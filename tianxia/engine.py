@@ -31,6 +31,7 @@ from . import wanted as _wanted_card  # noqa: F401  通緝登記進玩家卡的�
 from . import spar as _spar_card  # noqa: F401  切磋登記進玩家卡的動作表（social.ACTIONS）
 from . import events as event_rules  # note_round 走模組屬性（測試要能換掉它，確認只有 _present 會叫）
 from . import hints as hint_rules  # 碰到才說（新手引導計畫三）；叫 hint_rules：這個檔裡有幾處區域變數也叫 hints
+from . import tavern as tavern_rules  # 酒肆（企劃者 2026-10-18）；叫 tavern_rules：跟其他 *_rules 一樣避開區域變數
 from . import prologue as prologue_rules  # Game.new 有個參數也叫 prologue，所以模組在這裡一律叫 prologue_rules
 from . import rumor_view  # 傳聞分層的畫面：見聞頁的四層、你不在的時候（計畫 2026-10-06 傳聞分層一）
 from .characters import CharacterStore, name_key
@@ -50,7 +51,7 @@ from .models import (
 )
 from .ollama_client import ModelBudget, OllamaClient, quick_client
 from .rules import (
-    GEJU, HUANGJIN, add_marks, add_rumor, add_world_flags, apply_effect, audible, audience_bar, audience_hint, can_meet, change_trend,
+    GEJU, HUANGJIN, add_marks, add_rumor, add_world_flags, display_name, apply_effect, audible, audience_bar, audience_hint, can_meet, change_trend,
     check_result_line,
     day_turn, ears_of, evil_success, failed, fill_marks, free_text_rate, game_day, geju_resisted, here_regions,
     can_draw_side_change, chaos_fronts, chaos_note, front_chip, front_ids, front_of, front_text, humanize, in_chaos,
@@ -675,6 +676,8 @@ class Game:
             economy.close_donate(s)  # 捐軍備關了、人不在自家大本營了（叛投、管理者挪人）：收起軍需官那一串
         if p.picking_arena and not arena.here(s, c):
             p.picking_arena = False  # 擂台關了、季收了：收起擂台
+        if p.picking_tavern and not tavern_rules.here(s, c):
+            tavern_rules.close(s)  # 酒肆關了、人不在有酒肆的城鎮了：收起酒肆
         treasures.refresh_names(p, c)  # 寶物、名駒的名字照內容讀（裝備四欄 3.1）：joy 改了名字，存檔裡的跟著改；內容拿掉了留著舊名字
         forge_secrets.refresh_names(p, c, self.world)  # 名器的名字照內容讀（4.2）、神器的名字照全服那一列讀（5.2、5.3：原品定了名，仿品跟著改）
         signature_arms.refresh_names(p, c)  # 本命兵器的名字照內容讀（打造第三批）：joy 改了名，手上的跟著改
@@ -820,6 +823,8 @@ class Game:
             economy.close_donate(self.state)  # 捐軍備關了、人不在自家大本營了：收起軍需官那一串
         if self.state.player.picking_arena and not arena.here(self.state, self.content):
             self.state.player.picking_arena = False  # 擂台關了、季收了：收起擂台
+        if self.state.player.picking_tavern and not tavern_rules.here(self.state, self.content):
+            tavern_rules.close(self.state)  # 酒肆關了、人被挪走了：收起酒肆
         self._ambush_expire()  # 守著的埋伏到時刻了、或季上那一筆已經沒了（被打退、換季）：收起來
         arrived = self._arrivals()  # 抵達的站自己寫一則江湖紀錄（途中觸發的大事也寫在那裡），不併進下面的「江湖大事」
         if arrived:
@@ -834,6 +839,7 @@ class Game:
         self._deliver_renames()  # 手上的絕學被人定了名：下一次同步補一則紀錄（FB-083）
         self._deliver_echoes()  # 別人照著你首創的配方合了出來：補名望（首創名望回饋）
         self._deliver_guard_credits()  # 護衛：下線時替人物擋下的挑戰，回來補名望與心得
+        self._deliver_whispers()  # 酒肆：有人在酒肆打聽你（風聲），下線時的回來補
         self._deliver_arena()  # 擂台：被挑了的戰報、季末前三名的獎勵；季收了還沒打完的那一場作廢
         self._deliver_held_gear()  # 寄放的重賞、贈禮：裝備庫有空位就補（裝備四欄 6.5）
         refunds = bounties.deliver_refunds(self.state, self.content)  # 掛的通緝沒人揭成：押金退回
@@ -1090,6 +1096,8 @@ class Game:
             return self._donate_options()  # 大本營的捐軍備（素材與經濟設計第六節）
         if s.player.picking_arena:
             return self._arena_options()
+        if s.player.picking_tavern:
+            return self._tavern_options()  # 酒肆（企劃者 2026-10-18）
         if s.player.fs_asking is not None:
             return foreshadow.asking_options(s, c)  # 伏筆的最後一步正在答題：只有答案與「作罷」
         if s.player.busy_until is not None:
@@ -1189,6 +1197,8 @@ class Game:
             opts.append(Option(id="act:smith", label=weapons.SMITH))
         if mounts.market_here(s, c):  # 馬市（裝備四欄 5.5，帶「馬市」標籤的城鎮）：只是打開第二層選單，不花體力
             opts.append(Option(id="act:market", label=mounts.MARKET))
+        if tavern_rules.on(c) and tavern_rules.here(s, c):  # 酒肆（帶「酒肆」標籤的城鎮）：只是打開酒肆，不花體力
+            opts.append(Option(id="act:tavern", label=tavern_rules.TAVERN))
         opts += self._arena_entry()
         opts += self._stamina_play_options()  # 後期體力玩法：設伏劫道、修築工事、屯糧練兵
         heal = self._heal_option()
@@ -1685,6 +1695,344 @@ class Game:
             raise companion_agent.DialogueUnavailable("鎖外生成失敗")
         return prepared.turn
 
+    # ── 酒肆（企劃者 2026-10-18；設計稿 https://claude.ai/artifact/3CfrzfpT1HzCxy6S985Q5W）────────────
+    # 規則全在 tavern.py（tavern_rules）；這裡只管接上選單、扣錢、讀別人的存檔、寫紀錄與季。
+
+    def _tavern_open(self) -> bool:
+        """酒肆那一串此刻開著、人也還在酒肆裡（MAIN_ACTIONS["tavern"] 收不收的判斷）。"""
+        return self.state.player.picking_tavern and tavern_rules.here(self.state, self.content)
+
+    def _tavern_enter(self) -> list[str]:
+        s, c = self.state, self.content
+        if not (tavern_rules.on(c) and tavern_rules.here(s, c)) or not self._idle():
+            return [tavern_rules.NOT_HERE]
+        s.player.picking_tavern, s.player.shop_clue = True, ""
+        self._shop_say("enter")
+        return [tavern_rules.ENTERED.format(sign=tavern_rules.sign(s, c))]
+
+    def _tavern_price(self, base: int) -> int:
+        return tavern_rules.price(self.content, self.state.world, base)
+
+    def _tavern_options(self) -> list[Option]:
+        """酒肆那一串（店面關著、假人與整季機器人看的選單）：聽消息、請酒、藏行跡、反查、懸賞榜、出酒肆。查人、交情、素材、題壁要打字或挑東西，
+        只在店面上（MAIN_ACTIONS["tavern"]）。錢不夠的灰掉寫還差多少。都不花體力。"""
+        s, c = self.state, self.content
+        cfg = c.config.tavern
+        opts = []
+        for oid, label, base, problem in (
+            (tavern_rules.NEWS_ID, tavern_rules.NEWS_LABEL, cfg.news_price, None),
+            (tavern_rules.TREAT_ID, tavern_rules.TREAT_LABEL, cfg.treat_price, self._tavern_treat_problem()),
+            ("tavern:hide", tavern_rules.HIDE_LABEL, cfg.hide_price, self._tavern_hide_problem()),
+            ("tavern:trace", tavern_rules.TRACE_LABEL, cfg.trace_price, None),
+        ):
+            price = self._tavern_price(base)
+            problem = problem or tavern_rules.pay_problem(s, price)
+            text = label.format(price=price)
+            opts.append(Option(id=oid, label=text if problem is None else f"{text}・{problem}", enabled=problem is None))
+        if bounties.board_here(s, c) and bounties.visible(s, c):
+            opts.append(Option(id=tavern_rules.BOARD_ID, label=tavern_rules.BOARD_LABEL))
+        return opts + [Option(id=tavern_rules.BACK_ID, label=tavern_rules.BACK_LABEL)]
+
+    def _tavern_choice(self, arg: str) -> list[str]:
+        if arg == "back":
+            tavern_rules.close(self.state)
+            return [tavern_rules.LEFT]
+        if arg == "board":  # 牆上的懸賞榜：收起酒肆、打開懸賞榜（同城裡的 act:bounties）
+            tavern_rules.close(self.state)
+            self.state.player.picking_bounty = True
+            self._shop_say("enter")
+            return [f"你走到牆邊，看起{bounties.BOARD}。"]
+        return self._tavern_run(arg)
+
+    def tavern_do(self, op: str, target: str = "", text: str = "") -> list[str]:
+        """酒肆那一頁的動作（MAIN_ACTIONS["tavern"]）：news 聽消息、seek 查人在哪、ties 打聽交情、material 打聽素材（target 是素材 id）、
+        wall 題壁（text）、treat 請酒、hide 藏行跡、trace 反查。酒肆開著才收；做成了寫一則紀錄（同一趟坐下來的併成一則）。"""
+        if not self._tavern_open():
+            return self._log([equipment.NOT_NOW])
+        return self._log(self._tavern_run(str(op), str(target or "").strip(), str(text or "")))
+
+    def _tavern_run(self, op: str, target: str = "", text: str = "") -> list[str]:
+        s = self.state
+        before = s.player.stats.get("silver", 0)
+        handler = {
+            "news": self._tavern_news, "treat": self._tavern_treat, "hide": self._tavern_hide, "trace": self._tavern_trace,
+            "seek": lambda: self._tavern_seek(target), "ties": lambda: self._tavern_ties(target),
+            "material": lambda: self._tavern_material(target), "wall": lambda: self._tavern_wall(text),
+        }.get(op)
+        if handler is None:
+            return ["（沒有這個動作。）"]
+        msgs = handler()
+        paid = before - s.player.stats.get("silver", 0)
+        if paid:
+            msgs = msgs + [f"銀兩 {-paid:+d}"]
+        if paid:  # 真的花了錢（問不到退一半也算）才寫紀錄；被拒、沒收錢的只回一句
+            self._write(tavern_rules.sign(s, self.content), msgs, merge=True)
+            self._save_season()
+        return msgs
+
+    def _tavern_charge(self, base: int) -> int | None:
+        """扣這一下的錢：付得起回價錢，付不起記掌櫃那一句、回 None。"""
+        price = self._tavern_price(base)
+        problem = tavern_rules.pay_problem(self.state, price)
+        if problem is not None:
+            self._shop_after(problem, "refused")
+            return None
+        tavern_rules.pay(self.state, price)
+        return price
+
+    def _tavern_short(self, base: int) -> list[str]:
+        return [tavern_rules.pay_problem(self.state, self._tavern_price(base)) or ""]
+
+    def _tavern_wanted(self) -> set[str]:
+        """身上有通緝的名號鍵（名氣 +1）。"""
+        return {name_key(b.target) for b in bounties.open_bounties(self.state, self.content) if b.kind == "wanted" and b.target}
+
+    def _tavern_news(self) -> list[str]:
+        s, c = self.state, self.content
+        pick = tavern_rules.news_pick(s, c)
+        region = tavern_rules.region_lines(s, c)
+        if pick is None and not region:
+            self._shop_say("nothing")
+            return [tavern_rules.NOTHING_NEW]
+        if self._tavern_charge(c.config.tavern.news_price) is None:
+            return self._tavern_short(c.config.tavern.news_price)
+        lines = []
+        if pick is not None:
+            lines.append(f"{tavern_rules.NEWS_HEAD}「{pick.text}」")
+            s.player.tavern_heard = (s.player.tavern_heard + [tavern_rules.rumor_key(pick)])[-200:]
+        lines += region
+        tavern_rules.add_note(s, c, "news", tavern_rules.TITLES["news"], lines)
+        self._shop_say("news")
+        return lines
+
+    def _tavern_find(self, target: str) -> tuple[str | None, Game | None]:
+        """名號認人：先認人物（名字一模一樣），再認玩家存檔（不分大小寫）。回（人物 id, 玩家那一份）；都不是是 (None, None)。"""
+        c = self.content
+        for cid, ch in c.characters.items():
+            if ch.name == target:
+                return cid, None
+        if name_key(target) == name_key(self.state.player.name):
+            return None, None
+        other = self._load_kin(target)
+        if other is not None:
+            other.state.world = self.state.world
+        return None, other
+
+    def _tavern_whisper(self, kind: str, other: Game) -> None:
+        """被打聽的人收到風聲：記在季上，他下次同步時補（_deliver_whispers）。匿名行走的人只會是個生面孔。"""
+        s, c = self.state, self.content
+        w = tavern_rules.whisper(kind, s, c, s.player.location, s.world.time)
+        if s.player.anonymous:
+            w.named = False
+        tavern_rules.post_whisper(s.world, other.state.player.name, w)
+        self.touched.add(other.state.player.name)
+
+    def _tavern_seek(self, target: str) -> list[str]:
+        s, c = self.state, self.content
+        cfg = c.config.tavern
+        if not target:
+            return [tavern_rules.ASK_EMPTY]
+        if name_key(target) == name_key(s.player.name):
+            return [tavern_rules.ASK_SELF]
+        if self._tavern_charge(cfg.seek_price) is None:
+            return self._tavern_short(cfg.seek_price)
+        price = self._tavern_price(cfg.seek_price)
+        cid, other = self._tavern_find(target)
+        if cid is not None:
+            lines = tavern_rules.seek_figure_lines(s, c, cid)
+        elif other is not None:
+            lines, found = tavern_rules.seek_lines(s, c, other.state, self.now, self._tavern_wanted())
+            self._tavern_whisper("seek", other)
+            if not found:
+                back = tavern_rules.refund(s, c, price)
+                self._shop_say("missed")
+                lines = [tavern_rules.HALF_MISS.format(refund=back) if tavern_rules.person_fame(other.state, c) >= 1
+                         else tavern_rules.NOBODY.format(refund=back)]
+                tavern_rules.add_note(s, c, "seek", f"{tavern_rules.TITLES['seek']}・{target}", lines)
+                return lines
+            tavern_rules.remember(s, other.state.player.name)
+        else:  # 沒有這個人：跟默默無名的人問不到同一句（不讓人拿酒肆試出誰在不在）
+            back = tavern_rules.refund(s, c, price)
+            self._shop_say("missed")
+            lines = [tavern_rules.NOBODY.format(refund=back)]
+            tavern_rules.add_note(s, c, "seek", f"{tavern_rules.TITLES['seek']}・{target}", lines)
+            return lines
+        tavern_rules.add_note(s, c, "seek", f"{tavern_rules.TITLES['seek']}・{target}", lines)
+        self._shop_say("asked")
+        return lines
+
+    def _tavern_ties(self, target: str) -> list[str]:
+        s, c = self.state, self.content
+        cfg = c.config.tavern
+        if not target:
+            return [tavern_rules.ASK_EMPTY]
+        if name_key(target) == name_key(s.player.name):
+            return [tavern_rules.ASK_SELF]
+        if self._tavern_charge(cfg.ties_price) is None:
+            return self._tavern_short(cfg.ties_price)
+        price = self._tavern_price(cfg.ties_price)
+        cid, other = self._tavern_find(target)
+        wanted = self._tavern_wanted()
+        found = True
+        if cid is not None:
+            holders = []
+            if hasattr(self.world, "db"):
+                for state in CharacterStore(self.world.db).all():
+                    n = state.player.affinities.get(cid, 0)
+                    if n > 0 and name_key(state.player.name) != name_key(s.player.name):
+                        state.world = s.world
+                        holders.append((state, n))
+            holders.sort(key=lambda pair: (-pair[1], pair[0].player.name))
+            lines = tavern_rules.ties_figure_lines(s, c, cid, holders, wanted)
+        elif other is not None:
+            mates = [c.characters[m].name for m in other.state.player.team if m in c.characters]
+            lines, found = tavern_rules.ties_player_lines(s, c, other.state, mates, wanted)
+            self._tavern_whisper("ties", other)
+            if found:
+                tavern_rules.remember(s, other.state.player.name)
+        else:
+            lines, found = [], False
+        if not found:
+            back = tavern_rules.refund(s, c, price)
+            self._shop_say("missed")
+            lines = [tavern_rules.NOBODY.format(refund=back)]
+        else:
+            self._shop_say("asked")
+        tavern_rules.add_note(s, c, "ties", f"{tavern_rules.TITLES['ties']}・{target}", lines)
+        return lines
+
+    def _tavern_material(self, mid: str) -> list[str]:
+        s, c = self.state, self.content
+        material = c.materials.get(mid)
+        if material is None:
+            return [tavern_rules.MATERIAL_UNKNOWN]
+        base = c.config.tavern.material_prices.get(material.tier, max(c.config.tavern.material_prices.values()))
+        if self._tavern_charge(base) is None:
+            return self._tavern_short(base)
+        lines, found = tavern_rules.material_lines(s, c, material)
+        if not found:
+            back = tavern_rules.refund(s, c, self._tavern_price(base))
+            lines = [tavern_rules.MATERIAL_NONE.format(name=material.name, refund=back)]
+            self._shop_say("missed")
+        else:
+            self._shop_say("asked")
+        tavern_rules.add_note(s, c, "material", f"{tavern_rules.TITLES['material']}・{material.name}", lines)
+        return lines
+
+    def _tavern_wall(self, text: str) -> list[str]:
+        s, c = self.state, self.content
+        problem = tavern_rules.wall_problem(c, text)
+        if problem is not None:
+            self._shop_after(problem, "wall")
+            return [problem]
+        if self._tavern_charge(c.config.tavern.wall_price) is None:
+            return self._tavern_short(c.config.tavern.wall_price)
+        tavern_rules.write_wall(s.world, c, s.player.location, display_name(s), text)
+        self._shop_say("wall")
+        return [tavern_rules.WALL_DONE, f"「{text.strip()}」"]
+
+    def _tavern_treat_problem(self) -> str | None:
+        return tavern_rules.TREAT_FULL if self.state.player.tavern_treat_day == self._pill_day() else None
+
+    def _tavern_treat(self) -> list[str]:
+        s, c = self.state, self.content
+        cfg = c.config.tavern
+        problem = self._tavern_treat_problem()
+        if problem is not None:
+            self._shop_after(problem, "treat")
+            return [problem]
+        if self._tavern_charge(cfg.treat_price) is None:
+            return self._tavern_short(cfg.treat_price)
+        p = s.player
+        p.tavern_treat_day = self._pill_day()
+        who = display_name(s)
+        s.world.tavern_treats[p.location] = (who, s.world.time)
+        add_rumor(s, tavern_rules.TREAT_LINE.format(name=who, place=c.locations[p.location].name), p.location,
+                        content=c, layer="local", named=not p.anonymous)
+        self._shop_say("treat")
+        return [tavern_rules.TREAT_DONE] + renown.gain(s, c, "fame", cfg.treat_fame)
+
+    def _tavern_hide_problem(self) -> str | None:
+        p = self.state.player
+        if p.hidden_until > self.state.world.time:
+            return tavern_rules.HIDE_ALREADY.format(when=self.stamp(p.hidden_until))
+        return None
+
+    def _tavern_hide(self) -> list[str]:
+        s, c = self.state, self.content
+        problem = self._tavern_hide_problem()
+        if problem is not None:
+            self._shop_after(problem, "hide")
+            return [problem]
+        if self._tavern_charge(c.config.tavern.hide_price) is None:
+            return self._tavern_short(c.config.tavern.hide_price)
+        s.player.hidden_until = s.world.time + DAY
+        self._shop_say("hide")
+        return [tavern_rules.HIDE_DONE]
+
+    def _tavern_trace(self) -> list[str]:
+        s, c = self.state, self.content
+        pending = [w for w in s.player.whispers if not (w.named or w.revealed)]
+        if not pending:
+            self._shop_say("nothing")
+            return [tavern_rules.TRACE_NONE]
+        if self._tavern_charge(c.config.tavern.trace_price) is None:
+            return self._tavern_short(c.config.tavern.trace_price)
+        others = {}
+        last = pending[-1]
+        other = self._load_kin(last.who)
+        if other is not None:
+            other.state.world = s.world
+            others[name_key(last.who)] = other.state
+        lines, _ = tavern_rules.trace_lines(s, c, others)
+        tavern_rules.add_note(s, c, "trace", tavern_rules.TITLES["trace"], lines)
+        self._shop_say("trace")
+        return lines
+
+    def _deliver_whispers(self) -> None:
+        """酒肆的風聲（有人打聽你）：季上那幾則搬到身上，寫一則「風聲」紀錄。"""
+        lines = tavern_rules.collect_whispers(self.state, self.content)
+        if lines:
+            self._write(tavern_rules.WHISPER_TITLE, lines)
+            self._save_season()
+
+    def tavern_view(self) -> dict:
+        """酒肆那一頁（Game.shop_view 在酒肆開著時給）：招牌、銀兩、酒家那一句、出店、價錢、剛問到的、座上客、鄰桌閒談、題壁、
+        請酒的人、記下的名號、素材清單、收到的風聲。只讀。"""
+        s, c = self.state, self.content
+        p, cfg = s.player, c.config.tavern
+        loc = p.location
+        guests = [o.player.name for o in social.here(self)]
+        treat = tavern_rules.treat_shown(s.world, c, loc)
+        prices = {k: self._tavern_price(getattr(cfg, f"{k}_price")) for k in ("news", "seek", "ties", "wall", "treat", "hide", "trace")}
+        mats = []
+        for m in sorted(c.materials.values(), key=lambda m: (m.tier, shopview.attribute_rank(m.attribute), m.id)):
+            base = cfg.material_prices.get(m.tier, max(cfg.material_prices.values()))
+            mats.append({"id": m.id, "name": m.name, "tier": m.tier, "attribute": m.attribute, "price": self._tavern_price(base)})
+        hour = int(s.world.time // HOUR)
+        return {
+            "shop": "tavern",
+            "sign": tavern_rules.sign(s, c),
+            "silver": p.stats.get("silver", 0),
+            "line": shopview.line_text(s, c, "tavern"),
+            "back": tavern_rules.BACK_ID,
+            "prices": prices,
+            "problems": {"treat": self._tavern_treat_problem(), "hide": self._tavern_hide_problem()},
+            "notes": [{"kind": n.kind, "title": n.title, "lines": list(n.lines), "when": self.stamp(n.time)}
+                      for n in reversed(p.tavern_notes)],
+            "guests": guests[:6],
+            "more_guests": max(0, len(guests) - 6),
+            "treat": tavern_rules.TREAT_SEEN.format(name=treat) if treat else "",
+            "chatter": [{"who": who, "said": said} for who, said in tavern_rules.chatter(c, loc, hour)],
+            "walls": [{"who": w.who, "text": w.text, "when": self.stamp(w.time)} for w in reversed(s.world.tavern_walls.get(loc, []))],
+            "wall_chars": cfg.wall_chars,
+            "known": list(reversed(p.tavern_known)),
+            "materials": mats,
+            "whispers": tavern_rules.whisper_view(c, s),
+            "hidden": tavern_rules.HIDE_ALREADY.format(when=self.stamp(p.hidden_until)) if p.hidden_until > s.world.time else "",
+            "board": tavern_rules.BOARD_ID if bounties.board_here(s, c) and bounties.visible(s, c) else "",
+        }
+
     # ── 大場面：鎖外請模型判讀（武學與成長設計 8.3、計畫三 Task 2）────────────
 
     def is_big(self, squad: Squad) -> bool:
@@ -1890,6 +2238,8 @@ class Game:
                 msgs = self._market(arg)
             elif kind == "donate":
                 msgs = self._donate_choice(arg)
+            elif kind == "tavern":
+                msgs = self._tavern_choice(arg)
             elif kind == "arena":
                 msgs = self._arena(arg)
             elif kind == "explore":
@@ -2186,6 +2536,8 @@ class Game:
             return mounts.MARKET
         if kind == "donate":
             return f"{economy.DONATE_TITLE}・{c.locations[s.player.location].name}"
+        if kind == "tavern":
+            return tavern_rules.title_of(s, c, arg)
         if kind == "ambush":
             return "收伏" if arg == "lift" else f"{ambush_rules.TITLE}・{c.locations[s.player.location].name}"
         if kind == "aid":
@@ -2225,6 +2577,7 @@ class Game:
             "arena": f"{arena.ARENA}・{here}",
             "heal": f"療傷・{here}",
             "donate": f"{economy.DONATE_TITLE}・{here}",
+            "tavern": tavern_rules.sign(s, c),
         }
         return titles.get(arg, "提前出關")
 
@@ -2567,6 +2920,8 @@ class Game:
             self.state.player.picking_donate, self.state.player.shop_clue = True, ""
             self._shop_say("enter")  # 軍需帳上軍需官那一句（店面同一套）
             return [economy.DONATE_OPEN.format(faction=self.content.scenario.faction_name(self.state.player.faction, ""))]
+        if what == "tavern":  # 酒肆（企劃者 2026-10-18）：打開酒肆（見 _tavern_options），不花體力
+            return self._tavern_enter()
         if what == "call":
             self.state.player.picking_audience = True  # 打開求見選單（見 _audience_options），不花體力
             return [f"你遞上名帖，準備求見{self.content.locations[self.state.player.location].name}的人物。"]
@@ -3582,6 +3937,8 @@ class Game:
             return "market" if mounts.market_here(s, c) else None
         if p.picking_donate:  # 大本營的軍需帳（素材與經濟 B6，企劃者 2026-10-15 選 B3）
             return "donate" if self._at_own_base() else None
+        if p.picking_tavern:  # 酒肆（企劃者 2026-10-18）
+            return "tavern" if tavern_rules.here(s, c) else None
         return None
 
     def _shop_live(self, option_ids=None, shop: str = "smith") -> bool:
@@ -3606,6 +3963,8 @@ class Game:
             return shopview.arena_view(s, c, self.world, self._battle_power(), self.arena_left())
         if shop == "donate":
             return shopview.donate_view(s, c, self._pill_day())
+        if shop == "tavern":
+            return self.tavern_view()
         view = {"smith": shopview.smith_view, "market": shopview.market_view, "board": shopview.board_view}[shop](s, c, self.world)
         if shop == "smith":  # 素材買賣（素材與經濟設計第四、五節）：收購、升階都關著是 None
             view["trade"] = shopview.trade_view(s, c, self._pill_day())
@@ -6754,6 +7113,8 @@ class Game:
         if s.player.picking_donate:
             economy.close_donate(s)  # 軍需官那一串也收起來（素材與經濟設計第六節）
         s.player.picking_arena = False  # 擂台也收起來
+        if s.player.picking_tavern:
+            tavern_rules.close(s)  # 酒肆也收起來
         rerouting = s.player.journey is not None
         start = None if rerouting else s.player.location
         parted = self._part_ways() if s.player.tagalong is not None and not rerouting else []  # 答應了結伴卻自己先走：散了
@@ -7103,6 +7464,7 @@ class Game:
             and s.player.duel is None  # 單人頭目戰打到一半：同上
             and not s.player.picking_market  # 馬市開著：選單卡在第二層，先離開（同 FB-121 第 4 件的懸賞榜、鐵匠鋪）
             and not s.player.picking_donate  # 軍需官那一串開著：同馬市
+            and not s.player.picking_tavern  # 酒肆開著：同馬市
             and not s.player.picking_arena and s.player.arena is None  # 擂台開著、打到一半：同上
             and not allied.needs_ally(s, self.content)  # 拜入之後還沒挑依附哪一邊（豪強分屬兩軍）：先挑
         )

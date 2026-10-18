@@ -641,6 +641,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         return SMITH_SCORE if option.id == _smith_want(game) else 0.0 if arg in ("back", "forge-cancel") else None
     if kind == "arena":  # 擂台由 _arena 一次做完；萬一停在擂台邊只會返回，打到一半由 take_turn 照架勢出招
         return 0.0 if arg == "back" else None
+    if kind == "tavern":  # 酒肆裡：打聽由 take_turn 另外做（_tavern_play）；萬一停在酒肆裡就出門
+        return 0.0 if arg == "back" else None
     if kind == "market":  # 馬市上：照 bot.market_want 按那一顆（換、買、餵），沒事就離開
         return MARKET_SCORE if option.id == bot.market_want(game) else 0.0 if arg == "back" else None
     if kind == "call":
@@ -655,6 +657,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         clinic_hop = _clinic_score(game) if arg.partition(":")[0] == bot.clinic_hop(game) else 0.0  # 內傷重了往醫館
         return base + order_hop + summons_hop + bounty_hop + clinic_hop + (TRAIN_MOVE_SCORE if _train_value(game, profile, arg) > 0 else 0.0)
     if kind == "act":
+        if arg == "tavern":
+            return None  # 酒肆：不交給打分數（只是打開酒肆），打聽由 take_turn 另外做
         if arg == "explore" and explore_modes.on(game.content):
             return None  # 三選一開著：「探索」只是展開的入口，按了不做事
         if arg.startswith("challenge:") and _crippled(game):

@@ -1609,6 +1609,8 @@ MAIN_ACTIONS = {
     # 自家大本營捐軍備（素材與經濟設計第六節）：一次捐一種素材 count 個（上限切一半：收得下的收）；軍需帳那一頁送 items
     # （[{material, count}, …]，挑好的幾種一起捐、一則紀錄）
     "donate": lambda g, b: g.donate_items(donate_items(b)) if "items" in b else g.donate(str(b.get("material", "")), max(1, _int(b.get("count"), 1))),
+    # 酒肆那一頁（企劃者 2026-10-18）：op 是 news、seek、ties、material、wall、treat、hide、trace；target 是名號或素材 id、text 是題壁那一句
+    "tavern": lambda g, b: g.tavern_do(str(b.get("op", "")), str(b.get("target", ""))[:20], str(b.get("text", ""))[:40]),
     "anonymous": lambda g, b: g.set_anonymous(bool(b.get("value"))),
     "gender": lambda g, b: g.set_gender(str(b.get("value", ""))),  # 設定頁：還沒選過性別的舊角色選一次（PM 2026-10-12）
     "hints_off": lambda g, b: g.set_hints_off(bool(b.get("value"))),  # 設定頁的「不再提示」（碰到才說，新手引導計畫三）
