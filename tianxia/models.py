@@ -145,7 +145,7 @@ class Material(_Strict):
     id: str
     name: str
     attribute: Attribute
-    tier: int = Field(ge=1, le=3)  # 1 凡品、2 靈品、3 天品
+    tier: int = Field(ge=1, le=4)  # 1 凡品、2 靈品、3 天品、4 神品（神器的料，正式季整合 4.4）
     description: str = ""
 
 
@@ -1043,8 +1043,8 @@ class ForgeSide(_Strict):
     主料一定寫死階（tier，定這一件的階與工錢）；輔料可以改寫 min_tier（不低於幾階）。"""
 
     attribute: str
-    tier: int | None = Field(default=None, ge=1, le=3)
-    min_tier: int | None = Field(default=None, ge=1, le=3)
+    tier: int | None = Field(default=None, ge=1, le=4)  # 4：神器配方（正式季整合 5.5）
+    min_tier: int | None = Field(default=None, ge=1, le=3)  # 「幾階以上」只算到三階：四階是神器的料（forge_secrets.covers）
 
 
 class ForgeSecret(_Strict):
@@ -2442,6 +2442,19 @@ class EconomyRules(_Strict):
     )
 
 
+class FourTiers(_Strict):
+    """素材四階（docs/superpowers/specs/2026-10-17-正式季整合-design.md 第四、五章；tianxia/four_tiers.py）：主機的緊急開關，
+    預設開、測試內容關。內容（四階料、九件神器的配方與口訣、四階名器名字表）收不回（10.1），這裡關得掉的是規則：三階收購與黑市、
+    拿掉二換三一天一個（關著回到 economy.upgrade_per_day）、三換四、四階名器的機率、鐵匠講神器的規矩。數字都是 PM 提案或暫定。"""
+
+    enabled: bool = True
+    upgrade_need: int = Field(default=5, ge=1)  # 三換四：幾個同屬性的三階（4.5）
+    upgrade_silver: int = Field(default=150, ge=0)  # 三換四的工錢（乘地盤福利與名望折扣，同升階老規矩）
+    season_cap: int = Field(default=2, ge=0)  # 三換四一季最多幾個（PlayerState.tier4_upgrades）
+    named_main: float = Field(default=0.5, ge=0, le=1)  # 主料四階、沒打中神器配方：出名器的機會（5.2）
+    named_both: float = Field(default=0.8, ge=0, le=1)  # 主輔都是四階（也沒打中神器配方）
+
+
 class Config(_Strict):
     stamina_max: int = 150
     stamina_regen_seconds: float = 180  # 自然回復：每幾秒（遊戲時間）回 1 點體力（地圖擴充設計第二節：每 3 分鐘 1 點）
@@ -2514,6 +2527,7 @@ class Config(_Strict):
     push_resistance: PushResistance = Field(default_factory=PushResistance)  # 盡頭阻力與季長縮放（見 PushResistance）
     battle_quiet_hours: QuietHours = Field(default_factory=QuietHours)  # 時刻表決戰避開半夜（見 QuietHours）
     economy: EconomyRules = Field(default_factory=EconomyRules)  # 素材與經濟：收購、升階、捐軍備、找素材減量、出陣銀兩（見 EconomyRules）
+    four_tiers: FourTiers = Field(default_factory=FourTiers)  # 素材四階的規則（見 FourTiers）
     weapons: WeaponRules = Field(default_factory=WeaponRules)  # 兵器（見 WeaponRules）
     armor: ArmorRules = Field(default_factory=ArmorRules)  # 防具（見 ArmorRules；裝備四欄設計第四節）
     mounts: MountRules = Field(default_factory=MountRules)  # 坐騎（見 MountRules；裝備四欄設計第五節）

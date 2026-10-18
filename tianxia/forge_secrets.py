@@ -262,7 +262,7 @@ PIECE_ARMOR = "『{alias}』是一件防具。"
 PIECE_MAIN = "『{alias}』的主料：{attr}屬的{tier}料。"
 PIECE_AUX = "『{alias}』的輔料：{attr}屬的{tier}料。"
 UNKNOWN = "？"  # 鑄譜那一行還沒聽到的片
-TIER_WORDS = {1: "一", 2: "二", 3: "三"}
+TIER_WORDS = {1: "一", 2: "二", 3: "三", 4: "四"}
 
 
 def split_on(season: WorldState | None) -> bool:

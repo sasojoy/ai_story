@@ -24,7 +24,7 @@ from . import hints as hint_rules
 from .companion_agent import DIALOGUE_TAGS
 from .encounter import FALLBACK_TIER, TIER_RATIOS
 from .front_lines import BAND_KEYS, GEJU_KEYS
-from .materials import TIER_NAMES
+from .materials import DEFAULT_DROPS, TIER_NAMES
 from .models import (
     FRONT_KEY, GLOW_KEYS, GOOD_HORSE, MOVES, RECRUITER_ALLIED_FIELDS, REVEAL_KEYS, ROADS, STATS, TREASURE_EFFECTS, WEAPON_KINDS, Attribute, BattleDef, CharacterDef, CheckVoice,
     CombatLines, Condition, Config, Content, CraftNames, DuelBoss, Effect, Event, FigureDef, FollowerDef, ForgeSecret, Foreshadows, FrontLines, GearBook,
@@ -397,6 +397,10 @@ def _material_sources(c: Content) -> set[str]:
             reachable |= set(ch.effect.materials) | set(ch.fail_effect.materials)
     for sight in c.road_sights.values():
         reachable |= set(sight.effect.materials)
+    # 四階（正式季整合 4.5）只從幾條路來，這一批只有鐵匠鋪的三換四：素材四階與升階都開著時，同屬性有三階的四階拿得到
+    if c.config.four_tiers.enabled and c.config.economy.upgrade:
+        tier3 = {m.attribute for m in c.materials.values() if m.tier == 3}
+        reachable |= {m.id for m in c.materials.values() if m.tier == 4 and m.attribute in tier3}
     return reachable
 
 
@@ -1919,7 +1923,8 @@ def validate(c: Content) -> None:
     check_traits(c, need)
     check_signature_arts(c, need)
     # 沒寫 drops 的對手走 materials.py 依難度的預設掉落表，所以每一階都得有素材可挑。
-    for tier in sorted(TIER_NAMES):
+    # 只看預設表會掉的階（一到三階）：四階是神器的料，掉落表不給（正式季整合 4.5），測試內容也沒有
+    for tier in sorted({t for _, rolls in DEFAULT_DROPS for t, _ in rolls}):
         need(
             any(m.tier == tier for m in c.materials.values()),
             f"content/materials.json 沒有任何第 {tier} 階（{TIER_NAMES[tier]}）的素材，預設掉落表會挑不到東西",

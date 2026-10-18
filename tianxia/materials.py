@@ -18,7 +18,7 @@ from .insights import PAIR_ATTRIBUTES
 from .models import Content, Material, Squad
 from .state import GameState
 
-TIER_NAMES = {1: "凡品", 2: "靈品", 3: "天品"}
+TIER_NAMES = {1: "凡品", 2: "靈品", 3: "天品", 4: "神品"}  # 神品：四階，神器的料（正式季整合 4.4；待 joy 潤）
 
 # 沒寫 drops 的對手走這張表（設計 §4.1）：難度上限 -> [(階, 機率), ...]。
 # 內容不必每隻敵人都填掉落，難度本身就是強弱的唯一指標（見 models.Squad 的說明）。
