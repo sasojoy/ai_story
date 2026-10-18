@@ -279,6 +279,78 @@ def test_a_summons_place_still_talks(monkeypatch):
     assert "act:summons" in _ids(game) and game.dialogue_request("act:socialize") is not None
 
 
+# ── Task 5：找事件的偏向、併池、空池（2.7）──
+
+
+def test_seek_names_what_it_mostly_gives():
+    option = _ids(_game(at="yingchuan"))["explore:seek"]
+    assert option.enabled and option.label.startswith("找事件（體力 6・這裡多半給：")
+
+
+def test_an_empty_seek_pool_greys_out_for_free(monkeypatch):
+    from tianxia import engine as engine_mod
+
+    game = _game(at="yingchuan")
+    monkeypatch.setattr(engine_mod, "event_candidates", lambda *a, **k: [])
+    option = _ids(game)["explore:seek"]
+    assert not option.enabled and option.label == "找事件（這一帶眼下沒什麼事）"
+
+
+def test_top_kinds_takes_two_unless_one_stands_out():
+    assert precise.top_kinds({"名望": 0.5, "銀兩": 0.2}) == ["名望"]
+    assert precise.top_kinds({"名望": 0.5, "銀兩": 0.4, "善名": 0.1}) == ["名望", "銀兩"]
+    assert precise.top_kinds({"名望": 0.2, "銀兩": 0.1, "善名": 0.05}) == ["名望", "銀兩"]
+    assert precise.top_kinds({}) == []
+
+
+def test_choice_kinds_split_renown_and_skip_stat_points():
+    from tianxia.models import Choice, Effect
+
+    c = real_content("weekend")
+    choice = Choice(text="x", effect=Effect(stats={"fame": 1, "good": 1, "str": 1, "silver": -5}, stamina=10))
+    assert precise.choice_kinds(choice, c) == ("名望", "善名", "裝備與丹藥")
+    fight = Choice(text="y", combat="jun_bing", effect=Effect(stats={"xinde": 3}))
+    assert precise.choice_kinds(fight, c) == ("經驗", "心得")
+
+
+def test_after_fight_events_join_seeking_only_in_the_field_with_foes():
+    from tianxia.events import event_candidates
+
+    def explore_ids(game):
+        return {e.id for e in event_candidates(game.state, game.content, "explore", "common")}
+
+    assert "train_campfire" in explore_ids(_game(at="changshe"))
+    assert "train_campfire" not in explore_ids(_game(at="yingchuan"))  # 城鎮
+    old = _game(at="changshe")
+    old.state.world.precise_actions = False
+    assert "train_campfire" not in explore_ids(old)
+
+
+def test_no_after_fight_event_needs_a_fight_any_more():
+    c = real_content("weekend")
+    for eid in ("train_fallen_foe", "train_bettors", "train_sore_loser", "train_dropped_letter", "train_old_boxer",
+                "train_runaway_cart", "train_campfire", "train_insight", "train_onlooker"):
+        assert not c.events[eid].condition.fight_tiers, eid
+
+
+# ── Task 6：靜心感悟選錯給心得、不鎖（2.9）──
+
+
+def test_a_wrong_way_of_sensing_gives_xinde_and_does_not_lock():
+    from tianxia import insights, sensing
+
+    game = _game(at="yingshui")
+    s, c = game.state, game.content
+    _press(game, "explore:sense")
+    got, scene, loc = sensing.current(s, c)
+    assert "下回可以換個做法再試" in sensing.miss_warning(s, c)
+    wrong = next(i for i, m in enumerate(got.order) if scene.methods[m].attribute not in insights.pool_attributes(loc, c))
+    xinde = s.player.stats.get("xinde", 0)
+    game.choose(f"{sensing.PREFIX}{wrong}")
+    assert s.player.stats.get("xinde", 0) == xinde + c.config.sense_miss_xinde
+    assert s.player.sensing is None and _ids(game)["explore:sense"].enabled
+
+
 def test_fixture_and_switched_off_content_are_off(content):
     season = fresh_season(content)
     stamp_season(season, content)

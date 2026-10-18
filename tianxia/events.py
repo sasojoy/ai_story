@@ -49,7 +49,7 @@ def event_candidates(
         hidden |= foreshadow.third_party_events(content)
     candidates: list[Event] = []
     for event in content.events.values():
-        if action not in precise.actions_of(event, content, state.world):  # 一類一顆：交友事件併進找事件、拜門派另成一顆
+        if action not in precise.actions_of(event, state, content):  # 一類一顆：交友事件併進找事件、拜門派另成一顆
             continue
         if pool is not None and is_rare(event) != (pool == "rare"):
             continue
@@ -73,6 +73,43 @@ def rotation_pool(event: Event, location_id: str, action: str) -> str | None:
     return f"{location_id}:{action}" if event.locations else f"*:{action}"
 
 
+def fresh_events(state: GameState, content: Content, action: str, pool: EventPool | None = None) -> list[Event]:
+    """這一次真的抽得到的那幾則：合格的（event_candidates）再照防重複輪替拿掉這一輪看過的（pick_event 抽的就是它）。"""
+    candidates = event_candidates(state, content, action, pool)
+    if not candidates:
+        return []
+    location = state.player.location
+    rounds = state.player.event_rounds
+    pools = {e.id: rotation_pool(e, location, action) for e in candidates}
+    fresh = [e for e in candidates if pools[e.id] is None or e.id not in rounds.get(pools[e.id], [])]
+    if not fresh:
+        last = {rounds[key][-1] for key in set(pools.values()) if key is not None and rounds.get(key)}
+        fresh = [e for e in candidates if e.id not in last] or candidates
+    return fresh
+
+
+def seek_bias(state: GameState, content: Content, world: WorldStateStore) -> list[str]:
+    """一類一顆的找事件鈕上「這裡多半給」那幾類（正式季整合 2.7【PM】）：照此刻真的抽得到的可重複事件（fresh_events，一次性奇遇不算），
+    每則取他此刻最穩的那個有東西拿的選項（檢定照 check_outlook、動手當五成、沒檢定是十成），照抽中的權重彙總，precise.top_kinds 挑。"""
+    fresh = fresh_events(state, content, "explore", "common")
+    total = sum(e.weight for e in fresh)
+    if total <= 0:
+        return []
+    shares: dict[str, float] = {}
+    for event in fresh:
+        best: tuple[float, tuple[str, ...]] | None = None
+        for _, choice in visible_choices(event, state, content):
+            kinds = precise.choice_kinds(choice, content)
+            if not kinds:
+                continue
+            rate = check_outlook(choice.check, state, content, world).chance if choice.check else 0.5 if choice.combat else 1.0
+            if best is None or rate > best[0]:
+                best = (rate, kinds)
+        for kind in best[1] if best else ():
+            shares[kind] = shares.get(kind, 0.0) + event.weight / total
+    return precise.top_kinds(shares)
+
+
 def pick_event(
     state: GameState, content: Content, action: str, rng: random.Random, pool: EventPool | None = None,
 ) -> Event | None:
@@ -81,16 +118,9 @@ def pick_event(
     （剛看過的那一則這次先不抽，免得換輪時連著兩次一樣）。
     這個函式**不改狀態**：抽中的那一則要等 Game._present 真的端給玩家時，才由 note_round 記進
     PlayerState.event_rounds（全都看過時的清空也在那裡）。所以選單、勝算、機器人怎麼預覽都不會讓輪替往前走。"""
-    candidates = event_candidates(state, content, action, pool)
-    if not candidates:
-        return None
-    location = state.player.location
-    rounds = state.player.event_rounds
-    pools = {e.id: rotation_pool(e, location, action) for e in candidates}
-    fresh = [e for e in candidates if pools[e.id] is None or e.id not in rounds.get(pools[e.id], [])]
+    fresh = fresh_events(state, content, action, pool)
     if not fresh:
-        last = {rounds[key][-1] for key in set(pools.values()) if key is not None and rounds.get(key)}
-        fresh = [e for e in candidates if e.id not in last] or candidates
+        return None
     multiplier = content.config.qiyu_weight_multiplier
     weights = [event.weight * (multiplier if event.qiyu else 1.0) for event in fresh]
     return rng.choices(fresh, weights=weights)[0]

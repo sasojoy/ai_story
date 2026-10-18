@@ -1462,6 +1462,8 @@ class Game:
             return []
         name = explore_modes.NAMES
         opts = [self._cost_option(explore_modes.option_id(m), name[m], cost) for m in (explore_modes.GATHER, explore_modes.SEEK)]
+        if precise.on(c, self.state.world):
+            opts[1] = self._seek_option(cost)
         sense = explore_modes.option_id(explore_modes.SENSE)
         if not insights.explore_gives(loc, c):
             opts.append(Option(id=sense, label=f"{name[explore_modes.SENSE]}（{explore_modes.NO_SENSE}）", enabled=False))
@@ -1472,6 +1474,16 @@ class Game:
         if precise.on(c, self.state.world):
             opts.append(self._practice_option(loc, cost, odds))
         return opts
+
+    def _seek_option(self, cost: int) -> Option:
+        """一類一顆的找事件（正式季整合 2.7）：鈕上寫這裡多半給哪一類（event_rules.seek_bias）；一次性奇遇與這裡可重複的事件都沒有時
+        灰掉、寫「這一帶眼下沒什麼事」，不扣體力。"""
+        s, c = self.state, self.content
+        oid, name = explore_modes.option_id(explore_modes.SEEK), explore_modes.NAMES[explore_modes.SEEK]
+        if not event_candidates(s, c, "explore", "rare") and not event_candidates(s, c, "explore", "common"):
+            return Option(id=oid, label=f"{name}（{explore_modes.SEEK_EMPTY}）", enabled=False)
+        kinds = event_rules.seek_bias(s, c, self.world)
+        return self._cost_option(oid, name, cost, note=explore_modes.SEEK_BIAS.format(kinds="、".join(kinds)) if kinds else "")
 
     def _practice_option(self, loc: Location, cost: int, odds: bool) -> Option:
         """練功的鈕（正式季整合 2.5）：「練功（體力 6・對手・勝算・經驗約 N）」；這裡只有頭目時寫頭目那一面、直接對上；
