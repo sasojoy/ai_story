@@ -184,6 +184,15 @@ ROUND_HEAD = "##### 第 {n} 回合"  # 一回合一段的標題（Joy 2026-10-14
 RESTORED_NOTE = "（這份戰報是後來補回來的；軍餉與名望當時已經發過。）"  # Game._restore_showdowns
 MY_MOVE = "**你**　{move}"  # 決戰戰報的完整戰況：每一回合最後一條，自己這一回合出了什麼（BattleParticipant.moves）
 SLAY_LINE = "你陣前擊退了{name}，這一戰的頭功傳遍兩軍。"  # 待 joy 潤：龍頭上陣，最後一擊的人（戰報與紀錄）
+# 歷史武將同行第五節（待 joy 潤）：加入決戰時挑一位隨你上陣、決戰畫面上自己的那一位
+ESCORT_PICK = "挑一位隨你出陣的同伴，或不派、自己上陣（開打之後不能換）。"
+ESCORT_OPTION = "派{name}隨你出陣（份量 {score}・氣血 {pool}）"
+ESCORT_NONE = "不派，自己上陣"
+ESCORT_BACK = "再想想"
+ESCORT_BACK_LINE = "你還沒加入，再想想。"
+ESCORT_MUSTER = "{name}隨你出陣。"
+ESCORT_SCENE = "隨你出陣：{name}（氣血 {hp}/{cap}）"
+ESCORT_FELL = "隨你出陣：{name}（敗走）"
 TROOPS_LINE = "你帶著{names}上陣，強攻、奇襲多 {pct}"  # 待 joy 潤（PM 2026-10-12）：決戰畫面，接在騎兵那一句後面（加入時的快照）
 TROOPS_REPORT = "{names}跟著你衝陣"  # 待 joy 潤（PM 2026-10-12）：決戰的戰報
 # 賽季時鐘暫停（線上架構設計第四節、8.3）：選單上那一顆灰的，伺服器擋動作也回這一句（server._refuse_while_paused）。待 S1／joy 潤
@@ -336,6 +345,9 @@ class Game:
         self._preparing_memo: list[bool] | None = None  # 一次畫面建構裡記住的「籌備中嗎」；None＝不在範圍裡（見 phase_memo）
         self._draft: Draft | None = None  # choose() 進行中那次行動的江湖紀錄草稿
         self._affinity_before: dict[str, int] | None = None  # choose()、隨口應對進行中：這一下之前的情誼（_people_here 認這一下加了誰的情誼）
+        # 歷史武將同行：挑好了隨你上陣的那一位、正在照它加入（_escort_step 開著、_escort_carry 讀）
+        self._escort_picked = False
+        self._escort_now: battle_instance.Escort | None = None
         self._last_wear: list[str] = []  # 最近一場戰報歸檔時兵器鈍了、防具破了的提醒（_file_battle，兵器先、防具後）；沒有草稿的呼叫端（切磋、截殺的另一邊）自己接到訊息裡
         # 這一個動作動到（或要通知）的別人的名號（玩家卡上的互動、邀請）：伺服器做完動作叫他們開著的分頁也刷新（server._tell_tabs）
         self.touched: set[str] = set()
@@ -4079,7 +4091,66 @@ class Game:
         與稱號（名聲 2.5、4.5：本場戰功、論功那一句寫；名望名動一方起、善惡第 1 段起，開關關著是空的）。"""
         return {"turncoat": self.state.player.defected, "newbie": roster.newbie(self.state, self.content),
                 "kit": team.self_side(self.state, self.content, self.world, mounted=True, troops=True),  # 本命戰法（第二批）
-                "renown": renown.titles(self.state, self.content, fame_from=2)}
+                "renown": renown.titles(self.state, self.content, fame_from=2),
+                "escort": self._escort_carry()}  # 隨你上陣的歷史武將（歷史武將同行第五節）
+
+    def _escort_choices(self) -> list[str]:
+        """加入決戰時挑得到的同伴：名下的（歷史武將同行第五節）。開關關著是空的（照舊一下就加入）。"""
+        if not roster.on(self.content):
+            return []
+        return [cid for cid in roster.owned_companions(self.world, self.state.player.name) if cid in self.content.characters]
+
+    def _escort_of(self, cid: str) -> battle_instance.Escort:
+        """派他上陣的那一刻快照（第五節【預設】）：份量＝strength(他的威力) × escort_share（不吃你的職位、坐騎、部下），
+        池子是他的氣血上限，戰法是他自己身上的兩門。"""
+        s, c, w = self.state, self.content, self.world
+        pool = team.mate_pool(s, c, w, cid)
+        score = battle_instance.strength(c.config.battle, team.mate_power(s, c, w, cid)) * c.config.battle.generals.escort_share
+        return battle_instance.Escort(
+            cid=cid, name=c.characters[cid].name, score=round(score, 1), neili=pool, neili_cap=pool, kit=team.mate_side(s, c, w, cid),
+        )
+
+    def _escort_carry(self) -> battle_instance.Escort | None:
+        """這一次加入要帶的同伴：剛在挑的那一位（_escort_step）；不然是已經在參戰名單上的那一位（集結時改選、依附那一軍重新快照，照舊跟著）。"""
+        if self._escort_picked:
+            return self._escort_now
+        battle = self.world.get_battle()
+        me = battle.participants.get(self.state.player.name) if battle is not None else None
+        return me.escort if me is not None else None
+
+    def _escort_options(self) -> list[Option]:
+        """按了加入、還在挑誰隨你上陣：名下每一位一顆（寫份量與氣血），加上「不派」「再想想」。"""
+        out = []
+        for cid in self._escort_choices():
+            e = self._escort_of(cid)
+            out.append(Option(id=f"battle:escort:{cid}", label=ESCORT_OPTION.format(name=e.name, score=round(e.score), pool=round(e.neili_cap))))
+        return out + [Option(id="battle:escort:none", label=ESCORT_NONE), Option(id="battle:escort:back", label=ESCORT_BACK)]
+
+    def _escort_step(self, battle: battle_instance.BattleInstance, arg: str) -> list[str]:
+        """挑好了（battle:escort:<id>／none）或「再想想」（back）：照記下的那一下（PlayerState.escort_pick）加入，帶著挑的那一位。
+        集結時按的、挑的時候已經開打了，改成晚到（join_late）。"""
+        p = self.state.player
+        pick, p.escort_pick = p.escort_pick, ""
+        if not pick:
+            return ["（此刻無法這麼做。）"]
+        if arg == "back":
+            return [ESCORT_BACK_LINE]
+        if arg != "none" and arg not in self._escort_choices():
+            return ["（此刻無法這麼做。）"]
+        kind, _, rest = pick.partition(":")
+        if kind == "join" and battle.phase != "muster":
+            kind, rest = "join_late", ""
+        self._escort_picked, self._escort_now = True, (self._escort_of(arg) if arg != "none" else None)
+        try:
+            return self._battle_choose(f"{kind}:{rest}")
+        finally:
+            self._escort_picked, self._escort_now = False, None
+
+    def _escort_line(self, e: battle_instance.Escort) -> str:
+        """決戰畫面上自己的那一位（別人的不列，第五節「讀得下去」）。"""
+        if e.fallen_round is not None:
+            return ESCORT_FELL.format(name=e.name)
+        return ESCORT_SCENE.format(name=e.name, hp=round(e.neili), cap=round(e.neili_cap))
 
     def _mandate_weight(self, definition: BattleDef | None, scores: dict[str, float]) -> dict[str, float]:
         """天命之爭：手上有碎片的人到場，份量 × Config.seal.mandate.holder_weight（玉璽碎片設計 8.3；只在這一場，碎片本身不加威力）。
@@ -5367,6 +5438,7 @@ class Game:
                 role = f"你的職位：{role}。" if role else ""
                 ride = mounts.CAVALRY_LINE.format(name=me.mount, pct=mounts.pct(me.cavalry)) + "。" if me.mount else ""  # 騎著馬（5.9）：沒騎馬一個字都不多
                 ride += TROOPS_LINE.format(names=me.troops, pct=mounts.pct(me.troop_bonus)) + "。" if me.troops else ""  # 帶著部下
+                ride += ESCORT_MUSTER.format(name=me.escort.name) if me.escort is not None else ""  # 隨你出陣的同伴（歷史武將同行）
                 return f"{header}\n\n你已{joined}【{side}】，集結還剩現實 {left}。{role}{ride}集結結束就開打，在那之前照常行動{leaving}。"
             if self._free_agent(definition):
                 who = "你是散人" if self.state.player.faction is None else f"你是{self._own_side_name()}，不是交戰的兩軍"
@@ -5386,6 +5458,8 @@ class Game:
             lines.append(mounts.CAVALRY_LINE.format(name=p.mount, pct=mounts.pct(p.cavalry)))  # 騎著馬上陣（裝備四欄 5.9，加入時的快照）
         if p is not None and p.troops:
             lines.append(TROOPS_LINE.format(names=p.troops, pct=mounts.pct(p.troop_bonus)))  # 帶著部下上陣（加入時的快照）
+        if p is not None and p.escort is not None:
+            lines.append(self._escort_line(p.escort))  # 隨你出陣的同伴（氣血、敗走；別人的不列）
         if p is not None:
             last = []  # 上一回合的兩句併成一段 markdown 引用（「> 」、段內換行）：網頁在 .scene blockquote 底下縮成小字、淡色
             enemy = next((f for f in definition.factions if f.id != p.faction), None)
@@ -5498,6 +5572,8 @@ class Game:
         p = battle.participants.get(name)
         if p is None and allied.needs_ally(self.state, self.content):  # 拜入曹氏莊院還沒挑一邊（FB-273）：先挑一邊，不給加入也不給投效
             return []
+        if p is None and self.state.player.escort_pick and self._escort_choices():  # 按了加入、在挑誰隨你上陣（歷史武將同行）
+            return self._escort_options()
         if self._free_agent(definition):  # 散人、豪強：集結時、或開打了還沒參戰，給臨時投效的兩顆
             if battle.phase == "muster" or p is None:
                 return self._enlist_options(battle, definition)
@@ -5687,6 +5763,15 @@ class Game:
             changing_sides = name in battle.participants
         if kind in ("join", "join_late", "enlist") and not changing_sides and not self._at_battle(definition):
             return [f"（{self._absent_reason(definition)}。）"]
+        if kind == "escort":
+            return self._escort_step(battle, rest)
+        if kind in ("join", "join_late", "enlist") and not changing_sides and not self._escort_picked and self._escort_choices():
+            # 名下有同伴：先挑誰隨你上陣（或不派），挑了才加入（歷史武將同行 9.3：沒有預設值）
+            refusal = self._join_refusal(kind, rest, definition)
+            if refusal is not None:
+                return refusal
+            self.state.player.escort_pick = f"{kind}:{rest}"
+            return [ESCORT_PICK]
         if kind == "enlist":
             return self._enlist(battle, definition, rest, changing_sides)
         if kind == "join":
@@ -5721,6 +5806,14 @@ class Game:
             self._backfill_battle_scores()  # 還沒有份量快照的自己，出招之前先補（結算要讀）
             return self._submit_battle_action(name, definition, rest)
         return ["（此刻無法這麼做。）"]
+
+    def _join_refusal(self, kind: str, rest: str, definition: BattleDef) -> list[str] | None:
+        """加入、臨時投效這一下本身就不成的那一句（同 _battle_choose、_enlist 的擋法）：挑同伴之前先擋，免得挑完了才說不行。"""
+        if kind == "join" and self.content.scenario.factions and rest != self._side():
+            return ["（你只能站在自己陣營這一邊。）"]
+        if kind == "enlist" and (not self._free_agent(definition) or rest not in self._sides(definition)):
+            return ["（此刻無法這麼做。）"]
+        return None
 
     def _enlist(
         self, battle: battle_instance.BattleInstance, definition: BattleDef, side: str, changing_sides: bool,

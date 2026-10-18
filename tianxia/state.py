@@ -456,6 +456,8 @@ class PlayerState(BaseModel):
 
     # ── 同伴（sanguo-companions 合併重寫：全服唯一，見 world_state.py）──
     team: list[str] = Field(default_factory=list)  # 目前帶在身邊出戰的同伴 id，最多 MAX_TEAM_COMPANIONS 人
+    # 歷史武將同行：按了加入決戰、等著挑誰隨你上陣（「join:guan」「join_late:」「enlist:guan」；Game._escort_step 收）。空的是沒在挑
+    escort_pick: str = ""
     affinities: dict[str, int] = Field(default_factory=dict)  # 人物 id -> 0~100 好感度，跟有沒有招到他無關
     relationship_notes: dict[str, str] = Field(default_factory=dict)  # 人物 id -> 一句話關係現況
     # 風聞（figure_life.spread）：人物 id → 他聽說的你做過的事（一句一條，最新的在後，最多 hearsay_keep 條）；這一季的，換季清掉

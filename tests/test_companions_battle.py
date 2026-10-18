@@ -170,3 +170,81 @@ def test_an_escort_fires_his_war_tactic_under_his_name(c):
         _act(inst, d, "乙", "強攻")
         fired += [m for m in _round(c, inst, d, seed=seed) if "〔青龍拖刀〕" in m or "〔刮骨定神〕" in m]
     assert fired and all("關羽" in m for m in fired)
+
+
+# ── Task 5：加入決戰時挑一位（engine）──
+
+
+def _showdown(content, game):
+    from test_engine import _three_round_showdown
+
+    content.config.companions.enabled = True
+    definition = _three_round_showdown(content)
+    game.state.player.faction = "guan"
+    game.world.start_battle(definition, now=0.0)
+    return definition
+
+
+def test_owners_pick_an_escort_before_joining(content, game):
+    from conftest import at
+    from tianxia import engine, team
+
+    definition = _showdown(content, game)
+    p = game.state.player
+    assert game.world.try_recruit("mate", p.name, cap=3)
+    with at(game, 0.0):
+        assert game.choose("battle:join:guan") == [engine.ESCORT_PICK]
+        assert p.name not in game.world.get_battle().participants  # 挑了才加入
+        assert [o.id for o in game.options()][:3] == ["battle:escort:mate", "battle:escort:none", "battle:escort:back"]
+        game.choose("battle:escort:mate")
+    battle = game.world.get_battle()
+    me = battle.participants[p.name]
+    gen = content.config.battle.generals
+    power = team.mate_power(game.state, content, game.world, "mate")
+    assert me.faction == "guan" and me.escort.cid == "mate" and me.escort.name == "韓鐵"
+    assert me.escort.score == round(bi.strength(content.config.battle, power) * gen.escort_share, 1)
+    assert me.escort.neili == me.escort.neili_cap == team.mate_pool(game.state, content, game.world, "mate") > 0
+    assert engine.ESCORT_MUSTER.format(name="韓鐵") in game._battle_scene_text(battle, definition)
+    game._battle_choose("join:guan")  # 集結時再加入一次（改選、依附那一軍重新快照）：同伴照舊跟著
+    assert game.world.get_battle().participants[p.name].escort.cid == "mate"
+
+
+def test_declining_joins_alone_and_no_companions_means_no_step(content, game):
+    from conftest import at
+
+    _showdown(content, game)
+    p = game.state.player
+    assert game.world.try_recruit("mate", p.name, cap=3)
+    with at(game, 0.0):
+        game.choose("battle:join:guan")
+        game.choose("battle:escort:none")
+    assert game.world.get_battle().participants[p.name].escort is None
+    from test_engine import _fighter
+
+    other = _fighter(content, game, "乙", "guan")
+    with at(other, 0.0):
+        assert other.choose("battle:join:guan") == ["你加入了這場戰局。"]  # 名下沒有同伴：照舊一下就加入
+
+
+def test_the_scene_shows_only_my_escort(content, game):
+    from conftest import at
+    from test_engine import _fighter
+    from tianxia import engine
+
+    definition = _showdown(content, game)
+    assert game.world.try_recruit("mate", game.state.player.name, cap=3)
+    other = _fighter(content, game, "乙", "guan")
+    assert game.world.try_recruit("pupil", "乙", cap=3)
+    with at(game, 0.0):
+        game.choose("battle:join:guan")
+        game.choose("battle:escort:mate")
+    with at(other, 0.0):
+        other.choose("battle:join:guan")
+        other.choose("battle:escort:pupil")
+    battle = game.world.get_battle()
+    battle_instance_close = bi.close_muster
+    battle_instance_close(battle, definition, random.Random(0), 0.0, content.config.battle)
+    text = game._battle_scene_text(battle, definition)
+    assert engine.ESCORT_SCENE.format(name="韓鐵", hp=round(battle.participants[game.state.player.name].escort.neili),
+                                      cap=round(battle.participants[game.state.player.name].escort.neili_cap)) in text
+    assert "小六" not in text  # 別人的同伴不列
