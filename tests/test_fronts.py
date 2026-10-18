@@ -368,6 +368,7 @@ def test_the_players_advance_reads_the_roster_too(on):
 
 def test_geju_does_not_move_while_the_switch_is_off(real):
     real.scenario.sim_players = []
+    real.config.figure_life.enabled = False  # 人物的襲擾在規則關著的季推黃巾聲勢（另測，tests/test_figure_life.py）
     game = _game(real)
     for _ in range(48):
         rules.geju_tick(game.state, real, 1)

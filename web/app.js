@@ -112,6 +112,7 @@
     meltNote: null, // 批量熔煉的結果（伺服器的 message HTML），寫在功法庫標題底下；下一個修練頁動作就清掉
     rackAll: false, // 裝備庫列完了沒（兵器多時先只列 LIB_PAGE 件，同功法庫）
     insOpen: null, // 修練頁點開的那一個意境（攤開說明與「化成心得」）
+    mxNote: null, // 修練頁其他動作（裝備、意境、門下、療傷）的結果：{ at, html }，寫在按的那一塊裡（mxPlace）；切分頁、做別的動作就清掉
     artNote: null, // 修練（衝品質）的結果：{ id, html }，寫在那一門卡片的按鈕底下（W7）；點別的卡片、切分頁、做別的動作就清掉
     legendTick: {}, // 修練頁每一門武學「服下破境丹」勾了沒（id → true）；預設不勾，輪詢重畫不會悄悄取消，修練送出之後清掉
     forgeSel: [], // 爐裡放的：{type: "art" | "ins", id}，最多兩樣、武學最多兩門（武學＋意境、武學＋武學＝合成，兩個意境＝合併）
@@ -1361,6 +1362,7 @@
           <circle r="${r}" class="w-yang"/>
           <path d="M0,${-r} A${r},${r} 0 0 1 0,${r} A${r / 2},${r / 2} 0 0 1 0,0 A${r / 2},${r / 2} 0 0 0 0,${-r} Z" class="w-yin"/>
           <circle cy="${-r / 2}" r="${r / 7}" class="w-yang"/><circle cy="${r / 2}" r="${r / 7}" class="w-yin"/>
+          <circle r="${r}" class="w-seam"/>
         </g>
         ${slot(slots[0], 0)}${slot(slots[1], 1)}
         <text y="${r - 12}" class="w-furnace-lab">${ready ? "點爐開火" : "太極火爐"}</text>
@@ -2877,13 +2879,15 @@
         <div class="winfo"><b>【${esc(t.name)}】</b><span>${esc(t.effect_text)}</span></div>
         ${wornNow ? "" : `<div class="wbtns"><button class="btn small" data-act="wield" data-id="${esc(t.id)}">換上</button></div>`}
       </div>`;
+    // 修練頁其他動作的結果（mxPlace）：寫在按的那一塊裡，頁首那一行不寫
+    const noteAt = (at) => S.mxNote && S.mxNote.at === at ? `<div class="msg mx-note">${S.mxNote.html}</div>` : "";
     const GEAR_ROWS = { weapon: weaponRow, armor: armorRow, mount: mountRow, treasure: treasureRow };
     const slotBlock = (g) => {
       const row = GEAR_ROWS[g.slot];
       if (!row) return "";
       const shown = S.rackAll || g.rack.length <= LIB_PAGE ? g.rack : g.rack.slice(0, LIB_PAGE);
       // 傳承那一列（玉璽碎片的抄本，玉璽碎片設計 7.3）：寶物段身上那件之前，沒有鈕；寶物的開關關著、只有傳承時不寫「身上沒有寶物」（待 joy 潤）
-      return `<section class="gear-slot" data-slot="${esc(g.slot)}"><div class="sub">${esc(g.label)}</div>
+      return `<section class="gear-slot" data-slot="${esc(g.slot)}"><div class="sub">${esc(g.label)}</div>${noteAt("gear:" + g.slot)}
         ${g.fit_line ? `<p class="muted gear-fit">${esc(g.fit_line)}</p>` : ""}
         ${g.heirloom ? `<div class="wrow heirloom"><div class="winfo"><b>【${esc(g.heirloom.name)}】</b><span>傳承・${esc(g.heirloom.effect_text)}</span></div></div>` : ""}
         ${g.worn ? row(g.worn, true) : g.heirloom && !g.rack.length ? "" : `<p class="muted">${esc(g.empty)}</p>`}
@@ -2917,6 +2921,7 @@
           <select class="input" name="hours" aria-label="閉關幾小時">${[1, 2, 4, 6, 8, 12].map((h) => `<option value="${h}" ${h === 8 ? "selected" : ""}>${h} 小時</option>`).join("")}</select>
         </form>
       </div>
+      ${noteAt("heal")}
       ${x.seclude_blocked ? `<p class="muted">${esc(x.seclude_blocked)}</p>` : ""}
       ${attrNoteHtml(x)}
       <div class="label">身上的兩門</div>
@@ -2931,14 +2936,14 @@
         : '<p class="muted">功法庫是空的。合成出來的武學、學來的武學會放在這裡。</p>'}
       ${showAll ? "" : `<button class="btn ghost lib-more" data-act="lib-all">再列 ${picked.length - LIB_PAGE} 門</button>`}`}
       ${meltOn ? "" : `<div class="label">意境</div>
-      ${x.insights.length ? `<div class="ins">${insChips}</div>
+      ${x.insights.length ? `<div class="ins">${insChips}</div>${noteAt("ins")}
         ${insOpen && !meltOn ? `<div class="insight"><div>${insOpen.own ? glyphSvg(insOpen.glyph, "glyph-big") : ""}<b>「${esc(insOpen.name)}」</b>${insOpen.note ? `<p>${esc(insOpen.note)}</p>` : ""}${insOpen.own ? `<p class="glyph-from">悟於${esc(insOpen.place || "某處")}・只屬於你</p>` : ""}</div>
           <button class="btn small" data-act="melt-insight" data-id="${esc(insOpen.id)}" data-name="${esc(insOpen.name)}" ${insOpen.blocked ? "disabled" : ""}>化成心得 ${insOpen.melt}</button>${insOpen.blocked ? `<small class="muted">${esc(insOpen.blocked)}</small>` : ""}</div>` : ""}`
         : '<p class="muted">還沒悟到任何意境。去探索，荒郊野外最容易有所領悟。</p>'}`}
       <div class="label">門下</div>
       <details class="fold" open><summary>本人</summary><div class="fold-body">${tenCells(x.player_card)}</div></details>
       ${mates ? `<div class="list">${x.roster.map((r) => `<button class="${x.person === r.key ? "on" : ""}" data-act="person" data-key="${esc(r.key)}">${esc(r.label)}</button>`).join("")}</div>` : ""}
-      ${mates && x.person ? `<div class="card">${tenCells(x.person_card)}
+      ${mates && x.person ? `<div class="card person-card">${tenCells(x.person_card)}${noteAt("person")}
         ${x.person === "player" ? '<p class="muted">本人一直都在隊伍裡。</p>' // 本人不能加入、移出（引擎也會擋）
           : x.person.startsWith("follower:") ? "" // 部下（計畫 T5）也不能加入、移出；角色卡已經寫了
           : `<button class="btn ${x.on_team ? "" : "primary"}" data-act="mx" data-op="${x.on_team ? "leave" : "join"}">${x.on_team ? "移出隊伍" : "加入隊伍"}</button>`}
@@ -3039,7 +3044,7 @@
     const r = 20;
     const taichi = `<svg class="kiln-taichi" viewBox="-24 -24 48 48" aria-hidden="true"><circle r="23" class="w-hub-rim"/><g class="w-spin" style="${spinAt(ready ? 3 : 28)}">
       <circle r="${r}" class="w-yang"/><path d="M0,${-r} A${r},${r} 0 0 1 0,${r} A${r / 2},${r / 2} 0 0 1 0,0 A${r / 2},${r / 2} 0 0 0 0,${-r} Z" class="w-yin"/>
-      <circle cy="${-r / 2}" r="${r / 7}" class="w-yang"/><circle cy="${r / 2}" r="${r / 7}" class="w-yin"/></g></svg>`;
+      <circle cy="${-r / 2}" r="${r / 7}" class="w-yang"/><circle cy="${r / 2}" r="${r / 7}" class="w-yin"/><circle r="${r}" class="w-seam"/></g></svg>`;
     return `<div class="kiln-wrap" id="kiln-wrap"><div class="kiln" id="kiln">
       <div class="kiln-big">${furnaceSvg(slots, ready)}</div>
       <div class="kiln-mini">
@@ -5238,7 +5243,7 @@
     S.message = "";
     S.artOpen = null;
     S.artInfo = null; S.insOpen = null; S.libAll = false; S.rackAll = false; // 攤開的詳情、意境、列完的庫也收起（篩選留著）
-    S.artNote = null;
+    S.artNote = null; S.mxNote = null; S.meltNote = null;
     S.legendTick = {}; // 破境丹的勾也一起收：回到修練頁時它是真的沒勾（預設不勾）
     S.forgeResult = null; // 上一爐的結果也收起（篩選留著）
     S.forgeMade = null;
@@ -5614,45 +5619,75 @@
     if (S.tab === "jianghu") renderPage();
   }
 
-  // 修練（cultivate）不捲回頁首（W7）：反覆修練時，那一門的卡片留著、頁面留在原地，結果寫在那一門卡片裡、按鈕的底下（S.artNote），
-  // 頁首的訊息照舊也有。重畫整頁會讓頁首的訊息與卡片的高度變動、把按鈕推走，所以重畫前記下「修練」鈕在螢幕上的位置，
-  // 畫完捲回去補差——玩家的拇指底下永遠還是那顆鈕。例外：這一次練成了絕學、要定名——定名的表單在頁首，照舊捲上去；
-  // 這一次做完了引導的一步（師父的下一句在頁首），也捲上去；改練、熔煉、練成、療傷會改變清單的結構，也照舊回頁首。
-  function cultivateTop(id) {
-    const btn = [...document.querySelectorAll('[data-act="cultivate"]')].find((el) => el.dataset.id === id);
-    return btn ? btn.getBoundingClientRect().top : null;
+  // 修練頁的動作按完停在原地（W7 起只有修練；Joy 2026-10-18「武學升級的時候為什麼要點一次升級又把畫面跳到置頂？」之後每一顆都是）：
+  // 每個動作認一個錨（mxPlace）：重畫前記下它在螢幕上的位置，畫完捲回去補差——玩家的拇指底下還是那一塊。結果寫在錨附近
+  // （武學寫在那一門卡片的按鈕底下 S.artNote，熔掉的寫在功法庫標題底下 S.meltNote，其餘寫在那一塊裡 S.mxNote），頁首那一行不寫。
+  // 照舊回頁首的只有：這一次練成了絕學、要定名（表單在頁首），做完了引導的一步（師父的下一句在頁首），絕學定名本身與沒認的動作。
+  // 回 { from: [選擇器, id], to: [選擇器, id], note: "art:<id>"｜"lib"｜S.mxNote 的 at }，認不得回 null
+  function mxPlace(op, extra) {
+    const x = S.menxia || {};
+    const arts = x.owned_arts || [];
+    const card = (kind) => [`.acard[data-worn="${kind}"]`, null];
+    const slot = (id) => (((x.gear || {}).slots) || []).find((g) => (g.worn && g.worn.id === id) || (g.rack || []).some((w) => w.id === id));
+    const gear = (name) => name ? { from: [`.gear-slot[data-slot="${name}"]`, null], to: [`.gear-slot[data-slot="${name}"]`, null], note: "gear:" + name } : null;
+    switch (op) {
+      case "practice": { // 練成：身上那一門的卡
+        const a = arts.find((r) => r.worn && r.kind === S.kind);
+        return a ? { from: card(S.kind), to: card(S.kind), note: "art:" + a.id } : null;
+      }
+      case "cultivate": return extra.art ? { from: ['[data-act="cultivate"]', extra.art], to: ['[data-act="cultivate"]', extra.art], note: "art:" + extra.art } : null;
+      case "switch": { // 改練：從庫裡那一列換到身上那張卡，畫完讓那張卡停在剛才按的地方
+        const a = arts.find((r) => r.id === extra.art);
+        return a ? { from: ['[data-act="switch"]', extra.art], to: card(a.kind), note: "art:" + extra.art } : null;
+      }
+      case "melt": return { from: ['[data-act="melt"]', extra.art], to: null, note: "lib" }; // 那一列不在了：捲到功法庫標題底下那一句看得到為止
+      case "melt_insight": return { from: [".ins", null], to: [".ins", null], note: "ins" };
+      case "wield": case "dismantle": case "name_divine": case "bind_art": return gear((slot(extra.weapon) || {}).slot);
+      case "feed": return gear("mount");
+      case "chuangong": case "join": case "leave": return { from: [".person-card", null], to: [".person-card", null], note: "person" };
+      case "heal": return { from: ['[data-op="heal"]', null], to: ['[data-op="heal"]', null], note: "heal" };
+      default: return null;
+    }
+  }
+  function placeTop(at) {
+    if (!at) return null;
+    const el = [...document.querySelectorAll(at[0])].find((e) => at[1] == null || (e.dataset && e.dataset.id === at[1]));
+    return el ? el.getBoundingClientRect().top : null;
   }
 
   async function mx(op, extra = {}) {
     await busy(async () => {
-      const stay = op === "cultivate" && !!extra.art;
-      const was = S.menxia, mark = stay ? cultivateTop(extra.art) : null;
+      const place = mxPlace(op, extra);
+      const was = S.menxia, mark = place ? placeTop(place.from) : null;
       const step = guideKey(S.main && S.main.guide);
       const r = await api(`/api/menxia/${op}`, { person: S.person, kind: S.kind, ...extra });
       S.menxia = r.menxia;
       trimPot(); // 熔掉的若正放在爐裡，回煉製頁時不能還留著
-      // 批量熔煉的結果寫在功法庫那裡（按的地方），不捲回頂上、不在頂上再寫一次
+      const needsName = !!(r.menxia && r.menxia.naming) && !(was && was.naming);
+      // 這一次做完了引導的一步（說書人的 key 換了、或框沒了）：師父的下一句在修練頁最上面（序章 p6→p7），不捲上去玩家看不到。
+      // 比的是步驟，不特別認序章，所以以後任何被修練頁的動作做完的引導步驟都一樣
+      const guideMoved = guideKey(r.main && r.main.guide) !== step;
       const batch = op === "melt_many";
-      S.message = batch ? "" : r.message;
-      S.meltNote = batch ? r.message : null;
-      S.artNote = stay ? { id: extra.art, html: r.message } : null;
+      const stay = !!place && mark !== null && !needsName && !guideMoved;
+      const note = place && mark !== null ? place.note : null; // 回頁首的那幾次結果也照樣寫在錨附近（頁首那一行也有）
+      // 批量熔煉的結果寫在功法庫那裡（按的地方），不捲回頂上、不在頂上再寫一次；留在原地的動作同樣只寫在錨附近
+      S.message = batch || stay ? "" : r.message;
+      S.meltNote = batch || note === "lib" ? r.message : null;
+      S.artNote = note && note.startsWith("art:") ? { id: note.slice(4), html: r.message } : null;
+      S.mxNote = note && note !== "lib" && !note.startsWith("art:") ? { at: note, html: r.message } : null;
+      if (op === "switch") S.artOpen = null; // 改練真的送出了：庫裡那一列收起（它已經換到身上那張卡）
       setMain(r.main);
       renderTop();
       if (op === "switch" && S.tab === "craft") { // 煉製頁新武學卡上的「改練上身」：留在卡那裡，結果用提示泡泡說
-        S.message = "";
+        S.message = ""; S.artNote = null;
         keepPlace(() => renderPage(), ".made-card");
         const text = String(r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
         if (text) toast(text);
         return;
       }
       renderPage();
-      const needsName = !!(r.menxia && r.menxia.naming) && !(was && was.naming);
-      // 這一次修練做完了引導的一步（說書人的 key 換了、或框沒了）：師父的下一句在修練頁最上面（序章 p6→p7 「按打坐歇一歇」），
-      // 不捲上去玩家看不到。比的是步驟，不特別認序章，所以以後任何被修練做完的引導步驟都一樣
-      const guideMoved = guideKey(r.main && r.main.guide) !== step;
-      const now = stay && !needsName && !guideMoved && mark !== null ? cultivateTop(extra.art) : null;
-      if (op === "chuangong") return; // 傳功常常連按好幾下：留在人物卡那裡，不捲回頂上
-      if (batch) { document.querySelector(".melt-result")?.scrollIntoView({ block: "center", behavior: "smooth" }); return; }
+      if (batch || (stay && note === "lib")) { document.querySelector(".melt-result")?.scrollIntoView({ block: batch ? "center" : "nearest", behavior: "smooth" }); return; }
+      const now = stay ? placeTop(place.to) : null;
       if (now === null) window.scrollTo({ top: 0, behavior: "smooth" });
       else if (now !== mark) window.scrollBy({ top: now - mark, left: 0, behavior: "instant" });
     });
@@ -6113,9 +6148,7 @@
           break;
         case "switch": {
           // 改練真的送出了（mx 換上伺服器回來的那一份 menxia）才收起卡片；還在忙（mx 直接返回）或請求失敗就照舊開著
-          const was = S.menxia;
-          await mx("switch", { art: el.dataset.id });
-          if (S.menxia !== was) { S.artOpen = null; if (S.tab === "practice") renderPage(); }
+          await mx("switch", { art: el.dataset.id }); // 真的送出了才收起卡片（mx 換上伺服器回來的那一份才收）；還在忙或失敗就照舊開著
           break;
         }
         case "art": S.artOpen = S.artOpen === el.dataset.id ? null : el.dataset.id; S.artNote = null; renderPage(); break;
