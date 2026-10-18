@@ -64,7 +64,7 @@ from tianxia import (
     arena_crowd, battle_instance, biography, calendar, companion_agent, duel, event_llm, fight_llm, foreshadow, gender, glyph, insight_llm, leaderboard, mapdata,
     naming,
     ollama_client, rules,
-    seal, seal_duel, server_bots, social, sortie, team, timetable, treasures,
+    seal, seal_duel, server_bots, social, sortie, tavern, team, timetable, treasures,
 )
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import env_profile, load_content, profile_line
@@ -1027,6 +1027,23 @@ def duel_text(game: Game, text: str) -> list[str]:
     return act(game, lambda g: g.duel_gamble(request.text, verdict.rate, (verdict.win, verdict.lose), request=request, crowd=crowd))
 
 
+def tavern_ask(game: Game, text: str) -> list[str]:
+    """問酒家（酒肆，設計第八節），三段：A Game.tavern_ask_request（只讀；問到秘密的單子不叫模型）→ B 鎖外 tavern.ask_write
+    （預算 Config.tavern.ask_budget_seconds）→ C Game.tavern_ask 重驗同一間、同一句再收錢；叫不動模型退全額。"""
+    started, request = _open_request(game, lambda: game.tavern_ask_request(text))
+    if isinstance(request, list):
+        return request
+    total = game.content.config.tavern.ask_budget_seconds
+
+    def write():
+        client = within_budget(game.client, total - (_monotonic() - started))
+        return tavern.ask_write(client, request)
+
+    reply = None if request.secret else model_call(game, write, fallback=None, left=total - (_monotonic() - started),
+                                                     busy=BUSY_FREE_TEXT)
+    return act(game, lambda g: g.tavern_ask(request.question, reply, request=request))
+
+
 def seal_text(game: Game, text: str) -> list[str]:
     """奪璽單挑的放手一搏（玉璽碎片設計 5.7），三段同 duel_text：A Game.seal_text_request（只讀；判成不在場的回合不開單）→
     B 鎖外請模型評成功率、寫成敗兩版劇情（預算同隨口應對，評不到 40）→ C Game.seal_gamble 重驗同一場、同一回合、同一邊、同一句才用，
@@ -1711,6 +1728,8 @@ def api_do(op: str, request: Request, body: dict = Body(default={})):
         msgs = seal_text(game, str(body.get("text", "")))
     elif op == "duel_text":  # 頭目戰的放手一搏：同上（見 duel_text）
         msgs = duel_text(game, str(body.get("text", "")))
+    elif op == "tavern_ask":  # 問酒家：回話在行動鎖外寫（見 tavern_ask）
+        msgs = tavern_ask(game, str(body.get("text", ""))[:60])
     elif op in MAIN_ACTIONS:
         msgs = act(game, lambda g: MAIN_ACTIONS[op](g, body), paused_ok=op in PAUSE_OK_ACTIONS)
     else:

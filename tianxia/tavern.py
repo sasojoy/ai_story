@@ -16,9 +16,13 @@ from __future__ import annotations
 
 import hashlib
 import random
+import re
+from dataclasses import dataclass
 from collections import deque
 
 from . import atlas, figures, gender, renown, rules, territory
+from pydantic import BaseModel
+
 from .characters import name_key
 from .models import Content, Material
 from .state import GameState, Rumor, TavernHit, TavernNote, WallNote, Whisper, WorldState
@@ -639,7 +643,7 @@ TRACE_LABEL = "反查誰在打聽我（{price} 兩）"
 BOARD_LABEL = "看牆上的懸賞榜"
 BACK_LABEL = "出酒肆"
 TITLES = {"news": "聽消息", "seek": "打聽下落", "ties": "打聽交情", "material": "打聽素材", "wall": "題壁", "treat": "請酒",
-          "hide": "藏行跡", "trace": "反查", "hit": "買殺手", "guard": "保鏢"}  # 酒肆那一頁「剛問到的」每一則的小標（待 joy 潤）
+          "hide": "藏行跡", "trace": "反查", "hit": "買殺手", "guard": "保鏢", "ask": "問酒家"}  # 酒肆那一頁「剛問到的」每一則的小標（待 joy 潤）
 WHO_UNKNOWN = "酒家說：「{name}？沒聽說過這號人物。」（退你 {refund} 兩）"
 ASK_EMPTY = "要打聽誰？先報個名號。"
 ASK_SELF = "酒家笑了：「客官自己在哪，還要問我？」"
@@ -738,3 +742,111 @@ def active_hit(world: WorldState, target: str, now_real: float) -> TavernHit | N
 def town(content: Content, loc_id: str) -> bool:
     loc = content.locations.get(loc_id)
     return loc is not None and content.config.explore_mix_of(loc.tags).kind == "town"
+
+
+# ── 問酒家（設計第八節）：自己打一句話問，酒家照他此刻知道的事回。三段式：A 鎖內打一份事實清單（ask_facts，每一條照打聽度過濾過）、
+# B 鎖外交給模型寫一段（ask_write）、C 鎖內重驗再用（ask_clean：轉繁體、去標記、太長或有清單裡沒有的數字就整段不用）。
+# 秘密（配方、口訣、鑄譜、誰是假人）不在清單裡，問到這些字酒家直接不答、只收一半。叫不動模型退全額。字待 joy 潤 ──
+
+ASK_TITLE = "問酒家"
+ASK_EMPTY_Q = "想問什麼？寫一句吧。"
+ASK_LONG_Q = "一句最多 {n} 個字"
+ASK_SECRET = "酒家擺擺手：「這種事得自己去悟，我一個賣酒的哪曉得。」（只收一半）"
+ASK_BUSY = "酒家忙得團團轉：「今天客人多，改天再說。」（沒收錢）"
+ASK_YOU = "你：「{q}」"
+ASK_HIM = "酒家：「{a}」"
+ASK_RUMOR_KEEP = 6  # 清單裡放幾則最近的傳聞
+ASK_LIMIT = 120  # 回話最多幾個字
+_DIGITS = re.compile(r"[0-9０-９]+")
+
+
+@dataclass(frozen=True)
+class AskRequest:
+    """問酒家的單子（A 段開、B 段送模型、C 段重驗）：誰問、在哪一間、問了什麼、酒家此刻知道的事。"""
+
+    name: str
+    place: str
+    sign: str
+    question: str
+    facts: tuple[str, ...]
+    secret: bool = False
+
+
+class AskReply(BaseModel):
+    reply: str
+
+
+def secret_asked(question: str) -> bool:
+    return any(word in question for word in SECRET_WORDS)
+
+
+def ask_problem(content: Content, question: str) -> str | None:
+    q = question.strip()
+    if not q:
+        return ASK_EMPTY_Q
+    if len(q) > content.config.tavern.ask_chars:
+        return ASK_LONG_Q.format(n=content.config.tavern.ask_chars)
+    return None
+
+
+def ask_facts(state: GameState, content: Content, extra: list[str]) -> tuple[str, ...]:
+    """酒家此刻知道的事：這一區的局勢（大勢人物在哪、心事、地盤）、最近問得到的傳聞（同聽消息的打聽度門檻）、這裡產什麼素材，
+    加上呼叫端給的（懸賞、座上客、你自己的處境）。每一條一句。"""
+    out: list[str] = []
+    out += [line for line in region_lines(state, content) if not line.startswith(REGION_HEAD[:2])]
+    since = state.world.time - rules.recent_seconds(content.config.tavern.news_days, content, state.world)
+    tavern = state.player.location
+    rumors = []
+    for r in reversed(state.world.rumors):
+        if r.time < since or r.layer not in ("world", "local") or r.faction or r.character:
+            continue
+        if rumor_fame(r) + (near(content, tavern, r.location) if r.location else 0) >= 2:
+            rumors.append(r.text)
+        if len(rumors) >= ASK_RUMOR_KEEP:
+            break
+    out += [f"最近的傳聞：{t}" for t in rumors]
+    loc = content.locations.get(tavern)
+    if loc is not None and loc.materials:
+        attrs = "、".join(loc.materials)
+        out.append(f"{loc.name}一帶採得到屬{attrs}的素材。")
+    out += extra
+    return tuple(out)
+
+
+def ask_messages(req: AskRequest) -> list[dict[str, str]]:
+    facts = "\n".join(f"- {f}" for f in req.facts) or "- （這兩日沒什麼新鮮事）"
+    return [
+        {"role": "system", "content": (
+            f"你是東漢末年{req.sign}的酒家，見多識廣、說話市井而老練。客人問你一句話，你只能根據下面「你知道的事」回答；"
+            "清單裡沒有的事就說不清楚、聽說不多，不要編造人名、地名、數字。用繁體中文、半白話、八十字以內、一段話，"
+            "稱客人為「客官」，不要寫標題或列點，不要提到遊戲、系統、清單。"
+        )},
+        {"role": "user", "content": f"你知道的事：\n{facts}\n\n客官問：「{req.question}」\n請給 reply。"},
+    ]
+
+
+def ask_write(client, req: AskRequest) -> str | None:
+    """B 段（鎖外）：請模型寫一段酒家的回話；叫不動、不合用回 None。"""
+    if client is None or req.secret:
+        return None
+    try:
+        result = client.chat_structured(ask_messages(req), AskReply, temperature=0.7, num_predict=320, required_fields=["reply"])
+    except Exception:  # noqa: BLE001 — 叫不動就退全額
+        return None
+    return ask_clean(result.reply, req)
+
+
+def ask_clean(raw: str, req: AskRequest) -> str | None:
+    from . import zh  # noqa: PLC0415
+
+    text = zh.to_traditional(str(raw or ""))
+    text = re.sub(r"[*#>`_]+", "", text)
+    text = re.sub(r"\s+", "", text).strip("「」『』\"'“”")
+    if not text or len(text) > ASK_LIMIT:
+        return None
+    known = "".join(req.facts) + req.question
+    if any(d not in known for d in _DIGITS.findall(text)):
+        return None
+    if any(word in text for word in BANNED_WORDS):
+        return None
+    return text if text[-1] in "。！？…」" else text + "。"

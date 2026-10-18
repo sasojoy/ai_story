@@ -1760,6 +1760,7 @@ class Game:
             "seek": lambda: self._tavern_seek(target), "ties": lambda: self._tavern_ties(target),
             "material": lambda: self._tavern_material(target), "wall": lambda: self._tavern_wall(text),
             "hit": lambda: self._tavern_hit(target, text), "guard": self._tavern_guard,
+            "ask": lambda: self._tavern_ask(text),
         }.get(op)
         if handler is None:
             return ["（沒有這個動作。）"]
@@ -2209,6 +2210,76 @@ class Game:
             self._write(tavern_rules.HIT_TITLE, lines)
             self._save_season()
 
+    # ── 問酒家（設計第八節）：A tavern_ask_request（只讀）→ B 鎖外 tavern.ask_write → C tavern_ask（重驗同一間、同一句，再過一次 ask_clean）──
+
+    def _tavern_ask_facts(self) -> tuple[str, ...]:
+        s, c = self.state, self.content
+        p = s.player
+        extra = []
+        guests = [o.player.name for o in social.here(self)][:6]
+        if guests:
+            extra.append(f"此刻也在{c.locations[p.location].name}的江湖人：{'、'.join(guests)}。")
+        side = social.side(s, c)
+        extra.append(f"問話的客官是{side}，名號{p.name}。")
+        return tavern_rules.ask_facts(s, c, extra)
+
+    def tavern_ask_request(self, text: str) -> tavern_rules.AskRequest | list[str]:
+        """A 段（鎖內、只讀）：酒肆開著、問句合格、付得起，就開一張單（問到秘密的單子標 secret，B 段不叫模型）；不然回那一句拒絕。"""
+        s, c = self.state, self.content
+        if not self._tavern_open():
+            return [equipment.NOT_NOW]
+        q = str(text or "").strip()
+        problem = tavern_rules.ask_problem(c, q)
+        if problem is None:
+            problem = tavern_rules.pay_problem(s, self._tavern_price(c.config.tavern.ask_price))
+        if problem is not None:
+            return [problem]
+        return tavern_rules.AskRequest(name=s.player.name, place=s.player.location, sign=tavern_rules.sign(s, c), question=q,
+                                       facts=self._tavern_ask_facts(), secret=tavern_rules.secret_asked(q))
+
+    def tavern_ask(self, text: str, reply: str | None, request: tavern_rules.AskRequest | None = None) -> list[str]:
+        """C 段：重驗（酒肆還開著、還在同一間、同一句），回話再過一次 ask_clean（照此刻的清單），然後收錢寫紀錄。"""
+        if not self._tavern_open():
+            return self._log([equipment.NOT_NOW])
+        q = str(text or "").strip()
+        ok = request is not None and request.place == self.state.player.location and request.question == q
+        self._tavern_reply = reply if ok else None
+        try:
+            return self._log(self._tavern_run("ask", text=q))
+        finally:
+            self._tavern_reply = None
+
+    def _tavern_ask(self, text: str) -> list[str]:
+        s, c = self.state, self.content
+        cfg = c.config.tavern
+        q = text.strip()
+        problem = tavern_rules.ask_problem(c, q)
+        if problem is not None:
+            self._shop_after(problem, "refused")
+            return [problem]
+        if tavern_rules.secret_asked(q):
+            half = max(0, cfg.ask_price // 2)
+            if self._tavern_charge(half) is None:
+                return self._tavern_short(half)
+            lines = [tavern_rules.ASK_YOU.format(q=q), tavern_rules.ASK_SECRET]
+            tavern_rules.add_note(s, c, "ask", tavern_rules.ASK_TITLE, lines)
+            self._shop_say("nothing")
+            return lines
+        if self._tavern_charge(cfg.ask_price) is None:
+            return self._tavern_short(cfg.ask_price)
+        req = tavern_rules.AskRequest(name=s.player.name, place=s.player.location, sign=tavern_rules.sign(s, c), question=q,
+                                      facts=self._tavern_ask_facts())
+        reply = getattr(self, "_tavern_reply", None)  # B 段寫好的（tavern_ask 放的）；直接呼叫沒有 B 段，當叫不動
+        reply = tavern_rules.ask_clean(reply, req) if reply else None
+        if reply is None:
+            tavern_rules.pay(s, -self._tavern_price(cfg.ask_price))  # 叫不動模型：退全額
+            self._shop_say("nothing")
+            return [tavern_rules.ASK_BUSY]
+        lines = [tavern_rules.ASK_YOU.format(q=q), tavern_rules.ASK_HIM.format(a=reply)]
+        tavern_rules.add_note(s, c, "ask", tavern_rules.ASK_TITLE, lines)
+        self._shop_say("asked")
+        return lines
+
     def _deliver_whispers(self) -> None:
         """酒肆的風聲（有人打聽你）：季上那幾則搬到身上，寫一則「風聲」紀錄。"""
         lines = tavern_rules.collect_whispers(self.state, self.content)
@@ -2224,7 +2295,7 @@ class Game:
         loc = p.location
         guests = [o.player.name for o in social.here(self)]
         treat = tavern_rules.treat_shown(s.world, c, loc)
-        prices = {k: self._tavern_price(getattr(cfg, f"{k}_price")) for k in ("news", "seek", "ties", "wall", "treat", "hide", "trace")}
+        prices = {k: self._tavern_price(getattr(cfg, f"{k}_price")) for k in ("news", "seek", "ties", "wall", "treat", "hide", "trace", "ask")}
         mats = []
         for m in sorted(c.materials.values(), key=lambda m: (m.tier, shopview.attribute_rank(m.attribute), m.id)):
             base = cfg.material_prices.get(m.tier, max(cfg.material_prices.values()))
@@ -2258,6 +2329,7 @@ class Game:
             "chatter": [{"who": who, "said": said} for who, said in tavern_rules.chatter(c, loc, hour)],
             "walls": [{"who": w.who, "text": w.text, "when": self.stamp(w.time)} for w in reversed(s.world.tavern_walls.get(loc, []))],
             "wall_chars": cfg.wall_chars,
+            "ask_chars": cfg.ask_chars,
             "known": list(reversed(p.tavern_known)),
             "materials": mats,
             "whispers": tavern_rules.whisper_view(c, s),

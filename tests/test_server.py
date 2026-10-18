@@ -5485,6 +5485,7 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
         "prepare_peer",  # 論武答應時的首創取名（玩家卡上的互動，social.CardAction.request）
         "zhuan_job",  # 季末寫傳（玩家傳第二批）：server.write_zhuan 開的背景執行緒，A、C 段各拿一次鎖，模型在兩段之間
         "seal_text",  # 奪璽單挑的放手一搏（玉璽碎片設計 5.7）：三段同 duel_text
+        "tavern_ask",  # 酒肆問酒家：三段同 duel_text，模型只寫酒家那一句
     }
     # 宣告、model_call 讀、main() 建佇列；另外兩個只看不排：/api/queue 問位置、管理者那份資料抄總數（admin_choices 在 look 的鎖裡，
     # 但 snapshot 只碰佇列自己的短鎖、不等任何一件，不算在行動鎖裡排隊）

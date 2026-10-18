@@ -3521,21 +3521,26 @@
   }
 
   function tavAskHtml(shop) {
-    const mode = S.tavAsk === "ties" ? "ties" : "seek";
-    const modes = [["seek", "查人在哪", shop.prices.seek], ["ties", "打聽交情", shop.prices.ties]]
+    const mode = ["ties", "q"].includes(S.tavAsk) ? S.tavAsk : "seek";
+    const modes = [["seek", "查人在哪", shop.prices.seek], ["ties", "打聽交情", shop.prices.ties], ["q", "問酒家", shop.prices.ask]]
       .map(([k, name, price]) => `<button class="shop-page${mode === k ? " on" : ""}" data-act="tav-mode" data-mode="${k}">${name}・${price | 0} 兩</button>`).join("");
     const asked = shop.known.filter((n) => !shop.guests.includes(n)).slice(0, 8); // 問過的（座上客已經列了的不重寫）
     const known = asked.length ? `<div class="tav-known"><span class="gl">問過的</span>${asked.map((n) => `<button class="tav-chip" data-act="tav-name" data-name="${esc(n)}">${esc(n)}</button>`).join("")}</div>` : "";
     const guests = shop.guests.length ? `<div class="tav-known"><span class="gl">座上客</span>${shop.guests.map((n) => `<button class="tav-chip" data-act="tav-name" data-name="${esc(n)}">${esc(n)}</button>`).join("")}</div>` : "";
-    const hint = mode === "seek" ? "報個名號（江湖人物或大勢人物都行）。越有名、離這裡越近，越問得準；問不到退一半。" : "問誰跟他走得近、他身邊有誰、近來做了什麼。越有名越好打聽；問不到退一半。";
+    const hint = mode === "seek" ? "報個名號（江湖人物或大勢人物都行）。越有名、離這裡越近，越問得準；問不到退一半。"
+      : mode === "ties" ? "問誰跟他走得近、他身邊有誰、近來做了什麼。越有名越好打聽；問不到退一半。"
+      : `隨口問一句（${shop.ask_chars | 0} 字內），酒家照他聽來的說。他答不上來不收錢。`;
+    const box = mode === "q"
+      ? `<form class="tav-form" id="tav-q"><input class="input" name="text" data-keep="q" maxlength="${shop.ask_chars | 0}" placeholder="例：最近哪裡最亂？" autocomplete="off"><button class="btn primary small" type="submit">問</button></form>`
+      : `<form class="tav-form" id="tav-ask"><input class="input" name="target" data-keep="ask" maxlength="20" placeholder="名號" autocomplete="off"><button class="btn primary small" type="submit">打聽</button></form>`;
     const mats = shop.materials.map((m) => `<option value="${esc(m.id)}"${m.id === S.tavMat ? " selected" : ""}>${esc(m.name)}（${m.tier | 0} 階・${m.price | 0} 兩）</option>`).join("");
     return `<div class="shop-pages tav-modes">${modes}</div>
-      <form class="tav-form" id="tav-ask"><input class="input" name="target" data-keep="ask" maxlength="20" placeholder="名號" autocomplete="off"><button class="btn primary small" type="submit">打聽</button></form>
-      <p class="shop-cap">${esc(hint)}</p>${guests}${known}
+      ${box}
+      <p class="shop-cap">${esc(hint)}</p>${mode === "q" ? "" : guests + known}
       <h4 class="tav-h">打聽素材<small>哪裡採得到</small></h4>
       <form class="tav-form" id="tav-mat"><select class="input" name="material">${mats}</select><button class="btn small" type="submit">打聽</button></form>
       ${tavDone()}
-      ${tavNotes(shop, ["seek", "ties", "material"], "還沒打聽過什麼。")}`;
+      ${tavNotes(shop, ["ask", "seek", "ties", "material"], "還沒打聽過什麼。")}`;
   }
 
   function tavWallHtml(shop) {
@@ -3577,10 +3582,10 @@
   }
 
   // 打聽到了的寫成一則（每一頁「剛問到的」），那一句不再另外寫在上面；沒問到、被拒的那一句才寫
-  async function tavDo(op, body = {}) {
+  async function tavDo(op, body = {}, route = "tavern") {
     const seen = S.main && S.main.shop && S.main.shop.notes ? S.main.shop.notes.length : 0;
     const top = S.main && S.main.shop && S.main.shop.notes && S.main.shop.notes[0] ? S.main.shop.notes[0].when + S.main.shop.notes[0].title : "";
-    await shopDo("tavern", { op, ...body }, (r) => {
+    await shopDo(route, route === "tavern" ? { op, ...body } : body, (r) => {
       const notes = r.main && r.main.shop && r.main.shop.notes;
       if (notes && notes.length && (notes.length !== seen || notes[0].when + notes[0].title !== top)) S.shopNote = null;
     });
@@ -6546,6 +6551,11 @@
       } else if (form.id === "tav-ask") {
         if (!data.target.trim()) return;
         await tavDo(S.tavAsk === "ties" ? "ties" : "seek", { target: data.target.trim() });
+      } else if (form.id === "tav-q") {
+        if (!data.text.trim()) return;
+        await tavDo("", { text: data.text.trim() }, "tavern_ask");
+        const box = document.querySelector('#tav-q input[name="text"]');
+        if (box && S.shopNote == null) box.value = "";
       } else if (form.id === "tav-mat") {
         if (!data.material) return;
         S.tavMat = data.material;

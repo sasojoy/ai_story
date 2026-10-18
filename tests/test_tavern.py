@@ -277,3 +277,38 @@ def test_a_guard_once_until_it_lapses():
     game.tavern_do("guard")
     assert game.state.player.tavern_guard_until > game.now
     assert game.tavern_do("guard")[0].startswith("保鏢還跟著")
+
+
+def test_asking_the_keeper_three_steps():
+    game = _game()
+    c = game.content
+    game.choose("act:tavern")
+    req = game.tavern_ask_request("最近哪裡最亂？")
+    assert isinstance(req, tavern.AskRequest) and req.facts and not req.secret
+    before = game.state.player.stats["silver"]
+    msgs = game.tavern_ask(req.question, "客官，這兩日南陽一帶最不太平，聽說黃巾又有動靜。", request=req)
+    assert game.state.player.stats["silver"] == before - game._tavern_price(c.config.tavern.ask_price)
+    assert msgs[1].startswith("酒家：「客官")
+    assert game.state.player.tavern_notes[-1].kind == "ask"
+
+
+def test_the_keeper_does_not_answer_secrets_and_is_free_when_silent():
+    game = _game()
+    c = game.content
+    game.choose("act:tavern")
+    req = game.tavern_ask_request("神器配方怎麼湊？")
+    assert req.secret and tavern.ask_write(object(), req) is None  # 秘密不叫模型
+    before = game.state.player.stats["silver"]
+    assert game.tavern_ask(req.question, None, request=req)[1] == tavern.ASK_SECRET
+    assert game.state.player.stats["silver"] == before - game._tavern_price(c.config.tavern.ask_price // 2)
+    before = game.state.player.stats["silver"]
+    req = game.tavern_ask_request("曹操好不好說話？")
+    assert game.tavern_ask(req.question, None, request=req) == [tavern.ASK_BUSY]
+    assert game.state.player.stats["silver"] == before
+
+
+def test_a_reply_with_made_up_numbers_is_thrown_away():
+    req = tavern.AskRequest(name="甲", place="wan_city", sign="宛城・酒肆", question="多少人？", facts=("宛城一帶採得到屬剛的素材。",))
+    assert tavern.ask_clean("客官，城外聚了三千人。", req) == "客官，城外聚了三千人。"
+    assert tavern.ask_clean("客官，城外聚了3000人。", req) is None
+    assert tavern.ask_clean("字" * 200, req) is None
