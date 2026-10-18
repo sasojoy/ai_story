@@ -136,6 +136,24 @@ def test_switch_off_restores_the_old_economy():
     assert economy.upgrade_problem(s, c, "剛", 3, DAY) == economy.UPGRADE_DAY_FULL
 
 
+def test_real_content_loads_with_the_tier4_rules_switched_off(tmp_path):
+    """FB-340：主機在 content/config.json 關掉素材四階（或升階）時，正式內容照樣載得起來；四階料是內容收不回的，關著時只是拿不到
+    （設計 10.1：九件神器實際上打不出來）。在載入之前就改設定。"""
+    import json
+    import shutil
+    from pathlib import Path
+
+    from tianxia.content import load_content
+
+    root = tmp_path / "content"
+    shutil.copytree(Path(__file__).resolve().parent.parent / "content", root)
+    raw = json.loads((root / "config.json").read_text(encoding="utf-8"))
+    for patch in ({"four_tiers": {"enabled": False}}, {"economy": {"upgrade": False}}):
+        (root / "config.json").write_text(json.dumps({**raw, **patch}, ensure_ascii=False), encoding="utf-8")
+        c = load_content(root)
+        assert {"gang_4", "rou_4", "kuai_4", "man_4"} <= set(c.materials)
+
+
 def test_tier4_counts_as_reachable_through_the_upgrade():
     from tianxia.content import _material_sources
 

@@ -1875,7 +1875,11 @@ def validate(c: Content) -> None:
     # 每一種素材都要至少有一個拿得到的管道，否則它是死內容。第一版的「鎮山鐵」就是這樣
     # 漏掉的：掉天品的兩個對手屬剛與屬柔、奇遇給屬快，屬慢沒人負責，而難度 >=100 的對手
     # 都寫了明確 drops，所以依難度的預設表（會按對手屬性挑）對它們根本不執行。
-    unreachable = sorted(set(c.materials) - _material_sources(c))
+    unreachable = set(c.materials) - _material_sources(c)
+    if not (c.config.four_tiers.enabled and c.config.economy.upgrade):
+        # FB-340：素材四階或升階關著時四階料拿不到是預期的（四階料是內容收不回的，設計 10.1：關著時九件神器實際上打不出來），不擋載入
+        unreachable = {mid for mid in unreachable if c.materials[mid].tier < 4}
+    unreachable = sorted(unreachable)
     need(
         not unreachable,
         "這些素材沒有任何取得管道（沒有對手掉、沒有地點撿、沒有事件給）："
