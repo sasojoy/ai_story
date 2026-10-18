@@ -113,26 +113,43 @@ def contest(state: GameState, content: Content, fid: str, challenger: str, power
     return post, broke
 
 
-def restored_today(state: GameState, fid: str) -> float:
-    return state.world.aid_tally.get(f"restored:{fid}:{_day(state)}", 0.0)
+def _life():
+    """「大勢人物擴充」那一份（tianxia/figure_life.py，PR #58）在的話，一天的上限照它的帳（gain_left／note_gain，募兵、自然回復、
+    犒軍共用 Config.figure_life.daily_gain_cap）；不在照這裡的 daily_restore_cap 與 aid_tally。兩份先後合進 main 都對得上。"""
+    try:
+        from . import figure_life  # noqa: PLC0415
+    except ImportError:
+        return None
+    return figure_life if hasattr(figure_life, "gain_left") else None
+
+
+def left_today(state: GameState, content: Content, fid: str) -> float:
+    """這位人物今天還能回幾點聲威（開關關著不設上限）。"""
+    life = _life()
+    if life is not None:
+        return life.gain_left(state.world, content, fid)
+    if not on(content):
+        return float("inf")
+    return content.config.figure_aid.daily_restore_cap - state.world.aid_tally.get(f"restored:{fid}:{_day(state)}", 0.0)
 
 
 def restore(state: GameState, content: Content, fid: str, amount: float) -> int:
-    """替人物補聲威 amount（自然回復、犒軍、人物自己募兵共用）：補到開季值、一天最多 daily_restore_cap（開關關著不設上限）。
-    回傳真的補了幾點。"""
+    """替人物補聲威 amount（自然回復、犒軍、人物自己募兵共用）：補到開季值、一天有上限（left_today）。回傳真的補了幾點。"""
     fig = content.figures.get(fid)
     now = state.world.figures.get(fid)
     if fig is None or now is None or amount <= 0:
         return 0
-    room = fig.start_prestige - now.prestige
-    if on(content):
-        room = min(room, int(content.config.figure_aid.daily_restore_cap - restored_today(state, fid)))
-    gained = max(0, min(int(amount), room))
+    room = min(fig.start_prestige - now.prestige, left_today(state, content, fid))
+    gained = max(0, int(min(int(amount), room)))
     if gained:
         now.prestige += gained
-        key = f"restored:{fid}:{_day(state)}"
-        state.world.aid_tally[key] = state.world.aid_tally.get(key, 0.0) + gained
-        _prune_tally(state)
+        life = _life()
+        if life is not None:
+            life.note_gain(state.world, content, fid, gained)
+        else:
+            key = f"restored:{fid}:{_day(state)}"
+            state.world.aid_tally[key] = state.world.aid_tally.get(key, 0.0) + gained
+            _prune_tally(state)
     return gained
 
 
@@ -149,7 +166,7 @@ def rally_problem(state: GameState, content: Content, fid: str) -> str | None:
         return TOP_NOTE
     if state.world.aid_tally.get(f"rally:{fid}:{state.player.name}:{_day(state)}", 0) >= cfg.rally_per_day:
         return FULL_NOTE
-    if restored_today(state, fid) >= cfg.daily_restore_cap:
+    if left_today(state, content, fid) <= 0:
         return CAP_NOTE
     if state.player.stats.get("silver", 0) < cfg.rally_silver:
         return f"銀兩不夠（要 {cfg.rally_silver} 兩）"
