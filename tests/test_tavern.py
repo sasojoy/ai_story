@@ -177,3 +177,29 @@ def test_cannot_act_outside_the_tavern():
     before = game.state.player.stats["silver"]
     game.tavern_do("news")
     assert game.state.player.stats["silver"] == before
+
+
+def test_a_bot_drops_in_asks_one_thing_and_leaves():
+    from tianxia import bot_policy
+    game = _game(silver=500)
+    rng = random.Random(1)
+    old = bot_policy.TAVERN_CHANCE
+    bot_policy.TAVERN_CHANCE = 1.0
+    try:
+        msgs = bot_policy._tavern(game, rng)
+    finally:
+        bot_policy.TAVERN_CHANCE = old
+    assert msgs
+    assert not game.state.player.picking_tavern
+    assert game.state.player.stats["silver"] < 500
+
+
+def test_a_bot_short_of_silver_stays_out():
+    from tianxia import bot_policy
+    game = _game(silver=5)
+    old = bot_policy.TAVERN_CHANCE
+    bot_policy.TAVERN_CHANCE = 1.0
+    try:
+        assert bot_policy._tavern(game, random.Random(1)) is None
+    finally:
+        bot_policy.TAVERN_CHANCE = old

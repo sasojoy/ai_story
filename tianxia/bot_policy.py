@@ -182,6 +182,9 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random, slot: NamingS
     played = _stamina_play(game, rng)
     if played is not None:
         return msgs + played
+    drank = _tavern(game, rng)
+    if drank is not None:
+        return msgs + drank
     staged = _arena(game, rng)
     if staged is not None:
         msgs = msgs + staged
@@ -306,6 +309,49 @@ def _arena(game: Game, rng: random.Random) -> list[str] | None:
             msgs += game.choose(pick)
     if s.player.picking_arena:
         msgs += game.choose("arena:back")
+    return msgs
+
+
+# 酒肆（tianxia/tavern.py）：人在有酒肆的城鎮、手上銀兩比這一下的價錢多 TAVERN_RESERVE 時，每一輪 TAVERN_CHANCE 的機會進去問一件事、
+# 問完出門。真人會打聽人，假人也要會：不然「有人打聽你」的風聲只會來自真人，看得出誰是假人。問什麼照 TAVERN_ASKS 的權重擲；
+# 打聽人挑在座的客人、問過的名號或這一區的大勢人物，打聽素材挑一階、二階的。不寫題壁、不請酒、不藏行跡、不反查（真人的事）。
+TAVERN_CHANCE = 0.03
+TAVERN_RESERVE = 30
+TAVERN_ASKS = (("news", 5), ("seek", 3), ("material", 2), ("ties", 1))
+
+
+def _tavern(game: Game, rng: random.Random) -> list[str] | None:
+    """進酒肆問一件事、出門；這一輪不做是 None。選單上沒有「酒肆」時不擲骰。"""
+    s = game.state
+    if "act:tavern" not in {o.id for o in game.options(odds=False, tick=False) if o.enabled}:
+        return None
+    if rng.random() >= TAVERN_CHANCE:
+        return None
+    op = rng.choices([k for k, _ in TAVERN_ASKS], weights=[w for _, w in TAVERN_ASKS])[0]
+    t = game.content.config.tavern
+    price = game._tavern_price({"news": t.news_price, "seek": t.seek_price, "ties": t.ties_price}.get(op, max(t.material_prices.values())))
+    if s.player.stats.get("silver", 0) < price + TAVERN_RESERVE:
+        return None
+    msgs = game.choose("act:tavern")
+    view = game.tavern_view()
+    target = ""
+    if op in ("seek", "ties"):
+        names = list(view["guests"]) + list(view["known"])
+        if not names or rng.random() < 0.4:
+            figures = [game.content.characters[f.character].name for f in game.content.figures.values()
+                       if f.character in game.content.characters]
+            names = names + figures
+        target = rng.choice(names) if names else ""
+        if not target:
+            op = "news"
+    elif op == "material":
+        mats = [m["id"] for m in view["materials"] if m["tier"] <= 2]
+        target = rng.choice(mats) if mats else ""
+        if not target:
+            op = "news"
+    msgs += game.tavern_do(op, target)
+    if s.player.picking_tavern:
+        msgs += game.choose(view["back"])
     return msgs
 
 
