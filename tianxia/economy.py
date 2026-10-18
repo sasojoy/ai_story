@@ -9,13 +9,16 @@ from __future__ import annotations
 
 import random
 
-from . import materials, renown, rules, territory
+from . import four_tiers, materials, renown, rules, territory
 from .models import Content, Material
 from .state import GameState, WorldState
 
 # 玩家看得到的字（待 joy 潤）
 SELL_DONE = "鐵匠收下{item}，數了 {silver} 兩給你。"
-SELL_TIER3 = "三階的料鐵匠不收——留著打神器吧"
+SELL_TIER3 = "三階的料鐵匠不收——留著打神器吧"  # 素材四階關著時（舊規則）
+SELL_TIER4 = "四階的料鐵匠不收，留著打神器吧"  # 素材四階（正式季整合 4.2）：四階不收
+UPGRADE_SEASON_FULL = "這一季能升的四階都升過了"  # 三換四一季的上限（4.5）
+DONATE_TIER4 = "四階的料軍需官不收"  # 4.6：四階不能捐軍備
 SELL_NONE = "你身上沒有這樣東西"
 SELL_SHORT = "{name}只有 {have} 個"
 UPGRADE_DONE = "鐵匠把 {count} 個{low}下爐熬煉，煉出一個【{high}】。"
@@ -59,8 +62,22 @@ def upgradable(content: Content) -> list[tuple[str, int]]:
     照屬性（ATTRIBUTE_ORDER）、再照階排。"""
     attrs = sorted({m.attribute for m in content.materials.values()},
                    key=lambda a: (ATTRIBUTE_ORDER.index(a), "") if a in ATTRIBUTE_ORDER else (len(ATTRIBUTE_ORDER), a))
-    tiers = sorted(t for t in content.config.economy.upgrade_need if t > 1)
+    tiers = sorted(t for t in upgrade_needs(content) if t > 1)
     return [(a, t) for a in attrs for t in tiers if _of(content, a, t) is not None and _of(content, a, t - 1) is not None]
+
+
+def upgrade_needs(content: Content) -> dict[int, int]:
+    """換到幾階 → 要幾個同屬性低一階的：Config.economy.upgrade_need，素材四階開著時加上三換四（Config.four_tiers.upgrade_need）。"""
+    needs = dict(content.config.economy.upgrade_need)
+    if four_tiers.on(content):
+        needs[four_tiers.TIER] = content.config.four_tiers.upgrade_need
+    return needs
+
+
+def _upgrade_silver(content: Content, tier: int) -> int:
+    if tier == four_tiers.TIER and four_tiers.on(content):
+        return content.config.four_tiers.upgrade_silver
+    return content.config.economy.upgrade_silver.get(tier, 0)
 
 
 def upgrade_pair(content: Content, attribute: str, tier: int) -> tuple[Material, Material]:
@@ -76,10 +93,16 @@ def _of(content: Content, attribute: str, tier: int) -> Material | None:
 # ── 收購（第五節）──────────────────────────────────────────
 
 
-def sell_price(content: Content, tier: int) -> int | None:
-    """一個這一階的素材收多少兩；不在表上的階（三階）不收，是 None。收購價不分地盤。"""
-    return content.config.economy.sell_price.get(tier)
+def sell_tiers(content: Content) -> list[int]:
+    """鐵匠鋪收哪幾階（照 Config.economy.sell_price 的表）：素材四階開著時一到三階（正式季整合 4.2：三階 18 兩），
+    關著照舊只收一、二階（三階留著打神器）；四階一律不收。收購、黑市、店面與玩法說明的字都照它。"""
+    top = four_tiers.TOP_COMMON if four_tiers.on(content) else 2
+    return sorted(t for t in content.config.economy.sell_price if t <= top)
 
+
+def sell_price(content: Content, tier: int) -> int | None:
+    """一個這一階的素材收多少兩；不收的階（四階；素材四階關著時連三階）是 None。收購價不分地盤。"""
+    return content.config.economy.sell_price.get(tier) if tier in sell_tiers(content) else None
 
 def sell_price_for(state: GameState, content: Content, tier: int) -> int | None:
     """這個人賣一個這一階的素材收多少兩：寇一路綠林好漢以上照黑市價（名聲 5.2，renown.black_market_price：一階 3、二階 8），
@@ -103,7 +126,7 @@ def sell_problem(state: GameState, content: Content, mid: str, count: int = 1) -
     if material is None or have <= 0:
         return SELL_NONE
     if sell_price_for(state, content, material.tier) is None:
-        return SELL_TIER3
+        return SELL_TIER4 if four_tiers.is_tier4(material) else SELL_TIER3
     if count <= 0 or count > have:
         return SELL_SHORT.format(name=material.name, have=have)
     return None
@@ -126,7 +149,7 @@ def sell(state: GameState, content: Content, mid: str, count: int = 1) -> list[s
 
 def upgrade_cost(state: GameState, content: Content, tier: int) -> int:
     """換一個 tier 階的工錢：Config.economy.upgrade_silver 乘所在地的地盤福利（territory.price_factor），四捨五入（同 smithing.price）。"""
-    base = content.config.economy.upgrade_silver.get(tier, 0)
+    base = _upgrade_silver(content, tier)
     return int(base * territory.price_here(state, content) + 0.5)  # 地盤福利（照依附那一軍）× 名望的店家折扣（名聲設計 4.1）
 
 
@@ -137,7 +160,7 @@ def upgrade_outcomes(content: Content, attribute: str, tier: int) -> list[tuple[
     same = _of(content, attribute, tier)
     others = [m for a, t in upgradable(content) if t == tier and a != attribute and (m := _of(content, a, tier)) is not None]
     share = content.config.economy.upgrade_same_share
-    if not others or share >= 1:
+    if not others or share >= 1 or tier == four_tiers.TIER:  # 三換四一定出同屬性（4.5：這是補屬性的路）
         return [(same, 1.0)]
     rest = (1 - share) / len(others)
     return [(same, share)] + [(m, rest) for m in others]
@@ -176,7 +199,12 @@ def _today(p, day: int) -> dict[int, int]:
 
 
 def upgrade_left(state: GameState, content: Content, tier: int, day: int) -> int | None:
-    """今天還能換幾個 tier 階（Config.economy.upgrade_per_day）；不限是 None。"""
+    """還能換幾個 tier 階；不限是 None。素材四階開著時：三換四照這一季還剩幾個（Config.four_tiers.season_cap），其餘不限
+    （正式季整合 4.2：拿掉二換三一天一個）；關著照舊看今天（Config.economy.upgrade_per_day）。"""
+    if four_tiers.on(content):
+        if tier != four_tiers.TIER:
+            return None
+        return max(0, content.config.four_tiers.season_cap - state.player.tier4_upgrades)
     cap = content.config.economy.upgrade_per_day.get(tier)
     if cap is None:
         return None
@@ -184,16 +212,16 @@ def upgrade_left(state: GameState, content: Content, tier: int, day: int) -> int
 
 
 def upgrade_problem(state: GameState, content: Content, attribute: str, tier: int, day: int) -> str | None:
-    """把同屬性低一階的換一個 tier 階不行的原因；可以時是 None。照這個順序擋：換不出這一階、沒有這樣的料、今天的上限、料不夠、錢不夠。"""
-    econ = content.config.economy
-    need = econ.upgrade_need.get(tier)
+    """把同屬性低一階的換一個 tier 階不行的原因；可以時是 None。照這個順序擋：換不出這一階、沒有這樣的料、上限（今天的、
+    三換四這一季的）、料不夠、錢不夠。"""
+    need = upgrade_needs(content).get(tier)
     high, low = _of(content, attribute, tier), _of(content, attribute, tier - 1)
     if need is None or tier <= 1:
         return UPGRADE_NO_WAY
     if high is None or low is None:
         return UPGRADE_NO_KIND
     if upgrade_left(state, content, tier, day) == 0:
-        return UPGRADE_DAY_FULL
+        return UPGRADE_SEASON_FULL if tier == four_tiers.TIER else UPGRADE_DAY_FULL
     have = materials.held(state, low.id)
     if have < need:
         return UPGRADE_SHORT.format(name=low.name, need=need, have=have)
@@ -210,14 +238,16 @@ def upgrade(state: GameState, content: Content, attribute: str, tier: int, day: 
     if problem is not None:
         return [problem]
     p = state.player
-    need = content.config.economy.upgrade_need[tier]
+    need = upgrade_needs(content)[tier]
     low = _of(content, attribute, tier - 1)
     got_material = roll_upgrade(state, content, attribute, tier)
     p.upgrade_seq += 1
     cost = upgrade_cost(state, content, tier)
     materials.take(state, low.id, need)
     p.stats["silver"] = p.stats.get("silver", 0) - cost
-    if tier in content.config.economy.upgrade_per_day:
+    if tier == four_tiers.TIER:
+        p.tier4_upgrades += 1  # 三換四這一季的上限（Config.four_tiers.season_cap）
+    elif tier in content.config.economy.upgrade_per_day and not four_tiers.on(content):
         counts = dict(_today(p, day))
         counts[tier] = counts.get(tier, 0) + 1
         p.upgrade_day, p.upgrades_today = day, counts
@@ -254,6 +284,8 @@ def donate_take(state: GameState, content: Content, mid: str, count: int, day: i
 def donate_problem(state: GameState, content: Content, mid: str, day: int) -> str | None:
     """捐 mid 一個都捐不了的原因；捐得了（至少一個）時是 None。在不在自家大本營由 Game 問。"""
     points = donate_points(content, mid)
+    if materials.held(state, mid) > 0 and four_tiers.tier4_id(content, mid):
+        return DONATE_TIER4
     if points <= 0 or materials.held(state, mid) <= 0:
         return DONATE_NONE
     room = donate_room(state, content, day)

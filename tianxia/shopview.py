@@ -9,7 +9,7 @@ import hashlib
 import json
 import re
 
-from . import arena, armor, bounties, economy, equipment, forge_secrets, mounts, rules, skillview, smithing, tactics, team, territory, weapons
+from . import arena, armor, bounties, economy, equipment, forge_secrets, four_tiers, mounts, rules, skillview, smithing, tactics, team, territory, weapons
 from . import duel as duel_rules
 from .characters import name_key
 from .models import MOVES, WEAPON_KINDS, Content
@@ -355,11 +355,11 @@ def trade_view(state: GameState, content: Content, day: int) -> dict | None:
             have = state.player.materials.get(low.id, 0)
             upgrade.append({
                 "attribute": attribute, "tier": tier, "name": high.name, "id": high.id, "from": low.name, "from_id": low.id,
-                "need": econ.upgrade_need[tier], "have": have,
+                "need": (need := economy.upgrade_needs(content)[tier]), "have": have,
                 "cost": economy.upgrade_cost(state, content, tier), "left": economy.upgrade_left(state, content, tier, day),
                 "cost_note": territory.price_note(state, content),  # 名聲 4.1：工錢後面寫原因（關著是空的）
                 "problem": problem,
-                "short": _upgrade_short(problem, have, econ.upgrade_need[tier]),  # 素材頁格子上寫的短原因
+                "short": _upgrade_short(problem, have, need),  # 素材頁格子上寫的短原因
                 "odds": economy.upgrade_odds(content, attribute, tier),  # 「五成出流雲絮，其餘隨機」
                 "same_share": (share := economy.upgrade_outcomes(content, attribute, tier)[0][1]),
                 "lean": economy.share_word(share) if share < 1 else "",  # 素材頁格子上的短寫「五成」；一定照投入的屬性是空的
@@ -369,6 +369,8 @@ def trade_view(state: GameState, content: Content, day: int) -> dict | None:
 
 UP_SHORT_HAVE = "手上 {have}／{need}"  # 待 joy 潤：素材頁升階格子上的短原因
 UP_SHORT_DAY = "明日再來"
+UP_SHORT_SEASON = "這一季滿了"  # 待 joy 潤：三換四這一季換滿了（正式季整合 4.5）
+NOT_SOLD_NOTE = {False: "三階不收，留著打神器", True: "四階不收，留著打神器"}  # 收購標題最後那一段，照素材四階開著沒（待 joy 潤）
 SELL_EMPTY = "背包裡沒有收得了的素材。"  # 待 joy 潤
 # 素材頁最上面那一格還沒做事時的一句（做了事換成結果；待 joy 潤）。照開關寫（FB-272）：升階關著不提熬；開著時不說「只能」
 # （找素材、打贏也撿得到高階的料）
@@ -383,6 +385,8 @@ def _upgrade_short(problem: str | None, have: int, need: int) -> str | None:
         return None
     if problem == economy.UPGRADE_DAY_FULL:
         return UP_SHORT_DAY
+    if problem == economy.UPGRADE_SEASON_FULL:
+        return UP_SHORT_SEASON
     if have < need and problem not in (economy.UPGRADE_NO_WAY, economy.UPGRADE_NO_KIND):  # upgrade_problem 照這個順序擋：料不夠排在錢之前
         return UP_SHORT_HAVE.format(have=have, need=need)
     return problem
@@ -403,16 +407,21 @@ def _trade_captions(content: Content, state: GameState | None = None) -> dict:
     econ = content.config.economy
     out: dict = {"up_cap": "", "sell_cap": "", "sell_empty": SELL_EMPTY, "hint": _trade_hint(econ)}
     if econ.upgrade:
-        steps = "、".join(f"{TIER_NAMES.get(t - 1, '')}{rules.count_word(n)}個換一個{TIER_NAMES.get(t, '')}" for t, n in sorted(econ.upgrade_need.items()))
-        limits = "、".join(f"{TIER_NAMES.get(t, '')}一天{rules.count_word(n)}個" for t, n in sorted(econ.upgrade_per_day.items()))
+        needs = economy.upgrade_needs(content)
+        steps = "、".join(f"{TIER_NAMES.get(t - 1, '')}{rules.count_word(n)}個換一個{TIER_NAMES.get(t, '')}" for t, n in sorted(needs.items()))
+        if four_tiers.on(content):  # 素材四階：不設每日上限，三換四一季幾個（正式季整合 4.2、4.5）
+            limits = f"{TIER_NAMES[four_tiers.TIER]}一季{four_tiers.count_text(content.config.four_tiers.season_cap)}個" if four_tiers.TIER in needs else ""
+        else:
+            limits = "、".join(f"{TIER_NAMES.get(t, '')}一天{rules.count_word(n)}個" for t, n in sorted(econ.upgrade_per_day.items()))
         out["up_cap"] = f"升階（同屬性的{steps}{f'；{limits}' if limits else ''}）"
     if econ.sell:
         price_of = (lambda t: economy.sell_price_for(state, content, t)) if state is not None else (lambda t: econ.sell_price[t])  # noqa: E731
-        prices = [f"{TIER_NAMES.get(t, '')} {price_of(t)} 兩" for t in sorted(econ.sell_price)]
+        tiers = economy.sell_tiers(content)
+        prices = [f"{TIER_NAMES.get(t, '')} {price_of(t)} 兩" for t in tiers]
         if prices:
             prices[0] = prices[0].replace(" ", "一個 ", 1)  # 「一階一個 2 兩、二階 6 兩」（同玩法說明）
-        dark = state is not None and any(economy.black_market(state, content, t) for t in econ.sell_price)
-        out["sell_cap"] = f"收購（{'、'.join(prices)}{'，' + BLACK_MARKET_CAP if dark else ''}；三階不收，留著打神器）"
+        dark = state is not None and any(economy.black_market(state, content, t) for t in tiers)
+        out["sell_cap"] = f"收購（{'、'.join(prices)}{'，' + BLACK_MARKET_CAP if dark else ''}；{NOT_SOLD_NOTE[four_tiers.on(content)]}）"
     return out
 
 

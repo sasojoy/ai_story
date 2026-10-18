@@ -1512,7 +1512,8 @@ class RenownTuning(_Strict):
     clinic_tier: int = Field(default=2, ge=1, le=4)  # 俠的醫館折扣從第幾段（5.2）
     clinic_share: float = Field(default=0.85, gt=0, le=1)
     black_market_tier: int = Field(default=1, ge=1, le=4)  # 寇的黑市從第幾段（5.2）
-    black_market_prices: dict[int, int] = Field(default_factory=lambda: {1: 3, 2: 8})  # 素材的階 → 黑市收購價
+    # 素材的階 → 黑市收購價；三階只在素材四階開著時收（同 EconomyRules.sell_price，economy.sell_tiers）
+    black_market_prices: dict[int, int] = Field(default_factory=lambda: {1: 3, 2: 8, 3: 24})
     official_tier: int = Field(default=2, ge=1, le=4)  # 江湖巨寇以上官府每週掛通緝（5.4）
     official_silver: dict[int, int] = Field(default_factory=lambda: {2: 30, 3: 50, 4: 80})
     official_hunter_tier: int = Field(default=2, ge=1, le=4)  # 俠一路第幾段揭得了官府通緝
@@ -2423,11 +2424,14 @@ class EconomyRules(_Strict):
     sortie_silver: bool = True  # 出陣攻打贏加給對手銀兩的 sortie_silver_share（第八節；守、攪局不給）
     sortie_silver_share: float = Field(default=0.3, ge=0, le=1)
     sell: bool = True  # 鐵匠鋪收購（第五節）：階 → 一個幾兩；不在表上的階不收（三階要留著做神器）；收購價不分地盤
-    sell_price: dict[int, int] = Field(default_factory=lambda: {1: 2, 2: 6})
+    # 三階 18 兩只在素材四階開著時收（正式季整合 4.2、6.6；Config.four_tiers，關著照舊不收三階）；四階不在表上，一律不收
+    sell_price: dict[int, int] = Field(default_factory=lambda: {1: 2, 2: 6, 3: 18})
     upgrade: bool = True  # 鐵匠鋪升階（第四節）：換到幾階 → 要幾個同屬性低一階的、工錢（套地盤福利 territory.price_factor）
     upgrade_need: dict[int, int] = Field(default_factory=lambda: {2: 3, 3: 10})
     upgrade_silver: dict[int, int] = Field(default_factory=lambda: {2: 5, 3: 50})
-    upgrade_per_day: dict[int, int] = Field(default_factory=lambda: {3: 1})  # 一天最多換幾個（回體丹的換日，台灣 00:00）；不在表上的不限
+    # 一天最多換幾個（回體丹的換日，台灣 00:00）；不在表上的不限。素材四階開著時不設每日上限（正式季整合 4.2：拿掉二換三一天一個），
+    # 三換四另有一季的上限（Config.four_tiers.season_cap）
+    upgrade_per_day: dict[int, int] = Field(default_factory=lambda: {3: 1})
     # 升階出來的是哪一種（企劃者 2026-10-15 選「屬性隨機、偏向投入的」）：這個機會是投入的那個屬性，其餘平均落到同一階的其他屬性
     # （正式內容剛柔快慢，各 1/6）；1 是一定照投入的屬性、不擲骰。擲骰用自己的亂數（economy.upgrade_rng），不碰 Game.rng
     upgrade_same_share: float = Field(default=0.5, ge=0, le=1)

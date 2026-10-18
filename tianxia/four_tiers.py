@@ -21,6 +21,13 @@ def is_tier4(material: Material | None) -> bool:
     return material is not None and material.tier >= TIER
 
 
+def count_text(n: int) -> str:
+    """「一季兩個」的那個字：2 寫「兩」，其餘照 rules.count_word（這裡不 import rules）。"""
+    from .rules import count_word  # noqa: PLC0415  rules 會間接 import 用到這裡的模組
+
+    return "兩" if n == 2 else count_word(n)
+
+
 def tier4_id(content: Content, material_id: str) -> bool:
     """同 is_tier4，給只有素材 id 的地方。"""
     return is_tier4(content.materials.get(material_id))
