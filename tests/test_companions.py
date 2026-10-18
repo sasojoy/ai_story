@@ -191,3 +191,19 @@ def test_defecting_drops_companions_of_the_old_side(real, world):
     assert roster.DEFECT_LEFT.format(name="劉備", before=61, after=30) in msgs
     assert world.get_companion("liubei").owner is None and "liubei" not in p.team and p.affinities["liubei"] == 30
     assert world.get_companion("xunyu").owner == "官甲" and "xunyu" in p.team
+
+
+# ── 最終審查：劇情送人也照陣營、名下三位擋（第七節）──
+
+
+def test_a_story_gift_follows_the_side_and_the_cap(real, world):
+    huang = _player(real, world, "黃甲", "huang", "huangjin_camp")
+    xinde = huang.state.player.stats.get("xinde", 0)
+    msgs = roster.recruit(huang.state, real, world, "liubei")  # 劉備只追隨官軍
+    assert world.get_companion("liubei").owner is None and huang.state.player.stats["xinde"] > xinde
+    assert any(roster.SIDE_ONLY.format(side="官軍") in m for m in msgs)
+    guan = _player(real, world, "官甲", "guan", "zhuo_county")
+    for cid in ("caocao", "yuanshao", "taoqian"):
+        assert world.try_recruit(cid, "官甲", cap=3)
+    roster.recruit(guan.state, real, world, "liubei")  # 名下滿了
+    assert world.get_companion("liubei").owner is None

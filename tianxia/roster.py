@@ -48,6 +48,11 @@ def cap(content: Content) -> int:
     return content.config.companions.max_owned if on(content) else MAX_TEAM_COMPANIONS
 
 
+def _capped(content: Content) -> dict:
+    """try_recruit 的上限參數：開著才帶 cap（關著照舊兩個參數，一個字都不變）。"""
+    return {"cap": cap(content)} if on(content) else {}
+
+
 def owns(owner: str | None, player_name: str) -> bool:
     """owner 是不是這個人（名號比對不分大小寫，同 characters.name_key）。"""
     return owner is not None and name_key(owner) == name_key(player_name)
@@ -105,7 +110,7 @@ def attempt_recruit(
     p.stamina -= content.config.recruit_stamina
     chance = recruit_chance(content, state, companion_id)
     if rng.random() < chance:
-        if not world.try_recruit(companion_id, p.name, cap=cap(content) if on(content) else None):
+        if not world.try_recruit(companion_id, p.name, **_capped(content)):
             if owned_by(world, companion_id) is None:  # 沒人搶走：是名下滿了（另一個分頁剛招到一位）
                 return [f"（{FULL.format(n=len(owned_companions(world, p.name)))}，招不了更多人。）"]
             return [f"晚了一步，【{disp}】剛剛被別人招攬走了。"]
@@ -127,7 +132,7 @@ def recruit(state: GameState, content: Content, world: WorldStateStore, char_id:
     （被別的玩家搶先招走了）改給一筆心得當安慰，不會覆蓋別人的招募結果。"""
     ch = content.characters[char_id]
     owner = owned_by(world, char_id)
-    if owner == state.player.name:
+    if owns(owner, state.player.name):
         amount = content.config.recruit_consolation_xinde
         state.player.stats["xinde"] = state.player.stats.get("xinde", 0) + amount
         return [f"【{ch.name}】早已在你身邊，這份緣分化為心得。", f"心得 +{amount}"]
@@ -135,7 +140,12 @@ def recruit(state: GameState, content: Content, world: WorldStateStore, char_id:
         amount = content.config.recruit_consolation_xinde
         state.player.stats["xinde"] = state.player.stats.get("xinde", 0) + amount
         return [f"【{ch.name}】已經是{owner}的同伴了，這份緣分化為心得。", f"心得 +{amount}"]
-    if not world.try_recruit(char_id, state.player.name):
+    problem = recruit_problem(state, content, world, char_id) if on(content) else None
+    if problem is not None:  # 歷史武將同行第七節：劇情送人也照陣營、名下三位擋
+        amount = content.config.recruit_consolation_xinde
+        state.player.stats["xinde"] = state.player.stats.get("xinde", 0) + amount
+        return [f"【{ch.name}】{problem}，這份緣分化為心得。", f"心得 +{amount}"]
+    if not world.try_recruit(char_id, state.player.name, **_capped(content)):
         amount = content.config.recruit_consolation_xinde
         state.player.stats["xinde"] = state.player.stats.get("xinde", 0) + amount
         return [f"【{ch.name}】剛剛被別人招攬走了，這份緣分化為心得。", f"心得 +{amount}"]
