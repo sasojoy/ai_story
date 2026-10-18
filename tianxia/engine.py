@@ -974,7 +974,7 @@ class Game:
         rate = seconds / (cfg.neili_regen_hours * HOUR)
         if p.busy_until is not None:
             rate *= 2
-        if roster.newbie(self.state, self.content):  # 第一季從自己加入那天起算（roster.since_join），beta 照舊從季初
+        if cfg.newbie_hp_double and roster.newbie(self.state, self.content):  # 第一季從自己加入那天起算（roster.since_join），beta 照舊從季初
             rate *= 2
         team.regen_neili(self.content, p.member, rate, team.con_of(self.state, self.content, self.world, PLAYER))
         for cid in p.team:
@@ -7394,7 +7394,7 @@ class Game:
         if prologue_rules.active(self.state, self.content):
             return self._log([f"草廬裡先照師父說的做，{name}留著出了草廬再吃。"])
         if self.pills_left_today() == 0:
-            return self._log([PILL_DAY_FULL.format(n=_cn_count(cfg.stamina_pills_per_day))])
+            return self._log([PILL_DAY_FULL.format(n=_cn_count(self.pill_cap()))])
         if p.stamina >= cfg.stamina_max:
             return self._log(["體力是滿的，這時候服丹是糟蹋。"])
         before = p.stamina
@@ -7418,9 +7418,16 @@ class Game:
         """現在是第幾天（Config.pill_day_utc_offset_hours 的時區、00:00 換日；從 1970-01-01 起算）。"""
         return int((self.pill_now() + self.content.config.pill_day_utc_offset_hours * HOUR) // (24 * HOUR))
 
+    def pill_cap(self) -> int:
+        """一天最多服幾顆：新手期照 newbie_pills_per_day（有寫才算），其餘照 stamina_pills_per_day；0 是不限。"""
+        cfg = self.content.config
+        if cfg.stamina_pills_per_day > 0 and cfg.newbie_pills_per_day > 0 and roster.newbie(self.state, self.content):
+            return cfg.newbie_pills_per_day
+        return cfg.stamina_pills_per_day
+
     def pills_left_today(self) -> int | None:
-        """今天還能服幾顆回體丹（Config.stamina_pills_per_day）；不限是 None。不看手上有幾顆。"""
-        cap = self.content.config.stamina_pills_per_day
+        """今天還能服幾顆回體丹（pill_cap）；不限是 None。不看手上有幾顆。"""
+        cap = self.pill_cap()
         if cap <= 0:
             return None
         p = self.state.player

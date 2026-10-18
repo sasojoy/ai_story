@@ -17,7 +17,8 @@ def test_the_decided_numbers_are_in_the_real_config():
     cfg = real_content().config
     assert cfg.stamina_max == 250 and cfg.stamina_pill_restore == 150
     assert cfg.action_cost == {"explore": 6, "train": 6, "socialize": 3}
-    assert cfg.event_fail_stamina_scale == 0.5 and cfg.newbie_stamina_multiplier == 3
+    assert cfg.event_fail_stamina_scale == 0.5 and cfg.newbie_stamina_multiplier == 1  # Joy 2026-10-17：回體不分新手期
+    assert cfg.newbie_real_hours == 48
     assert cfg.newbie_days == cfg.newbie_stamina_days == 18
 
 

@@ -363,12 +363,24 @@ def _fresh(content, name="甲"):
 def test_the_howto_entry_is_there_only_in_the_newbie_window(on):
     from tianxia import calendar
 
+    on.config.newbie_real_hours = 0  # 量舊規則的季曆天；照現實時間的見 test_the_howto_entry_follows_the_real_newbie_hours
     on.config.newbie_days = 1  # 氣血加倍那一段（newbie_days）跟體力那一段分開：入口跟的是體力那一段（審查 Minor 3）
     on.config.newbie_stamina_days = 18
     game = _fresh(on)
     assert game.status_data()["howto_entry"] is True
     s = game.state
     window = on.config.newbie_stamina_days * calendar.DAY / calendar.cal_scale(on, s.world)  # 跟體力回復加快同一段（roster.newbie）
+    s.player.joined_at = s.world.time - window + 1
+    assert game.status_data()["howto_entry"] is True
+    s.player.joined_at = s.world.time - window - 1
+    assert game.status_data()["howto_entry"] is False
+
+
+def test_the_howto_entry_follows_the_real_newbie_hours(on):
+    on.config.newbie_real_hours = 48
+    game = _fresh(on)
+    s = game.state
+    window = 48 * 3600 * on.config.time_scale
     s.player.joined_at = s.world.time - window + 1
     assert game.status_data()["howto_entry"] is True
     s.player.joined_at = s.world.time - window - 1

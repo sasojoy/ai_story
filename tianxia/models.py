@@ -2677,7 +2677,13 @@ class Config(_Strict):
     # 照季長自動縮放：18 季曆天＝14 天的季 3 個現實天、週末 2.5 天的季約 13 小時。beta 那一季照同一個比例從季初算（14 天的季也是 3 天）
     newbie_days: float = 18  # 這段期間氣血回復加倍
     newbie_stamina_days: float = 18  # 這段期間體力回復乘 newbie_stamina_multiplier（跟打坐的倍數疊乘）
-    newbie_stamina_multiplier: float = Field(default=1, ge=1)  # 正式值在 content/config.json（3）；測試內容照舊 1
+    newbie_stamina_multiplier: float = Field(default=1, ge=1)  # 1 是不加快（Joy 2026-10-17「回體速率先調成一樣，不要分新手期」）
+    # 新手期照現實時間算（Joy 2026-10-17「新手期 48 小時」）：大於 0 時 roster.newbie 與 raid_newbie 一律從自己加入這一季那一刻（joined_at）
+    # 照現實的這麼多小時算，不看 newbie_days、newbie_stamina_days 的季曆天；0 是舊規則。正式值在 content/config.json（48）
+    newbie_real_hours: float = Field(default=0, ge=0)
+    newbie_hp_double: bool = True  # 新手期氣血回復加倍；Joy 2026-10-17「氣血不用加倍」，正式內容關掉
+    # 新手期一天能服幾顆回體丹（Joy 2026-10-17「回體丹可以吃到五顆，平常兩顆」）：0 是跟 stamina_pills_per_day 一樣
+    newbie_pills_per_day: int = Field(default=0, ge=0)
     # 事件失敗另扣的體力（檢定失敗、隨口應對失敗的 fail_effect.stamina）乘這個倍數、四捨五入（15 → 8、5 → 3）；
     # 選項上照乘過的數字寫「（失手多耗體力 N）」（events.choice_label）。正式值 0.5（企劃者 2026-10-07），測試內容照舊 1
     event_fail_stamina_scale: float = Field(default=1, ge=0, le=1)
