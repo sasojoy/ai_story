@@ -321,6 +321,8 @@ def smith_line(state: GameState, content: Content, world: WorldStateStore, kind:
         tier=equipment.TIER_WORDS[tier], price=price, divine=divine,
         odds=[{"q": q, "pct": round(w)} for q, w in odds.odds.items()] if odds is not None else None,
         reasons=list(odds.reasons) if odds is not None else [], head=head,
+        # FB-341：主料是四階時同一步一步選單的開爐鈕，多「四階的料，打出名器的機會很大」（不寫百分比、不寫神器）
+        named_hint=smithing.NAMED_HINT if not divine and four_tiers.named_chance(content, main, aux) > 0 else "",
         problem=smithing.forge_problem(state, content, kind, main, aux),
         go=GO_TEXT.format(price=price) + territory.price_note(state, content),  # 名聲 4.1：工錢後面寫原因
     )

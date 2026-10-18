@@ -367,6 +367,16 @@ def test_go_option_hints_named_for_tier4_main():
     assert "神器" not in smithing.NAMED_HINT and "%" not in smithing.NAMED_HINT
 
 
+def test_the_shop_forge_line_hints_named_for_tier4_main():
+    """FB-341：店面的開爐說明（/api/smith_line）跟一步一步選單的開爐鈕一樣，主料是四階時多那一句。"""
+    from tianxia import smithing
+
+    game = _forge_game({"gang_4": 1, "gang_3": 1})
+    s, c, w = game.state, game.content, game.world
+    assert shopview.smith_line(s, c, w, "劍", "gang_4", "gang_3")["named_hint"] == smithing.NAMED_HINT
+    assert shopview.smith_line(s, c, w, "劍", "gang_3", "gang_4")["named_hint"] == ""
+
+
 def test_old_gear_without_named_entry_loads():
     from tianxia.state import Equipment
 
