@@ -96,3 +96,35 @@ def test_switch_off_changes_nothing(content):
     game.state.player.tutorial_step = len(content.tutorial.steps)
     ids = {o.id for o in game.options()}
     assert not any(i.startswith("act:recruit:") for i in ids)
+
+
+# ── Task 2：情誼放慢 ──
+
+
+def test_affinity_gains_are_scaled_and_rounded():
+    from tianxia import renown
+
+    c = real_content()
+    assert c.config.affinity_gain_scale == 0.7 and real_content("weekend").config.affinity_gain_scale == 0.85
+    assert [renown.warmed(c, d) for d in (1, 2, 5, 8, -5, 0)] == [1, 1, 4, 6, -5, 0]  # 9.4：四捨五入、至少 1、扣的不乘
+    c.config.affinity_gain_scale = 1.0
+    assert renown.warmed(c, 7) == 7
+
+
+def test_each_gain_source_goes_through_warmed(real, world):
+    from tianxia import atlas, companion_agent, figure_life, renown, rules
+    from tianxia.companion_agent import CompanionTurn
+    from tianxia.models import Effect
+
+    game = _player(real, world, "官甲", "guan", "zhuo_county")
+    s, p = game.state, game.state.player
+    rules.apply_effect(Effect(affinity={"liubei": 5}), s, real, world)  # 事件
+    assert p.affinities["liubei"] == 4
+    companion_agent._apply_turn(s, real.characters["guanyu"], "guanyu", "請教", CompanionTurn(narrative="嗯。"), "坦誠相待", real)  # 對話
+    assert p.affinities["guanyu"] == 7  # 關羽的坦誠相待 +10（affinity_tag_deltas）× 0.7
+    p.stats["fame"] = 100_000
+    renown.first_meet(s, real, "zhangfei")  # 名望起步
+    assert p.affinities["zhangfei"] == renown.warmed(real, real.config.renown.fame_affinity)
+    region = atlas.region_of(real, "zhuo_county").id
+    figure_life.spread(s, real, "merit", "長社", at=None, side="guan", text="立了戰功", region=region)  # 風聞
+    assert p.affinities["gongsunzan"] == renown.warmed(real, real.config.figure_life.side_merit)

@@ -2540,6 +2540,9 @@ class Config(_Strict):
     tactics: TacticTuning = Field(default_factory=TacticTuning)  # 一般的仗的回合與本命戰法（見 TacticTuning）
     figure_life: FigureLifeTuning = Field(default_factory=FigureLifeTuning)  # 人物活起來：每日行事、心事、風聞（見 FigureLifeTuning）
     companions: CompanionsTuning = Field(default_factory=CompanionsTuning)  # 歷史武將同行：招募、名下三位、決戰助陣（見 CompanionsTuning）
+    # 情誼放慢（歷史武將同行第三節、9.4）：每一筆加的情誼乘這個倍數（renown.warmed：四捨五入，原本加 1 以上的至少加 1；扣的不乘）。
+    # 1 是不放慢；正式 0.7、週末設定 0.85。對話、事件、名聲起步、風聞都走它；名將贈禮、本命、招募的門檻不動，所以跟著晚一點拿到
+    affinity_gain_scale: float = Field(default=1.0, gt=0, le=1)
     rise: RiseTuning = Field(default_factory=RiseTuning)  # 江湖水漲：大場面、頭目、事件檢定跟得上變強的人（見 RiseTuning）
     treasures: TreasureRules = Field(default_factory=TreasureRules)  # 寶物與好馬的來源（見 TreasureRules；裝備四欄設計第六節）
     ranger: Ranger = Field(default_factory=Ranger)  # 遊俠名號（散人的成長階梯，見 Ranger）

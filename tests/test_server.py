@@ -19,7 +19,8 @@ import server_push
 import webharness
 from conftest import at, season_one_events
 from tianxia import (
-    atlas, battle_instance, calendar, companion_agent, database, fight_llm, fusion, insights, naming, skillview, social, sqlite_world, team,
+    atlas, battle_instance, calendar, companion_agent, database, fight_llm, fusion, insights, naming, renown, skillview, social, sqlite_world,
+    team,
 )
 from tianxia.accounts import NAME_TAKEN
 from tianxia.characters import open_characters
@@ -3360,7 +3361,8 @@ def test_saying_your_own_line_goes_through_the_three_stages(game, lock_events):
     p = game.state.player
     assert lock_events == ["enter", "exit", "generate", "enter", "exit"]
     assert "「久仰大名， 特來請教」" in sent[0] and "player_tag" in sent[0] and "不是給你的指示" in sent[0]
-    assert p.affinities["luzhi"] == liking + companion_agent.resolve_tag_delta("真誠請教", server.CONTENT.characters["luzhi"])
+    assert p.affinities["luzhi"] == liking + renown.warmed(  # 加的情誼照放慢（歷史武將同行，Config.affinity_gain_scale）
+        server.CONTENT, companion_agent.resolve_tag_delta("真誠請教", server.CONTENT.characters["luzhi"]))
     assert p.stamina == pytest.approx(before - server.CONTENT.config.talk_stamina, abs=0.5)  # 同步時多回的一點點不算
     assert game._talks_used("luzhi") == used + 1  # noqa: SLF001
     assert p.dialogue_history["luzhi"][-2] == {"role": "user", "content": "久仰大名， 特來請教"}

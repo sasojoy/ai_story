@@ -328,7 +328,7 @@ def _apply_turn(
     delta = resolve_tag_delta(tag, character)
     cooled = renown.cold(state, content, companion_id, delta) if content is not None else delta
     chill = cooled != delta
-    delta = cooled
+    delta = renown.warmed(content, cooled) if content is not None else cooled  # 情誼放慢（Config.affinity_gain_scale）
     before = p.affinities.get(companion_id, 0)
     after = max(0, min(100, before + delta))
     p.affinities[companion_id] = after

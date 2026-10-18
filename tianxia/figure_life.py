@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import random
 
-from . import calendar, figures, push
+from . import calendar, figures, push, renown
 from .calendar import DAY
 from .models import Content
 from .rules import add_rumor, change_trend, season_one, trend_shown, trend_value
@@ -275,7 +275,7 @@ def spread(state: GameState, content: Content, kind: str, target: str, *, at: st
         notes.append(text)
         del notes[:-tuning.hearsay_keep]
         before = p.affinities.get(cid, 0)
-        p.affinities[cid] = max(0, min(100, before + delta))
+        p.affinities[cid] = max(0, min(100, before + renown.warmed(content, delta)))  # 加的放慢（Config.affinity_gain_scale）
         moved = p.affinities[cid] - before
         if moved:
             deltas.setdefault(moved, []).append(ch.name)

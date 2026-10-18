@@ -7,6 +7,7 @@ titles 關著時這裡每個函式都回「沒有」（段 0、空清單、None�
 只 import models、state、gender、world_state；rules、ranger、territory、team、bounties、arena……反過來呼叫它。"""
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -440,6 +441,15 @@ def _cold_to(state: GameState, content: Content, character_id: str) -> bool:
             and virtue_tier(state, content) >= 1)
 
 
+def warmed(content: Content, delta: int) -> int:
+    """情誼放慢（歷史武將同行第三節、9.4；Config.affinity_gain_scale）：加的那一筆乘倍數、四捨五入，原本加 1 以上的至少加 1；
+    扣的與 0 原樣，倍數 1 原樣。不存零頭、不改存檔。對話、事件、名聲起步、風聞加情誼之前都先過它。"""
+    scale = content.config.affinity_gain_scale
+    if delta <= 0 or scale >= 1:
+        return delta
+    return max(1, math.floor(delta * scale + 0.5 + 1e-9))  # 浮點：5×0.7 是 3.4999…，照十進位的 3.5 進位
+
+
 def first_meet(state: GameState, content: Content, character_id: str) -> list[str]:
     """開始跟這位人物對話時（companion_agent.start_dialogue）的情誼起步（設計 4.3、5.2）：
     - 名望：威震州郡（fame_affinity_tier）以上 +fame_affinity，一季一位人物一次；還不到不記，升上去之後下一次對話照給。
@@ -455,7 +465,7 @@ def first_meet(state: GameState, content: Content, character_id: str) -> list[st
 
     def bump(n: int) -> int:
         before = p.affinities.get(character_id, 0)
-        p.affinities[character_id] = max(0, min(100, before + n))
+        p.affinities[character_id] = max(0, min(100, before + warmed(content, n)))
         return p.affinities[character_id] - before
 
     flag = MEET_FAME_FLAG.format(cid=character_id)
