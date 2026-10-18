@@ -123,6 +123,24 @@ def next_hour_mark(time: float, content: Content, season: WorldState | None = No
     return (math.floor((time + shift) / hour + EPS_CAL_HOURS) + 1) * hour - (time + shift)
 
 
+def hour_shift(content: Content, season: WorldState | None = None) -> float:
+    """季曆的偏移換成世界秒（21 天季開季不在整點時，季曆的整點在世界秒的哪裡）；其他季是 0。"""
+    return _offset(content, season) / cal_scale(content, season)
+
+
+def hour_ceil(time: float, content: Content, season: WorldState | None = None) -> float:
+    """世界秒 time 當下或之後的第一個季曆整點（FB-331：管理者排決戰、跳到下一件照季曆的整點對齊，季的事也在那裡跑）。
+    剛好在整點上（差 EPS_SECONDS 以內）就是那一刻。偏移是 0 時跟以前的 ceil((t − EPS)/曆時)×曆時 一模一樣。"""
+    hour, shift = cal_hour_seconds(content, season), hour_shift(content, season)
+    return math.ceil((time + shift - EPS_SECONDS) / hour) * hour - shift
+
+
+def hour_floor(time: float, content: Content, season: WorldState | None = None) -> float:
+    """世界秒 time 當下或之前的最後一個季曆整點（timetable.quiet_place 往前挪用）；偏移是 0 時跟以前一模一樣。"""
+    hour, shift = cal_hour_seconds(content, season), hour_shift(content, season)
+    return math.floor((time + shift) / hour + 1e-9) * hour - shift
+
+
 def day_index(time: float, content: Content, season: WorldState | None = None) -> int:
     """世界秒 time 落在季曆第幾天（從 0 起）。跟 point 不同，不夾在季末：管理者把季末往後排時「今天」照樣換（rules.game_day）。"""
     cal = time * cal_scale(content, season) + _offset(content, season)
