@@ -2478,6 +2478,16 @@ def validate(c: Content) -> None:
             for tag in ch.affinity_tag_deltas:
                 need(tag in DIALOGUE_TAGS, f"{where}：affinity_tag_deltas 的 {tag!r} 不是合法的交友 tag")
         need(len(ch.brush_off) <= 3, f"{where}：brush_off 最多三句")
+        if ch.haunts:  # 人物活起來：走動範圍的第一個就是他平常在的地方（開季、退回原處都照它）
+            known(where, ch.haunts, c.locations, "地點")
+            need(ch.haunts[0] == (ch.talk_at or ch.recruit_at), f"{where}：haunts 的第一個要是 talk_at／recruit_at")
+            need(ch.follows is None, f"{where}：跟著別人走（follows）的人物不寫自己的 haunts")
+        if ch.follows is not None:
+            known(where, [ch.follows], c.characters, "人物")
+            leader = c.characters.get(ch.follows)
+            need(leader is None or leader.follows is None, f"{where}：follows 的 {ch.follows} 自己也在跟著別人走")
+        if ch.side is not None:
+            known(where, [ch.side], [f.id for f in c.scenario.factions], "陣營")
     for squad in c.squads.values():
         where = f"敵方隊伍 {squad.id}"
         need(squad.difficulty >= 0, f"{where}：difficulty 不能是負的")

@@ -18,7 +18,7 @@ from pydantic import BaseModel
 
 from . import (
     allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, chuangong, clinic, companion_agent, cultivation, defection, economy, encounter, enlist, equipment, event_llm, explore_modes,
-    fight_llm, figure_aid, figures, foreshadow, generals, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, library, mapdata, martial_arts,
+    fight_llm, figure_aid, figure_life, figures, foreshadow, generals, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, library, mapdata, martial_arts,
     materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
     shopview, signature, signature_arms, skill_slots, skillview, smithing,
     social, sortie, styles, tactics, team, territory, timetable, traits, treasures, weapons, works, zh,
@@ -5020,6 +5020,10 @@ class Game:
                 lines.append(f"你是{side}這一仗的首功，名字傳遍了江湖。")
             if fame:
                 highlight_changes += renown.gain(s, c, "fame", fame)  # 名聲設計 3.2
+            if (definition is not None and definition.region and battle.outcome_side == me.faction
+                    and rank is not None and rank <= 3):  # 風聞（大勢人物擴充）：打贏的那一邊戰功前三名，那一區同一方的人物聽說了
+                lines += figure_life.spread(s, c, "merit", str(battle.record_id), at=None, side=me.faction,
+                                            text=f"在{name}立了戰功", region=definition.region)
         rule = c.config.breakthrough
         if earlier is None and me.acted_rounds >= rule.showdown_rounds:  # 絕學的契機（方案 C）：這一季的決戰裡真的出過手
             lines += cultivation.seize(s, c, self.world, rule.showdown_ratio, self.rng)
@@ -6383,6 +6387,9 @@ class Game:
             p.affinities[fig.character] = max(0, before - cfg.figure_defeat_affinity)
             if p.affinities[fig.character] != before:
                 msgs.append(f"{fig.name}情誼 {p.affinities[fig.character] - before:+d}")
+        msgs += figure_life.spread(  # 風聞（大勢人物擴充）：同一大區的人物聽說了，同一方的情誼掉、對頭的漲
+            s, c, "beat", fid, at=p.location, side=fig.faction,
+            text=f"在{c.locations[p.location].name}打退了{fig.name}")
         p.snubbed_until[fid] = self.now + cfg.snub_hours * HOUR
         if season_one(c, w):
             push.add_contribution(p, calendar.point(w.time, c, w).week, cfg.figure_defeat_prestige * cfg.contrib_per_push)
@@ -8027,6 +8034,11 @@ class Game:
         msgs = self._raid_record(result, them.name, theirs, other, spoils, attacker=True)
         if winner is self:
             msgs += self._raid_bounty(them.name)
+            heard = figure_life.spread(s, c, "raid", name_key(them.name), at=me.location, side=them.faction,
+                                       text=f"在{c.locations[me.location].name}截殺了{them.name}")
+            if heard and self._draft is None:
+                self._write(figure_life.HEARSAY_TITLE, heard)
+            msgs += heard
         # 冷卻與交差（通緝那一張的 done_by／takers）都在共用賽季：最後存一次。玩家卡走 peer_act、server.act 都只存角色，
         # 以前在打之前就存了季，交差改的沒存回去，同一張可以一直揭、一直領，過期還照退押金（FB-119）
         self._save_season()

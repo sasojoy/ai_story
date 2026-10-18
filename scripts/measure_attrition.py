@@ -48,6 +48,7 @@ def run(args, seed: int) -> dict:
     cfg.train_event_chance = 0.0
     if args.rules == "old":
         cfg.figure_dent_once_per_day, cfg.figure_return_days = False, 0
+    cfg.figure_life.enabled = args.life == "on"
     if args.return_days is not None:
         cfg.figure_return_days = args.return_days
     if args.no_aid:
@@ -177,6 +178,7 @@ def main(argv=None) -> None:
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser()
     ap.add_argument("--profile", default="weekend")
+    ap.add_argument("--life", choices=["on", "off"], default="on", help="人物活起來（Config.figure_life）")
     ap.add_argument("--rules", choices=("new", "old"), default="new")
     ap.add_argument("--seeds", type=int, nargs="+", default=[1, 2, 3])
     ap.add_argument("--per-side", type=int, default=10)

@@ -38,6 +38,11 @@ FIGURE_TABLE = {
     "sunjian": ("sunjian", "孫堅", "guan", "nanyang", "wan_city", True, 60, 1, 1, None, 2, "active"),
     "hejin": ("hejin", "何進", "guan", None, "dajiangjun_fu", True, 70, 0, 0, None, 1, "active"),
     "dongzhuo": ("dongzhuo", "董卓", "guan", None, "mengjin_ford", True, 60, 1, 1, None, 1, "active"),
+    # 大勢人物擴充（Joy 2026-10-17）：四位偏將，沒有戰線（不當主將、不推、不接位），挑得到
+    "fuxie": ("fuxie", "傅燮", "guan", None, "changshe", False, 45, 0, 0, None, 2, "active"),
+    "qinjie": ("qinjie", "秦頡", "guan", None, "wan_city", False, 45, 0, 0, None, 2, "active"),
+    "buji": ("buji", "卜己", "huang", None, "baima_ford", False, 45, 0, 0, None, 1, "active"),
+    "liupi": ("liupi", "劉辟", "huang", None, "runan_wilds", False, 40, 0, 0, None, 1, "active"),
 }
 # 濃縮版內容表 1.4：figure_<id> → (name, difficulty, attribute, faction)；難度是聲威 100 時的值
 SQUAD_TABLE = {
@@ -48,6 +53,8 @@ SQUAD_TABLE = {
     "huangfusong": ("皇甫嵩", 150, "實", "guan"), "zhujun": ("朱儁", 140, "實", "guan"),
     "luzhi": ("盧植", 140, "柔", "guan"), "sunjian": ("孫堅", 150, "快", "guan"),
     "hejin": ("何進", 100, "虛", "guan"), "dongzhuo": ("董卓", 160, "剛", "guan"),
+    "fuxie": ("傅燮", 110, "剛", "guan"), "qinjie": ("秦頡", 110, "實", "guan"),
+    "buji": ("卜己", 110, "柔", "huang"), "liupi": ("劉辟", 110, "快", "huang"),
 }
 
 
@@ -273,7 +280,7 @@ def test_difficulty_follows_prestige(on):
 
 def test_who_stands_where(on):
     s = _season(on)
-    assert figures.present_at(s, on, "changshe") == ["huangfusong", "zhujun"]
+    assert figures.present_at(s, on, "changshe") == ["huangfusong", "zhujun", "fuxie"]
     assert figures.present_at(s, on, "huangjin_camp") == ["bocai"]  # 彭脫還沒出場
     s.world.figures["luzhi"].status = "jailed"
     placed = figures.placed_characters(s, on)
@@ -386,7 +393,7 @@ def test_sim_players_stand_down_in_season_one(on):
 
 def test_the_map_shows_the_figures_where_they_stand(on):
     s = _season(on)
-    assert atlas.haunters(s, on, "changshe") == ["皇甫嵩", "朱儁"]
+    assert atlas.haunters(s, on, "changshe") == ["皇甫嵩", "朱儁", "傅燮"]
     assert atlas.haunters(s, on, "mengjin_ford") == ["董卓"]  # 不推戰線也在地圖上（內容表 1.1）
     assert atlas.haunters(s, on, "deep_mountain") == []  # beta 的虛擬玩家董卓不再標在嵩山深處
     assert atlas.leader_activity(s, on, "波才") == "每天約出手 1 次，讓潁川汝南上升"

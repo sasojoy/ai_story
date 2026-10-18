@@ -50,5 +50,9 @@
     "reward_silver": 12, "reward_xinde": 18, "exp": 22, "drops": [{"material": "man_1"}],
     "desc": "推獨輪車的信眾，糧袋上縫著黃布，前後各有幾個拿刀的力士。"
   },
-  {"id": "prologue_duanmei", "name": "斷眉", "difficulty": 15, "attribute": "剛", "reward_silver": 0, "reward_xinde": 0, "exp": 10, "desc": ""}
+  {"id": "prologue_duanmei", "name": "斷眉", "difficulty": 15, "attribute": "剛", "reward_silver": 0, "reward_xinde": 0, "exp": 10, "desc": ""},
+  {"id": "figure_fuxie", "name": "傅燮", "difficulty": 110, "attribute": "剛", "reward_xinde": 80, "exp": 80, "faction": "guan"},
+  {"id": "figure_qinjie", "name": "秦頡", "difficulty": 110, "attribute": "實", "reward_xinde": 80, "exp": 80, "faction": "guan"},
+  {"id": "figure_buji", "name": "卜己", "difficulty": 110, "attribute": "柔", "reward_xinde": 80, "exp": 80, "faction": "huang"},
+  {"id": "figure_liupi", "name": "劉辟", "difficulty": 110, "attribute": "快", "reward_xinde": 80, "exp": 80, "faction": "huang"}
 ]

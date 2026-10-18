@@ -6226,6 +6226,8 @@ NOT_IN_THE_FINGERPRINT = {
         "flag_times": "旗標第一次成立的時間，同上",
         "fired_thresholds": "門檻觸發過的記號；畫面看的是它帶來的傳聞與大勢",
         "sim_accum": "不滿一小時的時間累積器",
+        "life_turn": "人物每日行事做到第幾輪的記號；畫面看的是它帶來的傳聞（傳聞流水號已在指紋裡）",
+        "whereabouts": "人物走動時一定同時寫一則傳聞（傳聞流水號已在指紋裡），誰在這裡下次輪詢就補",
         "ending_text": "收季那一刻跟 ended、ending_title 一起寫入",
         "ending_id": "同上",
         "final_trends": "同上（結算卡的資料）",

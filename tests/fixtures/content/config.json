@@ -36,6 +36,7 @@
   "biography": {"enabled": false},
   "arena": {"enabled": false},
   "rise": {"enabled": false},
+  "figure_life": {"enabled": false},
   "renown": {
     "titles": false, "scale": false, "deed_fame": false, "discount": false, "prize_gate": false, "affinity": false, "duel": false,
     "news": false, "faction_wanted": false, "arena_reach": false, "virtue_insight": false, "lessons": false, "prompt": false,
