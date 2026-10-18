@@ -7182,19 +7182,19 @@ class Game:
         return skillview.forge_picks(self.state, self.content, self.world, art_id, insight_ids, other_art=other_art)
 
     @_not_while_preparing
-    def cultivate(self, art_id: str, use_legend: bool = False) -> list[str]:
+    def cultivate(self, art_id: str, use_legend: bool = False, by_xinde: bool = False) -> list[str]:
         """修練：武學＋它融的意境，衝下一品（見 cultivation.py）。花體力。真的擲了骰（成功或失敗）才寫江湖紀錄；
         被拒絕（意境熔掉了、沒融過意境、已經絕學、體力不足、沒有這門武學）只回一句話（武學與成長計畫 F12）。
         use_legend：玩家勾了「服下破境丹」；真的服了才在紀錄裡寫「破境丹 -1」（丹沒了、下一步不是絕學都照一般的機率擲）。"""
         sure = prologue_rules.sure_rng(self.state, self.content)  # 序章第 6 步：第一次修練一定升品，也不看成數門檻（劇本只練到第三成）
         problem = prologue_rules.cultivate_problem(self.state, self.content) or cultivation.cultivate_problem(
-            self.state, self.content, self.world, art_id, gate=sure is None, use_legend=use_legend,
+            self.state, self.content, self.world, art_id, gate=sure is None, use_legend=use_legend, by_xinde=by_xinde,
         )
         if problem is not None:
             return self._log([problem])
         xinde, stamina, pills = self._xinde(), self.state.player.stamina, self.state.player.legend_items
         msgs = cultivation.cultivate(
-            self.state, self.content, self.world, art_id, sure or self.rng, use_legend, gate=sure is None,
+            self.state, self.content, self.world, art_id, sure or self.rng, use_legend, gate=sure is None, by_xinde=by_xinde,
         )
         spent = round(stamina - self.state.player.stamina)  # 輸了也花了體力：數值變化寫在紀錄上，跟別的行動一樣
         taken = pills - self.state.player.legend_items

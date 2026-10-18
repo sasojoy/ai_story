@@ -117,8 +117,32 @@ def spend_xinde(game: Game, rng: random.Random) -> None:
     for kind in ("內功", "武學"):
         if can_practise(game, kind):
             game.practice(kind)
+    cultivate_by_xinde(game)
     buy_pill(game)
     teach(game)
+
+
+XINDE_CULTIVATE_MAX = 3  # 一次最多花心得修練幾下（越修越貴，這只是保險）
+
+
+def cultivate_by_xinde(game: Game, limit: int = XINDE_CULTIVATE_MAX) -> int:
+    """以心得修練（Joy 2026-10-18）：身上兩門（再功法庫）修得下去、付完還剩 TEACH_RESERVE，就花心得修一下；先顧自己再傳功。
+    整季機器人與假人共用；只走 Game.cultivate(by_xinde=True)。回傳修了幾下。"""
+    state, content, world = game.state, game.content, game.world
+    done = 0
+    while done < limit:
+        price = cultivation.xinde_price(state, content)
+        if price is None or state.player.stats.get("xinde", 0) - price < TEACH_RESERVE:
+            break
+        pick = next((
+            a for a in worn_first(game)
+            if cultivation.cultivate_problem(state, content, world, a, use_legend=takes_the_pill(game, a), by_xinde=True) is None
+        ), None)
+        if pick is None:
+            break
+        game.cultivate(pick, use_legend=takes_the_pill(game, pick), by_xinde=True)
+        done += 1
+    return done
 
 
 def buy_pill(game: Game) -> bool:

@@ -92,3 +92,63 @@ def test_bot_buys_when_waiting_for_a_chance(game):
     assert bot.buy_pill(game)
     assert p.legend_items == 1
     assert not bot.buy_pill(game)  # 手上有丹就不再換
+
+
+# ── 以心得修練（Joy 2026-10-18 決策卡「心得修練」）──────────────────────────────
+
+
+@pytest.fixture
+def xgame(game):
+    game.content.config.cultivate_xinde_price = 40
+    game.content.config.cultivate_xinde_step = 4
+    return game
+
+
+def test_cultivating_with_xinde_costs_no_stamina_and_climbs(xgame):
+    p = xgame.state.player
+    art_id = _ready_for_jue(xgame)
+    p.art_mastery[art_id] = 0  # 還在添火候
+    p.stamina, p.stats["xinde"] = 0, 200
+    xgame.cultivate(art_id, by_xinde=True)
+    assert p.stamina == 0 and p.stats["xinde"] == 160 and p.art_mastery[art_id] == 1
+    assert cultivation.xinde_price(xgame.state, xgame.content) == 44
+    xgame.cultivate(art_id, by_xinde=True)
+    assert p.stats["xinde"] == 116 and p.art_mastery[art_id] == 2
+
+
+def test_without_enough_xinde_nothing_moves(xgame):
+    p = xgame.state.player
+    art_id = _ready_for_jue(xgame)
+    p.art_mastery[art_id] = 0
+    p.stats["xinde"] = 39
+    msgs = xgame.cultivate(art_id, by_xinde=True)
+    assert "心得不足" in msgs[0] and p.stats["xinde"] == 39 and p.art_mastery[art_id] == 0 and p.xinde_cultivations == 0
+
+
+def test_row_offers_xinde_when_stamina_runs_out(xgame):
+    p = xgame.state.player
+    art_id = _ready_for_jue(xgame)
+    p.art_mastery[art_id] = 0
+    p.stamina, p.stats["xinde"] = 0, 100
+    row = next(r for r in skillview.art_rows(xgame.state, xgame.content, xgame.world) if r["id"] == art_id)
+    assert not row["cultivate"]["ok"]  # 體力不足
+    assert row["cultivate"]["xinde"]["ok"] and row["cultivate"]["xinde"]["price"] == 40
+    p.art_mastery[art_id] = xgame.content.config.breakthrough.heat  # 火候滿了、沒丹：等契機，心得修不了（改看換丹那一顆）
+    row = next(r for r in skillview.art_rows(xgame.state, xgame.content, xgame.world) if r["id"] == art_id)
+    assert row["cultivate"]["xinde"] is None and row["cultivate"]["buy"] is not None
+
+
+def test_bot_spends_spare_xinde_on_its_own_arts_first(xgame):
+    p = xgame.state.player
+    art_id = _ready_for_jue(xgame)
+    p.art_mastery[art_id] = 0
+    p.stats["xinde"] = 1000
+    assert bot.cultivate_by_xinde(xgame) == bot.XINDE_CULTIVATE_MAX
+    assert p.art_mastery[art_id] == bot.XINDE_CULTIVATE_MAX
+
+
+def test_off_in_test_content(tmp_path):
+    content = harden(load_content(FIXTURE))
+    g = Game.new(content, "試丹", rng=random.Random(1), world=open_world(tmp_path / "w.db"), graduated=True)
+    assert cultivation.xinde_price(g.state, content) is None
+    assert all(r["cultivate"]["xinde"] is None for r in skillview.art_rows(g.state, content, g.world))

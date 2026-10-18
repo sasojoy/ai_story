@@ -803,9 +803,15 @@ def season_page_lines(content: Content, season: WorldState, rule: str = "") -> l
 def legend_buy_lines(content: Content) -> list[str]:
     """玩法說明「心得」那一節：以心得換破境丹（Joy 2026-10-18）；關著是空的。數字讀 Config。"""
     cfg = content.config
+    lines = []
+    if cfg.cultivate_xinde_price > 0:
+        lines.append(
+            f"- 修練也可以改付心得、不花體力：這一季第一次 {cfg.cultivate_xinde_price}，之後每修一次多 {cfg.cultivate_xinde_step}。"
+            "後期改練一門新功夫，攢下的心得就能直接拿來衝品質、添火候。"
+        )
     if cfg.legend_xinde_price <= 0:
-        return []
-    return [
+        return lines
+    return lines + [
         f"- 一門武學衝到絕學那一步時，可以在修練頁花心得換一枚{cfg.legend_item_name}：這一季第一枚 {cfg.legend_xinde_price}，"
         f"之後每換一枚多 {cfg.legend_xinde_step}。後期改練一門新功夫，不必只等打仗時的頓悟。",
     ]

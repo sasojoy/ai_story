@@ -355,7 +355,10 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
             ),
             "gen": gen_word(art, content, world),  # 境界（depth.py 的第幾代）：第零代（基礎、內容寫的）是空字串
             "compare": compare,  # 卷軸卡直接把它寫在功法庫那張卡的鈕上面（改練之前看得到）；點開「詳情」時功法卡裡也有
-            "cultivate": {"ok": problem is None, "note": note, "legend": legend, "buy": _buy_choice(state, content, art)},
+            "cultivate": {
+                "ok": problem is None, "note": note, "legend": legend, "buy": _buy_choice(state, content, art),
+                "xinde": None if hut else _xinde_choice(state, content, world, art_id, gate),
+            },
             "melt": {
                 "ok": stuck is None,
                 "note": stuck if stuck is not None else melt_note(value),
@@ -452,6 +455,18 @@ def _legend_choice(
         "note": f"{cultivation.odds_for(state, content, target, failures, boost, world, art_id)}% 晉為{target}"
                 f"（含{cfg.legend_item_name} +{boost}%）・體力 {cfg.cultivate_stamina}",
     }
+
+
+def _xinde_choice(state: GameState, content: Content, world: WorldStateStore, art_id: str, gate: bool) -> dict | None:
+    """「以心得修練」那一顆（Joy 2026-10-18）：跟修練同一個判斷、付的是心得（cultivation.cultivate_problem 的 by_xinde）。
+    以心得修練關著、或除了錢以外就修不了（沒融意境、已經絕學、火候滿了等契機……）是 None；只差心得時灰掉寫原因。"""
+    price = cultivation.xinde_price(state, content)
+    if price is None:
+        return None
+    why = cultivation.cultivate_problem(state, content, world, art_id, gate=gate, use_legend=True, by_xinde=True)
+    if why is not None and not why.startswith("心得不足"):
+        return None
+    return {"price": price, "ok": why is None, "why": why or "", "label": f"以心得修練（心得 {price}）"}
 
 
 def _buy_choice(state: GameState, content: Content, art) -> dict | None:

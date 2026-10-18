@@ -47,7 +47,8 @@ class Ledger(dict):
 def run(seed, args):
     content = load_content(mc.ROOT / "content", profile=None if args.profile == "none" else args.profile)
     if args.no_buy:
-        content.config.legend_xinde_price = 0  # 對照組：沒有以心得換破境丹
+        content.config.legend_xinde_price = 0  # 對照組：沒有以心得換破境丹，也沒有以心得修練
+        content.config.cultivate_xinde_price = 0
     world = open_world(mc.TMP / f"x{seed}{len(args.mates)}{int(args.no_buy)}.db")
     if not world.get_season().storyline:
         world.seed_first_season(content)

@@ -2723,6 +2723,11 @@ class Config(_Strict):
     # 量到的（scripts/measure_xinde_flow.py，週末 60 小時）：沒有門下的人一季剩六千多點心得沒處花；300 起、每枚 +100，
     # 六千點約換八到九枚，服丹強行衝關一次約一成五到兩成，一季大約多出一兩門絕學
     legend_xinde_price: int = Field(default=0, ge=0)
+    # 以心得修練（Joy 2026-10-18 決策卡選「心得修練」）：修練每一次都可以改付心得、不付體力，這一季第 k 次（從 0 數）
+    # 要 cultivate_xinde_price + k × cultivate_xinde_step；0 是關著（測試內容）。量到的：轉一門新功夫從下品修到上品再添滿火候
+    # 約 27 次修練（約 270 體力，十幾個小時的回復）；40 起、每次 +4，一季溢出的六千點大約修得到五十次，約兩門
+    cultivate_xinde_price: int = Field(default=0, ge=0)
+    cultivate_xinde_step: int = Field(default=4, ge=0)
     legend_xinde_step: int = Field(default=100, ge=0)
     # 回體丹（企劃者 2026-10-07「新增物品回體丹可以回體力100點，新手進來都送20顆，現在是內測期間，讓大家初期可以盡情遊玩體驗」）：
     # 狀態列體力條旁邊按「服丹」吃一顆，回 stamina_pill_restore 點體力，夾在體力上限（不溢出；體力是滿的不讓吃）

@@ -129,8 +129,10 @@ def boost_for(state: GameState, content: Content, target_quality: str, use_legen
 
 def cultivate_problem(
     state: GameState, content: Content, world: WorldStateStore, art_id: str, gate: bool = True, use_legend: bool = False,
+    by_xinde: bool = False,
 ) -> str | None:
     """不能修練的原因；None＝可以。gate＝要不要看成數門檻（序章一定升品的那一步不看）。
+    by_xinde：這一次付心得、不付體力（以心得修練，Joy 2026-10-18；價錢見 xinde_price）。
     方案 C 火候已滿的那一門，只有勾了破境丹、手上也有丹才修得下去（服丹強行衝關，見 force_odds）。"""
     art = team.resolve_art(art_id, content, world)
     if art is None or art_id not in library.owned_arts(state):
@@ -158,22 +160,52 @@ def cultivate_problem(
     full = heat_mode(content, target) and state.player.art_mastery.get(art_id, 0) >= content.config.breakthrough.heat
     if full and not (use_legend and state.player.legend_items > 0):
         return f"【{art.name}】的火候已足，再關起門來練也是原地打轉——剩下那一步，不在練功房裡。"  # 方案 C（待 joy 潤）
+    if by_xinde:
+        price = xinde_price(state, content)
+        if price is None:
+            return "這裡只能花體力修練。"
+        have = state.player.stats.get("xinde", 0)
+        if have < price:
+            return f"心得不足：以心得修練一次要 {price}，你有 {have}。"
+        return None
     cost = content.config.cultivate_stamina
     if state.player.stamina < cost:
         return f"體力不足：修練一次要 {cost}。"
     return None
 
 
+def xinde_price(state: GameState, content: Content) -> int | None:
+    """以心得修練（Joy 2026-10-18 決策卡「心得修練」）：這一季下一次花心得修練要多少；關著（cultivate_xinde_price 是 0）是 None。
+    越修越貴：第 k 次（從 0 數）是 cultivate_xinde_price + k × cultivate_xinde_step，不分哪一門、哪一品。"""
+    cfg = content.config
+    if cfg.cultivate_xinde_price <= 0:
+        return None
+    return cfg.cultivate_xinde_price + state.player.xinde_cultivations * cfg.cultivate_xinde_step
+
+
+def _pay(state: GameState, content: Content, by_xinde: bool) -> str:
+    """修練一次的錢：體力或心得（cultivate_problem 已經驗過付得起）。回寫在擲骰那一句後面的「體力 -N」「心得 -N」。"""
+    p = state.player
+    if by_xinde:
+        price = xinde_price(state, content)
+        p.stats["xinde"] = p.stats.get("xinde", 0) - price
+        p.xinde_cultivations += 1
+        return f"心得 -{price}"
+    cost = content.config.cultivate_stamina
+    p.stamina -= cost
+    return f"體力 -{cost}"
+
+
 def cultivate(
     state: GameState, content: Content, world: WorldStateStore, art_id: str, rng: random.Random,
-    use_legend: bool = False, gate: bool = True,
+    use_legend: bool = False, gate: bool = True, by_xinde: bool = False,
 ) -> list[str]:
     """修練一次：花體力，擲一次能不能升一品。被拒絕時只回原因（什麼都不扣、不動，破境丹也留著）。
     use_legend：玩家勾了「服下破境丹」。衝絕學、手上有丹才真的服（這一次的機率多一份加成，成不成都用掉一枚）；
     頁面過期了（丹已經沒有、下一步不是絕學）不拒絕這次修練，照一般的機率擲，多回一句話說這一回沒服。
     方案 C 開著、衝的是絕學時：火候還沒滿就添一分火候（_temper，勾了丹也不服）；滿了只有勾了丹才修得下去——服下一枚強行衝關
     （_force，機會見 force_odds），不然要等契機（seize）。"""
-    problem = cultivate_problem(state, content, world, art_id, gate, use_legend)
+    problem = cultivate_problem(state, content, world, art_id, gate, use_legend, by_xinde)
     if problem is not None:
         return [problem]
     p = state.player
@@ -181,10 +213,8 @@ def cultivate(
     quality = team.art_quality(state, art)
     target = next_quality(quality)
     failures = p.art_mastery.get(art_id, 0)
-    cost = content.config.cultivate_stamina
-    p.stamina -= cost
-    # 花的體力寫在擲骰那一句後面，跟合併的回話（fusion.merge）同一種寫法（FB-070）；江湖紀錄的數值變化另由 engine 照實際扣的算
-    tired = f"體力 -{cost}"
+    # 花的體力（或心得）寫在擲骰那一句後面，跟合併的回話（fusion.merge）同一種寫法（FB-070）；江湖紀錄的數值變化另由 engine 照實際扣的算
+    tired = _pay(state, content, by_xinde)
     if heat_mode(content, target):
         if failures >= content.config.breakthrough.heat:
             return _force(state, content, world, art_id, rng) + [tired]
