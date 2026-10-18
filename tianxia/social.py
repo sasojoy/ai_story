@@ -16,7 +16,7 @@ from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
 from . import prologue as prologue_rules
-from . import allied, arena, gender, invites, ranger, ranks, renown, team
+from . import allied, arena, four_tiers, gender, invites, ranger, ranks, renown, team
 from .characters import CharacterStore, name_key
 from .rules import day_turn
 from .state import GameState
@@ -191,6 +191,7 @@ GESTURES: dict[str, Gesture] = {
     "toast": Gesture("敬酒", "舉杯敬酒", "舉杯向你敬酒", (("drink", "舉杯回敬"), ("decline", "婉言推辭了"))),
 }
 GIFT_KINDS = ("silver", "pill", "material")
+GIFT_TIER4 = "（四階的料不能送人。）"  # 待 joy 潤：素材四階（正式季整合 4.6）擋住開小號簽到再集中給主號
 
 
 def gesture_of(invite) -> Gesture | None:
@@ -277,7 +278,8 @@ def _gift_buttons(game: Game, other: Game) -> list[CardButton]:
             action="gift", label=f"贈{c.config.stamina_pill_name}", arg="pill", amount=p.stamina_pills,
             note=f"身上 {p.stamina_pills} 顆",
         ))
-    held = [(m, n) for m, n in sorted(p.materials.items()) if n > 0 and m in c.materials]
+    # 四階不在人與人之間轉手（正式季整合 4.6）：清單不列
+    held = [(m, n) for m, n in sorted(p.materials.items()) if n > 0 and m in c.materials and not four_tiers.tier4_id(c, m)]
     if held:
         buttons.append(CardButton(
             action="gift", label="贈素材", arg="material", amount=max(n for _, n in held),
@@ -319,6 +321,8 @@ def _gift(game: Game, other: Game, params: dict) -> list[str]:
         mine, theirs = [], []
     else:
         material = str(params.get("choice") or "")
+        if four_tiers.tier4_id(c, material):
+            return [GIFT_TIER4]
         if material not in c.materials or not materials.take(game.state, material, amount):
             return ["（身上沒有那麼多。）"]
         materials.grant(other.state, c, material, amount)

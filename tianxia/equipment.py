@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 
+from .four_tiers import TOP_COMMON
 from .insights import PAIR_ATTRIBUTES
 from .materials import by_tier
 from .models import Content, Material
@@ -200,12 +201,13 @@ def grade_line(item: Equipment) -> str:
 def dismantle_material(content: Content, item: Equipment) -> Material:
     """拆一件拿到的素材（兵器設計 4.7.1、裝備四欄 4.8）：同階；屬性剛柔快慢直接對，陰陽虛實是兩個屬性合出來的
     （insights.PAIR_ATTRIBUTES），從兩個來源裡挑一個，由 id 的 sha256 決定（同一件永遠拆出同一種；演算法不能改，不然舊兵器拆出來的會變）。
-    該階該屬性沒有素材時 by_tier 退回同階的全部。"""
+    該階該屬性沒有素材時 by_tier 退回同階的全部。主料四階的一件拆出三階（正式季整合 12.3 第 37 條：擋住一直重打洗屬性）。"""
     attribute = item.attribute
     sources = next((sorted(pair) for pair, result in PAIR_ATTRIBUTES.items() if result == attribute), None)
     if sources is not None:
         attribute = sources[hashlib.sha256(item.id.encode("utf-8")).digest()[0] % 2]
-    return (by_tier(content, item.tier, attribute) or by_tier(content, 1, attribute) or list(content.materials.values()))[0]
+    tier = min(item.tier, TOP_COMMON)
+    return (by_tier(content, tier, attribute) or by_tier(content, 1, attribute) or list(content.materials.values()))[0]
 
 
 def dismantle_order(item: Equipment) -> tuple[int, int, str]:

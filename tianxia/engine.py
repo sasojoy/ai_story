@@ -18,7 +18,7 @@ from pydantic import BaseModel
 
 from . import (
     allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, chuangong, clinic, companion_agent, cultivation, defection, economy, encounter, enlist, equipment, event_llm, explore_modes,
-    fight_llm, figure_aid, figure_life, figures, foreshadow, generals, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, library, mapdata, martial_arts,
+    fight_llm, figure_aid, figure_life, figures, foreshadow, four_tiers, generals, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, library, mapdata, martial_arts,
     materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
     shopview, signature, signature_arms, skill_slots, skillview, smithing,
     social, sortie, styles, tactics, team, territory, timetable, traits, treasures, weapons, works, zh,
@@ -8410,8 +8410,8 @@ class Game:
         wp.stats["silver"] = wp.stats.get("silver", 0) + taken
         goods: list[tuple[str, int]] = []
         left = cfg.materials
-        held = sorted(
-            ((mid, n) for mid, n in lp.materials.items() if n > 0 and mid in c.materials),
+        held = sorted(  # 四階搶不走（正式季整合 4.6：四階不在人與人之間轉手）
+            ((mid, n) for mid, n in lp.materials.items() if n > 0 and mid in c.materials and not four_tiers.tier4_id(c, mid)),
             key=lambda item: (c.materials[item[0]].tier, -item[1], item[0]),
         )
         for mid, n in held:

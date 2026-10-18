@@ -142,3 +142,60 @@ def test_captions_and_howto_say_tier3_sells():
     c.config.four_tiers.enabled = False
     assert "三階不收" in shopview._trade_captions(c)["sell_cap"]
     assert "三階不收" in "".join(howto.economy_lines(c))
+
+
+# ── Task 3：四階不算糧草、不送人、不被搶；拆四階裝備回三階 ──────────────
+
+
+def _pair():
+    from tianxia.engine import Game
+    from tianxia.sqlite_world import open_world
+
+    c = real_content("weekend")
+    world = open_world()
+    a = Game.new(c, "甲", rng=random.Random(0), world=world)
+    b = Game.new(c, "乙", rng=random.Random(1), world=world)
+    for g in (a, b):
+        g.client = None
+        g.state.player.location = "yingchuan"
+    return a, b
+
+
+def test_tier4_is_not_grain():
+    game = _econ_game(bag={"man_1": 2, "man_3": 1})
+    s, c = game.state, game.content
+    before = materials.grain_of(s, c)
+    s.player.materials["man_4"] = 3
+    assert materials.grain_of(s, c) == before
+    assert all(mid != "man_4" for mid, _ in materials.grain_plan(s, c, before))
+
+
+def test_gift_refuses_tier4():
+    from tianxia import social
+
+    a, b = _pair()
+    a.state.player.materials = {"gang_4": 2, "gang_1": 3}
+    buttons = social._gift_buttons(a, b)
+    choices = next(btn for btn in buttons if btn.arg == "material").choices
+    assert [ch["id"] for ch in choices] == ["gang_1"]
+    msgs = social._gift(a, b, {"arg": "material", "choice": "gang_4", "amount": 1})
+    assert msgs == [social.GIFT_TIER4]
+    assert a.state.player.materials["gang_4"] == 2 and "gang_4" not in b.state.player.materials
+
+
+def test_ambush_never_takes_tier4():
+    a, b = _pair()
+    b.state.player.materials = {"kuai_4": 3}
+    spoils = a._ambush_spoils(b)
+    assert spoils.goods == () or all(mid != "kuai_4" for mid, _ in spoils.goods)
+    assert b.state.player.materials["kuai_4"] == 3 and "kuai_4" not in a.state.player.materials
+
+
+def test_dismantle_tier4_gear_gives_tier3():
+    from tianxia.state import Equipment
+
+    c = real_content()
+    four = Equipment(id="兵:7", name="試刃", kind="劍", attribute="剛", tier=4, quality="下品")
+    three = Equipment(id="兵:8", name="舊刃", kind="劍", attribute="剛", tier=3, quality="下品")
+    assert equipment.dismantle_material(c, four).id == "gang_3"
+    assert equipment.dismantle_material(c, three).id == "gang_3"
