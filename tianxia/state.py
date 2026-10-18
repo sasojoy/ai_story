@@ -825,6 +825,7 @@ class Bounty(BaseModel):
     kind: str  # "strike" 討伐、"scout" 打探、"escort" 護送、"wanted" 通緝、"art" 求藝、"arms" 求兵
     faction: str | None  # 掛單的陣營（通緝是掛單人的陣營）；散人兩邊都能接，陣營的人只能接自己陣營的
     week: int  # 掛出來的那一週（季曆）
+    day: int = 0  # 21 天季每天一批：掛出來的那一天（季曆第幾天，bounties.issue_day）；其他季 0（正式季第 5 批）
     expires: float  # 世界秒：過了就下榜、不能揭（通緝沒人完成時把押金退給掛單的人）；過期但還有人揭著的留到他們同步（deliver_lapses）
     silver: int
     deeds: int  # 完成時給散人的俠名（ranger.add_deeds）
@@ -984,6 +985,7 @@ class WorldState(BaseModel):
     mandate: bool = False  # 天命之季（玉璽碎片設計 8.1；換季時由 seal.stamp_mandate 蓋，季的規則看它）
     mandate_result: str | None = None  # 天命之爭得天命的那一軍；"" 是天命未定；None 是還沒定（季末看它，world.evaluate_ending）
     hooked_week: int = 0  # 週初的掛鉤（world.WEEK_HOOKS）已經跑到第幾週；0＝還沒跑過
+    hooked_day: int = 0  # 21 天季每天 00:00 的掛鉤（world.DAY_HOOKS）已經跑到季曆第幾天；0＝還沒跑過（正式季第 5 批）
     # ── 時刻表決戰開集結（計畫 T8）：季的事在 mutate 裡只記號，mutate 外面才開（world.open_waiting_showdown）──
     showdowns_waiting: list[str] = Field(default_factory=list)  # 時間到了、還沒開成的決戰 id，照時間先後（另一場還在打就等）
     showdowns_opened: dict[str, str] = Field(default_factory=dict)  # 開過集結的決戰 id → 開的那一筆 BattleDef；開過就不再開
@@ -1006,6 +1008,7 @@ class WorldState(BaseModel):
     # 自動掛單已經掛到第幾週（季曆；bounties.issue 的第二道擋）：第一季那一條（WEEK_HOOKS，照 hooked_week）與規則關著的季那一條
     # （bounties.tick）都直接叫 issue，同一週叫幾次都只掛一次。不借 hooked_week：規則關著的季它一直是 0（懸賞榜設計 3.2）
     bounty_week: int = 0
+    bounty_day: int = 0  # 21 天季每天一批的懸賞已經掛到季曆第幾天（bounties.issue_day 的擋；正式季第 5 批）
     invites: list[Invite] = Field(default_factory=list)  # 玩家之間還在等回覆的邀請（invites.py；換季整個重來）
     spar_tally: dict[str, list[int]] = Field(default_factory=dict)  # 切磋的每日次數：「名號鍵|名號鍵」（排序）→ [遊戲日, 次數]
     gift_tally: dict[str, list[int]] = Field(default_factory=dict)  # 贈物的每日次數（FB-116）：同 spar_tally，不分誰送誰

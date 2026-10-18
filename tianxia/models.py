@@ -2436,6 +2436,35 @@ class QuietHours(_Strict):
     end: float = Field(default=8, gt=0, le=24)  # 幾點以後才開
 
 
+class Season21Daily(_Strict):
+    """21 天季的每天一批與推線（正式季整合設計第七章、6.1；只在 calendar.season21_on 的季讀，週末與 14 天一個字都不變）。
+    數字都是【預設】（12.3 第 39 條：先照預設做），量完（第 5～8 批做完的 20 人假人三週）再調。
+    - 軍令（7.1）：每天 00:00 每個陣營 orders_per_day 道；湊滿套效果時效果量乘 order_effect_share（0.43＝以前一週三道的總量攤到七天）。
+    - 懸賞（7.2、6.1）：每天 00:00 一批，期限 bounty_days 天；經驗＝這一級升下一級的經驗 × exp_ratio，銀兩＝等級 × silver_per_level
+      （求兵照那一把再加這一份）；滿級時 maxed_exp_per_xinde 經驗換 1 心得；討伐另擲 strike_tier3_chance 一個三階；
+      重賞每天每邊擲 prize_treasure_chance、prize_horse_chance。
+    - 推線（7.4）：出陣、捐軍備、事件乘 push_speed（取代季長倍數；事件再乘事件五折），每人每天每條線上限 push_daily_cap，
+      盡頭阻力的兩檔 push_mid_share／push_far_share（離 50 的兩個邊界照 PushResistance）。"""
+
+    orders_per_day: int = Field(default=1, ge=0)
+    order_effect_share: float = Field(default=0.43, ge=0)
+    bounty_days: float = Field(default=2, gt=0)
+    exp_ratio: dict[str, float] = Field(
+        default_factory=lambda: {"strike": 0.15, "escort": 0.12, "scout": 0.08, "art": 0.10, "arms": 0.10},
+    )
+    silver_per_level: dict[str, int] = Field(
+        default_factory=lambda: {"strike": 6, "escort": 5, "scout": 3, "art": 5, "arms": 5},
+    )
+    maxed_exp_per_xinde: int = Field(default=5, ge=1)
+    strike_tier3_chance: float = Field(default=0.10, ge=0, le=1)
+    prize_treasure_chance: float = Field(default=0.10, ge=0, le=1)
+    prize_horse_chance: float = Field(default=0.07, ge=0, le=1)
+    push_speed: float = Field(default=1.0, ge=0)
+    push_daily_cap: float = Field(default=10, gt=0)
+    push_mid_share: float = Field(default=0.5, gt=0, le=1)
+    push_far_share: float = Field(default=0.2, gt=0, le=1)
+
+
 class EconomyRules(_Strict):
     """素材與經濟（docs/superpowers/specs/2026-10-15-素材與經濟-design.md；tianxia/economy.py）：每一樣一個開關，預設開、
     測試內容關，關掉一個字都不變（亂數序列也一樣）。都上線就生效，不看季的章。"""
@@ -2720,6 +2749,8 @@ class Config(_Strict):
     # 糧草（計畫 T6；這一版沒有軍備物資，糧草＝背包裡的慢屬性素材，濃縮版內容表 4.0）：凡、靈、天一個各算幾份
     grain_values: list[int] = Field(default_factory=lambda: [1, 3, 9])
     # ── 軍令（計畫 T6、軍令文件第二節、濃縮版內容表第三節；掛在 season_one 後面）──
+    # 21 天季的每天一批與推線（正式季第 5 批，見 Season21Daily）：只在蓋了 21 天季章的季讀
+    season21_daily: Season21Daily = Field(default_factory=Season21Daily)
     orders_per_week: int = Field(default=3, ge=0)  # 每個陣營每週同時有幾道（豪強這一版只有打擊一種，最多一道）
     order_quota_min: int = Field(default=4, ge=1)  # 陣營總額度最少幾次（軍令文件寫 5；週末兩人時太滿，總計畫待決 3 先用 4）
     convoy_ambush_chance: float = Field(default=0.2, ge=0, le=1)  # 糧車送到終點前先撞上敵方截糧隊的機率

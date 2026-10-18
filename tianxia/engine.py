@@ -5978,6 +5978,8 @@ class Game:
         """每人每曆日每條線推得動多少（第一季，push.split_by_cap 的上限）：Config.daily_push_cap；盡頭阻力開著時再乘季長倍數
         （設計 5.2：週末設定 1，7 天的季約 0.36）。push_trend 與 _push_room 都讀它。"""
         cfg = self.content.config
+        if calendar.season21_on(self.state.world, self.content):  # 21 天季：自己的上限，不乘季長倍數（正式季整合設計 7.4）
+            return cfg.season21_daily.push_daily_cap
         return cfg.daily_push_cap * (self.season_scale() if cfg.push_resistance.enabled else 1.0)
 
     def _resisted_lines(self) -> set[str]:
@@ -5999,11 +6001,14 @@ class Game:
             return amount, False
         if source == "event" and cfg.explore_modes.enabled:
             amount *= cfg.explore_modes.event_trend_share
+        season21 = calendar.season21_on(w, c)
+        if season21 and source in ("sortie", "donate", "event"):  # 21 天季（7.4）：出陣、捐軍備、可重複的事件同一個速度，不乘季長倍數
+            amount *= cfg.season21_daily.push_speed
         if not cfg.push_resistance.enabled:
             return amount, False
-        if source in ("sortie", "donate") and calendar.season_one_on(w, c):  # 捐軍備照出陣（素材與經濟設計第六節第 2 點）
+        if source in ("sortie", "donate") and calendar.season_one_on(w, c) and not season21:  # 捐軍備照出陣（素材與經濟設計第六節第 2 點）
             amount *= self.season_scale()
-        share = push.resistance_share(world_trend_value(w, c, trend_id), amount, cfg.push_resistance)
+        share = push.resistance_share(world_trend_value(w, c, trend_id), amount, push.tuning_for(w, c))
         return amount * share, share < 1
 
     def drill_scale(self) -> float:
@@ -10228,17 +10233,21 @@ class Game:
         s, c = self.state, self.content
         if not orders.active(s, c):
             return self._log(["（這一季沒有軍令。）"])
-        week = orders.week_of(s, c)
+        week = orders.period_of(s, c)  # 21 天季是季曆第幾天（每天一期）
         replaced = sum(1 for o in s.world.orders if o.week == week and not o.done)
         kept = {o.id for o in s.world.orders if o.week == week and o.done}
-        orders.issue(s, c, week, self.rng, redraw=True)
+        if orders.daily(s, c):
+            orders.issue_day(s, c, week, self.rng, redraw=True)
+        else:
+            orders.issue(s, c, week, self.rng, redraw=True)
         self._save_season()
         issued = [o for o in s.world.orders if o.week == week and o.id not in kept]
         listing = "；".join(
             f"{f.name}：{'、'.join(orders.title(c, o) for o in issued if o.faction == f.id)}"
             for f in c.scenario.factions if any(o.faction == f.id for o in issued)
         ) or "這一週沒有要重挑的軍令"
-        msg = (f"已照週一的做法重發第 {week} 週的軍令，換掉沒達成的 {replaced} 道（進度不算了；已達成的 {len(kept)} 道照舊）"
+        label = f"第 {week} 天" if orders.daily(s, c) else f"第 {week} 週"
+        msg = (f"已照週一的做法重發{label}的軍令，換掉沒達成的 {replaced} 道（進度不算了；已達成的 {len(kept)} 道照舊）"
                f"——{listing}。")
         self._write("重發軍令", [msg], tag="管理者")
         return self._log([msg])
@@ -10930,11 +10939,14 @@ class Game:
         at = calendar.point(w.time, c, w)
         # 休季時沒有下一件（計畫 T9）；籌備中時鐘沒走，也不倒數（FB-049）
         upcoming = None if w.ended or self._preparing() else timetable.next_event(self.state, c)
+        cal = {
+            "week": at.week, "weekday": at.weekday, "clock": f"{at.hour:02d}:{at.minute:02d}",
+            "weeks": c.config.season_weeks, "text": calendar.point_text(at),  # 畫面第二行直接用這一句，不自己拼
+        }
+        if orders.daily(self.state, c):  # 21 天季的軍令每天一道：軍令卡收起來照季曆第幾天記（網頁 orderKey），隔天重新展開
+            cal["day"] = at.cal_day
         return {
-            "calendar": {
-                "week": at.week, "weekday": at.weekday, "clock": f"{at.hour:02d}:{at.minute:02d}",
-                "weeks": c.config.season_weeks, "text": calendar.point_text(at),  # 畫面第二行直接用這一句，不自己拼
-            },
+            "calendar": cal,
             "next_event": None if upcoming is None else {
                 "title": upcoming.title,
                 "at": self.stamp(timetable.when(self.state, c, upcoming)),  # 季曆時刻「第 9 週・週四 20:44」，畫面寫在倒數前面（FB-062）
@@ -10992,7 +11004,7 @@ class Game:
             view = {
                 "id": o.id, "title": orders.title(c, o), "text": o.text, "mine": o.progress.get(name, 0),
                 "progress": min(total, o.quota), "quota": o.quota, "done": o.done,
-                "deadline": self.stamp(calendar.week_start(o.week + 1, c, s.world)),
+                "deadline": self.stamp(orders.deadline(s, c, o)),  # 下週一 00:00；21 天季是隔天 00:00
             }
             if not o.done and (o.template != "strike" or o.figure is not None):
                 view["how"] = atlas.order_how(s, c, o)  # 怎麼出力（FB-093；打擊另寫他在哪，FB-072）；打完的沒有這個鍵

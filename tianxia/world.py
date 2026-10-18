@@ -30,6 +30,13 @@ WEEK_HOOKS: list[Callable[[GameState, Content, random.Random], list[str]]] = [
     lambda state, content, rng: bounties.issue(state, content, state.world.hooked_week, rng),  # 懸賞榜：兩個陣營各掛討伐、打探、護送
 ]
 
+# 21 天季每天 00:00 的掛鉤（正式季整合設計 7.1、7.2）：季曆每跨進新的一天各跑一次，排在週初掛鉤之後、那一刻的大事之前
+# （跑的時候 hooked_day 已經是剛跨進的那一天）。軍令、懸賞在 21 天季改走這一串，週初那一串略過（orders.issue、bounties.issue）
+DAY_HOOKS: list[Callable[[GameState, Content, random.Random], list[str]]] = [
+    lambda state, content, rng: orders.issue_day(state, content, state.world.hooked_day, rng),
+    lambda state, content, rng: bounties.issue_day(state, content, state.world.hooked_day, rng),  # 懸賞榜：每天一批（7.2）
+]
+
 
 def _now_for_battle(now: float | None) -> float:
     """開戰要知道現在的現實時間（集結截止時間從這裡算）。引擎不自己讀電腦時鐘，呼叫端要傳 now。"""
@@ -420,6 +427,12 @@ def season_events(state: GameState, content: Content, rng: random.Random) -> lis
         w.hooked_week += 1
         for hook in WEEK_HOOKS:
             msgs += hook(state, content, rng)
+    if calendar.season21_on(w, content):  # 21 天季：每天 00:00 的掛鉤（軍令、懸賞每天一批；只發今天的，跨過的天不補）
+        day = calendar.point(w.time, content, w).cal_day
+        while w.hooked_day < day:
+            w.hooked_day += 1
+            for hook in DAY_HOOKS:
+                msgs += hook(state, content, rng)
     for event in timetable.due(state, content):
         msgs += settle_waiting_showdowns(state, content, rng, before=event)
         msgs += timetable.resolve(state, content, event, rng)
