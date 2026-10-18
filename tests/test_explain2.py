@@ -268,6 +268,8 @@ def test_only_events_and_the_first_echo_give_fame_in_the_code():
             if re.search(r"""renown\.gain\([^)]*["']fame["']""", line):
                 gains.append((path.name, line.strip().split("#")[0].strip()))
     assert gains == [
+        ("engine.py", 'return [tavern_rules.TREAT_DONE] + renown.gain(s, c, "fame", cfg.treat_fame)'),  # 酒肆請全店喝酒（Game._tavern_treat）
+        ("engine.py", 'record.changes += renown.gain(s, c, "fame", cfg.hit_win_fame)'),  # 酒肆：打退殺手（Game._tavern_hit_fight）
         ("engine.py", 'changes += renown.gain(s, c, "fame", fame)'),  # 奪璽單挑（玉璽碎片設計 5.9，同一季才給）
         ("engine.py", 'self._write(journal.ECHO, lines + renown.gain(self.state, self.content, "fame", gained))'),  # 首創回饋
         ("engine.py", 'highlight_changes += renown.gain(s, c, "fame", fame)'),  # 決戰最有戲的那一搏與首功

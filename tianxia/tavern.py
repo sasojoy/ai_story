@@ -642,7 +642,7 @@ HIDE_LABEL = "打點酒家，藏起行跡（{price} 兩）"
 TRACE_LABEL = "反查誰在打聽我（{price} 兩）"
 BOARD_LABEL = "看牆上的懸賞榜"
 BACK_LABEL = "出酒肆"
-TITLES = {"news": "聽消息", "seek": "打聽下落", "ties": "打聽交情", "material": "打聽素材", "wall": "題壁", "treat": "請酒",
+TITLES = {"news": "聽消息", "seek": "打聽下落", "ties": "打聽情誼", "material": "打聽素材", "wall": "題壁", "treat": "請酒",
           "hide": "藏行跡", "trace": "反查", "hit": "買殺手", "guard": "保鏢", "ask": "問酒家"}  # 酒肆那一頁「剛問到的」每一則的小標（待 joy 潤）
 WHO_UNKNOWN = "酒家說：「{name}？沒聽說過這號人物。」（退你 {refund} 兩）"
 ASK_EMPTY = "要打聽誰？先報個名號。"
