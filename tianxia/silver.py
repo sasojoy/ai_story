@@ -198,6 +198,41 @@ def buy_legend(state: GameState, content: Content) -> list[str]:
     return [LEGEND_DONE.format(name=name), *_pay(state, cfg.legend_silver), f"{name} +1"]
 
 
+# ── 打點門路（塞門房；人物在不在此地由 Game 問）──
+
+
+def bribe_gain(state: GameState, content: Content, fid: str) -> int:
+    """這一下打點加幾點情誼：bribe_affinity，加到 bribe_max 為止（第 40 條：再往上要當面去處）；不乘別的倍數。談不上話的人物是 0。"""
+    cfg = content.config.silver_outlets
+    cid = content.figures[fid].character
+    if cid is None:
+        return 0
+    return max(0, min(cfg.bribe_affinity, cfg.bribe_max - state.player.affinities.get(cid, 0)))
+
+
+def bribe_problem(state: GameState, content: Content, fid: str, day: int) -> str | None:
+    """打點不了的原因：今天打點過這一位、情誼已經到 bribe_max、錢不夠；可以是 None。"""
+    if state.player.bribed.get(fid) == day:
+        return BRIBE_TODAY
+    if bribe_gain(state, content, fid) <= 0:
+        return BRIBE_TOP
+    return _short(state, content.config.silver_outlets.bribe_silver)
+
+
+def bribe(state: GameState, content: Content, fid: str, day: int) -> list[str]:
+    """打點門路：付錢、對這位人物的情誼加 bribe_gain、記下這一天。"""
+    problem = bribe_problem(state, content, fid, day)
+    if problem is not None:
+        return [f"（{problem}。）"]
+    p, cfg = state.player, content.config.silver_outlets
+    gain = bribe_gain(state, content, fid)
+    cid = content.figures[fid].character
+    p.affinities[cid] = p.affinities.get(cid, 0) + gain
+    p.bribed[fid] = day
+    name = content.figures[fid].name
+    return [BRIBE_DONE.format(name=name), *_pay(state, cfg.bribe_silver), f"{name}情誼 +{gain}"]
+
+
 def take_donation(state: GameState, content: Content, day: int, room_points: int) -> tuple[int, int]:
     """真的收下：扣銀兩、記今天的兩數與點數（捐素材的那本 donated_today），回（幾兩, 幾點）；捐不了是 (0, 0)、什麼都不動。"""
     if donate_problem(state, content, day, room_points, 0) is not None:

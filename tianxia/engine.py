@@ -1388,11 +1388,29 @@ class Game:
             problem, pill = silver.legend_problem(s, c), c.config.legend_item_name
             opts.append(Option(id="act:buy_legend", enabled=problem is None, label=silver.LEGEND_REFUSED.format(name=pill, problem=problem)
                                if problem else silver.LEGEND_LABEL.format(name=pill, silver=cfg.legend_silver, left=silver.legend_left(s, c))))
+        for fid in self._bribe_targets():
+            name, problem = c.figures[fid].name, silver.bribe_problem(s, c, fid, self._pill_day())
+            opts.append(Option(id=f"act:bribe:{fid}", enabled=problem is None, label=silver.BRIBE_REFUSED.format(name=name, problem=problem)
+                               if problem else silver.BRIBE_LABEL.format(name=name, silver=c.config.silver_outlets.bribe_silver,
+                                                                         gain=silver.bribe_gain(s, c, fid))))
         if equipment.smith_open(s, c):
             problem = silver.furnace_problem(s, c, self._pill_day(), prologue_rules.active(s, c))
             opts.append(Option(id="act:furnace", enabled=problem is None, label=silver.FURNACE_REFUSED.format(problem=problem)
                                if problem else silver.FURNACE_LABEL.format(silver=c.config.silver_outlets.furnace_silver)))
         return opts
+
+    def _bribe_targets(self) -> list[str]:
+        """此地打點得了門路的大勢人物（6.5）：在場、談得上話（有對話人物）；不在路上。"""
+        s, c = self.state, self.content
+        if s.player.journey is not None:
+            return []
+        return [fid for fid in figures.present_at(s, c, s.player.location) if c.figures[fid].character is not None]
+
+    def _silver_bribe(self, fid: str) -> list[str]:
+        s, c = self.state, self.content
+        if not (silver.on(c, s.world) and fid in self._bribe_targets()):
+            return [equipment.NOT_NOW]
+        return silver.bribe(s, c, fid, self._pill_day())
 
     def _silver_furnace(self) -> list[str]:
         s, c = self.state, self.content
@@ -2651,6 +2669,8 @@ class Game:
             return self._silver_mentor()
         if what == "furnace":
             return self._silver_furnace()
+        if what.startswith("bribe:"):
+            return self._silver_bribe(what.partition(":")[2])
         if what == "buy_legend":
             if not (silver.on(self.content, self.state.world) and self._at_clinic_town()):
                 return [equipment.NOT_NOW]

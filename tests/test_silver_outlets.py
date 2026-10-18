@@ -161,6 +161,50 @@ def test_picked_up_pills_do_not_count():
     assert p.legend_bought == 0 and "還差 1 兩" in _ids(game)["act:buy_legend"].label
 
 
+# ── Task 5：打點門路（塞門房）──
+
+
+def _at_a_figure(money=500):
+    from tianxia import figures
+
+    game = _game(money=money)
+    s, c = game.state, game.content
+    for loc in c.locations:
+        here = [f for f in figures.present_at(s, c, loc) if c.figures[f].character]
+        if here:
+            s.player.location = loc
+            return game, here[0], c.figures[here[0]].character
+    raise AssertionError("沒有談得上話的大勢人物站在任何地點")
+
+
+def test_bribing_adds_five_up_to_forty():
+    game, fid, cid = _at_a_figure()
+    p = game.state.player
+    p.affinities[cid] = 10
+    game.choose(f"act:bribe:{fid}")
+    assert p.affinities[cid] == 15 and p.stats["silver"] == 470
+    p.affinities[cid], p.bribed = 38, {}
+    game.choose(f"act:bribe:{fid}")
+    assert p.affinities[cid] == 40  # 只加到 40
+
+
+def test_bribe_once_a_day_per_figure():
+    game, fid, _ = _at_a_figure()
+    game.choose(f"act:bribe:{fid}")
+    option = _ids(game)[f"act:bribe:{fid}"]
+    assert not option.enabled and silver.BRIBE_TODAY in option.label
+
+
+def test_bribe_refused_at_forty():
+    game, fid, cid = _at_a_figure()
+    p = game.state.player
+    p.affinities[cid] = 40
+    option = _ids(game)[f"act:bribe:{fid}"]
+    assert not option.enabled and silver.BRIBE_TOP in option.label
+    game.choose(f"act:bribe:{fid}")
+    assert p.affinities[cid] == 40 and p.stats["silver"] == 500
+
+
 def test_weekend_has_no_silver_outlets():
     game = _game("weekend")
     assert not silver.on(game.content, game.state.world)
