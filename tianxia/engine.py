@@ -3993,10 +3993,13 @@ class Game:
         fid, _, ally = arg.partition(":")
         target = self.content.scenario.faction(fid)
         p.pending_defect, p.pending_ally = target.id, ally or None
-        lost = [self.content.characters[cid].name for cid in roster.left_behind(self.state, self.content, self.world, target.id)]
-        prompt = defection.prompt(self.state, self.content, target, self.faction_counts_text(), p.pending_ally, lost)
+        prompt = defection.prompt(self.state, self.content, target, self.faction_counts_text(), p.pending_ally, self._left_names(target.id))
         self._hide(prompt)  # 場景已經寫著這一問（_own_scene_text），江湖紀錄那一則只留標題（同投靠，FB-046）
         return [prompt]
+
+    def _left_names(self, side: str) -> list[str]:
+        """叛投確認畫面「會失去」那一段的同伴（歷史武將同行 9.5）：寫了 side、跟新陣營不合的。按鈕回的那一份與場景那一段（FB-362）共用。"""
+        return [self.content.characters[cid].name for cid in roster.left_behind(self.state, self.content, self.world, side)]
 
     def _leave_behind(self, side: str) -> list[str]:
         """叛投之後（歷史武將同行 9.5）：寫了 side、跟新陣營不合的同伴當場回江湖——全服放掉 owner、拿出隊伍、情誼照決戰後回江湖減半。"""
@@ -10892,7 +10895,7 @@ class Game:
             target = self.content.scenario.faction(s.player.pending_defect)
             ally = s.player.pending_ally
             head = defection.slot_label(s, c, target, ally)  # 「叛投X」；豪強分屬兩軍時也可能是「改投X」「改依附X」
-            return f"**{head}**\n\n{defection.prompt(s, c, target, self.faction_counts_text(), ally)}"
+            return f"**{head}**\n\n{defection.prompt(s, c, target, self.faction_counts_text(), ally, self._left_names(target.id))}"
         if s.player.picking_audience:
             return f"**求見**\n\n{self._audience_intro()}"
         asking = foreshadow.asking_text(s, c, self.world) if s.player.fs_asking is not None else None

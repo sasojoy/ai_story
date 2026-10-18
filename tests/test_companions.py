@@ -193,6 +193,19 @@ def test_defecting_drops_companions_of_the_old_side(real, world):
     assert world.get_companion("xunyu").owner == "官甲" and "xunyu" in p.team
 
 
+def test_the_defect_scene_lists_companions_left_behind(real, world):
+    """FB-362：按「叛投」之後玩家看的是場景那一段（Game._own_scene_text）；江湖紀錄那一則只留標題（_hide）。場景那一段也要列帶不走的同伴。"""
+    game = _player(real, world, "官甲", "guan", "huangjin_camp")
+    p = game.state.player
+    for cid in ("liubei", "xunyu"):
+        assert world.try_recruit(cid, "官甲", cap=3)
+        p.team.append(cid)
+    game.choose("defect:huang")
+    scene = game.scene_text()
+    assert roster.DEFECT_LOST.format(names="劉備") in scene
+    assert "荀彧" not in scene  # 沒寫陣營的照舊跟著，不列
+
+
 # ── 最終審查：劇情送人也照陣營、名下三位擋（第七節）──
 
 
