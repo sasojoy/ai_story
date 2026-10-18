@@ -10114,17 +10114,21 @@ class Game:
         s, c = self.state, self.content
         if not orders.active(s, c):
             return self._log(["（這一季沒有軍令。）"])
-        week = orders.week_of(s, c)
+        week = orders.period_of(s, c)  # 21 天季是季曆第幾天（每天一期）
         replaced = sum(1 for o in s.world.orders if o.week == week and not o.done)
         kept = {o.id for o in s.world.orders if o.week == week and o.done}
-        orders.issue(s, c, week, self.rng, redraw=True)
+        if orders.daily(s, c):
+            orders.issue_day(s, c, week, self.rng, redraw=True)
+        else:
+            orders.issue(s, c, week, self.rng, redraw=True)
         self._save_season()
         issued = [o for o in s.world.orders if o.week == week and o.id not in kept]
         listing = "；".join(
             f"{f.name}：{'、'.join(orders.title(c, o) for o in issued if o.faction == f.id)}"
             for f in c.scenario.factions if any(o.faction == f.id for o in issued)
         ) or "這一週沒有要重挑的軍令"
-        msg = (f"已照週一的做法重發第 {week} 週的軍令，換掉沒達成的 {replaced} 道（進度不算了；已達成的 {len(kept)} 道照舊）"
+        label = f"第 {week} 天" if orders.daily(s, c) else f"第 {week} 週"
+        msg = (f"已照週一的做法重發{label}的軍令，換掉沒達成的 {replaced} 道（進度不算了；已達成的 {len(kept)} 道照舊）"
                f"——{listing}。")
         self._write("重發軍令", [msg], tag="管理者")
         return self._log([msg])
@@ -10816,11 +10820,14 @@ class Game:
         at = calendar.point(w.time, c, w)
         # 休季時沒有下一件（計畫 T9）；籌備中時鐘沒走，也不倒數（FB-049）
         upcoming = None if w.ended or self._preparing() else timetable.next_event(self.state, c)
+        cal = {
+            "week": at.week, "weekday": at.weekday, "clock": f"{at.hour:02d}:{at.minute:02d}",
+            "weeks": c.config.season_weeks, "text": calendar.point_text(at),  # 畫面第二行直接用這一句，不自己拼
+        }
+        if orders.daily(self.state, c):  # 21 天季的軍令每天一道：軍令卡收起來照季曆第幾天記（網頁 orderKey），隔天重新展開
+            cal["day"] = at.cal_day
         return {
-            "calendar": {
-                "week": at.week, "weekday": at.weekday, "clock": f"{at.hour:02d}:{at.minute:02d}",
-                "weeks": c.config.season_weeks, "text": calendar.point_text(at),  # 畫面第二行直接用這一句，不自己拼
-            },
+            "calendar": cal,
             "next_event": None if upcoming is None else {
                 "title": upcoming.title,
                 "at": self.stamp(timetable.when(self.state, c, upcoming)),  # 季曆時刻「第 9 週・週四 20:44」，畫面寫在倒數前面（FB-062）
@@ -10878,7 +10885,7 @@ class Game:
             view = {
                 "id": o.id, "title": orders.title(c, o), "text": o.text, "mine": o.progress.get(name, 0),
                 "progress": min(total, o.quota), "quota": o.quota, "done": o.done,
-                "deadline": self.stamp(calendar.week_start(o.week + 1, c, s.world)),
+                "deadline": self.stamp(orders.deadline(s, c, o)),  # 下週一 00:00；21 天季是隔天 00:00
             }
             if not o.done and (o.template != "strike" or o.figure is not None):
                 view["how"] = atlas.order_how(s, c, o)  # 怎麼出力（FB-093；打擊另寫他在哪，FB-072）；打完的沒有這個鍵
