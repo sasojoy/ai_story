@@ -239,8 +239,8 @@ def _figure_activity(state: GameState, content: Content, name: str) -> str:
     fig, front = content.figures[fid], figures.state_of(state, content, fid).front
     front_name = next((t.name for t in content.scenario.trends if t.id == front), front)
     text = f"每天約出手 {fig.actions_per_day:g} 次，讓{front_name}{'上升' if goal > 0 else '下降'}"
-    if point(state.world.time, content, state.world).week < fig.active_from_week:
-        text += f"（第 {fig.active_from_week} 週起）"
+    if not figures.started(state, content, fid, state.world.time):
+        text += figures.start_text(state, content, fid)
     return text
 
 

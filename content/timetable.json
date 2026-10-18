@@ -2,6 +2,7 @@
   {
     "id": "uprising",
     "week": 1,
+    "real": {"week": 1, "weekday": 0, "hour": 0},
     "title": "三十六方起義",
     "kind": "fixed",
     "outcomes": {
@@ -14,6 +15,7 @@
   {
     "id": "court_mobilizes",
     "week": 2,
+    "real": {"week": 1, "weekday": 1, "hour": 12},
     "title": "朝廷出兵",
     "kind": "fixed",
     "outcomes": {
@@ -26,6 +28,7 @@
   {
     "id": "zhangmancheng_wan",
     "week": 3,
+    "real": {"week": 1, "weekday": 2, "hour": 12},
     "front": "nanyang",
     "title": "張曼成攻殺南陽太守",
     "kind": "roll",
@@ -49,6 +52,7 @@
   {
     "id": "bocai_routs_zhujun",
     "week": 4,
+    "real": {"week": 1, "weekday": 3, "hour": 12},
     "front": "yingru",
     "title": "波才大敗朱儁",
     "kind": "roll",
@@ -71,6 +75,7 @@
   {
     "id": "changshe_fire",
     "week": 6,
+    "real": {"week": 1, "weekday": 5, "hour": 20},
     "front": "yingru",
     "title": "長社火攻",
     "kind": "showdown",
@@ -124,6 +129,7 @@
   {
     "id": "luzhi_siege",
     "week": 7,
+    "real": {"week": 2, "weekday": 0, "hour": 12},
     "front": "jizhou",
     "title": "盧植圍廣宗",
     "kind": "roll",
@@ -146,6 +152,7 @@
   {
     "id": "qinjie_slays_zhangmancheng",
     "week": 7,
+    "real": {"week": 2, "weekday": 2, "hour": 12},
     "front": "nanyang",
     "title": "秦頡斬張曼成",
     "kind": "fixed",
@@ -176,6 +183,7 @@
   {
     "id": "luzhi_jailed",
     "week": 8,
+    "real": {"week": 3, "weekday": 0, "hour": 12},
     "title": "盧植下獄",
     "kind": "roll",
     "roll_side": "huang",
@@ -209,6 +217,7 @@
   {
     "id": "wancheng",
     "week": 9,
+    "real": {"week": 2, "weekday": 5, "hour": 20},
     "front": "nanyang",
     "title": "宛城之戰",
     "kind": "showdown",
@@ -288,6 +297,7 @@
   {
     "id": "zhangjiao_dies",
     "week": 10,
+    "real": {"week": 3, "weekday": 2, "hour": 12},
     "front": "jizhou",
     "title": "張角病逝",
     "kind": "roll",
@@ -315,6 +325,7 @@
   {
     "id": "guangzong",
     "week": 11,
+    "real": {"week": 3, "weekday": 5, "hour": 20},
     "front": "jizhou",
     "title": "廣宗決戰",
     "kind": "showdown",
@@ -350,6 +361,7 @@
   {
     "id": "tianming",
     "week": 12,
+    "real": {"week": 3, "weekday": 6, "hour": 20},
     "weekday": 0,
     "hour": 20,
     "front": "jizhou",
@@ -368,6 +380,7 @@
   {
     "id": "xiaquyang",
     "week": 12,
+    "real": {"week": 3, "weekday": 6, "hour": 23},
     "front": "jizhou",
     "title": "下曲陽・季末",
     "kind": "finale",

@@ -372,7 +372,7 @@ def season_end_time(season: WorldState, content: Content) -> float:
     """這一季在世界時鐘上何時收：第一季照排定的季末（schedule["finale"]，管理者可改，計畫 T10；舊季沒排就是季長），
     其他照季長（沒蓋章的舊季 14 天）。"""
     if calendar.season_one_on(season, content) and any(e.kind == "finale" for e in content.timetable):
-        return season.schedule.get("finale", season_length_days(season, content) * DAY)
+        return season.schedule.get("finale", timetable.finale_default(content, season))
     return season_length_days(season, content) * DAY
 
 
@@ -655,7 +655,8 @@ def advance_world_state(
     while remaining > 0 and not season.ended:
         step = min(remaining, HOUR)
         crossed = False
-        if cal_hour is not None and (to_mark := _to_next_cal_hour(season.time, cal_hour)) <= step + calendar.EPS_SECONDS:
+        # 曆時交界照季曆的整點（21 天季在 10:30 開季時，第一個交界在 11:00，calendar.next_hour_mark）
+        if cal_hour is not None and (to_mark := calendar.next_hour_mark(season.time, content, season)) <= step + calendar.EPS_SECONDS:
             step, crossed = to_mark, True
         remaining -= step
         season.time += step

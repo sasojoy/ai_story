@@ -208,26 +208,32 @@ class SharedWorldState(BaseModel):
         return "resting" if self.season.ended else "running"
 
 
-def fresh_season(content: Content) -> WorldState:
+def fresh_season(content: Content, now: float | None = None) -> WorldState:
     """照劇本種出一季全新的共用賽季（大勢起始值、公開的大勢線、第一條主線），並蓋上當下的章（stamp_season）。
-    seed_first_season、next_season 都走這裡；籌備中的季在管理者開季時再蓋一次（open_season）。"""
+    seed_first_season、next_season 都走這裡；籌備中的季在管理者開季時再蓋一次（open_season）。now 是開季那一刻（現實 epoch 秒），
+    21 天季照它算季曆的錨點（stamp_season）；種季（籌備中）時不知道，不給。"""
     from .rules import seed_trends  # rules → world_state：在函式裡 import，避免循環
 
     season = WorldState(storyline=content.scenario.storylines[0].id)
-    stamp_season(season, content)  # 先蓋章：種哪些大勢線看這一季的章（rules.seed_trends）
+    stamp_season(season, content, now=now)  # 先蓋章：種哪些大勢線看這一季的章（rules.seed_trends）
     seed_trends(season, content)
     return season
 
 
-def stamp_season(season: WorldState, content: Content) -> None:
+def stamp_season(season: WorldState, content: Content, now: float | None = None) -> None:
     """把當下的開關與季長蓋章在這一季上（計畫 T2「舊季不會被補算」）：之後換了設定，這一季照它自己的章走。
-    開關開著時順便填決戰與季末的預設時間（管理者開季後可以改，T10）。只在季還沒開始時呼叫：種季、換季、開季。"""
+    開關開著時順便填決戰與季末的預設時間（管理者開季後可以改，T10）。只在季還沒開始時呼叫：種季、換季、開季。
+    21 天季（Config.season21）另蓋季曆的錨點：now（開季那一刻的現實 epoch 秒）給了才算，不然是 0（第 1 週週一 00:00 就是開季那一刻）；
+    要先蓋錨點再排決戰與季末（正式季整合設計 1.1）。"""
     from .figures import seed  # noqa: PLC0415  延後 import：figures → rules → world_state
     from .timetable import default_schedule  # noqa: PLC0415  延後 import：timetable → rules → world_state
 
     cfg = content.config
     season.season_one = cfg.season_one
     season.length_days = cfg.season_days
+    from .calendar import anchor_offset  # noqa: PLC0415  延後 import：calendar → world_state
+    season.season21 = cfg.season21
+    season.cal_offset = anchor_offset(now, content) if cfg.season21 and now is not None else 0.0
     season.haoqiang_allied = cfg.season_one and cfg.haoqiang_allied  # 豪強分屬兩軍（企劃者 2026-10-15）：只在第一季的季（allied.on）
     season.schedule = default_schedule(content, season) if cfg.season_one else {}  # 照剛蓋好的季長排
     # 素材與經濟（企劃者 2026-10-15）：神器配方的條數與線索分片從下一季開季起照這個章（正在跑的季沒有＝照舊）

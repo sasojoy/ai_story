@@ -944,6 +944,8 @@ class WorldState(BaseModel):
     # 開關打開時還在跑的舊季照它自己的章走：不跑季曆與時刻表，也不會因為設定的季長變短就一口氣收掉。
     season_one: bool = False  # 這一季開季時第一季濃縮版的規則是不是開著
     haoqiang_allied: bool = False  # 這一季開季時豪強分屬兩軍是不是開著（allied.on 還要第一季的章）；舊季讀檔是 False
+    season21: bool = False  # 這一季開季時 21 天季的骨架是不是開著（Config.season21；calendar.season21_on 還要設定也開著）
+    cal_offset: float = 0.0  # 21 天季：開季那一刻離那一週台灣週一 00:00 幾個季曆秒（calendar.anchor_offset）；其他季是 0
     length_days: float | None = None  # 這一季的長度（遊戲日）；None＝T2 之前開的季，一律照 models.DEFAULT_SEASON_DAYS（FB-037）
     # ── 時刻表（計畫 T2；鎖定、搶輸、豪強、一般伏筆修正由 T7 寫入）──
     timeline: dict[str, TimelineResult] = Field(default_factory=dict)  # 大事 id → 結算結果（有就不再結算）

@@ -75,6 +75,11 @@ class Condition(_Strict):
     night: bool | None = None  # calendar.is_night 要等於它（True＝只在夜裡，False＝只在白天）
     week_min: int | None = None  # calendar.point(...).week 至少／至多第幾週
     week_max: int | None = None
+    # 21 天季（Config.season21，正式季整合設計 1.2 給開發 6）照天數另寫：季曆第幾天（從 1 起，calendar.point(...).cal_day）至少／至多；
+    # 21 天季只看這兩個、不看週，其他季只看週、不看這兩個（上面的 day_min／day_max 是世界天，給 beta 主線）。寫了週的條件在 21 天季的
+    # 內容裡也要寫這兩個（content.validate）
+    cal_day_min: int | None = Field(default=None, ge=1)
+    cal_day_max: int | None = Field(default=None, ge=1)
     clue_items: dict[str, int] = Field(default_factory=dict)  # 伏筆專用物品至少幾個（原數字，不照伺服器規模換算）
     grain_min: int = Field(default=0, ge=0)  # 糧草至少幾份（基準量，照 foreshadow.need 換算；0＝不檢查；正式版丙二的帶糧選項）
     # 戰後事件用：這次行動打的那一場（戰鬥卡片 state.battle_card 指著的那筆）的結果（大勝／險勝／僵持／落敗）在清單裡才成立；
@@ -779,6 +784,7 @@ class Ending(_Strict):
     text: str  # 結局的一句；第一季接在季末公告的開頭後面（時刻表結算第 12 週）
     storyline: str | None = None  # 只在這條主線下成立；None＝任何主線
     hint: str = ""  # 顯示在任務區塊：怎麼達成這個結局
+    hint_season21: str = ""  # 21 天季（不提前收季，正式季整合設計 1.1）換掉 hint 的那一句；沒寫照 hint（guide.ending_hint）
     condition: Condition = Field(default_factory=Condition)
     # ── 第一季濃縮版（計畫 T9）：只在 rules.season_one 成立時算；beta 季只看沒標的那幾筆。同一季清單的最後一筆是保底 ──
     season_one: bool = False
@@ -2608,6 +2614,11 @@ class Config(_Strict):
     # 軍階，豪強版的只能升到三階」）：開季時蓋章（WorldState.haoqiang_allied），只在蓋了第一季章的季生效（allied.on）。
     # 預設關、週末設定開；14 天的季就算打開也照舊有第三方豪強
     haoqiang_allied: bool = False
+    # 21 天季的骨架（正式季整合設計第一章；12.3 第 41 條：預設關，只有 content/profiles/season21.json 打開，週末與 14 天一個字都不變）：
+    # 季曆就是現實的三週（season_weeks 3、season_days 21，cal_scale 1），錨在開季那一週的台灣週一 00:00（WorldState.cal_offset）；
+    # 21 天季自己的時刻表（TimetableEvent.real）、官軍將領與伏筆照天數、不提前收季、「今天」是現實的一天（台灣 00:00 換日）。
+    # 開季時蓋章（WorldState.season21），正在跑的季照它開季時的章
+    season21: bool = False
     season_weeks: int = Field(default=12, ge=1)  # 季曆：一季壓成幾週（計畫第六節：季曆秒＝世界秒 × 週數 × 7 ÷ season_days）
     # 決定性勝利（黃巾聲勢 ≥85、≤15）季曆第幾週起才提前收季；之前到了門檻也不收，季末照常比（企劃者 2026-10-05，計畫 T9）。
     # 割據 ≥85 不提前收季、季末才判群雄並起（FB-254，企劃者 2026-10-15「提前收季只看戰線」；rules.ends_early）
@@ -3092,6 +3103,9 @@ class FigureDef(_Strict):
     successor: str | None = None  # 空出戰線時由誰接（人物表的 id）
     squad: str  # 挑戰本人時的對手（squads.json）；難度是聲威 100 時的值
     active_from_week: int = Field(default=1, ge=1)  # 第幾週起才推（官軍三將與孫堅是第 2 週「朝廷出兵」之後）
+    # 21 天季（Config.season21，正式季整合設計 1.2 給開發 5）照天數：第 1 週週一 00:00 起幾天才推（1.5＝週二 12:00，跟朝廷出兵同時）；
+    # 21 天季只看它（沒寫是 0）、不看 active_from_week。active_from_week 大於 1 的人物在 21 天季的內容裡要寫（content.validate）
+    active_from_day: float | None = Field(default=None, ge=0)
     start_status: Literal["active", "away"] = "active"  # 輕量接位者開季時還沒出場，接手時才出現
     challenge_off_front: bool = False  # 沒有戰線也能挑戰（何進）；其他人戰線空著時不受挑戰（PM 2026-10-05 定）
     # 丙 (c)，企劃者 2026-10-13：沒有時刻表的季這位人物被打到退場時記下的世界旗標（波才寫 bocai_defeated：等於「擊敗波才」）；第一季不記
@@ -3112,6 +3126,15 @@ class TimetableOutcome(_Strict):
     world_flags_add: list[str] = Field(default_factory=list)
     third_party_text: str | None = None  # 這個結果專用的豪強那一句，蓋過 TimetableEvent.third_party_text（盧植下獄分兩版）
     control: dict[str, str] = Field(default_factory=dict)  # 這個結果讓哪幾處易手：地點 → 陣營（設計 4.2 第 3 點；只能是可易手或 fixed 的地點）
+
+
+class RealSlot(_Strict):
+    """21 天季（Config.season21）這一件大事排在哪：現實的第幾週、星期幾（0 是週一）、幾點（正式季整合設計 1.2：一般大事 12:00、
+    決戰週六 20:00、天命之爭最後一個週日 20:00）。載入時（content.load_content，驗證之前）換掉 week、day、weekday、hour。"""
+
+    week: int = Field(ge=1)
+    weekday: int = Field(default=0, ge=0, le=6)
+    hour: int = Field(default=0, ge=0, le=23)
 
 
 class TimetableEvent(_Strict):
@@ -3153,6 +3176,7 @@ class TimetableEvent(_Strict):
     mandate_endings: dict[str, str] = Field(default_factory=dict)  # 得天命的那一軍 → 結局 id（劇本裡標 mandate 的第一季結局）
     weekday: int | None = Field(default=None, ge=0, le=6)  # 決戰的預設時刻：週幾（0 是週一）；None 照 timetable.SHOWDOWN_WEEKDAY
     hour: int | None = Field(default=None, ge=0, le=23)  # 同上，幾點；None 照 timetable.SHOWDOWN_HOUR
+    real: RealSlot | None = None  # 21 天季的時刻（RealSlot）；21 天季的內容每一件都要寫（content.validate），其他季不看
 
 
 FsKind = Literal["天時地利", "推理", "反直覺抉擇", "拼圖", "累積", "情誼", "集體密謀"]  # 第一季設計 11.3 的類型（只是標記）
