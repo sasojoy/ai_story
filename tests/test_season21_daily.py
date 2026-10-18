@@ -393,3 +393,17 @@ def test_weekend_push_unchanged():
     assert game._shaped(line, d, "sortie") == sortie == (d * game.season_scale(), False)
     assert game._shaped(line, d, "event") == event
     assert push.tuning_for(game.state.world, c) is c.config.push_resistance
+
+
+def test_the_away_summary_keeps_only_today_s_orders():
+    """「你不在的時候」：21 天季的軍令每天一期，只留最新那一天發的（同週末只留最新那一週）。"""
+    from tianxia import rumor_view
+
+    game = _game()
+    game.sync(MON + 2 * DAY + 60)
+    c = game.content
+    issued = [r for r in game.state.world.rumors if r.layer == "faction" and r.text.startswith(orders.ISSUED_DAY)]
+    assert len({calendar.point(r.time, c, game.state.world).cal_day for r in issued}) == 3  # 三天各發過一次
+    lines, _ = rumor_view.away_lines(game.state, c, None, game.stamp)
+    shown = [line for line in lines if orders.ISSUED_DAY in line]
+    assert shown and all("週三 00:00" in line for line in shown)  # 開季在週一 00:00：第 3 天是週三
