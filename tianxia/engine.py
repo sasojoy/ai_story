@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pydantic import BaseModel
 
 from . import (
-    allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, chuangong, clinic, companion_agent, cultivation, defection, economy, encounter, enlist, equipment, event_llm, explore_modes,
+    allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, chuangong, clinic, companion_agent, cultivation, defection, economy, encounter, enlist, equipment, escorts, event_llm, explore_modes,
     fight_llm, figure_aid, figure_life, figures, foreshadow, generals, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, library, mapdata, martial_arts,
     materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
     shopview, signature, signature_arms, skill_slots, skillview, smithing,
@@ -851,6 +851,7 @@ class Game:
         self._deliver_guard_credits()  # 護衛：下線時替人物擋下的挑戰，回來補名望與心得
         self._deliver_arena()  # 擂台：被挑了的戰報、季末前三名的獎勵；季收了還沒打完的那一場作廢
         self._deliver_held_gear()  # 寄放的重賞、贈禮：裝備庫有空位就補（裝備四欄 6.5）
+        self._settle_partings()  # 歷史武將同行：從你身邊回江湖的人，情誼減半（9.6；補戰報時已經算過的不再算）
         refunds = bounties.deliver_refunds(self.state, self.content)  # 掛的通緝沒人揭成：押金退回
         if refunds:
             self._write(bounties.BOARD, refunds)
@@ -4146,6 +4147,35 @@ class Game:
         finally:
             self._escort_picked, self._escort_now = False, None
 
+    def _escort_home(self, e: battle_instance.Escort) -> list[str]:
+        """補這一場戰報時（_file_showdown）：他回江湖了——拿出出戰隊伍、寫一句，情誼照 _settle_partings 減半（同一則紀錄裡說）。"""
+        team.remove_from_team(self.state, e.cid)
+        line = (escorts.FELL_RETURN_LINE if e.fallen_round is not None else escorts.RETURN_LINE).format(name=e.name)
+        return [line] + self._settle_partings(write=False)
+
+    def _settle_partings(self, write: bool = True) -> list[str]:
+        """歷史武將同行 9.6：決戰收場時從你身邊回江湖的人（CompanionProgress.parted_from 有你的名號），情誼乘 parted_keep（無條件捨去）、
+        拿掉記號。同步、按招募之前與補戰報時叫；write 時另起一則「同伴回江湖」紀錄（補戰報時併進那一則，不另寫）。開關關著什麼都不做。"""
+        c, p = self.content, self.state.player
+        if not roster.on(c):
+            return []
+        keep = c.config.companions.parted_keep
+        lines = []
+        for cid, progress in self.world.read().companions.items():
+            if cid not in c.characters or not any(roster.owns(n, p.name) for n in progress.parted_from):
+                continue
+            self.world.update_companion(
+                cid, lambda pr: setattr(pr, "parted_from", [n for n in pr.parted_from if not roster.owns(n, p.name)]),
+            )
+            before = p.affinities.get(cid, 0)
+            after = math.floor(before * keep)
+            p.affinities[cid] = after
+            if after != before:
+                lines.append(escorts.PARTED_LINE.format(name=c.characters[cid].name, before=before, after=after))
+        if write and lines:
+            journal.add_entry(self.state, JournalEntry(time=self.state.world.time, title=escorts.PARTED_TITLE, tag="", lines=lines))
+        return lines
+
     def _escort_line(self, e: battle_instance.Escort) -> str:
         """決戰畫面上自己的那一位（別人的不列，第五節「讀得下去」）。"""
         if e.fallen_round is not None:
@@ -4339,6 +4369,8 @@ class Game:
         if any(c.fallen_round is not None and not c.settled for c in battle.commanders):  # 龍頭上陣：敗走的人扣聲威（只扣一次）
             generals.after_battle(self.world, self.content, battle)
             self.state.world = self.world.get_season()  # 這一刻手上那一份跟資料庫一致（同 _settle_showdown），讀回來免得被 _save_season 蓋掉
+        if escorts.due(battle):  # 歷史武將同行：隨主人上陣的同伴收場那一刻全服放回江湖（只放一次）
+            escorts.after_battle(self.world, self.content, battle)
         definition = self.content.battles.get(battle.battle_id)
         line = self._highlight_line(battle, definition)
         if line:  # 這一場最有戲的放手一搏，全服的天下大事傳聞（試玩回饋 2026-10-08）；收場只走這裡一次
@@ -5111,6 +5143,8 @@ class Game:
         h = battle.highlight
         fame = 0
         highlight_changes = self._showdown_pay(battle, me, lines) if earlier is None else []
+        if earlier is None and me.escort is not None and roster.on(c):  # 歷史武將同行：隨你上陣的那一位回江湖了
+            lines += self._escort_home(me.escort)
         if earlier is None:
             s.player.showdowns += 1
             if h is not None and h.name == me.name and h.won and tuning.highlight_fame:  # 這一場最有戲的那一搏是自己的、而且成了
@@ -5877,6 +5911,7 @@ class Game:
         這裡再驗一次：人還在這裡、沒有主、陣營對、名下沒滿。"""
         if cid not in self._recruit_targets():
             return ["（此刻無法這麼做。）"]
+        self._settle_partings()  # 9.6：原主人不會因為比別人先上線就用舊情誼搶回來
         problem = roster.recruit_problem(self.state, self.content, self.world, cid)
         if problem is not None:
             return [f"（{problem}。）"]

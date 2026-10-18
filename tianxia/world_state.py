@@ -57,6 +57,8 @@ class CompanionProgress(BaseModel):
     # 傳功（Config.chuangong）傳給他的屬性點：{"str": 3, "con": 1}，加在內容的起始值與每級成長上面（team.member_stats）。
     # 跟等級、武學成數一樣記在他身上：放走、被別人招去都帶著走（傳過的功是他學到的），換季跟其他進度一起清空
     taught: dict[str, int] = Field(default_factory=dict)
+    # 歷史武將同行 9.6：決戰收場、他從誰身邊回江湖（escorts.after_battle 記）；那個人自己的 Game 同步或按招募之前把情誼減半、拿掉自己的名號
+    parted_from: list[str] = Field(default_factory=list)
 
 
 class SealEvent(BaseModel):

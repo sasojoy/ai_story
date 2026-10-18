@@ -248,3 +248,67 @@ def test_the_scene_shows_only_my_escort(content, game):
     assert engine.ESCORT_SCENE.format(name="韓鐵", hp=round(battle.participants[game.state.player.name].escort.neili),
                                       cap=round(battle.participants[game.state.player.name].escort.neili_cap)) in text
     assert "小六" not in text  # 別人的同伴不列
+
+
+# ── Task 6：打完回江湖 ──
+
+
+def _ride_in(content, game, affinity=80):
+    from conftest import at
+
+    definition = _showdown(content, game)
+    p = game.state.player
+    assert game.world.try_recruit("mate", p.name, cap=3)
+    p.team.append("mate")
+    p.affinities["mate"] = affinity
+    with at(game, 0.0):
+        game.choose("battle:join:guan")
+        game.choose("battle:escort:mate")
+    return definition
+
+
+def test_the_escort_returns_to_the_world_when_the_battle_ends(content, game):
+    from test_engine import _fight_to_the_end
+    from tianxia import escorts
+
+    definition = _ride_in(content, game)
+    _fight_to_the_end(game, definition, definition.muster_seconds + 1)
+    assert game.world.get_companion("mate").owner is None  # 收場那一刻全服放掉，別人馬上招得到
+    p = game.state.player
+    assert "mate" not in p.team and p.affinities["mate"] == 40  # 情誼減半
+    said = [line for entry in game.state.journal for line in entry.lines]
+    assert any(escorts.RETURN_LINE.format(name="韓鐵") in line or escorts.FELL_RETURN_LINE.format(name="韓鐵") in line for line in said)
+    assert escorts.PARTED_LINE.format(name="韓鐵", before=80, after=40) in said
+    assert game.world.get_companion("mate").parted_from == []  # 記號拿掉了，下一次同步不再減半
+    game._settle_partings()
+    assert p.affinities["mate"] == 40
+
+
+def test_a_new_owner_is_not_cleared(content, game):
+    """Review Focus 2：打到一半主人放走他、別人招走了，收場不能把新主人的清掉，原主人的情誼也不減半。"""
+    from test_engine import _fight_to_the_end
+
+    definition = _ride_in(content, game)
+    game.release_companion("mate")
+    assert game.world.try_recruit("mate", "乙", cap=3)
+    _fight_to_the_end(game, definition, definition.muster_seconds + 1)
+    assert game.world.get_companion("mate").owner == "乙"
+    assert game.state.player.affinities["mate"] == 80
+
+
+def test_shelved_or_cancelled_battles_send_no_one_back(content, game):
+    """Review Focus 5：季終收兵、管理者取消（unfinished）的那一場不算派過。"""
+    _ride_in(content, game)
+    game._shelve_unfinished_battle("這一仗沒有打成。")
+    game.sync(10.0)
+    assert game.world.get_companion("mate").owner == game.state.player.name
+    assert "mate" in game.state.player.team and game.state.player.affinities["mate"] == 80
+
+
+def test_parting_halves_at_the_next_sync(content, game):
+    content.config.companions.enabled = True
+    p = game.state.player
+    p.affinities["mate"] = 81
+    game.world.update_companion("mate", lambda pr: pr.parted_from.append(p.name))
+    game.sync(10.0)
+    assert p.affinities["mate"] == 40 and game.world.get_companion("mate").parted_from == []
