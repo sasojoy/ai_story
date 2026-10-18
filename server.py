@@ -56,6 +56,7 @@ from fastapi.staticfiles import StaticFiles
 from markdown_it import MarkdownIt
 from starlette.concurrency import run_in_threadpool
 
+import console
 import server_push
 import zhuan_html
 from llm_queue import Busy, LlmQueue, QueueTimeout
@@ -2212,6 +2213,7 @@ def start_tunnel(port: int) -> threading.Thread | None:
 def main(argv: list[str] | None = None) -> None:
     import uvicorn
 
+    console.use_utf8()  # 第一件事：cp950 編不出來的字（例：設定對不上那行開頭的 ⚠）不能把伺服器弄死
     global QUEUE, TALE_THREADS
     parser = argparse.ArgumentParser(description="天下大勢網頁伺服器")
     parser.add_argument("--port", type=int, default=PORT)
