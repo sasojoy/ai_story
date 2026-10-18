@@ -317,6 +317,14 @@ class WallNote(BaseModel):
     time: float
 
 
+class TavernWatch(BaseModel):
+    """託酒家留意一個人（酒肆，設計第三節的便利）：記在託的人身上；他自己同步時，那個人打聽得到確切地點了就捎信（江湖紀錄一則）。"""
+
+    target: str  # 對方名號
+    place: str  # 託的是哪一間酒肆（遠近照它算）
+    until_real: float  # 留意到幾時（現實秒）
+
+
 class TavernHit(BaseModel):
     """一張殺手單（酒肆，設計第六節）：全服、照季存（WorldState.tavern_hits）。殺手照對方在城外的動作擲找不找得到，找到了打一場。"""
 
@@ -604,6 +612,7 @@ class PlayerState(BaseModel):
     tavern_treat_day: int = -1  # 請全店喝酒是哪一天（同 pill_day 的換日）
     whispers: list[Whisper] = Field(default_factory=list)  # 收到的風聲（Config.tavern.whisper_keep）
     hidden_until: float = 0.0  # 藏行跡到幾時（世界秒）
+    tavern_watches: list[TavernWatch] = Field(default_factory=list)  # 託酒家留意的人（最多 Config.tavern.watch_keep 個）
     tavern_guard_until: float = 0.0  # 雇的保鏢跟到幾時（現實秒）
     guarded_until_real: float = 0.0  # 雇的保鏢跟到幾時（現實秒）
     xinde_cultivations: int = 0  # 這一季花心得修練了幾次（Config.cultivate_xinde_price，越修越貴）；角色每季重來

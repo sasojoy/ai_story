@@ -61,7 +61,7 @@ from .rules import (
 )
 from .sqlite_world import open_world
 from .state import (
-    ONBOARDING_VERSION, PLAYER, ArenaEntry, ArenaFight, ArenaReport, ArenaResult, ArenaSide, BattleRecord, Convoy, CrowdNote, DuelState, Equipment, GameState, HintNote, JournalEntry, Journey, Rumor, Tagalong, TavernHit, TimelineResult,
+    ONBOARDING_VERSION, PLAYER, ArenaEntry, ArenaFight, ArenaReport, ArenaResult, ArenaSide, BattleRecord, Convoy, CrowdNote, DuelState, Equipment, GameState, HintNote, JournalEntry, Journey, Rumor, Tagalong, TavernHit, TavernWatch, TimelineResult,
     Whisper, WorldState,
     new_game_state,
 )
@@ -841,6 +841,7 @@ class Game:
         self._deliver_guard_credits()  # 護衛：下線時替人物擋下的挑戰，回來補名望與心得
         self._deliver_whispers()  # 酒肆：有人在酒肆打聽你（風聲），下線時的回來補
         self._deliver_hits()  # 酒肆：自己雇的殺手得手、失手、到期退錢
+        self._deliver_watches()  # 酒肆：託酒家留意的人有了準信、或到期沒消息
         self._deliver_arena()  # 擂台：被挑了的戰報、季末前三名的獎勵；季收了還沒打完的那一場作廢
         self._deliver_held_gear()  # 寄放的重賞、贈禮：裝備庫有空位就補（裝備四欄 6.5）
         refunds = bounties.deliver_refunds(self.state, self.content)  # 掛的通緝沒人揭成：押金退回
@@ -1757,7 +1758,7 @@ class Game:
         before = s.player.stats.get("silver", 0)
         handler = {
             "news": self._tavern_news, "treat": self._tavern_treat, "hide": self._tavern_hide, "trace": self._tavern_trace,
-            "seek": lambda: self._tavern_seek(target), "ties": lambda: self._tavern_ties(target),
+            "seek": lambda: self._tavern_seek(target, watch=text == "watch"), "ties": lambda: self._tavern_ties(target),
             "material": lambda: self._tavern_material(target), "wall": lambda: self._tavern_wall(text),
             "hit": lambda: self._tavern_hit(target, text), "guard": self._tavern_guard,
             "ask": lambda: self._tavern_ask(text),
@@ -1830,21 +1831,92 @@ class Game:
         tavern_rules.post_whisper(s.world, other.state.player.name, w)
         self.touched.add(other.state.player.name)
 
-    def _tavern_seek(self, target: str) -> list[str]:
+    def _tavern_watch_problem(self, target: str) -> str | None:
+        p, cfg = self.state.player, self.content.config.tavern
+        mine = [w for w in p.tavern_watches if w.until_real > self.now]
+        if any(name_key(w.target) == name_key(target) for w in mine):
+            return tavern_rules.WATCH_SAME.format(name=target)
+        if len(mine) >= cfg.watch_keep:
+            return tavern_rules.WATCH_FULL.format(n=cfg.watch_keep)
+        return None
+
+    def _tavern_seek(self, target: str, watch: bool = False) -> list[str]:
+        lines = self._tavern_seek_once(target)
+        if not watch or not target or name_key(target) == name_key(self.state.player.name) or self._tavern_seek_exact is None:
+            return lines
+        if self._tavern_seek_exact:
+            return lines + [tavern_rules.WATCH_CLEAR]
+        return lines + self._tavern_watch(target)
+
+    def _tavern_watch(self, target: str) -> list[str]:
+        """託酒家留意：多付查人的 watch_share，記在自己身上；他自己同步時那個人打聽得到確切地點就捎信（_deliver_watches）。
+        查無此人也照收（不讓人拿託付試出誰在不在），到期捎一句沒聽到準信。"""
+        s, c, cfg = self.state, self.content, self.content.config.tavern
+        problem = self._tavern_watch_problem(target)
+        if problem is not None:
+            return [problem]
+        base = int(round(cfg.seek_price * cfg.watch_share))
+        if self._tavern_charge(base) is None:
+            return self._tavern_short(base)
+        p = s.player
+        p.tavern_watches = [w for w in p.tavern_watches if w.until_real > self.now]
+        p.tavern_watches.append(TavernWatch(target=target, place=p.location, until_real=self.now + cfg.watch_hours * 3600))
+        line = tavern_rules.WATCH_PLACED.format(name=target)
+        if p.tavern_notes:
+            p.tavern_notes[-1].lines.append(line)
+        return [line]
+
+    def _deliver_watches(self) -> None:
+        """託的人自己同步時：留意的那個人打聽得到確切地點（從託的那一間算，打聽度 WATCH_AT 以上、沒下線太久）就捎信；到期的捎一句沒消息。"""
+        s, c, cfg = self.state, self.content, self.content.config.tavern
+        p = s.player
+        if not p.tavern_watches:
+            return
+        lines, keep = [], []
+        for w in p.tavern_watches:
+            other = self._load_kin(w.target)
+            if other is not None:
+                other.state.world = s.world
+                op = other.state.player
+                seen = op.seen_real or 0.0
+                online = not seen or self.now - seen <= cfg.offline_hours * 3600
+                if online and tavern_rules.hit_reach(c, w.place, other.state) >= tavern_rules.WATCH_AT:
+                    if op.journey is not None:
+                        lines.append(tavern_rules.WATCH_ROAD.format(name=op.name, place=c.locations[op.journey.path[op.journey.last]].name))
+                    else:
+                        lines.append(tavern_rules.WATCH_FOUND.format(name=op.name, place=c.locations[op.location].name))
+                    tavern_rules.remember(s, op.name)
+                    continue
+            if w.until_real <= self.now:
+                lines.append(tavern_rules.WATCH_LAPSED.format(name=w.target))
+                continue
+            keep.append(w)
+        if len(keep) != len(p.tavern_watches):
+            p.tavern_watches = keep
+        if lines:
+            self._write(tavern_rules.WATCH_TITLE, lines)
+
+    def _tavern_seek_once(self, target: str) -> list[str]:
         s, c = self.state, self.content
         cfg = c.config.tavern
+        self._tavern_seek_exact = None  # 查人那一下問得多清楚（託酒家留意看它）：None 沒查成、True 確切地點、False 沒問清楚
         if not target:
             return [tavern_rules.ASK_EMPTY]
         if name_key(target) == name_key(s.player.name):
             return [tavern_rules.ASK_SELF]
         if self._tavern_charge(cfg.seek_price) is None:
             return self._tavern_short(cfg.seek_price)
+        self._tavern_seek_exact = False
         price = self._tavern_price(cfg.seek_price)
         cid, other = self._tavern_find(target)
         if cid is not None:
             lines = tavern_rules.seek_figure_lines(s, c, cid)
+            self._tavern_seek_exact = True  # 人物不託（他們走到哪都有人談）
         elif other is not None:
             lines, found = tavern_rules.seek_lines(s, c, other.state, self.now, self._tavern_wanted())
+            seen = other.state.player.seen_real or 0.0
+            self._tavern_seek_exact = found and (not seen or self.now - seen <= cfg.offline_hours * 3600) \
+                and tavern_rules.person_reach(s, c, other.state, self._tavern_wanted()) >= tavern_rules.WATCH_AT
             self._tavern_whisper("seek", other)
             if not found:
                 back = tavern_rules.refund(s, c, price)
@@ -2349,6 +2421,9 @@ class Game:
             "walls": [{"who": w.who, "text": w.text, "when": self.stamp(w.time)} for w in reversed(s.world.tavern_walls.get(loc, []))],
             "wall_chars": cfg.wall_chars,
             "ask_chars": cfg.ask_chars,
+            "watch": {"price": self._tavern_price(int(round(cfg.seek_price * cfg.watch_share))),
+                      "mine": [tavern_rules.WATCH_ACTIVE.format(name=w.target, until=self._real_stamp(w.until_real))
+                               for w in p.tavern_watches if w.until_real > self.now]},
             "known": list(reversed(p.tavern_known)),
             "materials": mats,
             "whispers": tavern_rules.whisper_view(c, s),

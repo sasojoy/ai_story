@@ -90,6 +90,7 @@
     tavAsk: "seek", // 打聽那一頁問的是下落（seek）還是交情（ties）
     tavTier: 1, // 買殺手挑哪一檔（預設中間那一檔）
     tavHush: false, // 買殺手上次勾了封口沒
+    tavWatch: false, // 查人時上次勾了託酒家留意沒
     tavMat: "", // 打聽那一頁挑著的素材 id
     arenaTab: "floor", // 擂台那一頁停在哪（floor 台下／board 擂台榜）；進擂台停在台下（Joy 2026-10-14「擂台應該要是獨立的一頁」）
     arenaSeen: null, // 看過、收起來的那一場收場卡（ArenaResult.id）
@@ -3533,9 +3534,12 @@
     const box = mode === "q"
       ? `<form class="tav-form" id="tav-q"><input class="input" name="text" data-keep="q" maxlength="${shop.ask_chars | 0}" placeholder="例：最近哪裡最亂？" autocomplete="off"><button class="btn primary small" type="submit">問</button></form>`
       : `<form class="tav-form" id="tav-ask"><input class="input" name="target" data-keep="ask" maxlength="20" placeholder="名號" autocomplete="off"><button class="btn primary small" type="submit">打聽</button></form>`;
+    const w = shop.watch || { price: 0, mine: [] };
+    const watch = mode === "seek"
+      ? `<label class="tav-hush"><input type="checkbox" name="watch" form="tav-ask"${S.tavWatch ? " checked" : ""}> 託酒家留意，多付 ${w.price | 0} 兩（問不清楚時，有了準信捎進你的江湖紀錄）</label>${w.mine.length ? `<ul class="tav-whispers">${w.mine.map((t) => `<li class="named">${esc(t)}</li>`).join("")}</ul>` : ""}` : "";
     const mats = shop.materials.map((m) => `<option value="${esc(m.id)}"${m.id === S.tavMat ? " selected" : ""}>${esc(m.name)}（${m.tier | 0} 階・${m.price | 0} 兩）</option>`).join("");
     return `<div class="shop-pages tav-modes">${modes}</div>
-      ${box}
+      ${box}${watch}
       <p class="shop-cap">${esc(hint)}</p>${mode === "q" ? "" : guests + known}
       <h4 class="tav-h">打聽素材<small>哪裡採得到</small></h4>
       <form class="tav-form" id="tav-mat"><select class="input" name="material">${mats}</select><button class="btn small" type="submit">打聽</button></form>
@@ -6550,7 +6554,9 @@
         await sayLine(form, data.text.trim());
       } else if (form.id === "tav-ask") {
         if (!data.target.trim()) return;
-        await tavDo(S.tavAsk === "ties" ? "ties" : "seek", { target: data.target.trim() });
+        const seek = S.tavAsk !== "ties";
+        if (seek) S.tavWatch = !!data.watch;
+        await tavDo(seek ? "seek" : "ties", { target: data.target.trim(), text: seek && data.watch ? "watch" : "" });
       } else if (form.id === "tav-q") {
         if (!data.text.trim()) return;
         await tavDo("", { text: data.text.trim() }, "tavern_ask");

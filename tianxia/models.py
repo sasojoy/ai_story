@@ -1730,6 +1730,10 @@ class TavernTuning(_Strict):
     ask_chars: int = Field(default=30, ge=1)
     ask_budget_seconds: float = Field(default=30.0, ge=0)
     chatter_hours: float = Field(default=1.0, gt=0)  # 酒客閒談每間酒肆多久換一段（世界小時）
+    # 託酒家留意（設計第三節）：查人時多付一半，之後那個人打聽得到確切地點（打聽度 3 以上）時捎信，寫進江湖紀錄
+    watch_share: float = Field(default=0.5, ge=0)
+    watch_hours: float = Field(default=6.0, gt=0)  # 留意多久（現實小時）
+    watch_keep: int = Field(default=3, ge=0)  # 一個人同時最多託幾個
 
 
 class DuelFoe(_Strict):

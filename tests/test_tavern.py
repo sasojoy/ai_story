@@ -368,3 +368,37 @@ def test_the_server_writes_the_chatter_outside_the_lock(monkeypatch):
     assert seen == [False]  # 模型在鎖外
     assert game.shop_view()["chatter"][1]["who"] == "喝悶酒的老卒"
     assert not server.chatter_once(game)  # 這一陣子不再寫
+
+
+def test_asking_the_keeper_to_keep_watch_sends_word_later():
+    """託酒家留意：查不清楚時多付一半，那個人打聽得到確切地點時（託的那一間算）捎信進江湖紀錄；問清楚了不收、到期捎一句沒消息。"""
+    world = open_world()
+    c = _content()
+    far = _game("無名客", at="zhuo_commandery", world=world, content=c)
+    game = _game(world=world, content=c)
+    game.choose("act:tavern")
+    before = game.state.player.stats["silver"]
+    msgs = game._tavern_run("seek", target="無名客", text="watch")
+    watch_price = game._tavern_price(round(c.config.tavern.seek_price * c.config.tavern.watch_share))
+    assert tavern.WATCH_PLACED.format(name="無名客") in msgs
+    assert len(game.state.player.tavern_watches) == 1
+    assert before - game.state.player.stats["silver"] >= watch_price
+    assert tavern.WATCH_SAME.format(name="無名客") in game._tavern_run("seek", target="無名客", text="watch")
+    game._deliver_watches()
+    assert len(game.state.player.tavern_watches) == 1  # 還在遠方：沒消息
+    far.state.player.location = "wan_city"  # 走進宛城、又有了點名氣：從這一間打聽得到確切地點
+    far.state.player.stats["fame"] = 100000
+    CharacterStore(world.db).save(far.state)
+    game._deliver_watches()
+    assert game.state.player.tavern_watches == []
+    entry = game.state.journal[0]
+    assert entry.title == tavern.WATCH_TITLE
+    assert tavern.WATCH_FOUND.format(name="無名客", place="宛城") in entry.lines
+    assert "無名客" in game.state.player.tavern_known
+    assert tavern.WATCH_CLEAR in game._tavern_run("seek", target="曹操", text="watch")  # 人物一問就清楚：不託、不多收
+    assert game.state.player.tavern_watches == []
+    game._tavern_run("seek", target="查無此人", text="watch")  # 查無此人也照收，到期捎一句
+    assert len(game.state.player.tavern_watches) == 1
+    game.now += c.config.tavern.watch_hours * 3600 + 1
+    game._deliver_watches()
+    assert tavern.WATCH_LAPSED.format(name="查無此人") in game.state.journal[0].lines  # 江湖紀錄新的在前

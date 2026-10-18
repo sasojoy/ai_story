@@ -783,6 +783,17 @@ def whisper_view(content: Content, state: GameState) -> list[dict]:
 
 HIT_TIERS = ("市井刺客", "江湖殺手", "成名刺客")  # 三檔殺手的名字（Config.tavern.hit_prices 的順序）
 HIT_TITLE = "買殺手"
+# 託酒家留意（設計第三節；待 joy 潤）
+WATCH_TITLE = "酒家捎信"
+WATCH_PLACED = "酒家點點頭：「{name}的事我替客官留意著，有了準信就托人捎給你。」"
+WATCH_CLEAR = "（這回已經問得清楚，不必再託酒家留意。）"
+WATCH_FULL = "酒家搖頭：「同時替客官留意 {n} 個人，已經忙不過來了。」"
+WATCH_SAME = "酒家已經在替你留意{name}了。"
+WATCH_FOUND = "酒家托人捎來一句：「{name}此刻在{place}。」"
+WATCH_ROAD = "酒家托人捎來一句：「{name}正在往{place}的路上。」"
+WATCH_LAPSED = "酒家托人捎來一句：「{name}的事留意了半天，一直沒聽到準信。」"
+WATCH_ACTIVE = "託酒家留意 {name}，到 {until}"
+WATCH_AT = 3  # 打聽度到這裡（確切地點）才捎信
 HIT_LABEL = "雇殺手"
 HIT_NEED_KNOWN = "酒家搖頭：「這人在哪都還沒打聽清楚，殺手不接。」"
 HIT_NO_FEUD = "酒家壓低聲音：「你跟{name}沒仇沒怨（不同陣營，或揭了{him}的通緝），這種單子沒人接。」"
