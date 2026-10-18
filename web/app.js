@@ -1362,6 +1362,7 @@
           <circle r="${r}" class="w-yang"/>
           <path d="M0,${-r} A${r},${r} 0 0 1 0,${r} A${r / 2},${r / 2} 0 0 1 0,0 A${r / 2},${r / 2} 0 0 0 0,${-r} Z" class="w-yin"/>
           <circle cy="${-r / 2}" r="${r / 7}" class="w-yang"/><circle cy="${r / 2}" r="${r / 7}" class="w-yin"/>
+          <circle r="${r}" class="w-seam"/>
         </g>
         ${slot(slots[0], 0)}${slot(slots[1], 1)}
         <text y="${r - 12}" class="w-furnace-lab">${ready ? "點爐開火" : "太極火爐"}</text>
@@ -3033,7 +3034,7 @@
     const r = 20;
     const taichi = `<svg class="kiln-taichi" viewBox="-24 -24 48 48" aria-hidden="true"><circle r="23" class="w-hub-rim"/><g class="w-spin" style="${spinAt(ready ? 3 : 28)}">
       <circle r="${r}" class="w-yang"/><path d="M0,${-r} A${r},${r} 0 0 1 0,${r} A${r / 2},${r / 2} 0 0 1 0,0 A${r / 2},${r / 2} 0 0 0 0,${-r} Z" class="w-yin"/>
-      <circle cy="${-r / 2}" r="${r / 7}" class="w-yang"/><circle cy="${r / 2}" r="${r / 7}" class="w-yin"/></g></svg>`;
+      <circle cy="${-r / 2}" r="${r / 7}" class="w-yang"/><circle cy="${r / 2}" r="${r / 7}" class="w-yin"/><circle r="${r}" class="w-seam"/></g></svg>`;
     return `<div class="kiln-wrap" id="kiln-wrap"><div class="kiln" id="kiln">
       <div class="kiln-big">${furnaceSvg(slots, ready)}</div>
       <div class="kiln-mini">
