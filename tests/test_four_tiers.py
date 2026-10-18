@@ -355,6 +355,63 @@ def test_tier4_named_table_passes_naming():
     c = real_content()
     assert len(c.tier4_named) == 112
     counts = Counter((e.slot, e.kind, e.attribute) for e in c.tier4_named.values())
+    assert len(counts) == 56
     for slot, kind in [("weapon", k) for k in WEAPON_KINDS] + [("armor", None)]:
         for attribute in ATTRIBUTES:
             assert counts[(slot, kind, attribute)] == 2, (kind, attribute)
+
+
+# ── Task 6：九件神器改用四階 ──────────────────────────────
+
+DIVINE_ATTRS = {
+    "wd_dark_crystal": ("快", "柔"), "wd_fallen_star": ("剛", "剛"), "wd_pierce_sun": ("剛", "快"), "wd_shake_mountain": ("慢", "剛"),
+    "wd_chase_lightning": ("快", "快"), "wd_cold_abyss": ("柔", "慢"), "ad_mountain_stand": ("剛", "慢"), "ad_still_wave": ("柔", "柔"),
+    "ad_skim_shadow": ("快", "柔"),
+}
+
+
+def test_divine_recipes_are_all_tier4():
+    c = real_content()
+    divine = {r.id: r for r in c.forge_secrets.values() if r.divine}
+    assert set(divine) == set(DIVINE_ATTRS)
+    for rid, (main, aux) in DIVINE_ATTRS.items():
+        r = divine[rid]
+        assert (r.main.attribute, r.main.tier, r.aux.attribute, r.aux.tier) == (main, 4, aux, 4), rid
+
+
+def test_divine_clues_name_tier4_materials():
+    c = real_content()
+    old = ("三階", "隕鐵膽", "化水晶", "掣電鱗", "鎮山鐵")
+    new = ("熔星髓", "天池露", "奔雷角", "歸墟壤")
+    for r in c.forge_secrets.values():
+        if not r.divine:
+            continue
+        text = "".join(r.clues)
+        assert not any(word in text for word in old), r.id
+        assert "四階" in r.clues[2] and any(word in r.clues[1] for word in new), r.id
+
+
+def test_divine_piece_says_tier4():
+    c = real_content()
+    piece = forge_secrets.piece_text(c, c.forge_secrets["wd_dark_crystal"], forge_secrets.MAIN)
+    assert "快屬的四階料" in piece
+
+
+def test_forging_a_divine_now_costs_300():
+    from tianxia import smithing
+
+    c = real_content()
+    assert smithing.price(c, smithing.tier_of(c, "kuai_4")) == 300
+
+
+def test_old_tier3_divine_keeps_its_bonus(world):
+    from tianxia import team, weapons
+    from tianxia.state import Equipment
+
+    c = real_content()
+    sword = team.resolve_art("liubei_wugong", c, world)
+    old = Equipment(id="兵:3", name="仿・玄晶劍", kind="劍", attribute="虛", tier=3, quality="上品", copy_of="鑄|wd_dark_crystal",
+                    secret="wd_dark_crystal")
+    new = old.model_copy(update={"tier": 4})
+    assert weapons.bonus(old, sword, c, world) == weapons.bonus(new, sword, c, world)  # 仿品照仿品的基本值，不看階
+    assert equipment.grade(old) == "三階上品・仿品"

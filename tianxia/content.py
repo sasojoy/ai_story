@@ -2617,7 +2617,7 @@ def _validate_tier4_named(c: Content, need) -> None:
 
 def _validate_forge_secrets(c: Content, need) -> None:
     """隱藏配方池（content/forge_secrets.json）與 Config.forge_secrets（打造隱藏配方設計 3.1、3.2、3.5）：每一組夠挑（神器組從打造第二批起照挑）；
-    每一條的種類、主料寫死階、輔料二選一、屬性是素材有的而且素材表合得上、不收剛柔快慢兩對、神器配方兩樣三階、名字（命名過濾、
+    每一條的種類、主料寫死階、輔料二選一、屬性是素材有的而且素材表合得上、不收剛柔快慢兩對、神器配方兩樣四階、名字（命名過濾、
     種類字或防具字、不重複、不跟武學秘方同名；跟寶物名駒、對照表同名由 name_problem 與字表那一圈擋）、口訣（1～20 字、不寫數字、
     不寫「配方」「秘方」），同一個組合只能有一條（min_tier 算它涵蓋的每一階）。"""
     cfg = c.config.forge_secrets
@@ -2644,8 +2644,8 @@ def _validate_forge_secrets(c: Content, need) -> None:
             need(any(forge_rules.fits(side, m) for m in c.materials.values()), f"{where}：素材表裡找不到合得上的{label}")
         need({r.main.attribute, r.aux.attribute} not in forge_rules.SEED_PAIRS,
              f"{where}：剛柔、快慢合出來的屬性每季不同，名器的說明會對不上")
-        if r.divine:
-            need(r.main.tier == 3 and min(forge_rules.covers(r.aux), default=0) == 3, f"{where}：神器配方的主料、輔料都要三階")
+        if r.divine:  # 正式季整合 5.5：九件神器改用四階（四階才是神器的料）
+            need(r.main.tier == 4 and r.aux.tier == 4, f"{where}：神器配方的主料、輔料都要四階")
         need(r.name not in names, f"{where}：名字 {r.name} 重複")
         names.add(r.name)
         problem = name_problem(r.name, c)
