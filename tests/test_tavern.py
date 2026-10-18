@@ -312,3 +312,59 @@ def test_a_reply_with_made_up_numbers_is_thrown_away():
     assert tavern.ask_clean("客官，城外聚了三千人。", req) == "客官，城外聚了三千人。"
     assert tavern.ask_clean("客官，城外聚了3000人。", req) is None
     assert tavern.ask_clean("字" * 200, req) is None
+
+
+def test_neighbours_chatter_is_written_once_per_while_and_falls_back():
+    """酒客閒談：開著的酒肆該換一段時開單（A）、寫好的記進這一季（C），這一陣子都用它；寫不出來記空的、照固定句、不再開單。"""
+    game = _game()
+    c = game.content
+    game.choose("act:tavern")
+    req = game.tavern_chatter_request()
+    assert isinstance(req, tavern.ChatterRequest) and req.place == "wan_city"
+    lines = tavern.chatter_clean(["靠窗的腳夫：「今兒這酒倒是沒摻水。」", "老卒:城外又不太平了", "說了一大堆" * 10], req)
+    assert lines == ["靠窗的腳夫：「今兒這酒倒是沒摻水。」", "老卒：「城外又不太平了」"]
+    assert game.apply_tavern_chatter(req, lines)
+    assert game.tavern_chatter_request() is None  # 這一陣子不再寫
+    assert game.shop_view()["chatter"][0] == {"who": "靠窗的腳夫", "said": "「今兒這酒倒是沒摻水。」"}
+    assert not game.apply_tavern_chatter(req, ["甲：「乙」", "丙：「丁」"])  # 別人先寫好了：不蓋
+    game.state.world.time += c.config.tavern.chatter_hours * 3600
+    req = game.tavern_chatter_request()
+    assert req is not None and not game.apply_tavern_chatter(req, [])  # 寫不出來：記空的，照固定句
+    assert game.tavern_chatter_request() is None
+    assert len(game.shop_view()["chatter"]) == 2
+
+
+def test_chatter_lines_with_made_up_numbers_or_one_line_are_dropped():
+    req = tavern.ChatterRequest(place="wan_city", sign="宛城・酒肆", asked_at=0.0, facts=())
+    assert tavern.chatter_clean(["腳夫：「城外聚了3000人」", "老卒：「唉」"], req) == []  # 剩一句：整段不用
+    assert tavern.chatter_write(None, req) == []
+
+
+def test_the_server_writes_the_chatter_outside_the_lock(monkeypatch):
+    import server
+    from tianxia.characters import open_characters
+
+    content = server.CONTENT
+    game = Game.new(content, "閒客")
+    game.world.open_season(content, 0.0)
+    game.client = None
+    p = game.state.player
+    p.tutorial_step = len(content.tutorial.steps)
+    p.location = "wan_city"
+    game.now = 0.0
+    game.sync(0.0)
+    game.choose("act:tavern")
+    open_characters().save(game.state)
+    game.client = object()  # 只要「叫得到模型」：B 段換成下面的 write
+    seen = []
+
+    def write(client, req):
+        seen.append(open_world().db.writing())
+        return ["靠窗的腳夫：「酒錢又漲了。」", "喝悶酒的老卒：「仗打不完囉。」"]
+
+    monkeypatch.setattr(tavern, "chatter_write", write)
+    monkeypatch.setattr(server, "within_budget", lambda client, budget: client)
+    assert server.chatter_once(game)
+    assert seen == [False]  # 模型在鎖外
+    assert game.shop_view()["chatter"][1]["who"] == "喝悶酒的老卒"
+    assert not server.chatter_once(game)  # 這一陣子不再寫

@@ -276,10 +276,13 @@ def act(game: Game, action, *, paused_ok: bool = False) -> list[str] | None:
         open_characters().save(game.state)
         tales = _tales_waiting(game)
         crowd = _crowd_waiting(game)
+        chat = _chatter_waiting(game)
     if tales:
         narrate_battle(game)
     if crowd:
         write_crowd(game)
+    if chat:
+        write_chatter(game, chat)
     return msgs
 
 
@@ -321,12 +324,15 @@ def act_look(game: Game, action, view) -> tuple[list[str] | None, object]:
             failure = exc
         tales = failure is None and _tales_waiting(game)
         crowd = failure is None and _crowd_waiting(game)
+        chat = _chatter_waiting(game) if failure is None else None
     if failure is not None:
         raise failure
     if tales:
         narrate_battle(game)
     if crowd:
         write_crowd(game)
+    if chat:
+        write_chatter(game, chat)
     return msgs, shown
 
 
@@ -997,6 +1003,62 @@ def crowd_once(game: Game) -> bool:
         done = game.apply_arena_crowd(note, text)
         open_characters().save(game.state)
     return done
+
+
+CHATTER_RUNNING: set[str] = set()  # 正在背景寫鄰桌閒談的酒肆（一間一條；地點 id）
+
+
+def _chatter_waiting(game: Game) -> str | None:
+    """這個人開著的酒肆該換一段閒談、模型叫得到、這一間還沒有一條在寫（write_chatter）：回地點 id。行動鎖內叫。"""
+    if not TALE_THREADS or game.client is None or game.tavern_chatter_request() is None:
+        return None
+    place = game.state.player.location
+    return None if place in CHATTER_RUNNING else place
+
+
+def write_chatter(game: Game, place: str) -> bool:
+    """酒肆鄰桌閒談：開一個背景執行緒寫一段。A 鎖內拿單子（Game.tavern_chatter_request）→ B 鎖外請模型寫（tavern.chatter_write，
+    預算 Config.tavern.ask_budget_seconds；排隊時當假人排在真人後面）→ C 鎖內重驗才記（Game.apply_tavern_chatter；寫不出來記空的，
+    這一陣子照固定句）。開了回 True。呼叫端不能握著行動鎖。"""
+    with TALE_LOCK:
+        if place in CHATTER_RUNNING:
+            return False
+        CHATTER_RUNNING.add(place)
+
+    def job() -> None:
+        try:
+            chatter_once(game)
+        except Exception:  # noqa: BLE001 — 背景執行緒：印出來就好，閒談照固定句
+            traceback.print_exc()
+        finally:
+            with TALE_LOCK:
+                CHATTER_RUNNING.discard(place)
+
+    threading.Thread(target=job, name="tavern-chatter", daemon=True).start()
+    return True
+
+
+def chatter_once(game: Game) -> bool:
+    """寫一段（write_chatter 的那一圈；測試直接叫）：記了寫好的回 True。呼叫端不能握著行動鎖。"""
+    with _locked(game):
+        request = game.tavern_chatter_request()
+    if request is None:
+        return False
+    budget = game.content.config.tavern.ask_budget_seconds
+    started = _monotonic()
+
+    def ask() -> list[str]:
+        return tavern.chatter_write(within_budget(game.client, budget - (_monotonic() - started)), request)
+
+    if QUEUE is None:
+        lines = ask()
+    else:
+        try:
+            lines = QUEUE.run(TALE_OWNER, ask, fallback=[], bot=True, wait=budget)
+        except (Busy, QueueTimeout):
+            lines = []
+    with _locked(game):
+        return game.apply_tavern_chatter(request, lines)
 
 
 def duel_text(game: Game, text: str) -> list[str]:

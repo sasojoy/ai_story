@@ -2223,6 +2223,25 @@ class Game:
         extra.append(f"問話的客官是{side}，名號{p.name}。")
         return tavern_rules.ask_facts(s, c, extra)
 
+    def tavern_chatter_request(self) -> tavern_rules.ChatterRequest | None:
+        """A 段（鎖內、只讀）：酒肆開著、這一間的閒談該換了，就開一張單（server.write_chatter 在背景請模型寫）。"""
+        s, c = self.state, self.content
+        loc = s.player.location
+        if not self._tavern_open() or not tavern_rules.chatter_due(s.world, c, loc):
+            return None
+        return tavern_rules.ChatterRequest(place=loc, sign=tavern_rules.sign(s, c), asked_at=s.world.time,
+                                           facts=tavern_rules.chatter_facts(s, c, loc))
+
+    def apply_tavern_chatter(self, request: tavern_rules.ChatterRequest, lines: list[str]) -> bool:
+        """C 段：這一間還是該換（沒有別人先寫好），就記下這一段；寫不出來記空清單，這一陣子照固定句、不再叫模型。記了回 True。"""
+        s, c = self.state, self.content
+        entry = s.world.tavern_chatter.get(request.place)
+        if entry is not None and entry[0] >= request.asked_at and not tavern_rules.chatter_due(s.world, c, request.place):
+            return False
+        s.world.tavern_chatter[request.place] = (s.world.time, list(lines))
+        self._save_season()
+        return bool(lines)
+
     def tavern_ask_request(self, text: str) -> tavern_rules.AskRequest | list[str]:
         """A 段（鎖內、只讀）：酒肆開著、問句合格、付得起，就開一張單（問到秘密的單子標 secret，B 段不叫模型）；不然回那一句拒絕。"""
         s, c = self.state, self.content
@@ -2326,7 +2345,7 @@ class Game:
             "guests": guests[:6],
             "more_guests": max(0, len(guests) - 6),
             "treat": tavern_rules.TREAT_SEEN.format(name=treat) if treat else "",
-            "chatter": [{"who": who, "said": said} for who, said in tavern_rules.chatter(c, loc, hour)],
+            "chatter": [{"who": who, "said": said} for who, said in tavern_rules.chatter(c, loc, hour, s.world)],
             "walls": [{"who": w.who, "text": w.text, "when": self.stamp(w.time)} for w in reversed(s.world.tavern_walls.get(loc, []))],
             "wall_chars": cfg.wall_chars,
             "ask_chars": cfg.ask_chars,

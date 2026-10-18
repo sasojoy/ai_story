@@ -5491,7 +5491,8 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
     # 但 snapshot 只碰佇列自己的短鎖、不等任何一件，不算在行動鎖裡排隊）
     # narrate_once：決戰放手一搏的劇情（Joy 2026-10-13），回合結算後在背景一整批寫，排在真人後面、名號不是任何一個角色，所以不走 model_call
     # crowd_once：擂台場邊那一句（Joy 2026-10-17），A、C 段各拿一次鎖，模型在兩段之間、當假人排在真人後面
-    assert _users_in_server("QUEUE") == {None, "model_call", "main", "api_queue", "admin_choices", "narrate_once", "crowd_once"}
+    assert _users_in_server("QUEUE") == {None, "model_call", "main", "api_queue", "admin_choices", "narrate_once", "crowd_once",
+                                        "chatter_once"}  # chatter_once：酒肆鄰桌閒談，同 crowd_once 當假人排
     importers = [
         p.name for p in (server.ROOT / "tianxia").glob("*.py")
         if re.search(r"^\s*(import|from)\s+llm_queue\b", p.read_text(encoding="utf-8"), re.M)
