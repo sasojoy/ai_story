@@ -137,6 +137,30 @@ def test_furnace_refused_in_the_prologue_and_twice_a_day():
     assert not option.enabled and silver.FURNACE_TODAY in option.label
 
 
+# ── Task 4：買破境丹 ──
+
+
+def test_buying_a_legend_pill_at_the_clinic_two_a_season():
+    game = _game(at="yingchuan", money=1000)
+    p = game.state.player
+    before = p.legend_items
+    assert "這一季還能買 2 枚" in _ids(game)["act:buy_legend"].label
+    game.choose("act:buy_legend")
+    game.choose("act:buy_legend")
+    assert p.legend_items == before + 2 and p.stats["silver"] == 400 and p.legend_bought == 2
+    option = _ids(game)["act:buy_legend"]
+    assert not option.enabled and silver.LEGEND_FULL in option.label
+    game.choose("act:buy_legend")
+    assert p.legend_items == before + 2 and p.stats["silver"] == 400
+
+
+def test_picked_up_pills_do_not_count():
+    game = _game(at="yingchuan", money=299)
+    p = game.state.player
+    p.legend_items += 3  # 撿到的
+    assert p.legend_bought == 0 and "還差 1 兩" in _ids(game)["act:buy_legend"].label
+
+
 def test_weekend_has_no_silver_outlets():
     game = _game("weekend")
     assert not silver.on(game.content, game.state.world)

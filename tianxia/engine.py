@@ -1385,6 +1385,9 @@ class Game:
             problem = silver.mentor_problem(s, c, self._pill_day())
             opts.append(Option(id="act:mentor", enabled=problem is None, label=silver.MENTOR_REFUSED.format(problem=problem)
                                if problem else silver.MENTOR_LABEL.format(silver=cfg.mentor_silver, bonus=cfg.mentor_bonus)))
+            problem, pill = silver.legend_problem(s, c), c.config.legend_item_name
+            opts.append(Option(id="act:buy_legend", enabled=problem is None, label=silver.LEGEND_REFUSED.format(name=pill, problem=problem)
+                               if problem else silver.LEGEND_LABEL.format(name=pill, silver=cfg.legend_silver, left=silver.legend_left(s, c))))
         if equipment.smith_open(s, c):
             problem = silver.furnace_problem(s, c, self._pill_day(), prologue_rules.active(s, c))
             opts.append(Option(id="act:furnace", enabled=problem is None, label=silver.FURNACE_REFUSED.format(problem=problem)
@@ -2648,6 +2651,10 @@ class Game:
             return self._silver_mentor()
         if what == "furnace":
             return self._silver_furnace()
+        if what == "buy_legend":
+            if not (silver.on(self.content, self.state.world) and self._at_clinic_town()):
+                return [equipment.NOT_NOW]
+            return silver.buy_legend(self.state, self.content)
         if what == "donate":  # 大本營捐軍備（素材與經濟設計第六節）：打開軍需官那一串（見 _donate_options），不花體力
             self.state.player.picking_donate, self.state.player.shop_clue = True, ""
             self._shop_say("enter")  # 軍需帳上軍需官那一句（店面同一套）

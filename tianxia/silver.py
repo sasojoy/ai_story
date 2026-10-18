@@ -172,6 +172,32 @@ def use_furnace(state: GameState) -> None:
     state.player.furnace_ready = False
 
 
+# ── 買破境丹（醫館；在不在由 Game 問）──
+
+
+def legend_left(state: GameState, content: Content) -> int:
+    """這一季還能買幾枚（撿到的不算）。"""
+    return max(0, content.config.silver_outlets.legend_season_cap - state.player.legend_bought)
+
+
+def legend_problem(state: GameState, content: Content) -> str | None:
+    if legend_left(state, content) <= 0:
+        return LEGEND_FULL
+    return _short(state, content.config.silver_outlets.legend_silver)
+
+
+def buy_legend(state: GameState, content: Content) -> list[str]:
+    """買一枚破境丹：付錢、破境丹 +1、這一季買過的 +1。"""
+    problem = legend_problem(state, content)
+    if problem is not None:
+        return [f"（{problem}。）"]
+    p, cfg = state.player, content.config.silver_outlets
+    p.legend_items += 1
+    p.legend_bought += 1
+    name = content.config.legend_item_name
+    return [LEGEND_DONE.format(name=name), *_pay(state, cfg.legend_silver), f"{name} +1"]
+
+
 def take_donation(state: GameState, content: Content, day: int, room_points: int) -> tuple[int, int]:
     """真的收下：扣銀兩、記今天的兩數與點數（捐素材的那本 donated_today），回（幾兩, 幾點）；捐不了是 (0, 0)、什麼都不動。"""
     if donate_problem(state, content, day, room_points, 0) is not None:
