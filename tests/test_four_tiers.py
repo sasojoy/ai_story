@@ -266,3 +266,95 @@ def test_arms_bounty_tier4_is_x6():
     c = real_content()
     w = _gear(tier=4)
     assert bounties._arms_base(c, w) == c.config.bounties.arms_silver["下品"] * 6
+
+
+# ── Task 5：四階名器 ──────────────────────────────
+
+
+def test_tier4_main_rolls_named_half_the_time():
+    c = real_content()
+    assert four_tiers.named_chance(c, "gang_4", "rou_1") == 0.5
+    assert four_tiers.named_chance(c, "gang_4", "rou_4") == 0.8
+    assert four_tiers.named_chance(c, "gang_3", "rou_4") == 0
+    c.config.four_tiers.enabled = False
+    assert four_tiers.named_chance(c, "gang_4", "rou_4") == 0
+
+
+def _forge_game(bag):
+    game = _econ_game(bag=bag, silver=5000)
+    game.state.player.weapon = None
+    return game
+
+
+def test_named_tier4_gets_a_table_name_and_bonus():
+    from tianxia import smithing
+
+    game = _forge_game({"gang_4": 2})
+    s, c, w = game.state, game.content, game.world
+    c.config.four_tiers.named_both = 1.0
+    with mock.patch.object(w, "claim_gear_find", side_effect=AssertionError("四階名器不登記首位發現")):
+        item, msgs = smithing.forge(s, c, w, "劍", "gang_4", "gang_4", rng=random.Random(0))
+    entry = c.tier4_named[item.named_entry]
+    assert (entry.slot, entry.kind, entry.attribute, entry.name) == ("weapon", "劍", item.attribute, item.name)
+    assert equipment.grade(item).startswith("四階") and equipment.grade(item).endswith("・名器")
+    assert equipment.named(c, item) and equipment.is_named(item)
+    assert "名器" in msgs[0]
+
+
+def test_named_roll_does_not_shift_game_rng():
+    from tianxia import smithing
+
+    draws = []
+    for chance in (0.0, 1.0):
+        game = _forge_game({"gang_4": 2})
+        game.content.config.four_tiers.named_both = chance
+        rng = random.Random(7)
+        smithing.forge(game.state, game.content, game.world, "劍", "gang_4", "gang_4", rng=rng)
+        draws.append(rng.random())
+    assert draws[0] == draws[1]
+
+
+def test_divine_recipe_still_beats_named():
+    from tianxia import forge_secrets as fs
+    from tianxia import smithing
+
+    game = _forge_game({"kuai_4": 1, "rou_4": 1})
+    s, c, w = game.state, game.content, game.world
+    c.config.four_tiers.named_both = 1.0
+    recipe = c.forge_secrets["wd_dark_crystal"]
+    with mock.patch.object(fs, "match", return_value=recipe):
+        item, _ = smithing.forge(s, c, w, "劍", "kuai_4", "rou_4", rng=random.Random(0))
+    assert item.original or item.copy_of is not None
+    assert item.named_entry is None
+
+
+def test_go_option_hints_named_for_tier4_main():
+    from tianxia import smithing
+
+    game = _forge_game({"gang_4": 1, "gang_3": 1})
+    s, c, w = game.state, game.content, game.world
+    four = smithing.go_option(s, c, w, "劍", "gang_4", "gang_3").label
+    three = smithing.go_option(s, c, w, "劍", "gang_3", "gang_4").label
+    assert smithing.NAMED_HINT in four and smithing.NAMED_HINT not in three
+    assert "神器" not in smithing.NAMED_HINT and "%" not in smithing.NAMED_HINT
+
+
+def test_old_gear_without_named_entry_loads():
+    from tianxia.state import Equipment
+
+    item = Equipment.model_validate({"id": "兵:1", "name": "舊刃", "kind": "劍", "attribute": "剛", "tier": 3, "quality": "下品"})
+    assert item.named_entry is None and not equipment.is_named(item)
+
+
+def test_tier4_named_table_passes_naming():
+    from collections import Counter
+
+    from tianxia.martial_arts import ATTRIBUTES
+    from tianxia.models import WEAPON_KINDS
+
+    c = real_content()
+    assert len(c.tier4_named) == 112
+    counts = Counter((e.slot, e.kind, e.attribute) for e in c.tier4_named.values())
+    for slot, kind in [("weapon", k) for k in WEAPON_KINDS] + [("armor", None)]:
+        for attribute in ATTRIBUTES:
+            assert counts[(slot, kind, attribute)] == 2, (kind, attribute)

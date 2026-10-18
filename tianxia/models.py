@@ -1064,6 +1064,19 @@ class ForgeSecret(_Strict):
     tactic: TacticDef | None = None  # 神器的特技（第三批）：原品照寫，仿品發動率乘 Config.tactics.copy_rate
 
 
+class Tier4Named(_Strict):
+    """四階名器名字表的一條（content/tier4_named.json；正式季整合 5.2）：主料四階、沒打中神器配方時照機率出名器，名字照這一爐的種子
+    從合欄位、合種類、合屬性的那幾條挑一個（four_tiers.pick_named）。不登記、不佔名字空間，不同的人可以撞名（跟一般組合一樣）。
+    打出來的那一件記 Equipment.named_entry＝這一條的 id；名字讀檔時照內容重寫（forge_secrets.refresh_names）。"""
+
+    id: str
+    slot: Literal["weapon", "armor"]
+    kind: str | None = None  # 兵器種類（WEAPON_KINDS）；防具不寫
+    attribute: Attribute
+    name: str
+    note: str = ""  # 打出來那一句下面的一句說明（待 joy 潤）
+
+
 class PresetRecipe(_Strict):
     """師門配方（content/preset_recipes.json，新手引導設計 3.3）：這個底融這個意境，名字與說明由內容寫好，
     第一個合出來的人不等模型（fusion.fuse）。每季配方清空，下一季照樣用它，所以不用每季重放。"""
@@ -3725,6 +3738,7 @@ class Content(_Strict):
     preset_recipes: list[PresetRecipe] = Field(default_factory=list)  # 師門配方（新手引導計畫一）；沒有這個檔就是空的
     secret_recipes: list[SecretRecipe] = Field(default_factory=list)  # 秘方池（content/secret_recipes.json）；沒有這個檔就是空的
     forge_secrets: dict[str, ForgeSecret] = Field(default_factory=dict)  # 隱藏配方池（content/forge_secrets.json，照 id）；沒有這個檔就是空的
+    tier4_named: dict[str, Tier4Named] = Field(default_factory=dict)  # 四階名器名字表（content/tier4_named.json，照 id）；沒有這個檔就是空的（測試內容）
     arena_crowd: dict[str, list[str]] = Field(default_factory=dict)  # 擂台的場邊事件的固定句（content/arena_crowd.json）：種類 → 句子；沒有這個檔就沒有場邊事件
     shop_lines: dict[str, dict[str, list[str]]] = Field(default_factory=dict)  # 店面上掌櫃的話（content/shop_lines.json，店面獨立介面設計 1.4）：店 → 情況 → 句子；沒有這個檔就是空的
     seal: dict[str, ShardDef] = Field(default_factory=dict)  # 玉璽碎片（content/seal.json，照 id）；沒有這個檔就是空的（碎片關著）

@@ -30,7 +30,7 @@ from .models import (
     CombatLines, Condition, Config, Content, CraftNames, DuelBoss, Effect, Event, FigureDef, FollowerDef, ForgeSecret, Foreshadows, FrontLines, GearBook,
     GiftDef, Hints, InsightDef, Location, OppDef,
     InsightScene, OrdersContent, PresetRecipe, PromotionDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, ShardDef, SimRumor, SkillDef,
-    SignatureArmDef, SteedDef, Squad, TimetableEvent, TraitBook, TreasureDef, Tutorial, allow_known,
+    SignatureArmDef, SteedDef, Squad, Tier4Named, TimetableEvent, TraitBook, TreasureDef, Tutorial, allow_known,
 )
 from .martial_arts import ATTRIBUTE_COUNTERS, ATTRIBUTES, QUALITIES
 from .naming import FORGE_CLASH, GEAR_CLASH, PRESET_CLASH, SEAL_CLASH, name_problem
@@ -113,6 +113,7 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         secret_recipes=[_build(SecretRecipe, raw) for raw in _read(root / "secret_recipes.json")]
         if (root / "secret_recipes.json").exists() else [],
         forge_secrets=_forge_secrets(root / "forge_secrets.json"),
+        tier4_named=_index(Tier4Named, _read(root / "tier4_named.json")) if (root / "tier4_named.json").exists() else {},
         shop_lines=_read(root / "shop_lines.json") if (root / "shop_lines.json").exists() else {},
         arena_crowd=_read(root / "arena_crowd.json") if (root / "arena_crowd.json").exists() else {},
         seal=_shards(root / "seal.json"),
@@ -2426,6 +2427,7 @@ def validate(c: Content) -> None:
 
     _validate_secrets(c, need)
     _validate_forge_secrets(c, need)
+    _validate_tier4_named(c, need)
     _validate_seal(c, need)
 
     # ── 意境與基礎武學（武學與成長設計附錄 A～C）──
@@ -2582,6 +2584,35 @@ def _validate_secrets(c: Content, need) -> None:
                  f"{where}：武學＋武學只寫 arts 兩門")
             for i, pattern in enumerate(recipe.arts):
                 art_ok(f"{where} 的第 {i + 1} 門", pattern)
+
+
+def _validate_tier4_named(c: Content, need) -> None:
+    """四階名器名字表（content/tier4_named.json，正式季整合 5.2）：兵器的種類合法、防具不寫種類；每一條的名字過命名過濾、兵器名對得上
+    種類（weapons.kind_problem）、防具名帶防具的字（armor.word_problem），不跟一般組合字表組得出的名字、隱藏配方、別的條目同名；
+    每一個欄位（兵器照種類）× 每一種屬性至少一條（不然那一爐擲中名器卻挑不到名字）。沒有這個檔（測試內容）不檢查。"""
+    if not c.tier4_named:
+        return
+    table = forge_rules.table_names(c)
+    names: set[str] = set()
+    for entry in c.tier4_named.values():
+        where = f"四階名器 {entry.id}"
+        if entry.slot == "weapon":
+            need(entry.kind in WEAPON_KINDS, f"{where}：兵器要寫種類（{'、'.join(WEAPON_KINDS)}）")
+            shape = weapon_kind_problem(entry.kind, entry.name) if entry.kind in WEAPON_KINDS else None
+        else:
+            need(entry.kind is None, f"{where}：防具不寫種類")
+            shape = armor_word_problem(entry.name)
+        problem = name_problem(entry.name, c)
+        need(problem is None, f"{where}：名字 {entry.name} 過不了命名過濾（{problem}）")
+        need(shape is None, f"{where}：名字 {entry.name} 過不了（{shape}）")
+        need(entry.name not in table, f"{where}：名字 {entry.name} 跟鐵匠鋪一般組合的名字同名")
+        need(entry.name not in names, f"{where}：名字 {entry.name} 重複")
+        names.add(entry.name)
+        need(0 < len(entry.note) <= 30, f"{where}：說明要 1～30 字")
+    for slot, kind in [("weapon", k) for k in WEAPON_KINDS] + [("armor", None)]:
+        for attribute in ATTRIBUTES:
+            need(any(e.slot == slot and e.kind == kind and e.attribute == attribute for e in c.tier4_named.values()),
+                 f"四階名器名字表少了 {kind or '防具'}・{attribute}")
 
 
 def _validate_forge_secrets(c: Content, need) -> None:

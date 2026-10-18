@@ -100,7 +100,7 @@ def forged_key(item: Equipment) -> str:
     """打完一爐那一句照什麼分（1.4）：神器（原品、仿品）＞名器＞品質。"""
     if item.original or item.copy_of is not None:
         return "forge_divine"
-    if item.secret is not None:
+    if equipment.is_named(item):  # 隱藏配方的名器、四階擲出的名器（正式季整合 5.2）
         return "forge_named"
     return FORGED_KEYS.get(item.quality, "forge_low")
 
@@ -491,7 +491,7 @@ def glow_of(item: Equipment) -> str:
         return "redgold"
     if item.copy_of is not None:
         return "red"
-    if item.secret is not None:
+    if equipment.is_named(item):
         return "purple"
     return GLOWS.get(item.quality, "none")
 

@@ -180,17 +180,27 @@ def mark_word(item: Equipment) -> str:
         mark = DIVINE_MARK
     elif item.copy_of is not None:
         mark = COPY_MARK
-    elif item.secret is not None:
+    elif is_named(item):
         mark = NAMED_MARK
     else:
         mark = ""
     return mark.removeprefix("・")
 
 
+def is_named(item: Equipment | None) -> bool:
+    """存檔上看是不是名器（不查內容）：照隱藏配方打出來的（secret，神器的原品、仿品不算），或四階擲出來的名器（named_entry，正式季整合 5.2）。
+    階品「・名器」、光色、江湖紀錄、名器同氣都照它認；加成照 named（內容拿掉了那一條就照一般的算）。"""
+    if item is None or item.original or item.copy_of is not None:
+        return False
+    return item.secret is not None or item.named_entry is not None
+
+
 def named(content: Content, item: Equipment | None) -> bool:
-    """名器（打造隱藏配方設計 4.2）：照隱藏配方打出來的（secret），而且內容裡還有那一條（拿掉了加成照一般的算）。仿品、原品不算（它們有自己的基本值，4.3）。"""
-    return (item is not None and item.secret is not None and item.secret in content.forge_secrets
-            and item.copy_of is None and not item.original)
+    """名器（打造隱藏配方設計 4.2）：照隱藏配方打出來的（secret），或四階擲出來的（named_entry，正式季整合 5.2），而且內容裡還有那一條
+    （拿掉了加成照一般的算）。仿品、原品不算（它們有自己的基本值，4.3）。"""
+    if not is_named(item):
+        return False
+    return item.secret in content.forge_secrets if item.secret is not None else item.named_entry in content.tier4_named
 
 
 def grade_line(item: Equipment) -> str:

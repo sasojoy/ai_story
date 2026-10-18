@@ -199,6 +199,15 @@ def forge(
         name = secret.name
     else:
         name = general_name(content, world, kind, main, aux, attribute)
+    entry = None
+    if secret is None and (chance := four_tiers.named_chance(content, main, aux)) > 0:
+        # 四階名器（正式季整合 5.2）：沒打中隱藏配方、主料四階時擲一次；用自己的亂數（不碰呼叫端給的 rng，品質那一擲的位置不變），
+        # 中了照同一顆亂數從名字表挑一條。不登記、沒有首位發現、不傳江湖
+        roll = own_rng(state, f"名器|{key}")
+        if roll.random() < chance:
+            entry = four_tiers.pick_named(content, slot, kind if slot == "weapon" else None, attribute, roll)
+            if entry is not None:
+                name = entry.name
     divine = secret is not None and secret.divine
     if report is not None:
         report.update(first=first, secret=secret.id if secret is not None else None, divine=divine)
@@ -223,7 +232,8 @@ def forge(
     m, a = content.materials[main], content.materials[aux]
     what = f"兩份{m.name}" if main == aux else f"{m.name}與{a.name}"
     secret_id = secret.id if secret is not None else None
-    gear = {"original": divine and first, "copy_of": forge_secrets.key(secret) if divine and not first else None}
+    gear = {"original": divine and first, "copy_of": forge_secrets.key(secret) if divine and not first else None,
+            "named_entry": entry.id if entry is not None else None}
     if slot == "armor":
         item = armor.new_armor(state, name=name, attribute=attribute, tier=tier, quality=quality, recipe=key, secret=secret_id, **gear)
     else:
@@ -231,6 +241,8 @@ def forge(
                                   **gear)
     head = forged_head(item, what)
     lines = forge_secrets.arrival(state, content, secret, find, first) if secret is not None else []
+    if entry is not None and entry.note:
+        lines = [entry.note]  # 四階名器那一句說明（名字表上的，待 joy 潤）
     msgs = ["\n".join([head, *lines])]
     msgs += [] if divine else setting_line(content, setting, slot)  # 神器那一爐不擲品質：天時地利那一句不寫
     msgs.append(f"銀兩 -{cost}")
@@ -399,6 +411,7 @@ ARMOR_ASK_AUX = "挑輔料：主料與輔料合起來定這件防具的屬性。
 ARMOR_ATTR_MARK = "・跟你的內功同屬性"  # 待 joy 潤（防具看內功，四欄設計 4.2）
 GO_LABEL = "開爐：{what}{head}（{kind}・屬{attribute}・{tier}・{note}）"  # 待 joy 潤：{what} 是放進爐裡的主料＋輔料；{head} 平常是空的（設計 6.4：不露隱藏配方），自己的鑄譜上打中過這一爐才寫 SOLVED_HEAD
 SOLVED_HEAD = " → 照鑄譜上的【{name}】打"  # 待 joy 潤：這一爐在自己的鑄譜上打中過才寫（打造隱藏配方設計 6.4）；別人打中的、沒打中過的都不寫
+NAMED_HINT = "四階的料，打出名器的機會很大"  # 待 joy 潤：主料是四階時開爐鈕機率那一段多這一句（正式季整合 5.2）
 DIVINE_HEAD = " → 照鑄譜上的【{name}】打：必出神器（仿品）"  # 待 joy 潤：自己的鑄譜上打中過的神器配方（6.4、5.1 甲）；{name} 是譜名
 
 
@@ -546,6 +559,8 @@ def go_option(state: GameState, content: Content, world: WorldStateStore, kind: 
     problem = forge_problem(state, content, kind, main, aux)
     cost = f"工錢 {price(content, tier, slot, state)} 兩"
     note = problem or (cost if divine else f"{cost}；{fusion.quality_odds_text(forge_odds(state, content, world, kind, main, aux))}")
+    if problem is None and not divine and four_tiers.named_chance(content, main, aux) > 0:
+        note += f"；{NAMED_HINT}"  # 正式季整合 5.2：不寫百分比、不寫會不會出神器（開爐鈕不能變成試配方的工具）
     head = (DIVINE_HEAD if divine else SOLVED_HEAD).format(name=known) if known else ""
     return Option(
         id=f"{GO}{kind}:{main}:{aux}",

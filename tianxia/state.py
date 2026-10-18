@@ -172,6 +172,9 @@ class Equipment(BaseModel):
     template: str | None = None
     # 打中的隱藏配方 id（名器，打造隱藏配方設計 4.2）：名字照內容讀（forge_secrets.refresh_names，name 只當備份），加成看 equipment.named
     secret: str | None = None
+    # 四階名器（正式季整合 5.2）：主料四階照機率擲出來的名器，指到 content/tier4_named.json 的那一條（名字照它讀，name 只當備份；
+    # 加成、階品、光色看 equipment.named／is_named）。不登記、沒有首位發現；舊存檔沒有這一欄
+    named_entry: str | None = None
     # 名將本命兵器的人物 id（打造第三批）：original 一起是 True（加成照神器原品）、secret 是 None（不是打出來的，不用定名）；
     # 名字照內容讀（signature_arms.refresh_names，name 只當備份）
     signature: str | None = None
