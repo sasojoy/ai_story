@@ -786,6 +786,7 @@ class SqliteWorldStore:
             if state.season_last_real is not None:
                 skipped = world_module.pause_skip(state.season, content, span)
                 state.season_last_real += skipped
+                world_module.realign_paused_calendar(state.season, content, skipped)  # 21 天季：季曆對回現實的星期（其他季不動）
                 season_now = state.season.time + max(0.0, now - state.season_last_real) * content.config.time_scale
                 world_module.keep_showdowns_on_time(state.season, content, skipped, season_now)
             if state.active_battle is not None:
