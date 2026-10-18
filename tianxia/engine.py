@@ -3431,7 +3431,8 @@ class Game:
                 opts.append(Option(id=option_id, enabled=False,
                                    label=economy.UPGRADE_REFUSED.format(low=row["from"], need=row["need"], problem=row["problem"])))
                 continue
-            left = economy.UPGRADE_LEFT.format(n=row["left"]) if row["left"] is not None else ""
+            left_line = economy.UPGRADE_SEASON_LEFT if row["tier"] == four_tiers.TIER else economy.UPGRADE_LEFT
+            left = left_line.format(n=row["left"]) if row["left"] is not None else ""
             opts.append(Option(id=option_id, label=economy.UPGRADE_LABEL.format(
                 low=row["from"], need=row["need"], cost=row["cost"], odds=row["odds"], left=left)))
         pages = [Option(id=f"smith:page:{slot}", label=equipment.PAGE_LABELS[slot]) for slot in equipment.SMITH_PAGES if equipment.on(c, slot)]

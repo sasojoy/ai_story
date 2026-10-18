@@ -47,6 +47,7 @@ DONATE_MISC = "雜項"  # 不在 armaments 表上的屬性（陰陽虛實）：�
 SELL_LABEL = "賣【{name}】一個（{price} 兩・手上 {have}）"
 UPGRADE_LABEL = "熬【{low}】×{need}（{cost} 兩・{odds}{left}）"
 UPGRADE_LEFT = "・今天還能換 {n} 個"
+UPGRADE_SEASON_LEFT = "・這一季還能換 {n} 個"  # 三換四（素材四階，正式季整合 4.5）：上限是一季的
 UPGRADE_REFUSED = "熬【{low}】×{need}（{problem}）"
 
 

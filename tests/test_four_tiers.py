@@ -110,6 +110,15 @@ def test_three_to_four_two_per_season():
     assert (dict(s.player.materials), s.player.stats["silver"]) == before
 
 
+def test_the_menu_counts_three_to_four_per_season():
+    game = _econ_game(bag={"gang_3": 5})
+    game.state.player.tutorial_step = len(game.content.tutorial.steps)
+    game.choose("act:smith")
+    game.choose("smith:page:material")
+    label = next(o.label for o in game.options() if o.id == "smith:upgrade:剛:4")
+    assert "這一季還能換 2 個" in label and "今天" not in label
+
+
 def test_tier4_cannot_be_donated():
     game = _econ_game(bag={"man_4": 1})
     s, c = game.state, game.content
