@@ -11,11 +11,14 @@ import copy
 import json
 import logging
 import re
+import threading
 from typing import TYPE_CHECKING, Any, Type, TypeVar
 
 import requests
 from pydantic import BaseModel, ValidationError
 from pydantic_core import PydanticUndefined
+
+from . import power_save
 
 if TYPE_CHECKING:
     from .models import Config
@@ -23,6 +26,9 @@ if TYPE_CHECKING:
 T = TypeVar("T", bound=BaseModel)
 
 logger = logging.getLogger(__name__)
+
+WARM_TIMEOUT = 600.0  # 暖機請求讓它跑多久：要跑到模型載完（這台 12b 約 11 秒），斷線就等於沒載
+_warming = threading.Lock()  # 同時只送一件暖機請求
 
 
 def _trim_schema_properties(schema: dict[str, Any], fields: list[str]) -> dict[str, Any]:
@@ -279,13 +285,22 @@ class OllamaClient:
         self.timeout = timeout
         self.context_length = context_length
         self.think = think  # None：不送 think 欄位（沒有思考模式的模型）
-        self.keep_alive = keep_alive
+        self._keep_alive = keep_alive  # 實際送出去的看 keep_alive 這個 property（省電模式會把它改短）
         self.repeat_penalty = repeat_penalty
         self.presence_penalty = presence_penalty
         self.frequency_penalty = frequency_penalty
         # chat_structured 失敗（逾時、格式不對）時要不要再問一趟：預設要；行動鎖內用的複本設成 False（見 quick_client），
         # 一次呼叫最多只送一趟，失敗就丟出那一次的例外讓呼叫端走退路
         self.retry = True
+
+    @property
+    def keep_alive(self) -> str:
+        """模型要 Ollama 留多久：省電模式（tianxia/power_save.py）開著時照它的短值。
+
+        故意每次調用都問一次，不存成欄位：這樣開關換了不必重開伺服器（重開就是全服重新登入），
+        已經建好的 client（每個角色一份，還有 capped 複本）也跟著換。
+        """
+        return power_save.keep_alive(self._keep_alive)
 
     @classmethod
     def from_config(cls, cfg: Config) -> OllamaClient:
@@ -296,18 +311,37 @@ class OllamaClient:
             presence_penalty=cfg.ollama_presence_penalty, frequency_penalty=cfg.ollama_frequency_penalty,
         )
 
-    def warm(self, seconds: float = 2.0) -> bool:
-        """叫 Ollama 把模型載起來（/api/generate 只帶 model 與 keep_alive，不產生任何字），不等它載完：
-        逾時（模型還在載）也算送到了。悟意境的畫布一出現就送（insight_llm.warm）。連不上回 False。"""
-        try:
-            requests.post(
-                f"{self.base_url}/api/generate", json={"model": self.model, "keep_alive": self.keep_alive}, timeout=seconds,
-            )
-        except requests.Timeout:
-            return True
-        except Exception as e:  # noqa: BLE001
-            logger.warning(f"Ollama 暖機失敗: {e}")
-            return False
+    def warm(self, seconds: float = WARM_TIMEOUT) -> bool:
+        """叫 Ollama 把模型載起來（/api/generate 只帶 model 與 keep_alive，不產生任何字），不等它載完。
+
+        **在背景執行緒裡送，而且讓那個請求跑到載完**（2026-10-18 改）：這一版的 Ollama 會跟著「客戶端斷線」
+        一起取消載入，所以舊寫法（2 秒就逾時斷線、把逾時當成「送到了」）其實一次都沒把模型載起來過——
+        實測 2 秒斷線之後等 25 秒，`ollama ps` 還是空的；請求跑完整段才會載（這台 12b 約 11 秒）。
+        悟意境的畫布預熱（insight_llm.warm）、登入預熱（server._warm_model）、暖機看守
+        （scripts/warm_keeper.py）都靠它。
+
+        呼叫端一律馬上拿到 True（送出去了），不會被擋住。同時只送一件：每分鐘呼叫也不會疊一堆執行緒。
+        連不上、出錯都只記一行警告，不丟例外——暖機是方便，不能讓它弄壞呼叫端。
+        """
+        if not _warming.acquire(blocking=False):
+            return True  # 已經有一件在載了，再送也是同一個模型
+
+        def run() -> None:
+            try:
+                res = requests.post(
+                    f"{self.base_url}/api/generate",
+                    json={"model": self.model, "keep_alive": self.keep_alive,
+                          "options": {"num_ctx": self.context_length}},  # ctx 要跟真正呼叫時一樣，不然 Ollama 會整個重載
+                    timeout=seconds,
+                )
+                if res.status_code != 200:  # 不記的話「模型就是不載」會看不出原因（例：keep_alive 夾到 BOM → 400）
+                    logger.warning(f"Ollama 暖機回 {res.status_code}：{res.text[:200]}")
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"Ollama 暖機失敗: {e}")
+            finally:
+                _warming.release()
+
+        threading.Thread(target=run, daemon=True).start()
         return True
 
     def _model_missing(self) -> RuntimeError:

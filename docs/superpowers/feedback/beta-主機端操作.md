@@ -299,6 +299,44 @@ Remove-Item C:\Users\User\tianxia-ops\PAUSED               # 恢復看守
 - 玩家自己的體力、氣血照現實時間回，停機期間也回，這不算在賽季裡。
 - 忘了按繼續，賽季就一直停著：設定頁的管理者工具會寫「已暫停 N 分鐘」。
 
+## 這台電腦還要做別的事：省電模式與睡／醒（2026-10-18）
+
+量過了（線上 1 個真人、近一小時 3 個）：**吃掉這台機器的不是遊戲程式，是常駐的模型。**
+
+| | CPU（單核％，12 核） | RAM | VRAM |
+|---|---|---|---|
+| `server.py` | 1.7%（8.8 小時平均） | 151 MB | – |
+| `run_bots.py` | 0.7% | 97 MB | – |
+| `monitor.py`、`warm_keeper.py`、隧道 | ~0.1% | 各 30～45 MB | – |
+| **gemma4:12b（`llama-server.exe`）** | 0.7%（閒置） | 10.5 GB | **約 9.1 GiB** |
+
+所以**不要去砍假人、調巡邏頻率**（量到省不了，只會讓江湖變冷清）。要省就省模型那一塊。
+
+### 省電模式：遊戲照開，模型只在有人玩的時候佔 VRAM
+
+開關是旗標檔 `.local/power_save`（`tianxia/power_save.py`）：在的時候模型的 `keep_alive` 改成檔裡寫的（預設 `5m`），沒人玩就讓 Ollama 卸掉模型。**不必重開伺服器、玩家不必重新登入**——`OllamaClient.keep_alive` 是個 property，每次模型呼叫都問一次旗標檔，所以 `server.py` 與 `run_bots.py` 兩個行程、每個角色那一份 client 都當場跟著換。
+
+```powershell
+powershell -ExecutionPolicy Bypass -File C:\Users\User\.claude\tianxia-powersave.ps1 on      # 開（順手請 Ollama 現在就卸掉模型）
+powershell -ExecutionPolicy Bypass -File C:\Users\User\.claude\tianxia-powersave.ps1 off     # 關（順手把模型暖回來）
+powershell -ExecutionPolicy Bypass -File C:\Users\User\.claude\tianxia-powersave.ps1 status  # 看現在開著沒、VRAM 多少、模型載著沒
+```
+
+配套的是 `scripts/warm_keeper.py`（ensure-up 會一起開）：**有真人在線就每分鐘替模型續一次命**，沒人在線就不送、省電模式下還請 Ollama 現在就卸掉。有它才不會踩 2026-10-10 那個坑（模型卸掉之後第一個要模型的動作撞上冷啟動）——連「只走路、半小時沒叫過模型」的人也一直是熱的。登入那一下另外由 `server.py::_warm_model` 預熱（射後不理，登入請求不等）。
+
+代價寫清楚：模型真的卸掉之後，下一次載回來**實測 11.4 秒**（`num_ctx` 8192，2026-10-18 的 Ollama 版本；CLAUDE.md 記的 24 秒與 10-10 記的 89 秒是舊版與別的 ctx）。遊戲的讀取逾時 30 秒、鎖內 15 秒、斷路器 180 秒，所以 11.4 秒撐得過去，但鎖內那 15 秒沒有太多餘裕——這就是為什麼要有暖機看守與登入預熱。
+
+### 睡／醒：要打遊戲、算圖，整疊停乾淨
+
+```powershell
+powershell -ExecutionPolicy Bypass -File C:\Users\User\.claude\tianxia-sleep.ps1   # 暫停賽季時鐘 → 停四支 python → 卸模型
+powershell -ExecutionPolicy Bypass -File C:\Users\User\.claude\tianxia-wake.ps1    # 繼續賽季時鐘 → ensure-up → 暖機看守 → 驗證
+```
+
+- 睡的時候**隧道刻意留著**（44 MB／0.1%）：網址還在、只是回 502，醒來不必重設。
+- 賽季時鐘由腳本 pause／resume（見上一節），停的那一段不算進賽季。
+- **公告要自己發**（Discord 中繼在 session 裡，腳本不碰它）。
+
 ## 怎麼備份資料庫
 
 伺服器開著也可以備份。備份腳本用 SQLite 內建的線上備份，做出來的是一個獨立的 `.db` 檔，先驗過才放上去。備份先放在這台電腦的資料夾 `C:\Ray\tianxia-play\backup`，不上雲端（企劃者 2026-10-06 定）；之後要上雲，看下面「之後要上雲時怎麼改」。

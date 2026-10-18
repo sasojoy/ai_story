@@ -161,6 +161,23 @@ def no_real_ollama_flavor_calls(monkeypatch):
 
     monkeypatch.setattr(OllamaClient, "chat_text", lambda self, messages, **kwargs: "")
     monkeypatch.setattr(OllamaClient, "chat_structured", _no_chat_structured)
+    # warm 也要假掉：server._warm_model（每次登入）與 insight_llm.warm（畫布一出現）會送暖機請求，
+    # 而它們拿的是 server.CONTENT（真實內容）的 ollama_url——於是整套測試會對這台機器真的那個 Ollama
+    # 連好幾十次，把正在跑的賽季那個模型按 content/config.json 的 keep_alive（12h）釘在 VRAM 裡，
+    # 省電模式當場失效（2026-10-18 實機量到：測試跑著的時候 ollama ps 從 5 分鐘跳成 12 小時）。
+    monkeypatch.setattr(OllamaClient, "warm", lambda self, *args, **kwargs: True)
+
+
+@pytest.fixture(autouse=True)
+def no_host_power_save(monkeypatch, tmp_path_factory):
+    """測試不看這台主機的省電模式（tianxia/power_save.py）：旗標檔是 repo 裡的 .local/power_save，
+    主機上開著省電模式的時候，client.keep_alive 會回 5m，於是 test_ollama_client.py 那幾個
+    「keep_alive 照設定」的測試整組掛掉（2026-10-18 實機踩到）。每個測試都指到一個不存在的旗標、
+    環境變數也清掉；要測省電模式本身的在 tests/test_power_save.py 裡自己設。"""
+    from tianxia import power_save
+
+    monkeypatch.delenv(power_save.ENV, raising=False)
+    monkeypatch.setattr(power_save, "FLAG", tmp_path_factory.mktemp("no-power-save") / "power_save")
 
 
 @pytest.fixture(autouse=True)

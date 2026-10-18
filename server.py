@@ -74,6 +74,7 @@ from tianxia.engine import FIGHT_GONE_LINES, FREE_TEXT_OPTION, PAUSED_TEXT, SAY_
 from tianxia.models import FREE_TEXT_MAX
 from tianxia.journal import CSS as JOURNAL_CSS
 from tianxia.sqlite_world import open_world
+from tianxia.ollama_client import OllamaClient
 
 ROOT = Path(__file__).parent
 WEB = ROOT / "web"
@@ -1478,9 +1479,24 @@ def _character_name(request: Request) -> str:
     return account.character
 
 
+def _warm_model() -> None:
+    """有人登入就先叫 Ollama 把模型載起來（省電模式下模型平常是卸掉的，見 tianxia/power_save.py）。
+
+    射後不理（OllamaClient.warm 自己開背景執行緒），登入這個請求一點都不等。模型載入約十幾秒，趁玩家還在讀畫面、
+    還沒走到人物面前時載好，免得他點第一句對話就撞上冷啟動（讀取逾時 30 秒、鎖內 15 秒、斷路器 180 秒）。
+    這裡只補「剛登入」這一下；之後「人還在線就一直熱著」是 scripts/warm_keeper.py 的事。
+    """
+    try:
+        client = OllamaClient.from_config(CONTENT.config)
+    except Exception:  # noqa: BLE001  暖不了不能影響登入
+        return
+    client.warm()  # warm 自己在背景執行緒裡跑到模型載完（見 OllamaClient.warm），這裡不會被擋住
+
+
 def _start_session(response: Response, account_key: str) -> None:
     token = secrets.token_urlsafe(32)
     SESSIONS[token] = account_key
+    _warm_model()
     response.set_cookie(COOKIE, token, httponly=True, samesite="lax", max_age=30 * 86400)
 
 

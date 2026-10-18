@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from . import naming, zh
 from .models import Content
-from .ollama_client import OllamaClient, capped
+from .ollama_client import WARM_TIMEOUT, OllamaClient, capped
 
 SYSTEM_PROMPT = (
     "你是武俠小說裡替意境取名的人。有人在某個地方心有所感，用手指一筆畫下了心中的形。"
@@ -25,7 +25,7 @@ IMAGERY_RULE = (
 GEOMETRY_WORDS = ("折角", "硬角", "轉角", "圓轉", "直線", "線條", "筆畫", "一筆", "畫得", "折線", "頭尾", "曲線", "弧線")
 IMAGE_SHARE = 0.7  # 預算的這幾成先給看圖；看圖拿不到，剩下的給只看文字特徵
 MIN_TEXT_SECONDS = 3.0  # 看圖失敗之後，剩不到這麼多秒就不再問文字那一層（熱機時文字約 4 秒）
-WARM_SECONDS = 2.0  # 暖機請求只是叫 Ollama 把模型載起來，不等它載完（載完要十幾二十秒）
+WARM_SECONDS = WARM_TIMEOUT  # 暖機請求要跑到模型載完才算（OllamaClient.warm 自己在背景跑，不擋呼叫端）
 
 
 def messages(facts: dict[str, str], image: str = "") -> list[dict]:
