@@ -75,6 +75,10 @@ DAY = 86400
 BULLETIN_MAX = 3  # 江湖頁那排小標「大事」點開的面板最多放這一週的幾則大事（計畫 T2；以前是公告卡）
 AUDIENCE_HALL_FIGURES = 2  # 一個地點有幾位以上的大勢人物，交友就不直接找人、改按「求見」指名（企劃者 2026-10-03 決定）
 OFF_FRONT_NOTE = "沒在戰線上領兵，不受挑戰"  # 戰線空著的人物（董卓、趙弘、重挫退下的人）：挑戰按鈕寫這一句（PM 2026-10-05 定）
+SOCIAL_TALK = "跟{name}說話"  # 待 joy 潤：一類一顆的交友只有一位說得上話的人物時，鈕上那一格（正式季整合 2.8）
+SOCIAL_NO_ONE = "這裡沒有能說上話的人"  # 待 joy 潤：一類一顆的交友沒有人物、也沒有結識事件時（鈕上不帶句號）
+SECT_LABEL = "拜入{sect}"  # 待 joy 潤：拜入門派從交友搬到「此地還能做」的一顆（正式季整合 2.7）
+AUDIENCE_MEET = "先設法結識"  # 待 joy 潤：一類一顆的求見名單上，名望不夠、但這裡有他的結識事件的那一位
 SNUB_NOTE = "剛吃了敗仗，閉門不見"  # 挑戰本人打贏之後，他對打贏的人關上門（軍令文件 4.5）：求見、交友、挑戰的按鈕寫這一句
 GENDER_SET = "往後江湖上以{word}相稱。"  # 設定頁選了性別（只能選一次）
 GENDER_LOCKED = "性別已經定了，改不了。"
@@ -1134,10 +1138,13 @@ class Game:
         if ranks.summons_event(s, c) is not None:
             opts.append(Option(id="act:summons", label="應召"))  # 晉升奇遇（計畫 T5）：人在召見的地點才有，不花體力
         people = self._figures_here()
+        if precise.on(c, s.world):  # 一類一顆（正式季整合 2.8）：交友只談話、求見併進交友；拜入門派另成一顆（2.7）
+            opts += self._sect_options() + [self._precise_social_option(cost["socialize"])]
+            people = []  # 下面舊的交友、求見都不列
         # 只有一位大勢人物、沒有交友事件、他又見不到（名望不夠、閉門不見、這個遊戲日談滿）、福緣也沒到、也不在召見的地點：
         # 交友只會花 5 點體力換同一句打發，所以不給，這條路只剩不花體力的求見（下面）
         only_the_door = len(people) == 1 and ranks.summons_event(s, c) is None and self.socialize_is_futile()
-        if (has_events_here(c, loc, "socialize") or 0 < len(people) < AUDIENCE_HALL_FIGURES) and not only_the_door:
+        if (has_events_here(c, loc, "socialize") or 0 < len(people) < AUDIENCE_HALL_FIGURES) and not only_the_door                 and not precise.on(c, s.world):
             # 兩位以上大勢人物的地點，交友只走福緣與地點事件、從不開口對話（見 _socialize_figure），
             # 所以只在有交友事件時才給；人物改由下面的「求見」指名
             opts.append(self._socialize_option(people, cost["socialize"]))
@@ -1508,6 +1515,73 @@ class Game:
                 return min(reachable, key=lambda route: (round(route.minutes, 6), len(route.path), route.path))
         return None
 
+    def _precise_social_option(self, cost: int) -> Option:
+        """一類一顆的交友（正式季整合 2.8）：照 _social_plan。兩位以上見得到的人物時是「交友」打開名單（act:call，不花體力）；
+        一位就直接開口（act:socialize，鈕上寫跟誰說話）；福緣、留在交友的事件也走 act:socialize；沒有人可以說話時灰掉、寫原因、不扣體力。"""
+        kind, arg = self._social_plan()
+        if kind == "list":
+            return Option(id="act:call", label="交友")
+        if kind == "talk":
+            return self._cost_option("act:socialize", "交友", cost, note=SOCIAL_TALK.format(name=self.content.characters[arg].name))
+        if kind is not None:
+            return self._cost_option("act:socialize", "交友", cost)
+        return Option(id="act:socialize", label=f"交友（{arg}）", enabled=False)
+
+    def _talkable(self, companion_id: str) -> bool:
+        """說得上話：見得到（名望或結識）、這個遊戲日還沒談滿、沒對你閉門不見。"""
+        return self._can_meet(companion_id) and self._talks_left(companion_id) > 0 and not self._snubbed_character(companion_id)
+
+    def _why_not_talk(self, companion_id: str) -> str:
+        if self._snubbed_character(companion_id):
+            return SNUB_NOTE
+        if not self._can_meet(companion_id):
+            return f"名望還差 {self._fame_gap(companion_id)}"
+        return self._talked_out_note()
+
+    def _meet_event(self, companion_id: str | None = None) -> Event | None:
+        """這裡此刻抽得到的結識事件（照內容順序第一則）；給了 companion_id 只要結識他的那一則。"""
+        for event in event_candidates(self.state, self.content, "socialize", "common"):
+            met = precise.meets(event)
+            if met and (companion_id is None or companion_id in met):
+                return event
+        return None
+
+    def _fortune_free(self) -> str | None:
+        """福緣送得出的那一位（可招募、還沒被人招走的第一位）；沒有是 None。"""
+        candidates = [cid for cid, ch in self.content.characters.items() if ch.kind == "recruitable"]
+        return next((cid for cid in candidates if roster.owned_by(self.world, cid) is None), None)
+
+    def _social_plan(self) -> tuple[str | None, str | None]:
+        """一類一顆的交友這一下會做什麼（選單、動作、對話備料、假人讀同一份）：
+        ("fortune", None) 福緣的同伴入門；("once", None) 留在交友的一次性事件；("talk", 人物) 直接開口；("list", None) 兩位以上、打開名單；
+        ("meet", 人物或 None) 見不到人、走結識事件；(None, 原因) 沒有人可以說話。"""
+        s, c = self.state, self.content
+        if roster.fortune_due(s, c) and self._fortune_free() is not None:  # 沒有同伴可給時不再送 30 心得（2.8【PM】）
+            return "fortune", None
+        if event_candidates(s, c, "socialize", "rare"):
+            return "once", None
+        people = self._figures_here()
+        if len(people) >= AUDIENCE_HALL_FIGURES:
+            if any(self._talkable(cid) or self._meet_event(cid) is not None for cid in people):
+                return "list", None
+            gaps = [cid for cid in people if not self._snubbed_character(cid) and not self._can_meet(cid)]
+            return None, self._why_not_talk(min(gaps, key=self._fame_gap) if gaps else people[0])
+        if people and self._talkable(people[0]):
+            return "talk", people[0]
+        if self._meet_event() is not None:
+            return "meet", None
+        return None, self._why_not_talk(people[0]) if people else SOCIAL_NO_ONE
+
+    def _sect_options(self) -> list[Option]:
+        """拜入門派（一類一顆開著時從交友搬出來，正式季整合 2.7）：這裡抽得到的拜門派事件各一顆，不花體力（同投靠）。"""
+        s, c = self.state, self.content
+        opts = []
+        for event in event_candidates(s, c, "sect"):
+            sect = next((e.join_sect for ch in event.choices for e in (ch.effect, ch.fail_effect) if e.join_sect), None)
+            if sect in c.sects:
+                opts.append(Option(id=f"sect:{event.id}", label=SECT_LABEL.format(sect=c.sects[sect].name)))
+        return opts
+
     def _socialize_option(self, people: list[str], cost: int) -> Option:
         """交友的按鈕。這裡只有一位大勢人物、沒有交友事件、福緣也還沒到，而他剛被你打敗、閉門不見（T4）時，交友只會
         撲空——按不下去、寫明原因。其他時候照舊。"""
@@ -1688,6 +1762,11 @@ class Game:
             if int(arg) >= len(shown):
                 return None
             player_action = shown[int(arg)]
+        elif option_id == "act:socialize" and precise.on(self.content, self.state.world):
+            companion_id = self._socialize_figure()  # 一類一顆：只有 _social_plan 是 talk 才開口
+            if companion_id is None:
+                return None
+            player_action = companion_agent.GENERIC_OPENING
         elif option_id == "act:socialize":
             if roster.fortune_due(self.state, self.content) or ranks.summons_event(self.state, self.content) is not None:
                 return None  # 福緣先發；在召見的地點交友端出晉升奇遇（計畫 T5，審查 I1）——都不開口對話
@@ -1940,6 +2019,8 @@ class Game:
                 msgs = self._arena(arg)
             elif kind == "explore":
                 msgs = self._explore_mode(arg)
+            elif kind == "sect":  # 拜入門派（一類一顆，_sect_options）：端出那一則事件，不花體力
+                msgs = self._present(self.content.events[arg], "sect")
             elif kind == "ambush":
                 msgs = self._ambush_act(arg)
             elif kind == "works":
@@ -2622,7 +2703,8 @@ class Game:
         if what == "summons":
             return self._present(self.content.events[promotion])
         self.state.player.stamina -= self._action_costs()[what]  # 不花體力的行動（上面那些）不必算（要翻武學的資料）
-        if promotion is not None and what in ("explore", "socialize"):  # 在召見的地點探索、交友：端出晉升奇遇（計畫 T5）
+        if promotion is not None and what in ("explore", "socialize") and not precise.on(self.content, self.state.world):
+            # 在召見的地點探索、交友：端出晉升奇遇（計畫 T5）；一類一顆開著時不再換掉（正式季整合 2.10），應召照舊在「此地還能做」
             return self._present(self.content.events[promotion])
         if what == "explore":
             return self._explore()
@@ -2634,7 +2716,9 @@ class Game:
 
     def _socialize(self, prepared: companion_agent.PreparedTurn | None = None) -> list[str]:
         """交友（act:socialize，體力呼叫端已經扣了）：福緣到了先發福緣；這裡至多一位人物、見得到就開口對話；不然抽一則
-        這裡的交友事件，沒有就是打發話。"""
+        這裡的交友事件，沒有就是打發話。一類一顆開著時照 _social_plan（_precise_socialize）。"""
+        if precise.on(self.content, self.state.world):
+            return self._precise_socialize(prepared)
         if roster.fortune_due(self.state, self.content):
             candidates = [cid for cid, ch in self.content.characters.items() if ch.kind == "recruitable"]
             if candidates and roster.owned_by(self.world, candidates[0]) is None:
@@ -2650,6 +2734,26 @@ class Game:
         if companion_id is not None:
             return self._open_dialogue(companion_id, prepared)
         return self._encounter("socialize", self._no_audience_line)  # 惰性：抽到事件就不挑打發話、不白花亂數
+
+    def _precise_socialize(self, prepared: companion_agent.PreparedTurn | None) -> list[str]:
+        """一類一顆的交友（正式季整合 2.8）：照 _social_plan 做那一件事；沒有人可以說話（鈕是灰的，舊分頁按到）退回體力。"""
+        s, c = self.state, self.content
+        kind, arg = self._social_plan()
+        if kind == "fortune":
+            s.player.fortune = True
+            cid = self._fortune_free()
+            return [f"你新立門戶不久，【{c.characters[cid].name}】主動前來結識。"] + roster.recruit(s, c, self.world, cid)
+        if kind == "once":
+            return self._present(pick_event(s, c, "socialize", self.rng, "rare"), "socialize")
+        if kind == "talk":
+            return self._open_dialogue(arg, prepared)
+        if kind == "meet":
+            return self._present(self._meet_event(), "socialize")
+        s.player.stamina += c.config.action_cost["socialize"]
+        if kind == "list":
+            s.player.picking_audience = True
+            return [f"你遞上名帖，準備求見{c.locations[s.player.location].name}的人物。"]
+        return [f"{arg}。"]
 
     def _foreshadow(self, arg: str) -> list[str]:
         """伏筆的最後一步（計畫 T7）：fs:<鏈> 看題（沒有題的直接做）、fs:<鏈>:<選項> 答題、fs:leave 作罷。"""
@@ -2685,6 +2789,12 @@ class Game:
         if arg == "back":
             return ["你收回名帖，暫且不求見了。"]
         if not self._can_meet(arg):
+            if precise.on(self.content, self.state.world):  # 一類一顆（2.8）：不再打發；結識得到的走結識事件，見不到的在名單上是灰的
+                event = self._meet_event(arg)
+                if event is None:
+                    return [f"{self._why_not_talk(arg)}。"]
+                self.state.player.stamina -= self.content.config.action_cost["socialize"]
+                return self._present(event, "socialize")
             return self._brush_off(arg)
         self.state.player.stamina -= self.content.config.action_cost["socialize"]
         return self._open_dialogue(arg, prepared)
@@ -3255,6 +3365,9 @@ class Game:
     def _socialize_figure(self) -> str | None:
         """交友會直接開口對話的那位人物：只有這裡至多一位大勢人物時才有（見得到、這個遊戲日還沒談滿，見
         _deep_interaction_target）；兩位以上的地點交友只走福緣與地點事件，人物要按「求見」指名。"""
+        if precise.on(self.content, self.state.world):  # 一類一顆：照 _social_plan
+            kind, arg = self._social_plan()
+            return arg if kind == "talk" else None
         if self._audience_hall():
             return None
         return self._deep_interaction_target()
@@ -3273,6 +3386,11 @@ class Game:
             left = self._talks_left(companion_id)
             if self._snubbed_character(companion_id):
                 opts.append(Option(id=option_id, label=f"{ch.name}（{SNUB_NOTE}）", enabled=False))
+            elif not self._can_meet(companion_id) and precise.on(c, self.state.world):  # 一類一顆（2.8）：不再打發
+                if self._meet_event(companion_id) is not None:
+                    opts.append(self._cost_option(option_id, ch.name, cost, note=AUDIENCE_MEET))
+                else:
+                    opts.append(Option(id=option_id, label=f"{ch.name}（名望還差 {self._fame_gap(companion_id)}）", enabled=False))
             elif not self._can_meet(companion_id):
                 opts.append(Option(id=option_id, label=f"{ch.name}（名望還差 {self._fame_gap(companion_id)}）"))  # 按下去走打發，見 _brush_off
             elif left == 0:
@@ -3845,12 +3963,16 @@ class Game:
 
     def socialize_starts_dialogue(self) -> bool:
         """在這裡交友會直接跟大勢人物對話（伺服器假人不閒聊大勢人物，見 bot_policy）。在召見的地點不會：交友端出晉升奇遇。"""
+        if precise.on(self.content, self.state.world):
+            return self._socialize_figure() is not None
         return ranks.summons_event(self.state, self.content) is None and self._socialize_figure() is not None
 
     def socialize_is_futile(self) -> bool:
         """在這裡交友注定白跑一趟（伺服器假人不該去按）：這個地點沒有交友事件、沒有見得到的大勢人物，
         而且福緣還沒到期（交友最先發福緣，見 _act）。"""
         s, c = self.state, self.content
+        if precise.on(c, s.world):  # 一類一顆：沒有人可以說話時鈕是灰的
+            return self._social_plan()[0] is None
         return (
             not has_events_here(c, c.locations[s.player.location], "socialize")
             and self._socialize_figure() is None
@@ -5825,6 +5947,8 @@ class Game:
         s.player.fortune = True
         candidates = [cid for cid, ch in c.characters.items() if ch.kind == "recruitable"]
         free = [cid for cid in candidates if roster.owned_by(self.world, cid) is None]
+        if not free and precise.on(c, s.world):  # 一類一顆（2.8【PM】）：沒有同伴可給時不再送 30 心得
+            return []
         if not free:
             msgs = self._fortune_gift()
             self._write("福緣", msgs, tag="賀禮")

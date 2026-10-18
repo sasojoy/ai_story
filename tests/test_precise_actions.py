@@ -193,6 +193,92 @@ def test_season21_boss_is_twice_a_week():
     assert duel_rules.available(s, c) is not None
 
 
+# ── Task 4：交友只談話、求見併進交友（2.8）；拜入門派另成一顆（2.7）──
+
+
+def test_one_figure_talks_straight_away():
+    game = _game(at="luoyang_road")
+    opts = _ids(game)
+    assert opts["act:socialize"].label == "交友（體力 3・跟唐周說話）" and opts["act:socialize"].enabled
+    assert not any(i.startswith("call:") or i == "act:call" for i in opts)  # 求見不再單獨列
+    assert game.dialogue_request("act:socialize") is not None
+
+
+def test_two_figures_open_the_list_for_free():
+    game = _game(at="wan_city")
+    opts = _ids(game)
+    assert opts["act:call"].label == "交友" and "act:socialize" not in opts
+    stamina = game.state.player.stamina
+    game.choose("act:call")
+    assert game.state.player.picking_audience and game.state.player.stamina == stamina
+    names = [o.label for o in game.options()]
+    assert any(label.startswith("孫堅") for label in names) and names[-1] == "返回"
+
+
+def test_no_one_to_talk_to_greys_out_and_costs_nothing():
+    game = _game(at="changshe")
+    option = _ids(game)["act:socialize"]
+    assert not option.enabled and option.label == "交友（名望還差 15）"
+    option = _ids(_game(at="yingchuan"))["act:socialize"]
+    assert not option.enabled and option.label == "交友（這裡沒有能說上話的人）"
+
+
+def test_under_fame_in_the_list_is_grey_unless_a_meeting_is_here():
+    game = _game(at="dajiangjun_fu")
+    game.choose("act:call")
+    opts = {o.label.split("（")[0]: o for o in game.options()}
+    assert not opts["何進"].enabled and "名望還差" in opts["何進"].label
+    assert opts["袁紹"].enabled and "先設法結識" in opts["袁紹"].label
+    stamina = game.state.player.stamina
+    game.choose(next(o.id for o in game.options() if o.label.startswith("袁紹")))
+    assert game.state.pending_event == "meet_yuanshao" and game.state.player.stamina == stamina - 3
+
+
+def test_a_figure_out_of_reach_is_met_through_his_meeting_event():
+    game = _game(at="qiao_county")
+    _press(game, "act:socialize")
+    assert game.state.pending_event == "meet_caocao"
+
+
+def test_socialize_events_move_to_seeking():
+    from tianxia.events import event_candidates
+
+    game = _game(at="yingchuan")
+    s, c = game.state, game.content
+    social = event_candidates(s, c, "socialize")
+    assert all(precise.kept_social(e) for e in social)
+    merged = [e for e in event_candidates(s, c, "explore") if "socialize" in e.actions]
+    assert merged and not any(precise.kept_social(e) or precise.joins_sect(e) for e in merged)
+
+
+def test_joining_a_sect_is_its_own_button():
+    game = _game(at="yingchuan_academy")
+    opts = _ids(game)
+    assert opts["sect:yingchuan_join"].label == "拜入潁川書院"
+    stamina = game.state.player.stamina
+    game.choose("sect:yingchuan_join")
+    assert game.state.pending_event == "yingchuan_join" and game.state.player.stamina == stamina
+
+
+def test_fortune_with_no_one_free_gives_no_xinde(monkeypatch):
+    from tianxia import roster
+
+    game = _game(at="luoyang_road")
+    monkeypatch.setattr(roster, "owned_by", lambda *a, **k: "別人")
+    monkeypatch.setattr(roster, "fortune_due", lambda *a, **k: True)
+    xinde = game.state.player.stats.get("xinde", 0)
+    assert game._social_plan() == ("talk", "tangzhou")
+    assert game._deliver_fortune() == [] and game.state.player.stats.get("xinde", 0) == xinde
+
+
+def test_a_summons_place_still_talks(monkeypatch):
+    from tianxia import ranks
+
+    game = _game(at="luoyang_road")
+    monkeypatch.setattr(ranks, "summons_event", lambda *a, **k: next(iter(game.content.events)))
+    assert "act:summons" in _ids(game) and game.dialogue_request("act:socialize") is not None
+
+
 def test_fixture_and_switched_off_content_are_off(content):
     season = fresh_season(content)
     stamp_season(season, content)

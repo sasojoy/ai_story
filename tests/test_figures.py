@@ -65,6 +65,7 @@ def real():
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0  # 遊歷打完不接戰後事件，結果才寫得死
     c.config.renown.scale = False  # 名聲（2026-10-15）的門檻倍數另測（tests/test_renown*）；這裡的求見照原本的門檻
+    c.config.precise_actions = False  # 一類一顆之前的交友、求見（新規則在 tests/test_precise_actions.py，設計 8.4）
     return c
 
 

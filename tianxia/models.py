@@ -955,6 +955,7 @@ ALLOW_FIXED = frozenset({
 ALLOW_FAMILIES = (
     "act:challenge:", "act:rank:", "call:", "move:", "learn:", "faction:", "defect:", "opp:", "fs:",
     "explore:",  # 探索三選一的三顆（explore_modes.PREFIX；序章裡不出現）
+    "sect:",  # 拜入門派（一類一顆開著時從交友搬出來，sect:<事件 id>；序章裡不出現）
     "ambush:set:",  # 設伏劫道（ambush:set:<另一頭>；序章裡不出現）
     "aid:guard:", "aid:rally:", "aid:visit:",  # 護著大勢人物（figure_aid；序章裡沒有陣營，不出現）
 )

@@ -4,7 +4,7 @@ from __future__ import annotations
 import random
 from typing import Literal
 
-from . import foreshadow
+from . import foreshadow, precise
 from .models import Check, Choice, Content, Event, FreeTextChoice, Location
 from .rules import check_condition, check_outlook, fail_stamina, haoqiang_allied, practice_line, season_one_off
 from .state import GameState
@@ -49,7 +49,7 @@ def event_candidates(
         hidden |= foreshadow.third_party_events(content)
     candidates: list[Event] = []
     for event in content.events.values():
-        if action not in event.actions:
+        if action not in precise.actions_of(event, content, state.world):  # 一類一顆：交友事件併進找事件、拜門派另成一顆
             continue
         if pool is not None and is_rare(event) != (pool == "rare"):
             continue
