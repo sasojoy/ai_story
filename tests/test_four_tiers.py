@@ -132,6 +132,15 @@ def test_the_materials_page_counts_three_to_four_per_season():
     assert "三換四" not in shopview.trade_view(off.state, off.content, DAY)["hint"]
 
 
+def test_the_depot_says_tier4_is_not_taken_when_only_tier4_is_left():
+    """FB-343：背包只剩四階時，軍需帳那一格不說「背包裡沒有素材」，說四階不收。"""
+    game = _econ_game(bag={"gang_4": 2})
+    view = shopview.donate_view(game.state, game.content, DAY)
+    assert view["cells"] == [] and view["empty"] == shopview.DONATE_TIER4_ONLY
+    game.state.player.materials = {}
+    assert shopview.donate_view(game.state, game.content, DAY)["empty"] == shopview.DONATE_EMPTY
+
+
 def test_tier4_cannot_be_donated():
     game = _econ_game(bag={"man_4": 1})
     s, c = game.state, game.content

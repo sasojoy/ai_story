@@ -463,6 +463,7 @@ def _trade_captions(content: Content, state: GameState | None = None) -> dict:
 DONATE_SIGN = "{place}・{faction}軍需帳"  # 待 joy 潤：招牌
 DONATE_CAP = "背包的素材（點一下挑要捐的；{points}）"  # 待 joy 潤
 DONATE_EMPTY = "背包裡沒有素材。"  # 待 joy 潤
+DONATE_TIER4_ONLY = "軍需官只收一到三階的料，四階的留著打神器。"  # 待 joy 潤（FB-343）：背包裡只剩四階（四階不能捐，正式季整合 4.6）
 # 軍需帳最上面那一格還沒捐時的一句（捐了換成結果；待 joy 潤）：第一季規則開著時記貢獻
 DONATE_HINT = "捐的記進陣營的軍備，也替陣營推一點大勢。"  # 豪強推的是割據，不寫「戰線」
 DONATE_HINT_S1 = "捐的記成貢獻、記進陣營的軍備，也替陣營推一點大勢。"
@@ -508,7 +509,8 @@ def donate_view(state: GameState, content: Content, day: int) -> dict:
         "room_text": economy.DONATE_LEFT.format(n=room) if room > 0 else economy.DONATE_FULL.format(cap=econ.donate_daily_cap),
         "caption": DONATE_CAP.format(points=points_text),
         "hint": DONATE_HINT_S1 if rules.season_one(content, state.world) else DONATE_HINT,
-        "empty": DONATE_EMPTY,
+        "empty": DONATE_TIER4_ONLY if not cells and any(  # FB-343：只剩四階時說四階不收，不說沒有素材
+            n > 0 and four_tiers.tier4_id(content, mid) for mid, n in p.materials.items()) else DONATE_EMPTY,
         "cells": cells,
     }
 
