@@ -199,3 +199,70 @@ def test_dismantle_tier4_gear_gives_tier3():
     three = Equipment(id="兵:8", name="舊刃", kind="劍", attribute="剛", tier=3, quality="下品")
     assert equipment.dismantle_material(c, four).id == "gang_3"
     assert equipment.dismantle_material(c, three).id == "gang_3"
+
+
+# ── Task 4：四階裝備的數字 ──────────────────────────────
+
+
+def _gear(slot="weapon", tier=4, attribute="剛", kind="劍", gid="兵:9"):
+    from tianxia.state import Equipment
+
+    return Equipment(slot=slot, id=gid, name="試器", kind=kind if slot == "weapon" else "", attribute=attribute, tier=tier, quality="下品")
+
+
+def test_tier4_weapon_bonus_is_17(world):
+    from tianxia import team, weapons
+
+    c = real_content()
+    sword = team.resolve_art("liubei_wugong", c, world)
+    other = next(a for a in ("剛", "柔", "快", "慢") if a != sword.attribute and not weapons.clashes(_gear(attribute=a), sword))
+    four, three = (weapons.bonus(_gear(tier=t, attribute=other), sword, c, world) for t in (4, 3))
+    assert round(four, 4) == round(three + 0.02, 4) and c.config.weapons.tier_bonus["4"] == 0.17
+
+
+def test_tier4_armor_cut_is_20():
+    from tianxia import armor
+
+    c = real_content()
+    four = armor.cut(_gear(slot="armor", tier=4, gid="甲:9"), None, c)
+    three = armor.cut(_gear(slot="armor", tier=3, gid="甲:9"), None, c)
+    assert round(four - three, 4) == 0.02 and c.config.armor.tier_cut["4"] == 0.20
+
+
+def test_tier4_forge_costs_300():
+    from tianxia import smithing
+
+    c = real_content()
+    assert smithing.price(c, 4) == 300 and smithing.price(c, 4, "armor") == 300
+
+
+def test_tier4_temper_takes_tier3_first():
+    from tianxia import smithing
+
+    game = _econ_game(bag={"gang_3": 1, "gang_4": 1})
+    s, c = game.state, game.content
+    s.player.weapon = _gear(tier=4)
+    assert smithing.temper_floor(s.player.weapon) == 3
+    mid = smithing.temper_material(s, c)
+    assert mid == "gang_3" and smithing.temper_price(c, c.materials[mid]) == 80
+    s.player.materials = {"gang_4": 1}
+    mid = smithing.temper_material(s, c)
+    assert mid == "gang_4" and smithing.temper_price(c, c.materials[mid]) == 150
+    s.player.weapon, s.player.materials = _gear(tier=3), {"gang_2": 1}
+    assert smithing.temper_material(s, c) is None
+    assert smithing.temper_problem(s, c) == "沒有三階以上的素材"
+
+
+def test_aux_three_tiers_apart():
+    from tianxia.models import SmithQuality
+
+    aux = SmithQuality().aux_tier
+    assert aux["3"] == 16 and aux["-3"] == -24
+
+
+def test_arms_bounty_tier4_is_x6():
+    from tianxia import bounties
+
+    c = real_content()
+    w = _gear(tier=4)
+    assert bounties._arms_base(c, w) == c.config.bounties.arms_silver["下品"] * 6

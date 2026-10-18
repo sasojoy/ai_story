@@ -1434,7 +1434,7 @@ def check_bounties(c: Content, need) -> None:
         f"Config.bounties.give_attributes 至少一個、不重複，而且只能是 {'、'.join(ATTRIBUTES)}：{cfg.give_attributes}",
     )
     need(set(cfg.arms_silver) == {"下品", "中品", "上品"}, f"Config.bounties.arms_silver 要剛好寫下品、中品、上品：{sorted(cfg.arms_silver)}")
-    need(set(cfg.arms_tier) == {"1", "2", "3"}, f"Config.bounties.arms_tier 要剛好寫 1、2、3：{sorted(cfg.arms_tier)}")
+    need(set(cfg.arms_tier) == {"1", "2", "3", "4"}, f"Config.bounties.arms_tier 要剛好寫 1、2、3、4：{sorted(cfg.arms_tier)}")
     defaults = type(cfg)()  # 預設長什麼樣，就是「該寫哪幾項」的依據
     for field in ("silver", "exp", "deeds", "xinde"):
         given = getattr(cfg, field)

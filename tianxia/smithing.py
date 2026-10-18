@@ -17,7 +17,7 @@ import random
 from collections import Counter
 from collections.abc import Callable
 
-from . import annals, armor, equipment, forge_secrets, fusion, library, naming, team, traits, weapons
+from . import annals, armor, equipment, forge_secrets, four_tiers, fusion, library, naming, team, traits, weapons
 from .fusion import QualityOdds
 from .insights import merged_attribute
 from .models import WEAPON_KINDS, Content, Material
@@ -610,13 +610,18 @@ TEMPER_TITLE = "淬煉"
 FULL = "已經淬滿了"  # 待 joy 潤
 
 
+def temper_floor(item: Equipment) -> int:
+    """淬這一件至少要幾階的料：同階或更高；四階裝備（含四階的神器原品、仿品）收三階以上（正式季整合 5.3：不然淬一次就要吃一個神器料）。"""
+    return min(item.tier, four_tiers.TOP_COMMON)
+
+
 def temper_material(state: GameState, content: Content, slot: str = "weapon") -> str | None:
-    """淬身上那一件（slot 那一欄）要用的素材：階不低於那一件的、最低階的先（最便宜），同階數量多的先，再照 id；沒有是 None。"""
+    """淬身上那一件（slot 那一欄）要用的素材：階不低於 temper_floor 的、最低階的先（最便宜），同階數量多的先，再照 id；沒有是 None。"""
     item = equipment.worn(state.player, slot)
     if item is None:
         return None
-    mats = content.materials
-    held = [(mats[mid].tier, -n, mid) for mid, n in state.player.materials.items() if n > 0 and mid in mats and mats[mid].tier >= item.tier]
+    mats, floor = content.materials, temper_floor(item)
+    held = [(mats[mid].tier, -n, mid) for mid, n in state.player.materials.items() if n > 0 and mid in mats and mats[mid].tier >= floor]
     return min(held)[2] if held else None
 
 
@@ -635,7 +640,7 @@ def temper_problem(state: GameState, content: Content, slot: str = "weapon") -> 
         return FULL
     mid = temper_material(state, content, slot)
     if mid is None:
-        return f"沒有{weapons.TIER_WORDS[item.tier]}以上的素材"
+        return f"沒有{weapons.TIER_WORDS[temper_floor(item)]}以上的素材"
     short = temper_price(content, content.materials[mid], slot) - p.stats.get("silver", 0)
     return f"還差 {short} 兩" if short > 0 else None
 
