@@ -18,7 +18,7 @@ from pydantic import BaseModel
 
 from . import (
     allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, chuangong, clinic, companion_agent, cultivation, defection, economy, encounter, enlist, equipment, event_llm, explore_modes,
-    fight_llm, figure_life, figures, foreshadow, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, library, mapdata, martial_arts,
+    fight_llm, figure_aid, figure_life, figures, foreshadow, generals, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, library, mapdata, martial_arts,
     materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
     shopview, signature, signature_arms, skill_slots, skillview, smithing,
     social, sortie, styles, tactics, team, territory, timetable, traits, treasures, weapons, works, zh,
@@ -183,6 +183,7 @@ SIDE_TAG = "〔{side}〕"  # 戰況每一條是哪一軍的（Joy 2026-10-14）�
 ROUND_HEAD = "##### 第 {n} 回合"  # 一回合一段的標題（Joy 2026-10-14）；網頁 app.js 的 ROUND_HEAD 認這個寫法
 RESTORED_NOTE = "（這份戰報是後來補回來的；軍餉與名望當時已經發過。）"  # Game._restore_showdowns
 MY_MOVE = "**你**　{move}"  # 決戰戰報的完整戰況：每一回合最後一條，自己這一回合出了什麼（BattleParticipant.moves）
+SLAY_LINE = "你陣前擊退了{name}，這一戰的頭功傳遍兩軍。"  # 待 joy 潤：龍頭上陣，最後一擊的人（戰報與紀錄）
 TROOPS_LINE = "你帶著{names}上陣，強攻、奇襲多 {pct}"  # 待 joy 潤（PM 2026-10-12）：決戰畫面，接在騎兵那一句後面（加入時的快照）
 TROOPS_REPORT = "{names}跟著你衝陣"  # 待 joy 潤（PM 2026-10-12）：決戰的戰報
 # 賽季時鐘暫停（線上架構設計第四節、8.3）：選單上那一顆灰的，伺服器擋動作也回這一句（server._refuse_while_paused）。待 S1／joy 潤
@@ -832,6 +833,7 @@ class Game:
         self._deliver_seal_results()  # 玉璽碎片：現世、單挑收場、隱沒（5.9），下線時發生的回來補
         self._deliver_renames()  # 手上的絕學被人定了名：下一次同步補一則紀錄（FB-083）
         self._deliver_echoes()  # 別人照著你首創的配方合了出來：補名望（首創名望回饋）
+        self._deliver_guard_credits()  # 護衛：下線時替人物擋下的挑戰，回來補名望與心得
         self._deliver_arena()  # 擂台：被挑了的戰報、季末前三名的獎勵；季收了還沒打完的那一場作廢
         self._deliver_held_gear()  # 寄放的重賞、贈禮：裝備庫有空位就補（裝備四欄 6.5）
         refunds = bounties.deliver_refunds(self.state, self.content)  # 掛的通緝沒人揭成：押金退回
@@ -1896,6 +1898,8 @@ class Game:
                 msgs = self._ambush_act(arg)
             elif kind == "works":
                 msgs = self._works_act(arg)
+            elif kind == "aid":
+                msgs = self._aid_act(arg)
             else:
                 msgs = self._choose(int(arg))
             # 三選一開著時按「探索」本身（_act 只回 PICK）：不算探索過、不寫紀錄。要在後面接上大勢門檻、召見那些訊息之前記
@@ -2184,6 +2188,10 @@ class Game:
             return f"{economy.DONATE_TITLE}・{c.locations[s.player.location].name}"
         if kind == "ambush":
             return "收伏" if arg == "lift" else f"{ambush_rules.TITLE}・{c.locations[s.player.location].name}"
+        if kind == "aid":
+            verb, _, fid = arg.partition(":")
+            title = {"guard": figure_aid.GUARD_TITLE, "rally": figure_aid.RALLY_TITLE, "visit": figure_aid.VISIT_TITLE}.get(verb, figure_aid.GUARD_TITLE)
+            return f"{title}・{c.figures[fid].name}" if fid in c.figures else title
         if kind == "works":
             name = works.FORT_TITLE if arg == "fortify" else works.STOCK_TITLE
             return f"{name}・{c.locations[s.player.location].name}"
@@ -4165,7 +4173,7 @@ class Game:
         now = self.now
         tuning = self.content.config.battle  # 三招的數字（排程的 Game 與玩家的 Game 讀同一份內容，所以結算一致）
         if battle.phase == "muster" and now >= battle.muster_deadline_real:
-            battle_instance.close_muster(battle, definition, self.rng, now)
+            battle_instance.close_muster(battle, definition, self.rng, now, tuning=tuning)
         if battle.phase != "active":
             return []
         for p in list(battle.participants.values()):
@@ -4225,6 +4233,9 @@ class Game:
         都看有沒有時間到了、在等這一場打完的決戰，有就立刻開（見 _open_waiting_showdown）。"""
         if battle.unfinished:
             return
+        if any(c.fallen_round is not None and not c.settled for c in battle.commanders):  # 龍頭上陣：敗走的人扣聲威（只扣一次）
+            generals.after_battle(self.world, self.content, battle)
+            self.state.world = self.world.get_season()  # 這一刻手上那一份跟資料庫一致（同 _settle_showdown），讀回來免得被 _save_season 蓋掉
         definition = self.content.battles.get(battle.battle_id)
         line = self._highlight_line(battle, definition)
         if line:  # 這一場最有戲的放手一搏，全服的天下大事傳聞（試玩回饋 2026-10-08）；收場只走這裡一次
@@ -5126,6 +5137,10 @@ class Game:
                 if points:
                     lines.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
             changes.append(f"經驗 +{exp}")
+        for chief in battle.commanders:  # 龍頭上陣：最後一擊擊退大將的人
+            if chief.felled_by == me.name and c.config.battle.generals.slay_fame:
+                changes += renown.gain(s, c, "fame", c.config.battle.generals.slay_fame)
+                lines.append(SLAY_LINE.format(name=chief.name))
         if me.acted_rounds >= 1:  # 名聲 3.1：自己出手至少 1 回合（同首功）；掛機被代為固守的回合不算
             rout = self._deed_fame("showdown_rout") if won and battle.outcome_margin == "大勝" else []
             changes += journal.combine_changes(self._deed_fame("showdown") + rout)
@@ -5301,6 +5316,8 @@ class Game:
             header += "\n\n" + seal.MANDATE_SCENE.format(
                 lean=seal.lean_text(battle.seal_lean, definition), shift=seal.shift_text(shift, battle.seal_lean, definition), weight=weight,
             )
+        if battle.phase == "muster" and battle.commanders:  # 龍頭上陣：集結時就看得到誰親自上陣
+            header += "\n\n" + "\n".join(f"{f.name}：{text}" for f in definition.factions if (text := generals.lineup(battle, f.id)))
         watching = self._watching_battle(battle, definition)
         watch_line = self._watch_line(battle, definition)
         if battle.phase == "muster":
@@ -5328,8 +5345,9 @@ class Game:
         # 已送出／在場：讓等待看起來是在等人，不是壞了（試玩回饋 2026-10-08）
         count = f"（第 {battle.round_number + 1}／{battle_instance.total_rounds(definition)} 回合・{self._round_wait(battle, definition)}）"
         lines = [header, *self._idle_note(battle), f"【{act.title}】{count}{battle_instance.act_text(battle, definition)}"]
-        lines += self._round_blocks(battle, definition)
         p = battle.participants.get(self.state.player.name)
+        lines += self._chief_lines(battle, definition, p.faction if p is not None else self._side())
+        lines += self._round_blocks(battle, definition)
         if p is not None and (role := battle_instance.role_text(self.content.config.battle, p.role)):
             lines.append(f"你的職位：{role}")
         if p is not None and p.mount:
@@ -5354,6 +5372,14 @@ class Game:
             lines.append(watch_line)
         return "\n\n".join(lines)
 
+    def _chief_lines(self, battle: battle_instance.BattleInstance, definition: BattleDef, side: str | None) -> list[str]:
+        """龍頭上陣：兩邊上陣的人物（氣血、敗走），自己這一方這一回合的將令。沒有人物上陣是空的。"""
+        if not battle.commanders:
+            return []
+        rows = [f"{SIDE_TAG.format(side=f.name)}{text}" for f in definition.factions if (text := generals.lineup(battle, f.id))]
+        order = battle_instance.order_text(battle, side, self.content.config.battle) if side is not None else ""
+        return ["\n".join(rows)] + ([order] if order else [])
+
     def _round_blocks(
         self, battle: battle_instance.BattleInstance, definition: BattleDef, *, last: int | None = ROUND_BLOCKS,
         oldest_first: bool = False, me: battle_instance.BattleParticipant | None = None,
@@ -5368,11 +5394,12 @@ class Game:
         oldest_first 照先後、me 是自己，每一段最後一條寫自己這一回合出了什麼（MY_MOVE）。"""
         log = battle.narrative_log
         sides = self._sides(definition)
-        names = sorted(battle.participants, key=len, reverse=True)  # 名號長的先比：「沈浪」不能先認走「沈浪子」
+        owner = {c.name: c.faction for c in battle.commanders} | {n: q.faction for n, q in battle.participants.items()}
+        names = sorted(owner, key=len, reverse=True)  # 名號長的先比：「沈浪」不能先認走「沈浪子」
 
         def side_of(item: str) -> str:
             who = next((n for n in names if item.startswith(n)), None)
-            fid = battle.participants[who].faction if who is not None else next((f for f, nm in sides.items() if item.startswith(nm)), None)
+            fid = owner[who] if who is not None else next((f for f, nm in sides.items() if item.startswith(nm)), None)
             return SIDE_TAG.format(side=sides[fid]) if fid in sides else ""
         out = []
         for k, entry in enumerate(reversed(log if last is None else log[-last:])):
@@ -5462,9 +5489,12 @@ class Game:
             if o.free_text:
                 continue
             label = o.text
+            ordered = o.move is not None and o.move == battle.orders.get(p.faction) and battle_instance.caller(battle, p.faction) is not None
             if o.move is not None and p.scores:  # 三招：寫招與這個人現在的份量（設計 3.4：按鈕上直接寫）
-                score = round(p.scores.get(o.move, 0.0) * battle_instance.condition(p))
-                label = f"{o.text}（{o.move}・{score} 分）"
+                score = p.scores.get(o.move, 0.0) * battle_instance.condition(p)
+                if ordered:  # 照將令出招（龍頭上陣）：份量照算進去
+                    score *= 1 + self.content.config.battle.generals.order_bonus
+                label = f"{o.text}（{o.move}・{round(score)} 分{battle_instance.ORDER_MARK if ordered else ''}）"
             elif o.move is not None:  # 還沒有份量快照（上線前就在場上、下一次同步才補）：不寫「0 分」，那是假的
                 label = f"{o.text}（{o.move}）"
             out.append(Option(id=f"battle:act:{o.tag}", label=label))
@@ -6211,6 +6241,9 @@ class Game:
                 opts.append(Option(id=option_id, label=f"挑戰{fig.name}（{SNUB_NOTE}）", enabled=False))
             else:
                 note = self.challenge_odds(fid) if odds else ""
+                guards = len(figure_aid.posts(s, c, fid)) if figure_aid.on(c) else 0
+                if guards:
+                    note = "・".join(x for x in (note, figure_aid.GUARDED_NOTE.format(n=guards)) if x)
                 option = self._cost_option(option_id, f"挑戰{fig.name}", cost, note=note)
                 option.wait = BIG_FIGHT_WAIT  # 挑戰本人一律是大場面：按下去先等模型判讀（武學與成長設計 8.3）
                 opts.append(option)
@@ -6252,6 +6285,9 @@ class Game:
         fig = c.figures[fid]
         squad = self._figure_squad(fid)
         s.player.stamina -= self._action_costs()["train"]
+        post, broke = figure_aid.contest(s, c, fid, s.player.name, self._battle_power()) if figure_aid.on(c) else (None, True)
+        if not broke:  # 護衛擋下：這一次挑戰不成，不打他本人、不扣情誼（Joy 2026-10-17 第 6 條）
+            return [figure_aid.BLOCKED_LINE.format(guard=post.name, name=fig.name)]
         judged = self._judged(squad)  # 挑戰本人一律是大場面：有鎖外的判讀就用（武學與成長設計 8.3）
         result = self._fight_with(squad, judged, difficulty=squad.difficulty, draw_floor=rise.draw_floor(c))
         record = battlelog.new_record(s, c, self.world, squad, result, "event", event=f"挑戰{fig.name}")
@@ -6295,6 +6331,8 @@ class Game:
                     figure=fig.character or "")
         for text, who in arm_annals:
             annals.note(s, c, annals.FIGURE, text, 4, figure=who)
+        if post is not None:
+            msgs.insert(1, figure_aid.BROKE_LINE.format(guard=post.name, name=fig.name))
         return msgs
 
     def _challenge_reward(self, fid: str, squad: Squad) -> Squad:
@@ -7189,19 +7227,19 @@ class Game:
         return skillview.forge_picks(self.state, self.content, self.world, art_id, insight_ids, other_art=other_art)
 
     @_not_while_preparing
-    def cultivate(self, art_id: str, use_legend: bool = False) -> list[str]:
+    def cultivate(self, art_id: str, use_legend: bool = False, by_xinde: bool = False) -> list[str]:
         """修練：武學＋它融的意境，衝下一品（見 cultivation.py）。花體力。真的擲了骰（成功或失敗）才寫江湖紀錄；
         被拒絕（意境熔掉了、沒融過意境、已經絕學、體力不足、沒有這門武學）只回一句話（武學與成長計畫 F12）。
         use_legend：玩家勾了「服下破境丹」；真的服了才在紀錄裡寫「破境丹 -1」（丹沒了、下一步不是絕學都照一般的機率擲）。"""
         sure = prologue_rules.sure_rng(self.state, self.content)  # 序章第 6 步：第一次修練一定升品，也不看成數門檻（劇本只練到第三成）
         problem = prologue_rules.cultivate_problem(self.state, self.content) or cultivation.cultivate_problem(
-            self.state, self.content, self.world, art_id, gate=sure is None, use_legend=use_legend,
+            self.state, self.content, self.world, art_id, gate=sure is None, use_legend=use_legend, by_xinde=by_xinde,
         )
         if problem is not None:
             return self._log([problem])
         xinde, stamina, pills = self._xinde(), self.state.player.stamina, self.state.player.legend_items
         msgs = cultivation.cultivate(
-            self.state, self.content, self.world, art_id, sure or self.rng, use_legend, gate=sure is None,
+            self.state, self.content, self.world, art_id, sure or self.rng, use_legend, gate=sure is None, by_xinde=by_xinde,
         )
         spent = round(stamina - self.state.player.stamina)  # 輸了也花了體力：數值變化寫在紀錄上，跟別的行動一樣
         taken = pills - self.state.player.legend_items
@@ -7299,6 +7337,15 @@ class Game:
         msgs = self._log(library.melt_many(self.state, self.content, self.world, art_ids, insight_ids))
         if library.held_count(self.state) < held:
             self._menxia_entry(msgs[0], xinde)
+        return msgs
+
+    @_not_while_preparing
+    def buy_legend(self) -> list[str]:
+        """修練頁的「以心得換破境丹」（Joy 2026-10-18，cultivation.buy_legend）：換成了寫一則修練紀錄，換不了只回原因。"""
+        xinde, pills = self._xinde(), self.state.player.legend_items
+        msgs = self._log(cultivation.buy_legend(self.state, self.content))
+        if self.state.player.legend_items > pills:
+            self._menxia_entry(msgs[0], xinde, extra=[f"{self.content.config.legend_item_name} +1"])
         return msgs
 
     @_not_while_preparing
@@ -8137,7 +8184,111 @@ class Game:
             name = c.scenario.faction_name(stock, stock)
             label = works.STOCK_LABEL.format(side=name, n=s.world.supply.get(stock, 0))
             opts.append(self._cost_option("works:stockpile", label, c.config.stockpile.stamina))
+        return opts + self._aid_options()
+
+    def _aid_options(self) -> list[Option]:
+        """護著同陣營的大勢人物（figure_aid）：這裡在場的同陣營人物各一顆護衛、一顆犒軍；在自己陣營的大本營，被挑戰打退、
+        還在等回來的人物各一顆探望。按不下去的灰掉寫原因。"""
+        s, c = self.state, self.content
+        p = s.player
+        if not figure_aid.on(c) or p.faction is None or p.journey is not None:
+            return []
+        cfg = c.config.figure_aid
+        side = self._side()
+        opts: list[Option] = []
+        for fid in figures.present_at(s, c, p.location):
+            fig = c.figures[fid]
+            if fig.faction != side:
+                continue
+            post = figure_aid.guarding(s, c, p.name, fid)
+            if post is not None:
+                opts.append(Option(id=f"aid:guard:{fid}", enabled=False,
+                                   label=figure_aid.GUARD_ON_LABEL.format(name=fig.name, until=self.stamp(post.until))))
+            else:
+                label = figure_aid.GUARD_LABEL.format(name=fig.name)
+                problem = figure_aid.guard_problem(s, c, fid)
+                opts.append(Option(id=f"aid:guard:{fid}", label=f"{label}（{problem}）", enabled=False) if problem
+                            else self._cost_option(f"aid:guard:{fid}", label, cfg.guard_stamina))
+            now = figures.state_of(s, c, fid)
+            label = figure_aid.RALLY_LABEL.format(name=fig.name, now=now.prestige, cap=fig.start_prestige, silver=cfg.rally_silver)
+            problem = figure_aid.rally_problem(s, c, fid)
+            opts.append(Option(id=f"aid:rally:{fid}", label=f"{label}（{problem}）", enabled=False) if problem
+                        else self._cost_option(f"aid:rally:{fid}", label, cfg.rally_stamina))
+        for fid in figure_aid.visiting(s, c):
+            name = c.figures[fid].name
+            label = figure_aid.VISIT_LABEL.format(name=name, left=figure_aid.left_text(s, c, fid))
+            problem = figure_aid.visit_problem(s, c, fid)
+            opts.append(Option(id=f"aid:visit:{fid}", label=f"{label}（{problem}）", enabled=False) if problem
+                        else self._cost_option(f"aid:visit:{fid}", label, cfg.visit_stamina))
         return opts
+
+    def _aid_act(self, arg: str) -> list[str]:
+        """護衛（aid:guard:<id>）、犒軍（aid:rally:<id>）、探望（aid:visit:<id>）：重驗、扣體力（犒軍另扣銀兩）、記進這一季；
+        第一季規則開著時記 contrib_push 點推力的貢獻。"""
+        s, c = self.state, self.content
+        p = s.player
+        cfg = c.config.figure_aid
+        verb, _, fid = arg.partition(":")
+        refuse = ["（此刻無法這麼做。）"]
+        if not figure_aid.on(c) or p.faction is None or fid not in c.figures or p.journey is not None:
+            return refuse
+        fig = c.figures[fid]
+        if verb in ("guard", "rally"):
+            if fig.faction != self._side() or fid not in figures.present_at(s, c, p.location):
+                return refuse
+            if verb == "guard":
+                cost, problem = cfg.guard_stamina, figure_aid.guard_problem(s, c, fid)
+            else:
+                cost, problem = cfg.rally_stamina, figure_aid.rally_problem(s, c, fid)
+        elif verb == "visit":
+            if fid not in figure_aid.visiting(s, c):
+                return refuse
+            cost, problem = cfg.visit_stamina, figure_aid.visit_problem(s, c, fid)
+        else:
+            return refuse
+        if problem is None and p.stamina < cost:
+            problem = f"體力不夠（要 {cost} 點）"
+        if problem is not None:
+            return [problem if problem.startswith("（") else f"（{problem}。）"]
+        p.stamina -= cost
+        changes = [f"體力 -{cost}"]
+        if verb == "guard":
+            post = figure_aid.guard(s, c, fid, self._battle_power())
+            msgs = [figure_aid.GUARD_DONE.format(name=fig.name, until=self.stamp(post.until))]
+        elif verb == "rally":
+            p.stats["silver"] = p.stats.get("silver", 0) - cfg.rally_silver
+            changes.append(f"銀兩 -{cfg.rally_silver}")
+            n = figure_aid.rally(s, c, fid)
+            now = figures.state_of(s, c, fid)
+            msgs = [figure_aid.RALLY_DONE.format(silver=cfg.rally_silver, name=fig.name, n=n, now=now.prestige, cap=fig.start_prestige)]
+        else:
+            hours = figure_aid.visit(s, c, fid)
+            msgs = [figure_aid.VISIT_DONE.format(name=fig.name, hours=figure_aid.hours_text(hours))]
+        if self._draft is not None:
+            self._draft.changes += changes
+        if season_one(c, s.world) and cfg.contrib_push:
+            contrib = c.config.contrib_per_push * cfg.contrib_push
+            push.add_contribution(p, calendar.point(s.world.time, c, s.world).week, contrib)
+            msgs.append(f"貢獻 +{contrib}")
+        return msgs
+
+    def _deliver_guard_credits(self) -> None:
+        """護衛替人物擋下的挑戰（figure_aid.contest 記在 WorldState.guard_credits）：自己同步時補名望 guard_fame、心得 guard_xinde
+        （每擋一次），一則紀錄。做法同 _deliver_echoes：擋下的那一下不動護衛的角色。"""
+        s, c = self.state, self.content
+        lines = s.world.guard_credits.pop(s.player.name, None)
+        if not lines:
+            return
+        cfg = c.config.figure_aid
+        n = len(lines)
+        out = list(lines)
+        if cfg.guard_xinde:
+            s.player.stats["xinde"] = s.player.stats.get("xinde", 0) + cfg.guard_xinde * n
+            out.append(f"心得 +{cfg.guard_xinde * n}")
+        if cfg.guard_fame:
+            out += renown.gain(s, c, "fame", cfg.guard_fame * n)
+        self._write(figure_aid.CREDIT_TITLE, out)
+        self._save_season()
 
     def _ambush_act(self, arg: str) -> list[str]:
         """設伏（ambush:set:<另一頭>）或收伏（ambush:lift）。設伏：重驗、扣體力、季上與角色身上各記一筆。收伏：季上那一筆記收起的時刻。"""

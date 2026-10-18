@@ -221,12 +221,18 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random, slot: NamingS
     return msgs + game.choose(choice) if choice else msgs
 
 
+ORDER_FOLLOW = 0.6  # 決戰有將令時照令出招的機會（真人也不見得都聽）
+
+
 def battle_move(game: Game, profile: BotProfile, rng: random.Random) -> list[str]:
     """決戰這一回合出一招（bot_runner.battle_tick 用；Joy 2026-10-13「機器人是不是都不會第一時間選擇行動」）：只看選單上的
     battle:act:，照 pick 一樣打分數挑（不寫放手一搏）。這一回合已經出過、或選單上沒有可出的招，就什麼都不做。"""
     options = [o for o in game.options(odds=False) if o.enabled and o.id.startswith("battle:act:")]
     if not options:
         return []
+    ordered = [o for o in options if battle_instance.ORDER_MARK in o.label]  # 龍頭上陣：有將令時多半照令出招
+    if ordered and rng.random() < ORDER_FOLLOW:
+        return game.choose(ordered[0].id)
     choice = pick(game, options, profile, rng)
     return game.choose(choice) if choice else []
 
@@ -248,12 +254,12 @@ def _answer_invite(game: Game, rng: random.Random) -> str | None:
 
 
 def _stamina_play(game: Game, rng: random.Random) -> list[str] | None:
-    """體力花不完時（PLAY_STAMINA 以上）PLAY_CHANCE 的機會設伏、修工事或屯糧（選單上按得下去的那幾顆挑一顆）；這一輪不做是 None。
+    """體力花不完時（PLAY_STAMINA 以上）PLAY_CHANCE 的機會設伏、修工事、屯糧、護衛、犒軍或探望（選單上按得下去的那幾顆挑一顆）；這一輪不做是 None。
     體力不夠、選單上沒有這幾顆時不擲骰。"""
     p = game.state.player
     if p.stamina < game.content.config.stamina_max * PLAY_STAMINA:
         return None
-    plays = [o.id for o in game.options(odds=False, tick=False) if o.enabled and o.id.startswith(("ambush:set:", "works:"))]
+    plays = [o.id for o in game.options(odds=False, tick=False) if o.enabled and o.id.startswith(("ambush:set:", "works:", "aid:"))]
     if _crippled(game):
         plays = [i for i in plays if not i.startswith("ambush:")]
     if not plays or rng.random() >= PLAY_CHANCE:
@@ -383,6 +389,8 @@ def look_after(game: Game, rng: random.Random) -> None:
     for kind in ("內功", "武學"):
         if can_practise(game, kind) and rng.random() < PRACTICE_CHANCE:
             game.practice(kind)
+    bot.cultivate_by_xinde(game)  # 以心得修練（Joy 2026-10-18）：心得多出來先顧自己的武學，再傳功
+    bot.buy_pill(game)  # 以心得換破境丹（Joy 2026-10-18）：火候滿了在等契機、手上沒有丹才換
     bot.teach(game, TEACH_PER_TICK)  # 傳功門下：心得多出來就傳給同伴、部下（不擲亂數）
     bot.trade_at_smith(game)  # 素材與經濟（計畫 B5）：人在鐵匠鋪就升階、賣多的（不擲亂數；不為了它進鐵匠鋪）
     bot.donate_spare(game)  # 人在自家大本營就捐多的素材（不擲亂數；不為了它繞路）
@@ -592,8 +600,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
     kind, _, arg = option.id.partition(":")
     if kind == "defect":
         return None  # 假人不叛投（計畫甲）
-    if kind in ("ambush", "works"):
-        return None  # 設伏、工事、屯糧由 take_turn 的 _stamina_play 做，不交給打分數
+    if kind in ("ambush", "works", "aid"):
+        return None  # 設伏、工事、屯糧、護衛、犒軍、探望由 take_turn 的 _stamina_play 做，不交給打分數
     if kind == "opp":
         return None  # 機緣：假人不做（正式版乙一）；對話裡的 talk:opp: 落在下面 talk 的 None
     if kind == "battle":

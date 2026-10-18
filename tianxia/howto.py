@@ -598,6 +598,12 @@ def _fame_sources(content: Content, season: WorldState) -> list[str]:
         lines.append(f"奪璽單挑：懷璽的人守住了 +{fame['keep']}、被奪走 +{fame['lose']}；挑戰的人打贏了單挑、碎片卻沒易手 +{fame['near']}。")
         if seal.mandate_event(content) is not None and cfg.seal.mandate.fame > 0:  # 得天命的那一軍（Game._showdown_pay，玉璽二）
             lines.append(seal.MANDATE_FAME.format(fame=cfg.seal.mandate.fame))
+    gen = cfg.battle.generals
+    if gen.enabled and gen.slay_fame > 0 and content.figures:  # 決戰陣前擊退對面的龍頭（Game._showdown_pay，generals）；待 joy 潤
+        lines.append(f"決戰裡給對面上陣的大勢人物最後一擊、把他打到敗走：+{gen.slay_fame}。")
+    aid = cfg.figure_aid
+    if aid.enabled and aid.guard_fame > 0 and content.figures:  # 護衛替人物擋下挑戰（Game._deliver_guard_credits，figure_aid）；待 joy 潤
+        lines.append(f"護衛自己陣營的大勢人物，每替他擋下一次挑戰：+{aid.guard_fame}。")
     ring = cfg.arena
     if ring.enabled:  # 擂台賽（Game._arena_finish 的最險一搏、Game._deliver_arena 的每日俸與季末前三名）
         if ring.highlight_fame > 0:
@@ -800,6 +806,23 @@ def season_page_lines(content: Content, season: WorldState, rule: str = "") -> l
     return lines
 
 
+def legend_buy_lines(content: Content) -> list[str]:
+    """玩法說明「心得」那一節：以心得換破境丹（Joy 2026-10-18）；關著是空的。數字讀 Config。"""
+    cfg = content.config
+    lines = []
+    if cfg.cultivate_xinde_price > 0:
+        lines.append(
+            f"- 修練也可以改付心得、不花體力：這一季第一次 {cfg.cultivate_xinde_price}，之後每修一次多 {cfg.cultivate_xinde_step}。"
+            "後期改練一門新功夫，攢下的心得就能直接拿來衝品質、添火候。"
+        )
+    if cfg.legend_xinde_price <= 0:
+        return lines
+    return lines + [
+        f"- 一門武學衝到絕學那一步時，可以在修練頁花心得換一枚{cfg.legend_item_name}：這一季第一枚 {cfg.legend_xinde_price}，"
+        f"之後每換一枚多 {cfg.legend_xinde_step}。後期改練一門新功夫，不必只等打仗時的頓悟。",
+    ]
+
+
 def pages_lines() -> list[str]:
     """玩法說明「修練與煉製」：底部兩個分頁各做什麼（修練頁 pagePractice、煉製頁 pageCraft 的實際內容）。價錢寫在「心得」那一節。"""
     return [
@@ -973,6 +996,7 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
         f"{cfg.fuse_stamina} 體力）、合併（{cfg.merge_xinde} 心得、{cfg.merge_stamina} 體力）都花它。",
         f"- 打贏、操練、閉關（每小時至少 {cfg.seclusion_xinde_per_hour}，悟性越高越多）、邊走邊想（{cfg.road_think_xinde}）都有心得；"
         "用不上的功法熔掉也能拿回一些。狀態列的 💡 會在你付得起、又真的有事可做時提醒你去哪一頁。",
+        *legend_buy_lines(content),
         "",
         *_section("修練與煉製", pages_lines()),
         *_section("鐵匠鋪與神器", forge_lines(content, season)),

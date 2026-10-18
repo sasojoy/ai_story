@@ -1380,7 +1380,8 @@
   const optParts = (o) => { const m = /^(.*?)（(.*)）$/.exec(o.label); return m ? [m[1], m[2]] : [o.label, ""]; };
   // 決戰三招的按鈕（決戰改版一）：引擎給「選項名（強攻・82 分）」，招與分數拆到按鈕右邊的小字、名字佔剩下的寬度——
   // 375px 上一顆按鈕的字只有約 285px，括號整句接在名字後面的話，十一、十二個字的名字會把一顆按鈕折成兩行（多 20px）
-  const BATTLE_MOVE_LABEL = /^(.*)（((?:強攻|固守|奇襲)・\d+ 分)）$/;
+  // 「・主將令」：照令的那一顆（龍頭上陣）
+  const BATTLE_MOVE_LABEL = /^(.*)（((?:強攻|固守|奇襲)・\d+ 分(?:・主將令)?)）$/;
   // 鐵匠鋪的選項標籤很長（開爐、主料、輔料、買修淬煉），375px 上瀏覽器會在字中間斷行（FB-132：「下｜品」「沒｜人」「壓｜得住」「屬｜實」）。
   // 照分隔的標點切成小段，每段不折行（.nb），段與段之間才換行；標籤的字一個都不改，只是多包幾層 span，每段各自跳脫。
   // 切在「・；、，＋→」後面（連同後面跟著的空白，「→ 」不留在行頭）與「（」前面；括號尾「）」、數字與單位（「下品 46%」「工錢 150 兩」）
@@ -2701,6 +2702,15 @@
     if (target) target.scrollIntoView({ block: "start", behavior: "smooth" });
   }
 
+  // 以心得換破境丹（Joy 2026-10-18）：衝絕學那一步的卡上一顆小鈕；換不了時灰掉、原因寫在後面（a.cultivate.buy 是伺服器算好的）
+  function buyPill(a) {
+    const xs = a.cultivate.xinde; // 以心得修練：付心得不付體力；換不了時灰掉、原因寫在後面
+    const byX = xs ? `<div class="buy-pill"><button class="btn small" data-act="cultivate" data-xinde="1" data-id="${esc(a.id)}" ${xs.ok ? "" : "disabled"} title="${esc(xs.why)}">${esc(xs.label)}</button>${xs.ok ? "" : `<span class="why">${esc(xs.why)}</span>`}</div>` : "";
+    const b = a.cultivate.buy;
+    if (!b) return byX;
+    return byX + `<div class="buy-pill"><button class="btn small" data-act="mx" data-op="buy_legend" ${b.ok ? "" : "disabled"} title="${esc(b.why)}">${esc(b.label)}</button>${b.ok ? "" : `<span class="why">${esc(b.why)}</span>`}</div>`;
+  }
+
   function pagePractice() {
     const x = S.menxia;
     if (!x) return '<p class="muted">載入中…</p>';
@@ -2740,6 +2750,7 @@
         <div class="acts">${first}${cult}</div>
         ${S.artNote && S.artNote.id === a.id ? `<div class="msg art-result">${S.artNote.html}</div>` : ""}
         ${lg ? `<label class="legend"><input type="checkbox" data-legend="${esc(a.id)}" ${ticked ? "checked" : ""}><span>${esc(lg.label)}</span></label>` : ""}
+        ${buyPill(a)}
         ${forgeOdds(a)}
         <div class="more">
           ${a.melt.ok ? "" : `<span class="why">${esc(a.melt.note)}</span>`}
@@ -6161,7 +6172,8 @@
           const ticked = !!(row && row.cultivate.legend && S.legendTick[id]);
           const was = S.menxia;
           delete S.legendTick[id];
-          await mx("cultivate", { art: id, use_legend: ticked });
+          // 以心得修練那一顆（data-xinde）：同一個修練，付心得不付體力（Joy 2026-10-18）
+          await mx("cultivate", { art: id, use_legend: ticked, ...(el.dataset.xinde ? { by_xinde: true } : {}) });
           if (ticked && S.menxia === was) S.legendTick[id] = true;
           break;
         }
