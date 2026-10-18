@@ -722,6 +722,18 @@ def _pick_pair(
     試下一個輔料、再試同階的下一個主料，都不行是 None；沒給（兵器）就是第一個組合，跟抽出來之前的 forge_plan 一模一樣。"""
     mats = content.materials
     held = {mid: n for mid, n in state.player.materials.items() if n > 0 and mid in mats}
+    # 素材四階（正式季整合 8.1）：一般組合不拿四階（神器的料）；湊齊兩個四階（不分屬性）才開四階的爐，主輔都是四階
+    tier4 = {mid: n for mid, n in held.items() if four_tiers.is_tier4(mats[mid])}
+    if sum(tier4.values()) >= 2 and (pair := _pick_from(content, tier4, prefer, mine, ok)) is not None:
+        return pair
+    return _pick_from(content, {mid: n for mid, n in held.items() if mid not in tier4}, prefer, mine, ok)
+
+
+def _pick_from(
+    content: Content, held: dict[str, int], prefer: str | None, mine: list[Equipment], ok: Callable[[str, str], bool] | None,
+) -> tuple[str, str] | None:
+    """_pick_pair 在這一堆素材裡挑一爐（規則見 _pick_pair）。"""
+    mats = content.materials
     if sum(held.values()) < 2:
         return None
     top = max(mats[mid].tier for mid in held)

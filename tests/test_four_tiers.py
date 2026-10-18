@@ -466,3 +466,38 @@ def test_rules_never_name_a_recipe():
     banned |= {m.name for m in c.materials.values()} | {r.name for r in c.forge_secrets.values()}
     for line in c.shop_lines["smith"]["rules"]:
         assert not any(word in line for word in banned), line
+
+
+# ── Task 8：機器人 ──────────────────────────────
+
+
+def test_pick_pair_keeps_a_lone_tier4():
+    from tianxia import smithing
+
+    game = _econ_game(bag={"gang_4": 1, "gang_3": 3})
+    assert smithing._pick_pair(game.state, game.content, "剛", []) == ("gang_3", "gang_3")
+
+
+def test_pick_pair_opens_tier4_with_two():
+    from tianxia import smithing
+
+    game = _econ_game(bag={"gang_4": 1, "rou_4": 1, "gang_3": 3})
+    main, aux = smithing._pick_pair(game.state, game.content, "剛", [])
+    assert (main, aux) == ("gang_4", "rou_4")
+    mine = [_gear(tier=4).model_copy(update={"recipe": "兵|劍|gang_4+rou_4"})]  # 已經有一件自己打的四階：不再開四階的爐
+    again = smithing._pick_pair(game.state, game.content, "剛", mine)
+    assert again is None or game.content.materials[again[0]].tier < 4
+
+
+def test_bot_trades_three_to_four():
+    from tianxia import bot
+
+    game = _econ_game(bag={"gang_3": 5}, silver=1000)
+    assert bot.trade_want(game) == ("upgrade", "剛", 4)
+
+
+def test_bot_sells_spare_tier3():
+    from tianxia import bot
+
+    game = _econ_game(bag={"gang_3": 8}, silver=0)
+    assert bot.trade_want(game) == ("sell", "gang_3", 8 - bot.TRADE_KEEP[3])
