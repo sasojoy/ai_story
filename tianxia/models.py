@@ -2280,7 +2280,7 @@ class AmbushRules(_Strict):
     take_share: float = Field(default=1.0, ge=0, le=1)  # 贏的拿走其中幾成（Joy：輸的東西被搶走）
     materials: int = Field(default=2, ge=0)  # 輸的一方被搶走幾個素材（挑手上最多的那幾種，一階先）
     hp_loss: float = Field(default=0.1, ge=0, le=1)  # 輸的一方扣氣血上限的幾成（乘 1−防具減損，不變成內傷，同截殺）
-    stamina_loss: int = Field(default=30, ge=0)  # 輸的一方扣幾點體力（Joy 2026-10-17）：雙向，伏兵被打退也扣；扣到 0 為止
+    stamina_loss: int = Field(default=30, ge=0)  # 走進埋伏輸了扣幾點體力（Joy 2026-10-17）；扣到 0 為止。伏兵設伏時已先付過體力，輸了不扣（Joy 2026-10-18）
     pair_cooldown_seconds: float = Field(default=3 * 3600, ge=0)  # 同一個伏兵劫同一個人的冷卻（跟截殺共用一本帳 WorldState.raids）
     win_contrib_push: int = Field(default=1, ge=0)  # 贏的記幾點推力的貢獻（只在第一季規則開著時，同截殺）
 

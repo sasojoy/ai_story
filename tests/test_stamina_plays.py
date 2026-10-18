@@ -268,9 +268,9 @@ def test_stockpile_button_only_for_the_two_armies_in_season_one(world):
     assert "works:stockpile" not in {o.id for o in ranger.options()}
 
 
-def test_the_ambush_loser_loses_stamina_both_ways(real, world):
-    """Joy 2026-10-17「截殺 設伏 是不是要扣到玩家體力才會有感」：輸的一方扣 stamina_loss。路過的人當場扣（正在補算這一趟），
-    伏兵記欠帳、下次補算完回復才扣（離線那一段頂到上限也照扣得到）。"""
+def test_the_ambush_passer_who_loses_pays_stamina(real, world):
+    """Joy 2026-10-17「截殺 設伏 是不是要扣到玩家體力才會有感」：走進埋伏輸了扣 stamina_loss，當場扣（正在補算這一趟）；
+    伏兵輸了不扣（Joy 2026-10-18：設伏時已先付過體力）。"""
     loss = real.config.ambush.stamina_loss
     owner = _player(real, world, "黃甲", "huang", "huangjin_camp")
     _player(real, world, "官乙", "guan", "changshe")
@@ -286,23 +286,16 @@ def test_the_ambush_loser_loses_stamina_both_ways(real, world):
     assert _reload(world, real, "黃甲").state.player.stamina_owed == 0  # 贏的不扣
 
 
-def test_a_beaten_ambusher_owes_the_stamina_until_his_next_sync(real, world):
-    loss = real.config.ambush.stamina_loss
-    owner2 = _player(real, world, "黃丙", "huang", "huangjin_camp")
+def test_a_beaten_ambusher_pays_no_extra_stamina(real, world):
+    """伏兵設伏時已經先付過體力，輸了不再扣（Joy 2026-10-18）：只丟銀兩素材、掉氣血。"""
+    owner = _player(real, world, "黃丙", "huang", "huangjin_camp")
     _player(real, world, "官丁", "guan", "changshe")
-    _set(owner2)
+    _set(owner)
+    paid = real.config.stamina_max - real.config.ambush.stamina
     walker = _reload(world, real, "官丁")
     with _fight("落敗"):
         walker.travel("huangjin_camp", "dash")
     back = _reload(world, real, "黃丙")
-    assert back.state.player.stamina_owed == loss
-    assert f"體力 -{loss}" in back.state.battles[-1].changes
-    back.state.last_real = 0.0
-    back.sync(10 * 24 * HOUR)  # 離線很久：體力先回到上限，再扣
-    assert back.state.player.stamina == real.config.stamina_max - loss and back.state.player.stamina_owed == 0
-
-
-def test_the_ambush_button_warns_about_the_stamina_loss(real, world):
-    owner = _player(real, world, "黃甲", "huang", "huangjin_camp")
-    opt = {o.id: o for o in owner.options()}["ambush:set:changshe"]
-    assert f"{real.config.ambush.stamina_loss} 點體力" in opt.confirm
+    assert back.state.player.stamina_owed == 0
+    assert back.state.player.stamina == pytest.approx(paid, abs=0.5)
+    assert not any(line.startswith("體力") for line in back.state.battles[-1].changes)

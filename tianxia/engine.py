@@ -8126,9 +8126,7 @@ class Game:
         elif ambush_rules.on(c) and ambush_rules.has_prey(s, c) and not roster.raid_newbie(s, c):
             for to in ambush_rules.roads(s, c):
                 label = ambush_rules.SET_LABEL.format(to=c.locations[to].name)
-                opt = self._cost_option(f"ambush:set:{to}", label, c.config.ambush.stamina)
-                opt.confirm = ambush_rules.SET_ASK.format(stamina=c.config.ambush.stamina_loss)
-                opts.append(opt)
+                opts.append(self._cost_option(f"ambush:set:{to}", label, c.config.ambush.stamina))
         side = self._side()
         if works.fort_spot(s, c, side):
             level, cfg = works.fort_now(s, c), c.config.fortify
@@ -8235,8 +8233,9 @@ class Game:
         else:
             winner = loser = None
         spoils = winner._ambush_spoils(loser) if winner is not None else None
-        if spoils is not None:  # 輸的扣體力：路過的人正在補算這一趟（體力回復已經算過），當場扣；伏兵的存檔是舊的，記欠帳
-            spoils = dataclasses.replace(spoils, stamina=loser._take_stamina(c.config.ambush.stamina_loss, owed=loser is owner))
+        if spoils is not None and loser is self:  # 走進埋伏輸了才扣體力（正在補算這一趟，回復已經算過，當場扣）；
+            # 伏兵設伏時已經先付過體力，輸了不再扣（Joy 2026-10-18）
+            spoils = dataclasses.replace(spoils, stamina=loser._take_stamina(c.config.ambush.stamina_loss, owed=False))
         broke = loser is owner
         if broke:  # 伏兵被打退：埋伏散了（身上那一筆是這一處才清：下線的人晚補算時，伏兵可能已經另設了一處）
             post = owner.state.player.ambush
