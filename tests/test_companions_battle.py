@@ -279,9 +279,45 @@ def test_the_escort_returns_to_the_world_when_the_battle_ends(content, game):
     said = [line for entry in game.state.journal for line in entry.lines]
     assert any(escorts.RETURN_LINE.format(name="韓鐵") in line or escorts.FELL_RETURN_LINE.format(name="韓鐵") in line for line in said)
     assert escorts.PARTED_LINE.format(name="韓鐵", before=80, after=40) in said
-    assert game.world.get_companion("mate").parted_from == []  # 記號拿掉了，下一次同步不再減半
+    assert p.parted_done == ["mate"]  # 減過了；全服的記號留到下一次再叫到才清（FB-361）
     game._settle_partings()
-    assert p.affinities["mate"] == 40
+    assert p.affinities["mate"] == 40 and p.parted_done == []  # 不再減半
+    assert game.world.get_companion("mate").parted_from == []
+
+
+def test_a_battle_ended_by_the_owners_own_poll_still_halves(content, game):
+    """FB-361：收場那一下是主人自己的輪詢（server.act_look：先同步、存檔，再組畫面；options() 在畫面那一段把決戰追到收場）。
+    畫面那一段對角色的改動不存（下一次同步再補戰報），可是全服的記號照樣提交：記號要留到存了減半的那一份角色才清，不然永遠不減半。"""
+    from conftest import at
+    from tianxia import escorts
+
+    definition = _ride_in(content, game)
+    p_name = game.state.player.name
+    now = definition.muster_seconds + 1
+    for _ in range(100):  # 每一回合都逾時、由輪詢結算（主人不出手，代為固守）
+        saved = game.state.model_copy(deep=True)  # 輪詢存檔那一刻的角色
+        with at(game, now):
+            game.options()  # 組畫面：逾時結算、收場、補戰報（不存）
+        battle = game.world.get_battle()
+        if battle.phase == "ended":
+            break
+        assert p_name not in battle.round.pending_actions
+        now = battle.round.opened_real + definition.round_seconds
+    assert game.world.get_battle().phase == "ended"
+    assert game.world.get_companion("mate").owner is None  # 全服那一份已經提交
+    world = game.state.world
+    game.state = saved  # 畫面那一段對角色的改動丟掉（act_look 不存）
+    game.state.world = world
+    assert game.state.player.affinities["mate"] == 80
+    with at(game, now + 60):
+        game.sync(now + 60)  # 下一次輪詢：補戰報、減半
+    p = game.state.player
+    assert p.affinities["mate"] == 40 and "mate" not in p.team
+    said = [line for entry in game.state.journal for line in entry.lines]
+    assert said.count(escorts.PARTED_LINE.format(name="韓鐵", before=80, after=40)) == 1
+    assert game.world.get_companion("mate").parted_from == []
+    game._settle_partings()
+    assert p.affinities["mate"] == 40 and p.parted_done == []  # 不再減半、記帳收乾淨
 
 
 def test_a_new_owner_is_not_cleared(content, game):
@@ -311,4 +347,6 @@ def test_parting_halves_at_the_next_sync(content, game):
     p.affinities["mate"] = 81
     game.world.update_companion("mate", lambda pr: pr.parted_from.append(p.name))
     game.sync(10.0)
-    assert p.affinities["mate"] == 40 and game.world.get_companion("mate").parted_from == []
+    assert p.affinities["mate"] == 40 and p.parted_done == ["mate"]  # 記號留到下一次同步（FB-361）
+    game.sync(20.0)
+    assert p.affinities["mate"] == 40 and p.parted_done == [] and game.world.get_companion("mate").parted_from == []

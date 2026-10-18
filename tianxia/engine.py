@@ -4167,24 +4167,33 @@ class Game:
         return [line] + self._settle_partings(write=False)
 
     def _settle_partings(self, write: bool = True) -> list[str]:
-        """歷史武將同行 9.6：決戰收場時從你身邊回江湖的人（CompanionProgress.parted_from 有你的名號），情誼乘 parted_keep（無條件捨去）、
-        拿掉記號。同步、按招募之前與補戰報時叫；write 時另起一則「同伴回江湖」紀錄（補戰報時併進那一則，不另寫）。開關關著什麼都不做。"""
+        """歷史武將同行 9.6：決戰收場時從你身邊回江湖的人（CompanionProgress.parted_from 有你的名號），情誼乘 parted_keep（無條件捨去）。
+        同步、按招募之前與補戰報時叫；write 時另起一則「同伴回江湖」紀錄（補戰報時併進那一則，不另寫）。開關關著什麼都不做。
+        全服的記號不在減半那一下清（FB-361）：減了記進 PlayerState.parted_done，記號留到之後再叫到這裡、看到這一份角色已經減過才清
+        （同一次同步裡補戰報先減、後面那一次清；收場在輪詢組畫面時發生、角色沒存的話，下一次同步照存檔裡沒減過的那一份再減一次）。"""
         c, p = self.content, self.state.player
         if not roster.on(c):
             return []
         keep = c.config.companions.parted_keep
         lines = []
+        marked = set()
         for cid, progress in self.world.read().companions.items():
             if cid not in c.characters or not any(roster.owns(n, p.name) for n in progress.parted_from):
                 continue
-            self.world.update_companion(
-                cid, lambda pr: setattr(pr, "parted_from", [n for n in pr.parted_from if not roster.owns(n, p.name)]),
-            )
+            marked.add(cid)
+            if cid in p.parted_done:  # 這一份角色已經減過：清記號
+                self.world.update_companion(
+                    cid, lambda pr: setattr(pr, "parted_from", [n for n in pr.parted_from if not roster.owns(n, p.name)]),
+                )
+                p.parted_done.remove(cid)
+                continue
+            p.parted_done.append(cid)
             before = p.affinities.get(cid, 0)
             after = math.floor(before * keep)
             p.affinities[cid] = after
             if after != before:
                 lines.append(escorts.PARTED_LINE.format(name=c.characters[cid].name, before=before, after=after))
+        p.parted_done = [cid for cid in p.parted_done if cid in marked]  # 記號已經不在的（換季清掉了）不留
         if write and lines:
             journal.add_entry(self.state, JournalEntry(time=self.state.world.time, title=escorts.PARTED_TITLE, tag="", lines=lines))
         return lines
