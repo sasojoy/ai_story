@@ -233,6 +233,7 @@ def stamp_season(season: WorldState, content: Content, now: float | None = None)
     season.length_days = cfg.season_days
     from .calendar import anchor_offset  # noqa: PLC0415  延後 import：calendar → world_state
     season.season21 = cfg.season21
+    season.precise_actions = cfg.precise_actions  # 一類一顆（正式季整合第二章、12.3 第 13 條）：照開季蓋章，正在跑的季不變
     season.cal_offset = anchor_offset(now, content) if cfg.season21 and now is not None else 0.0
     season.haoqiang_allied = cfg.season_one and cfg.haoqiang_allied  # 豪強分屬兩軍（企劃者 2026-10-15）：只在第一季的季（allied.on）
     season.schedule = default_schedule(content, season) if cfg.season_one else {}  # 照剛蓋好的季長排
