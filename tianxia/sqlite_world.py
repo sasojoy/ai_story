@@ -26,7 +26,7 @@ from contextlib import AbstractContextManager
 from pathlib import Path
 from sqlite3 import Connection, Row
 
-from . import allied
+from . import allied, calendar
 from .battle_instance import BattleInstance, BattleRoundRecord, shift_deadlines, start_muster
 from .characters import name_key
 from .database import Database, open_database
@@ -786,8 +786,16 @@ class SqliteWorldStore:
             if state.season_last_real is not None:
                 skipped = world_module.pause_skip(state.season, content, span)
                 state.season_last_real += skipped
-                world_module.realign_paused_calendar(state.season, content, skipped)  # 21 天季：季曆對回現實的星期（其他季不動）
-                season_now = state.season.time + max(0.0, now - state.season_last_real) * content.config.time_scale
+                scale = content.config.time_scale
+                until = None
+                if calendar.season21_on(state.season, content):
+                    # FB-332：暫停那一刻與繼續那一刻是同一個世界秒（暫停的這一段不算進賽季）。賽季多走 RESUME_NUDGE，
+                    # 舊的偏移用到兩者中間：暫停前寫下的照舊、繼續之後（含繼續那一刻結算的大事）照對回現實的偏移
+                    paused_season = state.season.time + max(0.0, now - state.season_last_real) * scale
+                    state.season_last_real -= world_module.RESUME_NUDGE / scale
+                    until = paused_season + world_module.RESUME_NUDGE / 2
+                world_module.realign_paused_calendar(state.season, content, skipped, until)  # 21 天季：季曆對回現實的星期（其他季不動）
+                season_now = state.season.time + max(0.0, now - state.season_last_real) * scale
                 world_module.keep_showdowns_on_time(state.season, content, skipped, season_now)
             if state.active_battle is not None:
                 shift_deadlines(state.active_battle, span)
