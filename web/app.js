@@ -4638,6 +4638,78 @@
   }
   const scheduleMarks = () => { if (!marksFrame) marksFrame = requestAnimationFrame(drawMarks); };
 
+  // ── 底圖烤成一張圖（Joy 2026-10-18「輿圖滑動的時候還是很卡」）──
+  // 底圖約 1,200 個 SVG 元素（山頭、樹、河、路）加一層絹紋雜訊濾鏡（feTurbulence）：拖到新的一塊、捏合換倍率，Chrome 都要把這些
+  // 元素連同雜訊重新點陣化（手機上一格 256px 要好幾毫秒，捏合一下重畫兩三百格），每一幀的屬性樹也要走過整棵。打開輿圖之後把不會變的
+  // 那些畫成一張點陣圖（<image>），只留會變的：底色那一塊（最前面的 rect）、大區（path[data-region]，drawMarks 照勢力換 fill）、字、記號。
+  // 手勢中只剩貼一張圖。圖的解析度照螢幕（最多 3 倍、一千兩百萬像素）：原尺寸看是清楚的，放到兩倍時山水略軟，字照舊是向量
+  const BAKE_PX = 12e6;
+  const baked = { key: null, url: null }; // 這一張底圖烤好的圖（同一張底圖整層重畫時不必再烤）
+  let bakeTimer = 0;
+  function bakeLater() {
+    clearTimeout(bakeTimer);
+    bakeTimer = setTimeout(bakeBase, 250);
+  }
+  // 要烤進圖裡的：最前面那一塊底色、大區、字、記號、defs 以外的
+  function bakeable(svg) {
+    const first = svg.querySelector(":scope > rect");
+    return [...svg.children].filter((el) => {
+      const t = el.tagName.toLowerCase();
+      return el !== first && t !== "defs" && t !== "text" && t !== "image" && el.id !== "mk" && !el.hasAttribute("data-region") && !(el.querySelector && el.querySelector("text"));
+    });
+  }
+  async function bakeBase() {
+    const wrap = document.getElementById("map");
+    const svg = wrap && wrap.querySelector(".tx-world-map > svg");
+    if (!svg || svg.dataset.baked || typeof Image === "undefined" || typeof Blob === "undefined" || !window.URL || !URL.createObjectURL) return;
+    if (mapHeld()) { bakeLater(); return; } // 手勢中不烤（烤的那一下要佔主執行緒）
+    const vb = svg.viewBox && svg.viewBox.baseVal;
+    const parts = bakeable(svg);
+    if (!vb || !vb.width || !parts.length) return;
+    const key = S.mapBase && S.mapBase.key;
+    svg.dataset.baked = "1";
+    try {
+      let url = baked.key === key ? baked.url : null;
+      if (!url) {
+        const f = Math.max(1, Math.min(3, window.devicePixelRatio || 1, Math.sqrt(BAKE_PX / (vb.width * vb.height))));
+        const w = Math.round(vb.width * f), h = Math.round(vb.height * f);
+        const defs = svg.querySelector(":scope > defs");
+        const src = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${vb.width} ${vb.height}" width="${w}" height="${h}">${defs ? defs.outerHTML : ""}${parts.map((el) => el.outerHTML).join("")}</svg>`;
+        const vec = URL.createObjectURL(new Blob([src], { type: "image/svg+xml" }));
+        const img = new Image();
+        img.src = vec;
+        await img.decode();
+        const cv = document.createElement("canvas");
+        cv.width = w; cv.height = h;
+        cv.getContext("2d").drawImage(img, 0, 0, w, h);
+        URL.revokeObjectURL(vec);
+        const blob = await new Promise((ok) => cv.toBlob(ok, "image/png"));
+        cv.width = cv.height = 0;
+        if (!blob) throw new Error("toBlob");
+        url = URL.createObjectURL(blob);
+        if (baked.url && baked.key !== key) URL.revokeObjectURL(baked.url);
+        Object.assign(baked, { key, url });
+        const pic = new Image();
+        pic.src = url;
+        await pic.decode(); // 先解好碼再換上，換的那一下不閃
+      }
+      // 等的時候底圖可能換掉了（劇情開了新地點、登出）
+      if (!svg.isConnected || (S.mapBase && S.mapBase.key) !== key) return;
+      const now = bakeable(svg);
+      const im = document.createElementNS("http://www.w3.org/2000/svg", "image");
+      for (const [k, v] of [["x", 0], ["y", 0], ["width", vb.width], ["height", vb.height], ["preserveAspectRatio", "none"], ["href", url]]) im.setAttribute(k, v);
+      im.setAttribute("class", "map-baked");
+      im.setAttribute("pointer-events", "none");
+      // 圖放在最後一塊大區後面（絹紋本來在大區底下，現在疊在大區上面：只有一成的淡褐雜訊，看不出差別）
+      const regions = svg.querySelectorAll(":scope > [data-region]");
+      const after = regions.length ? regions[regions.length - 1] : svg.querySelector(":scope > rect");
+      svg.insertBefore(im, after ? after.nextSibling : now[0]);
+      now.forEach((el) => el.remove());
+    } catch (e) {
+      /* 畫不出來（舊瀏覽器、記憶體不夠）：照舊用向量的底圖 */
+    }
+  }
+
   // ── 輿圖的視圖（W16）：純數學，不碰 DOM ──
   // 視圖 v = { s 倍率, cx, cy 視窗中心對著的地圖座標 }，地圖座標＝原尺寸的 px。存中心不存位移：視窗寬高變了（轉向、拉視窗）還對得上。
   // vw、vh 是視窗（地圖框）的大小，W、H 是地圖的大小（svg 的 viewBox）。手勢、滾輪、按鈕都走這幾個函式
@@ -4672,7 +4744,7 @@
   // 一指或滑鼠左鍵拖移、雙指縮放、滾輪縮放；按下到放開都沒移超過 8px、也從沒有第二指，才算點了一下（選地點）。
   // pointermove／up 掛在 document：重畫換掉了地圖框，手勢也接得下去（mapReady 會把指標抓回新的框）
   const TAP_SLOP = 8;
-  const grip = { pts: new Map(), tap: null, ref: null, frame: 0 }; // 按著的指標（id → [x, y]）、點一下的候選、起點、排好的那一幀
+  const grip = { pts: new Map(), tap: null, ref: null, g: null, pad: 0, frame: 0 }; // 按著的指標（id → [x, y]）、點一下的候選、起點、排好的那一幀
   const mapHeld = () => grip.pts.size > 0;
   let mapBox = null; // 上次套用時的地圖框大小 [寬, 高]：大小變了而原本是整張，就維持整張
   let glideTimer = 0;
@@ -4706,7 +4778,7 @@
       S.mapView = { ...S.mapView, s: fitScale(vw, vh, W, H) };
     }
     mapBox = [vw, vh];
-    const v = (S.mapView = clampView(S.mapView, vw, vh, W, H, mapPad()));
+    const v = (S.mapView = clampView(S.mapView, vw, vh, W, H, mapHeld() && grip.g === g ? grip.pad : mapPad()));
     clearTimeout(glideTimer);
     wrap.classList.toggle("glide", glide);
     if (glide) glideTimer = setTimeout(() => wrap.classList.remove("glide"), 200);
@@ -4718,9 +4790,9 @@
     const zin = document.querySelector('.map-ctl [data-step="in"]'), zout = document.querySelector('.map-ctl [data-step="out"]');
     if (zin) zin.disabled = v.s >= MAP_MAX - 1e-9;
     if (zout) zout.disabled = v.s <= fitScale(vw, vh, W, H) + 1e-9;
-    // 倍率變了一成上下：字與圓盤照新的倍率重畫（拖移不重畫）。手指還捏著時放寬到四成：每重畫一次要重排一千多個元素（節流到六倍
-    // 約 100ms），捏合中一直重畫就一頓一頓的；放開時（gripEnd）照一成補畫
-    if (!S.marksS || Math.abs(v.s - S.marksS) / v.s > (mapHeld() ? 0.4 : 0.08)) scheduleMarks();
+    // 倍率變了一成上下：字與圓盤照新的倍率重畫（拖移不重畫）。手指還捏著時不重畫：重畫一次要重建三百個記號、重排整張（節流到六倍
+    // 約 100ms），捏合中重畫就頓一下；字跟著圖一起放大縮小，放開時（gripEnd）照一成補畫
+    if (!S.marksS || (!mapHeld() && Math.abs(v.s - S.marksS) / v.s > 0.08)) scheduleMarks();
   }
 
   // 這次載入網頁後第一次打開輿圖的倍率，對準所在地：手機照原尺寸；桌機照地圖區的寬讓地圖佔滿左邊整塊（FB-263：1920 寬時地圖區
@@ -4752,6 +4824,7 @@
     }
     applyMapView(false, g);
     drawMarks();
+    bakeLater();
     drawerGrab();
     if (S.mapFocus) { mapCenterOn(S.mapFocus); S.mapFocus = null; } // 江湖頁的小地圖點了某一處（設計第八節）
   }
@@ -4776,7 +4849,8 @@
   // 兩指記開始時的視圖、兩指距離，以及兩指中點底下的地圖座標（之後要一直跟著中點走）
   function gripBase() {
     const pts = [...grip.pts.values()];
-    const g = mapGeom(document.getElementById("map"));
+    const g = (grip.g = mapGeom(document.getElementById("map")));
+    grip.pad = mapPad();
     grip.ref = null;
     if (!g || !S.mapView || !pts.length) return;
     if (pts.length === 1) { grip.ref = { at: pts[0] }; return; }
@@ -4787,7 +4861,8 @@
   // 一幀套用一次（同一幀的多次移動合併）
   function gripStep() {
     grip.frame = 0;
-    const g = mapGeom(document.getElementById("map"));
+    // 地圖框的大小與位置在按下時量好（gripBase）：每一幀量一次會逼瀏覽器先把上一幀的位移排好版
+    const g = grip.g && grip.g.wrap.isConnected ? grip.g : mapGeom(document.getElementById("map"));
     const ref = grip.ref;
     const pts = [...grip.pts.values()];
     if (!g || !ref || !S.mapView) return;
@@ -4795,12 +4870,12 @@
       // 地圖跟著手指（游標）走
       const [x, y] = pts[0];
       const v = S.mapView;
-      S.mapView = clampView({ s: v.s, cx: v.cx - (x - ref.at[0]) / v.s, cy: v.cy - (y - ref.at[1]) / v.s }, g.vw, g.vh, g.W, g.H, mapPad());
+      S.mapView = clampView({ s: v.s, cx: v.cx - (x - ref.at[0]) / v.s, cy: v.cy - (y - ref.at[1]) / v.s }, g.vw, g.vh, g.W, g.H, grip.pad);
       ref.at = [x, y];
     } else if (pts.length === 2 && ref.m) {
       const [[ax, ay], [bx, by]] = pts;
       const s = clampScale(ref.v.s * Math.hypot(bx - ax, by - ay) / ref.d, g.vw, g.vh, g.W, g.H);
-      S.mapView = clampView(pinView(s, ref.m, (ax + bx) / 2 - g.x0, (ay + by) / 2 - g.y0, g.vw, g.vh), g.vw, g.vh, g.W, g.H, mapPad());
+      S.mapView = clampView(pinView(s, ref.m, (ax + bx) / 2 - g.x0, (ay + by) / 2 - g.y0, g.vw, g.vh), g.vw, g.vh, g.W, g.H, grip.pad);
     } else return;
     applyMapView(false, g);
   }
@@ -4823,7 +4898,7 @@
   function gripEnd() {
     if (grip.frame) cancelAnimationFrame(grip.frame);
     grip.pts.clear();
-    grip.tap = grip.ref = null;
+    grip.tap = grip.ref = grip.g = null;
     grip.frame = 0;
     const wrap = document.getElementById("map");
     for (const c of ["grabbing", "moving"]) if (wrap && wrap.classList.contains(c)) wrap.classList.remove(c); // 有才拿（觸控點一下兩樣都沒有）
