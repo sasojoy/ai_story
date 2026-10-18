@@ -31,7 +31,9 @@ def _in_battle(state: GameState, content: Content, definition: BattleDef, fid: s
     if now.status != "active" or not now.location:
         return False
     if definition.front is not None:
-        return now.front == definition.front
+        # 「大勢人物擴充」（PR #58）的 figures.line_of：沒有戰線的人物照所在地點的大區算在哪條線上；那一份還沒合進來時照戰線
+        line = figures.line_of(state, content, fid) if hasattr(figures, "line_of") else now.front
+        return line == definition.front
     if definition.region is None or now.location not in content.locations:
         return False
     region = atlas.region_of(content, now.location)
