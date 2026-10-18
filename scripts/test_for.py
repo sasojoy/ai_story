@@ -2,6 +2,7 @@
 
 用法：
   python scripts/test_for.py                 # 跟 origin/main 比，加上還沒提交的改動
+  python scripts/test_for.py --base origin/feature/formal-season   # 在功能分支上跟功能分支比
   python scripts/test_for.py tianxia/fusion.py content/skills.json
   python scripts/test_for.py --list ...      # 只列出會跑哪幾個檔，不跑
   python scripts/test_for.py --all           # 整套（含 slow），合併前用
@@ -19,6 +20,7 @@ from __future__ import annotations
 import argparse
 import ast
 import importlib.util
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -27,15 +29,17 @@ ROOT = Path(__file__).resolve().parent.parent
 TESTS = ROOT / "tests"
 EVERYTHING = {"tests/conftest.py", "pyproject.toml", "requirements.txt"}
 PARALLEL_FROM = 3  # 挑到這麼多個檔以上才開 xdist（開工作行程本身要幾秒）
+# 跟哪一條分支比（企劃者 2026-10-18 起功能在功能分支上做：批的工作樹要跟功能分支比，不然越做越多）
+DEFAULT_BASE = os.environ.get("TIANXIA_TEST_BASE", "origin/main")
 
 
-def changed_files() -> list[str]:
-    """跟 origin/main 分岔之後改過的、還沒提交的、還沒加進版控的檔。"""
+def changed_files(base: str = DEFAULT_BASE) -> list[str]:
+    """跟 base（預設 origin/main）分岔之後改過的、還沒提交的、還沒加進版控的檔。"""
     def git(*args: str) -> list[str]:
         out = subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
         return [line.strip() for line in out.stdout.splitlines() if line.strip()]
 
-    files = git("diff", "--name-only", "origin/main...HEAD") + git("diff", "--name-only", "HEAD")
+    files = git("diff", "--name-only", f"{base}...HEAD") + git("diff", "--name-only", "HEAD")
     files += git("ls-files", "--others", "--exclude-standard")
     return sorted(set(files))
 
@@ -94,10 +98,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("files", nargs="*", help="改過的檔（沒給就問 git）")
     parser.add_argument("--list", action="store_true", help="只列出要跑的測試檔")
     parser.add_argument("--all", action="store_true", help="整套，含 slow（合併前用）")
+    parser.add_argument("--base", default=DEFAULT_BASE,
+                        help="跟哪一條分支比（預設 origin/main，或環境變數 TIANXIA_TEST_BASE）")
     argv = sys.argv[1:] if argv is None else argv
     extra = argv[argv.index("--") + 1:] if "--" in argv else []  # -- 之後的原樣交給 pytest（例：-- -x -k fusion）
     args = parser.parse_args(argv[:argv.index("--")] if "--" in argv else argv)
-    files = args.files or changed_files()
+    files = args.files or changed_files(args.base)
     chosen = None if args.all else pick(files)
     if chosen is not None and not chosen:
         print("這些改動沒有對應的測試檔（文件之類）。要跑整套用 --all。")

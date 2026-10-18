@@ -10,7 +10,7 @@
 
 ## 工作目錄與分支
 
-- GitHub `sasojoy/ai_story`，主線是 `main`（2026-10-03 起直接在 main 上開發；`feature/sanguo-companions` 不再更新；舊遊戲在 `legacy/ai-story-main`）。
+- GitHub `sasojoy/ai_story`，`main` 是線上正式版。**2026-10-18 起新功能不在 `main` 上做**（企劃者）：功能分支（現在是 `feature/formal-season`，正式季整合）從 `develop` 開，分批的工作樹從功能分支開；QA 過了合進功能分支、功能做完合進 `develop`（之後可能另外部署 `develop` 做內測），企劃者說可以上線才合回 `main`。分支、測試與合併的規矩全寫在專案技能 `.claude/skills/tianxia-flow/SKILL.md`，開工、派工、合併前先看。（2026-10-03～10-18 直接在 main 上開發；`feature/sanguo-companions` 不再更新；舊遊戲在 `legacy/ai-story-main`。）
 - 這台機器有兩份 clone：`C:\Ray\專案\天下大勢` 是主要的那份（main 在這裡合併、推上 GitHub；專職開發的工作樹在它的 `.claude/worktrees/`）；`C:\Ray\專案\ai遊戲` 是另一份 clone，地圖擴充開發在它的 `.worktrees/` 裡做。**開工前先 `git worktree list`、`git remote -v` 核對一次**：曾經在另一個遊戲的目錄開 session，讀到錯的 CLAUDE.md，白繞一圈。
 - `.claude/worktrees/` 底下的工作樹沒有 `.venv`：下面指令裡的 `.venv/Scripts/python.exe` 換成那份 clone 的絕對路徑（例：`C:/Ray/專案/天下大勢/.venv/Scripts/python.exe`）。
 - 工作樹的檔案是 CRLF（`core.autocrlf=true`，git 裡存 LF）：用腳本改檔時先把 `\r\n` 轉成 `\n` 再比對，寫回時轉回去。
@@ -154,9 +154,9 @@
 - 執行：`.venv/Scripts/python.exe server.py`（http://127.0.0.1:7861，預設只聽這台電腦；`--port` 換埠）。要給外面的手機：**固定網域 https://tianxiadashi.com**（2026-10-13 起，Cloudflare 具名 Tunnel `tianxia`，隧道是獨立行程、伺服器重開網址不變；做法與驗法在 `docs/superpowers/feedback/beta-主機端操作.md` 的「固定網域」，啟動時一併設 `TIANXIA_PUBLIC_URL=https://tianxiadashi.com`）——**所以不要再加 `--share`**，那是 trycloudflare 的臨時網址、每次重開都換。要讓同一個區網的裝置直接連：加 `--lan`（綁在所有網卡上、多印一行提醒；有網址的人都進得來）。
 - 週末設定（第一季濃縮版）：兩個程式啟動前都設 `$env:TIANXIA_PROFILE = "weekend"`；啟動時印「設定：…」，兩邊要一樣。
 - 測試（2026-10-07）：開發用的依賴在 `requirements-dev.txt`（`-r requirements.txt` 加 `pytest-xdist`；伺服器不用裝），裝好之後加 `-n auto`（或 `-n 8`）平行跑；這台 16 核整套約 1 分鐘，單一行程約 3 分 40 秒。venv 路徑有中文時 worker 要 `PYTHONIOENCODING=utf-8`，`tests/conftest.py` 在開 worker 前已經補上。網頁測試預設每個行程一個常駐 node，`TIANXIA_WEB_HARNESS=process` 改回每次各開一個。三種跑法：
-  - **開發中**：`.venv/Scripts/python.exe scripts/test_for.py`——跟 origin/main 比、加上還沒提交的改動，只跑直接相關的測試檔（直接 import 改到的模組的、內容改了跑內容與真實內容、`web/` 改了跑寫到那個檔名的），連 slow 一起跑，挑到三個檔以上自動 `-n auto`；`--list` 只列不跑，也可以直接給檔名（`scripts/test_for.py tianxia/fusion.py`），`--` 之後的參數原樣交給 pytest。改 `tests/conftest.py`、`tests/fixtures/`、`pyproject.toml` 時跑整套。
+  - **開發中與 QA**（企劃者 2026-10-18：平常只跑最小量，整套只在分支合併的那一刻由合併的人跑，見 `tianxia-flow`）：`.venv/Scripts/python.exe scripts/test_for.py`——跟 origin/main 比（功能分支的工作樹加 `--base origin/feature/<名字>` 或設 `TIANXIA_TEST_BASE`）、加上還沒提交的改動，只跑直接相關的測試檔（直接 import 改到的模組的、內容改了跑內容與真實內容、`web/` 改了跑寫到那個檔名的），連 slow 一起跑，挑到三個檔以上自動 `-n auto`；`--list` 只列不跑，也可以直接給檔名（`scripts/test_for.py tianxia/fusion.py`），`--` 之後的參數原樣交給 pytest。改 `tests/conftest.py`、`tests/fixtures/`、`pyproject.toml` 時只跑改到的那幾個測試檔，整套留到合併那一刻。
   - **平常的整套**：`.venv/Scripts/python.exe -m pytest -q -n auto`，不跑標了 `@pytest.mark.slow` 的（整季模擬、真實內容跑整季、量表與模擬腳本）。
-  - **合併前**：`.venv/Scripts/python.exe -m pytest -q -n auto -m "slow or not slow"`（或 `scripts/test_for.py --all`），含 slow。不寫 `-m ""`：PowerShell 5.1 會把空字串參數吞掉。
+  - **分支合併的那一刻**（批合進功能分支、功能分支合進 develop、develop 合進 main、main 合回 develop）：`.venv/Scripts/python.exe -m pytest -q -n auto -m "slow or not slow"`（或 `scripts/test_for.py --all`），含 slow。不寫 `-m ""`：PowerShell 5.1 會把空字串參數吞掉。
   - 新寫的測試要跑整季、整個腳本、或單一個超過一秒的，標 `@pytest.mark.slow`（整個檔都是就寫 `pytestmark = pytest.mark.slow`）。
   - 出陣、探索三選一、地盤、盡頭阻力四個開關在測試內容（`tests/fixtures/content/config.json`）關著；用正式內容、測舊遊歷／舊探索／舊推力本身、或拿散人的遊歷當手段的舊測試叫 `tests/conftest.py::classic_rules(content)`（四個一起關；共用的內容用 `monkeypatch.setattr(content.config.sortie, "enabled", False)` 這種只關一個），新規則的測試在 `tests/test_sortie.py`、`test_explore_modes.py`、`test_territory.py`、`test_territory_perks.py`、`test_push_resistance.py`、`test_core_loop_*.py`。
   - 全圖開放（`Config.open_map`）在測試內容關著；用正式內容、測摸清與視野本身的舊測試叫 `tests/conftest.py::closed_map(content)`（共用的內容用 `monkeypatch.setattr(content.config, "open_map", False)`），全圖開放的新規則在 `tests/test_open_map.py`。
