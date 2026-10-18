@@ -93,6 +93,7 @@
 - `tianxia/calendar.py`：季曆（一季壓成 `season_weeks` 週）、夜裡、週次；玩家看得到的時刻只有一個寫法 `point_text`（「第 3 週・週二 21:40」）。
 - `tianxia/timetable.py`：時刻表（第一季 12 件大事）：什麼時候、怎麼結算、公告怎麼寫；天命之爭（玉璽二）寫在 timetable.json、載入時分到 `Content.mandate_timetable`，只有蓋了天命之季章的季看得到：要看得到它的地方走 `timetable.events(season, content)`（照週次排、同一週季末最後）與 `timetable.find(content, id)`，`content.mandate_timetable` 只准 timetable／seal／content／models 讀（守門測試）；`default_time` 照這一件的 `weekday`／`hour`（沒寫是週四 20:00）。
 - `tianxia/figures.py`：大勢人物：讀（`state_of`、主將、難度與開季難度 `start_difficulty`、此刻站在哪、`can_challenge`、`by_name`〔龍頭人物照名字對人物表〕）、推（`tick`，季的事每曆時一次，只在第一季）、改（`apply` 是時刻表的人物結局與接位鏈〔只在第一季〕，`defeat` 是挑戰打贏）；人物表在 `content/figures.json`，第一季開季蓋章時種進 `WorldState.figures`（其他季沒被打過的照人物表讀，第一次被打贏才寫）。挑戰本人每季都有（挑戰每季都有設計）：開關 `challenge_on`（挑戰鈕、閉門不見、人物此刻站在哪〔`placed_characters`〕都問它），`untimed`＝有挑戰本人但不是第一季（沒有時刻表的季）——這種季才有聲威回復（`recover`，`world.advance_world_state` 每一步叫）、一天上限（`defeat(cap=)`，`HELD_LINE`）、龍頭人物退場停手（`leader_out`）。
+- `tianxia/figure_life.py`：人物活起來（大勢人物擴充第一批，Joy 2026-10-17；`Config.figure_life`，測試內容關著；設計稿 https://claude.ai/code/artifact/03df3760-b4bd-417c-935f-96dda0f500c2；見「規則速查」的「人物活起來」）：每日行事（`tick`，`world.advance_world_state` 每一步叫）、聲威一天的上限（`gain_left`／`note_gain`，`figures.recover` 也照它）、人物此刻在哪（`where`；不是大勢人物的走到哪記在 `WorldState.whereabouts`，`figures.placed_characters` 併進去）、風聞（`spread`，`PlayerState.hearsay`／`hearsay_keys`）、對話提示（`prompt_lines`，`companion_agent.build_system_prompt` 叫）、華佗坐診（`healer_factor`，`team._price_here` 乘）。心事（`mood_of`、`mood_scale`、`line_of`）放在 figures（難度要用）。只有 engine、world、team、companion_agent、figures（延後）import 它。
 - `tianxia/orders.py`：陣營軍令（每週一發令、個人記功、陣營湊滿額度套效果）。`tianxia/ranks.py`：陣營裡的階級（頭銜、召見、晉升、部下）。`tianxia/push.py`：推力規則（人數緩衝、每人每曆日上限、貢獻）。`tianxia/factions.py`：陣營規模照伺服器人數上限換算。
 - `tianxia/defection.py`：叛投（第一季正式版甲；不看第一季開關，劇本有陣營就有）：能不能叛投（`can_defect`）、確認畫面只列真的會失去的東西、`clear_progress` 是之後幾份計畫加「個人進度清除項目」的唯一地方；世界那邊的清理（軍情、地方傳聞）寫在 `Game.defect()`。
 - `tianxia/foreshadow.py`：關鍵伏筆（片段、最後一步、暗中鎖定、豪強第三方、官銀），鎖定不能露出來。
@@ -321,6 +322,16 @@
 - **輿圖**（沒有時刻表的季）：龍頭人物那一段只有人物此刻就站在這裡才寫聲威、情誼；其餘站在這裡的大勢人物列在「此地的大勢人物」（`atlas.HERE_TITLE`；戰線空著的寫「按兵不動，不出營應戰」，聲威會回時寫「沒人去打，他的聲威會慢慢回來」）。玩法說明（`howto._challenge_lines`）寫情誼會掉，沒有時刻表的季多寫聲威怎麼掉怎麼回、一天上限、退場、龍頭人物停手。
 - **機器人**：假人此地有勝算「穩勝」「有把握」的敵方人物時挑戰（`bot_policy.CHALLENGE_SCORE`）；整季機器人也照勝算挑（`bot.CHALLENGE_ODDS`，火候滿了等契機時五五波以上）。
 - **量表**：`scripts/measure_challenge.py`（只量不改）。2026-10-13（14 天、假人每 120 秒，種子 1～3）：一季挑戰 49～77 場、幾乎全贏，**沒有人物退場**，每個種子聲威最低的那一位 39／45／41（每天最後一輪看的）；線上速度（每 20 秒）挑戰 40～128 場，也沒有退場（朱儁一次被打到 5）；不回、不設上限時一季平均退場 1 位。挑戰本人佔打仗收入的心得 11～18%。頓悟一季 10～12 次（沒有挑戰本人時 6 次），整季機器人一季靠挑戰本人頓悟 1～2 次、在第 2～7 天。完整數字見設計第十一節【量到的】。
+
+### 人物活起來（每季都有，`Config.figure_life`；`tianxia/figure_life.py`）
+
+大勢人物擴充第一批（Joy 2026-10-17「歷史武將人數新增多一些，更智能化，像是真的活在這個亂世」；Joy 同意設計稿的三條建議：十三位、只在自己那一區走、書信一天一封情誼 40 起〔書信是第二批〕）；2026-10-18 Joy「全合」合進 main。
+- **十三位新人物**（`content/characters.json`，都是 locked、能深度對話、沒有本命武學）：傅燮、秦頡（官軍偏將）、卜己、劉辟（黃巾偏將）四位進人物表（`content/figures.json`，沒有戰線〔`challenge_off_front`〕：不當主將、不推、不接位、不當打擊軍令的目標，挑得到，`figure_<id>` 難度 110）；王允、公孫瓚、唐周、許褚、張燕、許劭、荀彧、華佗、張讓只能交友。`CharacterDef.haunts`（常去的地方，第一個要是 talk_at）、`follows`（關羽、張飛跟著劉備，趙弘跟著張曼成）、`side`（不是大勢人物的站哪一方，風聞用）。
+- **每日行事**（`tick`）：每 `every_cal_days`（2）個季曆天一輪，亂數「人物｜天機｜id｜第幾輪」，不碰 `Game.rng`；開季後第一次只記輪數、停機補算只做最新那一輪。不是大勢人物的有 `STROLL`（六成）在 haunts 之間走（地方傳聞「有人在某地見到了某某」）；大勢人物照心事的權重（`WEIGHTS`）走動（天下大事「某某移往某地」；**第一季不自己移動**，時刻表搬人）、募兵（聲威 +`recruit` 2，到開季值為止）、襲擾（地方傳聞；規則關著的季推黃巾聲勢 `raid_push` 1 × 季長倍數、照盡頭阻力，第一季不推〔人物本來就每曆時推〕）；負傷的留在原地募兵（養傷）。
+- **聲威一天的上限**：募兵與自然回復（`figures.recover`）合起來一個遊戲日最多 `daily_gain_cap`（10），之後的犒軍也算這一本。
+- **心事**（`figures.mood_of`，照事實算、不存檔）：悲憤（同一方、同一條線的人 `mood_cal_days` 內倒下，`FigureState.fell_at`）、負傷（剛被挑戰打掉聲威，`hurt_at`）、焦慮（聲威不到開季一半，或那條線偏向對方 `lean` 15 以上）、得意（偏向自己 15 以上）；沒有戰線的偏將照所在地點的大區（`line_of`），規則關著的季看黃巾聲勢。負傷挑戰難度 ×`hurt_scale` 0.9、悲憤 ×`grief_scale` 1.1（`figures.difficulty` 乘，決戰份量跟著）。對話提示多寫此刻在哪、心事。
+- **風聞**（`spread`）：打退大勢人物（`Game._rout`）、截殺打贏（`Game.raid`）、決戰打贏的一方戰功前三名（`_file_showdown`）時，那一區（決戰照決戰的大區）同一方、對頭的人物聽說了：打退同一方的人 `ally_beaten` −5、對頭 `foe_beaten` +3，截殺 `side_raided` −3，立功 `side_merit` +3；同一件事一季一次（`hearsay_keys`），記在 `PlayerState.hearsay`（每人最多 `hearsay_keep` 5 條），對話提示帶最近 `hearsay_prompt` 3 條；江湖紀錄一句「某某聽說了這件事，情誼 ±N。」（截殺另起一則「風聞」）。
+- **華佗坐診**：華佗此刻在的醫館療傷 ×`healer_share`（0.5）；他開季在白馬寺（不在陽翟：新手第一站不打折），在六家醫館之間走。
 
 ### 江湖水漲（大場面、頭目、事件跟得上變強的人）
 

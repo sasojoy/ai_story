@@ -861,8 +861,9 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .insight { display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid var(--line); background: var(--card); border-radius: 12px; padding: 8px 10px; margin-bottom: 12px; }
 /* 修練的結果（W7）：寫在卡上那排鈕的底下，按的那顆鈕旁邊就看得到 */
 .acard .art-result, .art-body .art-result { margin: 8px 0 0; font-size: 13px; }
-.art-result p { margin: 0 0 4px; }
-.art-result p:last-child { margin-bottom: 0; }
+.mx-note { margin: 8px 0; font-size: 13px; } /* 修練頁其他動作的結果，寫在按的那一塊裡（mxPlace） */
+.mx-note p, .art-result p { margin: 0 0 4px; }
+.mx-note p:last-child, .art-result p:last-child { margin-bottom: 0; }
 .insight > div { min-width: 0; overflow-wrap: anywhere; }
 .insight b { font-weight: 600; font-size: 14px; }
 .insight p { margin: 2px 0 0; color: var(--ink-2); font-size: 12px; }
@@ -1177,6 +1178,9 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .w-hub-rim { fill: var(--disk); stroke: var(--gold); stroke-width: 1.4; }
 .w-yang { fill: #efe6d5; }
 .w-yin { fill: #2a241d; }
+/* 太極的外緣（Joy 2026-10-18「旋轉時背景黑色會破圖」）：黑的那一半跟爐盤同色，整個太極的圓看不出來；白的那一圓的邊緣又從黑的那一半外面
+   透出一道斷斷續續的淺色反鋸齒，轉起來像破圖。描一圈白邊，圓是完整的，那道縫也被蓋掉 */
+.w-seam { fill: none; stroke: #efe6d5; stroke-width: 1.2; }
 .w-spin { transform-origin: 0 0; animation: w-turn 28s linear infinite; }
 .w-spin.hot { animation-duration: 3s; }
 @keyframes w-turn { to { transform: rotate(360deg); } }

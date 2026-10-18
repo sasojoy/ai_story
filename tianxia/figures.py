@@ -15,7 +15,7 @@ from __future__ import annotations
 from . import calendar, push
 from .calendar import DAY
 from .models import Content, FigureChange, FigureDef, Squad
-from .rules import add_rumor, change_trend, season_one, trend_value
+from .rules import add_rumor, change_trend, season_one, trend_shown, trend_value
 from .state import FigureState, GameState, WorldState
 
 OUT = ("retired", "crippled")  # 退場（非天命）、重創（天命）：本季不再出現；下獄不算（時刻表結算 5.2）
@@ -121,9 +121,11 @@ def placed_characters(state: GameState, content: Content) -> dict[str, str | Non
     """有挑戰本人的季（challenge_on）：人物表上有對話人物的那幾位此刻在哪裡：在場的是所在地點，下獄、退場、重創、還沒出場的是
     None（求見、交友都沒有他）。沒有挑戰本人的季（緊急開關關著、劇本沒有陣營）是空的：大家照 characters.json 的 talk_at。
     14 天的季沒人退場時跟 talk_at 一模一樣（content.check_figures 驗開季地點等於 talk_at）。"""
-    if not challenge_on(content, state.world):
-        return {}
     out: dict[str, str | None] = {}
+    if life_on(content):  # 人物活起來：不是大勢人物的人物照每日行事走到的地方（沒走過的照 talk_at，不寫）
+        out.update(state.world.whereabouts)
+    if not challenge_on(content, state.world):
+        return out
     for fid, fig in content.figures.items():
         if fig.character is not None:
             now = state_of(state, content, fid)
@@ -146,11 +148,12 @@ def commander(state: GameState, content: Content, front: str | None, faction: st
 
 def difficulty(state: GameState, content: Content, fid: str) -> int:
     """挑戰本人的難度：代表本人的隊伍的難度是聲威 100 時的值，聲威 0 時是 figure_difficulty_floor 成，中間線性；
-    四捨五入成整數（總計畫第五節；先 round 到小數六位，免得 127.4999… 這種浮點雜訊）。"""
+    四捨五入成整數（總計畫第五節；先 round 到小數六位，免得 127.4999… 這種浮點雜訊）。人物活起來開著時再乘心事
+    （負傷 hurt_scale、悲憤 grief_scale；決戰份量照這一條算，兩邊都吃到）。"""
     fig = content.figures[fid]
     floor = content.config.figure_difficulty_floor
     prestige = state_of(state, content, fid).prestige
-    value = content.squads[fig.squad].difficulty * (floor + (1 - floor) * prestige / 100)
+    value = content.squads[fig.squad].difficulty * (floor + (1 - floor) * prestige / 100) * mood_scale(state, content, fid)
     return int(round(value, 6) + 0.5)
 
 
@@ -258,6 +261,8 @@ def _change(state: GameState, content: Content, fid: str, change: FigureChange) 
         fate = "重創" if fig is not None and fig.destiny else "退場"
     if fate in FATE_STATUS:
         figure.status = FATE_STATUS[fate]
+    if figure.status in OUT:
+        figure.fell_at = state.world.time  # 心事：同陣營同戰線的人悲憤（mood_of）
     if fate in ("重挫", "到任"):  # 重挫：退出原戰線、轉往別處；到任：接下新戰線
         figure.front = change.front
         if change.location is not None:
@@ -333,6 +338,8 @@ def defeat(state: GameState, content: Content, fid: str, amount: float, cap: int
     before = figure.prestige
     figure.prestige = max(0, before - whole)
     lines = [f"{name}聲威 -{before - figure.prestige}"] if figure.prestige < before else []
+    if figure.prestige < before:
+        figure.hurt_at = w.time  # 心事：負傷（mood_of）
     if figure.prestige == 0:
         destiny = fid in content.figures and content.figures[fid].destiny
         days = content.config.figure_return_days
@@ -369,7 +376,11 @@ def recover(state: GameState, content: Content, cal_hours: float) -> None:
             continue
         pending = w.trend_accum.get(key, 0.0) + rate * cal_hours / 24
         whole = int(pending + 1e-9)  # 容一點浮點誤差（同 tick）
-        now.prestige = min(fig.start_prestige, now.prestige + whole)
+        if whole:
+            from . import figure_life  # figure_life import 這裡；募兵、犒軍與自然回復共用一天的上限
+            got = min(whole, fig.start_prestige - now.prestige, figure_life.gain_left(w, content, fid))
+            now.prestige += got
+            figure_life.note_gain(w, content, fid, got)
         rest = max(0.0, pending - whole)
         if rest and now.prestige < fig.start_prestige:
             w.trend_accum[key] = rest
@@ -440,3 +451,76 @@ def on_front(state: GameState, fid: str, front: str) -> bool:
     if figure is None:
         return True
     return figure.status == "active" and figure.front in (None, front)
+
+
+# ── 心事（人物活起來，FigureLifeTuning）───────────────────
+
+MOODS = ("得意", "焦慮", "負傷", "悲憤")  # 沒有心事（觀望、平常）是 None
+
+
+def life_on(content: Content) -> bool:
+    """人物活起來開著沒（主機的緊急開關；測試內容關著）。"""
+    return content.config.figure_life.enabled
+
+
+def mood_span(content: Content, world: WorldState) -> float:
+    """負傷、悲憤撐多久（世界秒）：mood_cal_days 個季曆天。"""
+    return content.config.figure_life.mood_cal_days * 24 * calendar.cal_hour_seconds(content, world)
+
+
+def mood_of(state: GameState, content: Content, fid: str) -> str | None:
+    """這位大勢人物此刻的心事，照事實算、不存檔、不擲骰：
+    - 悲憤：同陣營、同一條戰線（他守的或倒下時守的）的人剛退場或重創（mood_span 之內）；
+    - 負傷：他自己剛被挑戰打掉聲威；
+    - 焦慮：他那條戰線偏向對方 lean 以上，或聲威不到開季的一半；
+    - 得意：他那條戰線偏向自己這一方 lean 以上。
+    不是大勢人物、開關關著、不在場的人是 None。"""
+    fig = content.figures.get(fid)
+    if fig is None or not life_on(content):
+        return None
+    now = state_of(state, content, fid)
+    if now.status != "active":
+        return None
+    w = state.world
+    span = mood_span(content, w)
+    front = line_of(state, content, fid)
+    for other, ofig in content.figures.items():
+        if other == fid or ofig.faction != fig.faction:
+            continue
+        there = w.figures.get(other)
+        if there is None or there.fell_at is None or w.time - there.fell_at > span:
+            continue
+        if front is not None and front in (there.front, there.back_front, ofig.front, line_of(state, content, other)):
+            return "悲憤"
+    if now.hurt_at is not None and w.time - now.hurt_at <= span:
+        return "負傷"
+    tuning = content.config.figure_life
+    if now.prestige * 2 < fig.start_prestige:
+        return "焦慮"
+    faction = content.scenario.find_faction(fig.faction)
+    goal = faction.goals.get(front, 0) if faction is not None and front is not None else 0
+    if goal:
+        line = front if trend_shown(content, w, front) else "huangjin"  # 規則關著的季三條戰線合成黃巾聲勢
+        lean = (trend_value(state, content, line) - 50) * goal
+        if lean >= tuning.lean:
+            return "得意"
+        if lean <= -tuning.lean:
+            return "焦慮"
+    return None
+
+
+def line_of(state: GameState, content: Content, fid: str) -> str | None:
+    """這位人物心事與襲擾看的那條戰線：他守的戰線；沒有戰線的（偏將傅燮、秦頡、卜己、劉辟，不當主將也不推）照所在地點的大區。"""
+    now = state_of(state, content, fid)
+    if now.front is not None:
+        return now.front
+    from .rules import front_of  # noqa: PLC0415
+
+    return front_of(content, now.location) if now.location else None
+
+
+def mood_scale(state: GameState, content: Content, fid: str) -> float:
+    """心事改挑戰難度（也是決戰份量）：負傷 hurt_scale、悲憤 grief_scale，其餘 1。"""
+    mood = mood_of(state, content, fid)
+    tuning = content.config.figure_life
+    return tuning.hurt_scale if mood == "負傷" else tuning.grief_scale if mood == "悲憤" else 1.0

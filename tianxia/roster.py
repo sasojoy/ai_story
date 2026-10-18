@@ -111,6 +111,8 @@ def since_join(state: GameState, content: Content) -> float | None:
 def newbie(state: GameState, content: Content, days: float | None = None) -> bool:
     """新手福利還在：加入以來還沒過 days 個季曆天（沒給就是 newbie_days，氣血回復加倍那一條；體力那一條給
     newbie_stamina_days）。beta 那一季沒有 joined_at，從季初照同一個季曆比例算（14 天的季，18 季曆天＝3 天）。"""
+    if content.config.newbie_real_hours > 0:
+        return _real_newbie(state, content)
     since = since_join(state, content)
     elapsed = state.world.time * calendar.cal_scale(content, state.world) if since is None else since
     limit = content.config.newbie_days if days is None else days
@@ -121,10 +123,20 @@ def raid_newbie(state: GameState, content: Content) -> bool:
     """截殺與通緝的新手期（企劃者 2026-10-10，懸賞榜設計 14.1 丁）：一律從自己加入這一季的那一刻（joined_at）算 newbie_days 個季曆天，
     不看第一季開關——規則關著的季（14 天）開季三天之後才來的人也有保護。joined_at 還沒蓋（第一次同步之前）算剛加入。
     第一季的結果跟 newbie 一樣（第一季本來就從 joined_at 算）。新手的體力、氣血福利照舊走 newbie（beta 從季初算），since_join 不動。"""
+    if content.config.newbie_real_hours > 0:
+        return _real_newbie(state, content)
     w = state.world
     joined = state.player.joined_at
     elapsed = 0.0 if joined is None else max(0.0, w.time - joined)
     return elapsed * calendar.cal_scale(content, w) <= content.config.newbie_days * rules.DAY
+
+
+def _real_newbie(state: GameState, content: Content) -> bool:
+    """新手期照現實時間（Config.newbie_real_hours，Joy 2026-10-17「新手期 48 小時」）：從自己加入這一季那一刻（joined_at）
+    過了多少世界秒，除以 time_scale 換成現實秒。joined_at 還沒蓋（第一次同步之前）算剛加入。體力、氣血、丹、截殺通緝的保護都照它。"""
+    joined = state.player.joined_at
+    elapsed = 0.0 if joined is None else max(0.0, state.world.time - joined)
+    return elapsed / content.config.time_scale <= content.config.newbie_real_hours * 3600
 
 
 def fortune_due(state: GameState, content: Content) -> bool:
