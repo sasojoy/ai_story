@@ -250,6 +250,47 @@ def test_the_season21_ending_hints_drop_week_ten():
     assert "第 10 週起，黃巾的態勢一到 85" in guide.quest_text(weekend, wk)
 
 
+# ── Task 4：「今天」是現實的一天 ──
+
+
+def test_today_turns_over_at_taiwan_midnight_in_season21():
+    from tianxia import rules
+
+    c21 = real_content("season21")
+    season = _season(c21, now=WED)  # 週三 10:30 開季：13.5 小時之後是週四 00:00
+    midnight = 13.5 * HOUR
+    assert rules.game_day(c21, season, 0) == 3 and rules.game_day(c21, season, midnight - 1) == 3
+    assert rules.game_day(c21, season, midnight) == 4
+    assert rules.day_ends(c21, season, 0) == midnight
+    assert rules.day_seconds(c21, season) == DAY
+    assert rules.world_day(c21, season, midnight - 1) == 2 and rules.world_day(c21, season, midnight) == 3
+    late = season.schedule["finale"] + 2 * DAY  # 管理者把季末往後排：季曆寫到 23:59 為止，「今天」照樣換
+    assert rules.game_day(c21, season, late) == 24 and rules.day_ends(c21, season, late) == late + DAY
+
+
+def test_the_weekend_day_is_unchanged():
+    from tianxia import rules
+
+    wk = real_content("weekend")
+    season = _season(wk, now=WED)
+    assert rules.day_seconds(wk, season) == DAY * 2.5 / 14
+    for t in (0.0, 5000.0, 20000.0, 3 * DAY + 7):
+        assert rules.game_day(wk, season, t) == int(t // (DAY * 2.5 / 14)) + 1
+        assert rules.world_day(wk, season, t) == int(t // DAY)
+
+
+def test_a_figure_daily_cap_resets_at_midnight_not_24_hours_after_opening():
+    from tianxia import figures
+
+    c21 = real_content("season21")
+    state = world._season_vehicle(c21, _season(c21, now=WED))
+    midnight = 13.5 * HOUR
+    state.world.time = midnight - 60
+    figures.defeat(state, c21, "bocai", 3, cap=3)
+    assert figures.defeat(state, c21, "bocai", 3, cap=3) == [figures.HELD_LINE.format(name=figures.name_of(c21, "bocai"))]
+    state.world.time = midnight
+    assert figures.defeat(state, c21, "bocai", 3, cap=3) != [figures.HELD_LINE.format(name=figures.name_of(c21, "bocai"))]
+
 
 def test_season_clock_resume_refuses_a_profile_without_the_season21_switch():
     """主機端 season_clock.py resume 拿章當設定檔的指紋：21 天季的 season_weeks 由 season21 的章加季長釘住（content.validate：

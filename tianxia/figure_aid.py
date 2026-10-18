@@ -41,8 +41,9 @@ def on(content: Content) -> bool:
     return content.config.figure_aid.enabled and bool(content.figures)
 
 
-def _day(state: GameState) -> int:
-    return int(state.world.time // DAY)
+def _day(state: GameState, content: Content) -> int:
+    """「今天」的號碼（calendar.world_day：21 天季台灣 00:00 換日，其他季世界天）。"""
+    return calendar.world_day(state.world.time, content, state.world)
 
 
 def prune(state: GameState, content: Content) -> None:
@@ -130,7 +131,7 @@ def left_today(state: GameState, content: Content, fid: str) -> float:
         return life.gain_left(state.world, content, fid)
     if not on(content):
         return float("inf")
-    return content.config.figure_aid.daily_restore_cap - state.world.aid_tally.get(f"restored:{fid}:{_day(state)}", 0.0)
+    return content.config.figure_aid.daily_restore_cap - state.world.aid_tally.get(f"restored:{fid}:{_day(state, content)}", 0.0)
 
 
 def restore(state: GameState, content: Content, fid: str, amount: float) -> int:
@@ -147,14 +148,14 @@ def restore(state: GameState, content: Content, fid: str, amount: float) -> int:
         if life is not None:
             life.note_gain(state.world, content, fid, gained)
         else:
-            key = f"restored:{fid}:{_day(state)}"
+            key = f"restored:{fid}:{_day(state, content)}"
             state.world.aid_tally[key] = state.world.aid_tally.get(key, 0.0) + gained
-            _prune_tally(state)
+            _prune_tally(state, content)
     return gained
 
 
-def _prune_tally(state: GameState) -> None:
-    today = _day(state)
+def _prune_tally(state: GameState, content: Content) -> None:
+    today = _day(state, content)
     for k in [k for k in state.world.aid_tally if k.rsplit(":", 1)[-1].isdigit() and int(k.rsplit(":", 1)[-1]) < today - 1]:
         del state.world.aid_tally[k]
 
@@ -164,7 +165,7 @@ def rally_problem(state: GameState, content: Content, fid: str) -> str | None:
     fig, now = content.figures[fid], figures.state_of(state, content, fid)
     if now.prestige >= fig.start_prestige:
         return TOP_NOTE
-    if state.world.aid_tally.get(f"rally:{fid}:{state.player.name}:{_day(state)}", 0) >= cfg.rally_per_day:
+    if state.world.aid_tally.get(f"rally:{fid}:{state.player.name}:{_day(state, content)}", 0) >= cfg.rally_per_day:
         return FULL_NOTE
     if left_today(state, content, fid) <= 0:
         return CAP_NOTE
@@ -176,7 +177,7 @@ def rally_problem(state: GameState, content: Content, fid: str) -> str | None:
 def rally(state: GameState, content: Content, fid: str) -> int:
     """犒軍（呼叫端先驗過 rally_problem、扣過體力與銀兩）：聲威 +rally_points，記這個人今天犒了幾次。回傳補了幾點。"""
     figures._ensure(state, content, fid)  # noqa: SLF001  沒被打過的人物也要有一筆才補得上（照開季值種）
-    key = f"rally:{fid}:{state.player.name}:{_day(state)}"
+    key = f"rally:{fid}:{state.player.name}:{_day(state, content)}"
     state.world.aid_tally[key] = state.world.aid_tally.get(key, 0) + 1
     return restore(state, content, fid, content.config.figure_aid.rally_points)
 
@@ -196,7 +197,7 @@ def visiting(state: GameState, content: Content) -> list[str]:
 
 def visit_problem(state: GameState, content: Content, fid: str) -> str | None:
     cfg = content.config.figure_aid
-    if state.world.aid_tally.get(f"visit:{state.player.name}:{_day(state)}", 0) >= 1:
+    if state.world.aid_tally.get(f"visit:{state.player.name}:{_day(state, content)}", 0) >= 1:
         return "今天已經探望過了"
     full = content.config.figure_return_days * 24 * calendar.cal_hour_seconds(content, state.world)
     if state.world.aid_tally.get(f"visitcut:{fid}", 0.0) >= full * cfg.visit_max_share - 1e-6:
@@ -216,7 +217,7 @@ def visit(state: GameState, content: Content, fid: str) -> float:
     now = w.figures[fid]
     now.back_at = max(w.time, (now.back_at or w.time) - cut)
     w.aid_tally[f"visitcut:{fid}"] = done + cut
-    key = f"visit:{state.player.name}:{_day(state)}"
+    key = f"visit:{state.player.name}:{_day(state, content)}"
     w.aid_tally[key] = w.aid_tally.get(key, 0) + 1
     return cut / hour if hour else 0.0
 

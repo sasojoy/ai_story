@@ -15,7 +15,7 @@ from __future__ import annotations
 from . import calendar, push
 from .calendar import DAY
 from .models import Content, FigureChange, FigureDef, Squad
-from .rules import add_rumor, change_trend, season_one, trend_shown, trend_value
+from .rules import add_rumor, change_trend, season_one, trend_shown, trend_value, world_day
 from .state import FigureState, GameState, WorldState
 
 OUT = ("retired", "crippled")  # 退場（非天命）、重創（天命）：本季不再出現；下獄不算（時刻表結算 5.2）
@@ -333,7 +333,7 @@ def defeat(state: GameState, content: Content, fid: str, amount: float, cap: int
         return []
     w = state.world
     if cap:
-        day_key = f"lost:{fid}:{int(w.time // DAY)}"
+        day_key = f"lost:{fid}:{world_day(content, w)}"
         for old in [k for k in w.trend_accum if k.startswith(f"lost:{fid}:") and k != day_key]:
             del w.trend_accum[old]
         left = cap - w.trend_accum.get(day_key, 0.0)

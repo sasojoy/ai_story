@@ -56,7 +56,7 @@ from .rules import (
     can_draw_side_change, chaos_fronts, chaos_note, front_chip, front_ids, front_of, front_text, humanize, in_chaos,
     is_revealed, learn_skill, pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check,
     season_one, season_one_off, stance_rule_note, stance_sum_note, stances, trend_name, trend_shown, trend_value,
-    world_trend_value,
+    world_day, world_trend_value,
 )
 from .sqlite_world import open_world
 from .state import (
@@ -6374,7 +6374,7 @@ class Game:
         n = push.active_count(s, self._side(), w.time, window)
         msgs = [f"{fig.name}敗走。"]
         cap = cfg.figure_daily_loss_cap if figures.untimed(c, w) else None  # 甲 (d)：沒有時刻表的季每位人物一天最多被打掉幾點；第一季照人數緩衝
-        today = int(w.time // DAY)
+        today = world_day(c, w)  # 21 天季台灣 00:00 換日（正式季整合設計 1.3）
         if cfg.figure_dent_once_per_day and p.figure_dented.get(fid) == today:  # 同一個人同一位人物一天只有第一場扣聲威（PM 2026-10-16）
             msgs.append(figures.DENT_ONCE_LINE.format(name=fig.name))
         else:

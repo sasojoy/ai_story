@@ -104,21 +104,34 @@ FULL_SEASON_DAYS = DEFAULT_SEASON_DAYS  # 一個遊戲日剛好是現實一天�
 
 
 def day_seconds(content: Content, world: WorldState) -> float:
-    """一個遊戲日有幾個世界秒：DAY × 季長 ÷ FULL_SEASON_DAYS（季長照 world 蓋的章；沒有章的舊季照 14 天）。"""
+    """一個遊戲日有幾個世界秒：DAY × 季長 ÷ FULL_SEASON_DAYS（季長照 world 蓋的章；沒有章的舊季照 14 天）。21 天季是季曆的一天
+    （DAY ÷ cal_scale，就是現實的一天，正式季整合設計 1.3）。"""
+    if calendar.season21_on(world, content):
+        return DAY / calendar.cal_scale(content, world)
     return DAY * season_length_days(world, content) / FULL_SEASON_DAYS
 
 
 def game_day(content: Content, world: WorldState, time: float | None = None) -> int:
-    """世界秒 time（不給就是此刻）落在這一季的第幾個遊戲日（從 1 起）。上限的帳記的是這個號碼：記的是別的號碼就當前幾天的。"""
+    """世界秒 time（不給就是此刻）落在這一季的第幾個遊戲日（從 1 起）。上限的帳記的是這個號碼：記的是別的號碼就當前幾天的。
+    21 天季照季曆的天（台灣 00:00 換日；週三開季的第一天是第 3 天），季末往後排也照樣換（calendar.day_index 不夾在季末）。"""
     t = world.time if time is None else time
+    if calendar.season21_on(world, content):
+        return calendar.day_index(t, content, world) + 1
     return int(t // day_seconds(content, world)) + 1
+
+
+def world_day(content: Content, world: WorldState, time: float | None = None) -> int:
+    """「今天」的帳記的號碼（從 0 起；figures、engine 的一天只扣一次、figure_aid、figure_life 用）：21 天季是季曆第幾天減 1
+    （台灣 00:00 換日，正式季整合設計 1.3），其他季照舊 int(time // DAY)（calendar.world_day）。"""
+    return calendar.world_day(world.time if time is None else time, content, world)
 
 
 def day_ends(content: Content, world: WorldState, time: float | None = None) -> float:
     """time（不給就是此刻）所在的遊戲日結束、下一個遊戲日開始的那一刻（世界秒）：game_day 在這一刻剛好換成下一天
     （n × 一天的長度碰上浮點誤差時，往後挪到第一個真的換了日的值，寫出來的時刻跟真的換日的那一刻不會差一點）。"""
     day = game_day(content, world, time)
-    end = day * day_seconds(content, world)
+    start = calendar.week_start(1, content, world) if calendar.season21_on(world, content) else 0.0  # 21 天季從第 1 週週一 00:00 數
+    end = start + day * day_seconds(content, world)
     while game_day(content, world, end) <= day:
         end = math.nextafter(end, math.inf)
     return end

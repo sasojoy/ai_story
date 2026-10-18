@@ -121,6 +121,18 @@ def next_hour_mark(time: float, content: Content, season: WorldState | None = No
     return (math.floor((time + shift) / hour + EPS_CAL_HOURS) + 1) * hour - (time + shift)
 
 
+def day_index(time: float, content: Content, season: WorldState | None = None) -> int:
+    """世界秒 time 落在季曆第幾天（從 0 起）。跟 point 不同，不夾在季末：管理者把季末往後排時「今天」照樣換（rules.game_day）。"""
+    cal = time * cal_scale(content, season) + _offset(content, season)
+    return math.floor(cal / MINUTE + EPS_MINUTES) // (24 * 60)
+
+
+def world_day(time: float, content: Content, season: WorldState | None) -> int:
+    """「今天」的帳記的號碼（從 0 起；人物一天被打掉、回了多少、護衛犒軍探望、同一位人物一天只扣一次聲威）：21 天季是季曆第幾天
+    （台灣 00:00 換日，正式季整合設計 1.3），其他季照舊世界天 int(time // DAY)。rules.world_day 同一個。"""
+    return day_index(time, content, season) if season21_on(season, content) else int(time // DAY)
+
+
 def cal_days(time: float, content: Content, season: WorldState | None = None) -> float:
     """世界秒 time 離第 1 週週一 00:00 幾個季曆天（含零頭；21 天季的人物照天數出兵用）。"""
     return (time * cal_scale(content, season) + _offset(content, season)) / DAY
