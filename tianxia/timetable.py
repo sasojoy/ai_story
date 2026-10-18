@@ -152,14 +152,22 @@ def quiet_place(season: WorldState, content: Content, event: TimetableEvent, now
     hit = _quiet_hit(local, span, content) if span > 0 and at > season.time else None  # 已經到期的（管理者這一季才蓋章）馬上開，不挪
     if hit is None:
         return at
-    scale, cal_hour = content.config.time_scale, calendar.cal_hour_seconds(content, season)
-    back = math.floor((at - (local - (hit[0] - span)) * scale) / cal_hour + 1e-9) * cal_hour
-    forward = math.ceil((at + (hit[1] - local) * scale) / cal_hour - 1e-9) * cal_hour
+    scale = content.config.time_scale
+    # 取整到季曆的整點（FB-331：21 天季開季不在整點時，世界秒的整點對不到季曆；偏移是 0 的季照舊）
+    back = calendar.hour_floor(at - (local - (hit[0] - span)) * scale, content, season)
+    forward = _hour_up(at + (hit[1] - local) * scale, content, season)
     before, after = _neighbours(season, content, event)
     for t in sorted((back, forward), key=lambda t: abs(t - at)):
         if max(before, season.time) < t < after and _quiet_hit(_local(season, content, now, t), span, content) is None:
             return t
     return None
+
+
+def _hour_up(time: float, content: Content, season: WorldState) -> float:
+    """quiet_place 往後挪的那一邊：time 當下或之後的季曆整點，浮點誤差照以前的 1e-9 曆時（不是 calendar.hour_ceil 的 EPS_SECONDS），
+    偏移是 0 時跟以前一模一樣。"""
+    hour, shift = calendar.cal_hour_seconds(content, season), calendar.hour_shift(content, season)
+    return math.ceil((time + shift) / hour - 1e-9) * hour - shift
 
 
 def _quiet_pending(season: WorldState, content: Content) -> list[TimetableEvent]:

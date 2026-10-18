@@ -52,6 +52,17 @@ def _offset(content: Content, season: WorldState | None) -> float:
     return season.cal_offset if season21_on(season, content) else 0.0
 
 
+def offset_at(time: float, content: Content, season: WorldState | None) -> float:
+    """世界秒 time 那一刻的季曆偏移（FB-332）：21 天季暫停再繼續之後偏移加了暫停的長度，繼續之前的時刻照當時的偏移（cal_offset_history），
+    之後照現在的。其他季是 0（同 _offset）。"""
+    if not season21_on(season, content):
+        return 0.0
+    for until, offset in season.cal_offset_history:
+        if time < until:
+            return offset
+    return season.cal_offset
+
+
 def anchor_offset(now: float, content: Content) -> float:
     """開季那一刻（現實的 epoch 秒）離那一週台灣週一 00:00 幾秒（正式季整合設計 1.1：週一以外開季，第一週就短幾天）。
     台灣照 pill_day_utc_offset_hours（同回體丹的換日）；1970-01-01 是週四。"""
@@ -88,7 +99,8 @@ def cal_scale(content: Content, season: WorldState | None = None) -> float:
 def point(time: float, content: Content, season: WorldState | None = None) -> CalPoint:
     """世界秒落在季曆的哪一刻。季末那一刻（或之後）寫成最後一週週日 23:59，不會冒出不存在的下一週。"""
     total = content.config.season_weeks * WEEK
-    cal = min(max(0.0, time * cal_scale(content, season) + _offset(content, season)), total - MINUTE)
+    # 照那一刻當時的偏移（FB-332：暫停再繼續之後，以前寫下的時刻不跟著往後挪）；現在與之後的時刻就是 cal_offset
+    cal = min(max(0.0, time * cal_scale(content, season) + offset_at(time, content, season)), total - MINUTE)
     minutes = math.floor(cal / MINUTE + EPS_MINUTES)
     day, minute_of_day = divmod(minutes, 24 * 60)
     return CalPoint(
@@ -121,6 +133,24 @@ def next_hour_mark(time: float, content: Content, season: WorldState | None = No
     hour = cal_hour_seconds(content, season)
     shift = _offset(content, season) / cal_scale(content, season)
     return (math.floor((time + shift) / hour + EPS_CAL_HOURS) + 1) * hour - (time + shift)
+
+
+def hour_shift(content: Content, season: WorldState | None = None) -> float:
+    """季曆的偏移換成世界秒（21 天季開季不在整點時，季曆的整點在世界秒的哪裡）；其他季是 0。"""
+    return _offset(content, season) / cal_scale(content, season)
+
+
+def hour_ceil(time: float, content: Content, season: WorldState | None = None) -> float:
+    """世界秒 time 當下或之後的第一個季曆整點（FB-331：管理者排決戰、跳到下一件照季曆的整點對齊，季的事也在那裡跑）。
+    剛好在整點上（差 EPS_SECONDS 以內）就是那一刻。偏移是 0 時跟以前的 ceil((t − EPS)/曆時)×曆時 一模一樣。"""
+    hour, shift = cal_hour_seconds(content, season), hour_shift(content, season)
+    return math.ceil((time + shift - EPS_SECONDS) / hour) * hour - shift
+
+
+def hour_floor(time: float, content: Content, season: WorldState | None = None) -> float:
+    """世界秒 time 當下或之前的最後一個季曆整點（timetable.quiet_place 往前挪用）；偏移是 0 時跟以前一模一樣。"""
+    hour, shift = cal_hour_seconds(content, season), hour_shift(content, season)
+    return math.floor((time + shift) / hour + 1e-9) * hour - shift
 
 
 def day_index(time: float, content: Content, season: WorldState | None = None) -> int:

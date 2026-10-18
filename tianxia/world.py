@@ -695,14 +695,20 @@ def pause_skip(season: WorldState, content: Content, span: float) -> float:
     return math.floor(span / grid + EPS_CAL_HOURS) * grid
 
 
-def realign_paused_calendar(season: WorldState, content: Content, skipped: float) -> None:
+RESUME_NUDGE = 0.002  # 世界秒：21 天季繼續時賽季多走這一點點，暫停那一刻與繼續那一刻寫下的時刻才分得出用哪一個偏移（FB-332）
+
+
+def realign_paused_calendar(season: WorldState, content: Content, skipped: float, until: float | None = None) -> None:
     """21 天季（PM 2026-10-19：季曆就是現實的週，畫面上的週六 20:00 就是真的週六晚上）：暫停的這一段整段不算進賽季（pause_skip），
     季曆的偏移加回同樣長，季曆對回現實的星期；季末照原本的現實日期收場（排定的世界秒往前挪同樣長，不往後延）。決戰照
     keep_showdowns_on_time 挪；暫停期間該發生的一般大事在繼續那一刻依序結算（resume_season_clock）。其他季什麼都不做。
-    只改傳進來的 season（WorldStateStore.resume_clock 在它的 mutate 裡、keep_showdowns_on_time 之前呼叫）。"""
+    只改傳進來的 season（WorldStateStore.resume_clock 在它的 mutate 裡、keep_showdowns_on_time 之前呼叫）。
+    until（FB-332）是舊的偏移用到哪一個世界秒為止（暫停那一刻與繼續那一刻之間，見 RESUME_NUDGE）：記進 cal_offset_history，
+    以前寫下的時刻照舊的偏移換成季曆，不跟著往後挪。沒給（舊的呼叫）照季現在的時間記。"""
     if not calendar.season21_on(season, content):
         return
     shift = skipped * content.config.time_scale
+    season.cal_offset_history.append((season.time if until is None else until, season.cal_offset))
     season.cal_offset += shift * calendar.cal_scale(content, season)
     if "finale" in season.schedule:
         season.schedule["finale"] -= shift

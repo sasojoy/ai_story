@@ -6239,6 +6239,7 @@ NOT_IN_THE_FINGERPRINT = {
         "haoqiang_allied": "開季時蓋的章（豪強分屬兩軍），開季之後不變",
         "season21": "開季時蓋的章（21 天季），開季之後不變",
         "cal_offset": "開季時蓋的章（21 天季季曆的偏移），開季之後不變",
+        "cal_offset_history": "21 天季暫停再繼續時才多一筆（FB-332）：繼續那一下季的時間與排定本來就跟著變",
         "length_days": "同上",
         "locks": "伏筆鎖定不能露出來（推送計畫 Review Focus 1）",
         "lock_losers": "同上",

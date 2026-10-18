@@ -9802,8 +9802,7 @@ class Game:
         """排定的決戰時間對齊到下一個曆時交界（季的事只在交界把時間到了的決戰記下來，T10 審查 I1）；那一刻剛好有還沒結算的
         一般大事時再往後挪一個曆時——不然同一刻那件大事先結算，排在它前面、還沒開成的決戰會照起點判掉（settle_waiting_showdowns）。"""
         s, c = self.state, self.content
-        cal_hour = calendar.cal_hour_seconds(c, s.world)
-        mark = math.ceil((at - calendar.EPS_SECONDS) / cal_hour) * cal_hour
+        mark = calendar.hour_ceil(at, c, s.world)  # 季曆的整點（FB-331：21 天季開季不在整點時，世界秒的整點對不到季曆）
         return timetable.clear_of_events(s, c, mark)
 
     def admin_jump_next(self, now: float) -> list[str]:
@@ -9823,7 +9822,7 @@ class Game:
             return self._log(["（時刻表上沒有下一件大事了。）"])
         cal_hour = calendar.cal_hour_seconds(c, w)
         target = max(timetable.when(s, c, pending[0]), w.time)
-        mark = math.ceil((target - calendar.EPS_SECONDS) / cal_hour) * cal_hour
+        mark = calendar.hour_ceil(target, c, w)  # 季曆的整點（FB-331）
         if mark <= w.time + calendar.EPS_SECONDS:
             mark += cal_hour
         return [f"跳到{pending[0].title}。"] + self.advance(mark - w.time)
