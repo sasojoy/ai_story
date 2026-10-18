@@ -7295,6 +7295,15 @@ class Game:
         return msgs
 
     @_not_while_preparing
+    def buy_legend(self) -> list[str]:
+        """修練頁的「以心得換破境丹」（Joy 2026-10-18，cultivation.buy_legend）：換成了寫一則修練紀錄，換不了只回原因。"""
+        xinde, pills = self._xinde(), self.state.player.legend_items
+        msgs = self._log(cultivation.buy_legend(self.state, self.content))
+        if self.state.player.legend_items > pills:
+            self._menxia_entry(msgs[0], xinde, extra=[f"{self.content.config.legend_item_name} +1"])
+        return msgs
+
+    @_not_while_preparing
     def melt_insight(self, insight_id: str) -> list[str]:
         """把一個意境化成心得（見 library.melt_insight）；同 melt_art，熔成了才寫江湖紀錄。"""
         refusal = prologue_rules.melt_insight_problem(self.state, self.content)  # 序章的意境是合成要用的，熔了後面就走不下去

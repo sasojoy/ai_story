@@ -338,3 +338,38 @@ def name_mastered(state: GameState, content: Content, world: WorldStateStore, na
         state.player.renames_told.append(art_id)
     add_chronicle(state, f"{state.player.name}把【{old.name}】練成絕學，為之定名【{name}】。")  # 江湖史一律寫名號（傳聞分層第七節）
     return [f"從今以後，江湖上這門武學就叫【{name}】。"]
+
+
+def legend_price(state: GameState, content: Content) -> int | None:
+    """以心得換破境丹（Joy 2026-10-18）：這一季下一枚要多少心得；關著（legend_xinde_price 是 0）是 None。"""
+    cfg = content.config
+    if cfg.legend_xinde_price <= 0:
+        return None
+    return cfg.legend_xinde_price + state.player.legend_bought * cfg.legend_xinde_step
+
+
+def buy_legend_problem(state: GameState, content: Content) -> str | None:
+    """換不了的原因（修練頁那一顆鈕灰掉時寫的、按下去回的是同一句）；換得了是 None。"""
+    price = legend_price(state, content)
+    if price is None:
+        return f"{content.config.legend_item_name}換不到。"
+    have = state.player.stats.get("xinde", 0)
+    if have < price:
+        return f"心得不足：換一枚{content.config.legend_item_name}要 {price}，你有 {have}。"
+    return None
+
+
+def buy_legend(state: GameState, content: Content) -> list[str]:
+    """花心得換一枚破境丹（越換越貴）。被拒絕只回原因、什麼都不扣。"""
+    problem = buy_legend_problem(state, content)
+    if problem is not None:
+        return [problem]
+    p, cfg = state.player, content.config
+    price = legend_price(state, content)
+    p.stats["xinde"] = p.stats.get("xinde", 0) - price
+    p.legend_bought += 1
+    p.legend_items += 1
+    return [
+        f"你把積下的心得一一參透，凝成一枚【{cfg.legend_item_name}】（心得 -{price}）。",
+        f"下一枚要 {legend_price(state, content)} 心得。",
+    ]

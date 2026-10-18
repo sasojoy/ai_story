@@ -43,6 +43,8 @@
   "breakthrough": {"heat": 8},
   "skill_slots": {"enabled": true},
   "legend_item_bonus": 15,
+  "legend_xinde_price": 300,
+  "legend_xinde_step": 100,
   "explore_legend_chance": 0.02,
   "start_stats": {"str": 5, "agi": 5, "con": 5, "wis": 5, "lore": 5, "silver": 50, "good": 0, "evil": 0, "fame": 0, "xinde": 20},
   "starter_skills": ["jichu_tuna", "jichu_quanjiao"],

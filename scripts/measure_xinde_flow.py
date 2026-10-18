@@ -46,7 +46,9 @@ class Ledger(dict):
 
 def run(seed, args):
     content = load_content(mc.ROOT / "content", profile=None if args.profile == "none" else args.profile)
-    world = open_world(mc.TMP / f"x{seed}{len(args.mates)}.db")
+    if args.no_buy:
+        content.config.legend_xinde_price = 0  # 對照組：沒有以心得換破境丹
+    world = open_world(mc.TMP / f"x{seed}{len(args.mates)}{int(args.no_buy)}.db")
     if not world.get_season().storyline:
         world.seed_first_season(content)
     world.open_season(content, now=0)
@@ -113,7 +115,11 @@ def run(seed, args):
                 marks[h] = (inc, out, pp.stats.get("xinde", 0), pp.member.level,
                             pp.member.neigong_level, pp.member.wugong_level)
     pp = game.state.player
-    return Ledger.book, marks, pp.stats.get("xinde", 0), pp.member.level, game.advanced_real / 3600
+    for aid in (pp.member.wugong_id, pp.member.neigong_id):
+        if aid:
+            print(f"  身上 {aid}：{pp.art_quality.get(aid, '?')}・火候 {pp.art_mastery.get(aid, 0)}・丹 {pp.legend_items}", flush=True)
+    jue = sum(1 for a, q in pp.art_quality.items() if q == "絕學")
+    return Ledger.book, marks, pp.stats.get("xinde", 0), pp.member.level, game.advanced_real / 3600, (pp.legend_bought, jue)
 
 
 def main():
@@ -122,14 +128,15 @@ def main():
     ap.add_argument("--profile", default="weekend")
     ap.add_argument("--online", type=float, default=24)
     ap.add_argument("--faction", default="guan")
+    ap.add_argument("--no-buy", action="store_true", help="關掉以心得換破境丹（對照組）")
     ap.add_argument("--mates", nargs="*", default=["guanyu", "zhangfei"])
     ap.add_argument("--followers", nargs="*", default=["follower_guan_spear", "follower_guan_crossbow"])
     args = ap.parse_args()
     for seed in args.seeds:
-        book, marks, left, level, hours = run(seed, args)
+        book, marks, left, level, hours, (bought, jue) = run(seed, args)
         inc = sum(v for (pos, _), v in book.items() if pos)
         out = -sum(v for (pos, _), v in book.items() if not pos)
-        print(f"種子 {seed}：{hours:.0f} 小時、第 {level} 級　攢 {inc}・花 {out}・剩 {left}")
+        print(f"種子 {seed}：{hours:.0f} 小時、第 {level} 級　攢 {inc}・花 {out}・剩 {left}　心得換丹 {bought} 枚・季末絕學 {jue} 門")
         print("  收：" + "；".join(f"{k} {v}" for (pos, k), v in book.most_common() if pos and v > 0)[:2000])
         print("  花：" + "；".join(f"{k} {-v}" for (pos, k), v in sorted(book.items(), key=lambda kv: kv[1]) if not pos))
         print("  時間軸（攢, 花, 剩, 等級, 內功成, 武學成）：" + "  ".join(f"{h}h:{v}" for h, v in marks.items()), flush=True)

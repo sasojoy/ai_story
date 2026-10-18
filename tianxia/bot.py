@@ -117,7 +117,21 @@ def spend_xinde(game: Game, rng: random.Random) -> None:
     for kind in ("內功", "武學"):
         if can_practise(game, kind):
             game.practice(kind)
+    buy_pill(game)
     teach(game)
+
+
+def buy_pill(game: Game) -> bool:
+    """以心得換破境丹（Joy 2026-10-18）：身上有一門火候滿了在等契機、手上沒有丹、換完還留 TEACH_RESERVE，就換一枚。
+    整季機器人與假人共用；只走 Game.buy_legend。"""
+    state, content = game.state, game.content
+    price = cultivation.legend_price(state, content)
+    if price is None or state.player.legend_items > 0 or not awaits_chance(game):
+        return False
+    if state.player.stats.get("xinde", 0) - price < TEACH_RESERVE:
+        return False
+    game.buy_legend()
+    return True
 
 
 TEACH_RESERVE = 30  # 傳功之後至少留幾點心得：合成一爐 5、練成下一成 2×N，留著不至於為了傳功把自己的路堵死

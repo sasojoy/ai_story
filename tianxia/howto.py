@@ -800,6 +800,17 @@ def season_page_lines(content: Content, season: WorldState, rule: str = "") -> l
     return lines
 
 
+def legend_buy_lines(content: Content) -> list[str]:
+    """玩法說明「心得」那一節：以心得換破境丹（Joy 2026-10-18）；關著是空的。數字讀 Config。"""
+    cfg = content.config
+    if cfg.legend_xinde_price <= 0:
+        return []
+    return [
+        f"- 一門武學衝到絕學那一步時，可以在修練頁花心得換一枚{cfg.legend_item_name}：這一季第一枚 {cfg.legend_xinde_price}，"
+        f"之後每換一枚多 {cfg.legend_xinde_step}。後期改練一門新功夫，不必只等打仗時的頓悟。",
+    ]
+
+
 def pages_lines() -> list[str]:
     """玩法說明「修練與煉製」：底部兩個分頁各做什麼（修練頁 pagePractice、煉製頁 pageCraft 的實際內容）。價錢寫在「心得」那一節。"""
     return [
@@ -973,6 +984,7 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
         f"{cfg.fuse_stamina} 體力）、合併（{cfg.merge_xinde} 心得、{cfg.merge_stamina} 體力）都花它。",
         f"- 打贏、操練、閉關（每小時至少 {cfg.seclusion_xinde_per_hour}，悟性越高越多）、邊走邊想（{cfg.road_think_xinde}）都有心得；"
         "用不上的功法熔掉也能拿回一些。狀態列的 💡 會在你付得起、又真的有事可做時提醒你去哪一頁。",
+        *legend_buy_lines(content),
         "",
         *_section("修練與煉製", pages_lines()),
         *_section("鐵匠鋪與神器", forge_lines(content, season)),
