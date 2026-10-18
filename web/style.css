@@ -2222,6 +2222,7 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
 .shop-tavern .tav-act:disabled { opacity: 0.5; cursor: default; }
 .shop-tavern .tav-board { flex: 1 1 9em; }
 .shop-tavern .tav-modes { justify-content: flex-start; margin: 0.4em 0 0.6em; }
+.shop-tavern .tav-modes .shop-page { flex: 1 1 0; min-width: 0; padding: 3px 4px; white-space: nowrap; font-size: 0.92em; }  /* 375 寬三顆不折行 */
 .shop-tavern .tav-form { display: flex; gap: 0.5em; margin: 0.3em 0; }
 .shop-tavern .tav-form .input { flex: 1; min-width: 0; background: rgba(0, 0, 0, 0.35); border-color: #7a5532; color: #f6edd8; font-size: 1.15em; }
 .shop-tavern .tav-form select.input { font-size: 1.05em; }
