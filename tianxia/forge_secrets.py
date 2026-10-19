@@ -452,7 +452,8 @@ def recipe_text(content: Content, combo: str | None) -> str | None:
 
 def view(state: GameState, content: Content, world: WorldStateStore) -> list[dict]:
     """鑄譜給畫面的資料（status_data["forge_manual"]，形狀同 secret_recipes.view 多一個 recipe）：這一季聽過口訣或打中過的隱藏配方，
-    一條一筆——聽過的那幾句（照版本的先後）、打中了寫名字與配方（照自己打中的那一爐）；沒聽過也沒打過的不露。"""
+    一條一筆——聽過的那幾句（照版本的先後）、打中了寫名字與配方（照自己打中的那一爐）；沒聽過也沒打過的不露。
+    輪替季跨季記得的神器那幾行多帶 past：這一季沒聽到片子也沒打中，卷首「本季所聞」不算它（FB-404）。"""
     tianji = world.read().tianji
     book = state.player.forge_manual if state.player.forge_manual.tianji == tianji else Manual(tianji=tianji)
     rows = []
@@ -468,12 +469,12 @@ def view(state: GameState, content: Content, world: WorldStateStore) -> list[dic
                 shown.add(recipe.id)
                 rows.append({"clues": [piece_text(content, recipe, p) for p in got], "solved": recipe.name if solved else None,
                              "recipe": _made_text(content, state, book, recipe, SEEN_NOW if rotation else None) if solved
-                             else piece_line(content, recipe, got)})
+                             else piece_line(content, recipe, got), **_past(not got and recipe.id not in book.solved)})
             continue
         if recipe.divine and rotation and solved:  # 沒拆片的季：跨季記得的神器也寫現世
             shown.add(recipe.id)
             rows.append({"clues": [recipe.clues[i] for i in heard], "solved": recipe.name,
-                         "recipe": _made_text(content, state, book, recipe, SEEN_NOW)})
+                         "recipe": _made_text(content, state, book, recipe, SEEN_NOW), **_past(not heard and recipe.id not in book.solved)})
             continue
         if heard or solved:
             rows.append({"clues": [recipe.clues[i] for i in heard], "solved": recipe.name if solved else None,
@@ -482,8 +483,13 @@ def view(state: GameState, content: Content, world: WorldStateStore) -> list[dic
         for rid in state.player.divine_solved:
             recipe = content.forge_secrets.get(rid)
             if recipe is not None and rid not in shown:
-                rows.append({"clues": [], "solved": recipe.name, "recipe": _made_text(content, state, book, recipe, NOT_NOW)})
+                rows.append({"clues": [], "solved": recipe.name, "recipe": _made_text(content, state, book, recipe, NOT_NOW), "past": True})
     return rows
+
+
+def _past(past: bool) -> dict:
+    """鑄譜那一行是不是只靠跨季記得（FB-404）：是才帶 past，其餘的列形狀不變。"""
+    return {"past": True} if past else {}
 
 
 def _made_text(content: Content, state: GameState, book: Manual, recipe: ForgeSecret, mark: str | None) -> str | None:

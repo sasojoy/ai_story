@@ -107,6 +107,31 @@ def test_the_practice_page_greys_the_wield_button_below_fifteen():
     assert f'data-act="wield" data-id="{robe.id}">換上' in page and low not in page
 
 
+def test_the_manual_header_counts_only_this_season():
+    """FB-404：鑄譜卷首「本季所聞鑄訣 N 則・已參透 N 則」只算這一季真的聽到、打中的；跨季記得的那幾行（這一季沒現世、或現世了
+    卻是以前打中的）照樣列在卷裡，只是不算（列上帶 past）。"""
+    import pytest
+    import webharness
+
+    c = _content()
+    w = _opened(c)
+    jia = _smith(c, w, "甲")
+    _forge_sword(c, w, jia)
+    first = forge_secrets.view(jia.state, c, w)
+    assert [(r["solved"], r.get("past", False)) for r in first] == [(c.forge_secrets[SWORD].name, False)]  # 這一季打中的照算
+    _roll(c, w, jia, lineup=["wd_fallen_star", ROBE])  # 玄晶劍這一季沒現世
+    assert [r.get("past", False) for r in forge_secrets.view(jia.state, c, w)] == [True]
+    _roll(c, w, jia, lineup=[SWORD, ROBE])  # 又現世了，可是這一季沒聽到、沒打
+    assert [r.get("past", False) for r in forge_secrets.view(jia.state, c, w)] == [True]
+    if webharness.NODE is None:
+        pytest.skip("沒有 node，前端畫面測試略過")
+    import server
+    from test_prologue_web import run
+
+    book = run(server.main_view(jia), 'H.S.book = "forge"; return H.bookHtml();', S={"tab": "craft"}, menxia=server.menxia_view(jia))
+    assert '<p class="book-sub">本季所聞鑄訣 0 則</p>' in book and f"【{c.forge_secrets[SWORD].name}】" in book
+
+
 def test_the_manual_remembers_solved_divines():
     c = _content()
     w = _opened(c)

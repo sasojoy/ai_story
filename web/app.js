@@ -3862,7 +3862,8 @@
 
   function bookHtml(which = S.book === "forge" ? "forge" : "arts") {
     const rows = manualRows(which), b = BOOKS[which];
-    const solved = rows.filter((r) => r.solved).length;
+    const now = rows.filter((r) => !r.past); // 卷首只算這一季真的聽到、打中的：跨季記得的那幾行（past）照樣列在卷裡（FB-404）
+    const solved = now.filter((r) => r.solved).length;
     const leaves = rows.length ? rows.map((r, k) => `<article class="leaf${r.solved ? " solved" : ""}">
         <header class="leaf-head"><span>第${cnNum(k + 1)}則</span><span class="leaf-state">${r.solved ? "已參透" : "未參透"}</span></header>
         <div class="leaf-text">${r.clues.map((c) => `<p>${clauses(c).map((t) => `<span>${esc(t)}</span>`).join("")}</p>`).join("")}</div>
@@ -3879,7 +3880,7 @@
         </svg>
         <i class="book-moon" aria-hidden="true"></i>
         <div class="book-title"><span>${b.title}</span></div>
-        <p class="book-sub">本季所聞${b.unit} ${rows.length} 則${solved ? `・已參透 ${solved} 則` : ""}</p>
+        <p class="book-sub">本季所聞${b.unit} ${now.length} 則${solved ? `・已參透 ${solved} 則` : ""}</p>
       </div>
       <div class="leaves">${leaves}</div>
     </div>`;
