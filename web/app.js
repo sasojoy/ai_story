@@ -1756,14 +1756,20 @@
   // 手上揭了的懸賞，加上身上有合用東西的求藝、求兵（status.bounties，bounties.status；後者多一行 have）：一張一行，怎麼交差、賞什麼。懸賞榜在城鎮才看得到，
   // 選單上有 act:bounties 時卡底下一顆「看懸賞榜」（就是那個選項，按了走 choose），不在城鎮寫一句去哪裡看。
   // 預設展開，收起來的狀態照手上那幾張記住（S.bountyShut）：揭了新的、交了差，清單變了就重新展開
+  // 21 天季的賞拆成小籤（企劃者挑第 5 批畫面第三組丙；bounties.reward_tags）：一樣一格，附的那一樣金框、重賞紅框。字與數字照伺服器給的
+  function rewardChips(tags) {
+    return `<div class="rtags">${tags.map((t) => `<span class="rtag${t.kind ? ` ${esc(t.kind)}` : ""}">${t.k ? `<em>${esc(t.k)}</em>` : ""}${esc(t.v)}</span>`).join("")}</div>`;
+  }
+
   function bountiesHtml(list, options) {
     const key = list.map((b) => b.id).join(",");
     const board = (options || []).find((o) => o.id === "act:bounties");
+    const level = (list.find((b) => b.level) || {}).level; // 21 天季：「賞照你第 N 級」寫在卡頭
     const rows = list.map((b) => `
       <div class="order">
         <div class="order-head"><b>${esc(b.title)}</b><span>${esc(b.issuer)}</span></div>
         <div class="order-how">${esc(b.how)}</div>
-        <div class="order-meta">${esc(b.reward)}</div>
+        ${b.tags ? `<div class="order-meta">${rewardChips(b.tags)}</div>` : `<div class="order-meta">${esc(b.reward)}</div>`}
         ${b.due ? `<div class="order-meta">${esc(b.due)}</div>` : ""}
         ${b.have ? `<div class="order-meta">${esc(b.have)}</div>` : ""}
       </div>`).join("");
@@ -1773,7 +1779,7 @@
       ? `<button class="btn small" data-act="choose" data-id="act:bounties" ${board.enabled ? "" : "disabled"}>看懸賞榜</button>`
       : '<div class="order-meta">到城鎮的懸賞榜前，可以揭新的、放棄，或交出合用的功夫與兵器。</div>';  // 待 joy 潤
     return `<details class="fold bounties" data-key="${esc(key)}" ${S.bountyShut === key ? "" : "open"}>
-      <summary>🪧 懸賞（${list.length}）</summary><div class="fold-body">${rows}${foot ? `<div class="bounty-foot">${foot}</div>` : ""}</div></details>`;
+      <summary>🪧 懸賞（${list.length}）${level ? `<span class="order-level">${esc(level)}</span>` : ""}</summary><div class="fold-body">${rows}${foot ? `<div class="bounty-foot">${foot}</div>` : ""}</div></details>`;
   }
 
   // 三方態勢的三條（結算卡與江湖頁態勢小標的面板共用）：各用自己陣營的顏色、底色中性（T9 審查 M3）
@@ -3531,7 +3537,8 @@
       + (held.left ? `<div class="slot empty">${esc(held.left_text)}</div>` : "");
     // 告示照草圖寫得很短（企劃者 2026-10-14 微調）：種類・哪一方（色塊小標籤）、目標、期限與名額，重賞、你有幾件合用各一個小字；
     // 要做什麼與賞寫在點開的紙上。期限名額寫短的（n.short，「期限 第 6 週・剩 2」，不折行）；完整的時刻與「名額還剩 N」在紙上（FB-196）
-    const face = (n) => `<span class="tag">${esc(n.kind_name)}・${esc(n.issuer)}</span><b>${esc(n.head)}</b>
+    // 21 天季：告示右上角一個小朱印寫銀兩（n.corner，第 5 批畫面第三組丙）
+    const face = (n) => `<span class="tag">${esc(n.kind_name)}・${esc(n.issuer)}</span>${n.corner ? `<i class="corner">${esc(n.corner)}</i>` : ""}<b>${esc(n.head)}</b>
         ${n.prize ? `<small class="prize">${esc(n.prize)}</small>` : ""}${n.have ? `<small class="prize">${esc(n.have)}</small>` : ""}
         <small class="due">${esc(n.short)}</small>`;
     const note = (n) => (n.done
@@ -3562,7 +3569,8 @@
     // 紙貼在畫面下緣（企劃者 2026-10-14 微調，草圖那樣），不蓋住木板與招牌；紙太長（第三層交出清單）自己捲
     return `<div class="board-sheet"><article class="paper k-${esc(n.kind)}">${n.held ? '<i class="stamp">已揭</i>' : ""}
         <span class="tag">${esc(n.kind_name)}・${esc(n.issuer)}掛的</span><h4>${esc(n.title)}</h4>
-        <p>${esc(n.how)}</p>${n.have ? `<p class="have">${esc(n.have)}</p>` : ""}<p class="reward">賞：${esc(n.reward)}</p><p class="due">${esc(n.due)}</p>
+        <p>${esc(n.how)}</p>${n.have ? `<p class="have">${esc(n.have)}</p>` : ""}${n.tags ? rewardChips(n.tags) : `<p class="reward">賞：${esc(n.reward)}</p>`}
+        <p class="due">${n.level ? `${esc(n.level)}・` : ""}${esc(n.due)}</p>
         ${btns}</article></div>`;
   }
 

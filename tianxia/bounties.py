@@ -73,6 +73,9 @@ WANT_ARMS = "這一張要屬{attribute}的{noun}。"  # 待 joy 潤（noun 照 _
 ART_GIFTS = "・素材，偶有兵器"  # 待 joy 潤：求藝的賞那一段最後（兵器關著只寫「・素材」）
 # 21 天季每張附的那一樣（正式季整合設計 6.1 第 2 點）：賞那一段最後寫一句（待 joy 潤）
 ATTACH_NOTES = {"strike": "・二階素材（偶有三階）", "scout": "・{pill} 一顆", "escort": "・二階素材"}
+# 21 天季的懸賞卡與告示把賞拆成小籤（企劃者挑第 5 批畫面第三組丙）：reward_tags 一格一樣，重賞那一格與「照等級」那一句
+PRIZE_TAG = "重賞：{what}"  # 待 joy 潤
+LEVEL_NOTE = "賞照你第 {level} 級"  # 待 joy 潤
 ENEMY = {"guan": "huang", "huang": "guan"}  # 自動掛單的兩個陣營與他們的對頭（同軍令）
 BOARD = "懸賞榜"
 SEASON_END = "到季末"  # 待 joy 潤：期限到季末或過了季末時寫這個（due_text）
@@ -405,31 +408,79 @@ def has_prize(content: Content, b: Bounty) -> bool:
     return bool(b.prize) and not b.done_by and treasures.prize_on(content, b.prize)
 
 
-def reward_text(state: GameState, content: Content, b: Bounty) -> str:
-    """賞的那一段（選單、懸賞卡、揭下的回話共用）：「賞銀 20・經驗 15・俠名 +3」。功績只有散人看得到（ranger.active）；
-    名聲開著時功績記成善名或惡名，照此刻走的路寫（deed_word）。
-    求藝多寫心得與「素材，偶有兵器」；求兵的銀兩照交的那一把，寫成一段範圍（每顆交出鈕上另寫實拿多少，懸賞榜設計 4.7）。"""
+class RewardBits(NamedTuple):
+    """賞的每一樣（reward_text 接成一行、reward_tags 拆成小籤，兩邊讀同一份）。silver 是寫出來的字（求兵是一段範圍），
+    silver_short 只有數字（告示角上的朱印）；deed 是（帳的名字, 功績）或 None；gift 是附的那一樣（不帶開頭的「・」）。"""
+
+    silver: str
+    silver_short: str
+    exp: int
+    xinde: int
+    deed: tuple[str, int] | None
+    gift: str
+    prize: str
+
+
+def reward_bits(state: GameState, content: Content, b: Bounty) -> RewardBits:
+    """賞的那幾樣（照 reward_text 原本的算法）：功績只有散人看得到（ranger.active）；名聲開著時功績記成善名或惡名（deed_word）。
+    求藝多寫心得與「素材，偶有兵器」；求兵的銀兩照交的那一把，寫成一段範圍（懸賞榜設計 4.7）；21 天季滿級經驗換成心得（3.5）。"""
     cfg = content.config.bounties
     deeds = b.deeds if ranger.active(state, content) else 0
     exp = _exp(state, content, b)
     xinde = cfg.xinde.get(b.kind, 0)
-    if exp and _maxed(state, content, b):  # 21 天季滿級：經驗換成心得（3.5）
+    if exp and _maxed(state, content, b):
         xinde, exp = xinde + _as_xinde(content, exp), 0
     if b.kind == "arms":
         low, high = (_silver(state, content, b, base=price * cfg.arms_tier["1"])
                      for price in (min(cfg.arms_silver.values()), max(cfg.arms_silver.values())))
-        silver = f"{low}～{high}（照品質，高階另加）"  # 待 joy 潤
+        short = f"{low}～{high}"
+        silver = f"{short}（照品質，高階另加）"  # 待 joy 潤
     else:
-        silver = str(_silver(state, content, b))
-    text = f"賞銀 {silver}" + (f"・經驗 {exp}" if exp else "") + (f"・心得 {xinde}" if xinde else "") \
-        + (f"・{deed_word(state, content)} +{deeds}" if deeds else "")
+        silver = short = str(_silver(state, content, b))
+    gift = ""
     if b.kind == "art":
-        text += ART_GIFTS if content.config.weapons.enabled else "・素材"
+        gift = ART_GIFTS if content.config.weapons.enabled else "・素材"
     if b.kind in ATTACH_NOTES and _daily_pay(state, content, b):
-        text += ATTACH_NOTES[b.kind].format(pill=content.config.stamina_pill_name)
-    if has_prize(content, b):  # 重賞（裝備四欄 6.4）：只給第一個交差的人，給出去了就不再寫
-        text += treasures.PRIZE_NOTE.format(what=treasures.PRIZE_WORDS[b.prize])
+        gift = ATTACH_NOTES[b.kind].format(pill=content.config.stamina_pill_name)
+    prize = treasures.PRIZE_WORDS[b.prize] if has_prize(content, b) else ""  # 重賞只給第一個交差的人，給出去了就不再寫
+    return RewardBits(silver, short, exp, xinde, (deed_word(state, content), deeds) if deeds else None, gift.removeprefix("・"), prize)
+
+
+def reward_text(state: GameState, content: Content, b: Bounty) -> str:
+    """賞的那一段（選單、懸賞卡、揭下的回話共用）：「賞銀 20・經驗 15・俠名 +3」，附的那一樣與重賞接在後面（reward_bits）。"""
+    r = reward_bits(state, content, b)
+    text = f"賞銀 {r.silver}" + (f"・經驗 {r.exp}" if r.exp else "") + (f"・心得 {r.xinde}" if r.xinde else "") \
+        + (f"・{r.deed[0]} +{r.deed[1]}" if r.deed else "")
+    if r.gift:
+        text += f"・{r.gift}"
+    if r.prize:
+        text += treasures.PRIZE_NOTE.format(what=r.prize)
     return text
+
+
+def reward_tags(state: GameState, content: Content, b: Bounty) -> list[dict] | None:
+    """21 天季的懸賞卡與放大的紙把賞拆成小籤（企劃者挑第 5 批畫面第三組丙）：一樣一格，{"k": 名目, "v": 數字}；附的那一樣
+    {"v": …, "kind": "gift"}（金框）、重賞 {"v": …, "kind": "prize"}（紅框）。週末與 14 天的季是 None：網頁照舊寫 reward_text 那一行。"""
+    if not calendar.season21_on(state.world, content):
+        return None
+    r = reward_bits(state, content, b)
+    tags = [{"k": "銀", "v": r.silver}]
+    if r.exp:
+        tags.append({"k": "經驗", "v": str(r.exp)})
+    if r.xinde:
+        tags.append({"k": "心得", "v": str(r.xinde)})
+    if r.deed:
+        tags.append({"k": r.deed[0], "v": f"+{r.deed[1]}"})
+    if r.gift:
+        tags.append({"v": r.gift, "kind": "gift"})
+    if r.prize:
+        tags.append({"v": PRIZE_TAG.format(what=r.prize), "kind": "prize"})
+    return tags
+
+
+def level_note(state: GameState, content: Content, b: Bounty) -> str:
+    """賞照揭的人的等級長的那幾張（_daily_pay）寫「賞照你第 N 級」；其餘空字串。"""
+    return LEVEL_NOTE.format(level=state.player.member.level) if _daily_pay(state, content, b) else ""
 
 
 def deed_word(state: GameState, content: Content) -> str:
@@ -1291,8 +1342,12 @@ def targets(state: GameState, content: Content) -> list[str]:
 
 
 def _row(state: GameState, content: Content, b: Bounty) -> dict:
-    return {"id": b.id, "title": title(content, b), "how": how(content, b), "reward": reward_text(state, content, b),
-            "issuer": issuer(content, b), "due": due_line(state, content, b)}
+    row = {"id": b.id, "title": title(content, b), "how": how(content, b), "reward": reward_text(state, content, b),
+           "issuer": issuer(content, b), "due": due_line(state, content, b)}
+    tags = reward_tags(state, content, b)
+    if tags is not None:  # 21 天季：賞拆成小籤、照等級的那一句（週末與 14 天的季沒有這兩個鍵）
+        row.update(tags=tags, level=level_note(state, content, b))
+    return row
 
 
 def have_text(state: GameState, content: Content, world: WorldStateStore, b: Bounty, items: list[str], memo: dict | None = None) -> str:

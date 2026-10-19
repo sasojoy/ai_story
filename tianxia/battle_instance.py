@@ -1264,6 +1264,26 @@ def _main_move(mix: dict[str, float]) -> str:
     return max(MOVES, key=lambda m: mix.get(m, 0.0))
 
 
+COUNTER_VERB = {"固守": "擋住了"}  # 待 joy 潤：剋住的不是兩邊出最多的招時那一句，固守寫「擋住了」，其餘「剋住了」
+
+
+def counter_clause(w: str, lo: str, win_mix: dict[str, float], lose_mix: dict[str, float]) -> tuple[str, bool]:
+    """剋住的那一句與它寫的是不是兩邊出最多的招（FB-365）。兩邊最多的那一招真的相剋就照舊寫它們（「黃巾的固守剋住了官軍的強攻」）；
+    不然（例：官軍三強攻兩固守對黃巾三強攻，剋住的其實是那兩個固守）寫真正剋住的那一對：贏的一方出的招 m 剋對面出的 BEATS[m]，
+    兩邊人數乘起來最多的那一對（一樣多照 MOVES 的順序）；一對都沒有（剋制係數的差來自別處）寫 COUNTER_PLAIN。"""
+    mine, theirs = _main_move(win_mix), _main_move(lose_mix)
+    if BEATS[mine] == theirs:
+        return f"{w}的{mine}剋住了{lo}的{theirs}", True
+    pairs = [(win_mix.get(m, 0.0) * lose_mix.get(BEATS[m], 0.0), m) for m in MOVES]
+    weight, move = max(pairs, key=lambda p: p[0])
+    if weight <= 0:
+        return COUNTER_PLAIN.format(w=w, lo=lo), False
+    return f"{w}的{move}{COUNTER_VERB.get(move, '剋住了')}{lo}的{BEATS[move]}", False
+
+
+COUNTER_PLAIN = "{w}的招式壓過了{lo}"  # 待 joy 潤：剋制係數差得多、卻找不到哪一招剋哪一招時
+
+
 def round_causes(
     names: dict[str, str], armies: tuple[str, str], push: float, counts: dict[str, int], mixes: dict[str, dict[str, float]],
     coefs: dict[str, list[float]], gambles: dict[str, int], auto: dict[str, int],
@@ -1288,8 +1308,9 @@ def round_causes(
         else:
             avg = {side: sum(coefs[side]) / len(coefs[side]) for side in armies if coefs[side]}
             if avg.get(win, 1.0) - avg.get(lose, 1.0) >= 0.2:
-                tail = f"，{lead_clause(lead, crowd, with_move=False)}" if lead else ""
-                out.append(f"{w}的{_main_move(mixes[win])}剋住了{lo}的{_main_move(mixes[lose])}{tail}")
+                said, main = counter_clause(w, lo, mixes[win], mixes[lose])
+                tail = f"，{lead_clause(lead, crowd, with_move=not main)}" if lead else ""  # 剋住的不是帶頭那一招時照寫招
+                out.append(said + tail)
             elif counts[win] >= 1.5 * counts[lose]:
                 out.append(f"{w}人多勢眾（{counts[win]} 人對 {counts[lose]} 人）{tail}")
             else:

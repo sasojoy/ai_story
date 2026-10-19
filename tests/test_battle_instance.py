@@ -1382,6 +1382,16 @@ def test_the_round_summary_names_a_counter(three):
     assert _summary(msgs) == "這一回合黃巾佔了上風，把戰線往自己這邊推了一截：黃巾的固守剋住了官軍的強攻，乙一馬當先。"
 
 
+def test_the_round_summary_names_the_part_that_really_countered(three):
+    """FB-365（長社火攻）：官軍三強攻兩固守對黃巾三強攻。兩邊出最多的都是強攻，剋住的是那兩個固守：
+    不能寫成「官軍的強攻剋住了黃巾軍的強攻」。"""
+    picks = [(f"官{i}", "guan", "強攻") for i in range(3)] + [(f"守{i}", "guan", "固守") for i in range(2)] \
+        + [(f"黃{i}", "huang", "強攻") for i in range(3)]
+    summary = _summary(_fight(three, picks).rounds[-1].messages)
+    assert "強攻剋住了黃巾的強攻" not in summary
+    assert "官軍的固守擋住了黃巾的強攻，官2等 3 人結成強攻陣勢" in summary  # 帶頭的是強攻那一群：照寫招
+
+
 def test_the_round_summary_names_the_numbers_when_nobody_counters(three):
     picks = [(f"官{i}", "guan", "固守") for i in range(4)] + [("乙", "huang", "固守")]
     msgs = _fight(three, picks).rounds[-1].messages
