@@ -2507,6 +2507,32 @@ class ExploreModes(_Strict):
     sense_treasure_points: int = Field(default=15, ge=0)  # 寶物「探索悟意境」：靜心感悟擲中機率多幾個百分點（夾在 sense_rate_range 的上限）
 
 
+class GatherBranch(_Strict):
+    """找素材的一條分支（第 32 項，企劃者 10/18「往深山可能探索到的就是山或者風之類的意境」「素材可能就能分狩獵、挖礦」；
+    content/gather_branches.json）：地點帶 tags 其中一個、危險度到 min_danger 就有這條。給 attributes 這幾種屬性的素材
+    （數量照找素材一定給的那一套，explore_modes.gather_finds），deep（深入）照地點的 Location.materials、另外擲一次悟意境。
+    line 是紀錄的第一句（{place} 換地點名）；名字與句子待 joy 潤。"""
+
+    id: str
+    name: str
+    tags: list[str]
+    attributes: list[str] = Field(default_factory=list)
+    line: str
+    min_danger: int = Field(default=1, ge=1, le=3)
+    deep: bool = False
+
+
+class GatherBranches(_Strict):
+    """找素材分支（第 32 項；tianxia/explore_modes.py 的 branches_*）：按「找素材」先展開這裡的幾條路，每條一定給素材、差在屬性；
+    最後一顆「自己說…」寫 20 字的找法，模型評成算、引擎擲骰。另要探索三選一與一類一顆（precise.on）都開著、內容有
+    content/gather_branches.json 才生效；不蓋章（只影響給哪種屬性，正在跑的季中途打開沒有壞處，PM）。測試內容關著。"""
+
+    enabled: bool = True
+    deep_insight_chance: float = Field(default=0.10, ge=0, le=1)  # 【預設】「深入」另擲一次悟意境：附帶的小驚喜（同殘譜、破境丹），不取代素材
+    say_enabled: bool = True  # 「自己說」單獨的緊急開關（模型壞了只關它）
+    say_bonus_second: bool = True  # 【預設】「自己說」寫得好：多一個同屬性一階之外，再照危險度擲一次二階（企劃者 2026-10-19 照 PM 先定的做）
+
+
 class InsightStrong(_Strict):
     """意境提示（意境提示設計第二節）：每個地點最濃的意境（Location.insight_strong）。enabled 關掉一個字都不變：輿圖沒有意境濾鏡、
     感悟擲中的門檻與心得照舊、悟到時不多那一句、validate 不要求每處都寫；抽屜的「此地能悟」是補漏，不看這個開關。"""
@@ -2791,6 +2817,7 @@ class Config(_Strict):
     bounties: Bounties = Field(default_factory=Bounties)  # 懸賞榜（見 Bounties）
     sortie: SortieRules = Field(default_factory=SortieRules)  # 出陣（見 SortieRules）
     explore_modes: ExploreModes = Field(default_factory=ExploreModes)  # 探索三選一（見 ExploreModes）
+    gather_branches: GatherBranches = Field(default_factory=GatherBranches)  # 找素材分支（見 GatherBranches；內容在 content/gather_branches.json）
     # 一類一顆（正式季整合第二章；tianxia/precise.py）：每一顆鈕只給一類、按了一定拿到那一類。預設開、測試內容關；照開季蓋章
     # （WorldState.precise_actions，12.3 第 13 條：正在跑的季不變、下一個開季起生效）；探索三選一也開著時才生效
     precise_actions: bool = True
@@ -4058,6 +4085,7 @@ class Content(_Strict):
     shop_lines: dict[str, dict[str, list[str]]] = Field(default_factory=dict)  # 店面上掌櫃的話（content/shop_lines.json，店面獨立介面設計 1.4）：店 → 情況 → 句子；沒有這個檔就是空的
     seal: dict[str, ShardDef] = Field(default_factory=dict)  # 玉璽碎片（content/seal.json，照 id）；沒有這個檔就是空的（碎片關著）
     relations: list[RelationDef] = Field(default_factory=list)  # 人物之間的關係（content/relations.json，大勢人物擴充第二批）；沒有這個檔就是沒有
+    gather_branches: dict[str, GatherBranch] = Field(default_factory=dict)  # 找素材分支（content/gather_branches.json，照內容的順序）；沒有這個檔就是空的（分支關著）
     map: MapLayout
     tutorial: Tutorial
     hints: Hints = Field(default_factory=Hints)  # 碰到才說（content/hints.json，新手引導計畫三）；沒有這個檔就是沒有提示

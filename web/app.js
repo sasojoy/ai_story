@@ -126,6 +126,8 @@
     forgeSel: [], // 爐裡放的：{type: "art" | "ins", id}，最多兩樣、武學最多兩門（武學＋意境、武學＋武學＝合成，兩個意境＝合併）
     forgeLock: null, // 鎖在爐裡的那一樣（{type, id}，一次一樣；Joy 2026-10-19「尤其獲得新意境時會想要試他的所有組合」）：開爐成了它留在爐裡、只清另一格
     wheelSel: null, // 江湖頁行動列展開的那一格（move；探索三選一開著時也有 explore）
+    gatherOpen: false, // 探索卡上「找素材」底下的分支攤開了沒（第 32 項；做完一件事不收，下次點探索就直接看到）
+    gatherSaying: false, // 找素材的「自己說…」輸入框叫出來了沒
     sensing: false, // 有所感：畫布叫出來了沒（按了「把心中的形畫下來」）；感悟狀態結束（選單上沒有 SENSE_DRAW）就收起
     sensePts: [], // 畫布上那一筆的點位 [[x, y, 毫秒], …]（畫布座標 0～256）；輪詢重畫頁面之後照它補畫回去
     senseNote: "", // 畫布底下那一行：這一筆落下了沒（/api/sense_read；不寫筆畫的幾何）
@@ -1473,6 +1475,11 @@
   const SORTIE_FULL_SUB = "今日已滿"; // 用完了：整句（什麼時候再來）在行動列底下那一行（待 joy 潤）
   const EXPLORE_PREFIX = "explore:"; // 探索三選一（出陣探索與地盤設計第三節）：探索那一格點了展開這三顆
   const EXPLORE_SUB = "三選一"; // 探索那一格是展開鈕時的小字（待 joy 潤）
+  // 找素材分支（第 32 項，計畫 2.1 甲）：選單上有 explore:gather:<分支> 時「找素材」是展開鈕，點了在它底下再攤一排分支（S.gatherOpen）；
+  // 最後一顆「自己說…」點了出 20 字的輸入框（S.gatherSaying），送 /api/do/gather_text（同事件的隨口應對那一個輸入框）
+  const GATHER_ID = "explore:gather"; // engine：explore_modes.option_id(GATHER)
+  const GATHER_BRANCH = "explore:gather:"; // 分支的前綴
+  const GATHER_SAY_ID = "explore:gather:say"; // explore_modes.SAY_ID
   // 勝算的顏色（FB-044）：遊歷的小字第二行照風險上色
   const ODDS_TONE = { "穩勝": "good", "有把握": "good", "零風險": "good", "五五波": "even", "難分勝負": "even", "凶險": "bad", "必敗": "bad" };
   // 選單上有「探索」就是平常閒著的時候（以前認打坐，2026-10-12 拿掉了）：用行動列。事件、對話、路上、決戰的選項每次都不一樣，照舊排成一列按鈕
@@ -1668,8 +1675,11 @@
     const loneCall = m.options.find((o) => o.id.startsWith("call:") && o.id !== "call:back");
     const noted = []; // 畫出來、伺服器又寫了說明的格子：[格子上的名字, 選項 id]（行動列底下那幾行，見 actNotesHtml）
     // 探索三選一（出陣探索與地盤設計第三節）：三顆畫在探索那一格點開的卡上，不掉進「此地還能做」
-    const modes = m.options.filter((o) => o.id.startsWith(EXPLORE_PREFIX));
+    // 找素材分支（第 32 項）畫在「找素材」底下那一排，不算進三選一的那幾顆
+    const modes = m.options.filter((o) => o.id.startsWith(EXPLORE_PREFIX) && !o.id.startsWith(GATHER_BRANCH));
+    const branches = m.options.filter((o) => o.id.startsWith(GATHER_BRANCH));
     modes.forEach((o) => used.add(o.id));
+    branches.forEach((o) => used.add(o.id));
     // 入口灰著（體力不夠，三顆都按不下去）時就算記著展開也不畫：那一格是灰格子，不是展開鈕
     const exploreOpen = S.wheelSel === "explore" && modes.length > 0 && !!(byId["act:explore"] && byId["act:explore"].enabled);
     // 序章（新手引導計畫一）：還沒亮的格子不畫（act:explore、act:train、act:rest、act:social、act:move）；
@@ -1730,7 +1740,8 @@
           <button class="${S.moveMode === x.id ? "on" : ""}" data-act="move-mode" data-mode="${x.id}" aria-pressed="${S.moveMode === x.id}">${x.name}</button>`).join("")}</div>
         <div class="options">${moves.map((o) => `<button class="btn go" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}>
           <span class="k">→</span><span>${esc(o.label)}</span></button>`).join("")}</div></div>`;
-    const exploreCard = !exploreOpen ? "" : `<div class="card act-explore"><div class="options">${modes.map((o) => `
+    const exploreCard = !exploreOpen ? "" : `<div class="card act-explore"><div class="options">${modes.map((o) => o.id === GATHER_ID && branches.length
+      ? gatherWheel(o, branches) : `
           <button class="btn" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}><span>${esc(o.label)}</span></button>`).join("")}</div></div>`;
     // 其他只在此地才有的行動（招募、投靠、多出來的求見）收在摺疊裡，不佔行動列的高度。
     // 入伍段要你按的那一顆收在這裡（巡哨、傳道、保境安民、接糧車……，伺服器在框上帶的 guide.glow，FB-093）：那一步在這一處開頭摺疊先打開
@@ -1748,6 +1759,27 @@
     // 展開探索三選一時同樣讓位（三顆緊貼在行動列底下）
     const notes = open || exploreOpen || hotHere ? "" : actNotesHtml(m, noted);
     return `${sealRow}${summonsRow}${drawn.length ? `<div class="act-bar" role="group" aria-label="行動" style="--cells:${Math.max(4, drawn.length)}">${drawn.join("")}</div>` : ""}${notes}${moveCard}${exploreCard}${here}`;
+  }
+
+  // 找素材分支（第 32 項，計畫 2.1 甲）：「找素材」那一顆是展開鈕（再點一次收起；入口灰著〔分支都按不下去〕時不展開），
+  // 點開了在它底下攤一排分支（兩欄：名字一行、「體力 6・剛、慢」一行），最後一顆「自己說…」佔一整列；點了「自己說…」換成 20 字的
+  // 輸入框（S.gatherSaying），送 /api/do/gather_text（gatherSay）。展開記在 S.gatherOpen，做完一件事不收（下次點探索就直接看到分支，
+  // 少按一下）；換到沒有分支的地方就不畫。字待 joy 潤
+  const GATHER_SAY_HINT = "怎麼找？例：沿著獸徑找落羽"; // 待 joy 潤：輸入框的提示
+  const GATHER_SAY_GO = "去找"; // 待 joy 潤：送出鈕
+  function gatherWheel(o, branches) {
+    const open = !!S.gatherOpen && o.enabled;
+    const head = `
+          <button class="btn gather-head${open ? " on" : ""}" data-act="gather-wheel" aria-expanded="${open}" ${o.enabled ? "" : "disabled"}><span>${esc(o.label)}</span><span class="gather-caret" aria-hidden="true">${open ? "▴" : "▾"}</span></button>`;
+    if (!open) return head;
+    const say = branches.find((b) => b.id === GATHER_SAY_ID);
+    const saying = !!(say && S.gatherSaying && say.enabled);
+    const cells = branches.filter((b) => !(saying && b.id === GATHER_SAY_ID)).map((b) => {
+      const [name, detail] = optParts(b);
+      return `<button class="btn gather-branch${b.id === GATHER_SAY_ID ? " say" : ""}" data-act="choose" data-id="${esc(b.id)}" ${b.enabled ? "" : "disabled"}><span class="gb-text"><b>${esc(name)}</b>${detail ? `<small>${nbHtml(detail)}</small>` : ""}</span></button>`;
+    }).join("");
+    const form = saying ? `<form class="free answer gather-say" id="gather-say-form"><input class="input" name="text" maxlength="20" placeholder="${esc(GATHER_SAY_HINT)}" aria-label="${esc(say.label)}"><button class="btn primary small" type="submit">${esc(GATHER_SAY_GO)}</button></form>` : "";
+    return `${head}<div class="gather-branches" role="group" aria-label="找素材">${cells}${form}</div>`;
   }
 
   // 行動列底下那幾行（explain-1，試玩回饋：按下去之前不知道會怎樣）：探索、遊歷、交友（或求見）這一下會遇上什麼、打贏拿什麼。
@@ -5933,6 +5965,7 @@
     discuss: "兩人各陳所學，推敲新招……", // 論武答應、等首創取名（FB-117；待 joy 潤）
     sortie: "整隊出陣，候前方回報……", // 出陣開著時的 act:train（出陣探索與地盤設計第七節；待 joy 潤）
     gather: "四下翻找，看看能撿到什麼……", seek: "四處走走，看這一帶有什麼事……", sense: "靜心凝神……", // 探索三選一（待 joy 潤）
+    "gather:say": "你邊找邊盤算……", // 找素材的「自己說」（第 32 項；待 joy 潤）；其他分支照找素材那一句
   };
   const SENT_WAITING = "墨跡未乾，江湖尚未回音……"; // 沒列到的行動
   const SLOW_WAITING = "路遠消息遲，再等片刻……";
@@ -5943,7 +5976,11 @@
     if (key === "act:explore") return WAIT_LINES.explore;
     if (key === "act:train") return S.main && S.main.sortie ? WAIT_LINES.sortie : WAIT_LINES.train; // 出陣開著（m.sortie）換一句
     // 探索三選一：字面寫 "explore:"、不讀 EXPLORE_PREFIX（tests/test_sending_web.py 只從 app.js 切等候那一段出來，切不到行動列那邊的常數）
-    if (key.startsWith("explore:")) return WAIT_LINES[key.slice("explore:".length)] || WAIT_LINES.explore;
+    // 找素材分支（explore:gather:mine）照找素材那一句，「自己說」另一句（WAIT_LINES["gather:say"]）
+    if (key.startsWith("explore:")) {
+      const mode = key.slice("explore:".length);
+      return WAIT_LINES[mode] || (mode.startsWith("gather:") ? WAIT_LINES.gather : WAIT_LINES.explore);
+    }
     if (key === "act:rest") return WAIT_LINES.rest;
     if (key === "act:socialize" || key.startsWith("call:") || key.startsWith("talk:")) return WAIT_LINES.meet;
     if (key.startsWith("move:") || key.startsWith("road:")) return WAIT_LINES.move;
@@ -6171,6 +6208,13 @@
       if (input) input.focus();
       return;
     }
+    if (id === GATHER_SAY_ID) { // 找素材的「自己說」：先叫出輸入框，寫好再送（見 gatherSay）
+      S.gatherSaying = true;
+      renderPage();
+      const input = document.querySelector("#gather-say-form .input");
+      if (input) input.focus();
+      return;
+    }
     const sent = await busy(async () => {
       document.querySelectorAll(".options .btn").forEach((b) => { b.disabled = true; });
       btn.classList.add("busy");
@@ -6224,6 +6268,31 @@
         submitBtn.textContent = "說出口";
       }
     });
+  }
+
+  // 找素材的「自己說」（第 32 項）：送出後要等模型評這個找法（同隨口應對），按鈕先寫「盤算中……」；等候的話照 waitLineFor(GATHER_SAY_ID)
+  const GATHER_SAY_WAIT = "盤算中……"; // 待 joy 潤
+  async function gatherSay(form, text) {
+    await busy(async () => {
+      form.querySelectorAll("input, button").forEach((el) => { el.disabled = true; });
+      const submitBtn = form.querySelector("[type=submit]");
+      submitBtn.textContent = GATHER_SAY_WAIT;
+      const stop = watchQueue(submitBtn, GATHER_SAY_WAIT);
+      try {
+        const r = await api("/api/do/gather_text", { text });
+        S.gatherSaying = false;
+        S.wheelSel = null; // 同按了別的探索：收起展開的探索（分支展開與否照記著，S.gatherOpen）
+        applyMain(r.main);
+        const said = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+        // 被擋下來的那一句（字數不對、換了做法）在江湖紀錄裡沒有，用提示泡泡講；做成了的結果在「剛剛」
+        if (said && !said.startsWith("你：")) toast(said);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } finally {
+        stop();
+        form.querySelectorAll("input, button").forEach((el) => { el.disabled = false; });
+        submitBtn.textContent = GATHER_SAY_GO;
+      }
+    }, waitLineFor(GATHER_SAY_ID));
   }
 
   // 隨口應對：送出後要等模型評這個做法，首次常要好幾秒，按鈕先寫「思量中……」
@@ -6850,6 +6919,12 @@
           renderPage();
           if (S.wheelSel) revealMoveCard(); // 收起（再點一次）不捲
           break;
+        case "gather-wheel": // 找素材分支（第 32 項）：「找素材」點了在它底下攤開（再點一次收起）；輸入框跟著收
+          S.gatherOpen = !S.gatherOpen;
+          S.gatherSaying = false;
+          renderPage();
+          if (S.gatherOpen) revealMoveCard();
+          break;
         case "map-layer": { // 濾鏡：原地換開關與記號，不重畫整頁；勢力與意境互斥，整排鈕一起換樣子
           S.mapLayers = toggleLayer(S.mapLayers, el.dataset.layer);
           syncLayerButtons(); // 意境鈕在右上角那一欄（FB-325）：兩處一起換
@@ -7039,6 +7114,9 @@
       } else if (form.id === "say-form") {
         if (!data.text.trim()) return;
         await sayLine(form, data.text.trim());
+      } else if (form.id === "gather-say-form") {
+        if (!data.text.trim()) return;
+        await gatherSay(form, data.text.trim());
       } else if (form.id === "tav-ask") {
         if (!data.target.trim()) return;
         const seek = S.tavAsk !== "ties";

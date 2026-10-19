@@ -337,7 +337,7 @@ def explore_lines(content: Content, season: WorldState | None = None) -> list[st
     cfg = content.config
     names = explore_modes.NAMES
     if precise.on(content, season):
-        return precise_explore_lines(content)
+        return precise_explore_lines(content) + gather_branch_lines(content, season)
     legend = f"三種都有機會撿到{cfg.legend_item_name}。" if cfg.explore_legend_chance > 0 else ""
     econ = cfg.economy  # 素材與經濟設計第七節：一階從一定給改成七成
     first = f"（一階約 {econ.gather_first_chance * 10:g} 成撿得到）" if econ.gather_cut else ""
@@ -360,6 +360,20 @@ def precise_explore_lines(content: Content) -> list[str]:
         f"- **{names['practice']}**（在探索裡，體力 {cost}）：找這裡的對手打一場，一定開打、不限次數，打贏是經驗的大宗；"
         "城鎮與沒有對手的地方灰著。有頭目的地方，頭目在練功時碰上。",
     ]
+
+
+def gather_branch_lines(content: Content, season: WorldState | None) -> list[str]:
+    """找素材分支（第 32 項；待 joy 潤）開著時多一條：哪幾條路多給哪幾種屬性、深入偶有所悟、「自己說」。照 content/gather_branches.json 寫，
+    關著是空的（一個字都不變）。"""
+    if not explore_modes.branches_on(content, season):
+        return []
+    names = explore_modes.NAMES
+    roads = "，".join(f"{b.name}多{'、'.join(b.attributes)}" for b in content.gather_branches.values() if not b.deep)
+    deep = next((b for b in content.gather_branches.values() if b.deep), None)
+    deep_line = f"；深山裡「{deep.name}」偶爾另有所悟" if deep is not None and content.config.gather_branches.deep_insight_chance > 0 else ""
+    say = (f"最後一顆「{explore_modes.SAY_LABEL}」寫一句自己的找法（{explore_modes.SAY_MAX} 字內），寫得好多一份。"
+           if content.config.gather_branches.say_enabled else "")
+    return [f"- **{names['gather']}的路**：城外有兩條以上的路可走時，按{names['gather']}會再攤開幾條——{roads}{deep_line}。{say}"]
 
 
 def _tenth(share: float) -> str:

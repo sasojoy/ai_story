@@ -726,6 +726,17 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
             if _crippled(game):
                 return None
             return PRACTICE_SCORE + (BOUNTY_SCORE if _bounty_here(game, "strike") else 0.0)
+        gather, _, branch = arg.partition(":")
+        if gather == explore_modes.GATHER and branch:  # 找素材分支（第 32 項）：「自己說」不寫（不寫自由文字）；缺料時照缺的屬性挑
+            if branch == explore_modes.SAY or branch not in game.content.gather_branches:
+                return None
+            loc = game.content.locations[game.state.player.location]
+            attrs = explore_modes.branch_attributes(game.content, loc, game.content.gather_branches[branch])
+            need = NEED_MATERIAL_SCORE if _short_of_materials(game) and set(attrs) & _scarce_attributes(game) else 0.0
+            return PRECISE_GATHER_SCORE + scout + need
+        if arg == explore_modes.GATHER and explore_modes.layered(game.content, game.state.world,
+                                                                 game.content.locations[game.state.player.location]):
+            return None  # 有分支層時「找素材」只是展開分支的入口，按了不做事（同 act:explore）
         if arg == explore_modes.GATHER and precise.on(game.content, game.state.world):  # 一定給素材、不打仗
             return PRECISE_GATHER_SCORE + scout + (NEED_MATERIAL_SCORE if _short_of_materials(game) else 0.0)
         if arg == explore_modes.GATHER:
@@ -1005,6 +1016,20 @@ def _short_of_materials(game: Game) -> bool:
     """背包裡的一階素材少於 NEED_MATERIAL_BELOW 個（修兵器、餵馬、糧草都吃一階）。"""
     mats = game.content.materials
     return sum(n for mid, n in game.state.player.materials.items() if mid in mats and mats[mid].tier == 1) < NEED_MATERIAL_BELOW
+
+
+def _scarce_attributes(game: Game) -> set[str]:
+    """背包裡一階素材最少的那幾種屬性（找素材分支照它挑：缺剛的去挖礦，第 32 項）。素材表裡一種一階都沒有的屬性不算。"""
+    mats = game.content.materials
+    have = game.state.player.materials
+    counts: dict[str, int] = {}
+    for m in mats.values():
+        if m.tier == 1:
+            counts[m.attribute] = counts.get(m.attribute, 0) + have.get(m.id, 0)
+    if not counts:
+        return set()
+    low = min(counts.values())
+    return {attr for attr, n in counts.items() if n == low}
 
 
 def _bounty_here(game: Game, kind: str) -> bool:

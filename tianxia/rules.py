@@ -335,7 +335,13 @@ FREE_TEXT_PER_POINT = 4  # 相關屬性每比 5 高（低）1 點，成功率 +4
 def free_text_rate(llm_rate: int, choice, state: GameState, content: Content, world: WorldStateStore) -> int:
     """隨口應對的成功率（百分比）：LLM 評的 0～100，加上本人這項屬性的修正（跟一般檢定一樣只看本人，choice.by 不再有作用），
     夾在 5～85。choice 是 models.FreeTextChoice。"""
-    value = team.check_value(state, content, world, PLAYER, choice.stat)
+    return stat_rate(llm_rate, choice.stat, state, content, world)
+
+
+def stat_rate(llm_rate: int, stat: str, state: GameState, content: Content, world: WorldStateStore) -> int:
+    """LLM 評的 0～100 加上本人 stat 這項屬性的修正（每比 5 多一點 +FREE_TEXT_PER_POINT），夾在 5～85。隨口應對（照事件寫的屬性）
+    與找素材的「自己說」（固定悟性，第 32 項）共用。"""
+    value = team.check_value(state, content, world, PLAYER, stat)
     rate = round(llm_rate + (value - 5) * FREE_TEXT_PER_POINT)
     return max(FREE_TEXT_MIN_RATE, min(FREE_TEXT_MAX_RATE, rate))
 

@@ -1312,6 +1312,18 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .act-move, .act-explore { margin-bottom: 12px; scroll-margin-bottom: calc(64px + var(--bottom)); }
 .act-move .options { margin: 8px 0 0; }
 .act-explore .options { margin: 0; } /* 探索三選一點開的三顆（出陣探索與地盤）：沒有走法那一列，三顆貼著卡頂 */
+/* 找素材分支（第 32 項，計畫 2.1 甲）：「找素材」是展開鈕，底下一排分支——兩欄，名字一行、「體力 6・剛、慢」一行（小段不折在詞中間，nbHtml）；
+   「自己說…」與它的輸入框佔一整列。左邊一條細線表示是「找素材」底下的 */
+.act-explore .btn.gather-head { justify-content: space-between; }
+.act-explore .btn.gather-head.on { border-color: var(--accent); }
+.act-explore .gather-caret { flex: none; font-size: 12px; color: var(--ink-2); }
+.gather-branches { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: -2px 0 2px 6px; padding-left: 10px; border-left: 2px solid var(--line); }
+.gather-branches .btn.gather-branch { min-height: 44px; padding: 6px 10px; justify-content: flex-start; text-align: left; }
+.gather-branches .gb-text { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; min-width: 0; }
+.gather-branches .gb-text b { font-weight: 600; }
+.gather-branches .gb-text small { font-size: 12px; color: var(--ink-2); white-space: normal; }
+.gather-branches .gather-branch.say, .gather-branches .gather-say { grid-column: 1 / -1; }
+.gather-branches .gather-say { margin: 0; }
 .act-move .move-mode { margin: 0; }
 .fold.here summary { font-size: 14px; }
 .fold.here .options { margin: 0; }
