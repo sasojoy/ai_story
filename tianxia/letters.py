@@ -32,6 +32,8 @@ HELP_TEXT = {  # 待 joy 潤：求援的固定句（模型寫不出來時照這�
     "悲憤": "{hero}台鑒：同袍新喪，此仇不共戴天。聽聞{hero}身手了得，望能助我一臂之力：{task}。",
 }
 CHEER_TEXT = "{hero}台鑒：聽說你{about}，我拍案叫好。他日相見，當浮一大白。"  # 待 joy 潤：道賀的固定句
+FEAST_TEXT = "{hero}台鑒：我在{place}略備薄酒，{hero}若得閒，務請光臨。"  # 待 joy 潤：邀宴的固定句（第三批）
+THANK_TEXT = "{hero}台鑒：{task}一事，多虧{hero}出手相助，此情銘記於心。"  # 待 joy 潤：求援委託辦成了的道謝（第三批）
 HELP_MOODS = ("焦慮", "悲憤")
 CHEERS_KEEP = 5
 WRITE_LIMIT = 120  # 模型寫的信最多幾個字（超過照固定句）
@@ -65,7 +67,7 @@ def deliver(state: GameState, content: Content) -> list[str]:
     day = int(w.time // DAY)
     if w.ended or p.letter_day == day or prologue.active(state, content) or not content.characters:
         return msgs
-    letter = _cheer_letter(state, content) or _help_letter(state, content, random.Random(f"書信|{w.tianji}|{p.name}|{day}"))
+    letter = _cheer_letter(state, content) or _feast_letter(state, content) or _help_letter(state, content, random.Random(f"書信|{w.tianji}|{p.name}|{day}"))
     if letter is None:
         return msgs
     p.letter_day = day
@@ -101,6 +103,37 @@ def _cheer_letter(state: GameState, content: Content) -> Letter | None:
     return None
 
 
+def _feast_letter(state: GameState, content: Content) -> Letter | None:
+    """情誼夠的人物正在擺宴、這一場還沒邀過你、你還沒敬過酒：寫一封邀宴（第三批，feasts.py）。"""
+    from . import feasts  # noqa: PLC0415  feasts → figure_life
+
+    if not feasts.on(content):
+        return None
+    p = state.player
+    for f in feasts.open_feasts(state):
+        if feasts.toasted(state, f) or not _reachable(state, content, f.host):
+            continue
+        if any(x.kind == "邀宴" and x.sender == f.host and x.at >= f.start for x in p.letters):
+            continue
+        place = content.locations[f.place].name if f.place in content.locations else ""
+        return Letter(id=_next_id(state), kind="邀宴", sender=f.host, at=state.world.time, about=place,
+                      text=FEAST_TEXT.format(hero=gender.hero(p), place=place))
+    return None
+
+
+def thank(state: GameState, content: Content, task: Bounty) -> list[str]:
+    """求援委託辦成了（bounties._complete_rally）：那位人物寫一封道謝信（不佔一天一封的額度：是回你的信）。回傳江湖紀錄的句子。"""
+    cid = task.figure
+    if not on(content) or cid is None or cid not in content.characters:
+        return []
+    p = state.player
+    p.letters.append(Letter(id=_next_id(state), kind="道謝", sender=cid, at=state.world.time,
+                            about=bounties.title(content, task),
+                            text=THANK_TEXT.format(hero=gender.hero(p), task=bounties.title(content, task))))
+    del p.letters[:-content.config.figure_life.letters_keep]
+    return [ARRIVED.format(who=_name(content, cid))]
+
+
 def _help_letter(state: GameState, content: Content, rng: random.Random) -> Letter | None:
     p, w = state.player, state.world
     busy = {b.figure for b in bounties.open_commissions(state, content)}
@@ -114,7 +147,7 @@ def _help_letter(state: GameState, content: Content, rng: random.Random) -> Lett
             continue
         place = figure_life.where(state, content, cid)
         text = HELP_TEXT[mood].format(hero=gender.hero(p), place=content.locations[place].name if place in content.locations else "",
-                                      task=bounties.how(content, task))
+                                      task=bounties.how(content, task, state))
         return Letter(id=task_id(task), kind="求援", sender=cid, at=w.time, mood=mood, text=text, task=task)
     return None
 
@@ -181,7 +214,7 @@ def view(state: GameState, content: Content) -> dict | None:
     t = letter.task
     if t is not None:
         live = not letter.lapsed and not t.done_by and t.expires > state.world.time
-        out["task"] = {"title": bounties.title(content, t), "how": bounties.how(content, t),
+        out["task"] = {"title": bounties.title(content, t), "how": bounties.how(content, t, state),
                        "reward": bounties.commission_reward(state, content, t),
                        "due": f"期限 {bounties.due_text(t, content, state.world)}", "live": live,
                        "state": "辦成了" if t.done_by else "作罷了" if letter.lapsed or not live else ""}
@@ -239,7 +272,7 @@ def request(state: GameState, content: Content) -> LetterNote | None:
     persona = "；".join(x for x in ((ch.personality if ch else ""), (ch.situation if ch else "")) if x)
     return LetterNote(
         id=letter.id, kind=letter.kind, sender=letter.sender, sender_name=_name(content, letter.sender), persona=persona[:200],
-        mood=letter.mood, about=letter.about, task=bounties.how(content, letter.task) if letter.task else "",
+        mood=letter.mood, about=letter.about, task=bounties.how(content, letter.task, state) if letter.task else "",
         hero=gender.hero(state.player), player=state.player.name, fixed=letter.text,
     )
 
@@ -250,6 +283,10 @@ def write(client, note: LetterNote) -> str:
         return ""
     if note.kind == "求援":
         what = f"他此刻{note.mood}，寫信向{note.hero}求援，託的事是：{note.task}（事情要寫進信裡，可以換成他的說法）"
+    elif note.kind == "邀宴":
+        what = f"他在{note.about}設宴，寫信邀{note.hero}來赴宴（地點要寫進信裡）"
+    elif note.kind == "道謝":
+        what = f"{note.hero}替他辦成了「{note.about}」，他寫信道謝"
     else:
         what = f"他聽說{note.hero}{note.about}，寫信道賀"
     messages = [

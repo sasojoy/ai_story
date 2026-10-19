@@ -75,6 +75,7 @@ ART_GIFTS = "・素材，偶有兵器"  # 待 joy 潤：求藝的賞那一段最
 ATTACH_NOTES = {"strike": "・二階素材（偶有三階）", "scout": "・{pill} 一顆", "escort": "・二階素材"}
 # 21 天季的懸賞卡與告示把賞拆成小籤（企劃者挑第 5 批畫面第三組丙）：reward_tags 一格一樣，重賞那一格與「照等級」那一句
 PRIZE_TAG = "重賞：{what}"  # 待 joy 潤
+GIFT_SHORT = {"strike": "＋二階", "escort": "＋二階", "scout": "＋{pill}", "art": "＋素材"}  # 待 joy 潤：告示正面附贈那一格（FB-391，紙上那一格的短寫）
 LEVEL_NOTE = "賞照你第 {level} 級"  # 待 joy 潤
 ENEMY = {"guan": "huang", "huang": "guan"}  # 自動掛單的兩個陣營與他們的對頭（同軍令）
 BOARD = "懸賞榜"
@@ -149,6 +150,9 @@ def unit_of(b: Bounty) -> str:
 def title(content: Content, b: Bounty) -> str:
     """短標題：「討伐・黃巾游騎（南陽郊野）」「打探・嵩山深處」「護送・新野→宛城」「通緝・某某」「求藝・剛」「求兵・屬柔的劍」。"""
     kind = KIND_NAMES.get(b.kind, b.kind)
+    if b.motive == "求援":  # 人物對整個陣營發的（大勢人物擴充第三批）：「求援・汝南的黃巾軍」「求援・嵩山深處」
+        where = f"{_loc_name(content, b.location)}的{_enemy_name(content, b)}" if b.kind == "strike" else _loc_name(content, b.location)
+        return f"求援・{where}"
     if b.kind == "art":
         return f"{kind}・{b.attribute}"
     if b.kind == "arms":
@@ -168,14 +172,26 @@ def title(content: Content, b: Bounty) -> str:
 
 STRIKE_SORTIE = "出陣攻打贏"  # 待 joy 潤（FB-249）：出陣開著時討伐怎麼交差
 STRIKE_GATHER = "找素材撞上的那一場也算"  # 待 joy 潤：探索三選一開著時多的那半句（散人不出陣，討伐靠這裡）
+# 一類一顆生效的季（FB-420）：找素材不打仗，討伐在練功交差（待 joy 潤）
+STRIKE_PRECISE = "到{target}練功或出陣攻打贏一場{enemy}的隊伍"
+STRIKE_PRACTICE = "到{target}練功打贏一場{enemy}的隊伍"
 
 
-def how(content: Content, b: Bounty) -> str:
-    """怎麼完成（一句）。討伐在出陣開著時寫出陣攻（與探索三選一的找素材撞上），不寫遊歷（FB-249）。"""
+def how(content: Content, b: Bounty, state: GameState | None = None) -> str:
+    """怎麼完成（一句）。討伐在出陣開著時寫出陣攻（與探索三選一的找素材撞上），不寫遊歷（FB-249）；一類一顆在這一季生效時
+    （precise.on，要給 state）寫練功（FB-420：找素材不打仗了），看的人是散人（不出陣）只寫練功。懸賞卡、告示、紙上、揭下的回話、
+    傳聞與書信都走這一句；沒給 state（陣營傳聞）照陣營的人寫。"""
+    world = state.world if state is not None else None
+    if b.motive == "求援":  # 求援委託：護衛、犒軍那位人物也算（大勢人物擴充第三批，跟「大勢人物參戰與護衛」對齊）
+        return how(content, b.model_copy(update={"motive": None}), state) + RALLY_AID.format(who=issuer(content, b))
     if b.kind == "strike":
-        from . import explore_modes, sortie  # noqa: PLC0415  延後 import 只是保險
+        from . import explore_modes, precise, sortie  # noqa: PLC0415  延後 import 只是保險
 
         target = _loc_name(content, b.location)
+        if precise.on(content, world):
+            ranger = state is not None and state.player.faction is None  # 散人不出陣
+            line = STRIKE_PRECISE if sortie.on(content) and not ranger else STRIKE_PRACTICE
+            return line.format(target=target, enemy=_enemy_name(content, b))
         if sortie.on(content):
             ways = f"{STRIKE_SORTIE}，{STRIKE_GATHER}" if explore_modes.on(content) else STRIKE_SORTIE
             return f"到{target}打贏一場{_enemy_name(content, b)}的隊伍（{ways}）"
@@ -489,6 +505,13 @@ def reward_tags(state: GameState, content: Content, b: Bounty) -> list[dict] | N
     return tags
 
 
+def gift_short(state: GameState, content: Content, b: Bounty) -> str:
+    """告示正面附贈那一格（FB-391）：有附的那一樣（reward_bits 的 gift）才有，照種類寫短的；沒有是空字串。"""
+    if not reward_bits(state, content, b).gift:
+        return ""
+    return GIFT_SHORT.get(b.kind, "").format(pill=content.config.stamina_pill_name)
+
+
 def level_note(state: GameState, content: Content, b: Bounty) -> str:
     """賞照揭的人的等級長的那幾張（_daily_pay）寫「賞照你第 N 級」；其餘空字串。"""
     return LEVEL_NOTE.format(level=state.player.member.level) if _daily_pay(state, content, b) else ""
@@ -578,7 +601,7 @@ def take(state: GameState, content: Content, bounty_id: str) -> list[str]:
         return [problem]
     if name_key(state.player.name) not in (name_key(t) for t in b.takers):
         b.takers.append(state.player.name)
-    return [f"你揭下了「{title(content, b)}」：{how(content, b)}。（{reward_text(state, content, b)}；{due_line(state, content, b)}）"]
+    return [f"你揭下了「{title(content, b)}」：{how(content, b, state)}。（{reward_text(state, content, b)}；{due_line(state, content, b)}）"]
 
 
 def drop(state: GameState, content: Content, bounty_id: str) -> list[str]:
@@ -632,6 +655,97 @@ def _figure_thanks(state: GameState, content: Content, b: Bounty, amount: int) -
     return [f"{content.characters[b.figure].name}情誼 +{moved}"] if moved else []
 
 
+RALLY_AID = "；或去護衛、犒軍{who}"  # 待 joy 潤
+RALLY_DONE = "【求援】{who}的求援你辦成了：「{title}」。"  # 待 joy 潤
+RALLY_POSTED = "{who}向{side}各路同袍求援：{how}。"  # 待 joy 潤：陣營軍情
+
+
+def rallies(state: GameState, content: Content) -> list[Bounty]:
+    """我看得到、還辦得了的求援委託（WorldState.rallies；大勢人物擴充第三批）：掛單的是我這一邊（army_of：官軍、黃巾，依附的豪強
+    照依附那一軍）、沒過期、還有名額、我還沒辦過。不用揭，辦成了前 quota 個有賞。懸賞榜關著、休季沒有。"""
+    w = state.world
+    side = army_of(state, content)
+    if not active(state, content) or side is None:
+        return []
+    me = name_key(state.player.name)
+    return [b for b in w.rallies
+            if b.faction == side and b.expires > w.time and _left(b) > 0 and me not in (name_key(t) for t in b.done_by)]
+
+
+def _complete_rally(state: GameState, content: Content, b: Bounty) -> list[str]:
+    """求援委託辦成了：銀兩 b.silver（同委託，不乘加成）、那位人物情誼 +rally_affinity，他寫一封道謝信。"""
+    from . import letters  # noqa: PLC0415  letters → bounties
+
+    p = state.player
+    b.done_by.append(p.name)
+    p.stats["silver"] = p.stats.get("silver", 0) + b.silver
+    msgs = [RALLY_DONE.format(who=issuer(content, b), title=title(content, b))]
+    if b.silver:
+        msgs.append(f"銀兩 +{b.silver}")
+    msgs += _figure_thanks(state, content, b, content.config.figure_life.rally_affinity)
+    return msgs + letters.thank(state, content, b)
+
+
+def on_aid(state: GameState, content: Content, cid: str) -> list[str]:
+    """護衛、犒軍了大勢人物（對話人物 id cid；Game._aid_act）：他發的求援委託算辦成。"""
+    msgs: list[str] = []
+    for b in rallies(state, content):
+        if b.figure == cid:
+            msgs += _complete_rally(state, content, b)
+    return msgs
+
+
+def rally_reward(content: Content, b: Bounty) -> str:
+    """求援委託的賞：「賞銀 30・皇甫嵩情誼 +5」（名額寫在 due_line）。待 joy 潤。"""
+    parts = [f"賞銀 {b.silver}"] if b.silver else []
+    amount = content.config.figure_life.rally_affinity
+    if amount and b.figure in content.characters:
+        parts.append(f"{content.characters[b.figure].name}情誼 +{amount}")
+    return "・".join(parts)
+
+
+def post_rally(state: GameState, content: Content, cid: str) -> Bounty | None:
+    """cid（大勢人物）對自己陣營全部人發一件求援委託（figure_life.tick：心事焦慮時擲中）：在他所在那一區，有對頭站著的地方就討伐，
+    否則打探那一區危險度 2 以上、不是城鎮的地方。同一位一次一件。懸賞榜關著、他不是交戰兩軍、那一區什麼都挑不出來回 None。"""
+    from . import atlas, figure_life  # noqa: PLC0415  atlas → world → rules：延後載入
+
+    side = figure_life.side_of(content, cid)
+    w, tuning = state.world, content.config.figure_life
+    if not active(state, content) or side not in ENEMY:
+        return None
+    if any(b.figure == cid and b.expires > w.time and _left(b) > 0 for b in w.rallies):
+        return None
+    spot = figure_life.where(state, content, cid)
+    region = figure_life._region(content, spot)
+    if region is None:
+        return None
+
+    def in_region(loc_id: str) -> bool:
+        found = atlas.region_of(content, loc_id)
+        return found is not None and found.id == region
+
+    rng = random.Random(f"求援|{w.tianji}|{cid}|{w.time}")
+    spec: dict
+    strikes = [x for x in _strike_spots(content, w, side, set()) if in_region(x[0])]
+    if strikes:
+        loc, squad = rng.choice(strikes)
+        spec = {"kind": "strike", "location": loc, "squad": squad}
+    else:
+        scouts = [loc_id for loc_id, loc in content.locations.items()
+                  if loc.danger >= 2 and not is_town(content, loc_id) and _opened(loc, w) and in_region(loc_id)]
+        if not scouts:
+            return None
+        spec = {"kind": "scout", "location": rng.choice(scouts)}
+    w.bounty_seq += 1
+    made = Bounty(
+        id=f"r{w.bounty_seq}", faction=side, week=calendar.point(w.time, content, w).week,
+        expires=w.time + tuning.rally_cal_days * 24 * calendar.cal_hour_seconds(content, w),
+        silver=tuning.rally_silver, deeds=0, quota=tuning.rally_quota, figure=cid, motive="求援", **spec,
+    )
+    w.rallies = [b for b in w.rallies if b.expires > w.time][-20:] + [made]
+    return made
+
+
 COMMISSION_DONE = "【委託】{who}託你的事辦成了：「{title}」。"  # 待 joy 潤
 
 
@@ -663,6 +777,9 @@ def _done(state: GameState, content: Content, world: WorldStateStore, match) -> 
     for b in open_commissions(state, content):  # 求援書信附的委託（大勢人物擴充第二批）：照同一套交差
         if match(b):
             msgs += _complete_commission(state, content, b)
+    for b in rallies(state, content):  # 求援委託（第三批）：不用揭，自己這一邊的人辦成就算
+        if match(b):
+            msgs += _complete_rally(state, content, b)
     return msgs
 
 
@@ -1427,7 +1544,7 @@ def _hang_asks(w: WorldState, content: Content, give_rng: random.Random, give_ki
 def targets(state: GameState, content: Content) -> list[str]:
     """假人往哪裡走：手上每一張要去的地點（討伐、打探：那裡；護送：終點）。"""
     out = []
-    for b in mine(state, content) + open_commissions(state, content):  # 委託也去（大勢人物擴充第二批）
+    for b in mine(state, content) + open_commissions(state, content) + rallies(state, content):  # 委託、求援也去（擴充第二、三批）
         if b.kind == "escort":
             out.append(b.end)
         elif b.kind in ("strike", "scout"):
@@ -1436,7 +1553,7 @@ def targets(state: GameState, content: Content) -> list[str]:
 
 
 def _row(state: GameState, content: Content, b: Bounty) -> dict:
-    row = {"id": b.id, "title": title(content, b), "how": how(content, b), "reward": reward_text(state, content, b),
+    row = {"id": b.id, "title": title(content, b), "how": how(content, b, state), "reward": reward_text(state, content, b),
            "issuer": issuer(content, b), "due": due_line(state, content, b)}
     tags = reward_tags(state, content, b)
     if tags is not None:  # 21 天季：賞拆成小籤、照等級的那一句（週末與 14 天的季沒有這兩個鍵）
@@ -1467,6 +1584,8 @@ def status(state: GameState, content: Content, world: WorldStateStore) -> list[d
     rows = [_row(state, content, b) for b in mine(state, content)]
     rows += [{**_row(state, content, b), "reward": commission_reward(state, content, b), "commission": True}
              for b in open_commissions(state, content)]  # 委託（大勢人物擴充第二批）：跟手上揭了的排在一起
+    rows += [{**_row(state, content, b), "reward": rally_reward(content, b), "commission": True}
+             for b in rallies(state, content)]  # 求援委託（第三批）
     me = name_key(state.player.name)
     memo: dict = {}
     for b in open_bounties(state, content):

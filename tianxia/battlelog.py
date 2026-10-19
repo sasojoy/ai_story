@@ -23,7 +23,7 @@ BIG_KINDS = ("showdown", "seal")
 BIG_KEEP = 40
 FULL_LOG_HEAD = "**完整戰況**"  # 決戰戰報最後一段（BattleRecord.log）：網頁照「第 N 回合」把每一回合收成一行、點了展開（app.js 的 roundBlocks）
 TIER_WORDS = {"大勝": "大勝", "險勝": "險勝", "僵持": "平手", "落敗": "落敗"}
-KIND_WORDS = {"train": "遊歷", "event": "劇情", "wild": "探索遇敵", "showdown": "決戰", "spar": "切磋", "raid": "截殺", "duel": "頭目戰", "seal": "奪璽", "arena": "擂台", "sortie": "出陣", "ambush": "設伏"}
+KIND_WORDS = {"train": "遊歷", "event": "劇情", "wild": "探索遇敵", "showdown": "決戰", "spar": "切磋", "raid": "截殺", "duel": "頭目戰", "seal": "奪璽", "arena": "擂台", "sortie": "出陣", "ambush": "設伏", "assassin": "殺手"}
 NO_RECORD = "（還沒有戰報。）"
 DODGE_NOTE = "身法一閃，躲過了這一敗。"  # 落敗被閃成僵持時，戰報與場景的戰鬥卡片多這一句（人物資質設計 14.4）
 DAY = 86400
@@ -134,7 +134,7 @@ def _result_line(record: BattleRecord) -> str:
         return f"**{record.tier}**　你站在{record.side}"
     if record.kind == "seal":  # 奪璽單挑（玉璽碎片設計 5.9）：雙方都是快照，沒有我方威力與對手難度；待 joy 潤
         return f"**{record.tier}**　陣前單挑"
-    rival = "對手威力" if record.kind in ("spar", "raid", "arena", "ambush") else "對手難度"  # 切磋、截殺的對手是另一個玩家：寫他的威力
+    rival = "對手威力" if record.kind in ("spar", "raid", "arena", "ambush", "assassin") else "對手難度"  # 切磋、截殺的對手是另一個玩家：寫他的威力
     return f"**{record.tier}**　我方威力 {record.our_power:.0f}　{rival} {record.difficulty:.0f}"
 
 

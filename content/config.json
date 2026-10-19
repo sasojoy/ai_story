@@ -7,6 +7,8 @@
   "hurry_stamina_per_minute": 1,
   "dash_stamina_per_minute": 2,
   "action_cost": {"explore": 6, "train": 6, "socialize": 3},
+  "presence_seconds": 86400,
+  "invite_ttl_seconds": 1800,
   "stamina_pill_restore": 150,
   "beta_gift_stamina_pills": 30,
   "stamina_pills_per_day": 2,
@@ -14,6 +16,8 @@
   "event_fail_stamina_scale": 0.5,
   "newbie_real_hours": 48,
   "newbie_hp_double": false,
+  "companions": {"enabled": true},
+  "affinity_gain_scale": 0.7,
   "ollama_model": "gemma4:12b",
   "ollama_think": false,
   "ollama_keep_alive": "12h",
@@ -104,7 +108,8 @@
     "scrap_chance": 0.04,
     "challenge_tier3": 1,
     "tier3_per_figure": 1,
-    "big_tier3": 0.25
+    "big_tier3": 0.25,
+    "rotation": true
   },
   "ambush": {"enabled": false},
   "fortify": {"enabled": false},

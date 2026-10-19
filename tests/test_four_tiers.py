@@ -432,7 +432,7 @@ DIVINE_ATTRS = {
 
 def test_divine_recipes_are_all_tier4():
     c = real_content()
-    divine = {r.id: r for r in c.forge_secrets.values() if r.divine}
+    divine = {r.id: r for r in c.forge_secrets.values() if r.divine and r.wave == 1}  # 一開始的九件（新神器第一批是 wave 2，正式季第 10 批）
     assert set(divine) == set(DIVINE_ATTRS)
     for rid, (main, aux) in DIVINE_ATTRS.items():
         r = divine[rid]

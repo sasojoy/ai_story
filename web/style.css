@@ -290,7 +290,7 @@ ul { padding-left: 1.3em; margin: 0.4em 0; }
 .seg::-webkit-scrollbar { display: none; }
 .seg button { flex: 1 0 auto; border: 0; background: none; padding: 8px 12px; border-radius: 9px; cursor: pointer; font-size: 14px; color: var(--ink-2); white-space: nowrap; }
 .seg button.on { background: var(--card); color: var(--ink); font-weight: 600; box-shadow: var(--shadow); }
-.news-seg button { padding: 8px 6px; } /* 見聞七個子分頁（加了榜單）：375 寬一排放得下，不必橫捲才看得到最後一個 */
+.news-seg button { padding: 8px 4px; font-size: 13px; } /* 見聞八個子分頁（加了榜單、名帖匣）：375 寬一排放得下，不必橫捲才看得到最後一個 */
 
 .field { display: block; margin: 0 0 10px; }
 .field > span { display: block; font-size: 12px; color: var(--ink-2); margin: 0 2px 4px; }
@@ -465,6 +465,9 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .scene .muster-join .btn { width: auto; margin: -8px 0; }
 .scene .muster-join.wide { flex-basis: 100%; }
 .scene .muster-join.wide .btn { flex: 1 1 0; min-width: 0; margin: 0; padding: 6px 8px; justify-content: center; }
+/* 挑同伴那一步（FB-360）：另起一行、一顆一行，鈕上寫份量與氣血 */
+.scene .muster-join.pick { flex-basis: 100%; flex-direction: column; }
+.scene .muster-join.pick .btn { width: 100%; margin: 0; padding: 6px 8px; }
 /* 決戰：對面上一回合的出招比例與自己的結果（引擎寫成一段 markdown 引用「> 」，伺服器轉成 blockquote）：小字、淡色、行距緊、
    沒有瀏覽器預設的縮排與邊線，375px 上約 65px（含上面一段的間距；15.5px 兩段是 95px） */
 .scene blockquote { margin: 2px 0; padding: 0; border: 0; font-size: 13px; line-height: 1.5; color: var(--ink-2); }
@@ -1708,6 +1711,7 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
 .shop-back { border: 0; background: transparent; color: #e8d6ad; font: 600 15px var(--sans); padding: 6px 4px; cursor: pointer; }
 .shop-sign { justify-self: center; padding: 4px 14px; border: 2px solid #b7862b; border-radius: 4px; background: #2b1a10; color: #f2c46a; font: 600 16px var(--serif); letter-spacing: 4px; white-space: nowrap; }
 .shop-silver { font: 600 13px var(--sans); color: #f2c46a; }
+.shop-line.rule { border: 1px solid #f2c46a; border-left-width: 3px; border-radius: 2px; background: rgba(242, 196, 106, 0.1); } /* 鐵匠講神器的規矩：金框（設計 9.1 第 2 批甲） */
 .shop-line { margin: 6px 14px 4px; padding: 6px 10px; border-left: 3px solid #b7862b; background: rgba(0, 0, 0, 0.25); font: 13px/1.6 var(--serif); color: #e8d6ad; min-height: 2.4em; }
 .shop-pages { display: flex; gap: 6px; justify-content: center; margin: 4px 0; }
 .shop-page { border: 1px solid #6b4a2e; background: transparent; color: #c9b28a; border-radius: 14px; padding: 3px 14px; font: 13px var(--sans); }
@@ -1794,6 +1798,10 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
 /* 一屬性一排（企劃者 2026-10-14 微調）：排頭一個屬性字，後面一階到三階 */
 .shop-layer .cell-row { display: grid; grid-template-columns: 1.6em repeat(3, 1fr); gap: 6px; align-items: stretch; }
 .shop-layer .cell-row .t1 { grid-column: 2; } .shop-layer .cell-row .t2 { grid-column: 3; } .shop-layer .cell-row .t3 { grid-column: 4; } /* 一階、二階、三階各一欄對齊 */
+/* 素材四階開著（設計 9.1 第 2 批甲：「維持甲類畫面就好」）：一排直接多一欄四階，樣子跟一到三階一樣；375 寬一格約 70px，名字不折行 */
+.shop-layer .cells.four .cell-row { grid-template-columns: 1.6em repeat(4, minmax(0, 1fr)); }
+.shop-layer .cells.four .cell-row .t4 { grid-column: 5; }
+.shop-layer .cells.four .cell .nm { white-space: nowrap; }
 .shop-layer .row-attr { display: flex; align-items: center; justify-content: center; font: 600 14px var(--serif); color: #c9b28a; }
 .shop-layer .row-attr.gang { color: var(--gang); } .shop-layer .row-attr.kuai { color: var(--kuai); }
 .shop-layer .row-attr.rou { color: var(--rou); } .shop-layer .row-attr.man { color: var(--man); }
@@ -1914,7 +1922,12 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
 .shop-board .note.dim { opacity: 0.55; }
 .shop-board .note .corner { position: absolute; top: 3px; right: 4px; padding: 0 3px; border: 1.5px solid #b3261e; border-radius: 3px; color: #b3261e;
   background: rgba(246, 237, 216, 0.85); font: 600 10px/1.4 var(--serif); font-style: normal; transform: rotate(6deg); pointer-events: none; } /* 21 天季：寫銀兩的小朱印 */
-.shop-board .note.held .corner { right: 34px; } /* 揭著的那張右上角是「已揭」：朱印往左讓 */
+.shop-board .note.held .corner { right: 38px; } /* 揭著的那張右上角是「已揭」：朱印往左讓 */
+/* 21 天季告示正面的附贈（金框）與重賞一格（FB-391；草圖丙）：只排一行，放不下時第二格藏起來 */
+.shop-board .note .extra { display: flex; flex-wrap: wrap; gap: 3px; max-height: 1.6em; overflow: hidden; }
+.shop-board .note .extra span { padding: 0 3px; border: 1px solid #c9b48d; border-radius: 3px; background: #efe3c6; font-size: 9.5px; line-height: 1.5; }
+.shop-board .note .extra .gift { border-color: #c9a24a; background: #f5e6bd; }
+.shop-board .note .extra .prize { border-color: #a8322a; color: #a8322a; }
 .shop-board .paper .rtag { border-color: #c9b48d; background: #efe3c6; color: #2a241d; font-size: 12px; }
 .shop-board .paper .rtag em { color: #6d5a43; font-size: 11px; }
 .shop-board .paper .rtag.gift { border-color: #c9a24a; background: #f5e6bd; }
@@ -2037,6 +2050,7 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
 .shop-layer .shop-done.hint { border-left-color: #6b4a2e; background: transparent; color: #c9b28a; } /* 字一樣大：兩種高度才對得上 */
 .shop-layer .up-rows { display: grid; gap: 6px; margin-bottom: 12px; }
 .shop-layer .up-row { display: grid; grid-template-columns: 1.6em 1fr 1fr; gap: 6px; }
+.shop-layer .up-rows.four .up-row { grid-template-columns: 1.6em repeat(3, minmax(0, 1fr)); } /* 素材四階開著：一屬性多一格三換四（設計 9.1 第 2 批甲） */
 .shop-layer .up-cell { display: grid; gap: 1px; justify-items: center; padding: 8px 4px; border-radius: 10px; border: 1px solid #b7862b;
   background: rgba(43, 26, 16, 0.85); color: #f2e5c6; font: 12.5px var(--serif); min-width: 0; }
 .shop-layer .up-cell .from { font-size: 12px; color: #e8d6ad; white-space: nowrap; }
@@ -2067,6 +2081,46 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
 .shop-layer .dn-step { display: flex; gap: 4px; }
 .shop-layer .dn-step .btn { min-width: 34px; padding: 4px 8px; font-size: 15px; }
 .shop-layer .cell .pick { font: 600 10.5px var(--sans); color: #f2c46a; }
+/* 打點（21 天季的銀兩出口；企劃者挑第 9 批畫面乙：茶樓雅間的掮客，五樣記在一本攤開的帳簿上）：雅間是暗的茶褐色、頂上一片竹簾；
+   帳頁固定淺紙深字（深淺色主題都一樣，同懸賞榜的紙）。375 寬兩頁並排，說明字不小於 12px（設計 9.1）；做不了的那一筆墨線劃掉、朱筆批去哪做。
+   沒有動畫（減少動態效果的人也一樣） */
+.shop-layer.shop-dadian { color: #f1e7cf; background: radial-gradient(ellipse at 50% 30%, #3a3824 0%, #2b2a1c 55%, #1a1a10 100%); }
+.shop-layer.shop-dadian > .shop-bar { padding-top: 16px; background: repeating-linear-gradient(180deg, #b39a5c 0 3px, #7a6738 3px 4px) 0 0 / 100% 10px no-repeat; }
+.shop-layer.shop-dadian .shop-back { color: #f1e7cf; }
+.shop-layer.shop-dadian .shop-sign { border: 1px solid #b39a5c; border-radius: 14px; background: #6b4a2a; color: #f1e7cf; letter-spacing: 8px; }
+.shop-layer.shop-dadian > .shop-line { border: 1px solid rgba(179, 154, 92, 0.45); border-radius: 12px 12px 12px 2px; background: rgba(241, 231, 207, 0.1); color: #f1e7cf; }
+.shop-layer.shop-dadian .ledger { display: grid; grid-template-columns: 1fr 1fr; margin-top: 4px; border-radius: 4px; overflow: hidden;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45); color: #2a241d; }
+.shop-layer.shop-dadian .ledger-page { display: grid; align-content: start; padding: 10px 8px 10px 10px; background: linear-gradient(90deg, #f1e7cf 85%, #e8dcbe); }
+.shop-layer.shop-dadian .ledger-page + .ledger-page { padding: 10px 10px 10px 8px; border-left: 1px solid #c9b78f; background: linear-gradient(90deg, #e8dcbe, #f1e7cf 15%); }
+.shop-layer.shop-dadian .ledger-page h3 { margin: 0 0 4px; padding-bottom: 3px; border-bottom: 1px solid #a8322a; color: #a8322a; text-align: center;
+  font: 600 12px var(--serif); letter-spacing: 3px; }
+.shop-layer.shop-dadian .entry { display: grid; gap: 1px; width: 100%; padding: 6px 0 7px; border: 0; border-bottom: 1px dashed #c9b78f; background: none;
+  color: inherit; text-align: left; font: inherit; }
+.shop-layer.shop-dadian button.entry { cursor: pointer; }
+.shop-layer.shop-dadian button.entry:active { background: rgba(93, 122, 74, 0.12); }
+.shop-layer.shop-dadian .entry b { display: flex; justify-content: space-between; gap: 4px; font: 600 14px var(--serif); }
+.shop-layer.shop-dadian .entry b em { font-style: normal; color: #a8322a; white-space: nowrap; }
+.shop-layer.shop-dadian .entry .desc { font: 12px/1.45 var(--sans); color: #6b5d48; }
+.shop-layer.shop-dadian .entry .tick { font: 12px var(--sans); color: #4a6a3a; }
+.shop-layer.shop-dadian .entry.off b, .shop-layer.shop-dadian .entry.off b em { color: #7a6b55; }
+.shop-layer.shop-dadian .entry.off b { text-decoration: line-through 1.5px #2a241d; }
+.shop-layer.shop-dadian .entry.off .note { justify-self: start; transform: rotate(-2deg); color: #a8322a; font: 600 12px var(--serif); }
+.shop-layer.shop-dadian .abacus { position: relative; display: grid; grid-template-columns: repeat(9, 1fr); gap: 2px; height: 28px; margin-top: 8px; padding: 3px 6px;
+  border-radius: 3px; background: #6b4a2a; }
+.shop-layer.shop-dadian .abacus::before { content: ""; position: absolute; left: 6px; right: 6px; top: 11px; height: 2px; background: #b39a5c; }
+.shop-layer.shop-dadian .abacus i { background: radial-gradient(ellipse at 50% 50%, #4a2e1c 0 45%, transparent 48%) 50% 2px / 100% 8px no-repeat,
+  radial-gradient(ellipse at 50% 50%, #4a2e1c 0 45%, transparent 48%) 50% 14px / 100% 8px no-repeat,
+  linear-gradient(90deg, transparent 46%, #7a6738 46% 54%, transparent 54%); }
+.shop-layer.shop-dadian .ledger-hang { margin: 8px 0 0; padding: 5px 8px; border-left: 3px solid #5d7a4a; border-radius: 2px; background: rgba(93, 122, 74, 0.25);
+  color: #f1e7cf; font: 12.5px var(--sans); }
+/* 比 360 窄時兩頁並排放不下（FB-411：320 寬人名斷成「孫／堅」）：改成上下兩頁，第二頁的左邊線換成上邊線、兩頁都不要左右的書脊漸層 */
+@media (max-width: 359px) {
+  .shop-layer.shop-dadian .ledger { grid-template-columns: 1fr; }
+  .shop-layer.shop-dadian .ledger-page { padding: 10px; background: #f1e7cf; }
+  .shop-layer.shop-dadian .ledger-page + .ledger-page { padding: 10px; border-left: 0; border-top: 1px solid #c9b78f; background: #f1e7cf; }
+}
+
 /* ── 電腦上的店面與武學譜那本書（FB-225，企劃者 2026-10-14「最主要是寬度的設計沒有照著 UI 框架延續」）：遊戲本體在電腦上是一欄 640px
    （.shell、.tabs-inner），店面與書也照這一欄。圖層照舊蓋滿畫面（擋住底下的頁面），可是底色（爐火、土黃、木紋、書頁）只畫在中間那一欄
    （背景圖照欄寬、置中、不重複），欄外是遊戲本來的頁面底色 --paper：從江湖頁進店、出店，欄的左右邊不跳，欄外也不變色。
@@ -2075,7 +2129,7 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
    （scrollbar-gutter: stable both-edges），內容才正好在中間、跟 .shell 對齊，換到不必捲的那一頁也不左右跳。店裡捲的內容包在 .shop-col，
    照手機的版面左右各留 12px（640 − 24）。窄於 641px（手機）這一段整段不生效，一個像素都不變 ── */
 @media (min-width: 641px) {
-  .shop-layer.shop-smith, .shop-layer.shop-market, .shop-layer.shop-board, .shop-layer.shop-donate, .shop-layer.shop-arena {
+  .shop-layer.shop-smith, .shop-layer.shop-market, .shop-layer.shop-board, .shop-layer.shop-donate, .shop-layer.shop-arena, .shop-layer.shop-dadian {
     background-color: var(--paper); background-size: min(100%, 640px) 100%; background-position: 50% 0; background-repeat: no-repeat;
   }
   .shop-layer > .shop-bar, .shop-layer > .shop-tabs { margin-left: max(0px, calc(50% - 320px)); margin-right: max(0px, calc(50% - 320px)); }
@@ -2159,10 +2213,12 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
   .shop-board .note b { font: 600 17px var(--serif); }
   .shop-board .note small { font-size: 12.5px; }
   .shop-board .note .corner { font: 600 13px/1.4 var(--serif); }
+  .shop-board .note .extra span { font-size: 12.5px; }
   .shop-board .paper .rtag { font-size: 15.5px; }
   .shop-board .paper .rtag em { font-size: 14.5px; }
   .shop-board .stamp { font: 600 14.5px var(--serif); }
   .shop-board .note.held .stamp { font-size: 13px; }
+  .shop-board .note.held .corner { right: 46px; } /* FB-390：「已揭」13px 約 40px 寬，朱印照它往左讓（手機 10px 是 38px） */
   .shop-board .board-sheet .paper { font-size: 16px; }
   .shop-board .paper h4 { font: 600 21px var(--serif); }
   .shop-board .paper .due, .shop-board .paper .why { font-size: 15px; }
@@ -2217,6 +2273,12 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
   .shop-layer .dn-step .btn { font-size: 19.5px; }
   .shop-layer .cell .pick { font: 600 13.5px var(--sans); }
   .shop-layer .odds { height: 23.5px; }
+  .shop-layer.shop-dadian .ledger-page h3 { font: 600 15.5px var(--serif); }
+  .shop-layer.shop-dadian .entry b { font: 600 18px var(--serif); }
+  .shop-layer.shop-dadian .entry .desc { font: 15.5px/1.45 var(--sans); }
+  .shop-layer.shop-dadian .entry .tick { font: 15.5px var(--sans); }
+  .shop-layer.shop-dadian .entry.off .note { font: 600 15.5px var(--serif); }
+  .shop-layer.shop-dadian .ledger-hang { font: 16px var(--sans); }
 }
 
 /* ── 電腦上整頁的捲軸溝一直留著（FB-240）：江湖頁短到沒有整頁捲軸時，進鐵匠鋪、懸賞榜，底下那一頁換成一長串選項、整頁捲軸冒出來，
@@ -2226,7 +2288,169 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
   html { scrollbar-gutter: stable; }
 }
 
+/* ── 酒肆（企劃者 2026-10-18「可以，做精緻一些，包含氛圍感」；草圖甲「夜燈酒肆」）：跟三間店同一層。夜裡、燈籠、暖光、酒罈的剪影；
+   字級一律寫 em，跟著 .shop-tavern 的字級走（手機 13px、電腦寬 ×1.3），招牌、掌櫃話、分頁照店面共用的那一套。燈籠搖、熱氣冒、
+   暖光呼吸只在沒有要求減少動態效果時跑 ── */
+.shop-layer.shop-tavern { font-size: 13px; color: #f2e5c6; background: radial-gradient(ellipse at 50% 18%, #5a3018 0%, #2a170d 52%, #120a06 100%); }
+.shop-tavern .shop-line { border-left-color: #d08a3a; }
+.shop-tavern .shop-tabs { border-top-color: #5e3f26; }
+.shop-tavern .tav-hero { position: relative; height: 9.2em; overflow: hidden; pointer-events: none; }
+.shop-tavern .tav-glow { position: absolute; top: 0.6em; width: 9em; height: 9em; border-radius: 50%; background: radial-gradient(circle, rgba(255, 150, 70, 0.42), transparent 68%); }
+.shop-tavern .tav-glow.l { left: 4%; } .shop-tavern .tav-glow.r { right: 4%; }
+.shop-tavern .tav-hang { position: absolute; top: 0; width: 2.6em; transform-origin: 50% 0; }
+.shop-tavern .tav-hang.l { left: 12%; width: 2.2em; } .shop-tavern .tav-hang.r { right: 12%; }
+.shop-tavern .tav-lantern { display: block; width: 100%; height: auto; filter: drop-shadow(0 0 0.5em rgba(255, 120, 50, 0.6)); }
+.shop-tavern .tav-jars { position: absolute; left: 6%; bottom: 0.9em; width: 9em; }
+.shop-tavern .tav-bowl { position: absolute; right: 18%; bottom: 0.9em; width: 4.4em; }
+.shop-tavern .tav-table { position: absolute; left: 0; right: 0; bottom: 0; height: 1em; background: linear-gradient(#4a2c18, #22140b); border-top: 1px solid #7a5532; }
+.shop-tavern .tav-guests, .shop-tavern .tav-known { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4em; margin: 0.5em 0.15em; }
+.shop-tavern .gl { font-size: 0.9em; color: #c9a875; letter-spacing: 0.15em; margin-right: 0.2em; }
+.shop-tavern .tav-chip { display: inline-block; line-height: 1.5; padding: 0.15em 0.75em; border: 1px solid #7a5532; border-radius: 1em; background: rgba(60, 34, 18, 0.7); color: #f2e5c6; font: 0.95em var(--serif); }
+.shop-tavern button.tav-chip { cursor: pointer; }
+.shop-tavern .more { font-size: 0.88em; color: #a88a64; }
+.shop-tavern .tav-treat { margin: 0.3em 0.15em; font: 0.95em/1.6 var(--serif); color: #f2c46a; }
+.shop-tavern .tav-listen { display: block; width: 100%; margin: 0.7em 0 0.3em; padding: 0.7em; border: 1px solid #f2c46a; border-radius: 0.6em;
+  background: linear-gradient(180deg, #c3402c, #8c2416); color: #fbe9c0; font: 600 1.25em var(--serif); letter-spacing: 0.3em; box-shadow: 0 0 1em rgba(255, 120, 50, 0.25); cursor: pointer; }
+.shop-tavern .tav-listen span { font-size: 0.7em; letter-spacing: 0; font-weight: 400; opacity: 0.9; }
+.shop-tavern .tav-listen:disabled { opacity: 0.55; }
+.shop-tavern .tav-h { margin: 1.1em 0.15em 0.45em; font: 600 1.05em var(--serif); letter-spacing: 0.2em; color: #f2c46a; }
+.shop-tavern .tav-h small { margin-left: 0.6em; font: 0.8em var(--sans); letter-spacing: 0; color: #a88a64; }
+.shop-tavern .tav-talk { list-style: none; margin: 0; padding: 0.5em 0.8em; border: 1px dashed #5e3f26; border-radius: 0.5em; background: rgba(0, 0, 0, 0.28); }
+.shop-tavern .tav-talk li { margin: 0.3em 0; font: 0.98em/1.6 var(--serif); color: #e8d6ad; }
+.shop-tavern .tav-talk .who { margin-right: 0.35em; color: #c9a875; font-size: 0.9em; }
+.shop-tavern .tav-talk .who::after { content: "："; }
+.shop-tavern .tav-row { display: flex; flex-wrap: wrap; gap: 0.5em; margin: 0.9em 0 0.3em; align-items: stretch; }
+.shop-tavern .tav-act { flex: 1 1 9em; display: grid; gap: 0.15em; padding: 0.55em 0.7em; border: 1px solid #b7862b; border-radius: 0.5em; background: rgba(43, 26, 16, 0.85); color: #f2e5c6; text-align: center; cursor: pointer; }
+.shop-tavern .tav-act b { font: 600 1.05em var(--serif); letter-spacing: 0.1em; }
+.shop-tavern .tav-act small { font-size: 0.82em; color: #c9a875; }
+.shop-tavern .tav-act:disabled { opacity: 0.5; cursor: default; }
+.shop-tavern .tav-board { flex: 1 1 9em; }
+.shop-tavern .tav-modes { justify-content: flex-start; margin: 0.4em 0 0.6em; }
+.shop-tavern .tav-modes .shop-page { flex: 1 1 0; min-width: 0; padding: 3px 4px; white-space: nowrap; font-size: 0.92em; }  /* 375 寬三顆不折行 */
+.shop-tavern .tav-form { display: flex; gap: 0.5em; margin: 0.3em 0; }
+.shop-tavern .tav-form .input { flex: 1; min-width: 0; background: rgba(0, 0, 0, 0.35); border-color: #7a5532; color: #f6edd8; font-size: 1.15em; }
+.shop-tavern .tav-form select.input { font-size: 1.05em; }
+.shop-tavern .tav-form .btn:not(.primary) { background: rgba(43, 26, 16, 0.85); border-color: #b7862b; color: #f2e5c6; }
+.shop-tavern .tav-note { margin: 0.55em 0; padding: 0.6em 0.8em; border: 1px solid #5e3f26; border-radius: 0.5em; background: rgba(43, 26, 16, 0.82); }
+.shop-tavern .tav-note .tag { display: flex; justify-content: space-between; gap: 0.6em; margin-bottom: 0.2em; }
+.shop-tavern .tav-note .tag b { font: 600 0.95em var(--serif); color: #f2c46a; letter-spacing: 0.1em; }
+.shop-tavern .tav-note .tag span { font-size: 0.8em; color: #a88a64; white-space: nowrap; }
+.shop-tavern .tav-note.k-material .tag b, .shop-tavern .tav-note.k-trace .tag b { color: #e89a6a; }
+.shop-tavern .tav-note p { margin: 0.2em 0; font: 1em/1.65 var(--serif); color: #f2e5c6; }
+.shop-tavern .tav-wall { margin: 0.8em 0; padding: 0.9em 1em; border-radius: 0.4em; background: linear-gradient(180deg, #e8dcc2, #d8c8a6); color: #2a1a10;
+  box-shadow: inset 0 0 2em rgba(90, 60, 30, 0.35); }
+.shop-tavern .tav-wall p { margin: 0 0 0.9em; padding-bottom: 0.7em; border-bottom: 1px dashed rgba(90, 60, 30, 0.35); }
+.shop-tavern .tav-wall p:last-child { margin-bottom: 0; border-bottom: 0; padding-bottom: 0; }
+.shop-tavern .tav-wall .ink { display: block; font: 600 1.3em/1.55 var(--serif); letter-spacing: 0.08em; color: #1e1208; }
+.shop-tavern .tav-wall small { display: flex; justify-content: flex-end; align-items: center; gap: 0.4em; margin-top: 0.2em; font-size: 0.82em; color: #6d5a43; }
+.shop-tavern .tav-seal { display: inline-grid; place-items: center; width: 1.5em; height: 1.5em; border: 1px solid #a8281a; border-radius: 0.2em; color: #a8281a; font: 600 0.9em var(--serif); font-style: normal; transform: rotate(-6deg); }
+.shop-tavern .tav-whispers { list-style: none; margin: 0; padding: 0; }
+.shop-tavern .tav-whispers li { margin: 0.4em 0; padding: 0.5em 0.8em; border-left: 3px solid #5e3f26; background: rgba(0, 0, 0, 0.25); font: 0.98em/1.6 var(--serif); color: #e8d6ad; }
+.shop-tavern .tav-whispers li.named { border-left-color: #c3402c; color: #fbe9c0; }
+.shop-tavern .shop-empty, .shop-tavern .shop-cap, .shop-tavern .shop-note { font-size: 0.95em; }
+.shop-tavern .tav-tiers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.45em; margin: 0.4em 0; }
+.shop-tavern .tav-tier { display: grid; gap: 0.15em; padding: 0.5em 0.3em; border: 1px solid #5e3f26; border-radius: 0.5em; background: rgba(20, 10, 6, 0.6); color: #e8d6ad; text-align: center; cursor: pointer; }
+.shop-tavern .tav-tier b { font: 600 1em var(--serif); letter-spacing: 0.05em; }
+.shop-tavern .tav-tier small { font-size: 0.82em; color: #a88a64; }
+.shop-tavern .tav-tier.on { border-color: #c3402c; background: linear-gradient(180deg, rgba(195, 64, 44, 0.45), rgba(140, 36, 22, 0.45)); color: #fbe9c0; box-shadow: 0 0 0.8em rgba(195, 64, 44, 0.3); }
+.shop-tavern .tav-tier.on small { color: #f2c46a; }
+.shop-tavern .tav-hush { display: flex; align-items: center; gap: 0.4em; margin: 0.35em 0.15em; font-size: 0.9em; color: #c9a875; }
+@media (min-width: 641px) {
+  .shop-layer.shop-tavern { font-size: 17px; background-color: var(--paper); background-size: min(100%, 640px) 100%; background-position: 50% 0; background-repeat: no-repeat; }
+  .shop-layer > .tav-hero { margin-left: max(0px, calc(50% - 320px)); margin-right: max(0px, calc(50% - 320px)); } /* 燈籠與酒罈也照欄 */
+}
+@media (prefers-reduced-motion: no-preference) {
+  .shop-tavern .tav-hang { animation: tavsway 4.6s ease-in-out infinite alternate; }
+  .shop-tavern .tav-hang.r { animation-duration: 5.4s; animation-delay: -1.2s; }
+  .shop-tavern .tav-glow { animation: tavbreathe 3.8s ease-in-out infinite alternate; }
+  .shop-tavern .tav-steam path { animation: tavsteam 3.2s ease-in-out infinite; }
+  .shop-tavern .tav-steam path:nth-child(2) { animation-delay: -1s; }
+  .shop-tavern .tav-steam path:nth-child(3) { animation-delay: -2s; }
+}
+@keyframes tavsway { from { transform: rotate(-3deg); } to { transform: rotate(3deg); } }
+@keyframes tavbreathe { from { opacity: 0.7; } to { opacity: 1; } }
+@keyframes tavsteam { 0% { opacity: 0; transform: translateY(4px); } 40% { opacity: 0.8; } 100% { opacity: 0; transform: translateY(-6px); } }
+
 /* 傳功門下（app.js 的 lessonsHtml）：人物卡底下一格一顆，鈕上寫要練什麼與心得，第二行小字寫效果或按不下去的原因 */
 .lessons { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; margin-top: 6px; }
 .lessons .btn { width: 100%; flex-direction: column; gap: 2px; text-align: center; }
 .lessons .btn small { font-size: 11px; font-weight: 400; opacity: 0.85; line-height: 1.3; }
+
+/* ── 名帖（Joy 2026-10-19）：紙色固定、不跟深淺色走（三色墨要在紙上看得清）；字照卡的寬度縮放（cqw）── */
+.mt-card {
+  position: relative; container-type: inline-size; aspect-ratio: 3 / 4; width: 100%; overflow: hidden;
+  background: radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.55), transparent 60%), #f8f2e4;
+  border: 1px solid #d8d0c1; border-radius: 4px; box-shadow: inset 0 0 0 4px #f8f2e4, inset 0 0 0 5px rgba(178, 58, 42, 0.35), 0 1px 3px rgba(60, 40, 20, 0.18);
+  color: #24211d; font-family: var(--serif); text-align: left;
+}
+.mt-card .mt-ink { position: absolute; inset: 0; width: 100%; height: 100%; }
+.mt-card .mt-pad { touch-action: none; cursor: crosshair; }
+.mt-name {
+  position: absolute; top: 7cqw; right: 7cqw; writing-mode: vertical-rl; font-size: 10cqw; font-weight: 700; letter-spacing: 1.5cqw;
+  line-height: 1; pointer-events: none; text-shadow: 0 0 2px #f8f2e4, 0 0 4px #f8f2e4;
+}
+.mt-seal {
+  position: absolute; top: 7cqw; right: 20cqw; width: 11cqw; height: 11cqw; display: grid; grid-template-columns: 1fr 1fr;
+  background: #b23a2a; border-radius: 1cqw; padding: 0.6cqw; pointer-events: none; transform: rotate(-3deg);
+}
+.mt-seal i { font-style: normal; color: #f8f2e4; font-size: 4.4cqw; line-height: 5cqw; text-align: center; font-weight: 700; }
+.mt-foot { position: absolute; left: 6cqw; right: 6cqw; bottom: 5cqw; pointer-events: none; }
+.mt-titles { display: flex; flex-wrap: wrap; gap: 1.5cqw; margin-bottom: 2cqw; }
+.mt-titles span {
+  font-size: 4.6cqw; line-height: 1.3; padding: 0.6cqw 2cqw; border: 1px solid rgba(36, 33, 29, 0.35); border-radius: 1cqw;
+  background: rgba(248, 242, 228, 0.85);
+}
+.mt-motto { margin: 0; font-size: 6.2cqw; line-height: 1.4; min-height: 1.4em; text-shadow: 0 0 3px #f8f2e4, 0 0 5px #f8f2e4; }
+.mt-hidden { position: absolute; left: 6cqw; right: 6cqw; top: 40%; margin: 0; text-align: center; font-size: 5cqw; color: #6b6155; }
+.mt-card.thumb { border-radius: 3px; box-shadow: inset 0 0 0 2px #f8f2e4, inset 0 0 0 3px rgba(178, 58, 42, 0.3), 0 1px 2px rgba(60, 40, 20, 0.2); }
+
+/* 玩家卡上的縮圖：浮在名號右邊，點了放大 */
+.peer-mt { float: right; width: 78px; margin: 0 0 6px 10px; padding: 0; border: 0; background: none; cursor: zoom-in; }
+.peer-arts { clear: both; }
+
+/* 放大看一張 */
+.mt-zoom-layer { position: fixed; inset: 0; z-index: 44; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, 0.55); animation: fade 0.2s; }
+.mt-zoom-box { width: min(340px, 100%); }
+.mt-zoom-box .row { justify-content: center; margin-top: 10px; }
+.mt-zoom-box .btn { background: var(--card); }
+.mt-when { margin: 8px 0 0; text-align: center; color: #f4ede0; font-size: 13px; }
+.mt-report { color: var(--bad); }
+
+/* 見聞「名帖匣」 */
+.mt-box-head { display: grid; grid-template-columns: 120px 1fr; gap: 14px; align-items: center; }
+.mt-mine { display: contents; }
+.mt-mine > div:first-child { cursor: zoom-in; }
+.mt-mine.empty p { grid-column: 1 / -1; margin: 0; }
+.mt-mine-side .btn { width: 100%; }
+.mt-mine-side p { margin: 8px 0 0; font-size: 13px; }
+.mt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 12px; }
+.mt-cell { padding: 0; border: 0; background: none; color: var(--ink); cursor: zoom-in; text-align: center; font: inherit; }
+.mt-cell small { display: block; margin-top: 4px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 製作名帖（全螢幕一層） */
+.mt-layer { position: fixed; inset: 0; z-index: 43; display: flex; flex-direction: column; background: var(--paper); animation: fade 0.2s; }
+.mt-bar { display: flex; align-items: center; gap: 8px; padding: calc(8px + var(--top)) 12px 8px; background: var(--card); border-bottom: 1px solid var(--line); }
+.mt-bar b { font-family: var(--serif); letter-spacing: 2px; }
+.mt-bar span { margin-left: auto; font-size: 12px; color: var(--ink-2); }
+.mt-bar .book-back { color: var(--ink); }
+.mt-edit-col { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 14px 16px calc(24px + var(--bottom)); max-width: 640px; width: 100%; margin: 0 auto; box-sizing: border-box; }
+.mt-stage { width: min(270px, 78vw); margin: 0 auto 12px; }
+.mt-tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: center; margin-bottom: 8px; }
+.mt-ink-btn, .mt-pen-btn {
+  display: inline-flex; align-items: center; gap: 5px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 18px;
+  background: var(--card); color: var(--ink); font: 14px var(--sans); cursor: pointer;
+}
+.mt-ink-btn i { width: 14px; height: 14px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.4); }
+.mt-ink-btn.on, .mt-pen-btn.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.mt-preset { max-width: 150px; }
+.mt-count { text-align: center; font-size: 12px; margin: 0 0 10px; }
+.mt-sec { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 12px 0 6px; font-size: 14px; color: var(--ink-2); }
+.mt-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.mt-chip { padding: 5px 10px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); color: var(--ink); font: 13px var(--sans); cursor: pointer; }
+.mt-chip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.mt-go { width: 100%; margin-top: 6px; }
+
+/* 管理者：被檢舉的名帖 */
+.mt-admin { display: grid; gap: 10px; margin-bottom: 10px; }
+.mt-admin-row { display: grid; grid-template-columns: 64px 1fr; gap: 10px; align-items: start; }
+.mt-admin-row .muted { margin: 2px 0 6px; font-size: 12px; }

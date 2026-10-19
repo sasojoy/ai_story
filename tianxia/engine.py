@@ -17,11 +17,11 @@ from dataclasses import dataclass
 from pydantic import BaseModel
 
 from . import (
-    allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, chuangong, clinic, companion_agent, cultivation, defection, economy, encounter, enlist, equipment, event_llm, explore_modes,
-    fight_llm, figure_aid, figure_life, figures, foreshadow, four_tiers, generals, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, letters, library, mapdata, martial_arts,
+    allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, chuangong, clinic, companion_agent, cultivation, defection, divine, economy, encounter, enlist, equipment, event_llm, explore_modes, escorts,
+    fight_llm, figure_aid, figure_life, figures, foreshadow, four_tiers, generals, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, letters, library, mapdata, martial_arts, feasts,
     materials, mounts, naming, opportunities, orders, precise, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
     shopview, signature, signature_arms, silver, skill_slots, skillview, smithing,
-    social, sortie, styles, tactics, team, territory, timetable, traits, treasures, weapons, works, zh,
+    social, sortie, styles, tactics, team, territory, timetable, traits, treasures, weapons, works, zh, yuedan,
 )
 from . import ambush as ambush_rules  # 設伏劫道（後期體力玩法第一批）；叫 ambush_rules：這個檔裡有區域變數叫 ambush
 from . import duel as duel_rules  # 單人頭目戰（Joy 2026-10-10）
@@ -29,8 +29,12 @@ from . import discuss as _discuss_card  # noqa: F401  論武登記進玩家卡�
 from . import raid as _raid_card  # noqa: F401  截殺登記進玩家卡的動作表（social.ACTIONS）
 from . import wanted as _wanted_card  # noqa: F401  通緝登記進玩家卡的動作表（social.ACTIONS）
 from . import spar as _spar_card  # noqa: F401  切磋登記進玩家卡的動作表（social.ACTIONS）
+from . import mingtie as mingtie_rules  # 名帖（Joy 2026-10-19）
+from . import mingtie_card as _mingtie_card  # noqa: F401  遞名帖登記進玩家卡的動作表（social.ACTIONS）
+from . import speech
 from . import events as event_rules  # note_round 走模組屬性（測試要能換掉它，確認只有 _present 會叫）
 from . import hints as hint_rules  # 碰到才說（新手引導計畫三）；叫 hint_rules：這個檔裡有幾處區域變數也叫 hints
+from . import tavern as tavern_rules  # 酒肆（企劃者 2026-10-18）；叫 tavern_rules：跟其他 *_rules 一樣避開區域變數
 from . import prologue as prologue_rules  # Game.new 有個參數也叫 prologue，所以模組在這裡一律叫 prologue_rules
 from . import rumor_view  # 傳聞分層的畫面：見聞頁的四層、你不在的時候（計畫 2026-10-06 傳聞分層一）
 from .characters import CharacterStore, name_key
@@ -50,7 +54,7 @@ from .models import (
 )
 from .ollama_client import ModelBudget, OllamaClient, quick_client
 from .rules import (
-    GEJU, HUANGJIN, add_marks, add_rumor, add_world_flags, apply_effect, audible, audience_bar, audience_hint, can_meet, change_trend,
+    GEJU, HUANGJIN, add_marks, add_rumor, add_world_flags, display_name, apply_effect, audible, audience_bar, audience_hint, can_meet, change_trend,
     check_result_line,
     day_turn, ears_of, evil_success, failed, fill_marks, free_text_rate, game_day, geju_resisted, here_regions,
     can_draw_side_change, chaos_fronts, chaos_note, front_chip, front_ids, front_of, front_text, humanize, in_chaos,
@@ -60,8 +64,8 @@ from .rules import (
 )
 from .sqlite_world import open_world
 from .state import (
-    ONBOARDING_VERSION, PLAYER, ArenaEntry, ArenaFight, ArenaReport, ArenaResult, ArenaSide, BattleRecord, Convoy, CrowdNote, DuelState, Equipment, GameState, HintNote, JournalEntry, Journey, Rumor, Tagalong, TimelineResult,
-    WorldState,
+    ONBOARDING_VERSION, PLAYER, ArenaEntry, ArenaFight, ArenaReport, ArenaResult, ArenaSide, BattleRecord, Convoy, CrowdNote, DuelState, Equipment, Feast, GameState, HintNote, JournalEntry, Journey, Mingtie, Rumor, Tagalong, TavernHit, TavernWatch, TimelineResult,
+    Whisper, WorldState,
     new_game_state,
 )
 from .world import (
@@ -77,6 +81,8 @@ AUDIENCE_HALL_FIGURES = 2  # 一個地點有幾位以上的大勢人物，交友
 OFF_FRONT_NOTE = "沒在戰線上領兵，不受挑戰"  # 戰線空著的人物（董卓、趙弘、重挫退下的人）：挑戰按鈕寫這一句（PM 2026-10-05 定）
 SOCIAL_TALK = "跟{name}說話"  # 待 joy 潤：一類一顆的交友只有一位說得上話的人物時，鈕上那一格（正式季整合 2.8）
 SOCIAL_NO_ONE = "這裡沒有能說上話的人"  # 待 joy 潤：一類一顆的交友沒有人物、也沒有結識事件時（鈕上不帶句號）
+SOCIAL_LIST_TITLE = "交友"  # 待 joy 潤：一類一顆的交友打開的人物名單（FB-421）
+SOCIAL_LIST_INTRO = "{here}有好幾位人物，挑一位說話。每位人物各算各的，最多談 {per_day} 輪，{again}；名望不夠的見不到。"  # 待 joy 潤（FB-421）
 SECT_LABEL = "拜入{sect}"  # 待 joy 潤：拜入門派從交友搬到「此地還能做」的一顆（正式季整合 2.7）
 AUDIENCE_MEET = "先設法結識"  # 待 joy 潤：一類一顆的求見名單上，名望不夠、但這裡有他的結識事件的那一位
 SUMMONS_LABEL = "應召晉升（召見在此・不花體力）"  # 待 joy 潤：一類一顆的應召（設計 9.1 第 1 組乙，橫幅上的字）
@@ -190,6 +196,15 @@ ROUND_HEAD = "##### 第 {n} 回合"  # 一回合一段的標題（Joy 2026-10-14
 RESTORED_NOTE = "（這份戰報是後來補回來的；軍餉與名望當時已經發過。）"  # Game._restore_showdowns
 MY_MOVE = "**你**　{move}"  # 決戰戰報的完整戰況：每一回合最後一條，自己這一回合出了什麼（BattleParticipant.moves）
 SLAY_LINE = "你陣前擊退了{name}，這一戰的頭功傳遍兩軍。"  # 待 joy 潤：龍頭上陣，最後一擊的人（戰報與紀錄）
+# 歷史武將同行第五節（待 joy 潤）：加入決戰時挑一位隨你上陣、決戰畫面上自己的那一位
+ESCORT_PICK = "挑一位隨你出陣的同伴，或不派、自己上陣（開打之後不能換）。"
+ESCORT_OPTION = "派{name}隨你出陣（份量 {score}・氣血 {pool}）"
+ESCORT_NONE = "不派，自己上陣"
+ESCORT_BACK = "再想想"
+ESCORT_BACK_LINE = "你還沒加入，再想想。"
+ESCORT_MUSTER = "{name}隨你出陣。"
+ESCORT_SCENE = "隨你出陣：{name}（氣血 {hp}/{cap}）"
+ESCORT_FELL = "隨你出陣：{name}（敗走）"
 TROOPS_LINE = "你帶著{names}上陣，強攻、奇襲多 {pct}"  # 待 joy 潤（PM 2026-10-12）：決戰畫面，接在騎兵那一句後面（加入時的快照）
 TROOPS_REPORT = "{names}跟著你衝陣"  # 待 joy 潤（PM 2026-10-12）：決戰的戰報
 # 賽季時鐘暫停（線上架構設計第四節、8.3）：選單上那一顆灰的，伺服器擋動作也回這一句（server._refuse_while_paused）。待 S1／joy 潤
@@ -342,6 +357,9 @@ class Game:
         self._preparing_memo: list[bool] | None = None  # 一次畫面建構裡記住的「籌備中嗎」；None＝不在範圍裡（見 phase_memo）
         self._draft: Draft | None = None  # choose() 進行中那次行動的江湖紀錄草稿
         self._affinity_before: dict[str, int] | None = None  # choose()、隨口應對進行中：這一下之前的情誼（_people_here 認這一下加了誰的情誼）
+        # 歷史武將同行：挑好了隨你上陣的那一位、正在照它加入（_escort_step 開著、_escort_carry 讀）
+        self._escort_picked = False
+        self._escort_now: battle_instance.Escort | None = None
         self._last_wear: list[str] = []  # 最近一場戰報歸檔時兵器鈍了、防具破了的提醒（_file_battle，兵器先、防具後）；沒有草稿的呼叫端（切磋、截殺的另一邊）自己接到訊息裡
         # 這一個動作動到（或要通知）的別人的名號（玩家卡上的互動、邀請）：伺服器做完動作叫他們開著的分頁也刷新（server._tell_tabs）
         self.touched: set[str] = set()
@@ -619,7 +637,25 @@ class Game:
         fresh.player.donate_day, fresh.player.donated_today = old.player.donate_day, old.player.donated_today  # 換季不能多捐一輪
         fresh.player.battle_results_seen = old.player.battle_results_seen  # 補送過的決戰不再補一次（FB-027）
         fresh.player.heirloom = old.player.heirloom  # 玉璽碎片的抄本與補送的進度跨季帶走（玉璽碎片設計 7.5；同步時本來就照登記重抄）
+        # 神器輪替與收集（正式季整合 5.8）：輪替季打的神器（collected）跨季帶走、放進裝備庫，以器配招清掉，品質淬煉磨損照舊；
+        # 帶了東西過來流水號才接著走（帶過來的 id 不會跟新打的撞；沒帶的照上線前重來，FB-401）；鑄譜上打中過的神器記得（forge_secrets.divine_solved）
+        carried = [item for item in forge_secrets.owned_gear(old.player) if item.collected and item.signature is None]
+        for item in carried:
+            item.bound_art = None
+        fresh.player.rack = carried + fresh.player.rack
+        if carried:
+            fresh.player.weapon_serial = max(fresh.player.weapon_serial, old.player.weapon_serial)
+        fresh.player.divine_solved = dict(old.player.divine_solved)
         fresh.player.seal_seen = old.player.seal_seen
+        # 名帖（Joy 2026-10-19）：自己那一張、收到的、藏起來的、不接誰的挑釁話都是自己的東西，跨季保留；
+        # 這一季值得留名的頭銜寫進 title_book（「第N季 天下第一」），一天的次數照回體丹不能換季多一輪
+        fresh.player.mingtie, fresh.player.mingtie_box = old.player.mingtie, old.player.mingtie_box
+        fresh.player.mingtie_hidden, fresh.player.taunt_muted = old.player.mingtie_hidden, old.player.taunt_muted
+        fresh.player.mingtie_day, fresh.player.mingtie_made, fresh.player.mingtie_sent = (
+            old.player.mingtie_day, old.player.mingtie_made, old.player.mingtie_sent)
+        fresh.player.gift_day, fresh.player.gifts_today = old.player.gift_day, old.player.gifts_today
+        book_titles = mingtie_rules.season_book(old, self.content, old.player.season_number)
+        fresh.player.title_book = old.player.title_book + [t for t in book_titles if t not in old.player.title_book]
         fresh.player.seen_real = old.player.seen_real
         fresh.player.season_number = season_number
         self.state = fresh
@@ -679,8 +715,12 @@ class Game:
             mounts.close_market(p)  # 坐騎關了、人不在馬市了：收起馬市（裝備四欄 5.5），馬販那一句一併清掉
         if p.picking_donate and not self._at_own_base():
             economy.close_donate(s)  # 捐軍備關了、人不在自家大本營了（叛投、管理者挪人）：收起軍需官那一串
+        if p.picking_dadian and not self._silver_options():
+            self._close_dadian()  # 銀兩出口關了、這裡一樣都做不了了：收起打點那一間店
         if p.picking_arena and not arena.here(s, c):
             p.picking_arena = False  # 擂台關了、季收了：收起擂台
+        if p.picking_tavern and not tavern_rules.here(s, c):
+            tavern_rules.close(s)  # 酒肆關了、人不在有酒肆的城鎮了：收起酒肆
         treasures.refresh_names(p, c)  # 寶物、名駒的名字照內容讀（裝備四欄 3.1）：joy 改了名字，存檔裡的跟著改；內容拿掉了留著舊名字
         forge_secrets.refresh_names(p, c, self.world)  # 名器的名字照內容讀（4.2）、神器的名字照全服那一列讀（5.2、5.3：原品定了名，仿品跟著改）
         signature_arms.refresh_names(p, c)  # 本命兵器的名字照內容讀（打造第三批）：joy 改了名，手上的跟著改
@@ -697,6 +737,9 @@ class Game:
         p.leg_actions &= set(ROAD_TASKS)
         p.recent_sights = [sight_id for sight_id in p.recent_sights if sight_id in c.road_sights]
         p.team = [k for k in p.team if k in c.characters][: team.MAX_TEAM_COMPANIONS]
+        if roster.on(c):  # 歷史武將同行：出戰隊伍只放名下的（決戰後回江湖、放走、叛投帶不走的人，主人下次讀檔就不在隊伍裡）
+            mine = set(roster.owned_companions(self.world, p.name))
+            p.team = [k for k in p.team if k in mine]
         # 身上的武學要真的有這一門：is_skill_name_taken 連改過的名字、意境名都算，不能拿來判斷「武學存在」，要用 get_skill
         if p.member.neigong_id and p.member.neigong_id not in c.skills and self.world.get_skill(p.member.neigong_id) is None:
             p.member.neigong_id = None
@@ -824,8 +867,12 @@ class Game:
             mounts.close_market(self.state.player)  # 開關關了、人不在馬市了（內容改版、管理者挪人）：收起馬市
         if self.state.player.picking_donate and not self._at_own_base():
             economy.close_donate(self.state)  # 捐軍備關了、人不在自家大本營了：收起軍需官那一串
+        if self.state.player.picking_dadian and not self._silver_options():
+            self._close_dadian()  # 銀兩出口關了、這裡一樣都做不了了：收起打點那一間店
         if self.state.player.picking_arena and not arena.here(self.state, self.content):
             self.state.player.picking_arena = False  # 擂台關了、季收了：收起擂台
+        if self.state.player.picking_tavern and not tavern_rules.here(self.state, self.content):
+            tavern_rules.close(self.state)  # 酒肆關了、人被挪走了：收起酒肆
         self._ambush_expire()  # 守著的埋伏到時刻了、或季上那一筆已經沒了（被打退、換季）：收起來
         arrived = self._arrivals()  # 抵達的站自己寫一則江湖紀錄（途中觸發的大事也寫在那裡），不併進下面的「江湖大事」
         if arrived:
@@ -840,11 +887,20 @@ class Game:
         self._deliver_renames()  # 手上的絕學被人定了名：下一次同步補一則紀錄（FB-083）
         self._deliver_echoes()  # 別人照著你首創的配方合了出來：補名望（首創名望回饋）
         self._deliver_guard_credits()  # 護衛：下線時替人物擋下的挑戰，回來補名望與心得
+        self._deliver_whispers()  # 酒肆：有人在酒肆打聽你（風聲），下線時的回來補
+        self._deliver_hits()  # 酒肆：自己雇的殺手得手、失手、到期退錢
+        self._deliver_watches()  # 酒肆：託酒家留意的人有了準信、或到期沒消息
         self._deliver_arena()  # 擂台：被挑了的戰報、季末前三名的獎勵；季收了還沒打完的那一場作廢
         mail = letters.deliver(self.state, self.content)  # 書信（大勢人物擴充第二批）：人物來信、過期的委託作罷
         if mail:
             self._write(letters.TITLE, mail)
+        cheered = feasts.deliver(self.state, self.content)  # 宴客（第三批）：散席時我那一句是席間最佳，補名望
+        if cheered:
+            self._write(feasts.TITLE, cheered)
+        if self.state.player.feasting is not None and self._feast_seat() is None:
+            self.state.player.feasting = None  # 宴散了、人走了：收起敬酒的選單
         self._deliver_held_gear()  # 寄放的重賞、贈禮：裝備庫有空位就補（裝備四欄 6.5）
+        self._settle_partings()  # 歷史武將同行：從你身邊回江湖的人，情誼減半（9.6；補戰報時已經算過的不再算）
         refunds = bounties.deliver_refunds(self.state, self.content)  # 掛的通緝沒人揭成：押金退回
         if refunds:
             self._write(bounties.BOARD, refunds)
@@ -1051,6 +1107,8 @@ class Game:
                            enabled=move not in held) for move in MOVES] + [
                 Option(id=DUEL_FLEE, label="抽身退走（不分勝負，掉的氣血不回）"),
             ]
+        if s.player.feasting is not None and self._feast_seat() is not None:  # 赴宴（第三批）：固定的敬酒詞與離席；自己寫的走輸入框
+            return self._feast_menu()
         if s.player.arena is not None:  # 擂台（tianxia/arena.py）：三招與認輸；放手一搏同頭目戰走輸入框
             held = tactics.locks(s.player.arena.bout).no_moves
             return [Option(id=f"arena:{move}", label=duel_rules.move_label(move) + (tactics.lock_note(move) if move in held else ""),
@@ -1097,8 +1155,12 @@ class Game:
             return self._market_options()
         if s.player.picking_donate:
             return self._donate_options()  # 大本營的捐軍備（素材與經濟設計第六節）
+        if s.player.picking_dadian:
+            return self._silver_options() + [Option(id="dadian:back", label=silver.SHOP_BACK)]  # 打點（銀兩出口）：這裡做得了的幾樣與離開
         if s.player.picking_arena:
             return self._arena_options()
+        if s.player.picking_tavern:
+            return self._tavern_options()  # 酒肆（企劃者 2026-10-18）
         if s.player.fs_asking is not None:
             return foreshadow.asking_options(s, c)  # 伏筆的最後一步正在答題：只有答案與「作罷」
         if s.player.busy_until is not None:
@@ -1176,6 +1238,16 @@ class Game:
                 "act:recruit", f"招募【{c.characters[target].name}】", cfg.recruit_stamina,
                 note=f"成功率約 {chance * 100:.0f}%",
             ))
+        for cid in self._recruit_targets():  # 歷史武將同行：此地此刻站著、還沒有主的每一位一顆；招不了的灰掉寫原因
+            problem = roster.recruit_problem(s, c, self.world, cid)
+            name = c.characters[cid].name
+            if problem is not None:
+                opts.append(Option(id=f"act:recruit:{cid}", label=f"招募【{name}】（{problem}）", enabled=False))
+            else:
+                chance = roster.recruit_chance(c, s, cid)
+                opts.append(self._cost_option(
+                    f"act:recruit:{cid}", f"招募【{name}】", c.config.recruit_stamina, note=f"成功率約 {chance * 100:.0f}%",
+                ))
         for dest_id in loc.connections:
             if not atlas.is_unlocked(c.locations[dest_id], s, c):  # 世界旗標沒開、序章的草廬（只給站在那裡的人）
                 continue
@@ -1203,6 +1275,8 @@ class Game:
             opts.append(Option(id="act:smith", label=weapons.SMITH))
         if mounts.market_here(s, c):  # 馬市（裝備四欄 5.5，帶「馬市」標籤的城鎮）：只是打開第二層選單，不花體力
             opts.append(Option(id="act:market", label=mounts.MARKET))
+        if tavern_rules.on(c) and tavern_rules.here(s, c):  # 酒肆（帶「酒肆」標籤的城鎮）：只是打開酒肆，不花體力
+            opts.append(Option(id="act:tavern", label=tavern_rules.TAVERN))
         opts += self._arena_entry()
         opts += self._stamina_play_options()  # 後期體力玩法：設伏劫道、修築工事、屯糧練兵
         heal = self._heal_option()
@@ -1211,7 +1285,8 @@ class Game:
         donate = self._donate_option()
         if donate is not None:
             opts.append(donate)
-        opts += self._silver_options()  # 銀兩出口（21 天季，正式季整合 6.5）
+        if self._silver_options():  # 銀兩出口（21 天季，正式季整合 6.5）：五樣收進「打點」那一間店（第 9 批畫面乙），不花體力
+            opts.append(Option(id="act:dadian", label=silver.SHOP))
         if prologue_rules.instant_rest(s, c):  # 打坐 2026-10-12 拿掉了（企劃者）；只剩序章教體力那一步的調息，一下回滿
             opts.append(Option(id="act:rest", label=PROLOGUE_REST))
         # 序章裡在草廬閒著時只留這一步要的（新手引導計畫一）；初入江湖時「此地還能做」只留教到的（新手引導第四段）
@@ -1420,6 +1495,26 @@ class Game:
             return []
         return [fid for fid in figures.present_at(s, c, s.player.location) if c.figures[fid].character is not None]
 
+    def _silver_act(self, what: str) -> list[str]:
+        """銀兩出口的五樣（act:silver_donate、mentor、furnace、buy_legend、bribe:<人物>）。"""
+        if what == "silver_donate":
+            return self._silver_donate()
+        if what == "mentor":
+            return self._silver_mentor()
+        if what == "furnace":
+            return self._silver_furnace()
+        if what.startswith("bribe:"):
+            return self._silver_bribe(what.partition(":")[2])
+        if not (silver.on(self.content, self.state.world) and self._at_clinic_town()):
+            return [equipment.NOT_NOW]
+        return silver.buy_legend(self.state, self.content)
+
+    def _close_dadian(self) -> None:
+        """收起「打點」那一間店與掮客那一句（同 economy.close_donate）。"""
+        p = self.state.player
+        p.picking_dadian = False
+        p.shop_line, p.shop_clue, p.shop_hold = "", "", ""
+
     def _silver_bribe(self, fid: str) -> list[str]:
         s, c = self.state, self.content
         if not (silver.on(c, s.world) and fid in self._bribe_targets()):
@@ -1547,6 +1642,21 @@ class Game:
             if ch.kind == "recruitable" and ch.recruit_at == s.player.location and roster.owned_by(self.world, cid) is None:
                 return cid
         return None
+
+    def _recruit_targets(self) -> list[str]:
+        """歷史武將同行（Config.companions）：此地此刻站著（_figures_here，照人物此刻的所在）、標了 recruitable、還沒有主的人。
+        關著是空的（舊的 recruit_at 那一條照舊走 _recruit_target）。"""
+        if not roster.on(self.content):
+            return []
+        return [
+            cid for cid in self._figures_here()
+            if self.content.characters[cid].recruitable and roster.owned_by(self.world, cid) is None
+        ]
+
+    def _recruitable_here(self) -> bool:
+        """此地有人招得了你（_recruit_targets 裡陣營對、名下沒滿的）：h_recruit 照它說，灰掉的鈕不算（黃巾的人在涿郡不說）。"""
+        s, c = self.state, self.content
+        return any(roster.recruit_problem(s, c, self.world, cid) is None for cid in self._recruit_targets())
 
     def _cost_option(self, option_id: str, label: str, cost: int, note: str = "") -> Option:
         extra = f"・{note}" if note else ""
@@ -1809,7 +1919,9 @@ class Game:
         """出陣那一行（howto.sortie_line）：這裡是哪一種、推不推得動（_push_room，同第 3、4 階行動）、今天還能出陣幾次；用完寫什麼時候再來。"""
         how = self._sortie_mode(loc)
         if how is None:
-            return sortie.RANGER_LINE if sortie.ranger_here(self.content, self._side(), loc.id) else ""
+            if not sortie.ranger_here(self.content, self._side(), loc.id):
+                return ""
+            return sortie.RANGER_LINE_PRECISE if precise.on(self.content, self.state.world) else sortie.RANGER_LINE
         left = self.sorties_left()
         if left <= 0:
             return sortie.USED_UP.format(n=self.content.config.sortie.per_day) + "。"
@@ -1916,6 +2028,740 @@ class Game:
         if prepared.turn is None:
             raise companion_agent.DialogueUnavailable("鎖外生成失敗")
         return prepared.turn
+
+    # ── 酒肆（企劃者 2026-10-18；設計稿 https://claude.ai/artifact/3CfrzfpT1HzCxy6S985Q5W）────────────
+    # 規則全在 tavern.py（tavern_rules）；這裡只管接上選單、扣錢、讀別人的存檔、寫紀錄與季。
+
+    def _tavern_open(self) -> bool:
+        """酒肆那一串此刻開著、人也還在酒肆裡（MAIN_ACTIONS["tavern"] 收不收的判斷）。"""
+        return self.state.player.picking_tavern and tavern_rules.here(self.state, self.content)
+
+    def _tavern_enter(self) -> list[str]:
+        s, c = self.state, self.content
+        if not (tavern_rules.on(c) and tavern_rules.here(s, c)) or not self._idle():
+            return [tavern_rules.NOT_HERE]
+        s.player.picking_tavern, s.player.shop_clue = True, ""
+        self._shop_say("enter")
+        return [tavern_rules.ENTERED.format(sign=tavern_rules.sign(s, c))]
+
+    def _tavern_price(self, base: int) -> int:
+        return tavern_rules.price(self.content, self.state.world, base)
+
+    def _tavern_options(self) -> list[Option]:
+        """酒肆那一串（店面關著、假人與整季機器人看的選單）：聽消息、請酒、藏行跡、反查、懸賞榜、出酒肆。查人、交情、素材、題壁要打字或挑東西，
+        只在店面上（MAIN_ACTIONS["tavern"]）。錢不夠的灰掉寫還差多少。都不花體力。"""
+        s, c = self.state, self.content
+        cfg = c.config.tavern
+        opts = []
+        for oid, label, base, problem in (
+            (tavern_rules.NEWS_ID, tavern_rules.NEWS_LABEL, cfg.news_price, None),
+            (tavern_rules.TREAT_ID, tavern_rules.TREAT_LABEL, cfg.treat_price, self._tavern_treat_problem()),
+            ("tavern:hide", tavern_rules.HIDE_LABEL, cfg.hide_price, self._tavern_hide_problem()),
+            ("tavern:trace", tavern_rules.TRACE_LABEL, cfg.trace_price, None),
+        ):
+            price = self._tavern_price(base)
+            problem = problem or tavern_rules.pay_problem(s, price)
+            text = label.format(price=price)
+            opts.append(Option(id=oid, label=text if problem is None else f"{text}・{problem}", enabled=problem is None))
+        if bounties.board_here(s, c) and bounties.visible(s, c):
+            opts.append(Option(id=tavern_rules.BOARD_ID, label=tavern_rules.BOARD_LABEL))
+        return opts + [Option(id=tavern_rules.BACK_ID, label=tavern_rules.BACK_LABEL)]
+
+    def _tavern_choice(self, arg: str) -> list[str]:
+        if arg == "back":
+            tavern_rules.close(self.state)
+            return [tavern_rules.LEFT]
+        if arg == "board":  # 牆上的懸賞榜：收起酒肆、打開懸賞榜（同城裡的 act:bounties）
+            tavern_rules.close(self.state)
+            self.state.player.picking_bounty = True
+            self._shop_say("enter")
+            return [f"你走到牆邊，看起{bounties.BOARD}。"]
+        return self._tavern_run(arg)
+
+    def tavern_do(self, op: str, target: str = "", text: str = "") -> list[str]:
+        """酒肆那一頁的動作（MAIN_ACTIONS["tavern"]）：news 聽消息、seek 查人在哪、ties 打聽交情、material 打聽素材（target 是素材 id）、
+        wall 題壁（text）、treat 請酒、hide 藏行跡、trace 反查。酒肆開著才收；做成了寫一則紀錄（同一趟坐下來的併成一則）。"""
+        if not self._tavern_open():
+            return self._log([equipment.NOT_NOW])
+        return self._log(self._tavern_run(str(op), str(target or "").strip(), str(text or "")))
+
+    def _tavern_run(self, op: str, target: str = "", text: str = "") -> list[str]:
+        s = self.state
+        before = s.player.stats.get("silver", 0)
+        handler = {
+            "news": self._tavern_news, "treat": self._tavern_treat, "hide": self._tavern_hide, "trace": self._tavern_trace,
+            "seek": lambda: self._tavern_seek(target, watch=text == "watch"), "ties": lambda: self._tavern_ties(target),
+            "material": lambda: self._tavern_material(target), "wall": lambda: self._tavern_wall(text),
+            "hit": lambda: self._tavern_hit(target, text), "guard": self._tavern_guard,
+            "ask": lambda: self._tavern_ask(text),
+        }.get(op)
+        if handler is None:
+            return ["（沒有這個動作。）"]
+        msgs = handler()
+        paid = before - s.player.stats.get("silver", 0)
+        if paid:
+            msgs = msgs + [f"銀兩 {-paid:+d}"]
+        if paid:  # 真的花了錢（問不到退一半也算）才寫紀錄；被拒、沒收錢的只回一句
+            self._write(tavern_rules.sign(s, self.content), msgs, merge=True)
+            self._save_season()
+        return msgs
+
+    def _tavern_charge(self, base: int) -> int | None:
+        """扣這一下的錢：付得起回價錢，付不起記掌櫃那一句、回 None。"""
+        price = self._tavern_price(base)
+        problem = tavern_rules.pay_problem(self.state, price)
+        if problem is not None:
+            self._shop_after(problem, "refused")
+            return None
+        tavern_rules.pay(self.state, price)
+        return price
+
+    def _tavern_short(self, base: int) -> list[str]:
+        return [tavern_rules.pay_problem(self.state, self._tavern_price(base)) or ""]
+
+    def _tavern_wanted(self) -> set[str]:
+        """身上有通緝的名號鍵（名氣 +1）。"""
+        return {name_key(b.target) for b in bounties.open_bounties(self.state, self.content) if b.kind == "wanted" and b.target}
+
+    def _tavern_news(self) -> list[str]:
+        s, c = self.state, self.content
+        pick = tavern_rules.news_pick(s, c)
+        region = tavern_rules.region_lines(s, c)
+        if pick is None and not region:
+            self._shop_say("nothing")
+            return [tavern_rules.NOTHING_NEW]
+        if self._tavern_charge(c.config.tavern.news_price) is None:
+            return self._tavern_short(c.config.tavern.news_price)
+        lines = []
+        if pick is not None:
+            lines.append(f"{tavern_rules.NEWS_HEAD}「{pick.text}」")
+            s.player.tavern_heard = (s.player.tavern_heard + [tavern_rules.rumor_key(pick)])[-200:]
+        lines += region
+        tavern_rules.add_note(s, c, "news", tavern_rules.TITLES["news"], lines)
+        self._shop_say("news")
+        return lines
+
+    def _tavern_find(self, target: str) -> tuple[str | None, Game | None]:
+        """名號認人：先認人物（名字一模一樣），再認玩家存檔（不分大小寫）。回（人物 id, 玩家那一份）；都不是是 (None, None)。"""
+        c = self.content
+        for cid, ch in c.characters.items():
+            if ch.name == target:
+                return cid, None
+        if name_key(target) == name_key(self.state.player.name):
+            return None, None
+        other = self._load_kin(target)
+        if other is not None:
+            other.state.world = self.state.world
+        return None, other
+
+    def _tavern_whisper(self, kind: str, other: Game) -> None:
+        """被打聽的人收到風聲：記在季上，他下次同步時補（_deliver_whispers）。匿名行走的人只會是個生面孔。"""
+        s, c = self.state, self.content
+        w = tavern_rules.whisper(kind, s, c, s.player.location, s.world.time)
+        if s.player.anonymous:
+            w.named = False
+        tavern_rules.post_whisper(s.world, other.state.player.name, w)
+        self.touched.add(other.state.player.name)
+
+    def _tavern_watch_problem(self, target: str) -> str | None:
+        p, cfg = self.state.player, self.content.config.tavern
+        mine = [w for w in p.tavern_watches if w.until_real > self.now]
+        if any(name_key(w.target) == name_key(target) for w in mine):
+            return tavern_rules.WATCH_SAME.format(name=target)
+        if len(mine) >= cfg.watch_keep:
+            return tavern_rules.WATCH_FULL.format(n=cfg.watch_keep)
+        return None
+
+    def _tavern_seek(self, target: str, watch: bool = False) -> list[str]:
+        lines = self._tavern_seek_once(target)
+        if not watch or not target or name_key(target) == name_key(self.state.player.name) or self._tavern_seek_exact is None:
+            return lines
+        if self._tavern_seek_exact:
+            return lines + [tavern_rules.WATCH_CLEAR]
+        return lines + self._tavern_watch(target)
+
+    def _tavern_watch(self, target: str) -> list[str]:
+        """託酒家留意：多付查人的 watch_share，記在自己身上；他自己同步時那個人打聽得到確切地點就捎信（_deliver_watches）。
+        查無此人也照收（不讓人拿託付試出誰在不在），到期捎一句沒聽到準信。"""
+        s, c, cfg = self.state, self.content, self.content.config.tavern
+        problem = self._tavern_watch_problem(target)
+        if problem is not None:
+            return [problem]
+        base = int(round(cfg.seek_price * cfg.watch_share))
+        if self._tavern_charge(base) is None:
+            return self._tavern_short(base)
+        p = s.player
+        p.tavern_watches = [w for w in p.tavern_watches if w.until_real > self.now]
+        p.tavern_watches.append(TavernWatch(target=target, place=p.location, until_real=self.now + cfg.watch_hours * 3600))
+        line = tavern_rules.WATCH_PLACED.format(name=target)
+        if p.tavern_notes:
+            p.tavern_notes[-1].lines.append(line)
+        return [line]
+
+    def _deliver_watches(self) -> None:
+        """託的人自己同步時：留意的那個人打聽得到確切地點（從託的那一間算，打聽度 WATCH_AT 以上、沒下線太久）就捎信；到期的捎一句沒消息。"""
+        s, c, cfg = self.state, self.content, self.content.config.tavern
+        p = s.player
+        if not p.tavern_watches:
+            return
+        lines, keep = [], []
+        for w in p.tavern_watches:
+            other = self._load_kin(w.target)
+            if other is not None:
+                other.state.world = s.world
+                op = other.state.player
+                seen = op.seen_real or 0.0
+                online = not seen or self.now - seen <= cfg.offline_hours * 3600
+                if online and tavern_rules.hit_reach(c, w.place, other.state) >= tavern_rules.WATCH_AT:
+                    if op.journey is not None:
+                        lines.append(tavern_rules.WATCH_ROAD.format(name=op.name, place=c.locations[op.journey.path[op.journey.last]].name))
+                    else:
+                        lines.append(tavern_rules.WATCH_FOUND.format(name=op.name, place=c.locations[op.location].name))
+                    tavern_rules.remember(s, op.name)
+                    continue
+            if w.until_real <= self.now:
+                lines.append(tavern_rules.WATCH_LAPSED.format(name=w.target))
+                continue
+            keep.append(w)
+        if len(keep) != len(p.tavern_watches):
+            p.tavern_watches = keep
+        if lines:
+            self._write(tavern_rules.WATCH_TITLE, lines)
+
+    def _tavern_seek_once(self, target: str) -> list[str]:
+        s, c = self.state, self.content
+        cfg = c.config.tavern
+        self._tavern_seek_exact = None  # 查人那一下問得多清楚（託酒家留意看它）：None 沒查成、True 確切地點、False 沒問清楚
+        if not target:
+            return [tavern_rules.ASK_EMPTY]
+        if name_key(target) == name_key(s.player.name):
+            return [tavern_rules.ASK_SELF]
+        if self._tavern_charge(cfg.seek_price) is None:
+            return self._tavern_short(cfg.seek_price)
+        self._tavern_seek_exact = False
+        price = self._tavern_price(cfg.seek_price)
+        cid, other = self._tavern_find(target)
+        if cid is not None:
+            lines = tavern_rules.seek_figure_lines(s, c, cid)
+            self._tavern_seek_exact = True  # 人物不託（他們走到哪都有人談）
+        elif other is not None:
+            lines, found = tavern_rules.seek_lines(s, c, other.state, self.now, self._tavern_wanted())
+            seen = other.state.player.seen_real or 0.0
+            self._tavern_seek_exact = found and (not seen or self.now - seen <= cfg.offline_hours * 3600) \
+                and tavern_rules.person_reach(s, c, other.state, self._tavern_wanted()) >= tavern_rules.WATCH_AT
+            self._tavern_whisper("seek", other)
+            if not found:
+                back = tavern_rules.refund(s, c, price)
+                self._shop_say("missed")
+                lines = [tavern_rules.HALF_MISS.format(refund=back) if tavern_rules.person_fame(other.state, c) >= 1
+                         else tavern_rules.NOBODY.format(refund=back)]
+                tavern_rules.add_note(s, c, "seek", f"{tavern_rules.TITLES['seek']}・{target}", lines)
+                return lines
+            tavern_rules.remember(s, other.state.player.name)
+        else:  # 沒有這個人：跟默默無名的人問不到同一句（不讓人拿酒肆試出誰在不在）
+            back = tavern_rules.refund(s, c, price)
+            self._shop_say("missed")
+            lines = [tavern_rules.NOBODY.format(refund=back)]
+            tavern_rules.add_note(s, c, "seek", f"{tavern_rules.TITLES['seek']}・{target}", lines)
+            return lines
+        tavern_rules.add_note(s, c, "seek", f"{tavern_rules.TITLES['seek']}・{target}", lines)
+        self._shop_say("asked")
+        return lines
+
+    def _tavern_ties(self, target: str) -> list[str]:
+        s, c = self.state, self.content
+        cfg = c.config.tavern
+        if not target:
+            return [tavern_rules.ASK_EMPTY]
+        if name_key(target) == name_key(s.player.name):
+            return [tavern_rules.ASK_SELF]
+        if self._tavern_charge(cfg.ties_price) is None:
+            return self._tavern_short(cfg.ties_price)
+        price = self._tavern_price(cfg.ties_price)
+        cid, other = self._tavern_find(target)
+        wanted = self._tavern_wanted()
+        found = True
+        if cid is not None:
+            holders = []
+            if hasattr(self.world, "db"):
+                for state in CharacterStore(self.world.db).all():
+                    n = state.player.affinities.get(cid, 0)
+                    if n > 0 and name_key(state.player.name) != name_key(s.player.name):
+                        state.world = s.world
+                        holders.append((state, n))
+            holders.sort(key=lambda pair: (-pair[1], pair[0].player.name))
+            lines = tavern_rules.ties_figure_lines(s, c, cid, holders, wanted)
+        elif other is not None:
+            mates = [c.characters[m].name for m in other.state.player.team if m in c.characters]
+            lines, found = tavern_rules.ties_player_lines(s, c, other.state, mates, wanted)
+            self._tavern_whisper("ties", other)
+            if found:
+                tavern_rules.remember(s, other.state.player.name)
+        else:
+            lines, found = [], False
+        if not found:
+            back = tavern_rules.refund(s, c, price)
+            self._shop_say("missed")
+            lines = [tavern_rules.NOBODY.format(refund=back)]
+        else:
+            self._shop_say("asked")
+        tavern_rules.add_note(s, c, "ties", f"{tavern_rules.TITLES['ties']}・{target}", lines)
+        return lines
+
+    def _tavern_material(self, mid: str) -> list[str]:
+        s, c = self.state, self.content
+        material = c.materials.get(mid)
+        if material is None:
+            return [tavern_rules.MATERIAL_UNKNOWN]
+        base = c.config.tavern.material_prices.get(material.tier, max(c.config.tavern.material_prices.values()))
+        if self._tavern_charge(base) is None:
+            return self._tavern_short(base)
+        lines, found = tavern_rules.material_lines(s, c, material)
+        if not found:
+            back = tavern_rules.refund(s, c, self._tavern_price(base))
+            lines = [tavern_rules.MATERIAL_NONE.format(name=material.name, refund=back)]
+            self._shop_say("missed")
+        else:
+            self._shop_say("asked")
+        tavern_rules.add_note(s, c, "material", f"{tavern_rules.TITLES['material']}・{material.name}", lines)
+        return lines
+
+    def _tavern_wall(self, text: str) -> list[str]:
+        s, c = self.state, self.content
+        problem = tavern_rules.wall_problem(c, text)
+        if problem is not None:
+            self._shop_after(problem, "wall")
+            return [problem]
+        if self._tavern_charge(c.config.tavern.wall_price) is None:
+            return self._tavern_short(c.config.tavern.wall_price)
+        tavern_rules.write_wall(s.world, c, s.player.location, display_name(s), text)
+        self._shop_say("wall")
+        return [tavern_rules.WALL_DONE, f"「{text.strip()}」"]
+
+    def _tavern_treat_problem(self) -> str | None:
+        return tavern_rules.TREAT_FULL if self.state.player.tavern_treat_day == self._pill_day() else None
+
+    def _tavern_treat(self) -> list[str]:
+        s, c = self.state, self.content
+        cfg = c.config.tavern
+        problem = self._tavern_treat_problem()
+        if problem is not None:
+            self._shop_after(problem, "treat")
+            return [problem]
+        if self._tavern_charge(cfg.treat_price) is None:
+            return self._tavern_short(cfg.treat_price)
+        p = s.player
+        p.tavern_treat_day = self._pill_day()
+        who = display_name(s)
+        s.world.tavern_treats[p.location] = (who, s.world.time)
+        add_rumor(s, tavern_rules.TREAT_LINE.format(name=who, place=c.locations[p.location].name), p.location,
+                        content=c, layer="local", named=not p.anonymous)
+        self._shop_say("treat")
+        return [tavern_rules.TREAT_DONE] + renown.gain(s, c, "fame", cfg.treat_fame)
+
+    def _tavern_hide_problem(self) -> str | None:
+        p = self.state.player
+        if p.hidden_until > self.state.world.time:
+            return tavern_rules.HIDE_ALREADY.format(when=self.stamp(p.hidden_until))
+        return None
+
+    def _tavern_hide(self) -> list[str]:
+        s, c = self.state, self.content
+        problem = self._tavern_hide_problem()
+        if problem is not None:
+            self._shop_after(problem, "hide")
+            return [problem]
+        if self._tavern_charge(c.config.tavern.hide_price) is None:
+            return self._tavern_short(c.config.tavern.hide_price)
+        s.player.hidden_until = s.world.time + DAY
+        self._shop_say("hide")
+        return [tavern_rules.HIDE_DONE]
+
+    def _tavern_trace(self) -> list[str]:
+        s, c = self.state, self.content
+        pending = [w for w in s.player.whispers if not (w.named or w.revealed)]
+        if not pending:
+            self._shop_say("nothing")
+            return [tavern_rules.TRACE_NONE]
+        if self._tavern_charge(c.config.tavern.trace_price) is None:
+            return self._tavern_short(c.config.tavern.trace_price)
+        others = {}
+        last = pending[-1]
+        other = self._load_kin(last.who)
+        if other is not None:
+            other.state.world = s.world
+            others[name_key(last.who)] = other.state
+        lines, _ = tavern_rules.trace_lines(s, c, others)
+        tavern_rules.add_note(s, c, "trace", tavern_rules.TITLES["trace"], lines)
+        self._shop_say("trace")
+        return lines
+
+    # ── 買殺手（設計第六節）：雇（_tavern_hit）、保鏢（_tavern_guard）、殺手出手（_tavern_hit_check，對方自己在城外做完一件事時）、
+    # 雇主收結果（_deliver_hits，雇主自己同步時）。單子在季上（WorldState.tavern_hits），亂數用自己的種子，不動 Game.rng ──
+
+    def _tavern_hit_problem(self, target: str, tier: int) -> tuple[str | None, Game | None]:
+        """雇不雇得了（拒絕的話, 對方那一份）：要先在酒肆查到過這個人（不然查無此人與默默無名讀得出差別）、有仇（照截殺的規矩）、
+        雙方都過了新手期、對方身上沒有別人的單、同一對人 hit_pair_hours 內沒雇過、季還在跑。"""
+        s, c, cfg = self.state, self.content, self.content.config.tavern
+        if s.world.ended:
+            return tavern_rules.HIT_ENDED, None
+        if not 0 <= tier < len(cfg.hit_prices):
+            return tavern_rules.HIT_BAD_TIER, None
+        if not target or name_key(target) not in {name_key(n) for n in s.player.tavern_known} | self._tavern_wanted():
+            return tavern_rules.HIT_NEED_KNOWN, None
+        cid, other = self._tavern_find(target)
+        if other is None:
+            return tavern_rules.HIT_NEED_KNOWN, None
+        them = other.state.player.name
+        if not self.raid_shown(other):
+            return tavern_rules.HIT_NO_FEUD.format(name=them, him=gender.pronoun(other.state)), other
+        if roster.raid_newbie(s, c):
+            return tavern_rules.HIT_NEWBIE_ME, other
+        if roster.raid_newbie(other.state, c):
+            return tavern_rules.HIT_NEWBIE_THEM.format(name=them), other
+        if tavern_rules.active_hit(s.world, them, self.now) is not None:
+            return tavern_rules.HIT_TAKEN.format(name=them), other
+        recent = self.now - cfg.hit_pair_hours * 3600
+        if any(name_key(h.client) == name_key(s.player.name) and name_key(h.target) == name_key(them) and h.placed_real > recent
+               for h in s.world.tavern_hits):
+            return tavern_rules.HIT_PAIR.format(name=them), other
+        return None, other
+
+    def _tavern_hit(self, target: str, spec: str) -> list[str]:
+        """雇殺手：spec 是「檔次」或「檔次:hush」（多付封口錢）。付了錢掛單；對方擲一次聽不聽得到風聲（不說是誰）。"""
+        s, c, cfg = self.state, self.content, self.content.config.tavern
+        head, _, flag = str(spec or "").partition(":")
+        tier = int(head) if head.strip().isdigit() else -1
+        problem, other = self._tavern_hit_problem(target, tier)
+        if problem is not None:
+            self._shop_after(problem, "refused")
+            return [problem]
+        hush = flag == "hush"
+        base = cfg.hit_prices[tier] + (cfg.hush_price if hush else 0)
+        price = self._tavern_charge(base)
+        if price is None:
+            return self._tavern_short(base)
+        them = other.state.player.name
+        w = s.world
+        w.tavern_hit_seq += 1
+        hit = TavernHit(id=w.tavern_hit_seq, client=s.player.name, target=them, tier=tier, price=price, place=s.player.location,
+                        placed_real=self.now, until_real=self.now + cfg.hit_hours * 3600, hushed=hush)
+        warn = cfg.hit_warn + 0.05 * renown.fame_tier(other.state, c)
+        if tavern_rules.rng_for("酒肆殺手風聲", w.tavern_hit_seq, s.player.name, them, w.time).random() < warn:
+            hit.warned = True
+            note = Whisper(kind="hit", who=s.player.name, place=s.player.location, time=w.time,
+                           hint=tavern_rules.side_hint(s, c), hushed=hush)
+            tavern_rules.post_whisper(w, them, note)
+            self.touched.add(them)
+        w.tavern_hits.append(hit)
+        name = tavern_rules.hit_tier_name(tier)
+        lines = [tavern_rules.HIT_PLACED.format(name=them, tier=name, until=self._real_stamp(hit.until_real))]
+        if hush:
+            lines.append(tavern_rules.HIT_HUSHED)
+        tavern_rules.add_note(s, c, "hit", f"{tavern_rules.TITLES['hit']}・{them}", lines)
+        self._shop_say("asked")
+        return lines
+
+    def _real_stamp(self, real: float) -> str:
+        """現實秒換成玩家看得到的時刻（季曆的寫法）：照此刻的世界時間往後推。"""
+        w = self.state.world
+        return self.stamp(w.time + (real - self.now) * self.content.config.time_scale)
+
+    def _tavern_guard_problem(self) -> str | None:
+        p = self.state.player
+        if p.tavern_guard_until > self.now:
+            return tavern_rules.GUARD_ALREADY.format(until=self._real_stamp(p.tavern_guard_until))
+        return None
+
+    def _tavern_guard(self) -> list[str]:
+        s, c, cfg = self.state, self.content, self.content.config.tavern
+        problem = self._tavern_guard_problem()
+        if problem is not None:
+            self._shop_after(problem, "refused")
+            return [problem]
+        if self._tavern_charge(cfg.guard_price) is None:
+            return self._tavern_short(cfg.guard_price)
+        s.player.tavern_guard_until = self.now + cfg.guard_hours * 3600
+        line = tavern_rules.GUARD_DONE.format(until=self._real_stamp(s.player.tavern_guard_until))
+        tavern_rules.add_note(s, c, "guard", tavern_rules.TITLES["guard"], [line])
+        self._shop_say("hide")
+        return [line]
+
+    def _tavern_hit_check(self) -> list[str]:
+        """自己（被盯上的人）剛做完一件事：有一張找你的單子、你人在城外、不在路上、不在決戰裡、沒剛被人截殺或設伏過，殺手照打聽度
+        擲一次找不找得到；找到了本人對本人打一場。到期的單子在這裡收（退款由雇主自己同步時領）。"""
+        s, c = self.state, self.content
+        w, me = s.world, s.player
+        if not tavern_rules.on(c) or not w.tavern_hits:
+            return []
+        key = name_key(me.name)
+        mine = [h for h in w.tavern_hits if not h.done and name_key(h.target) == key]
+        if not mine:
+            return []
+        for h in mine:
+            if h.until_real <= self.now:
+                h.done, h.outcome = True, "過期"
+        hit = next((h for h in mine if not h.done), None)
+        if hit is None or w.ended or me.journey is not None or tavern_rules.town(c, me.location) or roster.raid_newbie(s, c):
+            return []
+        battle = self.world.get_battle()
+        if battle is not None and me.name in battle.participants:
+            return []
+        shield = w.raided.get(key)
+        if shield is not None and w.time - shield < c.config.raid.shield_seconds:
+            return []
+        rng = tavern_rules.rng_for("酒肆殺手", hit.id, me.name, w.time)
+        reach = tavern_rules.hit_reach(c, hit.place, s, self._tavern_wanted_of(me.name))
+        if rng.random() >= tavern_rules.find_chance(c, reach):
+            return []
+        return self._tavern_hit_fight(hit, rng)
+
+    def _tavern_wanted_of(self, name: str) -> set[str]:
+        """這個人身上有沒有通緝（名氣 +1）：有就回只含他名號鍵的集合。"""
+        return {name_key(name)} & self._tavern_wanted()
+
+    def _tavern_hit_fight(self, hit, rng: random.Random) -> list[str]:
+        s, c, cfg = self.state, self.content, self.content.config.tavern
+        w, me = s.world, s.player
+        tier_name = tavern_rules.hit_tier_name(hit.tier)
+        mine = self._spar_power(self, self)
+        power = cfg.hit_power[min(hit.tier, len(cfg.hit_power) - 1)]
+        if me.tavern_guard_until > self.now:
+            power *= cfg.guard_scale
+        killer = max(1.0, mine * power)
+        result = encounter.resolve_encounter(mine, killer, rng)
+        w.raided[name_key(me.name)] = w.time
+        hit.done = True
+        squad = Squad(id="assassin", name=tier_name, difficulty=killer)
+        record = battlelog.new_record(s, c, self.world, squad, result, "assassin")
+        record.ours = record.ours[:1]
+        hp_lost: int | None = 0
+        extra: list[str] = []
+        if result.tier in team.WIN_TIERS:
+            hit.outcome = "對方贏"
+            found = math.floor(hit.price * cfg.hit_bounty_share)
+            me.stats["silver"] = me.stats.get("silver", 0) + found
+            record.silver = found
+            story = tavern_rules.HIT_STORY_WON.format(tier=tier_name, n=found)
+            record.changes += renown.gain(s, c, "fame", cfg.hit_win_fame)
+            client = self._load_kin(hit.client)
+            tier = renown.fame_tier(client.state, c) if client is not None else 0
+            chance = (cfg.hit_reveal + 0.1 * tier) * (0.5 if hit.hushed else 1.0)
+            if rng.random() < chance:
+                extra.append(tavern_rules.HIT_REVEALED.format(who=hit.client))
+                tavern_rules.remember(s, hit.client)
+                hit.outcome = "對方贏・供出"
+                add_rumor(s, tavern_rules.HIT_RUMOR.format(who=hit.client, name=me.name), hit.place, content=c, layer="local")
+            else:
+                extra.append(tavern_rules.HIT_SILENT)
+        elif result.tier in team.DRAW_TIERS:
+            hit.outcome = "平手"
+            story = tavern_rules.HIT_STORY_DRAW.format(tier=tier_name)
+        else:
+            hit.outcome = "殺手贏"
+            purse = me.stats.get("silver", 0)
+            lost = min(cfg.hit_silver_cap, math.ceil(purse * cfg.hit_silver_share)) if purse > 0 else 0
+            me.stats["silver"] = purse - lost
+            record.silver = -lost
+            con = team.con_of(s, c, self.world, PLAYER)
+            cut = team.armor_cut(s, c, self.world)
+            hp, _ = team._apply_toll(c, me.member, cfg.hit_hp_loss * (1 - cut), agi=me.stats.get("agi", team.BASE_STAT), con=con)
+            hp_lost = round(hp)
+            if hp_lost > 0:
+                record.changes.append(f"氣血 -{hp_lost}")
+            story = tavern_rules.HIT_STORY_LOST.format(tier=tier_name)
+        record.notes.append(story)
+        record.notes += extra
+        annals.note(s, c, annals.FIGHT, story, 2)
+        self._play_rounds(record, squad, result.tier, hp_lost)
+        line = self._file_battle(record)
+        msgs = [line, story, *extra, *battlelog.gains_list(record), *self._last_wear]
+        self._write(tavern_rules.HIT_STRUCK, msgs, tag=battlelog.outcome_text(record))
+        self.touched.add(hit.client)
+        return msgs
+
+    def _deliver_hits(self) -> None:
+        """雇主自己同步時：收自己雇的單子的結果（得手、失手、平手、到期退一半），一張一句、一則紀錄；得手的記惡名。"""
+        s, c, cfg = self.state, self.content, self.content.config.tavern
+        w, me = s.world, s.player
+        if not w.tavern_hits:
+            return
+        key = name_key(me.name)
+        lines: list[str] = []
+        for h in w.tavern_hits:
+            if name_key(h.client) != key or h.refunded:
+                continue
+            if not h.done and h.until_real <= self.now:
+                h.done, h.outcome = True, "過期"
+            if not h.done:
+                continue
+            h.refunded = True
+            tier = tavern_rules.hit_tier_name(h.tier)
+            if h.outcome == "過期":
+                back = int(h.price * cfg.refund_share)
+                me.stats["silver"] = me.stats.get("silver", 0) + back
+                lines.append(tavern_rules.HIT_REFUND.format(name=h.target, tier=tier, n=back))
+            elif h.outcome == "殺手贏":
+                lines.append(tavern_rules.HIT_WON_CLIENT.format(tier=tier, name=h.target))
+                lines += renown.gain(s, c, "evil", cfg.hit_evil)
+            elif h.outcome.startswith("對方贏"):
+                lines.append(tavern_rules.HIT_LOST_CLIENT.format(tier=tier, name=h.target))
+                if h.outcome.endswith("供出"):
+                    lines.append(tavern_rules.HIT_LOST_NAMED)
+            else:
+                lines.append(tavern_rules.HIT_DRAW_CLIENT.format(tier=tier, name=h.target))
+        if lines:
+            self._write(tavern_rules.HIT_TITLE, lines)
+            self._save_season()
+
+    # ── 問酒家（設計第八節）：A tavern_ask_request（只讀）→ B 鎖外 tavern.ask_write → C tavern_ask（重驗同一間、同一句，再過一次 ask_clean）──
+
+    def _tavern_ask_facts(self) -> tuple[str, ...]:
+        s, c = self.state, self.content
+        p = s.player
+        extra = []
+        guests = [o.player.name for o in social.here(self)][:6]
+        if guests:
+            extra.append(f"此刻也在{c.locations[p.location].name}的江湖人：{'、'.join(guests)}。")
+        side = social.side(s, c)
+        extra.append(f"問話的客官是{side}，名號{p.name}。")
+        return tavern_rules.ask_facts(s, c, extra)
+
+    def tavern_chatter_request(self) -> tavern_rules.ChatterRequest | None:
+        """A 段（鎖內、只讀）：酒肆開著、這一間的閒談該換了，就開一張單（server.write_chatter 在背景請模型寫）。"""
+        s, c = self.state, self.content
+        loc = s.player.location
+        if not self._tavern_open() or not tavern_rules.chatter_due(s.world, c, loc):
+            return None
+        return tavern_rules.ChatterRequest(place=loc, sign=tavern_rules.sign(s, c), asked_at=s.world.time,
+                                           facts=tavern_rules.chatter_facts(s, c, loc))
+
+    def apply_tavern_chatter(self, request: tavern_rules.ChatterRequest, lines: list[str]) -> bool:
+        """C 段：這一間還是該換（沒有別人先寫好），就記下這一段；寫不出來記空清單，這一陣子照固定句、不再叫模型。記了回 True。"""
+        s, c = self.state, self.content
+        entry = s.world.tavern_chatter.get(request.place)
+        if entry is not None and entry[0] >= request.asked_at and not tavern_rules.chatter_due(s.world, c, request.place):
+            return False
+        s.world.tavern_chatter[request.place] = (s.world.time, list(lines))
+        self._save_season()
+        return bool(lines)
+
+    def tavern_ask_request(self, text: str) -> tavern_rules.AskRequest | list[str]:
+        """A 段（鎖內、只讀）：酒肆開著、問句合格、付得起，就開一張單（問到秘密的單子標 secret，B 段不叫模型）；不然回那一句拒絕。"""
+        s, c = self.state, self.content
+        if not self._tavern_open():
+            return [equipment.NOT_NOW]
+        q = str(text or "").strip()
+        problem = tavern_rules.ask_problem(c, q)
+        if problem is None:
+            problem = tavern_rules.pay_problem(s, self._tavern_price(c.config.tavern.ask_price))
+        if problem is not None:
+            return [problem]
+        return tavern_rules.AskRequest(name=s.player.name, place=s.player.location, sign=tavern_rules.sign(s, c), question=q,
+                                       facts=self._tavern_ask_facts(), secret=tavern_rules.secret_asked(q))
+
+    def tavern_ask(self, text: str, reply: str | None, request: tavern_rules.AskRequest | None = None) -> list[str]:
+        """C 段：重驗（酒肆還開著、還在同一間、同一句），回話再過一次 ask_clean（照此刻的清單），然後收錢寫紀錄。"""
+        if not self._tavern_open():
+            return self._log([equipment.NOT_NOW])
+        q = str(text or "").strip()
+        ok = request is not None and request.place == self.state.player.location and request.question == q
+        self._tavern_reply = reply if ok else None
+        try:
+            return self._log(self._tavern_run("ask", text=q))
+        finally:
+            self._tavern_reply = None
+
+    def _tavern_ask(self, text: str) -> list[str]:
+        s, c = self.state, self.content
+        cfg = c.config.tavern
+        q = text.strip()
+        problem = tavern_rules.ask_problem(c, q)
+        if problem is not None:
+            self._shop_after(problem, "refused")
+            return [problem]
+        if tavern_rules.secret_asked(q):
+            half = max(0, cfg.ask_price // 2)
+            if self._tavern_charge(half) is None:
+                return self._tavern_short(half)
+            lines = [tavern_rules.ASK_YOU.format(q=q), tavern_rules.ASK_SECRET]
+            tavern_rules.add_note(s, c, "ask", tavern_rules.ASK_TITLE, lines)
+            self._shop_say("nothing")
+            return lines
+        if self._tavern_charge(cfg.ask_price) is None:
+            return self._tavern_short(cfg.ask_price)
+        req = tavern_rules.AskRequest(name=s.player.name, place=s.player.location, sign=tavern_rules.sign(s, c), question=q,
+                                      facts=self._tavern_ask_facts())
+        reply = getattr(self, "_tavern_reply", None)  # B 段寫好的（tavern_ask 放的）；直接呼叫沒有 B 段，當叫不動
+        reply = tavern_rules.ask_clean(reply, req) if reply else None
+        if reply is None:
+            tavern_rules.pay(s, -self._tavern_price(cfg.ask_price))  # 叫不動模型：退全額
+            self._shop_say("nothing")
+            return [tavern_rules.ASK_BUSY]
+        lines = [tavern_rules.ASK_YOU.format(q=q), tavern_rules.ASK_HIM.format(a=reply)]
+        tavern_rules.add_note(s, c, "ask", tavern_rules.ASK_TITLE, lines)
+        self._shop_say("asked")
+        return lines
+
+    def _deliver_whispers(self) -> None:
+        """酒肆的風聲（有人打聽你）：季上那幾則搬到身上，寫一則「風聲」紀錄。"""
+        lines = tavern_rules.collect_whispers(self.state, self.content)
+        if lines:
+            self._write(tavern_rules.WHISPER_TITLE, lines)
+            self._save_season()
+
+    def tavern_view(self) -> dict:
+        """酒肆那一頁（Game.shop_view 在酒肆開著時給）：招牌、銀兩、酒家那一句、出店、價錢、剛問到的、座上客、鄰桌閒談、題壁、
+        請酒的人、記下的名號、素材清單、收到的風聲。只讀。"""
+        s, c = self.state, self.content
+        p, cfg = s.player, c.config.tavern
+        loc = p.location
+        guests = [o.player.name for o in social.here(self)]
+        treat = tavern_rules.treat_shown(s.world, c, loc)
+        prices = {k: self._tavern_price(getattr(cfg, f"{k}_price")) for k in ("news", "seek", "ties", "wall", "treat", "hide", "trace", "ask")}
+        mats = []
+        for m in sorted(c.materials.values(), key=lambda m: (m.tier, shopview.attribute_rank(m.attribute), m.id)):
+            base = cfg.material_prices.get(m.tier, max(cfg.material_prices.values()))
+            mats.append({"id": m.id, "name": m.name, "tier": m.tier, "attribute": m.attribute, "price": self._tavern_price(base)})
+        hour = int(s.world.time // HOUR)
+        me = name_key(p.name)
+        hits = {
+            "tiers": [{"tier": i, "name": tavern_rules.hit_tier_name(i), "price": self._tavern_price(base)}
+                      for i, base in enumerate(cfg.hit_prices)],
+            "hush": self._tavern_price(cfg.hush_price),
+            "guard": self._tavern_price(cfg.guard_price),
+            "guard_problem": self._tavern_guard_problem(),
+            "mine": [tavern_rules.HIT_ACTIVE.format(name=h.target, tier=tavern_rules.hit_tier_name(h.tier), until=self._real_stamp(h.until_real))
+                     for h in s.world.tavern_hits if not h.done and name_key(h.client) == me and h.until_real > self.now],
+            "ended": bool(s.world.ended),
+        }
+        return {
+            "shop": "tavern",
+            "hits": hits,
+            "sign": tavern_rules.sign(s, c),
+            "silver": p.stats.get("silver", 0),
+            "line": shopview.line_text(s, c, "tavern"),
+            "back": tavern_rules.BACK_ID,
+            "prices": prices,
+            "problems": {"treat": self._tavern_treat_problem(), "hide": self._tavern_hide_problem()},
+            "notes": [{"kind": n.kind, "title": n.title, "lines": list(n.lines), "when": self.stamp(n.time)}
+                      for n in reversed(p.tavern_notes)],
+            "guests": guests[:6],
+            "more_guests": max(0, len(guests) - 6),
+            "treat": tavern_rules.TREAT_SEEN.format(name=treat) if treat else "",
+            "chatter": [{"who": who, "said": said} for who, said in tavern_rules.chatter(c, loc, hour, s.world)],
+            "walls": [{"who": w.who, "text": w.text, "when": self.stamp(w.time)} for w in reversed(s.world.tavern_walls.get(loc, []))],
+            "wall_chars": cfg.wall_chars,
+            "ask_chars": cfg.ask_chars,
+            "watch": {"price": self._tavern_price(int(round(cfg.seek_price * cfg.watch_share))),
+                      "mine": [tavern_rules.WATCH_ACTIVE.format(name=w.target, until=self._real_stamp(w.until_real))
+                               for w in p.tavern_watches if w.until_real > self.now]},
+            "known": list(reversed(p.tavern_known)),
+            "materials": mats,
+            "whispers": tavern_rules.whisper_view(c, s),
+            "hidden": tavern_rules.HIDE_ALREADY.format(when=self.stamp(p.hidden_until)) if p.hidden_until > s.world.time else "",
+            "board": tavern_rules.BOARD_ID if bounties.board_here(s, c) and bounties.visible(s, c) else "",
+        }
 
     # ── 大場面：鎖外請模型判讀（武學與成長設計 8.3、計畫三 Task 2）────────────
 
@@ -2056,6 +2902,13 @@ class Game:
             if self._shop_open() == "market":  # 已經出了馬市、進了別的店（另一個分頁）：不改那一間店掌櫃的話（終審 M1）
                 self._shop_after(problem, "refused")
             return Refused(self._log([problem if problem == mounts.STALE else f"（{problem}。）"]))
+        if option is None and option_id.startswith("act:recruit:"):
+            # FB-363：兩個分頁搶，慢的那一頁的招募鈕還在、他已經被別人招走了：同懸賞榜 FB-162 回那一句（Refused，網頁跳提示），
+            # 不扣體力、不寫江湖紀錄。不在這裡、陣營不合這類原因照舊「此刻無法這麼做」
+            cid = option_id.removeprefix("act:recruit:")
+            owner = roster.owned_by(self.world, cid) if cid in self.content.characters else None
+            if owner is not None and not roster.owns(owner, self.state.player.name):
+                return Refused(self._log([roster.TAKEN.format(name=self.content.characters[cid].name, owner=owner)]))
         if option is not None and not option.enabled and option_id.startswith("arena:fight:"):
             # Joy 2026-10-16「看不出還有多久才能打」：按到灰掉的挑擂鈕（兩個分頁、畫面還沒重抓）回為什麼不成、還要等多久，不寫江湖紀錄
             foe = self.state.world.arena.get(option_id.removeprefix("arena:fight:"))
@@ -2122,18 +2975,25 @@ class Game:
                 msgs = self._market(arg)
             elif kind == "donate":
                 msgs = self._donate_choice(arg)
+            elif kind == "tavern":
+                msgs = self._tavern_choice(arg)
             elif kind == "arena":
                 msgs = self._arena(arg)
             elif kind == "explore":
                 msgs = self._explore_mode(arg)
             elif kind == "sect":  # 拜入門派（一類一顆，_sect_options）：端出那一則事件，不花體力
                 msgs = self._present(self.content.events[arg], "sect")
+            elif kind == "dadian":  # 打點那一間店的「離開」
+                self._close_dadian()
+                msgs = [silver.SHOP_CLOSED]
             elif kind == "ambush":
                 msgs = self._ambush_act(arg)
             elif kind == "works":
                 msgs = self._works_act(arg)
             elif kind == "aid":
                 msgs = self._aid_act(arg)
+            elif kind == "feast":
+                msgs = self._feast_act(arg)
             else:
                 msgs = self._choose(int(arg))
             # 三選一開著時按「探索」本身（_act 只回 PICK）：不算探索過、不寫紀錄。要在後面接上大勢門檻、召見那些訊息之前記
@@ -2188,6 +3048,7 @@ class Game:
             self._fight = None
             self._affinity_before = None
         self._record_faction()
+        msgs += self._tavern_hit_check()  # 酒肆：有人雇了殺手找你，你剛在城外做完一件事（設計第六節）
         self._save_season()
         return self._log(msgs)
 
@@ -2420,12 +3281,20 @@ class Game:
             return mounts.MARKET
         if kind == "donate":
             return f"{economy.DONATE_TITLE}・{c.locations[s.player.location].name}"
+        if kind == "dadian":
+            return f"{silver.SHOP}・{c.locations[s.player.location].name}"
+        if kind == "tavern":
+            return tavern_rules.title_of(s, c, arg)
         if kind == "ambush":
             return "收伏" if arg == "lift" else f"{ambush_rules.TITLE}・{c.locations[s.player.location].name}"
         if kind == "aid":
             verb, _, fid = arg.partition(":")
             title = {"guard": figure_aid.GUARD_TITLE, "rally": figure_aid.RALLY_TITLE, "visit": figure_aid.VISIT_TITLE}.get(verb, figure_aid.GUARD_TITLE)
             return f"{title}・{c.figures[fid].name}" if fid in c.figures else title
+        if kind == "feast":
+            f = feasts.find(s, s.player.feasting) if arg.startswith(("toast", "leave")) else feasts.find(
+                s, int(arg.partition(":")[2]) if arg.partition(":")[2].isdecimal() else None)
+            return f"{feasts.TITLE}・{feasts.host_name(c, f)}" if f is not None else feasts.TITLE
         if kind == "works":
             name = works.FORT_TITLE if arg == "fortify" else works.STOCK_TITLE
             return f"{name}・{c.locations[s.player.location].name}"
@@ -2447,6 +3316,8 @@ class Game:
                         "buy_legend": silver.LEGEND_TITLE}.get(arg) if kind == "act" else None
         if silver_title is not None:
             return f"{silver_title}・{c.locations[s.player.location].name}"
+        if kind == "act" and arg.startswith("recruit:") and arg.partition(":")[2] in c.characters:
+            return f"招募・{c.characters[arg.partition(':')[2]].name}"
         rank_action = _rank_action_id(arg) if kind == "act" else None  # 第 3、4 階的行動（正式版戊一）寫它自己的名字
         if rank_action is not None:
             name = next(a.name for a in c.orders.rank_actions if a.id == rank_action)  # choose 已經驗過選項在選單上，一定找得到
@@ -2465,6 +3336,8 @@ class Game:
             "arena": f"{arena.ARENA}・{here}",
             "heal": f"療傷・{here}",
             "donate": f"{economy.DONATE_TITLE}・{here}",
+            "dadian": f"{silver.SHOP}・{here}",
+            "tavern": tavern_rules.sign(s, c),
         }
         return titles.get(arg, "提前出關")
 
@@ -2674,7 +3547,7 @@ class Game:
         # 「這裡能學新的底」：只算現在學得了的（learn 擋下的——名望、學費、門派、陣營、持有滿了——都不算，不然師父說能學、按下去卻是「學不了」）
         if want("h_basic_art") and any(problem is None for _, problem in library.lessons_here(s, c)):
             on.append("h_basic_art")
-        if want("h_recruit") and self._recruit_target() is not None:
+        if want("h_recruit") and (self._recruit_target() is not None or self._recruitable_here()):
             on.append("h_recruit")
         if want("h_free_text") and s.pending_event:
             event = c.events.get(s.pending_event)
@@ -2750,6 +3623,94 @@ class Game:
         """還等著模型照他的口氣重寫的那一封（server 鎖外寫；A 段，只讀）。"""
         return letters.request(self.state, self.content)
 
+    # ── 宴客（大勢人物擴充第三批；tianxia/feasts.py）──
+
+    def _feast_seat(self) -> Feast | None:
+        """我坐著的那一場（PlayerState.feasting）還能敬酒：還擺著、我在那裡、我還沒敬過。不然是 None。"""
+        f = feasts.find(self.state, self.state.player.feasting)
+        return f if feasts.toast_problem(self.state, self.content, f) is None else None
+
+    def _feast_options(self) -> list[Option]:
+        s, c = self.state, self.content
+        out: list[Option] = []
+        for f in feasts.here(s, c):
+            host = feasts.host_name(c, f)
+            if feasts.toasted(s, f):
+                out.append(Option(id=f"feast:join:{f.id}", label=feasts.DONE_LABEL.format(host=host), enabled=False))
+            else:
+                out.append(Option(id=f"feast:join:{f.id}", label=feasts.JOIN_LABEL.format(host=host)))
+        return out
+
+    def _feast_menu(self) -> list[Option]:
+        return [Option(id=f"feast:toast:{i}", label=feasts.TOAST_LABEL.format(text=t)) for i, t in enumerate(feasts.FIXED_TOASTS)] + [
+            Option(id="feast:leave", label=feasts.LEAVE_LABEL)]
+
+    def _feast_act(self, arg: str) -> list[str]:
+        """入席（feast:join:<id>，不花體力）、挑一句固定的敬酒詞（feast:toast:<i>）、離席（feast:leave）。"""
+        s, c = self.state, self.content
+        p = s.player
+        verb, _, rest = arg.partition(":")
+        if verb == "join":
+            f = feasts.find(s, int(rest) if rest.isdecimal() else None)
+            problem = feasts.toast_problem(s, c, f)
+            if problem is not None:
+                return [problem]
+            p.feasting = f.id
+            return [feasts.SEATED.format(host=feasts.host_name(c, f), n=len(f.toasts))]
+        if verb == "leave":
+            p.feasting = None
+            return [feasts.LEFT]
+        if verb == "toast" and rest.isdecimal() and int(rest) < len(feasts.FIXED_TOASTS):
+            f = self._feast_seat()
+            if f is None:
+                p.feasting = None
+                return [feasts.GONE]
+            return feasts.toast(s, c, f, feasts.FIXED_TOASTS[int(rest)], feasts.FIXED_SCORE, fixed=True)
+        return ["（此刻無法這麼做。）"]
+
+    def feast_free_text_prompt(self) -> str | None:
+        """坐在宴席上時輸入框的提示語（server.main_view；送出走 feast_text），否則 None。"""
+        return feasts.FREE_PROMPT if self.state.player.feasting is not None and self._feast_seat() is not None else None
+
+    def feast_text_request(self, text: str) -> feasts.ToastRequest | list[str]:
+        """自己寫的敬酒詞，A 段（只讀）：坐在宴席上、這一場還能敬、字數對，就開評分的單子；不然回拒絕的話。"""
+        if self.world.paused_at() is not None:
+            return [f"（{PAUSED_TEXT}。）"]
+        f = self._feast_seat()
+        if f is None:
+            return [feasts.NOT_HERE]
+        text = feasts.clean_text(text)
+        problem = feasts.text_problem(text)
+        if problem is not None:
+            return [problem]
+        return feasts.request(self.state, self.content, f, text)
+
+    def feast_toast(self, text: str, score: int, request: feasts.ToastRequest | None = None) -> list[str]:
+        """C 段：重驗同一場、同一句才記（分數再夾一次）；對不上回拒絕的話、不寫紀錄。寫一則「宴客・某某」。"""
+        now = self.feast_text_request(text)
+        if isinstance(now, list):
+            return now
+        if request is not None and (request.feast != now.feast or request.text != now.text):
+            return [feasts.GONE]
+        f = feasts.find(self.state, now.feast)
+        msgs = feasts.toast(self.state, self.content, f, now.text, score, fixed=False)
+        self._write(f"{feasts.TITLE}・{feasts.host_name(self.content, f)}", msgs)
+        self._save_season()
+        return msgs
+
+    # ── 月旦評（第三批；tianxia/yuedan.py）──
+
+    def yuedan_request(self) -> yuedan.YuedanNote | None:
+        """A 段（只讀）：這一週還沒發、還沒寫過評語的那一批。"""
+        return yuedan.request(self.state, self.content)
+
+    def apply_yuedan(self, note: yuedan.YuedanNote, lines: dict[str, str]) -> bool:
+        """C 段：同一批才換上評語並發出去（天下大事、江湖史），存回共用賽季。"""
+        done = yuedan.apply(self.state, self.content, note, lines)
+        if done:
+            self._save_season()
+        return done
+
     def apply_letter(self, note: letters.LetterNote, text: str) -> bool:
         """C 段：還是同一封才換；寫不出來照固定句。"""
         return letters.apply(self.state, note, text)
@@ -2795,6 +3756,8 @@ class Game:
             return self._part_ways()
         if what == "recruit":
             return self._recruit()
+        if what.startswith("recruit:"):
+            return self._recruit_one(what.partition(":")[2])
         if what == "rest":
             return self._rest()
         if what == "duty":
@@ -2829,22 +3792,22 @@ class Game:
             return arena.standing(self.state.world, self.state.player.name, self.content.config.arena)
         if what == "heal":  # 醫館療傷（企劃者 2026-10-12）：同修練頁的療傷鈕，不花體力
             return self._heal_msgs()
-        if what == "silver_donate":  # 銀兩出口（21 天季，正式季整合 6.5）：都不花體力
-            return self._silver_donate()
-        if what == "mentor":
-            return self._silver_mentor()
-        if what == "furnace":
-            return self._silver_furnace()
-        if what.startswith("bribe:"):
-            return self._silver_bribe(what.partition(":")[2])
-        if what == "buy_legend":
-            if not (silver.on(self.content, self.state.world) and self._at_clinic_town()):
-                return [equipment.NOT_NOW]
-            return silver.buy_legend(self.state, self.content)
+        if what == "dadian":  # 打點（銀兩出口收成一間店，第 9 批畫面乙）：打開那一間店（見 options 的 picking_dadian），不花體力
+            p = self.state.player
+            p.picking_dadian, p.shop_clue = True, ""
+            self._shop_say("enter")
+            return [silver.SHOP_ENTERED]
+        if what in ("silver_donate", "mentor", "furnace", "buy_legend") or what.startswith("bribe:"):
+            msgs = self._silver_act(what)  # 銀兩出口（21 天季，正式季整合 6.5）：都不花體力
+            if self.state.player.picking_dadian:
+                self._shop_say("done")  # 打點那一間店裡記了一筆：掮客換一句
+            return msgs
         if what == "donate":  # 大本營捐軍備（素材與經濟設計第六節）：打開軍需官那一串（見 _donate_options），不花體力
             self.state.player.picking_donate, self.state.player.shop_clue = True, ""
             self._shop_say("enter")  # 軍需帳上軍需官那一句（店面同一套）
             return [economy.DONATE_OPEN.format(faction=self.content.scenario.faction_name(self.state.player.faction, ""))]
+        if what == "tavern":  # 酒肆（企劃者 2026-10-18）：打開酒肆（見 _tavern_options），不花體力
+            return self._tavern_enter()
         if what == "call":
             self.state.player.picking_audience = True  # 打開求見選單（見 _audience_options），不花體力
             return [f"你遞上名帖，準備求見{self.content.locations[self.state.player.location].name}的人物。"]
@@ -3578,7 +4541,7 @@ class Game:
                 else:
                     stuck.append(b)
                 continue
-            line = (f"{bounties.issuer(c, b)}・{bounties.title(c, b)}：{bounties.how(c, b)}"
+            line = (f"{bounties.issuer(c, b)}・{bounties.title(c, b)}：{bounties.how(c, b, self.state)}"
                     f"（{bounties.reward_text(s, c, b)}；{bounties.due_line(s, c, b)}）")  # 期限與名額（FB-121 第 5 件）
             if b.id in mine:
                 opts.append(Option(id=f"bounty:drop:{b.id}", label=f"放棄 {line}"))
@@ -3670,7 +4633,7 @@ class Game:
                 temper = temper.model_copy(update={"label": temper.label + unfit})
             opts.append(temper)
         for w in equipment.in_slot(s.player, "weapon"):  # 裝備四欄 3.3：只看武器那一欄
-            if weapons.usable(w, art, c, self.world):
+            if weapons.usable(w, art, c, self.world) and equipment.wear_problem(s, c, w) is None:  # 穿不上的神器不列（正式季整合 5.8）
                 opts.append(Option(id=f"smith:wield:{w.id}", label=f"換上【{w.name}】（{weapons.noun(w.kind)}・{weapons.grade_line(w)}・鋒利度 {w.edge}）"))
         if c.config.weapons.enabled:
             opts.append(smithing.forge_door(s, c))  # 打造兵器…（排在換上與拆解中間：FB-125，兩顆不相鄰）
@@ -3728,7 +4691,8 @@ class Game:
             opts.append(temper)
         # FB-134：「換上」最多 DISMANTLE_LIST 件，修好之後減損高的先、同分 id 大的先——跟 armor.wanted 挑換上的鍵一樣，整季機器人與假人
         # 要按的那一顆一定列得出來；多的一行灰掉的說明指到修練頁（同拆解）。淬過的寫「・淬煉 N」（equipment.grade_line）
-        spares = sorted(equipment.in_slot(p, "armor"), key=lambda a: (armor.fresh_cut(a, neigong, c), a.id), reverse=True)
+        spares = sorted((a for a in equipment.in_slot(p, "armor") if equipment.wear_problem(s, c, a) is None),  # 穿不上的神器不列（5.8）
+                        key=lambda a: (armor.fresh_cut(a, neigong, c), a.id), reverse=True)
         for a in spares[:equipment.DISMANTLE_LIST]:
             opts.append(Option(id=f"smith:wield:{a.id}", label=f"換上【{a.name}】（屬{a.attribute}・{equipment.grade_line(a)}・{armor.WEAR_WORD} {a.edge}）"))
         if len(spares) > equipment.DISMANTLE_LIST:
@@ -3922,6 +4886,10 @@ class Game:
             return "market" if mounts.market_here(s, c) else None
         if p.picking_donate:  # 大本營的軍需帳（素材與經濟 B6，企劃者 2026-10-15 選 B3）
             return "donate" if self._at_own_base() else None
+        if p.picking_dadian:  # 打點（21 天季的銀兩出口，第 9 批畫面乙）
+            return "dadian" if self._silver_options() else None
+        if p.picking_tavern:  # 酒肆（企劃者 2026-10-18）
+            return "tavern" if tavern_rules.here(s, c) else None
         return None
 
     def _shop_live(self, option_ids=None, shop: str = "smith") -> bool:
@@ -3946,6 +4914,14 @@ class Game:
             return shopview.arena_view(s, c, self.world, self._battle_power(), self.arena_left())
         if shop == "donate":
             return shopview.donate_view(s, c, self._pill_day())
+        if shop == "dadian":
+            day = self._pill_day()
+            base = self._at_own_base()
+            return shopview.dadian_view(s, c, day=day, room=economy.donate_room(s, c, day) if base else 0, base=base,
+                                        clinic=self._at_clinic_town(), smith=equipment.smith_open(s, c), bribe=self._bribe_targets(),
+                                        prologue=prologue_rules.active(s, c))
+        if shop == "tavern":
+            return self.tavern_view()
         view = {"smith": shopview.smith_view, "market": shopview.market_view, "board": shopview.board_view}[shop](s, c, self.world)
         if shop == "smith":  # 素材買賣（素材與經濟設計第四、五節）：收購、升階都關著是 None
             view["trade"] = shopview.trade_view(s, c, self._pill_day())
@@ -4078,11 +5054,11 @@ class Game:
         bonds = "、".join(f"{self.content.characters[cid].name} {self.state.player.affinities.get(cid, 0)}" for cid in self._figures_here())
         kind, moment = self._talks_reopen()
         again = f"到 {moment} 重新算起" if moment else "過一陣子重新算起" if kind == "later" else "這一季之內不再重算"  # FB-102
-        return (
-            f"{here}有好幾位人物，挑一位求見。每位人物各算各的，最多談 {per_day} 輪，{again}；"
-            "名望不夠的會被打發。"
-            + (f"\n\n你跟他們的情誼：{bonds}。" if bonds else "")
-        )
+        if precise.on(self.content, self.state.world):  # 一類一顆：求見併進交友，名望不夠的灰著寫還差多少，不打發（FB-421）
+            head = SOCIAL_LIST_INTRO.format(here=here, per_day=per_day, again=again)
+        else:
+            head = f"{here}有好幾位人物，挑一位求見。每位人物各算各的，最多談 {per_day} 輪，{again}；名望不夠的會被打發。"
+        return head + (f"\n\n你跟他們的情誼：{bonds}。" if bonds else "")
 
     def howto_text(self) -> str:
         """設定抽屜的「玩法說明」（Markdown，explain-1 第四項；explain-2 加了這一季在打什麼、名望、投靠與軍令、三方、修練與煉製）：
@@ -4288,13 +5264,29 @@ class Game:
                 if self._draft is not None:
                     self._draft.title = "叛投不成"
                 return [f"（{reason}）"]
-            return defection.defect(self.state, self.content, target, ally)
+            return defection.defect(self.state, self.content, target, ally) + self._leave_behind(target.id)
         fid, _, ally = arg.partition(":")
         target = self.content.scenario.faction(fid)
         p.pending_defect, p.pending_ally = target.id, ally or None
-        prompt = defection.prompt(self.state, self.content, target, self.faction_counts_text(), p.pending_ally)
+        prompt = defection.prompt(self.state, self.content, target, self.faction_counts_text(), p.pending_ally, self._left_names(target.id))
         self._hide(prompt)  # 場景已經寫著這一問（_own_scene_text），江湖紀錄那一則只留標題（同投靠，FB-046）
         return [prompt]
+
+    def _left_names(self, side: str) -> list[str]:
+        """叛投確認畫面「會失去」那一段的同伴（歷史武將同行 9.5）：寫了 side、跟新陣營不合的。按鈕回的那一份與場景那一段（FB-362）共用。"""
+        return [self.content.characters[cid].name for cid in roster.left_behind(self.state, self.content, self.world, side)]
+
+    def _leave_behind(self, side: str) -> list[str]:
+        """叛投之後（歷史武將同行 9.5）：寫了 side、跟新陣營不合的同伴當場回江湖——全服放掉 owner、拿出隊伍、情誼照決戰後回江湖減半。"""
+        c, p = self.content, self.state.player
+        keep, out = c.config.companions.parted_keep, []
+        for cid in roster.left_behind(self.state, c, self.world, side):
+            self.world.release_companion(cid)
+            team.remove_from_team(self.state, cid)
+            before = p.affinities.get(cid, 0)
+            p.affinities[cid] = math.floor(before * keep)
+            out.append(roster.DEFECT_LEFT.format(name=c.characters[cid].name, before=before, after=p.affinities[cid]))
+        return out
 
     def _defect_targets(self) -> list[tuple[FactionDef, str | None]]:
         """這一刻選單上能叛投去的（陣營, 依附的那一軍）。先用不碰資料庫的條件擋掉大多數人（散人、劇本沒有陣營、叛投過），
@@ -4391,7 +5383,104 @@ class Game:
         與稱號（名聲 2.5、4.5：本場戰功、論功那一句寫；名望名動一方起、善惡第 1 段起，開關關著是空的）。"""
         return {"turncoat": self.state.player.defected, "newbie": roster.newbie(self.state, self.content),
                 "kit": team.self_side(self.state, self.content, self.world, mounted=True, troops=True),  # 本命戰法（第二批）
-                "renown": renown.titles(self.state, self.content, fame_from=2)}
+                "renown": renown.titles(self.state, self.content, fame_from=2),
+                "escort": self._escort_carry()}  # 隨你上陣的歷史武將（歷史武將同行第五節）
+
+    def _escort_choices(self) -> list[str]:
+        """加入決戰時挑得到的同伴：名下的（歷史武將同行第五節）。開關關著是空的（照舊一下就加入）。"""
+        if not roster.on(self.content):
+            return []
+        return [cid for cid in roster.owned_companions(self.world, self.state.player.name) if cid in self.content.characters]
+
+    def _escort_of(self, cid: str) -> battle_instance.Escort:
+        """派他上陣的那一刻快照（第五節【預設】）：份量＝strength(他的威力) × escort_share（不吃你的職位、坐騎、部下），
+        池子是他的氣血上限，戰法是他自己身上的兩門。"""
+        s, c, w = self.state, self.content, self.world
+        pool = team.mate_pool(s, c, w, cid)
+        score = battle_instance.strength(c.config.battle, team.mate_power(s, c, w, cid)) * c.config.battle.generals.escort_share
+        return battle_instance.Escort(
+            cid=cid, name=c.characters[cid].name, score=round(score, 1), neili=pool, neili_cap=pool, kit=team.mate_side(s, c, w, cid),
+        )
+
+    def _escort_carry(self) -> battle_instance.Escort | None:
+        """這一次加入要帶的同伴：剛在挑的那一位（_escort_step）；不然是已經在參戰名單上的那一位（集結時改選、依附那一軍重新快照，照舊跟著）。"""
+        if self._escort_picked:
+            return self._escort_now
+        battle = self.world.get_battle()
+        me = battle.participants.get(self.state.player.name) if battle is not None else None
+        return me.escort if me is not None else None
+
+    def _escort_options(self) -> list[Option]:
+        """按了加入、還在挑誰隨你上陣：名下每一位一顆（寫份量與氣血），加上「不派」「再想想」。"""
+        out = []
+        for cid in self._escort_choices():
+            e = self._escort_of(cid)
+            out.append(Option(id=f"battle:escort:{cid}", label=ESCORT_OPTION.format(name=e.name, score=round(e.score), pool=round(e.neili_cap))))
+        return out + [Option(id="battle:escort:none", label=ESCORT_NONE), Option(id="battle:escort:back", label=ESCORT_BACK)]
+
+    def _escort_step(self, battle: battle_instance.BattleInstance, arg: str) -> list[str]:
+        """挑好了（battle:escort:<id>／none）或「再想想」（back）：照記下的那一下（PlayerState.escort_pick）加入，帶著挑的那一位。
+        集結時按的、挑的時候已經開打了，改成晚到（join_late）。"""
+        p = self.state.player
+        pick, p.escort_pick = p.escort_pick, ""
+        if not pick:
+            return ["（此刻無法這麼做。）"]
+        if arg == "back":
+            return [ESCORT_BACK_LINE]
+        if arg != "none" and arg not in self._escort_choices():
+            return ["（此刻無法這麼做。）"]
+        kind, _, rest = pick.partition(":")
+        if kind == "join" and battle.phase != "muster":
+            kind, rest = "join_late", ""
+        self._escort_picked, self._escort_now = True, (self._escort_of(arg) if arg != "none" else None)
+        try:
+            return self._battle_choose(f"{kind}:{rest}")
+        finally:
+            self._escort_picked, self._escort_now = False, None
+
+    def _escort_home(self, e: battle_instance.Escort) -> list[str]:
+        """補這一場戰報時（_file_showdown）：他回江湖了——拿出出戰隊伍、寫一句，情誼照 _settle_partings 減半（同一則紀錄裡說）。"""
+        team.remove_from_team(self.state, e.cid)
+        line = (escorts.FELL_RETURN_LINE if e.fallen_round is not None else escorts.RETURN_LINE).format(name=e.name)
+        return [line] + self._settle_partings(write=False)
+
+    def _settle_partings(self, write: bool = True) -> list[str]:
+        """歷史武將同行 9.6：決戰收場時從你身邊回江湖的人（CompanionProgress.parted_from 有你的名號），情誼乘 parted_keep（無條件捨去）。
+        同步、按招募之前與補戰報時叫；write 時另起一則「同伴回江湖」紀錄（補戰報時併進那一則，不另寫）。開關關著什麼都不做。
+        全服的記號不在減半那一下清（FB-361）：減了記進 PlayerState.parted_done，記號留到之後再叫到這裡、看到這一份角色已經減過才清
+        （同一次同步裡補戰報先減、後面那一次清；收場在輪詢組畫面時發生、角色沒存的話，下一次同步照存檔裡沒減過的那一份再減一次）。"""
+        c, p = self.content, self.state.player
+        if not roster.on(c):
+            return []
+        keep = c.config.companions.parted_keep
+        lines = []
+        marked = set()
+        for cid, progress in self.world.read().companions.items():
+            if cid not in c.characters or not any(roster.owns(n, p.name) for n in progress.parted_from):
+                continue
+            marked.add(cid)
+            if cid in p.parted_done:  # 這一份角色已經減過：清記號
+                self.world.update_companion(
+                    cid, lambda pr: setattr(pr, "parted_from", [n for n in pr.parted_from if not roster.owns(n, p.name)]),
+                )
+                p.parted_done.remove(cid)
+                continue
+            p.parted_done.append(cid)
+            before = p.affinities.get(cid, 0)
+            after = math.floor(before * keep)
+            p.affinities[cid] = after
+            if after != before:
+                lines.append(escorts.PARTED_LINE.format(name=c.characters[cid].name, before=before, after=after))
+        p.parted_done = [cid for cid in p.parted_done if cid in marked]  # 記號已經不在的（換季清掉了）不留
+        if write and lines:
+            journal.add_entry(self.state, JournalEntry(time=self.state.world.time, title=escorts.PARTED_TITLE, tag="", lines=lines))
+        return lines
+
+    def _escort_line(self, e: battle_instance.Escort) -> str:
+        """決戰畫面上自己的那一位（別人的不列，第五節「讀得下去」）。"""
+        if e.fallen_round is not None:
+            return ESCORT_FELL.format(name=e.name)
+        return ESCORT_SCENE.format(name=e.name, hp=round(e.neili), cap=round(e.neili_cap))
 
     def _mandate_weight(self, definition: BattleDef | None, scores: dict[str, float]) -> dict[str, float]:
         """天命之爭：手上有碎片的人到場，份量 × Config.seal.mandate.holder_weight（玉璽碎片設計 8.3；只在這一場，碎片本身不加威力）。
@@ -4580,6 +5669,8 @@ class Game:
         if any(c.fallen_round is not None and not c.settled for c in battle.commanders):  # 龍頭上陣：敗走的人扣聲威（只扣一次）
             generals.after_battle(self.world, self.content, battle)
             self.state.world = self.world.get_season()  # 這一刻手上那一份跟資料庫一致（同 _settle_showdown），讀回來免得被 _save_season 蓋掉
+        if escorts.due(battle):  # 歷史武將同行：隨主人上陣的同伴收場那一刻全服放回江湖（只放一次）
+            escorts.after_battle(self.world, self.content, battle)
         definition = self.content.battles.get(battle.battle_id)
         line = self._highlight_line(battle, definition)
         if line:  # 這一場最有戲的放手一搏，全服的天下大事傳聞（試玩回饋 2026-10-08）；收場只走這裡一次
@@ -5352,6 +6443,8 @@ class Game:
         h = battle.highlight
         fame = 0
         highlight_changes = self._showdown_pay(battle, me, lines) if earlier is None else []
+        if earlier is None and me.escort is not None and roster.on(c):  # 歷史武將同行：隨你上陣的那一位回江湖了
+            lines += self._escort_home(me.escort)
         if earlier is None:
             s.player.showdowns += 1
             if h is not None and h.name == me.name and h.won and tuning.highlight_fame:  # 這一場最有戲的那一搏是自己的、而且成了
@@ -5679,6 +6772,7 @@ class Game:
                 role = f"你的職位：{role}。" if role else ""
                 ride = mounts.CAVALRY_LINE.format(name=me.mount, pct=mounts.pct(me.cavalry)) + "。" if me.mount else ""  # 騎著馬（5.9）：沒騎馬一個字都不多
                 ride += TROOPS_LINE.format(names=me.troops, pct=mounts.pct(me.troop_bonus)) + "。" if me.troops else ""  # 帶著部下
+                ride += ESCORT_MUSTER.format(name=me.escort.name) if me.escort is not None else ""  # 隨你出陣的同伴（歷史武將同行）
                 return f"{header}\n\n你已{joined}【{side}】，集結還剩現實 {left}。{role}{ride}集結結束就開打，在那之前照常行動{leaving}。"
             if self._free_agent(definition):
                 who = "你是散人" if self.state.player.faction is None else f"你是{self._own_side_name()}，不是交戰的兩軍"
@@ -5698,6 +6792,8 @@ class Game:
             lines.append(mounts.CAVALRY_LINE.format(name=p.mount, pct=mounts.pct(p.cavalry)))  # 騎著馬上陣（裝備四欄 5.9，加入時的快照）
         if p is not None and p.troops:
             lines.append(TROOPS_LINE.format(names=p.troops, pct=mounts.pct(p.troop_bonus)))  # 帶著部下上陣（加入時的快照）
+        if p is not None and p.escort is not None:
+            lines.append(self._escort_line(p.escort))  # 隨你出陣的同伴（氣血、敗走；別人的不列）
         if p is not None:
             last = []  # 上一回合的兩句併成一段 markdown 引用（「> 」、段內換行）：網頁在 .scene blockquote 底下縮成小字、淡色
             enemy = next((f for f in definition.factions if f.id != p.faction), None)
@@ -5810,6 +6906,8 @@ class Game:
         p = battle.participants.get(name)
         if p is None and allied.needs_ally(self.state, self.content):  # 拜入曹氏莊院還沒挑一邊（FB-273）：先挑一邊，不給加入也不給投效
             return []
+        if p is None and self.state.player.escort_pick and self._escort_choices():  # 按了加入、在挑誰隨你上陣（歷史武將同行）
+            return self._escort_options()
         if self._free_agent(definition):  # 散人、豪強：集結時、或開打了還沒參戰，給臨時投效的兩顆
             if battle.phase == "muster" or p is None:
                 return self._enlist_options(battle, definition)
@@ -5999,6 +7097,15 @@ class Game:
             changing_sides = name in battle.participants
         if kind in ("join", "join_late", "enlist") and not changing_sides and not self._at_battle(definition):
             return [f"（{self._absent_reason(definition)}。）"]
+        if kind == "escort":
+            return self._escort_step(battle, rest)
+        if kind in ("join", "join_late", "enlist") and not changing_sides and not self._escort_picked and self._escort_choices():
+            # 名下有同伴：先挑誰隨你上陣（或不派），挑了才加入（歷史武將同行 9.3：沒有預設值）
+            refusal = self._join_refusal(kind, rest, definition)
+            if refusal is not None:
+                return refusal
+            self.state.player.escort_pick = f"{kind}:{rest}"
+            return [ESCORT_PICK]
         if kind == "enlist":
             return self._enlist(battle, definition, rest, changing_sides)
         if kind == "join":
@@ -6033,6 +7140,14 @@ class Game:
             self._backfill_battle_scores()  # 還沒有份量快照的自己，出招之前先補（結算要讀）
             return self._submit_battle_action(name, definition, rest)
         return ["（此刻無法這麼做。）"]
+
+    def _join_refusal(self, kind: str, rest: str, definition: BattleDef) -> list[str] | None:
+        """加入、臨時投效這一下本身就不成的那一句（同 _battle_choose、_enlist 的擋法）：挑同伴之前先擋，免得挑完了才說不行。"""
+        if kind == "join" and self.content.scenario.factions and rest != self._side():
+            return ["（你只能站在自己陣營這一邊。）"]
+        if kind == "enlist" and (not self._free_agent(definition) or rest not in self._sides(definition)):
+            return ["（此刻無法這麼做。）"]
+        return None
 
     def _enlist(
         self, battle: battle_instance.BattleInstance, definition: BattleDef, side: str, changing_sides: bool,
@@ -6090,6 +7205,17 @@ class Game:
         if target is None:
             return ["（此地此刻沒有能招募的人。）"]
         return roster.attempt_recruit(self.state, self.content, self.world, target, self.rng)
+
+    def _recruit_one(self, cid: str) -> list[str]:
+        """歷史武將同行：招這一位（第三節，照現在的成功率；失敗照舊可能被要求決鬥）。選單上那一顆按得下去才會走到這裡，
+        這裡再驗一次：人還在這裡、沒有主、陣營對、名下沒滿。"""
+        if cid not in self._recruit_targets():
+            return ["（此刻無法這麼做。）"]
+        self._settle_partings()  # 9.6：原主人不會因為比別人先上線就用舊情誼搶回來
+        problem = roster.recruit_problem(self.state, self.content, self.world, cid)
+        if problem is not None:
+            return [f"（{problem}。）"]
+        return roster.attempt_recruit(self.state, self.content, self.world, cid, self.rng)
 
     def _fortune_gift(self) -> list[str]:
         p = self.state.player
@@ -7230,7 +8356,11 @@ class Game:
         mounts.close_market(s.player)  # 馬市也收起來（裝備四欄 5.5）
         if s.player.picking_donate:
             economy.close_donate(s)  # 軍需官那一串也收起來（素材與經濟設計第六節）
+        if s.player.picking_dadian:
+            self._close_dadian()  # 打點那一間店也收起來
         s.player.picking_arena = False  # 擂台也收起來
+        if s.player.picking_tavern:
+            tavern_rules.close(s)  # 酒肆也收起來
         rerouting = s.player.journey is not None
         start = None if rerouting else s.player.location
         parted = self._part_ways() if s.player.tagalong is not None and not rerouting else []  # 答應了結伴卻自己先走：散了
@@ -7580,6 +8710,8 @@ class Game:
             and s.player.duel is None  # 單人頭目戰打到一半：同上
             and not s.player.picking_market  # 馬市開著：選單卡在第二層，先離開（同 FB-121 第 4 件的懸賞榜、鐵匠鋪）
             and not s.player.picking_donate  # 軍需官那一串開著：同馬市
+            and not s.player.picking_dadian  # 打點那一間店開著：同馬市
+            and not s.player.picking_tavern  # 酒肆開著：同馬市
             and not s.player.picking_arena and s.player.arena is None  # 擂台開著、打到一半：同上
             and not allied.needs_ally(s, self.content)  # 拜入之後還沒挑依附哪一邊（豪強分屬兩軍）：先挑
         )
@@ -8060,6 +9192,9 @@ class Game:
                 continue
             if inv.kind == "travel":  # 結伴同行：答應不花體力（趕路、疾行的體力出發時各付各的）
                 opts.append(Option(id=f"invite:yes:{inv.id}", label=f"答應{inv.sender}的{what}"))
+            elif inv.kind == "mingtie":  # 回帖不花什麼；自己還沒做名帖回不了（灰的寫為什麼）
+                opts.append(Option(id=f"invite:yes:{inv.id}", label=f"回{inv.sender}的名帖", enabled=p.mingtie is not None,
+                                   note="" if p.mingtie is not None else mingtie_rules.NO_CARD))
             elif inv.kind == "discuss":
                 # 論武要挑自己出哪一樣：在他的玩家卡上答（discuss.buttons）；選單上這一顆引擎不收（灰的，整季機器人與假人不會按到），
                 # 網頁把它畫成「打開他的玩家卡、捲到答應那一格」的鈕（social.calls 帶 peer，FB-117），字照舊寫去哪裡答
@@ -8068,8 +9203,8 @@ class Game:
                 opts.append(self._cost_option(f"invite:yes:{inv.id}", f"答應{inv.sender}的{what}", c.config.action_cost["train"]))
             opts.append(Option(id=f"invite:no:{inv.id}", label=f"婉拒{inv.sender}的{what}"))
         for inv in invites.outgoing(s.world, p.name):
-            if inv.kind == "greet":
-                continue  # 打招呼不用收回：等回禮，沒回就過去了
+            if inv.kind in ("greet", "mingtie"):
+                continue  # 打招呼、名帖不用收回：等回禮、回帖，沒回就過去了
             opts.append(Option(id=f"invite:cancel:{inv.id}", label=f"收回給{inv.target}的{invites.kind_name(inv.kind)}邀請"))
         return opts
 
@@ -8117,6 +9252,8 @@ class Game:
             return [f"你婉拒了{inv.sender}的{what}。"]
         if inv.kind == "travel":
             return self._join(inv, other)
+        if inv.kind == "mingtie":
+            return self._mingtie_swap(inv, other)
         if inv.kind == "discuss":
             return self._discuss(inv, other, item, proposed)
         return self._spar(inv, other)
@@ -8138,8 +9275,11 @@ class Game:
         did = dict(gesture.replies).get(verb)
         if did is None:
             return ["（沒有這種回禮。）"]
-        other._write(f"與{me}", [f"你向{me}{gesture.did}，{me}{did}。"])
-        return [f"你{did}。"]
+        line = social.taunt_line(inv, None)
+        said = f"：「{line}」" if line else ""
+        other._write(f"與{me}", [f"你向{me}{gesture.did}{said}，{me}{did}。"])
+        heard = social.taunt_line(inv, self.state)  # 不接他的挑釁話的人，自己的紀錄也不寫那一句
+        return [f"{inv.sender}{gesture.got}：「{heard}」" if heard else f"{inv.sender}{gesture.got}。", f"你{did}。"]
 
     def _join(self, inv, other: Game) -> list[str]:
         """答應結伴同行：重驗（還在發邀請的那個地點、兩個人都沒在跟別人、你身後也沒有人跟著你），記下跟著誰；兩邊各記一則。"""
@@ -8661,7 +9801,7 @@ class Game:
             name = c.scenario.faction_name(stock, stock)
             label = works.STOCK_LABEL.format(side=name, n=s.world.supply.get(stock, 0))
             opts.append(self._cost_option("works:stockpile", label, c.config.stockpile.stamina))
-        return opts + self._aid_options()
+        return opts + self._aid_options() + self._feast_options()
 
     def _aid_options(self) -> list[Option]:
         """護著同陣營的大勢人物（figure_aid）：這裡在場的同陣營人物各一顆護衛、一顆犒軍；在自己陣營的大本營，被挑戰打退、
@@ -8741,6 +9881,8 @@ class Game:
         else:
             hours = figure_aid.visit(s, c, fid)
             msgs = [figure_aid.VISIT_DONE.format(name=fig.name, hours=figure_aid.hours_text(hours))]
+        if verb in ("guard", "rally") and fig.character:  # 求援委託（第三批）：護衛、犒軍他也算辦成
+            msgs += bounties.on_aid(s, c, fig.character)
         if self._draft is not None:
             self._draft.changes += changes
         if season_one(c, s.world) and cfg.contrib_push:
@@ -9764,6 +10906,29 @@ class Game:
         return self._log(team.remove_from_team(self.state, companion_id))
 
     @_not_while_preparing
+    def release_companion(self, companion_id: str) -> list[str]:
+        """放他回江湖（歷史武將同行第四節【PM】）：修練頁名冊上那一顆（網頁先問一次）。全服放掉 owner、拿出出戰隊伍、
+        江湖紀錄一則；情誼、他的進度都不動。開關關著、不是你名下的只回一句話。"""
+        c, cid = self.content, str(companion_id)
+        if not roster.on(c) or cid not in c.characters or not roster.owns(roster.owned_by(self.world, cid), self.state.player.name):
+            return self._log([roster.RELEASE_NOT_YOURS])
+        self.world.release_companion(cid)
+        team.remove_from_team(self.state, cid)
+        name = c.characters[cid].name
+        msgs = [roster.RELEASE_DONE.format(name=name)]
+        self._write(roster.RELEASE_TITLE.format(name=name), msgs)
+        return self._log(msgs)
+
+    def release_view(self, companion_id: str | None) -> dict | None:
+        """修練頁人物卡的「放他回江湖」：開關開著、這個人在你名下才有（問句照 roster.RELEASE_CONFIRM），否則 None。"""
+        c = self.content
+        if not roster.on(c) or companion_id not in c.characters:
+            return None
+        if not roster.owns(roster.owned_by(self.world, companion_id), self.state.player.name):
+            return None
+        return {"confirm": roster.RELEASE_CONFIRM.format(name=c.characters[companion_id].name)}
+
+    @_not_while_preparing
     def chuangong(self, key: str, what: str) -> list[str]:
         """傳功門下（Config.chuangong）：用心得替名冊上的同伴或部下練武學、加屬性（chuangong.teach）。
         傳成了寫進江湖紀錄（併進「修練」那一則）；傳不了只回那一句話，不寫紀錄。"""
@@ -10084,6 +11249,11 @@ class Game:
             return self._log(["（這一季還沒結束，無法開啟下一季。）"])
         self._reconcile_season()
         quiet = timetable.quiet_notes(self.world.get_season(), self.content, now)  # 同開季
+        lineup = divine.lineup_note(self.content, self.world.get_season())  # 這一季現世了哪幾件神器（只回給管理者，FB-400）
+        if lineup is not None:
+            quiet = [*quiet, lineup]
+        if divine.exhausted_now(self.world.divine_state(), self.world.get_season_number()):  # 新神器用完了（正式季整合 5.6）：提醒管理者
+            quiet = [*quiet, divine.EXHAUSTED]
         return self._log([f"══ 第 {self.world.get_season_number()} 季開始 ══", *quiet] + self._settle_season_start())
 
     def admin_pause_clock(self, now: float) -> list[str]:
@@ -10737,6 +11907,205 @@ class Game:
         self.touched.add(other.state.player.name)  # 他開著的分頁也刷新（server._tell_tabs）
         return self._log(msgs)
 
+    # ── 名帖（Joy 2026-10-19；tianxia/mingtie.py 的說明）與贈物一天的次數 ──
+
+    def _shared_or_none(self):
+        """全服的狀態（名帖的檢舉、撤下）：測試用的記憶體世界沒有就是 None（照畫）。"""
+        try:
+            return self.world.read()
+        except (AttributeError, NotImplementedError):
+            return None
+
+    def gift_day_left(self) -> int:
+        """今天（回體丹的換日）還能送幾次東西（Config.gift_per_day；0＝不限）。"""
+        cap, p = self.content.config.gift_per_day, self.state.player
+        if cap <= 0:
+            return 1
+        return max(0, cap - (p.gifts_today if p.gift_day == self._pill_day() else 0))
+
+    def gift_day_tick(self) -> None:
+        p, day = self.state.player, self._pill_day()
+        p.gifts_today = (p.gifts_today if p.gift_day == day else 0) + 1
+        p.gift_day = day
+
+    def mingtie_face(self, state: GameState) -> dict | None:
+        """這個人的名帖給你看的樣子：還沒做是 None；被檢舉藏起來、管理者撤下、你檢舉過的只剩頭銜（mingtie.shown）。"""
+        card = state.player.mingtie
+        if card is None:
+            return None
+        if mingtie_rules.shown(self._shared_or_none(), state.player.name, card.version, self.state, self.content):
+            return mingtie_rules.view(card)
+        return mingtie_rules.blank_view(card)
+
+    def mingtie_view(self, board: dict | None = None) -> dict:
+        """見聞「名帖匣」：自己那一張、掙到的頭銜、今天還能定稿幾次遞幾張、畫布的規矩、現成的畫、收到的那幾張（新的在前）。
+        board 是這一季的榜單（伺服器的 boards_now；頭銜「某某榜第N」照它）。"""
+        p, c, cfg = self.state.player, self.content, self.content.config.mingtie
+        day, shared = self._pill_day(), self._shared_or_none()
+        box = []
+        for copy in reversed(p.mingtie_box):
+            seen = mingtie_rules.shown(shared, copy.name, copy.card.version, self.state, c)
+            box.append({
+                "name": copy.name, "when": copy.when, "place": copy.place, "season": copy.season,
+                "card": mingtie_rules.view(copy.card) if seen else mingtie_rules.blank_view(copy.card),
+            })
+        return {
+            "mine": mingtie_rules.view(p.mingtie),
+            "pool": mingtie_rules.earned(self.state, c, self.world, board),
+            "made_left": mingtie_rules.made_left(self.state, c, day),
+            "sent_left": mingtie_rules.sent_left(self.state, c, day),
+            "limits": {
+                "titles": cfg.titles, "motto": cfg.motto_max, "strokes": cfg.max_strokes, "points": cfg.max_points,
+                "width": mingtie_rules.WIDTH, "height": mingtie_rules.HEIGHT, "inks": list(mingtie_rules.INKS),
+                "ink_names": list(mingtie_rules.INK_NAMES), "pens": list(mingtie_rules.PENS),
+            },
+            "presets": [{"id": a.id, "name": a.name, "strokes": a.strokes} for a in c.mingtie.arts],
+            "box": box,
+        }
+
+    def mingtie_screen(self, motto: str) -> str | None:
+        """定稿之前要不要先請模型審自題那一句（三段式的 A 段）：字表先擋得下的、空的都不必問，回 None；要問回那一句（已整理過）。"""
+        line = speech.clean(motto)
+        cfg = self.content.config.mingtie
+        if not line or speech.word_problem(line, self.content, speech.MOTTO, cfg.motto_max):
+            return None
+        return line
+
+    def make_mingtie(self, strokes, titles, motto: str = "", verdict: str = "", board: dict | None = None) -> list[str]:
+        """名帖定稿：筆劃照 parse_strokes 驗、頭銜要從掙到的那一串裡挑（最多 MingtieTuning.titles 個）、自題一句過 speech
+        （verdict 是 B 段模型的判斷）。不花錢；一天最多定稿 made_per_day 次；定稿一次版本 +1（別人收著的舊版不變）。"""
+        p, c, cfg = self.state.player, self.content, self.content.config.mingtie
+        if not cfg.enabled:
+            return self._log(["（此刻無法這麼做。）"])
+        if mingtie_rules.made_left(self.state, c, self._pill_day()) <= 0:
+            return self._log([mingtie_rules.MADE_FULL.format(n=cfg.made_per_day)])
+        lines = mingtie_rules.parse_strokes(strokes, c)
+        if lines is None:
+            return self._log([mingtie_rules.BAD_DRAWING])
+        picked = [str(t) for t in (titles or [])]
+        pool = set(mingtie_rules.earned(self.state, c, self.world, board))
+        if len(picked) > cfg.titles or len(set(picked)) != len(picked) or not set(picked) <= pool:
+            return self._log([mingtie_rules.BAD_TITLE])
+        line = speech.clean(motto)
+        problem = speech.problem(line, c, speech.MOTTO, cfg.motto_max, verdict)
+        if problem:
+            return self._log([problem])
+        if not lines and not picked and not line:
+            return self._log([mingtie_rules.EMPTY])
+        version = (p.mingtie.version if p.mingtie else 0) + 1
+        p.mingtie = Mingtie(strokes=lines, titles=picked, motto=line, version=version)
+        p.mingtie_made += 1
+        self._write("名帖", [mingtie_rules.MADE], merge=True)
+        return self._log([mingtie_rules.MADE])
+
+    def mingtie_send_problem(self, other: Game) -> str | None:
+        """遞名帖給他按不按得下去：要有自己的名帖、今天還能遞、他手上還沒有你這一版、你們之間沒有一張還在等的名帖。"""
+        s, c = self.state, self.content
+        me, him = s.player, gender.pronoun(other.state)
+        if me.mingtie is None:
+            return mingtie_rules.NO_CARD
+        if invites.between(s.world, me.name, other.state.player.name, "mingtie") is not None:
+            return mingtie_rules.WAITING.format(him=him)
+        if mingtie_rules.given(self.state, other.state.player.name) >= me.mingtie.version:
+            return mingtie_rules.SAME_CARD.format(him=him)
+        if mingtie_rules.sent_left(self.state, c, self._pill_day()) <= 0:
+            return mingtie_rules.SENT_FULL.format(n=c.config.mingtie.send_per_day)
+        return None
+
+    def mingtie_send(self, other: Game) -> list[str]:
+        """遞名帖：一張邀請，他回帖才兩邊各收一張（_mingtie_swap）。不理就等它逾時，不退今天的次數。"""
+        problem = self.mingtie_send_problem(other)
+        if problem is not None:
+            return [problem]
+        s, name = self.state, other.state.player.name
+        renew = mingtie_rules.given(self.state, name) > 0
+        invites.expire(s.world)
+        invites.send(s.world, self.content, "mingtie", s.player.name, name, s.player.location)
+        s.player.mingtie_sent += 1
+        self._save_season()
+        self.touched.add(name)
+        return [f"你遞上{'新' if renew else ''}名帖，等{name}回帖。"]
+
+    def _mingtie_swap(self, inv, other: Game) -> list[str]:
+        """回帖：兩邊各收對方此刻的那一張（存遞出那一刻的樣子），兩邊的江湖紀錄各一則。你得有自己的名帖、他也還有。"""
+        me, them, c = self.state.player, other.state.player, self.content
+        if me.mingtie is None or them.mingtie is None:
+            self._tell_sender(inv, other)
+            return [f"（{mingtie_rules.NO_CARD}。）" if me.mingtie is None else "（對方的名帖不在了。）"]
+        mingtie_rules.file_copy(self.state, other.state, c, gave=me.mingtie.version)
+        mingtie_rules.file_copy(other.state, self.state, c, gave=them.mingtie.version)
+        other._write(f"名帖・{me.name}", [f"{me.name}回了帖，你們互換了名帖。"])
+        return [f"你回了帖，與{them.name}互換了名帖。"]
+
+    def report_mingtie(self, name: str, version: int) -> list[str]:
+        """檢舉一張名帖：你馬上就看不到（mingtie_hidden）；全服記一筆，滿 report_hide 個人藏起來等管理者看。
+        要是你看得到的那一張（名帖匣裡收著的、或他此刻就在這裡）。"""
+        p, c = self.state.player, self.content
+        try:
+            version = int(version)
+        except (TypeError, ValueError):
+            return self._log(["（找不到這張名帖。）"])
+        copy = mingtie_rules.copy_of(self.state, name)
+        here = self._peer(name)
+        card = here.state.player.mingtie if here is not None else None
+        if not ((copy and copy.card.version == version) or (card and card.version == version)):
+            return self._log(["（找不到這張名帖。）"])
+        if name_key(name) == name_key(p.name):
+            return self._log(["（這是你自己的名帖。）"])
+        k = mingtie_rules.key(name, version)
+        if k not in p.mingtie_hidden:
+            p.mingtie_hidden.append(k)
+        self.world.mutate(lambda shared: mingtie_rules.report(shared, name, version, p.name))
+        return self._log([mingtie_rules.REPORTED])
+
+    def admin_mingtie_reports(self) -> list[dict]:
+        """管理者「名帖檢舉」：被檢舉、還沒處理的（名號、第幾版、幾個人檢舉、那一張的樣子〔只有此刻還是那一版才看得到畫〕）。"""
+        if not self.is_admin():
+            return []
+        shared = self._shared_or_none()
+        if shared is None:
+            return []
+        rows = []
+        for nk, version, count in mingtie_rules.pending_reports(shared, self.content):
+            target = self._admin_target(nk, sync=False)
+            card = target.state.player.mingtie if target is not None else None
+            rows.append({
+                "name": target.state.player.name if target is not None else nk, "version": version, "count": count,
+                "card": mingtie_rules.view(card) if card is not None and card.version == version else None,
+            })
+        return rows
+
+    def admin_mingtie_remove(self, name: str, version: int) -> list[str]:
+        """撤下一張名帖：那一版以前的都不畫（別人名帖匣裡收著的也是）；他此刻那一張就是這一版的話，畫與自題清掉、頭銜照留、版本 +1，
+        他的江湖紀錄一句（不寫是誰撤的）。"""
+        refusal = self._admin_refusal("撤下名帖")
+        if refusal:
+            return self._log(refusal)
+        target = self._admin_target(name, sync=False)
+        if target is None:
+            return self._log([NO_SUCH_PLAYER.format(name=name.strip())])
+        version, tp = int(version), target.state.player
+        nk = name_key(tp.name)
+        self.world.mutate(lambda shared: shared.mingtie_removed.__setitem__(nk, max(shared.mingtie_removed.get(nk, 0), version)))
+        if tp.mingtie is not None and tp.mingtie.version <= version:
+            tp.mingtie = mingtie_rules.wipe(tp.mingtie.model_copy(update={"version": version}))
+            target._write("名帖", [mingtie_rules.REMOVED_LINE])
+        self._save_target(target)
+        msg = f"已撤下{tp.name}的名帖（第 {version} 版）。"
+        self._write("撤下名帖", [msg], tag="管理者")
+        return self._log([msg])
+
+    def admin_mingtie_restore(self, name: str, version: int) -> list[str]:
+        """放回：檢舉再多也照畫（管理者看過、沒事）。"""
+        refusal = self._admin_refusal("放回名帖")
+        if refusal:
+            return self._log(refusal)
+        k = mingtie_rules.key(name, int(version))
+        self.world.mutate(lambda shared: None if k in shared.mingtie_cleared else shared.mingtie_cleared.append(k))
+        msg = f"已放回{name.strip()}的名帖（第 {int(version)} 版）。"
+        self._write("放回名帖", [msg], tag="管理者")
+        return self._log([msg])
+
     # ── 玩家之間的互動・第二層：打招呼與結伴的回應、逾時、結伴同行（social.py 的說明）──
 
     def _kin(self, state: GameState) -> Game:
@@ -11142,6 +12511,9 @@ class Game:
             return self._duel_scene()
         if s.player.arena is not None:
             return self._arena_scene()
+        seat = self._feast_seat() if s.player.feasting is not None else None
+        if seat is not None:
+            return feasts.scene(s, c, seat)
         sense_card = sensing.scene_text(s, c) if s.player.sensing is not None else ""
         if sense_card:
             return sense_card
@@ -11160,9 +12532,10 @@ class Game:
             target = self.content.scenario.faction(s.player.pending_defect)
             ally = s.player.pending_ally
             head = defection.slot_label(s, c, target, ally)  # 「叛投X」；豪強分屬兩軍時也可能是「改投X」「改依附X」
-            return f"**{head}**\n\n{defection.prompt(s, c, target, self.faction_counts_text(), ally)}"
+            return f"**{head}**\n\n{defection.prompt(s, c, target, self.faction_counts_text(), ally, self._left_names(target.id))}"
         if s.player.picking_audience:
-            return f"**求見**\n\n{self._audience_intro()}"
+            title = SOCIAL_LIST_TITLE if precise.on(c, s.world) else "求見"
+            return f"**{title}**\n\n{self._audience_intro()}"
         asking = foreshadow.asking_text(s, c, self.world) if s.player.fs_asking is not None else None
         if asking is not None:
             return asking

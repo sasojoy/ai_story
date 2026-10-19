@@ -10,9 +10,52 @@ from __future__ import annotations
 import random
 
 from . import calendar, ranger, rules, team
+from .characters import name_key
 from .models import Content
-from .state import GameState
+from .state import MAX_TEAM_COMPANIONS, GameState
 from .world_state import WorldStateStore
+
+# 招募鈕灰掉時寫的原因（歷史武將同行第二、四節；待 joy 潤）
+SIDE_ONLY = "只追隨{side}"
+FULL = "名下已有 {n} 位同伴"
+# 修練頁名冊上的「放他回江湖」（第四節【PM】；待 joy 潤）
+RELEASE_CONFIRM = "放{name}回江湖？他會回到他常在的地方，誰都可以去招他；你們的情誼不變。"
+RELEASE_DONE = "{name}拱手道別，回江湖去了；你們的情誼還在，日後可以再去找他。"
+RELEASE_NOT_YOURS = "（他不在你的名下。）"
+RELEASE_TITLE = "放{name}回江湖"
+# 叛投帶不走（9.5；待 joy 潤）：確認畫面「會失去」的那一項、確定叛投之後那一句
+DEFECT_LOST = "{names}不會隨你改投，回江湖去（情誼減半）"
+DEFECT_LEFT = "{name}不肯隨你改投，回江湖去了（情誼 {before}→{after}）。"
+
+
+def left_behind(state: GameState, content: Content, world: WorldStateStore, side: str) -> list[str]:
+    """叛投到 side（陣營 id）時帶不走的同伴（9.5）：名下、寫了 side 而且跟新陣營不合的；沒寫 side 的照舊跟著你。開關關著是空的。"""
+    if not on(content):
+        return []
+    return [
+        cid for cid in owned_companions(world, state.player.name)
+        if cid in content.characters and content.characters[cid].side not in (None, side)
+    ]
+
+
+def on(content: Content) -> bool:
+    """歷史武將同行開著沒（Config.companions）：招募開放、名下上限、放走、決戰助陣、叛投帶不走都看它。"""
+    return content.config.companions.enabled
+
+
+def cap(content: Content) -> int:
+    """名下最多幾位：開著是 Config.companions.max_owned（3），關著照舊 MAX_TEAM_COMPANIONS（一個字都不變）。"""
+    return content.config.companions.max_owned if on(content) else MAX_TEAM_COMPANIONS
+
+
+def _capped(content: Content) -> dict:
+    """try_recruit 的上限參數：開著才帶 cap（關著照舊兩個參數，一個字都不變）。"""
+    return {"cap": cap(content)} if on(content) else {}
+
+
+def owns(owner: str | None, player_name: str) -> bool:
+    """owner 是不是這個人（名號比對不分大小寫，同 characters.name_key）。"""
+    return owner is not None and name_key(owner) == name_key(player_name)
 
 
 def owned_by(world: WorldStateStore, companion_id: str) -> str | None:
@@ -20,7 +63,17 @@ def owned_by(world: WorldStateStore, companion_id: str) -> str | None:
 
 
 def owned_companions(world: WorldStateStore, player_name: str) -> list[str]:
-    return [cid for cid, p in world.read().companions.items() if p.owner == player_name]
+    return [cid for cid, p in world.read().companions.items() if owns(p.owner, player_name)]
+
+
+def recruit_problem(state: GameState, content: Content, world: WorldStateStore, companion_id: str) -> str | None:
+    """歷史武將同行：招不了他的原因（照陣營、名下滿了）；招得了是 None。有沒有主、在不在這裡由呼叫端看。
+    陣營照自己投靠的那一個（豪強分屬兩軍時照舊算豪強，p.faction）。"""
+    ch = content.characters[companion_id]
+    if ch.side is not None and state.player.faction != ch.side:
+        return SIDE_ONLY.format(side=content.scenario.faction_name(ch.side, ch.side))
+    n = len(owned_companions(world, state.player.name))
+    return FULL.format(n=n) if n >= cap(content) else None
 
 
 def recruit_chance(content: Content, state: GameState, companion_id: str) -> float:
@@ -42,6 +95,10 @@ def _seed_starting_skills(world: WorldStateStore, companion_id: str, ch) -> None
     world.update_companion(companion_id, _apply)
 
 
+# 他已經有主了（招募撲空、兩個分頁搶慢了一步 FB-363）：寫主人的名號（匿名只在地方傳聞，rules.display_name）
+TAKEN = "【{name}】已經被{owner}招攬走了，這次撲了個空。"
+
+
 def attempt_recruit(
     state: GameState, content: Content, world: WorldStateStore, companion_id: str, rng: random.Random,
 ) -> list[str]:
@@ -49,15 +106,17 @@ def attempt_recruit(
     ch = content.characters[companion_id]
     disp = ch.name
     owner = owned_by(world, companion_id)
-    if owner == state.player.name:
+    if owns(owner, state.player.name):
         return [f"【{disp}】已經是你的同伴了。"]
     if owner is not None:
-        return [f"【{disp}】已經被{owner}招攬走了，這次撲了個空。"]
+        return [TAKEN.format(name=disp, owner=owner)]
     p = state.player
     p.stamina -= content.config.recruit_stamina
     chance = recruit_chance(content, state, companion_id)
     if rng.random() < chance:
-        if not world.try_recruit(companion_id, p.name):
+        if not world.try_recruit(companion_id, p.name, **_capped(content)):
+            if owned_by(world, companion_id) is None:  # 沒人搶走：是名下滿了（另一個分頁剛招到一位）
+                return [f"（{FULL.format(n=len(owned_companions(world, p.name)))}，招不了更多人。）"]
             return [f"晚了一步，【{disp}】剛剛被別人招攬走了。"]
         _seed_starting_skills(world, companion_id, ch)
         msgs = [f"【{disp}】被你的誠意打動，願意追隨於你！"]
@@ -77,7 +136,7 @@ def recruit(state: GameState, content: Content, world: WorldStateStore, char_id:
     （被別的玩家搶先招走了）改給一筆心得當安慰，不會覆蓋別人的招募結果。"""
     ch = content.characters[char_id]
     owner = owned_by(world, char_id)
-    if owner == state.player.name:
+    if owns(owner, state.player.name):
         amount = content.config.recruit_consolation_xinde
         state.player.stats["xinde"] = state.player.stats.get("xinde", 0) + amount
         return [f"【{ch.name}】早已在你身邊，這份緣分化為心得。", f"心得 +{amount}"]
@@ -85,7 +144,12 @@ def recruit(state: GameState, content: Content, world: WorldStateStore, char_id:
         amount = content.config.recruit_consolation_xinde
         state.player.stats["xinde"] = state.player.stats.get("xinde", 0) + amount
         return [f"【{ch.name}】已經是{owner}的同伴了，這份緣分化為心得。", f"心得 +{amount}"]
-    if not world.try_recruit(char_id, state.player.name):
+    problem = recruit_problem(state, content, world, char_id) if on(content) else None
+    if problem is not None:  # 歷史武將同行第七節：劇情送人也照陣營、名下三位擋
+        amount = content.config.recruit_consolation_xinde
+        state.player.stats["xinde"] = state.player.stats.get("xinde", 0) + amount
+        return [f"【{ch.name}】{problem}，這份緣分化為心得。", f"心得 +{amount}"]
+    if not world.try_recruit(char_id, state.player.name, **_capped(content)):
         amount = content.config.recruit_consolation_xinde
         state.player.stats["xinde"] = state.player.stats.get("xinde", 0) + amount
         return [f"【{ch.name}】剛剛被別人招攬走了，這份緣分化為心得。", f"心得 +{amount}"]

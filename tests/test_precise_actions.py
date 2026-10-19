@@ -422,3 +422,93 @@ def test_summons_stays_in_the_fold_when_precise_is_off(monkeypatch):
         return
     m, html = _summons_page(monkeypatch, precise_on=False)
     assert not m["precise"] and 'class="summons-strip"' not in html and 'data-id="act:summons"' in html
+
+
+# ── 第 3 批 QA 之後（FB-420、FB-421、戰後事件的成數）──
+
+
+def _strike(game, at="changshe"):
+    from tianxia.state import Bounty
+
+    b = Bounty(id="b1", kind="strike", faction="huang", week=1, expires=1e12, silver=20, deeds=1,
+               location=at, squad="jun_bing", takers=["沈浪"])
+    game.state.world.bounties.append(b)
+    return b
+
+
+def test_a_strike_bounty_says_practice_where_precise_is_on():
+    """FB-420：找素材不打仗了，討伐的說明寫練功（懸賞卡、告示、紙上都是這一句）。"""
+    from tianxia import bounties
+
+    game = _game()
+    b = _strike(game)
+    line = bounties.how(game.content, b, game.state)
+    assert "練功" in line and "找素材" not in line
+    rows = bounties.status(game.state, game.content, game.world)
+    assert any(r["id"] == "b1" and r["how"] == line for r in rows)
+    game.state.world.precise_actions = False  # 沒蓋章的季照舊
+    assert "找素材撞上" in bounties.how(game.content, b, game.state)
+
+
+def test_the_social_list_does_not_say_brushed_off():
+    """FB-421：交友打開的名單寫「說話」「見不到」，不寫「求見」「會被打發」。"""
+    game = _game(at="wan_city")
+    game.choose("act:call")
+    text = game.scene_text()
+    assert "**交友**" in text and "名望不夠的見不到" in text and "打發" not in text
+
+
+def _seek_draws(game, n=400):
+    from tianxia.events import note_round, pick_event
+
+    rng, s, c = random.Random(3), game.state, game.content
+    lent = 0
+    for _ in range(n):
+        event = pick_event(s, c, "explore", rng, "common")
+        note_round(s, c, event, "explore")
+        lent += precise.borrowed(event, "explore")
+    return lent / n
+
+
+def test_after_fight_events_take_at_most_three_tenths_of_a_seek_pool():
+    """PM 2026-10-19：九則借進找事件的戰後事件在一處池子裡合起來最多三成（QA 量到潁川郊野佔七成），照舊走防重複。"""
+    share = _seek_draws(_game(at="yingchuan_wilds"))
+    assert 0.2 < share <= 0.36
+
+
+def test_a_pool_of_only_the_borrowed_ones_is_not_capped():
+    from tianxia.events import _capped_group, event_candidates
+
+    game = _game(at="yingchuan_wilds")
+    lent = [e for e in event_candidates(game.state, game.content, "explore", "common") if precise.borrowed(e, "explore")]
+    assert len(lent) >= 2 and _capped_group(game.state, game.content, lent, "explore", random.Random(0)) == lent
+
+
+def test_a_ranger_reads_only_practice_on_a_strike_bounty():
+    """散人不出陣：討伐只寫練功（STRIKE_PRACTICE）；投靠了陣營的人寫練功或出陣（FB-420 之後 QA）。"""
+    from tianxia import bounties
+
+    game = _game()
+    b = _strike(game)
+    assert game.state.player.faction is None
+    assert bounties.how(game.content, b, game.state).startswith("到長社練功打贏")
+    game.state.player.faction = "guan"
+    assert "練功或出陣攻打贏" in bounties.how(game.content, b, game.state)
+
+
+def test_the_howto_follows_precise_actions_and_old_seasons_keep_every_word():
+    """FB-422：一類一顆生效的季，玩法說明的探索、練功、交友、意境、名望、情誼照新規則寫；沒蓋章的季跟以前一字不差。"""
+    from tianxia import explore_modes, howto
+    from tianxia.world_state import fresh_season
+
+    c = real_content("weekend")
+    season = fresh_season(c)
+    stamp_season(season, c)
+    text = howto.page(c, season, recruitable=False)
+    assert "一定撿得到素材，不打仗" in text and f"**{explore_modes.NAMES['practice']}**" in text and "不限次數" in text
+    assert "撞上怪" not in text and "會打發你" not in text and "過一陣子才悟得出" not in text and "求見名單" not in text
+    assert f"選錯了得 {c.config.sense_miss_xinde} 心得" in text and "交友名單上也有" in text and "不夠的見不到" in text
+    season.precise_actions = False
+    old = howto.page(c, season, recruitable=False)
+    assert "撞上怪" in old and "會打發你" in old and "過一陣子才悟得出" in old and "求見名單上也有" in old
+    assert f"**{explore_modes.NAMES['practice']}**" not in old

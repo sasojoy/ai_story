@@ -67,13 +67,14 @@ def test_match_reads_the_shape_kind_slot_and_main_aux_order(forge_content):
     assert m("weapon", "劍", "gang_1", "kuai_1") is None  # 這一季沒挑到的不算
 
 
-def test_the_real_pool_has_forty_two_named_recipes_and_validates():
+def test_the_real_pool_has_fifty_four_named_recipes_and_validates():
     rc = real_content()  # 載入時已經跑過 _validate_forge_secrets
-    # 3.4：兵器 22、防具 9，神器 9；正式季整合第 4 批補三階一組（兵器 8、防具 3，12.1 第 25 條）
-    assert len(rc.forge_secrets) == 42 and sum(r.divine for r in rc.forge_secrets.values()) == 9
+    # 3.4：兵器 22、防具 9，神器 9；正式季第 10 批加新神器第一批 12 件（兵器 8、防具 4，wave 2）；第 4 批補三階一組（兵器 8、防具 3）
+    assert len(rc.forge_secrets) == 54 and sum(r.divine for r in rc.forge_secrets.values()) == 21
+    assert sum(r.divine and r.wave == 1 for r in rc.forge_secrets.values()) == 9
     groups = Counter(forge_secrets.group_of(r) for r in rc.forge_secrets.values())
-    assert groups == {"weapon:1": 8, "weapon:2": 8, "weapon:3": 8, "weapon:divine": 6, "armor:1": 3, "armor:2": 3, "armor:3": 3,
-                      "armor:divine": 3}
+    assert groups == {"weapon:1": 8, "weapon:2": 8, "weapon:3": 8, "weapon:divine": 14, "armor:1": 3, "armor:2": 3, "armor:3": 3,
+                      "armor:divine": 7}
     assert rc.config.forge_secrets.per_season == {
         "weapon:1": 2, "weapon:2": 2, "weapon:3": 2, "weapon:divine": 2, "armor:1": 1, "armor:2": 1, "armor:3": 1, "armor:divine": 1}
     cfg = rc.config.forge_secrets

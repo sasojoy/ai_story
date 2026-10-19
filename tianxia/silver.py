@@ -48,6 +48,32 @@ BRIBE_TOP = "情誼到這裡，得當面去處了"
 BRIBE_TITLE = "打點門路"
 
 
+# 「打點」那一間店（企劃者挑第 9 批畫面乙：茶樓雅間的掮客，五樣記在一本攤開的帳簿上）；都待 joy 潤
+SHOP = "打點"  # 招牌，也是「此地還能做」那一顆
+SHOP_ENTERED = "你掀開竹簾，走進茶樓的雅間。掮客正替你斟茶。"
+SHOP_BACK = "離開"
+SHOP_CLOSED = "你放下茶碗，起身離了雅間。"
+PAGE_SELF, PAGE_FAVOR = "修為", "人情"  # 帳簿左頁、右頁
+MENTOR_DESC = "下一次修練升品的機會 +{bonus}%"
+FURNACE_DESC = "下一爐（打造或合成）：下 {low}／中 {mid}／上 {high}"
+LEGEND_DESC = "修練衝絕學時服下"
+BRIBE_DESC = "{name}的門房：情誼 {now} → {then}，最多打點到 {top}"
+BRIBE_DESC_AWAY = "塞門房說幾句好話：情誼 +{gain}，最多打點到 {top}"
+DONATE_DESC = "每 {per} 兩記 1 點貢獻，進糧秣"
+ONCE_DAILY = "一天一次"
+BRIBE_DAILY = "每位一天一次"
+LEGEND_LEFT = "這一季還能買 {left} 枚"
+DONATE_LEFT = "今天還能捐 {left} 兩"
+DONATE_NOW = "這一下捐 {silver} 兩"
+WHERE = {  # 這裡做不了時朱筆批的去處
+    "mentor": "到有醫館的城鎮請", "furnace": "到有鐵匠鋪的城鎮請", "legend": "到有醫館的城鎮買",
+    "bribe": "到大勢人物所在的地方打點", "donate": "到自家大本營捐", "donate_ranger": "投靠之後，到大本營捐",
+}
+HANG_HEAD = "記帳："
+HANG_MENTOR = "名師指點 1 次（下次修練用掉）"
+HANG_FURNACE = "看火候 1 次（下一爐用掉）"
+
+
 def on(content: Content, world: WorldState | None) -> bool:
     """銀兩出口開著沒：設定打開（只有 season21），而且這一季是 21 天季（開季時蓋的章）。週末與 14 天一律關著。"""
     return content.config.silver_outlets.enabled and calendar.season21_on(world, content)

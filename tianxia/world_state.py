@@ -57,6 +57,8 @@ class CompanionProgress(BaseModel):
     # 傳功（Config.chuangong）傳給他的屬性點：{"str": 3, "con": 1}，加在內容的起始值與每級成長上面（team.member_stats）。
     # 跟等級、武學成數一樣記在他身上：放走、被別人招去都帶著走（傳過的功是他學到的），換季跟其他進度一起清空
     taught: dict[str, int] = Field(default_factory=dict)
+    # 歷史武將同行 9.6：決戰收場、他從誰身邊回江湖（escorts.after_battle 記）；那個人自己的 Game 同步或按招募之前把情誼減半、拿掉自己的名號
+    parted_from: list[str] = Field(default_factory=list)
 
 
 class SealEvent(BaseModel):
@@ -110,6 +112,14 @@ class SealRegistry(BaseModel):
     mandate_season: int | None = None  # 最近一次蓋上天命之季的季別（seal.mandate_now 看它；WorldState.mandate 同時蓋）
     mandate_pending: bool = False  # 下一個能打天命之爭的季要蓋章（上一次延後、或管理者「下一季」）
     history: list[SealEvent] = Field(default_factory=list)
+
+
+class DivineRegistry(BaseModel):
+    """神器輪替與收集的全服登記（正式季整合 5.6、10.4；第 10 批，tianxia/divine.py）：world 那一列的 JSON，不分季、跨季保存（同玉璽碎片）。"""
+
+    seen: list[str] = Field(default_factory=list)  # 這個伺服器現世過的神器配方 id（照第一次現世的先後）；空的＝還沒照這套規則開過季
+    finds: dict[str, GearFind] = Field(default_factory=dict)  # 配方 id → 原品那一筆（主人、定名、全服仿品數、第幾季打出）；只算輪替季打的
+    exhausted: int | None = None  # 新神器用完了的那一季（主控台與管理者的回話提醒）
 
 
 class SealSide(BaseModel):
@@ -196,7 +206,12 @@ class SharedWorldState(BaseModel):
     tianji: int = 0  # 天機：每次換季 +1，自創武學「名字 → 數值」的配方跟著換（跨季不滾雪球第三條）
     # ── 玉璽碎片（玉璽碎片設計 7.4、5.12）：全服、不分季，跟 season 一樣存在 world 那一列的 JSON 裡 ──
     seal: SealRegistry = Field(default_factory=SealRegistry)
+    divine: DivineRegistry = Field(default_factory=DivineRegistry)  # 神器輪替與收集（正式季整合 10.4）：全服、不分季
     seal_duels: list[SealDuel] = Field(default_factory=list)  # 還沒收場的奪璽單挑，第一場在打、其餘排隊（玉璽一一次最多一場）
+    # ── 名帖的檢舉（tianxia/mingtie.py）：全服、不分季 ──
+    mingtie_reports: dict[str, list[str]] = Field(default_factory=dict)  # 「名號鍵|版本」→ 檢舉的人（名號鍵）
+    mingtie_removed: dict[str, int] = Field(default_factory=dict)  # 名號鍵 → 管理者撤下到第幾版（這一版以前的都不畫，名帖匣裡收著的也是）
+    mingtie_cleared: list[str] = Field(default_factory=list)  # 管理者看過、放回去的（「名號鍵|版本」）：檢舉再多也照畫
 
     # ── 全服即時多人戰鬥（設計討論：集結選陣營→逐幕逐回合鎖步）────────
     # 同一時間最多一場（先簡化成這樣；真的需要同時好幾場再擴充成 list/dict）。
@@ -361,8 +376,10 @@ class WorldStateStore(Protocol):
         ...
 
     # ── 隱藏配方的發現（打造隱藏配方設計 7.1；gear_recipes 裡鍵「鑄|配方 id」那幾列；這一季）──
-    def lookup_gear_find(self, key: str) -> GearFind | None:
-        """這條隱藏配方這一季有沒有人打出來過；有就回首位發現者那一筆。"""
+    def lookup_gear_find(self, key: str, registry: bool | None = None) -> GearFind | None:
+        """這條隱藏配方這一季有沒有人打出來過；有就回首位發現者那一筆。神器輪替（FB-402）：registry 是 None 時這一季蓋了輪替的章
+        讀全服登記、沒蓋讀照季分的那一列；手上有那一件神器時照它的 Equipment.collected 傳（True 只讀登記、False 只讀那一列）。
+        add_copy、name_divine 的 registry 同一個意思。"""
         ...
 
     def claim_gear_find(self, key: str, find: GearFind) -> tuple[GearFind, bool]:
@@ -370,11 +387,11 @@ class WorldStateStore(Protocol):
         鍵不是「鑄|」開頭丟 ValueError（別把兵器的組合鍵寫進來）。"""
         ...
 
-    def add_copy(self, key: str) -> None:
+    def add_copy(self, key: str, registry: bool | None = None) -> None:
         """這一季這條神器配方的仿品數 +1（打造隱藏配方設計 5.3、7.1；神器譜寫「仿品 N 把」）。沒有那一列就什麼都不做。"""
         ...
 
-    def name_divine(self, key: str, owner: str, name: str) -> str | None:
+    def name_divine(self, key: str, owner: str, name: str, registry: bool | None = None) -> str | None:
         """神器原品定名（打造隱藏配方設計 5.2、7.1、7.3；鎖內原子，同 rename_skill）：這一季這條神器配方那一列的原品主人是 owner、還沒定名、
         名字沒被佔（_name_taken：武學、改過的名字、意境、gear_recipes），才把名字欄與 data 一起改掉（定的名字佔名字空間）。
         回 None＝定成了；不行回原因："gone"（沒有那一列、不是神器配方）、"owner"（不是主人）、"named"（已經定過）、"taken"（名字被佔）。"""
@@ -590,6 +607,10 @@ class WorldStateStore(Protocol):
         """有沒有還沒收場的奪璽單挑（提前收季要等它，5.11）。在 mutate 裡也查得到（同 faction_counts）。"""
         ...
 
+    def divine_state(self) -> DivineRegistry:
+        """神器輪替的全服登記（現世過哪幾件、原品那一筆）：只讀 world 那一列，不讀季。"""
+        ...
+
     def fingerprint_parts(self) -> tuple[SharedWorldState, int, int]:
         """（全服狀態，這一季最大的天下大事傳聞流水號，這一季江湖史的則數），同一個唯讀快照裡讀的；賽季裡的傳聞與江湖史
         不讀回每一列。推送的看守用（server.current_fingerprint）。"""
@@ -642,7 +663,7 @@ class WorldStateStore(Protocol):
         """讀目前進度；還沒有人動過這位人物時回傳一份預設值（不寫回）。"""
         ...
 
-    def try_recruit(self, companion_id: str, player_name: str) -> bool:
+    def try_recruit(self, companion_id: str, player_name: str, cap: int | None = None) -> bool:
         """把 owner 設成 player_name；已經有主的話失敗（設計文件四.4：唯一、可搶）。"""
         ...
 

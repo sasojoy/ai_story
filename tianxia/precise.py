@@ -55,6 +55,12 @@ def field_with_foes(state: GameState, content: Content) -> bool:
     )
 
 
+def borrowed(event: Event, action: str) -> bool:
+    """這一則是借進找事件的戰後事件（內容寫 train、沒寫 explore；actions_of 在城外有對手時才借進來）：events.pick_event 照它
+    限成數、照它另開一個防重複的池子。不是找事件的池子一律 False。"""
+    return action == "explore" and "train" in event.actions and "explore" not in event.actions
+
+
 def actions_of(event: Event, state: GameState, content: Content) -> set[str]:
     """這則事件此刻算在哪幾種行動的池子裡（events.event_candidates 照它篩）。開關關著照內容寫的 actions。開著時：
     交友事件除了留在交友的（kept_social）都併進找事件（explore）；拜入門派的改成 sect（Game 的「此地還能做」）；

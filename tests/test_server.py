@@ -19,7 +19,8 @@ import server_push
 import webharness
 from conftest import at, season_one_events
 from tianxia import (
-    atlas, battle_instance, calendar, companion_agent, database, fight_llm, fusion, insights, naming, skillview, social, sqlite_world, team,
+    atlas, battle_instance, calendar, companion_agent, database, fight_llm, fusion, insights, naming, renown, skillview, social, sqlite_world,
+    team,
 )
 from tianxia.accounts import NAME_TAKEN
 from tianxia.characters import open_characters
@@ -3360,7 +3361,8 @@ def test_saying_your_own_line_goes_through_the_three_stages(game, lock_events):
     p = game.state.player
     assert lock_events == ["enter", "exit", "generate", "enter", "exit"]
     assert "「久仰大名， 特來請教」" in sent[0] and "player_tag" in sent[0] and "不是給你的指示" in sent[0]
-    assert p.affinities["luzhi"] == liking + companion_agent.resolve_tag_delta("真誠請教", server.CONTENT.characters["luzhi"])
+    assert p.affinities["luzhi"] == liking + renown.warmed(  # 加的情誼照放慢（歷史武將同行，Config.affinity_gain_scale）
+        server.CONTENT, companion_agent.resolve_tag_delta("真誠請教", server.CONTENT.characters["luzhi"]))
     assert p.stamina == pytest.approx(before - server.CONTENT.config.talk_stamina, abs=0.5)  # 同步時多回的一點點不算
     assert game._talks_used("luzhi") == used + 1  # noqa: SLF001
     assert p.dialogue_history["luzhi"][-2] == {"role": "user", "content": "久仰大名， 特來請教"}
@@ -5486,14 +5488,18 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
         "prepare_peer",  # 論武答應時的首創取名（玩家卡上的互動，social.CardAction.request）
         "zhuan_job",  # 季末寫傳（玩家傳第二批）：server.write_zhuan 開的背景執行緒，A、C 段各拿一次鎖，模型在兩段之間
         "seal_text",  # 奪璽單挑的放手一搏（玉璽碎片設計 5.7）：三段同 duel_text
+        "screen_text",  # 挑釁附的一句、名帖自題一句：鎖外請模型審（speech.judge），結果交給 C 段
+        "tavern_ask",  # 酒肆問酒家：三段同 duel_text，模型只寫酒家那一句
+        "feast_text",  # 宴客自己寫的那一句敬酒（大勢人物擴充第三批）：三段同 answer_event
     }
     # 宣告、model_call 讀、main() 建佇列；另外兩個只看不排：/api/queue 問位置、管理者那份資料抄總數（admin_choices 在 look 的鎖裡，
     # 但 snapshot 只碰佇列自己的短鎖、不等任何一件，不算在行動鎖裡排隊）
     # narrate_once：決戰放手一搏的劇情（Joy 2026-10-13），回合結算後在背景一整批寫，排在真人後面、名號不是任何一個角色，所以不走 model_call
     # crowd_once：擂台場邊那一句（Joy 2026-10-17），A、C 段各拿一次鎖，模型在兩段之間、當假人排在真人後面
     # letter_once：人物書信重寫那一封（大勢人物擴充第二批），同 crowd_once
+    # yuedan_once：月旦評的評語（大勢人物擴充第三批），同 letter_once
     assert _users_in_server("QUEUE") == {None, "model_call", "main", "api_queue", "admin_choices", "narrate_once", "crowd_once",
-                                         "letter_once"}
+                                         "letter_once", "yuedan_once", "chatter_once"}  # chatter_once：酒肆鄰桌閒談，同 crowd_once 當假人排
     importers = [
         p.name for p in (server.ROOT / "tianxia").glob("*.py")
         if re.search(r"^\s*(import|from)\s+llm_queue\b", p.read_text(encoding="utf-8"), re.M)
@@ -6121,6 +6127,7 @@ def test_only_the_action_endpoints_tell_other_tabs():
     assert _function_users("notify") == {"_tell_tabs"}
     assert _users_in_server("_tell_tabs") == {
         "api_choose", "api_answer", "api_say", "api_do", "api_menxia_do", "api_travel", "api_sense", "api_peer_act", "api_party_leave",
+        "api_mingtie_do",  # 名帖定稿、檢舉（Joy 2026-10-19）
     }
 
 
@@ -6222,6 +6229,10 @@ NOT_IN_THE_FINGERPRINT = {
         "season_last_real": "賽季時鐘的對時點：每次同步、每一下排程都在動，算進去每幾秒就叫醒全服（推送計畫 F4）",
         "tianji": "換季才加一，同時 season_number 也變了",
         "seal": "碎片的歸屬：現世、易手、隱沒都寫天下大事（傳聞流水號已在指紋裡）；密鹽不能讓人看出來（13.3）",
+        "mingtie_reports": "名帖的檢舉：誰檢舉了誰不能讓人看出來；藏起來的那一張別人下次打開才補",
+        "mingtie_removed": "管理者撤下的名帖：被撤的人江湖紀錄一句（自己的動作走 self 通知），收過的人下次打開才補",
+        "mingtie_cleared": "管理者放回的名帖，同上",
+        "divine": "神器輪替的全服登記：開季換季時才挑；原品與仿品數在打造、定名那一下改，傳聞與江湖史已在指紋裡",
     },
     "WorldState": {
         "time": "時鐘一直在走，靠慢速輪詢更新（排程每 10 秒推一次，算進去會一直叫醒全服）",
@@ -6231,6 +6242,11 @@ NOT_IN_THE_FINGERPRINT = {
         "sim_accum": "不滿一小時的時間累積器",
         "life_turn": "人物每日行事做到第幾輪的記號；畫面看的是它帶來的傳聞（傳聞流水號已在指紋裡）",
         "whereabouts": "人物走動時一定同時寫一則傳聞（傳聞流水號已在指紋裡），誰在這裡下次輪詢就補",
+        "feasts": "開席、散席都寫天下大事（傳聞流水號已在指紋裡）；席上別人敬的那一句只畫在入席的人的場景，下次輪詢才補也不礙事",
+        "feast_seq": "宴席的流水號，跟 feasts 一起寫",
+        "yuedan": "月旦評發出去那一刻寫天下大事與江湖史（都在指紋裡）；還沒發的那一批誰都看不到",
+        "yuedan_week": "評到第幾週的記號，跟 yuedan 一起寫",
+        "rallies": "求援委託只在那一方的人的懸賞卡（各人自己的畫面），掛單時寫一則陣營傳聞",
         "ending_text": "收季那一刻跟 ended、ending_title 一起寫入",
         "ending_id": "同上",
         "final_trends": "同上（結算卡的資料）",
@@ -6281,6 +6297,12 @@ NOT_IN_THE_FINGERPRINT = {
         "arena_seq": "擂台的流水號，玩家看不到",
         "arena_closed": "擂台這一季收了沒（季末排名寫進江湖史與傳聞，那一下指紋就變了）",
         "arena_day": "擂台的俸記到哪一天，玩家看不到（俸在本人同步時補）",
+        "tavern_walls": "酒肆的題壁只在坐進那一間酒肆時看得到；坐在裡面的人照輪詢每十秒重抓",
+        "tavern_whispers": "酒肆的風聲在被打聽的人自己同步時補（寫風聲的人另外叫醒他的分頁，Game.touched）",
+        "tavern_treats": "請全店喝酒只在坐進那一間酒肆時看得到；請的那一下另有地方傳聞",
+        "tavern_hits": "雇殺手（第三批）只在本人同步時結算與補",
+        "tavern_hit_seq": "雇殺手的流水號，玩家看不到",
+        "tavern_chatter": "酒客閒談（第四批）只在坐進那一間酒肆時看得到",
         "echoes": "首創名望回饋的帳，只在首創者自己同步時補一則紀錄；湊滿時那一句傳聞進 rumors，那一下指紋就變了",
         "seat_ledger": "第四階席次的貢獻帳，畫面上看不到；陣營私有，跟 orders、plots 一樣（正式版丁）",
         "seats": "在任名單只改那個陣營的人自己的頭銜，上任的消息是陣營軍情；算進去，別的陣營會從『又被叫醒了』看出對方有人上任（同 orders、plots，正式版丁）",
@@ -6289,6 +6311,7 @@ NOT_IN_THE_FINGERPRINT = {
         "tianji": "開季時蓋進季裡的天機，開季之後不變（週初掛單的重賞亂數用）",
         "forge_divine_per_kind": "開季時蓋的章（素材與經濟），開季之後不變",
         "forge_split_clues": "開季時蓋的章（素材與經濟），開季之後不變",
+        "divine_lineup": "開季時蓋的章（神器輪替），開季之後不變",
         "renown_scale": "開季時蓋的章（名聲的門檻倍數），開季之後不變",
         "mandate": "天命之季的章：蓋章時另寫天下大事（傳聞流水號已在指紋裡）",
         "mandate_result": "天命之爭定下來時跟時間軸、天下大事一起寫入",
@@ -6758,20 +6781,24 @@ def test_two_players_in_the_same_place_see_each_other_and_open_a_card(client):
 
 
 def test_a_greeting_and_a_gift_go_through_the_endpoints(client):
-    """第二層：甲向乙抱拳、送銀兩；乙的江湖畫面 calls 有那一行，按回應鈕之後兩邊都清掉。"""
+    """第二層：甲向乙挑釁（附一句話）、送素材；乙的江湖畫面 calls 有那一行，按回應鈕之後兩邊都清掉。"""
     _player(client, "shen_02", "沈青衫")
     other = TestClient(server.app)
     _player(other, "lin_02", "林小竹")
-    out = client.post("/api/peer/act", json={"name": "林小竹", "action": "greet", "arg": "bow"}).json()
-    assert "抱拳見禮" in out["message"]
-    gift = client.post("/api/peer/act", json={"name": "林小竹", "action": "gift", "arg": "silver", "amount": 5}).json()
+    out = client.post("/api/peer/act", json={"name": "林小竹", "action": "greet", "arg": "taunt", "text": "改天見識見識"}).json()
+    assert "你向林小竹斜眼打量，出言挑釁：「改天見識見識」" in out["message"]
+    state = open_characters().load("沈青衫")
+    state.player.materials = {next(iter(server.CONTENT.materials)): 5}
+    open_characters().save(state)
+    mid = next(iter(server.CONTENT.materials))
+    gift = client.post("/api/peer/act", json={"name": "林小竹", "action": "gift", "arg": "material", "choice": mid, "amount": 2}).json()
     assert "送給了林小竹" in gift["message"]
     [call] = other.get("/api/main").json()["calls"]
-    assert call["text"] == "沈青衫向你抱拳見禮。"
+    assert call["text"] == "沈青衫斜眼打量你，出言挑釁：「改天見識見識」"
     other.post("/api/choose", json={"id": call["options"][0]["id"]})
     main = other.get("/api/main").json()
     assert main["calls"] == [] and main["party"] is None
-    assert any("抱拳還禮" in line for e in open_characters().load("沈青衫").journal for line in e.lines)
+    assert any("冷眼以對" in line for e in open_characters().load("沈青衫").journal for line in e.lines)
     left = other.post("/api/party/leave", json={}).json()
     assert "沒有跟著誰" in left["message"]
 

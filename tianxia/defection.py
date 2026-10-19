@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from . import allied, bounties, opportunities, ranks, seats
+from . import allied, bounties, opportunities, ranks, roster, seats
 from .models import Content, FactionDef, Sect
 from .rules import add_rumor, display_name
 from .state import GameState, PlayerState
@@ -99,7 +99,9 @@ def _sect_left(p: PlayerState, old: FactionDef, content: Content) -> Sect | None
     return sect if sect is not None and sect.id in old.sects else None
 
 
-def prompt(state: GameState, content: Content, target: FactionDef, counts_text: str, ally: str | None = None) -> str:
+def prompt(
+    state: GameState, content: Content, target: FactionDef, counts_text: str, ally: str | None = None, companions: list[str] | None = None,
+) -> str:
     """確認畫面的話：寫明真的會失去什麼（晉升過的頭銜、還沒去的召見、部下、押著的糧車、要離開的門派、功勞、手上揭著的舊陣營懸賞）、一季一次，
     接上三方目前的人數。只寫真的有的：第 1 階（鄉勇）叛投之後在新陣營一樣是第 1 階，不算損失；沒有召見、糧車、部下、
     門派、功勞、懸賞就不提；什麼都沒有的人，話說「沒有什麼進度要作廢」。"""
@@ -125,6 +127,8 @@ def prompt(state: GameState, content: Content, target: FactionDef, counts_text: 
     held = bounties.stranded(state, content, ally or target.id)
     if held:  # 手上揭著的懸賞（FB-151）：新陣營的人接不了舊陣營掛的單，確定的那一下 defect() 拿掉名字
         lost.append(bounties.STRANDED_LOST.format(n=len(held), faction=old.name))
+    if companions:  # 歷史武將同行 9.5：寫了 side、跟新陣營不合的同伴帶不走（Game._leave_behind 放回江湖）；名字由呼叫端給（要查全服名冊）
+        lost.append(roster.DEFECT_LOST.format(names="、".join(companions)))
     verb = slot_label(state, content, target, ally)  # 「叛投官軍」；豪強分屬兩軍時也可能是「改投官軍」「改依附黃巾軍」
     head = f"{verb}之後，" + "，".join(lost) if lost else f"{verb}沒有什麼進度要作廢"
     return f"{head}；一季只能叛投一次。{counts_text}。確定{verb}？"
