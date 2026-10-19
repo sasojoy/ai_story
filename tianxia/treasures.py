@@ -417,6 +417,30 @@ def challenge_drop(state: GameState, content: Content, figure: str, season: int,
     return item, [DROP_LINE.format(who=who, name=item.name), *deliver(state, content, item)]
 
 
+# ---- 出陣攻打贏的稀有掉落（正式季整合 2.6，第 4 批）----
+
+SORTIE_TREASURE = "敵陣裡翻出一件好東西。"  # 待 joy 潤：出陣掉寶物那一句（接著 GOT）
+SORTIE_HORSE = "敵將棄下的坐騎還繫在營外。"  # 待 joy 潤：出陣掉良駒那一句（接著 GOT_HORSE）
+
+
+def sortie_rare(state: GameState, content: Content, season: int, record_id: int) -> list[str]:
+    """出陣攻打贏另擲寶物與良駒（2.6；Config.sortie）：寶物從挑戰本人的掉落池抽你還沒有的（都有了換銀兩），帳另記一本
+    （PlayerState.sortie_treasures，一季 treasure_cap 件，不讀挑戰本人的額度）；良駒一季 horse_cap 匹。那一欄關著、到了上限、
+    裝備庫滿了都不擲也不記。自己一份亂數（出陣稀有|季數|名號|戰報流水號|用途），不碰 Game.rng。"""
+    p, cfg = state.player, content.config.sortie
+    lines: list[str] = []
+    seed = f"出陣稀有|{season}|{p.name}|{record_id}"
+    if (on(content) and p.sortie_treasures < cfg.treasure_cap and room_for(state, content, "treasure")
+            and random.Random(seed + "|寶物").random() < cfg.rare_treasure):
+        p.sortie_treasures += 1
+        lines += [SORTIE_TREASURE, *_give_pool(state, content, random.Random(seed + "|寶物抽"), hold=False)]
+    if (equipment.on(content, "mount") and p.sortie_horses < cfg.horse_cap and room_for(state, content, "mount")
+            and random.Random(seed + "|良駒").random() < cfg.rare_horse):
+        p.sortie_horses += 1
+        lines += [SORTIE_HORSE, *_give_horse(state, content, random.Random(seed + "|良駒抽"), hold=False)]
+    return lines
+
+
 # ---- 機器人（設計第九節）：整季機器人與伺服器假人共用 ----
 
 # 挑寶物的固定順序：打仗拿得多的先（打贏經驗、心得，再來修練、悟意境、打贏多掉素材、破境丹）；機器人不閉關，閉關排最後

@@ -98,7 +98,7 @@
     "talk_affinity": 20
   },
   "forge_secrets": {
-    "per_season": {"weapon:1": 2, "weapon:2": 2, "weapon:divine": 2, "armor:1": 1, "armor:2": 1, "armor:divine": 1},
+    "per_season": {"weapon:1": 2, "weapon:2": 2, "weapon:3": 2, "weapon:divine": 2, "armor:1": 1, "armor:2": 1, "armor:3": 1, "armor:divine": 1},
     "tale_chance": 0.5,
     "smith_chance": 0.25,
     "scrap_chance": 0.04,

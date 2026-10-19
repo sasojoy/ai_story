@@ -67,13 +67,15 @@ def test_match_reads_the_shape_kind_slot_and_main_aux_order(forge_content):
     assert m("weapon", "劍", "gang_1", "kuai_1") is None  # 這一季沒挑到的不算
 
 
-def test_the_real_pool_has_thirty_one_named_recipes_and_validates():
+def test_the_real_pool_has_forty_two_named_recipes_and_validates():
     rc = real_content()  # 載入時已經跑過 _validate_forge_secrets
-    assert len(rc.forge_secrets) == 31 and sum(r.divine for r in rc.forge_secrets.values()) == 9  # 3.4：兵器 22、防具 9，神器 9
+    # 3.4：兵器 22、防具 9，神器 9；正式季整合第 4 批補三階一組（兵器 8、防具 3，12.1 第 25 條）
+    assert len(rc.forge_secrets) == 42 and sum(r.divine for r in rc.forge_secrets.values()) == 9
     groups = Counter(forge_secrets.group_of(r) for r in rc.forge_secrets.values())
-    assert groups == {"weapon:1": 8, "weapon:2": 8, "weapon:divine": 6, "armor:1": 3, "armor:2": 3, "armor:divine": 3}
+    assert groups == {"weapon:1": 8, "weapon:2": 8, "weapon:3": 8, "weapon:divine": 6, "armor:1": 3, "armor:2": 3, "armor:3": 3,
+                      "armor:divine": 3}
     assert rc.config.forge_secrets.per_season == {
-        "weapon:1": 2, "weapon:2": 2, "weapon:divine": 2, "armor:1": 1, "armor:2": 1, "armor:divine": 1}
+        "weapon:1": 2, "weapon:2": 2, "weapon:3": 2, "weapon:divine": 2, "armor:1": 1, "armor:2": 1, "armor:3": 1, "armor:divine": 1}
     cfg = rc.config.forge_secrets
     assert (cfg.tale_chance, cfg.smith_chance, cfg.scrap_chance) == (0.5, 0.25, 0.04)  # 設計 6.2（PM 決定第 6 條照預設）
     names = {r.name for r in rc.forge_secrets.values()}
@@ -82,7 +84,7 @@ def test_the_real_pool_has_thirty_one_named_recipes_and_validates():
         if r.divine:
             assert r.main.tier == 4 and r.aux.tier == 4  # 神器配方兩樣都四階（正式季整合 5.5；以前是三階，5.1）
     for tianji in range(5):
-        assert len(forge_secrets.active(rc, tianji)) == 9  # 一季 9 條（兵器 6、防具 3，3.2）
+        assert len(forge_secrets.active(rc, tianji)) == 12  # 一季 12 條（兵器 8、防具 4，3.2；第 4 批多三階兵器 2、防具 1）
     for r in rc.forge_secrets.values():
         assert naming.name_problem(r.name, rc) == naming.FORGE_CLASH  # 撞到自己：表示別人（模型、玩家）取不到這個名字
 

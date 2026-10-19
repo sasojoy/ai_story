@@ -80,6 +80,7 @@ SOCIAL_NO_ONE = "這裡沒有能說上話的人"  # 待 joy 潤：一類一顆�
 SECT_LABEL = "拜入{sect}"  # 待 joy 潤：拜入門派從交友搬到「此地還能做」的一顆（正式季整合 2.7）
 AUDIENCE_MEET = "先設法結識"  # 待 joy 潤：一類一顆的求見名單上，名望不夠、但這裡有他的結識事件的那一位
 SUMMONS_LABEL = "應召晉升（召見在此・不花體力）"  # 待 joy 潤：一類一顆的應召（設計 9.1 第 1 組乙，橫幅上的字）
+SHOWDOWN_TIER4 = "論功行賞，另得四階料【{name}】一個。"  # 待 joy 潤：時刻表決戰得勝那一方出手夠的人（正式季整合 4.5）
 SNUB_NOTE = "剛吃了敗仗，閉門不見"  # 挑戰本人打贏之後，他對打贏的人關上門（軍令文件 4.5）：求見、交友、挑戰的按鈕寫這一句
 GENDER_SET = "往後江湖上以{word}相稱。"  # 設定頁選了性別（只能選一次）
 GENDER_LOCKED = "性別已經定了，改不了。"
@@ -3371,6 +3372,10 @@ class Game:
         elif goals.get(GEJU) and in_chaos(s, c, front):
             msgs += self.push_trend(GEJU, 1, source="duty")
         msgs += opportunities.after_success(s, c, "duty", loc.id, self.rng)  # 收容流民（正式版乙一）
+        if precise.on(c, s.world):  # 一類一顆（正式季整合 2.6）：再加跟守一樣的經驗心得（這裡自家那一路的全額；沒有自家隊伍不給，只推線）
+            host = self._sortie_host(loc, "hold")
+            if host is not None:
+                msgs += self._drill_gains(host, 1.0)
         credit = self._order_credit(kind="duty", front=front)
         # 入伍段第 2 步「出一次力」：守勢行動不在這週軍令裡也算（FB-094：豪強第一週只有打擊，新人打不過；FB-093：巡哨、傳道就在營裡）
         return msgs + (credit or self._guide(note_action(s, c, self.world, "order")))
@@ -5491,7 +5496,7 @@ class Game:
                 changes.append(f"貢獻 +{contrib}")
         if changes:
             lines.append(f"{'得勝的' if won else ''}軍餉發下來了。")
-        return changes
+        return changes + self._showdown_tier4(battle, me, lines)
 
     def _watching_battle(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> bool:
         """這個人此刻打不了這場仗、只能在一旁看（options() 照常給平常的選項，場景上仍看得到戰場）：
@@ -6282,12 +6287,12 @@ class Game:
             msgs += self._drill_push(trend_id, delta)
         return msgs
 
-    def _drill_gains(self, squad: Squad) -> list[str]:
-        """跟這一路一起操練拿的：對手心得與經驗的 drill_reward_share（不給銀兩、素材）；經驗本人與帶著的同伴都拿（FB-002）。
-        操練（_drill）與出陣的守、攪局（_sortie_hold）共用。"""
+    def _drill_gains(self, squad: Squad, share: float | None = None) -> list[str]:
+        """跟這一路一起操練拿的：對手心得與經驗的 share（預設 drill_reward_share；不給銀兩、素材）；經驗本人與帶著的同伴都拿（FB-002）。
+        操練（_drill）與出陣的守、攪局（_sortie_hold）、守勢行動（_duty）共用；一類一顆開著時守、攪局、守勢行動給全額（_hold_share）。"""
         s, c = self.state, self.content
         p = s.player
-        share = c.config.drill_reward_share
+        share = c.config.drill_reward_share if share is None else share
         xinde, exp = drill_share(squad.reward_xinde, share), drill_share(squad.exp, share)
         msgs: list[str] = []
         if xinde:
@@ -6373,9 +6378,78 @@ class Game:
         return msgs + self._guide(note_action(s, c, self.world, "order"))
 
     def _sortie_rewards(self, squad: Squad, record) -> list[str]:
-        """出陣打贏給自己的（設計 2.4）：對手心得、經驗的 drill_reward_share（三成，同操練），不掉素材與兵器、不擲寶物多掉；
-        經驗整隊一起拿（同遊歷），升級照寫進戰報。銀兩：素材與經濟設計第八節（Config.economy.sortie_silver）開著時加給對手銀兩的
-        sortie_silver_share（三成，四捨五入），關著不給。"""
+        """出陣攻打贏給自己的。一類一顆開著（正式季整合 2.6，第 4 批）：經驗、心得是對手的 reward_scale（兩倍，寶物與遊俠名號照乘，
+        同練功打贏的算法再乘二），銀兩全額另加軍功賞（等級 × merit_silver_per_level），另擲稀有掉落（_sortie_rare）；關著照舊三成（_sortie_drill）。
+        素材四階開著（10.1）：照對手的掉落表掉素材、寶物多掉一個也加上出陣（不擲兵器 3%）。經驗整隊一起拿（同遊歷）。"""
+        s, c = self.state, self.content
+        msgs = self._sortie_full(squad, record) if precise.on(c, s.world) else self._sortie_drill(squad, record)
+        if four_tiers.on(c) and not prologue_rules.active(s, c):
+            msgs[:0] = self._squad_drops(squad, record)
+        if precise.on(c, s.world) and not prologue_rules.active(s, c):
+            msgs += self._sortie_rare(record)
+        return msgs
+
+    def _squad_drops(self, squad: Squad, record) -> list[str]:
+        """照對手的掉落表掉素材（同遊歷，Game.rng），寶物「打贏多掉一個素材」另擲一個（自己的亂數）；寫進戰報的得失。"""
+        got: list[str] = []
+        msgs: list[str] = []
+        for material_id, count in materials.roll_squad_drops(squad, self.content, self.rng):
+            line = materials.grant(self.state, self.content, material_id, count)
+            if line:
+                got.append(material_id)
+                materials.add_cell(record.materials, self.content, material_id, count)
+                msgs.append(line)
+        extra = treasures.extra_drop(self.state, self.content, got, self.world.get_season_number(), record.id)
+        line = materials.grant(self.state, self.content, extra) if extra is not None else None
+        if line:
+            source = self.state.player.treasure.name if self.state.player.treasure is not None else "寶物"
+            materials.add_cell(record.materials, self.content, extra, 1, source=source)
+            msgs.append(materials.extra_line(self.content, extra, 1, source))
+        return msgs
+
+    def _sortie_full(self, squad: Squad, record) -> list[str]:
+        """一類一顆的出陣攻打贏（2.6）：對手經驗、心得 × reward_scale（寶物與遊俠名號同 _battle_rewards），銀兩全額＋軍功賞。"""
+        s, c = self.state, self.content
+        p, cfg = s.player, c.config.sortie
+        msgs: list[str] = []
+        merit = p.member.level * cfg.merit_silver_per_level
+        silver = squad.reward_silver + merit
+        if silver:
+            p.stats["silver"] = p.stats.get("silver", 0) + silver
+            record.silver = silver
+            msgs.append(f"銀兩 +{silver}")
+            if merit:
+                record.notes.append(sortie.MERIT_LINE.format(silver=merit))
+        xinde = round(squad.reward_xinde * cfg.reward_scale * (1 + treasures.amount(s, c, "win_xinde_pct")))
+        if xinde:
+            p.stats["xinde"] = p.stats.get("xinde", 0) + xinde
+            record.xinde = xinde
+            msgs.append(f"心得 +{xinde}")
+        factor = ranger.exp_factor(s, c)
+        exp = round(squad.exp * cfg.reward_scale * (1 + treasures.amount(s, c, "win_exp_pct")) * factor)
+        record.exp = exp
+        levels, record.levelups = team.grant_team_exp(s, c, self.world, exp)
+        record.notes += levels
+        return msgs + levels
+
+    def _sortie_rare(self, record) -> list[str]:
+        """出陣攻打贏的稀有掉落（2.6）：破境丹 rare_legend（自己的亂數）；寶物與良駒照 treasures.sortie_rare（各自一季的上限）。
+        都寫進戰報的得失與江湖紀錄。"""
+        s, c = self.state, self.content
+        cfg, season = c.config.sortie, self.world.get_season_number()
+        msgs: list[str] = []
+        if random.Random(f"出陣稀有|{season}|{s.player.name}|{record.id}|破境丹").random() < cfg.rare_legend:
+            s.player.legend_items += 1
+            name = c.config.legend_item_name
+            record.materials.append(f"{name} ×1")
+            msgs += [f"獲得 【{name}】一枚——{c.config.legend_item_note}", f"{name} +1"]
+        gear = treasures.sortie_rare(s, c, season, record.id)
+        record.notes += gear
+        return msgs + gear
+
+    def _sortie_drill(self, squad: Squad, record) -> list[str]:
+        """一類一顆之前的出陣攻打贏（設計 2.4）：對手心得、經驗的 drill_reward_share（三成，同操練）。銀兩：素材與經濟設計第八節
+        （Config.economy.sortie_silver）開著時加給對手銀兩的 sortie_silver_share（三成，四捨五入），關著不給。"""
         p, share = self.state.player, self.content.config.drill_reward_share
         msgs: list[str] = []
         econ = self.content.config.economy
@@ -6431,12 +6505,16 @@ class Game:
         self._outcome(sortie.MODE_NAMES[how], line)
         host = self._sortie_host(loc, how)
         if host is not None:
-            msgs += self._drill_gains(host)
+            msgs += self._drill_gains(host, self._hold_share())
         for trend_id, amount in self.sortie_push(loc.id, how).items():
             msgs += self.push_trend(trend_id, amount, source="sortie")
         if how == "hold":
             msgs += self._order_credit(kind="duty", front=territory.line_of(c, loc.id))
         return msgs
+
+    def _hold_share(self) -> float | None:
+        """守、攪局、守勢行動拿 _sortie_host 那一路的幾成：一類一顆開著是全額（正式季整合 2.6），關著照操練的三成（None）。"""
+        return 1.0 if precise.on(self.content, self.state.world) else None
 
     def _lose_silver(self, record) -> list[str]:
         """落敗失落一成銀兩（遊歷、探索野怪、挑戰本人共用），記在戰報上。騎著馬有機會策馬脫身、保住這一成（裝備四欄 5.11）：
@@ -6660,6 +6738,7 @@ class Game:
             msgs += extra
             msgs += self._figure_treasure(fid, record)  # 打贏本人掉寶物（裝備四欄 6.4）：只進江湖紀錄，戰報的「得失」寫 GAIN_LINE（同兵器掉落）
             msgs += self._figure_tier3(fid, squad, record)  # 打贏本人掉一個三階（兵器設計 4.9）：戰報「得失」與江湖紀錄
+            msgs += self._figure_tier4(fid, squad, record)  # 這一季第一次打贏他另擲一個四階（正式季整合 4.5）
             msgs += self._signature_arms(record, beaten=fid, later=arm_annals)  # 第三次打贏那一刻他讓你奪走（寫進這一場戰報的「得失」）；_rout 把他打到重創的這一場照給
         elif result.tier == "僵持":
             msgs += self._challenge_draw(fid, squad, record)
@@ -6783,6 +6862,49 @@ class Game:
             p.tier3_drops[fid] = p.tier3_drops.get(fid, 0) + 1
             p.figure_rare_drops += 1
         return got
+
+    def _figure_tier4(self, fid: str, squad: Squad, record) -> list[str]:
+        """挑戰本人這一季第一次打贏某位人物另擲一個四階（正式季整合 4.5，第 4 批）：只看「這一季第一次」（PlayerState.tier4_wins，
+        另一本帳，不讀三階的 tier3_drops；三階的 6 個滿了照擲），擲 Config.four_tiers.challenge_chance，一人一季最多 challenge_cap 個
+        （tier4_challenge_drops，叛投不清）。屬性照他的隊伍（materials.tier_pick）。自己的亂數，不碰 Game.rng。素材四階關著、序章不擲。"""
+        s, c = self.state, self.content
+        p, cfg = s.player, c.config.four_tiers
+        if not four_tiers.on(c) or prologue_rules.active(s, c) or fid in p.tier4_wins:
+            return []
+        p.tier4_wins.append(fid)
+        if p.tier4_challenge_drops >= cfg.challenge_cap:
+            return []
+        seed = f"四階|{self.world.get_season_number()}|{p.name}|{record.id}|挑戰|{fid}"
+        if random.Random(seed).random() >= cfg.challenge_chance:
+            return []
+        mid = materials.tier_pick(c, squad.attribute, seed, four_tiers.TIER)
+        line = materials.grant(s, c, mid) if mid is not None else None
+        if not line:
+            return []
+        p.tier4_challenge_drops += 1
+        materials.add_cell(record.materials, c, mid, 1, source=materials.CHALLENGE_SOURCE)
+        return [materials.extra_line(c, mid, 1, materials.CHALLENGE_SOURCE)]
+
+    def _showdown_tier4(self, battle: battle_instance.BattleInstance, me: battle_instance.BattleParticipant, lines: list[str]) -> list[str]:
+        """時刻表決戰得勝給一個四階（正式季整合 4.5，第 4 批）：長社、宛城、廣宗這種時刻表上的決戰，得勝那一方出手滿門檻的人各一個
+        （門檻照奪璽單挑挑人那一條 seal.threshold：min(3, 實打回合)，參戰不到 small_battle 人放寬到 1）；臨時投效替得勝那一軍出手夠了也算。
+        保底收場（沒有贏家）、天命之爭不給。屬性隨機（名號＋那一場的 record_id）。回要寫在得失的那一樣，戰報那一句接在 lines。"""
+        c, s = self.content, self.state
+        definition = c.battles.get(battle.battle_id)
+        if (not four_tiers.on(c) or not c.config.four_tiers.showdown or definition is None or not definition.timetable_event
+                or seal.is_mandate_battle(c, definition) or not battle.outcome_side or me.faction != battle.outcome_side
+                or me.acted_rounds < seal.threshold(battle, c.config.seal)):
+            return []
+        rng = random.Random(f"決戰四階|{s.player.name}|{battle.record_id}")
+        pool = sorted(m.id for m in c.materials.values() if m.tier == four_tiers.TIER)
+        if not pool:
+            return []
+        mid = rng.choice(pool)
+        line = materials.grant(s, c, mid)
+        if not line:
+            return []
+        lines.append(SHOWDOWN_TIER4.format(name=c.materials[mid].name))
+        return [f"{c.materials[mid].name} ×1"]
 
     def _held_tier3(self) -> int:
         """背包裡的三階素材合計（_challenge 照它算挑戰本人這一場的預設表掉了幾個三階，記進 figure_rare_drops）。"""

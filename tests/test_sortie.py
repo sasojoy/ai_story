@@ -24,6 +24,9 @@ def _game(faction="huang", at="huangjin_camp", profile="weekend", name="沈浪",
     if third_party:
         third_party_gentry(c)  # 豪強是第三方、出陣攪局的規則（豪強分屬兩軍之前）
     c.config.train_event_chance = 0.0
+    # 第 4 批之前的出陣獎勵（三成、不掉東西）：新規則在 tests/test_sortie_rewards.py（設計 8.4）
+    c.config.precise_actions = False
+    c.config.four_tiers.enabled = False
     game = Game.new(c, name, rng=random.Random(0), world=open_world())
     game.client = None
     p = game.state.player
