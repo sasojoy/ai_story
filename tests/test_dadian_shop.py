@@ -140,6 +140,19 @@ def test_the_ledger_text_breaks_only_between_phrases():
     assert re.search(r'<span class="nb">下 \d+／</span><span class="nb">中 \d+／</span><span class="nb">上 \d+</span>', html)
 
 
+@web
+def test_the_broker_line_breaks_only_between_phrases():
+    """FB-433：店上面掮客那一句在 360、320 寬斷在「您／挑」「寫／著」中間：照 FB-297 切成不折行的小段，切在「，。：；！？」後面，
+    緊跟著的收引號併進前一段（「」」不落單）；字一個不改。"""
+    game = _game(at="wan_city")
+    game.choose("act:dadian")
+    m = server.main_view(game)
+    m["shop"]["line"] = "掮客撥了兩下算盤：「要辦什麼事，帳上都寫著，您挑。」"
+    html = _shop_run(m, "H.render(); return T.els.app.innerHTML;")
+    assert ('<p class="shop-line"><span class="nb">掮客撥了兩下算盤：</span><span class="nb">「要辦什麼事，</span>'
+            '<span class="nb">帳上都寫著，</span><span class="nb">您挑。」</span></p>') in html
+
+
 def test_the_ledger_stacks_its_pages_below_360():
     """FB-411：比 360 窄時兩頁放不下，改成上下兩頁（第二頁的左邊線換成上邊線）；360 以上照舊並排。"""
     from pathlib import Path

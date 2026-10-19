@@ -11,6 +11,7 @@ season_weeks 週的「季曆」——季曆秒＝世界秒 × cal_scale。第一
 from __future__ import annotations
 
 import math
+import time as time_module  # 只拿 gmtime 換算傳進來的現實秒（FB-439），不讀時鐘；叫 time_module 是因為這個檔的參數多半叫 time
 from typing import NamedTuple
 
 from .models import Content, TimetableEvent
@@ -159,6 +160,12 @@ def day_index(time: float, content: Content, season: WorldState | None = None) -
     return math.floor(cal / MINUTE + EPS_MINUTES) // (24 * 60)
 
 
+def open_day(content: Content, season: WorldState | None = None) -> int:
+    """開季那一刻落在季曆第幾天（從 0 起，同 day_index）：21 天季是開季那一天離第 1 週週一幾天（簽到照它起算，12.3 第 43 條），
+    其他季是 0。照開季時的偏移（offset_at(0)），暫停再繼續、偏移加了暫停的長度之後也不變。"""
+    return math.floor(offset_at(0.0, content, season) / MINUTE + EPS_MINUTES) // (24 * 60)
+
+
 def world_day(time: float, content: Content, season: WorldState | None) -> int:
     """「今天」的帳記的號碼（從 0 起；人物一天被打掉、回了多少、護衛犒軍探望、同一位人物一天只扣一次聲威）：21 天季是季曆第幾天
     （台灣 00:00 換日，正式季整合設計 1.3），其他季照舊世界天 int(time // DAY)。rules.world_day 同一個。"""
@@ -186,6 +193,36 @@ def day_text(time: float) -> str:
 def day_start(day: int, content: Content, world: WorldState) -> float:
     """季曆第 day 天 00:00 的世界秒（21 天季每天 00:00 的軍令截止、懸賞期限；正式季第 5 批）。day 從 1 算，可以是小數。"""
     return week_start(1, content, world) + (day - 1) * DAY / cal_scale(content, world)
+
+
+PAST_END = "季曆最後一刻（{end}）之後 {span}，現實 {real}"  # 待 joy 潤（FB-439）
+
+
+def calendar_end(content: Content, season: WorldState | None = None) -> float:
+    """季曆最後一刻之後那一瞬（最後一週之後的週一 00:00）的世界秒：季曆時刻到這裡就停在最後一週週日 23:59（point）。"""
+    return week_start(content.config.season_weeks + 1, content, season)
+
+
+def span_text(seconds: float) -> str:
+    """一段現實時間寫成最多兩個單位：「2 天 3 小時」「5 小時」「1 小時 20 分鐘」「40 分鐘」；不到一分鐘寫「不到一分鐘」。"""
+    minutes = int(seconds // MINUTE)
+    days, rest = divmod(minutes, 24 * 60)
+    hours, mins = divmod(rest, 60)
+    parts = [f"{n} {unit}" for n, unit in ((days, "天"), (hours, "小時"), (mins, "分鐘")) if n][:2]
+    return " ".join(parts) or "不到一分鐘"
+
+
+def schedule_text(time: float, real: float, content: Content, season: WorldState | None) -> str:
+    """管理者排時間的回覆寫的時刻（FB-439）：季曆之內照 stamp_text；排到季曆最後一刻之後（季末往後排）時季曆時刻停在週日 23:59，
+    照寫的話看起來像沒排過去，改寫「季曆最後一刻（…）之後 N 天 M 小時，現實 11/11 03:00」（現實照台灣時間，real 是那一刻的現實秒）。"""
+    end = calendar_end(content, season)
+    if not season_one_on(season, content) or time < end:
+        return stamp_text(time, content, season)
+    local = time_module.gmtime(real + content.config.pill_day_utc_offset_hours * HOUR)
+    return PAST_END.format(
+        end=stamp_text(end, content, season), span=span_text((time - end) / content.config.time_scale),
+        real=f"{local.tm_mon}/{local.tm_mday} {local.tm_hour:02d}:{local.tm_min:02d}",
+    )
 
 
 def point_text(at: CalPoint) -> str:

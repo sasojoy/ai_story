@@ -2701,6 +2701,20 @@ class SilverOutlets(_Strict):
     bribe_max: int = Field(default=40, ge=0, le=100)
 
 
+class CheckIn(_Strict):
+    """每日簽到與回體丹（docs/superpowers/specs/2026-10-17-正式季整合-design.md 6.2～6.4；tianxia/checkin.py）：21 天季才有（enabled 預設關，
+    只有 content/profiles/season21.json 打開，另照開季的章）。第 N 天照開季那一天（台灣日）起算（12.3 第 43 條）。
+    表照 6.2 與 12.3 第 27 條：丹的日子只給丹、四階的日子只給四階（第 6 天兩樣都給），其餘的日子照先後輪流銀兩、一階素材【預設】。"""
+
+    enabled: bool = False
+    pills: int = Field(default=2, ge=0)  # 丹的日子給幾顆回體丹
+    pill_days: list[int] = Field(default_factory=lambda: [3, 6, 9, 12, 15, 18, 21])
+    tier4_days: list[int] = Field(default_factory=lambda: [6, 13, 20])  # 自己挑屬性的四階一個（素材四階關著時第 13、20 天改給銀兩）
+    silver: int = Field(default=30, ge=0)  # 一般日子（照先後的第 0、2、4…個）給幾兩
+    material_tier: int = Field(default=1, ge=1, le=3)  # 一般日子（第 1、3、5…個）給一個這一階的素材（照種子挑）
+    pill_drop: float = Field(default=0.02, ge=0, le=1)  # 找素材、練功各擲一次掉一顆回體丹（6.4）
+
+
 class Config(_Strict):
     stamina_max: int = 150
     stamina_regen_seconds: float = 180  # 自然回復：每幾秒（遊戲時間）回 1 點體力（地圖擴充設計第二節：每 3 分鐘 1 點）
@@ -2782,6 +2796,7 @@ class Config(_Strict):
     economy: EconomyRules = Field(default_factory=EconomyRules)  # 素材與經濟：收購、升階、捐軍備、找素材減量、出陣銀兩（見 EconomyRules）
     four_tiers: FourTiers = Field(default_factory=FourTiers)  # 素材四階的規則（見 FourTiers）
     silver_outlets: SilverOutlets = Field(default_factory=SilverOutlets)  # 21 天季的銀兩出口（見 SilverOutlets）
+    checkin: CheckIn = Field(default_factory=CheckIn)  # 21 天季的每日簽到與掉回體丹（見 CheckIn）
     weapons: WeaponRules = Field(default_factory=WeaponRules)  # 兵器（見 WeaponRules）
     armor: ArmorRules = Field(default_factory=ArmorRules)  # 防具（見 ArmorRules；裝備四欄設計第四節）
     mounts: MountRules = Field(default_factory=MountRules)  # 坐騎（見 MountRules；裝備四欄設計第五節）

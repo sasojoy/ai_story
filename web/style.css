@@ -588,6 +588,9 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .peek-chip { flex: 1 1 auto; min-height: 44px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); color: var(--ink); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
 .peek-chip::after { content: "▾"; font-size: 12px; font-weight: 400; color: var(--ink-2); transform: rotate(-90deg); transition: transform 0.2s; }
 .peek-chip.board { border-color: var(--gold); }
+/* 21 天季多一顆「簽到」（第 7 批）：四顆時內距與間距收一點，375 寬（態勢寫兩個數字）到 360 寬都還是一行 */
+.peek-row:has(> .peek-chip:nth-child(4)) { gap: 4px; }
+.peek-row:has(> .peek-chip:nth-child(4)) > .peek-chip { padding-inline: 6px; }
 .peek-chip.on { background: var(--card-2); }
 .peek-chip.on::after { transform: none; }
 .peek-name { color: var(--ink-2); }
@@ -610,6 +613,31 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .war-help { font-size: 12px; line-height: 1.55; color: var(--ink-2); }
 .war-help p { margin: 4px 0 0; }
 .peek-panel > .war-help { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--line); }
+/* 每日簽到（21 天季，正式季整合 6.2；9.1 第 4 組丙的草圖）：「簽到」小標攤開的這一週七格、今天的份與領的鈕。class 一律 ck- 開頭，
+   不撞既有的通用名（.week、.day 別處有人用） */
+.peek-panel.checkin { border-color: var(--gold); }
+.ck-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.ck-head b { font: 600 15px var(--serif); }
+.ck-head span { font-size: 12px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.ck-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; margin: 6px 0 8px; }
+.ck-day { position: relative; display: grid; justify-items: center; align-content: start; gap: 1px; padding: 5px 1px 6px; border-radius: 9px; border: 1px solid var(--line); background: var(--paper); font-size: 10.5px; line-height: 1.3; color: var(--ink-2); text-align: center; min-width: 0; }
+.ck-day .d { font: 600 12px var(--serif); color: var(--ink); }
+.ck-day .g { font-size: 10.5px; color: var(--ink); white-space: nowrap; overflow: hidden; max-width: 100%; }
+.ck-day .g .gl { display: block; }
+.ck-day.got { opacity: .62; }
+/* 「簽」朱印半壓在右上角的外框上（FB-437：蓋在右下角時把「兩」「2」「階」蓋掉一半）：天數置中，兩位數也碰不到右邊這一截 */
+.ck-day.got::after { content: "簽"; position: absolute; right: -5px; top: -5px; width: 14px; height: 14px; box-sizing: border-box; border: 1.5px solid var(--accent); border-radius: 3px; background: var(--card); color: var(--accent); font: 600 9px/11px var(--serif); text-align: center; transform: rotate(-10deg); }
+.ck-day.miss { border-style: dashed; opacity: .5; }
+.ck-day.today { border: 2px solid var(--gold); background: var(--card); }
+.ck-day.today.got { opacity: 1; }
+.ck-day.four .g { color: var(--gold); font-weight: 600; }
+.ck-step { font-size: 12.5px; color: var(--ink-2); margin: 8px 0 6px; }
+.ck-go { min-height: 44px; width: 100%; border: 1px solid var(--gold); border-radius: var(--radius); background: var(--card-2); color: var(--ink); font: inherit; font-weight: 600; cursor: pointer; }
+.ck-pick { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.ck-p4 { min-height: 44px; display: grid; justify-items: center; gap: 0; padding: 6px 2px; border-radius: 10px; border: 1px solid var(--gold); background: linear-gradient(180deg, color-mix(in srgb, var(--gold) 16%, var(--card)), var(--card)); color: var(--ink); font: 12px/1.35 var(--serif); cursor: pointer; min-width: 0; }
+.ck-p4 b { font-size: 14px; }
+.ck-p4.gang b { color: var(--gang); } .ck-p4.rou b { color: var(--rou); } .ck-p4.kuai b { color: var(--kuai); } .ck-p4.man b { color: var(--man); }
+.ck-p4 small { font: 10.5px var(--sans); color: var(--ink-2); }
 .war { margin-bottom: 12px; }
 .war > .fronts { margin-bottom: 0; }
 /* 決戰的即時戰局條（Joy 2026-10-10，web/app.js 的 gaugeHtml）：拔河，左邊是自己那一邊，旗子被拉向佔上風的那一頭；

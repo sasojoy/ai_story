@@ -221,13 +221,13 @@ def stamina_lines(
 def gift_line(content: Content) -> str:
     """建角色時送的回體丹（Config.beta_gift、beta_gift_stamina_pills），記在江湖紀錄開場那一則的一行（建角色那一刻寫下）。
     測試期一鍵補滿打開時（Config.beta_free_refill），體力條那顆鈕寫 beta_free_refill_label、不花丹：說丹先收著、按那顆鈕免費補滿
-    （控制者走查）；關著時說按「丹」服下。兩句都待 joy 潤。"""
+    （控制者走查）；關著時說按「丹」服下。兩句都待 joy 潤。開頭從「內測贈禮」改成「新手福利」（正式季整合 6.3，企劃者 10/16）。"""
     cfg = content.config
     name, n, restore = cfg.stamina_pill_name, cfg.beta_gift_stamina_pills, cfg.stamina_pill_restore
     if cfg.beta_free_refill:
-        return (f"內測贈禮：{name} {n} 顆（一顆回 {restore} 點體力），先收著；"
+        return (f"新手福利：{name} {n} 顆（一顆回 {restore} 點體力），先收著；"
                 f"測試期間按體力條上的「{cfg.beta_free_refill_label}」就能免費補滿，不花丹。")
-    return f"內測贈禮：{name} {n} 顆，一顆回 {restore} 點體力，按體力條右端的「丹」服下。"
+    return f"新手福利：{name} {n} 顆，一顆回 {restore} 點體力，按體力條右端的「丹」服下。"
 
 
 def top_up_line(content: Content, added: int) -> str:

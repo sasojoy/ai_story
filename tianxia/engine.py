@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pydantic import BaseModel
 
 from . import (
-    allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, chuangong, clinic, companion_agent, cultivation, defection, divine, economy, encounter, enlist, equipment, event_llm, explore_modes, escorts,
+    allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, checkin, chuangong, clinic, companion_agent, cultivation, defection, divine, economy, encounter, enlist, equipment, event_llm, explore_modes, escorts,
     fight_llm, figure_aid, figure_life, figures, foreshadow, four_tiers, generals, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, letters, library, mapdata, martial_arts, feasts,
     materials, mounts, naming, opportunities, orders, precise, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
     shopview, signature, signature_arms, silver, skill_slots, skillview, smithing,
@@ -3957,6 +3957,17 @@ class Game:
         self.state.player.legend_items += 1
         return [f"獲得 【{cfg.legend_item_name}】一枚——{cfg.legend_item_note}", f"{cfg.legend_item_name} +1"]
 
+    def _pill_find(self, rng: random.Random) -> list[str]:
+        """找素材、練功掉一顆回體丹（21 天季，正式季整合 6.4；Config.checkin.pill_drop）：用探索三選一自己的亂數（用途「回體丹」），
+        不碰別的骰。兩行同破境丹：「獲得」開頭的敘事與「回體丹 +1」（寫進紀錄的數值變化）。"""
+        c = self.content
+        chance = c.config.checkin.pill_drop
+        if chance <= 0 or not checkin.on(c, self.state.world) or rng.random() >= chance:
+            return []
+        self.state.player.stamina_pills += 1
+        name = c.config.stamina_pill_name
+        return [checkin.PILL_FOUND.format(name=name), f"{name} +1"]
+
     def _explore_outcome(self) -> list[str]:
         s, c = self.state, self.content
         loc = c.locations[s.player.location]
@@ -4034,12 +4045,12 @@ class Game:
         roll = functools.partial(explore_modes.rng_for, self.world.get_season_number(), p.name, p.explore_seq)
         loc = c.locations[p.location]
         if mode == explore_modes.PRACTICE:  # 練功（正式季整合 2.5）：不算打探（7.3），破境丹、殘譜照擲，用途另取「練功」
-            msgs = self._practice(loc, roll("練功"))
+            msgs = self._practice(loc, roll("練功")) + self._pill_find(roll("回體丹"))
             if c.config.forge_secrets.scrap_every_mode:
                 msgs += self._scrap_find()
             return msgs + self._legend_find(roll("破境丹"))
         if mode == explore_modes.GATHER:
-            msgs = self._gather(loc, roll("找素材"))
+            msgs = self._gather(loc, roll("找素材")) + self._pill_find(roll("回體丹"))
         elif mode == explore_modes.SEEK:
             msgs = self._seek(roll("找事件"))
         else:
@@ -9056,6 +9067,27 @@ class Game:
         ))
         return self._log(msgs + [f"體力 +{round(p.stamina - before)}（{name}還剩 {p.stamina_pills} 顆）"])
 
+    @_not_while_preparing
+    def check_in(self, attribute: str = "") -> list[str]:
+        """每日簽到（21 天季，正式季整合 6.2；tianxia/checkin.py）：領今天的份，四階的日子帶 attribute（剛柔快慢）。草廬序章裡不簽
+        （同回體丹）；關著、簽過了、沒挑或挑錯四階都只回一句、什麼都不動。成了寫一則「簽到」江湖紀錄（數值變化寫丹、銀兩、素材）。"""
+        s, c = self.state, self.content
+        if checkin.on(c, s.world) and prologue_rules.active(s, c):
+            return self._log([checkin.HUT])
+        result = checkin.claim(s, c, s.world, attribute)
+        if isinstance(result, str):
+            return self._log([result])
+        lines, changes = result
+        journal.add_entry(s, JournalEntry(time=s.world.time, title=checkin.TITLE, lines=lines, changes=changes))
+        return self._log(lines + changes)
+
+    def checkin_view(self) -> dict | None:
+        """江湖頁「簽到」小標的資料（checkin.view）：簽到關著、草廬序章裡、過了這一季最後一天（管理者把季末往後排）是 None。"""
+        s, c = self.state, self.content
+        if not checkin.on(c, s.world) or not checkin.in_season(c, s.world) or prologue_rules.active(s, c):
+            return None
+        return checkin.view(s, c, s.world)
+
     def pill_now(self) -> float:
         """回體丹換日看的現實時間：sync 給的 now，加上 advance 推過的那一截（advanced_real）。"""
         return self.now + self.advanced_real
@@ -11468,7 +11500,13 @@ class Game:
         self._save_season()
         moved = "，對齊整點" if abs(at - wanted) > calendar.EPS_SECONDS else ""
         moved += f"、避開同一刻的{avoided}" if avoided else ""
-        msg = f"已把{event.title}排在{calendar.stamp_text(at, c, w)}（季曆{moved}）。"
+        if at >= calendar.calendar_end(c, w) and calendar.season_one_on(w, c):
+            # FB-439：排到季曆最後一刻之後，季曆時刻停在最後一週週日 23:59，照舊寫會像沒排過去：寫之後多久與現實的日期時刻
+            real = at_real + (at - wanted) / c.config.time_scale
+            note = moved.lstrip("，、")
+            msg = f"已把{event.title}排在{calendar.schedule_text(at, real, c, w)}{f'（{note}）' if note else ''}。"
+        else:
+            msg = f"已把{event.title}排在{calendar.stamp_text(at, c, w)}（季曆{moved}）。"
         self._write("排時間", [msg], tag="管理者")
         return self._log([msg])
 
@@ -12651,6 +12689,9 @@ class Game:
         # 江湖頁行動列底下的「玩法說明」入口（explain-2）：新手期（跟體力回復加快同一段，newbie_stamina_days）才有、序章裡沒有（師父會說）；
         # 過了新手期只剩設定抽屜那一顆
         data["howto_entry"] = newbie and not prologue_rules.active(s, c)
+        checkin_card = self.checkin_view()  # 每日簽到（21 天季，正式季整合 6.2）：關著、序章裡沒有這個鍵，畫面照舊
+        if checkin_card is not None:
+            data["checkin"] = checkin_card
         if season_one(c, w):  # 第一季濃縮版：江湖頁的三條戰況與三方態勢；開關關著時沒有這兩個鍵，畫面照舊
             # FB-065：圖卡畫亂局帶（兩端讀設定，跟 in_chaos 同一份、含兩端）、標出在亂局裡的戰線；態勢那一行的說明也由這裡給，
             # 前端不寫死 35／65，也不自己數條數。全服公開的戰況，誰看都一樣

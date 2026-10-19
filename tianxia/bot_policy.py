@@ -477,6 +477,7 @@ def look_after(game: Game, rng: random.Random) -> None:
     合成、修練、學藝、改練、熔煉、定名在 tend_arts。"""
     allocate_points(game, rng)
     _make_card(game)  # 名帖（不擲亂數）
+    bot.check_in(game)  # 每日簽到（21 天季，正式季整合 8.1；不擲亂數，四階照名號＋季數的種子挑）
     bot.take_pill(game)  # 體力見底、手上有回體丹就吃一顆（內測贈送，真人假人一樣拿到）
     if wants_heal(game):
         game.heal()
