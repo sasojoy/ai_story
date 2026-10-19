@@ -29,6 +29,9 @@ from . import discuss as _discuss_card  # noqa: F401  論武登記進玩家卡�
 from . import raid as _raid_card  # noqa: F401  截殺登記進玩家卡的動作表（social.ACTIONS）
 from . import wanted as _wanted_card  # noqa: F401  通緝登記進玩家卡的動作表（social.ACTIONS）
 from . import spar as _spar_card  # noqa: F401  切磋登記進玩家卡的動作表（social.ACTIONS）
+from . import mingtie as mingtie_rules  # 名帖（Joy 2026-10-19）
+from . import mingtie_card as _mingtie_card  # noqa: F401  遞名帖登記進玩家卡的動作表（social.ACTIONS）
+from . import speech
 from . import events as event_rules  # note_round 走模組屬性（測試要能換掉它，確認只有 _present 會叫）
 from . import hints as hint_rules  # 碰到才說（新手引導計畫三）；叫 hint_rules：這個檔裡有幾處區域變數也叫 hints
 from . import prologue as prologue_rules  # Game.new 有個參數也叫 prologue，所以模組在這裡一律叫 prologue_rules
@@ -60,7 +63,7 @@ from .rules import (
 )
 from .sqlite_world import open_world
 from .state import (
-    ONBOARDING_VERSION, PLAYER, ArenaEntry, ArenaFight, ArenaReport, ArenaResult, ArenaSide, BattleRecord, Convoy, CrowdNote, DuelState, Equipment, GameState, HintNote, JournalEntry, Journey, Rumor, Tagalong, TimelineResult,
+    ONBOARDING_VERSION, PLAYER, ArenaEntry, ArenaFight, ArenaReport, ArenaResult, ArenaSide, BattleRecord, Convoy, CrowdNote, DuelState, Equipment, GameState, HintNote, JournalEntry, Journey, Mingtie, Rumor, Tagalong, TimelineResult,
     WorldState,
     new_game_state,
 )
@@ -614,6 +617,15 @@ class Game:
         fresh.player.battle_results_seen = old.player.battle_results_seen  # 補送過的決戰不再補一次（FB-027）
         fresh.player.heirloom = old.player.heirloom  # 玉璽碎片的抄本與補送的進度跨季帶走（玉璽碎片設計 7.5；同步時本來就照登記重抄）
         fresh.player.seal_seen = old.player.seal_seen
+        # 名帖（Joy 2026-10-19）：自己那一張、收到的、藏起來的、不接誰的挑釁話都是自己的東西，跨季保留；
+        # 這一季值得留名的頭銜寫進 title_book（「第N季 天下第一」），一天的次數照回體丹不能換季多一輪
+        fresh.player.mingtie, fresh.player.mingtie_box = old.player.mingtie, old.player.mingtie_box
+        fresh.player.mingtie_hidden, fresh.player.taunt_muted = old.player.mingtie_hidden, old.player.taunt_muted
+        fresh.player.mingtie_day, fresh.player.mingtie_made, fresh.player.mingtie_sent = (
+            old.player.mingtie_day, old.player.mingtie_made, old.player.mingtie_sent)
+        fresh.player.gift_day, fresh.player.gifts_today = old.player.gift_day, old.player.gifts_today
+        book_titles = mingtie_rules.season_book(old, self.content, old.player.season_number)
+        fresh.player.title_book = old.player.title_book + [t for t in book_titles if t not in old.player.title_book]
         fresh.player.seen_real = old.player.seen_real
         fresh.player.season_number = season_number
         self.state = fresh
@@ -7583,6 +7595,9 @@ class Game:
                 continue
             if inv.kind == "travel":  # 結伴同行：答應不花體力（趕路、疾行的體力出發時各付各的）
                 opts.append(Option(id=f"invite:yes:{inv.id}", label=f"答應{inv.sender}的{what}"))
+            elif inv.kind == "mingtie":  # 回帖不花什麼；自己還沒做名帖回不了（灰的寫為什麼）
+                opts.append(Option(id=f"invite:yes:{inv.id}", label=f"回{inv.sender}的名帖", enabled=p.mingtie is not None,
+                                   note="" if p.mingtie is not None else mingtie_rules.NO_CARD))
             elif inv.kind == "discuss":
                 # 論武要挑自己出哪一樣：在他的玩家卡上答（discuss.buttons）；選單上這一顆引擎不收（灰的，整季機器人與假人不會按到），
                 # 網頁把它畫成「打開他的玩家卡、捲到答應那一格」的鈕（social.calls 帶 peer，FB-117），字照舊寫去哪裡答
@@ -7591,8 +7606,8 @@ class Game:
                 opts.append(self._cost_option(f"invite:yes:{inv.id}", f"答應{inv.sender}的{what}", c.config.action_cost["train"]))
             opts.append(Option(id=f"invite:no:{inv.id}", label=f"婉拒{inv.sender}的{what}"))
         for inv in invites.outgoing(s.world, p.name):
-            if inv.kind == "greet":
-                continue  # 打招呼不用收回：等回禮，沒回就過去了
+            if inv.kind in ("greet", "mingtie"):
+                continue  # 打招呼、名帖不用收回：等回禮、回帖，沒回就過去了
             opts.append(Option(id=f"invite:cancel:{inv.id}", label=f"收回給{inv.target}的{invites.kind_name(inv.kind)}邀請"))
         return opts
 
@@ -7640,6 +7655,8 @@ class Game:
             return [f"你婉拒了{inv.sender}的{what}。"]
         if inv.kind == "travel":
             return self._join(inv, other)
+        if inv.kind == "mingtie":
+            return self._mingtie_swap(inv, other)
         if inv.kind == "discuss":
             return self._discuss(inv, other, item, proposed)
         return self._spar(inv, other)
@@ -7661,8 +7678,11 @@ class Game:
         did = dict(gesture.replies).get(verb)
         if did is None:
             return ["（沒有這種回禮。）"]
-        other._write(f"與{me}", [f"你向{me}{gesture.did}，{me}{did}。"])
-        return [f"你{did}。"]
+        line = social.taunt_line(inv, None)
+        said = f"：「{line}」" if line else ""
+        other._write(f"與{me}", [f"你向{me}{gesture.did}{said}，{me}{did}。"])
+        heard = social.taunt_line(inv, self.state)  # 不接他的挑釁話的人，自己的紀錄也不寫那一句
+        return [f"{inv.sender}{gesture.got}：「{heard}」" if heard else f"{inv.sender}{gesture.got}。", f"你{did}。"]
 
     def _join(self, inv, other: Game) -> list[str]:
         """答應結伴同行：重驗（還在發邀請的那個地點、兩個人都沒在跟別人、你身後也沒有人跟著你），記下跟著誰；兩邊各記一則。"""
@@ -10253,6 +10273,205 @@ class Game:
         CharacterStore(self.world.db).save(other.state)
         self.touched.add(other.state.player.name)  # 他開著的分頁也刷新（server._tell_tabs）
         return self._log(msgs)
+
+    # ── 名帖（Joy 2026-10-19；tianxia/mingtie.py 的說明）與贈物一天的次數 ──
+
+    def _shared_or_none(self):
+        """全服的狀態（名帖的檢舉、撤下）：測試用的記憶體世界沒有就是 None（照畫）。"""
+        try:
+            return self.world.read()
+        except (AttributeError, NotImplementedError):
+            return None
+
+    def gift_day_left(self) -> int:
+        """今天（回體丹的換日）還能送幾次東西（Config.gift_per_day；0＝不限）。"""
+        cap, p = self.content.config.gift_per_day, self.state.player
+        if cap <= 0:
+            return 1
+        return max(0, cap - (p.gifts_today if p.gift_day == self._pill_day() else 0))
+
+    def gift_day_tick(self) -> None:
+        p, day = self.state.player, self._pill_day()
+        p.gifts_today = (p.gifts_today if p.gift_day == day else 0) + 1
+        p.gift_day = day
+
+    def mingtie_face(self, state: GameState) -> dict | None:
+        """這個人的名帖給你看的樣子：還沒做是 None；被檢舉藏起來、管理者撤下、你檢舉過的只剩頭銜（mingtie.shown）。"""
+        card = state.player.mingtie
+        if card is None:
+            return None
+        if mingtie_rules.shown(self._shared_or_none(), state.player.name, card.version, self.state, self.content):
+            return mingtie_rules.view(card)
+        return mingtie_rules.blank_view(card)
+
+    def mingtie_view(self, board: dict | None = None) -> dict:
+        """見聞「名帖匣」：自己那一張、掙到的頭銜、今天還能定稿幾次遞幾張、畫布的規矩、現成的畫、收到的那幾張（新的在前）。
+        board 是這一季的榜單（伺服器的 boards_now；頭銜「某某榜第N」照它）。"""
+        p, c, cfg = self.state.player, self.content, self.content.config.mingtie
+        day, shared = self._pill_day(), self._shared_or_none()
+        box = []
+        for copy in reversed(p.mingtie_box):
+            seen = mingtie_rules.shown(shared, copy.name, copy.card.version, self.state, c)
+            box.append({
+                "name": copy.name, "when": copy.when, "place": copy.place, "season": copy.season,
+                "card": mingtie_rules.view(copy.card) if seen else mingtie_rules.blank_view(copy.card),
+            })
+        return {
+            "mine": mingtie_rules.view(p.mingtie),
+            "pool": mingtie_rules.earned(self.state, c, self.world, board),
+            "made_left": mingtie_rules.made_left(self.state, c, day),
+            "sent_left": mingtie_rules.sent_left(self.state, c, day),
+            "limits": {
+                "titles": cfg.titles, "motto": cfg.motto_max, "strokes": cfg.max_strokes, "points": cfg.max_points,
+                "width": mingtie_rules.WIDTH, "height": mingtie_rules.HEIGHT, "inks": list(mingtie_rules.INKS),
+                "ink_names": list(mingtie_rules.INK_NAMES), "pens": list(mingtie_rules.PENS),
+            },
+            "presets": [{"id": a.id, "name": a.name, "strokes": a.strokes} for a in c.mingtie.arts],
+            "box": box,
+        }
+
+    def mingtie_screen(self, motto: str) -> str | None:
+        """定稿之前要不要先請模型審自題那一句（三段式的 A 段）：字表先擋得下的、空的都不必問，回 None；要問回那一句（已整理過）。"""
+        line = speech.clean(motto)
+        cfg = self.content.config.mingtie
+        if not line or speech.word_problem(line, self.content, speech.MOTTO, cfg.motto_max):
+            return None
+        return line
+
+    def make_mingtie(self, strokes, titles, motto: str = "", verdict: str = "", board: dict | None = None) -> list[str]:
+        """名帖定稿：筆劃照 parse_strokes 驗、頭銜要從掙到的那一串裡挑（最多 MingtieTuning.titles 個）、自題一句過 speech
+        （verdict 是 B 段模型的判斷）。不花錢；一天最多定稿 made_per_day 次；定稿一次版本 +1（別人收著的舊版不變）。"""
+        p, c, cfg = self.state.player, self.content, self.content.config.mingtie
+        if not cfg.enabled:
+            return self._log(["（此刻無法這麼做。）"])
+        if mingtie_rules.made_left(self.state, c, self._pill_day()) <= 0:
+            return self._log([mingtie_rules.MADE_FULL.format(n=cfg.made_per_day)])
+        lines = mingtie_rules.parse_strokes(strokes, c)
+        if lines is None:
+            return self._log([mingtie_rules.BAD_DRAWING])
+        picked = [str(t) for t in (titles or [])]
+        pool = set(mingtie_rules.earned(self.state, c, self.world, board))
+        if len(picked) > cfg.titles or len(set(picked)) != len(picked) or not set(picked) <= pool:
+            return self._log([mingtie_rules.BAD_TITLE])
+        line = speech.clean(motto)
+        problem = speech.problem(line, c, speech.MOTTO, cfg.motto_max, verdict)
+        if problem:
+            return self._log([problem])
+        if not lines and not picked and not line:
+            return self._log([mingtie_rules.EMPTY])
+        version = (p.mingtie.version if p.mingtie else 0) + 1
+        p.mingtie = Mingtie(strokes=lines, titles=picked, motto=line, version=version)
+        p.mingtie_made += 1
+        self._write("名帖", [mingtie_rules.MADE], merge=True)
+        return self._log([mingtie_rules.MADE])
+
+    def mingtie_send_problem(self, other: Game) -> str | None:
+        """遞名帖給他按不按得下去：要有自己的名帖、今天還能遞、他手上還沒有你這一版、你們之間沒有一張還在等的名帖。"""
+        s, c = self.state, self.content
+        me, him = s.player, gender.pronoun(other.state)
+        if me.mingtie is None:
+            return mingtie_rules.NO_CARD
+        if invites.between(s.world, me.name, other.state.player.name, "mingtie") is not None:
+            return mingtie_rules.WAITING.format(him=him)
+        if mingtie_rules.given(self.state, other.state.player.name) >= me.mingtie.version:
+            return mingtie_rules.SAME_CARD.format(him=him)
+        if mingtie_rules.sent_left(self.state, c, self._pill_day()) <= 0:
+            return mingtie_rules.SENT_FULL.format(n=c.config.mingtie.send_per_day)
+        return None
+
+    def mingtie_send(self, other: Game) -> list[str]:
+        """遞名帖：一張邀請，他回帖才兩邊各收一張（_mingtie_swap）。不理就等它逾時，不退今天的次數。"""
+        problem = self.mingtie_send_problem(other)
+        if problem is not None:
+            return [problem]
+        s, name = self.state, other.state.player.name
+        renew = mingtie_rules.given(self.state, name) > 0
+        invites.expire(s.world)
+        invites.send(s.world, self.content, "mingtie", s.player.name, name, s.player.location)
+        s.player.mingtie_sent += 1
+        self._save_season()
+        self.touched.add(name)
+        return [f"你遞上{'新' if renew else ''}名帖，等{name}回帖。"]
+
+    def _mingtie_swap(self, inv, other: Game) -> list[str]:
+        """回帖：兩邊各收對方此刻的那一張（存遞出那一刻的樣子），兩邊的江湖紀錄各一則。你得有自己的名帖、他也還有。"""
+        me, them, c = self.state.player, other.state.player, self.content
+        if me.mingtie is None or them.mingtie is None:
+            self._tell_sender(inv, other)
+            return [f"（{mingtie_rules.NO_CARD}。）" if me.mingtie is None else "（對方的名帖不在了。）"]
+        mingtie_rules.file_copy(self.state, other.state, c, gave=me.mingtie.version)
+        mingtie_rules.file_copy(other.state, self.state, c, gave=them.mingtie.version)
+        other._write(f"名帖・{me.name}", [f"{me.name}回了帖，你們互換了名帖。"])
+        return [f"你回了帖，與{them.name}互換了名帖。"]
+
+    def report_mingtie(self, name: str, version: int) -> list[str]:
+        """檢舉一張名帖：你馬上就看不到（mingtie_hidden）；全服記一筆，滿 report_hide 個人藏起來等管理者看。
+        要是你看得到的那一張（名帖匣裡收著的、或他此刻就在這裡）。"""
+        p, c = self.state.player, self.content
+        try:
+            version = int(version)
+        except (TypeError, ValueError):
+            return self._log(["（找不到這張名帖。）"])
+        copy = mingtie_rules.copy_of(self.state, name)
+        here = self._peer(name)
+        card = here.state.player.mingtie if here is not None else None
+        if not ((copy and copy.card.version == version) or (card and card.version == version)):
+            return self._log(["（找不到這張名帖。）"])
+        if name_key(name) == name_key(p.name):
+            return self._log(["（這是你自己的名帖。）"])
+        k = mingtie_rules.key(name, version)
+        if k not in p.mingtie_hidden:
+            p.mingtie_hidden.append(k)
+        self.world.mutate(lambda shared: mingtie_rules.report(shared, name, version, p.name))
+        return self._log([mingtie_rules.REPORTED])
+
+    def admin_mingtie_reports(self) -> list[dict]:
+        """管理者「名帖檢舉」：被檢舉、還沒處理的（名號、第幾版、幾個人檢舉、那一張的樣子〔只有此刻還是那一版才看得到畫〕）。"""
+        if not self.is_admin():
+            return []
+        shared = self._shared_or_none()
+        if shared is None:
+            return []
+        rows = []
+        for nk, version, count in mingtie_rules.pending_reports(shared, self.content):
+            target = self._admin_target(nk, sync=False)
+            card = target.state.player.mingtie if target is not None else None
+            rows.append({
+                "name": target.state.player.name if target is not None else nk, "version": version, "count": count,
+                "card": mingtie_rules.view(card) if card is not None and card.version == version else None,
+            })
+        return rows
+
+    def admin_mingtie_remove(self, name: str, version: int) -> list[str]:
+        """撤下一張名帖：那一版以前的都不畫（別人名帖匣裡收著的也是）；他此刻那一張就是這一版的話，畫與自題清掉、頭銜照留、版本 +1，
+        他的江湖紀錄一句（不寫是誰撤的）。"""
+        refusal = self._admin_refusal("撤下名帖")
+        if refusal:
+            return self._log(refusal)
+        target = self._admin_target(name, sync=False)
+        if target is None:
+            return self._log([NO_SUCH_PLAYER.format(name=name.strip())])
+        version, tp = int(version), target.state.player
+        nk = name_key(tp.name)
+        self.world.mutate(lambda shared: shared.mingtie_removed.__setitem__(nk, max(shared.mingtie_removed.get(nk, 0), version)))
+        if tp.mingtie is not None and tp.mingtie.version <= version:
+            tp.mingtie = mingtie_rules.wipe(tp.mingtie.model_copy(update={"version": version}))
+            target._write("名帖", [mingtie_rules.REMOVED_LINE])
+        self._save_target(target)
+        msg = f"已撤下{tp.name}的名帖（第 {version} 版）。"
+        self._write("撤下名帖", [msg], tag="管理者")
+        return self._log([msg])
+
+    def admin_mingtie_restore(self, name: str, version: int) -> list[str]:
+        """放回：檢舉再多也照畫（管理者看過、沒事）。"""
+        refusal = self._admin_refusal("放回名帖")
+        if refusal:
+            return self._log(refusal)
+        k = mingtie_rules.key(name, int(version))
+        self.world.mutate(lambda shared: None if k in shared.mingtie_cleared else shared.mingtie_cleared.append(k))
+        msg = f"已放回{name.strip()}的名帖（第 {int(version)} 版）。"
+        self._write("放回名帖", [msg], tag="管理者")
+        return self._log([msg])
 
     # ── 玩家之間的互動・第二層：打招呼與結伴的回應、逾時、結伴同行（social.py 的說明）──
 

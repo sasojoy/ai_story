@@ -182,15 +182,14 @@ def test_fb220_a_full_gift_button_keeps_its_name_on_one_line(content):
     cap = content.config.gift_per_pair_day
     a = _player(content, "甲")
     b = _player(content, "乙")
-    a.state.player.stats["silver"], a.state.player.stamina_pills = 50, 3
+    a.state.player.materials = {"gang_1": 50}
     for _ in range(cap):
-        a.peer_act("乙", "gift", {"arg": "silver", "amount": 1})
+        a.peer_act("乙", "gift", {"arg": "material", "choice": "gang_1", "amount": 1})
     card = social.card(a, b)
     full = social.pair_full(a, "gift")
-    assert [x["note"] for x in card["actions"] if x["action"] == "gift"] == [full, full]  # 原因那一句字不改
+    assert [x["note"] for x in card["actions"] if x["action"] == "gift"] == [full]  # 原因那一句字不改
     out = run(server.main_view(a), "H.S.peer = { name: '乙', card: CARD }; return H.peerHtml();".replace("CARD", json.dumps(card, ensure_ascii=False)))
-    assert f'disabled><span class="pa-name">贈銀兩</span><small>{full}</small></button>' in out
-    assert f'disabled><span class="pa-name">贈回體丹</span><small>{full}</small></button>' in out
+    assert f'disabled><span class="pa-name">贈素材</span><small>{full}</small></button>' in out
     css = _css()
     assert "white-space: nowrap" in _rule(css, ".peer-acts .btn .pa-name") and "flex: none" in _rule(css, ".peer-acts .btn .pa-name")
     assert "flex-wrap: wrap" in _rule(css, ".peer-acts .btn")  # 說明放不下就換到名字底下一行

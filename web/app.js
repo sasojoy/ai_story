@@ -26,6 +26,7 @@
     { id: "journal", name: "紀錄" },
     { id: "annals", name: "行狀" }, // 玩家傳第一批：這一季值得寫進傳裡的事（/api/annals）
     { id: "boards", name: "榜單" }, // 企劃者 2026-10-14：善人、惡人、名人、宗師榜與武學榜、內功榜（/api/boards）
+    { id: "mingtie", name: "名帖匣" }, // Joy 2026-10-19：自己的名帖與收到的名帖（/api/mingtie）
   ];
   const POLL_MS = 10000;
   const KINDS = ["武學", "內功"];
@@ -364,8 +365,11 @@
       ${S.sheet ? sheetHtml() : S.peer ? peerHtml() : ""}
       ${S.main && S.main.shop ? shopHtml(S.main.shop) : ""}
       ${S.book ? bookHtml() : ""}
-      ${S.zhuan ? zhuanHtml(S.zhuan) : ""}`;
+      ${S.zhuan ? zhuanHtml(S.zhuan) : ""}
+      ${S.mtEdit && S.mingtie ? mtEditHtml() : ""}
+      ${S.mtZoom ? mtZoomHtml() : ""}`;
     renderPage();
+    if (S.mtEdit) mtPadReady();
     fitBars(); // 狀態列的「體力」「氣血」放不放得下（FB-198）
     if (S.sheet) document.querySelector(".sheet-bg")?.addEventListener("wheel", sheetWheel, { passive: false }); // 暗處是每次新畫的，掛一次
   }
@@ -2213,9 +2217,10 @@
     const c = P.card;
     const body = P.loading ? '<p class="muted">……</p>'
       : !c ? `<p>${esc(P.gone || "對方已經不在這裡了。")}</p>${P.focus ? `<p class="muted">${esc(PEER_GONE_ANSWER)}</p>` : ""}`
-      : `<div class="peer-head"><h3>${esc(c.name)}</h3><div class="peer-title">${[...c.affiliation.split("・"), `第${c.level}級`].map((t) => `<span class="peer-seg">${esc(t)}</span>`).join("・")}</div>${peerRenownHtml(c, P)}${c.record ? `<p class="peer-record">${esc(c.record)}</p>` : ""}</div>
+      : `<div class="peer-head">${c.mingtie ? `<button class="peer-mt" data-act="mt-zoom-peer" aria-label="看${esc(c.name)}的名帖">${mtCardHtml(c.mingtie, c.name, "thumb")}</button>` : ""}<h3>${esc(c.name)}</h3><div class="peer-title">${[...c.affiliation.split("・"), `第${c.level}級`].map((t) => `<span class="peer-seg">${esc(t)}</span>`).join("・")}</div>${peerRenownHtml(c, P)}${c.record ? `<p class="peer-record">${esc(c.record)}</p>` : ""}</div>
         <div class="peer-arts">${c.arts.length ? c.arts.map((a) => `<div class="peer-art"><small>${esc(a.kind)}</small><b>${esc(a.name)}</b><span>${esc(a.quality)}</span></div>`).join("") : '<p class="muted">身上沒有功夫。</p>'}</div>
         ${P.amountFor != null && c.actions[P.amountFor] ? `<form class="free peer-amount" id="peer-amount">${choiceSelect(c.actions[P.amountFor])}<input class="input" name="amount" type="number" inputmode="numeric" min="${c.actions[P.amountFor].amount_min || 1}" max="${c.actions[P.amountFor].amount}" placeholder="${esc(c.actions[P.amountFor].label)}：${c.actions[P.amountFor].amount_min || 1}～${c.actions[P.amountFor].amount}" aria-label="數量"><button class="btn primary small" type="submit">送出</button></form>` : ""}
+        ${P.textFor != null && c.actions[P.textFor] ? `<form class="free peer-amount peer-text" id="peer-text"><input class="input" name="text" maxlength="${c.actions[P.textFor].text}" value="${esc(P.textDraft || "")}" placeholder="附一句話（可以不寫，${c.actions[P.textFor].text} 字內）" aria-label="附一句話"><button class="btn primary small" type="submit">${esc(c.actions[P.textFor].label)}</button></form>` : ""}
         ${c.actions.length ? peerActsHtml(c.actions) : ""}`;
     return `<div class="sheet-bg${quiet}" data-act="peer-close"></div>
       <div class="sheet peer-card${quiet}" role="dialog" aria-label="${esc(P.name)}">
@@ -2316,7 +2321,7 @@
   }
   function applyPeer(P, r) {
     peerNext = null;
-    if (S.peer !== P || S.busy || P.amountFor != null || typing() || document.querySelector(".ask-layer")) return;
+    if (S.peer !== P || S.busy || P.amountFor != null || P.textFor != null || typing() || document.querySelector(".ask-layer")) return;
     S.peer = { name: P.name, card: r.card, gone: r.gone, focus: P.focus, msg: P.msg }; // 上一個動作回的那一句照留
     const old = document.querySelector(".peer-card");
     if (!old) return;
@@ -2340,17 +2345,23 @@
   // 等回應的時候（論武答應時首創要等模型取名，FB-117）：照送出指令的回饋那一套（busy），論武答應另有一句等候的話（WAIT_LINES.discuss）。
   // 回來時卡已經關了、或換成別人的卡：不把剛才那張又彈出來，結果用提示泡泡講一句短的（伺服器給的 brief：論武合成了是
   // 「論武有結果了：合出【某某】。詳見江湖紀錄。」，其餘是回話的第一句；完整的在江湖紀錄，FB-242）
-  async function peerAct(i, sure = false, amount = 0, choice = "") {
+  async function peerAct(i, sure = false, amount = 0, choice = "", text = null) {
     const P = S.peer;
     const b = P && P.card && P.card.actions[i];
     if (!b) return;
     if (b.amount > 0 && !amount) { S.peer.amountFor = i; render(); return; }
+    if (b.text > 0 && text == null) { S.peer.textFor = i; S.peer.textDraft = ""; render(); document.querySelector("#peer-text input")?.focus(); return; } // 挑釁：先攤開一格輸入框
     if (!sure && b.confirm) { ask(b.confirm, b.label, () => peerAct(i, true, amount, choice)); return; }
     const line = b.action === "discuss" && /^yes:/.test(b.arg || "") ? WAIT_LINES.discuss : SENT_WAITING;
     await busy(async () => {
-      const r = await api("/api/peer/act", { name: P.name, action: b.action, arg: b.arg, amount, choice });
+      const r = await api("/api/peer/act", { name: P.name, action: b.action, arg: b.arg, amount, choice, text: text || "" });
       if (r.main) setMain(r.main);
-      if (S.peer && S.peer.name === P.name) S.peer = { name: P.name, card: r.card, gone: r.gone, msg: r.message };
+      if (S.peer && S.peer.name === P.name) {
+        S.peer = { name: P.name, card: r.card, gone: r.gone, msg: r.message };
+        // 那一句被擋下（鈕還按得下去）：輸入框照開著、打的字留著，改一改再送
+        const again = text && r.card ? r.card.actions.findIndex((x) => x.action === b.action && x.arg === b.arg && x.enabled && x.text > 0) : -1;
+        if (again >= 0) { S.peer.textFor = again; S.peer.textDraft = text; }
+      }
       else if (r.brief || r.message) toast(r.brief || r.message.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim());
       render();
     }, line);
@@ -5006,6 +5017,184 @@
     return tabs + `<div class="card board"><h3>${esc(cur.title)}</h3><p class="muted board-note">${esc(cur.note)}</p>${rows}${mine}</div>`;
   }
 
+  // ── 名帖（Joy 2026-10-19：抱拳改成互贈名帖；一張畫布當自己的標籤，頭銜系統照存檔算、按一下刷新，再留一句自題）──
+  // 名帖固定是紙色、不跟深淺色走（墨、朱砂、石青三色要在紙上看得清楚；跟 mingtie.INKS 同一份）。
+  // 筆劃是 [墨色, 筆粗, x0, y0, x1, y1, …]，座標在 300×400 的畫布上（mingtie.WIDTH／HEIGHT）。字待 joy 潤
+  const MT_INKS = ["#24211d", "#b23a2a", "#2f5d78"];
+  const MT_PENS = [3, 10];
+  const mtPolyline = (s) => (s.length >= 6
+    ? `<polyline points="${s.slice(2).join(" ")}" stroke="${MT_INKS[s[0]] || MT_INKS[0]}" stroke-width="${MT_PENS[s[1]] || MT_PENS[0]}"/>`
+    : `<circle cx="${s[2]}" cy="${s[3]}" r="${(MT_PENS[s[1]] || MT_PENS[0]) / 2}" fill="${MT_INKS[s[0]] || MT_INKS[0]}"/>`);
+  const mtStrokesSvg = (strokes) => (strokes || []).map(mtPolyline).join("");
+  // 一張名帖：畫在底下、右上直書名號、名號底下一方朱印（名號前三個字＋印）、下緣頭銜與自題。cls：thumb（玩家卡縮圖、名帖匣）、zoom、edit
+  function mtSeal(name) {
+    const chars = [...String(name || "")].slice(0, 3);
+    if (chars.length < 3) chars.push("之"); // 兩個字的名號寫「某某之印」
+    while (chars.length < 3) chars.push("");
+    // 2×2 一格一字，照印文的讀法：右行由上而下、再左行
+    return `<span class="mt-seal" aria-hidden="true">${[chars[2], chars[0], "印", chars[1]].map((ch) => `<i>${esc(ch)}</i>`).join("")}</span>`;
+  }
+  function mtCardHtml(card, name, cls = "", pad = false) {
+    const c = card || { strokes: [], titles: [], motto: "" };
+    return `<div class="mt-card ${cls}">
+      <svg class="mt-ink${pad ? " mt-pad" : ""}" ${pad ? 'id="mt-pad" ' : ""}viewBox="0 0 300 400" preserveAspectRatio="none" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${mtStrokesSvg(c.strokes)}</svg>
+      <div class="mt-name">${esc(name)}</div>${mtSeal(name)}
+      <div class="mt-foot">${c.titles && c.titles.length ? `<div class="mt-titles">${c.titles.map((t) => `<span>${esc(t)}</span>`).join("")}</div>` : ""}<p class="mt-motto">${c.motto ? `「${esc(c.motto)}」` : ""}</p></div>
+      ${c.hidden ? '<p class="mt-hidden">這一張的畫與題字看不到了。</p>' : ""}
+    </div>`;
+  }
+
+  // 放大看一張（玩家卡的縮圖、名帖匣裡收到的）：別人的那一張底下有「檢舉」；看不到的那一張不能再檢舉
+  function mtZoomHtml() {
+    const z = S.mtZoom;
+    const me = S.main && S.main.status && S.main.status.name;
+    const can = !z.card.hidden && z.name !== me;
+    return `<div class="mt-zoom-layer" data-act="mt-unzoom" role="dialog" aria-label="${esc(z.name)}的名帖">
+      <div class="mt-zoom-box">${mtCardHtml(z.card, z.name, "zoom")}${z.when ? `<p class="mt-when">${esc(z.when)}</p>` : ""}
+        <div class="row"><button class="btn ghost small" data-act="mt-unzoom">收起</button>${can ? '<button class="btn ghost small mt-report" data-act="mt-report">檢舉這一張</button>' : ""}</div></div></div>`;
+  }
+  async function mtReport() {
+    const z = S.mtZoom;
+    if (!z) return;
+    ask(`檢舉${z.name}的這一張名帖：你不會再看到它的畫與題字；被檢舉夠多次，大家都看不到，管理者會看。確定？`, "檢舉", async () => {
+      await busy(async () => {
+        const r = await api("/api/mingtie/report", { name: z.name, version: z.card.version });
+        if (r.mingtie) S.mingtie = r.mingtie;
+        S.mtZoom = null;
+        toast((r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() || "已檢舉。");
+        render();
+        if (S.peer && S.peer.name === z.name) refreshPeer();
+      });
+    });
+  }
+
+  async function loadMingtie() {
+    S.mingtie = await api("/api/mingtie");
+    if (S.tab === "news" && S.news === "mingtie") renderPage();
+  }
+
+  // 見聞「名帖匣」：自己那一張（製作或修改）、今天還能定稿幾次遞幾張、收到的那幾張（新的在前，點了放大）
+  function mingtieBoxHtml(m) {
+    if (!m) return '<p class="muted">載入中…</p>';
+    const me = S.main.status.name;
+    const mine = m.mine
+      ? `<div class="mt-mine"><div data-act="mt-zoom-mine">${mtCardHtml(m.mine, me, "mine")}</div>`
+      : `<div class="mt-mine empty"><p>你還沒有名帖。做一張，就能在玩家卡上跟人互換。</p>`;
+    return `<div class="card mt-box-head">${mine}
+        <div class="mt-mine-side"><button class="btn primary" data-act="mt-edit"${m.made_left ? "" : " disabled"}>${m.mine ? "修改名帖" : "製作名帖"}</button>
+          <p class="muted">今天還能定稿 ${m.made_left} 次、遞出 ${m.sent_left} 張。不花銀兩。</p></div></div></div>
+      <p class="report-group">收到的名帖（${m.box.length}）</p>
+      ${m.box.length ? `<div class="mt-grid">${m.box.map((x, i) => `<button class="mt-cell" data-act="mt-zoom-box" data-i="${i}">${mtCardHtml(x.card, x.name, "thumb")}<small>${esc(x.name)}</small></button>`).join("")}</div>`
+        : '<p class="muted">還沒收到誰的名帖。在「此地還有」點人的名字，玩家卡上可以遞名帖。</p>'}`;
+  }
+
+  // 製作名帖（全螢幕一層）：畫布、三色兩筆、上一筆、清空、現成的畫；頭銜從掙到的裡面挑（刷新＝隨機換一批）；自題一句；定稿
+  function mtEditOpen() {
+    const m = S.mingtie;
+    if (!m) return;
+    const pool = m.pool || [];
+    const mine = m.mine || { strokes: [], titles: [], motto: "" };
+    const titles = mine.titles.filter((t) => pool.includes(t));
+    S.mtEdit = { strokes: mine.strokes.map((s) => s.slice()), titles: titles.length ? titles : pool.slice(0, m.limits.titles), motto: mine.motto, ink: 0, pen: 0, note: "" };
+    render();
+  }
+  function mtPoints(strokes) { return strokes.reduce((n, s) => n + (s.length - 2) / 2, 0); }
+  function mtEditHtml() {
+    const E = S.mtEdit, m = S.mingtie, L = m.limits;
+    const me = S.main.status.name;
+    const pts = mtPoints(E.strokes);
+    const chip = (t) => `<button class="mt-chip${E.titles.includes(t) ? " on" : ""}" data-act="mt-title" data-t="${esc(t)}">${esc(t)}</button>`;
+    return `<div class="mt-layer" role="dialog" aria-label="製作名帖">
+      <div class="mt-bar"><button class="book-back" data-act="mt-close">‹ 返回</button><b>製作名帖</b><span>今天還能定稿 ${m.made_left} 次</span></div>
+      <div class="mt-edit-col">
+        <div class="mt-stage">${mtCardHtml({ strokes: E.strokes, titles: E.titles, motto: E.motto }, me, "edit", true)}</div>
+        <div class="mt-tools">
+          ${MT_INKS.map((c, i) => `<button class="mt-ink-btn${E.ink === i ? " on" : ""}" data-act="mt-ink" data-i="${i}" style="--c:${c}" aria-label="${esc(L.ink_names[i] || "")}"><i></i>${esc(L.ink_names[i] || "")}</button>`).join("")}
+          ${["細", "粗"].map((n, i) => `<button class="mt-pen-btn${E.pen === i ? " on" : ""}" data-act="mt-pen" data-i="${i}">${n}</button>`).join("")}
+        </div>
+        <div class="mt-tools"><button class="btn ghost small" data-act="mt-undo"${E.strokes.length ? "" : " disabled"}>上一筆</button><button class="btn ghost small" data-act="mt-clear"${E.strokes.length ? "" : " disabled"}>清空</button>
+          <select class="input mt-preset" id="mt-preset" aria-label="現成的畫"><option value="">現成的畫…</option>${(m.presets || []).map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("")}</select></div>
+        <p class="muted mt-count" id="mt-count">${E.strokes.length}／${L.strokes} 筆・墨 ${pts}／${L.points}</p>
+        <div class="mt-sec"><span>頭銜（挑 ${L.titles} 個以內）</span><button class="btn ghost small" data-act="mt-shuffle"${m.pool.length > L.titles ? "" : " disabled"}>刷新頭銜</button></div>
+        <div class="mt-chips">${m.pool.length ? m.pool.map(chip).join("") : '<p class="muted">還沒掙到頭銜。名聲、陣營、榜單、絕學……江湖上做出點事，這裡就有。</p>'}</div>
+        <div class="mt-sec"><span>自題一句（${L.motto} 字內，可以不寫）</span></div>
+        <input class="input" id="mt-motto" maxlength="${L.motto}" value="${esc(E.motto)}" placeholder="例：一劍霜寒十四州" aria-label="自題一句">
+        <p class="form-msg" id="mt-note" role="alert">${esc(E.note || "")}</p>
+        <button class="btn primary mt-go" data-act="mt-save"${m.made_left ? "" : " disabled"}>定稿</button>
+      </div></div>`;
+  }
+  // 工具列按了只換那一層（不重畫底下的頁面），畫布照 S.mtEdit 重新掛手勢
+  function mtEditRedraw() {
+    const old = document.querySelector(".mt-layer");
+    if (!old || !S.mtEdit) return;
+    const top = old.querySelector(".mt-edit-col")?.scrollTop || 0;
+    old.insertAdjacentHTML("afterend", mtEditHtml());
+    old.remove();
+    const col = document.querySelector(".mt-layer .mt-edit-col");
+    if (col) col.scrollTop = top;
+    mtPadReady();
+  }
+  function mtPadReady() {
+    const pad = document.getElementById("mt-pad");
+    const E = S.mtEdit;
+    if (!pad || !E) return;
+    const L = S.mingtie.limits;
+    let cur = null;
+    const at = (ev) => {
+      const r = pad.getBoundingClientRect();
+      return [Math.max(0, Math.min(L.width, Math.round(((ev.clientX - r.left) / r.width) * L.width))),
+        Math.max(0, Math.min(L.height, Math.round(((ev.clientY - r.top) / r.height) * L.height)))];
+    };
+    const paint = () => {
+      pad.innerHTML = mtStrokesSvg(cur ? [...E.strokes, cur] : E.strokes);
+      const n = document.getElementById("mt-count");
+      if (n) n.textContent = `${E.strokes.length + (cur ? 1 : 0)}／${L.strokes} 筆・墨 ${mtPoints(cur ? [...E.strokes, cur] : E.strokes)}／${L.points}`;
+    };
+    pad.addEventListener("pointerdown", (ev) => {
+      ev.preventDefault();
+      if (E.strokes.length >= L.strokes || mtPoints(E.strokes) >= L.points) { E.note = "畫布上的墨已經滿了：按「上一筆」或「清空」再畫。"; const n = document.getElementById("mt-note"); if (n) n.textContent = E.note; return; }
+      pad.setPointerCapture(ev.pointerId);
+      cur = [E.ink, E.pen, ...at(ev)];
+      paint();
+    });
+    pad.addEventListener("pointermove", (ev) => {
+      if (!cur) return;
+      ev.preventDefault();
+      const [x, y] = at(ev);
+      const lx = cur[cur.length - 2], ly = cur[cur.length - 1];
+      if (Math.abs(x - lx) + Math.abs(y - ly) < 4) return; // 太密的點不收：一張名帖的墨有上限
+      if (mtPoints(E.strokes) + (cur.length - 2) / 2 >= L.points) return;
+      cur.push(x, y);
+      paint();
+    });
+    const end = () => {
+      if (!cur) return;
+      E.strokes.push(cur);
+      cur = null;
+      mtEditRedraw();
+    };
+    pad.addEventListener("pointerup", end);
+    pad.addEventListener("pointercancel", end);
+  }
+  async function mtSave() {
+    const E = S.mtEdit;
+    if (!E) return;
+    const before = S.mingtie.mine ? S.mingtie.mine.version : 0;
+    await busy(async () => {
+      const r = await api("/api/mingtie/save", { strokes: E.strokes, titles: E.titles, motto: E.motto });
+      const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      if (r.mingtie) S.mingtie = r.mingtie;
+      if (r.mingtie && r.mingtie.mine && r.mingtie.mine.version > before) {
+        S.mtEdit = null;
+        toast(text || "名帖定稿了。");
+        render();
+      } else {
+        E.note = text;
+        mtEditRedraw();
+      }
+    });
+  }
+
   function pageNews() {
     const seg = `<div class="seg news-seg">${NEWS.map((n) => `<button class="${S.news === n.id ? "on" : ""}" data-act="news" data-news="${n.id}">${n.name}</button>`).join("")}</div>`;
     const m = S.main;
@@ -5027,6 +5216,7 @@
     else if (S.news === "chronicle") body = `<div class="card">${m.chronicle}</div>`;
     else if (S.news === "annals") body = annalsHtml(S.annals);
     else if (S.news === "boards") body = boardsHtml(S.boards);
+    else if (S.news === "mingtie") body = mingtieBoxHtml(S.mingtie);
     else body = `<div class="card">${m.latest || ""}${m.journal || ""}${m.older || ""}${!m.latest && !m.journal ? '<p class="muted">還沒有紀錄。</p>' : ""}</div>`;
     return seg + body;
   }
@@ -5110,6 +5300,7 @@
               ${a.fallen && a.fallen.length ? `<div class="row ad-row"><span class="ad-tag">人物</span><select class="input" id="ad-fallen" aria-label="叫回人物">${opts(a.fallen)}</select><button class="btn small" data-act="admin" data-op="revive_figure">叫他回來</button></div>` : ""}
               <div class="row"><button class="btn warn" data-act="admin" data-op="cancel_battle">⚠ 取消決戰</button></div>
               ${a.seal ? sealAdminHtml(a.seal) : ""}
+              ${a.mingtie && a.mingtie.length ? mingtieAdminHtml(a.mingtie) : ""}
               <p class="muted">重設密碼（朋友忘記密碼時用；臨時密碼私下告訴他）</p>
               <form id="reset-form"><div class="row"><input class="input" name="target" placeholder="帳號或名號"><input class="input" name="temp" placeholder="臨時密碼"><button class="btn small" type="submit">重設</button></div><p class="form-msg" role="alert"></p></form>` : ""}
           </section>` : ""}
@@ -5121,6 +5312,13 @@
   // 管理者「玉璽」一組（玉璽碎片設計第十二節，admin_choices.seal；碎片關著是 null，不畫）：七片與狀態、強制現世與璽動（下一場）、
   // 指定持有者、強制開單挑（正式伺服器只能掛在剛收場的時刻表決戰上，QA 開關開著才不必）、定結果、取消、隱沒判斷。按了照舊先問一次。字待 joy 潤
   const SEAL_STATES = { held: "懷中", hidden: "未現世", sunk: "不知所蹤" };
+  // 被檢舉的名帖（檢舉夠多次、大家都看不到的在前）：撤下＝畫與題字清掉、他再做一張；放回＝照舊給大家看。待 joy 潤
+  function mingtieAdminHtml(rows) {
+    return `<p class="muted">名帖檢舉</p><div class="mt-admin">${rows.map((x) => `<div class="mt-admin-row">${mtCardHtml(x.card, x.name, "thumb")}
+      <div><b>${esc(x.name)}</b><p class="muted">第 ${x.version} 版・${x.count} 人檢舉</p>
+      <div class="row wrap"><button class="btn warn small" data-act="admin" data-op="mingtie_remove" data-name="${esc(x.name)}" data-version="${x.version}">撤下</button><button class="btn small" data-act="admin" data-op="mingtie_restore" data-name="${esc(x.name)}" data-version="${x.version}">放回</button></div></div></div>`).join("")}</div>`;
+  }
+
   function sealAdminHtml(s) {
     const label = (x) => (x.state === "held" ? `${x.name}（${x.holder}懷中）` : `${x.name}（${SEAL_STATES[x.state] || x.state}）`);
     const canDuel = s.hung || s.qa;
@@ -5231,6 +5429,8 @@
       seal_duel: [`立刻對「${picked("ad-seal")}」開一場奪璽單挑，挑戰者 ${body.name}、局勢係數 ${body.factor}（上限照舊）：三分鐘後開打，確定？`, "確定開單挑"],
       seal_fix: [`正在打的奪璽單挑收場時${body.take ? "易主" : "懷璽不失"}（公告照常），確定？`, "確定"],
       seal_cancel: ["取消正在打（或下戰書中）的奪璽單挑：記成未分勝負，碎片留在原主，確定？", "確定取消"],
+      mingtie_remove: [`撤下 ${body.name} 的第 ${body.version} 版名帖：畫與自題那一句清掉（頭銜照留），他的江湖紀錄會寫一句，收過這一張的人也看不到了，確定？`, "確定撤下"],
+      mingtie_restore: [`放回 ${body.name} 的第 ${body.version} 版名帖：檢舉清掉、大家照舊看得到（檢舉過的人自己那裡照樣藏著），確定？`, "確定放回"],
       seal_sink_check: ["照隱沒的條件現在判一次：只列出下一次換季會沉哪幾片，不改，確定？", "確定"],
       // 蓋章的後果要寫明（審查 I2）：天命之季過後再換季，七片全部散去、每一位持有者都失去碎片
       seal_mandate: body.when === "cancel"
@@ -5336,6 +5536,7 @@
     S.forgeMade = null;
     S.book = false; // 武學譜是疊在煉製頁上的一本書：換分頁就闔上
     S.zhuan = null; clearTimeout(zhuanTimer); // 傳也一樣
+    S.mtEdit = null; S.mtZoom = null; // 名帖的畫布與放大的那一張也收起
     if (tab !== "map") stopPlay(); // 版圖變化的播放也停
     if (tab === "news") S.unseen = false;
     render();
@@ -5358,6 +5559,7 @@
       if (tab === "news" && S.news === "reports") await loadReports(null);
       if (tab === "news" && S.news === "annals") await loadAnnals();
       if (tab === "news" && S.news === "boards") await loadBoards();
+      if (tab === "news" && S.news === "mingtie") await loadMingtie();
     } catch (e) { /* api() 已經提示過 */ }
   }
 
@@ -6144,6 +6346,7 @@
             body.take = el.dataset.take === "1";
             body.when = el.dataset.when || ""; // 蓋天命之季：next／now（玉璽二）
           }
+          if (op.startsWith("mingtie_")) { body.name = el.dataset.name || ""; body.version = Number(el.dataset.version || 0); }
           if (op === "summon" || op === "give_opportunity" || op === "give_fragment") {
             body.name = (S.adPlayer && S.adPlayer.name) || "";
             if (op === "give_opportunity") {
@@ -6278,6 +6481,33 @@
         }
         case "map-zoom": mapZoom(el.dataset.step); break;
         case "map-home": mapHome(); break;
+        case "mt-edit": if (!S.mingtie) await loadMingtie(); mtEditOpen(); break;
+        case "mt-close": S.mtEdit = null; render(); break;
+        case "mt-ink": S.mtEdit.ink = Number(el.dataset.i); mtEditRedraw(); break;
+        case "mt-pen": S.mtEdit.pen = Number(el.dataset.i); mtEditRedraw(); break;
+        case "mt-undo": S.mtEdit.strokes.pop(); S.mtEdit.note = ""; mtEditRedraw(); break;
+        case "mt-clear": S.mtEdit.strokes = []; S.mtEdit.note = ""; mtEditRedraw(); break;
+        case "mt-title": {
+          const E = S.mtEdit, t = el.dataset.t, cap = S.mingtie.limits.titles;
+          if (E.titles.includes(t)) E.titles = E.titles.filter((x) => x !== t);
+          else if (E.titles.length < cap) E.titles = [...E.titles, t];
+          else { E.note = `頭銜最多 ${cap} 個：先點掉一個。`; }
+          mtEditRedraw();
+          break;
+        }
+        case "mt-shuffle": { // 刷新：從掙到的頭銜裡隨機換一批（只在這台裝置挑，定稿時伺服器再驗是不是你掙到的）
+          const pool = S.mingtie.pool.slice();
+          for (let k = pool.length - 1; k > 0; k--) { const j = Math.floor(Math.random() * (k + 1)); [pool[k], pool[j]] = [pool[j], pool[k]]; }
+          S.mtEdit.titles = pool.slice(0, S.mingtie.limits.titles);
+          mtEditRedraw();
+          break;
+        }
+        case "mt-save": await mtSave(); break;
+        case "mt-zoom-peer": if (S.peer && S.peer.card && S.peer.card.mingtie) { S.mtZoom = { name: S.peer.card.name, card: S.peer.card.mingtie }; render(); } break;
+        case "mt-zoom-mine": if (S.mingtie && S.mingtie.mine) { S.mtZoom = { name: S.main.status.name, card: S.mingtie.mine }; render(); } break;
+        case "mt-zoom-box": { const x = S.mingtie && S.mingtie.box[Number(el.dataset.i)]; if (x) { S.mtZoom = { name: x.name, card: x.card, when: [x.when, x.place].filter(Boolean).join("・") }; render(); } break; }
+        case "mt-unzoom": if (ev.target.closest(".mt-zoom-box") && el.classList.contains("mt-zoom-layer")) break; S.mtZoom = null; render(); break;
+        case "mt-report": await mtReport(); break;
         case "news":
           S.news = el.dataset.news;
           S.reportOpen = false;
@@ -6286,6 +6516,7 @@
           if (S.news === "reports") await loadReports(null);
           if (S.news === "annals") await loadAnnals();
           if (S.news === "boards") await loadBoards();
+          if (S.news === "mingtie") await loadMingtie();
           break;
         case "board": S.board = el.dataset.board; renderPage(); break;
         case "report":
@@ -6301,11 +6532,21 @@
   });
 
   document.addEventListener("input", mapQueryInput);
+  document.addEventListener("input", (ev) => { // 名帖的自題一句：只換畫布上那一行，不重畫（游標留著）
+    if (ev.target.id !== "mt-motto" || !S.mtEdit) return;
+    S.mtEdit.motto = ev.target.value;
+    const line = document.querySelector(".mt-layer .mt-motto");
+    if (line) line.textContent = S.mtEdit.motto ? `「${S.mtEdit.motto}」` : "";
+  });
 
   document.addEventListener("change", async (ev) => {
     if (ev.target.id === "anon") await doMain("anonymous", { value: ev.target.checked });
     if (ev.target.id === "hints-off") await doMain("hints_off", { value: ev.target.checked }); // 碰到才說的小提醒（新手引導計畫三）；打開時排著的清掉
     if (ev.target.dataset && ev.target.dataset.legend) onLegendTick(ev.target);
+    if (ev.target.id === "mt-preset" && S.mtEdit && ev.target.value) { // 名帖：換成一張現成的畫（之後照樣能再畫幾筆）
+      const art = (S.mingtie.presets || []).find((p) => p.id === ev.target.value);
+      if (art) { S.mtEdit.strokes = art.strokes.map((x) => x.slice()); S.mtEdit.note = ""; mtEditRedraw(); }
+    }
     if (ev.target.dataset && ev.target.dataset.act === "melt-view") { // 批量熔煉的篩選與排序
       meltView()[ev.target.dataset.key] = ev.target.value;
       renderPage();
@@ -6406,6 +6647,11 @@
         if (i == null || !(n >= 1)) return;
         S.peer.amountFor = null;
         await peerAct(i, false, n, data.choice || "");
+      } else if (form.id === "peer-text") {
+        const i = S.peer ? S.peer.textFor : null;
+        if (i == null) return;
+        S.peer.textFor = null;
+        await peerAct(i, false, 0, "", (data.text || "").trim());
       } else if (form.id === "create-form") {
         submit.disabled = true;
         enter(await api("/api/character", data));
