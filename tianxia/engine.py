@@ -7569,7 +7569,8 @@ class Game:
             name = c.config.legend_item_name
             record.materials.append(f"{name} ×1")
             msgs += [f"獲得 【{name}】一枚——{c.config.legend_item_note}", f"{name} +1"]
-        gear, gains = treasures.sortie_rare(s, c, season, record.id)
+        gear, gains, paid = treasures.sortie_rare(s, c, season, record.id)
+        record.silver = (record.silver or 0) + paid  # 掉落池都有了換的銀兩也算進得失（FB-434）
         record.notes += gear
         record.materials += gains  # 得失那一格照挑戰本人寫「寶物【X】」「良駒【X】」（FB-430）
         return msgs + gear

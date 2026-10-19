@@ -429,12 +429,13 @@ SORTIE_TREASURE = "敵陣裡翻出一件好東西。"  # 待 joy 潤：出陣掉
 SORTIE_HORSE = "敵將棄下的坐騎還繫在營外。"  # 待 joy 潤：出陣掉良駒那一句（接著 GOT_HORSE）
 
 
-def sortie_rare(state: GameState, content: Content, season: int, record_id: int) -> tuple[list[str], list[str]]:
+def sortie_rare(state: GameState, content: Content, season: int, record_id: int) -> tuple[list[str], list[str], int]:
     """出陣攻打贏另擲寶物與良駒（2.6；Config.sortie）：寶物從挑戰本人的掉落池抽你還沒有的（都有了換銀兩），帳另記一本
     （PlayerState.sortie_treasures，一季 treasure_cap 件，不讀挑戰本人的額度）；良駒一季 horse_cap 匹。那一欄關著、到了上限、
     裝備庫滿了都不擲也不記。自己一份亂數（出陣稀有|季數|名號|戰報流水號|用途），不碰 Game.rng。
-    回（江湖紀錄的話, 戰報「得失」那一格的字〔寶物【X】、良駒【X】，FB-430〕）。"""
+    回（江湖紀錄的話, 戰報「得失」那一格的字〔寶物【X】、良駒【X】，FB-430〕, 掉落池都有了換的銀兩〔算進得失的銀兩，FB-434〕）。"""
     p, cfg = state.player, content.config.sortie
+    silver = p.stats.get("silver", 0)
     lines: list[str] = []
     gains: list[str] = []
     seed = f"出陣稀有|{season}|{p.name}|{record_id}"
@@ -446,7 +447,7 @@ def sortie_rare(state: GameState, content: Content, season: int, record_id: int)
             and random.Random(seed + "|良駒").random() < cfg.rare_horse):
         p.sortie_horses += 1
         lines += [SORTIE_HORSE, *_give_horse(state, content, random.Random(seed + "|良駒抽"), hold=False, got=gains)]
-    return lines, gains
+    return lines, gains, p.stats.get("silver", 0) - silver
 
 
 # ---- 機器人（設計第九節）：整季機器人與伺服器假人共用 ----

@@ -90,6 +90,21 @@ def test_rare_drops_hit_with_their_own_dice_and_respect_the_caps():
     assert p.sortie_treasures == 1 and p.sortie_horses == 1  # 一季的上限
 
 
+def test_a_full_treasure_pool_pays_silver_into_the_report(monkeypatch):
+    """FB-434：掉落池都拿齊了，擲中換成 dup_silver 兩，這筆也算進得失的銀兩（以前得失寫 +103、手上多了 153）。"""
+    from tianxia import treasures
+
+    game = _game()
+    cfg = game.content.config.sortie
+    cfg.rare_legend, cfg.rare_treasure, cfg.rare_horse = 0.0, 1.0, 0.0
+    monkeypatch.setattr(treasures, "pick_pool", lambda *a, **k: None)
+    p = game.state.player
+    silver = p.stats["silver"]
+    record, _ = _attack(game)
+    assert p.stats["silver"] - silver == record.silver
+    assert record.silver >= game.content.config.treasures.dup_silver
+
+
 def test_season21_allows_three_sortie_treasures():
     assert real_content("season21").config.sortie.treasure_cap == 3
     assert real_content("weekend").config.sortie.treasure_cap == 2
