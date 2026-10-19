@@ -245,11 +245,12 @@ def recipe_text(content: Content, key: str | None) -> str | None:
 def new_weapon(
     state: GameState, *, name: str, kind: str, attribute: str, tier: int, quality: str, recipe: str | None = None,
     secret: str | None = None, original: bool = False, copy_of: str | None = None, named_entry: str | None = None,
+    collected: bool = False,
 ) -> Weapon:
     """新的一把（四欄共用的流水號 +1，id「兵:N」）；recipe 是自己打的那一把的配方鍵，買的與掉落的沒有；secret 是名器或神器的隱藏配方 id；
     original／copy_of 是神器的原品與仿品（copy_of 記「鑄|配方 id」，打造隱藏配方設計 5.3）。"""
     return Weapon(id=equipment.next_id(state, "weapon"), name=name, kind=kind, attribute=attribute, tier=tier, quality=quality,
-                  recipe=recipe, secret=secret, original=original, copy_of=copy_of, named_entry=named_entry)
+                  recipe=recipe, secret=secret, original=original, copy_of=copy_of, named_entry=named_entry, collected=collected)
 
 
 def rack_full(state: GameState, content: Content) -> bool:

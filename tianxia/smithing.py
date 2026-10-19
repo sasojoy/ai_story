@@ -98,6 +98,10 @@ def forge_problem(state: GameState, content: Content, kind: str, main: str, aux:
             return f"{content.materials[mid].name}不夠（要 {need} 個）"
     if equipment.rack_full(state, content, slot_of(kind)):
         return weapons.RACK_FULL
+    if state.world.divine_lineup is not None:  # 神器輪替季：同一件神器一人一把（正式季整合 5.8），再開那一爐先擋下
+        recipe = forge_secrets.match(content, state.world.tianji, slot_of(kind), kind, main, aux, state.world)
+        if recipe is not None and recipe.divine and forge_secrets.owns_divine(state.player, recipe.id):
+            return forge_secrets.HAVE_DIVINE
     short = price(content, tier_of(content, main), slot_of(kind), state) - state.player.stats.get("silver", 0)
     return f"還差 {short} 兩" if short > 0 else None
 
@@ -234,7 +238,8 @@ def forge(
     what = f"兩份{m.name}" if main == aux else f"{m.name}與{a.name}"
     secret_id = secret.id if secret is not None else None
     gear = {"original": divine and first, "copy_of": forge_secrets.key(secret) if divine and not first else None,
-            "named_entry": entry.id if entry is not None else None}
+            "named_entry": entry.id if entry is not None else None,
+            "collected": divine and state.world.divine_lineup is not None}  # 輪替季打的神器跨季帶著走（正式季整合 5.8）
     if slot == "armor":
         item = armor.new_armor(state, name=name, attribute=attribute, tier=tier, quality=quality, recipe=key, secret=secret_id, **gear)
     else:

@@ -102,12 +102,12 @@ def shop_item(attribute: str) -> Equipment:
 
 def new_armor(
     state: GameState, *, name: str, attribute: str, tier: int, quality: str, recipe: str | None = None, secret: str | None = None,
-    original: bool = False, copy_of: str | None = None, named_entry: str | None = None,
+    original: bool = False, copy_of: str | None = None, named_entry: str | None = None, collected: bool = False,
 ) -> Equipment:
     """新的一件（四欄共用的流水號 +1，id「甲:N」）；recipe 是自己打的那一件的組合鍵（「鎧|主料+輔料」），買的沒有；secret 是名器或神器的
     隱藏配方 id；original／copy_of 是神器的原品與仿品（打造隱藏配方設計 5.3、5.6）。"""
     return Equipment(id=equipment.next_id(state, "armor"), slot="armor", name=name, attribute=attribute, tier=tier, quality=quality,
-                     recipe=recipe, secret=secret, original=original, copy_of=copy_of, named_entry=named_entry)
+                     recipe=recipe, secret=secret, original=original, copy_of=copy_of, named_entry=named_entry, collected=collected)
 
 
 def rack_full(state: GameState, content: Content) -> bool:

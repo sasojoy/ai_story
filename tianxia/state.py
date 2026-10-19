@@ -180,6 +180,9 @@ class Equipment(BaseModel):
     signature: str | None = None
     # 以器配招（玩家武學追上本命）：神器原品的主人綁的那一門絕學 id（那一門的絕招照 GeneralTrait.ultimate_bond 加強）；None＝沒綁
     bound_art: str | None = None
+    # 神器輪替季打出來的神器（原品、仿品；正式季整合 5.8）：換季時帶著走（放進裝備庫、以器配招清掉）、本人 wear_level 級才穿得上；
+    # 上線前打的三階神器、名將本命兵器不是
+    collected: bool = False
     heirloom: bool = False  # 傳承（玉璽碎片的抄本，玉璽碎片設計 7.4）：不進裝備庫、不能換下、贈、拆、交懸賞
 
 

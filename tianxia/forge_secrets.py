@@ -82,6 +82,16 @@ def key_for(secret_id: str) -> str:
     return PREFIX + secret_id
 
 
+HAVE_DIVINE = "你已經有這一件神器了"  # 待 joy 潤：同一件神器一人一把（正式季整合 5.8），再開那一爐先擋下
+DIVINE_FIRST_FOREVER = "這是一{unit}神器，這門鑄法全江湖只有這一{unit}原品——到修練頁的裝備庫替它定名。"  # 待 joy 潤：輪替季的原品（全服一把）
+
+
+def owns_divine(p: PlayerState, recipe_id: str) -> bool:
+    """身上、裝備庫、寄放裡已經有這一件神器（原品或仿品；名將本命兵器不算）。"""
+    key = PREFIX + recipe_id
+    return any(item.signature is None and (item.original and item.secret == recipe_id or item.copy_of == key) for item in owned_gear(p))
+
+
 def owned_gear(p: PlayerState) -> list[Equipment]:
     """身上的兵器與防具、裝備庫、寄放的每一件（名器與神器的名字重寫、找原品都照這一份）。"""
     return [item for item in (p.weapon, p.armor, *p.rack, *p.held_gear) if item is not None]
@@ -134,7 +144,8 @@ def arrival(state: GameState, content: Content, recipe: ForgeSecret, find: GearF
     me = state.player.name
     if recipe.divine:
         if first:
-            lines.append(rule.divine_line.format(unit=equipment.unit_for(recipe.slot, find.kind)))
+            line = DIVINE_FIRST_FOREVER if state.world.divine_lineup is not None else rule.divine_line  # 輪替季：原品全服一把，不寫「這一季」
+            lines.append(line.format(unit=equipment.unit_for(recipe.slot, find.kind)))
         elif find.owner == me:
             lines.append(rule.copy_mine_line)
         else:
