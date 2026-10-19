@@ -614,12 +614,13 @@ class Game:
         fresh.player.battle_results_seen = old.player.battle_results_seen  # 補送過的決戰不再補一次（FB-027）
         fresh.player.heirloom = old.player.heirloom  # 玉璽碎片的抄本與補送的進度跨季帶走（玉璽碎片設計 7.5；同步時本來就照登記重抄）
         # 神器輪替與收集（正式季整合 5.8）：輪替季打的神器（collected）跨季帶走、放進裝備庫，以器配招清掉，品質淬煉磨損照舊；
-        # 流水號接著走（帶過來的 id 不會跟新打的撞）；鑄譜上打中過的神器記得（forge_secrets.divine_solved）
+        # 帶了東西過來流水號才接著走（帶過來的 id 不會跟新打的撞；沒帶的照上線前重來，FB-401）；鑄譜上打中過的神器記得（forge_secrets.divine_solved）
         carried = [item for item in forge_secrets.owned_gear(old.player) if item.collected and item.signature is None]
         for item in carried:
             item.bound_art = None
         fresh.player.rack = carried + fresh.player.rack
-        fresh.player.weapon_serial = max(fresh.player.weapon_serial, old.player.weapon_serial)
+        if carried:
+            fresh.player.weapon_serial = max(fresh.player.weapon_serial, old.player.weapon_serial)
         fresh.player.divine_solved = dict(old.player.divine_solved)
         fresh.player.seal_seen = old.player.seal_seen
         fresh.player.seen_real = old.player.seen_real

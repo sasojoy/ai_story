@@ -59,7 +59,9 @@ def active(content: Content, tianji: int, season: WorldState | None = None) -> l
     for group, count in content.config.forge_secrets.per_season.items():
         if count <= 0 or not equipment.on(content, group.partition(":")[0]) or (lineup is not None and group.endswith(":divine")):
             continue
-        pool = sorted((r for r in content.forge_secrets.values() if group_of(r) == group), key=lambda r: _rank(tianji, r.id))
+        # 沒蓋輪替章的季（開關關著、上線那一刻正在跑的季）照舊只從原本那九件挑：第二批起的新神器（wave 2…）只靠輪替現世（FB-401）
+        pool = sorted((r for r in content.forge_secrets.values() if group_of(r) == group and (not r.divine or r.wave == 1)),
+                      key=lambda r: _rank(tianji, r.id))
         if per_kind and group == "weapon:divine":
             first: dict[str | None, ForgeSecret] = {}
             for recipe in pool:

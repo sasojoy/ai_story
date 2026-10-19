@@ -42,6 +42,23 @@ def test_divines_cross_the_season_in_the_rack():
     assert forge_secrets.unnamed_originals(jia.state, w) == {item.id: c.forge_secrets[SWORD].name}  # 第二季照樣能定名
 
 
+def test_without_carried_divines_the_serial_starts_over():
+    """FB-401：沒帶神器過季（輪替關著、手上沒有輪替季的神器）時，四欄流水號照上線前重來；帶了才接著走（上一個測試）。"""
+    import random
+
+    from tianxia.engine import Game
+
+    c = _content(rotation=False)
+    w = _opened(c)
+    jia = _smith(c, w, "甲")
+    p = jia.state.player
+    p.rack += [weapons.new_weapon(jia.state, name=f"尋常劍{i}", kind="劍", attribute="快", tier=1, quality="下品") for i in range(3)]
+    assert p.weapon_serial >= 3
+    _roll(c, w, jia)
+    fresh = Game.new(c, "乙", rng=random.Random(0), world=w).state.player.weapon_serial
+    assert jia.state.player.rack == [] and jia.state.player.weapon_serial == fresh
+
+
 def test_below_level_fifteen_divines_wait_in_the_rack():
     """Review Focus 4：14 級打出來的神器進裝備庫（裝備庫滿了也放得進）、換不上、鐵匠鋪不列「換上」；15 級穿得上。"""
     c = _content()
