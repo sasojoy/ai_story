@@ -518,7 +518,9 @@ def generate_turn(client: OllamaClient | None, messages: list[dict[str, str]]) -
     if client is None:
         raise DialogueUnavailable("沒有可用的模型")
     try:
-        turn = client.chat_structured(messages, CompanionTurn, num_predict=TURN_PREDICT, required_fields=["options"])
+        turn = client.chat_structured(
+            messages, CompanionTurn, num_predict=TURN_PREDICT, required_fields=["options"], require_in_schema=True,
+        )
         # 模型常夾雜簡體字（提示裡寫了也只部分改善），所以在輸出端確定性地轉成繁體。
         # option_tags 也要轉：好感度查表是精確比對，模型寫成簡體的 tag（實機見過「由衷讚赏」）會落空。
         return turn.model_copy(update={

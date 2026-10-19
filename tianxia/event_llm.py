@@ -211,8 +211,9 @@ def _score(client: OllamaClient | None, event: Event, action: str) -> int | None
         )},
     ]
     try:
-        # 這一次的提示與呼叫**不能動**（CLAUDE.md；FB-223 的守門測試連 num_predict 都釘著預設 1024）：
-        # 丁批 QA 量到動它會讓分數整體移動。沒出過截斷，就不要為了「統一」去碰它。
+        # 這一次的提示與呼叫**一個字都不能動**（CLAUDE.md；FB-223 的守門測試連 kwargs 都要一字不差）：
+        # 丁批 QA 量到動它會讓分數整體移動。所以不加 num_predict、也不加 require_in_schema
+        # （chat_structured 的預設就是不動 schema，正是為了這一條）。
         result = client.chat_structured(messages, SuccessRateJudgment, temperature=0.3, required_fields=["success_rate"])
     except Exception as e:
         logger.warning("隨口應對評估失敗，用保底 %s：%r", DEFAULT_FREE_TEXT_SUCCESS_RATE, e)
