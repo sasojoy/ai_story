@@ -9,7 +9,7 @@ import hashlib
 import json
 import re
 
-from . import arena, armor, bounties, economy, equipment, forge_secrets, mounts, rules, skillview, smithing, tactics, team, territory, weapons
+from . import arena, armor, bounties, economy, equipment, forge_secrets, four_tiers, mounts, rules, skillview, smithing, tactics, team, territory, weapons
 from . import duel as duel_rules
 from .characters import name_key
 from .models import MOVES, WEAPON_KINDS, Content
@@ -22,6 +22,7 @@ SMITH_SITUATIONS = (
     "short_silver", "rack_full", "refused",
     "sell", "upgrade",  # 素材與經濟（2026-10-15）：收購、升階做成了（句子待 joy 潤）
     "black_market",  # 名聲 5.2：寇照黑市價賣成了
+    "rules",  # 素材四階（正式季整合 5.10）：背包有四階時鐵匠講的神器規矩（next_rule 輪著講；放在畫面哪裡等對比圖）
 )
 # 馬市（第三節）、懸賞榜（第四節）的情況：灰掉的鈕在 Game.choose 的選單那一關就擋下，short_silver、rack_full、held_full、refused
 # 多半只在兩個分頁搶的時候出現
@@ -100,7 +101,7 @@ def forged_key(item: Equipment) -> str:
     """打完一爐那一句照什麼分（1.4）：神器（原品、仿品）＞名器＞品質。"""
     if item.original or item.copy_of is not None:
         return "forge_divine"
-    if item.secret is not None:
+    if equipment.is_named(item):  # 隱藏配方的名器、四階擲出的名器（正式季整合 5.2）
         return "forge_named"
     return FORGED_KEYS.get(item.quality, "forge_low")
 
@@ -121,6 +122,27 @@ def line_text(state: GameState, content: Content, shop: str) -> str:
         return ""
     digest = hashlib.sha256(f"{p.name}|{key}|{p.shop_line_seed}".encode()).digest()
     return lines[int.from_bytes(digest[:4], "big") % len(lines)]
+
+
+def next_rule(state: GameState, content: Content) -> str:
+    """鐵匠講的神器規矩（素材四階，正式季整合 5.10）：素材四階開著、背包至少有一個四階時，挑這一季還沒講過的下一句（照
+    content/shop_lines.json smith.rules 的順序），記進 PlayerState.smith_rules_told；講完一輪從頭。其餘是空字串。
+    只看「有沒有四階」，跟是哪幾種四階無關（不講看了背包才說得出的話）；句子本身不講任何一件神器的配方。進鐵匠鋪時叫一次。"""
+    p = state.player
+    pool = content.shop_lines.get("smith", {}).get("rules") or []
+    if not (four_tiers.on(content) and pool and any(n > 0 and four_tiers.tier4_id(content, mid) for mid, n in p.materials.items())):
+        return ""
+    if len(set(p.smith_rules_told)) >= len(pool):
+        p.smith_rules_told = []
+    index = next(i for i in range(len(pool)) if i not in p.smith_rules_told)
+    p.smith_rules_told.append(index)
+    return pool[index]
+
+
+def rule_line(state: GameState) -> str:
+    """店面資料上的「鐵匠的規矩」那一句（等企劃者挑對比圖決定放哪裡，網頁先不畫）：鐵匠順口講配方線索的那一下不講規矩（線索比規矩重要）。"""
+    p = state.player
+    return "" if p.shop_clue else p.smith_rule
 
 
 # ── 鐵匠鋪（第二節）──
@@ -299,6 +321,8 @@ def smith_line(state: GameState, content: Content, world: WorldStateStore, kind:
         tier=equipment.TIER_WORDS[tier], price=price, divine=divine,
         odds=[{"q": q, "pct": round(w)} for q, w in odds.odds.items()] if odds is not None else None,
         reasons=list(odds.reasons) if odds is not None else [], head=head,
+        # FB-341：主料是四階時同一步一步選單的開爐鈕，多「四階的料，打出名器的機會很大」（不寫百分比、不寫神器）
+        named_hint=smithing.NAMED_HINT if not divine and four_tiers.named_chance(content, main, aux) > 0 else "",
         problem=smithing.forge_problem(state, content, kind, main, aux),
         go=GO_TEXT.format(price=price) + territory.price_note(state, content),  # 名聲 4.1：工錢後面寫原因
     )
@@ -315,6 +339,7 @@ def smith_view(state: GameState, content: Content, world: WorldStateStore) -> di
         "sign": f"{content.locations[p.location].name}{SMITH_SIGN}",
         "silver": p.stats.get("silver", 0),
         "line": line_text(state, content, "smith"),
+        "rule": rule_line(state),  # 鐵匠講的神器規矩（正式季整合 5.10；畫面還沒畫）
         "back": "smith:back",
         "page": page,
         "pages": [{"slot": s, "label": PAGE_NAMES[s], "id": f"smith:page:{s}"} for s in equipment.SMITH_PAGES if equipment.on(content, s)],
@@ -355,11 +380,13 @@ def trade_view(state: GameState, content: Content, day: int) -> dict | None:
             have = state.player.materials.get(low.id, 0)
             upgrade.append({
                 "attribute": attribute, "tier": tier, "name": high.name, "id": high.id, "from": low.name, "from_id": low.id,
-                "need": econ.upgrade_need[tier], "have": have,
-                "cost": economy.upgrade_cost(state, content, tier), "left": economy.upgrade_left(state, content, tier, day),
+                "need": (need := economy.upgrade_needs(content)[tier]), "have": have,
+                "cost": economy.upgrade_cost(state, content, tier), "left": (left := economy.upgrade_left(state, content, tier, day)),
+                # 格子上的上限字（FB-342）：三換四是這一季的，其餘是今天的；不限是空字串
+                "left_text": "" if left is None else (UP_LEFT_SEASON if tier == four_tiers.TIER else UP_LEFT_DAY).format(n=left),
                 "cost_note": territory.price_note(state, content),  # 名聲 4.1：工錢後面寫原因（關著是空的）
                 "problem": problem,
-                "short": _upgrade_short(problem, have, econ.upgrade_need[tier]),  # 素材頁格子上寫的短原因
+                "short": _upgrade_short(problem, have, need),  # 素材頁格子上寫的短原因
                 "odds": economy.upgrade_odds(content, attribute, tier),  # 「五成出流雲絮，其餘隨機」
                 "same_share": (share := economy.upgrade_outcomes(content, attribute, tier)[0][1]),
                 "lean": economy.share_word(share) if share < 1 else "",  # 素材頁格子上的短寫「五成」；一定照投入的屬性是空的
@@ -369,10 +396,16 @@ def trade_view(state: GameState, content: Content, day: int) -> dict | None:
 
 UP_SHORT_HAVE = "手上 {have}／{need}"  # 待 joy 潤：素材頁升階格子上的短原因
 UP_SHORT_DAY = "明日再來"
+UP_SHORT_SEASON = "這一季滿了"  # 待 joy 潤：三換四這一季換滿了（正式季整合 4.5）
+NOT_SOLD_NOTE = {False: "三階不收，留著打神器", True: "四階不收，留著打神器"}  # 收購標題最後那一段，照素材四階開著沒（待 joy 潤）
 SELL_EMPTY = "背包裡沒有收得了的素材。"  # 待 joy 潤
 # 素材頁最上面那一格還沒做事時的一句（做了事換成結果；待 joy 潤）。照開關寫（FB-272）：升階關著不提熬；開著時不說「只能」
 # （找素材、打贏也撿得到高階的料）
 UPGRADE_HINT = "熬出來的料{share}是同一個屬性，其餘隨機落到別的屬性。鐵匠不賣素材，高階的料得自己熬。"
+# 素材四階開著時（FB-342；待 joy 潤）：一換二、二換三照舊隨機，三換四一定同屬性
+UPGRADE_HINT_FOUR = "一換二、二換三熬出來的料{share}是同一個屬性，其餘隨機落到別的屬性；三換四一定是同一個屬性。鐵匠不賣素材，高階的料得自己熬。"
+UP_LEFT_DAY = "今天還能 {n} 個"  # 待 joy 潤：升階格子上的上限（FB-342：字由伺服器給，網頁不寫死）
+UP_LEFT_SEASON = "這一季還能 {n} 個"  # 待 joy 潤：三換四一季的上限
 TRADE_HINT = "鐵匠不賣素材，高階的料得自己熬。"  # 升階開著、一定照投入的屬性（upgrade_same_share 1）
 SELL_ONLY_HINT = "鐵匠只收素材，不賣素材。"  # 升階關著、收購開著
 
@@ -383,17 +416,22 @@ def _upgrade_short(problem: str | None, have: int, need: int) -> str | None:
         return None
     if problem == economy.UPGRADE_DAY_FULL:
         return UP_SHORT_DAY
+    if problem == economy.UPGRADE_SEASON_FULL:
+        return UP_SHORT_SEASON
     if have < need and problem not in (economy.UPGRADE_NO_WAY, economy.UPGRADE_NO_KIND):  # upgrade_problem 照這個順序擋：料不夠排在錢之前
         return UP_SHORT_HAVE.format(have=have, need=need)
     return problem
 
 
-def _trade_hint(econ) -> str:
-    """素材頁還沒做事時那一句（FB-272）：升階關著（只剩收購）不提熬；升階開著、出來的屬性隨機時寫幾成是同一個屬性。"""
+def _trade_hint(content: Content) -> str:
+    """素材頁還沒做事時那一句（FB-272）：升階關著（只剩收購）不提熬；升階開著、出來的屬性隨機時寫幾成是同一個屬性；
+    素材四階開著時另說三換四一定同屬性（FB-342）。"""
+    econ = content.config.economy
     if not econ.upgrade:
         return SELL_ONLY_HINT
     if econ.upgrade_same_share < 1:
-        return UPGRADE_HINT.format(share=economy.share_word(econ.upgrade_same_share))
+        hint = UPGRADE_HINT_FOUR if four_tiers.TIER in economy.upgrade_needs(content) else UPGRADE_HINT
+        return hint.format(share=economy.share_word(econ.upgrade_same_share))
     return TRADE_HINT
 
 
@@ -401,18 +439,23 @@ def _trade_captions(content: Content, state: GameState | None = None) -> dict:
     """素材頁兩段的標題（照 Config 的數字寫；開著的那一段才有）與收購沒東西時那一句。待 joy 潤。
     state 給了照這個人的收購價寫（名聲 5.2：寇的黑市價，標題後面多「黑市價」）。"""
     econ = content.config.economy
-    out: dict = {"up_cap": "", "sell_cap": "", "sell_empty": SELL_EMPTY, "hint": _trade_hint(econ)}
+    out: dict = {"up_cap": "", "sell_cap": "", "sell_empty": SELL_EMPTY, "hint": _trade_hint(content)}
     if econ.upgrade:
-        steps = "、".join(f"{TIER_NAMES.get(t - 1, '')}{rules.count_word(n)}個換一個{TIER_NAMES.get(t, '')}" for t, n in sorted(econ.upgrade_need.items()))
-        limits = "、".join(f"{TIER_NAMES.get(t, '')}一天{rules.count_word(n)}個" for t, n in sorted(econ.upgrade_per_day.items()))
+        needs = economy.upgrade_needs(content)
+        steps = "、".join(f"{TIER_NAMES.get(t - 1, '')}{rules.count_word(n)}個換一個{TIER_NAMES.get(t, '')}" for t, n in sorted(needs.items()))
+        if four_tiers.on(content):  # 素材四階：不設每日上限，三換四一季幾個（正式季整合 4.2、4.5）
+            limits = f"{TIER_NAMES[four_tiers.TIER]}一季{four_tiers.count_text(content.config.four_tiers.season_cap)}個" if four_tiers.TIER in needs else ""
+        else:
+            limits = "、".join(f"{TIER_NAMES.get(t, '')}一天{rules.count_word(n)}個" for t, n in sorted(econ.upgrade_per_day.items()))
         out["up_cap"] = f"升階（同屬性的{steps}{f'；{limits}' if limits else ''}）"
     if econ.sell:
         price_of = (lambda t: economy.sell_price_for(state, content, t)) if state is not None else (lambda t: econ.sell_price[t])  # noqa: E731
-        prices = [f"{TIER_NAMES.get(t, '')} {price_of(t)} 兩" for t in sorted(econ.sell_price)]
+        tiers = economy.sell_tiers(content)
+        prices = [f"{TIER_NAMES.get(t, '')} {price_of(t)} 兩" for t in tiers]
         if prices:
             prices[0] = prices[0].replace(" ", "一個 ", 1)  # 「一階一個 2 兩、二階 6 兩」（同玩法說明）
-        dark = state is not None and any(economy.black_market(state, content, t) for t in econ.sell_price)
-        out["sell_cap"] = f"收購（{'、'.join(prices)}{'，' + BLACK_MARKET_CAP if dark else ''}；三階不收，留著打神器）"
+        dark = state is not None and any(economy.black_market(state, content, t) for t in tiers)
+        out["sell_cap"] = f"收購（{'、'.join(prices)}{'，' + BLACK_MARKET_CAP if dark else ''}；{NOT_SOLD_NOTE[four_tiers.on(content)]}）"
     return out
 
 
@@ -420,10 +463,11 @@ def _trade_captions(content: Content, state: GameState | None = None) -> dict:
 DONATE_SIGN = "{place}・{faction}軍需帳"  # 待 joy 潤：招牌
 DONATE_CAP = "背包的素材（點一下挑要捐的；{points}）"  # 待 joy 潤
 DONATE_EMPTY = "背包裡沒有素材。"  # 待 joy 潤
+DONATE_TIER4_ONLY = "軍需官只收一到三階的料，四階的留著打神器。"  # 待 joy 潤（FB-343）：背包裡只剩四階（四階不能捐，正式季整合 4.6）
 # 軍需帳最上面那一格還沒捐時的一句（捐了換成結果；待 joy 潤）：第一季規則開著時記貢獻
 DONATE_HINT = "捐的記進陣營的軍備，也替陣營推一點大勢。"  # 豪強推的是割據，不寫「戰線」
 DONATE_HINT_S1 = "捐的記成貢獻、記進陣營的軍備，也替陣營推一點大勢。"
-TIER_NAMES = {1: "一階", 2: "二階", 3: "三階"}
+TIER_NAMES = {1: "一階", 2: "二階", 3: "三階", 4: "四階"}
 BLACK_MARKET = "（黑市價）"  # 名聲 5.2：寇賣素材的鈕上（待 joy 潤）
 BLACK_MARKET_CAP = "照黑市價收"  # 收購那一段的標題
 
@@ -465,7 +509,8 @@ def donate_view(state: GameState, content: Content, day: int) -> dict:
         "room_text": economy.DONATE_LEFT.format(n=room) if room > 0 else economy.DONATE_FULL.format(cap=econ.donate_daily_cap),
         "caption": DONATE_CAP.format(points=points_text),
         "hint": DONATE_HINT_S1 if rules.season_one(content, state.world) else DONATE_HINT,
-        "empty": DONATE_EMPTY,
+        "empty": DONATE_TIER4_ONLY if not cells and any(  # FB-343：只剩四階時說四階不收，不說沒有素材
+            n > 0 and four_tiers.tier4_id(content, mid) for mid, n in p.materials.items()) else DONATE_EMPTY,
         "cells": cells,
     }
 
@@ -482,7 +527,7 @@ def glow_of(item: Equipment) -> str:
         return "redgold"
     if item.copy_of is not None:
         return "red"
-    if item.secret is not None:
+    if equipment.is_named(item):
         return "purple"
     return GLOWS.get(item.quality, "none")
 
@@ -625,6 +670,9 @@ def board_view(state: GameState, content: Content, world: WorldStateStore) -> di
             "due": bounties.due_line(state, content, b), "short": bounties.due_short(b, content, state.world), "prize": PRIZE_SHORT if bounties.has_prize(content, b) else "",
             "held": b.id in mine_ids, "have": "",
         }
+        tags = bounties.reward_tags(state, content, b)
+        if tags is not None:  # 21 天季（第 5 批畫面第三組丙）：紙上的小籤、告示角上寫銀兩的小朱印、照等級的那一句
+            note.update(tags=tags, corner=bounties.reward_bits(state, content, b).silver_short, level=bounties.level_note(state, content, b))
         rank = 2
         if b.id in mine_ids:
             rank = 0

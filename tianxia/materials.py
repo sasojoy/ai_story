@@ -18,7 +18,7 @@ from .insights import PAIR_ATTRIBUTES
 from .models import Content, Material, Squad
 from .state import GameState
 
-TIER_NAMES = {1: "凡品", 2: "靈品", 3: "天品"}
+TIER_NAMES = {1: "凡品", 2: "靈品", 3: "天品", 4: "神品"}  # 神品：四階，神器的料（正式季整合 4.4；待 joy 潤）
 
 # 沒寫 drops 的對手走這張表（設計 §4.1）：難度上限 -> [(階, 機率), ...]。
 # 內容不必每隻敵人都填掉落，難度本身就是強弱的唯一指標（見 models.Squad 的說明）。
@@ -152,17 +152,18 @@ GRAIN_ATTRIBUTE = "慢"
 
 
 def _grain_value(content: Content, material: Material) -> int:
-    """一個素材算幾份糧草（Config.grain_values，凡、靈、天）；階超出表的照最後一格。"""
+    """一個素材算幾份糧草（Config.grain_values，凡、靈、天）；階超出表的（四階神品，正式季整合 4.6）不算糧草，是 0。"""
     values = content.config.grain_values
-    return values[min(material.tier, len(values)) - 1] if values else 0
+    return values[material.tier - 1] if 1 <= material.tier <= len(values) else 0
 
 
 def _grain_in_bag(state: GameState, content: Content) -> list[tuple[Material, int]]:
-    """背包裡的慢屬性素材，低階在前（同階照內容順序）。"""
+    """背包裡算糧草的慢屬性素材（不在 Config.grain_values 表上的階不算，四階不會被押糧車吃掉），低階在前（同階照內容順序）。"""
     order = {mid: i for i, mid in enumerate(content.materials)}
     items = [
         (content.materials[mid], n) for mid, n in state.player.materials.items()
         if mid in content.materials and n > 0 and content.materials[mid].attribute == GRAIN_ATTRIBUTE
+        and _grain_value(content, content.materials[mid]) > 0
     ]
     return sorted(items, key=lambda pair: (pair[0].tier, order.get(pair[0].id, 0)))
 

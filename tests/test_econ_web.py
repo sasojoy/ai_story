@@ -88,6 +88,14 @@ def test_the_materials_page_puts_upgrades_above_selling(smith):
     assert "smith-hero" not in html  # 爐火只在架上頁
 
 
+def test_the_three_to_four_cell_counts_the_season_not_today():
+    """FB-342：升階格的上限字照伺服器給的（三換四是「這一季還能」），網頁不再寫死「今天」。"""
+    game = _game(bag={"gang_3": 5}, silver=1000)
+    game.choose("act:smith")
+    html = run(server.main_view(game), 'H.S.shopTab = "trade"; H.render(); return T.els.app.innerHTML;')
+    assert 'data-tier="4"' in html and "這一季還能 2 個" in html and "今天還能 2 個" not in html
+
+
 def test_upgrading_posts_and_says_what_came_out(smith):
     m = server.main_view(smith)
     smith.smith_upgrade("柔", 2)

@@ -15,7 +15,7 @@ from test_forge_secrets import BLADE, CLEAVER, JACKET
 from test_treasures import _challenger, _won
 from tianxia import armor, battlelog, bot, bot_policy, equipment, forge_secrets, fusion, materials, naming, rules, skillview, smithing, team, weapons
 from tianxia.content import validate
-from tianxia.models import ForgeSecret, ForgeSide
+from tianxia.models import Drop, ForgeSecret, ForgeSide
 from tianxia.sqlite_world import open_world
 from tianxia.state import COPY_NAME, DIVINE_UNNAMED, Equipment, GearFind, Weapon
 
@@ -56,7 +56,15 @@ def _forger(content, world, name="鑄神", silver=1000):
 # ── Task 2：神器配方的內容與挑選 ──
 
 def test_divine_recipes_are_picked_per_season_in_their_own_group(divine_content):
-    validate(divine_content)  # 神器組不再擋（第一批載入時擋成 0）
+    # 神器組不再擋（第一批載入時擋成 0）。神器配方要四階（正式季整合 5.5），測試內容保持三階：驗的那一份另補一個剛四、兩條神器改四階
+    checked = divine_content.model_copy(deep=True)
+    checked.materials["gang_4"] = checked.materials["gang_3"].model_copy(update={"id": "gang_4", "name": "熔星髓", "tier": 4})
+    for rid in ("t_star", "t_ward"):
+        r = checked.forge_secrets[rid]
+        r.main.tier = r.aux.tier = 4
+    squad = next(iter(checked.squads.values()))  # 補的那一個四階要拿得到（載入檢查）：讓一支隊伍掉它
+    squad.drops = [*squad.drops, Drop(material="gang_4")]
+    validate(checked)
     picked = forge_secrets.active(divine_content, 0)
     assert Counter(forge_secrets.group_of(r) for r in picked) == {
         "weapon:1": 1, "weapon:2": 1, "armor:1": 1, "weapon:divine": 1, "armor:divine": 1}

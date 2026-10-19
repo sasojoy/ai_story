@@ -794,9 +794,10 @@ def test_a_tier_with_no_material_at_all_rejected(tmp_path):
         load_content(root)
 
 
-def test_a_material_tier_outside_one_to_three_rejected(tmp_path):
+def test_a_material_tier_outside_one_to_four_rejected(tmp_path):
+    """素材四階（正式季整合 4.4）之後階收到 4（神品），5 以上照舊擋。"""
     root = copy_fixture(tmp_path)
-    edit_json(root / "materials.json", lambda d: d[0].update(tier=4))
+    edit_json(root / "materials.json", lambda d: d[0].update(tier=5))
     with pytest.raises(ContentError):
         load_content(root)
 

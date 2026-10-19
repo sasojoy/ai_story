@@ -151,6 +151,11 @@ def refresh_names(p: PlayerState, content: Content, world: WorldStateStore | Non
     神器照全服那一列（5.2、5.3）：原品是定的名字（還沒定是「無名神器」），仿品是「仿・」接原品的名字——原品定名之後，別人手上的仿品
     下一次讀檔跟著改；這一季沒有那一列（別一季打的、資料不在）或沒給 world 就留著。只有 original／copy_of 的那幾件才查資料庫。"""
     for item in owned_gear(p):
+        if item.named_entry is not None:  # 四階名器（正式季整合 5.2）：名字照名字表那一條，表裡拿掉了留舊名
+            entry = content.tier4_named.get(item.named_entry)
+            if entry is not None:
+                item.name = entry.name
+            continue
         if item.secret is None:
             continue
         if item.original or item.copy_of is not None:
@@ -195,8 +200,8 @@ def divine_name_problem(content: Content, slot: str, kind: str, name: str) -> st
             return armor.WORD_CLASH
         if name in armor.SHOP_NAMES.values():
             return armor.SHOP_CLASH
-    if name in table_names(content):
-        return TABLE_CLASH
+    if name in table_names(content) or any(name == e.name for e in content.tier4_named.values()):
+        return TABLE_CLASH  # 四階名器名字表的名字也算鐵匠鋪尋常打得出的（正式季整合 5.2）
     return None
 
 
@@ -262,7 +267,7 @@ PIECE_ARMOR = "『{alias}』是一件防具。"
 PIECE_MAIN = "『{alias}』的主料：{attr}屬的{tier}料。"
 PIECE_AUX = "『{alias}』的輔料：{attr}屬的{tier}料。"
 UNKNOWN = "？"  # 鑄譜那一行還沒聽到的片
-TIER_WORDS = {1: "一", 2: "二", 3: "三"}
+TIER_WORDS = {1: "一", 2: "二", 3: "三", 4: "四"}
 
 
 def split_on(season: WorldState | None) -> bool:

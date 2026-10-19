@@ -19,7 +19,7 @@ from __future__ import annotations
 import random
 from typing import NamedTuple
 
-from . import insights, library, naming, team, treasures
+from . import insights, library, naming, silver, team, treasures
 from .martial_arts import next_quality
 from .models import Content
 from .rules import add_chronicle
@@ -66,7 +66,7 @@ def heat_mode(content: Content, target_quality: str | None) -> bool:
 
 def chance(
     content: Content, target_quality: str, failures: int, boost: int = 0, *, wis: float = team.BASE_STAT,
-    fit: float = 1.0, treasure: float = 1.0,
+    fit: float = 1.0, treasure: float = 1.0, mentor: int = 0,
 ) -> int:
     """升到 target_quality 的機率（%）：第一次的機率＋每失敗一次加的量，乘上悟性的加成（×（1＋3%×（悟性−5）），
     武學與成長設計 6.1）與這一回的搭配（fit，見 fit()）、寶物的倍數（treasure：treasures.amount 的 cultivate，同樣在上限之內），最多到這一階的上限（Config.cultivate_cap，沒寫的那一階是 100）；再加上 boost
@@ -82,7 +82,8 @@ def chance(
     if raw >= 100 and cap >= 100:
         base = 100
     else:
-        base = min(cap, round(raw * team.stat_factor(content, wis) * fit * treasure))  # 寶物「修練升品」跟悟性、搭配並列乘進 raw（裝備四欄 6.2）
+        # 寶物「修練升品」跟悟性、搭配並列乘進 raw（裝備四欄 6.2）；名師指點（銀兩出口，正式季整合 6.5）加在上限之內，不保底
+        base = min(cap, round(raw * team.stat_factor(content, wis) * fit * treasure) + mentor)
     return min(100, base + boost)
 
 
@@ -115,7 +116,7 @@ def odds_for(
     # 也不乘進 fit()：那樣頓悟（seize）與服丹衝關（force_odds）也會跟著放大，絕學要的是契機
     return chance(
         content, target_quality, failures, boost, wis=state.player.stats.get("wis", team.BASE_STAT), fit=factor,
-        treasure=treasures.amount(state, content, "cultivate"),
+        treasure=treasures.amount(state, content, "cultivate"), mentor=silver.mentor_bonus(state, content),
     )
 
 
@@ -231,7 +232,9 @@ def cultivate(
         else:
             msgs.append(f"你身上已經沒有{pill}了，這一回沒服。")
     matched = fit(state, content, world, art_id) if target not in content.config.cultivate_sure_by else Fit(1.0, [])
-    if rng.random() * 100 < odds_for(state, content, target, failures, boost, world, art_id):
+    odds = odds_for(state, content, target, failures, boost, world, art_id)
+    silver.take_mentor(state, content)  # 名師的指點（銀兩出口）擲這一次就用掉
+    if rng.random() * 100 < odds:
         p.art_quality[art_id] = target
         p.art_mastery.pop(art_id, None)
         msgs += [f"【{art.name}】修練有成，從{quality}晉為{target}！", *matched.lines, tired]

@@ -677,6 +677,14 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .order-bar { height: 5px; margin-top: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
 .order-bar > i { display: block; height: 100%; background: var(--gold); transition: width 0.4s ease; }
 .order-meta { margin-top: 4px; font-size: 12px; color: var(--ink-2); }
+/* 21 天季懸賞的賞：一樣一顆小籤（第 5 批畫面第三組丙）；附的那一樣金框、重賞紅框 */
+.rtags { display: flex; flex-wrap: wrap; gap: 4px; }
+.rtag { display: inline-flex; align-items: baseline; gap: 3px; padding: 1px 7px; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--card-2, var(--card)); color: var(--ink); font-size: 12px; line-height: 1.6; white-space: nowrap; }
+.rtag em { font-style: normal; font-size: 11px; color: var(--ink-2); }
+.rtag.gift { border-color: var(--gold); }
+.rtag.prize { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.order-level { margin-left: 8px; font-size: 11px; font-weight: 400; color: var(--ink-2); }
 .bounty-foot { margin-top: 8px; }
 .order-cart { padding-bottom: 8px; font-size: 13px; color: var(--ink); }
 .order.done .order-head b::after { content: " ✔"; color: var(--gold); }
@@ -1880,6 +1888,13 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
 .shop-board .note .prize { color: #a8322a; }
 .shop-board .note.k-art, .shop-board .note.k-arms { background: #fbf1d0; box-shadow: inset 0 0 0 1px #c9a24a, 2px 3px 6px rgba(0, 0, 0, 0.35); }
 .shop-board .note.dim { opacity: 0.55; }
+.shop-board .note .corner { position: absolute; top: 3px; right: 4px; padding: 0 3px; border: 1.5px solid #b3261e; border-radius: 3px; color: #b3261e;
+  background: rgba(246, 237, 216, 0.85); font: 600 10px/1.4 var(--serif); font-style: normal; transform: rotate(6deg); pointer-events: none; } /* 21 天季：寫銀兩的小朱印 */
+.shop-board .note.held .corner { right: 34px; } /* 揭著的那張右上角是「已揭」：朱印往左讓 */
+.shop-board .paper .rtag { border-color: #c9b48d; background: #efe3c6; color: #2a241d; font-size: 12px; }
+.shop-board .paper .rtag em { color: #6d5a43; font-size: 11px; }
+.shop-board .paper .rtag.gift { border-color: #c9a24a; background: #f5e6bd; }
+.shop-board .paper .rtag.prize { border-color: #a8322a; color: #a8322a; background: #f3ddd2; }
 .shop-board .stamp { position: absolute; right: 4px; bottom: 6px; transform: rotate(-14deg); padding: 2px 4px; border: 2px solid #b3261e; border-radius: 4px;
   color: #b3261e; background: rgba(246, 237, 216, 0.85); font: 600 11px var(--serif); font-style: normal; }
 .shop-board .note.held .stamp { top: 3px; right: 5px; bottom: auto; transform: rotate(8deg); padding: 1px 3px; font-size: 10px; pointer-events: none; } /* 揭著的那張：「已揭」在右上角、標籤那一行的右邊，不壓期限那一行（QA 2026-10-14）；點不到它，點告示照樣放大 */
@@ -2119,6 +2134,9 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
   .shop-board .note .tag, .shop-board .paper .tag { font-size: 12.5px; }
   .shop-board .note b { font: 600 17px var(--serif); }
   .shop-board .note small { font-size: 12.5px; }
+  .shop-board .note .corner { font: 600 13px/1.4 var(--serif); }
+  .shop-board .paper .rtag { font-size: 15.5px; }
+  .shop-board .paper .rtag em { font-size: 14.5px; }
   .shop-board .stamp { font: 600 14.5px var(--serif); }
   .shop-board .note.held .stamp { font-size: 13px; }
   .shop-board .board-sheet .paper { font-size: 16px; }

@@ -846,9 +846,9 @@ def geju_resisted(state: GameState, content: Content, delta: float) -> float:
     """割據往上漲打盡頭阻力（FB-254，企劃者 2026-10-15「割據也套越近盡頭越難推」）：跟戰線同一套分段（push.resistance_share：
     推之前 65 以下全額、65～85 一半、85 以上兩成）；割據只有往 100 那一頭有盡頭，往下落一律全額。開關同 Config.push_resistance。
     自然漲落（geju_tick）、玩家推的（Game._shaped）、機緣交付（opportunities）都走它；時刻表、決戰、管理者不打折（同戰線）。"""
-    from .push import resistance_share  # noqa: PLC0415  只引這個函式：apply_effect 有一個參數叫 push
+    from .push import resistance_share, tuning_for  # noqa: PLC0415  只引這兩個函式：apply_effect 有一個參數叫 push
 
-    tuning = content.config.push_resistance
+    tuning = tuning_for(state.world, content)  # 21 天季照自己那一組（7.4）
     if not tuning.enabled or delta <= 0:
         return delta
     return delta * resistance_share(trend_value(state, content, GEJU), delta, tuning)

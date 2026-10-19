@@ -24,13 +24,13 @@ from . import hints as hint_rules
 from .companion_agent import DIALOGUE_TAGS
 from .encounter import FALLBACK_TIER, TIER_RATIOS
 from .front_lines import BAND_KEYS, GEJU_KEYS
-from .materials import TIER_NAMES
+from .materials import DEFAULT_DROPS, TIER_NAMES
 from .models import (
     FRONT_KEY, GLOW_KEYS, GOOD_HORSE, MOVES, RECRUITER_ALLIED_FIELDS, REVEAL_KEYS, ROADS, STATS, TREASURE_EFFECTS, WEAPON_KINDS, Attribute, BattleDef, CharacterDef, CheckVoice,
     CombatLines, Condition, Config, Content, CraftNames, DuelBoss, Effect, Event, FigureDef, FollowerDef, ForgeSecret, Foreshadows, FrontLines, GearBook,
     GiftDef, Hints, InsightDef, Location, OppDef,
     InsightScene, OrdersContent, PresetRecipe, PromotionDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, ShardDef, SimRumor, SkillDef,
-    SignatureArmDef, SteedDef, Squad, TimetableEvent, TraitBook, TreasureDef, Tutorial, allow_known,
+    SignatureArmDef, SteedDef, Squad, Tier4Named, TimetableEvent, TraitBook, TreasureDef, Tutorial, allow_known,
 )
 from .martial_arts import ATTRIBUTE_COUNTERS, ATTRIBUTES, QUALITIES
 from .naming import FORGE_CLASH, GEAR_CLASH, PRESET_CLASH, SEAL_CLASH, name_problem
@@ -116,6 +116,7 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         secret_recipes=[_build(SecretRecipe, raw) for raw in _read(root / "secret_recipes.json")]
         if (root / "secret_recipes.json").exists() else [],
         forge_secrets=_forge_secrets(root / "forge_secrets.json"),
+        tier4_named=_index(Tier4Named, _read(root / "tier4_named.json")) if (root / "tier4_named.json").exists() else {},
         shop_lines=_read(root / "shop_lines.json") if (root / "shop_lines.json").exists() else {},
         arena_crowd=_read(root / "arena_crowd.json") if (root / "arena_crowd.json").exists() else {},
         seal=_shards(root / "seal.json"),
@@ -428,6 +429,10 @@ def _material_sources(c: Content) -> set[str]:
             reachable |= set(ch.effect.materials) | set(ch.fail_effect.materials)
     for sight in c.road_sights.values():
         reachable |= set(sight.effect.materials)
+    # 四階（正式季整合 4.5）只從幾條路來，這一批只有鐵匠鋪的三換四：素材四階與升階都開著時，同屬性有三階的四階拿得到
+    if c.config.four_tiers.enabled and c.config.economy.upgrade:
+        tier3 = {m.attribute for m in c.materials.values() if m.tier == 3}
+        reachable |= {m.id for m in c.materials.values() if m.tier == 4 and m.attribute in tier3}
     return reachable
 
 
@@ -642,6 +647,7 @@ def check_shop_lines(c: Content, need) -> None:
         "donate": c.config.economy.donate and bool(c.scenario.factions),  # 大本營的軍需帳（素材與經濟 B6）
     }
     switched = {"sell": c.config.economy.sell, "upgrade": c.config.economy.upgrade,  # 素材與經濟：收購、升階關著時不必有那一句
+                "rules": c.config.four_tiers.enabled,  # 素材四階關著時鐵匠不講神器的規矩（正式季整合 5.10）
                 "black_market": c.config.economy.sell and c.config.renown.titles and c.config.renown.black_market}  # 名聲 5.2
     for shop, on in opened.items():
         if c.config.shop_screens and on:
@@ -1470,7 +1476,7 @@ def check_bounties(c: Content, need) -> None:
         f"Config.bounties.give_attributes 至少一個、不重複，而且只能是 {'、'.join(ATTRIBUTES)}：{cfg.give_attributes}",
     )
     need(set(cfg.arms_silver) == {"下品", "中品", "上品"}, f"Config.bounties.arms_silver 要剛好寫下品、中品、上品：{sorted(cfg.arms_silver)}")
-    need(set(cfg.arms_tier) == {"1", "2", "3"}, f"Config.bounties.arms_tier 要剛好寫 1、2、3：{sorted(cfg.arms_tier)}")
+    need(set(cfg.arms_tier) == {"1", "2", "3", "4"}, f"Config.bounties.arms_tier 要剛好寫 1、2、3、4：{sorted(cfg.arms_tier)}")
     defaults = type(cfg)()  # 預設長什麼樣，就是「該寫哪幾項」的依據
     for field in ("silver", "exp", "deeds", "xinde"):
         given = getattr(cfg, field)
@@ -1916,7 +1922,11 @@ def validate(c: Content) -> None:
     # 每一種素材都要至少有一個拿得到的管道，否則它是死內容。第一版的「鎮山鐵」就是這樣
     # 漏掉的：掉天品的兩個對手屬剛與屬柔、奇遇給屬快，屬慢沒人負責，而難度 >=100 的對手
     # 都寫了明確 drops，所以依難度的預設表（會按對手屬性挑）對它們根本不執行。
-    unreachable = sorted(set(c.materials) - _material_sources(c))
+    unreachable = set(c.materials) - _material_sources(c)
+    if not (c.config.four_tiers.enabled and c.config.economy.upgrade):
+        # FB-340：素材四階或升階關著時四階料拿不到是預期的（四階料是內容收不回的，設計 10.1：關著時九件神器實際上打不出來），不擋載入
+        unreachable = {mid for mid in unreachable if c.materials[mid].tier < 4}
+    unreachable = sorted(unreachable)
     need(
         not unreachable,
         "這些素材沒有任何取得管道（沒有對手掉、沒有地點撿、沒有事件給）："
@@ -1966,7 +1976,8 @@ def validate(c: Content) -> None:
     check_traits(c, need)
     check_signature_arts(c, need)
     # 沒寫 drops 的對手走 materials.py 依難度的預設掉落表，所以每一階都得有素材可挑。
-    for tier in sorted(TIER_NAMES):
+    # 只看預設表會掉的階（一到三階）：四階是神器的料，掉落表不給（正式季整合 4.5），測試內容也沒有
+    for tier in sorted({t for _, rolls in DEFAULT_DROPS for t, _ in rolls}):
         need(
             any(m.tier == tier for m in c.materials.values()),
             f"content/materials.json 沒有任何第 {tier} 階（{TIER_NAMES[tier]}）的素材，預設掉落表會挑不到東西",
@@ -2468,6 +2479,7 @@ def validate(c: Content) -> None:
 
     _validate_secrets(c, need)
     _validate_forge_secrets(c, need)
+    _validate_tier4_named(c, need)
     _validate_seal(c, need)
 
     # ── 意境與基礎武學（武學與成長設計附錄 A～C）──
@@ -2626,9 +2638,38 @@ def _validate_secrets(c: Content, need) -> None:
                 art_ok(f"{where} 的第 {i + 1} 門", pattern)
 
 
+def _validate_tier4_named(c: Content, need) -> None:
+    """四階名器名字表（content/tier4_named.json，正式季整合 5.2）：兵器的種類合法、防具不寫種類；每一條的名字過命名過濾、兵器名對得上
+    種類（weapons.kind_problem）、防具名帶防具的字（armor.word_problem），不跟一般組合字表組得出的名字、隱藏配方、別的條目同名；
+    每一個欄位（兵器照種類）× 每一種屬性至少一條（不然那一爐擲中名器卻挑不到名字）。沒有這個檔（測試內容）不檢查。"""
+    if not c.tier4_named:
+        return
+    table = forge_rules.table_names(c)
+    names: set[str] = set()
+    for entry in c.tier4_named.values():
+        where = f"四階名器 {entry.id}"
+        if entry.slot == "weapon":
+            need(entry.kind in WEAPON_KINDS, f"{where}：兵器要寫種類（{'、'.join(WEAPON_KINDS)}）")
+            shape = weapon_kind_problem(entry.kind, entry.name) if entry.kind in WEAPON_KINDS else None
+        else:
+            need(entry.kind is None, f"{where}：防具不寫種類")
+            shape = armor_word_problem(entry.name)
+        problem = name_problem(entry.name, c)
+        need(problem is None, f"{where}：名字 {entry.name} 過不了命名過濾（{problem}）")
+        need(shape is None, f"{where}：名字 {entry.name} 過不了（{shape}）")
+        need(entry.name not in table, f"{where}：名字 {entry.name} 跟鐵匠鋪一般組合的名字同名")
+        need(entry.name not in names, f"{where}：名字 {entry.name} 重複")
+        names.add(entry.name)
+        need(0 < len(entry.note) <= 30, f"{where}：說明要 1～30 字")
+    for slot, kind in [("weapon", k) for k in WEAPON_KINDS] + [("armor", None)]:
+        for attribute in ATTRIBUTES:
+            need(any(e.slot == slot and e.kind == kind and e.attribute == attribute for e in c.tier4_named.values()),
+                 f"四階名器名字表少了 {kind or '防具'}・{attribute}")
+
+
 def _validate_forge_secrets(c: Content, need) -> None:
     """隱藏配方池（content/forge_secrets.json）與 Config.forge_secrets（打造隱藏配方設計 3.1、3.2、3.5）：每一組夠挑（神器組從打造第二批起照挑）；
-    每一條的種類、主料寫死階、輔料二選一、屬性是素材有的而且素材表合得上、不收剛柔快慢兩對、神器配方兩樣三階、名字（命名過濾、
+    每一條的種類、主料寫死階、輔料二選一、屬性是素材有的而且素材表合得上、不收剛柔快慢兩對、神器配方兩樣四階、名字（命名過濾、
     種類字或防具字、不重複、不跟武學秘方同名；跟寶物名駒、對照表同名由 name_problem 與字表那一圈擋）、口訣（1～20 字、不寫數字、
     不寫「配方」「秘方」），同一個組合只能有一條（min_tier 算它涵蓋的每一階）。"""
     cfg = c.config.forge_secrets
@@ -2655,8 +2696,8 @@ def _validate_forge_secrets(c: Content, need) -> None:
             need(any(forge_rules.fits(side, m) for m in c.materials.values()), f"{where}：素材表裡找不到合得上的{label}")
         need({r.main.attribute, r.aux.attribute} not in forge_rules.SEED_PAIRS,
              f"{where}：剛柔、快慢合出來的屬性每季不同，名器的說明會對不上")
-        if r.divine:
-            need(r.main.tier == 3 and min(forge_rules.covers(r.aux), default=0) == 3, f"{where}：神器配方的主料、輔料都要三階")
+        if r.divine:  # 正式季整合 5.5：九件神器改用四階（四階才是神器的料）
+            need(r.main.tier == 4 and r.aux.tier == 4, f"{where}：神器配方的主料、輔料都要四階")
         need(r.name not in names, f"{where}：名字 {r.name} 重複")
         names.add(r.name)
         problem = name_problem(r.name, c)

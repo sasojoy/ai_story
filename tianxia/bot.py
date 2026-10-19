@@ -12,7 +12,7 @@ import random
 from collections.abc import Callable
 from typing import NamedTuple
 
-from . import allied, armor, bounties, chuangong, clinic, cultivation, economy, equipment, explore_modes, forge_secrets, fusion, glyph, insights, library, mounts, naming, sensing, smithing, team, traits, treasures, weapons
+from . import allied, armor, bounties, chuangong, clinic, cultivation, economy, equipment, explore_modes, forge_secrets, four_tiers, fusion, glyph, insights, library, mounts, naming, sensing, smithing, team, traits, treasures, weapons
 from . import prologue as prologue_rules
 from .engine import ARENA_YIELD, DUEL_FLEE, FREE_TEXT_OPTION, SAY_OPTION, Game, Option
 from .martial_arts import MartialArt, next_quality
@@ -35,8 +35,9 @@ BLEND_SHARE = 0.3  # 沒做合併、手上有兩門以上武學時，這麼多�
 CULTIVATE_RESERVE = 60  # 體力留這麼多給探索與遊歷，多出來的才拿去修練
 MOUNT_SILVER_RESERVE = 30  # 買了馬至少還留幾兩（療傷用；同 bot_policy.LEARN_SILVER_RESERVE）：設計第九節「100＋保留額度」
 # 素材與經濟（計畫 B5）：整季機器人與假人賣、升、捐都留這麼多（修兵器、餵馬、糧草吃一階；二階留著升三階），三階一個都不賣不捐
-TRADE_KEEP = {1: 12, 2: 10}
-TIER3_WANT = 2  # 那個屬性的三階少於這麼多才升三階（一把神器要兩個三階）
+TRADE_KEEP = {1: 12, 2: 10, 3: 5}  # 三階只在素材四階開著時算（trade_keep）：留夠一次三換四
+TIER3_WANT = 2  # 素材四階關著（舊規則）：那個屬性的三階少於這麼多才升三階（一把神器要兩個三階）
+TIER4_WANT = 2  # 素材四階：那個屬性的四階少於這麼多才三換四（一件神器要主輔兩個四階，正式季整合 8.1）
 TRADE_SILVER_RESERVE = 30  # 升階付完工錢至少還留幾兩（療傷用，同 MOUNT_SILVER_RESERVE）
 TRADE_MOVES = 24  # 一次在鐵匠鋪最多升、賣幾下（保險：每一下都會讓背包離留的量更近，本來就停得下來）
 TRAIT_WEIGHT = 0.05  # 機器人選身上那門時，每一層功效（乘過品質）、每個特別功效算多少比例的威力（武學與成長設計 13.7）
@@ -620,31 +621,44 @@ def wear_better(game: Game) -> None:
 
 def trade_want(game: Game) -> tuple | None:
     """鐵匠鋪的下一件素材買賣（素材與經濟計畫 B5；整季機器人與假人共用）：先升階、再賣，沒事是 None。
+    素材四階開著時（正式季整合 8.1）：三換四是那個屬性的四階少於 TIER4_WANT、這一季還能換；其餘每一階照一般的料：高一階不夠換下一階、
+    低一階比留的（trade_keep）多出一份以上；三階跟一、二階一樣多的賣、捐，四階不賣不捐（本來就不收）。關著照舊：
     升三階：那個屬性的三階少於 TIER3_WANT、二階夠換、今天還能換；升二階：二階不夠換一個三階、一階比留的（TRADE_KEEP）多出一份以上；
     升階付完工錢要剩 TRADE_SILVER_RESERVE；出來的屬性隨機（economy.upgrade_outcomes），出什麼收什麼、照舊往下算。
     賣：一階、二階多過留的量的部分。三階不賣。回 ("upgrade", 屬性, 階) 或 ("sell", 素材, 個數)。"""
     s, c = game.state, game.content
     econ = c.config.economy
     held = s.player.materials
+    keep = trade_keep(c)
     if econ.upgrade:
         day = game.econ_day()
-        for attribute, tier in sorted(economy.upgradable(c), key=lambda pair: -pair[1]):  # 三階先
+        needs = economy.upgrade_needs(c)
+        four = four_tiers.on(c)
+        for attribute, tier in sorted(economy.upgradable(c), key=lambda pair: -pair[1]):  # 高階先
             high, low = economy.upgrade_pair(c, attribute, tier)
-            need = econ.upgrade_need[tier]
-            if tier >= 3:
+            need = needs[tier]
+            if tier == four_tiers.TIER:  # 三換四（正式季整合 8.1）：那個屬性的四階少於 TIER4_WANT 就換，一季照規矩
+                wanted = held.get(high.id, 0) < TIER4_WANT
+            elif tier >= 3 and not four:  # 素材四階關著：舊規則，三階留著湊神器
                 wanted = held.get(high.id, 0) < TIER3_WANT
-            else:
-                wanted = held.get(high.id, 0) < econ.upgrade_need.get(tier + 1, need) and held.get(low.id, 0) >= TRADE_KEEP.get(low.tier, 0) + need
+            else:  # 一般的料（素材四階開著時三階也是）：高一階不夠換下一階、低一階比留的多出一份以上
+                wanted = held.get(high.id, 0) < needs.get(tier + 1, need) and held.get(low.id, 0) >= keep.get(low.tier, 0) + need
             affordable = s.player.stats.get("silver", 0) - economy.upgrade_cost(s, c, tier) >= TRADE_SILVER_RESERVE
             if wanted and affordable and economy.upgrade_problem(s, c, attribute, tier, day) is None:
                 return ("upgrade", attribute, tier)
     if econ.sell:
         for mid, n in sorted(held.items()):
             material = c.materials.get(mid)
-            keep = TRADE_KEEP.get(material.tier) if material is not None else None
-            if keep is not None and n > keep and economy.sell_price_for(s, c, material.tier) is not None:
-                return ("sell", mid, n - keep)
+            spare = keep.get(material.tier) if material is not None else None
+            if spare is not None and n > spare and economy.sell_price_for(s, c, material.tier) is not None:
+                return ("sell", mid, n - spare)
     return None
+
+
+def trade_keep(content) -> dict[int, int]:
+    """每一階留幾個不賣不捐（TRADE_KEEP）：素材四階開著時三階照一、二階的規矩、留夠三換四的（正式季整合 8.1：「留兩個三階湊神器」
+    改成留四階，四階本來就不收）；關著照舊只有一、二階（三階不賣不捐）。"""
+    return dict(TRADE_KEEP) if four_tiers.on(content) else {t: n for t, n in TRADE_KEEP.items() if t < 3}
 
 
 def trade_at_smith(game: Game) -> None:
@@ -672,13 +686,14 @@ def donate_want(game: Game) -> tuple[str, int] | None:
     if not c.config.economy.donate:
         return None
     room = economy.donate_room(s, c, game.econ_day())
-    for tier in sorted(TRADE_KEEP):
+    keep = trade_keep(c)
+    for tier in sorted(keep):
         for mid, n in sorted(s.player.materials.items()):
             material = c.materials.get(mid)
             points = economy.donate_points(c, mid)
             if material is None or material.tier != tier or points <= 0:
                 continue
-            count = min(n - TRADE_KEEP[tier], room // points)
+            count = min(n - keep[tier], room // points)
             if count > 0:
                 return mid, count
     return None

@@ -183,6 +183,11 @@ def day_text(time: float) -> str:
     return f"第{int(time // DAY) + 1}天"
 
 
+def day_start(day: int, content: Content, world: WorldState) -> float:
+    """季曆第 day 天 00:00 的世界秒（21 天季每天 00:00 的軍令截止、懸賞期限；正式季第 5 批）。day 從 1 算，可以是小數。"""
+    return week_start(1, content, world) + (day - 1) * DAY / cal_scale(content, world)
+
+
 def point_text(at: CalPoint) -> str:
     """季曆時刻唯一的寫法「第 3 週・週二 21:40」（N 前後有空格）：狀態列第二行、下一件、江湖史、傳聞、軍令截止都走這裡，
     不要在別處自己拼（FB-062 之後 PM 定：全部跟狀態列第二行一樣）。"""

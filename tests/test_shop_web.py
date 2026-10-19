@@ -169,6 +169,18 @@ def test_a_ready_pot_shows_the_odds_the_head_and_a_live_go_button(content, world
     assert line["go"] in html and 'class="odds"' in html and 'data-act="shop-go"' in html and 'data-act="shop-go" disabled' not in html
 
 
+def test_a_tier4_pot_says_named_gear_is_likely(content, world):
+    """FB-341：伺服器給了 named_hint（主料四階）就畫在說明那一段；沒給不畫。"""
+    game = _smith(content, world)
+    m = server.main_view(game)
+    line = dict(game.smith_line("劍", "gang_1", "kuai_1"), named_hint="四階的料，<打出名器>的機會很大")
+    script = "H.S.shopPot = { slot: 'weapon', kind: '劍', main: 'gang_1', aux: 'kuai_1' }; H.S.shopLine = H.S.next; H.render(); return T.els.app.innerHTML;"
+    html = _forge_page(m, script, S={"next": line})
+    assert "&lt;打出名器&gt;" in html and "<打出名器>" not in html
+    plain = _forge_page(m, script, S={"next": dict(line, named_hint="")})
+    assert "打出名器" not in plain
+
+
 # ── Task 7：開爐與出爐 ──
 
 FORGED = {"id": "兵:1", "slot": "weapon", "name": "試鍛劍", "grade": "一階上品", "kind": "劍", "attribute": "陽", "value": "加成 +9%",

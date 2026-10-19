@@ -1020,7 +1020,7 @@ def gear_bond(content: Content, art: MartialArt, item) -> tuple[TacticBond, str]
         return None
     if item.original and item.secret and item.bound_art == art.id and trait.ultimate_bond is not None:
         return trait.ultimate_bond, BOUND_SOURCE
-    if item.secret and not item.original and item.copy_of is None and item.attribute == art.attribute:
+    if equipment.is_named(item) and item.attribute == art.attribute:  # 隱藏配方的名器與四階名器（正式季整合 5.2：好處照現在的名器）
         rate = content.config.tactics.named_bond_rate
         return TacticBond(desc=NAMED_BOND.format(pct=round(rate * 100)), rate=rate), NAMED_SOURCE
     return None

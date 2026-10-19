@@ -19,6 +19,7 @@
   "precise_actions": false,
   "insight_strong": {"enabled": false},
   "economy": {"gather_cut": false, "sortie_silver": false, "sell": false, "upgrade": false, "donate": false},
+  "four_tiers": {"enabled": false},
   "territory": {"enabled": false},
   "ambush": {"enabled": false},
   "fortify": {"enabled": false},

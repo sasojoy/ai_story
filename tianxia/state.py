@@ -172,6 +172,9 @@ class Equipment(BaseModel):
     template: str | None = None
     # 打中的隱藏配方 id（名器，打造隱藏配方設計 4.2）：名字照內容讀（forge_secrets.refresh_names，name 只當備份），加成看 equipment.named
     secret: str | None = None
+    # 四階名器（正式季整合 5.2）：主料四階照機率擲出來的名器，指到 content/tier4_named.json 的那一條（名字照它讀，name 只當備份；
+    # 加成、階品、光色看 equipment.named／is_named）。不登記、沒有首位發現；舊存檔沒有這一欄
+    named_entry: str | None = None
     # 名將本命兵器的人物 id（打造第三批）：original 一起是 True（加成照神器原品）、secret 是 None（不是打出來的，不用定名）；
     # 名字照內容讀（signature_arms.refresh_names，name 只當備份）
     signature: str | None = None
@@ -511,6 +514,10 @@ class PlayerState(BaseModel):
     shop_line: str = ""  # 店面上掌櫃那一句的情況鍵（店裡最後一件事：進門、買了、打完一爐……；店面獨立介面設計 1.4、6.1）：收起店時清掉
     shop_line_seed: int = 0  # 挑那一句的種子（記下那一下的季的時間，整數秒）：輪詢時同一件事一直是同一句
     shop_hold: str = ""  # 被拒的那一句撐到什麼時候（FB-192，shopview.hold_for）：被拒的原因不成立了就換回平常那一句；收起店時清掉
+    # 鐵匠講的神器規矩（素材四階，正式季整合 5.10；shopview.next_rule）：這一回進門講的那一句，與這一季講過的（content shop_lines.smith.rules
+    # 的位置，講完一輪從頭）。換季時新角色本來就是空的
+    smith_rule: str = ""
+    smith_rules_told: list[int] = Field(default_factory=list)
     shop_clue: str = ""  # 鐵匠順口說出的那一句（forge_secrets.hear_smith，1.4）：蓋過這一下的掌櫃話，下一下就換回掌櫃話；收起店時清掉
     smith_draft: SmithDraft | None = None  # 鐵匠鋪「打造兵器…／打造防具…」挑到哪一步；打開、打完、不打了都清掉，凡是把 picking_smith 收起來的地方（離開、存檔修補、同步時人不在城鎮、出發）一起清
     arts: list[str] = Field(default_factory=list)  # 功法庫：煉出來但沒配上身的功法 id
@@ -545,8 +552,19 @@ class PlayerState(BaseModel):
     upgrade_day: int = -1  # 鐵匠鋪升階：上次升階是哪一天
     upgrades_today: dict[int, int] = Field(default_factory=dict)  # 那一天換到幾階 → 換了幾個（只記有每日上限的階，Config.economy.upgrade_per_day）
     upgrade_seq: int = 0  # 這一季升階了幾次：升階擲哪一種的種子（economy.upgrade_rng），換季歸零（種子另帶季數）
+    # 這一季三換四換了幾個（素材四階，正式季整合 4.5：一季最多 Config.four_tiers.season_cap）：換季時新角色本來就是 0（不帶過季），叛投不清
+    tier4_upgrades: int = 0
     donate_day: int = -1  # 大本營捐軍備：上次捐是哪一天
     donated_today: int = 0  # 那一天捐了幾點貢獻（Config.economy.donate_daily_cap）
+    # 銀兩出口（21 天季，正式季整合 6.5；tianxia/silver.py）。「那一天」照回體丹的換日；一季一清（換季時新角色本來就是預設）
+    silver_donate_day: int = -1  # 捐銀兩：上次是哪一天
+    silver_donated: int = 0  # 那一天捐了幾兩（Config.silver_outlets.donate_daily_silver）
+    mentor_day: int = -1  # 名師指點：上次請是哪一天（一天一次）
+    mentor_ready: bool = False  # 請了、還沒用掉：下一次修練升品的機率加 mentor_bonus
+    furnace_day: int = -1  # 看火候：上次請是哪一天（一天一次）
+    furnace_ready: bool = False  # 請了、還沒用掉：下一次合成或打造的品質基準換成 furnace_odds
+    legend_silver_bought: int = 0  # 這一季在醫館用銀兩買了幾枚破境丹（撿到的、用心得換的都不算；FB-370 以前跟下面那一欄同名，兩條路共用一個數）
+    bribed: dict[str, int] = Field(default_factory=dict)  # 打點門路：大勢人物 id → 上次打點是哪一天（一位一天一次）
     picking_donate: bool = False  # 大本營的捐軍備選單開著（act:donate → donate:<素材>:<個數>／donate:back），不花體力
     xinde_cultivations: int = 0  # 這一季花心得修練了幾次（Config.cultivate_xinde_price，越修越貴）；角色每季重來
     legend_bought: int = 0  # 這一季用心得換了幾枚破境丹（Config.legend_xinde_price，越換越貴）；角色每季重來
@@ -807,6 +825,7 @@ class Bounty(BaseModel):
     kind: str  # "strike" 討伐、"scout" 打探、"escort" 護送、"wanted" 通緝、"art" 求藝、"arms" 求兵
     faction: str | None  # 掛單的陣營（通緝是掛單人的陣營）；散人兩邊都能接，陣營的人只能接自己陣營的
     week: int  # 掛出來的那一週（季曆）
+    day: int = 0  # 21 天季每天一批：掛出來的那一天（季曆第幾天，bounties.issue_day）；其他季 0（正式季第 5 批）
     expires: float  # 世界秒：過了就下榜、不能揭（通緝沒人完成時把押金退給掛單的人）；過期但還有人揭著的留到他們同步（deliver_lapses）
     silver: int
     deeds: int  # 完成時給散人的俠名（ranger.add_deeds）
@@ -967,6 +986,7 @@ class WorldState(BaseModel):
     mandate: bool = False  # 天命之季（玉璽碎片設計 8.1；換季時由 seal.stamp_mandate 蓋，季的規則看它）
     mandate_result: str | None = None  # 天命之爭得天命的那一軍；"" 是天命未定；None 是還沒定（季末看它，world.evaluate_ending）
     hooked_week: int = 0  # 週初的掛鉤（world.WEEK_HOOKS）已經跑到第幾週；0＝還沒跑過
+    hooked_day: int = 0  # 21 天季每天 00:00 的掛鉤（world.DAY_HOOKS）已經跑到季曆第幾天；0＝還沒跑過（正式季第 5 批）
     # ── 時刻表決戰開集結（計畫 T8）：季的事在 mutate 裡只記號，mutate 外面才開（world.open_waiting_showdown）──
     showdowns_waiting: list[str] = Field(default_factory=list)  # 時間到了、還沒開成的決戰 id，照時間先後（另一場還在打就等）
     showdowns_opened: dict[str, str] = Field(default_factory=dict)  # 開過集結的決戰 id → 開的那一筆 BattleDef；開過就不再開
@@ -989,6 +1009,7 @@ class WorldState(BaseModel):
     # 自動掛單已經掛到第幾週（季曆；bounties.issue 的第二道擋）：第一季那一條（WEEK_HOOKS，照 hooked_week）與規則關著的季那一條
     # （bounties.tick）都直接叫 issue，同一週叫幾次都只掛一次。不借 hooked_week：規則關著的季它一直是 0（懸賞榜設計 3.2）
     bounty_week: int = 0
+    bounty_day: int = 0  # 21 天季每天一批的懸賞已經掛到季曆第幾天（bounties.issue_day 的擋；正式季第 5 批）
     invites: list[Invite] = Field(default_factory=list)  # 玩家之間還在等回覆的邀請（invites.py；換季整個重來）
     spar_tally: dict[str, list[int]] = Field(default_factory=dict)  # 切磋的每日次數：「名號鍵|名號鍵」（排序）→ [遊戲日, 次數]
     gift_tally: dict[str, list[int]] = Field(default_factory=dict)  # 贈物的每日次數（FB-116）：同 spar_tally，不分誰送誰
