@@ -647,6 +647,7 @@ def check_shop_lines(c: Content, need) -> None:
         "board": c.config.bounties.enabled and bool(c.scenario.factions),
         "donate": c.config.economy.donate and bool(c.scenario.factions),  # 大本營的軍需帳（素材與經濟 B6）
         "dadian": c.config.silver_outlets.enabled,  # 打點（21 天季的銀兩出口）
+        "tavern": c.config.tavern.enabled and any("酒肆" in loc.tags for loc in c.locations.values()),  # 酒肆（企劃者 2026-10-18）
     }
     switched = {"sell": c.config.economy.sell, "upgrade": c.config.economy.upgrade,  # 素材與經濟：收購、升階關著時不必有那一句
                 "rules": c.config.four_tiers.enabled,  # 素材四階關著時鐵匠不講神器的規矩（正式季整合 5.10）
@@ -980,6 +981,20 @@ def check_relations(c: Content, need, known) -> None:
         if rel.faction is not None:
             need(rel.kind == "foe", f"{where}：只有仇敵能寫 faction")
             known(where, [rel.faction], factions, "陣營")
+
+
+def check_companions(c: Content, need) -> None:
+    """歷史武將同行（Config.companions）：標了 recruitable 的人物不能是任何大勢人物（人物表寫了 character 的那十六位帶不走），
+    要能深度對話（招募鈕照 Game._figures_here），side 寫的要是劇本的陣營。"""
+    big = {fig.character for fig in c.figures.values() if fig.character}
+    faction_ids = {f.id for f in c.scenario.factions}
+    for cid, ch in c.characters.items():
+        if not ch.recruitable:
+            continue
+        where = f"人物 {cid}"
+        need(cid not in big, f"{where}：大勢人物不能標 recruitable（人物表寫了他）")
+        need(ch.deep_interaction, f"{where}：標了 recruitable 要能深度對話（deep_interaction）")
+        need(ch.side is None or ch.side in faction_ids, f"{where}：side {ch.side} 不是劇本的陣營")
 
 
 def check_figures(c: Content, need, known, front_ids: list[str]) -> None:
@@ -2576,6 +2591,7 @@ def validate(c: Content) -> None:
     check_timetable(c, need, known, front_ids, trend_ids)
     check_figures(c, need, known, front_ids)
     check_relations(c, need, known)
+    check_companions(c, need)
     check_foreshadows(c, need, known, region_ids, front_ids, counters_written)
     check_orders(c, need, known, front_ids)
     check_promotions(c, need, known)

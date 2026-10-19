@@ -26,6 +26,7 @@ def real():
     c = classic_rules(real_content())  # 部下與晉升拿遊歷當手段：出陣探索與地盤之前的規則（14 天的季地盤全歸官軍，汝南荒野打不到人）
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
+    c.config.affinity_gain_scale = 1.0  # 這裡量的是寫好的情誼數字；歷史武將同行的情誼放慢（Config.affinity_gain_scale）另測（tests/test_companions.py）
     return c
 
 

@@ -87,6 +87,12 @@
     shopNote: null, // 鐵匠鋪素材頁、軍需帳上一下的結果那一句（升階出了什麼、捐了多少；素材與經濟 B6）；換頁、出店清掉
     donatePick: {}, // 軍需帳挑好要捐的：素材 id → 個數（點一格挑、＋−改個數，「捐出」一起送）
     boardZoom: null, // 懸賞榜放大的那一張告示（懸賞 id）；第三層開著時照伺服器的 picked
+    tavTab: "news", // 酒肆那一頁停在哪（news 聽消息／ask 打聽／wall 題壁／shade 暗處）；進門停在聽消息（企劃者 2026-10-18）
+    tavAsk: "seek", // 打聽那一頁問的是下落（seek）還是交情（ties）
+    tavTier: 1, // 買殺手挑哪一檔（預設中間那一檔）
+    tavHush: false, // 買殺手上次勾了封口沒
+    tavWatch: false, // 查人時上次勾了託酒家留意沒
+    tavMat: "", // 打聽那一頁挑著的素材 id
     arenaTab: "floor", // 擂台那一頁停在哪（floor 台下／board 擂台榜）；進擂台停在台下（Joy 2026-10-14「擂台應該要是獨立的一頁」）
     arenaSeen: null, // 看過、收起來的那一場收場卡（ArenaResult.id）
     boardStamp: null, // 剛交差的那一張：{ id, note, at }（交出之前那一份告示與它排第幾），照原本的位置蓋「交差」、淡出之後清掉（boardHanded）
@@ -322,6 +328,7 @@
       S.shopTab = "shelf"; S.shopPot = null; S.shopLine = null; S.shopMore = false;
       S.shopHorse = null; S.boardZoom = null; S.boardStamp = null; S.arenaTab = "floor";
       S.shopNote = null; S.donatePick = {}; // 素材頁、軍需帳上一下的結果與挑好要捐的（素材與經濟 B6）
+      S.tavTab = "news"; S.tavAsk = "seek"; // 酒肆從聽消息那一頁來
       if (shopKind(main) !== "smith") { S.shopReveal = null; S.shopOpened = false; }
     }
     S.main = main;
@@ -1454,11 +1461,13 @@
   // battle:join_late 是選單上唯一的一顆，本來就看得到，不在這裡：所以 MUSTER_JOIN 結尾要有冒號）。
   // 場景卡沒畫的時候不搬，照舊留在選單上（摺疊或選項列），鈕永遠不會不見：在路上（在路上的人加入不了，選單上本來就沒有這幾顆；
   // 萬一有，路上的場景卡收成兩行、不畫名字那一行），以及序章師父說話、草廬的場景卡不畫的那幾步（masterTalks）
-  const MUSTER_JOIN = /^battle:(join|enlist):/;
+  // 名下有同伴的人按了加入（或晚到、臨時投效）之後挑誰隨你出陣（battle:escort:*，歷史武將同行）：還沒加入，一樣畫在這裡（FB-360）
+  const MUSTER_JOIN = /^battle:(join|enlist|escort):/;
   // 鈕旁邊那一小句（待 joy 潤）：加入的那一顆在名字右邊，這句夾在名字與鈕中間、指向它；散人的兩顆在名字底下另起一行，這句在名字右邊、往下指。
   // 放不下時省略號收尾（style.css 的 .muster-note），名字那一行不因此變高、不折行。箭頭另外放（MUSTER_ARROW），讀螢幕的軟體不唸它（aria-hidden）
-  const MUSTER_NOTE = { join: "報名在這裡", enlist: "挑一邊臨時投效，只算這一場" };
-  const MUSTER_ARROW = { join: "→", enlist: "↓" };
+  // 挑同伴那一步（escort，FB-360）：一顆一行（鈕上寫份量與氣血，四顆擠一排放不下），那一小句說挑了才算加入（待 joy 潤）
+  const MUSTER_NOTE = { join: "報名在這裡", enlist: "挑一邊臨時投效，只算這一場", escort: "挑一位隨你出陣，挑了才算加入" };
+  const MUSTER_ARROW = { join: "→", enlist: "↓", escort: "↓" };
   // 序章：師父在說話（框顯示著）、眼前又沒有事件時，草廬那張地點描寫卡不畫——它是靜態的，而師父的整段話要用這塊地方（T7 審查 I1）
   // 出師那一段路（在路上）不算：第一條路的說明卡要留著（T7 審查 N2）。pageJianghu 照它決定畫不畫場景卡，musterJoins 照它決定搬不搬加入的鈕
   const masterTalksOf = (m) => !!pro() && !!m.guide && !m.on_road && !m.options.some((o) => o.id.startsWith("choice:"));
@@ -1473,10 +1482,12 @@
   function musterScene(m, scene) {
     const joins = musterJoins(m);
     if (!joins.length) return scene;
-    const kind = joins.some((o) => o.id.startsWith("battle:enlist:")) ? "enlist" : "join";
+    const kind = joins.some((o) => o.id.startsWith("battle:escort:")) ? "escort"
+      : joins.some((o) => o.id.startsWith("battle:enlist:")) ? "enlist" : "join";
     const wide = kind === "enlist";
     const note = `<span class="muster-note" id="muster-note">${esc(MUSTER_NOTE[kind])}<span aria-hidden="true"> ${MUSTER_ARROW[kind]}</span></span>`;
-    const row = `<div class="options muster-join${wide ? " wide" : ""}" role="group" aria-label="參戰" aria-describedby="muster-note">${joins.map((o) =>
+    const cls = wide ? " wide" : kind === "escort" ? " pick" : "";
+    const row = `<div class="options muster-join${cls}" role="group" aria-label="參戰" aria-describedby="muster-note">${joins.map((o) =>
       `<button class="btn small primary" data-act="choose" data-id="${esc(o.id)}"><span>${esc(wide ? optParts(o)[0] : o.label)}</span></button>`).join("")}</div>`;
     const head = /^<p>([\s\S]*?)<\/p>\n?/.exec(scene);
     return head ? `<div class="muster-head"><p>${head[1]}</p>${note}${row}</div>\n${scene.slice(head[0].length)}` : `<div class="muster-head">${note}${row}</div>\n${scene}`;
@@ -2238,7 +2249,7 @@
     const c = P.card;
     const body = P.loading ? '<p class="muted">……</p>'
       : !c ? `<p>${esc(P.gone || "對方已經不在這裡了。")}</p>${P.focus ? `<p class="muted">${esc(PEER_GONE_ANSWER)}</p>` : ""}`
-      : `<div class="peer-head"><h3>${esc(c.name)}</h3><div class="peer-title">${[...c.affiliation.split("・"), `第${c.level}級`].map((t) => `<span class="peer-seg">${esc(t)}</span>`).join("・")}</div>${peerRenownHtml(c, P)}${c.record ? `<p class="peer-record">${esc(c.record)}</p>` : ""}</div>
+      : `<div class="peer-head"><h3>${esc(c.name)}</h3><div class="peer-title">${[...c.affiliation.split("・"), `第${c.level}級`].map((t) => `<span class="peer-seg">${esc(t)}</span>`).join("・")}</div>${peerRenownHtml(c, P)}${c.record ? `<p class="peer-record">${esc(c.record)}</p>` : ""}${c.yuedan ? `<p class="peer-record peer-yuedan">${esc(c.yuedan)}</p>` : ""}</div>
         <div class="peer-arts">${c.arts.length ? c.arts.map((a) => `<div class="peer-art"><small>${esc(a.kind)}</small><b>${esc(a.name)}</b><span>${esc(a.quality)}</span></div>`).join("") : '<p class="muted">身上沒有功夫。</p>'}</div>
         ${P.amountFor != null && c.actions[P.amountFor] ? `<form class="free peer-amount" id="peer-amount">${choiceSelect(c.actions[P.amountFor])}<input class="input" name="amount" type="number" inputmode="numeric" min="${c.actions[P.amountFor].amount_min || 1}" max="${c.actions[P.amountFor].amount}" placeholder="${esc(c.actions[P.amountFor].label)}：${c.actions[P.amountFor].amount_min || 1}～${c.actions[P.amountFor].amount}" aria-label="數量"><button class="btn primary small" type="submit">送出</button></form>` : ""}
         ${c.actions.length ? peerActsHtml(c.actions) : ""}`;
@@ -2973,6 +2984,7 @@
         ${x.person === "player" ? '<p class="muted">本人一直都在隊伍裡。</p>' // 本人不能加入、移出（引擎也會擋）
           : x.person.startsWith("follower:") ? "" // 部下（計畫 T5）也不能加入、移出；角色卡已經寫了
           : `<button class="btn ${x.on_team ? "" : "primary"}" data-act="mx" data-op="${x.on_team ? "leave" : "join"}">${x.on_team ? "移出隊伍" : "加入隊伍"}</button>`}
+        ${x.release ? `<button class="btn ghost" data-act="release-mate" data-confirm="${esc(x.release.confirm)}">放他回江湖</button>` : ""}
         ${lessonsHtml(x.lessons)}</div>` : ""}
       <details class="fold"><summary>修練的規矩</summary><div class="fold-body">${x.rules}</div></details>
       ${meltGo}`;
@@ -3242,11 +3254,12 @@
     const back = shop.picked
       ? '<button class="shop-back" data-act="shop-leave">‹ 出店</button>'
       : `<button class="shop-back" data-act="choose" data-id="${esc(shop.back)}">‹ 出店</button>`;
-    const line = `<p class="shop-line">${esc(shop.line)}</p>`;
+    // 鐵匠講神器的規矩（背包有四階時，shop.rule；設計 9.1 第 2 批甲）：就畫在平常那一句的位置、金框標出來；順口講配方線索那一下伺服器給空的
+    const line = shop.rule ? `<p class="shop-line rule">${esc(shop.rule)}</p>` : `<p class="shop-line">${esc(shop.line)}</p>`;
     // 鐵匠鋪的架上頁照草圖 A 把鐵匠那一句放在爐火底下（smithHtml 畫，企劃者 2026-10-14）；其他頁、馬市、懸賞榜緊接招牌
     const underForge = kind === "smith" && smithTab(shop) === "shelf";
     const body = kind === "market" ? marketHtml(shop) : kind === "board" ? boardHtml(shop) : kind === "arena" ? arenaHtml(shop)
-      : kind === "donate" ? donateHtml(shop) : kind === "dadian" ? dadianHtml(shop) : smithHtml(shop, underForge ? line : "");
+      : kind === "donate" ? donateHtml(shop) : kind === "dadian" ? dadianHtml(shop) : kind === "tavern" ? tavernHtml(shop) : smithHtml(shop, underForge ? line : "");
     // 擂台打到一半：左上那一顆是認輸（先問一次），不是直接離開
     const leave = kind === "arena" && shop.fight
       ? `<button class="shop-back" data-act="shop-ask" data-id="${esc(shop.fight.yield.id)}" data-confirm="${esc(shop.fight.yield.confirm)}" data-yes="認輸">‹ 認輸</button>`
@@ -3378,7 +3391,7 @@
       const cell = (r) => `<button class="up-cell${r.problem ? " off" : ""}" data-act="trade-up" data-attr="${esc(r.attribute)}" data-tier="${r.tier | 0}" data-why="${esc(r.problem || "")}" title="${esc(r.odds)}">
           <span class="from">${esc(r.from)}×${r.need | 0} →</span><b>${esc(r.name)}</b>${r.lean ? `<small class="lean">${esc(r.lean)}・其餘隨機</small>` : ""}
           <small>${r.problem ? esc(r.short) : `${r.cost | 0} 兩${dealHtml(r.cost_note || "")}${r.left_text ? `・${esc(r.left_text)}` : ""}`}</small></button>`; // 上限字照伺服器給（FB-342：三換四是這一季的） // 價錢後面寫原因（名聲 4.1，FB-296）
-      ups = `<p class="shop-cap">${esc(t.up_cap)}</p><div class="up-rows">${rows.map((row) => `<div class="up-row"><span class="row-attr ${SHOP_ATTR[row.attribute] || ""}">${esc(row.attribute)}</span>${row.cells.map(cell).join("")}</div>`).join("")}</div>`;
+      ups = `<p class="shop-cap">${esc(t.up_cap)}</p><div class="up-rows${shop.four ? " four" : ""}">${rows.map((row) => `<div class="up-row"><span class="row-attr ${SHOP_ATTR[row.attribute] || ""}">${esc(row.attribute)}</span>${row.cells.map(cell).join("")}</div>`).join("")}</div>`;
     }
     let sells = "";
     if (t.sell_cap) {
@@ -3511,6 +3524,122 @@
     const items = Object.entries(donatePicks(shop)).map(([material, count]) => ({ material, count }));
     if (!items.length) return;
     await shopDo("donate", { items }, () => { S.donatePick = {}; });
+  }
+
+  // ── 酒肆（企劃者 2026-10-18「可以，做精緻一些，包含氛圍感」；草圖甲「夜燈酒肆」）：跟三間店同一層。四頁：聽消息（燈籠、酒罈、熱湯的場景，
+  // 座上客、請酒、鄰桌閒談、聽消息）、打聽（下落、交情、素材）、題壁、暗處（風聲、藏行跡、反查）。打聽到的寫在每一頁「剛問到的」底下；
+  // 動作走 MAIN_ACTIONS tavern（shopDo）。燈籠搖、熱氣冒，減少動態效果的人不動。字待 joy 潤 ──
+  const TAV_TABS = [["news", "聽消息"], ["ask", "打聽"], ["wall", "題壁"], ["shade", "暗處"]];
+  const TAV_LANTERN = (word) => `<svg class="tav-lantern" viewBox="0 0 46 96" aria-hidden="true"><line x1="23" y1="0" x2="23" y2="18" stroke="#2a170d" stroke-width="2"/><rect x="14" y="16" width="18" height="6" rx="1.5" fill="#c99a3a"/><ellipse cx="23" cy="46" rx="20" ry="25" fill="#c8321e"/><ellipse cx="23" cy="46" rx="12" ry="24" fill="#e2502e" opacity=".7"/><ellipse cx="23" cy="46" rx="5" ry="22" fill="#ffb15a" opacity=".55"/><path d="M5 38 Q23 34 41 38 M4 46 Q23 43 42 46 M5 54 Q23 51 41 54" stroke="#8c1f12" stroke-width="1" fill="none" opacity=".6"/>${word ? `<text x="23" y="52" text-anchor="middle" font-size="16" font-weight="700" fill="#2a0e06" opacity=".75">${word}</text>` : ""}<rect x="14" y="70" width="18" height="5" rx="1.5" fill="#c99a3a"/><path d="M19 75 L18 94 M23 75 L23 96 M27 75 L28 94" stroke="#d23a24" stroke-width="1.5"/></svg>`;
+  const TAV_HERO = `<div class="tav-hero" aria-hidden="true"><i class="tav-glow l"></i><i class="tav-glow r"></i>
+    <span class="tav-hang l">${TAV_LANTERN("")}</span><span class="tav-hang r">${TAV_LANTERN("酒")}</span>
+    <svg class="tav-bowl" viewBox="0 0 70 40"><g class="tav-steam" stroke="#f6dcb0" stroke-width="1.6" fill="none" stroke-linecap="round"><path d="M24 18 q-4 -6 0 -10 q4 -4 0 -8"/><path d="M34 18 q-4 -6 0 -10 q4 -4 0 -8"/><path d="M44 18 q-4 -6 0 -10 q4 -4 0 -8"/></g><path d="M12 22 L58 22 Q56 36 35 37 Q14 36 12 22 Z" fill="#3a2414"/><path d="M12 22 L58 22" stroke="#c99a3a" stroke-width="1.5"/></svg>
+    <svg class="tav-jars" viewBox="0 0 150 66"><g fill="#0e0805"><path d="M8 64 Q2 40 14 26 L14 18 L30 18 L30 26 Q42 40 36 64 Z"/><path d="M46 64 Q40 44 50 32 L50 26 L62 26 L62 32 Q72 44 66 64 Z"/><path d="M78 64 Q70 36 86 20 L86 10 L104 10 L104 20 Q120 36 112 64 Z"/><path d="M120 64 Q116 48 124 40 L124 34 L134 34 L134 40 Q142 48 138 64 Z"/></g><rect x="88" y="34" width="14" height="18" fill="#7a2014" opacity=".85"/><text x="95" y="47" text-anchor="middle" font-size="11" fill="#e8c27a">酒</text></svg>
+    <i class="tav-table"></i></div>`;
+
+  function tavTab() { return TAV_TABS.some(([k]) => k === S.tavTab) ? S.tavTab : "news"; }
+
+  // 打聽到的一則（聽消息、下落、交情、素材、反查）：小標、時刻，一行一句
+  function tavNoteHtml(n) {
+    return `<article class="tav-note k-${esc(n.kind)}"><div class="tag"><b>${esc(n.title)}</b><span>${esc(n.when)}</span></div>${n.lines.map((l) => `<p>${esc(l)}</p>`).join("")}</article>`;
+  }
+  function tavNotes(shop, kinds, empty) {
+    const rows = shop.notes.filter((n) => kinds.includes(n.kind));
+    return rows.length ? rows.map(tavNoteHtml).join("") : (empty ? `<p class="shop-empty">${esc(empty)}</p>` : "");
+  }
+  function tavDone() { return S.shopNote ? shopNoteHtml("") : ""; } // 這一下的結果（只有有結果時才畫）
+  function tavBtn(op, label, price, why) {
+    return `<button class="tav-act" data-act="tav-do" data-op="${op}"${why ? ` disabled title="${esc(why)}"` : ""}><b>${esc(label)}</b><small>${why ? esc(why) : `${price | 0} 兩`}</small></button>`;
+  }
+
+  function tavNewsHtml(shop) {
+    const guests = shop.guests.length
+      ? `<div class="tav-guests"><span class="gl">座上客</span>${shop.guests.map((g) => `<span class="tav-chip">${esc(g)}</span>`).join("")}${shop.more_guests ? `<span class="more">還有 ${shop.more_guests | 0} 人</span>` : ""}</div>`
+      : `<div class="tav-guests"><span class="gl">座上客</span><span class="more">今晚冷清，只有你一桌</span></div>`;
+    const treat = shop.treat ? `<p class="tav-treat">${esc(shop.treat)}</p>` : "";
+    const talk = shop.chatter.length
+      ? `<h4 class="tav-h">鄰桌閒談<small>壓低了聲音</small></h4><ul class="tav-talk">${shop.chatter.map((c) => `<li>${c.who ? `<span class="who">${esc(c.who)}</span>` : ""}${esc(c.said)}</li>`).join("")}</ul>` : "";
+    const board = shop.board ? `<button class="btn ghost small tav-board" data-act="choose" data-id="${esc(shop.board)}">看牆上的懸賞榜 ›</button>` : "";
+    return `${guests}${treat}
+      <button class="tav-listen" data-act="tav-do" data-op="news">聽消息<span>（${shop.prices.news | 0} 兩）</span></button>
+      ${tavDone()}
+      ${tavNotes(shop, ["news"], "")}
+      ${talk}
+      <div class="tav-row">${tavBtn("treat", "請全店喝一輪", shop.prices.treat, shop.problems.treat)}${board}</div>`;
+  }
+
+  function tavAskHtml(shop) {
+    const mode = ["ties", "q"].includes(S.tavAsk) ? S.tavAsk : "seek";
+    const modes = [["seek", "查人在哪", shop.prices.seek], ["ties", "打聽情誼", shop.prices.ties], ["q", "問酒家", shop.prices.ask]]
+      .map(([k, name, price]) => `<button class="shop-page${mode === k ? " on" : ""}" data-act="tav-mode" data-mode="${k}">${name}・${price | 0} 兩</button>`).join("");
+    const asked = shop.known.filter((n) => !shop.guests.includes(n)).slice(0, 8); // 問過的（座上客已經列了的不重寫）
+    const known = asked.length ? `<div class="tav-known"><span class="gl">問過的</span>${asked.map((n) => `<button class="tav-chip" data-act="tav-name" data-name="${esc(n)}">${esc(n)}</button>`).join("")}</div>` : "";
+    const guests = shop.guests.length ? `<div class="tav-known"><span class="gl">座上客</span>${shop.guests.map((n) => `<button class="tav-chip" data-act="tav-name" data-name="${esc(n)}">${esc(n)}</button>`).join("")}</div>` : "";
+    const hint = mode === "seek" ? "報個名號（江湖人物或大勢人物都行）。越有名、離這裡越近，越問得準；問不到退一半。"
+      : mode === "ties" ? "問誰跟他走得近、他身邊有誰、近來做了什麼。越有名越好打聽；問不到退一半。"
+      : `隨口問一句（${shop.ask_chars | 0} 字內），酒家照他聽來的說。他答不上來不收錢。`;
+    const box = mode === "q"
+      ? `<form class="tav-form" id="tav-q"><input class="input" name="text" data-keep="q" maxlength="${shop.ask_chars | 0}" placeholder="例：最近哪裡最亂？" autocomplete="off"><button class="btn primary small" type="submit">問</button></form>`
+      : `<form class="tav-form" id="tav-ask"><input class="input" name="target" data-keep="ask" maxlength="20" placeholder="名號" autocomplete="off"><button class="btn primary small" type="submit">打聽</button></form>`;
+    const w = shop.watch || { price: 0, mine: [] };
+    const watch = mode === "seek"
+      ? `<label class="tav-hush"><input type="checkbox" name="watch" form="tav-ask"${S.tavWatch ? " checked" : ""}> 託酒家留意，多付 ${w.price | 0} 兩（問不清楚時，有了準信捎進你的江湖紀錄）</label>${w.mine.length ? `<ul class="tav-whispers">${w.mine.map((t) => `<li class="named">${esc(t)}</li>`).join("")}</ul>` : ""}` : "";
+    const mats = shop.materials.map((m) => `<option value="${esc(m.id)}"${m.id === S.tavMat ? " selected" : ""}>${esc(m.name)}（${m.tier | 0} 階・${m.price | 0} 兩）</option>`).join("");
+    return `<div class="shop-pages tav-modes">${modes}</div>
+      ${box}${watch}
+      <p class="shop-cap">${esc(hint)}</p>${mode === "q" ? "" : guests + known}
+      <h4 class="tav-h">打聽素材<small>哪裡採得到</small></h4>
+      <form class="tav-form" id="tav-mat"><select class="input" name="material">${mats}</select><button class="btn small" type="submit">打聽</button></form>
+      ${tavDone()}
+      ${tavNotes(shop, ["ask", "seek", "ties", "material"], "還沒打聽過什麼。")}`;
+  }
+
+  function tavWallHtml(shop) {
+    const walls = shop.walls.length
+      ? `<div class="tav-wall">${shop.walls.map((w) => `<p><span class="ink">${esc(w.text)}</span><small>${esc(w.who)}・${esc(w.when)}<i class="tav-seal">題</i></small></p>`).join("")}</div>`
+      : '<p class="shop-empty">粉牆上還乾乾淨淨，等人來題第一句。</p>';
+    return `<p class="shop-cap">借酒家的筆，在牆上留一句話（最多 ${shop.wall_chars | 0} 字，${shop.prices.wall | 0} 兩）。來這間酒肆的人都看得到。</p>
+      <form class="tav-form" id="tav-wall"><input class="input" name="text" data-keep="wall" maxlength="${shop.wall_chars | 0}" placeholder="題一句" autocomplete="off"><button class="btn primary small" type="submit">題壁</button></form>
+      ${tavDone()}${walls}`;
+  }
+
+  function tavShadeHtml(shop) {
+    const heard = shop.whispers.length
+      ? `<ul class="tav-whispers">${shop.whispers.map((w) => `<li class="${w.named ? "named" : ""}">${esc(w.text)}</li>`).join("")}</ul>`
+      : '<p class="shop-empty">最近沒聽說有人打聽你。</p>';
+    const h = shop.hits;
+    const tier = h.tiers.some((t) => t.tier === S.tavTier) ? S.tavTier : 1;
+    const tiers = h.tiers.map((t) => `<button type="button" class="tav-tier${t.tier === tier ? " on" : ""}" data-act="tav-tier" data-tier="${t.tier}"><b>${esc(t.name)}</b><small>${t.price | 0} 兩</small></button>`).join("");
+    const names = shop.known.slice(0, 8).map((n) => `<button class="tav-chip" data-act="tav-hit-name" data-name="${esc(n)}">${esc(n)}</button>`).join("");
+    const mine = h.mine.length ? `<ul class="tav-whispers">${h.mine.map((m) => `<li class="named">${esc(m)}</li>`).join("")}</ul>` : "";
+    const hire = h.ended ? "" : `<h4 class="tav-h">買殺手<small>找上門的事，不說是誰</small></h4>
+      <p class="shop-cap">報一個查到過的名號。殺手只在城外出手；找不到人，期限到了退一半。</p>
+      <div class="tav-tiers">${tiers}</div>
+      <form class="tav-form" id="tav-hit"><input class="input" name="target" data-keep="hit" maxlength="20" placeholder="名號" autocomplete="off"><button class="btn primary small" type="submit">雇</button></form>
+      <label class="tav-hush"><input type="checkbox" name="hush" form="tav-hit"${S.tavHush ? " checked" : ""}> 加付封口錢 ${h.hush | 0} 兩（失手、被反查時不容易供出你）</label>
+      ${names ? `<div class="tav-known"><span class="gl">查到過的</span>${names}</div>` : ""}${mine}`;
+    return `<h4 class="tav-h">風聲<small>有人在打聽你</small></h4>${heard}
+      <div class="tav-row">${tavBtn("trace", "反查是誰", shop.prices.trace, "")}${tavBtn("hide", "藏起行跡", shop.prices.hide, shop.problems.hide)}${tavBtn("guard", "雇保鏢", h.guard, h.guard_problem)}</div>
+      ${shop.hidden ? `<p class="shop-cap">${esc(shop.hidden)}</p>` : '<p class="shop-cap">藏行跡：打點酒家與跑堂，接下來一天別人難打聽到你。保鏢：殺手找上時有人替你擋一擋。</p>'}
+      ${tavDone()}${tavNotes(shop, ["trace", "guard"], "")}${hire}${tavNotes(shop, ["hit"], "")}`;
+  }
+
+  function tavernHtml(shop) {
+    const tab = tavTab();
+    const body = { news: tavNewsHtml, ask: tavAskHtml, wall: tavWallHtml, shade: tavShadeHtml }[tab](shop);
+    return `${tab === "news" ? TAV_HERO : ""}
+      <div class="shop-body"><div class="shop-col">${body}</div></div>
+      <nav class="shop-tabs">${TAV_TABS.map(([k, name]) => `<button class="shop-tab${tab === k ? " on" : ""}" data-act="tav-tab" data-tab="${k}">${name}</button>`).join("")}</nav>`;
+  }
+
+  // 打聽到了的寫成一則（每一頁「剛問到的」），那一句不再另外寫在上面；沒問到、被拒的那一句才寫
+  async function tavDo(op, body = {}, route = "tavern") {
+    const seen = S.main && S.main.shop && S.main.shop.notes ? S.main.shop.notes.length : 0;
+    const top = S.main && S.main.shop && S.main.shop.notes && S.main.shop.notes[0] ? S.main.shop.notes[0].when + S.main.shop.notes[0].title : "";
+    await shopDo(route, route === "tavern" ? { op, ...body } : body, (r) => {
+      const notes = r.main && r.main.shop && r.main.shop.notes;
+      if (notes && notes.length && (notes.length !== seen || notes[0].when + notes[0].title !== top)) S.shopNote = null;
+    });
   }
 
   // ── 馬市（第三節）：一排馬廄（你騎的、待售、裝備庫裡的），點一匹看牠的卡；卡上那一顆送現在的選項 id
@@ -3687,7 +3816,15 @@
     if (!layer || !S.main || !S.main.shop) { render(); return; }
     const top = keep ? (layer.querySelector?.(".shop-body")?.scrollTop || 0) : 0;
     const left = keep ? (layer.querySelector?.(".stalls")?.scrollLeft || 0) : 0; // 馬廄那一排左右滑到哪（第三節）
+    // 打到一半的字（酒肆的打聽、題壁）：輪詢重畫整層時放回去，游標也放回去（data-keep 的輸入框）
+    const kept = [...(layer.querySelectorAll?.("input[data-keep]") || [])].map((el) => [el.dataset.keep, el.value, el === document.activeElement]);
     layer.outerHTML = shopHtml(S.main.shop);
+    for (const [k, v, focused] of kept) {
+      const el = document.querySelector(`.shop-layer input[data-keep="${k}"]`);
+      if (!el) continue;
+      el.value = v;
+      if (focused) el.focus();
+    }
     const body = top ? document.querySelector(".shop-layer .shop-body") : null;
     if (body) body.scrollTop = top;
     const stalls = left ? document.querySelector(".shop-layer .stalls") : null;
@@ -3790,7 +3927,7 @@
       <div class="furnace${S.shopFiring ? " firing" : ""}">${slot("main", pot.main)}<div class="flame">${FLAME_SVG}</div>${slot("aux", pot.aux)}</div>
       ${out}<div class="shop-gorow">${go}<button class="btn small ghost shop-book" data-act="book-open" data-book="forge">鑄譜</button></div>
       ${line.rack_full ? `<p class="shop-warn">${esc(line.rack_full)}</p>` : ""}
-      <p class="shop-cap">背包的素材（點一下放進爐裡）</p><div class="cells">${cells || '<p class="shop-empty">背包裡沒有素材。</p>'}</div>`;
+      <p class="shop-cap">背包的素材（點一下放進爐裡）</p><div class="cells${shop.four ? " four" : ""}">${cells || '<p class="shop-empty">背包裡沒有素材。</p>'}</div>`;
   }
 
   // 爐裡換了東西：先照放的畫一次，再問這一爐會怎樣（/api/smith_line；只用最後一次請求的回應）
@@ -6242,6 +6379,11 @@
           break;
         case "wield": await mx("wield", { weapon: el.dataset.id }); break; // 裝備庫上那一把換到手上
         case "feed": await mx("feed"); break;
+        case "release-mate": { // 歷史武將同行：放他回江湖，先問一次（問句伺服器寫好，roster.RELEASE_CONFIRM）
+          const who = S.person;
+          ask(el.dataset.confirm, "放他走", async () => { S.person = null; await mx("release", { person: who }); });
+          break;
+        }
         case "teach": await mx("chuangong", { what: el.dataset.what }); break; // 傳功門下：person 是名冊上點的那個人 // 身上那匹餵一個一階素材（裝備四欄 5.4）
         case "divine-keep": await mx("name_divine", { weapon: el.dataset.id, keep: true }); break; // 神器原品沿用譜名（5.2）
         case "bind-art": { // 以器配招：送挑好的那一門（select 的 id 帶冒號，用 getElementById）
@@ -6266,6 +6408,12 @@
         case "dn-tier1": donateTierOne(); break;
         case "dn-go": await donateGo(); break;
         case "shop-more": S.shopMore = true; renderShop(); break;
+        case "tav-tab": S.tavTab = el.dataset.tab; S.shopNote = null; renderShop(false); break; // 酒肆：四頁
+        case "tav-do": await tavDo(el.dataset.op); break;
+        case "tav-mode": S.tavAsk = el.dataset.mode; renderShop(); break; // 打聽：查人在哪／打聽情誼
+        case "tav-tier": S.tavTier = Number(el.dataset.tier); renderShop(); break; // 買殺手：三檔
+        case "tav-hit-name": { const box = document.querySelector('#tav-hit input[name="target"]'); if (box) { box.value = el.dataset.name; box.focus(); } break; }
+        case "tav-name": { const box = document.querySelector('#tav-ask input[name="target"]'); if (box) { box.value = el.dataset.name; box.focus(); } break; }
         case "arena-tab": S.arenaTab = el.dataset.tab; renderShop(false); break; // 擂台：台下／擂台榜
         case "arena-seen": S.arenaSeen = Number(el.dataset.id); renderShop(); break; // 收起收場卡
         case "shop-horse": S.shopHorse = el.dataset.id; renderShop(); break; // 馬市點一匹（第三節）：只換底下那張卡
@@ -6470,9 +6618,34 @@
       } else if (form.id === "say-form") {
         if (!data.text.trim()) return;
         await sayLine(form, data.text.trim());
+      } else if (form.id === "tav-ask") {
+        if (!data.target.trim()) return;
+        const seek = S.tavAsk !== "ties";
+        if (seek) S.tavWatch = !!data.watch;
+        await tavDo(seek ? "seek" : "ties", { target: data.target.trim(), text: seek && data.watch ? "watch" : "" });
+      } else if (form.id === "tav-q") {
+        if (!data.text.trim()) return;
+        await tavDo("", { text: data.text.trim() }, "tavern_ask");
+        const box = document.querySelector('#tav-q input[name="text"]');
+        if (box && S.shopNote == null) box.value = "";
+      } else if (form.id === "tav-mat") {
+        if (!data.material) return;
+        S.tavMat = data.material;
+        await tavDo("material", { target: data.material });
+      } else if (form.id === "tav-hit") {
+        if (!data.target.trim()) return;
+        S.tavHush = !!data.hush;
+        const tier = S.main.shop.hits.tiers.some((t) => t.tier === S.tavTier) ? S.tavTier : 1;
+        const name = S.main.shop.hits.tiers.find((t) => t.tier === tier).name;
+        ask(`雇${name}去找${data.target.trim()}？`, "雇", () => tavDo("hit", { target: data.target.trim(), text: `${tier}${data.hush ? ":hush" : ""}` }));
+      } else if (form.id === "tav-wall") {
+        if (!data.text.trim()) return;
+        await tavDo("wall", { text: data.text.trim() });
+        const box = document.querySelector('#tav-wall input[name="text"]');
+        if (box && !(S.shopNote || "").startsWith("一句最多")) box.value = "";
       } else if (form.id === "free-form" || form.id === "arena-free") {
         if (!data.text.trim()) return;
-        await doMain(["duel_text", "seal_text"].includes(form.dataset.op) ? form.dataset.op : "battle_text", { text: data.text }); // 決戰、奪璽或頭目戰的放手一搏
+        await doMain(["duel_text", "seal_text", "feast_text"].includes(form.dataset.op) ? form.dataset.op : "battle_text", { text: data.text }); // 決戰、奪璽或頭目戰的放手一搏
       } else if (form.id === "name-art") {
         // 絕學定名：名字合不合格、有沒有人用過都由伺服器驗，結果寫在頁面上方那一行；定成了表單就不再畫
         if (!data.name.trim()) { toast("先取個名字。"); return; }

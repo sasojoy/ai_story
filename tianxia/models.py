@@ -714,6 +714,9 @@ class CharacterDef(_Strict):
     haunts: list[str] = Field(default_factory=list)
     follows: str | None = None
     side: str | None = None
+    # 歷史武將同行（Config.companions）：開關開著時招得進名下（kind 照舊 locked：深度對話、走動、贈禮、本命都不變）。十六位大勢人物
+    # 不准標（content.validate）；寫了 side 的只有投靠了那個陣營的人招得到，沒寫的誰都招得到
+    recruitable: bool = False
 
 
 class RelationDef(_Strict):
@@ -960,6 +963,7 @@ ALLOW_FIXED = frozenset({
     "act:heal",  # 醫館療傷（帶「醫館」標籤的地點，有內傷時）
     "act:donate",  # 自家大本營捐軍備（素材與經濟設計第六節）
     "act:dadian",  # 打點（21 天季的銀兩出口收成一間店）
+    "act:tavern",  # 酒肆（帶「酒肆」標籤的城鎮；tianxia/tavern.py）
     "ambush:lift", "works:fortify", "works:stockpile",  # 後期體力玩法：收伏、修築工事、屯糧練兵
 })
 # opp: 是機緣的交東西與天時地利（opp:deliver:<id>、opp:try:<id>，正式版乙一）；對話選單的 talk:opp: 不是閒著的選單，不列
@@ -969,6 +973,8 @@ ALLOW_FAMILIES = (
     "explore:",  # 探索三選一的三顆（explore_modes.PREFIX；序章裡不出現）
     "ambush:set:",  # 設伏劫道（ambush:set:<另一頭>；序章裡不出現）
     "aid:guard:", "aid:rally:", "aid:visit:",  # 護著大勢人物（figure_aid；序章裡沒有陣營，不出現）
+    "act:recruit:",  # 招募歷史武將（act:recruit:<人物>，歷史武將同行；序章裡不出現）
+    "feast:join:",  # 入席（宴客，tianxia/feasts.py；序章裡不出現）
 )
 
 
@@ -1330,6 +1336,10 @@ class GeneralTuning(_Strict):
     fall_push: int = Field(default=6, ge=0)  # 敗走那一刻戰局往對面推幾點
     fall_prestige: int = Field(default=15, ge=0)  # 收場後聲威扣幾點
     slay_fame: int = Field(default=3, ge=0)  # 最後一擊的人名望多幾點
+    # 隨主人上陣的歷史武將（歷史武將同行第五節【預設】；battle_instance.Escort）：份量＝strength(他的威力) × escort_share（不吃主人的
+    # 職位、坐騎、部下），敗走時戰局往對面推 escort_fall_push（人物的三分之一）；點名、一回合上限、固守護他照上面人物那幾個數
+    escort_share: float = Field(default=0.5, ge=0)
+    escort_fall_push: int = Field(default=2, ge=0)
 
 
 class BattleTuning(_Strict):
@@ -1707,6 +1717,64 @@ class ArenaTuning(_Strict):
     prizes: list[int] = Field(default_factory=lambda: [30, 20, 10])
     prize_treasure: bool = True
     crowd: ArenaCrowdTuning = Field(default_factory=ArenaCrowdTuning)  # 場邊事件（見 ArenaCrowdTuning；tianxia/arena_crowd.py）
+
+
+class TavernTuning(_Strict):
+    """酒肆（設計稿 https://claude.ai/artifact/3CfrzfpT1HzCxy6S985Q5W，企劃者 2026-10-18「可以，做精緻一些，包含氛圍感」）：帶「酒肆」標籤的
+    城鎮有一間，進城才去得到。打聽消息、查人、交情、素材、題壁、請酒、雇殺手、問酒家，都花銀兩。規則在 tianxia/tavern.py。
+    價錢以正式季（21 天）為準，季短的照季長打折（price_full_days、price_floor）。全部【預設】，試玩後再調。
+
+    「越有名越好打聽」（企劃者 2026-10-18）：每一次打聽算打聽度＝名氣＋遠近＋近況（tavern.reach），照 reach_* 換成問不問得到、多準。"""
+
+    enabled: bool = True
+    price_full_days: float = Field(default=21.0, gt=0)  # 季長到這麼多天照原價；短的照比例打折
+    price_floor: float = Field(default=0.3, ge=0, le=1)  # 最低打到幾折（週末短季）
+    news_price: int = Field(default=10, ge=0)  # 聽消息
+    news_days: float = Field(default=3.0, gt=0)  # 酒家說得出最近幾天（季曆天）的傳聞
+    seek_price: int = Field(default=30, ge=0)  # 查人在哪
+    ties_price: int = Field(default=20, ge=0)  # 打聽交情
+    material_prices: dict[int, int] = Field(default_factory=lambda: {1: 5, 2: 10, 3: 25, 4: 40})  # 打聽素材：照階
+    wall_price: int = Field(default=5, ge=0)  # 題壁
+    wall_keep: int = Field(default=12, ge=1)  # 每間酒肆的牆留最近幾句
+    wall_chars: int = Field(default=20, ge=1)  # 一句最多幾個字
+    treat_price: int = Field(default=30, ge=0)  # 請全店喝酒（一天一次）
+    treat_fame: int = Field(default=1, ge=0)
+    treat_hours: float = Field(default=1.0, ge=0)  # 請酒之後多久（世界小時）進門的人還看得到
+    hide_price: int = Field(default=50, ge=0)  # 藏行跡（一個遊戲日）
+    hide_reach: int = Field(default=2, ge=0)  # 藏行跡讓別人打聽你的打聽度少幾點
+    trace_price: int = Field(default=40, ge=0)  # 反查：誰打聽我、誰雇殺手找我
+    refund_share: float = Field(default=0.5, ge=0, le=1)  # 問不到時退幾成
+    whisper_keep: int = Field(default=10, ge=1)  # 身上留最近幾則風聲
+    note_keep: int = Field(default=8, ge=1)  # 酒肆裡留最近幾則酒家的回話
+    named_from: int = Field(default=2, ge=0)  # 打聽你的人名望到第幾段，風聲裡直接說名號
+    offline_hours: float = Field(default=24.0, ge=0)  # 現實多久沒上線算「近來沒人見過他」
+    # 買殺手（設計第六節）
+    hit_prices: list[int] = Field(default_factory=lambda: [20, 40, 60], min_length=1)  # 三檔殺手
+    hit_power: list[float] = Field(default_factory=lambda: [0.85, 1.0, 1.15], min_length=1)  # 殺手威力＝對方本人威力 × 這個
+    hit_hours: float = Field(default=6.0, gt=0)  # 單子有效幾個現實小時
+    hit_pair_hours: float = Field(default=24.0, ge=0)  # 同一對人多久只能雇一次（現實小時）
+    hit_silver_share: float = Field(default=0.10, ge=0, le=1)  # 殺手贏：對方失幾成銀兩
+    hit_silver_cap: int = Field(default=60, ge=0)
+    hit_hp_loss: float = Field(default=0.15, ge=0, le=1)  # 殺手贏：扣氣血上限幾成（其中 injury_share 變內傷）
+    hit_evil: int = Field(default=3, ge=0)  # 雇主得的惡名
+    hit_bounty_share: float = Field(default=0.25, ge=0, le=1)  # 對方打贏：搜出雇金的幾成
+    hit_win_fame: int = Field(default=1, ge=0)
+    hit_reveal: float = Field(default=0.5, ge=0, le=1)  # 對方打贏時問出雇主的基本機會（雇主每一段名望 +0.1）
+    hit_warn: float = Field(default=0.4, ge=0, le=1)  # 單子掛上那一刻對方聽到風聲的基本機會（對方每一段名望 +0.05）
+    hit_find_drop: float = Field(default=0.2, ge=0, le=1)  # 打聽度每比 5 少一點，殺手找到人的機會少這麼多
+    guard_price: int = Field(default=10, ge=0)  # 雇保鏢
+    guard_hours: float = Field(default=6.0, ge=0)
+    guard_scale: float = Field(default=0.85, ge=0)  # 保鏢在身邊時殺手的威力再乘這個
+    hush_price: int = Field(default=20, ge=0)  # 雇主封口：被供出的機會減半
+    # 問酒家（AI 問答，設計第八節）
+    ask_price: int = Field(default=20, ge=0)
+    ask_chars: int = Field(default=30, ge=1)
+    ask_budget_seconds: float = Field(default=30.0, ge=0)
+    chatter_hours: float = Field(default=1.0, gt=0)  # 酒客閒談每間酒肆多久換一段（世界小時）
+    # 託酒家留意（設計第三節）：查人時多付一半，之後那個人打聽得到確切地點（打聽度 3 以上）時捎信，寫進江湖紀錄
+    watch_share: float = Field(default=0.5, ge=0)
+    watch_hours: float = Field(default=6.0, gt=0)  # 留意多久（現實小時）
+    watch_keep: int = Field(default=3, ge=0)  # 一個人同時最多託幾個
 
 
 class DuelFoe(_Strict):
@@ -2255,6 +2323,17 @@ class TacticTuning(_Strict):
     named_bond_rate: float = Field(default=0.08, ge=0, le=1)
 
 
+class CompanionsTuning(_Strict):
+    """歷史武將同行（docs/superpowers/specs/2026-10-18-歷史武將同行-design.md；tianxia/roster.py、tianxia/escorts.py）：
+    十五位標了 recruitable 的歷史武將照陣營招進名下（全服唯一），名下最多 max_owned 位；大決戰挑一位上陣（battle_instance.Escort），
+    打完那一場他回江湖、原主人的情誼乘 parted_keep（無條件捨去）。enabled 關著：招募、隊伍上限、決戰、叛投一個字都不變
+    （上限照 state.MAX_TEAM_COMPANIONS）。正式開、測試內容關。"""
+
+    enabled: bool = False
+    max_owned: int = Field(default=3, ge=1)  # 名下最多幾位（照 CompanionProgress.owner 算，名號比對不分大小寫）
+    parted_keep: float = Field(default=0.5, ge=0, le=1)  # 決戰打完回江湖、叛投帶不走時，原主人的情誼留幾成（無條件捨去）
+
+
 class FigureLifeTuning(_Strict):
     """人物活起來（大勢人物擴充第一批，Joy 2026-10-17「歷史武將人數新增多一些，更智能化，像是真的活在這個亂世」；
     設計稿 https://claude.ai/code/artifact/03df3760-b4bd-417c-935f-96dda0f500c2；tianxia/figure_life.py）。
@@ -2296,6 +2375,33 @@ class FigureLifeTuning(_Strict):
     commission_silver: int = Field(default=30, ge=0)
     commission_days: float = Field(default=1.0, gt=0)
     letter_write_budget_seconds: float = Field(default=60.0, gt=0)  # 書信請模型照他的口氣重寫的預算（鎖外、背景執行緒；寫不出來照固定句）
+    # 第三批（大家一起）：宴客、月旦評、求援委託
+    # 宴客：每一輪每位人物擲 feast_chance 設宴（心事是得意或沒有心事、此刻在場），全服同時最多 feast_max_open 場、上一場開席之後
+    # feast_gap_hours 個世界小時內不再開；一場擺 feast_hours 個世界小時（週末＝現實小時）。赴宴不花體力，一人一場敬一句：
+    # 情誼 +1～+feast_affinity_max（照分數）；散席時分數最高那一句上天下大事、名望 +feast_fame
+    feasts: bool = True
+    feast_chance: float = Field(default=0.03, ge=0, le=1)
+    feast_max_open: int = Field(default=1, ge=0)
+    feast_gap_hours: float = Field(default=6.0, ge=0)
+    feast_hours: float = Field(default=2.0, gt=0)
+    feast_affinity_max: int = Field(default=5, ge=1)
+    feast_fame: int = Field(default=1, ge=0)
+    feast_score_budget_seconds: float = Field(default=30.0, gt=0)  # 自己寫的敬酒詞請模型評分的預算（評不到照 feasts.DEFAULT_SCORE）
+    # 月旦評：許劭每週一評 yuedan_count 個人（名人、善人、惡人榜輪流挑），第 yuedan_from_week 週起；模型寫評語的預算，
+    # 等過 yuedan_wait_seconds 個世界秒還沒寫好就照固定句發
+    yuedan: bool = True
+    yuedan_count: int = Field(default=6, ge=1)
+    yuedan_from_week: int = Field(default=2, ge=1)
+    yuedan_wait_seconds: float = Field(default=900.0, ge=0)
+    yuedan_budget_seconds: float = Field(default=90.0, gt=0)
+    # 求援委託：心事焦慮的大勢人物每一輪擲 rally_chance 對自己陣營全部人發一件（同一位一次一件），前 rally_quota 個辦成的
+    # 拿銀兩 rally_silver、他的情誼 +rally_affinity，他寫信道謝；掛 rally_cal_days 個季曆天。護衛、犒軍他也算辦成
+    rallies: bool = True
+    rally_chance: float = Field(default=0.3, ge=0, le=1)
+    rally_quota: int = Field(default=3, ge=1)
+    rally_silver: int = Field(default=30, ge=0)
+    rally_affinity: int = Field(default=5, ge=0)
+    rally_cal_days: float = Field(default=3.0, gt=0)
 
 
 class RiseTuning(_Strict):
@@ -2614,6 +2720,7 @@ class Config(_Strict):
     showdown_pay: ShowdownPay = Field(default_factory=ShowdownPay)  # 全服決戰的軍餉與獲勝加給（見 ShowdownPay）
     duel: DuelTuning = Field(default_factory=DuelTuning)  # 單人頭目戰（見 DuelTuning；內容在 content/duels.json）
     arena: ArenaTuning = Field(default_factory=ArenaTuning)  # 擂台賽（見 ArenaTuning；tianxia/arena.py）
+    tavern: TavernTuning = Field(default_factory=TavernTuning)  # 酒肆（見 TavernTuning；tianxia/tavern.py）
     raid: Raid = Field(default_factory=Raid)  # 截殺敵對陣營的人（見 Raid）
     bounties: Bounties = Field(default_factory=Bounties)  # 懸賞榜（見 Bounties）
     sortie: SortieRules = Field(default_factory=SortieRules)  # 出陣（見 SortieRules）
@@ -2639,6 +2746,10 @@ class Config(_Strict):
     signature_arts: SignatureArtTuning = Field(default_factory=SignatureArtTuning)  # 本命武學的威力與學到時的成數（見 SignatureArtTuning）
     tactics: TacticTuning = Field(default_factory=TacticTuning)  # 一般的仗的回合與本命戰法（見 TacticTuning）
     figure_life: FigureLifeTuning = Field(default_factory=FigureLifeTuning)  # 人物活起來：每日行事、心事、風聞（見 FigureLifeTuning）
+    companions: CompanionsTuning = Field(default_factory=CompanionsTuning)  # 歷史武將同行：招募、名下三位、決戰助陣（見 CompanionsTuning）
+    # 情誼放慢（歷史武將同行第三節、9.4）：每一筆加的情誼乘這個倍數（renown.warmed：四捨五入，原本加 1 以上的至少加 1；扣的不乘）。
+    # 1 是不放慢；正式 0.7、週末設定 0.85。對話、事件、名聲起步、風聞都走它；名將贈禮、本命、招募的門檻不動，所以跟著晚一點拿到
+    affinity_gain_scale: float = Field(default=1.0, gt=0, le=1)
     rise: RiseTuning = Field(default_factory=RiseTuning)  # 江湖水漲：大場面、頭目、事件檢定跟得上變強的人（見 RiseTuning）
     treasures: TreasureRules = Field(default_factory=TreasureRules)  # 寶物與好馬的來源（見 TreasureRules；裝備四欄設計第六節）
     ranger: Ranger = Field(default_factory=Ranger)  # 遊俠名號（散人的成長階梯，見 Ranger）

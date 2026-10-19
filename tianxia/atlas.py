@@ -724,6 +724,8 @@ def travel_block(state: GameState, content: Content) -> TravelBlock | None:
         return TravelBlock("還在茶樓雅間裡，先離開才能安排前往", to_jianghu=True)
     if p.picking_donate:  # 大本營的捐軍備（素材與經濟設計第六節）；待 joy 潤
         return TravelBlock("還在軍需官帳前，先離開才能安排前往", to_jianghu=True)
+    if p.picking_tavern:  # 酒肆（企劃者 2026-10-18）；同 tavern.TRAVEL_BLOCKED（atlas 不 import tavern：tavern → atlas），待 joy 潤
+        return TravelBlock("還坐在酒肆裡，先出門才能安排前往", to_jianghu=True)
     if p.pending_faction:
         return TravelBlock("投靠還沒決定，先決定再安排前往", to_jianghu=True)
     if allied.needs_ally(state, content):  # 拜入之後還沒挑依附哪一邊（豪強分屬兩軍）
