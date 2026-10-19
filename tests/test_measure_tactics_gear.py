@@ -114,3 +114,44 @@ def test_gear_runs_to_the_end_and_names_every_effect(m):
         assert head in text
     assert "沒分類" not in text
     assert content.config.treasures.enabled and content.config.seal.enabled  # 量完放回去（正式內容本來就開著）
+
+
+def _fixed_quality(content, score):
+    """合成即設計開著時，造化分 score 的爐合出哪一品：直接問 fusion._points（遊戲裡真的定品的那一支）。"""
+    from tianxia import fusion
+    return fusion._points(content, [("score", score)]).fixed
+
+
+def test_chizhang_lift_bands_follow_the_fusion_thresholds(m, content):
+    """FB-454：赤璋（造化分 +5）那一行升一品的兩段照 fusion._points 的門檻寫——score >= mid_from 是中品、>= up_from 是上品，
+    所以剛好 mid_from、剛好 up_from 的爐本來就是那一品，+5 升不了；造化分有小數，寫成「以上、未滿」，不寫兩頭都算的「1～6」。"""
+    rule = content.config.fuse_quality
+    assert rule.fixed  # 正式內容合成即設計開著
+    amt = content.config.seal.effects["fuse_points"]
+    line = m._indirect(content, next(r for r in m.gear_rows(content) if r.key == "fuse_points"))
+    low_mid, low_up = rule.mid_from - amt, rule.up_from - amt
+    assert f"{low_mid:g}～{rule.mid_from:g}" not in line and f"{low_up:g}～{rule.up_from:g}" not in line
+    assert (f"造化分 {low_mid:g} 以上、未滿 {rule.mid_from:g} 的爐由下品升中品；"
+            f"{low_up:g} 以上、未滿 {rule.up_from:g} 的由中品升上品") in line
+    # 寫的跟 fusion 實際定的品一樣：下限算、上限不算
+    q = lambda s: _fixed_quality(content, s)  # noqa: E731
+    assert (q(low_mid), q(low_mid + amt)) == ("下品", "中品")
+    assert (q(rule.mid_from), q(rule.mid_from + amt)) == ("中品", "中品")  # 剛好 6 本來就是中品
+    assert (q(low_up), q(low_up + amt)) == ("中品", "上品")
+    assert (q(rule.up_from), q(rule.up_from + amt)) == ("上品", "上品")  # 剛好 24 本來就是上品
+
+
+def test_lift_bands_match_fusion_for_any_amount(m, content):
+    """lift_bands 照 Config 的門檻算、跟 fusion._points 對得上；加的分比中品那一段還寬時多一段下品直升上品。"""
+    rule = content.config.fuse_quality
+    for amt in (content.config.seal.effects["fuse_points"], 0.5, rule.up_from - rule.mid_from + 2):
+        bands = m.lift_bands(content, amt)
+        assert bands
+        for was, now, lo, hi in bands:
+            assert lo < hi
+            for s in (lo, (lo + hi) / 2, hi - 1e-6):  # 這一段裡（下限算）
+                assert (_fixed_quality(content, s), _fixed_quality(content, s + amt)) == (was, now)
+            for s in (lo - 1e-6, hi):  # 這一段外（上限不算）
+                assert (_fixed_quality(content, s), _fixed_quality(content, s + amt)) != (was, now)
+    wide = m.lift_bands(content, rule.up_from - rule.mid_from + 2)
+    assert {(was, now) for was, now, _, _ in wide} == {("下品", "中品"), ("下品", "上品"), ("中品", "上品")}

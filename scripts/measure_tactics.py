@@ -841,6 +841,30 @@ def _gear_hp(content, runs, chain, rows):
     print("  決戰、奪璽單挑：不吃（池子是加入決戰時的快照，team._cap_of 的 plain 不乘；隨行同伴 team.mate_pool 也是）")
 
 
+def lift_bands(content, amt):
+    """合成即設計（Config.fuse_quality.fixed）開著時，造化分多 amt 讓哪幾段的爐升品（FB-454）：[(原品, 升到, 下限, 上限)]，下限算、上限不算
+    （造化分可以有小數：兩門的底取平均、悟性係數）。品級直接問 fusion._points（score >= mid_from 中品、>= up_from 上品），
+    所以只在門檻與「門檻 − amt」上會變：照這幾個點切段，每一段取中間問一次，同一種升法接起來。fixed 關著回空的。"""
+    from tianxia import fusion
+    rule = content.config.fuse_quality
+
+    def quality(score):
+        return fusion._points(content, [("score", score)]).fixed
+
+    cuts = sorted({rule.mid_from, rule.up_from, rule.mid_from - amt, rule.up_from - amt})
+    bands = []
+    for lo, hi in zip(cuts, cuts[1:]):
+        mid = (lo + hi) / 2
+        was, now = quality(mid), quality(mid + amt)
+        if was == now:
+            continue
+        if bands and bands[-1][:2] == (was, now) and bands[-1][3] == lo:
+            bands[-1] = (was, now, bands[-1][2], hi)
+        else:
+            bands.append((was, now, lo, hi))
+    return bands
+
+
 def _indirect(content, r):
     """間接那一列：改哪一條成長、改多少（照遊戲裡真的掛點算，不換算成威力）。"""
     from tianxia import cultivation, fusion, sensing, treasures
@@ -885,9 +909,10 @@ def _indirect(content, r):
         if not rule.fixed:
             return f"造化分 +{amt:g}：{rolled}（此刻 fixed 關著）"
         band = rule.up_from - rule.mid_from
+        lifts = "；".join(f"{lo:g} 以上、未滿 {hi:g} 的{'爐' if i == 0 else ''}由{was}升{now}"
+                         for i, (was, now, lo, hi) in enumerate(lift_bands(content, amt)))
         return (f"造化分 +{amt:g}：合成即設計（Config.fuse_quality.fixed 開著）不擲骰，+{amt:g} 佔中品那一段（{rule.mid_from:g}～{rule.up_from:g}，"
-                f"{band:g} 分）的 {amt / band:.0%}——造化分 {rule.mid_from - amt:g}～{rule.mid_from:g} 的爐由下品升中品、"
-                f"{rule.up_from - amt:g}～{rule.up_from:g} 的由中品升上品；對照：{rolled}")
+                f"{band:g} 分）的 {amt / band:.0%}——造化分 {lifts}；對照：{rolled}")
     if r.key == "mate_exp":
         return f"同伴拿到的經驗 ×{amt:g}（本人不變）"
     return f"{r.text}（{NOTE.get(r.key, '')}）"
