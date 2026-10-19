@@ -34,6 +34,10 @@ from tianxia.content import env_profile, load_content, profile_line  # noqa: E40
 from tianxia.ollama_client import OllamaClient  # noqa: E402
 
 UNLOAD_SECONDS = 20.0  # 請 Ollama 卸掉模型：它回得很快，不必等久
+# 「真的在線」自己一個窗口，**刻意不讀 Config.presence_seconds**：那個是「此地還有／截殺得到」的窗口，
+# 2026-10-19 照 Joy 的要求拉到 24 小時（殺得到是重點，城鎮是避風港），照它判等於永遠有人在玩、
+# 模型永遠不卸、省電模式整個白做。這裡要的是「還有人正在按按鈕」，十分鐘剛好。
+ONLINE_SECONDS = 600.0
 # 暖機不給自己的逾時：要讓那個請求跑到模型載完（OllamaClient.warm 的預設 WARM_TIMEOUT）。
 # 給 2 秒的話，熱的模型續命看起來正常（回得快），但冷的模型永遠載不起來——請求一斷，Ollama 就把載入取消
 # （2026-10-18 實機踩到，warm_err.log 寫「Read timed out. (read timeout=2.0)」）。
@@ -72,7 +76,8 @@ def main(argv: list[str] | None = None) -> None:
     console.use_utf8()
     parser = argparse.ArgumentParser(description="有真人在線就把模型留在記憶體裡，沒人就放掉")
     parser.add_argument("--every", type=float, default=60, help="多久看一次（現實秒，預設 60）")
-    parser.add_argument("--presence", type=float, default=0, help="多久以內算在線（現實秒，預設照 Config.presence_seconds）")
+    parser.add_argument("--presence", type=float, default=0,
+                        help=f"多久以內算「真的在線」（現實秒，預設 {ONLINE_SECONDS:g}）")
     parser.add_argument("--rounds", type=int, default=0, help="看幾輪就結束（測試用，預設一直跑）")
     parser.add_argument("--warm-now", action="store_true",
                         help="不管有沒有人在線，先暖一次就結束（開服腳本用：keep_alive 照省電模式，不會把 12h 釘回去）")
@@ -80,7 +85,7 @@ def main(argv: list[str] | None = None) -> None:
 
     profile = env_profile()
     content = load_content(ROOT / "content", profile=profile)
-    presence = args.presence or content.config.presence_seconds
+    presence = args.presence or ONLINE_SECONDS
     client = OllamaClient.from_config(content.config)
     db = database.default_path().resolve()
     print(f"暖機看守：每 {args.every:g} 秒看一次　在線＝{presence:g} 秒內的真人　模型 {client.model}", flush=True)

@@ -126,7 +126,7 @@ def close(state: GameState) -> None:
     """收起酒肆（同 equipment.close_smith）：凡是把 picking_tavern 設成 False 的地方都走這裡，掌櫃那一句一併清掉。"""
     p = state.player
     p.picking_tavern = False
-    p.shop_line, p.shop_clue, p.shop_hold = "", "", None
+    p.shop_line, p.shop_clue, p.shop_hold = "", "", ""
 
 
 def sign(state: GameState, content: Content, loc_id: str | None = None) -> str:
@@ -311,7 +311,13 @@ def _road_end(other: GameState) -> str | None:
 def seek_lines(state: GameState, content: Content, other: GameState, now_real: float,
                wanted: set[str] | None = None) -> tuple[list[str], bool]:
     """查人在哪的回話與問到了沒（問不到的退一半，呼叫端退）。照打聽度：5 以上此刻的確切地點與在做什麼；3～4 一兩個時辰前的確切地點；
-    2 只說大區；1 一半機會說大區；0 以下沒人聽過。下線超過 offline_hours 的寫「近來沒人見過他」，打聽度 3 以上多一句最後在哪個大區。"""
+    2 只說大區；1 一半機會說大區；0 以下沒人聽過。下線超過 offline_hours 的寫「近來沒人見過他」，打聽度 3 以上多一句最後在哪個大區。
+
+    **「此刻就在…」只在那個人真的還在場時才寫**（Joy 2026-10-19「我在酒館打聽到冰狼西獅在嵩山腳，過去怎麼沒看到人」）：
+    場景的「此地還有」只列 presence_seconds（600 秒）內同步過的人，而這裡原本只擋 offline_hours（24 小時）——
+    中間那一段（離開十分鐘到一天）會被寫成「此刻就在嵩山腳，正在那裡走動」，玩家付了錢、走過去，那裡沒有人。
+    實機那一次對方離線 6.8 小時、人確實留在嵩山腳，情報沒錯，錯在「此刻」與「正在走動」。
+    不在場就退回同一段的過去式（「一兩個時辰前有人在…見過他」），情報照給、不騙人。"""
     cfg = content.config.tavern
     p = other.player
     score = person_reach(state, content, other, wanted)
@@ -324,7 +330,8 @@ def seek_lines(state: GameState, content: Content, other: GameState, now_real: f
         if score >= 1:
             return [OFFLINE.format(name=name, him=him)], True
         return [], False
-    if score >= 5:
+    present = bool(seen) and now_real - seen <= content.config.presence_seconds  # 跟「此地還有」同一個定義
+    if score >= 5 and present:
         if p.journey is not None:
             j = p.journey
             doing = DOING_ROAD.format(place=content.locations[j.path[j.last]].name)
