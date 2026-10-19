@@ -194,6 +194,7 @@ def run_one(profile: str | None, side: str, rules: str, pills: int, days: float,
     rng = random.Random(2)
     reached: dict[int, float] = {}
     daily: list[int] = []
+    powers: list[int] = []  # 每天結束時本人的武學威力（Game._battle_power）：練功挑得動多強的對手看它
     spots: Counter = Counter()  # 每一個現實日挑的練功點（地點・對手）
     presses = 0
     with Ledger(name) as ledger:
@@ -217,11 +218,12 @@ def run_one(profile: str | None, side: str, rules: str, pills: int, days: float,
             now += step_min * 60
             if now >= T0 + (len(daily) + 1) * DAY:
                 daily.append(p.member.level)
+                powers.append(round(game._battle_power()))
     database.close_all()
     source = "練功" if rules == "new" else "找素材"
     per = ledger.by[source] / (presses * cfg.action_cost["explore"]) if presses else 0.0
     return {"reached": reached, "daily": daily, "by": ledger.by, "level": p.member.level, "silver": p.stats.get("silver", 0),
-            "late": cfg.late_exp_step, "per_stamina": per, "spots": spots}
+            "late": cfg.late_exp_step, "per_stamina": per, "spots": spots, "powers": powers}
 
 
 def main(argv=None) -> None:
@@ -250,6 +252,7 @@ def main(argv=None) -> None:
                         print(f"[{'新' if rules == 'new' else '舊'}規則・加陡 {r['late']}・{'吃丹' if pills else '不吃丹'}] {side}："
                               f"{hit}；最後 {r['level']} 級、銀兩 {r['silver']}；經驗來源 {src}")
                         print(f"    每天結束時的等級：{r['daily']}")
+                        print(f"    每天結束時的威力：{r['powers']}")
                         where = "、".join(f"{k} {v} 天" for k, v in r["spots"].most_common(3))
                         print(f"    {'練功' if rules == 'new' else '找素材'}每點體力 {r['per_stamina']:.2f} 經驗；常去的：{where}")
 
