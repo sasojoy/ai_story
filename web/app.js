@@ -4641,9 +4641,11 @@
     return pills ? `<div class="m-ins"><small>${INSIGHT_ROW}</small>${pills}</div>` : "";
   }
   // 地利（武學隨地理環境計畫第六節）：拉高才看的細節裡、「站在這裡的」底下一段；字是伺服器照最濃的意境寫好的
-  // （mapdata.base 的 terrain_arts，terrain.place_line），開關關著、這一處沒有最濃的是空字串、整段不畫。「地利」兩個字待 joy 潤
+  // （mapdata.base 的 terrain_arts，terrain.place_line），開關關著、這一處沒有最濃的是空字串、整段不畫。「地利」兩個字待 joy 潤。
+  // 那一句 26 字，375 寬斷成「…施展不／開。」、360 與桌面「…施展／不開。」（FB-470）：照掮客那一句（sayHtml）切在「：」「，」
+  // 後面包成不折行的小段，字一個不改
   function terrainArtsRow(b) {
-    return b.terrain_arts ? `<div class="m-sec"><h4>地利</h4>${esc(b.terrain_arts)}</div>` : "";
+    return b.terrain_arts ? `<div class="m-sec"><h4>地利</h4>${sayHtml(b.terrain_arts)}</div>` : "";
   }
   // 點一個地點（設計第五節）：第一行（印、名字、危險度）、三格（誰佔著、打得過嗎、多遠）、動作一排、拉高才看的細節
   function placeHtml(base, st, id) {

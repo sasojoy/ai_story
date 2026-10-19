@@ -323,7 +323,8 @@ def test_the_map_drawer_shows_the_terrain_section():
     game = test_map_web._game()
     fire = next(p["id"] for p in game.map_base()["places"] if p["strong"] == "huo")
     out = test_map_web.run(game, f'return H.placeHtml(H.S.mapBase, H.S.mapState, "{fire}");')
-    assert "<h4>地利</h4>此地火氣最濃：剛猛的功夫在這裡得勢，柔勁的施展不開。" in out
+    # 那一句包成不折行的小段（FB-470，tests/test_fb470_471_terrain_wrap.py），字照舊
+    assert "<h4>地利</h4>此地火氣最濃：剛猛的功夫在這裡得勢，柔勁的施展不開。" in re.sub(r'</?span[^>]*>', "", out)
     game.content.config.terrain_arts.enabled = False
     assert "<h4>地利</h4>" not in test_map_web.run(game, f'return H.placeHtml(H.S.mapBase, H.S.mapState, "{fire}");')
 
