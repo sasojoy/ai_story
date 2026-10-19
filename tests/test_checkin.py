@@ -182,6 +182,16 @@ def test_off_in_weekend_and_after_season():
     assert game.check_in() == [checkin.OFF]
 
 
+def test_no_card_past_the_last_day():
+    """管理者把季末往後排、季還在跑：第 21 天之後沒有表上的份，不畫小標、按了也只回一句。"""
+    game = _game()
+    _day(game, 21)
+    game.state.world.time += DAY  # 第 22 天（季沒收）
+    assert not game.state.world.ended
+    assert "checkin" not in game.status_data()
+    assert game.check_in() == [checkin.OFF]
+
+
 def test_prologue_cannot_check_in():
     game = _game(prologue=True)
     pills = game.state.player.stamina_pills

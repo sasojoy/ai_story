@@ -9052,9 +9052,9 @@ class Game:
         return self._log(lines + changes)
 
     def checkin_view(self) -> dict | None:
-        """江湖頁「簽到」小標的資料（checkin.view）：簽到關著、草廬序章裡是 None。"""
+        """江湖頁「簽到」小標的資料（checkin.view）：簽到關著、草廬序章裡、過了這一季最後一天（管理者把季末往後排）是 None。"""
         s, c = self.state, self.content
-        if not checkin.on(c, s.world) or prologue_rules.active(s, c):
+        if not checkin.on(c, s.world) or not checkin.in_season(c, s.world) or prologue_rules.active(s, c):
             return None
         return checkin.view(s, c, s.world)
 

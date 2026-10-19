@@ -54,6 +54,11 @@ def last_day(content: Content, world: WorldState) -> int:
     return content.config.season_weeks * 7 - calendar.open_day(content, world)
 
 
+def in_season(content: Content, world: WorldState) -> bool:
+    """今天在這一季簽到的日子裡（第 1 天到 last_day）：管理者把季末往後排、季還在跑的那幾天沒有表上的份，不畫也不給。"""
+    return 1 <= day_of(content, world) <= last_day(content, world)
+
+
 def _ordinary_index(content: Content, day: int) -> int:
     """day 是第幾個一般的日子（從 0 起）：表上丹與四階以外的日子照先後編號，偶數號給銀兩、奇數號給素材（草圖：1 銀、2 料、4 銀）。"""
     rule = content.config.checkin
@@ -108,12 +113,10 @@ def tier4_choices(state: GameState, content: Content) -> list[dict]:
 
 def due(state: GameState, content: Content, world: WorldState) -> int | None:
     """今天還沒簽的話是第幾天；關著、簽過了、不在這一季的日子裡是 None（假人與整季機器人照它）。"""
-    if not on(content, world):
+    if not on(content, world) or not in_season(content, world):
         return None
     day = day_of(content, world)
-    if not 1 <= day <= last_day(content, world) or day in state.player.checkin_days:
-        return None
-    return day
+    return None if day in state.player.checkin_days else day
 
 
 def material_for(content: Content, name: str, season: int, day: int) -> str | None:
@@ -123,11 +126,9 @@ def material_for(content: Content, name: str, season: int, day: int) -> str | No
 
 def claim(state: GameState, content: Content, world: WorldState, attribute: str = "") -> tuple[list[str], list[str]] | str:
     """領今天的份：成了回（訊息, 數值變化），不成回原因（什麼都不動）。四階的日子要帶屬性（剛柔快慢）。"""
-    if not on(content, world):
+    if not on(content, world) or not in_season(content, world):
         return OFF
     day = day_of(content, world)
-    if not 1 <= day <= last_day(content, world):
-        return OFF
     p = state.player
     if day in p.checkin_days:
         return TODAY_DONE
