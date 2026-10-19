@@ -27,7 +27,7 @@ from .front_lines import BAND_KEYS, GEJU_KEYS
 from .materials import DEFAULT_DROPS, TIER_NAMES
 from .models import (
     FRONT_KEY, GLOW_KEYS, GOOD_HORSE, MOVES, RECRUITER_ALLIED_FIELDS, REVEAL_KEYS, ROADS, STATS, TREASURE_EFFECTS, WEAPON_KINDS, Attribute, BattleDef, CharacterDef, CheckVoice,
-    CombatLines, Condition, Config, Content, CraftNames, DuelBoss, Effect, Event, FigureDef, FollowerDef, ForgeSecret, Foreshadows, FrontLines, GearBook,
+    CombatLines, Condition, Config, Content, CraftNames, DuelBoss, Effect, Event, FigureDef, FollowerDef, ForgeSecret, Foreshadows, FrontLines, GatherBranch, GearBook,
     GiftDef, Hints, MingtieContent, InsightDef, Location, OppDef,
     InsightScene, OrdersContent, PresetRecipe, PromotionDef, RelationDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, ShardDef, SimRumor, SkillDef,
     SignatureArmDef, SteedDef, Squad, Tier4Named, TimetableEvent, TraitBook, TreasureDef, Tutorial, allow_known,
@@ -123,6 +123,7 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         arena_crowd=_read(root / "arena_crowd.json") if (root / "arena_crowd.json").exists() else {},
         seal=_shards(root / "seal.json"),
         relations=[_build(RelationDef, raw) for raw in _read(root / "relations.json")] if (root / "relations.json").exists() else [],
+        gather_branches=_index(GatherBranch, _read(root / "gather_branches.json")) if (root / "gather_branches.json").exists() else {},
         figures=_index(FigureDef, _read(root / "figures.json")) if (root / "figures.json").exists() else {},
         duels=_index(DuelBoss, _read(root / "duels.json")) if (root / "duels.json").exists() else {},
         gear=_gear(root / "gear.json"),
@@ -1540,6 +1541,31 @@ def check_core_loop(c: Content, need) -> None:
          f"Config.explore_modes.second_tier 的鍵是危險度 1～3：{sorted(c.config.explore_modes.second_tier)}")
 
 
+GATHER_BRANCH_FIELDS = {"place"}  # 分支第一句能用的佔位（GatherBranch.line）
+
+
+def check_gather_branches(c: Content, need) -> None:
+    """找素材分支（content/gather_branches.json，第 32 項）：id 不能是「自己說」那一顆的 say；屬性只能是素材表裡有的；
+    不是深入的要寫 attributes；標籤要有地點用；深入最多一條；第一句只能用 {place}。開關開著卻有城外地點一條都沒有不擋
+    （那裡照舊直接找素材，PM）。id 重複在載入時（_index）就擋。"""
+    from .explore_modes import SAY  # noqa: PLC0415  延後 import（同 validate 的 atlas）
+
+    attributes = {m.attribute for m in c.materials.values()}
+    tags = {tag for loc in c.locations.values() for tag in loc.tags}
+    where = "content/gather_branches.json"
+    need(sum(b.deep for b in c.gather_branches.values()) <= 1, f"{where}：深入（deep）最多一條")
+    for b in c.gather_branches.values():
+        need(b.id != SAY, f"{where}：id 不能是 {SAY}（「自己說」那一顆用掉了）")
+        need(b.deep or bool(b.attributes), f"{where}：{b.id} 不是深入，要寫 attributes")
+        known_attrs = [a for a in b.attributes if a not in attributes]
+        need(not known_attrs, f"{where}：{b.id} 的屬性 {known_attrs} 不在素材表裡")
+        need(len(set(b.attributes)) == len(b.attributes), f"{where}：{b.id} 的屬性重複")
+        unused = [t for t in b.tags if t not in tags]
+        need(bool(b.tags) and not unused, f"{where}：{b.id} 的標籤 {unused or '（空的）'} 沒有地點用")
+        fields = set(STEP_PLACEHOLDER.findall(b.line))
+        need(fields <= GATHER_BRANCH_FIELDS, f"{where}：{b.id} 的第一句只能用 {{place}}：{sorted(fields)}")
+
+
 def check_territory(c: Content, need, known, front_ids: list[str]) -> None:
     """地盤（Scenario.territory，出陣探索與地盤設計第四節）：戰線認得、兩頭有陣營；可易手的地點真的在那條戰線上、不是大本營、
     不重複；每一處戰線地點都有歸屬（大本營、fixed 或 lines）；站的隊伍是那一方的、每個可能的控制方都有；時刻表的 control
@@ -2607,6 +2633,7 @@ def validate(c: Content) -> None:
     check_signature_arms(c, need, known)
     check_bounties(c, need)
     check_core_loop(c, need)
+    check_gather_branches(c, need)
     check_territory(c, need, known, front_ids)
 
     for key, where in sorted(marks_written.items()):

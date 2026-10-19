@@ -61,7 +61,7 @@ import server_push
 import zhuan_html
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
-    arena_crowd, battle_instance, biography, calendar, companion_agent, divine, duel, event_llm, feasts, fight_llm, foreshadow, gender, glyph, insight_llm, leaderboard, letters, mapdata,
+    arena_crowd, battle_instance, biography, calendar, companion_agent, divine, duel, event_llm, feasts, fight_llm, foreshadow, gather_llm, gender, glyph, insight_llm, leaderboard, letters, mapdata,
     naming,
     ollama_client, rules,
     precise, seal, seal_duel, server_bots, social, sortie, speech, tavern, team, timetable, treasures, yuedan,
@@ -1117,6 +1117,23 @@ def feast_text(game: Game, text: str) -> list[str]:
     return act(game, lambda g: g.feast_toast(request.text, rate, request))
 
 
+def gather_text(game: Game, text: str) -> list[str]:
+    """找素材的「自己說」（第 32 項），三段同 feast_text：A Game.gather_text_request（只讀）→ B 鎖外請模型評成算、挑屬性
+    （gather_llm.score，預算同隨口應對 free_text_budget_seconds；評不到 40、屬性照第一條分支）→ C Game.gather_say 重驗同一個地點、
+    同一次探索、同一句才扣體力擲骰。排隊被擋丟 GameError（BUSY_FREE_TEXT、BUSY_QUEUE_TIMEOUT），不扣體力。"""
+    started, request = _open_request(game, lambda: game.gather_text_request(text))
+    if isinstance(request, list):
+        return request
+    total = game.content.config.free_text_budget_seconds
+
+    def ask() -> tuple[int, str | None]:
+        return gather_llm.score(within_budget(game.client, total - (_monotonic() - started)), request)
+
+    rate, attribute = model_call(game, ask, fallback=(gather_llm.DEFAULT_RATE, None), left=total - (_monotonic() - started),
+                                 busy=BUSY_FREE_TEXT)
+    return act(game, lambda g: g.gather_say(request, rate, attribute))
+
+
 CROWD_RUNNING: set[str] = set()  # 正在背景重寫場邊那一句的角色（一人一條；名號鍵）
 
 
@@ -1984,6 +2001,8 @@ def api_do(op: str, request: Request, body: dict = Body(default={})):
         msgs = tavern_ask(game, str(body.get("text", ""))[:60])
     elif op == "feast_text":  # 宴席上自己寫的敬酒詞：分數在行動鎖外評（見 feast_text）
         msgs = feast_text(game, str(body.get("text", "")))
+    elif op == "gather_text":  # 找素材的「自己說」：成算在行動鎖外評（見 gather_text）
+        msgs = gather_text(game, str(body.get("text", "")))
     elif op in MAIN_ACTIONS:
         msgs = act(game, lambda g: MAIN_ACTIONS[op](g, body), paused_ok=op in PAUSE_OK_ACTIONS)
     else:
