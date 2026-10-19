@@ -276,6 +276,26 @@ def test_an_anxious_figure_calls_his_whole_side(c):
     assert b not in s.world.bounties  # 不上懸賞榜
 
 
+def test_a_rally_rumor_says_practice_or_sortie_where_precise_is_on(c):
+    """FB-435：一類一顆的季，求援的陣營傳聞寫「練功或出陣攻打贏」，不寫找素材撞上（那種季找素材不打仗）；沒蓋章的季照舊。"""
+    from tianxia.world_state import stamp_season
+
+    c.config.figure_life.rally_chance = 1.0
+    for precise_on in (True, False):
+        s = _season(c)
+        stamp_season(s.world, c)
+        s.world.precise_actions = precise_on
+        _anxious(s, c, "qinjie")
+        figure_life._maybe_rally(s, c, "qinjie", 1)
+        b = s.world.rallies[0]
+        assert b.kind == "strike"
+        text = next(r.text for r in s.world.rumors if r.layer == "faction" and "求援" in r.text)
+        if precise_on:
+            assert "練功或出陣攻打贏" in text and "找素材" not in text
+        else:
+            assert "找素材撞上" in text
+
+
 def test_only_his_side_sees_it_and_the_first_three_get_paid(c):
     c.config.figure_life.rally_chance = 1.0
     s = _season(c)
