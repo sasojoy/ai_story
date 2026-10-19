@@ -1,0 +1,580 @@
+<title>簽到銀兩懸賞畫面</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;600&family=Noto+Sans+TC:wght@400;600&display=swap">
+<style>
+/* 版面：三組對比，每組三個選項並排（窄螢幕疊成一欄），每個選項是 375 寬的實際畫面。
+   頁面外框刻意單一暗色；手機畫面裡照遊戲本身：江湖頁是紙色淺底（web/style.css 的 :root），店面與懸賞榜是 .shop-layer 的暗底與木板 */
+:root {
+  color-scheme: dark;
+  /* 頁面外框 */
+  --page: #120c08; --page-ink: #f2e5c6; --page-muted: #c9b28a; --page-gold: #f2c46a; --page-edge: #3a2a1e;
+  /* 江湖頁（照 style.css 開頭的淺色 :root） */
+  --j-paper: #f4ede0; --j-card: #fbf7ef; --j-card-2: #efe6d5; --j-ink: #2a241d; --j-ink-2: #6b6155; --j-line: #ddd1bc;
+  --j-accent: #a8322a; --j-accent-ink: #fff; --j-accent-soft: rgba(168, 50, 42, 0.10); --j-gold: #b7862b;
+  --j-stam: #c08a1e; --j-hp: #b23a2b; --j-ok: #2f7d4f; --j-xia: #2f5d8a;
+  --j-shadow: 0 1px 2px rgba(60, 40, 20, 0.08), 0 2px 8px rgba(60, 40, 20, 0.06);
+  /* 店面（.shop-layer） */
+  --s-bg1: #4a2a18; --s-bg2: #24170f; --s-bg3: #160e09;
+  --s-ink: #f2e5c6; --s-ink-2: #e8d6ad; --s-muted: #c9b28a; --s-brass: #b7862b; --s-gold: #f2c46a; --s-line: #6b4a2e;
+  --s-cell: rgba(43, 26, 16, 0.85); --s-warn: #e0a08a; --s-sign-bg: #2b1a10; --s-tabline: #5a4030; --s-dark: #1e1510;
+  --s-shade: rgba(0, 0, 0, 0.25); --s-goldsoft: rgba(242, 196, 106, 0.1);
+  --q-low: #a89b88; --q-mid: #6fb7c4; --q-high: #f2c46a;
+  /* 懸賞榜（.shop-board 木板與紙） */
+  --w-1: #6b4a2a; --w-2: #5e4024; --w-3: #74512e; --w-bar: #4e3520;
+  --n-paper: #f6edd8; --n-gold-paper: #fbf1d0; --n-ink: #2a241d; --n-ink-2: #6d5a43; --n-pin: #8e2a22; --n-stamp: #b3261e;
+  --k-strike: #a8322a; --k-scout: #2f5d8a; --k-escort: #3f7d5c; --k-art: #9a6a2a; --n-goldline: #c9a24a;
+  /* 四屬性 */
+  --gang: #a8322a; --kuai: #2f5d8a; --rou: #3f7d5c; --man: #9a6a2a;
+  --gang-d: #c2473c; --kuai-d: #4a7cae; --rou-d: #55a079; --man-d: #b98634;
+  --serif: "Noto Serif TC", "Songti TC", "PMingLiU", serif;
+  --sans: "Noto Sans TC", -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif;
+}
+body { background: var(--page); color: var(--page-ink); font: 15px/1.7 var(--sans); margin: 0; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-block: 28px 56px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1 { font: 600 26px/1.3 var(--serif); letter-spacing: 3px; margin: 0 0 6px; color: var(--page-gold); text-wrap: balance; }
+.lede { max-width: 66ch; color: var(--page-muted); margin: 0 0 8px; }
+h2 { font: 600 20px/1.4 var(--serif); margin: 40px 0 4px; letter-spacing: 2px; text-wrap: balance; }
+.ask { max-width: 70ch; color: var(--page-muted); margin: 0 0 18px; }
+.opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 375px), 1fr)); gap: 28px 22px; align-items: start; }
+.opt { display: grid; gap: 10px; min-width: 0; }
+.opt-head { display: flex; align-items: baseline; gap: 10px; }
+.opt-key { font: 600 22px var(--serif); color: var(--page-gold); }
+.opt-name { font: 600 16px var(--serif); }
+.opt-note { font-size: 13.5px; color: var(--page-muted); margin: 0; }
+.pros { margin: 0; padding-left: 1.1em; font-size: 13px; color: var(--page-muted); }
+.cap { font: 12px var(--sans); color: var(--page-muted); letter-spacing: 1px; margin: 4px 0 -4px; }
+.foot { margin-top: 44px; font-size: 13px; color: var(--page-muted); max-width: 70ch; }
+
+/* ── 江湖頁的手機（淺色紙） ── */
+.jp { width: 100%; max-width: 375px; border-radius: 22px; overflow: hidden; border: 1px solid var(--page-edge); background: var(--j-paper); color: var(--j-ink); font: 15px/1.65 var(--sans); }
+.jtop { padding: 8px 16px; border-bottom: 1px solid var(--j-line); background: var(--j-paper); }
+.jrow { display: flex; align-items: center; gap: 8px; }
+.jwho { flex: 1; min-width: 0; }
+.jname { font: 600 17px var(--serif); }
+.jname small { font: 500 12px var(--sans); color: var(--j-ink-2); margin-left: 6px; }
+.jwhere { font-size: 12px; color: var(--j-ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jgear { width: 32px; height: 32px; border-radius: 10px; border: 1px solid var(--j-line); display: grid; place-items: center; color: var(--j-ink-2); }
+.jvit { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) auto auto; gap: 6px 10px; align-items: center; margin-top: 6px; }
+.jbar { position: relative; height: 20px; border-radius: 10px; background: var(--j-card-2); overflow: hidden; font: 600 11px/20px var(--sans); }
+.jbar > i { position: absolute; inset: 0 auto 0 0; border-radius: 10px; }
+.jbar.st > i { background: var(--j-stam); } .jbar.hp > i { background: var(--j-hp); }
+.jbar > span { position: relative; padding: 0 8px; white-space: nowrap; }
+.jnum { font: 600 13px var(--sans); white-space: nowrap; } .jnum em { font-style: normal; font-weight: 400; color: var(--j-ink-2); margin-right: 2px; font-size: 11px; }
+.jbody { padding: 12px 16px; display: grid; gap: 10px; }
+.jcard { background: var(--j-card); border: 1px solid var(--j-line); border-radius: 14px; padding: 12px 14px; box-shadow: var(--j-shadow); }
+.jcard p { margin: 0; }
+.jmuted { color: var(--j-ink-2); font-size: 13px; }
+.jbtn { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 8px 12px; border-radius: 12px; border: 1px solid var(--j-line); background: var(--j-card); color: var(--j-ink); font: 15px/1.35 var(--sans); text-align: center; }
+.jbtn.primary { background: var(--j-accent); border-color: var(--j-accent); color: var(--j-accent-ink); font-weight: 600; }
+.jbtn.small { min-height: 36px; padding: 4px 12px; font-size: 14px; }
+.jbtn.off { opacity: 0.45; }
+.jbtn small { display: block; font-size: 11.5px; font-weight: 400; opacity: .85; }
+.peek-row { display: flex; gap: 6px; }
+.peek { flex: 1 1 auto; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 6px 8px; border: 1px solid var(--j-line); border-radius: 14px; background: var(--j-card); font: 600 14px var(--sans); white-space: nowrap; position: relative; }
+.peek::after { content: "▾"; font-size: 12px; font-weight: 400; color: var(--j-ink-2); transform: rotate(-90deg); }
+.peek.on { background: var(--j-card-2); } .peek.on::after { transform: none; }
+.peek.board { border-color: var(--j-gold); }
+.peek .pdot { width: 7px; height: 7px; border-radius: 50%; background: var(--j-accent); }
+.peek-panel { border: 1px solid var(--j-gold); border-radius: 14px; background: var(--j-card); padding: 10px 12px; }
+.now { padding: 10px 12px; border-left: 3px solid var(--j-accent); background: var(--j-card); border-radius: 0 12px 12px 0; font-size: 14px; }
+.now b { font-family: var(--serif); }
+.wheel4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.wheel4 span { display: grid; place-items: center; min-height: 62px; border-radius: 14px; background: var(--j-ink); color: var(--j-paper); font: 600 15px var(--serif); }
+.wheel4 span:nth-child(1) { box-shadow: inset 0 -3px 0 var(--gang); } .wheel4 span:nth-child(2) { box-shadow: inset 0 -3px 0 var(--kuai); }
+.wheel4 span:nth-child(3) { box-shadow: inset 0 -3px 0 var(--rou); } .wheel4 span:nth-child(4) { box-shadow: inset 0 -3px 0 var(--man); }
+.jtabs { display: grid; grid-template-columns: repeat(5, 1fr); border-top: 1px solid var(--j-line); background: var(--j-card); }
+.jtab { display: grid; justify-items: center; padding: 6px 0 5px; font-size: 11px; color: var(--j-ink-2); position: relative; }
+.jtab b { font: 600 18px/1.2 var(--serif); }
+.jtab.on { color: var(--j-accent); } .jtab.on::before { content: ""; position: absolute; top: 0; left: 30%; right: 30%; height: 3px; border-radius: 0 0 3px 3px; background: var(--j-accent); }
+.fold { border: 1px solid var(--j-line); border-radius: 14px; background: var(--j-card); overflow: hidden; }
+.fold > .sum { display: flex; align-items: center; gap: 8px; padding: 10px 14px; font-weight: 600; }
+.fold > .sum::after { content: "▾"; margin-left: auto; color: var(--j-ink-2); }
+.fold > .fb { border-top: 1px solid var(--j-line); padding: 10px 12px; display: grid; gap: 8px; }
+.task { display: grid; gap: 1px; justify-items: start; text-align: left; padding: 7px 12px; min-height: 52px; border-radius: 12px; border: 1px solid var(--j-line); background: var(--j-card); }
+.task b { font-weight: 600; font-size: 14.5px; }
+.task small { font-size: 12px; line-height: 1.35; color: var(--j-ink-2); }
+.task.new { border-color: var(--j-gold); }
+.task.off { opacity: .45; }
+.task .why { color: var(--j-accent); }
+
+/* 簽到卡 */
+.sign-a { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; padding: 10px 12px; border-color: color-mix(in srgb, var(--j-gold) 60%, var(--j-line)); }
+.sign-a .t { font: 600 14.5px var(--serif); }
+.sign-a .t small { font: 12px var(--sans); color: var(--j-ink-2); margin-left: 6px; }
+.dots7 { display: flex; gap: 5px; align-items: center; }
+.dots7 i { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--j-line); background: var(--j-card); }
+.dots7 i.got { border-color: var(--j-accent); background: var(--j-accent); }
+.dots7 i.miss { border-style: dashed; }
+.dots7 i.today { border-color: var(--j-gold); box-shadow: 0 0 0 3px color-mix(in srgb, var(--j-gold) 30%, transparent); }
+.dots7 i.four { border-color: var(--j-gold); }
+.sign-a .line { grid-column: 1 / -1; font-size: 12.5px; color: var(--j-ink-2); line-height: 1.5; }
+.sign-a .line b { color: var(--j-ink); }
+.pick4 { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.p4 { display: grid; justify-items: center; gap: 0; padding: 6px 2px; border-radius: 10px; border: 1px solid var(--j-gold); background: linear-gradient(180deg, color-mix(in srgb, var(--j-gold) 16%, var(--j-card)), var(--j-card)); font: 12px/1.35 var(--serif); }
+.p4 b { font-size: 14px; }
+.p4.gang b { color: var(--gang); } .p4.rou b { color: var(--rou); } .p4.kuai b { color: var(--kuai); } .p4.man b { color: var(--man); }
+.p4 small { font: 10.5px var(--sans); color: var(--j-ink-2); }
+.week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; margin: 6px 0 8px; }
+.day { position: relative; display: grid; justify-items: center; align-content: start; gap: 1px; padding: 5px 1px 6px; border-radius: 9px; border: 1px solid var(--j-line); background: var(--j-paper); font: 10.5px/1.3 var(--sans); color: var(--j-ink-2); text-align: center; min-width: 0; }
+.day .d { font: 600 12px var(--serif); color: var(--j-ink); }
+.day .g { font-size: 10.5px; color: var(--j-ink); white-space: nowrap; }
+.day.got { opacity: .62; }
+.day.got::after { content: "簽"; position: absolute; right: 2px; bottom: 2px; width: 16px; height: 16px; border: 1.5px solid var(--j-accent); border-radius: 3px; color: var(--j-accent); font: 600 10px/13px var(--serif); transform: rotate(-10deg); }
+.day.miss { border-style: dashed; opacity: .5; }
+.day.miss .g::after { content: "・錯過"; }
+.day.today { border: 2px solid var(--j-gold); background: var(--j-card); }
+.day.four .g { color: var(--j-gold); font-weight: 600; }
+.sign-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.sign-head b { font: 600 15px var(--serif); }
+.sign-head span { font-size: 12px; color: var(--j-ink-2); white-space: nowrap; }
+.sign-step { font-size: 12.5px; color: var(--j-ink-2); margin: 8px 0 6px; }
+
+/* ── 店面的手機（.shop-layer 暗底） ── */
+.sp { width: 100%; max-width: 375px; border-radius: 22px; overflow: hidden; border: 1px solid var(--page-edge); color: var(--s-ink); font: 15px/1.65 var(--sans);
+  background: radial-gradient(ellipse at 50% 22%, var(--s-bg1) 0%, var(--s-bg2) 62%, var(--s-bg3) 100%); }
+.sbar { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; padding: 10px 12px 4px; }
+.sback { font: 600 15px var(--sans); color: var(--s-ink-2); }
+.ssign { justify-self: center; padding: 4px 14px; border: 2px solid var(--s-brass); border-radius: 4px; background: var(--s-sign-bg); color: var(--s-gold); font: 600 16px var(--serif); letter-spacing: 4px; white-space: nowrap; }
+.ssilver { font: 600 13px var(--sans); color: var(--s-gold); }
+.sline { margin: 6px 14px 4px; padding: 6px 10px; border-left: 3px solid var(--s-brass); background: var(--s-shade); font: 13px/1.6 var(--serif); color: var(--s-ink-2); }
+.spages { display: flex; gap: 6px; justify-content: center; margin: 6px 0 4px; }
+.spg { border: 1px solid var(--s-line); color: var(--s-muted); border-radius: 14px; padding: 2px 14px; font: 13px var(--sans); }
+.spg.on { background: var(--s-brass); color: var(--s-dark); border-color: var(--s-brass); }
+.sbody { padding: 6px 12px 12px; display: grid; gap: 8px; }
+.stabs { display: flex; border-top: 1px solid var(--s-tabline); background: var(--s-shade); }
+.stab { flex: 1; text-align: center; color: var(--s-muted); padding: 10px 0; font: 12.5px var(--sans); }
+.stab.on { color: var(--s-gold); box-shadow: inset 0 2px 0 var(--s-gold); background: var(--s-goldsoft); }
+.ware { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; align-items: center; padding: 9px 11px; border-radius: 10px; border: 1px solid var(--s-line); background: var(--s-cell); font: 12px/1.45 var(--sans); }
+.ware b { font: 600 14.5px var(--serif); color: var(--s-ink); }
+.ware .sub { grid-column: 1; color: var(--s-muted); }
+.ware .go { grid-row: 1 / span 2; grid-column: 2; padding: 6px 12px; border-radius: 10px; background: var(--s-brass); color: var(--s-dark); font: 600 13px var(--sans); white-space: nowrap; text-align: center; }
+.ware .go small { display: block; font: 10.5px var(--sans); }
+.ware.off { opacity: .6; } .ware.off .go { background: transparent; color: var(--s-warn); border: 1px solid var(--s-line); font-weight: 400; }
+.ware.fit { border-color: var(--s-gold); }
+.scap { font: 12px var(--sans); color: var(--s-muted); margin: 2px 0 0; }
+.pot { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.slot { border: 1px dashed var(--s-line); border-radius: 10px; padding: 8px; text-align: center; font: 12px var(--sans); color: var(--s-muted); }
+.slot b { display: block; font: 600 14px var(--serif); color: var(--s-ink); }
+.odds { display: flex; height: 18px; border-radius: 9px; overflow: hidden; font: 11px var(--sans); }
+.odds i { display: flex; align-items: center; justify-content: center; font-style: normal; color: var(--s-dark); white-space: nowrap; overflow: hidden; }
+.odds .lo { background: var(--q-low); } .odds .mi { background: var(--q-mid); } .odds .hi { background: var(--q-high); }
+.toggle { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--s-gold); background: var(--s-goldsoft); font: 12.5px/1.45 var(--sans); color: var(--s-ink-2); }
+.toggle .box { flex: none; width: 18px; height: 18px; border-radius: 4px; border: 2px solid var(--s-gold); background: var(--s-gold); color: var(--s-dark); display: grid; place-items: center; font: 700 12px var(--sans); }
+.toggle b { color: var(--s-gold); font-weight: 600; }
+.sgo { display: grid; justify-items: center; padding: 10px; border-radius: 12px; background: var(--j-accent); color: var(--j-accent-ink); font: 600 15px var(--sans); }
+.sgo small { font: 400 11.5px var(--sans); opacity: .9; }
+.reasons { font: 11.5px/1.5 var(--sans); color: var(--s-muted); }
+.meter { height: 8px; border-radius: 4px; background: var(--s-shade); overflow: hidden; } .meter i { display: block; height: 100%; background: var(--s-gold); }
+.amounts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.amt { text-align: center; padding: 8px 0; border-radius: 10px; border: 1px solid var(--s-line); background: var(--s-cell); font: 600 13px var(--sans); }
+.amt.on { border-color: var(--s-gold); box-shadow: inset 0 0 0 1px var(--s-gold); color: var(--s-gold); }
+.amt small { display: block; font: 400 10.5px var(--sans); color: var(--s-muted); }
+
+/* ── 懸賞榜（木板、紙） ── */
+.sp.board { background: repeating-linear-gradient(90deg, var(--w-1) 0 22px, var(--w-2) 22px 24px, var(--w-3) 24px 46px); }
+.sp.board .sbar { background: var(--w-bar); padding-bottom: 8px; }
+.held-row { padding: 6px 8px; border-radius: 10px; background: var(--s-shade); font-size: 12px; }
+.held-row p { margin: 0 0 4px; }
+.slots3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.hslot { display: grid; gap: 1px; min-width: 0; padding: 5px 6px; border: 1px solid var(--s-brass); border-radius: 6px; background: var(--n-paper); color: var(--n-ink); font: 10.5px var(--sans); }
+.hslot b { font: 600 12px var(--serif); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hslot.empty { display: flex; align-items: center; justify-content: center; background: transparent; color: var(--s-ink-2); border-style: dashed; }
+.notes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 8px; margin-top: 6px; }
+.note { position: relative; display: grid; gap: 1px; align-content: start; padding: 14px 7px 7px; border-radius: 2px; background: var(--n-paper); color: var(--n-ink); font: 10.5px/1.4 var(--sans); box-shadow: 2px 3px 6px rgba(0, 0, 0, 0.35); }
+.note:nth-child(4n+1) { transform: rotate(-2deg); } .note:nth-child(4n+2) { transform: rotate(1.5deg); } .note:nth-child(4n+3) { transform: rotate(1deg); } .note:nth-child(4n) { transform: rotate(-1deg); }
+.note::before { content: ""; position: absolute; top: 4px; left: 50%; width: 8px; height: 8px; margin-left: -4px; border-radius: 50%; background: var(--n-pin); }
+.tag { justify-self: start; padding: 0 4px; border-radius: 3px; color: #fff; font-size: 9.5px; line-height: 1.6; background: var(--n-ink-2); }
+.k-strike .tag { background: var(--k-strike); } .k-scout .tag { background: var(--k-scout); } .k-escort .tag { background: var(--k-escort); } .k-art .tag { background: var(--k-art); }
+.note b { font: 600 13px var(--serif); letter-spacing: 1px; }
+.note small { font-size: 9.5px; }
+.note .due { color: var(--n-ink-2); white-space: nowrap; }
+.note .prize { color: var(--k-strike); }
+.note .lv { color: var(--n-ink); font-weight: 600; }
+.note.k-art { background: var(--n-gold-paper); box-shadow: inset 0 0 0 1px var(--n-goldline), 2px 3px 6px rgba(0, 0, 0, 0.35); }
+.note .corner { position: absolute; top: 3px; right: 4px; padding: 0 3px; border: 1.5px solid var(--n-stamp); border-radius: 3px; color: var(--n-stamp); font: 600 10px/1.4 var(--serif); transform: rotate(6deg); background: rgba(246, 237, 216, .85); }
+.note .extra { display: flex; gap: 3px; flex-wrap: wrap; }
+.note .extra span { padding: 0 3px; border-radius: 3px; background: var(--j-card-2); font-size: 9.5px; }
+.sheet { margin: 4px 0 0; border-radius: 8px; box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45); }
+.paper { position: relative; display: grid; gap: 5px; padding: 10px 12px; border: 2px solid var(--w-1); border-radius: 8px; background: var(--n-paper); color: var(--n-ink); font-size: 12.5px; line-height: 1.55; }
+.paper h4 { margin: 0; font: 600 16px var(--serif); letter-spacing: 1px; }
+.paper p { margin: 0; }
+.paper .due { font-size: 11.5px; color: var(--n-ink-2); }
+.paper .rw { display: grid; grid-template-columns: 3.2em 1fr; gap: 2px 6px; }
+.paper .rw dt { color: var(--n-ink-2); font-size: 12px; }
+.paper .rw dd { margin: 0; }
+.paper .rw dd.big { font-weight: 600; }
+.paper .btns { display: grid; grid-template-columns: 2fr 1fr; gap: 6px; margin-top: 4px; }
+.pbtn { display: grid; place-items: center; min-height: 40px; border-radius: 10px; border: 1px solid var(--j-line); background: var(--j-card); font: 14px var(--sans); }
+.pbtn.primary { background: var(--j-accent); border-color: var(--j-accent); color: var(--j-accent-ink); font-weight: 600; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chip { display: inline-flex; align-items: baseline; gap: 3px; padding: 1px 7px; border-radius: 10px; border: 1px solid var(--j-line); background: var(--j-card-2); font: 12px/1.6 var(--sans); white-space: nowrap; }
+.chip em { font-style: normal; color: var(--j-ink-2); font-size: 11px; }
+.chip.gift { border-color: var(--j-gold); background: color-mix(in srgb, var(--j-gold) 14%, var(--j-card)); }
+.chip.prize { border-color: var(--j-accent); color: var(--j-accent); background: var(--j-accent-soft); }
+
+/* 江湖頁懸賞卡（bountiesHtml 的 .order） */
+.order { padding: 8px 0; border-top: 1px solid var(--j-line); }
+.order:first-child { border-top: 0; padding-top: 0; }
+.ohead { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; }
+.ohead span { color: var(--j-ink-2); white-space: nowrap; }
+.ohow { margin-top: 4px; padding-left: 8px; border-left: 2px solid var(--j-gold); font-size: 12.5px; line-height: 1.5; }
+.ometa { margin-top: 4px; font-size: 12px; color: var(--j-ink-2); line-height: 1.5; }
+.ometa b { color: var(--j-ink); }
+.ometa .gift { color: var(--j-gold); font-weight: 600; }
+.ometa .prize { color: var(--j-accent); }
+.mini { font-size: 11px; color: var(--j-ink-2); }
+</style>
+
+<div class="wrap">
+  <h1>簽到・銀兩・懸賞畫面對比</h1>
+  <p class="lede">正式季整合第 5、7、9 批各有一處畫面要你挑（設計第九章第 4～6 組）。下面每一張都是手機 375 寬的實際樣子：江湖頁照遊戲的紙色淺底，店面與懸賞榜照店裡的暗底與木板。示例角色是第 20 級的散人「沈青崖」，人在宛城、身上 1846 兩。三組各挑一個（甲、乙、丙），也可以說「甲，但……」。新寫的字句都是暫寫，待 joy 潤；數字照設計的【預設】。</p>
+
+  <!-- ══ 第一組：簽到卡 ══ -->
+  <h2>一、簽到卡（第 7 批，設計 6.2）</h2>
+  <p class="ask">江湖頁最上面一張小卡：今天簽了沒、這一週七格、下一份是什麼、一按就領。示例是第 6 天、還沒簽（第 2 天沒上線、錯過了）：第 6 天給回體丹 2 顆＋自己挑屬性的四階一個，挑屬性那一下也在卡上。第 13、20 天只給四階；第 7、14、21 天是一般的日子（30 兩或一個一階，隔天輪流）。</p>
+  <div class="opts">
+
+    <!-- 甲 -->
+    <div class="opt">
+      <div class="opt-head"><span class="opt-key">甲</span><span class="opt-name">一行小卡，七個點</span></div>
+      <p class="opt-note">卡只有兩行：這一週七個點、今天給什麼、一顆「領」。按了「領」，丹先進背包，同一張卡換成四顆挑屬性的鈕；簽完整張收成一行「明日：30 兩」。</p>
+      <ul class="pros"><li>最矮，約 64 像素，不把行動列擠出第一屏。</li><li>七個點看不出每天給什麼，要點開才知道後面幾天。</li></ul>
+      <p class="cap">按「領」之前</p>
+      <div class="jp">
+        <div class="jtop">
+          <div class="jrow"><div class="jwho"><div class="jname">沈青崖<small>散人・江湖遊俠</small></div><div class="jwhere">📍 宛城　第 6 天 09:12</div></div><span class="jgear">⚙</span></div>
+          <div class="jvit"><div class="jbar st"><i style="width:72%"></i><span>體力 180/250</span></div><div class="jbar hp"><i style="width:90%"></i><span>氣血 612/680</span></div><span class="jnum"><em>銀</em>1846</span><span class="jnum"><em>心得</em>312</span></div>
+        </div>
+        <div class="jbody">
+          <div class="jcard sign-a">
+            <div class="t">簽到・第 6 天<small>這一週</small></div>
+            <span class="jbtn small primary">領</span>
+            <div class="dots7"><i class="got"></i><i class="miss"></i><i class="got"></i><i class="got"></i><i class="got"></i><i class="today four"></i><i></i></div>
+            <div></div>
+            <div class="line">今日：<b>回體丹 2 顆＋四階一個（自己挑屬性）</b>・明日 30 兩</div>
+          </div>
+          <div class="peek-row"><span class="peek">態勢</span><span class="peek board">大事 2<i class="pdot"></i></span><span class="peek">主線</span></div>
+          <div class="now"><b>剛剛</b>　你在宛城外打退了一隊黃巾，銀兩 +18・經驗 +40。</div>
+          <div class="wheel4"><span>探索</span><span>出陣</span><span>交友</span><span>移動</span></div>
+        </div>
+        <div class="jtabs"><span class="jtab on"><b>江</b>江湖</span><span class="jtab"><b>修</b>修練</span><span class="jtab"><b>煉</b>煉製</span><span class="jtab"><b>輿</b>輿圖</span><span class="jtab"><b>聞</b>見聞</span></div>
+      </div>
+      <p class="cap">按了之後（挑四階）</p>
+      <div class="jp">
+        <div class="jbody">
+          <div class="jcard sign-a">
+            <div class="t">簽到・第 6 天<small>回體丹 2 顆已收下</small></div>
+            <span></span>
+            <div class="line">再挑一種四階料（只能挑一種）：</div>
+            <div class="pick4"><span class="p4 gang"><b>剛</b>熔星髓<small>有 1</small></span><span class="p4 rou"><b>柔</b>天池露<small>有 0</small></span><span class="p4 kuai"><b>快</b>奔雷角<small>有 2</small></span><span class="p4 man"><b>慢</b>歸墟壤<small>有 0</small></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 乙 -->
+    <div class="opt">
+      <div class="opt-head"><span class="opt-key">乙</span><span class="opt-name">七格攤開，每格寫給什麼</span></div>
+      <p class="opt-note">一週七格一排，每格寫天數與那天給什麼；簽過的蓋朱印「簽」、錯過的虛線、四階那一格金字。底下一顆大鈕「簽到」，四階的日子按了在鈕的位置換成四顆挑屬性。</p>
+      <ul class="pros"><li>一眼看到整週，知道哪天不能錯過（四階那幾天）。</li><li>最高，約 150 像素；簽完要收成一行，不然每天佔著第一屏。</li></ul>
+      <div class="jp">
+        <div class="jtop">
+          <div class="jrow"><div class="jwho"><div class="jname">沈青崖<small>散人・江湖遊俠</small></div><div class="jwhere">📍 宛城　第 6 天 09:12</div></div><span class="jgear">⚙</span></div>
+          <div class="jvit"><div class="jbar st"><i style="width:72%"></i><span>體力 180/250</span></div><div class="jbar hp"><i style="width:90%"></i><span>氣血 612/680</span></div><span class="jnum"><em>銀</em>1846</span><span class="jnum"><em>心得</em>312</span></div>
+        </div>
+        <div class="jbody">
+          <div class="jcard" style="padding: 10px 12px;">
+            <div class="sign-head"><b>每日簽到</b><span>第 1 週・下一份：明日 30 兩</span></div>
+            <div class="week">
+              <div class="day got"><span class="d">1</span><span class="g">30 兩</span></div>
+              <div class="day miss"><span class="d">2</span><span class="g">一階</span></div>
+              <div class="day got"><span class="d">3</span><span class="g">丹 2</span></div>
+              <div class="day got"><span class="d">4</span><span class="g">30 兩</span></div>
+              <div class="day got"><span class="d">5</span><span class="g">一階</span></div>
+              <div class="day today four"><span class="d">6</span><span class="g">丹2＋四階</span></div>
+              <div class="day"><span class="d">7</span><span class="g">30 兩</span></div>
+            </div>
+            <span class="jbtn primary">簽到<small>回體丹 2 顆，再挑一種四階料</small></span>
+          </div>
+          <div class="peek-row"><span class="peek">態勢</span><span class="peek board">大事 2<i class="pdot"></i></span><span class="peek">主線</span></div>
+          <div class="now"><b>剛剛</b>　你在宛城外打退了一隊黃巾，銀兩 +18・經驗 +40。</div>
+          <div class="wheel4"><span>探索</span><span>出陣</span><span>交友</span><span>移動</span></div>
+        </div>
+        <div class="jtabs"><span class="jtab on"><b>江</b>江湖</span><span class="jtab"><b>修</b>修練</span><span class="jtab"><b>煉</b>煉製</span><span class="jtab"><b>輿</b>輿圖</span><span class="jtab"><b>聞</b>見聞</span></div>
+      </div>
+      <p class="cap">第 2 週（第 13 天只給四階）</p>
+      <div class="jp">
+        <div class="jbody">
+          <div class="jcard" style="padding: 10px 12px;">
+            <div class="sign-head"><b>每日簽到</b><span>第 2 週・今日已簽</span></div>
+            <div class="week">
+              <div class="day got"><span class="d">8</span><span class="g">一階</span></div>
+              <div class="day got"><span class="d">9</span><span class="g">丹 2</span></div>
+              <div class="day got"><span class="d">10</span><span class="g">30 兩</span></div>
+              <div class="day got"><span class="d">11</span><span class="g">一階</span></div>
+              <div class="day got"><span class="d">12</span><span class="g">丹 2</span></div>
+              <div class="day four"><span class="d">13</span><span class="g">四階</span></div>
+              <div class="day"><span class="d">14</span><span class="g">30 兩</span></div>
+            </div>
+            <p class="jmuted">明日（第 13 天）：自己挑屬性的四階一個，別錯過。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 丙 -->
+    <div class="opt">
+      <div class="opt-head"><span class="opt-key">丙</span><span class="opt-name">收進最上面那排小標</span></div>
+      <p class="opt-note">不另起一張卡：在「態勢｜大事｜主線」那一排多一個「簽到」，還沒簽亮紅點；點了在那一排底下攤開七格與領的鈕（同大事小標的攤法）。</p>
+      <ul class="pros"><li>不多佔任何高度；簽完紅點就滅。</li><li>不點開看不到今天給什麼，四階的日子容易被忽略。</li></ul>
+      <div class="jp">
+        <div class="jtop">
+          <div class="jrow"><div class="jwho"><div class="jname">沈青崖<small>散人・江湖遊俠</small></div><div class="jwhere">📍 宛城　第 6 天 09:12</div></div><span class="jgear">⚙</span></div>
+          <div class="jvit"><div class="jbar st"><i style="width:72%"></i><span>體力 180/250</span></div><div class="jbar hp"><i style="width:90%"></i><span>氣血 612/680</span></div><span class="jnum"><em>銀</em>1846</span><span class="jnum"><em>心得</em>312</span></div>
+        </div>
+        <div class="jbody">
+          <div class="peek-row"><span class="peek">態勢</span><span class="peek board">大事 2</span><span class="peek">主線</span><span class="peek on">簽到<i class="pdot"></i></span></div>
+          <div class="peek-panel">
+            <div class="sign-head"><b>第 6 天</b><span>下一份：明日 30 兩</span></div>
+            <div class="week">
+              <div class="day got"><span class="d">1</span><span class="g">30 兩</span></div>
+              <div class="day miss"><span class="d">2</span><span class="g">一階</span></div>
+              <div class="day got"><span class="d">3</span><span class="g">丹 2</span></div>
+              <div class="day got"><span class="d">4</span><span class="g">30 兩</span></div>
+              <div class="day got"><span class="d">5</span><span class="g">一階</span></div>
+              <div class="day today four"><span class="d">6</span><span class="g">丹2＋四階</span></div>
+              <div class="day"><span class="d">7</span><span class="g">30 兩</span></div>
+            </div>
+            <p class="sign-step">回體丹 2 顆，再挑一種四階料（點一種就領）：</p>
+            <div class="pick4" style="grid-column:auto;"><span class="p4 gang"><b>剛</b>熔星髓<small>有 1</small></span><span class="p4 rou"><b>柔</b>天池露<small>有 0</small></span><span class="p4 kuai"><b>快</b>奔雷角<small>有 2</small></span><span class="p4 man"><b>慢</b>歸墟壤<small>有 0</small></span></div>
+          </div>
+          <div class="now"><b>剛剛</b>　你在宛城外打退了一隊黃巾，銀兩 +18・經驗 +40。</div>
+          <div class="wheel4"><span>探索</span><span>出陣</span><span>交友</span><span>移動</span></div>
+        </div>
+        <div class="jtabs"><span class="jtab on"><b>江</b>江湖</span><span class="jtab"><b>修</b>修練</span><span class="jtab"><b>煉</b>煉製</span><span class="jtab"><b>輿</b>輿圖</span><span class="jtab"><b>聞</b>見聞</span></div>
+      </div>
+      <p class="cap">收起來（簽過了）</p>
+      <div class="jp">
+        <div class="jbody">
+          <div class="peek-row"><span class="peek">態勢</span><span class="peek board">大事 2</span><span class="peek">主線</span><span class="peek">簽到 ✔</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ 第二組：銀兩出口 ══ -->
+  <h2>二、銀兩出口放哪（第 9 批，設計 6.5、6.6）</h2>
+  <p class="ask">五樣：捐銀兩進軍需帳（每 10 兩 1 點貢獻，一天最多 1000 兩）、名師指點（50 兩，這一次修練升品 +10%，一天一次）、看火候（50 兩，這一次合成或打造的基準從下 50／中 30／上 20 換成 35／40／25，一天一次）、買破境丹（300 兩，一季最多 2 枚）、打點門路（30 兩，對那位人物情誼 +5，一天一次、只加到 40）。它們各在不同的地方（軍需帳、醫館、鐵匠鋪、大勢人物所在），三種放法各畫一張。示例：人在宛城（有醫館、鐵匠鋪，皇甫嵩在這裡）。</p>
+  <div class="opts">
+
+    <!-- 甲 -->
+    <div class="opt">
+      <div class="opt-head"><span class="opt-key">甲</span><span class="opt-name">一間新店「打點」</span></div>
+      <p class="opt-note">城裡多一間店（同鐵匠鋪那一層暗底），五樣排成一張清單，這裡做得了的亮著、做不了的灰掉寫去哪裡做；名師指點與看火候買的是「下一次」，買了掛在身上，到修練或開爐時用掉。</p>
+      <ul class="pros"><li>五樣在同一處，一看就知道銀兩能花在哪。</li><li>「買下一次的機率」離修練、開爐遠，要記得自己買過。</li></ul>
+      <div class="sp">
+        <div class="sbar"><span class="sback">‹ 出店</span><span class="ssign">門路</span><span class="ssilver">銀 1846</span></div>
+        <div class="sline">「銀子使得對地方，路就寬了。客官要辦哪一樁？」</div>
+        <div class="sbody">
+          <div class="ware"><b>名師指點</b><span class="sub">下一次修練，升品的機率 +10%（不保底）</span><span class="go">50 兩<small>今日可 1 次</small></span></div>
+          <div class="ware"><b>看火候</b><span class="sub">下一爐合成或打造：中品、上品多幾成</span><span class="go">50 兩<small>今日可 1 次</small></span></div>
+          <div class="ware"><b>破境丹</b><span class="sub">衝絕學用；本季還能買 2 枚</span><span class="go">300 兩</span></div>
+          <div class="ware fit"><b>打點門路・皇甫嵩</b><span class="sub">塞給門房，情誼 +5（現在 28，最多打點到 40）</span><span class="go">30 兩</span></div>
+          <div class="ware off"><b>捐銀兩進軍需帳</b><span class="sub">每 10 兩記 1 點貢獻・散人不能捐</span><span class="go">投靠之後<small>到大本營</small></span></div>
+          <p class="scap">身上掛著：名師指點 1 次（下次修練用掉）</p>
+        </div>
+        <div class="stabs"><span class="stab on">打點</span></div>
+      </div>
+    </div>
+
+    <!-- 乙 -->
+    <div class="opt">
+      <div class="opt-head"><span class="opt-key">乙</span><span class="opt-name">併進用得到的地方</span></div>
+      <p class="opt-note">每一樣放在花下去的那一刻：看火候是鐵匠鋪打造頁開爐上面的一個勾（煉製頁的太極火爐同一個勾）、捐銀兩是軍需帳多一頁；名師指點與破境丹在修練頁修練那張卡上（同「服下破境丹」那個勾），打點門路在求見名單每人一顆。</p>
+      <ul class="pros"><li>勾了當場看到機率變了，花錢的理由就在眼前。</li><li>五樣散在四個畫面，沒有一處告訴玩家「銀兩能花在這些」。</li></ul>
+      <p class="cap">鐵匠鋪・打造頁（勾了看火候）</p>
+      <div class="sp">
+        <div class="sbar"><span class="sback">‹ 出店</span><span class="ssign">鐵匠鋪</span><span class="ssilver">銀 1846</span></div>
+        <div class="sline">「要我盯著爐子？五十兩，火候我替你看。」</div>
+        <div class="spages"><span class="spg on">兵器</span><span class="spg">防具</span></div>
+        <div class="sbody">
+          <div class="pot"><div class="slot">主料<b>隕鐵膽</b>三階・剛</div><div class="slot">輔料<b>掣電鱗</b>三階・快</div></div>
+          <div class="toggle"><span class="box">✓</span><span>請鐵匠<b>看火候</b>（50 兩，今日 1 次）<br>中品、上品多幾成</span></div>
+          <div class="odds"><i class="lo" style="width:27%">下 27</i><i class="mi" style="width:44%">中 44</i><i class="hi" style="width:29%">上 29</i></div>
+          <p class="reasons">輔料同階、熟手；不勾是 下 42／中 34／上 24</p>
+          <div class="sgo">開爐<small>工錢 150 兩＋看火候 50 兩</small></div>
+        </div>
+        <div class="stabs"><span class="stab">架上</span><span class="stab on">打造</span><span class="stab">淬煉與修</span><span class="stab">裝備庫</span><span class="stab">素材</span></div>
+      </div>
+      <p class="cap">軍需帳・捐銀兩那一頁（投靠了官軍的人）</p>
+      <div class="sp">
+        <div class="sbar"><span class="sback">‹ 出店</span><span class="ssign">軍需帳</span><span class="ssilver">銀 1846</span></div>
+        <div class="sline">「糧秣不嫌多，銀子換成米，前頭的弟兄吃得飽。」</div>
+        <div class="spages"><span class="spg">捐素材</span><span class="spg on">捐銀兩</span></div>
+        <div class="sbody">
+          <p class="scap">今天還能記 64 點貢獻（跟捐素材合算，一天 100 點）</p>
+          <div class="meter"><i style="width:36%"></i></div>
+          <div class="amounts"><span class="amt">100<small>10 點</small></span><span class="amt on">300<small>30 點</small></span><span class="amt">500<small>50 點</small></span><span class="amt">640<small>全捐</small></span></div>
+          <div class="sgo">捐 300 兩<small>記 30 點貢獻，換成糧秣</small></div>
+        </div>
+        <div class="stabs"><span class="stab on">軍需</span></div>
+      </div>
+    </div>
+
+    <!-- 丙 -->
+    <div class="opt">
+      <div class="opt-head"><span class="opt-key">丙</span><span class="opt-name">「此地還能做」裡的鈕</span></div>
+      <p class="opt-note">不做新畫面：這裡做得了的幾樣，照醫館療傷那一顆的樣子加進江湖頁「此地還能做」，鈕上寫價錢與還剩幾次；名師指點、看火候按了掛在身上，下一次修練或開爐用掉。</p>
+      <ul class="pros"><li>最少開發，跟療傷、拜師同一種鈕，玩家已經會用。</li><li>「此地還能做」會變長，宛城這種大城可能要列八、九顆。</li></ul>
+      <div class="jp">
+        <div class="jtop">
+          <div class="jrow"><div class="jwho"><div class="jname">沈青崖<small>散人・江湖遊俠</small></div><div class="jwhere">📍 宛城　第 6 天 09:12</div></div><span class="jgear">⚙</span></div>
+          <div class="jvit"><div class="jbar st"><i style="width:72%"></i><span>體力 180/250</span></div><div class="jbar hp"><i style="width:90%"></i><span>氣血 612/680</span></div><span class="jnum"><em>銀</em>1846</span><span class="jnum"><em>心得</em>312</span></div>
+        </div>
+        <div class="jbody">
+          <div class="wheel4"><span>探索</span><span>出陣</span><span>交友</span><span>移動</span></div>
+          <div class="fold">
+            <div class="sum">此地還能做 8 件事</div>
+            <div class="fb">
+              <div class="task"><b>醫館療傷</b><small>內傷 24・12 兩</small></div>
+              <div class="task new"><b>名師指點（50 兩）</b><small>下一次修練升品的機率 +10%・今日 1 次</small></div>
+              <div class="task new"><b>請鐵匠看火候（50 兩）</b><small>下一爐中品、上品多幾成・今日 1 次</small></div>
+              <div class="task new"><b>買破境丹（300 兩）</b><small>本季還能買 2 枚</small></div>
+              <div class="task new"><b>打點皇甫嵩的門房（30 兩）</b><small>情誼 28 → 33・最多打點到 40</small></div>
+              <div class="task"><b>進鐵匠鋪</b><small>兵器、防具、打造</small></div>
+              <div class="task"><b>進馬市</b><small>買馬、餵馬</small></div>
+              <div class="task"><b>懸賞榜（6 張）</b></div>
+            </div>
+          </div>
+        </div>
+        <div class="jtabs"><span class="jtab on"><b>江</b>江湖</span><span class="jtab"><b>修</b>修練</span><span class="jtab"><b>煉</b>煉製</span><span class="jtab"><b>輿</b>輿圖</span><span class="jtab"><b>聞</b>見聞</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ 第三組：懸賞卡寫獎勵 ══ -->
+  <h2>三、懸賞的賞怎麼寫（第 5 批，設計 6.1、7.2）</h2>
+  <p class="ask">賞照揭的人的等級長：第 20 級一張討伐約 120 兩、30 經驗（升一級要 200 的 15%），護送 100 兩、24 經驗，打探 60 兩、16 經驗；每張再附一樣銀兩買不到的（討伐：這一路對手屬性的二階 1 個、一成再一個三階；打探：回體丹 1 顆；護送：終點屬性的二階 1 個）。重賞照舊「另有重賞：寶物一件」。陣營的人做自己陣營的討伐、打探、護送照舊只拿一半（60 兩、15 經驗），附贈不減半。要挑的是江湖頁懸賞卡與懸賞榜告示、放大的紙上怎麼寫。</p>
+  <div class="opts">
+
+    <!-- 甲 -->
+    <div class="opt">
+      <div class="opt-head"><span class="opt-key">甲</span><span class="opt-name">接在現在那一行後面</span></div>
+      <p class="opt-note">現在的「賞銀 20・經驗 15・俠名 +3」只換數字，附贈與重賞接在後面；告示正面照舊不寫賞，只有重賞那一行小字。</p>
+      <ul class="pros"><li>改得最少，跟現在的告示、卡一模一樣。</li><li>一行很長，375 寬折成兩、三行；看不出數字是照等級變的。</li></ul>
+      <p class="cap">江湖頁・懸賞卡</p>
+      <div class="jp">
+        <div class="jbody">
+          <div class="jcard" style="padding:0; overflow:hidden;">
+            <div class="fold" style="border:0; border-radius:0;">
+              <div class="sum">🪧 懸賞（2）</div>
+              <div class="fb" style="gap:0;">
+                <div class="order"><div class="ohead"><b>討伐・宛城外黃巾</b><span>官軍</span></div><div class="ohow">到宛城外出陣或練功，打贏一場黃巾的隊伍。</div><div class="ometa">賞銀 120・經驗 30・俠名 +3・玄鋼骨 ×1（一成再得一個三階）・另有重賞：寶物一件</div><div class="ometa">期限 第 7 天 24:00・名額還剩 2</div></div>
+                <div class="order"><div class="ohead"><b>打探・博望坡</b><span>黃巾</span></div><div class="ohow">到博望坡探索一次。</div><div class="ometa">賞銀 60・經驗 16・俠名 +2・回體丹 ×1</div><div class="ometa">期限 第 7 天 24:00・名額還剩 3</div></div>
+                <div style="padding-top:8px;"><span class="jbtn small" style="display:inline-flex;">看懸賞榜</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="cap">懸賞榜・點開一張</p>
+      <div class="sp board">
+        <div class="sbar"><span class="sback">‹ 出店</span><span class="ssign">懸賞榜</span><span class="ssilver">銀 1846</span></div>
+        <div class="sbody">
+          <div class="held-row"><p>手上揭著的（還能揭 1 張）</p><div class="slots3"><div class="hslot"><b>討伐・宛城外</b>期限 第7天</div><div class="hslot"><b>打探・博望坡</b>期限 第7天</div><div class="hslot empty">空著</div></div></div>
+          <div class="notes">
+            <div class="note k-strike"><span class="tag">討伐・官軍</span><b>宛城外黃巾</b><small class="prize">另有重賞</small><small class="due">期限 第7天・剩 2</small></div>
+            <div class="note k-escort"><span class="tag">護送・黃巾</span><b>宛城→汝南</b><small class="due">期限 第7天・剩 3</small></div>
+          </div>
+          <div class="sheet"><div class="paper k-strike"><span class="tag">討伐・官軍掛的</span><h4>宛城外黃巾</h4><p>到宛城外出陣或練功，打贏一場黃巾的隊伍。</p><p>賞：賞銀 120・經驗 30・俠名 +3・玄鋼骨 ×1（一成再得一個三階）・另有重賞：寶物一件</p><p class="due">期限 第 7 天 24:00・名額還剩 2</p><div class="btns"><span class="pbtn primary">揭下</span><span class="pbtn">放回去</span></div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 乙 -->
+    <div class="opt">
+      <div class="opt-head"><span class="opt-key">乙</span><span class="opt-name">分三行：照等級、附贈、重賞</span></div>
+      <p class="opt-note">賞拆成三行，第一行寫明「照你第 20 級」，附贈金字、重賞紅字；告示正面多一行小字寫銀兩與附贈的種類。</p>
+      <ul class="pros"><li>一看就懂賞是跟著等級長的，附贈也不會被埋在長句裡。</li><li>每張卡多兩行，懸賞卡手上三張時約高 90 像素。</li></ul>
+      <p class="cap">江湖頁・懸賞卡</p>
+      <div class="jp">
+        <div class="jbody">
+          <div class="jcard" style="padding:0; overflow:hidden;">
+            <div class="fold" style="border:0; border-radius:0;">
+              <div class="sum">🪧 懸賞（2）</div>
+              <div class="fb" style="gap:0;">
+                <div class="order"><div class="ohead"><b>討伐・宛城外黃巾</b><span>官軍</span></div><div class="ohow">到宛城外出陣或練功，打贏一場黃巾的隊伍。</div>
+                  <div class="ometa">賞（照你第 20 級）：<b>銀 120・經驗 30</b>・俠名 +3</div>
+                  <div class="ometa"><span class="gift">附贈：玄鋼骨 ×1</span>，一成再得一個三階</div>
+                  <div class="ometa"><span class="prize">重賞：寶物一件</span>（第一個交差的人拿）</div>
+                  <div class="ometa">期限 第 7 天 24:00・名額還剩 2</div></div>
+                <div class="order"><div class="ohead"><b>打探・博望坡</b><span>黃巾</span></div><div class="ohow">到博望坡探索一次。</div>
+                  <div class="ometa">賞（照你第 20 級）：<b>銀 60・經驗 16</b>・俠名 +2</div>
+                  <div class="ometa"><span class="gift">附贈：回體丹 ×1</span></div>
+                  <div class="ometa">期限 第 7 天 24:00・名額還剩 3</div></div>
+                <div style="padding-top:8px;"><span class="jbtn small" style="display:inline-flex;">看懸賞榜</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="cap">懸賞榜・點開一張</p>
+      <div class="sp board">
+        <div class="sbar"><span class="sback">‹ 出店</span><span class="ssign">懸賞榜</span><span class="ssilver">銀 1846</span></div>
+        <div class="sbody">
+          <div class="held-row"><p>手上揭著的（還能揭 1 張）</p><div class="slots3"><div class="hslot"><b>討伐・宛城外</b>期限 第7天</div><div class="hslot"><b>打探・博望坡</b>期限 第7天</div><div class="hslot empty">空著</div></div></div>
+          <div class="notes">
+            <div class="note k-strike"><span class="tag">討伐・官軍</span><b>宛城外黃巾</b><small class="lv">120 兩＋二階料</small><small class="prize">另有重賞</small><small class="due">期限 第7天・剩 2</small></div>
+            <div class="note k-escort"><span class="tag">護送・黃巾</span><b>宛城→汝南</b><small class="lv">100 兩＋二階料</small><small class="due">期限 第7天・剩 3</small></div>
+          </div>
+          <div class="sheet"><div class="paper k-strike"><span class="tag">討伐・官軍掛的</span><h4>宛城外黃巾</h4><p>到宛城外出陣或練功，打贏一場黃巾的隊伍。</p>
+            <dl class="rw"><dt>賞</dt><dd class="big">銀 120・經驗 30・俠名 +3<br><span class="mini">照你第 20 級；等級越高賞越多</span></dd><dt>附贈</dt><dd>玄鋼骨 ×1（剛・二階），一成再得一個三階</dd><dt>重賞</dt><dd style="color:var(--k-strike)">寶物一件，第一個交差的人拿</dd></dl>
+            <p class="due">期限 第 7 天 24:00・名額還剩 2</p><div class="btns"><span class="pbtn primary">揭下</span><span class="pbtn">放回去</span></div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 丙 -->
+    <div class="opt">
+      <div class="opt-head"><span class="opt-key">丙</span><span class="opt-name">小籤一格一樣</span></div>
+      <p class="opt-note">賞拆成一顆一顆的小籤（銀、經驗、俠名、附贈金框、重賞紅框），一行排得下；告示右上角蓋一個小朱印寫銀兩數，底下一格附贈的小籤。</p>
+      <ul class="pros"><li>最好掃：比哪張賞多只要看數字那一格。</li><li>小籤是新樣子，遊戲裡還沒有這種東西；「照等級」要另寫一句才看得出來。</li></ul>
+      <p class="cap">江湖頁・懸賞卡</p>
+      <div class="jp">
+        <div class="jbody">
+          <div class="jcard" style="padding:0; overflow:hidden;">
+            <div class="fold" style="border:0; border-radius:0;">
+              <div class="sum">🪧 懸賞（2）<span class="mini" style="font-weight:400;">賞照你第 20 級</span></div>
+              <div class="fb" style="gap:0;">
+                <div class="order"><div class="ohead"><b>討伐・宛城外黃巾</b><span>官軍</span></div><div class="ohow">到宛城外出陣或練功，打贏一場黃巾的隊伍。</div>
+                  <div class="ometa chips"><span class="chip"><em>銀</em>120</span><span class="chip"><em>經驗</em>30</span><span class="chip"><em>俠名</em>+3</span><span class="chip gift">玄鋼骨 ×1</span><span class="chip prize">重賞・寶物</span></div>
+                  <div class="ometa">期限 第 7 天 24:00・名額還剩 2</div></div>
+                <div class="order"><div class="ohead"><b>打探・博望坡</b><span>黃巾</span></div><div class="ohow">到博望坡探索一次。</div>
+                  <div class="ometa chips"><span class="chip"><em>銀</em>60</span><span class="chip"><em>經驗</em>16</span><span class="chip"><em>俠名</em>+2</span><span class="chip gift">回體丹 ×1</span></div>
+                  <div class="ometa">期限 第 7 天 24:00・名額還剩 3</div></div>
+                <div style="padding-top:8px;"><span class="jbtn small" style="display:inline-flex;">看懸賞榜</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="cap">懸賞榜・點開一張</p>
+      <div class="sp board">
+        <div class="sbar"><span class="sback">‹ 出店</span><span class="ssign">懸賞榜</span><span class="ssilver">銀 1846</span></div>
+        <div class="sbody">
+          <div class="held-row"><p>手上揭著的（還能揭 1 張）</p><div class="slots3"><div class="hslot"><b>討伐・宛城外</b>期限 第7天</div><div class="hslot"><b>打探・博望坡</b>期限 第7天</div><div class="hslot empty">空著</div></div></div>
+          <div class="notes">
+            <div class="note k-strike"><span class="tag">討伐・官軍</span><i class="corner">120</i><b>宛城外黃巾</b><span class="extra"><span>＋二階</span><span style="color:var(--k-strike)">重賞</span></span><small class="due">期限 第7天・剩 2</small></div>
+            <div class="note k-escort"><span class="tag">護送・黃巾</span><i class="corner">100</i><b>宛城→汝南</b><span class="extra"><span>＋二階</span></span><small class="due">期限 第7天・剩 3</small></div>
+          </div>
+          <div class="sheet"><div class="paper k-strike"><span class="tag">討伐・官軍掛的</span><h4>宛城外黃巾</h4><p>到宛城外出陣或練功，打贏一場黃巾的隊伍。</p>
+            <div class="chips"><span class="chip"><em>銀</em>120</span><span class="chip"><em>經驗</em>30</span><span class="chip"><em>俠名</em>+3</span><span class="chip gift">玄鋼骨 ×1・一成再一個三階</span><span class="chip prize">重賞：寶物一件</span></div>
+            <p class="due">賞照你第 20 級算・期限 第 7 天 24:00・名額還剩 2</p><div class="btns"><span class="pbtn primary">揭下</span><span class="pbtn">放回去</span></div></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="foot">四階料的名字（熔星髓、天池露、奔雷角、歸墟壤）、新店「門路」的招牌、掌櫃與鐵匠的話、簽到與懸賞上新寫的字句都是暫寫，待 joy 潤。數字照正式季整合設計 6.1、6.2、6.5 的【預設】：簽到第 6 天丹 2 顆＋四階、第 13、20 天只給四階、第 7、14、21 天是一般的日子；銀兩出口的價錢與限制；第 20 級的懸賞賞銀與經驗（陣營的人做自己陣營的那三種減半）。看火候那一張的機率是示例，實際照輔料、悟性、熟手、天時地利推完再夾上下限。期限照 21 天季「每天一批、掛 2 天」寫。</p>
+</div>

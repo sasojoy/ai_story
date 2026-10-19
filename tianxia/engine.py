@@ -18,7 +18,7 @@ from pydantic import BaseModel
 
 from . import (
     allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, chuangong, clinic, companion_agent, cultivation, defection, economy, encounter, enlist, equipment, event_llm, explore_modes,
-    fight_llm, figure_aid, figure_life, figures, foreshadow, four_tiers, generals, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, library, mapdata, martial_arts,
+    fight_llm, figure_aid, figure_life, figures, foreshadow, four_tiers, generals, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, letters, library, mapdata, martial_arts,
     materials, mounts, naming, opportunities, orders, precise, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
     shopview, signature, signature_arms, silver, skill_slots, skillview, smithing,
     social, sortie, styles, tactics, team, territory, timetable, traits, treasures, weapons, works, zh,
@@ -840,6 +840,9 @@ class Game:
         self._deliver_echoes()  # 別人照著你首創的配方合了出來：補名望（首創名望回饋）
         self._deliver_guard_credits()  # 護衛：下線時替人物擋下的挑戰，回來補名望與心得
         self._deliver_arena()  # 擂台：被挑了的戰報、季末前三名的獎勵；季收了還沒打完的那一場作廢
+        mail = letters.deliver(self.state, self.content)  # 書信（大勢人物擴充第二批）：人物來信、過期的委託作罷
+        if mail:
+            self._write(letters.TITLE, mail)
         self._deliver_held_gear()  # 寄放的重賞、贈禮：裝備庫有空位就補（裝備四欄 6.5）
         refunds = bounties.deliver_refunds(self.state, self.content)  # 掛的通緝沒人揭成：押金退回
         if refunds:
@@ -2724,6 +2727,31 @@ class Game:
         呼叫的位置都在記進江湖紀錄之前，說的話才記在這一次行動那一則。"""
         self._queue_triggered_hints()
         self._surface_hint()
+
+    # ── 書信與委託（大勢人物擴充第二批；tianxia/letters.py）──
+
+    def letter_view(self) -> dict | None:
+        """江湖頁「剛剛」上面那張小卡：最新一封沒看過的信；沒有是 None。"""
+        return letters.view(self.state, self.content)
+
+    def read_letter(self, letter_id: int) -> list[str]:
+        """小卡上的「收起」：記成看過了（委託照樣在身上，懸賞卡上看得到）。"""
+        return letters.read(self.state, letter_id)
+
+    def decline_letter(self, letter_id: int) -> list[str]:
+        """小卡上的「婉拒」：這封信附的委託作罷（不扣情誼），信記成看過了。"""
+        msgs = letters.decline(self.state, self.content, letter_id)
+        if msgs and msgs[0] != letters.NO_LETTER:
+            self._write(letters.TITLE, msgs)
+        return msgs
+
+    def letter_request(self) -> letters.LetterNote | None:
+        """還等著模型照他的口氣重寫的那一封（server 鎖外寫；A 段，只讀）。"""
+        return letters.request(self.state, self.content)
+
+    def apply_letter(self, note: letters.LetterNote, text: str) -> bool:
+        """C 段：還是同一封才換；寫不出來照固定句。"""
+        return letters.apply(self.state, note, text)
 
     def set_hints_off(self, value: bool) -> None:
         """設定頁的「不再提示」：打開時排著的清掉（沒上過框的不算說過，關掉再打開還聽得到）；對話框的引導與入伍段不受影響。"""

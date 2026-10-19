@@ -71,8 +71,10 @@ def real():
 
 @pytest.fixture
 def on(real):
-    """同一份真實內容，開關打開（第一季濃縮版）。"""
+    """同一份真實內容，開關打開（第一季濃縮版）。倒下時盟友、仇敵的反應（人物活起來第二批）關著：這裡量的是接位鏈與那一句
+    天下大事，反應另在 tests/test_relations_letters.py。"""
     real.config.season_one = True
+    real.config.figure_life.reactions = False
     return real
 
 

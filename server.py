@@ -61,7 +61,7 @@ import server_push
 import zhuan_html
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
-    arena_crowd, battle_instance, biography, calendar, companion_agent, duel, event_llm, fight_llm, foreshadow, gender, glyph, insight_llm, leaderboard, mapdata,
+    arena_crowd, battle_instance, biography, calendar, companion_agent, duel, event_llm, fight_llm, foreshadow, gender, glyph, insight_llm, leaderboard, letters, mapdata,
     naming,
     ollama_client, rules,
     precise, seal, seal_duel, server_bots, social, sortie, team, timetable, treasures,
@@ -276,10 +276,13 @@ def act(game: Game, action, *, paused_ok: bool = False) -> list[str] | None:
         open_characters().save(game.state)
         tales = _tales_waiting(game)
         crowd = _crowd_waiting(game)
+        mail = _letter_waiting(game)
     if tales:
         narrate_battle(game)
     if crowd:
         write_crowd(game)
+    if mail:
+        write_letter(game)
     return msgs
 
 
@@ -321,12 +324,15 @@ def act_look(game: Game, action, view) -> tuple[list[str] | None, object]:
             failure = exc
         tales = failure is None and _tales_waiting(game)
         crowd = failure is None and _crowd_waiting(game)
+        mail = failure is None and _letter_waiting(game)
     if failure is not None:
         raise failure
     if tales:
         narrate_battle(game)
     if crowd:
         write_crowd(game)
+    if mail:
+        write_letter(game)
     return msgs, shown
 
 
@@ -941,6 +947,64 @@ def narrate_once(game: Game) -> int | None:
         return game.apply_battle_tales(request, stories)
 
 
+LETTER_RUNNING: set[str] = set()  # 正在背景重寫書信的角色（一人一條；名號）
+
+
+def _letter_waiting(game: Game) -> bool:
+    """有一封信等著模型照他的口氣重寫、模型叫得到、這個人還沒有一條在寫（write_letter）。行動鎖內叫。"""
+    if not TALE_THREADS or game.client is None or game.state.player.name in LETTER_RUNNING:
+        return False
+    return game.letter_request() is not None
+
+
+def write_letter(game: Game) -> bool:
+    """書信（大勢人物擴充第二批，letters.py）：開一個背景執行緒重寫。A 鎖內拿單子（Game.letter_request）→ B 鎖外請模型寫
+    （letters.write，預算 Config.figure_life.letter_write_budget_seconds；排隊時當假人排、排在真人後面）→ C 鎖內重驗同一封才換
+    （Game.apply_letter；寫不出來照固定句）。開了回 True。呼叫端不能握著行動鎖。"""
+    name = game.state.player.name
+    with TALE_LOCK:
+        if name in LETTER_RUNNING:
+            return False
+        LETTER_RUNNING.add(name)
+
+    def job() -> None:
+        try:
+            letter_once(game)
+        except Exception:  # noqa: BLE001 — 背景執行緒：印出來就好，信照固定句
+            traceback.print_exc()
+        finally:
+            with TALE_LOCK:
+                LETTER_RUNNING.discard(name)
+
+    threading.Thread(target=job, name="letter", daemon=True).start()
+    return True
+
+
+def letter_once(game: Game) -> bool:
+    """重寫一封（write_letter 的那一圈；測試直接叫）：換了回 True。呼叫端不能握著行動鎖。"""
+    with _locked(game):
+        note = game.letter_request()
+    if note is None:
+        return False
+    budget = game.content.config.figure_life.letter_write_budget_seconds
+    started = _monotonic()
+
+    def ask() -> str:
+        return letters.write(within_budget(game.client, budget - (_monotonic() - started)), note)
+
+    if QUEUE is None:
+        text = ask()
+    else:
+        try:
+            text = QUEUE.run(game.state.player.name, ask, fallback="", bot=True, wait=budget)
+        except (Busy, QueueTimeout):
+            text = ""
+    with _locked(game):
+        done = game.apply_letter(note, text)
+        open_characters().save(game.state)
+    return done
+
+
 CROWD_RUNNING: set[str] = set()  # 正在背景重寫場邊那一句的角色（一人一條；名號鍵）
 
 
@@ -1138,6 +1202,9 @@ def _main_view_body(game: Game) -> dict:
     convoy = game.convoy_line()  # 押著的糧車（T6 審查 I3）：軍令卡上寫一行
     if convoy is not None:
         view["convoy"] = convoy
+    letter = game.letter_view()  # 書信（大勢人物擴充第二批）：江湖頁「剛剛」上面一張小卡；沒有沒看過的信就沒有這個鍵
+    if letter is not None:
+        view["letter"] = letter
     zhuan = game.biography_entry()  # 休季：江湖頁最上面的「讀你的傳」（玩家傳第二批）；季還在跑、沒有行狀是 None
     if zhuan is not None:
         view["zhuan"] = zhuan
@@ -1615,6 +1682,8 @@ MAIN_ACTIONS = {
     "donate": lambda g, b: g.donate_items(donate_items(b)) if "items" in b else g.donate(str(b.get("material", "")), max(1, _int(b.get("count"), 1))),
     "anonymous": lambda g, b: g.set_anonymous(bool(b.get("value"))),
     "gender": lambda g, b: g.set_gender(str(b.get("value", ""))),  # 設定頁：還沒選過性別的舊角色選一次（PM 2026-10-12）
+    "letter_read": lambda g, b: g.read_letter(_int(b.get("id"), -1)),  # 書信小卡的「收起」（大勢人物擴充第二批）
+    "letter_decline": lambda g, b: g.decline_letter(_int(b.get("id"), -1)),  # 書信小卡的「婉拒」：委託作罷
     "hints_off": lambda g, b: g.set_hints_off(bool(b.get("value"))),  # 設定頁的「不再提示」（碰到才說，新手引導計畫三）
     "skip_tutorial": lambda g, b: g.skip_tutorial(),
     "view_map": lambda g, b: g.view_map(),

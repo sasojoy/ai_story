@@ -1,0 +1,418 @@
+<title>一類一顆畫面對比</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;600&family=Noto+Sans+TC:wght@400;600&display=swap">
+<style>
+/* 版面：三組對比，每組三個選項並排（窄螢幕疊成一欄），每個選項是 375 寬的江湖頁實際畫面。
+   江湖頁是紙色淺底，所以整頁做成單一淺色主題；手機畫面裡的顏色照 web/style.css 的 :root（淺色那一組） */
+:root {
+  color-scheme: light;
+  --page: #e8dfcd;           /* 頁面底色（手機外） */
+  --page-ink: #2a241d;
+  --page-muted: #6b6155;
+  --page-key: #a8322a;
+  /* 以下照 web/style.css :root */
+  --paper: #f4ede0; --card: #fbf7ef; --card-2: #efe6d5;
+  --ink: #2a241d; --ink-2: #6b6155; --line: #ddd1bc;
+  --accent: #a8322a; --gold: #b7862b;
+  --rn-xia: #2f5d8a; --ok: #2f7d4f; --bad: #b23a2b;
+  --stam: #c08a1e; --hp: #b23a2b;
+  --disk: #2a241d; --disk-2: #3a3128;
+  --gang: #a8322a; --kuai: #2f5d8a; --rou: #3f7d5c; --man: #9a6a2a;
+  --ink-cell: #ede2d3; --ink-sub: #9e8e7c; --ink-stroke: #d0c4b2; --ink-hot: #f5d77f;
+  --good-on-ink: #8fc79f; --even-on-ink: #e3c77d;
+  --new: rgba(183, 134, 43, 0.55);   /* 新字的底線 */
+  --shadow: 0 1px 2px rgba(60, 40, 20, 0.08), 0 2px 8px rgba(60, 40, 20, 0.06);
+  --serif: "Noto Serif TC", "Songti TC", "PMingLiU", serif;
+  --sans: -apple-system, BlinkMacSystemFont, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+}
+body { background: var(--page); color: var(--page-ink); font: 15px/1.7 var(--sans); margin: 0; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-block: 28px 56px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1 { font: 600 26px/1.3 var(--serif); letter-spacing: 3px; margin: 0 0 6px; color: var(--page-key); text-wrap: balance; }
+.lede { max-width: 66ch; color: var(--page-muted); margin: 0 0 8px; }
+.lede .new, .foot .new { padding: 0 2px; }
+h2 { font: 600 20px/1.4 var(--serif); margin: 40px 0 4px; letter-spacing: 2px; text-wrap: balance; }
+.ask { max-width: 70ch; color: var(--page-muted); margin: 0 0 18px; }
+.opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 375px), 1fr)); gap: 28px 22px; align-items: start; }
+.opt { display: grid; gap: 10px; min-width: 0; }
+.opt-head { display: flex; align-items: baseline; gap: 10px; }
+.opt-key { font: 600 22px var(--serif); color: var(--page-key); }
+.opt-name { font: 600 16px var(--serif); }
+.opt-note { font-size: 13.5px; color: var(--page-muted); margin: 0; }
+.pros { margin: 0; padding-left: 1.1em; font-size: 13px; color: var(--page-muted); }
+.cap { font: 12px var(--sans); color: var(--page-muted); letter-spacing: 1px; margin: 4px 0 -4px; }
+.new { box-shadow: inset 0 -2px 0 var(--new); }
+
+/* 一支手機：照 web/style.css 的江湖頁 */
+.phone { width: 100%; max-width: 375px; border-radius: 22px; overflow: hidden; border: 1px solid #c9bba1; background: var(--paper); color: var(--ink); box-shadow: 0 6px 20px rgba(60, 40, 20, .12); font-family: var(--sans); }
+.ptop { padding: 10px 16px 8px; border-bottom: 1px solid var(--line); background: var(--paper); }
+.pname { font: 600 17px var(--serif); }
+.pname small { font: 500 12px var(--sans); color: var(--ink-2); margin-left: 6px; }
+.vit { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) auto auto; gap: 6px 10px; align-items: center; margin-top: 6px; }
+.pbar { position: relative; height: 20px; border-radius: 10px; background: var(--card-2); overflow: hidden; }
+.pbar > i { position: absolute; inset: 0 auto 0 0; border-radius: 10px; }
+.pbar.stam > i { background: var(--stam); } .pbar.hp > i { background: var(--hp); }
+.pbar > span { position: relative; display: block; font-size: 11px; line-height: 20px; padding: 0 8px; font-weight: 600; white-space: nowrap; }
+.pbar.hp > span { text-shadow: 0 0 2px var(--card), 0 0 2px var(--card); }
+.pbar em { font-style: normal; }
+.cur { font: 600 12px var(--sans); color: var(--ink-2); white-space: nowrap; }
+.where { font-size: 12px; color: var(--ink-2); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pbody { padding: 12px 16px 6px; }
+.now { margin-bottom: 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); padding: 10px 14px; font-size: 14px; line-height: 1.6; }
+.now b { font: 600 13px var(--serif); color: var(--accent); margin-right: 6px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin: 0 0 12px; box-shadow: var(--shadow); }
+.scene { font-size: 14.5px; line-height: 1.7; }
+.scene p { margin: 0; }
+.scene p:first-child { font: 600 16px var(--serif); margin-bottom: 2px; }
+
+/* 行動列：一排「水墨氣勁」 */
+.act-bar { display: grid; grid-template-columns: repeat(var(--cells, 4), minmax(0, 1fr)); gap: 6px; padding: 8px 4px; margin-bottom: 12px;
+  background: color-mix(in srgb, var(--disk) 5%, transparent); border: 1px dashed var(--line); border-radius: 12px; }
+.act-ink { position: relative; overflow: hidden; min-height: 72px; padding: 8px 2px 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 0;
+  background: var(--disk); border: 1px solid color-mix(in srgb, var(--gold) 25%, transparent); border-radius: 10px; color: var(--ink-cell); }
+.ink-icon { width: 22px; height: 22px; margin-bottom: 2px; fill: none; stroke: var(--ink-stroke); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.act-ink b { font-size: 13px; font-weight: 800; letter-spacing: .5px; }
+.act-ink small { font-size: 10px; color: var(--ink-sub); margin-top: 2px; white-space: nowrap; }
+.act-ink small.ink-note { margin-top: 0; font-weight: 700; }
+.act-ink small.good { color: var(--good-on-ink); } .act-ink small.even { color: var(--even-on-ink); }
+.act-ink small.gain { color: var(--ink-hot); font-weight: 600; }
+.act-ink.on { background: #171310; border-color: var(--gold); transform: translateY(-4px); box-shadow: 0 4px 12px color-mix(in srgb, var(--gold) 22%, transparent), inset 0 0 12px color-mix(in srgb, var(--gold) 15%, transparent); }
+.act-ink.on .ink-icon { stroke: var(--ink-hot); } .act-ink.on b { color: var(--ink-hot); } .act-ink.on small { color: var(--gold); font-weight: 600; }
+.act-ink.off { opacity: .4; filter: grayscale(100%); border-color: rgba(255, 255, 255, .06); }
+.act-ink.off .ink-icon { stroke: #666; }
+.act-ink.glow { border-color: var(--gold); box-shadow: 0 0 0 2px color-mix(in srgb, var(--gold) 40%, transparent); }
+/* 丙的類別章：格子右上角一個字 */
+.act-ink .tag { position: absolute; top: 4px; right: 4px; width: 16px; height: 16px; border-radius: 4px; display: grid; place-items: center; font: 600 10px/1 var(--serif); color: #fff; }
+.tag.exp { background: var(--gang); } .tag.mat { background: var(--man); } .tag.gong { background: var(--kuai); } .tag.ren { background: var(--rou); } .tag.multi { background: #6b6155; }
+/* 乙：二選一的打仗格 */
+.act-notes { margin: -6px 4px 12px; font-size: 12px; line-height: 1.5; color: var(--ink-2); }
+.act-notes p { margin: 0; }
+.act-notes b { margin-right: 6px; color: var(--ink); font-weight: 600; }
+
+/* 展開的三顆／兩顆與摺疊 */
+.options { display: grid; gap: 8px; }
+.btn { display: flex; align-items: center; gap: 6px; width: 100%; min-height: 48px; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font-size: 15px; line-height: 1.35; text-align: left; box-sizing: border-box; }
+.btn.off { opacity: .45; }
+.btn .two { display: flex; flex-direction: column; min-width: 0; }
+.btn .opt-sub { display: block; font-size: 11.5px; color: var(--ink-2); line-height: 1.3; margin-top: 1px; }
+.btn .chips { margin-left: auto; display: flex; gap: 4px; flex: none; }
+.chip { font: 600 11px/1 var(--sans); padding: 4px 6px; border-radius: 10px; border: 1px solid; white-space: nowrap; }
+.chip.fame { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 50%, transparent); background: color-mix(in srgb, var(--gold) 10%, transparent); }
+.chip.silver { color: #6b6155; border-color: #c9bba1; background: var(--card-2); }
+.chip.good { color: var(--rn-xia); border-color: color-mix(in srgb, var(--rn-xia) 45%, transparent); background: color-mix(in srgb, var(--rn-xia) 8%, transparent); }
+.btn .k { flex: none; width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; background: var(--card-2); font: 600 12px var(--serif); color: var(--ink-2); }
+.act-sub { margin-bottom: 12px; padding: 10px; }
+.act-sub .options { gap: 6px; }
+.strip { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 8px; margin: 0 0 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+.strip > span { font: 600 12px var(--serif); color: var(--ink-2); letter-spacing: 2px; writing-mode: vertical-rl; }
+.strip .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.mini { display: flex; flex-direction: column; justify-content: center; min-height: 44px; padding: 4px 10px; border-radius: 10px; background: var(--disk); color: var(--ink-cell); border: 1px solid color-mix(in srgb, var(--gold) 25%, transparent); }
+.mini b { font-size: 13px; font-weight: 800; }
+.mini small { font-size: 10.5px; color: var(--ink-sub); white-space: nowrap; }
+.mini.glow { border-color: var(--gold); box-shadow: 0 0 0 2px color-mix(in srgb, var(--gold) 40%, transparent); }
+.mini.glow small { color: var(--ink-hot); }
+details.fold { margin-bottom: 8px; }
+.fold > .sum { padding: 10px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; }
+.fold > .sum::after { content: "▾"; margin-left: auto; color: var(--ink-2); }
+.fold.shut > .sum::after { transform: rotate(-90deg); }
+.fold.open > .sum { border-radius: 14px 14px 0 0; }
+.fold-body { border: 1px solid var(--line); border-top: 0; border-radius: 0 0 14px 14px; padding: 10px 14px; background: var(--card); }
+.btn.hot { border-color: var(--gold); box-shadow: 0 0 0 2px color-mix(in srgb, var(--gold) 35%, transparent); }
+.badge { font: 600 11px var(--sans); color: #fff; background: var(--accent); border-radius: 9px; padding: 0 6px; }
+
+.ptabs { display: grid; grid-template-columns: repeat(5, 1fr); border-top: 1px solid var(--line); background: color-mix(in srgb, var(--card) 94%, transparent); }
+.ptab { display: flex; flex-direction: column; align-items: center; padding: 7px 0 6px; font-size: 11px; color: var(--ink-2); position: relative; }
+.ptab i { font: 600 19px/1.2 var(--serif); font-style: normal; }
+.ptab.on { color: var(--accent); }
+.ptab.on::before { content: ""; position: absolute; top: 0; left: 30%; right: 30%; height: 3px; border-radius: 0 0 3px 3px; background: var(--accent); }
+
+.foot { margin-top: 44px; font-size: 13px; color: var(--page-muted); max-width: 70ch; }
+.foot p { margin: 0 0 8px; }
+</style>
+
+<div class="wrap">
+  <h1>一類一顆畫面對比</h1>
+  <p class="lede">正式季整合第 3 批「一類一顆」有三處畫面要你挑。下面每一張都是手機 375 寬的江湖頁實際樣子，同一個人（官軍、第 14 級）站在同一個城外地點：這裡有黃巾的隊伍可以練功、是戰線地點可以出陣、有一位人物可以交友，人又剛好在召見的地點。三組各挑一個（甲、乙、丙），也可以說「甲，但……」。<span class="new">底下畫了金線的字</span>都是新寫的，暫寫，待 joy 潤；數字照設計的預設。</p>
+
+  <!-- ── 第一組：練功與應召放哪 ── -->
+  <h2>一、主行動列多了「練功」，應召放哪</h2>
+  <p class="ask">現在平常是一排四格（探索、出陣、交友、移動），探索點開是找素材、找事件、靜心感悟三顆。新的「練功」一定打一場、不限次、拿經驗，會是按得最多的一顆。應召現在收在「此地還能做」裡；改了之後別的鈕不再被晉升奇遇換掉，它得自己被看見。</p>
+  <div class="opts">
+
+    <!-- 甲 -->
+    <div class="opt">
+      <div class="opt-head"><span class="opt-key">甲</span><span class="opt-name">一排五格，應召發光</span></div>
+      <p class="opt-note">練功插在探索後面，一排變五格（序章教調息時本來就排過五格）。應召照舊在「此地還能做」，有召見時摺疊自己打開、那一顆發光，同入伍段的做法。</p>
+      <ul class="pros"><li>按得最多的練功一下就按到，不多一層。</li><li>一格從約 78 像素窄到約 62 像素，小字只放得下五、六個字。</li></ul>
+      <div class="phone">
+        <div class="ptop"><div class="pname">柳寒舟<small>官軍・屯長</small></div>
+          <div class="vit"><div class="pbar stam"><i style="width:62%"></i><span><em>體力</em> 155/250</span></div><div class="pbar hp"><i style="width:88%"></i><span><em>氣血</em> 520/590</span></div><span class="cur">銀 312</span><span class="cur">心 86</span></div>
+          <div class="where">潁川官道・第 3 週・週二 21:40</div></div>
+        <div class="pbody">
+          <div class="now"><b>剛剛</b>練功：你一刀逼退黃巾殘兵，經驗 +22、心得 +4、銀兩 +6。</div>
+          <div class="card scene"><p>潁川官道</p><p>道旁的茶棚歇著幾個挑夫，遠處有黃巾的旗子在晃。</p></div>
+          <div class="act-bar" style="--cells:5">
+            <div class="act-ink"><svg class="ink-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3v3m0 12v3M3 12h3m12 0h3M15 9l-4 2-2 4 4-2z"/></svg><b>探索</b><small>三選一</small></div>
+            <div class="act-ink"><svg class="ink-icon" viewBox="0 0 24 24"><path d="M4 4l11 11M20 4L9 15M7 15l-3 3 2 2 3-3M17 15l3 3-2 2-3-3"/></svg><b class="new">練功</b><small>體力 6</small><small class="ink-note good">穩勝</small></div>
+            <div class="act-ink"><svg class="ink-icon" viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7h10zM12 7v13M8 12h8"/></svg><b>出陣</b><small>今日 5 次</small><small class="ink-note even">五五波</small></div>
+            <div class="act-ink"><svg class="ink-icon" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg><b>交友</b><small>體力 3</small></div>
+            <div class="act-ink"><svg class="ink-icon" viewBox="0 0 24 24"><path d="M13 3l-3 7h5l-4 11 8-10h-5z"/></svg><b>移動</b><small>3 條路</small></div>
+          </div>
+          <div class="act-notes"><p><b class="new">練功</b><span class="new">打一場這裡的黃巾殘兵，經驗約 22。</span></p><p><b>出陣</b>攻這裡的黃巾，推戰線、記貢獻。</p></div>
+          <div class="fold open"><div class="sum">此地還能做 2 件事</div><div class="fold-body options">
+            <div class="btn hot"><span>應召晉升（召見在此）</span></div>
+            <div class="btn"><span>捐軍備（銀兩 20）</span></div>
+          </div></div>
+        </div>
+        <div class="ptabs"><span class="ptab on"><i>江</i>江湖</span><span class="ptab"><i>修</i>修練</span><span class="ptab"><i>煉</i>煉製</span><span class="ptab"><i>圖</i>輿圖</span><span class="ptab"><i>聞</i>見聞</span></div>
+      </div>
+    </div>
+
+    <!-- 乙 -->
+    <div class="opt">
+      <div class="opt-head"><span class="opt-key">乙</span><span class="opt-name">四格不動，「打仗」點開二選一</span></div>
+      <p class="opt-note">出陣那一格改叫「打仗」，點了跟探索一樣在底下展開兩顆：練功、出陣。應召升上來，有召見時在行動列上面一條金框橫幅，沒有就不畫。</p>
+      <ul class="pros"><li>一排照舊四格不擠；打仗、探索都是「點開再挑」，一個做法。</li><li>按得最多的練功每次多點一下；散人沒有出陣，展開只剩一顆。</li></ul>
+      <div class="phone">
+        <div class="ptop"><div class="pname">柳寒舟<small>官軍・屯長</small></div>
+          <div class="vit"><div class="pbar stam"><i style="width:62%"></i><span><em>體力</em> 155/250</span></div><div class="pbar hp"><i style="width:88%"></i><span><em>氣血</em> 520/590</span></div><span class="cur">銀 312</span><span class="cur">心 86</span></div>
+          <div class="where">潁川官道・第 3 週・週二 21:40</div></div>
+        <div class="pbody">
+          <div class="now"><b>剛剛</b>練功：你一刀逼退黃巾殘兵，經驗 +22、心得 +4、銀兩 +6。</div>
+          <div class="card scene"><p>潁川官道</p><p>道旁的茶棚歇著幾個挑夫，遠處有黃巾的旗子在晃。</p></div>
+          <div class="strip"><span>召見</span><div class="mini glow"><b>應召晉升</b><small class="new">屯長召你在此相見・不花體力</small></div></div>
+          <div class="act-bar">
+            <div class="act-ink"><svg class="ink-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3v3m0 12v3M3 12h3m12 0h3M15 9l-4 2-2 4 4-2z"/></svg><b>探索</b><small>三選一</small></div>
+            <div class="act-ink on"><svg class="ink-icon" viewBox="0 0 24 24"><path d="M4 4l11 11M20 4L9 15M7 15l-3 3 2 2 3-3M17 15l3 3-2 2-3-3"/></svg><b class="new">打仗</b><small class="new">二選一</small></div>
+            <div class="act-ink"><svg class="ink-icon" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg><b>交友</b><small>體力 3</small></div>
+            <div class="act-ink"><svg class="ink-icon" viewBox="0 0 24 24"><path d="M13 3l-3 7h5l-4 11 8-10h-5z"/></svg><b>移動</b><small>3 條路</small></div>
+          </div>
+          <div class="card act-sub"><div class="options">
+            <div class="btn"><span class="k">練</span><span class="two"><span class="new">練功（體力 6・不限次）</span><span class="opt-sub new">打黃巾殘兵・穩勝・經驗約 22</span></span></div>
+            <div class="btn"><span class="k">陣</span><span class="two"><span>出陣・攻（體力 6・今日還能 5 次）</span><span class="opt-sub new">打黃巾軍・五五波・經驗約 44・軍功</span></span></div>
+          </div></div>
+          <div class="fold shut"><div class="sum">此地還能做 1 件事</div></div>
+        </div>
+        <div class="ptabs"><span class="ptab on"><i>江</i>江湖</span><span class="ptab"><i>修</i>修練</span><span class="ptab"><i>煉</i>煉製</span><span class="ptab"><i>圖</i>輿圖</span><span class="ptab"><i>聞</i>見聞</span></div>
+      </div>
+    </div>
+
+    <!-- 丙 -->
+    <div class="opt">
+      <div class="opt-head"><span class="opt-key">丙</span><span class="opt-name">練功進格子，出陣與應召另起「軍務」一條</span></div>
+      <p class="opt-note">一排四格是探索、練功、交友、移動，誰都有。出陣與應召是投靠了陣營才有的戰功類，收成行動列上面一條「軍務」；散人沒有這一條。</p>
+      <ul class="pros"><li>四格人人一樣，散人不再看到一格灰掉的「不在戰線」；戰功類集中一處。</li><li>多一條約 60 像素，第一屏的「剛剛」會被往上擠一點。</li></ul>
+      <div class="phone">
+        <div class="ptop"><div class="pname">柳寒舟<small>官軍・屯長</small></div>
+          <div class="vit"><div class="pbar stam"><i style="width:62%"></i><span><em>體力</em> 155/250</span></div><div class="pbar hp"><i style="width:88%"></i><span><em>氣血</em> 520/590</span></div><span class="cur">銀 312</span><span class="cur">心 86</span></div>
+          <div class="where">潁川官道・第 3 週・週二 21:40</div></div>
+        <div class="pbody">
+          <div class="now"><b>剛剛</b>練功：你一刀逼退黃巾殘兵，經驗 +22、心得 +4、銀兩 +6。</div>
+          <div class="card scene"><p>潁川官道</p><p>道旁的茶棚歇著幾個挑夫，遠處有黃巾的旗子在晃。</p></div>
+          <div class="strip"><span class="new">軍務</span><div class="row2">
+            <div class="mini"><b>出陣・攻</b><small>今日 5 次・五五波</small></div>
+            <div class="mini glow"><b>應召晉升</b><small class="new">召見在此</small></div>
+          </div></div>
+          <div class="act-bar">
+            <div class="act-ink"><svg class="ink-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3v3m0 12v3M3 12h3m12 0h3M15 9l-4 2-2 4 4-2z"/></svg><b>探索</b><small>三選一</small></div>
+            <div class="act-ink"><svg class="ink-icon" viewBox="0 0 24 24"><path d="M4 4l11 11M20 4L9 15M7 15l-3 3 2 2 3-3M17 15l3 3-2 2-3-3"/></svg><b class="new">練功</b><small>體力 6</small><small class="ink-note good">穩勝</small></div>
+            <div class="act-ink"><svg class="ink-icon" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg><b>交友</b><small>體力 3</small></div>
+            <div class="act-ink"><svg class="ink-icon" viewBox="0 0 24 24"><path d="M13 3l-3 7h5l-4 11 8-10h-5z"/></svg><b>移動</b><small>3 條路</small></div>
+          </div>
+          <div class="act-notes"><p><b class="new">練功</b><span class="new">打一場這裡的黃巾殘兵，經驗約 22。</span></p></div>
+          <div class="fold shut"><div class="sum">此地還能做 1 件事</div></div>
+        </div>
+        <div class="ptabs"><span class="ptab on"><i>江</i>江湖</span><span class="ptab"><i>修</i>修練</span><span class="ptab"><i>煉</i>煉製</span><span class="ptab"><i>圖</i>輿圖</span><span class="ptab"><i>聞</i>見聞</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 第二組：鈕上的字 ── -->
+  <h2>二、每顆鈕寫「給什麼、大約多少」</h2>
+  <p class="ask">設計 2.11 的寫法很長（例：「出陣・攻（體力 6・今日還能 N 次・對手・勝算・經驗約 2N・銀兩・軍功）」）。行動列一格在 375 寬只有 62～78 像素、小字 10 像素一行約六個字，放不下整句。下面三張都照第一組甲的五格排法，探索已點開。</p>
+  <div class="opts">
+
+    <!-- 甲 -->
+    <div class="opt">
+      <div class="opt-head"><span class="opt-key">甲</span><span class="opt-name">格子寫數字，整句在底下說明行</span></div>
+      <p class="opt-note">格子第二行換成「大約多少」（經驗約 22、經驗 44・功），第三行放勝算（出陣放今日還剩幾次）；整句的「給什麼」寫在行動列底下那幾行，一顆一行。探索展開的三顆鈕上寫全句。</p>
+      <ul class="pros"><li>格子上一眼看到最要緊的數字；整句照舊放在已經有的說明行。</li><li>體力從格子上拿掉（都是 6），要看說明行或展開的鈕才知道。</li></ul>
+      <div class="phone">
+        <div class="ptop"><div class="pname">柳寒舟<small>官軍・屯長</small></div>
+          <div class="vit"><div class="pbar stam"><i style="width:62%"></i><span><em>體力</em> 155/250</span></div><div class="pbar hp"><i style="width:88%"></i><span><em>氣血</em> 520/590</span></div><span class="cur">銀 312</span><span class="cur">心 86</span></div>
+          <div class="where">潁川官道・第 3 週・週二 21:40</div></div>
+        <div class="pbody">
+          <div class="card scene"><p>潁川官道</p><p>道旁的茶棚歇著幾個挑夫，遠處有黃巾的旗子在晃。</p></div>
+          <div class="act-bar" style="--cells:5">
+            <div class="act-ink on"><svg class="ink-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3v3m0 12v3M3 12h3m12 0h3M15 9l-4 2-2 4 4-2z"/></svg><b>探索</b><small>三選一</small></div>
+            <div class="act-ink"><svg class="ink-icon" viewBox="0 0 24 24"><path d="M4 4l11 11M20 4L9 15M7 15l-3 3 2 2 3-3M17 15l3 3-2 2-3-3"/></svg><b>練功</b><small class="gain new">經驗約 22</small><small class="ink-note good">穩勝</small></div>
+            <div class="act-ink"><svg class="ink-icon" viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7h10zM12 7v13M8 12h8"/></svg><b>出陣</b><small class="gain new">經驗 44・功</small><small class="ink-note even">今日 5 次</small></div>
+            <div class="act-ink"><svg class="ink-icon" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg><b>交友</b><small class="gain new">情誼</small><small>盧植</small></div>
+            <div class="act-ink"><svg class="ink-icon" viewBox="0 0 24 24"><path d="M13 3l-3 7h5l-4 11 8-10h-5z"/></svg><b>移動</b><small>3 條路</small></div>
+          </div>
+          <div class="card act-sub"><div class="options">
+            <div class="btn"><span class="new">找素材（體力 6・一階 1，二階 25%）</span></div>
+            <div class="btn"><span class="new">找事件（體力 6・這裡多半給：名望、銀兩）</span></div>
+            <div class="btn"><span class="new">靜心感悟（體力 6・悟這裡的意境）</span></div>
+          </div></div>
+        </div>
+        <div class="ptabs"><span class="ptab on"><i>江</i>江湖</span><span class="ptab"><i>修</i>修練</span><span class="ptab"><i>煉</i>煉製</span><span class="ptab"><i>圖</i>輿圖</span><span class="ptab"><i>聞</i>見聞</span></div>
+      </div>
+      <p class="cap">收起探索時，行動列底下那幾行</p>
+      <div class="phone"><div class="pbody">
+        <div class="act-notes" style="margin: 0 4px 6px;">
+          <p><b>練功</b><span class="new">體力 6・打黃巾殘兵・穩勝・經驗約 22，帶心得、銀兩、掉落。</span></p>
+          <p><b>出陣</b><span class="new">體力 6・攻黃巾軍・五五波・經驗約 44・銀兩約 42・軍功。</span></p>
+          <p><b>交友</b><span class="new">體力 3・跟盧植說話，漲情誼。</span></p>
+        </div>
+      </div></div>
+    </div>
+
+    <!-- 乙 -->
+    <div class="opt">
+      <div class="opt-head"><span class="opt-key">乙</span><span class="opt-name">格子照舊，展開與說明行寫全句</span></div>
+      <p class="opt-note">行動列的格子一個字都不改（體力、勝算）；「給什麼、大約多少」只寫在兩個地方：行動列底下的說明行、點開後的鈕。展開的鈕分兩行，第一行是設計的寫法前半，第二行寫給什麼。</p>
+      <ul class="pros"><li>行動列不動，375 寬最穩；長句放在本來就能折行的地方。</li><li>練功、出陣的經驗不點開或不往下看，格子上看不到。</li></ul>
+      <div class="phone">
+        <div class="ptop"><div class="pname">柳寒舟<small>官軍・屯長</small></div>
+          <div class="vit"><div class="pbar stam"><i style="width:62%"></i><span><em>體力</em> 155/250</span></div><div class="pbar hp"><i style="width:88%"></i><span><em>氣血</em> 520/590</span></div><span class="cur">銀 312</span><span class="cur">心 86</span></div>
+          <div class="where">潁川官道・第 3 週・週二 21:40</div></div>
+        <div class="pbody">
+          <div class="card scene"><p>潁川官道</p><p>道旁的茶棚歇著幾個挑夫，遠處有黃巾的旗子在晃。</p></div>
+          <div class="act-bar" style="--cells:5">
+            <div class="act-ink on"><svg class="ink-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3v3m0 12v3M3 12h3m12 0h3M15 9l-4 2-2 4 4-2z"/></svg><b>探索</b><small>三選一</small></div>
+            <div class="act-ink"><svg class="ink-icon" viewBox="0 0 24 24"><path d="M4 4l11 11M20 4L9 15M7 15l-3 3 2 2 3-3M17 15l3 3-2 2-3-3"/></svg><b>練功</b><small>體力 6</small><small class="ink-note good">穩勝</small></div>
+            <div class="act-ink"><svg class="ink-icon" viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7h10zM12 7v13M8 12h8"/></svg><b>出陣</b><small>今日 5 次</small><small class="ink-note even">五五波</small></div>
+            <div class="act-ink"><svg class="ink-icon" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg><b>交友</b><small>體力 3</small></div>
+            <div class="act-ink"><svg class="ink-icon" viewBox="0 0 24 24"><path d="M13 3l-3 7h5l-4 11 8-10h-5z"/></svg><b>移動</b><small>3 條路</small></div>
+          </div>
+          <div class="card act-sub"><div class="options">
+            <div class="btn"><span class="two"><span>找素材（體力 6）</span><span class="opt-sub new">素材：剛 一階 1 個，二階 25%</span></span></div>
+            <div class="btn"><span class="two"><span>找事件（體力 6）</span><span class="opt-sub new">這裡多半給：名望、銀兩</span></span></div>
+            <div class="btn"><span class="two"><span>靜心感悟（體力 6）</span><span class="opt-sub new">意境；選錯做法給 3 心得</span></span></div>
+          </div></div>
+        </div>
+        <div class="ptabs"><span class="ptab on"><i>江</i>江湖</span><span class="ptab"><i>修</i>修練</span><span class="ptab"><i>煉</i>煉製</span><span class="ptab"><i>圖</i>輿圖</span><span class="ptab"><i>聞</i>見聞</span></div>
+      </div>
+      <p class="cap">收起探索時，行動列底下那幾行</p>
+      <div class="phone"><div class="pbody">
+        <div class="act-notes" style="margin: 0 4px 6px;">
+          <p><b>練功</b><span class="new">打黃巾殘兵，經驗約 22，帶心得、銀兩、掉落；不限次。</span></p>
+          <p><b>出陣</b><span class="new">攻黃巾軍，經驗約 44、銀兩約 42、軍功；稀有掉落。</span></p>
+          <p><b>交友</b><span class="new">跟盧植說話，漲情誼。</span></p>
+        </div>
+      </div></div>
+    </div>
+
+    <!-- 丙 -->
+    <div class="opt">
+      <div class="opt-head"><span class="opt-key">丙</span><span class="opt-name">格子右上角蓋一個類別字</span></div>
+      <p class="opt-note">每一格右上角一個小方章寫它給的那一類（經、素、功、情），顏色固定；格子小字照舊寫體力或次數，大約多少寫在說明行。探索那一格給好幾類，章寫「三」。</p>
+      <ul class="pros"><li>一眼分得出哪一格給什麼，對得上「一類一顆」；格子不加字。</li><li>單字的章要學一次才認得；數字還是要往下看說明行。</li></ul>
+      <div class="phone">
+        <div class="ptop"><div class="pname">柳寒舟<small>官軍・屯長</small></div>
+          <div class="vit"><div class="pbar stam"><i style="width:62%"></i><span><em>體力</em> 155/250</span></div><div class="pbar hp"><i style="width:88%"></i><span><em>氣血</em> 520/590</span></div><span class="cur">銀 312</span><span class="cur">心 86</span></div>
+          <div class="where">潁川官道・第 3 週・週二 21:40</div></div>
+        <div class="pbody">
+          <div class="card scene"><p>潁川官道</p><p>道旁的茶棚歇著幾個挑夫，遠處有黃巾的旗子在晃。</p></div>
+          <div class="act-bar" style="--cells:5">
+            <div class="act-ink on"><span class="tag multi new">三</span><svg class="ink-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3v3m0 12v3M3 12h3m12 0h3M15 9l-4 2-2 4 4-2z"/></svg><b>探索</b><small>三選一</small></div>
+            <div class="act-ink"><span class="tag exp new">經</span><svg class="ink-icon" viewBox="0 0 24 24"><path d="M4 4l11 11M20 4L9 15M7 15l-3 3 2 2 3-3M17 15l3 3-2 2-3-3"/></svg><b>練功</b><small>體力 6</small><small class="ink-note good">穩勝</small></div>
+            <div class="act-ink"><span class="tag gong new">功</span><svg class="ink-icon" viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7h10zM12 7v13M8 12h8"/></svg><b>出陣</b><small>今日 5 次</small><small class="ink-note even">五五波</small></div>
+            <div class="act-ink"><span class="tag ren new">情</span><svg class="ink-icon" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg><b>交友</b><small>體力 3</small></div>
+            <div class="act-ink"><svg class="ink-icon" viewBox="0 0 24 24"><path d="M13 3l-3 7h5l-4 11 8-10h-5z"/></svg><b>移動</b><small>3 條路</small></div>
+          </div>
+          <div class="card act-sub"><div class="options">
+            <div class="btn"><span class="k new" style="background: var(--man); color: #fff;">素</span><span>找素材（體力 6・<span class="new">一階 1，二階 25%</span>）</span></div>
+            <div class="btn"><span class="k new" style="background: #6b6155; color: #fff;">事</span><span>找事件（體力 6・<span class="new">名望、銀兩</span>）</span></div>
+            <div class="btn"><span class="k new" style="background: var(--rou); color: #fff;">意</span><span>靜心感悟（體力 6・<span class="new">意境</span>）</span></div>
+          </div></div>
+        </div>
+        <div class="ptabs"><span class="ptab on"><i>江</i>江湖</span><span class="ptab"><i>修</i>修練</span><span class="ptab"><i>煉</i>煉製</span><span class="ptab"><i>圖</i>輿圖</span><span class="ptab"><i>聞</i>見聞</span></div>
+      </div>
+      <p class="cap">收起探索時，行動列底下那幾行</p>
+      <div class="phone"><div class="pbody">
+        <div class="act-notes" style="margin: 0 4px 6px;">
+          <p><b>練功</b><span class="new">經驗約 22（帶心得、銀兩、掉落）。</span></p>
+          <p><b>出陣</b><span class="new">軍功；經驗約 44、銀兩約 42。</span></p>
+          <p><b>交友</b><span class="new">跟盧植說話，漲情誼。</span></p>
+        </div>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- ── 第三組：找事件的偏向 ── -->
+  <h2>三、找事件的「這裡多半給」那一行</h2>
+  <p class="ask">找事件照舊是抽的，但鈕上要先講這裡多半給哪一類：照這個人此刻抽得到的事件，取出現最多的兩類；只有一類過三成時只寫那一類；名望、善名、惡名分開寫。下面三張是探索點開的那三顆，同一處（名望、銀兩），最後一張另附只有一類與池子空了的樣子。</p>
+  <div class="opts">
+
+    <!-- 甲 -->
+    <div class="opt">
+      <div class="opt-head"><span class="opt-key">甲</span><span class="opt-name">寫在括號裡（照設計的例子）</span></div>
+      <p class="opt-note">「找事件（體力 6・這裡多半給：名望、銀兩）」一整句，跟其他選項同一個寫法。</p>
+      <ul class="pros"><li>不加任何新樣式，跟出陣、遊歷的括號一致。</li><li>這一句 21 個字，375 寬會折到第二行，鈕變高一截；類別埋在句尾。</li></ul>
+      <div class="phone">
+        <div class="pbody">
+          <div class="card act-sub" style="margin-bottom: 6px;"><div class="options">
+            <div class="btn"><span>找素材（體力 6・一階 1，二階 25%）</span></div>
+            <div class="btn"><span>找事件（體力 6・<span class="new">這裡多半給：名望、銀兩</span>）</span></div>
+            <div class="btn"><span>靜心感悟（體力 6）</span></div>
+          </div></div>
+        </div>
+      </div>
+      <p class="cap">只有一類過三成／池子空了</p>
+      <div class="phone"><div class="pbody"><div class="options" style="margin-bottom: 6px;">
+        <div class="btn"><span>找事件（體力 6・<span class="new">這裡多半給：善名</span>）</span></div>
+        <div class="btn off"><span>找事件（<span class="new">這一帶眼下沒什麼事</span>）</span></div>
+      </div></div></div>
+    </div>
+
+    <!-- 乙 -->
+    <div class="opt">
+      <div class="opt-head"><span class="opt-key">乙</span><span class="opt-name">鈕底下第二行小字</span></div>
+      <p class="opt-note">第一行「找事件（體力 6）」，第二行灰色小字「這裡多半給：名望、銀兩」，同俠寇選項底下那一行的樣子。三顆都有第二行（給什麼）。</p>
+      <ul class="pros"><li>375 寬一行放得下，三顆一樣高、整齊。</li><li>三顆都變成兩行，展開那一塊高了約 40 像素。</li></ul>
+      <div class="phone">
+        <div class="pbody">
+          <div class="card act-sub" style="margin-bottom: 6px;"><div class="options">
+            <div class="btn"><span class="two"><span>找素材（體力 6）</span><span class="opt-sub new">剛 一階 1 個，二階 25%</span></span></div>
+            <div class="btn"><span class="two"><span>找事件（體力 6）</span><span class="opt-sub new">這裡多半給：名望、銀兩</span></span></div>
+            <div class="btn"><span class="two"><span>靜心感悟（體力 6）</span><span class="opt-sub new">悟這裡的意境</span></span></div>
+          </div></div>
+        </div>
+      </div>
+      <p class="cap">只有一類過三成／池子空了</p>
+      <div class="phone"><div class="pbody"><div class="options" style="margin-bottom: 6px;">
+        <div class="btn"><span class="two"><span>找事件（體力 6）</span><span class="opt-sub new">這裡多半給：善名</span></span></div>
+        <div class="btn off"><span class="two"><span>找事件</span><span class="opt-sub new">這一帶眼下沒什麼事</span></span></div>
+      </div></div></div>
+    </div>
+
+    <!-- 丙 -->
+    <div class="opt">
+      <div class="opt-head"><span class="opt-key">丙</span><span class="opt-name">鈕右邊兩個類別籤</span></div>
+      <p class="opt-note">鈕上只寫「找事件（體力 6）」，右邊排一兩個圓角小籤，顏色照類別（名望金、善名青、銀兩灰），照狀態列名聲的配色。</p>
+      <ul class="pros"><li>一行就放得下，類別一眼看到，鈕不變高。</li><li>籤沒有「多半」兩個字，看起來像保證一定給；顏色要另訂九類。</li></ul>
+      <div class="phone">
+        <div class="pbody">
+          <div class="card act-sub" style="margin-bottom: 6px;"><div class="options">
+            <div class="btn"><span>找素材（體力 6）</span><span class="chips"><span class="chip silver new">一階 1・二階 25%</span></span></div>
+            <div class="btn"><span>找事件（體力 6）</span><span class="chips"><span class="chip fame new">名望</span><span class="chip silver new">銀兩</span></span></div>
+            <div class="btn"><span>靜心感悟（體力 6）</span><span class="chips"><span class="chip good new">意境</span></span></div>
+          </div></div>
+        </div>
+      </div>
+      <p class="cap">只有一類過三成／池子空了</p>
+      <div class="phone"><div class="pbody"><div class="options" style="margin-bottom: 6px;">
+        <div class="btn"><span>找事件（體力 6）</span><span class="chips"><span class="chip good new">善名</span></span></div>
+        <div class="btn off"><span>找事件</span><span class="chips"><span class="chip silver new">眼下沒事</span></span></div>
+      </div></div></div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <p>畫了金線的字都是暫寫，待 joy 潤：「練功」「打仗」「二選一」「軍務」、類別章（經、素、功、情、事、意）、說明行與展開鈕上的每一句、「這一帶眼下沒什麼事」。</p>
+    <p>數字照正式季整合設計第二章的預設：練功、出陣、找事件、找素材、靜心感悟各 6 體力，交友 3；出陣一天 5 次、經驗是同一個對手練功的兩倍（這裡寫 22 與 44）、銀兩加等級 × 3 的軍功賞（14 級 → 42 兩）；找素材在危險度 2 的城外一階 1 個、二階 25%；靜心感悟選錯給 3 心得。人物、地點、勝算是示意。</p>
+    <p>三組可以分開挑；第二、三組的寫法也會跟著第一組選的排法調（例：第一組選乙，練功、出陣的全句就寫在展開的兩顆上）。</p>
+  </div>
+</div>
