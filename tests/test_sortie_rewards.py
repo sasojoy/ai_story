@@ -81,8 +81,10 @@ def test_rare_drops_hit_with_their_own_dice_and_respect_the_caps():
     cfg.treasure_cap, cfg.horse_cap = 1, 1
     p = game.state.player
     legend = p.legend_items
-    _attack(game)
+    record, _ = _attack(game)
     assert p.legend_items == legend + 1 and p.sortie_treasures == 1 and p.sortie_horses == 1
+    # FB-430：寶物、良駒照挑戰本人寫進得失那一格
+    assert any(m.startswith("寶物【") for m in record.materials) and any(m.startswith("良駒【") for m in record.materials)
     p.stamina = 250.0
     _attack(game)
     assert p.sortie_treasures == 1 and p.sortie_horses == 1  # 一季的上限
