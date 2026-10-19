@@ -463,6 +463,8 @@ class PlayerState(BaseModel):
 
     # ── 同伴（sanguo-companions 合併重寫：全服唯一，見 world_state.py）──
     team: list[str] = Field(default_factory=list)  # 目前帶在身邊出戰的同伴 id，最多 MAX_TEAM_COMPANIONS 人
+    # 鑄譜跨季記得的神器（正式季整合 5.6；第 10 批）：輪替季打中過的神器配方 id → 打中的那一爐組合鍵；換季帶著走（聽過的片子照舊一季一清）
+    divine_solved: dict[str, str] = Field(default_factory=dict)
     affinities: dict[str, int] = Field(default_factory=dict)  # 人物 id -> 0~100 好感度，跟有沒有招到他無關
     relationship_notes: dict[str, str] = Field(default_factory=dict)  # 人物 id -> 一句話關係現況
     # 風聞（figure_life.spread）：人物 id → 他聽說的你做過的事（一句一條，最新的在後，最多 hearsay_keep 條）；這一季的，換季清掉

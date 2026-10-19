@@ -253,7 +253,7 @@ def forge(
     msgs += [] if divine else setting_line(content, setting, slot)  # 神器那一爐不擲品質：天時地利那一句不寫
     msgs.append(f"銀兩 -{cost}")
     msgs += [f"{content.materials[mid].name} -{n}" for mid, n in used.items()]
-    msgs.append(equipment.store(state, item))
+    msgs.append(equipment.store(state, item, content))  # 15 級以下打出的神器先進裝備庫（正式季整合 5.8）
     if secret is not None:
         forge_secrets.solve(state, tianji, secret, key)
         if first:  # 7.2：江湖上傳一句（具名，同 fusion._secret_lines）；神器那一句不帶名字（還沒定名），定名時另傳（name_divine）
@@ -792,7 +792,8 @@ def armor_plan(state: GameState, content: Content, world: WorldStateStore, neigo
 def better_in_rack(state: GameState, content: Content, world: WorldStateStore, art) -> Weapon | None:
     """裝備庫裡威力加成比手上那把高的那一把（最高的；同分照 id），沒有是 None。"""
     now = weapons.bonus(state.player.weapon, art, content, world)
-    best = max(equipment.in_slot(state.player, "weapon"), key=lambda w: (weapons.bonus(w, art, content, world), w.id), default=None)
+    spare = [w for w in equipment.in_slot(state.player, "weapon") if equipment.wear_problem(state, content, w) is None]  # 穿不上的神器不挑
+    best = max(spare, key=lambda w: (weapons.bonus(w, art, content, world), w.id), default=None)
     return best if best is not None and weapons.bonus(best, art, content, world) > now + 1e-9 else None
 
 

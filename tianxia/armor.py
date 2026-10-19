@@ -190,7 +190,8 @@ def wanted(state: GameState, content: Content, neigong: MartialArt | None) -> st
         return None
     p = state.player
     now = fresh_cut(p.armor, neigong, content)
-    best = max(equipment.in_slot(p, "armor"), key=lambda a: (fresh_cut(a, neigong, content), a.id), default=None)
+    spare = [a for a in equipment.in_slot(p, "armor") if equipment.wear_problem(state, content, a) is None]  # 穿不上的神器不挑
+    best = max(spare, key=lambda a: (fresh_cut(a, neigong, content), a.id), default=None)
     if best is not None and fresh_cut(best, neigong, content) > now + 1e-9:
         return f"smith:wield:{best.id}"
     pick = _shop_pick(neigong)
@@ -239,7 +240,7 @@ def rows(state: GameState, content: Content, neigong: MartialArt | None) -> dict
         return {"worn": None, "rack": []}
     return {
         "worn": _row(p.armor, neigong, content, worn=True) if p.armor else None,
-        "rack": [_row(a, neigong, content) for a in equipment.in_slot(p, "armor")],
+        "rack": [equipment.wear_row(_row(a, neigong, content), state, content, a) for a in equipment.in_slot(p, "armor")],
     }
 
 

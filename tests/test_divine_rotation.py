@@ -117,6 +117,8 @@ def _smith(c, w, name, level=20):
     game = Game.new(c, name, rng=random.Random(0), world=w)
     p = game.state.player
     p.location = next(lid for lid, loc in c.locations.items() if equipment.TOWN_TAG in (loc.tags or []))
+    p.tutorial_step = len(c.tutorial.steps)  # 引導走完：選單是一般的（鐵匠鋪）
+    p.visited.add(p.location)
     p.member.level = level
     p.stats["silver"] = 10000
     return game
@@ -131,7 +133,7 @@ def _forge_sword(c, w, game, rid=SWORD):
     p = game.state.player
     p.materials[main] = p.materials.get(main, 0) + 1
     p.materials[aux] = p.materials.get(aux, 0) + 1
-    return smithing.forge(game.state, c, w, recipe.kind, main, aux)
+    return smithing.forge(game.state, c, w, recipe.kind if recipe.slot == "weapon" else smithing.ARMOR_KIND, main, aux)
 
 
 def test_one_original_per_server_across_seasons():

@@ -613,6 +613,14 @@ class Game:
         fresh.player.donate_day, fresh.player.donated_today = old.player.donate_day, old.player.donated_today  # 換季不能多捐一輪
         fresh.player.battle_results_seen = old.player.battle_results_seen  # 補送過的決戰不再補一次（FB-027）
         fresh.player.heirloom = old.player.heirloom  # 玉璽碎片的抄本與補送的進度跨季帶走（玉璽碎片設計 7.5；同步時本來就照登記重抄）
+        # 神器輪替與收集（正式季整合 5.8）：輪替季打的神器（collected）跨季帶走、放進裝備庫，以器配招清掉，品質淬煉磨損照舊；
+        # 流水號接著走（帶過來的 id 不會跟新打的撞）；鑄譜上打中過的神器記得（forge_secrets.divine_solved）
+        carried = [item for item in forge_secrets.owned_gear(old.player) if item.collected and item.signature is None]
+        for item in carried:
+            item.bound_art = None
+        fresh.player.rack = carried + fresh.player.rack
+        fresh.player.weapon_serial = max(fresh.player.weapon_serial, old.player.weapon_serial)
+        fresh.player.divine_solved = dict(old.player.divine_solved)
         fresh.player.seal_seen = old.player.seal_seen
         fresh.player.seen_real = old.player.seen_real
         fresh.player.season_number = season_number
@@ -3472,7 +3480,7 @@ class Game:
                 temper = temper.model_copy(update={"label": temper.label + unfit})
             opts.append(temper)
         for w in equipment.in_slot(s.player, "weapon"):  # 裝備四欄 3.3：只看武器那一欄
-            if weapons.usable(w, art, c, self.world):
+            if weapons.usable(w, art, c, self.world) and equipment.wear_problem(s, c, w) is None:  # 穿不上的神器不列（正式季整合 5.8）
                 opts.append(Option(id=f"smith:wield:{w.id}", label=f"換上【{w.name}】（{weapons.noun(w.kind)}・{weapons.grade_line(w)}・鋒利度 {w.edge}）"))
         if c.config.weapons.enabled:
             opts.append(smithing.forge_door(s, c))  # 打造兵器…（排在換上與拆解中間：FB-125，兩顆不相鄰）
@@ -3530,7 +3538,8 @@ class Game:
             opts.append(temper)
         # FB-134：「換上」最多 DISMANTLE_LIST 件，修好之後減損高的先、同分 id 大的先——跟 armor.wanted 挑換上的鍵一樣，整季機器人與假人
         # 要按的那一顆一定列得出來；多的一行灰掉的說明指到修練頁（同拆解）。淬過的寫「・淬煉 N」（equipment.grade_line）
-        spares = sorted(equipment.in_slot(p, "armor"), key=lambda a: (armor.fresh_cut(a, neigong, c), a.id), reverse=True)
+        spares = sorted((a for a in equipment.in_slot(p, "armor") if equipment.wear_problem(s, c, a) is None),  # 穿不上的神器不列（5.8）
+                        key=lambda a: (armor.fresh_cut(a, neigong, c), a.id), reverse=True)
         for a in spares[:equipment.DISMANTLE_LIST]:
             opts.append(Option(id=f"smith:wield:{a.id}", label=f"換上【{a.name}】（屬{a.attribute}・{equipment.grade_line(a)}・{armor.WEAR_WORD} {a.edge}）"))
         if len(spares) > equipment.DISMANTLE_LIST:

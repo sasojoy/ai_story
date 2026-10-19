@@ -362,7 +362,8 @@ def wanted(state: GameState, content: Content, world: WorldStateStore, art: Mart
         return None
     p = state.player
     if not usable(p.weapon, art, content, world):
-        fit = next((w for w in equipment.in_slot(p, "weapon") if usable(w, art, content, world)), None)  # 裝備四欄 3.3：只看武器那一欄
+        fit = next((w for w in equipment.in_slot(p, "weapon") if usable(w, art, content, world)
+                    and equipment.wear_problem(state, content, w) is None), None)  # 裝備四欄 3.3：只看武器那一欄；穿不上的神器不挑
         if fit is not None:
             return f"smith:wield:{fit.id}"
         kind = art_weapon(art.id, content, world)
@@ -444,6 +445,6 @@ def rows(state: GameState, content: Content, world: WorldStateStore, art: Martia
     return {
         "fit_line": fit_line(art, content, world),
         "worn": _row(p.weapon, art, content, world, worn=True) if p.weapon else None,
-        "rack": [_row(w, art, content, world) for w in equipment.in_slot(p, "weapon")],  # 只列武器那一欄（裝備四欄 3.3）
+        "rack": [equipment.wear_row(_row(w, art, content, world), state, content, w) for w in equipment.in_slot(p, "weapon")],  # 只列武器那一欄（裝備四欄 3.3）
         "cap": content.config.weapons.rack_cap,
     }
