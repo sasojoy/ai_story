@@ -110,6 +110,11 @@ def test_a_maxed_boss_duel_report_keeps_the_converted_xinde():
     record = s.battles[-1]
     gained = s.player.stats["xinde"] - have
     assert gained > round(boss.xinde * c.config.duel.reward_share["大勝"]) and record.xinde == gained and record.exp == 0
+    # FB-453：紀錄那一則的心得等於得失（以前多算一次），戰報敘事沒有單獨的「心得 +N」那一行（那一句照留）
+    entry = next(e for e in s.journal if e.title.startswith("頭目戰・"))  # 新的在前
+    logged = sum(int(x.split("+")[1]) for x in entry.changes if x.startswith("心得 +"))
+    assert logged == gained and not any(n.startswith("心得 +") for n in record.notes)
+    assert any(n.startswith(team.MAXED_XINDE.split("{")[0]) for n in record.notes)
 
 
 def test_the_now_card_has_no_red_xinde_after_a_maxed_win():

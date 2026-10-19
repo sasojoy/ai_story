@@ -10474,7 +10474,9 @@ class Game:
         exp = round(boss.exp * share)
         if exp:  # 同伴不上場：只給本人；升級給屬性點同決戰的軍餉
             before = p.member.level
-            extra += self._record_exp(record, exp)  # 滿級換心得（先換，升到滿級那一下剩下的不換）
+            # 滿級換心得（先換，升到滿級那一下剩下的不換）：extra 會進戰報敘事、紀錄另接得失（已含換來的那一份），所以只留那一句，
+            # 「心得 +N」不接（同切磋；FB-453：以前紀錄寫心得 +39、實際 +27）
+            extra += [n for n in self._record_exp(record, exp) if not n.startswith("心得 +")]
             extra += team.add_exp(c, p.member, exp, p.name)
             if p.member.level > before:
                 points = team.points_between(c.config, before, p.member.level)
