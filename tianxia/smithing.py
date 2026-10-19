@@ -98,6 +98,10 @@ def forge_problem(state: GameState, content: Content, kind: str, main: str, aux:
             return f"{content.materials[mid].name}不夠（要 {need} 個）"
     if equipment.rack_full(state, content, slot_of(kind)):
         return weapons.RACK_FULL
+    if state.world.divine_lineup is not None:  # 神器輪替季：同一件神器一人一把（正式季整合 5.8），再開那一爐先擋下
+        recipe = forge_secrets.match(content, state.world.tianji, slot_of(kind), kind, main, aux, state.world)
+        if recipe is not None and recipe.divine and forge_secrets.owns_divine(state.player, recipe.id):
+            return forge_secrets.HAVE_DIVINE
     short = price(content, tier_of(content, main), slot_of(kind), state) - state.player.stats.get("silver", 0)
     return f"還差 {short} 兩" if short > 0 else None
 
@@ -234,7 +238,8 @@ def forge(
     what = f"兩份{m.name}" if main == aux else f"{m.name}與{a.name}"
     secret_id = secret.id if secret is not None else None
     gear = {"original": divine and first, "copy_of": forge_secrets.key(secret) if divine and not first else None,
-            "named_entry": entry.id if entry is not None else None}
+            "named_entry": entry.id if entry is not None else None,
+            "collected": divine and state.world.divine_lineup is not None}  # 輪替季打的神器跨季帶著走（正式季整合 5.8）
     if slot == "armor":
         item = armor.new_armor(state, name=name, attribute=attribute, tier=tier, quality=quality, recipe=key, secret=secret_id, **gear)
     else:
@@ -248,7 +253,7 @@ def forge(
     msgs += [] if divine else setting_line(content, setting, slot)  # 神器那一爐不擲品質：天時地利那一句不寫
     msgs.append(f"銀兩 -{cost}")
     msgs += [f"{content.materials[mid].name} -{n}" for mid, n in used.items()]
-    msgs.append(equipment.store(state, item))
+    msgs.append(equipment.store(state, item, content))  # 15 級以下打出的神器先進裝備庫（正式季整合 5.8）
     if secret is not None:
         forge_secrets.solve(state, tianji, secret, key)
         if first:  # 7.2：江湖上傳一句（具名，同 fusion._secret_lines）；神器那一句不帶名字（還沒定名），定名時另傳（name_divine）
@@ -303,7 +308,7 @@ def name_divine(
             content, item.slot, item.kind, name)
         if problem is not None:
             return False, [NAME_BAD.format(problem=problem)]
-    reason = world.name_divine(forge_secrets.key_for(item.secret), state.player.name, name)
+    reason = world.name_divine(forge_secrets.key_for(item.secret), state.player.name, name, registry=item.collected)  # FB-402
     if reason == "taken":
         return False, [NAME_TAKEN.format(name=name)]
     if reason is not None:
@@ -787,7 +792,8 @@ def armor_plan(state: GameState, content: Content, world: WorldStateStore, neigo
 def better_in_rack(state: GameState, content: Content, world: WorldStateStore, art) -> Weapon | None:
     """裝備庫裡威力加成比手上那把高的那一把（最高的；同分照 id），沒有是 None。"""
     now = weapons.bonus(state.player.weapon, art, content, world)
-    best = max(equipment.in_slot(state.player, "weapon"), key=lambda w: (weapons.bonus(w, art, content, world), w.id), default=None)
+    spare = [w for w in equipment.in_slot(state.player, "weapon") if equipment.wear_problem(state, content, w) is None]  # 穿不上的神器不挑
+    best = max(spare, key=lambda w: (weapons.bonus(w, art, content, world), w.id), default=None)
     return best if best is not None and weapons.bonus(best, art, content, world) > now + 1e-9 else None
 
 

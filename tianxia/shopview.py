@@ -23,6 +23,7 @@ SMITH_SITUATIONS = (
     "sell", "upgrade",  # 素材與經濟（2026-10-15）：收購、升階做成了（句子待 joy 潤）
     "black_market",  # 名聲 5.2：寇照黑市價賣成了
     "rules",  # 素材四階（正式季整合 5.10）：背包有四階時鐵匠講的神器規矩（next_rule 輪著講；放在畫面哪裡等對比圖）
+    "have_divine",  # 神器輪替（正式季整合 5.8）：已經有那一件神器、再開那一爐被擋下（FB-403：不挑講料的那一句）
 )
 # 馬市（第三節）、懸賞榜（第四節）的情況：灰掉的鈕在 Game.choose 的選單那一關就擋下，short_silver、rack_full、held_full、refused
 # 多半只在兩個分頁搶的時候出現
@@ -41,11 +42,13 @@ RACK_FULL = "裝備庫滿了"  # 同 equipment.RACK_FULL（problem_key 照它認
 
 
 def problem_key(problem: str | None, done: str) -> str:
-    """這一下的情況鍵：做成了是 done；錢不夠（「還差 N 兩」）、裝備庫滿了各一種；其餘的擋法一律 refused。"""
+    """這一下的情況鍵：做成了是 done；錢不夠（「還差 N 兩」）、裝備庫滿了、已經有那一件神器各一種；其餘的擋法一律 refused。"""
     if problem is None:
         return done
     if problem.startswith("還差"):
         return "short_silver"
+    if problem == forge_secrets.HAVE_DIVINE:
+        return "have_divine"  # FB-403
     return "rack_full" if problem == RACK_FULL else "refused"
 
 
@@ -58,7 +61,7 @@ def board_key(problem: str | None, done: str) -> str:
 
 # 被拒的情況（FB-192）：那一句只撐到被拒的原因還成立的時候，原因不成立了就換回平常那一句（進門那一組）——錢補夠了、裝備庫騰出位子了、
 # 手上那一張作廢了；其餘的擋法（素材不夠、吃飽了、下榜了……）看不出原因，照「錢、素材、身上與裝備庫的東西都沒變」算還成立
-REFUSALS = ("short_silver", "rack_full", "held_full", "refused")
+REFUSALS = ("short_silver", "rack_full", "held_full", "refused", "have_divine")
 
 
 def _mark(state: GameState) -> str:

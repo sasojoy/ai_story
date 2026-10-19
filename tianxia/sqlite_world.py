@@ -26,7 +26,7 @@ from contextlib import AbstractContextManager
 from pathlib import Path
 from sqlite3 import Connection, Row
 
-from . import allied, calendar
+from . import allied, calendar, divine
 from .battle_instance import BattleInstance, BattleRoundRecord, shift_deadlines, start_muster
 from .characters import name_key
 from .database import Database, open_database
@@ -35,7 +35,8 @@ from .martial_arts import Insight, MartialArt
 from .models import BattleDef, Content
 from .state import GearFind, Rumor, SignatureClaim, WeaponRecipe, WorldState
 from .world_state import (
-    JADE_SEAL_FRAGMENT_COUNT, CompanionProgress, JadeSealFragment, SealDuel, SealRegistry, SealView, SeasonPhase, SharedWorldState,
+    JADE_SEAL_FRAGMENT_COUNT, CompanionProgress, DivineRegistry, JadeSealFragment, SealDuel, SealRegistry, SealView, SeasonPhase,
+    SharedWorldState,
     fresh_season,
     jade_seal_summary, stamp_season,
 )
@@ -280,15 +281,33 @@ class SqliteWorldStore:
 
     # ── 隱藏配方的發現（打造隱藏配方設計 7.1；第 4 版的 gear_recipes，不升版）──────
 
-    def lookup_gear_find(self, key: str) -> GearFind | None:
+    # 神器輪替（正式季整合 5.6、10.4）：蓋了章的季打的神器，原品那一筆記在全服登記（SharedWorldState.divine.finds，跨季、全服一把），
+    # 不在照季分的 gear_recipes。下面四個方法照同一個判斷讀哪一邊（FB-402）：registry 是 None 時看這一季蓋沒蓋輪替的章
+    # （_rotating，同 claim_gear_find）；呼叫端手上有那一件神器時照它打出來那一季的判斷傳（Equipment.collected），
+    # 所以輪替用過再關掉時，帶過季的那一把照舊讀登記、沒章那一季打的照季分的那一列
+
+    def lookup_gear_find(self, key: str, registry: bool | None = None) -> GearFind | None:
         with self.db.snapshot() as conn:
-            return _gear_find(conn, self._season_number(conn), key)
+            season = self._season_number(conn)
+            found = _registry_find(conn, season, key, registry)
+            if found is not None or registry:
+                return found
+            return _gear_find(conn, season, key)
 
     def claim_gear_find(self, key: str, find: GearFind) -> tuple[GearFind, bool]:
         if not key.startswith("鑄|"):
             raise ValueError(f"隱藏配方的鍵要是「鑄|配方 id」：{key}")
         with self.db.transaction() as conn:
             season = self._season_number(conn)
+            if find.divine and _rotating(conn, season):  # 輪替季的神器：全服一把，誰先寫進登記誰拿原品（同一筆交易）
+                reg = _divine(conn)
+                rid = key.removeprefix("鑄|")
+                if rid in reg.finds:
+                    return reg.finds[rid], False
+                find.season = season
+                reg.finds[rid] = find
+                _put_divine(conn, reg)
+                return find, True
             existing = _gear_find(conn, season, key)
             if existing is not None:
                 return existing, False
@@ -298,9 +317,18 @@ class SqliteWorldStore:
             )
             return find, True
 
-    def add_copy(self, key: str) -> None:
+    def add_copy(self, key: str, registry: bool | None = None) -> None:
         with self.db.transaction() as conn:
             season = self._season_number(conn)
+            if registry or (registry is None and _rotating(conn, season)):
+                reg = _divine(conn)
+                rid = key.removeprefix("鑄|")
+                if rid in reg.finds:  # 輪替季的神器：全服仿品數跨季累加
+                    reg.finds[rid].copies += 1
+                    _put_divine(conn, reg)
+                    return
+                if registry:
+                    return
             find = _gear_find(conn, season, key)
             if find is None:
                 return
@@ -309,10 +337,26 @@ class SqliteWorldStore:
                 "UPDATE gear_recipes SET data = ? WHERE season = ? AND key = ?", (find.model_dump_json(), season, key),
             )
 
-    def name_divine(self, key: str, owner: str, name: str) -> str | None:
+    def name_divine(self, key: str, owner: str, name: str, registry: bool | None = None) -> str | None:
         name = name.strip()
         with self.db.transaction() as conn:
             season = self._season_number(conn)
+            reg = _divine(conn)
+            rid = key.removeprefix("鑄|")
+            use_registry = registry or (registry is None and _rotating(conn, season))
+            if use_registry and rid not in reg.finds and registry:
+                return "gone"
+            if use_registry and rid in reg.finds:  # 輪替季的原品：名字跨季保留，之後別人不能取（_name_taken 也查登記）
+                find = reg.finds[rid]
+                if find.owner != owner:
+                    return "owner"
+                if find.divine_name is not None:
+                    return "named"
+                if _name_taken(conn, season, name):
+                    return "taken"
+                find.divine_name = name
+                _put_divine(conn, reg)
+                return None
             find = _gear_find(conn, season, key)
             if find is None or not find.divine:
                 return "gone"
@@ -333,7 +377,10 @@ class SqliteWorldStore:
             rows = conn.execute(
                 "SELECT season, data FROM gear_recipes WHERE key LIKE '鑄|%' ORDER BY season, key",
             ).fetchall()
+            reg = _divine(conn)
         finds = [(row["season"], GearFind.model_validate_json(row["data"])) for row in rows]
+        finds += [(find.season or 0, find) for find in reg.finds.values()]  # 輪替季的原品（全服登記，跨季）
+        finds.sort(key=lambda pair: pair[0])  # 穩定排序：同一季照季分的那幾列在前
         return [(season, find) for season, find in finds if find.divine and find.owner]
 
     def signature_records(self) -> list[tuple[int, dict[str, SignatureClaim]]]:
@@ -643,6 +690,8 @@ class SqliteWorldStore:
                 return
             state.season = fresh_season(content)
             state.season_opened = content.config.auto_open_first_season
+            if state.season_opened:  # 自動開的第一季（測試內容）：同開季那一刻挑這一季的神器（divine.stamp，開關關著什麼都不做）
+                divine.stamp(state, content)
 
         return self.mutate(_apply).season
 
@@ -658,6 +707,7 @@ class SqliteWorldStore:
             avoid_quiet_hours(state.season, content, now)  # 季曆排的決戰照開季這一刻挪開半夜（企劃者 2026-10-15）
             state.season.territory = None  # 章換了：地盤照開季的戰線重算，第一次不發天下大事（出陣探索與地盤設計第六節）
             state.season.tianji = state.tianji  # 這一季的天機蓋進季裡：週初掛單的重賞亂數看它（裝備四欄 6.4；bounties.issue 讀不到全服那一列）
+            divine.stamp(state, content)  # 神器輪替（正式季整合 5.6）：照全服登記挑這一季的神器；開關關著什麼都不做
             state.season_opened = True
             state.season_last_real = now
             state.seal.opened_real = now  # 「這一季上線過」與隱沒看它（玉璽碎片設計 5.3、7.6）
@@ -706,6 +756,7 @@ class SqliteWorldStore:
             state.companions = {}  # 跨季不滾雪球第二條：同伴全部重獲自由、等級武學歸零
             state.tianji += 1  # 第三條：天機 +1；武學命名、煉製配方、投靠名冊照季分開存，新的一季自然是空的
             state.season.tianji = state.tianji  # 同 open_season：新的一季蓋上新的天機
+            divine.stamp(state, content)  # 同 open_season：新的一季照全服登記挑神器（季數、天機都是新的）
             if content.seal and content.config.seal.enabled:  # 七片這一輪都現世過：新的一季蓋天命之季的章（8.1）
                 self._stamp_mandate(state, content)
             from .timetable import avoid_quiet_hours  # noqa: PLC0415  延後 import：timetable → rules → world_state
@@ -856,6 +907,10 @@ class SqliteWorldStore:
         duels = [SealDuel.model_validate(d) for d in json.loads(row["duels"])] if row["duels"] else []
         return SealView(registry, duels, int(row["season"] or 1), int(row["tianji"] or 0), row["paused"] is not None)
 
+    def divine_state(self) -> DivineRegistry:
+        with self.db.snapshot() as conn:
+            return _divine(conn)
+
     def seal_duel_open(self) -> bool:
         with self.db.snapshot() as conn:
             row = conn.execute("SELECT json_array_length(data, '$.seal_duels') AS n FROM world WHERE id = 1").fetchone()
@@ -961,6 +1016,8 @@ class SqliteWorldStore:
 def _name_taken(conn: Connection, season: int, name: str) -> bool:
     """這一季這個名字被用掉了沒：功法（id）、改過的名字、合併出來的意境、gear_recipes 都算（上線前的兵器配方；隱藏配方那幾列的名字欄
     是鍵本身，不會撞到合法的名字）。定了名的神器原品那一列名字欄是定的名字，照樣算（打造隱藏配方設計 7.3）。"""
+    if any(f.divine_name == name for f in _divine(conn).finds.values()):  # 輪替季的神器原品：名字跨季保留（正式季整合 10.4）
+        return True
     return any(
         conn.execute(f"SELECT 1 FROM {table} WHERE season = ? AND name = ?", (season, name)).fetchone()
         for table in ("skills", "skill_aliases", "insights", "gear_recipes")
@@ -1000,6 +1057,31 @@ def _insight_recipe(conn: Connection, season: int, key: str) -> Insight | None:
 def _gear_recipe(conn: Connection, season: int, key: str) -> WeaponRecipe | None:
     row = conn.execute("SELECT data FROM gear_recipes WHERE season = ? AND key = ?", (season, key)).fetchone()
     return None if row is None else WeaponRecipe.model_validate_json(row["data"])
+
+
+def _divine(conn: Connection) -> DivineRegistry:
+    """神器輪替的全服登記（world 那一列 JSON 的 divine；正式季整合 10.4）：只讀那一欄，不讀季。"""
+    row = conn.execute("SELECT json_extract(data, '$.divine') AS divine FROM world WHERE id = 1").fetchone()
+    return DivineRegistry.model_validate_json(row["divine"]) if row is not None and row["divine"] else DivineRegistry()
+
+
+def _put_divine(conn: Connection, reg: DivineRegistry) -> None:
+    """只改 world 那一列 JSON 的 divine（json_set），不整份覆寫、不碰季。"""
+    conn.execute("UPDATE world SET data = json_set(data, '$.divine', json(?)) WHERE id = 1", (reg.model_dump_json(),))
+
+
+def _registry_find(conn: Connection, season: int, key: str, registry: bool | None) -> GearFind | None:
+    """全服登記裡這條神器配方的原品那一筆（FB-402）：registry 給了照它（呼叫端照那一件神器 Equipment.collected 傳），
+    None 時看這一季蓋沒蓋輪替的章（_rotating）；不讀登記、或登記裡沒有回 None。"""
+    if registry is False or (registry is None and not _rotating(conn, season)):
+        return None
+    return _divine(conn).finds.get(key.removeprefix("鑄|"))
+
+
+def _rotating(conn: Connection, season: int) -> bool:
+    """這一季蓋了神器輪替的章（WorldState.divine_lineup 不是 null）。"""
+    row = conn.execute("SELECT json_extract(data, '$.divine_lineup') IS NOT NULL AS r FROM seasons WHERE number = ?", (season,)).fetchone()
+    return row is not None and bool(row["r"])
 
 
 def _gear_find(conn: Connection, season: int, key: str) -> GearFind | None:

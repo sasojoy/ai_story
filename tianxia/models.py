@@ -1086,6 +1086,8 @@ class ForgeSecret(_Strict):
     note: str = ""  # 打出來那一句下面的一句說明
     clues: list[str] = Field(min_length=3, max_length=3)
     tactic: TacticDef | None = None  # 神器的特技（第三批）：原品照寫，仿品發動率乘 Config.tactics.copy_rate
+    # 神器的批次（正式季整合 5.6、5.7）：1 是一開始的九件（這個伺服器第一季全開），2 是新神器第一批（第二季起才輪得到）
+    wave: int = Field(default=1, ge=1)
 
 
 class Tier4Named(_Strict):
@@ -2193,6 +2195,12 @@ class ForgeSecretRules(_Strict):
     divine_per_kind: bool = True  # 神器配方每一季每種兵器最多一條；第一季的章六種兵器各一條（forge_secrets.active）
     split_clues: bool = True  # 神器配方的線索拆三片（種類／主料／輔料），散在鐵匠鋪、說書、殘譜（forge_secrets.hear、hear_smith）
     scrap_every_mode: bool = True  # 殘譜（武學口訣與半張鑄譜）三種探索都擲；上線就生效，關著只在找事件擲（Game._explore_mode）
+    # 神器輪替與收集（正式季整合 5.6～5.8；第 10 批，tianxia/divine.py）：主機的緊急開關，模型預設關、config.json 開、測試內容關。
+    # 開著時開季、換季照全服登記（SharedWorldState.divine）挑這一季的神器、蓋進 WorldState.divine_lineup；從下一個開季起生效
+    rotation: bool = False
+    rotation_min: int = Field(default=2, ge=1)  # 第二季起每季開幾件神器（照天機，5.6【定】2～4 件）
+    rotation_max: int = Field(default=4, ge=1)
+    wear_level: int = Field(default=15, ge=1)  # 神器（原品、仿品）本人幾級才穿得上（5.8【定】）
 
 
 class FirstEcho(_Strict):

@@ -652,6 +652,7 @@ def check_shop_lines(c: Content, need) -> None:
     }
     switched = {"sell": c.config.economy.sell, "upgrade": c.config.economy.upgrade,  # 素材與經濟：收購、升階關著時不必有那一句
                 "rules": c.config.four_tiers.enabled,  # 素材四階關著時鐵匠不講神器的規矩（正式季整合 5.10）
+                "have_divine": c.config.forge_secrets.rotation,  # 神器輪替關著時不會擋「已經有這一件神器」（FB-403）
                 "black_market": c.config.economy.sell and c.config.renown.titles and c.config.renown.black_market}  # 名聲 5.2
     for shop, on in opened.items():
         if c.config.shop_screens and on:
@@ -2755,6 +2756,15 @@ def _validate_forge_secrets(c: Content, need) -> None:
             combo = (r.slot, r.kind, r.main.attribute, r.main.tier, r.aux.attribute, tier)
             other = combos.setdefault(combo, r.id)
             need(other == r.id, f"{where}：跟隱藏配方 {other} 認同一個組合")
+    # 神器（正式季整合 5.6、5.9）：每件的特色（特技的做法）不重複；要有 wave 1 的（這個伺服器第一季全開的那幾件）。
+    # 同一種兵器（防具算一種）兩件神器不能是同一對料，上面「認同一個組合」已經擋（神器兩樣都寫死四階）
+    divine = [r for r in c.forge_secrets.values() if r.divine]
+    kinds: dict[str, str] = {}
+    for r in divine:
+        if r.tactic is not None:
+            other = kinds.setdefault(r.tactic.kind, r.id)
+            need(other == r.id, f"神器 {r.id}：特技的做法 {r.tactic.kind} 跟神器 {other} 一樣（5.9：每件神器的特色不重複）")
+    need(not divine or any(r.wave == 1 for r in divine), "神器配方：要有 wave 1 的（這個伺服器第一季全開的那幾件）")
 
 
 def _validate_seal(c: Content, need) -> None:
