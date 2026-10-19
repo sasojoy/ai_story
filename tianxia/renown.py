@@ -12,7 +12,7 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from . import gender
+from . import four_tiers, gender
 from .models import Content
 from .state import GameState, RenownSeen, WorldState
 
@@ -382,7 +382,14 @@ def black_market_price(state: GameState, content: Content, tier: int) -> int | N
     cfg = content.config.renown
     if not (on(content, "black_market") and meets(state, content, "寇", cfg.black_market_tier)):
         return None
-    return cfg.black_market_prices.get(tier)
+    return _dark_prices(content).get(tier)
+
+
+def _dark_prices(content: Content) -> dict[int, int]:
+    """黑市收哪幾階、各幾兩：Config.renown.black_market_prices，三階只在素材四階開著時收（正式季整合 4.2、6.6：24 兩；關著照舊只收
+    一、二階），四階一律不收（同 economy.sell_tiers；這裡不 import economy，economy 會 import 這裡）。"""
+    top = four_tiers.TOP_COMMON if four_tiers.on(content) else 2
+    return {t: p for t, p in content.config.renown.black_market_prices.items() if t <= top}
 
 
 def _trade_perks(content: Content, way: str, tier: int) -> list[str]:
@@ -390,8 +397,9 @@ def _trade_perks(content: Content, way: str, tier: int) -> list[str]:
     out = []
     if way == "俠" and tier == cfg.clinic_tier and on(content, "clinic"):
         out.append(f"醫館療傷{discount_word(cfg.clinic_share)}")
-    if way == "寇" and tier == cfg.black_market_tier and on(content, "black_market") and cfg.black_market_prices:
-        out.append("鐵匠鋪收購" + "、".join(f"{_CN[t]}階 {p} 兩" for t, p in sorted(cfg.black_market_prices.items())))
+    prices = _dark_prices(content)
+    if way == "寇" and tier == cfg.black_market_tier and on(content, "black_market") and prices:
+        out.append("鐵匠鋪收購" + "、".join(f"{_CN[t]}階 {p} 兩" for t, p in sorted(prices.items())))
     return out
 
 

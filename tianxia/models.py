@@ -75,6 +75,11 @@ class Condition(_Strict):
     night: bool | None = None  # calendar.is_night 要等於它（True＝只在夜裡，False＝只在白天）
     week_min: int | None = None  # calendar.point(...).week 至少／至多第幾週
     week_max: int | None = None
+    # 21 天季（Config.season21，正式季整合設計 1.2 給開發 6）照天數另寫：季曆第幾天（從 1 起，calendar.point(...).cal_day）至少／至多；
+    # 21 天季只看這兩個、不看週，其他季只看週、不看這兩個（上面的 day_min／day_max 是世界天，給 beta 主線）。寫了週的條件在 21 天季的
+    # 內容裡也要寫這兩個（content.validate）
+    cal_day_min: int | None = Field(default=None, ge=1)
+    cal_day_max: int | None = Field(default=None, ge=1)
     clue_items: dict[str, int] = Field(default_factory=dict)  # 伏筆專用物品至少幾個（原數字，不照伺服器規模換算）
     grain_min: int = Field(default=0, ge=0)  # 糧草至少幾份（基準量，照 foreshadow.need 換算；0＝不檢查；正式版丙二的帶糧選項）
     # 戰後事件用：這次行動打的那一場（戰鬥卡片 state.battle_card 指著的那筆）的結果（大勝／險勝／僵持／落敗）在清單裡才成立；
@@ -145,7 +150,7 @@ class Material(_Strict):
     id: str
     name: str
     attribute: Attribute
-    tier: int = Field(ge=1, le=3)  # 1 凡品、2 靈品、3 天品
+    tier: int = Field(ge=1, le=4)  # 1 凡品、2 靈品、3 天品、4 神品（神器的料，正式季整合 4.4）
     description: str = ""
 
 
@@ -802,6 +807,7 @@ class Ending(_Strict):
     text: str  # 結局的一句；第一季接在季末公告的開頭後面（時刻表結算第 12 週）
     storyline: str | None = None  # 只在這條主線下成立；None＝任何主線
     hint: str = ""  # 顯示在任務區塊：怎麼達成這個結局
+    hint_season21: str = ""  # 21 天季（不提前收季，正式季整合設計 1.1）換掉 hint 的那一句；沒寫照 hint（guide.ending_hint）
     condition: Condition = Field(default_factory=Condition)
     # ── 第一季濃縮版（計畫 T9）：只在 rules.season_one 成立時算；beta 季只看沒標的那幾筆。同一季清單的最後一筆是保底 ──
     season_one: bool = False
@@ -965,6 +971,7 @@ ALLOW_FIXED = frozenset({
     "act:arena",  # 擂台（城鎮類的地點；tianxia/arena.py）
     "act:heal",  # 醫館療傷（帶「醫館」標籤的地點，有內傷時）
     "act:donate",  # 自家大本營捐軍備（素材與經濟設計第六節）
+    "act:dadian",  # 打點（21 天季的銀兩出口收成一間店）
     "act:tavern",  # 酒肆（帶「酒肆」標籤的城鎮；tianxia/tavern.py）
     "ambush:lift", "works:fortify", "works:stockpile",  # 後期體力玩法：收伏、修築工事、屯糧練兵
 })
@@ -973,6 +980,7 @@ ALLOW_FIXED = frozenset({
 ALLOW_FAMILIES = (
     "act:challenge:", "act:rank:", "call:", "move:", "learn:", "faction:", "defect:", "opp:", "fs:",
     "explore:",  # 探索三選一的三顆（explore_modes.PREFIX；序章裡不出現）
+    "sect:",  # 拜入門派（一類一顆開著時從交友搬出來，sect:<事件 id>；序章裡不出現）
     "ambush:set:",  # 設伏劫道（ambush:set:<另一頭>；序章裡不出現）
     "aid:guard:", "aid:rally:", "aid:visit:",  # 護著大勢人物（figure_aid；序章裡沒有陣營，不出現）
     "act:recruit:",  # 招募歷史武將（act:recruit:<人物>，歷史武將同行；序章裡不出現）
@@ -1069,8 +1077,8 @@ class ForgeSide(_Strict):
     主料一定寫死階（tier，定這一件的階與工錢）；輔料可以改寫 min_tier（不低於幾階）。"""
 
     attribute: str
-    tier: int | None = Field(default=None, ge=1, le=3)
-    min_tier: int | None = Field(default=None, ge=1, le=3)
+    tier: int | None = Field(default=None, ge=1, le=4)  # 4：神器配方（正式季整合 5.5）
+    min_tier: int | None = Field(default=None, ge=1, le=3)  # 「幾階以上」只算到三階：四階是神器的料（forge_secrets.covers）
 
 
 class ForgeSecret(_Strict):
@@ -1088,6 +1096,21 @@ class ForgeSecret(_Strict):
     note: str = ""  # 打出來那一句下面的一句說明
     clues: list[str] = Field(min_length=3, max_length=3)
     tactic: TacticDef | None = None  # 神器的特技（第三批）：原品照寫，仿品發動率乘 Config.tactics.copy_rate
+    # 神器的批次（正式季整合 5.6、5.7）：1 是一開始的九件（這個伺服器第一季全開），2 是新神器第一批（第二季起才輪得到）
+    wave: int = Field(default=1, ge=1)
+
+
+class Tier4Named(_Strict):
+    """四階名器名字表的一條（content/tier4_named.json；正式季整合 5.2）：主料四階、沒打中神器配方時照機率出名器，名字照這一爐的種子
+    從合欄位、合種類、合屬性的那幾條挑一個（four_tiers.pick_named）。不登記、不佔名字空間，不同的人可以撞名（跟一般組合一樣）。
+    打出來的那一件記 Equipment.named_entry＝這一條的 id；名字讀檔時照內容重寫（forge_secrets.refresh_names）。"""
+
+    id: str
+    slot: Literal["weapon", "armor"]
+    kind: str | None = None  # 兵器種類（WEAPON_KINDS）；防具不寫
+    attribute: Attribute
+    name: str
+    note: str = ""  # 打出來那一句下面的一句說明（待 joy 潤）
 
 
 class PresetRecipe(_Strict):
@@ -1560,7 +1583,8 @@ class RenownTuning(_Strict):
     clinic_tier: int = Field(default=2, ge=1, le=4)  # 俠的醫館折扣從第幾段（5.2）
     clinic_share: float = Field(default=0.85, gt=0, le=1)
     black_market_tier: int = Field(default=1, ge=1, le=4)  # 寇的黑市從第幾段（5.2）
-    black_market_prices: dict[int, int] = Field(default_factory=lambda: {1: 3, 2: 8})  # 素材的階 → 黑市收購價
+    # 素材的階 → 黑市收購價；三階只在素材四階開著時收（同 EconomyRules.sell_price，economy.sell_tiers）
+    black_market_prices: dict[int, int] = Field(default_factory=lambda: {1: 3, 2: 8, 3: 24})
     official_tier: int = Field(default=2, ge=1, le=4)  # 江湖巨寇以上官府每週掛通緝（5.4）
     official_silver: dict[int, int] = Field(default_factory=lambda: {2: 30, 3: 50, 4: 80})
     official_hunter_tier: int = Field(default=2, ge=1, le=4)  # 俠一路第幾段揭得了官府通緝
@@ -1605,7 +1629,7 @@ class Bounties(_Strict):
     )
     xinde: dict[str, int] = Field(default_factory=lambda: {"art": 20, "arms": 10})
     arms_silver: dict[str, int] = Field(default_factory=lambda: {"下品": 20, "中品": 35, "上品": 50})
-    arms_tier: dict[str, int] = Field(default_factory=lambda: {"1": 1, "2": 2, "3": 4})
+    arms_tier: dict[str, int] = Field(default_factory=lambda: {"1": 1, "2": 2, "3": 4, "4": 6})  # 四階 ×6（正式季整合 5.1）
     art_materials: int = Field(default=2, ge=0)
     art_material2_chance: float = Field(default=0.3, ge=0, le=1)
     art_weapon_chance: float = Field(default=0.2, ge=0, le=1)
@@ -1640,6 +1664,8 @@ class DuelTuning(_Strict):
 
     explore_chance: float = Field(default=0.05, ge=0, le=1)
     per_boss_season: int = Field(default=2, ge=1)
+    # 21 天季同一隻一人每週最多幾次（正式季整合 2.5【預設】；0＝不設，照 per_boss_season 一季算）：在 season21 設定裡打開
+    per_boss_week: int = Field(default=0, ge=0)
     cooldown_seconds: float = Field(default=7200, ge=0)
     start: float = 50.0
     big: float = 70.0
@@ -1878,7 +1904,8 @@ class SmithQuality(_Strict):
     up_range: tuple[float, float] = (5, 45)
     low_range: tuple[float, float] = (15, 80)
     # 輔料比主料高幾階 → 分數（「-1」是輔料低一階）：同階或更高加分、低階扣分（4.3）
-    aux_tier: dict[str, float] = Field(default_factory=lambda: {"-2": -16, "-1": -8, "0": 4, "1": 8, "2": 12})
+    # 差三階（正式季整合 5.1：主料四階配一階輔料 −24、主料一階配四階輔料 +16）
+    aux_tier: dict[str, float] = Field(default_factory=lambda: {"-3": -24, "-2": -16, "-1": -8, "0": 4, "1": 8, "2": 12, "3": 16})
     wis_weight: float = Field(default=0.5, ge=0)  # 悟性：stat_factor 多出來的百分點 × 這個（同 FuseQuality.wis_weight）
     practice_point: float = Field(default=2, ge=0)  # 熟手：這個配方這一季你打過一次加幾分
     practice_cap: float = Field(default=10, ge=0)  # 熟手最多加幾分
@@ -1907,7 +1934,8 @@ class WeaponRules(_Strict):
     參考內外同屬性 +20%、正邪共鳴最多 +20%，最好的兵器約抵其中一項。"""
 
     enabled: bool = True
-    tier_bonus: dict[str, float] = Field(default_factory=lambda: {"1": 0.05, "2": 0.10, "3": 0.15})
+    # 四階 17%（正式季整合 5.1：四階名器上品 17＋2＋4＝23%，剛好追平仿品）
+    tier_bonus: dict[str, float] = Field(default_factory=lambda: {"1": 0.05, "2": 0.10, "3": 0.15, "4": 0.17})
     quality_bonus: dict[str, float] = Field(default_factory=lambda: {"下品": 0.0, "中品": 0.02, "上品": 0.04})
     temper_step: float = Field(default=0.01, ge=0)  # 淬煉一次加多少（第二批才淬得了）
     match: float = Field(default=0.05, ge=0)  # 跟身上武學同屬性加、相剋扣
@@ -1920,10 +1948,10 @@ class WeaponRules(_Strict):
     drop_chance: float = Field(default=0.03, ge=0, le=1)  # 打贏遊歷或野怪掉一把一階下品的機會
     rack_cap: int = Field(default=100, ge=1)  # 裝備庫幾格（企劃者 2026-10-10：原來的 6 格改 100；程式裡的 rack 就是玩家看到的「裝備庫」）
     edge_warn: int = Field(default=30, ge=0, le=100)  # 鈍到這裡以下時江湖紀錄提醒一次
-    forge_silver: dict[str, int] = Field(default_factory=lambda: {"1": 20, "2": 60, "3": 150})  # 打造的工錢（4.2）：照主料的階；素材另算、不花體力心得
+    forge_silver: dict[str, int] = Field(default_factory=lambda: {"1": 20, "2": 60, "3": 150, "4": 300})  # 打造的工錢（4.2）：照主料的階；素材另算、不花體力心得（四階 300，正式季整合 5.1）
     quality: SmithQuality = Field(default_factory=SmithQuality)  # 打造的品質機率（見 SmithQuality）
     temper_max: int = Field(default=5, ge=0)  # 淬煉最多幾次（4.7）；每次 +temper_step
-    temper_silver: dict[str, int] = Field(default_factory=lambda: {"1": 0, "2": 30, "3": 80})  # 淬煉一次的工錢，照用的那個素材的階（4.7）
+    temper_silver: dict[str, int] = Field(default_factory=lambda: {"1": 0, "2": 30, "3": 80, "4": 150})  # 淬煉一次的工錢，照用的那個素材的階（4.7；四階料 150，正式季整合 5.3）
     named_bonus: float = Field(default=0.02, ge=0)  # 名器（照隱藏配方打出來的）的加成多這麼多（打造隱藏配方設計 4.2）
     copy_base: float = Field(default=0.19, ge=0)  # 神器仿品的基本加成，取代階那一格（打造隱藏配方設計 4.3；品質一律上品再 +4%，合計 23%）
     original_base: float = Field(default=0.22, ge=0)  # 神器原品的基本加成（同上；合計 26%）；不另加名器的 named_bonus
@@ -1940,7 +1968,7 @@ class ArmorRules(_Strict):
     天時地利正式值在 config.json。"""
 
     enabled: bool = True
-    tier_cut: dict[str, float] = Field(default_factory=lambda: {"1": 0.06, "2": 0.12, "3": 0.18})  # 查表用 str(tier)，同 WeaponRules.tier_bonus
+    tier_cut: dict[str, float] = Field(default_factory=lambda: {"1": 0.06, "2": 0.12, "3": 0.18, "4": 0.20})  # 查表用 str(tier)，同 WeaponRules.tier_bonus（四階 20%，正式季整合 5.1）
     quality_cut: dict[str, float] = Field(default_factory=lambda: {"下品": 0.0, "中品": 0.02, "上品": 0.04})
     temper_step: float = Field(default=0.01, ge=0)  # 淬煉一次加多少（4.1）
     match: float = Field(default=0.03, ge=0)  # 跟身上內功同屬性加、相剋扣（4.2）
@@ -1950,10 +1978,10 @@ class ArmorRules(_Strict):
     shop_price: int = Field(default=40, ge=0)  # 鐵匠鋪架上一階下品的價錢（4.6，同武器）
     repair_silver: int = Field(default=5, ge=0)  # 修一次的工錢，另加一個一階素材（4.5）
     edge_warn: int = Field(default=30, ge=0, le=100)  # 耐久低到這裡以下時江湖紀錄提醒一次
-    forge_silver: dict[str, int] = Field(default_factory=lambda: {"1": 20, "2": 60, "3": 150})  # 打造的工錢（同兵器 4.2）：照主料的階
+    forge_silver: dict[str, int] = Field(default_factory=lambda: {"1": 20, "2": 60, "3": 150, "4": 300})  # 打造的工錢（同兵器 4.2）：照主料的階
     quality: SmithQuality = Field(default_factory=SmithQuality)  # 打造的品質機率（同兵器 4.3；天時地利預設 0，正式值在 config.json）
     temper_max: int = Field(default=5, ge=0)  # 淬煉最多幾次（4.1）；每次 +temper_step
-    temper_silver: dict[str, int] = Field(default_factory=lambda: {"1": 0, "2": 30, "3": 80})  # 淬煉一次的工錢，照用的那個素材的階（同兵器 4.7）
+    temper_silver: dict[str, int] = Field(default_factory=lambda: {"1": 0, "2": 30, "3": 80, "4": 150})  # 淬煉一次的工錢，照用的那個素材的階（同兵器 4.7）
     named_cut: float = Field(default=0.02, ge=0)  # 名器的減損多這麼多（同上）
     copy_cut: float = Field(default=0.22, ge=0)  # 神器仿品的基本減損，取代階那一格（打造隱藏配方設計 4.3、5.6；上品再 +4%，合計 26%）
     original_cut: float = Field(default=0.25, ge=0)  # 神器原品的基本減損（合計 29%）；不另加名器的 named_cut
@@ -2177,6 +2205,12 @@ class ForgeSecretRules(_Strict):
     divine_per_kind: bool = True  # 神器配方每一季每種兵器最多一條；第一季的章六種兵器各一條（forge_secrets.active）
     split_clues: bool = True  # 神器配方的線索拆三片（種類／主料／輔料），散在鐵匠鋪、說書、殘譜（forge_secrets.hear、hear_smith）
     scrap_every_mode: bool = True  # 殘譜（武學口訣與半張鑄譜）三種探索都擲；上線就生效，關著只在找事件擲（Game._explore_mode）
+    # 神器輪替與收集（正式季整合 5.6～5.8；第 10 批，tianxia/divine.py）：主機的緊急開關，模型預設關、config.json 開、測試內容關。
+    # 開著時開季、換季照全服登記（SharedWorldState.divine）挑這一季的神器、蓋進 WorldState.divine_lineup；從下一個開季起生效
+    rotation: bool = False
+    rotation_min: int = Field(default=2, ge=1)  # 第二季起每季開幾件神器（照天機，5.6【定】2～4 件）
+    rotation_max: int = Field(default=4, ge=1)
+    wear_level: int = Field(default=15, ge=1)  # 神器（原品、仿品）本人幾級才穿得上（5.8【定】）
 
 
 class FirstEcho(_Strict):
@@ -2451,6 +2485,14 @@ class SortieRules(_Strict):
     enabled: bool = True
     per_day: int = Field(default=5, ge=1)  # 每人每天幾次（攻、守、攪局共用；照 pill_day_utc_offset_hours 的 00:00 換日，同回體丹）
     hold_share: float = Field(default=0.5, gt=0, le=1)  # 守、攪局推的量是攻的幾成
+    # ── 出陣更誘人（正式季整合 2.6、第 4 批；一類一顆 precise_actions 開著才有，關著照舊三成）──
+    reward_scale: float = Field(default=2.0, ge=0)  # 攻打贏的經驗、心得是對手的幾倍（同一個對手練功打贏的兩倍【PM】）
+    merit_silver_per_level: int = Field(default=3, ge=0)  # 攻打贏另加軍功賞：本人等級 × 這麼多兩【暫】
+    rare_legend: float = Field(default=0.05, ge=0, le=1)  # 攻打贏另擲：破境丹【暫】
+    rare_treasure: float = Field(default=0.02, ge=0, le=1)  # 寶物（挑戰本人的掉落池，另記一本帳 PlayerState.sortie_treasures）
+    rare_horse: float = Field(default=0.02, ge=0, le=1)  # 良駒
+    treasure_cap: int = Field(default=2, ge=0)  # 出陣掉的寶物一人一季最多幾件（不讀 figure_treasure_cap；season21 寫 3【PM】）
+    horse_cap: int = Field(default=1, ge=0)  # 出陣掉的良駒一人一季最多幾匹
 
 
 class ExploreModes(_Strict):
@@ -2576,6 +2618,34 @@ class QuietHours(_Strict):
     end: float = Field(default=8, gt=0, le=24)  # 幾點以後才開
 
 
+class Season21Daily(_Strict):
+    """21 天季的每天一批與推線（正式季整合設計第七章、6.1；只在 calendar.season21_on 的季讀，週末與 14 天一個字都不變）。
+    數字都是【預設】（12.3 第 39 條：先照預設做），量完（第 5～8 批做完的 20 人假人三週）再調。
+    - 軍令（7.1）：每天 00:00 每個陣營 orders_per_day 道；湊滿套效果時效果量乘 order_effect_share（0.43＝以前一週三道的總量攤到七天）。
+    - 懸賞（7.2、6.1）：每天 00:00 一批，期限 bounty_days 天；經驗＝這一級升下一級的經驗 × exp_ratio，銀兩＝等級 × silver_per_level
+      （求兵照那一把再加這一份）；滿級時經驗換成心得（第 8 批起是通用的 Config.maxed_exp_per_xinde）；討伐另擲 strike_tier3_chance 一個三階；
+      重賞每天每邊擲 prize_treasure_chance、prize_horse_chance。
+    - 推線（7.4）：出陣、捐軍備、事件乘 push_speed（取代季長倍數；事件再乘事件五折），每人每天每條線上限 push_daily_cap，
+      盡頭阻力的兩檔 push_mid_share／push_far_share（離 50 的兩個邊界照 PushResistance）。"""
+
+    orders_per_day: int = Field(default=1, ge=0)
+    order_effect_share: float = Field(default=0.43, ge=0)
+    bounty_days: float = Field(default=2, gt=0)
+    exp_ratio: dict[str, float] = Field(
+        default_factory=lambda: {"strike": 0.15, "escort": 0.12, "scout": 0.08, "art": 0.10, "arms": 0.10},
+    )
+    silver_per_level: dict[str, int] = Field(
+        default_factory=lambda: {"strike": 6, "escort": 5, "scout": 3, "art": 5, "arms": 5},
+    )
+    strike_tier3_chance: float = Field(default=0.10, ge=0, le=1)
+    prize_treasure_chance: float = Field(default=0.10, ge=0, le=1)
+    prize_horse_chance: float = Field(default=0.07, ge=0, le=1)
+    push_speed: float = Field(default=1.0, ge=0)
+    push_daily_cap: float = Field(default=10, gt=0)
+    push_mid_share: float = Field(default=0.5, gt=0, le=1)
+    push_far_share: float = Field(default=0.2, gt=0, le=1)
+
+
 class EconomyRules(_Strict):
     """素材與經濟（docs/superpowers/specs/2026-10-15-素材與經濟-design.md；tianxia/economy.py）：每一樣一個開關，預設開、
     測試內容關，關掉一個字都不變（亂數序列也一樣）。都上線就生效，不看季的章。"""
@@ -2585,11 +2655,14 @@ class EconomyRules(_Strict):
     sortie_silver: bool = True  # 出陣攻打贏加給對手銀兩的 sortie_silver_share（第八節；守、攪局不給）
     sortie_silver_share: float = Field(default=0.3, ge=0, le=1)
     sell: bool = True  # 鐵匠鋪收購（第五節）：階 → 一個幾兩；不在表上的階不收（三階要留著做神器）；收購價不分地盤
-    sell_price: dict[int, int] = Field(default_factory=lambda: {1: 2, 2: 6})
+    # 三階 18 兩只在素材四階開著時收（正式季整合 4.2、6.6；Config.four_tiers，關著照舊不收三階）；四階不在表上，一律不收
+    sell_price: dict[int, int] = Field(default_factory=lambda: {1: 2, 2: 6, 3: 18})
     upgrade: bool = True  # 鐵匠鋪升階（第四節）：換到幾階 → 要幾個同屬性低一階的、工錢（套地盤福利 territory.price_factor）
     upgrade_need: dict[int, int] = Field(default_factory=lambda: {2: 3, 3: 10})
     upgrade_silver: dict[int, int] = Field(default_factory=lambda: {2: 5, 3: 50})
-    upgrade_per_day: dict[int, int] = Field(default_factory=lambda: {3: 1})  # 一天最多換幾個（回體丹的換日，台灣 00:00）；不在表上的不限
+    # 一天最多換幾個（回體丹的換日，台灣 00:00）；不在表上的不限。素材四階開著時不設每日上限（正式季整合 4.2：拿掉二換三一天一個），
+    # 三換四另有一季的上限（Config.four_tiers.season_cap）
+    upgrade_per_day: dict[int, int] = Field(default_factory=lambda: {3: 1})
     # 升階出來的是哪一種（企劃者 2026-10-15 選「屬性隨機、偏向投入的」）：這個機會是投入的那個屬性，其餘平均落到同一階的其他屬性
     # （正式內容剛柔快慢，各 1/6）；1 是一定照投入的屬性、不擲骰。擲骰用自己的亂數（economy.upgrade_rng），不碰 Game.rng
     upgrade_same_share: float = Field(default=0.5, ge=0, le=1)
@@ -2602,6 +2675,56 @@ class EconomyRules(_Strict):
     armaments: dict[str, str] = Field(  # 素材屬性 → 陣營軍備的名字（第六節第 3 點；存量照份量累積）
         default_factory=lambda: {"慢": "糧秣", "快": "箭矢", "剛": "甲冑", "柔": "戰馬"}
     )
+
+
+class FourTiers(_Strict):
+    """素材四階（docs/superpowers/specs/2026-10-17-正式季整合-design.md 第四、五章；tianxia/four_tiers.py）：主機的緊急開關，
+    預設開、測試內容關。內容（四階料、九件神器的配方與口訣、四階名器名字表）收不回（10.1），這裡關得掉的是規則：三階收購與黑市、
+    拿掉二換三一天一個（關著回到 economy.upgrade_per_day）、三換四、四階名器的機率、鐵匠講神器的規矩。數字都是 PM 提案或暫定。"""
+
+    enabled: bool = True
+    upgrade_need: int = Field(default=5, ge=1)  # 三換四：幾個同屬性的三階（4.5）
+    upgrade_silver: int = Field(default=150, ge=0)  # 三換四的工錢（乘地盤福利與名望折扣，同升階老規矩）
+    season_cap: int = Field(default=2, ge=0)  # 三換四一季最多幾個（PlayerState.tier4_upgrades）
+    named_main: float = Field(default=0.5, ge=0, le=1)  # 主料四階、沒打中神器配方：出名器的機會（5.2）
+    named_both: float = Field(default=0.8, ge=0, le=1)  # 主輔都是四階（也沒打中神器配方）
+    # 四階的來源（4.5，第 4 批）：挑戰本人這一季第一次打贏某位人物另擲一個；時刻表決戰得勝那一方出手夠的人各一個
+    challenge_chance: float = Field(default=0.15, ge=0, le=1)
+    challenge_cap: int = Field(default=2, ge=0)  # 挑戰本人掉的四階一人一季最多幾個（另一本帳 PlayerState.tier4_challenge_drops）
+    showdown: bool = True  # 時刻表決戰得勝給四階（天命之爭、保底收場不給）
+
+
+class SilverOutlets(_Strict):
+    """銀兩出口（docs/superpowers/specs/2026-10-17-正式季整合-design.md 6.5；tianxia/silver.py）：21 天季才有（enabled 預設關，
+    只有 content/profiles/season21.json 打開，另照開季的章）。數字都是【預設】【待量】（12.3 第 39 條）。「一天」照回體丹的換日。"""
+
+    enabled: bool = False
+    donate_per_point: int = Field(default=10, ge=1)  # 捐銀兩：每幾兩記 1 點貢獻、捐成糧秣；跟捐素材共用 Config.economy.donate_daily_cap
+    donate_step: int = Field(default=100, ge=1)  # 按一下捐幾兩（收不下時照收得下的捐）
+    donate_daily_silver: int = Field(default=1000, ge=0)  # 一天最多捐幾兩
+    mentor_silver: int = Field(default=50, ge=0)  # 名師指點：有醫館的城鎮，下一次修練升品的機率加 mentor_bonus（在上限之內），一天一次
+    mentor_bonus: int = Field(default=10, ge=0)
+    furnace_silver: int = Field(default=50, ge=0)  # 看火候：有鐵匠鋪的城鎮，下一次合成或打造的品質基準換成 furnace_odds，一天一次、序章不能用
+    furnace_odds: dict[str, float] = Field(default_factory=lambda: {"下品": 35, "中品": 40, "上品": 25})
+    legend_silver: int = Field(default=300, ge=0)  # 醫館買破境丹：一枚幾兩，一個角色一季最多 legend_season_cap 枚（撿到的不算）
+    legend_season_cap: int = Field(default=2, ge=0)
+    bribe_silver: int = Field(default=30, ge=0)  # 打點門路（塞門房）：大勢人物所在的地點，情誼 +bribe_affinity，一位一天一次，只加到 bribe_max
+    bribe_affinity: int = Field(default=5, ge=0)
+    bribe_max: int = Field(default=40, ge=0, le=100)
+
+
+class CheckIn(_Strict):
+    """每日簽到與回體丹（docs/superpowers/specs/2026-10-17-正式季整合-design.md 6.2～6.4；tianxia/checkin.py）：21 天季才有（enabled 預設關，
+    只有 content/profiles/season21.json 打開，另照開季的章）。第 N 天照開季那一天（台灣日）起算（12.3 第 43 條）。
+    表照 6.2 與 12.3 第 27 條：丹的日子只給丹、四階的日子只給四階（第 6 天兩樣都給），其餘的日子照先後輪流銀兩、一階素材【預設】。"""
+
+    enabled: bool = False
+    pills: int = Field(default=2, ge=0)  # 丹的日子給幾顆回體丹
+    pill_days: list[int] = Field(default_factory=lambda: [3, 6, 9, 12, 15, 18, 21])
+    tier4_days: list[int] = Field(default_factory=lambda: [6, 13, 20])  # 自己挑屬性的四階一個（素材四階關著時第 13、20 天改給銀兩）
+    silver: int = Field(default=30, ge=0)  # 一般日子（照先後的第 0、2、4…個）給幾兩
+    material_tier: int = Field(default=1, ge=1, le=3)  # 一般日子（第 1、3、5…個）給一個這一階的素材（照種子挑）
+    pill_drop: float = Field(default=0.02, ge=0, le=1)  # 找素材、練功各擲一次掉一顆回體丹（6.4）
 
 
 class Config(_Strict):
@@ -2668,6 +2791,12 @@ class Config(_Strict):
     bounties: Bounties = Field(default_factory=Bounties)  # 懸賞榜（見 Bounties）
     sortie: SortieRules = Field(default_factory=SortieRules)  # 出陣（見 SortieRules）
     explore_modes: ExploreModes = Field(default_factory=ExploreModes)  # 探索三選一（見 ExploreModes）
+    # 一類一顆（正式季整合第二章；tianxia/precise.py）：每一顆鈕只給一類、按了一定拿到那一類。預設開、測試內容關；照開季蓋章
+    # （WorldState.precise_actions，12.3 第 13 條：正在跑的季不變、下一個開季起生效）；探索三選一也開著時才生效
+    precise_actions: bool = True
+    # 借進找事件的戰後事件（內容寫 train 的九則）在一處池子裡合起來最多佔幾成（PM 2026-10-19：QA 量到潁川郊野佔七成）；
+    # 當地自己的事件都抽不到時照舊補上，池子裡只有這幾則時不受上限（events.pick_event）
+    precise_aftermath_share: float = Field(default=0.3, ge=0, le=1)
     insight_strong: InsightStrong = Field(default_factory=InsightStrong)  # 意境提示：每個地點最濃的意境（見 InsightStrong）
     territory: TerritoryRules = Field(default_factory=TerritoryRules)  # 地盤易手（見 TerritoryRules）
     ambush: AmbushRules = Field(default_factory=AmbushRules)  # 設伏劫道（見 AmbushRules）
@@ -2677,6 +2806,9 @@ class Config(_Strict):
     push_resistance: PushResistance = Field(default_factory=PushResistance)  # 盡頭阻力與季長縮放（見 PushResistance）
     battle_quiet_hours: QuietHours = Field(default_factory=QuietHours)  # 時刻表決戰避開半夜（見 QuietHours）
     economy: EconomyRules = Field(default_factory=EconomyRules)  # 素材與經濟：收購、升階、捐軍備、找素材減量、出陣銀兩（見 EconomyRules）
+    four_tiers: FourTiers = Field(default_factory=FourTiers)  # 素材四階的規則（見 FourTiers）
+    silver_outlets: SilverOutlets = Field(default_factory=SilverOutlets)  # 21 天季的銀兩出口（見 SilverOutlets）
+    checkin: CheckIn = Field(default_factory=CheckIn)  # 21 天季的每日簽到與掉回體丹（見 CheckIn）
     weapons: WeaponRules = Field(default_factory=WeaponRules)  # 兵器（見 WeaponRules）
     armor: ArmorRules = Field(default_factory=ArmorRules)  # 防具（見 ArmorRules；裝備四欄設計第四節）
     mounts: MountRules = Field(default_factory=MountRules)  # 坐騎（見 MountRules；裝備四欄設計第五節）
@@ -2776,6 +2908,11 @@ class Config(_Strict):
     # 軍階，豪強版的只能升到三階」）：開季時蓋章（WorldState.haoqiang_allied），只在蓋了第一季章的季生效（allied.on）。
     # 預設關、週末設定開；14 天的季就算打開也照舊有第三方豪強
     haoqiang_allied: bool = False
+    # 21 天季的骨架（正式季整合設計第一章；12.3 第 41 條：預設關，只有 content/profiles/season21.json 打開，週末與 14 天一個字都不變）：
+    # 季曆就是現實的三週（season_weeks 3、season_days 21，cal_scale 1），錨在開季那一週的台灣週一 00:00（WorldState.cal_offset）；
+    # 21 天季自己的時刻表（TimetableEvent.real）、官軍將領與伏筆照天數、不提前收季、「今天」是現實的一天（台灣 00:00 換日）。
+    # 開季時蓋章（WorldState.season21），正在跑的季照它開季時的章
+    season21: bool = False
     season_weeks: int = Field(default=12, ge=1)  # 季曆：一季壓成幾週（計畫第六節：季曆秒＝世界秒 × 週數 × 7 ÷ season_days）
     # 決定性勝利（黃巾聲勢 ≥85、≤15）季曆第幾週起才提前收季；之前到了門檻也不收，季末照常比（企劃者 2026-10-05，計畫 T9）。
     # 割據 ≥85 不提前收季、季末才判群雄並起（FB-254，企劃者 2026-10-15「提前收季只看戰線」；rules.ends_early）
@@ -2814,6 +2951,8 @@ class Config(_Strict):
     # 丁 (c)，企劃者 2026-10-13：挑戰本人掉的三階一人一季最多幾個、寶物最多幾件（照總數算，擋豪強兩邊打與叛投；0＝不設）。兩種季都算
     figure_rare_cap: int = Field(default=6, ge=0)
     figure_treasure_cap: int = Field(default=2, ge=0)
+    # 挑戰本人掉的寶物一人每週最多幾件（季曆的週；0＝不設）。只有 21 天季的設定檔打開（正式季整合 3.8：每週 1 件、一季 3 件）
+    figure_treasure_weekly: int = Field(default=0, ge=0)
     # 推力規則（第一季設計第七節、計畫 T3；掛在 season_one 後面，開關關著時推大勢跟以前一樣）
     daily_push_cap: float = Field(default=10, gt=0)  # 每人每曆日、每條線推得動多少（人數緩衝之後的量）
     over_cap_contrib_ratio: float = Field(default=0.2, ge=0, le=1)  # 超過每日上限的部分，貢獻只記幾成
@@ -2822,6 +2961,8 @@ class Config(_Strict):
     # 糧草（計畫 T6；這一版沒有軍備物資，糧草＝背包裡的慢屬性素材，濃縮版內容表 4.0）：凡、靈、天一個各算幾份
     grain_values: list[int] = Field(default_factory=lambda: [1, 3, 9])
     # ── 軍令（計畫 T6、軍令文件第二節、濃縮版內容表第三節；掛在 season_one 後面）──
+    # 21 天季的每天一批與推線（正式季第 5 批，見 Season21Daily）：只在蓋了 21 天季章的季讀
+    season21_daily: Season21Daily = Field(default_factory=Season21Daily)
     orders_per_week: int = Field(default=3, ge=0)  # 每個陣營每週同時有幾道（豪強這一版只有打擊一種，最多一道）
     order_quota_min: int = Field(default=4, ge=1)  # 陣營總額度最少幾次（軍令文件寫 5；週末兩人時太滿，總計畫待決 3 先用 4）
     convoy_ambush_chance: float = Field(default=0.2, ge=0, le=1)  # 糧車送到終點前先撞上敵方截糧隊的機率
@@ -2907,6 +3048,9 @@ class Config(_Strict):
     # 而氣血設計 §1.4 的平衡量測點在第 5／10／15 級——連第 5 級都到不了。降到 10 之後
     # 一季大約升到第 10 級，等級的兩條線（氣血上限、屬性點）才有量級可談。
     max_level: int = 50
+    # 滿級之後的經驗換成心得（正式季整合 3.5【暫】，第 8 批做成通用的）：本人滿 max_level 之後拿到的經驗每這麼多換 1 心得
+    # （team.maxed_xinde；打仗、出陣、守與操練、決戰軍餉、頭目戰、切磋、懸賞都一樣），同伴照拿經驗
+    maxed_exp_per_xinde: int = Field(default=5, ge=1)
     # 企劃者 2026-10-14「50 級加陡」：二十人試玩有人四小時練到 30 級，上限從 30 調到 50。升到第 30 級之前一個字都不變；
     # 第 late_level_from 級起每升一級要 level_exp × n ×（1＋late_exp_step ×（n − late_level_from ＋ 1））（team.level_cost），
     # 屬性點與同伴的每級成長改成每 late_stat_every 級一點（team.growth_steps：50 級一共 29＋10 點）。
@@ -2915,6 +3059,9 @@ class Config(_Strict):
     # ——兩種季一天能拿的差不多，所以一條曲線顧不了兩種季：預設（14 天）0.5，30 → 50 要 52700；週末設定蓋成 0.12，30 → 50 要 18650。
     # 量到的：週末 16 小時 52～58 小時到 50 級、6 小時季末 40／45／46 級；14 天 16 小時第 5 天（約 122 小時）到 50、兩天時 41 級，
     # 6 小時第 10 天到 50。週末改 0.2 時 16 小時季末 46、6 小時 38／42／44。伺服器假人與整季機器人一季到不了 30 級，碰不到這一段。
+    # 21 天季（content/profiles/season21.json）蓋成 0.1【預設】（正式季整合 3.3 甲，第 8 批；PM：試玩後再調）：scripts/measure_exp_pace.py
+    # 的「最認真、不吃丹」（練功＋出陣，不合成不修練，威力停在 35 上下）0 是第 8.5～8.75 天滿級、0.05 第 11.2～11.8 天、0.1 第 12 天 46～47 級；
+    # 會合成、威力過 90 的人練功點一點體力約換 6 經驗（量表的兩倍），照這個估 0.1 約第 7～8 天滿級，落在設計估的 0.09～0.18 裡。
     late_level_from: int = Field(default=30, ge=1)
     late_exp_step: float = Field(default=0.5, ge=0)
     late_stat_every: int = Field(default=2, ge=1)
@@ -3264,6 +3411,9 @@ class FigureDef(_Strict):
     successor: str | None = None  # 空出戰線時由誰接（人物表的 id）
     squad: str  # 挑戰本人時的對手（squads.json）；難度是聲威 100 時的值
     active_from_week: int = Field(default=1, ge=1)  # 第幾週起才推（官軍三將與孫堅是第 2 週「朝廷出兵」之後）
+    # 21 天季（Config.season21，正式季整合設計 1.2 給開發 5）照天數：第 1 週週一 00:00 起幾天才推（1.5＝週二 12:00，跟朝廷出兵同時）；
+    # 21 天季只看它（沒寫是 0）、不看 active_from_week。active_from_week 大於 1 的人物在 21 天季的內容裡要寫（content.validate）
+    active_from_day: float | None = Field(default=None, ge=0)
     start_status: Literal["active", "away"] = "active"  # 輕量接位者開季時還沒出場，接手時才出現
     challenge_off_front: bool = False  # 沒有戰線也能挑戰（何進）；其他人戰線空著時不受挑戰（PM 2026-10-05 定）
     # 丙 (c)，企劃者 2026-10-13：沒有時刻表的季這位人物被打到退場時記下的世界旗標（波才寫 bocai_defeated：等於「擊敗波才」）；第一季不記
@@ -3284,6 +3434,15 @@ class TimetableOutcome(_Strict):
     world_flags_add: list[str] = Field(default_factory=list)
     third_party_text: str | None = None  # 這個結果專用的豪強那一句，蓋過 TimetableEvent.third_party_text（盧植下獄分兩版）
     control: dict[str, str] = Field(default_factory=dict)  # 這個結果讓哪幾處易手：地點 → 陣營（設計 4.2 第 3 點；只能是可易手或 fixed 的地點）
+
+
+class RealSlot(_Strict):
+    """21 天季（Config.season21）這一件大事排在哪：現實的第幾週、星期幾（0 是週一）、幾點（正式季整合設計 1.2：一般大事 12:00、
+    決戰週六 20:00、天命之爭最後一個週日 20:00）。載入時（content.load_content，驗證之前）換掉 week、day、weekday、hour。"""
+
+    week: int = Field(ge=1)
+    weekday: int = Field(default=0, ge=0, le=6)
+    hour: int = Field(default=0, ge=0, le=23)
 
 
 class TimetableEvent(_Strict):
@@ -3325,6 +3484,7 @@ class TimetableEvent(_Strict):
     mandate_endings: dict[str, str] = Field(default_factory=dict)  # 得天命的那一軍 → 結局 id（劇本裡標 mandate 的第一季結局）
     weekday: int | None = Field(default=None, ge=0, le=6)  # 決戰的預設時刻：週幾（0 是週一）；None 照 timetable.SHOWDOWN_WEEKDAY
     hour: int | None = Field(default=None, ge=0, le=23)  # 同上，幾點；None 照 timetable.SHOWDOWN_HOUR
+    real: RealSlot | None = None  # 21 天季的時刻（RealSlot）；21 天季的內容每一件都要寫（content.validate），其他季不看
 
 
 FsKind = Literal["天時地利", "推理", "反直覺抉擇", "拼圖", "累積", "情誼", "集體密謀"]  # 第一季設計 11.3 的類型（只是標記）
@@ -3891,6 +4051,7 @@ class Content(_Strict):
     preset_recipes: list[PresetRecipe] = Field(default_factory=list)  # 師門配方（新手引導計畫一）；沒有這個檔就是空的
     secret_recipes: list[SecretRecipe] = Field(default_factory=list)  # 秘方池（content/secret_recipes.json）；沒有這個檔就是空的
     forge_secrets: dict[str, ForgeSecret] = Field(default_factory=dict)  # 隱藏配方池（content/forge_secrets.json，照 id）；沒有這個檔就是空的
+    tier4_named: dict[str, Tier4Named] = Field(default_factory=dict)  # 四階名器名字表（content/tier4_named.json，照 id）；沒有這個檔就是空的（測試內容）
     arena_crowd: dict[str, list[str]] = Field(default_factory=dict)  # 擂台的場邊事件的固定句（content/arena_crowd.json）：種類 → 句子；沒有這個檔就沒有場邊事件
     banned_words: list[str] = Field(default_factory=list)  # 玩家寫給別人看的話（挑釁那一句、名帖自題）的髒話與辱罵字表（content/banned_words.json）；沒有這個檔就是空的
     mingtie: MingtieContent = Field(default_factory=lambda: MingtieContent())  # 名帖的現成的畫與假人的自題句庫（content/mingtie.json）；沒有這個檔就是空的

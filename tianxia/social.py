@@ -16,7 +16,7 @@ from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
 from . import prologue as prologue_rules
-from . import allied, arena, gender, invites, ranger, ranks, renown, team, yuedan
+from . import allied, arena, four_tiers, gender, invites, ranger, ranks, renown, team, yuedan
 from .characters import CharacterStore, name_key
 from .rules import day_turn
 from .state import GameState
@@ -202,6 +202,7 @@ GESTURES: dict[str, Gesture] = {
 }
 CARD_GESTURES = ("taunt",)  # 卡上畫的禮節
 GIFT_KINDS = ("material",)  # 贈物只剩素材（Joy 2026-10-19）
+GIFT_TIER4 = "（四階的料不能送人。）"  # 待 joy 潤：素材四階（正式季整合 4.6）；gift_max_tier 最多 3，四階本來就不在清單上，這一句擋硬送的
 
 
 def gesture_of(invite) -> Gesture | None:
@@ -335,6 +336,8 @@ def _gift(game: Game, other: Game, params: dict) -> list[str]:
     if params.get("arg") not in GIFT_KINDS or amount <= 0:
         return ["（要送多少？）"]
     material = str(params.get("choice") or "")
+    if four_tiers.tier4_id(c, material):
+        return [GIFT_TIER4]
     if material not in dict(giftable(game)):
         return ["（這一樣送不出去。）"]
     if not materials.take(game.state, material, amount):

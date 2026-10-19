@@ -12,7 +12,7 @@ import random
 from collections.abc import Callable
 from typing import NamedTuple
 
-from . import allied, armor, bounties, chuangong, clinic, cultivation, economy, equipment, explore_modes, forge_secrets, fusion, glyph, insights, library, mounts, naming, sensing, smithing, team, traits, treasures, weapons
+from . import allied, armor, bounties, checkin, chuangong, clinic, cultivation, economy, equipment, explore_modes, forge_secrets, four_tiers, fusion, glyph, insights, library, mounts, naming, sensing, smithing, team, traits, treasures, weapons
 from . import prologue as prologue_rules
 from .engine import ARENA_YIELD, DUEL_FLEE, FREE_TEXT_OPTION, SAY_OPTION, Game, Option
 from .martial_arts import MartialArt, next_quality
@@ -35,8 +35,9 @@ BLEND_SHARE = 0.3  # 沒做合併、手上有兩門以上武學時，這麼多�
 CULTIVATE_RESERVE = 60  # 體力留這麼多給探索與遊歷，多出來的才拿去修練
 MOUNT_SILVER_RESERVE = 30  # 買了馬至少還留幾兩（療傷用；同 bot_policy.LEARN_SILVER_RESERVE）：設計第九節「100＋保留額度」
 # 素材與經濟（計畫 B5）：整季機器人與假人賣、升、捐都留這麼多（修兵器、餵馬、糧草吃一階；二階留著升三階），三階一個都不賣不捐
-TRADE_KEEP = {1: 12, 2: 10}
-TIER3_WANT = 2  # 那個屬性的三階少於這麼多才升三階（一把神器要兩個三階）
+TRADE_KEEP = {1: 12, 2: 10, 3: 5}  # 三階只在素材四階開著時算（trade_keep）：留夠一次三換四
+TIER3_WANT = 2  # 素材四階關著（舊規則）：那個屬性的三階少於這麼多才升三階（一把神器要兩個三階）
+TIER4_WANT = 2  # 素材四階：那個屬性的四階少於這麼多才三換四（一件神器要主輔兩個四階，正式季整合 8.1）
 TRADE_SILVER_RESERVE = 30  # 升階付完工錢至少還留幾兩（療傷用，同 MOUNT_SILVER_RESERVE）
 TRADE_MOVES = 24  # 一次在鐵匠鋪最多升、賣幾下（保險：每一下都會讓背包離留的量更近，本來就停得下來）
 TRAIT_WEIGHT = 0.05  # 機器人選身上那門時，每一層功效（乘過品質）、每個特別功效算多少比例的威力（武學與成長設計 13.7）
@@ -92,6 +93,16 @@ def take_pill(game: Game) -> None:
     p = game.state.player
     if p.stamina_pills > 0 and p.stamina < PILL_BELOW and game.pills_left_today() != 0:  # 一天的上限照真人（今天服滿了就等明天）
         game.take_stamina_pill(pill_only=True)
+
+
+def check_in(game: Game) -> None:
+    """每日簽到（21 天季，正式季整合 8.1）：今天還沒簽就簽，四階的日子照名號＋季數的種子挑屬性（checkin.bot_attribute）。只走
+    Game.check_in（真人按「簽到」小標的同一條路）；畫面沒有簽到（關著、序章裡、休季）或今天簽過了都不叫。整季機器人與伺服器假人共用。"""
+    view = game.checkin_view()
+    if view is None or view["done"]:
+        return
+    p = game.state.player
+    game.check_in(checkin.bot_attribute(game.content, p.name, p.season_number) if view["pick"] else "")
 
 
 def allocate_points(game: Game, rng: random.Random) -> None:
@@ -366,8 +377,13 @@ def enlist_pick(game: Game, option_ids: list[str]) -> str | None:
     return min(sides, key=lambda i: (counts[i], tie(i)))
 
 
-def explore_choice(ids) -> str | None:
-    """要探索時按哪一顆：三選一開著是找素材（explore:gather），關著是 act:explore；都不在選單上是 None。量表與腳本共用。"""
+def explore_choice(ids, want: str = "material") -> str | None:
+    """要探索時按哪一顆：三選一開著是找素材（explore:gather），關著是 act:explore；都不在選單上是 None。量表與腳本共用。
+    want="exp"（要經驗）：一類一顆開著、選單上有練功（explore:practice）就按它，沒有退回上面那樣（正式季整合 9.2）。
+    打探懸賞照預設（練功不算打探）。"""
+    practice = explore_modes.option_id(explore_modes.PRACTICE)
+    if want == "exp" and practice in ids:
+        return practice
     gather = explore_modes.option_id(explore_modes.GATHER)
     return gather if gather in ids else "act:explore" if "act:explore" in ids else None
 
@@ -419,10 +435,14 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
     # 設伏、修工事、屯糧（ambush:、works:，後期體力玩法）：體力夠就一直按得下去、收伏一直按得下去；整季機器人只有一個人，劫不到誰，不做
     # 護衛、犒軍、探望（aid:，figure_aid）：體力夠就按得下去；整季機器人不做（同 works:）；宴客（feast:）不花體力、入席離席能一直按
     # 酒肆（act:tavern、tavern:）同鐵匠鋪：在城裡一直按得下去；整季機器人只有一個人，打聽不到誰，不進
+    # 拜入門派（sect:，一類一顆）：不花體力、婉拒之後還在，同 act:rest；只在第一次看到那一則時按得下去（還是隨機挑，婉拒的就不再按）
+    options = [o for o in options if not o.id.startswith("sect:") or o.id.partition(":")[2] not in s.player.seen_events]
     options = [
         o for o in options
-        if o.id not in ("act:rest", "act:halt", "act:bounties", "act:smith", "act:market", "act:heal", "act:arena", "act:donate", "act:tavern", DUEL_FLEE, ARENA_YIELD)
-        and not o.id.startswith(("road:", "defect:", "invite:", "smith:page:", "donate:", "ambush:", "works:", "aid:", "feast:", "tavern:", "act:recruit:"))
+        if o.id not in ("act:rest", "act:halt", "act:bounties", "act:smith", "act:market", "act:heal", "act:arena", "act:donate", "act:dadian",
+                        "act:tavern", DUEL_FLEE, ARENA_YIELD)
+        and not o.id.startswith(("road:", "defect:", "invite:", "smith:page:", "donate:", "dadian:", "ambush:", "works:", "aid:", "feast:", "tavern:",
+                                 "act:recruit:"))
     ]  # 招募歷史武將（act:recruit:<id>，歷史武將同行第七節）：整季機器人不招。頭目戰的抽身退走（DUEL_FLEE）：打到一半一直按得下去，機器人照出招打完
     # 會被打發的求見（名望不夠）永遠按得下去，不排除的話「沒事可做就推進時間」的訊號會失效（同 act:rest）
     options = [
@@ -614,31 +634,44 @@ def wear_better(game: Game) -> None:
 
 def trade_want(game: Game) -> tuple | None:
     """鐵匠鋪的下一件素材買賣（素材與經濟計畫 B5；整季機器人與假人共用）：先升階、再賣，沒事是 None。
+    素材四階開著時（正式季整合 8.1）：三換四是那個屬性的四階少於 TIER4_WANT、這一季還能換；其餘每一階照一般的料：高一階不夠換下一階、
+    低一階比留的（trade_keep）多出一份以上；三階跟一、二階一樣多的賣、捐，四階不賣不捐（本來就不收）。關著照舊：
     升三階：那個屬性的三階少於 TIER3_WANT、二階夠換、今天還能換；升二階：二階不夠換一個三階、一階比留的（TRADE_KEEP）多出一份以上；
     升階付完工錢要剩 TRADE_SILVER_RESERVE；出來的屬性隨機（economy.upgrade_outcomes），出什麼收什麼、照舊往下算。
     賣：一階、二階多過留的量的部分。三階不賣。回 ("upgrade", 屬性, 階) 或 ("sell", 素材, 個數)。"""
     s, c = game.state, game.content
     econ = c.config.economy
     held = s.player.materials
+    keep = trade_keep(c)
     if econ.upgrade:
         day = game.econ_day()
-        for attribute, tier in sorted(economy.upgradable(c), key=lambda pair: -pair[1]):  # 三階先
+        needs = economy.upgrade_needs(c)
+        four = four_tiers.on(c)
+        for attribute, tier in sorted(economy.upgradable(c), key=lambda pair: -pair[1]):  # 高階先
             high, low = economy.upgrade_pair(c, attribute, tier)
-            need = econ.upgrade_need[tier]
-            if tier >= 3:
+            need = needs[tier]
+            if tier == four_tiers.TIER:  # 三換四（正式季整合 8.1）：那個屬性的四階少於 TIER4_WANT 就換，一季照規矩
+                wanted = held.get(high.id, 0) < TIER4_WANT
+            elif tier >= 3 and not four:  # 素材四階關著：舊規則，三階留著湊神器
                 wanted = held.get(high.id, 0) < TIER3_WANT
-            else:
-                wanted = held.get(high.id, 0) < econ.upgrade_need.get(tier + 1, need) and held.get(low.id, 0) >= TRADE_KEEP.get(low.tier, 0) + need
+            else:  # 一般的料（素材四階開著時三階也是）：高一階不夠換下一階、低一階比留的多出一份以上
+                wanted = held.get(high.id, 0) < needs.get(tier + 1, need) and held.get(low.id, 0) >= keep.get(low.tier, 0) + need
             affordable = s.player.stats.get("silver", 0) - economy.upgrade_cost(s, c, tier) >= TRADE_SILVER_RESERVE
             if wanted and affordable and economy.upgrade_problem(s, c, attribute, tier, day) is None:
                 return ("upgrade", attribute, tier)
     if econ.sell:
         for mid, n in sorted(held.items()):
             material = c.materials.get(mid)
-            keep = TRADE_KEEP.get(material.tier) if material is not None else None
-            if keep is not None and n > keep and economy.sell_price_for(s, c, material.tier) is not None:
-                return ("sell", mid, n - keep)
+            spare = keep.get(material.tier) if material is not None else None
+            if spare is not None and n > spare and economy.sell_price_for(s, c, material.tier) is not None:
+                return ("sell", mid, n - spare)
     return None
+
+
+def trade_keep(content) -> dict[int, int]:
+    """每一階留幾個不賣不捐（TRADE_KEEP）：素材四階開著時三階照一、二階的規矩、留夠三換四的（正式季整合 8.1：「留兩個三階湊神器」
+    改成留四階，四階本來就不收）；關著照舊只有一、二階（三階不賣不捐）。"""
+    return dict(TRADE_KEEP) if four_tiers.on(content) else {t: n for t, n in TRADE_KEEP.items() if t < 3}
 
 
 def trade_at_smith(game: Game) -> None:
@@ -666,13 +699,14 @@ def donate_want(game: Game) -> tuple[str, int] | None:
     if not c.config.economy.donate:
         return None
     room = economy.donate_room(s, c, game.econ_day())
-    for tier in sorted(TRADE_KEEP):
+    keep = trade_keep(c)
+    for tier in sorted(keep):
         for mid, n in sorted(s.player.materials.items()):
             material = c.materials.get(mid)
             points = economy.donate_points(c, mid)
             if material is None or material.tier != tier or points <= 0:
                 continue
-            count = min(n - TRADE_KEEP[tier], room // points)
+            count = min(n - keep[tier], room // points)
             if count > 0:
                 return mid, count
     return None
@@ -788,6 +822,7 @@ def play_season(
     for step in range(max_steps):
         if game.state.world.ended:
             break
+        check_in(game)  # 21 天季每天簽一次（簽過了、別的季什麼都不做）
         take_pill(game)
         options = [o for o in game.options(odds=False) if o.enabled]
         hop = clinic_hop(game)  # 內傷重了先繞去醫館（排在 pick 前面：量表包住 pick 的引導也不會把它蓋掉）

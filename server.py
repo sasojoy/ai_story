@@ -61,10 +61,10 @@ import server_push
 import zhuan_html
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
-    arena_crowd, battle_instance, biography, calendar, companion_agent, duel, event_llm, feasts, fight_llm, foreshadow, gender, glyph, insight_llm, leaderboard, letters, mapdata,
+    arena_crowd, battle_instance, biography, calendar, companion_agent, divine, duel, event_llm, feasts, fight_llm, foreshadow, gender, glyph, insight_llm, leaderboard, letters, mapdata,
     naming,
     ollama_client, rules,
-    seal, seal_duel, server_bots, social, sortie, speech, tavern, team, timetable, treasures, yuedan,
+    precise, seal, seal_duel, server_bots, social, sortie, speech, tavern, team, timetable, treasures, yuedan,
 )
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import env_profile, load_content, profile_line
@@ -1321,6 +1321,8 @@ def _main_view_body(game: Game) -> dict:
         "options": [o.model_dump() for o in options],
         # 出陣開著（出陣探索與地盤設計第二節）：行動列那一格叫「出陣」、等候的話換一句；關著時照舊「遊歷」
         "sortie": sortie.on(game.content),
+        # 一類一顆開著（正式季整合第二章）：應召畫成行動列上面一條金框橫幅（設計 9.1 第 1 組乙），不收在「此地還能做」
+        "precise": precise.on(game.content, game.state.world),
         # 行動列底下那幾行（explain-1）：探索、遊歷、交友、求見這一下會怎樣（選項 id → 一句；序章裡是空的）
         "action_notes": game.action_notes(o.id for o in options),
         # 有所感選做法那一步（explain-2）：做法鈕上寫的心意（選項 id → 剛柔快慢）與鈕底下兩行小字；不在選做法是 None
@@ -1524,6 +1526,8 @@ def admin_choices(game: Game) -> dict:
         **timetable_choices(game),
         # 這一季照第一季的規則（開關開著、開季時蓋了章）：管理者區多「每週的事」（立刻發本週軍令、立刻輪替第 4 階席次）
         "season_one": rules.season_one(CONTENT, world),
+        # 21 天季（季曆就是現實的週）：暫停、繼續的問句多說一句季曆會對回現實的星期（PM 2026-10-19）
+        "season21": calendar.season21_on(world, CONTENT),
         # 三場大戲各一顆「立刻開這一場」（Game.admin_showdowns）：開不了的灰掉、寫為什麼（開過了、結算了、宛城要等第 3 週……）
         "showdowns": [
             {"id": event.id, "label": event.title, "enabled": why is None, "note": why or ""}
@@ -1535,6 +1539,8 @@ def admin_choices(game: Game) -> dict:
         "fallen": [{"label": CONTENT.figures[fid].name, "id": fid} for fid in game.admin_fallen()],
         "seal": game.admin_seal_choices(),  # 玉璽一組（碎片關著是 None，不畫）
         "mingtie": game.admin_mingtie_reports(),  # 被檢舉的名帖（撤下、放回）；沒有是空的
+        # 新神器用完了（正式季整合 5.6，FB-400）：主控台啟動時印、換季的回話寫，管理者那一塊也寫一行；沒用完是空字串
+        "divine_out": divine.EXHAUSTED if divine.exhausted_now(game.world.divine_state(), game.world.get_season_number()) else "",
         # 模型佇列的總數（正在跑幾件、在排幾件，真人與假人算在一起，不分開數）；不列名號，也看不出有沒有假人（審查 M4）。開關關著是 None
         "llm_queue": None if QUEUE is None else QUEUE.snapshot(),
     }
@@ -1879,6 +1885,8 @@ MAIN_ACTIONS = {
     "guide_ack": lambda g, b: g.guide_ack(),  # 對話框的結語按「知道了」
     "allocate": lambda g, b: g.allocate_stat(str(b.get("stat", ""))),  # 狀態列的配點鈕：升級得到的屬性點加到一項
     "pill": lambda g, b: g.take_stamina_pill(),  # 狀態列體力條上的「丹」：吃一顆回體丹（企劃者 2026-10-07 內測贈送）
+    # 江湖頁「簽到」小標攤開的領取鈕（21 天季，正式季整合 6.2）：四階的日子帶 attribute（剛柔快慢）
+    "checkin": lambda g, b: g.check_in(str(b.get("attribute", ""))[:2]),
 }
 # 賽季時鐘暫停中也照做的畫面設定（不推任何東西、不碰別人）：匿名、不再提示、略過引導、打開輿圖（頁面靠它載入輿圖）、軍令卡出現（入伍段第一步，
 # 只動自己的引導；被擋下的話網頁已經記成「送過了」，這個工作階段不會再送）、對話框的「知道了」
@@ -2557,6 +2565,8 @@ def main(argv: list[str] | None = None) -> None:
     warning = calendar.profile_warning(CONTENT, open_world().get_season())  # 這一季蓋了第一季的章、這個程式卻沒開（FB-157）
     if warning:
         print(warning, flush=True)
+    if divine.exhausted_now(open_world().divine_state(), open_world().get_season_number()):  # 新神器用完了（正式季整合 5.6）
+        print(divine.EXHAUSTED, flush=True)
     QUEUE = make_queue(CONTENT.config)  # 開關關著是 None：鎖外的模型呼叫照舊直接叫
     TALE_THREADS = True  # 放手一搏的劇情回合結算後在背景補（narrate_battle）
     print(queue_line(CONTENT.config), flush=True)

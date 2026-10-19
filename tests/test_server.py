@@ -3517,6 +3517,7 @@ class _PicksEvent(random.Random):
 
 def test_socializing_at_the_generals_mansion_reaches_yuanshaos_meeting(game):
     """大將軍府有何進、袁紹兩位人物，也有袁紹的結識事件：交友只走事件、從不開口，所以結識事件發得出來。"""
+    game.state.world.precise_actions = False  # 一類一顆之前的交友、求見（新規則在 tests/test_precise_actions.py，設計 8.4）
     game.state.player.location = "dajiangjun_fu"
     game.state.player.stats["fame"] = 99  # 兩位都見得到也一樣：交友不找人
     game.state.player.fortune = True
@@ -6231,6 +6232,7 @@ NOT_IN_THE_FINGERPRINT = {
         "mingtie_reports": "名帖的檢舉：誰檢舉了誰不能讓人看出來；藏起來的那一張別人下次打開才補",
         "mingtie_removed": "管理者撤下的名帖：被撤的人江湖紀錄一句（自己的動作走 self 通知），收過的人下次打開才補",
         "mingtie_cleared": "管理者放回的名帖，同上",
+        "divine": "神器輪替的全服登記：開季換季時才挑；原品與仿品數在打造、定名那一下改，傳聞與江湖史已在指紋裡",
     },
     "WorldState": {
         "time": "時鐘一直在走，靠慢速輪詢更新（排程每 10 秒推一次，算進去會一直叫醒全服）",
@@ -6254,6 +6256,10 @@ NOT_IN_THE_FINGERPRINT = {
         "pending_battle": "背景推進記下要開的戰鬥，開成集結之後 active_battle 的指紋就變了",
         "season_one": "開季時蓋的章，開季之後不變",
         "haoqiang_allied": "開季時蓋的章（豪強分屬兩軍），開季之後不變",
+        "season21": "開季時蓋的章（21 天季），開季之後不變",
+        "precise_actions": "開季時蓋的章（一類一顆），開季之後不變",
+        "cal_offset": "開季時蓋的章（21 天季季曆的偏移），開季之後不變",
+        "cal_offset_history": "21 天季暫停再繼續時才多一筆（FB-332）：繼續那一下季的時間與排定本來就跟著變",
         "length_days": "同上",
         "locks": "伏筆鎖定不能露出來（推送計畫 Review Focus 1）",
         "lock_losers": "同上",
@@ -6263,6 +6269,7 @@ NOT_IN_THE_FINGERPRINT = {
         "event_bonus": "時刻表結果帶來的修正，同上",
         "schedule": "只畫成『下一件大事』的倒數；時鐘本來就靠慢速輪詢，管理者改排定很少見（推送計畫沒納入）",
         "hooked_week": "週初掛鉤的內部記號",
+        "hooked_day": "21 天季每天掛鉤的內部記號",
         "showdowns_waiting": "排隊等著開的決戰記號，開成集結之後 active_battle 的指紋就變了",
         "orders": "陣營軍令只有那個陣營看得到（推送計畫 F4）",
         "plots": "集體密謀只有自己陣營的人看得到（發起的軍情是陣營軍情，不進天下大事的流水號）；算進去，別的陣營會從『又被叫醒了』看出對方有動靜（乙二）",
@@ -6283,6 +6290,7 @@ NOT_IN_THE_FINGERPRINT = {
         "bounty_seq": "懸賞的流水號，玩家看不到",
         "armaments": "陣營的軍備存量（素材與經濟）：捐的人自己那一下的畫面就更新；同陣營其他人的存量等下一次輪詢，不必為它叫醒全服的分頁",
         "bounty_week": "懸賞自動掛單掛到第幾週，玩家看不到",
+        "bounty_day": "21 天季懸賞每天掛單掛到第幾天，玩家看不到",
         "raided": "被截殺過的冷卻，只在打開玩家卡時看得到",
         "arena": "擂台的分身與名次只在打開擂台、看擂台榜時看得到；稱號在狀態列，守擂的人的戰報與俸在他自己同步時補",
         "arena_pairs": "挑擂的同一對冷卻，只在打開擂台時看得到",
@@ -6303,6 +6311,7 @@ NOT_IN_THE_FINGERPRINT = {
         "tianji": "開季時蓋進季裡的天機，開季之後不變（週初掛單的重賞亂數用）",
         "forge_divine_per_kind": "開季時蓋的章（素材與經濟），開季之後不變",
         "forge_split_clues": "開季時蓋的章（素材與經濟），開季之後不變",
+        "divine_lineup": "開季時蓋的章（神器輪替），開季之後不變",
         "renown_scale": "開季時蓋的章（名聲的門檻倍數），開季之後不變",
         "mandate": "天命之季的章：蓋章時另寫天下大事（傳聞流水號已在指紋裡）",
         "mandate_result": "天命之爭定下來時跟時間軸、天下大事一起寫入",

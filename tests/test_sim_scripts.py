@@ -170,6 +170,16 @@ def test_the_server_bot_simulation_can_pause_the_season_clock(content, tmp_path,
     assert result["ended"] and isinstance(result["late_joiners"], int)
 
 
+def test_the_exp_pace_measure_prints_one_line_per_side_and_rule(capsys, monkeypatch, tmp_path):
+    """經驗節奏量表（正式季整合 8.2）：短短跑一段，每一方、每一種規則各印一行等級與經驗來源（只量不改，不驗數字）。"""
+    monkeypatch.setenv("TIANXIA_DB", str(tmp_path / "pace.db"))
+    measure = _load("measure_exp_pace")
+    measure.main(["--profile", "weekend", "--rules", "old", "new", "--sides", "官軍", "散人", "--days", "0.2", "--step", "120"])
+    out = capsys.readouterr().out
+    assert out.count("[舊規則") == 2 and out.count("[新規則") == 2 and out.count("經驗來源") == 4
+    assert "練功" in out  # 新規則照練功拿經驗
+
+
 def test_the_weapons_measure_script_prints_one_line_with_and_one_without_weapons(capsys, monkeypatch):
     """兵器量表：--seeds 1 跑一次，兵器開、兵器關各印一行（只量不改，不驗數字）。"""
     measure = _load("measure_weapons")
@@ -320,9 +330,10 @@ def test_the_secrets_measure_script_also_prints_the_forge_part(capsys, monkeypat
     # 平均那三行（「隨機平均 鑄器：摸到 …」）也含「鑄器：摸到 」，所以每個種子的那三行照開頭數
     assert sum(line.startswith("種子 1 ") and "鑄器：摸到 " in line for line in lines) == 3
     assert out.count("種子 1 三邊合起來：鑄器摸到 ") == 1
-    # FB-270：照季的章數配方（週末蓋了章：兵器一階 2、二階 2、神器六種兵器各 1，防具一階 1、二階 1、神器 1，共 13 條），也數片子
+    # FB-270：照季的章數配方，也數片子。神器輪替（正式季第 10 批）：伺服器的第一季九件神器全開（兵器六、防具三），
+    # 加上名器兵器一階 2、二階 2、三階 2，防具一階 1、二階 1、三階 1（三階那一組是第 4 批補的），共 18 條
     forge_rows = [line for line in lines if line.startswith("種子 1 ") and "鑄器：摸到 " in line]
-    assert all("/13（" in line and "神器片子 " in line for line in forge_rows), forge_rows
+    assert all("/18（" in line and "神器片子 " in line for line in forge_rows), forge_rows
     assert out.count("爐、名器 ") == 6 and out.count("平均 鑄器：摸到 ") == 3  # 三邊各一行、三行平均
     assert out.count("神器 原品 ") >= 1 and out.count("三階 ") >= 1  # 打造第二批：神器一季幾把、三階一季幾個
 

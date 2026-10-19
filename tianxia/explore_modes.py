@@ -14,7 +14,8 @@ from .models import Content, Location
 PREFIX = "explore:"
 GATHER, SEEK, SENSE = "gather", "seek", "sense"
 MODES = (GATHER, SEEK, SENSE)
-NAMES = {GATHER: "找素材", SEEK: "找事件", SENSE: "靜心感悟"}  # 待 joy 潤
+PRACTICE = "practice"  # 練功（一類一顆開著才有，正式季整合 2.5；不在 MODES：舊的三選一沒有它）
+NAMES = {GATHER: "找素材", SEEK: "找事件", SENSE: "靜心感悟", PRACTICE: "練功"}  # 待 joy 潤
 PICK = "探索要選一種：找素材、找事件，或靜心感悟。"  # 待 joy 潤：按「探索」本身的回話
 NO_SENSE = "這裡悟不出什麼"  # 待 joy 潤（設計 3.3；鈕上不帶句號）
 SENSE_LATER = "選錯了做法，這裡要過一陣子才悟得出"  # 待 joy 潤：這個遊戲日在這裡選錯過做法
@@ -22,6 +23,14 @@ GATHER_LINE = "你在{place}四下翻找。"  # 待 joy 潤
 GATHER_NONE = "翻了一陣，沒找到什麼能用的。"  # 待 joy 潤
 FOE_LINE = "你正翻找著，{foe}突然殺出！"  # 待 joy 潤
 SEEK_NONE = "你四處走走，這一帶眼下沒什麼事。"  # 待 joy 潤
+SEEK_EMPTY = "這一帶眼下沒什麼事"  # 待 joy 潤：一類一顆的找事件池子空了（鈕上，不帶句號；正式季整合 2.7）
+PRACTICE_LINE = "你在{place}找上{foe}練手。"  # 待 joy 潤：練功開打那一句
+NO_FOE = "這裡沒有可以練手的對手"  # 待 joy 潤（設計 2.5；鈕上不帶句號）
+NO_FOE_NEAR = "，最近的在{place}"  # 待 joy 潤：接在 NO_FOE 後面
+BOSS_NOTE = "頭目"  # 待 joy 潤：這裡只有頭目時鈕上那一格
+BOSS_COOLING = "頭目{wait}後才會再現身"  # 待 joy 潤：兩場頭目戰之間的冷卻（wait 是 arena.wait_text 的現實倒數）
+BOSS_GONE_WEEK = "這一週他不再現身"  # 待 joy 潤：21 天季這一週的次數用完
+BOSS_GONE_SEASON = "這一季他不再現身"  # 待 joy 潤：一季的次數用完
 
 
 def on(content: Content) -> bool:
@@ -41,10 +50,11 @@ def is_town(content: Content, loc: Location) -> bool:
     return content.config.explore_mix_of(loc.tags).kind == "town"
 
 
-def gather_finds(content: Content, loc: Location, rng: random.Random) -> list[str]:
+def gather_finds(content: Content, loc: Location, rng: random.Random, sure: bool = False) -> list[str]:
     """找素材撿到的素材 id（設計 3.1 的表）：屬性照這裡寫的素材（Location.materials），沒寫就從同階全部挑；城鎮 town_chance 一個一階；
     其餘一個一階（素材與經濟設計第七節：Config.economy.gather_cut 開著時是 gather_first_chance〔七成〕，關著一定給、不擲骰），
-    照危險度 second_tier 的機會再一個二階。三階不從這裡來。"""
+    照危險度 second_tier 的機會再一個二階。三階不從這裡來。
+    sure（一類一顆，正式季整合 2.4）：一定給——城鎮一定一個一階、城外一定一個一階（不擲 town_chance、gather_first_chance），二階照舊。"""
     cfg = content.config.explore_modes
     econ = content.config.economy
     kinds = {content.materials[m].attribute for m in loc.materials if m in content.materials}
@@ -54,9 +64,9 @@ def gather_finds(content: Content, loc: Location, rng: random.Random) -> list[st
         return rng.choice(pool).id if pool else None
 
     if is_town(content, loc):
-        found = [one(1)] if rng.random() < cfg.town_chance else []
+        found = [one(1)] if sure or rng.random() < cfg.town_chance else []
     else:
-        found = [one(1)] if not econ.gather_cut or rng.random() < econ.gather_first_chance else []
+        found = [one(1)] if sure or not econ.gather_cut or rng.random() < econ.gather_first_chance else []
         if rng.random() < cfg.second_tier.get(loc.danger, 0.0):
             found.append(one(2))
     return [mid for mid in found if mid is not None]

@@ -18,6 +18,7 @@ TW_MIDNIGHT = 16 * 3600  # UTC 16:00＝台灣 00:00（1970-01-02）
 def _game(bag=None, silver=500, at="yingchuan", **econ):
     c = real_content("weekend")
     c.config.auto_open_first_season = True
+    c.config.four_tiers.enabled = False  # 素材四階之前的規則（三階不收、二換三一天一個）；四階的規則在 test_four_tiers
     for key, value in econ.items():
         setattr(c.config.economy, key, value)
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world())

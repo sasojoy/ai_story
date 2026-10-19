@@ -231,8 +231,8 @@ def test_the_fame_amounts_are_the_ones_the_content_gives(on):
     spans = _fame_spans(on, set(on.scenario.season_one_off.events))
     section = _fame_section(game)
     low, high = spans["common"]
-    # 真實內容出陣開著，沒有遊歷（FB-257）
-    assert f"（探索、交友、找素材撞上的仗之後碰上的事）：一次 +{low}～+{high}。" in section
+    # 真實內容出陣開著，沒有遊歷（FB-257）；一類一顆也開著，事件都在找事件（FB-420 同一批）
+    assert f"（探索找事件時碰上的事）：一次 +{low}～+{high}。" in section
     low, high = spans["big"]
     assert f"劇情裡打贏強敵、奇遇與一次性的大事：一次 +{low}～+{high}。" in section
     most, least = spans["loss"]

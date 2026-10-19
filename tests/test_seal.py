@@ -259,9 +259,9 @@ def test_chizhang_adds_fusion_points_and_guixin_grows_companions(content, world)
     scored = []
     real = fusion._points  # noqa: SLF001
 
-    def spy(content_, points):
+    def spy(content_, points, state=None):  # state：看火候換基準用（銀兩出口）
         scored.extend(points)
-        return real(content_, points)
+        return real(content_, points, state)
 
     base = content.skills["basic_fist"]  # 測試內容沒有 starter_skills（預設是空的），直接拿基礎拳腳
     art = content_art(base.id, base.name, base.kind, base.attribute, base.quality)

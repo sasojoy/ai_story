@@ -17,7 +17,7 @@ import random
 from . import calendar, figures, push, relations, renown
 from .calendar import DAY
 from .models import Content
-from .rules import add_rumor, change_trend, season_one, trend_shown, trend_value
+from .rules import add_rumor, change_trend, season_one, trend_shown, trend_value, world_day
 from .state import GameState, WorldState
 from .world_state import season_length_days
 
@@ -98,21 +98,21 @@ def gain_left(world: WorldState, content: Content, fid: str) -> int:
     """這位人物這個遊戲日在戰場外還能回幾點聲威（daily_gain_cap；募兵、自然回復、犒軍共用）。開關關著是無限。"""
     if not on(content):
         return 10**9
-    return max(0, content.config.figure_life.daily_gain_cap - int(world.trend_accum.get(_gain_key(world, fid), 0.0) + 1e-9))
+    return max(0, content.config.figure_life.daily_gain_cap - int(world.trend_accum.get(_gain_key(world, content, fid), 0.0) + 1e-9))
 
 
 def note_gain(world: WorldState, content: Content, fid: str, amount: int) -> None:
     """記下這一天回了多少（舊日子的帳順手刪掉）。"""
     if not on(content) or amount <= 0:
         return
-    key = _gain_key(world, fid)
+    key = _gain_key(world, content, fid)
     for old in [k for k in world.trend_accum if k.startswith(f"gain:{fid}:") and k != key]:
         del world.trend_accum[old]
     world.trend_accum[key] = world.trend_accum.get(key, 0.0) + amount
 
 
-def _gain_key(world: WorldState, fid: str) -> str:
-    return f"gain:{fid}:{int(world.time // DAY)}"
+def _gain_key(world: WorldState, content: Content, fid: str) -> str:
+    return f"gain:{fid}:{world_day(content, world)}"
 
 
 def _recruit(state: GameState, content: Content, fid: str) -> None:
@@ -173,7 +173,7 @@ def _maybe_rally(state: GameState, content: Content, cid: str, turn: int) -> Non
         return
     side = made.faction
     add_rumor(state, bounties.RALLY_POSTED.format(who=content.characters[cid].name, side=content.scenario.faction_name(side, side),
-                                                  how=bounties.how(content, made)),
+                                                  how=bounties.how(content, made, world=state.world)),  # 陣營的傳聞：照陣營的人寫（FB-435：要給 world）
               made.location, content=content, layer="faction", faction=side)
 
 

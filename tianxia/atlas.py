@@ -239,8 +239,8 @@ def _figure_activity(state: GameState, content: Content, name: str) -> str:
     fig, front = content.figures[fid], figures.state_of(state, content, fid).front
     front_name = next((t.name for t in content.scenario.trends if t.id == front), front)
     text = f"每天約出手 {fig.actions_per_day:g} 次，讓{front_name}{'上升' if goal > 0 else '下降'}"
-    if point(state.world.time, content, state.world).week < fig.active_from_week:
-        text += f"（第 {fig.active_from_week} 週起）"
+    if not figures.started(state, content, fid, state.world.time):
+        text += figures.start_text(state, content, fid)
     return text
 
 
@@ -258,7 +258,7 @@ IDLE_NOTE = "按兵不動，不出營應戰"  # 待 joy 潤：戰線空著、挑
 
 def _regen_note(state: GameState, content: Content) -> str:
     """聲威那一行後面接的「沒人去打……慢慢回來」：沒有時刻表的季、回復開著才有。"""
-    return f"；{REGEN_NOTE}" if figures.untimed(content, state.world) and content.config.figure_prestige_regen > 0 else ""
+    return f"；{REGEN_NOTE}" if figures.upkept(content, state.world) and content.config.figure_prestige_regen > 0 else ""
 
 
 def _here_text(state: GameState, content: Content, fid: str) -> str:
@@ -720,6 +720,8 @@ def travel_block(state: GameState, content: Content) -> TravelBlock | None:
         return TravelBlock("鐵匠鋪還開著，先離開才能安排前往", to_jianghu=True)
     if p.picking_market:
         return TravelBlock(mounts.TRAVEL_BLOCKED, to_jianghu=True)  # 待 joy 潤的字在 mounts（atlas 為了騎馬的步調與省體力 import mounts，這句就近讀它）
+    if p.picking_dadian:  # 打點（21 天季的銀兩出口）；待 joy 潤
+        return TravelBlock("還在茶樓雅間裡，先離開才能安排前往", to_jianghu=True)
     if p.picking_donate:  # 大本營的捐軍備（素材與經濟設計第六節）；待 joy 潤
         return TravelBlock("還在軍需官帳前，先離開才能安排前往", to_jianghu=True)
     if p.picking_tavern:  # 酒肆（企劃者 2026-10-18）；同 tavern.TRAVEL_BLOCKED（atlas 不 import tavern：tavern → atlas），待 joy 潤

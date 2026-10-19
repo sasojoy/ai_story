@@ -577,6 +577,7 @@ def test_every_figure_has_three_brush_off_lines(content):
 
 
 def test_a_newcomer_calling_on_a_figure_hears_one_of_his_own_lines_and_the_fame_gap(content):
+    content.config.precise_actions = False  # 一類一顆之前的交友、求見（新規則在 tests/test_precise_actions.py，設計 8.4）
     game = Game.new(content, "試玩者", rng=random.Random(1))
     game.world.open_season(game.content, now=0.0)
     game.state.player.location = content.characters["luzhi"].talk_at
@@ -804,6 +805,7 @@ def test_meeting_events_mark_the_acquaintance_instead_of_handing_out_companions(
 def test_the_fortune_turns_into_a_gift_when_nobody_can_be_recruited(content, tmp_path):
     from tianxia.sqlite_world import open_world
 
+    content.config.precise_actions = False  # 一類一顆之前的交友、求見（新規則在 tests/test_precise_actions.py，設計 8.4）
     game = Game.new(content, "測試俠客", rng=random.Random(0), world=open_world(tmp_path / "world.db"))
     msgs = game._deliver_fortune()
     assert any("賀禮" in m for m in msgs)
@@ -974,7 +976,7 @@ def test_a_hero_with_a_signature_skill_still_cannot_beat_bocai(content):
     assert _win_rate(content, "fanjianglong", wugong_id) <= 0.05
 
 
-# ── 戰後事件的文字假設打贏了：「倒地的對手」只在遊歷打贏之後接（跟 FB-001 同一類）──────────
+# ── 戰後事件（正式季整合 2.5：改寫成不必剛打過一場的版本，「倒地的對手」改成「倒地的漢子」、拿掉 fight_tiers）──────────
 
 
 def _after_a_fight(content, tier):
@@ -998,45 +1000,11 @@ def _after_fight_events(content, tier):
     return {e.id for e in event_candidates(game.state, content, "train")}
 
 
-@pytest.mark.parametrize("tier", ["大勝", "險勝"])
-def test_the_fallen_foe_can_follow_a_win(content, tier):
-    assert "train_fallen_foe" in _after_fight_events(content, tier)
-
-
-@pytest.mark.parametrize("tier", ["僵持", "落敗"])
-def test_the_fallen_foe_never_follows_a_draw_or_a_loss(content, tier):
+@pytest.mark.parametrize("tier", ["大勝", "險勝", "僵持", "落敗"])
+def test_the_fallen_man_follows_any_fight_now_that_the_text_no_longer_assumes_a_win(content, tier):
+    """舊規則（沒蓋一類一顆的季）照舊在仗後面接戰後事件；文字改寫過、不再假設你剛打贏，所以不挑結果。"""
     after = _after_fight_events(content, tier)
-    assert "train_fallen_foe" not in after
-    assert "train_campfire" in after  # 結果不挑的戰後事件照舊接得到
-
-
-def test_the_fallen_foe_needs_a_fight_in_this_very_action(content):
-    """上一次行動打贏了、這一次沒打（戰鬥卡片已經清掉）：紀錄還在，也抽不到它。"""
-    from tianxia.events import event_candidates
-
-    game = _after_a_fight(content, "大勝")
-    game.state.battle_card = None
-    assert "train_fallen_foe" not in {e.id for e in event_candidates(game.state, content, "train")}
-
-
-def test_playing_the_real_fight_the_fallen_foe_only_ever_comes_after_a_win(content, monkeypatch):
-    """真實內容、固定種子、戰後事件一定接：新角色在只有流寇散兵的地方遊歷，打贏與沒打贏都有，倒地的對手只跟著打贏。
-    測的是舊遊歷（出陣開著時散人沒有出陣鈕），所以關掉出陣。"""
-    monkeypatch.setattr(content.config, "train_event_chance", 1.0)
-    monkeypatch.setattr(content.config.sortie, "enabled", False)
-    place = next(loc.id for loc in content.locations.values() if loc.enemies == ["dipi"])
-    tiers: dict[str, int] = {}
-    fired_after: set[str] = set()
-    for seed in range(120):
-        game = Game.new(content, f"遊歷{seed}", rng=random.Random(seed))
-        game.state.player.location = place
-        game.choose("act:train")
-        tier = game.state.battles[0].tier
-        tiers[tier] = tiers.get(tier, 0) + 1
-        if game.state.pending_event == "train_fallen_foe":
-            fired_after.add(tier)
-    assert set(tiers) & {"僵持", "落敗"} and set(tiers) & {"大勝", "險勝"}  # 輸贏都打出來過，下面才不是空轉
-    assert fired_after and fired_after <= {"大勝", "險勝"}, (fired_after, tiers)
+    assert {"train_fallen_foe", "train_campfire"} <= after
 
 
 # ── 事件檢定的難度帶（企劃者 2026-10-05「成功率毫無道理可言」）────────

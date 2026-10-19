@@ -652,6 +652,31 @@ def exp_view(content: Content, member) -> dict | None:
     return {"have": int(member.exp), "need": level_cost(cfg, member.level)}
 
 
+MAXED_XINDE = "已達頂級，經驗化作心得 +{n}。"  # 待 joy 潤：滿級之後的經驗換成心得那一句（正式季整合 3.5，江湖紀錄）
+
+
+def maxed(content: Content, member) -> bool:
+    """這個人滿級了（Config.max_level）。"""
+    return member.level >= content.config.max_level
+
+
+def as_xinde(content: Content, exp: int) -> int:
+    """滿級之後這一筆經驗換得幾點心得（3.5：Config.maxed_exp_per_xinde 換 1，不足的捨去）。只算、不給。"""
+    return max(0, exp) // content.config.maxed_exp_per_xinde
+
+
+def maxed_xinde(state: GameState, content: Content, exp: int) -> int:
+    """本人這一筆經驗在滿級時換成心得（3.5，第 8 批通用）：已經滿級才換、記進心得、回換了幾點；沒滿級回 0（經驗照舊走 add_exp）。
+    升到滿級那一下剩下的經驗不換（照舊丟掉）。同伴不換，照拿經驗（grant_team_exp）。"""
+    p = state.player
+    if not maxed(content, p.member):
+        return 0
+    gained = as_xinde(content, exp)
+    if gained:
+        p.stats["xinde"] = p.stats.get("xinde", 0) + gained
+    return gained
+
+
 def add_exp(content: Content, member, amount: int, name: str) -> list[str]:
     cfg = content.config
     msgs: list[str] = []
@@ -1046,7 +1071,7 @@ def gear_bond(content: Content, art: MartialArt, item) -> tuple[TacticBond, str]
         return None
     if item.original and item.secret and item.bound_art == art.id and trait.ultimate_bond is not None:
         return trait.ultimate_bond, BOUND_SOURCE
-    if item.secret and not item.original and item.copy_of is None and item.attribute == art.attribute:
+    if equipment.is_named(item) and item.attribute == art.attribute:  # 隱藏配方的名器與四階名器（正式季整合 5.2：好處照現在的名器）
         rate = content.config.tactics.named_bond_rate
         return TacticBond(desc=NAMED_BOND.format(pct=round(rate * 100)), rate=rate), NAMED_SOURCE
     return None

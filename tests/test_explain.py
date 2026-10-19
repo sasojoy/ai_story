@@ -507,19 +507,19 @@ def test_a_new_character_gets_a_journal_line_for_the_gift(content):
     game = Game.new(content, "沈浪", rng=random.Random(0))
     head = game.state.journal[0]
     assert head.tag == "賽季開始" and head.lines[-1] == howto.gift_line(content)
-    assert head.lines[-1] == f"內測贈禮：回體丹 {content.config.beta_gift_stamina_pills} 顆，一顆回 {content.config.stamina_pill_restore} 點體力，按體力條右端的「丹」服下。"
+    assert head.lines[-1] == f"新手福利：回體丹 {content.config.beta_gift_stamina_pills} 顆，一顆回 {content.config.stamina_pill_restore} 點體力，按體力條右端的「丹」服下。"
     assert sum(1 for e in game.state.journal if e.tag == "賽季開始") == 1  # 接在開場那一則裡，不另起一則
 
 
 def test_no_gift_no_line_and_the_refill_wording(content):
     content.config.beta_gift = False
     game = Game.new(content, "沈浪", rng=random.Random(0))
-    assert not any("內測贈禮" in line for e in game.state.journal for line in e.lines)
+    assert not any("新手福利" in line for e in game.state.journal for line in e.lines)
     content.config.beta_gift, content.config.beta_free_refill = True, True
     content.config.beta_free_refill_label = "補到滿"  # 鈕上的字照設定
     other = Game.new(content, "柳青", rng=random.Random(0), world=game.world)
     assert other.state.journal[0].lines[-1] == (
-        f"內測贈禮：回體丹 {content.config.beta_gift_stamina_pills} 顆（一顆回 {content.config.stamina_pill_restore} 點體力），"
+        f"新手福利：回體丹 {content.config.beta_gift_stamina_pills} 顆（一顆回 {content.config.stamina_pill_restore} 點體力），"
         "先收著；測試期間按體力條上的「補到滿」就能免費補滿，不花丹。"
     )
 
@@ -553,7 +553,7 @@ def test_the_gift_line_does_not_show_on_the_first_screen_of_the_hut(prologue_con
     """序章第一屏的「剛剛」照舊什麼都不放（開場那一則是江湖上的事，T7 審查 I2）：贈禮那一行接在開場那一則裡，江湖紀錄看得到。"""
     hut = Game.new(prologue_content, "沈浪", rng=random.Random(0), world=world, prologue=True)
     assert hut.now_entry_html() == ""
-    assert any(line.startswith("內測贈禮") for line in hut.state.journal[0].lines)
+    assert any(line.startswith("新手福利") for line in hut.state.journal[0].lines)
 
 
 def test_the_full_stamina_note_says_why():

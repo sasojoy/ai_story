@@ -700,7 +700,10 @@ def bag_text(state: GameState, content: Content) -> str:
     pills, stamina_pills = state.player.legend_items, state.player.stamina_pills
     if not items and pills <= 0 and stamina_pills <= 0:
         return "**背包**　還沒有東西——打贏對手、沿路採集，或在奇遇裡拿到。"
-    lines = ["**背包**　隨身帶著的材料，分凡品、靈品、天品三階。"] if items else ["**背包**　隨身帶著的東西。"]
+    # 階名照內容裡有的階寫（正式內容四階：凡品、靈品、天品、神品；測試內容三階）
+    tiers = sorted({m.tier for m in content.materials.values()} & set(materials.TIER_NAMES))
+    names = "、".join(materials.TIER_NAMES[t] for t in tiers)
+    lines = [f"**背包**　隨身帶著的材料，分{names}{forge_secrets.TIER_WORDS.get(len(tiers), len(tiers))}階。"] if items else ["**背包**　隨身帶著的東西。"]
     lines += [
         f"- {m.name} ×{n}　{materials.tier_label(m)}・屬{m.attribute}　{m.description}"
         for m, n in items

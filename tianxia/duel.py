@@ -12,7 +12,7 @@ from __future__ import annotations
 import random
 from typing import NamedTuple
 
-from . import battle_instance, prologue, tactics
+from . import battle_instance, calendar, prologue, tactics
 from .models import BEATS, MOVES, BattleTuning, Content, DuelBoss, DuelFoe, DuelTuning
 from .state import DuelState, GameState
 
@@ -29,6 +29,28 @@ def season_key(state: GameState, boss_id: str) -> str:
     return f"{state.player.season_number}:{boss_id}"
 
 
+def week_key(state: GameState, content: Content, boss_id: str) -> str:
+    """這一隻這一週（季曆週）遇上幾次的帳（正式季整合 2.5：21 天季每週 per_boss_week 次）。"""
+    week = calendar.point(state.world.time, content, state.world).week
+    return f"{state.player.season_number}:w{week}:{boss_id}"
+
+
+def used_up(state: GameState, content: Content, boss_id: str) -> bool:
+    """這一隻的次數用完了沒：per_boss_week 設了（21 天季）照這一週算，否則照這一季的 per_boss_season。"""
+    tuning, tally = content.config.duel, state.player.duel_tally
+    if tuning.per_boss_week:
+        return tally.get(week_key(state, content, boss_id), 0) >= tuning.per_boss_week
+    return tally.get(season_key(state, boss_id), 0) >= tuning.per_boss_season
+
+
+def cooldown_left(state: GameState, tuning: DuelTuning) -> float:
+    """離冷卻結束還有幾世界秒（不在冷卻是 0）。"""
+    last = state.player.duel_last
+    if not cooling(state, tuning):
+        return 0.0
+    return tuning.cooldown_seconds - (state.world.time - last[1])
+
+
 def cooling(state: GameState, tuning: DuelTuning) -> bool:
     """上一場頭目戰開打到現在還沒過 cooldown_seconds（同一季的世界秒；換了季就不算）。"""
     last = state.player.duel_last
@@ -38,14 +60,19 @@ def cooling(state: GameState, tuning: DuelTuning) -> bool:
 
 
 def available(state: GameState, content: Content) -> DuelBoss | None:
-    """此刻在這裡探索遇得上的頭目（照 id 排第一個）：不在序章、沒有正在打的、不在冷卻、這一季遇上這一隻還沒滿 per_boss_season 次。"""
+    """此刻在這裡遇得上的頭目（照 id 排第一個）：不在序章、沒有正在打的、不在冷卻、這一隻的次數還沒用完（used_up）。"""
     p, tuning = state.player, content.config.duel
     if p.duel is not None or prologue.active(state, content) or cooling(state, tuning):
         return None
-    for boss in sorted(content.duels.values(), key=lambda b: b.id):
-        if p.location in boss.locations and p.duel_tally.get(season_key(state, boss.id), 0) < tuning.per_boss_season:
+    for boss in here(state, content):
+        if not used_up(state, content, boss.id):
             return boss
     return None
+
+
+def here(state: GameState, content: Content) -> list[DuelBoss]:
+    """站在這裡的頭目（照 id 排），不管冷卻與次數。"""
+    return [b for b in sorted(content.duels.values(), key=lambda b: b.id) if state.player.location in b.locations]
 
 
 def foe_index(boss: DuelBoss, faction: str | None) -> int:

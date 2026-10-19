@@ -23,6 +23,7 @@ SIGN = {"guan": -1, "huang": 1}  # 往己方推：戰況 0 是官軍穩控、100
 ENEMY = {"guan": "huang", "huang": "guan"}
 TOP = 3  # 達成時陣營軍情列出前幾名（軍令文件第二節）
 ISSUED = "本週軍令："  # 發令那一則陣營軍情的開頭
+ISSUED_DAY = "今日軍令："  # 21 天季每天發令那一則的開頭（正式季整合設計 7.1；待 joy 潤）
 DONE = "【軍令達成】"  # 達成那一則陣營軍情的開頭（「你不在的時候」照這兩個開頭挑陣營軍情的要點）
 OPENING_WEEK = 1  # 開局週（OrderWhen.opening_fronts 只在這一週放寬）
 
@@ -42,12 +43,31 @@ def week_of(state: GameState, content: Content) -> int:
     return calendar.point(state.world.time, content, state.world).week
 
 
+def daily(state: GameState, content: Content) -> bool:
+    """21 天季：軍令每天 00:00 發一批（正式季整合設計 7.1），照「期」記的是季曆第幾天；其他季照週。"""
+    return calendar.season21_on(state.world, content)
+
+
+def period_of(state: GameState, content: Content) -> int:
+    """軍令這一期的號碼（Order.week 存的就是它）：21 天季是季曆第幾天，其他季是第幾週。貢獻照舊照週記（week_of）。"""
+    at = calendar.point(state.world.time, content, state.world)
+    return at.cal_day if daily(state, content) else at.week
+
+
+def deadline(state: GameState, content: Content, order: Order) -> float:
+    """這一道的截止（世界秒）：21 天季是隔天 00:00，其他季是下週一 00:00。"""
+    w = state.world
+    if daily(state, content):
+        return calendar.day_start(order.week + 1, content, w)
+    return calendar.week_start(order.week + 1, content, w)
+
+
 def current(state: GameState, content: Content, faction: str | None) -> list[Order]:
     """這一週、這個陣營的軍令（含已達成的）；散人、開關關著是空的。"""
     if faction is None or not active(state, content):
         return []
-    week = week_of(state, content)
-    return [o for o in state.world.orders if o.faction == faction and o.week == week]
+    period = period_of(state, content)
+    return [o for o in state.world.orders if o.faction == faction and o.week == period]
 
 
 def template_of(content: Content, order: Order) -> OrderTemplate:
@@ -137,13 +157,13 @@ def siege_places(content: Content, faction: str, front: str, world: WorldState |
     ]
 
 
-def _issuable(state: GameState, content: Content, t: OrderTemplate, front: str, week: int) -> bool:
+def _issuable(state: GameState, content: Content, t: OrderTemplate, front: str, week: int, opening: bool) -> bool:
     """這種軍令這週在這條戰線發不發得出來（濃縮版內容表 3.1「什麼時候發」）；攻城另外要那條戰線打得到敵方隊伍。
     例外：第 1 週（OPENING_WEEK）、這條戰線在 when.opening_fronts 裡就直接發，front_min／front_max、event_within_weeks、
     losing_by 都不看（FB-054，新手第一週要有一道走得到的軍令）；攻城的「打得到敵方隊伍」照舊先看。"""
     if t.kind == "siege" and not siege_places(content, t.side, front, state.world):
         return False
-    if week == OPENING_WEEK and front in t.when.opening_fronts:  # 開局週：這條戰線不看局勢（FB-054）
+    if opening and front in t.when.opening_fronts:  # 開局週：這條戰線不看局勢（FB-054；21 天季是季曆第 1 週的每一天）
         return True
     when, v = t.when, _value(state, content, front)
     if when.front_min is not None and v < when.front_min:
@@ -202,6 +222,7 @@ def _picks(state: GameState, content: Content, faction: str, week: int) -> list[
     偏好的那一種（preferred_offense）有對象就發它，沒有就改發另一種，兩種都沒有就照優先序給下一道；其餘兩格照舊。
     每週只有一格時沒有「其中一格」可留，照優先序。發出的次序仍照優先序（進攻的那一道排在它的優先序上）。"""
     found: list[tuple[tuple[int, int, int, int], OrderTemplate, str | None, str | None]] = []
+    opening = calendar.point(state.world.time, content, state.world).week == 1 if daily(state, content) else week == OPENING_WEEK
     for rank, t in enumerate(content.orders.templates):
         if t.side != faction:
             continue
@@ -212,9 +233,12 @@ def _picks(state: GameState, content: Content, faction: str, week: int) -> list[
             continue
         turn = 1 if t.kind in SUPPLY and t.kind != preferred_supply(week) else 0  # 這週不輪到的那一種補給排後面
         for front in rules.front_ids(content):
-            if front in content.orders.slots and _issuable(state, content, t, front, week):
+            if front in content.orders.slots and _issuable(state, content, t, front, week, opening):
                 found.append(((t.priority, turn, -_pressure(faction, _value(state, content, front)), rank), t, front, None))
     found.sort(key=lambda item: item[0])
+    if daily(state, content):
+        chosen = _daily_choice(found, week, content.config.season21_daily.orders_per_day)
+        return [(t, front, fid) for _, t, front, fid in chosen]
     slots = content.config.orders_per_week
     reserved = None  # 留給進攻的那一道；沒有留（只有一格、或兩種進攻都沒有對象）就是 None
     if slots >= 2:
@@ -225,6 +249,22 @@ def _picks(state: GameState, content: Content, faction: str, week: int) -> list[
     chosen = rest[:slots] if reserved is None else rest[: slots - 1] + [reserved]
     chosen.sort(key=lambda item: item[0])
     return [(t, front, fid) for _, t, front, fid in chosen]
+
+
+DAILY_TURNS = ("defend", "offense", "supply")  # 21 天季一天一道時輪流的三組：守、進攻（攻城、打擊）、補給（截糧、護糧）
+
+
+def _daily_choice(found: list, day: int, slots: int) -> list:
+    """21 天季一天的軍令（正式季整合設計 7.1，五種照舊）：第一格照第幾天輪流挑守、進攻、補給（進攻與補給照 preferred_offense／
+    preferred_supply 偏好那一種），那一組這一天沒有候選就照優先序；其餘的格照優先序。found 已照優先序排好。"""
+    if slots <= 0 or not found:
+        return []
+    group = DAILY_TURNS[(day - 1) % len(DAILY_TURNS)]
+    kinds = {"defend": ("defend",), "offense": (preferred_offense(day), "strike" if preferred_offense(day) == "siege" else "siege"),
+             "supply": (preferred_supply(day), "escort" if preferred_supply(day) == "intercept" else "intercept")}[group]
+    first = next((item for kind in kinds for item in found if item[1].kind == kind), found[0])
+    rest = [item for item in found if item is not first][: slots - 1]
+    return sorted([first, *rest], key=lambda item: item[0])
 
 
 def _caller(state: GameState, content: Content) -> str:
@@ -283,6 +323,14 @@ def _faction_news(state: GameState, faction: str, text: str) -> None:
     rules.add_rumor(state, text, layer="faction", faction=faction)
 
 
+def issue_day(state: GameState, content: Content, day: int, rng: random.Random, *, redraw: bool = False) -> list[str]:
+    """21 天季每天 00:00 發令（world.DAY_HOOKS；正式季整合設計 7.1）：同 issue，期是季曆第幾天、一個陣營 orders_per_day 道（輪流挑，
+    _daily_choice）、陣營軍情寫「今日軍令：」。其他季什麼都不做（照週一那一串）。"""
+    if not active(state, content) or not daily(state, content):
+        return []
+    return _issue(state, content, day, ISSUED_DAY, redraw)
+
+
 def issue(state: GameState, content: Content, week: int, rng: random.Random, *, redraw: bool = False) -> list[str]:
     """週初發令（world.WEEK_HOOKS 每週一 00:00 跑一次，week 是剛跨進的那一週）。先清掉上週沒達成的（達成的留著）；
     只發「現在這一週」：追趕時一次跨過好幾週，跨過的週不補發（RF1）。每道寫一則陣營軍情「本週軍令：…」。
@@ -290,11 +338,16 @@ def issue(state: GameState, content: Content, week: int, rng: random.Random, *, 
     redraw：管理者的「立刻發本週軍令」（管理者觸發鈕，審查 I-1）——這一週還沒達成的拿掉、照同樣的挑法重挑；已經達成的原封不動
     （進度、套過的效果、給 _enemy_order 與下週 or_enemy_siege 讀的紀錄都留著），重挑出來跟它同一個 id 的那一道跳過、不發軍情，
     所以同一道不會達成兩次。週一的掛鉤不帶它，照舊。"""
-    if not active(state, content):
+    if not active(state, content) or daily(state, content):  # 21 天季改走每天那一串（issue_day）
         return []
+    return _issue(state, content, week, ISSUED, redraw)
+
+
+def _issue(state: GameState, content: Content, week: int, prefix: str, redraw: bool) -> list[str]:
+    """發一期軍令（issue、issue_day 共用；week 是這一期的號碼，21 天季是季曆第幾天）。"""
     w = state.world
     w.orders = [o for o in w.orders if o.done or o.week >= week]
-    if week != week_of(state, content):
+    if week != period_of(state, content):
         return []
     done = {o.id for o in w.orders if o.week == week and o.done}
     if redraw:
@@ -309,7 +362,7 @@ def issue(state: GameState, content: Content, week: int, rng: random.Random, *, 
             if order.id in done:
                 continue
             w.orders.append(order)
-            _faction_news(state, faction.id, f"{ISSUED}{order.text}")
+            _faction_news(state, faction.id, f"{prefix}{order.text}")
     return []
 
 
@@ -362,8 +415,8 @@ def _leak(state: GameState, content: Content, o: Order, text: str) -> None:
 def front_push(state: GameState, content: Content, front: str, amount: int) -> tuple[int, list[str]]:
     """軍令達成推戰線 amount 點（帶正負號）：盡頭阻力開著時照推之前的戰線打折（push.resistance，出陣探索與地盤設計 5.1），
     四捨五入成整點（push.round_half_away）。回傳（真的推的整點, change_trend 的訊息）。時刻表、決戰、管理者不走這裡。"""
-    tuning = content.config.push_resistance
-    moved = amount
+    tuning = push.tuning_for(state.world, content)  # 21 天季照自己那一組（7.4）
+    moved = push.round_half_away(amount)
     if tuning.enabled and amount:
         moved = push.round_half_away(push.resistance(rules.trend_value(state, content, front), amount, tuning))
     return moved, rules.change_trend(state, content, front, moved)
@@ -375,10 +428,11 @@ def _complete(state: GameState, content: Content, o: Order) -> list[str]:
     o.done, o.done_time = True, state.world.time
     t = template_of(content, o)
     effect, sign = t.effect, SIGN.get(o.faction, 0)
+    share = content.config.season21_daily.order_effect_share if daily(state, content) else 1.0  # 21 天季一天一道：效果量打折（7.1）
     msgs: list[str] = []
 
     def apply(nominal: int) -> int:
-        moved, lines = front_push(state, content, o.front, sign * nominal)
+        moved, lines = front_push(state, content, o.front, sign * nominal * share)
         msgs.extend(lines)
         return abs(moved) if sign else nominal
 
@@ -399,7 +453,7 @@ def _complete(state: GameState, content: Content, o: Order) -> list[str]:
             timetable.add_mod(state, content, event.id, o.faction, effect.event_mod)  # 沒有 roll_side 的大事 add_mod 自己略過
     elif o.template == "strike" and o.figure is not None:
         if figures.state_of(state, content, o.figure).status == "active":  # 已經退場、下獄的不再扣（RF3）
-            msgs += figures.defeat(state, content, o.figure, -effect.figure_prestige)
+            msgs += figures.defeat(state, content, o.figure, -effect.figure_prestige * share)
     top = sorted(o.progress.items(), key=lambda item: -item[1])[:TOP]  # 同次數照先出力的順序（sorted 是穩定的）
     names = "、".join(o.shown.get(name, name) for name, _ in top)
     news = f"{DONE}{fill(state, content, o, t.faction_rumor)}出力最多：{names}。"

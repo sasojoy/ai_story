@@ -172,11 +172,17 @@ class Equipment(BaseModel):
     template: str | None = None
     # 打中的隱藏配方 id（名器，打造隱藏配方設計 4.2）：名字照內容讀（forge_secrets.refresh_names，name 只當備份），加成看 equipment.named
     secret: str | None = None
+    # 四階名器（正式季整合 5.2）：主料四階照機率擲出來的名器，指到 content/tier4_named.json 的那一條（名字照它讀，name 只當備份；
+    # 加成、階品、光色看 equipment.named／is_named）。不登記、沒有首位發現；舊存檔沒有這一欄
+    named_entry: str | None = None
     # 名將本命兵器的人物 id（打造第三批）：original 一起是 True（加成照神器原品）、secret 是 None（不是打出來的，不用定名）；
     # 名字照內容讀（signature_arms.refresh_names，name 只當備份）
     signature: str | None = None
     # 以器配招（玩家武學追上本命）：神器原品的主人綁的那一門絕學 id（那一門的絕招照 GeneralTrait.ultimate_bond 加強）；None＝沒綁
     bound_art: str | None = None
+    # 神器輪替季打出來的神器（原品、仿品；正式季整合 5.8）：換季時帶著走（放進裝備庫、以器配招清掉）、本人 wear_level 級才穿得上；
+    # 上線前打的三階神器、名將本命兵器不是
+    collected: bool = False
     heirloom: bool = False  # 傳承（玉璽碎片的抄本，玉璽碎片設計 7.4）：不進裝備庫、不能換下、贈、拆、交懸賞
 
 
@@ -229,6 +235,7 @@ class GearFind(BaseModel):
     master_shown: str | None = None  # 寫給別人看的原品主人名號（打出那一刻記下；同 MartialArt.master_shown）
     divine_name: str | None = None  # 原品定的名字（world.name_divine）；還沒定是 None
     copies: int = 0  # 這一季照這個配方打出的仿品幾把（world.add_copy；神器譜寫「仿品 N 把」，不列人名）
+    season: int | None = None  # 原品打出的那一季（神器輪替的全服登記跨季，神器譜照它排；照季分的那幾列看表的 season 欄）
 
     @property
     def id(self) -> str:
@@ -537,6 +544,8 @@ class PlayerState(BaseModel):
 
     # ── 同伴（sanguo-companions 合併重寫：全服唯一，見 world_state.py）──
     team: list[str] = Field(default_factory=list)  # 目前帶在身邊出戰的同伴 id，最多 MAX_TEAM_COMPANIONS 人
+    # 鑄譜跨季記得的神器（正式季整合 5.6；第 10 批）：輪替季打中過的神器配方 id → 打中的那一爐組合鍵；換季帶著走（聽過的片子照舊一季一清）
+    divine_solved: dict[str, str] = Field(default_factory=dict)
     # 歷史武將同行：按了加入決戰、等著挑誰隨你上陣（「join:guan」「join_late:」「enlist:guan」；Game._escort_step 收）。空的是沒在挑
     escort_pick: str = ""
     # 歷史武將同行 9.6：情誼已經照「回江湖」減半、全服的記號（CompanionProgress.parted_from）還沒清的人物 id（Game._settle_partings）。
@@ -583,6 +592,7 @@ class PlayerState(BaseModel):
     armor_warned: bool = False  # 身上那件防具耐久低到 Config.armor.edge_warn 以下時提醒過一次了；修好或換一件時重設
     mount: Equipment | None = None  # 身上的坐騎（裝備四欄設計第五節）；舊存檔沒有＝沒騎馬
     hunger_warned: bool = False  # 身上那匹飽足低到 Config.mounts.edge_warn 以下時提醒過一次了；餵過或換一匹時重設
+    picking_dadian: bool = False  # 打開了「打點」那一間店（21 天季的銀兩出口，第 9 批畫面乙）；離開、同步時這裡一樣都做不了、出發都收起來
     picking_market: bool = False  # 打開了馬市的第二層選單（同 picking_smith）；離開、存檔修補、同步時人不在馬市、出發都收起來
     feasting: int | None = None  # 赴宴中（宴客，tianxia/feasts.py）：坐在哪一場宴席上（Feast.id），選單換成敬酒詞
     feasts_paid: list[int] = Field(default_factory=list)  # 領過「席間最佳」名望的宴席 id（這一季的）
@@ -591,6 +601,8 @@ class PlayerState(BaseModel):
     heirloom: Equipment | None = None  # 寶物欄的「傳承」那一格：玉璽碎片的抄本（照全服登記重抄，玉璽碎片設計 7.3、7.4）；換季帶走
     seal_seen: int = 0  # 玉璽的補送補到全服登記的第幾號（Game._deliver_seal_results）；換季帶走
     seen_real: float | None = None  # 這個人自己最近一次上線的現實秒（伺服器 act／act_look、假人自己那一輪才寫；Game.sync 不寫）：「這一季上線過」與隱沒看它（5.3、7.6）；換季帶走
+    # 挑戰本人每掉一件寶物記下季曆第幾週（Config.figure_treasure_weekly 的每週上限，正式季整合 3.8）；一季一清、叛投不清
+    treasure_weeks: list[int] = Field(default_factory=list)
     treasure_drops: set[str] = Field(default_factory=set)  # 這一季打贏後掉過寶物的大勢人物 id（6.4：同一位對同一個人每季只掉一次；裝備庫滿了沒擲的不記）
     tier3_drops: dict[str, int] = Field(default_factory=dict)  # 這一季挑戰打贏、掉過三階素材的大勢人物 id → 幾次（兵器設計 4.9；Game._figure_tier3）
     figure_wins: dict[str, int] = Field(default_factory=dict)  # 這一季挑戰打贏大勢人物本人的次數：人物 id → 幾次（大勝、險勝；本命兵器「打贏三次」，Game._challenge）。角色每季重來自然清掉；叛投不清
@@ -602,6 +614,10 @@ class PlayerState(BaseModel):
     shop_line: str = ""  # 店面上掌櫃那一句的情況鍵（店裡最後一件事：進門、買了、打完一爐……；店面獨立介面設計 1.4、6.1）：收起店時清掉
     shop_line_seed: int = 0  # 挑那一句的種子（記下那一下的季的時間，整數秒）：輪詢時同一件事一直是同一句
     shop_hold: str = ""  # 被拒的那一句撐到什麼時候（FB-192，shopview.hold_for）：被拒的原因不成立了就換回平常那一句；收起店時清掉
+    # 鐵匠講的神器規矩（素材四階，正式季整合 5.10；shopview.next_rule）：這一回進門講的那一句，與這一季講過的（content shop_lines.smith.rules
+    # 的位置，講完一輪從頭）。換季時新角色本來就是空的
+    smith_rule: str = ""
+    smith_rules_told: list[int] = Field(default_factory=list)
     shop_clue: str = ""  # 鐵匠順口說出的那一句（forge_secrets.hear_smith，1.4）：蓋過這一下的掌櫃話，下一下就換回掌櫃話；收起店時清掉
 
     @field_validator("shop_hold", mode="before")
@@ -644,8 +660,28 @@ class PlayerState(BaseModel):
     upgrade_day: int = -1  # 鐵匠鋪升階：上次升階是哪一天
     upgrades_today: dict[int, int] = Field(default_factory=dict)  # 那一天換到幾階 → 換了幾個（只記有每日上限的階，Config.economy.upgrade_per_day）
     upgrade_seq: int = 0  # 這一季升階了幾次：升階擲哪一種的種子（economy.upgrade_rng），換季歸零（種子另帶季數）
+    # 這一季三換四換了幾個（素材四階，正式季整合 4.5：一季最多 Config.four_tiers.season_cap）：換季時新角色本來就是 0（不帶過季），叛投不清
+    tier4_upgrades: int = 0
+    # 每日簽到（21 天季，正式季整合 6.2；tianxia/checkin.py）：這一季簽過的是第幾天（開季那一天是第 1 天）；換季跟著新角色清空
+    checkin_days: list[int] = Field(default_factory=list)
+    checkin_picks: dict[int, str] = Field(default_factory=dict)  # 四階的日子挑到哪一樣（第幾天 → 素材 id；領過那一句照它寫，FB-438）
+    # 四階的來源（第 4 批）：這一季打贏過、擲過四階的大勢人物（只看這一季第一次，另一本帳，不讀 tier3_drops）與掉了幾個（challenge_cap）
+    tier4_wins: list[str] = Field(default_factory=list)
+    tier4_challenge_drops: int = 0
+    # 出陣攻打贏的稀有掉落（正式季整合 2.6）：這一季掉了幾件寶物、幾匹良駒（Config.sortie.treasure_cap、horse_cap；換季跟著新角色歸零）
+    sortie_treasures: int = 0
+    sortie_horses: int = 0
     donate_day: int = -1  # 大本營捐軍備：上次捐是哪一天
     donated_today: int = 0  # 那一天捐了幾點貢獻（Config.economy.donate_daily_cap）
+    # 銀兩出口（21 天季，正式季整合 6.5；tianxia/silver.py）。「那一天」照回體丹的換日；一季一清（換季時新角色本來就是預設）
+    silver_donate_day: int = -1  # 捐銀兩：上次是哪一天
+    silver_donated: int = 0  # 那一天捐了幾兩（Config.silver_outlets.donate_daily_silver）
+    mentor_day: int = -1  # 名師指點：上次請是哪一天（一天一次）
+    mentor_ready: bool = False  # 請了、還沒用掉：下一次修練升品的機率加 mentor_bonus
+    furnace_day: int = -1  # 看火候：上次請是哪一天（一天一次）
+    furnace_ready: bool = False  # 請了、還沒用掉：下一次合成或打造的品質基準換成 furnace_odds
+    legend_silver_bought: int = 0  # 這一季在醫館用銀兩買了幾枚破境丹（撿到的、用心得換的都不算；FB-370 以前跟下面那一欄同名，兩條路共用一個數）
+    bribed: dict[str, int] = Field(default_factory=dict)  # 打點門路：大勢人物 id → 上次打點是哪一天（一位一天一次）
     picking_donate: bool = False  # 大本營的捐軍備選單開著（act:donate → donate:<素材>:<個數>／donate:back），不花體力
     # ── 酒肆（tianxia/tavern.py）──
     picking_tavern: bool = False  # 酒肆開著（act:tavern → tavern:*）；離開、存檔修補、同步時人不在酒肆、出發都收起來
@@ -928,6 +964,7 @@ class Bounty(BaseModel):
     kind: str  # "strike" 討伐、"scout" 打探、"escort" 護送、"wanted" 通緝、"art" 求藝、"arms" 求兵
     faction: str | None  # 掛單的陣營（通緝是掛單人的陣營）；散人兩邊都能接，陣營的人只能接自己陣營的
     week: int  # 掛出來的那一週（季曆）
+    day: int = 0  # 21 天季每天一批：掛出來的那一天（季曆第幾天，bounties.issue_day）；其他季 0（正式季第 5 批）
     expires: float  # 世界秒：過了就下榜、不能揭（通緝沒人完成時把押金退給掛單的人）；過期但還有人揭著的留到他們同步（deliver_lapses）
     silver: int
     deeds: int  # 完成時給散人的俠名（ranger.add_deeds）
@@ -1127,6 +1164,13 @@ class WorldState(BaseModel):
     # 開關打開時還在跑的舊季照它自己的章走：不跑季曆與時刻表，也不會因為設定的季長變短就一口氣收掉。
     season_one: bool = False  # 這一季開季時第一季濃縮版的規則是不是開著
     haoqiang_allied: bool = False  # 這一季開季時豪強分屬兩軍是不是開著（allied.on 還要第一季的章）；舊季讀檔是 False
+    season21: bool = False  # 這一季開季時 21 天季的骨架是不是開著（Config.season21；calendar.season21_on 還要設定也開著）
+    precise_actions: bool = False  # 這一季開季時一類一顆是不是開著（Config.precise_actions；precise.on 還要設定也開著）
+    cal_offset: float = 0.0  # 21 天季：開季那一刻離那一週台灣週一 00:00 幾個季曆秒（calendar.anchor_offset）；其他季是 0
+    # 21 天季暫停再繼續時偏移改過的紀錄（FB-332；world.realign_paused_calendar）：每一筆（until, offset）＝世界秒 until 之前用的是 offset，
+    # 照先後排；until 之後照下一筆，最後照 cal_offset。以前寫下的時刻（江湖史、傳聞、江湖紀錄、戰報）照那一刻當時的偏移換成季曆
+    # （calendar.offset_at），不跟著往後挪。存在季的 JSON 裡；其他季一直是空的
+    cal_offset_history: list[tuple[float, float]] = Field(default_factory=list)
     length_days: float | None = None  # 這一季的長度（遊戲日）；None＝T2 之前開的季，一律照 models.DEFAULT_SEASON_DAYS（FB-037）
     # ── 時刻表（計畫 T2；鎖定、搶輸、豪強、一般伏筆修正由 T7 寫入）──
     timeline: dict[str, TimelineResult] = Field(default_factory=dict)  # 大事 id → 結算結果（有就不再結算）
@@ -1141,6 +1185,7 @@ class WorldState(BaseModel):
     mandate: bool = False  # 天命之季（玉璽碎片設計 8.1；換季時由 seal.stamp_mandate 蓋，季的規則看它）
     mandate_result: str | None = None  # 天命之爭得天命的那一軍；"" 是天命未定；None 是還沒定（季末看它，world.evaluate_ending）
     hooked_week: int = 0  # 週初的掛鉤（world.WEEK_HOOKS）已經跑到第幾週；0＝還沒跑過
+    hooked_day: int = 0  # 21 天季每天 00:00 的掛鉤（world.DAY_HOOKS）已經跑到季曆第幾天；0＝還沒跑過（正式季第 5 批）
     # ── 時刻表決戰開集結（計畫 T8）：季的事在 mutate 裡只記號，mutate 外面才開（world.open_waiting_showdown）──
     showdowns_waiting: list[str] = Field(default_factory=list)  # 時間到了、還沒開成的決戰 id，照時間先後（另一場還在打就等）
     showdowns_opened: dict[str, str] = Field(default_factory=dict)  # 開過集結的決戰 id → 開的那一筆 BattleDef；開過就不再開
@@ -1169,6 +1214,7 @@ class WorldState(BaseModel):
     # 自動掛單已經掛到第幾週（季曆；bounties.issue 的第二道擋）：第一季那一條（WEEK_HOOKS，照 hooked_week）與規則關著的季那一條
     # （bounties.tick）都直接叫 issue，同一週叫幾次都只掛一次。不借 hooked_week：規則關著的季它一直是 0（懸賞榜設計 3.2）
     bounty_week: int = 0
+    bounty_day: int = 0  # 21 天季每天一批的懸賞已經掛到季曆第幾天（bounties.issue_day 的擋；正式季第 5 批）
     invites: list[Invite] = Field(default_factory=list)  # 玩家之間還在等回覆的邀請（invites.py；換季整個重來）
     spar_tally: dict[str, list[int]] = Field(default_factory=dict)  # 切磋的每日次數：「名號鍵|名號鍵」（排序）→ [遊戲日, 次數]
     gift_tally: dict[str, list[int]] = Field(default_factory=dict)  # 贈物的每日次數（FB-116）：同 spar_tally，不分誰送誰
@@ -1203,6 +1249,8 @@ class WorldState(BaseModel):
     # 素材與經濟（企劃者 2026-10-15）：開季時照 Config.forge_secrets 蓋的章（world_state.stamp_season）；舊季沒有這兩欄＝False（照舊）
     forge_divine_per_kind: bool = False  # 神器配方每種兵器一季最多一條（forge_secrets.active）
     forge_split_clues: bool = False  # 神器配方的線索拆三片（forge_secrets.hear、hear_smith、view）
+    # 神器輪替（正式季整合 5.6；第 10 批，divine.stamp 開季換季時蓋）：這一季現世的神器配方 id；None＝沒蓋章（開關關著、或上線前開的季），照舊挑
+    divine_lineup: list[str] | None = None
     renown_scale: float | None = None  # 名聲的門檻乘幾倍（開季時蓋章，world_state.stamp_season）；None＝沒有章，倍數 1
     territory: TerritoryState | None = None  # 地盤易手（出陣探索與地盤設計第四節）；None＝還沒算過
     # ── 擂台賽（tianxia/arena.py；換季整個重來）──

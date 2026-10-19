@@ -21,7 +21,7 @@ from __future__ import annotations
 import math
 import random
 
-from . import equipment, mounts
+from . import calendar, equipment, mounts
 from .models import GOOD_HORSE, Content, SteedDef
 from .state import Equipment, GameState, PlayerState
 
@@ -65,6 +65,7 @@ PRIZE_GOT = "{issuer}另有重賞，交到你手上。"  # 待 joy 潤
 GIFT_LINE = "{general}把【{gift}】交到你手上：『你我投緣，這個你拿著。』"  # 待 joy 潤（6.3；GiftDef.line 沒寫時用這一句）：他就在你身邊
 GIFT_SENT_LINE = "{general}託人送來【{gift}】，捎話說：『你我投緣，這個你拿著。』"  # 待 joy 潤（FB-139）：他不在你身邊
 GIFT_TITLE = "名將贈禮"  # 待 joy 潤（FB-139、FB-149）：名將贈禮與本命兵器另起一則江湖紀錄，不接在當下那個動作裡
+HORSE_GAIN_LINE = "良駒【{name}】"  # 待 joy 潤：出陣掉的良駒寫在戰報「得失」那一格（FB-430，同 GAIN_LINE）
 GAIN_LINE = "寶物【{name}】"  # 待 joy 潤：戰報「得失」那一格（同 weapons.GAIN_LINE：素材寫「精鐵砂 ×1」，寶物寫「寶物【烏木名刺】」）
 DROP_LINE = "{who}走得匆忙，落下了【{name}】，你撿了起來。"  # 待 joy 潤（6.4 挑戰本人；FB-140：前一句已經是「某某敗走。」，不再寫一次敗走）
 
@@ -236,17 +237,22 @@ def _silver(state: GameState, content: Content, line: str) -> list[str]:
     return [line, f"銀兩 +{n}"]
 
 
-def _give_horse(state: GameState, content: Content, rng: random.Random, *, hold: bool) -> list[str]:
+def _give_horse(state: GameState, content: Content, rng: random.Random, *, hold: bool, got: list[str] | None = None) -> list[str]:
+    """got 給了就把戰報「得失」那一格的字（HORSE_GAIN_LINE）接上去（出陣，FB-430）。"""
     item = good_horse(state, content, rng)
+    if got is not None:
+        got.append(HORSE_GAIN_LINE.format(name=item.name))
     return [GOT_HORSE.format(grade=mounts.grade(item), name=item.name), *deliver(state, content, item, hold=hold)]
 
 
-def _give_pool(state: GameState, content: Content, rng: random.Random, *, hold: bool) -> list[str]:
-    """從掉落池給一件你還沒有的；都有了改給銀兩。呼叫端（不寄放的）先確認拿得下。"""
+def _give_pool(state: GameState, content: Content, rng: random.Random, *, hold: bool, got: list[str] | None = None) -> list[str]:
+    """從掉落池給一件你還沒有的；都有了改給銀兩。呼叫端（不寄放的）先確認拿得下。got 給了就把「得失」那一格的字接上去（FB-430）。"""
     tid = pick_pool(state, content, rng)
     if tid is None:
         return _silver(state, content, ALL_OWNED.format(silver=content.config.treasures.dup_silver))
     item = new_treasure(state, content, tid)
+    if got is not None:
+        got.append(GAIN_LINE.format(name=item.name))
     effect = effect_text(content, content.gear.treasures[tid].effect)
     return [GOT.format(name=item.name, effect=effect), *deliver(state, content, item, hold=hold)]
 
@@ -383,6 +389,15 @@ def gifts_due(state: GameState, content: Content, present: frozenset[str] | set[
 
 # ---- 挑戰本人掉落（6.4）----
 
+def _week(state: GameState, content: Content) -> int:
+    return calendar.point(state.world.time, content, state.world).week
+
+
+def week_full(state: GameState, content: Content) -> bool:
+    """這一週（季曆）挑戰本人掉的寶物到了 Config.figure_treasure_weekly 件（0＝不設，週末與 14 天的季）。"""
+    weekly = content.config.figure_treasure_weekly
+    return bool(weekly) and state.player.treasure_weeks.count(_week(state, content)) >= weekly
+
 def challenge_drop(state: GameState, content: Content, figure: str, season: int, record_id: int) -> tuple[Equipment | None, list[str]]:
     """打贏大勢人物本人（Game._challenge 打贏那一支、_rout 之後）：challenge_chance 掉一件掉落池裡你還沒有的寶物（都有了改給銀兩）。
     同一位人物對同一個人每季只掉一次（treasure_drops），一人一季最多 figure_treasure_cap 件（挑戰每季都有設計丁 (c)，叛投不清）；
@@ -393,16 +408,46 @@ def challenge_drop(state: GameState, content: Content, figure: str, season: int,
     cap = content.config.figure_treasure_cap  # 丁 (c)：挑戰本人掉的寶物一人一季最多幾件（照 treasure_drops 的長度；0＝不設）
     if not on(content) or figure in p.treasure_drops or not room_for(state, content, "treasure") or (cap and len(p.treasure_drops) >= cap):
         return None, []
+    if week_full(state, content):  # 每週上限（21 天季，正式季整合 3.8）：到了不擲、也不記掉過
+        return None, []
     rng = random.Random(f"寶|{season}|{p.name}|{record_id}")
     if rng.random() >= cfg.challenge_chance:
         return None, []
     p.treasure_drops.add(figure)
+    p.treasure_weeks.append(_week(state, content))
     tid = pick_pool(state, content, rng)
     if tid is None:
         return None, _silver(state, content, ALL_OWNED.format(silver=cfg.dup_silver))
     item = new_treasure(state, content, tid)
     who = content.figures[figure].name if figure in content.figures else figure
     return item, [DROP_LINE.format(who=who, name=item.name), *deliver(state, content, item)]
+
+
+# ---- 出陣攻打贏的稀有掉落（正式季整合 2.6，第 4 批）----
+
+SORTIE_TREASURE = "敵陣裡翻出一件好東西。"  # 待 joy 潤：出陣掉寶物那一句（接著 GOT）
+SORTIE_HORSE = "敵將棄下的坐騎還繫在營外。"  # 待 joy 潤：出陣掉良駒那一句（接著 GOT_HORSE）
+
+
+def sortie_rare(state: GameState, content: Content, season: int, record_id: int) -> tuple[list[str], list[str], int]:
+    """出陣攻打贏另擲寶物與良駒（2.6；Config.sortie）：寶物從挑戰本人的掉落池抽你還沒有的（都有了換銀兩），帳另記一本
+    （PlayerState.sortie_treasures，一季 treasure_cap 件，不讀挑戰本人的額度）；良駒一季 horse_cap 匹。那一欄關著、到了上限、
+    裝備庫滿了都不擲也不記。自己一份亂數（出陣稀有|季數|名號|戰報流水號|用途），不碰 Game.rng。
+    回（江湖紀錄的話, 戰報「得失」那一格的字〔寶物【X】、良駒【X】，FB-430〕, 掉落池都有了換的銀兩〔算進得失的銀兩，FB-434〕）。"""
+    p, cfg = state.player, content.config.sortie
+    silver = p.stats.get("silver", 0)
+    lines: list[str] = []
+    gains: list[str] = []
+    seed = f"出陣稀有|{season}|{p.name}|{record_id}"
+    if (on(content) and p.sortie_treasures < cfg.treasure_cap and room_for(state, content, "treasure")
+            and random.Random(seed + "|寶物").random() < cfg.rare_treasure):
+        p.sortie_treasures += 1
+        lines += [SORTIE_TREASURE, *_give_pool(state, content, random.Random(seed + "|寶物抽"), hold=False, got=gains)]
+    if (equipment.on(content, "mount") and p.sortie_horses < cfg.horse_cap and room_for(state, content, "mount")
+            and random.Random(seed + "|良駒").random() < cfg.rare_horse):
+        p.sortie_horses += 1
+        lines += [SORTIE_HORSE, *_give_horse(state, content, random.Random(seed + "|良駒抽"), hold=False, got=gains)]
+    return lines, gains, p.stats.get("silver", 0) - silver
 
 
 # ---- 機器人（設計第九節）：整季機器人與伺服器假人共用 ----

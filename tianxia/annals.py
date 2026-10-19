@@ -115,7 +115,8 @@ def figure_name(content: Content, figure: str) -> str:
 
 def _notable(item) -> bool:
     """哪些裝備值得寫：寶物、良駒名駒（二階以上的馬）、名器（照隱藏配方打的）、神器的原品。"""
-    return item.slot == "treasure" or (item.slot == "mount" and item.tier >= 2) or bool(item.secret) or item.original
+    return (item.slot == "treasure" or (item.slot == "mount" and item.tier >= 2) or bool(item.secret)
+            or item.named_entry is not None or item.original)  # 四階擲出的名器也算（正式季整合 5.2）
 
 
 def _gear(state: GameState) -> dict[str, str]:
