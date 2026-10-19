@@ -2542,6 +2542,33 @@ class InsightStrong(_Strict):
     duplicate_xinde: int = Field(default=15, ge=0)  # 在最濃的地方又悟到一次已經會的那一種，化成的心得（平常 duplicate_insight_xinde）
 
 
+class TerrainArts(_Strict):
+    """武學隨地理環境（地利；企劃者 10/17 清單第 36 項，計畫 2026-10-18-武學隨地理環境）：一般的仗（遊歷、出陣、探索撞上的野怪、
+    練功、劇情戰、挑戰大勢人物本人）裡，本人與出戰同伴身上的武學、內功一門一門比這一地最濃的意境（insights.strong_of）：
+    同一路 ×match、被它剋 ×clash，其餘不動（tianxia/terrain.py）。部下不吃；決戰、擂台、頭目戰、奪璽單挑、護衛、切磋、截殺、
+    設伏不算；江湖水漲浮難度不算。enabled 關掉（或 insight_strong 關著）一個字都不變：倍數 1、戰報沒有那一句、輿圖沒有那一行、
+    玩法說明沒有那一句。"""
+
+    enabled: bool = True
+    match: float = Field(default=1.10, gt=0)  # 【預設】那一門跟最濃的意境同一路（PM 2026-10-19：企劃者說可以派下去，照 PM 先定的）
+    clash: float = Field(default=0.95, gt=0)  # 【預設】那一門被最濃的意境剋（水地裡的剛、山地裡的快）
+    # 戰報那一句（一場最多一句，同一路先於相剋、本人先於同伴；不寫倍數）：鍵 match:<意境 id>、clash:<意境 id>、mate_match（{name}）。
+    # 全部待 joy 潤
+    lines: dict[str, str] = Field(default_factory=lambda: {
+        "match:huo": "此地火氣正旺，你的剛猛之勁越打越烈。",
+        "clash:huo": "火氣燥烈，你的柔勁被逼得散了。",
+        "match:shui": "水氣漫過陣前，你的柔勁如魚得水。",
+        "clash:shui": "水氣沉沉，你的剛猛之勁施展不開。",
+        "match:shan": "山勢壓著陣腳，你的沉穩功夫在這裡更穩。",
+        "clash:shan": "山路崎嶇，你的快招總慢了半步。",
+        "match:feng": "風從背後推來，你的快招如虎添翼。",
+        "clash:feng": "風急勢亂，你的慢功夫跟不上。",
+        "mate_match": "{name}的功夫與此地的氣象相合。",
+    })
+    # 輿圖地利那一行的屬性字（terrain.place_line：「此地水氣最濃：柔勁的功夫在這裡得勢，剛猛的施展不開。」；待 joy 潤）
+    words: dict[str, str] = Field(default_factory=lambda: {"柔": "柔勁", "剛": "剛猛", "快": "快招", "慢": "沉穩"})
+
+
 class TerritoryRules(_Strict):
     """地盤易手（設計第四節；tianxia/territory.py）。enabled 關掉：沒有控制方，隊伍照 Location.enemies，價錢照原價。"""
 
@@ -2825,6 +2852,7 @@ class Config(_Strict):
     # 當地自己的事件都抽不到時照舊補上，池子裡只有這幾則時不受上限（events.pick_event）
     precise_aftermath_share: float = Field(default=0.3, ge=0, le=1)
     insight_strong: InsightStrong = Field(default_factory=InsightStrong)  # 意境提示：每個地點最濃的意境（見 InsightStrong）
+    terrain_arts: TerrainArts = Field(default_factory=TerrainArts)  # 地利：武學跟此地最濃的意境同一路或被剋（見 TerrainArts）
     territory: TerritoryRules = Field(default_factory=TerritoryRules)  # 地盤易手（見 TerritoryRules）
     ambush: AmbushRules = Field(default_factory=AmbushRules)  # 設伏劫道（見 AmbushRules）
     fortify: FortifyRules = Field(default_factory=FortifyRules)  # 修築工事（見 FortifyRules）

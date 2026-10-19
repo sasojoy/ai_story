@@ -640,6 +640,7 @@ def _fight_card(on):
     from conftest import classic_rules
     from tianxia.engine import Game
 
+    on.config.terrain_arts.enabled = False  # 地利那一句會讓得失接在「結果」後面（武學隨地理環境）；這裡驗的是沒有敘事的那張卡
     game = Game.new(classic_rules(on), "甲", rng=random.Random(0))  # 拿散人的遊歷打一場（出陣開著時散人沒有這顆鈕）
     game.client = None
     game.state.player.location = "yingshui"

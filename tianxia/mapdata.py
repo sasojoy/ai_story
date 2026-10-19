@@ -8,7 +8,8 @@ import hashlib
 from collections.abc import Callable
 
 from . import (
-    atlas, bounties, calendar, equipment, figures, insights, mapart, mapview, mounts, orders, rules, sensing, territory, timetable,
+    atlas, bounties, calendar, equipment, figures, insights, mapart, mapview, mounts, orders, rules, sensing, terrain, territory,
+    timetable,
 )
 from .models import Content, Location
 from .state import GameState, TerritoryWeek, WorldState
@@ -51,7 +52,7 @@ def insight_pool(loc: Location, content: Content) -> list[str]:
 
 def base(state: GameState, content: Content) -> dict:
     """底圖與清單（這裡不快取：伺服器 server.map_base_view 照 base_key 快取）。每個地點帶悟得到什麼、最濃、地形（意境提示設計第六節：
-    內容的事實，不是這一刻的狀態，所以放底圖不放疊層）。"""
+    內容的事實，不是這一刻的狀態，所以放底圖不放疊層），與地利那一行（terrain.place_line，同一個道理）。"""
     shown = mapview.open_places(state, content)
     keep = set(shown)
     places = []
@@ -63,6 +64,7 @@ def base(state: GameState, content: Content) -> dict:
             "big": loc.important, "region": region.id if region is not None else None,
             "insights": insight_pool(loc, content), "strong": None if loc.prologue_only else insights.strong_of(loc, content),
             "terrain": next(iter(sensing.terrain_tags(loc)), ""),
+            "terrain_arts": terrain.place_line(content, loc_id),  # 地利那一行（武學隨地理環境）；沒有地利是空字串
         })
     edges = [[a, z] for a in shown for z in content.locations[a].connections if a < z and z in keep]
     regions = [{
@@ -261,10 +263,11 @@ def _flips(world: WorldState, loc_id: str, now_week: int) -> list[dict]:
 
 
 def state(
-    state: GameState, content: Content, *, odds: atlas.Odds, sortie_mode: Callable[[str], str | None],
+    state: GameState, content: Content, *, odds: Callable[..., str], sortie_mode: Callable[[str], str | None],
     sorties_left: int | None, real_minutes: Callable[[float], int],
 ) -> dict:
-    """疊層（設計第九節）。odds 是 Game.odds（這裡記住、同一支隊伍只算一次）；sortie_mode(地點) 是 sortie.mode 的結果；
+    """疊層（設計第九節）。odds 是 Game.odds，照 odds(隊伍, at=地點) 問：每一處的勝算照那一處的地利算（terrain.strong_at，
+    武學隨地理環境計畫第六節）；這裡記住，同一支隊伍、同一種地利只算一次；sortie_mode(地點) 是 sortie.mode 的結果；
     sorties_left 是今天還能出陣幾次（散人、出陣關著是 None）；real_minutes 把世界秒換成現實分鐘（Game._real_minutes）。
 
     {"key", "now_week", "weeks_total", "season_one", "territory", "faction", "sides", "here", "stamina", "sorties_left",
@@ -275,12 +278,17 @@ def state(
      "suggest": [{"id","sortie","why": [[字, 種類]],"minutes","score","lose"}], "chart": [{"name","spots"}],
      "weeks": [{"week","control","ropes","geju","events","changed"}], "start": None | {地點: 開季那一刻的控制方}}"""
     s, c, w, p = state, content, state.world, state.player
-    memo: dict[str, str] = {}
+    memo: dict[tuple[str, str | None], str] = {}
 
-    def odds_once(squad_id: str) -> str:
-        if squad_id not in memo:
-            memo[squad_id] = odds(squad_id)
-        return memo[squad_id]
+    def odds_at(loc_id: str) -> atlas.Odds:
+        strong = terrain.strong_at(c, loc_id)
+        lie = strong.id if strong is not None else None
+
+        def ask(squad_id: str) -> str:
+            if (squad_id, lie) not in memo:
+                memo[squad_id, lie] = odds(squad_id, at=loc_id)
+            return memo[squad_id, lie]
+        return ask
 
     faction, on = rules.side_of(s, c), territory.on(c)  # 豪強分屬兩軍：照依附那一軍算自家、敵方
     weeks_total = c.config.season_weeks
@@ -300,7 +308,7 @@ def state(
         route = None if here else (routes.get(loc_id) if p.journey is None else atlas.way_to(s, c, loc_id))
         if route is not None and not route.path:
             route = None
-        listed = _foes(s, c, loc, odds_once, faction)
+        listed = _foes(s, c, loc, odds_at(loc_id), faction)
         worst = _worst(listed)
         places[loc_id] = {
             "control": territory.controller(w, c, loc_id),

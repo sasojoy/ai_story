@@ -104,6 +104,8 @@ class Boost(BaseModel):
     outer: float = 0.0  # 武學（外功）威力加幾成：臂力
     inner: float = 0.0  # 內功威力加幾成：根骨
     factor: float = 1.0  # 整個人的乘數：內外搭配 × 正邪共鳴（計畫二 Task 3）
+    outer_scale: float = 1.0  # 武學那一門自己的倍數，乘在 (1＋outer) 之後：地利（terrain.factor，計畫 2026-10-18 2.1）
+    inner_scale: float = 1.0  # 內功那一門自己的倍數，乘在 (1＋inner) 之後：地利
 
 
 BOOST_FLOOR = 0.1  # 1 + 加成再低也夾在這裡：屬性被扣到很低時威力變小，但不會變成負的
@@ -118,16 +120,17 @@ def member_power(
     `condition` 是氣血狀態係數（見 condition_of）：帶傷上陣的人出手比較弱。呼叫端算好傳進來，
     因為氣血上限要讀 content 的設定，而這個模組刻意只處理數字、不碰內容模型。
     `boost` 是這個人的加成（本人、同伴、部下各一份，見 team.player_boost、mate_boost、follower_boost）：outer 乘在武學的威力上、
-    inner 乘在內功的威力上（所以只放大內功那一項加成，不是整個人）、factor 乘在整個人上。
+    inner 乘在內功的威力上（所以只放大內功那一項加成，不是整個人）、factor 乘在整個人上；outer_scale、inner_scale 是那一門
+    自己的倍數（地利），跟 outer、inner 疊乘。
     """
     if not member.wugong_id or member.wugong_id not in arts:
         return 0.0
     boost = boost or Boost()
     wugong = arts[member.wugong_id]
-    power = power_at(wugong, member.wugong_level) * max(BOOST_FLOOR, 1 + boost.outer)
+    power = power_at(wugong, member.wugong_level) * max(BOOST_FLOOR, 1 + boost.outer) * boost.outer_scale
     if member.neigong_id and member.neigong_id in arts:
         neigong = arts[member.neigong_id]
-        inner = power_at(neigong, member.neigong_level) * max(BOOST_FLOOR, 1 + boost.inner)
+        inner = power_at(neigong, member.neigong_level) * max(BOOST_FLOOR, 1 + boost.inner) * boost.inner_scale
         power *= 1 + inner / NEIGONG_BONUS_DIVISOR
     power *= boost.factor
     if opponent_attribute and counters(wugong.attribute, opponent_attribute):

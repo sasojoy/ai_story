@@ -50,6 +50,9 @@ def explore_line(
 
 EXPLORE_MODES = "點開三選一：找素材{fight}、找事件，或靜心感悟{sense}。"  # 待 joy 潤：行動列底下探索那一行（出陣探索與地盤設計第三節）
 STRONG_HOWTO = "每個地點有一種意境最濃（輿圖「意境」濾鏡上圓盤的顏色），選對那一種的做法比較容易悟成。"  # 意境提示設計第二節（不寫數字）
+# 地利（武學隨地理環境計畫 Task 5；不寫倍數，待 joy 潤）
+TERRAIN_HOWTO = ("- 各地的氣象不同：身上的武學、內功跟此地最濃的意境同一路，打起來順手；被它剋的，施展不開。"
+                 "輿圖上點地點，「地利」那一段寫著此地利哪一路。")
 EXPLORE_FIGHT = "（這裡可能撞上怪，打贏是經驗的大宗）"
 EXPLORE_CALM = "（這裡不會撞上怪）"
 EXPLORE_NO_SENSE = "（這裡悟不出什麼）"
@@ -1068,6 +1071,7 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
            else "選錯了，那裡要過一陣子才悟得出（選之前卡上就寫著要到什麼時候）；")
         + "選對了還要看機緣（沒抓住也有一點心得），"
         "抓住了可以畫一筆，也可以順其自然。哪裡悟得到什麼看地形。" + (STRONG_HOWTO if cfg.insight_strong.enabled else ""),
+        *([TERRAIN_HOWTO] if cfg.terrain_arts.enabled and cfg.insight_strong.enabled else []),
         "- 善名、惡名夠高也會悟到意境。合成、合併都不會把意境用掉（自己熔掉才沒了）。",
         "- 一門武學融一個意境，合成新的武學；兩門武學也能合出第三門；兩個意境合併成新的意境。"
         f"悟到已經會的，化成 {cfg.duplicate_insight_xinde} 心得。",

@@ -21,7 +21,7 @@ from . import (
     fight_llm, figure_aid, figure_life, figures, foreshadow, four_tiers, gather_llm, generals, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, letters, library, mapdata, martial_arts, feasts,
     materials, mounts, naming, opportunities, orders, precise, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
     shopview, signature, signature_arms, silver, skill_slots, skillview, smithing,
-    social, sortie, styles, tactics, team, territory, timetable, traits, treasures, weapons, works, zh, yuedan,
+    social, sortie, styles, tactics, team, terrain, territory, timetable, traits, treasures, weapons, works, zh, yuedan,
 )
 from . import ambush as ambush_rules  # 設伏劫道（後期體力玩法第一批）；叫 ambush_rules：這個檔裡有區域變數叫 ambush
 from . import duel as duel_rules  # 單人頭目戰（Joy 2026-10-10）
@@ -1964,8 +1964,9 @@ class Game:
             label = choice_label(choice, self.state, self.content, self.world)
         return label + bounties.join_note(self.state, self.content, choice)
 
-    def odds(self, squad_id: str) -> str:
-        return team.estimate(self.state, self.content, self.world, squad_id, memo=self.odds_memo)
+    def odds(self, squad_id: str, at: str | None = None) -> str:
+        """勝算的字。at：照哪一處的地利算（輿圖替每一處算，武學隨地理環境計畫第六節）；不給是此刻腳下（在路上沒有）。"""
+        return team.estimate(self.state, self.content, self.world, squad_id, memo=self.odds_memo, at=at)
 
     def _save_season(self) -> None:
         """choose()/travel() 直接在 self.state.world 上就地修改（check_thresholds、
@@ -2893,6 +2894,15 @@ class Game:
         那一路。其他時候（不是大場面、第一季沒開、不相干的一路）什麼都不說。"""
         style = styles.style_of(self.state, self.content, self.world, squad)
         return styles.note(self.content, style, team.worn_attribute(self.state, self.content, self.world), result.tier)
+
+    def _terrain_note(self) -> list[str]:
+        """地利（武學隨地理環境）在戰報裡含蓄的一句：本人身上那兩門跟此地最濃的意境同一路或被它剋，或只有出戰同伴對上
+        （terrain.note）；打贏打輸都寫，不寫倍數。開關關著、在路上、這裡沒有最濃的意境什麼都不說。"""
+        strong = terrain.here(self.state, self.content)
+        if strong is None:
+            return []
+        mine, mates = team.terrain_attributes(self.state, self.content, self.world)
+        return terrain.note(self.content, strong, mine, mates)
 
     @staticmethod
     def _narrate(record, result: encounter.EncounterResult, judged: fight_llm.Judgment | None) -> None:
@@ -7403,7 +7413,7 @@ class Game:
         result = self._fight_with(squad, judged, tier=scripted)
         record = battlelog.new_record(s, c, self.world, squad, result, "wild" if wild else "sortie" if as_sortie else "train")
         if scripted is None:
-            record.notes += self._style_note(squad, result)
+            record.notes += self._style_note(squad, result) + self._terrain_note()
         self._narrate(record, result, judged)
         msgs: list[str] = []
         if result.tier in team.WIN_TIERS:
@@ -7956,7 +7966,7 @@ class Game:
         squad = figures.squad_of(s, c, fid)
         if not rise.on(c):
             return squad
-        power = team.power_vs(s, c, self.world, squad, fresh=True)
+        power = team.power_vs(s, c, self.world, squad, fresh=True, terrain=False)  # 地利不浮上去（武學隨地理環境 2.1）
         level = rise.big(c, squad.difficulty, power, s.player.figure_wins.get(fid, 0))
         return squad if level == squad.difficulty else squad.model_copy(update={"difficulty": round(level, 1)})
 
@@ -7966,7 +7976,7 @@ class Game:
         s, c = self.state, self.content
         if not rise.on(c) or not self.is_big(squad) or prologue_rules.active(s, c):
             return squad
-        level = rise.big(c, squad.difficulty, team.power_vs(s, c, self.world, squad, fresh=True))
+        level = rise.big(c, squad.difficulty, team.power_vs(s, c, self.world, squad, fresh=True, terrain=False))  # 地利不浮
         return squad if level == squad.difficulty else squad.model_copy(update={"difficulty": round(level, 1)})
 
     def _challenge(self, fid: str) -> list[str]:
@@ -7985,7 +7995,7 @@ class Game:
         judged = self._judged(squad)  # 挑戰本人一律是大場面：有鎖外的判讀就用（武學與成長設計 8.3）
         result = self._fight_with(squad, judged, difficulty=squad.difficulty, draw_floor=rise.draw_floor(c))
         record = battlelog.new_record(s, c, self.world, squad, result, "event", event=f"挑戰{fig.name}")
-        record.notes += self._style_note(squad, result)
+        record.notes += self._style_note(squad, result) + self._terrain_note()
         self._narrate(record, result, judged)
         msgs: list[str] = []
         arm_annals: list[tuple[str, str]] = []  # 本命兵器那一筆行狀：等這一場的行狀記完再記（照時間先後）
@@ -8775,7 +8785,7 @@ class Game:
         judged = self._judged(squad)  # 打頭目這種大場面：有鎖外的判讀就用（武學與成長設計 8.3）
         result = self._fight_with(squad, judged, dodge=False, difficulty=squad.difficulty)  # 劇情戰的勝敗是人寫好的：不閃（最終審查 I1）
         record = battlelog.new_record(s, c, self.world, squad, result, "event", event.title)
-        record.notes += self._style_note(squad, result)
+        record.notes += self._style_note(squad, result) + self._terrain_note()  # 劇情戰不扣氣血，地利照寫：威力真的有算
         self._narrate(record, result, judged)
         # 回合照開打時的陣容與身法演，所以要在發獎勵、套效果之前：效果可能加身法、教武學、給同伴或部下，
         # 不能回頭改寫這一場（例如 wolves 打贏身法 +1，不能變成「因為獎勵才先出手」）。
@@ -11340,7 +11350,7 @@ class Game:
         return atlas.place_choices(self.state, self.content)
 
     def place_detail(self, loc_id: str) -> str:
-        return atlas.detail_text(self.state, self.content, loc_id, self.odds)
+        return atlas.detail_text(self.state, self.content, loc_id, lambda squad_id: self.odds(squad_id, at=loc_id))  # 照那一處的地利
 
     def travel_options(self, loc_id: str) -> list[atlas.TravelOption] | None:
         return atlas.travel_options(self.state, self.content, loc_id)
