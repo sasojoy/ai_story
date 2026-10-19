@@ -24,7 +24,6 @@ GATHER_NONE = "翻了一陣，沒找到什麼能用的。"  # 待 joy 潤
 FOE_LINE = "你正翻找著，{foe}突然殺出！"  # 待 joy 潤
 SEEK_NONE = "你四處走走，這一帶眼下沒什麼事。"  # 待 joy 潤
 SEEK_EMPTY = "這一帶眼下沒什麼事"  # 待 joy 潤：一類一顆的找事件池子空了（鈕上，不帶句號；正式季整合 2.7）
-SEEK_BIAS = "這裡多半給：{kinds}"  # 待 joy 潤：找事件鈕上那一格（2.7【暫】）
 PRACTICE_LINE = "你在{place}找上{foe}練手。"  # 待 joy 潤：練功開打那一句
 NO_FOE = "這裡沒有可以練手的對手"  # 待 joy 潤（設計 2.5；鈕上不帶句號）
 NO_FOE_NEAR = "，最近的在{place}"  # 待 joy 潤：接在 NO_FOE 後面

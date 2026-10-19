@@ -1213,6 +1213,17 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
   80% { transform: translate(1.5px, 1px) rotate(1deg); } 100% { transform: translate(0, 0) rotate(0); }
 }
 
+/* 應召的橫幅（一類一顆開著時，設計 9.1 第 1 組乙）：行動列上面一條，左邊直書「召見」，右邊一顆金框的鈕 */
+.summons-strip { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 8px; margin: 0 0 8px; padding: 6px 8px;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+.summons-strip > span { font: 600 12px var(--serif); color: var(--ink-2); letter-spacing: 2px; writing-mode: vertical-rl; }
+.summons-go { display: flex; flex-direction: column; justify-content: center; align-items: flex-start; min-height: 44px; padding: 4px 10px;
+  border: 1px solid var(--gold); border-radius: 10px; background: var(--disk); color: #ede2d3; font: inherit; text-align: left; cursor: pointer;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--gold) 40%, transparent); }
+.summons-go b { font-size: 14px; font-weight: 800; }
+.summons-go small { font-size: 12px; color: #f2c46a; white-space: nowrap; }
+.summons-go:disabled { opacity: 0.5; box-shadow: none; cursor: default; }
+
 /* ── 江湖頁的行動列：一排五顆「水墨氣勁」（企劃者 2026-10-04 給的樣式），黑底金邊、圖示、底下一行消耗 ── */
 .act-bar { display: grid; grid-template-columns: repeat(var(--cells, 4), 1fr); gap: 6px; padding: 8px 4px; margin-bottom: 12px;
   background: color-mix(in srgb, var(--disk) 5%, transparent); border: 1px dashed var(--line); border-radius: 12px; }

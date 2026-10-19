@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 from . import explore_modes, territory
-from .models import Choice, Content, Effect, Event
+from .models import Content, Effect, Event
 from .state import GameState, WorldState
 
 MEET_FLAG = "結識:"  # 結識事件立的旗標（rules.can_meet 看到它就不看名望門檻）
@@ -71,46 +71,3 @@ def actions_of(event: Event, state: GameState, content: Content) -> set[str]:
     if "train" in acts and field_with_foes(state, content):
         acts.add("explore")
     return acts
-
-
-# ── 找事件鈕上的「這裡多半給」（2.7【PM】）──
-# 名望、善名、惡名分開寫；屬性點、學武學、伏筆物品、痕跡、拜門派不算；回體力與寶物、良駒算「裝備與丹藥」；動手打贏算「經驗」。
-STAT_KINDS = {"fame": "名望", "good": "善名", "evil": "惡名", "silver": "銀兩", "xinde": "心得"}  # 待 joy 潤
-EXP_KIND, MATERIAL_KIND, INSIGHT_KIND, AFFINITY_KIND, COMPANION_KIND, GEAR_KIND = (
-    "經驗", "素材", "意境", "情誼", "同伴", "裝備與丹藥")  # 待 joy 潤
-_KINDS: dict[int, tuple[Choice, tuple[str, ...]]] = {}  # 選項 → 成功時給的幾類（照內容算一次；id 撞號時比對物件本身）
-
-
-def effect_kinds(effect: Effect) -> list[str]:
-    kinds = [STAT_KINDS[k] for k, v in effect.stats.items() if v > 0 and k in STAT_KINDS]
-    if effect.materials:
-        kinds.append(MATERIAL_KIND)
-    if effect.insights:
-        kinds.append(INSIGHT_KIND)
-    if any(v > 0 for v in effect.affinity.values()):
-        kinds.append(AFFINITY_KIND)
-    if effect.recruit:
-        kinds.append(COMPANION_KIND)
-    if effect.stamina > 0 or effect.gear:
-        kinds.append(GEAR_KIND)
-    return kinds
-
-
-def choice_kinds(choice: Choice, content: Content) -> tuple[str, ...]:
-    """這個選項成功（檢定過、打贏、沒有檢定）時給哪幾類。快取起來（內容不會變）。"""
-    hit = _KINDS.get(id(choice))
-    if hit is not None and hit[0] is choice:
-        return hit[1]
-    kinds = effect_kinds(choice.effect)
-    if choice.combat and choice.combat in content.squads and content.squads[choice.combat].exp > 0:
-        kinds.insert(0, EXP_KIND)
-    found = tuple(dict.fromkeys(kinds))
-    _KINDS[id(choice)] = (choice, found)
-    return found
-
-
-def top_kinds(shares: dict[str, float]) -> list[str]:
-    """取出現機會最多的兩類；只有一類過三成時只寫那一類。shares 是每一類的機會（0～1）。"""
-    ranked = sorted((k for k, v in shares.items() if v > 0), key=lambda k: -shares[k])
-    over = [k for k in ranked if shares[k] > 0.3]
-    return over if len(over) == 1 else ranked[:2]

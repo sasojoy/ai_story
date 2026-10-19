@@ -79,6 +79,7 @@ SOCIAL_TALK = "跟{name}說話"  # 待 joy 潤：一類一顆的交友只有一�
 SOCIAL_NO_ONE = "這裡沒有能說上話的人"  # 待 joy 潤：一類一顆的交友沒有人物、也沒有結識事件時（鈕上不帶句號）
 SECT_LABEL = "拜入{sect}"  # 待 joy 潤：拜入門派從交友搬到「此地還能做」的一顆（正式季整合 2.7）
 AUDIENCE_MEET = "先設法結識"  # 待 joy 潤：一類一顆的求見名單上，名望不夠、但這裡有他的結識事件的那一位
+SUMMONS_LABEL = "應召晉升（召見在此・不花體力）"  # 待 joy 潤：一類一顆的應召（設計 9.1 第 1 組乙，橫幅上的字）
 SNUB_NOTE = "剛吃了敗仗，閉門不見"  # 挑戰本人打贏之後，他對打贏的人關上門（軍令文件 4.5）：求見、交友、挑戰的按鈕寫這一句
 GENDER_SET = "往後江湖上以{word}相稱。"  # 設定頁選了性別（只能選一次）
 GENDER_LOCKED = "性別已經定了，改不了。"
@@ -1136,7 +1137,9 @@ class Game:
                 opts.append(Option(id="act:train", label=f"{sortie.NAME}（{sortie.RANGER_NOTE}）", enabled=False))
         opts += self._challenge_options(odds)  # 挑戰本人（T4；每季都有，figures.challenge_on）：有陣營、這裡站著敵方的大勢人物時才有
         if ranks.summons_event(s, c) is not None:
-            opts.append(Option(id="act:summons", label="應召"))  # 晉升奇遇（計畫 T5）：人在召見的地點才有，不花體力
+            # 晉升奇遇（計畫 T5）：人在召見的地點才有，不花體力。一類一顆開著時網頁畫成行動列上面一條金框橫幅（設計 9.1 第 1 組乙），
+            # 鈕上寫它自己的名字與一行小字
+            opts.append(Option(id="act:summons", label=SUMMONS_LABEL if precise.on(c, s.world) else "應召"))
         people = self._figures_here()
         if precise.on(c, s.world):  # 一類一顆（正式季整合 2.8）：交友只談話、求見併進交友；拜入門派另成一顆（2.7）
             opts += self._sect_options() + [self._precise_social_option(cost["socialize"])]
@@ -1570,24 +1573,23 @@ class Game:
         return opts
 
     def _seek_option(self, cost: int) -> Option:
-        """一類一顆的找事件（正式季整合 2.7）：鈕上寫這裡多半給哪一類（event_rules.seek_bias）；一次性奇遇與這裡可重複的事件都沒有時
-        灰掉、寫「這一帶眼下沒什麼事」，不扣體力。"""
+        """一類一顆的找事件（正式季整合 2.7）：一次性奇遇與這裡可重複的事件都沒有時灰掉、寫「這一帶眼下沒什麼事」，不扣體力。
+        鈕上不寫給什麼（企劃者 2026-10-19 推翻 2.11：「不需要寫，這本來就是探索的一部分」，設計 9.1）。"""
         s, c = self.state, self.content
         oid, name = explore_modes.option_id(explore_modes.SEEK), explore_modes.NAMES[explore_modes.SEEK]
         if not event_candidates(s, c, "explore", "rare") and not event_candidates(s, c, "explore", "common"):
             return Option(id=oid, label=f"{name}（{explore_modes.SEEK_EMPTY}）", enabled=False)
-        kinds = event_rules.seek_bias(s, c, self.world)
-        return self._cost_option(oid, name, cost, note=explore_modes.SEEK_BIAS.format(kinds="、".join(kinds)) if kinds else "")
+        return self._cost_option(oid, name, cost)
 
     def _practice_option(self, loc: Location, cost: int, odds: bool) -> Option:
-        """練功的鈕（正式季整合 2.5）：「練功（體力 6・對手・勝算・經驗約 N）」；這裡只有頭目時寫頭目那一面、直接對上；
+        """練功的鈕（正式季整合 2.5）：「練功（體力 6・對手・勝算）」（不寫經驗：企劃者 2026-10-19 推翻 2.11，設計 9.1）；這裡只有頭目時寫頭目那一面、直接對上；
         頭目冷卻中灰掉寫還要等多久、次數用完灰掉寫他這一週（季）不再現身；都沒有灰掉寫最近的對手在哪。"""
         s, c = self.state, self.content
         oid, name = explore_modes.option_id(explore_modes.PRACTICE), explore_modes.NAMES[explore_modes.PRACTICE]
         foe = self._gather_foe(loc)
         if foe is not None:
             note = f"{foe.name}・{self.odds(foe.id)}" if odds else foe.name
-            return self._cost_option(oid, name, cost, note=f"{note}・經驗約 {self._practice_exp(foe)}")
+            return self._cost_option(oid, name, cost, note=note)
         bosses = duel_rules.here(s, c)
         if not bosses:
             route = self._nearest_practice()
@@ -1603,11 +1605,6 @@ class Game:
         else:
             why = explore_modes.BOSS_GONE_WEEK if c.config.duel.per_boss_week else explore_modes.BOSS_GONE_SEASON
         return Option(id=oid, label=f"{name}（{why}）", enabled=False)
-
-    def _practice_exp(self, squad: Squad) -> int:
-        """練功鈕上的「經驗約 N」：打贏這一路給的經驗（同 _battle_rewards：寶物與遊俠名號的倍數照乘）。"""
-        more = 1 + treasures.amount(self.state, self.content, "win_exp_pct")
-        return round(squad.exp * more * ranger.exp_factor(self.state, self.content))
 
     def _nearest_practice(self) -> atlas.Route | None:
         """離這裡最近、練得到的地點（有不是自己人的隊伍或此刻遇得上的頭目）：先照摸清的路找，都走不到照所有開放的地點找（同 clinic.nearest）。"""

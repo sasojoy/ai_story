@@ -101,7 +101,7 @@ def test_practice_always_fights_one_and_is_unlimited():
     game = _game(at="changshe")
     p = game.state.player
     option = _ids(game)["explore:practice"]
-    assert option.enabled and option.label.startswith("練功（體力 6") and "經驗約" in option.label
+    assert option.enabled and option.label.startswith("練功（體力 6") and "經驗" not in option.label  # 鈕上不寫給多少（設計 9.1）
     for n in range(1, 6):
         p.stamina = 250.0
         game.choose("explore:practice")
@@ -279,12 +279,14 @@ def test_a_summons_place_still_talks(monkeypatch):
     assert "act:summons" in _ids(game) and game.dialogue_request("act:socialize") is not None
 
 
-# ── Task 5：找事件的偏向、併池、空池（2.7）──
+# ── Task 5：找事件的併池、空池（2.7；鈕上的偏向企劃者 2026-10-19 拿掉了，設計 9.1）──
 
 
-def test_seek_names_what_it_mostly_gives():
+def test_seek_does_not_say_what_it_gives():
     option = _ids(_game(at="yingchuan"))["explore:seek"]
-    assert option.enabled and option.label.startswith("找事件（體力 6・這裡多半給：")
+    assert option.enabled and option.label == "找事件（體力 6）"
+
+
 
 
 def test_an_empty_seek_pool_greys_out_for_free(monkeypatch):
@@ -296,21 +298,8 @@ def test_an_empty_seek_pool_greys_out_for_free(monkeypatch):
     assert not option.enabled and option.label == "找事件（這一帶眼下沒什麼事）"
 
 
-def test_top_kinds_takes_two_unless_one_stands_out():
-    assert precise.top_kinds({"名望": 0.5, "銀兩": 0.2}) == ["名望"]
-    assert precise.top_kinds({"名望": 0.5, "銀兩": 0.4, "善名": 0.1}) == ["名望", "銀兩"]
-    assert precise.top_kinds({"名望": 0.2, "銀兩": 0.1, "善名": 0.05}) == ["名望", "銀兩"]
-    assert precise.top_kinds({}) == []
 
 
-def test_choice_kinds_split_renown_and_skip_stat_points():
-    from tianxia.models import Choice, Effect
-
-    c = real_content("weekend")
-    choice = Choice(text="x", effect=Effect(stats={"fame": 1, "good": 1, "str": 1, "silver": -5}, stamina=10))
-    assert precise.choice_kinds(choice, c) == ("名望", "善名", "裝備與丹藥")
-    fight = Choice(text="y", combat="jun_bing", effect=Effect(stats={"xinde": 3}))
-    assert precise.choice_kinds(fight, c) == ("經驗", "心得")
 
 
 def test_after_fight_events_join_seeking_only_in_the_field_with_foes():
@@ -395,3 +384,41 @@ def test_fixture_and_switched_off_content_are_off(content):
     season = fresh_season(c)
     stamp_season(season, c)
     assert not precise.on(c, season)
+
+
+# ── 第 3 批畫面（設計 9.1 第 1 組乙）：應召獨立一行 ──
+
+
+def _summons_page(monkeypatch, precise_on=True):
+    from test_prologue_web import run, with_reveal
+
+    import server
+    from tianxia import ranks
+
+    game = _game(at="luoyang_road")
+    game.state.world.precise_actions = precise_on
+    monkeypatch.setattr(ranks, "summons_event", lambda *a, **k: next(iter(game.content.events)))
+    m = with_reveal(server.main_view(game), ["all"])
+    return m, run(m, "return H.pageJianghu();")
+
+
+def test_summons_is_a_gold_strip_above_the_action_bar(monkeypatch):
+    import webharness
+
+    if webharness.NODE is None:
+        return
+    m, html = _summons_page(monkeypatch)
+    assert m["precise"]
+    strip = html.index('class="summons-strip"')
+    assert strip < html.index('class="act-bar"') and 'data-act="choose" data-id="act:summons"' in html
+    assert "<b>應召晉升</b><small>召見在此・不花體力</small>" in html
+    assert html.count('data-id="act:summons"') == 1  # 不再收在「此地還能做」裡
+
+
+def test_summons_stays_in_the_fold_when_precise_is_off(monkeypatch):
+    import webharness
+
+    if webharness.NODE is None:
+        return
+    m, html = _summons_page(monkeypatch, precise_on=False)
+    assert not m["precise"] and 'class="summons-strip"' not in html and 'data-id="act:summons"' in html

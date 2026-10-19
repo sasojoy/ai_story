@@ -88,28 +88,6 @@ def fresh_events(state: GameState, content: Content, action: str, pool: EventPoo
     return fresh
 
 
-def seek_bias(state: GameState, content: Content, world: WorldStateStore) -> list[str]:
-    """一類一顆的找事件鈕上「這裡多半給」那幾類（正式季整合 2.7【PM】）：照此刻真的抽得到的可重複事件（fresh_events，一次性奇遇不算），
-    每則取他此刻最穩的那個有東西拿的選項（檢定照 check_outlook、動手當五成、沒檢定是十成），照抽中的權重彙總，precise.top_kinds 挑。"""
-    fresh = fresh_events(state, content, "explore", "common")
-    total = sum(e.weight for e in fresh)
-    if total <= 0:
-        return []
-    shares: dict[str, float] = {}
-    for event in fresh:
-        best: tuple[float, tuple[str, ...]] | None = None
-        for _, choice in visible_choices(event, state, content):
-            kinds = precise.choice_kinds(choice, content)
-            if not kinds:
-                continue
-            rate = check_outlook(choice.check, state, content, world).chance if choice.check else 0.5 if choice.combat else 1.0
-            if best is None or rate > best[0]:
-                best = (rate, kinds)
-        for kind in best[1] if best else ():
-            shares[kind] = shares.get(kind, 0.0) + event.weight / total
-    return precise.top_kinds(shares)
-
-
 def pick_event(
     state: GameState, content: Content, action: str, rng: random.Random, pool: EventPool | None = None,
 ) -> Event | None:
