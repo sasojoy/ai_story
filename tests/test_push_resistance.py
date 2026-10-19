@@ -152,3 +152,20 @@ def test_the_order_of_the_bands_is_checked():
     c.config.push_resistance.full_within = 40
     with pytest.raises(ContentError, match="push_resistance"):
         validate(c)
+
+
+def test_pushing_too_far_from_your_own_ground_is_not_called_deep_in_enemy_land():
+    """FB-432：在自家控制的地方守、巡哨推過頭，接「此地已穩」，不接「深入敵境」；在別人控制的地方照舊。"""
+    from tianxia import territory
+
+    game = _game()
+    w = game.state.world
+    w.trends["yingru"] = 70
+    game.state.player.location = "huangjin_camp"  # 黃巾的大本營
+    assert territory.controller(w, game.content, "huangjin_camp") == "huang"
+    msgs = game.push_trend("yingru", 4, source="duty")
+    assert push.STEADY_LINE in msgs and push.RESISTED_LINE not in msgs
+    game.state.player.faction = "guan"
+    w.trends["yingru"] = 30
+    msgs = game.push_trend("yingru", -4, source="sortie")
+    assert push.RESISTED_LINE in msgs and push.STEADY_LINE not in msgs  # 官軍在黃巾的地盤上推

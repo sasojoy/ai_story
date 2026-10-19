@@ -6513,6 +6513,13 @@ class Game:
             msgs += self._order_credit(kind="duty", front=territory.line_of(c, loc.id))
         return msgs
 
+    def _resisted_line(self) -> str:
+        """盡頭阻力打了折的那一下接哪一句（FB-432）：人站在自家陣營控制的地方（守、巡哨、傳道、在自家地盤碰上的事）推過頭是
+        STEADY_LINE，其餘（攻、散人、沒有控制方的地方）照舊 RESISTED_LINE。"""
+        side, loc = self._side(), self.state.player.location
+        mine = side is not None and loc is not None and territory.controller(self.state.world, self.content, loc) == side
+        return push.STEADY_LINE if mine else push.RESISTED_LINE
+
     def _hold_share(self) -> float | None:
         """守、攪局、守勢行動拿 _sortie_host 那一路的幾成：一類一顆開著是全額（正式季整合 2.6），關著照操練的三成（None）。"""
         return 1.0 if precise.on(self.content, self.state.world) else None
@@ -6962,12 +6969,13 @@ class Game:
         （第一季規則開著時戰線是機器可讀的戰況變化，畫面上換成一句話，見 front_lines；開關關著是既有的「（黃巾聲勢 +2）」），
         只有整數真的動了才有。
         出陣探索與地盤（2026-10-14）：推之前先照 _shaped 打事件五折、第一季出陣的季長倍數、盡頭阻力（三個開關都關著時一個字都不變），
-        打了阻力的那一下後面多一句 push.RESISTED_LINE；每人每曆日上限讀 daily_push_cap；貢獻照收到的 delta（名目量）全額記。
+        打了阻力的那一下後面多一句 push.RESISTED_LINE（站在自家控制的地方是 STEADY_LINE，_resisted_line）；每人每曆日上限讀 daily_push_cap；
+        貢獻照收到的 delta（名目量）全額記。
         source 是註記（"train"、"sortie"、"drill"、"event"、"event_once"……），不存檔。"""
         s, c = self.state, self.content
         w, p = s.world, s.player
         amount, resisted = self._shaped(trend_id, delta, source)
-        tail = [push.RESISTED_LINE] if resisted else []
+        tail = [self._resisted_line()] if resisted else []
         if not calendar.season_one_on(w, c):
             # 規則關著的季，事件的大勢效果照季長縮放（FB-165，PM 2026-10-12：季長是週末的 5.6 倍、門檻不變，每一下照舊推就一定提早
             # 收季）：零頭跟操練記在同一個 trend_accum，滿一點才推、才寫推動那一行。隱藏線浮現的那一下照原本的量（浮現的規則不變）。
