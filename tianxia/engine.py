@@ -673,6 +673,8 @@ class Game:
             mounts.close_market(p)  # 坐騎關了、人不在馬市了：收起馬市（裝備四欄 5.5），馬販那一句一併清掉
         if p.picking_donate and not self._at_own_base():
             economy.close_donate(s)  # 捐軍備關了、人不在自家大本營了（叛投、管理者挪人）：收起軍需官那一串
+        if p.picking_dadian and not self._silver_options():
+            self._close_dadian()  # 銀兩出口關了、這裡一樣都做不了了：收起打點那一間店
         if p.picking_arena and not arena.here(s, c):
             p.picking_arena = False  # 擂台關了、季收了：收起擂台
         treasures.refresh_names(p, c)  # 寶物、名駒的名字照內容讀（裝備四欄 3.1）：joy 改了名字，存檔裡的跟著改；內容拿掉了留著舊名字
@@ -818,6 +820,8 @@ class Game:
             mounts.close_market(self.state.player)  # 開關關了、人不在馬市了（內容改版、管理者挪人）：收起馬市
         if self.state.player.picking_donate and not self._at_own_base():
             economy.close_donate(self.state)  # 捐軍備關了、人不在自家大本營了：收起軍需官那一串
+        if self.state.player.picking_dadian and not self._silver_options():
+            self._close_dadian()  # 銀兩出口關了、這裡一樣都做不了了：收起打點那一間店
         if self.state.player.picking_arena and not arena.here(self.state, self.content):
             self.state.player.picking_arena = False  # 擂台關了、季收了：收起擂台
         self._ambush_expire()  # 守著的埋伏到時刻了、或季上那一筆已經沒了（被打退、換季）：收起來
@@ -1088,6 +1092,8 @@ class Game:
             return self._market_options()
         if s.player.picking_donate:
             return self._donate_options()  # 大本營的捐軍備（素材與經濟設計第六節）
+        if s.player.picking_dadian:
+            return self._silver_options() + [Option(id="dadian:back", label=silver.SHOP_BACK)]  # 打點（銀兩出口）：這裡做得了的幾樣與離開
         if s.player.picking_arena:
             return self._arena_options()
         if s.player.fs_asking is not None:
@@ -1197,7 +1203,8 @@ class Game:
         donate = self._donate_option()
         if donate is not None:
             opts.append(donate)
-        opts += self._silver_options()  # 銀兩出口（21 天季，正式季整合 6.5）
+        if self._silver_options():  # 銀兩出口（21 天季，正式季整合 6.5）：五樣收進「打點」那一間店（第 9 批畫面乙），不花體力
+            opts.append(Option(id="act:dadian", label=silver.SHOP))
         if prologue_rules.instant_rest(s, c):  # 打坐 2026-10-12 拿掉了（企劃者）；只剩序章教體力那一步的調息，一下回滿
             opts.append(Option(id="act:rest", label=PROLOGUE_REST))
         # 序章裡在草廬閒著時只留這一步要的（新手引導計畫一）；初入江湖時「此地還能做」只留教到的（新手引導第四段）
@@ -1405,6 +1412,26 @@ class Game:
         if s.player.journey is not None:
             return []
         return [fid for fid in figures.present_at(s, c, s.player.location) if c.figures[fid].character is not None]
+
+    def _silver_act(self, what: str) -> list[str]:
+        """銀兩出口的五樣（act:silver_donate、mentor、furnace、buy_legend、bribe:<人物>）。"""
+        if what == "silver_donate":
+            return self._silver_donate()
+        if what == "mentor":
+            return self._silver_mentor()
+        if what == "furnace":
+            return self._silver_furnace()
+        if what.startswith("bribe:"):
+            return self._silver_bribe(what.partition(":")[2])
+        if not (silver.on(self.content, self.state.world) and self._at_clinic_town()):
+            return [equipment.NOT_NOW]
+        return silver.buy_legend(self.state, self.content)
+
+    def _close_dadian(self) -> None:
+        """收起「打點」那一間店與掮客那一句（同 economy.close_donate）。"""
+        p = self.state.player
+        p.picking_dadian = False
+        p.shop_line, p.shop_clue, p.shop_hold = "", "", ""
 
     def _silver_bribe(self, fid: str) -> list[str]:
         s, c = self.state, self.content
@@ -1988,6 +2015,9 @@ class Game:
                 msgs = self._arena(arg)
             elif kind == "explore":
                 msgs = self._explore_mode(arg)
+            elif kind == "dadian":  # 打點那一間店的「離開」
+                self._close_dadian()
+                msgs = [silver.SHOP_CLOSED]
             elif kind == "ambush":
                 msgs = self._ambush_act(arg)
             elif kind == "works":
@@ -2280,6 +2310,8 @@ class Game:
             return mounts.MARKET
         if kind == "donate":
             return f"{economy.DONATE_TITLE}・{c.locations[s.player.location].name}"
+        if kind == "dadian":
+            return f"{silver.SHOP}・{c.locations[s.player.location].name}"
         if kind == "ambush":
             return "收伏" if arg == "lift" else f"{ambush_rules.TITLE}・{c.locations[s.player.location].name}"
         if kind == "aid":
@@ -2325,6 +2357,7 @@ class Game:
             "arena": f"{arena.ARENA}・{here}",
             "heal": f"療傷・{here}",
             "donate": f"{economy.DONATE_TITLE}・{here}",
+            "dadian": f"{silver.SHOP}・{here}",
         }
         return titles.get(arg, "提前出關")
 
@@ -2664,18 +2697,16 @@ class Game:
             return arena.standing(self.state.world, self.state.player.name, self.content.config.arena)
         if what == "heal":  # 醫館療傷（企劃者 2026-10-12）：同修練頁的療傷鈕，不花體力
             return self._heal_msgs()
-        if what == "silver_donate":  # 銀兩出口（21 天季，正式季整合 6.5）：都不花體力
-            return self._silver_donate()
-        if what == "mentor":
-            return self._silver_mentor()
-        if what == "furnace":
-            return self._silver_furnace()
-        if what.startswith("bribe:"):
-            return self._silver_bribe(what.partition(":")[2])
-        if what == "buy_legend":
-            if not (silver.on(self.content, self.state.world) and self._at_clinic_town()):
-                return [equipment.NOT_NOW]
-            return silver.buy_legend(self.state, self.content)
+        if what == "dadian":  # 打點（銀兩出口收成一間店，第 9 批畫面乙）：打開那一間店（見 options 的 picking_dadian），不花體力
+            p = self.state.player
+            p.picking_dadian, p.shop_clue = True, ""
+            self._shop_say("enter")
+            return [silver.SHOP_ENTERED]
+        if what in ("silver_donate", "mentor", "furnace", "buy_legend") or what.startswith("bribe:"):
+            msgs = self._silver_act(what)  # 銀兩出口（21 天季，正式季整合 6.5）：都不花體力
+            if self.state.player.picking_dadian:
+                self._shop_say("done")  # 打點那一間店裡記了一筆：掮客換一句
+            return msgs
         if what == "donate":  # 大本營捐軍備（素材與經濟設計第六節）：打開軍需官那一串（見 _donate_options），不花體力
             self.state.player.picking_donate, self.state.player.shop_clue = True, ""
             self._shop_say("enter")  # 軍需帳上軍需官那一句（店面同一套）
@@ -3696,6 +3727,8 @@ class Game:
             return "market" if mounts.market_here(s, c) else None
         if p.picking_donate:  # 大本營的軍需帳（素材與經濟 B6，企劃者 2026-10-15 選 B3）
             return "donate" if self._at_own_base() else None
+        if p.picking_dadian:  # 打點（21 天季的銀兩出口，第 9 批畫面乙）
+            return "dadian" if self._silver_options() else None
         return None
 
     def _shop_live(self, option_ids=None, shop: str = "smith") -> bool:
@@ -3720,6 +3753,12 @@ class Game:
             return shopview.arena_view(s, c, self.world, self._battle_power(), self.arena_left())
         if shop == "donate":
             return shopview.donate_view(s, c, self._pill_day())
+        if shop == "dadian":
+            day = self._pill_day()
+            base = self._at_own_base()
+            return shopview.dadian_view(s, c, day=day, room=economy.donate_room(s, c, day) if base else 0, base=base,
+                                        clinic=self._at_clinic_town(), smith=equipment.smith_open(s, c), bribe=self._bribe_targets(),
+                                        prologue=prologue_rules.active(s, c))
         view = {"smith": shopview.smith_view, "market": shopview.market_view, "board": shopview.board_view}[shop](s, c, self.world)
         if shop == "smith":  # 素材買賣（素材與經濟設計第四、五節）：收購、升階都關著是 None
             view["trade"] = shopview.trade_view(s, c, self._pill_day())
@@ -6872,6 +6911,8 @@ class Game:
         mounts.close_market(s.player)  # 馬市也收起來（裝備四欄 5.5）
         if s.player.picking_donate:
             economy.close_donate(s)  # 軍需官那一串也收起來（素材與經濟設計第六節）
+        if s.player.picking_dadian:
+            self._close_dadian()  # 打點那一間店也收起來
         s.player.picking_arena = False  # 擂台也收起來
         rerouting = s.player.journey is not None
         start = None if rerouting else s.player.location
@@ -7222,6 +7263,7 @@ class Game:
             and s.player.duel is None  # 單人頭目戰打到一半：同上
             and not s.player.picking_market  # 馬市開著：選單卡在第二層，先離開（同 FB-121 第 4 件的懸賞榜、鐵匠鋪）
             and not s.player.picking_donate  # 軍需官那一串開著：同馬市
+            and not s.player.picking_dadian  # 打點那一間店開著：同馬市
             and not s.player.picking_arena and s.player.arena is None  # 擂台開著、打到一半：同上
             and not allied.needs_ally(s, self.content)  # 拜入之後還沒挑依附哪一邊（豪強分屬兩軍）：先挑
         )

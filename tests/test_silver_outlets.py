@@ -1,5 +1,5 @@
 """正式季整合第 9 批：銀兩出口（設計 6.5；12.3 第 39、40、42 條）。只在 21 天季（season21 設定），週末與 14 天一個字都不變。
-畫面這一批不做新版面：五樣都放在「此地還能做」。"""
+五樣收進「打點」那一間店（第 9 批畫面乙，tests/test_dadian_shop.py）：這裡的測試先進店（_shop），選項 id 照舊。"""
 from __future__ import annotations
 
 import random
@@ -28,10 +28,18 @@ def _game(profile="season21", at="changshe", faction="guan", money=500):
     p.location, p.faction = at, faction
     p.tutorial_step = len(c.tutorial.steps)
     p.stats["silver"] = money
+    _shop(game)
     return game
 
 
+def _shop(game):
+    """進「打點」那一間店（此地有銀兩出口才有那一顆）：五樣的選項 id 在店裡的選單上。"""
+    if any(o.id == "act:dadian" for o in game.options()):
+        game.choose("act:dadian")
+
+
 def _ids(game):
+    _shop(game)
     return {o.id: o for o in game.options()}
 
 
@@ -187,6 +195,7 @@ def _at_a_figure(money=500):
         here = [f for f in figures.present_at(s, c, loc) if c.figures[f].character]
         if here:
             s.player.location = loc
+            _shop(game)
             return game, here[0], c.figures[here[0]].character
     raise AssertionError("沒有談得上話的大勢人物站在任何地點")
 

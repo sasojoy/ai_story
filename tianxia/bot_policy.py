@@ -703,7 +703,11 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
             return ORDER_SCORE
         if arg == "summons":  # 應召（計畫 T5）：只在召見的地點出現
             return SUMMONS_SCORE
+        if arg == "dadian":  # 打點（21 天季的銀兩出口收成的一間店）：假人不進（只是打開一間店，同鐵匠鋪沒事不進）
+            return None
         return ACT_SCORES.get(arg, 0.0)
+    if kind == "dadian":  # 萬一停在打點那一間店裡：只會離開
+        return 0.0
     return None
 
 

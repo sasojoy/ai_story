@@ -3223,7 +3223,7 @@
     // 鐵匠鋪的架上頁照草圖 A 把鐵匠那一句放在爐火底下（smithHtml 畫，企劃者 2026-10-14）；其他頁、馬市、懸賞榜緊接招牌
     const underForge = kind === "smith" && smithTab(shop) === "shelf";
     const body = kind === "market" ? marketHtml(shop) : kind === "board" ? boardHtml(shop) : kind === "arena" ? arenaHtml(shop)
-      : kind === "donate" ? donateHtml(shop) : smithHtml(shop, underForge ? line : "");
+      : kind === "donate" ? donateHtml(shop) : kind === "dadian" ? dadianHtml(shop) : smithHtml(shop, underForge ? line : "");
     // 擂台打到一半：左上那一顆是認輸（先問一次），不是直接離開
     const leave = kind === "arena" && shop.fight
       ? `<button class="shop-back" data-act="shop-ask" data-id="${esc(shop.fight.yield.id)}" data-confirm="${esc(shop.fight.yield.confirm)}" data-yes="認輸">‹ 認輸</button>`
@@ -3392,6 +3392,22 @@
     }
     return out;
   }
+  // ── 打點（21 天季的銀兩出口；企劃者挑第 9 批畫面乙：茶樓雅間的掮客，五樣記在一本攤開的帳簿上；shopview.dadian_view）──
+  // 左頁「修為」、右頁「人情」。這裡做得了的一筆是一顆鈕，送原本的選項 id（choose）；做不了的墨線劃掉、朱筆批去哪做（或為什麼）。
+  // 身上掛著還沒用掉的寫在帳底下。字與數字照伺服器給的
+  function dadianHtml(shop) {
+    const entry = (e) => {
+      const head = `<b>${esc(e.name)}<em>${esc(e.price)}</em></b><span class="desc">${esc(e.desc)}</span>`;
+      return e.ok
+        ? `<button class="entry" data-act="choose" data-id="${esc(e.id)}">${head}<span class="tick">${esc(e.tick)}</span></button>`
+        : `<div class="entry off">${head}<span class="note">${esc(e.note)}</span></div>`;
+    };
+    const pages = shop.pages.map((p) => `<section class="ledger-page"><h3>${esc(p.head)}</h3>${p.entries.map(entry).join("")}</section>`).join("");
+    return `<div class="shop-body"><div class="shop-col"><div class="ledger">${pages}</div>
+      <div class="abacus" aria-hidden="true">${"<i></i>".repeat(9)}</div>
+      ${shop.hang ? `<p class="ledger-hang">${esc(shop.hang)}</p>` : ""}</div></div>`;
+  }
+
   function donateHtml(shop) {
     const picks = donatePicks(shop);
     const cells = new Map(shop.cells.map((c) => [c.id, c]));
