@@ -172,14 +172,15 @@ def test_the_server_writes_a_round_outside_the_lock(content, game, monkeypatch):
     _gambled_round(content, game)
     seen = []
 
-    def write(client, act, items, setting="漢末兩軍交戰的戰場"):
-        seen.append((game.world.db.writing(), [i.name for i in items]))
+    def write(client, act, items, setting="漢末兩軍交戰的戰場", sides=()):
+        seen.append((game.world.db.writing(), [i.name for i in items], tuple(sides)))
         return {"沈浪": "沈浪一把火燒了營寨。"}
 
     monkeypatch.setattr(bi, "write_tales", write)
     monkeypatch.setitem(server.CONTENT.battles, "t2", content.battles["t2"])
     assert server.narrate_once(game) == 1
-    assert seen == [(False, ["沈浪"])]
+    # 第三格是兩軍的名字：守門要靠它（失手那一句不准寫敵方受損，Joy 2026-10-19）
+    assert seen == [(False, ["沈浪"], ("官軍", "黃巾"))]
     assert server.narrate_once(game) is None
 
 

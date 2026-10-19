@@ -17,6 +17,8 @@ get_battle/mutate_battle/start_battle 的事）、不碰網頁介面（那是 en
 """
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import math
 import random
 import re
@@ -1711,8 +1713,16 @@ TALE_PREDICT_EACH = 90  # 一搏一句四十字上下，加上 JSON 的名號與
 TALE_BATCH = 20  # 一次最多寫幾搏（一回合二十人都搏時一次寫完；再多下一次再寫）
 
 
+def foe_names(items: list[TaleItem], sides: Sequence[str] = ()) -> dict[str, set[str]]:
+    """每一位的「敵方陣營叫什麼」：這一批出現過的陣營名，加上呼叫端給的兩軍名字，去掉他自己那一邊。
+    給 write_tales 守門用（失手那一句不准寫敵方受損）。"""
+    every = {item.faction_name for item in items} | {s for s in sides if s}
+    return {item.name: {n for n in every if n and n != item.faction_name} for item in items}
+
+
 def write_tales(
     client: OllamaClient | None, act: BattleAct, items: list[TaleItem], setting: str = "漢末兩軍交戰的戰場",
+    sides: Sequence[str] = (),
 ) -> dict[str, str]:
     """回合結算後，把這一回合等著補劇情的放手一搏一次批給模型寫（Joy 2026-10-13：評分與劇情拆開，二十人同時搏也撐得住）：
     成敗已經擲好了，一搏一句、照成敗寫，以名號開頭、第三人稱，不寫數字。回傳 名號 → 整理過的一句（clean_story）；
@@ -1731,7 +1741,10 @@ def write_tales(
             f"你是{setting}的說書人。下面每一位玩家這一回合都放手一搏，成敗已經定了。替每一位各寫一句結果：40 字以內、繁體中文，"
             "以那位玩家的名號開頭、用第三人稱寫（不用「你」，名號後面不接冒號）；名號就是出手的那個人，不是在一旁看的人；"
             "用名號稱呼雙方，不要拿「散人」「官軍」「黃巾」這類身分當代名詞。要具體接住玩家寫的內容，照成敗寫：成功就寫成了，"
-            "失敗就寫出糗、被識破、反被追打，可以荒謬、好笑。不要寫任何數字、不要寫戰局推進多少或扣多少氣血。"
+            "失敗就寫出糗、被識破、反被追打，可以荒謬、好笑。**失敗那一句的苦果一定要落在他自己或他那一方身上**："
+            "不可以寫成對手受損、中計、倒地、吃虧，也不可以寫成對他有利——那會跟引擎算出來的結果矛盾"
+            "（實例：一位黃巾玩家失手，卻被寫成「官軍吸入異味嘔吐倒地」，玩家看起來是贏了，數字卻是自己退了一截）。"
+            "不要寫任何數字、不要寫戰局推進多少或扣多少氣血。"
             "標了女子的玩家用「她」稱呼。回傳 lines：每一位一筆，name 照抄名號，story 是那一句。"
         )},
         {"role": "user", "content": f"戰場情境：【{act.title}】{act.text}\n這一回合的放手一搏：\n{listing}"},
@@ -1743,11 +1756,18 @@ def write_tales(
     except Exception:
         return {}
     wanted = {item.name for item in items}
+    lost = {item.name for item in items if not item.won}
+    foes = foe_names(items, sides)
     out: dict[str, str] = {}
     for line in result.lines:
         name = str(line.name or "").strip()
         if name in wanted and name not in out:
             story = clean_story(line.story, name)
+            # 失手的那一句提到敵方陣營的名字就不用（Joy 2026-10-19：黃巾玩家失手卻被寫成「官軍嘔吐倒地」，
+            # 文字看起來贏了、數字是自己退了一截）。提示詞本來就禁止拿陣營名當代名詞，這裡只是確定性地攔下來；
+            # 攔掉的照舊播固定句（「X這一搏失敗了，付出了慘痛代價：…」），寧可平淡也不要跟數字矛盾。
+            if story and name in lost and any(foe in story for foe in foes.get(name, ())):
+                story = ""
             if story:
                 out[name] = story
     return out
