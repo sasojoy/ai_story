@@ -110,3 +110,11 @@ def test_a_maxed_boss_duel_report_keeps_the_converted_xinde():
     record = s.battles[-1]
     gained = s.player.stats["xinde"] - have
     assert gained > round(boss.xinde * c.config.duel.reward_share["大勝"]) and record.xinde == gained and record.exp == 0
+
+
+def test_the_now_card_has_no_red_xinde_after_a_maxed_win():
+    """FB-451：滿級打完仗，「剛剛」卡片底下不多一顆「心得 -N」：紀錄那一則的心得跟卡片得失的心得對得上。"""
+    game = _game()
+    record, _, msgs = _attack(game)
+    assert record.xinde > 0
+    assert "心得 -" not in game.battle_extra_html() and "心得 -" not in game.battle_extra_html(for_card=True)

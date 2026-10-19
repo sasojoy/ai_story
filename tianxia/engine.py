@@ -7663,7 +7663,8 @@ class Game:
             return []
         record.exp = 0
         record.xinde = (record.xinde or 0) + gained
-        return [team.MAXED_XINDE.format(n=gained)] if gained else []
+        # 那一句之外另回「心得 +N」：江湖紀錄那一則的心得跟戰報得失對得上，「剛剛」卡片底下不多一顆「心得 -N」（FB-451）
+        return [team.MAXED_XINDE.format(n=gained), f"心得 +{gained}"] if gained else []
 
     def _hold_share(self) -> float | None:
         """守、攪局、守勢行動拿 _sortie_host 那一路的幾成：一類一顆開著是全額（正式季整合 2.6），關著照操練的三成（None）。"""
@@ -9573,12 +9574,12 @@ class Game:
             p.stat_points += points
             if points:
                 ups.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
-        record.notes += maxed_note
+        record.notes += [n for n in maxed_note if not n.startswith("心得 +")]  # 戰報敘事只留那一句；心得算在得失
         record.notes += ups
         self._play_rounds(record, squad, result.tier, None)
         line = self._file_battle(record, team_exp=False)
         # 兩邊對稱（FB-244）：各寫各自拿到的經驗與心得（只有本人拿，不寫「（每人）」）、各連自己的戰報
-        msgs = [line] + ([f"經驗 +{cfg.exp}"] if cfg.exp else []) + [f"心得 +{xinde}"] + ups + self._last_wear
+        msgs = [line] + ([f"經驗 +{cfg.exp}"] if record.exp else []) + [f"心得 +{xinde}"] + maxed_note + ups + self._last_wear  # 滿級不寫經驗（FB-451）
         if self._draft is None:  # 對方那一邊（或從玩家卡答應、沒有草稿）：替他記一則，連到這一份戰報
             self._write(f"切磋・{rival}", msgs, tag=battlelog.outcome_text(record), battle_id=record.id)
         else:  # 答應的那一方（自己按的，這次行動的草稿寫這一則）：結果那一句照樣寫進敘事，跟發邀請的那一方一樣（FB-117）
