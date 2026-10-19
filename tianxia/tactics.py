@@ -1350,7 +1350,12 @@ def _forced(me: _Fight, move: str, auto: bool, his: str | None, rng: random.Rand
     if me.us.has("失神"):
         picked = rng.choice(MOVES)
         hit = rng.random() < t.self_hit
-        me.lines.append(f"{LEAD}失神〕{me.us.name}心神一亂，" + ("一招打在自己身上" if hit else f"亂出了{picked}"))
+        # 一定要寫出「你挑的那一招變成了什麼」（Joy 2026-10-19「明明我選強攻，為什麼出來變固守……對話中也沒有描述清楚」）：
+        # 回合那一行的開頭寫的是實際出的招（「你固守」），玩家挑的是強攻，中間只有這一句能解釋。舊的寫法打到自己時
+        # 只寫「一招打在自己身上」，完全沒提招被換掉；沒打到自己時寫「亂出了固守」也看不出那是替換掉你挑的那一招。
+        # 句型照卸勁那一支的「使不出X，改出Y」，玩家認得。
+        swap = f"使不出{move}，亂出了{picked}" if picked != move else f"{move}出得七零八落"
+        me.lines.append(f"{LEAD}失神〕{me.us.name}心神一亂，{swap}" + ("，這一招還打在自己身上" if hit else ""))
         return picked, hit
     allowed = _allowed(me)
     if auto and read and his is not None and his != GAMBLE:

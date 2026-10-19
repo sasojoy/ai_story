@@ -5487,14 +5487,17 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
         "prepare_peer",  # 論武答應時的首創取名（玩家卡上的互動，social.CardAction.request）
         "zhuan_job",  # 季末寫傳（玩家傳第二批）：server.write_zhuan 開的背景執行緒，A、C 段各拿一次鎖，模型在兩段之間
         "seal_text",  # 奪璽單挑的放手一搏（玉璽碎片設計 5.7）：三段同 duel_text
+        "tavern_ask",  # 酒肆問酒家：三段同 duel_text，模型只寫酒家那一句
+        "feast_text",  # 宴客自己寫的那一句敬酒（大勢人物擴充第三批）：三段同 answer_event
     }
     # 宣告、model_call 讀、main() 建佇列；另外兩個只看不排：/api/queue 問位置、管理者那份資料抄總數（admin_choices 在 look 的鎖裡，
     # 但 snapshot 只碰佇列自己的短鎖、不等任何一件，不算在行動鎖裡排隊）
     # narrate_once：決戰放手一搏的劇情（Joy 2026-10-13），回合結算後在背景一整批寫，排在真人後面、名號不是任何一個角色，所以不走 model_call
     # crowd_once：擂台場邊那一句（Joy 2026-10-17），A、C 段各拿一次鎖，模型在兩段之間、當假人排在真人後面
     # letter_once：人物書信重寫那一封（大勢人物擴充第二批），同 crowd_once
+    # yuedan_once：月旦評的評語（大勢人物擴充第三批），同 letter_once
     assert _users_in_server("QUEUE") == {None, "model_call", "main", "api_queue", "admin_choices", "narrate_once", "crowd_once",
-                                         "letter_once"}
+                                         "letter_once", "yuedan_once", "chatter_once"}  # chatter_once：酒肆鄰桌閒談，同 crowd_once 當假人排
     importers = [
         p.name for p in (server.ROOT / "tianxia").glob("*.py")
         if re.search(r"^\s*(import|from)\s+llm_queue\b", p.read_text(encoding="utf-8"), re.M)
@@ -6232,6 +6235,11 @@ NOT_IN_THE_FINGERPRINT = {
         "sim_accum": "不滿一小時的時間累積器",
         "life_turn": "人物每日行事做到第幾輪的記號；畫面看的是它帶來的傳聞（傳聞流水號已在指紋裡）",
         "whereabouts": "人物走動時一定同時寫一則傳聞（傳聞流水號已在指紋裡），誰在這裡下次輪詢就補",
+        "feasts": "開席、散席都寫天下大事（傳聞流水號已在指紋裡）；席上別人敬的那一句只畫在入席的人的場景，下次輪詢才補也不礙事",
+        "feast_seq": "宴席的流水號，跟 feasts 一起寫",
+        "yuedan": "月旦評發出去那一刻寫天下大事與江湖史（都在指紋裡）；還沒發的那一批誰都看不到",
+        "yuedan_week": "評到第幾週的記號，跟 yuedan 一起寫",
+        "rallies": "求援委託只在那一方的人的懸賞卡（各人自己的畫面），掛單時寫一則陣營傳聞",
         "ending_text": "收季那一刻跟 ended、ending_title 一起寫入",
         "ending_id": "同上",
         "final_trends": "同上（結算卡的資料）",
@@ -6276,6 +6284,12 @@ NOT_IN_THE_FINGERPRINT = {
         "arena_seq": "擂台的流水號，玩家看不到",
         "arena_closed": "擂台這一季收了沒（季末排名寫進江湖史與傳聞，那一下指紋就變了）",
         "arena_day": "擂台的俸記到哪一天，玩家看不到（俸在本人同步時補）",
+        "tavern_walls": "酒肆的題壁只在坐進那一間酒肆時看得到；坐在裡面的人照輪詢每十秒重抓",
+        "tavern_whispers": "酒肆的風聲在被打聽的人自己同步時補（寫風聲的人另外叫醒他的分頁，Game.touched）",
+        "tavern_treats": "請全店喝酒只在坐進那一間酒肆時看得到；請的那一下另有地方傳聞",
+        "tavern_hits": "雇殺手（第三批）只在本人同步時結算與補",
+        "tavern_hit_seq": "雇殺手的流水號，玩家看不到",
+        "tavern_chatter": "酒客閒談（第四批）只在坐進那一間酒肆時看得到",
         "echoes": "首創名望回饋的帳，只在首創者自己同步時補一則紀錄；湊滿時那一句傳聞進 rumors，那一下指紋就變了",
         "seat_ledger": "第四階席次的貢獻帳，畫面上看不到；陣營私有，跟 orders、plots 一樣（正式版丁）",
         "seats": "在任名單只改那個陣營的人自己的頭銜，上任的消息是陣營軍情；算進去，別的陣營會從『又被叫醒了』看出對方有人上任（同 orders、plots，正式版丁）",
