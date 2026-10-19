@@ -1322,7 +1322,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .gather-branches .gb-text { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; min-width: 0; }
 .gather-branches .gb-text b { font-weight: 600; }
 .gather-branches .gb-text small { font-size: 12px; color: var(--ink-2); white-space: normal; }
-.gather-branches .gather-branch.say, .gather-branches .gather-say { grid-column: 1 / -1; }
+.gather-branches .gather-branch.say, .gather-branches .gather-branch.wide, .gather-branches .gather-say { grid-column: 1 / -1; } /* .wide：單數條的最後一條（FB-461） */
 .gather-branches .gather-say { margin: 0; }
 .act-move .move-mode { margin: 0; }
 .fold.here summary { font-size: 14px; }
