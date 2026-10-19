@@ -12,7 +12,7 @@ state 是 GameState（季的事用的是 world._season_vehicle 那個空殼玩�
 人物表沒有的 id（測試夾具）照 T2 最小版的規則：FigureState 的預設值、只改欄位。"""
 from __future__ import annotations
 
-from . import calendar, push
+from . import calendar, push, relations
 from .calendar import DAY
 from .models import Content, FigureChange, FigureDef, Squad
 from .rules import add_rumor, change_trend, season_one, trend_shown, trend_value, world_day
@@ -271,7 +271,8 @@ def apply(state: GameState, content: Content, fid: str, change: FigureChange) ->
 
 
 def _change(state: GameState, content: Content, fid: str, change: FigureChange) -> list[str]:
-    """apply 的本體：改這位人物、空出戰線時照接位鏈交接；回傳接手的那一句（apply 拿去發傳聞、defeat 接在退場那句後面）。"""
+    """apply 的本體：改這位人物、空出戰線時照接位鏈交接；回傳接手的那一句與倒下時盟友、仇敵的反應（figure_life.on_fall）
+    （apply 拿去發傳聞、defeat 接在退場那句後面）。"""
     figure = _ensure(state, content, fid)
     if figure.status in OUT:
         if change.fate in ZEROED:  # 被挑戰打倒、還等著回來的人，時刻表也寫他退場（例：張角病逝）：就不回來了
@@ -290,15 +291,19 @@ def _change(state: GameState, content: Content, fid: str, change: FigureChange) 
         fate = "重創" if fig is not None and fig.destiny else "退場"
     if fate in FATE_STATUS:
         figure.status = FATE_STATUS[fate]
+    react: list[str] = []
     if figure.status in OUT:
         figure.fell_at = state.world.time  # 心事：同陣營同戰線的人悲憤（mood_of）
+        from . import figure_life  # noqa: PLC0415  figure_life → figures：延後載入
+
+        react = figure_life.on_fall(state, content, fid)  # 第二批：盟友悲憤趕來、掛復仇懸賞，仇敵得意（接在接手那一句後面）
     if fate in ("重挫", "到任"):  # 重挫：退出原戰線、轉往別處；到任：接下新戰線
         figure.front = change.front
         if change.location is not None:
             figure.location = change.location
     if fig is None or fate not in HANDOFF_FATES or held is None or (figure.status == "active" and figure.front == held):
-        return []
-    return _hand_over(state, content, fid, held, post)
+        return react
+    return _hand_over(state, content, fid, held, post) + react
 
 
 def _hand_over(state: GameState, content: Content, fid: str, front: str, location: str) -> list[str]:
@@ -498,10 +503,10 @@ def mood_span(content: Content, world: WorldState) -> float:
 
 def mood_of(state: GameState, content: Content, fid: str) -> str | None:
     """這位大勢人物此刻的心事，照事實算、不存檔、不擲骰：
-    - 悲憤：同陣營、同一條戰線（他守的或倒下時守的）的人剛退場或重創（mood_span 之內）；
+    - 悲憤：同陣營、同一條戰線（他守的或倒下時守的）的人、或關係表上的盟友（relations）剛退場或重創（mood_span 之內）；
     - 負傷：他自己剛被挑戰打掉聲威；
     - 焦慮：他那條戰線偏向對方 lean 以上，或聲威不到開季的一半；
-    - 得意：他那條戰線偏向自己這一方 lean 以上。
+    - 得意：關係表上的仇敵剛倒下，或他那條戰線偏向自己這一方 lean 以上。
     不是大勢人物、開關關著、不在場的人是 None。"""
     fig = content.figures.get(fid)
     if fig is None or not life_on(content):
@@ -511,6 +516,9 @@ def mood_of(state: GameState, content: Content, fid: str) -> str | None:
         return None
     w = state.world
     span = mood_span(content, w)
+    tie = relations.mood(state, content, fig.character, span) if fig.character is not None else None  # 第二批：兄弟、師生、上下、仇敵
+    if tie == "悲憤":
+        return tie
     front = line_of(state, content, fid)
     for other, ofig in content.figures.items():
         if other == fid or ofig.faction != fig.faction:
@@ -522,6 +530,8 @@ def mood_of(state: GameState, content: Content, fid: str) -> str | None:
             return "悲憤"
     if now.hurt_at is not None and w.time - now.hurt_at <= span:
         return "負傷"
+    if tie is not None:  # 仇敵剛倒下：得意
+        return tie
     tuning = content.config.figure_life
     if now.prestige * 2 < fig.start_prestige:
         return "焦慮"

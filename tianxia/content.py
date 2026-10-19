@@ -29,7 +29,7 @@ from .models import (
     FRONT_KEY, GLOW_KEYS, GOOD_HORSE, MOVES, RECRUITER_ALLIED_FIELDS, REVEAL_KEYS, ROADS, STATS, TREASURE_EFFECTS, WEAPON_KINDS, Attribute, BattleDef, CharacterDef, CheckVoice,
     CombatLines, Condition, Config, Content, CraftNames, DuelBoss, Effect, Event, FigureDef, FollowerDef, ForgeSecret, Foreshadows, FrontLines, GearBook,
     GiftDef, Hints, InsightDef, Location, OppDef,
-    InsightScene, OrdersContent, PresetRecipe, PromotionDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, ShardDef, SimRumor, SkillDef,
+    InsightScene, OrdersContent, PresetRecipe, PromotionDef, RelationDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, ShardDef, SimRumor, SkillDef,
     SignatureArmDef, SteedDef, Squad, Tier4Named, TimetableEvent, TraitBook, TreasureDef, Tutorial, allow_known,
 )
 from .martial_arts import ATTRIBUTE_COUNTERS, ATTRIBUTES, QUALITIES
@@ -120,6 +120,7 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         shop_lines=_read(root / "shop_lines.json") if (root / "shop_lines.json").exists() else {},
         arena_crowd=_read(root / "arena_crowd.json") if (root / "arena_crowd.json").exists() else {},
         seal=_shards(root / "seal.json"),
+        relations=[_build(RelationDef, raw) for raw in _read(root / "relations.json")] if (root / "relations.json").exists() else [],
         figures=_index(FigureDef, _read(root / "figures.json")) if (root / "figures.json").exists() else {},
         duels=_index(DuelBoss, _read(root / "duels.json")) if (root / "duels.json").exists() else {},
         gear=_gear(root / "gear.json"),
@@ -959,6 +960,25 @@ def _condition_flags(c: Content) -> set[str]:
     walk(c.scenario)
     walk(list(c.events.values()))
     return flags
+
+
+def check_relations(c: Content, need, known) -> None:
+    """人物之間的關係（content/relations.json，大勢人物擴充第二批）：人物都存在、兄弟與仇敵至少兩人（寫了 faction 的仇敵一人就行）、
+    師生與上下要有 head、head 不在 members 裡、faction 要是劇本的陣營。"""
+    factions = [f.id for f in c.scenario.factions]
+    for i, rel in enumerate(c.relations):
+        where = f"relations.json 第 {i + 1} 條（{rel.kind}）"
+        known(where, rel.members + ([rel.head] if rel.head else []), c.characters, "人物")
+        need(len(set(rel.members)) == len(rel.members), f"{where}：members 重複")
+        if rel.kind in ("mentor", "chief"):
+            need(rel.head is not None and rel.head not in rel.members, f"{where}：要寫 head，而且不能也在 members 裡")
+            need(len(rel.members) >= 1, f"{where}：members 至少一人")
+        else:
+            need(rel.head is None, f"{where}：{rel.kind} 不寫 head")
+            need(len(rel.members) >= (1 if rel.faction else 2), f"{where}：至少兩人（寫了 faction 的仇敵一人就行）")
+        if rel.faction is not None:
+            need(rel.kind == "foe", f"{where}：只有仇敵能寫 faction")
+            known(where, [rel.faction], factions, "陣營")
 
 
 def check_figures(c: Content, need, known, front_ids: list[str]) -> None:
@@ -2554,6 +2574,7 @@ def validate(c: Content) -> None:
     front_ids = sorted(region_fronts)  # 戰線 id 照 T1 的大區 front，不另寫一份清單
     check_timetable(c, need, known, front_ids, trend_ids)
     check_figures(c, need, known, front_ids)
+    check_relations(c, need, known)
     check_foreshadows(c, need, known, region_ids, front_ids, counters_written)
     check_orders(c, need, known, front_ids)
     check_promotions(c, need, known)

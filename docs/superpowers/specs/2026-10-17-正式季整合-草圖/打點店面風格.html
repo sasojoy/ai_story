@@ -1,0 +1,257 @@
+<title>打點店面風格</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;600;700&family=Noto+Sans+TC:wght@400;600&display=swap">
+<style>
+/* 版面：一組三個選項並排（窄螢幕疊成一欄），每個選項是 375 寬的「打點」店面 */
+:root {
+  color-scheme: dark;
+  --page: #14100c;            /* 頁面底色（店外） */
+  --ink: #f2e5c6;             /* 頁面上的字 */
+  --muted: #c9b28a;           /* 頁面上的小字 */
+  --gold: #f2c46a;            /* 亮金：標題、選項字 */
+  --line: #3a2a1e;
+  --serif: "Noto Serif TC", "Songti TC", "PMingLiU", serif;
+  --sans: "Noto Sans TC", -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif;
+
+  /* 甲 衙門門房 */
+  --a-lacquer: #7e1d16; --a-lacquer-dk: #4a0f0b; --a-stud: #d6a74a; --a-brass: #c99a3e;
+  --a-plaque: #1b1410; --a-plaque-ink: #f0c86a; --a-card: #b8322a; --a-card-dk: #8e2219;
+  --a-card-ink: #fbe9c4; --a-card-off: #6a5a50; --a-strip: #f3e6c8; --a-strip-ink: #3a2214;
+  --a-box: #2a1a12;
+
+  /* 乙 茶樓雅間 */
+  --b-room: #2b2a1c; --b-room-dk: #1a1a10; --b-blind: #b39a5c; --b-blind-dk: #7a6738;
+  --b-page: #f1e7cf; --b-page-2: #e8dcbe; --b-ink: #2a241d; --b-faint: #7a6b55; --b-rule: #c9b78f;
+  --b-red: #a8322a; --b-tea: #5d7a4a; --b-bead: #4a2e1c; --b-wood: #6b4a2a;
+
+  /* 丙 夜裡的牙行 */
+  --c-night: #0c1018; --c-night-2: #151b28; --c-glow: #ff8a3c; --c-lamp: #c2311f;
+  --c-tag: #a77a48; --c-tag-dk: #6e4c2a; --c-tag-ink: #1e140b; --c-tag-off: #3a3630;
+  --c-tag-off-ink: #8c8478; --c-rope: #8a7a5a; --c-ink: #e9dcc0; --c-muted: #9aa0ac; --c-amber: #ffc56a;
+}
+body { background: var(--page); color: var(--ink); font: 15px/1.7 var(--sans); margin: 0; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-block: 28px 56px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1 { font: 600 26px/1.3 var(--serif); letter-spacing: 3px; margin: 0 0 6px; color: var(--gold); text-wrap: balance; }
+.lede { max-width: 70ch; color: var(--muted); margin: 0 0 8px; }
+h2 { font: 600 20px/1.4 var(--serif); margin: 36px 0 4px; letter-spacing: 2px; text-wrap: balance; }
+.ask { max-width: 72ch; color: var(--muted); margin: 0 0 18px; }
+.opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 375px), 1fr)); gap: 28px 22px; align-items: start; }
+.opt { display: grid; gap: 10px; min-width: 0; }
+.opt-head { display: flex; align-items: baseline; gap: 10px; }
+.opt-key { font: 600 22px var(--serif); color: var(--gold); }
+.opt-name { font: 600 16px var(--serif); }
+.opt-note { font-size: 13.5px; color: var(--muted); margin: 0; }
+.pros { margin: 0; padding-left: 1.1em; font-size: 13px; color: var(--muted); }
+.draft { font-size: 11.5px; color: var(--muted); opacity: .8; letter-spacing: 1px; }
+
+/* 三間店共用的骨架：出店、招牌、銀兩、掌櫃一句、內容、底部分頁 */
+.phone { width: 100%; max-width: 375px; border-radius: 22px; overflow: hidden; border: 1px solid var(--line); box-sizing: border-box; }
+.bar { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; padding: 10px 12px 4px; }
+.back { font: 600 15px var(--sans); white-space: nowrap; }
+.sign { justify-self: center; padding: 4px 16px; font: 700 17px var(--serif); letter-spacing: 6px; white-space: nowrap; }
+.silver { font: 600 13px var(--sans); white-space: nowrap; }
+.sline { margin: 6px 14px 6px; padding: 6px 10px; font: 13px/1.6 var(--serif); }
+.body { padding: 6px 12px 12px; display: grid; gap: 8px; }
+.tabs { display: flex; }
+.tab { flex: 1; text-align: center; padding: 10px 0; font: 12.5px var(--sans); }
+
+/* ═════ 甲 衙門門房 ═════ */
+.ya { color: var(--a-card-ink);
+  background:
+    radial-gradient(circle, var(--a-stud) 0 3px, transparent 3.6px) 0 0 / 34px 34px,
+    linear-gradient(90deg, var(--a-lacquer-dk) 0, var(--a-lacquer) 6%, var(--a-lacquer) 49.6%, var(--a-lacquer-dk) 49.8%, var(--a-lacquer-dk) 50.2%, var(--a-lacquer) 50.4%, var(--a-lacquer) 94%, var(--a-lacquer-dk) 100%); }
+.ya .back, .ya .silver { color: var(--a-strip); }
+.ya .sign { background: var(--a-plaque); color: var(--a-plaque-ink); border: 3px double var(--a-brass); border-radius: 2px; box-shadow: 0 3px 0 rgba(0,0,0,.4); }
+.ya .rings { display: flex; justify-content: center; gap: 46px; margin: 4px 0 -4px; }
+.ya .rings svg { width: 40px; height: 40px; }
+.ya .sline { background: var(--a-strip); color: var(--a-strip-ink); border-left: 4px solid var(--a-brass); border-radius: 2px; }
+.ya .who { font: 600 11px var(--sans); color: var(--a-card-dk); letter-spacing: 1px; display: block; }
+.ya .body { background: rgba(20,8,6,.55); margin: 0 10px; border-radius: 6px; border: 1px solid rgba(214,167,74,.4); }
+.ya .tie { font: 600 12px var(--serif); color: var(--a-stud); letter-spacing: 3px; text-align: center; }
+.ya .card { position: relative; display: grid; grid-template-columns: 30px 1fr auto; gap: 8px; align-items: center; padding: 8px 10px 8px 6px;
+  background: linear-gradient(180deg, var(--a-card), var(--a-card-dk)); border: 1px solid var(--a-stud); border-radius: 3px; box-shadow: inset 0 0 0 3px var(--a-card-dk), inset 0 0 0 4px rgba(214,167,74,.55); }
+.ya .card .v { writing-mode: vertical-rl; font: 700 14px/1 var(--serif); letter-spacing: 2px; color: var(--a-stud); border-right: 1px solid rgba(214,167,74,.5); padding-right: 6px; align-self: stretch; display: flex; align-items: center; justify-content: center; }
+.ya .card b { font: 600 14.5px var(--serif); display: block; }
+.ya .card span { font: 12px/1.45 var(--sans); color: #f6d7a8; display: block; }
+.ya .card .price { text-align: center; font: 700 14px var(--serif); color: var(--a-plaque-ink); white-space: nowrap; }
+.ya .card .price small { display: block; font: 10.5px var(--sans); color: #f6d7a8; }
+.ya .card.fit { box-shadow: inset 0 0 0 3px var(--a-card-dk), inset 0 0 0 4px var(--a-stud), 0 0 10px rgba(242,196,106,.45); }
+.ya .card.off { background: linear-gradient(180deg, #7a6a5e, var(--a-card-off)); border-color: #9a8a78; box-shadow: inset 0 0 0 3px var(--a-card-off); color: #e2d6c4; }
+.ya .card.off .v, .ya .card.off .price { color: #d8cab4; border-color: rgba(216,202,180,.4); }
+.ya .card.off span { color: #d8cab4; }
+.ya .card.off::after { content: "退帖"; position: absolute; right: 64px; top: 50%; transform: translateY(-50%) rotate(-12deg); border: 2px solid #d8cab4; color: #d8cab4; font: 700 12px var(--serif); padding: 0 4px; letter-spacing: 2px; opacity: .8; }
+.ya .box { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--a-box); border: 1px solid var(--a-brass); border-radius: 4px; font: 12.5px var(--sans); color: var(--a-strip); }
+.ya .box i { flex: none; width: 34px; height: 22px; border-radius: 3px; background: linear-gradient(180deg, #9a2a1e, #5a140e); border: 1px solid var(--a-stud); box-shadow: inset 0 6px 0 rgba(214,167,74,.35); }
+.ya .tabs { background: var(--a-plaque); border-top: 2px solid var(--a-brass); }
+.ya .tab { color: #b8a080; } .ya .tab.on { color: var(--a-plaque-ink); box-shadow: inset 0 2px 0 var(--a-plaque-ink); }
+
+/* ═════ 乙 茶樓雅間 ═════ */
+.cha { color: var(--b-page);
+  background: radial-gradient(ellipse at 50% 30%, #3a3824 0%, var(--b-room) 55%, var(--b-room-dk) 100%); }
+.cha .blind { height: 26px; background:
+    repeating-linear-gradient(180deg, var(--b-blind) 0 3px, var(--b-blind-dk) 3px 4px),
+    var(--b-blind);
+  border-bottom: 3px solid var(--b-wood); box-shadow: 0 4px 6px rgba(0,0,0,.35);
+  -webkit-mask: linear-gradient(180deg, #000 70%, transparent); mask: linear-gradient(180deg, #000 70%, transparent); }
+.cha .bar { padding-top: 6px; }
+.cha .back, .cha .silver { color: var(--b-page); }
+.cha .sign { background: var(--b-wood); color: var(--b-page); border-radius: 14px; border: 1px solid var(--b-blind); letter-spacing: 8px; font-weight: 600; }
+.cha .host { display: grid; grid-template-columns: 34px 1fr; gap: 8px; align-items: center; margin: 6px 14px; }
+.cha .host svg { width: 34px; height: 30px; }
+.cha .sline { margin: 0; background: rgba(241,231,207,.1); border: 1px solid rgba(179,154,92,.45); border-radius: 12px 12px 12px 2px; color: var(--b-page); }
+.cha .sline .who { font: 600 11px var(--sans); color: var(--b-blind); display: block; letter-spacing: 1px; }
+.cha .ledger { display: grid; grid-template-columns: 1fr 1fr; border-radius: 4px; overflow: hidden; box-shadow: 0 6px 14px rgba(0,0,0,.45); color: var(--b-ink); }
+.cha .pg { background: linear-gradient(90deg, var(--b-page) 85%, var(--b-page-2)); padding: 10px 8px 10px 10px; display: grid; gap: 0; align-content: start; }
+.cha .pg + .pg { background: linear-gradient(90deg, var(--b-page-2), var(--b-page) 15%); padding-left: 8px; padding-right: 10px; border-left: 1px solid var(--b-rule); }
+.cha .ph { font: 600 11px var(--serif); color: var(--b-red); letter-spacing: 3px; text-align: center; border-bottom: 1px solid var(--b-red); padding-bottom: 3px; margin-bottom: 4px; }
+.cha .entry { padding: 6px 0 7px; border-bottom: 1px dashed var(--b-rule); display: grid; gap: 1px; }
+.cha .entry b { font: 600 13.5px var(--serif); display: flex; justify-content: space-between; gap: 4px; }
+.cha .entry b em { font-style: normal; color: var(--b-red); white-space: nowrap; }
+.cha .entry span { font: 11.5px/1.45 var(--sans); color: var(--b-faint); }
+.cha .entry .tick { font: 10.5px var(--sans); color: var(--b-tea); }
+.cha .entry.fit b::before { content: "◉"; color: var(--b-tea); font-size: 10px; margin-right: 3px; align-self: center; }
+.cha .entry.off b { color: var(--b-faint); text-decoration: line-through 1.5px var(--b-ink); }
+.cha .entry.off b em { color: var(--b-faint); }
+.cha .entry.off .note { font: 600 11.5px var(--serif); color: var(--b-red); transform: rotate(-2deg); display: inline-block; }
+.cha .abacus { display: grid; grid-template-columns: repeat(9, 1fr); gap: 2px; height: 28px; padding: 3px 6px; background: var(--b-wood); border-radius: 3px; margin-top: 8px; position: relative; }
+.cha .abacus::before { content: ""; position: absolute; left: 6px; right: 6px; top: 11px; height: 2px; background: var(--b-blind); }
+.cha .abacus i { background: radial-gradient(ellipse at 50% 50%, var(--b-bead) 0 45%, transparent 48%) 50% 2px / 100% 8px no-repeat, radial-gradient(ellipse at 50% 50%, var(--b-bead) 0 45%, transparent 48%) 50% 14px / 100% 8px no-repeat, linear-gradient(90deg, transparent 46%, var(--b-blind-dk) 46% 54%, transparent 54%); }
+.cha .hang { font: 12px var(--sans); color: var(--b-page); background: rgba(93,122,74,.25); border-left: 3px solid var(--b-tea); padding: 5px 8px; border-radius: 2px; }
+.cha .tabs { background: var(--b-room-dk); border-top: 1px solid var(--b-blind-dk); }
+.cha .tab { color: #a99c78; } .cha .tab.on { color: var(--b-page); box-shadow: inset 0 2px 0 var(--b-blind); }
+
+/* ═════ 丙 夜裡的牙行 ═════ */
+.ye { color: var(--c-ink);
+  background:
+    radial-gradient(circle at 12% 9%, rgba(255,138,60,.35) 0, transparent 22%),
+    radial-gradient(circle at 88% 9%, rgba(255,138,60,.3) 0, transparent 22%),
+    linear-gradient(180deg, var(--c-night-2) 0%, var(--c-night) 70%); }
+.ye .lamps { display: flex; justify-content: space-between; padding: 0 22px; height: 0; position: relative; z-index: 1; }
+.ye .lamps svg { width: 26px; height: 44px; margin-top: 2px; filter: drop-shadow(0 0 8px var(--c-glow)); }
+.ye .bar { padding-top: 12px; }
+.ye .back { color: var(--c-muted); }
+.ye .silver { color: var(--c-amber); }
+.ye .sign { background: var(--c-lamp); color: var(--c-amber); border-radius: 40% / 50%; padding: 4px 22px; box-shadow: 0 0 14px rgba(255,138,60,.6), inset 0 -4px 0 rgba(0,0,0,.25); border-top: 3px solid #2a1a10; border-bottom: 3px solid #2a1a10; }
+.ye .sline { margin-top: 8px; background: transparent; color: var(--c-ink); border-left: 2px dotted var(--c-glow); font-style: italic; }
+.ye .sline .who { font: 600 11px var(--sans); color: var(--c-muted); font-style: normal; display: block; letter-spacing: 1px; }
+.ye .beam { height: 8px; border-radius: 3px; background: linear-gradient(180deg, #4a3420, #2a1d12); box-shadow: 0 2px 4px rgba(0,0,0,.6); margin: 2px 4px 0; }
+.ye .rack { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 10px; }
+.ye .tag { position: relative; margin-top: 16px; padding: 9px 9px 8px; border-radius: 4px 4px 10px 10px;
+  background: repeating-linear-gradient(91deg, transparent 0 9px, rgba(0,0,0,.07) 9px 10px), linear-gradient(180deg, var(--c-tag), var(--c-tag-dk));
+  color: var(--c-tag-ink); box-shadow: 0 0 16px rgba(255,138,60,.22), 0 3px 0 rgba(0,0,0,.4); display: grid; gap: 2px; }
+.ye .tag::before, .ye .tag::after { content: ""; position: absolute; top: -16px; width: 1px; height: 16px; background: var(--c-rope); }
+.ye .tag::before { left: 22%; } .ye .tag::after { right: 22%; }
+.ye .tag .hole { position: absolute; top: 4px; left: 50%; width: 6px; height: 6px; margin-left: -3px; border-radius: 50%; background: var(--c-night); }
+.ye .tag b { font: 700 14px var(--serif); margin-top: 4px; }
+.ye .tag span { font: 11.5px/1.4 var(--sans); }
+.ye .tag .pr { font: 700 15px var(--serif); color: #3a0e06; display: flex; justify-content: space-between; align-items: baseline; border-top: 1px solid rgba(30,20,11,.35); padding-top: 3px; margin-top: 3px; }
+.ye .tag .pr small { font: 10.5px var(--sans); color: var(--c-tag-ink); }
+.ye .tag.wide { grid-column: 1 / -1; }
+.ye .tag.fit { box-shadow: 0 0 0 2px var(--c-amber), 0 0 20px rgba(255,197,106,.45); }
+.ye .tag.off { background: linear-gradient(180deg, var(--c-tag-off), #26231f); color: var(--c-tag-off-ink); box-shadow: 0 3px 0 rgba(0,0,0,.4); }
+.ye .tag.off .pr { color: var(--c-tag-off-ink); border-color: rgba(140,132,120,.35); }
+.ye .tag.off .pr small { color: var(--c-tag-off-ink); }
+.ye .tag.off .dark { font: 600 11.5px var(--serif); color: #c9a46a; }
+.ye .pouch { font: 12px var(--sans); color: var(--c-ink); display: flex; gap: 8px; align-items: center; padding: 6px 8px; border: 1px dashed rgba(255,197,106,.45); border-radius: 6px; }
+.ye .pouch svg { width: 20px; height: 20px; flex: none; }
+.ye .tabs { background: #080b11; border-top: 1px solid #22293a; }
+.ye .tab { color: var(--c-muted); } .ye .tab.on { color: var(--c-amber); box-shadow: inset 0 2px 0 var(--c-glow); }
+</style>
+
+<div class="wrap">
+  <h1>「打點」店面三種風格</h1>
+  <p class="lede">你挑了甲「一間新店」，內容照那一張：五樣（名師指點、看火候、破境丹、打點門路、捐銀兩進軍需帳），這裡做得了的亮著、做不了的灰掉寫去哪裡做；名師指點、看火候買的是「下一次」，掛在身上。這一頁只換樣子：三種各畫一間完整的店，骨架照另外三間店共用的那一套（左上出店、招牌、右上銀兩、掌櫃一句、底部分頁）。示例同前：第 20 級散人「沈青崖」在宛城、身上 1846 兩，皇甫嵩在這裡、情誼 28。挑一個，或說「乙，但……」。</p>
+  <p class="draft">店裡的字句都是暫寫，待 joy 潤。</p>
+
+  <h2>打點這間店長什麼樣子</h2>
+  <p class="ask">另外三間：鐵匠鋪是爐火暖色暗底、馬市是淺色招牌、擂台是紅底金字、懸賞榜是木板釘紙。新店要一眼認得出是「花錢走門路」的地方，又不能跟它們撞。</p>
+  <div class="opts">
+
+    <!-- 甲 -->
+    <div class="opt">
+      <div class="opt-head"><span class="opt-key">甲</span><span class="opt-name">衙門門房：五張名帖</span></div>
+      <p class="opt-note">朱漆大門當底、銅門釘一排排，門上兩個銅門環；黑底金字的匾寫「打點」。門房那一句寫在一張白紙條上。五樣是五張紅名帖，帖頭直書兩個字（指點、火候、丹藥、門路、軍需），做不了的那張褪成灰、蓋「退帖」；身上掛著的放在底下的拜匣裡。</p>
+      <ul class="pros"><li>紅底跟擂台的紅底金字同色系，要靠門釘與名帖把兩間分開；顏色上最容易跟擂台混。</li><li>名帖一張一列，375 寬不擠；紅底淺字在深淺色系統下都看得清，灰帖的對比偏低。</li></ul>
+      <div class="phone ya">
+        <div class="bar"><span class="back">‹ 出店</span><span class="sign">打點</span><span class="silver">銀 1846</span></div>
+        <div class="rings" aria-hidden="true">
+          <svg viewBox="0 0 40 40"><circle cx="20" cy="12" r="7" fill="#c99a3e" stroke="#6a4a18" stroke-width="1.5"/><circle cx="20" cy="12" r="3" fill="#4a0f0b"/><circle cx="20" cy="25" r="11" fill="none" stroke="#d6a74a" stroke-width="3"/></svg>
+          <svg viewBox="0 0 40 40"><circle cx="20" cy="12" r="7" fill="#c99a3e" stroke="#6a4a18" stroke-width="1.5"/><circle cx="20" cy="12" r="3" fill="#4a0f0b"/><circle cx="20" cy="25" r="11" fill="none" stroke="#d6a74a" stroke-width="3"/></svg>
+        </div>
+        <div class="sline"><span class="who">門房</span>「帖子遞進去，總得有點分量。客官要投哪一張？」</div>
+        <div class="body">
+          <div class="tie">— 名 帖 —</div>
+          <div class="card"><span class="v">指點</span><div><b>名師指點</b><span>下一次修練，升品的機率 +10%（不保底）</span></div><div class="price">50 兩<small>今日可 1 次</small></div></div>
+          <div class="card"><span class="v">火候</span><div><b>看火候</b><span>下一爐合成或打造：下 50／中 30／上 20 → 35／40／25</span></div><div class="price">50 兩<small>今日可 1 次</small></div></div>
+          <div class="card"><span class="v">丹藥</span><div><b>破境丹</b><span>衝絕學用；本季還能買 2 枚</span></div><div class="price">300 兩</div></div>
+          <div class="card fit"><span class="v">門路</span><div><b>打點門路・皇甫嵩</b><span>塞給他的門房，情誼 28 → 33（最多打點到 40）</span></div><div class="price">30 兩<small>今日可 1 次</small></div></div>
+          <div class="card off"><span class="v">軍需</span><div><b>捐銀兩進軍需帳</b><span>每 10 兩記 1 點貢獻・散人不能捐</span></div><div class="price">投靠之後<small>到大本營</small></div></div>
+          <div class="box"><i aria-hidden="true"></i><span>拜匣裡：名師指點 1 次（下次修練用掉）</span></div>
+        </div>
+        <div class="tabs"><span class="tab on">打點</span></div>
+      </div>
+    </div>
+
+    <!-- 乙 -->
+    <div class="opt">
+      <div class="opt-head"><span class="opt-key">乙</span><span class="opt-name">茶樓雅間：一本攤開的帳</span></div>
+      <p class="opt-note">頂上一片竹簾，雅間是暗的茶褐色；掮客那一句是一個說話框，旁邊一盞茶。五樣寫在一本攤開的帳簿上，左頁「修為」（指點、火候、破境丹）、右頁「人情」（門路、軍需）；做不了的那一筆被墨線劃掉、旁邊朱筆批一句去哪裡做；帳底下一把算盤，身上掛著的寫成一行茶綠的「記帳」。</p>
+      <ul class="pros"><li>帳簿是淺紙色，跟馬市、懸賞榜的淺色紙最近；靠竹簾、暗茶色的房間和朱筆分開，跟鐵匠鋪的爐火差得最遠。</li><li>兩頁並排，375 寬每頁約 170px，說明字要縮到 11.5px，五樣以後再加會擠；帳頁固定淺紙深字，深淺色都看得清。</li></ul>
+      <div class="phone cha">
+        <div class="blind" aria-hidden="true"></div>
+        <div class="bar"><span class="back">‹ 出店</span><span class="sign">打點</span><span class="silver">銀 1846</span></div>
+        <div class="host">
+          <svg viewBox="0 0 34 30" aria-hidden="true"><path d="M6 12h20l-2 12a4 4 0 0 1-4 3h-8a4 4 0 0 1-4-3z" fill="#e8dcbe" stroke="#7a6738"/><path d="M26 15h3a3 3 0 0 1 0 6h-4" fill="none" stroke="#e8dcbe" stroke-width="2"/><path d="M12 9c0-3 3-3 3-6M18 9c0-3 3-3 3-6" fill="none" stroke="#b39a5c" stroke-width="1.2" opacity=".7"/></svg>
+          <div class="sline"><span class="who">掮客</span>「茶先喝著。銀子怎麼使，咱們一筆一筆記清楚。」</div>
+        </div>
+        <div class="body">
+          <div class="ledger">
+            <div class="pg">
+              <div class="ph">修 為</div>
+              <div class="entry"><b>名師指點<em>50 兩</em></b><span>下一次修練升品 +10%（不保底）</span><span class="tick">今日可 1 次</span></div>
+              <div class="entry"><b>看火候<em>50 兩</em></b><span>下一爐：下 35／中 40／上 25（平常 50／30／20）</span><span class="tick">今日可 1 次</span></div>
+              <div class="entry"><b>破境丹<em>300 兩</em></b><span>衝絕學用</span><span class="tick">本季還能買 2 枚</span></div>
+            </div>
+            <div class="pg">
+              <div class="ph">人 情</div>
+              <div class="entry fit"><b>打點門路<em>30 兩</em></b><span>皇甫嵩的門房：情誼 28 → 33，最多打點到 40</span><span class="tick">今日可 1 次</span></div>
+              <div class="entry off"><b>捐軍需帳<em>每 10 兩</em></b><span>記 1 點貢獻・散人不能捐</span><span class="note">投靠之後，到大本營捐</span></div>
+            </div>
+          </div>
+          <div class="abacus" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="hang">記帳：名師指點 1 次（下次修練用掉）</div>
+        </div>
+        <div class="tabs"><span class="tab on">打點</span></div>
+      </div>
+    </div>
+
+    <!-- 丙 -->
+    <div class="opt">
+      <div class="opt-head"><span class="opt-key">丙</span><span class="opt-name">夜裡的牙行：燈下一排木牌</span></div>
+      <p class="opt-note">深藍近黑的夜、兩角各掛一盞紅燈籠，招牌也是一盞燈籠；牙人那一句斜體、像壓低了聲音。一根橫樑上用繩吊著五塊小木牌，燈照著的發暖光，做不了的那塊沒燈、暗著，牌上寫去哪裡做；身上掛著的收在一個錢袋裡。</p>
+      <ul class="pros"><li>四間店裡唯一的冷色夜景，一眼就跟爐火、馬市、擂台、木板分開；「黑市」的味道會不會讓人覺得是做壞事，要 joy 看。</li><li>木牌兩欄一排兩塊，375 寬價錢與說明擠在約 165px 裡；暗底亮牌在深色系統下最好看，淺色系統下整間店還是黑的。</li></ul>
+      <div class="phone ye">
+        <div class="lamps" aria-hidden="true">
+          <svg viewBox="0 0 26 44"><line x1="13" y1="0" x2="13" y2="8" stroke="#8a7a5a"/><rect x="8" y="7" width="10" height="3" fill="#2a1a10"/><ellipse cx="13" cy="22" rx="11" ry="13" fill="#c2311f"/><path d="M5 22h16M6 16h14M6 28h14" stroke="#ff8a3c" stroke-width=".8" opacity=".7"/><rect x="8" y="34" width="10" height="3" fill="#2a1a10"/><line x1="13" y1="37" x2="13" y2="44" stroke="#ffc56a"/></svg>
+          <svg viewBox="0 0 26 44"><line x1="13" y1="0" x2="13" y2="8" stroke="#8a7a5a"/><rect x="8" y="7" width="10" height="3" fill="#2a1a10"/><ellipse cx="13" cy="22" rx="11" ry="13" fill="#c2311f"/><path d="M5 22h16M6 16h14M6 28h14" stroke="#ff8a3c" stroke-width=".8" opacity=".7"/><rect x="8" y="34" width="10" height="3" fill="#2a1a10"/><line x1="13" y1="37" x2="13" y2="44" stroke="#ffc56a"/></svg>
+        </div>
+        <div class="bar"><span class="back">‹ 出店</span><span class="sign">打點</span><span class="silver">銀 1846</span></div>
+        <div class="sline"><span class="who">牙人</span>「天黑了才好說話。路子我有，就看客官的銀子。」</div>
+        <div class="body">
+          <div class="beam" aria-hidden="true"></div>
+          <div class="rack">
+            <div class="tag"><i class="hole"></i><b>名師指點</b><span>下一次修練升品 +10%（不保底）</span><div class="pr">50 兩<small>今日 1 次</small></div></div>
+            <div class="tag"><i class="hole"></i><b>看火候</b><span>下一爐：中、上品多幾成（35／40／25）</span><div class="pr">50 兩<small>今日 1 次</small></div></div>
+            <div class="tag"><i class="hole"></i><b>破境丹</b><span>衝絕學用</span><div class="pr">300 兩<small>本季還 2 枚</small></div></div>
+            <div class="tag fit"><i class="hole"></i><b>門路・皇甫嵩</b><span>情誼 28 → 33，最多打點到 40</span><div class="pr">30 兩<small>今日 1 次</small></div></div>
+            <div class="tag off wide"><i class="hole"></i><b>捐銀兩進軍需帳</b><span>每 10 兩記 1 點貢獻・散人不能捐</span><div class="pr"><span class="dark">投靠之後，到大本營捐</span><small>這裡沒燈</small></div></div>
+          </div>
+          <div class="pouch"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 6h8l3 9a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3z" fill="#6e4c2a" stroke="#ffc56a" stroke-width=".8"/><path d="M6 6c1-3 7-3 8 0" fill="none" stroke="#ffc56a" stroke-width="1.2"/></svg><span>錢袋裡：名師指點 1 次（下次修練用掉）</span></div>
+        </div>
+        <div class="tabs"><span class="tab on">打點</span></div>
+      </div>
+    </div>
+
+  </div>
+</div>
