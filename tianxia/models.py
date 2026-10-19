@@ -1708,7 +1708,7 @@ class TavernTuning(_Strict):
     named_from: int = Field(default=2, ge=0)  # 打聽你的人名望到第幾段，風聲裡直接說名號
     offline_hours: float = Field(default=24.0, ge=0)  # 現實多久沒上線算「近來沒人見過他」
     # 買殺手（設計第六節）
-    hit_prices: list[int] = Field(default_factory=lambda: [300, 600, 1200], min_length=1)  # 三檔殺手
+    hit_prices: list[int] = Field(default_factory=lambda: [20, 40, 60], min_length=1)  # 三檔殺手
     hit_power: list[float] = Field(default_factory=lambda: [0.85, 1.0, 1.15], min_length=1)  # 殺手威力＝對方本人威力 × 這個
     hit_hours: float = Field(default=6.0, gt=0)  # 單子有效幾個現實小時
     hit_pair_hours: float = Field(default=24.0, ge=0)  # 同一對人多久只能雇一次（現實小時）
@@ -1721,10 +1721,10 @@ class TavernTuning(_Strict):
     hit_reveal: float = Field(default=0.5, ge=0, le=1)  # 對方打贏時問出雇主的基本機會（雇主每一段名望 +0.1）
     hit_warn: float = Field(default=0.4, ge=0, le=1)  # 單子掛上那一刻對方聽到風聲的基本機會（對方每一段名望 +0.05）
     hit_find_drop: float = Field(default=0.2, ge=0, le=1)  # 打聽度每比 5 少一點，殺手找到人的機會少這麼多
-    guard_price: int = Field(default=40, ge=0)  # 雇保鏢
+    guard_price: int = Field(default=10, ge=0)  # 雇保鏢
     guard_hours: float = Field(default=6.0, ge=0)
     guard_scale: float = Field(default=0.85, ge=0)  # 保鏢在身邊時殺手的威力再乘這個
-    hush_price: int = Field(default=100, ge=0)  # 雇主封口：被供出的機會減半
+    hush_price: int = Field(default=20, ge=0)  # 雇主封口：被供出的機會減半
     # 問酒家（AI 問答，設計第八節）
     ask_price: int = Field(default=20, ge=0)
     ask_chars: int = Field(default=30, ge=1)
