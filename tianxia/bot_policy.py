@@ -595,6 +595,10 @@ def duel_move(game: Game, rng: random.Random, fight=None) -> str:
     return answer if answer is not None and rng.random() < DUEL_READ else rng.choice(MOVES)
 
 
+FEAST_SCORE = 8.0  # 入席：不花體力，路過就坐一下（低過軍令與懸賞）
+FEAST_TOAST_SCORE = 50.0  # 坐下了就敬酒（不然卡在宴席的選單上）
+
+
 def score(game: Game, option: Option, profile: BotProfile) -> float | None:
     """選項的分數；None＝假人不會選（別的陣營的投靠、叛投、閒聊或求見大勢人物、只會被擋在門外的交友、投靠的確認畫面另外處理）。"""
     kind, _, arg = option.id.partition(":")
@@ -602,6 +606,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         return None  # 假人不叛投（計畫甲）
     if kind in ("ambush", "works", "aid"):
         return None  # 設伏、工事、屯糧、護衛、犒軍、探望由 take_turn 的 _stamina_play 做，不交給打分數
+    if kind == "feast":  # 宴客（大勢人物擴充第三批）：路過擺著宴的地方就入席，入了席挑一句固定的敬酒詞（不寫自己的，同放手一搏）
+        return None if arg == "leave" else FEAST_TOAST_SCORE if arg.startswith("toast:") else FEAST_SCORE
     if kind == "opp":
         return None  # 機緣：假人不做（正式版乙一）；對話裡的 talk:opp: 落在下面 talk 的 None
     if kind == "battle":
