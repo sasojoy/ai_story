@@ -1922,7 +1922,12 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
 .shop-board .note.dim { opacity: 0.55; }
 .shop-board .note .corner { position: absolute; top: 3px; right: 4px; padding: 0 3px; border: 1.5px solid #b3261e; border-radius: 3px; color: #b3261e;
   background: rgba(246, 237, 216, 0.85); font: 600 10px/1.4 var(--serif); font-style: normal; transform: rotate(6deg); pointer-events: none; } /* 21 天季：寫銀兩的小朱印 */
-.shop-board .note.held .corner { right: 34px; } /* 揭著的那張右上角是「已揭」：朱印往左讓 */
+.shop-board .note.held .corner { right: 38px; } /* 揭著的那張右上角是「已揭」：朱印往左讓 */
+/* 21 天季告示正面的附贈（金框）與重賞一格（FB-391；草圖丙）：只排一行，放不下時第二格藏起來 */
+.shop-board .note .extra { display: flex; flex-wrap: wrap; gap: 3px; max-height: 1.6em; overflow: hidden; }
+.shop-board .note .extra span { padding: 0 3px; border: 1px solid #c9b48d; border-radius: 3px; background: #efe3c6; font-size: 9.5px; line-height: 1.5; }
+.shop-board .note .extra .gift { border-color: #c9a24a; background: #f5e6bd; }
+.shop-board .note .extra .prize { border-color: #a8322a; color: #a8322a; }
 .shop-board .paper .rtag { border-color: #c9b48d; background: #efe3c6; color: #2a241d; font-size: 12px; }
 .shop-board .paper .rtag em { color: #6d5a43; font-size: 11px; }
 .shop-board .paper .rtag.gift { border-color: #c9a24a; background: #f5e6bd; }
@@ -2076,6 +2081,46 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
 .shop-layer .dn-step { display: flex; gap: 4px; }
 .shop-layer .dn-step .btn { min-width: 34px; padding: 4px 8px; font-size: 15px; }
 .shop-layer .cell .pick { font: 600 10.5px var(--sans); color: #f2c46a; }
+/* 打點（21 天季的銀兩出口；企劃者挑第 9 批畫面乙：茶樓雅間的掮客，五樣記在一本攤開的帳簿上）：雅間是暗的茶褐色、頂上一片竹簾；
+   帳頁固定淺紙深字（深淺色主題都一樣，同懸賞榜的紙）。375 寬兩頁並排，說明字不小於 12px（設計 9.1）；做不了的那一筆墨線劃掉、朱筆批去哪做。
+   沒有動畫（減少動態效果的人也一樣） */
+.shop-layer.shop-dadian { color: #f1e7cf; background: radial-gradient(ellipse at 50% 30%, #3a3824 0%, #2b2a1c 55%, #1a1a10 100%); }
+.shop-layer.shop-dadian > .shop-bar { padding-top: 16px; background: repeating-linear-gradient(180deg, #b39a5c 0 3px, #7a6738 3px 4px) 0 0 / 100% 10px no-repeat; }
+.shop-layer.shop-dadian .shop-back { color: #f1e7cf; }
+.shop-layer.shop-dadian .shop-sign { border: 1px solid #b39a5c; border-radius: 14px; background: #6b4a2a; color: #f1e7cf; letter-spacing: 8px; }
+.shop-layer.shop-dadian > .shop-line { border: 1px solid rgba(179, 154, 92, 0.45); border-radius: 12px 12px 12px 2px; background: rgba(241, 231, 207, 0.1); color: #f1e7cf; }
+.shop-layer.shop-dadian .ledger { display: grid; grid-template-columns: 1fr 1fr; margin-top: 4px; border-radius: 4px; overflow: hidden;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45); color: #2a241d; }
+.shop-layer.shop-dadian .ledger-page { display: grid; align-content: start; padding: 10px 8px 10px 10px; background: linear-gradient(90deg, #f1e7cf 85%, #e8dcbe); }
+.shop-layer.shop-dadian .ledger-page + .ledger-page { padding: 10px 10px 10px 8px; border-left: 1px solid #c9b78f; background: linear-gradient(90deg, #e8dcbe, #f1e7cf 15%); }
+.shop-layer.shop-dadian .ledger-page h3 { margin: 0 0 4px; padding-bottom: 3px; border-bottom: 1px solid #a8322a; color: #a8322a; text-align: center;
+  font: 600 12px var(--serif); letter-spacing: 3px; }
+.shop-layer.shop-dadian .entry { display: grid; gap: 1px; width: 100%; padding: 6px 0 7px; border: 0; border-bottom: 1px dashed #c9b78f; background: none;
+  color: inherit; text-align: left; font: inherit; }
+.shop-layer.shop-dadian button.entry { cursor: pointer; }
+.shop-layer.shop-dadian button.entry:active { background: rgba(93, 122, 74, 0.12); }
+.shop-layer.shop-dadian .entry b { display: flex; justify-content: space-between; gap: 4px; font: 600 14px var(--serif); }
+.shop-layer.shop-dadian .entry b em { font-style: normal; color: #a8322a; white-space: nowrap; }
+.shop-layer.shop-dadian .entry .desc { font: 12px/1.45 var(--sans); color: #6b5d48; }
+.shop-layer.shop-dadian .entry .tick { font: 12px var(--sans); color: #4a6a3a; }
+.shop-layer.shop-dadian .entry.off b, .shop-layer.shop-dadian .entry.off b em { color: #7a6b55; }
+.shop-layer.shop-dadian .entry.off b { text-decoration: line-through 1.5px #2a241d; }
+.shop-layer.shop-dadian .entry.off .note { justify-self: start; transform: rotate(-2deg); color: #a8322a; font: 600 12px var(--serif); }
+.shop-layer.shop-dadian .abacus { position: relative; display: grid; grid-template-columns: repeat(9, 1fr); gap: 2px; height: 28px; margin-top: 8px; padding: 3px 6px;
+  border-radius: 3px; background: #6b4a2a; }
+.shop-layer.shop-dadian .abacus::before { content: ""; position: absolute; left: 6px; right: 6px; top: 11px; height: 2px; background: #b39a5c; }
+.shop-layer.shop-dadian .abacus i { background: radial-gradient(ellipse at 50% 50%, #4a2e1c 0 45%, transparent 48%) 50% 2px / 100% 8px no-repeat,
+  radial-gradient(ellipse at 50% 50%, #4a2e1c 0 45%, transparent 48%) 50% 14px / 100% 8px no-repeat,
+  linear-gradient(90deg, transparent 46%, #7a6738 46% 54%, transparent 54%); }
+.shop-layer.shop-dadian .ledger-hang { margin: 8px 0 0; padding: 5px 8px; border-left: 3px solid #5d7a4a; border-radius: 2px; background: rgba(93, 122, 74, 0.25);
+  color: #f1e7cf; font: 12.5px var(--sans); }
+/* 比 360 窄時兩頁並排放不下（FB-411：320 寬人名斷成「孫／堅」）：改成上下兩頁，第二頁的左邊線換成上邊線、兩頁都不要左右的書脊漸層 */
+@media (max-width: 359px) {
+  .shop-layer.shop-dadian .ledger { grid-template-columns: 1fr; }
+  .shop-layer.shop-dadian .ledger-page { padding: 10px; background: #f1e7cf; }
+  .shop-layer.shop-dadian .ledger-page + .ledger-page { padding: 10px; border-left: 0; border-top: 1px solid #c9b78f; background: #f1e7cf; }
+}
+
 /* ── 電腦上的店面與武學譜那本書（FB-225，企劃者 2026-10-14「最主要是寬度的設計沒有照著 UI 框架延續」）：遊戲本體在電腦上是一欄 640px
    （.shell、.tabs-inner），店面與書也照這一欄。圖層照舊蓋滿畫面（擋住底下的頁面），可是底色（爐火、土黃、木紋、書頁）只畫在中間那一欄
    （背景圖照欄寬、置中、不重複），欄外是遊戲本來的頁面底色 --paper：從江湖頁進店、出店，欄的左右邊不跳，欄外也不變色。
@@ -2084,7 +2129,7 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
    （scrollbar-gutter: stable both-edges），內容才正好在中間、跟 .shell 對齊，換到不必捲的那一頁也不左右跳。店裡捲的內容包在 .shop-col，
    照手機的版面左右各留 12px（640 − 24）。窄於 641px（手機）這一段整段不生效，一個像素都不變 ── */
 @media (min-width: 641px) {
-  .shop-layer.shop-smith, .shop-layer.shop-market, .shop-layer.shop-board, .shop-layer.shop-donate, .shop-layer.shop-arena {
+  .shop-layer.shop-smith, .shop-layer.shop-market, .shop-layer.shop-board, .shop-layer.shop-donate, .shop-layer.shop-arena, .shop-layer.shop-dadian {
     background-color: var(--paper); background-size: min(100%, 640px) 100%; background-position: 50% 0; background-repeat: no-repeat;
   }
   .shop-layer > .shop-bar, .shop-layer > .shop-tabs { margin-left: max(0px, calc(50% - 320px)); margin-right: max(0px, calc(50% - 320px)); }
@@ -2168,10 +2213,12 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
   .shop-board .note b { font: 600 17px var(--serif); }
   .shop-board .note small { font-size: 12.5px; }
   .shop-board .note .corner { font: 600 13px/1.4 var(--serif); }
+  .shop-board .note .extra span { font-size: 12.5px; }
   .shop-board .paper .rtag { font-size: 15.5px; }
   .shop-board .paper .rtag em { font-size: 14.5px; }
   .shop-board .stamp { font: 600 14.5px var(--serif); }
   .shop-board .note.held .stamp { font-size: 13px; }
+  .shop-board .note.held .corner { right: 46px; } /* FB-390：「已揭」13px 約 40px 寬，朱印照它往左讓（手機 10px 是 38px） */
   .shop-board .board-sheet .paper { font-size: 16px; }
   .shop-board .paper h4 { font: 600 21px var(--serif); }
   .shop-board .paper .due, .shop-board .paper .why { font-size: 15px; }
@@ -2226,6 +2273,12 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
   .shop-layer .dn-step .btn { font-size: 19.5px; }
   .shop-layer .cell .pick { font: 600 13.5px var(--sans); }
   .shop-layer .odds { height: 23.5px; }
+  .shop-layer.shop-dadian .ledger-page h3 { font: 600 15.5px var(--serif); }
+  .shop-layer.shop-dadian .entry b { font: 600 18px var(--serif); }
+  .shop-layer.shop-dadian .entry .desc { font: 15.5px/1.45 var(--sans); }
+  .shop-layer.shop-dadian .entry .tick { font: 15.5px var(--sans); }
+  .shop-layer.shop-dadian .entry.off .note { font: 600 15.5px var(--serif); }
+  .shop-layer.shop-dadian .ledger-hang { font: 16px var(--sans); }
 }
 
 /* ── 電腦上整頁的捲軸溝一直留著（FB-240）：江湖頁短到沒有整頁捲軸時，進鐵匠鋪、懸賞榜，底下那一頁換成一長串選項、整頁捲軸冒出來，

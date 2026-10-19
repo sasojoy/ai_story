@@ -108,3 +108,44 @@ def test_the_board_note_has_a_seal_and_the_paper_has_tags():
                    + " return T.els.app.innerHTML; })();")
     assert '<i class="corner">120</i>' in out and 'class="rtags"' in out and "賞照你第 20 級・" in out
     assert '<p class="reward">' not in out
+
+
+# ── FB-390、FB-391（QA 5b）──
+
+
+def test_the_notice_face_carries_a_short_gift_and_the_prize():
+    """FB-391：草圖丙的告示正面在朱印之外還有一格附贈（金框，紙上那一格的短寫）；有重賞時再一格。只在 21 天季。"""
+    game = _ranger()
+    s = game.state
+    b = _first(s, "strike")
+    b.prize = "treasure"
+    game.choose("act:bounties")
+    view = shopview.board_view(s, game.content, game.world)
+    note = next(n for n in view["notes"] if n["id"] == b.id)
+    assert note["gift"] == "＋二階" and note["prize_chip"] == "重賞"
+    scout = next(n for n in view["notes"] if n["kind"] == "scout")
+    assert scout["gift"] == f"＋{game.content.config.stamina_pill_name}" and scout["prize_chip"] == ""
+    weekend = _ranger("weekend")
+    weekend.choose("act:bounties")
+    assert all("gift" not in n for n in shopview.board_view(weekend.state, weekend.content, weekend.world)["notes"])
+
+
+@web
+def test_the_notice_face_draws_the_gift_cell():
+    from test_shop2_web import run as shop_run
+
+    game = _ranger()
+    game.choose("act:bounties")
+    m = server.main_view(game)
+    html = shop_run(m, "H.render(); return T.els.app.innerHTML;")
+    assert '<span class="extra"><span class="gift">＋二階</span>' in html
+
+
+def test_the_held_seal_moves_further_left_on_wide_screens():
+    """FB-390：寬過 641px 時「已揭」換成 13px，揭著的朱印照新的字寬往左讓（手機也從 34px 挪到 38px：量到壓了 3px）。"""
+    from pathlib import Path
+
+    css = (Path(__file__).resolve().parent.parent / "web" / "style.css").read_text(encoding="utf-8")
+    phone, wide = css.split("@media (min-width: 641px)", 1)[0], css.split("@media (min-width: 641px)", 1)[1]
+    assert ".shop-board .note.held .corner { right: 38px; }" in phone
+    assert ".shop-board .note.held .corner { right: 46px; }" in wide

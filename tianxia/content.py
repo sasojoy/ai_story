@@ -648,6 +648,7 @@ def check_shop_lines(c: Content, need) -> None:
         "market": c.config.mounts.enabled,
         "board": c.config.bounties.enabled and bool(c.scenario.factions),
         "donate": c.config.economy.donate and bool(c.scenario.factions),  # 大本營的軍需帳（素材與經濟 B6）
+        "dadian": c.config.silver_outlets.enabled,  # 打點（21 天季的銀兩出口）
         "tavern": c.config.tavern.enabled and any("酒肆" in loc.tags for loc in c.locations.values()),  # 酒肆（企劃者 2026-10-18）
     }
     switched = {"sell": c.config.economy.sell, "upgrade": c.config.economy.upgrade,  # 素材與經濟：收購、升階關著時不必有那一句

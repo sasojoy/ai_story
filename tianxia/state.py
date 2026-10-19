@@ -592,6 +592,7 @@ class PlayerState(BaseModel):
     armor_warned: bool = False  # 身上那件防具耐久低到 Config.armor.edge_warn 以下時提醒過一次了；修好或換一件時重設
     mount: Equipment | None = None  # 身上的坐騎（裝備四欄設計第五節）；舊存檔沒有＝沒騎馬
     hunger_warned: bool = False  # 身上那匹飽足低到 Config.mounts.edge_warn 以下時提醒過一次了；餵過或換一匹時重設
+    picking_dadian: bool = False  # 打開了「打點」那一間店（21 天季的銀兩出口，第 9 批畫面乙）；離開、同步時這裡一樣都做不了、出發都收起來
     picking_market: bool = False  # 打開了馬市的第二層選單（同 picking_smith）；離開、存檔修補、同步時人不在馬市、出發都收起來
     feasting: int | None = None  # 赴宴中（宴客，tianxia/feasts.py）：坐在哪一場宴席上（Feast.id），選單換成敬酒詞
     feasts_paid: list[int] = Field(default_factory=list)  # 領過「席間最佳」名望的宴席 id（這一季的）

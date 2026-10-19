@@ -962,6 +962,7 @@ ALLOW_FIXED = frozenset({
     "act:arena",  # 擂台（城鎮類的地點；tianxia/arena.py）
     "act:heal",  # 醫館療傷（帶「醫館」標籤的地點，有內傷時）
     "act:donate",  # 自家大本營捐軍備（素材與經濟設計第六節）
+    "act:dadian",  # 打點（21 天季的銀兩出口收成一間店）
     "act:tavern",  # 酒肆（帶「酒肆」標籤的城鎮；tianxia/tavern.py）
     "ambush:lift", "works:fortify", "works:stockpile",  # 後期體力玩法：收伏、修築工事、屯糧練兵
 })
