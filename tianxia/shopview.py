@@ -670,6 +670,9 @@ def board_view(state: GameState, content: Content, world: WorldStateStore) -> di
             "due": bounties.due_line(state, content, b), "short": bounties.due_short(b, content, state.world), "prize": PRIZE_SHORT if bounties.has_prize(content, b) else "",
             "held": b.id in mine_ids, "have": "",
         }
+        tags = bounties.reward_tags(state, content, b)
+        if tags is not None:  # 21 天季（第 5 批畫面第三組丙）：紙上的小籤、告示角上寫銀兩的小朱印、照等級的那一句
+            note.update(tags=tags, corner=bounties.reward_bits(state, content, b).silver_short, level=bounties.level_note(state, content, b))
         rank = 2
         if b.id in mine_ids:
             rank = 0
