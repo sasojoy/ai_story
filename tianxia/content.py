@@ -534,6 +534,25 @@ def check_insight_strong(c: Content, need) -> None:
              f"{where}：有所感的場景沒有一段線索指得到最濃的「{d.name}」（{d.attribute}）")
 
 
+def check_terrain_arts(c: Content, need) -> None:
+    """地利（武學隨地理環境）：開著時，每一種當過最濃的意境都要有戰報那兩句（match:<id>、clash:<id>），它的屬性與它剋的那一路
+    都要有輿圖那一行的字（words）；同伴那一句要帶 {name}。不然戰報、輿圖會悄悄少一句。"""
+    cfg = c.config.terrain_arts
+    if not cfg.enabled or not c.config.insight_strong.enabled:
+        return
+    from .martial_arts import ATTRIBUTE_COUNTERS  # noqa: PLC0415  同 check_insight_strong 延後
+
+    for sid in sorted({loc.insight_strong for loc in c.locations.values() if loc.insight_strong}):
+        d = c.insights.get(sid)
+        if d is None:
+            continue  # 認不得的意境由 check_insight_strong 擋
+        for key in (f"match:{sid}", f"clash:{sid}"):
+            need(bool(cfg.lines.get(key)), f"地利：最濃的意境 {sid} 要寫戰報那一句 terrain_arts.lines[{key}]")
+        for attribute in (d.attribute, ATTRIBUTE_COUNTERS.get(d.attribute)):
+            need(attribute in cfg.words, f"地利：最濃的意境 {sid} 要寫輿圖那一行的屬性字 terrain_arts.words[{attribute}]")
+    need("{name}" in cfg.lines.get("mate_match", ""), "地利：同伴那一句 terrain_arts.lines[mate_match] 要帶 {name}")
+
+
 def check_faction_choices(c: Content, need) -> None:
     """選項照陣營分邊（Condition.factions／factions_none，企劃者 2026-10-08「加入黃巾軍了，探索還一堆打黃巾的任務」）之後，
     每一種身分（散人與每個陣營）碰得到的事件，至少要剩一個選項看得見——不然那個人會卡在一則沒有選項的事件上。
@@ -2009,6 +2028,7 @@ def validate(c: Content) -> None:
     check_check_voice(c, need)
     check_insight_scenes(c, need)
     check_insight_strong(c, need)
+    check_terrain_arts(c, need)
     check_faction_choices(c, need)
     check_front_lines(c, need)
     check_combat_lines(c, need)

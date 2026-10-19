@@ -15,8 +15,9 @@ from collections import OrderedDict
 from collections.abc import Callable
 
 from . import armor, calendar, encounter, equipment, mounts, rounds, signature, styles, tactics, traits, treasures, weapons
+from . import terrain as terrain_mod  # 地利（_styled_fighters 的參數 terrain 是開關，模組另取名字）
 from .martial_arts import MAX_LEVEL, MartialArt, content_art, counters, power_at, with_quality
-from .models import Content, FollowerDef, Squad, TacticBond, TacticDef
+from .models import Content, FollowerDef, InsightDef, Squad, TacticBond, TacticDef
 from .state import PLAYER, MAX_TEAM_COMPANIONS, FollowerDrill, GameState, LevelUps, Member
 from .world_state import CompanionProgress, WorldStateStore
 
@@ -1257,11 +1258,11 @@ def _odds_text(wins: int, draws: int, runs: int) -> str:
 
 def estimate(
     state: GameState, content: Content, world: WorldStateStore, squad_id: str, *, difficulty: float | None = None,
-    draw_floor: float | None = None, memo: OddsMemo | None = None,
+    draw_floor: float | None = None, memo: OddsMemo | None = None, at: str | None = None,
 ) -> str:
     """勝算的文字；difficulty、draw_floor 同 fight。含會改到贏的機會的功效（破甲、先手、穩、險、借力、連環、厚），不含護命與閃避：
     勝算是贏的機會，那兩個只把落敗變成僵持（人物資質設計 14.4、武學與成長設計 13.4）。memo：模擬的輸入一樣就拿記住的字（OddsMemo，
-    FB-321）；輸入（威力、功效、戰法與條件）照舊每次算，只有四十場的模擬省下來。"""
+    FB-321）；輸入（威力、功效、戰法與條件）照舊每次算，只有四十場的模擬省下來。at：照哪一處的地利（輿圖替別處算，power_vs）。"""
     squad = content.squads[squad_id]
     if difficulty is not None:
         squad = squad.model_copy(update={"difficulty": difficulty})
@@ -1270,17 +1271,21 @@ def estimate(
     mods = trait_mods(content, traits.loadout(state, content, world))
     if draw_floor is not None:
         mods = mods.model_copy(update={"draw_floor": draw_floor})
-    power, foe = power_vs(state, content, world, squad), foe_tactics(state, content, squad, ctx)
+    power, foe = power_vs(state, content, world, squad, at=at), foe_tactics(state, content, squad, ctx)
     if memo is None:
         return odds_word(power, squad, mods=mods, plan=plan, foe=foe)
     return memo.get(odds_key(power, squad, mods, plan, foe), lambda: odds_word(power, squad, mods=mods, plan=plan, foe=foe))
 
 
-def power_vs(state: GameState, content: Content, world: WorldStateStore, squad: Squad, fresh: bool = False) -> float:
-    """全隊此刻對上這一路的威力（氣血係數、加成、屬性相剋、一門打不遍都算；勝算與打起來同一份）。
-    fresh：氣血係數一律當滿的——江湖水漲（rise.big）照這一份浮難度，帶傷上陣照樣吃虧（不然傷得越重對手跟著越弱）。"""
+def power_vs(
+    state: GameState, content: Content, world: WorldStateStore, squad: Squad, fresh: bool = False,
+    *, at: str | None = None, terrain: bool = True,
+) -> float:
+    """全隊此刻對上這一路的威力（氣血係數、加成、屬性相剋、一門打不遍、地利都算；勝算與打起來同一份）。
+    fresh：氣血係數一律當滿的——江湖水漲（rise.big）照這一份浮難度，帶傷上陣照樣吃虧（不然傷得越重對手跟著越弱）。
+    at、terrain 照 _styled_fighters：江湖水漲浮難度傳 terrain=False（不然地利被浮上去的難度吃掉，計畫 2026-10-18 2.1）。"""
     arts = team_arts(state, content, world)
-    members, conditions, boosts = _styled_fighters(state, content, world, arts, squad)
+    members, conditions, boosts = _styled_fighters(state, content, world, arts, squad, at=at, terrain=terrain)
     if fresh:
         conditions = [1.0] * len(conditions)
     return encounter.team_power(*_with_attribute((members, conditions, boosts), arts, squad.attribute))
@@ -1288,8 +1293,11 @@ def power_vs(state: GameState, content: Content, world: WorldStateStore, squad: 
 
 def _styled_fighters(
     state: GameState, content: Content, world: WorldStateStore, arts: dict[str, MartialArt], squad: Squad,
+    *, at: str | None = None, terrain: bool = True,
 ) -> tuple[list, list[float], list[encounter.Boost]]:
-    """_fighters，再把大場面對手的路數（styles，一門打不遍）乘進每個人的加成：照他身上那一門武學的屬性。
+    """_fighters，再把大場面對手的路數（styles，一門打不遍）乘進每個人的加成：照他身上那一門武學的屬性；
+    最後是地利（terrain_mod.factor，計畫 2026-10-18）：本人與出戰同伴身上的武學、內功一門一門比這一地最濃的意境，部下不吃。
+    at：照哪一處的地利（輿圖替別處算勝算）；不給是玩家此刻腳下（在路上沒有）。terrain=False 不算地利（江湖水漲浮難度）。
     fight 與 estimate 都走這裡，勝算才跟打起來一樣。"""
     members, conditions, boosts = _fighters(state, content, world)
     style = styles.style_of(state, content, world, squad)
@@ -1300,7 +1308,43 @@ def _styled_fighters(
                                 content, world, style)
     if worn != 1.0:
         boosts = [boosts[0].model_copy(update={"factor": boosts[0].factor * worn}), *boosts[1:]]
+    strong = None if not terrain else terrain_mod.here(state, content) if at is None else terrain_mod.strong_at(content, at)
+    if strong is not None:
+        people = 1 + len(state.player.team)  # 本人與出戰同伴在前（team_participants），部下接在後面、不吃
+        boosts = [_on_terrain(b, m, arts, content, strong) if i < people else b
+                  for i, (m, b) in enumerate(zip(members, boosts, strict=True))]
     return members, conditions, boosts
+
+
+def _on_terrain(
+    boost: encounter.Boost, member: encounter.HasMartialArts, arts: dict[str, MartialArt], content: Content, strong: InsightDef,
+) -> encounter.Boost:
+    """一個人的地利：武學那一門的倍數進 outer_scale、內功那一門進 inner_scale；兩門都不相干照原樣。"""
+    def attribute(skill_id: str | None) -> str | None:
+        return arts[skill_id].attribute if skill_id in arts else None
+
+    outer = terrain_mod.factor(attribute(member.wugong_id), content, strong)
+    inner = terrain_mod.factor(attribute(member.neigong_id), content, strong)
+    if outer == 1.0 and inner == 1.0:
+        return boost
+    return boost.model_copy(update={"outer_scale": boost.outer_scale * outer, "inner_scale": boost.inner_scale * inner})
+
+
+def terrain_attributes(
+    state: GameState, content: Content, world: WorldStateStore,
+) -> tuple[list[str | None], list[tuple[str, list[str | None]]]]:
+    """戰報地利那一句要的屬性（terrain_mod.note）：本人身上兩門（照自己那一份）、出戰同伴每一位（名字, 兩門）。"""
+    p = state.player
+    mine = [art.attribute if (art := player_art(state, content, world, sid)) else None
+            for sid in (p.member.wugong_id, p.member.neigong_id)]
+    shared = world.read()
+    mates = []
+    for key in p.team:
+        progress = shared.companions.get(key, CompanionProgress())
+        mates.append((content.characters[key].name, [
+            art.attribute if (art := resolve_art(sid, content, world)) else None for sid in (progress.wugong_id, progress.neigong_id)
+        ]))
+    return mine, mates
 
 
 def worn_attribute(state: GameState, content: Content, world: WorldStateStore) -> str | None:

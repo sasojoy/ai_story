@@ -13,7 +13,7 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from . import allied, figures, insights, mounts, orders, prologue, sortie, territory
+from . import allied, figures, insights, mounts, orders, prologue, sortie, terrain, territory
 from .calendar import point, stamp_text
 from .models import Content, Location, MapRegion, SimPlayer, TravelMode
 from .rules import (
@@ -817,6 +817,7 @@ def _names(content: Content, loc_ids) -> str:
 
 INSIGHT_LABEL = "**意境**　"
 HERE_INSIGHTS = "這裡能悟：{names}"  # 詳情欄那一行（W3；待 joy 潤）
+TERRAIN_LABEL = "**地利**　"  # 詳情欄地利那一行的標題，字在 terrain.place_line（武學隨地理環境；待 joy 潤）
 
 
 def insight_names(content: Content, loc: Location) -> list[str]:
@@ -863,6 +864,9 @@ def detail_text(state: GameState, content: Content, loc_id: str, odds: Odds) -> 
     gives = insight_names(content, loc)
     if gives:  # 探索在這裡悟不到什麼（比例是 0、序章的草廬）就整行不寫；摸清了才走到這裡，沒摸清的地點上面已經回了
         parts.append(INSIGHT_LABEL + HERE_INSIGHTS.format(names="、".join(gives)))
+    lie = terrain.place_line(content, loc_id)
+    if lie:  # 地利（武學隨地理環境）：開關關著、這一處沒寫最濃、序章專屬的地方都是空的，整行不寫
+        parts.append(TERRAIN_LABEL + lie)
 
     story: list[str] = []
     if not storyline_off(state, content):  # 第一季不觸發的 beta 主線：玩家看不到它，這一行也不寫（審查 M-3）
