@@ -51,13 +51,35 @@ def test_gear_rows_read_the_numbers_from_config(m, content):
     assert len(rows) == len(content.config.treasures.effects) + len(content.seal) == 15
     for r in rows:
         table = content.config.treasures.effects if r.source == "寶物" else content.config.seal.effects
-        assert r.value == table[r.key]
         assert r.kind == m.KIND[r.key]
+        if r.key == "insight" and content.config.explore_modes.enabled:
+            continue  # 觀山石：探索三選一開著時數字出自 sense_treasure_points（FB-455，下面另一條驗）
+        assert r.value == table[r.key]
+        assert r.field.endswith(f"effects[{r.key}]")
     assert [r.name for r in rows if r.source == "玉璽"] == [s.name for s in content.seal.values()]
     # 改了 Config 的數字，表跟著變（不寫死）
     tweaked = content.model_copy(deep=True)
     tweaked.config.seal.effects["dodge"] = 0.07
     assert next(r for r in m.gear_rows(tweaked) if r.key == "dodge").value == 0.07
+
+
+def test_the_insight_row_names_the_field_its_number_comes_from(m, content):
+    """FB-455：觀山石那一列照探索三選一的開關標數字出自哪個欄位——開著時「+15 個百分點」是 sensing.rate 加的
+    Config.explore_modes.sense_treasure_points（effects[insight] 的 1.5 只拿來比 > 1），關著才是 Config.treasures.effects[insight] 的倍數。"""
+    cfg = content.config
+    assert cfg.explore_modes.enabled  # 正式內容開著
+    sense = cfg.explore_modes.sense_treasure_points
+    row = next(r for r in m.gear_rows(content) if r.key == "insight")
+    assert (row.field, row.value) == ("Config.explore_modes.sense_treasure_points", sense)
+    assert f"+{sense:g} 個百分點" in row.text  # 同一列的字跟它標的數字對得上
+    # 間接那一行照舊說 effects[insight] 的倍數只在三選一關著時用
+    line = m._indirect(content, row)
+    assert f"Config.treasures.effects[insight]＝{cfg.treasures.effects['insight']:g} 只在三選一關著時用" in line
+    closed = content.model_copy(deep=True)
+    closed.config.explore_modes.enabled = False
+    row = next(r for r in m.gear_rows(closed) if r.key == "insight")
+    assert (row.field, row.value) == ("Config.treasures.effects[insight]", closed.config.treasures.effects["insight"])
+    assert f"×{row.value:g}" in row.text
 
 
 def test_the_jinjiao_holder_reaches_the_real_dodge_hook(m, content):

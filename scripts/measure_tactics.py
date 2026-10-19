@@ -652,15 +652,24 @@ def gear_rows(content):
     names: dict[str, list[str]] = {}
     for item in content.gear.treasures.values():
         names.setdefault(item.effect, []).append(item.name)
-    rows = [GearRow("寶物", "、".join(names.get(key, [])) or "（沒有寶物帶它）", key, KIND.get(key, "?"), value,
-                    f"Config.treasures.effects[{key}]", treasures.effect_text(content, key))
+    rows = [GearRow("寶物", "、".join(names.get(key, [])) or "（沒有寶物帶它）", key, KIND.get(key, "?"),
+                    *_source(content, key, f"Config.treasures.effects[{key}]", value), treasures.effect_text(content, key))
             for key, value in content.config.treasures.effects.items()]
     for shard in content.seal.values():
         key = shard.effect
         value = content.config.seal.effects.get(key, 1.0 if key in treasures.MULTIPLY else 0.0)
-        rows.append(GearRow("玉璽", shard.name, key, KIND.get(key, "?"), value, f"Config.seal.effects[{key}]",
+        rows.append(GearRow("玉璽", shard.name, key, KIND.get(key, "?"), *_source(content, key, f"Config.seal.effects[{key}]", value),
                             treasures.seal_effect_text(content, key)))
     return rows
+
+
+def _source(content, key, field, value):
+    """（數字, 它出自哪個欄位）：照遊戲裡真的用的那一個。探索悟意境（觀山石）在探索三選一開著時是 sensing.rate 加的
+    Config.explore_modes.sense_treasure_points（effects 那個倍數只拿來比 > 1，同 treasures.effect_text 照開關寫的那一句；FB-455），
+    其餘照 effects。"""
+    if key == "insight" and content.config.explore_modes.enabled:
+        return content.config.explore_modes.sense_treasure_points, "Config.explore_modes.sense_treasure_points"
+    return value, field
 
 
 def wearing(content, key=None, agi=team.BASE_STAT, wis=team.BASE_STAT):
@@ -882,7 +891,8 @@ def _indirect(content, r):
             a = sensing.rate(wearing(content, None), content, loc)
             b = sensing.rate(wearing(content, "insight"), content, loc)
             return (f"探索三選一開著：靜心感悟擲中 {a}% → {b}%（悟性 5；+Config.explore_modes.sense_treasure_points，"
-                    f"夾在 sense_rate_range 上限 {cfg.sense_rate_range[1]}%；{r.field}＝{r.value:g} 只在三選一關著時用）")
+                    f"夾在 sense_rate_range 上限 {cfg.sense_rate_range[1]}%；Config.treasures.effects[insight]＝"
+                    f"{cfg.treasures.effects.get('insight', 1.0):g} 只在三選一關著時用）")
         return f"探索悟意境那一支的比重 ×{amt:g}（跟悟性疊乘，_explore_weights）"
     if r.key in ("win_xinde_pct", "win_exp_pct"):
         what = "心得" if r.key == "win_xinde_pct" else "經驗"
