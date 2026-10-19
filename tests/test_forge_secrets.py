@@ -326,3 +326,18 @@ def test_the_go_button_names_only_what_your_own_book_has_solved(forge_content, w
     label = go(other).label
     assert label.startswith("開爐：精鐵砂＋驚羽" + smithing.SOLVED_HEAD.format(name="穿霞劍") + "（劍・屬陽・一階・")
     assert go(other).wait == ""
+
+
+def test_named_gear_does_not_share_two_characters_with_a_divine_or_a_tactic():
+    """FB-431：名器的名字（拿掉兵器字、防具字）不跟神器、本命兵器、戰法特技共用連著的兩個字；正式內容過得了。"""
+    from tianxia import content as content_mod
+
+    rc = real_content()
+    problems: list[str] = []
+    content_mod._validate_named_clash(rc, lambda ok, msg: problems.append(msg) if not ok else None)
+    assert problems == []
+    rid = next(r.id for r in rc.forge_secrets.values() if r.slot == "armor" and not r.divine)
+    rc.forge_secrets[rid] = rc.forge_secrets[rid].model_copy(update={"name": "隕星鎧"})
+    content_mod._validate_named_clash(rc, lambda ok, msg: problems.append(msg) if not ok else None)
+    assert len(problems) == 1 and "隕星刀" in problems[0] and "隕星" in problems[0]
+    assert content_mod._named_stem("寒淵拳套", "weapon", "拳腳") == "寒淵"  # 拳套不算撞字

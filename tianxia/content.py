@@ -34,7 +34,7 @@ from .models import (
 )
 from .martial_arts import ATTRIBUTE_COUNTERS, ATTRIBUTES, QUALITIES
 from .naming import FORGE_CLASH, GEAR_CLASH, PRESET_CLASH, SEAL_CLASH, name_problem
-from .armor import FORGE_NOUNS as ARMOR_FORGE_NOUNS, word_problem as armor_word_problem
+from .armor import FORGE_NOUNS as ARMOR_FORGE_NOUNS, FORGE_WORDS as ARMOR_FORGE_WORDS, word_problem as armor_word_problem
 from .weapons import ATTR_WORDS as WEAPON_ATTR_WORDS, NOUNS as WEAPON_NOUNS, WEAPON_WORDS, kind_problem as weapon_kind_problem, shop_name as weapon_shop_name
 from .zh import to_traditional
 
@@ -2500,6 +2500,7 @@ def validate(c: Content) -> None:
     _validate_secrets(c, need)
     _validate_forge_secrets(c, need)
     _validate_tier4_named(c, need)
+    _validate_named_clash(c, need)
     _validate_seal(c, need)
 
     # ── 意境與基礎武學（武學與成長設計附錄 A～C）──
@@ -2686,6 +2687,32 @@ def _validate_tier4_named(c: Content, need) -> None:
         for attribute in ATTRIBUTES:
             need(any(e.slot == slot and e.kind == kind and e.attribute == attribute for e in c.tier4_named.values()),
                  f"四階名器名字表少了 {kind or '防具'}・{attribute}")
+
+
+def _named_stem(name: str, slot: str, kind: str | None) -> str:
+    """名器名字拿掉最後的兵器字（劍、拳套）或防具字（甲鎧袍衫），剩下的是取名的那幾個字（_validate_named_clash 比這一段）。"""
+    tail = WEAPON_NOUNS.get(kind or "", kind or "") if slot == "weapon" else next((w for w in ARMOR_FORGE_WORDS if name.endswith(w)), "")
+    return name[: -len(tail)] if tail and name.endswith(tail) else name
+
+
+def _validate_named_clash(c: Content, need) -> None:
+    """名器（隱藏配方的名器、四階名器名字表）的名字不跟神器、名將本命兵器的名字，與任何戰法、特技的名字共用連著的兩個字（FB-431：
+    三階名器【隕星鎧】跟神器【隕星刀】、【墜星劍】跟特技〔墜星〕）。名器那一邊先拿掉最後的兵器字、防具字（拳套、長刀的刀不算撞字）。"""
+    great = [r.name for r in c.forge_secrets.values() if r.divine] + [a.name for a in c.gear.signature_arms]
+    tactics = [s.tactic.name for s in c.skills.values() if s.tactic is not None]
+    tactics += [r.tactic.name for r in c.forge_secrets.values() if r.tactic is not None]
+    tactics += [a.tactic.name for a in c.gear.signature_arms if a.tactic is not None]
+
+    def pairs(text: str) -> set[str]:
+        return {text[i:i + 2] for i in range(len(text) - 1)}
+
+    named = [(f"名器 {r.id}", r.name, r.slot, r.kind) for r in c.forge_secrets.values() if not r.divine]
+    named += [(f"四階名器 {e.id}", e.name, e.slot, e.kind) for e in c.tier4_named.values()]
+    for where, name, slot, kind in named:
+        stem = pairs(_named_stem(name, slot, kind))
+        for other in great + tactics:
+            shared = sorted(stem & pairs(other))
+            need(not shared, f"{where}：名字 {name} 跟【{other}】共用「{'、'.join(shared)}」（FB-431：名器不跟神器、特技撞字）")
 
 
 def _validate_forge_secrets(c: Content, need) -> None:
