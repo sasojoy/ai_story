@@ -436,6 +436,8 @@ def _material_sources(c: Content) -> set[str]:
     if c.config.four_tiers.enabled and c.config.economy.upgrade:
         tier3 = {m.attribute for m in c.materials.values() if m.tier == 3}
         reachable |= {m.id for m in c.materials.values() if m.tier == 4 and m.attribute in tier3}
+    if c.config.four_tiers.enabled and c.config.checkin.enabled:  # 21 天季的簽到（第 7 批）：第 6、13、20 天自己挑一種四階
+        reachable |= {m.id for m in c.materials.values() if m.tier == 4}
     return reachable
 
 
@@ -1962,7 +1964,7 @@ def validate(c: Content) -> None:
     # 漏掉的：掉天品的兩個對手屬剛與屬柔、奇遇給屬快，屬慢沒人負責，而難度 >=100 的對手
     # 都寫了明確 drops，所以依難度的預設表（會按對手屬性挑）對它們根本不執行。
     unreachable = set(c.materials) - _material_sources(c)
-    if not (c.config.four_tiers.enabled and c.config.economy.upgrade):
+    if not (c.config.four_tiers.enabled and (c.config.economy.upgrade or c.config.checkin.enabled)):
         # FB-340：素材四階或升階關著時四階料拿不到是預期的（四階料是內容收不回的，設計 10.1：關著時九件神器實際上打不出來），不擋載入
         unreachable = {mid for mid in unreachable if c.materials[mid].tier < 4}
     unreachable = sorted(unreachable)

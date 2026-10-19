@@ -159,6 +159,12 @@ def day_index(time: float, content: Content, season: WorldState | None = None) -
     return math.floor(cal / MINUTE + EPS_MINUTES) // (24 * 60)
 
 
+def open_day(content: Content, season: WorldState | None = None) -> int:
+    """開季那一刻落在季曆第幾天（從 0 起，同 day_index）：21 天季是開季那一天離第 1 週週一幾天（簽到照它起算，12.3 第 43 條），
+    其他季是 0。照開季時的偏移（offset_at(0)），暫停再繼續、偏移加了暫停的長度之後也不變。"""
+    return math.floor(offset_at(0.0, content, season) / MINUTE + EPS_MINUTES) // (24 * 60)
+
+
 def world_day(time: float, content: Content, season: WorldState | None) -> int:
     """「今天」的帳記的號碼（從 0 起；人物一天被打掉、回了多少、護衛犒軍探望、同一位人物一天只扣一次聲威）：21 天季是季曆第幾天
     （台灣 00:00 換日，正式季整合設計 1.3），其他季照舊世界天 int(time // DAY)。rules.world_day 同一個。"""
