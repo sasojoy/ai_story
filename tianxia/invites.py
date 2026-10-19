@@ -11,7 +11,7 @@ from .characters import name_key
 from .models import Content
 from .state import Invite, WorldState
 
-KINDS = {"spar": "切磋", "discuss": "論武", "travel": "結伴同行", "greet": "打招呼"}
+KINDS = {"spar": "切磋", "discuss": "論武", "travel": "結伴同行", "greet": "打招呼", "mingtie": "名帖"}
 
 
 def kind_name(kind: str) -> str:

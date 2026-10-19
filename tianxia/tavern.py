@@ -126,7 +126,7 @@ def close(state: GameState) -> None:
     """收起酒肆（同 equipment.close_smith）：凡是把 picking_tavern 設成 False 的地方都走這裡，掌櫃那一句一併清掉。"""
     p = state.player
     p.picking_tavern = False
-    p.shop_line, p.shop_clue, p.shop_hold = "", "", None
+    p.shop_line, p.shop_clue, p.shop_hold = "", "", ""
 
 
 def sign(state: GameState, content: Content, loc_id: str | None = None) -> str:

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from .martial_arts import Insight
 from .models import Content, TravelMode
@@ -497,6 +497,29 @@ class RenownSeen(BaseModel):
     path_day: int = 0
 
 
+class Mingtie(BaseModel):
+    """一張名帖（tianxia/mingtie.py）：自己畫的筆劃（[墨色, 筆粗, x0, y0, x1, y1, …]，畫布 300×400）、印上去的頭銜、自題的一句話。
+    version 每定稿一次 +1：檢舉、管理者撤下、「同一個人只能換一次」都照它認。"""
+
+    strokes: list[list[int]] = Field(default_factory=list)
+    titles: list[str] = Field(default_factory=list)
+    motto: str = ""
+    version: int = 0
+
+
+class MingtieCopy(BaseModel):
+    """名帖匣裡的一張：對方遞給你那一刻的樣子（真的名帖也是這樣，他之後換了新帖，下次再換才更新）。
+    gave 是那一次你遞給他的是你的第幾版：你的名帖沒改過就不能再遞給他（只能換一次）。"""
+
+    name: str
+    card: Mingtie
+    when: str  # 換的那一刻（calendar.stamp_text）
+    place: str  # 在哪裡換的（地點的名字）
+    season: int
+    fame: int = 0  # 換的時候他的名望（頭銜「某某的帖友」挑名望最高的那一個）
+    gave: int = 0
+
+
 class PlayerState(BaseModel):
     name: str
     location: str
@@ -575,6 +598,12 @@ class PlayerState(BaseModel):
     shop_line_seed: int = 0  # 挑那一句的種子（記下那一下的季的時間，整數秒）：輪詢時同一件事一直是同一句
     shop_hold: str = ""  # 被拒的那一句撐到什麼時候（FB-192，shopview.hold_for）：被拒的原因不成立了就換回平常那一句；收起店時清掉
     shop_clue: str = ""  # 鐵匠順口說出的那一句（forge_secrets.hear_smith，1.4）：蓋過這一下的掌櫃話，下一下就換回掌櫃話；收起店時清掉
+
+    @field_validator("shop_hold", mode="before")
+    @classmethod
+    def _hold_none(cls, value):  # 酒肆第一版收店時寫成 None（tavern.close），那一版存下的檔照讀成空字串，免得整個角色讀不進來
+        return "" if value is None else value
+
     smith_draft: SmithDraft | None = None  # 鐵匠鋪「打造兵器…／打造防具…」挑到哪一步；打開、打完、不打了都清掉，凡是把 picking_smith 收起來的地方（離開、存檔修補、同步時人不在城鎮、出發）一起清
     arts: list[str] = Field(default_factory=list)  # 功法庫：煉出來但沒配上身的功法 id
     art_levels: dict[str, int] = Field(default_factory=dict)  # 每門學過的功法各自的「成」；改練時存進來／取出來
@@ -776,6 +805,17 @@ class PlayerState(BaseModel):
     duel_last: list[float] = Field(default_factory=list)  # 上一場頭目戰開打的 [季號, 世界秒]（Config.duel.cooldown_seconds）；空的是沒打過
     tagalong: Tagalong | None = None  # 跟著誰結伴同行；None＝沒有
     ambush: AmbushPost | None = None  # 正守著的埋伏（設伏劫道，ambush.py）；None＝沒有。守著的時候不能移動
+    # ── 名帖與挑釁附一句話（tianxia/mingtie.py；Joy 2026-10-19）：跨季保留（_reset_player_for_new_season）──
+    mingtie: Mingtie | None = None  # 自己的名帖；None＝還沒做過（不能遞名帖、不能回帖）
+    mingtie_box: list[MingtieCopy] = Field(default_factory=list)  # 收到的名帖（新的在後，最多 MingtieTuning.box_cap 張）
+    mingtie_day: int = 0  # 定稿、遞帖的次數記在哪一天（同 pill_day）
+    mingtie_made: int = 0  # 那一天定稿幾次（MingtieTuning.made_per_day）
+    mingtie_sent: int = 0  # 那一天主動遞了幾張（MingtieTuning.send_per_day）
+    mingtie_hidden: list[str] = Field(default_factory=list)  # 自己檢舉過、不想再看到的名帖（「名號鍵|版本」）
+    taunt_muted: list[str] = Field(default_factory=list)  # 不再接誰的挑釁話（名號鍵）：他照樣能挑釁你，只是那一句你看不到
+    title_book: list[str] = Field(default_factory=list)  # 過去幾季掙到的頭銜（「第N季 某某」），換季時記下、名帖照樣能印
+    gift_day: int = 0  # 贈物記在哪一天（同 pill_day）
+    gifts_today: int = 0  # 那一天送了幾次（Config.gift_per_day，不分送給誰）
 
 
 RumorLayer = Literal["world", "faction", "local", "personal"]  # 天下大事／陣營軍情／地方傳聞／個人線索（傳聞分層設計第二節）

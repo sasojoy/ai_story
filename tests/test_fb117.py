@@ -256,39 +256,47 @@ def _row(card, action):
     return [(b["label"], b["arg"], b["note"], b["enabled"]) for b in card["actions"] if b["action"] == action]
 
 
-def test_his_greeting_shows_the_replies_on_his_card(pair):
+def test_his_taunt_shows_the_replies_on_his_card(pair):
     content, world = pair
-    _do(content, world, "甲", lambda g: g.peer_act("乙", "greet", {"arg": "bow"}))
+    _do(content, world, "甲", lambda g: g.peer_act("乙", "greet", {"arg": "taunt"}))
     assert _row(_card(content, world, "乙", "甲"), "greet") == [
-        ("抱拳還禮", "reply:bow", social.GREET_BACK.format(him="他"), True), ("點頭致意", "reply:nod", "", True),
+        ("冷眼以對", "reply:cold", social.GREET_BACK.format(him="他"), True), ("出言回敬", "reply:retort", "", True),
+        (social.MUTE_LABEL.format(him="他"), "mute", "", True),
     ]
-    assert all(note == "等回禮" for _, _, note, _ in _row(_card(content, world, "甲", "乙"), "greet"))  # 發的那一方照舊
-    msgs = _do(content, world, "乙", lambda g: g.peer_act("甲", "greet", {"arg": "reply:bow"}))[0]
-    assert msgs == ["你抱拳還禮。"] and world.get_season().invites == []
+    assert all(note == "等回應" for _, _, note, _ in _row(_card(content, world, "甲", "乙"), "greet"))  # 發的那一方照舊
+    msgs = _do(content, world, "乙", lambda g: g.peer_act("甲", "greet", {"arg": "reply:cold"}))[0]
+    assert msgs == ["甲斜眼打量你，出言挑釁。", "你冷眼以對。"] and world.get_season().invites == []
     head = _load(world, "乙").journal[0]
-    assert (head.title, head.lines) == ("與甲", ["你抱拳還禮。"])  # 跟場景底下那一顆同一則
-    assert "你向乙抱拳見禮，乙抱拳還禮。" in _load(world, "甲").journal[0].lines
+    assert (head.title, head.lines) == ("與甲", msgs)  # 跟場景底下那一顆同一則
+    assert "你向乙斜眼打量，出言挑釁，乙冷眼以對。" in _load(world, "甲").journal[0].lines
 
 
-def test_his_travel_invite_shows_answer_and_decline_on_his_card(pair):
+def _card_for(content, world, name):
+    _do(content, world, name, lambda g: g.make_mingtie([[0, 0, 10, 10, 60, 60]], [], ""))
+
+
+def test_his_mingtie_shows_answer_and_decline_on_his_card(pair):
     content, world = pair
-    _do(content, world, "甲", lambda g: g.peer_act("乙", "travel"))
-    assert _row(_card(content, world, "乙", "甲"), "travel") == [
-        ("答應結伴同行", "yes", social.TRAVEL_ASKED.format(him="他"), True), ("婉拒同行", "no", "", True),
-    ]
-    assert _row(_card(content, world, "甲", "乙"), "travel")[0][2] == "等他回應"  # 發的那一方照舊
-    msgs = _do(content, world, "乙", lambda g: g.peer_act("甲", "travel", {"arg": "yes"}))[0]
-    assert msgs == ["你答應與甲結伴同行，等他動身。"]
-    assert _load(world, "乙").player.tagalong.leader == "甲" and _load(world, "乙").journal[0].title == "結伴同行・甲"
+    _card_for(content, world, "甲")
+    _do(content, world, "甲", lambda g: g.peer_act("乙", "mingtie", {"arg": "send"}))
+    from tianxia import mingtie
+    assert _row(_card(content, world, "乙", "甲"), "mingtie") == [("回帖", "yes", mingtie.NO_CARD, False), ("婉拒", "no", "", True)]
+    assert _row(_card(content, world, "甲", "乙"), "mingtie")[0][2] == "等他回帖"  # 發的那一方
+    _card_for(content, world, "乙")
+    msgs = _do(content, world, "乙", lambda g: g.peer_act("甲", "mingtie", {"arg": "yes"}))[0]
+    assert msgs == ["你回了帖，與甲互換了名帖。"]
+    assert [x.name for x in _load(world, "乙").player.mingtie_box] == ["甲"]
+    assert [x.name for x in _load(world, "甲").player.mingtie_box] == ["乙"]
+    assert _row(_card(content, world, "甲", "乙"), "mingtie")[0][:2] == ("換新帖", "send")
 
 
-def test_declining_his_travel_invite_on_the_card(pair):
+def test_declining_his_mingtie_on_the_card(pair):
     content, world = pair
-    _do(content, world, "甲", lambda g: g.peer_act("乙", "travel"))
-    _do(content, world, "乙", lambda g: g.peer_act("甲", "travel", {"arg": "no"}))
-    assert world.get_season().invites == [] and _load(world, "乙").player.tagalong is None
+    _card_for(content, world, "甲")
+    _do(content, world, "甲", lambda g: g.peer_act("乙", "mingtie", {"arg": "send"}))
+    _do(content, world, "乙", lambda g: g.peer_act("甲", "mingtie", {"arg": "no"}))
+    assert world.get_season().invites == [] and _load(world, "乙").player.mingtie_box == []
     assert "乙拱手婉拒了你的邀請。" in _load(world, "甲").journal[0].lines
-    assert _load(world, "乙").journal[0].title == "婉拒結伴同行"
 
 
 # ── 第四件：論武取名等模型時的等候話；等的時候關了卡、換了人，回應回來不把舊卡彈出來 ──
@@ -423,14 +431,15 @@ def test_no_swap_while_a_confirm_or_amount_is_open(twins):
 @needs_node
 def test_at_most_two_invitations_under_the_scene(pair):
     content, world = pair
-    for kind, arg in (("greet", "bow"), ("travel", ""), ("spar", "invite"), ("discuss", "invite:art:basic_fist")):
+    _card_for(content, world, "甲")
+    for kind, arg in (("greet", "taunt"), ("mingtie", "send"), ("spar", "invite"), ("discuss", "invite:art:basic_fist")):
         _do(content, world, "甲", lambda g, k=kind, a=arg: g.peer_act("乙", k, {"arg": a}))
     m = _main(content, world, "乙")
     assert len(m["calls"]) == 4
     out = run(m, "const shut = H.socialHtml(m); H.S.main = m; H.openCalls(); const open = H.socialHtml(m);"
                  "m.calls = m.calls.slice(0, 2); const few = H.socialHtml(m); return { shut, open, few, after: H.S.callsOpen };")
     assert out["shut"].count('<div class="call">') == 2 and "還有 2 份邀請 ▾" in out["shut"]
-    assert out["shut"].index("甲向你抱拳見禮。") < out["shut"].index("還有 2 份邀請")  # 舊的在前
+    assert out["shut"].index("甲斜眼打量你，出言挑釁。") < out["shut"].index("還有 2 份邀請")  # 舊的在前
     assert out["open"].count('<div class="call">') == 4 and "還有" not in out["open"]
     # 回掉兩份：剩下的兩份照樣攤著（FB-241：以前回到兩份以內就收回去）
     assert out["few"].count('<div class="call">') == 2 and "還有" not in out["few"] and len(out["after"]) == 4
@@ -512,7 +521,7 @@ def test_fb241_tapping_keeps_one_or_two_invitations_open(pair):
     """以前 socialHtml 看到邀請沒超過兩份就把 S.callsOpen 改回假，點了等於沒點。現在點開那時的那幾份還在就一直攤著，
     回掉一份照樣攤著，來了新的一份才照常收。"""
     content, world = pair
-    _do(content, world, "甲", lambda g: g.peer_act("乙", "greet", {"arg": "bow"}))
+    _do(content, world, "甲", lambda g: g.peer_act("乙", "greet", {"arg": "taunt"}))
     m = _main(content, world, "乙")
     script = """
       const key = (c) => c.options[0].id.split(":").pop();
@@ -638,8 +647,9 @@ def test_fb242_the_server_gives_a_brief_line_for_the_toast(pair, monkeypatch):
     client = TestClient(server.app)
     r = client.post("/api/peer/act", json={"name": "甲", "action": "discuss", "arg": "yes:insight:huo"}).json()
     assert r["brief"] == "論武有結果了：合出【烈焰拳】。詳見江湖紀錄。" and len(r["message"]) > len(r["brief"])
-    r = client.post("/api/peer/act", json={"name": "甲", "action": "greet", "arg": "bow"}).json()
-    assert r["brief"] == "你向甲抱拳見禮。"
+    monkeypatch.setattr(server, "screen_peer", lambda *a, **k: "")
+    r = client.post("/api/peer/act", json={"name": "甲", "action": "greet", "arg": "taunt"}).json()
+    assert r["brief"] == "你向甲斜眼打量，出言挑釁。"
 
 
 def test_fb242_brief_is_the_first_sentence_cut_short():

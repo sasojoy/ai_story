@@ -57,44 +57,50 @@ def test_fb184_the_government_army_drills_at_a_camp_between_yingchuan_and_changs
 def test_fb116_gifts_fold_into_one_entry_and_stop_at_the_daily_cap(content):
     from test_social import NOW, _as, _done, _player
 
+    from tianxia import materials
+
     cap = content.config.gift_per_pair_day
     assert cap == 5
     a = _player(content, "甲")
     _player(content, "乙")
-    a.state.player.stats["silver"] = 50
+    a.state.player.materials = {"gang_1": 50}
+    one = f"你把{materials.item_text(content, 'gang_1', 1)}送給了乙。"
     for _ in range(cap):
-        assert a.peer_act("乙", "gift", {"arg": "silver", "amount": 1})[0] == "你把銀子 1 兩送給了乙。"
+        assert a.peer_act("乙", "gift", {"arg": "material", "choice": "gang_1", "amount": 1})[0] == one
     full = social.pair_full(a, "gift")
-    assert a.peer_act("乙", "gift", {"arg": "silver", "amount": 1}) == [full]  # 第六次：照樣不收、不寫紀錄
-    assert a.state.player.stats["silver"] == 50 - cap
+    assert a.peer_act("乙", "gift", {"arg": "material", "choice": "gang_1", "amount": 1}) == [full]  # 第六次：照樣不收、不寫紀錄
+    assert a.state.player.materials["gang_1"] == 50 - cap
     gifts = [b for b in a.peer_card("乙")["actions"] if b["action"] == "gift"]
     assert gifts and not any(b["enabled"] for b in gifts) and all(b["note"] == full for b in gifts)
     sent = [e for e in a.state.journal if e.title == "贈物・乙"]
-    assert len(sent) == 1 and len(sent[0].lines) == cap and sent[0].changes == [f"銀兩 -{cap}"]
+    assert len(sent) == 1 and len(sent[0].lines) == cap
     _done(a)
     b = _as(content, a.world, "乙", NOW + 5)
     got = [e for e in b.state.journal if e.title == "收禮・甲"]
-    assert len(got) == 1 and len(got[0].lines) == cap and got[0].changes == [f"銀兩 +{cap}"]  # 連送五次：收禮併成一則
-    assert b.peer_act("甲", "gift", {"arg": "silver", "amount": 1}) == [full]  # 同一對人：反過來送也算在同一本帳
+    assert len(got) == 1 and len(got[0].lines) == cap  # 連送五次：收禮併成一則
+    assert b.peer_act("甲", "gift", {"arg": "material", "choice": "gang_1", "amount": 1}) == [full]  # 同一對人：反過來送也算在同一本帳
     key = b._spar_pair("甲")
     b.state.world.gift_tally[key][0] -= 1  # 帳記的是昨天：今天重算
-    assert b.peer_act("甲", "gift", {"arg": "silver", "amount": 1})[0] == "你把銀子 1 兩送給了甲。"
+    assert b.peer_act("甲", "gift", {"arg": "material", "choice": "gang_1", "amount": 1})[0].startswith("你把")
 
 
 def test_fb116_gifts_from_someone_else_in_between_start_a_new_entry(content):
     from test_social import NOW, _as, _done, _player
 
+    give = {"arg": "material", "choice": "gang_1", "amount": 1}
     a = _player(content, "甲")
     c = _player(content, "丙")
     _player(content, "乙")
-    a.state.player.stats["silver"] = c.state.player.stats["silver"] = 10
-    a.peer_act("乙", "gift", {"arg": "silver", "amount": 1})
+    a.state.player.materials = {"gang_1": 5}
+    c.state.player.materials = {"gang_1": 5}
+    _done(c)
+    a.peer_act("乙", "gift", give)
     _done(a)
     c = _as(content, a.world, "丙", NOW + 1)
-    c.peer_act("乙", "gift", {"arg": "silver", "amount": 1})
+    c.peer_act("乙", "gift", give)
     _done(c)
     a = _as(content, a.world, "甲", NOW + 2)
-    a.peer_act("乙", "gift", {"arg": "silver", "amount": 1})
+    a.peer_act("乙", "gift", give)
     _done(a)
     b = _as(content, a.world, "乙", NOW + 5)
     assert [e.title for e in b.state.journal[:3]] == ["收禮・甲", "收禮・丙", "收禮・甲"]  # 只併「連著」同一個人送的

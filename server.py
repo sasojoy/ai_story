@@ -64,7 +64,7 @@ from tianxia import (
     arena_crowd, battle_instance, biography, calendar, companion_agent, duel, event_llm, feasts, fight_llm, foreshadow, gender, glyph, insight_llm, leaderboard, letters, mapdata,
     naming,
     ollama_client, rules,
-    seal, seal_duel, server_bots, social, sortie, tavern, team, timetable, treasures, yuedan,
+    seal, seal_duel, server_bots, social, sortie, speech, tavern, team, timetable, treasures, yuedan,
 )
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import env_profile, load_content, profile_line
@@ -781,6 +781,34 @@ def prepare_peer(game: Game, name: str, action: str, params: dict) -> tuple[str 
         return naming.generate(game.client, game.content, request, budget=budget, person=game.world.is_character_name)
 
     return model_call(game, name_it, fallback=NO_NAME, left=total - (_monotonic() - started), busy=BUSY_FORGE)
+
+
+SCREEN_BUDGET_SECONDS = 12.0  # 審一句話（挑釁、名帖自題）最多等模型幾秒：叫不動就只看字表照送
+
+
+def screen_text(game: Game, text: str, kind: str) -> str:
+    """玩家寫給別人看的一句話在行動鎖外請模型審（speech.judge，三段式的 B 段）："ok"、"bad"，叫不動、沒輪到是空字串
+    （C 段只看字表）。空的、字表就擋得下的不叫模型。"""
+    if not text or game.client is None:
+        return ""
+    if speech.word_problem(text, game.content, kind, 200):
+        return ""
+    started = _monotonic()
+
+    def judge():
+        client = within_budget(game.client, SCREEN_BUDGET_SECONDS - (_monotonic() - started))
+        return speech.judge(client, text, kind)
+
+    return model_call(game, judge, fallback="", left=SCREEN_BUDGET_SECONDS)
+
+
+def screen_peer(game: Game, name: str, action: str, params: dict) -> str:
+    """玩家卡上帶一句話的互動（social.CardAction.screen；挑釁）：要審就審，不要審是空字串。只讀引擎，不拿鎖（那一句只是字）。"""
+    handler = social.ACTIONS.get(action)
+    if handler is None or handler.screen is None:
+        return ""
+    got = handler.screen(game, game, params)  # 只看 params（那一句），不讀對方；對方那一份 C 段才拿
+    return "" if got is None else screen_text(game, got[0], got[1])
 
 
 def forge(game: Game, art_id: str | None, insight_ids: list[str], other_art: str | None = None) -> list[str] | None:
@@ -1504,6 +1532,7 @@ def admin_choices(game: Game) -> dict:
         # 救場「叫回人物」：這一季退場、重創的大勢人物（沒有就不畫那一列）
         "fallen": [{"label": CONTENT.figures[fid].name, "id": fid} for fid in game.admin_fallen()],
         "seal": game.admin_seal_choices(),  # 玉璽一組（碎片關著是 None，不畫）
+        "mingtie": game.admin_mingtie_reports(),  # 被檢舉的名帖（撤下、放回）；沒有是空的
         # 模型佇列的總數（正在跑幾件、在排幾件，真人與假人算在一起，不分開數）；不列名號，也看不出有沒有假人（審查 M4）。開關關著是 None
         "llm_queue": None if QUEUE is None else QUEUE.snapshot(),
     }
@@ -1889,8 +1918,11 @@ ADMIN_ACTIONS = {
     "seal_cancel": lambda g, b: g.admin_seal_cancel(),
     "seal_sink_check": lambda g, b: g.admin_seal_sink_check(time.time()),
     "seal_mandate": lambda g, b: g.admin_seal_mandate(str(b.get("when", ""))),
+    # 名帖檢舉（Joy 2026-10-19）：撤下清掉畫與自題，放回是看過沒事
+    "mingtie_remove": lambda g, b: g.admin_mingtie_remove(str(b.get("name", "")), _int(b.get("version"), 0)),
+    "mingtie_restore": lambda g, b: g.admin_mingtie_restore(str(b.get("name", "")), _int(b.get("version"), 0)),
 }
-PLAYER_ADMIN_ACTIONS = frozenset({"summon", "give_opportunity", "give_fragment"})  # 動到別人的存檔：做完也叫他的分頁刷新
+PLAYER_ADMIN_ACTIONS = frozenset({"summon", "give_opportunity", "give_fragment", "mingtie_remove"})  # 動到別人的存檔：做完也叫他的分頁刷新
 
 
 @app.post("/api/choose")
@@ -2020,6 +2052,10 @@ def api_peer_act(request: Request, body: dict = Body(default={})):
         params["amount"] = int(body.get("amount", 0))
     except (TypeError, ValueError):
         params["amount"] = 0
+    params["text"] = str(body.get("text", ""))[:200]  # 挑釁附的一句話（CardButton.text）：C 段照字數與字表再驗
+    verdict = screen_peer(game, name, action, params)  # 那一句先在鎖外請模型審（speech.judge），結果交給 C 段
+    if verdict:
+        params["verdict"] = verdict
     proposed = prepare_peer(game, name, action, params)  # 論武的首創取名：A 鎖內開單、B 鎖外取名，C 是下面的 peer_act
     if proposed is not None:
         params["proposed"] = proposed
@@ -2180,6 +2216,34 @@ def api_boards(request: Request):
     book = {"id": "神器", "title": "神器譜", "note": DIVINE_NOTE, "book": game.divine_book_view()}
     return {"boards": leaderboard.view(boards_now(game), me=game.state.player.name) + [book]}
 
+
+
+@app.get("/api/mingtie")
+def api_mingtie(request: Request):
+    """見聞的「名帖匣」（Game.mingtie_view）：頭銜的榜單名次照快取的整張榜（boards_now，不拿行動鎖）。"""
+    game = _game(request)
+    board = boards_now(game)
+    return look(game, lambda g: g.mingtie_view(board))
+
+
+@app.post("/api/mingtie/{op}")
+def api_mingtie_do(op: str, request: Request, body: dict = Body(default={})):
+    """名帖的動作：save（定稿：筆劃、頭銜、自題一句；那一句先在鎖外審過）、report（檢舉某人的第幾版）。回傳 {mingtie, message}。"""
+    game = _game(request)
+    if op == "save":
+        board = boards_now(game)
+        motto = speech.clean(str(body.get("motto", ""))[:200])
+        verdict = screen_text(game, motto, speech.MOTTO) if look(game, lambda g: g.mingtie_screen(motto)) else ""
+        titles = body.get("titles")
+        titles = [str(t) for t in titles] if isinstance(titles, list) else []
+        msgs = act(game, lambda g: g.make_mingtie(body.get("strokes"), titles, motto, verdict, board))
+    elif op == "report":
+        msgs = act(game, lambda g: g.report_mingtie(str(body.get("name", "")), _int(body.get("version"), 0)))
+        board = boards_now(game)
+    else:
+        raise HTTPException(404)
+    _tell_tabs(game)
+    return {"mingtie": look(game, lambda g: g.mingtie_view(board)), "message": joined(msgs)}
 
 
 @app.get("/api/annals")
