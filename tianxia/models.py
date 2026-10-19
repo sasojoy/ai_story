@@ -711,6 +711,17 @@ class CharacterDef(_Strict):
     side: str | None = None
 
 
+class RelationDef(_Strict):
+    """人物之間的一條關係（content/relations.json；大勢人物擴充第二批）。kind：brother 兄弟、mentor 師生、chief 上下（head 是師長、上司，
+    members 是學生、部屬）、foe 仇敵（members 兩兩為敵；寫了 faction 的是 members 跟那一方的每一位為敵，例：唐周與黃巾）。
+    兄弟、師生、上下都算盟友：一位倒下，盟友悲憤、往那一區趕、掛一張復仇懸賞；仇敵得意（figure_life.on_fall）。"""
+
+    kind: Literal["brother", "mentor", "chief", "foe"]
+    members: list[str]
+    head: str | None = None
+    faction: str | None = None
+
+
 class Squad(_Strict):
     """遭遇/劇情戰的對手：一個抽象的難度值＋屬性，不是完整的人物陣容（見 encounter.py 的單次判定）。"""
 
@@ -2247,6 +2258,21 @@ class FigureLifeTuning(_Strict):
     foe_beaten: int = 3
     side_merit: int = 3
     side_raided: int = -3
+    # 第二批（人與人）：關係表與倒下時的反應、復仇懸賞、書信與委託
+    reactions: bool = True  # 一位人物倒下時，盟友悲憤、往那一區趕、掛復仇懸賞，仇敵得意（figure_life.on_fall）
+    revenge_silver_scale: float = Field(default=2.0, gt=0)  # 復仇懸賞的賞銀是一般討伐的幾倍（設計稿：秦頡「放話加倍懸賞」）
+    revenge_cal_days: float = Field(default=7.0, gt=0)  # 復仇懸賞掛幾個季曆天（同一般懸賞的一週）
+    revenge_affinity: int = Field(default=3, ge=0)  # 交了復仇懸賞，掛單的人物情誼加多少
+    # 書信：情誼到 letter_affinity 的人物在規則觸發時派人送信（求援：心事焦慮或悲憤；道賀：你剛做了他欣賞的事），一人一個遊戲日最多一封
+    letters: bool = True
+    letter_affinity: int = Field(default=40, ge=0)
+    letters_keep: int = Field(default=5, ge=1)  # 身上留幾封（舊的先丟）
+    # 求援附的委託（討伐、打探、護送，跟懸賞同一套）：完成了情誼 +commission_affinity、銀兩 commission_silver；commission_days 個遊戲日內要辦完
+    # （遊戲日＝世界秒 // DAY，跟「一天最多一封」同一把尺：週末是現實一天、14 天的季也是現實一天；照季曆天的話週末只撐三個鐘頭）
+    commission_affinity: int = Field(default=5, ge=0)
+    commission_silver: int = Field(default=30, ge=0)
+    commission_days: float = Field(default=1.0, gt=0)
+    letter_write_budget_seconds: float = Field(default=60.0, gt=0)  # 書信請模型照他的口氣重寫的預算（鎖外、背景執行緒；寫不出來照固定句）
 
 
 class RiseTuning(_Strict):
@@ -3708,6 +3734,7 @@ class Content(_Strict):
     arena_crowd: dict[str, list[str]] = Field(default_factory=dict)  # 擂台的場邊事件的固定句（content/arena_crowd.json）：種類 → 句子；沒有這個檔就沒有場邊事件
     shop_lines: dict[str, dict[str, list[str]]] = Field(default_factory=dict)  # 店面上掌櫃的話（content/shop_lines.json，店面獨立介面設計 1.4）：店 → 情況 → 句子；沒有這個檔就是空的
     seal: dict[str, ShardDef] = Field(default_factory=dict)  # 玉璽碎片（content/seal.json，照 id）；沒有這個檔就是空的（碎片關著）
+    relations: list[RelationDef] = Field(default_factory=list)  # 人物之間的關係（content/relations.json，大勢人物擴充第二批）；沒有這個檔就是沒有
     map: MapLayout
     tutorial: Tutorial
     hints: Hints = Field(default_factory=Hints)  # 碰到才說（content/hints.json，新手引導計畫三）；沒有這個檔就是沒有提示
