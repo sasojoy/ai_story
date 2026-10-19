@@ -5488,6 +5488,7 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
         "prepare_peer",  # 論武答應時的首創取名（玩家卡上的互動，social.CardAction.request）
         "zhuan_job",  # 季末寫傳（玩家傳第二批）：server.write_zhuan 開的背景執行緒，A、C 段各拿一次鎖，模型在兩段之間
         "seal_text",  # 奪璽單挑的放手一搏（玉璽碎片設計 5.7）：三段同 duel_text
+        "screen_text",  # 挑釁附的一句、名帖自題一句：鎖外請模型審（speech.judge），結果交給 C 段
         "tavern_ask",  # 酒肆問酒家：三段同 duel_text，模型只寫酒家那一句
         "feast_text",  # 宴客自己寫的那一句敬酒（大勢人物擴充第三批）：三段同 answer_event
     }
@@ -6126,6 +6127,7 @@ def test_only_the_action_endpoints_tell_other_tabs():
     assert _function_users("notify") == {"_tell_tabs"}
     assert _users_in_server("_tell_tabs") == {
         "api_choose", "api_answer", "api_say", "api_do", "api_menxia_do", "api_travel", "api_sense", "api_peer_act", "api_party_leave",
+        "api_mingtie_do",  # 名帖定稿、檢舉（Joy 2026-10-19）
     }
 
 
@@ -6227,6 +6229,9 @@ NOT_IN_THE_FINGERPRINT = {
         "season_last_real": "賽季時鐘的對時點：每次同步、每一下排程都在動，算進去每幾秒就叫醒全服（推送計畫 F4）",
         "tianji": "換季才加一，同時 season_number 也變了",
         "seal": "碎片的歸屬：現世、易手、隱沒都寫天下大事（傳聞流水號已在指紋裡）；密鹽不能讓人看出來（13.3）",
+        "mingtie_reports": "名帖的檢舉：誰檢舉了誰不能讓人看出來；藏起來的那一張別人下次打開才補",
+        "mingtie_removed": "管理者撤下的名帖：被撤的人江湖紀錄一句（自己的動作走 self 通知），收過的人下次打開才補",
+        "mingtie_cleared": "管理者放回的名帖，同上",
     },
     "WorldState": {
         "time": "時鐘一直在走，靠慢速輪詢更新（排程每 10 秒推一次，算進去會一直叫醒全服）",
@@ -6774,20 +6779,24 @@ def test_two_players_in_the_same_place_see_each_other_and_open_a_card(client):
 
 
 def test_a_greeting_and_a_gift_go_through_the_endpoints(client):
-    """第二層：甲向乙抱拳、送銀兩；乙的江湖畫面 calls 有那一行，按回應鈕之後兩邊都清掉。"""
+    """第二層：甲向乙挑釁（附一句話）、送素材；乙的江湖畫面 calls 有那一行，按回應鈕之後兩邊都清掉。"""
     _player(client, "shen_02", "沈青衫")
     other = TestClient(server.app)
     _player(other, "lin_02", "林小竹")
-    out = client.post("/api/peer/act", json={"name": "林小竹", "action": "greet", "arg": "bow"}).json()
-    assert "抱拳見禮" in out["message"]
-    gift = client.post("/api/peer/act", json={"name": "林小竹", "action": "gift", "arg": "silver", "amount": 5}).json()
+    out = client.post("/api/peer/act", json={"name": "林小竹", "action": "greet", "arg": "taunt", "text": "改天見識見識"}).json()
+    assert "你向林小竹斜眼打量，出言挑釁：「改天見識見識」" in out["message"]
+    state = open_characters().load("沈青衫")
+    state.player.materials = {next(iter(server.CONTENT.materials)): 5}
+    open_characters().save(state)
+    mid = next(iter(server.CONTENT.materials))
+    gift = client.post("/api/peer/act", json={"name": "林小竹", "action": "gift", "arg": "material", "choice": mid, "amount": 2}).json()
     assert "送給了林小竹" in gift["message"]
     [call] = other.get("/api/main").json()["calls"]
-    assert call["text"] == "沈青衫向你抱拳見禮。"
+    assert call["text"] == "沈青衫斜眼打量你，出言挑釁：「改天見識見識」"
     other.post("/api/choose", json={"id": call["options"][0]["id"]})
     main = other.get("/api/main").json()
     assert main["calls"] == [] and main["party"] is None
-    assert any("抱拳還禮" in line for e in open_characters().load("沈青衫").journal for line in e.lines)
+    assert any("冷眼以對" in line for e in open_characters().load("沈青衫").journal for line in e.lines)
     left = other.post("/api/party/leave", json={}).json()
     assert "沒有跟著誰" in left["message"]
 

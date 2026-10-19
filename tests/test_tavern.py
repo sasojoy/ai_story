@@ -402,3 +402,16 @@ def test_asking_the_keeper_to_keep_watch_sends_word_later():
     game.now += c.config.tavern.watch_hours * 3600 + 1
     game._deliver_watches()
     assert tavern.WATCH_LAPSED.format(name="查無此人") in game.state.journal[0].lines  # 江湖紀錄新的在前
+
+
+def test_leaving_the_tavern_keeps_the_save_readable():
+    """收起酒肆以前把 shop_hold 寫成 None，存下的角色整個讀不進來（characters.all 跳過、載入時搬去備份）：現在寫空字串，
+    那一版存下的 None 也照讀。"""
+    from tianxia.state import GameState
+
+    game = _game()
+    tavern.close(game.state)
+    assert game.state.player.shop_hold == ""
+    data = game.state.model_dump(mode="json")
+    data["player"]["shop_hold"] = None
+    assert GameState.model_validate(data).player.shop_hold == ""

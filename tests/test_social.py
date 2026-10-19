@@ -130,60 +130,105 @@ def _lines(game):
     return [line for e in game.state.journal for line in e.lines + e.changes]
 
 
-def test_a_gift_moves_silver_and_is_written_in_both_journals(content):
-    a = _player(content, "甲")
-    _player(content, "乙")
-    a.state.player.stats["silver"] = 50
-    card = a.peer_card("乙")
-    silver = next(b for b in card["actions"] if b["action"] == "gift" and b["arg"] == "silver")
-    assert silver["amount"] == 50 and silver["enabled"]
-    assert a.peer_act("乙", "gift", {"arg": "silver", "amount": 80}) == ["（身上的銀兩不夠。）"]
-    assert a.peer_act("乙", "gift", {"arg": "silver", "amount": "x"}) == ["（要送多少？）"]
-    assert a.peer_act("乙", "gift", {"arg": "silver", "amount": 20})[0] == "你把銀子 20 兩送給了乙。"
-    _done(a)
-    b = _as(content, a.world, "乙", NOW + 5)
-    assert a.state.player.stats["silver"] == 30 and b.state.player.stats["silver"] == 50 + 20
-    assert "收禮・甲" in _titles(b) and "銀兩 +20" in _lines(b)
-    assert "贈物・乙" in _titles(a) and "銀兩 -20" in _lines(a)
-
-
-def test_materials_and_pills_can_be_given_too(content):
-    a = _player(content, "甲")
-    pills = _player(content, "乙").state.player.stamina_pills  # 建角送的
-    a.state.player.materials = {"gang_1": 3}
-    a.state.player.stamina_pills = 2
-    card = a.peer_card("乙")
-    mats = next(b for b in card["actions"] if b["arg"] == "material")
-    assert mats["choices"] == [{"id": "gang_1", "label": content.materials["gang_1"].name, "max": 3}]
-    assert a.peer_act("乙", "gift", {"arg": "material", "choice": "gang_1", "amount": 4}) == ["（身上沒有那麼多。）"]
-    a.peer_act("乙", "gift", {"arg": "material", "choice": "gang_1", "amount": 2})
-    a.peer_act("乙", "gift", {"arg": "pill", "amount": 2})
-    stored = CharacterStore(a.world.db).load("乙")
-    assert stored.player.materials == {"gang_1": 2} and stored.player.stamina_pills == pills + 2
-    assert a.state.player.materials == {"gang_1": 1} and a.state.player.stamina_pills == 0
-    assert not any(b["arg"] == "pill" for b in a.peer_card("乙")["actions"])  # 沒有丹了就不畫那一顆
-
-
 def _calls(game):
     return game.calls_here()
 
 
-def test_a_greeting_waits_for_a_reply_and_both_sides_remember_it(content):
+def test_only_low_tier_materials_can_be_given(content):
+    """贈物只剩素材（Joy 2026-10-19 拿掉銀兩、PM 建議拿掉回體丹，Joy「照建議」），而且只送得出 gift_max_tier 階以下的。"""
     a = _player(content, "甲")
     _player(content, "乙")
-    assert a.peer_act("乙", "greet", {"arg": "bow"}) == ["你向乙抱拳見禮。"]
-    assert a.peer_act("乙", "greet", {"arg": "toast"}) == ["（乙還沒回禮。）"]
-    assert all(not b["enabled"] for b in a.peer_card("乙")["actions"] if b["action"] == "greet")
-    assert not any(o.id.startswith("invite:") for o in a.options())  # 打招呼不用收回
+    a.state.player.stats["silver"] = 50
+    a.state.player.materials = {"gang_1": 3, "gang_3": 2}
+    card = a.peer_card("乙")
+    gifts = [b for b in card["actions"] if b["action"] == "gift"]
+    assert [b["arg"] for b in gifts] == ["material"]
+    assert gifts[0]["choices"] == [{"id": "gang_1", "label": content.materials["gang_1"].name, "max": 3}]
+    assert a.peer_act("乙", "gift", {"arg": "silver", "amount": 20}) == ["（要送多少？）"]
+    assert a.peer_act("乙", "gift", {"arg": "pill", "amount": 1}) == ["（要送多少？）"]
+    assert a.peer_act("乙", "gift", {"arg": "material", "choice": "gang_3", "amount": 1}) == ["（這一樣送不出去。）"]
+    assert a.peer_act("乙", "gift", {"arg": "material", "choice": "gang_1", "amount": 4}) == ["（身上沒有那麼多。）"]
+    a.peer_act("乙", "gift", {"arg": "material", "choice": "gang_1", "amount": 2})
+    _done(a)
+    b = _as(content, a.world, "乙", NOW + 5)
+    assert b.state.player.materials == {"gang_1": 2} and a.state.player.materials == {"gang_1": 1, "gang_3": 2}
+    assert "收禮・甲" in _titles(b) and "贈物・乙" in _titles(a)
+    assert a.state.player.stats["silver"] == 50
+
+
+def test_one_person_can_give_only_so_many_times_a_day(content):
+    """一個人一天總共送 gift_per_day 次（不分送誰；照回體丹的換日）。"""
+    content.config.gift_per_day = 2
+    content.config.gift_per_pair_day = 9
+    a = _player(content, "甲")
+    for name in ("乙", "丙"):
+        _player(content, name)
+    a.state.player.materials = {"gang_1": 9}
+    a.peer_act("乙", "gift", {"arg": "material", "choice": "gang_1", "amount": 1})
+    a.peer_act("丙", "gift", {"arg": "material", "choice": "gang_1", "amount": 1})
+    full = social.GIFT_DAY_FULL.format(n=2)
+    assert a.peer_act("乙", "gift", {"arg": "material", "choice": "gang_1", "amount": 1}) == [full]
+    button = next(b for b in a.peer_card("丙")["actions"] if b["action"] == "gift")
+    assert button["enabled"] is False and button["note"] == full
+    a.sync(NOW + 24 * 3600)
+    assert a.gift_day_left() == 2
+
+
+def test_card_has_only_taunt_gift_and_mingtie_of_the_old_second_layer(content):
+    """拿掉抱拳、請教、敬酒、結伴同行（Joy 2026-10-19；抱拳換成遞名帖）。"""
+    a = _player(content, "甲")
+    _player(content, "乙")
+    card = a.peer_card("乙")
+    acts = {(b["action"], b["arg"]) for b in card["actions"]}
+    assert ("greet", "taunt") in acts and ("mingtie", "send") in acts
+    assert not {("greet", "bow"), ("greet", "ask"), ("greet", "toast")} & acts
+    assert not any(b["action"] == "travel" for b in card["actions"])
+    assert a.peer_act("乙", "greet", {"arg": "bow"}) == ["（沒有這種禮數。）"]
+    assert a.peer_act("乙", "travel") == ["（沒有這個動作。）"]
+
+
+def test_a_taunt_can_carry_a_line_and_both_sides_remember_it(content):
+    a = _player(content, "甲")
+    _player(content, "乙")
+    taunt = next(b for b in a.peer_card("乙")["actions"] if b["arg"] == "taunt")
+    assert taunt["text"] == content.config.mingtie.taunt_max
+    assert a.peer_act("乙", "greet", {"arg": "taunt", "text": "你這三腳貓也敢來"}) == ["你向乙斜眼打量，出言挑釁：「你這三腳貓也敢來」"]
+    assert a.peer_act("乙", "greet", {"arg": "taunt"}) == ["（乙還沒回應。）"]
+    assert not any(o.id.startswith("invite:") for o in a.options())  # 挑釁不用收回
     _done(a)
     b = _as(content, a.world, "乙", NOW + 10)
     [call] = _calls(b)
-    assert call["text"] == "甲向你抱拳見禮。" and [o["label"] for o in call["options"]] == ["抱拳還禮", "點頭致意"]
-    assert b.choose(call["options"][0]["id"])[-1] == "你抱拳還禮。"
+    assert call["text"] == "甲斜眼打量你，出言挑釁：「你這三腳貓也敢來」"
+    assert [o["label"] for o in call["options"]] == ["冷眼以對", "出言回敬"]
+    assert b.choose(call["options"][1]["id"])[-1] == "你出言回敬。"
     _done(b)
-    assert _calls(b) == []
     a = _as(content, a.world, "甲", NOW + 20)
-    assert "你向乙抱拳見禮，乙抱拳還禮。" in _lines(a) and a.peer_card("乙")["actions"][0]["enabled"]
+    assert "你向乙斜眼打量，出言挑釁：「你這三腳貓也敢來」，乙出言回敬。" in _lines(a)
+
+
+def test_a_dirty_or_too_long_taunt_is_not_sent(content):
+    from tianxia import speech
+
+    content.banned_words = ["王八蛋"]
+    a = _player(content, "甲")
+    _player(content, "乙")
+    assert a.peer_act("乙", "greet", {"arg": "taunt", "text": "你這王 八．蛋"}) == [speech.BLOCKED]
+    assert a.peer_act("乙", "greet", {"arg": "taunt", "text": "字" * 21}) == [speech.TOO_LONG.format(n=20)]
+    assert a.peer_act("乙", "greet", {"arg": "taunt", "text": "你算哪根蔥", "verdict": "bad"}) == [speech.BLOCKED]
+    assert a.state.world.invites == []
+
+
+def test_you_can_stop_reading_his_taunt_lines(content):
+    a = _player(content, "甲")
+    _player(content, "乙")
+    a.peer_act("乙", "greet", {"arg": "taunt", "text": "改天讓你見識見識"})
+    _done(a)
+    b = _as(content, a.world, "乙", NOW + 10)
+    mute = next(x for x in b.peer_card("甲")["actions"] if x["arg"] == "mute")
+    assert mute["label"] == "不再接他的挑釁話"
+    b.peer_act("甲", "greet", {"arg": "mute"})
+    assert _calls(b)[0]["text"] == "甲斜眼打量你，出言挑釁。"
+    assert any(x["arg"] == "unmute" for x in b.peer_card("甲")["actions"])
 
 
 def test_an_unanswered_greeting_runs_out(content):
@@ -198,43 +243,6 @@ def test_an_unanswered_greeting_runs_out(content):
 
 def _walk_to_lake(game):
     return game.choose("move:lake")
-
-
-def test_travelling_together_the_follower_copies_the_leaders_route_and_shares_road_gains(content):
-    a = _player(content, "甲")
-    _player(content, "乙")
-    assert a.peer_act("乙", "travel") == ["你邀乙結伴同行，等他回應。"]
-    _done(a)
-    b = _as(content, a.world, "乙", NOW + 5)
-    [call] = _calls(b)
-    assert [o["label"] for o in call["options"]] == ["答應", "婉拒"]
-    assert b.choose(call["options"][0]["id"])[-1] == "你答應與甲結伴同行，等他動身。"
-    _done(b)
-    a = _as(content, a.world, "甲", NOW + 6)
-    assert a.party_view()["names"] == ["乙"]
-    assert next(x for x in a.peer_card("乙")["actions"] if x["action"] == "travel")["enabled"] is False
-    _walk_to_lake(a)
-    a.state.player.leg_actions.discard("think")
-    _done(a)
-    b = _as(content, a.world, "乙", NOW + 7)
-    assert b.state.player.journey == a.state.player.journey
-    ids = [o.id for o in b.options()]
-    assert "act:part" in ids and not any(i.startswith("road:back") for i in ids) and "act:halt" not in ids
-    assert b.travel_refusal("town") == "跟著甲同行，要改道先分道揚鑣"
-    xinde = b.state.player.stats.get("xinde", 0)
-    _done(b)
-    a = _as(content, a.world, "甲", NOW + 8)
-    msgs = a.choose("road:think")
-    assert "（同行的乙也有一份。）" in msgs
-    _done(a)
-    b = _as(content, a.world, "乙", NOW + 9)
-    assert b.state.player.stats["xinde"] == xinde + content.config.road_think_xinde and "think" in b.state.player.leg_actions
-    arrive = a.state.player.journey.arrive_at[-1]
-    _done(b)
-    far = NOW + (arrive - a.state.world.time) / content.config.time_scale + 60
-    b = _as(content, a.world, "乙", far)
-    assert b.state.player.location == "lake" and b.state.player.tagalong is None
-    assert any("拱手作別" in line for line in _lines(b))
 
 
 def test_a_follower_who_cannot_keep_up_is_left_behind(content):
@@ -272,35 +280,19 @@ def test_the_leader_halting_halts_the_follower_and_parting_frees_him(content):
     assert a.party_view() is None
 
 
-def test_a_rejected_or_stale_party_comes_to_nothing(content):
-    a = _player(content, "甲")
-    _player(content, "乙")
-    a.peer_act("乙", "travel")
-    _done(a)
-    b = _as(content, a.world, "乙", NOW + 5)
-    b.choose(_calls(b)[0]["options"][1]["id"])
-    _done(b)
-    a = _as(content, a.world, "甲", NOW + 6)
-    assert "乙拱手婉拒了你的邀請。" in _lines(a)
-    a.peer_act("乙", "travel")
-    _done(a)
-    b = _as(content, a.world, "乙", NOW + 7)
-    b.choose(_calls(b)[0]["options"][0]["id"])
-    _done(b)
-    b = _as(content, a.world, "乙", NOW + 7 + content.config.party_wait_seconds + 1)
-    assert b.state.player.tagalong is None and "甲遲遲沒有動身，你們各走各的。" in _lines(b)
-
-
 @pytest.mark.parametrize("kind, arg, want", [
-    ("greet", "bow", {"bow", "nod", None}),
-    ("travel", "", {"yes", "no", None}),
+    ("greet", "taunt", {"cold", "retort", None}),
+    ("mingtie", "send", {"yes", "no", None}),
 ])
 def test_bots_answer_at_a_human_pace(content, kind, arg, want):
     """假人回打招呼、結伴邀請：剛收到不回；過了一陣子，各種假人（seed 不同）有回有拒有不理（None）。"""
     from tianxia import bot_policy
 
     a = _player(content, "甲")
-    _player(content, "乙", bot=True)
+    b = _player(content, "乙", bot=True)
+    for g in (a, b):
+        g.make_mingtie([[0, 0, 10, 10, 50, 50]], [], "")
+        _done(g)
     a.peer_act("乙", kind, {"arg": arg})
     _done(a)
     b = _as(content, a.world, "乙", NOW + 1)
@@ -313,7 +305,7 @@ def test_bots_answer_at_a_human_pace(content, kind, arg, want):
         option = bot_policy.answer_call(b, b.state.player.bot)
         seen.add(option.split(":")[1] if option else None)
     assert seen == want
-    b.state.player.bot.seed = next(n for n in range(60) if (lambda o: o and o.split(":")[1] in ("bow", "yes"))(
+    b.state.player.bot.seed = next(n for n in range(60) if (lambda o: o and o.split(":")[1] in ("cold", "yes"))(
         bot_policy.answer_call(b, b.state.player.bot.model_copy(update={"seed": n}))))
     bot_policy.take_turn(b, b.state.player.bot, random.Random(0))  # 照選單那一顆按下去
     assert _calls(b) == []

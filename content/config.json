@@ -7,6 +7,8 @@
   "hurry_stamina_per_minute": 1,
   "dash_stamina_per_minute": 2,
   "action_cost": {"explore": 6, "train": 6, "socialize": 3},
+  "presence_seconds": 86400,
+  "invite_ttl_seconds": 1800,
   "stamina_pill_restore": 150,
   "beta_gift_stamina_pills": 30,
   "stamina_pills_per_day": 2,
