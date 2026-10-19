@@ -48,6 +48,17 @@ def test_scheduling_a_showdown_at_nine_reads_nine_and_musters_at_nine():
     assert calendar.next_hour_mark(at - 1, c, game.state.world) == 1  # 這一刻就是季的事跑的那個交界
 
 
+def test_scheduling_the_finale_past_the_calendar_end_says_how_far_past():
+    """FB-439：管理者把季末排到季曆最後一刻之後，季曆時刻停在那一刻，回覆以前照舊寫「排在第 3 週・週日 23:59」，看起來像沒排過去。
+    現在寫季曆最後一刻之後多久、現實的日期時刻（台灣）；排在季曆之內照舊。"""
+    game = _game()
+    later = MON + 23 * DAY + 3 * HOUR  # 第 4 週週一 00:00 之後 2 天 3 小時：2026-11-11 03:00
+    msgs = game.admin_schedule("xiaquyang", later, OPEN)
+    assert msgs == ["已把下曲陽・季末排在季曆最後一刻（第 3 週・週日 23:59）之後 2 天 3 小時，現實 11/11 03:00。"], msgs
+    inside = game.admin_schedule("xiaquyang", MON + 20 * DAY + 18 * HOUR, OPEN)
+    assert inside == ["已把下曲陽・季末排在第 3 週・週日 18:00（季曆）。"], inside
+
+
 def test_jump_next_stops_on_the_calendar_hour_of_the_next_event():
     game = _game()
     stamp = lambda: calendar.stamp_text(game.state.world.time, game.content, game.state.world)  # noqa: E731

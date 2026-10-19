@@ -11476,7 +11476,13 @@ class Game:
         self._save_season()
         moved = "，對齊整點" if abs(at - wanted) > calendar.EPS_SECONDS else ""
         moved += f"、避開同一刻的{avoided}" if avoided else ""
-        msg = f"已把{event.title}排在{calendar.stamp_text(at, c, w)}（季曆{moved}）。"
+        if at >= calendar.calendar_end(c, w) and calendar.season_one_on(w, c):
+            # FB-439：排到季曆最後一刻之後，季曆時刻停在最後一週週日 23:59，照舊寫會像沒排過去：寫之後多久與現實的日期時刻
+            real = at_real + (at - wanted) / c.config.time_scale
+            note = moved.lstrip("，、")
+            msg = f"已把{event.title}排在{calendar.schedule_text(at, real, c, w)}{f'（{note}）' if note else ''}。"
+        else:
+            msg = f"已把{event.title}排在{calendar.stamp_text(at, c, w)}（季曆{moved}）。"
         self._write("排時間", [msg], tag="管理者")
         return self._log([msg])
 
