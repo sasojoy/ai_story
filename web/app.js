@@ -3254,7 +3254,8 @@
     const back = shop.picked
       ? '<button class="shop-back" data-act="shop-leave">‹ 出店</button>'
       : `<button class="shop-back" data-act="choose" data-id="${esc(shop.back)}">‹ 出店</button>`;
-    const line = `<p class="shop-line">${esc(shop.line)}</p>`;
+    // 鐵匠講神器的規矩（背包有四階時，shop.rule；設計 9.1 第 2 批甲）：就畫在平常那一句的位置、金框標出來；順口講配方線索那一下伺服器給空的
+    const line = shop.rule ? `<p class="shop-line rule">${esc(shop.rule)}</p>` : `<p class="shop-line">${esc(shop.line)}</p>`;
     // 鐵匠鋪的架上頁照草圖 A 把鐵匠那一句放在爐火底下（smithHtml 畫，企劃者 2026-10-14）；其他頁、馬市、懸賞榜緊接招牌
     const underForge = kind === "smith" && smithTab(shop) === "shelf";
     const body = kind === "market" ? marketHtml(shop) : kind === "board" ? boardHtml(shop) : kind === "arena" ? arenaHtml(shop)
@@ -3390,7 +3391,7 @@
       const cell = (r) => `<button class="up-cell${r.problem ? " off" : ""}" data-act="trade-up" data-attr="${esc(r.attribute)}" data-tier="${r.tier | 0}" data-why="${esc(r.problem || "")}" title="${esc(r.odds)}">
           <span class="from">${esc(r.from)}×${r.need | 0} →</span><b>${esc(r.name)}</b>${r.lean ? `<small class="lean">${esc(r.lean)}・其餘隨機</small>` : ""}
           <small>${r.problem ? esc(r.short) : `${r.cost | 0} 兩${dealHtml(r.cost_note || "")}${r.left_text ? `・${esc(r.left_text)}` : ""}`}</small></button>`; // 上限字照伺服器給（FB-342：三換四是這一季的） // 價錢後面寫原因（名聲 4.1，FB-296）
-      ups = `<p class="shop-cap">${esc(t.up_cap)}</p><div class="up-rows">${rows.map((row) => `<div class="up-row"><span class="row-attr ${SHOP_ATTR[row.attribute] || ""}">${esc(row.attribute)}</span>${row.cells.map(cell).join("")}</div>`).join("")}</div>`;
+      ups = `<p class="shop-cap">${esc(t.up_cap)}</p><div class="up-rows${shop.four ? " four" : ""}">${rows.map((row) => `<div class="up-row"><span class="row-attr ${SHOP_ATTR[row.attribute] || ""}">${esc(row.attribute)}</span>${row.cells.map(cell).join("")}</div>`).join("")}</div>`;
     }
     let sells = "";
     if (t.sell_cap) {
@@ -3906,7 +3907,7 @@
       <div class="furnace${S.shopFiring ? " firing" : ""}">${slot("main", pot.main)}<div class="flame">${FLAME_SVG}</div>${slot("aux", pot.aux)}</div>
       ${out}<div class="shop-gorow">${go}<button class="btn small ghost shop-book" data-act="book-open" data-book="forge">鑄譜</button></div>
       ${line.rack_full ? `<p class="shop-warn">${esc(line.rack_full)}</p>` : ""}
-      <p class="shop-cap">背包的素材（點一下放進爐裡）</p><div class="cells">${cells || '<p class="shop-empty">背包裡沒有素材。</p>'}</div>`;
+      <p class="shop-cap">背包的素材（點一下放進爐裡）</p><div class="cells${shop.four ? " four" : ""}">${cells || '<p class="shop-empty">背包裡沒有素材。</p>'}</div>`;
   }
 
   // 爐裡換了東西：先照放的畫一次，再問這一爐會怎樣（/api/smith_line；只用最後一次請求的回應）
