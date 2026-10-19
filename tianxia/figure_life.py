@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import random
 
-from . import calendar, figures, push
+from . import calendar, figures, push, relations
 from .calendar import DAY
 from .models import Content
 from .rules import add_rumor, change_trend, season_one, trend_shown, trend_value
@@ -30,10 +30,10 @@ HEARD = "{names}聽說了這件事，情誼 {delta:+d}。"
 HEARSAY_TITLE = "風聞"  # 截殺、決戰的風聞另起的那一則江湖紀錄
 
 MOOD_PROMPT = {
-    "得意": "戰局對他這一方有利，他心情不錯、說話有底氣。",
+    "得意": "戰局對他這一方有利、或他的仇人剛倒下，他心情不錯、說話有底氣。",
     "焦慮": "戰局對他這一方不利、或聲威大損，他心事重重，急著找人幫忙。",
     "負傷": "他剛在別人手下吃了敗仗，臉上掛不住，提起打仗就不太高興。",
-    "悲憤": "同一條戰線上的同袍剛倒下，他悲憤難平，一心想著報仇。",
+    "悲憤": "身邊的同袍、兄弟或師長剛倒下，他悲憤難平，一心想著報仇。",
 }
 
 # 心事 → 這一輪做哪件事的權重（移動、募兵、襲擾）；負傷一律養傷
@@ -138,12 +138,43 @@ def tick(state: GameState, content: Content) -> None:
     first, w.life_turn = w.life_turn < 0, turn
     if first:
         return
+    from . import feasts  # noqa: PLC0415  feasts → figure_life
+
     movers = [cid for cid, ch in content.characters.items() if ch.deep_interaction and ch.follows is None]
     for cid in movers:
-        _act(state, content, cid, random.Random(f"人物|{w.tianji}|{cid}|{turn}"))
+        if feasts.hosting(state, cid) is None:  # 擺著宴的人留在原地（第三批）
+            _act(state, content, cid, random.Random(f"人物|{w.tianji}|{cid}|{turn}"))
     for cid, ch in content.characters.items():  # 跟著走的人最後才動：關羽、張飛跟著劉備
         if ch.follows is not None and ch.deep_interaction:
             _follow(state, content, cid, ch.follows)
+    for cid, ch in content.characters.items():  # 第三批：宴客、求援委託（排在走動之後：照他這一輪走到的地方）
+        if ch.deep_interaction:
+            feasts.maybe_open(state, content, cid, turn)
+            _maybe_rally(state, content, cid, turn)
+
+
+RALLY_MOODS = ("焦慮",)  # 戰線吃緊、聲威大損：對自己陣營全部人發求援委託
+
+
+def _maybe_rally(state: GameState, content: Content, cid: str, turn: int) -> None:
+    """心事焦慮的大勢人物擲 rally_chance，對自己陣營全部人發一件求援委託（bounties.post_rally），陣營軍情一句。"""
+    tuning = content.config.figure_life
+    fid = figures.of_character(content, cid)
+    if not tuning.rallies or fid is None or figures.state_of(state, content, fid).status != "active":
+        return
+    if mood_any(state, content, cid) not in RALLY_MOODS:
+        return
+    if random.Random(f"求援|{state.world.tianji}|{cid}|{turn}").random() >= tuning.rally_chance:
+        return
+    from . import bounties  # noqa: PLC0415  bounties → territory → …：延後載入
+
+    made = bounties.post_rally(state, content, cid)
+    if made is None:
+        return
+    side = made.faction
+    add_rumor(state, bounties.RALLY_POSTED.format(who=content.characters[cid].name, side=content.scenario.faction_name(side, side),
+                                                  how=bounties.how(content, made)),
+              made.location, content=content, layer="faction", faction=side)
 
 
 def _act(state: GameState, content: Content, cid: str, rng: random.Random) -> None:
@@ -237,6 +268,81 @@ def _raid_front(state: GameState, content: Content, fid: str) -> None:
               now.location, content=content, layer="local")  # 地方傳聞：每兩天十幾位人物，放天下大事會洗版
 
 
+# ── 倒下時的反應（第二批：人與人）────────────────────────
+
+FELL_MOVE = "{fallen}倒下的消息傳到{here}，{ally}拔營趕往{dest}。"  # 待 joy 潤：盟友趕往那一區（天下大事，同設計稿「張梁拔營南下」）
+FELL_GRIEF = "{fallen}倒下的消息傳到{here}，{ally}悲憤難平，誓要報仇。"  # 待 joy 潤：盟友沒有地方可趕（第一季、那一區沒有他的據點）
+FELL_GLAD = "{foe}聽說{fallen}倒了，撫掌大笑。"  # 待 joy 潤：仇敵得意
+REVENGE_LINE = "{who}放出話來：誰在{place}打贏{enemy}，替{fallen}報仇，賞銀加倍。"  # 待 joy 潤：盟友掛的復仇懸賞
+HUNT_LINE = "{who}趁勢放出話來：誰在{place}打贏{enemy}，賞銀加倍。"  # 待 joy 潤：仇敵掛的追剿懸賞（設計稿：秦頡「張曼成一倒就放話加倍懸賞」）
+
+
+def on_fall(state: GameState, content: Content, fid: str) -> list[str]:
+    """一位大勢人物剛退場或重創（figures._change 叫）：關係表上的盟友悲憤（mood_of 照 fell_at 算）、往那一區趕（第一季的大勢人物
+    不自己移動；大勢人物只走到自己的據點）、盟友那一方掛一張復仇懸賞；仇敵得意，仇敵那一方掛一張追剿懸賞。回傳天下大事的句子
+    （呼叫端照接手那一句一起發）。一方最多一張懸賞，掛在倒下那一區。開關關著、沒有關係表、倒下的人沒有對話人物是空的。"""
+    if not on(content) or not content.config.figure_life.reactions or not content.relations:
+        return []
+    fig = content.figures.get(fid)
+    cid = fig.character if fig is not None else None
+    if cid is None or cid not in content.characters:
+        return []
+    fallen = content.characters[cid].name
+    spot = figures.state_of(state, content, fid).location
+    region = _region(content, spot)
+    lines: list[str] = []
+    posted: set[str] = set()
+    for ally in relations.allies(content, cid):
+        ch = content.characters[ally]
+        here = where(state, content, ally)
+        if here is None or not ch.deep_interaction:
+            continue
+        dest = None if ch.follows is not None else _rush_to(state, content, ally, region, spot)
+        tmpl = FELL_MOVE if dest is not None else FELL_GRIEF
+        lines.append(tmpl.format(fallen=fallen, here=_place(content, here), ally=ch.name, dest=_place(content, dest or here)))
+        if dest is not None:
+            _place_at(state, content, ally, figures.of_character(content, ally), dest)
+        lines += _post(state, content, ally, "復仇", region, spot, fallen, posted)
+    for foe in relations.foes(content, cid):
+        ch = content.characters[foe]
+        if where(state, content, foe) is None or not ch.deep_interaction:
+            continue
+        lines.append(FELL_GLAD.format(foe=ch.name, fallen=fallen))
+        lines += _post(state, content, foe, "追剿", region, spot, fallen, posted)
+    return lines
+
+
+def _rush_to(state: GameState, content: Content, cid: str, region: str | None, spot: str | None) -> str | None:
+    """盟友趕往倒下那一區的哪裡：他自己在那一區的據點（haunts）；不是大勢人物的，那一區沒有據點就到倒下的地方。
+    第一季的大勢人物不自己移動（時刻表搬人）；已經在那一區、或倒下的地方不明，就不動。"""
+    if region is None or _region(content, where(state, content, cid)) == region:
+        return None
+    fid = figures.of_character(content, cid)
+    if fid is not None and season_one(content, state.world):
+        return None
+    ch = content.characters[cid]
+    mine = next((loc for loc in ch.haunts if _region(content, loc) == region), None)
+    if mine is not None or fid is not None:
+        return mine
+    return spot if spot in content.locations else None
+
+
+def _post(state: GameState, content: Content, cid: str, motive: str, region: str | None, spot: str | None,
+          fallen: str, posted: set[str]) -> list[str]:
+    from . import bounties  # noqa: PLC0415  bounties → territory → …：延後載入
+
+    side = side_of(content, cid)
+    if side is None or side in posted:
+        return []
+    made = bounties.post_figure(state, content, cid, motive, region, spot)
+    if made is None:
+        return []
+    posted.add(side)
+    tmpl = REVENGE_LINE if motive == "復仇" else HUNT_LINE
+    return [tmpl.format(who=content.characters[cid].name, place=_place(content, made.location),
+                        enemy=bounties.enemy_name(content, made), fallen=fallen)]
+
+
 # ── 風聞 ─────────────────────────────────────────────────
 
 
@@ -279,6 +385,10 @@ def spread(state: GameState, content: Content, kind: str, target: str, *, at: st
         moved = p.affinities[cid] - before
         if moved:
             deltas.setdefault(moved, []).append(ch.name)
+        if moved > 0:  # 第二批：他欣賞你做的事，情誼夠的話會寫信道賀
+            from . import letters  # noqa: PLC0415  letters → figure_life
+
+            letters.note_cheer(state, content, cid, text)
     return [HEARD.format(names="、".join(names), delta=d) for d, names in sorted(deltas.items())]
 
 
@@ -291,14 +401,23 @@ def prompt_lines(state: GameState, content: Content, cid: str) -> str:
     here = where(state, content, cid)
     if here is not None and here != home_of(content, cid):
         lines.append(f"【{ch.name}此刻在】{_place(content, here)}（不是他平常在的地方）\n")
-    fid = figures.of_character(content, cid)
-    mood = figures.mood_of(state, content, fid) if fid is not None else None
+    mood = mood_any(state, content, cid)
     if mood is not None:
         lines.append(f"【{ch.name}此刻的心事】{mood}：{MOOD_PROMPT[mood]}\n")
     heard = state.player.hearsay.get(cid, [])[-content.config.figure_life.hearsay_prompt:] if content.config.figure_life.hearsay_prompt else []
     if heard:
         lines.append(f"【{ch.name}聽說過玩家的事】{'；'.join(heard)}（可以自然地提起，不必每句都提）\n")
     return "".join(lines)
+
+
+def mood_any(state: GameState, content: Content, cid: str) -> str | None:
+    """任何一位人物此刻的心事：大勢人物照 figures.mood_of；其他人只看關係表（盟友剛倒下悲憤、仇敵剛倒下得意）。開關關著是 None。"""
+    if not on(content):
+        return None
+    fid = figures.of_character(content, cid)
+    if fid is not None:
+        return figures.mood_of(state, content, fid)
+    return relations.mood(state, content, cid, figures.mood_span(content, state.world))
 
 
 def healer_factor(state: GameState, content: Content) -> float:
