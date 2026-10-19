@@ -9761,6 +9761,9 @@ class Game:
             return self._log(["（這一季還沒結束，無法開啟下一季。）"])
         self._reconcile_season()
         quiet = timetable.quiet_notes(self.world.get_season(), self.content, now)  # 同開季
+        lineup = divine.lineup_note(self.content, self.world.get_season())  # 這一季現世了哪幾件神器（只回給管理者，FB-400）
+        if lineup is not None:
+            quiet = [*quiet, lineup]
         if divine.exhausted_now(self.world.divine_state(), self.world.get_season_number()):  # 新神器用完了（正式季整合 5.6）：提醒管理者
             quiet = [*quiet, divine.EXHAUSTED]
         return self._log([f"══ 第 {self.world.get_season_number()} 季開始 ══", *quiet] + self._settle_season_start())

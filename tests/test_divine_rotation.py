@@ -83,6 +83,52 @@ def test_when_new_divines_run_out_it_still_picks_and_warns():
     assert divine.EXHAUSTED in msgs
 
 
+def _admin_rolls(c, w):
+    import random
+
+    from tianxia.engine import Game
+
+    c.config.admins = ["管理者"]
+    admin = Game.new(c, "管理者", rng=random.Random(1), world=w)
+    admin.admin_end_season(now=NOW + 100)
+    return admin, admin.admin_next_season(now=NOW + 200)
+
+
+def test_the_admin_hears_which_divines_appear():
+    """FB-400：管理者開下一季的回話多寫這一季現世了哪幾件（只回給管理者自己）；沒蓋章的季不寫。"""
+    c = _content()
+    w = _opened(c)
+    admin, msgs = _admin_rolls(c, w)
+    names = "、".join(c.forge_secrets[i].name for i in w.get_season().divine_lineup)
+    assert divine.LINEUP_NOTE.format(names=names) in msgs
+    c.config.forge_secrets.rotation = False  # 關掉之後的那一季沒蓋章：不寫
+    admin.admin_end_season(now=NOW + 300)
+    quiet = admin.admin_next_season(now=NOW + 400)
+    assert w.get_season().divine_lineup is None
+    assert not any(line.startswith(divine.LINEUP_NOTE.partition("{")[0]) for line in quiet)
+
+
+def test_the_settings_page_warns_when_new_divines_run_out():
+    """FB-400：「新神器用完了」除了主控台與換季那一句回話，設定頁管理者那一塊也寫一行（server.admin_choices 的 divine_out）。"""
+    import webharness
+
+    if webharness.NODE is None:
+        pytest.skip("沒有 node，前端畫面測試略過")
+    import server
+    from test_prologue_web import run
+
+    c = _content()
+    w = _opened(c)
+    admin, _ = _admin_rolls(c, w)
+    assert server.admin_choices(admin)["divine_out"] == ""
+    w.mutate(lambda s: setattr(s.divine, "seen", [r.id for r in c.forge_secrets.values() if r.divine]))
+    admin, _ = _admin_rolls(c, w)
+    choices = server.admin_choices(admin)
+    assert choices["divine_out"] == divine.EXHAUSTED
+    drawer = run(server.main_view(admin), "return H.sheetHtml();", S={"sheet": True, "admin": choices})
+    assert f'<p class="muted">{divine.EXHAUSTED}</p>' in drawer
+
+
 def test_active_follows_the_lineup():
     c = _content()
     w = _opened(c)

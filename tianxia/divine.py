@@ -15,9 +15,11 @@ import random
 
 from . import equipment
 from .models import Content, ForgeSecret
+from .state import WorldState
 from .world_state import DivineRegistry, SharedWorldState
 
-EXHAUSTED = "（新神器用完了：這一季的神器都是以前現世過的，請內容補新的神器。）"  # 待 joy 潤：主控台與管理者開季、換季的回話
+EXHAUSTED = "（新神器用完了：這一季的神器都是以前現世過的，請內容補新的神器。）"  # 待 joy 潤：主控台、管理者換季的回話與設定頁
+LINEUP_NOTE = "（這一季現世：{names}。）"  # 待 joy 潤：管理者開下一季的回話（只有管理者看得到，5.10 不對玩家露；FB-400）
 
 
 def _rank(tianji: int, recipe_id: str) -> bytes:
@@ -75,5 +77,11 @@ def stamp(state: SharedWorldState, content: Content) -> None:
 
 
 def exhausted_now(registry: DivineRegistry, season_number: int) -> bool:
-    """這一季開的時候新神器已經用完了（管理者換季的回話、伺服器啟動時印）。"""
+    """這一季開的時候新神器已經用完了（管理者換季的回話與設定頁、伺服器啟動時印）。"""
     return registry.exhausted is not None and registry.exhausted == season_number
+
+
+def lineup_note(content: Content, season: WorldState) -> str | None:
+    """管理者開下一季的回話那一句（FB-400）：這一季現世了哪幾件（照 divine_lineup 的順序寫譜名）；沒蓋章的季是 None。"""
+    names = "、".join(content.forge_secrets[i].name for i in season.divine_lineup or [] if i in content.forge_secrets)
+    return LINEUP_NOTE.format(names=names) if names else None
