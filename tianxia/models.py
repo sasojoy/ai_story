@@ -2611,7 +2611,7 @@ class Season21Daily(_Strict):
     數字都是【預設】（12.3 第 39 條：先照預設做），量完（第 5～8 批做完的 20 人假人三週）再調。
     - 軍令（7.1）：每天 00:00 每個陣營 orders_per_day 道；湊滿套效果時效果量乘 order_effect_share（0.43＝以前一週三道的總量攤到七天）。
     - 懸賞（7.2、6.1）：每天 00:00 一批，期限 bounty_days 天；經驗＝這一級升下一級的經驗 × exp_ratio，銀兩＝等級 × silver_per_level
-      （求兵照那一把再加這一份）；滿級時 maxed_exp_per_xinde 經驗換 1 心得；討伐另擲 strike_tier3_chance 一個三階；
+      （求兵照那一把再加這一份）；滿級時經驗換成心得（第 8 批起是通用的 Config.maxed_exp_per_xinde）；討伐另擲 strike_tier3_chance 一個三階；
       重賞每天每邊擲 prize_treasure_chance、prize_horse_chance。
     - 推線（7.4）：出陣、捐軍備、事件乘 push_speed（取代季長倍數；事件再乘事件五折），每人每天每條線上限 push_daily_cap，
       盡頭阻力的兩檔 push_mid_share／push_far_share（離 50 的兩個邊界照 PushResistance）。"""
@@ -2625,7 +2625,6 @@ class Season21Daily(_Strict):
     silver_per_level: dict[str, int] = Field(
         default_factory=lambda: {"strike": 6, "escort": 5, "scout": 3, "art": 5, "arms": 5},
     )
-    maxed_exp_per_xinde: int = Field(default=5, ge=1)
     strike_tier3_chance: float = Field(default=0.10, ge=0, le=1)
     prize_treasure_chance: float = Field(default=0.10, ge=0, le=1)
     prize_horse_chance: float = Field(default=0.07, ge=0, le=1)
@@ -3022,6 +3021,9 @@ class Config(_Strict):
     # 而氣血設計 §1.4 的平衡量測點在第 5／10／15 級——連第 5 級都到不了。降到 10 之後
     # 一季大約升到第 10 級，等級的兩條線（氣血上限、屬性點）才有量級可談。
     max_level: int = 50
+    # 滿級之後的經驗換成心得（正式季整合 3.5【暫】，第 8 批做成通用的）：本人滿 max_level 之後拿到的經驗每這麼多換 1 心得
+    # （team.maxed_xinde；打仗、出陣、守與操練、決戰軍餉、頭目戰、切磋、懸賞都一樣），同伴照拿經驗
+    maxed_exp_per_xinde: int = Field(default=5, ge=1)
     # 企劃者 2026-10-14「50 級加陡」：二十人試玩有人四小時練到 30 級，上限從 30 調到 50。升到第 30 級之前一個字都不變；
     # 第 late_level_from 級起每升一級要 level_exp × n ×（1＋late_exp_step ×（n − late_level_from ＋ 1））（team.level_cost），
     # 屬性點與同伴的每級成長改成每 late_stat_every 級一點（team.growth_steps：50 級一共 29＋10 點）。

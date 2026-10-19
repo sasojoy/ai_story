@@ -6565,7 +6565,11 @@ class Game:
         if silver:
             p.stats["silver"] = p.stats.get("silver", 0) + silver
             changes.append(f"銀兩 +{silver}")
-        if exp:  # 同伴不進決戰（人物資質設計 14.5）：只給本人；升級給屬性點同切磋
+        if exp and team.maxed(c, p.member):  # 滿級：經驗照 5 換 1 換成心得（3.5）
+            gained = team.maxed_xinde(s, c, exp)
+            if gained:
+                changes.append(f"心得 +{gained}")
+        elif exp:  # 同伴不進決戰（人物資質設計 14.5）：只給本人；升級給屬性點同切磋
             before = p.member.level
             lines += team.add_exp(c, p.member, exp, p.name)
             if p.member.level > before:
@@ -7428,9 +7432,12 @@ class Game:
             if self._draft is not None:
                 self._draft.hide(xinde_line)
                 self._draft.changes.append(xinde_line)
+        gained = team.maxed_xinde(s, c, exp)  # 滿級：本人的經驗照 5 換 1 換成心得（3.5），同伴照拿經驗
+        if gained:
+            msgs.append(team.MAXED_XINDE.format(n=gained))
         msgs += team.add_team_exp(s, c, self.world, exp)
         if self._draft is not None and exp > 0:
-            self._draft.changes.append(f"經驗 +{exp}（每人）")
+            self._draft.changes.append(f"心得 +{gained}" if team.maxed(c, p.member) else f"經驗 +{exp}（每人）")
         return msgs
 
     # ── 出陣（出陣探索與地盤設計第二節）──────────────────────────
@@ -7553,7 +7560,7 @@ class Game:
             msgs.append(f"心得 +{xinde}")
         factor = ranger.exp_factor(s, c)
         exp = round(squad.exp * cfg.reward_scale * (1 + treasures.amount(s, c, "win_exp_pct")) * factor)
-        record.exp = exp
+        msgs += self._record_exp(record, exp)
         levels, record.levelups = team.grant_team_exp(s, c, self.world, exp)
         record.notes += levels
         return msgs + levels
@@ -7593,7 +7600,7 @@ class Game:
             record.xinde = xinde
             msgs.append(f"心得 +{xinde}")
         exp = drill_share(squad.exp, share)
-        record.exp = exp
+        msgs += self._record_exp(record, exp)
         levels, record.levelups = team.grant_team_exp(self.state, self.content, self.world, exp)
         record.notes += levels
         return msgs + levels
@@ -7646,6 +7653,17 @@ class Game:
         side, loc = self._side(), self.state.player.location
         mine = side is not None and loc is not None and territory.controller(self.state.world, self.content, loc) == side
         return push.STEADY_LINE if mine else push.RESISTED_LINE
+
+    def _record_exp(self, record, exp: int) -> list[str]:
+        """這一場本人的經驗寫進戰報（record.exp）：已經滿級時照 5 換 1 換成心得（team.maxed_xinde，3.5），戰報的得失寫心得、
+        不寫經驗，回江湖紀錄那一句；沒滿級照舊寫經驗、回空的。經驗本身照舊交給 grant_team_exp／add_exp（滿級的本人不加，同伴照拿）。"""
+        gained = team.maxed_xinde(self.state, self.content, exp)
+        if not team.maxed(self.content, self.state.player.member):
+            record.exp = exp
+            return []
+        record.exp = 0
+        record.xinde = (record.xinde or 0) + gained
+        return [team.MAXED_XINDE.format(n=gained)] if gained else []
 
     def _hold_share(self) -> float | None:
         """守、攪局、守勢行動拿 _sortie_host 那一路的幾成：一類一顆開著是全額（正式季整合 2.6），關著照操練的三成（None）。"""
@@ -7914,7 +7932,7 @@ class Game:
             p.stats["xinde"] = p.stats.get("xinde", 0) + xinde
             record.xinde = xinde
             msgs.append(f"心得 +{xinde}")
-        record.exp = exp
+        msgs += self._record_exp(record, exp)
         levels, record.levelups = team.grant_team_exp(self.state, self.content, self.world, exp)
         record.notes += levels
         return msgs + levels
@@ -8196,7 +8214,7 @@ class Game:
         # 經驗本來就是每人拿一樣多（FB-002），乘勝與寶物整隊一起乘；散人的遊俠名號每一階再多一成（ranger.exp_factor，陣營的人是 1）
         factor = ranger.exp_factor(self.state, self.content)
         exp = round(squad.exp * more_exp * factor)
-        record.exp = exp
+        msgs += self._record_exp(record, exp)
         levels, record.levelups = team.grant_team_exp(self.state, self.content, self.world, exp)  # 每人都拿（FB-002）
         record.notes += levels  # 完整的句子留著（戰報頁、江湖紀錄）；戰鬥卡片畫 levelups 那一行簡短的（FB-074）
         why = renown.ranger_exp_note(self.state, self.content, factor)  # 名聲 6.3：散人的經驗加成說出原因
@@ -9548,13 +9566,14 @@ class Game:
         p.stats["xinde"] = p.stats.get("xinde", 0) + xinde
         record.xinde = xinde
         before = p.member.level
+        maxed_note = self._record_exp(record, cfg.exp)  # 先換（滿級才換）；升到滿級那一下剩下的不換
         ups = team.add_exp(c, p.member, cfg.exp, p.name)
         if p.member.level > before:
             points = team.points_between(c.config, before, p.member.level)
             p.stat_points += points
             if points:
                 ups.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
-        record.exp = cfg.exp
+        record.notes += maxed_note
         record.notes += ups
         self._play_rounds(record, squad, result.tier, None)
         line = self._file_battle(record, team_exp=False)
@@ -10453,13 +10472,13 @@ class Game:
         exp = round(boss.exp * share)
         if exp:  # 同伴不上場：只給本人；升級給屬性點同決戰的軍餉
             before = p.member.level
+            extra += self._record_exp(record, exp)  # 滿級換心得（先換，升到滿級那一下剩下的不換）
             extra += team.add_exp(c, p.member, exp, p.name)
             if p.member.level > before:
                 points = team.points_between(c.config, before, p.member.level)
                 p.stat_points += points
                 if points:
                     extra.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
-            record.exp = exp
         silver = round(boss.silver * share)
         if silver:
             p.stats["silver"] = p.stats.get("silver", 0) + silver
