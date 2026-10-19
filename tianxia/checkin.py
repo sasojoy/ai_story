@@ -101,6 +101,17 @@ def gift_text(content: Content, day: int) -> str:
     return "＋".join(FULL[k].format(**words) for k in gifts(content, day))
 
 
+def got_text(state: GameState, content: Content, day: int) -> str:
+    """第 day 天實際領到的（FB-438）：挑到的四階、那一天的一階素材寫名字，丹與銀兩照整句；這一版之前領的四階沒記挑了哪樣，照整句。"""
+    p, words = state.player, _words(content)
+    parts = []
+    for kind in gifts(content, day):
+        mid = p.checkin_picks.get(day) if kind == TIER4 else (
+            material_for(content, p.name, p.season_number, day) if kind == MATERIAL else None)
+        parts.append(f"{content.materials[mid].name}一個" if mid in content.materials else FULL[kind].format(**words))
+    return "＋".join(parts)
+
+
 def _tier4(content: Content) -> list[Material]:
     return [m for m in content.materials.values() if four_tiers.is_tier4(m)]
 
@@ -154,6 +165,8 @@ def claim(state: GameState, content: Content, world: WorldState, attribute: str 
             got.append(f"{content.materials[mid].name}一個")
             changes.append(f"{content.materials[mid].name} +1")
     p.checkin_days.append(day)
+    if pick is not None:
+        p.checkin_picks[day] = pick.id
     return [DONE.format(day=day, gift="、".join(got))], changes
 
 
@@ -172,7 +185,7 @@ def view(state: GameState, content: Content, world: WorldState) -> dict:
     gift = gift_text(content, day)
     pick = needs_pick(content, day) and not done
     if done:
-        step = STEP_DONE.format(gift=gift)
+        step = STEP_DONE.format(gift=got_text(state, content, day))
     elif pick:
         step = STEP_BOTH.format(n=content.config.checkin.pills) if PILLS in gifts(content, day) else STEP_PICK
     else:

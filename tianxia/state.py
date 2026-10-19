@@ -662,6 +662,7 @@ class PlayerState(BaseModel):
     tier4_upgrades: int = 0
     # 每日簽到（21 天季，正式季整合 6.2；tianxia/checkin.py）：這一季簽過的是第幾天（開季那一天是第 1 天）；換季跟著新角色清空
     checkin_days: list[int] = Field(default_factory=list)
+    checkin_picks: dict[int, str] = Field(default_factory=dict)  # 四階的日子挑到哪一樣（第幾天 → 素材 id；領過那一句照它寫，FB-438）
     # 四階的來源（第 4 批）：這一季打贏過、擲過四階的大勢人物（只看這一季第一次，另一本帳，不讀 tier3_drops）與掉了幾個（challenge_cap）
     tier4_wins: list[str] = Field(default_factory=list)
     tier4_challenge_drops: int = 0

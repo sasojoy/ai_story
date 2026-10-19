@@ -163,6 +163,24 @@ def test_view_last_day_has_no_next():
     assert [d["day"] for d in view["week"]] == [15, 16, 17, 18, 19, 20, 21]
 
 
+def test_done_line_names_what_was_picked():
+    """FB-438：領過之後攤開那一句照實際拿到的寫（挑到的四階、那一天的一階素材），不寫「自己挑的四階料一個」。"""
+    game = _game()
+    _day(game, 6)
+    game.check_in("快")
+    assert game.status_data()["checkin"]["step"] == "今天的份領過了：回體丹 2 顆＋奔雷角一個。"
+    p = game.state.player
+    assert type(p).model_validate_json(p.model_dump_json()).checkin_picks == {6: "kuai_4"}  # 存檔讀回來第幾天還是整數
+    _day(game, 8)
+    game.check_in()
+    p = game.state.player
+    name = game.content.materials[checkin.material_for(game.content, p.name, p.season_number, 8)].name
+    assert game.status_data()["checkin"]["step"] == f"今天的份領過了：{name}一個。"
+    _day(game, 13)
+    game.check_in("慢")
+    assert game.status_data()["checkin"]["step"] == "今天的份領過了：歸墟壤一個。"
+
+
 def test_short_last_week_after_a_wednesday_opening():
     game = _game(open_at=WED + 10 * HOUR)
     _day(game, 19, open_day=WED)
