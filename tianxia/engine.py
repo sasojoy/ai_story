@@ -18,10 +18,10 @@ from pydantic import BaseModel
 
 from . import (
     allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, chuangong, clinic, companion_agent, cultivation, defection, economy, encounter, enlist, equipment, event_llm, explore_modes,
-    fight_llm, figure_aid, figure_life, figures, foreshadow, generals, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, library, mapdata, martial_arts,
+    feasts, fight_llm, figure_aid, figure_life, figures, foreshadow, generals, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, letters, library, mapdata, martial_arts,
     materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
     shopview, signature, signature_arms, skill_slots, skillview, smithing,
-    social, sortie, styles, tactics, team, territory, timetable, traits, treasures, weapons, works, zh,
+    social, sortie, styles, tactics, team, territory, timetable, traits, treasures, weapons, works, yuedan, zh,
 )
 from . import ambush as ambush_rules  # 設伏劫道（後期體力玩法第一批）；叫 ambush_rules：這個檔裡有區域變數叫 ambush
 from . import duel as duel_rules  # 單人頭目戰（Joy 2026-10-10）
@@ -61,7 +61,7 @@ from .rules import (
 )
 from .sqlite_world import open_world
 from .state import (
-    ONBOARDING_VERSION, PLAYER, ArenaEntry, ArenaFight, ArenaReport, ArenaResult, ArenaSide, BattleRecord, Convoy, CrowdNote, DuelState, Equipment, GameState, HintNote, JournalEntry, Journey, Rumor, Tagalong, TavernHit, TavernWatch, TimelineResult,
+    ONBOARDING_VERSION, PLAYER, ArenaEntry, ArenaFight, ArenaReport, ArenaResult, ArenaSide, BattleRecord, Convoy, CrowdNote, DuelState, Equipment, Feast, GameState, HintNote, JournalEntry, Journey, Rumor, Tagalong, TavernHit, TavernWatch, TimelineResult,
     Whisper, WorldState,
     new_game_state,
 )
@@ -843,6 +843,14 @@ class Game:
         self._deliver_hits()  # 酒肆：自己雇的殺手得手、失手、到期退錢
         self._deliver_watches()  # 酒肆：託酒家留意的人有了準信、或到期沒消息
         self._deliver_arena()  # 擂台：被挑了的戰報、季末前三名的獎勵；季收了還沒打完的那一場作廢
+        mail = letters.deliver(self.state, self.content)  # 書信（大勢人物擴充第二批）：人物來信、過期的委託作罷
+        if mail:
+            self._write(letters.TITLE, mail)
+        cheered = feasts.deliver(self.state, self.content)  # 宴客（第三批）：散席時我那一句是席間最佳，補名望
+        if cheered:
+            self._write(feasts.TITLE, cheered)
+        if self.state.player.feasting is not None and self._feast_seat() is None:
+            self.state.player.feasting = None  # 宴散了、人走了：收起敬酒的選單
         self._deliver_held_gear()  # 寄放的重賞、贈禮：裝備庫有空位就補（裝備四欄 6.5）
         refunds = bounties.deliver_refunds(self.state, self.content)  # 掛的通緝沒人揭成：押金退回
         if refunds:
@@ -1050,6 +1058,8 @@ class Game:
                            enabled=move not in held) for move in MOVES] + [
                 Option(id=DUEL_FLEE, label="抽身退走（不分勝負，掉的氣血不回）"),
             ]
+        if s.player.feasting is not None and self._feast_seat() is not None:  # 赴宴（第三批）：固定的敬酒詞與離席；自己寫的走輸入框
+            return self._feast_menu()
         if s.player.arena is not None:  # 擂台（tianxia/arena.py）：三招與認輸；放手一搏同頭目戰走輸入框
             held = tactics.locks(s.player.arena.bout).no_moves
             return [Option(id=f"arena:{move}", label=duel_rules.move_label(move) + (tactics.lock_note(move) if move in held else ""),
@@ -2648,6 +2658,8 @@ class Game:
                 msgs = self._works_act(arg)
             elif kind == "aid":
                 msgs = self._aid_act(arg)
+            elif kind == "feast":
+                msgs = self._feast_act(arg)
             else:
                 msgs = self._choose(int(arg))
             # 三選一開著時按「探索」本身（_act 只回 PICK）：不算探索過、不寫紀錄。要在後面接上大勢門檻、召見那些訊息之前記
@@ -2943,6 +2955,10 @@ class Game:
             verb, _, fid = arg.partition(":")
             title = {"guard": figure_aid.GUARD_TITLE, "rally": figure_aid.RALLY_TITLE, "visit": figure_aid.VISIT_TITLE}.get(verb, figure_aid.GUARD_TITLE)
             return f"{title}・{c.figures[fid].name}" if fid in c.figures else title
+        if kind == "feast":
+            f = feasts.find(s, s.player.feasting) if arg.startswith(("toast", "leave")) else feasts.find(
+                s, int(arg.partition(":")[2]) if arg.partition(":")[2].isdecimal() else None)
+            return f"{feasts.TITLE}・{feasts.host_name(c, f)}" if f is not None else feasts.TITLE
         if kind == "works":
             name = works.FORT_TITLE if arg == "fortify" else works.STOCK_TITLE
             return f"{name}・{c.locations[s.player.location].name}"
@@ -3240,6 +3256,119 @@ class Game:
         呼叫的位置都在記進江湖紀錄之前，說的話才記在這一次行動那一則。"""
         self._queue_triggered_hints()
         self._surface_hint()
+
+    # ── 書信與委託（大勢人物擴充第二批；tianxia/letters.py）──
+
+    def letter_view(self) -> dict | None:
+        """江湖頁「剛剛」上面那張小卡：最新一封沒看過的信；沒有是 None。"""
+        return letters.view(self.state, self.content)
+
+    def read_letter(self, letter_id: int) -> list[str]:
+        """小卡上的「收起」：記成看過了（委託照樣在身上，懸賞卡上看得到）。"""
+        return letters.read(self.state, letter_id)
+
+    def decline_letter(self, letter_id: int) -> list[str]:
+        """小卡上的「婉拒」：這封信附的委託作罷（不扣情誼），信記成看過了。"""
+        msgs = letters.decline(self.state, self.content, letter_id)
+        if msgs and msgs[0] != letters.NO_LETTER:
+            self._write(letters.TITLE, msgs)
+        return msgs
+
+    def letter_request(self) -> letters.LetterNote | None:
+        """還等著模型照他的口氣重寫的那一封（server 鎖外寫；A 段，只讀）。"""
+        return letters.request(self.state, self.content)
+
+    # ── 宴客（大勢人物擴充第三批；tianxia/feasts.py）──
+
+    def _feast_seat(self) -> Feast | None:
+        """我坐著的那一場（PlayerState.feasting）還能敬酒：還擺著、我在那裡、我還沒敬過。不然是 None。"""
+        f = feasts.find(self.state, self.state.player.feasting)
+        return f if feasts.toast_problem(self.state, self.content, f) is None else None
+
+    def _feast_options(self) -> list[Option]:
+        s, c = self.state, self.content
+        out: list[Option] = []
+        for f in feasts.here(s, c):
+            host = feasts.host_name(c, f)
+            if feasts.toasted(s, f):
+                out.append(Option(id=f"feast:join:{f.id}", label=feasts.DONE_LABEL.format(host=host), enabled=False))
+            else:
+                out.append(Option(id=f"feast:join:{f.id}", label=feasts.JOIN_LABEL.format(host=host)))
+        return out
+
+    def _feast_menu(self) -> list[Option]:
+        return [Option(id=f"feast:toast:{i}", label=feasts.TOAST_LABEL.format(text=t)) for i, t in enumerate(feasts.FIXED_TOASTS)] + [
+            Option(id="feast:leave", label=feasts.LEAVE_LABEL)]
+
+    def _feast_act(self, arg: str) -> list[str]:
+        """入席（feast:join:<id>，不花體力）、挑一句固定的敬酒詞（feast:toast:<i>）、離席（feast:leave）。"""
+        s, c = self.state, self.content
+        p = s.player
+        verb, _, rest = arg.partition(":")
+        if verb == "join":
+            f = feasts.find(s, int(rest) if rest.isdecimal() else None)
+            problem = feasts.toast_problem(s, c, f)
+            if problem is not None:
+                return [problem]
+            p.feasting = f.id
+            return [feasts.SEATED.format(host=feasts.host_name(c, f), n=len(f.toasts))]
+        if verb == "leave":
+            p.feasting = None
+            return [feasts.LEFT]
+        if verb == "toast" and rest.isdecimal() and int(rest) < len(feasts.FIXED_TOASTS):
+            f = self._feast_seat()
+            if f is None:
+                p.feasting = None
+                return [feasts.GONE]
+            return feasts.toast(s, c, f, feasts.FIXED_TOASTS[int(rest)], feasts.FIXED_SCORE, fixed=True)
+        return ["（此刻無法這麼做。）"]
+
+    def feast_free_text_prompt(self) -> str | None:
+        """坐在宴席上時輸入框的提示語（server.main_view；送出走 feast_text），否則 None。"""
+        return feasts.FREE_PROMPT if self.state.player.feasting is not None and self._feast_seat() is not None else None
+
+    def feast_text_request(self, text: str) -> feasts.ToastRequest | list[str]:
+        """自己寫的敬酒詞，A 段（只讀）：坐在宴席上、這一場還能敬、字數對，就開評分的單子；不然回拒絕的話。"""
+        if self.world.paused_at() is not None:
+            return [f"（{PAUSED_TEXT}。）"]
+        f = self._feast_seat()
+        if f is None:
+            return [feasts.NOT_HERE]
+        text = feasts.clean_text(text)
+        problem = feasts.text_problem(text)
+        if problem is not None:
+            return [problem]
+        return feasts.request(self.state, self.content, f, text)
+
+    def feast_toast(self, text: str, score: int, request: feasts.ToastRequest | None = None) -> list[str]:
+        """C 段：重驗同一場、同一句才記（分數再夾一次）；對不上回拒絕的話、不寫紀錄。寫一則「宴客・某某」。"""
+        now = self.feast_text_request(text)
+        if isinstance(now, list):
+            return now
+        if request is not None and (request.feast != now.feast or request.text != now.text):
+            return [feasts.GONE]
+        f = feasts.find(self.state, now.feast)
+        msgs = feasts.toast(self.state, self.content, f, now.text, score, fixed=False)
+        self._write(f"{feasts.TITLE}・{feasts.host_name(self.content, f)}", msgs)
+        self._save_season()
+        return msgs
+
+    # ── 月旦評（第三批；tianxia/yuedan.py）──
+
+    def yuedan_request(self) -> yuedan.YuedanNote | None:
+        """A 段（只讀）：這一週還沒發、還沒寫過評語的那一批。"""
+        return yuedan.request(self.state, self.content)
+
+    def apply_yuedan(self, note: yuedan.YuedanNote, lines: dict[str, str]) -> bool:
+        """C 段：同一批才換上評語並發出去（天下大事、江湖史），存回共用賽季。"""
+        done = yuedan.apply(self.state, self.content, note, lines)
+        if done:
+            self._save_season()
+        return done
+
+    def apply_letter(self, note: letters.LetterNote, text: str) -> bool:
+        """C 段：還是同一封才換；寫不出來照固定句。"""
+        return letters.apply(self.state, note, text)
 
     def set_hints_off(self, value: bool) -> None:
         """設定頁的「不再提示」：打開時排著的清掉（沒上過框的不算說過，關掉再打開還聽得到）；對話框的引導與入伍段不受影響。"""
@@ -8945,7 +9074,7 @@ class Game:
             name = c.scenario.faction_name(stock, stock)
             label = works.STOCK_LABEL.format(side=name, n=s.world.supply.get(stock, 0))
             opts.append(self._cost_option("works:stockpile", label, c.config.stockpile.stamina))
-        return opts + self._aid_options()
+        return opts + self._aid_options() + self._feast_options()
 
     def _aid_options(self) -> list[Option]:
         """護著同陣營的大勢人物（figure_aid）：這裡在場的同陣營人物各一顆護衛、一顆犒軍；在自己陣營的大本營，被挑戰打退、
@@ -9025,6 +9154,8 @@ class Game:
         else:
             hours = figure_aid.visit(s, c, fid)
             msgs = [figure_aid.VISIT_DONE.format(name=fig.name, hours=figure_aid.hours_text(hours))]
+        if verb in ("guard", "rally") and fig.character:  # 求援委託（第三批）：護衛、犒軍他也算辦成
+            msgs += bounties.on_aid(s, c, fig.character)
         if self._draft is not None:
             self._draft.changes += changes
         if season_one(c, s.world) and cfg.contrib_push:
@@ -11420,6 +11551,9 @@ class Game:
             return self._duel_scene()
         if s.player.arena is not None:
             return self._arena_scene()
+        seat = self._feast_seat() if s.player.feasting is not None else None
+        if seat is not None:
+            return feasts.scene(s, c, seat)
         sense_card = sensing.scene_text(s, c) if s.player.sensing is not None else ""
         if sense_card:
             return sense_card

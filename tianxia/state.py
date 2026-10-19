@@ -519,6 +519,11 @@ class PlayerState(BaseModel):
     # 風聞（figure_life.spread）：人物 id → 他聽說的你做過的事（一句一條，最新的在後，最多 hearsay_keep 條）；這一季的，換季清掉
     hearsay: dict[str, list[str]] = Field(default_factory=dict)
     hearsay_keys: list[str] = Field(default_factory=list)  # 已經傳開過的事（「種類|對象」）：同一件事一位人物只算一次
+    # 書信（大勢人物擴充第二批；tianxia/letters.py）：人物派人送來的信，最新的在後、最多 letters_keep 封；這一季的，換季清掉
+    letters: list[Letter] = Field(default_factory=list)
+    letter_day: int = -1  # 上一封信是第幾個遊戲日收到的（一天最多一封）
+    letter_seq: int = 0  # 書信與委託的流水號
+    cheers: list[str] = Field(default_factory=list)  # 等著寫道賀信的「人物 id|你做的事」（figure_life.spread 情誼往上動的那幾位）
     # 上一季的交情（第一季設計第十四節；正式版辛）：人物 id → 最近一次有聊過的那一季的關係筆記。換季時把
     # relationship_notes 搬過來（這一季的從頭寫），沒聊過的人物保留更早的那一句。只給模型當背景，畫面不顯示
     past_notes: dict[str, str] = Field(default_factory=dict)
@@ -551,6 +556,8 @@ class PlayerState(BaseModel):
     mount: Equipment | None = None  # 身上的坐騎（裝備四欄設計第五節）；舊存檔沒有＝沒騎馬
     hunger_warned: bool = False  # 身上那匹飽足低到 Config.mounts.edge_warn 以下時提醒過一次了；餵過或換一匹時重設
     picking_market: bool = False  # 打開了馬市的第二層選單（同 picking_smith）；離開、存檔修補、同步時人不在馬市、出發都收起來
+    feasting: int | None = None  # 赴宴中（宴客，tianxia/feasts.py）：坐在哪一場宴席上（Feast.id），選單換成敬酒詞
+    feasts_paid: list[int] = Field(default_factory=list)  # 領過「席間最佳」名望的宴席 id（這一季的）
     picking_arena: bool = False  # 打開了擂台的第二層選單（同 picking_market）；離開、存檔修補、同步時人不在城鎮、出發都收起來
     treasure: Equipment | None = None  # 身上的寶物（裝備四欄設計第六節；隨時能換，2.3）；舊存檔沒有＝沒帶
     heirloom: Equipment | None = None  # 寶物欄的「傳承」那一格：玉璽碎片的抄本（照全服登記重抄，玉璽碎片設計 7.3、7.4）；換季帶走
@@ -892,6 +899,66 @@ class Bounty(BaseModel):
     prize: Literal["treasure", "horse"] | None = None
     auto_by: Literal["陣營", "官府"] | None = None  # 系統掛的通緝（名聲 4.6、5.4）；None＝玩家押錢掛的
     renown_title: str = ""  # 系統掛的通緝：掛單那一刻被掛的人的稱號（威震州郡、江湖巨寇……），標題照它寫
+    # 人物掛的（大勢人物擴充第二批）：figure 是掛單的人物（對話人物 id），motive 是「復仇」「追剿」（懸賞榜上，figure_life.on_fall）
+    # 或「委託」（求援書信附的那一件，只在收信的人身上：PlayerState.letters）。標題與掛單人照它寫，交差時那位人物情誼另加
+    figure: str | None = None
+    motive: Literal["復仇", "追剿", "委託", "求援"] | None = None
+
+
+class Letter(BaseModel):
+    """一位人物派人送來的信（tianxia/letters.py；大勢人物擴充第二批）。求援附一件委託（task：Bounty，motive「委託」，只在收信的人身上；
+    討伐、打探、護送照懸賞榜的同一套交差）；道賀沒有委託。text 先寫固定句，伺服器鎖外請模型照他的口氣重寫（written 標記寫過了沒，
+    寫不出來照固定句）。"""
+
+    id: int
+    kind: Literal["求援", "道賀", "邀宴", "道謝"]  # 邀宴、道謝是第三批（宴客、求援委託辦成了）
+    sender: str  # 對話人物 id
+    at: float  # 收到的那一刻（世界秒）
+    mood: str = ""  # 寫信時他的心事（求援：焦慮、悲憤）
+    about: str = ""  # 道賀：他聽說的你做的事
+    text: str
+    written: bool = False
+    read: bool = False
+    task: Bounty | None = None
+    lapsed: bool = False  # 委託過了期限、或你婉拒了
+
+
+class Toast(BaseModel):
+    """宴席上的一句敬酒詞（tianxia/feasts.py；大勢人物擴充第三批）。score 是模型評的（固定的敬酒詞照 feasts.FIXED_SCORE），情誼照它動。"""
+
+    name: str  # 名號
+    text: str
+    score: int
+    at: float
+    fixed: bool = False  # 挑的是固定的敬酒詞
+
+
+class Feast(BaseModel):
+    """一位人物設的宴（tianxia/feasts.py）：在 place 從 start 擺到 end（世界秒），人在那裡就能赴宴、敬一句酒。
+    散席（settled）時分數最高的那一句（best：名號）上天下大事，那個人同步時名望 +feast_fame（PlayerState.feasts_paid 記領過的）。"""
+
+    id: int
+    host: str  # 對話人物 id
+    place: str
+    start: float
+    end: float
+    toasts: list[Toast] = Field(default_factory=list)
+    settled: bool = False
+    best: str = ""
+
+
+class YuedanEntry(BaseModel):
+    """月旦評評到的一個人（tianxia/yuedan.py）：第 week 週、照哪一張榜（board）挑到的；line 先寫固定句，伺服器鎖外請模型寫成
+    八到十六字的評語（written）；published 是天下大事與江湖史寫了沒（寫好了、或等過 yuedan_wait_seconds 照固定句）。"""
+
+    week: int
+    name: str
+    board: str
+    fact: str = ""
+    line: str
+    at: float
+    written: bool = False
+    published: bool = False
 
 
 class Invite(BaseModel):
@@ -1043,6 +1110,12 @@ class WorldState(BaseModel):
     active_pushers: dict[str, dict[str, float]] = Field(default_factory=dict)  # 陣營 id → 名號 → 最後一次推大勢的世界秒（人數緩衝用，過期的順手清掉）
     bounties: list[Bounty] = Field(default_factory=list)  # 懸賞榜（bounties.py）：陣營掛的還沒過期的單、還沒退押金的通緝，加上過期但還有人揭著的（留到他們同步，deliver_lapses）；換季整個重來
     bounty_seq: int = 0  # 懸賞的流水號
+    # 大勢人物擴充第三批（tianxia/feasts.py、yuedan.py、bounties 的求援委託）：這一季的宴席、月旦評、人物對整個陣營發的求援委託
+    feasts: list[Feast] = Field(default_factory=list)
+    feast_seq: int = 0
+    yuedan: list[YuedanEntry] = Field(default_factory=list)
+    yuedan_week: int = 0  # 月旦評評到第幾週了
+    rallies: list[Bounty] = Field(default_factory=list)  # 求援委託（motive「求援」；不上懸賞榜，自己陣營的人都看得到、前 quota 個辦成的有賞）
     # 陣營的軍備（素材與經濟設計第六節第 3 點；economy.donate）：陣營 id → 素材屬性（慢、快、剛、柔）→ 累積的份量（一階 1、二階 3、三階 9）。
     # 名字照 Config.economy.armaments（慢 → 糧秣……）。這一季的；在決戰怎麼起作用還沒定（跟 joy 對，第 2 塊），先只存
     armaments: dict[str, dict[str, int]] = Field(default_factory=dict)

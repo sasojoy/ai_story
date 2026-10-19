@@ -6,7 +6,7 @@ import random
 import re
 from collections.abc import Callable
 
-from . import arena, battle_instance, bounties, calendar, figure_life, figures, flavor, leaderboard, orders, ranks, renown, seats, territory, timetable
+from . import arena, battle_instance, bounties, calendar, feasts, figure_life, figures, flavor, leaderboard, orders, ranks, renown, seats, territory, timetable, yuedan
 from .models import Act, BattleDef, Content, Ending, SimPlayer, SimRumor, Storyline, TimetableEvent
 from .ollama_client import OllamaClient
 from .rules import (
@@ -670,6 +670,8 @@ def advance_world_state(
         if not season.ended:
             msgs += figures.revive(vehicle, content)  # 被挑戰打退的人物過幾個季曆天回來（PM 2026-10-16，兩種季都有）
             figure_life.tick(vehicle, content)  # 人物的每日行事（大勢人物擴充第一批）：走動、募兵、襲擾，只寫傳聞
+            feasts.settle(vehicle, content)  # 時間到了的宴散席（第三批）：席間最佳那一句上天下大事
+            yuedan.tick(vehicle, content, world)  # 月旦評（第三批）：跨進新的一週評六個人；給了 store 才評（要掃角色）
         if crossed and not season.ended:
             msgs += season_hour(vehicle, content, rng, players=players)
             decisive = None if season.ended or seal_open else decisive_ending(vehicle, content)
