@@ -55,8 +55,9 @@ def active(content: Content, tianji: int, season: WorldState | None = None) -> l
     挑 per_season 條、跳過已經挑到的種類（池子的種類不夠就少挑）。防具照舊。season 是 None、沒蓋章（正在跑的季）照舊。"""
     out: list[ForgeSecret] = []
     per_kind = season is not None and season.forge_divine_per_kind
+    lineup = season.divine_lineup if season is not None else None  # 神器輪替（正式季整合 5.6）：蓋了章的季，神器照開季時挑的那幾件
     for group, count in content.config.forge_secrets.per_season.items():
-        if count <= 0 or not equipment.on(content, group.partition(":")[0]):
+        if count <= 0 or not equipment.on(content, group.partition(":")[0]) or (lineup is not None and group.endswith(":divine")):
             continue
         pool = sorted((r for r in content.forge_secrets.values() if group_of(r) == group), key=lambda r: _rank(tianji, r.id))
         if per_kind and group == "weapon:divine":
@@ -67,6 +68,8 @@ def active(content: Content, tianji: int, season: WorldState | None = None) -> l
             out += picked if calendar.season_one_on(season, content) else picked[:count]
         else:
             out += pool[:count]
+    if lineup is not None:
+        out += [content.forge_secrets[i] for i in lineup if i in content.forge_secrets and equipment.on(content, content.forge_secrets[i].slot)]
     return out
 
 

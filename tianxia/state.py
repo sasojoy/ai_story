@@ -232,6 +232,7 @@ class GearFind(BaseModel):
     master_shown: str | None = None  # 寫給別人看的原品主人名號（打出那一刻記下；同 MartialArt.master_shown）
     divine_name: str | None = None  # 原品定的名字（world.name_divine）；還沒定是 None
     copies: int = 0  # 這一季照這個配方打出的仿品幾把（world.add_copy；神器譜寫「仿品 N 把」，不列人名）
+    season: int | None = None  # 原品打出的那一季（神器輪替的全服登記跨季，神器譜照它排；照季分的那幾列看表的 season 欄）
 
     @property
     def id(self) -> str:
@@ -1070,6 +1071,8 @@ class WorldState(BaseModel):
     # 素材與經濟（企劃者 2026-10-15）：開季時照 Config.forge_secrets 蓋的章（world_state.stamp_season）；舊季沒有這兩欄＝False（照舊）
     forge_divine_per_kind: bool = False  # 神器配方每種兵器一季最多一條（forge_secrets.active）
     forge_split_clues: bool = False  # 神器配方的線索拆三片（forge_secrets.hear、hear_smith、view）
+    # 神器輪替（正式季整合 5.6；第 10 批，divine.stamp 開季換季時蓋）：這一季現世的神器配方 id；None＝沒蓋章（開關關著、或上線前開的季），照舊挑
+    divine_lineup: list[str] | None = None
     renown_scale: float | None = None  # 名聲的門檻乘幾倍（開季時蓋章，world_state.stamp_season）；None＝沒有章，倍數 1
     territory: TerritoryState | None = None  # 地盤易手（出陣探索與地盤設計第四節）；None＝還沒算過
     # ── 擂台賽（tianxia/arena.py；換季整個重來）──

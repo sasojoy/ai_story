@@ -112,6 +112,14 @@ class SealRegistry(BaseModel):
     history: list[SealEvent] = Field(default_factory=list)
 
 
+class DivineRegistry(BaseModel):
+    """神器輪替與收集的全服登記（正式季整合 5.6、10.4；第 10 批，tianxia/divine.py）：world 那一列的 JSON，不分季、跨季保存（同玉璽碎片）。"""
+
+    seen: list[str] = Field(default_factory=list)  # 這個伺服器現世過的神器配方 id（照第一次現世的先後）；空的＝還沒照這套規則開過季
+    finds: dict[str, GearFind] = Field(default_factory=dict)  # 配方 id → 原品那一筆（主人、定名、全服仿品數、第幾季打出）；只算輪替季打的
+    exhausted: int | None = None  # 新神器用完了的那一季（主控台與管理者的回話提醒）
+
+
 class SealSide(BaseModel):
     """奪璽單挑的一方：身手全是快照（5.3），不回頭讀存檔。"""
 
@@ -196,6 +204,7 @@ class SharedWorldState(BaseModel):
     tianji: int = 0  # 天機：每次換季 +1，自創武學「名字 → 數值」的配方跟著換（跨季不滾雪球第三條）
     # ── 玉璽碎片（玉璽碎片設計 7.4、5.12）：全服、不分季，跟 season 一樣存在 world 那一列的 JSON 裡 ──
     seal: SealRegistry = Field(default_factory=SealRegistry)
+    divine: DivineRegistry = Field(default_factory=DivineRegistry)  # 神器輪替與收集（正式季整合 10.4）：全服、不分季
     seal_duels: list[SealDuel] = Field(default_factory=list)  # 還沒收場的奪璽單挑，第一場在打、其餘排隊（玉璽一一次最多一場）
 
     # ── 全服即時多人戰鬥（設計討論：集結選陣營→逐幕逐回合鎖步）────────
@@ -587,6 +596,10 @@ class WorldStateStore(Protocol):
 
     def seal_duel_open(self) -> bool:
         """有沒有還沒收場的奪璽單挑（提前收季要等它，5.11）。在 mutate 裡也查得到（同 faction_counts）。"""
+        ...
+
+    def divine_state(self) -> DivineRegistry:
+        """神器輪替的全服登記（現世過哪幾件、原品那一筆）：只讀 world 那一列，不讀季。"""
         ...
 
     def fingerprint_parts(self) -> tuple[SharedWorldState, int, int]:

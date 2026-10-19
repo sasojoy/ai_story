@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pydantic import BaseModel
 
 from . import (
-    allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, chuangong, clinic, companion_agent, cultivation, defection, economy, encounter, enlist, equipment, event_llm, explore_modes,
+    allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, chuangong, clinic, companion_agent, cultivation, defection, divine, economy, encounter, enlist, equipment, event_llm, explore_modes,
     fight_llm, figure_aid, figure_life, figures, foreshadow, four_tiers, generals, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, letters, library, mapdata, martial_arts,
     materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
     shopview, signature, signature_arms, silver, skill_slots, skillview, smithing,
@@ -9751,6 +9751,8 @@ class Game:
             return self._log(["（這一季還沒結束，無法開啟下一季。）"])
         self._reconcile_season()
         quiet = timetable.quiet_notes(self.world.get_season(), self.content, now)  # 同開季
+        if divine.exhausted_now(self.world.divine_state(), self.world.get_season_number()):  # 新神器用完了（正式季整合 5.6）：提醒管理者
+            quiet = [*quiet, divine.EXHAUSTED]
         return self._log([f"══ 第 {self.world.get_season_number()} 季開始 ══", *quiet] + self._settle_season_start())
 
     def admin_pause_clock(self, now: float) -> list[str]:

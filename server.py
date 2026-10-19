@@ -61,7 +61,7 @@ import server_push
 import zhuan_html
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
-    arena_crowd, battle_instance, biography, calendar, companion_agent, duel, event_llm, fight_llm, foreshadow, gender, glyph, insight_llm, leaderboard, letters, mapdata,
+    arena_crowd, battle_instance, biography, calendar, companion_agent, divine, duel, event_llm, fight_llm, foreshadow, gender, glyph, insight_llm, leaderboard, letters, mapdata,
     naming,
     ollama_client, rules,
     seal, seal_duel, server_bots, social, sortie, team, timetable, treasures,
@@ -2325,6 +2325,8 @@ def main(argv: list[str] | None = None) -> None:
     warning = calendar.profile_warning(CONTENT, open_world().get_season())  # 這一季蓋了第一季的章、這個程式卻沒開（FB-157）
     if warning:
         print(warning, flush=True)
+    if divine.exhausted_now(open_world().divine_state(), open_world().get_season_number()):  # 新神器用完了（正式季整合 5.6）
+        print(divine.EXHAUSTED, flush=True)
     QUEUE = make_queue(CONTENT.config)  # 開關關著是 None：鎖外的模型呼叫照舊直接叫
     TALE_THREADS = True  # 放手一搏的劇情回合結算後在背景補（narrate_battle）
     print(queue_line(CONTENT.config), flush=True)

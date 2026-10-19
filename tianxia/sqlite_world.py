@@ -26,7 +26,7 @@ from contextlib import AbstractContextManager
 from pathlib import Path
 from sqlite3 import Connection, Row
 
-from . import allied, calendar
+from . import allied, calendar, divine
 from .battle_instance import BattleInstance, BattleRoundRecord, shift_deadlines, start_muster
 from .characters import name_key
 from .database import Database, open_database
@@ -35,7 +35,8 @@ from .martial_arts import Insight, MartialArt
 from .models import BattleDef, Content
 from .state import GearFind, Rumor, SignatureClaim, WeaponRecipe, WorldState
 from .world_state import (
-    JADE_SEAL_FRAGMENT_COUNT, CompanionProgress, JadeSealFragment, SealDuel, SealRegistry, SealView, SeasonPhase, SharedWorldState,
+    JADE_SEAL_FRAGMENT_COUNT, CompanionProgress, DivineRegistry, JadeSealFragment, SealDuel, SealRegistry, SealView, SeasonPhase,
+    SharedWorldState,
     fresh_season,
     jade_seal_summary, stamp_season,
 )
@@ -643,6 +644,8 @@ class SqliteWorldStore:
                 return
             state.season = fresh_season(content)
             state.season_opened = content.config.auto_open_first_season
+            if state.season_opened:  # 自動開的第一季（測試內容）：同開季那一刻挑這一季的神器（divine.stamp，開關關著什麼都不做）
+                divine.stamp(state, content)
 
         return self.mutate(_apply).season
 
@@ -658,6 +661,7 @@ class SqliteWorldStore:
             avoid_quiet_hours(state.season, content, now)  # 季曆排的決戰照開季這一刻挪開半夜（企劃者 2026-10-15）
             state.season.territory = None  # 章換了：地盤照開季的戰線重算，第一次不發天下大事（出陣探索與地盤設計第六節）
             state.season.tianji = state.tianji  # 這一季的天機蓋進季裡：週初掛單的重賞亂數看它（裝備四欄 6.4；bounties.issue 讀不到全服那一列）
+            divine.stamp(state, content)  # 神器輪替（正式季整合 5.6）：照全服登記挑這一季的神器；開關關著什麼都不做
             state.season_opened = True
             state.season_last_real = now
             state.seal.opened_real = now  # 「這一季上線過」與隱沒看它（玉璽碎片設計 5.3、7.6）
@@ -706,6 +710,7 @@ class SqliteWorldStore:
             state.companions = {}  # 跨季不滾雪球第二條：同伴全部重獲自由、等級武學歸零
             state.tianji += 1  # 第三條：天機 +1；武學命名、煉製配方、投靠名冊照季分開存，新的一季自然是空的
             state.season.tianji = state.tianji  # 同 open_season：新的一季蓋上新的天機
+            divine.stamp(state, content)  # 同 open_season：新的一季照全服登記挑神器（季數、天機都是新的）
             if content.seal and content.config.seal.enabled:  # 七片這一輪都現世過：新的一季蓋天命之季的章（8.1）
                 self._stamp_mandate(state, content)
             from .timetable import avoid_quiet_hours  # noqa: PLC0415  延後 import：timetable → rules → world_state
@@ -856,6 +861,10 @@ class SqliteWorldStore:
         duels = [SealDuel.model_validate(d) for d in json.loads(row["duels"])] if row["duels"] else []
         return SealView(registry, duels, int(row["season"] or 1), int(row["tianji"] or 0), row["paused"] is not None)
 
+    def divine_state(self) -> DivineRegistry:
+        with self.db.snapshot() as conn:
+            return _divine(conn)
+
     def seal_duel_open(self) -> bool:
         with self.db.snapshot() as conn:
             row = conn.execute("SELECT json_array_length(data, '$.seal_duels') AS n FROM world WHERE id = 1").fetchone()
@@ -994,6 +1003,12 @@ def _insight_recipe(conn: Connection, season: int, key: str) -> Insight | None:
 def _gear_recipe(conn: Connection, season: int, key: str) -> WeaponRecipe | None:
     row = conn.execute("SELECT data FROM gear_recipes WHERE season = ? AND key = ?", (season, key)).fetchone()
     return None if row is None else WeaponRecipe.model_validate_json(row["data"])
+
+
+def _divine(conn: Connection) -> DivineRegistry:
+    """神器輪替的全服登記（world 那一列 JSON 的 divine；正式季整合 10.4）：只讀那一欄，不讀季。"""
+    row = conn.execute("SELECT json_extract(data, '$.divine') AS divine FROM world WHERE id = 1").fetchone()
+    return DivineRegistry.model_validate_json(row["divine"]) if row is not None and row["divine"] else DivineRegistry()
 
 
 def _gear_find(conn: Connection, season: int, key: str) -> GearFind | None:
