@@ -124,6 +124,7 @@
     artNote: null, // 修練（衝品質）的結果：{ id, html }，寫在那一門卡片的按鈕底下（W7）；點別的卡片、切分頁、做別的動作就清掉
     legendTick: {}, // 修練頁每一門武學「服下破境丹」勾了沒（id → true）；預設不勾，輪詢重畫不會悄悄取消，修練送出之後清掉
     forgeSel: [], // 爐裡放的：{type: "art" | "ins", id}，最多兩樣、武學最多兩門（武學＋意境、武學＋武學＝合成，兩個意境＝合併）
+    forgeLock: null, // 鎖在爐裡的那一樣（{type, id}，一次一樣；Joy 2026-10-19「尤其獲得新意境時會想要試他的所有組合」）：開爐成了它留在爐裡、只清另一格
     wheelSel: null, // 江湖頁行動列展開的那一格（move；探索三選一開著時也有 explore）
     sensing: false, // 有所感：畫布叫出來了沒（按了「把心中的形畫下來」）；感悟狀態結束（選單上沒有 SENSE_DRAW）就收起
     sensePts: [], // 畫布上那一筆的點位 [[x, y, 毫秒], …]（畫布座標 0～256）；輪詢重畫頁面之後照它補畫回去
@@ -1363,9 +1364,12 @@
       const x = i ? 26 : -26;
       // 格子只有 46 寬：名字超過四個字（新取的武學名可到六個字）就把字距壓進格子裡，不然會溢出格外蓋到另一格
       const fit = m && [...m.name].length > 4 ? ' textLength="42" lengthAdjust="spacingAndGlyphs"' : "";
+      const locked = m && isLocked(S.forgeSel[i]);
+      // 格子外角一顆小鎖（pot-lock）：鎖著的那一樣開爐成了也留在爐裡
+      const pin = m ? `<g class="w-pin${locked ? " on" : ""}" data-act="pot-lock" data-i="${i}" role="button" aria-label="${locked ? "解開" : "鎖住"}${esc(m.name)}" aria-pressed="${locked}"><circle cx="${i ? x + 22 : x - 22}" cy="-16" r="6.5"/><text x="${i ? x + 22 : x - 22}" y="-13.6" class="w-pin-t">鎖</text></g>` : "";
       return m
-        ? `<g class="w-slot full r${m.rank}${S.potFlash === i ? " flash" : ""}" data-act="unslot" data-i="${i}" role="button" aria-label="拿出${esc(m.name)}">
-            <rect x="${x - 23}" y="-14" width="46" height="28" rx="7"/><text x="${x}" y="-3" class="w-slot-name"${fit}>${esc(m.name)}</text><text x="${x}" y="8" class="w-slot-sub">${esc(m.sub)}</text></g>`
+        ? `<g class="w-slot full r${m.rank}${S.potFlash === i ? " flash" : ""}${locked ? " locked" : ""}" data-act="unslot" data-i="${i}" role="button" aria-label="拿出${esc(m.name)}">
+            <rect x="${x - 23}" y="-14" width="46" height="28" rx="7"/><text x="${x}" y="-3" class="w-slot-name"${fit}>${esc(m.name)}</text><text x="${x}" y="8" class="w-slot-sub">${esc(m.sub)}</text></g>${pin}`
         : `<g class="w-slot" data-act="pot-open"${potGlow()} role="button" aria-label="放一樣進爐"><rect x="${x - 23}" y="-14" width="46" height="28" rx="7"/><text x="${x}" y="0" class="w-slot-sub">放入</text></g>`;
     };
     return `<g class="w-hub w-furnace${ready ? " ready" : ""}" data-act="forge-hub" role="button" aria-label="太極火爐，開爐">
@@ -3016,6 +3020,15 @@
     if (b.other_art !== null) return b.insights.length === 0;
     return (b.art !== null && b.insights.length === 1) || (b.art === null && b.insights.length === 2);
   }
+  // 鎖在爐裡（Joy 2026-10-19「弄一個鎖定的功能，尤其獲得新意境時會想要試他的所有組合」）：一次鎖一樣，開爐成了它留在爐裡、
+  // 只清另一格，接著再放一樣就能試下一個組合；拿出來、熔掉、合掉就解開
+  const isLocked = (p) => !!(p && S.forgeLock && S.forgeLock.type === p.type && S.forgeLock.id === p.id);
+  function toggleLock(i) {
+    const p = S.forgeSel[i];
+    if (!p) return;
+    S.forgeLock = isLocked(p) ? null : { type: p.type, id: p.id };
+    renderPage();
+  }
   let potFlashTimer = 0;
   function pick(type, id) {
     if (S.busy) return; // 開爐等結果的時候（首次取名要等模型）爐子不動
@@ -3093,8 +3106,10 @@
       ${v.problem ? `<p class="kiln-warn">⚠ ${esc(v.problem)}</p>` : ""}`;
   }
   function kilnHtml(slots, ready) {
+    // 放了東西的格子右下角一顆小鎖（同大爐子的 pot-lock），鎖著的那一格金邊；兩顆鈕不能套在一起，所以包一層 .kiln-cell
     const cell = (m, i) => m
-      ? `<button class="kiln-slot full r${m.rank}${S.potFlash === i ? " flash" : ""}" data-act="unslot" data-i="${i}" aria-label="拿出${esc(m.name)}"><b>${esc(m.name)}</b><small>${esc(m.sub)}</small><i aria-hidden="true">×</i></button>`
+      ? `<div class="kiln-cell"><button class="kiln-slot full r${m.rank}${S.potFlash === i ? " flash" : ""}${isLocked(S.forgeSel[i]) ? " locked" : ""}" data-act="unslot" data-i="${i}" aria-label="拿出${esc(m.name)}"><b>${esc(m.name)}</b><small>${esc(m.sub)}</small><i aria-hidden="true">×</i></button>
+          <button type="button" class="kiln-pin${isLocked(S.forgeSel[i]) ? " on" : ""}" data-act="pot-lock" data-i="${i}" aria-pressed="${isLocked(S.forgeSel[i])}" aria-label="${isLocked(S.forgeSel[i]) ? "解開" : "鎖住"}${esc(m.name)}">鎖</button></div>`
       : `<button type="button" class="kiln-slot empty" data-act="pot-open"${potGlow()}><small>${i ? "再放一樣" : "放一樣"}</small></button>`;
     const r = 20;
     const taichi = `<svg class="kiln-taichi" viewBox="-24 -24 48 48" aria-hidden="true"><circle r="26.5" class="kiln-ember"/><circle r="24.2" class="kiln-ring"/><circle r="23" class="w-hub-rim"/><g class="w-spin" style="${spinAt(ready ? 3 : 28)}">
@@ -3210,7 +3225,7 @@
     const artsShown = v.all || pro() ? arts : arts.slice(0, CRAFT_PAGE);
     const first = S.forgeSel[0];
     const held = first ? (first.type === "art" ? x.owned_arts.find((r) => r.id === first.id) : x.insights.find((r) => r.id === first.id)) : null;
-    const title = !first ? "放一樣進爐" : held ? `爐裡有${first.type === "art" ? `【${esc(held.name)}】` : `「${esc(held.name)}」`}，再放一樣` : "再放一樣";
+    const title = !first ? "放一樣進爐" : held ? `爐裡${isLocked(first) ? "鎖著" : "有"}${first.type === "art" ? `【${esc(held.name)}】` : `「${esc(held.name)}」`}，再放一樣` : "再放一樣";
     return `<div class="sheet-bg" data-act="pot-close"></div>
       <div class="sheet craft-sheet" role="dialog" aria-label="挑東西放進爐">
         <div class="grip"></div>
@@ -6261,8 +6276,9 @@
         made = !!r.made;
         // 合成了：兩格清空，下一爐從頭放（Joy 2026-10-12「爐子合完應該要把上次放上去的東西自動卸下」）；
         // 被拒絕（沒合成、只回一句話）：東西留在爐裡，換一格就能再試——只拿掉已經不在手上的
-        if (r.made) S.forgeSel = [];
-        else trimForgeSel();
+        // 鎖著的那一樣留在爐裡（Joy 2026-10-19），下一爐只要再放一樣；它自己被合掉了（武學＋武學不會，意境不會用掉）就解開
+        if (r.made) S.forgeSel = S.forgeLock ? S.forgeSel.filter(isLocked) : [];
+        trimForgeSel();
         S.forgeLine = "";
         S.forgePreview = null;
         S.forgePicks = null;
@@ -6685,7 +6701,8 @@
         case "melt-insight": askMeltInsight(el); break;
         case "art-filter": setArtFilter(el.dataset.page, el.dataset.filter); renderPage(); break;
         case "pick": pick(el.dataset.type, el.dataset.id); break;
-        case "unslot": if (S.busy) break; S.forgeSel.splice(Number(el.dataset.i), 1); S.forgePicks = null; S.forgePreview = null; renderPage(); updateForgeLine(); break;
+        case "unslot": if (S.busy) break; if (isLocked(S.forgeSel[Number(el.dataset.i)])) S.forgeLock = null; S.forgeSel.splice(Number(el.dataset.i), 1); S.forgePicks = null; S.forgePreview = null; renderPage(); updateForgeLine(); break;
+        case "pot-lock": if (S.busy) break; toggleLock(Number(el.dataset.i)); break;
         case "forge": await forge(); break;
         case "craft-all": craftView().all = true; renderPage(); break;
         case "peek": window.scrollTo({ top: 0, behavior: "smooth" }); break;
@@ -7147,6 +7164,7 @@
     const keep = S.forgeSel.filter((p) => (p.type === "art" ? arts : held).has(p.id));
     const trimmed = keep.length !== S.forgeSel.length;
     S.forgeSel = keep;
+    if (S.forgeLock && !keep.some(isLocked)) S.forgeLock = null; // 鎖著的那一樣不在爐裡了：鎖也解開
     return trimmed;
   }
 

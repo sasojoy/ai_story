@@ -78,6 +78,46 @@ def test_forging_empties_the_pot_and_writes_the_result_under_the_button_without_
     assert out["scrolled"] == 0  # 不跳到最上面
 
 
+def test_a_locked_insight_stays_in_the_pot_after_forging_so_the_next_pairing_is_one_tap_away(made):
+    """鎖在爐裡（Joy 2026-10-19「弄一個鎖定的功能，尤其獲得新意境時會想要試他的所有組合」）：每一格有一顆小鎖（pot-lock），
+    鎖著的那一樣開爐成了留在爐裡、只清另一格；拿出來就解開；鎖著的不在手上了（熔掉）也解開。"""
+    game, art = made
+    after = server.menxia_view(game)
+    out = run(server.main_view(game), """return (async () => {
+      const btn = { disabled: false, textContent: "開爐", classList: { add() {} } };
+      const byId = T.ctx.document.getElementById;
+      T.ctx.document.getElementById = (id) => (id === "forge" ? btn : byId(id));
+      const before = H.pageCraft();
+      H.toggleLock(1); // 鎖住右邊那一格（火）
+      const locked = H.pageCraft();
+      const lock = JSON.stringify(H.S.forgeLock);
+      await H.forge();
+      const afterForge = H.pageCraft();
+      const sel = JSON.stringify(H.S.forgeSel), stillLocked = JSON.stringify(H.S.forgeLock);
+      H.S.craftPick = true;
+      const sheet = H.pageCraft();
+      H.S.craftPick = false;
+      H.toggleLock(0); // 再按一次解開
+      const unlocked = JSON.stringify(H.S.forgeLock);
+      H.toggleLock(0); H.S.forgeSel.push({ type: "art", id: "basic_fist" }); // 鎖回去、再放武學；熔掉之後重抓：鎖著的不在了
+      H.S.menxia.insights = H.S.menxia.insights.filter((i) => i.id !== "huo");
+      const trimmed = H.trimForgeSel();
+      return { before, locked, lock, afterForge, sel, stillLocked, sheet, unlocked, trimmed, gone: JSON.stringify(H.S.forgeLock), left: JSON.stringify(H.S.forgeSel) };
+    })();""", S={"tab": "craft", "forgeSel": [{"type": "art", "id": "basic_fist"}, {"type": "ins", "id": "huo"}]},
+        menxia=server.menxia_view(game),
+        responses={"/api/menxia/forge": {"menxia": after, "message": "<p>煉成了。</p>", "main": server.main_view(game), "made": True},
+                   "/api/forge_line": {"line": "", "picks": None}})
+    assert out["before"].count('data-act="pot-lock"') == 4 and ' locked"' not in out["before"]  # 大爐子與縮起來的各兩顆小鎖，都沒鎖
+    assert out["lock"] == '{"type":"ins","id":"huo"}'
+    assert 'kiln-slot full r2 locked" data-act="unslot" data-i="1"' in out["locked"] and 'class="kiln-pin on" data-act="pot-lock" data-i="1"' in out["locked"]
+    assert 'w-slot full r2 locked" data-act="unslot" data-i="1"' in out["locked"] and 'class="w-pin on" data-act="pot-lock" data-i="1"' in out["locked"]
+    assert out["sel"] == '[{"type":"ins","id":"huo"}]' and out["stillLocked"] == out["lock"]  # 合成了：火留在爐裡、鎖還在，武學那一格清了
+    assert "煉成了。" in out["afterForge"] and "再放一樣進爐" in out["afterForge"]
+    assert "爐裡鎖著「火」，再放一樣" in out["sheet"]
+    assert out["unlocked"] == "null"
+    assert out["trimmed"] is True and out["gone"] == "null" and out["left"] == '[{"type":"art","id":"basic_fist"}]'
+
+
 def test_the_forge_line_endpoint_gives_marks_only(made, monkeypatch):
     game, art = made
     monkeypatch.setattr(server, "look", lambda g, view: view(g))
