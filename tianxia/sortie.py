@@ -29,6 +29,9 @@ RANGER_LINE = "散人不能出陣：投靠陣營之後才有。散人靠懸賞�
 RANGER_LINE_PRECISE = "散人不能出陣：投靠陣營之後才有。散人靠懸賞、事件與練功打的仗出力。"  # 一類一顆（FB-420；待 joy 潤）
 
 
+MERIT_LINE = "軍功賞銀 {silver} 兩已記上。"  # 待 joy 潤：出陣攻打贏的軍功賞（正式季整合 2.6），寫進這一場戰報的敘事
+
+
 def on(content: Content) -> bool:
     """出陣開著：Config.sortie.enabled，而且劇本有陣營（不看第一季開關，同懸賞、叛投）。"""
     return content.config.sortie.enabled and bool(content.scenario.factions)

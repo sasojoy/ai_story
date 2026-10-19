@@ -2472,6 +2472,14 @@ class SortieRules(_Strict):
     enabled: bool = True
     per_day: int = Field(default=5, ge=1)  # 每人每天幾次（攻、守、攪局共用；照 pill_day_utc_offset_hours 的 00:00 換日，同回體丹）
     hold_share: float = Field(default=0.5, gt=0, le=1)  # 守、攪局推的量是攻的幾成
+    # ── 出陣更誘人（正式季整合 2.6、第 4 批；一類一顆 precise_actions 開著才有，關著照舊三成）──
+    reward_scale: float = Field(default=2.0, ge=0)  # 攻打贏的經驗、心得是對手的幾倍（同一個對手練功打贏的兩倍【PM】）
+    merit_silver_per_level: int = Field(default=3, ge=0)  # 攻打贏另加軍功賞：本人等級 × 這麼多兩【暫】
+    rare_legend: float = Field(default=0.05, ge=0, le=1)  # 攻打贏另擲：破境丹【暫】
+    rare_treasure: float = Field(default=0.02, ge=0, le=1)  # 寶物（挑戰本人的掉落池，另記一本帳 PlayerState.sortie_treasures）
+    rare_horse: float = Field(default=0.02, ge=0, le=1)  # 良駒
+    treasure_cap: int = Field(default=2, ge=0)  # 出陣掉的寶物一人一季最多幾件（不讀 figure_treasure_cap；season21 寫 3【PM】）
+    horse_cap: int = Field(default=1, ge=0)  # 出陣掉的良駒一人一季最多幾匹
 
 
 class ExploreModes(_Strict):
@@ -2668,6 +2676,10 @@ class FourTiers(_Strict):
     season_cap: int = Field(default=2, ge=0)  # 三換四一季最多幾個（PlayerState.tier4_upgrades）
     named_main: float = Field(default=0.5, ge=0, le=1)  # 主料四階、沒打中神器配方：出名器的機會（5.2）
     named_both: float = Field(default=0.8, ge=0, le=1)  # 主輔都是四階（也沒打中神器配方）
+    # 四階的來源（4.5，第 4 批）：挑戰本人這一季第一次打贏某位人物另擲一個；時刻表決戰得勝那一方出手夠的人各一個
+    challenge_chance: float = Field(default=0.15, ge=0, le=1)
+    challenge_cap: int = Field(default=2, ge=0)  # 挑戰本人掉的四階一人一季最多幾個（另一本帳 PlayerState.tier4_challenge_drops）
+    showdown: bool = True  # 時刻表決戰得勝給四階（天命之爭、保底收場不給）
 
 
 class SilverOutlets(_Strict):

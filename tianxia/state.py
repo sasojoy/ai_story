@@ -659,6 +659,12 @@ class PlayerState(BaseModel):
     upgrade_seq: int = 0  # 這一季升階了幾次：升階擲哪一種的種子（economy.upgrade_rng），換季歸零（種子另帶季數）
     # 這一季三換四換了幾個（素材四階，正式季整合 4.5：一季最多 Config.four_tiers.season_cap）：換季時新角色本來就是 0（不帶過季），叛投不清
     tier4_upgrades: int = 0
+    # 四階的來源（第 4 批）：這一季打贏過、擲過四階的大勢人物（只看這一季第一次，另一本帳，不讀 tier3_drops）與掉了幾個（challenge_cap）
+    tier4_wins: list[str] = Field(default_factory=list)
+    tier4_challenge_drops: int = 0
+    # 出陣攻打贏的稀有掉落（正式季整合 2.6）：這一季掉了幾件寶物、幾匹良駒（Config.sortie.treasure_cap、horse_cap；換季跟著新角色歸零）
+    sortie_treasures: int = 0
+    sortie_horses: int = 0
     donate_day: int = -1  # 大本營捐軍備：上次捐是哪一天
     donated_today: int = 0  # 那一天捐了幾點貢獻（Config.economy.donate_daily_cap）
     # 銀兩出口（21 天季，正式季整合 6.5；tianxia/silver.py）。「那一天」照回體丹的換日；一季一清（換季時新角色本來就是預設）

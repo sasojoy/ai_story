@@ -331,9 +331,9 @@ def test_the_secrets_measure_script_also_prints_the_forge_part(capsys, monkeypat
     assert sum(line.startswith("種子 1 ") and "鑄器：摸到 " in line for line in lines) == 3
     assert out.count("種子 1 三邊合起來：鑄器摸到 ") == 1
     # FB-270：照季的章數配方，也數片子。神器輪替（正式季第 10 批）：伺服器的第一季九件神器全開（兵器六、防具三），
-    # 加上名器兵器一階 2、二階 2，防具一階 1、二階 1，共 15 條（以前週末的章是神器兵器六種各 1、防具 1，共 13 條）
+    # 加上名器兵器一階 2、二階 2、三階 2，防具一階 1、二階 1、三階 1（三階那一組是第 4 批補的），共 18 條
     forge_rows = [line for line in lines if line.startswith("種子 1 ") and "鑄器：摸到 " in line]
-    assert all("/15（" in line and "神器片子 " in line for line in forge_rows), forge_rows
+    assert all("/18（" in line and "神器片子 " in line for line in forge_rows), forge_rows
     assert out.count("爐、名器 ") == 6 and out.count("平均 鑄器：摸到 ") == 3  # 三邊各一行、三行平均
     assert out.count("神器 原品 ") >= 1 and out.count("三階 ") >= 1  # 打造第二批：神器一季幾把、三階一季幾個
 
