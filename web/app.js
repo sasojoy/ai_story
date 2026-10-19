@@ -1765,7 +1765,9 @@
   // 點開了在它底下攤一排分支（兩欄：名字一行、「體力 6・剛、慢」一行），最後一顆「自己說…」佔一整列；點了「自己說…」換成 20 字的
   // 輸入框（S.gatherSaying），送 /api/do/gather_text（gatherSay）。展開記在 S.gatherOpen，做完一件事不收（下次點探索就直接看到分支，
   // 少按一下）；換到沒有分支的地方就不畫。字待 joy 潤
-  const GATHER_SAY_HINT = "怎麼找？例：沿著獸徑找落羽"; // 待 joy 潤：輸入框的提示
+  // 輸入框的提示照別的 20 字輸入框寫字數（隨口應對「…（20字內）」、對話「想對他說的話（20字內）」）。這一格縮在分支那一排裡，比那兩格窄：
+  // 320 寬扣掉內距只剩 152 像素（16px 的字九個多），原本的「怎麼找？例：沿著獸徑找落羽」208 像素切在「沿著獸徑」，例句拿掉（FB-460）
+  const GATHER_SAY_HINT = "怎麼找？（20字內）"; // 待 joy 潤：輸入框的提示
   const GATHER_SAY_GO = "去找"; // 待 joy 潤：送出鈕
   function gatherWheel(o, branches) {
     const open = !!S.gatherOpen && o.enabled;
