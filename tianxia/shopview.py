@@ -689,6 +689,7 @@ HELD_HEAD = "你手上揭著的（{n}／{cap}）"  # 待 joy 潤：最上面那�
 SLOT_LEFT = "還能揭 {n} 張"  # 待 joy 潤：那一排最後的空格
 HAVE_NOTE = "你有 {n} {unit}合用"  # 待 joy 潤：求藝、求兵的告示上
 NO_FIT = "你身上沒有合用的"  # 待 joy 潤：求藝、求兵交不出時，放大的紙上「交出…」灰掉的原因
+PRIZE_CHIP = "重賞"  # 待 joy 潤：21 天季告示正面那一格（FB-391；草圖丙）
 PRIZE_SHORT = "另有重賞"  # 待 joy 潤：告示上（放大的紙上，賞那一段照 reward_text 寫是哪一種）
 DROP_ASK = "把「{title}」放回榜上？放回去就不算你的了。"  # 待 joy 潤：放棄先問一次（選單上的 bounty:drop 沒有問句，問在網頁那一層）
 
@@ -725,7 +726,8 @@ def board_view(state: GameState, content: Content, world: WorldStateStore) -> di
         }
         tags = bounties.reward_tags(state, content, b)
         if tags is not None:  # 21 天季（第 5 批畫面第三組丙）：紙上的小籤、告示角上寫銀兩的小朱印、照等級的那一句
-            note.update(tags=tags, corner=bounties.reward_bits(state, content, b).silver_short, level=bounties.level_note(state, content, b))
+            note.update(tags=tags, corner=bounties.reward_bits(state, content, b).silver_short, level=bounties.level_note(state, content, b),
+                        gift=bounties.gift_short(state, content, b), prize_chip=PRIZE_CHIP if note["prize"] else "")  # 附贈與重賞一格（FB-391）
         rank = 2
         if b.id in mine_ids:
             rank = 0

@@ -1890,7 +1890,12 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
 .shop-board .note.dim { opacity: 0.55; }
 .shop-board .note .corner { position: absolute; top: 3px; right: 4px; padding: 0 3px; border: 1.5px solid #b3261e; border-radius: 3px; color: #b3261e;
   background: rgba(246, 237, 216, 0.85); font: 600 10px/1.4 var(--serif); font-style: normal; transform: rotate(6deg); pointer-events: none; } /* 21 天季：寫銀兩的小朱印 */
-.shop-board .note.held .corner { right: 34px; } /* 揭著的那張右上角是「已揭」：朱印往左讓 */
+.shop-board .note.held .corner { right: 38px; } /* 揭著的那張右上角是「已揭」：朱印往左讓 */
+/* 21 天季告示正面的附贈（金框）與重賞一格（FB-391；草圖丙）：只排一行，放不下時第二格藏起來 */
+.shop-board .note .extra { display: flex; flex-wrap: wrap; gap: 3px; max-height: 1.6em; overflow: hidden; }
+.shop-board .note .extra span { padding: 0 3px; border: 1px solid #c9b48d; border-radius: 3px; background: #efe3c6; font-size: 9.5px; line-height: 1.5; }
+.shop-board .note .extra .gift { border-color: #c9a24a; background: #f5e6bd; }
+.shop-board .note .extra .prize { border-color: #a8322a; color: #a8322a; }
 .shop-board .paper .rtag { border-color: #c9b48d; background: #efe3c6; color: #2a241d; font-size: 12px; }
 .shop-board .paper .rtag em { color: #6d5a43; font-size: 11px; }
 .shop-board .paper .rtag.gift { border-color: #c9a24a; background: #f5e6bd; }
@@ -2169,10 +2174,12 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
   .shop-board .note b { font: 600 17px var(--serif); }
   .shop-board .note small { font-size: 12.5px; }
   .shop-board .note .corner { font: 600 13px/1.4 var(--serif); }
+  .shop-board .note .extra span { font-size: 12.5px; }
   .shop-board .paper .rtag { font-size: 15.5px; }
   .shop-board .paper .rtag em { font-size: 14.5px; }
   .shop-board .stamp { font: 600 14.5px var(--serif); }
   .shop-board .note.held .stamp { font-size: 13px; }
+  .shop-board .note.held .corner { right: 46px; } /* FB-390：「已揭」13px 約 40px 寬，朱印照它往左讓（手機 10px 是 38px） */
   .shop-board .board-sheet .paper { font-size: 16px; }
   .shop-board .paper h4 { font: 600 21px var(--serif); }
   .shop-board .paper .due, .shop-board .paper .why { font-size: 15px; }

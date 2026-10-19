@@ -75,6 +75,7 @@ ART_GIFTS = "・素材，偶有兵器"  # 待 joy 潤：求藝的賞那一段最
 ATTACH_NOTES = {"strike": "・二階素材（偶有三階）", "scout": "・{pill} 一顆", "escort": "・二階素材"}
 # 21 天季的懸賞卡與告示把賞拆成小籤（企劃者挑第 5 批畫面第三組丙）：reward_tags 一格一樣，重賞那一格與「照等級」那一句
 PRIZE_TAG = "重賞：{what}"  # 待 joy 潤
+GIFT_SHORT = {"strike": "＋二階", "escort": "＋二階", "scout": "＋{pill}", "art": "＋素材"}  # 待 joy 潤：告示正面附贈那一格（FB-391，紙上那一格的短寫）
 LEVEL_NOTE = "賞照你第 {level} 級"  # 待 joy 潤
 ENEMY = {"guan": "huang", "huang": "guan"}  # 自動掛單的兩個陣營與他們的對頭（同軍令）
 BOARD = "懸賞榜"
@@ -476,6 +477,13 @@ def reward_tags(state: GameState, content: Content, b: Bounty) -> list[dict] | N
     if r.prize:
         tags.append({"v": PRIZE_TAG.format(what=r.prize), "kind": "prize"})
     return tags
+
+
+def gift_short(state: GameState, content: Content, b: Bounty) -> str:
+    """告示正面附贈那一格（FB-391）：有附的那一樣（reward_bits 的 gift）才有，照種類寫短的；沒有是空字串。"""
+    if not reward_bits(state, content, b).gift:
+        return ""
+    return GIFT_SHORT.get(b.kind, "").format(pill=content.config.stamina_pill_name)
 
 
 def level_note(state: GameState, content: Content, b: Bounty) -> str:
