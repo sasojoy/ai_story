@@ -283,6 +283,26 @@ def test_switching_rotation_off_keeps_each_original_in_its_own_row():
     assert book == {(1, "甲"): "寒星", (2, "乙"): "曉霜"}
 
 
+def test_the_smith_does_not_blame_the_materials_for_a_divine_you_have():
+    """FB-403：已經有那一件神器、再開那一爐被擋下時，掌櫃那一句是自己那一組（have_divine），不會挑到講料的「料不對，這爐開不了。」；
+    原因還成立時（東西沒動）一直是那一句。"""
+    from tianxia import shopview
+
+    c = _content()
+    w = _opened(c)
+    jia = _smith(c, w, "甲")
+    first, _ = _forge_sword(c, w, jia)
+    recipe = c.forge_secrets[SWORD]
+    p = jia.state.player
+    p.materials.update({"kuai_4": 1, "rou_4": 1})
+    jia.choose("act:smith")
+    msgs = jia.smith_forge(recipe.kind, "kuai_4", "rou_4")
+    assert f"（{forge_secrets.HAVE_DIVINE}。）" in msgs
+    assert p.shop_line == "have_divine"
+    line = shopview.line_text(jia.state, c, "smith")
+    assert line in c.shop_lines["smith"]["have_divine"] and line not in c.shop_lines["smith"]["refused"]
+
+
 def test_old_seasons_keep_their_rows():
     """Review Focus 1、2：沒蓋章的季打的原品照舊記在照季分的那一列、神器譜照列，不進全服登記、不帶走。"""
     c = _content(rotation=False)
