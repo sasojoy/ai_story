@@ -1,0 +1,320 @@
+<title>四階料畫面對比</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;600&family=Noto+Sans+TC:wght@400;600&display=swap">
+<style>
+/* 版面：兩組對比，每組三個選項並排（窄螢幕疊成一欄），每個選項是 375 寬的鐵匠鋪實際畫面 */
+:root {
+  color-scheme: dark;
+  --page: #120c08;           /* 頁面底色（店外） */
+  --ink: #f2e5c6;            /* 店裡的字 */
+  --muted: #c9b28a;          /* 店裡的小字 */
+  --brass: #b7862b;          /* 招牌框、分隔 */
+  --gold: #f2c46a;           /* 亮金：數字、選中 */
+  --line: #6b4a2e;           /* 格子框 */
+  --cellbg: rgba(43, 26, 16, 0.85);
+  --warn: #e0a08a;
+  --paper: #efe4cc; --paper-ink: #2a241d; --seal: #a8322a;   /* 鑄譜那本線裝書 */
+  --gang: #c2473c; --kuai: #4a7cae; --rou: #55a079; --man: #b98634;
+  --serif: "Noto Serif TC", "Songti TC", "PMingLiU", serif;
+  --sans: "Noto Sans TC", -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif;
+}
+body { background: var(--page); color: var(--ink); font: 15px/1.7 var(--sans); margin: 0; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-block: 28px 56px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1 { font: 600 26px/1.3 var(--serif); letter-spacing: 3px; margin: 0 0 6px; color: var(--gold); text-wrap: balance; }
+.lede { max-width: 66ch; color: var(--muted); margin: 0 0 8px; }
+h2 { font: 600 20px/1.4 var(--serif); margin: 40px 0 4px; letter-spacing: 2px; text-wrap: balance; }
+.ask { max-width: 70ch; color: var(--muted); margin: 0 0 18px; }
+.opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 375px), 1fr)); gap: 28px 22px; align-items: start; }
+.opt { display: grid; gap: 10px; min-width: 0; }
+.opt-head { display: flex; align-items: baseline; gap: 10px; }
+.opt-key { font: 600 22px var(--serif); color: var(--gold); }
+.opt-name { font: 600 16px var(--serif); }
+.opt-note { font-size: 13.5px; color: var(--muted); margin: 0; }
+.pros { margin: 0; padding-left: 1.1em; font-size: 13px; color: var(--muted); }
+.cap { font: 12px var(--sans); color: var(--muted); letter-spacing: 1px; margin: 4px 0 -4px; }
+
+/* 一支手機：照遊戲 web/style.css 的 .shop-layer */
+.phone { width: 100%; max-width: 375px; border-radius: 22px; overflow: hidden; border: 1px solid #3a2a1e;
+  background: radial-gradient(ellipse at 50% 22%, #4a2a18 0%, #24170f 62%, #160e09 100%); color: var(--ink); }
+.bar { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; padding: 10px 12px 4px; }
+.back { font: 600 15px var(--sans); color: #e8d6ad; }
+.sign { justify-self: center; padding: 4px 14px; border: 2px solid var(--brass); border-radius: 4px; background: #2b1a10; color: var(--gold); font: 600 16px var(--serif); letter-spacing: 4px; white-space: nowrap; }
+.silver { font: 600 13px var(--sans); color: var(--gold); }
+.sline { margin: 6px 14px 4px; padding: 6px 10px; border-left: 3px solid var(--brass); background: rgba(0,0,0,.25); font: 13px/1.6 var(--serif); color: #e8d6ad; }
+.sline.rule { border-left-color: var(--gold); background: rgba(242,196,106,.1); }
+.pages { display: flex; gap: 6px; justify-content: center; margin: 6px 0 4px; }
+.pg { border: 1px solid var(--line); color: var(--muted); border-radius: 14px; padding: 2px 14px; font: 13px var(--sans); }
+.pg.on { background: var(--brass); color: #1e1510; border-color: var(--brass); }
+.body { padding: 6px 12px 12px; display: grid; gap: 8px; }
+.tabs { display: flex; border-top: 1px solid #5a4030; background: rgba(0,0,0,.25); }
+.tab { flex: 1; text-align: center; color: var(--muted); padding: 10px 0; font: 12.5px var(--sans); }
+.tab.on { color: var(--gold); box-shadow: inset 0 2px 0 var(--gold); background: rgba(242,196,106,.08); }
+
+/* 爐火（架上頁） */
+.hero { display: grid; justify-items: center; gap: 6px; margin: 12px 0 0; }
+.mouth { width: 150px; height: 100px; border-radius: 50% 50% 12px 12px;
+  background: radial-gradient(circle at 50% 70%, #ffe7a3 0%, #ffb347 22%, #e0642a 48%, #8a3a18 74%, #5a2a14 100%);
+  box-shadow: 0 0 22px 6px rgba(255,160,70,.5), 0 0 60px 20px rgba(224,100,42,.25); }
+.anvil { width: 110px; height: 18px; border-radius: 4px 4px 10px 10px; background: #3a3530; box-shadow: inset 0 2px 0 #6b625a; }
+.shelf { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.item { padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--cellbg); font: 12px/1.45 var(--sans); color: var(--ink); }
+.item b { font: 600 13.5px var(--serif); display: block; }
+
+/* 打造頁素材格：一屬性一排 */
+.pot { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.slot { border: 1px dashed var(--line); border-radius: 10px; padding: 8px; text-align: center; font: 12px var(--sans); color: var(--muted); }
+.slot b { display: block; font: 600 14px var(--serif); color: var(--ink); }
+.cells { display: grid; gap: 6px; }
+.row { display: grid; gap: 6px; align-items: stretch; }
+.row.c3 { grid-template-columns: 1.6em repeat(3, minmax(0, 1fr)); }
+.row.c4 { grid-template-columns: 1.6em repeat(4, minmax(0, 1fr)); }
+.ra { display: flex; align-items: center; justify-content: center; font: 600 14px var(--serif); color: var(--muted); }
+.ra.gang { color: var(--gang); } .ra.kuai { color: var(--kuai); } .ra.rou { color: var(--rou); } .ra.man { color: var(--man); }
+.colhead { font: 11px var(--sans); color: var(--muted); text-align: center; letter-spacing: 1px; }
+.colhead.shen { color: var(--gold); font-weight: 600; }
+.cell { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; min-height: 46px; padding: 14px 2px 6px; border-radius: 10px; border: 1px solid var(--line); background: var(--cellbg); font: 12px var(--serif); min-width: 0; }
+.cell.empty { background: transparent; border-style: dashed; border-color: rgba(107,74,46,.5); }
+.cell .n { position: absolute; top: 3px; right: 6px; font: 600 10px var(--sans); color: var(--gold); }
+.cell .nm { display: flex; align-items: center; white-space: nowrap; }
+.cell small { font: 10px var(--sans); color: var(--muted); }
+.cell.used { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold) inset; }
+.cell.shen { border-color: var(--gold); background: linear-gradient(180deg, rgba(242,196,106,.16), var(--cellbg)); box-shadow: 0 0 10px rgba(242,196,106,.25); }
+.dot { width: 7px; height: 7px; border-radius: 50%; margin-right: 3px; flex: none; background: var(--muted); }
+.dot.gang { background: var(--gang); } .dot.kuai { background: var(--kuai); } .dot.rou { background: var(--rou); } .dot.man { background: var(--man); }
+.divider { display: flex; align-items: center; gap: 8px; font: 600 12px var(--serif); color: var(--gold); letter-spacing: 2px; margin-top: 4px; }
+.divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, transparent, var(--brass), transparent); }
+.hint4 { font: 11px/1.5 var(--sans); color: var(--muted); text-align: center; }
+
+/* 素材頁升階格 */
+.shopcap { font: 12px var(--sans); color: var(--muted); margin: 2px 0 0; }
+.up { display: grid; gap: 6px; }
+.uprow { display: grid; gap: 6px; }
+.uprow.u2 { grid-template-columns: 1.6em repeat(2, minmax(0, 1fr)); }
+.uprow.u3 { grid-template-columns: 1.6em repeat(3, minmax(0, 1fr)); }
+.uprow.u4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.upc { display: grid; gap: 1px; justify-items: center; align-content: center; padding: 8px 3px; border-radius: 10px; border: 1px solid var(--brass); background: var(--cellbg); font: 12px var(--serif); text-align: center; min-width: 0; }
+.upc .from { font-size: 11.5px; color: #e8d6ad; white-space: nowrap; }
+.upc b { color: var(--gold); font-weight: 600; font-size: 13.5px; }
+.upc small { font: 10px/1.3 var(--sans); color: var(--muted); }
+.upc.off { border-color: var(--line); opacity: .6; }
+.upc.off small:last-child { color: var(--warn); }
+.upc.shen { border-color: var(--gold); background: linear-gradient(180deg, rgba(242,196,106,.16), var(--cellbg)); box-shadow: 0 0 10px rgba(242,196,106,.25); }
+
+/* 鑄譜那本書 */
+.book { background: var(--paper); color: var(--paper-ink); }
+.book .bar .back, .book .bar .silver { color: #6b4a2a; }
+.book .sign { background: var(--paper); color: var(--seal); border-color: #6b4a2a; }
+.leaf { margin: 10px 14px 14px; padding: 14px 12px; border: 1px solid #c8b48c; background: #f6eedb; min-height: 300px; display: flex; flex-direction: row-reverse; gap: 14px; justify-content: flex-start; }
+.leaf .ttl { writing-mode: vertical-rl; font: 600 17px var(--serif); letter-spacing: 6px; color: var(--seal); border-left: 1px solid #c8b48c; padding-left: 8px; }
+.leaf .col { writing-mode: vertical-rl; font: 14.5px/1.9 var(--serif); letter-spacing: 2px; }
+.leaf .col.blank { color: #b3a283; }
+.leaf .col .num { color: var(--seal); }
+.booktabs { display: flex; justify-content: center; gap: 8px; padding: 0 0 12px; font: 12px var(--sans); color: #6b4a2a; }
+.booktabs span { border: 1px solid #c8b48c; border-radius: 12px; padding: 2px 10px; }
+.booktabs span.on { background: var(--seal); color: var(--paper); border-color: var(--seal); }
+
+.foot { margin-top: 44px; font-size: 13px; color: var(--muted); max-width: 70ch; }
+</style>
+
+<div class="wrap">
+  <h1>四階料畫面對比</h1>
+  <p class="lede">正式季整合第 2 批「四階料與鐵匠鋪」有兩處畫面要你挑。下面每一張都是手機 375 寬的鐵匠鋪實際樣子，素材是同一份示例背包。兩組各挑一個（甲、乙、丙），也可以說「甲，但……」。字句都是暫寫的，待 joy 潤。</p>
+
+  <!-- ── 第一組：素材格與升階格 ── -->
+  <h2>一、素材格多一欄四階、升階格多一格三換四</h2>
+  <p class="ask">打造頁的素材格現在一屬性一排、一到三階各一欄；四階來了要多放一欄。素材頁的升階格現在一屬性兩格（二階、三階），要多一格「三換四」（五個三階＋150 兩，一季最多兩個）。375 寬一欄大約 70 像素。</p>
+  <div class="opts">
+
+    <!-- 甲 -->
+    <div class="opt">
+      <div class="opt-head"><span class="opt-key">甲</span><span class="opt-name">直接多一欄、多一格</span></div>
+      <p class="opt-note">四階跟一到三階長得一樣，只是多一欄；升階格一排三格。改動最小。</p>
+      <ul class="pros"><li>最省事，玩家一看就懂是第四階。</li><li>四階不特別顯眼，神器料跟一般料混在一起。</li></ul>
+      <p class="cap">打造頁</p>
+      <div class="phone">
+        <div class="bar"><span class="back">‹ 出店</span><span class="sign">鐵匠鋪</span><span class="silver">412 兩</span></div>
+        <div class="sline">「料挑好了就往爐裡放，主料定階，輔料定性子。」</div>
+        <div class="pages"><span class="pg on">兵器</span><span class="pg">防具</span></div>
+        <div class="body">
+          <div class="pot"><div class="slot">主料<b>熔星髓</b>四階・剛</div><div class="slot">輔料<b>空著</b>點下面的料放進來</div></div>
+          <div class="cells">
+            <div class="row c4"><span class="ra gang">剛</span><div class="cell"><span class="n">6</span><span class="nm"><i class="dot gang"></i>精鐵砂</span><small>一階</small></div><div class="cell"><span class="n">2</span><span class="nm"><i class="dot gang"></i>玄鋼骨</span><small>二階</small></div><div class="cell"><span class="n">1</span><span class="nm"><i class="dot gang"></i>隕鐵膽</span><small>三階</small></div><div class="cell used"><span class="n">1</span><span class="nm"><i class="dot gang"></i>熔星髓</span><small>主料</small></div></div>
+            <div class="row c4"><span class="ra rou">柔</span><div class="cell"><span class="n">4</span><span class="nm"><i class="dot rou"></i>柳絲綿</span><small>一階</small></div><div class="cell"><span class="n">1</span><span class="nm"><i class="dot rou"></i>流雲絮</span><small>二階</small></div><div class="cell empty"></div><div class="cell empty"></div></div>
+            <div class="row c4"><span class="ra kuai">快</span><div class="cell"><span class="n">3</span><span class="nm"><i class="dot kuai"></i>驚羽</span><small>一階</small></div><div class="cell"><span class="n">2</span><span class="nm"><i class="dot kuai"></i>風隼翎</span><small>二階</small></div><div class="cell"><span class="n">1</span><span class="nm"><i class="dot kuai"></i>掣電鱗</span><small>三階</small></div><div class="cell"><span class="n">2</span><span class="nm"><i class="dot kuai"></i>奔雷角</span><small>四階</small></div></div>
+            <div class="row c4"><span class="ra man">慢</span><div class="cell"><span class="n">5</span><span class="nm"><i class="dot man"></i>沉淵石</span><small>一階</small></div><div class="cell empty"></div><div class="cell empty"></div><div class="cell empty"></div></div>
+          </div>
+        </div>
+        <div class="tabs"><span class="tab">架上</span><span class="tab on">打造</span><span class="tab">淬煉與修</span><span class="tab">裝備庫</span><span class="tab">素材</span></div>
+      </div>
+      <p class="cap">素材頁</p>
+      <div class="phone">
+        <div class="bar"><span class="back">‹ 出店</span><span class="sign">鐵匠鋪</span><span class="silver">412 兩</span></div>
+        <div class="sline">「三階的料我收，四階的我可不敢收。」</div>
+        <div class="body">
+          <p class="shopcap">升階（同屬性的三個換高一階；三換四要五個，一季兩個）</p>
+          <div class="up">
+            <div class="uprow u3"><span class="ra gang">剛</span><div class="upc"><span class="from">精鐵砂×3 →</span><b>玄鋼骨</b><small>20 兩</small></div><div class="upc off"><span class="from">玄鋼骨×3 →</span><b>隕鐵膽</b><small>還差 1 個</small></div><div class="upc off"><span class="from">隕鐵膽×5 →</span><b>熔星髓</b><small>還差 4 個</small></div></div>
+            <div class="uprow u3"><span class="ra rou">柔</span><div class="upc"><span class="from">柳絲綿×3 →</span><b>流雲絮</b><small>20 兩</small></div><div class="upc off"><span class="from">流雲絮×3 →</span><b>化水晶</b><small>還差 2 個</small></div><div class="upc off"><span class="from">化水晶×5 →</span><b>天池露</b><small>還差 5 個</small></div></div>
+            <div class="uprow u3"><span class="ra kuai">快</span><div class="upc"><span class="from">驚羽×3 →</span><b>風隼翎</b><small>20 兩</small></div><div class="upc off"><span class="from">風隼翎×3 →</span><b>掣電鱗</b><small>還差 1 個</small></div><div class="upc off"><span class="from">掣電鱗×5 →</span><b>奔雷角</b><small>150 兩・一季還能 2 個</small><small>還差 4 個</small></div></div>
+            <div class="uprow u3"><span class="ra man">慢</span><div class="upc"><span class="from">沉淵石×3 →</span><b>磐嶽土</b><small>20 兩</small></div><div class="upc off"><span class="from">磐嶽土×3 →</span><b>鎮山鐵</b><small>還差 3 個</small></div><div class="upc off"><span class="from">鎮山鐵×5 →</span><b>歸墟壤</b><small>還差 5 個</small></div></div>
+          </div>
+        </div>
+        <div class="tabs"><span class="tab">架上</span><span class="tab">打造</span><span class="tab">淬煉與修</span><span class="tab">裝備庫</span><span class="tab on">素材</span></div>
+      </div>
+    </div>
+
+    <!-- 乙 -->
+    <div class="opt">
+      <div class="opt-head"><span class="opt-key">乙</span><span class="opt-name">多一欄，四階那一欄描金</span></div>
+      <p class="opt-note">跟甲同樣的格子，四階那一欄與三換四那一格描金、上面寫「神品」，一眼看出哪幾樣是神器的料。</p>
+      <ul class="pros"><li>四階顯眼，對得上「四階才是神器的料」。</li><li>多一行欄頭，素材格高了約 16 像素。</li></ul>
+      <p class="cap">打造頁</p>
+      <div class="phone">
+        <div class="bar"><span class="back">‹ 出店</span><span class="sign">鐵匠鋪</span><span class="silver">412 兩</span></div>
+        <div class="sline">「料挑好了就往爐裡放，主料定階，輔料定性子。」</div>
+        <div class="pages"><span class="pg on">兵器</span><span class="pg">防具</span></div>
+        <div class="body">
+          <div class="pot"><div class="slot">主料<b>熔星髓</b>神品・剛</div><div class="slot">輔料<b>空著</b>點下面的料放進來</div></div>
+          <div class="cells">
+            <div class="row c4"><span></span><span class="colhead">一階</span><span class="colhead">二階</span><span class="colhead">三階</span><span class="colhead shen">神品</span></div>
+            <div class="row c4"><span class="ra gang">剛</span><div class="cell"><span class="n">6</span><span class="nm"><i class="dot gang"></i>精鐵砂</span></div><div class="cell"><span class="n">2</span><span class="nm"><i class="dot gang"></i>玄鋼骨</span></div><div class="cell"><span class="n">1</span><span class="nm"><i class="dot gang"></i>隕鐵膽</span></div><div class="cell shen used"><span class="n">1</span><span class="nm"><i class="dot gang"></i>熔星髓</span><small>主料</small></div></div>
+            <div class="row c4"><span class="ra rou">柔</span><div class="cell"><span class="n">4</span><span class="nm"><i class="dot rou"></i>柳絲綿</span></div><div class="cell"><span class="n">1</span><span class="nm"><i class="dot rou"></i>流雲絮</span></div><div class="cell empty"></div><div class="cell empty"></div></div>
+            <div class="row c4"><span class="ra kuai">快</span><div class="cell"><span class="n">3</span><span class="nm"><i class="dot kuai"></i>驚羽</span></div><div class="cell"><span class="n">2</span><span class="nm"><i class="dot kuai"></i>風隼翎</span></div><div class="cell"><span class="n">1</span><span class="nm"><i class="dot kuai"></i>掣電鱗</span></div><div class="cell shen"><span class="n">2</span><span class="nm"><i class="dot kuai"></i>奔雷角</span></div></div>
+            <div class="row c4"><span class="ra man">慢</span><div class="cell"><span class="n">5</span><span class="nm"><i class="dot man"></i>沉淵石</span></div><div class="cell empty"></div><div class="cell empty"></div><div class="cell empty"></div></div>
+          </div>
+        </div>
+        <div class="tabs"><span class="tab">架上</span><span class="tab on">打造</span><span class="tab">淬煉與修</span><span class="tab">裝備庫</span><span class="tab">素材</span></div>
+      </div>
+      <p class="cap">素材頁</p>
+      <div class="phone">
+        <div class="bar"><span class="back">‹ 出店</span><span class="sign">鐵匠鋪</span><span class="silver">412 兩</span></div>
+        <div class="sline">「三階的料我收，四階的我可不敢收。」</div>
+        <div class="body">
+          <p class="shopcap">升階（同屬性的三個換高一階；煉成神品要五個，一季兩個）</p>
+          <div class="up">
+            <div class="uprow u3"><span class="ra gang">剛</span><div class="upc"><span class="from">精鐵砂×3 →</span><b>玄鋼骨</b><small>20 兩</small></div><div class="upc off"><span class="from">玄鋼骨×3 →</span><b>隕鐵膽</b><small>還差 1 個</small></div><div class="upc shen off"><span class="from">隕鐵膽×5 →</span><b>熔星髓</b><small>還差 4 個</small></div></div>
+            <div class="uprow u3"><span class="ra rou">柔</span><div class="upc"><span class="from">柳絲綿×3 →</span><b>流雲絮</b><small>20 兩</small></div><div class="upc off"><span class="from">流雲絮×3 →</span><b>化水晶</b><small>還差 2 個</small></div><div class="upc shen off"><span class="from">化水晶×5 →</span><b>天池露</b><small>還差 5 個</small></div></div>
+            <div class="uprow u3"><span class="ra kuai">快</span><div class="upc"><span class="from">驚羽×3 →</span><b>風隼翎</b><small>20 兩</small></div><div class="upc off"><span class="from">風隼翎×3 →</span><b>掣電鱗</b><small>還差 1 個</small></div><div class="upc shen off"><span class="from">掣電鱗×5 →</span><b>奔雷角</b><small>150 兩・一季還能 2 個</small><small>還差 4 個</small></div></div>
+            <div class="uprow u3"><span class="ra man">慢</span><div class="upc"><span class="from">沉淵石×3 →</span><b>磐嶽土</b><small>20 兩</small></div><div class="upc off"><span class="from">磐嶽土×3 →</span><b>鎮山鐵</b><small>還差 3 個</small></div><div class="upc shen off"><span class="from">鎮山鐵×5 →</span><b>歸墟壤</b><small>還差 5 個</small></div></div>
+          </div>
+        </div>
+        <div class="tabs"><span class="tab">架上</span><span class="tab">打造</span><span class="tab">淬煉與修</span><span class="tab">裝備庫</span><span class="tab on">素材</span></div>
+      </div>
+    </div>
+
+    <!-- 丙 -->
+    <div class="opt">
+      <div class="opt-head"><span class="opt-key">丙</span><span class="opt-name">一到三階照舊，四階另起一排</span></div>
+      <p class="opt-note">原本的格子一欄都不動，底下另起一排「神品料」，四種四階各一格；升階也一樣，三換四收在最底下自己一排。</p>
+      <ul class="pros"><li>格子照舊寬，375 寬最不擠；四階自成一區。</li><li>四階離同屬性的三階遠了，看不出哪一個是升上來的。</li></ul>
+      <p class="cap">打造頁</p>
+      <div class="phone">
+        <div class="bar"><span class="back">‹ 出店</span><span class="sign">鐵匠鋪</span><span class="silver">412 兩</span></div>
+        <div class="sline">「料挑好了就往爐裡放，主料定階，輔料定性子。」</div>
+        <div class="pages"><span class="pg on">兵器</span><span class="pg">防具</span></div>
+        <div class="body">
+          <div class="pot"><div class="slot">主料<b>熔星髓</b>神品・剛</div><div class="slot">輔料<b>空著</b>點下面的料放進來</div></div>
+          <div class="cells">
+            <div class="row c3"><span class="ra gang">剛</span><div class="cell"><span class="n">6</span><span class="nm"><i class="dot gang"></i>精鐵砂</span><small>一階</small></div><div class="cell"><span class="n">2</span><span class="nm"><i class="dot gang"></i>玄鋼骨</span><small>二階</small></div><div class="cell"><span class="n">1</span><span class="nm"><i class="dot gang"></i>隕鐵膽</span><small>三階</small></div></div>
+            <div class="row c3"><span class="ra rou">柔</span><div class="cell"><span class="n">4</span><span class="nm"><i class="dot rou"></i>柳絲綿</span><small>一階</small></div><div class="cell"><span class="n">1</span><span class="nm"><i class="dot rou"></i>流雲絮</span><small>二階</small></div><div class="cell empty"></div></div>
+            <div class="row c3"><span class="ra kuai">快</span><div class="cell"><span class="n">3</span><span class="nm"><i class="dot kuai"></i>驚羽</span><small>一階</small></div><div class="cell"><span class="n">2</span><span class="nm"><i class="dot kuai"></i>風隼翎</span><small>二階</small></div><div class="cell"><span class="n">1</span><span class="nm"><i class="dot kuai"></i>掣電鱗</span><small>三階</small></div></div>
+            <div class="row c3"><span class="ra man">慢</span><div class="cell"><span class="n">5</span><span class="nm"><i class="dot man"></i>沉淵石</span><small>一階</small></div><div class="cell empty"></div><div class="cell empty"></div></div>
+            <div class="divider">神品料</div>
+            <div class="row" style="grid-template-columns: repeat(4, minmax(0, 1fr));"><div class="cell shen used"><span class="n">1</span><span class="nm"><i class="dot gang"></i>熔星髓</span><small>主料</small></div><div class="cell empty"></div><div class="cell shen"><span class="n">2</span><span class="nm"><i class="dot kuai"></i>奔雷角</span><small>快</small></div><div class="cell empty"></div></div>
+          </div>
+        </div>
+        <div class="tabs"><span class="tab">架上</span><span class="tab on">打造</span><span class="tab">淬煉與修</span><span class="tab">裝備庫</span><span class="tab">素材</span></div>
+      </div>
+      <p class="cap">素材頁</p>
+      <div class="phone">
+        <div class="bar"><span class="back">‹ 出店</span><span class="sign">鐵匠鋪</span><span class="silver">412 兩</span></div>
+        <div class="sline">「三階的料我收，四階的我可不敢收。」</div>
+        <div class="body">
+          <p class="shopcap">升階（同屬性的三個換高一階）</p>
+          <div class="up">
+            <div class="uprow u2"><span class="ra gang">剛</span><div class="upc"><span class="from">精鐵砂×3 →</span><b>玄鋼骨</b><small>20 兩</small></div><div class="upc off"><span class="from">玄鋼骨×3 →</span><b>隕鐵膽</b><small>還差 1 個</small></div></div>
+            <div class="uprow u2"><span class="ra rou">柔</span><div class="upc"><span class="from">柳絲綿×3 →</span><b>流雲絮</b><small>20 兩</small></div><div class="upc off"><span class="from">流雲絮×3 →</span><b>化水晶</b><small>還差 2 個</small></div></div>
+            <div class="uprow u2"><span class="ra kuai">快</span><div class="upc"><span class="from">驚羽×3 →</span><b>風隼翎</b><small>20 兩</small></div><div class="upc off"><span class="from">風隼翎×3 →</span><b>掣電鱗</b><small>還差 1 個</small></div></div>
+            <div class="uprow u2"><span class="ra man">慢</span><div class="upc"><span class="from">沉淵石×3 →</span><b>磐嶽土</b><small>20 兩</small></div><div class="upc off"><span class="from">磐嶽土×3 →</span><b>鎮山鐵</b><small>還差 3 個</small></div></div>
+          </div>
+          <div class="divider">煉成神品・一季還能 2 個</div>
+          <div class="up"><div class="uprow u4">
+            <div class="upc shen off"><span class="from">隕鐵膽×5</span><b>熔星髓</b><small>還差 4 個</small></div>
+            <div class="upc shen off"><span class="from">化水晶×5</span><b>天池露</b><small>還差 5 個</small></div>
+            <div class="upc shen off"><span class="from">掣電鱗×5</span><b>奔雷角</b><small>還差 4 個</small></div>
+            <div class="upc shen off"><span class="from">鎮山鐵×5</span><b>歸墟壤</b><small>還差 5 個</small></div>
+          </div></div>
+          <p class="hint4">五個三階＋150 兩煉一個神品。</p>
+        </div>
+        <div class="tabs"><span class="tab">架上</span><span class="tab">打造</span><span class="tab">淬煉與修</span><span class="tab">裝備庫</span><span class="tab on">素材</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 第二組：鐵匠的規矩 ── -->
+  <h2>二、鐵匠講神器規矩的那一句放哪</h2>
+  <p class="ask">背包裡有四階的人進鐵匠鋪，鐵匠會講四條規矩之一（兩樣都要四階、配方固定現世看天時、沒對上多半出名器、種類屬性要對主輔不能對調），一次一句、輪著講；絕不講配方。順口講配方線索那一句照舊蓋過它。</p>
+  <div class="opts">
+
+    <div class="opt">
+      <div class="opt-head"><span class="opt-key">甲</span><span class="opt-name">鐵匠平常講話那一行</span></div>
+      <p class="opt-note">就是爐火底下那一句。手上有四階時，鐵匠平常的話換成規矩，金色框標出來。</p>
+      <ul class="pros"><li>不加任何新東西，最像鐵匠隨口說的。</li><li>出店就沒了，玩家沒記住就要再進來聽。</li></ul>
+      <div class="phone">
+        <div class="bar"><span class="back">‹ 出店</span><span class="sign">鐵匠鋪</span><span class="silver">412 兩</span></div>
+        <div class="pages"><span class="pg on">兵器</span><span class="pg">防具</span></div>
+        <div class="hero"><div class="mouth"></div><div class="anvil"></div></div>
+        <div class="sline rule">「絕世神器，主料、輔料都得是四階的料，少一樣都不成。」</div>
+        <div class="body">
+          <div class="shelf">
+            <div class="item"><b>青鋒劍</b>一階下品・40 兩<br>配得上你的武學</div>
+            <div class="item"><b>斷水刀</b>一階下品・40 兩</div>
+            <div class="item"><b>點鋼槍</b>一階下品・40 兩</div>
+            <div class="item"><b>鐵拳套</b>一階下品・40 兩</div>
+          </div>
+        </div>
+        <div class="tabs"><span class="tab on">架上</span><span class="tab">打造</span><span class="tab">淬煉與修</span><span class="tab">裝備庫</span><span class="tab">素材</span></div>
+      </div>
+    </div>
+
+    <div class="opt">
+      <div class="opt-head"><span class="opt-key">乙</span><span class="opt-name">打造頁多一行</span></div>
+      <p class="opt-note">打造頁爐子上面多一條「鐵匠的規矩」，一次一條，點左右換下一條；只有手上有四階才出現。平常那一句照舊。</p>
+      <ul class="pros"><li>就在要開爐的地方，挑料時看得到。</li><li>打造頁多一行，素材格往下推約 50 像素。</li></ul>
+      <div class="phone">
+        <div class="bar"><span class="back">‹ 出店</span><span class="sign">鐵匠鋪</span><span class="silver">412 兩</span></div>
+        <div class="sline">「料挑好了就往爐裡放，主料定階，輔料定性子。」</div>
+        <div class="pages"><span class="pg on">兵器</span><span class="pg">防具</span></div>
+        <div class="body">
+          <div class="sline rule" style="margin: 0;">‹ 鐵匠的規矩 2/4 ›<br>「神器的配法是祖傳的，從來不變；這一季哪幾件現世，要看天時。」</div>
+          <div class="pot"><div class="slot">主料<b>熔星髓</b>四階・剛</div><div class="slot">輔料<b>空著</b>點下面的料放進來</div></div>
+          <div class="cells">
+            <div class="row c4"><span class="ra gang">剛</span><div class="cell"><span class="n">6</span><span class="nm"><i class="dot gang"></i>精鐵砂</span></div><div class="cell"><span class="n">2</span><span class="nm"><i class="dot gang"></i>玄鋼骨</span></div><div class="cell"><span class="n">1</span><span class="nm"><i class="dot gang"></i>隕鐵膽</span></div><div class="cell used"><span class="n">1</span><span class="nm"><i class="dot gang"></i>熔星髓</span></div></div>
+            <div class="row c4"><span class="ra kuai">快</span><div class="cell"><span class="n">3</span><span class="nm"><i class="dot kuai"></i>驚羽</span></div><div class="cell"><span class="n">2</span><span class="nm"><i class="dot kuai"></i>風隼翎</span></div><div class="cell"><span class="n">1</span><span class="nm"><i class="dot kuai"></i>掣電鱗</span></div><div class="cell"><span class="n">2</span><span class="nm"><i class="dot kuai"></i>奔雷角</span></div></div>
+          </div>
+        </div>
+        <div class="tabs"><span class="tab">架上</span><span class="tab on">打造</span><span class="tab">淬煉與修</span><span class="tab">裝備庫</span><span class="tab">素材</span></div>
+      </div>
+    </div>
+
+    <div class="opt">
+      <div class="opt-head"><span class="opt-key">丙</span><span class="opt-name">鑄譜多一頁</span></div>
+      <p class="opt-note">鐵匠照甲那樣在爐火底下講；講過的那一條記進鑄譜最前面一頁「神器的規矩」，隨時能翻回來看，沒聽過的留白。</p>
+      <ul class="pros"><li>聽過就記得，跟鑄譜記口訣同一個道理。</li><li>多一頁書，要寫進鑄譜的存檔（一季四條的記號）。</li></ul>
+      <div class="phone book">
+        <div class="bar"><span class="back">‹ 闔上</span><span class="sign">鑄譜</span><span class="silver"></span></div>
+        <div class="leaf">
+          <div class="ttl">神器的規矩</div>
+          <div class="col"><span class="num">一、</span>絕世神器，主料輔料都得是四階的料，少一樣都不成。</div>
+          <div class="col"><span class="num">二、</span>神器的配法是祖傳的，從來不變；這一季哪幾件現世，要看天時。</div>
+          <div class="col blank"><span class="num">三、</span>還沒聽鐵匠說過。</div>
+          <div class="col blank"><span class="num">四、</span>還沒聽鐵匠說過。</div>
+        </div>
+        <div class="booktabs"><span class="on">規矩</span><span>名器</span><span>神器</span></div>
+      </div>
+    </div>
+  </div>
+
+  <p class="foot">四種四階料的名字（熔星髓、天池露、奔雷角、歸墟壤）、「神品」這個叫法、鐵匠的四句話都是暫寫的，等你挑好、joy 潤字。數字照正式季整合設計第四、五章：三換四是五個三階加 150 兩、一季兩個。</p>
+</div>

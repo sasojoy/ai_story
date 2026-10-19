@@ -464,6 +464,11 @@ class PlayerState(BaseModel):
     # 風聞（figure_life.spread）：人物 id → 他聽說的你做過的事（一句一條，最新的在後，最多 hearsay_keep 條）；這一季的，換季清掉
     hearsay: dict[str, list[str]] = Field(default_factory=dict)
     hearsay_keys: list[str] = Field(default_factory=list)  # 已經傳開過的事（「種類|對象」）：同一件事一位人物只算一次
+    # 書信（大勢人物擴充第二批；tianxia/letters.py）：人物派人送來的信，最新的在後、最多 letters_keep 封；這一季的，換季清掉
+    letters: list[Letter] = Field(default_factory=list)
+    letter_day: int = -1  # 上一封信是第幾個遊戲日收到的（一天最多一封）
+    letter_seq: int = 0  # 書信與委託的流水號
+    cheers: list[str] = Field(default_factory=list)  # 等著寫道賀信的「人物 id|你做的事」（figure_life.spread 情誼往上動的那幾位）
     # 上一季的交情（第一季設計第十四節；正式版辛）：人物 id → 最近一次有聊過的那一季的關係筆記。換季時把
     # relationship_notes 搬過來（這一季的從頭寫），沒聊過的人物保留更早的那一句。只給模型當背景，畫面不顯示
     past_notes: dict[str, str] = Field(default_factory=dict)
@@ -845,6 +850,28 @@ class Bounty(BaseModel):
     prize: Literal["treasure", "horse"] | None = None
     auto_by: Literal["陣營", "官府"] | None = None  # 系統掛的通緝（名聲 4.6、5.4）；None＝玩家押錢掛的
     renown_title: str = ""  # 系統掛的通緝：掛單那一刻被掛的人的稱號（威震州郡、江湖巨寇……），標題照它寫
+    # 人物掛的（大勢人物擴充第二批）：figure 是掛單的人物（對話人物 id），motive 是「復仇」「追剿」（懸賞榜上，figure_life.on_fall）
+    # 或「委託」（求援書信附的那一件，只在收信的人身上：PlayerState.letters）。標題與掛單人照它寫，交差時那位人物情誼另加
+    figure: str | None = None
+    motive: Literal["復仇", "追剿", "委託"] | None = None
+
+
+class Letter(BaseModel):
+    """一位人物派人送來的信（tianxia/letters.py；大勢人物擴充第二批）。求援附一件委託（task：Bounty，motive「委託」，只在收信的人身上；
+    討伐、打探、護送照懸賞榜的同一套交差）；道賀沒有委託。text 先寫固定句，伺服器鎖外請模型照他的口氣重寫（written 標記寫過了沒，
+    寫不出來照固定句）。"""
+
+    id: int
+    kind: Literal["求援", "道賀"]
+    sender: str  # 對話人物 id
+    at: float  # 收到的那一刻（世界秒）
+    mood: str = ""  # 寫信時他的心事（求援：焦慮、悲憤）
+    about: str = ""  # 道賀：他聽說的你做的事
+    text: str
+    written: bool = False
+    read: bool = False
+    task: Bounty | None = None
+    lapsed: bool = False  # 委託過了期限、或你婉拒了
 
 
 class Invite(BaseModel):
