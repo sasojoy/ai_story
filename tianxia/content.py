@@ -28,7 +28,7 @@ from .materials import TIER_NAMES
 from .models import (
     FRONT_KEY, GLOW_KEYS, GOOD_HORSE, MOVES, RECRUITER_ALLIED_FIELDS, REVEAL_KEYS, ROADS, STATS, TREASURE_EFFECTS, WEAPON_KINDS, Attribute, BattleDef, CharacterDef, CheckVoice,
     CombatLines, Condition, Config, Content, CraftNames, DuelBoss, Effect, Event, FigureDef, FollowerDef, ForgeSecret, Foreshadows, FrontLines, GearBook,
-    GiftDef, Hints, InsightDef, Location, OppDef,
+    GiftDef, Hints, MingtieContent, InsightDef, Location, OppDef,
     InsightScene, OrdersContent, PresetRecipe, PromotionDef, RelationDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, ShardDef, SimRumor, SkillDef,
     SignatureArmDef, SteedDef, Squad, TimetableEvent, TraitBook, TreasureDef, Tutorial, allow_known,
 )
@@ -114,6 +114,8 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         if (root / "secret_recipes.json").exists() else [],
         forge_secrets=_forge_secrets(root / "forge_secrets.json"),
         shop_lines=_read(root / "shop_lines.json") if (root / "shop_lines.json").exists() else {},
+        banned_words=_read(root / "banned_words.json") if (root / "banned_words.json").exists() else [],
+        mingtie=MingtieContent(**_read(root / "mingtie.json")) if (root / "mingtie.json").exists() else MingtieContent(),
         arena_crowd=_read(root / "arena_crowd.json") if (root / "arena_crowd.json").exists() else {},
         seal=_shards(root / "seal.json"),
         relations=[_build(RelationDef, raw) for raw in _read(root / "relations.json")] if (root / "relations.json").exists() else [],

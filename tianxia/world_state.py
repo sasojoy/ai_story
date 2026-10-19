@@ -199,6 +199,10 @@ class SharedWorldState(BaseModel):
     # ── 玉璽碎片（玉璽碎片設計 7.4、5.12）：全服、不分季，跟 season 一樣存在 world 那一列的 JSON 裡 ──
     seal: SealRegistry = Field(default_factory=SealRegistry)
     seal_duels: list[SealDuel] = Field(default_factory=list)  # 還沒收場的奪璽單挑，第一場在打、其餘排隊（玉璽一一次最多一場）
+    # ── 名帖的檢舉（tianxia/mingtie.py）：全服、不分季 ──
+    mingtie_reports: dict[str, list[str]] = Field(default_factory=dict)  # 「名號鍵|版本」→ 檢舉的人（名號鍵）
+    mingtie_removed: dict[str, int] = Field(default_factory=dict)  # 名號鍵 → 管理者撤下到第幾版（這一版以前的都不畫，名帖匣裡收著的也是）
+    mingtie_cleared: list[str] = Field(default_factory=list)  # 管理者看過、放回去的（「名號鍵|版本」）：檢舉再多也照畫
 
     # ── 全服即時多人戰鬥（設計討論：集結選陣營→逐幕逐回合鎖步）────────
     # 同一時間最多一場（先簡化成這樣；真的需要同時好幾場再擴充成 list/dict）。
