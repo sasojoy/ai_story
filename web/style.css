@@ -290,7 +290,7 @@ ul { padding-left: 1.3em; margin: 0.4em 0; }
 .seg::-webkit-scrollbar { display: none; }
 .seg button { flex: 1 0 auto; border: 0; background: none; padding: 8px 12px; border-radius: 9px; cursor: pointer; font-size: 14px; color: var(--ink-2); white-space: nowrap; }
 .seg button.on { background: var(--card); color: var(--ink); font-weight: 600; box-shadow: var(--shadow); }
-.news-seg button { padding: 8px 6px; } /* 見聞七個子分頁（加了榜單）：375 寬一排放得下，不必橫捲才看得到最後一個 */
+.news-seg button { padding: 8px 4px; font-size: 13px; } /* 見聞八個子分頁（加了榜單、名帖匣）：375 寬一排放得下，不必橫捲才看得到最後一個 */
 
 .field { display: block; margin: 0 0 10px; }
 .field > span { display: block; font-size: 12px; color: var(--ink-2); margin: 0 2px 4px; }
@@ -2364,3 +2364,82 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
 .lessons { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; margin-top: 6px; }
 .lessons .btn { width: 100%; flex-direction: column; gap: 2px; text-align: center; }
 .lessons .btn small { font-size: 11px; font-weight: 400; opacity: 0.85; line-height: 1.3; }
+
+/* ── 名帖（Joy 2026-10-19）：紙色固定、不跟深淺色走（三色墨要在紙上看得清）；字照卡的寬度縮放（cqw）── */
+.mt-card {
+  position: relative; container-type: inline-size; aspect-ratio: 3 / 4; width: 100%; overflow: hidden;
+  background: radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.55), transparent 60%), #f8f2e4;
+  border: 1px solid #d8d0c1; border-radius: 4px; box-shadow: inset 0 0 0 4px #f8f2e4, inset 0 0 0 5px rgba(178, 58, 42, 0.35), 0 1px 3px rgba(60, 40, 20, 0.18);
+  color: #24211d; font-family: var(--serif); text-align: left;
+}
+.mt-card .mt-ink { position: absolute; inset: 0; width: 100%; height: 100%; }
+.mt-card .mt-pad { touch-action: none; cursor: crosshair; }
+.mt-name {
+  position: absolute; top: 7cqw; right: 7cqw; writing-mode: vertical-rl; font-size: 10cqw; font-weight: 700; letter-spacing: 1.5cqw;
+  line-height: 1; pointer-events: none; text-shadow: 0 0 2px #f8f2e4, 0 0 4px #f8f2e4;
+}
+.mt-seal {
+  position: absolute; top: 7cqw; right: 20cqw; width: 11cqw; height: 11cqw; display: grid; grid-template-columns: 1fr 1fr;
+  background: #b23a2a; border-radius: 1cqw; padding: 0.6cqw; pointer-events: none; transform: rotate(-3deg);
+}
+.mt-seal i { font-style: normal; color: #f8f2e4; font-size: 4.4cqw; line-height: 5cqw; text-align: center; font-weight: 700; }
+.mt-foot { position: absolute; left: 6cqw; right: 6cqw; bottom: 5cqw; pointer-events: none; }
+.mt-titles { display: flex; flex-wrap: wrap; gap: 1.5cqw; margin-bottom: 2cqw; }
+.mt-titles span {
+  font-size: 4.6cqw; line-height: 1.3; padding: 0.6cqw 2cqw; border: 1px solid rgba(36, 33, 29, 0.35); border-radius: 1cqw;
+  background: rgba(248, 242, 228, 0.85);
+}
+.mt-motto { margin: 0; font-size: 6.2cqw; line-height: 1.4; min-height: 1.4em; text-shadow: 0 0 3px #f8f2e4, 0 0 5px #f8f2e4; }
+.mt-hidden { position: absolute; left: 6cqw; right: 6cqw; top: 40%; margin: 0; text-align: center; font-size: 5cqw; color: #6b6155; }
+.mt-card.thumb { border-radius: 3px; box-shadow: inset 0 0 0 2px #f8f2e4, inset 0 0 0 3px rgba(178, 58, 42, 0.3), 0 1px 2px rgba(60, 40, 20, 0.2); }
+
+/* 玩家卡上的縮圖：浮在名號右邊，點了放大 */
+.peer-mt { float: right; width: 78px; margin: 0 0 6px 10px; padding: 0; border: 0; background: none; cursor: zoom-in; }
+.peer-arts { clear: both; }
+
+/* 放大看一張 */
+.mt-zoom-layer { position: fixed; inset: 0; z-index: 44; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, 0.55); animation: fade 0.2s; }
+.mt-zoom-box { width: min(340px, 100%); }
+.mt-zoom-box .row { justify-content: center; margin-top: 10px; }
+.mt-zoom-box .btn { background: var(--card); }
+.mt-when { margin: 8px 0 0; text-align: center; color: #f4ede0; font-size: 13px; }
+.mt-report { color: var(--bad); }
+
+/* 見聞「名帖匣」 */
+.mt-box-head { display: grid; grid-template-columns: 120px 1fr; gap: 14px; align-items: center; }
+.mt-mine { display: contents; }
+.mt-mine > div:first-child { cursor: zoom-in; }
+.mt-mine.empty p { grid-column: 1 / -1; margin: 0; }
+.mt-mine-side .btn { width: 100%; }
+.mt-mine-side p { margin: 8px 0 0; font-size: 13px; }
+.mt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 12px; }
+.mt-cell { padding: 0; border: 0; background: none; color: var(--ink); cursor: zoom-in; text-align: center; font: inherit; }
+.mt-cell small { display: block; margin-top: 4px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 製作名帖（全螢幕一層） */
+.mt-layer { position: fixed; inset: 0; z-index: 43; display: flex; flex-direction: column; background: var(--paper); animation: fade 0.2s; }
+.mt-bar { display: flex; align-items: center; gap: 8px; padding: calc(8px + var(--top)) 12px 8px; background: var(--card); border-bottom: 1px solid var(--line); }
+.mt-bar b { font-family: var(--serif); letter-spacing: 2px; }
+.mt-bar span { margin-left: auto; font-size: 12px; color: var(--ink-2); }
+.mt-bar .book-back { color: var(--ink); }
+.mt-edit-col { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 14px 16px calc(24px + var(--bottom)); max-width: 640px; width: 100%; margin: 0 auto; box-sizing: border-box; }
+.mt-stage { width: min(270px, 78vw); margin: 0 auto 12px; }
+.mt-tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: center; margin-bottom: 8px; }
+.mt-ink-btn, .mt-pen-btn {
+  display: inline-flex; align-items: center; gap: 5px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 18px;
+  background: var(--card); color: var(--ink); font: 14px var(--sans); cursor: pointer;
+}
+.mt-ink-btn i { width: 14px; height: 14px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.4); }
+.mt-ink-btn.on, .mt-pen-btn.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.mt-preset { max-width: 150px; }
+.mt-count { text-align: center; font-size: 12px; margin: 0 0 10px; }
+.mt-sec { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 12px 0 6px; font-size: 14px; color: var(--ink-2); }
+.mt-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.mt-chip { padding: 5px 10px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); color: var(--ink); font: 13px var(--sans); cursor: pointer; }
+.mt-chip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.mt-go { width: 100%; margin-top: 6px; }
+
+/* 管理者：被檢舉的名帖 */
+.mt-admin { display: grid; gap: 10px; margin-bottom: 10px; }
+.mt-admin-row { display: grid; grid-template-columns: 64px 1fr; gap: 10px; align-items: start; }
+.mt-admin-row .muted { margin: 2px 0 6px; font-size: 12px; }

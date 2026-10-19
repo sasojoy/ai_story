@@ -35,9 +35,30 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-PRESENCE = 600  # 跟 Config.presence_seconds 一樣
+PRESENCE = 600  # 這一頁的「在線」＝還有人正在按按鈕。**刻意不等於 Config.presence_seconds**：
+# 那個是「此地還有／截殺得到」的窗口，2026-10-19 照 Joy 的要求拉到 24 小時（殺得到是重點，城鎮是避風港），
+# 拿它當「在線」的話這一頁永遠寫著幾十人在線，看不出此刻到底有沒有人在玩。
 FACTIONS = {"guan": "官軍", "huang": "黃巾", "haoqiang": "地方豪強", None: "散人（未投靠）"}
-WINDOWS = ((60, "1 分鐘內"), (300, "5 分鐘內"), (PRESENCE, "在線（10 分鐘內）"), (1800, "30 分鐘內"))
+
+
+def _reach() -> float:
+    """遊戲裡「此地還有／互動得到」的窗口（Config.presence_seconds）。刻意用標準庫直接讀那個檔、
+    不 import tianxia：這一頁要能在遊戲掛了的時候照樣開得起來。讀不到就當 24 小時。"""
+    try:
+        with open(ROOT / "content" / "config.json", encoding="utf-8") as f:
+            return float(json.load(f).get("presence_seconds", 86400))
+    except Exception:  # noqa: BLE001
+        return 86400.0
+
+
+def _windows() -> tuple[tuple[float, str], ...]:
+    """四個窗口：1 分鐘、5 分鐘、「在線」（10 分鐘），最後一個是遊戲裡還互動得到（＝截殺得到）的那一段。"""
+    reach = _reach()
+    label = f"互動得到（{reach / 3600:g} 小時內）" if reach >= 3600 else f"互動得到（{reach / 60:g} 分鐘內）"
+    return ((60, "1 分鐘內"), (300, "5 分鐘內"), (PRESENCE, "在線（10 分鐘內）"), (reach, label))
+
+
+WINDOWS = _windows()
 ONLINE_ROW = 2  # WINDOWS 裡哪一個是「在線」，給大字用
 
 

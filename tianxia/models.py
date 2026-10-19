@@ -1484,6 +1484,24 @@ class Spar(_Strict):
     per_pair_day: int = Field(default=2, ge=1)
 
 
+class MingtieTuning(_Strict):
+    """名帖（Joy 2026-10-19「抱拳改成互贈名帖」，設計稿 https://claude.ai/artifact/YLTXjaX77DJRsCmMX57xAi）：玩家自己畫的一張帖子，
+    底下是系統照他做過的事寫的頭銜與自題的一句話。做名帖不花錢（Joy：「製作名帖要花錢好像很過分」），所以照次數擋洗版：
+    定稿一天最多 made_per_day 次（每次定稿要請模型看一次那句話），一天最多主動遞 send_per_day 張，同一個人只能換一次
+    （之後再遞是換新帖）。不給任何數值。一天照回體丹的現實時間換日（Game._pill_day）。"""
+
+    enabled: bool = True
+    made_per_day: int = Field(default=5, ge=1)
+    send_per_day: int = Field(default=10, ge=1)
+    titles: int = Field(default=3, ge=1, le=6)  # 一張名帖印幾個頭銜
+    motto_max: int = Field(default=16, ge=1, le=40)  # 自題那一句最多幾個字
+    taunt_max: int = Field(default=20, ge=1, le=40)  # 挑釁附的那一句最多幾個字
+    report_hide: int = Field(default=3, ge=1)  # 同一張被幾個人檢舉就先對所有人藏起來，等管理者看
+    box_cap: int = Field(default=300, ge=10)  # 名帖匣最多收幾張（滿了丟最舊的）
+    max_strokes: int = Field(default=160, ge=1)
+    max_points: int = Field(default=4000, ge=10)
+
+
 class Ranger(_Strict):
     """遊俠名號（散人的成長階梯，PM 2026-10-08 派工「散人玩法對比加入陣營好像薄弱很多」）：劇本有陣營就有，每季都有（懸賞榜設計 2.2）。
     散人時攢的善名、惡名（只算加的，扣的不算）各記一本帳，俠名＝兩本取高的那一本＋懸賞的功績；走哪一條路看哪一本高
@@ -2755,6 +2773,7 @@ class Config(_Strict):
     ranger: Ranger = Field(default_factory=Ranger)  # 遊俠名號（散人的成長階梯，見 Ranger）
     renown: RenownTuning = Field(default_factory=RenownTuning)  # 名聲（兩個稱號與各段的效果，見 RenownTuning）
     biography: Biography = Field(default_factory=Biography)  # 玩家傳：行狀與季末的傳（見 Biography）
+    mingtie: MingtieTuning = Field(default_factory=MingtieTuning)  # 名帖與挑釁附一句話（見 MingtieTuning）
     spar: Spar = Field(default_factory=Spar)  # 切磋（見 Spar）；雙方各花 action_cost["train"] 的體力
     # 玩家之間的邀請（invites.py）放多久沒回就作廢（世界秒）：10 分鐘夠對方看到、想一下、按下去；週末設定也不縮——
     # 兩個人都在線上才有切磋，等的是現實的人
@@ -3148,6 +3167,10 @@ class Config(_Strict):
     # 同一對人（不分誰送誰）每個遊戲日最多贈物幾次（FB-116，PM 2026-10-14）：贈物不必對方同意，沒有上限時連送三十次 1 兩就把
     # 對方的江湖紀錄洗光（紀錄只留 30 則）。五次夠真的送東西（銀兩、丹、幾種素材各一趟）；帳照切磋記在 WorldState.gift_tally
     gift_per_pair_day: int = Field(default=5, ge=1)
+    # 贈物只剩素材（Joy 2026-10-19：拿掉互贈銀兩；PM 建議拿掉贈回體丹〔小號送丹繞過一天五顆〕，Joy「照建議」）：只能送到 gift_max_tier 階，
+    # 一個人一天（現實時間，同回體丹換日）總共只能送 gift_per_day 次、不分送給誰，小號搬不了三階、也搬不了大量的料
+    gift_max_tier: int = Field(default=2, ge=1, le=3)
+    gift_per_day: int = Field(default=5, ge=1)
     # 同一對人每個遊戲日最多論武幾回（FB-116，PM 2026-10-14；照切磋 Spar.per_pair_day 的兩場）：論武各付一半的價錢，沒有上限時
     # 兩個人可以一直合、熔掉淨賺；帳記在 WorldState.discuss_tally
     discuss_per_pair_day: int = Field(default=2, ge=1)
@@ -3919,6 +3942,20 @@ class CheckVoice(_Strict):
     bands: list[CheckVoiceBand] = Field(default_factory=list)
 
 
+class MingtieArt(_Strict):
+    """名帖的一張現成的畫：一筆一筆的筆劃（mingtie.Stroke 的寫法：[墨色, 筆粗, x0, y0, x1, y1, …]，畫布 300×400）。
+    真人與假人都能挑，所以「用現成的畫」看不出是假人。"""
+
+    id: str
+    name: str
+    strokes: list[list[int]]
+
+
+class MingtieContent(_Strict):
+    arts: list[MingtieArt] = Field(default_factory=list)
+    mottos: list[str] = Field(default_factory=list)  # 假人自題的那一句從這裡挑（真人自己寫）
+
+
 class Content(_Strict):
     config: Config
     scenario: Scenario
@@ -3955,6 +3992,8 @@ class Content(_Strict):
     forge_secrets: dict[str, ForgeSecret] = Field(default_factory=dict)  # 隱藏配方池（content/forge_secrets.json，照 id）；沒有這個檔就是空的
     tier4_named: dict[str, Tier4Named] = Field(default_factory=dict)  # 四階名器名字表（content/tier4_named.json，照 id）；沒有這個檔就是空的（測試內容）
     arena_crowd: dict[str, list[str]] = Field(default_factory=dict)  # 擂台的場邊事件的固定句（content/arena_crowd.json）：種類 → 句子；沒有這個檔就沒有場邊事件
+    banned_words: list[str] = Field(default_factory=list)  # 玩家寫給別人看的話（挑釁那一句、名帖自題）的髒話與辱罵字表（content/banned_words.json）；沒有這個檔就是空的
+    mingtie: MingtieContent = Field(default_factory=lambda: MingtieContent())  # 名帖的現成的畫與假人的自題句庫（content/mingtie.json）；沒有這個檔就是空的
     shop_lines: dict[str, dict[str, list[str]]] = Field(default_factory=dict)  # 店面上掌櫃的話（content/shop_lines.json，店面獨立介面設計 1.4）：店 → 情況 → 句子；沒有這個檔就是空的
     seal: dict[str, ShardDef] = Field(default_factory=dict)  # 玉璽碎片（content/seal.json，照 id）；沒有這個檔就是空的（碎片關著）
     relations: list[RelationDef] = Field(default_factory=list)  # 人物之間的關係（content/relations.json，大勢人物擴充第二批）；沒有這個檔就是沒有

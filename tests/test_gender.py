@@ -69,8 +69,10 @@ def test_what_others_read_follows_her_gender(real):
     him = _game(real, "乙")
     her.state.player.anonymous = him.state.player.anonymous = True
     assert (rules.display_name(her.state), rules.display_name(him.state)) == ("某位女俠", "某位少俠")
-    assert social._travel_buttons(him, her)[0].label == "邀她結伴同行"
-    assert social._travel_buttons(her, him)[0].label == "邀他結伴同行"
+    him.state.player.taunt_muted = [social.name_key(her.state.player.name)]  # 結伴同行拿掉了（名帖改版），改看封了挑釁話之後那一顆
+    her.state.player.taunt_muted = [social.name_key(him.state.player.name)]
+    assert social._greet_buttons(him, her)[-1].label == "再接她的挑釁話"
+    assert social._greet_buttons(her, him)[-1].label == "再接他的挑釁話"
     assert mounts.RAID_FLED_TAG.format(him=gender.pronoun(her.state)) == "她策馬跑了"
 
 
