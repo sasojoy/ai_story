@@ -392,6 +392,7 @@ def test_followers_fight_beside_the_player_with_their_own_strength():
     """計畫二 G1／F17：加成的清單跟陣容一樣長，部下照樣上陣、照樣算進勝算，吃自己模板的臂力（14.3）。"""
     real = load_content(CONTENT_DIR)
     real.config.auto_open_first_season = True
+    real.config.terrain_arts.enabled = False  # 手算的威力不含地利（武學隨地理環境；部下不吃地利在 test_terrain_arts）
     real.config.season_one, real.config.season_days, real.config.server_max_players = True, 2.5, 2
     game = Game.new(real, "甲", rng=random.Random(0))
     s = game.state
@@ -654,6 +655,7 @@ def test_followers_fight_beside_a_resonating_player_without_the_factor():
     """計畫二 G12／F17：部下照樣上陣，只是不吃本人的搭配與共鳴。真實內容、兩個部下。"""
     real = load_content(CONTENT_DIR)
     real.config.auto_open_first_season = True
+    real.config.terrain_arts.enabled = False  # 手算的威力不含地利（武學隨地理環境）
     real.config.season_one, real.config.season_days, real.config.server_max_players = True, 2.5, 2
     game = Game.new(real, "甲", rng=random.Random(0))
     s = game.state
