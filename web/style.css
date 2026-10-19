@@ -625,7 +625,8 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .ck-day .g { font-size: 10.5px; color: var(--ink); white-space: nowrap; overflow: hidden; max-width: 100%; }
 .ck-day .g .gl { display: block; }
 .ck-day.got { opacity: .62; }
-.ck-day.got::after { content: "簽"; position: absolute; right: 2px; bottom: 2px; width: 16px; height: 16px; box-sizing: border-box; border: 1.5px solid var(--accent); border-radius: 3px; color: var(--accent); font: 600 10px/13px var(--serif); transform: rotate(-10deg); }
+/* 「簽」朱印半壓在右上角的外框上（FB-437：蓋在右下角時把「兩」「2」「階」蓋掉一半）：天數置中，兩位數也碰不到右邊這一截 */
+.ck-day.got::after { content: "簽"; position: absolute; right: -5px; top: -5px; width: 14px; height: 14px; box-sizing: border-box; border: 1.5px solid var(--accent); border-radius: 3px; background: var(--card); color: var(--accent); font: 600 9px/11px var(--serif); text-align: center; transform: rotate(-10deg); }
 .ck-day.miss { border-style: dashed; opacity: .5; }
 .ck-day.today { border: 2px solid var(--gold); background: var(--card); }
 .ck-day.today.got { opacity: 1; }

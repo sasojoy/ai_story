@@ -94,6 +94,18 @@ def test_two_gift_label_splits_into_two_lines():
     assert ".ck-day .g .gl { display: block; }" in css
 
 
+def test_the_signed_stamp_sits_on_the_top_corner():
+    """FB-437：「簽」朱印貼在右下角，375 寬蓋掉「30 兩」的「兩」、「丹 2」的「2」、「一階」的「階」：改蓋在右上角、半壓在格子外框上，
+    不碰底下那一行獎勵字（天數置中，兩位數也不到右邊那一截）。"""
+    import re
+
+    css = (ROOT / "web" / "style.css").read_text(encoding="utf-8")
+    rule = re.search(r"\.ck-day\.got::after \{([^}]*)\}", css).group(1)
+    assert re.search(r"(?<![-\w])top: -\d+px", rule) and "bottom" not in rule
+    size = int(re.search(r"(?<![-\w])width: (\d+)px", rule).group(1))
+    assert size <= 14
+
+
 def test_no_chip_without_checkin():
     assert run({"status": {}})["part"] is None
 
