@@ -1422,6 +1422,23 @@
   const LEDGER_AFTER = "，・；／：";
   const LEDGER_NB = 14;
   const ledgerText = (text) => nbHtml(text, LEDGER_AFTER, LEDGER_NB);
+  // 打點店上面掮客那一句（FB-433：360、320 寬斷在「您／挑」「寫／著」中間）：同一套不折行的小段，切在「，。：；！？」後面，
+  // 緊跟著的收引號「」』」併進前一段（不讓一個「」」落單到下一行）；一段超過 LEDGER_NB 個字照常折行
+  const SAY_AFTER = "，。：；！？";
+  function sayHtml(text) {
+    const s = String(text ?? ""), out = [];
+    let cur = "";
+    for (let i = 0; i < s.length; i++) {
+      cur += s[i];
+      if (SAY_AFTER.includes(s[i])) {
+        while (s[i + 1] && "」』".includes(s[i + 1])) cur += s[++i];
+        out.push(cur);
+        cur = "";
+      }
+    }
+    if (cur) out.push(cur);
+    return out.map((t) => (t.length <= LEDGER_NB ? `<span class="nb">${esc(t)}</span>` : esc(t))).join("");
+  }
   // 價錢後面打折的原因（名聲 4.1：「威震州郡・九折」「自家地盤・貴兩成」，territory.price_parts、renown.clinic_part）：每一段包成同一種不折行的
   // 小段（.nb），375 寬才不會斷成「九／折」「八五／折」（FB-297）。緊貼的「（」與後面的「，」「）」一起包：Chrome 在括號與行內區塊之間照樣斷，
   // 不包的話一行收在「（」上、下一行從「，」起頭；段與段之間（「，」後面）照常換行。先跳脫再包，字一個不改。
@@ -3309,7 +3326,8 @@
       ? '<button class="shop-back" data-act="shop-leave">‹ 出店</button>'
       : `<button class="shop-back" data-act="choose" data-id="${esc(shop.back)}">‹ 出店</button>`;
     // 鐵匠講神器的規矩（背包有四階時，shop.rule；設計 9.1 第 2 批甲）：就畫在平常那一句的位置、金框標出來；順口講配方線索那一下伺服器給空的
-    const line = shop.rule ? `<p class="shop-line rule">${esc(shop.rule)}</p>` : `<p class="shop-line">${esc(shop.line)}</p>`;
+    const line = shop.rule ? `<p class="shop-line rule">${esc(shop.rule)}</p>`
+      : `<p class="shop-line">${kind === "dadian" ? sayHtml(shop.line) : esc(shop.line)}</p>`; // 打點：掮客那一句不在詞中間斷（FB-433）
     // 鐵匠鋪的架上頁照草圖 A 把鐵匠那一句放在爐火底下（smithHtml 畫，企劃者 2026-10-14）；其他頁、馬市、懸賞榜緊接招牌
     const underForge = kind === "smith" && smithTab(shop) === "shelf";
     const body = kind === "market" ? marketHtml(shop) : kind === "board" ? boardHtml(shop) : kind === "arena" ? arenaHtml(shop)
