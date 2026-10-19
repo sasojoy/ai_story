@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import random
 
-from . import calendar, figures, push, relations
+from . import calendar, figures, push, relations, renown
 from .calendar import DAY
 from .models import Content
 from .rules import add_rumor, change_trend, season_one, trend_shown, trend_value, world_day
@@ -138,12 +138,43 @@ def tick(state: GameState, content: Content) -> None:
     first, w.life_turn = w.life_turn < 0, turn
     if first:
         return
+    from . import feasts  # noqa: PLC0415  feasts → figure_life
+
     movers = [cid for cid, ch in content.characters.items() if ch.deep_interaction and ch.follows is None]
     for cid in movers:
-        _act(state, content, cid, random.Random(f"人物|{w.tianji}|{cid}|{turn}"))
+        if feasts.hosting(state, cid) is None:  # 擺著宴的人留在原地（第三批）
+            _act(state, content, cid, random.Random(f"人物|{w.tianji}|{cid}|{turn}"))
     for cid, ch in content.characters.items():  # 跟著走的人最後才動：關羽、張飛跟著劉備
         if ch.follows is not None and ch.deep_interaction:
             _follow(state, content, cid, ch.follows)
+    for cid, ch in content.characters.items():  # 第三批：宴客、求援委託（排在走動之後：照他這一輪走到的地方）
+        if ch.deep_interaction:
+            feasts.maybe_open(state, content, cid, turn)
+            _maybe_rally(state, content, cid, turn)
+
+
+RALLY_MOODS = ("焦慮",)  # 戰線吃緊、聲威大損：對自己陣營全部人發求援委託
+
+
+def _maybe_rally(state: GameState, content: Content, cid: str, turn: int) -> None:
+    """心事焦慮的大勢人物擲 rally_chance，對自己陣營全部人發一件求援委託（bounties.post_rally），陣營軍情一句。"""
+    tuning = content.config.figure_life
+    fid = figures.of_character(content, cid)
+    if not tuning.rallies or fid is None or figures.state_of(state, content, fid).status != "active":
+        return
+    if mood_any(state, content, cid) not in RALLY_MOODS:
+        return
+    if random.Random(f"求援|{state.world.tianji}|{cid}|{turn}").random() >= tuning.rally_chance:
+        return
+    from . import bounties  # noqa: PLC0415  bounties → territory → …：延後載入
+
+    made = bounties.post_rally(state, content, cid)
+    if made is None:
+        return
+    side = made.faction
+    add_rumor(state, bounties.RALLY_POSTED.format(who=content.characters[cid].name, side=content.scenario.faction_name(side, side),
+                                                  how=bounties.how(content, made)),
+              made.location, content=content, layer="faction", faction=side)
 
 
 def _act(state: GameState, content: Content, cid: str, rng: random.Random) -> None:
@@ -350,7 +381,7 @@ def spread(state: GameState, content: Content, kind: str, target: str, *, at: st
         notes.append(text)
         del notes[:-tuning.hearsay_keep]
         before = p.affinities.get(cid, 0)
-        p.affinities[cid] = max(0, min(100, before + delta))
+        p.affinities[cid] = max(0, min(100, before + renown.warmed(content, delta)))  # 加的放慢（Config.affinity_gain_scale）
         moved = p.affinities[cid] - before
         if moved:
             deltas.setdefault(moved, []).append(ch.name)

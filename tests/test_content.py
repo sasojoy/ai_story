@@ -1206,7 +1206,8 @@ def test_validate_reports_a_malformed_region_polygon_instead_of_crashing(tmp_pat
 # ── 週末設定（計畫 T2「總開關與週末設定」）：一次切換，不手改 content/config.json ──
 CONTENT_DIR = FIXTURE.parent.parent.parent / "content"
 WEEKEND_KEYS = {"season_one", "season_days", "server_max_players", "late_exp_step",  # 30 級以後的加陡：週末 0.12（50 級加陡）
-                "haoqiang_allied"}  # 第一季豪強分屬兩軍（企劃者 2026-10-15）：週末開、預設關
+                "haoqiang_allied",  # 第一季豪強分屬兩軍（企劃者 2026-10-15）：週末開、預設關
+                "affinity_gain_scale"}  # 情誼放慢（歷史武將同行 3）：正式 0.7、週末 0.85
 BETA_TEST_KEYS = {"beta_free_refill"}  # 一鍵補滿體力（企劃者 2026-10-07 開、2026-10-12 拿掉）：週末設定不再開它
 
 
@@ -1221,6 +1222,7 @@ def test_weekend_profile_overrides_the_season_settings_and_the_test_period_switc
     assert (weekend.beta_free_refill, base.beta_free_refill) == (False, False)
     assert (weekend.late_exp_step, base.late_exp_step) == (0.12, 0.5)
     assert (weekend.haoqiang_allied, base.haoqiang_allied) == (True, False)
+    assert (weekend.affinity_gain_scale, base.affinity_gain_scale) == (0.85, 0.7)
     assert weekend.model_dump(exclude=WEEKEND_KEYS | BETA_TEST_KEYS) == base.model_dump(exclude=WEEKEND_KEYS | BETA_TEST_KEYS)  # 其他設定一個都不動
 
 

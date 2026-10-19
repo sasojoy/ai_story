@@ -418,12 +418,13 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
     # 馬市（act:market）同鐵匠鋪：只是打開選單；買、換、餵走 visit_market、feed_mount
     # 捐軍備（act:donate，素材與經濟設計第六節）同鐵匠鋪：在大本營一直按得下去；捐走 donate_spare，軍需官那一串（donate:）不隨機按
     # 設伏、修工事、屯糧（ambush:、works:，後期體力玩法）：體力夠就一直按得下去、收伏一直按得下去；整季機器人只有一個人，劫不到誰，不做
-    # 護衛、犒軍、探望（aid:，figure_aid）：體力夠就按得下去；整季機器人不做（同 works:）
+    # 護衛、犒軍、探望（aid:，figure_aid）：體力夠就按得下去；整季機器人不做（同 works:）；宴客（feast:）不花體力、入席離席能一直按
+    # 酒肆（act:tavern、tavern:）同鐵匠鋪：在城裡一直按得下去；整季機器人只有一個人，打聽不到誰，不進
     options = [
         o for o in options
-        if o.id not in ("act:rest", "act:halt", "act:bounties", "act:smith", "act:market", "act:heal", "act:arena", "act:donate", DUEL_FLEE, ARENA_YIELD)
-        and not o.id.startswith(("road:", "defect:", "invite:", "smith:page:", "donate:", "ambush:", "works:", "aid:"))
-    ]  # 頭目戰的抽身退走（DUEL_FLEE）：打到一半一直按得下去，機器人照出招打完
+        if o.id not in ("act:rest", "act:halt", "act:bounties", "act:smith", "act:market", "act:heal", "act:arena", "act:donate", "act:tavern", DUEL_FLEE, ARENA_YIELD)
+        and not o.id.startswith(("road:", "defect:", "invite:", "smith:page:", "donate:", "ambush:", "works:", "aid:", "feast:", "tavern:", "act:recruit:"))
+    ]  # 招募歷史武將（act:recruit:<id>，歷史武將同行第七節）：整季機器人不招。頭目戰的抽身退走（DUEL_FLEE）：打到一半一直按得下去，機器人照出招打完
     # 會被打發的求見（名望不夠）永遠按得下去，不排除的話「沒事可做就推進時間」的訊號會失效（同 act:rest）
     options = [
         o for o in options

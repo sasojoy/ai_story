@@ -61,10 +61,10 @@ import server_push
 import zhuan_html
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
-    arena_crowd, battle_instance, biography, calendar, companion_agent, divine, duel, event_llm, fight_llm, foreshadow, gender, glyph, insight_llm, leaderboard, letters, mapdata,
+    arena_crowd, battle_instance, biography, calendar, companion_agent, divine, duel, event_llm, feasts, fight_llm, foreshadow, gender, glyph, insight_llm, leaderboard, letters, mapdata,
     naming,
     ollama_client, rules,
-    seal, seal_duel, server_bots, social, sortie, team, timetable, treasures,
+    seal, seal_duel, server_bots, social, sortie, tavern, team, timetable, treasures, yuedan,
 )
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import env_profile, load_content, profile_line
@@ -276,13 +276,19 @@ def act(game: Game, action, *, paused_ok: bool = False) -> list[str] | None:
         open_characters().save(game.state)
         tales = _tales_waiting(game)
         crowd = _crowd_waiting(game)
+        chat = _chatter_waiting(game)
         mail = _letter_waiting(game)
+        review = _yuedan_waiting(game)
     if tales:
         narrate_battle(game)
     if crowd:
         write_crowd(game)
+    if chat:
+        write_chatter(game, chat)
     if mail:
         write_letter(game)
+    if review:
+        write_yuedan(game)
     return msgs
 
 
@@ -324,15 +330,21 @@ def act_look(game: Game, action, view) -> tuple[list[str] | None, object]:
             failure = exc
         tales = failure is None and _tales_waiting(game)
         crowd = failure is None and _crowd_waiting(game)
+        chat = _chatter_waiting(game) if failure is None else None
         mail = failure is None and _letter_waiting(game)
+        review = failure is None and _yuedan_waiting(game)
     if failure is not None:
         raise failure
     if tales:
         narrate_battle(game)
     if crowd:
         write_crowd(game)
+    if chat:
+        write_chatter(game, chat)
     if mail:
         write_letter(game)
+    if review:
+        write_yuedan(game)
     return msgs, shown
 
 
@@ -1005,6 +1017,77 @@ def letter_once(game: Game) -> bool:
     return done
 
 
+YUEDAN_RUNNING: set[str] = set()  # 月旦評正在背景寫（全服一條：有東西就是有一條在寫）
+
+
+def _yuedan_waiting(game: Game) -> bool:
+    """這一週的月旦評等著模型寫評語、模型叫得到、還沒有一條在寫（write_yuedan）。行動鎖內叫。"""
+    if not TALE_THREADS or game.client is None or YUEDAN_RUNNING:
+        return False
+    return game.yuedan_request() is not None
+
+
+def write_yuedan(game: Game) -> bool:
+    """月旦評（大勢人物擴充第三批，yuedan.py）：開一個背景執行緒寫評語。A 鎖內拿單子（Game.yuedan_request）→ B 鎖外請模型寫
+    （yuedan.write，預算 Config.figure_life.yuedan_budget_seconds；排隊時當假人排）→ C 鎖內重驗同一批才換上並發出去
+    （Game.apply_yuedan；寫不出來照固定句發）。開了回 True。呼叫端不能握著行動鎖。"""
+    with TALE_LOCK:
+        if YUEDAN_RUNNING:
+            return False
+        YUEDAN_RUNNING.add("yuedan")
+
+    def job() -> None:
+        try:
+            yuedan_once(game)
+        except Exception:  # noqa: BLE001 — 背景執行緒：印出來就好，評語照固定句（等太久由季的事發）
+            traceback.print_exc()
+        finally:
+            with TALE_LOCK:
+                YUEDAN_RUNNING.clear()
+
+    threading.Thread(target=job, name="yuedan", daemon=True).start()
+    return True
+
+
+def yuedan_once(game: Game) -> bool:
+    """寫一批（write_yuedan 的那一圈；測試直接叫）：發了回 True。呼叫端不能握著行動鎖。"""
+    with _locked(game):
+        note = game.yuedan_request()
+    if note is None:
+        return False
+    budget = game.content.config.figure_life.yuedan_budget_seconds
+    started = _monotonic()
+
+    def ask() -> dict:
+        return yuedan.write(within_budget(game.client, budget - (_monotonic() - started)), note)
+
+    if QUEUE is None:
+        lines = ask()
+    else:
+        try:
+            lines = QUEUE.run(game.state.player.name, ask, fallback={}, bot=True, wait=budget)
+        except (Busy, QueueTimeout):
+            lines = {}
+    with _locked(game):
+        return game.apply_yuedan(note, lines)
+
+
+def feast_text(game: Game, text: str) -> list[str]:
+    """自己寫的敬酒詞（宴客，大勢人物擴充第三批），三段：A Game.feast_text_request（只讀）→ B 鎖外請模型評一個分數
+    （feasts.score，預算 Config.figure_life.feast_score_budget_seconds；評不到照 feasts.DEFAULT_SCORE）→ C Game.feast_toast
+    重驗同一場、同一句才記。"""
+    started, request = _open_request(game, lambda: game.feast_text_request(text))
+    if isinstance(request, list):
+        return request
+    total = game.content.config.figure_life.feast_score_budget_seconds
+
+    def ask() -> int:
+        return feasts.score(within_budget(game.client, total - (_monotonic() - started)), request)
+
+    rate = model_call(game, ask, fallback=feasts.DEFAULT_SCORE, left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT)
+    return act(game, lambda g: g.feast_toast(request.text, rate, request))
+
+
 CROWD_RUNNING: set[str] = set()  # 正在背景重寫場邊那一句的角色（一人一條；名號鍵）
 
 
@@ -1063,6 +1146,62 @@ def crowd_once(game: Game) -> bool:
     return done
 
 
+CHATTER_RUNNING: set[str] = set()  # 正在背景寫鄰桌閒談的酒肆（一間一條；地點 id）
+
+
+def _chatter_waiting(game: Game) -> str | None:
+    """這個人開著的酒肆該換一段閒談、模型叫得到、這一間還沒有一條在寫（write_chatter）：回地點 id。行動鎖內叫。"""
+    if not TALE_THREADS or game.client is None or game.tavern_chatter_request() is None:
+        return None
+    place = game.state.player.location
+    return None if place in CHATTER_RUNNING else place
+
+
+def write_chatter(game: Game, place: str) -> bool:
+    """酒肆鄰桌閒談：開一個背景執行緒寫一段。A 鎖內拿單子（Game.tavern_chatter_request）→ B 鎖外請模型寫（tavern.chatter_write，
+    預算 Config.tavern.ask_budget_seconds；排隊時當假人排在真人後面）→ C 鎖內重驗才記（Game.apply_tavern_chatter；寫不出來記空的，
+    這一陣子照固定句）。開了回 True。呼叫端不能握著行動鎖。"""
+    with TALE_LOCK:
+        if place in CHATTER_RUNNING:
+            return False
+        CHATTER_RUNNING.add(place)
+
+    def job() -> None:
+        try:
+            chatter_once(game)
+        except Exception:  # noqa: BLE001 — 背景執行緒：印出來就好，閒談照固定句
+            traceback.print_exc()
+        finally:
+            with TALE_LOCK:
+                CHATTER_RUNNING.discard(place)
+
+    threading.Thread(target=job, name="tavern-chatter", daemon=True).start()
+    return True
+
+
+def chatter_once(game: Game) -> bool:
+    """寫一段（write_chatter 的那一圈；測試直接叫）：記了寫好的回 True。呼叫端不能握著行動鎖。"""
+    with _locked(game):
+        request = game.tavern_chatter_request()
+    if request is None:
+        return False
+    budget = game.content.config.tavern.ask_budget_seconds
+    started = _monotonic()
+
+    def ask() -> list[str]:
+        return tavern.chatter_write(within_budget(game.client, budget - (_monotonic() - started)), request)
+
+    if QUEUE is None:
+        lines = ask()
+    else:
+        try:
+            lines = QUEUE.run(TALE_OWNER, ask, fallback=[], bot=True, wait=budget)
+        except (Busy, QueueTimeout):
+            lines = []
+    with _locked(game):
+        return game.apply_tavern_chatter(request, lines)
+
+
 def duel_text(game: Game, text: str) -> list[str]:
     """單人頭目戰的放手一搏，三段同 battle_text：A Game.duel_text_request（只讀）→ B 鎖外請模型評成功率、寫成敗兩版劇情
     （預算同隨口應對）→ C Game.duel_gamble 重驗同一隻、同一回合、同一句才用評好的分，對不上就在鎖內重評。"""
@@ -1089,6 +1228,23 @@ def duel_text(game: Game, text: str) -> list[str]:
 
     verdict, crowd = model_call(game, score, fallback=(fallback, ""), left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT)
     return act(game, lambda g: g.duel_gamble(request.text, verdict.rate, (verdict.win, verdict.lose), request=request, crowd=crowd))
+
+
+def tavern_ask(game: Game, text: str) -> list[str]:
+    """問酒家（酒肆，設計第八節），三段：A Game.tavern_ask_request（只讀；問到秘密的單子不叫模型）→ B 鎖外 tavern.ask_write
+    （預算 Config.tavern.ask_budget_seconds）→ C Game.tavern_ask 重驗同一間、同一句再收錢；叫不動模型退全額。"""
+    started, request = _open_request(game, lambda: game.tavern_ask_request(text))
+    if isinstance(request, list):
+        return request
+    total = game.content.config.tavern.ask_budget_seconds
+
+    def write():
+        client = within_budget(game.client, total - (_monotonic() - started))
+        return tavern.ask_write(client, request)
+
+    reply = None if request.secret else model_call(game, write, fallback=None, left=total - (_monotonic() - started),
+                                                     busy=BUSY_FREE_TEXT)
+    return act(game, lambda g: g.tavern_ask(request.question, reply, request=request))
 
 
 def seal_text(game: Game, text: str) -> list[str]:
@@ -1143,11 +1299,13 @@ def _main_view_body(game: Game) -> dict:
         # 在路上（路上設計 3.3）：頁面在選項底下多放三個捷徑（輿圖、修練、煉製），那是頁面切換、不是引擎的行動。
         # 看的是選單本身：參戰者在決戰大區裡走動時選單是戰鬥選項，那時不放捷徑
         "on_road": any(o.id == "act:on_road" for o in options),
-        "free_text": game.battle_free_text_prompt() or game.seal_free_text_prompt() or game.duel_free_text_prompt(),
+        "free_text": game.battle_free_text_prompt() or game.seal_free_text_prompt() or game.duel_free_text_prompt()
+        or game.feast_free_text_prompt(),  # 宴席上自己寫的敬酒詞（第三批）
         "free_text_note": game.battle_free_text_note() or game.seal_free_text_note() or game.duel_free_text_note(),  # 放手一搏輸入框旁邊：風險越高、失手時傷自己越重
         # 輸入框送到哪裡：正在打的決戰 > 奪璽單挑 > 頭目戰（玉璽碎片設計 5.7）
         "free_op": "battle_text" if game.battle_free_text_prompt() is not None
-        else "seal_text" if game.seal_free_text_prompt() is not None else "duel_text",
+        else "seal_text" if game.seal_free_text_prompt() is not None
+        else "feast_text" if game.feast_free_text_prompt() is not None else "duel_text",
         "event_free_text": game.event_free_text_prompt(),  # 眼前事件的隨口應對：選單上那一顆按下去叫出輸入框
         # 「剛剛」：這次行動打了仗就放戰鬥卡片，卡片沒寫到的補充放在 now；之後配了點也一樣（配點不換「剛剛」，計畫二最終審查 M1）
         "card": md(card) if card is not None else None,
@@ -1237,6 +1395,7 @@ def menxia_view(game: Game, person: str | None = None) -> dict:
         "person": person,
         "person_card": md(game.member_card(person)) if person else None,
         "on_team": person is not None and person in game.state.player.team,
+        "release": game.release_view(person),  # 歷史武將同行：名下的同伴多一顆「放他回江湖」（問句）；不是就 None
         "lessons": game.chuangong_lessons(person),  # 傳功鈕（同伴、部下；本人與開關關著是空的）
         "bag": md(game.bag_text()),
         "heal": game.heal_button(),  # 修練頁的療傷鈕：按不按得下去、不能按的原因（FB-082）；鈕上的字寫內傷與下面的 heal_cost
@@ -1680,6 +1839,8 @@ MAIN_ACTIONS = {
     # 自家大本營捐軍備（素材與經濟設計第六節）：一次捐一種素材 count 個（上限切一半：收得下的收）；軍需帳那一頁送 items
     # （[{material, count}, …]，挑好的幾種一起捐、一則紀錄）
     "donate": lambda g, b: g.donate_items(donate_items(b)) if "items" in b else g.donate(str(b.get("material", "")), max(1, _int(b.get("count"), 1))),
+    # 酒肆那一頁（企劃者 2026-10-18）：op 是 news、seek、ties、material、wall、treat、hide、trace；target 是名號或素材 id、text 是題壁那一句
+    "tavern": lambda g, b: g.tavern_do(str(b.get("op", "")), str(b.get("target", ""))[:20], str(b.get("text", ""))[:40]),
     "anonymous": lambda g, b: g.set_anonymous(bool(b.get("value"))),
     "gender": lambda g, b: g.set_gender(str(b.get("value", ""))),  # 設定頁：還沒選過性別的舊角色選一次（PM 2026-10-12）
     "letter_read": lambda g, b: g.read_letter(_int(b.get("id"), -1)),  # 書信小卡的「收起」（大勢人物擴充第二批）
@@ -1782,6 +1943,10 @@ def api_do(op: str, request: Request, body: dict = Body(default={})):
         msgs = seal_text(game, str(body.get("text", "")))
     elif op == "duel_text":  # 頭目戰的放手一搏：同上（見 duel_text）
         msgs = duel_text(game, str(body.get("text", "")))
+    elif op == "tavern_ask":  # 問酒家：回話在行動鎖外寫（見 tavern_ask）
+        msgs = tavern_ask(game, str(body.get("text", ""))[:60])
+    elif op == "feast_text":  # 宴席上自己寫的敬酒詞：分數在行動鎖外評（見 feast_text）
+        msgs = feast_text(game, str(body.get("text", "")))
     elif op in MAIN_ACTIONS:
         msgs = act(game, lambda g: MAIN_ACTIONS[op](g, body), paused_ok=op in PAUSE_OK_ACTIONS)
     else:
@@ -1835,6 +2000,7 @@ MENXIA_ACTIONS = {
     "bind_art": lambda g, b: g.bind_art(str(b.get("weapon") or ""), str(b.get("art") or "")),
     "join": lambda g, b: g.add_to_team(str(b.get("person") or "")),
     "leave": lambda g, b: g.remove_from_team(str(b.get("person") or "")),
+    "release": lambda g, b: g.release_companion(str(b.get("person") or "")),  # 放他回江湖（歷史武將同行）：引擎驗是不是你名下的
     "wield": lambda g, b: g.wield_weapon(str(b.get("weapon") or "")),  # 裝備庫上那一件換到身上它那一欄（兵器設計 2.2、裝備四欄 2.3）：武器、防具、坐騎、寶物都走這裡，網頁照舊送 weapon 這個鍵
     "dismantle": lambda g, b: g.dismantle_weapon(str(b.get("weapon") or "")),  # 裝備庫上那一件拆成一個素材（兵器設計 4.7.1、裝備四欄 4.8）：坐騎、寶物不能拆
     "feed": lambda g, b: g.feed_mount(),
@@ -1901,7 +2067,7 @@ def api_menxia_do(op: str, request: Request, body: dict = Body(default={})):
 
     def run(g: Game):
         # 名冊（誰是你的人）是全服狀態，換季、假人程式都會改：跟動作在同一把鎖裡核對，引擎才能假設那個人在名冊上
-        if op in ("join", "leave") and person not in {key for _, key in g.roster_lines()}:
+        if op in ("join", "leave", "release") and person not in {key for _, key in g.roster_lines()}:
             raise GameError("名冊裡沒有這個人。")  # 交易整筆撤回（連同進鎖時的同步）；下一個請求重讀再算一次
         return MENXIA_ACTIONS[op](g, body)
 

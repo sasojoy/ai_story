@@ -1,0 +1,352 @@
+"""歷史武將同行第五節：大決戰裡隨主人上陣的同伴（battle_instance.Escort）——照主人的招出手、份量算進那一邊、集火平分、
+點名打得到、固守護他、敗走推戰局；主人離開大區他也不在場上。加入決戰時挑一位、打完回江湖在後面幾段。"""
+from __future__ import annotations
+
+import random
+
+import pytest
+
+from conftest import real_content
+from tianxia import battle_instance as bi
+from tianxia import tactics
+
+
+@pytest.fixture
+def c():
+    return real_content()
+
+
+def _battle(c, battle_id="changshe_fire"):
+    d = c.battles[battle_id]
+    return d, bi.start_muster(d, now=0.0)
+
+
+def _sides(d):
+    return d.factions[0].id, d.factions[1].id
+
+
+def _join(c, inst, name, side, power=100.0, escort=None):
+    scores = bi.move_scores(c.config.battle, power, None, None)
+    bi.join_faction(inst, name, side, 400.0, power, scores=scores, escort=escort)
+
+
+def _escort(name="關羽", cid="guanyu", score=60.0, pool=400.0, neili=None, kit=None):
+    return bi.Escort(cid=cid, name=name, score=score, neili=pool if neili is None else neili, neili_cap=pool, kit=kit)
+
+
+def _open(c, d, inst):
+    bi.close_muster(inst, d, random.Random(0), 0.0, c.config.battle)
+
+
+def _act(inst, d, name, move):
+    inst.round.pending_actions[name] = next(o.tag for o in bi.options_for(inst, d, name) if o.move == move)
+
+
+def _gamble(inst, d, name, text, rate=100):
+    inst.round.pending_actions[name] = next(o.tag for o in bi.options_for(inst, d, name) if o.free_text)
+    inst.round.success_rates[name] = rate
+    inst.round.custom_texts[name] = text
+
+
+def _round(c, inst, d, seed=0, tuning=None):
+    return bi.resolve_round(inst, d, random.Random(seed), now=1.0, tuning=tuning or c.config.battle, tactic=c.config.tactics)
+
+
+def test_an_escort_follows_his_owners_move_and_adds_weight(c):
+    def run(escort, gamble=False):
+        d, inst = _battle(c)
+        a, b = _sides(d)
+        _join(c, inst, "甲", a, escort=escort)
+        _join(c, inst, "乙", b)
+        _open(c, d, inst)
+        if gamble:
+            _gamble(inst, d, "甲", "衝陣", rate=50)
+        else:
+            _act(inst, d, "甲", "強攻")
+        _act(inst, d, "乙", "強攻")
+        _round(c, inst, d)
+        return inst, a
+
+    plain, a = run(None)
+    helped, _ = run(_escort())
+    assert helped.trend > plain.trend  # 份量加在主人那一邊（第一方往上推）
+    assert helped.last_mix[a]["強攻"] == 1.0  # 他照主人的招：強攻
+    held, _ = run(_escort(), gamble=True)
+    assert held.last_mix[a]["固守"] == 1.0  # 主人放手一搏：他固守
+
+
+def test_escorts_take_split_focus_in_one_line(c):
+    tuning = c.config.battle
+    d, inst = _battle(c)
+    a, b = _sides(d)
+    for i, (cid, name) in enumerate([("guanyu", "關羽"), ("zhangfei", "張飛"), ("liubei", "劉備")]):
+        _join(c, inst, f"甲{i}", a, escort=_escort(name, cid, pool=1000.0))
+    for i in range(3):
+        _join(c, inst, f"乙{i}", b, power=300.0)
+    _open(c, d, inst)
+    for i in range(3):
+        _act(inst, d, f"甲{i}", "奇襲")
+        _act(inst, d, f"乙{i}", "強攻")
+    msgs = _round(c, inst, d)
+    assert len([m for m in msgs if "隨行的 3 位武將" in m]) == 1  # 讀得下去：三位挨打合成一句
+    for i in range(3):  # 三個強攻 × focus_per_attacker 平分給三位（沒人固守護）
+        assert inst.participants[f"甲{i}"].escort.neili == pytest.approx(1000 - tuning.focus_per_attacker)
+
+
+def test_an_escort_falls_pushes_the_line_and_counts_a_slay(c):
+    def run(push):
+        tuning = c.config.battle.model_copy(deep=True)
+        tuning.generals.escort_fall_push = push
+        d, inst = _battle(c)
+        a, b = _sides(d)
+        _join(c, inst, "甲", a, escort=_escort(pool=1000.0, neili=5.0))
+        _join(c, inst, "乙", b, power=300.0)
+        _open(c, d, inst)
+        _act(inst, d, "甲", "奇襲")
+        _act(inst, d, "乙", "強攻")
+        msgs = _round(c, inst, d, tuning=tuning)
+        return inst, msgs
+
+    fell, msgs = run(2)
+    e = fell.participants["甲"].escort
+    assert e.fallen_round == 1 and e.felled_by == "乙" and fell.participants["乙"].slew == 1
+    assert any("隨甲出陣的關羽陣前敗走" in m for m in msgs)
+    still, _ = run(0)
+    assert fell.trend == still.trend - 2  # 戰局往對面（第二方）推 2
+
+
+def test_naming_an_escort_hits_him_but_a_participant_comes_first(c):
+    d, inst = _battle(c)
+    a, b = _sides(d)
+    _join(c, inst, "甲", a, escort=_escort())
+    _join(c, inst, "乙", b)
+    _open(c, d, inst)
+    _act(inst, d, "甲", "固守")
+    _gamble(inst, d, "乙", "一刀劈向關羽")
+    _round(c, inst, d)
+    e = inst.participants["甲"].escort
+    assert e.neili < e.neili_cap and inst.participants["乙"].hits_landed == 1
+
+    d, inst = _battle(c)  # 對面有一個參戰者也叫關羽：參戰者優先
+    _join(c, inst, "甲", a, escort=_escort())
+    _join(c, inst, "關羽", a)
+    _join(c, inst, "乙", b)
+    _open(c, d, inst)
+    _act(inst, d, "甲", "固守")
+    _act(inst, d, "關羽", "固守")
+    _gamble(inst, d, "乙", "一刀劈向關羽")
+    _round(c, inst, d)
+    e = inst.participants["甲"].escort
+    assert e.neili == e.neili_cap and inst.participants["關羽"].neili < inst.participants["關羽"].neili_cap
+
+
+def test_an_absent_owner_takes_his_escort_off_the_field(c):
+    d, inst = _battle(c)
+    a, b = _sides(d)
+    _join(c, inst, "甲", a, escort=_escort())
+    _join(c, inst, "乙", b, power=300.0)
+    _open(c, d, inst)
+    inst.participants["甲"].away = True
+    _act(inst, d, "乙", "強攻")
+    _round(c, inst, d)
+    e = inst.participants["甲"].escort
+    assert e.neili == e.neili_cap and not any(inst.last_mix[a].values())  # 不出手、也挨不到集火
+    assert bi.find_escort(inst, d, "乙", "一刀劈向關羽") is None  # 點名也找不到他
+
+
+def test_an_escort_fires_his_war_tactic_under_his_name(c):
+    holders = tactics.holders_of(c, [("關羽", "guanyu", "guanyu_wugong", "guanyu_neigong")])
+    kit = tactics.side_for(holders, tactics.Ctx(foe="", team=["guanyu"]))
+    d, inst = _battle(c)
+    a, b = _sides(d)
+    _join(c, inst, "甲", a, escort=_escort(kit=kit))
+    _join(c, inst, "乙", b)
+    _open(c, d, inst)
+    fired = []
+    for seed in range(9):
+        if inst.phase == "ended":
+            break
+        _act(inst, d, "甲", "強攻")
+        _act(inst, d, "乙", "強攻")
+        fired += [m for m in _round(c, inst, d, seed=seed) if "〔青龍拖刀〕" in m or "〔刮骨定神〕" in m]
+    assert fired and all("關羽" in m for m in fired)
+
+
+# ── Task 5：加入決戰時挑一位（engine）──
+
+
+def _showdown(content, game):
+    from test_engine import _three_round_showdown
+
+    content.config.companions.enabled = True
+    definition = _three_round_showdown(content)
+    game.state.player.faction = "guan"
+    game.world.start_battle(definition, now=0.0)
+    return definition
+
+
+def test_owners_pick_an_escort_before_joining(content, game):
+    from conftest import at
+    from tianxia import engine, team
+
+    definition = _showdown(content, game)
+    p = game.state.player
+    assert game.world.try_recruit("mate", p.name, cap=3)
+    with at(game, 0.0):
+        assert game.choose("battle:join:guan") == [engine.ESCORT_PICK]
+        assert p.name not in game.world.get_battle().participants  # 挑了才加入
+        assert [o.id for o in game.options()][:3] == ["battle:escort:mate", "battle:escort:none", "battle:escort:back"]
+        game.choose("battle:escort:mate")
+    battle = game.world.get_battle()
+    me = battle.participants[p.name]
+    gen = content.config.battle.generals
+    power = team.mate_power(game.state, content, game.world, "mate")
+    assert me.faction == "guan" and me.escort.cid == "mate" and me.escort.name == "韓鐵"
+    assert me.escort.score == round(bi.strength(content.config.battle, power) * gen.escort_share, 1)
+    assert me.escort.neili == me.escort.neili_cap == team.mate_pool(game.state, content, game.world, "mate") > 0
+    assert engine.ESCORT_MUSTER.format(name="韓鐵") in game._battle_scene_text(battle, definition)
+    game._battle_choose("join:guan")  # 集結時再加入一次（改選、依附那一軍重新快照）：同伴照舊跟著
+    assert game.world.get_battle().participants[p.name].escort.cid == "mate"
+
+
+def test_declining_joins_alone_and_no_companions_means_no_step(content, game):
+    from conftest import at
+
+    _showdown(content, game)
+    p = game.state.player
+    assert game.world.try_recruit("mate", p.name, cap=3)
+    with at(game, 0.0):
+        game.choose("battle:join:guan")
+        game.choose("battle:escort:none")
+    assert game.world.get_battle().participants[p.name].escort is None
+    from test_engine import _fighter
+
+    other = _fighter(content, game, "乙", "guan")
+    with at(other, 0.0):
+        assert other.choose("battle:join:guan") == ["你加入了這場戰局。"]  # 名下沒有同伴：照舊一下就加入
+
+
+def test_the_scene_shows_only_my_escort(content, game):
+    from conftest import at
+    from test_engine import _fighter
+    from tianxia import engine
+
+    definition = _showdown(content, game)
+    assert game.world.try_recruit("mate", game.state.player.name, cap=3)
+    other = _fighter(content, game, "乙", "guan")
+    assert game.world.try_recruit("pupil", "乙", cap=3)
+    with at(game, 0.0):
+        game.choose("battle:join:guan")
+        game.choose("battle:escort:mate")
+    with at(other, 0.0):
+        other.choose("battle:join:guan")
+        other.choose("battle:escort:pupil")
+    battle = game.world.get_battle()
+    battle_instance_close = bi.close_muster
+    battle_instance_close(battle, definition, random.Random(0), 0.0, content.config.battle)
+    text = game._battle_scene_text(battle, definition)
+    assert engine.ESCORT_SCENE.format(name="韓鐵", hp=round(battle.participants[game.state.player.name].escort.neili),
+                                      cap=round(battle.participants[game.state.player.name].escort.neili_cap)) in text
+    assert "小六" not in text  # 別人的同伴不列
+
+
+# ── Task 6：打完回江湖 ──
+
+
+def _ride_in(content, game, affinity=80):
+    from conftest import at
+
+    definition = _showdown(content, game)
+    p = game.state.player
+    assert game.world.try_recruit("mate", p.name, cap=3)
+    p.team.append("mate")
+    p.affinities["mate"] = affinity
+    with at(game, 0.0):
+        game.choose("battle:join:guan")
+        game.choose("battle:escort:mate")
+    return definition
+
+
+def test_the_escort_returns_to_the_world_when_the_battle_ends(content, game):
+    from test_engine import _fight_to_the_end
+    from tianxia import escorts
+
+    definition = _ride_in(content, game)
+    _fight_to_the_end(game, definition, definition.muster_seconds + 1)
+    assert game.world.get_companion("mate").owner is None  # 收場那一刻全服放掉，別人馬上招得到
+    p = game.state.player
+    assert "mate" not in p.team and p.affinities["mate"] == 40  # 情誼減半
+    said = [line for entry in game.state.journal for line in entry.lines]
+    assert any(escorts.RETURN_LINE.format(name="韓鐵") in line or escorts.FELL_RETURN_LINE.format(name="韓鐵") in line for line in said)
+    assert escorts.PARTED_LINE.format(name="韓鐵", before=80, after=40) in said
+    assert p.parted_done == ["mate"]  # 減過了；全服的記號留到下一次再叫到才清（FB-361）
+    game._settle_partings()
+    assert p.affinities["mate"] == 40 and p.parted_done == []  # 不再減半
+    assert game.world.get_companion("mate").parted_from == []
+
+
+def test_a_battle_ended_by_the_owners_own_poll_still_halves(content, game):
+    """FB-361：收場那一下是主人自己的輪詢（server.act_look：先同步、存檔，再組畫面；options() 在畫面那一段把決戰追到收場）。
+    畫面那一段對角色的改動不存（下一次同步再補戰報），可是全服的記號照樣提交：記號要留到存了減半的那一份角色才清，不然永遠不減半。"""
+    from conftest import at
+    from tianxia import escorts
+
+    definition = _ride_in(content, game)
+    p_name = game.state.player.name
+    now = definition.muster_seconds + 1
+    for _ in range(100):  # 每一回合都逾時、由輪詢結算（主人不出手，代為固守）
+        saved = game.state.model_copy(deep=True)  # 輪詢存檔那一刻的角色
+        with at(game, now):
+            game.options()  # 組畫面：逾時結算、收場、補戰報（不存）
+        battle = game.world.get_battle()
+        if battle.phase == "ended":
+            break
+        assert p_name not in battle.round.pending_actions
+        now = battle.round.opened_real + definition.round_seconds
+    assert game.world.get_battle().phase == "ended"
+    assert game.world.get_companion("mate").owner is None  # 全服那一份已經提交
+    world = game.state.world
+    game.state = saved  # 畫面那一段對角色的改動丟掉（act_look 不存）
+    game.state.world = world
+    assert game.state.player.affinities["mate"] == 80
+    with at(game, now + 60):
+        game.sync(now + 60)  # 下一次輪詢：補戰報、減半
+    p = game.state.player
+    assert p.affinities["mate"] == 40 and "mate" not in p.team
+    said = [line for entry in game.state.journal for line in entry.lines]
+    assert said.count(escorts.PARTED_LINE.format(name="韓鐵", before=80, after=40)) == 1
+    assert game.world.get_companion("mate").parted_from == []
+    game._settle_partings()
+    assert p.affinities["mate"] == 40 and p.parted_done == []  # 不再減半、記帳收乾淨
+
+
+def test_a_new_owner_is_not_cleared(content, game):
+    """Review Focus 2：打到一半主人放走他、別人招走了，收場不能把新主人的清掉，原主人的情誼也不減半。"""
+    from test_engine import _fight_to_the_end
+
+    definition = _ride_in(content, game)
+    game.release_companion("mate")
+    assert game.world.try_recruit("mate", "乙", cap=3)
+    _fight_to_the_end(game, definition, definition.muster_seconds + 1)
+    assert game.world.get_companion("mate").owner == "乙"
+    assert game.state.player.affinities["mate"] == 80
+
+
+def test_shelved_or_cancelled_battles_send_no_one_back(content, game):
+    """Review Focus 5：季終收兵、管理者取消（unfinished）的那一場不算派過。"""
+    _ride_in(content, game)
+    game._shelve_unfinished_battle("這一仗沒有打成。")
+    game.sync(10.0)
+    assert game.world.get_companion("mate").owner == game.state.player.name
+    assert "mate" in game.state.player.team and game.state.player.affinities["mate"] == 80
+
+
+def test_parting_halves_at_the_next_sync(content, game):
+    content.config.companions.enabled = True
+    p = game.state.player
+    p.affinities["mate"] = 81
+    game.world.update_companion("mate", lambda pr: pr.parted_from.append(p.name))
+    game.sync(10.0)
+    assert p.affinities["mate"] == 40 and p.parted_done == ["mate"]  # 記號留到下一次同步（FB-361）
+    game.sync(20.0)
+    assert p.affinities["mate"] == 40 and p.parted_done == [] and game.world.get_companion("mate").parted_from == []

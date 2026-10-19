@@ -22,6 +22,7 @@ def real():
     c = classic_rules(real_content())  # 晉升奇遇的推力照出陣探索與地盤之前的規則量（事件推戰線不打五折、不打盡頭阻力）
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
+    c.config.affinity_gain_scale = 1.0  # 這裡量的是寫好的情誼數字；歷史武將同行的情誼放慢（Config.affinity_gain_scale）另測（tests/test_companions.py）
     return c
 
 
