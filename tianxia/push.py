@@ -96,6 +96,8 @@ def add_contribution(player: PlayerState, week: int, points: int) -> None:
 
 
 RESISTED_LINE = "深入敵境，推進艱難。"  # 待 joy 潤：盡頭阻力打了折的那一下，推動那一行後面多這一句（出陣探索與地盤設計 5.1）
+# 站在自家陣營控制的地方（守、巡哨、傳道……）推過頭：不是深入敵境（FB-432；待 joy 潤）
+STEADY_LINE = "此地已穩，再推也只是聊盡人事。"
 
 
 def resistance_share(value: float, direction: float, tuning: PushResistance) -> float:

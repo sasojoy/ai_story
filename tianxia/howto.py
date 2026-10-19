@@ -331,10 +331,13 @@ def sortie_lines(content: Content, allied: bool = False) -> list[str]:
     ]
 
 
-def explore_lines(content: Content) -> list[str]:
-    """玩法說明「行動」裡探索那一條（三選一開著時取代照地點比例那一條；待 joy 潤）。數字讀 Config。"""
+def explore_lines(content: Content, season: WorldState | None = None) -> list[str]:
+    """玩法說明「行動」裡探索那一條（三選一開著時取代照地點比例那一條；待 joy 潤）。數字讀 Config。
+    一類一顆在這一季生效時（precise.on）寫另一版：找素材一定給、不打仗，練功另一條（FB-422）；舊季一個字都不變。"""
     cfg = content.config
     names = explore_modes.NAMES
+    if precise.on(content, season):
+        return precise_explore_lines(content)
     legend = f"三種都有機會撿到{cfg.legend_item_name}。" if cfg.explore_legend_chance > 0 else ""
     econ = cfg.economy  # 素材與經濟設計第七節：一階從一定給改成七成
     first = f"（一階約 {econ.gather_first_chance * 10:g} 成撿得到）" if econ.gather_cut else ""
@@ -342,6 +345,20 @@ def explore_lines(content: Content) -> list[str]:
         f"- **探索**（體力 {cfg.action_cost['explore']}）：點開三選一。{names['gather']}：照這裡的地形撿素材{first}，"
         f"城外約 {cfg.explore_modes.encounter_chance * 10:g} 成會撞上怪，打贏是經驗的大宗；{names['seek']}：碰上這一帶的事，偶有奇遇；"
         f"{names['sense']}：只在悟得到意境的地方。{legend}",
+    ]
+
+
+def precise_explore_lines(content: Content) -> list[str]:
+    """一類一顆的探索與練功（FB-422；正式季整合 2.4、2.5；待 joy 潤）。數字讀 Config。"""
+    cfg = content.config
+    names = explore_modes.NAMES
+    cost = cfg.action_cost["explore"]
+    legend = f"每一種都有機會撿到{cfg.legend_item_name}。" if cfg.explore_legend_chance > 0 else ""
+    return [
+        f"- **探索**（體力 {cost}）：點開來挑一種。{names['gather']}：照這裡的地形一定撿得到素材，不打仗；"
+        f"{names['seek']}：碰上這一帶的事（交友的事也在這裡），偶有奇遇；{names['sense']}：只在悟得到意境的地方。{legend}",
+        f"- **{names['practice']}**（在探索裡，體力 {cost}）：找這裡的對手打一場，一定開打、不限次數，打贏是經驗的大宗；"
+        "城鎮與沒有對手的地方灰著。有頭目的地方，頭目在練功時碰上。",
     ]
 
 
@@ -577,7 +594,7 @@ def _plus(span: FameRange) -> str:
 
 def fame_lines(content: Content, season: WorldState) -> list[str]:
     """玩法說明「名望」那一節：從哪裡來（事件三堆、第一季的首創回饋、決戰最有戲的那一搏）、拿來做什麼（求見門檻、視野〔全圖開放時沒有〕、拜師學藝）。數字讀內容與設定。"""
-    return [*_fame_sources(content, season), _fame_uses(content)]
+    return [*_fame_sources(content, season), _fame_uses(content, season=season)]
 
 
 def _fame_sources(content: Content, season: WorldState) -> list[str]:
@@ -633,14 +650,17 @@ def _fame_sources(content: Content, season: WorldState) -> list[str]:
     return lines
 
 
-def _fame_uses(content: Content, k: float = 1.0) -> str:
-    """名望拿來做什麼：求見與拜師的門檻乘 k（名聲開著時是這一季的倍數，rules.audience_parts、library 照同一個算法）。"""
+def _fame_uses(content: Content, k: float = 1.0, season: WorldState | None = None) -> str:
+    """名望拿來做什麼：求見與拜師的門檻乘 k（名聲開著時是這一季的倍數，rules.audience_parts、library 照同一個算法）。
+    一類一顆在這一季生效時求見併進交友、不夠的見不到（FB-422）。"""
     cfg = content.config
     scaled = lambda n: int(n * k + 0.5)  # noqa: E731
     bars = sorted(ch.audience_fame for ch in content.characters.values() if ch.deep_interaction and ch.audience_fame > 0)
     uses = []
     if bars:
-        uses.append(f"求見大勢人物（門檻最低 {scaled(bars[0])}、最高 {scaled(bars[-1])}；不夠的會打發你）")
+        span = f"門檻最低 {scaled(bars[0])}、最高 {scaled(bars[-1])}"
+        uses.append(f"跟大勢人物說上話（{span}；不夠的見不到）" if precise.on(content, season)
+                    else f"求見大勢人物（{span}；不夠的會打發你）")
     if not cfg.open_map:  # 全圖開放（企劃者 2026-10-15）沒有視野，名望不再多看一站
         uses.append(f"名望到 {cfg.vision_fame}，輿圖多看一站")
     lessons = sorted(s.learn.fame for s in content.skills.values() if s.learn is not None and s.learn.fame > 0)
@@ -698,7 +718,7 @@ def renown_lines(content: Content, season: WorldState) -> list[str]:
     if cfg.battle.top_fame > 0:
         lines.append(RENOWN_TOP.format(n=cfg.battle.top_fame))
     lines += _fame_sources(content, season)
-    lines.append(_fame_uses(content, renown.scale(season)))
+    lines.append(_fame_uses(content, renown.scale(season), season))
     lines.append(RENOWN_VIRTUE_FROM)
     if cfg.resonance_cap > 0:
         lines.append(RENOWN_RESONANCE.format(per=cfg.resonance_per_point * 100, cap=cfg.resonance_cap * 100))
@@ -973,7 +993,8 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
     allied = rules.haoqiang_allied(content, season)  # 豪強分屬兩軍的季（企劃者 2026-10-15）：沒有第三方、割據、攪局
     legend = f"每次探索還有機會撿到{cfg.legend_item_name}。" if cfg.explore_legend_chance > 0 else ""
     bond = [
-        "- 跟人物談話，照你說的話漲跌；談話時他的名字旁邊寫著（求見名單上也有）。",
+        "- 跟人物談話，照你說的話漲跌；談話時他的名字旁邊寫著（"
+        + ("交友名單上也有）。" if precise.on(content, season) else "求見名單上也有）。"),
         f"- 情誼到 {cfg.signature_affinity}，有些人物會把本命武學傳給你。",
     ]
     if first:
@@ -996,10 +1017,11 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
     lines = [
         *_section("這一季在打什麼", season_page_lines(content, season, rule)),
         "#### 行動",
-        *(explore_lines(content) if explore_modes.on(content) else old_explore),
+        *(explore_lines(content, season) if explore_modes.on(content) else old_explore),
         *(sortie_lines(content, allied) if sortie.on(content) else old_train),
         f"- **交友**（體力 {cost['socialize']}）：見這裡的人物談話（每輪體力 {cfg.talk_stamina}，同一位人物{day_every(content, season)}最多 "
-        f"{cfg.talk_turns_per_day} 輪），或碰上交友的事。名望不夠的人物會打發你。",
+        + (f"{cfg.talk_turns_per_day} 輪）。名望不夠的人物在名單上灰著，寫還差多少；交友的事在探索的{explore_modes.NAMES['seek']}裡。"
+           if precise.on(content, season) else f"{cfg.talk_turns_per_day} 輪），或碰上交友的事。名望不夠的人物會打發你。"),
         "- **移動**：步行不花體力、只花時間；疾行立刻到、要花體力。步行時，每一段路可以邊走邊想、"
         + ("沿途打聽、路邊採集各一次。" if cfg.open_map else "沿途打聽、留意地形、路邊採集各一次。"),  # 全圖開放拿掉了留意地形
         "",
@@ -1027,8 +1049,10 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
         "#### 意境",
         # 有所感（sensing.choose、sensing.menu）：選對了還要擲一次（rate，沒中給 sense_miss_xinde）；中了可以畫、也可以順其自然（審查 M2）
         # 選錯了要到換日才悟得出（sensing.missed_today；遊戲日跟著季長縮）：說明頁不看此刻，不寫「今天」，寫「一陣子」，時刻看卡上那一行
-        f"- {sense_when}時「有所感」，先選做法：選錯了，那裡要過一陣子才悟得出（選之前卡上就寫著要到什麼時候）；"
-        "選對了還要看機緣（沒抓住也有一點心得），"
+        f"- {sense_when}時「有所感」，先選做法："
+        + (f"選錯了得 {cfg.sense_miss_xinde} 心得，那裡照樣悟得出；" if precise.on(content, season)
+           else "選錯了，那裡要過一陣子才悟得出（選之前卡上就寫著要到什麼時候）；")
+        + "選對了還要看機緣（沒抓住也有一點心得），"
         "抓住了可以畫一筆，也可以順其自然。哪裡悟得到什麼看地形。" + (STRONG_HOWTO if cfg.insight_strong.enabled else ""),
         "- 善名、惡名夠高也會悟到意境。合成、合併都不會把意境用掉（自己熔掉才沒了）。",
         "- 一門武學融一個意境，合成新的武學；兩門武學也能合出第三門；兩個意境合併成新的意境。"

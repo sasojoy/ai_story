@@ -177,17 +177,20 @@ STRIKE_PRECISE = "到{target}練功或出陣攻打贏一場{enemy}的隊伍"
 STRIKE_PRACTICE = "到{target}練功打贏一場{enemy}的隊伍"
 
 
-def how(content: Content, b: Bounty, world: WorldState | None = None) -> str:
+def how(content: Content, b: Bounty, state: GameState | None = None, world: WorldState | None = None) -> str:
     """怎麼完成（一句）。討伐在出陣開著時寫出陣攻（與探索三選一的找素材撞上），不寫遊歷（FB-249）；一類一顆在這一季生效時
-    （precise.on，要給 world）寫練功（FB-420：找素材不打仗了）。懸賞卡、告示、紙上、揭下的回話、傳聞與書信都走這一句。"""
+    （precise.on，要給 state 或 world）寫練功（FB-420：找素材不打仗了），看的人是散人（不出陣）只寫練功。懸賞卡、告示、紙上、揭下的回話、
+    傳聞與書信都走這一句；只給 world 的（陣營傳聞，沒有看的人）照陣營的人寫（FB-435）。"""
+    world = state.world if state is not None else world
     if b.motive == "求援":  # 求援委託：護衛、犒軍那位人物也算（大勢人物擴充第三批，跟「大勢人物參戰與護衛」對齊）
-        return how(content, b.model_copy(update={"motive": None}), world) + RALLY_AID.format(who=issuer(content, b))
+        return how(content, b.model_copy(update={"motive": None}), state, world) + RALLY_AID.format(who=issuer(content, b))
     if b.kind == "strike":
         from . import explore_modes, precise, sortie  # noqa: PLC0415  延後 import 只是保險
 
         target = _loc_name(content, b.location)
         if precise.on(content, world):
-            line = STRIKE_PRECISE if sortie.on(content) else STRIKE_PRACTICE
+            ranger = state is not None and state.player.faction is None  # 散人不出陣
+            line = STRIKE_PRECISE if sortie.on(content) and not ranger else STRIKE_PRACTICE
             return line.format(target=target, enemy=_enemy_name(content, b))
         if sortie.on(content):
             ways = f"{STRIKE_SORTIE}，{STRIKE_GATHER}" if explore_modes.on(content) else STRIKE_SORTIE
@@ -598,7 +601,7 @@ def take(state: GameState, content: Content, bounty_id: str) -> list[str]:
         return [problem]
     if name_key(state.player.name) not in (name_key(t) for t in b.takers):
         b.takers.append(state.player.name)
-    return [f"你揭下了「{title(content, b)}」：{how(content, b, state.world)}。（{reward_text(state, content, b)}；{due_line(state, content, b)}）"]
+    return [f"你揭下了「{title(content, b)}」：{how(content, b, state)}。（{reward_text(state, content, b)}；{due_line(state, content, b)}）"]
 
 
 def drop(state: GameState, content: Content, bounty_id: str) -> list[str]:
@@ -1550,7 +1553,7 @@ def targets(state: GameState, content: Content) -> list[str]:
 
 
 def _row(state: GameState, content: Content, b: Bounty) -> dict:
-    row = {"id": b.id, "title": title(content, b), "how": how(content, b, state.world), "reward": reward_text(state, content, b),
+    row = {"id": b.id, "title": title(content, b), "how": how(content, b, state), "reward": reward_text(state, content, b),
            "issuer": issuer(content, b), "due": due_line(state, content, b)}
     tags = reward_tags(state, content, b)
     if tags is not None:  # 21 天季：賞拆成小籤、照等級的那一句（週末與 14 天的季沒有這兩個鍵）

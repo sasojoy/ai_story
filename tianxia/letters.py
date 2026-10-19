@@ -147,7 +147,7 @@ def _help_letter(state: GameState, content: Content, rng: random.Random) -> Lett
             continue
         place = figure_life.where(state, content, cid)
         text = HELP_TEXT[mood].format(hero=gender.hero(p), place=content.locations[place].name if place in content.locations else "",
-                                      task=bounties.how(content, task, state.world))
+                                      task=bounties.how(content, task, state))
         return Letter(id=task_id(task), kind="求援", sender=cid, at=w.time, mood=mood, text=text, task=task)
     return None
 
@@ -214,7 +214,7 @@ def view(state: GameState, content: Content) -> dict | None:
     t = letter.task
     if t is not None:
         live = not letter.lapsed and not t.done_by and t.expires > state.world.time
-        out["task"] = {"title": bounties.title(content, t), "how": bounties.how(content, t, state.world),
+        out["task"] = {"title": bounties.title(content, t), "how": bounties.how(content, t, state),
                        "reward": bounties.commission_reward(state, content, t),
                        "due": f"期限 {bounties.due_text(t, content, state.world)}", "live": live,
                        "state": "辦成了" if t.done_by else "作罷了" if letter.lapsed or not live else ""}
@@ -272,7 +272,7 @@ def request(state: GameState, content: Content) -> LetterNote | None:
     persona = "；".join(x for x in ((ch.personality if ch else ""), (ch.situation if ch else "")) if x)
     return LetterNote(
         id=letter.id, kind=letter.kind, sender=letter.sender, sender_name=_name(content, letter.sender), persona=persona[:200],
-        mood=letter.mood, about=letter.about, task=bounties.how(content, letter.task, state.world) if letter.task else "",
+        mood=letter.mood, about=letter.about, task=bounties.how(content, letter.task, state) if letter.task else "",
         hero=gender.hero(state.player), player=state.player.name, fixed=letter.text,
     )
 
