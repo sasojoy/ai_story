@@ -1,0 +1,9 @@
+[
+  {"kind": "brother", "members": ["zhangjiao", "zhangbao", "zhangliang"]},
+  {"kind": "brother", "members": ["liubei", "guanyu", "zhangfei"]},
+  {"kind": "mentor", "head": "luzhi", "members": ["liubei", "gongsunzan"]},
+  {"kind": "chief", "head": "huangfusong", "members": ["fuxie", "caocao"]},
+  {"kind": "foe", "members": ["qinjie", "zhangmancheng"]},
+  {"kind": "foe", "members": ["wangyun", "zhangrang"]},
+  {"kind": "foe", "members": ["tangzhou"], "faction": "huang"}
+]

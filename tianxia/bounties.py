@@ -148,6 +148,8 @@ def title(content: Content, b: Bounty) -> str:
         return f"{kind}・{b.attribute}"
     if b.kind == "arms":
         return f"{kind}・屬{b.attribute}的{_noun(b)}"
+    if b.kind == "strike" and b.motive in ("復仇", "追剿"):  # 人物掛的（大勢人物擴充第二批）：「復仇・汝南的官軍」
+        return f"{b.motive}・{_loc_name(content, b.location)}的{_enemy_name(content, b)}"
     if b.kind == "strike":
         return f"{kind}・{_loc_name(content, b.location)}的{_enemy_name(content, b)}"
     if b.kind == "escort":
@@ -175,6 +177,8 @@ def how(content: Content, b: Bounty) -> str:
         return f"到{target}遊歷，打贏一場{_enemy_name(content, b)}的隊伍"
     if b.kind == "scout":
         return f"到{_loc_name(content, b.location)}探索一次"
+    if b.kind == "escort" and b.motive == "委託":  # 書信附的委託：信已經在你手上
+        return f"替{issuer(content, b)}把書信送到{_loc_name(content, b.end)}"
     if b.kind == "escort":
         return f"在{_loc_name(content, b.location)}接下，走到{_loc_name(content, b.end)}"
     if b.kind == "art":  # 待 joy 潤
@@ -188,7 +192,14 @@ def _enemy_name(content: Content, b: Bounty) -> str:
     return content.scenario.faction_name(ENEMY.get(b.faction or "")) or "敵軍"
 
 
+def enemy_name(content: Content, b: Bounty) -> str:
+    """討伐要打的那一方（figure_life 寫復仇懸賞那一句用）。"""
+    return _enemy_name(content, b)
+
+
 def issuer(content: Content, b: Bounty) -> str:
+    if b.figure is not None and b.figure in content.characters:  # 人物掛的、人物託的（大勢人物擴充第二批）
+        return content.characters[b.figure].name
     if b.auto_by == "官府":  # 名聲 5.4
         return OFFICIAL
     return content.scenario.faction_name(b.faction) or "江湖"
@@ -489,7 +500,42 @@ def _complete(state: GameState, content: Content, world: WorldStateStore, b: Bou
         msgs += renown.ranger_bounty_note(state, content, ranger.bounty_factor(state, content))  # 名聲 6.3：加成說出原因
     if b.prize and first:  # 哪一件到這一刻才定（季數＋名號＋懸賞 id 的亂數）；裝備庫滿了寄放
         msgs += treasures.bounty_prize(state, content, world.get_season_number(), b.id, b.prize, issuer(content, b))
+    msgs += _figure_thanks(state, content, b, content.config.figure_life.revenge_affinity)
     return msgs
+
+
+def _figure_thanks(state: GameState, content: Content, b: Bounty, amount: int) -> list[str]:
+    """人物掛的、人物託的（大勢人物擴充第二批）交差了：那位人物的情誼加 amount（最多 100）。"""
+    if b.figure is None or b.figure not in content.characters or amount <= 0:
+        return []
+    p = state.player
+    before = p.affinities.get(b.figure, 0)
+    p.affinities[b.figure] = min(100, before + amount)
+    moved = p.affinities[b.figure] - before
+    return [f"{content.characters[b.figure].name}情誼 +{moved}"] if moved else []
+
+
+COMMISSION_DONE = "【委託】{who}託你的事辦成了：「{title}」。"  # 待 joy 潤
+
+
+def open_commissions(state: GameState, content: Content) -> list[Bounty]:
+    """身上還沒辦完、沒過期、沒婉拒的委託（求援書信附的，letters.py）。休季沒有。"""
+    w = state.world
+    if w.ended:
+        return []
+    return [x.task for x in state.player.letters
+            if x.task is not None and not x.lapsed and not x.task.done_by and x.task.expires > w.time]
+
+
+def _complete_commission(state: GameState, content: Content, b: Bounty) -> list[str]:
+    """委託辦成了：銀兩 b.silver（不乘散人加成與陣營成數，委託是那位人物私下給的）、那位人物情誼 +commission_affinity。"""
+    p = state.player
+    b.done_by.append(p.name)
+    p.stats["silver"] = p.stats.get("silver", 0) + b.silver
+    msgs = [COMMISSION_DONE.format(who=issuer(content, b), title=title(content, b))]
+    if b.silver:
+        msgs.append(f"銀兩 +{b.silver}")
+    return msgs + _figure_thanks(state, content, b, content.config.figure_life.commission_affinity)
 
 
 def _done(state: GameState, content: Content, world: WorldStateStore, match) -> list[str]:
@@ -497,6 +543,9 @@ def _done(state: GameState, content: Content, world: WorldStateStore, match) -> 
     for b in mine(state, content):
         if match(b):
             msgs += _complete(state, content, world, b)
+    for b in open_commissions(state, content):  # 求援書信附的委託（大勢人物擴充第二批）：照同一套交差
+        if match(b):
+            msgs += _complete_commission(state, content, b)
     return msgs
 
 
@@ -1061,6 +1110,51 @@ def _spread(rng: random.Random, attributes: list[str], n: int) -> list[str]:
     return picks + [rng.choice(list(attributes)) for _ in range(n - len(picks))]
 
 
+def commission_reward(state: GameState, content: Content, b: Bounty) -> str:
+    """委託的賞（書信那張卡、懸賞卡）：「賞銀 30・張梁情誼 +5」。待 joy 潤。"""
+    parts = [f"賞銀 {b.silver}"] if b.silver else []
+    amount = content.config.figure_life.commission_affinity
+    if amount and b.figure in content.characters:
+        parts.append(f"{content.characters[b.figure].name}情誼 +{amount}")
+    return "・".join(parts)
+
+
+def post_figure(state: GameState, content: Content, cid: str, motive: str, region: str | None, spot: str | None) -> Bounty | None:
+    """人物掛一張懸賞（大勢人物擴充第二批，figure_life.on_fall）：討伐，掛單的是 cid 那一方，打的是對頭；地點在 region 那一區，
+    倒下的地方（spot）有對頭的隊伍就掛那裡，否則照那一區的地點挑（自己一份亂數：天機｜人物｜此刻）。賞銀是一般討伐的
+    revenge_silver_scale 倍，掛 revenge_cal_days 個季曆天。懸賞榜關著、cid 不是交戰兩軍、那一區沒有對頭站著的地方、
+    同一位人物還有一張有效的同一種，都不掛（回 None）。"""
+    from . import atlas  # noqa: PLC0415  atlas → world → rules：延後載入
+
+    from .relations import side_of  # noqa: PLC0415
+
+    side = side_of(content, cid)
+    if not active(state, content) or side not in ENEMY or region is None:
+        return None
+    w, cfg, tuning = state.world, content.config.bounties, content.config.figure_life
+    if any(b.figure == cid and b.motive == motive for b in open_bounties(state, content)):
+        return None
+
+    def in_region(loc_id: str) -> bool:
+        found = atlas.region_of(content, loc_id)
+        return found is not None and found.id == region
+
+    spots = [x for x in _strike_spots(content, w, side, set()) if in_region(x[0])]
+    if not spots:
+        return None
+    here = [x for x in spots if x[0] == spot]
+    pick = here[0] if here else random.Random(f"人物懸賞|{w.tianji}|{cid}|{w.time}").choice(spots)
+    w.bounty_seq += 1
+    made = Bounty(
+        id=f"b{w.bounty_seq}", kind="strike", faction=side, week=calendar.point(w.time, content, w).week,
+        expires=w.time + tuning.revenge_cal_days * 24 * calendar.cal_hour_seconds(content, w),
+        silver=round(cfg.silver.get("strike", 0) * tuning.revenge_silver_scale), deeds=cfg.deeds.get("strike", 0),
+        quota=quota(content), location=pick[0], squad=pick[1], figure=cid, motive=motive,
+    )
+    w.bounties.append(made)
+    return made
+
+
 def issue(state: GameState, content: Content, week: int, rng: random.Random | None = None) -> list[str]:
     """週初掛單（第一季：world.WEEK_HOOKS；規則關著的季：tick）：陣營掛的舊單下榜（通緝照自己的期限），兩個陣營各掛 kinds 裡的每一張
     （只挑已開放的地點〔_opened，FB-150：南華觀要等 xi_open 立起來〕，避開榜上還有效〔沒過期、名額沒滿〕的同種單已經用掉的地點，
@@ -1147,7 +1241,7 @@ def issue(state: GameState, content: Content, week: int, rng: random.Random | No
 def targets(state: GameState, content: Content) -> list[str]:
     """假人往哪裡走：手上每一張要去的地點（討伐、打探：那裡；護送：終點）。"""
     out = []
-    for b in mine(state, content):
+    for b in mine(state, content) + open_commissions(state, content):  # 委託也去（大勢人物擴充第二批）
         if b.kind == "escort":
             out.append(b.end)
         elif b.kind in ("strike", "scout"):
@@ -1181,6 +1275,8 @@ def status(state: GameState, content: Content, world: WorldStateStore) -> list[d
     合用照 fitting 判、不看人在哪裡：人在城外也列，知道去城鎮交（不能用 give_problem，它要人在城鎮，設計 4.9）。
     每次 /api/main 都算：只在榜上有接得了、自己還沒交過的求藝、求兵時才找合用的；查過的武學存進這一次的 memo。"""
     rows = [_row(state, content, b) for b in mine(state, content)]
+    rows += [{**_row(state, content, b), "reward": commission_reward(state, content, b), "commission": True}
+             for b in open_commissions(state, content)]  # 委託（大勢人物擴充第二批）：跟手上揭了的排在一起
     me = name_key(state.player.name)
     memo: dict = {}
     for b in open_bounties(state, content):
