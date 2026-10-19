@@ -1902,7 +1902,7 @@ def test_a_blend_that_lands_on_a_known_art_asks_the_model_to_pick_outside_the_lo
     world = open_world()
     key = fusion.blend_key("jichu_quanjiao", "jichu_tuna")
     quanjiao, tuna = (team.resolve_art(i, game.content, world) for i in ("jichu_quanjiao", "jichu_tuna"))
-    shape = fusion.blend_shape(quanjiao, tuna, fusion.recipe_seed(world, key)[1])
+    shape = fusion.blend_shape(quanjiao, tuna, fusion.recipe_seed(world, key)[1], fusion.blend_gens(content, world, quanjiao, tuna))
     for i, name in enumerate(("甲拳", "乙拳")):
         known = generate_from_name(name, shape.kind, name).model_copy(update={
             "origin": "fused", "attribute": shape.attribute, "lean": shape.lean, "creator": "丙",

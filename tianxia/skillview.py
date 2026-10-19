@@ -112,6 +112,8 @@ def _quality_note(state: GameState, content: Content, odds: fusion.QualityOdds) 
     """合成前寫這一爐算出來的品質機率與一句原因、不寫確定的品級（企劃者 2026-10-06）；序章那一爐照劇本是下品。"""
     if prologue.fuse_base(state, content) is not None:
         return "從下品起修"
+    if odds.fixed:  # 合成即設計：照投入定的那一品直接寫出來
+        return f"合出來是{fusion.quality_odds_text(odds, content.config.fuse_quality.near)}"
     return f"品質看造化：{fusion.quality_odds_text(odds)}"
 
 
@@ -139,13 +141,18 @@ def forge_line(
         a, b = team.player_art(state, content, world, art_id), team.player_art(state, content, world, other_art)
         if a is None or b is None:
             return "（選了不存在的東西。）"
-        shape = fusion.blend_shape(a, b, fusion.recipe_seed(world, fusion.blend_key(art_id, other_art))[1])
+        seed = fusion.recipe_seed(world, fusion.blend_key(art_id, other_art))[1]
+        gens = fusion.blend_gens(content, world, a, b)
+        shape = fusion.blend_shape(a, b, seed, gens)
         odds = fusion.blend_odds(state, content, art_id, a, other_art, b, shape=shape)
         head = (
             f"**合成**　【{a.name}】＋【{b.name}】→ 一門新{shape.kind}（屬{shape.attribute}，{_quality_note(state, content, odds)}），"
             f"花 {cfg.fuse_xinde} 點心得、{cfg.fuse_stamina} 點體力（你有 {xinde} 點心得）。"
         )
         head += _blend_depth_note(content, world, a, b, shape.attribute)
+        head += _pick_note(depth.pick_note(a, b, gens[0], gens[1], seed, "境界"))
+        head += _trait_note(state, content, depth.blend_traits(content, a, b, shape.attribute), odds)
+        head += _inherit_note(content, [level_of(state, art_id) or 1, level_of(state, other_art) or 1])
         head += _known_recipe(state, content, world, fusion.blend_key(art_id, other_art))
         problem = fusion.blend_problem(state, content, world, art_id, other_art)
     elif art_id and not other_art and len(insight_ids) == 1:
@@ -162,6 +169,11 @@ def forge_line(
             f"花 {cfg.fuse_xinde} 點心得、{cfg.fuse_stamina} 點體力（你有 {xinde} 點心得）。"
         )
         head += _fuse_depth_note(state, content, world, base, insight)
+        head += _trait_note(
+            state, content,
+            depth.fuse_traits(content, base, insight.attribute, depth.layers_of(insight, content, world, state)), odds,
+        )
+        head += _inherit_note(content, [level_of(state, art_id) or 1])
         head += _known_recipe(
             state, content, world, fusion.fuse_key(art_id, insight_ids[0], insight.attribute),
             preset=fusion.preset_for(content, art_id, insight_ids[0]) is not None,
@@ -173,13 +185,17 @@ def forge_line(
         a, b = (insights.resolve(i, content, world, state) for i in insight_ids)
         if a is None or b is None:
             return "（選了不存在的東西。）"
-        attribute, _ = fusion.merge_shape(world, a, b)  # 跟 fusion.merge 真的登記的同一個函式算的（FB-082）
+        attribute, _ = fusion.merge_shape(world, a, b, content, state)  # 跟 fusion.merge 真的登記的同一個函式算的（FB-082）
         head = (  # 三種合成都花體力（設計 12.1）：不夠的話下面的 ⚠ 會說
             f"**合併**　「{a.name}」＋「{b.name}」→ 一個新的意境（屬{attribute}），"
             f"花 {cfg.merge_xinde} 點心得、{cfg.merge_stamina} 點體力（你有 {xinde} 點心得）。"
         )
         rank, mood = depth.merged_depth(a, b, content, world, state)
         head += f"\n合出來是{depth.RANK_WORDS[rank]}・{mood}（{'兩股意相生' if mood == depth.HARMONY else '兩股意硬湊'}）。"
+        head += _pick_note(depth.pick_note(
+            a, b, depth.rank_of(a, content, world, state), depth.rank_of(b, content, world, state),
+            fusion.recipe_seed(world, fusion.merge_key(a.id, b.id))[1], "重數",
+        ))
         head += _known_insight_recipe(state, world, fusion.merge_key(*insight_ids))
         problem = fusion.merge_problem(state, content, world, *insight_ids)
     elif bool(art_id) != bool(insight_ids) and not other_art and len(insight_ids) <= 1:
@@ -202,6 +218,37 @@ def _fuse_depth_note(state: GameState, content: Content, world: WorldStateStore,
         f"\n合出來的境界是{depth.gen_label(gen)}；「{insight.name}」{depth.label(insight, content, world, state)}，"
         f"給 {layers} 層功效；{depth.KEEP_LINE[rel]}。"
     )
+
+
+def _pick_note(note: str | None) -> str:
+    return f"\n{note}。" if note else ""
+
+
+def _trait_note(state: GameState, content: Content, new_traits: list[str], odds: fusion.QualityOdds) -> str:
+    """合成即設計定案第三節：合成前就寫出合出來那一門的功效與層數（「功效：先手 ×3、化勁 ×1」），
+    技能分檔開著時再寫定的那一品亮幾格（fixed 才知道是哪一品；擲骰的爐不寫）。只讀內容，不擲。"""
+    if not new_traits or not content.traits.general:
+        return ""
+    counts: dict[str, int] = {}
+    for attribute in new_traits:
+        counts[attribute] = counts.get(attribute, 0) + 1
+    parts = []
+    for attribute, n in counts.items():
+        try:
+            parts.append(f"{traits.general(content, attribute).name} ×{n}")
+        except KeyError:
+            parts.append(f"{attribute} ×{n}")
+    line = f"\n功效：{'、'.join(parts)}"
+    if odds.fixed and content.config.skill_slots.enabled:
+        lo, hi = (content.config.skill_slots.slots.get(odds.fixed) or [1, 1])[:2]
+        line += f"；{odds.fixed}亮 {int(lo)}～{int(hi)} 格" if lo != hi else f"；{odds.fixed}亮 {int(lo)} 格"
+    return line + "。"
+
+
+def _inherit_note(content: Content, levels: list[int]) -> str:
+    """合成即設計定案第二節：承底的成數先說（第一成不說）。"""
+    level = fusion.inherited_level(content, levels)
+    return f"\n承底子的火候，一上手便是第{level}成。" if level > 1 else ""
 
 
 def _blend_depth_note(content: Content, world: WorldStateStore, a: MartialArt, b: MartialArt, attribute: str) -> str:

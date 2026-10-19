@@ -830,9 +830,8 @@ def test_forge_line_shows_a_blend(state, content, world):
     state.player.stats["xinde"] = 100
     line = skillview.forge_line(state, content, world, "basic_fist", [], other_art="lake_kick")
     seed = fusion.recipe_seed(world, fusion.blend_key("basic_fist", "lake_kick"))[1]
-    shape = fusion.blend_shape(
-        team.resolve_art("basic_fist", content, world), team.resolve_art("lake_kick", content, world), seed,
-    )
+    fist_, kick_ = team.resolve_art("basic_fist", content, world), team.resolve_art("lake_kick", content, world)
+    shape = fusion.blend_shape(fist_, kick_, seed, fusion.blend_gens(content, world, fist_, kick_))
     assert "**合成**" in line and f"→ 一門新{shape.kind}（屬{shape.attribute}，品質看造化：下品 " in line
     assert "花 5 點心得、5 點體力（你有 100 點心得）" in line and "⚠" not in line
     assert "⚠ 要放兩門不同的武學。" in skillview.forge_line(state, content, world, "basic_fist", [], other_art="basic_fist")

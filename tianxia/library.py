@@ -212,6 +212,7 @@ def melt_value(state: GameState, content: Content, world: WorldStateStore, art_i
     if rolled in QUALITIES and QUALITIES.index(rolled) > QUALITIES.index(start):
         start = rolled
     free = content.config.signature_arts.start_level if signature.is_signature(content, art_id) else 1
+    free = max(free, state.player.art_free_levels.get(art_id, 1))  # 合成承底白送的成數也不退（合成即設計定案第二節）
     return melt_refund(
         content, state.player.art_levels.get(art_id, 1), mine.quality if mine else "下品", start, minimum, free,
     )
@@ -240,7 +241,7 @@ def remove_art(state: GameState, art_id: str) -> None:
     熔煉（melt_art）與交出懸賞（bounties.give，懸賞榜設計 4.6）共用；呼叫端先擋（身上的、等著定名的）。全服登記的那一門不動。"""
     p = state.player
     p.arts.remove(art_id)
-    for record in (p.art_levels, p.art_quality, p.art_mastery, p.art_rolled):
+    for record in (p.art_levels, p.art_quality, p.art_mastery, p.art_rolled, p.art_free_levels):
         record.pop(art_id, None)
 
 
