@@ -26,6 +26,7 @@ STIR_FLAT_LINE = "這條戰線正在中間，攪局推不動；等戰局偏向�
 # 散人站在戰線地點（FB-250）：出陣那一顆灰著寫這個原因（不寫「不在戰線」）；行動列底下那一行寫 RANGER_LINE。待 joy 潤
 RANGER_NOTE = "散人不能出陣"
 RANGER_LINE = "散人不能出陣：投靠陣營之後才有。散人靠懸賞、事件與找素材撞上的仗出力。"
+RANGER_LINE_PRECISE = "散人不能出陣：投靠陣營之後才有。散人靠懸賞、事件與練功打的仗出力。"  # 一類一顆（FB-420；待 joy 潤）
 
 
 def on(content: Content) -> bool:

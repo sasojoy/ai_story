@@ -2730,6 +2730,9 @@ class Config(_Strict):
     # 一類一顆（正式季整合第二章；tianxia/precise.py）：每一顆鈕只給一類、按了一定拿到那一類。預設開、測試內容關；照開季蓋章
     # （WorldState.precise_actions，12.3 第 13 條：正在跑的季不變、下一個開季起生效）；探索三選一也開著時才生效
     precise_actions: bool = True
+    # 借進找事件的戰後事件（內容寫 train 的九則）在一處池子裡合起來最多佔幾成（PM 2026-10-19：QA 量到潁川郊野佔七成）；
+    # 當地自己的事件都抽不到時照舊補上，池子裡只有這幾則時不受上限（events.pick_event）
+    precise_aftermath_share: float = Field(default=0.3, ge=0, le=1)
     insight_strong: InsightStrong = Field(default_factory=InsightStrong)  # 意境提示：每個地點最濃的意境（見 InsightStrong）
     territory: TerritoryRules = Field(default_factory=TerritoryRules)  # 地盤易手（見 TerritoryRules）
     ambush: AmbushRules = Field(default_factory=AmbushRules)  # 設伏劫道（見 AmbushRules）

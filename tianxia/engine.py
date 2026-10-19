@@ -78,6 +78,8 @@ AUDIENCE_HALL_FIGURES = 2  # 一個地點有幾位以上的大勢人物，交友
 OFF_FRONT_NOTE = "沒在戰線上領兵，不受挑戰"  # 戰線空著的人物（董卓、趙弘、重挫退下的人）：挑戰按鈕寫這一句（PM 2026-10-05 定）
 SOCIAL_TALK = "跟{name}說話"  # 待 joy 潤：一類一顆的交友只有一位說得上話的人物時，鈕上那一格（正式季整合 2.8）
 SOCIAL_NO_ONE = "這裡沒有能說上話的人"  # 待 joy 潤：一類一顆的交友沒有人物、也沒有結識事件時（鈕上不帶句號）
+SOCIAL_LIST_TITLE = "交友"  # 待 joy 潤：一類一顆的交友打開的人物名單（FB-421）
+SOCIAL_LIST_INTRO = "{here}有好幾位人物，挑一位說話。每位人物各算各的，最多談 {per_day} 輪，{again}；名望不夠的見不到。"  # 待 joy 潤（FB-421）
 SECT_LABEL = "拜入{sect}"  # 待 joy 潤：拜入門派從交友搬到「此地還能做」的一顆（正式季整合 2.7）
 AUDIENCE_MEET = "先設法結識"  # 待 joy 潤：一類一顆的求見名單上，名望不夠、但這裡有他的結識事件的那一位
 SUMMONS_LABEL = "應召晉升（召見在此・不花體力）"  # 待 joy 潤：一類一顆的應召（設計 9.1 第 1 組乙，橫幅上的字）
@@ -1868,7 +1870,9 @@ class Game:
         """出陣那一行（howto.sortie_line）：這裡是哪一種、推不推得動（_push_room，同第 3、4 階行動）、今天還能出陣幾次；用完寫什麼時候再來。"""
         how = self._sortie_mode(loc)
         if how is None:
-            return sortie.RANGER_LINE if sortie.ranger_here(self.content, self._side(), loc.id) else ""
+            if not sortie.ranger_here(self.content, self._side(), loc.id):
+                return ""
+            return sortie.RANGER_LINE_PRECISE if precise.on(self.content, self.state.world) else sortie.RANGER_LINE
         left = self.sorties_left()
         if left <= 0:
             return sortie.USED_UP.format(n=self.content.config.sortie.per_day) + "。"
@@ -4480,7 +4484,7 @@ class Game:
                 else:
                     stuck.append(b)
                 continue
-            line = (f"{bounties.issuer(c, b)}・{bounties.title(c, b)}：{bounties.how(c, b)}"
+            line = (f"{bounties.issuer(c, b)}・{bounties.title(c, b)}：{bounties.how(c, b, self.state.world)}"
                     f"（{bounties.reward_text(s, c, b)}；{bounties.due_line(s, c, b)}）")  # 期限與名額（FB-121 第 5 件）
             if b.id in mine:
                 opts.append(Option(id=f"bounty:drop:{b.id}", label=f"放棄 {line}"))
@@ -4984,11 +4988,11 @@ class Game:
         bonds = "、".join(f"{self.content.characters[cid].name} {self.state.player.affinities.get(cid, 0)}" for cid in self._figures_here())
         kind, moment = self._talks_reopen()
         again = f"到 {moment} 重新算起" if moment else "過一陣子重新算起" if kind == "later" else "這一季之內不再重算"  # FB-102
-        return (
-            f"{here}有好幾位人物，挑一位求見。每位人物各算各的，最多談 {per_day} 輪，{again}；"
-            "名望不夠的會被打發。"
-            + (f"\n\n你跟他們的情誼：{bonds}。" if bonds else "")
-        )
+        if precise.on(self.content, self.state.world):  # 一類一顆：求見併進交友，名望不夠的灰著寫還差多少，不打發（FB-421）
+            head = SOCIAL_LIST_INTRO.format(here=here, per_day=per_day, again=again)
+        else:
+            head = f"{here}有好幾位人物，挑一位求見。每位人物各算各的，最多談 {per_day} 輪，{again}；名望不夠的會被打發。"
+        return head + (f"\n\n你跟他們的情誼：{bonds}。" if bonds else "")
 
     def howto_text(self) -> str:
         """設定抽屜的「玩法說明」（Markdown，explain-1 第四項；explain-2 加了這一季在打什麼、名望、投靠與軍令、三方、修練與煉製）：
@@ -12123,7 +12127,8 @@ class Game:
             head = defection.slot_label(s, c, target, ally)  # 「叛投X」；豪強分屬兩軍時也可能是「改投X」「改依附X」
             return f"**{head}**\n\n{defection.prompt(s, c, target, self.faction_counts_text(), ally, self._left_names(target.id))}"
         if s.player.picking_audience:
-            return f"**求見**\n\n{self._audience_intro()}"
+            title = SOCIAL_LIST_TITLE if precise.on(c, s.world) else "求見"
+            return f"**{title}**\n\n{self._audience_intro()}"
         asking = foreshadow.asking_text(s, c, self.world) if s.player.fs_asking is not None else None
         if asking is not None:
             return asking

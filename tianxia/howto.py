@@ -13,7 +13,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from . import allied as allied_rules
-from . import calendar, economy, equipment, explore_modes, figures, four_tiers, renown, rules, seal, sortie, territory, timetable
+from . import calendar, economy, equipment, explore_modes, figures, four_tiers, precise, renown, rules, seal, sortie, territory, timetable
 from .models import Content
 from .rules import STANCE_NAMES  # 態勢卡上三方的叫法（官軍、黃巾、豪強）：說明跟卡上同一個叫法
 from .state import GameState, WorldState
@@ -587,7 +587,9 @@ def _fame_sources(content: Content, season: WorldState) -> list[str]:
     lines = []
     if "common" in spans:
         # 出陣開著時沒有遊歷，戰後事件接在探索找素材撞上的那一場之後（FB-257；待 joy 潤）
-        where = "探索、交友、找素材撞上的仗之後" if sortie.on(content) else "探索、交友、遊歷之後"
+        # 一類一顆：戰後事件與交友事件都併進找事件（FB-420 同一批；待 joy 潤）
+        where = ("探索找事件時" if precise.on(content, season)
+                 else "探索、交友、找素材撞上的仗之後" if sortie.on(content) else "探索、交友、遊歷之後")
         lines.append(f"事件裡出頭、仗義、露臉的做法（{where}碰上的事）：一次 {_plus(spans['common'])}。")
     if "big" in spans:
         lines.append(f"劇情裡打贏強敵、奇遇與一次性的大事：一次 {_plus(spans['big'])}。")

@@ -668,7 +668,7 @@ def board_view(state: GameState, content: Content, world: WorldStateStore) -> di
         title = bounties.title(content, b)
         note = {
             "id": b.id, "kind": b.kind, "kind_name": bounties.KIND_NAMES.get(b.kind, b.kind), "issuer": bounties.issuer(content, b),
-            "title": title, "head": _headline(title), "how": bounties.how(content, b), "reward": bounties.reward_text(state, content, b),
+            "title": title, "head": _headline(title), "how": bounties.how(content, b, state.world), "reward": bounties.reward_text(state, content, b),
             "due": bounties.due_line(state, content, b), "short": bounties.due_short(b, content, state.world), "prize": PRIZE_SHORT if bounties.has_prize(content, b) else "",
             "held": b.id in mine_ids, "have": "",
         }

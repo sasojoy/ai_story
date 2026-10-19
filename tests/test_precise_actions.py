@@ -422,3 +422,63 @@ def test_summons_stays_in_the_fold_when_precise_is_off(monkeypatch):
         return
     m, html = _summons_page(monkeypatch, precise_on=False)
     assert not m["precise"] and 'class="summons-strip"' not in html and 'data-id="act:summons"' in html
+
+
+# ── 第 3 批 QA 之後（FB-420、FB-421、戰後事件的成數）──
+
+
+def _strike(game, at="changshe"):
+    from tianxia.state import Bounty
+
+    b = Bounty(id="b1", kind="strike", faction="huang", week=1, expires=1e12, silver=20, deeds=1,
+               location=at, squad="jun_bing", takers=["沈浪"])
+    game.state.world.bounties.append(b)
+    return b
+
+
+def test_a_strike_bounty_says_practice_where_precise_is_on():
+    """FB-420：找素材不打仗了，討伐的說明寫練功（懸賞卡、告示、紙上都是這一句）。"""
+    from tianxia import bounties
+
+    game = _game()
+    b = _strike(game)
+    line = bounties.how(game.content, b, game.state.world)
+    assert "練功" in line and "找素材" not in line
+    rows = bounties.status(game.state, game.content, game.world)
+    assert any(r["id"] == "b1" and r["how"] == line for r in rows)
+    game.state.world.precise_actions = False  # 沒蓋章的季照舊
+    assert "找素材撞上" in bounties.how(game.content, b, game.state.world)
+
+
+def test_the_social_list_does_not_say_brushed_off():
+    """FB-421：交友打開的名單寫「說話」「見不到」，不寫「求見」「會被打發」。"""
+    game = _game(at="wan_city")
+    game.choose("act:call")
+    text = game.scene_text()
+    assert "**交友**" in text and "名望不夠的見不到" in text and "打發" not in text
+
+
+def _seek_draws(game, n=400):
+    from tianxia.events import note_round, pick_event
+
+    rng, s, c = random.Random(3), game.state, game.content
+    lent = 0
+    for _ in range(n):
+        event = pick_event(s, c, "explore", rng, "common")
+        note_round(s, c, event, "explore")
+        lent += precise.borrowed(event, "explore")
+    return lent / n
+
+
+def test_after_fight_events_take_at_most_three_tenths_of_a_seek_pool():
+    """PM 2026-10-19：九則借進找事件的戰後事件在一處池子裡合起來最多三成（QA 量到潁川郊野佔七成），照舊走防重複。"""
+    share = _seek_draws(_game(at="yingchuan_wilds"))
+    assert 0.2 < share <= 0.36
+
+
+def test_a_pool_of_only_the_borrowed_ones_is_not_capped():
+    from tianxia.events import _capped_group, event_candidates
+
+    game = _game(at="yingchuan_wilds")
+    lent = [e for e in event_candidates(game.state, game.content, "explore", "common") if precise.borrowed(e, "explore")]
+    assert len(lent) >= 2 and _capped_group(game.state, game.content, lent, "explore", random.Random(0)) == lent
