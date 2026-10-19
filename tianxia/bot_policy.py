@@ -185,6 +185,9 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random, slot: NamingS
     played = _stamina_play(game, rng)
     if played is not None:
         return msgs + played
+    drank = _tavern(game, rng)
+    if drank is not None:
+        return msgs + drank
     staged = _arena(game, rng)
     if staged is not None:
         msgs = msgs + staged
@@ -309,6 +312,59 @@ def _arena(game: Game, rng: random.Random) -> list[str] | None:
             msgs += game.choose(pick)
     if s.player.picking_arena:
         msgs += game.choose("arena:back")
+    return msgs
+
+
+# 酒肆（tianxia/tavern.py）：人在有酒肆的城鎮、手上銀兩比這一下的價錢多 TAVERN_RESERVE 時，每一輪 TAVERN_CHANCE 的機會進去問一件事、
+# 問完出門。真人會打聽人，假人也要會：不然「有人打聽你」的風聲只會來自真人，看得出誰是假人。問什麼照 TAVERN_ASKS 的權重擲；
+# 打聽人挑在座的客人、問過的名號或這一區的大勢人物，打聽素材挑一階、二階的；偶爾對查到過、有仇的人雇最便宜的那一檔殺手
+# （「有人出錢買你」不能只來自真人）。不寫題壁、不請酒、不藏行跡、不反查。
+TAVERN_CHANCE = 0.03
+TAVERN_RESERVE = 30
+TAVERN_ASKS = (("news", 5), ("seek", 3), ("material", 2), ("ties", 1), ("hit", 0.5))
+
+
+def _tavern(game: Game, rng: random.Random) -> list[str] | None:
+    """進酒肆問一件事、出門；這一輪不做是 None。選單上沒有「酒肆」時不擲骰。"""
+    s = game.state
+    if "act:tavern" not in {o.id for o in game.options(odds=False, tick=False) if o.enabled}:
+        return None
+    if rng.random() >= TAVERN_CHANCE:
+        return None
+    op = rng.choices([k for k, _ in TAVERN_ASKS], weights=[w for _, w in TAVERN_ASKS])[0]
+    t = game.content.config.tavern
+    price = game._tavern_price({"news": t.news_price, "seek": t.seek_price, "ties": t.ties_price,
+                                "hit": t.hit_prices[0]}.get(op, max(t.material_prices.values())))
+    if s.player.stats.get("silver", 0) < price + TAVERN_RESERVE:
+        return None
+    msgs = game.choose("act:tavern")
+    view = game.tavern_view()
+    target = ""
+    if op in ("seek", "ties"):
+        names = list(view["guests"]) + list(view["known"])
+        if not names or rng.random() < 0.4:
+            figures = [game.content.characters[f.character].name for f in game.content.figures.values()
+                       if f.character in game.content.characters]
+            names = names + figures
+        target = rng.choice(names) if names else ""
+        if not target:
+            op = "news"
+    elif op == "hit":
+        foes = [n for n in view["known"] if game._tavern_hit_problem(n, 0)[0] is None]
+        if foes:
+            msgs += game.tavern_do("hit", rng.choice(foes), "0")
+            if s.player.picking_tavern:
+                msgs += game.choose(view["back"])
+            return msgs
+        op = "news"
+    elif op == "material":
+        mats = [m["id"] for m in view["materials"] if m["tier"] <= 2]
+        target = rng.choice(mats) if mats else ""
+        if not target:
+            op = "news"
+    msgs += game.tavern_do(op, target)
+    if s.player.picking_tavern:
+        msgs += game.choose(view["back"])
     return msgs
 
 
@@ -598,6 +654,10 @@ def duel_move(game: Game, rng: random.Random, fight=None) -> str:
     return answer if answer is not None and rng.random() < DUEL_READ else rng.choice(MOVES)
 
 
+FEAST_SCORE = 8.0  # 入席：不花體力，路過就坐一下（低過軍令與懸賞）
+FEAST_TOAST_SCORE = 50.0  # 坐下了就敬酒（不然卡在宴席的選單上）
+
+
 def score(game: Game, option: Option, profile: BotProfile) -> float | None:
     """選項的分數；None＝假人不會選（別的陣營的投靠、叛投、閒聊或求見大勢人物、只會被擋在門外的交友、投靠的確認畫面另外處理）。"""
     kind, _, arg = option.id.partition(":")
@@ -605,6 +665,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         return None  # 假人不叛投（計畫甲）
     if kind in ("ambush", "works", "aid"):
         return None  # 設伏、工事、屯糧、護衛、犒軍、探望由 take_turn 的 _stamina_play 做，不交給打分數
+    if kind == "feast":  # 宴客（大勢人物擴充第三批）：路過擺著宴的地方就入席，入了席挑一句固定的敬酒詞（不寫自己的，同放手一搏）
+        return None if arg == "leave" else FEAST_TOAST_SCORE if arg.startswith("toast:") else FEAST_SCORE
     if kind == "opp":
         return None  # 機緣：假人不做（正式版乙一）；對話裡的 talk:opp: 落在下面 talk 的 None
     if kind == "battle":
@@ -652,6 +714,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         return SMITH_SCORE if option.id == _smith_want(game) else 0.0 if arg in ("back", "forge-cancel") else None
     if kind == "arena":  # 擂台由 _arena 一次做完；萬一停在擂台邊只會返回，打到一半由 take_turn 照架勢出招
         return 0.0 if arg == "back" else None
+    if kind == "tavern":  # 酒肆裡：打聽由 take_turn 另外做（_tavern_play）；萬一停在酒肆裡就出門
+        return 0.0 if arg == "back" else None
     if kind == "market":  # 馬市上：照 bot.market_want 按那一顆（換、買、餵），沒事就離開
         return MARKET_SCORE if option.id == bot.market_want(game) else 0.0 if arg == "back" else None
     if kind == "call":
@@ -666,6 +730,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         clinic_hop = _clinic_score(game) if arg.partition(":")[0] == bot.clinic_hop(game) else 0.0  # 內傷重了往醫館
         return base + order_hop + summons_hop + bounty_hop + clinic_hop + (TRAIN_MOVE_SCORE if _train_value(game, profile, arg) > 0 else 0.0)
     if kind == "act":
+        if arg == "tavern":
+            return None  # 酒肆：不交給打分數（只是打開酒肆），打聽由 take_turn 另外做
         if arg == "explore" and explore_modes.on(game.content):
             return None  # 三選一開著：「探索」只是展開的入口，按了不做事
         if arg.startswith("challenge:") and _crippled(game):
@@ -715,6 +781,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
             return ORDER_SCORE
         if arg == "summons":  # 應召（計畫 T5）：只在召見的地點出現
             return SUMMONS_SCORE
+        if arg.startswith("recruit:"):
+            return None  # 招募歷史武將（歷史武將同行第七節）：假人不招
         return ACT_SCORES.get(arg, 0.0)
     return None
 

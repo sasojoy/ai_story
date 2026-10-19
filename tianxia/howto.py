@@ -621,6 +621,13 @@ def _fame_sources(content: Content, season: WorldState) -> list[str]:
             lines.append(f"擂台每天的俸：第一名 +{ring.wages[0][1]}，前 {len(ring.wages)} 名都有。")
         if ring.prizes:
             lines.append("擂台賽季末前三名：" + "、".join(f"第{'一二三四五'[i]}名 +{fame}" for i, fame in enumerate(ring.prizes)) + "。")
+    from . import tavern  # noqa: PLC0415  酒肆（Game._tavern_treat 請酒、Game._tavern_hit_fight 打退殺手）；待 joy 潤
+    if tavern.on(content):
+        bar = cfg.tavern
+        if bar.treat_fame > 0:
+            lines.append(f"在酒肆請全店喝一輪：+{bar.treat_fame}（一天一次）。")
+        if bar.hit_win_fame > 0:
+            lines.append(f"打退別人雇來找你的殺手：+{bar.hit_win_fame}。")
     return lines
 
 
