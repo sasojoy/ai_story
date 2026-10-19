@@ -16,7 +16,7 @@ from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
 from . import prologue as prologue_rules
-from . import allied, arena, gender, invites, ranger, ranks, renown, team
+from . import allied, arena, gender, invites, ranger, ranks, renown, team, yuedan
 from .characters import CharacterStore, name_key
 from .rules import day_turn
 from .state import GameState
@@ -160,6 +160,7 @@ def card(game: Game, other: Game) -> dict:
         # 這一季的決戰戰績（Joy 2026-10-10 個人戰功）：沒打過是空字串
         "record": f"參戰 {o.player.showdowns} 場・首功 {o.player.top_merits} 次" if o.player.showdowns else "",
         "renown": renown.card(o, other.content),  # 名聲 3B：只寫稱號（名聲關著是 None）
+        "yuedan": yuedan.line_for(game.state, other.content, o.player.name),  # 月旦評（大勢人物擴充第三批）：這一週許劭對他的那一句
         "arts": arts(other),
         "actions": buttons,
     }

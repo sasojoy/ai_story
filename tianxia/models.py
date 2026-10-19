@@ -962,6 +962,7 @@ ALLOW_FAMILIES = (
     "explore:",  # 探索三選一的三顆（explore_modes.PREFIX；序章裡不出現）
     "ambush:set:",  # 設伏劫道（ambush:set:<另一頭>；序章裡不出現）
     "aid:guard:", "aid:rally:", "aid:visit:",  # 護著大勢人物（figure_aid；序章裡沒有陣營，不出現）
+    "feast:join:",  # 入席（宴客，tianxia/feasts.py；序章裡不出現）
 )
 
 
@@ -2273,6 +2274,33 @@ class FigureLifeTuning(_Strict):
     commission_silver: int = Field(default=30, ge=0)
     commission_days: float = Field(default=1.0, gt=0)
     letter_write_budget_seconds: float = Field(default=60.0, gt=0)  # 書信請模型照他的口氣重寫的預算（鎖外、背景執行緒；寫不出來照固定句）
+    # 第三批（大家一起）：宴客、月旦評、求援委託
+    # 宴客：每一輪每位人物擲 feast_chance 設宴（心事是得意或沒有心事、此刻在場），全服同時最多 feast_max_open 場、上一場開席之後
+    # feast_gap_hours 個世界小時內不再開；一場擺 feast_hours 個世界小時（週末＝現實小時）。赴宴不花體力，一人一場敬一句：
+    # 情誼 +1～+feast_affinity_max（照分數）；散席時分數最高那一句上天下大事、名望 +feast_fame
+    feasts: bool = True
+    feast_chance: float = Field(default=0.03, ge=0, le=1)
+    feast_max_open: int = Field(default=1, ge=0)
+    feast_gap_hours: float = Field(default=6.0, ge=0)
+    feast_hours: float = Field(default=2.0, gt=0)
+    feast_affinity_max: int = Field(default=5, ge=1)
+    feast_fame: int = Field(default=1, ge=0)
+    feast_score_budget_seconds: float = Field(default=30.0, gt=0)  # 自己寫的敬酒詞請模型評分的預算（評不到照 feasts.DEFAULT_SCORE）
+    # 月旦評：許劭每週一評 yuedan_count 個人（名人、善人、惡人榜輪流挑），第 yuedan_from_week 週起；模型寫評語的預算，
+    # 等過 yuedan_wait_seconds 個世界秒還沒寫好就照固定句發
+    yuedan: bool = True
+    yuedan_count: int = Field(default=6, ge=1)
+    yuedan_from_week: int = Field(default=2, ge=1)
+    yuedan_wait_seconds: float = Field(default=900.0, ge=0)
+    yuedan_budget_seconds: float = Field(default=90.0, gt=0)
+    # 求援委託：心事焦慮的大勢人物每一輪擲 rally_chance 對自己陣營全部人發一件（同一位一次一件），前 rally_quota 個辦成的
+    # 拿銀兩 rally_silver、他的情誼 +rally_affinity，他寫信道謝；掛 rally_cal_days 個季曆天。護衛、犒軍他也算辦成
+    rallies: bool = True
+    rally_chance: float = Field(default=0.3, ge=0, le=1)
+    rally_quota: int = Field(default=3, ge=1)
+    rally_silver: int = Field(default=30, ge=0)
+    rally_affinity: int = Field(default=5, ge=0)
+    rally_cal_days: float = Field(default=3.0, gt=0)
 
 
 class RiseTuning(_Strict):

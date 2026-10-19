@@ -279,6 +279,7 @@ def test_only_events_and_the_first_echo_give_fame_in_the_code():
         ("engine.py", 'record.changes += renown.gain(s, c, "fame", cfg.highlight_fame)'),  # 擂台上成了的最險一搏
         ("engine.py", 'renown.gain(s, c, "fame", fame)'),  # 擂台每天的俸（Game._deliver_arena）
         ("engine.py", 'renown.gain(s, c, "fame", fame)'),  # 擂台賽季末前三名（Game._deliver_arena）
+        ("feasts.py", 'out += renown.gain(state, content, "fame", amount)'),  # 宴客散席時最好的那一句敬酒（feasts.deliver）
     ]
     givers = []
 
