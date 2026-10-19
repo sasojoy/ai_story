@@ -12,7 +12,7 @@ import random
 from collections.abc import Callable
 from typing import NamedTuple
 
-from . import allied, armor, bounties, chuangong, clinic, cultivation, economy, equipment, explore_modes, forge_secrets, four_tiers, fusion, glyph, insights, library, mounts, naming, sensing, smithing, team, traits, treasures, weapons
+from . import allied, armor, bounties, checkin, chuangong, clinic, cultivation, economy, equipment, explore_modes, forge_secrets, four_tiers, fusion, glyph, insights, library, mounts, naming, sensing, smithing, team, traits, treasures, weapons
 from . import prologue as prologue_rules
 from .engine import ARENA_YIELD, DUEL_FLEE, FREE_TEXT_OPTION, SAY_OPTION, Game, Option
 from .martial_arts import MartialArt, next_quality
@@ -93,6 +93,16 @@ def take_pill(game: Game) -> None:
     p = game.state.player
     if p.stamina_pills > 0 and p.stamina < PILL_BELOW and game.pills_left_today() != 0:  # 一天的上限照真人（今天服滿了就等明天）
         game.take_stamina_pill(pill_only=True)
+
+
+def check_in(game: Game) -> None:
+    """每日簽到（21 天季，正式季整合 8.1）：今天還沒簽就簽，四階的日子照名號＋季數的種子挑屬性（checkin.bot_attribute）。只走
+    Game.check_in（真人按「簽到」小標的同一條路）；畫面沒有簽到（關著、序章裡、休季）或今天簽過了都不叫。整季機器人與伺服器假人共用。"""
+    view = game.checkin_view()
+    if view is None or view["done"]:
+        return
+    p = game.state.player
+    game.check_in(checkin.bot_attribute(game.content, p.name, p.season_number) if view["pick"] else "")
 
 
 def allocate_points(game: Game, rng: random.Random) -> None:
@@ -812,6 +822,7 @@ def play_season(
     for step in range(max_steps):
         if game.state.world.ended:
             break
+        check_in(game)  # 21 天季每天簽一次（簽過了、別的季什麼都不做）
         take_pill(game)
         options = [o for o in game.options(odds=False) if o.enabled]
         hop = clinic_hop(game)  # 內傷重了先繞去醫館（排在 pick 前面：量表包住 pick 的引導也不會把它蓋掉）

@@ -249,6 +249,32 @@ def test_pill_drop_uses_its_own_dice():
     assert found[0] == found[1] and found[0]
 
 
+def test_bot_checks_in_and_picks_by_seed():
+    from tianxia import bot
+
+    game = _game()
+    p = game.state.player
+    p.bot = True
+    _day(game, 6)
+    bot.check_in(game)
+    attribute = checkin.bot_attribute(game.content, p.name, p.season_number)
+    mid = next(m.id for m in game.content.materials.values() if m.tier == 4 and m.attribute == attribute)
+    assert p.checkin_days == [6] and p.materials.get(mid) == 1
+    pills = p.stamina_pills
+    bot.check_in(game)  # 同一天再叫一次：什麼都不動
+    assert p.checkin_days == [6] and p.stamina_pills == pills
+
+
+def test_look_after_checks_in():
+    from tianxia import bot_policy
+
+    game = _game()
+    game.state.player.bot = True
+    _day(game, 3)
+    bot_policy.look_after(game, random.Random(0))
+    assert game.state.player.checkin_days == [3]
+
+
 def test_tier4_reachable_through_checkin():
     c = real_content("season21")
     c.config.economy.upgrade = False
