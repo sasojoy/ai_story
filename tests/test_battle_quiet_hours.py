@@ -12,7 +12,7 @@ from tianxia.world_state import fresh_season
 
 DAY, HOUR = 86400, 3600
 BASE = 20_000 * DAY  # 隨便一天的當地 00:00（照時區換過的 epoch 秒）
-SPAN = 1800 + 3 * 300  # 正式內容的決戰：集結 30 分鐘、打一幕（三回合，每回合最多 5 分鐘）
+SPAN = 1800 + 3 * 180  # 正式內容的決戰：集結 30 分鐘、打一幕（三回合，每回合最多 3 分鐘；Joy 2026-10-19 從 5 分鐘改）
 
 
 def _setup(event_id, hh, mm=0, content=None):

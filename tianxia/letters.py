@@ -257,6 +257,10 @@ class LetterNote(BaseModel):
     fixed: str
 
 
+LETTER_MAX = 100  # 提示詞要他寫一百字以內
+LETTER_PREDICT = LETTER_MAX * 3 + 120  # 240 不夠：2026-10-19 線上被截斷過（模型會寫超過）
+
+
 class LetterText(BaseModel):
     letter: str = ""
 
@@ -298,7 +302,7 @@ def write(client, note: LetterNote) -> str:
         {"role": "user", "content": f"{what}。\n請給 letter。"},
     ]
     try:
-        result = client.chat_structured(messages, LetterText, temperature=0.8, num_predict=240, required_fields=["letter"])
+        result = client.chat_structured(messages, LetterText, temperature=0.8, num_predict=LETTER_PREDICT, required_fields=["letter"])
     except Exception:
         return ""
     return clean(result.letter)

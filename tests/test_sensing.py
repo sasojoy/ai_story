@@ -87,7 +87,10 @@ class FakeClient:
         self.replies, self.seen = list(replies), []
         self.retry = True
 
-    def chat_structured(self, messages, schema, required_fields=None):
+    def chat_structured(self, messages, schema, required_fields=None, **kw):
+        # **kw：真的 client 收 temperature、num_predict 這些；替身把簽名寫死的話，
+        # 呼叫端多給一個參數就變成 TypeError，被 except 吞掉之後看起來像「模型叫不動」
+        # （2026-10-19 給每個呼叫點加 num_predict 時踩到）
         self.seen.append(messages)
         reply = self.replies.pop(0)
         if isinstance(reply, Exception):

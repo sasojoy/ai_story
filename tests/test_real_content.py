@@ -1289,10 +1289,15 @@ def test_real_content_defines_the_three_factions_and_the_battle_uses_them(conten
 
 
 def test_the_showdown_gives_scattered_players_time_to_gather(content):
-    """企劃者定案：集結 30 分鐘、每回合 5 分鐘，人少、上線時間不一的伺服器也來得及到場。"""
+    """集結 30 分鐘不變（人少、上線時間不一的伺服器也來得及到場）；每回合 3 分鐘（Joy 2026-10-19 從 5 分鐘改）。
+
+    原本是 5 分鐘，理由是「讓散在各處的人來得及到場」。改 3 分鐘的那一次有量過代價：10-19 的廣宗決戰
+    九回合實際花了 117、151、106、199、105、138、117、265、55 秒（平均 139），所以 3 分鐘會截斷其中兩個
+    回合（199、265 秒）、那兩回合有人會被代選保守行動；省下的等待約 104 秒。這個取捨由企劃者拍板。
+    """
     showdown = content.battles["huangjin_showdown"]
     assert showdown.muster_seconds == 30 * 60
-    assert showdown.round_seconds == 5 * 60
+    assert showdown.round_seconds == 3 * 60
 
 
 def test_the_showdown_is_three_acts_of_three_rounds_and_ends_early_at_90_or_10(content):
