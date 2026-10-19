@@ -6232,6 +6232,7 @@
         const r = await api("/api/choose", { id });
         S.answering = false;
         S.saying = false;
+        S.gatherSaying = false; // 找素材「自己說」的輸入框叫出來之後改按了別的（一條分支）：下次攤開分支不再停在輸入框
         S.wheelSel = null; // 收起展開的移動
         applyMain(r.main);
         if (id.startsWith("bounty:give:")) boardHanded(id, shopBefore); // 店面的懸賞榜：交差了蓋朱印（第四節）

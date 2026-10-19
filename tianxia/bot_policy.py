@@ -728,12 +728,9 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
             return PRACTICE_SCORE + (BOUNTY_SCORE if _bounty_here(game, "strike") else 0.0)
         gather, _, branch = arg.partition(":")
         if gather == explore_modes.GATHER and branch:  # 找素材分支（第 32 項）：「自己說」不寫（不寫自由文字）；缺料時照缺的屬性挑
-            if branch == explore_modes.SAY or branch not in game.content.gather_branches:
-                return None
-            loc = game.content.locations[game.state.player.location]
-            attrs = explore_modes.branch_attributes(game.content, loc, game.content.gather_branches[branch])
-            need = NEED_MATERIAL_SCORE if _short_of_materials(game) and set(attrs) & _scarce_attributes(game) else 0.0
-            return PRECISE_GATHER_SCORE + scout + need
+            if branch != _gather_branch(game):
+                return None  # 只給一條打分：找素材的份量跟沒有分支層時一樣（隨便挑的那一半不會因為多了幾條路而多去找素材）
+            return PRECISE_GATHER_SCORE + scout + (NEED_MATERIAL_SCORE if _short_of_materials(game) else 0.0)
         if arg == explore_modes.GATHER and explore_modes.layered(game.content, game.state.world,
                                                                  game.content.locations[game.state.player.location]):
             return None  # 有分支層時「找素材」只是展開分支的入口，按了不做事（同 act:explore）
@@ -1030,6 +1027,21 @@ def _scarce_attributes(game: Game) -> set[str]:
         return set()
     low = min(counts.values())
     return {attr for attr, n in counts.items() if n == low}
+
+
+def _gather_branch(game: Game) -> str | None:
+    """假人這一下找素材走哪一條分支（第 32 項）：缺料時挑給得出背包裡一階最少那幾種屬性的分支（缺剛的去挖礦），不缺（或沒有一條給得出）
+    就這裡的每一條；幾條都行時照 explore_seq 輪（不擲骰，同一輪打分前後一致）。這裡沒有分支層是 None。
+    只有這一條打分（bot_policy.score）：pick 有一半是從會按的選項裡隨便挑，幾條路都打分的話假人在這些地方會多去找素材好幾倍。"""
+    c, p = game.content, game.state.player
+    loc = c.locations[p.location]
+    here = explore_modes.layered(c, game.state.world, loc)
+    if not here:
+        return None
+    if _short_of_materials(game):
+        scarce = _scarce_attributes(game)
+        here = [b for b in here if scarce & set(explore_modes.branch_attributes(c, loc, b))] or here
+    return here[p.explore_seq % len(here)].id
 
 
 def _bounty_here(game: Game, kind: str) -> bool:

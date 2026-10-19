@@ -2,5 +2,5 @@
   {"id": "mine", "name": "挖礦", "tags": ["山林", "洞窟", "古戰場", "營寨"], "attributes": ["剛", "慢"], "line": "你在{place}敲開一塊山岩，翻撿碎石裡的礦砂。"},
   {"id": "hunt", "name": "狩獵", "tags": ["山林", "野外", "官道"], "attributes": ["快", "柔"], "line": "你在{place}循著蹄印與落羽下了幾個套子。"},
   {"id": "forage", "name": "採集", "tags": ["河畔", "渡口", "野外"], "attributes": ["柔", "慢"], "line": "你在{place}的草叢水邊一路撿拾。"},
-  {"id": "deep", "name": "深入", "tags": ["山林", "洞窟"], "min_danger": 2, "deep": true, "line": "你往{place}更深處走，越走越不見人跡。"}
+  {"id": "deep", "name": "深入", "tags": ["山林", "洞窟"], "min_danger": 2, "deep": true, "line": "你撇開熟路，往{place}人跡不到的地方鑽。"}
 ]

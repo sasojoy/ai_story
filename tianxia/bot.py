@@ -429,8 +429,11 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
         options = [o for o in options if o.id != "act:explore"]
     gather = explore_modes.option_id(explore_modes.GATHER)
     if any(o.id.startswith(f"{gather}:") for o in options):
-        # 找素材分支（第 32 項）：「找素材」那時只是展開分支的入口（同 act:explore，按了不做事）；「自己說」要寫一句話（同隨口應對）
-        options = [o for o in options if o.id not in (gather, explore_modes.SAY_ID)]
+        # 找素材分支（第 32 項）：「找素材」那時只是展開分支的入口（同 act:explore，按了不做事）；「自己說」要寫一句話（同隨口應對）。
+        # 分支只留一條（照 explore_seq 輪，不擲骰）：隨機挑時找素材的份量跟沒有分支層時一樣是一顆，不因為多了幾條路多去找素材
+        branches = [o.id for o in options if o.id.startswith(f"{gather}:") and o.id != explore_modes.SAY_ID]
+        keep = branches[s.player.explore_seq % len(branches)] if branches else None
+        options = [o for o in options if o.id not in (gather, explore_modes.SAY_ID) and (not o.id.startswith(f"{gather}:") or o.id == keep)]
     if s.pending_event:
         choices = game.content.events[s.pending_event].choices
         for option in options:

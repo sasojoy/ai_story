@@ -443,19 +443,32 @@ def _score(game, option_id):
 
 
 def test_server_bots_pick_the_branch_for_what_they_lack():
+    """只有一條分支打分（分數跟沒有分支層時的找素材一樣），缺料時是給得出缺的那種屬性的那一條；不缺時照 explore_seq 輪。"""
     from tianxia import bot_policy
 
     game = _game("deep_mountain")
-    mats = game.content.materials
-    have = {m.id: 1 for m in mats.values() if m.tier == 1 and m.attribute != "剛"}  # 缺剛、總數也不夠
-    game.state.player.materials = dict(have)
+    c, p = game.content, game.state.player
+    loc = c.locations[p.location]
+    branches = {explore_modes.branch_option(b.id): b for b in explore_modes.layered(c, game.state.world, loc)}
+    assert len(branches) == 3
+    p.materials = {m.id: 1 for m in c.materials.values() if m.tier == 1 and m.attribute != "剛"}  # 缺剛、總數也不夠
     assert _score(game, "explore:gather") is None  # 入口按了不做事
     assert _score(game, explore_modes.SAY_ID) is None  # 不寫自由文字
-    mine, hunt = _score(game, "explore:gather:mine"), _score(game, "explore:gather:hunt")
-    assert mine == pytest.approx(hunt + bot_policy.NEED_MATERIAL_SCORE)
-    game.state.player.materials = {m.id: 5 for m in mats.values() if m.tier == 1}  # 不缺：照舊打分
-    assert _score(game, "explore:gather:mine") == pytest.approx(_score(game, "explore:gather:hunt")) == \
-        pytest.approx(bot_policy.PRECISE_GATHER_SCORE)
+    for seq in range(4):
+        p.explore_seq = seq
+        scores = {oid: _score(game, oid) for oid in branches}
+        scored = [oid for oid, value in scores.items() if value is not None]
+        assert len(scored) == 1
+        assert scores[scored[0]] == pytest.approx(bot_policy.PRECISE_GATHER_SCORE + bot_policy.NEED_MATERIAL_SCORE)
+        assert "剛" in explore_modes.branch_attributes(c, loc, branches[scored[0]])
+    p.materials = {m.id: 5 for m in c.materials.values() if m.tier == 1}  # 不缺：幾條輪著走
+    seen = set()
+    for seq in range(len(branches)):
+        p.explore_seq = seq
+        scored = {oid: value for oid in branches if (value := _score(game, oid)) is not None}
+        assert len(scored) == 1 and list(scored.values()) == [pytest.approx(bot_policy.PRECISE_GATHER_SCORE)]
+        seen |= set(scored)
+    assert seen == set(branches)
 
 
 def test_the_season_bot_skips_the_entry_and_the_say():
@@ -465,7 +478,12 @@ def test_the_season_bot_skips_the_entry_and_the_say():
     options = [o for o in game.options(odds=False) if o.enabled]
     picks = {bot.pick(game, options, random.Random(seed)) for seed in range(80)}
     assert "explore:gather" not in picks and explore_modes.SAY_ID not in picks
-    assert any(p.startswith("explore:gather:") for p in picks)
+    # 分支只留一條（照 explore_seq 輪）：隨機挑時找素材的份量跟沒有分支層時一樣是一顆
+    branched = {p for p in picks if p.startswith("explore:gather:")}
+    assert len(branched) == 1
+    game.state.player.explore_seq += 1
+    again = {bot.pick(game, options, random.Random(seed)) for seed in range(80)}
+    assert len({p for p in again if p.startswith("explore:gather:")} - branched) == 1
     ids = [o.id for o in options]
     assert bot.explore_choice(ids) == "explore:gather:mine"  # 第一條分支
     assert bot.explore_choice(set(ids)) == "explore:gather:deep"  # set 照字排：結果固定
