@@ -442,12 +442,12 @@ def test_a_strike_bounty_says_practice_where_precise_is_on():
 
     game = _game()
     b = _strike(game)
-    line = bounties.how(game.content, b, game.state.world)
+    line = bounties.how(game.content, b, game.state)
     assert "練功" in line and "找素材" not in line
     rows = bounties.status(game.state, game.content, game.world)
     assert any(r["id"] == "b1" and r["how"] == line for r in rows)
     game.state.world.precise_actions = False  # 沒蓋章的季照舊
-    assert "找素材撞上" in bounties.how(game.content, b, game.state.world)
+    assert "找素材撞上" in bounties.how(game.content, b, game.state)
 
 
 def test_the_social_list_does_not_say_brushed_off():
@@ -482,3 +482,15 @@ def test_a_pool_of_only_the_borrowed_ones_is_not_capped():
     game = _game(at="yingchuan_wilds")
     lent = [e for e in event_candidates(game.state, game.content, "explore", "common") if precise.borrowed(e, "explore")]
     assert len(lent) >= 2 and _capped_group(game.state, game.content, lent, "explore", random.Random(0)) == lent
+
+
+def test_a_ranger_reads_only_practice_on_a_strike_bounty():
+    """散人不出陣：討伐只寫練功（STRIKE_PRACTICE）；投靠了陣營的人寫練功或出陣（FB-420 之後 QA）。"""
+    from tianxia import bounties
+
+    game = _game()
+    b = _strike(game)
+    assert game.state.player.faction is None
+    assert bounties.how(game.content, b, game.state).startswith("到長社練功打贏")
+    game.state.player.faction = "guan"
+    assert "練功或出陣攻打贏" in bounties.how(game.content, b, game.state)

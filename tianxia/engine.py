@@ -4541,7 +4541,7 @@ class Game:
                 else:
                     stuck.append(b)
                 continue
-            line = (f"{bounties.issuer(c, b)}・{bounties.title(c, b)}：{bounties.how(c, b, self.state.world)}"
+            line = (f"{bounties.issuer(c, b)}・{bounties.title(c, b)}：{bounties.how(c, b, self.state)}"
                     f"（{bounties.reward_text(s, c, b)}；{bounties.due_line(s, c, b)}）")  # 期限與名額（FB-121 第 5 件）
             if b.id in mine:
                 opts.append(Option(id=f"bounty:drop:{b.id}", label=f"放棄 {line}"))
