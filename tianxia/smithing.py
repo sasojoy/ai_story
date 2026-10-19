@@ -308,7 +308,7 @@ def name_divine(
             content, item.slot, item.kind, name)
         if problem is not None:
             return False, [NAME_BAD.format(problem=problem)]
-    reason = world.name_divine(forge_secrets.key_for(item.secret), state.player.name, name)
+    reason = world.name_divine(forge_secrets.key_for(item.secret), state.player.name, name, registry=item.collected)  # FB-402
     if reason == "taken":
         return False, [NAME_TAKEN.format(name=name)]
     if reason is not None:

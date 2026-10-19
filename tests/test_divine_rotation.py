@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from conftest import real_content
 
-from tianxia import divine, equipment, forge_secrets
+from tianxia import divine, equipment, forge_secrets, smithing
 from tianxia.sqlite_world import open_world
 
 NOW = 1792339200.0  # 2026-10-19 週一 00:00（台灣）
@@ -200,6 +200,41 @@ def test_unstamped_seasons_never_pick_the_new_divines(profile, monkeypatch):
         with monkeypatch.context() as m:
             m.setattr(c, "forge_secrets", before)
             assert [r.id for r in forge_secrets.active(c, tianji, season)] == now
+
+
+def test_switching_rotation_off_keeps_each_original_in_its_own_row():
+    """FB-402：輪替用過之後關掉開關，沒章那一季打的原品、仿品、定名都照季分的那一列（跟 claim_gear_find 同一個判斷），
+    不去讀全服登記；輪替季打的、帶過季的那一把照舊讀登記（名字還是自己定的那一個）。"""
+    c = _content()
+    w = _opened(c)
+    jia = _smith(c, w, "甲")
+    first, _ = _forge_sword(c, w, jia)
+    key = forge_secrets.key_for(SWORD)
+    assert w.name_divine(key, "甲", "寒星") is None
+    c.config.forge_secrets.rotation = False  # 主機關掉緊急開關：下一季不蓋章
+    c.config.forge_secrets.per_season["weapon:divine"] = 6  # 這一季六種兵器的神器都挑上，玄晶劍一定在
+    season = _next(c, w)
+    assert season.divine_lineup is None and SWORD in [r.id for r in forge_secrets.active(c, w.read().tianji, season)]
+    jia.sync(NOW + 5 * 86400)
+    forge_secrets.refresh_names(jia.state.player, c, w)  # 讀檔時（Game._drop_stale_references）同一個
+    assert [i.name for i in jia.state.player.rack if i.id == first.id] == ["寒星"]  # 帶過季的那一把照登記
+    yi = _smith(c, w, "乙")
+    original, _ = _forge_sword(c, w, yi)
+    assert original.original and not original.collected
+    forge_secrets.refresh_names(yi.state.player, c, w)
+    assert original.name == smithing.DIVINE_UNNAMED  # 不會讀到登記那一把的【寒星】
+    assert forge_secrets.unnamed_originals(yi.state, w) == {original.id: c.forge_secrets[SWORD].name}
+    bing = _smith(c, w, "丙")
+    copy, _ = _forge_sword(c, w, bing)
+    assert w.divine_state().finds[SWORD].copies == 0  # 仿品記在這一季那一列，不記到登記
+    assert w.lookup_gear_find(key).owner == "乙" and w.lookup_gear_find(key).copies == 1
+    ok, _ = smithing.name_divine(yi.state, c, w, original.id, "曉霜")
+    assert ok and original.name == "曉霜"
+    forge_secrets.refresh_names(bing.state.player, c, w)
+    assert copy.name == smithing.COPY_NAME.format(name="曉霜")
+    assert w.divine_state().finds[SWORD].divine_name == "寒星"
+    book = {(s, f.owner): f.name for s, f in w.divine_records()}
+    assert book == {(1, "甲"): "寒星", (2, "乙"): "曉霜"}
 
 
 def test_old_seasons_keep_their_rows():

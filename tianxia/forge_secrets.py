@@ -187,7 +187,8 @@ def refresh_names(p: PlayerState, content: Content, world: WorldStateStore | Non
         if item.secret is None:
             continue
         if item.original or item.copy_of is not None:
-            find = world.lookup_gear_find(item.copy_of or key_for(item.secret)) if world is not None else None
+            # 照這一件打出來那一季的判斷讀（FB-402）：輪替季打的讀全服登記，其餘讀照季分的那一列
+            find = world.lookup_gear_find(item.copy_of or key_for(item.secret), registry=item.collected) if world is not None else None
             if find is not None and find.divine:
                 item.name = find.name if item.original else COPY_NAME.format(name=find.name)
             continue
@@ -241,7 +242,7 @@ def unnamed_originals(state: GameState, world: WorldStateStore) -> dict[str, str
     for item in owned_gear(p):
         if not item.original or item.secret is None:
             continue
-        find = world.lookup_gear_find(key_for(item.secret))
+        find = world.lookup_gear_find(key_for(item.secret), registry=item.collected)  # 同 refresh_names（FB-402）
         if find is not None and find.divine and find.owner == p.name and find.divine_name is None:
             out[item.id] = find.title
     return out

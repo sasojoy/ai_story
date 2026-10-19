@@ -369,8 +369,10 @@ class WorldStateStore(Protocol):
         ...
 
     # ── 隱藏配方的發現（打造隱藏配方設計 7.1；gear_recipes 裡鍵「鑄|配方 id」那幾列；這一季）──
-    def lookup_gear_find(self, key: str) -> GearFind | None:
-        """這條隱藏配方這一季有沒有人打出來過；有就回首位發現者那一筆。"""
+    def lookup_gear_find(self, key: str, registry: bool | None = None) -> GearFind | None:
+        """這條隱藏配方這一季有沒有人打出來過；有就回首位發現者那一筆。神器輪替（FB-402）：registry 是 None 時這一季蓋了輪替的章
+        讀全服登記、沒蓋讀照季分的那一列；手上有那一件神器時照它的 Equipment.collected 傳（True 只讀登記、False 只讀那一列）。
+        add_copy、name_divine 的 registry 同一個意思。"""
         ...
 
     def claim_gear_find(self, key: str, find: GearFind) -> tuple[GearFind, bool]:
@@ -378,11 +380,11 @@ class WorldStateStore(Protocol):
         鍵不是「鑄|」開頭丟 ValueError（別把兵器的組合鍵寫進來）。"""
         ...
 
-    def add_copy(self, key: str) -> None:
+    def add_copy(self, key: str, registry: bool | None = None) -> None:
         """這一季這條神器配方的仿品數 +1（打造隱藏配方設計 5.3、7.1；神器譜寫「仿品 N 把」）。沒有那一列就什麼都不做。"""
         ...
 
-    def name_divine(self, key: str, owner: str, name: str) -> str | None:
+    def name_divine(self, key: str, owner: str, name: str, registry: bool | None = None) -> str | None:
         """神器原品定名（打造隱藏配方設計 5.2、7.1、7.3；鎖內原子，同 rename_skill）：這一季這條神器配方那一列的原品主人是 owner、還沒定名、
         名字沒被佔（_name_taken：武學、改過的名字、意境、gear_recipes），才把名字欄與 data 一起改掉（定的名字佔名字空間）。
         回 None＝定成了；不行回原因："gone"（沒有那一列、不是神器配方）、"owner"（不是主人）、"named"（已經定過）、"taken"（名字被佔）。"""
