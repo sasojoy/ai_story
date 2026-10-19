@@ -411,7 +411,7 @@ def test_joining_snapshots_turncoat_and_newbie(sealed, world):
     game.state.player.defected = True
     marks = game._battle_marks()
     # 新角色還在新手期；沒有本命戰法；稱號（名聲 2.5）測試內容關著
-    assert marks == {"turncoat": True, "newbie": True, "kit": None, "renown": []}
+    assert marks == {"turncoat": True, "newbie": True, "kit": None, "renown": [], "escort": None}  # 沒派同伴（歷史武將同行）
     b = BattleInstance(battle_id="changshe_fire")
     battle_instance.join_faction(b, "甲", "guan", 300.0, **marks)
     assert (b.participants["甲"].turncoat, b.participants["甲"].newbie) == (True, True)

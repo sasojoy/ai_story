@@ -17,7 +17,7 @@ import math
 import random
 from collections.abc import Iterator
 
-from . import calendar, figures, materials, push, timetable
+from . import calendar, figures, materials, push, renown, timetable
 from .journal import fragment_line
 from .models import (
     Check, Content, FsAsk, FsChain, FsFinal, FsFragment, FsItem, FsRequires, FsStep, FsWrong, Squad,
@@ -636,7 +636,7 @@ def _punish(state: GameState, content: Content, c: FsChain, trip: FsStep, wrong:
         lines += spend_grain(state, content, min(_trip_grain(content, trip), materials.grain_of(state, content)))
     for cid, delta in wrong.affinity.items():
         before = p.affinities.get(cid, 0)
-        p.affinities[cid] = max(0, min(100, before + delta))
+        p.affinities[cid] = max(0, min(100, before + renown.warmed(content, delta)))  # 加的放慢；正式內容這裡只寫扣的
         if p.affinities[cid] != before:
             lines.append(f"{_figure_name(content, cid)}情誼 {p.affinities[cid] - before:+d}")
     if wrong.cooldown_days:  # 遊戲日（跟著季長縮，rules.day_seconds）：從答錯那一刻起整整那麼久（fix-1008 項目七，控制者裁示）

@@ -935,7 +935,7 @@ def offer_refusal(state: GameState, content: Content, o: OppDef, world=None) -> 
 def offer(state: GameState, content: Content, o: OppDef, world=None) -> tuple[list[str], str]:
     """管理者「給他一個機緣」（先過 offer_refusal）：照這一種機緣自然送上門的那一刻，用自然那條路的同一個函式。
     回傳（寫進他江湖紀錄的幾行——自然那條路的原句, 給管理者看的那一句「做了什麼」）。
-    - 情誼型：情誼補到話題出現的門檻（rules.apply_effect 的情誼，跟事件加情誼同一條；紀錄寫「某某情誼 +N」）。
+    - 情誼型：情誼補到話題出現的門檻（補到那個數，不過情誼放慢；紀錄寫「某某情誼 +N」，同 rules.apply_effect 的寫法）。
     - 天時地利型：聽到線索（hear_clue，hear_clues 擲中時的同一條）；時段與地點照舊要等、要去。
     - 推理型：聽到本季內鬼還沒聽過的每一個特徵（hear_clue）；指認照舊到問話的人那裡。
     - 累積型：次數記滿、拿到東西（_milestone，after_success 湊滿那一刻的同一條；戰線記他此刻所在地點的）；送去照舊。
@@ -943,7 +943,11 @@ def offer(state: GameState, content: Content, o: OppDef, world=None) -> tuple[li
     p = state.player
     if o.kind == "bond":
         cid, need = o.bond.character, foreshadow.need(content, o.bond.affinity)
-        lines = apply_effect(Effect(affinity={cid: need - p.affinities.get(cid, 0)}), state, content, world)
+        # 補到門檻是目標、不是一筆加的情誼：照補到那個數，不過情誼放慢（renown.warmed）；紀錄寫法同 rules.apply_effect
+        before = p.affinities.get(cid, 0)
+        p.affinities[cid] = max(before, min(100, need))
+        moved = p.affinities[cid] - before
+        lines = [f"{content.characters[cid].name}情誼 {moved:+d}"] if moved else []
         return lines, f"跟{content.characters[cid].name}的情誼補到 {need}，跟他交談時有話題「{o.bond.topic}」"
     if o.kind == "timing":
         return hear_clue(state, o.id, o.timing.clue), "聽到了線索；照舊要在那個時段、到那個地方才試得了"

@@ -465,6 +465,9 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .scene .muster-join .btn { width: auto; margin: -8px 0; }
 .scene .muster-join.wide { flex-basis: 100%; }
 .scene .muster-join.wide .btn { flex: 1 1 0; min-width: 0; margin: 0; padding: 6px 8px; justify-content: center; }
+/* 挑同伴那一步（FB-360）：另起一行、一顆一行，鈕上寫份量與氣血 */
+.scene .muster-join.pick { flex-basis: 100%; flex-direction: column; }
+.scene .muster-join.pick .btn { width: 100%; margin: 0; padding: 6px 8px; }
 /* 決戰：對面上一回合的出招比例與自己的結果（引擎寫成一段 markdown 引用「> 」，伺服器轉成 blockquote）：小字、淡色、行距緊、
    沒有瀏覽器預設的縮排與邊線，375px 上約 65px（含上面一段的間距；15.5px 兩段是 95px） */
 .scene blockquote { margin: 2px 0; padding: 0; border: 0; font-size: 13px; line-height: 1.5; color: var(--ink-2); }

@@ -14,6 +14,8 @@
   "event_fail_stamina_scale": 0.5,
   "newbie_real_hours": 48,
   "newbie_hp_double": false,
+  "companions": {"enabled": true},
+  "affinity_gain_scale": 0.7,
   "ollama_model": "gemma4:12b",
   "ollama_think": false,
   "ollama_keep_alive": "12h",

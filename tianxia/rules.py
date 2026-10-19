@@ -7,7 +7,7 @@ import re
 from collections.abc import Callable
 from typing import Literal, NamedTuple
 
-from . import calendar, front_lines, gender, insights, library, materials, rise, roster, team, treasures  # 與 roster 互相 import：只能引入整個模組、呼叫時才取屬性，不能 from .roster import …
+from . import calendar, front_lines, gender, insights, library, materials, renown, rise, roster, team, treasures  # 與 roster 互相 import：只能引入整個模組、呼叫時才取屬性，不能 from .roster import …
 from .allied import hidden_trends as allied_hidden
 from .allied import on as haoqiang_allied  # noqa: F401  豪強分屬兩軍：設計寫 rules.haoqiang_allied、rules.side_of，其他模組照這兩個名字讀
 from .allied import side_of  # noqa: F401
@@ -1016,7 +1016,7 @@ def apply_effect(
         msgs.append(f"體力 {'+' if effect.stamina > 0 else ''}{effect.stamina}")
     for character_id, delta in effect.affinity.items():  # 情誼（計畫 T5）：夾在 0～100，訊息寫實際動了多少，沒動就不寫
         before = p.affinities.get(character_id, 0)
-        p.affinities[character_id] = max(0, min(100, before + delta))
+        p.affinities[character_id] = max(0, min(100, before + renown.warmed(content, delta)))  # 加的放慢（Config.affinity_gain_scale）
         if p.affinities[character_id] != before:
             msgs.append(f"{content.characters[character_id].name}情誼 {p.affinities[character_id] - before:+d}")
     if effect.patron is not None:  # 豪強的靠山（晉升奇遇 4.2；正式版丙一）

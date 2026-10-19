@@ -703,6 +703,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
             return ORDER_SCORE
         if arg == "summons":  # 應召（計畫 T5）：只在召見的地點出現
             return SUMMONS_SCORE
+        if arg.startswith("recruit:"):
+            return None  # 招募歷史武將（歷史武將同行第七節）：假人不招
         return ACT_SCORES.get(arg, 0.0)
     return None
 
