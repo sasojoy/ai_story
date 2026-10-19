@@ -33,6 +33,16 @@ def test_the_upgrade_rows_get_a_third_cell_for_three_to_four():
     assert 'class="up-rows four"' in html and 'data-tier="4"' in html
 
 
+def test_the_three_for_four_line_breaks_only_between_its_pieces():
+    """FB-410：375 寬三換四那一格（一格約 103px）「150 兩・這一季還能 2 個」斷成「這一季還／能 2 個」：價錢與「這一季還能 N 個」
+    各包成不折行的小段（同 FB-132、FB-297 的 .nb），要斷只斷在「・」後面。"""
+    game = _smithy({"gang_3": 5})
+    html = run(server.main_view(game), "H.render(); return T.els.app.innerHTML;", S={"shopTab": "trade"})
+    cell = html[html.index('data-tier="4"'):]
+    cell = cell[:cell.index("</button>")]
+    assert '<span class="nb">150 兩</span>' in cell and '・<span class="nb">這一季還能 2 個</span>' in cell
+
+
 def test_tier_four_off_keeps_three_columns():
     game = _smithy({"gang_1": 2, "gang_3": 1}, on=False)
     assert shopview.smith_view(game.state, game.content, game.world)["four"] is False

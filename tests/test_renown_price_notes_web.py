@@ -164,7 +164,8 @@ def test_the_upgrade_cell_names_the_discount():
     page = econ_run(m, 'H.S.shopTab = "trade"; H.render(); return T.els.app.innerHTML;')
     cell = page[page.index('data-attr="柔" data-tier="2"'):]
     cell = cell[:cell.index("</button>")]
-    assert f'{row["cost"]} 兩<span class="nb">（威震州郡・九折）</span>' in cell
+    # 價錢自己也是一個不折行的小段（FB-410），原因接在後面
+    assert f'<span class="nb">{row["cost"]} 兩</span><span class="nb">（威震州郡・九折）</span>' in cell
     plain = econ_game(faction=None, bag={"rou_1": 7})  # 沒打折：照舊只寫價錢
     plain.choose("act:smith")
     page = econ_run(server.main_view(plain), 'H.S.shopTab = "trade"; H.render(); return T.els.app.innerHTML;')
