@@ -60,13 +60,45 @@ def harmony(a: str, b: str) -> str:
     return HARMONY if relation(a, b) in (SAME, BORN) else DISCORD
 
 
-def merge_attribute(a, b, seed: str) -> str:
-    """意境＋意境合出來的屬性：陰陽虛實跟它自己的來源相生（陽＋剛）時合出陰陽虛實那一個；其他照 insights.merged_attribute
-    （同屬性、兩兩相生照表、其餘照配方雜湊挑一個）。打造與武學＋武學照舊用 merged_attribute。"""
+COMPOUND = frozenset(insights.PAIR_ATTRIBUTES.values())  # 陰陽虛實：兩股意合出來的複合的意
+PICK_LINE = {  # 預覽那一句：相剋或不相干時為什麼是這一邊（合成即設計定案第四節；待 joy 潤）
+    "deeper": "兩股意{how}，照{side}的「{name}」",
+    "compound": "兩股意{how}，照複合的「{name}」",
+    "seed": "兩股意{how}，爐火自己挑了「{name}」",
+}
+
+
+def pick_attribute(a, b, da: int, db: int, seed: str) -> tuple[str, str | None]:
+    """相剋或不相干的兩樣合出哪一邊的屬性（合成即設計定案第四節，Joy 2026-10-19：不再一律雜湊）：
+    深的那一邊為主（意境看重數、武學看境界，da／db）；一樣深時陰陽虛實這類複合的意為主；再一樣才照配方種子挑。
+    同屬性、相生的不走這裡（呼叫端先照表）。回（屬性, 原因鍵）：deeper、compound、seed；跟參數順序無關。"""
+    if da != db:
+        return (a if da > db else b).attribute, "deeper"
+    comp = [t for t in (a, b) if t.attribute in COMPOUND]
+    if len(comp) == 1:
+        return comp[0].attribute, "compound"
+    return insights.merged_attribute(a, b, seed), "seed"
+
+
+def merge_attribute(a, b, seed: str, ranks: tuple[int, int] | None = None) -> str:
+    """意境＋意境合出來的屬性：陰陽虛實跟它自己的來源相生（陽＋剛）時合出陰陽虛實那一個；同屬性、兩兩相生照表；
+    其餘（相剋、不相干）給了 ranks 照 pick_attribute（重數高的為主），沒給照配方雜湊（舊規則）。打造照舊用 insights.merged_attribute。"""
     for pair, made in insights.PAIR_ATTRIBUTES.items():
         if (made == a.attribute and b.attribute in pair) or (made == b.attribute and a.attribute in pair):
             return made
+    if ranks is not None and relation(a.attribute, b.attribute) in (CLASH, APART):
+        return pick_attribute(a, b, ranks[0], ranks[1], seed)[0]
     return insights.merged_attribute(a, b, seed)
+
+
+def pick_note(a, b, da: int, db: int, seed: str, side: str) -> str | None:
+    """預覽寫為什麼是這一邊（相剋、不相干才寫；同屬性、相生不寫）。side 是「重數」或「境界」。"""
+    rel = relation(a.attribute, b.attribute)
+    if rel not in (CLASH, APART):
+        return None
+    attribute, why = pick_attribute(a, b, da, db, seed)
+    how = "相剋" if rel == CLASH else "不相干"
+    return PICK_LINE[why].format(how=how, side=f"{side}高的那一邊", name=attribute)
 
 
 def _parents(insight: Insight, content: Content, world: WorldStateStore, state: GameState | None) -> list[Insight]:

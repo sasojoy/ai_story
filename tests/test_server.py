@@ -1742,7 +1742,7 @@ def test_forge_line_previews_a_blend(client):
     _a_player_with_insights(client)
     before = open_characters().load("沈青衫").player
     out = client.post("/api/forge_line", json={"art": "jichu_quanjiao", "other_art": "jichu_tuna"}).json()
-    assert "【基礎拳腳】＋【基礎吐納】" in out["line"] and "品質看造化" in out["line"]
+    assert "【基礎拳腳】＋【基礎吐納】" in out["line"] and "合出來是下品" in out["line"]  # 正式內容 fuse_quality.fixed 開著（合成即設計）
     saved = open_characters().load("沈青衫").player
     assert saved.arts == []  # 只是預覽：什麼都沒收、沒登記
     assert (saved.stats["xinde"], saved.stamina) == (before.stats["xinde"], before.stamina)
@@ -1902,7 +1902,7 @@ def test_a_blend_that_lands_on_a_known_art_asks_the_model_to_pick_outside_the_lo
     world = open_world()
     key = fusion.blend_key("jichu_quanjiao", "jichu_tuna")
     quanjiao, tuna = (team.resolve_art(i, game.content, world) for i in ("jichu_quanjiao", "jichu_tuna"))
-    shape = fusion.blend_shape(quanjiao, tuna, fusion.recipe_seed(world, key)[1])
+    shape = fusion.blend_shape(quanjiao, tuna, fusion.recipe_seed(world, key)[1], fusion.blend_gens(game.content, world, quanjiao, tuna))
     for i, name in enumerate(("甲拳", "乙拳")):
         known = generate_from_name(name, shape.kind, name).model_copy(update={
             "origin": "fused", "attribute": shape.attribute, "lean": shape.lean, "creator": "丙",

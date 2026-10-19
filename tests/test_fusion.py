@@ -1257,7 +1257,8 @@ def test_an_inner_and_an_outer_art_blend_into_the_kind_the_recipe_fixes(ready, c
     ready.player.member.neigong_id = "basic_breath"
     art, _ = fusion.blend(ready, content, world, named("吐納拳"), "basic_breath", "basic_fist")
     seed = fusion.recipe_seed(world, fusion.blend_key("basic_breath", "basic_fist"))[1]
-    expected = fusion.blend_shape(base_art("basic_breath", content, world), base_art("basic_fist", content, world), seed)
+    a_, b_ = base_art("basic_breath", content, world), base_art("basic_fist", content, world)
+    expected = fusion.blend_shape(a_, b_, seed, fusion.blend_gens(content, world, a_, b_))
     assert (art.kind, art.attribute) == (expected.kind, expected.attribute)
 
 
@@ -1371,9 +1372,8 @@ def test_a_blend_without_a_model_falls_back_to_the_word_table(ready, content, wo
     ready.player.arts = ["lake_kick"]
     key = fusion.blend_key("basic_fist", "lake_kick")
     art, _ = fusion.blend(ready, content, world, model_down(), "basic_fist", "lake_kick")
-    shape = fusion.blend_shape(
-        base_art("basic_fist", content, world), base_art("lake_kick", content, world), fusion.recipe_seed(world, key)[1],
-    )
+    fist_, kick_ = base_art("basic_fist", content, world), base_art("lake_kick", content, world)
+    shape = fusion.blend_shape(fist_, kick_, fusion.recipe_seed(world, key)[1], fusion.blend_gens(content, world, fist_, kick_))
     assert art.name == naming.fallback_name(content, key, shape.kind, tianji=world.read().tianji)
     assert art.kind == shape.kind and art.attribute == shape.attribute and art.note == ""
 
@@ -1442,9 +1442,8 @@ def test_a_landed_blend_sentence_follows_the_same_order(ready, content, world, a
     """武學＋武學也會合到一門已知的（候選拳，乙首創）：登記成這個配方、不叫模型；句子照功法卡的順序寫兩門，不管放進爐子的先後。"""
     ready.player.arts = ["lake_kick"]
     key = fusion.blend_key("basic_fist", "lake_kick")
-    shape = fusion.blend_shape(
-        base_art("basic_fist", content, world), base_art("lake_kick", content, world), fusion.recipe_seed(world, key)[1],
-    )
+    fist_, kick_ = base_art("basic_fist", content, world), base_art("lake_kick", content, world)
+    shape = fusion.blend_shape(fist_, kick_, fusion.recipe_seed(world, key)[1], fusion.blend_gens(content, world, fist_, kick_))
     known = generate_from_name("候選拳", shape.kind, "候選拳").model_copy(update={
         "origin": "fused", "attribute": shape.attribute, "lean": shape.lean, "creator": "乙",
     })
@@ -1526,7 +1525,7 @@ def test_a_mixed_kind_blend_lands_among_arts_of_the_kind_the_recipe_fixes(ready,
     ready.player.member.neigong_id = "basic_breath"
     key = fusion.blend_key("basic_breath", "basic_fist")
     breath, fist = base_art("basic_breath", content, world), base_art("basic_fist", content, world)
-    shape = fusion.blend_shape(breath, fist, fusion.recipe_seed(world, key)[1])
+    shape = fusion.blend_shape(breath, fist, fusion.recipe_seed(world, key)[1], fusion.blend_gens(content, world, breath, fist))
     first, second = ("basic_breath", "basic_fist") if breath.kind != shape.kind else ("basic_fist", "basic_breath")
     decoy_kind = "武學" if shape.kind == "內功" else "內功"
     for name, kind in (("甲功", shape.kind), ("乙功", shape.kind), ("誘餌功", decoy_kind)):

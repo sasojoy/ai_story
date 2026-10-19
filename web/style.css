@@ -1431,8 +1431,32 @@ div.here { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; ma
 .kiln-slot.full.r3 { border-color: var(--gold); background: color-mix(in srgb, var(--gold) 10%, var(--card)); }
 .kiln-slot > i { position: absolute; top: 3px; right: 6px; font-style: normal; font-size: 12px; color: var(--ink-2); }
 .kiln-slot.flash { animation: kiln-flash 0.9s ease-out; }
+/* 鎖在爐裡（Joy 2026-10-19）：格子右下角一顆小「鎖」，鎖著時金底；大爐子的格子外角一顆小圓（.w-pin） */
+.kiln-cell { flex: 1 1 0; min-width: 0; position: relative; display: flex; }
+.kiln-cell .kiln-slot { flex: 1 1 0; }
+.kiln-slot.locked { border-color: var(--gold); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gold) 45%, transparent); }
+.kiln-pin { position: absolute; right: 3px; bottom: 3px; width: 20px; height: 20px; padding: 0; border-radius: 50%; border: 1px solid var(--line);
+  background: var(--card); color: var(--ink-2); font: 600 10px var(--serif); line-height: 18px; cursor: pointer; }
+.kiln-pin.on { background: var(--gold); border-color: var(--gold); color: #2a241d; }
+.w-pin { cursor: pointer; }
+.w-pin circle { fill: rgba(42, 36, 29, 0.9); stroke: rgba(251, 247, 239, 0.45); stroke-width: 0.8; }
+.w-pin.on circle { fill: var(--gold); stroke: var(--gold); }
+.w-pin-t { font-size: 6.5px; font-weight: 700; fill: rgba(251, 247, 239, 0.8); text-anchor: middle; pointer-events: none; }
+.w-pin.on .w-pin-t { fill: #2a241d; }
+.w-slot.locked rect { stroke: #f0c060; stroke-width: 2; }
 @keyframes kiln-flash { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--gold) 80%, transparent); background: color-mix(in srgb, var(--gold) 35%, var(--card)); }
   100% { box-shadow: 0 0 0 10px transparent; } }
+/* 挑東西放進爐的抽屜（Joy 2026-10-19「點格子開抽屜」）：同設定抽屜的 .sheet，清單在裡面自己捲 */
+.craft-sheet { max-height: 80vh; }
+.craft-sheet .label { margin-top: 8px; }
+.btn.pot-open { width: 100%; margin: 0 0 12px; }
+.w-slot[data-act="pot-open"] { cursor: pointer; }
+.kiln-slot.empty[data-act="pot-open"] { cursor: pointer; font: inherit; color: inherit; background: none; }
+.kiln-peek { display: flex; align-items: center; gap: 8px; width: 100%; margin: 6px 0 0; padding: 0; border: 0; background: none; text-align: left; color: var(--ink); font: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.kiln-peek > span { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.kiln-peek b { font: 600 13px var(--serif); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kiln-peek small { font-size: 11px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kiln-peek .qseal { width: 22px; height: 22px; font-size: 13px; }
 .kiln-warn { margin: 6px 0 0; font-size: 12px; line-height: 1.4; color: var(--bad); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 @media (prefers-reduced-motion: reduce) { .kiln-slot.flash { animation: none; outline: 2px solid var(--gold); } }
 /* 開爐成了：合出來的那一樣的卡（Joy 2026-10-17） */
@@ -1459,6 +1483,12 @@ div.here { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; ma
 .mc-tags i.off { border-style: dashed; color: var(--ink-2); background: none; }
 .mc-tags i.off em { background: none; color: var(--ink-2); border: 1px dashed var(--line); }
 .mc-tags i.hi { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 50%, var(--line)); }
+.made-card.preview { border-style: dashed; border-color: color-mix(in srgb, var(--gold) 60%, var(--line)); box-shadow: none; } /* 預覽卡：還沒開爐，虛線框 */
+.made-card.preview .mc-power small { font-size: 11px; color: var(--ink-2); margin-left: 1px; }
+.made-card.preview .mc-verdict .near { color: var(--gold); }
+.mc-cost { margin: 8px 0 0; font-size: 12px; color: var(--ink-2); }
+.made-card .kiln-warn { -webkit-line-clamp: unset; }
+.odds.fixed em { font-style: normal; font-weight: 600; margin-left: 4px; }
 .made-card .fold { margin: 10px 0 0; }
 .made-card > .btn { margin-top: 10px; }
 

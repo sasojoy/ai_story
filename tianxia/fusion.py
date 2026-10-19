@@ -31,7 +31,7 @@ import random
 from dataclasses import dataclass
 
 from . import annals, calendar, depth, insights, landing, library, naming, rules, secret_recipes, sensing, team, traits, treasures
-from .martial_arts import ATTRIBUTE_COUNTERS, Insight, MartialArt, generate_from_name, shown_creator
+from .martial_arts import ATTRIBUTE_COUNTERS, MAX_LEVEL, Insight, MartialArt, generate_from_name, shown_creator
 from .models import Content, PresetRecipe
 from .ollama_client import OllamaClient
 from .rules import add_chronicle, add_rumor, season_one
@@ -99,6 +99,9 @@ class QualityOdds:
 
     odds: dict[str, float]
     reasons: tuple[str, ...] = ()
+    # 合成即設計（Config.fuse_quality.fixed）：不擲骰時這一爐一定合出的品級，與離下一品還差幾分（到頂是 None）；擲骰的爐是 None
+    fixed: str | None = None
+    short_of: float | None = None
 
 
 def odds_from_points(scored: list[tuple[str, float]], rule, base: dict[str, float]) -> QualityOdds:
@@ -122,9 +125,17 @@ def odds_from_points(scored: list[tuple[str, float]], rule, base: dict[str, floa
 
 
 def _points(content: Content, scored: list[tuple[str, float]]) -> QualityOdds:
-    """合成的品質機率：權重是 Config.fuse_quality，從普通搭配的平均（Config.fuse_quality_odds）推。"""
+    """合成的品質機率：權重是 Config.fuse_quality，從普通搭配的平均（Config.fuse_quality_odds）推。
+    fixed 開著（合成即設計定案第一節）時造化分直接對應品級：過 mid_from 中品、過 up_from 上品，其餘下品；odds 寫成 100% 那一品。"""
     cfg = content.config
-    return odds_from_points(scored, cfg.fuse_quality, cfg.fuse_quality_odds)
+    odds = odds_from_points(scored, cfg.fuse_quality, cfg.fuse_quality_odds)
+    rule = cfg.fuse_quality
+    if not rule.fixed:
+        return odds
+    score = sum(points for _, points in scored)
+    quality = "上品" if score >= rule.up_from else "中品" if score >= rule.mid_from else "下品"
+    short = None if quality == "上品" else (rule.up_from if quality == "中品" else rule.mid_from) - score
+    return QualityOdds({q: (100.0 if q == quality else 0.0) for q in odds.odds}, odds.reasons, quality, short)
 
 
 def _art_points(state: GameState, content: Content, arts: list[tuple[str, MartialArt]]) -> list[tuple[str, float]]:
@@ -249,13 +260,24 @@ def blend_odds(
 
 def roll_quality(odds: QualityOdds | None, rng: random.Random | None) -> str:
     """擲合成出新武學自己那一份的品質。rng 或 odds 是 None 時不擲、照劇本是下品（序章那一爐、直接呼叫的腳本與測試）。"""
+    if odds is not None and odds.fixed:  # 合成即設計：照投入定，不擲
+        return odds.fixed
     if rng is None or odds is None or not any(odds.odds.values()):
         return "下品"
     return rng.choices(list(odds.odds), weights=list(odds.odds.values()))[0]
 
 
-def quality_odds_text(odds: QualityOdds) -> str:
-    """合成前的說明寫這一爐的機率，不寫確定的品級：「下品 19%、中品 46%、上品 35%（兩股氣息相投、底子厚實）」。"""
+NEAR_LINE = "再講究些便是{next}"  # fixed 開著、離下一品不到 Config.fuse_quality.near 分時多這一句（待 joy 潤）
+
+
+def quality_odds_text(odds: QualityOdds, near: float = 0) -> str:
+    """合成前的說明寫這一爐的機率，不寫確定的品級：「下品 19%、中品 46%、上品 35%（兩股氣息相投、底子厚實）」。
+    fixed 的爐（合成即設計）寫定的那一品：「中品（底子厚實；再講究些便是上品）」。"""
+    if odds.fixed:
+        reasons = list(odds.reasons)
+        if odds.short_of is not None and near and odds.short_of <= near:
+            reasons.append(NEAR_LINE.format(next="上品" if odds.fixed == "中品" else "中品"))
+        return odds.fixed + (f"（{'；'.join(reasons)}）" if reasons else "")
     text = "、".join(f"{q} {round(w)}%" for q, w in odds.odds.items() if w > 0)
     return text + (f"（{'、'.join(odds.reasons)}）" if odds.reasons else "")
 
@@ -317,13 +339,17 @@ def _bit(seed: str, what: str) -> int:
     return hashlib.sha256(f"{seed}|{what}".encode("utf-8")).digest()[0] % 2
 
 
-def blend_shape(a: MartialArt, b: MartialArt, seed: str) -> Shape:
-    """設計 12.3：兩門同種類就是那一種，一內一外由配方決定（兩種各半）；屬性、正邪照意境合併的規則；
+def blend_shape(a: MartialArt, b: MartialArt, seed: str, gens: tuple[int, int] | None = None) -> Shape:
+    """設計 12.3：兩門同種類就是那一種，一內一外由配方決定（兩種各半）；屬性、正邪照意境合併的規則（相剋、不相干時給了
+    gens〔兩門的境界，照 a、b 的順序〕照境界高的那一邊，合成即設計定案第四節；沒給照配方雜湊）；
     修練記屬性跟結果一樣的那一門的意境，兩門都一樣或都不一樣由配方挑一門，挑到的那門沒記意境（基礎武學）就用另一門的。
     跟參數順序無關。seed 是 recipe_seed 的第二個值。"""
     first, second = sorted((a, b), key=lambda art: art.id)
     kind = a.kind if a.kind == b.kind else KINDS[_bit(seed, "kind")]
-    attribute = insights.merged_attribute(first, second, seed)
+    if gens is not None and depth.relation(a.attribute, b.attribute) in (depth.CLASH, depth.APART):
+        attribute = depth.pick_attribute(a, b, gens[0], gens[1], seed)[0]
+    else:
+        attribute = insights.merged_attribute(first, second, seed)
     matching = [art for art in (first, second) if art.attribute == attribute]
     keeper = matching[0] if len(matching) == 1 else (first, second)[_bit(seed, "insight")]
     other = second if keeper is first else first
@@ -331,11 +357,22 @@ def blend_shape(a: MartialArt, b: MartialArt, seed: str) -> Shape:
     return Shape(kind, attribute, insights.merged_lean(first, second), held.insight, held.insight_attr)
 
 
-def merge_shape(world: WorldStateStore, a: Insight, b: Insight) -> tuple[str, str]:
+def merge_shape(
+    world: WorldStateStore, a: Insight, b: Insight, content: Content | None = None, state: GameState | None = None,
+) -> tuple[str, str]:
     """意境＋意境本來會得到的（屬性, 正邪）：配方種子（天機＋配方鍵）加上兩個來源決定，跟參數順序無關（設計 12.6）。
+    給了 content，相剋、不相干的照重數高的那一邊（depth.merge_attribute 帶 ranks；合成即設計定案第四節）。
     merge 照它登記，煉製頁的預覽（skillview.forge_line）照它寫——兩邊同一個函式，預覽不會跟結果各說各話（FB-082）。"""
     seed = recipe_seed(world, merge_key(a.id, b.id))[1]
-    return depth.merge_attribute(a, b, seed), insights.merged_lean(a, b)
+    ranks = None
+    if content is not None:
+        ranks = (depth.rank_of(a, content, world, state), depth.rank_of(b, content, world, state))
+    return depth.merge_attribute(a, b, seed, ranks), insights.merged_lean(a, b)
+
+
+def blend_gens(content: Content, world: WorldStateStore, a: MartialArt, b: MartialArt) -> tuple[int, int]:
+    """兩門的境界（blend_shape 的 gens）。"""
+    return depth.gen_of(a, content, world), depth.gen_of(b, content, world)
 
 
 def _fuse_traits(state: GameState, content: Content, world: WorldStateStore, base: MartialArt, insight: Insight) -> list[str]:
@@ -641,7 +678,7 @@ def forge_request(
         if secret_recipes.match_blend(state, content, world, art_id, art_a, other_art, art_b) is not None:
             return None  # 秘方：名字內容寫好了
         tianji, seed = recipe_seed(world, key)
-        shape = blend_shape(art_a, art_b, seed)
+        shape = blend_shape(art_a, art_b, seed, blend_gens(content, world, art_a, art_b))
         candidates = landing.art_candidates(world, shape.kind, shape.attribute, shape.lean)
         if landing.lands(content, key, tianji, len(candidates)):
             return _pick_request("blend", key, shape.kind, _pick_messages(_blend_what(art_a, art_b), candidates), candidates)
@@ -815,7 +852,7 @@ def fuse(
     echo(state, content, art, first)
     if first:
         annals.note(state, content, annals.DEED, f"江湖上第一個合出【{art.name}】。", 3)  # 行狀（玩家傳）：首創
-    return art, msgs + _store_forged(state, content, world, art, quality)
+    return art, msgs + _store_forged(state, content, world, art, quality, [library.level_of(state, art_id) or 1])
 
 
 def _claim_secret_art(
@@ -862,13 +899,42 @@ def _secret_lines(
     return lines
 
 
+INHERIT_LINE = "承著底子的火候，【{name}】一上手便是第{level}成。"  # 合成即設計定案第二節（待 joy 潤）
+
+
+def inherited_level(content: Content, levels: list[int]) -> int:
+    """合出來的武學一上手第幾成：底（兩門時平均）的成數 × Config.fusion_depth.inherit_share，無條件捨去、至少第一成。"""
+    share = content.config.fusion_depth.inherit_share
+    if not levels or share <= 0:
+        return 1
+    return max(1, min(MAX_LEVEL, int(sum(levels) / len(levels) * share)))
+
+
+def _inherit(state: GameState, content: Content, art: MartialArt, levels: list[int]) -> list[str]:
+    """把承底的成數寫進去（身上那一欄或 art_levels），白送的記在 art_free_levels（熔了不退）。第一成就是沒承到，一個字不寫。"""
+    level = inherited_level(content, levels)
+    if level <= 1:
+        return []
+    p = state.player
+    slot = "neigong_id" if art.kind == "內功" else "wugong_id"
+    if getattr(p.member, slot) == art.id:
+        setattr(p.member, slot.replace("_id", "_level"), level)
+    else:
+        p.art_levels[art.id] = level
+    p.art_free_levels[art.id] = level
+    return [INHERIT_LINE.format(name=art.name, level=level)]
+
+
 def _store_forged(
     state: GameState, content: Content, world: WorldStateStore, art: MartialArt, quality: str | None = None,
+    levels: list[int] | None = None,
 ) -> list[str]:
     """合成出來的新武學放哪（fuse、blend 共用）：同 library.store_art（quality 是擲到的自己那一份品質）；進了功法庫（沒有直接上身）的，再接兩句——
     跟身上同一種那門的比較（W6，team.compare_with_worn；沒東西可比就沒有這一句），與一句指路（W5）：結果說「收進功法庫」，
     修練頁的清單也叫「功法庫」，最後這句把兩邊接起來，所以排在最後。學藝、事件教的武學不走這裡。"""
     stored = library.store_art(state, art, quality)
+    if stored:
+        stored += _inherit(state, content, art, levels or [])
     if not stored or art.id not in state.player.arts:
         return stored
     note = team.compare_with_worn(state, content, world, art)
@@ -964,7 +1030,7 @@ def merge(
     ia, ib = insights.resolve(a, content, world, state), insights.resolve(b, content, world, state)
     key = merge_key(a, b)
     tianji = recipe_seed(world, key)[0]
-    attribute, lean = merge_shape(world, ia, ib)
+    attribute, lean = merge_shape(world, ia, ib, content, state)
     secret = secret_recipes.match_merge(content, world, ia, ib)  # 秘方（照左右兩格；私有意境照屬性認）先於私有的合併
     if secret is None and (insights.is_own(a) or insights.is_own(b)):
         return _merge_own(state, content, world, client, ia, ib, attribute, lean, key, proposed)
@@ -1108,7 +1174,7 @@ def blend(
     art_a, art_b = team.player_art(state, content, world, a), team.player_art(state, content, world, b)
     key = blend_key(a, b)
     tianji, seed = recipe_seed(world, key)
-    shape = blend_shape(art_a, art_b, seed)  # 秘方也照這一組的種子定形狀：合成前的說明寫的屬性跟合出來的對得上
+    shape = blend_shape(art_a, art_b, seed, blend_gens(content, world, art_a, art_b))  # 秘方也照這一組的種子定形狀：合成前的說明寫的屬性跟合出來的對得上
     secret = secret_recipes.match_blend(state, content, world, a, art_a, b, art_b)
     if secret is not None:
         key = secret_recipes.key(secret)
@@ -1170,4 +1236,6 @@ def blend(
     echo(state, content, art, first)
     if first:
         annals.note(state, content, annals.DEED, f"江湖上第一個合出【{art.name}】。", 3)  # 行狀（玩家傳）：首創
-    return art, msgs + _store_forged(state, content, world, art, quality)
+    return art, msgs + _store_forged(
+        state, content, world, art, quality, [library.level_of(state, a) or 1, library.level_of(state, b) or 1],
+    )

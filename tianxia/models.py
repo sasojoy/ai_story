@@ -222,6 +222,15 @@ class FuseQuality(_Strict):
     low_per_point: float = Field(default=1.0, ge=0)
     up_range: tuple[float, float] = (5, 45)  # 上品最少、最多幾 %
     low_range: tuple[float, float] = (15, 80)  # 下品最少、最多幾 %
+    # ── 合成即設計（Joy 2026-10-19「戰力應該更重要」「試試看這樣吧」；/mnt/project-files/plan/合成即設計定案.md 第一節）：
+    # fixed 開著時不擲骰，造化分過 mid_from 是中品、過 up_from 是上品，其餘下品——同樣的底、同樣的意境一定合出同一品。
+    # 分數的量級（base_quality 下品 −5／上品 12、成數每成 1.5、同屬性 8、合併的意境 6、天時地利 8～10）：
+    # 上品的底七成融同屬性合併意境約 29（上品）、中品的底五成融基本意境約 5（中品邊緣）、下品的底一成不相干約 −11（下品）。
+    # 絕學照舊只靠修練與契機。near 是說明那一句「再講究些」的門檻：離下一品不到這麼多分才提。測試內容關著（舊測試照機率）。
+    fixed: bool = False
+    mid_from: float = 6
+    up_from: float = 24
+    near: float = Field(default=8, ge=0)
     # 底（武學＋武學時是兩門的平均）自己那一份的品質：好的底比較容易合出好品質（回應企劃者「中品的底合出下品，那我幹嘛合成」）
     base_quality: dict[str, float] = Field(
         default_factory=lambda: {"下品": -5, "中品": 5, "上品": 12, "絕學": 20},
@@ -2261,6 +2270,9 @@ class FusionDepthTuning(_Strict):
     # （scripts/measure_depth.py，2026-10-16）。功效每個有上限，層數多了只是把三四個功效都推到頂。
     max_layers: int = Field(default=5, ge=1)
     directions: int = Field(default=3, ge=1)
+    # 一脈相承連成數也傳（合成即設計定案第二節）：合出來的武學繼承底（兩門時取平均）這麼多比例的成數（無條件捨去、至少第一成），
+    # 白送的那幾成記在 PlayerState.art_free_levels、熔了不退。0 是舊規則（從第一成起修）。
+    inherit_share: float = Field(default=0, ge=0, le=1)
 
 
 class SignatureArtTuning(_Strict):
