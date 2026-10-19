@@ -925,12 +925,18 @@ class SqliteWorldStore:
     def get_companion(self, companion_id: str) -> CompanionProgress:
         return self.read().companions.get(companion_id, CompanionProgress())
 
-    def try_recruit(self, companion_id: str, player_name: str) -> bool:
+    def try_recruit(self, companion_id: str, player_name: str, cap: int | None = None) -> bool:
+        """原子地招一位：已經有主、或（給了 cap）這個人名下已經有 cap 位（名號比對不分大小寫），都不寫、回 False。
+        上限在同一筆寫入裡判，兩個分頁同時招第四位也只有一個成（歷史武將同行第四節）。"""
         result = {"ok": False}
 
         def _apply(state: SharedWorldState) -> None:
             progress = state.companions.setdefault(companion_id, CompanionProgress())
             if progress.owner is not None:
+                return
+            if cap is not None and sum(
+                1 for p in state.companions.values() if p.owner is not None and name_key(p.owner) == name_key(player_name)
+            ) >= cap:
                 return
             progress.owner = player_name
             result["ok"] = True

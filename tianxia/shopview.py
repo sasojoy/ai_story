@@ -29,11 +29,12 @@ SMITH_SITUATIONS = (
 MARKET_SITUATIONS = ("enter", "buy", "feed", "wield", "short_silver", "rack_full", "refused")
 BOARD_SITUATIONS = ("enter", "take", "drop", "pick", "give", "held_full", "refused")
 DONATE_SITUATIONS = ("enter", "donate", "refused")  # 軍需帳（素材與經濟 B6）：進門、捐成了、捐不了
+TAVERN_SITUATIONS = ("enter", "chatter", "news", "nothing", "asked", "missed", "wall", "treat", "hide", "trace", "short_silver", "refused")  # 酒肆（企劃者 2026-10-18）
 SITUATIONS = {"smith": SMITH_SITUATIONS, "market": MARKET_SITUATIONS, "board": BOARD_SITUATIONS,
-              "donate": DONATE_SITUATIONS}  # 店 → 情況；content.check_shop_lines 照它驗
+              "donate": DONATE_SITUATIONS, "tavern": TAVERN_SITUATIONS}  # 店 → 情況；content.check_shop_lines 照它驗
 # 每間店的離開鈕（Game._shop_live 認「店裡那一串是眼前的選單」）：懸賞榜的第三層（替一張求藝、求兵挑東西）沒有 bounty:back，只有回到懸賞榜
 BACKS = {"smith": ("smith:back",), "market": (mounts.BACK,), "board": ("bounty:back", bounties.UNPICK_ID), "arena": (arena.BACK_ID, arena.YIELD_ID),
-         "donate": ("donate:back",)}
+         "donate": ("donate:back",), "tavern": ("tavern:back",)}
 _HELD_HEAD = bounties.HELD_FULL.partition("{")[0]
 FORGED_KEYS = {"下品": "forge_low", "中品": "forge_mid", "上品": "forge_high"}
 RACK_FULL = "裝備庫滿了"  # 同 equipment.RACK_FULL（problem_key 照它認；tests/test_shop.py 鎖住兩邊一樣）
