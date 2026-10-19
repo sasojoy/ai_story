@@ -5491,6 +5491,7 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
         "screen_text",  # 挑釁附的一句、名帖自題一句：鎖外請模型審（speech.judge），結果交給 C 段
         "tavern_ask",  # 酒肆問酒家：三段同 duel_text，模型只寫酒家那一句
         "feast_text",  # 宴客自己寫的那一句敬酒（大勢人物擴充第三批）：三段同 answer_event
+        "gather_text",  # 找素材的「自己說」（第 32 項）：三段同 feast_text
     }
     # 宣告、model_call 讀、main() 建佇列；另外兩個只看不排：/api/queue 問位置、管理者那份資料抄總數（admin_choices 在 look 的鎖裡，
     # 但 snapshot 只碰佇列自己的短鎖、不等任何一件，不算在行動鎖裡排隊）
@@ -5740,7 +5741,9 @@ def test_the_page_polls_the_queue_only_while_waiting_on_the_model():
     assert 'watchQueue(send, "心念漸凝……")' in _js_function(js, "async function senseSend(")
     say = _js_function(js, "async function sayLine(")
     assert 'watchQueue(submitBtn, "對方沉吟中…")' in say and "stop();" in say.split("finally")[1]
-    assert js.count("watchQueue(") == 6  # 定義一個、使用五個（對話與大場面是同一個選項流程；有所感畫完送出、對話「自己說」各另一個）
+    gather = _js_function(js, "async function gatherSay(")  # 找素材的「自己說」（第 32 項）
+    assert "watchQueue(submitBtn, GATHER_SAY_WAIT)" in gather and "stop();" in gather.split("finally")[1]
+    assert js.count("watchQueue(") == 7  # 定義一個、使用六個（對話與大場面是同一個選項流程；有所感畫完送出、對話「自己說」、找素材「自己說」各另一個）
     sheet = _js_function(js, "function sheetHtml(")
     assert "a && a.llm_queue" in sheet and "模型佇列：處理中" in sheet
 

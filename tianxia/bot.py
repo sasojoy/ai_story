@@ -380,11 +380,17 @@ def enlist_pick(game: Game, option_ids: list[str]) -> str | None:
 def explore_choice(ids, want: str = "material") -> str | None:
     """要探索時按哪一顆：三選一開著是找素材（explore:gather），關著是 act:explore；都不在選單上是 None。量表與腳本共用。
     want="exp"（要經驗）：一類一顆開著、選單上有練功（explore:practice）就按它，沒有退回上面那樣（正式季整合 9.2）。
-    打探懸賞照預設（練功不算打探）。"""
+    打探懸賞照預設（練功不算打探）。
+    找素材分支（第 32 項）：選單上有分支（explore:gather:<id>）時「找素材」只是入口，回第一條分支（不回「自己說」）；
+    ids 是有順序的（list、tuple）照選單的順序，set 照字排，結果才固定。"""
     practice = explore_modes.option_id(explore_modes.PRACTICE)
     if want == "exp" and practice in ids:
         return practice
     gather = explore_modes.option_id(explore_modes.GATHER)
+    order = list(ids) if isinstance(ids, (list, tuple)) else sorted(ids)
+    branch = next((i for i in order if i.startswith(f"{gather}:") and i != explore_modes.SAY_ID), None)
+    if branch is not None:
+        return branch
     return gather if gather in ids else "act:explore" if "act:explore" in ids else None
 
 
@@ -421,6 +427,13 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
         # 探索三選一開著：「探索」只是展開三顆的入口，按了什麼都不做、不花體力（同 act:rest 的道理：永遠按得下去的空按會讓
         # 「沒得按就推進時間」的訊號失效）
         options = [o for o in options if o.id != "act:explore"]
+    gather = explore_modes.option_id(explore_modes.GATHER)
+    if any(o.id.startswith(f"{gather}:") for o in options):
+        # 找素材分支（第 32 項）：「找素材」那時只是展開分支的入口（同 act:explore，按了不做事）；「自己說」要寫一句話（同隨口應對）。
+        # 分支只留一條（照 explore_seq 輪，不擲骰）：隨機挑時找素材的份量跟沒有分支層時一樣是一顆，不因為多了幾條路多去找素材
+        branches = [o.id for o in options if o.id.startswith(f"{gather}:") and o.id != explore_modes.SAY_ID]
+        keep = branches[s.player.explore_seq % len(branches)] if branches else None
+        options = [o for o in options if o.id not in (gather, explore_modes.SAY_ID) and (not o.id.startswith(f"{gather}:") or o.id == keep)]
     if s.pending_event:
         choices = game.content.events[s.pending_event].choices
         for option in options:

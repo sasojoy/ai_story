@@ -17,6 +17,7 @@
   "sortie": {"enabled": false},
   "explore_modes": {"enabled": false},
   "precise_actions": false,
+  "gather_branches": {"enabled": false},
   "insight_strong": {"enabled": false},
   "terrain_arts": {"enabled": false},
   "economy": {"gather_cut": false, "sortie_silver": false, "sell": false, "upgrade": false, "donate": false},
