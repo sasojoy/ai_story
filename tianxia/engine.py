@@ -6443,8 +6443,9 @@ class Game:
             name = c.config.legend_item_name
             record.materials.append(f"{name} ×1")
             msgs += [f"獲得 【{name}】一枚——{c.config.legend_item_note}", f"{name} +1"]
-        gear = treasures.sortie_rare(s, c, season, record.id)
+        gear, gains = treasures.sortie_rare(s, c, season, record.id)
         record.notes += gear
+        record.materials += gains  # 得失那一格照挑戰本人寫「寶物【X】」「良駒【X】」（FB-430）
         return msgs + gear
 
     def _sortie_drill(self, squad: Squad, record) -> list[str]:
