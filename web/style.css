@@ -1697,6 +1697,7 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
 .shop-back { border: 0; background: transparent; color: #e8d6ad; font: 600 15px var(--sans); padding: 6px 4px; cursor: pointer; }
 .shop-sign { justify-self: center; padding: 4px 14px; border: 2px solid #b7862b; border-radius: 4px; background: #2b1a10; color: #f2c46a; font: 600 16px var(--serif); letter-spacing: 4px; white-space: nowrap; }
 .shop-silver { font: 600 13px var(--sans); color: #f2c46a; }
+.shop-line.rule { border: 1px solid #f2c46a; border-left-width: 3px; border-radius: 2px; background: rgba(242, 196, 106, 0.1); } /* 鐵匠講神器的規矩：金框（設計 9.1 第 2 批甲） */
 .shop-line { margin: 6px 14px 4px; padding: 6px 10px; border-left: 3px solid #b7862b; background: rgba(0, 0, 0, 0.25); font: 13px/1.6 var(--serif); color: #e8d6ad; min-height: 2.4em; }
 .shop-pages { display: flex; gap: 6px; justify-content: center; margin: 4px 0; }
 .shop-page { border: 1px solid #6b4a2e; background: transparent; color: #c9b28a; border-radius: 14px; padding: 3px 14px; font: 13px var(--sans); }
@@ -1783,6 +1784,10 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
 /* 一屬性一排（企劃者 2026-10-14 微調）：排頭一個屬性字，後面一階到三階 */
 .shop-layer .cell-row { display: grid; grid-template-columns: 1.6em repeat(3, 1fr); gap: 6px; align-items: stretch; }
 .shop-layer .cell-row .t1 { grid-column: 2; } .shop-layer .cell-row .t2 { grid-column: 3; } .shop-layer .cell-row .t3 { grid-column: 4; } /* 一階、二階、三階各一欄對齊 */
+/* 素材四階開著（設計 9.1 第 2 批甲：「維持甲類畫面就好」）：一排直接多一欄四階，樣子跟一到三階一樣；375 寬一格約 70px，名字不折行 */
+.shop-layer .cells.four .cell-row { grid-template-columns: 1.6em repeat(4, minmax(0, 1fr)); }
+.shop-layer .cells.four .cell-row .t4 { grid-column: 5; }
+.shop-layer .cells.four .cell .nm { white-space: nowrap; }
 .shop-layer .row-attr { display: flex; align-items: center; justify-content: center; font: 600 14px var(--serif); color: #c9b28a; }
 .shop-layer .row-attr.gang { color: var(--gang); } .shop-layer .row-attr.kuai { color: var(--kuai); }
 .shop-layer .row-attr.rou { color: var(--rou); } .shop-layer .row-attr.man { color: var(--man); }
@@ -2026,6 +2031,7 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
 .shop-layer .shop-done.hint { border-left-color: #6b4a2e; background: transparent; color: #c9b28a; } /* 字一樣大：兩種高度才對得上 */
 .shop-layer .up-rows { display: grid; gap: 6px; margin-bottom: 12px; }
 .shop-layer .up-row { display: grid; grid-template-columns: 1.6em 1fr 1fr; gap: 6px; }
+.shop-layer .up-rows.four .up-row { grid-template-columns: 1.6em repeat(3, minmax(0, 1fr)); } /* 素材四階開著：一屬性多一格三換四（設計 9.1 第 2 批甲） */
 .shop-layer .up-cell { display: grid; gap: 1px; justify-items: center; padding: 8px 4px; border-radius: 10px; border: 1px solid #b7862b;
   background: rgba(43, 26, 16, 0.85); color: #f2e5c6; font: 12.5px var(--serif); min-width: 0; }
 .shop-layer .up-cell .from { font-size: 12px; color: #e8d6ad; white-space: nowrap; }

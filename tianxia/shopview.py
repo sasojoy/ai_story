@@ -339,7 +339,8 @@ def smith_view(state: GameState, content: Content, world: WorldStateStore) -> di
         "sign": f"{content.locations[p.location].name}{SMITH_SIGN}",
         "silver": p.stats.get("silver", 0),
         "line": line_text(state, content, "smith"),
-        "rule": rule_line(state),  # 鐵匠講的神器規矩（正式季整合 5.10；畫面還沒畫）
+        "rule": rule_line(state),  # 鐵匠講的神器規矩（正式季整合 5.10）：網頁畫在平常那一句的位置、金框（設計 9.1 第 2 批甲）
+        "four": four_tiers.on(content),  # 素材四階開著：打造頁素材格一排多一欄四階、升階一屬性多一格三換四（設計 9.1 第 2 批甲）
         "back": "smith:back",
         "page": page,
         "pages": [{"slot": s, "label": PAGE_NAMES[s], "id": f"smith:page:{s}"} for s in equipment.SMITH_PAGES if equipment.on(content, s)],
