@@ -202,6 +202,53 @@ def test_four_tiers_off():
     assert p.stats["silver"] == silver + 30 and not any(k.endswith("_4") for k in p.materials)
 
 
+def _explore(game, mode):
+    """按探索的那一種（explore:gather|seek|practice），體力先補滿。"""
+    game.state.player.stamina = game.content.config.stamina_max
+    ids = {o.id for o in game.options() if o.enabled}
+    assert f"explore:{mode}" in ids, sorted(ids)
+    return game.choose(f"explore:{mode}")
+
+
+def _sure_drop(c):
+    c.config.checkin.pill_drop = 1.0
+
+
+def test_gather_and_practice_drop_a_pill():
+    game = _game(setup=_sure_drop)
+    p = game.state.player
+    pills = p.stamina_pills
+    msgs = _explore(game, "gather")
+    assert p.stamina_pills == pills + 1 and "回體丹 +1" in msgs
+    p.location = "changshe"  # 練功要有對手：城鎮沒有
+    msgs = _explore(game, "practice")
+    assert p.stamina_pills == pills + 2 and "回體丹 +1" in msgs
+
+
+def test_seek_does_not_drop():
+    game = _game(setup=_sure_drop)
+    pills = game.state.player.stamina_pills
+    _explore(game, "seek")
+    assert game.state.player.stamina_pills == pills
+
+
+def test_no_pill_drop_outside_season21():
+    game = _game("weekend", setup=_sure_drop)
+    pills = game.state.player.stamina_pills
+    _explore(game, "gather")
+    assert game.state.player.stamina_pills == pills
+
+
+def test_pill_drop_uses_its_own_dice():
+    found = []
+    for chance in (0.0, 1.0):
+        game = _game(setup=lambda c, chance=chance: setattr(c.config.checkin, "pill_drop", chance))
+        bag = dict(game.state.player.materials)
+        _explore(game, "gather")
+        found.append({k: v - bag.get(k, 0) for k, v in game.state.player.materials.items() if v != bag.get(k, 0)})
+    assert found[0] == found[1] and found[0]
+
+
 def test_tier4_reachable_through_checkin():
     c = real_content("season21")
     c.config.economy.upgrade = False

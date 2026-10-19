@@ -3957,6 +3957,17 @@ class Game:
         self.state.player.legend_items += 1
         return [f"獲得 【{cfg.legend_item_name}】一枚——{cfg.legend_item_note}", f"{cfg.legend_item_name} +1"]
 
+    def _pill_find(self, rng: random.Random) -> list[str]:
+        """找素材、練功掉一顆回體丹（21 天季，正式季整合 6.4；Config.checkin.pill_drop）：用探索三選一自己的亂數（用途「回體丹」），
+        不碰別的骰。兩行同破境丹：「獲得」開頭的敘事與「回體丹 +1」（寫進紀錄的數值變化）。"""
+        c = self.content
+        chance = c.config.checkin.pill_drop
+        if chance <= 0 or not checkin.on(c, self.state.world) or rng.random() >= chance:
+            return []
+        self.state.player.stamina_pills += 1
+        name = c.config.stamina_pill_name
+        return [checkin.PILL_FOUND.format(name=name), f"{name} +1"]
+
     def _explore_outcome(self) -> list[str]:
         s, c = self.state, self.content
         loc = c.locations[s.player.location]
@@ -4034,12 +4045,12 @@ class Game:
         roll = functools.partial(explore_modes.rng_for, self.world.get_season_number(), p.name, p.explore_seq)
         loc = c.locations[p.location]
         if mode == explore_modes.PRACTICE:  # 練功（正式季整合 2.5）：不算打探（7.3），破境丹、殘譜照擲，用途另取「練功」
-            msgs = self._practice(loc, roll("練功"))
+            msgs = self._practice(loc, roll("練功")) + self._pill_find(roll("回體丹"))
             if c.config.forge_secrets.scrap_every_mode:
                 msgs += self._scrap_find()
             return msgs + self._legend_find(roll("破境丹"))
         if mode == explore_modes.GATHER:
-            msgs = self._gather(loc, roll("找素材"))
+            msgs = self._gather(loc, roll("找素材")) + self._pill_find(roll("回體丹"))
         elif mode == explore_modes.SEEK:
             msgs = self._seek(roll("找事件"))
         else:
