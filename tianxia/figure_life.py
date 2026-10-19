@@ -173,7 +173,7 @@ def _maybe_rally(state: GameState, content: Content, cid: str, turn: int) -> Non
         return
     side = made.faction
     add_rumor(state, bounties.RALLY_POSTED.format(who=content.characters[cid].name, side=content.scenario.faction_name(side, side),
-                                                  how=bounties.how(content, made)),  # 陣營的傳聞：照陣營的人寫
+                                                  how=bounties.how(content, made, world=state.world)),  # 陣營的傳聞：照陣營的人寫（FB-435：要給 world）
               made.location, content=content, layer="faction", faction=side)
 
 
