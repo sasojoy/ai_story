@@ -1922,10 +1922,15 @@
   // 序章裡、休季）就不畫。CK_LAST 待 joy 潤
   const CK_ATTR = { 剛: "gang", 柔: "rou", 快: "kuai", 慢: "man" };
   const CK_LAST = "這一季最後一天";
+  // 格子上的短字（FB-436）：兩樣的那一格（第 6 天「丹2＋四階」）375、360 寬放不下一行，照「＋」拆兩行；一樣的照舊一行
+  function ckGift(label) {
+    const parts = String(label).split("＋");
+    return parts.length < 2 ? esc(label) : parts.map((p, i) => `<span class="gl">${i ? "＋" : ""}${esc(p)}</span>`).join("");
+  }
   function checkinPeek(m) {
     const k = m.status && m.status.checkin;
     if (!k) return null;
-    const cells = k.week.map((d) => `<div class="ck-day ${d.state}${d.got ? " got" : ""}${d.four ? " four" : ""}"><span class="d">${d.day}</span><span class="g">${esc(d.label)}</span></div>`).join("");
+    const cells = k.week.map((d) => `<div class="ck-day ${d.state}${d.got ? " got" : ""}${d.four ? " four" : ""}"><span class="d">${d.day}</span><span class="g">${ckGift(d.label)}</span></div>`).join("");
     const act = k.done ? "" : k.pick
       ? `<div class="ck-pick">${k.pick.map((x) => `<button class="ck-p4 ${CK_ATTR[x.attribute] || ""}" data-act="checkin" data-attr="${esc(x.attribute)}"><b>${esc(x.attribute)}</b>${esc(x.name)}<small>有 ${x.held}</small></button>`).join("")}</div>`
       : '<button class="ck-go" data-act="checkin">領取</button>';

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import random
+from pathlib import Path
 
 import pytest
 
@@ -12,12 +13,13 @@ from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 
 pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
+ROOT = Path(__file__).parent.parent
 
 DRIVER = r"""
 const S = { peekOpen: input.open ? { id: "checkin", week: 1 } : null };
 const H = new Function("S", [
   ...["esc", "CK_ATTR", "CK_LAST"].map(konst),
-  ...["checkinPeek", "peekHtml"].map(fn),
+  ...["ckGift", "checkinPeek", "peekHtml"].map(fn),
   "return { checkinPeek, peekHtml };",
 ].join("\n"))(S);
 const part = H.checkinPeek(input.m);
@@ -80,6 +82,16 @@ def test_tier4_day_shows_four_picks():
 def test_short_last_week_and_no_next():
     html = run(_m(day=19, week=_week(19, last=19, first=15), next=None))["html"]
     assert html.count('class="ck-day') == 5 and "下一份" not in html and "這一季最後一天" in html
+
+
+def test_two_gift_label_splits_into_two_lines():
+    """FB-436：第 6 天「丹2＋四階」字寬 48px、375／360 寬的格子只有 37／35px，被切成「丹2＋四」：兩樣的短字拆兩行（「丹2」／「＋四階」），
+    一樣的照舊一行。"""
+    html = run(_m(day=6, week=_week(6)))["html"]
+    assert '<span class="g"><span class="gl">丹2</span><span class="gl">＋四階</span></span>' in html
+    assert '<span class="g">30 兩</span>' in html and '<span class="g">丹 2</span>' in html
+    css = (ROOT / "web" / "style.css").read_text(encoding="utf-8")
+    assert ".ck-day .g .gl { display: block; }" in css
 
 
 def test_no_chip_without_checkin():

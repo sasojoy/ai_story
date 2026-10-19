@@ -44,7 +44,7 @@ const parts = [
     "BATTLE_ROUND", "BATTLE_MINE", "BATTLE_PEEK", "BATTLE_SHUT", "CK_ATTR", "CK_LAST"].map(konst),
   // musterJoins、musterScene：決戰集結時還沒參戰的加入鈕畫在場景卡上（FB-105）；battleWatch、battleScene：只能觀戰的人，開打中的
   // 戰場收成一行（FB-120）；gaugeHtml、withGauge：決戰的戰局條；pageJianghu 用它們排場景卡與選項
-  ...["stanceBars", "boardSeen", "markBoardSeen", "boardUnseen", "warHelp", "stancePeek", "boardPeek", "questPeek", "checkinPeek",
+  ...["stanceBars", "boardSeen", "markBoardSeen", "boardUnseen", "warHelp", "stancePeek", "boardPeek", "questPeek", "ckGift", "checkinPeek",
     "peekHtml", "peekTap", "musterJoins", "musterScene", "battleWatch", "battleScene", "roundBlocks", "gaugeHtml", "meritHtml", "withGauge",
     "armsLine", "pageJianghu"].map(fn),
   // 不相干的畫法換成一行的假貨：要驗的是排在哪裡，不是它們自己長什麼樣
