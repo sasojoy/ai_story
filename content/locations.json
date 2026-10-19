@@ -19,7 +19,8 @@
     "important": true,
     "tags": [
       "城鎮",
-      "醫館"
+      "醫館",
+      "酒肆"
     ],
     "insight_strong": "huo",
     "insights": [
@@ -180,7 +181,8 @@
     "tags": [
       "城鎮",
       "馬市",
-      "醫館"
+      "醫館",
+      "酒肆"
     ],
     "insight_strong": "huo",
     "insights": [
@@ -426,7 +428,8 @@
     "x": 134,
     "y": 1195,
     "tags": [
-      "城鎮"
+      "城鎮",
+      "酒肆"
     ],
     "insight_strong": "huo",
     "insights": [
@@ -482,7 +485,8 @@
     "important": true,
     "tags": [
       "城鎮",
-      "醫館"
+      "醫館",
+      "酒肆"
     ],
     "insight_strong": "huo",
     "insights": [
@@ -662,7 +666,8 @@
     "y": 1230,
     "tags": [
       "城鎮",
-      "馬市"
+      "馬市",
+      "酒肆"
     ],
     "materials": [
       "gang_1",
@@ -688,7 +693,8 @@
     "y": 1167,
     "important": true,
     "tags": [
-      "城鎮"
+      "城鎮",
+      "酒肆"
     ],
     "insight_strong": "huo",
     "insights": [
@@ -836,7 +842,8 @@
     "tags": [
       "城鎮",
       "馬市",
-      "醫館"
+      "醫館",
+      "酒肆"
     ],
     "insight_strong": "huo",
     "insights": [
@@ -858,7 +865,8 @@
     "x": 678,
     "y": 109,
     "tags": [
-      "城鎮"
+      "城鎮",
+      "酒肆"
     ],
     "materials": [
       "gang_1",
@@ -1109,7 +1117,8 @@
     "tags": [
       "城鎮",
       "馬市",
-      "醫館"
+      "醫館",
+      "酒肆"
     ],
     "danger": 2,
     "enemies": [

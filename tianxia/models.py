@@ -953,6 +953,7 @@ ALLOW_FIXED = frozenset({
     "act:arena",  # 擂台（城鎮類的地點；tianxia/arena.py）
     "act:heal",  # 醫館療傷（帶「醫館」標籤的地點，有內傷時）
     "act:donate",  # 自家大本營捐軍備（素材與經濟設計第六節）
+    "act:tavern",  # 酒肆（帶「酒肆」標籤的城鎮；tianxia/tavern.py）
     "ambush:lift", "works:fortify", "works:stockpile",  # 後期體力玩法：收伏、修築工事、屯糧練兵
 })
 # opp: 是機緣的交東西與天時地利（opp:deliver:<id>、opp:try:<id>，正式版乙一）；對話選單的 talk:opp: 不是閒著的選單，不列
@@ -1705,6 +1706,64 @@ class ArenaTuning(_Strict):
     prizes: list[int] = Field(default_factory=lambda: [30, 20, 10])
     prize_treasure: bool = True
     crowd: ArenaCrowdTuning = Field(default_factory=ArenaCrowdTuning)  # 場邊事件（見 ArenaCrowdTuning；tianxia/arena_crowd.py）
+
+
+class TavernTuning(_Strict):
+    """酒肆（設計稿 https://claude.ai/artifact/3CfrzfpT1HzCxy6S985Q5W，企劃者 2026-10-18「可以，做精緻一些，包含氛圍感」）：帶「酒肆」標籤的
+    城鎮有一間，進城才去得到。打聽消息、查人、交情、素材、題壁、請酒、雇殺手、問酒家，都花銀兩。規則在 tianxia/tavern.py。
+    價錢以正式季（21 天）為準，季短的照季長打折（price_full_days、price_floor）。全部【預設】，試玩後再調。
+
+    「越有名越好打聽」（企劃者 2026-10-18）：每一次打聽算打聽度＝名氣＋遠近＋近況（tavern.reach），照 reach_* 換成問不問得到、多準。"""
+
+    enabled: bool = True
+    price_full_days: float = Field(default=21.0, gt=0)  # 季長到這麼多天照原價；短的照比例打折
+    price_floor: float = Field(default=0.3, ge=0, le=1)  # 最低打到幾折（週末短季）
+    news_price: int = Field(default=10, ge=0)  # 聽消息
+    news_days: float = Field(default=3.0, gt=0)  # 酒家說得出最近幾天（季曆天）的傳聞
+    seek_price: int = Field(default=30, ge=0)  # 查人在哪
+    ties_price: int = Field(default=20, ge=0)  # 打聽交情
+    material_prices: dict[int, int] = Field(default_factory=lambda: {1: 5, 2: 10, 3: 25, 4: 40})  # 打聽素材：照階
+    wall_price: int = Field(default=5, ge=0)  # 題壁
+    wall_keep: int = Field(default=12, ge=1)  # 每間酒肆的牆留最近幾句
+    wall_chars: int = Field(default=20, ge=1)  # 一句最多幾個字
+    treat_price: int = Field(default=30, ge=0)  # 請全店喝酒（一天一次）
+    treat_fame: int = Field(default=1, ge=0)
+    treat_hours: float = Field(default=1.0, ge=0)  # 請酒之後多久（世界小時）進門的人還看得到
+    hide_price: int = Field(default=50, ge=0)  # 藏行跡（一個遊戲日）
+    hide_reach: int = Field(default=2, ge=0)  # 藏行跡讓別人打聽你的打聽度少幾點
+    trace_price: int = Field(default=40, ge=0)  # 反查：誰打聽我、誰雇殺手找我
+    refund_share: float = Field(default=0.5, ge=0, le=1)  # 問不到時退幾成
+    whisper_keep: int = Field(default=10, ge=1)  # 身上留最近幾則風聲
+    note_keep: int = Field(default=8, ge=1)  # 酒肆裡留最近幾則酒家的回話
+    named_from: int = Field(default=2, ge=0)  # 打聽你的人名望到第幾段，風聲裡直接說名號
+    offline_hours: float = Field(default=24.0, ge=0)  # 現實多久沒上線算「近來沒人見過他」
+    # 買殺手（設計第六節）
+    hit_prices: list[int] = Field(default_factory=lambda: [20, 40, 60], min_length=1)  # 三檔殺手
+    hit_power: list[float] = Field(default_factory=lambda: [0.85, 1.0, 1.15], min_length=1)  # 殺手威力＝對方本人威力 × 這個
+    hit_hours: float = Field(default=6.0, gt=0)  # 單子有效幾個現實小時
+    hit_pair_hours: float = Field(default=24.0, ge=0)  # 同一對人多久只能雇一次（現實小時）
+    hit_silver_share: float = Field(default=0.10, ge=0, le=1)  # 殺手贏：對方失幾成銀兩
+    hit_silver_cap: int = Field(default=60, ge=0)
+    hit_hp_loss: float = Field(default=0.15, ge=0, le=1)  # 殺手贏：扣氣血上限幾成（其中 injury_share 變內傷）
+    hit_evil: int = Field(default=3, ge=0)  # 雇主得的惡名
+    hit_bounty_share: float = Field(default=0.25, ge=0, le=1)  # 對方打贏：搜出雇金的幾成
+    hit_win_fame: int = Field(default=1, ge=0)
+    hit_reveal: float = Field(default=0.5, ge=0, le=1)  # 對方打贏時問出雇主的基本機會（雇主每一段名望 +0.1）
+    hit_warn: float = Field(default=0.4, ge=0, le=1)  # 單子掛上那一刻對方聽到風聲的基本機會（對方每一段名望 +0.05）
+    hit_find_drop: float = Field(default=0.2, ge=0, le=1)  # 打聽度每比 5 少一點，殺手找到人的機會少這麼多
+    guard_price: int = Field(default=10, ge=0)  # 雇保鏢
+    guard_hours: float = Field(default=6.0, ge=0)
+    guard_scale: float = Field(default=0.85, ge=0)  # 保鏢在身邊時殺手的威力再乘這個
+    hush_price: int = Field(default=20, ge=0)  # 雇主封口：被供出的機會減半
+    # 問酒家（AI 問答，設計第八節）
+    ask_price: int = Field(default=20, ge=0)
+    ask_chars: int = Field(default=30, ge=1)
+    ask_budget_seconds: float = Field(default=30.0, ge=0)
+    chatter_hours: float = Field(default=1.0, gt=0)  # 酒客閒談每間酒肆多久換一段（世界小時）
+    # 託酒家留意（設計第三節）：查人時多付一半，之後那個人打聽得到確切地點（打聽度 3 以上）時捎信，寫進江湖紀錄
+    watch_share: float = Field(default=0.5, ge=0)
+    watch_hours: float = Field(default=6.0, gt=0)  # 留意多久（現實小時）
+    watch_keep: int = Field(default=3, ge=0)  # 一個人同時最多託幾個
 
 
 class DuelFoe(_Strict):
@@ -2573,6 +2632,7 @@ class Config(_Strict):
     showdown_pay: ShowdownPay = Field(default_factory=ShowdownPay)  # 全服決戰的軍餉與獲勝加給（見 ShowdownPay）
     duel: DuelTuning = Field(default_factory=DuelTuning)  # 單人頭目戰（見 DuelTuning；內容在 content/duels.json）
     arena: ArenaTuning = Field(default_factory=ArenaTuning)  # 擂台賽（見 ArenaTuning；tianxia/arena.py）
+    tavern: TavernTuning = Field(default_factory=TavernTuning)  # 酒肆（見 TavernTuning；tianxia/tavern.py）
     raid: Raid = Field(default_factory=Raid)  # 截殺敵對陣營的人（見 Raid）
     bounties: Bounties = Field(default_factory=Bounties)  # 懸賞榜（見 Bounties）
     sortie: SortieRules = Field(default_factory=SortieRules)  # 出陣（見 SortieRules）

@@ -54,12 +54,11 @@ def test_the_bounty_card_lists_what_you_hold_and_opens_the_board(setup):  # noqa
 
 
 def test_the_wanted_amount_box_starts_at_the_lowest_bounty(setup):  # noqa: F811
-    """FB-121 第 6 件：通緝的金額輸入框下限照規則（post_min，20 兩），不是贈物那樣的 1；贈物照舊從 1 起。"""
+    """FB-121 第 6 件：通緝的金額輸入框下限照規則（post_min，20 兩），不是 1。"""
     content, world = setup
     card = _do(content, world, "甲", lambda g: g.peer_card("乙"))[0]
     i = next(k for k, b in enumerate(card["actions"]) if b["action"] == "wanted")
-    gift = next(b for b in card["actions"] if b["action"] == "gift" and b["amount"] > 0)
-    assert card["actions"][i]["amount_min"] == content.config.bounties.post_min == 20 and gift["amount_min"] == 1
+    assert card["actions"][i]["amount_min"] == content.config.bounties.post_min == 20  # 贈銀兩拿掉了（名帖改版），只剩通緝這一格寫金額
     html = run(_view(content, world, "甲"), "H.render(); return T.els.app.innerHTML;",
                S={"peer": {"name": "乙", "card": card, "amountFor": i}})
     box = html.split('id="peer-amount"')[1].split("</form>")[0]

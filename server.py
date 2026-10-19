@@ -64,7 +64,7 @@ from tianxia import (
     arena_crowd, battle_instance, biography, calendar, companion_agent, duel, event_llm, feasts, fight_llm, foreshadow, gender, glyph, insight_llm, leaderboard, letters, mapdata,
     naming,
     ollama_client, rules,
-    seal, seal_duel, server_bots, social, sortie, speech, team, timetable, treasures, yuedan,
+    seal, seal_duel, server_bots, social, sortie, speech, tavern, team, timetable, treasures, yuedan,
 )
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import env_profile, load_content, profile_line
@@ -276,12 +276,15 @@ def act(game: Game, action, *, paused_ok: bool = False) -> list[str] | None:
         open_characters().save(game.state)
         tales = _tales_waiting(game)
         crowd = _crowd_waiting(game)
+        chat = _chatter_waiting(game)
         mail = _letter_waiting(game)
         review = _yuedan_waiting(game)
     if tales:
         narrate_battle(game)
     if crowd:
         write_crowd(game)
+    if chat:
+        write_chatter(game, chat)
     if mail:
         write_letter(game)
     if review:
@@ -327,6 +330,7 @@ def act_look(game: Game, action, view) -> tuple[list[str] | None, object]:
             failure = exc
         tales = failure is None and _tales_waiting(game)
         crowd = failure is None and _crowd_waiting(game)
+        chat = _chatter_waiting(game) if failure is None else None
         mail = failure is None and _letter_waiting(game)
         review = failure is None and _yuedan_waiting(game)
     if failure is not None:
@@ -335,6 +339,8 @@ def act_look(game: Game, action, view) -> tuple[list[str] | None, object]:
         narrate_battle(game)
     if crowd:
         write_crowd(game)
+    if chat:
+        write_chatter(game, chat)
     if mail:
         write_letter(game)
     if review:
@@ -1168,6 +1174,62 @@ def crowd_once(game: Game) -> bool:
     return done
 
 
+CHATTER_RUNNING: set[str] = set()  # 正在背景寫鄰桌閒談的酒肆（一間一條；地點 id）
+
+
+def _chatter_waiting(game: Game) -> str | None:
+    """這個人開著的酒肆該換一段閒談、模型叫得到、這一間還沒有一條在寫（write_chatter）：回地點 id。行動鎖內叫。"""
+    if not TALE_THREADS or game.client is None or game.tavern_chatter_request() is None:
+        return None
+    place = game.state.player.location
+    return None if place in CHATTER_RUNNING else place
+
+
+def write_chatter(game: Game, place: str) -> bool:
+    """酒肆鄰桌閒談：開一個背景執行緒寫一段。A 鎖內拿單子（Game.tavern_chatter_request）→ B 鎖外請模型寫（tavern.chatter_write，
+    預算 Config.tavern.ask_budget_seconds；排隊時當假人排在真人後面）→ C 鎖內重驗才記（Game.apply_tavern_chatter；寫不出來記空的，
+    這一陣子照固定句）。開了回 True。呼叫端不能握著行動鎖。"""
+    with TALE_LOCK:
+        if place in CHATTER_RUNNING:
+            return False
+        CHATTER_RUNNING.add(place)
+
+    def job() -> None:
+        try:
+            chatter_once(game)
+        except Exception:  # noqa: BLE001 — 背景執行緒：印出來就好，閒談照固定句
+            traceback.print_exc()
+        finally:
+            with TALE_LOCK:
+                CHATTER_RUNNING.discard(place)
+
+    threading.Thread(target=job, name="tavern-chatter", daemon=True).start()
+    return True
+
+
+def chatter_once(game: Game) -> bool:
+    """寫一段（write_chatter 的那一圈；測試直接叫）：記了寫好的回 True。呼叫端不能握著行動鎖。"""
+    with _locked(game):
+        request = game.tavern_chatter_request()
+    if request is None:
+        return False
+    budget = game.content.config.tavern.ask_budget_seconds
+    started = _monotonic()
+
+    def ask() -> list[str]:
+        return tavern.chatter_write(within_budget(game.client, budget - (_monotonic() - started)), request)
+
+    if QUEUE is None:
+        lines = ask()
+    else:
+        try:
+            lines = QUEUE.run(TALE_OWNER, ask, fallback=[], bot=True, wait=budget)
+        except (Busy, QueueTimeout):
+            lines = []
+    with _locked(game):
+        return game.apply_tavern_chatter(request, lines)
+
+
 def duel_text(game: Game, text: str) -> list[str]:
     """單人頭目戰的放手一搏，三段同 battle_text：A Game.duel_text_request（只讀）→ B 鎖外請模型評成功率、寫成敗兩版劇情
     （預算同隨口應對）→ C Game.duel_gamble 重驗同一隻、同一回合、同一句才用評好的分，對不上就在鎖內重評。"""
@@ -1194,6 +1256,23 @@ def duel_text(game: Game, text: str) -> list[str]:
 
     verdict, crowd = model_call(game, score, fallback=(fallback, ""), left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT)
     return act(game, lambda g: g.duel_gamble(request.text, verdict.rate, (verdict.win, verdict.lose), request=request, crowd=crowd))
+
+
+def tavern_ask(game: Game, text: str) -> list[str]:
+    """問酒家（酒肆，設計第八節），三段：A Game.tavern_ask_request（只讀；問到秘密的單子不叫模型）→ B 鎖外 tavern.ask_write
+    （預算 Config.tavern.ask_budget_seconds）→ C Game.tavern_ask 重驗同一間、同一句再收錢；叫不動模型退全額。"""
+    started, request = _open_request(game, lambda: game.tavern_ask_request(text))
+    if isinstance(request, list):
+        return request
+    total = game.content.config.tavern.ask_budget_seconds
+
+    def write():
+        client = within_budget(game.client, total - (_monotonic() - started))
+        return tavern.ask_write(client, request)
+
+    reply = None if request.secret else model_call(game, write, fallback=None, left=total - (_monotonic() - started),
+                                                     busy=BUSY_FREE_TEXT)
+    return act(game, lambda g: g.tavern_ask(request.question, reply, request=request))
 
 
 def seal_text(game: Game, text: str) -> list[str]:
@@ -1784,6 +1863,8 @@ MAIN_ACTIONS = {
     # 自家大本營捐軍備（素材與經濟設計第六節）：一次捐一種素材 count 個（上限切一半：收得下的收）；軍需帳那一頁送 items
     # （[{material, count}, …]，挑好的幾種一起捐、一則紀錄）
     "donate": lambda g, b: g.donate_items(donate_items(b)) if "items" in b else g.donate(str(b.get("material", "")), max(1, _int(b.get("count"), 1))),
+    # 酒肆那一頁（企劃者 2026-10-18）：op 是 news、seek、ties、material、wall、treat、hide、trace；target 是名號或素材 id、text 是題壁那一句
+    "tavern": lambda g, b: g.tavern_do(str(b.get("op", "")), str(b.get("target", ""))[:20], str(b.get("text", ""))[:40]),
     "anonymous": lambda g, b: g.set_anonymous(bool(b.get("value"))),
     "gender": lambda g, b: g.set_gender(str(b.get("value", ""))),  # 設定頁：還沒選過性別的舊角色選一次（PM 2026-10-12）
     "letter_read": lambda g, b: g.read_letter(_int(b.get("id"), -1)),  # 書信小卡的「收起」（大勢人物擴充第二批）
@@ -1889,6 +1970,8 @@ def api_do(op: str, request: Request, body: dict = Body(default={})):
         msgs = seal_text(game, str(body.get("text", "")))
     elif op == "duel_text":  # 頭目戰的放手一搏：同上（見 duel_text）
         msgs = duel_text(game, str(body.get("text", "")))
+    elif op == "tavern_ask":  # 問酒家：回話在行動鎖外寫（見 tavern_ask）
+        msgs = tavern_ask(game, str(body.get("text", ""))[:60])
     elif op == "feast_text":  # 宴席上自己寫的敬酒詞：分數在行動鎖外評（見 feast_text）
         msgs = feast_text(game, str(body.get("text", "")))
     elif op in MAIN_ACTIONS:
