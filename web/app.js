@@ -3408,8 +3408,40 @@
       S.shopNote = (first ? first[1] : r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() || null;
       if (after) after(r);
       setMain(r.main);
-      render();
+      renderKeepingShop();
     });
+  }
+
+  // 店裡做了一件事之後整個重畫（狀態列的銀兩也要換），店裡捲到哪裡、打到一半的字照放回去：不然在酒肆往下捲去打聽素材，
+  // 按一下就跳回頂上、剛打的字也沒了（Joy 2026-10-19「酒肆操作沒兩下很容易就跑版了」）。店收了、換了一間照常從頂上開始
+  function shopSpot() {
+    const layer = document.querySelector(".shop-layer");
+    if (!layer) return null;
+    return {
+      shop: layer.className,
+      top: layer.querySelector?.(".shop-body")?.scrollTop || 0,
+      left: layer.querySelector?.(".stalls")?.scrollLeft || 0, // 馬廄那一排左右滑到哪（第三節）
+      kept: [...(layer.querySelectorAll?.("input[data-keep]") || [])].map((el) => [el.dataset.keep, el.value, el === document.activeElement]),
+    };
+  }
+  function putShopSpot(spot) {
+    const layer = document.querySelector(".shop-layer");
+    if (!spot || !layer || layer.className !== spot.shop) return;
+    for (const [k, v, focused] of spot.kept) {
+      const el = document.querySelector(`.shop-layer input[data-keep="${k}"]`);
+      if (!el) continue;
+      el.value = v;
+      if (focused) el.focus?.({ preventScroll: true });
+    }
+    const body = spot.top ? document.querySelector(".shop-layer .shop-body") : null;
+    if (body) body.scrollTop = spot.top;
+    const stalls = spot.left ? document.querySelector(".shop-layer .stalls") : null;
+    if (stalls) stalls.scrollLeft = spot.left;
+  }
+  function renderKeepingShop() {
+    const spot = shopSpot();
+    render();
+    putShopSpot(spot);
   }
 
   // ── 軍需帳（素材與經濟設計第六節；企劃者 2026-10-15 選草圖 B3）：上面陣營四種軍備的存量、今天還能捐幾點，底下背包的素材一格一格
@@ -3543,10 +3575,10 @@
     const board = shop.board ? `<button class="btn ghost small tav-board" data-act="choose" data-id="${esc(shop.board)}">看牆上的懸賞榜 ›</button>` : "";
     return `${guests}${treat}
       <button class="tav-listen" data-act="tav-do" data-op="news">聽消息<span>（${shop.prices.news | 0} 兩）</span></button>
+      <div class="tav-row">${tavBtn("treat", "請全店喝一輪", shop.prices.treat, shop.problems.treat)}${board}</div>
       ${tavDone()}
       ${tavNotes(shop, ["news"], "")}
-      ${talk}
-      <div class="tav-row">${tavBtn("treat", "請全店喝一輪", shop.prices.treat, shop.problems.treat)}${board}</div>`;
+      ${talk}`; // 鈕都在聽到的消息上面：聽一則多一則，不把請酒那一顆往下推
   }
 
   function tavAskHtml(shop) {
@@ -3608,8 +3640,8 @@
   function tavernHtml(shop) {
     const tab = tavTab();
     const body = { news: tavNewsHtml, ask: tavAskHtml, wall: tavWallHtml, shade: tavShadeHtml }[tab](shop);
-    return `${tab === "news" ? TAV_HERO : ""}
-      <div class="shop-body"><div class="shop-col">${body}</div></div>
+    // 燈籠那一幅畫在捲的那一層裡：四頁的框一樣高，換頁時底下的格子不上下跳（Joy 2026-10-19「視窗大小跳來跳去」）
+    return `<div class="shop-body"><div class="shop-col">${tab === "news" ? TAV_HERO : ""}${body}</div></div>
       <nav class="shop-tabs">${TAV_TABS.map(([k, name]) => `<button class="shop-tab${tab === k ? " on" : ""}" data-act="tav-tab" data-tab="${k}">${name}</button>`).join("")}</nav>`;
   }
 
@@ -3789,21 +3821,10 @@
   function renderShop(keep = true) {
     const layer = document.querySelector(".shop-layer");
     if (!layer || !S.main || !S.main.shop) { render(); return; }
-    const top = keep ? (layer.querySelector?.(".shop-body")?.scrollTop || 0) : 0;
-    const left = keep ? (layer.querySelector?.(".stalls")?.scrollLeft || 0) : 0; // 馬廄那一排左右滑到哪（第三節）
-    // 打到一半的字（酒肆的打聽、題壁）：輪詢重畫整層時放回去，游標也放回去（data-keep 的輸入框）
-    const kept = [...(layer.querySelectorAll?.("input[data-keep]") || [])].map((el) => [el.dataset.keep, el.value, el === document.activeElement]);
+    const spot = shopSpot();
+    if (!keep) { spot.top = 0; spot.left = 0; }
     layer.outerHTML = shopHtml(S.main.shop);
-    for (const [k, v, focused] of kept) {
-      const el = document.querySelector(`.shop-layer input[data-keep="${k}"]`);
-      if (!el) continue;
-      el.value = v;
-      if (focused) el.focus();
-    }
-    const body = top ? document.querySelector(".shop-layer .shop-body") : null;
-    if (body) body.scrollTop = top;
-    const stalls = left ? document.querySelector(".shop-layer .stalls") : null;
-    if (stalls) stalls.scrollLeft = left;
+    putShopSpot(spot);
   }
 
   // 輪詢拿到新的畫面（refreshPage 最前面叫）：店面開了或收了整個重畫；開著而且店裡的資料變了只重畫店面（手指按著時等放開，

@@ -2201,7 +2201,8 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
    字級一律寫 em，跟著 .shop-tavern 的字級走（手機 13px、電腦寬 ×1.3），招牌、掌櫃話、分頁照店面共用的那一套。燈籠搖、熱氣冒、
    暖光呼吸只在沒有要求減少動態效果時跑 ── */
 .shop-layer.shop-tavern { font-size: 13px; color: #f2e5c6; background: radial-gradient(ellipse at 50% 18%, #5a3018 0%, #2a170d 52%, #120a06 100%); }
-.shop-tavern .shop-line { border-left-color: #d08a3a; }
+.shop-tavern .shop-line { border-left-color: #d08a3a; box-sizing: border-box; height: calc(3.2em + 12px); min-height: 0; overflow: hidden;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; } /* 酒家那一句固定兩行高：話長話短，底下的框不跟著跳 */
 .shop-tavern .shop-tabs { border-top-color: #5e3f26; }
 .shop-tavern .tav-hero { position: relative; height: 9.2em; overflow: hidden; pointer-events: none; }
 .shop-tavern .tav-glow { position: absolute; top: 0.6em; width: 9em; height: 9em; border-radius: 50%; background: radial-gradient(circle, rgba(255, 150, 70, 0.42), transparent 68%); }
