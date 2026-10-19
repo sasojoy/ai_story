@@ -127,7 +127,9 @@ def test_furnace_shifts_the_base_odds_once():
     assert s.player.furnace_ready and s.player.stats["silver"] == 450
     warm = smithing.forge_odds(s, c, w, "劍", "gang_1", "gang_1")
     assert warm.odds["上品"] > plain.odds["上品"] and warm.odds["下品"] < plain.odds["下品"]
-    assert fusion._points(c, [], s).odds == fusion.odds_from_points([], c.config.fuse_quality, c.config.silver_outlets.furnace_odds).odds
+    # 合成即設計（fuse_quality.fixed，正式內容開著）照造化分定品：看火候用不上，合成那一爐也不用掉它（PM 2026-10-19 合 develop）
+    assert c.config.fuse_quality.fixed
+    assert fusion._points(c, [], s).odds == fusion._points(c, []).odds
     smithing.forge(s, c, w, "劍", "gang_1", "gang_1", rng=random.Random(0))
     assert not s.player.furnace_ready  # 打一爐就用掉：之後照原本的基準
     base = c.config.weapons.quality.odds
