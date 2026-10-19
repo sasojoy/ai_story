@@ -18,7 +18,13 @@
 合成深度（--depth third.json …，measure_depth.py --dump 寫的）另量：十八位本命對那一季合出的第三代滿配（兩門第三代練到絕學、
 各自的功效與走向、絕招、以器配招的神器原品），--layers 試一門最多幾層。
 
+寶物與玉璽（--gear，企劃者 10/17 清單第 35 項「武學平衡要包含寶物，玉璽也是」；計畫 docs/superpowers/plans/2026-10-18-武學平衡含寶物玉璽.md）：
+寶物八種效果、玉璽七片一樣一列，分直接（進打仗的數字：金角、螭首）、間接（改成長快慢）、不碰（跟打仗無關）三類（KIND）；
+直接的量出在哪幾種仗、勝負各變幾個百分點（金角在一般的仗、螭首在連打與擂台），間接的印它改哪一條成長、改多少，不換算成威力。
+數字一律照 Config 讀，調了數字重跑就是新表；只量不改。
+
 用法：.venv/Scripts/python.exe scripts/measure_tactics.py [--runs 4000] [--bouts] [--kits] [--catch-up] [--depth JSON… --layers N…]
+      [--gear [--chain N]]
 """
 from __future__ import annotations
 
@@ -27,6 +33,7 @@ import io
 import random
 import sys
 from pathlib import Path
+from typing import NamedTuple
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 ROOT = Path(__file__).resolve().parent.parent
@@ -71,6 +78,8 @@ def main() -> None:
     parser.add_argument("--might-scale", type=float, help="本命底蘊（TacticDef.might）全部乘這個數（只量）")
     parser.add_argument("--tweak", nargs="+", default=[], metavar="技能.欄=數",
                         help="試別的本命戰法數字（只量）：zhangfei_wugong.rate=0.3、zhangliang_wugong.per_pct=0.05（params 裡的照鍵名）")
+    parser.add_argument("--gear", action="store_true", help="只量寶物八種與玉璽七片：哪些進打仗、勝負變幾個百分點，哪些只改成長（第 35 項）")
+    parser.add_argument("--chain", type=int, default=5, help="--gear 的螭首連打幾場不療傷（預設 5）")
     args = parser.parse_args()
     content = load_content(ROOT / "content")
     if args.bout_strike is not None:
@@ -94,6 +103,9 @@ def main() -> None:
         return
     if args.kits:
         kits(content, args.runs)
+        return
+    if args.gear:
+        gear(content, args.runs, args.chain)
         return
     if args.catch_up:
         catch_up(content, args.runs, args.slots if content.config.skill_slots.enabled else "off")
@@ -476,8 +488,9 @@ def gear_holder(tactic):
     return tactics.Holder(who="你", key="player", skill="gear", tactic=tactic)
 
 
-def ring_share(content, runs):
-    """擂台的贏面：share(甲的戰法, 乙的戰法)，兩邊威力 150（kits 與 catch_up 共用）。"""
+def ring_share(content, runs, hp_a=1000, hp_b=1000):
+    """擂台的贏面：share(甲的戰法, 乙的戰法)，兩邊威力 150（kits 與 catch_up 共用）。
+    hp_a、hp_b 是甲、乙的池子（滿的開始，hp＝hp_cap；--gear 量螭首用），預設兩邊 1000、跟加這兩個參數之前一模一樣。"""
     from tianxia import arena, battle_instance
     from tianxia import duel as duel_rules
     from tianxia.models import MOVES
@@ -487,12 +500,12 @@ def ring_share(content, runs):
     power = 150.0
     ctx = tactics.Ctx(foe="", our_agility=8, team=["player"])
 
-    def ring_once(hs_a, hs_b, seed):
+    def ring_once(hs_a, hs_b, seed, hp_me, hp_foe):
         rng = random.Random(f"r|{seed}")
         trng = random.Random(f"rt|{seed}")
         sc = battle_instance.strength(bt, power)
-        me = ArenaSide(name="甲", power=power, scores={m: sc for m in MOVES}, hp=1000, hp_cap=1000)
-        foe = ArenaSide(name="乙", power=power, scores={m: sc for m in MOVES}, hp=1000, hp_cap=1000)
+        me = ArenaSide(name="甲", power=power, scores={m: sc for m in MOVES}, hp=hp_me, hp_cap=hp_me)
+        foe = ArenaSide(name="乙", power=power, scores={m: sc for m in MOVES}, hp=hp_foe, hp_cap=hp_foe)
         f = ArenaFight(id=1, foe_key="乙", me=me, foe=foe)
         ka = tactics.side_for([h.model_copy(deep=True) for h in hs_a], ctx) if hs_a else None
         kb = tactics.side_for([h.model_copy(deep=True) for h in hs_b], ctx) if hs_b else None
@@ -516,10 +529,10 @@ def ring_share(content, runs):
         """甲對乙的贏面：兩個方向（甲挑乙、乙挑甲）各 runs 場，贏 ÷（贏＋輸），和局不算。"""
         won = lost = 0
         for i in range(runs):
-            r = ring_once(hs_a, hs_b, f"ab|{i}")
+            r = ring_once(hs_a, hs_b, f"ab|{i}", hp_a, hp_b)
             won += r > 0
             lost += r < 0
-            r = ring_once(hs_b, hs_a, f"ba|{i}")
+            r = ring_once(hs_b, hs_a, f"ba|{i}", hp_b, hp_a)
             won += r < 0
             lost += r > 0
         return won / max(1, won + lost)
@@ -584,6 +597,316 @@ def kits(content, runs):
                 tactics.war_close(side, rng.random() < 0.5, t, random.Random(f"wc|{i}|{j}"))
         tot.append(total / n)
     print(f"決戰：自組上品份量平均 ×{sum(tot) / len(tot):.3f}（最低 ×{min(tot):.3f}、最高 ×{max(tot):.3f}）")
+
+
+# ── 寶物與玉璽（--gear，第 35 項）──────────────────────────
+
+DIRECT, INDIRECT, UNTOUCHED = "直接", "間接", "不碰"
+# 效果鍵 → 類別（計畫 2.1【PM】）：寶物八種（Config.treasures.effects）＋玉璽七片（content/seal.json 的 effect，數字在 Config.seal.effects）。
+# tests/test_measure_tactics_gear.py 驗它涵蓋每一個效果鍵：之後加了新寶物或新碎片效果，要先來這裡分類，平衡表才不會漏
+KIND = {
+    "cultivate": INDIRECT, "insight": INDIRECT, "win_xinde_pct": INDIRECT, "win_exp_pct": INDIRECT,
+    "seclusion": INDIRECT, "audience": UNTOUCHED, "win_material": INDIRECT, "legend": INDIRECT,
+    "hp_cap": DIRECT, "talk_turns": UNTOUCHED, "practice": INDIRECT, "dodge": DIRECT,
+    "stamina_regen": UNTOUCHED, "fuse_points": INDIRECT, "mate_exp": INDIRECT,
+}
+NOTE = {  # 一句：改的是哪一條（量表的字，不是玩家看的，不必給 joy 潤）
+    "cultivate": "修練衝中品、上品那一擲（cultivation.chance 的 treasure；不碰頓悟與服丹衝關）",
+    "insight": "探索悟意境（三選一開著：靜心感悟擲中，sensing.rate；關著：悟意境那一支的比重）",
+    "win_xinde_pct": "打贏的心得（遊歷、出陣、野怪、挑戰本人、劇情戰）",
+    "win_exp_pct": "打贏的經驗（整隊一起多；滿級之後換成心得）",
+    "seclusion": "閉關出關的心得",
+    "audience": "求見門檻（rules.audience_bar）",
+    "win_material": "打贏而且掉了素材時多掉一個（遊歷、探索野怪）",
+    "legend": "探索撿破境丹的機率",
+    "hp_cap": "本人氣血上限（Member.cap_scale）；扣血、回血、挨打都照上限的比例",
+    "talk_turns": "每位人物每個遊戲日多談幾輪",
+    "practice": "練成的心得（熔煉照原價退）",
+    "dodge": "落敗閃成僵持（team.dodge_chance，只在 team.fight 收尾擲）",
+    "stamina_regen": "體力自然回復",
+    "fuse_points": "合成的造化分（fusion.fuse_odds／blend_odds）",
+    "mate_exp": "同伴拿到的經驗",
+}
+TIERS = ("大勝", "險勝", "僵持", "落敗")
+CHAIN_LEVEL = 20  # 【預設】螭首連打：20 級、根骨 5、身法 5
+DODGE_AGI = (5, 15)  # 【預設】金角：身法 5、15 兩檔（身法自己的閃避 0、0.2）
+# 金角只把落敗改成僵持。一般的仗僵持的下緣是 −50%、運氣 ±30%，威力到難度的八成就輸不了：RATIOS（0.9 起）一場落敗都沒有，
+# 所以一般的仗量 0.5～0.8；挑戰大勢人物本人的僵持收窄（rise.draw_floor）輸得多，照 RATIOS 量
+DODGE_RATIOS = (0.5, 0.6, 0.7, 0.8)
+SEEN_BELOW = 1.0  # 【預設】直接那幾列的差在幾個百分點以內就是看不出來（「怎麼讀」那一段）
+
+
+class GearRow(NamedTuple):
+    source: str  # 寶物／玉璽
+    name: str  # 寶物：帶這個效果的寶物（content/gear.json）；玉璽：片名（content/seal.json）
+    key: str  # 效果鍵
+    kind: str  # KIND（沒分類是「?」）
+    value: float  # 照 Config 讀的數字
+    field: str  # 數字來自哪個 Config 欄位
+    text: str  # 遊戲裡那一句（treasures.effect_text／seal_effect_text）
+
+
+def gear_rows(content):
+    """寶物八種（照 Config.treasures.effects 的順序）與玉璽七片（照 content/seal.json 的順序）一樣一列；數字照 Config 讀，不寫死。"""
+    from tianxia import treasures
+    names: dict[str, list[str]] = {}
+    for item in content.gear.treasures.values():
+        names.setdefault(item.effect, []).append(item.name)
+    rows = [GearRow("寶物", "、".join(names.get(key, [])) or "（沒有寶物帶它）", key, KIND.get(key, "?"), value,
+                    f"Config.treasures.effects[{key}]", treasures.effect_text(content, key))
+            for key, value in content.config.treasures.effects.items()]
+    for shard in content.seal.values():
+        key = shard.effect
+        value = content.config.seal.effects.get(key, 1.0 if key in treasures.MULTIPLY else 0.0)
+        rows.append(GearRow("玉璽", shard.name, key, KIND.get(key, "?"), value, f"Config.seal.effects[{key}]",
+                            treasures.seal_effect_text(content, key)))
+    return rows
+
+
+def wearing(content, key=None, agi=team.BASE_STAT, wis=team.BASE_STAT):
+    """一個只帶著 key 那一樣的角色（寶物放寶物欄；玉璽碎片放傳承那一格、上限倍數照 seal.copy_heirloom 設），給遊戲裡真的掛點讀
+    （treasures.amount、team.dodge_chance、sensing.rate）；key 是 None 就是什麼都沒帶。"""
+    from tianxia import seal, treasures
+    from tianxia.state import Equipment, GameState, PlayerState
+    p = PlayerState(name="量表", location=next(iter(content.locations)), stats={"agi": agi, "wis": wis}, stamina=0)
+    if key in content.config.treasures.effects:
+        item = next(t for t in content.gear.treasures.values() if t.effect == key)
+        p.treasure = Equipment(slot="treasure", id="寶:1", name=item.name, template=item.id)
+    elif key is not None:
+        shard = next(s for s in content.seal.values() if s.effect == key)
+        p.heirloom = Equipment(slot="treasure", id=seal.HEIRLOOM_PREFIX + shard.id, name=shard.name, template=shard.id, heirloom=True)
+    state = GameState(player=p)
+    p.member.cap_scale = treasures.amount(state, content, "hp_cap")  # 同 seal.copy_heirloom
+    return state
+
+
+def kit_full(content, seed):
+    """滿配：照 --catch-up 的挑法（武學技能分檔開著用 slot_kit 的 rolled，關著用 full_kit）。"""
+    return slot_kit(content, seed, "rolled") if content.config.skill_slots.enabled else full_kit(content, seed)
+
+
+def dodge_table(content, runs, kit, ratio, chances, agi=8, draw_floor=None):
+    """金角：一般的仗照 win_rate 的迴圈（單次判定＋回合，種子同 win_rate），收尾再接身法閃避（team.fight 最後那一下）。
+    閃避用自己的亂數 d|i，不動判定與回合那兩顆：chances 裡每一個閃避機率看到的判定與回合一模一樣，差的只有閃避。
+    回每一個機率的四種結果比例（TIERS）。agi 是本人的身法（回合裡誰先出手，tactics.Ctx.our_agility）。
+    draw_floor 給了是挑戰大勢人物本人的僵持收窄（rise.draw_floor，team.fight 照它改 Mods；不帶他自己的戰法）。"""
+    ctx = tactics.Ctx(foe="對手", our_agility=float(agi), foe_agility=rounds.foe_agility(DIFFICULTY), team=["player"])
+    mods = encounter.Mods() if draw_floor is None else encounter.Mods(draw_floor=draw_floor)
+    rng = random.Random(7)
+    counts = [dict.fromkeys(TIERS, 0) for _ in chances]
+    for i in range(runs):
+        result = (encounter.resolve_encounter(DIFFICULTY * ratio, DIFFICULTY, rng) if draw_floor is None
+                  else encounter.resolve_encounter(DIFFICULTY * ratio, DIFFICULTY, rng, mods=mods))
+        if kit:
+            result = team.clash_result(result, mods, kit, ctx, content, random.Random(f"m|{i}"))
+        for count, chance in zip(counts, chances):
+            tier = encounter.dodge(result, chance, random.Random(f"d|{i}")).tier
+            count[tier] = count.get(tier, 0) + 1
+    return [{tier: n / runs for tier, n in count.items()} for count in counts]
+
+
+def toll_share(content, tier):
+    """一場扣上限的幾成：日常氣血見底（2026-10-18 計畫 Task 2 的 team.toll_fraction，開著讀 Config.grave.loss）合進來之後照它，
+    還沒合進來讀 Config.encounter_neili_loss——兩邊誰先合都量得對。"""
+    fraction = getattr(team, "toll_fraction", None)
+    return fraction(content, tier, False, 1.0) if fraction is not None else content.config.encounter_neili_loss.get(tier, 0.0)
+
+
+def chain_table(content, runs, chain, scale, ratio=1.0, level=CHAIN_LEVEL, con=team.BASE_STAT, agi=team.BASE_STAT):
+    """螭首：一般的仗連打 chain 場、中間不療傷也不回血。每一場照單次判定定勝負（威力＝難度 × ratio × 氣血係數 encounter.condition_of），
+    打完照 team._apply_toll 扣血（take_encounter_toll 叫的同一個，比例照 toll_share、其中 injury_share 變內傷；不帶防具與化勁）。
+    scale 是本人氣血上限的倍數（Member.cap_scale：1 是沒帶）。種子每一輪 c|i，不同 scale 看到的亂數一樣。
+    回每一場的（贏面, 打完剩幾成氣血〔÷這個人的上限〕）。"""
+    from tianxia.state import Member
+    won = [0] * chain
+    left = [0.0] * chain
+    for i in range(runs):
+        member = Member(level=level, cap_scale=scale)
+        rng = random.Random(f"c|{i}")
+        for k in range(chain):
+            now, cap = team.member_neili(content, member, con)
+            result = encounter.resolve_encounter(DIFFICULTY * ratio * encounter.condition_of(now, cap), DIFFICULTY, rng)
+            won[k] += result.tier in WIN
+            team._apply_toll(content, member, toll_share(content, result.tier), agi=agi, con=con)
+            now, cap = team.member_neili(content, member, con)
+            left[k] += now / cap
+    return [(w / runs, x / runs) for w, x in zip(won, left)]
+
+
+def _tiers(odds):
+    return "/".join(f"{odds[t] * 100:4.1f}" for t in TIERS)
+
+
+def gear(content, runs, chain):
+    """第 35 項：寶物八種與玉璽七片哪些進打仗（直接：量勝負變幾個百分點）、哪些只改成長（間接：改哪一條、改多少）、哪些不碰。
+    寶物或玉璽的開關關著也照樣量（量的是開了會怎樣）：只在這一份記憶體裡的內容把兩個開關打開，量完放回去。"""
+    from tianxia import seal, treasures
+    cfg = content.config
+    print("寶物與玉璽：哪一樣進打仗（第 35 項；只量不改，數字照 Config 讀）")
+    print(f"  寶物（Config.treasures.enabled）{'開著' if treasures.on(content) else '關著'}；"
+          f"玉璽（Config.seal.enabled＋content/seal.json {len(content.seal)} 片）{'開著' if seal.on(content) else '關著'}；關著也照樣量")
+    was = cfg.treasures.enabled, cfg.seal.enabled
+    cfg.treasures.enabled = cfg.seal.enabled = True
+    try:
+        rows = gear_rows(content)
+        print("\n── 一覽（直接＝進打仗的數字；間接＝改成長快慢；不碰＝跟打仗無關）──")
+        for kind in (DIRECT, INDIRECT, UNTOUCHED, "?"):
+            for r in (r for r in rows if r.kind == kind):
+                tag = "沒分類：先到 KIND 分類" if kind == "?" else kind
+                print(f"  [{tag}] {r.source}〔{r.name}〕{r.text}　← {r.field}＝{r.value:g}；{NOTE.get(r.key, '')}")
+        keys = {r.key for r in rows}
+        print("\n── 直接 ──")
+        if "dodge" in keys:
+            _gear_dodge(content, runs, rows)
+        if "hp_cap" in keys:
+            _gear_hp(content, runs, chain, rows)
+        print("  兩片同時帶：一人最多一片（seal.shard_of），金角與螭首不會在同一個人身上；寶物八種沒有一樣進打仗，所以沒有合計那一列")
+        print("\n── 間接（改成長快慢；不換算成威力：換算要看玩家怎麼玩，就是在跑模擬）──")
+        for r in (r for r in rows if r.kind == INDIRECT):
+            print(f"  {r.source}〔{r.name}〕{_indirect(content, r)}")
+        print("\n── 不碰（不進打仗）──")
+        for r in (r for r in rows if r.kind == UNTOUCHED):
+            print(f"  {r.source}〔{r.name}〕{_untouched(content, r)}")
+        print("\n── 怎麼讀 ──")
+        print(f"  直接那幾列的差在 {SEEN_BELOW:g} 個百分點以內，就是看不出來（【預設】）。")
+        print("  間接那幾列只說改哪一條成長、改多少；成長換成戰力要看玩家怎麼玩，不在這裡換算（企劃者 10/14：平衡等試玩回饋）。")
+        print("  數字都照 Config 讀：調了 Config.treasures.effects 或 Config.seal.effects 重跑就是新表。")
+    finally:
+        cfg.treasures.enabled, cfg.seal.enabled = was
+
+
+def _named(rows, key):
+    return next(r for r in rows if r.key == key)
+
+
+def _gear_dodge(content, runs, rows):
+    from tianxia import rise
+    r = _named(rows, "dodge")
+    fig = figures_with(content)[0]
+    lineup = [("沒有戰法", []), ("滿配", kit_full(content, 0)),
+              (f"本命（{content.characters[fig].name}）", holders(content, [("你", "player", fig)]))]
+    floor = rise.draw_floor(content)
+    fights = [("一般的仗", DODGE_RATIOS, None)]
+    if floor is not None:
+        fights.append((f"挑戰本人（僵持收窄 {floor:g}）", RATIOS, floor))
+    print(f"金角〔{r.text}〕：只在一般的仗（遊歷、出陣、探索野怪、挑戰本人）收尾擲（team.fight → team.dodge_chance）；"
+          "擂台、頭目戰、奪璽單挑、決戰、切磋、截殺都不擲，勝算（team.estimate）也不含")
+    print(f"  各 {runs} 場；四個數是 大勝/險勝/僵持/落敗（%），左邊沒帶、右邊帶金角；最後是落敗少了幾個百分點（全部變成僵持，大勝險勝不動）")
+    print("  一般的仗威力到難度的八成就輸不了（僵持的下緣 −50%、運氣 ±30%），所以量 0.5～0.8；挑戰本人的僵持收窄，量 0.9～1.3（不帶他自己的戰法）")
+    for agi in DODGE_AGI:
+        bare = team.dodge_chance(wearing(content, None, agi=agi), content)
+        worn = team.dodge_chance(wearing(content, "dodge", agi=agi), content)
+        print(f"  身法 {agi}：閃避 {bare:.0%} → 帶金角 {worn:.0%}")
+        for fight, ratios, draw in fights:
+            cuts = []
+            for label, kit in lineup:
+                for ratio in ratios:
+                    a, b = dodge_table(content, runs, kit, ratio, [bare, worn], agi=agi, draw_floor=draw)
+                    cuts.append((b["落敗"] - a["落敗"]) * 100)
+                    print(f"    {fight} {label:<8}威力÷難度 {ratio:<5g}{_tiers(a)} → {_tiers(b)}　落敗 {cuts[-1]:+.1f}")
+            print(f"    {fight}平均落敗 {sum(cuts) / len(cuts):+.1f} 個百分點（最多 {min(cuts):+.1f}）")
+
+
+def _gear_hp(content, runs, chain, rows):
+    from tianxia import treasures
+    r = _named(rows, "hp_cap")
+    scale = treasures.amount(wearing(content, "hp_cap"), content, "hp_cap")
+    cap0 = team.neili_cap(content, CHAIN_LEVEL)
+    cap1 = team.neili_cap(content, CHAIN_LEVEL, scale=scale)
+    src = "team.toll_fraction" if hasattr(team, "toll_fraction") else "Config.encounter_neili_loss"
+    print(f"螭首〔{r.text}〕：本人氣血上限 ×{scale:g}（Member.cap_scale）")
+    print(f"  一般的仗連打 {chain} 場不療傷（{CHAIN_LEVEL} 級、根骨 5、身法 5，上限 {cap0:g} → {cap1:g}；每場扣上限的幾成照 {src}，"
+          f"{content.config.injury_share:.0%} 變內傷），各 {runs} 輪；每場的贏面（大勝＋險勝）左邊沒帶、右邊帶螭首，最後是打完剩幾成氣血")
+    for ratio in RATIOS:
+        a = chain_table(content, runs, chain, 1.0, ratio)
+        b = chain_table(content, runs, chain, scale, ratio)
+        diff = max(abs(x[0] - y[0]) for x, y in zip(a, b)) * 100
+        print(f"    威力÷難度 {ratio:<5g}" + "　".join(f"{x[0]:5.1%}→{y[0]:5.1%}" for x, y in zip(a, b))
+              + f"　剩 {a[-1][1]:.0%}→{b[-1][1]:.0%}　最大差 {diff:.1f} 個百分點")
+    base = 1000
+    hp = round(base * scale)
+    plain, worn = ring_share(content, runs), ring_share(content, runs, hp_a=hp)
+    fulls = [kit_full(content, k) for k in range(SELF_KITS)]
+    fig = figures_with(content)[0]
+    sig = holders(content, [("你", "player", fig)])
+    print(f"  擂台（兩邊威力 150，兩個方向各 {runs} 場；帶螭首的一方池子 {hp}、對手 {base}，左邊兩邊都 {base}）：")
+    for label, pairs in (
+        ("滿配（帶螭首）對滿配", [(fulls[k], fulls[(k + 1) % SELF_KITS]) for k in range(SELF_KITS)]),
+        (f"本命（{content.characters[fig].name}，帶螭首）對滿配", [(sig, k) for k in fulls]),
+    ):
+        a = sum(plain(x, y) for x, y in pairs) / len(pairs)
+        b = sum(worn(x, y) for x, y in pairs) / len(pairs)
+        print(f"    {label}（{SELF_KITS} 套平均）：{a:.1%} → {b:.1%}（{(b - a) * 100:+.1f}）")
+    print("  頭目戰：挨打（duel.harm_of）、放手一搏的代價都照自己的上限算，按比例，同擂台，不另量")
+    print("  決戰、奪璽單挑：不吃（池子是加入決戰時的快照，team._cap_of 的 plain 不乘；隨行同伴 team.mate_pool 也是）")
+
+
+def _indirect(content, r):
+    """間接那一列：改哪一條成長、改多少（照遊戲裡真的掛點算，不換算成威力）。"""
+    from tianxia import cultivation, fusion, sensing, treasures
+    cfg = content.config
+    amt = treasures.amount(wearing(content, r.key), content, r.key)
+    if r.key == "cultivate":
+        steps = [f"衝{q}第一次 {cultivation.chance(content, q, 0)}% → {cultivation.chance(content, q, 0, treasure=amt)}%"
+                 for q in ("中品", "上品")]
+        sure = "、".join(f"衝{q}第 {n} 次必成" for q, n in cfg.cultivate_sure_by.items())
+        heat = "；上品往絕學走火候與契機（Config.breakthrough），不吃" if cfg.breakthrough.heat > 0 else ""
+        return f"修練升品 ×{amt:g}：" + "、".join(steps) + f"（悟性 5、普通搭配；{sure}不受影響、上限 Config.cultivate_cap 照夾{heat}）"
+    if r.key == "insight":
+        if cfg.explore_modes.enabled:
+            loc = next(iter(content.locations.values()))
+            a = sensing.rate(wearing(content, None), content, loc)
+            b = sensing.rate(wearing(content, "insight"), content, loc)
+            return (f"探索三選一開著：靜心感悟擲中 {a}% → {b}%（悟性 5；+Config.explore_modes.sense_treasure_points，"
+                    f"夾在 sense_rate_range 上限 {cfg.sense_rate_range[1]}%；{r.field}＝{r.value:g} 只在三選一關著時用）")
+        return f"探索悟意境那一支的比重 ×{amt:g}（跟悟性疊乘，_explore_weights）"
+    if r.key in ("win_xinde_pct", "win_exp_pct"):
+        what = "心得" if r.key == "win_xinde_pct" else "經驗"
+        line = f"打贏一場的{what} ×{1 + amt:g}，同一份{what}少打 {1 - 1 / (1 + amt):.0%} 場"
+        if r.key == "win_exp_pct":
+            line += f"；滿級之後經驗每 {cfg.maxed_exp_per_xinde} 點換 1 心得（team.maxed_xinde），這一件就是多換心得"
+        return line
+    if r.key == "seclusion":
+        return f"閉關出關的心得 ×{1 + amt:g}（照出關那一刻身上那件）"
+    if r.key == "win_material":
+        return f"打贏而且這一場掉了素材時，{amt:.0%} 多一個（從掉到的挑一種；只在遊歷、探索野怪）"
+    if r.key == "legend":
+        base = cfg.explore_legend_chance
+        return f"探索撿破境丹 {base:.0%} → {min(1.0, base * amt):.0%}（只放大門檻，擲的還是同一顆）"
+    if r.key == "practice":
+        full = sum(team.practice_price(content, n) for n in range(1, team.MAX_LEVEL))
+        cut = sum(team.practice_price(content, n, amt) for n in range(1, team.MAX_LEVEL))
+        return f"練成 ×{amt:g}：練滿十成的心得 {full} → {cut}（每一成 round(原價×{amt:g})、最少 1；熔煉照原價退）"
+    if r.key == "fuse_points":
+        rule, base = cfg.fuse_quality, cfg.fuse_quality_odds
+        up0 = fusion.odds_from_points([], rule, base).odds["上品"]
+        up1 = fusion.odds_from_points([("seal", amt)], rule, base).odds["上品"]
+        rolled = f"擲骰（fixed 關著）時普通一爐上品 {up0:g}% → {up1:g}%（{up1 - up0:+g}）"
+        if not rule.fixed:
+            return f"造化分 +{amt:g}：{rolled}（此刻 fixed 關著）"
+        band = rule.up_from - rule.mid_from
+        return (f"造化分 +{amt:g}：合成即設計（Config.fuse_quality.fixed 開著）不擲骰，+{amt:g} 佔中品那一段（{rule.mid_from:g}～{rule.up_from:g}，"
+                f"{band:g} 分）的 {amt / band:.0%}——造化分 {rule.mid_from - amt:g}～{rule.mid_from:g} 的爐由下品升中品、"
+                f"{rule.up_from - amt:g}～{rule.up_from:g} 的由中品升上品；對照：{rolled}")
+    if r.key == "mate_exp":
+        return f"同伴拿到的經驗 ×{amt:g}（本人不變）"
+    return f"{r.text}（{NOTE.get(r.key, '')}）"
+
+
+def _untouched(content, r):
+    """不碰那一列：一句。"""
+    from tianxia import treasures
+    cfg = content.config
+    amt = treasures.amount(wearing(content, r.key), content, r.key)
+    if r.key == "audience":
+        return f"求見門檻 −{amt:g}（扣完遊俠名號再扣、最低 0）"
+    if r.key == "talk_turns":
+        return f"每位人物每個遊戲日 {cfg.talk_turns_per_day} 輪 → {cfg.talk_turns_per_day + round(amt)} 輪"
+    if r.key == "stamina_regen":
+        per_hour = 3600 / cfg.stamina_regen_seconds
+        return (f"體力自然回復每小時 {per_hour:g} → {per_hour * amt:g} 點（不進打仗；一樣的時間多 {amt - 1:.0%} 行動，"
+                "跟新手期疊乘、回體丹不吃）")
+    return f"{r.text}（{NOTE.get(r.key, '')}）"
 
 
 def foe_rate(content, power, foe, runs, ctx):
