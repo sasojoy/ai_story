@@ -19,6 +19,12 @@ from .naming import per_post_seconds
 from .ollama_client import OllamaClient, capped
 
 TEXT_MAX = 200  # 每一版過程最多幾個字
+# 輸出長度的上限：**模型會寫超過提示詞講的字數**，所以照「允許的字數 × 3 ＋ JSON 的框」給足餘裕。
+# **只加不減**：預設是 1024，沒出過截斷的呼叫就別去「統一」它——調低等於自己製造截斷，而且
+# 隨口應對的評分那一次連 num_predict 都被 FB-223 的守門測試釘著（動它會讓分數整體移動）。
+# num_predict 只是上限，沒生成就不花時間；給不夠的代價是最後一個欄位被截斷、client 重問一次
+# （2026-10-19 線上抓到：fight_llm 的 losing 兩次、letters 的 letter 一次）。
+PREDICT = 2 * TEXT_MAX * 3 + 120  # 兩版過程
 
 
 class FightRequest(BaseModel):
@@ -126,7 +132,7 @@ def judge(
         caller = capped(client, per_post)
     try:
         reply = caller.chat_structured(
-            _messages(request, swing), Judgment, temperature=0.4, required_fields=["winning", "losing"],
+            _messages(request, swing), Judgment, temperature=0.4, num_predict=PREDICT, required_fields=["winning", "losing"],
         )
     except Exception:  # noqa: BLE001  連不上、逾時、格式不對——一律當作這次沒有判讀
         return None

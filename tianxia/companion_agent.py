@@ -84,6 +84,12 @@ class DialogueUnavailable(Exception):
     結束對話（企劃者決定：不再退回同一句保底反應讓玩家卡在原地白扣體力）。"""
 
 
+# 輸出長度的上限：**模型會寫超過提示詞講的字數**，所以照「允許的字數 × 3 ＋ JSON 的框」給足餘裕。
+# num_predict 只是上限，沒生成就不花時間；給不夠的代價是最後一個欄位被截斷、client 重問一次
+# （2026-10-19 線上抓到：fight_llm 的 losing 兩次、letters 的 letter 一次）。
+TURN_PREDICT = 1400  # 一輪對話：敘事一段＋三個選項＋標籤＋關係備註
+
+
 class CompanionTurn(BaseModel):
     """交友一回合的 LLM 輸出：敘事 + 3 個帶 tag 的選項，好感度查表覆寫，不信任這裡任何數字。"""
 
@@ -512,7 +518,7 @@ def generate_turn(client: OllamaClient | None, messages: list[dict[str, str]]) -
     if client is None:
         raise DialogueUnavailable("沒有可用的模型")
     try:
-        turn = client.chat_structured(messages, CompanionTurn, required_fields=["options"])
+        turn = client.chat_structured(messages, CompanionTurn, num_predict=TURN_PREDICT, required_fields=["options"])
         # 模型常夾雜簡體字（提示裡寫了也只部分改善），所以在輸出端確定性地轉成繁體。
         # option_tags 也要轉：好感度查表是精確比對，模型寫成簡體的 tag（實機見過「由衷讚赏」）會落空。
         return turn.model_copy(update={

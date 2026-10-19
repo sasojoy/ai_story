@@ -974,7 +974,8 @@ def narrate_once(game: Game) -> int | None:
 
     def ask() -> dict[str, str]:
         client = within_budget(game.client, budget - (_monotonic() - started))
-        return battle_instance.write_tales(client, act_, request.items)
+        sides = [f.name for f in definition.factions]  # 兩軍的名字：失手那一句不准寫敵方受損（守門用）
+        return battle_instance.write_tales(client, act_, request.items, sides=sides)
 
     if QUEUE is None:
         stories = ask()
@@ -2169,7 +2170,10 @@ def api_forge_line(request: Request, body: dict = Body(default={})):
     判斷是開爐時那一套（skillview.forge_picks）；其他時候是 None。"""
     game = _game(request)
     art, picked, other = forge_args(body)
-    return look(game, lambda g: {"line": md(g.forge_line(art, picked, other_art=other)), "picks": g.forge_picks(art, picked, other_art=other)})
+    return look(game, lambda g: {
+        "line": md(g.forge_line(art, picked, other_art=other)), "picks": g.forge_picks(art, picked, other_art=other),
+        "preview": g.forge_preview(art, picked, other_art=other),  # 兩格都放好：預覽卡（合成即設計），其餘 None、網頁畫 line
+    })
 
 
 @app.post("/api/smith_line")

@@ -612,6 +612,8 @@ class PlayerState(BaseModel):
     smith_draft: SmithDraft | None = None  # 鐵匠鋪「打造兵器…／打造防具…」挑到哪一步；打開、打完、不打了都清掉，凡是把 picking_smith 收起來的地方（離開、存檔修補、同步時人不在城鎮、出發）一起清
     arts: list[str] = Field(default_factory=list)  # 功法庫：煉出來但沒配上身的功法 id
     art_levels: dict[str, int] = Field(default_factory=dict)  # 每門學過的功法各自的「成」；改練時存進來／取出來
+    # 合成時承底白送的成數（合成即設計定案第二節，Config.fusion_depth.inherit_share）：功法 id → 拿到時就有的那一成，熔了那幾成不退
+    art_free_levels: dict[str, int] = Field(default_factory=dict)
     # ── 武學與成長（設計第三、四節）──
     insights: list[str] = Field(default_factory=list)  # 悟得的意境 id，照悟得的先後
     # ── 悟意境（悟意境設計第零節、0.2b；舊存檔沒這幾欄就是空的）──

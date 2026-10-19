@@ -112,6 +112,8 @@ def _quality_note(state: GameState, content: Content, odds: fusion.QualityOdds) 
     """合成前寫這一爐算出來的品質機率與一句原因、不寫確定的品級（企劃者 2026-10-06）；序章那一爐照劇本是下品。"""
     if prologue.fuse_base(state, content) is not None:
         return "從下品起修"
+    if odds.fixed:  # 合成即設計：照投入定的那一品直接寫出來
+        return f"合出來是{fusion.quality_odds_text(odds, content.config.fuse_quality.near)}"
     return f"品質看造化：{fusion.quality_odds_text(odds)}"
 
 
@@ -139,13 +141,18 @@ def forge_line(
         a, b = team.player_art(state, content, world, art_id), team.player_art(state, content, world, other_art)
         if a is None or b is None:
             return "（選了不存在的東西。）"
-        shape = fusion.blend_shape(a, b, fusion.recipe_seed(world, fusion.blend_key(art_id, other_art))[1])
+        seed = fusion.recipe_seed(world, fusion.blend_key(art_id, other_art))[1]
+        gens = fusion.blend_gens(content, world, a, b)
+        shape = fusion.blend_shape(a, b, seed, gens)
         odds = fusion.blend_odds(state, content, art_id, a, other_art, b, shape=shape)
         head = (
             f"**合成**　【{a.name}】＋【{b.name}】→ 一門新{shape.kind}（屬{shape.attribute}，{_quality_note(state, content, odds)}），"
             f"花 {cfg.fuse_xinde} 點心得、{cfg.fuse_stamina} 點體力（你有 {xinde} 點心得）。"
         )
         head += _blend_depth_note(content, world, a, b, shape.attribute)
+        head += _pick_note(depth.pick_note(a, b, gens[0], gens[1], seed, "境界"))
+        head += _trait_note(state, content, depth.blend_traits(content, a, b, shape.attribute), odds)
+        head += _inherit_note(content, [level_of(state, art_id) or 1, level_of(state, other_art) or 1])
         head += _known_recipe(state, content, world, fusion.blend_key(art_id, other_art))
         problem = fusion.blend_problem(state, content, world, art_id, other_art)
     elif art_id and not other_art and len(insight_ids) == 1:
@@ -162,6 +169,11 @@ def forge_line(
             f"花 {cfg.fuse_xinde} 點心得、{cfg.fuse_stamina} 點體力（你有 {xinde} 點心得）。"
         )
         head += _fuse_depth_note(state, content, world, base, insight)
+        head += _trait_note(
+            state, content,
+            depth.fuse_traits(content, base, insight.attribute, depth.layers_of(insight, content, world, state)), odds,
+        )
+        head += _inherit_note(content, [level_of(state, art_id) or 1])
         head += _known_recipe(
             state, content, world, fusion.fuse_key(art_id, insight_ids[0], insight.attribute),
             preset=fusion.preset_for(content, art_id, insight_ids[0]) is not None,
@@ -173,13 +185,17 @@ def forge_line(
         a, b = (insights.resolve(i, content, world, state) for i in insight_ids)
         if a is None or b is None:
             return "（選了不存在的東西。）"
-        attribute, _ = fusion.merge_shape(world, a, b)  # 跟 fusion.merge 真的登記的同一個函式算的（FB-082）
+        attribute, _ = fusion.merge_shape(world, a, b, content, state)  # 跟 fusion.merge 真的登記的同一個函式算的（FB-082）
         head = (  # 三種合成都花體力（設計 12.1）：不夠的話下面的 ⚠ 會說
             f"**合併**　「{a.name}」＋「{b.name}」→ 一個新的意境（屬{attribute}），"
             f"花 {cfg.merge_xinde} 點心得、{cfg.merge_stamina} 點體力（你有 {xinde} 點心得）。"
         )
         rank, mood = depth.merged_depth(a, b, content, world, state)
         head += f"\n合出來是{depth.RANK_WORDS[rank]}・{mood}（{'兩股意相生' if mood == depth.HARMONY else '兩股意硬湊'}）。"
+        head += _pick_note(depth.pick_note(
+            a, b, depth.rank_of(a, content, world, state), depth.rank_of(b, content, world, state),
+            fusion.recipe_seed(world, fusion.merge_key(a.id, b.id))[1], "重數",
+        ))
         head += _known_insight_recipe(state, world, fusion.merge_key(*insight_ids))
         problem = fusion.merge_problem(state, content, world, *insight_ids)
     elif bool(art_id) != bool(insight_ids) and not other_art and len(insight_ids) <= 1:
@@ -193,6 +209,132 @@ def forge_line(
     return head if problem is None else f"{head}\n⚠ {problem}"
 
 
+def _trait_counts(content: Content, new_traits: list[str]) -> list[dict]:
+    """預覽卡的功效籤：一般功效的名字與層數（照合出來那一門的清單，不乘品質）。"""
+    counts: dict[str, int] = {}
+    for attribute in new_traits:
+        counts[attribute] = counts.get(attribute, 0) + 1
+    out = []
+    for attribute, n in counts.items():
+        try:
+            out.append({"name": traits.general(content, attribute).name, "layers": n})
+        except KeyError:
+            out.append({"name": attribute, "layers": n})
+    return out
+
+
+def _slots_note(content: Content, quality: str | None) -> str | None:
+    """定了的那一品亮幾格（技能分檔開著時）：「亮 2～3 格」。"""
+    if not quality or not content.config.skill_slots.enabled:
+        return None
+    lo, hi = (content.config.skill_slots.slots.get(quality) or [1, 1])[:2]
+    return f"亮 {int(lo)}～{int(hi)} 格" if lo != hi else f"亮 {int(lo)} 格"
+
+
+def _quality_block(state: GameState, content: Content, odds: fusion.QualityOdds) -> dict:
+    """預覽卡的品級那一格：定了的寫品級與原因（離下一品不遠多一句）；擲骰的爐寫機率那一句（quality 是 None）；序章固定下品。"""
+    if prologue.fuse_base(state, content) is not None:
+        return {"quality": "下品", "why": [], "near": None, "odds": None}
+    if odds.fixed:
+        near = content.config.fuse_quality.near
+        hint = None
+        if odds.short_of is not None and near and odds.short_of <= near:
+            hint = fusion.NEAR_LINE.format(next="上品" if odds.fixed == "中品" else "中品")
+        return {"quality": odds.fixed, "why": list(odds.reasons), "near": hint, "odds": None}
+    return {"quality": None, "why": list(odds.reasons), "near": None, "odds": fusion.quality_odds_text(odds)}
+
+
+def _strip_note(note: str) -> str | None:
+    """_known_recipe 那類「\n…。」的句子拿掉換行；空的是 None。"""
+    text = note.strip()
+    return text or None
+
+
+def forge_preview(
+    state: GameState, content: Content, world: WorldStateStore, art_id: str | None, insight_ids: list[str],
+    other_art: str | None = None,
+) -> dict | None:
+    """煉製頁的預覽卡（合成即設計：合成前就看得到合出來的樣子，跟出爐卡同一個形狀）。兩格都放好、而且都是你的東西時才給；
+    其餘（空爐、只放一樣、不是你的）是 None，網頁照舊畫 forge_line 那一行。每一格都跟 forge_line 同一套函式算，不另擲。
+    鍵：kind（合成／合併）、made（「一門新武學」）、attribute、attribute_why、gen（境界）、depth（意境幾重）、quality
+    （定了的品級；擲骰的爐是 None、odds 寫機率那一句）、why、near、slots、traits、keep（舊功效怎麼傳）、level（承底第幾成）、
+    known（有沒有人合過）、cost、problem（開不了爐的原因）。"""
+    if prologue.fuse_problem(state, content, art_id, insight_ids, other_art) is not None:
+        return None
+    cfg, xinde = content.config, state.player.stats.get("xinde", 0)
+    owned, held = owned_arts(state), state.player.insights
+    cost = f"心得 {cfg.fuse_xinde}・體力 {cfg.fuse_stamina}（你有 {xinde} 點心得）"
+    if art_id and other_art and not insight_ids:
+        if art_id not in owned or other_art not in owned:
+            return None
+        a, b = team.player_art(state, content, world, art_id), team.player_art(state, content, world, other_art)
+        if a is None or b is None:
+            return None
+        seed = fusion.recipe_seed(world, fusion.blend_key(art_id, other_art))[1]
+        gens = fusion.blend_gens(content, world, a, b)
+        shape = fusion.blend_shape(a, b, seed, gens)
+        odds = fusion.blend_odds(state, content, art_id, a, other_art, b, shape=shape)
+        gen = max(depth.gen_of(a, content, world), depth.gen_of(b, content, world)) + 1
+        keeps = "、".join(f"【{art.name}】{depth.RELATION_WORDS[depth.relation(shape.attribute, art.attribute)]}" for art in (a, b))
+        block = _quality_block(state, content, odds)
+        return {
+            "kind": "合成", "made": f"一門新{shape.kind}", "attribute": shape.attribute,
+            "attribute_why": depth.pick_note(a, b, gens[0], gens[1], seed, "境界"),
+            "gen": depth.gen_label(gen), "depth": None, **block,
+            "slots": _slots_note(content, block["quality"]),
+            "traits": _trait_counts(content, depth.blend_traits(content, a, b, shape.attribute)), "keep": keeps,
+            "level": fusion.inherited_level(content, [level_of(state, art_id) or 1, level_of(state, other_art) or 1]),
+            "known": _strip_note(_known_recipe(state, content, world, fusion.blend_key(art_id, other_art))),
+            "cost": cost, "problem": fusion.blend_problem(state, content, world, art_id, other_art),
+        }
+    if art_id and not other_art and len(insight_ids) == 1:
+        if art_id not in owned or insight_ids[0] not in held:
+            return None
+        base = team.player_art(state, content, world, art_id)
+        insight = insights.resolve(insight_ids[0], content, world, state)
+        if base is None or insight is None:
+            return None
+        odds = fusion.fuse_odds(state, content, art_id, base, insight)
+        layers = depth.layers_of(insight, content, world, state)
+        rel = depth.fuse_relation(base, insight.attribute)
+        block = _quality_block(state, content, odds)
+        return {
+            "kind": "合成", "made": f"一門新{base.kind}", "attribute": insight.attribute, "attribute_why": None,
+            "gen": depth.gen_label(depth.gen_of(base, content, world) + 1),
+            "depth": f"「{insight.name}」{depth.label(insight, content, world, state)}，給 {layers} 層功效", **block,
+            "slots": _slots_note(content, block["quality"]),
+            "traits": _trait_counts(content, depth.fuse_traits(content, base, insight.attribute, layers)),
+            "keep": depth.KEEP_LINE[rel],
+            "level": fusion.inherited_level(content, [level_of(state, art_id) or 1]),
+            "known": _strip_note(_known_recipe(
+                state, content, world, fusion.fuse_key(art_id, insight_ids[0], insight.attribute),
+                preset=fusion.preset_for(content, art_id, insight_ids[0]) is not None,
+            )),
+            "cost": cost, "problem": fusion.fuse_problem(state, content, world, art_id, insight_ids[0]),
+        }
+    if not art_id and not other_art and len(insight_ids) == 2:
+        if any(i not in held for i in insight_ids):
+            return None
+        a, b = (insights.resolve(i, content, world, state) for i in insight_ids)
+        if a is None or b is None:
+            return None
+        attribute, _ = fusion.merge_shape(world, a, b, content, state)
+        rank, mood = depth.merged_depth(a, b, content, world, state)
+        return {
+            "kind": "合併", "made": "一個新的意境", "attribute": attribute,
+            "attribute_why": depth.pick_note(
+                a, b, depth.rank_of(a, content, world, state), depth.rank_of(b, content, world, state),
+                fusion.recipe_seed(world, fusion.merge_key(a.id, b.id))[1], "重數",
+            ),
+            "gen": None, "depth": f"{depth.RANK_WORDS[rank]}・{mood}（{'兩股意相生' if mood == depth.HARMONY else '兩股意硬湊'}）",
+            "quality": None, "why": [], "near": None, "odds": None, "slots": None, "traits": [], "keep": None, "level": None,
+            "known": _strip_note(_known_insight_recipe(state, world, fusion.merge_key(*insight_ids))),
+            "cost": f"心得 {cfg.merge_xinde}・體力 {cfg.merge_stamina}（你有 {xinde} 點心得）",
+            "problem": fusion.merge_problem(state, content, world, *insight_ids),
+        }
+    return None
+
+
 def _fuse_depth_note(state: GameState, content: Content, world: WorldStateStore, base: MartialArt, insight: Insight) -> str:
     """煉製頁說明的一行（合成與意境改法定案第一、二節）：合出來第幾代、這個意境給幾層、底的功效怎麼傳。照開爐時同一套算。"""
     gen = depth.gen_of(base, content, world) + 1
@@ -202,6 +344,37 @@ def _fuse_depth_note(state: GameState, content: Content, world: WorldStateStore,
         f"\n合出來的境界是{depth.gen_label(gen)}；「{insight.name}」{depth.label(insight, content, world, state)}，"
         f"給 {layers} 層功效；{depth.KEEP_LINE[rel]}。"
     )
+
+
+def _pick_note(note: str | None) -> str:
+    return f"\n{note}。" if note else ""
+
+
+def _trait_note(state: GameState, content: Content, new_traits: list[str], odds: fusion.QualityOdds) -> str:
+    """合成即設計定案第三節：合成前就寫出合出來那一門的功效與層數（「功效：先手 ×3、化勁 ×1」），
+    技能分檔開著時再寫定的那一品亮幾格（fixed 才知道是哪一品；擲骰的爐不寫）。只讀內容，不擲。"""
+    if not new_traits or not content.traits.general:
+        return ""
+    counts: dict[str, int] = {}
+    for attribute in new_traits:
+        counts[attribute] = counts.get(attribute, 0) + 1
+    parts = []
+    for attribute, n in counts.items():
+        try:
+            parts.append(f"{traits.general(content, attribute).name} ×{n}")
+        except KeyError:
+            parts.append(f"{attribute} ×{n}")
+    line = f"\n功效：{'、'.join(parts)}"
+    if odds.fixed and content.config.skill_slots.enabled:
+        lo, hi = (content.config.skill_slots.slots.get(odds.fixed) or [1, 1])[:2]
+        line += f"；{odds.fixed}亮 {int(lo)}～{int(hi)} 格" if lo != hi else f"；{odds.fixed}亮 {int(lo)} 格"
+    return line + "。"
+
+
+def _inherit_note(content: Content, levels: list[int]) -> str:
+    """合成即設計定案第二節：承底的成數先說（第一成不說）。"""
+    level = fusion.inherited_level(content, levels)
+    return f"\n承底子的火候，一上手便是第{level}成。" if level > 1 else ""
 
 
 def _blend_depth_note(content: Content, world: WorldStateStore, a: MartialArt, b: MartialArt, attribute: str) -> str:
@@ -373,6 +546,7 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
             # 卷軸卡的合成機率條：拿手上的意境裡上品機率最高的那一個算（forge_with 是它的名字）；序章、沒有意境不給
             row["forge_odds"] = [{"quality": q, "pct": round(w)} for q, w in forge[1].odds.items()]
             row["forge_with"] = forge[0].name
+            row["forge_fixed"] = forge[1].fixed  # 合成即設計：定了的品級（擲骰的爐是 None，網頁照舊畫機率條）
         if hut:  # 序章：這一列在這一步可以發光的鍵由伺服器說（T7 走查 W-A、W-B）；序章外沒有這個鍵
             row["glow"] = prologue.art_glow(state, content, world, art_id, cultivate_ok=problem is None, melt_ok=stuck is None)
         rows.append(row)

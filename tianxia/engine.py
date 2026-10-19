@@ -8326,6 +8326,10 @@ class Game:
     def forge_line(self, art_id: str | None, insight_ids: list[str], other_art: str | None = None) -> str:
         return skillview.forge_line(self.state, self.content, self.world, art_id, insight_ids, other_art=other_art)
 
+    def forge_preview(self, art_id: str | None, insight_ids: list[str], other_art: str | None = None) -> dict | None:
+        """兩格都放好時煉製頁的預覽卡（skillview.forge_preview；合成即設計）。只讀。"""
+        return skillview.forge_preview(self.state, self.content, self.world, art_id, insight_ids, other_art=other_art)
+
     def forge_picks(self, art_id: str | None, insight_ids: list[str], other_art: str | None = None) -> dict | None:
         """爐裡只放了一樣時，另一格放得進來的每一樣合不合得了（skillview.forge_picks）。只讀。"""
         return skillview.forge_picks(self.state, self.content, self.world, art_id, insight_ids, other_art=other_art)

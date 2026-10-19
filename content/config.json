@@ -75,8 +75,13 @@
     "battlefield": 10,
     "calm": 8,
     "setting_good": "冥冥之中，天時地利都站在你這一邊。",
-    "setting_bad": "時辰地氣都不太對，爐火燒得有些勉強。"
+    "setting_bad": "時辰地氣都不太對，爐火燒得有些勉強。",
+    "fixed": true,
+    "mid_from": 6,
+    "up_from": 24,
+    "near": 8
   },
+  "fusion_depth": {"inherit_share": 0.5},
   "weapons": {
     "quality": {
       "terrain": 10,

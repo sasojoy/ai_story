@@ -28,7 +28,7 @@ const parts = [
   src.slice(src.indexOf("\n  // ── 修練 ──"), src.indexOf("\n  function pagePractice(")),
   // artFilter…：煉製頁挑東西那一排的篩選（arts-polish-2 FB-085），pageCraft 畫的時候要用
   ...["forgeBody", "forgeReady", "pagePractice", "pageCraft", "artFilter", "setArtFilter", "showArts", "filterChips",
-    "pickMark", "craftView", "craftFilterRow", "craftChip", "kilnWarn", "kilnHtml", "madeCardHtml", "manualRows", "manualEntry", "bookIcon", ...input.fns].map(fn),
+    "pickMark", "craftView", "craftFilterRow", "craftChip", "kilnWarn", "kilnHtml", "madeCardHtml", "previewCardHtml", "forgeLineHtml", "craftSheetHtml", "potGlow", "kilnPeek", "manualRows", "manualEntry", "bookIcon", ...input.fns].map(fn),
   `const guideHtml = () => "", furnaceSvg = () => '<div class="furnace"></div>', proGuide = () => "", spinAt = () => "";`,
   input.stubs || "",
   "return { " + ["pagePractice", "pageCraft", ...input.fns, ...input.consts].join(", ") + " };",
@@ -253,7 +253,8 @@ def test_the_practice_page_has_a_closed_attribute_fold_right_under_the_rules_lin
 def test_the_craft_page_has_the_same_fold_right_under_the_open_furnace_button():
     html = page("pageCraft", menxia(), tab="craft")
     assert html.count('<details class="attr-note">') == 1 and "ATTRNOTE" in html
-    assert html.index('id="forge"') < html.index("FORGELINE") < html.index("attr-note") < html.index("<div class=\"label\">功法")  # 挑東西的標題併了篩選鈕（arts-polish-2 FB-085），摺疊還是在它前面
+    assert html.index('id="forge"') < html.index("FORGELINE") < html.index("attr-note")  # 挑東西的清單收進抽屜了（Joy 2026-10-19），摺疊接在預覽後面
+    assert "<div class=\"label\">功法" not in html  # 抽屜關著：清單不在頁面上
 
 
 def test_the_attribute_note_is_escaped_and_a_missing_one_draws_nothing():
