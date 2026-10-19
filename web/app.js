@@ -1396,13 +1396,13 @@
   // 都留在原來那一段。一段超過 NB_MAX 個字就不包（寧可折行也不讓字衝出按鈕）
   const NB_AFTER = "・；、，＋→";
   const NB_MAX = 16;
-  function nbChunks(text) {
+  function nbChunks(text, after = NB_AFTER) {
     const s = String(text ?? ""), out = [];
     let cur = "";
     for (let i = 0; i < s.length; i++) {
       if (s[i] === "（" && cur) { out.push(cur); cur = ""; }
       cur += s[i];
-      if (NB_AFTER.includes(s[i])) {
+      if (after.includes(s[i])) {
         while (s[i + 1] === " ") cur += s[++i];
         out.push(cur);
         cur = "";
@@ -1412,7 +1412,12 @@
     return out;
   }
   // 「→ 」後面那個空白放在 span 外面：行內區塊尾巴上的空白會被瀏覽器吃掉（「→這個配方」貼在一起），放外面它是普通空白，既看得到、也是一個換行機會，落在行尾或行頭時自己消失
-  const nbHtml = (text) => nbChunks(text).map((t) => (t.length <= NB_MAX ? `<span class="nb">${esc(t.trimEnd())}</span>${esc(t.slice(t.trimEnd().length))}` : esc(t))).join("");
+  const nbHtml = (text, after = NB_AFTER, max = NB_MAX) => nbChunks(text, after).map((t) => (t.length <= max ? `<span class="nb">${esc(t.trimEnd())}</span>${esc(t.slice(t.trimEnd().length))}` : esc(t))).join("");
+  // 打點帳簿的說明、旁註、去處（FB-411：375 寬一頁 176px，「最／多打點到 40」「今天還能／捐 1000 兩」斷在詞中間）：同一套小段，切在
+  // 「，・；／：」後面與「（」前面；不切「→」（「情誼 0 → 5」是一件事）。一段最多 LEDGER_NB 個字（一頁 150px 上下，太長的照常折行）
+  const LEDGER_AFTER = "，・；／：";
+  const LEDGER_NB = 14;
+  const ledgerText = (text) => nbHtml(text, LEDGER_AFTER, LEDGER_NB);
   // 價錢後面打折的原因（名聲 4.1：「威震州郡・九折」「自家地盤・貴兩成」，territory.price_parts、renown.clinic_part）：每一段包成同一種不折行的
   // 小段（.nb），375 寬才不會斷成「九／折」「八五／折」（FB-297）。緊貼的「（」與後面的「，」「）」一起包：Chrome 在括號與行內區塊之間照樣斷，
   // 不包的話一行收在「（」上、下一行從「，」起頭；段與段之間（「，」後面）照常換行。先跳脫再包，字一個不改。
@@ -3434,10 +3439,10 @@
   // 身上掛著還沒用掉的寫在帳底下。字與數字照伺服器給的
   function dadianHtml(shop) {
     const entry = (e) => {
-      const head = `<b>${esc(e.name)}<em>${esc(e.price)}</em></b><span class="desc">${esc(e.desc)}</span>`;
+      const head = `<b>${esc(e.name)}<em>${esc(e.price)}</em></b><span class="desc">${ledgerText(e.desc)}</span>`;
       return e.ok
-        ? `<button class="entry" data-act="choose" data-id="${esc(e.id)}">${head}<span class="tick">${esc(e.tick)}</span></button>`
-        : `<div class="entry off">${head}<span class="note">${esc(e.note)}</span></div>`;
+        ? `<button class="entry" data-act="choose" data-id="${esc(e.id)}">${head}<span class="tick">${ledgerText(e.tick)}</span></button>`
+        : `<div class="entry off">${head}<span class="note">${ledgerText(e.note)}</span></div>`;
     };
     const pages = shop.pages.map((p) => `<section class="ledger-page"><h3>${esc(p.head)}</h3>${p.entries.map(entry).join("")}</section>`).join("");
     return `<div class="shop-body"><div class="shop-col"><div class="ledger">${pages}</div>

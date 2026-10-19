@@ -126,6 +126,30 @@ def test_the_ledger_writes_what_is_owed_underneath():
     assert '<p class="ledger-hang">' in html and silver.HANG_MENTOR in html
 
 
+@web
+def test_the_ledger_text_breaks_only_between_phrases():
+    """FB-411：375 寬一頁 176px，說明斷在詞中間（「最／多打點到 40」「今天還能／捐 1000 兩」「下 35／／中 40」）：帳上的字照「，・；／：」
+    與「（」切成不折行的小段（同 FB-132 的 .nb），「情誼 0 → 5」這種不在箭頭那裡切開。"""
+    import re
+
+    game = _game(at="wan_city", money=2000)
+    game.choose("act:dadian")
+    html = _shop_run(server.main_view(game), "H.render(); return T.els.app.innerHTML;")
+    assert re.search(r'<span class="nb">\w+的門房：</span><span class="nb">情誼 \d+ → \d+，</span><span class="nb">最多打點到 \d+</span>', html)
+    assert re.search(r'<span class="nb">這一下捐 \d+ 兩・</span><span class="nb">今天還能捐 \d+ 兩</span>', html)
+    assert re.search(r'<span class="nb">下 \d+／</span><span class="nb">中 \d+／</span><span class="nb">上 \d+</span>', html)
+
+
+def test_the_ledger_stacks_its_pages_below_360():
+    """FB-411：比 360 窄時兩頁放不下，改成上下兩頁（第二頁的左邊線換成上邊線）；360 以上照舊並排。"""
+    from pathlib import Path
+
+    css = (Path(__file__).resolve().parent.parent / "web" / "style.css").read_text(encoding="utf-8")
+    narrow = css.split("@media (max-width: 359px)")[1].split("\n}\n")[0]
+    assert ".shop-layer.shop-dadian .ledger { grid-template-columns: 1fr; }" in narrow
+    assert ".shop-layer.shop-dadian .ledger-page + .ledger-page {" in narrow and "border-top" in narrow
+
+
 def test_the_ledger_css_keeps_text_at_twelve_px_and_has_a_desktop_column():
     import re
     from pathlib import Path
