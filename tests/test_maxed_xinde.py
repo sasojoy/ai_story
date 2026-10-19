@@ -96,3 +96,17 @@ def test_maxed_bounty_reward_converts_in_every_season():
     assert exp > 0 and bits.exp == 0 and bits.xinde >= exp // 5
     msgs = bounties._complete(s, c, game.world, b)
     assert not any(m.startswith("經驗") for m in msgs) and f"心得 +{exp // 5}" in msgs
+
+
+def test_a_maxed_boss_duel_report_keeps_the_converted_xinde():
+    """FB-450：滿級頭目戰的戰報得失，心得含換來的那一份（以前被頭目給的心得蓋掉：實際 +27、得失只寫 +15）。"""
+    game = _game()
+    s, c = game.state, game.content
+    boss = next(b for b in c.duels.values() if b.exp >= 5 and b.xinde > 0)
+    s.player.location = boss.locations[0]
+    game._duel_start(boss)
+    have = s.player.stats.get("xinde", 0)
+    game._duel_finish("大勝", "（測試）")
+    record = s.battles[-1]
+    gained = s.player.stats["xinde"] - have
+    assert gained > round(boss.xinde * c.config.duel.reward_share["大勝"]) and record.xinde == gained and record.exp == 0

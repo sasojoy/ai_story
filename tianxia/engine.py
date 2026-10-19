@@ -10486,7 +10486,7 @@ class Game:
         xinde = round(boss.xinde * share)
         if xinde:
             p.stats["xinde"] = p.stats.get("xinde", 0) + xinde
-            record.xinde = xinde
+            record.xinde = (record.xinde or 0) + xinde  # 滿級換來的那一份已經在裡面（_record_exp，FB-450）
         if won:
             for material_id in boss.drops:
                 if materials.grant(s, c, material_id) is not None:
