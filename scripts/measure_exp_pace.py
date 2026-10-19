@@ -17,7 +17,8 @@
   .venv/Scripts/python.exe scripts/measure_exp_pace.py --profile weekend --rules old new
   .venv/Scripts/python.exe scripts/measure_exp_pace.py --profile 14 --rules old new --days 14
   .venv/Scripts/python.exe scripts/measure_exp_pace.py --profile season21 --rules new --days 21 --pills 0 5
---late 0.1 0.12：只換這一份設定的 late_exp_step 再量（校曲線用）。"""
+--late 0.1 0.12：只換這一份設定的 late_exp_step 再量（校曲線用）。
+每一行多印練功的「每點體力換幾經驗」（練功拿到的經驗 ÷ 花在練功的體力，勝率算在裡面）與常去的練功點（第 8 批：各陣營的練功點一樣好）。"""
 from __future__ import annotations
 
 import argparse
@@ -143,8 +144,10 @@ def _heal(game: Game) -> None:
         game.heal()
 
 
-def _spend(game: Game, ledger: Ledger, rules: str, spot: str, rng: random.Random) -> None:
+def _spend(game: Game, ledger: Ledger, rules: str, spot: str, rng: random.Random) -> int:
+    """把體力用掉；回按了幾下練功（找素材）。"""
     p = game.state.player
+    presses = 0
     for _ in range(400):
         if _settle(game, ledger, rng):
             continue
@@ -160,9 +163,11 @@ def _spend(game: Game, ledger: Ledger, rules: str, spot: str, rng: random.Random
         ids = {o.id for o in game.options(odds=False) if o.enabled}
         press = PRACTICE if rules == "new" else GATHER
         if press not in ids:
-            return
+            return presses
         ledger.source = "練功" if rules == "new" else "找素材"
         game.choose(press)
+        presses += 1
+    return presses
 
 
 def run_one(profile: str | None, side: str, rules: str, pills: int, days: float, step_min: float, late: float | None,
@@ -189,6 +194,8 @@ def run_one(profile: str | None, side: str, rules: str, pills: int, days: float,
     rng = random.Random(2)
     reached: dict[int, float] = {}
     daily: list[int] = []
+    spots: Counter = Counter()  # 每一個現實日挑的練功點（地點・對手）
+    presses = 0
     with Ledger(name) as ledger:
         press = PRACTICE if rules == "new" else GATHER
         now, spot, day_mark = T0, _best_spot(game, press), T0
@@ -196,12 +203,14 @@ def run_one(profile: str | None, side: str, rules: str, pills: int, days: float,
             game.sync(now)
             if now >= day_mark:
                 spot, day_mark = _best_spot(game, press), day_mark + DAY
+                foe = game._gather_foe(content.locations[spot])
+                spots[f"{content.locations[spot].name}・{foe.name if foe else '—'}"] += 1
             _heal(game)
             bot.allocate_points(game, rng)  # 配點、練成（同整季機器人）
             bot.spend_xinde(game, rng)
             while pills and game.pills_left_today() and p.stamina <= cfg.stamina_max - cfg.stamina_pill_restore:
                 game.take_stamina_pill(pill_only=True)
-            _spend(game, ledger, rules, spot, rng)
+            presses += _spend(game, ledger, rules, spot, rng)
             for lv in (30, 40, 50):
                 if lv not in reached and p.member.level >= lv:
                     reached[lv] = (now - T0) / DAY
@@ -209,8 +218,10 @@ def run_one(profile: str | None, side: str, rules: str, pills: int, days: float,
             if now >= T0 + (len(daily) + 1) * DAY:
                 daily.append(p.member.level)
     database.close_all()
+    source = "練功" if rules == "new" else "找素材"
+    per = ledger.by[source] / (presses * cfg.action_cost["explore"]) if presses else 0.0
     return {"reached": reached, "daily": daily, "by": ledger.by, "level": p.member.level, "silver": p.stats.get("silver", 0),
-            "late": cfg.late_exp_step}
+            "late": cfg.late_exp_step, "per_stamina": per, "spots": spots}
 
 
 def main(argv=None) -> None:
@@ -239,6 +250,8 @@ def main(argv=None) -> None:
                         print(f"[{'新' if rules == 'new' else '舊'}規則・加陡 {r['late']}・{'吃丹' if pills else '不吃丹'}] {side}："
                               f"{hit}；最後 {r['level']} 級、銀兩 {r['silver']}；經驗來源 {src}")
                         print(f"    每天結束時的等級：{r['daily']}")
+                        where = "、".join(f"{k} {v} 天" for k, v in r["spots"].most_common(3))
+                        print(f"    {'練功' if rules == 'new' else '找素材'}每點體力 {r['per_stamina']:.2f} 經驗；常去的：{where}")
 
 
 if __name__ == "__main__":
