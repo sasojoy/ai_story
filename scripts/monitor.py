@@ -35,9 +35,29 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-PRESENCE = 600  # 跟 Config.presence_seconds 一樣
+def _presence() -> float:
+    """「在線」的窗口照 content/config.json 的 presence_seconds（跟遊戲同一個數字；2026-10-19 從 600 拉到 1800）。
+    刻意用標準庫直接讀那個檔、不 import tianxia：這一頁要能在遊戲掛了的時候照樣開得起來。讀不到就用舊的 600。"""
+    try:
+        with open(ROOT / "content" / "config.json", encoding="utf-8") as f:
+            return float(json.load(f).get("presence_seconds", 600))
+    except Exception:  # noqa: BLE001
+        return 600.0
+
+
+PRESENCE = _presence()
 FACTIONS = {"guan": "官軍", "huang": "黃巾", "haoqiang": "地方豪強", None: "散人（未投靠）"}
-WINDOWS = ((60, "1 分鐘內"), (300, "5 分鐘內"), (PRESENCE, "在線（10 分鐘內）"), (1800, "30 分鐘內"))
+
+
+def _windows() -> tuple[tuple[float, str], ...]:
+    """四個窗口：短的兩個、「在線」（照 presence）、再長一截。數字換了標籤跟著換，不會寫死「10 分鐘內」。"""
+    mins = PRESENCE / 60
+    label = f"在線（{mins:g} 分鐘內）"
+    longer = PRESENCE * 4
+    return ((60, "1 分鐘內"), (300, "5 分鐘內"), (PRESENCE, label), (longer, f"{longer / 60:g} 分鐘內"))
+
+
+WINDOWS = _windows()
 ONLINE_ROW = 2  # WINDOWS 裡哪一個是「在線」，給大字用
 
 
