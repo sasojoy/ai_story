@@ -3297,7 +3297,10 @@ class Config(_Strict):
     bot_fill_seconds: float = 3600  # 同一個陣營兩次補人至少隔幾秒（現實時間），看起來像玩家陸續湧入
     bot_naming: bool = True  # 假人首創的配方與絕學定名也請模型取名（企劃者 2026-10-05、10-06）；關掉時假人不開要取名的爐、也不定名
     bot_naming_gap_seconds: float = 120  # 假人兩次請模型取名至少隔幾秒（現實時間；PM 10/5：一次一件，不搶真人的顯卡）
-    bot_naming_budget_seconds: float = 30  # 假人一次取名最多花幾秒；取不到：首創的那一爐不開（不用字表名字搶首創），絕學定名改用字表另組
+    # 假人一次取名最多花幾秒；取不到：首創的那一爐不開（不用字表名字搶首創），絕學定名改用字表另組。
+    # 正式內容 60（2026-10-19 從 30 提高）：naming.propose 把預算切成兩趟，而省電模式下模型可能是卸掉的，
+    # 冷啟動在這台實測 11.4 秒——30 秒的話一趟只有 15 秒，光載入就吃掉大半，線上實際逾時過兩次。
+    bot_naming_budget_seconds: float = 30
     # ── 全服決戰的三招與推力（戰鬥系統設計 3.4；全部【預設】）──
     battle: BattleTuning = Field(default_factory=BattleTuning)
 

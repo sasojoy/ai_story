@@ -1966,7 +1966,8 @@ def write_tales(
     ]
     try:
         result = client.chat_structured(
-            messages, TaleBatch, temperature=0.7, num_predict=64 + TALE_PREDICT_EACH * len(items), required_fields=["lines"],
+            messages, TaleBatch, temperature=0.7, num_predict=64 + TALE_PREDICT_EACH * len(items),
+            required_fields=["lines"], require_in_schema=True,  # TaleBatch.lines 有預設值，不寫進 required 的話模型可以回 {}
         )
     except Exception:
         return {}

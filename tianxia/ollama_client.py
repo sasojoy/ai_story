@@ -38,6 +38,23 @@ def _trim_schema_properties(schema: dict[str, Any], fields: list[str]) -> dict[s
     return trimmed
 
 
+def _require_in_schema(schema: dict[str, Any], fields: list[str]) -> dict[str, Any]:
+    """把呼叫端宣告的必填欄位寫進送出去的 schema 的 required。
+
+    不寫的話：欄位只要在 pydantic 有預設值（例 `LetterText.letter: str = ""`），schema 就沒有 required，
+    於是結構化輸出的語法允許模型回一個 `{}`——接著 _ensure_required_present 判定缺欄位、重問一趟才拿到。
+    2026-10-19 線上實測：書信**每一封都**這樣白跑第一趟（三次複現三次中），而 NameReply 本來就有 required，
+    所以取名第一趟就成功。一次模型呼叫在這台約 1～2 秒、而且一次只服務一件，白跑一趟等於這個功能的吞吐腰斬。
+    只加 required、不動 properties：模型照舊可以多寫別的欄位。
+    """
+    if not fields:
+        return schema
+    out = dict(schema)
+    known = set(out.get("properties", {}))
+    out["required"] = sorted(set(out.get("required", [])) | {f for f in fields if f in known})
+    return out
+
+
 def clean_json_text(text: str) -> str:
     text = text.strip()
     if text.startswith("```"):
@@ -395,11 +412,13 @@ class OllamaClient:
     def chat_structured(
         self, messages: list[dict[str, str]], response_model: Type[T], temperature: float = 0.8,
         schema_fields: list[str] | None = None, required_fields: list[str] | None = None,
-        num_predict: int = 1024,
+        num_predict: int = 1024, require_in_schema: bool = False,
     ) -> T:
         schema = response_model.model_json_schema()
         if schema_fields:
             schema = _trim_schema_properties(schema, schema_fields)
+        if require_in_schema:  # 要語法強制必填的呼叫自己開（opt-in；預設不動，見 _require_in_schema 的說明）
+            schema = _require_in_schema(schema, required_fields or [])
         payload = self._build_payload(messages, temperature, num_predict=num_predict, json_schema=schema)
         url = f"{self.base_url}/api/chat"
         required = required_fields or []

@@ -302,7 +302,10 @@ def write(client, note: LetterNote) -> str:
         {"role": "user", "content": f"{what}。\n請給 letter。"},
     ]
     try:
-        result = client.chat_structured(messages, LetterText, temperature=0.8, num_predict=LETTER_PREDICT, required_fields=["letter"])
+        result = client.chat_structured(
+            messages, LetterText, temperature=0.8, num_predict=LETTER_PREDICT,
+            required_fields=["letter"], require_in_schema=True,  # 不開的話每封信都白跑一趟（實測）
+        )
     except Exception:
         return ""
     return clean(result.letter)
