@@ -494,3 +494,21 @@ def test_a_ranger_reads_only_practice_on_a_strike_bounty():
     assert bounties.how(game.content, b, game.state).startswith("到長社練功打贏")
     game.state.player.faction = "guan"
     assert "練功或出陣攻打贏" in bounties.how(game.content, b, game.state)
+
+
+def test_the_howto_follows_precise_actions_and_old_seasons_keep_every_word():
+    """FB-422：一類一顆生效的季，玩法說明的探索、練功、交友、意境、名望、情誼照新規則寫；沒蓋章的季跟以前一字不差。"""
+    from tianxia import explore_modes, howto
+    from tianxia.world_state import fresh_season
+
+    c = real_content("weekend")
+    season = fresh_season(c)
+    stamp_season(season, c)
+    text = howto.page(c, season, recruitable=False)
+    assert "一定撿得到素材，不打仗" in text and f"**{explore_modes.NAMES['practice']}**" in text and "不限次數" in text
+    assert "撞上怪" not in text and "會打發你" not in text and "過一陣子才悟得出" not in text and "求見名單" not in text
+    assert f"選錯了得 {c.config.sense_miss_xinde} 心得" in text and "交友名單上也有" in text and "不夠的見不到" in text
+    season.precise_actions = False
+    old = howto.page(c, season, recruitable=False)
+    assert "撞上怪" in old and "會打發你" in old and "過一陣子才悟得出" in old and "求見名單上也有" in old
+    assert f"**{explore_modes.NAMES['practice']}**" not in old
