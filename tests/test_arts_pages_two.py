@@ -502,7 +502,7 @@ def test_the_same_order_reaches_the_page_data(real):
 PRACTICE_STUBS = 'const guideHtml = () => "", proGuide = () => "";'
 CRAFT_STUBS = PRACTICE_STUBS + 'const furnaceSvg = () => "<svg></svg>", toast = () => {}, spinAt = () => "";'
 CRAFT_FNS = ["pageCraft", "forgeBody", "forgeReady", "artFilter", "setArtFilter", "filterChips", "showArts",
-             "pickMark", "craftView", "craftFilterRow", "craftChip", "kilnWarn", "kilnHtml", "madeCardHtml", "previewCardHtml", "forgeLineHtml", "manualRows", "manualEntry", "bookIcon"]
+             "pickMark", "craftView", "craftFilterRow", "craftChip", "kilnWarn", "kilnHtml", "madeCardHtml", "previewCardHtml", "forgeLineHtml", "craftSheetHtml", "potGlow", "kilnPeek", "manualRows", "manualEntry", "bookIcon"]
 CRAFT_CONSTS = ["ART_FILTERS", "filterKey", "CRAFT_SORTS", "CRAFT_PAGE", "BOOKS"]
 
 
@@ -553,7 +553,7 @@ def _practice(rows, script_before="", insights=None, **extra):
 def _craft(filter_for=None, **S):
     return run(
         (f"H.setArtFilter('craft', {json.dumps(filter_for)});" if filter_for else "") + " return H.pageCraft();",
-        S={"menxia": _menxia(owned_arts=_library_of_ten(), insights=INSIGHTS), "main": {"status": {"injury": 0}}, **S},
+        S={"menxia": _menxia(owned_arts=_library_of_ten(), insights=INSIGHTS), "main": {"status": {"injury": 0}}, "craftPick": True, **S},  # 清單在抽屜裡（Joy 2026-10-19）
         fns=CRAFT_FNS, consts=CRAFT_CONSTS, stubs=CRAFT_STUBS,
     )
 

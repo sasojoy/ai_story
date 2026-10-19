@@ -36,7 +36,7 @@ def made(game):
 def test_with_an_insight_in_the_pot_the_arts_that_cannot_take_it_are_greyed_with_a_reason(made):
     game, art = made
     picks = game.forge_picks(None, ["feng"])
-    S = {"tab": "craft", "forgeSel": [{"type": "ins", "id": "feng"}], "forgePicks": picks}
+    S = {"tab": "craft", "craftPick": True, "forgeSel": [{"type": "ins", "id": "feng"}], "forgePicks": picks}  # 清單在抽屜裡（Joy 2026-10-19）
     out = run(server.main_view(game), """
       const html = H.pageCraft();
       H.pick("art", "basic_fist");
@@ -49,7 +49,7 @@ def test_with_an_insight_in_the_pot_the_arts_that_cannot_take_it_are_greyed_with
 
 def test_only_what_fits_can_be_shown(made):
     game, art = made
-    S = {"tab": "craft", "forgeSel": [{"type": "ins", "id": "feng"}], "forgePicks": game.forge_picks(None, ["feng"]),
+    S = {"tab": "craft", "craftPick": True, "forgeSel": [{"type": "ins", "id": "feng"}], "forgePicks": game.forge_picks(None, ["feng"]),
          "craftView": {"attr": "", "quality": "", "sort": "", "okOnly": True, "all": False}}
     html = run(server.main_view(game), "return H.pageCraft();", S=S, menxia=server.menxia_view(game))
     assert "只看合得了的" in html and 'data-id="basic_fist"' not in html and f'data-id="{art.id}"' not in html
