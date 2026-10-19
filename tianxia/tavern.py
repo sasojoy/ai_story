@@ -481,18 +481,11 @@ def ties_player_lines(state: GameState, content: Content, other: GameState, mate
 # ── 素材 ──
 
 def material_places(content: Content, material: Material) -> list[str]:
-    """採得到這一樣的地點：照地點的素材屬性（一階：寫了這個屬性的地點；二階：再要危險度 2 以上）；三階以上不從地點來，是空的。
+    """採得到這一樣的地點：地點的 materials 寫了這一樣的 id（路邊採集、探索找素材同一張表）；三階以上不從地點來，是空的。
     序章專屬的地點不算。"""
     if material.tier >= 3:
         return []
-    out = []
-    for loc in content.locations.values():
-        if loc.prologue_only or material.attribute not in loc.materials:
-            continue
-        if material.tier == 2 and loc.danger < 2:
-            continue
-        out.append(loc.id)
-    return out
+    return [loc.id for loc in content.locations.values() if not loc.prologue_only and material.id in loc.materials]
 
 
 def material_lines(state: GameState, content: Content, material: Material) -> tuple[list[str], bool]:
@@ -927,8 +920,9 @@ def ask_facts(state: GameState, content: Content, extra: list[str]) -> tuple[str
     out += [f"最近的傳聞：{t}" for t in rumors]
     loc = content.locations.get(tavern)
     if loc is not None and loc.materials:
-        attrs = "、".join(loc.materials)
-        out.append(f"{loc.name}一帶採得到屬{attrs}的素材。")
+        names = "、".join(content.materials[mid].name for mid in loc.materials if mid in content.materials)
+        if names:
+            out.append(f"{loc.name}一帶採得到{names}。")
     out += extra
     return tuple(out)
 

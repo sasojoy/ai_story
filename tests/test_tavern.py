@@ -135,6 +135,27 @@ def test_seeking_a_figure_and_a_material():
     assert "傳說" in msgs[0]
 
 
+def test_material_answers_name_real_places_and_differ_by_material():
+    """Joy 2026-10-19「酒館打聽素材消息他全部都回一樣的話」：地點的 materials 寫的是素材 id，以前拿屬性去比、一處都對不上，
+    一階二階全回「傳說裡的東西」。"""
+    c = _content()
+    for m in c.materials.values():
+        places = tavern.material_places(c, m)
+        assert bool(places) == (m.tier <= 2), m.id
+        assert all(m.id in c.locations[loc].materials for loc in places)
+    game = _game(silver=5000)
+    game.choose("act:tavern")
+    answers = {}
+    for m in c.materials.values():
+        if m.tier > 2:
+            continue
+        line = game.tavern_do("material", m.id)[0]
+        assert "傳說" not in line, line
+        answers[m.id] = line
+    assert len(set(answers.values())) == len(answers)
+    assert "沉淵石" in tavern.material_lines(game.state, c, c.materials["man_1"])[0][0]
+
+
 def test_wall_treat_hide_and_their_limits():
     game = _game()
     c = game.content
