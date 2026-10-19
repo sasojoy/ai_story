@@ -199,6 +199,32 @@ def follower_power(
 CN_DIGITS = "零一兩三四五六七八九十"
 
 
+def mate_power(state: GameState, content: Content, world: WorldStateStore, key: str) -> float:
+    """一位同伴此刻的威力（不看對手、氣血係數照滿的）：他自己的兩門武學、他自己的加成（mate_boost）。
+    決戰的隨行同伴照它算份量（歷史武將同行第五節，Game._escort_of）。"""
+    progress = world.get_companion(key)
+    arts = {sid: art for sid in (progress.neigong_id, progress.wugong_id) if sid and (art := resolve_art(sid, content, world))}
+    return encounter.member_power(progress, arts, None, 1.0, mate_boost(state, content, world, key))
+
+
+def mate_pool(state: GameState, content: Content, world: WorldStateStore, key: str) -> float:
+    """一位同伴的氣血池（決戰加入時快照）：他的氣血上限，照他自己的等級與根骨（member_neili，不乘螭首）。"""
+    _, cap = member_neili(content, world.get_companion(key), con_of(state, content, world, key), plain=True)
+    return cap
+
+
+def mate_side(state: GameState, content: Content, world: WorldStateStore, key: str) -> tactics.BoutSide | None:
+    """一位同伴在決戰帶的本命戰法：只算他自己身上的兩門（照決戰的規矩，tactics.war_round）；沒有是 None。"""
+    progress = world.get_companion(key)
+    holders = tactics.holders_of(content, [(content.characters[key].name, key, progress.wugong_id, progress.neigong_id)])
+    if not holders:
+        return None
+    agility = member_stats(state, content, world, key).get("agi", BASE_STAT)
+    return tactics.side_for(holders, tactics.Ctx(
+        foe="", our_agility=float(agility), night=calendar.is_night(state.world.time, content, state.world), team=[key],
+    ))
+
+
 def follower_share(state: GameState, content: Content, world: WorldStateStore, squad: Squad) -> tuple[float, float]:
     """這一場（照對手算：相剋、路數都在，同 fight）部下的威力合計與其餘的人（本人、同伴）的威力合計。沒有部下是 (0, 全隊)。"""
     rows = follower_rows(state, content)

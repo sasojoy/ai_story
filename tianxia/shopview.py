@@ -9,7 +9,7 @@ import hashlib
 import json
 import re
 
-from . import arena, armor, bounties, economy, equipment, forge_secrets, four_tiers, mounts, rules, skillview, smithing, tactics, team, territory, weapons
+from . import arena, armor, bounties, economy, equipment, forge_secrets, four_tiers, mounts, rules, silver, skillview, smithing, tactics, team, territory, weapons
 from . import duel as duel_rules
 from .characters import name_key
 from .models import MOVES, WEAPON_KINDS, Content
@@ -23,28 +23,33 @@ SMITH_SITUATIONS = (
     "sell", "upgrade",  # 素材與經濟（2026-10-15）：收購、升階做成了（句子待 joy 潤）
     "black_market",  # 名聲 5.2：寇照黑市價賣成了
     "rules",  # 素材四階（正式季整合 5.10）：背包有四階時鐵匠講的神器規矩（next_rule 輪著講；放在畫面哪裡等對比圖）
+    "have_divine",  # 神器輪替（正式季整合 5.8）：已經有那一件神器、再開那一爐被擋下（FB-403：不挑講料的那一句）
 )
 # 馬市（第三節）、懸賞榜（第四節）的情況：灰掉的鈕在 Game.choose 的選單那一關就擋下，short_silver、rack_full、held_full、refused
 # 多半只在兩個分頁搶的時候出現
 MARKET_SITUATIONS = ("enter", "buy", "feed", "wield", "short_silver", "rack_full", "refused")
 BOARD_SITUATIONS = ("enter", "take", "drop", "pick", "give", "held_full", "refused")
 DONATE_SITUATIONS = ("enter", "donate", "refused")  # 軍需帳（素材與經濟 B6）：進門、捐成了、捐不了
+DADIAN_SITUATIONS = ("enter", "done")  # 打點（21 天季的銀兩出口）：進門、記了一筆
+TAVERN_SITUATIONS = ("enter", "chatter", "news", "nothing", "asked", "missed", "wall", "treat", "hide", "trace", "short_silver", "refused")  # 酒肆（企劃者 2026-10-18）
 SITUATIONS = {"smith": SMITH_SITUATIONS, "market": MARKET_SITUATIONS, "board": BOARD_SITUATIONS,
-              "donate": DONATE_SITUATIONS}  # 店 → 情況；content.check_shop_lines 照它驗
+              "donate": DONATE_SITUATIONS, "dadian": DADIAN_SITUATIONS, "tavern": TAVERN_SITUATIONS}  # 店 → 情況；content.check_shop_lines 照它驗
 # 每間店的離開鈕（Game._shop_live 認「店裡那一串是眼前的選單」）：懸賞榜的第三層（替一張求藝、求兵挑東西）沒有 bounty:back，只有回到懸賞榜
 BACKS = {"smith": ("smith:back",), "market": (mounts.BACK,), "board": ("bounty:back", bounties.UNPICK_ID), "arena": (arena.BACK_ID, arena.YIELD_ID),
-         "donate": ("donate:back",)}
+         "donate": ("donate:back",), "dadian": ("dadian:back",), "tavern": ("tavern:back",)}
 _HELD_HEAD = bounties.HELD_FULL.partition("{")[0]
 FORGED_KEYS = {"下品": "forge_low", "中品": "forge_mid", "上品": "forge_high"}
 RACK_FULL = "裝備庫滿了"  # 同 equipment.RACK_FULL（problem_key 照它認；tests/test_shop.py 鎖住兩邊一樣）
 
 
 def problem_key(problem: str | None, done: str) -> str:
-    """這一下的情況鍵：做成了是 done；錢不夠（「還差 N 兩」）、裝備庫滿了各一種；其餘的擋法一律 refused。"""
+    """這一下的情況鍵：做成了是 done；錢不夠（「還差 N 兩」）、裝備庫滿了、已經有那一件神器各一種；其餘的擋法一律 refused。"""
     if problem is None:
         return done
     if problem.startswith("還差"):
         return "short_silver"
+    if problem == forge_secrets.HAVE_DIVINE:
+        return "have_divine"  # FB-403
     return "rack_full" if problem == RACK_FULL else "refused"
 
 
@@ -57,7 +62,7 @@ def board_key(problem: str | None, done: str) -> str:
 
 # 被拒的情況（FB-192）：那一句只撐到被拒的原因還成立的時候，原因不成立了就換回平常那一句（進門那一組）——錢補夠了、裝備庫騰出位子了、
 # 手上那一張作廢了；其餘的擋法（素材不夠、吃飽了、下榜了……）看不出原因，照「錢、素材、身上與裝備庫的東西都沒變」算還成立
-REFUSALS = ("short_silver", "rack_full", "held_full", "refused")
+REFUSALS = ("short_silver", "rack_full", "held_full", "refused", "have_divine")
 
 
 def _mark(state: GameState) -> str:
@@ -339,7 +344,8 @@ def smith_view(state: GameState, content: Content, world: WorldStateStore) -> di
         "sign": f"{content.locations[p.location].name}{SMITH_SIGN}",
         "silver": p.stats.get("silver", 0),
         "line": line_text(state, content, "smith"),
-        "rule": rule_line(state),  # 鐵匠講的神器規矩（正式季整合 5.10；畫面還沒畫）
+        "rule": rule_line(state),  # 鐵匠講的神器規矩（正式季整合 5.10）：網頁畫在平常那一句的位置、金框（設計 9.1 第 2 批甲）
+        "four": four_tiers.on(content),  # 素材四階開著：打造頁素材格一排多一欄四階、升階一屬性多一格三換四（設計 9.1 第 2 批甲）
         "back": "smith:back",
         "page": page,
         "pages": [{"slot": s, "label": PAGE_NAMES[s], "id": f"smith:page:{s}"} for s in equipment.SMITH_PAGES if equipment.on(content, s)],
@@ -470,6 +476,58 @@ DONATE_HINT_S1 = "捐的記成貢獻、記進陣營的軍備，也替陣營推�
 TIER_NAMES = {1: "一階", 2: "二階", 3: "三階", 4: "四階"}
 BLACK_MARKET = "（黑市價）"  # 名聲 5.2：寇賣素材的鈕上（待 joy 潤）
 BLACK_MARKET_CAP = "照黑市價收"  # 收購那一段的標題
+
+
+def dadian_view(state: GameState, content: Content, *, day: int, room: int, base: bool, clinic: bool, smith: bool,
+                bribe: list[str], prologue: bool) -> dict:
+    """「打點」那一間店（21 天季的銀兩出口；企劃者挑第 9 批畫面乙：茶樓雅間、一本攤開的帳簿）：Game.shop_view 在這間店開著時給。
+    五樣都列：左頁「修為」名師指點、看火候、買破境丹，右頁「人情」打點門路（此地談得上話的每一位一筆）、捐銀兩。每一筆
+    {id（這裡按得下的選項 id，做不了是 None）, name, price, desc, tick, ok, note（做不了的原因或去處）}：按得下去的送原本的選項 id；
+    這裡做得了但被擋（今天請過了、錢不夠）的照 silver 的原因寫，這裡做不了的寫去哪裡做（silver.WHERE）。身上掛著還沒用掉的寫在帳底下（hang）。
+    base／clinic／smith 是此地有沒有自家大本營、醫館、鐵匠鋪（Game 判），bribe 是此地打點得了的大勢人物，day 是回體丹的換日。"""
+    p, cfg = state.player, content.config.silver_outlets
+
+    def entry(oid, name, price, desc, tick, here, problem, where):
+        ok = here and problem is None
+        return {"id": oid if ok else None, "name": name, "price": price, "desc": desc, "tick": tick, "ok": ok,
+                "note": "" if ok else (problem if here else where)}
+
+    odds = cfg.furnace_odds
+    pill = content.config.legend_item_name
+    left = [
+        entry("act:mentor", "名師指點", f"{cfg.mentor_silver} 兩", silver.MENTOR_DESC.format(bonus=cfg.mentor_bonus), silver.ONCE_DAILY,
+              clinic, silver.mentor_problem(state, content, day) if clinic else None, silver.WHERE["mentor"]),
+        entry("act:furnace", "看火候", f"{cfg.furnace_silver} 兩",
+              silver.FURNACE_DESC.format(low=f"{odds.get('下品', 0):g}", mid=f"{odds.get('中品', 0):g}", high=f"{odds.get('上品', 0):g}"),
+              silver.ONCE_DAILY, smith, silver.furnace_problem(state, content, day, prologue) if smith else None, silver.WHERE["furnace"]),
+        entry("act:buy_legend", f"買{pill}", f"{cfg.legend_silver} 兩", silver.LEGEND_DESC,
+              silver.LEGEND_LEFT.format(left=silver.legend_left(state, content)), clinic,
+              silver.legend_problem(state, content) if clinic else None, silver.WHERE["legend"]),
+    ]
+    right = []
+    for fid in bribe:
+        name, cid = content.figures[fid].name, content.figures[fid].character
+        now = p.affinities.get(cid, 0)
+        right.append(entry(f"act:bribe:{fid}", f"打點門路・{name}", f"{cfg.bribe_silver} 兩",
+                           silver.BRIBE_DESC.format(name=name, now=now, then=now + silver.bribe_gain(state, content, fid), top=cfg.bribe_max),
+                           silver.BRIBE_DAILY, True, silver.bribe_problem(state, content, fid, day), ""))
+    if not bribe:
+        right.append(entry(None, "打點門路", f"{cfg.bribe_silver} 兩", silver.BRIBE_DESC_AWAY.format(gain=cfg.bribe_affinity, top=cfg.bribe_max),
+                           silver.BRIBE_DAILY, False, None, silver.WHERE["bribe"]))
+    donated = p.silver_donated if p.silver_donate_day == day else 0
+    tick = silver.DONATE_LEFT.format(left=max(0, cfg.donate_daily_silver - donated))
+    problem = silver.donate_problem(state, content, day, room, content.config.economy.donate_daily_cap) if base else None
+    if base and problem is None:
+        tick = f"{silver.DONATE_NOW.format(silver=silver.donate_amount(state, content, day, room))}・{tick}"
+    right.append(entry("act:silver_donate", "捐銀兩", f"每 {cfg.donate_per_point} 兩", silver.DONATE_DESC.format(per=cfg.donate_per_point),
+                       tick, base, problem, silver.WHERE["donate" if p.faction else "donate_ranger"]))
+    hang = [line for ready, line in ((p.mentor_ready, silver.HANG_MENTOR), (p.furnace_ready, silver.HANG_FURNACE)) if ready]
+    return {
+        "shop": "dadian", "sign": silver.SHOP, "silver": p.stats.get("silver", 0), "line": line_text(state, content, "dadian"),
+        "back": "dadian:back",
+        "pages": [{"head": silver.PAGE_SELF, "entries": left}, {"head": silver.PAGE_FAVOR, "entries": right}],
+        "hang": silver.HANG_HEAD + "・".join(hang) if hang else "",
+    }
 
 
 def donate_view(state: GameState, content: Content, day: int) -> dict:
@@ -636,6 +694,7 @@ HELD_HEAD = "你手上揭著的（{n}／{cap}）"  # 待 joy 潤：最上面那�
 SLOT_LEFT = "還能揭 {n} 張"  # 待 joy 潤：那一排最後的空格
 HAVE_NOTE = "你有 {n} {unit}合用"  # 待 joy 潤：求藝、求兵的告示上
 NO_FIT = "你身上沒有合用的"  # 待 joy 潤：求藝、求兵交不出時，放大的紙上「交出…」灰掉的原因
+PRIZE_CHIP = "重賞"  # 待 joy 潤：21 天季告示正面那一格（FB-391；草圖丙）
 PRIZE_SHORT = "另有重賞"  # 待 joy 潤：告示上（放大的紙上，賞那一段照 reward_text 寫是哪一種）
 DROP_ASK = "把「{title}」放回榜上？放回去就不算你的了。"  # 待 joy 潤：放棄先問一次（選單上的 bounty:drop 沒有問句，問在網頁那一層）
 
@@ -666,13 +725,14 @@ def board_view(state: GameState, content: Content, world: WorldStateStore) -> di
         title = bounties.title(content, b)
         note = {
             "id": b.id, "kind": b.kind, "kind_name": bounties.KIND_NAMES.get(b.kind, b.kind), "issuer": bounties.issuer(content, b),
-            "title": title, "head": _headline(title), "how": bounties.how(content, b), "reward": bounties.reward_text(state, content, b),
+            "title": title, "head": _headline(title), "how": bounties.how(content, b, state.world), "reward": bounties.reward_text(state, content, b),
             "due": bounties.due_line(state, content, b), "short": bounties.due_short(b, content, state.world), "prize": PRIZE_SHORT if bounties.has_prize(content, b) else "",
             "held": b.id in mine_ids, "have": "",
         }
         tags = bounties.reward_tags(state, content, b)
         if tags is not None:  # 21 天季（第 5 批畫面第三組丙）：紙上的小籤、告示角上寫銀兩的小朱印、照等級的那一句
-            note.update(tags=tags, corner=bounties.reward_bits(state, content, b).silver_short, level=bounties.level_note(state, content, b))
+            note.update(tags=tags, corner=bounties.reward_bits(state, content, b).silver_short, level=bounties.level_note(state, content, b),
+                        gift=bounties.gift_short(state, content, b), prize_chip=PRIZE_CHIP if note["prize"] else "")  # 附贈與重賞一格（FB-391）
         rank = 2
         if b.id in mine_ids:
             rank = 0

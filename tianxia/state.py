@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from .martial_arts import Insight
 from .models import Content, TravelMode
@@ -180,6 +180,9 @@ class Equipment(BaseModel):
     signature: str | None = None
     # 以器配招（玩家武學追上本命）：神器原品的主人綁的那一門絕學 id（那一門的絕招照 GeneralTrait.ultimate_bond 加強）；None＝沒綁
     bound_art: str | None = None
+    # 神器輪替季打出來的神器（原品、仿品；正式季整合 5.8）：換季時帶著走（放進裝備庫、以器配招清掉）、本人 wear_level 級才穿得上；
+    # 上線前打的三階神器、名將本命兵器不是
+    collected: bool = False
     heirloom: bool = False  # 傳承（玉璽碎片的抄本，玉璽碎片設計 7.4）：不進裝備庫、不能換下、贈、拆、交懸賞
 
 
@@ -232,6 +235,7 @@ class GearFind(BaseModel):
     master_shown: str | None = None  # 寫給別人看的原品主人名號（打出那一刻記下；同 MartialArt.master_shown）
     divine_name: str | None = None  # 原品定的名字（world.name_divine）；還沒定是 None
     copies: int = 0  # 這一季照這個配方打出的仿品幾把（world.add_copy；神器譜寫「仿品 N 把」，不列人名）
+    season: int | None = None  # 原品打出的那一季（神器輪替的全服登記跨季，神器譜照它排；照季分的那幾列看表的 season 欄）
 
     @property
     def id(self) -> str:
@@ -286,6 +290,64 @@ class DuelState(BaseModel):
     lines: list[str] = Field(default_factory=list)  # 每回合一行（戰報的過程）
     difficulty: float | None = None  # 開打時快照的他的難度（江湖水漲，rise.duel）；舊存檔沒有，照內容寫的（duel.foe_difficulty）
     bout: Bout | None = None  # 兩邊的本命戰法（tactics.Bout，本命戰法第二批）；你沒有本命戰法是 None
+
+
+class TavernNote(BaseModel):
+    """酒家的一則回話（酒肆，tianxia/tavern.py）：酒肆那一頁列最近幾則（Config.tavern.note_keep）。"""
+
+    kind: str  # news／seek／ties／material／ask／hit／trace／hide／treat／wall
+    title: str  # 「打聽・某某」「聽消息」
+    lines: list[str] = Field(default_factory=list)
+    time: float = 0.0  # 世界秒
+    place: str = ""  # 在哪一間酒肆問的（地點 id）
+
+
+class Whisper(BaseModel):
+    """一則風聲（酒肆）：有人打聽你、有人出錢找你麻煩。先記在季上（WorldState.tavern_whispers），本人同步時收進 PlayerState.whispers。
+    who 是打聽的人的名號：只有 named 為真（他夠有名）或反查問出來（revealed）才寫給你看。"""
+
+    kind: str  # seek／ties／hit
+    who: str
+    place: str  # 在哪一間酒肆（地點 id）
+    time: float  # 世界秒
+    named: bool = False
+    revealed: bool = False
+    hint: str = ""  # 問不出名號時的那一點線索（「一個生面孔」）
+    hushed: bool = False  # 雇殺手的人付了封口錢：反查難一點
+
+
+class WallNote(BaseModel):
+    """酒肆牆上題的一句（題壁）：同服的人走進那一間都看得到。"""
+
+    who: str
+    text: str
+    time: float
+
+
+class TavernWatch(BaseModel):
+    """託酒家留意一個人（酒肆，設計第三節的便利）：記在託的人身上；他自己同步時，那個人打聽得到確切地點了就捎信（江湖紀錄一則）。"""
+
+    target: str  # 對方名號
+    place: str  # 託的是哪一間酒肆（遠近照它算）
+    until_real: float  # 留意到幾時（現實秒）
+
+
+class TavernHit(BaseModel):
+    """一張殺手單（酒肆，設計第六節）：全服、照季存（WorldState.tavern_hits）。殺手照對方在城外的動作擲找不找得到，找到了打一場。"""
+
+    id: int
+    client: str  # 雇主名號
+    target: str  # 對方名號
+    tier: int  # 第幾檔（Config.tavern.hit_prices 的索引）
+    price: int  # 付了多少
+    place: str  # 在哪一間酒肆雇的（遠近照它算）
+    placed_real: float  # 掛上的現實秒
+    until_real: float  # 到期的現實秒
+    hushed: bool = False  # 雇主封了口
+    warned: bool = False  # 對方聽到風聲了
+    done: bool = False  # 打過了（或作廢）
+    outcome: str = ""  # 殺手贏／對方贏／平手／過期
+    refunded: bool = False  # 過期退款已經記給雇主了
 
 
 class CrowdSide(BaseModel):
@@ -442,6 +504,29 @@ class RenownSeen(BaseModel):
     path_day: int = 0
 
 
+class Mingtie(BaseModel):
+    """一張名帖（tianxia/mingtie.py）：自己畫的筆劃（[墨色, 筆粗, x0, y0, x1, y1, …]，畫布 300×400）、印上去的頭銜、自題的一句話。
+    version 每定稿一次 +1：檢舉、管理者撤下、「同一個人只能換一次」都照它認。"""
+
+    strokes: list[list[int]] = Field(default_factory=list)
+    titles: list[str] = Field(default_factory=list)
+    motto: str = ""
+    version: int = 0
+
+
+class MingtieCopy(BaseModel):
+    """名帖匣裡的一張：對方遞給你那一刻的樣子（真的名帖也是這樣，他之後換了新帖，下次再換才更新）。
+    gave 是那一次你遞給他的是你的第幾版：你的名帖沒改過就不能再遞給他（只能換一次）。"""
+
+    name: str
+    card: Mingtie
+    when: str  # 換的那一刻（calendar.stamp_text）
+    place: str  # 在哪裡換的（地點的名字）
+    season: int
+    fame: int = 0  # 換的時候他的名望（頭銜「某某的帖友」挑名望最高的那一個）
+    gave: int = 0
+
+
 class PlayerState(BaseModel):
     name: str
     location: str
@@ -459,6 +544,13 @@ class PlayerState(BaseModel):
 
     # ── 同伴（sanguo-companions 合併重寫：全服唯一，見 world_state.py）──
     team: list[str] = Field(default_factory=list)  # 目前帶在身邊出戰的同伴 id，最多 MAX_TEAM_COMPANIONS 人
+    # 鑄譜跨季記得的神器（正式季整合 5.6；第 10 批）：輪替季打中過的神器配方 id → 打中的那一爐組合鍵；換季帶著走（聽過的片子照舊一季一清）
+    divine_solved: dict[str, str] = Field(default_factory=dict)
+    # 歷史武將同行：按了加入決戰、等著挑誰隨你上陣（「join:guan」「join_late:」「enlist:guan」；Game._escort_step 收）。空的是沒在挑
+    escort_pick: str = ""
+    # 歷史武將同行 9.6：情誼已經照「回江湖」減半、全服的記號（CompanionProgress.parted_from）還沒清的人物 id（Game._settle_partings）。
+    # 記號留到下一次同步、看到存檔裡這一份已經減過才清（FB-361：收場那一下在輪詢組畫面時，角色不存、全服的記號照樣提交）
+    parted_done: list[str] = Field(default_factory=list)
     affinities: dict[str, int] = Field(default_factory=dict)  # 人物 id -> 0~100 好感度，跟有沒有招到他無關
     relationship_notes: dict[str, str] = Field(default_factory=dict)  # 人物 id -> 一句話關係現況
     # 風聞（figure_life.spread）：人物 id → 他聽說的你做過的事（一句一條，最新的在後，最多 hearsay_keep 條）；這一季的，換季清掉
@@ -500,7 +592,10 @@ class PlayerState(BaseModel):
     armor_warned: bool = False  # 身上那件防具耐久低到 Config.armor.edge_warn 以下時提醒過一次了；修好或換一件時重設
     mount: Equipment | None = None  # 身上的坐騎（裝備四欄設計第五節）；舊存檔沒有＝沒騎馬
     hunger_warned: bool = False  # 身上那匹飽足低到 Config.mounts.edge_warn 以下時提醒過一次了；餵過或換一匹時重設
+    picking_dadian: bool = False  # 打開了「打點」那一間店（21 天季的銀兩出口，第 9 批畫面乙）；離開、同步時這裡一樣都做不了、出發都收起來
     picking_market: bool = False  # 打開了馬市的第二層選單（同 picking_smith）；離開、存檔修補、同步時人不在馬市、出發都收起來
+    feasting: int | None = None  # 赴宴中（宴客，tianxia/feasts.py）：坐在哪一場宴席上（Feast.id），選單換成敬酒詞
+    feasts_paid: list[int] = Field(default_factory=list)  # 領過「席間最佳」名望的宴席 id（這一季的）
     picking_arena: bool = False  # 打開了擂台的第二層選單（同 picking_market）；離開、存檔修補、同步時人不在城鎮、出發都收起來
     treasure: Equipment | None = None  # 身上的寶物（裝備四欄設計第六節；隨時能換，2.3）；舊存檔沒有＝沒帶
     heirloom: Equipment | None = None  # 寶物欄的「傳承」那一格：玉璽碎片的抄本（照全服登記重抄，玉璽碎片設計 7.3、7.4）；換季帶走
@@ -524,6 +619,12 @@ class PlayerState(BaseModel):
     smith_rule: str = ""
     smith_rules_told: list[int] = Field(default_factory=list)
     shop_clue: str = ""  # 鐵匠順口說出的那一句（forge_secrets.hear_smith，1.4）：蓋過這一下的掌櫃話，下一下就換回掌櫃話；收起店時清掉
+
+    @field_validator("shop_hold", mode="before")
+    @classmethod
+    def _hold_none(cls, value):  # 酒肆第一版收店時寫成 None（tavern.close），那一版存下的檔照讀成空字串，免得整個角色讀不進來
+        return "" if value is None else value
+
     smith_draft: SmithDraft | None = None  # 鐵匠鋪「打造兵器…／打造防具…」挑到哪一步；打開、打完、不打了都清掉，凡是把 picking_smith 收起來的地方（離開、存檔修補、同步時人不在城鎮、出發）一起清
     arts: list[str] = Field(default_factory=list)  # 功法庫：煉出來但沒配上身的功法 id
     art_levels: dict[str, int] = Field(default_factory=dict)  # 每門學過的功法各自的「成」；改練時存進來／取出來
@@ -577,6 +678,17 @@ class PlayerState(BaseModel):
     legend_silver_bought: int = 0  # 這一季在醫館用銀兩買了幾枚破境丹（撿到的、用心得換的都不算；FB-370 以前跟下面那一欄同名，兩條路共用一個數）
     bribed: dict[str, int] = Field(default_factory=dict)  # 打點門路：大勢人物 id → 上次打點是哪一天（一位一天一次）
     picking_donate: bool = False  # 大本營的捐軍備選單開著（act:donate → donate:<素材>:<個數>／donate:back），不花體力
+    # ── 酒肆（tianxia/tavern.py）──
+    picking_tavern: bool = False  # 酒肆開著（act:tavern → tavern:*）；離開、存檔修補、同步時人不在酒肆、出發都收起來
+    tavern_notes: list[TavernNote] = Field(default_factory=list)  # 酒家最近幾則回話（Config.tavern.note_keep）
+    tavern_heard: list[str] = Field(default_factory=list)  # 在酒肆聽過的傳聞（tavern.rumor_key），聽過的不再說
+    tavern_known: list[str] = Field(default_factory=list)  # 在酒肆查到過的人（名號），可以對他掛通緝、雇殺手
+    tavern_treat_day: int = -1  # 請全店喝酒是哪一天（同 pill_day 的換日）
+    whispers: list[Whisper] = Field(default_factory=list)  # 收到的風聲（Config.tavern.whisper_keep）
+    hidden_until: float = 0.0  # 藏行跡到幾時（世界秒）
+    tavern_watches: list[TavernWatch] = Field(default_factory=list)  # 託酒家留意的人（最多 Config.tavern.watch_keep 個）
+    tavern_guard_until: float = 0.0  # 雇的保鏢跟到幾時（現實秒）
+    guarded_until_real: float = 0.0  # 雇的保鏢跟到幾時（現實秒）
     xinde_cultivations: int = 0  # 這一季花心得修練了幾次（Config.cultivate_xinde_price，越修越貴）；角色每季重來
     legend_bought: int = 0  # 這一季用心得換了幾枚破境丹（Config.legend_xinde_price，越換越貴）；角色每季重來
     legend_items: int = 0  # 破境丹（Config.legend_item_name）的數量：探索撿到，玩家在修練頁勾了、衝絕學那一次才服一枚；角色每季重來
@@ -731,6 +843,17 @@ class PlayerState(BaseModel):
     duel_last: list[float] = Field(default_factory=list)  # 上一場頭目戰開打的 [季號, 世界秒]（Config.duel.cooldown_seconds）；空的是沒打過
     tagalong: Tagalong | None = None  # 跟著誰結伴同行；None＝沒有
     ambush: AmbushPost | None = None  # 正守著的埋伏（設伏劫道，ambush.py）；None＝沒有。守著的時候不能移動
+    # ── 名帖與挑釁附一句話（tianxia/mingtie.py；Joy 2026-10-19）：跨季保留（_reset_player_for_new_season）──
+    mingtie: Mingtie | None = None  # 自己的名帖；None＝還沒做過（不能遞名帖、不能回帖）
+    mingtie_box: list[MingtieCopy] = Field(default_factory=list)  # 收到的名帖（新的在後，最多 MingtieTuning.box_cap 張）
+    mingtie_day: int = 0  # 定稿、遞帖的次數記在哪一天（同 pill_day）
+    mingtie_made: int = 0  # 那一天定稿幾次（MingtieTuning.made_per_day）
+    mingtie_sent: int = 0  # 那一天主動遞了幾張（MingtieTuning.send_per_day）
+    mingtie_hidden: list[str] = Field(default_factory=list)  # 自己檢舉過、不想再看到的名帖（「名號鍵|版本」）
+    taunt_muted: list[str] = Field(default_factory=list)  # 不再接誰的挑釁話（名號鍵）：他照樣能挑釁你，只是那一句你看不到
+    title_book: list[str] = Field(default_factory=list)  # 過去幾季掙到的頭銜（「第N季 某某」），換季時記下、名帖照樣能印
+    gift_day: int = 0  # 贈物記在哪一天（同 pill_day）
+    gifts_today: int = 0  # 那一天送了幾次（Config.gift_per_day，不分送給誰）
 
 
 RumorLayer = Literal["world", "faction", "local", "personal"]  # 天下大事／陣營軍情／地方傳聞／個人線索（傳聞分層設計第二節）
@@ -858,7 +981,7 @@ class Bounty(BaseModel):
     # 人物掛的（大勢人物擴充第二批）：figure 是掛單的人物（對話人物 id），motive 是「復仇」「追剿」（懸賞榜上，figure_life.on_fall）
     # 或「委託」（求援書信附的那一件，只在收信的人身上：PlayerState.letters）。標題與掛單人照它寫，交差時那位人物情誼另加
     figure: str | None = None
-    motive: Literal["復仇", "追剿", "委託"] | None = None
+    motive: Literal["復仇", "追剿", "委託", "求援"] | None = None
 
 
 class Letter(BaseModel):
@@ -867,7 +990,7 @@ class Letter(BaseModel):
     寫不出來照固定句）。"""
 
     id: int
-    kind: Literal["求援", "道賀"]
+    kind: Literal["求援", "道賀", "邀宴", "道謝"]  # 邀宴、道謝是第三批（宴客、求援委託辦成了）
     sender: str  # 對話人物 id
     at: float  # 收到的那一刻（世界秒）
     mood: str = ""  # 寫信時他的心事（求援：焦慮、悲憤）
@@ -877,6 +1000,44 @@ class Letter(BaseModel):
     read: bool = False
     task: Bounty | None = None
     lapsed: bool = False  # 委託過了期限、或你婉拒了
+
+
+class Toast(BaseModel):
+    """宴席上的一句敬酒詞（tianxia/feasts.py；大勢人物擴充第三批）。score 是模型評的（固定的敬酒詞照 feasts.FIXED_SCORE），情誼照它動。"""
+
+    name: str  # 名號
+    text: str
+    score: int
+    at: float
+    fixed: bool = False  # 挑的是固定的敬酒詞
+
+
+class Feast(BaseModel):
+    """一位人物設的宴（tianxia/feasts.py）：在 place 從 start 擺到 end（世界秒），人在那裡就能赴宴、敬一句酒。
+    散席（settled）時分數最高的那一句（best：名號）上天下大事，那個人同步時名望 +feast_fame（PlayerState.feasts_paid 記領過的）。"""
+
+    id: int
+    host: str  # 對話人物 id
+    place: str
+    start: float
+    end: float
+    toasts: list[Toast] = Field(default_factory=list)
+    settled: bool = False
+    best: str = ""
+
+
+class YuedanEntry(BaseModel):
+    """月旦評評到的一個人（tianxia/yuedan.py）：第 week 週、照哪一張榜（board）挑到的；line 先寫固定句，伺服器鎖外請模型寫成
+    八到十六字的評語（written）；published 是天下大事與江湖史寫了沒（寫好了、或等過 yuedan_wait_seconds 照固定句）。"""
+
+    week: int
+    name: str
+    board: str
+    fact: str = ""
+    line: str
+    at: float
+    written: bool = False
+    published: bool = False
 
 
 class Invite(BaseModel):
@@ -1036,6 +1197,12 @@ class WorldState(BaseModel):
     active_pushers: dict[str, dict[str, float]] = Field(default_factory=dict)  # 陣營 id → 名號 → 最後一次推大勢的世界秒（人數緩衝用，過期的順手清掉）
     bounties: list[Bounty] = Field(default_factory=list)  # 懸賞榜（bounties.py）：陣營掛的還沒過期的單、還沒退押金的通緝，加上過期但還有人揭著的（留到他們同步，deliver_lapses）；換季整個重來
     bounty_seq: int = 0  # 懸賞的流水號
+    # 大勢人物擴充第三批（tianxia/feasts.py、yuedan.py、bounties 的求援委託）：這一季的宴席、月旦評、人物對整個陣營發的求援委託
+    feasts: list[Feast] = Field(default_factory=list)
+    feast_seq: int = 0
+    yuedan: list[YuedanEntry] = Field(default_factory=list)
+    yuedan_week: int = 0  # 月旦評評到第幾週了
+    rallies: list[Bounty] = Field(default_factory=list)  # 求援委託（motive「求援」；不上懸賞榜，自己陣營的人都看得到、前 quota 個辦成的有賞）
     # 陣營的軍備（素材與經濟設計第六節第 3 點；economy.donate）：陣營 id → 素材屬性（慢、快、剛、柔）→ 累積的份量（一階 1、二階 3、三階 9）。
     # 名字照 Config.economy.armaments（慢 → 糧秣……）。這一季的；在決戰怎麼起作用還沒定（跟 joy 對，第 2 塊），先只存
     armaments: dict[str, dict[str, int]] = Field(default_factory=dict)
@@ -1077,6 +1244,8 @@ class WorldState(BaseModel):
     # 素材與經濟（企劃者 2026-10-15）：開季時照 Config.forge_secrets 蓋的章（world_state.stamp_season）；舊季沒有這兩欄＝False（照舊）
     forge_divine_per_kind: bool = False  # 神器配方每種兵器一季最多一條（forge_secrets.active）
     forge_split_clues: bool = False  # 神器配方的線索拆三片（forge_secrets.hear、hear_smith、view）
+    # 神器輪替（正式季整合 5.6；第 10 批，divine.stamp 開季換季時蓋）：這一季現世的神器配方 id；None＝沒蓋章（開關關著、或上線前開的季），照舊挑
+    divine_lineup: list[str] | None = None
     renown_scale: float | None = None  # 名聲的門檻乘幾倍（開季時蓋章，world_state.stamp_season）；None＝沒有章，倍數 1
     territory: TerritoryState | None = None  # 地盤易手（出陣探索與地盤設計第四節）；None＝還沒算過
     # ── 擂台賽（tianxia/arena.py；換季整個重來）──
@@ -1085,6 +1254,13 @@ class WorldState(BaseModel):
     arena_seq: int = 0  # 這一季開過幾場擂台
     arena_closed: bool = False  # 季末前三名排過了（world.end_season）
     arena_day: int = -1  # 擂台的俸發到哪一天（現實的第幾天，arena.roll_day）；-1＝還沒看過
+    # ── 酒肆（tianxia/tavern.py；換季整個重來）──
+    tavern_walls: dict[str, list[WallNote]] = Field(default_factory=dict)  # 地點 id → 牆上的題字（最近 Config.tavern.wall_keep 句）
+    tavern_whispers: dict[str, list[Whisper]] = Field(default_factory=dict)  # 名號鍵 → 還沒送到的風聲（本人同步時收）
+    tavern_treats: dict[str, tuple[str, float]] = Field(default_factory=dict)  # 地點 id →（請酒的人, 世界秒）
+    tavern_hits: list[TavernHit] = Field(default_factory=list)  # 殺手單（收了的留到季末）
+    tavern_hit_seq: int = 0
+    tavern_chatter: dict[str, tuple[float, list[str]]] = Field(default_factory=dict)  # 地點 id →（寫成的世界秒, 鄰桌閒談幾句）
 
 
 class Fighter(BaseModel):
@@ -1110,7 +1286,7 @@ class BattleRecord(BaseModel):
     id: int  # 流水號，本季從 1 起算
     time: float  # 開打時的遊戲時間（決戰是收場時的）
     location: str  # 地點名稱（決戰是大區名；上一季打的前面加「第 N 季・」）
-    kind: Literal["train", "event", "wild", "showdown", "spar", "raid", "duel", "seal", "arena", "sortie", "ambush"]  # 遊歷／劇情／探索撞上的野怪／全服決戰／跟玩家切磋／截殺（發起或被截殺）／頭目戰／奪璽單挑（玉璽碎片設計 5.9）／出陣（出陣探索與地盤設計；舊戰報的 train 照舊顯示「遊歷」，不遷移）
+    kind: Literal["train", "event", "wild", "showdown", "spar", "raid", "duel", "seal", "arena", "sortie", "ambush", "assassin"]  # 遊歷／劇情／探索撞上的野怪／全服決戰／跟玩家切磋／截殺（發起或被截殺）／頭目戰／奪璽單挑（玉璽碎片設計 5.9）／出陣（出陣探索與地盤設計；舊戰報的 train 照舊顯示「遊歷」，不遷移）
     event: str = ""  # 劇情戰的事件標題；決戰是決戰的名稱
     opponent: str  # 敵方隊伍名稱；決戰是敵方陣營名
     ours: list[Fighter]  # 我方陣容，第一位是隊長；等級是開打時的等級（決戰不記，是空的）

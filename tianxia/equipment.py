@@ -72,6 +72,24 @@ ORIGINAL_KEPT = "原品不能拆"  # 待 joy 潤：神器原品那一列的拆�
 ORIGINAL_KEPT_LINE = "這是神器的原品，一季全江湖只有這一{unit}，拆不得。"  # 待 joy 潤：引擎收到拆原品時回的那一句
 
 
+WEAR_LOW = "還差 {n} 級才穿得上神器"  # 待 joy 潤：神器（原品、仿品）本人 wear_level 級才穿得上（正式季整合 5.8）
+
+
+def wear_problem(state: GameState, content: Content, item: Equipment) -> str | None:
+    """這一件此刻穿不穿得上：輪替季打的神器（collected）要本人 Config.forge_secrets.wear_level 級；其餘一律 None。
+    修練頁與店面那一列的「換上」（wield_ok／wield_note）、鐵匠鋪的「換上」、機器人挑換上的都問它，wield 也擋。"""
+    if not item.collected or item.signature is not None:
+        return None
+    short = content.config.forge_secrets.wear_level - state.player.member.level
+    return WEAR_LOW.format(n=short) if short > 0 else None
+
+
+def wear_row(row: dict, state: GameState, content: Content, item: Equipment) -> dict:
+    """修練頁、店面裝備庫那一列多兩欄（同坐騎那一列）：「換上」按不按得下去、為什麼（wear_problem）。"""
+    problem = wear_problem(state, content, item)
+    return {**row, "wield_ok": problem is None, "wield_note": problem or ""}
+
+
 def kept(item: Equipment) -> str:
     """拆不得的原因（修練頁那一列灰掉的拆解鈕、鐵匠鋪那一顆）：本命兵器、神器原品（打造隱藏配方設計 5.4）；其餘是空字串。"""
     if item.signature is not None:
@@ -121,11 +139,12 @@ def next_id(state: GameState, slot: str) -> str:
     return f"{SLOTS[slot].prefix}:{state.player.weapon_serial}"
 
 
-def store(state: GameState, item: Equipment) -> str:
-    """拿到一件（2.2）：這一欄身上空著就穿上（重設這一欄的提醒：穿上的是另一件），不然放進裝備庫（呼叫端先用 rack_full 擋）。"""
+def store(state: GameState, item: Equipment, content: Content | None = None) -> str:
+    """拿到一件（2.2）：這一欄身上空著就穿上（重設這一欄的提醒：穿上的是另一件），不然放進裝備庫（呼叫端先用 rack_full 擋）。
+    給了 content、這一件此刻穿不上（wear_problem：15 級以下的神器）就直接進裝備庫（滿了也放：打出來的神器不丟）。"""
     p = state.player
     entry = SLOTS[item.slot]
-    if worn(p, item.slot) is None:
+    if worn(p, item.slot) is None and (content is None or wear_problem(state, content, item) is None):
         setattr(p, item.slot, item)
         if entry.warned:
             setattr(p, entry.warned, False)  # 寶物沒有磨損、沒有提醒旗標（warned 是空字串）
@@ -150,6 +169,9 @@ def wield(state: GameState, content: Content, item_id: str, slots: tuple[str, ..
         return [NOT_NOW]
     if SLOTS[chosen.slot].road_locked and p.journey is not None:
         return [ROAD_LOCKED.format(label=SLOTS[chosen.slot].label)]  # 坐騎（2.3）：閉關中照樣能換，只擋路上
+    problem = wear_problem(state, content, chosen)
+    if problem is not None:  # 神器 15 級才穿得上（正式季整合 5.8）
+        return [f"（{problem}。）"]
     p.rack.remove(chosen)
     current = worn(p, chosen.slot)
     if current is not None:

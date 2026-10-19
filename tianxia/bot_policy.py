@@ -10,7 +10,7 @@ import hashlib
 import random
 from dataclasses import dataclass
 
-from . import allied, arena, atlas, battle_instance, bot, bounties, cultivation, duel, explore_modes, forge_secrets, invites, library, naming, orders, precise, rules, sensing, server_bots, social, sortie, team
+from . import allied, arena, atlas, battle_instance, bot, bounties, cultivation, duel, explore_modes, forge_secrets, invites, leaderboard, library, mingtie, naming, orders, precise, rules, sensing, server_bots, social, sortie, team
 from .bot import allocate_points, can_practise, wants_heal
 from .engine import FREE_TEXT_OPTION, IDLE_MARK, Game, Option
 from .models import MOVES, Content, Effect, SkillDef
@@ -92,6 +92,9 @@ REPLY_SPREAD_SECONDS = 150  # 再加上 0～這麼多秒（每一件各擲一次
 GREET_REPLY_SHARE = 0.65  # 打招呼：回禮的比例，其餘不理
 TRAVEL_ACCEPT_SHARE = 0.4  # 結伴邀請：答應的比例
 TRAVEL_REJECT_SHARE = 0.3  # 婉拒的比例；其餘不理
+MINGTIE_ACCEPT_SHARE = 0.7  # 有人遞名帖：回帖的比例（Joy 2026-10-19）
+MINGTIE_REJECT_SHARE = 0.1  # 婉拒的比例；其餘不理
+MINGTIE_SEND_CHANCE = 0.03  # 每一輪向此地一個還沒換過帖的人遞名帖的機會【預設】
 LEARN_ROOM = 3  # 學藝之後，功法庫至少還留幾格給合成
 LEARN_SILVER_RESERVE = 30  # 付完學費至少留幾兩（療傷用）
 DIVINE_NAME_CHANCE = 0.3  # 打出神器原品之後，每一輪按「沿用譜名」的機會（不在打出來那一下就定，照人的步調，同 answer_call）【預設】
@@ -182,9 +185,15 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random, slot: NamingS
     raided = _raid(game, rng)
     if raided is not None:
         return msgs + raided
+    handed = _hand_card(game, rng)
+    if handed is not None:
+        return msgs + handed
     played = _stamina_play(game, rng)
     if played is not None:
         return msgs + played
+    drank = _tavern(game, rng)
+    if drank is not None:
+        return msgs + drank
     staged = _arena(game, rng)
     if staged is not None:
         msgs = msgs + staged
@@ -270,6 +279,29 @@ def _stamina_play(game: Game, rng: random.Random) -> list[str] | None:
     return game.choose(rng.choice(plays))
 
 
+def _make_card(game: Game) -> None:
+    """還沒有名帖就做一張（Joy 2026-10-19「假人也做名帖」）：現成的畫、句庫或留空、照雜湊挑頭銜（mingtie.bot_card），
+    走 Game.make_mingtie（跟真人按定稿同一條；不叫模型：句庫的句子本來就過得了字表）。頭銜的榜單名次照此刻掃一次榜。"""
+    p, c = game.state.player, game.content
+    if p.mingtie is not None or not c.config.mingtie.enabled:
+        return
+    board = leaderboard.compute_boards(c, game.world, top=10) if hasattr(game.world, "db") else None
+    card = mingtie.bot_card(game.state, c, mingtie.earned(game.state, c, game.world, board))
+    game.make_mingtie(card.strokes, card.titles, card.motto, board=board)
+
+
+def _hand_card(game: Game, rng: random.Random) -> list[str] | None:
+    """有名帖、今天還能遞時，MINGTIE_SEND_CHANCE 的機會向此地一個遞得了的人遞名帖（走玩家卡同一條路）。先擲骰再看此地有誰。"""
+    if game.state.player.mingtie is None or rng.random() >= MINGTIE_SEND_CHANCE:
+        return None
+    for peer in game.peers_here():
+        card = game.peer_card(peer["name"])
+        ready = [b for b in (card or {}).get("actions", []) if b["action"] == "mingtie" and b["arg"] == "send" and b["enabled"]]
+        if ready:
+            return game.peer_act(peer["name"], "mingtie", {"arg": "send"})
+    return None
+
+
 def _raid(game: Game, rng: random.Random) -> list[str] | None:
     """此地有截殺得了、勝算在 RAID_ODDS 的人時，RAID_CHANCE 的機會截殺第一個（走玩家卡同一條路，Game.peer_act）。
     沒有對象時不擲骰（不改到其他行為的亂數）；這一輪不動手是 None。"""
@@ -312,6 +344,59 @@ def _arena(game: Game, rng: random.Random) -> list[str] | None:
     return msgs
 
 
+# 酒肆（tianxia/tavern.py）：人在有酒肆的城鎮、手上銀兩比這一下的價錢多 TAVERN_RESERVE 時，每一輪 TAVERN_CHANCE 的機會進去問一件事、
+# 問完出門。真人會打聽人，假人也要會：不然「有人打聽你」的風聲只會來自真人，看得出誰是假人。問什麼照 TAVERN_ASKS 的權重擲；
+# 打聽人挑在座的客人、問過的名號或這一區的大勢人物，打聽素材挑一階、二階的；偶爾對查到過、有仇的人雇最便宜的那一檔殺手
+# （「有人出錢買你」不能只來自真人）。不寫題壁、不請酒、不藏行跡、不反查。
+TAVERN_CHANCE = 0.03
+TAVERN_RESERVE = 30
+TAVERN_ASKS = (("news", 5), ("seek", 3), ("material", 2), ("ties", 1), ("hit", 0.5))
+
+
+def _tavern(game: Game, rng: random.Random) -> list[str] | None:
+    """進酒肆問一件事、出門；這一輪不做是 None。選單上沒有「酒肆」時不擲骰。"""
+    s = game.state
+    if "act:tavern" not in {o.id for o in game.options(odds=False, tick=False) if o.enabled}:
+        return None
+    if rng.random() >= TAVERN_CHANCE:
+        return None
+    op = rng.choices([k for k, _ in TAVERN_ASKS], weights=[w for _, w in TAVERN_ASKS])[0]
+    t = game.content.config.tavern
+    price = game._tavern_price({"news": t.news_price, "seek": t.seek_price, "ties": t.ties_price,
+                                "hit": t.hit_prices[0]}.get(op, max(t.material_prices.values())))
+    if s.player.stats.get("silver", 0) < price + TAVERN_RESERVE:
+        return None
+    msgs = game.choose("act:tavern")
+    view = game.tavern_view()
+    target = ""
+    if op in ("seek", "ties"):
+        names = list(view["guests"]) + list(view["known"])
+        if not names or rng.random() < 0.4:
+            figures = [game.content.characters[f.character].name for f in game.content.figures.values()
+                       if f.character in game.content.characters]
+            names = names + figures
+        target = rng.choice(names) if names else ""
+        if not target:
+            op = "news"
+    elif op == "hit":
+        foes = [n for n in view["known"] if game._tavern_hit_problem(n, 0)[0] is None]
+        if foes:
+            msgs += game.tavern_do("hit", rng.choice(foes), "0")
+            if s.player.picking_tavern:
+                msgs += game.choose(view["back"])
+            return msgs
+        op = "news"
+    elif op == "material":
+        mats = [m["id"] for m in view["materials"] if m["tier"] <= 2]
+        target = rng.choice(mats) if mats else ""
+        if not target:
+            op = "news"
+    msgs += game.tavern_do(op, target)
+    if s.player.picking_tavern:
+        msgs += game.choose(view["back"])
+    return msgs
+
+
 def _roll(profile: BotProfile, invite: Invite, salt: str) -> float:
     """這個假人對這一張的決定性擲骰（0～1）：同一張、同一個假人永遠一樣，所以每一輪重看不會改主意。"""
     digest = hashlib.sha256(f"{profile.seed}|{invite.id}|{salt}".encode()).digest()
@@ -325,7 +410,7 @@ def answer_call(game: Game, profile: BotProfile) -> str | None:
     s = game.state
     menu = {o.id for o in game.options(odds=False, tick=False) if o.enabled and o.id.startswith("invite:")}
     for inv in invites.incoming(s.world, s.player.name):
-        if inv.kind not in ("greet", "travel"):
+        if inv.kind not in ("greet", "travel", "mingtie"):
             continue
         waited = (s.world.time - inv.sent_at) / game.content.config.time_scale
         if waited < REPLY_MIN_SECONDS + _roll(profile, inv, "wait") * REPLY_SPREAD_SECONDS:
@@ -336,6 +421,13 @@ def answer_call(game: Game, profile: BotProfile) -> str | None:
             if roll >= GREET_REPLY_SHARE:
                 continue
             verb = gesture.replies[int(_roll(profile, inv, "which") * len(gesture.replies))][0]
+        elif inv.kind == "mingtie":
+            if roll < MINGTIE_ACCEPT_SHARE:
+                verb = "yes"
+            elif roll < MINGTIE_ACCEPT_SHARE + MINGTIE_REJECT_SHARE:
+                verb = "no"
+            else:
+                continue
         elif roll < TRAVEL_ACCEPT_SHARE:
             verb = "yes" if game.join_refusal(inv.sender) is None else "no"
         elif roll < TRAVEL_ACCEPT_SHARE + TRAVEL_REJECT_SHARE:
@@ -384,6 +476,7 @@ def look_after(game: Game, rng: random.Random) -> None:
     心得多出來的傳給同伴、部下（bot.teach，一輪最多 TEACH_PER_TICK 下）。
     合成、修練、學藝、改練、熔煉、定名在 tend_arts。"""
     allocate_points(game, rng)
+    _make_card(game)  # 名帖（不擲亂數）
     bot.take_pill(game)  # 體力見底、手上有回體丹就吃一顆（內測贈送，真人假人一樣拿到）
     if wants_heal(game):
         game.heal()
@@ -598,6 +691,10 @@ def duel_move(game: Game, rng: random.Random, fight=None) -> str:
     return answer if answer is not None and rng.random() < DUEL_READ else rng.choice(MOVES)
 
 
+FEAST_SCORE = 8.0  # 入席：不花體力，路過就坐一下（低過軍令與懸賞）
+FEAST_TOAST_SCORE = 50.0  # 坐下了就敬酒（不然卡在宴席的選單上）
+
+
 def score(game: Game, option: Option, profile: BotProfile) -> float | None:
     """選項的分數；None＝假人不會選（別的陣營的投靠、叛投、閒聊或求見大勢人物、只會被擋在門外的交友、投靠的確認畫面另外處理）。"""
     kind, _, arg = option.id.partition(":")
@@ -605,6 +702,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         return None  # 假人不叛投（計畫甲）
     if kind in ("ambush", "works", "aid"):
         return None  # 設伏、工事、屯糧、護衛、犒軍、探望由 take_turn 的 _stamina_play 做，不交給打分數
+    if kind == "feast":  # 宴客（大勢人物擴充第三批）：路過擺著宴的地方就入席，入了席挑一句固定的敬酒詞（不寫自己的，同放手一搏）
+        return None if arg == "leave" else FEAST_TOAST_SCORE if arg.startswith("toast:") else FEAST_SCORE
     if kind == "opp":
         return None  # 機緣：假人不做（正式版乙一）；對話裡的 talk:opp: 落在下面 talk 的 None
     if kind == "battle":
@@ -652,6 +751,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         return SMITH_SCORE if option.id == _smith_want(game) else 0.0 if arg in ("back", "forge-cancel") else None
     if kind == "arena":  # 擂台由 _arena 一次做完；萬一停在擂台邊只會返回，打到一半由 take_turn 照架勢出招
         return 0.0 if arg == "back" else None
+    if kind == "tavern":  # 酒肆裡：打聽由 take_turn 另外做（_tavern_play）；萬一停在酒肆裡就出門
+        return 0.0 if arg == "back" else None
     if kind == "market":  # 馬市上：照 bot.market_want 按那一顆（換、買、餵），沒事就離開
         return MARKET_SCORE if option.id == bot.market_want(game) else 0.0 if arg == "back" else None
     if kind == "call":
@@ -666,6 +767,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         clinic_hop = _clinic_score(game) if arg.partition(":")[0] == bot.clinic_hop(game) else 0.0  # 內傷重了往醫館
         return base + order_hop + summons_hop + bounty_hop + clinic_hop + (TRAIN_MOVE_SCORE if _train_value(game, profile, arg) > 0 else 0.0)
     if kind == "act":
+        if arg == "tavern":
+            return None  # 酒肆：不交給打分數（只是打開酒肆），打聽由 take_turn 另外做
         if arg == "explore" and explore_modes.on(game.content):
             return None  # 三選一開著：「探索」只是展開的入口，按了不做事
         if arg.startswith("challenge:") and _crippled(game):
@@ -715,7 +818,13 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
             return ORDER_SCORE
         if arg == "summons":  # 應召（計畫 T5）：只在召見的地點出現
             return SUMMONS_SCORE
+        if arg == "dadian":  # 打點（21 天季的銀兩出口收成的一間店）：假人不進（只是打開一間店，同鐵匠鋪沒事不進）
+            return None
+        if arg.startswith("recruit:"):
+            return None  # 招募歷史武將（歷史武將同行第七節）：假人不招
         return ACT_SCORES.get(arg, 0.0)
+    if kind == "dadian":  # 萬一停在打點那一間店裡：只會離開
+        return 0.0
     return None
 
 

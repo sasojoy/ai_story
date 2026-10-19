@@ -231,8 +231,8 @@ def test_the_fame_amounts_are_the_ones_the_content_gives(on):
     spans = _fame_spans(on, set(on.scenario.season_one_off.events))
     section = _fame_section(game)
     low, high = spans["common"]
-    # 真實內容出陣開著，沒有遊歷（FB-257）
-    assert f"（探索、交友、找素材撞上的仗之後碰上的事）：一次 +{low}～+{high}。" in section
+    # 真實內容出陣開著，沒有遊歷（FB-257）；一類一顆也開著，事件都在找事件（FB-420 同一批）
+    assert f"（探索找事件時碰上的事）：一次 +{low}～+{high}。" in section
     low, high = spans["big"]
     assert f"劇情裡打贏強敵、奇遇與一次性的大事：一次 +{low}～+{high}。" in section
     most, least = spans["loss"]
@@ -268,6 +268,8 @@ def test_only_events_and_the_first_echo_give_fame_in_the_code():
             if re.search(r"""renown\.gain\([^)]*["']fame["']""", line):
                 gains.append((path.name, line.strip().split("#")[0].strip()))
     assert gains == [
+        ("engine.py", 'return [tavern_rules.TREAT_DONE] + renown.gain(s, c, "fame", cfg.treat_fame)'),  # 酒肆請全店喝酒（Game._tavern_treat）
+        ("engine.py", 'record.changes += renown.gain(s, c, "fame", cfg.hit_win_fame)'),  # 酒肆：打退殺手（Game._tavern_hit_fight）
         ("engine.py", 'changes += renown.gain(s, c, "fame", fame)'),  # 奪璽單挑（玉璽碎片設計 5.9，同一季才給）
         ("engine.py", 'self._write(journal.ECHO, lines + renown.gain(self.state, self.content, "fame", gained))'),  # 首創回饋
         ("engine.py", 'highlight_changes += renown.gain(s, c, "fame", fame)'),  # 決戰最有戲的那一搏與首功
@@ -279,6 +281,7 @@ def test_only_events_and_the_first_echo_give_fame_in_the_code():
         ("engine.py", 'record.changes += renown.gain(s, c, "fame", cfg.highlight_fame)'),  # 擂台上成了的最險一搏
         ("engine.py", 'renown.gain(s, c, "fame", fame)'),  # 擂台每天的俸（Game._deliver_arena）
         ("engine.py", 'renown.gain(s, c, "fame", fame)'),  # 擂台賽季末前三名（Game._deliver_arena）
+        ("feasts.py", 'out += renown.gain(state, content, "fame", amount)'),  # 宴客散席時最好的那一句敬酒（feasts.deliver）
     ]
     givers = []
 

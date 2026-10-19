@@ -18,6 +18,7 @@ def _turn():
 
 def test_first_meet_gives_once_and_tops_up_after_a_new_tier():
     c = real_content("weekend")
+    c.config.affinity_gain_scale = 1.0  # 這裡量的是寫好的情誼數字；歷史武將同行的情誼放慢（Config.affinity_gain_scale）另測（tests/test_companions.py）
     s = new_game_state(c, "甲")
     liubei = _cid(c, "劉備")
     s.player.stats.update({"fame": 50, "good": 15})
@@ -32,6 +33,7 @@ def test_first_meet_gives_once_and_tops_up_after_a_new_tier():
 
 def test_fame_below_the_tier_is_not_recorded():
     c = real_content("weekend")
+    c.config.affinity_gain_scale = 1.0  # 這裡量的是寫好的情誼數字；歷史武將同行的情誼放慢（Config.affinity_gain_scale）另測（tests/test_companions.py）
     s = new_game_state(c, "甲")
     lu = _cid(c, "盧植")
     s.player.stats["fame"] = 49
@@ -63,6 +65,7 @@ def test_cold_trims_gains_only():
 
 def test_the_dialogue_starts_warmer_and_a_cold_turn_says_why():
     c = real_content("weekend")
+    c.config.affinity_gain_scale = 1.0  # 這裡量的是寫好的情誼數字；歷史武將同行的情誼放慢（Config.affinity_gain_scale）另測（tests/test_companions.py）
     w = open_world()
     s = new_game_state(c, "甲")
     liubei, luzhi = _cid(c, "劉備"), _cid(c, "盧植")

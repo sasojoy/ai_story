@@ -28,7 +28,7 @@ from .materials import DEFAULT_DROPS, TIER_NAMES
 from .models import (
     FRONT_KEY, GLOW_KEYS, GOOD_HORSE, MOVES, RECRUITER_ALLIED_FIELDS, REVEAL_KEYS, ROADS, STATS, TREASURE_EFFECTS, WEAPON_KINDS, Attribute, BattleDef, CharacterDef, CheckVoice,
     CombatLines, Condition, Config, Content, CraftNames, DuelBoss, Effect, Event, FigureDef, FollowerDef, ForgeSecret, Foreshadows, FrontLines, GearBook,
-    GiftDef, Hints, InsightDef, Location, OppDef,
+    GiftDef, Hints, MingtieContent, InsightDef, Location, OppDef,
     InsightScene, OrdersContent, PresetRecipe, PromotionDef, RelationDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, ShardDef, SimRumor, SkillDef,
     SignatureArmDef, SteedDef, Squad, Tier4Named, TimetableEvent, TraitBook, TreasureDef, Tutorial, allow_known,
 )
@@ -118,6 +118,8 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         forge_secrets=_forge_secrets(root / "forge_secrets.json"),
         tier4_named=_index(Tier4Named, _read(root / "tier4_named.json")) if (root / "tier4_named.json").exists() else {},
         shop_lines=_read(root / "shop_lines.json") if (root / "shop_lines.json").exists() else {},
+        banned_words=_read(root / "banned_words.json") if (root / "banned_words.json").exists() else [],
+        mingtie=MingtieContent(**_read(root / "mingtie.json")) if (root / "mingtie.json").exists() else MingtieContent(),
         arena_crowd=_read(root / "arena_crowd.json") if (root / "arena_crowd.json").exists() else {},
         seal=_shards(root / "seal.json"),
         relations=[_build(RelationDef, raw) for raw in _read(root / "relations.json")] if (root / "relations.json").exists() else [],
@@ -646,9 +648,12 @@ def check_shop_lines(c: Content, need) -> None:
         "market": c.config.mounts.enabled,
         "board": c.config.bounties.enabled and bool(c.scenario.factions),
         "donate": c.config.economy.donate and bool(c.scenario.factions),  # 大本營的軍需帳（素材與經濟 B6）
+        "dadian": c.config.silver_outlets.enabled,  # 打點（21 天季的銀兩出口）
+        "tavern": c.config.tavern.enabled and any("酒肆" in loc.tags for loc in c.locations.values()),  # 酒肆（企劃者 2026-10-18）
     }
     switched = {"sell": c.config.economy.sell, "upgrade": c.config.economy.upgrade,  # 素材與經濟：收購、升階關著時不必有那一句
                 "rules": c.config.four_tiers.enabled,  # 素材四階關著時鐵匠不講神器的規矩（正式季整合 5.10）
+                "have_divine": c.config.forge_secrets.rotation,  # 神器輪替關著時不會擋「已經有這一件神器」（FB-403）
                 "black_market": c.config.economy.sell and c.config.renown.titles and c.config.renown.black_market}  # 名聲 5.2
     for shop, on in opened.items():
         if c.config.shop_screens and on:
@@ -979,6 +984,20 @@ def check_relations(c: Content, need, known) -> None:
         if rel.faction is not None:
             need(rel.kind == "foe", f"{where}：只有仇敵能寫 faction")
             known(where, [rel.faction], factions, "陣營")
+
+
+def check_companions(c: Content, need) -> None:
+    """歷史武將同行（Config.companions）：標了 recruitable 的人物不能是任何大勢人物（人物表寫了 character 的那十六位帶不走），
+    要能深度對話（招募鈕照 Game._figures_here），side 寫的要是劇本的陣營。"""
+    big = {fig.character for fig in c.figures.values() if fig.character}
+    faction_ids = {f.id for f in c.scenario.factions}
+    for cid, ch in c.characters.items():
+        if not ch.recruitable:
+            continue
+        where = f"人物 {cid}"
+        need(cid not in big, f"{where}：大勢人物不能標 recruitable（人物表寫了他）")
+        need(ch.deep_interaction, f"{where}：標了 recruitable 要能深度對話（deep_interaction）")
+        need(ch.side is None or ch.side in faction_ids, f"{where}：side {ch.side} 不是劇本的陣營")
 
 
 def check_figures(c: Content, need, known, front_ids: list[str]) -> None:
@@ -2576,6 +2595,7 @@ def validate(c: Content) -> None:
     check_timetable(c, need, known, front_ids, trend_ids)
     check_figures(c, need, known, front_ids)
     check_relations(c, need, known)
+    check_companions(c, need)
     check_foreshadows(c, need, known, region_ids, front_ids, counters_written)
     check_orders(c, need, known, front_ids)
     check_promotions(c, need, known)
@@ -2764,6 +2784,15 @@ def _validate_forge_secrets(c: Content, need) -> None:
             combo = (r.slot, r.kind, r.main.attribute, r.main.tier, r.aux.attribute, tier)
             other = combos.setdefault(combo, r.id)
             need(other == r.id, f"{where}：跟隱藏配方 {other} 認同一個組合")
+    # 神器（正式季整合 5.6、5.9）：每件的特色（特技的做法）不重複；要有 wave 1 的（這個伺服器第一季全開的那幾件）。
+    # 同一種兵器（防具算一種）兩件神器不能是同一對料，上面「認同一個組合」已經擋（神器兩樣都寫死四階）
+    divine = [r for r in c.forge_secrets.values() if r.divine]
+    kinds: dict[str, str] = {}
+    for r in divine:
+        if r.tactic is not None:
+            other = kinds.setdefault(r.tactic.kind, r.id)
+            need(other == r.id, f"神器 {r.id}：特技的做法 {r.tactic.kind} 跟神器 {other} 一樣（5.9：每件神器的特色不重複）")
+    need(not divine or any(r.wave == 1 for r in divine), "神器配方：要有 wave 1 的（這個伺服器第一季全開的那幾件）")
 
 
 def _validate_seal(c: Content, need) -> None:
