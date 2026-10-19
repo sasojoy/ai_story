@@ -1917,7 +1917,30 @@
     return m.quest && m.quest.trim() ? { id: "quest", label: "主線與目標", chip: '<span class="peek-name">主線</span>', panel: m.quest + warHelp(m, "quest") } : null;
   }
 
-  const peekParts = (m) => [shown("stances") ? stancePeek(m) : null, shown("board") ? boardPeek(m, peekWeek(m)) : null, shown("quest") ? questPeek(m) : null];
+  // 每日簽到（21 天季，正式季整合 6.2；畫面照 9.1 第 4 組丙）：收進這一排小標，還沒簽亮紅點、簽了寫「簽到 ✔」。攤開是這一週七格
+  // （最後一週到季末為止）、今天的份與領的鈕；四階的日子是四顆挑屬性的鈕（點一種就領）。伺服器沒給 status.checkin（週末與 14 天的季、
+  // 序章裡、休季）就不畫。CK_LAST 待 joy 潤
+  const CK_ATTR = { 剛: "gang", 柔: "rou", 快: "kuai", 慢: "man" };
+  const CK_LAST = "這一季最後一天";
+  function checkinPeek(m) {
+    const k = m.status && m.status.checkin;
+    if (!k) return null;
+    const cells = k.week.map((d) => `<div class="ck-day ${d.state}${d.got ? " got" : ""}${d.four ? " four" : ""}"><span class="d">${d.day}</span><span class="g">${esc(d.label)}</span></div>`).join("");
+    const act = k.done ? "" : k.pick
+      ? `<div class="ck-pick">${k.pick.map((x) => `<button class="ck-p4 ${CK_ATTR[x.attribute] || ""}" data-act="checkin" data-attr="${esc(x.attribute)}"><b>${esc(x.attribute)}</b>${esc(x.name)}<small>有 ${x.held}</small></button>`).join("")}</div>`
+      : '<button class="ck-go" data-act="checkin">領取</button>';
+    return {
+      id: "checkin",
+      label: `簽到：第 ${k.day} 天${k.done ? "已簽" : "還沒簽"}`,
+      chip: `<span class="peek-name">簽到${k.done ? " ✔" : ""}</span>`,
+      flag: !k.done,
+      dotNote: "",
+      panel: `<div class="ck-head"><b>第 ${k.day} 天</b><span>${k.next ? `下一份：${esc(k.next)}` : CK_LAST}</span></div>`
+        + `<div class="ck-week">${cells}</div><p class="ck-step">${esc(k.step)}</p>${act}`,
+    };
+  }
+
+  const peekParts = (m) => [shown("stances") ? stancePeek(m) : null, shown("board") ? boardPeek(m, peekWeek(m)) : null, shown("quest") ? questPeek(m) : null, checkinPeek(m)];
 
   function peekHtml(parts, week) {
     const list = parts.filter(Boolean);
@@ -1925,7 +1948,8 @@
     const open = S.peekOpen && S.peekOpen.week === week ? list.find((p) => p.id === S.peekOpen.id) : null;
     const row = list.map((p) => {
       const on = p === open, dot = p.flag && !on; // 開著的時候就是正在看，不亮點
-      return `<button class="peek-chip ${p.id}${on ? " on" : ""}" data-act="peek" data-id="${p.id}" aria-expanded="${on}" aria-label="${esc(p.label)}${dot ? "，有還沒看過的" : ""}">${p.chip}${dot ? '<i class="peek-dot" aria-hidden="true"></i>' : ""}</button>`;
+      // dotNote：亮點時讀給人聽的那一句（簽到的 label 已經寫「還沒簽」，給空字串）
+      return `<button class="peek-chip ${p.id}${on ? " on" : ""}" data-act="peek" data-id="${p.id}" aria-expanded="${on}" aria-label="${esc(p.label)}${dot ? (p.dotNote ?? "，有還沒看過的") : ""}">${p.chip}${dot ? '<i class="peek-dot" aria-hidden="true"></i>' : ""}</button>`;
     }).join("");
     return `<div class="peek" id="peek"><div class="peek-row" role="group" aria-label="態勢、大事與主線">${row}</div>${open ? `<div class="peek-panel ${open.id}">${open.panel}</div>` : ""}</div>`;
   }
@@ -6514,6 +6538,7 @@
         case "renown-open": S.showMore = true; S.renownOpen = true; S.renownDot = null; renderTop(); window.scrollTo(0, 0); break; // 6B：金色的「名號傳開」
         case "renown-peer": peerRenownToggle(el); break; // 3B：玩家卡的稱號小籤，原地攤開說明（不重畫整張卡）
         case "fronts-help": frontsTap(); break; // 點戰況圖卡：底下攤開／收起這一季在打什麼、亂局、怎麼推（explain-2）
+        case "checkin": await doMain("checkin", el.dataset.attr ? { attribute: el.dataset.attr } : {}); break; // 「簽到」小標攤開的領取鈕（四階的日子帶屬性）
         case "pill": await doMain("pill"); break; // 體力條上的「丹 N」：服一顆回體丹（測試期間一鍵補滿打開時同一顆鈕寫「補滿」，同一條路由）
         case "hero-node": heroTap(el); break; // 修練頁人物面板的光點：只換那一格，不重畫
         case "hero-jump": heroJump(el); break; // 面板底下「看這一門／看這件」：捲到下面那張卡
