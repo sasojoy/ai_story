@@ -1147,6 +1147,7 @@ class WorldState(BaseModel):
     season_one: bool = False  # 這一季開季時第一季濃縮版的規則是不是開著
     haoqiang_allied: bool = False  # 這一季開季時豪強分屬兩軍是不是開著（allied.on 還要第一季的章）；舊季讀檔是 False
     season21: bool = False  # 這一季開季時 21 天季的骨架是不是開著（Config.season21；calendar.season21_on 還要設定也開著）
+    precise_actions: bool = False  # 這一季開季時一類一顆是不是開著（Config.precise_actions；precise.on 還要設定也開著）
     cal_offset: float = 0.0  # 21 天季：開季那一刻離那一週台灣週一 00:00 幾個季曆秒（calendar.anchor_offset）；其他季是 0
     # 21 天季暫停再繼續時偏移改過的紀錄（FB-332；world.realign_paused_calendar）：每一筆（until, offset）＝世界秒 until 之前用的是 offset，
     # 照先後排；until 之後照下一筆，最後照 cal_offset。以前寫下的時刻（江湖史、傳聞、江湖紀錄、戰報）照那一刻當時的偏移換成季曆

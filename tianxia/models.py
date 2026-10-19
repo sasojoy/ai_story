@@ -970,6 +970,7 @@ ALLOW_FIXED = frozenset({
 ALLOW_FAMILIES = (
     "act:challenge:", "act:rank:", "call:", "move:", "learn:", "faction:", "defect:", "opp:", "fs:",
     "explore:",  # 探索三選一的三顆（explore_modes.PREFIX；序章裡不出現）
+    "sect:",  # 拜入門派（一類一顆開著時從交友搬出來，sect:<事件 id>；序章裡不出現）
     "ambush:set:",  # 設伏劫道（ambush:set:<另一頭>；序章裡不出現）
     "aid:guard:", "aid:rally:", "aid:visit:",  # 護著大勢人物（figure_aid；序章裡沒有陣營，不出現）
     "act:recruit:",  # 招募歷史武將（act:recruit:<人物>，歷史武將同行；序章裡不出現）
@@ -1651,6 +1652,8 @@ class DuelTuning(_Strict):
 
     explore_chance: float = Field(default=0.05, ge=0, le=1)
     per_boss_season: int = Field(default=2, ge=1)
+    # 21 天季同一隻一人每週最多幾次（正式季整合 2.5【預設】；0＝不設，照 per_boss_season 一季算）：在 season21 設定裡打開
+    per_boss_week: int = Field(default=0, ge=0)
     cooldown_seconds: float = Field(default=7200, ge=0)
     start: float = 50.0
     big: float = 70.0
@@ -2742,6 +2745,12 @@ class Config(_Strict):
     bounties: Bounties = Field(default_factory=Bounties)  # 懸賞榜（見 Bounties）
     sortie: SortieRules = Field(default_factory=SortieRules)  # 出陣（見 SortieRules）
     explore_modes: ExploreModes = Field(default_factory=ExploreModes)  # 探索三選一（見 ExploreModes）
+    # 一類一顆（正式季整合第二章；tianxia/precise.py）：每一顆鈕只給一類、按了一定拿到那一類。預設開、測試內容關；照開季蓋章
+    # （WorldState.precise_actions，12.3 第 13 條：正在跑的季不變、下一個開季起生效）；探索三選一也開著時才生效
+    precise_actions: bool = True
+    # 借進找事件的戰後事件（內容寫 train 的九則）在一處池子裡合起來最多佔幾成（PM 2026-10-19：QA 量到潁川郊野佔七成）；
+    # 當地自己的事件都抽不到時照舊補上，池子裡只有這幾則時不受上限（events.pick_event）
+    precise_aftermath_share: float = Field(default=0.3, ge=0, le=1)
     insight_strong: InsightStrong = Field(default_factory=InsightStrong)  # 意境提示：每個地點最濃的意境（見 InsightStrong）
     territory: TerritoryRules = Field(default_factory=TerritoryRules)  # 地盤易手（見 TerritoryRules）
     ambush: AmbushRules = Field(default_factory=AmbushRules)  # 設伏劫道（見 AmbushRules）

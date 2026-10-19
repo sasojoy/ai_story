@@ -367,8 +367,13 @@ def enlist_pick(game: Game, option_ids: list[str]) -> str | None:
     return min(sides, key=lambda i: (counts[i], tie(i)))
 
 
-def explore_choice(ids) -> str | None:
-    """要探索時按哪一顆：三選一開著是找素材（explore:gather），關著是 act:explore；都不在選單上是 None。量表與腳本共用。"""
+def explore_choice(ids, want: str = "material") -> str | None:
+    """要探索時按哪一顆：三選一開著是找素材（explore:gather），關著是 act:explore；都不在選單上是 None。量表與腳本共用。
+    want="exp"（要經驗）：一類一顆開著、選單上有練功（explore:practice）就按它，沒有退回上面那樣（正式季整合 9.2）。
+    打探懸賞照預設（練功不算打探）。"""
+    practice = explore_modes.option_id(explore_modes.PRACTICE)
+    if want == "exp" and practice in ids:
+        return practice
     gather = explore_modes.option_id(explore_modes.GATHER)
     return gather if gather in ids else "act:explore" if "act:explore" in ids else None
 
@@ -420,6 +425,8 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
     # 設伏、修工事、屯糧（ambush:、works:，後期體力玩法）：體力夠就一直按得下去、收伏一直按得下去；整季機器人只有一個人，劫不到誰，不做
     # 護衛、犒軍、探望（aid:，figure_aid）：體力夠就按得下去；整季機器人不做（同 works:）；宴客（feast:）不花體力、入席離席能一直按
     # 酒肆（act:tavern、tavern:）同鐵匠鋪：在城裡一直按得下去；整季機器人只有一個人，打聽不到誰，不進
+    # 拜入門派（sect:，一類一顆）：不花體力、婉拒之後還在，同 act:rest；只在第一次看到那一則時按得下去（還是隨機挑，婉拒的就不再按）
+    options = [o for o in options if not o.id.startswith("sect:") or o.id.partition(":")[2] not in s.player.seen_events]
     options = [
         o for o in options
         if o.id not in ("act:rest", "act:halt", "act:bounties", "act:smith", "act:market", "act:heal", "act:arena", "act:donate", "act:tavern", DUEL_FLEE, ARENA_YIELD)

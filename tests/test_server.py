@@ -3517,6 +3517,7 @@ class _PicksEvent(random.Random):
 
 def test_socializing_at_the_generals_mansion_reaches_yuanshaos_meeting(game):
     """大將軍府有何進、袁紹兩位人物，也有袁紹的結識事件：交友只走事件、從不開口，所以結識事件發得出來。"""
+    game.state.world.precise_actions = False  # 一類一顆之前的交友、求見（新規則在 tests/test_precise_actions.py，設計 8.4）
     game.state.player.location = "dajiangjun_fu"
     game.state.player.stats["fame"] = 99  # 兩位都見得到也一樣：交友不找人
     game.state.player.fortune = True
@@ -6255,6 +6256,7 @@ NOT_IN_THE_FINGERPRINT = {
         "season_one": "開季時蓋的章，開季之後不變",
         "haoqiang_allied": "開季時蓋的章（豪強分屬兩軍），開季之後不變",
         "season21": "開季時蓋的章（21 天季），開季之後不變",
+        "precise_actions": "開季時蓋的章（一類一顆），開季之後不變",
         "cal_offset": "開季時蓋的章（21 天季季曆的偏移），開季之後不變",
         "cal_offset_history": "21 天季暫停再繼續時才多一筆（FB-332）：繼續那一下季的時間與排定本來就跟著變",
         "length_days": "同上",

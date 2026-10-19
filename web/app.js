@@ -1685,6 +1685,14 @@
     sealMoves.forEach((o) => used.add(o.id));
     const sealRow = sealMoves.length ? `<div class="options seal-moves" role="group" aria-label="奪璽">${sealMoves.map((o) => `
         <button class="btn" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}><span>${esc(o.label)}</span></button>`).join("")}</div>` : "";
+    // 應召（一類一顆開著時，設計 9.1 第 1 組乙）：有召見時行動列上面一條金框橫幅，按了就去應召；沒有召見不畫，也不收進「此地還能做」
+    const summons = m.precise ? byId["act:summons"] : null;
+    if (summons) used.add(summons.id);
+    const summonsRow = summons ? (() => {
+      const [label, detail] = optParts(summons);
+      return `<div class="summons-strip"><span>召見</span><button class="summons-go" data-act="choose" data-id="act:summons" ${summons.enabled ? "" : "disabled"}>
+        <b>${esc(label)}</b>${detail ? `<small>${esc(detail)}</small>` : ""}</button></div>`;
+    })() : "";
     const open = S.wheelSel === "move";
     if (shown("act:move")) {
       cells.push(inkCell("move", "移動", moves.length ? `${moves.length} 條路` : "沒有路", MOVE_ICON,
@@ -1711,7 +1719,7 @@
     // 緊貼在行動列底下），入伍段要按的鈕在「此地還能做」裡時也讓位（不把發光的那一顆往下推）
     // 展開探索三選一時同樣讓位（三顆緊貼在行動列底下）
     const notes = open || exploreOpen || hotHere ? "" : actNotesHtml(m, noted);
-    return `${sealRow}${drawn.length ? `<div class="act-bar" role="group" aria-label="行動" style="--cells:${Math.max(4, drawn.length)}">${drawn.join("")}</div>` : ""}${notes}${moveCard}${exploreCard}${here}`;
+    return `${sealRow}${summonsRow}${drawn.length ? `<div class="act-bar" role="group" aria-label="行動" style="--cells:${Math.max(4, drawn.length)}">${drawn.join("")}</div>` : ""}${notes}${moveCard}${exploreCard}${here}`;
   }
 
   // 行動列底下那幾行（explain-1，試玩回饋：按下去之前不知道會怎樣）：探索、遊歷、交友（或求見）這一下會遇上什麼、打贏拿什麼。

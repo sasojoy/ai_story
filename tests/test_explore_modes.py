@@ -19,6 +19,7 @@ def _game(faction=None, at="yingshui", **cfg):
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
     c.config.duel.explore_chance = 0.0  # 頭目戰另外測（tests/test_duel.py）：這裡的地點有頭目也不擲中
+    c.config.precise_actions = False  # 一類一顆之前的三選一（新規則在 tests/test_precise_actions.py，設計 8.4）
     for key, value in cfg.items():
         setattr(c.config.explore_modes, key, value)
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world())

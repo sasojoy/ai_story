@@ -16,6 +16,7 @@
   "heal_at_clinic": false,
   "sortie": {"enabled": false},
   "explore_modes": {"enabled": false},
+  "precise_actions": false,
   "insight_strong": {"enabled": false},
   "economy": {"gather_cut": false, "sortie_silver": false, "sell": false, "upgrade": false, "donate": false},
   "four_tiers": {"enabled": false},

@@ -170,6 +170,16 @@ def test_the_server_bot_simulation_can_pause_the_season_clock(content, tmp_path,
     assert result["ended"] and isinstance(result["late_joiners"], int)
 
 
+def test_the_exp_pace_measure_prints_one_line_per_side_and_rule(capsys, monkeypatch, tmp_path):
+    """經驗節奏量表（正式季整合 8.2）：短短跑一段，每一方、每一種規則各印一行等級與經驗來源（只量不改，不驗數字）。"""
+    monkeypatch.setenv("TIANXIA_DB", str(tmp_path / "pace.db"))
+    measure = _load("measure_exp_pace")
+    measure.main(["--profile", "weekend", "--rules", "old", "new", "--sides", "官軍", "散人", "--days", "0.2", "--step", "120"])
+    out = capsys.readouterr().out
+    assert out.count("[舊規則") == 2 and out.count("[新規則") == 2 and out.count("經驗來源") == 4
+    assert "練功" in out  # 新規則照練功拿經驗
+
+
 def test_the_weapons_measure_script_prints_one_line_with_and_one_without_weapons(capsys, monkeypatch):
     """兵器量表：--seeds 1 跑一次，兵器開、兵器關各印一行（只量不改，不驗數字）。"""
     measure = _load("measure_weapons")

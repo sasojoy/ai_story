@@ -4,7 +4,7 @@ from __future__ import annotations
 import random
 from typing import Literal
 
-from . import foreshadow
+from . import foreshadow, precise
 from .models import Check, Choice, Content, Event, FreeTextChoice, Location
 from .rules import check_condition, check_outlook, fail_stamina, haoqiang_allied, practice_line, season_one_off
 from .state import GameState
@@ -49,7 +49,7 @@ def event_candidates(
         hidden |= foreshadow.third_party_events(content)
     candidates: list[Event] = []
     for event in content.events.values():
-        if action not in event.actions:
+        if action not in precise.actions_of(event, state, content):  # 一類一顆：交友事件併進找事件、拜門派另成一顆
             continue
         if pool is not None and is_rare(event) != (pool == "rare"):
             continue
@@ -65,12 +65,50 @@ def event_candidates(
     return candidates
 
 
+BORROWED_POOL = ":戰後"  # 借進找事件的戰後事件另開的防重複池子（接在池子名後面，precise.borrowed）
+
+
 def rotation_pool(event: Event, location_id: str, action: str) -> str | None:
     """防重複的池子（交友與人物別傳設計稿第八節）：掛在特定地點的事件，每個地點、每種行動各一池
-    （「潁川郡:explore」）；不掛地點的通用事件每種行動共用一池（「*:explore」）。一次性與奇遇不輪替，回 None。"""
+    （「潁川郡:explore」）；不掛地點的通用事件每種行動共用一池（「*:explore」）。一次性與奇遇不輪替，回 None。
+    借進找事件的戰後事件另一池（「*:explore:戰後」），輪完重開不清掉當地自己的那幾池。"""
     if is_rare(event):
         return None
-    return f"{location_id}:{action}" if event.locations else f"*:{action}"
+    key = f"{location_id}:{action}" if event.locations else f"*:{action}"
+    return key + BORROWED_POOL if precise.borrowed(event, action) else key
+
+
+def fresh_events(state: GameState, content: Content, action: str, pool: EventPool | None = None) -> list[Event]:
+    """這一次真的抽得到的那幾則：合格的（event_candidates）再照防重複輪替拿掉這一輪看過的。"""
+    return _fresh_among(state, event_candidates(state, content, action, pool), action)
+
+
+def _capped_group(
+    state: GameState, content: Content, candidates: list[Event], action: str, rng: random.Random,
+) -> list[Event]:
+    """一類一顆：借進找事件的戰後事件（precise.borrowed）合起來最多佔 Config.precise_aftermath_share（照權重；本來就不到就照本來的）。
+    兩堆都有時先擲這一次抽哪一堆，再在那一堆裡照防重複抽——只限一下的權重沒用，防重複一輪會把每一則都端出來一次。
+    只有其中一堆時照舊（當地自己的事件不夠時照舊補上、池子裡只有這幾則時不受上限）。關著時沒有借進來的，不擲骰。"""
+    lent = [e for e in candidates if precise.borrowed(e, action)]
+    if not lent or len(lent) == len(candidates):
+        return candidates
+    own = [e for e in candidates if not precise.borrowed(e, action)]
+    weight = sum(e.weight for e in lent)
+    share = min(content.config.precise_aftermath_share, weight / (weight + sum(e.weight for e in own)))
+    return lent if rng.random() < share else own
+
+
+def _fresh_among(state: GameState, candidates: list[Event], action: str) -> list[Event]:
+    if not candidates:
+        return []
+    location = state.player.location
+    rounds = state.player.event_rounds
+    pools = {e.id: rotation_pool(e, location, action) for e in candidates}
+    fresh = [e for e in candidates if pools[e.id] is None or e.id not in rounds.get(pools[e.id], [])]
+    if not fresh:
+        last = {rounds[key][-1] for key in set(pools.values()) if key is not None and rounds.get(key)}
+        fresh = [e for e in candidates if e.id not in last] or candidates
+    return fresh
 
 
 def pick_event(
@@ -82,15 +120,9 @@ def pick_event(
     這個函式**不改狀態**：抽中的那一則要等 Game._present 真的端給玩家時，才由 note_round 記進
     PlayerState.event_rounds（全都看過時的清空也在那裡）。所以選單、勝算、機器人怎麼預覽都不會讓輪替往前走。"""
     candidates = event_candidates(state, content, action, pool)
-    if not candidates:
-        return None
-    location = state.player.location
-    rounds = state.player.event_rounds
-    pools = {e.id: rotation_pool(e, location, action) for e in candidates}
-    fresh = [e for e in candidates if pools[e.id] is None or e.id not in rounds.get(pools[e.id], [])]
+    fresh = _fresh_among(state, _capped_group(state, content, candidates, action, rng), action)
     if not fresh:
-        last = {rounds[key][-1] for key in set(pools.values()) if key is not None and rounds.get(key)}
-        fresh = [e for e in candidates if e.id not in last] or candidates
+        return None
     multiplier = content.config.qiyu_weight_multiplier
     weights = [event.weight * (multiplier if event.qiyu else 1.0) for event in fresh]
     return rng.choices(fresh, weights=weights)[0]
@@ -106,7 +138,10 @@ def note_round(state: GameState, content: Content, event: Event, action: str) ->
         return
     rounds = state.player.event_rounds
     if event.id in rounds.get(key, []):
+        lent = precise.borrowed(event, action)  # 只清同一堆的池子：戰後那幾則輪完了，當地自己的那一輪照舊
         for candidate in event_candidates(state, content, action):
+            if precise.borrowed(candidate, action) != lent:
+                continue
             pool_key = rotation_pool(candidate, location, action)
             if pool_key is not None:
                 rounds.pop(pool_key, None)
