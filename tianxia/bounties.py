@@ -455,8 +455,8 @@ def reward_bits(state: GameState, content: Content, b: Bounty) -> RewardBits:
     deeds = b.deeds if ranger.active(state, content) else 0
     exp = _exp(state, content, b)
     xinde = cfg.xinde.get(b.kind, 0)
-    if exp and _maxed(state, content, b):
-        xinde, exp = xinde + _as_xinde(content, exp), 0
+    if exp and team.maxed(content, state.player.member):  # 滿級：經驗換成心得（3.5，第 8 批起每一種季都是）
+        xinde, exp = xinde + team.as_xinde(content, exp), 0
     if b.kind == "arms":
         low, high = (_silver(state, content, b, base=price * cfg.arms_tier["1"])
                      for price in (min(cfg.arms_silver.values()), max(cfg.arms_silver.values())))
@@ -556,15 +556,6 @@ def _daily_pay(state: GameState, content: Content, b: Bounty) -> bool:
     return calendar.season21_on(state.world, content) and b.kind in content.config.season21_daily.exp_ratio
 
 
-def _maxed(state: GameState, content: Content, b: Bounty) -> bool:
-    """21 天季滿級的人交懸賞：經驗換成心得（3.5、6.1；週末與 14 天的季照舊）。"""
-    return _daily_pay(state, content, b) and state.player.member.level >= content.config.max_level
-
-
-def _as_xinde(content: Content, exp: int) -> int:
-    return exp // content.config.season21_daily.maxed_exp_per_xinde
-
-
 def _attached(state: GameState, content: Content, world: WorldStateStore, b: Bounty) -> list[str]:
     """21 天季每張附的那一樣（6.1 第 2 點）：討伐給這一路對手屬性的二階一個、另擲 strike_tier3_chance 一個同屬性三階；
     打探給一顆回體丹；護送給終點那一處屬性的二階一個。對手、終點沒寫屬性就照同階隨便一個（materials.by_tier 退回同階全部）。
@@ -625,11 +616,10 @@ def _complete(state: GameState, content: Content, world: WorldStateStore, b: Bou
     p.bounties_done += 1
     msgs = [f"【懸賞】「{title(content, b)}」交差了，{issuer(content, b)}的賞銀送到。", f"銀兩 +{silver}"]
     exp = _exp(state, content, b)
-    if exp and _maxed(state, content, b):  # 21 天季滿級：本人的經驗照 5 換 1 換成心得（3.5），同伴照拿經驗
-        gained = _as_xinde(content, exp)
+    if exp and team.maxed(content, p.member):  # 滿級：本人的經驗照 5 換 1 換成心得（3.5，team.maxed_xinde），同伴照拿經驗
+        gained = team.maxed_xinde(state, content, exp)
         if gained:
-            p.stats["xinde"] = p.stats.get("xinde", 0) + gained
-            msgs.append(f"心得 +{gained}")
+            msgs += [team.MAXED_XINDE.format(n=gained), f"心得 +{gained}"]  # 跟其他來源同一句（FB-452）
         msgs += team.add_team_exp(state, content, world, exp)
     elif exp:
         msgs.append(f"經驗 +{exp}")

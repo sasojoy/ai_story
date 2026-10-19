@@ -286,7 +286,7 @@ def test_maxed_players_get_xinde():
     s.player.faction = None
     s.player.member.level = c.config.max_level
     b = _first(s, "strike")
-    xinde = round(team.level_cost(c.config, c.config.max_level) * 0.15) // c.config.season21_daily.maxed_exp_per_xinde
+    xinde = round(team.level_cost(c.config, c.config.max_level) * 0.15) // c.config.maxed_exp_per_xinde
     assert xinde > 0
     text = bounties.reward_text(s, c, b)
     assert f"・心得 {xinde}" in text and "經驗" not in text

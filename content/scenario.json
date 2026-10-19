@@ -141,7 +141,7 @@
     "garrison": {
       "changshe": {"guan": ["guan_patrol", "jun_bing"]},
       "guangzong": {"huang": ["huangjin_sishi", "toumu"], "guan": ["jun_bing", "beijun_wuzu"]},
-      "guan_camp": {"guan": ["guan_patrol", "jun_bing"], "huang": ["louluo", "shuikou"], "haoqiang": ["yiyong", "wubao_buqu"]},
+      "guan_camp": {"guan": ["beijun_wuzu", "liangzhou_cavalry"], "huang": ["louluo", "shuikou"], "haoqiang": ["yiyong", "wubao_buqu"]},
       "runan_wilds": {"guan": ["guan_patrol", "jun_bing"], "huang": ["louluo", "shuikou"], "haoqiang": ["yiyong", "wubao_buqu"]},
       "nanyang_wilds": {"guan": ["jun_bing"], "huang": ["shanzei"], "haoqiang": ["yiyong", "wubao_buqu"]},
       "yu_river": {"guan": ["guan_patrol"], "huang": ["louluo"], "haoqiang": ["yiyong"]},
