@@ -118,3 +118,28 @@ def test_the_now_card_has_no_red_xinde_after_a_maxed_win():
     record, _, msgs = _attack(game)
     assert record.xinde > 0
     assert "心得 -" not in game.battle_extra_html() and "心得 -" not in game.battle_extra_html(for_card=True)
+
+
+def test_maxed_showdown_pay_and_bounty_say_the_conversion_line():
+    """FB-452：決戰軍餉與懸賞交差在滿級時也寫「已達頂級，經驗化作心得 +N。」。"""
+    from tianxia import bounties
+    from tianxia.state import Bounty
+
+    game = _game()
+    c = game.content
+    c.config.showdown_pay.exp = 60
+    definition = next(b for b in c.battles.values() if b.timetable_event)
+    battle = battle_instance.BattleInstance(battle_id=definition.id, record_id=7, phase="ended", round_number=6)
+    me = battle_instance.BattleParticipant(name="沈浪", faction="guan", neili=100, neili_cap=100, acted_rounds=6)
+    battle.participants["沈浪"] = me
+    lines: list[str] = []
+    changes = game._showdown_pay(battle, me, lines)
+    gained = next(int(x.split("+")[1]) for x in changes if x.startswith("心得 +"))
+    assert team.MAXED_XINDE.format(n=gained) in lines
+    s = game.state
+    s.player.faction = None
+    b = Bounty(id="b2", kind="scout", faction="huang", week=1, expires=1e12, silver=20, deeds=1, location="changshe", takers=["沈浪"])
+    s.world.bounties.append(b)
+    exp = bounties._exp(s, c, b)
+    msgs = bounties._complete(s, c, game.world, b)
+    assert team.MAXED_XINDE.format(n=exp // 5) in msgs

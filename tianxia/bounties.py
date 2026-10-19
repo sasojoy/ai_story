@@ -619,7 +619,7 @@ def _complete(state: GameState, content: Content, world: WorldStateStore, b: Bou
     if exp and team.maxed(content, p.member):  # 滿級：本人的經驗照 5 換 1 換成心得（3.5，team.maxed_xinde），同伴照拿經驗
         gained = team.maxed_xinde(state, content, exp)
         if gained:
-            msgs.append(f"心得 +{gained}")
+            msgs += [team.MAXED_XINDE.format(n=gained), f"心得 +{gained}"]  # 跟其他來源同一句（FB-452）
         msgs += team.add_team_exp(state, content, world, exp)
     elif exp:
         msgs.append(f"經驗 +{exp}")

@@ -6568,6 +6568,7 @@ class Game:
         if exp and team.maxed(c, p.member):  # 滿級：經驗照 5 換 1 換成心得（3.5）
             gained = team.maxed_xinde(s, c, exp)
             if gained:
+                lines.append(team.MAXED_XINDE.format(n=gained))  # 跟其他來源同一句（FB-452）
                 changes.append(f"心得 +{gained}")
         elif exp:  # 同伴不進決戰（人物資質設計 14.5）：只給本人；升級給屬性點同切磋
             before = p.member.level
