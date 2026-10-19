@@ -130,6 +130,7 @@
     senseNote: "", // 畫布底下那一行：這一筆落下了沒（/api/sense_read；不寫筆畫的幾何）
     stroking: false, // 手指正按在畫布上：輪詢不重畫（重畫會換掉畫布、手指底下的那一筆就斷了）
     forgeLine: "",
+    forgePreview: null, // 兩格都放好時的預覽卡（/api/forge_line 的 preview，合成即設計）；只放一樣、空爐是 null，畫 forgeLine 那一行
     mapBase: null, // 輿圖升級：底圖（/api/map/base：svg、地點、路、大區），一次載入只抓一次，疊層的 key 變了才重抓
     mapState: null, // 疊層（/api/map/state）
     mapStateAt: 0, // 上次抓疊層的時間（輪詢每 MAP_STATE_EVERY 毫秒重抓一次）
@@ -2478,7 +2479,9 @@
     return `<span class="qseal ${cls}${big ? " big" : ""}">${ch}</span>`;
   };
   // 合成品質的機率條：伺服器在這一門帶了 forge_odds（[{quality, pct}]，配手上最好的那個意境 forge_with 算的）才畫；沒帶就不畫，不寫死數字
-  const forgeOdds = (a) => (Array.isArray(a.forge_odds) && a.forge_odds.length ? `<div class="odds"><span>${a.forge_with ? `配「${esc(a.forge_with)}」煉製會出` : "拿去煉製會出"}</span>${a.forge_odds
+  // 合成即設計（forge_fixed）：品級定了，不畫一格 100% 的條，寫「配「風」合出來是中品」帶品級印
+  const forgeOdds = (a) => (a.forge_fixed ? `<div class="odds fixed"><span>${a.forge_with ? `配「${esc(a.forge_with)}」煉製` : "拿去煉製"}合出來是</span>${seal(a.forge_fixed)}<em>${esc(a.forge_fixed)}</em></div>`
+    : Array.isArray(a.forge_odds) && a.forge_odds.length ? `<div class="odds"><span>${a.forge_with ? `配「${esc(a.forge_with)}」煉製會出` : "拿去煉製會出"}</span>${a.forge_odds
     .map((o) => `<b class="${(QUALITY_SEAL[o.quality] || [, "q1"])[1]}" style="flex-grow:${Math.max(1, Number(o.pct) || 0)}">${esc(String(o.quality).slice(0, 1))} ${Number(o.pct) || 0}%</b>`).join("")}</div>` : "");
 
   // 功法卡、人物卡（伺服器的 Markdown）裡的十成進度「●●●○○○○○○○」換成跟卷軸卡同一種格子（企劃者 10/6：不要圈圈）。
@@ -3144,6 +3147,35 @@
       ${a.worn ? "" : `<button class="btn small" data-act="switch" data-id="${esc(a.id)}">改練上身<small>熟練度各自保留</small></button>`}
     </div>`;
   }
+  // 預覽卡（合成即設計定案第三節；Joy 2026-10-19「這個UI不用跟著調整嗎」）：兩格都放好時爐子底下不再是一團字，
+  // 而是跟出爐卡同一個形狀的一張卡——品級印、屬性、境界、一上手第幾成、功效籤、亮幾格、舊功效怎麼傳、為什麼是這個屬性、
+  // 有沒有人合過、花多少；開不了爐的原因在最底下。資料全是伺服器算的（skillview.forge_preview），網頁一個字不算。
+  // 擲骰的爐（fixed 關著）品級印是「？」、寫機率那一句；合併意境寫幾重、圓融駁雜。
+  function previewCardHtml(v) {
+    if (!v) return "";
+    const merge = v.kind === "合併";
+    const sub = [v.attribute ? `屬${v.attribute}` : "", merge ? "" : v.gen, v.level > 1 ? `第${v.level}成` : ""].filter(Boolean);
+    const badge = merge ? '<span class="qseal qi big">意</span>' : v.quality ? seal(v.quality, true) : '<span class="qseal q1 big">？</span>';
+    const verdict = merge ? esc(v.depth || "")
+      : v.quality ? `<b>${esc(v.quality)}</b>${v.why && v.why.length ? `<span class="muted">・${v.why.map(esc).join("；")}</span>` : ""}${v.near ? `<span class="near">・${esc(v.near)}</span>` : ""}`
+      : `品質看造化：${esc(v.odds || "")}`;
+    const tags = (v.traits || []).map((t) => `<i class="tr">${esc(t.name)}${t.layers > 1 ? `<small>${t.layers} 層</small>` : ""}</i>`);
+    if (v.slots) tags.push(`<i class="tr off">${esc(v.slots)}</i>`);
+    const notes = [merge ? "" : v.depth, v.keep, v.attribute_why, v.known].filter(Boolean);
+    return `<div class="made-card preview">
+      <div class="mc-head">${badge}<div><b>${esc(v.made)}</b><small>${sub.map(esc).join("・")}</small></div>
+        ${v.level > 1 ? `<span class="mc-power">一上手<b>${v.level}<small>成</small></b></span>` : ""}</div>
+      <p class="mc-verdict">${verdict}</p>
+      ${tags.length ? `<div class="mc-tags">${tags.join("")}</div>` : ""}
+      ${notes.length ? `<p class="mc-note">${notes.map((n) => esc(n.replace(/。$/, ""))).join("。")}。</p>` : ""}
+      <p class="mc-cost">${esc(v.cost)}</p>
+      ${v.problem ? `<p class="kiln-warn">⚠ ${esc(v.problem)}</p>` : ""}
+    </div>`;
+  }
+  // 爐子底下那一格：有預覽卡畫卡，否則畫說明那一行（空爐、只放一樣、不是你的東西）
+  function forgeLineHtml(x) {
+    return S.forgePreview ? previewCardHtml(S.forgePreview) : `<div class="card">${S.forgeLine || x.forge_line}</div>`;
+  }
   function pageCraft() {
     const x = S.menxia;
     if (!x) return '<p class="muted">載入中…</p>';
@@ -3175,12 +3207,12 @@
       ${proGuide()}
       <div class="msg" id="mx-msg">${S.message}</div>
       ${kilnHtml([slotOf(S.forgeSel[0]), slotOf(S.forgeSel[1])], ready)}
-      <div class="card" id="forge-line">${S.forgeLine || x.forge_line}</div>
+      <div id="forge-line">${forgeLineHtml(x)}</div>
       ${result}
       ${attrNoteHtml(x)}
       <div class="label">功法${filterChips("craft")}</div>
       ${craftFilterRow(x)}
-      ${artFilter("craft") === "意境" ? "" : `${arts.length ? `<div class="chips">${artsShown.map((a) => craftChip("art", a, `${a.quality}・屬${a.attribute}${a.gen ? `・${a.gen}` : ""}`, QUALITY_RANK[a.quality] || 1,
+      ${artFilter("craft") === "意境" ? "" : `${arts.length ? `<div class="chips">${artsShown.map((a) => craftChip("art", a, `${a.quality}・屬${a.attribute}・第${a.level}成${a.gen ? `・${a.gen}` : ""}`, QUALITY_RANK[a.quality] || 1,
         (a.glow || []).includes("pick:art") ? ' data-glow="pick:art"' : "", inPot(a.id))).join("")}</div>` : '<p class="muted">沒有合這些條件的武學。</p>'}
       ${artsShown.length < arts.length ? `<button class="btn ghost lib-more" data-act="craft-all">再列 ${arts.length - artsShown.length} 門</button>` : ""}`}
       <div class="label">意境 <small class="muted">同一個也能放兩次</small></div>
@@ -6148,11 +6180,12 @@
       const r = await api("/api/forge_line", forgeBody());
       if (seq !== forgeLineSeq || pot !== JSON.stringify(S.forgeSel)) return;
       S.forgeLine = r.line;
+      S.forgePreview = r.preview || null;
       const drawn = JSON.stringify(S.forgePicks);
       S.forgePicks = r.picks || null;
       if (S.tab === "craft" && JSON.stringify(S.forgePicks) !== drawn) { keepPlace(() => renderPage()); return; } // 清單上「合不了」的標記變了
       const el = document.getElementById("forge-line");
-      if (el) el.innerHTML = r.line;
+      if (el) el.innerHTML = forgeLineHtml(S.menxia || {});
       const warn = document.getElementById("kiln-warn");
       if (warn) warn.innerHTML = kilnWarn();
     } catch (e) { /* 提示過 */ }
@@ -6197,6 +6230,7 @@
         if (r.made) S.forgeSel = [];
         else trimForgeSel();
         S.forgeLine = "";
+        S.forgePreview = null;
         S.forgePicks = null;
         setMain(r.main);
         renderTop();
@@ -6616,7 +6650,7 @@
         case "melt-insight": askMeltInsight(el); break;
         case "art-filter": setArtFilter(el.dataset.page, el.dataset.filter); renderPage(); break;
         case "pick": pick(el.dataset.type, el.dataset.id); break;
-        case "unslot": if (S.busy) break; S.forgeSel.splice(Number(el.dataset.i), 1); S.forgePicks = null; renderPage(); updateForgeLine(); break;
+        case "unslot": if (S.busy) break; S.forgeSel.splice(Number(el.dataset.i), 1); S.forgePicks = null; S.forgePreview = null; renderPage(); updateForgeLine(); break;
         case "forge": await forge(); break;
         case "craft-all": craftView().all = true; renderPage(); break;
         case "craft-ok": craftView().okOnly = !craftView().okOnly; renderPage(); break;
@@ -7004,7 +7038,7 @@
         const row = x.owned_arts.find((a) => a.id === id);
         if (!row || !row.cultivate.legend) delete S.legendTick[id];
       }
-      if (!S.forgeSel.length) S.forgeLine = ""; // 爐是空的：用伺服器剛給的那一行（心得是新的）
+      if (!S.forgeSel.length) { S.forgeLine = ""; S.forgePreview = null; } // 爐是空的：用伺服器剛給的那一行（心得是新的）
       const shown = (m) => JSON.stringify(MENXIA_SHOWN[tab].map((k) => m[k]));
       const changed = trimmed || shown(x) !== shown(was)
         || (tab === "practice" && old.status.injury !== S.main.status.injury) // 療傷鈕看的是內傷
@@ -7064,6 +7098,7 @@
   function trimPot() {
     if (!trimForgeSel()) return;
     S.forgeLine = "";
+    S.forgePreview = null;
     if (S.forgeSel.length) updateForgeLine();
   }
 

@@ -1459,6 +1459,12 @@ div.here { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; ma
 .mc-tags i.off { border-style: dashed; color: var(--ink-2); background: none; }
 .mc-tags i.off em { background: none; color: var(--ink-2); border: 1px dashed var(--line); }
 .mc-tags i.hi { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 50%, var(--line)); }
+.made-card.preview { border-style: dashed; border-color: color-mix(in srgb, var(--gold) 60%, var(--line)); box-shadow: none; } /* 預覽卡：還沒開爐，虛線框 */
+.made-card.preview .mc-power small { font-size: 11px; color: var(--ink-2); margin-left: 1px; }
+.made-card.preview .mc-verdict .near { color: var(--gold); }
+.mc-cost { margin: 8px 0 0; font-size: 12px; color: var(--ink-2); }
+.made-card .kiln-warn { -webkit-line-clamp: unset; }
+.odds.fixed em { font-style: normal; font-weight: 600; margin-left: 4px; }
 .made-card .fold { margin: 10px 0 0; }
 .made-card > .btn { margin-top: 10px; }
 

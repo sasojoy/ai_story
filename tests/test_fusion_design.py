@@ -112,3 +112,28 @@ def test_blend_picks_the_attribute_of_the_higher_generation(content, world):
     gens = (0, 2)
     assert fusion.blend_shape(fist, windy, "0|兼|x", gens).attribute == "快"
     assert fusion.blend_shape(windy, fist, "0|兼|x", (2, 0)).attribute == "快"
+
+
+def test_the_preview_card_carries_the_same_quality_level_and_traits_as_the_line(designed, content, world):
+    """煉製頁的預覽卡（skillview.forge_preview，合成即設計的 UI）：跟說明那一行同一套函式算——品級、第幾成、功效一樣；
+    空爐、只放一樣、不是你的東西都是 None（網頁照舊畫那一行）。"""
+    designed.player.art_quality["basic_fist"] = "上品"
+    designed.player.member.wugong_level = 8
+    card = skillview.forge_preview(designed, content, world, "basic_fist", ["feng"])
+    line = skillview.forge_line(designed, content, world, "basic_fist", ["feng"])
+    assert card["kind"] == "合成" and card["quality"] == "中品" and f"合出來是{card['quality']}" in line
+    assert card["level"] == 4 and "一上手便是第4成" in line
+    assert card["attribute"] == "快" and card["gen"] == "初成" and card["problem"] is None
+    assert card["traits"] and all(set(t) == {"name", "layers"} for t in card["traits"])
+    assert card["known"] == "沒人合過。" and "心得" in card["cost"]
+    assert skillview.forge_preview(designed, content, world, None, []) is None
+    assert skillview.forge_preview(designed, content, world, "basic_fist", []) is None
+    assert skillview.forge_preview(designed, content, world, "caocao_wugong", ["feng"]) is None  # 不是你的：不露
+    merged = skillview.forge_preview(designed, content, world, None, ["feng", "huo"])
+    assert merged["kind"] == "合併" and merged["quality"] is None and "二重" in merged["depth"]
+
+
+def test_the_scroll_card_names_the_fixed_quality_instead_of_an_odds_bar(designed, content, world):
+    rows = {r["id"]: r for r in skillview.art_rows(designed, content, world)}
+    row = rows["basic_fist"]
+    assert row["forge_fixed"] in ("下品", "中品", "上品") and row["forge_odds"]
