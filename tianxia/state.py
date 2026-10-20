@@ -1163,6 +1163,44 @@ class DayNote(BaseModel):
     share: float = 0.0  # 眾議：這一塊加權之後的比例（0～1）
     # 作罷了另記一筆（conquest_day.note_void）：原因 absent＝攻方一個人都沒到（這種不發天下大事，裁決 19）；空的是結算那一下排定的那一筆
     void: str = ""
+    # ── 第三批 A：收場那一下另記一筆（siege.settle；〈天下形勢〉讀）。結算排定的那一筆與作罷的那一筆這幾欄是空的 ──
+    result: str = ""  # taken 攻方拿下、held 守住、stalemate 兩軍相持（沒有守將的中立地停在中線）
+    taken: str = ""  # 拿下的那一方（陣營 id）；沒易手是空的
+    margin: str = ""  # 大勝／險勝（戰場上贏的那一方）
+    keeper: str = ""  # 守方是誰（開集結那一刻）：陣營 id，中立地的守將寫 guard；兩軍同時搶沒有守將的中立地是空的
+    attackers: list[str] = Field(default_factory=list)  # 攻方（兩軍同時攻同一塊是兩個）
+    blow: str = ""  # 三方混戰補上守將最後一刀的人（名號；天下大事本來就具名）
+
+
+class XingshiTicket(BaseModel):
+    """〈天下形勢〉還在等模型的那一張單（WorldState.xingshi_ticket；Game._xingshi_open 開、settle_xingshi 或保底收）：事實與「是日：…」
+    那一句在開單那一刻就定了，模型只照它寫文章。taken：伺服器的背景執行緒拿走了（A 段），同一張不再拿第二次。"""
+
+    n: int  # 這一季第幾篇
+    key: int  # 哪一天（conquest_day.day_key）結算時開的
+    opened_real: float  # 開單的現實時間（過 Config.xingshi.grace_seconds 照固定段收）
+    facts: list[str] = Field(default_factory=list)
+    line: str = ""  # 「是日：…」
+    taken: bool = False
+
+
+class XingshiEssay(BaseModel):
+    """收下的一篇（WorldState.xingshi）：見聞「形勢」頁一篇一行。by_rule：模型沒寫成、照固定段拼的（畫面上不寫，看不出差別）。"""
+
+    key: int
+    time: float  # 世界秒：收下那一刻
+    n: int
+    essay: str
+    line: str  # 「是日：…」
+    by_rule: bool = False
+
+
+class XingshiMark(BaseModel):
+    """上一篇讀到哪裡（WorldState.xingshi_mark）：下一篇只寫這之後的事。開季後第一次結算（只記 key 的那一下）記起點。"""
+
+    log: int = 0  # ConquestState.day_log 讀到第幾筆
+    rumors: int = 0  # WorldState.rumors 讀到第幾則（傳聞只加不刪，照位置記）
+    lines: dict[str, int] = Field(default_factory=dict)  # 三條戰線那一刻的值（「比前一篇往哪一邊動」）
 
 
 class ConquestState(BaseModel):
@@ -1311,6 +1349,11 @@ class WorldState(BaseModel):
     territory: TerritoryState | None = None  # 地盤易手（出陣探索與地盤設計第四節）；None＝還沒算過
     conquest_on: bool = False  # 這一季開季時領地爭奪是不是開著（Config.conquest；conquest.on 還要設定也開著）；舊季讀檔是 False
     conquest: ConquestState | None = None  # 領地爭奪（tianxia/conquest.py）；None＝這一季還沒算過
+    # 〈天下形勢〉（領地爭奪第三批 A，tianxia/xingshi.py）：這一季收下的每一篇（照先後，最多 Config.xingshi.keep 篇）、還在等模型的那一張單、
+    # 上一篇讀到哪裡（None＝這一季還沒記過起點）
+    xingshi: list[XingshiEssay] = Field(default_factory=list)
+    xingshi_ticket: XingshiTicket | None = None
+    xingshi_mark: XingshiMark | None = None
     # ── 擂台賽（tianxia/arena.py；換季整個重來）──
     arena: dict[str, ArenaEntry] = Field(default_factory=dict)  # 名號鍵 → 守擂的人
     arena_pairs: dict[str, float] = Field(default_factory=dict)  # 「挑的名號鍵>守的名號鍵」→ 上一次挑的世界秒（冷卻）

@@ -2632,6 +2632,18 @@ class ConquestRules(_Strict):
     melee_pool_per_head: float = Field(default=30.0, gt=0)
 
 
+class XingshiTuning(_Strict):
+    """〈天下形勢〉（領地爭奪第三批 A；設計 3.10，計畫第五章 Task 16、17；tianxia/xingshi.py）：每天 22:00 結算那一刻開一張單，伺服器鎖外
+    請模型照那一天的事實寫一篇旁白（三段式，server.write_xingshi），寫不出來照固定段。只在領地爭奪開著（conquest.on）而且這裡開著時有；
+    模型只寫文章，不給任何數字、不定任何勝負。enabled 是主機的開關（關掉時不開單、不碰季的形勢欄位）。"""
+
+    enabled: bool = True  # 【預設】正式開；領地爭奪本身還關著（ConquestRules.enabled），開了領地爭奪就有
+    grace_seconds: float = Field(default=900, ge=0)  # 【預設】單開了這麼久（現實秒）還沒交回，下一個同步的人照固定段收（伺服器關著、模型壞了照樣每天一篇）
+    budget_seconds: int = Field(default=120, ge=0)  # 【預設】鎖外那一趟模型呼叫的總預算（同決戰劇情 battle_tale_budget_seconds）
+    facts_max: int = Field(default=30, ge=1)  # 【預設】一張單最多幾條事實（攻城的在前、三條線、再補天下大事，新的在前）
+    keep: int = Field(default=30, ge=1)  # 【預設】這一季最多留幾篇（21 天的季約 20 篇，留得下一整季）
+
+
 class AmbushRules(_Strict):
     """設伏劫道（後期體力玩法第一批，Joy 2026-10-16；tianxia/ambush.py）：花一大筆體力守在一段路上，敵對的人走過那一段（步行、疾行都算）
     就跟你打一場；贏的搶走輸的一點銀兩與素材，輸的扣氣血——雙向的，伏兵輸了賠的是自己的東西。設伏的人守在路段的這一頭，期間不能移動
@@ -2906,6 +2918,7 @@ class Config(_Strict):
     terrain_arts: TerrainArts = Field(default_factory=TerrainArts)  # 地利：武學跟此地最濃的意境同一路或被剋（見 TerrainArts）
     territory: TerritoryRules = Field(default_factory=TerritoryRules)  # 地盤易手（見 TerritoryRules）
     conquest: ConquestRules = Field(default_factory=ConquestRules)  # 領地爭奪（見 ConquestRules）
+    xingshi: XingshiTuning = Field(default_factory=XingshiTuning)  # 〈天下形勢〉：領地爭奪每天一篇的旁白（見 XingshiTuning）
     ambush: AmbushRules = Field(default_factory=AmbushRules)  # 設伏劫道（見 AmbushRules）
     fortify: FortifyRules = Field(default_factory=FortifyRules)  # 修築工事（見 FortifyRules）
     figure_aid: FigureAidRules = Field(default_factory=FigureAidRules)  # 護衛、犒軍、探望大勢人物（見 FigureAidRules）
@@ -4166,6 +4179,8 @@ class Content(_Strict):
     forge_secrets: dict[str, ForgeSecret] = Field(default_factory=dict)  # 隱藏配方池（content/forge_secrets.json，照 id）；沒有這個檔就是空的
     tier4_named: dict[str, Tier4Named] = Field(default_factory=dict)  # 四階名器名字表（content/tier4_named.json，照 id）；沒有這個檔就是空的（測試內容）
     arena_crowd: dict[str, list[str]] = Field(default_factory=dict)  # 擂台的場邊事件的固定句（content/arena_crowd.json）：種類 → 句子；沒有這個檔就沒有場邊事件
+    # 〈天下形勢〉的句型（content/xingshi_lines.json，領地爭奪第三批 A；tianxia/xingshi.py 讀、content.check_xingshi_lines 驗）；沒有這個檔就沒有〈天下形勢〉
+    xingshi_lines: dict = Field(default_factory=dict)
     banned_words: list[str] = Field(default_factory=list)  # 玩家寫給別人看的話（挑釁那一句、名帖自題）的髒話與辱罵字表（content/banned_words.json）；沒有這個檔就是空的
     mingtie: MingtieContent = Field(default_factory=lambda: MingtieContent())  # 名帖的現成的畫與假人的自題句庫（content/mingtie.json）；沒有這個檔就是空的
     shop_lines: dict[str, dict[str, list[str]]] = Field(default_factory=dict)  # 店面上掌櫃的話（content/shop_lines.json，店面獨立介面設計 1.4）：店 → 情況 → 句子；沒有這個檔就是空的

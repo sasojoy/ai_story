@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING
 from . import atlas, battle_instance, conquest, conquest_day, generals, territory
 from .battle_instance import GUARD, Commander, SiegeInfo
 from .models import BattleDef, Content
-from .state import GameState, Rumor, SiegeSlot, WorldState
+from .state import DayNote, GameState, Rumor, SiegeSlot, WorldState
 
 if TYPE_CHECKING:
     from .world_state import WorldStateStore
@@ -258,6 +258,33 @@ def scene_line(content: Content, info: SiegeInfo, battle: battle_instance.Battle
     return line
 
 
+# 攻城戰畫面最上面那一條（領地爭奪第三批 A，企劃者挑甲：「攻城・地點｜守方：某某（或守將）」；Game.siege_banner → main.siege，
+# 網頁 siegeStrip 把場景的名字那一行換成這一條）。三方混戰、轉回單方、兩軍相爭那三種怎麼寫是【開發定】；全部待 joy 潤
+BANNER_DEFENDER = "守方：{who}"
+BANNER_MELEE = "三方混戰"  # 【開發定】兩軍同時攻同一塊中立地（裁決 22）：寫在守方前面
+BANNER_ABSENT = "{absent}未到"  # 【開發定】三方混戰只有一軍到場、轉回單方攻中立地（裁決 23）：接在守方後面
+BANNER_OPEN = "兩軍相爭，沒有守方"  # 【開發定】兩軍同時搶沒有守將的中立地（退回正面打）
+
+
+def banner(content: Content, battle: battle_instance.BattleInstance) -> dict:
+    """攻城戰畫面最上面那一條：{"title": 「攻城・地點」, "parts": 接在後面的幾段, "kind": held／neutral／melee／lone／open}。
+    陣營佔著的寫那一方；中立地寫守將的名字（「某某（守將）」，找不到寫守軍）；三方混戰前面多「三方混戰」；轉回單方的後面多「某軍未到」。"""
+    info_ = battle.siege
+    guard = next((c.name for c in battle.commanders if c.fid.startswith("squad:")), "") or battle_instance.GUARD_SIDE
+    if battle_instance.melee(battle):
+        kind, parts = "melee", [BANNER_MELEE, BANNER_DEFENDER.format(who=guard)]
+    elif info_.holder in conquest.SIDES:
+        kind, parts = "held", [BANNER_DEFENDER.format(who=content.scenario.faction_name(info_.holder, info_.holder))]
+    elif info_.absent:
+        kind = "lone"
+        parts = [BANNER_DEFENDER.format(who=guard), BANNER_ABSENT.format(absent=content.scenario.faction_name(info_.absent, info_.absent))]
+    elif defender(info_) is not None:
+        kind, parts = "neutral", [BANNER_DEFENDER.format(who=guard)]
+    else:
+        kind, parts = "open", [BANNER_OPEN]
+    return {"title": title(content, info_), "parts": parts, "kind": kind}
+
+
 def _rumor(world: WorldState, text: str, loc: str | None = None) -> None:
     world.rumors.append(Rumor(time=world.time, text=text, location=loc, layer="world"))
 
@@ -376,4 +403,24 @@ def settle(world: WorldState, content: Content, battle: battle_instance.BattleIn
         world.conquest.progress.pop(info_.loc, None)
     if slot is not None:
         slot.status, slot.winner = "done", taken
+        _note_result(world, slot, info_, battle, taken, winner, margin)
     return {"taken": taken, "winner": winner, "margin": margin, "title": outcome_title(content, info_, taken, winner, margin)}
+
+
+def _note_result(world: WorldState, slot: SiegeSlot, info_: SiegeInfo, battle: battle_instance.BattleInstance,
+                 taken: str | None, winner: str, margin: str) -> None:
+    """收場那一下在當天的 day_log 記一筆結果（領地爭奪第三批 A：〈天下形勢〉只讀 day_log，計畫 6.3 第 1 條）：拿下（taken）、
+    守住（held，戰場上贏的是守方）、相持（stalemate，兩軍同時搶沒有守將的中立地停在中線）。keeper 是開集結那一刻的守方
+    （陣營 id；中立地的守將寫 guard）；三方混戰補上最後一刀的人照抄（天下大事本來就具名）。作罷的另由 conquest_day.note_void 記。"""
+    if world.conquest is None:
+        return
+    result = "taken" if taken is not None else "held" if winner else "stalemate"
+    side = defender(info_)
+    keeper = side if side in conquest.SIDES and info_.holder in conquest.SIDES else "guard" if side is not None else ""
+    guard = next((c for c in battle.commanders if c.faction == GUARD), None) if battle_instance.melee(battle) else None
+    first = taken or (info_.attackers[0] if info_.attackers else slot.attackers[0] if slot.attackers else "")
+    world.conquest.day_log.append(DayNote(
+        key=slot.key, side=first, loc=slot.loc, minute=slot.minute, by=slot.by.get(first, ""), result=result,
+        taken=taken or "", margin=margin, keeper=keeper, attackers=list(info_.attackers),
+        blow=guard.felled_by if guard is not None and taken is not None else "",
+    ))
