@@ -17,6 +17,9 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 - 不開多代理工作流程，也不要一個驗收項目開一個子代理。
 - **在隔離的工作樹裡**（PM 用 Agent 派的子代理）：Bash 工具會擋帶中文路徑的 python（`C:/Ray/專案/…/python.exe`），python 一律從 PowerShell 跑，git 照樣用 Bash。PowerShell 傳 JSON 參數會壞：把 JSON 寫進腳本，或讓腳本收一般參數。
   - Bash 也會拒絕「看不出會不會碰到別的工作樹」的複雜指令（遇到過的：`cd` 到工作樹外面的資料夾、拿 shell 變數組出別的資料夾的路徑、awk、在 Bash 裡再叫 powershell）。腳本一律用 Write 寫成檔，再從 Bash 跑 `python3 <絕對路徑>`（系統的 python 3.14 有 requests，打 API 與唯讀讀資料庫夠用），不 `cd`、路徑寫絕對的；node 與 venv 的 python 從 PowerShell 跑。
+  - Git Bash 會改參數：`rev:path`（`git show origin/develop:.claude/…`）被當成路徑清單、開頭是 `/` 的（`/api/mall/buy`）變成 `C:/Program Files/Git/api/…`。拿舊版的檔用 `git archive <sha> <檔…> -o x.tar` 再 `tar --force-local -x`；打 API 的腳本收不帶斜線的路徑。`cmd /c` 會吃掉 `^`（`8be1a6eb^1` 拿到的是別的版本），先在 PowerShell `git rev-parse` 成完整的 sha。
+  - Write 寫的 `.ps1` 是沒有 BOM 的 UTF-8，PowerShell 5.1 當 ANSI 讀、中文整個壞掉：寫完用 `[IO.File]::WriteAllText(檔, 內容, (New-Object Text.UTF8Encoding($true)))` 補 BOM。
+  - 長跑的 node／python 不要接 `| Select-Object -First N`：拿到 N 行 PowerShell 就收掉行程（exit 255），`finally` 裡關 chromium 那一段不會跑。輸出導進檔案再讀。
 - **scratchpad 跟同一個 PM 派出的其他子代理共用**（2026-10-20 在 `shots/` 看到別人的檔）：自己的複本、資料庫、截圖，都放在用這次驗收命名的子資料夾。
 
 ## 開伺服器與登入
@@ -49,6 +52,8 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
   - `start_showdown {id}`
   - `resolve_event`
 - **快轉的限制**：快轉只推世界時間。看現實時間的東西（出陣的每日次數 `PlayerState.sorties_today`、回體丹換日）快轉沒用，要改存檔。季曆的時刻夾在季末那一刻：把季末往後排，畫面照樣寫「週日 23:59」。
+  - `fast_forward` 的 `hours` 只收整數；week7 現實一小時是季曆 12 小時，湊不到 23:59。要最壞的時刻：先 `schedule {"id": "xiaquyang", "at": <九天後的 epoch>}`（下曲陽・季末）再快轉過頭，季曆就停在「第 12 週・週日 23:59」，時鐘走著也不動。
+  - `pause_clock` 會在江湖頁多一張暫停的卡、行動列換成一顆灰的選項：第一屏（行動列底緣）要在時鐘走著時量，逐像素比新舊時才暫停。
 - **畫面的資料不全在 `status`**：
   - 軍令卡在 `main["orders"]`。
   - 按了 `act:bounties` 之後，懸賞榜在 `main["shop"]`（`notes` 每張有 `short`、`due`）。
@@ -73,6 +78,8 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
   - **回應沒收到**：在頁面裡包 `window.fetch`，對指定的網址等真的回應回來再丟 `TypeError`（伺服器做了、頁面沒收到），或送出前就丟（根本沒到伺服器）；要「馬上再點、輪詢還沒插進來」就讓 `/api/main`、貨架那幾個 GET 先掛著（等一個 promise），點完才放。要「等一次輪詢再點」就不掛、記下輪詢何時打過。
   - **修前修後比版面**：同一個登入、同一頁，把 `git show <舊 sha>:web/style.css` 整份換進頁面（`link[href*="style.css"]` 換成 `<style>`），量同一批元素的 `getComputedStyle`（字級、字重、行高）與 `getBoundingClientRect`，再比兩張截圖的 sha256；不必起兩台伺服器。寬度要跨媒體查詢的邊界各量一次（640、641）。
   - 提示泡泡（`#toast`，3.2 秒）與離線橫幅會蓋在確認框上；要看底下的字就等它消失，或用 JS 讀 DOM。
+  - 每跑一次 node 就是新的瀏覽器，登入的 cookie 留不下來：用 `set_password.py` 建的帳號，node 自己讀 `local/<帳號>_password.txt` 打 `/api/login`（密碼不進對話）。在瀏覽器裡用隨機密碼註冊的帳號，下一輪就登不進去了。
+  - 逐像素比修前修後，同一版也要跑兩次：煉製的太極爐、輿圖的紅旗、修練的人物面板是動畫，跑兩次就不一樣。只有新對新、舊對舊都一樣，新對舊才不一樣的，才算改動造成的。
 
 ## 存檔、資料庫與假人
 - 換季之後、玩家第一次同步之前改的存檔，會被換季重設洗掉。要等他同步完再改。
@@ -85,6 +92,8 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 - **假人**：只在台灣時間 11:30～13 與 19～24 上線，懶的有些日子整天不上線。
   - 其他時段：把資料庫複製一份，用 `BotRunner(content, client=None, clock=lambda: 假時間)` 一輪一輪 `tick()`。
   - 正式驗「看不出是假人」：查角色存檔以外的每一張表，加上 `status`、玩家卡、傳聞、江湖史。
+  - 時段之外要跑真的 `run_bots.main(ticks=N)`（跟伺服器同一個資料庫）：包一支腳本，把 `tianxia.server_bots.is_online` 換成永遠在線、`load_content` 之後設 `bot_tick_seconds = 1000`（在線就一定做事），`run_bots.time.sleep` 縮短。`_wait` 每一輪還是要照 `bot_tick_seconds ÷ BATTLE_TICK_SECONDS` 一步一步查決戰，40 輪約 12 分鐘；要更快，就把 `run_bots._wait` 也換掉。
+  - 假人跑完多半在路上（`player.journey` 不是 null），「此地還有」與玩家卡都找不到他。要驗他的卡，就改存檔把 `journey` 清成 null。
 
 ## 只能靠引擎腳本驗的（寫法看 `引擎驗收.md`）
 - 跟開季時刻有關的：伺服器開季用真實時間，例如週三開季。
