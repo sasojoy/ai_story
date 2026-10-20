@@ -29,7 +29,8 @@ from .models import (
     FRONT_KEY, GLOW_KEYS, GOOD_HORSE, MOVES, RECRUITER_ALLIED_FIELDS, REVEAL_KEYS, ROADS, STATS, TREASURE_EFFECTS, WEAPON_KINDS, Attribute, BattleDef, CharacterDef, CheckVoice,
     CombatLines, Condition, Config, Content, CraftNames, DuelBoss, Effect, Event, FigureDef, FollowerDef, ForgeSecret, Foreshadows, FrontLines, GatherBranch, GearBook,
     GiftDef, Hints, MingtieContent, InsightDef, Location, OppDef,
-    InsightScene, OrdersContent, PresetRecipe, PromotionDef, RelationDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, ShardDef, SimRumor, SkillDef,
+    InsightScene, OrdersContent, PresetRecipe, PromotionDef, RealDay, RealSlot, RelationDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, ShardDef,
+    SimRumor, SkillDef,
     SignatureArmDef, SteedDef, Squad, Tier4Named, TimetableEvent, TraitBook, TreasureDef, Tutorial, allow_known,
 )
 from .martial_arts import ATTRIBUTE_COUNTERS, ATTRIBUTES, QUALITIES
@@ -81,7 +82,7 @@ def load_content(root: Path, profile: str | None = None) -> Content:
     timetable_events = [_build(TimetableEvent, raw) for raw in _read(root / "timetable.json")] if (root / "timetable.json").exists() else []
     config = _config(root, profile)
     if config.season21:  # 21 天季自己一份時刻表（正式季整合設計 1.2 給開發 1）：驗證之前套上，週末與 14 天不經過這裡
-        timetable_events = season21_timetable(timetable_events)
+        timetable_events = season21_timetable(timetable_events, config.season_segments)
     content = Content(
         config=config,
         scenario=Scenario(**_read(root / "scenario.json")),
@@ -140,13 +141,26 @@ def load_content(root: Path, profile: str | None = None) -> Content:
     return content
 
 
-def season21_timetable(events: list[TimetableEvent]) -> list[TimetableEvent]:
+def _segment_slot(real7: RealDay | None, segments: list[int]) -> RealSlot | None:
+    """7 天濃縮季的第幾天、幾點換成季曆的（第幾段, 段裡第幾天, 幾點）：段 [2, 2, 3] 時第 4 天是第 2 段的第 1 天（weekday 1）。"""
+    if real7 is None:
+        return None
+    start = 0
+    for week, length in enumerate(segments, 1):
+        if real7.day <= start + length:
+            return RealSlot(week=week, weekday=real7.day - start - 1, hour=real7.hour)
+        start += length
+    return None  # 超過段的和（content.validate 擋）
+
+
+def season21_timetable(events: list[TimetableEvent], segments: list[int] | None = None) -> list[TimetableEvent]:
     """21 天季的時刻表（Config.season21）：每一件照 real 換掉時刻——一般大事 day＝星期＋鐘點÷24（週二 12:00 是 1.5）、決戰與天命之爭
     寫 weekday、hour、季末只換週（季末的時刻照錨點算，timetable.finale_default）——再照時刻排（同一刻照檔案順序；季末排在那一週最後），
-    畫面上的時刻表照時間排（正式季整合設計 1.2 給開發 4）。沒寫 real 的照原樣（content.validate 擋）。"""
+    畫面上的時刻表照時間排（正式季整合設計 1.2 給開發 4）。沒寫 real 的照原樣（content.validate 擋）。
+    7 天濃縮季（segments 是 Config.season_segments）照 real7（第幾天、幾點）換成段裡的時刻，其餘一樣。"""
     moved = []
     for event in events:
-        slot = event.real
+        slot = _segment_slot(event.real7, segments) if segments else event.real
         if slot is None:
             moved.append(event)
         elif event.kind == "showdown":
@@ -840,6 +854,11 @@ def check_traits(c: Content, need) -> None:
             need(not NUMBER_IN_TEXT.search(line), f"{where}：不能寫數字或百分比，功效的數字由規則算、句子只寫打法（「{line[:12]}」）")
 
 
+def _week7(c: Content) -> bool:
+    """這一份設定是 7 天濃縮季（照現實天的季、季曆分段）：內容要照天另寫 7 天的那一份（real7、active_from_day7、cal_day_*7）。"""
+    return bool(c.config.season21 and c.config.season_segments)
+
+
 def check_timetable(c: Content, need, known, front_ids: list[str], trend_ids: set[str]) -> None:
     """時刻表（content/timetable.json，計畫 T2）：戰線（大事的 front、人物效果的 front 與 only_if、@commander 的戰線）
     寫的是戰線 id（大區的 front，T1：yingru／nanyang／jizhou），不是大區 id——幽州是大區、它的戰線是冀州，寫 youzhou
@@ -906,11 +925,14 @@ def check_timetable(c: Content, need, known, front_ids: list[str], trend_ids: se
             sum(segments) == c.config.season_days == 7,
             f"設定：season_segments 的和（{sum(segments)}）要等於 season_days（{c.config.season_days:g}），而且只做 7 天的季（內容照天另寫的是 7 天）",
         )
-    week7 = bool(c.config.season21 and segments)
+    week7 = _week7(c)
     for ev in table:
         where = f"時刻表 {ev.id}"
         need(ev.week <= c.config.season_weeks, f"{where}：第 {ev.week} 週超出季曆的 {c.config.season_weeks} 週")
-        need(not c.config.season21 or ev.real is not None, f"{where}：21 天季的時刻表每一件都要寫 real（現實的週、星期、鐘點）")
+        if week7:
+            need(ev.real7 is not None, f"{where}：7 天濃縮季的時刻表每一件都要寫 real7（第幾天、幾點）")
+        else:
+            need(not c.config.season21 or ev.real is not None, f"{where}：21 天季的時刻表每一件都要寫 real（現實的週、星期、鐘點）")
         if ev.front is not None:
             known(where, [ev.front], front_ids, "戰線")
         if ev.kind == "roll":
@@ -1038,6 +1060,7 @@ def check_figures(c: Content, need, known, front_ids: list[str]) -> None:
     狀態）；接位的人存在、同一個陣營、接位鏈不繞回來；名字只用繁體中文。"""
     faction_ids = [f.id for f in c.scenario.factions]
     owner: dict[str, str] = {}  # 對話人物 → 第一個用它的大勢人物
+    week7 = _week7(c)
     for fid, fig in c.figures.items():
         where = f"大勢人物 {fid}"
         if fig.character is not None:
@@ -1056,8 +1079,16 @@ def check_figures(c: Content, need, known, front_ids: list[str]) -> None:
             f"{where}：第 {fig.active_from_week} 週超出季曆的 {c.config.season_weeks} 週",
         )
         need(  # 21 天季照天數出兵（正式季整合設計 1.2 給開發 5）：第 1 週以後才出兵的人物要另寫天數
-            not c.config.season21 or fig.active_from_week <= 1 or fig.active_from_day is not None,
+            not c.config.season21 or week7 or fig.active_from_week <= 1 or fig.active_from_day is not None,
             f"{where}：21 天季照天數出兵，第 {fig.active_from_week} 週起的人物要寫 active_from_day",
+        )
+        need(  # 7 天濃縮季同上，寫 7 天的那一份
+            not week7 or fig.active_from_week <= 1 or fig.active_from_day7 is not None,
+            f"{where}：7 天濃縮季照天數出兵，第 {fig.active_from_week} 週起的人物要寫 active_from_day7",
+        )
+        need(
+            fig.active_from_day7 is None or fig.active_from_day7 < 7,
+            f"{where}：active_from_day7（{fig.active_from_day7:g}）超出 7 天" if fig.active_from_day7 is not None else "",
         )
         need(to_traditional(fig.name) == fig.name, f"{where}：名字只能用繁體中文（{fig.name}）")
         if fig.out_flag is not None:  # 丙 (c)：退場時記的世界旗標要有人讀（劇本或事件的條件），打錯字才抓得到
@@ -1857,7 +1888,10 @@ def validate(c: Content) -> None:
         known(where, cond.controlled_by, faction_ids, "陣營")
         known(where, cond.clue_items, item_ids, "伏筆物品")
         weekly = cond.week_min is not None or cond.week_max is not None
-        if c.config.season21 and weekly:  # 21 天季不看週、只看天（正式季整合設計 1.2 給開發 6）：寫了哪一頭的週就要寫那一頭的天
+        if _week7(c) and weekly:  # 7 天濃縮季同 21 天季照天數，寫 7 天的那一份（cal_day_*7，1～7 在模型裡驗）
+            need(cond.week_min is None or cond.cal_day_min7 is not None, f"{where}：7 天濃縮季照天數，寫了 week_min 也要寫 cal_day_min7")
+            need(cond.week_max is None or cond.cal_day_max7 is not None, f"{where}：7 天濃縮季照天數，寫了 week_max 也要寫 cal_day_max7")
+        elif c.config.season21 and weekly:  # 21 天季不看週、只看天（正式季整合設計 1.2 給開發 6）：寫了哪一頭的週就要寫那一頭的天
             need(cond.week_min is None or cond.cal_day_min is not None, f"{where}：21 天季照天數，寫了 week_min 也要寫 cal_day_min")
             need(cond.week_max is None or cond.cal_day_max is not None, f"{where}：21 天季照天數，寫了 week_max 也要寫 cal_day_max")
         else:
