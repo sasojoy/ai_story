@@ -197,6 +197,19 @@ DUP_LINE = "【{name}】上已經有「{insight}」了。"
 AFFINITY_LINE = "【{name}】收不下「{insight}」（只收{attrs}的意境）。"  # 待 joy 潤
 
 
+class Refusal(str):
+    """做不了的原因：照舊是那一句話（呼叫端都當字串用），另外帶一個兩三個字的 short，給煉製頁在清單上標「合不了」用
+    （skillview.forge_picks，企劃者 2026-10-10「常常丟上去按合成才知道」）。fusion 的合成與這裡的裝槽共用。"""
+
+    short: str = "合不了"
+
+
+def refuse(text: str, short: str) -> Refusal:
+    out = Refusal(text)
+    out.short = short
+    return out
+
+
 def takes(art: MartialArt, attribute: str) -> bool:
     """這一門的槽收不收這個屬性的意境：相容屬性空著什麼都收。"""
     return not art.affinity or attribute in art.affinity
@@ -206,6 +219,11 @@ def affinity_text(art: MartialArt) -> str:
     return "、".join(art.affinity) if art.affinity else "兼容並蓄"
 
 
+def takes_text(affinity: str) -> str:
+    """「收快、陽的意境」；兼容並蓄寫「什麼意境都收」（不寫「收兼容並蓄的意境」）。待 joy 潤"""
+    return "什麼意境都收" if affinity == "兼容並蓄" else f"收{affinity}的意境"
+
+
 def slot_problem(state: GameState, content: Content, world: WorldStateStore, art_id: str, insight_id: str) -> str | None:
     from . import library, team
 
@@ -213,23 +231,23 @@ def slot_problem(state: GameState, content: Content, world: WorldStateStore, art
     if art is None or art_id not in library.owned_arts(state):
         return NOT_OWNED
     if fixed(content, art_id):
-        return FIXED_LINE.format(name=art.name)
+        return refuse(FIXED_LINE.format(name=art.name), "寫死的")
     if insight_id not in state.player.insights:
         return NO_INSIGHT
     slots = slots_of(state, content, art)
     if insight_id in slots:
-        return DUP_LINE.format(name=art.name, insight=_iname(state, content, world, insight_id))
+        return refuse(DUP_LINE.format(name=art.name, insight=_iname(state, content, world, insight_id)), "已裝上")
     from . import insights as insights_mod
 
     ins = insights_mod.resolve(insight_id, content, world, state)
     if ins is not None and not takes(art, ins.attribute):
-        return AFFINITY_LINE.format(name=art.name, insight=ins.name, attrs=affinity_text(art))
+        return refuse(AFFINITY_LINE.format(name=art.name, insight=ins.name, attrs=affinity_text(art)), "收不下")
     other = where_slotted(state, insight_id)
     if other is not None:
         o = team.resolve_art(other, content, world)
-        return ELSEWHERE_LINE.format(insight=_iname(state, content, world, insight_id), other=o.name if o else other)
+        return refuse(ELSEWHERE_LINE.format(insight=_iname(state, content, world, insight_id), other=o.name if o else other), "裝在別門")
     if None not in slots:
-        return FULL_LINE.format(name=art.name, n=len(slots))
+        return refuse(FULL_LINE.format(name=art.name, n=len(slots)), "槽滿了")
     return None
 
 

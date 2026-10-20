@@ -180,7 +180,7 @@ def melt_problem(
     兩邊才不會各說各話。name 是這門武學現在的名字（寫進「先替它定名」那一句；不給就寫「這一門」）。
     only：序章（新手引導計畫一）只准熔師父說的那一門，空字串是這一步一門都不准熔；None＝不限。
     由呼叫端查序章再傳進來（prologue 會 import rules、rules 會 import 這個模組，這裡不能反過來 import 它）。
-    content 給了才認得本命武學（signature.is_signature）：本命熔不得（Joy 2026-10-16），拿去當底合成照舊可以。"""
+    content 給了才認得本命武學（signature.is_signature）：本命熔不得（Joy 2026-10-16），武學重構之後也不能當合成的料（fusion.blend_problem 擋 arts.fixed）。"""
     if only is not None and art_id != only:
         return "師父沒叫你熔這一門。"
     p = state.player

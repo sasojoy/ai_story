@@ -40,17 +40,9 @@ LOW_ONLY = {"下品": 100.0, "中品": 0.0, "上品": 0.0, "絕學": 0.0}  # 全
 BLEND_TOP = "上品"  # 武學合成最高合到的品級（絕學要契機）
 
 
-class Refusal(str):
-    """合不了的原因：照舊是那一句話（呼叫端都當字串用），另外帶一個兩三個字的 short，給煉製頁在清單上標「合不了」用
-    （skillview.forge_picks，企劃者 2026-10-10「常常丟上去按合成才知道」）。判斷只寫在這幾個 *_problem 裡。"""
-
-    short: str = "合不了"
-
-
-def _refuse(text: str, short: str) -> Refusal:
-    out = Refusal(text)
-    out.short = short
-    return out
+# 合不了的原因帶兩三個字的 short（煉製頁清單上標用）；類別搬到 arts，裝槽的拒絕也帶得上
+Refusal = arts_mod.Refusal
+_refuse = arts_mod.refuse
 
 
 @dataclass(frozen=True)
@@ -386,6 +378,9 @@ def blend_grade(state: GameState, content: Content, a: str, art_a: MartialArt, b
     return QUALITIES[grade], False
 
 
+FIXED_LINE = "【{name}】的路數是寫死的，拆不開，不能拿來合成。"  # 待 joy 潤
+
+
 def blend_problem(
     state: GameState, content: Content, world: WorldStateStore, a: str, b: str, partner: Partner | None = None,
 ) -> str | None:
@@ -398,6 +393,9 @@ def blend_problem(
     art_a, art_b = team.player_art(state, content, world, a), team.player_art(state, content, world, b)
     if art_a is None or art_b is None:
         return "找不到它的資料。"
+    for art_id, art in ((a, art_a), (b, art_b)):  # 定案第一節：寫死的武學（本命、部下的上品）不能當料
+        if arts_mod.fixed(content, art_id):
+            return _refuse(FIXED_LINE.format(name=art.name), "不能當料")
     secret = secret_recipes.match_blend(state, content, world, a, art_a, b, art_b)
     known = world.lookup_recipe(secret_recipes.key(secret) if secret is not None else blend_key(a, b))
     if known is not None and known.id in owned:

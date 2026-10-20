@@ -917,3 +917,22 @@ def test_can_forge_looks_only_at_the_shape_of_what_you_hold(ready, content, worl
     assert fusion.can_forge(ready, content)  # 兩門武學
     ready.player.stats["xinde"] = 0
     assert not fusion.can_forge(ready, content)
+
+
+def test_a_fixed_art_cannot_be_blended(ready, content, world):
+    """定案第一節：寫死的武學（本命、內容寫死的非下品）不能當合成的料；拒絕帶兩三個字的 short（清單上標）。"""
+    ready.player.arts = ["fist"]  # 測試內容的長拳沒寫品級＝絕學、寫死
+    problem = fusion.blend_problem(ready, content, world, "basic_fist", "fist")
+    assert problem == fusion.FIXED_LINE.format(name="長拳") and problem.short == "不能當料"
+    content.skills["fist"].quality = "下品"  # 下品的內容武學有空槽、不寫死，照舊合得
+    assert fusion.blend_problem(ready, content, world, "basic_fist", "fist") is None
+
+
+def test_slot_refusals_carry_a_short_word(ready, content, world):
+    """裝槽的拒絕也帶 short（skillview.forge_picks 照它標，不再一律「合不了」）。"""
+    from tianxia import arts
+    ready.player.art_slots["basic_fist"] = ["feng", None]
+    assert arts.slot_problem(ready, content, world, "basic_fist", "feng").short == "已裝上"
+    ready.player.art_slots["basic_fist"] = ["feng", "huo"]
+    ready.player.insights.append("shui")
+    assert arts.slot_problem(ready, content, world, "basic_fist", "shui").short == "槽滿了"

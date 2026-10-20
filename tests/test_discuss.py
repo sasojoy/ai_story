@@ -32,6 +32,13 @@ def _make(content, world, name, wugong="basic_fist", insights=("feng",)):
     return game
 
 
+@pytest.fixture(autouse=True)
+def _fist_is_plain(content):
+    """武學重構：寫死的武學（內容寫死、不是下品）不能當合成的料；測試內容的長拳沒寫品級（預設絕學），
+    這裡改成下品，讓它照舊當論武的那一門。"""
+    content.skills["fist"].quality = "下品"
+
+
 @pytest.fixture
 def pair(content, world):
     install_season_one(content)

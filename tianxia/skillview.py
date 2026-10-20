@@ -185,7 +185,7 @@ def forge_line(
         a, b = team.player_art(state, content, world, art_id), team.player_art(state, content, world, other_art)
         head = (
             f"**合成**　【{a.name}】＋【{b.name}】→ 一門新{info['kind']}（{info['grade']}・意境槽 {info['slots']} 格・"
-            f"收{info['affinity']}的意境），花 {cfg.fuse_xinde} 點心得、{cfg.fuse_stamina} 點體力（你有 {xinde} 點心得）。"
+            f"{arts_mod.takes_text(info['affinity'])}），花 {cfg.fuse_xinde} 點心得、{cfg.fuse_stamina} 點體力（你有 {xinde} 點心得）。"
         )
         if info["ripe"]:
             head += f"\n{fusion.RIPE_LINE}"
@@ -266,7 +266,7 @@ def forge_preview(
         affinity = fusion.blend_affinity(a, b)
         return {
             **empty, "kind": "合成", "made": f"一門新{info['kind']}", "attribute": affinity[0] if affinity else "",
-            "attribute_why": f"收{info['affinity']}的意境", "quality": info["grade"],
+            "attribute_why": arts_mod.takes_text(info['affinity']), "quality": info["grade"],
             "why": [fusion.RIPE_LINE] if info["ripe"] else [], "slots": f"意境槽 {info['slots']} 格（空的）",
             "traits": [], "keep": info["released"], "level": 1,
             "known": _strip_note(info["known"]), "cost": cost, "problem": info["problem"],
@@ -280,7 +280,7 @@ def forge_preview(
         where = f"第 {info['slot']} 格" if info["slot"] else "（槽滿了）"
         return {
             **empty, "kind": "裝意境", "made": f"【{info['art'].name}】{where}", "attribute": info["insight"].attribute,
-            "attribute_why": f"【{info['art'].name}】收{info['affinity']}的意境", "quality": None,
+            "attribute_why": f"【{info['art'].name}】{arts_mod.takes_text(info['affinity'])}", "quality": None,
             "slots": f"共 {info['total']} 格", "traits": [{"name": info["skill"], "layers": arts_mod.strength_of(state, insight_ids[0])}],
             "depth": f"〔{info['skill']}〕{info['mark']}：{info['desc']}",
             "known": None, "cost": NO_CHARGE, "problem": info["problem"],
