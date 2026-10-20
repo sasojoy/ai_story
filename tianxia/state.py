@@ -1124,6 +1124,15 @@ class TerritoryState(BaseModel):
     forts: dict[str, Fort] = Field(default_factory=dict)  # 可易手的地點 → 工事（修築工事，works.py；易手就拿掉）
 
 
+class ConquestState(BaseModel):
+    """這一季的領地爭奪（tianxia/conquest.py；WorldState.conquest，None＝這一季還沒算過）。此刻的控制方照舊記在 TerritoryState.control。"""
+
+    start: dict[str, str] = Field(default_factory=dict)  # 區塊 → 開季那一刻的種類（neutral／guan／huang）；之後內容改了，這一季不跟著動
+    offset: dict[str, float] = Field(default_factory=dict)  # 戰線 → 其他來源累積的偏移（值＝夾過的基準＋偏移；開季＝劇本起點−50，裁決 5）
+    base: dict[str, float] = Field(default_factory=dict)  # 戰線 → 上一次寫回時的佔領基準（別處直接改了線，照它重錨偏移）
+    progress: dict[str, float] = Field(default_factory=dict)  # 區塊 → 攻城目標的進度 0～100（往黃巾為正；沒寫是 50，計畫 2.3）
+
+
 class GuardPost(BaseModel):
     """一班護衛（figure_aid.guard）：替同陣營的大勢人物站崗，把站崗那一刻的身手抄成分身（power），下線也照守。"""
 
@@ -1253,6 +1262,8 @@ class WorldState(BaseModel):
     divine_lineup: list[str] | None = None
     renown_scale: float | None = None  # 名聲的門檻乘幾倍（開季時蓋章，world_state.stamp_season）；None＝沒有章，倍數 1
     territory: TerritoryState | None = None  # 地盤易手（出陣探索與地盤設計第四節）；None＝還沒算過
+    conquest_on: bool = False  # 這一季開季時領地爭奪是不是開著（Config.conquest；conquest.on 還要設定也開著）；舊季讀檔是 False
+    conquest: ConquestState | None = None  # 領地爭奪（tianxia/conquest.py）；None＝這一季還沒算過
     # ── 擂台賽（tianxia/arena.py；換季整個重來）──
     arena: dict[str, ArenaEntry] = Field(default_factory=dict)  # 名號鍵 → 守擂的人
     arena_pairs: dict[str, float] = Field(default_factory=dict)  # 「挑的名號鍵>守的名號鍵」→ 上一次挑的世界秒（冷卻）

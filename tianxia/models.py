@@ -1226,12 +1226,23 @@ class SeasonOneOff(_Strict):
     unlocks: list[str] = Field(default_factory=list)
 
 
+class BlockDef(_Strict):
+    """領地爭奪的一個區塊（設計 3.1：一塊＝一個地點）。kind 是開季歸哪一種：neutral 中立（高階獎勵、兩軍爭奪），guan／huang 是那一方的
+    陣營領地（大本營也寫在這裡，種類要是自己陣營的）；line 是佔領算進哪一條戰線的大勢值（null＝不算進任何一條，洛陽那一帶）。"""
+
+    kind: Literal["neutral", "guan", "huang"]
+    line: str | None = None
+
+
 class TerritoryDef(_Strict):
     """地盤易手（出陣探索與地盤設計第四節；tianxia/territory.py）。大本營（陣營的 join_at）不寫在這裡，永遠歸那一方。"""
 
     lines: dict[str, list[str]] = Field(default_factory=dict)  # 戰線 id → 可易手的地點，從目標往 0 推的那一方（官軍）那頭排到另一頭（待 joy 對）
     fixed: dict[str, str] = Field(default_factory=dict)  # 不參與拔河、只照大事（TimetableOutcome.control）易手的地點 → 開季的控制方（廣宗）
     garrison: dict[str, dict[str, list[str]]] = Field(default_factory=dict)  # 地點 → 控制方 → 站的隊伍；流寇野獸照 Location.enemies 裡無陣營的
+    # ── 領地爭奪（第 38 項改版，docs/superpowers/specs/2026-10-20-領地爭奪-design.md；tianxia/conquest.py；Config.conquest 開著才讀）──
+    blocks: dict[str, BlockDef] = Field(default_factory=dict)  # 地點 → 區塊（開季歸哪一種、算進哪條戰線）；不寫的地點不是區塊
+    neutral_garrison: dict[str, list[str]] = Field(default_factory=dict)  # 開季中立的區塊 → 另一套駐軍（無陣營的強對手，設計 3.3；待 joy）
 
 
 class Scenario(_Strict):
@@ -2581,6 +2592,28 @@ class TerritoryRules(_Strict):
     enemy_price: float = Field(default=1.2, gt=0)  # 在別的陣營控制的地方
 
 
+class ConquestRules(_Strict):
+    """領地爭奪（第 38 項改版，docs/superpowers/specs/2026-10-20-領地爭奪-design.md；計畫 docs/superpowers/plans/2026-10-20-領地爭奪.md；
+    tianxia/conquest.py）。開季時蓋章（WorldState.conquest_on，要第一季規則開著、劇本有官軍與黃巾、寫了 territory.blocks、豪強分屬兩軍），
+    正在跑的季不變；enabled 是主機的開關（關掉時照關著）。開著時：控制方只照佔領（不拔河、不割據），三條戰線的值＝佔領的基準＋其他
+    來源的偏移，出陣推攻城目標的進度、不推線，人站在自家領地吃加成，散人在開季中立的區塊也吃。第一批只有地圖、大勢值、加成、
+    中立駐軍與出陣推進度（沒有攻城戰）。數字全是【預設】，等 21 天的季試玩再調。"""
+
+    enabled: bool = False  # 【預設】正式內容先關；三批都做完、QA 過、PM 說可以，再在 season21.json 打開（裁決 15）
+    share: float = Field(default=35.0, ge=0)  # 【預設】佔領的份量：中立地全被一方拿下，基準偏到 50±share（分母只算中立時，設計 4.7）
+    neutral_weight: float = Field(default=1.0, ge=0)  # 【預設】中立區塊的權重（設計 4.7）
+    faction_weight: float = Field(default=2.0, ge=0)  # 【預設】陣營區塊的權重：打進敵方陣營影響比較大（設計 4.7、3.2）
+    # 【預設】基準的分母：neutral＝那條線開季中立的權重和（裁決 5：中立全被拿下剛好走到 50±share）；total＝那條線所有可奪區塊的權重和
+    # （設計 4.7 原文；潁川汝南被後方的陣營區塊稀釋到只偏幾點）。兩種都留，數字等試玩調
+    weigh_by: Literal["total", "neutral"] = "neutral"
+    gather_bonus_chance: float = Field(default=0.25, ge=0, le=1)  # 【預設】人站在自家領地找素材，多一個同屬性一階的機會（設計 4.5）
+    sense_bonus_points: int = Field(default=5, ge=0)  # 【預設】人站在自家領地靜心感悟，擲中多幾個百分點（夾在 sense_rate_range 的上限，設計 4.5）
+    progress_scale: float = Field(default=2.0, ge=0)  # 【預設】出陣推進度：max(1, 地點寫的推量合計) × 這個 ×（攻 1、守 hold_share）÷ √人數（計畫 2.3）
+    event_progress: float = Field(default=1.0, ge=0)  # 【預設】在區塊做完一則事件，往自己那一邊推進度一次的量（計畫 2.3；散人不推）
+    start_shift_per_10: int = Field(default=2, ge=0)  # 【預設】攻城戰起點：進度偏 50 每 10 點偏幾點（設計 4.4；第二批才用）
+    start_shift_cap: int = Field(default=10, ge=0)  # 【預設】最多偏幾點（設計 4.4；第二批才用）
+
+
 class AmbushRules(_Strict):
     """設伏劫道（後期體力玩法第一批，Joy 2026-10-16；tianxia/ambush.py）：花一大筆體力守在一段路上，敵對的人走過那一段（步行、疾行都算）
     就跟你打一場；贏的搶走輸的一點銀兩與素材，輸的扣氣血——雙向的，伏兵輸了賠的是自己的東西。設伏的人守在路段的這一頭，期間不能移動
@@ -2854,6 +2887,7 @@ class Config(_Strict):
     insight_strong: InsightStrong = Field(default_factory=InsightStrong)  # 意境提示：每個地點最濃的意境（見 InsightStrong）
     terrain_arts: TerrainArts = Field(default_factory=TerrainArts)  # 地利：武學跟此地最濃的意境同一路或被剋（見 TerrainArts）
     territory: TerritoryRules = Field(default_factory=TerritoryRules)  # 地盤易手（見 TerritoryRules）
+    conquest: ConquestRules = Field(default_factory=ConquestRules)  # 領地爭奪（見 ConquestRules）
     ambush: AmbushRules = Field(default_factory=AmbushRules)  # 設伏劫道（見 AmbushRules）
     fortify: FortifyRules = Field(default_factory=FortifyRules)  # 修築工事（見 FortifyRules）
     figure_aid: FigureAidRules = Field(default_factory=FigureAidRules)  # 護衛、犒軍、探望大勢人物（見 FigureAidRules）

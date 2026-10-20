@@ -706,6 +706,7 @@ class SqliteWorldStore:
 
             avoid_quiet_hours(state.season, content, now)  # 季曆排的決戰照開季這一刻挪開半夜（企劃者 2026-10-15）
             state.season.territory = None  # 章換了：地盤照開季的戰線重算，第一次不發天下大事（出陣探索與地盤設計第六節）
+            state.season.conquest = None  # 領地爭奪同上：照開季的區塊與戰線重算（偏移從這一刻的戰線起算）
             state.season.tianji = state.tianji  # 這一季的天機蓋進季裡：週初掛單的重賞亂數看它（裝備四欄 6.4；bounties.issue 讀不到全服那一列）
             divine.stamp(state, content)  # 神器輪替（正式季整合 5.6）：照全服登記挑這一季的神器；開關關著什麼都不做
             state.season_opened = True
