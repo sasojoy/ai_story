@@ -7046,6 +7046,8 @@ class Game:
         if self.state.player.name in battle.participants:
             region = self._battle_region_name(definition)
             return f"你離開了{region}，這回合不出手；人回到{region}就能再出手。"
+        if battle.siege is not None and not siege.slots(battle.siege, self._conquest_side()):
+            return siege.watch_line(self.content, battle.siege)  # 攻城戰：另一軍站不進守將那一格（裁決 8）
         return f"{self._absent_reason(definition)}。"
 
     def _sync_battle_presence(self) -> None:

@@ -181,6 +181,7 @@ def test_other_army_cannot_stand_with_the_guard():
     _open(game, announce(game, "nanyang_road", "huang"))
     assert not any(o.id.startswith("battle:") for o in game.options())  # 黃巾攻中立地：官軍插不上手，照常遊玩
     assert game._battle_choose_in("join:guan") != ["你加入了這場戰局。"]
+    assert "插不上手" in game.scene_text() and "人要到了那裡" not in game.scene_text()  # 場景說對原因
     ranger = _game(side=None, loc="nanyang_road", name="散某", world=game.world)
     enlists = {o.id for o in ranger.options() if o.id.startswith("battle:enlist:")}
     assert enlists == {"battle:enlist:guan", "battle:enlist:huang"}  # 散人可以投效守將那一邊（助守，裁決 8）

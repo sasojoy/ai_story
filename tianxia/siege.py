@@ -103,6 +103,13 @@ def commanders(state: GameState, content: Content, info: SiegeInfo, definition: 
 
 JOIN_SIDE = "（這一仗是{who}攻{place}，你這一邊插不上手。）"  # 待 joy 潤
 JOIN_OWN = "（你只能站在自己陣營這一邊。）"
+WATCH_LINE = "這一仗是{who}攻{place}，你這一邊插不上手，照常行動就好。"  # 待 joy 潤：另一軍站在攻中立地的那一區時，場景上那一句
+
+
+def watch_line(content: Content, info: SiegeInfo) -> str:
+    """另一軍的人站在這一區、這一仗沒有他站得進去的格時，場景上那一句（取代「人要到了那裡才能加入」）。"""
+    who = "、".join(content.scenario.faction_name(a, a) for a in info.attackers)
+    return WATCH_LINE.format(who=who, place=content.locations[info.loc].name)
 
 
 def slots(info: SiegeInfo, side: str | None) -> list[str]:
