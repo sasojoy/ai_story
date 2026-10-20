@@ -151,7 +151,7 @@ def _world_geometry(state: GameState, content: Content) -> dict:
         "frame": [round(x0), round(y0), round(x1 - x0), round(y1 - y0)],
         "regions": [{
             "id": r.id, "name": r.name, "ring": r.ring, "d": worldgeo.path(pts),
-            **dict(zip(("lx", "ly"), worldgeo.label_spot(pts, (x0, y0, x1, y1), spots))),
+            "spots": [list(p) for p in worldgeo.label_spots(pts, (x0, y0, x1, y1), spots)],  # 州名可以擺的幾處，好的在前（網頁照字級挑不壓字的）
         } for r, (_, pts) in zip(m.regions, regions)],
         "cells": cells, "edges": edges,
     }
@@ -480,6 +480,7 @@ def state(
         "journey": journey, "travel_block": None if block is None else {"reason": block.reason, "to_jianghu": block.to_jianghu},
         "places": places, "ropes": ropes,
         "geju": rules.world_trend_value(w, c, rules.GEJU) if rules.trend_shown(c, w, rules.GEJU) else None,
+        "geju_side": territory.geju_side(c),  # 割據那一條曲線照誰的顏色（劇本裡推割據的那一方）
         "events": _titles(s, c, now_week, now_week), "suggest": suggest, "chart": chart,
         "start": _start_control(w, c) if on else None,
         "weeks": _weeks(s, c, now_week, ropes),

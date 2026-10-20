@@ -257,6 +257,16 @@ def clip_rect(points: list[Point], rect: Rect) -> list[Point]:
 def label_spot(polygon: list[Point], frame_rect: Rect, places: list[Point]) -> Point:
     """州名擺哪：（州 ∩ 取景框）裡離邊與地點都最遠的一點（左右的距離打 LABEL_ASPECT 折：字是橫的）。粗格找、細格修。
     整州都在框外（或小到放不下一格）時用頂點的平均。"""
+    return label_spots(polygon, frame_rect, places, 1)[0]
+
+
+LABEL_APART = 80.0  # 備選的州名位置彼此至少隔多遠（地圖單位）
+LABEL_KEEP = 0.4  # 備選的分數至少要有最好那一個的幾成
+
+
+def label_spots(polygon: list[Point], frame_rect: Rect, places: list[Point], n: int = 4) -> list[Point]:
+    """州名可以擺的幾個位置，好的在前（第一個同 label_spot）：網頁照螢幕上的字級量州名框，前一個會壓到別州的州名就換下一個。
+    彼此隔 LABEL_APART 以上、分數不到最好那一個 LABEL_KEEP 成的不列。"""
     poly = clip_rect(polygon, frame_rect) or list(polygon)
     squash = [(x / LABEL_ASPECT, y) for x, y in poly]
     marks = [(x / LABEL_ASPECT, y) for x, y in places]
@@ -268,27 +278,31 @@ def label_spot(polygon: list[Point], frame_rect: Rect, places: list[Point]) -> P
         return min(edge, near)
 
     xs, ys = [p[0] for p in poly], [p[1] for p in poly]
-    best: tuple[float, float, float] | None = None
 
-    def scan(xa: float, xb: float, ya: float, yb: float, step: float) -> None:
-        nonlocal best
+    def scan(xa: float, xb: float, ya: float, yb: float, step: float) -> list[tuple[float, float, float]]:
+        found = []
         y = ya + step / 2
         while y < yb:
             x = xa + step / 2
             while x < xb:
                 if inside(x, y, poly):
-                    s = score(x, y)
-                    if best is None or s > best[0] + 1e-9:
-                        best = (s, x, y)
+                    found.append((score(x, y), x, y))
                 x += step
             y += step
+        return found
 
-    scan(min(xs), max(xs), min(ys), max(ys), LABEL_COARSE)
-    if best is None:
-        return (round(sum(xs) / len(xs), 1), round(sum(ys) / len(ys), 1))
-    _, bx, by = best
-    scan(bx - LABEL_COARSE, bx + LABEL_COARSE, by - LABEL_COARSE, by + LABEL_COARSE, LABEL_FINE)
-    return (round(best[1], 1), round(best[2], 1))
+    coarse = scan(min(xs), max(xs), min(ys), max(ys), LABEL_COARSE)
+    if not coarse:
+        return [(round(sum(xs) / len(xs), 1), round(sum(ys) / len(ys), 1))]
+    coarse.sort(key=lambda t: (-t[0], t[2], t[1]))
+    picks: list[tuple[float, float, float]] = []
+    for s, x, y in coarse:  # 好的在前，彼此隔開；每一個再用細格修一次
+        if len(picks) >= n or s < coarse[0][0] * LABEL_KEEP:
+            break
+        if all(math.hypot(x - px, y - py) >= LABEL_APART for _, px, py in picks):
+            fine = scan(x - LABEL_COARSE, x + LABEL_COARSE, y - LABEL_COARSE, y + LABEL_COARSE, LABEL_FINE) or [(s, x, y)]
+            picks.append(max(fine, key=lambda t: (t[0], -t[2], -t[1])))
+    return [(round(x, 1), round(y, 1)) for _, x, y in picks]
 
 
 def frame(points: list[Point], width: float, height: float, margin: float) -> Rect:

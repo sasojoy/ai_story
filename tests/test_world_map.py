@@ -101,8 +101,11 @@ def test_world_labels_sit_inside_their_region():
     polys = {r.id: [tuple(p) for p in r.points] for r in c.map.regions}
     x, y, w, h = world["frame"]
     for r in world["regions"]:
-        assert worldgeo.inside(r["lx"], r["ly"], polys[r["id"]]), r["id"]
-        assert x <= r["lx"] <= x + w and y <= r["ly"] <= y + h
+        assert 1 <= len(r["spots"]) <= 4, r["id"]
+        for lx, ly in r["spots"]:
+            assert worldgeo.inside(lx, ly, polys[r["id"]]), r["id"]
+            assert x <= lx <= x + w and y <= ly <= y + h
+        assert all(abs(a[0] - b[0]) + abs(a[1] - b[1]) > 0 for a, b in zip(r["spots"], r["spots"][1:]))
 
 
 def test_world_sides_come_from_the_scenario_in_its_order():

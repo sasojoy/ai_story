@@ -75,6 +75,10 @@ def test_label_spot_sits_inside_a_crescent_away_from_places():
     x, y = worldgeo.label_spot(crescent, (0, 0, 100, 100), [(15, 50)])
     assert worldgeo.inside(x, y, crescent)
     assert math.hypot(x - 15, y - 50) > 20  # 讓開地點
+    spots = worldgeo.label_spots(crescent, (0, 0, 100, 100), [(15, 50)], 3)
+    assert spots[0] == (x, y) and len(spots) >= 2  # 上下兩條臂各一個備選
+    assert all(math.hypot(a[0] - b[0], a[1] - b[1]) >= worldgeo.LABEL_APART - 2 * worldgeo.LABEL_COARSE
+               for i, a in enumerate(spots) for b in spots[i + 1:])
 
 
 def test_frame_wraps_the_places_with_a_margin_inside_the_map():
