@@ -9252,6 +9252,24 @@ class Game:
                 time=self.state.world.time, title=mall.TITLE, lines=[mall.GRANT_LINE.format(n=amount)], changes=[f"元寶 +{amount}"],
             ))
 
+    def mall_buy(self, item_id: str, ref: str) -> list[str]:
+        """買一件商品（mall.buy）：ref 是這一次購買的編號（網頁按下確認那一刻產，重送同一個不會買兩次）。成了寫一則「商城」
+        江湖紀錄（變化寫元寶與拿到的東西）；不成、或這個編號已經買過了只回一句、不寫紀錄。伺服器在行動鎖裡叫：扣元寶、
+        寫購買紀錄、發貨同一筆交易。時間照回體丹那一套（pill_now、_pill_day），不讀時鐘。"""
+        wallet = self._wallet()
+        if wallet is None:
+            return self._log([mall.OFF])
+        result = mall.buy(
+            self.state, self.content, wallet, item_id, ref,
+            now=self.pill_now(), day=self._pill_day(), season=self.world.get_season_number(),
+        )
+        if isinstance(result, str):
+            return self._log([result])
+        journal.add_entry(self.state, JournalEntry(
+            time=self.state.world.time, title=mall.TITLE, lines=result.lines, changes=result.changes,
+        ))
+        return self._log(result.lines)
+
     def pills_left_today(self) -> int | None:
         """今天還能服幾顆回體丹（pill_cap）；不限是 None。不看手上有幾顆。"""
         cap = self.pill_cap()

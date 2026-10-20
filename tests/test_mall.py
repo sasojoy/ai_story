@@ -133,3 +133,160 @@ def test_card_bonus_is_ignored_when_the_mall_is_off(on):
     _card(game, DAY0, DAY0 + 30)
     on.config.mall.enabled = False
     assert game.pill_cap() in (2, 5)  # 照原本的（新手期與否），不加
+
+
+# ── 購買與發貨 ───────────────────────────────────
+
+
+def _date(day: int) -> str:
+    from datetime import date, timedelta
+
+    return (date(1970, 1, 1) + timedelta(days=day)).isoformat()
+
+
+def _ready(on, name="沈浪", now=T0) -> Game:
+    game = _game(on, name, now)
+    game.mark_seen(now)  # 封測發放 5000
+    return game
+
+
+def test_buying_pills_moves_yuanbao_and_pills(on):
+    game = _ready(on)
+    pills = game.state.player.stamina_pills
+    msgs = game.mall_buy("pills_5", "ref-0001")
+    assert game.state.player.stamina_pills == pills + 5
+    wallet = _wallet(game)
+    assert wallet.balance("沈浪") == 4900
+    buy = _rows(game)[0]
+    assert (buy.reason, buy.delta, buy.ref) == ("buy", -100, "buy:沈浪:ref-0001") and buy.purchase_id
+    bought = wallet.purchase(buy.purchase_id)
+    assert (bought.item, bought.price, bought.day, bought.data) == ("pills_5", 100, DAY0, {"pills": 5})
+    assert bought.season == game.world.get_season_number() and bought.time == T0
+    entry = game.state.journal[0]
+    assert entry.title == "商城" and "元寶 -100" in entry.changes and "回體丹 +5" in entry.changes
+    assert any("回體丹五顆" in m for m in msgs)
+
+
+def test_not_enough_yuanbao_writes_nothing(on):
+    on.config.mall.beta_grant = 50
+    game = _ready(on)
+    pills, entries = game.state.player.stamina_pills, len(game.state.journal)
+    msgs = game.mall_buy("pills_5", "ref-0002")
+    assert "元寶不夠" in msgs[0]
+    assert _wallet(game).balance("沈浪") == 50 and len(_rows(game)) == 1
+    assert _wallet(game).purchases("沈浪") == []
+    assert game.state.player.stamina_pills == pills and len(game.state.journal) == entries
+
+
+def test_unknown_item_is_refused(on):
+    game = _ready(on)
+    assert game.mall_buy("nope", "ref-0003") == [mall.NO_ITEM]
+    assert len(_rows(game)) == 1
+
+
+def test_same_ref_twice_charges_once(on):
+    game = _ready(on)
+    pills = game.state.player.stamina_pills
+    game.mall_buy("pills_5", "same-ref-1")
+    again = game.mall_buy("pills_5", "same-ref-1")
+    assert "已經買好" in again[0]
+    assert _wallet(game).balance("沈浪") == 4900 and len(_wallet(game).purchases("沈浪")) == 1
+    assert game.state.player.stamina_pills == pills + 5
+
+
+def test_limits_per_day(on):
+    game = _ready(on)
+    assert game.mall_buy("pills_5", "d1")[0].startswith("買下")
+    assert game.mall_buy("pills_5", "d2")[0].startswith("買下")
+    refused = game.mall_buy("pills_5", "d3")
+    assert "今天" in refused[0] and _wallet(game).balance("沈浪") == 4800
+    game.now = T0 + 15 * HOUR  # 台灣隔天 00:00
+    assert game.mall_buy("pills_5", "d4")[0].startswith("買下")
+
+
+def test_limits_per_season(on):
+    game = _ready(on)
+    assert game.mall_buy("pills_30", "s1")[0].startswith("買下")
+    assert "這一季" in game.mall_buy("pills_30", "s2")[0]
+    next_season(on, game.world, game)
+    game.now = T0 + DAY
+    assert game.mall_buy("pills_30", "s3")[0].startswith("買下")
+
+
+def test_limits_per_account(on):
+    game = _ready(on)
+    assert game.mall_buy("card_30", "a1")[0].startswith("買下")
+    assert game.mall_buy("card_30", "a2")[0].startswith("買下")
+    assert "每個帳號" in game.mall_buy("card_30", "a3")[0]
+    next_season(on, game.world, game)
+    game.now = T0 + DAY
+    assert "每個帳號" in game.mall_buy("card_30", "a4")[0]
+
+
+def test_items_out_of_window_are_not_for_sale(on):
+    game = _ready(on)
+    window = on.mall["pills_5"].on_sale
+    window.seasons = [9]
+    assert game.mall_buy("pills_5", "w1") == [mall.NO_ITEM]
+    window.seasons = []
+    window.start = _date(DAY0 + 1)
+    assert game.mall_buy("pills_5", "w2") == [mall.NO_ITEM]
+    window.start, window.end = None, _date(DAY0 - 1)
+    assert game.mall_buy("pills_5", "w3") == [mall.NO_ITEM]
+    window.start = window.end = _date(DAY0)  # 頭尾都含
+    assert game.mall_buy("pills_5", "w4")[0].startswith("買下")
+
+
+def test_a_failed_delivery_rolls_everything_back(on, monkeypatch):
+    """發貨中途出錯（這裡是月卡寫不進去）：伺服器的行動鎖是一筆交易，整筆撤回——帳、購買紀錄、月卡都跟沒買一樣，手上的東西也沒動。"""
+    game = _ready(on)
+    pills = game.state.player.stamina_pills
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("發貨壞了")
+
+    monkeypatch.setattr(Wallet, "set_card", boom)
+    with pytest.raises(RuntimeError), game.world.db.transaction():
+        game.mall_buy("card_30", "ref-boom")
+    wallet = _wallet(game)
+    assert wallet.balance("沈浪") == 5000 and len(_rows(game)) == 1
+    assert wallet.purchases("沈浪") == [] and wallet.card("沈浪", mall.CARD_KEY) is None
+    assert game.state.player.stamina_pills == pills
+
+
+def test_balance_always_equals_the_ledger(on):
+    game = _ready(on)
+    for i, item in enumerate(("pills_5", "pills_30", "card_30", "card_1", "pills_5")):
+        game.mall_buy(item, f"sum-{i}")
+    rows = _rows(game)
+    assert _wallet(game).balance("沈浪") == sum(r.delta for r in rows) == 5000 - 100 - 500 - 600 - 10 - 100
+
+
+# ── 月卡的日子 ───────────────────────────────────
+
+
+def test_card_bought_at_2359_counts_that_day(on, monkeypatch):
+    monkeypatch.setattr(roster, "newbie", lambda state, content, days=None: False)
+    late = MIDNIGHT_TW + 20000 * DAY + DAY - 60  # DAY0 的台灣 23:59
+    game = _ready(on, now=late)
+    game.mall_buy("card_1", "c1")
+    assert _wallet(game).card("沈浪", mall.CARD_KEY) == (DAY0, DAY0 + 1)
+    assert game.pill_cap() == 3
+    game.now = late + 60  # 00:00 一到就失效
+    assert game.pill_cap() == 2
+
+
+def test_card_rebuy_extends_from_the_end(on):
+    game = _ready(on)
+    game.mall_buy("card_30", "e1")
+    game.now = T0 + 20 * DAY  # 還剩 10 天
+    game.mall_buy("card_30", "e2")
+    assert _wallet(game).card("沈浪", mall.CARD_KEY) == (DAY0, DAY0 + 60)
+
+
+def test_card_rebuy_after_expiry_starts_today(on):
+    game = _ready(on)
+    game.mall_buy("card_1", "x1")
+    game.now = T0 + 5 * DAY
+    game.mall_buy("card_1", "x2")
+    assert _wallet(game).card("沈浪", mall.CARD_KEY) == (DAY0 + 5, DAY0 + 6)

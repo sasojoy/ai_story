@@ -16,7 +16,9 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 
 from . import naming
+from .characters import name_key
 from .models import Content, MallItem
+from .state import GameState
 from .wallet import Wallet
 
 
@@ -39,7 +41,24 @@ _DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 _EPOCH = date(1970, 1, 1)
 
 TITLE = "商城"  # 江湖紀錄的標題（發放、購買）
-GRANT_LINE = "封閉測試期間，帳上先撥給你 {n} 元寶，可以到商城看看。"  # 待 joy 潤
+# 以下都待 joy 潤
+GRANT_LINE = "封閉測試期間，帳上先撥給你 {n} 元寶，可以到商城看看。"
+OFF = "商城沒有開。"
+NO_ITEM = "沒有這件商品。"  # 沒上架的也回這一句（不露下一季、下一段日子要賣什麼）
+DUPLICATE = "這一筆已經買好了：「{name}」。"
+SHORT = "元寶不夠：「{name}」要 {price}，你有 {balance}。"
+LIMIT_DAY = "「{name}」今天已經買了 {n} 次，明日 00:00 後再來。"
+LIMIT_SEASON = "「{name}」這一季已經買了 {n} 次。"
+LIMIT_ACCOUNT = "「{name}」每個帳號限買 {n} 次，已經買滿了。"
+BOUGHT = "買下「{name}」：{effects}。元寶 -{price}（還剩 {left}）。"
+CARD_UNTIL = "月卡到 {day}"  # 江湖紀錄的變化：卡用到哪一天（含）
+
+
+@dataclass(frozen=True)
+class Bought:
+    item: MallItem
+    lines: list[str]  # 回給玩家、寫進江湖紀錄的那一句
+    changes: list[str]  # 江湖紀錄的變化（元寶、拿到的東西）
 
 
 def on(content: Content) -> bool:
@@ -78,6 +97,101 @@ def day_text(day: int) -> str:
     """日數 → 「10/25」（台灣日期）。"""
     d = _EPOCH + timedelta(days=day)
     return f"{d.month}/{d.day}"
+
+
+def effects_text(item: MallItem, content: Content) -> str:
+    """這件買了拿到什麼（照允許表的寫法，例「回體丹 5 顆」「月卡 30 天（每天多服 1 顆回體丹）」）。"""
+    cfg = content.config
+    return "、".join(
+        EFFECTS[key].label.format(n=n, pill=cfg.stamina_pill_name, bonus=cfg.mall.card_pill_bonus)
+        for key, n in item.effects.items() if key in EFFECTS
+    )
+
+
+def on_sale(item: MallItem, day: int, season: int) -> bool:
+    """這一天、這一季上不上架（MallWindow：季的清單空的是每一季；日期含頭尾、不寫是不限）。"""
+    window = item.on_sale
+    if window.seasons and season not in window.seasons:
+        return False
+    if window.start and day < date_day(window.start):
+        return False
+    return not (window.end and day > date_day(window.end))
+
+
+def limit_problem(item: MallItem, wallet: Wallet, owner: str, day: int, season: int) -> str | None:
+    """限購滿了的那一句；還能買是 None。數的是沒退的購買（Wallet.count）。"""
+    limit = item.limit
+    if limit.day is not None and wallet.count(owner, item.id, day=day) >= limit.day:
+        return LIMIT_DAY.format(name=item.name, n=limit.day)
+    if limit.season is not None and wallet.count(owner, item.id, season=season) >= limit.season:
+        return LIMIT_SEASON.format(name=item.name, n=limit.season)
+    if limit.account is not None and wallet.count(owner, item.id) >= limit.account:
+        return LIMIT_ACCOUNT.format(name=item.name, n=limit.account)
+    return None
+
+
+def buy_problem(item: MallItem, wallet: Wallet, owner: str, day: int, season: int) -> str | None:
+    """買不了的那一句（限購、元寶不夠）；買得了是 None。上架由呼叫端先看（on_sale）。"""
+    problem = limit_problem(item, wallet, owner, day, season)
+    if problem:
+        return problem
+    balance = wallet.balance(owner)
+    return SHORT.format(name=item.name, price=item.price, balance=balance) if balance < item.price else None
+
+
+def buy_ref(owner: str, ref: str) -> str:
+    """購買的編號：帶上主人，兩個人送一樣的 ref 也不會撞在一起。"""
+    return f"buy:{owner}:{ref}"
+
+
+def buy(
+    state: GameState, content: Content, wallet: Wallet, item_id: str, ref: str, *, now: float, day: int, season: int,
+) -> Bought | str:
+    """買一件（4.4）：查重 → 上架 → 限購 → 餘額 → 寫購買紀錄 → 扣元寶 → 發貨，全部在一筆交易裡（呼叫端開著就併進去）。
+    回字串是不成（或這個編號已經買過了）的那一句，什麼都沒寫；發貨途中丟例外整筆撤回。
+    發貨先寫資料庫（月卡）、最後才動 state（回體丹），所以例外丟出來時 state 也還沒被改到。"""
+    owner = name_key(state.player.name)
+    full = buy_ref(owner, ref)
+    with wallet.db.transaction():
+        done = wallet.purchase_by_ref(full)
+        if done is not None:
+            known = content.mall.get(done.item)
+            return DUPLICATE.format(name=known.name if known else done.item)
+        item = content.mall.get(item_id)
+        if item is None or not on_sale(item, day, season):
+            return NO_ITEM
+        problem = buy_problem(item, wallet, owner, day, season)
+        if problem:
+            return problem
+        pid = wallet.add_purchase(owner, full, item.id, item.price, time=now, day=day, season=season, data=dict(item.effects))
+        if not wallet.post(owner, -item.price, "buy", full, time=now, purchase_id=pid):
+            raise RuntimeError(f"購買編號 {full} 已經記過帳，購買紀錄卻沒有")  # 兩張表對不上：整筆撤回，不發貨
+        changes = _deliver(state, content, wallet, owner, item, day)
+        left = wallet.balance(owner)
+    line = BOUGHT.format(name=item.name, effects=effects_text(item, content), price=item.price, left=left)
+    return Bought(item=item, lines=[line], changes=[f"元寶 -{item.price}", *changes])
+
+
+def card_span(span: tuple[int, int] | None, day: int, days: int) -> tuple[int, int]:
+    """月卡再加 days 天（4.5）：還沒到期（到期日在今天之後）就從到期日往後接，開始日不動；沒有或過期了從今天起算。"""
+    if span is not None and span[1] > day:
+        return span[0], span[1] + days
+    return day, day + days
+
+
+def _deliver(state: GameState, content: Content, wallet: Wallet, owner: str, item: MallItem, day: int) -> list[str]:
+    """發貨：月卡寫進 mall_entitlements、回體丹進角色（走拿到回體丹的那條路：手上的顆數加上去）。回江湖紀錄的變化。"""
+    changes: list[str] = []
+    days = item.effects.get("card_days", 0)
+    if days:
+        start, end = card_span(wallet.card(owner, CARD_KEY), day, days)
+        wallet.set_card(owner, CARD_KEY, start, end)
+        changes.append(CARD_UNTIL.format(day=day_text(end - 1)))
+    pills = item.effects.get("pills", 0)
+    if pills:
+        state.player.stamina_pills += pills
+        changes.append(f"{content.config.stamina_pill_name} +{pills}")
+    return changes
 
 
 def item_problems(item: MallItem, content: Content) -> list[str]:
