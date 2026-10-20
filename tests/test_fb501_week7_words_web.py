@@ -119,7 +119,9 @@ def test_other_seasons_keep_the_week_words(profile, monkeypatch):
     assert "<small>第 1 週週末</small>" in out["timeline"] and "<h4>第 1 週</h4>" in out["timeline"]
     assert "<h4>本週大事</h4>" in out["overview"] and "易手：第 1 週 " in out["place"]
     assert "比第 1 週" in out["hud"] and "正在看第 1 週" in out["chrome"]
-    assert "（預設在第 6、9、11 週中、第 12 週末）" in out["open"]
+    # 開季問句括號裡的預設時刻照這一種季自己的時刻表寫：21 天季「週六 20:00」三場、週末「週中」（dev/small-1020 改了 21 天這一句，FB-560）
+    default_dates = "（預設在第 1、2、3 週週六 20:00、季末第 3 週週日過完）" if profile == "season21" else "（預設在第 6、9、11 週中、第 12 週末）"
+    assert default_dates in out["open"]
     assert "照上一週的貢獻" in out["rotate"]
     if profile == "weekend":  # 21 天季的軍令每天一道：軍令卡、管理者那幾句照「今日」寫（FB-502，test_fb502_season21_order_words）
         assert "📜 本週軍令（1）" in out["orders"]

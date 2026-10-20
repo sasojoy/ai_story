@@ -278,6 +278,28 @@ def when_in(season: WorldState, content: Content, event: TimetableEvent) -> floa
     return calendar.event_time(event, content, season)
 
 
+def happened_at(season: WorldState, content: Content, event: TimetableEvent) -> float:
+    """輿圖「這一段大事」「天下怎麼變」把這件大事當成發生了的世界秒（FB-561、FB-562）：照排定的時刻（when_in）；
+    例外是決戰提早開了或收場了——管理者「立刻開戰」記在 showdowns_opened、收場記在 timeline——不等排定的時刻，開了那一刻就算發生了：
+    收場了取排定的時刻與收場那一刻較早的，開了還沒收場取排定的時刻與此刻較早的（沒有另記開的那一刻；開打的幾分鐘裡跨週，
+    才會跟著此刻換到新的一週）。其他大事（含季末、時間到了才結算的）一律是排定的時刻，跟 when_in 逐刻一樣。"""
+    at = when_in(season, content, event)
+    if event.kind != "showdown":
+        return at
+    done = season.timeline.get(event.id)
+    if done is not None:
+        return min(at, done.time)
+    return min(at, season.time) if event.id in season.showdowns_opened else at
+
+
+def happened_week(season: WorldState, content: Content, event: TimetableEvent) -> int:
+    """輿圖把這件大事歸在第幾週（7 天季是第幾段）：決戰與季末照實際排定的時刻落在季曆的哪一週（FB-562：被「避開半夜」或管理者挪到
+    別週的，不再照時刻表原本寫的那一週）；其他大事照時刻表寫的週次。"""
+    if event.kind not in NOT_BY_SEASON_HOUR:
+        return event.week
+    return calendar.point(happened_at(season, content, event), content, season).week
+
+
 def _pending(state: GameState, content: Content) -> list[TimetableEvent]:
     """還沒結算的大事，照時間排（同一刻照 timetable.json 的順序）。"""
     pending = [e for e in events(state.world, content) if e.id not in state.world.timeline]  # 天命之季多天命之爭（玉璽二）
