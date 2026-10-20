@@ -12,7 +12,7 @@
 只在 world._open_claimed（不在任何 mutate 裡）叫。"""
 from __future__ import annotations
 
-from . import allied, rules, territory
+from . import allied, home_ground, rules, territory
 from .models import BattleDef, Content
 from .state import Fort, GameState, Rumor, WorldState
 from .world_state import WorldStateStore
@@ -129,15 +129,17 @@ def on_muster(world: WorldStateStore, content: Content, definition: BattleDef) -
         return []
     got: dict[str, int] = {}
     text: dict[str, str] = {}
+    battle = world.get_battle()  # 主場（輿圖重製 1c）已經偏過的那一份：兩者合計夾在 ±home_stack_cap（沒有主場原樣，home_ground.stack）
+    home = battle.home if battle is not None and battle.battle_id == definition.id and battle.phase == "muster" else None
 
     def _take(season: WorldState) -> None:
         got.update({f.id: season.supply.get(f.id, 0) for f in definition.factions})
         season.supply = {}
-        text["line"] = muster_text(got, definition, lean(got, definition, content))
+        text["line"] = muster_text(got, definition, home_ground.stack(content, home, lean(got, definition, content)))
         season.rumors.append(Rumor(time=season.time, text=text["line"], layer="world"))
 
     world.mutate_season(_take)
-    shift = lean(got, definition, content)
+    shift = home_ground.stack(content, home, lean(got, definition, content))
 
     def _snap(b) -> None:
         if b.battle_id == definition.id and b.phase == "muster":

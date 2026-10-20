@@ -33,6 +33,7 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   - 要用就 `git stash push -m <獨一無二的標籤> -- <檔>`，`git stash list --format='%H %gd %gs'` 找到自己那一筆，`git stash apply <sha>`，再照標籤找 `stash@{n}` 去 drop。
   - 想證明測試「修之前是紅的」，最簡單的就是這樣把改動暫時收起來跑一次。
 - 背景長跑（量表）用 `run_in_background`。輸出導到檔案時 python 會緩衝，加 `-u` 才看得到進度。等它結束的通知，不要輪詢。
+- **scratchpad 是同一個 session 的子代理共用的**（2026-10-20 輿圖 1c：另一個同時跑的子代理寫了同名的 `dump_locs.py`，把我的蓋掉）：放進去的腳本、log 檔名一律加自己這一批的前綴（例 `m1c_`）。
 - **PowerShell 的 `git commit -F - @'…'@` 不會走 stdin**：here-string 被當成一個路徑參數，合併中會報 `cannot do a partial commit during a merge`（不在合併中就變成只提交那個「路徑」）。commit 訊息用 Write 寫進 scratchpad 的檔，`git commit -F <檔>`（2026-10-20）。
 - **Git Bash 的 `sed -i` 會把 CRLF 的檔整個改成 LF**（2026-10-20 改 `bot_policy.py` 一行，整個檔變 LF）：改一行也用 Edit 工具，或照上面「讀進來轉 `\n`、寫回轉回去」的腳本。
 - **PowerShell 5.1 讀沒有 BOM 的 `.ps1` 會把中文路徑讀成亂碼**（`Set-Location` 說找不到路徑）：長指令直接放進 PowerShell 工具的 `command`（工具會處理編碼），要一長串檔名就寫進 ASCII 的 txt、用 `Get-Content` 讀。

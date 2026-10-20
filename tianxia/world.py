@@ -582,8 +582,11 @@ def _open_claimed(
     if msgs:  # 真的開成了：玉璽碎片的現世與璽動在集結這一刻擲（玉璽碎片設計 3.2、4.1）
         from . import seal  # noqa: PLC0415  seal → world_state：在函式裡 import，同這個模組其他延後 import
 
-        from . import works  # noqa: PLC0415  同上
+        from . import home_ground, works  # noqa: PLC0415  同上
 
+        # 主場（輿圖重製 1c）：領地爭奪開著時照那一塊此刻歸誰偏起點、把主場人物調過去（排在龍頭上陣之前，不然挑不到他；
+        # 偏移排在屯糧、天命之爭之前，三者各自加上去、各自夾；主場與屯糧合計另外夾在 ±home_stack_cap，works 問 home_ground.stack）
+        msgs += home_ground.on_muster(world, content, definition)
         msgs += works.on_muster(world, content, definition)  # 屯糧練兵：兩軍屯的量換成起點的偏移（排在天命之爭的偏移之前，兩者疊加）
         msgs += seal.on_muster(world, content, definition, now)
         from . import generals  # noqa: PLC0415  同上

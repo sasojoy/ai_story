@@ -640,7 +640,7 @@
       "wis": 0.15
     },
     "desc": "甲子年二月隨三十六方一同起事，統領潁川的黃巾，四處截斷官道、劫奪官糧，朝廷派來的中郎將正往潁川趕。",
-    "talk_at": "huangjin_camp",
+    "talk_at": "julu_altar",
     "affinity_tag_deltas": {
       "雪中送炭": 10,
       "由衷讚賞": 7,
@@ -648,6 +648,7 @@
       "言語冒犯": -9
     },
     "haunts": [
+      "julu_altar",
       "huangjin_camp",
       "runan_wilds"
     ]
@@ -793,7 +794,7 @@
     "id": "buji",
     "name": "卜己",
     "kind": "locked",
-    "talk_at": "baima_ford",
+    "talk_at": "jishui",
     "background": "東郡黃巾的渠帥，出身渡口的船家，手下多是河上討生活的窮漢。",
     "situation": "率東郡黃巾在白馬津一帶截官船、掠糧道，替北邊廣宗的大賢良師撐著東面。",
     "personality": "粗豪狡黠、講義氣也講利，對手下的兄弟護短；信太平道，卻更信手上的刀和船。",
@@ -812,6 +813,7 @@
     },
     "desc": "率東郡黃巾在白馬津一帶截官船、掠糧道，替北邊廣宗的大賢良師撐著東面。",
     "haunts": [
+      "jishui",
       "baima_ford",
       "juma_river"
     ],
@@ -821,7 +823,7 @@
     "id": "liupi",
     "name": "劉辟",
     "kind": "locked",
-    "talk_at": "runan_wilds",
+    "talk_at": "qingzhou_camp",
     "background": "汝南黃巾的頭目，本是汝南的佃戶，荒年裡跟著太平道起事。",
     "situation": "帶著一支汝南黃巾在荒野裡打游擊，跟著波才的旗號走，卻常常糧草不濟。",
     "personality": "心思活絡、見風轉舵，最在乎手下的人有沒有飯吃；打仗不算狠，保命的本事卻一流。",
@@ -840,6 +842,7 @@
     },
     "desc": "帶著一支汝南黃巾在荒野裡打游擊，跟著波才的旗號走，卻常常糧草不濟。",
     "haunts": [
+      "qingzhou_camp",
       "runan_wilds",
       "hilltop_wilds"
     ],

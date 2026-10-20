@@ -402,9 +402,9 @@ def test_challenging_a_great_figure_wears_the_armor_like_training(world):
     game = Game.new(c, "官甲", rng=random.Random(0), world=world)
     game.client = None
     p = game.state.player
-    p.faction, p.location = "guan", "huangjin_camp"
+    p.faction, p.location = "guan", "julu_altar"
     p.tutorial_step = len(c.tutorial.steps)
-    p.visited.add("huangjin_camp")
+    p.visited.add("julu_altar")
     p.stamina = 250.0
     game.now = 1000.0
     p.armor = _jacket()

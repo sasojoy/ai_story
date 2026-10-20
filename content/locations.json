@@ -22,9 +22,10 @@
       "醫館",
       "酒肆"
     ],
-    "insight_strong": "huo",
+    "insight_strong": "shui",
     "insights": [
-      "huo"
+      "huo",
+      "shui"
     ]
   },
   {
@@ -240,9 +241,10 @@
     "tags": [
       "官署"
     ],
-    "insight_strong": "huo",
+    "insight_strong": "shan",
     "insights": [
-      "huo"
+      "huo",
+      "shan"
     ]
   },
   {
@@ -441,9 +443,10 @@
       "城鎮",
       "酒肆"
     ],
-    "insight_strong": "huo",
+    "insight_strong": "shui",
     "insights": [
-      "huo"
+      "huo",
+      "shui"
     ]
   },
   {
@@ -499,9 +502,10 @@
       "醫館",
       "酒肆"
     ],
-    "insight_strong": "huo",
+    "insight_strong": "feng",
     "insights": [
-      "huo"
+      "huo",
+      "feng"
     ]
   },
   {
@@ -517,9 +521,10 @@
     "tags": [
       "城鎮"
     ],
-    "insight_strong": "huo",
+    "insight_strong": "shui",
     "insights": [
-      "huo"
+      "huo",
+      "shui"
     ]
   },
   {
@@ -595,9 +600,10 @@
     "tags": [
       "書院"
     ],
-    "insight_strong": "huo",
+    "insight_strong": "shan",
     "insights": [
-      "huo"
+      "huo",
+      "shan"
     ]
   },
   {
@@ -692,9 +698,10 @@
       "gang_1",
       "rou_1"
     ],
-    "insight_strong": "huo",
+    "insight_strong": "shui",
     "insights": [
-      "huo"
+      "huo",
+      "shui"
     ]
   },
   {
@@ -741,9 +748,10 @@
     "tags": [
       "莊院"
     ],
-    "insight_strong": "huo",
+    "insight_strong": "shan",
     "insights": [
-      "huo"
+      "huo",
+      "shan"
     ]
   },
   {
@@ -901,9 +909,10 @@
       "gang_1",
       "kuai_1"
     ],
-    "insight_strong": "huo",
+    "insight_strong": "feng",
     "insights": [
-      "huo"
+      "huo",
+      "feng"
     ]
   },
   {
@@ -1328,9 +1337,10 @@
       "rou_1",
       "kuai_1"
     ],
-    "insight_strong": "huo",
+    "insight_strong": "shui",
     "insights": [
-      "huo"
+      "huo",
+      "shui"
     ]
   },
   {
@@ -1400,9 +1410,10 @@
       "gang_1",
       "man_1"
     ],
-    "insight_strong": "huo",
+    "insight_strong": "shui",
     "insights": [
-      "huo"
+      "huo",
+      "shui"
     ]
   },
   {
@@ -1535,9 +1546,10 @@
       "man_1",
       "rou_1"
     ],
-    "insight_strong": "huo",
+    "insight_strong": "shui",
     "insights": [
-      "huo"
+      "huo",
+      "shui"
     ]
   },
   {

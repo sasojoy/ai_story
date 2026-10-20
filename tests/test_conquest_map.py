@@ -14,8 +14,8 @@ from tianxia.models import BlockDef
 pytestmark = pytest.mark.slow  # 建 Game、載正式內容
 
 NOT_BLOCKS = {"mentor_hut", "jade_cave", "zhuo_militia_hall", "cao_manor", "haozu_fort"}  # 序章、劇情、豪強三處投靠點（設計 4.1）
-# 新天下開季碰得到的中立地：官軍從洛陽、南陽往潁川、東郡、汝南，黃巾從冀州、青州往東郡、陳留、汝南（各 5 塊；裁決 2 原本的 6～7 塊是 v1 地圖的數，見計畫）
-GUAN_OPEN = {"yingchuan", "guan_camp", "hilltop_wilds", "nanyang_huangjin_camp", "baima_ford"}
+# 新天下開季碰得到的中立地：官軍從洛陽、南陽往潁川、東郡、汝南，黃巾從冀州、青州往東郡、陳留、汝南（官軍 4、黃巾 5 塊；裁決 2 原本的 6～7 塊是 v1 地圖的數，見計畫；1c 的 PM 裁決：潁川郡沒有對手，不列）
+GUAN_OPEN = {"guan_camp", "hilltop_wilds", "nanyang_huangjin_camp", "baima_ford"}
 HUANG_OPEN = {"baima_ford", "luzhi_camp", "guandu", "jiwu", "qiao_county"}
 
 
@@ -39,7 +39,7 @@ def test_opening_reach_is_balanced():
     game = conquest_game("season21")
     guan, huang = _neutral(game, "guan"), _neutral(game, "huang")
     assert guan == GUAN_OPEN and huang == HUANG_OPEN
-    assert len(guan) == len(huang) == 5
+    assert (len(guan), len(huang)) == (4, 5)
     blocks = conquest.blocks(game.content)
     assert {blocks[x].line for x in guan | huang} == {"yingru"}  # 整個中原一個總值（暫用 yingru 那一條）
 

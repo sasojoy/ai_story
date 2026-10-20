@@ -2630,6 +2630,13 @@ class ConquestRules(_Strict):
     # 【預設】兩軍同時攻同一塊中立地（三方混戰，裁決 22）：守將的池子＝這個 × 集結結束時兩軍到場的人數（至少算 2 人，siege.size_melee_guard）。
     # 一個人五回合都強攻、戰線在中線打得掉 15×5＝75：兩軍平均四成的回合出強攻，守將撐不過五回合（一回合最多打掉四分之一，最快第 4 回合倒）
     melee_pool_per_head: float = Field(default=30.0, gt=0)
+    # ── 主場（輿圖重製 1c，企劃者 2026-10-20「長社火攻照長社此刻歸誰定難易」；tianxia/home_ground.py）：時刻表決戰寫了 BattleDef.home 時，
+    # 開集結那一刻看那一塊此刻歸誰。企劃者 2026-10-20 答：主場優勢要「錦上添花」，不能幾乎決定勝負 ──
+    home_shift: int = Field(default=6, ge=0)  # 【企劃者 2026-10-20：錦上添花；數字 PM 定】那一塊歸兩軍之一：戰局起點往佔著的那一方偏幾點（中立不偏）
+    home_away_share: float = Field(default=0.7, ge=0)  # 【企劃者 2026-10-20：錦上添花；數字 PM 定】那一塊歸主場人物的對面：他遠道而來，龍頭上陣的份量乘這個
+    # 【企劃者 2026-10-20：錦上添花；數字 PM 定】主場的偏移跟屯糧練兵的偏移（最多 Config.stockpile.cap）合計夾在 ±這個以內（同方向疊加時才撞得到；
+    # 天命之爭的偏移不在有主場的那幾場）。只在有主場的那一場生效（works.on_muster 問 home_ground.stack）
+    home_stack_cap: int = Field(default=8, ge=0)
 
 
 class AmbushRules(_Strict):
@@ -3453,6 +3460,15 @@ class FreeTextGamble(_Strict):
     per_act: int = Field(default=0, ge=0)
 
 
+class HomeGround(_Strict):
+    """時刻表決戰的主場（輿圖重製 1c，企劃者 2026-10-20；tianxia/home_ground.py）：領地爭奪開著的季，開集結那一刻看 block 此刻歸誰——
+    主場人物那一方佔著，他坐鎮、全額上陣，起點往那一方偏；對面佔著，起點往對面偏、他遠道而來份量打折；還沒人佔，起點不偏。
+    三種都把主場人物（在場的才算）調到 block，龍頭上陣才挑得到他。長社火攻是第一個用的（block 長社、figure 波才）。"""
+
+    block: str  # 看哪一塊的控制方（Scenario.territory.blocks 的地點 id，要搶得下來）
+    figure: str  # 主場人物（人物表 id，要是這一場交戰的兩軍之一）
+
+
 class BattleDef(_Strict):
     """全服共用的即時多人戰鬥骨架（例如「黃巾決戰」）：集結選陣營→逐幕逐回合（框架給
     選項是每邊每幕強攻／固守／奇襲三招，照 Config.battle 的算法推動戰局/扣氣血；每幕固定幾回合）→打完最後一回合、
@@ -3491,6 +3507,8 @@ class BattleDef(_Strict):
     # 選單上；每一場打哪一塊、誰攻記在 BattleInstance.siege，名字照 siege.title。範本的幕文字待 joy 潤
     siege: bool = False
     # 沒有第三方（Joy 2026-10-13「豪強在大決戰還是要加入某一陣營，主軸還是官兵跟黃巾」）：不是交戰兩軍的人臨時投效其中一軍
+    # 主場（輿圖重製 1c；tianxia/home_ground.py）：寫了的話，領地爭奪開著的季開集結那一刻照 home.block 此刻歸誰定起點與主場人物的份量
+    home: HomeGround | None = None
 
 
 FigureFate = Literal["退場", "重創", "重挫", "聲威大減", "受挫", "下獄", "到任"]  # 用詞照時刻表結算文件第一節

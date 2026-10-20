@@ -16,11 +16,11 @@
     "rank": 2,
     "figure": "bocai",
     "successor": "pengtuo",
-    "location": "huangjin_camp",
+    "location": "julu_altar",
     "event_main": "promo_huang_2",
     "event_handoff": "promo_huang_2_handoff",
-    "summons_text": "波才傳話，要你到黃巾別部營寨見他。",
-    "summons_handoff": "彭脫傳話，要你到黃巾別部營寨。",
+    "summons_text": "波才傳話，要你到{據點}見他。",
+    "summons_handoff": "彭脫傳話，要你到{據點}。",
     "closing": "一個信眾、一個力士被帶到你身後：「小帥，以後聽你的。」"
   },
   {

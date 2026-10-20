@@ -2282,6 +2282,22 @@ def test_every_idle_menu_id_is_one_the_prologue_allow_list_knows(content, tmp_pa
 # ── 意境提示：每個地點最濃的意境（意境提示設計第三節，企劃者 10/15 守「渡口是風」）──
 STRONG_RULE = {"河畔": "shui", "渡口": "feng", "山林": "shan", "營寨": "huo", "城鎮": "huo"}
 STRONG_EXCEPTIONS = {"guangzong"}  # 城池營寨：冀州悟得到水的只有這裡
+# 輿圖重製 1c（企劃者 2026-10-20「地利火地太多要調」）：以前每個城鎮、營寨、官署都是火，火佔了一半。河畔水、山林山、渡口風照舊；
+# 營寨、城鎮多的地方照地點的描寫挑別的（【開發定，可推翻】，理由見計畫 1c）。新手第一站陽翟不能是剋開局內功的那一種。
+STRONG_BY_DESC = {
+    "yingchuan": "shui",  # 陽翟：潁水邊的郡治（新手第一站：開局的基礎吐納屬柔，火剋柔）
+    "xinye": "shui",  # 新野：淯水邊的小縣
+    "puyang": "shui",  # 濮陽：渡河的商旅往來
+    "chenliu_city": "shui",  # 陳留：四方的消息在這裡匯聚
+    "linzi": "shui",  # 臨淄：淄水邊、近海的大城
+    "runan_market": "shui",  # 汝南集市：米糧布匹流通、少有還算太平的地方
+    "runan_academy": "shui",  # 汝南學宮：士人講學論道
+    "runan": "feng",  # 汝南：清議之風極盛
+    "market_town": "feng",  # 集市小鎮：意氣風發的年輕人
+    "yingchuan_academy": "shan",  # 潁川書院：門規嚴謹
+    "cao_manor": "shan",  # 曹氏莊院：佔地極廣、護院森嚴
+    "luoyang_palace": "shan",  # 洛陽宮城：宮門重重
+}
 
 
 # 輿圖重製第 1 批（新天下）：五個大區變成九州，中原每郡、核心只有三處上下（設計 3.3），「每一個大區四種都有」做不到
@@ -2310,10 +2326,34 @@ def test_every_basic_insight_is_strongest_in_five_places_in_every_region(content
 
 def test_the_strongest_follows_the_terrain(content):
     for loc in content.locations.values():
+        if loc.id in STRONG_BY_DESC:
+            assert loc.insight_strong == STRONG_BY_DESC[loc.id], (loc.id, loc.insight_strong)
+            continue
         tag = next((t for t in loc.tags if t in STRONG_RULE), None)
         if tag is None or loc.id in STRONG_EXCEPTIONS:
             continue
         assert loc.insight_strong == STRONG_RULE[tag], (loc.id, tag, loc.insight_strong)
+
+
+def test_the_four_basic_insights_share_the_land(content):
+    """1c（企劃者 2026-10-20「地利火地太多要調」）：有最濃的地點裡，四種基本意境各佔大約四分之一（差不超過一處）；
+    以前火 25、風 11、山 10、水 6。"""
+    count: dict[str, int] = {}
+    for loc in content.locations.values():
+        if loc.insight_strong:
+            count[loc.insight_strong] = count.get(loc.insight_strong, 0) + 1
+    total = sum(count.values())
+    low, high = total // 4 - 1, -(-total // 4) + 1
+    assert all(low <= n <= high for n in count.values()), count
+
+
+def test_the_first_stop_does_not_counter_the_starter_arts(content):
+    """新手第一站（劇本的起點，序章出來那一站）的地利不能剋開局送的功法：火剋柔，開局的基礎吐納屬柔（地利 terrain.side）。"""
+    from tianxia import terrain
+
+    strong = content.insights[content.locations[content.scenario.start_location].insight_strong]
+    for sid in content.config.starter_skills:
+        assert terrain.side(content.skills[sid].attribute, strong) != "clash", (sid, strong.id)
 
 
 def test_luoyang_gets_its_water_at_the_white_horse_temple(content):

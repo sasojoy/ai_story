@@ -3249,10 +3249,10 @@ DIALOGUE_TURN = companion_agent.CompanionTurn(
 
 
 def _stand_by_a_figure(game):
-    """站到正式內容裡波才所在的地點（黃巾別部營寨，只有他一位大勢人物：交友直接找他），有他的結識旗標所以見得到；
+    """站到正式內容裡波才所在的地點（鉅鹿道壇，只有他一位大勢人物：交友直接找他；輿圖重製 1c 以前是黃巾別部營寨），有他的結識旗標所以見得到；
     福緣設成已領，交友不會先觸發福緣。兩位以上人物的地點（例如廣宗）交友不開口，要「求見」指名。
     輿圖重製 1b 以前用盧植營的盧植——盧植搬到孟津渡、跟董卓同處，那裡交友不開口。"""
-    game.state.player.location = "huangjin_camp"
+    game.state.player.location = "julu_altar"
     game.state.player.flags.add("結識:bocai")
     game.state.player.fortune = True
 
@@ -4904,7 +4904,7 @@ def test_a_second_request_from_the_same_player_is_cancelled_or_refused_as_the_ca
 
 @pytest.mark.parametrize("option", ["call:zhangliang", "act:socialize"])
 def test_two_connections_asking_the_same_person_at_once_the_second_is_refused_and_the_first_is_applied(option, monkeypatch):
-    """FB-077（佇列開著）：同一個帳號開兩條連線、同時按「求見」同一個人（交友同一條路：黃巾別部營寨只有波才一位，交友直接找他）。
+    """FB-077（佇列開著）：同一個帳號開兩條連線、同時按「求見」同一個人（交友同一條路：鉅鹿道壇只有波才一位，交友直接找他）。
     以前第二件在 B 段被擋下來拿 cancelled，C 段進鎖當成「生成不出對話」：寫一行「…似乎無心多談，你只好先行告辭。」、把求見的選單收掉，
     之後第一件的回話（模型花了十幾秒）套用時選單已經換了、重驗對不上，兩邊都沒談成、也沒人知道為什麼。現在跟開爐、隨口應對、大場面
     一樣：第二件被擋下來（丟 GameError，BUSY_DIALOGUE），不寫紀錄、求見的選單還開著、不扣體力；第一件照常套用。"""
@@ -6358,6 +6358,7 @@ NOT_IN_THE_FINGERPRINT = {
         "seal_notes": "收場時跟 phase 一起寫入（戰報那一行）",
         "seal_lean": "天命之爭開集結那一刻快照（集結公告另寫天下大事，指紋本來就變了）",
         "supply_lean": "屯糧練兵開集結那一刻快照（集結公告另寫天下大事，指紋本來就變了）",
+        "home": "主場（輿圖重製 1c）開集結那一刻快照（集結公告另寫天下大事，指紋本來就變了）",
         "commanders": "上陣的大勢人物：開集結那一刻派上來（另寫天下大事），氣血與敗走只在回合結算時改，那一下 round_number 也變了",
         "orders": "主將令：回合結算那一下換，round_number 也變了",
         "siege": "攻城戰打哪一塊、誰攻：開集結那一刻就定了（跟 phase 一起寫入）；收場的易手另寫天下大事（傳聞流水號已在指紋裡）",

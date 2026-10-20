@@ -23,10 +23,10 @@ from tianxia.world_state import fresh_season
 
 # 濃縮版內容表 1.1（企劃者已審）：id → (character, name, faction, front, location, destiny, start_prestige,
 # actions_per_day, push, successor, active_from_week, start_status)；squad 一律是 figure_<id>。
-# 輿圖重製 1b（設計 3.1）：原本站在中原舊投靠點的七位搬回自家外圈——長社的三位到洛陽官道、盧植到孟津渡、南陽黃巾營的三位到泰山腳
+# 輿圖重製 1b（設計 3.1）：原本站在中原舊投靠點的七位搬回自家外圈——長社的三位到洛陽官道、盧植到孟津渡、南陽黃巾營的三位到泰山腳；1c：波才、彭脫到鉅鹿道壇，卜己到濟水河畔，劉辟到青州黃巾營
 FIGURE_TABLE = {
-    "bocai": ("bocai", "波才", "huang", "yingru", "huangjin_camp", False, 60, 1, 1, "pengtuo", 1, "active"),
-    "pengtuo": (None, "彭脫", "huang", None, "huangjin_camp", False, 40, 1, 1, None, 1, "away"),
+    "bocai": ("bocai", "波才", "huang", "yingru", "julu_altar", False, 60, 1, 1, "pengtuo", 1, "active"),
+    "pengtuo": (None, "彭脫", "huang", None, "julu_altar", False, 40, 1, 1, None, 1, "away"),
     "zhangmancheng": ("zhangmancheng", "張曼成", "huang", "nanyang", "taishan_foot", False, 50, 1, 1, "zhaohong", 1, "active"),
     "zhaohong": ("zhaohong", "趙弘", "huang", None, "taishan_foot", False, 50, 1, 1, "hanzhong", 1, "active"),
     "hanzhong": (None, "韓忠", "huang", None, "taishan_foot", False, 40, 1, 1, None, 1, "away"),
@@ -42,8 +42,8 @@ FIGURE_TABLE = {
     # 大勢人物擴充（Joy 2026-10-17）：四位偏將，沒有戰線（不當主將、不推、不接位），挑得到
     "fuxie": ("fuxie", "傅燮", "guan", None, "luoyang_road", False, 45, 0, 0, None, 2, "active"),
     "qinjie": ("qinjie", "秦頡", "guan", None, "wan_city", False, 45, 0, 0, None, 2, "active"),
-    "buji": ("buji", "卜己", "huang", None, "baima_ford", False, 45, 0, 0, None, 1, "active"),
-    "liupi": ("liupi", "劉辟", "huang", None, "runan_wilds", False, 40, 0, 0, None, 1, "active"),
+    "buji": ("buji", "卜己", "huang", None, "jishui", False, 45, 0, 0, None, 1, "active"),
+    "liupi": ("liupi", "劉辟", "huang", None, "qingzhou_camp", False, 40, 0, 0, None, 1, "active"),
 }
 # 濃縮版內容表 1.4：figure_<id> → (name, difficulty, attribute, faction)；難度是聲威 100 時的值
 SQUAD_TABLE = {
@@ -163,7 +163,7 @@ def _season(content) -> GameState:
 def test_figures_are_seeded_when_the_season_opens_with_the_switch_on(on):
     season = fresh_season(on)
     assert list(season.figures) == list(FIGURE_TABLE)
-    assert season.figures["bocai"] == FigureState(prestige=60, status="active", front="yingru", location="huangjin_camp")
+    assert season.figures["bocai"] == FigureState(prestige=60, status="active", front="yingru", location="julu_altar")
     assert season.figures["pengtuo"].status == "away"
     assert season.figures["zhaohong"] == FigureState(prestige=50, front=None, location="taishan_foot")  # 在地圖上、不推
 
@@ -192,7 +192,7 @@ def test_state_of_reads_the_table_for_a_figure_the_season_never_seeded(on):
     )
     assert figures.commander(s, on, "yingru", "guan") == "huangfusong"
     assert figures.difficulty(s, on, "huangfusong") == 128  # 150 × (0.5 + 0.5 × 0.70) = 127.5 → 128
-    assert figures.present_at(s, on, "huangjin_camp") == ["bocai"]
+    assert figures.present_at(s, on, "julu_altar") == ["bocai"]
     assert s.world.figures == {}
 
 
@@ -285,7 +285,7 @@ def test_difficulty_follows_prestige(on):
 def test_who_stands_where(on):
     s = _season(on)
     assert figures.present_at(s, on, "luoyang_road") == ["huangfusong", "zhujun", "fuxie"]  # 輿圖重製 1b：從長社搬回洛陽
-    assert figures.present_at(s, on, "huangjin_camp") == ["bocai"]  # 彭脫還沒出場
+    assert figures.present_at(s, on, "julu_altar") == ["bocai"]  # 彭脫還沒出場
     s.world.figures["luzhi"].status = "jailed"
     placed = figures.placed_characters(s, on)
     assert placed["luzhi"] is None and placed["dongzhuo"] == "mengjin_ford" and "pengtuo" not in placed
@@ -411,27 +411,27 @@ def test_the_map_shows_the_figures_where_they_stand(on):
 
 def test_the_map_keeps_the_sim_players_with_the_switch_off(real):
     """規則關著的季照舊標虛擬玩家（龍頭人物）。挑戰每季都有（設計 3.8）：緊急開關關著時，給了地點也不寫聲威；開著時人物此刻
-    就站在這裡才寫（黃巾別部營寨的波才寫、潁川的皇甫嵩不寫——他站在長社）。"""
+    就站在這裡才寫（輿圖重製 1c：黃巾別部營寨照舊標著龍頭人物波才，人卻站在鉅鹿道壇——鉅鹿道壇寫、黃巾別部營寨不寫；潁川的皇甫嵩不寫）。"""
     s = _season(real)
     assert atlas.haunters(s, real, "huangjin_camp") == ["波才"]
     assert atlas.haunters(s, real, "mengjin_ford") == []
-    assert "聲威" in atlas.leader_text(s, real, "波才", "huangjin_camp")
+    assert "聲威" not in atlas.leader_text(s, real, "波才", "huangjin_camp") and "聲威" in atlas.leader_text(s, real, "波才", "julu_altar")
     assert "聲威" not in atlas.leader_text(s, real, "皇甫嵩", "yingchuan")
     real.config.figure_challenge_every_season = False
-    assert "聲威" not in atlas.leader_text(s, real, "波才", "huangjin_camp")
+    assert "聲威" not in atlas.leader_text(s, real, "波才", "julu_altar")
 
 
 # ── Task 4：人物結局、接手、打贏扣聲威 ───────────────────
 
 
 def test_prestige_zero_retires_and_successor_takes_the_front(on):
-    """波才被打到聲威歸零：退場，彭脫上場、接下潁川（在黃巾別部營寨）、開始推；退場與接手合成一則天下大事。"""
+    """波才被打到聲威歸零：退場，彭脫上場、接下中原（在鉅鹿道壇，輿圖重製 1c）、開始推；退場與接手合成一則天下大事。"""
     s = _season(on)
     s.world.figures["bocai"].prestige = 5
     lines = figures.defeat(s, on, "bocai", 5)
     assert lines == ["波才聲威 -5", figures.OUT_BACK.format(name="波才"), "彭脫接手中原的戰事。"]  # 輿圖重製 1b：線名「中原」
     assert s.world.figures["bocai"].status == "retired" and figures.is_out(s, "bocai")
-    assert s.world.figures["pengtuo"] == FigureState(prestige=40, status="active", front="yingru", location="huangjin_camp")
+    assert s.world.figures["pengtuo"] == FigureState(prestige=40, status="active", front="yingru", location="julu_altar")
     assert figures.commander(s, on, "yingru", "huang") == "pengtuo" and figures.push_goal(s, on, "pengtuo") == 1
     assert [(r.layer, r.text) for r in s.world.rumors] == [
         ("world", figures.OUT_BACK.format(name="波才") + "彭脫接手中原的戰事。"),
@@ -582,15 +582,15 @@ def _fight(tier: str = "大勝"):
 
 
 def test_challenge_only_for_enemy_faction_at_location(on, world):
-    """挑戰本人只給敵方陣營、站在人物所在地點的人：官軍在黃巾別部營寨看得到「挑戰波才」（勝算照聲威算的難度）；
+    """挑戰本人只給敵方陣營、站在人物所在地點的人：官軍在鉅鹿道壇（輿圖重製 1c：波才開季站這裡）看得到「挑戰波才」（勝算照聲威算的難度）；
     黃巾（同陣營）、散人看不到；官軍在長社（皇甫嵩、朱儁是自己人）看不到；豪強兩邊都打。還沒出場的彭脫不在。"""
     ids = lambda game: [o.id for o in game.options()]  # noqa: E731
-    guan = _player(on, world, "官甲", "guan", "huangjin_camp")
+    guan = _player(on, world, "官甲", "guan", "julu_altar")
     challenge = _option(guan, "act:challenge:bocai")
     assert challenge.enabled and challenge.label.startswith(f"挑戰波才（體力 {on.config.action_cost['train']}・")
     assert "act:challenge:pengtuo" not in ids(guan)
     # 輿圖重製 1b：皇甫嵩、朱儁從長社搬到洛陽官道
-    for name, faction, at in (("黃乙", "huang", "huangjin_camp"), ("散丙", None, "huangjin_camp"), ("官丁", "guan", "luoyang_road")):
+    for name, faction, at in (("黃乙", "huang", "julu_altar"), ("散丙", None, "julu_altar"), ("官丁", "guan", "luoyang_road")):
         assert not any(i.startswith("act:challenge:") for i in ids(_player(on, world, name, faction, at))), name
     assert {"act:challenge:huangfusong", "act:challenge:zhujun"} <= set(ids(_player(on, world, "豪戊", "haoqiang", "luoyang_road")))
 
@@ -615,9 +615,9 @@ def test_figures_off_the_front_refuse_challenges_but_still_meet(on, world, real)
     assert _option(guan, "act:challenge:zhangmancheng").enabled
     assert real.figures["hejin"].challenge_off_front and not real.figures["dongzhuo"].challenge_off_front
     assert _option(_player(on, world, "黃丙", "huang", "dajiangjun_fu"), "act:challenge:hejin").enabled
-    guan.state.player.location = "huangjin_camp"
+    guan.state.player.location = "julu_altar"
     assert _option(guan, "act:challenge:bocai").enabled
-    figures.apply(guan.state, on, "bocai", FigureChange(fate="重挫", location="huangjin_camp"))
+    figures.apply(guan.state, on, "bocai", FigureChange(fate="重挫", location="julu_altar"))
     assert not _option(guan, "act:challenge:bocai").enabled
     on.config.season_one = False  # 沒有時刻表的季：季中種好的人物照存檔讀
     assert _option(_player(on, world, "黃戊", "huang", "mengjin_ford"), "act:challenge:dongzhuo") is None  # 戰線空著：不畫
@@ -627,11 +627,11 @@ def test_figures_off_the_front_refuse_challenges_but_still_meet(on, world, real)
     assert _option(_player(on, world, "黃庚", "huang", "dajiangjun_fu"), "act:challenge:hejin") is None
 
 
-@pytest.mark.parametrize("faction, spot, figure", [  # 輿圖重製 1b：盧植搬到孟津渡、跟董卓同處，兩處都不再只有一位，換成白馬津的卜己
-    ("guan", "baima_ford", "buji"), ("huang", "huangjin_camp", "bocai"), ("huang", "baima_ford", "buji"),
+@pytest.mark.parametrize("faction, spot, figure", [  # 輿圖重製 1b：盧植搬到孟津渡、跟董卓同處，兩處都不再只有一位，換成卜己（1c：白馬津搬到濟水河畔）
+    ("guan", "jishui", "buji"), ("huang", "julu_altar", "bocai"), ("huang", "jishui", "buji"),
 ])
 def test_a_lone_general_behind_a_closed_door_leaves_only_the_free_audience_button(on, world, faction, spot, figure):
-    """只站著一位將領、沒有交友事件的地方（黃巾別部營寨、白馬津）：名望不夠時交友只會花 5 點體力換同一句打發，
+    """只站著一位將領、沒有交友事件的地方（鉅鹿道壇、濟水河畔）：名望不夠時交友只會花 5 點體力換同一句打發，
     所以不給交友，只留不花體力的求見（審查：盧植營交友 150→145 還吃了閉門羹）。"""
     game = _player(on, world, "新人", faction, spot)
     assert [o.id for o in game.options() if o.id in ("act:socialize", f"call:{figure}")] == [f"call:{figure}"]
@@ -647,7 +647,7 @@ def test_a_lone_general_behind_a_closed_door_leaves_only_the_free_audience_butto
 def test_win_routs_the_figure_and_snubs_the_winner(on, world):
     """打贏波才：他敗走，聲威 −5（陣營只有一人在推）、跟他的情誼 −5、記 50 貢獻、戰報記一筆「挑戰波才」；兩個現實小時內
     他的交友、挑戰對打贏的人都按不下去、寫「剛吃了敗仗，閉門不見」，別人照常；時間一過又見得到。"""
-    winner = _player(on, world, "官甲", "guan", "huangjin_camp")
+    winner = _player(on, world, "官甲", "guan", "julu_altar")
     winner.state.player.affinities["bocai"] = 20
     winner.state.player.stats["fame"] = 50  # 名望夠，平常見得到波才
     stamina = winner.state.player.stamina
@@ -665,7 +665,7 @@ def test_win_routs_the_figure_and_snubs_the_winner(on, world):
     option = _option(winner, "call:bocai")
     assert (option.enabled, option.label) == (False, "求見波才（剛吃了敗仗，閉門不見）")
     assert not winner.socialize_starts_dialogue()
-    other = _player(on, world, "官乙", "guan", "huangjin_camp")
+    other = _player(on, world, "官乙", "guan", "julu_altar")
     other.state.player.stats["fame"] = 50
     assert _option(other, "act:challenge:bocai").enabled and other.socialize_starts_dialogue()
     winner.now += 2 * 3600
@@ -675,7 +675,7 @@ def test_win_routs_the_figure_and_snubs_the_winner(on, world):
 def test_a_challenge_plays_out_rounds_that_add_up_to_the_toll(on, world):
     """挑戰本人也演回合（計畫三 Task 1）：對手是照聲威的那一份（難度 120，身法 5＋120÷20＝11，比你快、先出手），
     回合裡的「你氣血 -N」加起來等於戰報那一筆（根骨 10，上限吃根骨）。"""
-    game = _player(on, world, "官甲", "guan", "huangjin_camp")
+    game = _player(on, world, "官甲", "guan", "julu_altar")
     game.state.player.stats["con"] = 10
     with _fight("落敗"):
         game.choose("act:challenge:bocai")
@@ -702,7 +702,7 @@ def test_a_challenge_is_judged_with_the_whole_lineup_against_the_prestige_diffic
     計畫三 G7）與照聲威算的難度；判讀的優勢換成判定差距的平移交給 team.fight，難度照舊。"""
     from tianxia import encounter, fight_llm
 
-    game = _player(on, world, "官甲", "guan", "huangjin_camp")
+    game = _player(on, world, "官甲", "guan", "julu_altar")
     game.state.player.followers = ["follower_guan_spear"]
     assert _option(game, "act:challenge:bocai").wait == "兩人對峙……"
     request = game.fight_request("act:challenge:bocai")
@@ -721,7 +721,7 @@ def test_a_challenge_is_judged_with_the_whole_lineup_against_the_prestige_diffic
 def test_the_fight_receives_the_difficulty_from_the_prestige(on, world):
     """挑戰本人時交給 team.fight 的難度是照聲威算的（聲威 60：150 × (0.5 + 0.5 × 0.60) = 120），不是代表本人的隊伍
     寫死的 150；不寫死結果，只看呼叫收到什麼（真的打一場）。"""
-    game = _player(on, world, "官甲", "guan", "huangjin_camp")
+    game = _player(on, world, "官甲", "guan", "julu_altar")
     assert on.squads["figure_bocai"].difficulty == 150 and world.get_season().figures["bocai"].prestige == 60
     expected = figures.difficulty(game.state, on, "bocai")  # 打之前算（打贏會扣聲威）
     assert expected == 120
@@ -747,7 +747,7 @@ def test_snub_in_the_audience_list(on, world):
 def test_snub_follows_the_real_clock_not_the_season_clock(on, world):
     """Review Focus 3：不見你看的是現實時間（Game.now）。管理者快轉賽季三天他照樣不見；現實時間過兩小時才見。
     內容改版拿掉的人物，紀錄跟著清掉。"""
-    winner = _player(on, world, "官甲", "guan", "huangjin_camp", now=5000.0)
+    winner = _player(on, world, "官甲", "guan", "julu_altar", now=5000.0)
     with _fight():
         winner.choose("act:challenge:bocai")
     winner.advance(3 * 86400)  # 賽季時鐘、季曆往前三天，現實時間沒動
@@ -762,7 +762,7 @@ def test_snub_follows_the_real_clock_not_the_season_clock(on, world):
 
 
 def test_losing_a_challenge_costs_silver_and_blood_but_no_prestige(on, world):
-    game = _player(on, world, "官甲", "guan", "huangjin_camp")
+    game = _player(on, world, "官甲", "guan", "julu_altar")
     game.state.player.stats["silver"] = 50
     with _fight("落敗"):
         msgs = game.choose("act:challenge:bocai")
@@ -776,7 +776,7 @@ def test_a_challenge_can_be_dodged_into_a_draw(on, world):
     結果是僵持——戰報有那一句、不賠銀兩、聲威不動、他不閉門，氣血照僵持扣（身法別拉太高：身法 38 以上損耗歸零，兩種結果分不出來）。"""
     on.config.dodge_per_point = 1.0
     on.config.figure_draw_share = 0.0  # 僵持的經驗會升級、氣血上限跟著變，扣的氣血就對不上照舊算的那一份（僵持的獎勵另有測試）
-    game = _player(on, world, "官甲", "guan", "huangjin_camp")
+    game = _player(on, world, "官甲", "guan", "julu_altar")
     p = game.state.player
     p.stats["silver"], p.stats["agi"] = 50, 6
     before = game.state.model_copy(deep=True)
@@ -790,7 +790,7 @@ def test_a_challenge_can_be_dodged_into_a_draw(on, world):
 
 def test_the_rout_is_buffered_by_the_sides_active_members(on, world):
     """陣營人數緩衝（T3）：官軍這一曆日裡連自己有 4 個人推過大勢，打贏一次只扣 5 ÷ √4 = 2.5 點——先扣 2、留 0.5；貢獻照記 50。"""
-    game = _player(on, world, "官甲", "guan", "huangjin_camp")
+    game = _player(on, world, "官甲", "guan", "julu_altar")
     w = game.state.world
     w.active_pushers["guan"] = {name: w.time for name in ("官乙", "官丙", "官丁")}
     with _fight():
@@ -803,14 +803,14 @@ def test_challenge_while_a_showdown_is_on(on, world):
     """Review Focus 4：決戰打起來的時候——上場的人只看得到決戰的選單（不能分身去挑戰）；在一旁觀戰的豪強照常挑戰，
     打贏扣的是人物的聲威，決戰的戰局一點都不動。"""
     definition = on.battles["huangjin_showdown"]
-    fighter = _player(on, world, "官甲", "guan", "huangjin_camp", now=0.0)
+    fighter = _player(on, world, "官甲", "guan", "julu_altar", now=0.0)
     world.start_battle(definition, now=0.0)
     for name, side in (("官甲", "guan"), ("黃乙", "huang")):
         world.mutate_battle(lambda b, n=name, f=side: battle_instance.join_faction(b, n, f, neili_cap=100.0))
     fighter.now = definition.muster_seconds + 1
     assert fighter._battle_status()[0].phase == "active"
     assert not any(o.id.startswith("act:") for o in fighter.options())
-    watcher = _player(on, world, "豪丙", "haoqiang", "huangjin_camp", now=definition.muster_seconds + 2)
+    watcher = _player(on, world, "豪丙", "haoqiang", "julu_altar", now=definition.muster_seconds + 2)
     trend = world.get_battle().trend
     with _fight():
         watcher.choose("act:challenge:bocai")
@@ -835,7 +835,7 @@ def test_nothing_changes_with_the_switch_off(real, world):
     存檔沒有人物，交友照舊找波才。現在「開關關著」是挑戰每季都有的緊急開關（Config.figure_challenge_every_season）：14 天的季
     預設有挑戰本人，見 tests/test_challenge_season.py。"""
     real.config.figure_challenge_every_season = False
-    game = _player(real, world, "官甲", "guan", "huangjin_camp")
+    game = _player(real, world, "官甲", "guan", "julu_altar")
     game.state.player.stats["fame"] = 50
     assert not any(o.id.startswith("act:challenge:") for o in game.options())
     assert game._figures_here() == ["bocai"] and game.socialize_starts_dialogue()
@@ -899,11 +899,11 @@ def test_a_drawn_challenge_pays_half_a_win_and_nothing_else(on, world):
     """僵持：險勝那一份心得、經驗的一半（照聲威打折之後），不給銀兩、素材，聲威、情誼不動，不閉門不見，不算打贏。"""
     fig = on.figures["bocai"]
     squad = on.squads[fig.squad]
-    won = _player(on, world, "官甲", "guan", "huangjin_camp")
+    won = _player(on, world, "官甲", "guan", "julu_altar")
     with _fight("險勝"), mock.patch("tianxia.cultivation.seize", return_value=[]):
         won.choose("act:challenge:bocai")
     win = won.state.battles[0]
-    game = _player(on, world, "官乙", "guan", "huangjin_camp")
+    game = _player(on, world, "官乙", "guan", "julu_altar")
     p = game.state.player
     p.stats["silver"] = 50
     if fig.character:
@@ -926,12 +926,12 @@ def test_a_drawn_challenge_pays_half_a_win_and_nothing_else(on, world):
 
 def test_a_drawn_challenge_is_a_chance_to_break_through_like_a_win(on, world):
     """僵持也擲一次頓悟，難度比照打贏的算法（對手難度 ÷ 我方威力）；figure_draw_share 0 是舊規則：什麼都不給、不擲。"""
-    game = _player(on, world, "官甲", "guan", "huangjin_camp")
+    game = _player(on, world, "官甲", "guan", "julu_altar")
     with _fight("僵持"), mock.patch("tianxia.cultivation.seize", return_value=[]) as seize:
         game.choose("act:challenge:bocai")
     assert seize.call_count == 1 and seize.call_args.args[3] == pytest.approx(120 / 200)
     on.config.figure_draw_share = 0.0
-    other = _player(on, world, "官乙", "guan", "huangjin_camp")
+    other = _player(on, world, "官乙", "guan", "julu_altar")
     with _fight("僵持"), mock.patch("tianxia.cultivation.seize", return_value=[]) as seize:
         other.choose("act:challenge:bocai")
     assert seize.call_count == 0 and (other.state.battles[0].xinde, other.state.battles[0].exp) == (0, 0)
@@ -954,7 +954,7 @@ def test_challenges_use_the_narrow_draw_band(on, world):
     assert encounter.tier_of(-0.2 * 100, 100) == "僵持"
     assert encounter.tier_of(-0.2 * 100, 100, encounter.Mods(draw_floor=0.1)) == "落敗"
     assert encounter.tier_of(-0.05 * 100, 100, encounter.Mods(draw_floor=0.1)) == "僵持"
-    game = _player(on, world, "官甲", "guan", "huangjin_camp")
+    game = _player(on, world, "官甲", "guan", "julu_altar")
     with _fight("僵持") as fight:
         game.choose("act:challenge:bocai")
     assert fight.call_args.kwargs["draw_floor"] == 0.10

@@ -27,7 +27,7 @@ def real():
     return c
 
 
-def _player(content, store, name, faction="guan", at="huangjin_camp") -> Game:
+def _player(content, store, name, faction="guan", at="julu_altar") -> Game:
     game = Game.new(content, name, rng=random.Random(0), world=store)
     p = game.state.player
     p.faction, p.location = faction, at

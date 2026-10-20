@@ -67,7 +67,7 @@ def test_real_promotions_valid(real):
     assert set(by_side) == {"guan", "huang", "haoqiang"} and len(rank2) == 3
     guan, huang, gentry = by_side["guan"], by_side["huang"], by_side["haoqiang"]
     assert (guan.figure, guan.successor, guan.location) == ("huangfusong", "zhujun", "luoyang_road")  # 輿圖重製 1b：從長社搬到洛陽官道
-    assert (huang.figure, huang.successor, huang.location) == ("bocai", "pengtuo", "huangjin_camp")
+    assert (huang.figure, huang.successor, huang.location) == ("bocai", "pengtuo", "julu_altar")
     assert (gentry.figure, gentry.successor, gentry.location, gentry.event_handoff) == (None, None, "nearest_base", None)
     assert guan.summons_text == "皇甫嵩召你到{據點}。" and guan.summons_handoff == "朱儁召你到{據點}。"
     assert gentry.summons_text == "中山的馬商張世平、蘇雙到了{據點}，指名要見你。"
@@ -178,7 +178,7 @@ def test_summons_when_contribution_crosses_threshold(on):
 
 def test_summons_after_a_challenge_win(on):
     """RF2：貢獻不是從推大勢來的——貢獻 260、挑戰波才打贏（+50）→ 召見。"""
-    game = _game(on, faction="guan", at="huangjin_camp")
+    game = _game(on, faction="guan", at="julu_altar")
     game.state.player.contrib = 260
     with _win():
         msgs = game.choose("act:challenge:bocai")
@@ -287,7 +287,7 @@ def test_explore_at_the_place_opens_the_promotion(on):
     game.choose("act:explore")
     assert game.state.pending_event == "promo_guan_2"
     assert game.state.player.stamina == stamina - on.config.action_cost["explore"]
-    huang = _summoned(_game(on, name="乙", faction="huang", at="huangjin_camp"), figure="bocai", at="huangjin_camp")
+    huang = _summoned(_game(on, name="乙", faction="huang", at="julu_altar"), figure="bocai", at="julu_altar")
     huang.choose("act:socialize")
     assert huang.state.pending_event == "promo_huang_2"
 
@@ -387,12 +387,12 @@ def _bot(on, game, faction):
 
 
 def test_bot_answers_summons(on):
-    """有召見的假人往召見的地點走（長社 → 黃巾別部營寨），到了選「應召」，演完晉升（選哪個選項都晉升）。"""
-    game = _summoned(_game(on, faction="huang", at="changshe"), figure="bocai", at="huangjin_camp")
+    """有召見的假人往召見的地點走（白馬津 → 鉅鹿道壇；輿圖重製 1c 以前是長社 → 黃巾別部營寨），到了選「應召」，演完晉升（選哪個選項都晉升）。"""
+    game = _summoned(_game(on, faction="huang", at="baima_ford"), figure="bocai", at="julu_altar")
     profile = _bot(on, game, "huang")
     options = [o for o in game.options(odds=False) if o.enabled]
-    assert bot_policy.pick(game, options, profile, random.Random(0)).startswith("move:huangjin_camp")
-    game.state.player.location = "huangjin_camp"
+    assert bot_policy.pick(game, options, profile, random.Random(0)).startswith("move:julu_altar")
+    game.state.player.location = "julu_altar"
     options = [o for o in game.options(odds=False) if o.enabled]
     assert bot_policy.pick(game, options, profile, random.Random(0)) == "act:summons"
     bot_policy.take_turn(game, profile, random.Random(0))
@@ -430,7 +430,7 @@ def test_real_guan_reaches_rank_two(on):
 
 def test_socialize_at_the_summons_place_prepares_no_dialogue(on):
     """T5 審查 I1：在召見的地點交友端出的是晉升奇遇，伺服器不該先在鎖外生成一輪對話（生成了也會被丟掉，白等十幾秒）。"""
-    game = _summoned(_game(on, faction="huang", at="huangjin_camp"), figure="bocai", at="huangjin_camp")
+    game = _summoned(_game(on, faction="huang", at="julu_altar"), figure="bocai", at="julu_altar")
     game.state.player.stats["fame"] = 50  # 名望夠，平常見得到波才
     assert game.dialogue_request("act:socialize") is None and not game.socialize_starts_dialogue()
     game.state.player.summons = None

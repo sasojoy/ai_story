@@ -784,9 +784,9 @@ def _challenger(world, *, treasures_on=True, chance=1.0):
     game = Game.new(c, "官甲", rng=random.Random(0), world=world)
     game.client = None
     p = game.state.player
-    p.faction, p.location = "guan", "huangjin_camp"
+    p.faction, p.location = "guan", "julu_altar"
     p.tutorial_step = len(c.tutorial.steps)
-    p.visited.add("huangjin_camp")
+    p.visited.add("julu_altar")
     p.stamina = 250.0
     game.now = 1000.0
     return game

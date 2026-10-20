@@ -384,10 +384,12 @@ def apply_push(world: WorldState, content: Content, line: str, delta: int) -> in
 
 
 def targets(world: WorldState, content: Content, side: str) -> list[str]:
-    """side 此刻能挑成目標的區塊（設計 3.2）：搶得下來、此刻不是 side 的、跟 side 此刻控制的某一塊直通、劇情開放了；照內容順序。"""
+    """side 此刻能挑成目標的區塊（設計 3.2）：搶得下來、此刻不是 side 的、跟 side 此刻控制的某一塊直通、劇情開放了；照內容順序。
+    輿圖重製 1c 的 PM 裁決（鈕寫什麼就要給什麼）：side 在那裡出陣找不到對手（sortie_foes 是空的）的也不列——潁川郡（新手第一站）
+    開季中立卻刻意不放守軍，以前會被公告成攻城目標卻打不起來；之後它有了守軍就自然回來。公告、投票、軍令都讀這一個。"""
     mine = {loc for loc in blocks(content) if holder(world, content, loc) == side}
     return [
         loc for loc in blocks(content)
         if capturable(content, loc) and holder(world, content, loc) != side and _opened(world, content, loc)
-        and any(x in mine for x in adjacent(content, loc))
+        and any(x in mine for x in adjacent(content, loc)) and sortie_foes(world, content, loc, side)
     ]
