@@ -66,6 +66,7 @@ def main() -> None:
     parser.add_argument("--bout-strike", type=float, help="試別的 Config.tactics.bout_strike（只量）")
     parser.add_argument("--war-scale", type=float, help="試別的 Config.tactics.war_scale（只量）")
     parser.add_argument("--might-scale", type=float, help="本命底蘊（TacticDef.might）全部乘這個數（只量）")
+    parser.add_argument("--grand-share", type=float, help="--catch-up 滿配每一格第二個效果是大獎的機會（預設 1.0）")
     parser.add_argument("--might-add", type=float, help="本命底蘊（TacticDef.might）每一門都加這個數（只量；一位人物兩門，合計加兩倍）")
     parser.add_argument("--tweak", nargs="+", default=[], metavar="技能.欄=數",
                         help="試別的本命戰法數字（只量）：zhangfei_wugong.rate=0.3、zhangliang_wugong.per_pct=0.05（params 裡的照鍵名）")
@@ -97,6 +98,9 @@ def main() -> None:
     if args.kits:
         kits(content, args.runs)
         return
+    if args.grand_share is not None:
+        global GRAND_SHARE
+        GRAND_SHARE = args.grand_share
     if args.catch_up:
         catch_up(content, args.runs, args.strength)
         return
@@ -281,6 +285,7 @@ def bouts(content, runs):
 # ── 第三批 ──────────────────────────────────────────
 
 SELF_KITS = 12  # 隨機自組幾套
+GRAND_SHARE = 1.0  # 滿配每一格的第二個效果是大獎的機會（--grand-share 改；意境效果池之後，第三批）
 ATTRS = ("快", "慢", "剛", "柔", "陽", "陰", "虛", "實")
 
 
@@ -319,6 +324,47 @@ def slots_kit(content, seed, quality, strength, special_share=0.5, high_share=0.
     return hs
 
 
+def piece_kit(content, seed, quality, strength, grand_share=1.0, special_share=0.5, ults=False):
+    """意境效果池之後（第二批）的一套：武學、內功各一門（品級 quality），每一格裝一份意境——那一路的一個一般功效 strength 重，
+    再加第二個效果：grand_share 的機會是那一路的大獎（同一個大獎只算一次，撞了換成另一個一般功效 strength 重），其餘是另一個一般功效
+    strength 重。一格裡的兩個效果最多三重（insight_fx.MAX_LAYERS）。special_share 的機會第一門一格換成秘方的特別功效。"""
+    from tianxia import insight_fx, traits
+    rng = random.Random(f"piece|{seed}")
+    mult = traits.multiplier(content, quality)
+    n = int(content.config.arts.slots.get(quality, 2))
+    lo = traits.Loadout()
+    out = []
+    for i in range(2):
+        cells = rng.sample(ATTRS, n)
+        if i == 0 and rng.random() < special_share:
+            sp = rng.choice([t for t in content.traits.special if t.pool])
+            lo.specials[sp.hook] = sp
+            cells = cells[1:]
+        layer_count: dict[str, float] = {}
+        for a in cells:
+            pool = insight_fx.generals(content, a)
+            first = rng.choice(pool)
+            picks = [first]
+            top = insight_fx.grand_of(content, a)
+            if rng.random() < grand_share and top is not None and all(t.name != top.tactic.name for t in lo.highs):
+                lo.highs.append(top.tactic)
+            else:
+                picks += [t for t in pool if t.key != first.key][:1]
+            for t in picks:
+                lo.layers[t.hook] = lo.layers.get(t.hook, 0.0) + mult * strength
+                layer_count[t.key] = layer_count.get(t.key, 0) + strength
+        if ults and layer_count:
+            ultable = {k: v for k, v in layer_count.items() if traits.general(content, k).ultimate is not None}
+            if ultable:
+                best = traits.general(content, max(ultable, key=ultable.get))
+                ult = best.ultimate.model_copy(update={"name": f"絕學{i + 1}"})
+                out.append(tactics.bonded(ult, best.ultimate_bond) if i == 0 else ult)
+    hs = [tactics.Holder(who="你", key="player", skill=f"ult:{u.name}", tactic=u) for u in out]
+    hs += [tactics.Holder(who="你", key="player", skill=f"trait:{t.name}", tactic=t) for t in traits.tactic_defs(content, lo)]
+    hs += [tactics.Holder(who="你", key="player", skill=f"high:{t.name}", tactic=t) for t in lo.highs]
+    return hs
+
+
 def self_kit(content, seed, quality="上品", special_share=0.5):
     """一套自組上品：四格各裝一個剛悟到的意境（●），一半的機會帶一個特別功效。"""
     return slots_kit(content, seed, quality, 1, special_share)
@@ -327,7 +373,7 @@ def self_kit(content, seed, quality="上品", special_share=0.5):
 def full_kit(content, seed, strength=3, special_share=0.5):
     """滿配（玩家武學追上本命）：兩門絕學四格都裝滿、每格 ●●●、一半帶特別功效、一半帶高階技能、各一招絕招、一把以器配招的神器原品。"""
     rng = random.Random(f"full|{seed}")
-    hs = slots_kit(content, seed, "絕學", strength, special_share, high_share=0.5, ults=True)
+    hs = piece_kit(content, seed, "絕學", strength, GRAND_SHARE, special_share, ults=True)
     arm = rng.choice([r for r in content.forge_secrets.values() if r.tactic is not None and r.slot == "weapon"])
     return hs + [gear_holder(arm.tactic)]
 

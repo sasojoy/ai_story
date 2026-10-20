@@ -1,6 +1,7 @@
 from tianxia import arts as arts_mod, cultivation, fusion, insights, library, rules, skillview, team, traits
 from tianxia.martial_arts import Insight, MartialArt, generate_from_name, historical_art, power_at
-from tianxia.state import new_game_state
+from tianxia.state import InsightFx, new_game_state
+from test_cultivation import STRONG
 
 
 def test_rules_line():
@@ -623,6 +624,8 @@ def _cultivate_row(state, content, world):
 def _ripe(world, state, content, quality="上品"):
     """上品、第十成、槽（4 格）裝滿：到了衝絕學的門檻（cultivation.ready）。"""
     _wind_kick(world, state, quality, content, level=10, filled=4)
+    for insight_id, fx in STRONG.items():  # 評分（第三批）：每一份三重加一重，四格 128 過一百
+        state.player.insight_fx[insight_id] = InsightFx(quality="上品", general=dict(fx))
 
 
 def test_the_peerless_step_note_says_to_wait_for_a_chance_or_take_the_pill(state, content, world):
@@ -630,7 +633,7 @@ def test_the_peerless_step_note_says_to_wait_for_a_chance_or_take_the_pill(state
     還沒到極處寫差在哪（第幾成、槽幾格）；不是上品一律寫品級不靠修練。"""
     _wind_kick(world, state, "上品")
     row = _cultivate_row(state, content, world)
-    assert row["ok"] is False and row["note"] == cultivation.NOT_RIPE_LINE.format(name="旋風腿", level=1, filled=0, slots=4)
+    assert row["ok"] is False and row["note"] == cultivation.NOT_RIPE_LINE.format(name="旋風腿", level=1, need=100, score=0)
     assert row["legend"] is None
     _ripe(world, state, content)
     row = _cultivate_row(state, content, world)

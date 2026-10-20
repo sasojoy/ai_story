@@ -208,6 +208,46 @@ def rating(content: Content, view: MartialArt, level: int, state: GameState | No
     return int(round(power_at(view, level) * (1 + bonus)))
 
 
+def score(state: GameState, content: Content, world: WorldStateStore, art: MartialArt | None) -> int:
+    """評分（第三批）：槽裡每一份意境的效果加總，單色格的 ×score_single_color（見 Config.arts）；槽裡沒有特別功效、
+    卻暗合「裝滿」秘方的另加一條特別功效。寫死的武學照它內容寫的功效算（本命戰法算一個大獎）。art 是 team.player_art 那一份。"""
+    if art is None:
+        return 0
+    cfg = content.config.arts
+    if fixed(content, art.id):
+        counts: dict[str, int] = {}
+        for key in art.traits or ([art.attribute] if art.attribute else []):
+            counts[key] = counts.get(key, 0) + 1
+        total = sum(cfg.score_per_layer * min(MAX_STRENGTH, n) for n in counts.values())
+        total += cfg.score_grand * len({h for h in (art.high, *art.extra_highs) if h})
+        total += cfg.score_special if art.special and special_of(content, art.special) is not None else 0
+        skill = content.skills.get(art.id)
+        total += cfg.score_grand if skill is not None and skill.tactic is not None else 0
+        return int(round(total))
+    from . import insights as insights_mod
+
+    slots, colors = slots_of(state, content, art), slot_colors(state, content, art)
+    total, specials = 0.0, 0
+    for i, insight_id in enumerate(slots):
+        ins = insights_mod.resolve(insight_id, content, world, state) if insight_id else None
+        if ins is None:
+            continue
+        fx = insight_fx.record(state, content, world, insight_id, ins)
+        pts = sum(cfg.score_per_layer * min(MAX_STRENGTH, n) for n in fx.general.values())
+        pts += cfg.score_grand if fx.grand and insight_fx.grand(content, fx.grand) is not None else 0
+        if ins.secret_special and special_of(content, ins.secret_special) is not None:
+            pts += cfg.score_special
+            specials += 1
+        if i < len(colors) and len(colors[i]) == 1:
+            pts *= cfg.score_single_color
+        total += pts
+    if not specials:
+        view = apply(state, content, world, art)
+        if view is not None and view.special and special_of(content, view.special) is not None:
+            total += cfg.score_special
+    return int(round(total))
+
+
 # ── 裝與拆 ───────────────────────────────────────────────
 
 FIXED_LINE = "【{name}】的招式是定的，裝不了意境。"  # 待 joy 潤

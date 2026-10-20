@@ -50,7 +50,7 @@ def test_the_last_step_waits_for_the_tenth_level_and_a_refusal_costs_nothing(kic
     at(kicker, 9)
     kicker.player.legend_items = 1
     msgs = cultivation.cultivate(kicker, hard, world, "旋風腿", WIN, use_legend=True)
-    assert msgs == [cultivation.NOT_RIPE_LINE.format(name="旋風腿", level=9, filled=4, slots=4)]
+    assert msgs == [cultivation.NOT_RIPE_LINE.format(name="旋風腿", level=9, need=100, score=128)]
     assert kicker.player.stamina == 150 and kicker.player.art_quality["旋風腿"] == "上品" and kicker.player.legend_items == 1
     at(kicker, 10)
     assert cultivation.cultivate_problem(kicker, hard, world, "旋風腿", use_legend=True) is None

@@ -4,6 +4,8 @@ from unittest import mock
 import pytest
 
 from tianxia import insight_fx, arts as arts_mod, bot, fusion, library, team
+from tianxia.state import InsightFx
+from test_cultivation import STRONG
 from tianxia.bot import pick, play_season, spend_xinde, wants_heal
 from tianxia.engine import Game
 from tianxia.martial_arts import generate_from_name
@@ -389,6 +391,8 @@ def ready_to_climb(content, world, quality):
     game = armed(content, world)
     p = game.state.player
     p.insights = ["feng", "huo", "shui", "shan"]  # 上品四格都裝得滿（基礎武學兼容並蓄）
+    for insight_id, fx in STRONG.items():  # 評分（第三批）：每一份三重加一重，四格 128 過一百
+        p.insight_fx[insight_id] = InsightFx(quality="上品", general=dict(fx))
     p.member.wugong_level = 10
     p.art_quality["basic_fist"] = quality
     # 槽數照 team.resolve_art 那一份（內容武學要轉成 MartialArt 才有 slot_adjust）

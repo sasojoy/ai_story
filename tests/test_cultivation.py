@@ -9,11 +9,12 @@ import pytest
 
 from tianxia import cultivation, fusion, library, skillview, team
 from tianxia.martial_arts import Insight, generate_from_name
-from tianxia.state import new_game_state
+from tianxia.state import InsightFx, new_game_state
 
 LOW = {"下品": 100.0, "中品": 0.0, "上品": 0.0, "絕學": 0.0}
 AFFINITY = ["快", "剛", "柔", "慢"]  # 旋風腿的相容屬性：四個基本意境都收得下（上品 4 格剛好裝滿）
 BASICS = ["feng", "huo", "shui", "shan"]  # 測試內容的四個基本意境（快、剛、柔、慢）
+STRONG = {"feng": {"快": 3, "lueying": 1}, "huo": {"剛": 3, "chenjin": 1}, "shui": {"柔": 3, "huilan": 1}, "shan": {"慢": 3, "shouzhuo": 1}}
 
 
 class Fixed(random.Random):
@@ -56,6 +57,9 @@ def ripen(state, art_id="旋風腿", level=10, quality="上品", slots=BASICS):
     else:
         p.art_levels[art_id] = level
     p.art_slots[art_id] = list(slots)
+    for insight_id in slots:  # 評分（第三批）：每一份是那一路三重加第二個功效一重（32 分），四格 128 過一百、三格 96 不到
+        if insight_id in STRONG:
+            p.insight_fx[insight_id] = InsightFx(quality="上品", general=dict(STRONG[insight_id]))
     return state
 
 
@@ -73,11 +77,11 @@ def test_ready_needs_an_upper_grade_art_at_ten_levels_with_every_slot_filled(kic
     assert cultivation.ready(kicker, content, world, "旋風腿") == (True, None)
     kicker.player.art_levels["旋風腿"] = 9
     ok, why = cultivation.ready(kicker, content, world, "旋風腿")
-    assert not ok and why == cultivation.NOT_RIPE_LINE.format(name="旋風腿", level=9, filled=4, slots=4)
+    assert not ok and why == cultivation.NOT_RIPE_LINE.format(name="旋風腿", level=9, need=100, score=128)
     kicker.player.art_levels["旋風腿"] = 10
-    kicker.player.art_slots["旋風腿"] = ["feng", "huo", "shui", None]
+    kicker.player.art_slots["旋風腿"] = ["feng", "huo", "shui", None]  # 評分（第三批）：三格 96，差一點不到一百
     ok, why = cultivation.ready(kicker, content, world, "旋風腿")
-    assert not ok and "槽 3／4" in why
+    assert not ok and "評 96" in why
 
 
 @pytest.mark.parametrize("quality", ["下品", "中品", "絕學"])
@@ -103,7 +107,7 @@ def test_cultivate_problem_says_why_in_the_configured_words(kicker, content, wor
     assert cultivation.cultivate_problem(kicker, content, world, "旋風腿", use_legend=True) is None
     assert cultivation.cultivate_problem(kicker, content, world, "旋風腿", use_legend=False) is not None  # 沒勾：只能等契機
     p.art_levels["旋風腿"] = 9
-    assert cultivation.cultivate_problem(kicker, content, world, "旋風腿", use_legend=True) == cultivation.NOT_RIPE_LINE.format(name="旋風腿", level=9, filled=4, slots=4)
+    assert cultivation.cultivate_problem(kicker, content, world, "旋風腿", use_legend=True) == cultivation.NOT_RIPE_LINE.format(name="旋風腿", level=9, need=100, score=128)
     p.art_levels["旋風腿"] = 10
     p.art_quality["旋風腿"] = "中品"
     assert cultivation.cultivate_problem(kicker, content, world, "旋風腿", use_legend=True) == cultivation.NO_RANK_LINE
@@ -639,7 +643,7 @@ def test_the_practice_row_only_offers_the_pill_on_the_last_step(adept):
     assert row["cultivate"]["xinde"] is None  # 武學重構：沒有以心得修練了
     adept.state.player.art_levels["旋風腿"] = 9
     row = next(r for r in skillview.art_rows(adept.state, adept.content, adept.world) if r["id"] == "旋風腿")
-    assert not row["cultivate"]["ok"] and row["cultivate"]["legend"] is None and "槽 4／4" in row["cultivate"]["note"]
+    assert not row["cultivate"]["ok"] and row["cultivate"]["legend"] is None and "評 128" in row["cultivate"]["note"]
     adept.state.player.art_levels["旋風腿"] = 10
     adept.state.player.art_quality["旋風腿"] = "中品"
     row = next(r for r in skillview.art_rows(adept.state, adept.content, adept.world) if r["id"] == "旋風腿")

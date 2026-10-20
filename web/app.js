@@ -2625,7 +2625,7 @@
     const lines = [];
     if (it.t === "arts") {
       const j = it.j, a = it.a;
-      lines.push(`第${a.level}成${it.power !== null ? `，威力 ${it.power}` : ""}${a.affinity ? `・收${esc(a.affinity)}` : ""}${typeof a.rating === "number" ? `・戰力 ${a.rating}` : ""}`);
+      lines.push(`第${a.level}成${it.power !== null ? `，威力 ${it.power}` : ""}${a.affinity ? `・收${esc(a.affinity)}` : ""}${scoreText(a)}`);
       if ((a.slots || []).length) lines.push(`意境槽 ${a.slots.length} 格：${a.slots.map((t) => (t ? `「${esc(t.name)}」〔${esc(t.skill)}〕${esc(t.mark)}` : "空")).join("、")}`);
       if ((j.traits || []).length) lines.push(`功效：${j.traits.map((t) => `〔${esc(t.name)}〕${t.layers > 1 ? `${t.layers} 層` : ""}`).join("")}`);
       if (j.special) lines.push(`特別功效〔${esc(j.special)}〕`);
@@ -2763,6 +2763,8 @@
   const Q_SHORT = { 下品: "下", 中品: "中", 上品: "上" };
   const qMark = (q) => (Q_SHORT[q] ? `<em class="iq q-${Q_SHORT[q] === "上" ? 3 : Q_SHORT[q] === "中" ? 2 : 1}" title="${esc(q)}">${Q_SHORT[q]}</em>` : "");
   const FX_LAYERS = ["", "一重", "二重", "三重"];
+  // 評分（第三批）：「・評 87」；上品還沒成絕學的寫門檻「・評 87／100」
+  const scoreText = (a) => (typeof a.score === "number" ? `・評 ${a.score}${a.bar ? `／${a.bar}` : ""}` : "");
   const fxOne = (e) => e.grand ? `<i class="fx grand${e.maybe ? " maybe" : ""}">${esc(e.name)}</i>`
     : e.special ? `<i class="fx sp">${esc(e.name)}</i>`
     : `<i class="fx${e.maybe ? " maybe" : ""}">${esc(e.name)}${e.maybe ? "" : lvHtml(e.layers)}</i>`;
@@ -2899,7 +2901,7 @@
       // 功法庫的卡：跟身上同一種那門的比較（W6）直接寫在鈕的上面，改練之前看得到，不必先點「詳情」；點開詳情時功法卡裡也有，這裡就不重複
       const compare = !slot && a.compare && !info ? `<p class="cmp">${esc(a.compare)}</p>` : "";
       return `<div class="ten">${Array.from({ length: 10 }, (_, k) => `<i${k < level ? ' class="on"' : ""}></i>`).join("")}</div>
-        <div class="lvline"><b>第${level}成</b><span>${esc(a.kind)}${a.attribute ? `・屬${esc(a.attribute)}` : ""}・收${esc(a.affinity || "")}${typeof a.rating === "number" ? `・戰力 ${a.rating}` : ""}</span></div>
+        <div class="lvline"><b>第${level}成</b><span>${esc(a.kind)}${a.attribute ? `・屬${esc(a.attribute)}` : ""}・收${esc(a.affinity || "")}${esc(scoreText(a))}</span></div>
         ${slotsHtml(a, x)}
         ${compare}
         <div class="acts">${first}${cult}</div>
@@ -2944,7 +2946,7 @@
     const libRow = (a) => {
       const todo = ["switch", "cultivate", "melt"].filter((key) => (a.glow || []).includes(key)).join(" ");
       const open = S.artOpen === a.id;
-      return `<button class="art libr ${open ? "on" : ""}" data-act="art" data-id="${esc(a.id)}"${todo && !open ? ` data-glow="${todo}"` : ""}>${seal(a.quality)}<span class="txt"><b>${esc(a.name)}</b><small>${esc(a.kind)}${a.attribute ? `・屬${esc(a.attribute)}` : ""}・第${a.level}成${typeof a.rating === "number" ? `・戰力 ${a.rating}` : ""}${(a.slots || []).some(Boolean) ? `・${(a.slots || []).filter(Boolean).map((t) => `〔${esc(t.skill)}〕`).join("")}` : ""}</small></span></button>
+      return `<button class="art libr ${open ? "on" : ""}" data-act="art" data-id="${esc(a.id)}"${todo && !open ? ` data-glow="${todo}"` : ""}>${seal(a.quality)}<span class="txt"><b>${esc(a.name)}</b><small>${esc(a.kind)}${a.attribute ? `・屬${esc(a.attribute)}` : ""}・第${a.level}成${esc(scoreText(a))}${(a.slots || []).some(Boolean) ? `・${(a.slots || []).filter(Boolean).map((t) => `〔${esc(t.skill)}〕`).join("")}` : ""}</small></span></button>
         ${open ? `<div class="art-body ${(QUALITY_SEAL[a.quality] || [, "q1"])[1]}">${body(a, null)}</div>` : ""}`;
     };
     const tutorial = x.owned_arts.some((a) => a.glow) || x.insights.some((i) => i.blocked);
