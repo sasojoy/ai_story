@@ -2427,8 +2427,8 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
 .jring.jchip .jin { font-size: 10px; }
 .jring.jmini { width: 18px; height: 18px; }
 .jring.jmini::after { inset: 4px; }
-.jade { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 2px; }
-.jd { display: grid; justify-items: center; gap: 2px; min-width: 64px; padding: 6px 4px 5px; border: 1px solid transparent; border-radius: 12px;
+.jade { display: grid; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: 6px; margin: 10px 0 2px; }
+.jd { display: grid; justify-items: center; align-content: start; gap: 2px; min-width: 0; padding: 6px 4px 5px; border: 1px solid transparent; border-radius: 12px;
   background: transparent; color: var(--ink); cursor: pointer; line-height: 1.25; }
 .jd.full { background: color-mix(in srgb, var(--gold) 7%, var(--card)); border-color: color-mix(in srgb, var(--gold) 30%, var(--line)); }
 .jd.empty { border-style: dashed; border-color: var(--line); }
@@ -2439,6 +2439,31 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
 .lv { display: inline-flex; gap: 2px; vertical-align: middle; }
 .lv i { width: 9px; height: 4px; border-radius: 2px; background: var(--jade-lv-off); }
 .lv i.on { background: var(--jade-lv); box-shadow: 0 0 3px color-mix(in srgb, var(--jade-lv) 60%, transparent); }
+/* 意境效果池（第二批）：品質是玉環右上角一枚小印（下灰、中青、上金）；效果一顆一顆的小籤——一般功效名字加三節玉，大獎金底，秘方的特別功效朱底；
+   合併預覽裡「可能擲到的」虛線 */
+.jd { position: relative; }
+.iq { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 4px; font: 700 10px/1 var(--serif); font-style: normal;
+  color: #fff; background: #8a8478; vertical-align: middle; flex: none; }
+.iq.q-2 { background: #3f7d74; }
+.iq.q-3 { background: linear-gradient(135deg, #d9a93a, #a87818); box-shadow: 0 0 4px color-mix(in srgb, var(--gold) 60%, transparent); }
+.jd .iq { position: absolute; top: 3px; right: 6px; }
+.fxs { display: inline-flex; flex-wrap: wrap; gap: 3px; align-items: center; }
+.fxs.col { flex-direction: column; gap: 2px; }
+.fxs.col .fx { font-size: 10px; padding: 1px 3px; gap: 2px; }
+.fxs.col .lv { gap: 1px; }
+.fxs.col .lv i { width: 5px; height: 3px; }
+.fx { display: inline-flex; align-items: center; gap: 3px; font: 500 11px/1.2 var(--serif); font-style: normal; color: var(--ink);
+  white-space: nowrap; padding: 1px 5px; border-radius: 6px; background: color-mix(in srgb, var(--gold) 8%, var(--card)); border: 1px solid var(--line); }
+.fx.grand, .tr.grand { color: #5a3a00; border-color: #c9a24a; background: linear-gradient(135deg, #f5dc8e, #e2b54e);
+  box-shadow: 0 0 5px color-mix(in srgb, #e2b54e 55%, transparent); font-weight: 700; }
+.fx.sp, .tr.sp { color: #fff; border-color: #8f2d24; background: #a8322a; }
+.fx.maybe, .tr.maybe { border-style: dashed; background: transparent; box-shadow: none; opacity: 0.85; }
+.tr.grand small { margin-left: 4px; font-size: 10px; color: #7a5200; }
+.tr .lv { margin-left: 4px; }
+.ins-fx { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0; font-size: 12px; color: var(--ink-2); }
+@media (prefers-color-scheme: dark) {
+  .fx.grand, .tr.grand { color: #2a1a00; }
+}
 .slot-pick { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; padding: 8px; border-radius: 12px; background: var(--card-2); }
 .slot-pick button { display: flex; align-items: center; gap: 7px; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 10px;
   padding: 5px 9px; text-align: left; font-size: 13px; cursor: pointer; min-height: 40px; }

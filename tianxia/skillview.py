@@ -288,7 +288,7 @@ def forge_preview(
         return {
             **empty, "kind": "裝意境", "made": f"【{info['art'].name}】{where}", "attribute": info["insight"].attribute,
             "attribute_why": f"【{info['art'].name}】{arts_mod.takes_text(info['affinity'])}",
-            "slots": f"共 {info['total']} 格", "traits": fx_traits(content, info["fx"]), "quality": info["fx"].quality,
+            "slots": f"共 {info['total']} 格", "traits": fx_traits(content, info["fx"], info["insight"]), "quality": info["fx"].quality,
             "depth": info["desc"] or None,
             "known": None, "cost": NO_CHARGE, "problem": info["problem"],
         }
@@ -303,7 +303,7 @@ def forge_preview(
             merged, chance = _deepen_preview(state, content, world, a, b)
             return {
                 **empty, "kind": "揣摩", "made": f"「{a.name}」{insight_fx.label(content, merged)}", "attribute": a.attribute, "quality": merged.quality, "slots": None,
-                "traits": fx_traits(content, merged),
+                "traits": fx_traits(content, merged, a),
                 "depth": "；".join(f"〔{e['name']}〕{e['desc']}" for e in insight_fx.effects(content, merged) if e["desc"]) or None,
                 "odds": f"大獎機會 {chance}%" if chance else None, "keep": DEEPEN_KEEP,
                 "known": None, "cost": merge_cost, "problem": fusion.merge_problem(state, content, world, *insight_ids),
@@ -314,7 +314,7 @@ def forge_preview(
         pool = [t.name for t in insight_fx.generals(content, attribute)]
         return {
             **empty, "kind": "合併", "made": "一個新的意境", "attribute": attribute, "quality": quality, "slots": None,
-            "traits": [{"name": n, "layers": 1} for n in pool] + ([{"name": high.name, "layers": 0, "grand": True}] if high is not None else []),
+            "traits": [{"name": n, "layers": 1, "maybe": True} for n in pool] + ([{"name": high.name, "layers": 0, "grand": True, "maybe": True}] if high is not None else []),
             "depth": (f"擲一到兩個效果：{'或'.join(pool)}" + (f"，大獎〔{high.name}〕：{high.desc}" if high is not None else "")) if pool else None,
             "odds": f"大獎機會約 {_compound_grand(content, quality)}%" if high is not None else None,
             "known": _strip_note(_known_insight_recipe(state, world, fusion.merge_key(*insight_ids))),
@@ -341,9 +341,13 @@ def _compound_grand(content: Content, quality: str) -> int:
     return round(second * min(1.0, cfg.insight_grand.get(quality, 0.0) * cfg.compound_grand_scale) * 100)
 
 
-def fx_traits(content: Content, fx) -> list[dict]:
-    """卡上的效果籤：一般功效寫層數，大獎 layers 0、grand true。"""
-    return [{"name": e["name"], "layers": e["layers"], "grand": e["grand"]} for e in insight_fx.effects(content, fx)]
+def fx_traits(content: Content, fx, insight=None) -> list[dict]:
+    """卡上的效果籤：一般功效寫層數，大獎 layers 0、grand true；給了意境、它是秘方合出來的，再加那一條特別功效（special true）。"""
+    out = [{"name": e["name"], "layers": e["layers"], "grand": e["grand"]} for e in insight_fx.effects(content, fx)]
+    sp = arts_mod.special_of(content, insight.secret_special) if insight is not None and insight.secret_special else None
+    if sp is not None:
+        out.append({"name": sp.name, "layers": 0, "grand": False, "special": True})
+    return out
 
 
 def _no(problem: str) -> dict:
@@ -554,7 +558,7 @@ def slot_rows(state: GameState, content: Content, world: WorldStateStore, art: M
         rows.append({
             "id": insight_id, "name": ins.name, "attribute": ins.attribute, "skill": arts_mod.skill_name(content, ins, fx),
             "mark": arts_mod.strength_mark(strength), "strength": strength, "desc": arts_mod.skill_desc(content, ins, strength, fx),
-            "quality": fx.quality, "fx": fx_traits(content, fx),  # 意境效果池：這一份的品質與每一個效果（大獎 grand）
+            "quality": fx.quality, "fx": fx_traits(content, fx, ins),  # 意境效果池：這一份的品質與每一個效果（大獎 grand）
         })
     return rows
 
@@ -602,7 +606,7 @@ def insight_rows(state: GameState, content: Content, world: WorldStateStore) -> 
                 "depth": f"〔{arts_mod.skill_name(content, insight, fx)}〕",
                 "rank": strength, "mood": None,  # 批量熔煉的篩選還讀這兩個鍵
                 # 意境效果池：同一種可以有好幾份，每一份的品質與效果（大獎 grand）；piece 是第幾份（第一份 1）
-                "quality": fx.quality, "fx": fx_traits(content, fx), "grand": fx.grand is not None,
+                "quality": fx.quality, "fx": fx_traits(content, fx, insight), "grand": fx.grand is not None,
                 "piece": insight_fx.pieces(state, insight_fx.base_id(insight_id)).index(insight_id) + 1 if not insights.is_own(insight_id) else 1,
                 "note": insight.note, "melt": content.config.melt_insight_xinde, "blocked": blocked,
                 # 感悟悟來的私有意境（悟意境設計 0.2b）：在哪裡悟的、畫的那一筆（修練頁畫小縮圖）

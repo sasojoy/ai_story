@@ -2758,6 +2758,17 @@
   const ringWord = (colors) => ((colors || []).length ? `收${colors.join("")}` : "任意皆收"); // 待 joy 潤
   // 意境的強度（一重～三重）畫成三節玉
   const lvHtml = (n) => `<span class="lv" role="img" aria-label="${["", "一重", "二重", "三重"][Math.max(1, Math.min(3, n | 0))]}">${[1, 2, 3].map((k) => `<i${k <= (n | 0) ? ' class="on"' : ""}></i>`).join("")}</span>`;
+  // 意境效果池（第二批）：一份意境的品質（下中上，玉環右上角一枚小印）與一到兩個效果——一般功效寫名字加三節玉，大獎金底，秘方的特別功效朱底。
+  // 資料是伺服器給的 fx（skillview.fx_traits：name、layers、grand、special）
+  const Q_SHORT = { 下品: "下", 中品: "中", 上品: "上" };
+  const qMark = (q) => (Q_SHORT[q] ? `<em class="iq q-${Q_SHORT[q] === "上" ? 3 : Q_SHORT[q] === "中" ? 2 : 1}" title="${esc(q)}">${Q_SHORT[q]}</em>` : "");
+  const FX_LAYERS = ["", "一重", "二重", "三重"];
+  const fxOne = (e) => e.grand ? `<i class="fx grand${e.maybe ? " maybe" : ""}">${esc(e.name)}</i>`
+    : e.special ? `<i class="fx sp">${esc(e.name)}</i>`
+    : `<i class="fx${e.maybe ? " maybe" : ""}">${esc(e.name)}${e.maybe ? "" : lvHtml(e.layers)}</i>`;
+  const fxHtml = (fx, cls) => (Array.isArray(fx) && fx.length ? `<span class="fxs${cls ? ` ${cls}` : ""}">${fx.map(fxOne).join("")}</span>` : "");
+  // 純文字版（清單的小字、title）：「掠影二重・流光」
+  const fxText = (fx) => (Array.isArray(fx) ? fx.map((e) => (e.grand || e.special ? e.name : `${e.name}${FX_LAYERS[e.layers] || ""}`)).join("・") : "");
 
   // 火柴人：九個角度（create.POSE_KEYS，度；0 朝下、正的往右），骨架跟 tianxia/create.py 同一組數字（伺服器照同一個幾何讀偏向）
   const RIG = { CX: 110, SY: 96, HIPY: 146, UA: 27, FA: 25, TH: 31, SH: 29 };
@@ -2833,7 +2844,7 @@
     const cells = a.slots.map((s, i) => {
       const c = colors[i] || [];
       return s
-        ? `<button type="button" class="jd full" data-act="slot-out" data-id="${esc(a.id)}" data-ins="${esc(s.id)}" title="${esc(`「${s.name}」〔${s.skill}〕${s.desc || ""}（點了拆下）`)}">${ringHtml(c, `<b>${esc(String(s.name).slice(0, 2))}</b>`)}<small>〔${esc(s.skill)}〕</small>${lvHtml(s.strength)}</button>`
+        ? `<button type="button" class="jd full" data-act="slot-out" data-id="${esc(a.id)}" data-ins="${esc(s.id)}" title="${esc(`「${s.name}」${s.quality || ""}・${fxText(s.fx) || s.skill}${s.desc ? `：${s.desc}` : ""}（點了拆下）`)}">${ringHtml(c, `<b>${esc(String(s.name).slice(0, 2))}</b>`)}${qMark(s.quality)}${fxHtml(s.fx, "col") || `<small>〔${esc(s.skill)}〕</small>${lvHtml(s.strength)}`}</button>`
         : `<button type="button" class="jd empty${pick === i ? " on" : ""}" data-act="slot-pick" data-id="${esc(a.id)}" data-i="${i}" title="${esc(ringWord(c))}">${ringHtml(c, "<i>＋</i>", "vacant")}<small class="dim">${esc(ringWord(c))}</small></button>`;
     }).join("");
     let picker = "";
@@ -2841,7 +2852,7 @@
       const c = colors[pick] || [];
       const fits = (i) => !c.length || c.includes(i.attribute);
       const free = (x.insights || []).filter((i) => !i.slotted);
-      picker = `<div class="slot-pick">${free.length ? free.map((i) => `<button type="button" class="${fits(i) ? "" : "no"}" data-act="slot-in" data-id="${esc(a.id)}" data-i="${pick}" data-ins="${esc(i.id)}" ${fits(i) ? "" : "disabled"} title="${esc(fits(i) ? i.skill_desc || "" : `這一格${ringWord(c)}`)}">${ringHtml([i.attribute], "", "jmini")}<span>「${esc(i.name)}」<small>〔${esc(i.skill || "")}〕${lvHtml(i.strength)}${fits(i) ? "" : "・顏色不合"}</small></span></button>`).join("")
+      picker = `<div class="slot-pick">${free.length ? free.map((i) => `<button type="button" class="${fits(i) ? "" : "no"}" data-act="slot-in" data-id="${esc(a.id)}" data-i="${pick}" data-ins="${esc(i.id)}" ${fits(i) ? "" : "disabled"} title="${esc(fits(i) ? i.skill_desc || "" : `這一格${ringWord(c)}`)}">${ringHtml([i.attribute], "", "jmini")}<span>「${esc(i.name)}」${qMark(i.quality)}<small>${fxHtml(i.fx) || `〔${esc(i.skill || "")}〕${lvHtml(i.strength)}`}${fits(i) ? "" : "・顏色不合"}</small></span></button>`).join("")
         : '<span class="muted">手上沒有空著的意境——去探索悟一個，或從別門武學上拆下來。</span>'}</div>`;
     }
     return `<div class="jade">${cells}</div>${picker}`;
@@ -2967,7 +2978,7 @@
     }).join("")}</div>` : "";
     // 意境：一顆一顆的籤，點一下攤開模型寫的那句說明與「化成心得」
     const insOpen = x.insights.find((i) => i.id === S.insOpen);
-    const insChips = x.insights.map((i) => `<button class="${S.insOpen === i.id ? "on" : ""}" data-act="ins-open" data-id="${esc(i.id)}">${i.own ? glyphSvg(i.glyph, "glyph-mini") : ""}「${esc(i.name)}」<small>屬${esc(i.attribute)}${i.lean !== "無" ? `・${esc(i.lean)}` : ""}${i.depth ? `・${esc(i.depth)}` : ""}${i.slotted ? `・裝在【${esc(i.slotted)}】` : ""}</small></button>`).join("");
+    const insChips = x.insights.map((i) => `<button class="${S.insOpen === i.id ? "on" : ""}" data-act="ins-open" data-id="${esc(i.id)}">${i.own ? glyphSvg(i.glyph, "glyph-mini") : ""}「${esc(i.name)}」${qMark(i.quality)}<small>屬${esc(i.attribute)}${i.lean !== "無" ? `・${esc(i.lean)}` : ""}・${esc(fxText(i.fx) || i.depth || "")}${i.slotted ? `・裝在【${esc(i.slotted)}】` : ""}</small></button>`).join("");
     // 名冊只有本人一列（還沒有同伴）時跟上面的本人卡重複，不畫（C6）
     const mates = x.roster.length > 1;
     // 裝備（裝備四欄設計 2.5）：開著的欄位一段一段（武器、防具、坐騎、寶物），每段先列身上那件、再列裝備庫裡同一欄的。
@@ -3081,7 +3092,7 @@
       ${showAll ? "" : `<button class="btn ghost lib-more" data-act="lib-all">再列 ${picked.length - LIB_PAGE} 門</button>`}`}
       ${meltOn ? "" : `<div class="label">意境</div>
       ${x.insights.length ? `<div class="ins">${insChips}</div>${noteAt("ins")}
-        ${insOpen && !meltOn ? `<div class="insight"><div>${insOpen.own ? glyphSvg(insOpen.glyph, "glyph-big") : ""}<b>「${esc(insOpen.name)}」</b>${insOpen.skill ? `<p class="ins-skill">技能〔${esc(insOpen.skill)}〕${esc(insOpen.mark || "")}${insOpen.skill_desc ? `：${esc(insOpen.skill_desc)}` : ""}${insOpen.slotted ? `・裝在【${esc(insOpen.slotted)}】` : "・還沒裝上任何武學"}</p>` : ""}${insOpen.note ? `<p>${esc(insOpen.note)}</p>` : ""}${insOpen.own ? `<p class="glyph-from">悟於${esc(insOpen.place || "某處")}・只屬於你</p>` : ""}</div>
+        ${insOpen && !meltOn ? `<div class="insight"><div>${insOpen.own ? glyphSvg(insOpen.glyph, "glyph-big") : ""}<b>「${esc(insOpen.name)}」</b>${insOpen.fx && insOpen.fx.length ? `<p class="ins-fx">${esc(insOpen.quality || "")}${fxHtml(insOpen.fx)}</p>` : ""}${insOpen.skill ? `<p class="ins-skill">技能〔${esc(insOpen.skill)}〕${esc(insOpen.mark || "")}${insOpen.skill_desc ? `：${esc(insOpen.skill_desc)}` : ""}${insOpen.slotted ? `・裝在【${esc(insOpen.slotted)}】` : "・還沒裝上任何武學"}</p>` : ""}${insOpen.note ? `<p>${esc(insOpen.note)}</p>` : ""}${insOpen.own ? `<p class="glyph-from">悟於${esc(insOpen.place || "某處")}・只屬於你</p>` : ""}</div>
           <button class="btn small" data-act="melt-insight" data-id="${esc(insOpen.id)}" data-name="${esc(insOpen.name)}" ${insOpen.blocked ? "disabled" : ""}>化成心得 ${insOpen.melt}</button>${insOpen.blocked ? `<small class="muted">${esc(insOpen.blocked)}</small>` : ""}</div>` : ""}`
         : '<p class="muted">還沒悟到任何意境。去探索，荒郊野外最容易有所領悟。</p>'}`}
       <div class="label">門下</div>
@@ -3288,10 +3299,13 @@
     const merge = v.kind === "合併";
     const sub = [v.attribute ? `屬${v.attribute}` : "", merge ? "" : v.gen, v.level > 1 ? `第${v.level}成` : ""].filter(Boolean);
     const badge = merge ? '<span class="qseal qi big">意</span>' : v.quality ? seal(v.quality, true) : '<span class="qseal q1 big">？</span>';
-    const verdict = merge ? esc(v.depth || "")
+    const pair = merge || v.kind === "揣摩"; // 意境＋意境：品質照兩份裡好的，另寫大獎機會
+    const verdict = pair ? `${v.quality ? `<b>${esc(v.quality)}</b>` : ""}${v.odds ? `<span class="near">・${esc(v.odds)}</span>` : ""}${merge && v.depth ? `<span class="muted">・${esc(v.depth)}</span>` : ""}`
       : v.quality ? `<b>${esc(v.quality)}</b>${v.why && v.why.length ? `<span class="muted">・${v.why.map(esc).join("；")}</span>` : ""}${v.near ? `<span class="near">・${esc(v.near)}</span>` : ""}`
       : `品質看造化：${esc(v.odds || "")}`;
-    const tags = (v.traits || []).map((t) => `<i class="tr">${esc(t.name)}${t.layers > 1 ? `<small>${t.layers} 層</small>` : ""}</i>`);
+    const tags = (v.traits || []).map((t) => t.grand ? `<i class="tr grand${t.maybe ? " maybe" : ""}">${esc(t.name)}<small>大獎</small></i>`
+      : t.special ? `<i class="tr sp">${esc(t.name)}</i>`
+      : `<i class="tr${t.maybe ? " maybe" : ""}">${esc(t.name)}${t.maybe ? "" : lvHtml(t.layers)}</i>`); // 待 joy 潤
     if (v.slots) tags.push(`<i class="tr off">${esc(v.slots)}</i>`);
     const notes = [merge ? "" : v.depth, v.keep, v.attribute_why, v.known].filter(Boolean);
     return `<div class="made-card preview">
@@ -3336,8 +3350,8 @@
         ${artFilter("craft") === "意境" ? "" : `${arts.length ? `<div class="chips">${artsShown.map((a) => craftChip("art", a, `${a.quality}${a.attribute ? `・屬${a.attribute}` : ""}・第${a.level}成・收${a.affinity || ""}`, QUALITY_RANK[a.quality] || 1,
           (a.glow || []).includes("pick:art") ? ' data-glow="pick:art"' : "", inPot(a.id))).join("")}</div>` : '<p class="muted">沒有合這些條件的武學。</p>'}
         ${artsShown.length < arts.length ? `<button class="btn ghost lib-more" data-act="craft-all">再列 ${arts.length - artsShown.length} 門</button>` : ""}`}
-        <div class="label">意境 <small class="muted">同一個也能放兩次</small></div>
-        ${x.insights.length ? (ins.length ? `<div class="chips">${ins.map((i) => craftChip("ins", i, `屬${i.attribute}${i.lean !== "無" ? `・${i.lean}` : ""}${i.depth ? `・${i.depth}` : ""}`, 2,
+        <div class="label">意境 <small class="muted">同一種的兩份放在一起是揣摩</small></div>
+        ${x.insights.length ? (ins.length ? `<div class="chips">${ins.map((i) => craftChip("ins", i, `${i.quality || ""}・屬${i.attribute}${i.lean !== "無" ? `・${i.lean}` : ""}・${fxText(i.fx) || i.depth || ""}`, i.grand ? 3 : 2,
           (i.glow || []).includes("pick:insight") && !S.forgeSel.some((p) => p.type === "ins" && p.id === i.id) ? ' data-glow="pick:insight"' : "")).join("")}</div>`
           : '<p class="muted">沒有合這些條件的意境。</p>')
           : '<p class="muted">還沒悟到任何意境。去探索，荒郊野外最容易有所領悟。</p>'}
