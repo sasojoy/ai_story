@@ -55,10 +55,31 @@ def test_switch_off_map_unchanged():
     assert mapview.LEGEND_NEUTRAL not in mapview.legend_data(game.state, game.content, "situation")["layer"]
 
 
+def test_ropes_hang_no_beads_without_tug_of_war():
+    """領地爭奪沒有拔河：輿圖總覽的三條戰線照舊寫值，繩上不掛照門檻擺的地點；關著照舊掛。"""
+    ropes = _game().map_state()["ropes"]
+    assert len(ropes) == 3 and all(r["beads"] == [] for r in ropes)
+    plain = go(join(plain_game("weekend"), "guan"), "yingchuan")
+    assert any(r["beads"] for r in plain.map_state()["ropes"])
+
+
+def _place_svg(out: str, loc_id: str) -> str:
+    """marksSvg 裡那一處的 <g data-loc> 一段（點擊區、外圈、圓盤、字）。"""
+    start = out.index(f'<g data-loc="{loc_id}"')
+    return out[start:out.index("</g>", start)]
+
+
 @pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
-def test_web_marks_paint_unheld_neutral_grey():
+def test_web_marks_draw_unheld_neutral_as_grey_disc_with_dashed_ring():
     game = _game()
     out = test_map_web.marks(game)
-    assert '#ECE9E2' in out  # 還沒人佔的中立地：灰白圓盤
+    wilds = _place_svg(out, "nanyang_wilds")
+    assert "#ECE9E2" in wilds and "stroke-dasharray" in wilds  # 甲：灰白圓盤＋虛線圈（還沒人佔）
+    assert "stroke-dasharray" not in _place_svg(out, "yingshui")  # 陣營的區塊照舊實線
+    far = _place_svg(test_map_web.marks(game, k=2.5, far="true"), "nanyang_wilds")
+    assert "#CFCBC2" in far and "stroke-dasharray" in far  # 看大局：小點也是灰、虛線邊
     drawer = test_map_web.run(game, 'return H.placeHtml(H.S.mapBase, H.S.mapState, "nanyang_wilds");')
     assert "中立地" in drawer and "還沒有人佔" in drawer
+    conquest.set_control(game.state.world, game.content, "nanyang_wilds", "huang")
+    held = _place_svg(test_map_web.marks(game), "nanyang_wilds")
+    assert "stroke-dasharray" not in held and "#ECE9E2" not in held  # 被佔下了：照佔領方的顏色，不再是虛線

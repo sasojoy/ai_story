@@ -1201,7 +1201,7 @@ class Game:
             option = self._sortie_option(loc, cost["train"], odds)  # 出陣（出陣探索與地盤設計第二節）：散人、不在戰線上的地點沒有
             if option is not None:
                 opts.append(option)
-            elif sortie.ranger_here(c, self._side(), loc.id):  # 散人站在戰線上：灰的一顆寫真正的原因（FB-250）
+            elif sortie.ranger_here(c, self._side(), loc.id, s.world):  # 散人站在戰線上：灰的一顆寫真正的原因（FB-250）
                 opts.append(Option(id="act:train", label=f"{sortie.NAME}（{sortie.RANGER_NOTE}）", enabled=False))
         opts += self._challenge_options(odds)  # 挑戰本人（T4；每季都有，figures.challenge_on）：有陣營、這裡站著敵方的大勢人物時才有
         if ranks.summons_event(s, c) is not None:
@@ -1940,7 +1940,7 @@ class Game:
         """出陣那一行（howto.sortie_line）：這裡是哪一種、推不推得動（_push_room，同第 3、4 階行動）、今天還能出陣幾次；用完寫什麼時候再來。"""
         how = self._sortie_mode(loc)
         if how is None:
-            if not sortie.ranger_here(self.content, self._side(), loc.id):
+            if not sortie.ranger_here(self.content, self._side(), loc.id, self.state.world):
                 return ""
             return sortie.RANGER_LINE_PRECISE if precise.on(self.content, self.state.world) else sortie.RANGER_LINE
         left = self.sorties_left()
@@ -1950,7 +1950,9 @@ class Game:
             return sortie.STIR_FLAT_LINE
         push_ok = any(amount and self._push_room(line) > 0 for line, amount in self.sortie_push(loc.id, how).items())
         own = how == "attack" and territory.controller(self.state.world, self.content, loc.id) == self._side()
-        return howto.sortie_line("convoy" if own else how, push_ok, left, self.content)  # 自家地盤上攻的只有運糧隊（FB-255）
+        # 領地爭奪：出陣推的是這一塊的進度（大本營、廣宗推不動），不是線——那一句照進度寫
+        progress = conquest.progress_open(self.state.world, self.content, loc.id) if conquest.on(self.content, self.state.world) else None
+        return howto.sortie_line("convoy" if own else how, push_ok, left, self.content, progress)  # 自家地盤上攻的只有運糧隊（FB-255）
 
     def _choice_label(self, choice: Choice, odds: bool) -> str:
         """動手的選項寫對手與勝算，後面照樣接體力的代價（輸了多扣的，企劃者裁決 E6；events.stamina_note）；

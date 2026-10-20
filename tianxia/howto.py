@@ -87,14 +87,21 @@ SORTIE_LOOT = "不給銀兩、不掉東西。"
 SORTIE_LOOT_SILVER = "銀兩也是 {silver} 成，不掉東西。"  # 素材與經濟設計第八節（Config.economy.sortie_silver）；待 joy 潤
 SORTIE_PUSH = "推動戰局、記貢獻"
 SORTIE_NO_PUSH = "今天這條線推滿了，推不動"
+SORTIE_PROGRESS = "推這一塊的進度、記貢獻"  # 領地爭奪：出陣不推線、推那一塊的進度（設計 3.7）；待 joy 潤
+SORTIE_NO_PROGRESS = "推不動進度（這裡搶不下來）"  # 領地爭奪：大本營、廣宗沒有進度；待 joy 潤
 SORTIE_LEFT = "今日還能出陣 {n} 次。"
 
 
-def sortie_line(how: str, push: bool, left: int, content: Content) -> str:
-    """出陣這一下會怎樣（Game._sortie_line 照規則算好傳進來）。數字讀 Config：給自己的成數、守與攪局是攻的幾成。"""
+def sortie_line(how: str, push: bool, left: int, content: Content, progress: bool | None = None) -> str:
+    """出陣這一下會怎樣（Game._sortie_line 照規則算好傳進來）。數字讀 Config：給自己的成數、守與攪局是攻的幾成。
+    progress：領地爭奪在這一季生效時給（這一塊的進度推不推得動），推的那一句換成推進度；沒給（關著）一個字都不變、照 push。"""
     cfg = content.config
     half = "一半" if cfg.sortie.hold_share == 0.5 else f" {cfg.sortie.hold_share * 10:g} 成"
-    text = SORTIE_NOTES[how].format(push=SORTIE_PUSH if push else SORTIE_NO_PUSH, share=f"{cfg.drill_reward_share * 10:g}", half=half,
+    if progress is None:
+        pushed = SORTIE_PUSH if push else SORTIE_NO_PUSH
+    else:
+        pushed = SORTIE_PROGRESS if progress else SORTIE_NO_PROGRESS
+    text = SORTIE_NOTES[how].format(push=pushed, share=f"{cfg.drill_reward_share * 10:g}", half=half,
                                     loot=sortie_loot(content))
     return text + SORTIE_LEFT.format(n=left)
 
@@ -316,6 +323,17 @@ SORTIE_PLACES = "在戰線上的地點出陣會推動戰況（行動列底下那
 SORTIE_JOIN = "在戰線上的地點出陣：別人的地盤打贏往你那一邊推，自家的地盤守一回、推一半"
 SORTIE_GEJU = "在戰線上出陣攪局、把戰局往中間拉（戰線一亂，割據自然漲）"  # 豪強怎麼推割據
 SORTIE_RANGER = "散人不出陣，靠懸賞與事件出力"
+# 領地爭奪（第 38 項改版第一批）：出陣推的是那一塊的進度、戰線照佔領算——上面三句在這種季換成這幾句（待 joy 潤）
+CONQUEST_PLACES = "在官軍、黃巾的領地與中立地出陣，推的是那一塊的進度，不直接推戰線"
+CONQUEST_JOIN = "在官軍、黃巾的領地與中立地出陣：別人的地方打贏把那一塊的進度往你那一邊推，自家的地方守一回、推一半"
+CONQUEST_FRONTS = "戰線照兩軍佔了多少地來算：佔下中立地、打進敵方的領地，戰線就往那一邊偏"
+
+
+def _sortie_places(content: Content, season: WorldState | None) -> str:
+    """「你能做的」那一句的出陣怎麼推：領地爭奪在這一季生效時推進度（CONQUEST_PLACES），不然照舊。"""
+    if conquest.on(content, season):
+        return CONQUEST_PLACES
+    return SORTIE_PLACES if sortie.on(content) else SOME_PLACES
 
 
 def sortie_lines(content: Content, allied: bool = False, season: WorldState | None = None) -> list[str]:
@@ -513,7 +531,10 @@ def fronts_help(state: GameState, content: Content) -> list[str]:
     now = f"現在{'、'.join(chaos)}在亂局。" if chaos else "現在沒有戰線在亂局。"
     on = sortie.on(content)
     allied = rules.haoqiang_allied(content, state.world)  # 豪強分屬兩軍：沒有割據、豪強照依附那一邊推
-    parts = [f"{SORTIE_PLACES if on else SOME_PLACES}，往你陣營那一邊推" + ("（地方豪強往依附的那一邊）" if allied else "")]
+    if conquest.on(content, state.world):  # 領地爭奪：出陣不直接推線，戰線照佔領算（設計 3.7、3.8）
+        parts = [f"{CONQUEST_FRONTS}（地方豪強算依附的那一邊）；{CONQUEST_PLACES}，大事、事件、大勢人物照舊推線"]
+    else:
+        parts = [f"{SORTIE_PLACES if on else SOME_PLACES}，往你陣營那一邊推" + ("（地方豪強往依附的那一邊）" if allied else "")]
     pushers = _order_pushers(content)
     if pushers:  # 一個人照做軍令不推戰線，全陣營湊滿額度那一刻才推（orders.credit，審查 Minor 5）
         parts.append(f"{'、'.join(STANCE_NAMES.get(f, f) for f in pushers)}的軍令湊滿額度時整個陣營再推一把")
@@ -561,7 +582,7 @@ def board_help(content: Content) -> list[str]:
     return lines
 
 
-def quest_help(content: Content, allied: bool = False) -> list[str]:
+def quest_help(content: Content, allied: bool = False, season: WorldState | None = None) -> list[str]:
     """主線小標點開的說明：你能怎麼影響這一季（遊歷、軍令、伏筆）。FB-112：推線只說有些地方；伏筆只有會鎖定大事的兩方
     （foreshadow.LOCK_SIDES＝timetable.SIDE_NAMES）改寫得了，豪強做完是第三方（揭曉時留名、照 third_party_trends 推割據，結果不變），
     散人做不了（foreshadow.capable 要陣營對得上）。"""
@@ -572,7 +593,7 @@ def quest_help(content: Content, allied: bool = False) -> list[str]:
     if allied:  # 新寫
         aside = f"地方{STANCE_NAMES['haoqiang']}照依附的那一邊；"
     return [
-        f"你能做的：{SORTIE_PLACES if sortie.on(content) else SOME_PLACES}；投靠陣營之後每週一有軍令，照做記功，全陣營湊滿額度就一起見效；"
+        f"你能做的：{_sortie_places(content, season)}；投靠陣營之後每週一有軍令，照做記功，全陣營湊滿額度就一起見效；"
         f"{locks}的人聽傳聞、跟人物交好，湊齊關鍵伏筆，能暗中改寫一件大事（{aside}散人拿不到伏筆）。",
     ]
 
@@ -584,7 +605,7 @@ def war_help(state: GameState, content: Content) -> dict[str, list[str]]:
         "stance": stance_help(content, allied),
         "fronts": fronts_help(state, content),
         "board": board_help(content),
-        "quest": quest_help(content, allied),
+        "quest": quest_help(content, allied, state.world),
     }
 
 
@@ -789,7 +810,8 @@ def join_lines(content: Content, season: WorldState) -> list[str]:
               else "陣營不是交戰的兩軍時，跟散人一樣臨時投效。")
     lines = [
         "**投靠**：在陣營收人的地方按「投靠」，要再確認一次；也可以拜入陣營名下的門派。投靠之後，"
-        f"{SORTIE_JOIN if sortie.on(content) else SOME_PLACES + '，推向你那一邊，遇上自己陣營的隊伍是操練'}；全服決戰替自己的陣營出戰，"
+        f"{CONQUEST_JOIN if conquest.on(content, season) else SORTIE_JOIN if sortie.on(content) else SOME_PLACES + '，推向你那一邊，遇上自己陣營的隊伍是操練'}"
+        "；全服決戰替自己的陣營出戰，"
         f"{gentry}"
         "散人照樣能玩，只是沒有軍令與晉升；遇上決戰，人到了決戰的大區，可以臨時投效交戰兩軍之一，只算那一場，打完照樣是散人。",
     ]
@@ -881,7 +903,7 @@ def season_page_lines(content: Content, season: WorldState, rule: str = "") -> l
     lines = [season_line(content, allied), front_rule(content, card=False, allied=allied), stance, *board_help(content)]
     if rule:
         lines.append(f"收季：{rule}")
-    lines += quest_help(content, allied)
+    lines += quest_help(content, allied, season)
     lines.append("江湖頁最上面的「態勢」「大事」「主線」與底下的戰況圖卡，點開都有說明。")
     return lines
 

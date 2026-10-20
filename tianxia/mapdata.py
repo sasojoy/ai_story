@@ -178,12 +178,13 @@ def _titles(state: GameState, content: Content, week: int, now_week: int) -> lis
 
 
 def _ropes(state: GameState, content: Content, now_week: int) -> list[dict]:
-    """三條戰線（第一季）或一根黃巾聲勢（規則關著的季）：值、比上一週推了多少、繩上的可易手地點（地盤開著才有）。"""
+    """三條戰線（第一季）或一根黃巾聲勢（規則關著的季）：值、比上一週推了多少、繩上的可易手地點（地盤開著才有）。
+    領地爭奪開著的季沒有拔河：地點不照戰線的門檻易手，繩上不掛地點（不然小方印擺在已經不作用的門檻上）。"""
     w = state.world
     fronts = rules.front_ids(content)
     if not fronts:
         return []
-    lines = content.scenario.territory.lines if territory.on(content) else {}
+    lines = content.scenario.territory.lines if territory.on(content) and not conquest.on(content, w) else {}
     names = {t.id: t.name for t in content.scenario.trends}
     prev = territory.week_at(w, now_week - 1) if now_week > 1 else None
 

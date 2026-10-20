@@ -37,9 +37,16 @@ def on(content: Content) -> bool:
     return content.config.sortie.enabled and bool(content.scenario.factions)
 
 
-def ranger_here(content: Content, faction: str | None, loc_id: str) -> bool:
-    """散人站在戰線地點（FB-250）：投靠了陣營的人在這裡會有出陣，散人沒有——那一格寫原因，不寫「不在戰線」。"""
-    return faction is None and on(content) and territory.line_of(content, loc_id) is not None
+def ranger_here(content: Content, faction: str | None, loc_id: str, world: WorldState | None = None) -> bool:
+    """散人站在戰線地點（FB-250）：投靠了陣營的人在這裡會有出陣，散人沒有——那一格寫原因，不寫「不在戰線」。
+    領地爭奪在這一季生效時（給了 world）出陣在每一塊區塊都有，照區塊判（不只戰線地點）。"""
+    if faction is not None or not on(content):
+        return False
+    from . import conquest  # noqa: PLC0415  conquest → territory → rules：在函式裡 import
+
+    if conquest.on(content, world):
+        return loc_id in conquest.blocks(content)
+    return territory.line_of(content, loc_id) is not None
 
 
 def left_today(p: PlayerState, content: Content, today: int) -> int:

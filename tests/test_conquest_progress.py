@@ -4,7 +4,7 @@ from __future__ import annotations
 import pytest
 
 from conquest_kit import contribution, conquest_game, go, join, plain_game, win_sortie
-from tianxia import bot_policy, conquest, howto, orders, rules, territory, works
+from tianxia import bot_policy, conquest, howto, orders, rules, sortie, territory, works
 from tianxia.state import BotProfile
 
 pytestmark = pytest.mark.slow  # 建 Game、載正式內容
@@ -82,7 +82,8 @@ def test_event_at_block_pushes_progress_once():
                 continue
             game.choose(option.id)
             assert s.pending_event is None
-            assert conquest.progress_of(s.world, "yingchuan_wilds") < 50
+            # 只推一次 event_progress（一個人推：人數緩衝 ÷√1），往官軍那頭
+            assert conquest.progress_of(s.world, "yingchuan_wilds") == pytest.approx(50 - c.config.conquest.event_progress)
             return
     pytest.skip("找不到單純的事件選項")
 
@@ -114,6 +115,48 @@ def test_howto_has_the_conquest_version():
     assert any("中立地" in line for line in lines)
     plain = plain_game("season21")
     assert not any("中立地" in line for line in howto.territory_lines(plain.content, True, plain.state.world))
+
+
+def test_help_texts_say_progress_and_holdings():
+    """戰況圖卡、主線小標、投靠那一段的說明：出陣推進度、戰線照佔領算（不再寫「在戰線上的地點出陣會推動戰況」）；關著照舊。"""
+    game = conquest_game("season21")
+    s, c = game.state, game.content
+    helps = howto.war_help(s, c)
+    assert howto.CONQUEST_FRONTS in " ".join(helps["fronts"]) and howto.SORTIE_PLACES not in " ".join(helps["fronts"])
+    assert howto.CONQUEST_PLACES in " ".join(helps["quest"])
+    assert howto.CONQUEST_PLACES in " ".join(howto.season_page_lines(c, s.world))
+    assert howto.CONQUEST_JOIN in " ".join(howto.join_lines(c, s.world))
+    plain = plain_game("season21")
+    old = howto.war_help(plain.state, plain.content)
+    assert howto.SORTIE_PLACES in " ".join(old["quest"]) and howto.CONQUEST_FRONTS not in " ".join(old["fronts"])
+    assert howto.SORTIE_JOIN in " ".join(howto.join_lines(plain.content, plain.state.world))
+
+
+def _note(game, loc_id):
+    return game._sortie_line(game.content.locations[loc_id])  # 行動列底下出陣那一行（action_notes 的 act:train）
+
+
+def test_action_note_says_progress_not_the_line():
+    """行動列底下那一行：出陣推的是這一塊的進度，不寫「這條線推滿了」（sortie_push 開著時是空的，舊寫法會判成推不動）。"""
+    game = go(join(conquest_game("season21"), "huang"), "nanyang_road")
+    assert howto.SORTIE_PROGRESS in _note(game, "nanyang_road") and howto.SORTIE_NO_PUSH not in _note(game, "nanyang_road")
+    go(join(game, "guan"), "yingchuan_wilds")  # 守自家的區塊
+    assert howto.SORTIE_PROGRESS in _note(game, "yingchuan_wilds")
+    go(game, "changshe")  # 大本營搶不下來：沒有進度
+    assert howto.SORTIE_NO_PROGRESS in _note(game, "changshe")
+    plain = go(join(plain_game("weekend"), "huang"), "runan_wilds")
+    assert howto.SORTIE_PROGRESS not in _note(plain, "runan_wilds")  # 關著照舊寫推動戰局
+
+
+def test_ranger_sees_why_at_every_block():
+    """散人站在不是戰線地點的區塊（嵩山深處）：投靠了陣營的人在這裡有出陣，散人那一格灰著寫原因（FB-250 的同一條，照區塊判）。"""
+    game = go(join(conquest_game("season21"), None), "deep_mountain")
+    option = _sortie(game)
+    assert option is not None and not option.enabled and sortie.RANGER_NOTE in option.label
+    go(game, "haozu_fort")  # 不是區塊：沒有出陣那一格
+    assert _sortie(game) is None
+    plain = go(join(plain_game("season21"), None), "deep_mountain")
+    assert _sortie(plain) is None  # 關著：嵩山深處不是戰線地點，照舊沒有
 
 
 def test_switch_off_sortie_unchanged():
