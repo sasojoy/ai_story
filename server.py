@@ -1551,6 +1551,8 @@ def admin_choices(game: Game) -> dict:
         if calendar.season21_on(world, CONTENT) else None,
         # 開季、開下一季的問句括號裡那一句：7 天濃縮季照時刻表寫（timetable.default_dates_note）；其他季 None，網頁照原本的字
         "default_dates": timetable.default_dates_note(CONTENT),
+        # 「這一季立刻蓋天命之季的章」問句裡天命之爭的時刻：7 天濃縮季照時刻表寫（timetable.mandate_note，FB-503）；其他季 None，網頁照原本的字
+        "mandate_at": timetable.mandate_note(CONTENT, world),
         # 三場大戲各一顆「立刻開這一場」（Game.admin_showdowns）：開不了的灰掉、寫為什麼（開過了、結算了、宛城要等第 3 週……）
         "showdowns": [
             {"id": event.id, "label": event.title, "enabled": why is None, "note": why or ""}

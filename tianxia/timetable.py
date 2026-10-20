@@ -109,6 +109,18 @@ def default_dates_note(content: Content) -> str | None:
     return DEFAULT_DATES.format(battles=battles, end=end)
 
 
+MANDATE_AT = "第 {day} 天 {hour:02d}:00"  # 待 joy 潤（FB-503）
+
+
+def mandate_note(content: Content, season: WorldState | None) -> str | None:
+    """管理者「這一季立刻蓋天命之季的章」問句裡天命之爭排在哪一刻（FB-503）：7 天濃縮季（week7_on）照時刻表的 real7 寫
+    「第 7 天 22:00」；其他季是 None，網頁照原本那一句（21 天季那一句也寫「第 12 週週一」，這一批不動）。"""
+    if not calendar.week7_on(season, content):
+        return None
+    when = next((e.real7 for e in content.mandate_timetable if e.real7 is not None), None)
+    return None if when is None else MANDATE_AT.format(day=when.day, hour=when.hour)
+
+
 # ── 決戰避開半夜（企劃者 2026-10-15，經 PM；Config.battle_quiet_hours）─────────────
 
 # 管理者那一行（開季、開下一季）：兩邊都挪不開、照原時間的那一場。待 joy 潤

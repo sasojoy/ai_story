@@ -222,6 +222,13 @@ NO_SUCH_PLAYER = "（江湖上沒有「{name}」這個人。）"  # 管理者的
 # 管理者「立刻發軍令」的回話照軍令多久一道（orders.daily：照週一發、每天 00:00 發；FB-502，待 joy 潤）
 ADMIN_REISSUE_HOW = {False: "週一", True: " 00:00 "}  # 「已照週一的做法重發」「已照 00:00 的做法重發」
 ADMIN_REISSUE_NONE = {False: "這一週沒有要重挑的軍令", True: "今天沒有要重挑的軍令"}
+# 管理者「立刻輪替第 4 階席次」的回話：7 天濃縮季照段（calendar.week7_on；FB-503，待 joy 潤）
+ADMIN_ROTATE_FIRST = {
+    False: "（第 1 週沒有上一週的貢獻可排；空缺照常由有資格的人補上。）",
+    True: "（第 1 段沒有上一段的貢獻可排；空缺照常由有資格的人補上。）",
+}
+ADMIN_ROTATE_AGAIN = {False: "下週一照常再排", True: "下一段第一天 00:00 照常再排"}
+ADMIN_ROTATE_LAST = "這是最後一段，季末之前不再排"  # 7 天濃縮季的最後一段沒有下一段
 
 
 @dataclass(frozen=True)
@@ -4388,8 +4395,9 @@ class Game:
             if not rank_actions.where_ok(s, c, action, loc.id):
                 continue
             option_id = f"{RANK_ACTION_PREFIX}{action.id}"
-            if rank_actions.left(s, c, action) <= 0:
-                opts.append(Option(id=option_id, enabled=False, label=f"{action.name}（這週已經做滿 {action.weekly} 次）"))
+            if rank_actions.left(s, c, action) <= 0:  # 7 天濃縮季照段記、寫「這一段」（calendar.week_word，FB-503）
+                this = calendar.week_word("this_short", c, s.world)
+                opts.append(Option(id=option_id, enabled=False, label=f"{action.name}（{this}已經做滿 {action.weekly} 次）"))
             elif line is not None and self._push_room(line) <= 0:
                 opts.append(Option(id=option_id, enabled=False, label=f"{action.name}（今天這條線已經推滿）"))  # 新寫，待 joy 潤
             else:  # 有檢定的（煽動起事）照事件選項的寫法接在體力後面，體力不夠時不寫（裁決 E5.3、審查 I1，同 _rank2_options）
@@ -11978,8 +11986,9 @@ class Game:
         if not season_one(c, s.world):
             return self._log(["（這一季沒有第 4 階席次。）"])
         week = calendar.point(s.world.time, c, s.world).week
+        segments = calendar.week7_on(s.world, c)  # 7 天濃縮季照段寫（FB-503，待 joy 潤）
         if week < 2:
-            return self._log(["（第 1 週沒有上一週的貢獻可排；空缺照常由有資格的人補上。）"])
+            return self._log([ADMIN_ROTATE_FIRST[segments]])
         seats.rotate(s, c, week)
         self._save_season()
         held = s.world.seats
@@ -11987,7 +11996,9 @@ class Game:
             f"{f.name}{ranks.TITLES[f.id][seats.SEAT_RANK]}：{'、'.join(held.get(f.id, [])) or '沒有人'}"
             for f in c.scenario.factions if f.id in s.world.seat_ledger and f.id in ranks.TITLES
         ) or "帳上還沒有人有第 4 階的資格"
-        msg = f"已照第 {week - 1} 週的貢獻輪替第 4 階席次（下週一照常再排）——{listing}。"
+        last = segments and week >= len(c.config.season_segments)
+        again = ADMIN_ROTATE_LAST if last else ADMIN_ROTATE_AGAIN[segments]
+        msg = f"已照{calendar.week_label(week - 1, c, s.world)}的貢獻輪替第 4 階席次（{again}）——{listing}。"
         self._write("輪替席次", [msg], tag="管理者")
         return self._log([msg])
 

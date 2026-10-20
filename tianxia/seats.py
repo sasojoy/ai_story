@@ -78,7 +78,24 @@ def report(state: GameState, content: Content) -> list[str]:
     held.append(p.name)
     # 新寫，待 joy 潤：下面這一則陣營軍情與回傳給自己的那一句
     add_rumor(state, f"{p.name}補上了{title}的缺。", content=content, layer="faction", faction=p.faction)
-    return [f"你補上了{title}的缺，到下週一為止。"]
+    return [f"你補上了{title}的缺，{_until(state, content)}。"]
+
+
+SEAT_UNTIL_DAY = "到第 {day} 天 00:00 為止"  # 待 joy 潤：7 天濃縮季補缺做到下一段第一天（FB-503）
+SEAT_UNTIL_END = "到季末為止"  # 待 joy 潤：7 天濃縮季最後一段沒有下一段
+
+
+def _until(state: GameState, content: Content) -> str:
+    """補上的缺做到什麼時候（下一次輪替）：照週的季「到下週一為止」（原本的字）；7 天濃縮季照段，下一段第一天 00:00，
+    最後一段是季末（FB-503）。"""
+    w = state.world
+    if not calendar.week7_on(w, content):
+        return "到下週一為止"
+    week = calendar.point(w.time, content, w).week
+    if week >= len(content.config.season_segments):
+        return SEAT_UNTIL_END
+    first, _ = calendar.segment_days(week + 1, content)
+    return SEAT_UNTIL_DAY.format(day=first)
 
 
 def leave(state: GameState, faction: str) -> None:
