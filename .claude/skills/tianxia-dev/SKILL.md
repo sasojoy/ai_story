@@ -30,6 +30,7 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   - 要用就 `git stash push -m <獨一無二的標籤> -- <檔>`，`git stash list --format='%H %gd %gs'` 找到自己那一筆，`git stash apply <sha>`，再照標籤找 `stash@{n}` 去 drop。
   - 想證明測試「修之前是紅的」，最簡單的就是這樣把改動暫時收起來跑一次。
 - 背景長跑（量表）用 `run_in_background`。輸出導到檔案時 python 會緩衝，加 `-u` 才看得到進度。等它結束的通知，不要輪詢。
+- **不要寫帶中文路徑的 `.ps1`**：Write 工具寫出的 .ps1 沒有 BOM，Windows PowerShell 5.1 照 ANSI 讀，`C:/Ray/專案/…/python.exe` 變亂碼、每一行都 CommandNotFound（2026-10-20 背景跑對照表踩到，log 只看得到一串錯）。要串好幾個 python 程式，就寫一支 Python 調度腳本，用 `sys.executable` 叫子程式，再從 PowerShell 跑那一支。
 
 ## 測試怎麼挑
 
@@ -43,6 +44,11 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 - **修 bug 先寫會紅的測試**：先確認它在修之前真的失敗、失敗的數字跟 QA 回報的一樣，再修。回報時寫「修前重現了什麼」。
 - 用正式內容測舊規則的測試，要在 helper 裡把新開關關掉（例 `c.config.precise_actions = False`、`four_tiers.enabled = False`）。新規則另開一個測試檔，不要改寫舊的斷言去迎合新規則。
 - 江湖紀錄 `state.journal` 新的在前（index 0）。找某一則照標題找，不要拿 `[-1]`。
+- **一個測試只開一季**：conftest 每個測試給一個 `TIANXIA_DB`，同一個測試裡 `open_world()` 兩次開的是同一份資料庫，第二個 `Game` 讀到第一季的章（7 天季的測試裡 21 天季的 `season_length_days` 變成 7）。要比幾種季就 `parametrize`，一種季一個測試。
+- **「舊季一字不變」用對照證明**（2026-10-20，7 天季 FB-500／501）：
+  - 引擎：`git archive <開工那一點> | tar -x` 解到 scratchpad，同一支腳本在舊程式與 HEAD 各跑一次、diff 輸出。腳本開季後一路 `catch_up_season`＋`Game.for_world(...).world_tick`＋`sync` 到收季，印要比的字（狀態列、軍令、懸賞的 `due_short`／`due_text`、傳聞、玩法說明、名聲、`server.admin_choices`）；照 `time.time()` 算的（時刻表的 `at_real`）先抹掉，新加的鍵印之前拿掉。
+  - 網頁：`webharness.run(DRIVER, {..., "app": <舊 app.js 的路徑>})` 用同一份伺服器資料、舊新兩份 app.js 各畫一次比字串；`wholeApp` 的名單只放兩版都有的函式。
+  - 回報寫「差異只有哪幾行」，不是只寫「測試過了」。
 
 ## 內容改動的雷
 
@@ -65,7 +71,8 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 - **季種類對照**（週末 `weekend`、14 天＝不帶設定檔、21 天 `season21`）：
   - 新數字通常只寫在 `content/profiles/season21.json` 或 `Config` 預設。
   - 改之前想清楚三種季各會怎樣。派工沒說要動週末與 14 天就不動。
-  - 測試用 `real_content("weekend")`／`("season21")` 各驗一次。
+  - 測試用 `real_content("weekend")`／`("season21")` 各驗一次。7 天濃縮季是 `week7`（`season21` 骨架＋`season_segments`），只在那一季換的東西問 `calendar.week7_on`，寫「週／段」的字走 `calendar.week_word`／`week_label`，不要各處自己判斷。
+  - **設定覆寫檔是淺層合併**（`content._config` 是 `{**config.json, **profile}`）：profile 寫 `"figure_life": {"revenge_cal_days": 2}` 會把 config.json 裡整塊 `figure_life` 換掉，沒寫的鍵回到 `Config` 預設。寫巢狀的覆寫之前先看 config.json 有沒有那一塊；測試驗一次「這一塊跟別種季只差這幾個鍵」（例 `test_week7_shortens_the_calendar_day_spans_pm_ruling_5`）。
 - **說法要跟規則一起改**：
   - 規則換了，玩法說明（`howto.py`）、按鈕、懸賞說明、傳聞、書信裡的同一件事都要跟著改。舊季要一個字都不變，照開關分兩版。
   - 改完 grep 舊句子的關鍵字，找漏掉的地方。
