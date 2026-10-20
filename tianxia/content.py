@@ -893,10 +893,20 @@ def check_timetable(c: Content, need, known, front_ids: list[str], trend_ids: se
         known(where, change.only_if.values(), front_ids, "戰線")
         check_text(where, change.note)
 
+    segments = c.config.season_segments
     need(  # 21 天季的季曆就是現實的週（正式季整合設計 1.1）：cal_scale 要是 1
-        not c.config.season21 or c.config.season_weeks * 7 == c.config.season_days,
+        not c.config.season21 or segments or c.config.season_weeks * 7 == c.config.season_days,
         f"設定：21 天季的季曆就是現實的週，season_weeks × 7（{c.config.season_weeks * 7}）要等於 season_days（{c.config.season_days:g}）",
     )
+    if segments:  # 7 天濃縮季（企劃者 2026-10-20）：季曆的週換成段，也是照現實天（cal_scale 1）；內容照天另寫的那一份是 7 天的
+        need(c.config.season21, "設定：season_segments（季曆分段）只給照現實天的季，要一起打開 season21")
+        need(all(n >= 1 for n in segments), f"設定：season_segments 每一段至少一天（{segments}）")
+        need(len(segments) == c.config.season_weeks, f"設定：season_segments 有 {len(segments)} 段，season_weeks 要一樣（{c.config.season_weeks}）")
+        need(
+            sum(segments) == c.config.season_days == 7,
+            f"設定：season_segments 的和（{sum(segments)}）要等於 season_days（{c.config.season_days:g}），而且只做 7 天的季（內容照天另寫的是 7 天）",
+        )
+    week7 = bool(c.config.season21 and segments)
     for ev in table:
         where = f"時刻表 {ev.id}"
         need(ev.week <= c.config.season_weeks, f"{where}：第 {ev.week} 週超出季曆的 {c.config.season_weeks} 週")

@@ -2966,9 +2966,15 @@ class Config(_Strict):
     # 21 天季的骨架（正式季整合設計第一章；12.3 第 41 條：預設關，只有 content/profiles/season21.json 打開，週末與 14 天一個字都不變）：
     # 季曆就是現實的三週（season_weeks 3、season_days 21，cal_scale 1），錨在開季那一週的台灣週一 00:00（WorldState.cal_offset）；
     # 21 天季自己的時刻表（TimetableEvent.real）、官軍將領與伏筆照天數、不提前收季、「今天」是現實的一天（台灣 00:00 換日）。
-    # 開季時蓋章（WorldState.season21），正在跑的季照它開季時的章
+    # 開季時蓋章（WorldState.season21），正在跑的季照它開季時的章。
+    # 名字是歷史的：現在是「照現實天的季」的骨架，7 天濃縮季（content/profiles/week7.json，企劃者 2026-10-20）也打開，另寫 season_segments
     season21: bool = False
     season_weeks: int = Field(default=12, ge=1)  # 季曆：一季壓成幾週（計畫第六節：季曆秒＝世界秒 × 週數 × 7 ÷ season_days）
+    # 7 天濃縮季（企劃者 2026-10-20；計畫 docs/superpowers/plans/2026-10-20-七天濃縮季.md）：照現實天的季把季曆的「週」換成幾段、每段幾天
+    # （week7 寫 [2, 2, 3]：第 1～2、3～4、5～7 天）。照週算的東西（第四階輪替、月旦評、寶物每週上限、頭目每週次數、貢獻的週帳、版圖變化）
+    # 一律照段；錨點是開季那一天的台灣 00:00（開季那天是第 1 天），畫面寫「第 N 天 HH:MM」（calendar.week7_on）。
+    # 空的是一週 7 天（21 天季與其他季，一個字都不變）。載入時驗：要 season21、段數＝season_weeks、段的和＝season_days＝7
+    season_segments: list[int] = Field(default_factory=list)
     # 決定性勝利（黃巾聲勢 ≥85、≤15）季曆第幾週起才提前收季；之前到了門檻也不收，季末照常比（企劃者 2026-10-05，計畫 T9）。
     # 割據 ≥85 不提前收季、季末才判群雄並起（FB-254，企劃者 2026-10-15「提前收季只看戰線」；rules.ends_early）
     decisive_from_week: int = Field(default=10, ge=1)
