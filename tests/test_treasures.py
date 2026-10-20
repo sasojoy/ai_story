@@ -211,15 +211,15 @@ def test_amount_is_neutral_unless_worn_and_switched_on(content, state):
     assert treasures.amount(state, content, "audience") == 0.0
 
 
-def test_cultivate_treasure_still_reads_but_the_last_step_does_not_use_it(content, state, world):
-    """武學重構：衝品的擲骰拿掉了（品級不靠修練），設計 6.2 的「修練升品 ×1.2」沒有地方讀；寶物本身照舊讀得到（amount），
-    服丹衝關（force_odds）與頓悟不吃寶物（跟以前一樣）。"""
+def test_cultivate_treasure_now_multiplies_the_last_step(content, state, world):
+    """武學重構：衝品拿掉了，寶物「cultivate」改乘絕學這一步——服丹衝關（force_odds）照 ×1.2（夾 max_chance 之前）。"""
     from tianxia import cultivation
     _book(content)
+    content.config.legend_item_bonus = 20  # 照悟性 5 是 20%，乘 1.2 是 24%，不碰 max_chance
     forcing = cultivation.force_odds(state, content, world, "nope")
     state.player.treasure = _item("cultivate")
     assert treasures.amount(state, content, "cultivate") == 1.2
-    assert cultivation.force_odds(state, content, world, "nope") == forcing
+    assert cultivation.force_odds(state, content, world, "nope") == round(forcing * 1.2)
 
 
 def test_insight_treasure_weighs_only_the_insight_branch(content, world):

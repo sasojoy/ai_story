@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import random
 
-from . import arts as arts_mod, library, naming, team
+from . import arts as arts_mod, library, naming, team, treasures
 from .martial_arts import MAX_LEVEL, next_quality
 from .models import Content
 from .rules import add_chronicle
@@ -95,7 +95,9 @@ def seize(
         if not art_id or not ready(state, content, world, art_id)[0]:
             continue
         art = team.resolve_art(art_id, content, world)
+        # 寶物「cultivate」（凝神香囊、檀木念珠）以前乘修練升品，衝品拿掉之後改乘絕學這一步（契機與服丹都乘）
         odds = rule.chance * ratio / rule.par_ratio * team.stat_factor(content, p.stats.get("wis", team.BASE_STAT))
+        odds *= treasures.amount(state, content, "cultivate")
         if rng.random() * 100 < max(1.0, min(rule.max_chance, odds)):
             p.art_quality[art_id] = "絕學"
             p.art_mastery.pop(art_id, None)
@@ -108,6 +110,7 @@ def force_odds(state: GameState, content: Content, world: WorldStateStore, art_i
     """不等契機，服一枚破境丹關起門來強行衝關的機會（%）：legend_item_bonus × 悟性，夾在 1～breakthrough.max_chance。"""
     cfg = content.config
     odds = cfg.legend_item_bonus * team.stat_factor(content, state.player.stats.get("wis", team.BASE_STAT))
+    odds *= treasures.amount(state, content, "cultivate")  # 衝絕學的寶物，同 seize
     return round(max(1.0, min(cfg.breakthrough.max_chance, odds)))
 
 

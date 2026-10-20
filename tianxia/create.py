@@ -19,7 +19,7 @@ from dataclasses import dataclass
 
 from pydantic import BaseModel
 
-from . import annals, arts as arts_mod, insights, library, naming, team
+from . import annals, arts as arts_mod, insights, library, naming, team, treasures
 from .martial_arts import ATTRIBUTES, QUALITY_BASE_POWER, QUALITY_TOP_POWER, MartialArt
 from .models import WEAPON_KINDS, Content
 from .ollama_client import OllamaClient
@@ -252,6 +252,11 @@ def bonus_of(content: Content, extra: int) -> int:
     return min(cfg.create_bonus_cap, 5 * (max(0, extra) // cfg.create_bonus_per))
 
 
+def seal_points(state: GameState, content: Content) -> int:
+    """玉璽赤璋（fuse_points）：合成不擲品質之後改加在自創的意分上（夾之前加，品級機率照它挪）。"""
+    return int(treasures.amount(state, content, "fuse_points"))
+
+
 def grade_odds(content: Content, score_value: int, bonus: int) -> dict[str, float]:
     """品級機率（%）：從 create_odds 起算，意分＋加分每一分把下品挪 create_point_shift 個百分點，三分之二到上品、三分之一到中品。"""
     cfg = content.config.arts
@@ -302,7 +307,7 @@ def finish(
     draft = state.player.creating
     clean = naming.clean_name(name)
     bonus = bonus_of(content, extra)
-    grade = roll_grade(content, draft.score, bonus, rng)
+    grade = roll_grade(content, draft.score + seal_points(state, content), bonus, rng)
     art = MartialArt(
         id=clean, name=clean, kind=draft.kind, quality="下品", attribute=draft.affinity[0] if draft.affinity else "",
         base_power=QUALITY_BASE_POWER["下品"], top_power=QUALITY_TOP_POWER["下品"], origin="created",
@@ -362,6 +367,6 @@ def view(state: GameState, content: Content, world: WorldStateStore) -> dict:
     base["draft"] = {
         "kind": draft.kind, "affinity": list(draft.affinity), "affinity_text": "、".join(draft.affinity) or "兼容並蓄",
         "lean": draft.lean, "intent": draft.intent, "weapon": draft.weapon, "insight": draft.insight,
-        "insight_choices": choices, "odds": grade_odds(content, draft.score, 0),
+        "insight_choices": choices, "odds": grade_odds(content, draft.score + seal_points(state, content), 0),
     }
     return base

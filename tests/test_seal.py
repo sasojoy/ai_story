@@ -247,7 +247,7 @@ def test_xuanniu_adds_a_talk_turn_and_jinjiao_adds_dodge(content, world):
 
 
 def test_chizhang_is_read_and_guixin_grows_companions(content, world):
-    """赤璋：合成的造化 +5——武學重構之後合成不擲品質、沒有造化分可加，這一片只剩讀得到（amount）；
+    """赤璋：武學重構之後合成不擲品質，改成自創的意分 +5（create.seal_points，品級機率照它挪）；
     歸心：同伴拿到的經驗 ×1.1、取整，本人那一份不變。"""
     from unittest import mock
 
@@ -256,6 +256,8 @@ def test_chizhang_is_read_and_guixin_grows_companions(content, world):
     put_shards(content)
     game = _holding(content, world, "chizhang")
     assert treasures.amount(game.state, content, "fuse_points") == 5
+    from tianxia import create
+    assert create.seal_points(game.state, content) == 5
     guixin = _holding(content, world, "guixin", name="歸心客")
     guixin.state.player.team = ["mate"]  # 測試內容的人物 mate 帶在身邊（grant_team_exp 只讀 team 與 content.characters）
     seen = []
