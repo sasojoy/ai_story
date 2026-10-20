@@ -15,9 +15,9 @@
 第三批（--kits）另量：本命對玩家自組上品（兩門上品、意境槽裝滿的技能換成的戰法，隨機 SELF_KITS 套）、神器特技、名將本命兵器（含人器合一）。
 擂台同樣身手的兩個人對打（兩邊都照架勢出招），兩個方向都量；另量一般的仗多的贏面與決戰的份量。
 
-武學重構（2026-10-20，tianxia/arts.py）之後的「滿配」：兩門絕學各 4 格意境槽（Config.arts.slots）都裝滿、每個意境揣摩到 ●●●
-（一般功效三層，乘絕學的品質倍數），一半的機會一格換成秘方的特別功效、一半的機會一格換成不同意境合出來的高階技能，
-各一招絕招、一把以器配招的神器原品。自組上品是 4 格各 ●（新悟到的意境）。--strength 試滿配的意境強度（1～3）。
+武學重構（2026-10-20，tianxia/arts.py）之後的「滿配」（第三批：意境效果池之後）：兩門絕學各 4 格都裝滿、每一格一路不同的意境，
+一個一般功效三重加一個大獎（--grand-share 試大獎的比例，沒有大獎的那一格換成第二個一般功效），一半帶秘方的特別功效，
+各一招絕招、一把以器配招的神器原品。自組上品是 4 格各一重（新悟到的意境）。--strength 試滿配的一般功效重數（1～3）。
 
 用法：.venv/Scripts/python.exe scripts/measure_tactics.py [--runs 4000] [--bouts] [--kits] [--catch-up [--strength 3]]
 """
@@ -62,7 +62,7 @@ def main() -> None:
     parser.add_argument("--bouts", action="store_true", help="只量第二批：挑戰本人的對手戰法、頭目戰、擂台、決戰")
     parser.add_argument("--kits", action="store_true", help="只量第三批：本命對自組上品、神器特技、名將本命兵器")
     parser.add_argument("--catch-up", action="store_true", help="只量玩家武學追上本命：十八位本命對滿配絕學＋配招兵器")
-    parser.add_argument("--strength", type=int, default=3, help="--catch-up 滿配裡每個意境的強度（●～●●●；武學重構之後一格一個意境）")
+    parser.add_argument("--strength", type=int, default=3, help="--catch-up 滿配裡每個意境的強度（一重～三重）")
     parser.add_argument("--bout-strike", type=float, help="試別的 Config.tactics.bout_strike（只量）")
     parser.add_argument("--war-scale", type=float, help="試別的 Config.tactics.war_scale（只量）")
     parser.add_argument("--might-scale", type=float, help="本命底蘊（TacticDef.might）全部乘這個數（只量）")
@@ -371,7 +371,7 @@ def self_kit(content, seed, quality="上品", special_share=0.5):
 
 
 def full_kit(content, seed, strength=3, special_share=0.5):
-    """滿配（玩家武學追上本命）：兩門絕學四格都裝滿、每格 ●●●、一半帶特別功效、一半帶高階技能、各一招絕招、一把以器配招的神器原品。"""
+    """滿配（玩家武學追上本命）：兩門絕學四格都裝滿、每格三重加大獎、一半帶特別功效、各一招絕招、一把以器配招的神器原品。"""
     rng = random.Random(f"full|{seed}")
     hs = piece_kit(content, seed, "絕學", strength, GRAND_SHARE, special_share, ults=True)
     arm = rng.choice([r for r in content.forge_secrets.values() if r.tactic is not None and r.slot == "weapon"])
@@ -385,7 +385,7 @@ def catch_up(content, runs, strength=3):
     arms = {a.character: a for a in content.gear.signature_arms}
     fulls = [full_kit(content, k, strength) for k in range(SELF_KITS)]
     selfs = [self_kit(content, k) for k in range(SELF_KITS)]
-    print(f"擂台（兩邊威力 150，兩個方向各 {runs} 場）：本命對滿配絕學＋配招兵器（{SELF_KITS} 套，每格意境 {'●' * strength}）")
+    print(f"擂台（兩邊威力 150，兩個方向各 {runs} 場）：本命對滿配絕學＋配招兵器（{SELF_KITS} 套，每格{'一二三'[strength - 1]}重＋大獎）")
     print(f"  滿配對自組上品：{sum(share(a, b) for a, b in zip(fulls, selfs)) / SELF_KITS:.1%}")
     rows = []
     for fid in figures_with(content):
