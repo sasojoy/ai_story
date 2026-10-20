@@ -37,6 +37,7 @@ from . import hints as hint_rules  # 碰到才說（新手引導計畫三）；�
 from . import tavern as tavern_rules  # 酒肆（企劃者 2026-10-18）；叫 tavern_rules：跟其他 *_rules 一樣避開區域變數
 from . import prologue as prologue_rules  # Game.new 有個參數也叫 prologue，所以模組在這裡一律叫 prologue_rules
 from . import rumor_view  # 傳聞分層的畫面：見聞頁的四層、你不在的時候（計畫 2026-10-06 傳聞分層一）
+from .accounts import AccountStore
 from .characters import CharacterStore, name_key
 from .events import (
     choice_label, event_candidates, free_text_note, has_events_here, pick_event, stamina_note, visible_choices,
@@ -9269,6 +9270,89 @@ class Game:
             time=self.state.world.time, title=mall.TITLE, lines=result.lines, changes=result.changes,
         ))
         return self._log(result.lines)
+
+    def mall_view(self) -> dict | None:
+        """商城那一頁的資料（mall.view）；商城關著是 None。"""
+        wallet = self._wallet()
+        if wallet is None:
+            return None
+        return mall.view(self.content, wallet, self._mall_owner(), self._pill_day(), self.world.get_season_number())
+
+    def mall_records(self) -> dict | None:
+        """自己的購買紀錄與帳（mall.records，不寫經手的管理者）；商城關著是 None。"""
+        wallet = self._wallet()
+        return None if wallet is None else mall.records(self.content, wallet, self._mall_owner())
+
+    def _mall_admin(self, action: str) -> tuple[Wallet | None, str | None]:
+        """管理者商城工具的共同檢查：(錢包, None)，或 (None, 拒絕的那一句)。帳跟季無關：籌備中、休季、暫停中都做得了。"""
+        if not self.is_admin():
+            return None, f"（只有管理者能{action}。）"
+        wallet = self._wallet()
+        return (None, mall.OFF) if wallet is None else (wallet, None)
+
+    def _mall_target(self, wallet: Wallet, text: str) -> tuple[str, str] | None:
+        """管理者填的名號或帳號 → (錢包的主人, 名號)。先照角色找（真人假人一樣），再照帳號找它綁的角色；都沒有是 None。"""
+        text = (text or "").strip()
+        if not text:
+            return None
+        shown = wallet.character_name(name_key(text))
+        if shown is not None:
+            return name_key(text), shown
+        account = AccountStore(self.world.db).get(text)
+        if account is None or account.character is None:
+            return None
+        shown = wallet.character_name(name_key(account.character))
+        return None if shown is None else (name_key(account.character), shown)
+
+    def _mall_adjust(self, name: str, amount: int, note: str, ref: str, reason: str) -> list[str]:
+        wallet, refusal = self._mall_admin("補發元寶" if reason == "reissue" else "扣回元寶")
+        if refusal:
+            return self._log([refusal])
+        target = self._mall_target(wallet, name)
+        if target is None:
+            return self._log([NO_SUCH_PLAYER.format(name=(name or "").strip())])
+        owner, shown = target
+        msg = mall.adjust(wallet, owner, shown, amount, reason, ref, now=self.now, admin=self.state.player.name, note=note)
+        if not msg.startswith("（"):
+            self._write("商城", [msg], tag="管理者")
+        return self._log([msg])
+
+    def admin_mall_reissue(self, name: str, amount: int, note: str, ref: str) -> list[str]:
+        """管理者替某個名號（或帳號）補發元寶（4.7）：原因必填、寫進帳（誰、何時、為什麼）；ref 是這一筆的編號（伺服器產）。"""
+        return self._mall_adjust(name, amount, note, ref, "reissue")
+
+    def admin_mall_revoke(self, name: str, amount: int, note: str, ref: str) -> list[str]:
+        """管理者從某個名號（或帳號）扣回元寶（4.7）：餘額不能是負的。"""
+        return self._mall_adjust(name, amount, note, ref, "revoke")
+
+    def admin_mall_refund(self, name: str, purchase_id: int, note: str) -> list[str]:
+        """管理者退一筆購買（mall.refund）：元寶全退、收回手上還有的回體丹、月卡扣回天數；改到的存檔存回去（_save_target）。"""
+        wallet, refusal = self._mall_admin("退購買")
+        if refusal:
+            return self._log([refusal])
+        target = self._mall_target(wallet, name)
+        game = None if target is None else self._admin_target(target[1])
+        if game is None:
+            return self._log([NO_SUCH_PLAYER.format(name=(name or "").strip())])
+        msg = mall.refund(game.state, self.content, wallet, purchase_id, now=self.now, admin=self.state.player.name, note=note)
+        self._save_target(game)
+        if not msg.startswith("（"):
+            self._write("商城", [msg], tag="管理者")
+        return self._log([msg])
+
+    def admin_mall_ledger(self, name: str) -> dict:
+        """管理者查某個名號（或帳號）的帳（4.7）：{name, balance, card, ledger, purchases}，帳多寫編號與經手的管理者；
+        不是管理者、商城關著、查不到回 {refusal}。真人假人回的一模一樣（不寫帳號）。只讀。"""
+        wallet, refusal = self._mall_admin("查帳")
+        if refusal:
+            return {"refusal": refusal}
+        target = self._mall_target(wallet, name)
+        if target is None:
+            return {"refusal": NO_SUCH_PLAYER.format(name=(name or "").strip())}
+        owner, shown = target
+        data = mall.records(self.content, wallet, owner, admin=True)
+        return {"name": shown, "balance": data["balance"], "card": mall.card_view(self.content, wallet, owner, self._pill_day()),
+                "ledger": data["ledger"], "purchases": data["purchases"]}
 
     def pills_left_today(self) -> int | None:
         """今天還能服幾顆回體丹（pill_cap）；不限是 None。不看手上有幾顆。"""

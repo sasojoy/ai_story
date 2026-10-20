@@ -161,6 +161,12 @@ class Wallet:
 
     # ── 對帳 ────────────────────────────────────
 
+    def character_name(self, owner: str) -> str | None:
+        """這個錢包的角色名號（characters 表的原寫法）；沒有這個角色是 None。管理者查帳找人用（真人假人一樣查）。"""
+        with self.db.snapshot() as conn:
+            r = conn.execute("SELECT name FROM characters WHERE key = ?", (owner,)).fetchone()
+        return None if r is None else r["name"]
+
     def export(self) -> list[tuple[LedgerRow, str | None]]:
         """全部的帳照 id 排，配上角色的名號（characters 表；沒有這個角色是 None）。主機端對帳用（scripts/mall_ledger.py）。"""
         sql = "SELECT l.*, c.name AS shown FROM mall_ledger l LEFT JOIN characters c ON c.key = l.owner ORDER BY l.id"

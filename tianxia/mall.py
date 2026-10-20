@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from . import naming
 from .characters import name_key
@@ -52,6 +52,20 @@ LIMIT_SEASON = "「{name}」這一季已經買了 {n} 次。"
 LIMIT_ACCOUNT = "「{name}」每個帳號限買 {n} 次，已經買滿了。"
 BOUGHT = "買下「{name}」：{effects}。元寶 -{price}（還剩 {left}）。"
 CARD_UNTIL = "月卡到 {day}"  # 江湖紀錄的變化：卡用到哪一天（含）
+# 管理者工具（4.7）：只有管理者看得到
+NEED_NOTE = "（要寫原因：每一筆都會記進帳。）"
+BAD_AMOUNT = "（元寶要寫正整數。）"
+NEED_REF = "（這一筆沒有編號，沒有記帳。）"
+REVOKE_SHORT = "（{name}只有 {balance} 元寶，扣不了 {n}：餘額不能是負的。）"
+DONE_BEFORE = "（這個編號已經記過帳了，沒有再記一次。）"
+REISSUED = "已替{name}補發 {n} 元寶（餘額 {left}）。"
+REVOKED = "已從{name}扣回 {n} 元寶（餘額 {left}）。"
+NO_PURCHASE = "（{name}沒有這一筆購買。）"
+REFUNDED_BEFORE = "（這一筆已經退過了。）"
+REFUNDED = "已退{name}的「{item}」：元寶 +{price}（餘額 {left}）。{took}"
+PILLS_BACK = "{pill}收回 {n} 顆。"
+PILLS_USED = "用掉的 {n} 顆不追。"
+CARD_BACK = "月卡少 {n} 天。"
 
 
 @dataclass(frozen=True)
@@ -192,6 +206,133 @@ def _deliver(state: GameState, content: Content, wallet: Wallet, owner: str, ite
         state.player.stamina_pills += pills
         changes.append(f"{content.config.stamina_pill_name} +{pills}")
     return changes
+
+
+def real_text(now: float, content: Content) -> str:
+    """現實時間 → 台灣時間「10/25 21:40」（購買紀錄與帳；不是季曆的時刻，所以不走 calendar.point_text）。"""
+    offset = content.config.pill_day_utc_offset_hours
+    moment = datetime.fromtimestamp(now, tz=timezone(timedelta(hours=offset)))
+    return f"{moment.month}/{moment.day} {moment.hour:02d}:{moment.minute:02d}"
+
+
+def card_view(content: Content, wallet: Wallet, owner: str, day: int) -> dict | None:
+    """月卡此刻有沒有效：有效回 {until: 用到哪一天（含）, bonus: 多幾顆}，其餘 None。"""
+    span = wallet.card(owner, CARD_KEY)
+    if span is None or not span[0] <= day < span[1]:
+        return None
+    return {"until": day_text(span[1] - 1), "bonus": content.config.mall.card_pill_bonus}
+
+
+def limit_text(item: MallItem, wallet: Wallet, owner: str, day: int, season: int) -> str:
+    """限購那一行（例「每天限 2 次（今天已買 1）」）；不限是空字串。待 joy 潤。"""
+    limit, parts = item.limit, []
+    if limit.day is not None:
+        parts.append(f"每天限 {limit.day} 次（今天已買 {wallet.count(owner, item.id, day=day)}）")
+    if limit.season is not None:
+        parts.append(f"每季限 {limit.season} 次（這一季已買 {wallet.count(owner, item.id, season=season)}）")
+    if limit.account is not None:
+        parts.append(f"每個帳號限 {limit.account} 次（已買 {wallet.count(owner, item.id)}）")
+    return "、".join(parts)
+
+
+def view(content: Content, wallet: Wallet, owner: str, day: int, season: int) -> dict:
+    """商城那一頁的資料：餘額、月卡、這一刻上架的商品（照 content/mall.json 的順序；沒上架的不列）。每件寫買不買得了、
+    為什麼、買了之後剩多少（購買確認用，4.6）。"""
+    balance = wallet.balance(owner)
+    items = []
+    for item in content.mall.values():
+        if not on_sale(item, day, season):
+            continue
+        why = buy_problem(item, wallet, owner, day, season)
+        items.append({
+            "id": item.id, "name": item.name, "note": item.note, "price": item.price, "kind": item.kind,
+            "kind_name": KIND_NAMES[item.kind], "effects": effects_text(item, content),
+            "limit": limit_text(item, wallet, owner, day, season), "can": why is None, "why": why, "after": balance - item.price,
+        })
+    return {"balance": balance, "card": card_view(content, wallet, owner, day), "items": items}
+
+
+def records(content: Content, wallet: Wallet, owner: str, *, admin: bool = False) -> dict:
+    """購買紀錄與帳（最近 Config.mall.records_shown 筆，新的在前）；帳的每一列寫那一筆之後的餘額。admin 為真時多寫編號與
+    經手的管理者（管理者查帳）；玩家自己看的不寫是誰經手。"""
+    shown = content.config.mall.records_shown
+    balance = wallet.balance(owner)
+    after, ledger = balance, []
+    for row in wallet.ledger(owner, shown):
+        line = {"time": real_text(row.time, content), "delta": row.delta, "reason": REASONS.get(row.reason, row.reason),
+                "note": row.note, "balance": after}
+        if admin:
+            line.update(ref=row.ref, admin=row.admin, purchase=row.purchase_id)
+        ledger.append(line)
+        after -= row.delta
+    purchases = []
+    for bought in wallet.purchases(owner, shown):
+        known = content.mall.get(bought.item)
+        purchases.append({"id": bought.id, "time": real_text(bought.time, content), "item": known.name if known else bought.item,
+                          "price": bought.price, "refunded": bought.refunded is not None})
+    return {"balance": balance, "ledger": ledger, "purchases": purchases}
+
+
+def adjust(
+    wallet: Wallet, owner: str, shown: str, amount: int, reason: str, ref: str, *, now: float, admin: str, note: str,
+) -> str:
+    """管理者補發（reissue）或扣回（revoke）元寶（4.7）：原因必填、元寶是正整數、扣回不能扣到負的；回那一句（成了或不成）。
+    ref 是這一筆的編號（伺服器產），同一個編號重送不會記兩次。"""
+    note = (note or "").strip()
+    if not note:
+        return NEED_NOTE
+    if not isinstance(amount, int) or amount <= 0:
+        return BAD_AMOUNT
+    if not ref:
+        return NEED_REF
+    with wallet.db.transaction():
+        if reason == "revoke":
+            balance = wallet.balance(owner)
+            if balance < amount:
+                return REVOKE_SHORT.format(name=shown, balance=balance, n=amount)
+        if not wallet.post(owner, amount if reason == "reissue" else -amount, reason, f"admin:{ref}", time=now, admin=admin, note=note):
+            return DONE_BEFORE
+        left = wallet.balance(owner)
+    return (REISSUED if reason == "reissue" else REVOKED).format(name=shown, n=amount, left=left)
+
+
+def refund(
+    state: GameState, content: Content, wallet: Wallet, purchase_id: int, *, now: float, admin: str, note: str,
+) -> str:
+    """管理者退一筆購買（4.7）：元寶照價錢全退；回體丹收回手上還有的（最多當初那幾顆，用掉的不追）；月卡把那一張的天數
+    扣回去（那一張屬於已經過期的舊卡就不動現在這一張）。一筆只能退一次（編號 refund:<購買>）。state 是那個人的存檔，
+    呼叫端存回去；回那一句（成了或不成）。"""
+    owner = name_key(state.player.name)
+    shown = state.player.name
+    note = (note or "").strip()
+    if not note:
+        return NEED_NOTE
+    bought = wallet.purchase(purchase_id)
+    if bought is None or bought.owner != owner:
+        return NO_PURCHASE.format(name=shown)
+    if bought.refunded is not None:
+        return REFUNDED_BEFORE
+    took: list[str] = []
+    with wallet.db.transaction():
+        if not wallet.post(owner, bought.price, "refund", f"refund:{bought.id}", time=now, admin=admin, note=note,
+                           purchase_id=bought.id):
+            return REFUNDED_BEFORE
+        wallet.mark_refunded(bought.id, now)
+        days = int(bought.data.get("card_days", 0))
+        span = wallet.card(owner, CARD_KEY)
+        if days and span is not None and bought.day >= span[0]:
+            wallet.set_card(owner, CARD_KEY, span[0], max(span[0], span[1] - days))
+            took.append(CARD_BACK.format(n=days))
+        pills = int(bought.data.get("pills", 0))
+        if pills:
+            back = min(pills, state.player.stamina_pills)
+            state.player.stamina_pills -= back
+            took.append(PILLS_BACK.format(pill=content.config.stamina_pill_name, n=back))
+            if back < pills:
+                took.append(PILLS_USED.format(n=pills - back))
+        left = wallet.balance(owner)
+    known = content.mall.get(bought.item)
+    return REFUNDED.format(name=shown, item=known.name if known else bought.item, price=bought.price, left=left, took="".join(took))
 
 
 def item_problems(item: MallItem, content: Content) -> list[str]:

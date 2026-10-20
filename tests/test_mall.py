@@ -8,7 +8,7 @@ import pytest
 from conftest import next_season
 
 from tianxia import mall, roster
-from tianxia.characters import name_key
+from tianxia.characters import name_key, open_characters
 from tianxia.engine import Game
 from tianxia.models import MallItem
 from tianxia.state import BotProfile
@@ -44,6 +44,7 @@ def on(content):
 def _game(content, name="沈浪", now=T0) -> Game:
     game = Game.new(content, name, rng=random.Random(0))
     game.sync(now)
+    open_characters().save(game.state)  # 伺服器存過的樣子：管理者照名號找得到他
     return game
 
 
@@ -290,3 +291,136 @@ def test_card_rebuy_after_expiry_starts_today(on):
     game.now = T0 + 5 * DAY
     game.mall_buy("card_1", "x2")
     assert _wallet(game).card("沈浪", mall.CARD_KEY) == (DAY0 + 5, DAY0 + 6)
+
+
+# ── 畫面資料 ─────────────────────────────────────
+
+
+def test_view_is_none_when_off(content):
+    game = _game(content)
+    assert game.mall_view() is None and game.mall_records() is None
+
+
+def test_view_lists_items_with_why(on):
+    game = _ready(on)
+    on.mall["pills_30"].on_sale.seasons = [9]  # 沒上架的不列
+    game.mall_buy("pills_5", "v1")
+    game.mall_buy("pills_5", "v2")
+    view = game.mall_view()
+    assert view["balance"] == 4800 and view["card"] is None
+    rows = {row["id"]: row for row in view["items"]}
+    assert set(rows) == {"pills_5", "card_30", "card_1"}
+    pills = rows["pills_5"]
+    assert pills["can"] is False and "今天" in pills["why"] and pills["price"] == 100
+    assert pills["effects"] == "回體丹 5 顆" and pills["kind_name"] == "消耗品" and "每天限 2 次" in pills["limit"]
+    card = rows["card_30"]
+    assert card["can"] is True and card["why"] is None and card["after"] == 4200
+    game.mall_buy("card_30", "v3")
+    assert game.mall_view()["card"] == {"until": mall.day_text(DAY0 + 29), "bonus": 1}
+
+
+def test_records_show_the_ledger_with_running_balance(on):
+    game = _ready(on)
+    game.mall_buy("pills_5", "r1")
+    records = game.mall_records()
+    assert records["balance"] == 4900
+    assert [(row["reason"], row["delta"], row["balance"]) for row in records["ledger"]] == [("購買", -100, 4900), ("封測發放", 5000, 5000)]
+    assert [(p["item"], p["price"], p["refunded"]) for p in records["purchases"]] == [("回體丹五顆", 100, False)]
+    assert "admin" not in records["ledger"][0]  # 玩家看自己的帳不寫經手的管理者
+
+
+# ── 管理者工具 ───────────────────────────────────
+
+
+def _admin(on, now=T0) -> Game:
+    admin = _game(on, "管理者", now)
+    admin.mark_seen(now)
+    return admin
+
+
+def test_reissue_and_revoke_are_logged_with_admin_and_note(on):
+    player = _ready(on)
+    admin = _admin(on)
+    assert "只有管理者" in player.admin_mall_reissue("管理者", 100, "自己加", "ref-x")[0]
+    assert "原因" in admin.admin_mall_reissue("沈浪", 100, "  ", "ref-a")[0]
+    assert "江湖上沒有" in admin.admin_mall_reissue("查無此人", 100, "補償", "ref-b")[0]
+    msgs = admin.admin_mall_reissue("沈浪", 300, "伺服器維修補償", "ref-c")
+    assert "沈浪" in msgs[0] and _wallet(player).balance("沈浪") == 5300
+    row = _rows(player)[0]
+    assert (row.reason, row.delta, row.admin, row.note) == ("reissue", 300, "管理者", "伺服器維修補償")
+    assert admin.admin_mall_reissue("沈浪", 300, "伺服器維修補償", "ref-c")  # 同一個編號重送不算兩次
+    assert _wallet(player).balance("沈浪") == 5300
+    assert "不能是負的" in admin.admin_mall_revoke("沈浪", 9999, "扣錯了", "ref-d")[0]
+    admin.admin_mall_revoke("沈浪", 300, "發錯了", "ref-e")
+    assert _wallet(player).balance("沈浪") == 5000 and _rows(player)[0].reason == "revoke"
+
+
+def test_admin_finds_the_wallet_by_login_too(on):
+    from tianxia.accounts import AccountStore
+
+    player = _ready(on)
+    store = AccountStore(player.world.db)
+    store.register("shen_01", "secret-pw")
+    store.bind_character("shen_01", "沈浪")
+    admin = _admin(on)
+    admin.admin_mall_reissue("shen_01", 10, "測試", "ref-login")
+    assert _wallet(player).balance("沈浪") == 5010
+
+
+def test_refund_returns_yuanbao_and_takes_back_pills_in_hand(on):
+    player = _ready(on)
+    player.mall_buy("pills_30", "f1")
+    from tianxia.characters import open_characters
+
+    player.state.player.stamina_pills = 12  # 用掉了一大半
+    open_characters().save(player.state)
+    pid = _wallet(player).purchases("沈浪")[0].id
+    admin = _admin(on)
+    msgs = admin.admin_mall_refund("沈浪", pid, "買錯了")
+    assert "500" in msgs[0]
+    assert _wallet(player).balance("沈浪") == 5000
+    assert open_characters().load("沈浪").player.stamina_pills == 0  # 手上的 12 顆收回，用掉的不追
+    row = _rows(player)[0]
+    assert (row.reason, row.delta, row.purchase_id, row.admin) == ("refund", 500, pid, "管理者")
+    assert "退過" in admin.admin_mall_refund("沈浪", pid, "再退一次")[0]
+    assert _wallet(player).balance("沈浪") == 5000
+
+
+def test_refunded_purchase_frees_the_limit(on):
+    player = _ready(on)
+    player.mall_buy("pills_30", "l1")
+    pid = _wallet(player).purchases("沈浪")[0].id
+    _admin(on).admin_mall_refund("沈浪", pid, "買錯了")
+    from tianxia.characters import open_characters
+
+    player.state = open_characters().load("沈浪")
+    player.sync(T0)
+    assert player.mall_buy("pills_30", "l2")[0].startswith("買下")
+
+
+def test_refunding_a_card_takes_its_days_back(on):
+    player = _ready(on)
+    player.mall_buy("card_30", "k1")
+    player.mall_buy("card_30", "k2")
+    first = _wallet(player).purchases("沈浪")[-1].id
+    _admin(on).admin_mall_refund("沈浪", first, "測試退卡")
+    assert _wallet(player).card("沈浪", mall.CARD_KEY) == (DAY0, DAY0 + 30)
+
+
+def test_admin_ledger_looks_the_same_for_bots(on):
+    """管理者查帳：真人與假人回一樣的鍵、都沒有帳號字樣（看不出誰是假人）；不是管理者、查不到的回 refusal。"""
+    real = _ready(on, "沈浪")
+    bot = _game(on, "某假人")
+    bot.state.player.bot = BotProfile(personality="普通", seed=1)
+    bot.own_turn_checks()
+    from tianxia.characters import open_characters
+
+    open_characters().save(real.state)
+    open_characters().save(bot.state)
+    admin = _admin(on)
+    a, b = admin.admin_mall_ledger("沈浪"), admin.admin_mall_ledger("某假人")
+    assert set(a) == set(b) == {"name", "balance", "card", "ledger", "purchases"}
+    assert a["balance"] == b["balance"] == 5000
+    assert a["ledger"][0]["reason"] == b["ledger"][0]["reason"] == "封測發放"
+    assert "refusal" in real.admin_mall_ledger("某假人")
+    assert "refusal" in admin.admin_mall_ledger("查無此人")
