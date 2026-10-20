@@ -315,8 +315,23 @@ FALL_LINE = "{name}陣前敗走，{side}一時號令不行，戰線往{enemy}那
 FALL_BY_LINE = "{name}被{who}擊退，陣前敗走，{side}一時號令不行，戰線往{enemy}那邊推了{size}！"
 
 
+class SiegeInfo(BaseModel):
+    """這一場是攻城戰（領地爭奪第二批，tianxia/siege.py）：打哪一塊、誰攻、開集結那一刻誰佔著。BattleInstance.battle_id 是那個大區的
+    攻城範本（content/battles.json 的 siege_<大區>），名字照 siege.title（「攻城・地點」）。攻城另存一串（SharedWorldState.sieges），
+    可以跟時刻表決戰、別的攻城戰同時打。"""
+
+    slot_id: str  # 時程表上那一場（ConquestState.schedule 的 SiegeSlot.id）
+    loc: str  # 攻哪一塊
+    attackers: list[str] = Field(default_factory=list)  # 攻方（兩軍同時搶同一塊中立地是兩個）
+    holder: str | None = None  # 開集結那一刻的控制方；None＝中立地還沒人佔
+    guard_side: str | None = None  # 單方攻中立地時守將站的那一格（另一軍的 id）：另一軍的人站不進去，散人可以投效助守（裁決 8）
+    void: str = ""  # 作罷的原因（攻方沒人到、攻方已經是主人、管理者取消）；空的是照常打完
+    settled: bool = False  # 收場的事做過了（易手、進度歸 50、時程表記 done；只做一次）
+
+
 class BattleInstance(BaseModel):
     battle_id: str
+    siege: SiegeInfo | None = None  # 攻城戰（領地爭奪第二批）；決戰是 None
     phase: Phase = "muster"
     muster_deadline_real: float = 0.0
     participants: dict[str, BattleParticipant] = Field(default_factory=dict)

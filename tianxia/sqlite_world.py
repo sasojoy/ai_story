@@ -21,13 +21,13 @@ from __future__ import annotations
 
 import json
 import random
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from contextlib import AbstractContextManager
 from pathlib import Path
 from sqlite3 import Connection, Row
 
 from . import allied, calendar, divine
-from .battle_instance import BattleInstance, BattleRoundRecord, shift_deadlines, start_muster
+from .battle_instance import BattleInstance, BattleRoundRecord, SiegeInfo, shift_deadlines, start_muster
 from .characters import name_key
 from .database import Database, open_database
 from .characters import name_key
@@ -75,14 +75,16 @@ class SqliteWorldStore:
         state.season = self._load_season(conn, state.season_number, logs)
         if row is not None and row["active_battle_id"] is not None:
             state.active_battle = self._load_battle(conn, row["active_battle_id"])
+        state.sieges = [self._load_battle(conn, rid) for rid in state.siege_records]  # 攻城戰（領地爭奪第二批）：另存一串
         return state
 
     def _save(self, conn: Connection, state: SharedWorldState) -> None:
         battle_id = self._save_battle(conn, state.season_number, state.active_battle)  # 先寫決戰：world 要指向它
+        state.siege_records = [self._save_battle(conn, state.season_number, b) for b in state.sieges]  # 攻城戰：一場一列，world 記流水號
         conn.execute(
             "INSERT INTO world (id, data, active_battle_id) VALUES (1, ?, ?) "
             "ON CONFLICT (id) DO UPDATE SET data = excluded.data, active_battle_id = excluded.active_battle_id",
-            (state.model_dump_json(exclude={"season", "active_battle"}), battle_id),
+            (state.model_dump_json(exclude={"season", "active_battle", "sieges"}), battle_id),
         )
         self._save_season(conn, state.season_number, state.season)
 
@@ -707,6 +709,7 @@ class SqliteWorldStore:
             avoid_quiet_hours(state.season, content, now)  # 季曆排的決戰照開季這一刻挪開半夜（企劃者 2026-10-15）
             state.season.territory = None  # 章換了：地盤照開季的戰線重算，第一次不發天下大事（出陣探索與地盤設計第六節）
             state.season.conquest = None  # 領地爭奪同上：照開季的區塊與戰線重算（偏移從這一刻的戰線起算）
+            state.sieges = []  # 攻城戰（第二批）：籌備中不會有，保險
             state.season.tianji = state.tianji  # 這一季的天機蓋進季裡：週初掛單的重賞亂數看它（裝備四欄 6.4；bounties.issue 讀不到全服那一列）
             divine.stamp(state, content)  # 神器輪替（正式季整合 5.6）：照全服登記挑這一季的神器；開關關著什麼都不做
             state.season_opened = True
@@ -764,6 +767,7 @@ class SqliteWorldStore:
 
             avoid_quiet_hours(state.season, content, now)  # 同開季：季曆排的決戰（含天命之爭）照這一刻挪開半夜
             state.active_battle = None  # 上一季沒打完（或打完沒清掉）的戰鬥不帶進新的一季
+            state.sieges = []  # 攻城戰同上（領地爭奪第二批）
             self._save(conn, state)
             return True
 
@@ -851,6 +855,8 @@ class SqliteWorldStore:
                 world_module.keep_showdowns_on_time(state.season, content, skipped, season_now)
             if state.active_battle is not None:
                 shift_deadlines(state.active_battle, span)
+            for siege in state.sieges:  # 攻城戰同上（領地爭奪第二批，Review Focus 5）
+                shift_deadlines(siege, span)
             for duel in state.seal_duels:  # 奪璽單挑的時間一起挪（5.4）：不挪的話一繼續兩邊都過了在場窗口，全由代打打完
                 duel.starts_real += span
                 if duel.opened_real is not None:
@@ -950,6 +956,36 @@ class SqliteWorldStore:
     def clear_battle(self) -> None:
         self.mutate(lambda state: setattr(state, "active_battle", None))
 
+    def get_sieges(self) -> list[BattleInstance]:
+        return self.read().sieges
+
+    def mutate_siege(self, record_id: int, fn: Callable[[BattleInstance], None]) -> BattleInstance | None:
+        result: dict[str, BattleInstance | None] = {"battle": None}
+
+        def _apply(state: SharedWorldState) -> None:
+            found = next((b for b in state.sieges if b.record_id == record_id), None)
+            if found is not None:
+                fn(found)
+                result["battle"] = found
+
+        self.mutate(_apply)
+        return result["battle"]
+
+    def start_siege(self, definition: BattleDef, now: float, trend_start: int, info: SiegeInfo) -> BattleInstance:
+        result: dict[str, BattleInstance] = {}
+
+        def _apply(state: SharedWorldState) -> None:
+            battle = start_muster(definition, now, trend_start)
+            battle.siege = info
+            state.sieges.append(battle)
+            result["battle"] = battle
+
+        self.mutate(_apply)  # 寫回時 _save_battle 填上流水號（同一個物件）
+        return result["battle"]
+
+    def drop_siege(self, record_id: int) -> None:
+        self.mutate(lambda state: setattr(state, "sieges", [b for b in state.sieges if b.record_id != record_id]))
+
     def battle_rounds(self, record_id: int) -> list[BattleRoundRecord]:
         with self.db.snapshot() as conn:
             rows = conn.execute(
@@ -957,14 +993,16 @@ class SqliteWorldStore:
             ).fetchall()
         return [BattleRoundRecord.model_validate_json(row["data"]).model_copy(update={"id": row["id"]}) for row in rows]
 
-    def ended_battles(self, after: int = 0) -> list[tuple[int, BattleInstance]]:
+    def ended_battles(self, after: int = 0, skip: Collection[int] = ()) -> list[tuple[int, BattleInstance]]:
         """每個人每次同步（包括畫面每 10 秒的計時器）都會問，所以只讀流水號比 after 大的那幾列（主鍵的範圍查詢），
-        通常一列都沒有。流水號是 INTEGER PRIMARY KEY、這張表從不刪列，新的一場永遠比舊的大。"""
+        通常一列都沒有。流水號是 INTEGER PRIMARY KEY、這張表從不刪列，新的一場永遠比舊的大。
+        skip 裡的流水號（呼叫端補過的）先用流水號濾掉、不讀內容（攻城戰同時打，after 是往回讓的下限，見介面的說明）。"""
+        done = set(skip)
         with self.db.snapshot() as conn:
             rows = conn.execute(
                 "SELECT id, season FROM battles WHERE id > ? AND phase = 'ended' ORDER BY id", (after,),
             ).fetchall()
-            return [(row["season"], self._load_battle(conn, row["id"])) for row in rows]
+            return [(row["season"], self._load_battle(conn, row["id"])) for row in rows if row["id"] not in done]
 
     def ended_battle(self, record_id: int) -> BattleInstance | None:
         with self.db.snapshot() as conn:

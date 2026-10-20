@@ -210,7 +210,7 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random, slot: NamingS
     if not options and not enlist:
         return msgs
     ids = [o.id for o in options]
-    battle = game.world.get_battle()
+    battle = game.battle_now()  # 有攻城戰時是自己看的那一場（領地爭奪第二批）
     if battle is not None and s.player.name not in battle.participants:
         join = next((i for i in ids if i.startswith("battle:join")), None) or bot.enlist_pick(game, [o.id for o in enlist])
         if join is not None:  # 集結時選單照常有別的事可做（FB-009）；假人一看到加入就加入，不交給強度旋鈕碰運氣；豪強投效人少的一軍
@@ -945,7 +945,7 @@ def _battle_score(game: Game, arg: str) -> float | None:
         return JOIN_BATTLE_SCORE
     if kind != "act":
         return None
-    battle = game.world.get_battle()
+    battle = game.battle_now()  # 自己參戰的那一場（決戰或攻城，領地爭奪第二批）
     definition = game.content.battles[battle.battle_id]
     me = battle.participants.get(game.state.player.name)
     if me is None:

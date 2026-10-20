@@ -134,32 +134,38 @@ class BotRunner:
         report = TickReport()
         if self.world.season_phase() != "running" or self.world.paused_at() is not None:
             return report
-        battle = self.world.get_battle()
-        if battle is None or battle.phase != "active" or battle.battle_id not in self.content.battles:
+        battles = [b for b in self._battles() if b.phase == "active" and b.battle_id in self.content.battles]
+        if not battles:
             return report
         bots = {state.player.name: state.player.bot for state in self.characters.all(bots_only=True)}
-        present = [p for p in battle.participants.values() if not p.eliminated and not p.away]
-        pending = [p for p in present if p.name not in battle.round.pending_actions]
-        humans_done = not any(p.name not in bots and not p.is_bot and not battle_instance.idle(p) for p in pending)
         now = self.clock()
-        for p in pending:
-            profile = bots.get(p.name)
-            if profile is None:
-                continue
-            delay = random.Random(f"{profile.seed}|{battle.battle_id}|{battle.round_number}|{battle.round.opened_real}").uniform(*BATTLE_DELAY)
-            if not humans_done and now - battle.round.opened_real < delay:
-                continue
-            report.online += 1
-            try:
-                with self.world.action_lock(timeout=LOCK_WAIT):
-                    if self._battle_turn(p.name, self.clock()):
-                        report.acted += 1
-            except TimeoutError:
-                report.skipped += 1
-            except Exception as exc:
-                log_failure(exc)
-                report.failed += 1
+        for battle in battles:  # 決戰與攻城戰（領地爭奪第二批）各自看這一回合在等誰
+            present = [p for p in battle.participants.values() if not p.eliminated and not p.away]
+            pending = [p for p in present if p.name not in battle.round.pending_actions]
+            humans_done = not any(p.name not in bots and not p.is_bot and not battle_instance.idle(p) for p in pending)
+            for p in pending:
+                profile = bots.get(p.name)
+                if profile is None:
+                    continue
+                delay = random.Random(f"{profile.seed}|{battle.battle_id}|{battle.round_number}|{battle.round.opened_real}").uniform(*BATTLE_DELAY)
+                if not humans_done and now - battle.round.opened_real < delay:
+                    continue
+                report.online += 1
+                try:
+                    with self.world.action_lock(timeout=LOCK_WAIT):
+                        if self._battle_turn(p.name, self.clock()):
+                            report.acted += 1
+                except TimeoutError:
+                    report.skipped += 1
+                except Exception as exc:
+                    log_failure(exc)
+                    report.failed += 1
         return report
+
+    def _battles(self) -> list[battle_instance.BattleInstance]:
+        """全服此刻的每一場：決戰那一格加上攻城戰（領地爭奪第二批；沒開時是空的），一次讀完。"""
+        shared = self.world.read()
+        return ([shared.active_battle] if shared.active_battle is not None else []) + list(shared.sieges)
 
     def _battle_turn(self, name: str, now: float) -> bool:
         """在寫入交易裡替一個假人出決戰的一招（battle_tick）；季不在跑、暫停中、不是這一季的假人就什麼都不做。"""
@@ -182,9 +188,8 @@ class BotRunner:
         return acted
 
     def battle_on(self) -> bool:
-        """有一場決戰正在開打（run_bots 照它決定要不要每 BATTLE_TICK_SECONDS 叫 battle_tick）。"""
-        battle = self.world.get_battle()
-        return battle is not None and battle.phase == "active"
+        """有一場決戰（或攻城戰）正在開打（run_bots 照它決定要不要每 BATTLE_TICK_SECONDS 叫 battle_tick）。"""
+        return any(b.phase == "active" for b in self._battles())
 
     def _naming_open(self) -> bool:
         """這一輪輪不輪得到請模型取名：有 client、設定開著、離上一次夠久（一次一件，PM 10/5）。"""
@@ -286,12 +291,9 @@ class BotRunner:
 
     def _battle_owes(self) -> frozenset[str]:
         """進行中的全服戰鬥這一回合還在等誰出手：還在場（沒出局、沒離開大區）而且還沒送出行動的參戰者名號。
-        集結中、已經收場、沒有戰鬥時是空的。只用來決定「這一輪要不要讓這個假人動」，不改任何狀態。"""
-        battle = self.world.get_battle()
-        if battle is None or battle.phase != "active":
-            return frozenset()
+        集結中、已經收場、沒有戰鬥時是空的。只用來決定「這一輪要不要讓這個假人動」，不改任何狀態。決戰與攻城戰（領地爭奪第二批）都算。"""
         return frozenset(
-            p.name for p in battle.participants.values()
+            p.name for battle in self._battles() if battle.phase == "active" for p in battle.participants.values()
             if not p.eliminated and not p.away and p.name not in battle.round.pending_actions
         )
 

@@ -15,13 +15,13 @@
 from __future__ import annotations
 
 import random
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from contextlib import AbstractContextManager
 from typing import Literal, NamedTuple, Protocol
 
 from pydantic import BaseModel, Field
 
-from .battle_instance import BattleInstance, BattleRoundRecord
+from .battle_instance import BattleInstance, BattleRoundRecord, SiegeInfo
 from .martial_arts import Insight, MartialArt
 from .models import DEFAULT_SEASON_DAYS, BattleDef, Content
 from .state import GearFind, Rumor, SignatureClaim, WeaponRecipe, WorldState
@@ -216,6 +216,10 @@ class SharedWorldState(BaseModel):
     # ── 全服即時多人戰鬥（設計討論：集結選陣營→逐幕逐回合鎖步）────────
     # 同一時間最多一場（先簡化成這樣；真的需要同時好幾場再擴充成 list/dict）。
     active_battle: BattleInstance | None = None
+    # 攻城戰（領地爭奪第二批）：跟決戰、別的攻城戰同時打，另存一串。每一場跟決戰一樣是 battles 表的一列，world 那一列的 JSON 只記
+    # 流水號（siege_records，存檔時照 sieges 寫）；資料庫結構不動。收場、季終收兵之後拿掉（ended_battles 照樣讀得到那一列）
+    sieges: list[BattleInstance] = Field(default_factory=list)
+    siege_records: list[int] = Field(default_factory=list)
 
     def season_phase(self) -> SeasonPhase:
         if not self.season.storyline or not self.season_opened:
@@ -633,16 +637,35 @@ class WorldStateStore(Protocol):
 
     def clear_battle(self) -> None: ...
 
+    # ── 攻城戰（領地爭奪第二批）：跟決戰同時打，另存一串 ──
+    def get_sieges(self) -> list[BattleInstance]:
+        """還在共用狀態裡的攻城戰（照開集結的先後；收場之後拿掉，見 drop_siege）。"""
+        ...
+
+    def mutate_siege(self, record_id: int, fn: Callable[[BattleInstance], None]) -> BattleInstance | None:
+        """讀出流水號 record_id 那一場攻城→套用 fn→寫回；沒有那一場時 fn 不會被呼叫、回 None。"""
+        ...
+
+    def start_siege(self, definition: BattleDef, now: float, trend_start: int, info: SiegeInfo) -> BattleInstance:
+        """開一場攻城戰的集結（start_muster，再記上 info）；回帶著流水號的那一場。"""
+        ...
+
+    def drop_siege(self, record_id: int) -> None:
+        """把那一場攻城從共用狀態拿掉（收場、季終收兵之後）；battles 表那一列照留。"""
+        ...
+
     def battle_rounds(self, record_id: int) -> list[BattleRoundRecord]:
         """這一場（BattleInstance.record_id）結算過的每一回合，照先後。BattleInstance.rounds 只放這次讀出來
         之後才結算、還沒寫進資料庫的回合，存檔後讀出來是空的；要看以前的回合查這裡。"""
         ...
 
-    def ended_battles(self, after: int = 0) -> list[tuple[int, BattleInstance]]:
+    def ended_battles(self, after: int = 0, skip: Collection[int] = ()) -> list[tuple[int, BattleInstance]]:
         """收場的決戰（phase 是 ended）裡流水號（record_id）比 after 大的，不分季別、照先後，每一場連同它是第幾季
         打的：（季別, 戰鬥），戰鬥帶著 record_id。決戰的結果常常就把季收掉，所以參戰者休季、下一季才回來也要補得到
         （FB-027，見 Game._deliver_battle_results）。只讀。
 
+        skip 是呼叫端已經處理過的流水號（攻城戰跟決戰、別的攻城戰同時打，先開的可能晚收場，領地爭奪第二批）：after 給的是往回讓幾場的
+        下限，流水號在 skip 裡的不讀內容（先只查流水號，便宜）。下面「照開戰的先後收場」的理由只對決戰成立。
         after 是呼叫端已經處理過的最大流水號：決戰照開戰的先後收場，所以比它小的不會再有新收場的。理由——
         同一時間只有一場還沒收場（start_battle 在它收場或被清掉之前不另開），被清掉的（換季 next_season、季終
         clear_battle）不再指到、永遠不會收場，而新開的一場流水號一定比之前的都大（實作要保證這一點，SQLite 版是

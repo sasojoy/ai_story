@@ -297,8 +297,7 @@ def _tales_waiting(game: Game) -> bool:
     假人程式、逾時的追趕裡結算，所以每一個動作與輪詢之後都看一眼。"""
     if not TALE_THREADS or game.client is None or TALE_RUNNING:
         return False
-    battle = game.world.get_battle()
-    return battle is not None and bool(battle.tales)
+    return any(battle.tales for battle in game._tale_battles())  # 決戰與攻城戰（領地爭奪第二批）
 
 
 def look(game: Game, view):
@@ -485,10 +484,15 @@ def current_fingerprint() -> str:
     battle = shared.active_battle
     definition = CONTENT.battles.get(battle.battle_id) if battle is not None else None
     progress = battle_instance.round_progress(battle, definition) if definition is not None and battle.phase == "active" else None
+    sieges = [  # 攻城戰（領地爭奪第二批）：每一場同決戰那幾樣
+        (siege, battle_instance.round_progress(siege, CONTENT.battles[siege.battle_id])
+         if siege.phase == "active" and siege.battle_id in CONTENT.battles else None)
+        for siege in shared.sieges
+    ]
     return server_push.world_fingerprint(
         shared.season_number, shared.season_phase(), shared.season, battle,
         rumor_id=rumor_id, chronicle_count=chronicle_count, paused=shared.paused_at is not None, progress=progress,
-        seal=shared.seal_duels,
+        seal=shared.seal_duels, sieges=sieges,
     )
 
 
