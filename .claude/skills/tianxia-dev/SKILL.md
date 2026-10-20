@@ -48,6 +48,9 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 - **「舊季一字不變」用對照證明**（2026-10-20，7 天季 FB-500／501）：
   - 引擎：`git archive <開工那一點> | tar -x` 解到 scratchpad，同一支腳本在舊程式與 HEAD 各跑一次、diff 輸出。腳本開季後一路 `catch_up_season`＋`Game.for_world(...).world_tick`＋`sync` 到收季，印要比的字（狀態列、軍令、懸賞的 `due_short`／`due_text`、傳聞、玩法說明、名聲、`server.admin_choices`）；照 `time.time()` 算的（時刻表的 `at_real`）先抹掉，新加的鍵印之前拿掉。
   - 網頁：`webharness.run(DRIVER, {..., "app": <舊 app.js 的路徑>})` 用同一份伺服器資料、舊新兩份 app.js 各畫一次比字串；`wholeApp` 的名單只放兩版都有的函式。
+    **伺服器送的資料形狀也改了時這樣比會比出假差異**（2026-10-20 FB-502：21 天季多送 `words`，舊 app.js 拿到新資料就把 21 天季當 7 天季）：改成兩邊各用自己的伺服器＋app.js——在舊程式的根目錄用它自己 `tests/` 的 `_render` 跑一次、寫成 JSON，再比。
+  - 兩份輸出行數一樣時照行號比：`difflib` 遇到一大段相似的行會錯配，報出其實沒變的行。
+  - Windows 的 `tar -xf` 解 `git archive` 會在中文檔名（`docs/`）噴「Invalid empty pathname」，程式碼目錄照樣解得出來；比一次 `tianxia/`、`content/` 的檔數確認。
   - 回報寫「差異只有哪幾行」，不是只寫「測試過了」。
 
 ## 內容改動的雷
@@ -61,6 +64,7 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 - 練功、找素材撞上的對手是「這裡不是自己陣營、難度最低的那一路」（`Game._gather_foe`），出陣守拿的是「經驗最高的那一路」（`_sortie_host`）。換一路隊伍兩邊都會動，回報時寫出連帶。
 - 改了 `content/forge_secrets.json`、`per_season` 這類「池子大小」，會有測試與量表腳本寫死數量（配方總數、每季條數、`/13（` 這種字）。用 grep 找出來一起改。
 - 新寫給玩家看的字一律標「待 joy 潤」，數字標【預設】或【暫】。不要改 joy 寫好的事件文字；真的非動不可先問 PM。
+- 內容裡要照季換的字用插槽（`content/orders.json` 的 `{本週}`、`content/tutorial.json` 引薦人的 `{本週}`／`{每週}`，FB-502），填字的函式一個、載入時驗插槽；週末填完要跟原句一字不差。加了插槽，`test_real_content` 這類照原文寫死的斷言要一起改。
 
 ## 規則改動的雷
 
@@ -72,6 +76,8 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   - 新數字通常只寫在 `content/profiles/season21.json` 或 `Config` 預設。
   - 改之前想清楚三種季各會怎樣。派工沒說要動週末與 14 天就不動。
   - 測試用 `real_content("weekend")`／`("season21")` 各驗一次。7 天濃縮季是 `week7`（`season21` 骨架＋`season_segments`），只在那一季換的東西問 `calendar.week7_on`，寫「週／段」的字走 `calendar.week_word`／`week_label`，不要各處自己判斷。
+  - **「段」與「每天」是兩個開關**（FB-502）：季曆有段只有 7 天季（`week7_on`）；軍令每天一道是照現實天的季（`calendar.orders_daily`，21 天季也是）。軍令的字放 `calendar.ORDER_KEYS`，其他「週」的字照段。網頁 `calWords()` 有值不代表 7 天季（21 天季也送軍令那幾個字）：段問 `wk7()`、軍令問 `ordersDaily()`。
+  - **照現實天的季有開季偏移**：名義季末一律 `calendar.nominal_end`（不是季長 × DAY，FB-500、FB-505）；時刻表某一件「到了沒」一律 `timetable.when_in`（決戰照 `schedule`），不要用 `calendar.event_time`——決戰只寫星期鐘點、`day` 是 0，會被當成那一週第一天就到了（FB-504）。
   - **設定覆寫檔是淺層合併**（`content._config` 是 `{**config.json, **profile}`）：profile 寫 `"figure_life": {"revenge_cal_days": 2}` 會把 config.json 裡整塊 `figure_life` 換掉，沒寫的鍵回到 `Config` 預設。寫巢狀的覆寫之前先看 config.json 有沒有那一塊；測試驗一次「這一塊跟別種季只差這幾個鍵」（例 `test_week7_shortens_the_calendar_day_spans_pm_ruling_5`）。
 - **說法要跟規則一起改**：
   - 規則換了，玩法說明（`howto.py`）、按鈕、懸賞說明、傳聞、書信裡的同一件事都要跟著改。舊季要一個字都不變，照開關分兩版。
