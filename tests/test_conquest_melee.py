@@ -14,7 +14,7 @@ pytestmark = pytest.mark.slow  # 建 Game、載正式內容
 
 NOW = 1_792_000_000.0
 SCORES = {"強攻": 60.0, "固守": 60.0, "奇襲": 60.0}
-LOC = "nanyang_road"
+LOC = "yingchuan_wilds"  # 潁川郊野：守將劫道響馬（新天下的中立地；v1 是南陽官道）
 
 
 def _game(side="guan", name="沈浪", world=None):
@@ -174,7 +174,7 @@ def test_last_blow_takes_the_block():
     assert conquest.holder(w, game.content, LOC) == "guan"
     assert any("甲" in r.text and "最後一刀" in r.text for r in w.rumors if r.layer == "world")
     ended = game.world.ended_battle(after.record_id)
-    assert ended.outcome_side == "guan" and "最後一刀" in ended.outcome_title and "南陽官道" in ended.outcome_title
+    assert ended.outcome_side == "guan" and "最後一刀" in ended.outcome_title and "潁川郊野" in ended.outcome_title
     assert "甲" in ended.outcome_reason and "最後一刀" in ended.outcome_reason
 
 
@@ -222,8 +222,8 @@ def test_guard_survives_and_the_block_stays_neutral():
     w = game.state.world
     assert conquest.holder(w, game.content, LOC) is None  # 守將守住：照舊中立
     ended = game.world.ended_battle(after.record_id)
-    assert ended.outcome_side == GUARD and "守軍守住南陽官道" in ended.outcome_title
-    assert any("守住" in r.text and "南陽官道" in r.text for r in w.rumors if r.layer == "world")
+    assert ended.outcome_side == GUARD and "守軍守住潁川郊野" in ended.outcome_title
+    assert any("守住" in r.text and "潁川郊野" in r.text for r in w.rumors if r.layer == "world")
     found = next(s for s in w.conquest.schedule if s.id == after.siege.slot_id)
     assert found.status == "done" and found.winner is None
 
@@ -320,9 +320,9 @@ def test_the_lone_army_takes_the_block_by_the_line_without_felling_the_guard():
     w = game.state.world
     assert conquest.holder(w, game.content, LOC) == "guan"
     texts = [r.text for r in w.rumors if r.layer == "world"]
-    assert any("南陽官道落入" in t for t in texts) and not any("最後一刀" in t for t in texts)  # 天下大事照單方攻中立地的寫
+    assert any("潁川郊野落入" in t for t in texts) and not any("最後一刀" in t for t in texts)  # 天下大事照單方攻中立地的寫
     ended = game.world.ended_battle(after.record_id)
-    assert ended.outcome_side == "guan" and ended.outcome_title == "官軍大勝，拿下南陽官道"
+    assert ended.outcome_side == "guan" and ended.outcome_title == "官軍大勝，拿下潁川郊野"
     found = next(s for s in w.conquest.schedule if s.id == after.siege.slot_id)
     assert found.status == "done" and found.winner == "guan"
 
@@ -358,7 +358,7 @@ def test_the_guard_holds_a_lone_army_by_the_line():
     assert after.phase == "ended"
     assert conquest.holder(game.state.world, game.content, LOC) is None  # 照舊中立
     texts = [r.text for r in game.state.world.rumors if r.layer == "world"]
-    assert any("守住" in t and "南陽官道" in t for t in texts) and not any("兩軍都沒能" in t for t in texts)  # 單方的 HELD_LINE
+    assert any("守住" in t and "潁川郊野" in t for t in texts) and not any("兩軍都沒能" in t for t in texts)  # 單方的 HELD_LINE
 
 
 def test_both_armies_present_is_still_a_melee():
@@ -418,5 +418,5 @@ def test_the_absent_army_cannot_come_late_and_the_scene_says_so():
     assert siege.slots(battle.siege, None) == ["guan", "huang"]  # 散人可以投效到場那一軍、或助守
     assert battle.siege.absent == "huang"
     line = siege.scene_line(game.content, battle.siege, battle)
-    assert line.startswith(siege.SCENE_LINE.format(attackers="官軍", place="南陽官道", defender=_squad(battle).name))  # 場景照單方攻中立地的寫
+    assert line.startswith(siege.SCENE_LINE.format(attackers="官軍", place="潁川郊野", defender=_squad(battle).name))  # 場景照單方攻中立地的寫
     assert siege.ABSENT_SCENE_LINE.format(absent="黃巾軍") in line  # 再加一句沒到場的是誰

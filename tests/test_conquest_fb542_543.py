@@ -19,7 +19,7 @@ pytestmark = pytest.mark.slow  # 建 Game、載正式內容
 
 NOW = 1_792_000_000.0
 SCORES = {"強攻": 60.0, "固守": 60.0, "奇襲": 60.0}
-LOC = "nanyang_road"  # 南陽官道：守將劫道響馬（守將）
+LOC = "yingchuan_wilds"  # 潁川郊野：守將劫道響馬（守將）（新天下的中立地；v1 是南陽官道）
 PLACE = "hilltop_wilds"  # 荒丘：守將荒丘刀客（守將）
 SQUAD = "劫道響馬"
 
@@ -102,7 +102,7 @@ def _lone():
 
 
 def _single():
-    """官軍單方攻南陽官道（merged 空）：守將站黃巾那一格。"""
+    """官軍單方攻潁川郊野（merged 空）：守將站黃巾那一格。"""
     game = _game()
     battle = _add(game, _open(game, merged=(), side="guan"), {"甲": "guan", "丙": "guan"})
     battle = _start(game, battle)

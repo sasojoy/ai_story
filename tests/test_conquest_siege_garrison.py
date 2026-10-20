@@ -5,11 +5,13 @@ from __future__ import annotations
 
 import pytest
 
-from conquest_kit import announce, conquest_game, go, join, win_sortie
+from conquest_kit import announce, conquest_game, conquest_game_with, go, join, win_sortie
 from tianxia import atlas, conquest, orders
 from tianxia.state import Order
 
 pytestmark = pytest.mark.slow  # 建 Game、載正式內容
+
+V1_RUNAN = {"runan_wilds": ("huang", "yingru")}  # v1：汝南荒野是黃巾的陣營區塊、在潁川汝南那一條線上（輿圖重製第 1 批：新天下只剩中立的中原）
 
 
 def _siege(game, faction="guan", front="yingru"):
@@ -51,13 +53,13 @@ def test_a_line_with_only_a_neutral_target_still_issues_a_siege():
     """只公告中立地的那一天，那條線照樣發得出攻城（計畫 6.2 合併那一段第 2 條的代價拿掉了）。"""
     game = conquest_game("season21")
     w, c = game.state.world, game.content
-    announce(game, "nanyang_road", "guan")
-    assert orders.siege_places(c, "guan", "nanyang", w) == ["nanyang_road"]  # _issuable 先看的就是它
+    announce(game, "yingchuan_wilds", "guan")  # 新天下：南陽、冀州兩條舊線沒有中立地，改在中原那一條線上公告一塊中立地
+    assert orders.siege_places(c, "guan", "yingru", w) == ["yingchuan_wilds"]  # _issuable 先看的就是它
 
 
 def test_enemy_block_and_unannounced_places_are_unchanged():
     """敵方陣營區塊照舊（打贏敵方的兵記一次）；沒公告的照舊不列、不記。"""
-    game = go(join(conquest_game("season21"), "guan"), "runan_wilds")
+    game = go(join(conquest_game_with(V1_RUNAN), "guan"), "runan_wilds")
     s, c = game.state, game.content
     order = _siege(game)
     assert orders.siege_places(c, "guan", "yingru", s.world) == []
