@@ -1346,7 +1346,7 @@ class BattleRecord(BaseModel):
     id: int  # 流水號，本季從 1 起算
     time: float  # 開打時的遊戲時間（決戰是收場時的）
     location: str  # 地點名稱（決戰是大區名；上一季打的前面加「第 N 季・」）
-    kind: Literal["train", "event", "wild", "showdown", "spar", "raid", "duel", "seal", "arena", "sortie", "ambush", "assassin"]  # 遊歷／劇情／探索撞上的野怪／全服決戰／跟玩家切磋／截殺（發起或被截殺）／頭目戰／奪璽單挑（玉璽碎片設計 5.9）／出陣（出陣探索與地盤設計；舊戰報的 train 照舊顯示「遊歷」，不遷移）
+    kind: Literal["train", "event", "wild", "showdown", "siege", "spar", "raid", "duel", "seal", "arena", "sortie", "ambush", "assassin"]  # 遊歷／劇情／探索撞上的野怪／全服決戰／跟玩家切磋／截殺（發起或被截殺）／頭目戰／奪璽單挑（玉璽碎片設計 5.9）／出陣（出陣探索與地盤設計；舊戰報的 train 照舊顯示「遊歷」，不遷移）
     event: str = ""  # 劇情戰的事件標題；決戰是決戰的名稱
     opponent: str  # 敵方隊伍名稱；決戰是敵方陣營名
     ours: list[Fighter]  # 我方陣容，第一位是隊長；等級是開打時的等級（決戰不記，是空的）

@@ -695,6 +695,10 @@ def advance_world_state(
                 msgs += end_season(vehicle, content, world, rng, ending=decisive)
         if not season.ended and _season_due(season, content):
             msgs += end_season(vehicle, content, world, rng)
+        if not season.ended and season.conquest is not None:
+            from . import siege  # noqa: PLC0415  siege → conquest_day → timetable：延後 import
+
+            siege.mark_due(season, content)  # 領地爭奪第二批：到了開集結的攻城記成 waiting（start_pending_battle 開）
     return msgs
 
 
@@ -778,6 +782,10 @@ def start_pending_battle(world: WorldStateStore, content: Content, now: float) -
     msgs = _start_threshold_battle(world, content, now) if season.pending_battle is not None else []
     if season.showdowns_waiting:
         msgs += open_waiting_showdown(world, content, now)
+    if season.conquest is not None and any(slot.status == "waiting" for slot in season.conquest.schedule):
+        from . import siege  # noqa: PLC0415
+
+        msgs += siege.open_waiting(world, content, now)  # 領地爭奪第二批：時間到了的攻城開集結（跟決戰同時打）
     return msgs
 
 

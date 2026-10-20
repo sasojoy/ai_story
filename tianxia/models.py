@@ -2598,8 +2598,8 @@ class ConquestRules(_Strict):
     """領地爭奪（第 38 項改版，docs/superpowers/specs/2026-10-20-領地爭奪-design.md；計畫 docs/superpowers/plans/2026-10-20-領地爭奪.md；
     tianxia/conquest.py）。開季時蓋章（WorldState.conquest_on，要第一季規則開著、劇本有官軍與黃巾、寫了 territory.blocks、豪強分屬兩軍），
     正在跑的季不變；enabled 是主機的開關（關掉時照關著）。開著時：控制方只照佔領（不拔河、不割據），三條戰線的值＝佔領的基準＋其他
-    來源的偏移，出陣推攻城目標的進度、不推線，人站在自家領地吃加成，散人在開季中立的區塊也吃。第一批只有地圖、大勢值、加成、
-    中立駐軍與出陣推進度（沒有攻城戰）。數字全是【預設】，等 21 天的季試玩再調。"""
+    來源的偏移，出陣推攻城目標的進度、不推線，人站在自家領地吃加成，散人在開季中立的區塊也吃。第二批起每天投票、22:00 結算排明天的
+    攻城（conquest_day.py），時間到了開攻城戰（siege.py，決戰的縮小版，跟決戰同時打），攻方贏了就易手。數字全是【預設】，等 21 天的季試玩再調。"""
 
     enabled: bool = False  # 【預設】正式內容先關；三批都做完、QA 過、PM 說可以，再在 season21.json 打開（裁決 15）
     share: float = Field(default=35.0, ge=0)  # 【預設】佔領的份量：中立地全被一方拿下，基準偏到 50±share（分母只算中立時，設計 4.7）
@@ -3484,6 +3484,9 @@ class BattleDef(_Strict):
     version: str | None = None  # 那件大事分版本時（宛城甲、乙）這一筆是哪一版；到時間照 version_from 的結果開對的那一筆
     defender: Literal["guan", "huang"] | None = None  # 守方：戰局剛好停在 50 算守方守住（戰鬥系統 4.2）
     front: str | None = None  # 起點讀哪條戰線（戰線 id）：集結開始時讀一次戰況 v，起點＝50 ＋（50 − v）÷ 2（戰鬥系統 5.3）
+    # 領地爭奪第二批：攻城戰的範本（每個有區塊的大區一筆 siege_<大區>，tianxia/siege.py）：不是時刻表決戰、不從門檻開、不在「立刻開戰」的
+    # 選單上；每一場打哪一塊、誰攻記在 BattleInstance.siege，名字照 siege.title。範本的幕文字待 joy 潤
+    siege: bool = False
     # 沒有第三方（Joy 2026-10-13「豪強在大決戰還是要加入某一陣營，主軸還是官兵跟黃巾」）：不是交戰兩軍的人臨時投效其中一軍
 
 
