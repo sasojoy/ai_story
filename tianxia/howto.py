@@ -82,6 +82,12 @@ SORTIE_NOTES = {  # 待 joy 潤：行動列底下出陣那一行（設計第二�
     "stir": "不用打，把這一帶的戰局往中間攪（量是攻的{half}）；拿此地隊伍 {share} 成的心得與經驗。",
     # 截糧週在自家佔著的截糧地點出陣是攻打運糧隊（FB-255）：地方是自己的，不寫「這裡歸別人」
     "convoy": "對面的運糧隊正打這裡經過：打一場，打贏{push}；只拿對手 {share} 成的心得與經驗，{loot}",
+    # 領地爭奪：自家的大本營、廣宗（搶不下來的區塊）守，沒有進度可推、不記貢獻（FB-532，不接「量是攻的一半」）
+    "home": "這裡是自家地盤，不在爭奪之列：不用打，也沒有進度可推；拿自家隊伍 {share} 成的心得與經驗。",
+    # 領地爭奪：還沒人佔的中立地是攻，但不是「歸別人」（FB-533）
+    "open": "這裡還沒有人佔：打一場，打贏{push}；只拿對手 {share} 成的心得與經驗，{loot}",
+    # 領地爭奪：大本營、廣宗不在爭奪之列，只有截糧的運糧隊經過時打運糧隊（計畫第八章裁決 18）
+    "convoy_out": "對面的運糧隊正打這裡經過：此地不在爭奪之列，打贏只算截糧、沒有進度可推；只拿對手 {share} 成的心得與經驗，{loot}",
 }
 SORTIE_LOOT = "不給銀兩、不掉東西。"
 SORTIE_LOOT_SILVER = "銀兩也是 {silver} 成，不掉東西。"  # 素材與經濟設計第八節（Config.economy.sortie_silver）；待 joy 潤
@@ -348,13 +354,15 @@ def sortie_lines(content: Content, allied: bool = False, season: WorldState | No
     gentry = "地方豪強照依附的那一邊攻守。" if allied else "地方豪強是攪局，把戰局往中間拉。"
     hold = "守" if allied else "守與攪局"
     where, push_word = "只在戰線上的地點", "打贏推動戰局"
+    others, far = "這裡歸別人", "越往對方老巢推越難推。"
     if conquest.on(content, season):  # 領地爭奪（第 38 項改版第一批）
-        where, push_word = "官軍、黃巾的領地與中立地上都有", "打贏推那一塊的進度"
+        where, push_word = "官軍、黃巾的領地與中立地上都有（各家的大本營與廣宗不在爭奪之列，攻不得）", "打贏推那一塊的進度"  # 裁決 18
+        others, far = "這裡歸別人或還沒人佔", ""  # 推進度沒有盡頭阻力（FB-533；待 joy 潤）
     return [
         f"- **出陣**（體力 {cfg.action_cost['train']}，每天 {cfg.sortie.per_day} 次，{reset}）：投靠了陣營才有，{where}。"
-        f"這裡歸別人就打一場，{push_word}、記貢獻；歸自家就守，不用打；{gentry}"
+        f"{others}就打一場，{push_word}、記貢獻；歸自家就守，不用打；{gentry}"
         f"{hold}推的量是攻的{half}。只拿對手 {cfg.drill_reward_share * 10:g} 成的心得與經驗，"
-        + ("攻打贏" + sortie_loot(content) if cfg.economy.sortie_silver else sortie_loot(content)) + "越往對方老巢推越難推。",
+        + ("攻打贏" + sortie_loot(content) if cfg.economy.sortie_silver else sortie_loot(content)) + far,
     ]
 
 
@@ -418,7 +426,8 @@ def conquest_lines(content: Content) -> list[str]:
         "能挑的是跟自家領地有路直通的那一塊——中立地，或者敵方的領地，一塊一塊往前推。",
         f"三條戰線的大勢照兩軍佔了多少地來算：一條線上的中立地全被一方拿下，那條線往那一邊偏 {cfg.share:g} 點；"
         "打進敵方的領地份量加倍。時刻表的大事、事件、大勢人物、軍令照舊推線。",
-        "出陣不再直接推戰線，推的是那一塊的進度：在別人的地方出陣是攻、推向自己這一邊，在自家的地方是守、推回來；照樣記貢獻。"
+        "出陣不再直接推戰線，推的是那一塊的進度：在別人的地方、還沒人佔的中立地出陣是攻、推向自己這一邊，在自家的地方是守、推回來；"
+        "照樣記貢獻。各家的大本營與廣宗不在爭奪之列：別人的攻不得，自家的守了也沒有進度。"  # 裁決 18；待 joy 潤
         "只有今天公告要打、還沒開打的那幾塊推得動；開打時進度往哪一邊偏，戰局就往那一邊偏一點。",
         f"每天 {cfg.settle_hour}:00 結算一次：投靠了官軍或黃巾的人每天投一票，挑明天打哪一塊、幾點開打"
         f"（{cfg.slot_first // 60}:00～{cfg.slot_last // 60}:00 的整點或半點）。有第 4 階的人投票時，第 4 階的票合起來佔"

@@ -27,6 +27,10 @@ STIR_FLAT_LINE = "這條戰線正在中間，攪局推不動；等戰局偏向�
 RANGER_NOTE = "散人不能出陣"
 RANGER_LINE = "散人不能出陣：投靠陣營之後才有。散人靠懸賞、事件與找素材撞上的仗出力。"
 RANGER_LINE_PRECISE = "散人不能出陣：投靠陣營之後才有。散人靠懸賞、事件與練功打的仗出力。"  # 一類一顆（FB-420；待 joy 潤）
+# 領地爭奪：別人的大本營與廣宗搶不下來、不推進度，不給攻（計畫第八章裁決 18）：出陣那一顆灰著寫 OUT_NOTE、行動列底下那一行寫 OUT_LINE。待 joy 潤
+# OUT_NOTE 是行動列格子裡的小字：一行約 60 px、10 px 的字只放得下六個（同 RANGER_NOTE），「此地」兩個字留給底下那一行
+OUT_NOTE = "不在爭奪之列"
+OUT_LINE = "此地不在爭奪之列：各家的大本營與廣宗搶不下來，出陣推不了進度，這裡不能攻。"
 
 
 MERIT_LINE = "軍功賞銀 {silver} 兩已記上。"  # 待 joy 潤：出陣攻打贏的軍功賞（正式季整合 2.6），寫進這一場戰報的敘事
@@ -47,6 +51,17 @@ def ranger_here(content: Content, faction: str | None, loc_id: str, world: World
     if conquest.on(content, world):
         return loc_id in conquest.blocks(content)
     return territory.line_of(content, loc_id) is not None
+
+
+def out_of_contest(content: Content, world: WorldState | None, faction: str | None, loc_id: str) -> bool:
+    """領地爭奪在這一季生效時，投靠了陣營的人站在搶不下來、又不是自家的區塊（別人的大本營、廣宗；計畫第八章裁決 18）：這裡沒有出陣
+    （截糧的運糧隊經過時例外，那時 mode 是攻），那一格灰著寫 OUT_NOTE。"""
+    if faction is None or not on(content):
+        return False
+    from . import conquest  # noqa: PLC0415  conquest → territory → rules：在函式裡 import
+
+    return (conquest.on(content, world) and loc_id in conquest.blocks(content) and not conquest.capturable(content, loc_id)
+            and conquest.holder(world, content, loc_id) != faction)
 
 
 def left_today(p: PlayerState, content: Content, today: int) -> int:

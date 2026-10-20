@@ -5,7 +5,8 @@
 - 開著時控制方只照佔領（攻城戰的結果、時刻表指定、管理者改），不拔河、不割據；此刻的控制方照舊記在 TerritoryState.control
   （所以讀控制方的地方都不用改），開季中立而沒人佔的區塊不在裡面（controller 回 None）。
 - 三條戰線的值＝佔領的基準＋其他來源累積的偏移，夾在 0～100（設計 4.7）；值照舊存在 world.trends[戰線]，讀線的地方都不用改。
-  別處直接改了線（rules.change_trend、決戰收場、管理者），下一次 reweigh 照上一次的基準重錨偏移（推進牆的部分丟掉，同以前）。
+  rules.change_trend 推的是偏移（apply_push，夾值只在顯示那一刻做，FB-530）；決戰收場、管理者這類直接改了線的，下一次 reweigh
+  照上一次的基準重錨偏移。
 - 出陣不推線、推攻城目標的進度（ConquestState.progress；第二批起只有今天公告、還沒開打的目標推得動，progress_open）。
 - 第二批：每天投票、22:00 結算排時程表在 conquest_day.py，攻城戰在 siege.py。
 只讀寫 WorldState；天下大事與江湖史照 territory._announce。territory 反過來在函式裡延後 import 這裡。"""
@@ -110,11 +111,14 @@ PROGRESS_LINES = (
 def sortie_foes(world: WorldState, content: Content, loc_id: str, own: str | None) -> list[str]:
     """出陣攻打的對手（Game._sortie_foes 在開關開著時叫；截糧的運糧隊另外由呼叫端加）：自家控制的區塊沒有（守）；開季中立的區塊是
     那裡站的全部（中立駐軍與流寇野獸，計畫 Task 6）；別人控制的陣營區塊是控制方站的隊伍，那裡沒寫 garrison 時照
-    Scenario.territory.side_garrison（控制方的巡邏，待 joy），不然官軍的城鎮誰都攻不了。不是區塊是空的。"""
+    Scenario.territory.side_garrison（控制方的巡邏，待 joy），不然官軍的城鎮誰都攻不了。不是區塊是空的；別人的大本營與廣宗
+    （搶不下來，不在爭奪之列）也是空的——不給攻、輿圖不畫 ⚔（計畫第八章裁決 18）。"""
     if loc_id not in blocks(content):
         return []
     side = holder(world, content, loc_id)
     if side is not None and side == own:
+        return []
+    if not capturable(content, loc_id):
         return []
     squads = territory.squads_at(world, content, loc_id)
     if start_kind(world, content, loc_id) == NEUTRAL:
@@ -356,15 +360,25 @@ def assign(world: WorldState, content: Content, given: dict[str, str]) -> None:
 
 
 def apply_push(world: WorldState, content: Content, line: str, delta: int) -> int:
-    """其他來源推一條戰線（rules.change_trend 在開關開著時叫）：新值＝夾過的（此刻的值＋delta），偏移照它重錨（推進牆的部分丟掉，
-    同以前）；回實際推動量。寫回 world.trends，之後的 recompute_trends、territory.update 照舊由呼叫端做。"""
+    """其他來源推一條戰線（rules.change_trend 在開關開著時叫）：推的是偏移（設計 4.7「其他來源」），夾值只在顯示那一刻做（FB-530）。
+    推過牆的那一截丟掉（同以前）：往 100 推時未夾的（基準＋偏移）最多 max(原本的, 100)，往 0 推時最少 min(原本的, 0)——基準已經在牆外時
+    往牆那一邊推整個丟掉、偏移不動，往回推照實記進偏移。回實際推動量（顯示的值前後差）。寫回 world.trends，之後的 recompute_trends、
+    territory.update 照舊由呼叫端做。"""
     state = world.conquest
     if state is None or world.territory is None:
         update(world, content)
         state = world.conquest
+    _sync(world, content, state)  # 別處直接寫過線、還沒重算：先照上一次的基準重錨
     now = rules.world_trend_value(world, content, line)
-    after = max(0, min(100, now + delta))
-    state.offset[line] = after - state.base.get(line, base(world, content, line))
+    floor = state.base.get(line, base(world, content, line))
+    raw = floor + state.offset.get(line, 0.0)
+    pushed = raw + delta
+    if delta > 0 and pushed > 100:
+        pushed = max(raw, 100.0)
+    elif delta < 0 and pushed < 0:
+        pushed = min(raw, 0.0)
+    state.offset[line] = pushed - floor
+    after = _clamp(pushed)
     world.trends[line] = after
     return after - now
 
