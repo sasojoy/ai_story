@@ -13,9 +13,9 @@ from __future__ import annotations
 import math
 import random
 
-from . import conquest, territory, timetable
+from . import calendar, conquest, territory, timetable
 from .models import Config, Content
-from .state import Pick, SiegeSlot, WorldState
+from .state import DayNote, Pick, Rumor, SiegeSlot, WorldState
 from .world_state import season_length_days
 
 HOUR = 3600
@@ -31,10 +31,11 @@ REASON_NEUTRAL = "{place}是中立地，主將要先搶下這片獵場。"
 REASON_LOSING = "{line}一帶我軍吃緊，主將要從{place}扳回局面。"
 REASON_PLAIN = "主將看準了{place}，下令攻打。"
 
-# 每天結算的天下大事（Task 9；待 joy 潤）
-ANNOUNCE = "明日 {time}，{who}攻{place}。"
-ANNOUNCE_BOTH = "明日 {time}，{who}同時攻{place}。"
+# 每天結算的天下大事（Task 9；待 joy 潤）：時刻照 calendar.stamp_text（玩家看得到的時刻只有一個寫法；結算晚了「明日」會寫錯，所以不寫）
+ANNOUNCE = "{time}，{who}攻{place}。"
+ANNOUNCE_BOTH = "{time}，{who}同時攻{place}。"
 VOID_LATE = "{who}原定攻{place}，時辰已過，這一仗作罷。"
+VOID_CANCEL = "{who}攻{place}這一仗作罷。"  # 管理者取消（公告不寫管理者）
 
 
 def day_key(real: float, cfg: Config) -> int:
@@ -257,3 +258,138 @@ def merge(plans: dict[str, list[tuple[Pick, str, str]]], key: int) -> list[Siege
     for i, slot in enumerate(rows, 1):
         slot.id = f"{key}-{i}"
     return rows
+
+
+# ── 每天的結算（Task 9；Game._conquest_tick 叫，只寫 WorldState）──
+
+LIVE = ("planned", "waiting")  # 還沒開打的：進度推得動（conquest.progress_open）、結算換天時沒開成就作罷
+SHOWN = ("planned", "waiting", "open")  # 今天公告、還沒打完的：軍令的攻城、守城認它（裁決 11）
+
+
+def _names(content: Content, sides: list[str]) -> str:
+    return "、".join(content.scenario.faction_name(s, s) for s in sides)
+
+
+def _rumor(world: WorldState, text: str, loc: str | None = None) -> None:
+    world.rumors.append(Rumor(time=world.time, text=text, location=loc, layer="world"))
+
+
+def late_minute(key: int, real_now: float, cfg: Config) -> int | None:
+    """結算晚了（Review Focus 1）：第 key 天「此刻＋muster_minutes」之後的第一個時段（整點或半點）；挪不進 slot_last 是 None。"""
+    need = real_now + cfg.conquest.muster_minutes * 60
+    return next((m for m in _all_minutes(cfg) if slot_real(key, m, cfg) >= need), None)
+
+
+def void(world: WorldState, content: Content, slot: SiegeSlot, text: str = "") -> None:
+    """這一場作罷：進度歸 50；text 給了寫一句天下大事。"""
+    slot.status = "void"
+    if world.conquest is not None:
+        world.conquest.progress.pop(slot.loc, None)
+    if text:
+        _rumor(world, text, slot.loc)
+
+
+def _announce(world: WorldState, content: Content, slot: SiegeSlot) -> str:
+    """公告一場：一句天下大事（時刻照 calendar.stamp_text），回那一句。"""
+    line = ANNOUNCE_BOTH if len(slot.attackers) > 1 else ANNOUNCE
+    text = line.format(time=calendar.stamp_text(slot.at, content, world), who=_names(content, slot.attackers),
+                       place=content.locations[slot.loc].name)
+    _rumor(world, text, slot.loc)
+    return text
+
+
+def _schedule(world: WorldState, content: Content, plans: dict[str, list[tuple[Pick, str, str]]], key: int, real_now: float,
+              shares_of: dict[str, dict[str, float]]) -> tuple[list[SiegeSlot], list[str]]:
+    """plan 排好的合成時程表、換成世界秒，公告一場一句天下大事、記 DayNote。回（時程表, 公告的那幾句）。"""
+    cfg = content.config
+    rows = merge(plans, key)
+    muster = cfg.conquest.muster_minutes * 60 * cfg.time_scale
+    lines = []
+    for slot in rows:
+        slot.at = to_world(slot.minute, key, real_now, world.time, cfg)
+        slot.muster_at = slot.at - muster
+        lines.append(_announce(world, content, slot))
+    for side, picks in plans.items():
+        for pick, by, why in picks:
+            world.conquest.day_log.append(DayNote(
+                key=key, side=side, loc=pick.loc, minute=pick.minute, by=by, reason=why,
+                share=round(shares_of.get(side, {}).get(pick.loc, 0.0), 4) if by == VOTE else 0.0,
+            ))
+    return rows, lines
+
+
+def settle(world: WorldState, content: Content, key: int, real_now: float) -> list[str]:
+    """第 key 天的結算（呼叫端已經確認 key 比 settled_key 大、開關開著、季在跑）：前一天還沒開成的（planned、waiting）作罷、進度歸 50；
+    兩邊各 plan（票＋主將）；結算晚了，過了「此刻＋集結」的時段往後挪到第一個來得及的時段，挪不進 slot_last 就作罷、一句天下大事；
+    合成時程表、一場一句天下大事；清掉這一天的票；settled_key 記成 key。回寫進天下大事的那幾句（給排程與紀錄看）。"""
+    state = world.conquest
+    cfg = content.config
+    for slot in state.schedule:
+        if slot.status in LIVE:
+            void(world, content, slot)
+    kept = [slot for slot in state.schedule if slot.status == "open"]  # 還在打的那一場（收場時照它記 done）
+    votes = state.votes if state.votes_for == key else {}
+    out: list[str] = []
+    plans: dict[str, list[tuple[Pick, str, str]]] = {}
+    shares_of: dict[str, dict[str, float]] = {}
+    for side in conquest.SIDES:
+        seated = set(world.seats.get(side, []))
+        shares_of[side] = shares(votes.get(side, {}), seated, cfg.conquest.rank4_share)
+        rows = []
+        for pick, by, why in plan(world, content, side, key, real_now, votes.get(side, {}), seated):
+            if slot_real(key, pick.minute, cfg) < real_now + cfg.conquest.muster_minutes * 60:
+                later = late_minute(key, real_now, cfg)
+                if later is None:
+                    text = VOID_LATE.format(who=content.scenario.faction_name(side, side), place=content.locations[pick.loc].name)
+                    _rumor(world, text, pick.loc)
+                    out.append(text)
+                    continue
+                pick = Pick(loc=pick.loc, minute=later)
+            rows.append((pick, by, why))
+        plans[side] = rows
+    fresh, lines = _schedule(world, content, plans, key, real_now, shares_of)
+    out += lines
+    state.schedule = kept + fresh
+    if state.votes_for <= key:
+        state.votes, state.votes_for = {}, -1
+    state.settled_key = key
+    return out
+
+
+def settle_now(world: WorldState, content: Content, real_now: float) -> list[str]:
+    """管理者救場「立刻排一次」（QA 不必等到 22:00）：照此刻的票（明天的那一批，不清掉）與主將排，每一場都在「此刻＋集結」開打
+    （集結馬上開）；今天還沒開打的那幾場先作罷。settled_key 不動（22:00 照常結算）。"""
+    state = world.conquest
+    cfg = content.config
+    key = day_key(real_now, cfg)
+    for slot in state.schedule:
+        if slot.status in LIVE:
+            void(world, content, slot)
+    votes = state.votes if state.votes_for == key + 1 else {}
+    plans = {side: plan(world, content, side, key, real_now, votes.get(side, {}), set(world.seats.get(side, [])))
+             for side in conquest.SIDES}
+    rows = merge(plans, key)
+    at = world.time + cfg.conquest.muster_minutes * 60 * cfg.time_scale
+    out = []
+    local = (real_now + cfg.conquest.muster_minutes * 60 + cfg.pill_day_utc_offset_hours * HOUR) % DAY
+    for i, slot in enumerate(rows, 1):
+        slot.id = f"now-{world.time:.0f}-{i}"
+        slot.at, slot.muster_at, slot.minute = at, world.time, int(local // 60)
+        out.append(_announce(world, content, slot))
+    state.schedule = [s for s in state.schedule if s.status == "open"] + rows
+    return out
+
+
+def today(world: WorldState, content: Content, side: str, how: str) -> list[str]:
+    """今天公告、還沒打完的（SHOWN）：how 是 attack（side 是攻方之一）或 defend（side 此刻佔著、不是攻方）。照時程表的先後、不重複。
+    軍令的攻城、守城（裁決 11）與假人往哪裡走讀它。開關關著是空的。"""
+    if not conquest.on(content, world) or world.conquest is None:
+        return []
+    out: list[str] = []
+    for slot in world.conquest.schedule:
+        if slot.status not in SHOWN or slot.loc in out:
+            continue
+        mine = side in slot.attackers
+        if (how == "attack" and mine) or (how == "defend" and not mine and conquest.holder(world, content, slot.loc) == side):
+            out.append(slot.loc)
+    return out

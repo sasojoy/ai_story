@@ -89,18 +89,20 @@ SORTIE_PUSH = "推動戰局、記貢獻"
 SORTIE_NO_PUSH = "今天這條線推滿了，推不動"
 SORTIE_PROGRESS = "推這一塊的進度、記貢獻"  # 領地爭奪：出陣不推線、推那一塊的進度（設計 3.7）；待 joy 潤
 SORTIE_NO_PROGRESS = "推不動進度（這裡搶不下來）"  # 領地爭奪：大本營、廣宗沒有進度；待 joy 潤
+SORTIE_NOT_TODAY = "推不動進度（這一塊今天沒有公告攻城）"  # 領地爭奪第二批：只有今天公告、還沒開打的目標推得動；待 joy 潤
 SORTIE_LEFT = "今日還能出陣 {n} 次。"
 
 
-def sortie_line(how: str, push: bool, left: int, content: Content, progress: bool | None = None) -> str:
+def sortie_line(how: str, push: bool, left: int, content: Content, progress: bool | None = None, today: bool = True) -> str:
     """出陣這一下會怎樣（Game._sortie_line 照規則算好傳進來）。數字讀 Config：給自己的成數、守與攪局是攻的幾成。
-    progress：領地爭奪在這一季生效時給（這一塊的進度推不推得動），推的那一句換成推進度；沒給（關著）一個字都不變、照 push。"""
+    progress：領地爭奪在這一季生效時給（這一塊的進度推不推得動），推的那一句換成推進度；沒給（關著）一個字都不變、照 push。
+    today：推不動是因為今天沒有公告（第二批）時給 False，寫 SORTIE_NOT_TODAY；搶不下來的照舊 SORTIE_NO_PROGRESS。"""
     cfg = content.config
     half = "一半" if cfg.sortie.hold_share == 0.5 else f" {cfg.sortie.hold_share * 10:g} 成"
     if progress is None:
         pushed = SORTIE_PUSH if push else SORTIE_NO_PUSH
     else:
-        pushed = SORTIE_PROGRESS if progress else SORTIE_NO_PROGRESS
+        pushed = SORTIE_PROGRESS if progress else SORTIE_NO_PROGRESS if today else SORTIE_NOT_TODAY
     text = SORTIE_NOTES[how].format(push=pushed, share=f"{cfg.drill_reward_share * 10:g}", half=half,
                                     loot=sortie_loot(content))
     return text + SORTIE_LEFT.format(n=left)
@@ -416,7 +418,14 @@ def conquest_lines(content: Content) -> list[str]:
         "能挑的是跟自家領地有路直通的那一塊——中立地，或者敵方的領地，一塊一塊往前推。",
         f"三條戰線的大勢照兩軍佔了多少地來算：一條線上的中立地全被一方拿下，那條線往那一邊偏 {cfg.share:g} 點；"
         "打進敵方的領地份量加倍。時刻表的大事、事件、大勢人物、軍令照舊推線。",
-        "出陣不再直接推戰線，推的是那一塊的進度：在別人的地方出陣是攻、推向自己這一邊，在自家的地方是守、推回來；照樣記貢獻。",
+        "出陣不再直接推戰線，推的是那一塊的進度：在別人的地方出陣是攻、推向自己這一邊，在自家的地方是守、推回來；照樣記貢獻。"
+        "只有今天公告要打、還沒開打的那幾塊推得動；開打時進度往哪一邊偏，戰局就往那一邊偏一點。",
+        f"每天 {cfg.settle_hour}:00 結算一次：投靠了官軍或黃巾的人每天投一票，挑明天打哪一塊、幾點開打"
+        f"（{cfg.slot_first // 60}:00～{cfg.slot_last // 60}:00 的整點或半點）。有第 4 階的人投票時，第 4 階的票合起來佔"
+        f" {cfg.rank4_share * 100:g}%；沒人投、平手由主將定奪。只公開各塊的比例，不公開誰投了什麼。",
+        f"一邊一天打一兩塊（中立地多、季短就兩塊），兩軍挑中同一塊、同一刻就併成一場；開打前 {cfg.muster_minutes} 分鐘開集結，"
+        "人要在那個大區才加得進去。攻城戰是決戰的縮小版：攻方贏了就易手，守方沒人時打那裡的留守，攻方沒人到這一場作罷。"
+        f"軍餉是決戰的{_tenth(cfg.pay_share)}。",
         f"人站在自家領地：療傷、打造、買馬便宜{_tenth(1 - terr.own_price)}，在敵方的領地貴{_tenth(terr.enemy_price - 1)}"
         f"（新手期在敵方領地療傷不加價）；找素材有 {gather} 的機會多撿一個，靜心感悟更容易抓住。",
         "散人在開季是中立地的地方也算自家：一樣便宜、一樣多撿一份，不論那裡此刻被誰佔了。",

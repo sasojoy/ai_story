@@ -858,6 +858,7 @@ class Game:
         self._reconcile_season()
         msgs = list(self.world.catch_up_season(self.content, now, self.rng))
         self.state.world = self.world.get_season()
+        msgs += self._conquest_tick()  # 領地爭奪第二批：22:00 沒人在線也照時結算
         self._battle_status(tick=True)
         self._seal_tick()
         return msgs
@@ -914,6 +915,7 @@ class Game:
         self._deliver_whispers()  # 酒肆：有人在酒肆打聽你（風聲），下線時的回來補
         self._deliver_hits()  # 酒肆：自己雇的殺手得手、失手、到期退錢
         self._deliver_watches()  # 酒肆：託酒家留意的人有了準信、或到期沒消息
+        self._conquest_tick()  # 領地爭奪第二批：換天（22:00）的那一刻結算、排明天的攻城（第一個看到新的一天的人觸發）
         self._deliver_arena()  # 擂台：被挑了的戰報、季末前三名的獎勵；季收了還沒打完的那一場作廢
         mail = letters.deliver(self.state, self.content)  # 書信（大勢人物擴充第二批）：人物來信、過期的委託作罷
         if mail:
@@ -1005,6 +1007,7 @@ class Game:
         msgs += self._advance_player_local(seconds)
         self.advanced_real += seconds / self.content.config.time_scale
         arrived = self._arrivals()  # 同 sync：抵達自己寫紀錄
+        msgs += self._conquest_tick(save=False)  # 領地爭奪第二批：快轉跨過 22:00 也結算（下面一起存）
         self._save_season()
         msgs += start_pending_battle(self.world, self.content, self.now)
         self.state.world = self.world.get_season()
@@ -1974,7 +1977,8 @@ class Game:
         own = how == "attack" and territory.controller(self.state.world, self.content, loc.id) == self._side()
         # 領地爭奪：出陣推的是這一塊的進度（大本營、廣宗推不動），不是線——那一句照進度寫
         progress = conquest.progress_open(self.state.world, self.content, loc.id) if conquest.on(self.content, self.state.world) else None
-        return howto.sortie_line("convoy" if own else how, push_ok, left, self.content, progress)  # 自家地盤上攻的只有運糧隊（FB-255）
+        today = bool(progress) or not conquest.capturable(self.content, loc.id)  # 第二批：搶得下來、只是今天沒公告的另寫一句
+        return howto.sortie_line("convoy" if own else how, push_ok, left, self.content, progress, today)  # 自家地盤上攻的只有運糧隊（FB-255）
 
     def _choice_label(self, choice: Choice, odds: bool) -> str:
         """動手的選項寫對手與勝算，後面照樣接體力的代價（輸了多扣的，企劃者裁決 E6；events.stamina_note）；
@@ -4506,7 +4510,7 @@ class Game:
             host = self._sortie_host(loc, "hold")
             if host is not None:
                 msgs += self._drill_gains(host, 1.0)
-        credit = self._order_credit(kind="duty", front=front)
+        credit = self._order_credit(kind="duty", location=loc.id, front=front)  # 地點：領地爭奪的守城認自家被公告的那一塊（裁決 11）
         # 入伍段第 2 步「出一次力」：守勢行動不在這週軍令裡也算（FB-094：豪強第一週只有打擊，新人打不過；FB-093：巡哨、傳道就在營裡）
         return msgs + (credit or self._guide(note_action(s, c, self.world, "order")))
 
@@ -7862,7 +7866,7 @@ class Game:
             msgs += self._push_progress(loc.id, conquest.sortie_nominal(c, loc.id, how), "sortie")
         if how == "hold":
             front = conquest.line_of(s.world, c, loc.id) if on else territory.line_of(c, loc.id)
-            msgs += self._order_credit(kind="duty", front=front)
+            msgs += self._order_credit(kind="duty", location=loc.id, front=front)
         return msgs
 
     def _resisted_line(self) -> str:
@@ -9343,6 +9347,25 @@ class Game:
         self._write(VOTE_TITLE, [line])
         self._save_season()
         return self._log([line])
+
+    def _conquest_tick(self, save: bool = True) -> list[str]:
+        """領地爭奪第二批：換天（當地 22:00，conquest_day.day_key 照 pill_now）的那一刻結算一次（conquest_day.settle）——兩邊照票與主將
+        排明天的攻城、一場一句天下大事。第一個看到新的一天的人觸發（sync、伺服器的排程 world_tick、快轉 advance 都叫）；
+        **日子只准往前走**（ConquestState.settled_key，同 arena.roll_day 的教訓：快轉過的 Game 與照現實時間的 Game 輪流同步不重排、不倒退）。
+        這一季第一次只記下今天（開季當天沒有票可結）。開關關著、季收了、暫停中什麼都不做（不碰 WorldState）。save 是假時不存季（advance 自己存）。"""
+        c, w = self.content, self.state.world
+        if not conquest.on(c, w) or w.ended or w.conquest is None:
+            return []
+        key = conquest_day.day_key(self.pill_now(), c.config)
+        if key <= w.conquest.settled_key or self.world.paused_at() is not None:
+            return []
+        if w.conquest.settled_key < 0:
+            w.conquest.settled_key, msgs = key, []
+        else:
+            msgs = conquest_day.settle(w, c, key, self.pill_now())
+        if save:
+            self._save_season()
+        return msgs
 
     def conquest_view(self) -> dict | None:
         """攻城的畫面資料（Task 13 的網頁畫它；server.main_view 的 conquest）：today 是最近一次結算排的時程表（地點、攻方、時刻、狀態，
@@ -11868,6 +11891,42 @@ class Game:
         self._write("定一塊歸誰", [line] + msgs, tag="管理者")
         self._save_season()
         return self._log([line] + msgs)
+
+    def admin_conquest_settle_now(self) -> list[str]:
+        """領地爭奪第二批（救場）：立刻照此刻的票（明天那一批，不清掉）與主將排一次，每一場都在「此刻＋集結」開打、集結馬上開——QA 不必等到
+        22:00。今天還沒開打的先作罷；22:00 照常結算（settled_key 不動）。公告照自然結算寫，不寫管理者。"""
+        refusal = self._admin_refusal("立刻排攻城")
+        if refusal:
+            return self._log(refusal)
+        c, w = self.content, self.state.world
+        if not conquest.on(c, w) or w.conquest is None or w.ended:
+            return self._log([f"（{CONQUEST_OFF}）"])
+        msgs = conquest_day.settle_now(w, c, self.pill_now()) or ["（兩邊此刻都沒有打得到的地方。）"]
+        self._write("立刻排攻城", msgs, tag="管理者")
+        self._save_season()
+        return self._log(msgs)
+
+    def admin_conquest_cancel(self, slot_id: str) -> list[str]:
+        """領地爭奪第二批（救場）：取消今天的一場攻城（照作罷處理：進度歸 50、天下大事一句，公告不寫管理者）；已經開了集結的那一場照決戰的
+        取消收兵（不算勝負、不發軍餉、不易手）。"""
+        refusal = self._admin_refusal("取消一場攻城")
+        if refusal:
+            return self._log(refusal)
+        c, w = self.content, self.state.world
+        if not conquest.on(c, w) or w.conquest is None:
+            return self._log([f"（{CONQUEST_OFF}）"])
+        slot = next((s for s in w.conquest.schedule if s.id == slot_id), None)
+        if slot is None or slot.status in ("done", "void"):
+            return self._log(["（找不到這一場，或已經打完、作罷了。）"])
+        text = conquest_day.VOID_CANCEL.format(who=conquest_day._names(c, slot.attackers), place=c.locations[slot.loc].name)
+        if slot.status == "open" and slot.record_id is not None:
+            self._cancel_siege(slot.record_id, text)
+            w = self.state.world
+            slot = next(s for s in w.conquest.schedule if s.id == slot_id)
+        conquest_day.void(w, c, slot, text)
+        self._write("取消一場攻城", [text], tag="管理者")
+        self._save_season()
+        return self._log([text])
 
     def admin_resolve_event(self, event_id: str, key: str) -> list[str]:
         """定結果：管理者直接定一件大事的結果（不含版本的鍵，例如「成」「guan:險勝」），照時刻表結算（公告、江湖史、

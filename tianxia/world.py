@@ -744,6 +744,11 @@ def keep_showdowns_on_time(season: WorldState, content: Content, skipped: float,
         return
     vehicle = _season_vehicle(content, season)
     shift = skipped * content.config.time_scale
+    if season.conquest is not None:  # 領地爭奪第二批：排好、還沒開集結的攻城也照原本的現實時間開（Review Focus 5）
+        for slot in season.conquest.schedule:
+            if slot.status in ("planned", "waiting"):
+                slot.at -= shift
+                slot.muster_at -= shift
     cal_hour = calendar.cal_hour_seconds(content, season)
     regular = [e for e in timetable._pending(vehicle, content) if e.kind not in timetable.NOT_BY_SEASON_HOUR]  # noqa: SLF001
     for event in timetable.events(season, content):  # 天命之季含天命之爭（玉璽二）

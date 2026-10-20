@@ -12,6 +12,7 @@ from tianxia.encounter import EncounterResult
 from tianxia.engine import Game
 from tianxia.models import Content
 from tianxia.sqlite_world import open_world
+from tianxia.state import SiegeSlot
 
 
 def conquest_rules(content: Content) -> Content:
@@ -71,3 +72,16 @@ def win_sortie(game: Game) -> list[str]:
 def contribution(game: Game) -> int:
     """本季的貢獻（push.add_contribution 寫進的那一份）。"""
     return game.state.player.contrib
+
+
+def announce(game: Game, loc_id: str, side: str, minute: int = 21 * 60, merged: tuple[str, ...] = ()) -> SiegeSlot:
+    """把一場攻城直接排進今天的時程表（第二批；不等 22:00 結算）：side 攻 loc_id，一小時後開打、半小時後開集結。merged 給兩軍時併成一場。"""
+    w = game.state.world
+    attackers = list(merged) or [side]
+    slot = SiegeSlot(
+        id=f"t-{loc_id}-{len(w.conquest.schedule)}", key=w.conquest.settled_key, loc=loc_id, minute=minute,
+        at=w.time + 3600, muster_at=w.time + 1800, attackers=attackers,
+        by={a: "commander" for a in attackers}, reasons={a: "" for a in attackers},
+    )
+    w.conquest.schedule.append(slot)
+    return slot

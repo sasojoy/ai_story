@@ -6,7 +6,8 @@
   （所以讀控制方的地方都不用改），開季中立而沒人佔的區塊不在裡面（controller 回 None）。
 - 三條戰線的值＝佔領的基準＋其他來源累積的偏移，夾在 0～100（設計 4.7）；值照舊存在 world.trends[戰線]，讀線的地方都不用改。
   別處直接改了線（rules.change_trend、決戰收場、管理者），下一次 reweigh 照上一次的基準重錨偏移（推進牆的部分丟掉，同以前）。
-- 出陣不推線、推攻城目標的進度（ConquestState.progress，第一批任何可奪的區塊都記）。
+- 出陣不推線、推攻城目標的進度（ConquestState.progress；第二批起只有今天公告、還沒開打的目標推得動，progress_open）。
+- 第二批：每天投票、22:00 結算排時程表在 conquest_day.py，攻城戰在 siege.py。
 只讀寫 WorldState；天下大事與江湖史照 territory._announce。territory 反過來在函式裡延後 import 這裡。"""
 from __future__ import annotations
 
@@ -125,8 +126,11 @@ def sortie_foes(world: WorldState, content: Content, loc_id: str, own: str | Non
 
 
 def progress_open(world: WorldState, content: Content, loc_id: str) -> bool:
-    """這一塊的進度推得動（第一批：任何搶得下來的區塊；第二批起只有今天公告、還沒打的目標）。"""
-    return on(content, world) and capturable(content, loc_id)
+    """這一塊的進度推得動（計畫 2.3）：第二批起只有今天公告、還沒開打（時程表上 planned、waiting）的目標；打完或作罷歸 50
+    （conquest_day.void、siege 收場）。搶不下來的區塊（大本營、廣宗）一律推不動。"""
+    if not on(content, world) or not capturable(content, loc_id) or world.conquest is None:
+        return False
+    return any(slot.loc == loc_id and slot.status in ("planned", "waiting") for slot in world.conquest.schedule)
 
 
 def progress_of(world: WorldState, loc_id: str) -> float:

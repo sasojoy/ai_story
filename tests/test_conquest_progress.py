@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from conquest_kit import contribution, conquest_game, go, join, plain_game, win_sortie
+from conquest_kit import announce, contribution, conquest_game, go, join, plain_game, win_sortie
 from tianxia import bot_policy, conquest, howto, orders, rules, sortie, territory, works
 from tianxia.state import BotProfile
 
@@ -20,6 +20,7 @@ def _value(game, line):
 
 def test_sortie_attack_win_pushes_progress_not_the_line():
     game = go(join(conquest_game("season21"), "huang"), "nanyang_road")
+    announce(game, "nanyang_road", "huang")  # 第二批起只有今天公告的目標推得動進度（計畫 2.3）
     before = _value(game, "nanyang")
     option = _sortie(game)
     assert option is not None and option.enabled and "攻" in option.label
@@ -33,6 +34,7 @@ def test_sortie_attack_win_pushes_progress_not_the_line():
 
 def test_hold_at_own_block_pushes_back():
     game = go(join(conquest_game("season21"), "guan"), "yingchuan_wilds")
+    announce(game, "yingchuan_wilds", "huang")
     option = _sortie(game)
     assert option is not None and "守" in option.label
     game.choose("act:train")
@@ -70,6 +72,7 @@ def test_enemy_block_without_garrison_has_the_holders_patrol():
 
 def test_event_at_block_pushes_progress_once():
     game = go(join(conquest_game("season21"), "guan"), "yingchuan_wilds")
+    announce(game, "yingchuan_wilds", "huang")
     s, c = game.state, game.content
     for event in c.events.values():
         for i, choice in enumerate(event.choices):
@@ -91,15 +94,20 @@ def test_event_at_block_pushes_progress_once():
 def test_bot_train_value_follows_progress():
     game = go(join(conquest_game("season21"), "huang"), "nanyang_huangjin_camp")
     profile = BotProfile(personality="普通", seed=1, faction="huang", season_number=1)
+    assert bot_policy._train_value(game, profile, "nanyang_road") == 0  # 第二批：今天沒公告推不動
+    announce(game, "nanyang_road", "huang")
     assert bot_policy._train_value(game, profile, "nanyang_road") > 0
     assert bot_policy._train_value(game, profile, "nanyang_huangjin_camp") == 0  # 大本營：沒有進度可推
 
 
-def test_siege_places_are_enemy_held_targets_on_that_line():
+def test_siege_places_are_todays_targets_on_that_line():
+    """第二批（裁決 11）：攻城軍令的地點是這一邊今天公告要攻的目標（第一批是此刻歸敵方的目標）。"""
     game = conquest_game("season21")
     w, c = game.state.world, game.content
+    assert orders.siege_places(c, "guan", "yingru", w) == []  # 還沒公告
+    announce(game, "runan_wilds", "guan")
     assert orders.siege_places(c, "guan", "yingru", w) == ["runan_wilds"]
-    assert orders.siege_places(c, "huang", "yingru", w) == []  # 黃巾開季碰不到官軍的陣營區塊
+    assert orders.siege_places(c, "huang", "yingru", w) == []
 
 
 def test_fortify_is_not_drawn():
@@ -139,6 +147,9 @@ def _note(game, loc_id):
 def test_action_note_says_progress_not_the_line():
     """行動列底下那一行：出陣推的是這一塊的進度，不寫「這條線推滿了」（sortie_push 開著時是空的，舊寫法會判成推不動）。"""
     game = go(join(conquest_game("season21"), "huang"), "nanyang_road")
+    assert howto.SORTIE_NOT_TODAY in _note(game, "nanyang_road")  # 第二批：今天沒公告推不動
+    announce(game, "nanyang_road", "huang")
+    announce(game, "yingchuan_wilds", "huang")
     assert howto.SORTIE_PROGRESS in _note(game, "nanyang_road") and howto.SORTIE_NO_PUSH not in _note(game, "nanyang_road")
     go(join(game, "guan"), "yingchuan_wilds")  # 守自家的區塊
     assert howto.SORTIE_PROGRESS in _note(game, "yingchuan_wilds")
