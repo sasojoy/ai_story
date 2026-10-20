@@ -13013,7 +13013,8 @@ class Game:
         upcoming = None if w.ended or self._preparing() else timetable.next_event(self.state, c)
         cal = {
             "week": at.week, "weekday": at.weekday, "clock": f"{at.hour:02d}:{at.minute:02d}",
-            "weeks": c.config.season_weeks, "text": calendar.point_text(at),  # 畫面第二行直接用這一句，不自己拼
+            # 畫面第二行直接用這一句，不自己拼（7 天濃縮季寫「第 N 天 HH:MM」）
+            "weeks": c.config.season_weeks, "text": calendar.point_text(at, by_day=calendar.week7_on(w, c)),
         }
         if orders.daily(self.state, c):  # 21 天季的軍令每天一道：軍令卡收起來照季曆第幾天記（網頁 orderKey），隔天重新展開
             cal["day"] = at.cal_day

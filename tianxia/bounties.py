@@ -124,7 +124,8 @@ def close_board(p: PlayerState) -> None:
 
 
 def week_seconds(state: GameState, content: Content) -> float:
-    return calendar.WEEK / calendar.cal_scale(content, state.world)
+    """通緝的「一週」（post_weeks 照它退押金）：季曆一週；7 天濃縮季是一段的平均（calendar.week_seconds）。"""
+    return calendar.week_seconds(content, state.world)
 
 
 def quota(content: Content) -> int:
@@ -267,6 +268,11 @@ def due_short(b: Bounty, content: Content, world: WorldState) -> str:
     left = _left(b)
     if to_season_end(b, content, world):
         return f"{SEASON_END}・剩 {left}"
+    if b.day and calendar.week7_on(world, content):  # 7 天濃縮季：同 21 天季，只寫第幾天（calendar.point_text 的 by_day；待 joy 潤）
+        at = calendar.point(b.expires, content, world)
+        if (at.hour, at.minute) == (0, 0):
+            return f"到第 {calendar.point(b.expires - 1, content, world).cal_day} 天・剩 {left}"
+        return f"期限 第 {at.cal_day} 天・剩 {left}"
     if b.day and calendar.season21_on(world, content):  # 21 天季每天一批：在某天 00:00 到期，寫最後還有效的那一天（待 joy 潤）
         at = calendar.point(b.expires, content, world)
         if (at.hour, at.minute) == (0, 0):

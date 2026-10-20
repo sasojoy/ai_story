@@ -80,6 +80,9 @@ class Condition(_Strict):
     # 內容裡也要寫這兩個（content.validate）
     cal_day_min: int | None = Field(default=None, ge=1)
     cal_day_max: int | None = Field(default=None, ge=1)
+    # 7 天濃縮季（Config.season_segments）照天數另寫的那一份（開季那天是第 1 天）：7 天濃縮季只看這兩個；寫了週的條件在 7 天的內容裡也要寫
+    cal_day_min7: int | None = Field(default=None, ge=1, le=7)
+    cal_day_max7: int | None = Field(default=None, ge=1, le=7)
     clue_items: dict[str, int] = Field(default_factory=dict)  # 伏筆專用物品至少幾個（原數字，不照伺服器規模換算）
     grain_min: int = Field(default=0, ge=0)  # 糧草至少幾份（基準量，照 foreshadow.need 換算；0＝不檢查；正式版丙二的帶糧選項）
     # 戰後事件用：這次行動打的那一場（戰鬥卡片 state.battle_card 指著的那筆）的結果（大勝／險勝／僵持／落敗）在清單裡才成立；
@@ -3011,9 +3014,15 @@ class Config(_Strict):
     # 21 天季的骨架（正式季整合設計第一章；12.3 第 41 條：預設關，只有 content/profiles/season21.json 打開，週末與 14 天一個字都不變）：
     # 季曆就是現實的三週（season_weeks 3、season_days 21，cal_scale 1），錨在開季那一週的台灣週一 00:00（WorldState.cal_offset）；
     # 21 天季自己的時刻表（TimetableEvent.real）、官軍將領與伏筆照天數、不提前收季、「今天」是現實的一天（台灣 00:00 換日）。
-    # 開季時蓋章（WorldState.season21），正在跑的季照它開季時的章
+    # 開季時蓋章（WorldState.season21），正在跑的季照它開季時的章。
+    # 名字是歷史的：現在是「照現實天的季」的骨架，7 天濃縮季（content/profiles/week7.json，企劃者 2026-10-20）也打開，另寫 season_segments
     season21: bool = False
     season_weeks: int = Field(default=12, ge=1)  # 季曆：一季壓成幾週（計畫第六節：季曆秒＝世界秒 × 週數 × 7 ÷ season_days）
+    # 7 天濃縮季（企劃者 2026-10-20；計畫 docs/superpowers/plans/2026-10-20-七天濃縮季.md）：照現實天的季把季曆的「週」換成幾段、每段幾天
+    # （week7 寫 [2, 2, 3]：第 1～2、3～4、5～7 天）。照週算的東西（第四階輪替、月旦評、寶物每週上限、頭目每週次數、貢獻的週帳、版圖變化）
+    # 一律照段；錨點是開季那一天的台灣 00:00（開季那天是第 1 天），畫面寫「第 N 天 HH:MM」（calendar.week7_on）。
+    # 空的是一週 7 天（21 天季與其他季，一個字都不變）。載入時驗：要 season21、段數＝season_weeks、段的和＝season_days＝7
+    season_segments: list[int] = Field(default_factory=list)
     # 決定性勝利（黃巾聲勢 ≥85、≤15）季曆第幾週起才提前收季；之前到了門檻也不收，季末照常比（企劃者 2026-10-05，計畫 T9）。
     # 割據 ≥85 不提前收季、季末才判群雄並起（FB-254，企劃者 2026-10-15「提前收季只看戰線」；rules.ends_early）
     decisive_from_week: int = Field(default=10, ge=1)
@@ -3517,6 +3526,9 @@ class FigureDef(_Strict):
     # 21 天季（Config.season21，正式季整合設計 1.2 給開發 5）照天數：第 1 週週一 00:00 起幾天才推（1.5＝週二 12:00，跟朝廷出兵同時）；
     # 21 天季只看它（沒寫是 0）、不看 active_from_week。active_from_week 大於 1 的人物在 21 天季的內容裡要寫（content.validate）
     active_from_day: float | None = Field(default=None, ge=0)
+    # 7 天濃縮季（Config.season_segments）照天數另寫：開季那天 00:00 起幾天才推（0.5＝第 1 天 12:00，跟朝廷出兵同時）；
+    # 7 天濃縮季只看它，active_from_week 大於 1 的人物在 7 天的內容裡要寫（content.validate）
+    active_from_day7: float | None = Field(default=None, ge=0)
     start_status: Literal["active", "away"] = "active"  # 輕量接位者開季時還沒出場，接手時才出現
     challenge_off_front: bool = False  # 沒有戰線也能挑戰（何進）；其他人戰線空著時不受挑戰（PM 2026-10-05 定）
     # 丙 (c)，企劃者 2026-10-13：沒有時刻表的季這位人物被打到退場時記下的世界旗標（波才寫 bocai_defeated：等於「擊敗波才」）；第一季不記
@@ -3545,6 +3557,14 @@ class RealSlot(_Strict):
 
     week: int = Field(ge=1)
     weekday: int = Field(default=0, ge=0, le=6)
+    hour: int = Field(default=0, ge=0, le=23)
+
+
+class RealDay(_Strict):
+    """7 天濃縮季（Config.season_segments，企劃者 2026-10-20）這一件大事排在第幾天（開季那天是第 1 天）、幾點：大決戰在第 2、4、7 天，
+    鐘點沿用 21 天季那一場。載入時（content.season21_timetable）照段換成 week（第幾段）、weekday（段裡第幾天）、hour。"""
+
+    day: int = Field(ge=1, le=7)
     hour: int = Field(default=0, ge=0, le=23)
 
 
@@ -3588,6 +3608,7 @@ class TimetableEvent(_Strict):
     weekday: int | None = Field(default=None, ge=0, le=6)  # 決戰的預設時刻：週幾（0 是週一）；None 照 timetable.SHOWDOWN_WEEKDAY
     hour: int | None = Field(default=None, ge=0, le=23)  # 同上，幾點；None 照 timetable.SHOWDOWN_HOUR
     real: RealSlot | None = None  # 21 天季的時刻（RealSlot）；21 天季的內容每一件都要寫（content.validate），其他季不看
+    real7: RealDay | None = None  # 7 天濃縮季的時刻（第幾天、幾點）；7 天濃縮季的內容每一件都要寫（content.validate），其他季不看
 
 
 FsKind = Literal["天時地利", "推理", "反直覺抉擇", "拼圖", "累積", "情誼", "集體密謀"]  # 第一季設計 11.3 的類型（只是標記）

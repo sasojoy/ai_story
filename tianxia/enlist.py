@@ -133,7 +133,7 @@ def expire(state: GameState, content: Content) -> list[str]:
     if p.enlist_since is None:
         p.enlist_since = state.world.time
         return []
-    if state.world.time - p.enlist_since < calendar.WEEK / calendar.cal_scale(content, state.world):
+    if state.world.time - p.enlist_since < calendar.week_seconds(content, state.world):  # 7 天濃縮季是一段的平均
         return []
     p.enlist_step = len(_steps(content))
     p.enlist_end = True

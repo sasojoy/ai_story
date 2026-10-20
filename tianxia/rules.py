@@ -267,13 +267,18 @@ def check_condition(cond: Condition, state: GameState, content: Content | None =
         if fought is None or fought.tier not in cond.fight_tiers:
             return False
     if (cond.night is not None or cond.week_min is not None or cond.week_max is not None
-            or cond.cal_day_min is not None or cond.cal_day_max is not None):
+            or cond.cal_day_min is not None or cond.cal_day_max is not None
+            or cond.cal_day_min7 is not None or cond.cal_day_max7 is not None):
         if content is None or not calendar.season_one_on(w, content):
             return False
         if cond.night is not None and calendar.is_night(w.time, content, w) != cond.night:
             return False
         at = calendar.point(w.time, content, w)
-        if calendar.season21_on(w, content):  # 21 天季照天數、不看週（正式季整合設計 1.2 給開發 6）
+        if calendar.week7_on(w, content):  # 7 天濃縮季照天數、讀 7 天的那一份（開季那天是第 1 天）
+            if ((cond.cal_day_min7 is not None and at.cal_day < cond.cal_day_min7)
+                    or (cond.cal_day_max7 is not None and at.cal_day > cond.cal_day_max7)):
+                return False
+        elif calendar.season21_on(w, content):  # 21 天季照天數、不看週（正式季整合設計 1.2 給開發 6）
             if ((cond.cal_day_min is not None and at.cal_day < cond.cal_day_min)
                     or (cond.cal_day_max is not None and at.cal_day > cond.cal_day_max)):
                 return False

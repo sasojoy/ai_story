@@ -5,6 +5,8 @@ season_weeks 週的「季曆」——季曆秒＝世界秒 × cal_scale。第一
 季長照這一季開季時蓋的章（WorldState.length_days）：設定中途換了，正在跑的這一季週次不會移動；沒有章的舊季照預設的 14 天。
 21 天季（Config.season21，正式季整合設計 1.1）：season_weeks 3、季長 21 天，cal_scale 是 1（季曆就是現實的三週），另加一段偏移
 （WorldState.cal_offset）：開季那一刻離那一週台灣週一 00:00 多遠。世界秒照舊從開季那一刻算；只有這裡把它換成季曆，其他季偏移是 0。
+7 天濃縮季（同一套骨架，season21 也打開；企劃者 2026-10-20）另寫 Config.season_segments（[2, 2, 3]）：季曆的「週」換成三段
+（第 1～2、3～4、5～7 天），CalPoint.week 是第幾段、weekday 是段裡第幾天；錨點是開季那一天的台灣 00:00，畫面寫「第 N 天 HH:MM」。
 每個函式都收一個 season；只有沒有季可看的呼叫端（例如蓋章本身之前）才不給，那時照現在的設定。
 
 只是換算，不改任何狀態；引擎不讀電腦時鐘，時間一律是傳進來的世界秒。"""
@@ -48,6 +50,44 @@ def season21_on(season: WorldState | None, content: Content) -> bool:
     return season is not None and content.config.season21 and season.season21
 
 
+def week7_on(season: WorldState | None, content: Content) -> bool:
+    """7 天濃縮季（企劃者 2026-10-20）：照現實天的季（season21_on），季曆的週換成段（Config.season_segments）。
+    內容照天另寫的那一份（TimetableEvent.real7、FigureDef.active_from_day7、Condition.cal_day_*7）與「第 N 天」的寫法只看它。"""
+    return season21_on(season, content) and bool(content.config.season_segments)
+
+
+def _week_days(content: Content) -> list[int]:
+    """季曆每一週幾天：7 天濃縮季照段（[2, 2, 3]），其他季一律 season_weeks 個 7 天。季曆的長度與週的分法只看設定
+    （同 season_weeks 不在章上；設定與章對不上時 profile_warning 印一行）。"""
+    return list(content.config.season_segments) or [7] * content.config.season_weeks
+
+
+def total_days(content: Content) -> int:
+    """季曆一共幾天：週末與 14 天的季 84（12 週）、21 天季 21、7 天濃縮季 7。"""
+    return sum(_week_days(content))
+
+
+def _split(day: int, content: Content) -> tuple[int, int]:
+    """季曆第 day 天（從 0 起）在第幾週（從 1 起）、那一週的第幾天（從 0 起）。沒有段時就是 day // 7 + 1、day % 7。"""
+    if not content.config.season_segments:
+        return day // 7 + 1, day % 7
+    start = 0
+    for week, length in enumerate(content.config.season_segments, 1):
+        if day < start + length:
+            return week, day - start
+        start += length
+    beyond = day - start  # 季曆之外（point 夾在季末，碰不到）：之後照 7 天一週往下數
+    return len(content.config.season_segments) + beyond // 7 + 1, beyond % 7
+
+
+def _week_start_day(week: int, content: Content) -> int:
+    """第 week 週週初是季曆第幾天（從 0 起）。沒有段時就是 (week − 1) × 7；段數之後照 7 天一週往下數。"""
+    segments = content.config.season_segments
+    if not segments or week <= 1:
+        return (week - 1) * 7
+    return sum(segments[:week - 1]) + max(0, week - 1 - len(segments)) * 7
+
+
 def _offset(content: Content, season: WorldState | None) -> float:
     """季曆的偏移（季曆秒）：21 天季是開季那一刻離那一週台灣週一 00:00 多遠，其他季是 0（一個字都不變）。"""
     return season.cal_offset if season21_on(season, content) else 0.0
@@ -66,9 +106,12 @@ def offset_at(time: float, content: Content, season: WorldState | None) -> float
 
 def anchor_offset(now: float, content: Content) -> float:
     """開季那一刻（現實的 epoch 秒）離那一週台灣週一 00:00 幾秒（正式季整合設計 1.1：週一以外開季，第一週就短幾天）。
-    台灣照 pill_day_utc_offset_hours（同回體丹的換日）；1970-01-01 是週四。"""
+    台灣照 pill_day_utc_offset_hours（同回體丹的換日）；1970-01-01 是週四。
+    7 天濃縮季（Config.season_segments）錨在開季那一天的台灣 00:00：沒有週可對，開季那天就是第 1 天，週幾開都是 7 天。"""
     local = now + content.config.pill_day_utc_offset_hours * HOUR
     days = math.floor(local / DAY)
+    if content.config.season_segments:
+        return local - days * DAY
     return local - (days - (days + 3) % 7) * DAY
 
 
@@ -86,6 +129,8 @@ def profile_warning(content: Content, season: WorldState | None) -> str | None:
         return None
     if season.season21 != content.config.season21:  # 21 天季的章跟設定對不上（兩個方向）：season_weeks 不在章上，季曆整個對不上
         return SEASON21_MISMATCH
+    if season.season21 and season.length_days != content.config.season_days:  # 照現實天的季，7 天與 21 天互相帶錯（週與段不在章上）
+        return SEASON21_MISMATCH
     if not season.season_one or content.config.season_one:
         return None
     return PROFILE_MISMATCH
@@ -94,24 +139,34 @@ def profile_warning(content: Content, season: WorldState | None) -> str | None:
 def cal_scale(content: Content, season: WorldState | None = None) -> float:
     """季曆秒 ÷ 世界秒。季長照 season 蓋的章（沒有章的舊季照 DEFAULT_SEASON_DAYS）；不給 season 時照現在的設定。"""
     days = season_length_days(season, content) if season is not None else content.config.season_days
-    return content.config.season_weeks * 7 / days
+    return total_days(content) / days
 
 
 def point(time: float, content: Content, season: WorldState | None = None) -> CalPoint:
-    """世界秒落在季曆的哪一刻。季末那一刻（或之後）寫成最後一週週日 23:59，不會冒出不存在的下一週。"""
-    total = content.config.season_weeks * WEEK
+    """世界秒落在季曆的哪一刻。季末那一刻（或之後）寫成最後一週週日 23:59，不會冒出不存在的下一週。
+    7 天濃縮季的 week 是第幾段、weekday 是段裡第幾天（季末夾在第 7 天 23:59）。"""
+    total = total_days(content) * DAY
     # 照那一刻當時的偏移（FB-332：暫停再繼續之後，以前寫下的時刻不跟著往後挪）；現在與之後的時刻就是 cal_offset
     cal = min(max(0.0, time * cal_scale(content, season) + offset_at(time, content, season)), total - MINUTE)
     minutes = math.floor(cal / MINUTE + EPS_MINUTES)
     day, minute_of_day = divmod(minutes, 24 * 60)
+    week, weekday = _split(day, content)
     return CalPoint(
-        week=day // 7 + 1, weekday=day % 7, hour=minute_of_day // 60, minute=minute_of_day % 60, cal_day=day + 1,
+        week=week, weekday=weekday, hour=minute_of_day // 60, minute=minute_of_day % 60, cal_day=day + 1,
     )
 
 
 def week_start(week: int, content: Content, season: WorldState | None = None) -> float:
-    """第 week 週週一 00:00 的世界秒（21 天季在週一以外開季時，第 1 週週一是負的：開季之前）。"""
-    return ((week - 1) * WEEK - _offset(content, season)) / cal_scale(content, season)
+    """第 week 週週一 00:00 的世界秒（21 天季在週一以外開季時，第 1 週週一是負的：開季之前）。7 天濃縮季是第 week 段的第一天 00:00。"""
+    return (_week_start_day(week, content) * DAY - _offset(content, season)) / cal_scale(content, season)
+
+
+def week_seconds(content: Content, season: WorldState | None = None) -> float:
+    """「一週」那麼長的世界秒（通緝退押金、入伍最後一步收尾、軍令看下一件大事有多近）：季曆的一週 WEEK ÷ cal_scale；
+    7 天濃縮季照週算的換成段，一段平均（7 ÷ 3 天）。"""
+    if week7_on(season, content):
+        return total_days(content) / len(content.config.season_segments) * DAY / cal_scale(content, season)
+    return WEEK / cal_scale(content, season)
 
 
 def event_time(event: TimetableEvent, content: Content, season: WorldState | None = None) -> float:
@@ -225,9 +280,12 @@ def schedule_text(time: float, real: float, content: Content, season: WorldState
     )
 
 
-def point_text(at: CalPoint) -> str:
+def point_text(at: CalPoint, *, by_day: bool = False) -> str:
     """季曆時刻唯一的寫法「第 3 週・週二 21:40」（N 前後有空格）：狀態列第二行、下一件、江湖史、傳聞、軍令截止都走這裡，
-    不要在別處自己拼（FB-062 之後 PM 定：全部跟狀態列第二行一樣）。"""
+    不要在別處自己拼（FB-062 之後 PM 定：全部跟狀態列第二行一樣）。
+    by_day（7 天濃縮季，week7_on）寫「第 3 天 21:40」：季曆的週是段、星期也不是現實的星期，只寫第幾天（待 joy 潤）。"""
+    if by_day:
+        return f"第 {at.cal_day} 天 {at.hour:02d}:{at.minute:02d}"
     return f"第 {at.week} 週・週{WEEKDAYS[at.weekday]} {at.hour:02d}:{at.minute:02d}"
 
 
@@ -236,5 +294,5 @@ def stamp_text(time: float, content: Content, season: WorldState | None, *, cloc
     其他時候照舊——clock 時「第2天 14:05」，不要時刻（江湖史、傳聞）時「第2天」，一個字都不變。
     season 是 None（例如上一季的江湖史）一律照舊。"""
     if season is not None and season_one_on(season, content):
-        return point_text(point(time, content, season))
+        return point_text(point(time, content, season), by_day=week7_on(season, content))
     return day_clock_text(time) if clock else day_text(time)

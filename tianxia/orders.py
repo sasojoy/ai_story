@@ -126,7 +126,7 @@ def _event_within(state: GameState, content: Content, front: str, weeks: float):
     event = timetable.next_event_on(state, content, front)
     if event is None:
         return None
-    horizon = weeks * calendar.WEEK / calendar.cal_scale(content, state.world)
+    horizon = weeks * calendar.week_seconds(content, state.world)  # 7 天濃縮季的「週」是一段的平均
     gap = timetable.when(state, content, event) - state.world.time
     return event if gap <= horizon + calendar.EPS_SECONDS else None
 
