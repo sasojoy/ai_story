@@ -28,9 +28,9 @@ def test_prices_follow_the_holder():
     assert _land(game, "nanyang_wilds", "guan") == pytest.approx(1.2)
     assert _land(game, "nanyang_wilds", "huang") == pytest.approx(0.9)
     assert _land(game, "nanyang_wilds", None) == pytest.approx(0.9)  # 散人：開季中立的區塊算自家（設計 4.6），不論此刻歸誰
-    assert _land(game, "guan_camp", None) == pytest.approx(0.9)
+    assert _land(game, "yu_river", None) == pytest.approx(0.9)
     assert _land(game, "yingchuan", None) == 1.0  # 散人在陣營領地：原價
-    assert _land(game, "guan_camp", "guan") == 1.0  # 中立地沒人佔：誰都不是自家
+    assert _land(game, "yu_river", "guan") == 1.0  # 中立地沒人佔：誰都不是自家
 
 
 def test_home_follows_where_you_stand():
@@ -92,11 +92,11 @@ def test_gather_bonus_only_at_home():
 def test_sense_rate_plus_five_at_home():
     game = conquest_game("season21")
     s, c = game.state, game.content
-    loc = c.locations["deep_mountain"]
+    loc = c.locations["yu_river"]  # 開季中立（區塊表 v3 之前用嵩山深處，現在是官軍的）
     s.player.stats["wis"] = 1  # 壓低成算，免得撞到上限
-    _at(game, "deep_mountain", "guan")
+    _at(game, "yu_river", "guan")
     away = sensing.rate(s, c, loc)
-    conquest.set_control(s.world, c, "deep_mountain", "guan")
+    conquest.set_control(s.world, c, "yu_river", "guan")
     assert sensing.rate(s, c, loc) == away + c.config.conquest.sense_bonus_points
 
 
