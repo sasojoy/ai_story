@@ -258,6 +258,15 @@ def calendar_end(content: Content, season: WorldState | None = None) -> float:
     return week_start(content.config.season_weeks + 1, content, season)
 
 
+def nominal_end(content: Content, season: WorldState) -> float:
+    """這一季名義上的季末（世界秒；管理者往後排的季末不算，那是 world.season_end_time）：照現實天的季（21 天季、7 天濃縮季）是季曆
+    最後一刻之後那一瞬（calendar_end，照錨點：週三 14:00 開的 7 天季是 7 天減 14 小時），其他季是季長 × DAY（偏移是 0，一個字都不變）。
+    timetable.finale_default（季末的預設時刻）與 bounties.to_season_end（「到季末」，FB-500）共用這一個。"""
+    if season21_on(season, content):
+        return calendar_end(content, season)
+    return season_length_days(season, content) * DAY
+
+
 def span_text(seconds: float) -> str:
     """一段現實時間寫成最多兩個單位：「2 天 3 小時」「5 小時」「1 小時 20 分鐘」「40 分鐘」；不到一分鐘寫「不到一分鐘」。"""
     minutes = int(seconds // MINUTE)

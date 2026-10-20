@@ -25,7 +25,7 @@ from .characters import name_key
 from .martial_arts import QUALITIES
 from .models import WEAPON_KINDS, Choice, Content, Location
 from .state import Bounty, GameState, PlayerState, Weapon, WorldState
-from .world_state import WorldStateStore, season_length_days
+from .world_state import WorldStateStore
 
 KIND_NAMES = {"strike": "討伐", "scout": "打探", "escort": "護送", "wanted": "通緝", "art": "求藝", "arms": "求兵"}
 GIVE_KINDS = ("art", "arms")  # 求藝、求兵：不用揭，在懸賞榜上直接交（懸賞榜設計第四節）
@@ -232,9 +232,11 @@ def _left(b: Bounty) -> int:
 
 
 def to_season_end(b: Bounty, content: Content, world: WorldState) -> bool:
-    """這一張的期限寫「到季末」：到期在名義季長（開季時蓋的章）或之後。第 11 週掛的正好到季末、第 12 週掛的在季末後一週。
-    比的是名義季長，不是真正收季的時刻：第一季管理者可以把季末往後排（Game.admin_schedule），這種單要撐到季真的收了（past_due）。"""
-    return b.expires >= season_length_days(world, content) * calendar.DAY - calendar.EPS_SECONDS
+    """這一張的期限寫「到季末」：到期在名義季末（calendar.nominal_end：季長照開季時蓋的章）或之後。第 11 週掛的正好到季末、第 12 週掛的在季末後一週。
+    比的是名義季末，不是真正收季的時刻：第一季管理者可以把季末往後排（Game.admin_schedule），這種單要撐到季真的收了（past_due）。
+    照現實天的季（21 天、7 天）名義季末要扣開季偏移（FB-500：週三 14:00 開的 7 天季季末是 7 天減 14 小時，以前比季長 × DAY，
+    剛好在季末到期的第 6 天那一批判不成「到季末」）；週末、14 天的季偏移是 0，照舊是季長 × DAY。"""
+    return b.expires >= calendar.nominal_end(content, world) - calendar.EPS_SECONDS
 
 
 def past_due(b: Bounty, content: Content, world: WorldState) -> bool:

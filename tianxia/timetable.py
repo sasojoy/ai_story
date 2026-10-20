@@ -19,7 +19,6 @@ from . import calendar, figures, territory
 from .models import Content, TimetableEvent, TimetableOutcome
 from .rules import add_chronicle, add_rumor, add_world_flags, change_trend, trend_value
 from .state import GameState, Lock, TimelineResult, WorldState
-from .world_state import season_length_days
 
 HOUR = 3600
 DAY = 86400
@@ -85,11 +84,10 @@ def default_schedule(content: Content, season: WorldState | None = None) -> dict
 
 def finale_default(content: Content, season: WorldState | None) -> float:
     """季末的預設時刻（世界秒）：21 天季是季曆最後一週週日 24:00（照錨點算，週三開季也落在第 3 週週日，正式季整合設計 1.2 給開發 3），
-    其他照季長整（以前的寫法，一個字都不變）。"""
-    if calendar.season21_on(season, content):
-        return calendar.week_start(content.config.season_weeks + 1, content, season)
-    days = season_length_days(season, content) if season is not None else content.config.season_days
-    return days * DAY
+    其他照季長整（以前的寫法，一個字都不變）。就是 calendar.nominal_end（懸賞的「到季末」也比它，FB-500）。"""
+    if season is None:
+        return content.config.season_days * DAY
+    return calendar.nominal_end(content, season)
 
 
 # ── 決戰避開半夜（企劃者 2026-10-15，經 PM；Config.battle_quiet_hours）─────────────
