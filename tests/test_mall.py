@@ -370,8 +370,6 @@ def test_admin_finds_the_wallet_by_login_too(on):
 def test_refund_returns_yuanbao_and_takes_back_pills_in_hand(on):
     player = _ready(on)
     player.mall_buy("pills_30", "f1")
-    from tianxia.characters import open_characters
-
     player.state.player.stamina_pills = 12  # 用掉了一大半
     open_characters().save(player.state)
     pid = _wallet(player).purchases("沈浪")[0].id
@@ -391,8 +389,6 @@ def test_refunded_purchase_frees_the_limit(on):
     player.mall_buy("pills_30", "l1")
     pid = _wallet(player).purchases("沈浪")[0].id
     _admin(on).admin_mall_refund("沈浪", pid, "買錯了")
-    from tianxia.characters import open_characters
-
     player.state = open_characters().load("沈浪")
     player.sync(T0)
     assert player.mall_buy("pills_30", "l2")[0].startswith("買下")
@@ -413,8 +409,6 @@ def test_admin_ledger_looks_the_same_for_bots(on):
     bot = _game(on, "某假人")
     bot.state.player.bot = BotProfile(personality="普通", seed=1)
     bot.own_turn_checks()
-    from tianxia.characters import open_characters
-
     open_characters().save(real.state)
     open_characters().save(bot.state)
     admin = _admin(on)
