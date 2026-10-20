@@ -7187,8 +7187,10 @@ class Game:
 
     def _battle_scene_text(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> str:
         header = f"**{definition.name}**"
-        if battle.siege is not None:  # 攻城戰（領地爭奪第二批）：誰攻、守方是誰
-            header += "\n\n" + siege.scene_line(self.content, battle.siege, battle)
+        # 攻城戰（領地爭奪第二批）：誰攻、守方是誰寫在畫面最上面那一條（siege_banner，第三批 A），場景不再寫一次（PM）；
+        # 只留那一條沒說到的（三方混戰的規矩、沒到場的那一軍，siege.scene_note）
+        if battle.siege is not None and (note := siege.scene_note(self.content, battle.siege, battle)):
+            header += "\n\n" + note
         if battle.seal_shard and battle.seal_shard in self.content.seal:  # 璽動（4.3）：參戰的人知道打完可能有單挑
             header += "\n\n" + seal.STIR_SCENE.format(holder=battle.seal_holder or "", shard=self.content.seal[battle.seal_shard].name)
         if seal.on(self.content) and seal.is_mandate_battle(self.content, definition):  # 天命之爭（8.3）：碎片在哪一軍、懷璽的人份量加重
@@ -9789,9 +9791,20 @@ class Game:
         return True
 
     def xingshi_waiting(self) -> bool:
-        """有一張單等著伺服器拿去請模型寫（server._xingshi_waiting 問；還沒被拿走）。只讀。"""
+        """有一張單等著伺服器拿去請模型寫（server._xingshi_waiting 問；還沒被拿走、上一趟沒輪到的隔過 retry_seconds 了）。只讀。"""
         ticket = self.state.world.xingshi_ticket
-        return ticket is not None and not ticket.taken and xingshi.on(self.content, self.state.world)
+        return (ticket is not None and not ticket.taken and self.pill_now() >= ticket.retry_at
+                and xingshi.on(self.content, self.state.world))
+
+    def release_xingshi(self, request: xingshi.XingshiRequest) -> bool:
+        """B 段沒叫成模型（佇列裡假人的名額被佔、排不到）：同一張單放回去（taken 清掉），隔 Config.xingshi.retry_seconds 再拿；
+        寬限到了還沒寫成，照舊由 _xingshi_grace 照固定段收（PM，第三批 A 回報之後：不要一被擋就退回固定段）。放了回 True、存季。"""
+        ticket = self.state.world.xingshi_ticket
+        if ticket is None or ticket.n != request.n or ticket.key != request.key:
+            return False
+        ticket.taken, ticket.retry_at = False, self.pill_now() + self.content.config.xingshi.retry_seconds
+        self._save_season()
+        return True
 
     def xingshi_request(self) -> xingshi.XingshiRequest | None:
         """A 段（server.xingshi_once 在行動鎖內叫）：拿走還在等的那一張單（記 taken、存季，同一張不再拿第二次），回請模型寫要的東西；

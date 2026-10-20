@@ -2640,6 +2640,9 @@ class XingshiTuning(_Strict):
     enabled: bool = True  # 【預設】正式開；領地爭奪本身還關著（ConquestRules.enabled），開了領地爭奪就有
     grace_seconds: float = Field(default=900, ge=0)  # 【預設】單開了這麼久（現實秒）還沒交回，下一個同步的人照固定段收（伺服器關著、模型壞了照樣每天一篇）
     budget_seconds: int = Field(default=120, ge=0)  # 【預設】鎖外那一趟模型呼叫的總預算（同決戰劇情 battle_tale_budget_seconds）
+    # 【預設】佇列裡假人的名額被佔（或排不到）、這一趟沒叫成模型：單子放回去，隔這麼久（現實秒）再試；寬限（grace_seconds）到了才照固定段
+    # （PM，第三批 A 回報之後）。不隔的話每一次輪詢都撞一次佇列
+    retry_seconds: float = Field(default=30, ge=0)
     facts_max: int = Field(default=30, ge=1)  # 【預設】一張單最多幾條事實（攻城的在前、三條線、再補天下大事，新的在前）
     keep: int = Field(default=30, ge=1)  # 【預設】這一季最多留幾篇（21 天的季約 20 篇，留得下一整季）
 

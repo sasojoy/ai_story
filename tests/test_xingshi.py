@@ -313,6 +313,54 @@ def test_no_thread_without_tale_threads(monkeypatch):
     assert not server._xingshi_waiting(game)
 
 
+class _FullQueue:
+    """假的模型佇列：前 full 次假人的名額被佔（照 llm_queue 的規矩回 fallback、不跑），之後照跑。"""
+
+    def __init__(self, full: int):
+        self.full, self.calls = full, 0
+
+    def run(self, owner, job, *, fallback, bot=False, wait=30.0):
+        self.calls += 1
+        if self.full > 0:
+            self.full -= 1
+            return fallback
+        return job()
+
+
+@pytest.mark.slow
+def test_bot_slot_taken_retries_within_grace(monkeypatch):
+    """PM（第三批 A 回報之後）：被假人的名額擋住時不要馬上照固定段，寬限之內下一輪再試；名額被佔一次、下一輪空了，寫得出模型那一篇。"""
+    game = _game(DAY0)
+    _tick(game, DAY0)
+    _tick(game, SETTLE)
+    game.client = _Fake(ESSAY)
+    queue = _FullQueue(1)
+    monkeypatch.setattr(server, "QUEUE", queue)
+    monkeypatch.setattr(server, "TALE_THREADS", True)
+    assert not server.xingshi_once(game)  # 名額被佔：這一次不收（修前照固定段收了）
+    w = game.world.get_season()
+    assert w.xingshi == [] and w.xingshi_ticket is not None and not w.xingshi_ticket.taken  # 單子放回去
+    assert not server._xingshi_waiting(game)  # 隔一下（retry_seconds）才再試，不每一次輪詢都撞一次
+    game.now = SETTLE + game.content.config.xingshi.retry_seconds + 1
+    assert server._xingshi_waiting(game)
+    assert server.xingshi_once(game)  # 下一輪空了
+    essay = game.world.get_season().xingshi[0]
+    assert not essay.by_rule and essay.essay == ESSAY.strip() and queue.calls == 2
+
+
+@pytest.mark.slow
+def test_bot_slot_never_frees_falls_back_after_grace(monkeypatch):
+    """名額一直被佔：寬限（grace_seconds）到了照固定段收，一天一篇照樣有。"""
+    game = _game(DAY0)
+    _tick(game, DAY0)
+    _tick(game, SETTLE)
+    game.client = _Fake(ESSAY)
+    monkeypatch.setattr(server, "QUEUE", _FullQueue(99))
+    assert not server.xingshi_once(game)
+    w = _tick(game, SETTLE + 901)
+    assert w.xingshi_ticket is None and len(w.xingshi) == 1 and w.xingshi[0].by_rule
+
+
 def test_server_serves_the_page():
     assert any(getattr(r, "path", "") == "/api/xingshi" for r in server.app.routes)
     assert "xingshi_now" in server.ADMIN_ACTIONS

@@ -1182,6 +1182,7 @@ class XingshiTicket(BaseModel):
     facts: list[str] = Field(default_factory=list)
     line: str = ""  # 「是日：…」
     taken: bool = False
+    retry_at: float = 0.0  # 現實時間：上一趟沒輪到模型（假人的名額被佔），這之前不再拿（Game.release_xingshi，Config.xingshi.retry_seconds）
 
 
 class XingshiEssay(BaseModel):

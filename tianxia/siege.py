@@ -40,7 +40,8 @@ BLOW_RUMOR = "{title}：{who}替{side}補上最後一刀，{guard}倒下，{plac
 BLOW_RUMOR_NOBODY = "{title}：{side}補上最後一刀，{guard}倒下，{place}歸了{side}。"
 MELEE_HELD_LINE = "{title}：兩軍都沒能補上最後一刀，守軍守住了{place}，照舊沒人佔。"
 MELEE_TAKEN_TITLE = "{side}補上最後一刀，拿下{place}"  # 戰報與紀錄的結果
-MELEE_SCENE_LINE = "{attackers}同時攻{place}，守方{defender}兩頭迎戰；守將的氣血照開打時兩軍到場的人數定，誰補上最後一刀誰拿下這一塊。"
+MELEE_RULE = "守將的氣血照開打時兩軍到場的人數定，誰補上最後一刀誰拿下這一塊。"  # 三方混戰的規矩那一句（場景上跟著攻城那一條寫，scene_note）
+MELEE_SCENE_LINE = "{attackers}同時攻{place}，守方{defender}兩頭迎戰；" + MELEE_RULE
 MELEE_MIN_HEADS = 2  # 【開發】三方混戰守將的池子至少照幾個人算（一軍只到一個人也不會一碰就倒）
 ABSENT_SCENE_LINE = "{absent}沒有人趕到，這一場只剩對面一軍來攻。"  # 待 joy 潤：三方混戰集結結束只有一軍到場（裁決 23），場景第二行多的一句
 TAKEN_TITLE = "{side}{margin}，拿下{place}"  # 待 joy 潤：戰報與紀錄的結果
@@ -256,6 +257,17 @@ def scene_line(content: Content, info: SiegeInfo, battle: battle_instance.Battle
     if info.absent:  # 三方混戰只有一軍到場、轉回單方攻中立地（裁決 23）：多一句沒到場的是誰
         line += ABSENT_SCENE_LINE.format(absent=content.scenario.faction_name(info.absent, info.absent))
     return line
+
+
+def scene_note(content: Content, info: SiegeInfo, battle: battle_instance.BattleInstance) -> str:
+    """攻城戰場景第二行（Game._battle_scene_text）：誰攻、守方是誰已經寫在畫面最上面那一條（banner，第三批 A），PM 定不再寫一次
+    （scene_line 的「某軍攻某地；守方：某某。」）；只留那一條沒說到的——三方混戰的規矩（MELEE_RULE）、轉回單方時沒到場的那一軍
+    （ABSENT_SCENE_LINE）。其餘是空的。"""
+    if battle_instance.melee(battle):
+        return MELEE_RULE
+    if info.absent:
+        return ABSENT_SCENE_LINE.format(absent=content.scenario.faction_name(info.absent, info.absent))
+    return ""
 
 
 # 攻城戰畫面最上面那一條（領地爭奪第三批 A，企劃者挑甲：「攻城・地點｜守方：某某（或守將）」；Game.siege_banner → main.siege，

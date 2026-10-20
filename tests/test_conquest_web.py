@@ -179,6 +179,29 @@ def test_fb553_one_join_button_stays_beside_the_name():
     assert cls == "" and row.count('data-act="choose"') == 1  # 一顆的照舊（FB-105 的排法，一個像素都不變）
 
 
+@pytest.mark.slow
+def test_scene_does_not_repeat_the_strip():
+    """PM（第三批 A 回報之後）：有攻城那一條時，場景第二行「某軍攻某地；守方：某某。」不再寫一次（引擎 siege.scene_note）。"""
+    m = _sieges_view(["nanyang_road"])
+    assert m["siege"]["parts"][0].startswith(siege.BANNER_DEFENDER.format(who=""))
+    assert "；守方：" not in m["scene"] and "官軍攻南陽官道" not in m["scene"]
+
+
+@pytest.mark.slow
+def test_melee_scene_keeps_only_the_rule():
+    """三方混戰：誰攻、守方是誰也拿掉，只留那一條沒說到的規矩（誰補上最後一刀誰拿下）。"""
+    game = go(join(conquest_game("season21"), "huang"), "nanyang_road")
+    game.now = NOW
+    slot = announce(game, "nanyang_road", "huang", merged=("guan", "huang"))
+    w = game.state.world
+    slot.muster_at, slot.at, slot.status = w.time, w.time + 1800, "waiting"
+    game._save_season()
+    siege.open_waiting(game.world, game.content, NOW)
+    game.state.world = game.world.get_season()
+    scene = server.main_view(game)["scene"]
+    assert siege.MELEE_RULE in scene and "兩頭迎戰" not in scene
+
+
 def test_fb553_stacked_row_takes_its_own_line():
     """.pick 那一排另起一行、一顆一行、鈕佔滿那一行（字長也只往下折，不往右撐）。"""
     css = (ROOT / "web" / "style.css").read_text(encoding="utf-8").split("@media (min-width: 641px)")[0]

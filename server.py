@@ -1115,6 +1115,7 @@ def yuedan_once(game: Game) -> bool:
 # 全服同時只有一條在寫（XINGSHI_RUNNING）；佇列開著時當成假人排在真人後面（名號是 XINGSHI_OWNER，不是任何一個角色）。
 XINGSHI_RUNNING: set[str] = set()
 XINGSHI_OWNER = "§史官"
+XINGSHI_SKIPPED = object()  # 佇列沒讓這一趟跑（假人的名額被佔、排不到）：跟「模型寫不出來」分開——前者單子放回去下一輪再試
 
 
 def _xingshi_waiting(game: Game) -> bool:
@@ -1148,7 +1149,9 @@ def write_xingshi(game: Game) -> bool:
 
 
 def xingshi_once(game: Game) -> bool:
-    """寫一篇（write_xingshi 的那一圈；測試直接叫）：收了回 True。呼叫端不能握著行動鎖。"""
+    """寫一篇（write_xingshi 的那一圈；測試直接叫）：收了回 True。呼叫端不能握著行動鎖。
+    佇列沒讓這一趟跑（假人的名額被佔、排不到）：不照固定段收，單子放回去（Game.release_xingshi），隔 retry_seconds 下一輪再試；
+    寬限（grace_seconds）到了還沒寫成，由 Game._xingshi_grace 照固定段收（PM，第三批 A 回報之後）。模型叫了卻寫不出來照舊馬上照固定段。"""
     with _locked(game):
         request = game.xingshi_request()
     if request is None:
@@ -1162,11 +1165,14 @@ def xingshi_once(game: Game) -> bool:
     if QUEUE is None:
         essay = ask()
     else:
-        try:  # 排在真人的評分後面（當成假人排）；排不到就照固定段
-            essay = QUEUE.run(XINGSHI_OWNER, ask, fallback=None, bot=True, wait=min(budget, 120))
+        try:  # 排在真人的評分後面（當成假人排）
+            essay = QUEUE.run(XINGSHI_OWNER, ask, fallback=XINGSHI_SKIPPED, bot=True, wait=min(budget, 120))
         except (Busy, QueueTimeout):
-            essay = None
+            essay = XINGSHI_SKIPPED
     with _locked(game):  # 收下那一刻寫天下大事：推送的指紋跟著變，開著的分頁會更新
+        if essay is XINGSHI_SKIPPED:
+            game.release_xingshi(request)
+            return False
         return game.settle_xingshi(request, essay)
 
 
