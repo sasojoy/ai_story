@@ -32,8 +32,9 @@ REASON_LOSING = "{line}一帶我軍吃緊，主將要從{place}扳回局面。"
 REASON_PLAIN = "主將看準了{place}，下令攻打。"
 
 # 每天結算的天下大事（Task 9；待 joy 潤）：時刻照 calendar.stamp_text（玩家看得到的時刻只有一個寫法；結算晚了「明日」會寫錯，所以不寫）
-ANNOUNCE = "{time}，{who}攻{place}。"
-ANNOUNCE_BOTH = "{time}，{who}同時攻{place}。"
+# 傳聞列表本身在每一則前面寫發出的時刻，所以開打的時刻寫在句子中間（實機看過：開頭也寫時刻會連著兩個時刻）
+ANNOUNCE = "{who}定於{time}攻{place}。"
+ANNOUNCE_BOTH = "{who}定於{time}同時攻{place}。"
 VOID_LATE = "{who}原定攻{place}，時辰已過，這一仗作罷。"
 VOID_CANCEL = "{who}攻{place}這一仗作罷。"  # 管理者取消（公告不寫管理者）
 

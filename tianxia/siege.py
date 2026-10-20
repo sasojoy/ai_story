@@ -193,7 +193,8 @@ def open_waiting(world: WorldStateStore, content: Content, now: float) -> list[s
             voided[slot.id] = VOID_HELD.format(who=who, place=content.locations[slot.loc].name)
             continue
         battle = world.start_siege(definition, now, start_trend(season, content, here), here)
-        deadline = max(now + max(0.0, slot.at - season.time) / scale, now + LATE_MUSTER_SECONDS)
+        floor = min(LATE_MUSTER_SECONDS, content.config.conquest.muster_minutes * 60)  # 開晚了（伺服器停過）至少留這麼久
+        deadline = now + max((slot.at - season.time) / scale, floor)
         rows = commanders(_season_vehicle(content, season), content, here, definition.model_copy(update={"name": name}))
 
         def _snap(b: battle_instance.BattleInstance, deadline=deadline, rows=rows) -> None:
