@@ -148,11 +148,12 @@ def siege_places(content: Content, faction: str, front: str, world: WorldState |
     from . import conquest  # noqa: PLC0415  conquest → territory → rules：在函式裡 import
 
     if conquest.on(content, world):
-        # 領地爭奪（第一批）：這條線上此刻能挑成目標、而且歸敵方的區塊（攻城只算打贏敵方陣營的隊伍，中立駐軍不算，所以中立地不列；
-        # 第二批起攻城改成今天公告的目標，裁決 11）
+        # 領地爭奪（第一批）：這條線上此刻能挑成目標、歸敵方、而且出陣攻打的對手全是敵方陣營隊伍的區塊——打贏一定記得到（同 _counts
+        # 的 siege_win）。被敵方佔下的中立地站的還是中立駐軍與流寇，打贏記不到，不列（FB-531）。第二批起攻城改成今天公告的目標，裁決 11
         return [
             loc_id for loc_id in conquest.targets(world, content, faction)
             if conquest.line_of(world, content, loc_id) == front and conquest.holder(world, content, loc_id) == enemy
+            and _all_enemy(content, faction, conquest.sortie_foes(world, content, loc_id, faction))
         ]
     if world is not None and territory.on(content):
         return [
@@ -164,6 +165,17 @@ def siege_places(content: Content, faction: str, front: str, world: WorldState |
         if rules.front_of(content, loc_id) == front
         and any(content.squads[sid].faction == enemy for sid in loc.enemies if sid in content.squads)
     ]
+
+
+def siege_win(faction: str | None, squad_faction: str | None) -> bool:
+    """打贏這一路算不算 faction 的攻城（軍令文件 3.1：敵方陣營的隊伍；操練、流寇、中立駐軍不算）。記功（_counts）與領地爭奪開著時
+    列地點（siege_places）都問它：軍令卡、假人、記功同一個判斷（FB-531）。"""
+    return squad_faction is not None and squad_faction == ENEMY.get(faction or "")
+
+
+def _all_enemy(content: Content, faction: str, squads: list[str]) -> bool:
+    """這裡出陣攻打的對手（至少一路）每一路打贏都算 faction 的攻城。"""
+    return bool(squads) and all(siege_win(faction, content.squads[sid].faction) for sid in squads)
 
 
 def _issuable(state: GameState, content: Content, t: OrderTemplate, front: str, week: int, opening: bool) -> bool:
@@ -388,7 +400,7 @@ def _counts(
     if PERSONAL.get(o.template) != kind:
         return False
     if o.template == "siege":  # 在那條戰線遊歷打贏一場敵方陣營的隊伍（操練、流寇不算）
-        return front == o.front and squad_faction is not None and squad_faction == ENEMY.get(o.faction)
+        return front == o.front and siege_win(o.faction, squad_faction)
     if o.template == "intercept":  # 在運糧隊在的那幾站（intercept_spots）打贏敵方的運糧隊
         enemy = content.orders.convoy_squads.get(ENEMY.get(o.faction, ""))
         return squad is not None and squad == enemy and location is not None and o.location is not None \
