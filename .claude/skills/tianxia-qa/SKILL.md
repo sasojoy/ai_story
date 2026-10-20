@@ -9,6 +9,7 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 
 ## 開工
 - **先對版本**：`git fetch`，再 `git ls-remote origin <分支>`，確認派工單給的 commit 還是最新的。PM 派單到你開工之間，分支常常已經往前走；回報之前再對一次。驗的是哪一個 commit 就寫哪一個。
+- **Skill 工具找不到 `tianxia-qa`**（子代理的工作樹常停在舊 commit，那個 commit 還沒有這個技能）：先 `git switch` 到結果分支，再直接 Read `.claude/skills/tianxia-qa/SKILL.md` 與 `引擎驗收.md`。
 - **開結果分支**：從派工單給的那個 commit 開，`git worktree add -b qa/<名字> .claude/worktrees/qa-<名字> <sha>`。複驗如果沿用既有的 qa/ 分支，先 `git merge --ff-only origin/<修好的分支>`，快轉到修好的版本。
 - **寫檔被擋**：如果 hook 擋你寫別的工作樹的檔，就在自己 session 的工作樹 `git switch` 到結果分支來做。
 - 工作樹沒有 `.venv`，一律用 `C:/Ray/專案/天下大勢/.venv/Scripts/python.exe`。印中文要設 `PYTHONIOENCODING=utf-8`（或把 stdout 包成 UTF-8）。
@@ -16,6 +17,8 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 - 不開多代理工作流程，也不要一個驗收項目開一個子代理。
 - **在隔離的工作樹裡**（PM 用 Agent 派的子代理）：Bash 工具會擋帶中文路徑的 python（`C:/Ray/專案/…/python.exe`），python 一律從 PowerShell 跑，git 照樣用 Bash。PowerShell 傳 JSON 參數會壞：把 JSON 寫進腳本，或讓腳本收一般參數。
   Bash 也會擋「`cd` 到工作樹外面」或太複雜的指令（heredoc 加管線、`od` 之類，回「too complex to verify that it stays inside the worktree」）：小腳本用 Write 寫進 scratchpad、用絕對路徑跑（系統的 `python` 可以），git 一律 `git -C <自己的工作樹>`。
+- **git 一個指令一個指令跑**：`W=…; git -C "$W" … | …; git -C "$W" …` 這種變數加管線加好幾個 git 串在同一行，會被擋（too complex）。拆成單一的 `git -C <絕對路徑> …`；要 grep 輸出就先 `> scratchpad 的檔`，再另一個指令 grep。
+- **兩份複本對照要平行跑**：PowerShell `Start-Process -FilePath <python> -ArgumentList '-u','-I',<腳本> -RedirectStandardOutput <檔> -RedirectStandardError <檔> -WindowStyle Hidden -PassThru`，各設自己的 `QA_ROOT`；不加 `-u` 的話輸出要等跑完才寫進檔，看不到進度。
 - **scratchpad 跟同一個 PM 派出的其他子代理共用**（2026-10-20 在 `shots/` 看到別人的檔）：自己的複本、資料庫、截圖，都放在用這次驗收命名的子資料夾。
 
 ## 開伺服器與登入
@@ -116,12 +119,12 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
   - 條列：**測試**（跑了哪幾個檔、幾個 passed）、**做法**、**1.～N.** 每一項怎麼驗、看到什麼（照實寫數字與畫面上的原字）、**順帶**（看到但不是這一批的）、**新開的 FB**、**沒驗到的**（一定要寫，含只在引擎驗的）。
 
 ## 結果分支
-- qa/ 分支只 commit 試玩回饋，一個 commit。commit 訊息用英文一行，說驗了什麼、開了哪幾張 FB，結尾空一行加 `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`。
+- qa/ 分支只 commit 試玩回饋（順手更新這個技能時，同一個 commit 帶上）。commit 訊息用英文一行，說驗了什麼、開了哪幾張 FB，結尾空一行加系統給的 `Co-Authored-By:` 署名（照當次 Claude Code 給的那一行，不要寫死模型名）。
 - `git push -u origin qa/<名字>`，接著 `git ls-remote origin qa/<名字>`，確認遠端那一個跟本機的 commit 一樣。
 - 不合併，合併是 PM 的事。
 
 ## 回報 PM
-- 用 SendMessage 回派工的那個 session（照訊息的 `from`），用繁體中文。
+- 用 SendMessage 回派工的那個 session（照訊息的 `from`），用繁體中文。被 PM 用 Agent 派出來的子代理沒有對象可以 SendMessage：最後一步呼叫 `SubagentHandback` 交出完整報告（呼叫完就結束，所以推送、確認遠端都要先做完）。
 - **第一行**寫結論，加 commit，例如「第 7 批 QA 完成：九項照設計，新開 FB-436～438，結果在 qa/season-7 `3cbaea20`（已推）」。
 - **接著**：驗的分支與 commit、測試結果、每一項一兩句（照派工單的編號）、新開 FB 一張一句、順帶看到的、沒驗到的。
 - **最後**：伺服器和假人程式關了沒有。
