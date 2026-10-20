@@ -15,18 +15,19 @@ from tianxia.state import BotProfile, Order
 
 pytestmark = pytest.mark.slow  # 建 Game、載正式內容
 
-# （陣營, 地點, 這裡是誰的）：敵方大本營、敵方區塊、廣宗（fixed，黃巾的）、還沒佔下的中立地
+# （陣營, 地點, 這裡是誰的）：敵方大本營、敵方區塊、廣宗（fixed，黃巾的）、還沒佔下的中立地（區塊表 v3：汝南荒野改成中立、
+# 嵩山深處改成官軍的，敵方區塊換汝南、中立地換淯水河畔）
 OTHERS = (
     ("guan", "huangjin_camp", "other"),
-    ("guan", "runan_wilds", "other"),
+    ("guan", "runan", "other"),
     ("guan", "guangzong", "other"),
-    ("guan", "deep_mountain", "open"),
+    ("guan", "yu_river", "open"),
     ("guan", "hilltop_wilds", "open"),
     ("huang", "changshe", "other"),
     ("huang", "yingchuan_wilds", "other"),
     ("huang", "nanyang_road", "open"),
 )
-OWN = (("guan", "changshe"), ("guan", "yingchuan_wilds"), ("huang", "huangjin_camp"), ("huang", "runan_wilds"))
+OWN = (("guan", "changshe"), ("guan", "yingchuan_wilds"), ("huang", "huangjin_camp"), ("huang", "runan"))
 
 
 def _duty(game):
@@ -78,12 +79,12 @@ def test_own_ground_still_gives_it(side, loc):
 
 
 def test_taking_a_neutral_block_turns_the_button_on_and_losing_it_turns_it_off():
-    game = go(join(conquest_game("season21"), "guan"), "deep_mountain")
+    game = go(join(conquest_game("season21"), "guan"), "yu_river")  # 區塊表 v3 之前用嵩山深處（現在是官軍的）
     w, c = game.state.world, game.content
     assert not _duty(game).enabled
-    conquest.set_control(w, c, "deep_mountain", "guan")
+    conquest.set_control(w, c, "yu_river", "guan")
     assert _duty(game).enabled
-    conquest.set_control(w, c, "deep_mountain", "huang")
+    conquest.set_control(w, c, "yu_river", "huang")
     option = _duty(game)
     assert not option.enabled and option.label.endswith(f"（{sortie.DUTY_OUT_OTHER}）")
 
@@ -116,10 +117,10 @@ def test_the_defend_order_never_counts_or_lists_an_enemy_base():
                           quota=5, text="守"))
     state = join(game, "guan").state
     assert orders.duty_counts(state, c, "guan", guan_block)
-    for loc in ("huangjin_camp", "runan_wilds", "runan", "deep_mountain", "changshe", "yingchuan_wilds"):
+    for loc in ("huangjin_camp", "runan", "runan_academy", "runan_wilds", "hilltop_wilds", "changshe", "yingchuan_wilds", "deep_mountain"):
         assert not orders.duty_counts(state, c, "guan", loc), loc  # 敵方大本營、敵方區塊、中立地、自家大本營與沒被公告的自家區塊
     assert orders.targets(state, c, "guan") == [guan_block]
-    for loc in ("huangjin_camp", "runan_wilds"):  # 真的站在敵方那裡也記不到（修前就是如此，只是鈕按得下去、線照推）
+    for loc in ("huangjin_camp", "runan"):  # 真的站在敵方那裡也記不到（修前就是如此，只是鈕按得下去、線照推）
         assert not orders._counts(c, w.orders[-1], "duty", loc, None, None, None, None, None, w)
 
 
