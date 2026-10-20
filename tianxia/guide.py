@@ -157,7 +157,8 @@ def next_hint(state: GameState, content: Content, world: WorldStateStore | None 
         return f"（{speaker_of(content, step)}）{step_text(state, content, world)}"
     who = enlist.recruiter(state, content)
     if who is not None and enlist.active(state, content):  # 入伍段進行中：引薦人這一步交代的事（收起來那一行，不帶名字）
-        return f"（{who.name}）{pending_line(state, content) or who.lines[state.player.enlist_step]}"  # 有事件待處理時跟框一樣（F12）
+        # 有事件待處理時跟框一樣（F12）；那一行的 {本週} 照軍令多久一道換（enlist.step_line，FB-502）
+        return f"（{who.name}）{pending_line(state, content) or enlist.step_line(who, state.player.enlist_step, state, content)}"
     hints = [] if storyline_off(state, content) else [current_act(state, content).goal]
     if state.player.stamina >= content.config.stamina_max * 0.9 and _idle(state):
         hints.append(STAMINA_FULL_NOTE if state.player.stamina >= content.config.stamina_max else FULL_STAMINA_NOTE)

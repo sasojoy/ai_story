@@ -221,6 +221,16 @@ RESUME_LINE = (  # 待 S1／joy 潤；{skip} 是實際扣了多少（world.resum
 )
 PAUSED_REFUSAL = "（賽季時鐘暫停中，先按「繼續」。）"  # 暫停中的管理者動作；待 S1／joy 潤
 NO_SUCH_PLAYER = "（江湖上沒有「{name}」這個人。）"  # 管理者的「玩家個人劇情」查不到名號（管理者觸發鈕第 2 組；只有管理者看得到）
+# 管理者「立刻發軍令」的回話照軍令多久一道（orders.daily：照週一發、每天 00:00 發；FB-502，待 joy 潤）
+ADMIN_REISSUE_HOW = {False: "週一", True: " 00:00 "}  # 「已照週一的做法重發」「已照 00:00 的做法重發」
+ADMIN_REISSUE_NONE = {False: "這一週沒有要重挑的軍令", True: "今天沒有要重挑的軍令"}
+# 管理者「立刻輪替第 4 階席次」的回話：7 天濃縮季照段（calendar.week7_on；FB-503，待 joy 潤）
+ADMIN_ROTATE_FIRST = {
+    False: "（第 1 週沒有上一週的貢獻可排；空缺照常由有資格的人補上。）",
+    True: "（第 1 段沒有上一段的貢獻可排；空缺照常由有資格的人補上。）",
+}
+ADMIN_ROTATE_AGAIN = {False: "下週一照常再排", True: "下一段第一天 00:00 照常再排"}
+ADMIN_ROTATE_LAST = "這是最後一段，季末之前不再排"  # 7 天濃縮季的最後一段沒有下一段
 
 
 @dataclass(frozen=True)
@@ -1745,7 +1755,7 @@ class Game:
         if wait > 0:
             why = explore_modes.BOSS_COOLING.format(wait=arena.wait_text(wait / c.config.time_scale))
         else:
-            why = explore_modes.BOSS_GONE_WEEK if c.config.duel.per_boss_week else explore_modes.BOSS_GONE_SEASON
+            why = explore_modes.boss_gone(s, c)  # 7 天濃縮季寫「這一段…第 N 天 00:00 再來」（FB-501）
         return Option(id=oid, label=f"{name}（{why}）", enabled=False)
 
     def _nearest_practice(self) -> atlas.Route | None:
@@ -4392,8 +4402,9 @@ class Game:
             if not rank_actions.where_ok(s, c, action, loc.id):
                 continue
             option_id = f"{RANK_ACTION_PREFIX}{action.id}"
-            if rank_actions.left(s, c, action) <= 0:
-                opts.append(Option(id=option_id, enabled=False, label=f"{action.name}（這週已經做滿 {action.weekly} 次）"))
+            if rank_actions.left(s, c, action) <= 0:  # 7 天濃縮季照段記、寫「這一段」（calendar.week_word，FB-503）
+                this = calendar.week_word("this_short", c, s.world)
+                opts.append(Option(id=option_id, enabled=False, label=f"{action.name}（{this}已經做滿 {action.weekly} 次）"))
             elif line is not None and self._push_room(line) <= 0:
                 opts.append(Option(id=option_id, enabled=False, label=f"{action.name}（今天這條線已經推滿）"))  # 新寫，待 joy 潤
             else:  # 有檢定的（煽動起事）照事件選項的寫法接在體力後面，體力不夠時不寫（裁決 E5.3、審查 I1，同 _rank2_options）
@@ -12096,16 +12107,17 @@ class Game:
         """立刻發本週軍令：這一週還沒達成的軍令換成照週一的做法（orders.issue，週一掛鉤用的同一個函式，redraw）此刻重新挑的一批，
         各陣營照常發「本週軍令：…」的陣營軍情。換掉的那幾道進度不算了；已經達成的原封不動、不會再達成一次（審查 I-1：重挑的 id
         是決定性的，不留著的話同一道會達成兩次、效果套兩次）。不動 hooked_week：下週一照常發令。"""
-        refusal = self._admin_refusal("發本週軍令")
+        refusal = self._admin_refusal(f"發{calendar.week_word('order_this', self.content, self.state.world)}軍令")
         if refusal:
             return self._log(refusal)
         s, c = self.state, self.content
         if not orders.active(s, c):
             return self._log(["（這一季沒有軍令。）"])
         week = orders.period_of(s, c)  # 21 天季是季曆第幾天（每天一期）
+        daily = orders.daily(s, c)
         replaced = sum(1 for o in s.world.orders if o.week == week and not o.done)
         kept = {o.id for o in s.world.orders if o.week == week and o.done}
-        if orders.daily(s, c):
+        if daily:
             orders.issue_day(s, c, week, self.rng, redraw=True)
         else:
             orders.issue(s, c, week, self.rng, redraw=True)
@@ -12114,9 +12126,9 @@ class Game:
         listing = "；".join(
             f"{f.name}：{'、'.join(orders.title(c, o) for o in issued if o.faction == f.id)}"
             for f in c.scenario.factions if any(o.faction == f.id for o in issued)
-        ) or "這一週沒有要重挑的軍令"
-        label = f"第 {week} 天" if orders.daily(s, c) else f"第 {week} 週"
-        msg = (f"已照週一的做法重發{label}的軍令，換掉沒達成的 {replaced} 道（進度不算了；已達成的 {len(kept)} 道照舊）"
+        ) or ADMIN_REISSUE_NONE[daily]
+        label = f"第 {week} 天" if daily else f"第 {week} 週"
+        msg = (f"已照{ADMIN_REISSUE_HOW[daily]}的做法重發{label}的軍令，換掉沒達成的 {replaced} 道（進度不算了；已達成的 {len(kept)} 道照舊）"
                f"——{listing}。")
         self._write("重發軍令", [msg], tag="管理者")
         return self._log([msg])
@@ -12132,8 +12144,9 @@ class Game:
         if not season_one(c, s.world):
             return self._log(["（這一季沒有第 4 階席次。）"])
         week = calendar.point(s.world.time, c, s.world).week
+        segments = calendar.week7_on(s.world, c)  # 7 天濃縮季照段寫（FB-503，待 joy 潤）
         if week < 2:
-            return self._log(["（第 1 週沒有上一週的貢獻可排；空缺照常由有資格的人補上。）"])
+            return self._log([ADMIN_ROTATE_FIRST[segments]])
         seats.rotate(s, c, week)
         self._save_season()
         held = s.world.seats
@@ -12141,7 +12154,9 @@ class Game:
             f"{f.name}{ranks.TITLES[f.id][seats.SEAT_RANK]}：{'、'.join(held.get(f.id, [])) or '沒有人'}"
             for f in c.scenario.factions if f.id in s.world.seat_ledger and f.id in ranks.TITLES
         ) or "帳上還沒有人有第 4 階的資格"
-        msg = f"已照第 {week - 1} 週的貢獻輪替第 4 階席次（下週一照常再排）——{listing}。"
+        last = segments and week >= len(c.config.season_segments)
+        again = ADMIN_ROTATE_LAST if last else ADMIN_ROTATE_AGAIN[segments]
+        msg = f"已照{calendar.week_label(week - 1, c, s.world)}的貢獻輪替第 4 階席次（{again}）——{listing}。"
         self._write("輪替席次", [msg], tag="管理者")
         return self._log([msg])
 
@@ -13017,10 +13032,15 @@ class Game:
         upcoming = None if w.ended or self._preparing() else timetable.next_event(self.state, c)
         cal = {
             "week": at.week, "weekday": at.weekday, "clock": f"{at.hour:02d}:{at.minute:02d}",
-            "weeks": c.config.season_weeks, "text": calendar.point_text(at),  # 畫面第二行直接用這一句，不自己拼
+            # 畫面第二行直接用這一句，不自己拼（7 天濃縮季寫「第 N 天 HH:MM」）
+            "weeks": c.config.season_weeks, "text": calendar.point_text(at, by_day=calendar.week7_on(w, c)),
         }
         if orders.daily(self.state, c):  # 21 天季的軍令每天一道：軍令卡收起來照季曆第幾天記（網頁 orderKey），隔天重新展開
             cal["day"] = at.cal_day
+        # 7 天濃縮季：畫面上寫「週」的地方換成段（網頁 calWords，FB-501）；21 天季只有軍令的字（FB-502）；週末、14 天沒有這個鍵
+        words = calendar.week_words(c, w)
+        if words is not None:
+            cal["words"] = words
         return {
             "calendar": cal,
             "next_event": None if upcoming is None else {

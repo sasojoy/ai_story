@@ -12,11 +12,11 @@ from pydantic import BaseModel
 
 from typing import TYPE_CHECKING
 
-from . import insights, materials
+from . import calendar, insights, materials
 from .models import Content, GatherBranch, Location
 
 if TYPE_CHECKING:
-    from .state import WorldState
+    from .state import GameState, WorldState
 
 PREFIX = "explore:"
 GATHER, SEEK, SENSE = "gather", "seek", "sense"
@@ -38,6 +38,22 @@ BOSS_NOTE = "頭目"  # 待 joy 潤：這裡只有頭目時鈕上那一格
 BOSS_COOLING = "頭目{wait}後才會再現身"  # 待 joy 潤：兩場頭目戰之間的冷卻（wait 是 arena.wait_text 的現實倒數）
 BOSS_GONE_WEEK = "這一週他不再現身"  # 待 joy 潤：21 天季這一週的次數用完
 BOSS_GONE_SEASON = "這一季他不再現身"  # 待 joy 潤：一季的次數用完
+BOSS_BACK_DAY = "，第 {day} 天 00:00 再來"  # 待 joy 潤：7 天濃縮季接在「這一段他不再現身」後面，下一段第一天重算（FB-501）
+
+
+def boss_gone(state: GameState, content: Content) -> str:
+    """頭目的次數用完時練功鈕上那一格（FB-501）：per_boss_week 設了照「這一週」（7 天濃縮季「這一段」，calendar.week_word，
+    寫出下一段第一天 00:00 再來；最後一段沒有下一段，寫「這一季」），否則照「這一季」。21 天季一個字都不變。"""
+    if not content.config.duel.per_boss_week:
+        return BOSS_GONE_SEASON
+    w = state.world
+    if not calendar.week7_on(w, content):
+        return BOSS_GONE_WEEK
+    week = calendar.point(w.time, content, w).week
+    if week >= len(content.config.season_segments):
+        return BOSS_GONE_SEASON
+    first, _ = calendar.segment_days(week + 1, content)
+    return f"{calendar.week_word('this_one', content, w)}他不再現身" + BOSS_BACK_DAY.format(day=first)
 
 # ── 找素材分支（第 32 項；docs/superpowers/plans/2026-10-18-找素材分支.md）──
 # 按「找素材」照地點地形展開幾條路（content/gather_branches.json），每條一定給素材、差在屬性；最後一顆「自己說…」。

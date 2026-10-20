@@ -202,15 +202,20 @@ def started(state: GameState, content: Content, fid: str, time: float) -> bool:
     正式季整合設計 1.2 給開發 5），其他季照週次（active_from_week）。"""
     fig = content.figures[fid]
     if calendar.season21_on(state.world, content):
-        return calendar.cal_days(time, content, state.world) + calendar.EPS_SECONDS >= (fig.active_from_day or 0.0)
+        return calendar.cal_days(time, content, state.world) + calendar.EPS_SECONDS >= _from_day(fig, content, state.world)
     return calendar.point(time, content, state.world).week >= fig.active_from_week
+
+
+def _from_day(fig: FigureDef, content: Content, world: WorldState) -> float:
+    """照現實天的季這位人物第幾天才出兵（季曆第 1 週週初起幾天，沒寫是 0）：7 天濃縮季讀 active_from_day7，21 天季 active_from_day。"""
+    return (fig.active_from_day7 if calendar.week7_on(world, content) else fig.active_from_day) or 0.0
 
 
 def start_text(state: GameState, content: Content, fid: str) -> str:
     """還沒出兵時「（…起）」那一句（atlas）：21 天季寫出兵的那一刻（季曆，calendar.stamp_text），其他季寫第幾週。待 joy 潤。"""
     fig, w = content.figures[fid], state.world
     if calendar.season21_on(w, content):
-        at = ((fig.active_from_day or 0.0) * calendar.DAY - w.cal_offset) / calendar.cal_scale(content, w)
+        at = (_from_day(fig, content, w) * calendar.DAY - w.cal_offset) / calendar.cal_scale(content, w)
         return f"（{calendar.stamp_text(at, content, w)} 起）"
     return f"（第 {fig.active_from_week} 週起）"
 

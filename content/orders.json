@@ -21,7 +21,7 @@
     {
       "kind": "intercept", "side": "guan", "priority": 2,
       "when": {"event_within_weeks": 2},
-      "text": "探得黃巾的糧道經過{地點}，本週截斷它。",
+      "text": "探得黃巾的糧道經過{地點}，{本週}截斷它。",
       "personal": "win", "quota_base": 600,
       "effect": {"trend": 4, "event_mod": 0.05},
       "faction_rumor": "{地點}的糧道斷了。",
@@ -57,7 +57,7 @@
     {
       "kind": "siege", "side": "guan", "priority": 3,
       "when": {"front_min": 30, "front_max": 70},
-      "text": "{主將}傳令：本週全力攻打{戰線}的黃巾，各營凡有斬獲者記功。",
+      "text": "{主將}傳令：{本週}全力攻打{戰線}的黃巾，各營凡有斬獲者記功。",
       "personal": "win", "quota_base": 1200,
       "effect": {"trend": 8},
       "faction_rumor": "{戰線}的黃巾營壘被我軍連拔數處。",
@@ -66,7 +66,7 @@
     {
       "kind": "siege", "side": "huang", "priority": 3,
       "when": {"front_min": 30, "front_max": 70},
-      "text": "{號令}：{戰線}的官軍欺我太甚，本週各方齊出，把他們打回去！",
+      "text": "{號令}：{戰線}的官軍欺我太甚，{本週}各方齊出，把他們打回去！",
       "personal": "win", "quota_base": 1200,
       "effect": {"trend": 8},
       "faction_rumor": "{戰線}的官軍被打退了！",
@@ -75,19 +75,19 @@
     {
       "kind": "strike", "side": "guan", "priority": 4,
       "when": {"front_min": 30, "front_max": 70},
-      "text": "{主將}傳令：{人物}是賊中的頭目，本週誰遇上他就打，打到他不敢露面。",
+      "text": "{主將}傳令：{人物}是賊中的頭目，{本週}誰遇上他就打，打到他不敢露面。",
       "personal": "challenge", "quota_base": 600,
       "effect": {"figure_prestige": -15},
-      "faction_rumor": "{人物}這週連敗幾陣，躲在營裡不敢出來。",
+      "faction_rumor": "{人物}{這週}連敗幾陣，躲在營裡不敢出來。",
       "leak_rumor": "{人物}這陣子天天被人挑，敗走了好幾回。"
     },
     {
       "kind": "strike", "side": "huang", "priority": 4,
       "when": {"front_min": 30, "front_max": 70},
-      "text": "{人物}殺了咱們多少弟兄？這週讓他嚐嚐厲害。",
+      "text": "{人物}殺了咱們多少弟兄？{這週}讓他嚐嚐厲害。",
       "personal": "challenge", "quota_base": 600,
       "effect": {"figure_prestige": -15},
-      "faction_rumor": "{人物}這週連敗幾陣，躲在營裡不敢出來。",
+      "faction_rumor": "{人物}{這週}連敗幾陣，躲在營裡不敢出來。",
       "leak_rumor": "{人物}這陣子天天被人挑，敗走了好幾回。"
     },
     {
@@ -96,7 +96,7 @@
       "text": "家主吩咐：{人物}擋了咱們的路。",
       "personal": "challenge", "quota_base": 600,
       "effect": {"figure_prestige": -15},
-      "faction_rumor": "{人物}這週連敗幾陣，躲在營裡不敢出來。",
+      "faction_rumor": "{人物}{這週}連敗幾陣，躲在營裡不敢出來。",
       "leak_rumor": "{人物}這陣子天天被人挑，敗走了好幾回。"
     }
   ],

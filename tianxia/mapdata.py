@@ -169,10 +169,16 @@ def _price(world: WorldState, content: Content, faction: str | None, loc_id: str
 
 
 def _titles(state: GameState, content: Content, week: int, now_week: int) -> list[str]:
-    """第 week 週時刻表的大事（第一季才有）：以前的週全列，這一週只列已經到了的。"""
+    """第 week 週時刻表的大事（第一季才有）：以前的週全列，這一週只列已經到了的。
+    照現實天的季（21 天季、7 天濃縮季）「到了沒」照這一件真正的時刻（timetable.when_in：決戰照排定的時刻、季末照排定的季末，
+    其餘照季曆；FB-504）：時刻表決戰只寫了星期與鐘點，照 calendar.event_time 會被當成那一週（段）第一天就到了（7 天季第 1 天就列出
+    長社火攻）。以前的週也照它（管理者往後排到還沒到的不列）。週末照舊（PM 定一字不變）。"""
     w = state.world
     if not rules.season_one(content, w):
         return []
+    if calendar.season21_on(w, content):
+        return [e.title for e in timetable.events(w, content)
+                if e.week == week and timetable.when_in(w, content, e) <= w.time]
     return [e.title for e in timetable.events(w, content)
             if e.week == week and (week < now_week or calendar.event_time(e, content, w) <= w.time)]
 

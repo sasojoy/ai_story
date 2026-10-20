@@ -26,7 +26,7 @@ FIXED = {  # 待 joy 潤：模型寫不出來時的固定評語（照名號雜�
     "善人": ("急人之難，有古俠風", "仁厚有餘，鄉里稱善", "行義不倦，可託大事"),
     "惡人": ("行事乖張，人皆側目", "梟雄之姿，可畏可懼", "鋒芒太露，終恐自傷"),
 }
-HEAD = "{critic}月旦評（第 {week} 週）："  # 待 joy 潤
+HEAD = "{critic}月旦評（{week}）："  # 待 joy 潤；week 照季寫（calendar.week_label 的 inner：「第 2 週」，7 天濃縮季「第 2 段・第 3～4 天」，FB-501）
 CARD_LINE = "月旦評：「{line}」"  # 玩家卡上那一行（待 joy 潤）
 LINE_MIN, LINE_MAX = 6, 18  # 模型寫的評語幾個字算數（設計稿八到十六字，留一點餘地）
 _DIGITS = re.compile(r"[0-9０-９]")
@@ -95,7 +95,8 @@ def publish(state: GameState, content: Content) -> None:
     batch = waiting(state)
     if not batch:
         return
-    text = HEAD.format(critic=critic_name(content), week=batch[0].week) + "；".join(f"{e.name}「{e.line}」" for e in batch) + "。"
+    week = calendar.week_label(batch[0].week, content, state.world, form="inner")
+    text = HEAD.format(critic=critic_name(content), week=week) + "；".join(f"{e.name}「{e.line}」" for e in batch) + "。"
     add_rumor(state, text, content.characters[CRITIC].talk_at, content=content, layer="world")
     add_chronicle(state, text)
     for e in batch:

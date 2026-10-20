@@ -75,6 +75,7 @@ from tianxia.models import FREE_TEXT_MAX
 from tianxia.journal import CSS as JOURNAL_CSS
 from tianxia.sqlite_world import open_world
 from tianxia.ollama_client import OllamaClient
+from tianxia.world_state import season_length_days
 
 ROOT = Path(__file__).parent
 WEB = ROOT / "web"
@@ -1548,6 +1549,13 @@ def admin_choices(game: Game) -> dict:
         "season_one": rules.season_one(CONTENT, world),
         # 21 天季（季曆就是現實的週）：暫停、繼續的問句多說一句季曆會對回現實的星期（PM 2026-10-19）
         "season21": calendar.season21_on(world, CONTENT),
+        # 那一句照季寫（FB-501）：「21 天的季…對回現實的星期」「7 天的季…對回現實的日子」（同 world.realign_line）
+        "realign": {"days": f"{season_length_days(world, CONTENT):g}", "unit": calendar.week_word("realign", CONTENT, world)}
+        if calendar.season21_on(world, CONTENT) else None,
+        # 開季、開下一季的問句括號裡那一句：7 天濃縮季照時刻表寫（timetable.default_dates_note）；其他季 None，網頁照原本的字
+        "default_dates": timetable.default_dates_note(CONTENT),
+        # 「這一季立刻蓋天命之季的章」問句裡天命之爭的時刻：7 天濃縮季照時刻表寫（timetable.mandate_note，FB-503）；其他季 None，網頁照原本的字
+        "mandate_at": timetable.mandate_note(CONTENT, world),
         # 三場大戲各一顆「立刻開這一場」（Game.admin_showdowns）：開不了的灰掉、寫為什麼（開過了、結算了、宛城要等第 3 週……）
         "showdowns": [
             {"id": event.id, "label": event.title, "enabled": why is None, "note": why or ""}
@@ -1605,7 +1613,8 @@ def timetable_choices(game: Game) -> dict:
     rows = []
     for row in timetable.status_rows(state, CONTENT, cancelled=game.cancelled_showdowns()):
         rows.append({
-            "id": row["id"], "label": f"第{row['week']}週　{row['title']}",
+            # 7 天濃縮季寫「第 1 段（第 1～2 天）」（calendar.week_label，FB-501）；其他季「第1週」
+            "id": row["id"], "label": f"{calendar.week_label(row['week'], CONTENT, world, form='tight')}　{row['title']}",
             "state": row["state"], "state_text": TIMETABLE_STATES[row["state"]],
             "result": (_ending_title(row["result"]) if row["kind"] == "finale" else _done_label(row["result"]))
             if row["result"] else None,

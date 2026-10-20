@@ -19,7 +19,6 @@ from . import calendar, figures, territory
 from .models import Content, TimetableEvent, TimetableOutcome
 from .rules import add_chronicle, add_rumor, add_world_flags, change_trend, trend_value
 from .state import GameState, Lock, TimelineResult, WorldState
-from .world_state import season_length_days
 
 HOUR = 3600
 DAY = 86400
@@ -85,11 +84,41 @@ def default_schedule(content: Content, season: WorldState | None = None) -> dict
 
 def finale_default(content: Content, season: WorldState | None) -> float:
     """季末的預設時刻（世界秒）：21 天季是季曆最後一週週日 24:00（照錨點算，週三開季也落在第 3 週週日，正式季整合設計 1.2 給開發 3），
-    其他照季長整（以前的寫法，一個字都不變）。"""
-    if calendar.season21_on(season, content):
-        return calendar.week_start(content.config.season_weeks + 1, content, season)
-    days = season_length_days(season, content) if season is not None else content.config.season_days
-    return days * DAY
+    其他照季長整（以前的寫法，一個字都不變）。就是 calendar.nominal_end（懸賞的「到季末」也比它，FB-500）。"""
+    if season is None:
+        return content.config.season_days * DAY
+    return calendar.nominal_end(content, season)
+
+
+DEFAULT_DATES = "預設在{battles}、季末第 {end} 天過完"  # 待 joy 潤：管理者開季、開下一季的問句括號裡（FB-501，7 天濃縮季）
+
+
+def default_dates_note(content: Content) -> str | None:
+    """管理者開季、開下一季的問句「記得排三場大戲與季末的時間（…）」括號裡那一句，照這份設定的時刻表寫（FB-501）：
+    7 天濃縮季（Config.season_segments，開季之前還沒有章，照設定）「預設在第 2、4、7 天 20:00、季末第 7 天過完」；
+    其他季是 None，網頁照原本那一句。"""
+    if not content.config.season_segments:
+        return None
+    shows = [e.real7 for e in content.timetable if e.kind == "showdown" and e.real7 is not None]
+    end = next((e.real7.day for e in content.timetable if e.kind == "finale" and e.real7 is not None), calendar.total_days(content))
+    hours = {r.hour for r in shows}
+    if len(hours) == 1:
+        battles = f"第 {'、'.join(str(r.day) for r in shows)} 天 {next(iter(hours)):02d}:00"
+    else:
+        battles = "、".join(f"第 {r.day} 天 {r.hour:02d}:00" for r in shows)
+    return DEFAULT_DATES.format(battles=battles, end=end)
+
+
+MANDATE_AT = "第 {day} 天 {hour:02d}:00"  # 待 joy 潤（FB-503）
+
+
+def mandate_note(content: Content, season: WorldState | None) -> str | None:
+    """管理者「這一季立刻蓋天命之季的章」問句裡天命之爭排在哪一刻（FB-503）：7 天濃縮季（week7_on）照時刻表的 real7 寫
+    「第 7 天 22:00」；其他季是 None，網頁照原本那一句（21 天季那一句也寫「第 12 週週一」，這一批不動）。"""
+    if not calendar.week7_on(season, content):
+        return None
+    when = next((e.real7 for e in content.mandate_timetable if e.real7 is not None), None)
+    return None if when is None else MANDATE_AT.format(day=when.day, hour=when.hour)
 
 
 # ── 決戰避開半夜（企劃者 2026-10-15，經 PM；Config.battle_quiet_hours）─────────────
