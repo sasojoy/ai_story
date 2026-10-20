@@ -33,8 +33,8 @@ def test_per_day_follows_neutral_count_and_season_length():
     game = conquest_game("season21")
     w, c = game.state.world, game.content
     neutral = sum(1 for loc in conquest.blocks(c) if conquest.start_kind(w, c, loc) == conquest.NEUTRAL)
-    assert neutral == 8  # 區塊表 v3（計畫「區塊表 v3」那一節）
-    assert conquest_day.per_day(c, w) == 1  # 8 ÷ 21 ＜ 0.5（設計 4.2：21 天的季要 11 塊以上才 2 塊）
+    assert neutral == 9  # 區塊表 v3（計畫「區塊表 v3」那一節）
+    assert conquest_day.per_day(c, w) == 1  # 9 ÷ 21 ＜ 0.5（設計 4.2：21 天的季要 11 塊以上才 2 塊）
     c.config.conquest.two_per_day_ratio = 0.3
     assert conquest_day.per_day(c, w) == 2
     weekend = conquest_game("weekend")
@@ -87,7 +87,7 @@ def test_tally_boundary_tie_goes_to_the_commander():
 def test_plan_votes_then_commander_fills():
     game = conquest_game("season21")
     w, c = game.state.world, game.content
-    c.config.conquest.two_per_day_ratio = 0.3  # 一天兩塊（中立 8 塊 ÷ 21 天）
+    c.config.conquest.two_per_day_ratio = 0.3  # 一天兩塊（中立 9 塊 ÷ 21 天）
     target = conquest.targets(w, c, "huang")[-1]
     picks = conquest_day.plan(w, c, "huang", 20000, 0.0, {"甲": Pick(loc=target, minute=19 * 60)}, set())
     assert [(p.loc, p.minute, by) for p, by, _ in picks][0] == (target, 19 * 60, conquest_day.VOTE)

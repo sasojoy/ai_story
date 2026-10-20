@@ -109,7 +109,7 @@ def test_late_settle_shifts_or_voids_slots():
 
 def test_commander_fills_in_with_21_and_20():
     game = _game(_tw(2026, 10, 20, 10))
-    game.content.config.conquest.two_per_day_ratio = 0.3  # 一邊一天兩塊（中立 8 塊 ÷ 21 天）
+    game.content.config.conquest.two_per_day_ratio = 0.3  # 一邊一天兩塊（中立 9 塊 ÷ 21 天）
     _tick(game, game.now)
     state = _tick(game, _tw(2026, 10, 20, 22, 1))
     for side in conquest.SIDES:

@@ -61,7 +61,7 @@ def test_neutral_block_foes_are_the_neutral_garrison():
     game = go(join(conquest_game("season21"), "guan"), "yu_river")  # 區塊表 v3 之前用嵩山深處（現在是官軍的）
     loc = game.content.locations["yu_river"]
     assert set(game._sortie_foes(loc)) == set(territory.squads_at(game.state.world, game.content, "yu_river"))
-    assert "nz_haoke" in game._sortie_foes(loc)
+    assert "nz_shuifei" in game._sortie_foes(loc)
 
 
 def test_enemy_block_without_garrison_has_the_holders_patrol():

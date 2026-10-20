@@ -15,8 +15,8 @@ from tianxia.models import BlockDef
 pytestmark = pytest.mark.slow  # 建 Game、載正式內容
 
 NOT_BLOCKS = {"mentor_hut", "jade_cave", "zhuo_militia_hall", "cao_manor", "haozu_fort"}  # 序章、劇情、豪強三處投靠點（設計 4.1）
-GUAN_OPEN = {"hilltop_wilds", "runan_wilds", "nanyang_road", "nanyang_wilds", "yu_river", "baima_ford", "juma_river"}
-HUANG_OPEN = {"runan_wilds", "nanyang_road", "nanyang_wilds", "yu_river", "baima_ford", "xiaquyang"}
+GUAN_OPEN = {"hilltop_wilds", "runan_wilds", "nanyang_road", "nanyang_wilds", "yu_river", "lulin_zhai", "baima_ford", "juma_river"}
+HUANG_OPEN = {"runan_wilds", "nanyang_road", "nanyang_wilds", "yu_river", "lulin_zhai", "baima_ford", "xiaquyang"}
 
 
 def _neutral(game, side):
@@ -49,11 +49,12 @@ def test_every_place_but_five_is_a_block():
 
 
 def test_opening_reach_is_balanced():
-    """裁決 2【企劃者「調整比例」】：開季碰得到的中立地兩邊差不多（各 6～7 塊、差在一塊以內），每一條戰線兩邊都碰得到至少一塊。"""
+    """裁決 2【企劃者「調整比例」】：開季碰得到的中立地兩邊差不多（目標各 6～7 塊、差在一塊以內），每一條戰線兩邊都碰得到至少一塊。
+    PM 2026-10-21 收了宛城—綠林山寨的山路、綠林山寨留中立（高級獵場盡量留給兩邊搶）：官軍 8、黃巾 7。"""
     game = conquest_game("season21")
     guan, huang = _neutral(game, "guan"), _neutral(game, "huang")
     assert guan == GUAN_OPEN and huang == HUANG_OPEN
-    assert 6 <= len(guan) <= 7 and 6 <= len(huang) <= 7
+    assert (len(guan), len(huang)) == (8, 7)
     assert abs(len(guan) - len(huang)) <= 1
     for line in ("yingru", "nanyang", "jizhou"):
         blocks = conquest.blocks(game.content)
@@ -112,12 +113,25 @@ def test_adjacent_is_direct_roads_between_blocks():
 def test_locked_block_is_not_a_target_until_unlocked():
     game = conquest_game("season21")
     w, c = game.state.world, game.content
-    conquest.set_control(w, c, "xinye", "guan")  # 綠林山寨（黃巾的）只跟新野直通：官軍拿下新野才碰得到
     flag = c.locations["lulin_zhai"].unlock_flag
     w.flags.discard(flag)
-    assert "lulin_zhai" not in conquest.targets(w, c, "guan")
+    assert "lulin_zhai" not in conquest.targets(w, c, "guan") and "lulin_zhai" not in conquest.targets(w, c, "huang")
     w.flags.add(flag)
-    assert "lulin_zhai" in conquest.targets(w, c, "guan")
+    assert "lulin_zhai" in conquest.targets(w, c, "guan") and "lulin_zhai" in conquest.targets(w, c, "huang")
+
+
+def test_validate_names_the_neutral_block_an_army_cannot_reach():
+    """PM 2026-10-21：「每塊中立兩軍都走得到」寫進載入檢查，錯誤訊息寫是哪一塊、哪一軍走不到。新野給官軍之後，黃巾在南陽西半邊沒有
+    立足點：淯水河畔、南陽郊野、綠林山寨黃巾都走不到。"""
+    c = real_content("season21")
+    c.scenario.territory.blocks["xinye"] = BlockDef(kind="guan", line="nanyang")
+    with pytest.raises(ContentError) as caught:
+        validate(c)
+    text = str(caught.value)
+    huang = c.scenario.faction_name("huang")
+    for loc in ("yu_river", "nanyang_wilds", "lulin_zhai"):
+        assert f"{loc}（{c.locations[loc].name}）：{huang}走不到這塊中立地" in text
+    assert "nanyang_road（" not in text  # 南陽官道黃巾照樣走得到（南陽黃巾營直通）
 
 
 @pytest.mark.parametrize("change", [

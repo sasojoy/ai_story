@@ -33,7 +33,7 @@ def test_neutral_garrison_stays_after_capture():
     conquest.set_control(w, c, "nanyang_wilds", "huang")
     assert _squads(game, "nanyang_wilds") == start  # 駐軍不換成佔領方自己的兵（設計 3.3）
     river = set(_squads(game, "yu_river"))
-    assert river >= {"he_shuikou", "nz_haoke"} and "louluo" not in river  # 地點自己的野獸流寇照舊在，有陣營的兵不在
+    assert river >= {"he_shuikou", "nz_shuifei"} and "louluo" not in river  # 地點自己的野獸流寇照舊在，有陣營的兵不在
 
 
 def test_faction_block_takes_holder_garrison():
@@ -60,4 +60,4 @@ def test_validate_rejects_bad_neutral_garrison(change):
 def test_switch_off_squads_unchanged():
     game = plain_game("weekend")
     assert _squads(game, "nanyang_wilds") == ["jun_bing"]  # 地盤易手：官軍控制的那一組
-    assert "nz_haoke" not in _squads(game, "yu_river")
+    assert "nz_shuifei" not in _squads(game, "yu_river")

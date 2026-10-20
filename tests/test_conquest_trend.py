@@ -45,8 +45,8 @@ def test_capture_moves_the_base_and_keeps_the_offset():
     pushed = _value(game, "nanyang")
     conquest.set_control(w, c, "nanyang_wilds", "huang")
     assert _owner(game, "nanyang_wilds") == "huang"
-    assert conquest.base(w, c, "nanyang") == pytest.approx(50 + 35 / 3)
-    assert _value(game, "nanyang") == round(pushed + 35 / 3)
+    assert conquest.base(w, c, "nanyang") == pytest.approx(50 + 35 / 4)  # 南陽開季中立 4 塊（區塊表 v3）
+    assert _value(game, "nanyang") == round(pushed + 35 / 4)
     assert any("南陽郊野落入" in r.text for r in w.rumors)
     assert any("南陽郊野落入" in r.text for r in w.chronicle)
 
@@ -67,7 +67,7 @@ def test_push_into_the_wall_is_lost_like_before():
     assert _value(game, "nanyang") == 100
     assert rules.change_trend(game.state, c, "nanyang", 5) == []  # 推進牆：不動、不寫
     conquest.set_control(w, c, "nanyang_road", "guan")  # 官軍拿下一塊中立：基準往下，值＝新基準＋重錨後的偏移（50）
-    assert _value(game, "nanyang") == round(50 - 35 / 3 + 50)
+    assert _value(game, "nanyang") == round(50 - 35 / 4 + 50)
 
 
 def test_a_direct_write_is_reanchored():
@@ -84,23 +84,23 @@ def test_a_direct_write_is_reanchored():
 def test_capturing_an_enemy_faction_block_weighs_double():
     game = conquest_game("season21")
     w, c = game.state.world, game.content
-    before = _value(game, "nanyang")
-    conquest.set_control(w, c, "xinye", "guan")  # 黃巾的陣營區塊（權重 2）被官軍拿下；南陽開季中立 3 塊（區塊表 v3）
-    assert conquest.base(w, c, "nanyang") == pytest.approx(50 - 35 * 2 / 3)
-    assert _value(game, "nanyang") == round(before - 35 * 2 / 3)
-    conquest.set_control(w, c, "xinye", "huang")  # 拿回自己的：不算佔得，回到 50
-    assert conquest.base(w, c, "nanyang") == 50
-    assert any("收復新野" in r.text for r in w.rumors)
+    before = _value(game, "yingru")
+    conquest.set_control(w, c, "runan", "guan")  # 黃巾的陣營區塊（權重 2）被官軍拿下；潁川汝南開季中立 2 塊（區塊表 v3）
+    assert conquest.base(w, c, "yingru") == pytest.approx(50 - 35 * 2 / 2)
+    assert _value(game, "yingru") == round(before - 35 * 2 / 2)
+    conquest.set_control(w, c, "runan", "huang")  # 拿回自己的：不算佔得，回到 50
+    assert conquest.base(w, c, "yingru") == 50
+    assert any("收復汝南。" in r.text for r in w.rumors)
 
 
 def test_weigh_by_neutral_full_ring_reaches_the_share():
     game = conquest_game("season21")
     w, c = game.state.world, game.content
-    for loc in ("nanyang_road", "nanyang_wilds", "yu_river"):
+    for loc in ("nanyang_road", "nanyang_wilds", "yu_river", "lulin_zhai"):
         conquest.set_control(w, c, loc, "huang")
     assert conquest.base(w, c, "nanyang") == pytest.approx(85)
-    c.config.conquest.weigh_by = "total"  # 設計 4.7 原文：分母是那條線所有可奪區塊的權重和（中立 3、陣營 2 塊 ×2）
-    assert conquest.base(w, c, "nanyang") == pytest.approx(50 + 35 * 3 / 7)
+    c.config.conquest.weigh_by = "total"  # 設計 4.7 原文：分母是那條線所有可奪區塊的權重和（中立 4、陣營 1 塊〔新野〕×2）
+    assert conquest.base(w, c, "nanyang") == pytest.approx(50 + 35 * 4 / 6)
 
 
 def test_timetable_assign_sticks_and_reweighs():

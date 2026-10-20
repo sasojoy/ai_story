@@ -62,7 +62,8 @@ def test_pushing_back_far_enough_moves_the_value_and_stops_at_the_other_wall():
 
 
 def test_a_push_with_a_fractional_base_moves_the_offset_by_the_push():
-    """基準有小數（南陽官道歸黃巾：61.67）時，推 1 偏移就走 1（修前照四捨五入過的值重錨，偏移多走 1.33）。"""
+    """基準有小數（南陽官道歸黃巾：58.75，區塊表 v3 南陽中立 4 塊；QA 那時 3 塊是 61.67）時，推 1 偏移就走 1（修前照四捨五入過的值
+    重錨，偏移會多走一截，61.67 時多走 1.33）。"""
     game = conquest_game("season21")
     w, c = game.state.world, game.content
     conquest.set_control(w, c, "nanyang_road", "huang")

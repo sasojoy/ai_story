@@ -173,7 +173,8 @@
       },
       "nanyang_huangjin_camp",
       "yu_river",
-      "nanyang_wilds"
+      "nanyang_wilds",
+      "lulin_zhai"
     ],
     "x": 172,
     "y": 1137,
@@ -1232,12 +1233,13 @@
   {
     "id": "lulin_zhai",
     "name": "綠林山寨",
-    "description": "新野往南的山坳裡紮著一座木寨，寨門上插著褪了色的綠旗。進出的都是挎刀的漢子，山下的行商寧可繞遠路也不往這邊走。",
+    "description": "新野往南的山坳裡紮著一座木寨，寨門上插著褪了色的綠旗。進出的都是挎刀的漢子，山下的行商寧可繞遠路也不往這邊走。寨後另有一條小路翻過山脊，直通宛城。",
     "connections": [
       {
         "to": "xinye",
         "road": "山路"
-      }
+      },
+      "wan_city"
     ],
     "x": 168,
     "y": 1248,
