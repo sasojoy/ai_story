@@ -207,6 +207,9 @@
   // 初入江湖（新手引導第四段）：出了草廬之後那幾步也一樣一樣亮（m.onboard，同一個形狀）；草廬裡才有的規矩（略過序章、師父的框）照舊只看 pro()
   const shown = (key) => { const p = pro() || (S.main && S.main.onboard); return !p || p.reveal.includes("all") || p.reveal.includes(key); };
   const prologueKey = () => { const p = pro() || (S.main && S.main.onboard); return p ? p.reveal.join(",") : ""; };
+  // 商城的兩個入口（齒輪旁的錠子鈕、底部第六格）：出師後才出現（FB-490，docs/guide/商城.md）。草廬裡照序章的 reveal 藏著（tab:mall 或 all 才出來）；
+  // 出了草廬、初入江湖那四步就在：m.onboard 的 reveal 是前幾步的聯集、不會有 all，照 shown() 會等到四步走完才出現
+  const mallShown = () => { const p = pro(); return !!(S.main && S.main.mall) && (!p || p.reveal.includes("all") || p.reveal.includes("tab:mall")); };
   // 本季天數：整數不帶小數點（14.0 → 14），不是整數照原樣（14.5）
   const dayCount = (n) => String(Number(n));
   // 第一季的季曆（計畫 T2）：狀態列寫「第 3 週・週二 21:40」，旁邊是下一件大事的倒數（現實時間）。
@@ -426,11 +429,11 @@
 
   // 底部分頁列：序章裡只畫亮起來的分頁（格數跟著變，不是固定五格），一個都沒有就整列不畫。data-glow 給序章指路（applyGlow）
   // 商城開著（main.mall）時多第六格「商城」（商城第二批，企劃者 2026-10-20 挑的入口丙）：點了打開商城那一層、不換頁（出店回到原本那一頁）。
-  // 序章裡跟其他還沒開放的分頁一樣藏著：reveal 沒有 tab:mall 這個鍵，亮齊（all）那一步才出來（齒輪旁的錠子鈕同一條）
+  // 序章裡跟其他還沒開放的分頁一樣藏著，出了草廬就在（mallShown，FB-490；齒輪旁的錠子鈕同一條）
   function tabsHtml() {
     const list = TABS.filter((t) => shown(`tab:${t.id}`));
     if (!list.length) return "";
-    const mall = !!(S.main && S.main.mall) && shown("tab:mall");
+    const mall = mallShown();
     return `<nav class="tabs"><div class="tabs-inner" style="grid-template-columns:repeat(${list.length + (mall ? 1 : 0)}, 1fr)">${list.map((t) => `
         <button class="tab ${S.tab === t.id ? "on" : ""}" data-act="tab" data-tab="${t.id}" data-glow="tab:${t.id}">
           <span class="ico">${t.ico}</span>${t.name}${t.id === "news" && S.unseen && S.tab !== "news" ? '<i class="dot"></i>' : ""}
@@ -585,7 +588,7 @@
           ${whoNameHtml(s)}
           <div class="where">${where}</div>
         </div>
-        ${S.main.mall && shown("tab:mall") ? mallBtnHtml(S.main.mall) : ""}
+        ${mallShown() ? mallBtnHtml(S.main.mall) : ""}
         <button class="icon-btn" data-act="sheet" aria-label="設定">⚙</button>
       </div>
       ${S.showMore && S.renownOpen && s.renown ? renownStripHtml(s.renown) : ""}

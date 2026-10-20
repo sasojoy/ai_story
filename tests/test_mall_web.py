@@ -1,7 +1,7 @@
 """商城第二批：畫面（企劃者 2026-10-20 挑的對比圖：入口乙＋丙、商城那一層子；docs/superpowers/specs/2026-10-20-商城架構-design.md 4.6、4.7）。
 
 - 入口乙：右上角齒輪旁一顆錠子鈕寫元寶餘額；丙：底部分頁第六格「商城」。兩個都點了打開商城那一層。商城關著（main 沒有 mall）時
-  兩個都沒有、分頁照舊五格；序章裡跟其他還沒開放的分頁一樣藏著，亮齊（reveal 有 all）才出現。
+  兩個都沒有、分頁照舊五格；序章裡跟其他還沒開放的分頁一樣藏著，亮齊（reveal 有 all）或出了草廬才出現（FB-490）。
 - 商城那一層沿用店面的框（shopHtml：招牌、掌櫃那一句、左上出店），底下貨架、紀錄兩頁；按一件先問一次（花多少、元寶剩多少、
   丹或月卡變成多少），買成了餘額與狀態列的丹鈕當場換；買不了的（元寶不夠、限購、下架）掌櫃回一句原因。
 - 設定頁的管理者區多一組商城：查帳、補發、扣回、退一筆。
@@ -180,6 +180,26 @@ def test_the_prologue_hides_both_entries_like_any_tab_not_open_yet(m_on):
     done = with_reveal(m_on, ["all"])
     out = run(done, "return { top: H.topHtml(), tabs: H.tabsHtml() };")
     assert "mall-open" in out["top"] and "repeat(6, 1fr)" in out["tabs"]
+
+
+def test_after_graduating_both_entries_show_through_the_onboarding_steps(real):
+    """FB-490：出師後就出現（docs/guide/商城.md）。出了草廬、初入江湖那四步（m.onboard，reveal 是前幾步的聯集、沒有 all）
+    兩個入口都在，不等初入江湖走完；草廬裡（m.prologue）照舊藏著。照正式內容的序章與初入江湖算，教學步驟改了也照樣抓得到。"""
+    game = Game.new(real, "沈浪", rng=random.Random(0))
+    game.client = None
+    p = game.state.player
+    p.tutorial_step = real.tutorial.prologue_steps  # e1_clinic：剛走出草廬、到了潁川
+    p.location = "yingchuan"
+    for step in range(real.tutorial.prologue_steps, len(real.tutorial.steps)):
+        p.tutorial_step = step
+        m = server.main_view(game)
+        assert m.get("mall") is not None and m["onboard"] and not m["prologue"]
+        out = run(m, "return { top: H.topHtml(), tabs: H.tabsHtml() };")
+        assert "mall-open" in out["top"], real.tutorial.steps[step].id
+        assert 'data-act="mall-open" data-tab="mall"' in out["tabs"], real.tutorial.steps[step].id
+    farewell = with_reveal({**m, "onboard": None}, sorted({k for s in real.tutorial.steps[:real.tutorial.prologue_steps] for k in s.reveal}))
+    out = run(farewell, "return { top: H.topHtml(), tabs: H.tabsHtml() };")  # 出師那一步（還在草廬）照舊藏著
+    assert "mall-open" not in out["top"] and "mall-open" not in out["tabs"]
 
 
 def test_the_entry_balance_follows_main(m_on):
