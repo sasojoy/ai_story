@@ -4388,9 +4388,13 @@ class Game:
 
     def _duty_option(self, name: str) -> Option:
         """守勢行動的鈕。出陣開著時每用一次扣一次出陣次數（PM 2026-10-14：跟攻、守、攪局共用每日的次數），鈕上寫今天還能幾次、
-        用完灰掉、寫跟出陣同一句；關著照舊。"""
+        用完灰掉、寫跟出陣同一句；關著照舊。領地爭奪在這一季生效時，站在不是自家的區塊（別人的、沒佔下的中立地）灰掉寫原因，
+        按下去不扣體力與次數、不推線、不記守城（裁決 24；choose 照選單驗，灰的按不下去）。"""
         c = self.content
         cost = c.config.duty_stamina
+        problem = sortie.duty_problem(c, self.state.world, self._side(), self.state.player.location)
+        if problem:
+            return Option(id="act:duty", label=f"{name}（{problem}）", enabled=False)
         if not sortie.on(c):
             return self._cost_option("act:duty", name, cost)
         left = self.sorties_left()
