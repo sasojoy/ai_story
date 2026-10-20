@@ -84,6 +84,8 @@ SORTIE_NOTES = {  # 待 joy 潤：行動列底下出陣那一行（設計第二�
     "convoy": "對面的運糧隊正打這裡經過：打一場，打贏{push}；只拿對手 {share} 成的心得與經驗，{loot}",
     # 領地爭奪：自家的大本營、廣宗（搶不下來的區塊）守，沒有進度可推、不記貢獻（FB-532，不接「量是攻的一半」）
     "home": "這裡是自家地盤，不在爭奪之列：不用打，也沒有進度可推；拿自家隊伍 {share} 成的心得與經驗。",
+    # 領地爭奪：還沒人佔的中立地是攻，但不是「歸別人」（FB-533）
+    "open": "這裡還沒有人佔：打一場，打贏{push}；只拿對手 {share} 成的心得與經驗，{loot}",
 }
 SORTIE_LOOT = "不給銀兩、不掉東西。"
 SORTIE_LOOT_SILVER = "銀兩也是 {silver} 成，不掉東西。"  # 素材與經濟設計第八節（Config.economy.sortie_silver）；待 joy 潤
@@ -348,13 +350,15 @@ def sortie_lines(content: Content, allied: bool = False, season: WorldState | No
     gentry = "地方豪強照依附的那一邊攻守。" if allied else "地方豪強是攪局，把戰局往中間拉。"
     hold = "守" if allied else "守與攪局"
     where, push_word = "只在戰線上的地點", "打贏推動戰局"
+    others, far = "這裡歸別人", "越往對方老巢推越難推。"
     if conquest.on(content, season):  # 領地爭奪（第 38 項改版第一批）
         where, push_word = "官軍、黃巾的領地與中立地上都有", "打贏推那一塊的進度"
+        others, far = "這裡歸別人或還沒人佔", ""  # 推進度沒有盡頭阻力（FB-533；待 joy 潤）
     return [
         f"- **出陣**（體力 {cfg.action_cost['train']}，每天 {cfg.sortie.per_day} 次，{reset}）：投靠了陣營才有，{where}。"
-        f"這裡歸別人就打一場，{push_word}、記貢獻；歸自家就守，不用打；{gentry}"
+        f"{others}就打一場，{push_word}、記貢獻；歸自家就守，不用打；{gentry}"
         f"{hold}推的量是攻的{half}。只拿對手 {cfg.drill_reward_share * 10:g} 成的心得與經驗，"
-        + ("攻打贏" + sortie_loot(content) if cfg.economy.sortie_silver else sortie_loot(content)) + "越往對方老巢推越難推。",
+        + ("攻打贏" + sortie_loot(content) if cfg.economy.sortie_silver else sortie_loot(content)) + far,
     ]
 
 

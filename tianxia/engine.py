@@ -1956,6 +1956,8 @@ class Game:
         note = "convoy" if own else how  # 自家地盤上攻的只有運糧隊（FB-255）
         if on and how == "hold" and not conquest.capturable(self.content, loc.id):
             note = "home"  # 自家的大本營、廣宗：不在爭奪之列（FB-532）
+        elif on and note == "attack" and conquest.holder(self.state.world, self.content, loc.id) is None:
+            note = "open"  # 還沒人佔的中立地：不寫「這裡歸別人」（FB-533）
         return howto.sortie_line(note, push_ok, left, self.content, progress)
 
     def _choice_label(self, choice: Choice, odds: bool) -> str:
