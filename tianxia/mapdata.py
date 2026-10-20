@@ -8,10 +8,10 @@ import hashlib
 from collections.abc import Callable
 
 from . import (
-    atlas, bounties, calendar, conquest, equipment, figures, insights, mapart, mapview, mounts, orders, rules, sensing, terrain,
-    territory, timetable,
+    atlas, bounties, calendar, conquest, equipment, figures, insights, mapart, mapview, mounts, orders, rules, seal, sensing, terrain,
+    territory, timetable, worldgeo,
 )
-from .models import Content, Location
+from .models import Content, FactionDef, Location
 from .state import GameState, TerritoryWeek, WorldState
 
 ODDS_TONE = {"穩勝": "safe", "有把握": "safe", "五五波": "ok", "難分勝負": "ok", "凶險": "risk", "必敗": "risk", "操練": "safe"}
@@ -24,6 +24,11 @@ PRICE_ENEMY = "別人的地盤：療傷、打造、買馬貴 {pct}%"  # 待 joy 
 FIXED_ROW = "只照大事易手"  # 年表最後一組（廣宗）的名字，待 joy 潤
 SUGGEST_MAX = 3
 LOSE_WORD = "必敗"  # 這種勝算的出陣建議照樣列，但排到最後、網頁畫淡（企劃者 10/15 從對比圖選乙）
+# ── 天下圖（輿圖重製第 2 批；輿圖簡化設計 4.1、3.6）──
+WORLD_MARGIN = 70  # 取景框：開放的地點外框往外加多少（地圖單位）；外圈的州往地圖角落延伸的空地不必整片入鏡
+FALLBACK_INKS = ["#7A4E8C", "#2E7D7A", "#A0522D", "#5C6B2E", "#8C3B5A", "#3B5C8C"]  # 劇本沒寫 ink 的陣營照順序挑（待 joy 對色）
+WORLD_CACHE_KEEP = 8  # 幾何照內容快取最多幾份
+_WORLD_CACHE: dict[str, dict] = {}
 
 
 def rank_suggestions(rows: list[dict]) -> list[dict]:
@@ -76,6 +81,93 @@ def base(state: GameState, content: Content) -> dict:
         "svg": mapview.render_base(state, content), "places": places, "edges": edges, "regions": regions,
         "insight_kinds": {d.id: {"name": d.name, "attribute": d.attribute} for d in content.insights.values() if d.grant is None},
         "insight_layer": content.config.insight_strong.enabled and any(p["strong"] for p in places),
+        "world": world(state, content),
+    }
+
+
+def ground_places(state: GameState, content: Content) -> list[str]:
+    """天下圖上分地面的地點：劇本寫了區塊表就只拿區塊（鄉里結社、草廬這類不是區塊的不分地面，不然州裡挖出一個灰洞）；沒寫照
+    全部開放的地點（序章專屬的不算）。只看內容與開放的地點，跟底圖一起快取。"""
+    shown = mapview.open_places(state, content)
+    table = conquest.blocks(content)
+    if table:
+        return [x for x in shown if x in table]
+    return [x for x in shown if not content.locations[x].prologue_only]
+
+
+def side_inks(content: Content) -> list[dict]:
+    """劇本的每一方在輿圖上的樣子（設計 3.6：顏色與幾方從劇本讀）：FactionDef.ink；沒寫的照 FALLBACK_INKS 的順序挑、
+    名字照 FactionDef.name、一個字照名字的第一個字。soft、tint 沒寫照 color 往紙色淡。"""
+    paper = content.map.background
+    out, spare = [], iter(FALLBACK_INKS)
+
+    def one(f: FactionDef) -> dict:
+        ink = f.ink
+        color = ink.color if ink is not None else next(spare, FALLBACK_INKS[-1])
+        return {
+            "id": f.id, "name": (ink.label if ink is not None and ink.label else f.name),
+            "short": (ink.short if ink is not None and ink.short else f.name[:1]), "color": color,
+            "soft": (ink.soft if ink is not None and ink.soft else mapart.mix(color, paper, 0.45)),
+            "tint": (ink.tint if ink is not None and ink.tint else mapart.mix(color, paper, 0.8)),
+        }
+
+    for f in content.scenario.factions:
+        out.append(one(f))
+    return out
+
+
+def _world_geometry(state: GameState, content: Content) -> dict:
+    """取景框、州（輪廓、圈、州名擺哪）、地面格、相鄰的邊：只看內容與開放的地點，照內容雜湊快取（同一份內容另一局不再算）。"""
+    m = content.map
+    shown = mapview.open_places(state, content)
+    seeds = ground_places(state, content)
+    regions = [(r.id, [(float(x), float(y)) for x, y in r.points]) for r in m.regions]
+    key = hashlib.sha1(repr((
+        m.width, m.height, regions, [(r.id, r.name, r.ring) for r in m.regions],
+        [(x, content.locations[x].x, content.locations[x].y) for x in shown], seeds,
+    )).encode()).hexdigest()
+    if key in _WORLD_CACHE:
+        return _WORLD_CACHE[key]
+    box = (0.0, 0.0, float(m.width), float(m.height))
+    spots = [(float(content.locations[x].x), float(content.locations[x].y)) for x in shown] or [(m.width / 2, m.height / 2)]
+    x0, y0, x1, y1 = worldgeo.frame(spots, m.width, m.height, WORLD_MARGIN)
+    by_region: dict[str, list[tuple[str, tuple[float, float]]]] = {r.id: [] for r in m.regions}
+    for loc_id in seeds:
+        region = atlas.region_of(content, loc_id)
+        if region is not None:
+            loc = content.locations[loc_id]
+            by_region[region.id].append((loc_id, (float(loc.x), float(loc.y))))
+    cells, edges = [], []
+    for rid, pts in regions:
+        group = by_region[rid]
+        polys = worldgeo.cells([pt for _, pt in group], box)
+        cells += [{"id": loc_id, "region": rid, "d": worldgeo.path([p for p, _ in poly])}
+                  for (loc_id, _), poly in zip(group, polys) if poly]
+        edges += [{"a": group[i][0], "b": group[j][0], "d": worldgeo.path([p, q], closed=False), "clip": rid}
+                  for i, j, p, q in worldgeo.inner_edges(polys)]
+    edges += [{"a": a, "b": b, "d": worldgeo.path([p, q], closed=False), "clip": None}
+              for a, b, p, q in worldgeo.cross_edges(regions, by_region, box)]
+    out = {
+        "frame": [round(x0), round(y0), round(x1 - x0), round(y1 - y0)],
+        "regions": [{
+            "id": r.id, "name": r.name, "ring": r.ring, "d": worldgeo.path(pts),
+            **dict(zip(("lx", "ly"), worldgeo.label_spot(pts, (x0, y0, x1, y1), spots))),
+        } for r, (_, pts) in zip(m.regions, regions)],
+        "cells": cells, "edges": edges,
+    }
+    if len(_WORLD_CACHE) >= WORLD_CACHE_KEEP:
+        _WORLD_CACHE.clear()
+    _WORLD_CACHE[key] = out
+    return out
+
+
+def world(state: GameState, content: Content) -> dict:
+    """天下圖要的資料（輿圖重製第 2 批；設計 4.1）：幾何（_world_geometry）加劇本的每一方（side_inks）、沒人佔的顏色、
+    「璽」標在哪一州（碎片開著、劇本有 core 圈）。誰佔著在疊層（state 的 places[*].control、rich），網頁照它上色。"""
+    core = next((r.id for r in content.map.regions if r.ring == "core"), None)
+    return {
+        **_world_geometry(state, content), "sides": side_inks(content), "unheld": content.map.unheld,
+        "seal": core if seal.on(content) else None,
     }
 
 
@@ -192,6 +284,10 @@ def _ropes(state: GameState, content: Content, now_week: int) -> list[dict]:
         return {"id": loc_id, "threshold": territory.threshold(spots.index(loc_id) + 1, len(spots)),
                 "control": territory.controller(w, content, loc_id)}
 
+    def ends(line: str) -> dict:  # 繩的兩頭是誰（往 0 推的、往 100 推的；territory.sides 照劇本的 goals）：網頁不寫死官軍、黃巾
+        low, high = territory.sides(content, line)
+        return {"low": low, "high": high}
+
     if rules.season_one(content, w):
         out = []
         for line in fronts:
@@ -199,13 +295,13 @@ def _ropes(state: GameState, content: Content, now_week: int) -> list[dict]:
             before = prev.fronts.get(line, value) if prev is not None else value
             spots = lines.get(line, [])
             out.append({"id": line, "name": names.get(line, line), "value": value, "delta": value - before,
-                        "beads": [bead(x, spots) for x in spots]})
+                        "beads": [bead(x, spots) for x in spots], **ends(line)})
         return out
     trend = rules.resolve_trend(content, w, fronts[0]) or fronts[0]
     value = rules.world_trend_value(w, content, trend)
     before = next(iter(prev.fronts.values()), value) if prev is not None and prev.fronts else value
     beads = [bead(x, spots) for spots in lines.values() for x in spots]
-    return [{"id": trend, "name": names.get(trend, trend), "value": value, "delta": value - before, "beads": beads}]
+    return [{"id": trend, "name": names.get(trend, trend), "value": value, "delta": value - before, "beads": beads, **ends(fronts[0])}]
 
 
 def _rope_values(snap: TerritoryWeek, ropes: list[dict]) -> dict[str, int | None]:
@@ -282,8 +378,8 @@ def state(
     {"key", "now_week", "weeks_total", "season_one", "territory", "faction", "sides", "here", "stamina", "sorties_left",
      "journey": None | {"to","to_name","minutes","next_name","x","y"}, "travel_block": None | {"reason","to_jianghu"},
      "places": {地點: {"control","kind","odds","sortie","armed","minutes","stamina","order","bounty","goal","news","people","services",
-                       "price","squads","danger","flips"}},
-     "ropes": [{"id","name","value","delta","beads": [{"id","threshold","control"}]}], "geju", "events",
+                       "price","squads","danger","flips","rich"}},
+     "ropes": [{"id","name","value","delta","beads": [{"id","threshold","control"}],"low","high"}], "geju", "events",
      "suggest": [{"id","sortie","why": [[字, 種類]],"minutes","score","lose"}], "chart": [{"name","spots"}],
      "weeks": [{"week","control","ropes","geju","events","changed"}], "start": None | {地點: 開季那一刻的控制方}}"""
     s, c, w, p = state, content, state.world, state.player
@@ -335,6 +431,8 @@ def state(
             "services": _services(c, loc), "price": _price(w, c, faction, loc_id),
             "squads": [{"name": name, "odds": word} for name, word in listed],
             "danger": loc.danger, "flips": _flips(w, loc_id, now_week) if on else [],
+            # 高級資源地（天下圖的金點，輿圖簡化設計 3.3、4.1）：開季中立的區塊，不管此刻誰佔著；領地爭奪關著的季照內容的區塊表
+            "rich": conquest.start_kind(w, c, loc_id) == conquest.NEUTRAL,
         }
     suggest = []
     for loc_id, info in places.items():
