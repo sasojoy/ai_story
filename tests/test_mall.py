@@ -136,6 +136,31 @@ def test_card_bonus_is_ignored_when_the_mall_is_off(on):
     assert game.pill_cap() in (2, 5)  # 照原本的（新手期與否），不加
 
 
+def test_stamina_help_names_the_card_cap(on, monkeypatch):
+    """FB-480：月卡有效時，點體力條看的說明照這個人此刻的上限寫（跟 pill_cap、「今天還能服幾顆」對得上）；沒有卡一個字都不變。"""
+    game = _game(on)
+    monkeypatch.setattr(roster, "newbie", lambda state, content, days=None: False)
+    plain = game.status_data()["stamina_help"][-1]
+    assert "一天最多服 2 顆（新手期 5 顆），每天 00:00（台灣時間）重新計算（今天還能服 2 顆）。" in plain
+    _card(game, DAY0, DAY0 + 30)
+    line = game.status_data()["stamina_help"][-1]
+    assert "一天最多服 3 顆（新手期 6 顆；月卡多 1 顆），每天 00:00（台灣時間）重新計算（今天還能服 3 顆）。" in line
+    on.config.mall.enabled = False  # 商城關著：卡不算，說明照舊
+    assert game.status_data()["stamina_help"][-1] == plain
+
+
+def test_newbie_line_names_the_card_cap(on, monkeypatch):
+    """FB-480：新手期那一行「回體丹一天能服 N 顆」有月卡時照 pill_cap 寫（5 → 6）。"""
+    on.config.newbie_real_hours = 48
+    game = _game(on)
+    monkeypatch.setattr(roster, "newbie", lambda state, content, days=None: True)
+    assert any("回體丹一天能服 5 顆，" in line for line in game.status_data()["stamina_help"])
+    _card(game, DAY0, DAY0 + 30)
+    help_lines = game.status_data()["stamina_help"]
+    assert game.pill_cap() == 6
+    assert any("回體丹一天能服 6 顆（月卡多 1 顆），" in line for line in help_lines)
+
+
 # ── 購買與發貨 ───────────────────────────────────
 
 
