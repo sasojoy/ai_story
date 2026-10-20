@@ -46,6 +46,25 @@ description: 《天下大勢》的分支、測試與合併規矩（企劃者 202
 - 交接寫在 `docs/superpowers/handoff/`：分支與 HEAD、還沒提交的東西、開著的伺服器與埠、還開著的 FB、踩過的坑。
 - 開發照技能 `tianxia-dev`（改網頁另看同資料夾的 `網頁.md`），QA 照技能 `tianxia-qa`（只能靠引擎驗的看同資料夾的 `引擎驗收.md`）；派工單寫明要用哪一個技能。這兩個技能是 10/19 收工的四個老對話寫的。
 
+## PM 平行派工（2026-10-20 這一輪學到的）
+
+- **交接是活的**：企劃者 2026-10-20「token 到上限我可能換帳號，要能接續開發」。PM 每合一次、派一次工、企劃者每定一件事，就更新 `docs/superpowers/handoff/` 最新那一份（分支與 HEAD、進行中的子代理與它們推到哪、下一步、等企劃者決定的、FB 號段與埠）並推上 develop。
+- **派工前先核對現行程式**：計畫寫的「現在的程式」常常已經過時（例如計畫照 main 寫、develop 多了正式季十批）。派工單第一步寫「核對現行程式，差異寫進計畫第六節；前提不在了就停下來回報」。
+- **平行的子代理**：
+  - 每個 QA 給一段不重疊的 FB 號段（例：FB-460～469、470～479）。
+  - 每個要開伺服器的給一個埠、一個 `<名字>.localhost`；瀏覽器一律帶自己的 tabId（10/20 有 QA 沒帶 tabId，動到另一個子代理的分頁）。
+  - 小的修正與複驗可以派 `model: sonnet`。
+- **疊批**：趕時間時，下一批可以接在還在 QA 的上一批上面開（例：`dev/shop-2` 從 `dev/shop-1` 開）；上一批的修正推回上一批的分支，下一批合進來再推。
+- **暫停與用量上限**：企劃者喊暫停就用 TaskStop 停掉全部子代理，再查每個工作樹留下什麼：已推的記下來，沒推的由 PM 提交成 WIP 推上去，再派新的子代理接手。子代理撞到用量上限時，用 SendMessage 叫它從中斷的地方接著做，不要重派。
+- **PM 不能寫別的工作樹的檔**（有 hook 擋）：PM 要改 develop 上的文件，就在自己的工作樹 `git switch -c pm/<名字> origin/develop`，改完 `git push origin HEAD:develop`（快轉）。git 指令可以 `git -C` 別的工作樹。
+- **合併的衝突**：
+  - `試玩回饋.md` 兩邊都留，表格照 FB 編號排，檔尾的驗收紀錄照時間排。
+  - `CLAUDE.md` 一律留瘦身版，對方新加的那一行搬進對應的 `docs/guide/`。
+  - 用腳本解衝突時保留檔案原本的換行（`newline=""`），每一處 assert。
+- **合併的順序**：功能分支合進 develop 之前，先把 develop（與 main 的新東西）合進功能分支，在那裡跑整套；合進 develop 時內容跟測過的一樣（`git diff --quiet HEAD <功能分支>`）就不必再跑一次。
+- **跑整套的指令**：`TIANXIA_DB=<scratchpad>/db/x.db PYTHONIOENCODING=utf-8 C:/Ray/專案/天下大勢/.venv/Scripts/python.exe -m pytest -q -n auto -m "slow or not slow" -p no:cacheprovider > log 2>&1; echo EXIT=$? >> log`，背景跑，看最後那一行「N passed」與 EXIT 再推。
+- **設計稿請人審**：寫完設計稿派一個子代理用「拿這份能不能開工」讀一遍，只把「只有企劃者能答」的問題一次問完，其餘 PM 自己定、標【PM】。
+
 ## 流程
 
 1. **設計定了**：開發 session 照設計寫這一批的計畫（superpowers:writing-plans，存 `docs/superpowers/plans/`，不必給企劃者審），再照計畫在 session 裡一步一步做（executing-plans，不開子代理）。

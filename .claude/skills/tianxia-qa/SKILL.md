@@ -14,6 +14,8 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 - 工作樹沒有 `.venv`，一律用 `C:/Ray/專案/天下大勢/.venv/Scripts/python.exe`。印中文要設 `PYTHONIOENCODING=utf-8`（或把 stdout 包成 UTF-8）。
 - **測試只跑派工單點名的檔**：`<python> -m pytest -q tests/a.py tests/b.py`。不跑整套，也不用 `test_for.py`，因為 engine、content 一動，它會挑到幾乎整套。
 - 不開多代理工作流程，也不要一個驗收項目開一個子代理。
+- **平行驗收**（2026-10-20）：PM 會給你一段 FB 號段、一個埠和一個 `<名字>.localhost`，只用給你的；瀏覽器窗格是共用的，**每一個動作都帶自己的 tabId**（10/20 有 QA 沒帶，動到別的子代理的分頁）。驗完把視窗設回 desktop、配色淺色、關掉自己的分頁、`taskkill /T` 關伺服器。
+- 開關的「一個字都不變」最好的驗法：同一支腳本，在功能分支開出來的那一點（`git archive` 解出來）和這一版各跑一次，比輸出。
 
 ## 開伺服器與登入
 - **複本**：在 scratchpad 用 bash `git -C <qa 工作樹> archive HEAD | tar -x -C <scratchpad>/on` 解一份來跑。PowerShell 的 tar 碰到中文路徑會壞。不要在 repo 裡跑伺服器，也不要改 repo 的設定與 `.local/`。

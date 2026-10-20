@@ -29,6 +29,10 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   - 不要裸 `git stash` / `pop`。
   - 要用就 `git stash push -m <獨一無二的標籤> -- <檔>`，`git stash list --format='%H %gd %gs'` 找到自己那一筆，`git stash apply <sha>`，再照標籤找 `stash@{n}` 去 drop。
   - 想證明測試「修之前是紅的」，最簡單的就是這樣把改動暫時收起來跑一次。
+- **用 `python -I` 跑腳本時 `PYTHONIOENCODING` 不生效**（`-I` 忽略所有 PYTHON 開頭的環境變數）：在腳本裡 `sys.stdout.reconfigure(encoding="utf-8")`。
+- **實機看畫面**：PM 會給你一個埠與 `<名字>.localhost`（別的子代理同時在跑伺服器，cookie 照主機名分開）；瀏覽器窗格是共用的，**每一個動作都帶自己的 tabId**，看完把視窗設回 desktop、關掉自己的分頁、`taskkill /T` 關伺服器。窗格在背後時截圖可能拍到動畫中途，數字用 `javascript_tool` 量。
+- **這台的 Ollama 沒有 `gemma4:12b`**（只有 26b 等舊模型，2026-10-20 查的）：真模型實測叫不動就照實回報；不要改拿 26b 代跑（17GB、keep_alive 12 小時會一直佔著顯卡）。
+- **計畫要對現行程式**：派工給的計畫可能是照 main 或更早的版本寫的；開工先核對，差異寫進計畫，前提不在了就停下來回報 PM。
 - 背景長跑（量表）用 `run_in_background`。輸出導到檔案時 python 會緩衝，加 `-u` 才看得到進度。等它結束的通知，不要輪詢。
 
 ## 測試怎麼挑
