@@ -441,7 +441,7 @@ def conquest_lines(content: Content) -> list[str]:
     """玩法說明「地盤」一節的領地爭奪版（第 38 項改版第一批；開關在這一季生效時取代拔河那一版；待 joy 潤）。數字讀 Config。"""
     cfg, terr = content.config.conquest, content.config.territory
     gather = f"{cfg.gather_bonus_chance * 100:g}%"
-    return [
+    lines = [
         "地圖分三種：官軍的領地、黃巾的領地，和中立地。中立地開季沒人佔，兩軍爭的就是它；各家的投靠點永遠是自家的，廣宗只照廣宗決戰易手。",
         "能挑的是跟自家領地有路直通的那一塊——中立地，或者敵方的領地，一塊一塊往前推。",
         f"三條戰線的大勢照兩軍佔了多少地來算：一條線上的中立地全被一方拿下，那條線往那一邊偏 {cfg.share:g} 點；"
@@ -467,6 +467,10 @@ def conquest_lines(content: Content) -> list[str]:
         "中立地站著另一批強對手，掉的東西也好；被佔下之後照樣在那裡，兩邊的人去都得打。",
         "輿圖局勢層的底色就是此刻誰佔著，灰的是還沒人佔的中立地；易手時天下大事會傳一句。",
     ]
+    if seal.on(content):  # 第三批 B（設計 3.9）：碎片的來源；只說「在哪一類地方」，藏在哪一塊不公開；待 joy 潤
+        lines.insert(-1, "傳說傳國玉璽的碎片就藏在這些中立地的某一處：一季最多一片，到那裡探索（四種探索都算）才有極小的機會撿到，"
+                         "藏在哪一處沒人知道；那一塊此刻若歸你的陣營，機會再高一點。")
+    return lines
 
 
 def territory_lines(content: Content, allied: bool = False, season: WorldState | None = None) -> list[str]:

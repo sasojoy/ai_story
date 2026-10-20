@@ -4069,6 +4069,47 @@ class Game:
         scouted = bounties.on_explore(self.state, self.content, self.world, self.state.player.location)  # 懸賞榜的打探：探索一次就算
         return self._explore_outcome() + self._legend_find() + self._scrap_find() + scouted
 
+    def _seal_find(self, loc_id: str) -> list[str]:
+        """領地爭奪的季，探索撿玉璽碎片（領地爭奪設計 3.9、4.8；計畫 Task 14）：探索的四種（找素材、找事件、靜心感悟、練功）收尾各叫一次。
+        只在這一季藏著一片、人就站在藏碎片的那一塊、手上還沒有碎片（一人一片）時擲 seal.find（那一塊此刻歸你的陣營機率高一點）；
+        別的塊、沒藏碎片的季一律不擲、不碰任何登記。擲中就把那一片記到自己名下（登記記一筆 emerge，所以補紀錄、同一季學會混元一氣、
+        天命之季的判斷都照現世的老路），清掉藏處；接著 _deliver_seal_results 馬上補送。天下大事與江湖史都不寫是在哪裡撿到的。
+        骰子是密鹽的亂數，不碰 Game.rng；寫登記用一次 world.mutate、寫入時整個重驗（別人搶先撿走了就落空）。回要接在探索結果後面的句子。"""
+        c, s = self.content, self.state
+        if not seal.on(c) or not conquest.on(c, s.world):
+            return []
+        view = self.world.seal_state()
+        cache = seal.live_cache(view.registry, view.season)
+        p = s.player
+        if cache is None or cache.loc != loc_id or seal.shard_of(view.registry, p.name) is not None:
+            return []
+        side = self._side()  # allied.side_of（＝rules.side_of）：豪強依附一軍就是那一軍（FB-571，同地盤折扣）；散人沒有自家、不乘（PM 裁決）：side 是 None，不能跟沒人佔的 None 湊成自家
+        own = side is not None and conquest.holder(s.world, c, loc_id) == side
+        if not seal.find(view.registry, view.tianji, p.name, p.explore_seq, own, c.config.seal):
+            return []
+        found = {"ok": False}
+
+        def _apply(shared) -> None:
+            reg = seal.filled(shared.seal, c)
+            now = seal.live_cache(reg, shared.season_number)
+            if now is None or now.loc != loc_id or seal.key(p.name) in seal.holders(reg):  # 寫入時重驗：被別人搶先、或自己剛有了一片
+                return
+            shard = reg.shards[now.shard]
+            season = shared.season_number
+            shard.state, shard.holder, shard.since_season, shard.emerged_round = "held", p.name, season, reg.round
+            reg.emerge_season, reg.cache = season, None
+            text = seal.FIND_GOT.format(name=p.name, shard=c.seal[shard.id].name)
+            seal.log(reg, season, "emerge", shard=shard.id, holder=p.name, text=text)
+            seal.rumor(shared.season, text)
+            seal.chronicle(shared.season, text)
+            found["ok"] = True
+
+        self.world.mutate(_apply)
+        if not found["ok"]:
+            return []
+        self._deliver_seal_results()  # 傳承那一格、混元一氣、紀錄一則、行狀一筆（同現世的得主）
+        return [seal.FIND_SCENE]
+
     def _legend_find(self, rng: random.Random | None = None) -> list[str]:
         """探索不論走哪一支，結束後擲一次有沒有撿到破境丹（企劃者 2026-10-05：到處探索都有約 2% 的機會；帶著「探索撿破境丹」的寶物時門檻 ×2）。
         機率是 0 就不擲骰（先判斷機率，亂數序列一個都不動：測試內容把它設成 0，既有的固定種子序列才不會位移）。
@@ -4179,7 +4220,7 @@ class Game:
             msgs = self._practice(loc, roll("練功")) + self._pill_find(roll("回體丹"))
             if c.config.forge_secrets.scrap_every_mode:
                 msgs += self._scrap_find()
-            return msgs + self._legend_find(roll("破境丹"))
+            return msgs + self._legend_find(roll("破境丹")) + self._seal_find(loc.id)
         if gather_mode == explore_modes.GATHER and branch_id == explore_modes.SAY:  # 「自己說」（C 段走 choose 進來，_gather_said 帶著）
             msgs = self._gather_say(loc, roll("找素材"), roll(explore_modes.SAY_ROLL)) + self._pill_find(roll("回體丹"))
         elif gather_mode == explore_modes.GATHER:
@@ -4192,7 +4233,7 @@ class Game:
         if c.config.forge_secrets.scrap_every_mode:  # 殘譜三種探索都擲（素材與經濟設計第三節；關著只在找事件擲，_seek）
             msgs += self._scrap_find()
         scouted = bounties.on_explore(s, c, self.world, p.location)  # 打探：三種都算（設計 3.4）
-        return msgs + self._legend_find(roll("破境丹")) + scouted
+        return msgs + self._legend_find(roll("破境丹")) + scouted + self._seal_find(loc.id)
 
     def _gather(self, loc: Location, rng: random.Random, branch: GatherBranch | None = None) -> list[str]:
         """找素材（設計 3.1）：有頭目的地點先擲頭目戰（Config.duel.explore_chance）；撿素材（explore_modes.gather_finds）；
@@ -12508,9 +12549,39 @@ class Game:
             return self._log(refusal)
         if shard_id and shard_id not in self.content.seal:
             return self._log(["（沒有這一片。）"])
+        if seal.on(self.content) and seal.conquest_season(self.content, self.state.world):  # 領地爭奪的季沒有宛城現世：改成現在藏一片
+            return self._admin_seal_hide(shard_id)
         self.world.mutate(lambda st: setattr(seal.filled(st.seal, self.content), "force_emerge", shard_id or "*"))
         self._write("強制現世", ["下一場標了現世的決戰，碎片必定現世。"], tag="管理者")
         return self._log(["（下一場標了現世的決戰，碎片必定現世。）"])
+
+    def _admin_seal_hide(self, shard_id: str) -> list[str]:
+        """領地爭奪的季「強制現世」的替身（領地爭奪設計 3.9）：現在就藏一片（略過 hide_chance，可以指定哪一片），藏在哪一塊照開季的藏法
+        （權重、亂數同自然擲中）；回話與紀錄都不寫藏在哪裡。這一季已經藏著、已經現世過一片、沒有可藏的都不藏。"""
+        c = self.content
+        out: list[str] = []
+
+        def _apply(shared) -> None:
+            reg = seal.filled(shared.seal, c)
+            season = shared.season_number
+            if seal.mandate_now(reg, season):
+                out.append(seal.HIDE_MANDATE)
+            elif reg.emerge_season == season:
+                out.append(seal.HIDE_EMERGED)
+            elif seal.live_cache(reg, season) is not None:
+                out.append(seal.HIDE_HAS)
+            else:
+                spots = seal.hide_spots(c, shared.season)
+                cache = seal.hide(reg, c, season, shared.tianji, spots, force=True, shard=shard_id or None)
+                if cache is None:
+                    out.append(seal.HIDE_NO_SPOT if not spots else seal.HIDE_NONE)
+                else:
+                    reg.cache = cache
+                    out.append(seal.HIDE_DONE)
+
+        self.world.mutate(_apply)
+        self._write("現在藏一片", out, tag="管理者")
+        return self._log([f"（{line}）" for line in out])
 
     def admin_seal_stir(self, shard_id: str) -> list[str]:
         """下一場標了 seal 的決戰必定牽動這一片（略過 7%、新主保護與次數上限；那一片要有主）。"""
@@ -12685,6 +12756,8 @@ class Game:
             "where": reg.last_showdown_where, "qa": c.config.seal.qa_tools,
             "mandate": "now" if seal.mandate_now(reg, view.season) else "next" if reg.mandate_pending else "",  # 兩個章一起蓋，讀登記那一份（不必 get_season）
             "mandate_ok": seal.mandate_event(c) is not None and seal.mandate_battle(c) is not None,
+            # 領地爭奪的季「強制現世」是「現在藏一片」（網頁換鈕上的字）；只給有沒有，不給藏在哪
+            "hide": seal.conquest_season(c, self.state.world),
         }
 
     def admin_issue_orders(self) -> list[str]:
