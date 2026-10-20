@@ -243,6 +243,27 @@ def test_outer_ring_showdowns_keep_the_attackers_commanders_at_home():
                 assert _owner(c, rid) == side and frozenset((rid, battle.region)) in touching, (battle.id, fid, loc)
 
 
+def test_faction_lessons_are_taught_on_their_own_outer_ring():
+    """FB-551（PM 裁決：搬到外圈，同「投靠點只在外圈」）：陣營武學（learn.faction）在自家陣營的外圈教——有領地的陣營照那一州開季
+    歸誰（不在中原的中立地，不必走進對方家門口學自家刀法）；沒有領地的陣營（豪強）在自己的投靠點教。入伍簡報點得出每一處教的地方。"""
+    c = real_content("season21")
+    landed = set(_sides(c))
+    taught = 0
+    for sid, skill in c.skills.items():
+        learn = skill.learn
+        if learn is None or learn.faction is None:
+            continue
+        taught += 1
+        if learn.faction in landed:
+            rid = _region(c, learn.at)
+            assert rid not in INNER and rid != CORE and _owner(c, rid) == learn.faction, (sid, learn.at, rid)
+        else:
+            assert learn.at in c.scenario.faction(learn.faction).join_at, (sid, learn.at)
+        intro = c.tutorial.enlist.recruiters[learn.faction].intro
+        assert c.locations[learn.at].name in intro and skill.name in intro, (sid, learn.at)
+    assert taught >= len(landed)
+
+
 def test_luzhi_camp_fragments_follow_the_camp():
     """盧植營搬進東郡（批 1）：本來掛冀州、講盧植營裡的事的伏筆片段，掛到盧植營所在的大區；盧植自己說的每一片都在裡面。"""
     c = real_content("season21")
