@@ -2614,6 +2614,19 @@ class ConquestRules(_Strict):
     event_progress: float = Field(default=1.0, ge=0)  # 【預設】在區塊做完一則事件，往自己那一邊推進度一次的量（計畫 2.3；散人不推）
     start_shift_per_10: int = Field(default=2, ge=0)  # 【預設】攻城戰起點：進度偏 50 每 10 點偏幾點（設計 4.4；第二批才用）
     start_shift_cap: int = Field(default=10, ge=0)  # 【預設】最多偏幾點（設計 4.4；第二批才用）
+    # ── 第二批：每天的鐘、投票與時程表（tianxia/conquest_day.py；設計 3.6、4.2、4.3，裁決 6、7、9）──
+    # 時刻一律是當地時間（照 pill_day_utc_offset_hours，跟回體丹同一個換日的算法）從 00:00 起算的分鐘
+    settle_hour: int = Field(default=22, ge=0, le=23)  # 【預設】每天幾點結算、公告隔天的攻城（設計 4.3）；要晚過 slot_last，當天的仗才打得完
+    slot_first: int = Field(default=12 * 60, ge=0, lt=24 * 60)  # 【預設】最早幾點開打（設計 4.3：12:00～21:00 的整點或半點）
+    slot_last: int = Field(default=21 * 60, ge=0, lt=24 * 60)  # 【預設】最晚幾點開打
+    slot_step_minutes: int = Field(default=30, ge=1)  # 【預設】開打時段的間隔（整點與半點）
+    commander_slots: list[int] = Field(default_factory=lambda: [21 * 60, 20 * 60])  # 【預設】主將替人挑時用的時段，第幾塊用第幾個（裁決 7）
+    two_per_day_ratio: float = Field(default=0.5, ge=0)  # 【預設】中立區塊數 ÷ 季長（天）≥ 這個就一邊一天兩塊，否則一塊（設計 4.2）
+    showdown_gap_before: int = Field(default=30, ge=0)  # 【預設】時刻表決戰排定時刻之前幾分鐘不排攻城（裁決 6）
+    showdown_gap_after: int = Field(default=45, ge=0)  # 【預設】之後幾分鐘不排攻城（裁決 6）
+    muster_minutes: int = Field(default=30, ge=1)  # 【預設】開打前幾分鐘開集結（設計 4.3）；結算晚了，過了「現在＋這麼久」的時段往後挪
+    rank4_share: float = Field(default=0.55, ge=0, le=1)  # 【企劃者】有第 4 階的人投票時，第 4 階的票合起來佔的比例；其他人合起來佔其餘（裁決 9）
+    pay_share: float = Field(default=0.5, ge=0)  # 【預設】攻城戰的軍餉與貢獻是決戰的幾成（設計 4.4）
 
 
 class AmbushRules(_Strict):

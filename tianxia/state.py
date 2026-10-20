@@ -1124,6 +1124,44 @@ class TerritoryState(BaseModel):
     forts: dict[str, Fort] = Field(default_factory=dict)  # 可易手的地點 → 工事（修築工事，works.py；易手就拿掉）
 
 
+class Pick(BaseModel):
+    """一票、或排好的一塊（tianxia/conquest_day.py）：打哪一塊、幾點開打（當地時間從 00:00 起算的分鐘）。"""
+
+    loc: str
+    minute: int
+
+
+class SiegeSlot(BaseModel):
+    """一天的時程表裡的一場攻城戰（conquest_day.merge 排出來、Game._conquest_tick 換成世界秒）。兩軍挑中同一塊、同一刻就併成一場
+    （attackers 兩個）。status：planned 排好了、waiting 到了開集結的時候等著開（world.advance_world_state 記）、open 開了集結
+    （record_id 是那一場）、done 打完、void 作廢（結算晚了挪不進、攻方沒人到、攻方已經是主人、管理者取消）。"""
+
+    id: str
+    key: int = 0  # 哪一天（conquest_day.day_key）排的
+    loc: str
+    minute: int  # 開打的時刻（當地時間的分鐘）
+    at: float = 0.0  # 世界秒：開打（集結截止）
+    muster_at: float = 0.0  # 世界秒：開集結
+    attackers: list[str] = Field(default_factory=list)  # 攻方（官軍、黃巾；兩個是兩軍同時搶同一塊）
+    by: dict[str, str] = Field(default_factory=dict)  # 攻方 → 怎麼定的（vote 眾議、commander 主將定奪）
+    reasons: dict[str, str] = Field(default_factory=dict)  # 攻方 → 主將為什麼挑這裡（〈天下形勢〉讀；眾議是空的）
+    status: Literal["planned", "waiting", "open", "done", "void"] = "planned"
+    record_id: int | None = None  # 開了集結之後那一場的流水號
+    winner: str | None = None  # 打完拿下的一方；守住、作廢是 None
+
+
+class DayNote(BaseModel):
+    """每天結算時記一筆（第三批〈天下形勢〉讀）：哪一邊打哪一塊、幾點、怎麼定的、主將為什麼挑這裡、眾議的比例。"""
+
+    key: int
+    side: str
+    loc: str
+    minute: int
+    by: str  # vote／commander
+    reason: str = ""
+    share: float = 0.0  # 眾議：這一塊加權之後的比例（0～1）
+
+
 class ConquestState(BaseModel):
     """這一季的領地爭奪（tianxia/conquest.py；WorldState.conquest，None＝這一季還沒算過）。此刻的控制方照舊記在 TerritoryState.control。"""
 
@@ -1131,6 +1169,12 @@ class ConquestState(BaseModel):
     offset: dict[str, float] = Field(default_factory=dict)  # 戰線 → 其他來源累積的偏移（值＝夾過的基準＋偏移；開季＝劇本起點−50，裁決 5）
     base: dict[str, float] = Field(default_factory=dict)  # 戰線 → 上一次寫回時的佔領基準（別處直接改了線，照它重錨偏移）
     progress: dict[str, float] = Field(default_factory=dict)  # 區塊 → 攻城目標的進度 0～100（往黃巾為正；沒寫是 50，計畫 2.3）
+    # ── 第二批：每天的鐘（conquest_day.py）──
+    settled_key: int = -1  # 結算到哪一天（day_key）；只准往前走（同 arena.roll_day 的教訓），-1 是還沒記過
+    votes: dict[str, dict[str, Pick]] = Field(default_factory=dict)  # 陣營 → 名號 → 那一票（一人一票、可以改；只公開加權後的比例）
+    votes_for: int = -1  # 這一批票是替哪一天（day_key）投的；結算那一下對不上就不算
+    schedule: list[SiegeSlot] = Field(default_factory=list)  # 今天（最近一次結算排的）的時程表，照開打的先後
+    day_log: list[DayNote] = Field(default_factory=list)  # 每天結算記的那幾筆（〈天下形勢〉讀）
 
 
 class GuardPost(BaseModel):
