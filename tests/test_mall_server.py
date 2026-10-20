@@ -134,3 +134,33 @@ def test_export_script_writes_every_row(tmp_path):
     assert rows[0][0] == "編號" and len(rows) == 3
     assert [row[4] for row in rows[1:]] == ["5000", "-100"] and rows[2][-1] == "4900"
     assert "負的餘額：沒有" in run.stderr
+
+
+def _ledger_script(db_path, out):
+    return subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "mall_ledger.py"), "--db", str(db_path), "--out", str(out)],
+        capture_output=True, text=True, encoding="utf-8", env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+    )
+
+
+def test_export_script_leaves_a_version_5_file_alone(tmp_path):
+    """FB-481：對帳腳本只讀。第 5 版（還沒升級）的檔：印一句沒有商城的帳就結束，不升版、不建表、不寫 CSV，檔一個位元組都不變。"""
+    from test_mall_schema import MALL_TABLES, _tables, _version, _version_5_file
+
+    db_path = tmp_path / "old.db"
+    _version_5_file(db_path)
+    before = db_path.read_bytes()
+    out = tmp_path / "ledger.csv"
+    run = _ledger_script(db_path, out)
+    assert run.returncode == 0, run.stderr
+    assert "這份資料庫還是第 5 版（還沒升級），沒有商城的帳" in run.stderr
+    assert _version(db_path) == 5 and not (MALL_TABLES & _tables(db_path))
+    assert db_path.read_bytes() == before and not out.exists()
+
+
+def test_export_script_does_not_create_a_missing_file(tmp_path):
+    """FB-481：只讀也包括不替打錯的路徑建一個新的空資料庫。"""
+    db_path = tmp_path / "typo.db"
+    run = _ledger_script(db_path, tmp_path / "ledger.csv")
+    assert run.returncode == 1 and "打不開" in run.stderr
+    assert not db_path.exists()

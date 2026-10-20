@@ -9227,10 +9227,13 @@ class Game:
             cap = cfg.newbie_pills_per_day
         else:
             cap = cfg.stamina_pills_per_day
-        if cap <= 0:
-            return cap
+        return cap if cap <= 0 else cap + self._pill_card_bonus()
+
+    def _pill_card_bonus(self) -> int:
+        """今天月卡讓回體丹上限多幾顆（mall.card_bonus）；商城關著、沒有卡、今天不在卡的期間裡是 0。
+        pill_cap 與體力條的說明（howto.stamina_lines 的 card，FB-480）都讀這一份，兩邊寫的上限才對得上。"""
         wallet = self._wallet()
-        return cap if wallet is None else cap + mall.card_bonus(self.content, wallet, self._mall_owner(), self._pill_day())
+        return 0 if wallet is None else mall.card_bonus(self.content, wallet, self._mall_owner(), self._pill_day())
 
     # ── 商城（docs/superpowers/specs/2026-10-20-商城架構-design.md；規則在 mall.py、錢包在 wallet.py）──
 
@@ -12954,6 +12957,7 @@ class Game:
         newbie = roster.newbie(s, c, c.config.newbie_stamina_days)
         data["stamina_help"] = howto.stamina_lines(
             c, w, newbie, p.stamina_pills, button=data["pills"] is not None, today=self.pills_left_today(),
+            card=self._pill_card_bonus() if c.config.stamina_pills_per_day > 0 else 0,  # 月卡（FB-480）：上限照 pill_cap 寫
         )
         # 江湖頁行動列底下的「玩法說明」入口（explain-2）：新手期（跟體力回復加快同一段，newbie_stamina_days）才有、序章裡沒有（師父會說）；
         # 過了新手期只剩設定抽屜那一顆
