@@ -112,7 +112,7 @@
   {"id": "guan_three_roads", "name": "三路並進", "faction": "guan", "rank": 4, "kind": "plot",
    "plot": {
      "how": "win",
-     "parts": [{"key": "yingru", "name": "潁川汝南", "front": "yingru"}, {"key": "nanyang", "name": "南陽", "front": "nanyang"},
+     "parts": [{"key": "yingru", "name": "中原", "front": "yingru"}, {"key": "nanyang", "name": "南陽", "front": "nanyang"},
                {"key": "jizhou", "name": "冀州", "front": "jizhou"}],
      "headcount": 3,
      "start_text": "{name} 發起三路並進，還缺{缺}。",

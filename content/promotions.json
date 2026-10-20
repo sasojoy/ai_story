@@ -4,11 +4,11 @@
     "rank": 2,
     "figure": "huangfusong",
     "successor": "zhujun",
-    "location": "changshe",
+    "location": "luoyang_road",
     "event_main": "promo_guan_2",
     "event_handoff": "promo_guan_2_handoff",
-    "summons_text": "皇甫嵩召你到長社營中。",
-    "summons_handoff": "朱儁召你到長社營中。",
+    "summons_text": "皇甫嵩召你到{據點}。",
+    "summons_handoff": "朱儁召你到{據點}。",
     "closing": "兩個鄉勇被叫到你面前：「從今天起，他們跟你。」"
   },
   {
@@ -44,13 +44,13 @@
           {
             "event": "promo_guan_3_memorial",
             "figure": "luzhi",
-            "at": "luzhi_camp",
+            "at": "mengjin_ford",
             "summons_text": "盧植派人來找你：到{據點}見他。"
           },
           {
             "event": "promo_guan_3_gift",
             "figure": "dongzhuo",
-            "at": "luzhi_camp",
+            "at": "mengjin_ford",
             "summons_text": "董卓派人來找你：到{據點}見他。"
           }
         ]
@@ -182,13 +182,13 @@
           {
             "event": "promo_huang_3_zmc",
             "figure": "zhangmancheng",
-            "at": "nanyang_huangjin_camp",
+            "at": "taishan_foot",
             "summons_text": "帶著符去{據點}。"
           },
           {
             "event": "promo_huang_3_zh",
             "figure": "zhaohong",
-            "at": "nanyang_huangjin_camp",
+            "at": "taishan_foot",
             "summons_text": "帶著符去{據點}。"
           },
           {

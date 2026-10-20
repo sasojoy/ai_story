@@ -292,8 +292,8 @@ def test_talisman_then_zhangmancheng(on):
     _ready(game, 2)
     assert ranks.check_summons(game.state, on) == ["張寶召你到下曲陽。"]
     game.choose("act:summons")
-    assert "帶著符去南陽黃巾營。" in game.choose("choice:0")
-    game.state.player.location = "nanyang_huangjin_camp"
+    assert "帶著符去泰山腳。" in game.choose("choice:0")  # 輿圖重製 1b：張曼成從南陽黃巾營搬到泰山腳
+    game.state.player.location = "taishan_foot"
     game.choose("act:summons")
     msgs = game.choose("choice:0")
     assert "你升為小方渠帥。" in msgs and game.state.player.affinities.get("zhangmancheng") == 10
@@ -305,18 +305,18 @@ def test_receiver_changes_after_week_seven(on):
     ranks.check_summons(game.state, on)
     game.choose("act:summons")
     game.choose("choice:0")
-    _retire(game, "zhangmancheng")  # 第 7 週秦頡斬張曼成（趙弘本來就在南陽黃巾營、在場：不必另外改他）
+    _retire(game, "zhangmancheng")  # 第 7 週秦頡斬張曼成（趙弘本來就在泰山腳〔輿圖重製 1b 以前是南陽黃巾營〕、在場：不必另外改他）
     # 地點與召見那一句都沒變，悄悄換成趙弘那一版（丙一 _refresh：同一句話不再寫進紀錄一次）；到了才知道是趙弘
     assert ranks.check_summons(game.state, on) == []
     assert game.state.player.summons.event == "promo_huang_3_zh"
-    game.state.player.location = "nanyang_huangjin_camp"
+    game.state.player.location = "taishan_foot"
     assert ranks.summons_event(game.state, on) == "promo_huang_3_zh"  # 到了演的是趙弘那一版
     game.choose("act:summons")
     assert game.state.pending_event == "promo_huang_3_zh"
 
 
 def test_grain_offer_feeds_the_hoard(on):
-    game = _game(on, at="nanyang_huangjin_camp")
+    game = _game(on, at="taishan_foot")  # 輿圖重製 1b：趙弘在泰山腳；糧照舊記進南陽黃巾營的糧倉（宛城那一條伏筆數的那一份）
     _retire(game, "zhangmancheng")
     _ready(game, 2)
     p = game.state.player
@@ -386,7 +386,7 @@ def test_the_real_huang_promotions_are_defined(on):
         ["promo_huang_3_zmc", "promo_huang_3_zh", "promo_huang_3_zl"]]
     assert [(c.figure, c.at, c.after, c.before_event, c.flags_none) for leg in rank3.legs for c in leg.casts] == [
         ("zhangbao", "xiaquyang", None, None, []), ("zhangliang", "guangzong", None, None, []),
-        ("zhangmancheng", "nanyang_huangjin_camp", None, None, []), ("zhaohong", "nanyang_huangjin_camp", None, None, []),
+        ("zhangmancheng", "taishan_foot", None, None, []), ("zhaohong", "taishan_foot", None, None, []),  # 輿圖重製 1b
         ("zhangliang", "guangzong", None, None, [])]
     assert [c.summons_text for leg in rank3.legs for c in leg.casts] == [
         "張寶召你到{據點}。", "張梁召你到{據點}。", "帶著符去{據點}。", "帶著符去{據點}。",
@@ -413,7 +413,8 @@ def test_the_eight_new_events_are_wired_to_their_legs(on):
         assert event.actions == [] and len(event.choices) == (2 if event_id == "promo_huang_4_heir" else 3)
         for choice in event.choices:
             assert (choice.effect.promote, choice.effect.followers, choice.effect.summons_next) == (rank, given, None)
-    # 帶糧是基準量 2（週末換算成 1；人多的伺服器要得更多），捐去那個人所在的據點
+    # 帶糧是基準量 2（週末換算成 1；人多的伺服器要得更多），捐去那個人的據點（趙弘的是南陽黃巾營的糧倉：宛城那一條伏筆數的那一份；
+    # 輿圖重製 1b 趙弘開季搬到泰山腳，糧照舊記在南陽黃巾營，要不要改交 PM）
     for event_id, place in (("promo_huang_3_zh", "nanyang_huangjin_camp"), ("promo_huang_3_zl", "guangzong")):
         grain = on.events[event_id].choices[0]
         assert grain.condition.grain_min == 2 and grain.effect.donate_grain == {place: 2}
@@ -465,7 +466,7 @@ def test_inner_quotes_are_stored_as_corner_brackets(on):
 @pytest.mark.parametrize("choice, affinity", [(0, {"zhangmancheng": 10}), (1, {"zhangmancheng": 3}),
                                               (2, {"zhangmancheng": -3, "zhaohong": 5})])
 def test_every_zhangmancheng_ending_makes_a_small_leader(on, choice, affinity):
-    game = _game(on, at="nanyang_huangjin_camp")
+    game = _game(on, at="taishan_foot")  # 輿圖重製 1b：張曼成在泰山腳
     p = game.state.player
     p.affinities.update({"zhangmancheng": 20, "zhaohong": 20})
     _ready(game, 2)
@@ -483,7 +484,7 @@ def test_every_zhangmancheng_ending_makes_a_small_leader(on, choice, affinity):
 
 @pytest.mark.parametrize("choice, affinity, grain", [(0, 10, 1), (1, 5, 0), (2, 0, 0)])
 def test_every_zhaohong_ending(on, choice, affinity, grain):
-    game = _game(on, at="nanyang_huangjin_camp")
+    game = _game(on, at="taishan_foot")  # 輿圖重製 1b：趙弘在泰山腳
     p = game.state.player
     p.affinities["zhaohong"] = 20
     _retire(game, "zhangmancheng")
@@ -530,7 +531,7 @@ def test_the_talisman_can_come_from_zhangliang_when_zhangbao_is_out(on):
     assert game.state.player.summons.event == "promo_huang_3_talisman_zl"
     game.choose("act:summons")
     msgs = game.choose("choice:0")
-    assert "帶著符去南陽黃巾營。" in msgs and game.state.player.summons.leg == 1
+    assert "帶著符去泰山腳。" in msgs and game.state.player.summons.leg == 1  # 輿圖重製 1b
 
 
 def test_nobody_to_hand_over_the_talisman_means_no_summons(on):
@@ -652,7 +653,7 @@ def test_a_huang_player_walks_all_the_way_up(on):
     assert ranks.check_summons(game.state, on) == ["張寶召你到下曲陽。"]
     game.choose("act:summons")
     game.choose("choice:0")
-    p.location = "nanyang_huangjin_camp"
+    p.location = "taishan_foot"  # 輿圖重製 1b：張曼成在泰山腳
     game.choose("act:summons")
     msgs = game.choose("choice:1")
     assert "你升為小方渠帥。" in msgs and ranks.HINT in msgs  # 第 4 階的進度到了、機緣還沒有
@@ -787,24 +788,24 @@ def test_the_real_timetable_moves_the_presenters_where_the_leg_casts_expect_them
         now = figures.state_of(state, on, fid)
         return now.status, now.location
 
-    # 開頭：張寶在下曲陽給符，下一段是南陽黃巾營的張曼成
+    # 開頭：張寶在下曲陽給符，下一段是泰山腳（輿圖重製 1b 以前是南陽黃巾營）的張曼成
     _ready(game, 2)
     assert ranks.check_summons(state, on) == ["張寶召你到下曲陽。"]
     assert standing("zhangbao") == ("active", "xiaquyang")
     game.choose("act:summons")
     game.choose("choice:0")
     assert (p.summons.event, p.summons.figure, p.summons.location) == (
-        "promo_huang_3_zmc", "zhangmancheng", "nanyang_huangjin_camp")
-    assert standing("zhangmancheng") == ("active", "nanyang_huangjin_camp")
+        "promo_huang_3_zmc", "zhangmancheng", "taishan_foot")
+    assert standing("zhangmancheng") == ("active", "taishan_foot")
 
     # 第 3 週張曼成攻殺太守（成）、第 7 週秦頡斬張曼成：他退場，趙弘還在營裡——召見那一句沒變、悄悄換成趙弘
     settle("zhangmancheng_wan", "成")
     settle("qinjie_slays_zhangmancheng")
     assert standing("zhangmancheng")[0] == "retired"
-    assert standing("zhaohong") == ("active", "nanyang_huangjin_camp")
+    assert standing("zhaohong") == ("active", "taishan_foot")
     assert ranks.check_summons(state, on) == []
     assert (p.summons.event, p.summons.figure, p.summons.location) == (
-        "promo_huang_3_zh", "zhaohong", "nanyang_huangjin_camp")
+        "promo_huang_3_zh", "zhaohong", "taishan_foot")
 
     # 第 9 週宛城之戰官軍大勝：趙弘戰死，南陽沒有人接符，改去廣宗的張梁
     settle("wancheng", "guan:大勝")

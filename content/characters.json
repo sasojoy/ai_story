@@ -182,12 +182,13 @@
       "wis": 0.4
     },
     "desc": "拜左中郎將，與朱儁分道討黃巾，於長社（火攻大破黃巾）、廣宗（擊斬張梁）等地連戰連捷，是平定黃巾的首功之臣。",
-    "talk_at": "changshe",
+    "talk_at": "luoyang_road",
     "affinity_tag_deltas": {
       "真誠請教": 8,
       "由衷讚賞": 3
     },
     "haunts": [
+      "luoyang_road",
       "changshe",
       "guan_camp"
     ]
@@ -221,12 +222,13 @@
       "wis": 0.3
     },
     "desc": "拜右中郎將，與皇甫嵩並肩討黃巾，圍剿南陽黃巾軍有功。",
-    "talk_at": "changshe",
+    "talk_at": "luoyang_road",
     "affinity_tag_deltas": {
       "坦誠相待": 9,
       "由衷讚賞": 3
     },
     "haunts": [
+      "luoyang_road",
       "changshe",
       "guan_camp",
       "yingchuan"
@@ -262,7 +264,7 @@
       "wis": 0.4
     },
     "desc": "拜北中郎將討張角，圍困廣宗幾乎破城，卻因不肯賄賂前來監軍的宦官左豐，被誣陷「畏敵不進」下獄，功敗垂成。劉備、公孫瓚都曾是他的學生。",
-    "talk_at": "luzhi_camp",
+    "talk_at": "mengjin_ford",
     "affinity_tag_deltas": {
       "真誠請教": 9,
       "強人所難": -8,
@@ -679,13 +681,14 @@
       "wis": 0.35
     },
     "desc": "甲子年二月在南陽起事，部眾圍住宛城，揚言要取南陽太守的首級祭天。",
-    "talk_at": "nanyang_huangjin_camp",
+    "talk_at": "taishan_foot",
     "affinity_tag_deltas": {
       "真誠請教": 9,
       "由衷讚賞": 7,
       "言語冒犯": -10
     },
     "haunts": [
+      "taishan_foot",
       "nanyang_huangjin_camp",
       "nanyang_wilds"
     ]
@@ -719,7 +722,7 @@
       "wis": 0.3
     },
     "desc": "張曼成麾下的部將，替他管營中的糧草與城防；郡兵出身，營裡的弟兄有事都先找他。",
-    "talk_at": "nanyang_huangjin_camp",
+    "talk_at": "taishan_foot",
     "affinity_tag_deltas": {
       "雪中送炭": 10,
       "坦誠相待": 8,
@@ -731,7 +734,7 @@
     "id": "fuxie",
     "name": "傅燮",
     "kind": "locked",
-    "talk_at": "changshe",
+    "talk_at": "luoyang_road",
     "background": "北地靈州人，身長八尺、容貌威嚴，本名傅幼起，仰慕介子推而改字南容。",
     "situation": "任護軍司馬，隨皇甫嵩討潁川黃巾；軍中都知道他看不慣朝中宦官，私下說過亂源不在張角而在宮裡。",
     "personality": "剛直不阿、重名節，說話直來直往，最恨趨炎附勢與賄賂；對肯為百姓出力的人掏心掏肺，對貪生怕死的人連正眼都不給。",
@@ -750,6 +753,7 @@
     },
     "desc": "任護軍司馬，隨皇甫嵩討潁川黃巾；軍中都知道他看不慣朝中宦官，私下說過亂源不在張角而在宮裡。",
     "haunts": [
+      "luoyang_road",
       "changshe",
       "guan_camp",
       "yingchuan"

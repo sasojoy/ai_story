@@ -27,7 +27,9 @@ from tianxia.state import FigureState, GameState
 CONTENT_DIR = Path(__file__).parent.parent / "content"
 PLACEHOLDER_TAG = "待joy寫"  # 13 則事件的文字是占位（內容表 4.5：事件文字歸 joy）；事件模型不收多的欄位，所以記在 tags 上
 
-FS_CHAINS = {  # chain: (大事, 陣營, 類型, 戰況看哪條, 片段的大區（4.2；輿圖重製第 1 批潁川汝南拆成潁川、汝南）, 片段的來源（4.2）)
+# chain: (大事, 陣營, 類型, 戰況看哪條, 片段的大區（4.2；輿圖重製第 1 批潁川汝南拆成潁川、汝南；1b 盧植營那幾片跟著盧植營搬進東郡）,
+# 片段的來源（4.2）)
+FS_CHAINS = {
     "fs_changshe_guan": ("changshe_fire", "guan", "天時地利", "yingru",
                          ["yingchuan", "yingchuan", "luoyang", "yingchuan"], ["action", "event", "action", "talk"]),
     "fs_changshe_huang": ("changshe_fire", "huang", "推理", "yingru",
@@ -35,9 +37,9 @@ FS_CHAINS = {  # chain: (大事, 陣營, 類型, 戰況看哪條, 片段的大�
     "fs_changshe_haoqiang": ("changshe_fire", "haoqiang", "反直覺抉擇", "yingru",
                              ["yingchuan", "runan", "luoyang", "runan"], ["action", "action", "action", "talk"]),
     "fs_luzhi_guan": ("luzhi_jailed", "guan", "拼圖", "jizhou",
-                      ["jizhou", "jizhou", "luoyang", "luoyang"], ["action", "talk", "action", "action"]),
+                      ["dongjun", "dongjun", "luoyang", "luoyang"], ["action", "talk", "action", "action"]),
     "fs_luzhi_huang": ("luzhi_jailed", "huang", "累積", "jizhou",
-                       ["jizhou", "jizhou", "luoyang", "luoyang"], ["action", "talk", "action", "action"]),
+                       ["dongjun", "jizhou", "luoyang", "luoyang"], ["action", "talk", "action", "action"]),
     "fs_luzhi_haoqiang": ("luzhi_jailed", "haoqiang", "情誼", "jizhou",
                           ["luoyang", "runan", "luoyang", "luoyang"], ["action", "action", "action", "talk"]),
     "fs_wancheng_guan": ("wancheng", "guan", "情誼", "nanyang",
@@ -47,7 +49,7 @@ FS_CHAINS = {  # chain: (大事, 陣營, 類型, 戰況看哪條, 片段的大�
     "fs_wancheng_haoqiang": ("wancheng", "haoqiang", "天時地利", "nanyang",
                              ["nanyang", "nanyang", "luoyang", "nanyang"], ["action", "action", "action", "event"]),
     "fs_zhangjiao_guan": ("zhangjiao_dies", "guan", "推理", "jizhou",
-                          ["jizhou", "jizhou", "yingchuan", "jizhou"], ["action", "talk", "action", "action"]),
+                          ["jizhou", "dongjun", "yingchuan", "jizhou"], ["action", "talk", "action", "action"]),
     "fs_zhangjiao_huang": ("zhangjiao_dies", "huang", "拼圖", "jizhou",
                            ["jizhou", "jizhou", "nanyang", "nanyang"], ["action", "talk", "action", "event"]),
 }
@@ -507,10 +509,11 @@ def test_overheard_uses_stand_in(fs_content, world):
     見不見得到也看出面的那位（盧植 20、董卓 25、朱儁 20）。"""
     c = fs_content
     zhangjiao = fs_chain(c, "fs_zhangjiao_guan").fragments[1]
-    assert (zhangjiao.character, zhangjiao.stand_in, zhangjiao.region) == ("luzhi", "dongzhuo", "jizhou")
+    # 輿圖重製 1b：盧植營搬進東郡，盧植那一片跟著掛東郡
+    assert (zhangjiao.character, zhangjiao.stand_in, zhangjiao.region) == ("luzhi", "dongzhuo", "dongjun")
     game = fs_game(c, world, "甲", "guan", "luzhi_camp")
     leave_unheard(game, c, ("fs_zhangjiao_guan", 1))
-    assert foreshadow.hear_after_action(game.state, c, "jizhou", FixedRandom(0.0), world) == [
+    assert foreshadow.hear_after_action(game.state, c, "dongjun", FixedRandom(0.0), world) == [
         f"你聽到一件事：聽說盧植說過：{zhangjiao.text}"]
 
     for name, fame, jailed, expect in (
@@ -524,7 +527,7 @@ def test_overheard_uses_stand_in(fs_content, world):
         if jailed:
             other.state.world.figures["luzhi"] = FigureState(status="jailed")
         leave_unheard(other, c, ("fs_zhangjiao_guan", 1))
-        heard = foreshadow.hear_after_action(other.state, c, "jizhou", FixedRandom(0.0), world)
+        heard = foreshadow.hear_after_action(other.state, c, "dongjun", FixedRandom(0.0), world)
         assert heard == ([f"你聽到一件事：聽說{expect}說過：{zhangjiao.text}"] if expect else []), name
 
     huangfusong = fs_chain(c, "fs_changshe_guan").fragments[3]

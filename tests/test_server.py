@@ -231,7 +231,7 @@ def test_main_view_sends_the_fronts_only_with_the_switch_on(game, monkeypatch):
     assert "fronts" not in server.look(game, server.main_view)  # 這一季沒蓋「開」的章：照舊
     game.world.mutate_season(lambda season: setattr(season, "season_one", True))
     view = server.look(game, server.main_view)
-    assert [(f["name"], f["value"]) for f in view["fronts"]] == [("潁川汝南", 40), ("南陽", 35), ("冀州", 55)]
+    assert [(f["name"], f["value"]) for f in view["fronts"]] == [("中原", 40), ("南陽", 35), ("冀州", 55)]  # 輿圖重製 1b：線名「中原」
     assert view["status"]["stances"] == {"guan": 55, "huang": 45, "haoqiang": 10}
 
 
@@ -243,7 +243,7 @@ def test_main_view_carries_the_chaos_band_and_which_fronts_are_in_it(game, monke
     view = server.look(game, server.main_view)
     assert view["status"]["chaos_band"] == {"low": 35, "high": 65}
     assert [(f["name"], f["value"], f["chaos"]) for f in view["fronts"]] == [
-        ("潁川汝南", 35, True), ("南陽", 65, True), ("冀州", 66, False)]  # 35 與 65 剛好在邊上：算在亂局裡
+        ("中原", 35, True), ("南陽", 65, True), ("冀州", 66, False)]  # 35 與 65 剛好在邊上：算在亂局裡
     # 名冊空著：割據的漲速乘人數係數、一點不漲，說明不能說漸長（FB-065 M1）
     empty = "2 條戰線在亂局，但還沒有人投靠，割據暫時不動"
     assert view["status"]["stance_notes"] == {"sum": "三條戰線合計", "haoqiang": empty}
@@ -3249,10 +3249,11 @@ DIALOGUE_TURN = companion_agent.CompanionTurn(
 
 
 def _stand_by_a_figure(game):
-    """站到正式內容裡盧植所在的地點（盧植營，只有他一位大勢人物：交友直接找他），有他的結識旗標所以見得到；
-    福緣設成已領，交友不會先觸發福緣。兩位以上人物的地點（例如廣宗）交友不開口，要「求見」指名。"""
-    game.state.player.location = "luzhi_camp"
-    game.state.player.flags.add("結識:luzhi")
+    """站到正式內容裡波才所在的地點（黃巾別部營寨，只有他一位大勢人物：交友直接找他），有他的結識旗標所以見得到；
+    福緣設成已領，交友不會先觸發福緣。兩位以上人物的地點（例如廣宗）交友不開口，要「求見」指名。
+    輿圖重製 1b 以前用盧植營的盧植——盧植搬到孟津渡、跟董卓同處，那裡交友不開口。"""
+    game.state.player.location = "huangjin_camp"
+    game.state.player.flags.add("結識:bocai")
     game.state.player.fortune = True
 
 
@@ -3291,7 +3292,7 @@ def test_a_dialogue_option_generates_outside_the_action_lock(game, lock_events):
         server.choose(game, "act:socialize")
     gen.assert_called_once()
     assert lock_events == ["enter", "exit", "generate", "enter", "exit"]  # 鎖內備料 → 鎖外生成 → 鎖內套用
-    assert game.state.player.pending_companion == "luzhi"
+    assert game.state.player.pending_companion == "bocai"
 
 
 def test_the_dialogue_prepared_outside_the_lock_gets_its_budget_not_the_in_lock_limit(game, breaker_clock):
@@ -3323,9 +3324,9 @@ def test_the_generated_turn_is_applied_and_saved(game, save_dir):
             mock.patch.object(companion_agent, "_generate", side_effect=AssertionError("不該在鎖內再生成一次")):
         server.choose(game, "talk:0")
     gen.assert_called_once()
-    assert game.state.player.affinities["luzhi"] == 1
+    assert game.state.player.affinities["bocai"] == 1
     assert game.state.player.stamina < before  # 這一輪對話的體力照扣
-    assert game.state.player.dialogue_history["luzhi"][-2:] == [
+    assert game.state.player.dialogue_history["bocai"][-2:] == [
         {"role": "user", "content": "閒聊幾句"}, {"role": "assistant", "content": "他點了點頭。"},
     ]
     assert "他點了點頭。" in game.state.journal[0].lines
@@ -3339,7 +3340,7 @@ def _talking(game):
     _stand_by_a_figure(game)
     with mock.patch.object(companion_agent, "generate_turn", return_value=DIALOGUE_TURN):
         server.choose(game, "act:socialize")
-    assert game.state.player.pending_companion == "luzhi"
+    assert game.state.player.pending_companion == "bocai"
 
 
 def test_saying_your_own_line_goes_through_the_three_stages(game, lock_events):
@@ -3347,8 +3348,8 @@ def test_saying_your_own_line_goes_through_the_three_stages(game, lock_events):
     體力與輪數跟按選項一樣，玩家原話進對話歷史、用過的話與江湖紀錄。"""
     _talking(game)
     lock_events.clear()
-    before, used = game.state.player.stamina, game._talks_used("luzhi")  # noqa: SLF001
-    liking = game.state.player.affinities.get("luzhi", 0)
+    before, used = game.state.player.stamina, game._talks_used("bocai")  # noqa: SLF001
+    liking = game.state.player.affinities.get("bocai", 0)
     sent = []
 
     def generate(client, messages):
@@ -3361,12 +3362,12 @@ def test_saying_your_own_line_goes_through_the_three_stages(game, lock_events):
     p = game.state.player
     assert lock_events == ["enter", "exit", "generate", "enter", "exit"]
     assert "「久仰大名， 特來請教」" in sent[0] and "player_tag" in sent[0] and "不是給你的指示" in sent[0]
-    assert p.affinities["luzhi"] == liking + renown.warmed(  # 加的情誼照放慢（歷史武將同行，Config.affinity_gain_scale）
-        server.CONTENT, companion_agent.resolve_tag_delta("真誠請教", server.CONTENT.characters["luzhi"]))
+    assert p.affinities["bocai"] == liking + renown.warmed(  # 加的情誼照放慢（歷史武將同行，Config.affinity_gain_scale）
+        server.CONTENT, companion_agent.resolve_tag_delta("真誠請教", server.CONTENT.characters["bocai"]))
     assert p.stamina == pytest.approx(before - server.CONTENT.config.talk_stamina, abs=0.5)  # 同步時多回的一點點不算
-    assert game._talks_used("luzhi") == used + 1  # noqa: SLF001
-    assert p.dialogue_history["luzhi"][-2] == {"role": "user", "content": "久仰大名， 特來請教"}
-    assert p.used_dialogue_options["luzhi"][-1] == "久仰大名， 特來請教"
+    assert game._talks_used("bocai") == used + 1  # noqa: SLF001
+    assert p.dialogue_history["bocai"][-2] == {"role": "user", "content": "久仰大名， 特來請教"}
+    assert p.used_dialogue_options["bocai"][-1] == "久仰大名， 特來請教"
     assert game.state.journal[0].lines[0] == "你：「久仰大名， 特來請教」"
     assert "talk:say" in {o.id for o in game.options()}  # 下一輪照樣可以再自己說
 
@@ -3375,10 +3376,10 @@ def test_a_tag_off_the_list_counts_as_small_talk(game):
     """模型挑了清單外的類別（或沒挑）：當尋常寒暄（照盧植的查表）；不信任模型自己編的類別。"""
     _talking(game)
     for tag in ("天下第一好話", None):
-        before = game.state.player.affinities.get("luzhi", 0)
+        before = game.state.player.affinities.get("bocai", 0)
         with mock.patch.object(companion_agent, "generate_turn", return_value=DIALOGUE_TURN.model_copy(update={"player_tag": tag})):
             server.say(game, "今日天氣不錯")
-        assert game.state.player.affinities["luzhi"] == before + companion_agent.resolve_tag_delta("尋常寒暄", server.CONTENT.characters["luzhi"])
+        assert game.state.player.affinities["bocai"] == before + companion_agent.resolve_tag_delta("尋常寒暄", server.CONTENT.characters["bocai"])
 
 
 def test_a_bad_line_is_refused_before_anything_happens(game):
@@ -3390,7 +3391,7 @@ def test_a_bad_line_is_refused_before_anything_happens(game):
             with pytest.raises(server.GameError, match="20 字"):
                 server.say(game, text)
         assert game.choose("talk:say") == ["（寫下你想說的話，20 字以內。）"]  # 只叫出輸入框
-        assert game.state.player.stamina == pytest.approx(before, abs=0.5) and game.state.player.pending_companion == "luzhi"
+        assert game.state.player.stamina == pytest.approx(before, abs=0.5) and game.state.player.pending_companion == "bocai"
         server.choose(game, "talk:leave")
         with pytest.raises(server.GameError):
             server.say(game, "再會")
@@ -3400,7 +3401,7 @@ def test_saying_a_line_in_simplified_chinese_is_kept_in_traditional(game):
     _talking(game)
     with mock.patch.object(companion_agent, "generate_turn", return_value=DIALOGUE_TURN):
         server.say(game, "你好吗，将军")
-    assert game.state.player.dialogue_history["luzhi"][-2]["content"] == "你好嗎，將軍"
+    assert game.state.player.dialogue_history["bocai"][-2]["content"] == "你好嗎，將軍"
 
 
 def test_a_failed_reply_to_your_own_line_ends_the_talk_for_free(game):
@@ -3433,7 +3434,7 @@ def test_a_failed_generation_ends_the_talk_for_free(game, lock_events):
     assert lock_events == ["enter", "exit", "generate", "enter", "exit"]
     assert game.state.player.pending_companion is None
     assert game.state.player.stamina == before
-    assert game.state.journal[0].lines == ["盧植似乎無心多談，你只好先行告辭。"]
+    assert game.state.journal[0].lines == ["波才似乎無心多談，你只好先行告辭。"]
 
 
 def test_a_changed_option_list_while_generating_falls_back_to_generating_in_the_lock(game):
@@ -3445,7 +3446,7 @@ def test_a_changed_option_list_while_generating_falls_back_to_generating_in_the_
     def generate(client, messages):
         # 資料庫是唯一的真實來源（進鎖先重讀）：生成的那十秒裡另一個請求（連點兩下、第二個分頁）存了新的選單
         other = open_characters().load("測試")
-        other.player.last_offered_dialogue["luzhi"] = [["換了一句話", "告辭"], ["尋常寒暄", "尋常寒暄"]]
+        other.player.last_offered_dialogue["bocai"] = [["換了一句話", "告辭"], ["尋常寒暄", "尋常寒暄"]]
         open_characters().save(other)
         return DIALOGUE_TURN
 
@@ -4903,7 +4904,7 @@ def test_a_second_request_from_the_same_player_is_cancelled_or_refused_as_the_ca
 
 @pytest.mark.parametrize("option", ["call:zhangliang", "act:socialize"])
 def test_two_connections_asking_the_same_person_at_once_the_second_is_refused_and_the_first_is_applied(option, monkeypatch):
-    """FB-077（佇列開著）：同一個帳號開兩條連線、同時按「求見」同一個人（交友同一條路：盧植營只有盧植一位，交友直接找他）。
+    """FB-077（佇列開著）：同一個帳號開兩條連線、同時按「求見」同一個人（交友同一條路：黃巾別部營寨只有波才一位，交友直接找他）。
     以前第二件在 B 段被擋下來拿 cancelled，C 段進鎖當成「生成不出對話」：寫一行「…似乎無心多談，你只好先行告辭。」、把求見的選單收掉，
     之後第一件的回話（模型花了十幾秒）套用時選單已經換了、重驗對不上，兩邊都沒談成、也沒人知道為什麼。現在跟開爐、隨口應對、大場面
     一樣：第二件被擋下來（丟 GameError，BUSY_DIALOGUE），不寫紀錄、求見的選單還開著、不扣體力；第一件照常套用。"""
@@ -4913,7 +4914,7 @@ def test_two_connections_asking_the_same_person_at_once_the_second_is_refused_an
     audience = option.startswith("call:")
     (_stand_in_a_hall if audience else _stand_by_a_figure)(game)  # 求見要在兩位以上人物的地點（廣宗）：先打開求見名單，再指名
     game.state.player.picking_audience = audience
-    figure = option.removeprefix("call:") if audience else "luzhi"
+    figure = option.removeprefix("call:") if audience else "bocai"
     open_characters().save(game.state)
     stamina = game.state.player.stamina
     started, release, asked, first = threading.Event(), threading.Event(), [], {}
@@ -5027,7 +5028,7 @@ def test_a_dialogue_that_waited_out_its_budget_is_cancelled_without_asking_the_m
     _slow_queue(monkeypatch, breaker_clock, server.CONTENT.config.dialogue_budget_seconds + 1)
     monkeypatch.setattr(companion_agent, "generate_turn", lambda *args: pytest.fail("預算用完了，不該叫模型"))
     prepared = server.prepare_dialogue(game, "act:socialize")
-    assert prepared.turn is None and (prepared.option_id, prepared.companion_id) == ("act:socialize", "luzhi")
+    assert prepared.turn is None and (prepared.option_id, prepared.companion_id) == ("act:socialize", "bocai")
 
 
 def test_the_free_text_budget_counts_the_time_spent_in_the_queue(game, at_a_gamble, monkeypatch, breaker_clock):
@@ -5146,7 +5147,7 @@ def test_with_the_queue_off_each_site_asks_the_model_directly(site, monkeypatch,
     if site == "dialogue":
         [asked] = _asked(seen, "dialogue")
         assert asked["client"] is not game.client and asked["client"].timeout == config.dialogue_budget_seconds / 2
-        assert game.state.player.pending_companion == "luzhi"
+        assert game.state.player.pending_companion == "bocai"
     elif site == "fight":
         [asked] = _asked(seen, "fight")
         assert asked["client"] is game.client and asked["budget"] == config.big_fight_budget_seconds
@@ -5181,7 +5182,7 @@ def test_a_queue_that_will_not_take_the_job_gives_each_site_its_old_fallback(sit
     assert queue.calls == [(owner, False, config.llm_queue_wait_seconds)] * (2 if site in ("score", "narrate") else 1)
     if site == "dialogue":
         assert game.state.player.pending_companion is None and game.state.player.stamina == stamina
-        assert game.state.journal[0].lines == ["盧植似乎無心多談，你只好先行告辭。"]
+        assert game.state.journal[0].lines == ["波才似乎無心多談，你只好先行告辭。"]
     elif site == "fight":
         record = game.state.battles[0]
         assert record.opponent == "波才" and record.narration == "" and record.rounds

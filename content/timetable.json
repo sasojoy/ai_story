@@ -109,7 +109,7 @@
         "trends": {"yingru": 15, "jizhou": 5},
         "figures": {
           "zhujun": {"only_if": {"huangfusong": "yingru", "zhujun": "yingru"}, "note": "留在潁川的官軍，由朱儁收拾殘局。"},
-          "@人物:huangfusong": {"fate": "重挫", "front": "jizhou", "location": "luzhi_camp"}
+          "@人物:huangfusong": {"fate": "重挫", "front": "jizhou", "location": "mengjin_ford"}
         },
         "chance_mods": {"luzhi_siege": -0.10}
       },
@@ -121,7 +121,7 @@
         "trends": {"yingru": 8},
         "figures": {
           "zhujun": {"only_if": {"huangfusong": "yingru", "zhujun": "yingru"}, "note": "留在潁川的官軍，由朱儁收拾殘局。"},
-          "@人物:huangfusong": {"fate": "重挫", "front": "jizhou", "location": "luzhi_camp"}
+          "@人物:huangfusong": {"fate": "重挫", "front": "jizhou", "location": "mengjin_ford"}
         }
       }
     }
@@ -201,7 +201,7 @@
         "trends": {"jizhou": 8},
         "figures": {
           "luzhi": {"fate": "下獄"},
-          "dongzhuo": {"fate": "到任", "front": "jizhou", "location": "luzhi_camp"}
+          "dongzhuo": {"fate": "到任", "front": "jizhou", "location": "mengjin_ford"}
         }
       },
       "不成": {

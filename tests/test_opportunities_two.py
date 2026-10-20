@@ -33,6 +33,7 @@ def on(real):
     return real
 
 
+# 輿圖重製 1b：官軍的人物（皇甫嵩、朱儁、傅燮）從長社搬到洛陽官道，這個檔裡「站在自家人物身邊」的官軍改站洛陽官道
 def _game(content, name="甲", faction=None, at=None, rank=3, world=None):
     game = Game.new(content, name, rng=random.Random(0), world=world)
     p = game.state.player
@@ -238,7 +239,7 @@ def _option(game, option_id):
 
 
 def test_ask_a_general_for_his_plan(on):
-    game = _game(on, faction="guan", at="changshe")
+    game = _game(on, faction="guan", at="luoyang_road")
     _talk_to(game, "huangfusong", 5)
     assert "talk:opp:guan_three_plans:yingru" not in _ids(game)  # 30 換算成 6
     _talk_to(game, "huangfusong", 6)
@@ -250,7 +251,7 @@ def test_ask_a_general_for_his_plan(on):
 
 
 def test_plan_comes_from_whoever_holds_the_front(on):
-    game = _game(on, faction="guan", at="changshe")
+    game = _game(on, faction="guan", at="luoyang_road")
     w = game.state.world
     hfs = figures.state_of(game.state, on, "huangfusong")
     w.figures["huangfusong"] = hfs.model_copy(update={"front": "jizhou", "location": "luzhi_camp"})  # 重挫轉冀州
@@ -318,7 +319,7 @@ def _profile(faction="guan"):
 
 
 def test_only_the_holder_of_a_front_gives_its_plan(on):
-    game = _game(on, faction="guan", at="changshe")
+    game = _game(on, faction="guan", at="luoyang_road")
     _talk_to(game, "zhujun", 99)  # 朱儁在潁川，但潁川那一策問的是皇甫嵩（他還在那條戰線上）
     assert not any(i.startswith("talk:opp:guan_three_plans") for i in _ids(game))
     _talk_to(game, "huangfusong", 99)  # 冀州問盧植、南陽問孫堅：皇甫嵩只有潁川那一策
@@ -326,7 +327,7 @@ def test_only_the_holder_of_a_front_gives_its_plan(on):
 
 
 def test_nobody_to_ask_when_the_front_has_no_commander(on):
-    game = _game(on, faction="guan", at="changshe")
+    game = _game(on, faction="guan", at="luoyang_road")
     for fid in ("huangfusong", "zhujun"):  # 潁川的官軍將領都下獄了
         game.state.world.figures[fid] = figures.state_of(game.state, on, fid).model_copy(update={"status": "jailed"})
     _talk_to(game, "zhujun", 99)
@@ -334,7 +335,7 @@ def test_nobody_to_ask_when_the_front_has_no_commander(on):
 
 
 def test_taking_a_plan_is_free_and_leaves_the_talk_open(on):
-    game = _game(on, faction="guan", at="changshe")
+    game = _game(on, faction="guan", at="luoyang_road")
     _talk_to(game, "huangfusong", 6)
     p, rumors = game.state.player, len(game.state.world.rumors)
     before = p.stamina
@@ -354,7 +355,7 @@ def test_a_stand_in_receives_the_plans_when_he_jin_is_away(on):
 
 
 def test_the_plans_go_to_the_office_only(on):
-    game = _game(on, faction="guan", at="changshe")
+    game = _game(on, faction="guan", at="luoyang_road")
     game.state.player.opp_pieces = {"guan_three_plans": ["yingru", "jizhou", "nanyang"]}
     assert "opp:present:guan_three_plans" not in _ids(game)
 
@@ -415,7 +416,7 @@ def test_a_check_piece_needs_the_stamina(on):
 def test_nothing_with_the_switch_off(real):
     off = _game(real, faction="haoqiang", at="haozu_fort")  # 開關關著：一個選項都沒有
     assert not any(i.startswith("opp:") for i in _ids(off))
-    asker = _game(real, faction="guan", at="changshe")
+    asker = _game(real, faction="guan", at="luoyang_road")
     _talk_to(asker, "huangfusong", 99)
     assert not any(i.startswith("talk:opp:") for i in _ids(asker))
 
@@ -449,7 +450,7 @@ def test_bots_skip_the_puzzle_options(on):
     present = _option(game, "opp:present:hao_land_people_name")
     assert bot.pick(game, [present], random.Random(0)) is None
     assert bot_policy.score(game, present, _profile("haoqiang")) is None
-    asker = _game(on, faction="guan", at="changshe")
+    asker = _game(on, faction="guan", at="luoyang_road")
     _talk_to(asker, "huangfusong", 6)
     ask = _option(asker, "talk:opp:guan_three_plans:yingru")
     assert bot.pick(asker, [ask], random.Random(0)) is None
@@ -531,7 +532,7 @@ def test_accusing_names_all_three_suspects(on):
         "opp:accuse:huang_mole:priest": "向張梁指認：送藥的道士",
         "opp:accuse:huang_mole:strongman": "向張梁指認：新來的力士",
     }
-    assert all("opp:accuse:" not in i for i in _ids(_game(on, faction="huang", at="changshe")))  # 別的地方沒有
+    assert all("opp:accuse:" not in i for i in _ids(_game(on, faction="huang", at="luoyang_road")))  # 別的地方沒有
 
 
 def test_a_wrong_accusation_never_drops_affinity_below_zero(on):
@@ -616,7 +617,7 @@ def _huang(on):
 
 
 def test_petition_needs_rank_three_and_an_own_figure(on):
-    game = _game(on, faction="guan", at="changshe", rank=2)
+    game = _game(on, faction="guan", at="luoyang_road", rank=2)
     assert "opp:plot:guan_three_roads" not in _ids(game)
     game.state.player.rank = 3
     option = _option(game, "opp:plot:guan_three_roads")
@@ -631,19 +632,19 @@ def test_haoqiang_petition_at_a_patron_character(on):
 
 
 def test_starting_a_plot_posts_faction_intel(on):
-    game = _game(on, faction="guan", at="changshe")
+    game = _game(on, faction="guan", at="luoyang_road")
     before = len(game.state.world.rumors)
     game.choose("opp:plot:guan_three_roads")
     plot = game.state.world.plots[-1]
     assert (plot.opp, plot.leader, plot.members, plot.status) == ("guan_three_roads", "甲", ["甲"], "open")
     note = game.state.world.rumors[before]
     assert (note.layer, note.faction) == ("faction", "guan")
-    assert note.text == "甲 發起三路並進，還缺潁川汝南、南陽、冀州。"
+    assert note.text == "甲 發起三路並進，還缺中原、南陽、冀州。"  # 輿圖重製 1b：中原那條線的名字
     assert "opp:plot:guan_three_roads" not in _ids(game)  # 同時只能牽頭一場
 
 
 def test_three_roads_done_by_wins_on_each_front(on):
-    game = _game(on, faction="guan", at="changshe")
+    game = _game(on, faction="guan", at="luoyang_road")
     game.choose("opp:plot:guan_three_roads")
     s = game.state
     assert opportunities.on_win(s, on, "yingru", "guan") == []  # 自己陣營的隊伍（操練）不算
@@ -654,12 +655,12 @@ def test_three_roads_done_by_wins_on_each_front(on):
 
 
 def test_a_train_win_reaches_the_plot(on):
-    game = _game(on, faction="guan", at="changshe")
+    game = _game(on, faction="guan", at="luoyang_road")
     game.choose("opp:plot:guan_three_roads")
     game.state.player.location = "yingchuan_wilds"
     with _win():
         msgs = game._squad_encounter("huang_grain_convoy")  # noqa: SLF001  黃巾的隊伍；只驗遊歷打贏有接到密謀
-    assert "（密謀「三路並進」：潁川汝南這一路，成了。）" in msgs
+    assert "（密謀「三路並進」：中原這一路，成了。）" in msgs
 
 
 def test_join_and_check_parts(on):
@@ -693,7 +694,7 @@ def test_one_person_cannot_do_every_part_when_two_are_needed(on):
 
 
 def test_offline_member_settles_once(on):
-    leader = _game(on, faction="guan", at="changshe")
+    leader = _game(on, faction="guan", at="luoyang_road")
     leader.choose("opp:plot:guan_three_roads")
     plot = leader.state.world.plots[-1]
     helper = _game(on, name="乙", faction="guan", rank=1)
@@ -708,7 +709,7 @@ def test_offline_member_settles_once(on):
 
 def test_a_member_who_did_nothing_gets_nothing(on):
     """至少辦成一處才拿獎勵（企劃者 2026-10-06）：只按了響應的人、沒出力的第 3 階發起人都一樣。"""
-    leader = _game(on, faction="guan", at="changshe")
+    leader = _game(on, faction="guan", at="luoyang_road")
     leader.choose("opp:plot:guan_three_roads")
     plot = leader.state.world.plots[-1]
     idle = _game(on, name="乙", faction="guan", rank=1)
@@ -726,22 +727,22 @@ def test_a_member_who_did_nothing_gets_nothing(on):
 def test_one_win_counts_for_one_plot(on):
     """打贏一場只算進一場密謀（企劃者 2026-10-06）：同時參加兩場三路並進，潁川汝南打贏一場只記進先發起的那一場。
     （密謀編號是雜湊、不是連號，所以「先」看發起的先後，不看編號大小。）"""
-    first = _game(on, faction="guan", at="changshe")
+    first = _game(on, faction="guan", at="luoyang_road")
     first.choose("opp:plot:guan_three_roads")
-    second = _game(on, name="乙", faction="guan", at="changshe", rank=3)
+    second = _game(on, name="乙", faction="guan", at="luoyang_road", rank=3)
     second.state.world = first.state.world
     second.choose("opp:plot:guan_three_roads")
     one, two = first.state.world.plots[-2:]
     two.members.append("甲")
     msgs = opportunities.on_win(first.state, on, "yingru", "huang")
-    assert msgs == ["（密謀「三路並進」：潁川汝南這一路，成了。）"]
+    assert msgs == ["（密謀「三路並進」：中原這一路，成了。）"]
     assert (one.parts, two.parts) == ({"yingru": "甲"}, {})
-    assert opportunities.on_win(first.state, on, "yingru", "huang") == ["（密謀「三路並進」：潁川汝南這一路，成了。）"]  # 先發起的那一場這一路滿了，才輪到下一場
+    assert opportunities.on_win(first.state, on, "yingru", "huang") == ["（密謀「三路並進」：中原這一路，成了。）"]  # 先發起的那一場這一路滿了，才輪到下一場
     assert (one.parts, two.parts) == ({"yingru": "甲"}, {"yingru": "甲"})
 
 
 def test_plot_expires(on):
-    game = _game(on, faction="guan", at="changshe")
+    game = _game(on, faction="guan", at="luoyang_road")
     game.choose("opp:plot:guan_three_roads")
     plot = game.state.world.plots[-1]
     w = game.state.world
@@ -755,7 +756,7 @@ def test_plot_expires(on):
 
 # 計畫沒寫、這裡多測的
 
-def _lead(content, opp="guan_three_roads", faction="guan", at="changshe", name="甲", anonymous=False):
+def _lead(content, opp="guan_three_roads", faction="guan", at="luoyang_road", name="甲", anonymous=False):
     game = _game(content, name, faction=faction, at=at)
     game.state.player.anonymous = anonymous
     game.choose(f"opp:plot:{opp}")
@@ -811,7 +812,7 @@ def test_a_leader_who_defects_may_lead_in_the_new_faction(on):
 
 def test_the_news_and_the_join_label_name_an_anonymous_leader(on):
     """陣營軍情一律寫真名、不匿名（企劃者 2026-10-06：只有地方傳聞匿名）。"""
-    game = _game(on, faction="guan", at="changshe")
+    game = _game(on, faction="guan", at="luoyang_road")
     game.state.player.anonymous = True
     before = len(game.state.world.rumors)
     game.choose("opp:plot:guan_three_roads")
@@ -861,7 +862,7 @@ def test_only_enemy_wins_on_the_right_front_count(on):
     leader, plot = _lead(on)
     assert opportunities.on_win(leader.state, on, None, "huang") == []  # 沒有戰線
     assert opportunities.on_win(leader.state, on, "yingru", None) == []  # 沒有陣營的對手（盜匪）
-    assert opportunities.on_win(leader.state, on, "yingru", "huang") == ["（密謀「三路並進」：潁川汝南這一路，成了。）"]
+    assert opportunities.on_win(leader.state, on, "yingru", "huang") == ["（密謀「三路並進」：中原這一路，成了。）"]
     assert opportunities.on_win(leader.state, on, "yingru", "huang") == []  # 同一路不重複記
     assert plot.parts == {"yingru": "甲"}
     stranger = _game(on, "乙", faction="guan", rank=3)  # 沒響應過的人，打贏也不算

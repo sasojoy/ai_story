@@ -382,13 +382,15 @@ def test_no_hut_step_promises_odds_the_hut_never_shows(content):
 
 
 def test_the_farewell_scouts_the_places_it_names_and_a_skipper_gets_nothing(content, world):
-    """計畫者的規則：師父的出師那一步講了三個投靠的地方（長社、黃巾別部營寨、曹氏莊院），走出草廬的那一刻就把它們記成摸清了
-    （PlayerState.surveyed：輿圖上有名字、點得開），不用先自己走過去；略過序章的人什麼都沒有。清單寫在內容裡（TutorialStep.survey）。"""
+    """計畫者的規則：師父的出師那一步講了投靠的地方（輿圖重製 1b：官軍大將軍府、宛城，黃巾鉅鹿道壇、青州黃巾營，豪強曹氏莊院），
+    走出草廬的那一刻就把它們記成摸清了（PlayerState.surveyed：輿圖上有名字、點得開），不用先自己走過去；略過序章的人什麼都沒有。
+    清單寫在內容裡（TutorialStep.survey）。"""
     from tianxia import atlas
 
     farewell = next(s for s in content.tutorial.steps if s.id == "p11_farewell")
-    assert farewell.survey[:3] == NAMED_BY_THE_FAREWELL  # 師父點名的三個地方在前面；後面是路上的站（下面的測試釘它們為什麼在）
-    assert all(word in farewell.text for word in ("長社", "別部營寨", "曹家"))  # 師父的話真的講到它們
+    named = len(NAMED_BY_THE_FAREWELL)
+    assert farewell.survey[:named] == NAMED_BY_THE_FAREWELL  # 師父點名的地方在前面；後面是路上的站（下面的測試釘它們為什麼在）
+    assert all(word in farewell.text for word in ("大將軍府", "宛城", "鉅鹿道壇", "青州黃巾營", "曹家"))  # 師父的話真的講到它們
     game = Game.new(content, "新人", rng=random.Random(0), world=world, prologue=True)
     _walk_the_hut(game)
     assert not set(farewell.survey) & game.state.player.surveyed  # 還在草廬：還沒有
@@ -405,9 +407,18 @@ def test_the_farewell_scouts_the_places_it_names_and_a_skipper_gets_nothing(cont
 
 # 師父講到的地方「摸清了」不等於走得到：路線只走摸清的站（atlas.routes，規則不改），曹氏莊院離潁川 7 站，路上的站（汝南荒野、汝南、汝南集市、
 # 譙縣）視野之外、沒去過，不一起摸清的話疾行去會被擋下。計畫者選的做法：出師那一步的 survey 清單把路上要走的站也寫進去（寫在內容裡），
-# 這樣師父點名的每一個地方，剛走出草廬就疾行得到。
-NAMED_BY_THE_FAREWELL = ["changshe", "huangjin_camp", "cao_manor"]
-ROUTE_STOPS = {"cao_manor": ["runan_wilds", "runan", "runan_market", "qiao_county"]}  # 潁川→潁水河畔→荒丘（視野之內）→這四站→曹氏莊院
+# 這樣師父點名的每一個地方，剛走出草廬就疾行得到。輿圖重製 1b：投靠點搬到外圈，師父改點這五處，路上的站照最短路補上
+# （洛陽官道、白馬寺、潁水河畔、荒丘、潁川郊野、長社在潁川的視野之內，不用寫）。
+NAMED_BY_THE_FAREWELL = ["dajiangjun_fu", "wan_city", "julu_altar", "qingzhou_camp", "cao_manor"]
+ROUTE_STOPS = {  # 每一處最短路上、視野之外又沒去過的站（照順序；前面一處寫過的不再寫）
+    "dajiangjun_fu": ["luoyang_palace"],  # 潁川→洛陽官道→白馬寺→洛陽宮城→大將軍府
+    "wan_city": ["nanyang_road"],  # 潁川→潁水河畔→荒丘→南陽官道→宛城
+    "julu_altar": ["baima_ford"],  # 潁川→潁川郊野→長社→白馬津→鉅鹿道壇
+    "qingzhou_camp": ["taishan_foot"],  # 同宛城走到南陽官道（寫在宛城底下）→泰山腳→青州黃巾營
+    "cao_manor": ["runan_wilds", "runan", "runan_market", "qiao_county"],  # 潁川→潁水河畔→荒丘（視野之內）→這四站→曹氏莊院
+}
+# 拿掉這一站，疾行去它底下那一處就被擋下。南陽官道只擋宛城：去青州黃巾營少了它，還能從譙縣（去曹氏莊院摸清的）繞到泰山腳
+NEEDED_BY = {stop: [place] for place, stops in ROUTE_STOPS.items() for stop in stops}
 
 
 @pytest.mark.parametrize("place", NAMED_BY_THE_FAREWELL)
@@ -421,8 +432,9 @@ def test_a_new_player_leaving_the_hut_can_dash_to_each_place_the_farewell_names(
 
 
 def test_every_stop_the_farewell_scouts_on_the_way_is_needed_and_is_on_the_route(content, world, monkeypatch):
-    """survey 清單裡的每一站都有理由：一條路上的站（汝南荒野、汝南、汝南集市、譙縣）少了任何一站，走去曹氏莊院的最短路就斷在那裡、疾行被擋；
-    清單裡沒有多餘的站（多出來的不是路上的、不必摸清的地方）。路上的站本來就在視野之內（荒丘、潁水河畔）的不用寫。
+    """survey 清單裡的每一站都有理由：路上的站（例：去曹氏莊院的汝南荒野、汝南、汝南集市、譙縣）少了任何一站，走去那一處投靠點的最短路
+    就斷在那裡——疾行被擋，或只能繞遠路（輿圖重製 1b：泰山腳也摸清了，少了汝南那幾站還能從南陽官道、泰山腳繞到譙縣）；清單裡沒有多餘的站
+    （多出來的不是路上的、不必摸清的地方）。路上的站本來就在視野之內（荒丘、潁水河畔）的不用寫。
     摸清是全圖開放之前的規則（全圖開放時這份清單照記、用不到）。"""
     from tianxia import atlas
 
@@ -435,9 +447,14 @@ def test_every_stop_the_farewell_scouts_on_the_way_is_needed_and_is_on_the_route
         game = Game.new(content, f"新人{stop}", rng=random.Random(0), world=world, prologue=True)
         _walk_the_real_prologue(game)
         assert stop in game.state.player.surveyed
+        before = {place: sum(atlas.routes(game.state, content)[place].legs) for place in NEEDED_BY[stop]}
         game.state.player.surveyed.discard(stop)  # 把這一站拿掉：視野之外、沒去過，就不在摸清的站裡
         assert stop not in atlas.known_locations(game.state, content)
-        assert game.travel_refusal("cao_manor", "dash") is not None, stop
+        assert NEEDED_BY[stop], stop
+        for place in NEEDED_BY[stop]:
+            route = atlas.routes(game.state, content).get(place)
+            blocked = game.travel_refusal(place, "dash") is not None
+            assert blocked or route is None or sum(route.legs) > before[place] + 1e-6, (stop, place)
 
 
 def test_a_survey_naming_an_unknown_place_is_rejected_when_the_content_loads(tmp_path):
@@ -485,7 +502,7 @@ def test_the_real_enlistment_has_three_recruiters_and_the_drifter_line_names_eve
     spec = {
         "guan": {
             "intro": "我姓石，管這一屯。官軍沒什麼大道理：黃巾燒村子，我們就去把火滅了。",
-            "briefing": "看這三條線：潁川汝南、南陽、冀州。越往黃巾那頭偏，就越糟。",
+            "briefing": "看這三條線：中原、南陽、冀州。越往黃巾那頭偏，就越糟。",  # 輿圖重製 1b：線的名字改「中原」（PM 定）
             "done": "「做得乾淨。」老石點點頭，「往後每一道怎麼做，軍令卡上都寫著，照著辦就是。",  # FB-093：每一種怎麼做搬到軍令卡上
             "rejoin": "「又是你。……行，回來就好，營裡的規矩你都懂。」",
         },
@@ -585,6 +602,8 @@ def test_a_newcomer_calling_on_a_figure_hears_one_of_his_own_lines_and_the_fame_
     game.world.open_season(game.content, now=0.0)
     game.state.player.location = content.characters["luzhi"].talk_at
     stamina = game.state.player.stamina
+    if "call:luzhi" not in [o.id for o in game.options()]:  # 輿圖重製 1b：盧植在孟津渡、跟董卓同處，先攤開求見的名單
+        game.choose("act:call")
     (line,) = game.choose("call:luzhi")
     spoken, _, hint = line.rpartition("（")
     assert spoken in content.characters["luzhi"].brush_off
@@ -1885,7 +1904,8 @@ def test_changshe_huang_win_hands_yingru_to_zhujun_only_when_huangfusong_held_it
     msgs = timetable.resolve(gone, c, changshe, random.Random(0), key="huang:險勝")
     assert msgs == [f"【江湖大事】{changshe.preface}這一次，火攻沒有成。黃巾死戰不退，官軍折損甚重，朱儁重挫退走。"]
     zhujun = gone.world.figures["zhujun"]
-    assert (zhujun.front, zhujun.location, zhujun.prestige) == ("jizhou", "luzhi_camp", 30)  # 重挫照舊轉往冀州盧植營
+    # 重挫照舊轉往冀州那條線；輿圖重製 1b：冀州線官軍的據點從盧植營（搬進東郡）改成孟津渡（洛陽往冀州的渡口）
+    assert (zhujun.front, zhujun.location, zhujun.prestige) == ("jizhou", "mengjin_ford", 30)
     assert gone.world.chronicle[-1].text == "長社火攻失利，朱儁重挫。"
 
 

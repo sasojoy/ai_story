@@ -22,24 +22,25 @@ from tianxia.server_bots import reserved_names
 from tianxia.world_state import fresh_season
 
 # 濃縮版內容表 1.1（企劃者已審）：id → (character, name, faction, front, location, destiny, start_prestige,
-# actions_per_day, push, successor, active_from_week, start_status)；squad 一律是 figure_<id>
+# actions_per_day, push, successor, active_from_week, start_status)；squad 一律是 figure_<id>。
+# 輿圖重製 1b（設計 3.1）：原本站在中原舊投靠點的七位搬回自家外圈——長社的三位到洛陽官道、盧植到孟津渡、南陽黃巾營的三位到泰山腳
 FIGURE_TABLE = {
     "bocai": ("bocai", "波才", "huang", "yingru", "huangjin_camp", False, 60, 1, 1, "pengtuo", 1, "active"),
     "pengtuo": (None, "彭脫", "huang", None, "huangjin_camp", False, 40, 1, 1, None, 1, "away"),
-    "zhangmancheng": ("zhangmancheng", "張曼成", "huang", "nanyang", "nanyang_huangjin_camp", False, 50, 1, 1, "zhaohong", 1, "active"),
-    "zhaohong": ("zhaohong", "趙弘", "huang", None, "nanyang_huangjin_camp", False, 50, 1, 1, "hanzhong", 1, "active"),
-    "hanzhong": (None, "韓忠", "huang", None, "nanyang_huangjin_camp", False, 40, 1, 1, None, 1, "away"),
+    "zhangmancheng": ("zhangmancheng", "張曼成", "huang", "nanyang", "taishan_foot", False, 50, 1, 1, "zhaohong", 1, "active"),
+    "zhaohong": ("zhaohong", "趙弘", "huang", None, "taishan_foot", False, 50, 1, 1, "hanzhong", 1, "active"),
+    "hanzhong": (None, "韓忠", "huang", None, "taishan_foot", False, 40, 1, 1, None, 1, "away"),
     "zhangjiao": ("zhangjiao", "張角", "huang", "jizhou", "guangzong", False, 80, 0.5, 1, None, 1, "active"),
     "zhangbao": ("zhangbao", "張寶", "huang", "jizhou", "xiaquyang", False, 60, 0.5, 1, None, 1, "active"),
     "zhangliang": ("zhangliang", "張梁", "huang", "jizhou", "guangzong", False, 60, 0.5, 1, None, 1, "active"),
-    "huangfusong": ("huangfusong", "皇甫嵩", "guan", "yingru", "changshe", False, 70, 1, 1, "zhujun", 2, "active"),
-    "zhujun": ("zhujun", "朱儁", "guan", "yingru", "changshe", False, 60, 0.5, 1, None, 2, "active"),
-    "luzhi": ("luzhi", "盧植", "guan", "jizhou", "luzhi_camp", False, 70, 1, 1, "dongzhuo", 2, "active"),
+    "huangfusong": ("huangfusong", "皇甫嵩", "guan", "yingru", "luoyang_road", False, 70, 1, 1, "zhujun", 2, "active"),
+    "zhujun": ("zhujun", "朱儁", "guan", "yingru", "luoyang_road", False, 60, 0.5, 1, None, 2, "active"),
+    "luzhi": ("luzhi", "盧植", "guan", "jizhou", "mengjin_ford", False, 70, 1, 1, "dongzhuo", 2, "active"),
     "sunjian": ("sunjian", "孫堅", "guan", "nanyang", "wan_city", True, 60, 1, 1, None, 2, "active"),
     "hejin": ("hejin", "何進", "guan", None, "dajiangjun_fu", True, 70, 0, 0, None, 1, "active"),
     "dongzhuo": ("dongzhuo", "董卓", "guan", None, "mengjin_ford", True, 60, 1, 1, None, 1, "active"),
     # 大勢人物擴充（Joy 2026-10-17）：四位偏將，沒有戰線（不當主將、不推、不接位），挑得到
-    "fuxie": ("fuxie", "傅燮", "guan", None, "changshe", False, 45, 0, 0, None, 2, "active"),
+    "fuxie": ("fuxie", "傅燮", "guan", None, "luoyang_road", False, 45, 0, 0, None, 2, "active"),
     "qinjie": ("qinjie", "秦頡", "guan", None, "wan_city", False, 45, 0, 0, None, 2, "active"),
     "buji": ("buji", "卜己", "huang", None, "baima_ford", False, 45, 0, 0, None, 1, "active"),
     "liupi": ("liupi", "劉辟", "huang", None, "runan_wilds", False, 40, 0, 0, None, 1, "active"),
@@ -164,7 +165,7 @@ def test_figures_are_seeded_when_the_season_opens_with_the_switch_on(on):
     assert list(season.figures) == list(FIGURE_TABLE)
     assert season.figures["bocai"] == FigureState(prestige=60, status="active", front="yingru", location="huangjin_camp")
     assert season.figures["pengtuo"].status == "away"
-    assert season.figures["zhaohong"] == FigureState(prestige=50, front=None, location="nanyang_huangjin_camp")  # 在地圖上、不推
+    assert season.figures["zhaohong"] == FigureState(prestige=50, front=None, location="taishan_foot")  # 在地圖上、不推
 
 
 def test_no_figures_are_seeded_with_the_switch_off(real):
@@ -187,7 +188,7 @@ def test_state_of_reads_the_table_for_a_figure_the_season_never_seeded(on):
     s = _season(on)
     s.world.figures = {}
     assert figures.state_of(s, on, "huangfusong") == FigureState(
-        prestige=70, status="active", front="yingru", location="changshe",
+        prestige=70, status="active", front="yingru", location="luoyang_road",
     )
     assert figures.commander(s, on, "yingru", "guan") == "huangfusong"
     assert figures.difficulty(s, on, "huangfusong") == 128  # 150 × (0.5 + 0.5 × 0.70) = 127.5 → 128
@@ -202,10 +203,10 @@ def test_t2_minimal_entry_without_a_location_is_read_from_the_table(on):
     s = _season(on)
     minimal = FigureState(prestige=45, status="active", front=None, location="")
     s.world.figures["zhangmancheng"] = minimal.model_copy()
-    repaired = FigureState(prestige=45, status="active", front="nanyang", location="nanyang_huangjin_camp")
+    repaired = FigureState(prestige=45, status="active", front="nanyang", location="taishan_foot")
     assert figures.state_of(s, on, "zhangmancheng") == repaired
     assert s.world.figures["zhangmancheng"] == minimal  # 讀不改存檔
-    assert "zhangmancheng" in figures.present_at(s, on, "nanyang_huangjin_camp")
+    assert "zhangmancheng" in figures.present_at(s, on, "taishan_foot")
     assert figures.commander(s, on, "nanyang", "huang") == "zhangmancheng"
     assert figures.push_goal(s, on, "zhangmancheng") == 1
     assert figures._ensure(s, on, "zhangmancheng") == repaired
@@ -217,9 +218,9 @@ def test_t2_minimal_entry_that_is_not_active_only_gets_its_location(on):
     s = _season(on)
     s.world.figures["luzhi"] = FigureState(prestige=70, status="jailed", front=None, location="")
     s.world.figures["zhaohong"] = FigureState(prestige=50, status="active", front=None, location="")
-    assert figures.state_of(s, on, "luzhi") == FigureState(prestige=70, status="jailed", front=None, location="luzhi_camp")
+    assert figures.state_of(s, on, "luzhi") == FigureState(prestige=70, status="jailed", front=None, location="mengjin_ford")
     assert figures.state_of(s, on, "zhaohong") == FigureState(
-        prestige=50, status="active", front=None, location="nanyang_huangjin_camp",
+        prestige=50, status="active", front=None, location="taishan_foot",
     )
 
 
@@ -283,7 +284,7 @@ def test_difficulty_follows_prestige(on):
 
 def test_who_stands_where(on):
     s = _season(on)
-    assert figures.present_at(s, on, "changshe") == ["huangfusong", "zhujun", "fuxie"]
+    assert figures.present_at(s, on, "luoyang_road") == ["huangfusong", "zhujun", "fuxie"]  # 輿圖重製 1b：從長社搬回洛陽
     assert figures.present_at(s, on, "huangjin_camp") == ["bocai"]  # 彭脫還沒出場
     s.world.figures["luzhi"].status = "jailed"
     placed = figures.placed_characters(s, on)
@@ -396,15 +397,16 @@ def test_sim_players_stand_down_in_season_one(on):
 
 def test_the_map_shows_the_figures_where_they_stand(on):
     s = _season(on)
-    assert atlas.haunters(s, on, "changshe") == ["皇甫嵩", "朱儁", "傅燮"]
-    assert atlas.haunters(s, on, "mengjin_ford") == ["董卓"]  # 不推戰線也在地圖上（內容表 1.1）
+    # 輿圖重製 1b：長社的三位搬到洛陽官道、盧植搬到孟津渡（跟董卓同處）；中原那條線的名字是「中原」
+    assert atlas.haunters(s, on, "luoyang_road") == ["皇甫嵩", "朱儁", "傅燮"]
+    assert atlas.haunters(s, on, "mengjin_ford") == ["盧植", "董卓"]  # 董卓不推戰線也在地圖上（內容表 1.1）
     assert atlas.haunters(s, on, "deep_mountain") == []  # beta 的虛擬玩家董卓不再標在嵩山深處
-    assert atlas.leader_activity(s, on, "波才") == "每天約出手 1 次，讓潁川汝南上升"
-    assert atlas.leader_activity(s, on, "皇甫嵩") == "每天約出手 1 次，讓潁川汝南下降（第 2 週起）"
+    assert atlas.leader_activity(s, on, "波才") == "每天約出手 1 次，讓中原上升"
+    assert atlas.leader_activity(s, on, "皇甫嵩") == "每天約出手 1 次，讓中原下降（第 2 週起）"
     assert atlas.leader_activity(s, on, "董卓") == atlas.LEADER_QUIET
     assert "- 聲威 60（越高越難打）。" in atlas.leader_text(s, on, "波才")
     s.world.figures["luzhi"].status = "jailed"
-    assert atlas.haunters(s, on, "luzhi_camp") == []
+    assert atlas.haunters(s, on, "mengjin_ford") == ["董卓"]
 
 
 def test_the_map_keeps_the_sim_players_with_the_switch_off(real):
@@ -427,12 +429,12 @@ def test_prestige_zero_retires_and_successor_takes_the_front(on):
     s = _season(on)
     s.world.figures["bocai"].prestige = 5
     lines = figures.defeat(s, on, "bocai", 5)
-    assert lines == ["波才聲威 -5", figures.OUT_BACK.format(name="波才"), "彭脫接手潁川汝南的戰事。"]
+    assert lines == ["波才聲威 -5", figures.OUT_BACK.format(name="波才"), "彭脫接手中原的戰事。"]  # 輿圖重製 1b：線名「中原」
     assert s.world.figures["bocai"].status == "retired" and figures.is_out(s, "bocai")
     assert s.world.figures["pengtuo"] == FigureState(prestige=40, status="active", front="yingru", location="huangjin_camp")
     assert figures.commander(s, on, "yingru", "huang") == "pengtuo" and figures.push_goal(s, on, "pengtuo") == 1
     assert [(r.layer, r.text) for r in s.world.rumors] == [
-        ("world", figures.OUT_BACK.format(name="波才") + "彭脫接手潁川汝南的戰事。"),
+        ("world", figures.OUT_BACK.format(name="波才") + "彭脫接手中原的戰事。"),
     ]
     assert figures.defeat(s, on, "bocai", 5) == []  # 退場的人不再扣、不再發公告
 
@@ -442,6 +444,8 @@ def test_successor_takes_over_the_post_of_the_one_he_replaces(on):
     天下大事傳聞寫「董卓接手冀州的戰事。」。盧植退場、聲威歸零。"""
     s = _season(on)
     assert s.world.figures["dongzhuo"] == FigureState(prestige=60, status="active", front=None, location="mengjin_ford")
+    # 輿圖重製 1b：盧植開季跟董卓同在孟津渡；先把他挪回盧植營，才看得出接位的人站到前任的所在、不是自己開季的地方
+    s.world.figures["luzhi"].location = "luzhi_camp"
     s.world.figures["luzhi"].prestige = 3
     lines = figures.defeat(s, on, "luzhi", 5)
     assert lines[-1] == "董卓接手冀州的戰事。"
@@ -494,16 +498,16 @@ def test_timetable_outcome_retires_bocai(on):
     assert msgs == [f"【江湖大事】{changshe.preface}{text}{outcome.note}"]
     assert s.world.figures["bocai"].status == "retired"
     assert (s.world.figures["pengtuo"].status, s.world.figures["pengtuo"].front) == ("active", "yingru")
-    assert [r.text for r in s.world.rumors] == ["彭脫接手潁川汝南的戰事。", msgs[0].removeprefix("【江湖大事】")]
+    assert [r.text for r in s.world.rumors] == ["彭脫接手中原的戰事。", msgs[0].removeprefix("【江湖大事】")]
 
 
 def test_displaced_figure_leaves_front_successor_takes_it(on):
-    """長社「huang:險勝」：皇甫嵩重挫——聲威 −30、離開潁川轉往冀州盧植營；朱儁本來就在潁川，接下潁川不必交接、
-    也不另發公告。冀州官軍的主將變成皇甫嵩（人物表上他排在盧植前面）。"""
+    """長社「huang:險勝」：皇甫嵩重挫——聲威 −30、離開潁川轉往冀州那條線（輿圖重製 1b：冀州線官軍的據點從盧植營改成孟津渡）；
+    朱儁本來就在潁川，接下潁川不必交接、也不另發公告。冀州官軍的主將變成皇甫嵩（人物表上他排在盧植前面）。"""
     s = _season(on)
     changshe = next(e for e in on.timetable if e.id == "changshe_fire")
     timetable.resolve(s, on, changshe, random.Random(0), key="huang:險勝")
-    assert s.world.figures["huangfusong"] == FigureState(prestige=40, front="jizhou", location="luzhi_camp")
+    assert s.world.figures["huangfusong"] == FigureState(prestige=40, front="jizhou", location="mengjin_ford")
     assert figures.commander(s, on, "yingru", "guan") == "zhujun"
     assert figures.commander(s, on, "jizhou", "guan") == "huangfusong"
     assert figures.push_goal(s, on, "huangfusong") == -1  # 之後推冀州
@@ -520,13 +524,13 @@ def test_displaced_with_nobody_left_on_the_front_hands_it_down_the_chain(on):
 
 
 def test_jailed_figure_hidden_dongzhuo_arrives(on):
-    """盧植下獄「成」：盧植 jailed（不在地圖上、不推、不算退場、聲威不變）；董卓到任冀州、在盧植營，開始推冀州。
-    下獄不走接位鏈（董卓是「到任」），不發接手公告。求見、交友那一半見 Task 5。"""
+    """盧植下獄「成」：盧植 jailed（不在地圖上、不推、不算退場、聲威不變）；董卓到任冀州、在冀州線官軍的據點（輿圖重製 1b：
+    孟津渡，原本是盧植營），開始推冀州。下獄不走接位鏈（董卓是「到任」），不發接手公告。求見、交友那一半見 Task 5。"""
     s = _season(on)
     jailed = next(e for e in on.timetable if e.id == "luzhi_jailed")
     timetable.resolve(s, on, jailed, random.Random(0), key="成")
-    assert s.world.figures["luzhi"] == FigureState(prestige=70, status="jailed", front="jizhou", location="luzhi_camp")
-    assert not figures.is_out(s, "luzhi") and figures.present_at(s, on, "luzhi_camp") == ["dongzhuo"]
+    assert s.world.figures["luzhi"] == FigureState(prestige=70, status="jailed", front="jizhou", location="mengjin_ford")
+    assert not figures.is_out(s, "luzhi") and figures.present_at(s, on, "mengjin_ford") == ["dongzhuo"]
     assert (s.world.figures["dongzhuo"].front, figures.push_goal(s, on, "dongzhuo")) == ("jizhou", -1)
     assert figures.commander(s, on, "jizhou", "guan") == "dongzhuo"
     assert not any("接手" in r.text for r in s.world.rumors)
@@ -585,9 +589,10 @@ def test_challenge_only_for_enemy_faction_at_location(on, world):
     challenge = _option(guan, "act:challenge:bocai")
     assert challenge.enabled and challenge.label.startswith(f"挑戰波才（體力 {on.config.action_cost['train']}・")
     assert "act:challenge:pengtuo" not in ids(guan)
-    for name, faction, at in (("黃乙", "huang", "huangjin_camp"), ("散丙", None, "huangjin_camp"), ("官丁", "guan", "changshe")):
+    # 輿圖重製 1b：皇甫嵩、朱儁從長社搬到洛陽官道
+    for name, faction, at in (("黃乙", "huang", "huangjin_camp"), ("散丙", None, "huangjin_camp"), ("官丁", "guan", "luoyang_road")):
         assert not any(i.startswith("act:challenge:") for i in ids(_player(on, world, name, faction, at))), name
-    assert {"act:challenge:huangfusong", "act:challenge:zhujun"} <= set(ids(_player(on, world, "豪戊", "haoqiang", "changshe")))
+    assert {"act:challenge:huangfusong", "act:challenge:zhujun"} <= set(ids(_player(on, world, "豪戊", "haoqiang", "luoyang_road")))
 
 
 def test_figures_off_the_front_refuse_challenges_but_still_meet(on, world, real):
@@ -598,9 +603,13 @@ def test_figures_off_the_front_refuse_challenges_but_still_meet(on, world, real)
     huang = _player(on, world, "黃甲", "huang", "mengjin_ford")
     assert (_option(huang, "act:challenge:dongzhuo").enabled, _option(huang, "act:challenge:dongzhuo").label) == (
         False, f"挑戰董卓（{off_front}）")
-    # 求見照常（孟津渡沒有交友事件、董卓又見不到：交友只會撲空所以不給，求見不花體力、按得下去）
-    assert _option(huang, "act:socialize") is None and _option(huang, "call:dongzhuo").enabled
-    guan = _player(on, world, "官乙", "guan", "nanyang_huangjin_camp")
+    # 求見照常（孟津渡沒有交友事件、董卓又見不到：交友只會撲空所以不給，求見不花體力、按得下去）。輿圖重製 1b：盧植也在孟津渡，
+    # 求見先攤開名單，董卓那一顆按得下去
+    assert _option(huang, "act:socialize") is None and _option(huang, "act:call").enabled
+    huang.choose("act:call")
+    assert _option(huang, "call:dongzhuo").enabled
+    huang.choose("call:back")
+    guan = _player(on, world, "官乙", "guan", "taishan_foot")  # 輿圖重製 1b：張曼成、趙弘從南陽黃巾營搬到泰山腳
     assert (_option(guan, "act:challenge:zhaohong").enabled, _option(guan, "act:challenge:zhaohong").label) == (
         False, f"挑戰趙弘（{off_front}）")
     assert _option(guan, "act:challenge:zhangmancheng").enabled
@@ -618,11 +627,11 @@ def test_figures_off_the_front_refuse_challenges_but_still_meet(on, world, real)
     assert _option(_player(on, world, "黃庚", "huang", "dajiangjun_fu"), "act:challenge:hejin") is None
 
 
-@pytest.mark.parametrize("faction, spot, figure", [
-    ("guan", "luzhi_camp", "luzhi"), ("huang", "huangjin_camp", "bocai"), ("huang", "mengjin_ford", "dongzhuo"),
+@pytest.mark.parametrize("faction, spot, figure", [  # 輿圖重製 1b：盧植搬到孟津渡、跟董卓同處，兩處都不再只有一位，換成白馬津的卜己
+    ("guan", "baima_ford", "buji"), ("huang", "huangjin_camp", "bocai"), ("huang", "baima_ford", "buji"),
 ])
 def test_a_lone_general_behind_a_closed_door_leaves_only_the_free_audience_button(on, world, faction, spot, figure):
-    """陣營投靠點的營寨、孟津渡都只站著一位將領、沒有交友事件：名望不夠時交友只會花 5 點體力換同一句打發，
+    """只站著一位將領、沒有交友事件的地方（黃巾別部營寨、白馬津）：名望不夠時交友只會花 5 點體力換同一句打發，
     所以不給交友，只留不花體力的求見（審查：盧植營交友 150→145 還吃了閉門羹）。"""
     game = _player(on, world, "新人", faction, spot)
     assert [o.id for o in game.options() if o.id in ("act:socialize", f"call:{figure}")] == [f"call:{figure}"]
@@ -724,8 +733,8 @@ def test_the_fight_receives_the_difficulty_from_the_prestige(on, world):
 
 
 def test_snub_in_the_audience_list(on, world):
-    """兩位人物以上的地點（長社）：被你打敗的朱儁在求見名單上按不下去、寫原因；皇甫嵩照常。"""
-    game = _player(on, world, "黃甲", "huang", "changshe")
+    """兩位人物以上的地點（洛陽官道；輿圖重製 1b 以前是長社）：被你打敗的朱儁在求見名單上按不下去、寫原因；皇甫嵩照常。"""
+    game = _player(on, world, "黃甲", "huang", "luoyang_road")
     game.state.player.stats["fame"] = 50
     with _fight():
         game.choose("act:challenge:zhujun")
@@ -809,14 +818,15 @@ def test_challenge_while_a_showdown_is_on(on, world):
 
 
 def test_jailed_figure_is_gone_from_audience_and_dongzhuo_receives_at_the_camp(on, world):
-    """盧植下獄、董卓到任之後：盧植營交友直接找董卓（盧植不在），孟津渡沒有董卓了；人物照他此刻的所在出現。"""
-    game = _player(on, world, "官甲", "guan", "luzhi_camp")
+    """盧植下獄、董卓到任之後：孟津渡交友直接找董卓（盧植不在）；人物照他此刻的所在出現。輿圖重製 1b：盧植開季就在孟津渡、
+    跟董卓同處（冀州線官軍的據點從盧植營改成孟津渡），盧植營沒有人。"""
+    game = _player(on, world, "官甲", "guan", "mengjin_ford")
     game.state.player.stats["fame"] = 50
-    assert game._figures_here() == ["luzhi"]
+    assert game._figures_here() == ["luzhi", "dongzhuo"]
     jailed = next(e for e in on.timetable if e.id == "luzhi_jailed")
     timetable.resolve(game.state, on, jailed, random.Random(0), key="成")
     assert game._figures_here() == ["dongzhuo"] and game.socialize_starts_dialogue()
-    game.state.player.location = "mengjin_ford"
+    game.state.player.location = "luzhi_camp"
     assert game._figures_here() == []
 
 
@@ -831,7 +841,7 @@ def test_nothing_changes_with_the_switch_off(real, world):
     assert game._figures_here() == ["bocai"] and game.socialize_starts_dialogue()
     assert world.get_season().figures == {}
     game.state.player.location = "mengjin_ford"
-    assert game._figures_here() == ["dongzhuo"]
+    assert game._figures_here() == ["luzhi", "dongzhuo"]  # 輿圖重製 1b：盧植的 talk_at 搬到孟津渡
 
 
 # ── Task 6：假人偶爾挑戰 ─────────────────────────────────

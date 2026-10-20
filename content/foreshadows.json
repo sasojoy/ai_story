@@ -84,8 +84,8 @@
       "id": "fs_luzhi_guan", "event": "luzhi_jailed", "side": "guan", "kind": "拼圖", "front": "jizhou",
       "invalid_if": {"figure_out": "luzhi"},
       "fragments": [
-        {"region": "jizhou", "source": "action", "text": "聽說朝廷要派個小黃門來監軍，叫左豐。上一個被他監過的郡守，傾家蕩產才保住官。"},
-        {"region": "jizhou", "source": "talk", "character": "luzhi", "topic": "問起監軍", "affinity_min": 0,
+        {"region": "dongjun", "source": "action", "text": "聽說朝廷要派個小黃門來監軍，叫左豐。上一個被他監過的郡守，傾家蕩產才保住官。"},
+        {"region": "dongjun", "source": "talk", "character": "luzhi", "topic": "問起監軍", "affinity_min": 0,
          "text": "「軍中一錢一粟都是將士的命，我拿什麼去填宦官的口？」"},
         {"region": "luoyang", "source": "action", "text": "左豐家這半年起了三進大宅，錢從哪來，大家心裡有數。"},
         {"region": "luoyang", "source": "action", "text": "大將軍府的掾屬說：大將軍不聽什麼冤不冤，只聽扳倒誰對他有好處。"}
@@ -107,7 +107,7 @@
       "id": "fs_luzhi_huang", "event": "luzhi_jailed", "side": "huang", "kind": "累積", "front": "jizhou",
       "invalid_if": {"figure_out": "luzhi"},
       "fragments": [
-        {"region": "jizhou", "source": "action", "text": "官軍營裡傳出來的：朝廷派來監軍的左豐，要的不是戰功，是錢。"},
+        {"region": "dongjun", "source": "action", "text": "官軍營裡傳出來的：朝廷派來監軍的左豐，要的不是戰功，是錢。"},
         {"region": "jizhou", "source": "talk", "character": "zhangbao", "topic": "問起洛陽", "affinity_min": 0,
          "text": "「宮裡也有黃天的信徒，大賢良師早年埋下的。馬元義的事之後，他們都躲得很深。」"},
         {"region": "luoyang", "source": "action", "text": "白馬寺後門有個掃地的老宦官，牆上常有一個小小的黃圈，旁人只當是孩子亂畫。"},
@@ -227,7 +227,7 @@
       "id": "fs_zhangjiao_guan", "event": "zhangjiao_dies", "side": "guan", "kind": "推理", "front": "jizhou",
       "fragments": [
         {"region": "jizhou", "source": "action", "text": "大賢良師已經一個月沒在壇前露面了，夜裡常聽見他咳。"},
-        {"region": "jizhou", "source": "talk", "character": "luzhi", "stand_in": "dongzhuo", "topic": "問起廣宗", "affinity_min": 0,
+        {"region": "dongjun", "source": "talk", "character": "luzhi", "stand_in": "dongzhuo", "topic": "問起廣宗", "affinity_min": 0,
          "text": "「張角的藥要是斷了，廣宗不攻自破。」"},
         {"region": "yingchuan", "source": "action", "text": "嵩山的採藥人說，今年有人出高價收一種只長在背陰崖下的草，收了就往北送。"},
         {"region": "jizhou", "source": "action", "text": "白馬津的船家說，這陣子往北渡河的{偽裝}特別多，船錢給得也大方。"}

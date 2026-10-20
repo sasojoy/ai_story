@@ -870,7 +870,7 @@ def _figure_game(content, at):
 
 
 def test_a_great_figure_in_the_room_triggers_figure(on):
-    game = _figure_game(on, "changshe")  # 皇甫嵩、朱儁在長社
+    game = _figure_game(on, "mengjin_ford")  # 盧植、董卓在孟津渡（輿圖重製 1b 以前用長社的皇甫嵩、朱儁；洛陽官道另有唐周，先跳招人的提示）
     game._check_hints()
     assert _key(game) == "h_figure"
 
@@ -885,7 +885,7 @@ def test_a_character_who_is_not_a_great_figure_does_not_trigger_figure(on, place
 
 
 def test_figure_needs_the_season_one_rules(real):
-    game = _figure_game(real, "changshe")  # 開關關著（beta 的那一季）：沒有大勢人物
+    game = _figure_game(real, "mengjin_ford")  # 開關關著（beta 的那一季）：沒有大勢人物
     game._check_hints()
     assert game.guide_box() is None
 

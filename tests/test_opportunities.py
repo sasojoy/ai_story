@@ -394,7 +394,7 @@ def test_no_more_counting_while_holding_the_item(on):
 
 
 def test_deliver_goes_to_whoever_commands_now(on):
-    game = _game(on, faction="guan", at="changshe", rank=2)
+    game = _game(on, faction="guan", at="luoyang_road", rank=2)  # 輿圖重製 1b：皇甫嵩、朱儁從長社搬到洛陽官道
     p = game.state.player
     p.opp_items, p.opp_fronts = {"guan_deserter": "知道運糧小道的降卒"}, {"guan_deserter": "yingru"}
     option = next(o for o in game.options(odds=False) if o.id == "opp:deliver:guan_deserter")
@@ -417,13 +417,14 @@ def test_deliver_goes_to_whoever_commands_now(on):
 
 
 def test_deliver_needs_the_commander_to_be_there(on):
-    game = _game(on, faction="guan", at="changshe", rank=2)
+    game = _game(on, faction="guan", at="luoyang_road", rank=2)  # 輿圖重製 1b：皇甫嵩開季在洛陽官道
     p = game.state.player
     p.opp_items, p.opp_fronts = {"guan_deserter": "降卒"}, {"guan_deserter": "yingru"}
+    assert "opp:deliver:guan_deserter" in _ids(game)
     here = figures.state_of(game.state, on, "huangfusong")
-    game.state.world.figures["huangfusong"] = here.model_copy(update={"location": "luoyang_road"})  # 主將還在，卻不在這裡
+    game.state.world.figures["huangfusong"] = here.model_copy(update={"location": "changshe"})  # 主將還在，卻不在這裡（朱儁在也不算）
     assert "opp:deliver:guan_deserter" not in _ids(game)
-    p.location = "luoyang_road"
+    p.location = "changshe"  # 跟著他走
     assert "opp:deliver:guan_deserter" in _ids(game)
 
 
@@ -500,6 +501,7 @@ def test_opportunity_entries_are_titled(on):
         game.choose("act:rank2")
     assert game.state.journal[0].title == "招降黃巾散兵・長社"
     game.state.player.opp_items, game.state.player.opp_fronts = {"guan_deserter": "降卒"}, {"guan_deserter": "yingru"}
+    game.state.player.location = "luoyang_road"  # 輿圖重製 1b：降卒交給皇甫嵩，他在洛陽官道
     game.choose("opp:deliver:guan_deserter")
     assert game.state.journal[0].title == "機緣・降卒的消息"
 
@@ -577,7 +579,7 @@ def test_courier_letter_goes_to_the_yingchuan_commander(on):
         game.choose("opp:try:guan_courier")
     assert _try(game, "guan_courier") is None  # 密信在手上，不再出攔截的選項
     assert "opp:deliver:guan_courier" not in _ids(game)  # 荒丘不是主將所在
-    game.state.player.location = "changshe"
+    game.state.player.location = "luoyang_road"  # 輿圖重製 1b：潁川（中原）的官軍主將皇甫嵩在洛陽官道
     option = next(o for o in game.options(odds=False) if o.id == "opp:deliver:guan_courier")
     assert option.label == "把密信交給皇甫嵩"
     msgs = game.choose("opp:deliver:guan_courier")
@@ -950,25 +952,25 @@ def _plot_span(game, content):
 
 
 def test_the_plot_deadline_keeps_its_calendar_day_when_that_is_already_enough(on):
-    game = _game(on, faction="guan", at="changshe", rank=3)
+    game = _game(on, faction="guan", at="luoyang_road", rank=3)  # 輿圖重製 1b：牽頭密謀要有自家人物在場
     assert _plot_span(game, on) == pytest.approx(calendar.DAY / 33.6)  # 一個曆日現實 42.9 分鐘，比目標 10 分鐘長，維持
     assert opportunities.windows(on, game.state.world).plot_seconds == pytest.approx(calendar.DAY / 33.6)
 
 
 def test_the_full_length_plot_deadline_is_one_calendar_day(full):
-    game = _game(full, faction="guan", at="changshe", rank=3)
+    game = _game(full, faction="guan", at="luoyang_road", rank=3)  # 輿圖重製 1b：牽頭密謀要有自家人物在場
     assert _plot_span(game, full) == pytest.approx(calendar.DAY / 6)  # 整季 14 天：現實 4 小時，不動
 
 
 def test_the_plot_deadline_gets_the_same_real_time_floor(on):
     on.config.opp_window_min_minutes = 90  # 比一個曆日（現實 42.9 分鐘）還長
-    game = _game(on, faction="guan", at="changshe", rank=3)
+    game = _game(on, faction="guan", at="luoyang_road", rank=3)  # 輿圖重製 1b：牽頭密謀要有自家人物在場
     assert _plot_span(game, on) == pytest.approx(90 * 60)
 
 
 def test_a_zero_target_leaves_the_plot_deadline_at_plot_days(on):
     on.config.opp_window_min_minutes = 0  # 0＝不放寬
-    game = _game(on, faction="guan", at="changshe", rank=3)
+    game = _game(on, faction="guan", at="luoyang_road", rank=3)  # 輿圖重製 1b：牽頭密謀要有自家人物在場
     assert _plot_span(game, on) == pytest.approx(calendar.DAY / 33.6)
 
 
@@ -991,7 +993,8 @@ def _profile(faction="guan"):
 
 
 def test_bots_skip_opportunities_but_do_rank2(on):
-    game = _game(on, faction="guan", at="changshe", rank=2)
+    # 輿圖重製 1b：皇甫嵩搬到洛陽官道（沒有戰線），交降卒在那裡；第 2 階行動要在有戰線的地方（長社）——分兩處看
+    game = _game(on, faction="guan", at="luoyang_road", rank=2)
     p = game.state.player
     p.opp_items, p.opp_fronts = {"guan_deserter": "知道運糧小道的降卒"}, {"guan_deserter": "yingru"}
     options = game.options(odds=False)
@@ -999,7 +1002,8 @@ def test_bots_skip_opportunities_but_do_rank2(on):
     assert opp and bot.pick(game, opp, random.Random(0)) is None
     profile = _profile()
     assert all(bot_policy.score(game, o, profile) is None for o in opp)
-    rank2 = next(o for o in options if o.id == "act:rank2")
+    p.location = "changshe"
+    rank2 = next(o for o in game.options(odds=False) if o.id == "act:rank2")
     assert bot_policy.score(game, rank2, profile) is not None
 
 
@@ -1029,14 +1033,16 @@ def test_rank2_scores_like_the_duty_action_for_bots(on):
 
 
 def test_server_bots_never_choose_an_opportunity(on):
-    game = _game(on, faction="guan", at="changshe", rank=2)
+    # 輿圖重製 1b：交降卒的地方跟著皇甫嵩搬到洛陽官道（站在那裡，交降卒的選項才在）
+    game = _game(on, faction="guan", at="luoyang_road", rank=2)
     p = game.state.player
     p.opp_items, p.opp_fronts = {"guan_deserter": "知道運糧小道的降卒"}, {"guan_deserter": "yingru"}
+    assert "opp:deliver:guan_deserter" in _ids(game)
     chosen = []
     real_choose = game.choose
     with mock.patch.object(game, "choose", side_effect=lambda option_id, *a, **k: chosen.append(option_id) or real_choose(option_id, *a, **k)):
         for seed in range(40):
             p.stamina = 100
-            p.location, p.pending_companion = "changshe", None
+            p.location, p.pending_companion = "luoyang_road", None
             bot_policy.take_turn(game, _profile(), random.Random(seed))
     assert chosen and not any(i.startswith(("opp:", "talk:opp:")) for i in chosen)

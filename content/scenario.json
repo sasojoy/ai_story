@@ -11,7 +11,7 @@
   ],
   "trends": [
     {"id": "huangjin", "name": "黃巾聲勢", "desc": "黃巾軍在潁川一帶的聲勢。到 50 官道將被切斷，到 80 潁川恐將淪陷。剿討能讓它下降。", "start": 25, "derived": {"yingru": 0.35, "nanyang": 0.25, "jizhou": 0.40}},
-    {"id": "yingru", "name": "潁川汝南", "desc": "潁川、汝南一帶的戰況：0 是官軍穩控，100 是黃巾控制。", "start": 40, "season_one": true},
+    {"id": "yingru", "name": "中原", "desc": "中原四郡（潁川、東郡、陳留、汝南）與嵩山、鹿台一帶的戰況：0 是官軍穩控，100 是黃巾控制。", "start": 40, "season_one": true},
     {"id": "nanyang", "name": "南陽", "desc": "南陽一帶的戰況：0 是官軍穩控，100 是黃巾控制。", "start": 35, "season_one": true},
     {"id": "jizhou", "name": "冀州", "desc": "冀州（含幽州）的戰況：0 是官軍穩控，100 是黃巾控制。", "start": 55, "season_one": true},
     {"id": "geju", "name": "豪強割據", "desc": "地方豪強割據的程度：有戰線在亂局（戰況 35～65）時自然上漲，三條戰線都穩下來時慢慢回落。", "start": 10, "season_one": true},
