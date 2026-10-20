@@ -5937,6 +5937,7 @@ class Game:
             if siege.void_absent(self.content, battle):  # 攻城戰（領地爭奪第二批）：攻方一個人都沒到，這一場作罷
                 battle.end_time = self.state.world.time
                 return [battle.unfinished_text]
+            siege.size_melee_guard(self.content, battle)  # 三方混戰（裁決 22）：守將的池子照兩軍到場的人數定
         if battle.phase != "active":
             return []
         for p in list(battle.participants.values()):
@@ -7025,14 +7026,21 @@ class Game:
         me = battle.participants.get(self.state.player.name)
         guard, names = battle_instance.neutral_guard(battle), battle_instance.side_names(battle, definition)
         out = []
-        for f in definition.factions:
-            done = me is not None and me.faction == f.id
-            if f.id == guard:
-                label = (siege.HELPED_GUARD if done else siege.HELP_GUARD).format(side=names[f.id])
+        for fid in battle_instance.fields(battle, definition):  # 三方混戰（裁決 22）多一顆助守【守軍】（GUARD）
+            done = me is not None and me.faction == fid
+            if fid == guard:
+                label = (siege.HELPED_GUARD if done else siege.HELP_GUARD).format(side=names[fid])
             else:
-                label = f"已臨時投效【{f.name}】" if done else f"臨時投效【{f.name}】（只算這一場）"
-            out.append(Option(id=f"battle:enlist:{f.id}", label=label, enabled=not done))
+                label = f"已臨時投效【{names[fid]}】" if done else f"臨時投效【{names[fid]}】（只算這一場）"
+            out.append(Option(id=f"battle:enlist:{fid}", label=label, enabled=not done))
         return out
+
+    def _enlist_sides(self, battle: battle_instance.BattleInstance | None, definition: BattleDef) -> dict[str, str]:
+        """臨時投效站得了的格（id → 名字）：交戰的兩軍，三方混戰再加助守【守軍】（GUARD，裁決 22）。"""
+        sides = self._sides(definition)
+        if battle is not None and battle_instance.melee(battle):
+            sides[battle_instance.GUARD] = battle_instance.GUARD_SIDE
+        return sides
 
     def _at_battle(self, definition: BattleDef) -> bool:
         """人在這場決戰的大區、而且不在路上，才算到了戰場（地圖擴充設計第六節）；決戰不限地點時只看在不在路上。
@@ -7178,8 +7186,9 @@ class Game:
                 lean=seal.lean_text(battle.seal_lean, definition), shift=seal.shift_text(shift, battle.seal_lean, definition), weight=weight,
             )
         names = battle_instance.side_names(battle, definition)  # 單方攻中立地時守將那一格寫守軍（FB-540）
-        if battle.phase == "muster" and battle.commanders:  # 龍頭上陣：集結時就看得到誰親自上陣
-            header += "\n\n" + "\n".join(f"{names[f.id]}：{text}" for f in definition.factions if (text := generals.lineup(battle, f.id)))
+        if battle.phase == "muster" and battle.commanders:  # 龍頭上陣：集結時就看得到誰親自上陣（三方混戰多一格守軍）
+            header += "\n\n" + "\n".join(
+                f"{names[fid]}：{text}" for fid in battle_instance.fields(battle, definition) if (text := generals.lineup(battle, fid)))
         watching = self._watching_battle(battle, definition)
         watch_line = self._watch_line(battle, definition)
         if battle.phase == "muster":
@@ -7248,7 +7257,8 @@ class Game:
         if not battle.commanders:
             return []
         names = battle_instance.side_names(battle, definition)  # 單方攻中立地時守將那一格寫守軍（FB-540）
-        rows = [f"{SIDE_TAG.format(side=names[f.id])}{text}" for f in definition.factions if (text := generals.lineup(battle, f.id))]
+        rows = [f"{SIDE_TAG.format(side=names[fid])}{text}"  # 三方混戰多一格守軍（裁決 22）
+                for fid in battle_instance.fields(battle, definition) if (text := generals.lineup(battle, fid))]
         order = battle_instance.order_text(battle, side, self.content.config.battle) if side is not None else ""
         return ["\n".join(rows)] + ([order] if order else [])
 
@@ -7377,7 +7387,9 @@ class Game:
                 continue
             label = o.text
             ordered = o.move is not None and o.move == battle.orders.get(p.faction) and battle_instance.caller(battle, p.faction) is not None
-            if o.move is not None and p.scores:  # 三招：寫招與這個人現在的份量（設計 3.4：按鈕上直接寫）
+            if p.faction == battle_instance.GUARD and o.move is not None:  # 三方混戰助守的人：份量不推戰線，不寫分數與將令（裁決 22）
+                label = f"{o.text}（{o.move}）"
+            elif o.move is not None and p.scores:  # 三招：寫招與這個人現在的份量（設計 3.4：按鈕上直接寫）
                 score = p.scores.get(o.move, 0.0) * battle_instance.condition(p)
                 if ordered:  # 照將令出招（龍頭上陣）：份量照算進去
                     score *= 1 + self.content.config.battle.generals.order_bonus
@@ -7569,7 +7581,9 @@ class Game:
             return [f"（{self._absent_reason(definition)}。）"]
         if kind == "escort":
             return self._escort_step(battle, rest)
-        if kind in ("join", "join_late", "enlist") and not changing_sides and not self._escort_picked and self._escort_choices():
+        guarding = kind == "enlist" and rest.partition("@")[0] == battle_instance.GUARD  # 三方混戰助守：同伴只在兩軍那兩格上陣（裁決 22）
+        if (kind in ("join", "join_late", "enlist") and not changing_sides and not self._escort_picked and not guarding
+                and self._escort_choices()):
             # 名下有同伴：先挑誰隨你上陣（或不派），挑了才加入（歷史武將同行 9.3：沒有預設值）
             refusal = self._join_refusal(kind, rest, definition, battle)
             if refusal is not None:
@@ -7624,7 +7638,7 @@ class Game:
         攻城戰（領地爭奪第二批）另照 siege.join_problem（另一軍站不進守將那一格）。"""
         if kind == "join" and self.content.scenario.factions and rest != self._side():
             return ["（你只能站在自己陣營這一邊。）"]
-        if kind == "enlist" and (not self._free_agent(definition) or rest not in self._sides(definition)):
+        if kind == "enlist" and (not self._free_agent(definition) or rest not in self._enlist_sides(battle, definition)):
             return ["（此刻無法這麼做。）"]
         if battle is not None and battle.siege is not None:
             slot = rest if kind != "join_late" else (self._side() or "")
@@ -7639,7 +7653,7 @@ class Game:
         """散人、豪強臨時投效交戰的一方（_free_agent）：集結時跟加入一樣（還能改投另一邊），開打了照晚到的人算、當回合就能出手。
         參戰名單上記投效的那一方，自己的陣營照舊（散人照舊是散人、豪強照舊是豪強）。"""
         name = self.state.player.name
-        armies = {f.id: f.name for f in definition.factions}
+        armies = self._enlist_sides(battle, definition)  # 三方混戰多一格助守【守軍】（裁決 22）
         if not self._free_agent(definition) or side not in armies:
             return ["（此刻無法這麼做。）"]
         if battle.siege is not None and (problem := siege.join_problem(self.content, battle.siege, self._conquest_side(), side)):
@@ -7649,6 +7663,8 @@ class Game:
         scores, cap, power, road = self._mandate_weight(definition, self._battle_scores()), self._battle_neili_cap(), self._battle_power(), self._battle_road()
         role = self._battle_role()
         gear, marks = self._battle_gear(), self._battle_marks()
+        if side == battle_instance.GUARD:  # 三方混戰助守：同伴只在兩軍那兩格上陣，這一場不帶（裁決 22）
+            marks["escort"] = None
         if battle.phase == "muster":
             self._mutate_battle_of(
                 battle,

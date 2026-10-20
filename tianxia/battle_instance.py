@@ -287,24 +287,28 @@ def call_orders(instance: BattleInstance, definition: BattleDef, tuning: BattleT
     instance.orders = {}
     if not instance.commanders or instance.phase != "active":
         return
-    for f in definition.factions:
-        c = caller(instance, f.id)
+    for side in fields(instance, definition):
+        c = caller(instance, side)
         if c is None:
             continue
-        rng = random.Random(f"將令|{instance.battle_id}|{instance.record_id}|{instance.round_number}|{f.id}")
-        enemy = next((e.id for e in definition.factions if e.id != f.id), None)
-        seen = instance.last_mix.get(enemy or "", {})
+        rng = random.Random(f"將令|{instance.battle_id}|{instance.record_id}|{instance.round_number}|{side}")
+        if side == GUARD:  # 三方混戰的守將（裁決 22）：看兩軍上一回合合起來出最多的那一招
+            seen = {m: sum(instance.last_mix.get(f.id, {}).get(m, 0.0) for f in definition.factions) for m in MOVES}
+            seen = seen if any(seen.values()) else {}
+        else:
+            enemy = next((e.id for e in definition.factions if e.id != side), None)
+            seen = instance.last_mix.get(enemy or "", {})
         if seen and rng.random() < tuning.generals.order_read:
             main = _main_move(seen)
-            instance.orders[f.id] = next(m for m, v in BEATS.items() if v == main)  # 剋它的那一招
+            instance.orders[side] = next(m for m, v in BEATS.items() if v == main)  # 剋它的那一招
         else:
-            instance.orders[f.id] = rng.choice(MOVES)
+            instance.orders[side] = rng.choice(MOVES)
 
 
 def order_text(instance: BattleInstance, side: str, tuning: BattleTuning) -> str:
-    """決戰畫面：自己這一方這一回合的將令；沒有人喊令是空字串。"""
+    """決戰畫面：自己這一方這一回合的將令；沒有人喊令是空字串。三方混戰助守的人（GUARD）不寫：他們的份量不推戰線（裁決 22）。"""
     c, move = caller(instance, side), instance.orders.get(side)
-    if c is None or not move:
+    if c is None or not move or side == GUARD:
         return ""
     return ORDER_LINE.format(name=c.name, move=move, pct=round(tuning.generals.order_bonus * 100))
 
@@ -324,17 +328,36 @@ class SiegeInfo(BaseModel):
     loc: str  # 攻哪一塊
     attackers: list[str] = Field(default_factory=list)  # 攻方（兩軍同時搶同一塊中立地是兩個）
     holder: str | None = None  # 開集結那一刻的控制方；None＝中立地還沒人佔
-    guard_side: str | None = None  # 單方攻中立地時守將站的那一格（另一軍的 id）：另一軍的人站不進去，散人可以投效助守（裁決 8）
+    # 單方攻中立地時守將站的那一格（另一軍的 id）：另一軍的人站不進去，散人可以投效助守（裁決 8）。兩軍同時攻同一塊中立地（三方混戰，
+    # 裁決 22）是 GUARD：守將與助守的人站第三格，不是任何一軍
+    guard_side: str | None = None
     void: str = ""  # 作罷的原因（攻方沒人到、攻方已經是主人、管理者取消）；空的是照常打完
     settled: bool = False  # 收場的事做過了（易手、進度歸 50、時程表記 done；只做一次）
+    blow: str = ""  # 三方混戰：補上守將最後一刀的那一軍（拿下這一塊）；守將還沒倒、守住了、不是三方混戰是空的
 
 
+GUARD = "guard"  # 三方混戰（裁決 22，企劃者 2026-10-21）：守將與助守的人站的第三格；範本照舊只有官軍、黃巾兩格
 GUARD_SIDE = "守軍"  # 待 joy 潤：單方攻中立地時守將那一格在畫面、戰報、天下大事上的名字（不冠任何一軍，FB-540）
 # 單方攻中立地時的幕文字（範本的 text_by_lead 寫的是兩軍對打，「漢家的旗」「官軍的陣線」對中立的守軍不對，FB-540）；待 joy 潤
 GUARD_LEAD_TEXT = {
     "attacker": "{who}的陣腳越壓越前，守軍一步步退回寨牆後面。",
     "guard": "守軍據著寨牆死守，{who}一波波攻上來，都被打了回去。",
 }
+# 三方混戰（裁決 22）的幕文字、補上最後一刀的那幾句；待 joy 潤
+MELEE_TEXT = "兩軍同時殺到寨牆下，守軍兩頭應付；誰補上守將最後一刀，這一塊就歸誰。"
+MELEE_LEAD_TEXT = "{lead}把{other}擠開，搶先貼近了寨牆；守軍兩頭應付，還沒倒。"
+GUARD_HIT_LINE = "{side}的強攻撲向{guard}：{guard}氣血 -{hp}{shield}。"  # 兩軍的強攻打守將（一軍一句）
+GUARD_SHIELD = "，{n} 人固守護住了 {hp}"
+BLOW_LINE = "{who}替{side}補上最後一刀，{guard}倒下了！{side}拿下了這一塊。"  # 守將倒下那一下（回合裡）
+BLOW_LINE_NOBODY = "{side}補上最後一刀，{guard}倒下了！{side}拿下了這一塊。"  # 那一軍打守將的只有不是參戰者的（萬一）
+BLOW_REASON = "勝負的關鍵：第 {n} 回合，{side}的{who}補上了最後一刀，{guard}倒下了。"
+BLOW_REASON_NOBODY = "勝負的關鍵：第 {n} 回合，{side}補上了最後一刀，{guard}倒下了。"
+MELEE_HOLD_REASON = "勝負的關鍵：守軍撐過了 {n} 回合，兩軍都沒能補上最後一刀。"
+MEND_LINE = "{name}這一搏成功了！替{guard}補回氣血 {hp}，自己氣血 -{cost}。"  # 助守的人沒點名的放手一搏成了
+MEND_STORY = "{story}（替{guard}補回氣血 {hp}，自己氣血 -{cost}）"
+MELEE_CAPTION = "{lead}；{guard}還剩氣血 {hp}/{cap}，誰補上最後一刀誰拿下"  # 三方混戰的戰局條說明
+MELEE_LEAD = "{side}佔上風、離寨牆比較近"
+MELEE_EVEN = "兩軍不分上下"
 
 
 def neutral_guard(instance: BattleInstance) -> str | None:
@@ -344,13 +367,31 @@ def neutral_guard(instance: BattleInstance) -> str | None:
     return s.guard_side if s is not None and s.holder is None and s.guard_side else None
 
 
+def melee(instance: BattleInstance) -> bool:
+    """兩軍同時攻同一塊中立地、那裡有守將：三方混戰（裁決 22）。守將站第三格 GUARD，兩軍都打他、兩軍之間也互打，
+    誰補上守將最後一刀誰拿下（resolve_round、_strike_guard）。"""
+    s = instance.siege
+    return s is not None and s.holder is None and s.guard_side == GUARD
+
+
+def fields(instance: BattleInstance, definition: BattleDef) -> list[str]:
+    """這一場站得了人的每一格：交戰的兩軍，三方混戰再加守軍那一格（GUARD）。"""
+    return [f.id for f in definition.factions] + ([GUARD] if melee(instance) else [])
+
+
 def side_names(instance: BattleInstance, definition: BattleDef) -> dict[str, str]:
-    """這一場兩邊寫給人看的名字（陣營 id → 名字）：照範本的陣營名字，守將那一格（neutral_guard）換成 GUARD_SIDE。認東西照舊用 id。"""
+    """這一場兩邊寫給人看的名字（陣營 id → 名字）：照範本的陣營名字，守將那一格（neutral_guard）換成 GUARD_SIDE；三方混戰多一格
+    守軍（GUARD）。認東西照舊用 id。"""
     names = {f.id: f.name for f in definition.factions}
     guard = neutral_guard(instance)
-    if guard in names:
+    if guard in names or (guard == GUARD and melee(instance)):
         names[guard] = GUARD_SIDE
     return names
+
+
+def _option_side(definition: BattleDef, faction: str) -> str:
+    """選項照哪一格的招：助守三方混戰守將的人（GUARD）用第一方（官軍）那一組招的字（範本只寫了兩軍的招）。"""
+    return definition.factions[0].id if faction == GUARD else faction
 
 
 class BattleInstance(BaseModel):
@@ -525,9 +566,9 @@ def close_muster(
     隨機分配」，呼叫端自己決定要不要把從沒選過的在線玩家也塞進 participants。"""
     if instance.phase != "muster":
         return
-    armies = sides(definition)  # 沒選邊的分到兩軍之一
+    armies = sides(definition)  # 沒選邊的分到兩軍之一（三方混戰助守的人站守軍那一格，不改分）
     for p in instance.participants.values():
-        if p.faction not in armies:
+        if p.faction not in armies and not (p.faction == GUARD and melee(instance)):
             p.faction = rng.choice(armies)
     instance.phase = "active"
     instance.round = BattleRound(opened_real=now)
@@ -544,8 +585,8 @@ def auto_assign_latecomer(
 ) -> None:
     """集結期結束後才出現的人（包含機器人）：有指定陣營（劇本分陣營時的玩家、臨時投效的人投效的那一軍）就站自己那邊，
     否則塞進兩軍裡人數較少的一方，維持陣營平衡。scores、mount、cavalry、troops、troop_bonus、turncoat、newbie、renown
-    同 join_faction。"""
-    if faction not in sides(definition):
+    同 join_faction。三方混戰助守的人（GUARD）照站守軍那一格。"""
+    if faction not in sides(definition) and not (faction == GUARD and melee(instance)):
         armies = sides(definition)
         counts = {fid: sum(1 for p in instance.participants.values() if p.faction == fid) for fid in armies}
         faction = min(counts, key=lambda fid: (counts[fid], rng.random()))
@@ -600,6 +641,11 @@ def act_text(instance: BattleInstance, definition: BattleDef) -> str:
     act = current_act(instance, definition)
     first, second = definition.factions[0].id, definition.factions[1].id
     leader = first if instance.trend > CENTER else second if instance.trend < CENTER else None
+    if melee(instance):  # 三方混戰（裁決 22）：戰線是兩軍之間的，守軍兩頭應付
+        if leader is None:
+            return MELEE_TEXT
+        names = side_names(instance, definition)
+        return MELEE_LEAD_TEXT.format(lead=names[leader], other=names[second if leader == first else first])
     guard = neutral_guard(instance)
     if guard is not None and leader is not None:
         names = side_names(instance, definition)
@@ -619,7 +665,7 @@ def options_for(instance: BattleInstance, definition: BattleDef, name: str) -> l
     if p is None:
         return []
     act = current_act(instance, definition)
-    options = [o for o in act.options if o.faction in (None, p.faction)]
+    options = [o for o in act.options if o.faction in (None, _option_side(definition, p.faction))]
     if pinned(instance, p):  # 被險招牽制住：這一回合只能固守
         held = [o for o in options if o.move == "固守" and not o.free_text]
         if held:
@@ -644,9 +690,9 @@ def can_gamble(instance: BattleInstance, definition: BattleDef, p: BattlePartici
 
 def find_target(instance: BattleInstance, definition: BattleDef, name: str, text: str) -> BattleParticipant | None:
     """放手一搏的文字裡點名的對面參戰者：名號 2 字以上、在文字裡最先出現的那一個（一樣早取長的）。只認交戰兩軍裡對面那一邊、
-    還沒倒下的人。由引擎認，不靠模型。"""
+    還沒倒下的人。由引擎認，不靠模型。三方混戰（裁決 22）三格互為對面：兩軍點得到另一軍與助守的人，助守的人點得到兩軍的人。"""
     me = instance.participants.get(name)
-    armies = {f.id for f in definition.factions}
+    armies = set(fields(instance, definition))
     if me is None or me.faction not in armies:
         return None
     found = [
@@ -761,9 +807,10 @@ def condition(p: BattleParticipant) -> float:
 
 
 def option_of(definition: BattleDef, act_index: int, faction: str, tag: str) -> BattleOption | None:
-    """這一幕、這個陣營能選的、tag 是 tag 的那個選項；沒有就是 None。"""
+    """這一幕、這個陣營能選的、tag 是 tag 的那個選項；沒有就是 None。三方混戰助守的人（GUARD）用第一方那一組招（_option_side）。"""
+    side = _option_side(definition, faction)
     return next(
-        (o for o in definition.acts[act_index].options if o.tag == tag and o.faction in (None, faction)), None,
+        (o for o in definition.acts[act_index].options if o.tag == tag and o.faction in (None, side)), None,
     )
 
 
@@ -771,6 +818,12 @@ def _mix(moves: dict[str, str], factions: dict[str, str], side: str) -> dict[str
     """這一邊這回合各招的比例（只算出固定招的人）；沒人出就是空的。"""
     mine = [moves[name] for name in moves if factions[name] == side]
     return {m: mine.count(m) / len(mine) for m in MOVES} if mine else {}
+
+
+def _mix_of(moves: dict[str, str], factions: dict[str, str], sides_: set[str]) -> dict[str, float]:
+    """好幾格合起來這回合各招的比例（三方混戰：自己以外的兩格，裁決 22）；沒人出就是空的。"""
+    theirs = [moves[name] for name in moves if factions[name] in sides_]
+    return {m: theirs.count(m) / len(theirs) for m in MOVES} if theirs else {}
 
 
 def safest_option_tag(
@@ -845,6 +898,9 @@ def resolve_round(
     act_index = instance.act_index
     msgs: list[str] = []
     first, second = definition.factions[0].id, definition.factions[1].id  # first 是戰局的正向方
+    # 三方混戰（裁決 22）：守將與助守的人站第三格 GUARD——出招算進兩軍各自的「對面」，不推戰線（戰線只算兩軍之間）
+    three = melee(instance)
+    sides3 = (first, second, GUARD) if three else (first, second)
     for p in instance.participants.values():
         p.last_result = ""  # 沒出固定招的人（放手一搏、離開大區、倒下、沒出手）不留上一回合的字
     # 這一回合出固定招的人：名號 → 哪一招（放手一搏的人不算進比例；不在交戰雙方的陣營這一份不算）
@@ -852,7 +908,7 @@ def resolve_round(
     moves: dict[str, str] = {}
     for name, tag in instance.round.pending_actions.items():
         p = instance.participants.get(name)
-        if p is None or p.eliminated or name in instance.round.success_rates or p.faction not in (first, second):
+        if p is None or p.eliminated or name in instance.round.success_rates or p.faction not in sides3:
             continue
         option = option_of(definition, act_index, p.faction, tag)
         if option is not None and option.move is not None:
@@ -862,6 +918,10 @@ def resolve_round(
     for c in on_field:  # 上陣的大勢人物照這一方的將令出手，也算進出招的比例（對面剋不剋得住他）
         moves[c.name] = instance.orders.get(c.faction) or "固守"
         factions[c.name] = c.faction
+    keeper = next((c for c in instance.commanders if three and c.faction == GUARD and c.fallen_round is None), None)
+    if keeper is not None:  # 三方混戰的守將：照自己喊的那一招出手，兩軍都算他是對面
+        moves[keeper.name] = instance.orders.get(GUARD) or "固守"
+        factions[keeper.name] = GUARD
     escorts = escorts_on_field(instance, (first, second))
     for p, e in escorts:  # 隨主人上陣的同伴：照主人這一回合的固定招出手，主人放手一搏、倒下時固守（也算進出招的比例）
         key = escort_key(p.name)
@@ -870,7 +930,10 @@ def resolve_round(
     callers = {side for side in (first, second) if caller(instance, side) is not None}
     chief_hits: list[tuple[str, str, int, int, str, str, int, float, str]] = []  # 點名人物的放手一搏成了（_strike_commanders 結算）
     escort_hits: list[tuple[str, str, int, int, str, str, int, float, str]] = []  # 點名同伴的（第二格是主人的名號，_strike_escorts）
-    mixes = {side: _mix(moves, factions, side) for side in (first, second)}
+    mixes = {side: _mix(moves, factions, side) for side in sides3}
+    # 每一格的「對面」這一回合各招的比例（剋制係數照它算）：兩軍對打就是另一軍；三方混戰是自己以外兩格合起來
+    foe_mix = ({side: _mix_of(moves, factions, set(sides3) - {side}) for side in sides3} if three
+               else {first: mixes[second], second: mixes[first]})
     force, counts = {first: 0.0, second: 0.0}, {first: 0, second: 0}
     names = side_names(instance, definition)  # 守將那一格寫守軍（FB-540）
     gambles: dict[str, int] = {}  # 陣營 → 這一回合放手一搏替自己這一邊推了多少（正是推進、負是倒退），回合摘要用
@@ -954,6 +1017,7 @@ def resolve_round(
             if fx.lines:
                 p.moves[rnd_no] += "；" + "；".join(fx.lines)
             side_name = names.get(p.faction, p.faction)
+            helper = three and p.faction == GUARD  # 三方混戰助守的人：沒有戰線可推（裁決 22）
             win_story, lose_story = (instance.round.stories.get(name) or ["", ""])[:2]
             if p.gambled_act == act_index:  # 一幕最多搏幾次（FreeTextGamble.per_act）
                 p.gambles_this_act += 1
@@ -969,7 +1033,32 @@ def resolve_round(
                     target.targeted_by.append(name)
                 targets_now.setdefault(target.name, []).append(name)
             # 試玩回饋 2026-10-08：對戰局只有小影響，主要的代價是自己的氣血池（扣到 0 就照下面倒下出局）
-            if succeeded:
+            if succeeded and helper:  # 助守的人搏成了：點名兩軍的人照打（不推戰線），沒點名替守將補回一截（同點名守將打掉的量）
+                delta = 0
+                damage = p.neili_cap * gamble.success_neili_share
+                instance.marked[name] = act_index
+                p.gambles_won += 1
+                if target is not None:
+                    want = target.neili_cap * min(tuning.target_hit_max, tuning.target_hit_base + risk * tuning.target_hit_per_risk)
+                    hits.append(_Hit(
+                        len(msgs), name, target.name, want, success_rate <= tuning.pin_rate, win_story, side_name, 0, damage,
+                        custom_text or "", False,
+                    ))
+                    msgs.append("")
+                else:
+                    mend = 0.0
+                    if keeper is not None:
+                        mend = min(keeper.neili_cap * min(gen.hit_max, gen.hit_base + risk * gen.hit_per_risk), keeper.neili_cap - keeper.neili)
+                        keeper.neili += mend
+                    who = keeper.name if keeper is not None else GUARD_SIDE
+                    numbers = f"替{who}補回氣血 {round(mend)}，自己氣血 -{round(damage)}"
+                    if win_story:
+                        msgs.append(MEND_STORY.format(story=win_story, guard=who, hp=round(mend), cost=round(damage)))
+                    else:
+                        msgs.append(MEND_LINE.format(name=name, guard=who, hp=round(mend), cost=round(damage)))
+                        if custom_text:
+                            tale(name, p, custom_text, True, "", msgs[-1], numbers)
+            elif succeeded:
                 # 越強越有份量：推進乘實力（新手打五折、練滿最多兩倍）
                 might = max(tuning.gamble_strength_min, min(tuning.gamble_strength_max, strength(tuning, p.power) / tuning.gamble_strength_ref))
                 delta = max(1, round((gamble.success_trend_base + risk * gamble.success_trend_per_risk) * might))
@@ -1000,7 +1089,7 @@ def resolve_round(
                     if custom_text:
                         tale(name, p, custom_text, True, "", msgs[-1], numbers)
             else:
-                delta = -min(gamble.failure_trend_cap, round(risk * gamble.failure_trend_per_risk))
+                delta = 0 if helper else -min(gamble.failure_trend_cap, round(risk * gamble.failure_trend_per_risk))
                 damage = p.neili_cap * min(1.0, gamble.failure_neili_share_base + risk * gamble.failure_neili_share_per_risk)
                 # 代價照引擎算的寫出來（試玩回饋 2026-10-08：「慘痛的代價是什麼？」）
                 cost = f"{shove(side_name, delta)}，" if delta else ""
@@ -1020,15 +1109,16 @@ def resolve_round(
                     p.gambles.append(moment)
                 if more_dramatic(moment, instance.highlight):
                     instance.highlight = moment
-            gambles[p.faction] = gambles.get(p.faction, 0) + delta
-            if delta > 0:
-                gains[p.faction] = gains.get(p.faction, 0) + delta
-            elif delta < 0:
-                losses[p.faction] = losses.get(p.faction, 0) + delta
+            if not helper:  # 助守的人不推戰線（三方混戰）
+                gambles[p.faction] = gambles.get(p.faction, 0) + delta
+                if delta > 0:
+                    gains[p.faction] = gains.get(p.faction, 0) + delta
+                elif delta < 0:
+                    losses[p.faction] = losses.get(p.faction, 0) + delta
         elif name in moves:
             move = moves[name]
-            enemy = second if p.faction == first else first
-            coef = counter_coefficient(tuning, move, mixes[enemy]) if mixes[enemy] else 1.0
+            foe = foe_mix[p.faction]  # 兩軍對打是另一軍（同以前的 mixes[enemy]）；三方混戰是自己以外兩格合起來
+            coef = counter_coefficient(tuning, move, foe) if foe else 1.0
             if p.role == "lore" and coef < 1:  # 參謀：被剋時吃虧少一些
                 coef = 1 - (1 - coef) * (1 - tuning.role_counter_relief)
             fx = war(name, p, move, coef)
@@ -1038,11 +1128,12 @@ def resolve_round(
             might *= 1 + sum(pct for who, pct in rally.get((p.faction, move), []) if who != name)
             if p.faction in callers and move == instance.orders.get(p.faction):  # 照將令出招（龍頭上陣）
                 might *= 1 + gen.order_bonus
-            force[p.faction] += might  # 份量在扣這一回合的血之前算
-            shares[p.faction].append((might, name, move))
-            counts[p.faction] += 1
-            coefs[p.faction].append(coef)
-            fitness[p.faction].append((p.scores.get(move, 0.0), condition(p)))
+            if p.faction in force:  # 三方混戰助守的人不推戰線（戰線只算兩軍之間）
+                force[p.faction] += might  # 份量在扣這一回合的血之前算
+                shares[p.faction].append((might, name, move))
+                counts[p.faction] += 1
+                coefs[p.faction].append(coef)
+                fitness[p.faction].append((p.scores.get(move, 0.0), condition(p)))
             damage = tuning.damage[move] * (2 - coef)
             if move == "強攻":
                 damage *= 1 - min(tuning.strong_mitigation_cap, p.power / 200)
@@ -1057,8 +1148,8 @@ def resolve_round(
             p.fell_round = instance.round_number + 1  # 這一回合（round_number 結算完才加一）
             msgs.append(f"{name}氣血耗盡，倒在戰場上，退出了這場戰鬥（轉為觀戰）。")
     for c in on_field:  # 上陣的大勢人物的力量（份量在扣這一回合的血之前算）
-        enemy = second if c.faction == first else first
-        coef = counter_coefficient(tuning, moves[c.name], mixes[enemy]) if mixes[enemy] else 1.0
+        foe = foe_mix[c.faction]
+        coef = counter_coefficient(tuning, moves[c.name], foe) if foe else 1.0
         cond = encounter.condition_of(c.neili, c.neili_cap)
         force[c.faction] += c.score * cond * coef
         counts[c.faction] += 1
@@ -1067,8 +1158,8 @@ def resolve_round(
     shields: dict[str, float] = {}  # 主人名號 → 這一回合同伴挨的打乘多少（化影）
     for p, e in escorts:  # 隨行同伴的力量（同人物：算進那一邊的人數；不扣出招的血）
         key = escort_key(p.name)
-        enemy = second if p.faction == first else first
-        coef = counter_coefficient(tuning, moves[key], mixes[enemy]) if mixes[enemy] else 1.0
+        foe = foe_mix[p.faction]
+        coef = counter_coefficient(tuning, moves[key], foe) if foe else 1.0
         fx = escort_war(p, e, moves[key], coef)
         if fx.unbeaten:
             coef = max(coef, 1.0)
@@ -1083,7 +1174,7 @@ def resolve_round(
         msgs[hit.index], fixed, numbers = _land_hit(instance, tuning, hit, harmed, msgs)
         if fixed and hit.text:
             tale(hit.attacker, instance.participants[hit.attacker], hit.text, True, hit.target, fixed, numbers)
-    msgs += _focus_fire(instance, tuning, moves, factions, (first, second), names, act_index, harmed)
+    msgs += _focus_fire(instance, tuning, moves, factions, sides3, names, act_index, harmed)
     fall_delta = 0
     if on_field:
         fall_lines, fall_delta = _strike_commanders(
@@ -1093,9 +1184,13 @@ def resolve_round(
     if escorts:
         mate_lines, mate_delta = _strike_escorts(
             instance, tuning, moves, factions, (first, second), names, escort_hits, msgs, harmed, rnd_no, tale, shields,
+            extra=(GUARD,) if three else (),
         )
         msgs += mate_lines
         fall_delta += mate_delta
+    if keeper is not None:  # 三方混戰：兩軍打守將，池子歸零那一下算誰補上最後一刀（裁決 22）
+        msgs += _strike_guard(instance, tuning, keeper, moves, factions, (first, second), names, chief_hits, msgs, harmed,
+                              rnd_no, tale, trend_before)
     for hurt_name, amount in harmed.items():  # 被盯上打掉了氣血、回合結束還站著：戰功（撐住）
         q = instance.participants.get(hurt_name)
         if q is not None and amount >= 0.5 and not q.eliminated:
@@ -1128,7 +1223,7 @@ def resolve_round(
             push = tuning.push_max * (mine - theirs) / (mine + theirs)
         sides = "；".join(
             f"{names[side]}：" + "・".join(f"{m} {round(mixes[side][m] * 100)}%" for m in MOVES)
-            for side in (first, second) if mixes[side]
+            for side in sides3 if mixes[side]  # 三方混戰多寫守軍那一格
         )
         # 這一行放在這一回合訊息的最前面（只進戰報，場景上拿掉，見 without_mix_line）；推了多少照 shove 的說法，數字記在 RoundSwing.fixed
         leader = names[first] if round(push) > 0 else names[second]
@@ -1142,7 +1237,7 @@ def resolve_round(
         gained = instance.trend - trend_before
         for q in instance.participants.values():
             if q.kit is not None and not q.eliminated:
-                won = gained > 0 if q.faction == first else gained < 0
+                won = (gained > 0 if q.faction == first else gained < 0) and q.faction != GUARD  # 助守的人沒有戰線
                 tactics.war_close(q.kit, won, tactic, _war_rng(instance, q.name, rnd_no, "收"))
         for q, e in escorts:
             if e.kit is not None and e.fallen_round is None:
@@ -1158,7 +1253,10 @@ def resolve_round(
     instance.swings.append(RoundSwing(
         round=instance.round_number, delta=instance.trend - trend_before, causes="；".join(causes), fixed=round(push),
     ))
-    decisive = abs(instance.trend - CENTER) >= definition.decisive_margin
+    if three:  # 三方混戰（裁決 22）：偏離中線不收場，守將倒下那一回合當場收場
+        decisive = keeper is not None and keeper.fallen_round is not None
+    else:
+        decisive = abs(instance.trend - CENTER) >= definition.decisive_margin
     if decisive or instance.round_number >= total_rounds(definition):
         msgs += _record_outcome(instance, decide_outcome(instance, definition))
         instance.outcome_reason = outcome_reason(instance, definition)
@@ -1203,6 +1301,7 @@ class _Hit(NamedTuple):
     delta: int
     damage: float
     text: str = ""  # 玩家寫的那一句（沒有現成劇情時記一筆等著補，GambleTale）
+    push: bool = True  # 括號裡寫不寫推了戰線（三方混戰助守的人沒有戰線可推，裁決 22）
 
 
 def _harm(tuning: BattleTuning, q: BattleParticipant, want: float, harmed: dict[str, float]) -> float:
@@ -1235,7 +1334,8 @@ def _land_hit(
     pinned_now = hit.pin and q.neili > 0
     if pinned_now:
         q.pinned_round = instance.round_number + 2  # 這一回合是第 round_number＋1 回合，牽制的是下一回合
-    numbers = f"{shove(hit.side_name, hit.delta)}，{q.name}氣血 -{round(dealt)}，自己氣血 -{round(hit.damage)}"
+    lead = f"{shove(hit.side_name, hit.delta)}，" if hit.push else ""
+    numbers = f"{lead}{q.name}氣血 -{round(dealt)}，自己氣血 -{round(hit.damage)}"
     fixed = "" if hit.story else f"{hit.attacker}這一搏成功了，正中{q.name}！{numbers}。"
     line = f"{hit.story}（{numbers}）" if hit.story else fixed
     if pinned_now:
@@ -1246,14 +1346,16 @@ def _land_hit(
 
 def _focus_fire(
     instance: BattleInstance, tuning: BattleTuning, moves: dict[str, str], factions: dict[str, str],
-    armies: tuple[str, str], names: dict[str, str], act_index: int, harmed: dict[str, float],
+    armies: tuple[str, ...], names: dict[str, str], act_index: int, harmed: dict[str, float],
 ) -> list[str]:
     """引人注目：對面這一回合每一個出強攻的人，另外有 focus_per_attacker 的傷害平分到這一邊這一幕顯眼的人身上
-    （每人最多他上限的 focus_cap，也受 target_round_cap 夾）。"""
+    （每人最多他上限的 focus_cap，也受 target_round_cap 夾）。三方混戰（armies 三格，裁決 22）自己以外兩格都是對面。"""
     out: list[str] = []
     for side in armies:
-        enemy = armies[1] if side == armies[0] else armies[0]
-        attackers = sum(1 for n, m in moves.items() if factions.get(n) == enemy and m == "強攻")
+        enemies = [a for a in armies if a != side]
+        attackers = sum(1 for n, m in moves.items() if factions.get(n) in enemies and m == "強攻")
+        enemy = "、".join(  # 誰的強攻（兩軍對打只有另一軍）
+            names.get(e, e) for e in enemies if any(factions.get(n) == e and m == "強攻" for n, m in moves.items()))
         marked = [
             q for q in instance.participants.values()
             if q.faction == side and not q.eliminated and not q.away and instance.marked.get(q.name) == act_index
@@ -1267,7 +1369,7 @@ def _focus_fire(
             if dealt >= 0.5:
                 landed.append(f"{q.name}氣血 -{round(dealt)}")
         if landed:
-            out.append(f"{names.get(enemy, enemy)}的強攻盯著顯眼的人打：{'、'.join(landed)}。")
+            out.append(f"{enemy}的強攻盯著顯眼的人打：{'、'.join(landed)}。")
         for q in marked:
             _fell(instance, q, out)
     return out
@@ -1349,6 +1451,103 @@ def _strike_commanders(
     return out, shove_total
 
 
+def _owner(key: str) -> str:
+    """出招的鍵是誰的：隨行同伴的鍵（escort_key）算主人，其餘就是自己。"""
+    head = ESCORT_KEY.format(owner="")
+    return key[len(head):] if key.startswith(head) else key
+
+
+def blow_side(dealt: dict[str, float], trend: int, armies: tuple[str, str], seed: str) -> str:
+    """三方混戰守將倒下那一回合，最後一刀算哪一軍（裁決 22）：這一回合打守將打得多的那一軍；一樣多看這一回合開打時戰線偏向誰
+    （trend 以 armies[0] 為正向）；戰線也在中線，照 seed 擲（自己的亂數，不碰回合結算的 rng）。"""
+    a, b = armies
+    if abs(dealt.get(a, 0.0) - dealt.get(b, 0.0)) > 1e-9:
+        return a if dealt.get(a, 0.0) > dealt.get(b, 0.0) else b
+    if trend != CENTER:
+        return a if trend > CENTER else b
+    return random.Random(seed).choice(armies)
+
+
+def _strike_guard(
+    instance: BattleInstance, tuning: BattleTuning, keeper: Commander, moves: dict[str, str], factions: dict[str, str],
+    armies: tuple[str, str], names: dict[str, str], chief_hits: list[tuple[str, str, int, int, str, str, int, float, str]],
+    msgs: list[str], harmed: dict[str, float], rnd_no: int, tale, trend: int,
+) -> list[str]:
+    """三方混戰的守將這一回合挨的打（裁決 22，照單方攻中立地時守將池子的扣法）：兩軍每一個出強攻的（隨行同伴算主人的）打他
+    focus_per_attacker，點名他的放手一搏成了打掉池子的 hit_base＋風險×hit_per_risk（最多 hit_max）；**一軍打的再乘這一回合開打時
+    戰線往自己偏多少**（自己那一頭的戰局 ÷ 50：中線 ×1、壓到底 ×2、被壓到底 ×0）。助守的人出固守替他擋（guard_per、盾陣 guard_role，
+    最多 guard_cap，擋下的平分給他們）；一回合最多 round_cap，兩軍合起來超過時照比例分。池子歸零那一回合：打得多的那一軍補上最後一刀
+    （blow_side），那一軍這一回合打守將打得最多的參戰者記 slew、Commander.felled_by；SiegeInfo.blow 記那一軍。不推戰線。
+    點名那幾句填回 msgs 先佔好的位置；回傳其餘的句子。"""
+    gen = tuning.generals
+    first, second = armies
+    lean = {first: trend / CENTER, second: (100 - trend) / CENTER}
+    helpers = _guards(instance, moves, GUARD)
+    share = min(gen.guard_cap, sum(gen.guard_role if q.role == "con" else gen.guard_per for q in helpers))
+    per: dict[str, dict[str, float]] = {a: {} for a in armies}  # 一軍 → 參戰者 → 這一回合想打掉多少（乘過戰線、還沒扣擋）
+    focus: dict[str, float] = {a: 0.0 for a in armies}
+    named = []
+    for attacker, chief, risk, index, story, side_name, delta, damage, text in chief_hits:
+        me = instance.participants.get(attacker)
+        if chief != keeper.name or me is None or me.faction not in armies:
+            continue
+        want = keeper.neili_cap * min(gen.hit_max, gen.hit_base + risk * gen.hit_per_risk) * lean[me.faction]
+        per[me.faction][attacker] = per[me.faction].get(attacker, 0.0) + want
+        named.append((attacker, me, index, story, side_name, delta, damage, text, want))
+    for n, m in moves.items():
+        side = factions.get(n)
+        if m != "強攻" or side not in armies or tuning.focus_per_attacker <= 0:
+            continue
+        want = tuning.focus_per_attacker * lean[side]
+        per[side][_owner(n)] = per[side].get(_owner(n), 0.0) + want
+        focus[side] += want
+    raw = {a: sum(per[a].values()) for a in armies}
+    blocked = sum(raw.values()) * share
+    if blocked > 0 and helpers:
+        for q in helpers:
+            _harm(tuning, q, blocked / len(helpers), harmed)
+    total = sum(raw.values()) * (1 - share)
+    room = min(keeper.neili_cap * gen.round_cap, keeper.neili)
+    scale = (1 - share) * (min(1.0, room / total) if total > 0 else 0.0)  # 想打的 → 真的打掉的
+    dealt = {a: raw[a] * scale for a in armies}
+    keeper.neili = max(0.0, keeper.neili - sum(dealt.values()))
+    out: list[str] = []
+    for attacker, me, index, story, side_name, delta, damage, text, want in named:
+        hit = want * scale
+        if hit >= 0.5:
+            me.hits_landed += 1
+            me.hurt_dealt += hit
+        cover = f"（{len(helpers)} 人固守護住了 {round(want * share)}）" if want * share >= 0.5 else ""
+        numbers = f"{shove(side_name, delta)}，{keeper.name}氣血 -{round(hit)}{cover}，自己氣血 -{round(damage)}"
+        fixed = "" if story else f"{attacker}這一搏成功了，正中{keeper.name}！{numbers}。"
+        msgs[index] = f"{story}（{numbers}）" if story else fixed
+        if fixed and text:
+            tale(attacker, me, text, True, keeper.name, fixed, numbers)
+    for a in armies:
+        if focus[a] <= 0:
+            continue
+        cover = focus[a] * share
+        out.append(GUARD_HIT_LINE.format(
+            side=names.get(a, a), guard=keeper.name, hp=round(focus[a] * scale),
+            shield=GUARD_SHIELD.format(n=len(helpers), hp=round(cover)) if cover >= 0.5 else "",
+        ))
+    if keeper.neili > 1e-6:
+        return out
+    keeper.neili, keeper.fallen_round = 0.0, rnd_no
+    side = blow_side(dealt, trend, armies, f"最後一刀|{instance.battle_id}|{instance.record_id}|{rnd_no}")
+    crew = [(amount, instance.participants[n]) for n, amount in per[side].items() if n in instance.participants]
+    best = max(crew, key=lambda row: (row[0], row[1].scores.get("強攻", 0.0), row[1].name), default=None)
+    who = best[1].name if best is not None else ""
+    keeper.felled_by = who
+    if best is not None:
+        best[1].slew += 1
+    if instance.siege is not None:
+        instance.siege.blow = side
+    line = BLOW_LINE if who else BLOW_LINE_NOBODY
+    out.append(line.format(who=who, side=names.get(side, side), guard=keeper.name))
+    return out
+
+
 def _guards(instance: BattleInstance, moves: dict[str, str], side: str) -> list[BattleParticipant]:
     """這一回合這一邊出固守、還站著的參戰者（替人物、同伴擋打）。"""
     return [
@@ -1360,13 +1559,14 @@ def _guards(instance: BattleInstance, moves: dict[str, str], side: str) -> list[
 def _strike_escorts(
     instance: BattleInstance, tuning: BattleTuning, moves: dict[str, str], factions: dict[str, str],
     armies: tuple[str, str], names: dict[str, str], hits: list[tuple[str, str, int, int, str, str, int, float, str]],
-    msgs: list[str], harmed: dict[str, float], rnd_no: int, tale, shields: dict[str, float],
+    msgs: list[str], harmed: dict[str, float], rnd_no: int, tale, shields: dict[str, float], extra: tuple[str, ...] = (),
 ) -> tuple[list[str], int]:
     """隨行的同伴這一回合挨的打（歷史武將同行第五節，照 _strike_commanders 的規矩）：點名他的放手一搏成了打掉他池子的
     hit_base＋風險×hit_per_risk（最多 hit_max）；對面每一個出強攻的照 focus_per_attacker 算一份，平分到這一邊站著的同伴身上；
     一回合最多 round_cap；同一邊出固守的人照 guard_per／guard_role 替他擋（最多 guard_cap），擋下來的平分給他們。
     集火打到的合成一句（ESCORT_FOCUS_LINE，「讀得下去」），點名與敗走各一句。池子打光就敗走：戰局往對面推 escort_fall_push，
-    最後一擊的人記 slew。回傳其餘的句子與敗走推了多少（正是往第一方）。"""
+    最後一擊的人記 slew。回傳其餘的句子與敗走推了多少（正是往第一方）。
+    extra 是兩軍以外也算對面的格（三方混戰的守軍 GUARD，裁決 22：守將與助守的人的強攻也打得到兩軍的同伴）。"""
     gen = tuning.generals
     first = armies[0]
     out: list[str] = []
@@ -1406,7 +1606,8 @@ def _strike_escorts(
             tale(attacker, me, text, True, e.name, fixed, numbers)
     for side in armies:
         enemy = armies[1] if side == first else first
-        attackers = [n for n, m in moves.items() if factions.get(n) == enemy and m == "強攻"]
+        foes = (enemy, *extra)
+        attackers = [n for n, m in moves.items() if factions.get(n) in foes and m == "強攻"]
         mine = [(p, e) for p, e in standing if p.faction == side and e.neili > 0]
         if not attackers or not mine or tuning.focus_per_attacker <= 0:
             continue
@@ -1417,16 +1618,18 @@ def _strike_escorts(
             total += hit
             hurt += hit >= 0.5
         if hurt:
-            out.append(ESCORT_FOCUS_LINE.format(enemy=names.get(enemy, enemy), side=names.get(side, side), n=hurt, hp=round(total)))
+            who = "、".join(names.get(f, f) for f in foes if any(factions.get(n) == f for n in attackers))
+            out.append(ESCORT_FOCUS_LINE.format(enemy=who, side=names.get(side, side), n=hurt, hp=round(total)))
     for p, e in standing:
         if e.neili > 0:
             continue
         enemy = armies[1] if p.faction == first else first
+        foes = (enemy, *extra)
         e.neili, e.fallen_round = 0.0, rnd_no
         hitter = last.get(p.name, "")
         if not hitter:  # 沒有點名的最後一擊：算對面出強攻的人裡份量最重的那一個（同人物）
             best = max(
-                (q for n, m in moves.items() if m == "強攻" and (q := instance.participants.get(n)) is not None and q.faction == enemy),
+                (q for n, m in moves.items() if m == "強攻" and (q := instance.participants.get(n)) is not None and q.faction in foes),
                 key=lambda q: (q.scores.get("強攻", 0.0), q.name), default=None,
             )
             hitter = best.name if best is not None else ""
@@ -1456,9 +1659,10 @@ def find_escort(instance: BattleInstance, definition: BattleDef, name: str, text
 
 
 def find_commander(instance: BattleInstance, definition: BattleDef, name: str, text: str) -> Commander | None:
-    """放手一搏的文字裡點名的對面上陣人物（同 find_target：名字 2 字以上、最先出現的那一個）；只認還在陣上的。"""
+    """放手一搏的文字裡點名的對面上陣人物（同 find_target：名字 2 字以上、最先出現的那一個）；只認還在陣上的。
+    三方混戰（裁決 22）的守將站 GUARD 那一格：兩軍的人點得到他。"""
     me = instance.participants.get(name)
-    armies = {f.id for f in definition.factions}
+    armies = set(fields(instance, definition))
     if me is None or me.faction not in armies:
         return None
     found = [
@@ -1691,12 +1895,19 @@ def gauge(
     else:
         gap = definition.decisive_margin - abs(now - CENTER)
         caption = f"{names[leader]}佔上風；再推{shove_size(gap)}就當場分出勝負"
+    decisive = definition.decisive_margin
+    keeper = next((c for c in instance.commanders if c.faction == GUARD), None) if melee(instance) else None
+    if keeper is not None:  # 三方混戰（裁決 22）：偏離中線不收場（兩道細線畫在兩頭），說明寫守將還剩多少
+        decisive = CENTER
+        if instance.phase == "active":
+            lead = MELEE_LEAD.format(side=names[leader]) if leader is not None else MELEE_EVEN
+            caption = MELEE_CAPTION.format(lead=lead, guard=keeper.name, hp=round(keeper.neili), cap=round(keeper.neili_cap))
     return {
         "name": definition.name, "phase": instance.phase,
         "round": instance.round_number + (0 if instance.phase == "ended" else 1), "total": total_rounds(definition),
         "left": {"id": left, "name": names[left], "mine": viewer_side == left},
         "right": {"id": right, "name": names[right], "mine": viewer_side == right},
-        "lean": now, "start": lean(start), "decisive": definition.decisive_margin, "zones": zones, "rounds": rounds,
+        "lean": now, "start": lean(start), "decisive": decisive, "zones": zones, "rounds": rounds,
         "caption": caption,
         "merit": merit_board(instance, tuning or BattleTuning(), left, right, viewer),
     }
@@ -1710,6 +1921,13 @@ def outcome_reason(instance: BattleInstance, definition: BattleDef) -> str:
     （最多 KEY_ROUNDS 個，照回合先後寫），連同那一回合的原因；開打時起點就偏向贏家的也寫一句。只看公開的戰局，不看伏筆鎖定。"""
     first, second = definition.factions[0].id, definition.factions[1].id
     names = side_names(instance, definition)  # 守將那一格寫守軍（FB-540）
+    if melee(instance):  # 三方混戰（裁決 22）：誰補上最後一刀，或守軍撐過了幾回合
+        keeper = next((c for c in instance.commanders if c.faction == GUARD), None)
+        if keeper is not None and keeper.fallen_round is not None and instance.siege.blow:
+            line = BLOW_REASON if keeper.felled_by else BLOW_REASON_NOBODY
+            return line.format(n=keeper.fallen_round, side=names.get(instance.siege.blow, instance.siege.blow),
+                               who=keeper.felled_by, guard=keeper.name)
+        return MELEE_HOLD_REASON.format(n=instance.round_number)
     if instance.trend == CENTER:
         return ""
     winner, sign = (first, 1) if instance.trend > CENTER else (second, -1)

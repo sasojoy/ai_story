@@ -7,16 +7,19 @@
 - 開集結（open_waiting）：時程表上到了開集結時候的那幾場（world.advance_world_state 記成 waiting）。那一刻重新看誰佔著（Review Focus 3：
   同一天先打的那一場、時刻表指定、管理者改了主人，後打的照打新的主人）；攻方自己已經是主人就作罷。起點照進度偏（start_trend）。
 - 誰能站哪一格（join_problem）：攻方站自己那一格；打的是誰的區塊，那一方站守的那一格；單方攻中立地時另一格是守將（guard_side），
-  另一軍站不進去、散人可以投效助守（裁決 8）；兩軍同時搶同一塊中立地沒有守將。
+  另一軍站不進去、散人可以投效助守（裁決 8）。
+- 兩軍同時攻同一塊中立地＝三方混戰（裁決 22，企劃者 2026-10-21）：守將留著、站第三格 battle_instance.GUARD，兩軍都打他、兩軍之間也互打，
+  誰補上守將最後一刀誰拿下；回合打完守將沒倒，守住、照舊中立。散人可以投效兩軍之一或助守。守將的池子在集結結束那一刻照兩軍到場的人數定
+  （size_melee_guard）。回合裡的規則在 battle_instance（resolve_round、_strike_guard）。
 - 留守（commanders）：守方是陣營時照龍頭上陣的挑法派那一區守方的大勢人物，沒有人物或中立地時是那裡最強的一路隊伍當守將（guard_squad）。
-- 收場（verdict）：攻方贏（大勝或險勝）就易手；否則原主人留著（中立還是中立）。攻方一個人都沒到（集結結束時）作罷。
+- 收場（verdict）：攻方贏（大勝或險勝）就易手；否則原主人留著（中立還是中立）。三方混戰照誰補上最後一刀。攻方一個人都沒到（集結結束時）作罷。
 只 import models、state、battle_instance、generals、territory、conquest、conquest_day（作罷）、world_state 型別。"""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
 from . import atlas, battle_instance, conquest, conquest_day, generals, territory
-from .battle_instance import Commander, SiegeInfo
+from .battle_instance import GUARD, Commander, SiegeInfo
 from .models import BattleDef, Content
 from .state import GameState, Rumor, SiegeSlot, WorldState
 
@@ -28,7 +31,14 @@ MUSTER_LINE = "{title}：{who}的集結號角吹響了，開打前趕到{region}
 VOID_HELD = "{who}原定攻{place}，那裡已經是{who}的了，這一仗作罷。"  # 待 joy 潤：開集結那一刻攻方已經是主人（Review Focus 3）
 VOID_ABSENT_NOTE = "攻方一個人都沒到，這一仗作罷，不算勝負。"  # 參戰者（守方、助守的人）那一則江湖紀錄
 HELD_LINE = "{title}：{side}守住了{place}。"  # 待 joy 潤：攻方沒打下來的天下大事（打下來的照 territory 的「落入」那一句）
-STALEMATE_LINE = "{title}：兩軍相持不下，{place}照舊沒人佔。"  # 待 joy 潤：兩軍同時搶同一塊中立地、戰局停在中線
+STALEMATE_LINE = "{title}：兩軍相持不下，{place}照舊沒人佔。"  # 待 joy 潤：兩軍同時搶同一塊中立地、那裡沒有守將（退回正面打）、戰局停在中線
+# 三方混戰（裁決 22）；待 joy 潤
+BLOW_RUMOR = "{title}：{who}替{side}補上最後一刀，{guard}倒下，{place}歸了{side}。"  # 天下大事（具名，天下大事一律寫名號）
+BLOW_RUMOR_NOBODY = "{title}：{side}補上最後一刀，{guard}倒下，{place}歸了{side}。"
+MELEE_HELD_LINE = "{title}：兩軍都沒能補上最後一刀，守軍守住了{place}，照舊沒人佔。"
+MELEE_TAKEN_TITLE = "{side}補上最後一刀，拿下{place}"  # 戰報與紀錄的結果
+MELEE_SCENE_LINE = "{attackers}同時攻{place}，守方{defender}兩頭迎戰；守將的氣血照開打時兩軍到場的人數定，誰補上最後一刀誰拿下這一塊。"
+MELEE_MIN_HEADS = 2  # 【開發】三方混戰守將的池子至少照幾個人算（一軍只到一個人也不會一碰就倒）
 TAKEN_TITLE = "{side}{margin}，拿下{place}"  # 待 joy 潤：戰報與紀錄的結果
 HELD_TITLE = "{side}守住{place}"
 STALEMATE_TITLE = "相持，{place}照舊"
@@ -54,16 +64,26 @@ def _other(side: str) -> str:
     return next(s for s in conquest.SIDES if s != side)
 
 
+def _squads(world: WorldState, content: Content, loc_id: str) -> list[str]:
+    return [sid for sid in territory.squads_at(world, content, loc_id) if sid in content.squads]
+
+
 def info(slot: SiegeSlot, world: WorldState, content: Content) -> SiegeInfo:
-    """開集結那一刻的這一場：此刻誰佔著（holder）、攻方（已經是主人的那一方不算攻方）、守將站哪一格。"""
+    """開集結那一刻的這一場：此刻誰佔著（holder）、攻方（已經是主人的那一方不算攻方）、守將站哪一格。
+    兩軍同時攻同一塊中立地、那裡有隊伍當守將：三方混戰，守將站 GUARD（裁決 22）；那裡沒有隊伍（開季中立的每一塊都有）退回兩軍正面打。"""
     holder = conquest.holder(world, content, slot.loc)
     attackers = [a for a in slot.attackers if a != holder]
-    guard = _other(attackers[0]) if len(attackers) == 1 and holder is None else None
+    if holder is None and len(attackers) == 1:
+        guard = _other(attackers[0])
+    elif holder is None and len(attackers) == 2 and _squads(world, content, slot.loc):
+        guard = GUARD
+    else:
+        guard = None
     return SiegeInfo(slot_id=slot.id, loc=slot.loc, attackers=attackers, holder=holder, guard_side=guard)
 
 
 def defender(info: SiegeInfo) -> str | None:
-    """守的那一格：陣營佔著的是那一方，中立地是守將那一格；兩軍同時搶中立地沒有。"""
+    """守的那一格：陣營佔著的是那一方，中立地是守將那一格（三方混戰是 GUARD）；兩軍同時搶沒有守將的中立地沒有。"""
     return info.holder if info.holder in conquest.SIDES else info.guard_side
 
 
@@ -74,13 +94,16 @@ def start_trend(world: WorldState, content: Content, info: SiegeInfo) -> int:
 
 def guard_squad(world: WorldState, content: Content, loc_id: str, side_slot: str) -> Commander | None:
     """那裡最強的一路隊伍當守將（站 side_slot 那一格；fid 是「squad:隊伍 id」，收場時 generals.after_battle 自然略過）：
-    份量＝strength(難度) × 龍頭上陣主將的倍數，池子照主將。那裡沒有隊伍是 None。"""
-    squads = [sid for sid in territory.squads_at(world, content, loc_id) if sid in content.squads]
+    份量＝strength(難度) × 龍頭上陣主將的倍數，池子照主將（三方混戰站 GUARD 時先照 MELEE_MIN_HEADS 個人算，集結結束再照到場的人數定，
+    size_melee_guard）。那裡沒有隊伍是 None。"""
+    squads = _squads(world, content, loc_id)
     if not squads:
         return None
     best = max(squads, key=lambda sid: (content.squads[sid].difficulty, sid))
     gen = content.config.battle.generals
     rank, pool = (gen.ranks[0] if gen.ranks else 1.0), (gen.pool[0] if gen.pool else 1000.0)
+    if side_slot == GUARD:
+        pool = content.config.conquest.melee_pool_per_head * MELEE_MIN_HEADS
     score = round(battle_instance.strength(content.config.battle, content.squads[best].difficulty) * rank, 1)
     return Commander(fid=f"squad:{best}", name=GUARD_NAME.format(squad=content.squads[best].name), faction=side_slot,
                      rank=0, score=score, neili=pool, neili_cap=pool)
@@ -88,7 +111,7 @@ def guard_squad(world: WorldState, content: Content, loc_id: str, side_slot: str
 
 def commanders(state: GameState, content: Content, info: SiegeInfo, definition: BattleDef) -> list[Commander]:
     """這一場的留守（不是參戰者：不佔人數、不等他、不拿軍餉）：守方是陣營時照龍頭上陣的挑法取那一區守方的大勢人物（開關開著時）；
-    沒有人物、或中立地時是那裡最強的一路隊伍當守將。兩軍同時搶中立地沒有守將。"""
+    沒有人物、或中立地時是那裡最強的一路隊伍當守將（三方混戰站 GUARD，裁決 22）。兩軍同時搶沒有隊伍的中立地沒有守將。"""
     side = defender(info)
     if side is None:
         return []
@@ -98,6 +121,18 @@ def commanders(state: GameState, content: Content, info: SiegeInfo, definition: 
             return rows
     guard = guard_squad(state.world, content, info.loc, side)
     return [guard] if guard is not None else []
+
+
+def size_melee_guard(content: Content, battle: battle_instance.BattleInstance) -> None:
+    """三方混戰集結結束、開打的那一下（Game._advance_battle_round 在 close_muster 之後叫，在 mutate 裡）：守將的池子照兩軍到場的人數定
+    （Config.conquest.melee_pool_per_head × max(MELEE_MIN_HEADS, 人數)，裁決 22【預設】）。不是三方混戰、還沒開打不動。"""
+    if not battle_instance.melee(battle) or battle.phase != "active":
+        return
+    heads = sum(1 for p in battle.participants.values() if p.faction in battle.siege.attackers)
+    pool = float(content.config.conquest.melee_pool_per_head * max(MELEE_MIN_HEADS, heads))
+    for c in battle.commanders:
+        if c.faction == GUARD and c.fallen_round is None:
+            c.neili = c.neili_cap = pool
 
 
 # 單方攻中立地時，散人、豪強站守將那一格（裁決 8）：那一格規則上是另一軍的 id，寫給人看的是中立的守軍、說「助守」，
@@ -141,7 +176,13 @@ def join_problem(content: Content, info: SiegeInfo, side: str | None, slot: str)
 
 def verdict(info: SiegeInfo, battle: battle_instance.BattleInstance, definition: BattleDef) -> tuple[str | None, str, str]:
     """收場：（易手給誰〔None＝原主人留著〕, 戰場上贏的那一方, 大勝／險勝）。照 battle_instance.result_at 判（戰局剛好 50 算守方守住；
-    兩軍同時搶中立地停在 50 是相持，誰都沒拿下）。"""
+    兩軍同時搶沒有守將的中立地停在 50 是相持，誰都沒拿下）。三方混戰（裁決 22）照誰補上最後一刀（SiegeInfo.blow）：那一軍拿下，
+    大勝看那一軍最後的戰線偏過中線 BIG_WIN_MARGIN；守將沒倒是守軍（GUARD）守住、險勝。"""
+    if battle_instance.melee(battle):
+        if info.blow:
+            lean = battle.trend if info.blow == definition.factions[0].id else 100 - battle.trend
+            return info.blow, info.blow, "大勝" if lean - battle_instance.CENTER >= battle_instance.BIG_WIN_MARGIN else "險勝"
+        return None, GUARD, "險勝"
     side = defender(info)
     if side is None and battle.trend == battle_instance.CENTER:
         return None, "", ""
@@ -151,6 +192,10 @@ def verdict(info: SiegeInfo, battle: battle_instance.BattleInstance, definition:
 
 def outcome_title(content: Content, info: SiegeInfo, taken: str | None, winner: str, margin: str) -> str:
     place = content.locations[info.loc].name
+    if info.holder is None and info.guard_side == GUARD:  # 三方混戰（裁決 22）
+        if taken is not None:
+            return MELEE_TAKEN_TITLE.format(side=content.scenario.faction_name(taken, taken), place=place)
+        return HELD_TITLE.format(side=battle_instance.GUARD_SIDE, place=place)
     if taken is not None:
         return TAKEN_TITLE.format(side=content.scenario.faction_name(taken, taken), margin=margin, place=place)
     side = defender(info)
@@ -161,8 +206,11 @@ def outcome_title(content: Content, info: SiegeInfo, taken: str | None, winner: 
 
 
 def scene_line(content: Content, info: SiegeInfo, battle: battle_instance.BattleInstance) -> str:
-    """攻城戰的場景第二行：誰攻、守方是誰（陣營、守將、或兩軍相爭）。"""
+    """攻城戰的場景第二行：誰攻、守方是誰（陣營、守將、或兩軍相爭）；三方混戰另寫誰補上最後一刀誰拿下（裁決 22）。"""
     who = "、".join(content.scenario.faction_name(a, a) for a in info.attackers)
+    if battle_instance.melee(battle):
+        guard = next((c.name for c in battle.commanders if c.faction == GUARD), battle_instance.GUARD_SIDE)
+        return MELEE_SCENE_LINE.format(attackers=who, place=content.locations[info.loc].name, defender=guard)
     if info.holder in conquest.SIDES:
         side = content.scenario.faction_name(info.holder, info.holder)
     else:
@@ -267,7 +315,17 @@ def settle(world: WorldState, content: Content, battle: battle_instance.BattleIn
             world.conquest.progress.pop(info_.loc, None)
         return {"taken": None, "winner": "", "margin": "", "title": battle.outcome_title or battle_instance.UNFINISHED_TITLE}
     taken, winner, margin = verdict(info_, battle, definition)
-    if taken is not None:
+    if battle_instance.melee(battle):  # 三方混戰（裁決 22）：寫出誰補上最後一刀（具名），或守軍守住
+        keeper = next((c for c in battle.commanders if c.faction == GUARD), None)
+        if taken is not None:
+            side = content.scenario.faction_name(taken, taken)
+            line = BLOW_RUMOR if keeper is not None and keeper.felled_by else BLOW_RUMOR_NOBODY
+            _rumor(world, line.format(title=name, who=keeper.felled_by if keeper is not None else "", side=side,
+                                      guard=keeper.name if keeper is not None else battle_instance.GUARD_SIDE, place=place), info_.loc)
+            conquest.set_control(world, content, info_.loc, taken)
+        else:
+            _rumor(world, MELEE_HELD_LINE.format(title=name, place=place), info_.loc)
+    elif taken is not None:
         conquest.set_control(world, content, info_.loc, taken)
     elif winner and defender(info_) is not None:
         holder = info_.holder
