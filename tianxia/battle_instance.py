@@ -329,6 +329,30 @@ class SiegeInfo(BaseModel):
     settled: bool = False  # 收場的事做過了（易手、進度歸 50、時程表記 done；只做一次）
 
 
+GUARD_SIDE = "守軍"  # 待 joy 潤：單方攻中立地時守將那一格在畫面、戰報、天下大事上的名字（不冠任何一軍，FB-540）
+# 單方攻中立地時的幕文字（範本的 text_by_lead 寫的是兩軍對打，「漢家的旗」「官軍的陣線」對中立的守軍不對，FB-540）；待 joy 潤
+GUARD_LEAD_TEXT = {
+    "attacker": "{who}的陣腳越壓越前，守軍一步步退回寨牆後面。",
+    "guard": "守軍據著寨牆死守，{who}一波波攻上來，都被打了回去。",
+}
+
+
+def neutral_guard(instance: BattleInstance) -> str | None:
+    """單方攻中立地時守將站的那一格（另一軍的 id，SiegeInfo.guard_side）：規則照那一格算（誰能站、勝負），寫給人看的一律寫中立的守軍
+    （GUARD_SIDE），不寫那一軍（FB-540）。不是這種攻城（決戰、陣營佔著的區塊、兩軍同時搶中立地）是 None。"""
+    s = instance.siege
+    return s.guard_side if s is not None and s.holder is None and s.guard_side else None
+
+
+def side_names(instance: BattleInstance, definition: BattleDef) -> dict[str, str]:
+    """這一場兩邊寫給人看的名字（陣營 id → 名字）：照範本的陣營名字，守將那一格（neutral_guard）換成 GUARD_SIDE。認東西照舊用 id。"""
+    names = {f.id: f.name for f in definition.factions}
+    guard = neutral_guard(instance)
+    if guard in names:
+        names[guard] = GUARD_SIDE
+    return names
+
+
 class BattleInstance(BaseModel):
     battle_id: str
     siege: SiegeInfo | None = None  # 攻城戰（領地爭奪第二批）；決戰是 None
@@ -571,10 +595,16 @@ def current_act(instance: BattleInstance, definition: BattleDef) -> BattleAct:
 
 def act_text(instance: BattleInstance, definition: BattleDef) -> str:
     """這一幕的文字（戰鬥系統 3.2）：照誰佔上風換版本——戰局高於 50 用第一方佔上風的那一版、低於 50 用第二方的，
-    剛好 50 或那一方沒寫就用 text。只看公開的戰局，不看伏筆鎖定（4.3）。"""
+    剛好 50 或那一方沒寫就用 text。只看公開的戰局，不看伏筆鎖定（4.3）。
+    單方攻中立地（neutral_guard）不用範本的兩軍版本（「漢家的旗」對中立的守軍不對，FB-540），改寫 GUARD_LEAD_TEXT。"""
     act = current_act(instance, definition)
     first, second = definition.factions[0].id, definition.factions[1].id
     leader = first if instance.trend > CENTER else second if instance.trend < CENTER else None
+    guard = neutral_guard(instance)
+    if guard is not None and leader is not None:
+        names = side_names(instance, definition)
+        who = "、".join(names.get(a, a) for a in instance.siege.attackers)
+        return GUARD_LEAD_TEXT["guard" if leader == guard else "attacker"].format(who=who)
     return act.text_by_lead.get(leader, act.text) if leader else act.text
 
 
@@ -630,8 +660,9 @@ def target_line(instance: BattleInstance, definition: BattleDef, name: str, text
     """給模型評成功率的那一行：點名的對手是誰、身手跟你比如何（只寫比較，不寫數字）；沒點名是空字串。"""
     target = find_target(instance, definition, name, text)
     me = instance.participants.get(name)
+    names = side_names(instance, definition)  # 守將那一格寫守軍（FB-540）
     if target is None and me is not None and (chief := find_commander(instance, definition, name, text)) is not None:
-        side = next((f.name for f in definition.factions if f.id == chief.faction), chief.faction)
+        side = names.get(chief.faction, chief.faction)
         hurt = "，已經帶傷" if chief.neili < chief.neili_cap * 0.5 else ""
         return f"{chief.name}（{side}{'主將' if chief.rank == 0 else '副將'}，親自坐鎮陣中、身邊護衛重重{hurt}）"
     if target is None or me is None:
@@ -640,7 +671,7 @@ def target_line(instance: BattleInstance, definition: BattleDef, name: str, text
     how = ("遠比玩家強" if ratio >= 1.5 else "比玩家強" if ratio >= 1.1 else "跟玩家不相上下" if ratio > 0.9
            else "比玩家弱" if ratio > 0.6 else "遠比玩家弱")
     role = role_name(tuning, target.role)
-    side = next((f.name for f in definition.factions if f.id == target.faction), target.faction)
+    side = names.get(target.faction, target.faction)
     hurt = "，已經帶傷" if target.neili < target.neili_cap * 0.5 else ""
     return f"{target.name}（{side}{'的' + role if role else ''}，身手{how}{hurt}）"
 
@@ -841,7 +872,7 @@ def resolve_round(
     escort_hits: list[tuple[str, str, int, int, str, str, int, float, str]] = []  # 點名同伴的（第二格是主人的名號，_strike_escorts）
     mixes = {side: _mix(moves, factions, side) for side in (first, second)}
     force, counts = {first: 0.0, second: 0.0}, {first: 0, second: 0}
-    names = {f.id: f.name for f in definition.factions}
+    names = side_names(instance, definition)  # 守將那一格寫守軍（FB-540）
     gambles: dict[str, int] = {}  # 陣營 → 這一回合放手一搏替自己這一邊推了多少（正是推進、負是倒退），回合摘要用
     gains: dict[str, int] = {}  # 陣營 → 其中成了的合起來推進多少（success_trend_cap 夾）
     losses: dict[str, int] = {}  # 陣營 → 其中失手的合起來倒退多少（負的，side_trend_cap 夾）
@@ -1619,7 +1650,7 @@ def gauge(
     的大勝，其餘照 outcomes 的門檻），decisive 是偏離中線多少當場收場。rounds 是每一回合從哪裡到哪裡、誰佔上風。
     merit 是條旁的「本場戰功」（merit_board；viewer 是看的人的名號）。"""
     first, second = definition.factions[0].id, definition.factions[1].id
-    names = {f.id: f.name for f in definition.factions}
+    names = side_names(instance, definition)  # 守將那一格寫守軍（FB-540）
     left = viewer_side if viewer_side in (first, second) else first
     right = second if left == first else first
 
@@ -1678,7 +1709,7 @@ def outcome_reason(instance: BattleInstance, definition: BattleDef) -> str:
     """收場時寫勝負的關鍵（試玩回饋 2026-10-08）：戰局停在哪一邊（剛好 50 不寫），就挑往那一邊推得最多的幾個回合
     （最多 KEY_ROUNDS 個，照回合先後寫），連同那一回合的原因；開打時起點就偏向贏家的也寫一句。只看公開的戰局，不看伏筆鎖定。"""
     first, second = definition.factions[0].id, definition.factions[1].id
-    names = {f.id: f.name for f in definition.factions}
+    names = side_names(instance, definition)  # 守將那一格寫守軍（FB-540）
     if instance.trend == CENTER:
         return ""
     winner, sign = (first, 1) if instance.trend > CENTER else (second, -1)

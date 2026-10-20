@@ -6067,12 +6067,12 @@ class Game:
 
     def _merit_line(self, battle: battle_instance.BattleInstance, definition: BattleDef | None) -> str:
         """收場時的論功那一則：兩軍各自戰功最高的人（battle_instance.top_merit；臨時投效的人算在投效的那一軍）；
-        都沒人出過手就不寫。"""
+        都沒人出過手就不寫。單方攻中立地時守將那一格寫守軍（battle_instance.side_names，FB-540）。"""
         if definition is None:
             return ""
         tuning = self.content.config.battle
         heads = [
-            (side, top) for fid, side in self._sides(definition).items()
+            (side, top) for fid, side in battle_instance.side_names(battle, definition).items()
             if (top := battle_instance.top_merit(battle, tuning, fid)) is not None
         ]
         if not heads:
@@ -6739,9 +6739,9 @@ class Game:
                 kept = have_old[(definition.name, time)]
                 kept.battle_ref = kept.battle_ref if kept.battle_ref is not None else battle.record_id
                 continue
-            sides = self._sides(definition)
+            sides = battle_instance.side_names(battle, definition)  # 守將那一格寫守軍（FB-540）
             side = sides.get(me.faction, me.faction)
-            foes = "、".join(f.name for f in definition.factions if f.id != me.faction) or "敵軍"
+            foes = "、".join(n for fid, n in sides.items() if fid != me.faction) or "敵軍"
             lines, *_ = self._showdown_lines(battle, me, side, sides)
             s.battle_seq += 1
             s.battles.append(BattleRecord(
@@ -6798,8 +6798,9 @@ class Game:
         季終收兵的決戰（unfinished，FB-035）沒有結果：只寫一則江湖紀錄交代一聲，不加戰報、不放「剛剛」的戰鬥卡片。"""
         c, s = self.content, self.state
         definition = self._definition_of(battle)  # 攻城戰的名字是「攻城・地點」（領地爭奪第二批）
-        sides = self._sides(definition) if definition is not None else {}  # 自己站哪一方（臨時投效的是投效的那一軍）
-        armies = {f.id: f.name for f in definition.factions} if definition is not None else {}
+        # 自己站哪一方（臨時投效的是投效的那一軍）；單方攻中立地時守將那一格寫守軍（battle_instance.side_names，FB-540）
+        sides = battle_instance.side_names(battle, definition) if definition is not None else {}
+        armies = dict(sides)
         name = definition.name if definition is not None else battle.battle_id
         side = sides.get(me.faction, me.faction)
         foes = "、".join(n for fid, n in armies.items() if fid != me.faction) or "敵軍"
@@ -6831,8 +6832,10 @@ class Game:
                 lines.append(f"你是{side}這一仗的首功，名字傳遍了江湖。")
             if fame:
                 highlight_changes += renown.gain(s, c, "fame", fame)  # 名聲設計 3.2
+            # 風聞（大勢人物擴充）：打贏的那一邊戰功前三名，那一區同一方的人物聽說了。助守中立地的守將（站的是另一軍那一格）
+            # 不是替那一軍出戰，不加那一軍人物的情誼（PM 2026-10-21，FB-540）
             if (definition is not None and definition.region and battle.outcome_side == me.faction
-                    and rank is not None and rank <= 3):  # 風聞（大勢人物擴充）：打贏的那一邊戰功前三名，那一區同一方的人物聽說了
+                    and rank is not None and rank <= 3 and me.faction != battle_instance.neutral_guard(battle)):
                 lines += figure_life.spread(s, c, "merit", str(battle.record_id), at=None, side=me.faction,
                                             text=f"在{name}立了戰功", region=definition.region)
         rule = c.config.breakthrough
@@ -7015,13 +7018,19 @@ class Game:
         return "散人" if faction is None else f"{self.content.scenario.faction_name(faction, faction)}的人"
 
     def _enlist_options(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> list[Option]:
-        """散人的臨時投效按鈕（兩軍各一顆）：集結時已經投效的那一邊是灰的「已投效」、還能改投另一邊；開打了還沒參戰的照樣能投效。"""
+        """散人的臨時投效按鈕（兩軍各一顆）：集結時已經投效的那一邊是灰的「已投效」、還能改投另一邊；開打了還沒參戰的照樣能投效。
+        單方攻中立地時守將那一格（battle_instance.neutral_guard）寫「助守【守軍】」，不寫那一格的陣營（FB-540；鈕 id 照舊是那一格的 id）。"""
         me = battle.participants.get(self.state.player.name)
-        return [
-            Option(id=f"battle:enlist:{f.id}", label=f"已臨時投效【{f.name}】", enabled=False)
-            if me is not None and me.faction == f.id else Option(id=f"battle:enlist:{f.id}", label=f"臨時投效【{f.name}】（只算這一場）")
-            for f in definition.factions
-        ]
+        guard, names = battle_instance.neutral_guard(battle), battle_instance.side_names(battle, definition)
+        out = []
+        for f in definition.factions:
+            done = me is not None and me.faction == f.id
+            if f.id == guard:
+                label = (siege.HELPED_GUARD if done else siege.HELP_GUARD).format(side=names[f.id])
+            else:
+                label = f"已臨時投效【{f.name}】" if done else f"臨時投效【{f.name}】（只算這一場）"
+            out.append(Option(id=f"battle:enlist:{f.id}", label=label, enabled=not done))
+        return out
 
     def _at_battle(self, definition: BattleDef) -> bool:
         """人在這場決戰的大區、而且不在路上，才算到了戰場（地圖擴充設計第六節）；決戰不限地點時只看在不在路上。
@@ -7166,8 +7175,9 @@ class Game:
             header += "\n\n" + seal.MANDATE_SCENE.format(
                 lean=seal.lean_text(battle.seal_lean, definition), shift=seal.shift_text(shift, battle.seal_lean, definition), weight=weight,
             )
+        names = battle_instance.side_names(battle, definition)  # 單方攻中立地時守將那一格寫守軍（FB-540）
         if battle.phase == "muster" and battle.commanders:  # 龍頭上陣：集結時就看得到誰親自上陣
-            header += "\n\n" + "\n".join(f"{f.name}：{text}" for f in definition.factions if (text := generals.lineup(battle, f.id)))
+            header += "\n\n" + "\n".join(f"{names[f.id]}：{text}" for f in definition.factions if (text := generals.lineup(battle, f.id)))
         watching = self._watching_battle(battle, definition)
         watch_line = self._watch_line(battle, definition)
         if battle.phase == "muster":
@@ -7178,9 +7188,11 @@ class Game:
                 return f"{header}\n\n集結中，還剩現實 {left}。{watch_line}"
             me = battle.participants.get(self.state.player.name)
             if me is not None:
-                side = self._sides(definition).get(me.faction, me.faction)
+                side = names.get(me.faction, me.faction)
                 leaving = "；走出這一區就不算在場" if definition.region is not None else ""
                 joined = "臨時投效" if self._free_agent(definition) else "加入"
+                if me.faction == battle_instance.neutral_guard(battle):
+                    joined = siege.HELP_GUARD_TITLE  # 「你已助守【守軍】」（FB-540）
                 role = battle_instance.role_text(self.content.config.battle, me.role)
                 role = f"你的職位：{role}。" if role else ""
                 ride = mounts.CAVALRY_LINE.format(name=me.mount, pct=mounts.pct(me.cavalry)) + "。" if me.mount else ""  # 騎著馬（5.9）：沒騎馬一個字都不多
@@ -7189,7 +7201,11 @@ class Game:
                 return f"{header}\n\n你已{joined}【{side}】，集結還剩現實 {left}。{role}{ride}集結結束就開打，在那之前照常行動{leaving}。"
             if self._free_agent(definition):
                 who = "你是散人" if self.state.player.faction is None else f"你是{self._own_side_name()}，不是交戰的兩軍"
-                return f"{header}\n\n集結中，還剩現實 {left}。{who}，可以臨時投效其中一方，只算這一場；集結期間照常行動。"
+                can = "可以臨時投效其中一方，只算這一場"
+                if battle_instance.neutral_guard(battle) is not None:  # 單方攻中立地：一邊是攻方、一邊是助守（FB-540）
+                    can = siege.FREE_AGENT_GUARD.format(
+                        who="、".join(names.get(a, a) for a in battle.siege.attackers), place=self.content.locations[battle.siege.loc].name)
+                return f"{header}\n\n集結中，還剩現實 {left}。{who}，{can}；集結期間照常行動。"
             return f"{header}\n\n集結中，還剩現實 {left}。選擇陣營加入；集結期間照常行動。"
         act = battle_instance.current_act(battle, definition)
         # 第幾回合／一共幾回合（戰鬥系統設計 3.2）：讓人知道還要打多久；收場的決戰不會走到這裡。
@@ -7213,7 +7229,7 @@ class Game:
             seen = battle.last_mix.get(enemy.id) if enemy is not None else None
             if seen:  # 這回合的比例要到結算才揭曉，畫面只寫上一回合（設計 3.4）
                 parts = "・".join(f"{m} {round(seen[m] * 100)}%" for m in MOVES)
-                last.append(f"> 對面上一回合（{enemy.name}）：{parts}")
+                last.append(f"> 對面上一回合（{names.get(enemy.id, enemy.name)}）：{parts}")
             if p.last_result:
                 last.append(f"> 你上一回合：{p.last_result}")
             if last:
@@ -7229,7 +7245,8 @@ class Game:
         """龍頭上陣：兩邊上陣的人物（氣血、敗走），自己這一方這一回合的將令。沒有人物上陣是空的。"""
         if not battle.commanders:
             return []
-        rows = [f"{SIDE_TAG.format(side=f.name)}{text}" for f in definition.factions if (text := generals.lineup(battle, f.id))]
+        names = battle_instance.side_names(battle, definition)  # 單方攻中立地時守將那一格寫守軍（FB-540）
+        rows = [f"{SIDE_TAG.format(side=names[f.id])}{text}" for f in definition.factions if (text := generals.lineup(battle, f.id))]
         order = battle_instance.order_text(battle, side, self.content.config.battle) if side is not None else ""
         return ["\n".join(rows)] + ([order] if order else [])
 
@@ -7246,7 +7263,7 @@ class Game:
         收場時寫進自己戰報的那一份（Joy 2026-10-14「決戰能不能把完整戰報在戰報那邊可以展開」，_file_showdown）：last 是 None＝整場、
         oldest_first 照先後、me 是自己，每一段最後一條寫自己這一回合出了什麼（MY_MOVE）。"""
         log = battle.narrative_log
-        sides = self._sides(definition)
+        sides = battle_instance.side_names(battle, definition)  # 單方攻中立地時守將那一格寫〔守軍〕（FB-540）
         owner = {c.name: c.faction for c in battle.commanders} | {n: q.faction for n, q in battle.participants.items()}
         names = sorted(owner, key=len, reverse=True)  # 名號長的先比：「沈浪」不能先認走「沈浪子」
 
@@ -7428,7 +7445,7 @@ class Game:
         text = text.strip()[:20]
         if not text:
             return ["（請先輸入你想做的事。）"]
-        faction_name = next((f.name for f in definition.factions if f.id == p.faction), p.faction)
+        faction_name = battle_instance.side_names(battle, definition).get(p.faction, p.faction)  # 助守中立地寫守軍（FB-540）
         return definition, option.tag, text, faction_name
 
     def battle_text_request(self, text: str) -> BattleTextRequest | list[str]:
@@ -7483,7 +7500,7 @@ class Game:
             return None
         definition = self._definition_of(battle)
         due = battle_instance.tales_due(battle)
-        names = {f.id: f.name for f in definition.factions}
+        names = battle_instance.side_names(battle, definition)  # 助守中立地寫守軍（FB-540）
         return BattleTaleRequest(
             battle_id=battle.battle_id, record_id=battle.record_id, opened=battle.muster_deadline_real,
             act_index=min(due[0].act_index, len(definition.acts) - 1),
@@ -7647,6 +7664,12 @@ class Game:
                 ),
             )
             msgs = [f"你臨時投效了{armies[side]}，趕到了戰場，這一回合就能出手；打完你照樣是{self._own_side_name()}。"]
+        if side == battle_instance.neutral_guard(battle):  # 助守中立地的守將：不寫那一格的陣營（FB-540）
+            place = self.content.locations[battle.siege.loc].name
+            line = siege.HELP_GUARD_LINE if battle.phase == "muster" else siege.HELP_GUARD_LATE
+            msgs = [line.format(place=place, own=self._own_side_name())]
+            self._write(f"{definition.name}・{siege.HELP_GUARD_SWITCH if changing_sides else siege.HELP_GUARD_TITLE}", msgs)
+            return msgs
         self._write(f"{definition.name}・{'改投' if changing_sides else '臨時投效'}{armies[side]}", msgs)
         return msgs
 

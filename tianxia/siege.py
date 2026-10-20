@@ -100,6 +100,16 @@ def commanders(state: GameState, content: Content, info: SiegeInfo, definition: 
     return [guard] if guard is not None else []
 
 
+# 單方攻中立地時，散人、豪強站守將那一格（裁決 8）：那一格規則上是另一軍的 id，寫給人看的是中立的守軍、說「助守」，
+# 不寫「臨時投效【另一軍】」（FB-540；那一格的名字是 battle_instance.GUARD_SIDE）。待 joy 潤
+HELP_GUARD = "助守【{side}】（只算這一場）"
+HELPED_GUARD = "已助守【{side}】"
+HELP_GUARD_LINE = "你助守{place}，只算這一場：打完你照樣是{own}。"
+HELP_GUARD_LATE = "你助守{place}，趕到了戰場，這一回合就能出手；打完你照樣是{own}。"
+HELP_GUARD_TITLE = "助守"  # 江湖紀錄的標題「攻城・荒丘・助守」
+HELP_GUARD_SWITCH = "改為助守"
+FREE_AGENT_GUARD = "可以臨時投效{who}、或助守{place}，只算這一場"  # 集結時散人、豪強看到的那一句（取代「可以臨時投效其中一方」）
+
 JOIN_SIDE = "（這一仗是{who}攻{place}，你這一邊插不上手。）"  # 待 joy 潤
 JOIN_OWN = "（你只能站在自己陣營這一邊。）"
 WATCH_LINE = "這一仗是{who}攻{place}，你這一邊插不上手，照常行動就好。"  # 待 joy 潤：另一軍站在攻中立地的那一區時，場景上那一句
