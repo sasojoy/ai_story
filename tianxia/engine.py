@@ -219,6 +219,9 @@ RESUME_LINE = (  # 待 S1／joy 潤；{skip} 是實際扣了多少（world.resum
 )
 PAUSED_REFUSAL = "（賽季時鐘暫停中，先按「繼續」。）"  # 暫停中的管理者動作；待 S1／joy 潤
 NO_SUCH_PLAYER = "（江湖上沒有「{name}」這個人。）"  # 管理者的「玩家個人劇情」查不到名號（管理者觸發鈕第 2 組；只有管理者看得到）
+# 管理者「立刻發軍令」的回話照軍令多久一道（orders.daily：照週一發、每天 00:00 發；FB-502，待 joy 潤）
+ADMIN_REISSUE_HOW = {False: "週一", True: " 00:00 "}  # 「已照週一的做法重發」「已照 00:00 的做法重發」
+ADMIN_REISSUE_NONE = {False: "這一週沒有要重挑的軍令", True: "今天沒有要重挑的軍令"}
 
 
 @dataclass(frozen=True)
@@ -11938,16 +11941,17 @@ class Game:
         """立刻發本週軍令：這一週還沒達成的軍令換成照週一的做法（orders.issue，週一掛鉤用的同一個函式，redraw）此刻重新挑的一批，
         各陣營照常發「本週軍令：…」的陣營軍情。換掉的那幾道進度不算了；已經達成的原封不動、不會再達成一次（審查 I-1：重挑的 id
         是決定性的，不留著的話同一道會達成兩次、效果套兩次）。不動 hooked_week：下週一照常發令。"""
-        refusal = self._admin_refusal("發本週軍令")
+        refusal = self._admin_refusal(f"發{calendar.week_word('order_this', self.content, self.state.world)}軍令")
         if refusal:
             return self._log(refusal)
         s, c = self.state, self.content
         if not orders.active(s, c):
             return self._log(["（這一季沒有軍令。）"])
         week = orders.period_of(s, c)  # 21 天季是季曆第幾天（每天一期）
+        daily = orders.daily(s, c)
         replaced = sum(1 for o in s.world.orders if o.week == week and not o.done)
         kept = {o.id for o in s.world.orders if o.week == week and o.done}
-        if orders.daily(s, c):
+        if daily:
             orders.issue_day(s, c, week, self.rng, redraw=True)
         else:
             orders.issue(s, c, week, self.rng, redraw=True)
@@ -11956,9 +11960,9 @@ class Game:
         listing = "；".join(
             f"{f.name}：{'、'.join(orders.title(c, o) for o in issued if o.faction == f.id)}"
             for f in c.scenario.factions if any(o.faction == f.id for o in issued)
-        ) or "這一週沒有要重挑的軍令"
-        label = f"第 {week} 天" if orders.daily(s, c) else f"第 {week} 週"
-        msg = (f"已照週一的做法重發{label}的軍令，換掉沒達成的 {replaced} 道（進度不算了；已達成的 {len(kept)} 道照舊）"
+        ) or ADMIN_REISSUE_NONE[daily]
+        label = f"第 {week} 天" if daily else f"第 {week} 週"
+        msg = (f"已照{ADMIN_REISSUE_HOW[daily]}的做法重發{label}的軍令，換掉沒達成的 {replaced} 道（進度不算了；已達成的 {len(kept)} 道照舊）"
                f"——{listing}。")
         self._write("重發軍令", [msg], tag="管理者")
         return self._log([msg])
@@ -12863,7 +12867,8 @@ class Game:
         }
         if orders.daily(self.state, c):  # 21 天季的軍令每天一道：軍令卡收起來照季曆第幾天記（網頁 orderKey），隔天重新展開
             cal["day"] = at.cal_day
-        words = calendar.week_words(c, w)  # 7 天濃縮季：畫面上寫「週」的地方換成段（網頁 calWords，FB-501）；其他季沒有這個鍵
+        # 7 天濃縮季：畫面上寫「週」的地方換成段（網頁 calWords，FB-501）；21 天季只有軍令的字（FB-502）；週末、14 天沒有這個鍵
+        words = calendar.week_words(c, w)
         if words is not None:
             cal["words"] = words
         return {

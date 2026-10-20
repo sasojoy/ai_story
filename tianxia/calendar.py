@@ -301,20 +301,33 @@ def point_text(at: CalPoint, *, by_day: bool = False) -> str:
 # ── 7 天濃縮季的「週」是段（FB-501，PM 2026-10-20）────────────────────
 # 季曆有段的季（week7_on）畫面上寫「週」的地方，換字一律走 week_word／week_label（網頁走 week_words 送的那一份）；
 # 其他季（21 天、週末、14 天）照原本的字，一個字都不變。7 天季的字待 joy 潤。
-WEEK_WORDS = {  # 鍵：(照週的季, 7 天濃縮季)
+# 軍令的字（ORDER_KEYS）另照「這一季的軍令是不是每天發」（orders_daily：照現實天的季，21 天季也是；FB-502，PM 2026-10-20
+# 推翻 FB-501 那一批「21 天季不動」）；週末、14 天照原本的字。
+WEEK_WORDS = {  # 鍵：(照週的季, 7 天濃縮季；軍令的那幾個是軍令每天發的季)
     "this": ("本週", "這一段"),  # 本週大事、本週在任
     "this_one": ("這一週", "這一段"),  # 頭目「這一週他不再現身」
+    "this_short": ("這週", "這一段"),  # 第 3、4 階行動「這週已經做滿 N 次」（FB-503）
     "each": ("每週", "每段"),  # 名聲：每週通緝、每週貼海捕文書
-    "order_this": ("本週", "今日"),  # 軍令：7 天季每天一道（21 天季也是每天一道，這一批不動）
+    "order_this": ("本週", "今日"),  # 軍令：21 天季、7 天季每天一道
     "order_that": ("這週", "今天"),  # 軍令的傳聞「這週連敗幾陣」
     "order_each": ("每週一", "每天"),  # 玩法說明、主線「每週一有軍令」
+    "order_every": ("每週", "每天"),  # 入伍段引薦人「上頭每週發幾道軍令」（content/tutorial.json 的 {每週}）
     "realign": ("星期", "日子"),  # 暫停再繼續：季曆對回現實的星期（21 天季）／日子（7 天季）
 }
+ORDER_KEYS = ("order_this", "order_that", "order_each", "order_every")  # 照 orders_daily 換的那幾個（FB-502）
+
+
+def orders_daily(season: WorldState | None, content: Content) -> bool:
+    """這一季的軍令每天 00:00 發一道（正式季整合設計 7.1）：照現實天的季（21 天季、7 天濃縮季）；其他季每週一發。
+    orders.daily 與軍令的字（ORDER_KEYS）都問它。"""
+    return season21_on(season, content)
 
 
 def week_word(key: str, content: Content, season: WorldState | None) -> str:
-    """WEEK_WORDS[key] 照季挑一個：7 天濃縮季（week7_on）是後一個，其他季是前一個（原本的字）。"""
-    return WEEK_WORDS[key][1 if week7_on(season, content) else 0]
+    """WEEK_WORDS[key] 照季挑一個：軍令的字（ORDER_KEYS）照軍令每天發不發（orders_daily），其餘照 7 天濃縮季（week7_on）；
+    是的話後一個，不然前一個（原本的字）。"""
+    on = orders_daily(season, content) if key in ORDER_KEYS else week7_on(season, content)
+    return WEEK_WORDS[key][1 if on else 0]
 
 
 def segment_days(week: int, content: Content) -> tuple[int, int]:
@@ -340,9 +353,11 @@ def week_label(week: int, content: Content, season: WorldState | None, *, form: 
 
 def week_words(content: Content, season: WorldState | None) -> dict | None:
     """給網頁的那一份（status.calendar.words；網頁 calWords／wkWord／wkName）：7 天濃縮季的 WEEK_WORDS 與每一段的 week_label
-    （names、ends）；其他季是 None，網頁照原本的字。"""
+    （names、ends）；21 天季只有軍令的那幾個（ORDER_KEYS，FB-502；沒有 names，網頁的「週」照原本的字）；其他季是 None，網頁照原本的字。"""
     if not week7_on(season, content):
-        return None
+        if not orders_daily(season, content):
+            return None
+        return {key: WEEK_WORDS[key][1] for key in ORDER_KEYS}
     weeks = range(1, len(content.config.season_segments) + 1)
     return {
         **{key: pair[1] for key, pair in WEEK_WORDS.items()},

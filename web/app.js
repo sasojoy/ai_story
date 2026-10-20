@@ -204,15 +204,19 @@
     if (sec < 60) return "就在眼前";
     return h > 0 ? `現實約 ${h} 小時 ${m} 分後` : `現實約 ${m} 分後`;
   };
-  // FB-501（PM 2026-10-20）：7 天濃縮季的「週」是段（第 1～2、3～4、5～7 天），軍令每天一道。伺服器只在 7 天季送
-  // status.calendar.words（calendar.week_words：「這一段」「每段」「今日」……與每一段的名字 names、段末 ends）；畫面上寫週的地方
-  // 一律問 calWords／wkWord／wkName，沒有 words 的季（21 天、週末、14 天）照原本的字（plain），一個字都不變。字待 joy 潤
+  // FB-501（PM 2026-10-20）：7 天濃縮季的「週」是段（第 1～2、3～4、5～7 天），軍令每天一道。伺服器在 7 天季送
+  // status.calendar.words（calendar.week_words：「這一段」「每段」「今日」……與每一段的名字 names、段末 ends），21 天季只送軍令的
+  // 那幾個字（FB-502）；畫面上寫週的地方一律問 calWords／wkWord／wkName，沒有那個字的季照原本的字（plain），週末、14 天一個字都不變。字待 joy 潤
   function calWords() {
     const s = S.main && S.main.status;
     return (s && s.calendar && s.calendar.words) || null;
   }
   function wkWord(key, plain) { const w = calWords(); return w && w[key] ? w[key] : plain; }
   function wkName(n, plain, end) { const w = calWords(), names = w && (end ? w.ends : w.names); return (names && names[n - 1]) || plain; }
+  // FB-502（PM 2026-10-20）：21 天季的軍令也是每天一道，伺服器在 21 天季只送軍令的那幾個字（order_this…，沒有 names）。
+  // 「季曆有段」與「軍令每天發」分開問：段照 names，軍令照 order_this
+  function wk7() { const w = calWords(); return !!(w && w.names); }
+  function ordersDaily() { const w = calWords(); return !!(w && w.order_this); }
   // 江湖頁畫的東西有沒有變：狀態列（時鐘、季曆每次輪詢都在走）另外重畫，不讓「剛剛」一直重播浮現
   // 狀態列另外畫（renderTop），江湖頁不必跟著它重畫；奪璽卡與碎片卡的資料也在 status 裡（回合、氣勢、已出招、架勢），
   // 那兩張變了要重畫（FB-172）。奪璽卡的倒數（left）每秒都在變，不算進來（FB-182：單挑期間全服的江湖頁每 10 秒整頁重畫）：
@@ -5641,6 +5645,8 @@
 
   // 管理者「每週的事」那一行在 7 天濃縮季的寫法（軍令每天、第 4 階席次每段；FB-501，待 joy 潤）
   const ADMIN_DAILY_WEEK7 = "每天、每段的事（照 00:00 的做法立刻再做一次；之後照常）";
+  // 21 天季：軍令每天、第 4 階席次照舊每週一（FB-502，待 joy 潤）
+  const ADMIN_DAILY_SEASON21 = "每天、每週的事（軍令照 00:00、席次照週一的做法立刻再做一次；之後照常）";
   function sheetHtml() {
     const s = S.main.status;
     const a = S.admin;
@@ -5691,7 +5697,7 @@
               <div class="row ad-row"><span class="ad-tag">事件</span><select class="input" id="ad-fire" aria-label="事件">${opts(a.events)}</select><button class="btn small" data-act="admin" data-op="fire">觸發</button></div>
               <div class="row ad-row"><span class="ad-tag">大勢</span><select class="input" id="ad-trend" aria-label="大勢">${opts(a.trends)}</select><input class="input" id="ad-amount" type="number" value="10" aria-label="推動量" style="max-width:76px"><button class="btn small" data-act="admin" data-op="push_trend">推動</button></div>
               ${a.season_one ? `
-                <p class="muted">${calWords() ? ADMIN_DAILY_WEEK7 : "每週的事（照週一的做法立刻再做一次；下週一照常）"}</p>
+                <p class="muted">${wk7() ? ADMIN_DAILY_WEEK7 : ordersDaily() ? ADMIN_DAILY_SEASON21 : "每週的事（照週一的做法立刻再做一次；下週一照常）"}</p>
                 <div class="row wrap"><button class="btn small" data-act="admin" data-op="issue_orders">立刻發${wkWord("order_this", "本週")}軍令</button><button class="btn small" data-act="admin" data-op="rotate_seats">立刻輪替第 4 階席次</button></div>` : ""}
               ${a.showdowns && a.showdowns.length ? `
                 <p class="muted">三場大戲（照時刻表開集結；開過就算這一場開過了，排定的時間到了不會再開）</p>
@@ -5805,7 +5811,7 @@
     const RESUME_21 = `讓賽季時鐘繼續走：${R.days} 天的季的季曆對回現實的${R.unit}，暫停期間的大事在這一刻一起發生，季末照原本的日期；排好的決戰照原本的時間開，時間在暫停裡過了的馬上開始集結，確定？`;
     // 三場大戲與季末的預設時間：7 天濃縮季照時刻表寫（S.admin.default_dates，timetable.default_dates_note；FB-501），其他季照原本那一句
     const DATES = (S.admin && S.admin.default_dates) || "預設在第 6、9、11 週中、第 12 週末";
-    const week7 = !!calWords(); // 7 天濃縮季：軍令每天一道、第 4 階席次每段（FB-501）
+    const week7 = wk7(), daily = ordersDaily(); // 7 天濃縮季：第 4 階席次每段（FB-501）；21 天季、7 天季：軍令每天一道（FB-502）
     return {
       open_season: [`開季：賽季從籌備中正式開始，全服玩家都能行動了。記得排三場大戲與季末的時間（${DATES}），確定？`, "確定開季"],
       // 照 Game.admin_end_season 實際做的事寫（只在進行中有效）
@@ -5831,7 +5837,7 @@
       revive_figure: [`叫「${picked("ad-fallen")}」回來：以一半聲威回到原本的戰線，全服看得到一句天下大事，確定？`, "確定叫回"],
       cancel_battle: ["取消正在集結或開打的決戰：不算勝負，參戰者都會收到通知；時刻表的決戰不會自己再開，要用「定結果」收尾，確定？", "確定取消"],
       // 管理者觸發鈕（企劃者 2026-10-07）：照 Game.admin_issue_orders／admin_rotate_seats 實際做的事寫
-      issue_orders: [week7 // 7 天濃縮季的軍令每天一道（FB-501，待 joy 潤）
+      issue_orders: [daily // 軍令每天一道的季（21 天、7 天；FB-501、FB-502，待 joy 潤）
         ? "立刻發今日軍令：今天還沒達成的軍令照 00:00 的做法重挑、換掉（它們的進度不算了），各陣營發一則軍情；已經達成的照舊留著、不會再達成一次；明天 00:00 照常發令，確定？"
         : "立刻發本週軍令：這一週還沒達成的軍令照週一的做法重挑、換掉（它們的進度不算了），各陣營發一則軍情；已經達成的照舊留著、不會再達成一次；下週一照常發令，確定？", "確定重發"],
       rotate_seats: [week7 // 7 天濃縮季的席次每段輪替（FB-501，待 joy 潤）

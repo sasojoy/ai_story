@@ -114,15 +114,17 @@ def test_the_timeline_head_keeps_the_segment_end_on_one_line():
 @pytest.mark.parametrize("profile", ["season21", "weekend"])
 def test_other_seasons_keep_the_week_words(profile, monkeypatch):
     out = _render(_game(profile), monkeypatch)
-    assert "📜 本週軍令（1）" in out["orders"] and out["board"] == "本週江湖大事 1 則"
+    assert out["board"] == "本週江湖大事 1 則"
     assert "<b>第 1 週・三十六方起義</b>" in out["result"]
     assert "<small>第 1 週週末</small>" in out["timeline"] and "<h4>第 1 週</h4>" in out["timeline"]
     assert "<h4>本週大事</h4>" in out["overview"] and "易手：第 1 週 " in out["place"]
     assert "比第 1 週" in out["hud"] and "正在看第 1 週" in out["chrome"]
-    assert "每週的事（照週一的做法立刻再做一次；下週一照常）" in out["sheet"] and "立刻發本週軍令" in out["sheet"]
     assert "（預設在第 6、9、11 週中、第 12 週末）" in out["open"]
-    assert out["issue"].startswith("立刻發本週軍令：這一週還沒達成的軍令照週一的做法重挑")
     assert "照上一週的貢獻" in out["rotate"]
+    if profile == "weekend":  # 21 天季的軍令每天一道：軍令卡、管理者那幾句照「今日」寫（FB-502，test_fb502_season21_order_words）
+        assert "📜 本週軍令（1）" in out["orders"]
+        assert "每週的事（照週一的做法立刻再做一次；下週一照常）" in out["sheet"] and "立刻發本週軍令" in out["sheet"]
+        assert out["issue"].startswith("立刻發本週軍令：這一週還沒達成的軍令照週一的做法重挑")
     if profile == "season21":
         assert "21 天的季：繼續時季曆會對回現實的星期" in out["pause"] and "21 天的季的季曆對回現實的星期" in out["resume"]
     else:

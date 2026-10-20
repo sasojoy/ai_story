@@ -539,7 +539,7 @@ def board_help(content: Content) -> list[str]:
 def quest_help(content: Content, allied: bool = False, season: WorldState | None = None) -> list[str]:
     """主線小標點開的說明：你能怎麼影響這一季（遊歷、軍令、伏筆）。FB-112：推線只說有些地方；伏筆只有會鎖定大事的兩方
     （foreshadow.LOCK_SIDES＝timetable.SIDE_NAMES）改寫得了，豪強做完是第三方（揭曉時留名、照 third_party_trends 推割據，結果不變），
-    散人做不了（foreshadow.capable 要陣營對得上）。season 給了照季寫軍令多久一道（7 天濃縮季「每天」，FB-501）。"""
+    散人做不了（foreshadow.capable 要陣營對得上）。season 給了照季寫軍令多久一道（軍令每天發的季〔21 天季、7 天濃縮季〕「每天」，FB-501、FB-502）。"""
     locks = "、".join(timetable.SIDE_NAMES.values())
     third = "" if allied else "、".join(STANCE_NAMES.get(f, f) for f in _geju_sides(content))  # 豪強分屬兩軍：沒有第三方
     geju = any(rules.GEJU in e.third_party_trends for e in content.timetable)
@@ -782,7 +782,7 @@ def join_lines(content: Content, season: WorldState) -> list[str]:
     effects += [f"{'、'.join(denting)}挫大勢人物的聲威"] if denting else []
     met = f"全陣營湊滿額度的那一刻一起見效（{'，'.join(effects)}）" if effects else "全陣營湊滿額度的那一刻一起見效"
     lines += [
-        # 7 天濃縮季的軍令每天一道：「每天發令」「今日的軍令卡」（calendar.week_word，FB-501）
+        # 軍令每天一道的季（21 天季、7 天濃縮季）：「每天發令」「今日的軍令卡」（calendar.week_word，FB-501、FB-502）
         f"**軍令**：{calendar.week_word('order_each', content, season)}發令（{kinds}，各陣營拿到的不一樣），照做一次記一次功；{met}。"
         f"{calendar.week_word('order_this', content, season)}的軍令卡在江湖頁行動列底下。",
         f"**晉升**：替陣營出力記貢獻（推 1 點戰況記 {cfg.contrib_per_push}），到 {cfg.rank2_contrib} 會有人召見，去應召就晉升；"

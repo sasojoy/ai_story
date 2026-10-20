@@ -1,6 +1,8 @@
 """FB-501（7 天濃縮季 QA 第 7 件清單，PM 2026-10-20）：7 天季還寫「週」的地方換成段（或軍令的「今日／每天」）。
 季曆有段的季（calendar.week7_on）才換字，換字一律走 calendar.week_word／week_label（網頁走 week_words 送的那一份）；
-21 天季、週末、14 天一個字都不變（例外：暫停再繼續那一句照季寫季長，21 天季照舊）。字待 joy 潤。"""
+21 天季、週末、14 天一個字都不變（例外：暫停再繼續那一句照季寫季長，21 天季照舊）。字待 joy 潤。
+FB-502（PM 2026-10-20）推翻「21 天季不動」的軍令那幾個字：21 天季的軍令也每天一道，照「今日／每天」寫，見
+test_fb502_season21_order_words；這裡 21 天季只驗段以外的「週」照舊。"""
 from __future__ import annotations
 
 import random
@@ -58,12 +60,13 @@ def test_week7_names_segments_with_their_days():
 def test_other_seasons_keep_their_week_words(profile):
     content = _content(profile)
     season = _season(content)
-    assert calendar.week_words(content, season) is None
     assert [calendar.week_label(2, content, season, form=f) for f in ("", "tight", "end", "inner")] == [
         "第 2 週", "第2週", "第 2 週週末", "第 2 週"]
-    assert [calendar.week_word(k, content, season) for k in ("this", "this_one", "each", "order_this", "order_that", "order_each")] == [
-        "本週", "這一週", "每週", "本週", "這週", "每週一"]
+    assert [calendar.week_word(k, content, season) for k in ("this", "this_one", "each")] == ["本週", "這一週", "每週"]
     assert calendar.week_word("this", content, None) == "本週"  # 沒有季（上一季的江湖史）照原本的字
+    if profile != "season21":  # 21 天季的軍令每天一道，軍令的字與 words 照「今日／每天」（FB-502，test_fb502_season21_order_words）
+        assert calendar.week_words(content, season) is None
+        assert [calendar.week_word(k, content, season) for k in ("order_this", "order_that", "order_each")] == ["本週", "這週", "每週一"]
 
 
 # ── 4. 練功鈕「這一週他不再現身」──
@@ -134,9 +137,9 @@ def test_howto_says_orders_come_every_day_on_week7():
     assert "每週一" not in join and "本週" not in join
 
 
-@pytest.mark.parametrize("profile", ["season21", "weekend"])
+@pytest.mark.parametrize("profile", ["weekend"])
 def test_howto_orders_lines_unchanged_elsewhere(profile):
-    """21 天季的軍令其實也是每天一道，這一批照舊（已知字，PM 2026-10-20：另開）；週末本來就是每週一。"""
+    """週末本來就是每週一。21 天季的軍令也是每天一道，FB-502 起照「每天」寫（test_fb502_season21_order_words）。"""
     content = _content(profile)
     state = _state(content)
     assert "投靠陣營之後每週一有軍令" in "".join(howto.war_help(state, content)["quest"])
@@ -154,16 +157,17 @@ def _order(world_state):
 
 
 def test_order_text_slots_follow_the_season():
-    c7, c21 = real_content("week7"), real_content("season21")
-    s7, s21 = _state(c7), _state(c21)
+    """21 天季（軍令也每天一道）見 test_fb502_season21_order_words（FB-502）。"""
+    c7, cw = real_content("week7"), real_content("weekend")
+    s7, sw = _state(c7), _state(cw)
     raw = "{地點}，{本週}截斷它；{人物}{這週}連敗幾陣。"
     assert orders.fill(s7, c7, _order(s7), raw).endswith("，今日截斷它；今天連敗幾陣。")
-    assert orders.fill(s21, c21, _order(s21), raw).endswith("，本週截斷它；這週連敗幾陣。")
+    assert orders.fill(sw, cw, _order(sw), raw).endswith("，本週截斷它；這週連敗幾陣。")
 
 
 def test_issued_orders_read_today_on_week7_only():
-    c7, c21 = real_content("week7"), real_content("season21")
-    for content, want, never in ((c7, "今日", "本週"), (c21, "本週", "今日截斷")):
+    c7, cw = real_content("week7"), real_content("weekend")
+    for content, want, never in ((c7, "今日", "本週"), (cw, "本週", "今日截斷")):
         season = _season(content)
         world.settle_season_start(season, content, random.Random(0))
         texts = [o.text for o in season.orders]
@@ -238,6 +242,8 @@ def test_status_sends_the_words_only_on_week7(profile):
     cal = _game(profile).status_data()["calendar"]
     if profile == "week7":
         assert cal["words"]["names"][0] == "第 1 段（第 1～2 天）" and cal["words"]["order_this"] == "今日"
+    elif profile == "season21":  # 只有軍令的字（FB-502）：沒有段的名字，網頁的「週」照原本的字
+        assert "names" not in cal["words"] and "this" not in cal["words"] and cal["words"]["order_this"] == "今日"
     else:
         assert "words" not in cal
 

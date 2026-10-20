@@ -1111,6 +1111,7 @@ def check_figures(c: Content, need, known, front_ids: list[str]) -> None:
 
 
 ORDER_SLOTS = ("{戰線}", "{地點}", "{起點}", "{終點}", "{主將}", "{人物}", "{號令}", "{本週}", "{這週}")  # 後兩個照季換字（FB-501）
+RECRUITER_SLOTS = ("{本週}", "{每週}")  # 入伍段引薦人的話裡照軍令多久一道換的字（enlist.SLOTS，FB-502）
 ORDER_PERSONAL = {"siege": "win", "defend": "duty", "intercept": "win", "escort": "convoy", "strike": "challenge"}
 
 
@@ -2462,6 +2463,9 @@ def validate(c: Content) -> None:
             for field, text in who.allied.items():  # 豪強分屬兩軍的季換的那幾句（Recruiter.allied）
                 need(field in RECRUITER_ALLIED_FIELDS, f"入伍段：引薦人 {who.name} 的 allied 不認得 {field}（只認 {RECRUITER_ALLIED_FIELDS}）")
                 need(bool(text.strip()) and to_traditional(text) == text, f"入伍段：引薦人 {who.name} 的 allied.{field} 要是繁體、不能是空的")
+            texts = [who.intro, who.briefing, who.order_hint, who.done, who.rejoin, *who.lines, *who.allied.values()]
+            for slot in sorted({s for text in texts for s in re.findall(r"\{[^{}]*\}", text)}):  # enlist.fill 只換這兩個（FB-502）
+                need(slot in RECRUITER_SLOTS, f"入伍段：引薦人 {who.name} 的話裡 {slot} 不認得（只認 {RECRUITER_SLOTS}）")
 
     # ── 碰到才說（新手引導計畫三）：id 不重複、只能是設計 5.2 的十八條（hints.KNOWN）；師父的條要有 text、引薦人的條要有 texts，
     # texts 的鍵是劇本的陣營、每一句都不是空的；寫反了（師父的條寫 texts、引薦人的條寫 text）多半是填錯欄位，載入時就報錯 ──

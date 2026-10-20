@@ -44,8 +44,9 @@ def week_of(state: GameState, content: Content) -> int:
 
 
 def daily(state: GameState, content: Content) -> bool:
-    """21 天季：軍令每天 00:00 發一批（正式季整合設計 7.1），照「期」記的是季曆第幾天；其他季照週。"""
-    return calendar.season21_on(state.world, content)
+    """21 天季：軍令每天 00:00 發一批（正式季整合設計 7.1），照「期」記的是季曆第幾天；其他季照週。軍令的字照同一個判斷
+    （calendar.orders_daily，FB-502）。"""
+    return calendar.orders_daily(state.world, content)
 
 
 def period_of(state: GameState, content: Content) -> int:
@@ -282,7 +283,8 @@ def _commander(state: GameState, content: Content, order: Order) -> str:
 
 def fill(state: GameState, content: Content, order: Order, text: str) -> str:
     """填插槽：{戰線}{地點}{起點}{終點}{人物}；{主將} 是那條戰線己方當下的主將，沒有就寫泛稱（RF3）；{號令} 是黃巾發令的人；
-    {本週}{這週} 照季寫（7 天濃縮季的軍令每天一道，寫「今日」「今天」；其他季原本的字，calendar.week_word，FB-501）。"""
+    {本週}{這週} 照季寫（軍令每天一道的季〔21 天季、7 天濃縮季〕寫「今日」「今天」；其他季原本的字，calendar.week_word，
+    FB-501、FB-502）。"""
     slots = {
         "{本週}": calendar.week_word("order_this", content, state.world),
         "{這週}": calendar.week_word("order_that", content, state.world),
