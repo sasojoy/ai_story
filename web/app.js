@@ -5112,7 +5112,7 @@
     }
     return out;
   }
-  // 州名與底下那一行「官 N・巾 N・寶 N」（照疊層的 sides：會佔地的幾方）：每一州一個框（地圖單位，k＝1／倍率）。
+  // 州名與底下那一行「官 N・巾 N・寶 N」（照疊層的 sides：會佔地的幾方；只寫不是 0 的，全是 0 就沒有那一行）：每一州一個框（地圖單位，k＝1／倍率）。
   // 底圖給每一州幾個可以擺的位置（好的在前）；小的州先挑，前一個會壓到已經擺好的就換下一個，都不行用第一個；夾在取景框裡
   function worldLabels(base, st, ctrl, k) {
     const wd = base.world, n = worldCounts(base, st, ctrl), sides = st.sides || sideOrder(base);
@@ -5123,10 +5123,11 @@
     const order = [...wd.regions].sort((a, z) => (RING_ORDER.indexOf(a.ring) + 4) % 4 - (RING_ORDER.indexOf(z.ring) + 4) % 4);
     for (const r of order) {
       const c = n[r.id] || { rich: 0 };
-      const line = [...sides.map((sd) => `${sideInk(sd).short} ${c[sd] || 0}`), `${RICH_WORD} ${c.rich}`].join("・");
+      // 只寫有的：是 0 的那一方、寶 0 都不寫；全是 0 那一行就不畫（企劃者 2026-10-20 從對比圖選乙）
+      const line = [...sides.filter((sd) => c[sd]).map((sd) => `${sideInk(sd).short} ${c[sd]}`), ...(c.rich ? [`${RICH_WORD} ${c.rich}`] : [])].join("・");
       const seal = wd.seal === r.id ? sp + 4 : 0;
       const w = Math.max(textW(r.name, np) + 2 * seal, textW(line, lp)) * k + 6 * k;
-      const h = (np + 3 + lp) * k + 4 * k;
+      const h = (line ? np + 3 + lp : np) * k + 4 * k;
       const fit = ([x, y]) => [Math.min(fx + fw - w / 2, Math.max(fx + w / 2, x)), Math.min(fy + fh - h / 2, Math.max(fy + h / 2, y))];
       const spots = (r.spots && r.spots.length ? r.spots : [[r.lx, r.ly]]).map(fit);
       const clash = ([x, y]) => Object.values(placed).some((b) => Math.abs(b.x - x) * 2 < b.w + w && Math.abs(b.y - y) * 2 < b.h + h);
@@ -5171,7 +5172,7 @@
     for (const l of worldLabels(base, st, ctrl, k)) {
       const top = l.y - l.h / 2, nameY = f1(top + (2 + l.np * 0.88) * k), lineY = f1(top + (2 + l.np + 3 + l.lp * 0.88) * k);
       out.push(`<g class="w-label" pointer-events="none" style="font-family:serif"><text x="${f1(l.x)}" y="${nameY}" text-anchor="middle" font-size="${f1(l.np * k)}" font-weight="700" letter-spacing="${f1(2 * k)}" fill="${MAP_INK}" stroke="${MAP_HALO}" stroke-width="${f1(3.4 * k)}" paint-order="stroke">${esc(l.name)}</text>`
-        + `<text x="${f1(l.x)}" y="${lineY}" text-anchor="middle" font-size="${f1(l.lp * k)}" font-weight="600" fill="#3A332A" stroke="${MAP_HALO}" stroke-width="${f1(3 * k)}" paint-order="stroke">${esc(l.line)}</text></g>`);
+        + (l.line ? `<text x="${f1(l.x)}" y="${lineY}" text-anchor="middle" font-size="${f1(l.lp * k)}" font-weight="600" fill="#3A332A" stroke="${MAP_HALO}" stroke-width="${f1(3 * k)}" paint-order="stroke">${esc(l.line)}</text>` : "") + "</g>");
       if (l.seal) {
         const sz = l.sp * k, sx = f1(l.x + (textW(l.name, l.np) / 2 + 4) * k), sy = f1(top + 1 * k);
         out.push(`<g class="w-seal" pointer-events="none" transform="rotate(-6 ${f1(Number(sx) + sz / 2)} ${f1(Number(sy) + sz / 2)})"><rect x="${sx}" y="${sy}" width="${f1(sz)}" height="${f1(sz)}" rx="${f1(2 * k)}" fill="${FRONT_RED}"/><text x="${f1(Number(sx) + sz / 2)}" y="${f1(Number(sy) + sz * 0.8)}" text-anchor="middle" font-size="${f1(sz * 0.78)}" font-weight="700" fill="#FFF8EC" style="font-family:serif">${SEAL_WORD}</text></g>`);
@@ -5263,13 +5264,12 @@
     clearTimeout(bakeTimer);
     bakeTimer = setTimeout(bakeBase, 250);
   }
-  // 要烤進圖裡的：最前面那一塊底色、大區、字、記號、defs、路（天下圖要藏起來，輿圖重製第 2 批）以外的
+  // 要烤進圖裡的：最前面那一塊底色、大區、字、記號、defs 以外的（路也烤進去：天下圖上它從地面底下淡淡透上來，企劃者 2026-10-20 選乙）
   function bakeable(svg) {
     const first = svg.querySelector(":scope > rect");
     return [...svg.children].filter((el) => {
       const t = el.tagName.toLowerCase();
-      return el !== first && t !== "defs" && t !== "text" && t !== "image" && el.id !== "mk" && !el.hasAttribute("data-region") && !(el.querySelector && el.querySelector("text"))
-        && !(el.classList && el.classList.contains("tx-roads"));
+      return el !== first && t !== "defs" && t !== "text" && t !== "image" && el.id !== "mk" && !el.hasAttribute("data-region") && !(el.querySelector && el.querySelector("text"));
     });
   }
   async function bakeBase() {

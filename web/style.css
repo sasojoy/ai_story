@@ -1035,8 +1035,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 /* ── 天下圖（輿圖重製第 2 批；輿圖簡化設計 4.1）：同一張底圖換一個固定的取景（app.js 的 worldFit），不拖不縮。
    .mapx.world 時藏起區圖那一套（找地點與濾鏡、右上角那一欄、「天下」那一條），換成上面一排「天下・找地點・⏱ 版圖」 */
 .mapx.world .map-top, .mapx.world .map-ctl, .mapx.world .map-hud { display: none; }
-.mapx.world .map-wrap { cursor: default; }
-.mapx.world .tx-roads { display: none; } /* 天下圖不畫路（設計 4.1 那一表沒有路；路照舊是向量、不烤進底圖那張圖） */
+.mapx.world .map-wrap { cursor: default; } /* 路照舊在底圖裡，從地面底下淡淡透上來（企劃者 2026-10-20 從對比圖選乙） */
 .w-top { position: absolute; left: 10px; right: 10px; top: 10px; display: none; gap: 8px; align-items: center; pointer-events: none; }
 .mapx.world .w-top { display: flex; }
 .mapx.world.tl-mode .w-top { display: none; } /* 版圖變化：那一排收起，抽屜上面整塊給天下圖（同 FB-261） */

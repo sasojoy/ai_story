@@ -724,13 +724,11 @@ def render_base(state: GameState, content: Content) -> str:
         text, box = _river_label(label)
         out.append(text)
         taken.append((box, TEXT_WEIGHT))
-    # 路包成一組（輿圖重製第 2 批）：天下圖不畫路（設計 4.1 那一表沒有路），網頁照 .mapx.world 藏這一組，所以它不烤進底圖那張圖
-    out.append('<g class="tx-roads">')
+    # 路照舊烤進底圖那張圖：天下圖上它淡淡地從地面底下透上來（企劃者 2026-10-20 從對比圖選乙）
     for a_id, a in content.locations.items():
         for b_id in a.connections:
             if a_id < b_id and a_id in shown and b_id in shown:
                 out.append(mapart.road(a, content.locations[b_id], a.road_to(b_id), mapart.road_control(content, a_id, b_id)))
-    out.append("</g>")
     out.append(_compass(m, taken))
     out += _terrain_names(m, taken)
     out.append(

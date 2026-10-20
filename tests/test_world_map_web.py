@@ -106,14 +106,33 @@ def test_the_seal_sits_in_the_core_only_when_on():
 
 
 def test_region_labels_show_name_and_counts_from_the_sides():
+    """州名底下只寫不是 0 的（企劃者 2026-10-20 從對比圖選乙）：開季洛陽「官 6」、冀州「巾 8」、潁川「寶 9」、核心「寶 2」。"""
     game = _game()
     labels = run(game, "return H.worldLabels(H.S.mapBase, H.S.mapState, H.controlAt(H.S.mapState, H.S.mapState.now_week), 2.5);")
     by = {x["id"]: x for x in labels}
-    assert by["luoyang"]["name"] == "洛陽" and by["luoyang"]["line"] == "官 6・巾 0・寶 0"
-    assert by["jizhou"]["line"] == "官 0・巾 8・寶 0" and by["yingchuan"]["line"].endswith("寶 9")
-    assert by["core"]["line"] == "官 0・巾 0・寶 2"
+    assert by["luoyang"]["name"] == "洛陽" and by["luoyang"]["line"] == "官 6"
+    assert by["jizhou"]["line"] == "巾 8" and by["yingchuan"]["line"] == "寶 9" and by["core"]["line"] == "寶 2"
+    game.state.world.territory.control["changshe"] = "guan"
+    by = {x["id"]: x for x in run(game, "return H.worldLabels(H.S.mapBase, H.S.mapState, H.controlAt(H.S.mapState, H.S.mapState.now_week), 2.5);")}
+    assert by["yingchuan"]["line"] == "官 1・寶 9"  # 佔下一塊：那一方寫在前、寶照寫
     low, _ = parts(game)
-    assert ">官 6・巾 0・寶 0<" in low and ">洛陽<" in low
+    assert ">官 6<" in low and ">洛陽<" in low and "・巾 0" not in low and "寶 0" not in low
+
+
+def test_a_region_with_nothing_to_count_has_no_second_line():
+    """全是 0 那一行就不畫（企劃者 2026-10-20）：地盤關著（整張沒人佔）時外圈的州只寫州名，框也矮一截。"""
+    from conftest import classic_rules
+
+    game = _game(content=classic_rules(real_content("weekend")), conquest=False)
+    labels = run(game, "return H.worldLabels(H.S.mapBase, H.S.mapState, H.controlAt(H.S.mapState, H.S.mapState.now_week), 2.5);")
+    by = {x["id"]: x for x in labels}
+    assert by["luoyang"]["line"] == "" and by["yingchuan"]["line"] == "寶 9"
+    assert by["luoyang"]["h"] < by["yingchuan"]["h"]
+    low, _ = parts(game)
+    name = low.index('paint-order="stroke">洛陽</text>')  # 州名那一行（點擊區的 <title> 也寫州名）
+    group = low[low.rindex('<g class="w-label"', 0, name):]
+    group = group[: group.index("</g>")]
+    assert group.count("<text") == 1
 
 
 # 地圖框的大小（寬 × 高）：手機的畫面減掉上面的狀態列（約 89）與底下的分頁列（約 56）。375×812、375×667、360×640、320×568（實機量的
@@ -230,7 +249,8 @@ def test_three_and_four_sides_each_get_a_colour_and_every_pair_a_front():
     front = low[low.index('class="w-front"'):]
     assert front[: front.index("</g>")].count("<path") >= 4
     labels = run(game, "return H.worldLabels(H.S.mapBase, H.S.mapState, H.controlAt(H.S.mapState, H.S.mapState.now_week), 2.5);")
-    assert next(x for x in labels if x["id"] == "qingzhou")["line"].startswith("官 0・巾 0・魏 5・吳 0")
+    assert next(x for x in labels if x["id"] == "qingzhou")["line"] == "魏 5"
+    assert next(x for x in labels if x["id"] == "nanyang")["line"] == "吳 6"
     assert run(game, "return [H.sideInk('wei').color, H.sideInk('wu').name];") == ["#6A3D7A", "吳"]
 
 
@@ -252,13 +272,16 @@ def test_the_region_layer_has_a_way_back_to_the_world():
     assert 'data-act="map-world"' in row[: row.index('class="map-chips"')] and "天下" in row[: row.index('class="map-chips"')]
 
 
-def test_the_world_map_hides_the_roads():
-    """設計 4.1 那一表沒有路（企劃者嫌線太多）：底圖的路包成一組 tx-roads，不烤進點陣那張圖，天下圖那一層藏起來；區圖照舊畫。"""
+def test_the_roads_show_faintly_through_the_world_ground():
+    """天下圖的路淡淡透上來（企劃者 2026-10-20 從對比圖選乙）：路照舊在底圖裡（烤進點陣那張圖），天下圖那一層不藏它；
+    地面不是全不透明的，底下的路與山水看得到。"""
     svg = _game().map_base()["svg"]
-    group = svg[svg.index('<g class="tx-roads">'):]
-    assert group.index("</g>") > group.index("<path")
+    assert 'class="tx-roads"' not in svg and svg.count(" Q") > 20  # 路是底圖裡的二次曲線
     css = re.sub(r"/\*.*?\*/", "", (Path(server.WEB) / "style.css").read_text(encoding="utf-8"), flags=re.S)
-    assert re.search(r"\.mapx\.world \.tx-roads \{[^}]*display: none", css)
+    assert "tx-roads" not in css
+    low, _ = parts(_game())
+    ground = re.search(r'class="w-ground" opacity="([\d.]+)"', low)
+    assert ground and 0.5 <= float(ground.group(1)) < 1
 
 
 def test_world_layer_ignores_drag_and_wheel():
