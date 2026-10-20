@@ -1135,7 +1135,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 /* 天下怎麼變（設計第六節）：曲線、三方處數、年表、那一週的大事 */
 .m-tl-head { display: flex; align-items: center; gap: 6px; }
 .m-tl-head b { flex: 1; min-width: 0; font-size: 16px; font-family: var(--serif); }
-.m-tl-head small { font-size: 12px; color: var(--ink-2); margin-left: 4px; font-weight: 400; font-family: var(--sans); }
+.m-tl-head small { font-size: 12px; color: var(--ink-2); margin-left: 4px; font-weight: 400; font-family: var(--sans); white-space: nowrap; } /* 7 天季「第 1 段末（第 2 天）」整段換行，不拆在括號裡（FB-501） */
 .m-tl-head button:not(.m-x) { min-height: 36px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); border-radius: 9px; padding: 0 9px; font: inherit; font-size: 12.5px; cursor: pointer; white-space: nowrap; }
 .m-graph { display: block; width: 100%; height: auto; margin: 4px 0 2px; cursor: pointer; background: #fbf6ea; border-radius: 8px; }
 .m-sum { display: flex; gap: 6px; margin: 4px 0; }

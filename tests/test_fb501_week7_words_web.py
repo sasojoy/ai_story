@@ -104,6 +104,13 @@ def test_week7_pages_say_segments_and_today(monkeypatch):
     assert not any("週" in v for v in out.values() if isinstance(v, str) and v is not out["sheet"])
 
 
+def test_the_timeline_head_keeps_the_segment_end_on_one_line():
+    """實機 375 寬：「第 1 段末（第 2 天）」拆在括號裡（「（第」／「2 天）」）；那一小行不折行，整段換到下一行（CSS，幾何在瀏覽器量過）。"""
+    css = (webharness.ROOT / "web" / "style.css").read_text(encoding="utf-8")
+    rule = re.search(r"\.m-tl-head small \{([^}]*)\}", css)
+    assert rule and "white-space: nowrap" in rule.group(1)
+
+
 @pytest.mark.parametrize("profile", ["season21", "weekend"])
 def test_other_seasons_keep_the_week_words(profile, monkeypatch):
     out = _render(_game(profile), monkeypatch)
