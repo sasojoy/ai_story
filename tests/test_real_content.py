@@ -116,13 +116,13 @@ def test_the_mentor_explains_travel_and_sitting_down(content):
 
 
 INSIGHT_OF = {"快": "feng", "慢": "shan", "柔": "shui", "剛": "huo"}  # 草廬四景的四個做法（有所感）各悟到哪一個基本意境
-PRESET_OF = {"feng": "穿林腿", "shan": "坐山拳", "shui": "回瀾手", "huo": "烈爐拳"}  # 師門配方（content/preset_recipes.json）
+# 武學重構：師門配方（穿林腿、坐山拳……）拿掉了，序章改成把悟到的意境裝進基礎拳腳的槽、再揣摩到二重
 
 
 def _walk_the_hut(game, ambush="choice:0", attribute="快", luck=None):
-    """照正式內容把草廬走到熔蠻牛拳（剛走完前十步、還站在草廬）：遇險、拜師、看修練頁、草廬四景挑一個做法（attribute）去悟、合成、改練並練到第三成、
-    修練、打坐、雪恥、配點、熔蠻牛拳。每一步都要真的往前走。luck：戰場運氣固定成最好（0.99）或最壞（0.0）——雪恥那一場照樣要是險勝
-    （設計 3.2「必定險勝」）。回傳合成出來的那一門。"""
+    """照正式內容把草廬走到熔蠻牛拳（剛走完前十步、還站在草廬）：遇險、拜師、看修練頁、草廬四景挑一個做法（attribute）去悟、
+    把意境裝進基礎拳腳、練到第三成、揣摩到二重、調息、雪恥、配點、熔蠻牛拳（武學重構之後的序章）。每一步都要真的往前走。
+    luck：戰場運氣固定成最好（0.99）或最壞（0.0）——雪恥那一場照樣要是險勝（設計 3.2「必定險勝」）。回傳裝了意境的那一門。"""
     from tianxia import prologue, sensing
 
     content, p = game.content, game.state.player
@@ -140,12 +140,14 @@ def _walk_the_hut(game, ambush="choice:0", attribute="快", luck=None):
     game.choose(sensing.LET_GO)
     insight = INSIGHT_OF[attribute]
     assert insight in p.insights and p.tutorial_step == 3
-    game.forge("jichu_quanjiao", [insight], proposed=(None, ""))
-    art = prologue.fused_arts(game.state, content, game.world)[0]
-    game.switch_art(art.id)
+    game.forge("jichu_quanjiao", [insight], proposed=(None, ""))  # 裝進基礎拳腳的槽
+    assert p.tutorial_step == 4
+    art = prologue.slotted_arts(game.state, content, game.world)[0]
     game.practice("武學")
     game.practice("武學")
-    game.cultivate(art.id)
+    assert p.tutorial_step == 5
+    game.forge(None, [insight, insight], proposed=(None, ""))  # 揣摩：同一個意境放兩次，強度到二重
+    assert p.tutorial_step == 6
     game.choose("act:rest")
     if luck is not None:
         from conftest import FixedRandom
@@ -174,10 +176,10 @@ def test_the_real_prologue_walks_to_yingchuan(content, world):
     p = game.state.player
     silver = p.stats["silver"]
     art = _walk_the_real_prologue(game)
-    assert art.name == "穿林腿" and art.preset
+    assert art.id == "jichu_quanjiao" and p.art_slots["jichu_quanjiao"][0] == "feng" and p.insight_strength["feng"] == 2
     assert p.location == "yingchuan" and p.tutorial_step == content.tutorial.prologue_steps == 11
     assert p.stats["silver"] == silver + 30  # 序章裡銀兩只有出師的盤纏會動
-    # 心得的帳：20 → 合成 −5 → 練到第三成 −6 → 熔蠻牛拳 +16 → 25（練成每成 2N，企劃者 2026-10-07 方案 A；熔煉退八成跟著翻倍）
+    # 心得的帳：20 → 裝意境不花 → 練到第三成 −6 → 揣摩 −5 → 熔蠻牛拳 +16 → 25（練成每成 2N，企劃者 2026-10-07 方案 A；熔煉退八成跟著翻倍）
     assert p.stamina == content.config.stamina_max and p.stats["xinde"] == content.config.start_stats["xinde"] + 5
     assert "mentor_hut" not in atlas.visible_locations(game.state, content)
     assert any(content.tutorial.leave_text in line for e in game.state.journal for line in e.lines)
@@ -187,16 +189,18 @@ def test_the_real_prologue_walks_to_yingchuan(content, world):
     ("choice:0", "拿身子去擋柴刀"), ("choice:1", "抄根扁擔就敢往上衝"), ("choice:2", "喊一嗓子『官兵來了』"),
 ])
 @pytest.mark.parametrize("attribute", ["快", "慢", "柔", "剛"])
-def test_every_way_through_the_real_hut_reaches_yingchuan_with_a_preset_art(content, world, ambush, first_words, attribute):
-    """遇險的三個選項各接到自己的拜師那一則（師父醒來的第一句照選項換）、草廬四景的四個做法各悟一個意境、各合出自己的師門功夫；
-    十二條路都走得到潁川。（我們原本寫的四景是四個事件選項；現在是 joy 的有所感，四個做法對應同樣四個意境。）"""
+def test_every_way_through_the_real_hut_reaches_yingchuan_with_the_insight_slotted(content, world, ambush, first_words, attribute):
+    """遇險的三個選項各接到自己的拜師那一則（師父醒來的第一句照選項換）、草廬四景的四個做法各悟一個意境、各裝進基礎拳腳、揣摩到二重；
+    十二條路都走得到潁川。（我們原本寫的四景是四個事件選項；現在是 joy 的有所感，四個做法對應同樣四個意境。武學重構之後沒有師門功夫。）"""
     peek = Game.new(content, "偷看", rng=random.Random(0), world=world, prologue=True)
     peek.world.open_season(content, now=0.0)
     peek.choose(ambush)
     assert first_words in peek.scene_text()  # 拜師那一則開頭的評語照剛才選的那一個
     game = Game.new(content, "新人", rng=random.Random(0), world=world, prologue=True)
     art = _walk_the_real_prologue(game, ambush=ambush, attribute=attribute)
-    assert (art.name, art.preset, art.creator) == (PRESET_OF[INSIGHT_OF[attribute]], True, None)
+    insight = INSIGHT_OF[attribute]
+    p = game.state.player
+    assert art.id == "jichu_quanjiao" and p.art_slots["jichu_quanjiao"] == [insight, None] and p.insight_strength[insight] == 2
     assert game.state.player.location == "yingchuan" and game.state.player.tutorial_step == content.tutorial.prologue_steps
 
 
@@ -220,7 +224,7 @@ def _looks(game) -> dict:
 
 def test_bots_and_scripts_skip_the_real_prologue_and_look_like_graduates(content, world):
     """新手引導計畫一的 Global Constraints：伺服器假人、整季機器人（Game.new(graduated=True)）與腳本建的角色（Game.new 預設）
-    不進草廬；假人出來的樣子跟走完正式序章的真人一樣（等級 2、一門中品第三成的師門功夫、蠻牛拳熔掉了、多了盤纏）。"""
+    不進草廬；假人出來的樣子跟走完正式序章的真人一樣（等級 2、基礎拳腳練到第三成、槽裡裝了一個二重的意境、蠻牛拳熔掉了、多了盤纏）。"""
     from tianxia import atlas, prologue
 
     script = Game.new(content, "腳本", rng=random.Random(0), world=world)
@@ -233,8 +237,8 @@ def test_bots_and_scripts_skip_the_real_prologue_and_look_like_graduates(content
     bot = Game.new(content, "假人", rng=random.Random(1), world=world, graduated=True)
     assert _looks(bot) == {**_looks(human), "step": len(content.tutorial.steps)}  # 真人出草廬接著走初入江湖，假人略過
     assert _looks(bot)["level"] == 2 and _looks(bot)["location"] == "yingchuan"
-    fused = prologue.fused_arts(bot.state, content, world)
-    assert fused[0].name in {"穿林腿", "坐山拳", "回瀾手", "烈爐拳"} and fused[0].quality == "中品"
+    slotted = prologue.slotted_arts(bot.state, content, world)  # 武學重構：沒有師門功夫了，看的是裝了意境的基礎拳腳
+    assert [a.id for a in slotted] == ["jichu_quanjiao"] and prologue.deepened(bot.state)
     assert "manniu_quan" not in bot.state.player.arts and not prologue.active(bot.state, content)
 
 
@@ -278,9 +282,12 @@ def test_the_real_steps_say_the_craft_tab_by_its_name_and_the_farewell_is_paged(
     """S1 的用語（2026-10-06）：分頁叫「煉製」，師父的話跟著（joy 的版本寫「合成」，這裡改回分頁真正的名字）；功法庫是修練頁列表的標題；
     p11 分三頁（三邊收人、使命、盤纏與輿圖），最後一頁帶著要做的事，只有 p11 分頁。"""
     steps = {step.id: step for step in content.tutorial.steps}
-    assert "『煉製』" not in steps["p4_fuse"].text and "「煉製」那裡試試，花你 5 點心得" in steps["p4_fuse"].text and "合成」那裡" not in steps["p4_fuse"].text
-    assert steps["p4_fuse"].line == "到「煉製」把基礎拳腳融進意境"
-    assert "功法庫" in steps["p5_level"].text and "功法庫" in steps["p10_melt"].line  # 修練頁的列表標題叫「功法庫」（arts-polish-1）
+    # 武學重構：p4 是把意境裝進槽（不花心得體力），花 5 點心得的是 p6 的揣摩
+    assert "『煉製』" not in steps["p4_fuse"].text and "到「煉製」那裡" in steps["p4_fuse"].text and "合成」那裡" not in steps["p4_fuse"].text
+    assert "不花心得也不花體力" in steps["p4_fuse"].text and "花你 5 點心得" in steps["p6_deepen"].text
+    assert steps["p4_fuse"].line == "到「煉製」把意境裝進基礎拳腳"
+    # 武學重構：p5 練的是身上的基礎拳腳、不在功法庫，那一句只指到「修練」；熔煉那一步才講功法庫
+    assert "「修練」" in steps["p5_level"].text and "功法庫" in steps["p10_melt"].line  # 修練頁的列表標題叫「功法庫」（arts-polish-1）
     p11 = steps["p11_farewell"]
     pages = p11.text.split("\n\n")
     assert p11.paged and len(pages) == 3 and "輿圖" in pages[-1] and "天命裂了一道縫" in pages[1]
@@ -294,9 +301,10 @@ def test_the_real_steps_glow_on_the_page_you_are_on_and_on_the_tab_that_leads_to
     from tianxia import sensing
 
     steps = {step.id: step for step in content.tutorial.steps}
-    for step_id in ("p5_level", "p6_refine", "p10_melt"):
+    for step_id in ("p5_level", "p10_melt"):
         assert steps[step_id].glow[0] == "tab:practice", step_id
     assert {"pick:art", "pick:insight", "forge"} <= set(steps["p4_fuse"].glow)
+    assert steps["p6_deepen"].glow[0] == "tab:craft" and {"pick:insight", "forge"} <= set(steps["p6_deepen"].glow)  # 揣摩在煉製頁
     game = Game.new(content, "新人", rng=random.Random(0), world=world, prologue=True)
     game.world.open_season(content, now=0.0)
     for option in ("choice:0", "choice:0"):
@@ -309,11 +317,11 @@ def test_the_real_steps_glow_on_the_page_you_are_on_and_on_the_tab_that_leads_to
     game.choose(sensing.LET_GO)
     assert [r["id"] for r in game.art_rows() if "pick:art" in r["glow"]] == ["jichu_quanjiao"]
     assert [i["id"] for i in game.insight_rows() if "pick:insight" in i["glow"]] == ["shan"]
-    game.forge("jichu_quanjiao", ["shan"], proposed=(None, ""))
-    named = next(r["id"] for r in game.art_rows() if "switch" in r["glow"])
-    assert named != "jichu_quanjiao"  # 坐山拳
-    game.switch_art(named)
-    assert all("switch" not in r["glow"] for r in game.art_rows())  # 基礎拳腳換下來了，不發光
+    game.forge("jichu_quanjiao", ["shan"], proposed=(None, ""))  # 武學重構：裝進槽，不用改練
+    assert all("switch" not in r["glow"] and "pick:art" not in r["glow"] for r in game.art_rows())
+    game.practice("武學")
+    game.practice("武學")
+    assert [i["id"] for i in game.insight_rows() if "pick:insight" in i["glow"]] == ["shan"]  # 揣摩那一步：同一個意境發光
 
 
 # 一步做完的時候玩家在哪一頁，下一步要按的東西在哪一頁（T7 走查 W-G：步驟 7 一開始在修練頁，打坐在江湖頁，江湖分頁卻沒發光）。
@@ -321,10 +329,10 @@ def test_the_real_steps_glow_on_the_page_you_are_on_and_on_the_tab_that_leads_to
 # 狀態列，哪一頁都看得到）；合成（p4）在煉製頁；練成、修練、熔煉（p5、p6、p10）在修練頁。「目標在」：分頁列與狀態列的東西哪一頁都在（any）。
 COMPLETES_ON = {
     "p1_ambush": "jianghu", "p2_apprentice": "practice", "p3_insight": "jianghu", "p4_fuse": "craft", "p5_level": "practice",
-    "p6_refine": "practice", "p7_rest": "jianghu", "p8_revenge": "jianghu", "p9_stat": "any", "p10_melt": "practice",
+    "p6_deepen": "craft", "p7_rest": "jianghu", "p8_revenge": "jianghu", "p9_stat": "any", "p10_melt": "practice",  # 武學重構：p6 是煉製頁的揣摩
 }
 TARGET_ON = {
-    "p2_apprentice": ("any",), "p3_insight": ("jianghu",), "p4_fuse": ("craft",), "p5_level": ("practice",), "p6_refine": ("practice",),
+    "p2_apprentice": ("any",), "p3_insight": ("jianghu",), "p4_fuse": ("craft",), "p5_level": ("practice",), "p6_deepen": ("craft",),
     "p7_rest": ("jianghu",), "p8_revenge": ("jianghu",), "p9_stat": ("any",), "p10_melt": ("practice",),
     "p11_farewell": ("jianghu", "map"),  # 移動在江湖頁，也可以直接去輿圖（師父的話說的是打開輿圖）
 }
@@ -365,7 +373,7 @@ def test_the_real_prologue_text_has_no_placeholder_left_over(content):
         texts = [event.title, event.text] + [x for ch in event.choices for x in (ch.text, ch.effect.text)]
         assert not any("{" in text for text in texts), event_id
     steps = {step.id: step for step in content.tutorial.steps}
-    assert "{武學}" in steps["p5_level"].line and "{武學}" in steps["p6_refine"].line
+    assert "{武學}" in steps["p5_level"].line and "{" not in steps["p6_deepen"].line  # 武學重構：p6 揣摩不點名武學
     assert not any("{" in step.text for step in content.tutorial.steps)
     assert content.tutorial.outro == ""  # 第一季兩步走完不再有說書人的結語
 
@@ -870,13 +878,12 @@ def test_the_level_step_waits_for_a_real_practice_not_for_having_the_art(content
     order = [got[1].methods[j].attribute for j in got[0].order]
     game.choose(f"sense:{order.index('快')}")
     game.choose(sensing.LET_GO)
-    game.forge("jichu_quanjiao", ["feng"], proposed=(None, ""))
+    game.forge("jichu_quanjiao", ["feng"], proposed=(None, ""))  # 武學重構：裝進基礎拳腳的槽
     index = [step.id for step in content.tutorial.steps].index("p5_level")
     assert game.state.player.tutorial_step == index and content.tutorial.steps[index].done_when.fused_level == 3
-    art = prologue.fused_arts(game.state, content, world)[0]
-    game.switch_art(art.id)
+    assert [a.id for a in prologue.slotted_arts(game.state, content, world)] == ["jichu_quanjiao"]
     game.practice("武學")
-    assert game.state.player.tutorial_step == index  # 帶著、換上、練到第二成，還不算
+    assert game.state.player.tutorial_step == index  # 裝了意境、練到第二成，還不算
     game.practice("武學")
     assert game.state.player.tutorial_step == index + 1 and game.state.player.guide_done == []  # 序章的步驟沒有「✔ 引導完成」
 

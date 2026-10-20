@@ -1252,7 +1252,7 @@ def _styled_fighters(
 def worn_attribute(state: GameState, content: Content, world: WorldStateStore) -> str | None:
     """本人身上那一門武學的屬性（戰報的路數那一句、決戰的隊伍多樣性看它）；沒有武學是 None。"""
     art = player_art(state, content, world, state.player.member.wugong_id)
-    return art.attribute if art is not None else None
+    return (art.attribute or None) if art is not None else None  # 兼容並蓄的沒有屬性：None（Squad 的屬性是 Literal，空字串進不去）
 
 
 def _with_attribute(

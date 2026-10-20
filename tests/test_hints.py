@@ -1155,6 +1155,7 @@ def test_every_page_action_looks_for_hints(game, monkeypatch):
     p.member.neigong_id, p.member.wugong_id = "breath", "fist"
     p.arts = ["sword", "step", "lake_kick"]
     p.insights = ["feng", "huo", "shui"]
+    game.content.skills["step"].quality = "下品"  # 寫死的武學不能當合成的料；測試內容的追風步沒寫品級（絕學），改成下品才合得
     calls = []
     real = game._check_hints
     monkeypatch.setattr(game, "_check_hints", lambda *args, **kwargs: (calls.append(1), real(*args, **kwargs))[1])

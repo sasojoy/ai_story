@@ -112,8 +112,11 @@ def test_fb116_a_pair_discusses_at_most_twice_a_game_day(pair):
     content, world = pair
     cap = content.config.discuss_per_pair_day
     assert cap == 2
+    from test_fb117 import _kick
+
+    _kick(world)  # 武學重構：寫死的【長拳】不能當合成的料，乙改練【湖邊腿法】
     _invite(content, world, "art:basic_fist")
-    assert "烈焰拳" in _accept(content, world, "insight:huo")[0]
+    assert "烈焰拳" in _accept(content, world, "art:lake_kick")[0]  # 武學重構：武學＋意境不再合，第一回改武學＋武學
     _invite(content, world, "insight:feng")
     # 第二張邀請還在等的時候，這一對人今天的帳被別處用滿了（另一個分頁、假人）：答應那一下重驗，不開爐
     key = "|".join(sorted(("甲", "乙")))

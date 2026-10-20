@@ -1,6 +1,6 @@
 """口訣與秘方（PM 2026-10-10 派工，企劃者選「甲乙都做」）。
 武學重構（Joy 2026-10-20）之後秘方的規則還沒改，這裡照引擎現在實際的行為測：
-- 武學＋意境（kind fuse）不再是合成（裝進槽），所以 fuse 的秘方合不中了——卻照樣每季挑、照樣聽得到口訣（跟新規則衝突，見報告）；
+- kind fuse 的秘方改成「屬性＋指定意境裝滿」：武學合得上那一格、槽全部裝滿、其中一格是指定的意境，就暗合口訣（給特別功效）；
 - 武學＋武學的秘方照「自己那一份」的屬性認（相容屬性的第一個），兼容並蓄的基礎武學沒有屬性，認不上；
 - 意境＋意境的秘方照舊，合出來的意境帶特別功效（裝進槽就是那一招）。
 天時地利（fusion.setting_points）、品質擲骰、合到舊的候選（landing）都拿掉了，那幾條測試刪除。"""
@@ -20,7 +20,7 @@ from tianxia.state import new_game_state
 from test_fusion import _registered, must_not_ask, named
 
 FUSE = SecretRecipe(
-    id="t_fuse", kind="fuse", art=ArtPattern(attribute="實"), insight=InsightPattern(id="shan"),
+    id="t_fuse", kind="fuse", art=ArtPattern(attribute="慢"), insight=InsightPattern(id="shan"),
     name="鎮岳指", note="一指按下去，像一座山壓著。", clues=["說書一句。", "人物一句。", "殘譜一句。"],
 )
 MERGE = SecretRecipe(
@@ -58,12 +58,37 @@ def test_each_season_picks_its_own_batch(secret_content):
     assert any(secret_recipes.active(secret_content, t) != first for t in range(1, 6))  # 換季換一批
 
 
-def test_an_art_and_insight_secret_can_no_longer_be_hit(ready, secret_content, world):
-    """武學重構：武學＋意境是裝槽、不是合成，fuse 的秘方合不中——不叫模型、不登記、武學譜上不記（秘方規則還沒跟著改）。"""
+def test_filling_the_slots_with_the_named_insight_hits_the_set_secret(ready, secret_content, world):
+    """「屬性＋指定意境裝滿」：基礎拳腳兼容並蓄，屬性照強度最高那一格（山在第一格＝慢）；裝第一格什麼都沒有，裝滿那一下暗合口訣：
+    一句話、武學譜記上、這一季第一個暗合的江湖上傳一句；身上的樣子多那一條特別功效。不叫模型、不登記武學。"""
+    from tianxia import team
+    sp = secret_content.traits.special[0]  # 測試內容現成的一條特別功效
+    secret_content.secret_recipes[0] = FUSE.model_copy(update={"special": sp.id})
     assert fusion.forge_request(ready, secret_content, world, "basic_fist", ["shan"]) is None
-    assert fusion.fuse_problem(ready, secret_content, world, "basic_fist", "shan") == fusion.FUSE_GONE
-    arts_mod.slot(ready, secret_content, world, "basic_fist", "shan")
-    assert world.lookup_recipe("秘|t_fuse") is None and ready.player.manual.solved == []
+    first = arts_mod.slot(ready, secret_content, world, "basic_fist", "shan")
+    assert len(first) == 1 and ready.player.manual.solved == []
+    msgs = arts_mod.slot(ready, secret_content, world, "basic_fist", "feng")
+    assert any("暗合口訣" in m and "【鎮岳指】" in m and sp.name in m for m in msgs)
+    assert ready.player.manual.solved == ["t_fuse"] and ready.world.secret_sets == {"t_fuse": ready.player.name}
+    assert any("鎮岳指" in m for m in msgs[1:])  # 第一個暗合的：傳聞那一句
+    mine = team.player_art(ready, secret_content, world, "basic_fist")
+    assert mine.special == sp.id
+    arts_mod.unslot(ready, secret_content, world, "basic_fist", "feng")  # 拆一格就不合了
+    assert team.player_art(ready, secret_content, world, "basic_fist").special is None
+    again = arts_mod.slot(ready, secret_content, world, "basic_fist", "feng")
+    assert any("暗合口訣" in m for m in again) and not any("江湖上傳開了" in m for m in again)  # 傳聞只有第一次
+    assert world.lookup_recipe("秘|t_fuse") is None
+
+
+def test_the_set_secret_needs_the_named_insight_and_the_attribute(ready, secret_content, world):
+    """槽滿了但沒有指定的意境、或屬性對不上（風在第一格＝快），都不合。"""
+    from tianxia import team
+    arts_mod.slot(ready, secret_content, world, "basic_fist", "feng")
+    assert not any("暗合" in m for m in arts_mod.slot(ready, secret_content, world, "basic_fist", "shan"))
+    ready.player.art_slots["basic_fist"] = ["huo", "shui"]
+    slots = ready.player.art_slots["basic_fist"]
+    art = team.resolve_art("basic_fist", secret_content, world)
+    assert secret_recipes.match_slots(ready, secret_content, world, "basic_fist", art, slots) is None
 
 
 def test_hitting_a_merge_secret_registers_the_named_insight_with_a_special_and_tells_the_world(ready, secret_content, world):

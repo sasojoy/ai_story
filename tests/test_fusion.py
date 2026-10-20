@@ -489,7 +489,7 @@ def test_a_slotted_compound_insight_gives_its_attribute_and_lean_to_the_art(read
     assert arts_mod.slot_problem(ready, content, world, "basic_fist", good.id) is None
     arts_mod.slot(ready, content, world, "basic_fist", good.id)
     mine = team.player_art(ready, content, world, "basic_fist")
-    assert mine.traits == [good.attribute] and mine.lean == "正" and mine.attribute == ""  # 基礎拳腳兼容並蓄：自己沒有屬性
+    assert mine.traits == [good.attribute] and mine.lean == "正" and mine.attribute == good.attribute  # 基礎拳腳兼容並蓄：屬性照槽裡強度最高那一格
     assert "正派" in skillview.art_card(mine, 1)
 
 

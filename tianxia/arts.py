@@ -141,8 +141,9 @@ def apply(state: GameState, content: Content, world: WorldStateStore, art: Marti
     traits: list[str] = []
     special = None
     high = None
-    lean = "無"
+    lean = art.lean if art.lean in LEAN_OF else "無"  # 內容寫的正邪（守義劍、剪徑刀…）與自創挑的正邪是底，槽裡帶正邪的意境蓋過它
     lean_strength = 0
+    top_attr, top_strength = "", 0  # 兼容並蓄的武學：屬性照強度最高的那一格（一樣高取前面的；定案第二節）
     for insight_id in slots_of(state, content, art):
         if insight_id is None:
             continue
@@ -156,9 +157,18 @@ def apply(state: GameState, content: Content, world: WorldStateStore, art: Marti
             high = high_of(content, ins.attribute).id
         else:
             traits += [ins.attribute] * strength
+        if ins.attribute and strength > top_strength:
+            top_attr, top_strength = ins.attribute, strength
         if ins.lean in LEAN_OF and strength > lean_strength:
             lean, lean_strength = ins.lean, strength
-    attribute = art.affinity[0] if art.affinity else ""
+    # 屬性：相容屬性的第一個；兼容並蓄的照槽裡強度最高那一格，槽空著沒有屬性（不相剋、不搭配）
+    attribute = art.affinity[0] if art.affinity else top_attr
+    if special is None:  # 「裝滿」秘方（secret_recipes.match_slots）：槽裡沒有特別功效時給秘方的那一條
+        from . import secret_recipes
+
+        recipe = secret_recipes.match_slots(state, content, world, art.id, art, slots_of(state, content, art))
+        if recipe is not None:
+            special = secret_recipes.special_for(content, recipe, secret_recipes.tianji_of(world))
     return art.model_copy(update={
         "traits": traits, "special": special, "high": high, "extra_specials": [], "dormant": [],
         "attribute": attribute, "lean": lean, "insight": None, "insight_attr": None,
@@ -262,7 +272,13 @@ def slot(state: GameState, content: Content, world: WorldStateStore, art_id: str
     i = slots.index(None)
     slots[i] = insight_id
     state.player.art_slots[art_id] = slots
-    return [SLOTTED_LINE.format(insight=_iname(state, content, world, insight_id), art=art.name, i=i + 1)]
+    msgs = [SLOTTED_LINE.format(insight=_iname(state, content, world, insight_id), art=art.name, i=i + 1)]
+    from . import secret_recipes  # 裝滿最後一格才可能暗合「裝滿」秘方（之前有空格，一定沒合上）
+
+    recipe = secret_recipes.match_slots(state, content, world, art_id, art, slots)
+    if recipe is not None:
+        msgs += secret_recipes.set_lines(state, content, world, recipe, art.name)
+    return msgs
 
 
 def unslot(state: GameState, content: Content, world: WorldStateStore, art_id: str, insight_id: str) -> list[str]:

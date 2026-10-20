@@ -311,7 +311,7 @@ def finish(
     art = MartialArt(
         id=clean, name=clean, kind=draft.kind, quality="下品", attribute=draft.affinity[0] if draft.affinity else "",
         base_power=QUALITY_BASE_POWER["下品"], top_power=QUALITY_TOP_POWER["下品"], origin="created",
-        creator=state.player.name, creator_shown=state.player.name, note=draft.intent, lean="無",
+        creator=state.player.name, creator_shown=state.player.name, note=draft.intent, lean=draft.lean,
         affinity=list(draft.affinity), weapon=draft.weapon,
         slot_adjust=UNIVERSAL_SLOT_ADJUST if not draft.affinity else 0,
     )

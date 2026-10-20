@@ -627,7 +627,8 @@ def _art_label(
     art = team.player_art(state, content, world, skill_id) if state is not None else team.resolve_art(skill_id, content, world)
     if art is None:
         return skill_id
-    return f"{art.name}（{art.quality}・屬{art.attribute}）第{level}成 {level_bar(level)}"
+    attr = f"・屬{art.attribute}" if art.attribute else ""  # 兼容並蓄的沒有屬性
+    return f"{art.name}（{art.quality}{attr}）第{level}成 {level_bar(level)}"
 
 
 def member_card(state: GameState, content: Content, world: WorldStateStore, key: str) -> str:
@@ -849,7 +850,8 @@ def art_card(
     else:
         source = "本命武學"
     lines = [
-        f"【{art.name}】{art.quality}・屬{art.attribute}" + (f"・{art.lean}派" if art.lean != "無" else ""),
+        f"【{art.name}】{art.quality}" + (f"・屬{art.attribute}" if art.attribute else "")  # 兼容並蓄的沒有屬性，不留「・屬」
+        + (f"・{art.lean}派" if art.lean != "無" else ""),
         power_line(art, level),
         f"來源：{source}" + (f"・{gen_word}" if gen_word else "")
         + (f"　由【{parent_names[0]}】與【{parent_names[1]}】衍生" if parent_names and len(parent_names) == 2 else "")

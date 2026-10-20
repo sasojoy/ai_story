@@ -24,35 +24,56 @@ def named(name):
 
 @pytest.fixture
 def made(game):
-    """手上有基礎拳腳、風、火，已經合過【旋風腿】（基礎拳腳＋風）。"""
+    """手上有基礎拳腳、湖邊腿法、風、火，已經合過【旋風腿】（基礎拳腳＋湖邊腿法）。
+    武學重構：武學＋意境不再是合成（改裝槽），合成只剩武學＋武學、意境＋意境，所以先合的那一門改成兩門武學合的。"""
     p = game.state.player
     p.member.wugong_id = "basic_fist"
+    p.arts = ["lake_kick"]
     p.insights = ["feng", "huo"]
     p.stats["xinde"] = 100
-    art, _ = fusion.fuse(game.state, game.content, game.world, named("旋風腿"), "basic_fist", "feng")
+    art, _ = fusion.blend(game.state, game.content, game.world, named("旋風腿"), "basic_fist", "lake_kick")
     return game, art
 
 
-def test_with_an_insight_in_the_pot_the_arts_that_cannot_take_it_are_greyed_with_a_reason(made):
+def test_with_an_art_in_the_pot_the_arts_it_cannot_blend_with_are_greyed_with_a_reason(made):
+    # 武學重構：爐裡放武學，另一格是武學＋武學的合成；合過的那一對（基礎拳腳＋湖邊腿法 → 旋風腿）灰掉寫「已經有了」。
+    # 舊版的「來歷裡融過」（血統擋）拿掉了，所以只剩一門灰掉。
     game, art = made
-    picks = game.forge_picks(None, ["feng"])
-    S = {"tab": "craft", "craftPick": True, "forgeSel": [{"type": "ins", "id": "feng"}], "forgePicks": picks}  # 清單在抽屜裡（Joy 2026-10-19）
+    picks = game.forge_picks("basic_fist", [])
+    S = {"tab": "craft", "craftPick": True, "forgeSel": [{"type": "art", "id": "basic_fist"}], "forgePicks": picks}  # 清單在抽屜裡（Joy 2026-10-19）
     out = run(server.main_view(game), """
       const html = H.pageCraft();
-      H.pick("art", "basic_fist");
+      H.pick("art", "lake_kick");
       return { html, sel: H.S.forgeSel.length, toast: T.els.toast.textContent };
     """, S=S, menxia=server.menxia_view(game))
-    assert '<i class="why">已經有了</i>' in out["html"] and '<i class="why">來歷裡融過</i>' in out["html"]
-    assert out["html"].count('class="chip r1 no"') + out["html"].count('class="chip r2 no"') >= 2
+    assert '<i class="why">已經有了</i>' in out["html"]
+    assert out["html"].count('class="chip r1 no"') == 1  # 只有湖邊腿法；旋風腿合得了
     assert out["sel"] == 1 and "你已經有了" in out["toast"]  # 點了不放進去，說整句
+
+
+def test_with_an_insight_in_the_pot_the_arts_whose_slots_cannot_take_it_are_greyed(made):
+    # 武學重構：爐裡放意境，另一格放武學＝裝進槽；裝不進的（意境已經裝在別門上）照 arts.slot_problem 灰掉，點了說整句。
+    game, art = made
+    game.slot_insight("basic_fist", "feng")
+    picks = game.forge_picks(None, ["feng"])
+    assert all(mark is not None for mark in picks["arts"].values())
+    S = {"tab": "craft", "craftPick": True, "forgeSel": [{"type": "ins", "id": "feng"}], "forgePicks": picks}
+    out = run(server.main_view(game), """
+      const html = H.pageCraft();
+      H.pick("art", "lake_kick");
+      return { html, sel: H.S.forgeSel.length, toast: T.els.toast.textContent };
+    """, S=S, menxia=server.menxia_view(game))
+    assert out["html"].count('class="chip r1 no"') == 3
+    assert out["sel"] == 1 and "先從那裡拆下來" in out["toast"]
 
 
 def test_only_what_fits_can_be_shown(made):
     game, art = made
-    S = {"tab": "craft", "craftPick": True, "forgeSel": [{"type": "ins", "id": "feng"}], "forgePicks": game.forge_picks(None, ["feng"]),
+    # 武學重構：爐裡放基礎拳腳，湖邊腿法（合過了）藏起來，旋風腿合得了照列
+    S = {"tab": "craft", "craftPick": True, "forgeSel": [{"type": "art", "id": "basic_fist"}], "forgePicks": game.forge_picks("basic_fist", []),
          "craftView": {"attr": "", "quality": "", "sort": "", "okOnly": True, "all": False}}
     html = run(server.main_view(game), "return H.pageCraft();", S=S, menxia=server.menxia_view(game))
-    assert "只看合得了的" in html and 'data-id="basic_fist"' not in html and f'data-id="{art.id}"' not in html
+    assert "只看合得了的" in html and 'data-id="lake_kick"' not in html and f'data-id="{art.id}"' in html
 
 
 def test_forging_empties_the_pot_and_writes_the_result_under_the_button_without_scrolling(made):
@@ -122,8 +143,8 @@ def test_the_forge_line_endpoint_gives_marks_only(made, monkeypatch):
     game, art = made
     monkeypatch.setattr(server, "look", lambda g, view: view(g))
     monkeypatch.setattr(server, "_game", lambda request: game)
-    one = server.api_forge_line(None, {"insights": ["feng"]})
-    assert one["picks"]["arts"]["basic_fist"]["short"] == "已經有了" and "ideas" not in one
+    one = server.api_forge_line(None, {"art": "basic_fist"})  # 武學重構：合過的那一對是武學＋武學
+    assert one["picks"]["arts"]["lake_kick"]["short"] == "已經有了" and "ideas" not in one
     empty = server.api_forge_line(None, {})
     assert empty["picks"] is None and "ideas" not in empty
 
@@ -217,19 +238,21 @@ def test_the_engine_says_what_it_forged_and_the_page_finds_it_in_the_lists(made)
     """開爐成了，煉製頁在結果底下畫合出來的那一樣（Joy 2026-10-17）：Game.forged_thing 是 ("art"／"ins", id)，
     id 在 menxia_view 的 owned_arts／insights 裡找得到；被拒絕是 None。"""
     game, art = made
-    game.forge("basic_fist", ["huo"], proposed=("烈焰拳", "一句話說明。"))
+    game.forge("basic_fist", [], proposed=("烈焰拳", "一句話說明。"), other_art=art.id)  # 武學重構：武學＋武學才合出新武學
     kind, art_id = game.forged_thing
     assert kind == "art" and any(r["id"] == art_id for r in server.menxia_view(game)["owned_arts"])
     game.forge(None, ["feng", "huo"], proposed=("風火意", "一句話說明。"))
     kind, ins_id = game.forged_thing
     assert kind == "ins" and any(r["id"] == ins_id for r in server.menxia_view(game)["insights"])
-    game.forge("basic_fist", ["feng"], proposed=("旋風腿", ""))  # 已經有了：被拒絕
+    game.forge("basic_fist", [], proposed=("旋風腿", ""), other_art="lake_kick")  # 已經有了：被拒絕
     assert game.forged is False and game.forged_thing is None
+    game.forge("basic_fist", ["huo"])  # 武學＋意境是裝進槽：沒有「合出來的那一樣」
+    assert game.forged is True and game.forged_thing is None
 
 
 def test_a_new_art_shows_its_card_under_the_result_with_power_and_how_it_compares(made):
     game, art = made
-    game.forge("basic_fist", ["huo"], proposed=("烈焰拳", "一句話說明。"))
+    game.forge("basic_fist", [], proposed=("烈焰拳", "一句話說明。"), other_art=art.id)  # 武學重構：武學＋武學
     menxia = server.menxia_view(game)
     row = next(r for r in menxia["owned_arts"] if r["id"] == game.forged_thing[1])
     row["judge"]["traits"] = [{"name": "剛猛", "layers": 2, "tier": 1}, {"name": "破軍", "layers": 1, "tier": 3}]  # 檔次（武學技能分檔）

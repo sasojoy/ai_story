@@ -117,7 +117,7 @@ def test_bot_takes_the_pill_only_at_the_last_step(game):
 def test_no_xinde_cultivation_any_more(game):
     """武學重構：修練不能改付心得了（Game.cultivate 沒有 by_xinde），修練頁那一列的 xinde 一律是 None。"""
     art_id = _ready_for_jue(game)
-    game.content.config.cultivate_xinde_price = 40  # 舊設定還在 Config 裡，但沒有地方讀它
+    assert not hasattr(game.content.config, "cultivate_xinde_price")  # 舊設定也拿掉了
     assert all(r["cultivate"]["xinde"] is None for r in skillview.art_rows(game.state, game.content, game.world))
     with pytest.raises(TypeError):
         game.cultivate(art_id, by_xinde=True)

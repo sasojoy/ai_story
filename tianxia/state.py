@@ -669,7 +669,7 @@ class PlayerState(BaseModel):
     tavern_watches: list[TavernWatch] = Field(default_factory=list)  # 託酒家留意的人（最多 Config.tavern.watch_keep 個）
     tavern_guard_until: float = 0.0  # 雇的保鏢跟到幾時（現實秒）
     guarded_until_real: float = 0.0  # 雇的保鏢跟到幾時（現實秒）
-    xinde_cultivations: int = 0  # 這一季花心得修練了幾次（Config.cultivate_xinde_price，越修越貴）；角色每季重來
+    xinde_cultivations: int = 0  # 這一季花心得修練了幾次（以心得修練拿掉了，欄位留著讓舊存檔讀得進來）；角色每季重來
     legend_bought: int = 0  # 這一季用心得換了幾枚破境丹（Config.legend_xinde_price，越換越貴）；角色每季重來
     legend_items: int = 0  # 破境丹（Config.legend_item_name）的數量：探索撿到，玩家在修練頁勾了、衝絕學那一次才服一枚；角色每季重來
 
@@ -1205,6 +1205,9 @@ class WorldState(BaseModel):
     # 名將贈禮給了誰：人物 id → 名號（6.4：每位名將每季全服只送一人；換季整個重來）。跟懸賞榜第二批的求藝送兵器（bounty-gift）、
     # 玩家之間的贈物無關，所以不叫 gifts
     general_gifts: dict[str, str] = Field(default_factory=dict)
+    # 武學重構：「裝滿」那種秘方（kind fuse）這一季第一個暗合的人：秘方 id → 寫給別人看的名號（換季整個重來；小的整份覆寫，
+    # 跟 general_gifts 一樣走這一下動作最後的 _save_season）
+    secret_sets: dict[str, str] = Field(default_factory=dict)
     # 名將本命兵器給了誰：人物 id → SignatureClaim（兵器設計 4.10：每位名將每季全服一人；換季整個重來）。神器譜跨季讀 seasons 表
     # 的這一欄（WorldStateStore.signature_records），所以舊季的也留著
     signature_arms: dict[str, SignatureClaim] = Field(default_factory=dict)

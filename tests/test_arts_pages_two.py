@@ -195,17 +195,26 @@ def _merger(content, name, ids):
 
 
 def test_the_merge_preview_names_the_attribute_the_merge_really_gives(content, world):
-    """六個基本意境兩兩合併（含自己合自己）：預覽寫的屬性跟 fusion.merge 真的給的一樣——同一個函式算的，不是另寫一份。"""
+    """六個基本意境兩兩合併：預覽寫的屬性跟 fusion.merge 真的給的一樣——同一個函式算的，不是另寫一份。
+    武學重構：自己合自己是揣摩（強度加深一級，不是新的意境），預覽寫「揣摩」與強度從幾到幾，合了真的加深那一級。"""
     import itertools
 
+    from tianxia import arts
+
     ids = list(content.insights)
-    for n, (a, b) in enumerate(itertools.combinations_with_replacement(ids, 2)):
+    for n, (a, b) in enumerate(itertools.combinations(ids, 2)):
         state = _merger(content, f"甲{n}", [a, b])
         line = skillview.forge_line(state, content, world, None, [a, b])
-        shown = re.search(r"→ 一個新的意境（屬(.)），", line)
+        shown = re.search(r"→ 一個新的意境（屬(.)・", line)
         assert shown, line
         made, _ = fusion.merge(state, content, world, _named(f"新意境{n}"), a, b)
         assert made is not None and made.attribute == shown.group(1), (a, b, line)
+    for a in ids:
+        state = _merger(content, f"乙{a}", [a])
+        line = skillview.forge_line(state, content, world, None, [a, a])
+        assert line.startswith("**揣摩**") and "從●到●●" in line, line
+        fusion.merge(state, content, world, None, a, a)
+        assert arts.strength_of(state, a) == 2
 
 
 def test_the_merge_preview_says_nobody_has_merged_it_before_or_what_it_becomes(content, world):
@@ -228,8 +237,12 @@ def test_the_merge_preview_matches_the_other_two_kinds_in_shape(content, world, 
     fuse = skillview.forge_line(state, content, world, "basic_fist", ["feng"])
     blend = skillview.forge_line(state, content, world, "basic_fist", [], other_art="lake_kick")
     merge = skillview.forge_line(state, content, world, None, ["feng", "huo"])
-    for line in (fuse, blend, merge):
-        assert re.search(r"（屬.[，）]", line) and line.endswith("\n沒人合過。"), line  # 屬性、花費、沒人合過，三種都有
+    # 武學重構：武學＋意境是裝進槽（不花心得體力、沒有配方），只有兩種合成寫「沒人合過」；合出來的武學寫品級、槽數與收什麼
+    assert fuse.startswith("**裝意境**") and "不花心得體力" in fuse and "沒人合過" not in fuse
+    assert re.search(r"（下品・意境槽 \d 格・", blend) and blend.endswith("\n沒人合過。"), blend
+    assert re.search(r"（屬.・", merge) and merge.endswith("\n沒人合過。"), merge
+    for line in (blend, merge):
+        assert "花 5 點心得、5 點體力" in line
 
 
 def test_the_merge_preview_still_refuses_what_you_do_not_hold(content, world, state):
@@ -362,14 +375,14 @@ def test_a_forge_that_lands_on_a_named_art_does_not_tell_the_forger_either(conte
     from tianxia.state import new_game_state
 
     master, late = _two_players(content, world)
-    for game in (master, late):
-        game.state.player.insights = ["feng"]
+    for game in (master, late):  # 武學重構：合成是武學＋武學（武學＋意境改成裝槽）
+        game.state.player.arts = ["lake_kick"]
         game.state.player.stats["xinde"] = 50
         game.state.player.member.wugong_id = "basic_fist"
-    made, _ = fusion.fuse(master.state, content, world, _named("旋風腿"), "basic_fist", "feng")
+    made, _ = fusion.blend(master.state, content, world, _named("旋風腿"), "basic_fist", "lake_kick")
     assert made.id == "旋風腿"
     _name_it(master, made, "旋風不歸腿")
-    got, _ = fusion.fuse(late.state, content, world, _named("不會用到"), "basic_fist", "feng")
+    got, _ = fusion.blend(late.state, content, world, _named("不會用到"), "basic_fist", "lake_kick")
     assert got.id == "旋風腿" and "旋風腿" in late.state.player.arts
     late.sync(1000.0)
     assert _notices(late) == [] and new_game_state is not None
@@ -500,7 +513,7 @@ def test_the_same_order_reaches_the_page_data(real):
 
 
 PRACTICE_STUBS = 'const guideHtml = () => "", proGuide = () => "";'
-CRAFT_STUBS = PRACTICE_STUBS + 'const furnaceSvg = () => "<svg></svg>", toast = () => {}, spinAt = () => "";'
+CRAFT_STUBS = PRACTICE_STUBS + 'const furnaceSvg = () => "<svg></svg>", toast = () => {}, spinAt = () => "", createHtml = () => "";'  # 自創那張卡（武學重構）這裡不看
 CRAFT_FNS = ["pageCraft", "forgeBody", "forgeReady", "artFilter", "setArtFilter", "filterChips", "showArts",
              "pickMark", "craftView", "craftFilterRow", "craftChip", "kilnWarn", "kilnHtml", "madeCardHtml", "previewCardHtml", "forgeLineHtml", "craftSheetHtml", "potGlow", "kilnPeek", "manualRows", "manualEntry", "bookIcon"]
 CRAFT_CONSTS = ["ART_FILTERS", "filterKey", "CRAFT_SORTS", "CRAFT_PAGE", "BOOKS"]

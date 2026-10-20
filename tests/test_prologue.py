@@ -1321,8 +1321,9 @@ def test_the_fire_recipe_does_not_clash_with_the_starting_breath(world):
     msgs = game.forge("jichu_quanjiao", ["huo"])
     assert "裝進了【基礎拳腳】" in msgs[0] and not any("相剋" in m for m in msgs)
     art = team.player_art(game.state, content, game.world, "jichu_quanjiao")
-    assert art.attribute == "" and art.traits == ["剛"]  # 身上的樣子：剛那一招，武學本身沒有屬性
-    assert team.pairing(content, art, content.skills["jichu_tuna"]) == 1.0
+    assert art.attribute == "剛" and art.traits == ["剛"]  # 身上的樣子：兼容並蓄的屬性照槽裡那一格（剛）；內功槽空著沒有屬性，不相剋
+    breath = team.player_art(game.state, content, game.world, "jichu_tuna")  # 身上那一份：槽空著，沒有屬性
+    assert breath.attribute == "" and team.pairing(content, art, breath) == 1.0
 
 
 def test_a_masters_recipe_that_clashes_with_the_starting_art_is_refused(prologue_root):

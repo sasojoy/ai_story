@@ -46,6 +46,7 @@ def _explore_many(game, n=N):
     s = game.state
     for _ in range(n):
         battles, known, xinde = s.battle_seq, len(s.player.insights), s.player.stats.get("xinde", 0)
+        deep = sum(s.player.insight_strength.values())  # 武學重構：再悟到已經會的，先加深強度（●→●●→●●●）才化成心得
         msgs = game._explore()
         if s.pending_event:
             counts["event"] += 1
@@ -53,8 +54,8 @@ def _explore_many(game, n=N):
             s.pending_event = None
         elif s.battle_seq != battles:
             counts["wild"] += 1
-        elif len(s.player.insights) > known or s.player.stats.get("xinde", 0) > xinde:
-            counts["insight"] += 1  # 悟得新的意境，或是悟到已經會的、化成心得（沒有戰鬥就只有這一支會給心得）
+        elif len(s.player.insights) > known or s.player.stats.get("xinde", 0) > xinde or sum(s.player.insight_strength.values()) > deep:
+            counts["insight"] += 1  # 悟得新的意境、加深已經會的，或是到頂了化成心得（沒有戰鬥就只有這一支會給心得）
         else:
             counts["nothing"] += 1
             assert msgs == ["你四處走走，一無所獲。"]
@@ -337,7 +338,7 @@ def test_the_insight_branch_teaches_an_insight_from_the_location(game):
 
 
 def test_the_insight_branch_always_gives_something_and_a_repeat_turns_into_xinde(game):
-    """抽到「悟意境」那一支必定有收穫：第一次是新意境，悟到已經會的就化成心得。"""
+    """抽到「悟意境」那一支必定有收穫：第一次是新意境；武學重構：悟到已經會的先加深一層（●●、●●●），到頂了才化成心得。"""
     game.content.locations["town"].insights = ["huo"]
     game.content.config.rare_explore_chance = 0.0
     _only(game, insight=1, wild=0, event=0)
@@ -345,6 +346,10 @@ def test_the_insight_branch_always_gives_something_and_a_repeat_turns_into_xinde
     first = game._explore()
     assert first == ["你在小鎮靜下心來，看了好一陣。", "你悟得了「火」的意境（屬剛）！"]
     assert game.state.player.insights == ["huo"] and game.state.player.stats["xinde"] == 0
+    for mark in ("●●", "●●●"):
+        msgs = game._explore()
+        assert msgs == ["你在小鎮靜下心來，看了好一陣。", f"你對「火」的體會又深了一層（{mark}）。"]
+    assert game.state.player.insight_strength["huo"] == 3 and game.state.player.stats["xinde"] == 0
     for n in range(1, 4):
         msgs = game._explore()
         assert msgs[0] == "你在小鎮靜下心來，看了好一陣。" and msgs[-1] == "心得 +10"
