@@ -3267,7 +3267,7 @@
       if (!p) return null;
       if (p.type === "art") {
         const a = x.owned_arts.find((r) => r.id === p.id);
-        return a && { name: a.name, sub: `${a.quality}・${a.attribute}`, rank: QUALITY_RANK[a.quality] || 1 };
+        return a && { name: a.name, sub: a.attribute ? `${a.quality}・${a.attribute}` : a.quality, rank: QUALITY_RANK[a.quality] || 1 }; // 兼容並蓄的沒有屬性，不留一個「・」
       }
       const i = x.insights.find((r) => r.id === p.id);
       return i && { name: i.name, sub: `意境・${i.attribute}`, rank: 2 };

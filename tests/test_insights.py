@@ -7,11 +7,16 @@ def test_learning_a_new_insight_keeps_it_for_good(state, content, world):
     assert state.player.insights == ["feng"] and "風" in msgs[0]
 
 
-def test_learning_it_again_turns_into_xinde(state, content, world):
+def test_learning_it_again_deepens_it_and_only_the_fourth_time_turns_into_xinde(state, content, world):
+    """武學重構：意境就是技能，再悟到一次這一招深一層（●→●●→●●●）；到了極處再悟到才化成心得。"""
     state.player.insights = ["feng"]
     state.player.stats["xinde"] = 0
     msgs = insights.learn(state, content, world, "feng")
-    assert state.player.insights == ["feng"] and state.player.stats["xinde"] == 10
+    assert state.player.insights == ["feng"] and state.player.insight_strength["feng"] == 2 and "●●" in msgs[0]
+    insights.learn(state, content, world, "feng")
+    assert state.player.insight_strength["feng"] == 3 and state.player.stats["xinde"] == 0
+    msgs = insights.learn(state, content, world, "feng")
+    assert state.player.insight_strength["feng"] == 3 and state.player.stats["xinde"] == 10
     assert "心得 +10" in msgs
 
 
@@ -144,12 +149,13 @@ def test_the_grant_is_remembered_with_a_flag_so_a_second_call_adds_nothing(state
     assert state.player.insights == ["haoran"]
 
 
-def test_an_insight_already_known_turns_into_xinde_but_is_still_counted_as_granted(state, content, world):
+def test_an_insight_already_known_deepens_but_is_still_counted_as_granted(state, content, world):
     state.player.insights = ["haoran"]  # 例如別條路已經悟過
     state.player.stats["good"] = 15
     state.player.stats["xinde"] = 0
     msgs = insights.grant_by_name(state, content, world)
-    assert state.player.insights == ["haoran"] and state.player.stats["xinde"] == content.config.duplicate_insight_xinde
-    assert insights.grant_by_name(state, content, world) == []  # 旗標記下了，不會每次加名聲都再化一次心得
-    assert state.player.stats["xinde"] == content.config.duplicate_insight_xinde and msgs
+    assert state.player.insights == ["haoran"] and state.player.insight_strength["haoran"] == 2  # 武學重構：再悟到先加深
+    assert state.player.stats["xinde"] == 0
+    assert insights.grant_by_name(state, content, world) == []  # 旗標記下了，不會每次加名聲都再加深一層
+    assert state.player.insight_strength["haoran"] == 2 and msgs
 

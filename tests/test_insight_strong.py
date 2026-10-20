@@ -89,9 +89,19 @@ def test_learning_another_kind_here_has_no_line(lake):
     assert "feng" in lake.state.player.insights and not any("最濃" in m for m in msgs)
 
 
+def test_a_repeat_of_the_strongest_deepens_it_first_with_the_line(lake):
+    """武學重構：再悟到一次先加深那一招（●→●●）；最濃的那一句照樣在前面。"""
+    p = lake.state.player
+    p.insights.append("shui")
+    before = p.stats.get("xinde", 0)
+    msgs = insights.learn(lake.state, lake.content, lake.world, "shui", at=_here(lake))
+    assert p.insight_strength["shui"] == 2 and p.stats.get("xinde", 0) == before and msgs[0] == LINE and "●●" in msgs[1]
+
+
 def test_a_repeat_of_the_strongest_gives_more_xinde(lake):
     p = lake.state.player
     p.insights.append("shui")
+    p.insight_strength["shui"] = 3  # 武學重構：到了 ●●● 再悟到才化成心得
     before = p.stats.get("xinde", 0)
     msgs = insights.learn(lake.state, lake.content, lake.world, "shui", at=_here(lake))
     assert p.stats["xinde"] == before + 15 and msgs[0] == LINE
@@ -100,6 +110,7 @@ def test_a_repeat_of_the_strongest_gives_more_xinde(lake):
 def test_a_repeat_of_another_kind_gives_the_usual_xinde(lake):
     p = lake.state.player
     p.insights.append("feng")
+    p.insight_strength["feng"] = 3  # 武學重構：到了 ●●● 再悟到才化成心得
     before = p.stats.get("xinde", 0)
     insights.learn(lake.state, lake.content, lake.world, "feng", at=_here(lake))
     assert p.stats["xinde"] == before + lake.content.config.duplicate_insight_xinde
@@ -108,6 +119,7 @@ def test_a_repeat_of_another_kind_gives_the_usual_xinde(lake):
 def test_a_repeat_without_a_place_gives_the_usual_xinde(lake):
     p = lake.state.player
     p.insights.append("shui")
+    p.insight_strength["shui"] = 3  # 武學重構：到了 ●●● 再悟到才化成心得
     before = p.stats.get("xinde", 0)
     msgs = insights.learn(lake.state, lake.content, lake.world, "shui")
     assert p.stats["xinde"] == before + lake.content.config.duplicate_insight_xinde and LINE not in msgs
@@ -115,6 +127,7 @@ def test_a_repeat_without_a_place_gives_the_usual_xinde(lake):
 
 def test_a_private_insight_at_the_strongest_place_is_left_alone(lake):  # Review Focus 3
     own = sensing.add_own(lake.state, Insight(id="", name="湖心月", attribute="柔", lean="無", note=""))
+    lake.state.player.insight_strength[own.id] = 3  # 武學重構：到了 ●●● 再悟到才化成心得
     before = lake.state.player.stats.get("xinde", 0)
     msgs = insights.learn(lake.state, lake.content, lake.world, own.id, at=_here(lake))
     assert lake.state.player.stats["xinde"] == before + lake.content.config.duplicate_insight_xinde and LINE not in msgs
@@ -125,6 +138,7 @@ def test_switch_off_changes_nothing(lake):
     assert sensing.rate(lake.state, lake.content, _here(lake), "柔") == sensing.rate(lake.state, lake.content, _here(lake))
     p = lake.state.player
     p.insights.append("shui")
+    p.insight_strength["shui"] = 3  # 武學重構：到了 ●●● 再悟到才化成心得
     before = p.stats.get("xinde", 0)
     msgs = insights.learn(lake.state, lake.content, lake.world, "shui", at=_here(lake))
     assert p.stats["xinde"] == before + 10 and not any("最濃" in m for m in msgs)

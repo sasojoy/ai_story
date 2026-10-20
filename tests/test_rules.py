@@ -289,9 +289,13 @@ def test_an_effect_can_grant_an_insight(state, content, world):
     assert state.player.insights == ["feng"] and any("悟得" in m for m in msgs)
 
 
-def test_an_effect_that_grants_a_known_insight_again_gives_xinde(state, content, world):
+def test_an_effect_that_grants_a_known_insight_again_deepens_it_or_gives_xinde_at_the_top(state, content, world):
+    """武學重構：再悟到一次先加深那一招（●→●●）；已經 ●●● 的才化成心得。"""
     state.player.insights = ["feng"]
     state.player.stats["xinde"] = 0
+    msgs = apply_effect(Effect(insights=["feng"]), state, content, world)
+    assert state.player.insights == ["feng"] and state.player.insight_strength["feng"] == 2 and any("●●" in m for m in msgs)
+    state.player.insight_strength["feng"] = 3
     msgs = apply_effect(Effect(insights=["feng"]), state, content, world)
     assert state.player.insights == ["feng"] and state.player.stats["xinde"] == 10 and "心得 +10" in msgs
 

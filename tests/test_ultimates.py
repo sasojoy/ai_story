@@ -27,13 +27,24 @@ def _game(content):
     return game
 
 
+INSIGHT_OF = {"快": "feng", "剛": "huo", "柔": "shui", "慢": "shan", "陽": "haoran", "陰": "xuesha"}  # 正式內容的基本意境
+
+
 def _mastered(game, name, cells, kind="武學", quality="絕學"):
-    """一門自己合成、練到 quality 的武學，功效照 cells（第一格是自己的屬性），配在身上。"""
+    """一門自己合成、練到 quality 的武學，功效照 cells（第一格是自己的屬性），配在身上。
+    武學重構：功效不寫在武學上、由槽裡裝的意境決定（arts.apply 會蓋掉 traits）——cells 換成同屬性的基本意境裝進槽，
+    同一個屬性出現幾次就是那個意境的強度（層數）；相容屬性照 cells 的順序，第一個就是武學自己的屬性。"""
+    affinity = list(dict.fromkeys(cells))
     art = generate_from_name(name, kind, name, weights=ALL_ODDS).model_copy(
-        update={"origin": "fused", "creator": game.state.player.name, "attribute": cells[0], "traits": list(cells)})
+        update={"origin": "fused", "creator": game.state.player.name, "attribute": cells[0], "affinity": affinity})
     assert game.world.claim_skill_name(art)
     p = game.state.player
     p.art_quality[art.id] = quality
+    p.art_slots[art.id] = [INSIGHT_OF[a] for a in affinity]
+    for a in affinity:
+        if INSIGHT_OF[a] not in p.insights:
+            p.insights.append(INSIGHT_OF[a])
+        p.insight_strength[INSIGHT_OF[a]] = cells.count(a)
     if kind == "武學":
         p.member.wugong_id, p.member.wugong_level = art.id, 10
     else:
