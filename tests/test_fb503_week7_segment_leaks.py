@@ -1,6 +1,7 @@
 """FB-503（7 天濃縮季第二輪，PM 2026-10-20）：FB-501 清單外還寫「週」的地方，7 天季照段寫（calendar.week_word／week_label）：
 第 3、4 階行動「這週已經做滿 N 次」、補上第 4 階席次「到下週一為止」、管理者輪替席次的回話、管理者「這一季立刻蓋天命之季的章」
-問句裡天命之爭的時刻。21 天季、週末、14 天一個字都不變。字待 joy 潤。"""
+問句裡天命之爭的時刻。21 天季、週末、14 天一個字都不變（例外：天命之爭那一句 PM 2026-10-20 改成 21 天季也照時刻表寫
+「第 3 週週日 20:00」，不再寫週末的「第 12 週週一 20:00」；週末、14 天照舊）。字待 joy 潤。"""
 from __future__ import annotations
 
 import pytest
@@ -10,7 +11,7 @@ import webharness
 from conftest import real_content
 
 import server
-from tianxia import calendar, seats, timetable
+from tianxia import calendar, seal, seats, timetable
 
 pytestmark = pytest.mark.slow  # 每一條都載真實內容、開一季
 
@@ -93,17 +94,42 @@ def test_admin_rotation_reply_unchanged_elsewhere(profile):
 def test_mandate_note_reads_the_week7_timetable():
     c7 = real_content("week7")
     assert timetable.mandate_note(c7, fb501._season(c7)) == "第 7 天 22:00"
-    for profile in ("season21", "weekend", None):
+    for profile in ("weekend", None):
         content = fb501._content(profile)
         assert timetable.mandate_note(content, fb501._season(content)) is None
 
 
-@pytest.mark.parametrize("profile,when", [("week7", "第 7 天 22:00"), ("weekend", "第 12 週週一 20:00")])
+def test_mandate_note_reads_the_season21_timetable():
+    """修前重現：21 天季這一句 None，網頁退回週末的「第 12 週週一 20:00」（21 天季只有 3 週，天命之爭排在第 3 週週日 20:00）。"""
+    c21 = real_content("season21")
+    assert timetable.mandate_note(c21, fb501._season(c21)) == "第 3 週週日 20:00"
+
+
+@pytest.mark.parametrize("profile", ["week7", "season21", "weekend"])
+def test_the_mandate_ask_names_the_time_the_stamp_really_schedules(profile):
+    """問句寫的就是「這一季立刻蓋章」真正會排的時刻（timetable.default_time 排進 schedule）：蓋完看排進去的世界秒換成季曆的時刻。
+    問句括號裡另寫了「現實時間落在半夜會盡量挪開」，所以週末（一週只有現實 5 小時，預設時刻常落在半夜）比的是挪之前的預設時刻；
+    照現實天的季（21 天季、7 天季）預設時刻不落在半夜，排進去的就是它。"""
+    game = fb501._game(profile, opened=fb501.WED14 if profile == "week7" else fb501.MON)
+    c = game.content
+    game.admin_seal_mandate("now")
+    at = timetable.default_time(seal.mandate_event(c), c, game.state.world)
+    if profile != "weekend":
+        assert game.state.world.schedule["tianming"] == at
+    p = calendar.point(at, c, game.state.world)
+    if profile == "week7":
+        really = f"第 {p.cal_day} 天 {p.hour:02d}:{p.minute:02d}"
+    else:
+        really = f"第 {p.week} 週週{calendar.WEEKDAYS[p.weekday]} {p.hour:02d}:{p.minute:02d}"
+    assert (timetable.mandate_note(c, game.state.world) or "第 12 週週一 20:00") == really
+
+
+@pytest.mark.parametrize("profile,when", [("week7", "第 7 天 22:00"), ("season21", "第 3 週週日 20:00"), ("weekend", "第 12 週週一 20:00")])
 def test_the_admin_mandate_ask_names_the_week7_time(profile, when, monkeypatch):
     game = fb501._game(profile)
     monkeypatch.setattr(server, "CONTENT", game.content)
     admin = server.admin_choices(game)
-    assert admin["mandate_at"] == (when if profile == "week7" else None)
+    assert admin["mandate_at"] == (None if profile == "weekend" else when)
     payload = {"m": {**server.main_view(game), "admin": True}, "menxia": None, "stored": {}, "responses": {},
                "script": 'return H.adminAsk("seal_mandate", {when: "now"})[0];', "S": {"admin": admin}}
     asked = webharness.run(fb501web.DRIVER, payload)
