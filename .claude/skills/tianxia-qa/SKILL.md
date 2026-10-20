@@ -9,19 +9,25 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 
 ## 開工
 - **先對版本**：`git fetch`，再 `git ls-remote origin <分支>`，確認派工單給的 commit 還是最新的。PM 派單到你開工之間，分支常常已經往前走；回報之前再對一次。驗的是哪一個 commit 就寫哪一個。
+  - 這份 clone 的 `git fetch origin` 不更新 `origin/dev/*`、`origin/qa/*`（fetch 的 refspec 沒有它們）。要對的每一條各寫一個明確的 refspec：`git fetch origin +refs/heads/dev/<名>:refs/remotes/origin/dev/<名> +refs/heads/qa/<名>:refs/remotes/origin/qa/<名>`，再 `git rev-parse origin/dev/<名>`；不然讀到的是舊的。
 - **開結果分支**：從派工單給的那個 commit 開，`git worktree add -b qa/<名字> .claude/worktrees/qa-<名字> <sha>`。複驗如果沿用既有的 qa/ 分支，先 `git merge --ff-only origin/<修好的分支>`，快轉到修好的版本。
 - **寫檔被擋**：如果 hook 擋你寫別的工作樹的檔，就在自己 session 的工作樹 `git switch` 到結果分支來做。
 - 工作樹沒有 `.venv`，一律用 `C:/Ray/專案/天下大勢/.venv/Scripts/python.exe`。印中文要設 `PYTHONIOENCODING=utf-8`（或把 stdout 包成 UTF-8）。
 - **測試只跑派工單點名的檔**：`<python> -m pytest -q tests/a.py tests/b.py`。不跑整套，也不用 `test_for.py`，因為 engine、content 一動，它會挑到幾乎整套。
 - 不開多代理工作流程，也不要一個驗收項目開一個子代理。
+- **在隔離的工作樹裡**（PM 用 Agent 派的子代理）：Bash 工具會擋帶中文路徑的 python（`C:/Ray/專案/…/python.exe`），python 一律從 PowerShell 跑，git 照樣用 Bash。PowerShell 傳 JSON 參數會壞：把 JSON 寫進腳本，或讓腳本收一般參數。
+  - Bash 也會拒絕「看不出會不會碰到別的工作樹」的複雜指令（遇到過的：`cd` 到工作樹外面的資料夾、拿 shell 變數組出別的資料夾的路徑、awk、在 Bash 裡再叫 powershell）。腳本一律用 Write 寫成檔，再從 Bash 跑 `python3 <絕對路徑>`（系統的 python 3.14 有 requests，打 API 與唯讀讀資料庫夠用），不 `cd`、路徑寫絕對的；node 與 venv 的 python 從 PowerShell 跑。
+- **scratchpad 跟同一個 PM 派出的其他子代理共用**（2026-10-20 在 `shots/` 看到別人的檔）：自己的複本、資料庫、截圖，都放在用這次驗收命名的子資料夾。
 
 ## 開伺服器與登入
 - **複本**：在 scratchpad 用 bash `git -C <qa 工作樹> archive HEAD | tar -x -C <scratchpad>/on` 解一份來跑。PowerShell 的 tar 碰到中文路徑會壞。不要在 repo 裡跑伺服器，也不要改 repo 的設定與 `.local/`。
+- **擋 11434**：有人登入時，伺服器會預熱模型（`server._warm_model` 連 Ollama）。在複本的 `content/config.json` 加一個鍵 `"ollama_url": "http://127.0.0.1:9"`（只改 scratchpad 的複本），就打不到 11434。
 - **埠與 host**：先用 `netstat -ano | grep LISTEN` 挑沒人用的埠。cookie 照 host 分、不分埠，所以每個驗收都用自己的 `<名字>.localhost`（例 `qa7check.localhost:7893`）。同一個驗收要同時登兩個帳號，也要換 host。
-- **設定**：`TIANXIA_PROFILE` 是 `weekend`、`season21`，或空字串（預設，14 天的季）。`TIANXIA_DB` 指到 scratchpad 的暫存檔。伺服器、`set_password.py`、`run_bots.py` 三者要設成一樣的值。
+- **設定**：`TIANXIA_PROFILE` 是 `weekend`、`season21`、`week7`（7 天濃縮季），或空字串（預設，14 天的季）。`TIANXIA_DB` 指到 scratchpad 的暫存檔。伺服器、`set_password.py`、`run_bots.py` 三者要設成一樣的值。
 - **帳號**：`TIANXIA_PROFILE=… <python> scripts/set_password.py <帳號> --character <名號> --db <db> --local-dir <scratchpad>/local`。
   - 密碼寫在 `local/<帳號>_password.txt`，要用就從檔案讀，不要貼進對話。
   - 這樣建的角色不走草廬序章。要驗序章，就打 `POST /api/register {login,password,again}`，再打 `POST /api/character {name,gender}`（網頁註冊的那一條路）。
+  - **要驗序章或初入江湖的某一步**：先走網頁那一條建角色，再直接改 `characters.data` 裡的 `player.tutorial_step` 與 `player.location`（`tutorial.json` 的 `prologue_steps`＝11，0～10 在草廬、`location` 要是 `mentor_hut`；11～14 是初入江湖 e1～e4，`location` 換成 `yingchuan`；15 走完）。伺服器開著也能改：`sqlite3.connect(db, timeout=30)`、`BEGIN IMMEDIATE`，下一個請求會從資料庫重讀。
   - 不同資料庫的帳號用不同的 `--local-dir`，才不會互相蓋掉。
 - **管理者**：設環境變數 `TIANXIA_ADMINS=驗收官`，再建一個叫這個名號的角色。全服第一季停在「籌備中」，要用管理者開季。
 - **啟動**：用 PowerShell `Start-Process -FilePath <python> -ArgumentList "-u","server.py","--port","<埠>" -WorkingDirectory <複本> -RedirectStandardOutput out.log -RedirectStandardError err.log -WindowStyle Hidden -PassThru`。
@@ -31,6 +37,7 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 - **關**：`taskkill /PID <PID> /T /F`，暫時建的 `content/profiles` 也一起刪掉。
   - 關之前先確認那個埠是你開的：用 `Get-CimInstance Win32_Process` 看命令列、父行程與 log 的位置。
   - 別的 session 開的伺服器不要動。
+- **要驗內容檔現在沒有的寫法**（例：序章哪一步 reveal 寫了 `all`）：scratchpad 再解一份複本改那個內容檔，另開一個埠、另一個 `<名字>b.localhost`、另一個資料庫，只開來驗那一項；驗完 `taskkill /T` 並把複本刪掉。主要那一台不動。
 
 ## API
 - 打 API 的腳本從 **bash** 跑，PowerShell 會把 JSON 參數弄壞。用 `requests.Session()`，先 `POST /api/login {login,password}`。
@@ -42,6 +49,11 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
   - `start_showdown {id}`
   - `resolve_event`
 - **快轉的限制**：快轉只推世界時間。看現實時間的東西（出陣的每日次數 `PlayerState.sorties_today`、回體丹換日）快轉沒用，要改存檔。季曆的時刻夾在季末那一刻：把季末往後排，畫面照樣寫「週日 23:59」。
+- **畫面的資料不全在 `status`**：
+  - 軍令卡在 `main["orders"]`。
+  - 按了 `act:bounties` 之後，懸賞榜在 `main["shop"]`（`notes` 每張有 `short`、`due`）。
+  - 管理者頁（時刻表每一列、排定的現實時間 `at_real`）要 `GET /api/admin`；`main["admin"]` 只是布林。
+- **實機對照「一個字都不變」**：腳本用 `subprocess.Popen` 在同一個埠輪流起兩份複本的伺服器，各用新的暫存資料庫，只打 API、印要比的欄位；把現實時刻的 `HH:MM` 換掉再 diff，結束時 `taskkill /T`。
 - `status` 裡沒有的鍵就是畫面不畫。要確認某個東西在某種季、某種狀態下不出現，直接看 `status` 有沒有那個鍵，再補打一次那個動作，確認什麼都沒動。
 
 ## 瀏覽器（in-app）
@@ -49,17 +61,25 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 - **reload 要單獨一次呼叫**：同一段 JS 裡 reload，後面的程式會被切掉。等約 2 秒之後，再在下一次呼叫裡查畫面。
 - 頁面每 10 秒打一次 `/api/main`。用 API 改了狀態之後，等 11 秒或 reload 再看。
 - **按鈕用 JS 的 `el.click()`**，座標點擊常常沒反應。
+- **換帳號**：同一個分頁重打 `/api/login` 就換掉 cookie，再單獨一次 reload。兩個帳號要同時登著才需要換 host。
+- **截圖檔**：存在 `~/.claude/projects/<session>/tool-results/`，檔名是 `mcp-Claude_Browser-blob-*-<尾碼>.jpg`，截圖結果那一行寫著。回報要附路徑時，照尾碼複製到自己的子資料夾、改成看得懂的名字。
 - **量版面用 JS**：
   - 同一行：比 `getBoundingClientRect().top`。
   - 沒有橫向捲動：`scrollWidth` 等於 `clientWidth`。
   - 字被切掉：元素的 `scrollWidth` 大於 `clientWidth`。
   - 截圖與 `zoom` 拿來當證據。
 - **寬度與深色**：用 `resize_window` 設 375×812、360×780，`colorScheme` 設 dark 或 light。窗格寬度一變、回合結束，這些設定都會被重設，要再設一次。做完設回 `preset: desktop`。
+- **共用窗格太擠、或要包 `fetch`、要換樣式表時，自己開 headless chromium**（寫法看 `tianxia-dev/網頁.md` 的「要真實截圖 PNG 的草圖」：playwright 的 chromium-1208、node 22、CDP；一個 node 腳本開一個瀏覽器、跑完 `taskkill /T` 自己的那個）。截圖用 `Page.captureScreenshot` 存 PNG，再用 Read 看。窗格那幾條（`el.click()`、單獨 reload、量 `scrollWidth`）照樣適用。好用的幾招：
+  - **回應沒收到**：在頁面裡包 `window.fetch`，對指定的網址等真的回應回來再丟 `TypeError`（伺服器做了、頁面沒收到），或送出前就丟（根本沒到伺服器）；要「馬上再點、輪詢還沒插進來」就讓 `/api/main`、貨架那幾個 GET 先掛著（等一個 promise），點完才放。要「等一次輪詢再點」就不掛、記下輪詢何時打過。
+  - **修前修後比版面**：同一個登入、同一頁，把 `git show <舊 sha>:web/style.css` 整份換進頁面（`link[href*="style.css"]` 換成 `<style>`），量同一批元素的 `getComputedStyle`（字級、字重、行高）與 `getBoundingClientRect`，再比兩張截圖的 sha256；不必起兩台伺服器。寬度要跨媒體查詢的邊界各量一次（640、641）。
+  - 提示泡泡（`#toast`，3.2 秒）與離線橫幅會蓋在確認框上；要看底下的字就等它消失，或用 JS 讀 DOM。
 
 ## 存檔、資料庫與假人
 - 換季之後、玩家第一次同步之前改的存檔，會被換季重設洗掉。要等他同步完再改。
+- **改存檔不驗型別**：list 欄位寫成 None（例 `duel_last = None`），`CharacterStore.save` 照樣存進去，讀的時候才炸：伺服器 `_reload` 回 500，網頁掉回登入頁。清空一律用欄位的預設值（`[]`、`{}`）；已經壞了，就直接改 `characters` 那一列的 JSON。
 - **讀資料庫只開唯讀**：`sqlite3.connect("file:<db>?mode=ro", uri=True)`。`characters` 有 `is_bot` 和 `data`（JSON，`player`、`journal`），江湖紀錄只留最近 30 則。
 - **複製資料庫**用 sqlite 的 `backup()`，不要只複製 `.db`，WAL 裡的資料會漏掉。
+- **商城的帳**：資料表 `mall_purchases`、`mall_ledger`、`mall_entitlements`，`owner` 是名號不是帳號。`scripts/mall_ledger.py --db <db> --out <csv>` 對帳（只讀，印錢包數與餘額合計，沒有負的餘額、exit 0）。
 - `battles` 是最新的在前（`battles[0]`）。腳本移動角色之前先略過序章（`skip_tutorial` 會重設地點）。自動選事件的迴圈要排除 `choice:free`（那一顆要打字）。
 - 決戰的「定結果」只能定還沒開打的。要驗發獎勵就實際打完：用腳本把 `muster_deadline_real` 和 `round.opened_real` 拉到過去。
 - **假人**：只在台灣時間 11:30～13 與 19～24 上線，懶的有些日子整天不上線。
@@ -102,6 +122,7 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 - qa/ 分支只 commit 試玩回饋，一個 commit。commit 訊息用英文一行，說驗了什麼、開了哪幾張 FB，結尾空一行加 `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`。
 - `git push -u origin qa/<名字>`，接著 `git ls-remote origin qa/<名字>`，確認遠端那一個跟本機的 commit 一樣。
 - 不合併，合併是 PM 的事。
+- **複驗**：上一輪的紀錄常常已經被 PM 合進被驗的分支（看 `git merge-base --is-ancestor origin/qa/<上一輪> HEAD`）。是的話不用硬做合併 commit，總表的狀態直接在原列換成複驗結果，驗收紀錄接在檔尾；不是的話才 `git merge --no-ff origin/qa/<上一輪>`（衝突兩邊都留）。
 
 ## 回報 PM
 - 用 SendMessage 回派工的那個 session（照訊息的 `from`），用繁體中文。
