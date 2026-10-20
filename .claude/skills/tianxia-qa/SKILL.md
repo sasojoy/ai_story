@@ -15,6 +15,7 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 - **測試只跑派工單點名的檔**：`<python> -m pytest -q tests/a.py tests/b.py`。不跑整套，也不用 `test_for.py`，因為 engine、content 一動，它會挑到幾乎整套。
 - 不開多代理工作流程，也不要一個驗收項目開一個子代理。
 - **在隔離的工作樹裡**（PM 用 Agent 派的子代理）：Bash 工具會擋帶中文路徑的 python（`C:/Ray/專案/…/python.exe`），python 一律從 PowerShell 跑，git 照樣用 Bash。PowerShell 傳 JSON 參數會壞：把 JSON 寫進腳本，或讓腳本收一般參數。
+  Bash 也會擋「`cd` 到工作樹外面」或太複雜的指令（heredoc 加管線、`od` 之類，回「too complex to verify that it stays inside the worktree」）：小腳本用 Write 寫進 scratchpad、用絕對路徑跑（系統的 `python` 可以），git 一律 `git -C <自己的工作樹>`。
 - **scratchpad 跟同一個 PM 派出的其他子代理共用**（2026-10-20 在 `shots/` 看到別人的檔）：自己的複本、資料庫、截圖，都放在用這次驗收命名的子資料夾。
 
 ## 開伺服器與登入
@@ -65,6 +66,11 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
   - 字被切掉：元素的 `scrollWidth` 大於 `clientWidth`。
   - 截圖與 `zoom` 拿來當證據。
 - **寬度與深色**：用 `resize_window` 設 375×812、360×780，`colorScheme` 設 dark 或 light。窗格寬度一變、回合結束，這些設定都會被重設，要再設一次。做完設回 `preset: desktop`。
+- **東西在哪**（2026-10-20 找過的）：
+  - 玩法說明在齒輪抽屜裡（`[data-act="howto"]`，攤開之後在 `#howto` 找 `h4` 的節名）；江湖頁的「玩法說明 ›」只在新手期出現。
+  - 輿圖總覽（「今天去哪裡出陣」、三條戰線的繩 `.m-rope`、繩上的地點 `.bead`）在底下那張卡裡，收著時點卡頭攤開。
+  - 輿圖上的 ⚔ 是 `g.armed`，數量拿去跟引擎的 `mapview.armed_places` 比；地點圓盤在 `g[data-loc="<id>"]` 裡，顏色與虛線直接讀 `circle` 的屬性。
+  - 江湖頁的戰況圖卡是 `div.war`，點了攤開 `.war-help.fronts-help`；主線是 `.peek-chip.quest`。
 
 ## 存檔、資料庫與假人
 - 換季之後、玩家第一次同步之前改的存檔，會被換季重設洗掉。要等他同步完再改。
