@@ -252,6 +252,20 @@ class SmithDraft(BaseModel):
     aux: str | None = None
 
 
+class CreateDraft(BaseModel):
+    """自創武學的三步儀式走到哪（tianxia/create.py）：形意（kind、affinity、lean、intent 與模型評的分 score）做完就有這張單；
+    式（weapon、insight）做完 step 變成 name；取名那一步付心得、登記，單子收起。"""
+
+    kind: str  # 內功／武學
+    affinity: list[str] = Field(default_factory=list)  # 相容屬性（空＝兼容並蓄，少一格槽）
+    lean: str = "無"  # 正／邪／無
+    intent: str = ""  # 形意那一步寫的 20 字「意」
+    score: int = 40  # 模型評的意分（0～100，夾 5～85；評不到 40）
+    weapon: str | None = None  # 式：兵器種類（內功 None）
+    insight: str | None = None  # 式：起手式（悟過的意境，登記時裝進第一格）
+    step: str = "form"  # 下一步：form（式）、name（取名）
+
+
 class Manual(BaseModel):
     """武學譜（tianxia/secret_recipes.py）：這一季聽過的口訣與合中過的秘方。秘方每季照天機換一批，所以記著是哪一季的天機，
     對不上就當空的。鑄譜（PlayerState.forge_manual）用同一個型別，多記 made。"""
@@ -625,6 +639,7 @@ class PlayerState(BaseModel):
     insight_strength: dict[str, int] = Field(default_factory=dict)  # 意境 id → 強度 2 或 3（沒記是 1）；同一個意境再悟到、同＋同合成升一級
     arts_migrated: bool = False  # 舊存檔的功效轉成槽做過了沒（arts.migrate 只做一次）
     created_count: int = 0  # 這一季自創了幾門（Config.arts.create_per_season、價錢遞增）；角色每季重來
+    creating: CreateDraft | None = None  # 自創走到一半的單子（tianxia/create.py）；取名那一步才付心得
     stamina_pills: int = 0  # 回體丹（Config.stamina_pill_name）的數量：建立角色時的內測贈送；跨季保留（Game._reset_player_for_new_season）
     # 回體丹補到過幾顆（企劃者 2026-10-12 拿掉一鍵補滿、改送合適的數量）：Config.beta_gift_stamina_pills 比它多時，讀檔那一刻手上不到那個數的
     # 補到那個數、寫一行紀錄，再記成那個數（一個數只補一次；之後再調高會再補一次）。新角色建立時就記成送的數。

@@ -12,8 +12,9 @@ import random
 from collections.abc import Callable
 from typing import NamedTuple
 
-from . import allied, armor, bounties, chuangong, clinic, cultivation, economy, equipment, explore_modes, forge_secrets, fusion, glyph, insights, library, mounts, naming, sensing, smithing, team, traits, treasures, weapons
+from . import arts as arts_mod, allied, armor, bounties, chuangong, clinic, create, cultivation, economy, equipment, explore_modes, forge_secrets, fusion, glyph, insights, library, mounts, naming, sensing, smithing, team, traits, treasures, weapons
 from . import prologue as prologue_rules
+from .models import WEAPON_KINDS
 from .engine import ARENA_YIELD, DUEL_FLEE, FREE_TEXT_OPTION, SAY_OPTION, Game, Option
 from .martial_arts import MartialArt, next_quality
 from .models import Content
@@ -117,36 +118,12 @@ def spend_xinde(game: Game, rng: random.Random) -> None:
     for kind in ("內功", "武學"):
         if can_practise(game, kind):
             game.practice(kind)
-    cultivate_by_xinde(game)
     buy_pill(game)
     teach(game)
 
 
-XINDE_CULTIVATE_MAX = 3  # 一次最多花心得修練幾下（越修越貴，這只是保險）
-
-
-def cultivate_by_xinde(game: Game, limit: int = XINDE_CULTIVATE_MAX) -> int:
-    """以心得修練（Joy 2026-10-18）：身上兩門（再功法庫）修得下去、付完還剩 TEACH_RESERVE，就花心得修一下；先顧自己再傳功。
-    整季機器人與假人共用；只走 Game.cultivate(by_xinde=True)。回傳修了幾下。"""
-    state, content, world = game.state, game.content, game.world
-    done = 0
-    while done < limit:
-        price = cultivation.xinde_price(state, content)
-        if price is None or state.player.stats.get("xinde", 0) - price < TEACH_RESERVE:
-            break
-        pick = next((
-            a for a in worn_first(game)
-            if cultivation.cultivate_problem(state, content, world, a, use_legend=takes_the_pill(game, a), by_xinde=True) is None
-        ), None)
-        if pick is None:
-            break
-        game.cultivate(pick, use_legend=takes_the_pill(game, pick), by_xinde=True)
-        done += 1
-    return done
-
-
 def buy_pill(game: Game) -> bool:
-    """以心得換破境丹（Joy 2026-10-18）：身上有一門火候滿了在等契機、手上沒有丹、換完還留 TEACH_RESERVE，就換一枚。
+    """以心得換破境丹（Joy 2026-10-18）：身上有一門上品到了極處在等契機、手上沒有丹、換完還留 TEACH_RESERVE，就換一枚。
     整季機器人與假人共用；只走 Game.buy_legend。"""
     state, content = game.state, game.content
     price = cultivation.legend_price(state, content)
@@ -229,7 +206,9 @@ def forge_and_cultivate(game: Game, rng: random.Random) -> None:
     plan = pick_forge(game, rng)
     if plan is not None:
         game.forge(plan.art_id, list(plan.insight_ids), other_art=plan.other_art)
+    create_art(game, rng)
     switch_to_the_strongest(game)
+    slot_insights(game)  # 武學重構：悟到的意境裝進身上兩門的空槽
     if p.stamina >= CULTIVATE_RESERVE:
         for art_id in worn_first(game):
             pill = takes_the_pill(game, art_id)
@@ -247,29 +226,21 @@ def worn_first(game: Game) -> list[str]:
 
 
 def awaits_chance(game: Game) -> bool:
-    """身上有一門火候滿了、等著契機（方案 C）：機器人這時有挑戰本人可打就去打（見 pick）。"""
+    """身上有一門上品到了極處（cultivation.ready：第十成、意境槽裝滿）、等著契機：機器人這時有挑戰本人可打就去打（見 pick）。"""
     state, content, world = game.state, game.content, game.world
-    rule, member = content.config.breakthrough, state.player.member
-    if rule.heat <= 0 or state.player.naming is not None:
+    member = state.player.member
+    if content.config.breakthrough.chance <= 0 or state.player.naming is not None:
         return False
-    for art_id, level in ((member.wugong_id, member.wugong_level), (member.neigong_id, member.neigong_level)):
-        art = team.resolve_art(art_id, content, world) if art_id else None
-        if art is None or next_quality(team.art_quality(state, art)) != "絕學":
-            continue
-        if level >= content.config.cultivate_min_level.get("絕學", 0) and state.player.art_mastery.get(art_id, 0) >= rule.heat:
-            return True
-    return False
+    return any(
+        art_id and cultivation.ready(state, content, world, art_id)[0] for art_id in (member.wugong_id, member.neigong_id)
+    )
 
 
 def takes_the_pill(game: Game, art_id: str) -> bool:
-    """這一次衝的是絕學、手上又有破境丹：服（企劃者：丹由玩家自己決定哪一次服，機器人有就服；方案 C 開著時是火候滿了才服）。
-    只在這一步傳 use_legend：別的步驟用不上丹，傳了只會多一句「這一回沒服」。要不要算丹由 cultivation.boost_for 決定。"""
+    """這一門到了極處、手上又有破境丹：服（企劃者：丹由玩家自己決定哪一次服，機器人有就服）。
+    只在這一步傳 use_legend：別的門用不上丹。"""
     state, content, world = game.state, game.content, game.world
-    art = team.player_art(state, content, world, art_id)
-    target = next_quality(art.quality) if art is not None else None
-    if cultivation.heat_mode(content, target):  # 方案 C：火候滿了才服（強行衝關）；還在添火候時服了也沒用
-        return state.player.legend_items > 0 and state.player.art_mastery.get(art_id, 0) >= content.config.breakthrough.heat
-    return target is not None and cultivation.boost_for(state, content, target, use_legend=True) > 0
+    return state.player.legend_items > 0 and cultivation.ready(state, content, world, art_id)[0]
 
 
 def melt_the_weakest(game: Game) -> None:
@@ -283,13 +254,7 @@ def melt_the_weakest(game: Game) -> None:
     if spare:
         game.melt_art(min(spare)[1])
         return
-    needed = {
-        used.id for used in (
-            insights.for_cultivation(state, content, world, art)
-            for art in (team.resolve_art(a, content, world) for a in library.owned_arts(state)) if art is not None
-        ) if used is not None
-    }
-    loose = [i for i in state.player.insights if i not in needed]
+    loose = [i for i in state.player.insights if arts_mod.where_slotted(state, i) is None]  # 裝在武學上的不熔
     if loose:
         game.melt_insight(loose[0])
 
@@ -301,6 +266,62 @@ def _worth(content: Content, art: MartialArt) -> float:
         return art.top_power
     layers = len(traits.traits_of(art)) * traits.multiplier(content, art.quality) + (1 if art.special else 0)
     return art.top_power * (1 + TRAIT_WEIGHT * layers)
+
+
+CREATE_RESERVE = 50  # 自創付完心得要剩這麼多（練成、揣摩還要用）
+CREATE_INTENTS = ("風過林梢，影不留痕", "山不動而勢壓人", "一息吐納，百脈皆通", "水無常形，隨勢而走", "烈火燎原，一往無前")
+
+
+def slot_insights(game: Game) -> int:
+    """把手上沒裝在任何一門上的意境裝進身上兩門的空槽（武學先、內功後；收得下的才裝）。整季機器人與假人共用；
+    只走 Game.slot_insight、不擲亂數。回傳裝了幾個。"""
+    state, content, world = game.state, game.content, game.world
+    member = state.player.member
+    done = 0
+    for art_id in (member.wugong_id, member.neigong_id):
+        if not art_id:
+            continue
+        for insight_id in list(state.player.insights):
+            if arts_mod.where_slotted(state, insight_id) is not None:
+                continue
+            if arts_mod.slot_problem(state, content, world, art_id, insight_id) is None:
+                game.slot_insight(art_id, insight_id)
+                done += 1
+    return done
+
+
+def create_art(game: Game, rng: random.Random) -> bool:
+    """自創一門（tianxia/create.py）：心得付完還剩 CREATE_RESERVE、手上有沒裝的意境才做。三步一次走完：
+    形意（種類挑身上那一門比較弱的那一種、相容屬性照起手式的屬性、意分照 create.DEFAULT_SCORE——假人不叫模型）、
+    式（兵器照身上武學的種類，推不出來隨機）、取名（退路字表）。伺服器假人與整季機器人共用。回傳有沒有自創成。"""
+    state, content, world = game.state, game.content, game.world
+    p = state.player
+    if create.allowed(state, content) is not None or p.stats.get("xinde", 0) - create.price(state, content) < CREATE_RESERVE:
+        return False
+    loose = [i for i in p.insights if arts_mod.where_slotted(state, i) is None]
+    if not loose:
+        return False
+    insight_id = rng.choice(loose)
+    ins = insights.resolve(insight_id, content, world, state)
+    if ins is None:
+        return False
+    worn = [(team.player_art(state, content, world, a), k) for a, k in ((p.member.wugong_id, "武學"), (p.member.neigong_id, "內功"))]
+    kind = min(worn, key=lambda x: x[0].top_power if x[0] is not None else 0)[1]
+    game.create_intent(kind, [ins.attribute], "無", rng.choice(CREATE_INTENTS))
+    if p.creating is None:
+        return False
+    weapon = (weapons.art_weapon(p.member.wugong_id, content, world) or rng.choice(WEAPON_KINDS)) if kind == "武學" else None
+    game.create_form(weapon, insight_id)
+    if p.creating is None or p.creating.step != "name":
+        game.create_cancel()
+        return False
+    for salt in range(naming.CLAIM_ATTEMPTS):
+        name = naming.fallback_name(content, f"自創|{p.name}|{p.created_count}", kind, salt=salt)
+        game.create_name(name)
+        if p.creating is None:
+            return True
+    game.create_cancel()
+    return False
 
 
 def switch_to_the_strongest(game: Game) -> None:

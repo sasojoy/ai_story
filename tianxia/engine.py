@@ -18,7 +18,7 @@ from pydantic import BaseModel
 
 from . import arts as arts_mod
 from . import (
-    allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, chuangong, clinic, companion_agent, cultivation, defection, economy, encounter, enlist, equipment, event_llm, explore_modes,
+    allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, chuangong, clinic, companion_agent, create, cultivation, defection, economy, encounter, enlist, equipment, event_llm, explore_modes,
     feasts, fight_llm, figure_aid, figure_life, figures, foreshadow, generals, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, letters, library, mapdata, martial_arts,
     materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
     shopview, signature, signature_arms, skillview, smithing,
@@ -506,24 +506,24 @@ class Game:
             else:
                 self.choose(sensing.LET_GO)
             return True
-        fused = prologue_rules.fused_arts(s, c, self.world)
+        fused = prologue_rules.slotted_arts(s, c, self.world)
         if goal.action == "view_tab":
             tab = next((flag.removeprefix("看過:") for flag in goal.condition.flags_all if flag.startswith("看過:")), "")
             self.view_tab(tab)
         elif step.explore_event is not None or step.explore_scene is not None:
             self.choose("act:explore")
-        elif goal.fused:
+        elif goal.fused:  # 武學重構：把悟到的意境裝進師父點名的那一門
             if not p.insights or step.fuse_base is None:
                 return False
-            self.forge(step.fuse_base, [self.rng.choice(p.insights)])
+            self.slot_insight(step.fuse_base, self.rng.choice(p.insights))
         elif goal.fused_level and fused:
             art = fused[0]
             if art.id not in (p.member.wugong_id, p.member.neigong_id):
                 self.switch_art(art.id)
             else:
                 self.practice(art.kind)
-        elif goal.fused_quality and fused:
-            self.cultivate(fused[0].id)
+        elif goal.deepened and p.insights:  # 武學重構：揣摩（同一個意境合兩個，層數 +1）
+            self.forge(None, [p.insights[0], p.insights[0]])
         elif goal.action in ("rest", "train", "explore"):
             self.choose(f"act:{goal.action}")
         elif goal.action == "allocate":
@@ -3178,13 +3178,8 @@ class Game:
             self._surface_hint()
 
     def _refine_failed(self) -> bool:
-        """有一門往下一品修練失敗過、還沒練成（art_mastery 記失敗幾次）：h_refine_fail 的條件。joy 的加難方案 C 衝絕學時，art_mastery
-        記的是火候（cultivation._temper）：添火候不擲骰、不是失敗，不算（服丹強行衝關沒成也留著火候，那也沒有越修越容易，一樣不算）。"""
-        s, c = self.state, self.content
-        for art_id, count in s.player.art_mastery.items():
-            art = team.resolve_art(art_id, c, self.world) if count > 0 else None
-            if art is not None and not cultivation.heat_mode(c, martial_arts.next_quality(team.art_quality(s, art))):
-                return True
+        """h_refine_fail 的條件。武學重構（Joy 2026-10-20）之後品級不靠修練衝、沒有「修練失敗」這件事（art_mastery 不再記失敗），
+        永遠是假；函式留著讓提示的表不改。"""
         return False
 
     def _hint_triggers(self, only: set[str] | None = None) -> list[str]:
@@ -8124,32 +8119,22 @@ class Game:
         return skillview.forge_picks(self.state, self.content, self.world, art_id, insight_ids, other_art=other_art)
 
     @_not_while_preparing
-    def cultivate(self, art_id: str, use_legend: bool = False, by_xinde: bool = False) -> list[str]:
-        """修練：武學＋它融的意境，衝下一品（見 cultivation.py）。花體力。真的擲了骰（成功或失敗）才寫江湖紀錄；
-        被拒絕（意境熔掉了、沒融過意境、已經絕學、體力不足、沒有這門武學）只回一句話（武學與成長計畫 F12）。
-        use_legend：玩家勾了「服下破境丹」；真的服了才在紀錄裡寫「破境丹 -1」（丹沒了、下一步不是絕學都照一般的機率擲）。"""
-        sure = prologue_rules.sure_rng(self.state, self.content)  # 序章第 6 步：第一次修練一定升品，也不看成數門檻（劇本只練到第三成）
-        problem = prologue_rules.cultivate_problem(self.state, self.content) or cultivation.cultivate_problem(
-            self.state, self.content, self.world, art_id, gate=sure is None, use_legend=use_legend, by_xinde=by_xinde,
-        )
+    def cultivate(self, art_id: str, use_legend: bool = False) -> list[str]:
+        """修練（武學重構，Joy 2026-10-20）：品級不靠修練衝，這裡只剩上品到了極處（第十成、意境槽裝滿）服一枚破境丹強行衝絕學
+        （見 cultivation.py）。花體力與一枚丹。真的擲了骰才寫江湖紀錄；被拒絕（還沒到極處、沒有丹、體力不足、沒有這門武學）只回一句話。
+        use_legend：玩家勾了「服下破境丹」；沒勾就只回「等契機或服丹」那一句。"""
+        problem = cultivation.cultivate_problem(self.state, self.content, self.world, art_id, use_legend=use_legend)
         if problem is not None:
             return self._log([problem])
         xinde, stamina, pills = self._xinde(), self.state.player.stamina, self.state.player.legend_items
-        msgs = cultivation.cultivate(
-            self.state, self.content, self.world, art_id, sure or self.rng, use_legend, gate=sure is None, by_xinde=by_xinde,
-        )
-        spent = round(stamina - self.state.player.stamina)  # 輸了也花了體力：數值變化寫在紀錄上，跟別的行動一樣
+        msgs = cultivation.cultivate(self.state, self.content, self.world, art_id, self.rng, use_legend)
+        spent = round(stamina - self.state.player.stamina)  # 沒衝開也花了體力：數值變化寫在紀錄上，跟別的行動一樣
         taken = pills - self.state.player.legend_items
         extra = ([f"體力 -{spent}"] if spent > 0 else []) + (
             [f"{self.content.config.legend_item_name} -{taken}"] if taken > 0 else []
         )
-        # 結果標記是擲骰的結果（「【X】修練…」，一定以【開頭）；前面服丹、沒服的提示與後面定名的話都不是
+        # 結果標記是擲骰的結果（「【X】衝開了…」「【X】撞在…」，一定以【開頭）；前面服丹那一句與後面定名的話都不是
         tag = next((m for m in msgs if m.startswith("【")), msgs[0])
-        won = next((i for i, m in enumerate(msgs) if "修練有成，從" in m), None)
-        art = team.resolve_art(art_id, self.content, self.world)
-        line = prologue_rules.after_line(self.state, self.content, 武學=art.name if art else "") if won is not None else None
-        if line is not None:  # 草廬這一步寫了結果那一句（設計 10.3「修練之後」）：它就是結果標記，也是敘事那一句（T7 審查 M1）
-            msgs[won] = tag = line
         msgs = self._log(msgs)
         self._menxia_entry(tag, xinde, guide=True, action="cultivate", extra=extra or None)
         return msgs
@@ -8204,6 +8189,47 @@ class Game:
         tag = next((m for m in reversed(msgs) if m.startswith("你改練")), msgs[-1] if msgs else "改練")
         self._menxia_entry(tag, xinde)
         return msgs
+
+    # ── 自創武學（三步儀式，tianxia/create.py）──────────────────
+
+    def create_request(self, kind: str, affinity: list[str], lean: str, text: str) -> create.IntentRequest | list[str]:
+        """形意的 A 段（鎖內、只讀）：送得出去回傳要在鎖外請模型評分的單子，不行回傳那一句話。"""
+        if self._preparing():
+            return [PREPARING_REFUSAL]
+        problem = create.intent_problem(self.state, self.content, kind, affinity, lean, text)
+        if problem is not None:
+            return [problem]
+        return create.request(self.state, kind, affinity, lean, text)
+
+    @_not_while_preparing
+    def create_intent(self, kind: str, affinity: list[str], lean: str, text: str, score: int | None = None) -> list[str]:
+        """形意（C 段，或直接呼叫）：score 是鎖外評好的意分；沒給（整季機器人、腳本）是 create.DEFAULT_SCORE。只開單、不收錢、不寫紀錄。"""
+        return self._log(create.start(self.state, self.content, kind, affinity, lean, text, score))
+
+    @_not_while_preparing
+    def create_form(self, weapon: str | None, insight_id: str) -> list[str]:
+        """式：兵器種類（內功 None）與起手式。只改單子、不收錢、不寫紀錄。"""
+        return self._log(create.form(self.state, self.content, self.world, weapon or None, insight_id))
+
+    @_not_while_preparing
+    def create_name(self, name: str, extra: int = 0) -> list[str]:
+        """取名：付心得、擲品級、登記、裝起手式（create.finish）。做成了寫一則煉製紀錄，被拒絕只回一句。"""
+        xinde = self._xinde()
+        art, msgs = create.finish(self.state, self.content, self.world, name, self.rng, extra)
+        self.forged = art is not None
+        self.forged_thing = ("art", art.id) if art is not None else None
+        msgs = self._log(msgs)
+        if art is not None:
+            self._menxia_entry(msgs[0], xinde, guide=True, title=journal.CRAFT, action="forge", lines=msgs[1:])
+        return msgs
+
+    @_not_while_preparing
+    def create_cancel(self) -> list[str]:
+        return self._log(create.cancel(self.state))
+
+    def create_view(self) -> dict:
+        """煉製頁「自創」那一塊（create.view）。只讀。"""
+        return create.view(self.state, self.content, self.world)
 
     @_not_while_preparing
     def slot_insight(self, art_id: str, insight_id: str) -> list[str]:
@@ -11855,6 +11881,7 @@ class Game:
             "armament": self.armament_view(),  # 陣營的軍備存量（素材與經濟設計第六節）；散人、捐軍備關著是 None
             # 鑄譜（打造的隱藏配方）：這一季聽過口訣或打中過的，一條一筆 {"clues", "solved", "recipe"}（打造隱藏配方設計 6.3）
             "forge_manual": forge_secrets.view(s, c, self.world),
+            "create": self.create_view(),  # 自創武學那一塊（煉製頁；tianxia/create.py）
             "anonymous": p.anonymous,
             "gender": gender.of(p),  # 性別：修練頁的人物面板照它換男女版（web/app.js 的 HERO_FIGURES）
             "gender_chosen": p.gender_chosen,  # 選過了沒：設定頁沒選過的舊角色給一次改的機會

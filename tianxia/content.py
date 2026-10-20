@@ -2354,7 +2354,7 @@ def validate(c: Content) -> None:
     for i, step in enumerate(t.steps):
         where = f"新手引導 {step.id}"
         special = (step.explore_event or step.enemies
-                   or step.force_tier or step.sure_cultivate or step.instant_rest or step.fuse_base or step.melt_only
+                   or step.force_tier or step.deepen or step.instant_rest or step.fuse_base or step.melt_only
                    or step.give_art or step.paged or step.after)
         need(not special or i < t.prologue_steps, f"{where}：序章才有的欄位只能寫在前 {t.prologue_steps} 步")
         # 畫面的那幾樣（旁白、收起來那一行、亮、發光、選單）序章與初入江湖（序章之後、不分季的步驟，新手引導第四段）都可以寫
@@ -2391,8 +2391,7 @@ def validate(c: Content) -> None:
         need(step.force_tier is None or step.force_tier in encounter.TIERS, f"{where}：force_tier {step.force_tier} 不是判定結果")
         for art in (step.fuse_base, step.melt_only, step.give_art.id if step.give_art else None):
             need(art is None or art in c.skills, f"{where}：武學 {art} 不存在")
-    # 草廬裡新人拿得到的每個意境（開場遇險、拜師那一串事件、四景、序章每一步的獎勵），都要有一筆師門配方接上合成那一步的底：
-    # 沒有的話那個新人的合成要等模型取名、或拿到退路的名字（「合成不等模型」落空）；加了第五景、或配方的意境 id 打錯，載入時就報錯
+    # 武學重構：序章裝意境那一步點名的那一門要收得下草廬悟得到的每個意境（相容屬性），不然新人照師父的話做會被擋
     sights: set[str] = set()
     for step in t.steps[: t.prologue_steps]:
         sights.update(step.reward.insights)
@@ -2414,11 +2413,11 @@ def validate(c: Content) -> None:
                 sights.update(effect.insights)
                 if effect.next_event:
                     todo.append(effect.next_event)
-    have = {(recipe.base, recipe.insight) for recipe in c.preset_recipes}
     for step in t.steps[: t.prologue_steps]:
-        if step.fuse_base:
-            missing = sorted(i for i in sights if (step.fuse_base, i) not in have)
-            need(not missing, f"新手引導 {step.id}：草廬悟得到的意境 {missing} 沒有以 {step.fuse_base} 為底的師門配方（preset_recipes.json）")
+        base_def = c.skills.get(step.fuse_base) if step.fuse_base else None
+        if base_def is not None and base_def.affinity:
+            wrong = sorted(i for i in sights if i in c.insights and c.insights[i].attribute not in base_def.affinity)
+            need(not wrong, f"新手引導 {step.id}：{step.fuse_base} 的相容屬性 {base_def.affinity} 收不下草廬悟得到的意境 {wrong}")
     recipe_keys, recipe_names = set(), set()
     for recipe in c.preset_recipes:
         where = f"師門配方 {recipe.base}+{recipe.insight}"

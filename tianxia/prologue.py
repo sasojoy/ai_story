@@ -35,10 +35,10 @@ def step(state: GameState, content: Content) -> TutorialStep | None:
 
 
 def start_stamina(content: Content) -> int:
-    """序章開局的體力：探索一次、合成一次、修練一次剛好用完，第 7 步才有「體力見底、打坐」（設計 3.2）。
-    合成的體力是武學與成長計畫五加的（Config.fuse_stamina，5）：設計 3.2 寫的 20 是那之前的算法，現在是 25。"""
+    """序章開局的體力：探索一次、揣摩一次剛好用完，第 7 步才有「體力見底、調息」（設計 3.2）。
+    武學重構（Joy 2026-10-20）：裝意境不花體力，衝品質的修練沒有了，揣摩（意境＋意境）花 Config.merge_stamina。"""
     cfg = content.config
-    return cfg.action_cost["explore"] + cfg.fuse_stamina + cfg.cultivate_stamina
+    return cfg.action_cost["explore"] + cfg.merge_stamina
 
 
 def begin(state: GameState, content: Content) -> None:
@@ -233,12 +233,6 @@ def instant_rest(state: GameState, content: Content) -> str:
     return current.instant_rest if current is not None else ""
 
 
-def sure_rng(state: GameState, content: Content) -> random.Random | None:
-    """這一步的修練一定升品：回一個永遠擲中的亂數；其他時候是 None（用遊戲自己的亂數）。"""
-    current = step(state, content)
-    return SureRandom() if current is not None and current.sure_cultivate else None
-
-
 def melt_only(state: GameState, content: Content) -> str | None:
     """序章裡只准熔哪一門；序章裡別的步驟一門都不准熔（回空字串）；不在序章是 None（不限）。"""
     current = step(state, content)
@@ -248,7 +242,7 @@ def melt_only(state: GameState, content: Content) -> str | None:
 
 
 def fuse_base(state: GameState, content: Content) -> str | None:
-    """序章裡合成只准拿哪一門當底；序章裡別的步驟不准合成（回空字串）；不在序章是 None（不限）。"""
+    """序章裡只准把意境裝進哪一門；序章裡別的步驟不准裝（回空字串）；不在序章是 None（不限）。"""
     current = step(state, content)
     if current is None:
         return None
@@ -262,20 +256,25 @@ def fuse_base(state: GameState, content: Content) -> str | None:
 def fuse_problem(
     state: GameState, content: Content, art_id: str | None, insight_ids: list[str], other_art: str | None = None,
 ) -> str | None:
-    """序章裡開爐：只准在合成那一步、拿師父說的那一門融一個意境；別的（別的底、兩門武學、合併、別的步驟）都擋。"""
-    base = fuse_base(state, content)
-    if base is None:
+    """序章裡的爐子（武學重構）：裝意境那一步只准把一個意境裝進師父說的那一門；揣摩那一步只准同一個意境合兩個；
+    別的（別的門、兩門武學、別的意境、別的步驟）都擋。不在序章是 None（不限）。"""
+    current = step(state, content)
+    if current is None:
         return None
-    if not base:
-        return "師父這一步沒叫你合成。"
-    if art_id != base or other_art or len(insight_ids) != 1:
-        return f"師父要你拿【{content.skills[base].name}】融一個意境。"
-    return None
+    if current.fuse_base:
+        if art_id != current.fuse_base or other_art or len(insight_ids) != 1:
+            return f"師父要你把意境裝進【{content.skills[current.fuse_base].name}】。"
+        return None
+    if current.deepen:
+        if art_id or other_art or len(insight_ids) != 2 or insight_ids[0] != insight_ids[1]:
+            return "師父要你拿同一個意境揣摩，合成二重。"
+        return None
+    return "師父這一步沒叫你開爐。"
 
 
 def practice_problem(state: GameState, content: Content, world: WorldStateStore, kind: str) -> str | None:
-    """序章裡練成：只在「練到第幾成」那一步（done_when.fused_level）、練身上換上的那一門合成出來的武學；
-    心得是照劇本備的，花在基本功上就練不到第三成。"""
+    """序章裡練成：只在「練到第幾成」那一步（done_when.fused_level）、練身上裝了意境的那一門；
+    心得是照劇本備的，花在別的門上就練不到第三成。"""
     current = step(state, content)
     if current is None:
         return None
@@ -283,17 +282,9 @@ def practice_problem(state: GameState, content: Content, world: WorldStateStore,
         return "師父這一步沒叫你練功。"
     member = state.player.member
     worn = member.neigong_id if kind == "內功" else member.wugong_id
-    if worn is None or worn not in {art.id for art in fused_arts(state, content, world)}:
-        return "師父要你練新得的那一門，先把它換上。"
+    if worn is None or worn not in {art.id for art in slotted_arts(state, content, world)}:
+        return "師父要你練裝了意境的那一門，先把它換上。"
     return None
-
-
-def cultivate_problem(state: GameState, content: Content) -> str | None:
-    """序章裡修練：只在安排好一定升品的那一步（sure_cultivate）；體力是照劇本備的。"""
-    current = step(state, content)
-    if current is None or current.sure_cultivate:
-        return None
-    return "師父這一步沒叫你修練。"
 
 
 def seclude_problem(state: GameState, content: Content) -> str | None:
@@ -312,7 +303,7 @@ def switch_target(state: GameState, content: Content, world: WorldStateStore) ->
     current = step(state, content)
     if current is None or "switch" not in current.glow:
         return None
-    named = next(iter(fused_arts(state, content, world)), None)
+    named = next(iter(slotted_arts(state, content, world)), None)
     member = state.player.member
     if named is None or named.id in (member.neigong_id, member.wugong_id):
         return None
@@ -339,9 +330,9 @@ def art_glow(
 
 
 def insight_glow(state: GameState, content: Content) -> list[str]:
-    """煉製頁這一步（有 fuse_base 的合成那一步）剛悟到的意境發光：序章的意境都是合成要用的，所以這一步手上的都標。只在序章裡呼叫。"""
+    """煉製頁這一步（裝意境、揣摩那兩步）剛悟到的意境發光：序章的意境都是這兩步要用的，所以手上的都標。只在序章裡呼叫。"""
     current = step(state, content)
-    return ["pick:insight"] if current is not None and current.fuse_base else []
+    return ["pick:insight"] if current is not None and (current.fuse_base or current.deepen) else []
 
 
 def after_line(state: GameState, content: Content, **names: str | int) -> str | None:
@@ -356,20 +347,28 @@ def after_line(state: GameState, content: Content, **names: str | int) -> str | 
     return text
 
 
-def fused_arts(state: GameState, content: Content, world: WorldStateStore) -> list[MartialArt]:
-    """身上與功法庫裡合成出來的武學（自己那一份，品質照自己修到的），照擁有的順序。"""
+def slotted_arts(state: GameState, content: Content, world: WorldStateStore) -> list[MartialArt]:
+    """身上與功法庫裡意境槽裝了東西的武學（自己那一份），照擁有的順序（武學重構；以前是合成出來的那一門）。"""
     from . import library, team  # team、library 都 import 很多東西，放在函式裡避免循環
 
-    arts = (team.player_art(state, content, world, art_id) for art_id in library.owned_arts(state))
-    return [art for art in arts if art is not None and art.origin == "fused"]
+    slotted = {art_id for art_id, cells in state.player.art_slots.items() if any(cells)}
+    arts = (team.player_art(state, content, world, art_id) for art_id in library.owned_arts(state) if art_id in slotted)
+    return [art for art in arts if art is not None]
+
+
+def deepened(state: GameState) -> bool:
+    """揣摩過：手上有一個意境二重以上（PlayerState.insight_strength）。"""
+    return any(state.player.insight_strength.get(i, 1) >= 2 for i in state.player.insights)
 
 
 def fill(text: str, state: GameState, content: Content, world: WorldStateStore) -> str:
-    """序章的話裡的 {武學}：換成合成出來的那一門（序章只合一門）；還沒有就寫「新武學」。"""
+    """序章的話裡的 {武學}：換成裝了意境的那一門（序章只裝一門）；還沒有就寫「基礎拳腳」那一步點名的底。"""
     if "{武學}" not in text:
         return text
-    arts = fused_arts(state, content, world)
-    return text.replace("{武學}", arts[0].name if arts else "新武學")
+    arts = slotted_arts(state, content, world)
+    current = step(state, content)
+    base = content.skills.get(current.fuse_base).name if current is not None and current.fuse_base in content.skills else "新武學"
+    return text.replace("{武學}", arts[0].name if arts else base)
 
 
 def give_art(state: GameState, content: Content, world: WorldStateStore, give: GiveArt) -> list[str]:

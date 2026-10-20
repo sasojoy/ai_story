@@ -63,6 +63,9 @@ class MartialArt(BaseModel):
     # 意境槽只收這幾種屬性的意境；空的＝兼容並蓄、什麼都收（基礎武學）。武學自己的屬性＝第一個；兼容並蓄的沒有屬性（attribute ""）。
     # 合成出來的＝兩門來源合起來（任一門兼容並蓄就兼容並蓄）；自創的照形意那一步挑
     affinity: list[str] = Field(default_factory=list)
+    # 自創的武學（tianxia/create.py）：式那一步挑的兵器種類（內功是 None）；合成、內容武學照 weapons.art_weapon 推，這欄空著
+    weapon: str | None = None
+    slot_adjust: int = 0  # 意境槽比品級的格數多或少幾格（自創挑「兼容並蓄」少一格）；最少留一格
     # 身上的樣子（arts.apply）：只在玩家自己那一份上填，全服登記的那一份永遠是空的
     extra_specials: list[str] = Field(default_factory=list)  # 空格擲到的中階技能（特別功效 id）
     high: str | None = None  # 擲到的高階技能（content/traits.json 的 high 的 id）

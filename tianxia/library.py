@@ -296,15 +296,16 @@ def melt_many(
         remove_art(state, art_id)
         melted.append(f"【{name}】")
         art_count += 1
-    # 熔意境之前記下哪幾門還找得到修練用的意境，熔完再比（同 melt_insight 那一句）
-    kept = [art for art in (team.resolve_art(a, content, world) for a in owned_arts(state)) if art is not None]
-    leaned = {art.id for art in kept if insights.for_cultivation(state, content, world, art) is not None}
     insight_count = 0
     for insight_id in ins:
         if insight_id not in p.insights:
             skipped.append(f"「{insight_id}」沒熔：你沒有這個意境。")
             continue
         insight = insights.resolve(insight_id, content, world, state)
+        stuck = melt_insight_problem(state, content, world, insight_id)
+        if stuck is not None:
+            skipped.append(f"「{insight.name if insight else insight_id}」沒熔：{stuck}")
+            continue
         p.insights.remove(insight_id)
         refund += content.config.melt_insight_xinde
         melted.append(f"「{insight.name if insight else insight_id}」")
@@ -320,26 +321,34 @@ def melt_many(
     msgs += skipped[:MELT_MANY_SKIPS]
     if len(skipped) > MELT_MANY_SKIPS:
         msgs.append(f"還有 {len(skipped) - MELT_MANY_SKIPS} 樣沒熔。")
-    needing = [art.name for art in kept if art.id in leaned and insights.for_cultivation(state, content, world, art) is None]
-    if needing:
-        msgs.append(f"{'、'.join(f'【{n}】' for n in needing)}從此不能再修練（修練要用的意境熔掉了）。")
     return msgs
+
+
+INSIGHT_SLOTTED = "「{name}」還裝在【{art}】上，先拆下來。"  # 待 joy 潤
+
+
+def melt_insight_problem(state: GameState, content: Content, world: WorldStateStore, insight_id: str) -> str | None:
+    """這個意境熔不熔得掉：不是自己的、或還裝在某一門武學的意境槽上（武學重構）都不行。None＝可以。"""
+    from . import arts as arts_mod  # arts import library
+
+    if insight_id not in state.player.insights:
+        return "你沒有這個意境。"
+    where = arts_mod.where_slotted(state, insight_id)
+    if where is not None:
+        insight = insights.resolve(insight_id, content, world, state)
+        art = team.resolve_art(where, content, world)
+        return INSIGHT_SLOTTED.format(name=insight.name if insight else insight_id, art=art.name if art else where)
+    return None
 
 
 def melt_insight(state: GameState, content: Content, world: WorldStateStore, insight_id: str) -> list[str]:
     p = state.player
-    if insight_id not in p.insights:
-        return ["你沒有這個意境。"]
+    problem = melt_insight_problem(state, content, world, insight_id)
+    if problem is not None:
+        return [problem]
     insight = insights.resolve(insight_id, content, world, state)
-    arts = [art for art in (team.resolve_art(a, content, world) for a in owned_arts(state)) if art is not None]
-    leaned = {art.id for art in arts if insights.for_cultivation(state, content, world, art) is not None}
     p.insights.remove(insight_id)
     amount = content.config.melt_insight_xinde
     p.stats["xinde"] = p.stats.get("xinde", 0) + amount
     name = insight.name if insight else insight_id
-    msgs = [f"你把「{name}」的領悟化成了心得。", f"心得 +{amount}"]
-    # 熔掉之後再也找不到修練用的意境的那幾門（手上還有同屬性的，換那一個來修，不算）
-    needing = [art.name for art in arts if art.id in leaned and insights.for_cultivation(state, content, world, art) is None]
-    if needing:
-        msgs.append(f"{'、'.join(f'【{n}】' for n in needing)}從此不能再修練（修練要用「{name}」）。")
-    return msgs
+    return [f"你把「{name}」的領悟化成了心得。", f"心得 +{amount}"]

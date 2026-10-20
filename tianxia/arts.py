@@ -43,7 +43,7 @@ def slots_of(state: GameState, content: Content, art: MartialArt) -> list[str | 
     """這一門的槽（照品級的格數補齊、多的砍掉）。寫死的武學回空清單。"""
     if fixed(content, art.id):
         return []
-    n = slot_count(content, state.player.art_quality.get(art.id, art.quality))
+    n = max(1, slot_count(content, state.player.art_quality.get(art.id, art.quality)) + art.slot_adjust)
     raw = list(state.player.art_slots.get(art.id, []))[:n]
     return raw + [None] * (n - len(raw))
 

@@ -418,29 +418,13 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
         if art is None:
             continue
         level = level_of(state, art_id)
-        insight = insights.for_cultivation(state, content, world, art) or (
-            insights.resolve(art.insight, content, world, state) if art.insight else None
-        )
-        insight_name = insight.name if insight else None
-        gate = prologue.sure_rng(state, content) is None  # 序章一定升品的那一步不看成數門檻（跟 Game.cultivate 同一個判斷）
-        problem = prologue.cultivate_problem(state, content) or cultivation.cultivate_problem(
-            state, content, world, art_id, gate=gate, use_legend=True,  # 火候滿了、手上有丹：這一列給「服丹強行衝關」那一格
-        )
+        insight_name = None  # 武學重構：沒有「融的意境」了（網頁還讀這個鍵；槽裡裝的在 slots）
+        # 修練（武學重構）：只剩上品到了極處服丹強行衝絕學那一格；還沒到極處、不是上品都灰掉寫原因
+        problem = cultivation.cultivate_problem(state, content, world, art_id, use_legend=True)
         legend = None
         if problem is None:
-            target = next_quality(art.quality)
-            failures = p.art_mastery.get(art_id, 0)
-            cost = f"體力 {content.config.cultivate_stamina}"
-            if cultivation.heat_mode(content, target):  # 方案 C：上品往絕學只添火候，不寫機率；滿了只剩服丹強行衝關那一格
-                note = f"{cultivation.heat_note(content, failures)}・{cost}"
-                if failures >= content.config.breakthrough.heat:
-                    legend = _force_choice(state, content, world, art_id)
-            else:
-                odds = cultivation.odds_for(state, content, target, failures, 0, world, art_id)
-                note = f"{cultivation.odds_note(odds, target)}・{cost}"
-                legend = _legend_choice(state, content, world, art_id, target, failures)
-            if gate and target not in content.config.cultivate_sure_by:  # 方案 B：這一回的搭配，含蓄的一句（不寫倍數）
-                note += "".join(f"　{line}" for line in cultivation.fit(state, content, world, art_id).lines)
+            note = f"上品已到極處：等一場硬仗的契機，或服丹強行衝關・體力 {content.config.cultivate_stamina}"  # 待 joy 潤
+            legend = _force_choice(state, content, world, art_id)
         else:
             note = problem
         stuck = melt_problem(state, art_id, art.name, only=prologue.melt_only(state, content), content=content)  # 跟 library.melt_art 同一個判斷
@@ -461,8 +445,8 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
             "rating": arts_mod.rating(content, art, level or 1, state, world),  # 戰力：威力 ×（1＋槽裡技能的加成）
             "compare": compare,  # 卷軸卡直接把它寫在功法庫那張卡的鈕上面（改練之前看得到）；點開「詳情」時功法卡裡也有
             "cultivate": {
-                "ok": problem is None, "note": note, "legend": legend, "buy": _buy_choice(state, content, art),
-                "xinde": None if hut else _xinde_choice(state, content, world, art_id, gate),
+                "ok": problem is None, "note": note, "legend": legend, "buy": _buy_choice(state, content, world, art),
+                "xinde": None,  # 武學重構：沒有「以心得修練」了（品級不靠修練衝）；網頁還讀這個鍵
             },
             "melt": {
                 "ok": stuck is None,
@@ -537,45 +521,11 @@ def slot_rows(state: GameState, content: Content, world: WorldStateStore, art: M
     return rows
 
 
-def _legend_choice(
-    state: GameState, content: Content, world: WorldStateStore, art_id: str, target: str, failures: int,
-) -> dict | None:
-    """修練頁上「服下破境丹」那一格（預設不勾）要的資料：下一步是絕學、手上有丹才有，否則 None。
-    note 是勾了之後機率欄換成的那一句；加成機率照 cultivation.boost_for 算，跟實際擲的一致。"""
-    boost = cultivation.boost_for(state, content, target, use_legend=True)
-    if not boost:
-        return None
-    cfg, count = content.config, state.player.legend_items
-    return {
-        "count": count,
-        "bonus": boost,
-        "label": f"服下{cfg.legend_item_name}（+{boost}%，剩 {count} 枚）",
-        "note": f"{cultivation.odds_for(state, content, target, failures, boost, world, art_id)}% 晉為{target}"
-                f"（含{cfg.legend_item_name} +{boost}%）・體力 {cfg.cultivate_stamina}",
-    }
-
-
-def _xinde_choice(state: GameState, content: Content, world: WorldStateStore, art_id: str, gate: bool) -> dict | None:
-    """「以心得修練」那一顆（Joy 2026-10-18）：跟修練同一個判斷、付的是心得（cultivation.cultivate_problem 的 by_xinde）。
-    以心得修練關著、或除了錢以外就修不了（沒融意境、已經絕學、火候滿了等契機……）是 None；只差心得時灰掉寫原因。"""
-    price = cultivation.xinde_price(state, content)
-    if price is None:
-        return None
-    why = cultivation.cultivate_problem(state, content, world, art_id, gate=gate, use_legend=True, by_xinde=True)
-    if why is not None and not why.startswith("心得不足"):
-        return None
-    return {"price": price, "ok": why is None, "why": why or "", "label": f"以心得修練（心得 {price}）"}
-
-
-def _buy_choice(state: GameState, content: Content, art) -> dict | None:
-    """「以心得換破境丹」那一顆（Joy 2026-10-18）：下一步是絕學、這門已經練到衝絕學的成數、換丹開著才有，否則 None。
-    方案 C 開著時要火候滿了（丹只在強行衝關那一下用得上）。ok／why 跟 cultivation.buy_legend 同一個判斷。"""
+def _buy_choice(state: GameState, content: Content, world: WorldStateStore, art) -> dict | None:
+    """「以心得換破境丹」那一顆（Joy 2026-10-18）：這門上品到了極處（cultivation.ready：第十成、意境槽裝滿）、換丹開著才有，
+    否則 None（丹只在強行衝關那一下用得上）。ok／why 跟 cultivation.buy_legend 同一個判斷。"""
     price = cultivation.legend_price(state, content)
-    if price is None or prologue.active(state, content) or next_quality(art.quality) != "絕學":
-        return None
-    if (level_of(state, art.id) or 1) < content.config.cultivate_min_level.get("絕學", 0):
-        return None
-    if cultivation.heat_mode(content, "絕學") and state.player.art_mastery.get(art.id, 0) < content.config.breakthrough.heat:
+    if price is None or prologue.active(state, content) or not cultivation.ready(state, content, world, art.id)[0]:
         return None
     why = cultivation.buy_legend_problem(state, content)
     return {"price": price, "ok": why is None, "why": why or "",
@@ -583,7 +533,7 @@ def _buy_choice(state: GameState, content: Content, art) -> dict | None:
 
 
 def _force_choice(state: GameState, content: Content, world: WorldStateStore, art_id: str) -> dict:
-    """方案 C 火候滿了的那一門：「服下破境丹」那一格換成強行衝關（待 joy 潤）。資料形狀跟 _legend_choice 一樣，網頁照舊畫；
+    """上品到了極處的那一門：「服下破境丹」那一格是強行衝關（待 joy 潤）。網頁照舊畫（count、bonus、label、note）；
     bonus 是這一次衝開的機會（cultivation.force_odds，跟實際擲的一致）。"""
     cfg, count = content.config, state.player.legend_items
     odds = cultivation.force_odds(state, content, world, art_id)

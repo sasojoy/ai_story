@@ -929,10 +929,10 @@ class TutorialGoal(_Strict):
     # 初入江湖（新手引導第四段）：身上沒有內傷，或這一下就是療傷（銀兩不夠全治時治一部分也算，不卡住）
     healthy: bool = False
     has_wugong: bool = False  # 身上要有一門武學才算（沒有武學威力是 0，出城只有挨打的份）
-    # 序章：有一門合成出來的武學（fused）、它至少第幾成（fused_level）、至少什麼品質（fused_quality，看自己那一份）
+    # 序章（武學重構）：有一門裝了意境的武學（fused）、它至少第幾成（fused_level）；有一個意境揣摩到二重以上（deepened）
     fused: bool = False
     fused_level: int = 0
-    fused_quality: Quality | None = None
+    deepened: bool = False
 
 
 # 序章每一步 reveal 可以寫的畫面元件（網頁照它藏／亮，見 web/app.js 的 pro()）；content.validate 擋拼錯的
@@ -1010,9 +1010,9 @@ class TutorialStep(_Strict):
     explore_scene: str | None = None  # 在草廬探索時一定端出這段有所感（InsightScene，prologue 要是 true；跟 explore_event 二選一）
     enemies: list[str] = Field(default_factory=list)  # 這一步草廬的對手（遊歷才出現）
     force_tier: str | None = None  # 這一步的遊歷結果照寫好的（雪恥：險勝）
-    sure_cultivate: bool = False  # 這一步的修練一定升品
+    deepen: bool = False  # 這一步准揣摩（同一個意境合兩個，層數 +1；武學重構）；序章裡別的步驟不准開爐
     instant_rest: str = ""  # 非空：這一步的打坐一坐就回滿，說這一句
-    fuse_base: str | None = None  # 這一步的合成只准拿這一門當底
+    fuse_base: str | None = None  # 這一步只准把意境裝進這一門的意境槽（武學重構；以前是合成的底）
     melt_only: str | None = None  # 這一步只准熔這一門
     give_art: GiveArt | None = None  # 完成這一步時給的武學
     # 師父的話太長、一次放不下時分頁（T7 審查 I1）：網頁照 \n\n 切成幾頁、一頁一頁按「下一段 ▸」，最後一頁是要做的事；話整段都在、不切。
