@@ -23,7 +23,7 @@ from .state import GameState
 from .world_state import WorldStateStore
 
 MAX_STRENGTH = 3
-STRENGTH_MARKS = {1: "●", 2: "●●", 3: "●●●"}
+STRENGTH_MARKS = {1: "一重", 2: "二重", 3: "三重"}  # Joy 2026-10-20「●好醜」：寫成重數，網頁另畫三節玉
 ULTIMATE_SLOT = "絕招"  # 絕學第五格
 
 LEAN_OF = {"正": "正", "邪": "邪"}
@@ -53,7 +53,7 @@ def strength_of(state: GameState, insight_id: str) -> int:
 
 
 def strength_mark(n: int) -> str:
-    return STRENGTH_MARKS.get(max(1, min(MAX_STRENGTH, n)), "●")
+    return STRENGTH_MARKS.get(max(1, min(MAX_STRENGTH, n)), "一重")
 
 
 def where_slotted(state: GameState, insight_id: str) -> str | None:
@@ -205,6 +205,10 @@ UNSLOTTED_LINE = "「{insight}」從【{art}】拆了下來。"
 NOT_IN_LINE = "「{insight}」沒有裝在【{art}】上。"
 DUP_LINE = "【{name}】上已經有「{insight}」了。"
 AFFINITY_LINE = "【{name}】收不下「{insight}」（只收{attrs}的意境）。"  # 待 joy 潤
+NO_SUCH_SLOT = "沒有這一格。"
+TAKEN_SLOT = "第 {i} 格已經裝了東西，先拆下來。"
+COLOR_LINE = "第 {i} 格是{colors}色，收不下「{insight}」。"  # 待 joy 潤
+COLOR_FULL = "【{name}】收得下「{insight}」的那幾格都裝滿了。"  # 待 joy 潤
 
 
 class Refusal(str):
@@ -220,9 +224,37 @@ def refuse(text: str, short: str) -> Refusal:
     return out
 
 
+def colors_of(art: MartialArt, n: int) -> list[list[str]]:
+    """前 n 格各收哪幾種屬性（每格分顏色，Joy 2026-10-20「有些是單色，有些是雙色，有些是全部都能放」）：
+    寫了 slot_colors 的照它（自創、合成的），沒寫或不夠的格照相容屬性（內容武學每一格都收整份相容屬性）；空清單＝什麼都收。"""
+    out: list[list[str]] = []
+    for i in range(n):
+        if i < len(art.slot_colors):
+            out.append(list(art.slot_colors[i]))
+        else:
+            out.append(list(art.affinity))
+    return out
+
+
+def takes_at(art: MartialArt, colors: list[str], attribute: str) -> bool:
+    return not colors or attribute in colors
+
+
 def takes(art: MartialArt, attribute: str) -> bool:
-    """這一門的槽收不收這個屬性的意境：相容屬性空著什麼都收。"""
+    """這一門有沒有哪一格收這個屬性的意境：相容屬性空著什麼都收。"""
+    if art.slot_colors:
+        return any(takes_at(art, c, attribute) for c in art.slot_colors)
     return not art.affinity or attribute in art.affinity
+
+
+def color_text(colors: list[str]) -> str:
+    """一格的顏色寫成字：「剛」「剛快」「任」。待 joy 潤"""
+    return "".join(colors) if colors else "任"
+
+
+def slot_colors(state: GameState, content: Content, art: MartialArt) -> list[list[str]]:
+    """這一門此刻開著的每一格的顏色（跟 slots_of 一樣長）；寫死的武學是空清單。"""
+    return colors_of(art, len(slots_of(state, content, art)))
 
 
 def affinity_text(art: MartialArt) -> str:
@@ -234,7 +266,9 @@ def takes_text(affinity: str) -> str:
     return "什麼意境都收" if affinity == "兼容並蓄" else f"收{affinity}的意境"
 
 
-def slot_problem(state: GameState, content: Content, world: WorldStateStore, art_id: str, insight_id: str) -> str | None:
+def slot_problem(
+    state: GameState, content: Content, world: WorldStateStore, art_id: str, insight_id: str, index: int | None = None,
+) -> str | None:
     from . import library, team
 
     art = team.resolve_art(art_id, content, world)
@@ -250,7 +284,8 @@ def slot_problem(state: GameState, content: Content, world: WorldStateStore, art
     from . import insights as insights_mod
 
     ins = insights_mod.resolve(insight_id, content, world, state)
-    if ins is not None and not takes(art, ins.attribute):
+    colors = colors_of(art, len(slots))
+    if ins is not None and not any(takes_at(art, c, ins.attribute) for c in colors):
         return refuse(AFFINITY_LINE.format(name=art.name, insight=ins.name, attrs=affinity_text(art)), "收不下")
     other = where_slotted(state, insight_id)
     if other is not None:
@@ -258,18 +293,43 @@ def slot_problem(state: GameState, content: Content, world: WorldStateStore, art
         return refuse(ELSEWHERE_LINE.format(insight=_iname(state, content, world, insight_id), other=o.name if o else other), "裝在別門")
     if None not in slots:
         return refuse(FULL_LINE.format(name=art.name, n=len(slots)), "槽滿了")
+    if index is not None:
+        if not 0 <= index < len(slots):
+            return refuse(NO_SUCH_SLOT, "沒這格")
+        if slots[index] is not None:
+            return refuse(TAKEN_SLOT.format(i=index + 1), "這格有了")
+        if ins is not None and not takes_at(art, colors[index], ins.attribute):
+            return refuse(COLOR_LINE.format(i=index + 1, colors=color_text(colors[index]), insight=ins.name), "顏色不合")
+        return None
+    if ins is not None and _open_slot(slots, colors, ins.attribute) is None:
+        return refuse(COLOR_FULL.format(name=art.name, insight=ins.name), "顏色不合")
     return None
 
 
-def slot(state: GameState, content: Content, world: WorldStateStore, art_id: str, insight_id: str) -> list[str]:
-    problem = slot_problem(state, content, world, art_id, insight_id)
+def _open_slot(slots: list[str | None], colors: list[list[str]], attribute: str) -> int | None:
+    """第一個空著、顏色收得下的格；單色、雙色的先（任色的留給別的意境）。"""
+    open_ = [i for i, v in enumerate(slots) if v is None and (not colors[i] or attribute in colors[i])]
+    if not open_:
+        return None
+    return min(open_, key=lambda i: (not colors[i], i))
+
+
+def slot(
+    state: GameState, content: Content, world: WorldStateStore, art_id: str, insight_id: str, index: int | None = None,
+) -> list[str]:
+    """裝進 index 那一格；沒給照 _open_slot 挑（單色雙色先、任色後）。"""
+    problem = slot_problem(state, content, world, art_id, insight_id, index)
     if problem is not None:
         return [problem]
-    from . import team
+    from . import insights as insights_mod, team
 
     art = team.resolve_art(art_id, content, world)
     slots = slots_of(state, content, art)
-    i = slots.index(None)
+    if index is not None:
+        i = index
+    else:
+        ins = insights_mod.resolve(insight_id, content, world, state)
+        i = _open_slot(slots, colors_of(art, len(slots)), ins.attribute if ins else "")
     slots[i] = insight_id
     state.player.art_slots[art_id] = slots
     msgs = [SLOTTED_LINE.format(insight=_iname(state, content, world, insight_id), art=art.name, i=i + 1)]

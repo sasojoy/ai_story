@@ -66,6 +66,13 @@ class MartialArt(BaseModel):
     # 自創的武學（tianxia/create.py）：式那一步挑的兵器種類（內功是 None）；合成、內容武學照 weapons.art_weapon 推，這欄空著
     weapon: str | None = None
     slot_adjust: int = 0  # 意境槽比品級的格數多或少幾格（自創挑「兼容並蓄」少一格）；最少留一格
+    # 槽分顏色（Joy 2026-10-20「武學出來的槽位就是分屬性的，有些是單色，有些是雙色，有些是全部都能放」；arts.colors_of）：
+    # 照格子的先後，每一格收哪幾種屬性的意境（一種是單色、兩種是雙色、空清單是全色、什麼都收）。品級開幾格就用前幾格；
+    # 沒寫的（內容武學、這一版之前的）每一格都照 affinity。自創的在成形那一步擲（create.roll_colors），合成的從兩門來源的格子裡抽
+    slot_colors: list[list[str]] = Field(default_factory=list)
+    # 自創那一步玩家拖出來的姿勢（create.POSE_KEYS 九個角度，度）：功法卡的小圖照它畫；空的照兵器的預設姿勢畫
+    pose: dict[str, float] = Field(default_factory=dict)
+    method: str | None = None  # 自創的內功挑的行功之法（吐納、導引、坐忘、閉息）；武學與其他是 None
     # 身上的樣子（arts.apply）：只在玩家自己那一份上填，全服登記的那一份永遠是空的
     extra_specials: list[str] = Field(default_factory=list)  # 空格擲到的中階技能（特別功效 id）
     high: str | None = None  # 擲到的高階技能（content/traits.json 的 high 的 id）

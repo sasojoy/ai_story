@@ -14,7 +14,6 @@ from typing import NamedTuple
 
 from . import arts as arts_mod, allied, armor, bounties, chuangong, clinic, create, cultivation, economy, equipment, explore_modes, forge_secrets, fusion, glyph, insights, library, mounts, naming, sensing, smithing, team, traits, treasures, weapons
 from . import prologue as prologue_rules
-from .models import WEAPON_KINDS
 from .engine import ARENA_YIELD, DUEL_FLEE, FREE_TEXT_OPTION, SAY_OPTION, Game, Option
 from .martial_arts import MartialArt, next_quality
 from .models import Content
@@ -291,27 +290,29 @@ def slot_insights(game: Game) -> int:
 
 
 def create_art(game: Game, rng: random.Random) -> bool:
-    """自創一門（tianxia/create.py）：心得付完還剩 CREATE_RESERVE、手上有沒裝的意境才做。三步一次走完：
-    形意（種類挑身上那一門比較弱的那一種、相容屬性照起手式的屬性、意分照 create.DEFAULT_SCORE——假人不叫模型）、
-    式（兵器照身上武學的種類，推不出來隨機）、取名（退路字表）。伺服器假人與整季機器人共用。回傳有沒有自創成。"""
+    """自創一門（tianxia/create.py 五步一次走完）：心得付完還剩 CREATE_RESERVE 才做。種類挑身上那一門比較弱的那一種；
+    兵器照身上武學的種類（推不出來隨機），行功之法隨機；架式從預設的幾個挑一個再稍微動一下；意從 CREATE_INTENTS 挑、
+    照關鍵字表讀（假人不叫模型）；名字走退路字表（看得出來是假人：之後要補模型取名）。伺服器假人與整季機器人共用。"""
     state, content, world = game.state, game.content, game.world
     p = state.player
     if create.allowed(state, content) is not None or p.stats.get("xinde", 0) - create.price(state, content) < CREATE_RESERVE:
         return False
-    loose = [i for i in p.insights if arts_mod.where_slotted(state, i) is None]
-    if not loose:
-        return False
-    insight_id = rng.choice(loose)
-    ins = insights.resolve(insight_id, content, world, state)
-    if ins is None:
-        return False
+    if p.creating is not None:
+        game.create_cancel()
     worn = [(team.player_art(state, content, world, a), k) for a, k in ((p.member.wugong_id, "武學"), (p.member.neigong_id, "內功"))]
     kind = min(worn, key=lambda x: x[0].top_power if x[0] is not None else 0)[1]
-    game.create_intent(kind, [ins.attribute], "無", rng.choice(CREATE_INTENTS))
+    forms = [f.key for f in create.forms_of(content, kind)]
+    if not forms:
+        return False
+    form = weapons.art_weapon(p.member.wugong_id, content, world) if kind == "武學" else None
+    game.create_begin(kind, form if form in forms else rng.choice(forms))
     if p.creating is None:
         return False
-    weapon = (weapons.art_weapon(p.member.wugong_id, content, world) or rng.choice(WEAPON_KINDS)) if kind == "武學" else None
-    game.create_form(weapon, insight_id)
+    names = [x.name for x in content.create_forms.presets] or [create.DEFAULT_PRESET]
+    pose = create.preset(content, rng.choice(names))
+    pose = {k: v + rng.uniform(-15, 15) for k, v in pose.items()}
+    game.create_pose(pose)
+    game.create_intent(rng.choice(CREATE_INTENTS))
     if p.creating is None or p.creating.step != "name":
         game.create_cancel()
         return False

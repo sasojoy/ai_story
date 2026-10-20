@@ -212,7 +212,7 @@ def test_the_merge_preview_names_the_attribute_the_merge_really_gives(content, w
     for a in ids:
         state = _merger(content, f"乙{a}", [a])
         line = skillview.forge_line(state, content, world, None, [a, a])
-        assert line.startswith("**揣摩**") and "從●到●●" in line, line
+        assert line.startswith("**揣摩**") and "從一重到二重" in line, line
         fusion.merge(state, content, world, None, a, a)
         assert arts.strength_of(state, a) == 2
 

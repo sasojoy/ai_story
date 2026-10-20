@@ -435,13 +435,14 @@ def _claim_blend(
     秘方合中的名字照內容、記 secret。名字被占用就換下一個再試。"""
     tianji, _ = recipe_seed(world, key)
     affinity = blend_affinity(team.resolve_art(a, content, world), team.resolve_art(b, content, world))
+    colors = blend_colors(team.resolve_art(a, content, world), team.resolve_art(b, content, world), key, tianji, content)
     for candidate_name in _candidates(content, world, key, kind, tianji, name):
         candidate = generate_from_name(candidate_name, kind, candidate_name, tianji, weights=LOW_ONLY, attribute="無")
         candidate = candidate.model_copy(update={
             "origin": "fused", **_makers(state, partner), "attribute": affinity[0] if affinity else "", "affinity": affinity,
             "note": note if candidate_name == name else "",
             "insight": None, "insight_attr": None, "base": follow, "parents": sorted([a, b]), "lean": "無",
-            "traits": [], "special": None, "secret": secret.id if secret is not None else None,
+            "traits": [], "special": None, "secret": secret.id if secret is not None else None, "slot_colors": colors,
         })
         art, first = world.claim_recipe(key, candidate)
         if art is not None:
@@ -455,6 +456,20 @@ def blend_affinity(a: MartialArt | None, b: MartialArt | None) -> list[str]:
     if a is None or b is None or not a.affinity or not b.affinity:
         return []
     return list(dict.fromkeys([*a.affinity, *b.affinity]))
+
+
+def blend_colors(a: MartialArt | None, b: MartialArt | None, key: str, tianji: int, content) -> list[list[str]]:
+    """合出來的每一格顏色：從兩門各自的格（照最多格數攤開）裡照配方鍵挑（不重複挑同一格），全服同一個配方一樣。
+    兩門都沒寫格色、相容屬性也都空（兩門基礎武學）時回空清單（照相容屬性＝什麼都收）。"""
+    if a is None or b is None:
+        return []
+    n = max(content.config.arts.slots.values() or [4])
+    pool = arts_mod.colors_of(a, n) + arts_mod.colors_of(b, n)
+    if all(not c for c in pool):
+        return []
+    rng = random.Random(f"合格|{tianji}|{key}")
+    picked = rng.sample(range(len(pool)), min(n, len(pool)))
+    return [list(pool[i]) for i in picked]
 
 
 RIPE_LINE = "兩門都已練到極處、意境滿槽，底子更上一層。"  # 待 joy 潤

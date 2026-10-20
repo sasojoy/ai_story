@@ -253,17 +253,24 @@ class SmithDraft(BaseModel):
 
 
 class CreateDraft(BaseModel):
-    """自創武學的三步儀式走到哪（tianxia/create.py）：形意（kind、affinity、lean、intent 與模型評的分 score）做完就有這張單；
-    式（weapon、insight）做完 step 變成 name；取名那一步付心得、登記，單子收起。"""
+    """自創武學走到哪（tianxia/create.py；Joy 2026-10-20 改成五步）：執器（kind、form）開單 → 擺式（pose）→ 立意（intent，
+    模型讀出 read、lean、score；引擎照兵器＋姿勢＋意擲出 colors）→ 立名（付心得、擲品級、登記）。redo 是還能免費重來幾次。"""
 
     kind: str  # 內功／武學
-    affinity: list[str] = Field(default_factory=list)  # 相容屬性（空＝兼容並蓄，少一格槽）
-    lean: str = "無"  # 正／邪／無
-    intent: str = ""  # 形意那一步寫的 20 字「意」
+    form: str = ""  # 執器：武學的兵器種類（劍、刀…）或內功的行功之法（吐納、導引…）
+    pose: dict[str, float] = Field(default_factory=dict)  # 擺式：九個角度（create.POSE_KEYS）
+    intent: str = ""  # 立意那一句（2～20 字）
+    read: list[str] = Field(default_factory=list)  # 模型（或關鍵字表）讀出這一句偏哪幾路，偏得多的在前；空的是不偏
+    lean: str = "無"  # 正／邪／無：意讀出來的
     score: int = 40  # 模型評的意分（0～100，夾 5～85；評不到 40）
-    weapon: str | None = None  # 式：兵器種類（內功 None）
-    insight: str | None = None  # 式：起手式（悟過的意境，登記時裝進第一格）
-    step: str = "form"  # 下一步：form（式）、name（取名）
+    colors: list[list[str]] = Field(default_factory=list)  # 成形擲出的每一格顏色（MartialArt.slot_colors）
+    redo: int = 1  # 還能免費重來幾次（回到擺式或立意再擲一次）
+    rolls: int = 0  # 擲過幾次（成形的亂數種子用）
+    step: str = "pose"  # 下一步：pose（擺式）、intent（立意）、name（立名）
+    # 舊單子（這一版之前的三步）的欄位，讀得進來就好；讀檔時 create.prune 收掉
+    affinity: list[str] = Field(default_factory=list)
+    weapon: str | None = None
+    insight: str | None = None
 
 
 class Manual(BaseModel):

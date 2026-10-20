@@ -12,7 +12,7 @@ def test_learning_it_again_deepens_it_and_only_the_fourth_time_turns_into_xinde(
     state.player.insights = ["feng"]
     state.player.stats["xinde"] = 0
     msgs = insights.learn(state, content, world, "feng")
-    assert state.player.insights == ["feng"] and state.player.insight_strength["feng"] == 2 and "●●" in msgs[0]
+    assert state.player.insights == ["feng"] and state.player.insight_strength["feng"] == 2 and "二重" in msgs[0]
     insights.learn(state, content, world, "feng")
     assert state.player.insight_strength["feng"] == 3 and state.player.stats["xinde"] == 0
     msgs = insights.learn(state, content, world, "feng")

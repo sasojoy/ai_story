@@ -24,7 +24,7 @@ def test_slotting_previews_the_slot_and_the_skill_and_costs_nothing(designed, co
     assert card["kind"] == "裝意境" and card["problem"] is None and card["quality"] is None
     assert card["made"] == "【粗淺拳腳】第 1 格" and "第 1 格" in line
     assert card["attribute"] == "快" and card["traits"] == [{"name": "先手", "layers": 1}]
-    assert card["depth"].startswith("〔先手〕●：") and "〔先手〕●" in line
+    assert card["depth"].startswith("〔先手〕一重：") and "〔先手〕一重" in line
     assert card["cost"] == "不花心得體力" and "不花心得體力" in line
 
 
@@ -58,7 +58,7 @@ def test_merging_two_different_insights_previews_a_new_insight(designed, content
 def test_pondering_the_same_insight_previews_one_more_dot(designed, content, world):
     """同一個意境放兩次是揣摩：卡上寫加深之後的強度與那一招的數字。"""
     card = skillview.forge_preview(designed, content, world, None, ["feng", "feng"])
-    assert card["kind"] == "揣摩" and card["made"] == "「風」●●"
+    assert card["kind"] == "揣摩" and card["made"] == "「風」二重"
     assert card["traits"] == [{"name": "先手", "layers": 2}]
     assert "20%" in card["depth"]  # 先手一層 10%，兩層 20%
 

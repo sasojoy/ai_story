@@ -2235,6 +2235,17 @@ class ArtsTuning(_Strict):
     create_bonus_cap: int = Field(default=20, ge=0)
     create_odds: dict[str, float] = Field(default_factory=lambda: {"下品": 50, "中品": 30, "上品": 20})
     create_point_shift: float = Field(default=0.4, ge=0)  # 「意」分＋加分每一分把下品的機率往上品挪多少個百分點
+    # 成形（create.roll_colors）：每一路屬性的權重＝底 create_base_weight ＋ 兵器或行功之法的偏向（content/create_forms.json）
+    # ＋ 姿勢讀出的偏向（第一路 create_pose_weights[0]、第二路 [1]）＋ 意讀出的偏向（create_intent_weights）。
+    # 第一格一定是權重最高的那一路單色（定向）；其餘每一格先照 create_slot_odds 擲單色、雙色、全色，再照權重抽顏色（格與格之間可以重複）。
+    # 意讀不出偏向（不偏）時全色的機率 ×create_neutral_any_scale。create_redo：一張單子能免費重來幾次
+    create_base_weight: float = Field(default=0.5, ge=0)
+    create_pose_weights: list[float] = Field(default_factory=lambda: [1.5, 0.75])
+    create_intent_weights: list[float] = Field(default_factory=lambda: [2.5, 1.25])
+    create_slot_odds: dict[str, float] = Field(default_factory=lambda: {"單": 55, "雙": 35, "全": 10})
+    create_neutral_any_scale: float = Field(default=2.0, ge=1)
+    create_redo: int = Field(default=1, ge=0)
+    create_slots: int = Field(default=4, ge=1)  # 成形擲幾格（品級開幾格就用前幾格；上品四格全開）
 
 
 class SignatureArtTuning(_Strict):
@@ -3773,6 +3784,32 @@ class MingtieContent(_Strict):
     mottos: list[str] = Field(default_factory=list)  # 假人自題的那一句從這裡挑（真人自己寫）
 
 
+class CreateForm(_Strict):
+    """自創武學的執器那一步（content/create_forms.json 的 forms）：一種兵器或一種行功之法，偏向哪幾路屬性。"""
+
+    kind: str  # 武學／內功
+    key: str  # 武學是兵器種類（WEAPON_KINDS）；內功是行功之法的名字
+    blurb: str = ""  # 鈕底下那一句
+    bias: dict[str, float] = Field(default_factory=dict)  # 屬性 → 權重（主偏向 3、次 2、再次 1）
+
+
+class PosePreset(_Strict):
+    """擺式那一步的起點架式（點一下套上再拖）。angles 是 create.POSE_KEYS 九個角度（度）。"""
+
+    name: str
+    angles: dict[str, float]
+
+
+class CreateForms(_Strict):
+    """自創武學的內容（content/create_forms.json；Joy 2026-10-20）：執器的兵器與行功之法、擺式的起點架式、
+    模型讀不出意時的關鍵字表（屬性 → 字；正邪 → 字）。沒有這個檔：沒有偏向、沒有起點架式、讀不出就是不偏。"""
+
+    forms: list[CreateForm] = Field(default_factory=list)
+    presets: list[PosePreset] = Field(default_factory=list)
+    keywords: dict[str, list[str]] = Field(default_factory=dict)
+    lean_words: dict[str, list[str]] = Field(default_factory=dict)
+
+
 class Content(_Strict):
     config: Config
     scenario: Scenario
@@ -3817,3 +3854,4 @@ class Content(_Strict):
     tutorial: Tutorial
     hints: Hints = Field(default_factory=Hints)  # 碰到才說（content/hints.json，新手引導計畫三）；沒有這個檔就是沒有提示
     check_voice: CheckVoice = Field(default_factory=CheckVoice)  # 檢定選項括號裡的那一句（content/check_voice.json，載入時必備）
+    create_forms: CreateForms = Field(default_factory=CreateForms)  # 自創武學的兵器偏向、起點架式、關鍵字表（content/create_forms.json）

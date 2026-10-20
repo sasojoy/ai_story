@@ -1260,21 +1260,22 @@ def duel_text(game: Game, text: str) -> list[str]:
 
 
 def create_intent(game: Game, body: dict) -> list[str]:
-    """自創武學的形意（tianxia/create.py），三段同 duel_text：A Game.create_request（只讀）→ B 鎖外 create.score 評意分
-    （預算同隨口應對）→ C Game.create_intent(score=) 整個重驗再開單。評不到是 create.DEFAULT_SCORE。"""
-    kind, lean = str(body.get("kind") or ""), str(body.get("lean") or "無")
-    affinity = [str(a) for a in _id_list(body.get("affinity"))]
+    """自創武學的立意（tianxia/create.py），三段同 duel_text：A Game.create_request（只讀）→ B 鎖外 create.read 讀這一句意
+    （分數、最多兩路屬性、正邪；預算同隨口應對）→ C Game.create_intent(reading=) 整個重驗再成形。叫不動照關鍵字表讀。"""
     text = str(body.get("text") or "")[:create.INTENT_MAX * 2]
-    started, request = _open_request(game, lambda: game.create_request(kind, affinity, lean, text))
+    started, request = _open_request(game, lambda: game.create_request(text))
     if isinstance(request, list):
         return request
     total = game.content.config.free_text_budget_seconds
 
-    def score():
-        return create.score(within_budget(game.client, total - (_monotonic() - started)), request)
+    def reading():
+        return create.read(within_budget(game.client, total - (_monotonic() - started)), request, game.content)
 
-    value = model_call(game, score, fallback=create.DEFAULT_SCORE, left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT)
-    return act(game, lambda g: g.create_intent(request.kind, list(request.affinity), request.lean, request.text, score=value))
+    value = model_call(
+        game, reading, fallback=create.fallback_read(game.content, request.text),
+        left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT,
+    )
+    return act(game, lambda g: g.create_intent(request.text, reading=value))
 
 
 def tavern_ask(game: Game, text: str) -> list[str]:
@@ -2042,10 +2043,14 @@ MENXIA_ACTIONS = {
     "forge": lambda g, b: _forge_without_naming(g, *forge_args(b)),
     "switch": lambda g, b: g.switch_art(str(b.get("art") or "")),
     # 武學重構：把意境裝進武學的意境槽、或拆下來（修練頁與煉製頁都走這裡；不花心得體力）
-    "slot": lambda g, b: g.slot_insight(str(b.get("art") or ""), str(b.get("insight") or "")),
+    "slot": lambda g, b: g.slot_insight(
+        str(b.get("art") or ""), str(b.get("insight") or ""), _int_of(b.get("index")) if b.get("index") is not None else None,
+    ),
     "unslot": lambda g, b: g.unslot_insight(str(b.get("art") or ""), str(b.get("insight") or "")),
-    # 自創武學（tianxia/create.py）：式與取名、擱下；形意走 /api/do/create_intent（三段式，模型評意分）
-    "create_form": lambda g, b: g.create_form(str(b.get("weapon") or "") or None, str(b.get("insight") or "")),
+    # 自創武學（tianxia/create.py）：執器、擺式、回頭、立名、擱下；立意走 /api/do/create_intent（三段式，模型讀這一句意）
+    "create_begin": lambda g, b: g.create_begin(str(b.get("kind") or ""), str(b.get("form") or "")),
+    "create_pose": lambda g, b: g.create_pose(b.get("pose") if isinstance(b.get("pose"), dict) else {}),
+    "create_back": lambda g, b: g.create_back(str(b.get("to") or "")),
     "create_name": lambda g, b: g.create_name(str(b.get("name") or ""), _int_of(b.get("extra"))),
     "create_cancel": lambda g, b: g.create_cancel(),
     # 用融的意境修練一次，衝下一品；use_legend 是勾了「服下破境丹」。只認真正的布林 true：字串、數字都不算勾

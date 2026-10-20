@@ -95,7 +95,7 @@ def test_a_repeat_of_the_strongest_deepens_it_first_with_the_line(lake):
     p.insights.append("shui")
     before = p.stats.get("xinde", 0)
     msgs = insights.learn(lake.state, lake.content, lake.world, "shui", at=_here(lake))
-    assert p.insight_strength["shui"] == 2 and p.stats.get("xinde", 0) == before and msgs[0] == LINE and "●●" in msgs[1]
+    assert p.insight_strength["shui"] == 2 and p.stats.get("xinde", 0) == before and msgs[0] == LINE and "二重" in msgs[1]
 
 
 def test_a_repeat_of_the_strongest_gives_more_xinde(lake):

@@ -442,6 +442,8 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
             "gen": "",  # 武學重構：沒有境界了（網頁的篩選還讀這個鍵）
             "affinity": arts_mod.affinity_text(art),  # 相容屬性（「快、陽、虛」或「兼容並蓄」）
             "slots": slot_rows(state, content, world, art),  # 意境槽：每格裝的那一招（None 是空的）；寫死的武學是空清單
+            "colors": arts_mod.slot_colors(state, content, art),  # 每一格收哪幾種屬性（跟 slots 一樣長；[] 是任色）
+            "pose": dict(art.pose),  # 自創時擺的式（火柴人的九個角度）；內容武學是空的，網頁照兵器畫預設的
             "rating": arts_mod.rating(content, art, level or 1, state, world),  # 戰力：威力 ×（1＋槽裡技能的加成）
             "compare": compare,  # 卷軸卡直接把它寫在功法庫那張卡的鈕上面（改練之前看得到）；點開「詳情」時功法卡裡也有
             "cultivate": {

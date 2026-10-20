@@ -738,6 +738,7 @@ class Game:
         p.art_mastery = {k: v for k, v in p.art_mastery.items() if k in owned and v > 0}
         arts_mod.migrate(s, c, self.world)  # 武學重構：舊存檔的功效轉成槽（只做一次）
         arts_mod.prune(s, c, self.world)  # 槽只留自己還有的武學與意境
+        create.prune(s, c)  # 自創的舊三步單子收掉（還沒付錢）
         if p.naming is not None and (p.naming not in owned or self.world.master_of(p.naming) != p.name):
             p.naming = None
         chains = {ch.id for ch in c.foreshadows.chains}  # 伏筆：內容改版後拿掉的鏈與物品
@@ -8190,30 +8191,41 @@ class Game:
         self._menxia_entry(tag, xinde)
         return msgs
 
-    # ── 自創武學（三步儀式，tianxia/create.py）──────────────────
+    # ── 自創武學（五步：執器、擺式、立意、成形、立名；tianxia/create.py）──────────────────
 
-    def create_request(self, kind: str, affinity: list[str], lean: str, text: str) -> create.IntentRequest | list[str]:
-        """形意的 A 段（鎖內、只讀）：送得出去回傳要在鎖外請模型評分的單子，不行回傳那一句話。"""
+    @_not_while_preparing
+    def create_begin(self, kind: str, form: str) -> list[str]:
+        """執器：內功或武學、兵器種類或行功之法。只開單、不收錢、不寫紀錄。"""
+        return self._log(create.begin(self.state, self.content, kind, form))
+
+    @_not_while_preparing
+    def create_pose(self, pose: dict) -> list[str]:
+        """擺式：火柴人的九個角度（create.POSE_KEYS）。只改單子。"""
+        return self._log(create.set_pose(self.state, self.content, pose))
+
+    def create_request(self, text: str) -> create.IntentRequest | list[str]:
+        """立意的 A 段（鎖內、只讀）：送得出去回傳要在鎖外請模型讀的單子，不行回傳那一句話。"""
         if self._preparing():
             return [PREPARING_REFUSAL]
-        problem = create.intent_problem(self.state, self.content, kind, affinity, lean, text)
+        problem = create.intent_problem(self.state, self.content, text)
         if problem is not None:
             return [problem]
-        return create.request(self.state, kind, affinity, lean, text)
+        return create.request(self.state, text)
 
     @_not_while_preparing
-    def create_intent(self, kind: str, affinity: list[str], lean: str, text: str, score: int | None = None) -> list[str]:
-        """形意（C 段，或直接呼叫）：score 是鎖外評好的意分；沒給（整季機器人、腳本）是 create.DEFAULT_SCORE。只開單、不收錢、不寫紀錄。"""
-        return self._log(create.start(self.state, self.content, kind, affinity, lean, text, score))
+    def create_intent(self, text: str, reading: create.IntentReading | None = None) -> list[str]:
+        """立意（C 段，或直接呼叫）：reading 是鎖外讀好的；沒給（假人、整季機器人、腳本）照關鍵字表讀。
+        記下之後馬上成形（擲四格顏色）。只改單子、不收錢、不寫紀錄。"""
+        return self._log(create.set_intent(self.state, self.content, self.world, text, reading))
 
     @_not_while_preparing
-    def create_form(self, weapon: str | None, insight_id: str) -> list[str]:
-        """式：兵器種類（內功 None）與起手式。只改單子、不收錢、不寫紀錄。"""
-        return self._log(create.form(self.state, self.content, self.world, weapon or None, insight_id))
+    def create_back(self, to: str) -> list[str]:
+        """回頭重擺式或重立意（成形之後回頭用掉一次重來）。"""
+        return self._log(create.back(self.state, self.content, to))
 
     @_not_while_preparing
     def create_name(self, name: str, extra: int = 0) -> list[str]:
-        """取名：付心得、擲品級、登記、裝起手式（create.finish）。做成了寫一則煉製紀錄，被拒絕只回一句。"""
+        """立名：付心得、擲品級、登記（create.finish）。做成了寫一則煉製紀錄，被拒絕只回一句。"""
         xinde = self._xinde()
         art, msgs = create.finish(self.state, self.content, self.world, name, self.rng, extra)
         self.forged = art is not None
@@ -8232,15 +8244,15 @@ class Game:
         return create.view(self.state, self.content, self.world)
 
     @_not_while_preparing
-    def slot_insight(self, art_id: str, insight_id: str) -> list[str]:
+    def slot_insight(self, art_id: str, insight_id: str, index: int | None = None) -> list[str]:
         """把一個意境裝進一門武學的意境槽（武學重構；修練頁與煉製頁都走這裡，MENXIA_ACTIONS["slot"]）：不花心得體力，
         裝成了寫一則「裝意境」江湖紀錄，被拒絕只回一句。"""
         xinde = self._xinde()
-        problem = arts_mod.slot_problem(self.state, self.content, self.world, art_id, insight_id)
+        problem = arts_mod.slot_problem(self.state, self.content, self.world, art_id, insight_id, index)
         if problem is not None:
             self.forged = False
             return self._log([problem])
-        msgs = self._log(arts_mod.slot(self.state, self.content, self.world, art_id, insight_id))
+        msgs = self._log(arts_mod.slot(self.state, self.content, self.world, art_id, insight_id, index))
         self.forged = True
         self.forged_thing = None
         self._menxia_entry(msgs[0], xinde, guide=True, action="slot")

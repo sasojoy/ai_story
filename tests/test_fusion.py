@@ -498,13 +498,13 @@ def test_merging_an_insight_with_itself_deepens_it(ready, content, world):
     before = ready.player.stamina
     insight, msgs = fusion.merge(ready, content, world, must_not_ask(), "feng", "feng")
     assert insight.id == "feng" and arts_mod.strength_of(ready, "feng") == 2
-    assert msgs[0] == fusion.DEEPEN_LINE.format(name="風", mark="●●")
+    assert msgs[0] == fusion.DEEPEN_LINE.format(name="風", mark="二重")
     assert ready.player.stats["xinde"] == 100 - content.config.merge_xinde and ready.player.stamina == before - content.config.merge_stamina
     assert ready.player.insights == ["feng", "huo"] and world.lookup_insight_recipe(fusion.merge_key("feng", "feng")) is None
     _, msgs = fusion.merge(ready, content, world, must_not_ask(), "feng", "feng")
-    assert msgs[0] == fusion.DEEPEN_LINE.format(name="風", mark="●●●")
+    assert msgs[0] == fusion.DEEPEN_LINE.format(name="風", mark="三重")
     problem = fusion.merge_problem(ready, content, world, "feng", "feng")
-    assert problem == fusion.DEEPEST.format(name="風", mark="●●●") and problem.short == "已到極處"
+    assert problem == fusion.DEEPEST.format(name="風", mark="三重") and problem.short == "已到極處"
     none, msgs = fusion.merge(ready, content, world, must_not_ask(), "feng", "feng")
     assert none is None and msgs == [problem] and ready.player.stats["xinde"] == 100 - 2 * content.config.merge_xinde
 
