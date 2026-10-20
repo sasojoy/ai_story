@@ -205,13 +205,13 @@ def _issuable(state: GameState, content: Content, t: OrderTemplate, front: str, 
 
 def strike_target(state: GameState, content: Content, template: OrderTemplate) -> str | None:
     """打擊的 {人物}（濃縮版內容表 3.2）：官軍、黃巾挑敵方在交戰戰線（戰況在 front_min～front_max）上聲威最低的；
-    豪強挑官軍或黃巾在亂局戰線上聲威最低的，沒有亂局戰線就在全部有戰線的人物裡挑。只算在場（active）、有戰線的人物；
-    同聲威照人物表的順序。都沒有時是 None（這週不發打擊）。"""
+    豪強挑官軍或黃巾在亂局戰線上聲威最低的，沒有亂局戰線就在全部有戰線的人物裡挑。只算在場（active）、有戰線的人物，偏將
+    （figures.deputy：輿圖重製 1d 起卜己、劉辟有戰線）不算；同聲威照人物表的順序。都沒有時是 None（這週不發打擊）。"""
     side, when = template.side, template.when
     picks: list[tuple[int, str, str]] = []
     for fid, figure in content.figures.items():
         fs = figures.state_of(state, content, fid)
-        if fs.status != "active" or fs.front is None:
+        if fs.status != "active" or fs.front is None or figures.deputy(content, fid):
             continue
         if side in ENEMY:
             if figure.faction != ENEMY[side]:

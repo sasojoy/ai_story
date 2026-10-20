@@ -39,11 +39,11 @@ FIGURE_TABLE = {
     "sunjian": ("sunjian", "孫堅", "guan", "nanyang", "wan_city", True, 60, 1, 1, None, 2, "active"),
     "hejin": ("hejin", "何進", "guan", None, "dajiangjun_fu", True, 70, 0, 0, None, 1, "active"),
     "dongzhuo": ("dongzhuo", "董卓", "guan", None, "mengjin_ford", True, 60, 1, 1, None, 1, "active"),
-    # 大勢人物擴充（Joy 2026-10-17）：四位偏將，沒有戰線（不當主將、不推、不接位），挑得到
+    # 大勢人物擴充（Joy 2026-10-17）：四位偏將，不推、不接位，挑得到；傅燮、秦頡沒有戰線，卜己、劉辟的戰線是中原（輿圖重製 1d：替哪一條線打，人照舊站黃巾的外圈）
     "fuxie": ("fuxie", "傅燮", "guan", None, "luoyang_road", False, 45, 0, 0, None, 2, "active"),
     "qinjie": ("qinjie", "秦頡", "guan", None, "wan_city", False, 45, 0, 0, None, 2, "active"),
-    "buji": ("buji", "卜己", "huang", None, "jishui", False, 45, 0, 0, None, 1, "active"),
-    "liupi": ("liupi", "劉辟", "huang", None, "qingzhou_camp", False, 40, 0, 0, None, 1, "active"),
+    "buji": ("buji", "卜己", "huang", "yingru", "jishui", False, 45, 0, 0, None, 1, "active"),
+    "liupi": ("liupi", "劉辟", "huang", "yingru", "qingzhou_camp", False, 40, 0, 0, None, 1, "active"),
 }
 # 濃縮版內容表 1.4：figure_<id> → (name, difficulty, attribute, faction)；難度是聲威 100 時的值
 SQUAD_TABLE = {
@@ -465,13 +465,16 @@ def test_destiny_figure_is_crippled_not_retired(on):
 
 
 def test_successor_chain_ends_without_error(on):
-    """總計畫 Review Focus 4：波才退場、接手的彭脫也退場——潁川沒有黃巾的人物了：commander 回 None、{黃巾主將}
+    """總計畫 Review Focus 4：波才退場、接手的彭脫也退場——中原那條線的黃巾沒有主將了：commander 回 None（輿圖重製 1d 起卜己、劉辟的戰線是中原，可是偏將不當主將，figures.deputy）、{黃巾主將}
     填「黃巾」、tick 照跑不丟例外，潁川只剩官軍在推。"""
     s = _season(on)
     figures.apply(s, on, "bocai", FigureChange(fate="退場"))
     figures.apply(s, on, "pengtuo", FigureChange(fate="退場"))
     assert s.world.figures["pengtuo"].status == "retired"
+    assert figures.state_of(s, on, "buji").front == "yingru" and figures.deputy(on, "buji")
     assert figures.commander(s, on, "yingru", "huang") is None
+    assert not figures.deputy(on, "bocai") and not figures.deputy(on, "zhangjiao")  # 推線的人（張角每天 0.5）不是偏將
+    assert all(figures.deputy(on, fid) for fid in ("hejin", "fuxie", "qinjie", "liupi"))
     changshe = next(e for e in on.timetable if e.id == "changshe_fire")
     assert timetable.fill_slots(s, on, changshe, "{黃巾主將}") == "黃巾"
     s.world.time = calendar.week_start(2, on, s.world) + calendar.cal_hour_seconds(on, s.world)  # 第 2 週：官軍出兵了

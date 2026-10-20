@@ -145,15 +145,23 @@ def placed_characters(state: GameState, content: Content) -> dict[str, str | Non
     return out
 
 
+def deputy(content: Content, fid: str) -> bool:
+    """偏將（大勢人物擴充，Joy 2026-10-17）：人物表上不推線的人（push 或 actions_per_day 是 0）——不當主將（commander）、
+    不當打擊軍令的目標（orders.strike_target）、不在接位鏈上。輿圖重製 1d（PM 2026-10-20）起卜己、劉辟寫了戰線（中原：替哪一條線打，
+    龍頭上陣照戰線挑得到他們當副將），這兩件照舊不當；以前偏將都沒有戰線，所以這一條對其他人一個字都不變。人物表沒有的是 False。"""
+    fig = content.figures.get(fid)
+    return fig is not None and (fig.push <= 0 or fig.actions_per_day <= 0)
+
+
 def commander(state: GameState, content: Content, front: str | None, faction: str) -> str | None:
     """那條戰線上那一方當下的主將（人物 id）：在場、戰線是 front、陣營是 faction 的人物裡，人物表排最前面的那位——
-    人物表的順序就是位階（皇甫嵩在朱儁前、朱儁在孫堅前、張角在張寶前、盧植在董卓前）。沒有就是 None：時刻表的
+    人物表的順序就是位階（皇甫嵩在朱儁前、朱儁在孫堅前、張角在張寶前、盧植在董卓前）。偏將（deputy）不算。沒有就是 None：時刻表的
     {官軍主將} 填「官軍」、@commander 的效果略過，軍令（T6）的 {主將} 換成泛稱。人物表沒有的人物不算（不知道是哪一方）。"""
     if front is None:
         return None
     for fid, fig in content.figures.items():
         now = state_of(state, content, fid)
-        if fig.faction == faction and now.status == "active" and now.front == front:
+        if fig.faction == faction and now.status == "active" and now.front == front and not deputy(content, fid):
             return fid
     return None
 

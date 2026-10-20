@@ -243,6 +243,27 @@ def test_outer_ring_showdowns_keep_the_attackers_commanders_at_home():
                 assert _owner(c, rid) == side and frozenset((rid, battle.region)) in touching, (battle.id, fid, loc)
 
 
+def test_changshe_fire_fields_a_chief_and_a_deputy_on_each_side():
+    """1d（PM 2026-10-20）：卜己、劉辟的戰線是中原那一條（戰線＝替哪一條線打），站位照 1c 的外圈（站位＝開季在哪裡）。長社火攻照戰線
+    挑人（generals.pick），兩邊都是主將、副將兩位龍頭——黃巾不再只剩波才一位、主將份量先輸一截（企劃者要的是「錦上添花」）。
+    兩位偏將照舊不推線（push、actions_per_day 是 0：第一季每曆時推中原的照舊只有波才）。"""
+    from tianxia import figures, generals
+    from tianxia.state import GameState, PlayerState
+    from tianxia.world_state import fresh_season
+
+    c = real_content("season21")
+    c.config.battle.generals.enabled = True
+    s = GameState(player=PlayerState(name="", location=c.scenario.start_location, stats={}, stamina=0), world=fresh_season(c))
+    d = c.battles["changshe_fire"]
+    rows = generals.pick(s, c, d)
+    assert {f.id: [r.rank for r in rows if r.faction == f.id] for f in d.factions} == {f.id: [0, 1] for f in d.factions}
+    assert [(r.name, r.rank) for r in rows if r.faction == "huang"] == [("波才", 0), ("卜己", 1)]
+    for fid in ("buji", "liupi"):
+        fig = c.figures[fid]
+        assert fig.front == d.front and figures.push_goal(s, c, fid) == 0
+        assert _owner(c, _region(c, fig.location)) == fig.faction  # 人照舊站外圈
+
+
 def test_faction_lessons_are_taught_on_their_own_outer_ring():
     """FB-551（PM 裁決：搬到外圈，同「投靠點只在外圈」）：陣營武學（learn.faction）在自家陣營的外圈教——有領地的陣營照那一州開季
     歸誰（不在中原的中立地，不必走進對方家門口學自家刀法）；沒有領地的陣營（豪強）在自己的投靠點教。入伍簡報點得出每一處教的地方。"""
