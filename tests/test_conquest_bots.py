@@ -76,6 +76,20 @@ def test_bot_submits_every_siege_round():
     assert battle.round_number == 1 or {"假黃", "假官"} <= set(battle.round.pending_actions)  # 兩個都出手了（湊齊就結算）
 
 
+def test_switch_off_showdown_rally_unchanged():
+    """關著：只有時刻表決戰那一格，趕去與「會趕來的陣營」照舊（兩軍加上劇本每一個陣營）。"""
+    from conquest_kit import plain_game
+
+    game = _bot(go(join(plain_game("season21", name="假黃"), "huang"), "julu_altar"), "huang")
+    game.now = NOW
+    definition = game.content.battles["changshe_fire"]
+    game.world.start_battle(definition, NOW, 50)
+    assert game.rally_region() == definition.region
+    runner = BotRunner(game.content, game.world, open_characters(game.world.db.path), random.Random(1), clock=lambda: NOW)
+    rows = runner._battle_sides()
+    assert rows == [(NOW + definition.muster_seconds, {f.id for f in game.content.scenario.factions}, set())]
+
+
 def test_no_bot_hint_in_siege_views():
     human = go(join(conquest_game("season21", name="真某"), "huang"), "nanyang_road")
     bot = _bot(go(join(conquest_game("season21", name="假某", world=human.world), "huang"), "nanyang_road"), "huang")
