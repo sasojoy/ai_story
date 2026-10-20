@@ -855,7 +855,7 @@ def test_the_defection_prompt_names_a_pending_two_leg_summons(on):
 def test_a_summons_during_the_enlistment_still_works(on):
     """入伍段進行中收到召見：「應召」照常出、引薦人的框在晉升奇遇待處理時寫「先把眼前的…了結」（pending），不被召見改掉。"""
     _test_rank3(on)
-    game = _game(on, at="changshe")
+    game = _game(on, at="wan_city")  # 官軍的投靠點（輿圖重製第 1 批：v1 是長社）
     p = game.state.player
     p.tutorial_step = 99  # 序章與舊引導都走完了
     game.choose("faction:guan")

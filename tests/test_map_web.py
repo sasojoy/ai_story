@@ -67,7 +67,7 @@ def test_marks_without_territory_have_no_halos_or_fronts():
 
 def test_the_far_view_shows_regions_and_tallies_without_place_names():
     out = marks(_game(), k=2.5, far="true")
-    assert "潁川汝南" in out and re.search(r"官 \d", out) and "潁川郊野" not in out
+    assert "東郡" in out and re.search(r"官 \d", out) and "潁川郊野" not in out  # 大區名（輿圖重製第 1 批：九州）
 
 
 def test_badges_stack_under_the_name():
@@ -84,7 +84,7 @@ def test_the_map_page_is_a_full_page_layer_with_chips():
 
 def test_region_tint_follows_the_majority():
     out = run(_game(), "return H.regionTint(H.S.mapBase, H.S.mapState, H.S.mapState.now_week, true);")
-    assert out["yingru"] in ("#DCE5F0", "#F4E7C2", "#DFEBDD")
+    assert out["yingchuan"] in ("#DCE5F0", "#F4E7C2", "#DFEBDD")
     assert run(_game(), "return H.regionTint(H.S.mapBase, H.S.mapState, H.S.mapState.now_week, false);") == {}
 
 
@@ -219,13 +219,13 @@ def test_fb264_week_one_flips_show_in_the_chart_and_flash_on_the_map():
     game = _game()
     w, c = game.state.world, game.content
     territory.update(w, c)
-    territory.assign(w, c, {"runan_wilds": "guan"})
+    territory.assign(w, c, {"nanyang_huangjin_camp": "guan"})  # 開季歸黃巾（輿圖重製第 1 批：中原那一條線的第 7 處）
     chart = run(game, "return H.chartHtml(H.S.mapBase, H.S.mapState, 1);")
     assert 'class="cell now flip"' in chart
     out = marks(game, week=1, tl="true")
-    assert out.count('class="pulse"') == 2  # 汝南荒野，加上你的那一圈
+    assert out.count('class="pulse"') == 2  # 南陽黃巾營，加上你的那一圈
     tl = run(game, "return H.timelineHtml(H.S.mapBase, H.S.mapState, 1);")
-    assert "汝南荒野" in tl[tl.index("第 1 週</h4>"):]
+    assert "南陽黃巾營" in tl[tl.index("第 1 週</h4>"):]
 
 
 def test_the_timeline_button_sits_under_the_zoom_buttons():
@@ -308,10 +308,10 @@ def test_fb261_far_view_tallies_are_drawn_over_the_dots():
 
 def test_fb262_standing_there_still_shows_the_odds():
     """FB-262：站在那個地點時「打得過嗎」照那裡的對手寫勝算（不寫「—」），出陣・攻那一顆也寫勝算；沒有對手才寫沒有對手。"""
-    game = _game(faction="guan", at="runan_wilds")
-    p = game.map_state()["places"]["runan_wilds"]
+    game = _game(faction="guan", at="nanyang_huangjin_camp")  # 開季歸黃巾（輿圖重製第 1 批：v1 是汝南荒野）
+    p = game.map_state()["places"]["nanyang_huangjin_camp"]
     assert p["sortie"] == "attack" and p["odds"]
-    out = run(game, 'return H.placeHtml(H.S.mapBase, H.S.mapState, "runan_wilds");')
+    out = run(game, 'return H.placeHtml(H.S.mapBase, H.S.mapState, "nanyang_huangjin_camp");')
     cell = out[out.index("打得過嗎"):out.index("多遠")]
     assert p["odds"]["word"] in cell and "<b>—</b>" not in cell
     sortie = out[out.index('data-key="sortie"'):]

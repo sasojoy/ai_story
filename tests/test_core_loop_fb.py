@@ -107,13 +107,14 @@ def _map(game):
 
 
 def test_fb251_the_crossed_swords_mark_where_you_can_attack():
-    """⚔ 照地盤畫：此刻歸敵方、能出陣攻的戰線地點才有（官軍看：汝南荒野〔黃巾佔著〕有，長社〔自家大本營〕、荒丘〔不是戰線〕沒有）；
+    """⚔ 照地盤畫：此刻歸敵方、能出陣攻的戰線地點才有（官軍看：南陽黃巾營〔黃巾佔著〕有，長社〔自家佔著〕、荒丘〔不是戰線〕沒有；
+    輿圖重製第 1 批之前量的是汝南荒野）；
     散人不能出陣，哪裡都沒有。圖例那一句改成出陣的說法。出陣關著時照舊照內容的敵人畫。"""
     from tianxia import mapview
 
     guan = _game("guan", "changshe")
     svg = _map(guan)
-    assert "汝南荒野 ⚔" in svg and "長社 ⚔" not in svg and "荒丘 ⚔" not in svg
+    assert "南陽黃巾營 ⚔" in svg and "長社 ⚔" not in svg and "荒丘 ⚔" not in svg
     assert "⚔" not in _map(_game(None, "changshe", name="散人甲"))
     legend = mapview.legend_data(guan.state, guan.content)
     assert legend["ring"] == mapview.LEGEND_RING_SORTIE and "遊歷" not in legend["ring"]
@@ -137,7 +138,8 @@ def _world_lines(game):
 
 
 def test_fb252_taking_a_place_back_reads_as_a_recapture():
-    """官軍大營（潁川汝南靠官軍那一頭，門檻 62.5、±5）：推到 70 落入黃巾之手；退回 55，官軍這一季佔過它，寫「官軍收復官軍大營」。
+    """官軍大營（中原那一條線最靠官軍的一處，門檻 72.2、±5；輿圖重製第 1 批之前是 62.5）：推到 80 落入黃巾之手；退回 55，官軍這一季佔過它，
+    寫「官軍收復官軍大營」。
     割據交還、黃巾再拿下一次也是收復。江湖史同一句。"""
     from tianxia import rules
 
@@ -145,12 +147,12 @@ def test_fb252_taking_a_place_back_reads_as_a_recapture():
     c, w = game.content, game.state.world
     guan, huang = c.scenario.faction_name("guan"), c.scenario.faction_name("huang")
     territory.update(w, c)  # 這一季第一次算（不發天下大事）：開季的戰況，官軍大營歸官軍
-    rules.change_trend(game.state, c, "yingru", 70 - w.trends["yingru"])
+    rules.change_trend(game.state, c, "yingru", 80 - w.trends["yingru"])
     assert territory.FLIP_LINE.format(place="官軍大營", side=huang) in _world_lines(game)
     rules.change_trend(game.state, c, "yingru", 55 - w.trends["yingru"])
     back = territory.RETAKE_LINE.format(place="官軍大營", side=guan)
     assert back in _world_lines(game) and back in [r.text for r in w.chronicle]
-    rules.change_trend(game.state, c, "yingru", 70 - w.trends["yingru"])
+    rules.change_trend(game.state, c, "yingru", 80 - w.trends["yingru"])
     assert territory.RETAKE_LINE.format(place="官軍大營", side=huang) in _world_lines(game)
 
 
@@ -283,16 +285,16 @@ def test_fb254_the_stance_card_says_separatism_waits_for_the_finale():
 
 
 def test_fb255_attacking_a_convoy_on_your_own_ground_does_not_say_it_is_theirs():
-    """截糧週在自家佔著的截糧地點（官軍在南陽郊野）出陣是攻打運糧隊：底下那一行不寫「這裡歸別人」，寫運糧隊經過自家地盤。
+    """截糧週在自家佔著的截糧地點（官軍在汝南荒野；輿圖重製第 1 批之前是南陽郊野）出陣是攻打運糧隊：底下那一行不寫「這裡歸別人」，寫運糧隊經過自家地盤。
     別人的地盤照舊寫「這裡歸別人」。"""
     from tianxia import howto
 
-    game = _game("guan", "nanyang_wilds")
-    assert territory.controller(game.state.world, game.content, "nanyang_wilds") == "guan"
-    _intercept(game, "guan", "nanyang_wilds")
+    game = _game("guan", "runan_wilds")
+    assert territory.controller(game.state.world, game.content, "runan_wilds") == "guan"
+    _intercept(game, "guan", "runan_wilds")
     line = game.action_notes([o.id for o in game.options(odds=False)])["act:train"]
     assert "這裡歸別人" not in line and line.startswith(howto.SORTIE_NOTES["convoy"].split("{")[0])
-    game.state.player.location = "huangjin_camp"
+    game.state.player.location = "nanyang_huangjin_camp"
     assert game.action_notes([o.id for o in game.options(odds=False)])["act:train"].startswith("這裡歸別人")
 
 

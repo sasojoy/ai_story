@@ -2,7 +2,7 @@
   {
     "id": "huangjin_showdown",
     "name": "黃巾決戰",
-    "region": "yingru",
+    "region": "yingchuan",
     "factions": [
       {"id": "guan", "name": "官軍"},
       {"id": "huang", "name": "黃巾軍"}
@@ -106,7 +106,7 @@
   {
     "id": "changshe_fire",
     "name": "長社火攻",
-    "region": "yingru",
+    "region": "yingchuan",
     "timetable_event": "changshe_fire",
     "defender": "guan",
     "front": "yingru",
@@ -531,10 +531,10 @@
     ]
   },
   {
-    "id": "siege_yingru",
-    "name": "攻城（潁川汝南）",
+    "id": "siege_luoyang",
+    "name": "攻城（洛陽）",
     "siege": true,
-    "region": "yingru",
+    "region": "luoyang",
     "factions": [
       {"id": "guan", "name": "官軍"},
       {"id": "huang", "name": "黃巾軍"}
@@ -558,9 +558,9 @@
     },
     "acts": [
       {
-        "id": "siege_yingru_1",
+        "id": "siege_luoyang_1",
         "title": "城下鏖兵",
-        "text": "潁川汝南的這一塊地上，兩軍的旗號隔著寨牆對望。一方要把它拿下，一方要守住它，天黑之前見分曉。",
+        "text": "洛陽的這一塊地上，兩軍的旗號隔著寨牆對望。一方要把它拿下，一方要守住它，天黑之前見分曉。",
         "goal": "把戰局推向自己這一邊，壓過去就拿下這一塊",
         "text_by_lead": {"guan": "官軍的陣腳越壓越前，寨牆上的旗一面面換成了漢家的。", "huang": "黃巾的人潮一波接一波湧上來，官軍的陣線被逼得往後退。"},
         "options": [
@@ -678,10 +678,10 @@
     ]
   },
   {
-    "id": "siege_youzhou",
-    "name": "攻城（幽州）",
+    "id": "siege_qingzhou",
+    "name": "攻城（青州）",
     "siege": true,
-    "region": "youzhou",
+    "region": "qingzhou",
     "factions": [
       {"id": "guan", "name": "官軍"},
       {"id": "huang", "name": "黃巾軍"}
@@ -705,9 +705,9 @@
     },
     "acts": [
       {
-        "id": "siege_youzhou_1",
+        "id": "siege_qingzhou_1",
         "title": "城下鏖兵",
-        "text": "幽州的這一塊地上，兩軍的旗號隔著寨牆對望。一方要把它拿下，一方要守住它，天黑之前見分曉。",
+        "text": "青州的這一塊地上，兩軍的旗號隔著寨牆對望。一方要把它拿下，一方要守住它，天黑之前見分曉。",
         "goal": "把戰局推向自己這一邊，壓過去就拿下這一塊",
         "text_by_lead": {"guan": "官軍的陣腳越壓越前，寨牆上的旗一面面換成了漢家的。", "huang": "黃巾的人潮一波接一波湧上來，官軍的陣線被逼得往後退。"},
         "options": [
@@ -727,10 +727,10 @@
     ]
   },
   {
-    "id": "siege_luoyang",
-    "name": "攻城（洛陽）",
+    "id": "siege_yingchuan",
+    "name": "攻城（潁川）",
     "siege": true,
-    "region": "luoyang",
+    "region": "yingchuan",
     "factions": [
       {"id": "guan", "name": "官軍"},
       {"id": "huang", "name": "黃巾軍"}
@@ -754,9 +754,205 @@
     },
     "acts": [
       {
-        "id": "siege_luoyang_1",
+        "id": "siege_yingchuan_1",
         "title": "城下鏖兵",
-        "text": "洛陽的這一塊地上，兩軍的旗號隔著寨牆對望。一方要把它拿下，一方要守住它，天黑之前見分曉。",
+        "text": "潁川的這一塊地上，兩軍的旗號隔著寨牆對望。一方要把它拿下，一方要守住它，天黑之前見分曉。",
+        "goal": "把戰局推向自己這一邊，壓過去就拿下這一塊",
+        "text_by_lead": {"guan": "官軍的陣腳越壓越前，寨牆上的旗一面面換成了漢家的。", "huang": "黃巾的人潮一波接一波湧上來，官軍的陣線被逼得往後退。"},
+        "options": [
+          {"text": "列陣強攻，正面壓上", "tag": "guan_strong", "faction": "guan", "move": "強攻"},
+          {"text": "結陣固守，寸步不讓", "tag": "guan_hold", "faction": "guan", "move": "固守"},
+          {"text": "分兵繞後，奇襲側翼", "tag": "guan_raid", "faction": "guan", "move": "奇襲"},
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
+          {"text": "一擁而上，衝散敵陣", "tag": "huang_strong", "faction": "huang", "move": "強攻"},
+          {"text": "據險死守，以逸待勞", "tag": "huang_hold", "faction": "huang", "move": "固守"},
+          {"text": "趁亂偷襲，燒其輜重", "tag": "huang_raid", "faction": "huang", "move": "奇襲"},
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
+        ]
+      }
+    ],
+    "outcomes": [
+      {"faction": "guan", "title": "攻城戰罷", "text": "城下的廝殺停了下來。"}
+    ]
+  },
+  {
+    "id": "siege_dongjun",
+    "name": "攻城（東郡）",
+    "siege": true,
+    "region": "dongjun",
+    "factions": [
+      {"id": "guan", "name": "官軍"},
+      {"id": "huang", "name": "黃巾軍"}
+    ],
+    "trend_start": 50,
+    "muster_seconds": 1800,
+    "round_seconds": 180,
+    "rounds_per_act": 5,
+    "decisive_margin": 40,
+    "action_tags": {},
+    "free_text_gamble": {
+      "success_trend_base": 2,
+      "success_trend_per_risk": 0.06,
+      "success_neili_share": 0.05,
+      "failure_trend_per_risk": 0.02,
+      "failure_trend_cap": 1,
+      "failure_neili_share_base": 0.1,
+      "failure_neili_share_per_risk": 0.0025,
+      "side_trend_cap": 4,
+      "success_trend_cap": 10
+    },
+    "acts": [
+      {
+        "id": "siege_dongjun_1",
+        "title": "城下鏖兵",
+        "text": "東郡的這一塊地上，兩軍的旗號隔著寨牆對望。一方要把它拿下，一方要守住它，天黑之前見分曉。",
+        "goal": "把戰局推向自己這一邊，壓過去就拿下這一塊",
+        "text_by_lead": {"guan": "官軍的陣腳越壓越前，寨牆上的旗一面面換成了漢家的。", "huang": "黃巾的人潮一波接一波湧上來，官軍的陣線被逼得往後退。"},
+        "options": [
+          {"text": "列陣強攻，正面壓上", "tag": "guan_strong", "faction": "guan", "move": "強攻"},
+          {"text": "結陣固守，寸步不讓", "tag": "guan_hold", "faction": "guan", "move": "固守"},
+          {"text": "分兵繞後，奇襲側翼", "tag": "guan_raid", "faction": "guan", "move": "奇襲"},
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
+          {"text": "一擁而上，衝散敵陣", "tag": "huang_strong", "faction": "huang", "move": "強攻"},
+          {"text": "據險死守，以逸待勞", "tag": "huang_hold", "faction": "huang", "move": "固守"},
+          {"text": "趁亂偷襲，燒其輜重", "tag": "huang_raid", "faction": "huang", "move": "奇襲"},
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
+        ]
+      }
+    ],
+    "outcomes": [
+      {"faction": "guan", "title": "攻城戰罷", "text": "城下的廝殺停了下來。"}
+    ]
+  },
+  {
+    "id": "siege_chenliu",
+    "name": "攻城（陳留）",
+    "siege": true,
+    "region": "chenliu",
+    "factions": [
+      {"id": "guan", "name": "官軍"},
+      {"id": "huang", "name": "黃巾軍"}
+    ],
+    "trend_start": 50,
+    "muster_seconds": 1800,
+    "round_seconds": 180,
+    "rounds_per_act": 5,
+    "decisive_margin": 40,
+    "action_tags": {},
+    "free_text_gamble": {
+      "success_trend_base": 2,
+      "success_trend_per_risk": 0.06,
+      "success_neili_share": 0.05,
+      "failure_trend_per_risk": 0.02,
+      "failure_trend_cap": 1,
+      "failure_neili_share_base": 0.1,
+      "failure_neili_share_per_risk": 0.0025,
+      "side_trend_cap": 4,
+      "success_trend_cap": 10
+    },
+    "acts": [
+      {
+        "id": "siege_chenliu_1",
+        "title": "城下鏖兵",
+        "text": "陳留的這一塊地上，兩軍的旗號隔著寨牆對望。一方要把它拿下，一方要守住它，天黑之前見分曉。",
+        "goal": "把戰局推向自己這一邊，壓過去就拿下這一塊",
+        "text_by_lead": {"guan": "官軍的陣腳越壓越前，寨牆上的旗一面面換成了漢家的。", "huang": "黃巾的人潮一波接一波湧上來，官軍的陣線被逼得往後退。"},
+        "options": [
+          {"text": "列陣強攻，正面壓上", "tag": "guan_strong", "faction": "guan", "move": "強攻"},
+          {"text": "結陣固守，寸步不讓", "tag": "guan_hold", "faction": "guan", "move": "固守"},
+          {"text": "分兵繞後，奇襲側翼", "tag": "guan_raid", "faction": "guan", "move": "奇襲"},
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
+          {"text": "一擁而上，衝散敵陣", "tag": "huang_strong", "faction": "huang", "move": "強攻"},
+          {"text": "據險死守，以逸待勞", "tag": "huang_hold", "faction": "huang", "move": "固守"},
+          {"text": "趁亂偷襲，燒其輜重", "tag": "huang_raid", "faction": "huang", "move": "奇襲"},
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
+        ]
+      }
+    ],
+    "outcomes": [
+      {"faction": "guan", "title": "攻城戰罷", "text": "城下的廝殺停了下來。"}
+    ]
+  },
+  {
+    "id": "siege_runan",
+    "name": "攻城（汝南）",
+    "siege": true,
+    "region": "runan",
+    "factions": [
+      {"id": "guan", "name": "官軍"},
+      {"id": "huang", "name": "黃巾軍"}
+    ],
+    "trend_start": 50,
+    "muster_seconds": 1800,
+    "round_seconds": 180,
+    "rounds_per_act": 5,
+    "decisive_margin": 40,
+    "action_tags": {},
+    "free_text_gamble": {
+      "success_trend_base": 2,
+      "success_trend_per_risk": 0.06,
+      "success_neili_share": 0.05,
+      "failure_trend_per_risk": 0.02,
+      "failure_trend_cap": 1,
+      "failure_neili_share_base": 0.1,
+      "failure_neili_share_per_risk": 0.0025,
+      "side_trend_cap": 4,
+      "success_trend_cap": 10
+    },
+    "acts": [
+      {
+        "id": "siege_runan_1",
+        "title": "城下鏖兵",
+        "text": "汝南的這一塊地上，兩軍的旗號隔著寨牆對望。一方要把它拿下，一方要守住它，天黑之前見分曉。",
+        "goal": "把戰局推向自己這一邊，壓過去就拿下這一塊",
+        "text_by_lead": {"guan": "官軍的陣腳越壓越前，寨牆上的旗一面面換成了漢家的。", "huang": "黃巾的人潮一波接一波湧上來，官軍的陣線被逼得往後退。"},
+        "options": [
+          {"text": "列陣強攻，正面壓上", "tag": "guan_strong", "faction": "guan", "move": "強攻"},
+          {"text": "結陣固守，寸步不讓", "tag": "guan_hold", "faction": "guan", "move": "固守"},
+          {"text": "分兵繞後，奇襲側翼", "tag": "guan_raid", "faction": "guan", "move": "奇襲"},
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "guan_reckless", "faction": "guan", "free_text": true},
+          {"text": "一擁而上，衝散敵陣", "tag": "huang_strong", "faction": "huang", "move": "強攻"},
+          {"text": "據險死守，以逸待勞", "tag": "huang_hold", "faction": "huang", "move": "固守"},
+          {"text": "趁亂偷襲，燒其輜重", "tag": "huang_raid", "faction": "huang", "move": "奇襲"},
+          {"text": "放手一搏（20字內，寫下你想做的事）", "tag": "huang_reckless", "faction": "huang", "free_text": true}
+        ]
+      }
+    ],
+    "outcomes": [
+      {"faction": "guan", "title": "攻城戰罷", "text": "城下的廝殺停了下來。"}
+    ]
+  },
+  {
+    "id": "siege_core",
+    "name": "攻城（核心）",
+    "siege": true,
+    "region": "core",
+    "factions": [
+      {"id": "guan", "name": "官軍"},
+      {"id": "huang", "name": "黃巾軍"}
+    ],
+    "trend_start": 50,
+    "muster_seconds": 1800,
+    "round_seconds": 180,
+    "rounds_per_act": 5,
+    "decisive_margin": 40,
+    "action_tags": {},
+    "free_text_gamble": {
+      "success_trend_base": 2,
+      "success_trend_per_risk": 0.06,
+      "success_neili_share": 0.05,
+      "failure_trend_per_risk": 0.02,
+      "failure_trend_cap": 1,
+      "failure_neili_share_base": 0.1,
+      "failure_neili_share_per_risk": 0.0025,
+      "side_trend_cap": 4,
+      "success_trend_cap": 10
+    },
+    "acts": [
+      {
+        "id": "siege_core_1",
+        "title": "城下鏖兵",
+        "text": "核心的這一塊地上，兩軍的旗號隔著寨牆對望。一方要把它拿下，一方要守住它，天黑之前見分曉。",
         "goal": "把戰局推向自己這一邊，壓過去就拿下這一塊",
         "text_by_lead": {"guan": "官軍的陣腳越壓越前，寨牆上的旗一面面換成了漢家的。", "huang": "黃巾的人潮一波接一波湧上來，官軍的陣線被逼得往後退。"},
         "options": [

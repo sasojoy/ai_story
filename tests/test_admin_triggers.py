@@ -426,7 +426,7 @@ def test_timing_gives_the_clue_exactly_as_hearing_it(on):
     """天時地利型：自然那一刻是聽到線索（花體力的行動之後在潁川汝南擲中）。管理者給的：記進同一份聽過的線索、紀錄同一句。"""
     admin = _game(on)
     natural = _member(on, "甲", save=False)
-    heard = opportunities.hear_clues(natural.state, on, "yingru", FixedRandom(0.0), world=natural.world)
+    heard = opportunities.hear_clues(natural.state, on, "yingchuan", FixedRandom(0.0), world=natural.world)  # 荒丘在潁川（輿圖重製第 1 批）
     assert natural.state.player.opp_clues == ["guan_courier"]
     _member(on, "乙")
     [msg] = admin.admin_give_opportunity("乙", "guan_courier")

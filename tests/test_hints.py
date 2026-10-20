@@ -601,7 +601,7 @@ def test_a_real_draw_from_a_dodge_in_a_travelling_fight_brings_the_mentor(on):
     from tianxia.encounter import EncounterResult
     from tests.test_orders import _game as _fresh
 
-    game = _fresh(on, faction="guan", at="huangjin_camp")
+    game = _fresh(on, faction="guan", at="julu_altar")  # 黃巾的營寨（新天下是鉅鹿道壇；v1 是黃巾別部營寨）
     game.skip_tutorial()
     assert game.guide_box() is None
     draw = EncounterResult(tier="僵持", margin=-10, our_power=10, difficulty=60)
@@ -1280,7 +1280,8 @@ def test_defecting_drops_the_old_sides_queued_hints_and_keeps_the_mentors(game):
 # ── Task 3：再投靠的招呼（設計 7.1、10.6；話寫在 tutorial.json 入伍段的 rejoin）──────────────────────
 # 用真內容、第一季的規則打開；提示表清空（真的提示表另有測試，招呼不靠它）。
 
-JOIN_POINTS = {"guan": ("changshe", "老石"), "huang": ("huangjin_camp", "青禾"), "haoqiang": ("zhuo_militia_hall", "季伯平")}
+# 輿圖重製第 1 批：投靠點只在外圈（v1 是長社、黃巾別部營寨）
+JOIN_POINTS = {"guan": ("wan_city", "老石"), "huang": ("julu_altar", "青禾"), "haoqiang": ("zhuo_militia_hall", "季伯平")}
 
 
 def _rejoiner(content, faction, **kwargs):
@@ -1323,7 +1324,7 @@ def test_the_greeting_comes_every_season(on):
     game._reset_player_for_new_season(3)
     p = game.state.player
     assert p.faction is None and p.enlist_step == len(on.tutorial.enlist.steps) and not p.guide_skipped
-    p.location = "changshe"
+    p.location = "wan_city"
     _join(game, "guan")
     assert game.guide_box()["key"] == "s_rejoin"
 
@@ -1357,7 +1358,7 @@ def test_defecting_is_not_a_rejoin(on):
     """叛投：投靠之前已經有陣營，不打招呼。"""
     game = _rejoiner(on, "guan")
     game.state.player.faction = "guan"
-    game.state.player.location = "huangjin_camp"
+    game.state.player.location = "julu_altar"
     game.choose("defect:huang")
     game.choose("defect:confirm")
     assert game.state.player.faction == "huang" and game.state.player.hint_queue == []
@@ -1367,7 +1368,7 @@ def test_a_greeting_is_dropped_when_you_defect_before_reading_it(on):
     game = _rejoiner(on, "guan")
     _join(game, "guan")
     assert [n.id for n in game.state.player.hint_queue] == ["s_rejoin"]
-    game.state.player.location = "huangjin_camp"
+    game.state.player.location = "julu_altar"
     game.choose("defect:huang")
     game.choose("defect:confirm")
     assert game.state.player.faction == "huang" and game.state.player.hint_queue == []  # 老石的招呼隨舊陣營作廢

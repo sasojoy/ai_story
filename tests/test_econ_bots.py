@@ -75,7 +75,7 @@ def test_donating_spare_at_the_base_and_nowhere_else():
     away = _game(at="yingchuan", bag={"rou_1": 30})
     bot.donate_spare(away)
     assert away.state.player.materials == {"rou_1": 30}
-    home = _game(at="changshe", bag={"rou_1": 30, "rou_2": 14, "rou_3": 2})
+    home = _game(at="wan_city", bag={"rou_1": 30, "rou_2": 14, "rou_3": 2})
     bot.donate_spare(home)
     p = home.state.player
     assert p.materials == {"rou_1": 12, "rou_2": 10, "rou_3": 2}  # 一階、二階捐到留的量，三階不捐
@@ -83,7 +83,7 @@ def test_donating_spare_at_the_base_and_nowhere_else():
 
 
 def test_donating_respects_the_daily_cap():
-    game = _game(at="changshe", bag={"rou_1": 200})
+    game = _game(at="wan_city", bag={"rou_1": 200})
     bot.donate_spare(game)
     assert game.state.player.materials["rou_1"] == 200 - 100
 
@@ -93,13 +93,13 @@ def test_server_bots_trade_in_the_smith_and_donate_at_home_while_looking_after()
     smith.choose("act:smith")
     bot_policy.look_after(smith, random.Random(0))
     assert smith.state.player.materials.get("rou_1", 0) <= bot.TRADE_KEEP[1] + 2
-    home = _game(at="changshe", bag={"rou_1": 30})
+    home = _game(at="wan_city", bag={"rou_1": 30})
     bot_policy.look_after(home, random.Random(0))
     assert home.state.player.materials["rou_1"] == bot.TRADE_KEEP[1]
 
 
 def test_switched_off_bots_leave_the_bag_alone():
-    game = _game(at="changshe", bag={"rou_1": 30})
+    game = _game(at="wan_city", bag={"rou_1": 30})
     for key in ("sell", "upgrade", "donate"):
         setattr(game.content.config.economy, key, False)
     assert bot.trade_want(game) is None

@@ -39,7 +39,7 @@ def test_the_outlets_fold_into_one_dadian_button():
 
 
 def test_the_shop_lists_all_five_and_strikes_what_is_elsewhere():
-    game = _game(at="changshe")  # 長社：官軍大本營，沒有醫館、鐵匠鋪
+    game = _game(at="dajiangjun_fu")  # 大將軍府：官軍大本營，沒有醫館、鐵匠鋪（輿圖重製第 1 批：v1 是長社）
     game.choose("act:dadian")
     view = game.shop_view()
     assert view["shop"] == "dadian" and view["sign"] == "打點" and view["back"] == "dadian:back" and view["line"]
@@ -105,7 +105,7 @@ def _shop_run(m, script):
 
 @web
 def test_the_ledger_draws_two_pages_and_strikes_what_is_elsewhere():
-    game = _game(at="changshe")
+    game = _game(at="dajiangjun_fu")
     game.choose("act:dadian")
     m = server.main_view(game)
     html = _shop_run(m, "H.render(); return T.els.app.innerHTML;")

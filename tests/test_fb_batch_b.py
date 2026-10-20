@@ -30,9 +30,10 @@ def test_fb184_the_government_army_drills_at_a_camp_between_yingchuan_and_changs
 
     c = classic_rules(real)  # 操練是舊遊歷的（出陣開著時這裡是出陣・守，見 test_sortie）
     camp = c.locations["guan_camp"]
-    assert _ids(camp.connections) == {"yingchuan_wilds"} and "guan_camp" in _ids(c.locations["yingchuan_wilds"].connections)
+    # 輿圖重製第 1 批：官軍大營另接洛陽官道（洛陽→潁川的第二條輻路，開季兩邊碰得到的中立地才各 5 塊）
+    assert _ids(camp.connections) == {"yingchuan_wilds", "luoyang_road"} and "guan_camp" in _ids(c.locations["yingchuan_wilds"].connections)
     assert {"yingchuan", "changshe"} <= _ids(c.locations["yingchuan_wilds"].connections)  # 潁川郡 → 潁川郊野 → 長社的中間站
-    assert atlas.region_of(c, "guan_camp").id == "yingru" and "營寨" in camp.tags
+    assert atlas.region_of(c, "guan_camp").id == "yingchuan" and "營寨" in camp.tags
     assert camp.enemies and all(c.squads[e].faction == "guan" for e in camp.enemies)  # 整支都是官軍：官軍的人在這裡只會操練
     assert camp.train_trend == {"yingru": 2}  # 同黃巾別部營寨的兩點、方向相反
     game = Game.new(c, "營中客", rng=random.Random(0))

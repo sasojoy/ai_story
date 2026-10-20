@@ -102,7 +102,7 @@ def test_join_shows_rank_one_title(on):
         "huang": ["", "信眾", "小帥", "小方渠帥", "大方渠帥"],
         "haoqiang": ["", "鄉里子弟", "宗族頭人", "地方豪強", "一方之主"],
     }
-    game = _game(on, at="changshe")
+    game = _game(on, at="wan_city")  # 官軍的投靠點（輿圖重製第 1 批：投靠點只在外圈，v1 是長社）
     assert (ranks.rank_of(game.state), ranks.title(on, game.state), game.status_data()["affiliation"]) == (0, None, "散人")
     game.choose("faction:guan")
     game.choose("faction:confirm")
@@ -402,13 +402,13 @@ def test_bot_answers_summons(on):
 
 
 def test_real_guan_reaches_rank_two(on):
-    """真實內容走一遍：新角色走到長社投靠官軍（官軍・鄉勇）、巡哨把貢獻推過 300、收到召見、應召、選第二個選項，
-    狀態列「官軍・屯長」、兩名部下，遊歷的威力變高。"""
-    game = _game(on, at="yingchuan")
+    """真實內容走一遍：新角色走到宛城投靠官軍（官軍・鄉勇）、回長社巡哨把貢獻推過 300、收到召見、應召、選第二個選項，
+    狀態列「官軍・屯長」、兩名部下，遊歷的威力變高。輿圖重製第 1 批：投靠點只在外圈（v1 是在長社投靠），皇甫嵩照舊站在長社。"""
+    game = _game(on, at="wan_city")
     game.state.player.stamina = 150
-    game.travel("changshe", "dash")
     game.choose("faction:guan")
     game.choose("faction:confirm")
+    game.state.player.location = "changshe"
     assert game.status_data()["affiliation"] == "官軍・鄉勇"
     game.state.player.contrib = 290
     game.state.player.stamina = 150

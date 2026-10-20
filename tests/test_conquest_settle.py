@@ -1,4 +1,6 @@
-"""領地爭奪第二批 Task 9：每天 22:00 結算、公告、天下大事、說明（計畫第四章 Task 9；Review Focus 1、2；裁決 6、7、9、11）。"""
+"""領地爭奪第二批 Task 9：每天 22:00 結算、公告、天下大事、說明（計畫第四章 Task 9；Review Focus 1、2；裁決 6、7、9、11）。
+輿圖重製第 1 批（新天下）：中立地 23 塊，21 天的季變成一天兩塊（test_conquest_day 守）；這幾條量結算本身，照 v1 一天一塊
+（two_per_day_ratio 調高）。中原那一條線上沒有官軍的陣營區塊：量守城的那一條把潁川兩塊改回 v1 的官軍區塊（conquest_game_with）。"""
 from __future__ import annotations
 
 import calendar as pycal
@@ -6,7 +8,7 @@ from datetime import datetime
 
 import pytest
 
-from conquest_kit import announce, conquest_game, join, plain_game
+from conquest_kit import announce, conquest_game, conquest_game_with, join, plain_game
 from tianxia import conquest, conquest_day, howto, orders
 from tianxia.state import Order
 from tianxia.world import keep_showdowns_on_time
@@ -19,8 +21,9 @@ def _tw(y, mo, d, h, mi=0) -> float:
     return float(pycal.timegm(datetime(y, mo, d, h, mi).timetuple())) - 8 * 3600
 
 
-def _game(now: float, name: str = "沈浪", world=None):
-    game = join(conquest_game("season21", name=name, world=world), "huang")
+def _game(now: float, name: str = "沈浪", world=None, blocks=None):
+    game = join(conquest_game_with(blocks or {}, "season21", name=name, world=world), "huang")
+    game.content.config.conquest.two_per_day_ratio = 1.2  # 一邊一天一塊（v1 的 10 塊中立 ÷ 21 天）
     game.now = now
     return game
 
@@ -181,7 +184,7 @@ def test_resume_shifts_planned_slots():
 
 
 def test_siege_and_defend_orders_follow_todays_schedule():
-    game = _game(_tw(2026, 10, 20, 10))
+    game = _game(_tw(2026, 10, 20, 10), blocks={"yingshui": ("guan", "yingru"), "yingchuan_wilds": ("guan", "yingru")})
     w, c = game.state.world, game.content
     holder_block = next(loc for loc in conquest.blocks(c) if conquest.capturable(c, loc) and conquest.holder(w, c, loc) == "guan"
                         and conquest.line_of(w, c, loc) == "yingru")

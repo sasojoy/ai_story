@@ -1,5 +1,6 @@
 """出陣（docs/superpowers/specs/2026-10-14-出陣探索與地盤-design.md 第二節）。正式內容、週末設定。
-開季：潁川汝南 40；黃巾別部營寨是黃巾的大本營（站黃巾別部、黃巾渠帥，train_trend 潁川汝南 −2）；汝南荒野此刻歸黃巾。"""
+開季：潁川汝南 40、冀州 55；鉅鹿道壇是黃巾的大本營（站太平道力士、黃巾死士，train_trend 冀州 −2）；汝南荒野在中原那一條線上。
+輿圖重製第 1 批：v1 量的是黃巾別部營寨（黃巾的大本營、在潁川汝南那條線上），新天下它改成中原的中立地，換成鉅鹿道壇。"""
 from __future__ import annotations
 
 import random
@@ -18,7 +19,7 @@ from tianxia.state import Order
 TW_MIDNIGHT = 16 * 3600  # UTC 16:00＝台灣 00:00（1970-01-02）
 
 
-def _game(faction="huang", at="huangjin_camp", profile="weekend", name="沈浪", third_party=False):
+def _game(faction="huang", at="julu_altar", profile="weekend", name="沈浪", third_party=False):
     c = real_content(profile)
     c.config.auto_open_first_season = True
     if third_party:
@@ -47,7 +48,7 @@ def _fight(tier="大勝"):
 def test_rangers_and_places_off_the_fronts_have_no_sortie():
     ranger = _sortie(_game(faction=None, at="changshe"))  # FB-250：散人在戰線上看得到一顆灰的、寫原因
     assert ranger is not None and not ranger.enabled and sortie.RANGER_NOTE in ranger.label
-    assert _sortie(_game(at="wan_city")) is None  # 投靠點，不在戰線上
+    assert _sortie(_game(at="dajiangjun_fu")) is None  # 投靠點，不在戰線上（新天下：洛陽的大將軍府）
     assert _sortie(_game(at="luoyang_road")) is None  # 寫的是 front，洛陽沒有戰線
 
 
@@ -58,9 +59,9 @@ def test_holding_your_own_camp():
     assert option.enabled and option.label == "出陣・守（體力 6・今日還能 5 次・零風險）"
     xinde = p.stats.get("xinde", 0)
     msgs = game.choose("act:train")
-    assert sortie.HOLD_LINE.format(place="黃巾別部營寨") in msgs
-    assert p.stats["xinde"] - xinde == drill_share(35, 0.3)  # 自家經驗最高的一路：黃巾渠帥（心得 35）
-    assert w.trends["yingru"] == 41  # 攻的一半：2 × 0.5
+    assert sortie.HOLD_LINE.format(place="鉅鹿道壇") in msgs
+    assert p.stats["xinde"] - xinde == drill_share(32, 0.3)  # 自家經驗最高的一路：黃巾死士（心得 32）
+    assert w.trends["jizhou"] == 56  # 攻的一半：2 × 0.5
     assert game.sorties_left() == 4 and game.state.battles == []
     assert p.stamina == game.content.config.stamina_max - 6
 
@@ -77,7 +78,7 @@ def test_attacking_an_enemy_camp_gives_a_third_and_no_loot():
     squad = next(q for q in game.content.squads.values() if q.name == record.opponent)
     assert record.kind == "sortie" and record.silver == 0 and record.materials == []
     assert record.xinde == drill_share(squad.reward_xinde, 0.3) and record.exp == drill_share(squad.exp, 0.3)
-    assert p.stats["silver"] == silver and w.trends["yingru"] == 38  # 打贏推地點寫的量（2），往官軍那頭
+    assert p.stats["silver"] == silver and w.trends["jizhou"] == 53  # 打贏推地點寫的量（2），往官軍那頭
     assert game.state.pending_event is None  # 不接戰後事件（搬到找素材）
 
 
@@ -86,7 +87,7 @@ def test_losing_an_attack_costs_silver_and_pushes_nothing():
     game.state.player.stats["silver"] = 100
     with _fight("落敗"):
         game.choose("act:train")
-    assert game.state.player.stats["silver"] == 90 and game.state.world.trends["yingru"] == 40
+    assert game.state.player.stats["silver"] == 90 and game.state.world.trends["jizhou"] == 55
 
 
 def test_five_a_day_then_grey_until_taiwan_midnight():
@@ -153,13 +154,13 @@ def test_the_gentry_stir_earns_contribution():
 
 def test_holding_counts_for_the_defend_order_and_attacking_for_the_siege():
     huang = _game()
-    huang.state.world.orders.append(Order(id="1:huang:defend:yingru", template="defend", faction="huang", week=1,
-                                          front="yingru", quota=99, text=""))
+    huang.state.world.orders.append(Order(id="1:huang:defend:jizhou", template="defend", faction="huang", week=1,
+                                          front="jizhou", quota=99, text=""))
     huang.choose("act:train")
     assert huang.state.world.orders[-1].progress == {"沈浪": 1}
     guan = _game(faction="guan", name="燕青")
-    guan.state.world.orders.append(Order(id="1:guan:siege:yingru", template="siege", faction="guan", week=1,
-                                         front="yingru", quota=99, text=""))
+    guan.state.world.orders.append(Order(id="1:guan:siege:jizhou", template="siege", faction="guan", week=1,
+                                         front="jizhou", quota=99, text=""))
     with _fight():
         guan.choose("act:train")
     assert guan.state.world.orders[-1].progress == {"燕青": 1}
@@ -198,7 +199,7 @@ def test_the_sortie_line_says_when_today_is_pushed_full_or_used_up():
     line = lambda: game.action_notes([o.id for o in game.options(odds=False)])["act:train"]  # noqa: E731
     assert howto.SORTIE_PUSH in line() and howto.SORTIE_LEFT.format(n=5) in line()
     day = calendar.point(game.state.world.time, game.content, game.state.world).cal_day
-    game.state.player.pushed[f"{day}:yingru"] = game.content.config.daily_push_cap
+    game.state.player.pushed[f"{day}:jizhou"] = game.content.config.daily_push_cap
     assert howto.SORTIE_NO_PUSH in line() and howto.SORTIE_PUSH not in line()
     game.state.player.sortie_day, game.state.player.sorties_today = game._pill_day(), 5
     assert line() == sortie.USED_UP.format(n=5) + "。"
@@ -222,8 +223,8 @@ def _duty(game):
 def test_a_duty_spends_a_sortie_and_still_counts_for_the_defend_order():
     """出陣開著時巡哨、傳道、保境安民每用一次扣一次出陣次數（跟攻、守、攪局共用），守城軍令照舊認它。"""
     game = _game()
-    game.state.world.orders.append(Order(id="1:huang:defend:yingru", template="defend", faction="huang", week=1,
-                                         front="yingru", quota=99, text=""))
+    game.state.world.orders.append(Order(id="1:huang:defend:jizhou", template="defend", faction="huang", week=1,
+                                         front="jizhou", quota=99, text=""))
     option = _duty(game)
     assert option.enabled and sortie.LEFT_NOTE.format(n=5) in option.label
     game.choose("act:duty")

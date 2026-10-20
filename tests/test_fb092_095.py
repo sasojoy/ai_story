@@ -28,7 +28,7 @@ from tianxia.rules import front_of
 # 三樣——收著的摺疊改由標題列發光、「在下面 ↓」、摺疊在那一步開頭只自動打開一次（tests/test_fb087_here_fold.py）。
 
 DUTY = {"guan": "巡哨", "huang": "傳道", "haoqiang": "保境安民"}
-JOIN_AT = {"guan": "changshe", "huang": "huangjin_camp", "haoqiang": "zhuo_militia_hall"}
+JOIN_AT = {"guan": "wan_city", "huang": "julu_altar", "haoqiang": "zhuo_militia_hall"}  # 輿圖重製第 1 批：投靠點只在外圈（v1 是長社、黃巾別部營寨）
 
 
 def _enlisted(on, faction, place=None):
@@ -45,7 +45,7 @@ def _enlisted(on, faction, place=None):
 
 def test_fb093_every_order_card_says_how(on):
     game = _enlisted(on, "guan")
-    on_front = front_of(on, "changshe")
+    on_front = front_of(on, JOIN_AT["guan"])
     _order(game, "siege", "guan", front=on_front)
     _order(game, "defend", "guan", front=on_front)
     _order(game, "intercept", "guan", location="hilltop_wilds")
@@ -105,7 +105,7 @@ def enlist_done(state, content):
 
 def test_fb094_patrolling_under_a_defence_order_credits_it_once_and_finishes_the_step(on):
     game = _enlisted(on, "guan")
-    order = _order(game, "defend", "guan", front=front_of(on, "changshe"), quota=900)
+    order = _order(game, "defend", "guan", front=front_of(on, JOIN_AT["guan"]), quota=900)
     game.choose("act:duty")
     _finished(game, on)
     assert order.progress == {game.state.player.name: 1}  # 有守城軍令時，這一下照舊替它記了一次（軍令不動）
@@ -172,7 +172,7 @@ def test_fb094_the_week_counts_from_when_the_step_started_not_from_joining(on):
 def test_fb094_the_fallback_only_touches_the_order_step_and_old_saves_start_their_week_when_loaded(on):
     from tianxia import calendar, enlist
 
-    game = _game(on, at="changshe")
+    game = _game(on, at=JOIN_AT["guan"])
     game.state.player.tutorial_step = len(guide.steps(game.state, on))
     game.set_hints_off(True)
     game.choose("faction:guan")
@@ -199,7 +199,7 @@ def _train(game):
 
 
 def _camp(on):
-    return _game(on, faction="guan", at="huangjin_camp")
+    return _game(on, faction="guan", at="julu_altar")  # 黃巾的大本營（輿圖重製第 1 批：黃巾別部營寨改成中原的中立地，開季在官軍那一頭）
 
 
 @pytest.mark.parametrize("word, asks", [("必敗", True), ("凶險", False), ("難分勝負", False), ("五五波", False), ("有把握", False), ("穩勝", False)])

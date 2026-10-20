@@ -17,6 +17,7 @@ from conftest import real_content
 CONTENT_DIR = Path(__file__).parent.parent / "content"
 EVENTS = CONTENT_DIR / "events"
 MAP_REGIONS = [region["id"] for region in json.loads((CONTENT_DIR / "map.json").read_text(encoding="utf-8"))["regions"]]
+MAP_REGIONS += ["youzhou"]  # 輿圖重製第 1 批：幽州併進冀州，地圖擴充那一份幽州的事件檔檔名照留（content/events/youzhou.json）
 REGION_FILES = [EVENTS / f"{region}.json" for region in MAP_REGIONS if (EVENTS / f"{region}.json").exists()]
 ATTRS = ("str", "agi", "con", "wis")
 BASE_KEYS = {"silver", "good", "evil", "fame", *ATTRS}
@@ -48,7 +49,8 @@ def test_the_region_pool_is_every_map_region_with_its_own_event_file(content):
     test_events_new_regions 的 REGIONS 也都有一列（地點與事件數的結構檢查），兩邊不會一邊有、一邊沒有。"""
     from tests.test_events_new_regions import REGION_IDS
 
-    with_files = [region.id for region in content.map.regions if (EVENTS / f"{region.id}.json").exists()]
+    regions = [region.id for region in content.map.regions] + ["youzhou"]  # 幽州併進冀州之後，事件檔照舊叫 youzhou
+    with_files = [rid for rid in regions if (EVENTS / f"{rid}.json").exists()]
     assert [path.stem for path in REGION_FILES] == with_files
     assert len(with_files) >= 4 and set(with_files) == set(REGION_IDS)
 

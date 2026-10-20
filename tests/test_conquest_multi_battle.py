@@ -18,7 +18,7 @@ pytestmark = pytest.mark.slow  # 建 Game、載正式內容
 NOW = 1_792_000_000.0
 
 
-def _template(content, region: str = "yingru"):
+def _template(content, region: str = "yingchuan"):
     """那個大區的攻城範本（Task 11 寫進內容；還沒有時照長社火攻借一份，只換 id）。"""
     tid = f"siege_{region}"
     if tid not in content.battles:
@@ -40,9 +40,9 @@ def _region(game, loc: str) -> str:
 
 
 def _two(game):
-    """潁川汝南的兩場攻城（同一個大區、同時集結）。"""
+    """潁川的兩場攻城（同一個大區、同時集結；輿圖重製第 1 批把潁川汝南拆成潁川、汝南兩州）。"""
     w, c = game.state.world, game.content
-    blocks = [loc for loc in conquest.blocks(c) if conquest.capturable(c, loc) and _region(game, loc) == "yingru"][:2]
+    blocks = [loc for loc in conquest.blocks(c) if conquest.capturable(c, loc) and _region(game, loc) == "yingchuan"][:2]
     return _siege(game, blocks[0]), _siege(game, blocks[1])
 
 
@@ -63,7 +63,7 @@ def test_two_sieges_persist_and_reload():
 
 
 def test_submit_in_one_battle_does_not_touch_the_other():
-    game = go(join(conquest_game("season21"), "huang"), "runan")
+    game = go(join(conquest_game("season21"), "huang"), "yingchuan")
     game.now = NOW
     a, b = _two(game)
     joins = [o.id for o in game.options() if o.id.startswith("battle:join")]
@@ -79,7 +79,7 @@ def test_submit_in_one_battle_does_not_touch_the_other():
 
 
 def test_two_battles_one_region_join_is_explicit():
-    game = go(join(conquest_game("season21"), "huang"), "runan")
+    game = go(join(conquest_game("season21"), "huang"), "yingchuan")
     game.now = NOW
     a, b = _two(game)
     joins = [o.id for o in game.options() if o.id.startswith("battle:join")]
@@ -95,7 +95,7 @@ def test_two_battles_one_region_join_is_explicit():
 
 
 def test_season_end_shelves_sieges():
-    game = go(join(conquest_game("season21"), "huang"), "runan")
+    game = go(join(conquest_game("season21"), "huang"), "yingchuan")
     game.now = NOW
     a, _ = _two(game)
     game.choose(next(o.id for o in game.options() if o.id.endswith(f"@{a.record_id}")))
@@ -118,8 +118,8 @@ def test_resume_shifts_siege_deadlines():
 
 
 def test_bot_runner_owes_both_battles():
-    game = go(join(conquest_game("season21", name="甲某"), "huang"), "runan")
-    other = go(join(conquest_game("season21", name="乙某", world=game.world), "huang"), "runan")
+    game = go(join(conquest_game("season21", name="甲某"), "huang"), "yingchuan")
+    other = go(join(conquest_game("season21", name="乙某", world=game.world), "huang"), "yingchuan")
     game.now = other.now = NOW
     _template(other.content)  # 兩局各自一份內容
     a, b = _two(game)
@@ -134,7 +134,7 @@ def test_bot_runner_owes_both_battles():
 
 def test_results_are_delivered_out_of_order():
     """先開的那一場晚收場：補戰報不能只看「比補過的最大流水號大」（ended_battles 以前的前提）。"""
-    game = go(join(conquest_game("season21"), "huang"), "runan")
+    game = go(join(conquest_game("season21"), "huang"), "yingchuan")
     game.now = NOW
     a, b = _two(game)
     game.choose(next(o.id for o in game.options() if o.id.endswith(f"@{a.record_id}")))

@@ -12,7 +12,7 @@ from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 
 
-def _game(faction="guan", at="huangjin_camp", level=50):
+def _game(faction="guan", at="julu_altar", level=50):  # 黃巾的大本營（輿圖重製第 1 批：v1 是黃巾別部營寨）
     c = real_content("weekend")
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
@@ -63,7 +63,7 @@ def test_reaching_the_top_in_this_win_does_not_convert_the_rest():
 
 def test_a_maxed_hold_converts_the_host_exp():
     game = _game(faction="huang")
-    host = game._sortie_host(game.content.locations["huangjin_camp"], "hold")
+    host = game._sortie_host(game.content.locations["julu_altar"], "hold")
     xinde = game.state.player.stats.get("xinde", 0)
     msgs = game.choose("act:train")
     assert game.state.player.stats["xinde"] - xinde == host.reward_xinde + host.exp // 5

@@ -36,7 +36,7 @@ node = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端�
 # ── 共用 ─────────────────────────────────────────────
 
 
-def _muster(on, who="guan", place="luzhi_camp", battle="guangzong", name="甲"):
+def _muster(on, who="guan", place="xiaquyang", battle="guangzong", name="甲"):  # 人在冀州（輿圖重製第 1 批：盧植營搬進東郡）
     """廣宗決戰集結中（真實內容、週末設定）：who 是陣營或 None（散人），人在 place；提示關掉（框不在這個測試裡）。"""
     game = Game.new(on, name, rng=random.Random(0))
     game.client = None

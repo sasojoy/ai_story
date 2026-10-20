@@ -59,18 +59,18 @@ def test_fb258_a_hold_never_gives_intercept_as_the_reason():
 
 
 def test_fb258_an_intercept_on_your_own_ground_is_against_the_convoy():
-    """截糧的地點歸自己（官軍截南陽郊野）：出陣是攻，對手是運糧隊；「打得過嗎」照運糧隊算，站著的隊伍也列它。"""
+    """截糧的地點歸自己（官軍截汝南荒野；輿圖重製第 1 批之前是南陽郊野）：出陣是攻，對手是運糧隊；「打得過嗎」照運糧隊算，站著的隊伍也列它。"""
     game = _game("guan", "yingchuan")
-    _intercept(game, "guan", "nanyang_wilds")
+    _intercept(game, "guan", "runan_wilds")
     w, c = game.state.world, game.content
-    assert territory.controller(w, c, "nanyang_wilds") == "guan"
+    assert territory.controller(w, c, "runan_wilds") == "guan"
     convoy = c.squads[c.orders.convoy_squads["huang"]]
     st = game.map_state()
-    p = st["places"]["nanyang_wilds"]
+    p = st["places"]["runan_wilds"]
     assert p["sortie"] == "attack" and p["odds"] is not None
     assert atlas.ODDS_ORDER.index(p["odds"]["word"]) >= atlas.ODDS_ORDER.index(game.odds(convoy.id))  # 最險的算進糧隊
     assert convoy.name in [q["name"] for q in p["squads"]]
-    g = next(g for g in st["suggest"] if g["id"] == "nanyang_wilds")
+    g = next(g for g in st["suggest"] if g["id"] == "runan_wilds")
     assert g["lose"] == (p["odds"]["word"] == mapdata.LOSE_WORD)
 
 
@@ -94,12 +94,12 @@ def test_fb264_the_first_reckoning_in_week_one_keeps_the_season_start():
     w, c = game.state.world, game.content
     territory.update(w, c)  # 開季：第一次算
     assert w.territory.weeks[0].control == w.territory.weeks[1].control
-    territory.assign(w, c, {"runan_wilds": "guan"})  # 第 1 週就易手
-    assert w.territory.weeks[0].control["runan_wilds"] == "huang" and w.territory.weeks[1].control["runan_wilds"] == "guan"
+    territory.assign(w, c, {"nanyang_huangjin_camp": "guan"})  # 第 1 週就易手（輿圖重製第 1 批：開季歸黃巾的是南陽黃巾營）
+    assert w.territory.weeks[0].control["nanyang_huangjin_camp"] == "huang" and w.territory.weeks[1].control["nanyang_huangjin_camp"] == "guan"
     st = game.map_state()
-    assert st["start"]["runan_wilds"] == "huang"
-    assert {"id": "runan_wilds", "from": "huang", "to": "guan"} in st["weeks"][0]["changed"]
-    assert {"week": 1, "from": "huang", "to": "guan"} in st["places"]["runan_wilds"]["flips"]
+    assert st["start"]["nanyang_huangjin_camp"] == "huang"
+    assert {"id": "nanyang_huangjin_camp", "from": "huang", "to": "guan"} in st["weeks"][0]["changed"]
+    assert {"week": 1, "from": "huang", "to": "guan"} in st["places"]["nanyang_huangjin_camp"]["flips"]
 
 
 def test_fb264_a_season_first_reckoned_later_has_no_start():

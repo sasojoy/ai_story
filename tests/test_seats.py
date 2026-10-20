@@ -698,7 +698,7 @@ def _huang(content):
 
 def _defect_through_the_menu(game, now):
     """照伺服器的做法：先同步（讀最新的共用賽季），再走叛投的兩步（站在黃巾的投靠點）。"""
-    game.state.player.location = "huangjin_camp"
+    game.state.player.location = "julu_altar"
     game.sync(now)
     game.choose("defect:huang")
     return game.choose("defect:confirm")
@@ -710,7 +710,7 @@ def test_defection_frees_the_seat(on):
     w = WorldState(season_one=True)
     holder = _qualified(on, "甲", world=w)
     seats.report(holder.state, on)
-    holder.state.player.location = "huangjin_camp"
+    holder.state.player.location = "julu_altar"
     defection.defect(holder.state, on, _huang(on))
     assert "甲" not in w.seat_ledger.get("guan", {}) and "甲" not in w.seats.get("guan", [])
     nxt = _qualified(on, "乙", world=w)

@@ -174,7 +174,7 @@ def test_cancel_clears_the_pick(wk):
 
 
 def test_join_army_has_no_side_step(wk):
-    game = _game(wk, at="changshe")
+    game = _game(wk, at="wan_city")
     game.choose("faction:guan")
     assert _ids(game) == ["faction:confirm", "faction:cancel"]
 
@@ -371,13 +371,13 @@ def test_donate_goes_to_the_side_stock(wk):
 
     game = _game(wk, faction="haoqiang", ally="guan", at="zhuo_militia_hall")
     assert game._at_own_base()
-    game.state.player.location = "changshe"  # 依附那一軍的投靠點也算自家大本營
+    game.state.player.location = "wan_city"  # 依附那一軍的投靠點也算自家大本營
     assert game._at_own_base()
-    game.state.player.location = "huangjin_camp"
+    game.state.player.location = "julu_altar"
     assert not game._at_own_base()
     target = economy.donate_target(wk, game.state.world, "guan", "zhuo_militia_hall")
     assert target is not None and target[0] != rules.GEJU and target[1] == -1
-    game.state.player.location = "changshe"
+    game.state.player.location = "wan_city"
     game.state.player.materials = {"man_1": 3}
     game.donate("man_1", 3)
     assert game.state.world.armaments.get("guan") and "haoqiang" not in game.state.world.armaments
@@ -613,7 +613,7 @@ def test_switching_ally_is_a_defection(wk):
 
 
 def test_gentry_to_pure_army_on_the_same_side_is_a_defection(wk):
-    game = _game(wk, faction="haoqiang", ally="guan", at="changshe")
+    game = _game(wk, faction="haoqiang", ally="guan", at="wan_city")
     assert _defect_labels(game) == ["改投官軍"]
     game.state.player.rank = 3
     game.choose("defect:guan")

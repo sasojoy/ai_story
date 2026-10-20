@@ -15,7 +15,7 @@ MON = 1792339200  # 2026-10-19 週一 00:00（台灣）
 NOW = MON + 10 * HOUR
 
 
-def _game(profile="season21", at="changshe", faction="guan", money=500):
+def _game(profile="season21", at="wan_city", faction="guan", money=500):
     c = real_content(profile)
     c.config.train_event_chance = 0.0
     store = open_world()

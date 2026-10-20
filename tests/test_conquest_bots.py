@@ -33,12 +33,12 @@ def _open(game, slot):
 def test_attacker_bot_heads_to_the_siege_region():
     game = _bot(go(join(conquest_game("season21", name="假黃"), "huang"), "julu_altar"), "huang")  # 人在冀州
     game.now = NOW
-    _open(game, announce(game, "nanyang_road", "huang"))  # 南陽的攻城
-    assert game.rally_region() == "nanyang"
+    _open(game, announce(game, "hilltop_wilds", "huang"))  # 潁川的攻城（新天下的中立地；v1 是南陽官道）
+    assert game.rally_region() == "yingchuan"
     before = game.state.player.location
     bot_policy._toward_battle(game)
-    assert game.state.player.journey is not None or game.state.player.location != before  # 往南陽走
-    guan = _bot(go(join(conquest_game("season21", name="假官", world=game.world), "guan"), "luzhi_camp"), "guan")
+    assert game.state.player.journey is not None or game.state.player.location != before  # 往潁川走
+    guan = _bot(go(join(conquest_game("season21", name="假官", world=game.world), "guan"), "wan_city"), "guan")
     guan.now = NOW
     assert guan.rally_region() is None  # 黃巾攻中立地：官軍站不進守將那一格，不趕去（裁決 8）
 
@@ -46,7 +46,7 @@ def test_attacker_bot_heads_to_the_siege_region():
 def test_bot_runner_sees_the_siege_and_bots_come():
     game = _bot(go(join(conquest_game("season21", name="假黃"), "huang"), "julu_altar"), "huang")
     game.now = NOW
-    _open(game, announce(game, "nanyang_road", "huang"))
+    _open(game, announce(game, "hilltop_wilds", "huang"))  # 新天下的中立地（v1 是南陽官道）
     runner = BotRunner(game.content, game.world, open_characters(game.world.db.path), random.Random(1), clock=lambda: NOW)
     rows = runner._battle_sides()
     assert len(rows) == 1 and "huang" in rows[0][1] and "guan" not in rows[0][1]

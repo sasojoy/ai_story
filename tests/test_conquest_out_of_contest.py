@@ -11,7 +11,8 @@ from tianxia.state import BotProfile, Order
 
 pytestmark = pytest.mark.slow  # 建 Game、載正式內容
 
-ENEMY_SPOTS = (("guan", "huangjin_camp"), ("guan", "guangzong"), ("guan", "julu_altar"), ("huang", "changshe"), ("huang", "wan_city"))
+# 輿圖重製第 1 批（新天下）：大本營只在外圈——官軍大將軍府、宛城，黃巾鉅鹿道壇、青州黃巾營（長社、黃巾別部營寨改成中原的中立地）
+ENEMY_SPOTS = (("guan", "qingzhou_camp"), ("guan", "guangzong"), ("guan", "julu_altar"), ("huang", "dajiangjun_fu"), ("huang", "wan_city"))
 
 
 def _train(game):
@@ -44,14 +45,14 @@ def test_no_crossed_swords_and_no_map_sortie_there(side, loc):
 def test_crossed_swords_stay_on_blocks_you_can_take():
     game = join(conquest_game("season21"), "guan")
     armed = mapview.armed_places(game.state, game.content)
-    assert {"deep_mountain", "hilltop_wilds", "runan_wilds", "zhuo_county"} <= armed
-    assert not armed & {"huangjin_camp", "nanyang_huangjin_camp", "julu_altar", "guangzong", "changshe"}
+    assert {"deep_mountain", "hilltop_wilds", "runan_wilds", "zhuo_county", "changshe", "huangjin_camp"} <= armed
+    assert not armed & {"qingzhou_camp", "julu_altar", "guangzong", "wan_city", "dajiangjun_fu"}
 
 
 def test_bots_do_not_sortie_there():
-    game = go(join(conquest_game("season21"), "guan"), "huangjin_camp")
+    game = go(join(conquest_game("season21"), "guan"), "qingzhou_camp")
     profile = BotProfile(personality="普通", seed=1, faction="guan", season_number=1)
-    assert bot_policy._train_value(game, profile, "huangjin_camp") == 0
+    assert bot_policy._train_value(game, profile, "qingzhou_camp") == 0
     assert not any(o.id == "act:train" and o.enabled for o in game.options())
 
 
@@ -59,34 +60,34 @@ def test_siege_places_never_list_them():
     game = conquest_game("season21")
     w, c = game.state.world, game.content
     for side, front in (("guan", "yingru"), ("guan", "jizhou"), ("guan", "nanyang"), ("huang", "yingru"), ("huang", "nanyang")):
-        assert not set(orders.siege_places(c, side, front, w)) & {"huangjin_camp", "guangzong", "julu_altar", "changshe", "wan_city",
-                                                                 "nanyang_huangjin_camp", "luzhi_camp"}
+        assert not set(orders.siege_places(c, side, front, w)) & {"qingzhou_camp", "guangzong", "julu_altar", "dajiangjun_fu",
+                                                                 "wan_city"}
 
 
 def test_intercept_convoy_at_an_enemy_base_is_still_fought():
-    """黃巾的截糧在長社（官軍的大本營）：運糧隊打那裡經過的那一週照打，只打運糧隊、只算截糧，不推進度。"""
-    game = go(join(conquest_game("season21"), "huang"), "changshe")
+    """黃巾的截糧在宛城（官軍的大本營；新天下南陽那條舊線的截糧地點）：運糧隊打那裡經過的那一週照打，只打運糧隊、只算截糧，不推進度。"""
+    game = go(join(conquest_game("season21"), "huang"), "wan_city")
     s, c = game.state, game.content
     s.world.orders.append(Order(id="t:huang:intercept", template="intercept", faction="huang", week=orders.period_of(s, c),
-                                location="changshe", quota=4, text="（測試）"))
+                                location="wan_city", quota=4, text="（測試）"))
     convoy = c.orders.convoy_squads["guan"]
     option = _train(game)
     assert option is not None and option.enabled and "攻" in option.label
-    assert game._sortie_foes(c.locations["changshe"]) == [convoy]
-    assert "changshe" in mapview.armed_places(s, c)
-    note = _note(game, "changshe")
+    assert game._sortie_foes(c.locations["wan_city"]) == [convoy]
+    assert "wan_city" in mapview.armed_places(s, c)
+    note = _note(game, "wan_city")
     assert note.startswith("對面的運糧隊正打這裡經過：") and "不在爭奪之列" in note and "推這一塊的進度" not in note
 
 
 def test_own_base_still_holds():
-    game = go(join(conquest_game("season21"), "guan"), "changshe")
+    game = go(join(conquest_game("season21"), "guan"), "wan_city")
     option = _train(game)
     assert option is not None and option.enabled and "守" in option.label
 
 
 def test_switch_off_enemy_base_is_unchanged():
     """關著：照舊攻得了、畫 ⚔（a73c111e 上量的）。"""
-    game = go(join(plain_game("season21"), "guan"), "huangjin_camp")
+    game = go(join(plain_game("season21"), "guan"), "julu_altar")  # 新天下黃巾的大本營（v1 是黃巾別部營寨）
     option = _train(game)
     assert option is not None and option.enabled and option.label.startswith("出陣・攻（")
-    assert "huangjin_camp" in mapview.armed_places(game.state, game.content)
+    assert "julu_altar" in mapview.armed_places(game.state, game.content)

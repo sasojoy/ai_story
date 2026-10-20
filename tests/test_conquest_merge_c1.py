@@ -2,16 +2,24 @@
 
 - 攻城軍令記得到功、軍令卡列得出來的地方＝今天公告的目標裡、`orders.siege_win` 也成立的那幾塊：公告了的中立地站的是中立駐軍，
   打贏記不到，不列。
-- 敵方大本營與廣宗（搶不下來）不會被公告成目標：票投到那裡不算，主將也不挑；就算時程表上硬塞一場，也不列成攻城地點。"""
+- 敵方大本營與廣宗（搶不下來）不會被公告成目標：票投到那裡不算，主將也不挑；就算時程表上硬塞一場，也不列成攻城地點。
+輿圖重製第 1 批（新天下）：中原那一條線上全是中立地，外圈的陣營區塊與大本營不算進任何一條線，大本營開季也不跟對方直通；
+量「線上的敵方陣營區塊」的幾條把汝南荒野改回 v1 的黃巾陣營區塊（conquest_kit.conquest_game_with）。"""
 from __future__ import annotations
 
 import pytest
 
-from conquest_kit import announce, conquest_game, go, join, win_sortie
+from conquest_kit import announce, conquest_game, conquest_game_with, go, join, win_sortie
 from tianxia import conquest, conquest_day, orders
 from tianxia.state import Order, Pick
 
 pytestmark = pytest.mark.slow  # 建 Game、載正式內容
+
+V1_RUNAN = {"runan_wilds": ("huang", "yingru")}  # v1：汝南荒野是黃巾的陣營區塊、在潁川汝南那一條線上
+
+
+def _game():
+    return conquest_game_with(V1_RUNAN)
 
 
 def _siege(game, faction="guan", front="yingru"):
@@ -28,7 +36,7 @@ def _out_of_contest(game) -> list[str]:
 
 
 def test_an_announced_neutral_target_is_not_a_siege_place():
-    game = conquest_game("season21")
+    game = _game()
     w, c = game.state.world, game.content
     assert conquest.holder(w, c, "hilltop_wilds") is None and conquest.line_of(w, c, "hilltop_wilds") == "yingru"
     announce(game, "hilltop_wilds", "guan")
@@ -46,7 +54,7 @@ def test_a_win_at_an_announced_neutral_target_does_not_credit_the_siege():
 
 
 def test_a_win_at_an_announced_enemy_block_credits_the_siege():
-    game = go(join(conquest_game("season21"), "guan"), "runan_wilds")
+    game = go(join(_game(), "guan"), "runan_wilds")
     announce(game, "runan_wilds", "guan")
     order = _siege(game)
     assert orders.win_counts(game.state, game.content, "guan", "runan_wilds")
@@ -56,11 +64,14 @@ def test_a_win_at_an_announced_enemy_block_credits_the_siege():
 
 def test_an_unannounced_enemy_block_still_does_not_count():
     """第二批照留：沒公告的敵方陣營區塊不列、不記（第一批是此刻歸敵方就算）。"""
-    game = go(join(conquest_game("season21"), "guan"), "runan_wilds")
+    game = go(join(_game(), "guan"), "runan_wilds")
     order = _siege(game)
     assert orders.siege_places(game.content, "guan", "yingru", game.state.world) == []
     win_sortie(game)
     assert game.state.player.name not in order.progress
+
+
+NEXT_TO_ENEMY_BASE = {"guan": "baima_ford", "huang": "nanyang_huangjin_camp"}  # 挨著對方大本營（鉅鹿道壇、廣宗／宛城）的中立地
 
 
 @pytest.mark.parametrize("side", ["guan", "huang"])
@@ -68,10 +79,11 @@ def test_enemy_bases_and_guangzong_are_never_scheduled(side):
     game = conquest_game("season21")
     w, c = game.state.world, game.content
     c.config.conquest.two_per_day_ratio = 0.01  # 一天兩塊：多給主將一個名額去挑
+    conquest.set_control(w, c, NEXT_TO_ENEMY_BASE[side], side)  # 新天下的大本營在外圈深處，開季不跟對方直通：先佔下挨著的那一塊
     out = _out_of_contest(game)
     mine = {loc for loc in conquest.blocks(c) if conquest.holder(w, c, loc) == side}
     near = [loc for loc in out if conquest.holder(w, c, loc) != side and any(x in mine for x in conquest.adjacent(c, loc))]
-    assert near  # 有搶不下來、又跟自家領地直通的敵方區塊（例：官軍的長社挨著黃巾別部營寨），這條才量得到東西
+    assert near  # 有搶不下來、又跟自家領地直通的敵方區塊，這條才量得到東西
     assert not set(conquest.targets(w, c, side)) & set(out)
     votes = {f"甲{i}": Pick(loc=loc, minute=21 * 60) for i, loc in enumerate(near)}
     picks = conquest_day.plan(w, c, side, 20000, 0.0, votes, set())
@@ -82,10 +94,11 @@ def test_enemy_bases_and_guangzong_are_never_scheduled(side):
 
 
 def test_a_forced_slot_at_an_enemy_base_is_still_not_a_siege_place():
-    """時程表上硬塞一場（不經 plan）：黃巾別部營寨出陣沒有對手（裁決 18 的 sortie_foes），不列。"""
-    game = conquest_game("season21")
+    """時程表上硬塞一場（不經 plan）：鉅鹿道壇出陣沒有對手（裁決 18 的 sortie_foes），不列。新天下的大本營不算進任何一條線，
+    這裡把它掛回中原那一條，量的是「沒有對手」那一條排除，不是線對不上。"""
+    game = conquest_game_with({**V1_RUNAN, "julu_altar": ("huang", "yingru")})
     w, c = game.state.world, game.content
-    announce(game, "huangjin_camp", "guan")
+    announce(game, "julu_altar", "guan")
     announce(game, "runan_wilds", "guan")
-    assert "huangjin_camp" in conquest_day.today(w, c, "guan", "attack")
+    assert "julu_altar" in conquest_day.today(w, c, "guan", "attack")
     assert orders.siege_places(c, "guan", "yingru", w) == ["runan_wilds"]

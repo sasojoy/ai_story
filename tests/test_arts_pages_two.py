@@ -78,7 +78,7 @@ def test_a_melted_starter_art_is_offered_again_in_every_town_and_learning_it_put
     game = _real_game(real)
     _melted_starter(game)
     p, towns = game.state.player, [loc for loc in real.locations.values() if library.TOWN_TAG in loc.tags]
-    assert len(towns) == 10 and "yingchuan" in {t.id for t in towns}
+    assert len(towns) == 13 and "yingchuan" in {t.id for t in towns}  # 輿圖重製第 1 批多了濮陽、陳留、臨淄
     assert "jichu_quanjiao" not in library.owned_arts(game.state)
     for town in towns:
         p.location = town.id

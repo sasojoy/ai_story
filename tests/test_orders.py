@@ -82,7 +82,7 @@ def test_real_orders_content(real):
         ("strike", "guan"), ("strike", "huang"), ("strike", "haoqiang"),
     ])
     assert o.slots["yingru"]["guan"].intercept == "runan_wilds"  # FB-248（PM 2026-10-15）：截糧的地點一律在戰線上，以前是荒丘
-    assert o.slots["nanyang"]["huang"].escort == ("nanyang_wilds", "nanyang_huangjin_camp")
+    assert o.slots["nanyang"]["huang"].escort == ("xinye", "qingzhou_camp")  # 輿圖重製第 1 批：南陽黃巾營搬進中原，終點是青州的大本營
     assert {f: d.name for f, d in o.duties.items()} == {"guan": "巡哨", "huang": "傳道", "haoqiang": "保境安民"}
     assert real.squads["guan_grain_convoy"].faction == "guan" and real.squads["huang_grain_convoy"].faction == "huang"
     assert real.squads["huang_grain_convoy"].drops[0].material == "man_1"
@@ -164,8 +164,9 @@ def test_issue_fills_slots(on):
     _at_week(game, 1)
     orders.issue(game.state, on, 1, random.Random(0))
     by_id = {(o.faction, o.template): o for o in game.state.world.orders}
-    assert by_id[("guan", "intercept")].location == "nanyang_wilds"
-    assert by_id[("guan", "intercept")].text == "探得黃巾的糧道經過南陽郊野，本週截斷它。"
+    # 輿圖重製第 1 批：南陽那條舊線只剩大本營宛城是戰線地點（截糧要在戰線地點，FB-248；第 5 批三條線變一條時再定）
+    assert by_id[("guan", "intercept")].location == "wan_city"
+    assert by_id[("guan", "intercept")].text == "探得黃巾的糧道經過宛城，本週截斷它。"
     # 官軍第 1 週（奇數週）輪到截糧、護糧排不進去（FB-061）：護糧看偶數週，南陽最吃緊的那一週（每條戰線兩週內都有大事）
     with mock.patch.object(orders, "_event_within", return_value=object()):
         _fronts(game, 40, 55, 50)
@@ -594,8 +595,8 @@ def test_enlistment_after_joining_only_in_season_one(on):
     攻城軍令打贏一場 → 框是老石的結尾 → 「知道了」收起。開關關著（beta 季）投靠不開始。"""
     from tianxia import guide
 
-    game = _game(on, at="changshe")
-    game.set_hints_off(True)  # 這個測試看入伍段的框：長社站著大勢人物，真內容的提示表會在投靠前先排一條散人聽的提示（新手引導計畫三）
+    game = _game(on, at="dajiangjun_fu")
+    game.set_hints_off(True)  # 這個測試看入伍段的框：大將軍府站著大勢人物（何進），真內容的提示表會在投靠前先排一條散人聽的提示（新手引導計畫三）
     off = load_content(CONTENT_DIR)  # 同一份存檔，開關關著的內容
     assert len(guide.steps(game.state, off)) == len(guide.steps(game.state, on)) == BASE  # 軍令兩步沒有了：兩種季都只有序章十一步加初入江湖四步
     game.state.player.tutorial_step = BASE  # 序章與初入江湖都做完了
@@ -611,6 +612,7 @@ def test_enlistment_after_joining_only_in_season_one(on):
     box = game.guide_box()
     assert box["key"] == "r3_first_order" and box["text"].startswith("挑一道軍令，出一次力") and box["done"] == ["✔ 引導完成"]
     _order(game, "siege", "guan", front="yingru")
+    game.state.player.location = "nanyang_huangjin_camp"  # 輿圖重製第 1 批：大本營在外圈，攻城走到中原黃巾佔著的那一處
     with _win():
         game.choose("act:train")
     assert enlist.done(game.state, on) and game.state.player.tutorial_step == BASE
@@ -619,7 +621,8 @@ def test_enlistment_after_joining_only_in_season_one(on):
     game.guide_ack()
     assert game.guide_box() is None
     # 開關關著：不開始
-    beta = _game(off, at="changshe")
+    beta = _game(off, at="dajiangjun_fu")
+    beta.set_hints_off(True)  # 看的是入伍段的框；大將軍府有人可結交，提示表會先排一條師父的話（v1 的長社沒有）
     beta.state.player.tutorial_step = BASE
     beta.choose("faction:guan")
     beta.choose("faction:confirm")
@@ -636,7 +639,7 @@ def test_after_the_farewell_a_drifter_is_told_where_to_join_and_nothing_nags(on)
     for faction in on.scenario.factions:
         for place in faction.join_at:
             assert on.locations[place].name in text
-    game.state.player.location = "changshe"
+    game.state.player.location = "wan_city"
     game.choose("faction:guan")
     game.choose("faction:confirm")
     assert "**投靠**" not in game.quest_text() and game.quest_text().count("（老石）") == 1  # 下一步改寫引薦人交代的事
@@ -706,7 +709,7 @@ def test_new_player_can_join_and_finish_an_order_in_week_one(on):
     game.state.player.tutorial_step = BASE
     game.advance(200)  # 跨過開季後第一個曆時交界：第 1 週發令
     game.state.player.stamina = 150
-    game.travel("changshe", "dash")
+    game.state.player.location = "wan_city"  # 輿圖重製第 1 批：投靠點只在外圈、離潁川四站（v1 是疾行到兩站外的長社）；這裡只看投靠與軍令的規則，直接站過去
     game.choose("faction:guan")
     game.choose("faction:confirm")
     assert len(game.orders_view()) == 3
@@ -729,13 +732,14 @@ def test_new_player_can_join_and_finish_an_order_in_week_one(on):
 
 def test_a_new_guan_recruit_finishes_a_week_one_order_without_leaving_yingru(on):
     """FB-054：官軍第 1 週的軍令不能全在南陽、冀州（開局戰況潁川 40，官軍不吃緊，守城原本發不出來）。
-    官軍的守城寫了開局週（opening_fronts），第 1 週在潁川汝南也發；新角色照引導在長社投靠、不離開潁川，
-    巡哨一次就替這道記一次，跟黃巾在營寨傳道一次同一個難度。"""
+    官軍的守城寫了開局週（opening_fronts），第 1 週在潁川汝南也發；巡哨一次就替這道記一次，跟黃巾在營寨傳道一次同一個難度。
+    輿圖重製第 1 批：投靠點只在外圈，新角色到宛城投靠、再回到潁川郡（中原那一條線）巡哨；v1 是在長社投靠、不離開潁川
+    （出生點與序章搬家是第 4 批）。"""
     game = _game(on, at="yingchuan")
     game.state.player.tutorial_step = BASE
     game.advance(200)  # 第 1 週發令
     game.state.player.stamina = 150
-    game.travel("changshe", "dash")
+    game.state.player.location = "wan_city"  # 同上：直接站到外圈的大本營
     game.choose("faction:guan")
     game.choose("faction:confirm")
     assert orders.week_of(game.state, on) == 1
@@ -743,8 +747,8 @@ def test_a_new_guan_recruit_finishes_a_week_one_order_without_leaving_yingru(on)
     defend = next(o for o in orders.current(game.state, on, "guan") if o.template == "defend")
     assert orders.title(on, defend) == "守城・潁川汝南"
     assert defend.id in [card["id"] for card in game.orders_view()]  # 軍令卡上看得到
-    here = game.state.player.location
-    assert rules.front_of(on, here) == defend.front  # 人在長社，已經站在那條戰線上，不必動
+    game.state.player.location = here = "yingchuan"  # 回到潁川郡：中原那一條線
+    assert rules.front_of(on, here) == defend.front
     msgs = game.choose("act:duty")
     assert game.state.player.location == here
     assert defend.progress.get("甲") == 1
@@ -812,7 +816,7 @@ def test_map_place_detail_hides_other_sides_orders(on):
 def test_no_siege_where_the_enemy_has_no_squad(on):
     """T6 審查 I2：沒有任何一支官軍隊伍的戰線，黃巾在那裡打不贏「敵方陣營的隊伍」，攻城永遠湊不滿：不發。
     假人也只往打得到敵方隊伍的地點走、只在那裡把遊歷算成攻城。FB-184 之後潁川汝南有了官軍大營（整支官軍），黃巾在那裡攻得了城。"""
-    assert orders.siege_places(on, "huang", "yingru") == ["guan_camp"]
+    assert orders.siege_places(on, "huang", "yingru") == ["guan_camp", "luzhi_camp", "baima_ford"]  # 輿圖重製第 1 批：盧植營、白馬津搬進東郡
     assert "nanyang_wilds" in orders.siege_places(on, "huang", "nanyang")
     assert "changshe" in orders.siege_places(on, "guan", "yingru")
     game = _game(on, faction="huang", at="changshe")
@@ -821,10 +825,10 @@ def test_no_siege_where_the_enemy_has_no_squad(on):
     _issue_now(game)
     assert ("siege", "yingru") in _kinds(game, "huang") and len(_kinds(game, "huang")) == 3  # FB-184：潁川汝南有官軍大營了
     game.state.world.orders = []  # 只看攻城這一道
-    _order(game, "siege", "huang", front="nanyang")
-    assert not orders.win_counts(game.state, on, "huang", "xinye")  # 新野在南陽、但沒有官軍隊伍
-    assert orders.win_counts(game.state, on, "huang", "nanyang_wilds")
-    assert orders.targets(game.state, on, "huang") == orders.siege_places(on, "huang", "nanyang")
+    _order(game, "siege", "huang", front="yingru")
+    assert not orders.win_counts(game.state, on, "huang", "yingchuan")  # 潁川郡在中原那一條線上、但沒有官軍隊伍
+    assert orders.win_counts(game.state, on, "huang", "guan_camp")
+    assert orders.targets(game.state, on, "huang") == orders.siege_places(on, "huang", "yingru", game.state.world)
 
 
 def test_a_cart_whose_order_is_gone_is_still_shown_and_delivered(on):
@@ -1020,10 +1024,10 @@ def test_switch_off_no_orders_in_any_week(real):
 
 # （陣營, 目標人物, 他的所在, 大區 id, 大區名）：三邊的打擊模板各一道。這三位開季時，新角色都還沒摸清他們的所在
 # （新角色摸得清的只有開局那十個地點）；要「摸清」就把所在加進 visited。
-STRIKES = [
-    ("guan", "bocai", "huangjin_camp", "yingru", "潁川汝南"),
-    ("huang", "luzhi", "luzhi_camp", "jizhou", "冀州"),
-    ("haoqiang", "zhangmancheng", "nanyang_huangjin_camp", "nanyang", "南陽"),
+STRIKES = [  # 輿圖重製第 1 批：州＝大區，黃巾別部營寨在潁川、盧植營在東郡、南陽黃巾營在汝南（人物的開季站位還沒搬，設計 3.1）
+    ("guan", "bocai", "huangjin_camp", "yingchuan", "潁川"),
+    ("huang", "luzhi", "luzhi_camp", "dongjun", "東郡"),
+    ("haoqiang", "zhangmancheng", "nanyang_huangjin_camp", "runan", "汝南"),
 ]
 
 
@@ -1259,7 +1263,7 @@ def _recruit(on, faction, at):
     return game
 
 
-@pytest.mark.parametrize(("faction", "at"), [("guan", "changshe"), ("huang", "huangjin_camp"), ("haoqiang", "cao_manor")])
+@pytest.mark.parametrize(("faction", "at"), [("guan", "wan_city"), ("huang", "julu_altar"), ("haoqiang", "cao_manor")])
 def test_the_duty_action_finishes_the_first_order_step_and_glows(on, faction, at):
     """FB-094 選甲：入伍第 2 步「出一次力」也認自己陣營的守勢行動（巡哨、傳道、保境安民），這週的軍令一道都辦不到也走得完；
     FB-093：那顆按鈕在第 2 步會發光，「此地還能做」自己打開。"""
@@ -1275,7 +1279,7 @@ def test_the_duty_action_finishes_the_first_order_step_and_glows(on, faction, at
 
 
 def test_nothing_glows_before_the_orders_are_opened(on):
-    game = _game(on, at="changshe")
+    game = _game(on, at="wan_city")
     game.state.player.tutorial_step = BASE
     game.choose("faction:guan")
     game.choose("faction:confirm")
@@ -1284,9 +1288,9 @@ def test_nothing_glows_before_the_orders_are_opened(on):
 
 
 def test_a_siege_front_makes_training_glow(on):
-    game = _recruit(on, "guan", "changshe")
+    game = _recruit(on, "guan", "wan_city")
     game.state.world.orders = []
-    _order(game, "siege", "guan", front=rules.front_of(game.content, "changshe"))
+    _order(game, "siege", "guan", front=rules.front_of(game.content, "wan_city"))
     assert "act:train" in game.enlist_glow(["act:train", "act:rest"])
     assert "act:rest" not in game.enlist_glow(["act:train", "act:rest"])
 

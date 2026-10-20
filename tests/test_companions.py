@@ -230,7 +230,7 @@ def test_the_roster_card_offers_release_through_the_server(real, world):
 
 def test_defecting_drops_companions_of_the_old_side(real, world):
     """9.5：官軍叛投黃巾，劉備（寫了官軍）當場回江湖、情誼減半，確認畫面列出他；荀彧（沒寫陣營）照舊跟著。"""
-    game = _player(real, world, "官甲", "guan", "huangjin_camp")
+    game = _player(real, world, "官甲", "guan", "julu_altar")
     p = game.state.player
     for cid in ("liubei", "xunyu"):
         assert world.try_recruit(cid, "官甲", cap=3)
@@ -248,7 +248,7 @@ def test_defecting_drops_companions_of_the_old_side(real, world):
 
 def test_the_defect_scene_lists_companions_left_behind(real, world):
     """FB-362：按「叛投」之後玩家看的是場景那一段（Game._own_scene_text）；江湖紀錄那一則只留標題（_hide）。場景那一段也要列帶不走的同伴。"""
-    game = _player(real, world, "官甲", "guan", "huangjin_camp")
+    game = _player(real, world, "官甲", "guan", "julu_altar")
     p = game.state.player
     for cid in ("liubei", "xunyu"):
         assert world.try_recruit(cid, "官甲", cap=3)
@@ -263,7 +263,7 @@ def test_the_defect_scene_lists_companions_left_behind(real, world):
 
 
 def test_a_story_gift_follows_the_side_and_the_cap(real, world):
-    huang = _player(real, world, "黃甲", "huang", "huangjin_camp")
+    huang = _player(real, world, "黃甲", "huang", "julu_altar")
     xinde = huang.state.player.stats.get("xinde", 0)
     msgs = roster.recruit(huang.state, real, world, "liubei")  # 劉備只追隨官軍
     assert world.get_companion("liubei").owner is None and huang.state.player.stats["xinde"] > xinde

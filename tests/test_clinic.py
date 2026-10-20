@@ -31,7 +31,8 @@ def _game(real, where="yingchuan", injury=40.0, silver=100):
 
 def test_every_region_has_a_clinic_and_the_first_stop_out_of_the_prologue_is_one(real):
     places = clinic.clinics(real)
-    assert {atlas.region_of(real, loc).id for loc in places} == {region.id for region in real.map.regions}
+    # 輿圖重製第 1 批：核心（鹿台、嵩山深處、南華觀）是荒台深山，沒有城鎮、沒有醫館；其餘八州都有
+    assert {atlas.region_of(real, loc).id for loc in places} == {region.id for region in real.map.regions} - {"core"}
     assert real.scenario.start_location in places
 
 

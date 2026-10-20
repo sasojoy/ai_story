@@ -1,5 +1,8 @@
-"""真實地圖（content/）的結構：五個大區、每區有環、跨區的路、路程目標、地點不擠。
-見 docs/superpowers/specs/2026-10-03-地圖擴充與移動-design.md 第四、五節。"""
+"""真實地圖（content/）的結構：九州（大區）、每區有環、跨區的路、路程目標、地點不擠。
+見 docs/superpowers/specs/2026-10-03-地圖擴充與移動-design.md 第四、五節（路程目標：同州一站 2～4 分鐘）；
+輿圖重製第 1 批（新天下，docs/superpowers/specs/2026-10-20-輿圖簡化-design.md 第三章）把五個大區換成三圈九州：
+外圈出生州（洛陽、南陽、冀州〔含幽州〕、青州）、內圈中原四郡（潁川、東郡、陳留、汝南）、核心。跨州的路照新天下重排（外環路、輻路、
+內環路），分鐘數是新天下量的、待 PM 對。"""
 from __future__ import annotations
 
 import math
@@ -15,15 +18,27 @@ from tianxia.state import new_game_state
 CONTENT_DIR = Path(__file__).parent.parent / "content"
 
 REGIONS = {
-    "youzhou": {"zhuo_county", "market_town", "loushang_village", "zhuo_militia_hall", "juma_river", "yanshan_foot"},
-    "jizhou": {"julu_altar", "guangzong", "luzhi_camp", "xiaquyang", "haozu_fort", "baima_ford"},
+    # 外圈・出生州
     "luoyang": {"luoyang_road", "baima_temple", "luoyang_palace", "dajiangjun_fu", "beimang_hill", "mengjin_ford"},
-    "yingru": {
-        "yingchuan", "yingshui", "yingchuan_wilds", "changshe", "yingchuan_academy", "songshan_foot", "deep_mountain",
-        "jade_cave", "runan", "runan_academy", "runan_market", "runan_wilds", "hilltop_wilds", "qiao_county",
-        "cao_manor", "huangjin_camp", "guan_camp",  # 官軍大營：FB-184 在四十處之外補的官軍操練點
+    "nanyang": {"wan_city", "nanyang_road", "yu_river", "xinye", "nanyang_wilds", "lulin_zhai"},  # 綠林山寨：名聲 5.1
+    "jizhou": {  # 幽州併進冀州最外側（設計 3.1）
+        "zhuo_county", "market_town", "loushang_village", "zhuo_militia_hall", "juma_river", "yanshan_foot",
+        "julu_altar", "guangzong", "xiaquyang", "haozu_fort",
     },
-    "nanyang": {"wan_city", "nanyang_road", "nanyang_huangjin_camp", "yu_river", "xinye", "nanyang_wilds", "lulin_zhai"},  # 綠林山寨：名聲 5.1
+    "qingzhou": {"jishui", "linzi", "donglai_ford", "qingzhou_camp", "taishan_foot"},  # 新的五處（佔位，待 joy）
+    # 內圈・中原
+    "yingchuan": {
+        "yingchuan", "yingshui", "yingchuan_wilds", "changshe", "yingchuan_academy", "songshan_foot", "hilltop_wilds",
+        "huangjin_camp", "guan_camp",  # 官軍大營：FB-184 在四十處之外補的官軍操練點
+    },
+    "dongjun": {"baima_ford", "luzhi_camp", "puyang"},  # 盧植營搬進來當前哨舊址；濮陽是新的
+    "chenliu": {"guandu", "chenliu_city", "jiwu"},  # 新的三處
+    "runan": {"runan", "runan_academy", "runan_market", "runan_wilds", "qiao_county", "cao_manor", "nanyang_huangjin_camp"},
+    # 核心
+    "core": {"deep_mountain", "jade_cave", "lutai"},  # 鹿台是新的
+}
+REMAKE_LOCATIONS = {  # 輿圖重製第 1 批新加的十處（佔位，待 joy）
+    "puyang", "guandu", "chenliu_city", "jiwu", "lutai", "qingzhou_camp", "linzi", "jishui", "donglai_ford", "taishan_foot",
 }
 NEW_LOCATIONS = {
     "loushang_village", "zhuo_militia_hall", "juma_river", "yanshan_foot",
@@ -31,14 +46,36 @@ NEW_LOCATIONS = {
     "luoyang_palace", "dajiangjun_fu", "beimang_hill", "mengjin_ford",
     "nanyang_huangjin_camp", "yu_river", "xinye", "nanyang_wilds",
 }
-CROSS_ROADS = {  # 設計第五節：跨大區的路 → （路的種類, 步行分鐘）
-    frozenset({"zhuo_county", "julu_altar"}): ("官道", 12),
-    frozenset({"juma_river", "xiaquyang"}): ("山路", 16),
-    frozenset({"baima_ford", "changshe"}): ("官道", 15),
-    frozenset({"haozu_fort", "mengjin_ford"}): ("路", 12),
-    frozenset({"luoyang_road", "yingchuan"}): ("官道", 8),
-    frozenset({"hilltop_wilds", "nanyang_road"}): ("官道", 10),
-    frozenset({"luoyang_palace", "nanyang_wilds"}): ("山路", 14),
+CROSS_ROADS = {  # 跨州的路 → （路的種類, 步行分鐘）：新天下量的（輿圖重製第 1 批，待 PM 對）
+    # 外環路（出生州相連，企劃者「也要讓出生區直接相連」）
+    frozenset({"haozu_fort", "mengjin_ford"}): ("路", 11),
+    frozenset({"guangzong", "jishui"}): ("官道", 14),
+    frozenset({"nanyang_road", "taishan_foot"}): ("官道", 14),
+    frozenset({"luoyang_palace", "nanyang_wilds"}): ("山路", 16),
+    # 輻路：出生州 → 內圈
+    frozenset({"luoyang_road", "yingchuan"}): ("官道", 5),
+    frozenset({"guan_camp", "luoyang_road"}): ("路", 3),
+    frozenset({"baima_ford", "mengjin_ford"}): ("官道", 7),
+    frozenset({"hilltop_wilds", "nanyang_road"}): ("官道", 6),
+    frozenset({"nanyang_huangjin_camp", "nanyang_road"}): ("路", 5),
+    frozenset({"nanyang_huangjin_camp", "wan_city"}): ("路", 10),
+    frozenset({"baima_ford", "julu_altar"}): ("官道", 7),
+    frozenset({"baima_ford", "guangzong"}): ("官道", 10),
+    frozenset({"guangzong", "luzhi_camp"}): ("路", 11),
+    frozenset({"guandu", "guangzong"}): ("官道", 9),
+    frozenset({"jishui", "jiwu"}): ("路", 6),
+    frozenset({"qiao_county", "taishan_foot"}): ("官道", 6),
+    # 內環路（中原四郡相連）
+    frozenset({"baima_ford", "changshe"}): ("官道", 6),
+    frozenset({"guandu", "luzhi_camp"}): ("官道", 7),
+    frozenset({"jiwu", "qiao_county"}): ("官道", 6),
+    frozenset({"changshe", "runan_wilds"}): ("官道", 11),
+    frozenset({"hilltop_wilds", "runan_wilds"}): ("路", 8),
+    # 內圈 → 核心（每郡一條）
+    frozenset({"deep_mountain", "songshan_foot"}): ("山路", 5),
+    frozenset({"lutai", "puyang"}): ("山路", 13),
+    frozenset({"chenliu_city", "lutai"}): ("山路", 7),
+    frozenset({"lutai", "runan"}): ("山路", 13),
 }
 
 
@@ -139,10 +176,10 @@ def _shortest(content, src: str, dst: str) -> float:
     return shortest_routes(state, content, set(content.locations))[dst].minutes
 
 
-def test_the_map_has_forty_locations_in_five_regions(content):
+def test_the_map_has_its_locations_in_nine_regions(content):
     places = {loc.id for loc in _places(content)}
     assert places == set().union(*REGIONS.values())
-    assert NEW_LOCATIONS <= places
+    assert NEW_LOCATIONS <= places and REMAKE_LOCATIONS <= places
     assert {r.id for r in content.map.regions} == set(REGIONS)
     for loc_id in places:
         assert region_of(content, loc_id).id == _region(loc_id), loc_id
@@ -154,7 +191,7 @@ def test_the_mentors_hut_is_a_short_walk_from_yingchuan(content):
     assert hut.id == content.tutorial.location == "mentor_hut"
     assert [str(c) for c in hut.connections] == ["yingchuan"] and "mentor_hut" in content.locations["yingchuan"].connections
     assert 2.0 <= leg_minutes(content, "mentor_hut", "yingchuan") <= 3.5
-    assert region_of(content, "mentor_hut").id == "yingru"
+    assert region_of(content, "mentor_hut").id == "yingchuan"
 
 
 def test_every_region_is_connected_and_has_a_loop(content):
@@ -191,7 +228,7 @@ def test_hops_inside_a_region_take_two_to_four_minutes(content):
 
 def test_the_longest_trips(content):
     assert 24 <= _shortest(content, "guangzong", "wan_city") <= 42  # 設計：約 30～35 分鐘，±20%
-    assert 36 <= _shortest(content, "zhuo_county", "wan_city") <= 54  # 設計：約 45 分鐘，±20%
+    assert 36 <= _shortest(content, "zhuo_county", "wan_city") <= 54  # 設計：約 45 分鐘，±20%（新天下約 40）
 
 
 def test_locations_keep_room_for_their_labels(content):
@@ -202,7 +239,7 @@ def test_locations_keep_room_for_their_labels(content):
 
 
 def test_new_locations_have_a_description_and_tags(content):
-    for loc_id in NEW_LOCATIONS:
+    for loc_id in NEW_LOCATIONS | REMAKE_LOCATIONS:
         loc = content.locations[loc_id]
         assert len(loc.description) >= 20 and loc.tags, loc_id
 
@@ -237,9 +274,9 @@ FIGURE_PLACES = {  # 設計 7.3、第一季設計 8.1
     "liubei": "zhuo_county", "guanyu": "zhuo_county", "zhangfei": "zhuo_county", "taoqian": "runan_market",
     "bocai": "huangjin_camp", "zhangmancheng": "nanyang_huangjin_camp", "zhaohong": "nanyang_huangjin_camp",  # 人物誌 §6
 }
-JOIN_POINTS = {  # 設計 7.2、第一季設計 5.1
-    "guan": {"changshe", "wan_city", "luzhi_camp"},
-    "huang": {"huangjin_camp", "julu_altar", "nanyang_huangjin_camp"},
+JOIN_POINTS = {  # 設計 7.2、第一季設計 5.1；輿圖重製第 1 批：官軍、黃巾的投靠點只在外圈出生州，兩州各一處（企劃者）
+    "guan": {"dajiangjun_fu", "wan_city"},
+    "huang": {"julu_altar", "qingzhou_camp"},
     "haoqiang": {"zhuo_militia_hall", "cao_manor", "haozu_fort"},
 }
 
@@ -248,7 +285,7 @@ def test_figures_stand_where_the_design_puts_them(content):
     assert {cid: content.characters[cid].talk_at for cid in FIGURE_PLACES} == FIGURE_PLACES
 
 
-def test_each_faction_joins_at_three_places(content):
+def test_each_faction_joins_where_the_design_puts_it(content):
     assert {f.id: set(f.join_at) for f in content.scenario.factions} == JOIN_POINTS
 
 
@@ -274,32 +311,34 @@ def test_old_tag_matched_events_on_the_new_places_are_approved(content):
     地圖重排時新地點的 tags 可能撞上舊事件（例如 山林 的玉璽挖寶、水路／渡口 的封鎖），那些劇情是為特定地方寫的。
     能被任何行動（探索／遊歷／交友）抽到、而且不是靠 locations 點名到新地點的事件，集合必須剛好等於核准名單
     （只加 locations 沒拿掉 tags 的事件仍會靠 tags 撞進來，這裡一樣抓得到）。"""
-    matched = {
-        e.id
-        for e in content.events.values()
-        if e.actions
-        and any(
-            loc_id not in e.locations and event_matches_location(e, content.locations[loc_id])
-            for loc_id in NEW_LOCATIONS
-        )
-    }
-    assert matched == APPROVED_TAG_MATCHED_EVENTS
+    for places in (NEW_LOCATIONS, REMAKE_LOCATIONS):  # 輿圖重製第 1 批新加的十處也一樣（撞上的都在核准名單裡）
+        matched = {
+            e.id
+            for e in content.events.values()
+            if e.actions
+            and any(
+                loc_id not in e.locations and event_matches_location(e, content.locations[loc_id])
+                for loc_id in places
+            )
+        }
+        assert matched <= APPROVED_TAG_MATCHED_EVENTS, sorted(matched - APPROVED_TAG_MATCHED_EVENTS)
+        assert places is REMAKE_LOCATIONS or matched == APPROVED_TAG_MATCHED_EVENTS
 
 
 def test_rivers_widen_downstream_and_the_yellow_river_is_yellow(content):
     """輿圖美術設計第四節：河流寫成物件，從上游寫到下游；只有黃河是土黃色。"""
     rivers = {river.name: river for river in content.map.rivers}
-    assert list(rivers) == ["黃河", "潁水", "淯水", "拒馬河"]
+    assert list(rivers) == ["黃河", "潁水", "淯水", "拒馬河", "濟水"]  # 濟水：輿圖重製第 1 批，青州那一條
     assert {name for name, river in rivers.items() if river.color == "yellow"} == {"黃河"}
     assert all(river.width[0] < river.width[1] for river in rivers.values())
 
 
 def test_terrain_follows_eastern_han_geography(content):
-    """輿圖美術設計第四節的初版擺法：七條有名字的山、兩段沒名字的（太行山南端的丘陵、嵩山南段）、四片林地，
-    指北針在右側中段的空白，紙色底。"""
+    """輿圖美術設計第四節的擺法，輿圖重製第 1 批照新天下重擺（第 2 批重畫天下圖時再定）：六條有名字的山（燕山、太行山、呂梁山、
+    伏牛山、桐柏山，加青州的泰山）、一段沒名字的（嵩山南段）、六片林地，指北針在左上角的空白，紙色底。"""
     m = content.map
     named = [t.name for t in m.terrain if t.name]
-    assert named == ["燕山", "太行山", "呂梁山", "邙山", "嵩山", "伏牛山", "桐柏山"]
-    assert [t.kind for t in m.terrain].count("forest") == 4
+    assert named == ["燕山", "太行山", "呂梁山", "伏牛山", "桐柏山", "泰山"]
+    assert [t.kind for t in m.terrain].count("forest") == 6
     assert len(m.terrain) == 13
-    assert m.compass == (845, 680) and m.background == "#E9E2CC"
+    assert m.compass == (50, 50) and m.background == "#E9E2CC"

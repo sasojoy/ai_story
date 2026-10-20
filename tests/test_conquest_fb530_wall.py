@@ -1,14 +1,25 @@
 """FB-530：基準超過 100（裁決 5 分母只算中立之後才有）時，推一條線不該把偏移往回扣（計畫 6.2）。
 
-偏移是「其他來源累積的量」，夾值只在顯示那一刻做；推過牆的那一截丟掉（往牆那一邊推、未夾的值已經在牆外時整個丟掉）。"""
+偏移是「其他來源累積的量」，夾值只在顯示那一刻做；推過牆的那一截丟掉（往牆那一邊推、未夾的值已經在牆外時整個丟掉）。
+輿圖重製第 1 批（新天下）：南陽是官軍的出生州、不算進任何一條線；這幾條把 QA 那一季的 v1 南陽那條線（三塊中立加淯水河畔）原樣擺回來
+（conquest_kit.conquest_game_with），量的是同一條規則。"""
 from __future__ import annotations
 
 import pytest
 
-from conquest_kit import conquest_game
+from conquest_kit import conquest_game_with
 from tianxia import conquest, rules
 
 pytestmark = pytest.mark.slow  # 建 Game、載正式內容
+
+V1_NANYANG = {  # v1 地圖的南陽那條線
+    "nanyang_road": ("neutral", "nanyang"), "nanyang_wilds": ("neutral", "nanyang"), "lulin_zhai": ("neutral", "nanyang"),
+    "yu_river": ("guan", "nanyang"),
+}
+
+
+def conquest_game(profile: str = "season21"):
+    return conquest_game_with(V1_NANYANG, profile)
 
 
 def _value(game, line):

@@ -404,12 +404,16 @@ def test_deliver_goes_to_whoever_commands_now(on):
     assert option.label == "把降卒帶給朱儁"  # 主將換人：交給接手的人
     for fid in ("huangfusong", "zhujun"):  # 潁川一個官軍人物都沒有：交給那條戰線上的官軍投靠點
         game.state.world.figures[fid] = figures.state_of(game.state, on, fid).model_copy(update={"status": "retired"})
+    # 輿圖重製第 1 批：投靠點只在外圈，中原那一條線上沒有官軍的投靠點——交不出去（程式照「那條戰線上的投靠點」找，第 5 批接縫再定）
+    assert "opp:deliver:guan_deserter" not in _ids(game)
+    p.opp_fronts["guan_deserter"], p.location = "nanyang", "wan_city"  # 南陽那條舊線上還有宛城：量的是同一條退路
+    game.state.world.figures["sunjian"] = figures.state_of(game.state, on, "sunjian").model_copy(update={"status": "retired"})
     option = next(o for o in game.options(odds=False) if o.id == "opp:deliver:guan_deserter")
     assert option.label == "把降卒帶給官軍的主將"
-    before = rules.trend_value(game.state, on, "yingru")
+    before = rules.trend_value(game.state, on, "nanyang")
     msgs = game.choose("opp:deliver:guan_deserter")
     assert msgs[-1] == "（機緣「降卒的消息」完成。）" and p.opp_items == {}
-    assert rules.trend_value(game.state, on, "yingru") == before - 1  # 往官軍偏 1
+    assert rules.trend_value(game.state, on, "nanyang") == before - 1  # 往官軍偏 1
 
 
 def test_deliver_needs_the_commander_to_be_there(on):
@@ -699,10 +703,10 @@ def test_timing_options_are_only_for_the_own_faction(on):
 def test_clue_heard_once_in_its_region(on):
     game = _game(on, faction="guan")
     rng = mock.Mock(random=mock.Mock(return_value=0.0), choice=lambda xs: xs[0])
-    assert opportunities.hear_clues(game.state, on, "jizhou", rng) == []  # 荒丘的線索只在潁川汝南
-    first = opportunities.hear_clues(game.state, on, "yingru", rng)
+    assert opportunities.hear_clues(game.state, on, "jizhou", rng) == []  # 荒丘的線索只在潁川（輿圖重製第 1 批：潁川汝南拆成兩州）
+    first = opportunities.hear_clues(game.state, on, "yingchuan", rng)
     assert first and "荒丘那條官道" in first[0]
-    assert opportunities.hear_clues(game.state, on, "yingru", rng) == []  # 只聽一次
+    assert opportunities.hear_clues(game.state, on, "yingchuan", rng) == []  # 只聽一次
 
 
 def test_clue_without_a_region_restriction_is_heard_anywhere(on):

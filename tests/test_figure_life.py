@@ -141,6 +141,7 @@ def test_beating_a_figure_spreads_to_people_in_that_region(c):
 def test_allies_of_the_beaten_side_cool_off(c):
     s = _season(c)
     s.player.affinities["liupi"] = 20
+    figures._ensure(s, c, "liupi").location = "changshe"  # noqa: SLF001  輿圖重製第 1 批：汝南荒野搬進汝南，劉辟先擺回波才那一州（潁川）
     figure_life.spread(s, c, "beat", "bocai", at="huangjin_camp", side="huang", text="打退了波才")
     assert s.player.affinities["liupi"] == 20 + c.config.figure_life.ally_beaten
 
@@ -185,6 +186,7 @@ def test_routing_a_figure_in_the_engine_spreads_the_word(c):
     p = game.state.player
     p.faction = "guan"
     p.location = "huangjin_camp"
+    figures._ensure(game.state, c, "liupi").location = "changshe"  # noqa: SLF001  同上：劉辟擺回潁川
     msgs = game._rout("bocai")
     assert any("聽說了這件事" in m for m in msgs)
     assert p.hearsay["liupi"][0].endswith("打退了波才")  # 同一區的劉辟聽說了

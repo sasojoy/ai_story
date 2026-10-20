@@ -37,7 +37,7 @@ def test_the_base_lists_open_places_roads_and_regions():
 
 def test_the_state_says_who_holds_each_place():
     st = _game().map_state()
-    assert st["places"]["changshe"]["control"] == "guan" and st["places"]["changshe"]["kind"] == "base"
+    assert st["places"]["wan_city"]["control"] == "guan" and st["places"]["wan_city"]["kind"] == "base"  # 輿圖重製第 1 批：大本營在外圈
     assert st["places"]["runan_wilds"]["kind"] == "line" and st["places"]["runan_wilds"]["control"] in ("guan", "huang", "haoqiang")
     assert st["places"]["guangzong"]["kind"] == "fixed"
     assert st["places"]["yingshui"]["control"] is None and st["places"]["yingshui"]["kind"] is None
@@ -83,7 +83,7 @@ def test_the_state_carries_three_ropes_and_the_weeks():
     territory.update(game.state.world, game.content)
     st = game.map_state()
     assert [r["id"] for r in st["ropes"]] == ["yingru", "nanyang", "jizhou"]
-    assert all(r["beads"] for r in st["ropes"]) and st["geju"] is not None
+    assert [bool(r["beads"]) for r in st["ropes"]] == [True, False, False] and st["geju"] is not None  # 舊拔河只剩中原那一條（輿圖重製第 1 批）
     assert st["weeks"][0]["week"] == 1 and st["weeks"][0]["control"]["changshe"] == "guan"
     assert len(st["weeks"]) == st["now_week"]
 

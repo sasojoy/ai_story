@@ -128,13 +128,13 @@ def test_rally_restores_prestige_within_the_shared_daily_cap(real, world):
 
 
 def test_visit_brings_a_beaten_figure_back_sooner(real, world):
-    guan = _player(real, world, "官甲", "guan")
+    guan = _player(real, world, "官甲", "guan", at="wan_city")  # 官軍的大本營（輿圖重製第 1 批：長社改成中原的中立地）
     s = guan.state
     figures._ensure(s, real, "zhujun").prestige = 5  # noqa: SLF001
     figures.defeat(s, real, "zhujun", 5)
     back_at = s.world.figures["zhujun"].back_at
     assert back_at is not None
-    assert "aid:visit:zhujun" in _ids(guan)  # 長社是官軍的大本營
+    assert "aid:visit:zhujun" in _ids(guan)  # 宛城是官軍的大本營
     guan.choose("aid:visit:zhujun")
     assert s.world.figures["zhujun"].back_at < back_at
     assert "aid:visit:zhujun" not in _ids(guan)  # 一天一次

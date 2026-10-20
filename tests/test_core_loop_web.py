@@ -33,12 +33,12 @@ def _bar(game, **S):
 
 
 def test_the_sortie_cell_says_how_many_are_left():
-    bar = _bar(_game("huang", "huangjin_camp"))
+    bar = _bar(_game("huang", "julu_altar"))
     assert "<b>出陣・守</b>" in bar and "今日 5 次" in bar and "零風險" in bar
 
 
 def test_a_used_up_sortie_greys_out():
-    game = _game("huang", "huangjin_camp")
+    game = _game("huang", "julu_altar")
     for _ in range(5):
         game.choose("act:train")
     bar = _bar(game)

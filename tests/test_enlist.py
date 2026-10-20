@@ -38,11 +38,16 @@ def enlisting(on):
     return on
 
 
+JOIN_AT = {"guan": "wan_city", "huang": "julu_altar", "haoqiang": "zhuo_militia_hall"}  # 輿圖重製第 1 批：投靠點只在外圈（v1 在長社投靠）
+
+
 def _joined(content, at="changshe", faction="guan"):
-    game = _game(content, at=at)
+    """在自己陣營的投靠點投靠，再站到 at（預設長社：中原那一條線上、站著黃巾的兵，攻城軍令在那裡打得到）。"""
+    game = _game(content, at=JOIN_AT[faction])
     game.state.player.tutorial_step = len(guide.steps(game.state, content))  # 序章與舊引導都走完了
     game.choose(f"faction:{faction}")
     game.choose("faction:confirm")
+    game.state.player.location = at
     return game
 
 
@@ -101,7 +106,7 @@ def test_a_sect_joined_through_an_event_choice_starts_enlistment(enlisting):
 
 
 def test_enlistment_waits_behind_the_tutorial(enlisting):
-    game = _game(enlisting, at="changshe")
+    game = _game(enlisting, at="wan_city")
     game.state.player.tutorial_step = 1  # 引導還有一步有話的沒走完（序章第 2 步）
     game.choose("faction:guan")
     game.choose("faction:confirm")
@@ -115,7 +120,7 @@ def test_enlistment_waits_behind_the_tutorial(enlisting):
 
 def _joined_mid_tutorial(content):
     """引導還沒走完（tutorial_step 是 1，說書人那一步還在框上）就在長社投靠了官軍。"""
-    game = _game(content, at="changshe")
+    game = _game(content, at="wan_city")
     game.state.player.tutorial_step = 1
     game.choose("faction:guan")
     game.choose("faction:confirm")
@@ -143,7 +148,7 @@ def test_a_pending_outro_is_shown_before_the_recruiter(enlisting):
     """F8：先是引導的步驟、再是結語、最後才是入伍段；「知道了」只收框上那一個。結語還沒按就投靠了：框還是結語，
     按下去之後才輪到引薦人（不然按「知道了」把兩個一起清掉，結語從沒出現過）。"""
     enlisting.tutorial.outro = "去闖吧。"
-    game = _game(enlisting, at="changshe")
+    game = _game(enlisting, at="wan_city")
     game.state.player.tutorial_step = len(guide.steps(game.state, enlisting))
     game.state.player.guide_outro = True
     game.choose("faction:guan")
@@ -216,7 +221,7 @@ def _join_is_the_last_step(content):
     content.tutorial.steps.append(TutorialStep(
         id="t_join", text="去投靠一邊。", done_when=TutorialGoal(condition=Condition(factions=["guan", "huang", "haoqiang"])),
     ))
-    game = _game(content, at="changshe")
+    game = _game(content, at="wan_city")
     game.state.player.tutorial_step = len(guide.steps(game.state, content)) - 1
     return game
 
@@ -251,7 +256,7 @@ def test_no_enlistment_outside_season_one(enlisting):
 
 
 def test_skipping_the_guide_skips_enlistment(enlisting):
-    game = _game(enlisting, at="changshe")
+    game = _game(enlisting, at="wan_city")
     game.skip_tutorial()
     game.choose("faction:guan")
     game.choose("faction:confirm")
@@ -271,7 +276,7 @@ def test_skipping_during_enlistment_skips_the_rest(enlisting):
 
 def test_skipping_after_the_tutorial_but_before_joining_skips_enlistment(enlisting):
     """設計 7.3「略過新手引導＝跳過序章與入伍段」：引導走完、還沒投靠就按「略過」，不是什麼都不發生——之後投靠也不開始入伍段。"""
-    game = _game(enlisting, at="changshe")
+    game = _game(enlisting, at="wan_city")
     game.state.player.tutorial_step = len(guide.steps(game.state, enlisting))
     assert enlist.waiting(game.state, enlisting)
     msgs = game.skip_tutorial()
@@ -285,7 +290,7 @@ def test_skipping_after_the_tutorial_but_before_joining_skips_enlistment(enlisti
 
 def test_skipping_with_the_outro_pending_clears_it_and_enlistment_is_skipped_too(enlisting):
     enlisting.tutorial.outro = "去闖吧。"
-    game = _game(enlisting, at="changshe")
+    game = _game(enlisting, at="wan_city")
     game.state.player.tutorial_step = len(guide.steps(game.state, enlisting))
     game.state.player.guide_outro = True
     assert game.skip_tutorial()
@@ -293,7 +298,7 @@ def test_skipping_with_the_outro_pending_clears_it_and_enlistment_is_skipped_too
 
 
 def test_the_second_press_of_skip_does_nothing(enlisting):
-    game = _game(enlisting, at="changshe")
+    game = _game(enlisting, at="wan_city")
     game.state.player.tutorial_step = len(guide.steps(game.state, enlisting))
     assert game.skip_tutorial()
     entries = len(game.state.journal)
@@ -306,7 +311,7 @@ def test_skipping_stays_a_no_op_where_there_is_nothing_to_skip(enlisting):
         game.state.player.tutorial_step = len(guide.steps(game.state, enlisting))
         return game
 
-    game = idle(_game(enlisting, at="changshe"))
+    game = idle(_game(enlisting, at="wan_city"))
     enlisting.config.season_one = False  # beta 季
     assert not enlist.waiting(game.state, enlisting)
     assert game.skip_tutorial() == [] and not game.state.player.guide_skipped
@@ -324,7 +329,7 @@ def test_a_skipper_from_before_the_enlist_content_never_gets_the_recruiters_hint
     """I2：內容還沒有入伍段時略過的人，`enlist.skip` 存的是 0（＝步數 0 的「走完」）；之後內容加了入伍段，0 不能被讀成
     「入伍段進行中、第一步」——不然他一投靠，「主線與目標」就永遠寫著「（老石）看看本週軍令」。"""
     saved, enlisting.tutorial.enlist = enlisting.tutorial.enlist, None
-    game = _game(enlisting, at="changshe")
+    game = _game(enlisting, at="wan_city")
     game.state.player.tutorial_step = 1  # 新角色一開局已經站在序章之後（Game.new 不走草廬）；這裡要一個引導還沒走完的人
     assert game.skip_tutorial() and game.state.player.guide_skipped and game.state.player.enlist_step == 0
     enlisting.tutorial.enlist = saved  # 之後入伍段內容上線
@@ -370,7 +375,7 @@ def test_every_enlistment_box_says_it_is_never_cut_and_only_the_two_paragraph_st
     game.state.player.enlist_step, game.state.player.enlist_end = 2, True
     box = game.guide_box()
     assert box["end"] is True and box["full"] is True and "paged" not in box
-    narrator = _game(enlisting, at="changshe")
+    narrator = _game(enlisting, at="wan_city")
     narrator.state.player.tutorial_step = 1
     assert "full" not in narrator.guide_box() and "paged" not in narrator.guide_box()
 
@@ -429,7 +434,7 @@ def test_a_recruiter_met_behind_the_tutorial_is_still_met_at_the_join(enlisting)
 
 def test_the_recruiters_words_do_not_wipe_the_narrators_check_rows(enlisting):
     """說書人的框上有上一次行動完成的 ✔ 與獎勵時，入伍段在背後往前一步（只寫引薦人的話進紀錄）不能把那些完成列清掉。"""
-    game = _game(enlisting, at="changshe")
+    game = _game(enlisting, at="wan_city")
     game.state.player.tutorial_step = 1
     game.choose("faction:guan")
     game.choose("faction:confirm")
@@ -439,7 +444,7 @@ def test_the_recruiters_words_do_not_wipe_the_narrators_check_rows(enlisting):
 
 
 def test_a_skipped_guide_writes_no_recruiter_words(enlisting):
-    game = _game(enlisting, at="changshe")
+    game = _game(enlisting, at="wan_city")
     game.skip_tutorial()
     game.choose("faction:guan")
     game.choose("faction:confirm")
@@ -453,7 +458,7 @@ def test_the_recruiters_words_are_not_mistaken_for_a_checkmark_row(enlisting):
 
 
 def test_view_orders_only_counts_for_the_enlistment_step_that_asks_for_it(enlisting):
-    game = _game(enlisting, at="changshe")
+    game = _game(enlisting, at="wan_city")
     game.state.player.tutorial_step = len(guide.steps(game.state, enlisting))  # 初入江湖也走完了：只看入伍段
     before = list(game.state.journal[0].guide)
     game.view_orders()  # 還沒投靠、入伍段還沒開始：什麼都不發生
@@ -506,7 +511,7 @@ def test_begin_if_joined_needs_a_recruiter_and_an_unskipped_guide(enlisting):
 
 def test_skipping_clears_an_ending_that_was_waiting(enlisting):
     """入伍段在引導還沒走完時就走完了（結尾等著、框上是說書人）：這時按「略過」，結尾也一起收掉。"""
-    game = _game(enlisting, at="changshe")
+    game = _game(enlisting, at="wan_city")
     p = game.state.player
     p.tutorial_step = 1  # 引導還沒走完（Game.new 的新角色已經在序章之後）
     p.enlist_step, p.enlist_end = 2, True
@@ -587,7 +592,7 @@ def test_a_free_text_answer_that_joins_a_sect_starts_enlistment(enlisting, world
 def test_old_saves_without_a_faction_enlist_later(enlisting, world):
     from tianxia.engine import Game
 
-    game = _game(enlisting, at="changshe", world=world)
+    game = _game(enlisting, at="wan_city", world=world)
     game.state.player.tutorial_step = len(guide.steps(game.state, enlisting))
     game.state.player.onboarding = 2  # 入伍段上線之前存的
     again = Game(enlisting, game.state, world=world)
@@ -628,7 +633,7 @@ def test_a_veteran_loaded_mid_season_is_not_walked_through_it_when_he_rejoins_ne
     game = Game(enlisting, state, world=world)  # 這一季讀檔：蓋章
     game._reset_player_for_new_season(2)  # 換季：陣營清掉
     assert game.state.player.faction is None and enlist.done(game.state, enlisting)
-    game.state.player.location = "changshe"
+    game.state.player.location = "wan_city"
     game.choose("faction:guan")
     game.choose("faction:confirm")
     # 不重走入伍段，只有再投靠的招呼（新手引導計畫三）：老石的話只有那一句，沒有入營、看戰局那幾段
@@ -657,7 +662,7 @@ def test_a_veteran_first_loaded_after_the_season_already_changed_is_not_walked_t
     loaded.sync(300.0)
     assert loaded.state.player.season_number == 2 and loaded.state.player.faction is None  # 陣營被換季清掉了
     assert enlist.done(loaded.state, enlisting)
-    loaded.state.player.location = "changshe"
+    loaded.state.player.location = "wan_city"
     loaded.choose("faction:guan")
     loaded.choose("faction:confirm")
     assert loaded.guide_box()["key"] == "s_rejoin" and enlist.done(loaded.state, enlisting)  # 不重走，只打招呼（新手引導計畫三）
@@ -678,7 +683,7 @@ def test_the_veteran_marking_leaves_everyone_else_alone(enlisting, world):
     again = Game(enlisting, state, world=world)
     assert again.state.player.enlist_step is None
     again._reset_player_for_new_season(2)  # 下一季（第一季）投靠時才走
-    again.state.player.location = "changshe"
+    again.state.player.location = "wan_city"
     again.choose("faction:guan")
     again.choose("faction:confirm")
     assert again.state.player.enlist_step == 0 and again.guide_box()["speaker"] == "老石"
@@ -704,7 +709,7 @@ def test_a_character_made_while_joys_prologue_was_live_is_neither_converted_nor_
     out.state.player.onboarding = 2
     again = Game(enlisting, out.state, world=world)
     assert again.state.player.enlist_step is None
-    again.state.player.location = "changshe"
+    again.state.player.location = "wan_city"
     again.choose("faction:guan")
     again.choose("faction:confirm")
     assert again.state.player.enlist_step == 0 and again.guide_box()["speaker"] == "老石"
@@ -750,7 +755,7 @@ def test_finished_enlistment_survives_a_season(enlisting):
     game.state.player.enlist_step = 2
     game._reset_player_for_new_season(2)
     assert game.state.player.enlist_step == 2
-    game.state.player.location = "changshe"
+    game.state.player.location = "wan_city"
     game.choose("faction:guan")
     game.choose("faction:confirm")  # 第二季再投靠：不重走（設計 7.1），引薦人只打個招呼（新手引導計畫三）
     assert game.state.player.faction == "guan"
@@ -761,7 +766,7 @@ def test_unfinished_enlistment_restarts_next_season(enlisting):
     game = _joined(enlisting)
     game._reset_player_for_new_season(2)
     assert game.state.player.enlist_step is None
-    game.state.player.location = "changshe"
+    game.state.player.location = "wan_city"
     game.choose("faction:guan")
     game.choose("faction:confirm")  # 沒走完就換季：下一季投靠時從頭走
     assert game.state.player.faction == "guan"
@@ -769,11 +774,11 @@ def test_unfinished_enlistment_restarts_next_season(enlisting):
 
 
 def test_a_skipped_guide_stays_skipped_for_enlistment_next_season(enlisting):
-    game = _game(enlisting, at="changshe")
+    game = _game(enlisting, at="wan_city")
     game.skip_tutorial()
     game._reset_player_for_new_season(2)
     assert enlist.done(game.state, enlisting) and game.state.player.guide_skipped
-    game.state.player.location = "changshe"
+    game.state.player.location = "wan_city"
     game.choose("faction:guan")
     game.choose("faction:confirm")
     assert game.state.player.faction == "guan" and game.guide_box() is None

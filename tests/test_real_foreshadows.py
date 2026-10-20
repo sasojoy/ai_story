@@ -27,27 +27,27 @@ from tianxia.state import FigureState, GameState
 CONTENT_DIR = Path(__file__).parent.parent / "content"
 PLACEHOLDER_TAG = "待joy寫"  # 13 則事件的文字是占位（內容表 4.5：事件文字歸 joy）；事件模型不收多的欄位，所以記在 tags 上
 
-FS_CHAINS = {  # chain: (大事, 陣營, 類型, 戰況看哪條, 片段的大區（4.2）, 片段的來源（4.2）)
+FS_CHAINS = {  # chain: (大事, 陣營, 類型, 戰況看哪條, 片段的大區（4.2；輿圖重製第 1 批潁川汝南拆成潁川、汝南）, 片段的來源（4.2）)
     "fs_changshe_guan": ("changshe_fire", "guan", "天時地利", "yingru",
-                         ["yingru", "yingru", "luoyang", "yingru"], ["action", "event", "action", "talk"]),
+                         ["yingchuan", "yingchuan", "luoyang", "yingchuan"], ["action", "event", "action", "talk"]),
     "fs_changshe_huang": ("changshe_fire", "huang", "推理", "yingru",
-                          ["yingru", "yingru", "yingru", "jizhou"], ["action", "action", "event", "talk"]),
+                          ["runan", "yingchuan", "yingchuan", "jizhou"], ["action", "action", "event", "talk"]),
     "fs_changshe_haoqiang": ("changshe_fire", "haoqiang", "反直覺抉擇", "yingru",
-                             ["yingru", "yingru", "luoyang", "yingru"], ["action", "action", "action", "talk"]),
+                             ["yingchuan", "runan", "luoyang", "runan"], ["action", "action", "action", "talk"]),
     "fs_luzhi_guan": ("luzhi_jailed", "guan", "拼圖", "jizhou",
                       ["jizhou", "jizhou", "luoyang", "luoyang"], ["action", "talk", "action", "action"]),
     "fs_luzhi_huang": ("luzhi_jailed", "huang", "累積", "jizhou",
                        ["jizhou", "jizhou", "luoyang", "luoyang"], ["action", "talk", "action", "action"]),
     "fs_luzhi_haoqiang": ("luzhi_jailed", "haoqiang", "情誼", "jizhou",
-                          ["luoyang", "yingru", "luoyang", "luoyang"], ["action", "action", "action", "talk"]),
+                          ["luoyang", "runan", "luoyang", "luoyang"], ["action", "action", "action", "talk"]),
     "fs_wancheng_guan": ("wancheng", "guan", "情誼", "nanyang",
-                         ["nanyang", "nanyang", "yingru", "yingru"], ["action", "talk", "talk", "action"]),
+                         ["nanyang", "nanyang", "yingchuan", "yingchuan"], ["action", "talk", "talk", "action"]),
     "fs_wancheng_huang": ("wancheng", "huang", "累積", "nanyang",
-                          ["nanyang", "nanyang", "yingru", "nanyang"], ["action", "talk", "action", "action"]),
+                          ["nanyang", "nanyang", "yingchuan", "nanyang"], ["action", "talk", "action", "action"]),
     "fs_wancheng_haoqiang": ("wancheng", "haoqiang", "天時地利", "nanyang",
                              ["nanyang", "nanyang", "luoyang", "nanyang"], ["action", "action", "action", "event"]),
     "fs_zhangjiao_guan": ("zhangjiao_dies", "guan", "推理", "jizhou",
-                          ["jizhou", "jizhou", "yingru", "jizhou"], ["action", "talk", "action", "action"]),
+                          ["jizhou", "jizhou", "yingchuan", "jizhou"], ["action", "talk", "action", "action"]),
     "fs_zhangjiao_huang": ("zhangjiao_dies", "huang", "拼圖", "jizhou",
                            ["jizhou", "jizhou", "nanyang", "nanyang"], ["action", "talk", "action", "event"]),
 }
@@ -238,12 +238,12 @@ def test_real_foreshadows_valid(fs_content):
     texts = [f.text for ch in fs.chains for f in ch.fragments]
     assert any("{風向}" in t for t in texts) and any("{偽裝}" in t for t in texts)
     assert fs.guanyin is not None and (fs.guanyin.side, fs.guanyin.squad_faction) == ("huang", "guan")
-    assert fs.guanyin.regions == ["jizhou", "yingru"] and fs.guanyin.text
+    assert fs.guanyin.regions == ["jizhou", "dongjun", "yingchuan", "runan"] and fs.guanyin.text  # 輿圖重製第 1 批：盧植營搬進東郡
 
 
 @pytest.mark.parametrize("where", ["chain", "event", "figure"])
 def test_front_must_be_a_front_not_just_a_region(where):
-    """front 寫的是戰線（大勢線 yingru／nanyang／jizhou），不是大區：幽州是一個大區、它的戰線是冀州，寫 youzhou
+    """front 寫的是戰線（大勢線 yingru／nanyang／jizhou），不是大區：東郡是一個大區、它的戰線是 yingru，寫 dongjun
     讀戰況時會讀到固定的 50。載入時就擋下（地圖擴充 T1 總審查提的漏洞）。"""
     from tianxia.content import ContentError, validate
     from tianxia.models import FigureChange
@@ -252,12 +252,12 @@ def test_front_must_be_a_front_not_just_a_region(where):
     c.config.server_max_players = 2  # 下面的表照係數 0.2 抄的（見檔頭）；線上的人數上限由 test_content.py 驗
     validate(c)  # 原樣是對的
     if where == "chain":
-        c.foreshadows.chains[0].front = "youzhou"
+        c.foreshadows.chains[0].front = "dongjun"
     elif where == "event":
         next(e for e in c.timetable if e.front is not None).front = "luoyang"
     else:
         outcome = next(o for e in c.timetable for o in e.outcomes.values() if o.figures)
-        outcome.figures["huangfusong"] = FigureChange(fate="重挫", front="youzhou", location="luzhi_camp")
+        outcome.figures["huangfusong"] = FigureChange(fate="重挫", front="dongjun", location="luzhi_camp")
     with pytest.raises(ContentError, match="戰線"):
         validate(c)
 
@@ -360,9 +360,9 @@ def test_every_action_fragment_is_heard_by_its_own_side_in_its_own_region(fs_con
             }
             heard = foreshadow.hear_after_action(game.state, c, f.region, FixedRandom(0.0), world)
             assert heard == [f"你聽到一件事：{foreshadow.fill(game.state, c, ch, f.text, world)}"], (ch.id, i)
-            assert foreshadow.hear_after_action(game.state, c, "youzhou", FixedRandom(0.0), world) == []  # 幽州一則片段也沒有
+            assert foreshadow.hear_after_action(game.state, c, "qingzhou", FixedRandom(0.0), world) == []  # 青州一則片段也沒有
     stranger = fs_game(c, world, "路人", None, "yingchuan")
-    assert foreshadow.hear_after_action(stranger.state, c, "yingru", FixedRandom(0.0), world) == []  # 散人什麼都聽不到
+    assert foreshadow.hear_after_action(stranger.state, c, "yingchuan", FixedRandom(0.0), world) == []  # 散人什麼都聽不到
 
 
 def test_event_fragments_go_to_the_sides_that_can_use_them(fs_content, world):
@@ -444,7 +444,7 @@ def test_low_fame_overhears_talk_fragment(fs_content, world):
     p = game.state.player
     assert p.stats.get("fame", 0) < 15
     leave_unheard(game, c, ("fs_changshe_huang", 3))
-    assert foreshadow.hear_after_action(game.state, c, "yingru", FixedRandom(0.0), world) == []  # 別的大區聽不到
+    assert foreshadow.hear_after_action(game.state, c, "yingchuan", FixedRandom(0.0), world) == []  # 別的大區聽不到
     assert foreshadow.hear_after_action(game.state, c, "jizhou", FixedRandom(0.99), world) == []  # 機率跟別的行動片段一樣
     assert foreshadow.hear_after_action(game.state, c, "jizhou", FixedRandom(0.0), world) == [f"你聽到一件事：聽說張梁說過：{frag.text}"]
     assert p.fragments["fs_changshe_huang"] == [0, 1, 2, 3]
@@ -533,7 +533,7 @@ def test_overheard_uses_stand_in(fs_content, world):
         other = fs_game(c, world, f"官{status}", "guan", "changshe")
         other.state.world.figures["huangfusong"] = FigureState(status=status)
         leave_unheard(other, c, ("fs_changshe_guan", 3))
-        assert foreshadow.hear_after_action(other.state, c, "yingru", FixedRandom(0.0), world) == [
+        assert foreshadow.hear_after_action(other.state, c, "yingchuan", FixedRandom(0.0), world) == [
             f"你聽到一件事：聽說{name}說過：{huangfusong.text}"], status
 
 
@@ -791,7 +791,7 @@ def test_wancheng_haoqiang_only_opens_once_the_showdown_musters(fs_content, worl
 
 
 def test_guanyin_on_a_real_win_against_the_guan_squad(fs_content, world, monkeypatch):
-    """黃巾在冀州（盧植營，那裡的對手是官軍）遊歷打贏，30% 得 1 官銀；落敗不算。"""
+    """黃巾在盧植營（輿圖重製第 1 批搬進東郡；那裡的對手是官軍）遊歷打贏，30% 得 1 官銀；落敗不算。"""
     c = fs_content
     monkeypatch.setattr(c.config, "train_event_chance", 0.0)
     monkeypatch.setattr(team, "fight", lambda *a, **k: EncounterResult(tier="大勝", margin=50, our_power=60, difficulty=1))

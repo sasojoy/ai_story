@@ -57,7 +57,7 @@ def smith():
 
 @pytest.fixture
 def depot():
-    game = _game(at="changshe", bag={"rou_1": 30, "kuai_1": 80, "man_2": 4, "gang_3": 1})
+    game = _game(at="wan_city", bag={"rou_1": 30, "kuai_1": 80, "man_2": 4, "gang_3": 1})
     game.choose("act:donate")
     return game
 
@@ -151,7 +151,7 @@ def test_the_depot_is_a_shop_with_stores_room_and_cells(depot):
     m = server.main_view(depot)
     shop = m["shop"]
     html = run(m, "H.render(); return T.els.app.innerHTML;")
-    assert 'class="shop-layer shop-donate"' in html and "長社・官軍軍需帳" in html and shop["line"] in html
+    assert 'class="shop-layer shop-donate"' in html and "宛城・官軍軍需帳" in html and shop["line"] in html
     assert 'data-act="choose" data-id="donate:back"' in html and "出店" in html
     for name in ("糧秣", "箭矢", "甲冑", "戰馬"):
         assert name in html
@@ -214,7 +214,7 @@ def test_the_server_reads_the_items_list_and_skips_bad_ones():
 
 
 def test_the_jianghu_page_has_one_line_of_stores_under_the_fronts():
-    game = _game(at="changshe", bag={"man_1": 3})
+    game = _game(at="wan_city", bag={"man_1": 3})
     game.donate("man_1", 3)
     m = server.main_view(game)
     html = run(m, 'H.S.tab = "jianghu"; H.render(); return T.els.page.innerHTML;')

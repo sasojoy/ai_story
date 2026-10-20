@@ -128,14 +128,15 @@ def test_switch_off_world_and_screens_look_as_before(real):
     text = game.trends_text()
     assert "黃巾聲勢" in text and not any(name in text for name in ("潁川汝南", "南陽", "冀州", "豪強割據"))
     regions = {r.id: atlas.region_trends(game.state, real, r) for r in real.map.regions}
+    huangjin = [("黃巾聲勢", 25)]  # 輿圖重製第 1 批：九州（外圈洛陽、青州沒有戰線）
     assert regions == {
-        "youzhou": [("黃巾聲勢", 25)], "jizhou": [("黃巾聲勢", 25)], "luoyang": [],
-        "yingru": [("黃巾聲勢", 25)], "nanyang": [("黃巾聲勢", 25)],
+        "luoyang": [], "qingzhou": [], "nanyang": huangjin, "jizhou": huangjin,
+        **dict.fromkeys(("yingchuan", "dongjun", "chenliu", "runan", "core"), huangjin),
     }
     assert "讓黃巾聲勢上升" in atlas.leader_activity(game.state, real, "波才")
     svg = mapview.render_map(game.state, real, "situation")
     for region in real.map.regions:
-        if region.id != "luoyang":
+        if region.trends:  # 沒有戰況的大區（洛陽、青州）不上色
             assert mapview._tint(region.fill, 25) in svg, region.id
 
 
@@ -398,18 +399,18 @@ def test_geju_waits_for_a_season_stamped_with_the_switch_on(real):
 
 
 def test_map_tints_each_region_by_its_front(on):
-    """Review Focus 4：開關開著時每個大區照自己的戰線標值、上色；幽州跟著冀州，洛陽不上色。"""
+    """Review Focus 4：開關開著時每個大區照自己的戰線標值、上色；洛陽、青州不上色（輿圖重製第 1 批：幽州併進冀州，中原四郡與核心算一條）。"""
     game = _game(on)
     s = game.state
     _set_fronts(s, 30, 70, 90)
     regions = {r.id: atlas.region_trends(s, on, r) for r in on.map.regions}
     assert regions == {
-        "youzhou": [("冀州", 90)], "jizhou": [("冀州", 90)], "luoyang": [],
-        "yingru": [("潁川汝南", 30)], "nanyang": [("南陽", 70)],
+        "luoyang": [], "qingzhou": [], "nanyang": [("南陽", 70)], "jizhou": [("冀州", 90)],
+        **dict.fromkeys(("yingchuan", "dongjun", "chenliu", "runan", "core"), [("潁川汝南", 30)]),
     }
     svg = mapview.render_map(s, on, "situation")
     fills = {r.id: r.fill for r in on.map.regions}
-    for region_id, value in (("yingru", 30), ("nanyang", 70), ("jizhou", 90), ("youzhou", 90)):
+    for region_id, value in (("yingchuan", 30), ("nanyang", 70), ("jizhou", 90), ("dongjun", 30)):
         assert mapview._tint(fills[region_id], value) in svg, region_id
     assert "黃巾聲勢" not in svg
 
@@ -419,7 +420,7 @@ def test_map_tints_each_region_by_its_front(on):
 
 @pytest.mark.parametrize("faction, place, squad, moved", [
     ("guan", "changshe", "louluo", {"yingru": 39}),  # 官軍在長社打贏黃巾：潁川往 0 推
-    ("huang", "nanyang_wilds", "jun_bing", {"nanyang": 36}),  # 黃巾在南陽郊野打贏郡國兵：南陽往 100 推
+    ("huang", "wan_city", "jun_bing", {"nanyang": 36}),  # 黃巾在宛城打贏郡國兵：南陽往 100 推（新天下南陽那條舊線上只剩宛城）
     (None, "changshe", "louluo", {"yingru": 39}),  # 散人照地點原本的方向（長社寫 -1）
     ("haoqiang", "changshe", "louluo", {"geju": 11}),  # 豪強：潁川 40 在亂局，推割據、不動潁川
 ])

@@ -22,8 +22,11 @@ def content():
 
 
 def _places(content):
-    """探索得到事件的地點：序章的草廬（Location.prologue_only）不算，那裡的探索是師父安排好的草廬四景。"""
-    return [loc_id for loc_id, loc in content.locations.items() if not loc.prologue_only]
+    """探索得到事件的地點：序章的草廬（Location.prologue_only）不算，那裡的探索是師父安排好的草廬四景；
+    輿圖重製第 1 批新加的佔位地點（事件待 joy 寫，tests/remake_placeholders.py）先不算。"""
+    from remake_placeholders import PENDING_EVENTS
+
+    return [loc_id for loc_id, loc in content.locations.items() if not loc.prologue_only and loc_id not in PENDING_EVENTS]
 
 
 def _always_available(content, loc_id):

@@ -13,17 +13,17 @@
   "guanyin": {
     "side": "huang",
     "squad_faction": "guan",
-    "regions": ["jizhou", "yingru"],
+    "regions": ["jizhou", "dongjun", "yingchuan", "runan"],
     "text": "你從官軍的行囊裡摸出一小錠官銀，悄悄收進懷裡。"
   },
   "chains": [
     {
       "id": "fs_changshe_guan", "event": "changshe_fire", "side": "guan", "kind": "天時地利", "front": "yingru",
       "fragments": [
-        {"region": "yingru", "source": "action", "text": "黃巾在長社城外紮營，營帳全搭在去年沒割的荒草坡上，風一吹，草浪一直漫到營門口。"},
-        {"region": "yingru", "source": "event", "event": "fs_ev_boatman", "text": "「這時節的大風，都是半夜從{風向}邊刮過來的，刮起來連船都拴不住。」"},
+        {"region": "yingchuan", "source": "action", "text": "黃巾在長社城外紮營，營帳全搭在去年沒割的荒草坡上，風一吹，草浪一直漫到營門口。"},
+        {"region": "yingchuan", "source": "event", "event": "fs_ev_boatman", "text": "「這時節的大風，都是半夜從{風向}邊刮過來的，刮起來連船都拴不住。」"},
         {"region": "luoyang", "source": "action", "text": "靈台的太史私下說，今年五月夜裡多大風，風從{風向}來。"},
-        {"region": "yingru", "source": "talk", "character": "huangfusong", "stand_in": "zhujun", "topic": "問起破敵之策", "affinity_min": 20,
+        {"region": "yingchuan", "source": "talk", "character": "huangfusong", "stand_in": "zhujun", "topic": "問起破敵之策", "affinity_min": 20,
          "text": "「兵有奇變，不在眾寡。賊依草結營，若有引火之物，一夜可破。」"}
       ],
       "final": {
@@ -41,9 +41,9 @@
       "id": "fs_changshe_huang", "event": "changshe_fire", "side": "huang", "kind": "推理", "front": "yingru",
       "invalid_if": {"figure_out": "bocai"},
       "fragments": [
-        {"region": "yingru", "source": "action", "text": "汝南的油坊這幾天被官軍包了，膏油一車一車往長社送。"},
-        {"region": "yingru", "source": "action", "text": "長社城頭這幾夜堆了好些乾葦，捆得整整齊齊，不像是要燒飯的。"},
-        {"region": "yingru", "source": "event", "event": "fs_ev_boatman", "text": "「前兩天官軍把我叫去，問的全是颳風的事。這時節夜裡的風都從{風向}邊來。」"},
+        {"region": "runan", "source": "action", "text": "汝南的油坊這幾天被官軍包了，膏油一車一車往長社送。"},
+        {"region": "yingchuan", "source": "action", "text": "長社城頭這幾夜堆了好些乾葦，捆得整整齊齊，不像是要燒飯的。"},
+        {"region": "yingchuan", "source": "event", "event": "fs_ev_boatman", "text": "「前兩天官軍把我叫去，問的全是颳風的事。這時節夜裡的風都從{風向}邊來。」"},
         {"region": "jizhou", "source": "talk", "character": "zhangliang", "topic": "問起兵法", "affinity_min": 0,
          "text": "「紮營先看風。草深的地方不能住人，要住就住上風處。」"}
       ],
@@ -61,10 +61,10 @@
     {
       "id": "fs_changshe_haoqiang", "event": "changshe_fire", "side": "haoqiang", "kind": "反直覺抉擇", "front": "yingru",
       "fragments": [
-        {"region": "yingru", "source": "action", "text": "長社城裡的官軍已經在殺馬吃了。"},
-        {"region": "yingru", "source": "action", "text": "波才的人在汝南四處搶糧，連來年的種子都搶。"},
+        {"region": "yingchuan", "source": "action", "text": "長社城裡的官軍已經在殺馬吃了。"},
+        {"region": "runan", "source": "action", "text": "波才的人在汝南四處搶糧，連來年的種子都搶。"},
         {"region": "luoyang", "source": "action", "text": "大司農的倉吏說，往潁川的軍糧扣在半路，等一道蓋印的公文。"},
-        {"region": "yingru", "source": "talk", "character": "caocao", "topic": "談起糧草", "affinity_min": 0,
+        {"region": "runan", "source": "talk", "character": "caocao", "topic": "談起糧草", "affinity_min": 0,
          "text": "「打仗缺的是糧。手上有糧的人，兩邊都得對他客氣。」"}
       ],
       "final": {
@@ -130,7 +130,7 @@
       "id": "fs_luzhi_haoqiang", "event": "luzhi_jailed", "side": "haoqiang", "kind": "情誼", "front": "jizhou",
       "fragments": [
         {"region": "luoyang", "source": "action", "text": "太學的諸生在議論：盧中郎若真因為不肯行賄下獄，天下讀書人的心就寒了。"},
-        {"region": "yingru", "source": "action", "text": "汝南的士人說，本初公子最看重的是名聲。四世三公的門楣，他比誰都看得重。"},
+        {"region": "runan", "source": "action", "text": "汝南的士人說，本初公子最看重的是名聲。四世三公的門楣，他比誰都看得重。"},
         {"region": "luoyang", "source": "action", "text": "袁本初在大將軍府走動得勤，何進的話，他說得上三分。"},
         {"region": "luoyang", "source": "talk", "character": "yuanshao", "topic": "談起時局", "affinity_min": 0,
          "text": "「宦官弄權，忠良受辱，袁家世受國恩，豈能坐視？只是……此事牽連甚廣。」"}
@@ -156,9 +156,9 @@
         {"region": "nanyang", "source": "action", "text": "孫司馬帶來的江東子弟打起仗來不要命，說是要讓中原人看看江東的本事。"},
         {"region": "nanyang", "source": "talk", "character": "sunjian", "topic": "問起江東", "affinity_min": 0,
          "text": "「我十七歲在錢唐單刀趕走海賊，那時就知道，打仗第一個衝上去的人才有名字。」"},
-        {"region": "yingru", "source": "talk", "character": "zhujun", "topic": "問起南陽", "affinity_min": 0,
+        {"region": "yingchuan", "source": "talk", "character": "zhujun", "topic": "問起南陽", "affinity_min": 0,
          "text": "「孫文臺勇則勇矣，就怕他衝得太前面，沒人跟得上。給他一隊肯跟著他的人，他什麼城都上得去。」"},
-        {"region": "yingru", "source": "action", "text": "宛城東北角的城牆年久失修，雨後塌過一回，補的是新土。"}
+        {"region": "yingchuan", "source": "action", "text": "宛城東北角的城牆年久失修，雨後塌過一回，補的是新土。"}
       ],
       "final": {
         "location": "wan_city", "label": "請纓",
@@ -190,7 +190,7 @@
         {"region": "nanyang", "source": "action", "text": "南陽黃巾營的糧只夠吃到秋天。趙將軍每天親自去數糧袋。"},
         {"region": "nanyang", "source": "talk", "character": "zhaohong", "topic": "問起糧", "affinity_min": 0,
          "text": "「城牆再高，沒糧也守不過一個月。我當郡兵那幾年，看過太多城是餓開的。」"},
-        {"region": "yingru", "source": "action", "text": "往南陽的糧要走荒丘那條官道，官軍的巡騎常在那裡截。"},
+        {"region": "yingchuan", "source": "action", "text": "往南陽的糧要走荒丘那條官道，官軍的巡騎常在那裡截。"},
         {"region": "nanyang", "source": "action", "text": "城裡的人說，官軍圍城最怕拖，拖到秋收他們的兵就要散。",
          "versions": {
            "甲": "城裡的人說，官軍圍城最怕拖，拖到秋收他們的兵就要散。",
@@ -229,7 +229,7 @@
         {"region": "jizhou", "source": "action", "text": "大賢良師已經一個月沒在壇前露面了，夜裡常聽見他咳。"},
         {"region": "jizhou", "source": "talk", "character": "luzhi", "stand_in": "dongzhuo", "topic": "問起廣宗", "affinity_min": 0,
          "text": "「張角的藥要是斷了，廣宗不攻自破。」"},
-        {"region": "yingru", "source": "action", "text": "嵩山的採藥人說，今年有人出高價收一種只長在背陰崖下的草，收了就往北送。"},
+        {"region": "yingchuan", "source": "action", "text": "嵩山的採藥人說，今年有人出高價收一種只長在背陰崖下的草，收了就往北送。"},
         {"region": "jizhou", "source": "action", "text": "白馬津的船家說，這陣子往北渡河的{偽裝}特別多，船錢給得也大方。"}
       ],
       "final": {

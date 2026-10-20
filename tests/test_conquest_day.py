@@ -33,10 +33,10 @@ def test_per_day_follows_neutral_count_and_season_length():
     game = conquest_game("season21")
     w, c = game.state.world, game.content
     neutral = sum(1 for loc in conquest.blocks(c) if conquest.start_kind(w, c, loc) == conquest.NEUTRAL)
-    assert neutral == 10
-    assert conquest_day.per_day(c, w) == 1  # 10 ÷ 21 ＜ 0.5（設計 4.2：21 天的季要 11 塊以上才 2 塊）
-    c.config.conquest.two_per_day_ratio = 0.4
-    assert conquest_day.per_day(c, w) == 2
+    assert neutral == 23  # 輿圖重製第 1 批（新天下）：中原四郡與核心全是中立（v1 是 10 塊）
+    assert conquest_day.per_day(c, w) == 2  # 23 ÷ 21 ≥ 0.5（設計 4.2：21 天的季 11 塊以上就 2 塊）
+    c.config.conquest.two_per_day_ratio = 1.2
+    assert conquest_day.per_day(c, w) == 1
     weekend = conquest_game("weekend")
     assert conquest_day.per_day(weekend.content, weekend.state.world) == 2  # 週末 2.5 天一律 2 塊
 

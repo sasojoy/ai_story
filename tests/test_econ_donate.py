@@ -1,5 +1,6 @@
 """素材與經濟（docs/superpowers/specs/2026-10-15-素材與經濟-design.md）第六節：自家陣營的大本營捐軍備。
-正式內容、週末設定（Config.economy 預設開）。長社是官軍的大本營、在潁川汝南戰線上（開季 40）；宛城是官軍的投靠點、不在戰線上（南陽）；
+正式內容、週末設定（Config.economy 預設開）。宛城是官軍的大本營、在南陽那條線上（開季 35）；大將軍府是官軍的投靠點、不在戰線上（洛陽）；
+輿圖重製第 1 批：投靠點只在外圈（v1 量的是長社與宛城）；
 曹氏莊院是豪強的大本營。"""
 from __future__ import annotations
 
@@ -14,7 +15,7 @@ from tianxia.sqlite_world import open_world
 TW_MIDNIGHT = 16 * 3600  # UTC 16:00＝台灣 00:00（1970-01-02）
 
 
-def _game(faction="guan", at="changshe", bag=None, profile="weekend", third_party=False, **econ):
+def _game(faction="guan", at="wan_city", bag=None, profile="weekend", third_party=False, **econ):
     c = real_content(profile)
     c.config.auto_open_first_season = True
     if third_party:
@@ -37,8 +38,8 @@ def _ids(game):
 
 def test_only_your_own_base_takes_donations():
     assert "act:donate" in _ids(_game())
-    assert "act:donate" in _ids(_game(at="wan_city"))  # 不在戰線上的投靠點也是大本營
-    assert "act:donate" not in _ids(_game(at="huangjin_camp"))  # 別人的大本營
+    assert "act:donate" in _ids(_game(at="dajiangjun_fu"))  # 不在戰線上的投靠點也是大本營
+    assert "act:donate" not in _ids(_game(at="julu_altar"))  # 別人的大本營
     assert "act:donate" not in _ids(_game(at="yingchuan"))  # 不是大本營
     assert "act:donate" not in _ids(_game(faction=None))  # 散人
 
@@ -55,9 +56,9 @@ def test_donating_from_the_menu_records_points_stores_and_pushes_the_front():
     assert p.materials == {"rou_3": 1}
     assert w.armaments == {"guan": {"柔": 40}}
     assert p.contrib - contrib == 40  # 照份量記貢獻；推大勢不另記
-    assert w.trends["yingru"] == 39  # 40 × 0.05 × 五折＝1：往官軍那頭
+    assert w.trends["nanyang"] == 34  # 40 × 0.05 × 五折＝1：往官軍那頭
     assert "貢獻 +40" in msgs and "戰馬 +40" in msgs
-    assert game.state.journal[0].title == f"{economy.DONATE_TITLE}・長社"
+    assert game.state.journal[0].title == f"{economy.DONATE_TITLE}・宛城"
 
 
 def test_the_daily_cap_takes_only_what_fits_and_keeps_the_rest():
@@ -95,7 +96,7 @@ def test_a_season_without_the_season_one_rules_only_stores():
 
 
 def test_rangers_and_other_bases_are_refused_and_nothing_moves():
-    for game in (_game(faction=None, bag={"rou_1": 5}), _game(at="huangjin_camp", bag={"rou_1": 5})):
+    for game in (_game(faction=None, bag={"rou_1": 5}), _game(at="julu_altar", bag={"rou_1": 5})):
         assert game.donate("rou_1", 5) == [NOT_NOW]
         assert game.state.player.materials == {"rou_1": 5} and game.state.world.armaments == {}
 
@@ -122,7 +123,7 @@ def test_the_quartermasters_book_is_a_shop():
     assert game.shop_view() is None
     game.choose("act:donate")
     view = game.shop_view()
-    assert view["shop"] == "donate" and view["back"] == "donate:back" and view["sign"] == "長社・官軍軍需帳"
+    assert view["shop"] == "donate" and view["back"] == "donate:back" and view["sign"] == "宛城・官軍軍需帳"
     assert view["line"] in game.content.shop_lines["donate"]["enter"]
     assert view["room"] == 100 and view["cap"] == 100
     assert [s["name"] for s in view["stock"]] == ["糧秣", "箭矢", "甲冑", "戰馬"]

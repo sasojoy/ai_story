@@ -72,11 +72,11 @@ def test_server_bots_gather_more_when_short_of_materials():
 
 
 def test_server_bots_hold_their_camp_for_the_defend_order_and_the_gentry_stir():
-    huang = _game("huang", "huangjin_camp")
+    huang = _game("huang", "julu_altar")  # 黃巾的大本營（輿圖重製第 1 批：v1 是黃巾別部營寨）
     huang.state.world.orders = []  # 開季自動發的軍令先拿掉，只看這一道守城
     plain = _score(huang, "act:train")
-    huang.state.world.orders.append(Order(id="1:huang:defend:yingru", template="defend", faction="huang", week=1,
-                                          front="yingru", quota=99, text=""))
+    huang.state.world.orders.append(Order(id="1:huang:defend:jizhou", template="defend", faction="huang", week=1,
+                                          front="jizhou", quota=99, text=""))
     assert _score(huang, "act:train") == pytest.approx(plain + bot_policy.ORDER_SCORE)
     gentry = _game("haoqiang", "runan_wilds")
     assert _score(gentry, "act:train") == bot_policy.STIR_SCORE

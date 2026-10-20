@@ -1,6 +1,6 @@
 """傳聞分層（一）：聽得到什麼（計畫 2026-10-06-傳聞分層-1-聽得到什麼）。
 
-用真實內容（content/）：要驗的是真實的五個大區（潁川汝南、南陽、冀州、幽州、洛陽）、地點與陣營。每個測試拿自己的一份
+用真實內容（content/）：要驗的是真實的大區（輿圖重製第 1 批之後是九州：潁川、汝南、東郡、陳留、核心、洛陽、南陽、冀州、青州）、地點與陣營。每個測試拿自己的一份
 （conftest.real_content 的複本），開關在 fixture 裡才打開；開關開著的季是「蓋了章」的（auto_open_first_season 開出來的季
 照當下的 Config 蓋章）。週末設定（季長 2.5 天）的季曆一天是 86400 ÷ 33.6 ≈ 2571 個世界秒。"""
 from __future__ import annotations
@@ -81,10 +81,10 @@ def test_world_news_reaches_everyone_and_faction_news_only_its_own_side(on):
 
 
 def test_local_news_is_heard_only_inside_its_region(on):
-    game = _game(on, at="yingchuan")  # 潁川汝南
+    game = _game(on, at="yingchuan")  # 潁川
     here = _rumor(game, "長社一帶有人鬧事。", "changshe")
     there = _rumor(game, "宛城一帶有人鬧事。", "wan_city")
-    assert (here.region, there.region) == ("yingru", "nanyang")
+    assert (here.region, there.region) == ("yingchuan", "nanyang")
     assert _hears(game, here) and not _hears(game, there)
     game.state.player.location = "wan_city"  # 走進南陽：聽到南陽的，潁川的就聽不到了
     assert not _hears(game, here) and _hears(game, there)
@@ -164,7 +164,7 @@ def test_can_hear_still_answers_the_faction_and_name_half(on):
 
 
 def _on_the_road(game, dest="luoyang_road"):
-    """從潁川（潁川汝南）往洛陽官道（洛陽）出發，停在半路上（還沒抵達）。"""
+    """從潁川郡（潁川）往洛陽官道（洛陽）出發，停在半路上（還沒抵達）。"""
     game.choose(f"move:{dest}")
     assert game.state.player.journey is not None
     return game
@@ -172,7 +172,7 @@ def _on_the_road(game, dest="luoyang_road"):
 
 def test_on_the_road_both_ends_of_the_leg_count(on):
     game = _on_the_road(_game(on, at="yingchuan"))
-    assert rules.here_regions(game.state, on) == {"yingru", "luoyang"}
+    assert rules.here_regions(game.state, on) == {"yingchuan", "luoyang"}
     behind = _rumor(game, "長社一帶有人鬧事。", "changshe")
     ahead = _rumor(game, "洛陽宮裡出了事。", "luoyang_palace")
     elsewhere = _rumor(game, "宛城一帶有人鬧事。", "wan_city")
@@ -230,7 +230,7 @@ def _story_marks(game) -> dict[str, str]:
 
 def test_the_map_marks_only_places_you_can_hear(on):
     game = _game(on, "甲", "guan", at="yingchuan")
-    _rumor(game, "長社一帶有人鬧事。", "changshe")  # 潁川汝南：人就在這一區
+    _rumor(game, "長社一帶有人鬧事。", "changshe")  # 潁川：人就在這一區
     _rumor(game, "宛城一帶有人鬧事。", "wan_city")  # 南陽：別的大區
     _rumor(game, "鉅鹿出了大事。", "julu_altar", layer="world")  # 天下大事：人人聽得到
     _rumor(game, "黃巾在盧植營外佈了暗哨。", "luzhi_camp", layer="faction", faction="huang")  # 敵方的軍情
@@ -317,7 +317,7 @@ def test_the_news_page_splits_rumors_into_four_layers(on):
     game.state.world.rumors.append(Rumor(time=0.0, text="只說給甲聽的。", layer="personal", character="甲"))
     assert [layer["id"] for layer in game.rumor_layers()] == ["world", "faction", "local", "personal"]
     layers = _layers(game)
-    assert [layers[k]["title"] for k in layers] == ["天下大事", "陣營軍情", "潁川汝南的傳聞（最近 3 天）", "個人線索"]
+    assert [layers[k]["title"] for k in layers] == ["天下大事", "陣營軍情", "潁川的傳聞（最近 3 天）", "個人線索"]
     assert "鉅鹿出了大事。" in layers["world"]["body"]
     assert "守長社" in layers["faction"]["body"] and "圍長社" not in layers["faction"]["body"]
     assert "長社一帶" in layers["local"]["body"] and "宛城一帶" not in layers["local"]["body"]
@@ -404,7 +404,7 @@ def test_on_the_road_the_local_layer_names_both_regions(on):
     game = _on_the_road(_game(on, at="yingchuan"))
     _rumor(game, "洛陽宮裡出了事。", "luoyang_palace")
     local = _layers(game)["local"]
-    assert local["title"] == "洛陽、潁川汝南的傳聞（最近 3 天）" and "洛陽宮裡出了事。" in local["body"]  # 照地圖的大區順序
+    assert local["title"] == "洛陽、潁川的傳聞（最近 3 天）" and "洛陽宮裡出了事。" in local["body"]  # 照地圖的大區順序
 
 
 def test_heard_clues_are_personal_and_only_yours(on):
@@ -466,7 +466,7 @@ def test_foreshadow_fragments_in_the_personal_layer_are_unchanged_and_come_befor
     game.state.player.fragments[chain.id] = [0]
     fragments = foreshadow.heard_texts(game.state, on, game.world)
     assert len(fragments) == 1 and _personal(game) == fragments  # 沒聽過機緣的線索：跟以前一模一樣
-    clue = _hear(game, "yingru").removeprefix(journal.FRAGMENT_PREFIX)
+    clue = _hear(game, "yingchuan").removeprefix(journal.FRAGMENT_PREFIX)
     assert _personal(game) == [*fragments, clue]  # 伏筆片段照舊在前，機緣的線索接在後面
     assert foreshadow.heard_texts(game.state, on, game.world) == fragments  # 伏筆那一條讀的東西沒被動到
 
@@ -476,7 +476,7 @@ def test_personal_rumors_stay_first_then_fragments_then_opportunity_clues(on):
     game.state.world.rumors.append(Rumor(time=3.0, text="只說給甲聽的。", layer="personal", character="甲"))
     chain = next(c for c in on.foreshadows.chains if c.side == "guan" and c.fragments)
     game.state.player.fragments[chain.id] = [0]
-    clue = _hear(game, "yingru").removeprefix(journal.FRAGMENT_PREFIX)
+    clue = _hear(game, "yingchuan").removeprefix(journal.FRAGMENT_PREFIX)
     lines = _personal(game)
     assert lines[0].endswith("只說給甲聽的。") and lines[-1] == clue and len(lines) == 3
 
@@ -484,7 +484,7 @@ def test_personal_rumors_stay_first_then_fragments_then_opportunity_clues(on):
 def test_a_finished_opportunitys_clue_stays_listed_like_a_finished_chains_fragment(on):
     """完成了的機緣，線索照舊留著（不標記、不收起來）：跟伏筆完成之後片段還在個人線索裡一樣——聽過的線索是一份紀錄。"""
     game = _game(on, "甲", "guan", at="yingchuan")
-    clue = _hear(game, "yingru").removeprefix(journal.FRAGMENT_PREFIX)
+    clue = _hear(game, "yingchuan").removeprefix(journal.FRAGMENT_PREFIX)
     game.state.player.opp_done.append("guan_courier")
     assert _personal(game) == [clue]
 
@@ -498,7 +498,7 @@ def test_a_clue_whose_opportunity_left_the_content_is_skipped_not_a_crash(on):
 def test_after_defecting_the_old_factions_clues_stay_like_fragments(on):
     """叛投時機緣的其餘進度作廢，聽過的線索留著（企劃者裁決 E5.2，同伏筆片段與符文殘片）：個人線索照舊列著。"""
     game = _game(on, "甲", "guan", at="yingchuan")
-    clue = _hear(game, "yingru").removeprefix(journal.FRAGMENT_PREFIX)
+    clue = _hear(game, "yingchuan").removeprefix(journal.FRAGMENT_PREFIX)
     assert _personal(game) == [clue]
     defection.clear_progress(game.state.player)
     assert _personal(game) == [clue]
@@ -509,12 +509,12 @@ def test_after_defecting_through_the_menu_the_old_clues_stay_and_the_old_opportu
     （每一個地點的選單都沒有，荒丘的夜裡也不能埋伏信使）；新陣營的線索照聽、接在後面。"""
     game = _game(on, "甲", "guan", at="hilltop_wilds")
     p = game.state.player
-    old_clue = _hear(game, "yingru").removeprefix(journal.FRAGMENT_PREFIX)  # 荒丘的信使（官軍）
+    old_clue = _hear(game, "yingchuan").removeprefix(journal.FRAGMENT_PREFIX)  # 荒丘的信使（官軍）
     assert p.opp_clues == ["guan_courier"]
     w = game.state.world
     w.time = 23 * calendar.HOUR / calendar.cal_scale(on, w)  # 夜裡：官軍可以埋伏信使
     assert "opp:try:guan_courier" in [o.id for o in game.options(odds=False)]
-    p.location = "huangjin_camp"
+    p.location = "julu_altar"  # 黃巾的投靠點（輿圖重製第 1 批：投靠點只在外圈）
     game.choose("defect:huang")
     game.choose("defect:confirm")
     assert p.faction == "huang"
@@ -554,7 +554,7 @@ def test_the_main_view_sends_the_layers_and_keeps_the_old_list(server_season_one
     view = server.main_view(game)
     assert [layer["id"] for layer in view["rumor_layers"]] == ["world", "faction", "local", "personal"]
     local = view["rumor_layers"][2]
-    assert local["title"] == "潁川汝南的傳聞（最近 3 天）" and "<p>" in local["body"] and "長社一帶有人鬧事。" in local["body"]
+    assert local["title"] == "潁川的傳聞（最近 3 天）" and "<p>" in local["body"] and "長社一帶有人鬧事。" in local["body"]
     assert "長社一帶有人鬧事。" in view["rumors"]  # 舊的一條清單照送（別的地方不會壞）
 
 
@@ -614,7 +614,7 @@ def test_coming_back_after_an_hour_gets_a_summary_in_order(slow, world):
         Rumor(time=1.5, text="本週軍令：守長社。", layer="faction", faction="guan"),
         Rumor(time=1.6, text="昨日升為屯長的有：乙。", layer="faction", faction="guan"),  # 晉升彙整不是要點
         Rumor(time=1.7, text="本週軍令：圍長社。", layer="faction", faction="huang"),  # 敵方的軍情聽不到
-        Rumor(time=2.0, text="長社事。", location="changshe", layer="local", region="yingru"),
+        Rumor(time=2.0, text="長社事。", location="changshe", layer="local", region="yingchuan"),
         Rumor(time=2.2, text="宛城事。", location="wan_city", layer="local", region="nanyang"),  # 別的大區
         Rumor(time=2.5, text="天下事乙。", layer="world"),
     )
@@ -626,7 +626,7 @@ def test_coming_back_after_an_hour_gets_a_summary_in_order(slow, world):
         f"〔天下大事〕{at(1.0)}　天下事甲。",
         f"〔天下大事〕{at(2.5)}　天下事乙。",
         f"〔陣營軍情〕{at(1.5)}　本週軍令：守長社。",
-        f"〔潁川汝南〕{at(2.0)}　長社事。",
+        f"〔潁川〕{at(2.0)}　長社事。",
     ]
     assert journal.AWAY in jia.now_entry_html()  # 江湖頁的「剛剛」先放這一份
 
@@ -666,7 +666,7 @@ def test_the_summary_is_capped_at_eight_lines_and_points_to_the_news_page(slow, 
     jia = _game(slow, "甲", "guan", world=world)
     jia.sync(T0)
     _put(world, *(Rumor(time=float(i), text=f"天下事{i}。", layer="world") for i in range(1, 23)))
-    _put(world, Rumor(time=30.0, text="長社事。", layer="local", region="yingru"))
+    _put(world, Rumor(time=30.0, text="長社事。", layer="local", region="yingchuan"))
     jia.sync(T0 + HOUR)
     entry = _away(jia)
     assert entry.tag == "共 23 則" and len(entry.lines) == 8
@@ -683,7 +683,7 @@ def test_the_cap_keeps_the_sections_in_spec_order(slow, world):
         world,
         *(Rumor(time=1.0 + i, text=f"天下事{i}。", layer="world") for i in range(3)),
         *(Rumor(time=10.0 + i, text=f"【軍令達成】第{i}道。出力最多：甲。", layer="faction", faction="guan") for i in range(4)),
-        *(Rumor(time=20.0 + i, text=f"長社事{i}。", layer="local", region="yingru") for i in range(3)),
+        *(Rumor(time=20.0 + i, text=f"長社事{i}。", layer="local", region="yingchuan") for i in range(3)),
     )
     jia.sync(T0 + HOUR)
     entry = _away(jia)
@@ -700,7 +700,7 @@ def test_the_cap_comes_from_the_config(slow, world):
     _put(world, Rumor(time=1.0, text="天下事甲。", layer="world"),
          Rumor(time=2.0, text="本週軍令：守長社。", layer="faction", faction="guan"),
          Rumor(time=2.5, text="【軍令達成】守長社。出力最多：甲。", layer="faction", faction="guan"),
-         Rumor(time=3.0, text="長社事。", layer="local", region="yingru"))
+         Rumor(time=3.0, text="長社事。", layer="local", region="yingchuan"))
     jia.sync(T0 + HOUR)
     assert [line.split("　")[-1] for line in _away(jia).lines] == [
         "天下事甲。", "【軍令達成】守長社。出力最多：甲。", "另有 2 則沒列出來，到「見聞」的傳聞翻。",  # 放進 2 則（最後一行算在 3 行裡）
@@ -742,7 +742,7 @@ def test_identical_texts_collapse_to_the_newest_one(slow, world):
         Rumor(time=3.0, text="天下事甲。", layer="world"),  # 比第一則新：留這一則，順序在乙後面
         Rumor(time=4.0, text="本週軍令：同一句。", layer="faction", faction="guan"),
         Rumor(time=5.0, text="本週軍令：同一句。", layer="world"),  # 另一段、更新：留這一則，陣營軍情那一則收掉
-        Rumor(time=6.0, text="長社事。", layer="local", region="yingru"),
+        Rumor(time=6.0, text="長社事。", layer="local", region="yingchuan"),
     )
     jia.sync(T0 + HOUR)
     entry = _away(jia)
@@ -751,7 +751,7 @@ def test_identical_texts_collapse_to_the_newest_one(slow, world):
         f"〔天下大事〕{at(2.0)}　天下事乙。",
         f"〔天下大事〕{at(3.0)}　天下事甲。",
         f"〔天下大事〕{at(5.0)}　本週軍令：同一句。",
-        f"〔潁川汝南〕{at(6.0)}　長社事。",
+        f"〔潁川〕{at(6.0)}　長社事。",
     ]
     assert entry.tag == "共 4 則"
 
@@ -770,7 +770,7 @@ def test_several_weeks_away_gets_one_short_summary_without_stale_orders(slow, wo
         if week in (2, 4):
             rows.append(Rumor(time=start(week) + 90, text=f"【軍令達成】第{week}週。出力最多：甲。", layer="faction", faction="guan"))
     rows += [Rumor(time=start(3) + 7, text="天下事甲。", layer="world")]
-    rows += [Rumor(time=start(5) + 9, text="長社事。", layer="local", region="yingru")]
+    rows += [Rumor(time=start(5) + 9, text="長社事。", layer="local", region="yingchuan")]
     _put(world, *rows)
     jia.sync(T0 + HOUR)
     entry = _away(jia)
@@ -874,7 +874,7 @@ def test_asking_along_the_road_only_ever_hears_a_legal_line(on, monkeypatch):
     _rumor(game, "洛陽宮裡出了事。", "luoyang_palace", time=fresh)  # 前面那一區、板上：唯一合法的
     _rumor(game, "官軍在長社佈了暗哨。", "changshe", layer="faction", faction="guan", time=fresh)  # 對方陣營的軍情
     game.state.world.rumors.append(Rumor(  # 寫給別人的線索，帶著這一帶的地點與大區
-        time=fresh, text="只說給丙聽的。", location="changshe", layer="personal", character="丙", region="yingru",
+        time=fresh, text="只說給丙聽的。", location="changshe", layer="personal", character="丙", region="yingchuan",
     ))
     _rumor(game, "洛陽很久以前的大事。", "luoyang_palace", layer="world", time=0.0)  # 撤板了的天下大事
     assert _pool_of_the_ask(_on_the_road(game), monkeypatch) == ["洛陽宮裡出了事。"]
@@ -920,7 +920,7 @@ def test_the_star_window_keeps_world_days_when_the_switch_is_on_but_the_stamp_is
 
 def test_a_factions_local_rumor_needs_both_the_faction_and_the_region(on):
     """陣營與大區兩個條件一起算：官軍的地方軍情，只有人在那一區的官軍聽得到。"""
-    here = _game(on, "甲", "guan", at="yingchuan")  # 官軍、人在潁川汝南
+    here = _game(on, "甲", "guan", at="yingchuan")  # 官軍、人在潁川
     rumor = _rumor(here, "官軍在長社屯糧。", "changshe", layer="local", faction="guan")
     assert _hears(here, rumor)
     assert not _hears(_game(on, "乙", "huang", at="yingchuan"), rumor)  # 同一區的黃巾聽不到

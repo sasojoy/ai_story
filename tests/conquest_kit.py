@@ -10,7 +10,7 @@ from conftest import real_content
 from tianxia import team, territory
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game
-from tianxia.models import Content
+from tianxia.models import BlockDef, Content
 from tianxia.sqlite_world import open_world
 from tianxia.state import SiegeSlot
 
@@ -35,6 +35,19 @@ def _new(content: Content, name: str, world=None) -> Game:
 def conquest_game(profile: str = "season21", name: str = "沈浪", world=None) -> Game:
     """正式內容、開季時就打開領地爭奪的一局（同 test_territory._game 的建法）。"""
     return _new(conquest_rules(real_content(profile)), name, world)
+
+
+def conquest_game_with(blocks: dict[str, tuple[str, str | None]], profile: str = "season21", name: str = "沈浪", world=None) -> Game:
+    """同 conquest_game，開季前先改幾塊區塊（地點 → (種類, 線)）。輿圖重製第 1 批（新天下）之後外圈的陣營區塊不算進任何一條線、
+    中原與核心全是中立：量「線上的敵方陣營區塊」這種規則的測試（攻城地點、記功、權重 2），借中原的一塊改成陣營區塊（例：汝南荒野
+    改回 v1 的黃巾陣營區塊），改成陣營的那一塊拿掉中立駐軍。"""
+    content = conquest_rules(real_content(profile))
+    t = content.scenario.territory
+    for loc_id, (kind, line) in blocks.items():
+        t.blocks[loc_id] = BlockDef(kind=kind, line=line)
+        if kind != "neutral":
+            t.neutral_garrison.pop(loc_id, None)
+    return _new(content, name, world)
 
 
 def plain_game(profile: str = "weekend", name: str = "沈浪", world=None) -> Game:

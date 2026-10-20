@@ -26,6 +26,16 @@ def _fell(s: GameState, c, fid: str) -> list[str]:
     return figures.defeat(s, c, fid, 1000)
 
 
+# 輿圖重製第 1 批（新天下）：盧植營、白馬津搬進東郡，冀州沒有官軍站的地方了；南陽黃巾營搬進汝南，張曼成跟秦頡不在同一州。
+# 倒下的人物掛懸賞要「那一區有對頭站著的地方」：量這條規則的幾條把倒下的人物先擺到對頭站得到的地方（人物的開季站位第 4 批以後再搬）。
+FALL_AT = {"zhangbao": "luzhi_camp", "zhangmancheng": "julu_altar"}
+
+
+def _fell_where_foes_stand(s: GameState, c, fid: str) -> list[str]:
+    figures._ensure(s, c, fid).location = FALL_AT[fid]  # noqa: SLF001
+    return _fell(s, c, fid)
+
+
 def test_the_relations_table_reads_both_ways(c):
     assert relations.link(c, "zhangbao", "zhangliang") == "brother"
     assert relations.link(c, "liubei", "luzhi") == relations.link(c, "luzhi", "liubei") == "mentor"
@@ -38,7 +48,7 @@ def test_the_relations_table_reads_both_ways(c):
 
 def test_a_brother_falls_and_the_others_grieve_and_post_a_revenge_bounty(c):
     s = _season(c)
-    lines = _fell(s, c, "zhangbao")
+    lines = _fell_where_foes_stand(s, c, "zhangbao")
     text = "".join(lines)
     assert "張寶倒下的消息" in text and "張梁" in text and "張角" in text
     assert figures.mood_of(s, c, "zhangliang") == "悲憤"
@@ -61,7 +71,7 @@ def test_the_grief_wears_off(c):
 
 def test_qin_jie_gloats_and_doubles_the_bounty_when_zhang_mancheng_falls(c):
     s = _season(c)
-    lines = _fell(s, c, "zhangmancheng")
+    lines = _fell_where_foes_stand(s, c, "zhangmancheng")
     assert any("秦頡聽說張曼成倒了" in x for x in lines)
     assert figures.mood_of(s, c, "qinjie") == "得意"
     hunt = [b for b in s.world.bounties if b.motive == "追剿"]
@@ -92,7 +102,7 @@ def test_reactions_off_means_nothing_happens(c):
 
 def test_handing_in_a_revenge_bounty_warms_the_poster(c):
     s = _season(c)
-    _fell(s, c, "zhangbao")
+    _fell_where_foes_stand(s, c, "zhangbao")
     b = next(b for b in s.world.bounties if b.motive == "復仇")
     s.player.faction = "huang"
     bounties.take(s, c, b.id)
@@ -170,7 +180,7 @@ def test_declining_drops_the_commission(c):
 
 def test_hearsay_that_pleases_a_friend_brings_a_congratulation(c):
     s = _season(c)
-    s.player.location = c.figures["zhangmancheng"].location
+    s.player.location = c.figures["qinjie"].location  # 宛城（輿圖重製第 1 批：南陽黃巾營搬進汝南，打退張曼成的地方寫的是宛城）
     s.player.affinities["qinjie"] = 45
     figure_life.spread(s, c, "beat", "zhangmancheng", at=s.player.location, side="huang", text="在宛城打退了張曼成")
     assert any(x.startswith("qinjie|") for x in s.player.cheers)

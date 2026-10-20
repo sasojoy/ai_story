@@ -12,7 +12,7 @@ from tianxia.engine import Game, drill_share
 from tianxia.sqlite_world import open_world
 
 
-def _game(faction="guan", at="huangjin_camp", profile="weekend", precise=True, tiers=True):
+def _game(faction="guan", at="julu_altar", profile="weekend", precise=True, tiers=True):  # 黃巾的大本營（輿圖重製第 1 批：v1 是黃巾別部營寨）
     c = real_content(profile)
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
@@ -114,27 +114,27 @@ def test_season21_allows_three_sortie_treasures():
 
 
 def test_holding_pays_the_host_in_full():
-    game = _game(faction="huang", at="huangjin_camp")
+    game = _game(faction="huang")
     p = game.state.player
     xinde = p.stats.get("xinde", 0)
     game.choose("act:train")
-    assert p.stats["xinde"] - xinde == 35  # 自家經驗最高的一路：黃巾渠帥（心得 35）全額
+    assert p.stats["xinde"] - xinde == 32  # 自家經驗最高的一路：黃巾死士（心得 32）全額
 
 
 def test_holding_with_precise_off_keeps_the_third():
-    game = _game(faction="huang", at="huangjin_camp", precise=False)
+    game = _game(faction="huang", precise=False)
     p = game.state.player
     xinde = p.stats.get("xinde", 0)
     game.choose("act:train")
-    assert p.stats["xinde"] - xinde == drill_share(35, 0.3)
+    assert p.stats["xinde"] - xinde == drill_share(32, 0.3)
 
 
 def test_a_duty_pays_like_holding():
-    game = _game(faction="huang", at="huangjin_camp")
+    game = _game(faction="huang")
     p = game.state.player
     xinde = p.stats.get("xinde", 0)
     game.choose("act:duty")
-    assert p.stats["xinde"] - xinde == 35
+    assert p.stats["xinde"] - xinde == 32
 
 
 # ── Task 4：四階兩條來源 ──

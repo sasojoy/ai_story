@@ -239,11 +239,12 @@ def test_fb221_the_yellow_turbans_siege_names_the_government_camp(on):
 
     classic_rules(on)  # FB-221 的攻城地名照舊站法（出陣探索與地盤之前）；地盤開著時照控制方，另見 tests/test_territory.py
     closed_map(on)  # 「還沒摸清只寫大區」是全圖開放之前的規則；全圖開放的見 tests/test_open_map.py
-    assert orders.siege_places(on, "huang", "yingru") == ["guan_camp"]
-    known = _siege_card(on, "huang", "yingru", at="guangzong", visited=["guan_camp"])
-    assert known == "到官軍大營遊歷，打贏一場官軍記一次。" == atlas.SIEGE_AT.format(where="官軍大營", enemy="官軍", note="")
-    unseen = _siege_card(on, "huang", "yingru", at="guangzong")  # 還沒摸清：只寫大區，不寫「官軍大營」
-    assert "官軍大營" not in unseen and unseen == f"到潁川汝南一帶遊歷，打贏一場官軍記一次{atlas.SIEGE_UNSEEN}。"
+    # 輿圖重製第 1 批：只有一處的換成南陽那條舊線（南陽郊野站著郡國兵）；中原那一條線有官軍大營、盧植營、白馬津三處
+    assert orders.siege_places(on, "huang", "nanyang") == ["nanyang_wilds"]
+    known = _siege_card(on, "huang", "nanyang", at="guangzong", visited=["nanyang_wilds"])
+    assert known == "到南陽郊野遊歷，打贏一場官軍記一次。" == atlas.SIEGE_AT.format(where="南陽郊野", enemy="官軍", note="")
+    unseen = _siege_card(on, "huang", "nanyang", at="guangzong")  # 還沒摸清：只寫大區，不寫「南陽郊野」
+    assert "南陽郊野" not in unseen and unseen == f"到南陽一帶遊歷，打贏一場官軍記一次{atlas.SIEGE_UNSEEN}。"
 
 
 def test_fb221_two_places_are_both_named_and_an_unseen_one_stays_a_region(on):
@@ -252,11 +253,13 @@ def test_fb221_two_places_are_both_named_and_an_unseen_one_stays_a_region(on):
 
     classic_rules(on)  # FB-221 的攻城地名照舊站法（出陣探索與地盤之前）；地盤開著時照控制方，另見 tests/test_territory.py
     closed_map(on)  # 「另一處你還沒摸清」是全圖開放之前的規則；全圖開放的見 tests/test_open_map.py
-    assert orders.siege_places(on, "huang", "jizhou") == ["luzhi_camp", "baima_ford"]
-    both = _siege_card(on, "huang", "jizhou", at="nanyang_wilds", visited=["luzhi_camp", "baima_ford"])
+    # 輿圖重製第 1 批：盧植營、白馬津搬進東郡、算進中原那一條（潁川汝南）；官軍大營先拿掉官軍，剩這兩處
+    on.locations["guan_camp"].enemies = []
+    assert orders.siege_places(on, "huang", "yingru") == ["luzhi_camp", "baima_ford"]
+    both = _siege_card(on, "huang", "yingru", at="nanyang_wilds", visited=["luzhi_camp", "baima_ford"])
     assert both == "到盧植營或白馬津遊歷，打贏一場官軍記一次。"
-    one = _siege_card(on, "huang", "jizhou", at="nanyang_wilds", visited=["luzhi_camp"])
-    assert one == f"到盧植營或冀州一帶遊歷，打贏一場官軍記一次{atlas.SIEGE_SOME_UNSEEN}。" and "白馬津" not in one
+    one = _siege_card(on, "huang", "yingru", at="nanyang_wilds", visited=["luzhi_camp"])
+    assert one == f"到盧植營或東郡一帶遊歷，打贏一場官軍記一次{atlas.SIEGE_SOME_UNSEEN}。" and "白馬津" not in one  # 沒摸清的那一處寫它的大區
 
 
 def test_fb221_three_or_more_places_still_say_the_whole_front(on):

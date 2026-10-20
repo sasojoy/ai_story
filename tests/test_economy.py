@@ -13,7 +13,7 @@ from tianxia.world_state import fresh_season
 DAY = 20000  # 回體丹的換日算出來的「第幾天」，測試直接給
 
 
-def _state(faction="guan", at="changshe", silver=500, bag=None, profile="weekend", same=None, third_party=False):
+def _state(faction="guan", at="wan_city", silver=500, bag=None, profile="weekend", same=None, third_party=False):
     c = real_content(profile)
     c.config.auto_open_first_season = True
     c.config.four_tiers.enabled = False  # 素材四階之前的規則（三階不收、二換三一天一個）；四階的規則在 test_four_tiers
@@ -53,8 +53,8 @@ def test_tier_three_is_not_bought_and_refusals_touch_nothing():
 
 
 def test_selling_ignores_who_holds_the_ground():
-    own, c = _state(at="changshe")
-    enemy, _ = _state(at="huangjin_camp")
+    own, c = _state(at="wan_city")
+    enemy, _ = _state(at="julu_altar")
     assert economy.sell_price(c, 1) == 2  # 收購價只看階，不看地盤（第五節）
     own.player.materials, enemy.player.materials = {"rou_1": 1}, {"rou_1": 1}
     economy.sell(own, c, "rou_1", 1)
@@ -66,11 +66,11 @@ def test_selling_ignores_who_holds_the_ground():
 
 
 def test_three_tier_ones_make_a_tier_two_for_five_silver_with_the_ground_perk():
-    s, c = _state(at="changshe", bag={"rou_1": 7}, same=1)  # 長社是官軍的大本營：自家地盤 ×0.9
+    s, c = _state(at="wan_city", bag={"rou_1": 7}, same=1)  # 宛城是官軍的大本營：自家地盤 ×0.9
     assert economy.upgrade_cost(s, c, 2) == 5 and economy.upgrade_cost(s, c, 3) == 45  # 4.5 → 5（四捨五入，同 smithing.price）
     msgs = economy.upgrade(s, c, "柔", 2, DAY)
     assert s.player.materials == {"rou_1": 4, "rou_2": 1} and s.player.stats["silver"] == 495 and "銀兩 -5" in msgs
-    away, _ = _state(at="huangjin_camp")  # 黃巾的大本營：別家地盤 ×1.2
+    away, _ = _state(at="julu_altar")  # 黃巾的大本營：別家地盤 ×1.2
     assert economy.upgrade_cost(away, c, 2) == 6 and economy.upgrade_cost(away, c, 3) == 60
 
 
@@ -174,7 +174,8 @@ def test_donating_pushes_the_bases_own_front_toward_your_side():
     s, c = _state()
     w = s.world
     assert economy.donate_target(c, w, "guan", "changshe") == ("yingru", -1)
-    assert economy.donate_target(c, w, "guan", "wan_city") == ("nanyang", -1)  # 宛城不在戰線上：照大區的戰線
+    assert economy.donate_target(c, w, "guan", "wan_city") == ("nanyang", -1)  # 宛城在南陽那條舊線上（輿圖重製第 1 批）
+    assert economy.donate_target(c, w, "guan", "dajiangjun_fu") is None  # 洛陽沒有戰線：推不了
     assert economy.donate_target(c, w, "huang", "julu_altar") == ("jizhou", 1)
 
 

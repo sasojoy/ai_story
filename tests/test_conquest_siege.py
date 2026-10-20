@@ -1,4 +1,5 @@
-"""領地爭奪第二批 Task 11：攻城戰（範本、開集結、留守、收場、易手、作廢、軍餉；Review Focus 3；裁決 8、14）。"""
+"""領地爭奪第二批 Task 11：攻城戰（範本、開集結、留守、收場、易手、作廢、軍餉；Review Focus 3；裁決 8、14）。
+輿圖重製第 1 批（新天下）：攻的中立地換成中原的荒丘、推的線換成中原那一條（v1 是南陽官道與南陽那條線）。"""
 from __future__ import annotations
 
 import pytest
@@ -12,7 +13,7 @@ pytestmark = pytest.mark.slow  # 建 Game、載正式內容
 NOW = 1_792_000_000.0
 
 
-def _game(side="huang", loc="nanyang_road", name="沈浪", world=None):
+def _game(side="huang", loc="hilltop_wilds", name="沈浪", world=None):
     game = go(join(conquest_game("season21", name=name, world=world), side), loc)
     game.now = NOW
     return game
@@ -55,21 +56,21 @@ def test_templates_exist_for_every_region_and_stay_off_the_admin_menu():
 
 def test_siege_opens_at_muster_with_progress_shift():
     game = _game()
-    slot = announce(game, "nanyang_road", "huang")
-    game.state.world.conquest.progress["nanyang_road"] = 80  # 往黃巾偏 30 → 起點偏 6（戰局以官軍為正向，往下）
+    slot = announce(game, "hilltop_wilds", "huang")
+    game.state.world.conquest.progress["hilltop_wilds"] = 80  # 往黃巾偏 30 → 起點偏 6（戰局以官軍為正向，往下）
     msgs = _open(game, slot)
     battle, found = _siege_of(game, slot)
     assert battle is not None and found.status == "open" and found.record_id == battle.record_id
     assert battle.trend_start == 44 and battle.trend == 44
     assert battle.muster_deadline_real == pytest.approx(NOW + 1800)  # 集結截止＝開打的那一刻
-    assert battle.siege.loc == "nanyang_road" and battle.siege.attackers == ["huang"] and battle.siege.holder is None
-    assert any("攻城・南陽官道" in m for m in msgs)
-    assert conquest.progress_open(game.state.world, game.content, "nanyang_road") is False  # 開打之後進度不再推
+    assert battle.siege.loc == "hilltop_wilds" and battle.siege.attackers == ["huang"] and battle.siege.holder is None
+    assert any("攻城・荒丘" in m for m in msgs)
+    assert conquest.progress_open(game.state.world, game.content, "hilltop_wilds") is False  # 開打之後進度不再推
 
 
 def test_neutral_siege_has_a_guard_commander():
     game = _game()
-    _open(game, announce(game, "nanyang_road", "huang"))
+    _open(game, announce(game, "hilltop_wilds", "huang"))
     battle = game.world.get_sieges()[0]
     assert battle.siege.guard_side == "guan"
     guards = [c for c in battle.commanders if c.fid.startswith("squad:")]
@@ -79,44 +80,44 @@ def test_neutral_siege_has_a_guard_commander():
 
 def test_attacker_win_flips_and_reweighs():
     game = _game()
-    slot = announce(game, "nanyang_road", "huang")
-    game.state.world.conquest.progress["nanyang_road"] = 70
+    slot = announce(game, "hilltop_wilds", "huang")
+    game.state.world.conquest.progress["hilltop_wilds"] = 70
     _open(game, slot)
     battle = game.world.get_sieges()[0]
     game.choose(next(o.id for o in game.options() if o.id.startswith("battle:join:huang")))
     game.world.mutate_siege(battle.record_id, lambda b: setattr(b.participants[game.state.player.name], "acted_rounds", 5))
-    before = rules.world_trend_value(game.state.world, game.content, "nanyang")
+    before = rules.world_trend_value(game.state.world, game.content, "yingru")
     after = _end(game, battle, 10)  # 黃巾大勝
     w = game.state.world
-    assert conquest.holder(w, game.content, "nanyang_road") == "huang"
-    assert rules.world_trend_value(w, game.content, "nanyang") > before  # 照新的基準
-    assert any("南陽官道落入" in r.text for r in w.rumors)
-    assert conquest.progress_of(w, "nanyang_road") == 50
+    assert conquest.holder(w, game.content, "hilltop_wilds") == "huang"
+    assert rules.world_trend_value(w, game.content, "yingru") > before  # 照新的基準
+    assert any("荒丘落入" in r.text for r in w.rumors)
+    assert conquest.progress_of(w, "hilltop_wilds") == 50
     _, found = _siege_of(game, slot)
     assert found.status == "done" and found.winner == "huang"
     ended = game.world.ended_battle(after.record_id)
-    assert ended.outcome_side == "huang" and ended.outcome_margin == "大勝" and ended.outcome_title == "黃巾軍大勝，拿下南陽官道"
+    assert ended.outcome_side == "huang" and ended.outcome_margin == "大勝" and ended.outcome_title == "黃巾軍大勝，拿下荒丘"
     report = next(r for r in game.state.battles if r.battle_ref == after.record_id)
-    assert report.kind == "siege" and report.event == "攻城・南陽官道"
+    assert report.kind == "siege" and report.event == "攻城・荒丘"
 
 
 def test_defender_win_keeps_holder():
     game = _game()
-    slot = announce(game, "nanyang_road", "huang")
+    slot = announce(game, "hilltop_wilds", "huang")
     _open(game, slot)
     battle = game.world.get_sieges()[0]
     _end(game, battle, 60)  # 守將那一邊（官軍那一格）佔上風
-    assert conquest.holder(game.state.world, game.content, "nanyang_road") is None  # 中立還是中立
+    assert conquest.holder(game.state.world, game.content, "hilltop_wilds") is None  # 中立還是中立
     _, found = _siege_of(game, slot)
     assert found.status == "done" and found.winner is None
 
 
 def test_siege_void_when_no_attacker():
-    game = _game(side="guan", loc="nanyang_road")  # 官軍的人在場、黃巾一個人都沒來
-    slot = announce(game, "nanyang_road", "huang")
+    game = _game(side="guan", loc="hilltop_wilds")  # 官軍的人在場、黃巾一個人都沒來
+    slot = announce(game, "hilltop_wilds", "huang")
     _open(game, slot)
     battle = game.world.get_sieges()[0]
-    game.state.world.conquest.progress["nanyang_road"] = 70
+    game.state.world.conquest.progress["hilltop_wilds"] = 70
     game._save_season()
     game.now = NOW + 1801  # 集結截止
     game._battle_status(tick=True)
@@ -124,15 +125,15 @@ def test_siege_void_when_no_attacker():
     ended = game.world.ended_battle(battle.record_id)
     assert ended is not None and ended.unfinished and ended.siege.void
     _, found = _siege_of(game, slot)
-    assert found.status == "void" and conquest.progress_of(game.state.world, "nanyang_road") == 50
+    assert found.status == "void" and conquest.progress_of(game.state.world, "hilltop_wilds") == 50
     assert not any("作罷" in r.text for r in game.state.world.rumors if r.layer == "world")  # 裁決 19：不發天下大事（test_conquest_void_quiet）
     assert not any(r.battle_ref == battle.record_id and r.kind == "siege" for r in game.state.battles)  # 沒有戰報、沒有軍餉
 
 
 def test_siege_void_when_attacker_already_holds():
     game = _game()
-    slot = announce(game, "nanyang_road", "huang")
-    conquest.set_control(game.state.world, game.content, "nanyang_road", "huang")
+    slot = announce(game, "hilltop_wilds", "huang")
+    conquest.set_control(game.state.world, game.content, "hilltop_wilds", "huang")
     _open(game, slot)
     assert game.world.get_sieges() == []
     _, found = _siege_of(game, slot)
@@ -141,11 +142,11 @@ def test_siege_void_when_attacker_already_holds():
 
 def test_later_siege_fights_the_new_holder():
     game = _game()
-    first = announce(game, "nanyang_road", "guan", minute=14 * 60)
+    first = announce(game, "hilltop_wilds", "guan", minute=14 * 60)
     _open(game, first)
     _end(game, game.world.get_sieges()[0], 90)  # 官軍 14:00 先拿下
-    assert conquest.holder(game.state.world, game.content, "nanyang_road") == "guan"
-    second = announce(game, "nanyang_road", "huang", minute=20 * 60)
+    assert conquest.holder(game.state.world, game.content, "hilltop_wilds") == "guan"
+    second = announce(game, "hilltop_wilds", "huang", minute=20 * 60)
     _open(game, second)
     battle = next(b for b in game.world.get_sieges() if b.phase != "ended")
     assert battle.siege.holder == "guan" and battle.siege.guard_side is None and battle.siege.attackers == ["huang"]
@@ -154,14 +155,14 @@ def test_later_siege_fights_the_new_holder():
 
 def test_merged_siege_has_no_guard():
     game = _game()
-    _open(game, announce(game, "nanyang_road", "huang", merged=("guan", "huang")))
+    _open(game, announce(game, "hilltop_wilds", "huang", merged=("guan", "huang")))
     battle = game.world.get_sieges()[0]
     assert battle.siege.attackers == ["guan", "huang"] and battle.siege.guard_side is None and battle.commanders == []
 
 
 def test_pay_is_half_of_a_showdown():
     game = _game()
-    _open(game, announce(game, "nanyang_road", "huang"))
+    _open(game, announce(game, "hilltop_wilds", "huang"))
     battle = game.world.get_sieges()[0]
     game.choose(next(o.id for o in game.options() if o.id.startswith("battle:join:huang")))
     battle = game.world.mutate_siege(battle.record_id, lambda b: setattr(b.participants[game.state.player.name], "acted_rounds", 6))
@@ -177,12 +178,12 @@ def test_pay_is_half_of_a_showdown():
 
 
 def test_other_army_cannot_stand_with_the_guard():
-    game = _game(side="guan", loc="nanyang_road")
-    _open(game, announce(game, "nanyang_road", "huang"))
+    game = _game(side="guan", loc="hilltop_wilds")
+    _open(game, announce(game, "hilltop_wilds", "huang"))
     assert not any(o.id.startswith("battle:") for o in game.options())  # 黃巾攻中立地：官軍插不上手，照常遊玩
     assert game._battle_choose_in("join:guan") != ["你加入了這場戰局。"]
     assert "插不上手" in game.scene_text() and "人要到了那裡" not in game.scene_text()  # 場景說對原因
-    ranger = _game(side=None, loc="nanyang_road", name="散某", world=game.world)
+    ranger = _game(side=None, loc="hilltop_wilds", name="散某", world=game.world)
     enlists = {o.id for o in ranger.options() if o.id.startswith("battle:enlist:")}
     assert enlists == {"battle:enlist:guan", "battle:enlist:huang"}  # 散人可以投效守將那一邊（助守，裁決 8）
     ranger.choose("battle:enlist:guan")

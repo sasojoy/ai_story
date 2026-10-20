@@ -73,7 +73,9 @@ def content():
 
 def test_real_content_loads():
     c = load_content(CONTENT_DIR)
-    assert 30 <= len([loc for loc in c.locations.values() if not loc.prologue_only]) <= 42  # 序章的草廬不算；四十處之外多一處官軍大營（FB-184）與綠林山寨（名聲 5.1）
+    # 序章的草廬不算；四十處之外多一處官軍大營（FB-184）與綠林山寨（名聲 5.1）；輿圖重製第 1 批（新天下，設計 3.3）再加十處：
+    # 青州五處、東郡的濮陽、陳留三處、核心的鹿台（佔位，待 joy）
+    assert 30 <= len([loc for loc in c.locations.values() if not loc.prologue_only]) <= 52
     assert {t.id for t in c.scenario.trends} == {"huangjin", "yuxi", "yingru", "nanyang", "jizhou", "geju"}
 
 
@@ -503,7 +505,8 @@ def test_the_real_enlistment_has_three_recruiters_and_the_drifter_line_names_eve
     for faction_id, fields in spec.items():
         for field, sentence in fields.items():
             assert sentence in getattr(e.recruiters[faction_id], field), (faction_id, field)
-    assert e.drifter_line == "想投靠的話——官軍：長社、宛城、盧植營；黃巾：黃巾別部營寨、南陽黃巾營、鉅鹿道壇；豪強：鄉里結社、曹氏莊院、豪族塢堡。"
+    # 輿圖重製第 1 批：投靠點只在外圈（企劃者），官軍洛陽、南陽各一處，黃巾冀州、青州各一處（字待 joy 潤）
+    assert e.drifter_line == "想投靠的話——官軍：大將軍府、宛城；黃巾：鉅鹿道壇、青州黃巾營；豪強：鄉里結社、曹氏莊院、豪族塢堡。"
     assert not any(step.season_one for step in content.tutorial.steps)
     assert content.tutorial.steps[content.tutorial.prologue_steps - 1].id == "p11_farewell"
     assert content.tutorial.steps[-1].id == "e4_world"  # 初入江湖的最後一步（老周）之後沒有別的引導步驟：投靠由「主線」那一行與引薦人帶
@@ -1188,7 +1191,7 @@ def test_every_join_point_has_a_name_on_the_map_from_the_first_screen(content):
 
     joins = {loc for f in content.scenario.factions for loc in f.join_at}
     joins |= {content.sects[s].location for f in content.scenario.factions for s in f.sects}
-    assert len(joins) >= 9
+    assert len(joins) >= 8  # 輿圖重製第 1 批：官軍、黃巾各兩處（外圈），豪強三處，加潁川書院
     game = Game.new(content, "測試俠客", rng=random.Random(0))
     views = atlas.views(game.state, content)
     nameless = sorted(loc for loc in joins if not content.locations[loc].important and views[loc] == "dot")
@@ -1297,13 +1300,16 @@ def test_each_side_of_the_war_wants_the_yellow_turbans_to_go_its_way(content):
     assert goals == {"guan": dict.fromkeys(fronts, -1), "huang": dict.fromkeys(fronts, 1), "haoqiang": {"geju": 1}}
 
 
-# 遊歷推大勢：數字跟遷移前一模一樣，鍵換成所在大區的戰線；洛陽沒有戰況，寫 front
+# 遊歷推大勢：數字跟遷移前一模一樣，鍵換成所在大區的戰線；洛陽沒有戰況，寫 front。
+# 輿圖重製第 1 批（新天下）：大勢值整個中原一個總值（企劃者 2026-10-21，暫用 yingru 那一條），中原的出陣點都推它（搬進東郡、汝南的
+# 盧植營、白馬津、南陽黃巾營換成 yingru，量不變；陳留新加的官渡、己吾各 1）；外圈出生州不再是戰線，只剩大本營與 fixed（鉅鹿道壇、廣宗）
+# 與南陽那條舊線的截糧地點宛城（orders.slots 要那條線的戰線地點；第 5 批三條線變一條時一起拿掉）
 EXPECTED_TRAINING = {
     "changshe": {"yingru": -1}, "luoyang_road": {"front": -1}, "mengjin_ford": {"front": 1},
-    "nanyang_huangjin_camp": {"nanyang": -2}, "yu_river": {"nanyang": -1}, "nanyang_wilds": {"nanyang": -1},
-    "runan_wilds": {"yingru": -1}, "huangjin_camp": {"yingru": -2}, "juma_river": {"jizhou": -1},
-    "yanshan_foot": {"jizhou": -1}, "julu_altar": {"jizhou": -2}, "guangzong": {"jizhou": -2},
-    "luzhi_camp": {"jizhou": 1}, "xiaquyang": {"jizhou": -1}, "baima_ford": {"jizhou": 1},
+    "nanyang_huangjin_camp": {"yingru": -2}, "wan_city": {"nanyang": -1},
+    "runan_wilds": {"yingru": -1}, "huangjin_camp": {"yingru": -2},
+    "julu_altar": {"jizhou": -2}, "guangzong": {"jizhou": -2},
+    "luzhi_camp": {"yingru": 1}, "baima_ford": {"yingru": 1}, "guandu": {"yingru": 1}, "jiwu": {"yingru": 1},
     "guan_camp": {"yingru": 2},  # 官軍大營（FB-184）：官軍在潁川一帶的操練點，量同黃巾別部營寨、方向相反
 }
 
@@ -1317,11 +1323,14 @@ def test_real_content_fronts(content):
     assert trends["huangjin"].derived == {"yingru": 0.35, "nanyang": 0.25, "jizhou": 0.40}
     assert trends["huangjin"].start == 25 and not trends["huangjin"].season_one
     assert all(trends[key].season_one for key in ("yingru", "nanyang", "jizhou", "geju"))
+    # 輿圖重製第 1 批：九州＝九個大區（設計 3.3）；中原四郡與核心算 yingru 那一條（整個中原一個總值），南陽、冀州的舊線留到第 5 批
+    middle = ("yingchuan", "dongjun", "chenliu", "runan", "core")
     assert {r.id: r.front for r in content.map.regions} == {
-        "youzhou": "jizhou", "jizhou": "jizhou", "luoyang": None, "yingru": "yingru", "nanyang": "nanyang",
+        "luoyang": None, "nanyang": "nanyang", "jizhou": "jizhou", "qingzhou": None, **dict.fromkeys(middle, "yingru"),
     }
     assert {r.id: r.trends for r in content.map.regions} == {
-        "youzhou": ["jizhou"], "jizhou": ["jizhou"], "luoyang": [], "yingru": ["yingru", "yuxi"], "nanyang": ["nanyang"],
+        "luoyang": [], "nanyang": ["nanyang"], "jizhou": ["jizhou"], "qingzhou": [],
+        **{rid: ["yingru"] for rid in middle[:-1]}, "core": ["yingru", "yuxi"],
     }
     assert {lid: loc.train_trend for lid, loc in content.locations.items() if loc.train_trend} == EXPECTED_TRAINING
     for lid, pushes in EXPECTED_TRAINING.items():
@@ -2042,8 +2051,8 @@ def test_season_one_off_blocks_thresholds_storyline_and_beta_battle(tmp_path):
 
 # ── 三場大戲（計畫 T8；戰鬥系統附錄 A）──────────────────────────────────
 
-SHOWDOWN_TABLE = {  # 計畫 T8 的表：大區、守方、時刻表大事、版本、戰線
-    "changshe_fire": ("yingru", "guan", "changshe_fire", None, "yingru"),
+SHOWDOWN_TABLE = {  # 計畫 T8 的表：大區、守方、時刻表大事、版本、戰線（輿圖重製第 1 批：潁川汝南拆成潁川、汝南兩州，長社火攻在潁川）
+    "changshe_fire": ("yingchuan", "guan", "changshe_fire", None, "yingru"),
     "wancheng_jia": ("nanyang", "huang", "wancheng", "甲", "nanyang"),
     "wancheng_yi": ("nanyang", "guan", "wancheng", "乙", "nanyang"),
     "guangzong": ("jizhou", "huang", "guangzong", None, "jizhou"),
@@ -2195,7 +2204,7 @@ def test_a_real_weekend_season_opens_and_settles_the_three_showdowns(tmp_path):
     world = open_world(tmp_path / "weekend.db")
     game = Game.new(c, "Rayal", rng=random.Random(0), world=world)
     game.now = 0.0
-    for event_id, region in (("changshe_fire", "yingru"), ("wancheng", "nanyang"), ("guangzong", "jizhou")):
+    for event_id, region in (("changshe_fire", "yingchuan"), ("wancheng", "nanyang"), ("guangzong", "jizhou")):
         game.advance(game.state.world.schedule[event_id] + 1.0 - game.state.world.time)
         battle = world.get_battle()
         definition = c.battles[battle.battle_id]
@@ -2255,6 +2264,13 @@ STRONG_RULE = {"河畔": "shui", "渡口": "feng", "山林": "shan", "營寨": "
 STRONG_EXCEPTIONS = {"guangzong"}  # 城池營寨：冀州悟得到水的只有這裡
 
 
+# 輿圖重製第 1 批（新天下）：五個大區變成九州，中原每郡、核心只有三處上下（設計 3.3），「每一個大區四種都有」做不到
+# （汝南、東郡缺水與山，陳留缺山，核心只有山）。改成每個出生州四種都有、中原（內圈四郡＋核心）合起來四種都有；
+# 要不要補地點或換意境，待 PM／joy（計畫 docs/superpowers/plans/2026-10-20-輿圖重製-1.md）。
+BIRTH_STATES = {"luoyang", "nanyang", "jizhou", "qingzhou"}
+MIDDLE = {"yingchuan", "dongjun", "chenliu", "runan", "core"}
+
+
 def test_every_basic_insight_is_strongest_in_five_places_in_every_region(content):
     from tianxia import atlas
 
@@ -2265,10 +2281,11 @@ def test_every_basic_insight_is_strongest_in_five_places_in_every_region(content
             count[loc.insight_strong] = count.get(loc.insight_strong, 0) + 1
             regions.setdefault(loc.insight_strong, set()).add(atlas.region_of(content, loc.id).id)
     every = set().union(*regions.values())
+    assert every == BIRTH_STATES | MIDDLE
     basics = [i for i, d in content.insights.items() if d.grant is None]
     assert sorted(count) == sorted(basics)
     for i in basics:
-        assert count[i] >= 5 and regions[i] == every, (i, count[i], sorted(regions[i]))
+        assert count[i] >= 5 and BIRTH_STATES <= regions[i] and regions[i] & MIDDLE, (i, count[i], sorted(regions[i]))
 
 
 def test_the_strongest_follows_the_terrain(content):

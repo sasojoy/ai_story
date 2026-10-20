@@ -199,8 +199,8 @@ def test_skipping_stays_skipped_into_the_next_season():
     assert games["略過的"].state.player.guide_skipped and not games["做完的"].state.player.guide_skipped  # 略過照帶
     assert games["略過的"].state.player.enlist_step == len(on.tutorial.enlist.steps)  # 略過的人入伍段算走完，換季照帶
     assert games["做完的"].state.player.enlist_step is None  # 還沒投靠：投靠時才開始
-    for game in games.values():  # 兩個人到長社投靠：略過的沒有框、沒略過的由引薦人帶（框只在投靠之後才分得出兩個人）
-        game.state.player.location = "changshe"
+    for game in games.values():  # 兩個人到宛城投靠：略過的沒有框、沒略過的由引薦人帶（框只在投靠之後才分得出兩個人）
+        game.state.player.location = "wan_city"  # 輿圖重製第 1 批：投靠點只在外圈（v1 是長社）
         game.choose("faction:guan")
         game.choose("faction:confirm")
     assert games["略過的"].guide_box() is None

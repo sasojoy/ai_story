@@ -1,6 +1,7 @@
 """領地爭奪第一批 QA 之後：行動列底下出陣那一行照實寫（FB-532、FB-533），敵方大本營與廣宗不給攻（計畫第八章裁決 18）。字待 joy 潤。
 
-第二批起只有今天公告的目標推得動進度：寫「推這一塊的進度」的幾條先把那一塊公告了（計畫 6.2「合併 conquest-1 修正」）。"""
+第二批起只有今天公告的目標推得動進度：寫「推這一塊的進度」的幾條先把那一塊公告了（計畫 6.2「合併 conquest-1 修正」）。
+輿圖重製第 1 批（新天下）：大本營換成宛城、鉅鹿道壇，官軍的陣營區塊換成南陽官道（v1 是長社、黃巾別部營寨、潁川郊野）。"""
 from __future__ import annotations
 
 import pytest
@@ -15,7 +16,7 @@ def _note(game, loc_id):
     return game._sortie_line(game.content.locations[loc_id])  # 行動列底下出陣那一行（action_notes 的 act:train）
 
 
-@pytest.mark.parametrize(("side", "base"), [("guan", "changshe"), ("huang", "huangjin_camp")])
+@pytest.mark.parametrize(("side", "base"), [("guan", "wan_city"), ("huang", "julu_altar")])
 def test_own_base_hold_line_reads_right(side, base):
     """FB-532：站在自家大本營守，那一行不再寫「推不動進度（這裡搶不下來）（量是攻的一半）」。"""
     game = go(join(conquest_game("season21"), side), base)
@@ -30,17 +31,17 @@ def test_own_fixed_block_hold_line_reads_right():
 
 
 def test_own_capturable_block_hold_line_is_unchanged():
-    game = go(join(conquest_game("season21"), "guan"), "yingchuan_wilds")
-    announce(game, "yingchuan_wilds", "huang")  # 第二批：黃巾今天公告要攻這一塊，官軍守才推得動
-    assert _note(game, "yingchuan_wilds") == (
+    game = go(join(conquest_game("season21"), "guan"), "nanyang_road")
+    announce(game, "nanyang_road", "huang")  # 第二批：黃巾今天公告要攻這一塊，官軍守才推得動
+    assert _note(game, "nanyang_road") == (
         "這裡是自家地盤：不用打，推這一塊的進度、記貢獻（量是攻的一半）；拿自家隊伍 3 成的心得與經驗。今日還能出陣 5 次。"
     )
 
 
 def test_switch_off_hold_line_is_unchanged():
     """關著：自家大本營照舊寫推動戰局（a73c111e 上量的）。"""
-    game = go(join(plain_game("season21"), "guan"), "changshe")
-    assert _note(game, "changshe") == (
+    game = go(join(plain_game("season21"), "guan"), "wan_city")
+    assert _note(game, "wan_city") == (
         "這裡是自家地盤：不用打，推動戰局、記貢獻（量是攻的一半）；拿自家隊伍 3 成的心得與經驗。今日還能出陣 5 次。"
     )
 

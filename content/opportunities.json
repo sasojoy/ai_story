@@ -4,7 +4,7 @@
             "text": "朱儁說起自己寒門出身、以孝義聞名，一步一腳印爬上來的事：「我也是從什麼都沒有爬上來的。你的名字，我會報上去。」"}},
   {"id": "guan_courier", "name": "荒丘的信使", "faction": "guan", "rank": 3, "kind": "timing",
    "timing": {"when": "night", "at": ["hilltop_wilds"],
-              "clue": "南陽和潁川的黃巾，夜裡靠信使在荒丘那條官道上傳話。", "clue_regions": ["yingru"],
+              "clue": "南陽和潁川的黃巾，夜裡靠信使在荒丘那條官道上傳話。", "clue_regions": ["yingchuan"],
               "label": "埋伏在荒丘攔信使", "stamina": 10, "check": {"stat": "agi", "difficulty": 6},
               "ok": "三更時分，一個黑影從官道上摸過來。你撲上去按倒了他，從他懷裡搜出一封信——南陽渠帥寫給潁川的。",
               "fail": "黑影一閃就鑽進了荒草裡，追不上了。下一個夜裡再來。",

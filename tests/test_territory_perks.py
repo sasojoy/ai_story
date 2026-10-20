@@ -50,7 +50,7 @@ def test_the_switch_off_keeps_the_list_price():
 
 
 def test_events_can_ask_who_holds_this_place():
-    game = _game("guan", at="runan_wilds")  # 開季歸黃巾
+    game = _game("guan", at="nanyang_huangjin_camp")  # 開季歸黃巾（輿圖重製第 1 批：中原那一條線的第 7 處；v1 是汝南荒野）
     s, c = game.state, game.content
     assert rules.check_condition(Condition(controlled_by=["huang"]), s, c)
     assert not rules.check_condition(Condition(controlled_by=["guan"]), s, c)
@@ -68,9 +68,9 @@ def test_an_unknown_side_in_controlled_by_is_refused():
 
 
 def test_the_situation_layer_paints_who_holds_each_place():
-    game = _game("huang", at="huangjin_camp")
+    game = _game("huang", at="julu_altar")  # 黃巾的投靠點（新天下：黃巾別部營寨改成中原的中立地）
     s, c = game.state, game.content
     svg = mapview.render_map(s, c, "situation")
     assert mapview.CONTROL_DISC["huang"] in svg
     assert mapview.LEGEND_CONTROL in mapview.legend_data(s, c, "situation")["layer"]
-    assert "此刻由黃巾軍控制" in atlas.detail_text(s, c, "huangjin_camp", game.odds)
+    assert "此刻由黃巾軍控制" in atlas.detail_text(s, c, "julu_altar", game.odds)

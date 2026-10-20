@@ -231,7 +231,8 @@ def test_the_switch_off_brings_back_the_leaders_even_after_a_retirement(real, wo
     s = game.state
     hfs = next(sim for sim in real.scenario.sim_players if sim.name == "皇甫嵩")
     assert sim_active(hfs, s, real) and "皇甫嵩" in atlas.haunters(s, real, "changshe")
-    assert figures.placed_characters(s, real) == {}
+    # 大勢人物一個都不擺；曹操（皇甫嵩的盟友，不是大勢人物）照人物活起來趕去長社——輿圖重製第 1 批：譙縣在汝南、長社在潁川，不同州了
+    assert all(figures.of_character(real, cid) is None for cid in figures.placed_characters(s, real))
 
 
 def test_season_one_records_no_out_flag(real, world):

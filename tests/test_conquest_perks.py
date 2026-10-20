@@ -1,4 +1,5 @@
-"""領地爭奪第一批 Task 5：陣營領地加成、散人在中立地（計畫三、Task 5；設計 4.5、4.6；裁決 4：新手期在敵方領地療傷不吃 ×1.2）。"""
+"""領地爭奪第一批 Task 5：陣營領地加成、散人在中立地（計畫三、Task 5；設計 4.5、4.6；裁決 4：新手期在敵方領地療傷不吃 ×1.2）。
+輿圖重製第 1 批（新天下）：官軍的領地換成宛城、黃巾的換成涿郡、中立地換成荒丘（v1 是潁川郡、汝南、南陽郊野；潁川郡在新天下是中立地）。"""
 from __future__ import annotations
 
 import random
@@ -23,24 +24,24 @@ def _land(game, loc, faction):
 def test_prices_follow_the_holder():
     game = conquest_game("season21")
     w, c = game.state.world, game.content
-    assert _land(game, "yingchuan", "guan") == pytest.approx(0.9)
-    conquest.set_control(w, c, "nanyang_wilds", "huang")
-    assert _land(game, "nanyang_wilds", "guan") == pytest.approx(1.2)
-    assert _land(game, "nanyang_wilds", "huang") == pytest.approx(0.9)
-    assert _land(game, "nanyang_wilds", None) == pytest.approx(0.9)  # 散人：開季中立的區塊算自家（設計 4.6），不論此刻歸誰
+    assert _land(game, "wan_city", "guan") == pytest.approx(0.9)
+    conquest.set_control(w, c, "hilltop_wilds", "huang")
+    assert _land(game, "hilltop_wilds", "guan") == pytest.approx(1.2)
+    assert _land(game, "hilltop_wilds", "huang") == pytest.approx(0.9)
+    assert _land(game, "hilltop_wilds", None) == pytest.approx(0.9)  # 散人：開季中立的區塊算自家（設計 4.6），不論此刻歸誰
     assert _land(game, "guan_camp", None) == pytest.approx(0.9)
-    assert _land(game, "yingchuan", None) == 1.0  # 散人在陣營領地：原價
+    assert _land(game, "wan_city", None) == 1.0  # 散人在陣營領地：原價
     assert _land(game, "guan_camp", "guan") == 1.0  # 中立地沒人佔：誰都不是自家
 
 
 def test_home_follows_where_you_stand():
     game = conquest_game("season21")
     s, c = game.state, game.content
-    _at(game, "yingchuan", "guan")
+    _at(game, "wan_city", "guan")
     assert conquest.home(s, c)
-    _at(game, "runan", "guan")
+    _at(game, "zhuo_county", "guan")
     assert not conquest.home(s, c)
-    _at(game, "nanyang_wilds", None)
+    _at(game, "hilltop_wilds", None)
     assert conquest.home(s, c)  # 散人在開季中立的區塊
     _at(game, "haozu_fort", None)
     assert not conquest.home(s, c)  # 不是區塊
@@ -49,7 +50,7 @@ def test_home_follows_where_you_stand():
 def test_newbie_heals_at_home_price_in_enemy_land():
     game = conquest_game("season21")
     s, c = game.state, game.content
-    _at(game, "yingchuan", "huang")  # 潁川郡：黃巾新手出序章的第一站，官軍的領地（裁決 4）
+    _at(game, "wan_city", "huang")  # 官軍的領地（裁決 4；v1 量的是潁川郡，新天下它是中立地）
     s.player.joined_at = s.world.time
     assert territory.price_here(s, c, heal=True) == pytest.approx(territory.price_here(s, c) / 1.2)
     s.player.joined_at = s.world.time - 100 * 3600  # 過了新手期
@@ -77,16 +78,16 @@ def _lucky_seq(game, hit):
 def test_gather_bonus_only_at_home():
     game = conquest_game("season21")
     s, c = game.state, game.content
-    _at(game, "nanyang_wilds", "guan")
+    _at(game, "hilltop_wilds", "guan")
     s.player.explore_seq = _lucky_seq(game, True)
-    conquest.set_control(s.world, c, "nanyang_wilds", "guan")
-    home = _found_count(game, "nanyang_wilds")
-    conquest.set_control(s.world, c, "nanyang_wilds", "huang")
-    away = _found_count(game, "nanyang_wilds")
+    conquest.set_control(s.world, c, "hilltop_wilds", "guan")
+    home = _found_count(game, "hilltop_wilds")
+    conquest.set_control(s.world, c, "hilltop_wilds", "huang")
+    away = _found_count(game, "hilltop_wilds")
     assert home == away + 1
     s.player.explore_seq = _lucky_seq(game, False)
-    conquest.set_control(s.world, c, "nanyang_wilds", "guan")
-    assert _found_count(game, "nanyang_wilds") == away  # 沒擲中：不多給
+    conquest.set_control(s.world, c, "hilltop_wilds", "guan")
+    assert _found_count(game, "hilltop_wilds") == away  # 沒擲中：不多給
 
 
 def test_sense_rate_plus_five_at_home():
@@ -106,5 +107,5 @@ def test_switch_off_perks_unchanged():
     _at(game, "deep_mountain", None)
     assert not conquest.home(s, c)
     assert territory.price_factor(s.world, c, None, "deep_mountain") == 1.0
-    _at(game, "yingchuan", "huang")
+    _at(game, "wan_city", "huang")
     assert territory.price_here(s, c, heal=True) == territory.price_here(s, c)
