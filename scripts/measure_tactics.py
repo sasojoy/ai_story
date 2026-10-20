@@ -66,6 +66,7 @@ def main() -> None:
     parser.add_argument("--bout-strike", type=float, help="試別的 Config.tactics.bout_strike（只量）")
     parser.add_argument("--war-scale", type=float, help="試別的 Config.tactics.war_scale（只量）")
     parser.add_argument("--might-scale", type=float, help="本命底蘊（TacticDef.might）全部乘這個數（只量）")
+    parser.add_argument("--might-add", type=float, help="本命底蘊（TacticDef.might）每一門都加這個數（只量；一位人物兩門，合計加兩倍）")
     parser.add_argument("--tweak", nargs="+", default=[], metavar="技能.欄=數",
                         help="試別的本命戰法數字（只量）：zhangfei_wugong.rate=0.3、zhangliang_wugong.per_pct=0.05（params 裡的照鍵名）")
     args = parser.parse_args()
@@ -86,6 +87,10 @@ def main() -> None:
         for sk in content.skills.values():
             if sk.tactic is not None:
                 sk.tactic.might *= args.might_scale
+    if args.might_add is not None:
+        for sk in content.skills.values():
+            if sk.tactic is not None:
+                sk.tactic.might += args.might_add
     if args.bouts:
         bouts(content, args.runs)
         return
