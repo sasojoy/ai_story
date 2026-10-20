@@ -271,6 +271,10 @@ def squads_at(world: WorldState, content: Content, loc_id: str) -> list[str]:
     """這個地點此刻站的隊伍（設計 4.3 第 1 點）：寫了 garrison 的地點是無陣營的那幾路（Location.enemies 裡的，誰控制都在）加上
     控制方那一組；其餘（開關關著、大本營沒寫 garrison）照 Location.enemies。遊歷、出陣、探索、懸賞、攻城、輿圖都讀它。"""
     loc = content.locations[loc_id]
+    from . import conquest  # noqa: PLC0415
+
+    if conquest.on(content, world) and conquest.start_kind(world, content, loc_id) == conquest.NEUTRAL:
+        return conquest.neutral_squads(world, content, loc_id)  # 領地爭奪：開季中立的區塊照它自己那一套，不看控制方（設計 3.3）
     side = controller(world, content, loc_id)
     garrison = content.scenario.territory.garrison.get(loc_id) if side is not None else None
     if not garrison:

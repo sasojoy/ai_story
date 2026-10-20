@@ -82,6 +82,16 @@ def holder(world: WorldState | None, content: Content, loc_id: str) -> str | Non
     return kind if kind in SIDES else None
 
 
+def neutral_squads(world: WorldState | None, content: Content, loc_id: str) -> list[str]:
+    """開季中立的區塊站的隊伍（設計 3.3；territory.squads_at 在開關開著時叫）：地點自己的流寇野獸（Location.enemies 裡沒有陣營的）
+    加上中立駐軍（Scenario.territory.neutral_garrison，待 joy）；不看控制方，佔下之後對兩邊都照打。不動 Location.enemies
+    （探索事件的 combat 守門讀它）。"""
+    loc = content.locations[loc_id]
+    own = [sid for sid in loc.enemies if sid in content.squads and content.squads[sid].faction is None]
+    extra = content.scenario.territory.neutral_garrison.get(loc_id, []) if content.scenario.territory is not None else []
+    return own + [sid for sid in extra if sid not in own]
+
+
 def _opened(world: WorldState, content: Content, loc_id: str) -> bool:
     """劇情開放了（同 atlas.is_unlocked，但不看人站在哪裡）：不是序章專屬、unlock_flag 立了或第一季直接開放的地點。"""
     loc = content.locations[loc_id]

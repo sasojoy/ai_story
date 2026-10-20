@@ -189,6 +189,18 @@
       "dajiangjun_fu": {"kind": "guan", "line": null},
       "beimang_hill": {"kind": "guan", "line": null},
       "mengjin_ford": {"kind": "guan", "line": null}
+    },
+    "neutral_garrison": {
+      "guan_camp": ["nz_kuibing"],
+      "hilltop_wilds": ["nz_daoke"],
+      "deep_mountain": ["nz_tiger"],
+      "nanyang_road": ["nz_xiangma"],
+      "nanyang_wilds": ["nz_luanbing"],
+      "lulin_zhai": ["nz_haoke"],
+      "baima_ford": ["nz_jinba"],
+      "xiaquyang": ["nz_youxia"],
+      "juma_river": ["nz_shuifei"],
+      "yanshan_foot": ["nz_huqi"]
     }
   }
 }

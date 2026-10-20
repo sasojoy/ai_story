@@ -54,5 +54,15 @@
   {"id": "figure_fuxie", "name": "傅燮", "difficulty": 110, "attribute": "剛", "reward_xinde": 80, "exp": 80, "faction": "guan"},
   {"id": "figure_qinjie", "name": "秦頡", "difficulty": 110, "attribute": "實", "reward_xinde": 80, "exp": 80, "faction": "guan"},
   {"id": "figure_buji", "name": "卜己", "difficulty": 110, "attribute": "柔", "reward_xinde": 80, "exp": 80, "faction": "huang"},
-  {"id": "figure_liupi", "name": "劉辟", "difficulty": 110, "attribute": "快", "reward_xinde": 80, "exp": 80, "faction": "huang"}
+  {"id": "figure_liupi", "name": "劉辟", "difficulty": 110, "attribute": "快", "reward_xinde": 80, "exp": 80, "faction": "huang"},
+  {"id": "nz_kuibing", "name": "潰營悍卒", "difficulty": 65, "attribute": "剛", "reward_silver": 30, "reward_xinde": 38, "exp": 42, "drops": [{"material": "gang_2"}, {"material": "gang_3", "chance": 0.15}]},
+  {"id": "nz_daoke", "name": "荒丘刀客", "difficulty": 58, "attribute": "快", "reward_silver": 26, "reward_xinde": 34, "exp": 38, "drops": [{"material": "kuai_2"}, {"material": "kuai_3", "chance": 0.12}]},
+  {"id": "nz_tiger", "name": "吊睛白額虎", "difficulty": 78, "attribute": "剛", "reward_xinde": 45, "exp": 48, "drops": [{"material": "gang_2"}, {"material": "gang_3", "chance": 0.2}]},
+  {"id": "nz_xiangma", "name": "劫道響馬", "difficulty": 62, "attribute": "快", "reward_silver": 30, "reward_xinde": 36, "exp": 40, "drops": [{"material": "kuai_2"}, {"material": "kuai_3", "chance": 0.12}]},
+  {"id": "nz_luanbing", "name": "亡命亂兵", "difficulty": 68, "attribute": "慢", "reward_silver": 32, "reward_xinde": 40, "exp": 44, "drops": [{"material": "man_2"}, {"material": "man_3", "chance": 0.15}]},
+  {"id": "nz_haoke", "name": "綠林豪客", "difficulty": 82, "attribute": "柔", "reward_silver": 40, "reward_xinde": 45, "exp": 50, "drops": [{"material": "rou_2"}, {"material": "rou_3", "chance": 0.2}]},
+  {"id": "nz_jinba", "name": "津口惡霸", "difficulty": 70, "attribute": "柔", "reward_silver": 35, "reward_xinde": 40, "exp": 44, "drops": [{"material": "rou_2"}, {"material": "rou_3", "chance": 0.15}]},
+  {"id": "nz_youxia", "name": "亡命游俠", "difficulty": 72, "attribute": "快", "reward_silver": 36, "reward_xinde": 42, "exp": 46, "drops": [{"material": "kuai_2"}, {"material": "kuai_3", "chance": 0.15}]},
+  {"id": "nz_shuifei", "name": "蘆蕩水匪", "difficulty": 66, "attribute": "柔", "reward_silver": 32, "reward_xinde": 38, "exp": 42, "drops": [{"material": "rou_2"}, {"material": "rou_3", "chance": 0.15}]},
+  {"id": "nz_huqi", "name": "塞外胡騎", "difficulty": 88, "attribute": "快", "reward_silver": 45, "reward_xinde": 48, "exp": 52, "drops": [{"material": "kuai_2"}, {"material": "kuai_3", "chance": 0.25}]}
 ]
