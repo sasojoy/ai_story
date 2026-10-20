@@ -23,6 +23,7 @@
   "economy": {"gather_cut": false, "sortie_silver": false, "sell": false, "upgrade": false, "donate": false},
   "four_tiers": {"enabled": false},
   "territory": {"enabled": false},
+  "conquest": {"enabled": false},
   "ambush": {"enabled": false},
   "fortify": {"enabled": false},
   "figure_aid": {"enabled": false},

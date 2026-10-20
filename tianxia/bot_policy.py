@@ -10,7 +10,7 @@ import hashlib
 import random
 from dataclasses import dataclass
 
-from . import allied, arena, atlas, battle_instance, bot, bounties, cultivation, duel, explore_modes, forge_secrets, invites, leaderboard, library, mingtie, naming, orders, precise, rules, sensing, server_bots, social, sortie, team
+from . import allied, arena, atlas, battle_instance, bot, bounties, conquest, conquest_day, cultivation, duel, explore_modes, forge_secrets, invites, leaderboard, library, mingtie, naming, orders, precise, rules, sensing, server_bots, social, sortie, team
 from .bot import allocate_points, can_practise, wants_heal
 from .engine import FREE_TEXT_OPTION, IDLE_MARK, Game, Option
 from .models import MOVES, Content, Effect, SkillDef
@@ -210,7 +210,7 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random, slot: NamingS
     if not options and not enlist:
         return msgs
     ids = [o.id for o in options]
-    battle = game.world.get_battle()
+    battle = game.battle_now()  # 有攻城戰時是自己看的那一場（領地爭奪第二批）
     if battle is not None and s.player.name not in battle.participants:
         join = next((i for i in ids if i.startswith("battle:join")), None) or bot.enlist_pick(game, [o.id for o in enlist])
         if join is not None:  # 集結時選單照常有別的事可做（FB-009）；假人一看到加入就加入，不交給強度旋鈕碰運氣；豪強投效人少的一軍
@@ -478,6 +478,7 @@ def look_after(game: Game, rng: random.Random) -> None:
     allocate_points(game, rng)
     _make_card(game)  # 名帖（不擲亂數）
     bot.check_in(game)  # 每日簽到（21 天季，正式季整合 8.1；不擲亂數，四階照名號＋季數的種子挑）
+    _conquest_vote(game)  # 領地爭奪第二批：每天投一票（裁決 9：假人照樣投，含第 4 階；不擲亂數）
     bot.take_pill(game)  # 體力見底、手上有回體丹就吃一顆（內測贈送，真人假人一樣拿到）
     if wants_heal(game):
         game.heal()
@@ -491,6 +492,22 @@ def look_after(game: Game, rng: random.Random) -> None:
     bot.teach(game, TEACH_PER_TICK)  # 傳功門下：心得多出來就傳給同伴、部下（不擲亂數）
     bot.trade_at_smith(game)  # 素材與經濟（計畫 B5）：人在鐵匠鋪就升階、賣多的（不擲亂數；不為了它進鐵匠鋪）
     bot.donate_spare(game)  # 人在自家大本營就捐多的素材（不擲亂數；不為了它繞路）
+
+
+def _conquest_vote(game: Game) -> None:
+    """領地爭奪第二批（裁決 9、設計 4.9）：投靠了官軍或黃巾的假人一天投一次「主將建議的那一組」（conquest_day.commander_picks 的第一組，
+    同一天同一邊大家投得一樣），投過了這一天不再投。在任的第 4 階假人也投（算進 55% 那一組）；不下令（沒有下令這一條了）。"""
+    s, c = game.state, game.content
+    w = s.world
+    if game._vote_problem() is not None:
+        return
+    side, key = game._conquest_side(), game._vote_key()
+    if w.conquest.votes_for == key and s.player.name in w.conquest.votes.get(side, {}):
+        return
+    valid = conquest_day.slots(w, c, key, game.pill_now())
+    picks = conquest_day.commander_picks(w, c, side, 1, key, set(), valid)
+    if picks:
+        game.conquest_vote(picks[0][0].loc, picks[0][0].minute)
 
 
 def tend_arts(game: Game, rng: random.Random, slot: NamingSlot | None = None) -> list[str]:
@@ -850,6 +867,8 @@ def _train_value(game: Game, profile: BotProfile, loc_id: str | None = None) -> 
     """在這個地點（預設所在地）出陣（關著時遊歷）對自己陣營的大勢分（同 effect_score 的一點抵十分）。出陣今天用完了就是 0：
     不再往戰線地點拉（出陣探索與地盤設計第七節：次數用完就去探索找素材練功）。"""
     goals = _goals(game, profile)
+    if conquest.on(game.content, game.state.world):  # 領地爭奪：出陣推進度、不推線——照推得動的名目量（大本營、不是區塊是 0）
+        return TREND_WEIGHT * game.sortie_progress(loc_id) if game.sorties_left() > 0 else 0.0
     if sortie.on(game.content):
         pushes = game.sortie_push(loc_id) if game.sorties_left() > 0 else {}
     else:
@@ -926,7 +945,7 @@ def _battle_score(game: Game, arg: str) -> float | None:
         return JOIN_BATTLE_SCORE
     if kind != "act":
         return None
-    battle = game.world.get_battle()
+    battle = game.battle_now()  # 自己參戰的那一場（決戰或攻城，領地爭奪第二批）
     definition = game.content.battles[battle.battle_id]
     me = battle.participants.get(game.state.player.name)
     if me is None:

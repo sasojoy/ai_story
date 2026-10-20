@@ -297,8 +297,7 @@ def _tales_waiting(game: Game) -> bool:
     假人程式、逾時的追趕裡結算，所以每一個動作與輪詢之後都看一眼。"""
     if not TALE_THREADS or game.client is None or TALE_RUNNING:
         return False
-    battle = game.world.get_battle()
-    return battle is not None and bool(battle.tales)
+    return any(battle.tales for battle in game._tale_battles())  # 決戰與攻城戰（領地爭奪第二批）
 
 
 def look(game: Game, view):
@@ -485,10 +484,15 @@ def current_fingerprint() -> str:
     battle = shared.active_battle
     definition = CONTENT.battles.get(battle.battle_id) if battle is not None else None
     progress = battle_instance.round_progress(battle, definition) if definition is not None and battle.phase == "active" else None
+    sieges = [  # 攻城戰（領地爭奪第二批）：每一場同決戰那幾樣
+        (siege, battle_instance.round_progress(siege, CONTENT.battles[siege.battle_id])
+         if siege.phase == "active" and siege.battle_id in CONTENT.battles else None)
+        for siege in shared.sieges
+    ]
     return server_push.world_fingerprint(
         shared.season_number, shared.season_phase(), shared.season, battle,
         rumor_id=rumor_id, chronicle_count=chronicle_count, paused=shared.paused_at is not None, progress=progress,
-        seal=shared.seal_duels,
+        seal=shared.seal_duels, sieges=sieges,
     )
 
 
@@ -1406,6 +1410,9 @@ def _main_view_body(game: Game) -> dict:
     convoy = game.convoy_line()  # 押著的糧車（T6 審查 I3）：軍令卡上寫一行
     if convoy is not None:
         view["convoy"] = convoy
+    conquest_view = game.conquest_view()  # 領地爭奪第二批：攻城的時程表與明天的眾議（開關關著、季收了沒有這個鍵）
+    if conquest_view is not None:
+        view["conquest"] = conquest_view
     letter = game.letter_view()  # 書信（大勢人物擴充第二批）：江湖頁「剛剛」上面一張小卡；沒有沒看過的信就沒有這個鍵
     if letter is not None:
         view["letter"] = letter
@@ -1904,6 +1911,8 @@ MAIN_ACTIONS = {
     "pill": lambda g, b: g.take_stamina_pill(),  # 狀態列體力條上的「丹」：吃一顆回體丹（企劃者 2026-10-07 內測贈送）
     # 江湖頁「簽到」小標攤開的領取鈕（21 天季，正式季整合 6.2）：四階的日子帶 attribute（剛柔快慢）
     "checkin": lambda g, b: g.check_in(str(b.get("attribute", ""))[:2]),
+    # 領地爭奪第二批：每天投票（裁決 9）——明天打哪一塊（loc）、幾點開打（minute：當地時間的分鐘）
+    "conquest_vote": lambda g, b: g.conquest_vote(str(b.get("loc", "")), _int(b.get("minute"), -1)),
 }
 # 賽季時鐘暫停中也照做的畫面設定（不推任何東西、不碰別人）：匿名、不再提示、略過引導、打開輿圖（頁面靠它載入輿圖）、軍令卡出現（入伍段第一步，
 # 只動自己的引導；被擋下的話網頁已經記成「送過了」，這個工作階段不會再送）、對話框的「知道了」
@@ -1923,6 +1932,11 @@ ADMIN_ACTIONS = {
     "schedule": lambda g, b: g.admin_schedule(str(b.get("id", "")), _float(b.get("at"), 0.0), time.time()),
     "jump_next": lambda g, b: g.admin_jump_next(time.time()),
     "set_trend": lambda g, b: g.admin_set_trend(str(b.get("id", "")), _int(b.get("value"), 0)),
+    # 領地爭奪（第 38 項改版第一批）：定一塊歸誰（side 空字串＝放回中立）；第一批沒有攻城戰，地圖只靠這裡與時刻表指定易手
+    "conquest_set": lambda g, b: g.admin_conquest_set(str(b.get("id", "")), str(b.get("side", "")) or None),
+    # 第二批（救場）：立刻照此刻的票與主將排一次攻城（集結馬上開）、取消今天的一場（id 是時程表那一場的 id）
+    "conquest_settle_now": lambda g, b: g.admin_conquest_settle_now(),
+    "conquest_cancel": lambda g, b: g.admin_conquest_cancel(str(b.get("id", ""))),
     "resolve_event": lambda g, b: g.admin_resolve_event(str(b.get("id", "")), str(b.get("key", ""))),
     "clear_lock": lambda g, b: g.admin_clear_lock(str(b.get("id", ""))),
     "cancel_battle": lambda g, b: g.admin_cancel_battle(),

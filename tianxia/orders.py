@@ -145,6 +145,17 @@ def siege_places(content: Content, faction: str, front: str, world: WorldState |
     T6 審查 I2：沒有這種地點的戰線，攻城永遠湊不滿，不發攻城。潁川汝南以前沒有官軍隊伍、黃巾在那裡不發攻城；
     FB-184 開了官軍大營（整支官軍）之後黃巾在潁川汝南也有攻城（攻打官軍大營）。"""
     enemy = ENEMY.get(faction)
+    from . import conquest  # noqa: PLC0415  conquest → territory → rules：在函式裡 import
+
+    if conquest.on(content, world):
+        # 領地爭奪（第二批，裁決 11）：這條線上這一邊今天公告要攻的目標（conquest_day.today），而且那裡出陣攻打的對手每一路打贏都記得到
+        # （同 _counts 的 siege_win，FB-531）。打贏那裡的守軍就算，公告了的中立地、被敵方佔下的中立地站的中立駐軍與流寇也算
+        # （裁決 20，PM 2026-10-21）。敵方大本營與廣宗搶不下（conquest.targets 先排掉），不會被公告（裁決 18）
+        return [
+            loc_id for loc_id in _today(content, world, faction, "attack")
+            if conquest.line_of(world, content, loc_id) == front
+            and _all_enemy(content, faction, conquest.sortie_foes(world, content, loc_id, faction), garrison=True)
+        ]
     if world is not None and territory.on(content):
         return [
             loc_id for loc_id in content.locations
@@ -155,6 +166,21 @@ def siege_places(content: Content, faction: str, front: str, world: WorldState |
         if rules.front_of(content, loc_id) == front
         and any(content.squads[sid].faction == enemy for sid in loc.enemies if sid in content.squads)
     ]
+
+
+def siege_win(faction: str | None, squad_faction: str | None, garrison: bool = False) -> bool:
+    """打贏這一路算不算 faction 的攻城（軍令文件 3.1：敵方陣營的隊伍；操練、流寇、中立駐軍不算）。記功（_counts）與領地爭奪開著時
+    列地點（siege_places）都問它：軍令卡、假人、記功同一個判斷（FB-531）。
+    garrison（領地爭奪在這一季生效，裁決 20，PM 2026-10-21）：攻城＝今天公告的目標，打贏那裡的守軍就算——敵方陣營的兵，或沒有陣營的
+    中立駐軍、流寇；自家的、別的陣營（豪強）的隊伍照舊不算。地點是不是今天公告的目標由呼叫端看。"""
+    if garrison and squad_faction is None:
+        return True
+    return squad_faction is not None and squad_faction == ENEMY.get(faction or "")
+
+
+def _all_enemy(content: Content, faction: str, squads: list[str], garrison: bool = False) -> bool:
+    """這裡出陣攻打的對手（至少一路）每一路打贏都算 faction 的攻城（garrison 同 siege_win）。"""
+    return bool(squads) and all(siege_win(faction, content.squads[sid].faction, garrison) for sid in squads)
 
 
 def _issuable(state: GameState, content: Content, t: OrderTemplate, front: str, week: int, opening: bool) -> bool:
@@ -371,15 +397,31 @@ def _issue(state: GameState, content: Content, week: int, prefix: str, redraw: b
 PERSONAL = {"siege": "win", "defend": "duty", "intercept": "win", "escort": "convoy", "strike": "challenge"}
 
 
+def _today(content: Content, world: WorldState | None, side: str | None, how: str) -> list[str]:
+    """領地爭奪第二批：這一邊今天公告要攻（attack）、或自家被公告要守（defend）的區塊（conquest_day.today）。"""
+    from . import conquest_day  # noqa: PLC0415  conquest_day → conquest → territory → rules：在函式裡 import
+
+    return conquest_day.today(world, content, side, how) if world is not None and side is not None else []
+
+
 def _counts(
     content: Content, o: Order, kind: str, location: str | None, front: str | None, squad: str | None,
-    squad_faction: str | None, figure: str | None, order: str | None,
+    squad_faction: str | None, figure: str | None, order: str | None, world: WorldState | None = None,
 ) -> bool:
-    """這一次個人行動算不算這道軍令的一次（軍令文件 3.1～3.4、4.5）。"""
+    """這一次個人行動算不算這道軍令的一次（軍令文件 3.1～3.4、4.5）。world 給了而且領地爭奪在這一季生效時，攻城與守城照今天的時程表
+    （裁決 11：攻城＝這一邊今天公告的目標裡打贏那裡的守軍〔siege_win(garrison=True)：敵方陣營的兵，中立駐軍、流寇也算，裁決 20；
+    同 siege_places，FB-531〕；守城＝自家被公告的那一塊）。"""
     if PERSONAL.get(o.template) != kind:
         return False
+    from . import conquest  # noqa: PLC0415
+
+    if o.template in ("siege", "defend") and conquest.on(content, world):
+        spots = _today(content, world, o.faction, "attack" if o.template == "siege" else "defend")
+        if location not in spots or conquest.line_of(world, content, location) != o.front:
+            return False
+        return o.template == "defend" or siege_win(o.faction, squad_faction, garrison=True)
     if o.template == "siege":  # 在那條戰線遊歷打贏一場敵方陣營的隊伍（操練、流寇不算）
-        return front == o.front and squad_faction is not None and squad_faction == ENEMY.get(o.faction)
+        return front == o.front and siege_win(o.faction, squad_faction)
     if o.template == "intercept":  # 在運糧隊在的那幾站（intercept_spots）打贏敵方的運糧隊
         enemy = content.orders.convoy_squads.get(ENEMY.get(o.faction, ""))
         return squad is not None and squad == enemy and location is not None and o.location is not None \
@@ -473,7 +515,7 @@ def credit(
     「某位少俠」照舊。散人、開關關著回空。"""
     msgs: list[str] = []
     for o in current(state, content, faction):
-        if o.done or not _counts(content, o, kind, location, front, squad, squad_faction, figure, order):
+        if o.done or not _counts(content, o, kind, location, front, squad, squad_faction, figure, order, state.world):
             continue
         o.progress[name] = o.progress.get(name, 0) + weight
         o.shown[name] = shown or name
@@ -525,7 +567,12 @@ def win_counts(state: GameState, content: Content, faction: str | None, loc_id: 
 
 
 def duty_counts(state: GameState, content: Content, faction: str | None, loc_id: str) -> bool:
-    """在這裡做守勢行動，會替這週還沒達成的守城記一次。"""
+    """在這裡做守勢行動，會替這週還沒達成的守城記一次（領地爭奪第二批：自家今天被公告的那一塊，裁決 11）。"""
+    from . import conquest  # noqa: PLC0415
+
+    if conquest.on(content, state.world):
+        return any(o.template == "defend" and not o.done and _counts(content, o, "duty", loc_id, None, None, None, None, None, state.world)
+                   for o in current(state, content, faction))
     front = rules.front_of(content, loc_id)
     return any(o.template == "defend" and not o.done and o.front == front for o in current(state, content, faction))
 
@@ -538,6 +585,7 @@ def strike_on(state: GameState, content: Content, faction: str | None, fid: str)
 def targets(state: GameState, content: Content, faction: str | None) -> list[str]:
     """假人往哪裡走：這週還沒達成的軍令要去的地點（攻城、守城：那條戰線的地點；截糧：運糧隊在的那幾站〔intercept_spots〕；護糧：身上有
     這一道的糧車就是終點，沒有而且糧草夠就是起點；打擊：人物當下的所在），照內容檔的地點順序。"""
+    from . import conquest  # noqa: PLC0415  conquest → territory → rules：在函式裡 import
     from .materials import grain_of  # noqa: PLC0415  只有這裡用得到
 
     p = state.player
@@ -548,7 +596,11 @@ def targets(state: GameState, content: Content, faction: str | None) -> list[str
         if o.template == "siege":
             wanted |= set(siege_places(content, o.faction, o.front, state.world))
         elif o.template == "defend":
-            wanted |= {loc for loc in content.locations if rules.front_of(content, loc) == o.front}
+            if conquest.on(content, state.world):  # 領地爭奪第二批：自家今天被公告的那一塊（裁決 11）
+                wanted |= {loc for loc in _today(content, state.world, o.faction, "defend")
+                           if conquest.line_of(state.world, content, loc) == o.front}
+            else:
+                wanted |= {loc for loc in content.locations if rules.front_of(content, loc) == o.front}
         elif o.template == "intercept" and o.location is not None:
             wanted |= intercept_spots(content, o.location)
         elif o.template == "escort":

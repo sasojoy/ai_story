@@ -4370,6 +4370,7 @@
   const FRONT_RED = "#A8322A";
   const MAP_INK = "#2B241B"; // 地圖上的字（紙色描邊）
   const MAP_HALO = "#F7F1E3";
+  const NEUTRAL_INK = { ring: "#8F8B82", disc: "#ECE9E2", far: "#CFCBC2" }; // 領地爭奪：還沒人佔的中立地（甲：灰白圓盤＋虛線圈；待 joy 對色）
   const MAP_FAR = 0.62; // 倍率低於它換成「看大局」：只剩點、大區名、三色長條（設計第四節）
   const MAP_STATE_EVERY = 30000; // 輿圖開著時疊層多久重抓一次（毫秒）
   // ── 意境濾鏡（意境提示設計第四節）：照屬性上色（意境改名也不跑掉）。c 圓盤外框與小圓章、light 圓盤底、dark 深色主題上空心牌子的字
@@ -4453,7 +4454,10 @@
     }
     for (const p of base.places) {
       const c = on ? ctrl[p.id] : null, ink = ins ? insightInk(base, p.strong) : null; // 意境開著：圓盤是最濃那一種的顏色與字
-      const col = ink ? ink.c : c ? MAP_SIDES[c].color : "#7A6A55";
+      // 領地爭奪：還沒人佔的中立地畫灰白圓盤＋虛線圈（甲；乙「細金邊＋被佔之後外圈一圈淡色」等企劃者挑，草圖在
+      // docs/superpowers/specs/2026-10-20-領地爭奪-草圖/中立地/；待 joy 對顏色）
+      const nz = on && !c && !!st.places[p.id] && st.places[p.id].kind === "neutral";
+      const col = ink ? ink.c : c ? MAP_SIDES[c].color : nz ? NEUTRAL_INK.ring : "#7A6A55";
       const r = (far ? 6 : 11) * k; // 圓盤半徑照螢幕固定（11px；看大局 6px），倍率變了地圖單位跟著反算（設計第三節，FB-260）
       if (flash.has(p.id)) pulse(`<circle class="pulse" cx="${p.x}" cy="${p.y}" r="16" fill="none" stroke="${FRONT_RED}" stroke-width="${f1(3 * k)}" pointer-events="none"/>`);
       if (o.sel === p.id) out.push(`<circle cx="${p.x}" cy="${p.y}" r="${f1(r + 9 * k)}" fill="none" stroke="${MAP_INK}" stroke-width="${f1(3 * k)}" pointer-events="none"/>`);
@@ -4461,11 +4465,14 @@
       // 不寫成框上繼承的 CSS 變數：變數一改，整棵地圖約 1,500 個元素都要重算樣式（縮放每一下多 40ms 上下，Joy 2026-10-17）
       out.push(`<g data-loc="${esc(p.id)}" style="cursor:pointer"><circle cx="${p.x}" cy="${p.y}" r="16" fill="#000000" fill-opacity="0" stroke-width="${hit}"/>`);
       if (far) {
-        out.push(`<circle cx="${p.x}" cy="${p.y}" r="${f1(r)}" fill="${ink ? ink.c : c ? MAP_SIDES[c].color : "#A99C84"}" stroke="${MAP_HALO}" stroke-width="${f1(1.5 * k)}"/></g>`);
+        const dash = nz ? ` stroke-dasharray="${f1(2 * k)} ${f1(1.6 * k)}"` : ""; // 看大局：中立地的小點也是虛線邊
+        out.push(`<circle cx="${p.x}" cy="${p.y}" r="${f1(r)}" fill="${ink ? ink.c : c ? MAP_SIDES[c].color : nz ? NEUTRAL_INK.far : "#A99C84"}" stroke="${nz ? NEUTRAL_INK.ring : MAP_HALO}" stroke-width="${f1(1.5 * k)}"${dash}/></g>`);
         continue;
       }
-      out.push(`<circle cx="${p.x}" cy="${p.y}" r="${f1(r + 2.5 * k)}" fill="none" stroke="${col}" stroke-width="${f1(1.2 * k)}" opacity=".7"/>`);
-      out.push(`<circle cx="${p.x}" cy="${p.y}" r="${f1(r)}" fill="${ink ? ink.light : "#FBF6EA"}" stroke="${col}" stroke-width="${f1(2.6 * k)}"/>`);
+      out.push(nz // 中立地：外圈換成虛線（「還沒人佔」），離圓盤遠一點、粗一點，375 寬也看得出是斷的
+        ? `<circle cx="${p.x}" cy="${p.y}" r="${f1(r + 4 * k)}" fill="none" stroke="${col}" stroke-width="${f1(1.6 * k)}" stroke-dasharray="${f1(3.2 * k)} ${f1(2.4 * k)}"/>`
+        : `<circle cx="${p.x}" cy="${p.y}" r="${f1(r + 2.5 * k)}" fill="none" stroke="${col}" stroke-width="${f1(1.2 * k)}" opacity=".7"/>`);
+      out.push(`<circle cx="${p.x}" cy="${p.y}" r="${f1(r)}" fill="${ink ? ink.light : nz ? NEUTRAL_INK.disc : "#FBF6EA"}" stroke="${col}" stroke-width="${f1(2.6 * k)}"/>`);
       out.push(`<text x="${p.x}" y="${f1(p.y + r * 0.36)}" text-anchor="middle" font-size="${f1(r * 1.02)}" fill="${col}" font-weight="700" style="font-family:serif">${esc(ink ? ink.name : p.glyph)}</text></g>`);
       if (ink) (p.insights || []).filter((id) => id !== p.strong).forEach((id, i) => { // 同一處還悟得到的別種：圓盤右下沿著邊掛小圓章
         const other = insightInk(base, id);
@@ -4702,12 +4709,12 @@
     } else {
       acts = `<button type="button" class="main" data-act="map-travel" data-mode="walk">步行 ${Number(p.minutes)} 分<small>沿路可以做小事</small></button><button type="button" data-act="map-travel" data-mode="dash"${st.stamina < p.stamina ? " disabled" : ""}>疾行<small>${st.stamina < p.stamina ? `體力不足，要 ${Number(p.stamina)}` : `立刻到・體力 ${Number(p.stamina)}`}</small></button>`;
     }
-    const strip = p.kind === "line" || p.kind === "fixed" ? `<div class="m-strip">${Array.from({ length: st.weeks_total }, (_, i) => {
+    const strip = p.kind === "line" || p.kind === "fixed" || p.kind === "neutral" ? `<div class="m-strip">${Array.from({ length: st.weeks_total }, (_, i) => {
       const w = i + 1, row = (st.weeks || []).find((x) => x.week === w), c = row && row.control ? row.control[id] : null;
       return `<span class="${w > st.now_week ? "future" : ""}${w === st.now_week ? " now" : ""}" style="background:${c ? MAP_SIDES[c].color : "#CDBF9F"}"></span>`;
     }).join("")}</div>` : "";
     const flips = p.flips.map((f) => `第 ${Number(f.week)} 週 ${sideName(f.from)}→${sideName(f.to)}`).join("；");
-    const kind = p.kind === "base" ? "大本營" : p.kind === "fixed" ? "照大事易手" : p.kind ? "可易手" : "";
+    const kind = p.kind === "base" ? "大本營" : p.kind === "fixed" ? "照大事易手" : p.kind === "neutral" ? "中立地" : p.kind ? "可易手" : ""; // 中立地：領地爭奪（待 joy 潤）
     const tone = (word) => TONE_COLOR[ODDS_TONE_WEB[word] || "ok"];
     return `<div class="m-h1">${ctrlSeal(p.control)}<span class="nm">${esc(b.name)}</span><span class="meta">${insightOn(base, new Set(S.mapLayers)) && b.terrain ? `<span class="terrain">${esc(b.terrain)}</span>` : ""}${"★".repeat(Number(p.danger) || 0)}</span><button type="button" class="m-x" data-act="map-back" aria-label="收起">✕</button></div>
       <div class="m-three"><div><small>誰佔著</small><b style="color:${p.control ? MAP_SIDES[p.control].color : "inherit"}">${p.control ? MAP_SIDES[p.control].name : "無人"}</b>${kind ? `<small>${kind}</small>` : ""}</div>
@@ -4715,7 +4722,7 @@
         <div><small>多遠</small><b>${here ? "這裡" : p.minutes === null ? "—" : `${Number(p.minutes)} 分`}</b>${here || p.stamina === null ? "" : `<small>疾行 體力 ${Number(p.stamina)}</small>`}</div></div>
       ${insightRow(base, b)}<div class="m-acts">${acts}</div>
       ${p.order || p.bounty ? `<div class="m-sec"><h4>軍令與懸賞</h4>${p.order ? `軍令「${esc(p.order)}」在這裡記功` : ""}${p.order && p.bounty ? "；" : ""}${p.bounty ? `懸賞「${esc(p.bounty)}」在這裡交差` : ""}</div>` : ""}
-      ${st.territory ? `<div class="m-sec"><h4>地盤</h4>${p.control ? `${sideName(p.control)}${p.control === "haoqiang" ? "佔據" : "控制"}。${esc(p.price)}` : "不在戰線上，沒有控制方。"}${strip}${flips ? `<div class="m-sub">易手：${flips}</div>` : ""}</div>` : ""}
+      ${st.territory ? `<div class="m-sec"><h4>地盤</h4>${p.control ? `${sideName(p.control)}${p.control === "haoqiang" ? "佔據" : "控制"}。${esc(p.price)}` : p.kind === "neutral" ? `中立地，還沒有人佔。${esc(p.price)}` : "不在戰線上，沒有控制方。"}${strip}${flips ? `<div class="m-sub">易手：${flips}</div>` : ""}</div>` : ""}
       <div class="m-sec"><h4>站在這裡的</h4>${p.squads.length ? p.squads.map((q) => `${esc(q.name)} <span style="color:${tone(q.odds)}">${esc(q.odds)}</span>`).join("、") : "沒有人在這裡滋事"}${p.people.length ? `<div class="m-sub">人物：${p.people.map(esc).join("、")}</div>` : ""}</div>
       ${terrainArtsRow(b)}
       ${p.services.length ? `<div class="m-sec"><h4>此地</h4>${p.services.map(esc).join("・")}</div>` : ""}

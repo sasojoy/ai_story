@@ -38,6 +38,10 @@ def fort_spot(state: GameState, content: Content, side: str | None) -> bool:
     """這裡修不修得了工事（鈕要不要畫）：開關開著、這裡是可易手的戰線地點、此刻控制方與拔河都是你這一方。"""
     if side is None or not fortify_on(content) or state.world.ended:
         return False
+    from . import conquest  # noqa: PLC0415  conquest → territory：在函式裡 import
+
+    if conquest.on(content, state.world):  # 領地爭奪：沒有拔河，工事替拔河多撐的那幾點沒作用，先不畫（裁決 12）
+        return False
     loc = state.player.location
     line = territory.line_of(content, loc)
     if line is None or loc not in content.scenario.territory.lines.get(line, []):

@@ -181,8 +181,13 @@ def _remember(t: TerritoryState) -> None:
 def update(world: WorldState, content: Content) -> None:
     """重算一次（設計 4.2 最後一段）：rules.change_trend 真的動了一條線、決戰結果直接寫進季（Game._apply_outcome_trends_and_flags）、
     推進世界（world.advance_world_state）時叫。這一季第一次算（world.territory 是 None）不發天下大事；之後控制方換了的地點各發
-    一句天下大事、記一筆江湖史。開關關著什麼都不做。"""
+    一句天下大事、記一筆江湖史。開關關著什麼都不做。領地爭奪開著的季（conquest.on）改走 conquest.update：不拔河、不割據。"""
     if not on(content):
+        return
+    from . import conquest  # noqa: PLC0415  conquest → territory：在函式裡 import，避免循環
+
+    if conquest.on(content, world):
+        conquest.update(world, content)
         return
     first = world.territory is None
     t = world.territory or TerritoryState()
@@ -203,6 +208,11 @@ def assign(world: WorldState, content: Content, given: dict[str, str]) -> None:
     「這一刻規則算出來的控制方」（pinned），之後規則算出來的改變那一刻才回到規則；固定的地點（廣宗）換了就是換了。大本營不收
     （載入時也擋）。換了的地點照樣發天下大事。"""
     if not on(content) or not given:
+        return
+    from . import conquest  # noqa: PLC0415
+
+    if conquest.on(content, world):  # 領地爭奪：指定了就是指定了（不記 pinned、不回到規則），重算三條線
+        conquest.assign(world, content, given)
         return
     update(world, content)
     t = world.territory
@@ -243,6 +253,10 @@ def controller(world: WorldState, content: Content, loc_id: str) -> str | None:
     """這個地點此刻歸誰；不是戰線地點也不是大本營、或開關關著是 None。這一季還沒算過時照規則現算（不存，Review Focus 4）。"""
     if not on(content) or unheld(world, content, loc_id):
         return None
+    from . import conquest  # noqa: PLC0415
+
+    if conquest.on(content, world):  # 領地爭奪：只有區塊有控制方，中立而沒人佔是 None
+        return conquest.holder(world, content, loc_id)
     t = world.territory
     if t is not None and loc_id in t.control:
         return t.control[loc_id]
@@ -257,6 +271,10 @@ def squads_at(world: WorldState, content: Content, loc_id: str) -> list[str]:
     """這個地點此刻站的隊伍（設計 4.3 第 1 點）：寫了 garrison 的地點是無陣營的那幾路（Location.enemies 裡的，誰控制都在）加上
     控制方那一組；其餘（開關關著、大本營沒寫 garrison）照 Location.enemies。遊歷、出陣、探索、懸賞、攻城、輿圖都讀它。"""
     loc = content.locations[loc_id]
+    from . import conquest  # noqa: PLC0415
+
+    if conquest.on(content, world) and conquest.start_kind(world, content, loc_id) == conquest.NEUTRAL:
+        return conquest.neutral_squads(world, content, loc_id)  # 領地爭奪：開季中立的區塊照它自己那一套，不看控制方（設計 3.3）
     side = controller(world, content, loc_id)
     garrison = content.scenario.territory.garrison.get(loc_id) if side is not None else None
     if not garrison:
@@ -267,30 +285,46 @@ def squads_at(world: WorldState, content: Content, loc_id: str) -> list[str]:
 
 def price_factor(world: WorldState, content: Content, faction: str | None, loc_id: str) -> float:
     """地盤福利（設計 4.3 第 3 點）：在自己陣營控制的地方 own_price、別的陣營控制的地方 enemy_price；散人、沒有控制方是 1。
-    faction 是那一邊（rules.side_of）。豪強分屬兩軍的季，豪強的投靠點不算哪一軍的地盤（held_bases：沒有控制方），照原價。"""
+    faction 是那一邊（rules.side_of）。豪強分屬兩軍的季，豪強的投靠點不算哪一軍的地盤（held_bases：沒有控制方），照原價。
+    領地爭奪開著的季（conquest.on），散人在開季中立的區塊算自家（設計 4.6：中立地算散人的地盤，不論此刻歸誰）。"""
+    from . import conquest  # noqa: PLC0415
+
+    cfg = content.config.territory
+    if faction is None and conquest.is_home(world, content, None, loc_id):
+        return cfg.own_price
     side = controller(world, content, loc_id)
     if side is None or faction is None:
         return 1.0
-    cfg = content.config.territory
     return cfg.own_price if side == faction else cfg.enemy_price
 
 
-def price_here(state: GameState, content: Content) -> float:
+def _land_here(state: GameState, content: Content, heal: bool = False) -> float:
+    """此刻所在地的地盤福利（price_factor，照 rules.side_of）。heal：療傷——領地爭奪開著的季，新手期（roster.newbie）在敵方領地療傷
+    不吃加價（裁決 4：潁川郡是黃巾新手出序章的第一站）。"""
+    from . import conquest, roster  # noqa: PLC0415  roster → rules：延後 import
+
+    p = state.player
+    land = price_factor(state.world, content, rules.side_of(state, content), p.location)
+    if heal and land > 1 and conquest.on(content, state.world) and roster.newbie(state, content):
+        return 1.0
+    return land
+
+
+def price_here(state: GameState, content: Content, heal: bool = False) -> float:
     """此刻在這裡買東西的倍數（名聲設計 4.1）：地盤福利（price_factor）× 名望的店家折扣（renown.price_factor）。
     療傷、打造工錢、升階工錢、買馬都走這裡；輿圖詳情欄照舊只寫地盤（那是地點的，mapdata 讀 price_factor）。
+    heal：療傷那一條（_land_here：領地爭奪的新手期在敵方領地不加價）。
     放在 territory 而不是 renown：territory → rules → renown，renown 再 import territory 就繞成環。"""
-    p = state.player  # 自家地盤照那一邊算（rules.side_of：豪強分屬兩軍的季，豪強是依附的那一軍）
-    return price_factor(state.world, content, rules.side_of(state, content), p.location) * renown.price_factor(state, content)
+    return _land_here(state, content, heal) * renown.price_factor(state, content)
 
 
-def price_parts(state: GameState, content: Content) -> list[str]:
+def price_parts(state: GameState, content: Content, heal: bool = False) -> list[str]:
     """價錢打折的原因，一樣一段：「自家地盤・九折」「名動一方・九四折」（名聲 4.1 的寫法）；名聲關著、兩樣都沒有是空的。
-    醫館另有俠的那一半（renown.clinic_part），skillview.heal_note 接在後面、寫在同一個括號裡（FB-294）。"""
+    醫館另有俠的那一半（renown.clinic_part），skillview.heal_note 接在後面、寫在同一個括號裡（FB-294）。heal 同 price_here。"""
     if not renown.on(content, "discount"):
         return []
-    p = state.player
     parts = []
-    land = price_factor(state.world, content, rules.side_of(state, content), p.location)
+    land = _land_here(state, content, heal)
     if land != 1.0:
         parts.append(("自家地盤" if land < 1 else "敵方地盤") + "・" + renown.discount_word(land))
     fame = renown.price_factor(state, content)

@@ -1226,12 +1226,25 @@ class SeasonOneOff(_Strict):
     unlocks: list[str] = Field(default_factory=list)
 
 
+class BlockDef(_Strict):
+    """領地爭奪的一個區塊（設計 3.1：一塊＝一個地點）。kind 是開季歸哪一種：neutral 中立（高階獎勵、兩軍爭奪），guan／huang 是那一方的
+    陣營領地（大本營也寫在這裡，種類要是自己陣營的）；line 是佔領算進哪一條戰線的大勢值（null＝不算進任何一條，洛陽那一帶）。"""
+
+    kind: Literal["neutral", "guan", "huang"]
+    line: str | None = None
+
+
 class TerritoryDef(_Strict):
     """地盤易手（出陣探索與地盤設計第四節；tianxia/territory.py）。大本營（陣營的 join_at）不寫在這裡，永遠歸那一方。"""
 
     lines: dict[str, list[str]] = Field(default_factory=dict)  # 戰線 id → 可易手的地點，從目標往 0 推的那一方（官軍）那頭排到另一頭（待 joy 對）
     fixed: dict[str, str] = Field(default_factory=dict)  # 不參與拔河、只照大事（TimetableOutcome.control）易手的地點 → 開季的控制方（廣宗）
     garrison: dict[str, dict[str, list[str]]] = Field(default_factory=dict)  # 地點 → 控制方 → 站的隊伍；流寇野獸照 Location.enemies 裡無陣營的
+    # ── 領地爭奪（第 38 項改版，docs/superpowers/specs/2026-10-20-領地爭奪-design.md；tianxia/conquest.py；Config.conquest 開著才讀）──
+    blocks: dict[str, BlockDef] = Field(default_factory=dict)  # 地點 → 區塊（開季歸哪一種、算進哪條戰線）；不寫的地點不是區塊
+    neutral_garrison: dict[str, list[str]] = Field(default_factory=dict)  # 開季中立的區塊 → 另一套駐軍（無陣營的強對手，設計 3.3；待 joy）
+    # 陣營區塊沒寫 garrison 時，出陣攻打碰上的控制方巡邏（陣營 → 隊伍；conquest.sortie_foes；待 joy）：城鎮這類沒有兵的區塊也攻得了
+    side_garrison: dict[str, list[str]] = Field(default_factory=dict)
 
 
 class Scenario(_Strict):
@@ -2581,6 +2594,44 @@ class TerritoryRules(_Strict):
     enemy_price: float = Field(default=1.2, gt=0)  # 在別的陣營控制的地方
 
 
+class ConquestRules(_Strict):
+    """領地爭奪（第 38 項改版，docs/superpowers/specs/2026-10-20-領地爭奪-design.md；計畫 docs/superpowers/plans/2026-10-20-領地爭奪.md；
+    tianxia/conquest.py）。開季時蓋章（WorldState.conquest_on，要第一季規則開著、劇本有官軍與黃巾、寫了 territory.blocks、豪強分屬兩軍），
+    正在跑的季不變；enabled 是主機的開關（關掉時照關著）。開著時：控制方只照佔領（不拔河、不割據），三條戰線的值＝佔領的基準＋其他
+    來源的偏移，出陣推攻城目標的進度、不推線，人站在自家領地吃加成，散人在開季中立的區塊也吃。第二批起每天投票、22:00 結算排明天的
+    攻城（conquest_day.py），時間到了開攻城戰（siege.py，決戰的縮小版，跟決戰同時打），攻方贏了就易手。數字全是【預設】，等 21 天的季試玩再調。"""
+
+    enabled: bool = False  # 【預設】正式內容先關；三批都做完、QA 過、PM 說可以，再在 season21.json 打開（裁決 15）
+    share: float = Field(default=35.0, ge=0)  # 【預設】佔領的份量：中立地全被一方拿下，基準偏到 50±share（分母只算中立時，設計 4.7）
+    neutral_weight: float = Field(default=1.0, ge=0)  # 【預設】中立區塊的權重（設計 4.7）
+    faction_weight: float = Field(default=2.0, ge=0)  # 【預設】陣營區塊的權重：打進敵方陣營影響比較大（設計 4.7、3.2）
+    # 【預設】基準的分母：neutral＝那條線開季中立的權重和（裁決 5：中立全被拿下剛好走到 50±share）；total＝那條線所有可奪區塊的權重和
+    # （設計 4.7 原文；潁川汝南被後方的陣營區塊稀釋到只偏幾點）。兩種都留，數字等試玩調
+    weigh_by: Literal["total", "neutral"] = "neutral"
+    gather_bonus_chance: float = Field(default=0.25, ge=0, le=1)  # 【預設】人站在自家領地找素材，多一個同屬性一階的機會（設計 4.5）
+    sense_bonus_points: int = Field(default=5, ge=0)  # 【預設】人站在自家領地靜心感悟，擲中多幾個百分點（夾在 sense_rate_range 的上限，設計 4.5）
+    progress_scale: float = Field(default=2.0, ge=0)  # 【預設】出陣推進度：max(1, 地點寫的推量合計) × 這個 ×（攻 1、守 hold_share）÷ √人數（計畫 2.3）
+    event_progress: float = Field(default=1.0, ge=0)  # 【預設】在區塊做完一則事件，往自己那一邊推進度一次的量（計畫 2.3；散人不推）
+    start_shift_per_10: int = Field(default=2, ge=0)  # 【預設】攻城戰起點：進度偏 50 每 10 點偏幾點（設計 4.4；第二批才用）
+    start_shift_cap: int = Field(default=10, ge=0)  # 【預設】最多偏幾點（設計 4.4；第二批才用）
+    # ── 第二批：每天的鐘、投票與時程表（tianxia/conquest_day.py；設計 3.6、4.2、4.3，裁決 6、7、9）──
+    # 時刻一律是當地時間（照 pill_day_utc_offset_hours，跟回體丹同一個換日的算法）從 00:00 起算的分鐘
+    settle_hour: int = Field(default=22, ge=0, le=23)  # 【預設】每天幾點結算、公告隔天的攻城（設計 4.3）；要晚過 slot_last，當天的仗才打得完
+    slot_first: int = Field(default=12 * 60, ge=0, lt=24 * 60)  # 【預設】最早幾點開打（設計 4.3：12:00～21:00 的整點或半點）
+    slot_last: int = Field(default=21 * 60, ge=0, lt=24 * 60)  # 【預設】最晚幾點開打
+    slot_step_minutes: int = Field(default=30, ge=1)  # 【預設】開打時段的間隔（整點與半點）
+    commander_slots: list[int] = Field(default_factory=lambda: [21 * 60, 20 * 60])  # 【預設】主將替人挑時用的時段，第幾塊用第幾個（裁決 7）
+    two_per_day_ratio: float = Field(default=0.5, ge=0)  # 【預設】中立區塊數 ÷ 季長（天）≥ 這個就一邊一天兩塊，否則一塊（設計 4.2）
+    showdown_gap_before: int = Field(default=30, ge=0)  # 【預設】時刻表決戰排定時刻之前幾分鐘不排攻城（裁決 6）
+    showdown_gap_after: int = Field(default=45, ge=0)  # 【預設】之後幾分鐘不排攻城（裁決 6）
+    muster_minutes: int = Field(default=30, ge=1)  # 【預設】開打前幾分鐘開集結（設計 4.3）；結算晚了，過了「現在＋這麼久」的時段往後挪
+    rank4_share: float = Field(default=0.55, ge=0, le=1)  # 【企劃者】有第 4 階的人投票時，第 4 階的票合起來佔的比例；其他人合起來佔其餘（裁決 9）
+    pay_share: float = Field(default=0.5, ge=0)  # 【預設】攻城戰的軍餉與貢獻是決戰的幾成（設計 4.4）
+    # 【預設】兩軍同時攻同一塊中立地（三方混戰，裁決 22）：守將的池子＝這個 × 集結結束時兩軍到場的人數（至少算 2 人，siege.size_melee_guard）。
+    # 一個人五回合都強攻、戰線在中線打得掉 15×5＝75：兩軍平均四成的回合出強攻，守將撐不過五回合（一回合最多打掉四分之一，最快第 4 回合倒）
+    melee_pool_per_head: float = Field(default=30.0, gt=0)
+
+
 class AmbushRules(_Strict):
     """設伏劫道（後期體力玩法第一批，Joy 2026-10-16；tianxia/ambush.py）：花一大筆體力守在一段路上，敵對的人走過那一段（步行、疾行都算）
     就跟你打一場；贏的搶走輸的一點銀兩與素材，輸的扣氣血——雙向的，伏兵輸了賠的是自己的東西。設伏的人守在路段的這一頭，期間不能移動
@@ -2854,6 +2905,7 @@ class Config(_Strict):
     insight_strong: InsightStrong = Field(default_factory=InsightStrong)  # 意境提示：每個地點最濃的意境（見 InsightStrong）
     terrain_arts: TerrainArts = Field(default_factory=TerrainArts)  # 地利：武學跟此地最濃的意境同一路或被剋（見 TerrainArts）
     territory: TerritoryRules = Field(default_factory=TerritoryRules)  # 地盤易手（見 TerritoryRules）
+    conquest: ConquestRules = Field(default_factory=ConquestRules)  # 領地爭奪（見 ConquestRules）
     ambush: AmbushRules = Field(default_factory=AmbushRules)  # 設伏劫道（見 AmbushRules）
     fortify: FortifyRules = Field(default_factory=FortifyRules)  # 修築工事（見 FortifyRules）
     figure_aid: FigureAidRules = Field(default_factory=FigureAidRules)  # 護衛、犒軍、探望大勢人物（見 FigureAidRules）
@@ -3435,6 +3487,9 @@ class BattleDef(_Strict):
     version: str | None = None  # 那件大事分版本時（宛城甲、乙）這一筆是哪一版；到時間照 version_from 的結果開對的那一筆
     defender: Literal["guan", "huang"] | None = None  # 守方：戰局剛好停在 50 算守方守住（戰鬥系統 4.2）
     front: str | None = None  # 起點讀哪條戰線（戰線 id）：集結開始時讀一次戰況 v，起點＝50 ＋（50 − v）÷ 2（戰鬥系統 5.3）
+    # 領地爭奪第二批：攻城戰的範本（每個有區塊的大區一筆 siege_<大區>，tianxia/siege.py）：不是時刻表決戰、不從門檻開、不在「立刻開戰」的
+    # 選單上；每一場打哪一塊、誰攻記在 BattleInstance.siege，名字照 siege.title。範本的幕文字待 joy 潤
+    siege: bool = False
     # 沒有第三方（Joy 2026-10-13「豪強在大決戰還是要加入某一陣營，主軸還是官兵跟黃巾」）：不是交戰兩軍的人臨時投效其中一軍
 
 

@@ -13,7 +13,7 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from . import allied, figures, insights, mounts, orders, prologue, sortie, terrain, territory
+from . import allied, conquest, figures, insights, mounts, orders, prologue, sortie, terrain, territory
 from .calendar import point, stamp_text
 from .models import Content, Location, MapRegion, SimPlayer, TravelMode
 from .rules import (
@@ -342,6 +342,10 @@ SIEGE_UNSEEN = "（那裡你還沒摸清）"  # 待 joy 潤（FB-221）：記得
 SIEGE_SOME_UNSEEN = "（另一處你還沒摸清）"  # 待 joy 潤（FB-221）：兩處裡摸清了一處
 SIEGE_AT_SORTIE = "到{where}出陣，打贏一場{enemy}記一次{note}。"  # 待 joy 潤：出陣開著時的攻城（設計第七節）
 SIEGE_AREA_SORTIE = "到{front}一帶{enemy}的地盤出陣，打贏一場記一次。"  # 待 joy 潤
+# 領地爭奪開著時（裁決 20）：攻城認今天公告的目標、打贏那裡的守軍（敵方的兵、中立駐軍都算），卡上照 siege_places 寫；待 joy 潤
+SIEGE_CONQUEST_FOE = "守軍"
+SIEGE_AREA_CONQUEST = "到{front}一帶今天公告要攻的地方出陣，打贏一場守軍記一次。"  # 公告的地方多過 SIEGE_NAMED_MAX
+SIEGE_NONE_CONQUEST = "{front}一帶今天沒有公告要攻的地方，在那裡打贏記不到；每天 {hour}:00 公告下一天的。"  # 打完了、或公告在別條線
 INTERCEPT_SORTIE = "到{place}出陣，撞上對面的運糧隊、打贏記一次。"  # 待 joy 潤（FB-248：出陣開著時糧隊只在這一處，orders.intercept_spots）
 DEFEND_SORTIE = "在{front}一帶自家的地盤出陣守一回，或按「{duty}」（收在「此地還能做」裡），做一次記一次。"  # 待 joy 潤
 
@@ -350,10 +354,18 @@ def siege_how(state: GameState, content: Content, order: Order) -> str:
     """軍令卡上攻城那道多寫的一行（FB-221）：記得了次數的地點（orders.siege_places：這條戰線上有敵方陣營隊伍的地方）只有一兩處時
     寫出地名（「到官軍大營遊歷，打贏一場官軍記一次。」）——潁川汝南的黃巾只有官軍大營記得到，寫「一帶」會讓人在潁川郊野、長社白打。
     沒摸清的地點同打擊（strike_how）只寫大區（沒有大區寫戰線），不洩漏名字。三處以上、或一處都沒有（舊存檔），照舊寫那條戰線一帶。
-    出陣開著時說「出陣」、地點照控制方（設計第七節：攻城認出陣的攻打贏）。"""
+    出陣開著時說「出陣」、地點照控制方（設計第七節：攻城認出陣的攻打贏）。
+    領地爭奪開著時（裁決 20）：地點是今天公告的目標（siege_places），對手寫「守軍」（中立駐軍也算）；今天這條線沒有公告的地方就直說
+    記不到，不指「某一帶敵方的地盤」（那裡打贏記不到：列與記功同一個判斷）。"""
     front = trend_name(content, order.front) if order.front else "戰線"
     places = orders.siege_places(content, order.faction, order.front, state.world) if order.front else []
     enemy = content.scenario.faction_name(orders.ENEMY.get(order.faction or "")) or "對面的兵"
+    if conquest.on(content, state.world):
+        if not places:
+            return SIEGE_NONE_CONQUEST.format(front=front, hour=content.config.conquest.settle_hour)
+        if len(places) > SIEGE_NAMED_MAX:
+            return SIEGE_AREA_CONQUEST.format(front=front)
+        enemy = SIEGE_CONQUEST_FOE
     if not places or len(places) > SIEGE_NAMED_MAX:
         if sortie.on(content):
             return SIEGE_AREA_SORTIE.format(front=front, enemy=enemy)
@@ -844,8 +856,12 @@ def detail_text(state: GameState, content: Content, loc_id: str, odds: Odds) -> 
         trends = "、".join(f"{name} {value}" for name, value in region_trends(state, content, region))
         situation.append(region.name + (f"（{trends}）" if trends else ""))
     side = territory.controller(state.world, content, loc_id)
+    neutral = conquest.on(content, state.world) and conquest.start_kind(state.world, content, loc_id) == conquest.NEUTRAL
     if side is not None:  # 地盤易手（出陣探索與地盤設計 4.3 第 2 點）
-        situation.append(territory.CONTROL_LINE.format(side=content.scenario.faction_name(side, side)))
+        line = territory.CONTROL_LINE.format(side=content.scenario.faction_name(side, side))
+        situation.append(line + (conquest.NEUTRAL_HELD if neutral else ""))  # 領地爭奪：被佔下的中立地多寫一句開季是中立地
+    elif neutral:
+        situation.append(conquest.NEUTRAL_LINE)
     people = haunters(state, content, loc_id)
     standing = [  # 沒有時刻表的季：此刻站在這裡、沒有同名龍頭人物那一段的大勢人物（挑戰每季都有設計 3.8，照地點合併、不照名字）
         fid for fid in figures.present_at(state, content, loc_id) if figures.name_of(content, fid) not in people

@@ -8,8 +8,8 @@ import hashlib
 from collections.abc import Callable
 
 from . import (
-    atlas, bounties, calendar, equipment, figures, insights, mapart, mapview, mounts, orders, rules, sensing, terrain, territory,
-    timetable,
+    atlas, bounties, calendar, conquest, equipment, figures, insights, mapart, mapview, mounts, orders, rules, sensing, terrain,
+    territory, timetable,
 )
 from .models import Content, Location
 from .state import GameState, TerritoryWeek, WorldState
@@ -178,12 +178,13 @@ def _titles(state: GameState, content: Content, week: int, now_week: int) -> lis
 
 
 def _ropes(state: GameState, content: Content, now_week: int) -> list[dict]:
-    """三條戰線（第一季）或一根黃巾聲勢（規則關著的季）：值、比上一週推了多少、繩上的可易手地點（地盤開著才有）。"""
+    """三條戰線（第一季）或一根黃巾聲勢（規則關著的季）：值、比上一週推了多少、繩上的可易手地點（地盤開著才有）。
+    領地爭奪開著的季沒有拔河：地點不照戰線的門檻易手，繩上不掛地點（不然小方印擺在已經不作用的門檻上）。"""
     w = state.world
     fronts = rules.front_ids(content)
     if not fronts:
         return []
-    lines = content.scenario.territory.lines if territory.on(content) else {}
+    lines = content.scenario.territory.lines if territory.on(content) and not conquest.on(content, w) else {}
     names = {t.id: t.name for t in content.scenario.trends}
     prev = territory.week_at(w, now_week - 1) if now_week > 1 else None
 
@@ -235,6 +236,14 @@ def _weeks(state: GameState, content: Content, now_week: int, ropes: list[dict])
                     "events": events, "changed": changed})
         before = control
     return out
+
+
+def _conquest_kind(world: WorldState, content: Content, loc_id: str) -> str | None:
+    """領地爭奪開著的季，地點那一格的 kind（大本營、fixed 在呼叫端先判）：開季中立的區塊 neutral（被佔下了也是，網頁的抽屜寫「開季是中立地」），
+    搶得下來的陣營區塊 line（同拔河的可易手），不是區塊 None。"""
+    if conquest.start_kind(world, content, loc_id) == conquest.NEUTRAL:
+        return "neutral"
+    return "line" if conquest.capturable(content, loc_id) else None
 
 
 def _held(world: WorldState, content: Content, control: dict[str, str]) -> dict[str, str]:
@@ -301,6 +310,7 @@ def state(
     armed = mapview.armed_places(s, c)  # ⚔ 標在哪裡：跟舊輿圖同一個判斷（FB-251）；出陣關著是 None，照內容的 enemies
     base_ids = territory.bases(c) if on else {}
     fixed = c.scenario.territory.fixed if on else {}
+    conquest_on = conquest.on(c, w)
     places = {}
     for loc_id in shown:
         loc = c.locations[loc_id]
@@ -313,6 +323,7 @@ def state(
         places[loc_id] = {
             "control": territory.controller(w, c, loc_id),
             "kind": "base" if loc_id in base_ids else "fixed" if loc_id in fixed
+            else _conquest_kind(w, c, loc_id) if conquest_on  # 領地爭奪：中立地 neutral、搶得下來的陣營區塊 line（網頁照它畫灰、寫「可易手」）
             else "line" if on and territory.line_of(c, loc_id) else None,
             "odds": None if worst is None else {"word": worst[1], "tone": ODDS_TONE.get(worst[1], "ok")},
             "sortie": sortie_mode(loc_id),

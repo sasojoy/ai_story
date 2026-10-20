@@ -1124,6 +1124,62 @@ class TerritoryState(BaseModel):
     forts: dict[str, Fort] = Field(default_factory=dict)  # 可易手的地點 → 工事（修築工事，works.py；易手就拿掉）
 
 
+class Pick(BaseModel):
+    """一票、或排好的一塊（tianxia/conquest_day.py）：打哪一塊、幾點開打（當地時間從 00:00 起算的分鐘）。"""
+
+    loc: str
+    minute: int
+
+
+class SiegeSlot(BaseModel):
+    """一天的時程表裡的一場攻城戰（conquest_day.merge 排出來、Game._conquest_tick 換成世界秒）。兩軍挑中同一塊、同一刻就併成一場
+    （attackers 兩個）。status：planned 排好了、waiting 到了開集結的時候等著開（world.advance_world_state 記）、open 開了集結
+    （record_id 是那一場）、done 打完、void 作廢（結算晚了挪不進、攻方沒人到、攻方已經是主人、管理者取消）。"""
+
+    id: str
+    key: int = 0  # 哪一天（conquest_day.day_key）排的
+    loc: str
+    minute: int  # 開打的時刻（當地時間的分鐘）
+    at: float = 0.0  # 世界秒：開打（集結截止）
+    muster_at: float = 0.0  # 世界秒：開集結
+    attackers: list[str] = Field(default_factory=list)  # 攻方（官軍、黃巾；兩個是兩軍同時搶同一塊）
+    by: dict[str, str] = Field(default_factory=dict)  # 攻方 → 怎麼定的（vote 眾議、commander 主將定奪）
+    reasons: dict[str, str] = Field(default_factory=dict)  # 攻方 → 主將為什麼挑這裡（〈天下形勢〉讀；眾議是空的）
+    status: Literal["planned", "waiting", "open", "done", "void"] = "planned"
+    record_id: int | None = None  # 開了集結之後那一場的流水號
+    winner: str | None = None  # 打完拿下的一方；守住、作廢是 None
+
+
+class DayNote(BaseModel):
+    """每天結算時記一筆（第三批〈天下形勢〉讀）：哪一邊打哪一塊、幾點、怎麼定的、主將為什麼挑這裡、眾議的比例；攻方沒人到作罷時
+    那一場的每一個攻方再記一筆（void）。"""
+
+    key: int
+    side: str
+    loc: str
+    minute: int
+    by: str  # vote／commander
+    reason: str = ""
+    share: float = 0.0  # 眾議：這一塊加權之後的比例（0～1）
+    # 作罷了另記一筆（conquest_day.note_void）：原因 absent＝攻方一個人都沒到（這種不發天下大事，裁決 19）；空的是結算那一下排定的那一筆
+    void: str = ""
+
+
+class ConquestState(BaseModel):
+    """這一季的領地爭奪（tianxia/conquest.py；WorldState.conquest，None＝這一季還沒算過）。此刻的控制方照舊記在 TerritoryState.control。"""
+
+    start: dict[str, str] = Field(default_factory=dict)  # 區塊 → 開季那一刻的種類（neutral／guan／huang）；之後內容改了，這一季不跟著動
+    offset: dict[str, float] = Field(default_factory=dict)  # 戰線 → 其他來源累積的偏移（值＝夾過的基準＋偏移；開季＝劇本起點−50，裁決 5）
+    base: dict[str, float] = Field(default_factory=dict)  # 戰線 → 上一次寫回時的佔領基準（別處直接改了線，照它重錨偏移）
+    progress: dict[str, float] = Field(default_factory=dict)  # 區塊 → 攻城目標的進度 0～100（往黃巾為正；沒寫是 50，計畫 2.3）
+    # ── 第二批：每天的鐘（conquest_day.py）──
+    settled_key: int = -1  # 結算到哪一天（day_key）；只准往前走（同 arena.roll_day 的教訓），-1 是還沒記過
+    votes: dict[str, dict[str, Pick]] = Field(default_factory=dict)  # 陣營 → 名號 → 那一票（一人一票、可以改；只公開加權後的比例）
+    votes_for: int = -1  # 這一批票是替哪一天（day_key）投的；結算那一下對不上就不算
+    schedule: list[SiegeSlot] = Field(default_factory=list)  # 今天（最近一次結算排的）的時程表，照開打的先後
+    day_log: list[DayNote] = Field(default_factory=list)  # 每天結算記的那幾筆（〈天下形勢〉讀）
+
+
 class GuardPost(BaseModel):
     """一班護衛（figure_aid.guard）：替同陣營的大勢人物站崗，把站崗那一刻的身手抄成分身（power），下線也照守。"""
 
@@ -1253,6 +1309,8 @@ class WorldState(BaseModel):
     divine_lineup: list[str] | None = None
     renown_scale: float | None = None  # 名聲的門檻乘幾倍（開季時蓋章，world_state.stamp_season）；None＝沒有章，倍數 1
     territory: TerritoryState | None = None  # 地盤易手（出陣探索與地盤設計第四節）；None＝還沒算過
+    conquest_on: bool = False  # 這一季開季時領地爭奪是不是開著（Config.conquest；conquest.on 還要設定也開著）；舊季讀檔是 False
+    conquest: ConquestState | None = None  # 領地爭奪（tianxia/conquest.py）；None＝這一季還沒算過
     # ── 擂台賽（tianxia/arena.py；換季整個重來）──
     arena: dict[str, ArenaEntry] = Field(default_factory=dict)  # 名號鍵 → 守擂的人
     arena_pairs: dict[str, float] = Field(default_factory=dict)  # 「挑的名號鍵>守的名號鍵」→ 上一次挑的世界秒（冷卻）
@@ -1291,7 +1349,7 @@ class BattleRecord(BaseModel):
     id: int  # 流水號，本季從 1 起算
     time: float  # 開打時的遊戲時間（決戰是收場時的）
     location: str  # 地點名稱（決戰是大區名；上一季打的前面加「第 N 季・」）
-    kind: Literal["train", "event", "wild", "showdown", "spar", "raid", "duel", "seal", "arena", "sortie", "ambush", "assassin"]  # 遊歷／劇情／探索撞上的野怪／全服決戰／跟玩家切磋／截殺（發起或被截殺）／頭目戰／奪璽單挑（玉璽碎片設計 5.9）／出陣（出陣探索與地盤設計；舊戰報的 train 照舊顯示「遊歷」，不遷移）
+    kind: Literal["train", "event", "wild", "showdown", "siege", "spar", "raid", "duel", "seal", "arena", "sortie", "ambush", "assassin"]  # 遊歷／劇情／探索撞上的野怪／全服決戰／跟玩家切磋／截殺（發起或被截殺）／頭目戰／奪璽單挑（玉璽碎片設計 5.9）／出陣（出陣探索與地盤設計；舊戰報的 train 照舊顯示「遊歷」，不遷移）
     event: str = ""  # 劇情戰的事件標題；決戰是決戰的名稱
     opponent: str  # 敵方隊伍名稱；決戰是敵方陣營名
     ours: list[Fighter]  # 我方陣容，第一位是隊長；等級是開打時的等級（決戰不記，是空的）

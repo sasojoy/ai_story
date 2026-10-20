@@ -17,10 +17,10 @@ from dataclasses import dataclass
 from pydantic import BaseModel
 
 from . import (
-    allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, checkin, chuangong, clinic, companion_agent, cultivation, defection, divine, economy, encounter, enlist, equipment, event_llm, explore_modes, escorts,
+    allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, checkin, chuangong, clinic, companion_agent, conquest, conquest_day, cultivation, defection, divine, economy, encounter, enlist, equipment, event_llm, explore_modes, escorts,
     fight_llm, figure_aid, figure_life, figures, foreshadow, four_tiers, gather_llm, generals, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, letters, library, mapdata, martial_arts, feasts,
     materials, mounts, naming, opportunities, orders, precise, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
-    shopview, signature, signature_arms, silver, skill_slots, skillview, smithing,
+    shopview, siege, signature, signature_arms, silver, skill_slots, skillview, smithing,
     social, sortie, styles, tactics, team, terrain, territory, timetable, traits, treasures, weapons, works, zh, yuedan,
 )
 from . import ambush as ambush_rules  # 設伏劫道（後期體力玩法第一批）；叫 ambush_rules：這個檔裡有區域變數叫 ambush
@@ -64,7 +64,7 @@ from .rules import (
 )
 from .sqlite_world import open_world
 from .state import (
-    ONBOARDING_VERSION, PLAYER, ArenaEntry, ArenaFight, ArenaReport, ArenaResult, ArenaSide, BattleRecord, Convoy, CrowdNote, DuelState, Equipment, Feast, GameState, HintNote, JournalEntry, Journey, Mingtie, Rumor, Tagalong, TavernHit, TavernWatch, TimelineResult,
+    ONBOARDING_VERSION, PLAYER, ArenaEntry, ArenaFight, ArenaReport, ArenaResult, ArenaSide, BattleRecord, Convoy, CrowdNote, DuelState, Equipment, Feast, GameState, HintNote, JournalEntry, Journey, Mingtie, Pick, Rumor, Tagalong, TavernHit, TavernWatch, TimelineResult,
     Whisper, WorldState,
     new_game_state,
 )
@@ -194,6 +194,7 @@ GAMBLE_SAID = "放手一搏：「"  # battle_instance.resolve_round 寫「某某
 SIDE_TAG = "〔{side}〕"  # 戰況每一條是哪一軍的（Joy 2026-10-14）；網頁 app.js 的 roundBlocks 認這個寫法
 ROUND_HEAD = "##### 第 {n} 回合"  # 一回合一段的標題（Joy 2026-10-14）；網頁 app.js 的 ROUND_HEAD 認這個寫法
 RESTORED_NOTE = "（這份戰報是後來補回來的；軍餉與名望當時已經發過。）"  # Game._restore_showdowns
+RESULT_LOOKBACK = 50  # 補戰報往回讓幾場流水號（攻城戰同時打，先開的可能晚收場；一天最多四場，五十場是十來天）
 MY_MOVE = "**你**　{move}"  # 決戰戰報的完整戰況：每一回合最後一條，自己這一回合出了什麼（BattleParticipant.moves）
 SLAY_LINE = "你陣前擊退了{name}，這一戰的頭功傳遍兩軍。"  # 待 joy 潤：龍頭上陣，最後一擊的人（戰報與紀錄）
 # 歷史武將同行第五節（待 joy 潤）：加入決戰時挑一位隨你上陣、決戰畫面上自己的那一位
@@ -207,6 +208,30 @@ ESCORT_SCENE = "隨你出陣：{name}（氣血 {hp}/{cap}）"
 ESCORT_FELL = "隨你出陣：{name}（敗走）"
 TROOPS_LINE = "你帶著{names}上陣，強攻、奇襲多 {pct}"  # 待 joy 潤（PM 2026-10-12）：決戰畫面，接在騎兵那一句後面（加入時的快照）
 TROOPS_REPORT = "{names}跟著你衝陣"  # 待 joy 潤（PM 2026-10-12）：決戰的戰報
+# 領地爭奪第二批：每天投票（裁決 9；待 joy 潤）
+VOTE_TITLE = "攻城投票"
+# 時刻照 calendar.stamp_text 寫那一場真正的日子（同公告 conquest_day.ANNOUNCE）：票替「此刻的下一天」投，一天從 22:00 起算，
+# 22:00～24:00 投的排在後天，寫「明日」就錯了（FB-541）
+VOTED_LINE = "你投了一票：{time}攻{place}。"
+VOTE_HOW = "眾議"  # 明天怎麼定：有人投就是眾議（只寫加權之後的比例）
+VOTE_NONE = "還沒有人投票，22:00 由主將定奪"
+CONQUEST_OFF = "這一季沒有攻城戰。"
+CONQUEST_ENDED = "這一季已經收了。"
+VOTE_RANGER = "投靠了官軍或黃巾（豪強：依附了一軍）才能投票。"
+VOTE_NOT_TARGET = "那裡此刻打不到：要是這一邊碰得到、搶得下來的地方。"
+VOTE_BAD_SLOT = "那個時辰不能開打：只能挑{first}～{last} 的整點或半點，時刻表決戰前後不排。"  # first 是那一天的第一個時段（照 stamp_text，FB-541）
+SIEGE_STATUS = {"planned": "未開", "waiting": "即將集結", "open": "集結・交戰中", "void": "作罷"}
+SIEGE_TAKEN = "{side}拿下"
+SIEGE_HELD = "守住了"
+
+
+def siege_status_text(content: Content, slot) -> str:
+    """時程表上一場攻城的狀態那幾個字（待 joy 潤）。"""
+    if slot.status == "done":
+        return SIEGE_TAKEN.format(side=content.scenario.faction_name(slot.winner, slot.winner)) if slot.winner else SIEGE_HELD
+    return SIEGE_STATUS.get(slot.status, "")
+
+
 # 賽季時鐘暫停（線上架構設計第四節、8.3）：選單上那一顆灰的，伺服器擋動作也回這一句（server._refuse_while_paused）。待 S1／joy 潤
 PAUSED_TEXT = "賽季暫停中（停機維護）：這段時間不能行動，畫面照常可看"
 PAUSE_LINE = (  # 待 S1／joy 潤
@@ -360,6 +385,7 @@ class Game:
         # 歷史武將同行：挑好了隨你上陣的那一位、正在照它加入（_escort_step 開著、_escort_carry 讀）
         self._escort_picked = False
         self._escort_now: battle_instance.Escort | None = None
+        self._battle_ref: int | None = None  # 領地爭奪第二批：這一下按的鈕指定的那一場（加入鈕帶 @流水號，_battle_choose 設、_battle_now 讀）
         self._last_wear: list[str] = []  # 最近一場戰報歸檔時兵器鈍了、防具破了的提醒（_file_battle，兵器先、防具後）；沒有草稿的呼叫端（切磋、截殺的另一邊）自己接到訊息裡
         # 這一個動作動到（或要通知）的別人的名號（玩家卡上的互動、邀請）：伺服器做完動作叫他們開著的分頁也刷新（server._tell_tabs）
         self.touched: set[str] = set()
@@ -836,6 +862,7 @@ class Game:
         self._reconcile_season()
         msgs = list(self.world.catch_up_season(self.content, now, self.rng))
         self.state.world = self.world.get_season()
+        msgs += self._conquest_tick()  # 領地爭奪第二批：22:00 沒人在線也照時結算
         self._battle_status(tick=True)
         self._seal_tick()
         return msgs
@@ -892,6 +919,7 @@ class Game:
         self._deliver_whispers()  # 酒肆：有人在酒肆打聽你（風聲），下線時的回來補
         self._deliver_hits()  # 酒肆：自己雇的殺手得手、失手、到期退錢
         self._deliver_watches()  # 酒肆：託酒家留意的人有了準信、或到期沒消息
+        self._conquest_tick()  # 領地爭奪第二批：換天（22:00）的那一刻結算、排明天的攻城（第一個看到新的一天的人觸發）
         self._deliver_arena()  # 擂台：被挑了的戰報、季末前三名的獎勵；季收了還沒打完的那一場作廢
         mail = letters.deliver(self.state, self.content)  # 書信（大勢人物擴充第二批）：人物來信、過期的委託作罷
         if mail:
@@ -983,6 +1011,7 @@ class Game:
         msgs += self._advance_player_local(seconds)
         self.advanced_real += seconds / self.content.config.time_scale
         arrived = self._arrivals()  # 同 sync：抵達自己寫紀錄
+        msgs += self._conquest_tick(save=False)  # 領地爭奪第二批：快轉跨過 22:00 也結算（下面一起存）
         self._save_season()
         msgs += start_pending_battle(self.world, self.content, self.now)
         self.state.world = self.world.get_season()
@@ -1070,8 +1099,8 @@ class Game:
                 # 集結那段時間照常遊玩，加入的按鈕（已經加入就是灰的「已加入」）放在平常的選單前面
                 # （企劃者 2026-10-03 決定，FB-009）；走出決戰的大區就照 _watching_battle 算不在場。
                 # 開打了還沒投效的散人也一樣：投效的按鈕接在平常的選單前面，不把散人鎖在戰場上（這場仗本來不是他的）
-                return self._seal_options() + self._battle_options(battle, definition) + self._everyday_options(odds)
-            battle_menu = self._battle_options(battle, definition)
+                return self._seal_options() + self._battle_menu(battle, definition) + self._everyday_options(odds)
+            battle_menu = self._battle_menu(battle, definition)
             if self.state.player.pending_defect:  # 同理：開著的叛投確認畫面不能因為開打就卡到整場打完（最終審查 Minor 1）
                 battle_menu.append(Option(id="defect:cancel", label="再想想"))
             return battle_menu
@@ -1201,8 +1230,10 @@ class Game:
             option = self._sortie_option(loc, cost["train"], odds)  # 出陣（出陣探索與地盤設計第二節）：散人、不在戰線上的地點沒有
             if option is not None:
                 opts.append(option)
-            elif sortie.ranger_here(c, self._side(), loc.id):  # 散人站在戰線上：灰的一顆寫真正的原因（FB-250）
+            elif sortie.ranger_here(c, self._side(), loc.id, s.world):  # 散人站在戰線上：灰的一顆寫真正的原因（FB-250）
                 opts.append(Option(id="act:train", label=f"{sortie.NAME}（{sortie.RANGER_NOTE}）", enabled=False))
+            elif sortie.out_of_contest(c, s.world, self._side(), loc.id):  # 領地爭奪：別人的大本營、廣宗不給攻（裁決 18）
+                opts.append(Option(id="act:train", label=f"{sortie.NAME}（{sortie.OUT_NOTE}）", enabled=False))
         opts += self._challenge_options(odds)  # 挑戰本人（T4；每季都有，figures.challenge_on）：有陣營、這裡站著敵方的大勢人物時才有
         if ranks.summons_event(s, c) is not None:
             # 晉升奇遇（計畫 T5）：人在召見的地點才有，不花體力。一類一顆開著時網頁畫成行動列上面一條金框橫幅（設計 9.1 第 1 組乙），
@@ -1940,7 +1971,9 @@ class Game:
         """出陣那一行（howto.sortie_line）：這裡是哪一種、推不推得動（_push_room，同第 3、4 階行動）、今天還能出陣幾次；用完寫什麼時候再來。"""
         how = self._sortie_mode(loc)
         if how is None:
-            if not sortie.ranger_here(self.content, self._side(), loc.id):
+            if sortie.out_of_contest(self.content, self.state.world, self._side(), loc.id):
+                return sortie.OUT_LINE  # 領地爭奪：別人的大本營、廣宗不給攻（裁決 18）
+            if not sortie.ranger_here(self.content, self._side(), loc.id, self.state.world):
                 return ""
             return sortie.RANGER_LINE_PRECISE if precise.on(self.content, self.state.world) else sortie.RANGER_LINE
         left = self.sorties_left()
@@ -1950,7 +1983,18 @@ class Game:
             return sortie.STIR_FLAT_LINE
         push_ok = any(amount and self._push_room(line) > 0 for line, amount in self.sortie_push(loc.id, how).items())
         own = how == "attack" and territory.controller(self.state.world, self.content, loc.id) == self._side()
-        return howto.sortie_line("convoy" if own else how, push_ok, left, self.content)  # 自家地盤上攻的只有運糧隊（FB-255）
+        # 領地爭奪：出陣推的是這一塊的進度（大本營、廣宗推不動），不是線——那一句照進度寫
+        on = conquest.on(self.content, self.state.world)
+        progress = conquest.progress_open(self.state.world, self.content, loc.id) if on else None
+        today = bool(progress) or not conquest.capturable(self.content, loc.id)  # 第二批：搶得下來、只是今天沒公告的另寫一句
+        note = "convoy" if own else how  # 自家地盤上攻的只有運糧隊（FB-255）
+        if on and how == "hold" and not conquest.capturable(self.content, loc.id):
+            note = "home"  # 自家的大本營、廣宗：不在爭奪之列（FB-532）
+        elif on and how == "attack" and not conquest.capturable(self.content, loc.id):
+            note = "convoy_out"  # 大本營、廣宗上攻的只有截糧的運糧隊（裁決 18）：只算截糧、沒有進度
+        elif on and note == "attack" and conquest.holder(self.state.world, self.content, loc.id) is None:
+            note = "open"  # 還沒人佔的中立地：不寫「這裡歸別人」（FB-533）
+        return howto.sortie_line(note, push_ok, left, self.content, progress, today)
 
     def _choice_label(self, choice: Choice, odds: bool) -> str:
         """動手的選項寫對手與勝算，後面照樣接體力的代價（輸了多扣的，企劃者裁決 E6；events.stamina_note）；
@@ -2526,7 +2570,7 @@ class Game:
         hit = next((h for h in mine if not h.done), None)
         if hit is None or w.ended or me.journey is not None or tavern_rules.town(c, me.location) or roster.raid_newbie(s, c):
             return []
-        battle = self.world.get_battle()
+        battle = self._battle_now()  # 有攻城戰時是自己參戰的那一場（領地爭奪第二批）
         if battle is not None and me.name in battle.participants:
             return []
         shield = w.raided.get(key)
@@ -3179,6 +3223,7 @@ class Game:
             else:
                 effect = choice.effect if success else failed(choice.fail_effect, c)  # 失手另扣的體力減半（體力平衡提案）
             msgs += self._apply(effect, once=event.once)
+            msgs += self._event_progress()  # 領地爭奪：隨口應對了結也推一次進度（開關關著是空的）
             self._begin_enlistment(faction_before)  # 隨口應對的結果也可能拜入門派
             self._greet_rejoin(faction_before)  # 同樣：入伍段早就走完的人拜入門派，引薦人打個招呼（新手引導計畫三）
             gifts = self._general_gifts() + self._signature_arms()  # 隨口應對的效果也可能加情誼（同 choose：另起一則）
@@ -4154,9 +4199,9 @@ class Game:
         if branch is not None:
             msgs = [branch.line.format(place=loc.name)]
             attrs = None if branch.deep else branch.attributes
-            found = [line for mid in explore_modes.gather_finds(c, loc, rng, sure=True, attributes=attrs)
-                     if (line := materials.grant(s, c, mid))]
-            msgs += found or [explore_modes.GATHER_NONE]
+            mids = explore_modes.gather_finds(c, loc, rng, sure=True, attributes=attrs)
+            found = [line for mid in mids if (line := materials.grant(s, c, mid))]
+            msgs += (found or [explore_modes.GATHER_NONE]) + self._home_gather(loc, mids)
             if branch.deep:
                 sensed = explore_modes.deep_insight(c, loc, rng)
                 if sensed is not None:
@@ -4166,11 +4211,28 @@ class Game:
         if boss is not None and rng.random() < c.config.duel.explore_chance * renown.duel_chance(s, c):  # 名聲 4.4
             return self._duel_start(boss)
         msgs = [explore_modes.GATHER_LINE.format(place=loc.name)]
-        found = [line for mid in explore_modes.gather_finds(c, loc, rng, sure=sure) if (line := materials.grant(s, c, mid))]
-        msgs += found or [explore_modes.GATHER_NONE]
+        mids = explore_modes.gather_finds(c, loc, rng, sure=sure)
+        found = [line for mid in mids if (line := materials.grant(s, c, mid))]
+        msgs += (found or [explore_modes.GATHER_NONE]) + self._home_gather(loc, mids)
         if not sure and explore_modes.encounter_due(c, loc, rng):
             msgs += self._gather_fight(loc, rng)
         return msgs
+
+    def _home_gather(self, loc: Location, mids: list[str]) -> list[str]:
+        """領地爭奪：人站在自家領地找素材，Config.conquest.gather_bonus_chance 的機會多一個同屬性的一階（設計 4.5；散人在開季中立的區塊也算）。
+        屬性照這一下找到的第一個素材，沒找到照地點寫的第一種素材；擲骰用這一次探索自己的亂數（用途「領地」），不碰 Game.rng。
+        開關關著、不在自家是空的，一個字都不變。"""
+        s, c = self.state, self.content
+        if not conquest.home(s, c):
+            return []
+        rng = explore_modes.rng_for(self.world.get_season_number(), s.player.name, s.player.explore_seq, "領地")
+        if rng.random() >= c.config.conquest.gather_bonus_chance:
+            return []
+        pool = [m for m in [*mids, *loc.materials] if m in c.materials]
+        attribute = c.materials[pool[0]].attribute if pool else None
+        mid = explore_modes.one_of(c, {attribute} if attribute else set(), 1, rng)
+        line = materials.grant(s, c, mid) if mid is not None else None
+        return [conquest.HOME_GATHER_LINE, line] if line else []
 
     def _gather_say(self, loc: Location, rng: random.Random, say_rng: random.Random) -> list[str]:
         """找素材的「自己說」（第 32 項，計畫 2.3）：照模型挑的屬性一定給一份（同分支），成算＝模型分數＋悟性修正、夾 5～85
@@ -4187,7 +4249,7 @@ class Game:
         if success:
             mids += explore_modes.say_bonus(c, loc, say_rng, attribute)
         found = [granted for mid in mids if (granted := materials.grant(s, c, mid))]
-        return msgs + (found or [explore_modes.GATHER_NONE])
+        return msgs + (found or [explore_modes.GATHER_NONE]) + self._home_gather(loc, mids)
 
     def _practice(self, loc: Location, rng: random.Random) -> list[str]:
         """練功（正式季整合 2.5）：一定打一場。有頭目時先擲頭目戰（5% × 名聲倍數，renown.duel_chance）；這裡只有頭目、沒有一般對手時
@@ -4464,7 +4526,7 @@ class Game:
             host = self._sortie_host(loc, "hold")
             if host is not None:
                 msgs += self._drill_gains(host, 1.0)
-        credit = self._order_credit(kind="duty", front=front)
+        credit = self._order_credit(kind="duty", location=loc.id, front=front)  # 地點：領地爭奪的守城認自家被公告的那一塊（裁決 11）
         # 入伍段第 2 步「出一次力」：守勢行動不在這週軍令裡也算（FB-094：豪強第一週只有打擊，新人打不過；FB-093：巡哨、傳道就在營裡）
         return msgs + (credit or self._guide(note_action(s, c, self.world, "order")))
 
@@ -5362,11 +5424,12 @@ class Game:
             return [allied.ALLY_STAYS.format(battle=definition.name, ally=sides[side], old=sides.get(me.faction, me.faction))]
         scores = self._mandate_weight(definition, self._battle_scores())
         gear, marks = self._battle_gear(), self._battle_marks()
-        self.world.mutate_battle(
+        self._mutate_battle_of(
+            battle,
             lambda b: battle_instance.join_faction(
                 b, name, side, self._battle_neili_cap(), self._battle_power(), scores=scores, attribute=self._battle_road(),
                 role=self._battle_role(), **gear, **marks,
-            )
+            ),
         )
         return [allied.ALLY_REJOINED.format(battle=definition.name, ally=sides[side])]
 
@@ -5384,7 +5447,7 @@ class Game:
         if arg == "confirm":
             target = self.content.scenario.faction(p.pending_defect)
             ally, p.pending_defect, p.pending_ally = p.pending_ally, None, None
-            reason = defection.refusal(self.state, self.content, target, self.world.get_battle(), ally)
+            reason = defection.refusal(self.state, self.content, target, self._battle_now(), ally)
             if reason is not None:
                 if self._draft is not None:
                     self._draft.title = "叛投不成"
@@ -5418,7 +5481,7 @@ class Game:
         剩下的才讀目前的決戰、看名字在不在參戰名單上（defection.enlisted）。豪強分屬兩軍的季見 defection.slots_here。"""
         if not defection.can_defect(self.state, self.content):
             return []
-        return defection.slots_here(self.state, self.content, self.world.get_battle())
+        return defection.slots_here(self.state, self.content, self._battle_now())
 
     def _faction_prompt(self, faction) -> str:
         p = self.state.player
@@ -5531,7 +5594,7 @@ class Game:
         """這一次加入要帶的同伴：剛在挑的那一位（_escort_step）；不然是已經在參戰名單上的那一位（集結時改選、依附那一軍重新快照，照舊跟著）。"""
         if self._escort_picked:
             return self._escort_now
-        battle = self.world.get_battle()
+        battle = self._battle_now()
         me = battle.participants.get(self.state.player.name) if battle is not None else None
         return me.escort if me is not None else None
 
@@ -5554,12 +5617,13 @@ class Game:
             return [ESCORT_BACK_LINE]
         if arg != "none" and arg not in self._escort_choices():
             return ["（此刻無法這麼做。）"]
+        pick, at, ref = pick.partition("@")  # 同一個大區兩場以上時記著是哪一場（領地爭奪第二批）
         kind, _, rest = pick.partition(":")
         if kind == "join" and battle.phase != "muster":
             kind, rest = "join_late", ""
         self._escort_picked, self._escort_now = True, (self._escort_of(arg) if arg != "none" else None)
         try:
-            return self._battle_choose(f"{kind}:{rest}")
+            return self._battle_choose(f"{kind}:{rest}{at}{ref}")
         finally:
             self._escort_picked, self._escort_now = False, None
 
@@ -5649,7 +5713,7 @@ class Game:
                 mine.mount, mine.cavalry = mine.mount or gear["mount"], mine.cavalry or gear["cavalry"]
                 mine.troops, mine.troop_bonus = mine.troops or gear["troops"], mine.troop_bonus or gear["troop_bonus"]
 
-        self.world.mutate_battle(_fill)
+        self._mutate_battle_of(battle, _fill)
 
     def _battle_neili_cap(self) -> float:
         """決戰的氣血池上限：決戰的池子不吃螭首（玉璽碎片設計 7.1：決戰一個字都不改）。"""
@@ -5658,7 +5722,145 @@ class Game:
         )
         return cap
 
+    # ── 好幾場戰鬥並存（領地爭奪第二批 Task 10）：時刻表決戰一場（world.get_battle）＋攻城戰一串（world.get_sieges）──
+    # 沒有攻城戰時一切照舊（這一季沒開領地爭奪時 _sieges 不讀資料庫、回空的）。有的時候每個人看「自己的那一場」（_battle_now）：
+    # 選單、場景、出招、放手一搏都照它；全服的推進（_battle_status 的 tick）每一場各推一次。
+
+    def _sieges(self) -> list[battle_instance.BattleInstance]:
+        """還沒收場的攻城戰（照開集結的先後）；這一季沒開領地爭奪是空的、不讀資料庫。"""
+        if not conquest.on(self.content, self.state.world):
+            return []
+        return [b for b in self.world.get_sieges() if b.phase != "ended"]
+
+    def battles_now(self) -> list[battle_instance.BattleInstance]:
+        """全服此刻的每一場：決戰那一格（收場了照舊在，同 get_battle）在前，再照開集結的先後是還沒收場的攻城戰。"""
+        showdown = self.world.get_battle()
+        return ([showdown] if showdown is not None else []) + self._sieges()
+
+    def battle_now(self) -> battle_instance.BattleInstance | None:
+        """這個人看的那一場（_battle_now；假人程式與 bot_policy 讀它，取代 world.get_battle）。"""
+        return self._battle_now()
+
+    def _battle_now(self) -> battle_instance.BattleInstance | None:
+        """這個人看的那一場：沒有攻城戰時就是決戰那一格（world.get_battle，一個字都不變）。有攻城戰時照這個順序：按鈕指定的那一場
+        （_battle_ref：加入鈕帶 @流水號）＞自己是參戰者的那一場＞自己大區裡集結中或開打的（決戰在前）＞決戰那一格——別處的攻城戰不畫在
+        別人的場景上（一天最多四場，全服都看會很吵；決戰照舊全服看得到）。"""
+        showdown = self.world.get_battle()
+        sieges = self._sieges()
+        if not sieges:
+            return showdown
+        live = ([showdown] if showdown is not None and showdown.phase != "ended" else []) + sieges
+        if self._battle_ref is not None:
+            return next((b for b in live if b.record_id == self._battle_ref), None)
+        name = self.state.player.name
+        mine = next((b for b in live if name in b.participants), None)
+        if mine is not None:
+            return mine
+        here = self._in_region(live)
+        return here[0] if here else showdown
+
+    def _in_region(self, battles: list[battle_instance.BattleInstance]) -> list[battle_instance.BattleInstance]:
+        """這幾場裡，人此刻所在（在路上看最後一站）的大區就是它的大區的；不限地點的那一場也算。"""
+        loc = self.state.player.location
+        found = atlas.region_of(self.content, loc) if loc in self.content.locations else None
+        out = []
+        for b in battles:
+            d = self._definition_of(b)
+            if d is not None and (d.region is None or (found is not None and found.id == d.region)):
+                out.append(b)
+        return out
+
+    def _joinable(self) -> list[battle_instance.BattleInstance]:
+        """自己大區裡集結中或開打、加得進去的那幾場（決戰在前）：自己已經在某一場的名單上、或沒有攻城戰時是空的。"""
+        sieges = self._sieges()
+        if not sieges:
+            return []
+        showdown = self.world.get_battle()
+        live = ([showdown] if showdown is not None and showdown.phase != "ended" else []) + sieges
+        name = self.state.player.name
+        if any(name in b.participants for b in live):
+            return []
+        out = []
+        for b in live:
+            d = self._definition_of(b)
+            if d is not None and self._at_battle(d) and not self._watching_battle(b, d):
+                out.append(b)
+        return out
+
+    def _definition_of(self, battle: battle_instance.BattleInstance) -> BattleDef | None:
+        """這一場的定義：決戰照內容；攻城戰是那個大區的範本，名字換成「攻城・地點」（siege.title）。"""
+        definition = self.content.battles.get(battle.battle_id)
+        if definition is None or battle.siege is None:
+            return definition
+        return definition.model_copy(update={"name": siege.title(self.content, battle.siege)})
+
+    def _mutate_battle_of(self, battle: battle_instance.BattleInstance, fn) -> battle_instance.BattleInstance | None:
+        """改這一場（照它是決戰還是攻城走 store 的那一個；同 mutate_battle：fn 在交易裡改、回改完的那一場）。"""
+        if battle.siege is not None and battle.record_id is not None:
+            return self.world.mutate_siege(battle.record_id, fn)
+        return self.world.mutate_battle(fn)
+
+    def _mutate_battle_now(self, fn) -> battle_instance.BattleInstance | None:
+        """改這個人看的那一場（_battle_now）；沒有就不動、回 None。"""
+        battle = self._battle_now()
+        return None if battle is None else self._mutate_battle_of(battle, fn)
+
+    def _tick_siege(self, battle: battle_instance.BattleInstance) -> None:
+        """推一場攻城（同決戰的 _run_battle_tick：集結截止、回合逾時、補位、結算），剛收場就套結果（_apply_battle_outcome）。"""
+        definition = self._definition_of(battle)
+        if definition is None:
+            return
+        after = self.world.mutate_siege(battle.record_id, lambda b: self._advance_battle_round(b, definition))
+        if after is not None and after.phase == "ended":
+            self._apply_battle_outcome(after)
+
+    def _shelve_siege(self, battle: battle_instance.BattleInstance, text: str = "") -> None:
+        """季終（或管理者取消）時還沒打完的攻城收起來：同 _shelve_unfinished_battle（不算勝負、不發軍餉、不易手），參戰者補一則交代。"""
+        end_time = self.state.world.time
+
+        def _mark(b: battle_instance.BattleInstance) -> None:
+            b.phase, b.unfinished, b.unfinished_text = "ended", True, text
+            b.outcome_title, b.end_time = battle_instance.UNFINISHED_TITLE, end_time
+            if b.siege is not None:
+                b.siege.settled = True
+
+        self.world.mutate_siege(battle.record_id, _mark)
+        self.world.drop_siege(battle.record_id)
+        self._deliver_battle_results()
+
+    def _cancel_siege(self, record_id: int, text: str) -> None:
+        """管理者取消一場已經開了集結的攻城（admin_conquest_cancel）：照季終收兵收起來，參戰者那一則寫 text。"""
+        battle = next((b for b in self._sieges() if b.record_id == record_id), None)
+        if battle is not None:
+            self._shelve_siege(battle, text)
+            self.state.world = self.world.get_season()
+
     def _battle_status(self, tick: bool = True) -> tuple[battle_instance.BattleInstance, BattleDef] | None:
+        """目前這場全服戰鬥的最新狀態（有攻城戰時是這個人看的那一場，_battle_now）。沒有攻城戰時照舊（_showdown_status）。
+        有攻城戰時：季收了，決戰與每一場攻城都收兵；tick 時決戰與每一場攻城各推一次（同一次請求裡一場只推一次，見 _showdown_status
+        的說明），再回這個人看的那一場（收場了是 None）。"""
+        sieges = self._sieges()
+        if not sieges:
+            return self._showdown_status(tick)
+        if self.state.world.ended:
+            if tick:
+                showdown = self.world.get_battle()
+                if showdown is not None and showdown.phase != "ended":
+                    self._shelve_unfinished_battle()
+                for b in sieges:
+                    self._shelve_siege(b)
+            return None
+        if tick and self.world.paused_at() is None:
+            self._showdown_status(tick=True)
+            for b in sieges:
+                self._tick_siege(b)
+        focus = self._battle_now()
+        if focus is None or focus.phase == "ended":
+            return None
+        definition = self._definition_of(focus)
+        return None if definition is None else (focus, definition)
+
+    def _showdown_status(self, tick: bool = True) -> tuple[battle_instance.BattleInstance, BattleDef] | None:
         """目前這場全服戰鬥的最新狀態。tick=True 時順便處理所有「只要時間到了就該自動
         發生」的事（集結逾時自動分配、回合逾時代選保守行動、機器人立刻選、全員選完就
         結算）——不管是誰的畫面刷新到這裡，都會把戰鬥狀態追趕到跟現實時間一致，誰先連線
@@ -5732,6 +5934,11 @@ class Game:
         tuning = self.content.config.battle  # 三招的數字（排程的 Game 與玩家的 Game 讀同一份內容，所以結算一致）
         if battle.phase == "muster" and now >= battle.muster_deadline_real:
             battle_instance.close_muster(battle, definition, self.rng, now, tuning=tuning)
+            if siege.void_absent(self.content, battle):  # 攻城戰（領地爭奪第二批）：攻方一個人都沒到，這一場作罷
+                battle.end_time = self.state.world.time
+                return [battle.unfinished_text]
+            siege.lone_army(self.content, battle, definition)  # 三方混戰只有一軍到場（裁決 23）：轉回單方攻中立地
+            siege.size_melee_guard(self.content, battle)  # 三方混戰（裁決 22）：守將的池子照兩軍到場的人數定
         if battle.phase != "active":
             return []
         for p in list(battle.participants.values()):
@@ -5789,6 +5996,9 @@ class Game:
 
         時刻表決戰（第一季的三場大戲，計畫 T8）不套保底的 BattleOutcome，改走 _settle_showdown。不論哪一種，收場之後
         都看有沒有時間到了、在等這一場打完的決戰，有就立刻開（見 _open_waiting_showdown）。"""
+        if battle.siege is not None:  # 攻城戰（領地爭奪第二批）：易手、作罷、時程表另外收（_settle_siege）
+            self._settle_siege(battle)
+            return
         if battle.unfinished:
             return
         if any(c.fallen_round is not None and not c.settled for c in battle.commanders):  # 龍頭上陣：敗走的人扣聲威（只扣一次）
@@ -5818,14 +6028,55 @@ class Game:
             self._deliver_battle_results()
         self._open_waiting_showdown()
 
+    def _settle_siege(self, battle: battle_instance.BattleInstance) -> None:
+        """攻城戰剛收場（_apply_battle_outcome 分進來；只做一次，SiegeInfo.settled）：龍頭上陣的留守敗走扣聲威（守將是隊伍，不扣）；
+        最有戲的一搏與兩軍首功照決戰上天下大事；易手（「落入／收復」）、守住各一句天下大事（作罷不發，攻方沒人到記 day_log，裁決 19）、
+        進度歸 50、時程表記 done 或 void
+        （siege.settle）；戰鬥那一列寫上結果（贏的一方、大勝或險勝、「某某大勝，拿下某地」）；參戰者照決戰補戰報與軍餉（軍餉、貢獻乘
+        Config.conquest.pay_share，_showdown_pay）。隨行同伴不放回江湖（裁決 14）。收場的那一場留在共用狀態裡到每天結算才拿掉
+        （最後一回合的放手一搏劇情收場之後才寫好）。"""
+        if battle.siege is None or battle.siege.settled:
+            return
+        c = self.content
+        definition = self._definition_of(battle)
+        if definition is None:
+            return
+        if not battle.unfinished:
+            if any(x.fallen_round is not None and not x.settled and x.fid in c.figures for x in battle.commanders):
+                generals.after_battle(self.world, c, battle, where=definition.name,
+                                      mutate=lambda fn: self.world.mutate_siege(battle.record_id, fn))
+            for line in (self._highlight_line(battle, definition), self._merit_line(battle, definition)):
+                if line:
+                    self.world.mutate_season(lambda season, line=line: season.rumors.append(Rumor(time=season.time, text=line, layer="world")))
+        result: dict = {}
+
+        def _season(season: WorldState) -> None:
+            result.update(siege.settle(season, c, battle, definition))
+
+        self.world.mutate_season(_season)
+
+        def _relabel(b: battle_instance.BattleInstance) -> None:
+            b.siege.settled = True
+            if not b.unfinished:
+                b.outcome_title = result["title"]
+                b.outcome_side, b.outcome_margin = result["winner"], result["margin"]
+                b.outcome_text = b.outcome_text or ""
+
+        after = self.world.mutate_siege(battle.record_id, _relabel)
+        battle.siege.settled = True
+        self.state.world = self.world.get_season()
+        if after is not None:
+            battle.outcome_title, battle.outcome_side, battle.outcome_margin = after.outcome_title, after.outcome_side, after.outcome_margin
+        self._deliver_battle_results()
+
     def _merit_line(self, battle: battle_instance.BattleInstance, definition: BattleDef | None) -> str:
         """收場時的論功那一則：兩軍各自戰功最高的人（battle_instance.top_merit；臨時投效的人算在投效的那一軍）；
-        都沒人出過手就不寫。"""
+        都沒人出過手就不寫。單方攻中立地時守將那一格寫守軍（battle_instance.side_names，FB-540）。"""
         if definition is None:
             return ""
         tuning = self.content.config.battle
         heads = [
-            (side, top) for fid, side in self._sides(definition).items()
+            (side, top) for fid, side in battle_instance.side_names(battle, definition).items()
             if (top := battle_instance.top_merit(battle, tuning, fid)) is not None
         ]
         if not heads:
@@ -6457,7 +6708,9 @@ class Game:
         內容只是一則「不算勝負」的江湖紀錄（FB-035，見 _file_showdown）。"""
         p = self.state.player
         self._restore_showdowns()
-        fresh = self.world.ended_battles(after=max(p.battle_results_seen, default=0))
+        seen = p.battle_results_seen
+        # 攻城戰跟決戰、別的攻城戰同時打（領地爭奪第二批）：先開的可能晚收場，往回讓 RESULT_LOOKBACK 場、補過的用流水號跳過
+        fresh = self.world.ended_battles(after=max(0, max(seen, default=0) - RESULT_LOOKBACK), skip=set(seen))
         if not fresh:
             return
         current = self.world.get_season_number()
@@ -6477,12 +6730,12 @@ class Game:
             return
         p.showdowns_restored = season
         seen = set(p.battle_results_seen)
-        have_refs = {r.battle_ref for r in s.battles if r.kind == "showdown"}
+        have_refs = {r.battle_ref for r in s.battles if r.kind in battlelog.SHOWDOWN_KINDS}
         have_old = {(r.event, r.time): r for r in s.battles if r.kind == "showdown"}  # 這一版以前的戰報沒有 battle_ref：照戰名與收場時刻認
         added = False
         for battle in self.world.season_ended_battles(season):
             me = battle.participants.get(p.name)
-            definition = c.battles.get(battle.battle_id)
+            definition = self._definition_of(battle)
             if me is None or definition is None or battle.unfinished or battle.record_id not in seen or battle.record_id in have_refs:
                 continue
             time = battle.end_time if battle.end_time is not None else s.world.time
@@ -6490,14 +6743,14 @@ class Game:
                 kept = have_old[(definition.name, time)]
                 kept.battle_ref = kept.battle_ref if kept.battle_ref is not None else battle.record_id
                 continue
-            sides = self._sides(definition)
+            sides = battle_instance.side_names(battle, definition)  # 守將那一格寫守軍（FB-540）
             side = sides.get(me.faction, me.faction)
-            foes = "、".join(f.name for f in definition.factions if f.id != me.faction) or "敵軍"
+            foes = "、".join(n for fid, n in sides.items() if fid != me.faction) or "敵軍"
             lines, *_ = self._showdown_lines(battle, me, side, sides)
             s.battle_seq += 1
             s.battles.append(BattleRecord(
                 id=s.battle_seq, time=time, location=self._battle_region_name(definition) if definition.region else definition.name,
-                kind="showdown", event=definition.name, opponent=foes, ours=[], tier=battle.outcome_title or "收場", our_power=0.0,
+                kind="siege" if battle.siege is not None else "showdown", event=definition.name, opponent=foes, ours=[], tier=battle.outcome_title or "收場", our_power=0.0,
                 difficulty=0.0, side=side, notes=[*lines, RESTORED_NOTE], gauge=self._gauge_of(battle, definition, me.faction),
                 log=self._round_blocks(battle, definition, last=None, oldest_first=True, me=me), battle_ref=battle.record_id,
             ))
@@ -6548,9 +6801,10 @@ class Game:
 
         季終收兵的決戰（unfinished，FB-035）沒有結果：只寫一則江湖紀錄交代一聲，不加戰報、不放「剛剛」的戰鬥卡片。"""
         c, s = self.content, self.state
-        definition = c.battles.get(battle.battle_id)
-        sides = self._sides(definition) if definition is not None else {}  # 自己站哪一方（臨時投效的是投效的那一軍）
-        armies = {f.id: f.name for f in definition.factions} if definition is not None else {}
+        definition = self._definition_of(battle)  # 攻城戰的名字是「攻城・地點」（領地爭奪第二批）
+        # 自己站哪一方（臨時投效的是投效的那一軍）；單方攻中立地時守將那一格寫守軍（battle_instance.side_names，FB-540）
+        sides = battle_instance.side_names(battle, definition) if definition is not None else {}
+        armies = dict(sides)
         name = definition.name if definition is not None else battle.battle_id
         side = sides.get(me.faction, me.faction)
         foes = "、".join(n for fid, n in armies.items() if fid != me.faction) or "敵軍"
@@ -6568,7 +6822,7 @@ class Game:
         h = battle.highlight
         fame = 0
         highlight_changes = self._showdown_pay(battle, me, lines) if earlier is None else []
-        if earlier is None and me.escort is not None and roster.on(c):  # 歷史武將同行：隨你上陣的那一位回江湖了
+        if earlier is None and me.escort is not None and roster.on(c) and battle.siege is None:  # 歷史武將同行：隨你上陣的那一位回江湖了（攻城戰不放，裁決 14）
             lines += self._escort_home(me.escort)
         if earlier is None:
             s.player.showdowns += 1
@@ -6582,8 +6836,10 @@ class Game:
                 lines.append(f"你是{side}這一仗的首功，名字傳遍了江湖。")
             if fame:
                 highlight_changes += renown.gain(s, c, "fame", fame)  # 名聲設計 3.2
+            # 風聞（大勢人物擴充）：打贏的那一邊戰功前三名，那一區同一方的人物聽說了。助守中立地的守將（站的是另一軍那一格）
+            # 不是替那一軍出戰，不加那一軍人物的情誼（PM 2026-10-21，FB-540）
             if (definition is not None and definition.region and battle.outcome_side == me.faction
-                    and rank is not None and rank <= 3):  # 風聞（大勢人物擴充）：打贏的那一邊戰功前三名，那一區同一方的人物聽說了
+                    and rank is not None and rank <= 3 and me.faction != battle_instance.neutral_guard(battle)):
                 lines += figure_life.spread(s, c, "merit", str(battle.record_id), at=None, side=me.faction,
                                             text=f"在{name}立了戰功", region=definition.region)
         rule = c.config.breakthrough
@@ -6612,7 +6868,8 @@ class Game:
                 for tid, d in moves.items()
             ]
         record = BattleRecord(
-            id=s.battle_seq + 1, time=time, location=f"{label}{where}", kind="showdown", event=name, opponent=foes,
+            id=s.battle_seq + 1, time=time, location=f"{label}{where}", kind="siege" if battle.siege is not None else "showdown",
+            event=name, opponent=foes,
             ours=[], tier=outcome, our_power=0.0, difficulty=0.0, side=side, notes=list(lines), changes=list(record_changes),
             gauge=self._gauge_of(battle, definition, me.faction) if definition is not None else None,
             log=self._round_blocks(battle, definition, last=None, oldest_first=True, me=me) if definition is not None else [],
@@ -6682,8 +6939,9 @@ class Game:
         bonus = pay.win_bonus.get(battle.outcome_margin, 0.0) if won else 0.0
         destiny = won and seal.on(c) and seal.is_mandate_battle(c, c.battles.get(battle.battle_id))  # 得天命的那一軍（8.3；要 PM 定的第 3 條；碎片關著時天命不定，不加給）
         scale = c.config.seal.mandate.pay_scale if destiny else 1
-        silver = round(pay.silver * share * (1 + bonus)) * scale
-        exp = round(pay.exp * share * (1 + bonus)) * scale
+        half = c.config.conquest.pay_share if battle.siege is not None else 1.0  # 攻城戰（領地爭奪第二批）：決戰的幾成（設計 4.4）
+        silver = round(pay.silver * share * (1 + bonus) * half) * scale
+        exp = round(pay.exp * share * (1 + bonus) * half) * scale
         changes = []
         if destiny and c.config.seal.mandate.fame:
             changes += renown.gain(s, c, "fame", c.config.seal.mandate.fame)  # 名聲設計 3.2
@@ -6713,7 +6971,7 @@ class Game:
             changes += journal.combine_changes(self._deed_fame("showdown") + rout)
         if self._side() is not None and me.faction == self._side():  # 替自己這一方出戰才記（豪強分屬兩軍：依附那一軍）；臨時投效的不記
             push_points = pay.contrib_push + (pay.win_contrib_push.get(battle.outcome_margin, 0) if won else 0)
-            contrib = round(c.config.contrib_per_push * push_points * share)
+            contrib = round(c.config.contrib_per_push * push_points * share * half)
             if contrib and season_one(c, s.world):
                 push.add_contribution(p, calendar.point(s.world.time, c, s.world).week, contrib)
                 changes.append(f"貢獻 +{contrib}")
@@ -6730,6 +6988,8 @@ class Game:
         me = battle.participants.get(self.state.player.name)
         if me is not None:
             return me.away
+        if battle.siege is not None and not siege.slots(battle.siege, self._conquest_side()):
+            return True  # 攻城戰（領地爭奪第二批）：這一仗沒有自己站得進去的格（另一軍攻中立地，裁決 8），照常遊玩
         return not self._at_battle(definition)
 
     def _fighting(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> bool:
@@ -6762,13 +7022,26 @@ class Game:
         return "散人" if faction is None else f"{self.content.scenario.faction_name(faction, faction)}的人"
 
     def _enlist_options(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> list[Option]:
-        """散人的臨時投效按鈕（兩軍各一顆）：集結時已經投效的那一邊是灰的「已投效」、還能改投另一邊；開打了還沒參戰的照樣能投效。"""
+        """散人的臨時投效按鈕（兩軍各一顆）：集結時已經投效的那一邊是灰的「已投效」、還能改投另一邊；開打了還沒參戰的照樣能投效。
+        單方攻中立地時守將那一格（battle_instance.neutral_guard）寫「助守【守軍】」，不寫那一格的陣營（FB-540；鈕 id 照舊是那一格的 id）。"""
         me = battle.participants.get(self.state.player.name)
-        return [
-            Option(id=f"battle:enlist:{f.id}", label=f"已臨時投效【{f.name}】", enabled=False)
-            if me is not None and me.faction == f.id else Option(id=f"battle:enlist:{f.id}", label=f"臨時投效【{f.name}】（只算這一場）")
-            for f in definition.factions
-        ]
+        guard, names = battle_instance.neutral_guard(battle), battle_instance.side_names(battle, definition)
+        out = []
+        for fid in battle_instance.fields(battle, definition):  # 三方混戰（裁決 22）多一顆助守【守軍】（GUARD）
+            done = me is not None and me.faction == fid
+            if fid == guard:
+                label = (siege.HELPED_GUARD if done else siege.HELP_GUARD).format(side=names[fid])
+            else:
+                label = f"已臨時投效【{names[fid]}】" if done else f"臨時投效【{names[fid]}】（只算這一場）"
+            out.append(Option(id=f"battle:enlist:{fid}", label=label, enabled=not done))
+        return out
+
+    def _enlist_sides(self, battle: battle_instance.BattleInstance | None, definition: BattleDef) -> dict[str, str]:
+        """臨時投效站得了的格（id → 名字）：交戰的兩軍，三方混戰再加助守【守軍】（GUARD，裁決 22）。"""
+        sides = self._sides(definition)
+        if battle is not None and battle_instance.melee(battle):
+            sides[battle_instance.GUARD] = battle_instance.GUARD_SIDE
+        return sides
 
     def _at_battle(self, definition: BattleDef) -> bool:
         """人在這場決戰的大區、而且不在路上，才算到了戰場（地圖擴充設計第六節）；決戰不限地點時只看在不在路上。
@@ -6806,6 +7079,8 @@ class Game:
         if self.state.player.name in battle.participants:
             region = self._battle_region_name(definition)
             return f"你離開了{region}，這回合不出手；人回到{region}就能再出手。"
+        if battle.siege is not None and not siege.slots(battle.siege, self._conquest_side()):
+            return siege.watch_line(self.content, battle.siege)  # 攻城戰：另一軍站不進守將那一格（裁決 8）
         return f"{self._absent_reason(definition)}。"
 
     def _sync_battle_presence(self) -> None:
@@ -6820,12 +7095,15 @@ class Game:
             return
         away = not self._in_battle_region(definition)
         if me.away != away:
-            self.world.mutate_battle(lambda b: battle_instance.set_away(b, name, away))
+            self._mutate_battle_of(battle, lambda b: battle_instance.set_away(b, name, away))
 
     def rally_region(self) -> str | None:
         """自己這一方正在集結或開打的全服決戰、而自己人不在現場時，回傳那場決戰的大區 id，給伺服器假人決定要不要
         趕路（地圖擴充設計 3.4）。不在現場的意思：還沒參戰的人不在那個大區或在路上；參戰者離開了大區
-        （見 _in_battle_region）。沒有這種決戰、決戰不限地點、打不了這場、已經在場上或倒下了，都是 None。"""
+        （見 _in_battle_region）。沒有這種決戰、決戰不限地點、打不了這場、已經在場上或倒下了，都是 None。
+        有攻城戰時（領地爭奪第二批）每一場都看（決戰在前、再照開集結的先後）：攻城認自己那一邊的攻方、守方（守將那一格不算，裁決 8）。"""
+        if self._sieges():
+            return self._rally_any()
         status = self._battle_status(tick=False)
         if status is None:
             return None
@@ -6839,6 +7117,29 @@ class Game:
         if me is not None:
             return definition.region if me.away and not me.eliminated else None
         return None if self._at_battle(definition) else definition.region
+
+    def _rally_any(self) -> str | None:
+        """rally_region 在有攻城戰時：自己已經在某一場的名單上就只看那一場（離開了大區、還沒倒下才回它的大區）；不然照先後找第一場
+        自己這一方打得進去、自己人又不在現場的那一場的大區。散人不為了投效趕過去（同決戰）；攻城戰另照 siege.slots。"""
+        name = self.state.player.name
+        showdown = self.world.get_battle()
+        live = ([showdown] if showdown is not None and showdown.phase != "ended" else []) + self._sieges()
+        mine = next((b for b in live if name in b.participants), None)
+        if mine is not None:
+            d = self._definition_of(mine)
+            me = mine.participants[name]
+            return d.region if d is not None and d.region is not None and me.away and not me.eliminated else None
+        for b in live:
+            d = self._definition_of(b)
+            if d is None or d.region is None:
+                continue
+            if self.state.player.faction is None and self._free_agent(d):
+                continue  # 散人沒有自己的一方：不會為了投效趕過去
+            if b.siege is not None and not siege.slots(b.siege, self._conquest_side()):
+                continue
+            if not self._at_battle(d):
+                return d.region
+        return None
 
     def _gauge_of(self, battle: battle_instance.BattleInstance, definition: BattleDef, side: str | None) -> dict:
         """battle_instance.gauge 的參數：時刻表決戰（第一季開著）照偏離中線分大勝，其餘照 outcomes 的門檻。"""
@@ -6875,6 +7176,8 @@ class Game:
 
     def _battle_scene_text(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> str:
         header = f"**{definition.name}**"
+        if battle.siege is not None:  # 攻城戰（領地爭奪第二批）：誰攻、守方是誰
+            header += "\n\n" + siege.scene_line(self.content, battle.siege, battle)
         if battle.seal_shard and battle.seal_shard in self.content.seal:  # 璽動（4.3）：參戰的人知道打完可能有單挑
             header += "\n\n" + seal.STIR_SCENE.format(holder=battle.seal_holder or "", shard=self.content.seal[battle.seal_shard].name)
         if seal.on(self.content) and seal.is_mandate_battle(self.content, definition):  # 天命之爭（8.3）：碎片在哪一軍、懷璽的人份量加重
@@ -6883,8 +7186,10 @@ class Game:
             header += "\n\n" + seal.MANDATE_SCENE.format(
                 lean=seal.lean_text(battle.seal_lean, definition), shift=seal.shift_text(shift, battle.seal_lean, definition), weight=weight,
             )
-        if battle.phase == "muster" and battle.commanders:  # 龍頭上陣：集結時就看得到誰親自上陣
-            header += "\n\n" + "\n".join(f"{f.name}：{text}" for f in definition.factions if (text := generals.lineup(battle, f.id)))
+        names = battle_instance.side_names(battle, definition)  # 單方攻中立地時守將那一格寫守軍（FB-540）
+        if battle.phase == "muster" and battle.commanders:  # 龍頭上陣：集結時就看得到誰親自上陣（三方混戰多一格守軍）
+            header += "\n\n" + "\n".join(
+                f"{names[fid]}：{text}" for fid in battle_instance.fields(battle, definition) if (text := generals.lineup(battle, fid)))
         watching = self._watching_battle(battle, definition)
         watch_line = self._watch_line(battle, definition)
         if battle.phase == "muster":
@@ -6895,9 +7200,11 @@ class Game:
                 return f"{header}\n\n集結中，還剩現實 {left}。{watch_line}"
             me = battle.participants.get(self.state.player.name)
             if me is not None:
-                side = self._sides(definition).get(me.faction, me.faction)
+                side = names.get(me.faction, me.faction)
                 leaving = "；走出這一區就不算在場" if definition.region is not None else ""
                 joined = "臨時投效" if self._free_agent(definition) else "加入"
+                if me.faction == battle_instance.neutral_guard(battle):
+                    joined = siege.HELP_GUARD_TITLE  # 「你已助守【守軍】」（FB-540）
                 role = battle_instance.role_text(self.content.config.battle, me.role)
                 role = f"你的職位：{role}。" if role else ""
                 ride = mounts.CAVALRY_LINE.format(name=me.mount, pct=mounts.pct(me.cavalry)) + "。" if me.mount else ""  # 騎著馬（5.9）：沒騎馬一個字都不多
@@ -6906,7 +7213,11 @@ class Game:
                 return f"{header}\n\n你已{joined}【{side}】，集結還剩現實 {left}。{role}{ride}集結結束就開打，在那之前照常行動{leaving}。"
             if self._free_agent(definition):
                 who = "你是散人" if self.state.player.faction is None else f"你是{self._own_side_name()}，不是交戰的兩軍"
-                return f"{header}\n\n集結中，還剩現實 {left}。{who}，可以臨時投效其中一方，只算這一場；集結期間照常行動。"
+                can = "可以臨時投效其中一方，只算這一場"
+                if battle_instance.neutral_guard(battle) is not None:  # 單方攻中立地：一邊是攻方、一邊是助守（FB-540）
+                    can = siege.FREE_AGENT_GUARD.format(
+                        who="、".join(names.get(a, a) for a in battle.siege.attackers), place=self.content.locations[battle.siege.loc].name)
+                return f"{header}\n\n集結中，還剩現實 {left}。{who}，{can}；集結期間照常行動。"
             return f"{header}\n\n集結中，還剩現實 {left}。選擇陣營加入；集結期間照常行動。"
         act = battle_instance.current_act(battle, definition)
         # 第幾回合／一共幾回合（戰鬥系統設計 3.2）：讓人知道還要打多久；收場的決戰不會走到這裡。
@@ -6930,7 +7241,7 @@ class Game:
             seen = battle.last_mix.get(enemy.id) if enemy is not None else None
             if seen:  # 這回合的比例要到結算才揭曉，畫面只寫上一回合（設計 3.4）
                 parts = "・".join(f"{m} {round(seen[m] * 100)}%" for m in MOVES)
-                last.append(f"> 對面上一回合（{enemy.name}）：{parts}")
+                last.append(f"> 對面上一回合（{names.get(enemy.id, enemy.name)}）：{parts}")
             if p.last_result:
                 last.append(f"> 你上一回合：{p.last_result}")
             if last:
@@ -6946,7 +7257,9 @@ class Game:
         """龍頭上陣：兩邊上陣的人物（氣血、敗走），自己這一方這一回合的將令。沒有人物上陣是空的。"""
         if not battle.commanders:
             return []
-        rows = [f"{SIDE_TAG.format(side=f.name)}{text}" for f in definition.factions if (text := generals.lineup(battle, f.id))]
+        names = battle_instance.side_names(battle, definition)  # 單方攻中立地時守將那一格寫守軍（FB-540）
+        rows = [f"{SIDE_TAG.format(side=names[fid])}{text}"  # 三方混戰多一格守軍（裁決 22）
+                for fid in battle_instance.fields(battle, definition) if (text := generals.lineup(battle, fid))]
         order = battle_instance.order_text(battle, side, self.content.config.battle) if side is not None else ""
         return ["\n".join(rows)] + ([order] if order else [])
 
@@ -6963,7 +7276,7 @@ class Game:
         收場時寫進自己戰報的那一份（Joy 2026-10-14「決戰能不能把完整戰報在戰報那邊可以展開」，_file_showdown）：last 是 None＝整場、
         oldest_first 照先後、me 是自己，每一段最後一條寫自己這一回合出了什麼（MY_MOVE）。"""
         log = battle.narrative_log
-        sides = self._sides(definition)
+        sides = battle_instance.side_names(battle, definition)  # 單方攻中立地時守將那一格寫〔守軍〕（FB-540）
         owner = {c.name: c.faction for c in battle.commanders} | {n: q.faction for n, q in battle.participants.items()}
         names = sorted(owner, key=len, reverse=True)  # 名號長的先比：「沈浪」不能先認走「沈浪子」
 
@@ -7030,6 +7343,19 @@ class Game:
         due = f"最遲 {left // 60} 分 {left % 60} 秒後結算" if left else "時間到了，即將結算"
         return f"已送出 {sent}／在場 {present}" + (f"（掛機 {idlers} 人不等）" if idlers else "") + f"，{due}"
 
+    def _battle_menu(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> list[Option]:
+        """戰鬥那一段選單：自己大區裡打得進去的只有一場（或已經在名單上、在挑同伴）照舊（_battle_options，鈕 id 一字不變）；
+        兩場以上（攻城戰與決戰、或兩場攻城，領地爭奪第二批 Review Focus 4）每一場各一組加入鈕，id 帶「@流水號」、字前面寫是哪一場。"""
+        joinable = self._joinable()
+        if len(joinable) < 2 or self.state.player.escort_pick:
+            return self._battle_options(battle, definition)
+        out = []
+        for b in joinable:
+            d = self._definition_of(b)
+            for o in self._battle_options(b, d):
+                out.append(o.model_copy(update={"id": f"{o.id}@{b.record_id}", "label": f"{d.name}：{o.label}"}))
+        return out
+
     def _battle_options(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> list[Option]:
         """打得了這場仗的人的戰鬥選項（只能觀戰的人不會走到這裡，見 _watching_battle）。"""
         name = self.state.player.name
@@ -7062,7 +7388,9 @@ class Game:
                 continue
             label = o.text
             ordered = o.move is not None and o.move == battle.orders.get(p.faction) and battle_instance.caller(battle, p.faction) is not None
-            if o.move is not None and p.scores:  # 三招：寫招與這個人現在的份量（設計 3.4：按鈕上直接寫）
+            if p.faction == battle_instance.GUARD and o.move is not None:  # 三方混戰助守的人：份量不推戰線，不寫分數與將令（裁決 22）
+                label = f"{o.text}（{o.move}）"
+            elif o.move is not None and p.scores:  # 三招：寫招與這個人現在的份量（設計 3.4：按鈕上直接寫）
                 score = p.scores.get(o.move, 0.0) * battle_instance.condition(p)
                 if ordered:  # 照將令出招（龍頭上陣）：份量照算進去
                     score *= 1 + self.content.config.battle.generals.order_bonus
@@ -7132,7 +7460,7 @@ class Game:
         text = text.strip()[:20]
         if not text:
             return ["（請先輸入你想做的事。）"]
-        faction_name = next((f.name for f in definition.factions if f.id == p.faction), p.faction)
+        faction_name = battle_instance.side_names(battle, definition).get(p.faction, p.faction)  # 助守中立地寫守軍（FB-540）
         return definition, option.tag, text, faction_name
 
     def battle_text_request(self, text: str) -> BattleTextRequest | list[str]:
@@ -7142,7 +7470,7 @@ class Game:
         if isinstance(checked, list):
             return checked
         definition, _, text, faction_name = checked
-        battle = self.world.get_battle()
+        battle = self._battle_now()
         return BattleTextRequest(
             battle_id=definition.id, act_index=battle.act_index, faction_name=faction_name, text=text,
             name=self.state.player.name, sex=gender.of(self.state),
@@ -7167,7 +7495,7 @@ class Game:
             return checked
         definition, tag, text, faction_name = checked
         if llm_rate is None:
-            battle = self.world.get_battle()
+            battle = self._battle_now()
             act = battle_instance.current_act(battle, definition)
             target = battle_instance.target_line(battle, definition, self.state.player.name, text, self.content.config.battle)
             verdict = battle_instance.assess_gamble(
@@ -7180,13 +7508,14 @@ class Game:
 
     def battle_tale_request(self) -> BattleTaleRequest | None:
         """回合結算後補放手一搏劇情的 A 段（server.narrate_battle 在行動鎖內、很快地呼叫）：這一場有等著補劇情的放手一搏，
-        回傳最早那一回合的一批（battle_instance.tales_due）；沒有回 None。只讀。"""
-        battle = self.world.get_battle()
-        if battle is None or not battle.tales or battle.battle_id not in self.content.battles:
+        回傳最早那一回合的一批（battle_instance.tales_due）；沒有回 None。只讀。有攻城戰時（領地爭奪第二批）決戰先、再照攻城的先後，
+        第一場有等著補的那一場（收場了、還沒在每天結算時拿掉的攻城也算：最後一回合的劇情收場之後才寫好）。"""
+        battle = next((b for b in self._tale_battles() if b.tales and b.battle_id in self.content.battles), None)
+        if battle is None:
             return None
-        definition = self.content.battles[battle.battle_id]
+        definition = self._definition_of(battle)
         due = battle_instance.tales_due(battle)
-        names = {f.id: f.name for f in definition.factions}
+        names = battle_instance.side_names(battle, definition)  # 助守中立地寫守軍（FB-540）
         return BattleTaleRequest(
             battle_id=battle.battle_id, record_id=battle.record_id, opened=battle.muster_deadline_real,
             act_index=min(due[0].act_index, len(definition.acts) - 1),
@@ -7197,8 +7526,9 @@ class Game:
         )
 
     def apply_battle_tales(self, request: BattleTaleRequest, stories: dict[str, str]) -> int:
-        """補劇情的 C 段：還是同一場才補（battle_instance.apply_tales）；回傳補了幾句。換了一場（收場後開了下一場）什麼都不動。"""
-        battle = self.world.get_battle()
+        """補劇情的 C 段：還是同一場才補（battle_instance.apply_tales）；回傳補了幾句。換了一場（收場後開了下一場）什麼都不動。
+        有攻城戰時照流水號找那一場（決戰或攻城）。"""
+        battle = next((b for b in self._tale_battles() if b.record_id == request.record_id), None)
         if battle is None or (battle.battle_id, battle.record_id, battle.muster_deadline_real) != (
             request.battle_id, request.record_id, request.opened,
         ):
@@ -7208,13 +7538,36 @@ class Game:
         def _apply(b: battle_instance.BattleInstance) -> None:
             patched["n"] = battle_instance.apply_tales(b, request.done, stories)
 
-        self.world.mutate_battle(_apply)
+        self._mutate_battle_of(battle, _apply)
         return patched["n"]
+
+    def _tale_battles(self) -> list[battle_instance.BattleInstance]:
+        """補放手一搏劇情看的那幾場：決戰那一格，加上共用狀態裡的攻城（收場了、還沒在每天結算時拿掉的也算）；沒開領地爭奪只有決戰。"""
+        showdown = self.world.get_battle()
+        sieges = self.world.get_sieges() if conquest.on(self.content, self.state.world) else []
+        return ([showdown] if showdown is not None else []) + sieges
 
     def _battle_choose(self, arg: str) -> list[str]:
         """choose() 分派進這裡之前，已經透過自己開頭那次 self.options(odds=False) 呼叫
         推進過一次了（options() 內部會 tick），這裡用 tick=False 只讀，避免同一次請求裡
-        重複推進兩次。序章裡一律擋下（_battle_for_me，FB-113）：選單上本來就沒有，直接送也不行。"""
+        重複推進兩次。序章裡一律擋下（_battle_for_me，FB-113）：選單上本來就沒有，直接送也不行。
+        鈕 id 帶「@流水號」（同一個大區有兩場以上打得進去，領地爭奪第二批 Review Focus 4）：這一下照那一場；已經在別場的名單上不收。"""
+        arg, at, ref = arg.partition("@")
+        if not at:
+            return self._battle_choose_in(arg)
+        if not ref.isdigit():
+            return ["（此刻無法這麼做。）"]
+        name = self.state.player.name
+        if any(name in b.participants and b.record_id != int(ref) for b in self.battles_now() if b.phase != "ended"):
+            return ["（你已經在另一場戰局裡。）"]
+        self._battle_ref = int(ref)
+        try:
+            return self._battle_choose_in(arg)
+        finally:
+            self._battle_ref = None
+
+    def _battle_choose_in(self, arg: str) -> list[str]:
+        """_battle_choose 的本體（看的那一場已經照 @流水號 定好）。"""
         status = self._battle_for_me(tick=False)
         if status is None:
             return ["（此刻無法這麼做。）"]
@@ -7229,25 +7582,30 @@ class Game:
             return [f"（{self._absent_reason(definition)}。）"]
         if kind == "escort":
             return self._escort_step(battle, rest)
-        if kind in ("join", "join_late", "enlist") and not changing_sides and not self._escort_picked and self._escort_choices():
+        guarding = kind == "enlist" and rest.partition("@")[0] == battle_instance.GUARD  # 三方混戰助守：同伴只在兩軍那兩格上陣（裁決 22）
+        if (kind in ("join", "join_late", "enlist") and not changing_sides and not self._escort_picked and not guarding
+                and self._escort_choices()):
             # 名下有同伴：先挑誰隨你上陣（或不派），挑了才加入（歷史武將同行 9.3：沒有預設值）
-            refusal = self._join_refusal(kind, rest, definition)
+            refusal = self._join_refusal(kind, rest, definition, battle)
             if refusal is not None:
                 return refusal
-            self.state.player.escort_pick = f"{kind}:{rest}"
+            self.state.player.escort_pick = f"{kind}:{rest}" + (f"@{self._battle_ref}" if self._battle_ref is not None else "")
             return [ESCORT_PICK]
         if kind == "enlist":
             return self._enlist(battle, definition, rest, changing_sides)
         if kind == "join":
             if self.content.scenario.factions and rest != self._side():
                 return ["（你只能站在自己陣營這一邊。）"]
+            if battle.siege is not None and (problem := siege.join_problem(self.content, battle.siege, self._conquest_side(), rest)):
+                return [problem]
             scores = self._mandate_weight(definition, self._battle_scores())  # 在 mutate_battle 之前算好：快照的是加入這一刻、這個玩家自己的份量
             gear, marks = self._battle_gear(), self._battle_marks()
-            self.world.mutate_battle(
+            self._mutate_battle_of(
+                battle,
                 lambda b: battle_instance.join_faction(
                     b, name, rest, self._battle_neili_cap(), self._battle_power(), scores=scores, attribute=self._battle_road(),
                     role=self._battle_role(), **gear, **marks,
-                )
+                ),
             )
             msgs = ["你加入了這場戰局。"]
             side = self._sides(definition).get(rest, rest)
@@ -7255,13 +7613,16 @@ class Game:
             return msgs
         if kind == "join_late":
             own = self._side() if self.content.scenario.factions else None
+            if battle.siege is not None and (problem := siege.join_problem(self.content, battle.siege, self._conquest_side(), own or "")):
+                return [problem]
             scores = self._mandate_weight(definition, self._battle_scores())
             gear, marks = self._battle_gear(), self._battle_marks()
-            self.world.mutate_battle(
+            self._mutate_battle_of(
+                battle,
                 lambda b: battle_instance.auto_assign_latecomer(
                     b, definition, name, self._battle_neili_cap(), self.rng, self._battle_power(), faction=own,
                     scores=scores, attribute=self._battle_road(), role=self._battle_role(), **gear, **marks,
-                )
+                ),
             )
             msgs = ["你趕到了戰場，這一回合就能出手。"]  # 晚到的人當回合就能出招（FB-028）
             self._write(f"{definition.name}・趕到戰場", msgs)  # 趕到也留一則（FB-030）；每回合的出招不寫，太吵
@@ -7271,12 +7632,20 @@ class Game:
             return self._submit_battle_action(name, definition, rest)
         return ["（此刻無法這麼做。）"]
 
-    def _join_refusal(self, kind: str, rest: str, definition: BattleDef) -> list[str] | None:
-        """加入、臨時投效這一下本身就不成的那一句（同 _battle_choose、_enlist 的擋法）：挑同伴之前先擋，免得挑完了才說不行。"""
+    def _join_refusal(
+        self, kind: str, rest: str, definition: BattleDef, battle: battle_instance.BattleInstance | None = None,
+    ) -> list[str] | None:
+        """加入、臨時投效這一下本身就不成的那一句（同 _battle_choose、_enlist 的擋法）：挑同伴之前先擋，免得挑完了才說不行。
+        攻城戰（領地爭奪第二批）另照 siege.join_problem（另一軍站不進守將那一格）。"""
         if kind == "join" and self.content.scenario.factions and rest != self._side():
             return ["（你只能站在自己陣營這一邊。）"]
-        if kind == "enlist" and (not self._free_agent(definition) or rest not in self._sides(definition)):
+        if kind == "enlist" and (not self._free_agent(definition) or rest not in self._enlist_sides(battle, definition)):
             return ["（此刻無法這麼做。）"]
+        if battle is not None and battle.siege is not None:
+            slot = rest if kind != "join_late" else (self._side() or "")
+            problem = siege.join_problem(self.content, battle.siege, self._conquest_side(), slot)
+            if problem is not None:
+                return [problem]
         return None
 
     def _enlist(
@@ -7285,29 +7654,41 @@ class Game:
         """散人、豪強臨時投效交戰的一方（_free_agent）：集結時跟加入一樣（還能改投另一邊），開打了照晚到的人算、當回合就能出手。
         參戰名單上記投效的那一方，自己的陣營照舊（散人照舊是散人、豪強照舊是豪強）。"""
         name = self.state.player.name
-        armies = {f.id: f.name for f in definition.factions}
+        armies = self._enlist_sides(battle, definition)  # 三方混戰多一格助守【守軍】（裁決 22）
         if not self._free_agent(definition) or side not in armies:
             return ["（此刻無法這麼做。）"]
+        if battle.siege is not None and (problem := siege.join_problem(self.content, battle.siege, self._conquest_side(), side)):
+            return [problem]
         if changing_sides and battle.phase != "muster":
             return ["（開打之後就不能改投了。）"]
         scores, cap, power, road = self._mandate_weight(definition, self._battle_scores()), self._battle_neili_cap(), self._battle_power(), self._battle_road()
         role = self._battle_role()
         gear, marks = self._battle_gear(), self._battle_marks()
+        if side == battle_instance.GUARD:  # 三方混戰助守：同伴只在兩軍那兩格上陣，這一場不帶（裁決 22）
+            marks["escort"] = None
         if battle.phase == "muster":
-            self.world.mutate_battle(
+            self._mutate_battle_of(
+                battle,
                 lambda b: battle_instance.join_faction(
                     b, name, side, cap, power, scores=scores, attribute=road, role=role, **gear, **marks,
-                )
+                ),
             )
             msgs = [f"你臨時投效了{armies[side]}，只算這一場：打完你照樣是{self._own_side_name()}。"]
         else:
-            self.world.mutate_battle(
+            self._mutate_battle_of(
+                battle,
                 lambda b: battle_instance.auto_assign_latecomer(
                     b, definition, name, cap, self.rng, power, faction=side, scores=scores, attribute=road, role=role,
                     **gear, **marks,
-                )
+                ),
             )
             msgs = [f"你臨時投效了{armies[side]}，趕到了戰場，這一回合就能出手；打完你照樣是{self._own_side_name()}。"]
+        if side == battle_instance.neutral_guard(battle):  # 助守中立地的守將：不寫那一格的陣營（FB-540）
+            place = self.content.locations[battle.siege.loc].name
+            line = siege.HELP_GUARD_LINE if battle.phase == "muster" else siege.HELP_GUARD_LATE
+            msgs = [line.format(place=place, own=self._own_side_name())]
+            self._write(f"{definition.name}・{siege.HELP_GUARD_SWITCH if changing_sides else siege.HELP_GUARD_TITLE}", msgs)
+            return msgs
         self._write(f"{definition.name}・{'改投' if changing_sides else '臨時投效'}{armies[side]}", msgs)
         return msgs
 
@@ -7325,7 +7706,7 @@ class Game:
             battle_instance.submit_action(b, name, tag, text, success_rate, stories, sex=sex)
             captured["msgs"] = self._advance_battle_round(b, definition)
 
-        battle = self.world.mutate_battle(_apply)
+        battle = self._mutate_battle_now(_apply)  # 有攻城戰時是自己參戰的那一場（領地爭奪第二批）
         if battle is not None and battle.phase == "ended":
             self._apply_battle_outcome(battle)
         return captured["msgs"] or ["你選擇了行動，等待其他人……"]
@@ -7424,6 +7805,8 @@ class Game:
                 pushes = self.sortie_push(loc.id, "attack") if as_sortie else self.train_trend_push(loc.id)
                 for trend_id, delta in pushes.items():  # 換算過的線，照舊交給 T3 的 push_trend
                     extra += self.push_trend(trend_id, delta, source="sortie" if as_sortie else "train")
+                if as_sortie and conquest.on(c, s.world):  # 領地爭奪：出陣攻打贏推這一塊的進度、不推線（設計 3.7）
+                    extra += self._push_progress(loc.id, conquest.sortie_nominal(c, loc.id, "attack"), "sortie")
                 region = atlas.region_of(c, p.location)  # 官銀（伏筆，濃縮版內容表 4.0）：只有遊歷打贏才擲
                 extra += foreshadow.after_win(s, c, squad, self.rng, region.id if region is not None else None)
                 extra += self._order_credit(  # 軍令（計畫 T6）：攻城看戰線與敵方陣營，截糧看地點與運糧隊
@@ -7578,10 +7961,13 @@ class Game:
         s, c = self.state, self.content
         own = self._side()  # 豪強分屬兩軍：依附的那一軍
         side = territory.controller(s.world, c, loc.id)
-        ids = [
-            sid for sid in territory.squads_at(s.world, c, loc.id)
-            if (faction := c.squads[sid].faction) is not None and faction != own and (side is None or faction == side)
-        ]
+        if conquest.on(c, s.world):  # 領地爭奪：中立地打那裡的駐軍與流寇野獸，敵方的陣營區塊打控制方的兵（conquest.sortie_foes）
+            ids = conquest.sortie_foes(s.world, c, loc.id, own)
+        else:
+            ids = [
+                sid for sid in territory.squads_at(s.world, c, loc.id)
+                if (faction := c.squads[sid].faction) is not None and faction != own and (side is None or faction == side)
+            ]
         extra = orders.extra_enemies(s, c, loc.id, own)
         return ids + [sid for sid in extra if sid not in ids]
 
@@ -7600,9 +7986,50 @@ class Game:
         loc = c.locations[loc_id or s.player.location]
         how = how or self._sortie_mode(loc)
         side = self._side()  # 豪強分屬兩軍：照依附那一軍的目標推
-        if how is None or side is None:
+        if how is None or side is None or conquest.on(c, s.world):  # 領地爭奪：出陣不推線、推進度（sortie_progress）
             return {}
         return sortie.pushes(c, s.world, side, loc.id, how)
+
+    def sortie_progress(self, loc_id: str | None = None, how: str | None = None) -> float:
+        """領地爭奪：在這個地點（預設所在地）出陣往自己那一邊推進度的名目量（conquest.sortie_nominal；還沒打人數緩衝）。
+        開關關著、沒有出陣、這一塊的進度推不動（大本營、不是區塊）是 0。假人照它挑往哪裡走（bot_policy._train_value）。"""
+        s, c = self.state, self.content
+        loc = c.locations[loc_id or s.player.location]
+        if not conquest.on(c, s.world) or self._side() is None or not conquest.progress_open(s.world, c, loc.id):
+            return 0.0
+        how = how or self._sortie_mode(loc)
+        return conquest.sortie_nominal(c, loc.id, how) if how is not None else 0.0
+
+    def _push_progress(self, loc_id: str, nominal: float, source: str) -> list[str]:
+        """領地爭奪：往自己那一邊推這一塊的進度（計畫 2.3）。推多少＝nominal × Config.conquest.progress_scale（出陣）÷ √n（n 同推線的人數緩衝：
+        自己那一邊 active_window_days 內推過的人，含這一次的自己），沒有每人上限（出陣一天幾次本身就是上限）；事件（source="event"）
+        推 event_progress、不乘 progress_scale。出陣照推線那一本帳記貢獻（名目量，不然出陣不推線之後沒人升得到第 4 階），也進活躍名單。
+        回推完那一句話（不寫數字）；推不動是空的。"""
+        s, c = self.state, self.content
+        w, p = s.world, s.player
+        side = self._side()
+        if side is None or not conquest.progress_open(w, c, loc_id):
+            return []
+        cfg = c.config
+        window = cfg.active_window_days * DAY / calendar.cal_scale(c, w)
+        scale = cfg.conquest.progress_scale if source == "sortie" else 1.0
+        amount = push.buffered(nominal * scale, push.active_count(s, side, w.time, window))
+        after = conquest.push_progress(w, c, side, loc_id, amount)
+        if source == "sortie" and calendar.season_one_on(w, c):
+            gained = push.contribution(nominal, 1.0, 1.0, cfg.contrib_per_push, cfg.over_cap_contrib_ratio)
+            push.add_contribution(p, calendar.point(w.time, c, w).week, gained)
+        w.active_pushers.setdefault(side, {})[p.name] = w.time
+        w.active_pushers = push.drop_stale(w.active_pushers, w.time, window)
+        return [conquest.progress_line(c, loc_id, after, side)]
+
+    def _event_progress(self) -> list[str]:
+        """領地爭奪：在一塊區塊做完一則事件，往自己那一邊推一次進度（Config.conquest.event_progress；計畫 2.3）。散人、在路上、
+        事件還串著下一則、開關關著都是空的。"""
+        s, c = self.state, self.content
+        p = s.player
+        if s.pending_event is not None or p.journey is not None or not conquest.on(c, s.world) or p.location is None:
+            return []
+        return self._push_progress(p.location, c.config.conquest.event_progress, "event")
 
     def _sortie_option(self, loc: Location, cost: int, odds: bool) -> Option | None:
         """出陣的鈕（設計 2.2、2.3）：沒有出陣是 None；今天次數用完灰掉、寫什麼時候再來；攻照遊歷的寫法寫對手與勝算、必敗先問、
@@ -7769,8 +8196,12 @@ class Game:
             msgs += self._drill_gains(host, self._hold_share())
         for trend_id, amount in self.sortie_push(loc.id, how).items():
             msgs += self.push_trend(trend_id, amount, source="sortie")
+        on = conquest.on(c, s.world)
+        if on:  # 領地爭奪：守把這一塊的進度推回自己那一邊（設計 3.7、4.4）
+            msgs += self._push_progress(loc.id, conquest.sortie_nominal(c, loc.id, how), "sortie")
         if how == "hold":
-            msgs += self._order_credit(kind="duty", front=territory.line_of(c, loc.id))
+            front = conquest.line_of(s.world, c, loc.id) if on else territory.line_of(c, loc.id)
+            msgs += self._order_credit(kind="duty", location=loc.id, front=front)
         return msgs
 
     def _resisted_line(self) -> str:
@@ -8712,7 +9143,8 @@ class Game:
         if choice.combat:
             if rare:
                 annals.note(s, c, annals.DEED, what + "。", 3)
-            return msgs + self._event_battle(event, choice)
+            msgs += self._event_battle(event, choice)
+            return msgs + self._event_progress()  # 領地爭奪：在區塊了結一則事件推一次進度（開關關著是空的）
         if choice.check:
             success = roll_check(choice.check, s, c, self.world, self.rng)
             tag, line = check_result_line(success)  # 一律是本人：不寫誰出手（企劃者 2026-10-05）
@@ -8720,10 +9152,12 @@ class Game:
             self._outcome(tag, line)
             if rare:
                 annals.note(s, c, annals.DEED, what + ("，成了。" if success else "，沒成。"), 3)
-            return msgs + self._apply(choice.effect if success else failed(choice.fail_effect, c), once=event.once) + self._tale_clue(event)
+            msgs += self._apply(choice.effect if success else failed(choice.fail_effect, c), once=event.once) + self._tale_clue(event)
+            return msgs + self._event_progress()
         if rare:
             annals.note(s, c, annals.DEED, what + "。", 3)
-        return msgs + self._apply(choice.effect, once=event.once) + self._tale_clue(event)
+        msgs += self._apply(choice.effect, once=event.once) + self._tale_clue(event)
+        return msgs + self._event_progress()
 
     def _tale_clue(self, event: Event) -> list[str]:
         """說書的事件了結時，偶爾多一句說書版的口訣（武學，Config.secrets，tianxia/secret_recipes.py），記進武學譜；鑄器另擲一次
@@ -9205,6 +9639,110 @@ class Game:
         if not checkin.on(c, s.world) or not checkin.in_season(c, s.world) or prologue_rules.active(s, c):
             return None
         return checkin.view(s, c, s.world)
+
+    # ── 領地爭奪第二批：每天投票、時程表（conquest_day；設計 3.6、4.3，裁決 9）──
+
+    def _conquest_side(self) -> str | None:
+        """替哪一軍投票、打攻城（豪強分屬兩軍：依附的那一軍）；散人、不是兩軍是 None。"""
+        side = allied.side_of(self.state, self.content)
+        return side if side in conquest.SIDES else None
+
+    def _vote_key(self) -> int:
+        """這一下投的票是替哪一天投的：此刻的下一天（22:00 結算時排那一天的攻城，conquest_day.day_key）。"""
+        return conquest_day.day_key(self.pill_now(), self.content.config) + 1
+
+    def _vote_stamp(self, minute: int) -> str:
+        """這一票的時段寫給人看的那一刻（FB-541）：照結算排那一場的算法換成世界秒（conquest_day.to_world，同 SiegeSlot.at），再照
+        calendar.stamp_text 寫——跟公告同一個寫法；22:00～24:00 投的是後天，不寫「明日」。"""
+        c = self.content
+        return self.stamp(conquest_day.to_world(minute, self._vote_key(), self.pill_now(), self.state.world.time, c.config))
+
+    def _vote_problem(self, loc: str | None = None, minute: int | None = None) -> str | None:
+        """投不了票的那一句（不含括號）；投得了是 None。loc、minute 給了再驗那一票。"""
+        c, w = self.content, self.state.world
+        if not conquest.on(c, w) or w.conquest is None:
+            return CONQUEST_OFF
+        if w.ended:
+            return CONQUEST_ENDED
+        side = self._conquest_side()
+        if side is None:
+            return VOTE_RANGER
+        if loc is not None and loc not in conquest.targets(w, c, side):
+            return VOTE_NOT_TARGET
+        if minute is not None and minute not in conquest_day.slots(w, c, self._vote_key(), self.pill_now()):
+            cfg = c.config.conquest
+            return VOTE_BAD_SLOT.format(first=self._vote_stamp(cfg.slot_first), last=conquest_day.slot_text(cfg.slot_last))
+        return None
+
+    def conquest_vote(self, loc: str, minute: int) -> list[str]:
+        """投一票：明天打哪一塊、幾點開打（裁決 9：投靠了官軍或黃巾的人每天都投；一人一票、可以改；只公開加權之後的比例）。
+        票記在共用賽季（ConquestState.votes，votes_for 是替哪一天），22:00 結算時照 conquest_day.plan 定。"""
+        problem = self._vote_problem(loc, minute)
+        if problem is not None:
+            return self._log([f"（{problem}）"])
+        w = self.state.world
+        state, key = w.conquest, self._vote_key()
+        if state.votes_for != key:  # 前一天的票（結算吃過、或沒人結算）不帶過來
+            state.votes, state.votes_for = {}, key
+        state.votes.setdefault(self._conquest_side(), {})[self.state.player.name] = Pick(loc=loc, minute=minute)
+        line = VOTED_LINE.format(time=self._vote_stamp(minute), place=self.content.locations[loc].name)
+        self._write(VOTE_TITLE, [line])
+        self._save_season()
+        return self._log([line])
+
+    def _conquest_tick(self, save: bool = True) -> list[str]:
+        """領地爭奪第二批：換天（當地 22:00，conquest_day.day_key 照 pill_now）的那一刻結算一次（conquest_day.settle）——兩邊照票與主將
+        排明天的攻城、一場一句天下大事。第一個看到新的一天的人觸發（sync、伺服器的排程 world_tick、快轉 advance 都叫）；
+        **日子只准往前走**（ConquestState.settled_key，同 arena.roll_day 的教訓：快轉過的 Game 與照現實時間的 Game 輪流同步不重排、不倒退）。
+        這一季第一次只記下今天（開季當天沒有票可結）。開關關著、季收了、暫停中什麼都不做（不碰 WorldState）。save 是假時不存季（advance 自己存）。"""
+        c, w = self.content, self.state.world
+        if not conquest.on(c, w) or w.ended or w.conquest is None:
+            return []
+        key = conquest_day.day_key(self.pill_now(), c.config)
+        if key <= w.conquest.settled_key or self.world.paused_at() is not None:
+            return []
+        if w.conquest.settled_key < 0:
+            w.conquest.settled_key, msgs = key, []
+        else:
+            msgs = conquest_day.settle(w, c, key, self.pill_now())
+            for done in [b for b in self.world.get_sieges() if b.phase == "ended"]:  # 收場的攻城戰留到這時才從共用狀態拿掉
+                self.world.drop_siege(done.record_id)
+        if save:
+            self._save_season()
+        return msgs
+
+    def conquest_view(self) -> dict | None:
+        """攻城的畫面資料（Task 13 的網頁畫它；server.main_view 的 conquest）：today 是最近一次結算排的時程表（地點、攻方、時刻、狀態，
+        誰都看得到）；tomorrow 是自己這一邊明天的眾議（只有加權之後的比例，不帶名號、不帶票數）或主將定奪；mine 是自己那一票；
+        can_vote／why；targets 與 slots 是能投的區塊與時段。開關關著、季收了是 None。散人看得到 today，tomorrow 是 None。"""
+        c, w = self.content, self.state.world
+        if not conquest.on(c, w) or w.ended or w.conquest is None:
+            return None
+        state, side, key = w.conquest, self._conquest_side(), self._vote_key()
+        names = {f.id: f.name for f in c.scenario.factions}
+        today = [{
+            "id": slot.id, "loc": slot.loc, "place": c.locations[slot.loc].name,
+            "attackers": [names.get(a, a) for a in slot.attackers], "time": self.stamp(slot.at), "minute": slot.minute,
+            "status": slot.status, "status_text": siege_status_text(c, slot),
+            "by": {names.get(a, a): conquest_day.BY_WORDS.get(slot.by.get(a, ""), "") for a in slot.attackers},
+        } for slot in state.schedule]
+        problem = self._vote_problem()
+        view: dict = {"today": today, "tomorrow": None, "mine": None, "can_vote": problem is None, "why": problem or "",
+                      "targets": [], "slots": [], "per_day": conquest_day.per_day(c, w)}
+        if side is None:
+            return view
+        votes = state.votes.get(side, {}) if state.votes_for == key else {}
+        shares = conquest_day.shares(votes, set(w.seats.get(side, [])), c.config.conquest.rank4_share)
+        rows = [{"loc": loc, "place": c.locations[loc].name, "share": round(share * 100)}
+                for loc, share in sorted(shares.items(), key=lambda kv: -kv[1])]
+        view["tomorrow"] = {"how": "vote" if rows else "none", "text": VOTE_HOW if rows else VOTE_NONE, "rows": rows}
+        mine = votes.get(self.state.player.name)
+        if mine is not None:
+            view["mine"] = {"loc": mine.loc, "place": c.locations[mine.loc].name, "minute": mine.minute,
+                            "time": conquest_day.slot_text(mine.minute)}
+        view["targets"] = [{"id": loc, "name": c.locations[loc].name} for loc in conquest.targets(w, c, side)]
+        view["slots"] = [{"minute": m, "text": conquest_day.slot_text(m)} for m in conquest_day.slots(w, c, key, self.pill_now())]
+        return view
 
     def pill_now(self) -> float:
         """回體丹換日看的現實時間：sync 給的 now，加上 advance 推過的那一截（advanced_real）。"""
@@ -10484,7 +11022,7 @@ class Game:
             state = seal.CARD_STIRRED if shard.stirred_season == view.season else seal.CARD_MANDATE
         else:
             state = seal.CARD_NEW if shard.since_season == view.season else seal.CARD_STIRRED if shard.stirred_season == view.season else seal.CARD_CALM
-        status = self._battle_status(tick=False)
+        status = self._showdown_status(tick=False)  # 璽動只在時刻表決戰（攻城戰不璽動）
         stir = seal.STIR_MINE.format(shard=c.seal[shard.id].name) if status is not None and status[0].seal_shard == shard.id else ""
         w = self.state.world
         dates = [
@@ -10510,7 +11048,7 @@ class Game:
         _, who = self._my_seal_duel()
         if who is not None:
             return True
-        status = self._battle_status(tick=False)
+        status = self._showdown_status(tick=False)  # 璽動只在時刻表決戰（攻城戰不璽動）
         if status is None or not status[0].seal_shard:
             return False
         battle, me = status[0], self.state.player.name
@@ -11403,6 +11941,8 @@ class Game:
         battle = self.world.get_battle()
         if battle is not None and battle.phase != "ended":
             self._shelve_unfinished_battle()
+        for siege_battle in self._sieges():  # 攻城戰同上（領地爭奪第二批）
+            self._shelve_siege(siege_battle)
         # 收季前結算的、從沒開成的決戰（world.settle_waiting_showdowns）：公告跟別的大事一樣走 _deliver_big_events，
         # 收季那一則不再重複一次
         self._deliver_big_events()
@@ -11419,6 +11959,10 @@ class Game:
             # 參戰者才補得到「不算勝負」那一則（FB-035）。收場時間記收掉的那一季的時間，所以先讀回賽季
             self.state.world = self.world.get_season()
             self._shelve_unfinished_battle()
+        if self.world.season_phase() == "resting":
+            self.state.world = self.world.get_season()
+            for siege_battle in self._sieges():  # 攻城戰同上（領地爭奪第二批）：換季前收起來，參戰者補得到交代
+                self._shelve_siege(siege_battle)
         if not self.world.next_season(self.content, now):
             return self._log(["（這一季還沒結束，無法開啟下一季。）"])
         self._reconcile_season()
@@ -11507,7 +12051,8 @@ class Game:
             and (e.version_from is None or e.version_from in w.timeline)  # 宛城：第 3 週結算前不知道是哪一版，不列（PM 2026-10-05）
         ]
         openable = {b.id for b in showdowns if b is not None}
-        return [b for b in self.content.battles.values() if b.id not in off and (b.timetable_event is None or b.id in openable)]
+        return [b for b in self.content.battles.values()  # 攻城範本（領地爭奪第二批）不列：照時程表開
+                if b.id not in off and not b.siege and (b.timetable_event is None or b.id in openable)]
 
     def admin_fires(self) -> list[Threshold | WorldEvent]:
         """管理者「觸發大事」的選單：大勢門檻與世界事件，第一季不觸發的 beta 門檻與世界事件不列（計畫 T8；玉璽碎片設計 11.2）。"""
@@ -11672,6 +12217,67 @@ class Game:
         self._write("定戰況", msgs or ["大勢紋絲不動。"], tag="管理者")
         self._save_season()
         return self._log(msgs)
+
+    def admin_conquest_set(self, loc_id: str, side: str | None) -> list[str]:
+        """領地爭奪（第 38 項改版）：管理者把一塊改成某一軍的（side None 或空字串＝放回中立）。第一批沒有攻城戰，地圖只能靠這裡與時刻表
+        指定易手動；易手的天下大事、江湖史、三條線的重算跟自然易手一樣（conquest.set_control）。只收搶得下來的區塊、官軍或黃巾。"""
+        refusal = self._admin_refusal("定一塊歸誰")
+        if refusal:
+            return self._log(refusal)
+        c, w = self.content, self.state.world
+        if not conquest.on(c, w):
+            return self._log(["（這一季沒有開領地爭奪。）"])
+        side = side or None
+        if not conquest.capturable(c, loc_id):
+            return self._log(["（這裡不是搶得下來的區塊：大本營、廣宗、不是區塊的地點都不收。）"])
+        if side is not None and side not in conquest.SIDES:
+            return self._log(["（只能定給官軍或黃巾。）"])
+        before = territory.controller(w, c, loc_id)
+        if before == side:
+            return self._log(["（這一塊本來就是這樣。）"])
+        conquest.set_control(w, c, loc_id, side)
+        msgs = check_thresholds(self.state, c, self.world, self._quick_client(), now=self.now)
+        name = c.locations[loc_id].name
+        line = f"{name}改歸{c.scenario.faction_name(side, side)}。" if side else f"{name}放回中立。"  # 管理者看的，不是天下大事
+        self._write("定一塊歸誰", [line] + msgs, tag="管理者")
+        self._save_season()
+        return self._log([line] + msgs)
+
+    def admin_conquest_settle_now(self) -> list[str]:
+        """領地爭奪第二批（救場）：立刻照此刻的票（明天那一批，不清掉）與主將排一次，每一場都在「此刻＋集結」開打、集結馬上開——QA 不必等到
+        22:00。今天還沒開打的先作罷；22:00 照常結算（settled_key 不動）。公告照自然結算寫，不寫管理者。"""
+        refusal = self._admin_refusal("立刻排攻城")
+        if refusal:
+            return self._log(refusal)
+        c, w = self.content, self.state.world
+        if not conquest.on(c, w) or w.conquest is None or w.ended:
+            return self._log([f"（{CONQUEST_OFF}）"])
+        msgs = conquest_day.settle_now(w, c, self.pill_now()) or ["（兩邊此刻都沒有打得到的地方。）"]
+        self._write("立刻排攻城", msgs, tag="管理者")
+        self._save_season()
+        return self._log(msgs)
+
+    def admin_conquest_cancel(self, slot_id: str) -> list[str]:
+        """領地爭奪第二批（救場）：取消今天的一場攻城（照作罷處理：進度歸 50、天下大事一句，公告不寫管理者）；已經開了集結的那一場照決戰的
+        取消收兵（不算勝負、不發軍餉、不易手）。"""
+        refusal = self._admin_refusal("取消一場攻城")
+        if refusal:
+            return self._log(refusal)
+        c, w = self.content, self.state.world
+        if not conquest.on(c, w) or w.conquest is None:
+            return self._log([f"（{CONQUEST_OFF}）"])
+        slot = next((s for s in w.conquest.schedule if s.id == slot_id), None)
+        if slot is None or slot.status in ("done", "void"):
+            return self._log(["（找不到這一場，或已經打完、作罷了。）"])
+        text = conquest_day.VOID_CANCEL.format(who=conquest_day._names(c, slot.attackers), place=c.locations[slot.loc].name)
+        if slot.status == "open" and slot.record_id is not None:
+            self._cancel_siege(slot.record_id, text)
+            w = self.state.world
+            slot = next(s for s in w.conquest.schedule if s.id == slot_id)
+        conquest_day.void(w, c, slot, text)
+        self._write("取消一場攻城", [text], tag="管理者")
+        self._save_season()
+        return self._log([text])
 
     def admin_resolve_event(self, event_id: str, key: str) -> list[str]:
         """定結果：管理者直接定一件大事的結果（不含版本的鍵，例如「成」「guan:險勝」），照時刻表結算（公告、江湖史、

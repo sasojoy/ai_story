@@ -142,6 +142,10 @@ def rate(state: GameState, content: Content, loc: Location, method: str | None =
     strong = insights.strong_of(loc, content)
     if method is not None and strong is not None and content.insights[strong].attribute == method:
         base = min(high, base + cfg.insight_strong.sense_points)
+    from . import conquest  # noqa: PLC0415  延後 import：conquest → territory → rules
+
+    if conquest.home(state, content):  # 領地爭奪：人站在自家領地（散人在開季中立的區塊）擲中多幾個百分點（設計 4.5），同樣夾在上限
+        base = min(high, base + cfg.conquest.sense_bonus_points)
     bonus = min(cfg.sense_marks_cap, _tier(state.world.marks.get(mark_key(loc.id), 0)) * cfg.sense_marks_bonus)
     return base + bonus
 
