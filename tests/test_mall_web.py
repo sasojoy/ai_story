@@ -1,7 +1,7 @@
 """商城第二批：畫面（企劃者 2026-10-20 挑的對比圖：入口乙＋丙、商城那一層子；docs/superpowers/specs/2026-10-20-商城架構-design.md 4.6、4.7）。
 
 - 入口乙：右上角齒輪旁一顆錠子鈕寫元寶餘額；丙：底部分頁第六格「商城」。兩個都點了打開商城那一層。商城關著（main 沒有 mall）時
-  兩個都沒有、分頁照舊五格；序章裡跟其他還沒開放的分頁一樣藏著，亮齊（reveal 有 all）才出現。
+  兩個都沒有、分頁照舊五格；序章裡跟其他還沒開放的分頁一樣藏著，亮齊（reveal 有 all）或出了草廬才出現（FB-490）。
 - 商城那一層沿用店面的框（shopHtml：招牌、掌櫃那一句、左上出店），底下貨架、紀錄兩頁；按一件先問一次（花多少、元寶剩多少、
   丹或月卡變成多少），買成了餘額與狀態列的丹鈕當場換；買不了的（元寶不夠、限購、下架）掌櫃回一句原因。
 - 設定頁的管理者區多一組商城：查帳、補發、扣回、退一筆。
@@ -182,6 +182,26 @@ def test_the_prologue_hides_both_entries_like_any_tab_not_open_yet(m_on):
     assert "mall-open" in out["top"] and "repeat(6, 1fr)" in out["tabs"]
 
 
+def test_after_graduating_both_entries_show_through_the_onboarding_steps(real):
+    """FB-490：出師後就出現（docs/guide/商城.md）。出了草廬、初入江湖那四步（m.onboard，reveal 是前幾步的聯集、沒有 all）
+    兩個入口都在，不等初入江湖走完；草廬裡（m.prologue）照舊藏著。照正式內容的序章與初入江湖算，教學步驟改了也照樣抓得到。"""
+    game = Game.new(real, "沈浪", rng=random.Random(0))
+    game.client = None
+    p = game.state.player
+    p.tutorial_step = real.tutorial.prologue_steps  # e1_clinic：剛走出草廬、到了潁川
+    p.location = "yingchuan"
+    for step in range(real.tutorial.prologue_steps, len(real.tutorial.steps)):
+        p.tutorial_step = step
+        m = server.main_view(game)
+        assert m.get("mall") is not None and m["onboard"] and not m["prologue"]
+        out = run(m, "return { top: H.topHtml(), tabs: H.tabsHtml() };")
+        assert "mall-open" in out["top"], real.tutorial.steps[step].id
+        assert 'data-act="mall-open" data-tab="mall"' in out["tabs"], real.tutorial.steps[step].id
+    farewell = with_reveal({**m, "onboard": None}, sorted({k for s in real.tutorial.steps[:real.tutorial.prologue_steps] for k in s.reveal}))
+    out = run(farewell, "return { top: H.topHtml(), tabs: H.tabsHtml() };")  # 出師那一步（還在草廬）照舊藏著
+    assert "mall-open" not in out["top"] and "mall-open" not in out["tabs"]
+
+
 def test_the_entry_balance_follows_main(m_on):
     m = copy.deepcopy(m_on)
     m["mall"]["balance"] = 123456
@@ -261,6 +281,63 @@ def test_a_buy_that_got_no_answer_reuses_its_ref_next_time(m_on):
       return { first, calls: T.calls };"""), responses={"/api/mall/buy": {"message": "", "bought": None, "mall": _view()}, "/api/mall": _view()})
     posts = [c for c in out["calls"] if c[0] == "/api/mall/buy"]
     assert out["first"] and posts and posts[-1][1]["ref"] == out["first"]
+
+
+LOST_BUY = """
+      const real = T.ctx.fetch;
+      T.ctx.fetch = (url, opts) => url === "/api/mall/buy" ? Promise.reject(new Error("斷線")) : real(url, opts);
+      """ + _click('{ act: "mall-pick", id: "pills_5" }') + _click('{ act: "ask-yes" }') + """
+      const first = H.S.mallPending && H.S.mallPending.ref;
+      T.ctx.fetch = real;
+      """  # 第一次送出去沒拿到回應（逾時、斷線）：伺服器可能其實買好了
+
+
+def test_a_resend_that_already_went_through_is_said_as_done(m_on):
+    """FB-491：同一個編號再送、伺服器回「這一筆已經買好了」（already 有值）：照成了的樣子講（綠的），不是買不了的紅字。"""
+    dup = {"message": "<p>這一筆已經買好了：「回體丹五顆」。</p>", "bought": None, "already": "pills_5",
+           "mall": _view(balance=4900, count=33), "main": m_on}
+    out = _layer(m_on, _click('{ act: "mall-pick", id: "pills_5" }') + _click('{ act: "ask-yes" }'),
+                 responses={"/api/mall/buy": dup})
+    assert "這一筆已經買好了：「回體丹五顆」。" in _text(out["app"])
+    assert 'class="shop-line said ok"' in out["app"] and "said no" not in out["app"]
+
+
+def test_a_lost_buy_resent_says_it_is_the_same_one(m_on):
+    """FB-491：沒等到回音、貨架也還沒變（不知道成了沒）：再點同一件，確認框照實講這是上一筆再送一次（同一個編號、不會扣兩次），
+    不假裝是新的一筆。"""
+    out = run(m_on, _async(_click('{ act: "mall-open" }') + LOST_BUY + _click('{ act: "mall-pick", id: "pills_5" }') + """
+      const asked = T.bodyHtml.slice(-1)[0];
+      """ + _click('{ act: "ask-yes" }') + """
+      return { first, asked, calls: T.calls };"""),
+        responses={"/api/mall/buy": {"message": "", "bought": None, "already": None, "mall": _view()}, "/api/mall": _view()})
+    posts = [c for c in out["calls"] if c[0] == "/api/mall/buy"]
+    assert out["first"] and posts[-1][1]["ref"] == out["first"]
+    asked = _text(out["asked"])
+    assert "上一筆「回體丹五顆」還沒等到回音" in asked and "不會扣兩次" in asked and "再送一次（100）" in asked
+    assert "買下（100）" not in asked
+
+
+def test_a_lost_buy_that_shows_up_on_the_shelf_lets_the_next_one_be_new(m_on):
+    """FB-491：沒等到回音，可是之後重抓到的貨架變了（元寶少了、丹多了：那一筆其實成了）：再點一件是新的一筆、用新的編號，
+    確認框照新的貨架算（4900 → 4800），不寫「再送一次」。"""
+    richer = copy.deepcopy(m_on)
+    richer["mall"]["balance"] = 4900
+    out = run(m_on, _async(_click('{ act: "mall-open" }') + LOST_BUY + """
+      const later = T.ctx.fetch;
+      T.ctx.fetch = (url, opts) => url === "/api/mall" ? (T.calls.push([url, null]), Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(H.S.landed) })) : later(url, opts);
+      const was = H.S.main; H.setMain(H.S.next); await H.refreshPage(was);
+      const pending = H.S.mallPending;
+      """ + _click('{ act: "mall-pick", id: "pills_5" }') + """
+      const asked = T.bodyHtml.slice(-1)[0];
+      """ + _click('{ act: "ask-yes" }') + """
+      return { first, pending, asked, calls: T.calls };"""), S={"next": richer, "landed": _view(balance=4900, count=33)},
+        responses={"/api/mall/buy": {"message": "", "bought": None, "already": None, "mall": _view(balance=4800, count=38)},
+                   "/api/mall": _view()})
+    assert out["first"] and out["pending"] is None
+    posts = [c for c in out["calls"] if c[0] == "/api/mall/buy"]
+    assert posts[-1][1]["ref"] != out["first"] and REF.match(posts[-1][1]["ref"])
+    asked = _text(out["asked"])
+    assert "還沒等到回音" not in asked and "買下（100）" in asked and "4900 →" in asked and "4800" in asked
 
 
 def test_a_refused_buy_lets_the_shopkeeper_say_it(m_on):
@@ -350,6 +427,29 @@ def test_admin_reissue_asks_first_then_posts_with_a_ref_and_keeps_the_sheet(m_on
     assert post[1]["name"] == "沈浪" and post[1]["amount"] == 300 and post[1]["note"] == "維修補償" and REF.match(post[1]["ref"])
     assert any(c[0] == "/api/admin/mall" for c in out["calls"])  # 補完重查一次帳
     assert out["sheet"] is True and "已替沈浪補發 300 元寶" in out["msg"]
+
+
+def _admin_result(m_on, op, message):
+    """管理者補發或扣回（先問、確定），回之後重畫的設定抽屜（結果寫在查帳那一行）。"""
+    admin = {**m_on, "admin": True}
+    return run(admin, _async("""
+      const fields = { "ad-mall-name": { value: "沈浪" }, "ad-mall-amount": { value: "300" }, "ad-mall-note": { value: "維修補償" } };
+      const orig = T.ctx.document.getElementById;
+      T.ctx.document.getElementById = (id) => fields[id] || orig(id);
+      T.qs['.ask [data-act="ask-no"]'] = { focus() {} };
+      """ + _click('{ act: "mall-admin", op: "' + op + '" }') + _click('{ act: "ask-yes" }') + """
+      return H.sheetHtml();"""),
+        S={"sheet": True, "admin": None},
+        responses={f"/api/do/{op}": {"main": admin, "message": message},
+                   "/api/admin/mall": {"name": "沈浪", "balance": 400, "card": None, "ledger": [], "purchases": []}})
+
+
+def test_admin_result_that_went_through_is_not_red(m_on):
+    """FB-492：補發、扣回、退一筆做成了，查帳那一行帶 ok（不是被拒的紅字）；被拒的那一句（包在全形括號裡）照舊紅字。"""
+    done = _admin_result(m_on, "mall_reissue", "<p>已替沈浪補發 300 元寶（餘額 400）。</p>")
+    assert '<p class="form-msg ok" role="alert">已替沈浪補發 300 元寶（餘額 400）。</p>' in done
+    refused = _admin_result(m_on, "mall_revoke", "<p>（沈浪只有 100 元寶，扣不了 300：餘額不能是負的。）</p>")
+    assert '<p class="form-msg" role="alert">（沈浪只有 100 元寶，扣不了 300：餘額不能是負的。）</p>' in refused
 
 
 def test_admin_refund_asks_then_posts_the_purchase_of_the_looked_up_player(m_on):

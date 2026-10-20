@@ -88,6 +88,19 @@ def test_buy_returns_main_and_whether_it_went_through():
     assert again["bought"] is None and again["main"]["mall"] == {"balance": 4900}  # 同一筆重送：沒有再買
 
 
+def test_a_resent_buy_says_which_item_already_went_through():
+    """FB-491：第一次的回應沒收到、同一個編號再送，伺服器回「這一筆已經買好了」：already 寫那一筆的商品 id，網頁照成了的樣子講
+    （bought 照舊只寫這一次買成的）。別的編號買不成（沒有這件商品）already 是 None。"""
+    client = _player()
+    client.post("/api/mall/buy", json={"item": "card_30", "ref": "click-0201"})
+    again = client.post("/api/mall/buy", json={"item": "card_30", "ref": "click-0201"}).json()
+    assert "已經買好" in again["message"] and again["bought"] is None and again["already"] == "card_30"
+    nothing = client.post("/api/mall/buy", json={"item": "沒有這件", "ref": "click-0202"}).json()
+    assert nothing["bought"] is None and nothing["already"] is None
+    fresh = client.post("/api/mall/buy", json={"item": "pills_5", "ref": "click-0203"}).json()
+    assert fresh["bought"] == "pills_5" and fresh["already"] is None
+
+
 def test_main_has_no_mall_key_when_off(monkeypatch):
     monkeypatch.setattr(server.CONTENT.config.mall, "enabled", False)
     assert "mall" not in _player().get("/api/main").json()

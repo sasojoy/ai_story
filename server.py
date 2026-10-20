@@ -1998,8 +1998,9 @@ def api_mall_records(request: Request):
 
 @app.post("/api/mall/buy")
 def api_mall_buy(request: Request, body: dict = Body(...)):
-    """買一件（Game.mall_buy）：{item, ref}；回 {message, bought, mall, main}。bought 是買成的商品 id（不成是 None：網頁照它換
-    掌櫃那一句）、main 是江湖畫面（狀態列的錠子鈕與丹鈕當場換，商城第二批）。賽季時鐘暫停中照其他動作擋。"""
+    """買一件（Game.mall_buy）：{item, ref}；回 {message, bought, already, mall, main}。bought 是買成的商品 id（不成是 None：網頁照它換
+    掌櫃那一句）、already 是這個編號早就買好的那一件（逾時重送，網頁照成了的樣子講，FB-491；其餘是 None）、main 是江湖畫面
+    （狀態列的錠子鈕與丹鈕當場換，商城第二批）。賽季時鐘暫停中照其他動作擋。"""
     _mall_on()
     game = _game(request)
     item, ref = str(body.get("item", ""))[:40], _mall_ref(body.get("ref"))
@@ -2007,12 +2008,13 @@ def api_mall_buy(request: Request, body: dict = Body(...)):
 
     def buy(g: Game):
         out = g.mall_buy(item, ref)
-        got["bought"] = g.mall_bought  # 在鎖裡讀：出了鎖別的請求可能又動了這一份 Game
+        got["bought"], got["already"] = g.mall_bought, g.mall_already  # 在鎖裡讀：出了鎖別的請求可能又動了這一份 Game
         return out
 
     msgs = act(game, buy)
     _tell_tabs(game)
-    return {"message": joined(msgs), "bought": got.get("bought"), "mall": look(game, lambda g: g.mall_view()), "main": look(game, main_view)}
+    return {"message": joined(msgs), "bought": got.get("bought"), "already": got.get("already"),
+            "mall": look(game, lambda g: g.mall_view()), "main": look(game, main_view)}
 
 
 @app.post("/api/admin/mall")
