@@ -1951,8 +1951,12 @@ class Game:
         push_ok = any(amount and self._push_room(line) > 0 for line, amount in self.sortie_push(loc.id, how).items())
         own = how == "attack" and territory.controller(self.state.world, self.content, loc.id) == self._side()
         # 領地爭奪：出陣推的是這一塊的進度（大本營、廣宗推不動），不是線——那一句照進度寫
-        progress = conquest.progress_open(self.state.world, self.content, loc.id) if conquest.on(self.content, self.state.world) else None
-        return howto.sortie_line("convoy" if own else how, push_ok, left, self.content, progress)  # 自家地盤上攻的只有運糧隊（FB-255）
+        on = conquest.on(self.content, self.state.world)
+        progress = conquest.progress_open(self.state.world, self.content, loc.id) if on else None
+        note = "convoy" if own else how  # 自家地盤上攻的只有運糧隊（FB-255）
+        if on and how == "hold" and not conquest.capturable(self.content, loc.id):
+            note = "home"  # 自家的大本營、廣宗：不在爭奪之列（FB-532）
+        return howto.sortie_line(note, push_ok, left, self.content, progress)
 
     def _choice_label(self, choice: Choice, odds: bool) -> str:
         """動手的選項寫對手與勝算，後面照樣接體力的代價（輸了多扣的，企劃者裁決 E6；events.stamina_note）；

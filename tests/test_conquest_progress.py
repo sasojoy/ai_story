@@ -142,8 +142,8 @@ def test_action_note_says_progress_not_the_line():
     assert howto.SORTIE_PROGRESS in _note(game, "nanyang_road") and howto.SORTIE_NO_PUSH not in _note(game, "nanyang_road")
     go(join(game, "guan"), "yingchuan_wilds")  # 守自家的區塊
     assert howto.SORTIE_PROGRESS in _note(game, "yingchuan_wilds")
-    go(game, "changshe")  # 大本營搶不下來：沒有進度
-    assert howto.SORTIE_NO_PROGRESS in _note(game, "changshe")
+    go(game, "changshe")  # 大本營搶不下來：沒有進度（FB-532：自家的大本營另一句，見 test_conquest_sortie_notes）
+    assert "沒有進度可推" in _note(game, "changshe") and howto.SORTIE_PROGRESS not in _note(game, "changshe")
     plain = go(join(plain_game("weekend"), "huang"), "runan_wilds")
     assert howto.SORTIE_PROGRESS not in _note(plain, "runan_wilds")  # 關著照舊寫推動戰局
 
