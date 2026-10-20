@@ -237,30 +237,39 @@ def limit_text(item: MallItem, wallet: Wallet, owner: str, day: int, season: int
 
 def view(content: Content, wallet: Wallet, owner: str, day: int, season: int) -> dict:
     """商城那一頁的資料：餘額、月卡、這一刻上架的商品（照 content/mall.json 的順序；沒上架的不列）。每件寫買不買得了、
-    為什麼、買了之後剩多少（購買確認用，4.6）。"""
+    為什麼、買了之後剩多少（購買確認用，4.6）；gives 是這件發什麼（允許表的鍵 → 數量）、card_to 是今天買的話月卡用到哪一天
+    （含；不是月卡是 None）：購買確認寫「丹或月卡變成多少」用（商城第二批）。"""
     balance = wallet.balance(owner)
+    span = wallet.card(owner, CARD_KEY)
     items = []
     for item in content.mall.values():
         if not on_sale(item, day, season):
             continue
         why = buy_problem(item, wallet, owner, day, season)
+        days = item.effects.get("card_days", 0)
         items.append({
             "id": item.id, "name": item.name, "note": item.note, "price": item.price, "kind": item.kind,
             "kind_name": KIND_NAMES[item.kind], "effects": effects_text(item, content),
             "limit": limit_text(item, wallet, owner, day, season), "can": why is None, "why": why, "after": balance - item.price,
+            "gives": {key: n for key, n in item.effects.items() if key in EFFECTS},
+            "card_to": day_text(card_span(span, day, days)[1] - 1) if days else None,
         })
     return {"balance": balance, "card": card_view(content, wallet, owner, day), "items": items}
 
 
 def records(content: Content, wallet: Wallet, owner: str, *, admin: bool = False) -> dict:
     """購買紀錄與帳（最近 Config.mall.records_shown 筆，新的在前）；帳的每一列寫那一筆之後的餘額。admin 為真時多寫編號與
-    經手的管理者（管理者查帳）；玩家自己看的不寫是誰經手。"""
+    經手的管理者（管理者查帳）；玩家自己看的不寫是誰經手。連著一筆購買的那幾列（購買、退款）寫商品的名字 item 與那一筆退了沒
+    refunded（紀錄頁照它寫標題，商城第二批）；其餘 item 是 None。"""
     shown = content.config.mall.records_shown
     balance = wallet.balance(owner)
     after, ledger = balance, []
     for row in wallet.ledger(owner, shown):
+        bought = wallet.purchase(row.purchase_id) if row.purchase_id is not None else None
+        known = content.mall.get(bought.item) if bought is not None else None
         line = {"time": real_text(row.time, content), "delta": row.delta, "reason": REASONS.get(row.reason, row.reason),
-                "note": row.note, "balance": after}
+                "note": row.note, "balance": after, "item": (known.name if known else bought.item) if bought is not None else None,
+                "refunded": bought is not None and bought.refunded is not None}
         if admin:
             line.update(ref=row.ref, admin=row.admin, purchase=row.purchase_id)
         ledger.append(line)
