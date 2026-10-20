@@ -45,13 +45,14 @@ def test_losing_lore_can_leave_you_over_the_cap(state, content, world):
     p = state.player
     p.stats["lore"] = 7
     p.member.wugong_id = "basic_fist"
+    p.arts = ["lake_kick"]  # 武學重構：合成只剩武學＋武學，要第二門
     p.insights = ["feng", "huo"]
     p.insights += [f"x{i}" for i in range(library.cap_of(state, content) - library.held_count(state))]
     assert library.held_count(state) == library.cap_of(state, content)  # 博聞 7 時正好滿
     p.stats["lore"] = 5
     assert library.held_count(state) > library.cap_of(state, content) and library.full(state, content)
     assert "滿了" in fusion.merge_problem(state, content, world, "feng", "huo")  # 合併被擋
-    assert "滿了" in fusion.fuse_problem(state, content, world, "basic_fist", "feng")  # 合成也被擋
+    assert "滿了" in fusion.blend_problem(state, content, world, "basic_fist", "lake_kick")  # 合成也被擋
     before = library.held_count(state)
     insights.learn(state, content, world, "shui")  # 悟意境不擋：新的意境照收
     assert "shui" in p.insights and library.held_count(state) == before + 1
@@ -248,43 +249,22 @@ def test_melting_refunds_eighty_percent_of_practice_plus_a_quality_bonus(state, 
     state.player.art_mastery["旋風腿"] = 2
     state.player.stats["xinde"] = 0
     library.melt_art(state, content, world, "旋風腿")
-    assert state.player.stats["xinde"] == 8 + 5
+    assert state.player.stats["xinde"] == 8  # 武學重構：品級不靠修練衝，中品不另給加給（只剩絕學那一階）
     assert "旋風腿" not in state.player.arts
     assert {"旋風腿"} & (set(state.player.art_levels) | set(state.player.art_quality) | set(state.player.art_mastery)) == set()
 
 
-def test_melting_pays_the_bonus_of_the_grade_you_raised_the_art_to_and_nothing_for_the_rest(state, content, world):
-    """企劃者 2026-10-05（改了設計 4.3）：品質加給只算你自己修練出來的那幾階——現在的品質減去登記的品質。
-    合成的武學登記在下品，所以修練到中品、第一成熟練度（沒花練成的心得）熔掉，退中品那 5 點，
-    加上 FB-068 墊在練成那一份底下的基本值 4。"""
+def test_melting_pays_the_bonus_only_for_the_peerless_grade_you_reached(state, content, world):
+    """武學重構：品級不靠修練衝了（下中上是合成時兩門來源帶來的），熔掉中品、上品不給品質加給；
+    只有契機練成的絕學照舊領絕學那一階的加給（減去登記的下品），加上 FB-068 墊在練成那一份底下的基本值 4。"""
     bonus, floor = content.config.melt_quality_bonus, content.config.melt_min_refund
     _fused(world, "旋風腿")
-    state.player.arts = ["旋風腿"]
-    state.player.art_quality["旋風腿"] = "中品"
-    state.player.stats["xinde"] = 0
-    msgs = library.melt_art(state, content, world, "旋風腿")
-    assert state.player.stats["xinde"] == floor + bonus["中品"] - bonus["下品"] == 9
-    assert f"心得 +{floor + bonus['中品']}" in msgs
-
-
-def test_the_grades_a_fusion_rolled_pay_no_bonus_when_melted(state, content, world):
-    """企劃者 2026-10-06：合成擲到的品質算「登記時就有」——合到上品馬上熔掉，不能領上品的加給（不然合、熔就是心得迴圈）；
-    擲到中品、再修練到上品，熔的時候只領中品到上品那一段。"""
-    bonus, floor = content.config.melt_quality_bonus, content.config.melt_min_refund
-    _fused(world, "旋風腿")
-    state.player.stats["xinde"] = 0
-    state.player.member.wugong_id = "basic_fist"  # 欄位有人：合出來的收進功法庫，才熔得掉
-    library.store_art(state, world.get_skill("旋風腿"), "上品")
-    assert state.player.arts == ["旋風腿"] and state.player.art_rolled["旋風腿"] == "上品"
-    library.melt_art(state, content, world, "旋風腿")
-    assert state.player.stats["xinde"] == floor  # 沒有品質加給
-    assert "旋風腿" not in state.player.art_rolled
-
-    state.player.stats["xinde"] = 0
-    state.player.arts = ["旋風腿"]
-    state.player.art_quality["旋風腿"], state.player.art_rolled["旋風腿"] = "上品", "中品"  # 擲到中品，自己修練到上品
-    library.melt_art(state, content, world, "旋風腿")
-    assert state.player.stats["xinde"] == floor + bonus["上品"] - bonus["中品"]
+    for grade, refund in (("中品", floor), ("上品", floor), ("絕學", floor + bonus["絕學"] - bonus["下品"])):
+        state.player.arts = ["旋風腿"]
+        state.player.art_quality["旋風腿"] = grade
+        state.player.stats["xinde"] = 0
+        msgs = library.melt_art(state, content, world, "旋風腿")
+        assert state.player.stats["xinde"] == refund and f"心得 +{refund}" in msgs, grade
 
 
 def test_a_content_art_handed_out_at_its_top_grade_pays_no_bonus_when_melted(state, content, world):
@@ -308,14 +288,31 @@ def test_melt_refund_counts_only_the_grades_above_the_registered_one(content):
     assert library.melt_refund(content, 5, "中品", registered="中品") == 8  # 練成的八成照退
 
 
-def test_melting_an_insight_pays_and_warns_about_the_arts_that_need_it(state, content, world):
+def test_an_insight_in_a_slot_cannot_be_melted_until_it_is_taken_out(state, content, world):
+    """武學重構：意境裝在槽裡才生效，裝著的熔不得（INSIGHT_SLOTTED）；拆下來就照價熔（以前是熔了照樣、只警告不能再修練）。"""
+    from tianxia import arts as arts_mod
+
     _fused(world, "旋風腿")
     state.player.arts = ["旋風腿"]
     state.player.insights = ["feng"]
+    state.player.art_slots["旋風腿"] = ["feng", None]
     state.player.stats["xinde"] = 0
     msgs = library.melt_insight(state, content, world, "feng")
-    assert state.player.insights == [] and state.player.stats["xinde"] == 10
-    assert any("旋風腿" in m and "不能再修練" in m for m in msgs)
+    assert msgs == [library.INSIGHT_SLOTTED.format(name="風", art="旋風腿")] and state.player.insights == ["feng"]
+    arts_mod.unslot(state, content, world, "旋風腿", "feng")
+    msgs = library.melt_insight(state, content, world, "feng")
+    assert state.player.insights == [] and state.player.stats["xinde"] == 10 and msgs[-1] == "心得 +10"
+
+
+def test_melting_an_art_puts_its_insights_back(state, content, world):
+    """熔掉一門武學，槽裡的意境拆回背包（library.remove_art → arts.release_all），不跟著沒了。"""
+    _fused(world, "旋風腿")
+    state.player.arts = ["旋風腿"]
+    state.player.insights = ["feng"]
+    state.player.art_slots["旋風腿"] = ["feng", None]
+    library.melt_art(state, content, world, "旋風腿")
+    assert "旋風腿" not in state.player.art_slots and state.player.insights == ["feng"]
+    assert library.melt_insight_problem(state, content, world, "feng") is None
 
 
 def test_melting_an_insight_nobody_needs_has_no_warning(state, content, world):
@@ -374,11 +371,12 @@ def test_melting_a_fused_art_that_was_never_practised_refunds_the_minimum(state,
 
 
 def test_the_minimum_is_a_floor_under_the_practice_part_and_the_own_grade_bonus_still_adds(state, content, world):
-    """max(4, 練成花的八成) ＋ 自己修上去的品質加給：第五成（練成花 10、八成是 8）照退 8，不是 12；
-    第二成（花 1、八成是 0）退 4；修到中品的第一成退 4 ＋ 5。"""
+    """max(4, 練成花的八成) ＋ 絕學的品質加給：第五成（練成花 10、八成是 8）照退 8，不是 12；
+    第二成（花 1、八成是 0）退 4；中品、上品不給加給（武學重構：品級不靠修練衝），絕學的第一成退 4 ＋ 絕學加給。"""
     _fused(world, "旋風腿")
     state.player.arts = ["旋風腿"]
-    for level, quality, refund in ((5, "下品", 8), (2, "下品", 4), (1, "中品", 4 + 5), (5, "上品", 8 + 15)):
+    peerless = content.config.melt_quality_bonus["絕學"] - content.config.melt_quality_bonus["下品"]
+    for level, quality, refund in ((5, "下品", 8), (2, "下品", 4), (1, "中品", 4), (5, "上品", 8), (1, "絕學", 4 + peerless)):
         state.player.art_levels["旋風腿"], state.player.art_quality["旋風腿"] = level, quality
         assert library.melt_value(state, content, world, "旋風腿") == refund, (level, quality)
 
@@ -428,17 +426,17 @@ def test_melting_many_with_nothing_to_melt_changes_nothing(state, content, world
     assert msgs[0] == library.MELT_MANY_NOTHING and state.player.stats["xinde"] == 0
 
 
-def test_melting_many_warns_about_arts_that_lose_their_cultivation_insight(state, content, world):
+def test_melting_many_skips_an_insight_in_a_slot_unless_its_art_goes_first(state, content, world):
+    """武學重構：裝在槽裡的意境熔不得，批量熔煉跳過、寫原因；同一次也熔掉那一門的話，那一門先熔、意境拆回來，接著照熔。"""
     _fused(world, "旋風腿")
     state.player.arts = ["旋風腿"]
     state.player.insights = ["feng"]
+    state.player.art_slots["旋風腿"] = ["feng", None]
     msgs = library.melt_many(state, content, world, [], ["feng"])
-    assert any("旋風腿" in m and "不能再修練" in m for m in msgs)
-    # 那一門同一次也熔掉了，就不必再警告
-    state.player.insights = ["feng"]
-    state.player.arts = ["旋風腿"]
+    assert msgs[0] == library.MELT_MANY_NOTHING and state.player.insights == ["feng"]
+    assert msgs[1] == "「風」沒熔：" + library.INSIGHT_SLOTTED.format(name="風", art="旋風腿")
     msgs = library.melt_many(state, content, world, ["旋風腿"], ["feng"])
-    assert not any("不能再修練" in m for m in msgs)
+    assert state.player.arts == [] and state.player.insights == [] and msgs[0].startswith("你一口氣熔掉了 1 門武學、1 個意境")
 
 
 def test_melting_many_lists_at_most_a_few_names(state, content, world):

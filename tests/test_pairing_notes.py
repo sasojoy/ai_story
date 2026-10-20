@@ -1,6 +1,7 @@
 """換上另一門功法會不會改變內外搭配（FB-088）：功法庫那一門跟身上同一種那門的比較（team.compare_with_worn，W6）與改練的回話
 （team.switch_art）都要講。搭配的數字一律來自 team.pairing（設定的 pairing_bonus、pairing_penalty），這裡不寫死 20%：
-測試把設定改掉，句子跟著變。夾具的身上是粗淺吐納（內功・柔）與粗淺拳腳（武學・實）——實跟柔不相剋、不同屬，搭配是 1。"""
+測試把設定改掉，句子跟著變。夾具的身上是柔息功（內功・柔）與實拳（武學・實）——實跟柔不相剋、不同屬，搭配是 1。
+武學重構：武學的屬性＝相容屬性的第一個，粗淺吐納、粗淺拳腳兼容並蓄、沒有屬性（跟誰都不搭不剋），所以夾具改穿兩門登記的。"""
 from __future__ import annotations
 
 import pytest
@@ -13,15 +14,21 @@ LOW_ONLY = {"下品": 100.0, "中品": 0.0, "上品": 0.0, "絕學": 0.0}
 
 
 def _art(world, name, attribute, kind="武學"):
-    art = generate_from_name(name, kind, name, weights=LOW_ONLY, attribute=attribute).model_copy(update={"origin": "fused"})
+    art = generate_from_name(name, kind, name, weights=LOW_ONLY, attribute=attribute).model_copy(
+        update={"origin": "fused", "affinity": [attribute]},  # 武學重構：屬性照相容屬性的第一個（arts.apply）
+    )
     assert world.claim_skill_name(art)
     return art
 
 
+INNER = "柔息功"  # 夾具身上的內功（柔）
+
+
 @pytest.fixture
-def worn(state):
-    """身上：粗淺吐納（內功・柔）與粗淺拳腳（武學・實）。"""
-    state.player.member.neigong_id, state.player.member.wugong_id = "basic_breath", "basic_fist"
+def worn(state, world):
+    """身上：柔息功（內功・柔）與實拳（武學・實）。"""
+    inner, outer = _art(world, INNER, "柔", kind="內功"), _art(world, "實拳", "實")
+    state.player.member.neigong_id, state.player.member.wugong_id = inner.id, outer.id
     return state
 
 
@@ -38,7 +45,7 @@ def test_a_same_attribute_switch_says_the_pair_turns_into_a_bonus(worn, content,
     worn.player.arts = [art.id]
     line = team.compare_with_worn(worn, content, world, art)
     assert line.endswith("；換上後跟內功同屬，整體 +20%") and line.count("；") == 1
-    assert line.startswith("比身上的【粗淺拳腳】：威力 ")  # 原本的比較照舊在前面
+    assert line.startswith("比身上的【實拳】：威力")  # 原本的比較照舊在前面（同樣的名字長度可能「威力相同」）
 
 
 def test_a_counter_switch_says_the_pair_turns_into_a_penalty(worn, content, world):
@@ -86,7 +93,7 @@ def test_no_pair_clause_when_the_other_slot_is_empty_or_the_pair_does_not_change
     worn.player.arts = [art.id]
     worn.player.member.neigong_id = None  # 內功欄空著：武學之間沒有搭配可言
     assert "換上後" not in team.compare_with_worn(worn, content, world, art)
-    worn.player.member.neigong_id = "basic_breath"
+    worn.player.member.neigong_id = INNER
     same_again = _art(world, "柔拳二式", "柔")
     worn.player.member.wugong_id = _art(world, "柔拳三式", "柔").id  # 已經同屬了：換成另一門同屬的，搭配不變
     worn.player.arts = [same_again.id]
@@ -159,8 +166,8 @@ def test_the_engines_switch_keeps_the_journal_tag_on_the_switch_line_and_shows_t
 
     game = Game.new(content, "沈浪", rng=random.Random(0))
     art = _art(game.world, "柔拳", "柔")
-    game.state.player.member.neigong_id = "basic_breath"
-    game.state.player.member.wugong_id = "basic_fist"
+    game.state.player.member.neigong_id = _art(game.world, INNER, "柔", kind="內功").id
+    game.state.player.member.wugong_id = _art(game.world, "實拳", "實").id
     game.state.player.arts = [art.id]
     msgs = game.switch_art(art.id)
     assert msgs[-1] == "你的內功與武學現在同屬，整體威力 +20%。"

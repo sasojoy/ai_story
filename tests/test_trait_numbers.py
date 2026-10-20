@@ -78,13 +78,28 @@ def test_the_card_line_reads_in_plain_words(real):
 
 
 def _wear(game, name, attribute, trait_list, special=None, kind="武學", quality="下品"):
-    art = generate_from_name(name, kind, name, attribute=attribute).model_copy(
-        update={"origin": "fused", "traits": trait_list, "special": special},
-    )
+    """穿上一門登記的武學。武學重構：功效照槽裡的意境（arts.apply），所以照 trait_list（同一屬性幾個＝強度幾）與 special
+    造自己悟的意境裝進槽，不再寫在武學上。"""
+    from tianxia.martial_arts import Insight
+
+    art = generate_from_name(name, kind, name, attribute=attribute).model_copy(update={"origin": "fused", "affinity": [attribute]})
     game.world.claim_skill_name(art)
     slot = "neigong_id" if art.kind == "內功" else "wugong_id"
     setattr(game.state.player.member, slot, art.id)
-    game.state.player.art_quality[art.id] = quality
+    p = game.state.player
+    p.art_quality[art.id] = quality
+    wanted = [(a, None, min(3, trait_list.count(a))) for a in dict.fromkeys(trait_list)]
+    if special:
+        wanted.append((attribute, special, 1))
+    slots = []
+    for a, sp, strength in wanted:
+        ins = Insight(id=f"悟:{len(p.own_insights) + 1}", name=f"悟{a}", attribute=a, secret_special=sp)
+        p.own_insights[ins.id] = ins
+        p.insights.append(ins.id)
+        if strength > 1:
+            p.insight_strength[ins.id] = strength
+        slots.append(ins.id)
+    p.art_slots[art.id] = slots
     return art
 
 

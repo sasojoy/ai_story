@@ -457,18 +457,21 @@ def test_armor_plan_reaches_for_the_highest_tier_and_stops_once_it_has_one(conte
 
 
 def test_armor_plan_skips_pairs_the_inner_art_counters(content, world):
-    """合出來會被內功剋的組合不打；被內功剋的那幾件不算「已經有了」。"""
-    game = _smithy(content, world, inner="basic_breath")  # 粗淺吐納：屬柔，剛剋柔
+    """合出來會被內功剋的組合不打；被內功剋的那幾件不算「已經有了」。
+    武學重構：基礎內功（粗淺吐納）兼容並蓄、沒有屬性，跟什麼都不剋；這裡改用寫死的吐納法（屬陰，陰陽相剋）。"""
+    game = _smithy(content, world, inner="breath")  # 吐納法：屬陰，陽剋陰；精鐵砂（剛）＋驚羽（快）合出陽
     s, p = game.state, game.state.player
     ng = _inner(game, content, world)
     p.materials = {"gang_1": 2, "kuai_1": 1}
-    assert smithing.armor_plan(s, content, world, ng) == (smithing.ARMOR_KIND, "gang_1", "kuai_1")  # 剛＋剛＝剛剋柔：改配驚羽（陽）
-    p.materials = {"gang_1": 2}
-    assert smithing.armor_plan(s, content, world, ng) is None  # 只合得出剛：不打
+    assert smithing.armor_plan(s, content, world, ng) == (smithing.ARMOR_KIND, "gang_1", "gang_1")  # 剛＋快＝陽剋陰：改配剛＋剛（剛）
+    p.materials = {"gang_1": 1, "kuai_1": 1}
+    assert smithing.armor_plan(s, content, world, ng) is None  # 只合得出陽：不打
     p.materials = {"gang_1": 2, "kuai_1": 1}
-    p.rack = [_jacket(attribute="剛", aid="甲:3", recipe=armor.recipe_key("gang_1", "gang_1"))]  # 同階、自己打的，可是被內功剋
-    assert smithing.armor_plan(s, content, world, ng) == (smithing.ARMOR_KIND, "gang_1", "kuai_1")
-    assert armor.clashes("剛", ng) and not armor.clashes("陽", ng) and not armor.clashes("剛", None)
+    p.rack = [_jacket(attribute="陽", aid="甲:3", recipe=armor.recipe_key("gang_1", "kuai_1"))]  # 同階、自己打的，可是被內功剋
+    assert smithing.armor_plan(s, content, world, ng) == (smithing.ARMOR_KIND, "gang_1", "gang_1")
+    assert armor.clashes("陽", ng) and not armor.clashes("剛", ng) and not armor.clashes("剛", None)
+    basic = team.player_art(s, content, world, "basic_breath")  # 兼容並蓄的基礎內功沒有屬性：不剋、不搭
+    assert basic.attribute == "" and not armor.clashes("剛", basic) and not armor.clashes("柔", basic)
 
 
 def test_forge_plan_for_weapons_is_unchanged_by_the_shared_picker(content, world):

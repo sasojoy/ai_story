@@ -1,5 +1,6 @@
 """論武（玩家互動第二層，企劃者 2026-10-08）：同一地點的兩個人各出一樣（武學或意境）合成一樣新的，兩人都拿到；
-第一次合出來的首創算兩人共有，價錢各付一半；血統、持有上限、「已經有了」照舊擋。答應的那一方開爐（首創取名在鎖外）。
+第一次合出來的首創算兩人共有，價錢各付一半；持有上限、「已經有了」照舊擋。答應的那一方開爐（首創取名在鎖外）。
+武學重構：武學＋意境不再是合成（裝槽），論武只剩武學＋武學、意境＋意境；血統擋拿掉了。原本拿「粗淺拳腳＋火」測的改成「粗淺拳腳＋長拳」。
 
 兩個角色開在同一個資料庫；每一個動作照伺服器的做法先從資料庫重讀自己，做完存回去（同 test_spar）。"""
 from __future__ import annotations
@@ -71,16 +72,16 @@ def _accept(content, world, item, proposed=NAME):
 def test_both_get_the_new_art_and_share_the_first_creation(pair):
     content, world = pair
     assert "等他回覆" in _invite(content, world)[-1]
-    msgs = _accept(content, world, "insight:huo")
+    msgs = _accept(content, world, "art:fist")
     assert "烈焰拳" in msgs[0]
-    art = world.lookup_recipe(fusion.fuse_key("basic_fist", "huo", "剛"))
+    art = world.lookup_recipe(fusion.blend_key("basic_fist", "fist"))
     assert (art.name, art.creator, art.co_creator, art.creator_shown) == ("烈焰拳", "乙", "甲", "乙、甲")
     for name in ("甲", "乙"):
         p = _load(world, name).player
         assert "烈焰拳" in library.owned_arts(_load(world, name))
         assert p.stats["xinde"] == 100 - 3 and p.stamina == pytest.approx(100 - 3, abs=0.5)  # 一爐 5 的一半，進位
         assert any(e.title.startswith("論武") for e in _load(world, name).journal)
-    assert "huo" not in _load(world, "甲").player.insights  # 借來的意境不會留在你身上
+    assert "fist" not in library.owned_arts(_load(world, "甲"))  # 借來的武學不會留在你身上
     assert world.get_season().invites == []
 
 
@@ -106,29 +107,24 @@ def test_one_side_already_has_it_so_nothing_happens(pair):
     """一邊已經有了：整爐不開、誰都不收錢（說是哪一邊合不成）。"""
     content, world = pair
     _invite(content, world)
-    _accept(content, world, "insight:huo")
+    _accept(content, world, "art:fist")
     for name in ("甲", "乙"):  # 再論一次同一組
         state = _load(world, name)
         state.player.stamina = 100.0
         CharacterStore(world.db).save(state)
     _invite(content, world)
-    msgs = _accept(content, world, "insight:huo")
+    msgs = _accept(content, world, "art:fist")
     assert "已經有了" in msgs[0]
     assert _load(world, "甲").player.stats["xinde"] == 97 and _load(world, "乙").player.stats["xinde"] == 97
 
 
-def test_lineage_still_blocks(pair):
-    """血統裡融過的意境照樣擋：乙出火、甲出一門融過火的武學。"""
+def test_an_art_and_an_insight_do_not_discuss_into_anything(pair):
+    """武學重構：武學＋意境是裝槽、不是合成（以前這裡測血統擋）——答應不成、誰都不收錢，邀請留著換一樣再答。"""
     content, world = pair
     _invite(content, world)
-    _accept(content, world, "insight:huo")  # 兩人都有了 烈焰拳（粗淺拳腳＋火）
-    for name in ("甲", "乙"):
-        state = _load(world, name)
-        state.player.stamina = 100.0
-        CharacterStore(world.db).save(state)
-    _invite(content, world, "art:烈焰拳")
     msgs = _accept(content, world, "insight:huo")
-    assert "早已融過" in msgs[0]
+    assert msgs == [fusion.FUSE_GONE] and len(world.get_season().invites) == 1
+    assert _load(world, "甲").player.stats["xinde"] == 100 and _load(world, "乙").player.stats["xinde"] == 100
 
 
 def test_private_insights_cannot_be_put_in(pair):
@@ -173,9 +169,10 @@ def test_the_first_creation_echo_pays_both(pair):
     """別人照著論武合出來的那一門合：兩個首創者各自同步時都拿名望。"""
     content, world = pair
     _invite(content, world)
-    _accept(content, world, "insight:huo")
+    _accept(content, world, "art:fist")
     third = _make(content, world, "丙", insights=("huo",))
-    third.forge("basic_fist", ["huo"], proposed=(None, ""))
+    third.state.player.arts = ["fist"]  # 武學重構：照配方合同一門要兩門武學（粗淺拳腳＋長拳）
+    third.forge("basic_fist", [], proposed=(None, ""), other_art="fist")
     third._save_season()
     CharacterStore(world.db).save(third.state)
     for name in ("甲", "乙"):
@@ -225,7 +222,7 @@ def test_the_server_names_it_outside_the_lock(pair, monkeypatch):
     game.sync(NOW)
     monkeypatch.setattr(server, "_open_request", lambda g, open_it: (0.0, open_it()))
     monkeypatch.setattr(naming, "generate", lambda *a, **k: NAME)
-    params = {"arg": "yes:insight:huo"}
+    params = {"arg": "yes:art:fist"}
     assert server.prepare_peer(game, "甲", "discuss", params) == NAME
     assert server.prepare_peer(game, "甲", "spar", {"arg": "invite"}) is None  # 切磋不用模型
     assert server.prepare_peer(game, "甲", "discuss", {"arg": "no"}) == server.NO_NAME
@@ -259,7 +256,7 @@ def no_ollama(monkeypatch):
     monkeypatch.setattr(OllamaClient, "from_config", classmethod(lambda cls, cfg: None))
 
 
-def _answer_like_the_server(content, world, monkeypatch, item="insight:huo"):
+def _answer_like_the_server(content, world, monkeypatch, item="art:fist"):
     """照伺服器答應論武的三段走一次：A、B 是 server.prepare_peer（A 段鎖內開單、B 段鎖外取名），C 是 peer_act。
     模型換成數次數的假 client。回傳（回話, 模型被叫了幾次）。"""
     import server
@@ -284,8 +281,8 @@ def _change(world, name, edit):
 
 def test_fb245_a_discussion_that_can_go_ahead_still_asks_the_model_once(pair, no_ollama, monkeypatch):
     content, world = pair
-    _invite(content, world)  # 甲出【粗淺拳腳】，乙出「火」：新配方，要取名
-    request = _do(content, world, "乙", lambda g: g.peer_request("甲", "discuss", {"arg": "yes:insight:huo"}))[0]
+    _invite(content, world)  # 甲出【粗淺拳腳】，乙出【長拳】：新配方，要取名
+    request = _do(content, world, "乙", lambda g: g.peer_request("甲", "discuss", {"arg": "yes:art:fist"}))[0]
     assert isinstance(request, naming.NamingRequest)
     msgs, calls = _answer_like_the_server(content, world, monkeypatch)
     assert calls == 1 and "烈焰拳" in msgs[0] and world.get_season().invites == []
@@ -311,13 +308,13 @@ def test_fb245_a_lapsed_invitation_is_refused_without_the_model(pair, no_ollama,
     else:
         _change(world, "甲", lambda p: setattr(p, "member", p.member.model_copy(update={"wugong_id": None})))
         mine, theirs = "甲身上已經沒有他要出的那一樣了。", "你身上已經沒有要出的那一樣了。"
-    assert _do(content, world, "乙", lambda g: g.peer_request("甲", "discuss", {"arg": "yes:insight:huo"}))[0] is None
+    assert _do(content, world, "乙", lambda g: g.peer_request("甲", "discuss", {"arg": "yes:art:fist"}))[0] is None
     msgs, calls = _answer_like_the_server(content, world, monkeypatch)
     assert calls == 0 and msgs == [mine]
     assert world.get_season().invites == []
     head = _load(world, "甲").journal[0]
     assert (head.title, head.lines) == ("論武不成・乙", [engine.INVITE_LAPSED.format(who="乙", what="論武"), theirs])
-    assert world.lookup_recipe(fusion.fuse_key("basic_fist", "huo", "剛")) is None
+    assert world.lookup_recipe(fusion.blend_key("basic_fist", "fist")) is None
 
 
 @pytest.mark.parametrize("why", ["same", "same_insight", "their_side"])
@@ -335,7 +332,8 @@ def test_fb245_a_pick_that_cannot_fit_is_refused_without_the_model(content, worl
         item, line = "insight:feng", engine.DISCUSS_SAME
     else:
         _change(world, "甲", lambda p: p.stats.__setitem__("xinde", 0))
-        item, line = "insight:huo", "甲那邊合不成：他的心得不夠。"
+        _change(world, "乙", lambda p: p.arts.append("lake_kick"))  # 武學重構：武學＋意境不合成，改出另一門武學
+        item, line = "art:lake_kick", "甲那邊合不成：他的心得不夠。"
     assert _do(content, world, "乙", lambda g: g.peer_request("甲", "discuss", {"arg": f"yes:{item}"}))[0] is None
     msgs, calls = _answer_like_the_server(content, world, monkeypatch, item)
     assert calls == 0 and msgs == [line]

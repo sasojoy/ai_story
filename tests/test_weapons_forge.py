@@ -293,18 +293,8 @@ def test_practice_counts_reset_with_a_new_season(content, world):
     assert game.state.player.forge_counts == {}
 
 
-def test_fuse_odds_are_unchanged_by_the_refactor(content, world):
-    """合成的品質機率改走 odds_from_points 之後，數字一模一樣（同一個公式，只是 rule 與 base 改成參數）。"""
-    from tianxia.martial_arts import Insight
-    game = _forger(content, world)
-    base = team.player_art(game.state, content, world, "sword")
-    insight = Insight(id="風", name="風", attribute="快")
-    odds = fusion.fuse_odds(game.state, content, "sword", base, insight)
-    assert odds == fusion.odds_from_points(
-        [*fusion._art_points(game.state, content, [("sword", base)]), ("insight", 0.0),
-         ("attribute", fusion._attribute_points(content, base.attribute, "快"))],
-        content.config.fuse_quality, content.config.fuse_quality_odds,
-    )
+# 武學重構：合成不擲品質了（fusion.fuse_odds 拿掉），「合成的品質機率改走 odds_from_points 之後不變」那一條刪除；
+# odds_from_points 只剩打造在用，打造的機率照 smithing.forge_odds 的測試。
 
 
 # ── Task 5：開爐的取名、退路字表、首創名望回饋 ──

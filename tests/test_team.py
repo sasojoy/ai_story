@@ -554,7 +554,27 @@ def test_the_hp_cap_is_a_whole_number_at_any_root(content):
 
 
 def _art(name, kind, attribute, lean="無"):
-    return generate_from_name(name, kind, name, attribute=attribute).model_copy(update={"lean": lean})
+    # 武學重構：武學的屬性＝相容屬性的第一個（arts.apply），所以一併寫進 affinity；正邪照槽裡的浩然、血煞（見 _lean_slot）
+    return generate_from_name(name, kind, name, attribute=attribute).model_copy(update={"lean": lean, "affinity": [attribute]})
+
+
+def _own_insight(state, attribute, lean="無", special=None, strength=1):
+    """一個自己悟的意境（私有 id「悟:N」）：基本意境一種屬性只有一個、虛實沒有，測試要幾個就造幾個。"""
+    from tianxia.martial_arts import Insight
+
+    ins = Insight(id=f"悟:{len(state.player.own_insights) + 1}", name=f"悟{attribute}", attribute=attribute, lean=lean,
+                  secret_special=special)
+    state.player.own_insights[ins.id] = ins
+    state.player.insights.append(ins.id)
+    if strength > 1:
+        state.player.insight_strength[ins.id] = strength
+    return ins.id
+
+
+def _lean_slot(state, art):
+    """武學重構：正邪不寫在武學上，照槽裡帶正邪的意境（浩然、血煞那種）——art.lean 是正或邪時替它裝一個。"""
+    if art.lean in ("正", "邪"):
+        state.player.art_slots[art.id] = [_own_insight(state, "陽" if art.lean == "正" else "陰", art.lean)]
 
 
 def test_pairing_rewards_the_same_attribute_and_punishes_a_countering_pair(content):
@@ -591,9 +611,11 @@ def test_the_wrong_name_gives_no_resonance_and_never_a_penalty(state, content):
     assert team.resonance(state, content, _art("正拳", "武學", "陽", "正")) == 1.0
 
 
-def _register(world, name, kind, attribute, lean="無"):
+def _register(world, name, kind, attribute, lean="無", state=None):
     art = _art(name, kind, attribute, lean)
     assert world.claim_skill_name(art)
+    if state is not None:
+        _lean_slot(state, art)
     return art
 
 
@@ -601,10 +623,11 @@ def test_pairing_and_resonance_can_never_push_the_factor_under_the_floor(state, 
     """設定把相剋的打折調到比 100% 還大，搭配也只到下限（encounter.BOOST_FLOOR），整個人的乘數不會變成負的；
     共鳴只往上加，名聲是負的也不會把乘數往下拉。"""
     content.config.pairing_penalty = 5.0
-    wugong = _register(world, "鐵拳", "武學", "剛", "正")
-    state.player.member.wugong_id, state.player.member.neigong_id = wugong.id, "basic_breath"  # 剛克柔
+    wugong = _register(world, "鐵拳", "武學", "剛", "正", state)
+    neigong = _register(world, "柔息功", "內功", "柔")  # 武學重構：粗淺吐納兼容並蓄、沒有屬性，換一門屬柔的內功
+    state.player.member.wugong_id, state.player.member.neigong_id = wugong.id, neigong.id  # 剛克柔
     state.player.stats["good"] = -500
-    assert team.pairing(content, wugong, team.resolve_art("basic_breath", content, world)) == encounter.BOOST_FLOOR
+    assert team.pairing(content, wugong, neigong) == encounter.BOOST_FLOOR
     assert team.player_boost(state, content, world).factor == pytest.approx(encounter.BOOST_FLOOR)
     state.player.stats["good"] = 100  # 共鳴封頂 1.2：搭配的下限 × 1.2，仍是正的
     assert team.player_boost(state, content, world).factor == pytest.approx(encounter.BOOST_FLOOR * 1.2)
@@ -612,8 +635,9 @@ def test_pairing_and_resonance_can_never_push_the_factor_under_the_floor(state, 
 
 def test_the_players_factor_is_pairing_times_both_resonances(state, content, world):
     """計畫二 G12：正派的合成武學＋同屬性的內功＋善名 40 → 整個人乘 1.2（搭配）× 1.2（共鳴）。"""
-    wugong = _register(world, "清風拳", "武學", "柔", "正")
-    state.player.member.wugong_id, state.player.member.neigong_id = wugong.id, "basic_breath"  # 內功也是柔
+    wugong = _register(world, "清風拳", "武學", "柔", "正", state)
+    neigong = _register(world, "柔息功", "內功", "柔")  # 武學重構：粗淺吐納兼容並蓄、沒有屬性，換一門屬柔的內功
+    state.player.member.wugong_id, state.player.member.neigong_id = wugong.id, neigong.id  # 內功也是柔
     state.player.stats["good"] = 40
     boost = team.player_boost(state, content, world)
     assert boost.factor == pytest.approx(1.2 * 1.2)
@@ -623,8 +647,8 @@ def test_the_players_factor_is_pairing_times_both_resonances(state, content, wor
 
 def test_both_arts_resonate_each_on_its_own_name(state, content, world):
     """內功與武學都是正派：兩份共鳴各算各的；一正一邪各吃各的名聲。"""
-    wugong = _register(world, "清風拳", "武學", "剛", "正")
-    neigong = _register(world, "烈焰功", "內功", "快", "邪")  # 剛與快互不相剋、也不同屬性：搭配 1.0
+    wugong = _register(world, "清風拳", "武學", "剛", "正", state)
+    neigong = _register(world, "烈焰功", "內功", "快", "邪", state)  # 剛與快互不相剋、也不同屬性：搭配 1.0
     state.player.member.wugong_id, state.player.member.neigong_id = wugong.id, neigong.id
     state.player.stats["good"], state.player.stats["evil"] = 20, 40
     assert team.player_boost(state, content, world).factor == pytest.approx(1.1 * 1.2)
@@ -633,8 +657,9 @@ def test_both_arts_resonate_each_on_its_own_name(state, content, world):
 def test_a_fight_gives_the_resonance_to_the_player_only(state, content, world):
     """計畫二 G12、人物資質設計 14.3：帶著同伴打一場，總威力＝乘了 1.44（搭配×共鳴）的本人＋只吃自己屬性、
     沒有共鳴的同伴（打一場與勝算估計一樣）。"""
-    wugong = _register(world, "清風拳", "武學", "柔", "正")
-    state.player.member.wugong_id, state.player.member.neigong_id = wugong.id, "basic_breath"
+    wugong = _register(world, "清風拳", "武學", "柔", "正", state)
+    neigong = _register(world, "柔息功", "內功", "柔")  # 武學重構：粗淺吐納兼容並蓄、沒有屬性，換一門屬柔的內功
+    state.player.member.wugong_id, state.player.member.neigong_id = wugong.id, neigong.id
     world.update_companion("mate", lambda p: setattr(p, "wugong_id", "palm"))
     state.player.team = ["mate"]
     state.player.stats["good"] = 40
@@ -659,6 +684,7 @@ def test_followers_fight_beside_a_resonating_player_without_the_factor():
     s = game.state
     wugong, neigong = _art("清風拳", "武學", "柔", "正"), _art("清風功", "內功", "柔")
     assert game.world.claim_skill_name(wugong) and game.world.claim_skill_name(neigong)
+    _lean_slot(s, wugong)
     s.player.member.wugong_id, s.player.member.neigong_id = wugong.id, neigong.id
     s.player.followers = ["follower_guan_spear", "follower_guan_crossbow"]
     s.player.stats["good"] = 40
@@ -682,13 +708,14 @@ def test_followers_fight_beside_a_resonating_player_without_the_factor():
 
 
 def test_the_narrated_lineup_is_the_player_then_the_companions_with_their_arts(state, content, world):
-    """回合演出的陣容：本人在前、再來是帶著出戰的同伴，各報身上那門武學（名字與屬性）；沒學武學的是 None。"""
+    """回合演出的陣容：本人在前、再來是帶著出戰的同伴，各報身上那門武學（名字與屬性）；沒學武學的是 None。
+    武學重構：粗淺拳腳兼容並蓄、沒有屬性（空字串）；同伴的內容武學照內容。"""
     state.player.member.wugong_id = "basic_fist"
     state.player.team = ["mate", "pupil"]
     world.update_companion("mate", lambda p: setattr(p, "wugong_id", "fist"))
     lineup = team.fighters(state, content, world)
     assert [(f.name, f.art, f.attribute) for f in lineup] == [
-        ("沈浪", "粗淺拳腳", "實"), ("韓鐵", "長拳", "剛"), ("小六", None, None),
+        ("沈浪", "粗淺拳腳", ""), ("韓鐵", "長拳", "剛"), ("小六", None, None),
     ]
 
 
@@ -722,18 +749,24 @@ def test_a_full_team_says_so_in_chinese_only(state):
 
 
 def _trait_art(world, name, attribute, trait_list, special=None, kind="武學"):
+    # 武學重構：全服那一份的 traits／special 會被 arts.apply 照槽蓋掉；這裡先記在物件上，_wear 照它裝意境進槽
     art = generate_from_name(name, kind, name, attribute=attribute).model_copy(
-        update={"origin": "fused", "traits": trait_list, "special": special},
+        update={"origin": "fused", "traits": trait_list, "special": special, "affinity": [attribute]},
     )
     world.claim_skill_name(art)
     return art
 
 
 def _wear(state, world, *arts, quality="下品"):
+    """穿上身，照 art.traits（同一屬性幾個＝強度幾）與 art.special 造自己悟的意境裝進槽（武學重構：功效＝槽裡的意境）。"""
     for art in arts:
         slot = "neigong_id" if art.kind == "內功" else "wugong_id"
         setattr(state.player.member, slot, art.id)
         state.player.art_quality[art.id] = quality
+        slots = [_own_insight(state, a, strength=min(3, art.traits.count(a))) for a in dict.fromkeys(art.traits)]
+        if art.special:
+            slots.append(_own_insight(state, art.attribute, special=art.special))
+        state.player.art_slots[art.id] = slots
 
 
 class _CountingRandom(random.Random):
@@ -781,9 +814,13 @@ def test_no_traits_means_the_same_roll_as_before(state, content, world):
 
 
 def test_a_starter_who_never_double_rolls_draws_exactly_what_a_plain_fight_draws(state, content, world):
-    """F12：開局的基礎武學帶【厚】【化勁】，但這兩個都不碰運氣、也不碰閃避——沒有連環的人，一場仗用掉的亂數
-    （次數與整個亂數狀態）跟沒有功效時一模一樣：打得贏的一場擲一次運氣；必敗的一場擲一次運氣，加上閃避那一次。"""
+    """F12：基礎武學帶【厚】【化勁】，但這兩個都不碰運氣、也不碰閃避——沒有連環的人，一場仗用掉的亂數
+    （次數與整個亂數狀態）跟沒有功效時一模一樣：打得贏的一場擲一次運氣；必敗的一場擲一次運氣，加上閃避那一次。
+    武學重構：開局的基礎武學槽是空的，這裡把屬實、屬柔的意境各裝一個進去。"""
     state.player.member.wugong_id, state.player.member.neigong_id = "basic_fist", "basic_breath"
+    state.player.art_slots["basic_fist"] = [_own_insight(state, "實")]
+    state.player.insights.append("shui")
+    state.player.art_slots["basic_breath"] = ["shui"]
     assert traits.loadout(state, content, world).layers  # 確實帶著功效
     for seed in range(12):
         for squad_id, agi in (("thug", 5), ("boss", 5), ("boss", 15)):

@@ -1,4 +1,9 @@
-"""口訣與秘方、天時地利（PM 2026-10-10 派工，企劃者選「甲乙都做」）。"""
+"""口訣與秘方（PM 2026-10-10 派工，企劃者選「甲乙都做」）。
+武學重構（Joy 2026-10-20）之後秘方的規則還沒改，這裡照引擎現在實際的行為測：
+- 武學＋意境（kind fuse）不再是合成（裝進槽），所以 fuse 的秘方合不中了——卻照樣每季挑、照樣聽得到口訣（跟新規則衝突，見報告）；
+- 武學＋武學的秘方照「自己那一份」的屬性認（相容屬性的第一個），兼容並蓄的基礎武學沒有屬性，認不上；
+- 意境＋意境的秘方照舊，合出來的意境帶特別功效（裝進槽就是那一招）。
+天時地利（fusion.setting_points）、品質擲骰、合到舊的候選（landing）都拿掉了，那幾條測試刪除。"""
 from __future__ import annotations
 
 import random
@@ -6,12 +11,13 @@ import random
 import pytest
 
 from conftest import real_content
-from tianxia import fusion, landing, secret_recipes, skillview
+from tianxia import arts as arts_mod
+from tianxia import fusion, secret_recipes
 from tianxia.content import ContentError, validate
 from tianxia.engine import Game
 from tianxia.models import ArtPattern, InsightPattern, SecretRecipe
 from tianxia.state import new_game_state
-from test_fusion import Fixed, must_not_ask, named
+from test_fusion import _registered, must_not_ask, named
 
 FUSE = SecretRecipe(
     id="t_fuse", kind="fuse", art=ArtPattern(attribute="實"), insight=InsightPattern(id="shan"),
@@ -52,35 +58,34 @@ def test_each_season_picks_its_own_batch(secret_content):
     assert any(secret_recipes.active(secret_content, t) != first for t in range(1, 6))  # 換季換一批
 
 
-def test_hitting_a_secret_registers_the_named_art_with_a_special_and_tells_the_world(ready, secret_content, world):
-    rng = Fixed("中品")
-    art, msgs = fusion.fuse(ready, secret_content, world, must_not_ask(), "basic_fist", "shan", rng=rng)
-    assert (art.name, art.secret, art.note) == ("鎮岳指", "t_fuse", FUSE.note)
-    assert art.special is not None and art.attribute == "慢"
-    assert world.lookup_recipe("秘|t_fuse").id == art.id
+def test_an_art_and_insight_secret_can_no_longer_be_hit(ready, secret_content, world):
+    """武學重構：武學＋意境是裝槽、不是合成，fuse 的秘方合不中——不叫模型、不登記、武學譜上不記（秘方規則還沒跟著改）。"""
+    assert fusion.forge_request(ready, secret_content, world, "basic_fist", ["shan"]) is None
+    assert fusion.fuse_problem(ready, secret_content, world, "basic_fist", "shan") == fusion.FUSE_GONE
+    arts_mod.slot(ready, secret_content, world, "basic_fist", "shan")
+    assert world.lookup_recipe("秘|t_fuse") is None and ready.player.manual.solved == []
+
+
+def test_hitting_a_merge_secret_registers_the_named_insight_with_a_special_and_tells_the_world(ready, secret_content, world):
+    """合中意境＋意境的秘方：名字照內容、不叫模型，帶一條特別功效（裝進槽就是那一招），傳一句、寫進江湖史、記進武學譜；
+    照著合的別人不再傳。"""
+    assert fusion.forge_request(ready, secret_content, world, None, ["shan", "shui"]) is None  # 名字內容寫好了：不叫模型
+    made, msgs = fusion.merge(ready, secret_content, world, must_not_ask(), "shan", "shui")
+    assert (made.name, made.secret) == ("山環水抱", "t_merge") and made.secret_special is not None
+    assert arts_mod.skill_name(secret_content, made) == arts_mod.special_of(secret_content, made.secret_special).name
+    assert world.lookup_insight_recipe("秘|t_merge").id == made.id
     assert secret_content.config.secrets.hit_line in msgs
     assert any("參透了一句口訣" in m for m in msgs)
     assert any("參透口訣" in r.text for r in ready.world.chronicle)
-    assert ready.player.manual.solved == ["t_fuse"]
-    shan = fusion.insights.resolve("shan", secret_content, world)
-    plain = fusion.fuse_odds(ready, secret_content, "basic_fist", secret_content.skills["basic_fist"], shan)
-    assert rng.weights["上品"] > plain.odds["上品"]  # 秘方那一爐擲的機率比同一組一般的好
-    # 同一個人再合一次：已經有了；照著合的人不再傳
-    again, why = fusion.fuse(ready, secret_content, world, must_not_ask(), "basic_fist", "shan")
-    assert again is None and "已經有了" in why[0]
+    assert ready.player.manual.solved == ["t_merge"]
+    again, why = fusion.merge(ready, secret_content, world, must_not_ask(), "shan", "shui")
+    assert again is None and "已經悟得" in why[0]
     other = new_game_state(secret_content, "乙")
-    other.player.member.wugong_id = "basic_fist"
-    other.player.insights = ["shan"]
+    other.player.insights = ["shan", "shui"]
     other.player.stats["xinde"] = 100
-    copy, msgs = fusion.fuse(other, secret_content, world, must_not_ask(), "basic_fist", "shan")
-    assert copy.id == art.id and not any("參透了一句口訣" in m for m in msgs)
-    assert other.player.manual.solved == ["t_fuse"]
-
-
-def test_a_secret_needs_no_model_and_is_never_a_landing_candidate(ready, secret_content, world):
-    assert fusion.forge_request(ready, secret_content, world, "basic_fist", ["shan"]) is None
-    art, _ = fusion.fuse(ready, secret_content, world, must_not_ask(), "basic_fist", "shan")
-    assert art not in landing.art_candidates(world, art.kind, art.attribute, art.lean)
+    copy, msgs = fusion.merge(other, secret_content, world, must_not_ask(), "shan", "shui")
+    assert copy.id == made.id and not any("參透了一句口訣" in m for m in msgs)
+    assert other.player.manual.solved == ["t_merge"]
 
 
 def test_merge_secret_cares_about_left_and_right(ready, secret_content, world):
@@ -88,20 +93,30 @@ def test_merge_secret_cares_about_left_and_right(ready, secret_content, world):
     assert wrong.secret is None
     right, msgs = fusion.merge(ready, secret_content, world, must_not_ask(), "shan", "shui")
     assert (right.name, right.secret) == ("山環水抱", "t_merge") and ready.player.manual.solved == ["t_merge"]
-    # 秘方合出來的意境拿去融，意境的來歷多加分
-    assert fusion.insight_points(ready, secret_content, right) >= secret_content.config.secrets.insight_points
 
 
 def test_blend_secret_ignores_the_order(ready, secret_content, world):
-    art, _ = fusion.blend(ready, secret_content, world, must_not_ask(), "step", "basic_fist")
-    assert (art.name, art.secret) == ("疾實勁", "t_blend")
-    assert sorted(art.parents) == ["basic_fist", "step"]
+    """武學重構：武學的屬性＝相容屬性的第一個。兩門帶相容屬性的合成武學（實、快）才認得上；不分先後。"""
+    solid = _registered(world, "實勁拳", ["實"])
+    quick = _registered(world, "疾風腿", ["快"])
+    ready.player.arts = [solid.id, quick.id]
+    art, msgs = fusion.blend(ready, secret_content, world, must_not_ask(), quick.id, solid.id)
+    assert (art.name, art.secret) == ("疾實勁", "t_blend") and secret_content.config.secrets.hit_line in msgs
+    assert sorted(art.parents) == sorted([solid.id, quick.id]) and art.affinity == ["快", "實"]
+
+
+def test_a_blend_secret_does_not_take_the_open_basic_arts(ready, secret_content, world):
+    """基礎拳腳兼容並蓄、沒有屬性（以前屬實）：秘方認不上它，照一般的合成叫模型取名。"""
+    quick = _registered(world, "疾風腿", ["快"])
+    ready.player.arts = [quick.id]
+    art, _ = fusion.blend(ready, secret_content, world, named("風樁腿"), "basic_fist", quick.id)
+    assert art.secret is None and art.name == "風樁腿"
 
 
 def test_a_character_name_clash_falls_back_to_the_word_table(ready, secret_content, world):
-    world.is_character_name = lambda name: name == "鎮岳指"
-    art, _ = fusion.fuse(ready, secret_content, world, must_not_ask(), "basic_fist", "shan")
-    assert art.secret == "t_fuse" and art.name != "鎮岳指" and art.note == ""
+    world.is_character_name = lambda name: name == "山環水抱"
+    made, _ = fusion.merge(ready, secret_content, world, must_not_ask(), "shan", "shui")
+    assert made.secret == "t_merge" and made.name != "山環水抱" and made.note == ""
 
 
 @pytest.fixture
@@ -151,62 +166,11 @@ def test_the_manual_belongs_to_one_season(state, secret_content):
     assert secret_recipes.manual(state, 4).solved == []
 
 
-# ── 天時地利 ─────────────────────────────────────────────
-
-
-@pytest.fixture
-def setting(content):
-    rule = content.config.fuse_quality
-    rule.terrain, rule.night_match, rule.night_clash, rule.battlefield, rule.calm = 6, 6, -4, 6, 5
-    rule.setting_good, rule.setting_bad = "天時地利。", "時辰不對。"
-    return content
-
-
-def test_setting_is_off_by_default(state, content):
-    shui = fusion.insights.resolve("shui", content, None, state)
-    assert fusion.setting_points(state, content, "柔", "無", shui) == []
-
-
-def test_terrain_night_battlefield_and_calm(state, setting):
-    c, s = setting, state
-    resolve = lambda i: fusion.insights.resolve(i, c, None, s)  # noqa: E731
-    s.world.time = 3600  # 白天
-    s.player.location = "lake"  # 探索悟得到水、風
-    assert fusion.setting_points(s, c, "柔", "無", resolve("shui")) == [("terrain", 6)]
-    assert fusion.setting_points(s, c, "山", "無", resolve("shan")) == []
-    assert fusion.setting_points(s, c, "陰", "邪", resolve("xuesha")) == [("night", -4)]
-    assert fusion.setting_points(s, c, "陽", "正", resolve("haoran")) == [("night", 6)]
-    s.world.time = 0  # 夜裡
-    assert fusion.setting_points(s, c, "陰", "邪", resolve("xuesha")) == [("night", 6)]
-    c.locations["cave"].tags = ["營寨"]
-    s.player.location = "cave"
-    assert fusion.setting_points(s, c, "剛", "無", resolve("huo")) == [("battlefield", 6)]
-    s.player.seclusion_done = 0
-    s.world.time = 3600
-    got = fusion.setting_points(s, c, "剛", "邪", resolve("huo"))
-    assert len(got) == 2 and got[0] == ("battlefield", 6)  # 最多兩條，照絕對值挑
-    assert fusion.setting_line(c, got) == ["天時地利。"]
-    assert fusion.setting_line(c, [("night", -4)]) == ["時辰不對。"]
-
-
-def test_setting_moves_the_odds_and_the_forge_line_says_why(state, setting, world):
-    s = state
-    s.player.member.wugong_id = "basic_fist"
-    s.player.insights = ["shui"]
-    s.player.stats["xinde"] = 100
-    s.player.location = "town"
-    away = fusion.fuse_odds(s, setting, "basic_fist", setting.skills["basic_fist"], fusion.insights.resolve("shui", setting, world, s))
-    s.player.location = "lake"
-    here = fusion.fuse_odds(s, setting, "basic_fist", setting.skills["basic_fist"], fusion.insights.resolve("shui", setting, world, s))
-    assert here.odds["上品"] > away.odds["上品"]
-    assert "此地氣象與這股意相合" in skillview.forge_line(s, setting, world, "basic_fist", ["shui"])
-
-
 def test_secrets_in_the_real_content_load_and_cover_every_kind():
     c = real_content()
     assert {r.kind for r in c.secret_recipes} == {"fuse", "merge", "blend"}
     assert all(len(r.clues) == 3 for r in c.secret_recipes)
-    assert c.config.secrets.quality_points > 0 and c.config.fuse_quality.terrain > 0
+    assert c.config.secrets.quality_points > 0  # 天時地利（fuse_quality.terrain）合成不用了，不再查
 
 
 def test_a_broken_secret_fails_validation(content):
@@ -225,7 +189,5 @@ def test_a_self_found_insight_counts_by_its_attribute(ready, secret_content, wor
 
     own = sensing.add_own(ready, Insight(id="", name="峰影", attribute="慢", creator="沈浪", creator_shown="沈浪"))
     ready.player.insights.remove("shan")
-    art, _ = fusion.fuse(ready, secret_content, world, must_not_ask(), "basic_fist", own.id)
-    assert art.secret == "t_fuse" and art.insight is None and art.insight_attr == "慢"
     merged, _ = fusion.merge(ready, secret_content, world, must_not_ask(), own.id, "shui")
     assert merged.secret == "t_merge" and merged.id in ready.player.insights
