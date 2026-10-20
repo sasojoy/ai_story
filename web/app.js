@@ -1518,15 +1518,18 @@
   }
   // 場景卡（伺服器的 Markdown）第一段是戰場名字（「**廣宗決戰**」）：包成一行，名字、那一小句、加入的鈕排在同一行；散人臨時投效的
   // 兩顆字多，另起一行排在名字底下（.wide，鈕上只寫「臨時投效【官軍】」，「只算這一場」寫在那一小句裡）。認不出第一段就排在卡片最上面。
-  // 那一小句用 aria-describedby 接到那一排鈕上（一頁只有一張場景卡，id 不會重複）
+  // 那一小句用 aria-describedby 接到那一排鈕上（一頁只有一張場景卡，id 不會重複）。
+  // FB-553：同一州兩場以上自己這一邊的攻城一起集結，加入鈕一場一顆、鈕上寫是哪一場（字長），兩顆擠在名字那一行把整頁撐出橫捲
+  // （375 寬 488px）：兩顆以上照挑同伴那一步，另起一行、一顆一行（.pick），那一小句往下指；一顆的照舊在名字右邊
   function musterScene(m, scene) {
     const joins = musterJoins(m);
     if (!joins.length) return scene;
     const kind = joins.some((o) => o.id.startsWith("battle:escort:")) ? "escort"
       : joins.some((o) => o.id.startsWith("battle:enlist:")) ? "enlist" : "join";
     const wide = kind === "enlist";
-    const note = `<span class="muster-note" id="muster-note">${esc(MUSTER_NOTE[kind])}<span aria-hidden="true"> ${MUSTER_ARROW[kind]}</span></span>`;
-    const cls = wide ? " wide" : kind === "escort" ? " pick" : "";
+    const stacked = kind === "escort" || (kind === "join" && joins.length > 1);
+    const note = `<span class="muster-note" id="muster-note">${esc(MUSTER_NOTE[kind])}<span aria-hidden="true"> ${stacked ? MUSTER_ARROW.escort : MUSTER_ARROW[kind]}</span></span>`;
+    const cls = wide ? " wide" : stacked ? " pick" : "";
     const row = `<div class="options muster-join${cls}" role="group" aria-label="參戰" aria-describedby="muster-note">${joins.map((o) =>
       `<button class="btn small primary" data-act="choose" data-id="${esc(o.id)}"><span>${esc(wide ? optParts(o)[0] : o.label)}</span></button>`).join("")}</div>`;
     const head = /^<p>([\s\S]*?)<\/p>\n?/.exec(scene);
@@ -1654,8 +1657,9 @@
     return html.slice(0, cut) + gaugeHtml(g) + html.slice(cut);
   }
   // 攻城戰畫面（領地爭奪第三批 A，企劃者挑甲）：沿用決戰畫面，最上面那一行換成一條「攻城・地點｜守方：某某（或守將）」（main.siege，
-  // engine.siege_banner；三方混戰、轉回單方、兩軍相爭的字是伺服器給的）。引擎場景第一行是 **攻城・地點**：把那一行換成這一條（不多佔一行，
-  // 集結時投效的鈕照舊接在它後面）；找不到那一行就疊在最上面；收成一行的觀戰（battle-fold）不畫。每一段包成不折行的小段，只在「｜」那裡換行。
+  // engine.siege_banner；三方混戰、轉回單方、兩軍相爭的字是伺服器給的）。引擎場景第一行是 **攻城・地點**：把那一行換成這一條（不多佔一行；
+  // 集結時這一條自己一行，「報名在這裡」與加入的鈕排在它底下，見 style.css）；找不到那一行就疊在最上面；收成一行的觀戰（battle-fold）不畫。
+  // 每一段包成不折行的小段，只在「｜」那裡換行。
   // 排在 withGauge 之後：withGauge 認的是原本那一行 <p>，換掉之前先把戰局條插好
   function siegeStrip(html, s) {
     if (!s || html.startsWith('<p class="battle-fold"')) return html;

@@ -134,6 +134,58 @@ def test_banner_words_for_melee_lone_and_held():
     assert b["kind"] == "held" and b["parts"] == [siege.BANNER_DEFENDER.format(who=guan)]
 
 
+# ── FB-553：同一州兩場自己這一邊的攻城一起集結，兩顆加入鈕撐出橫捲 ──
+# QA（qa/map-1 4be1960e，375×812）：名字那一行的 .options.muster-join 寬 457、documentElement.scrollWidth 488。.muster-join 在名字那一行裡
+# 是 flex: none，寬度等於兩顆加起來（鈕上寫是哪一場，字長），wrap 用不上。現在兩顆以上一顆一行、另起一行排在名字底下（同挑同伴那一步的
+# .pick），一顆的照舊在名字右邊。版面在 node 裡量不到：這裡鎖住排法與那兩條 CSS，375 寬實量見 docs/superpowers/specs/2026-10-20-領地爭奪-草圖/第三批/。
+
+
+def _sieges_view(locs):
+    """官軍的人站南陽官道，locs 每一塊各排一場官軍攻城、此刻開集結（同一州）：回 server.main_view。"""
+    game = go(join(conquest_game("season21"), "guan"), "nanyang_road")
+    game.now = NOW
+    for loc in locs:
+        slot = announce(game, loc, "guan")
+        w = game.state.world
+        slot.muster_at, slot.at, slot.status = w.time, w.time + 1800, "waiting"
+        game._save_season()
+    siege.open_waiting(game.world, game.content, NOW)
+    game.state.world = game.world.get_season()
+    return server.main_view(game)
+
+
+def _join_row(m):
+    from test_prologue_web import run as page_run
+
+    page = page_run(m, "return H.pageJianghu();")
+    row = re.search(r'<div class="options muster-join([^"]*)"[^>]*>(.*?)</div>', page, re.S)
+    assert row is not None
+    return row.group(1), row.group(2)
+
+
+@pytest.mark.slow
+def test_fb553_two_join_buttons_stack_one_per_line():
+    m = _sieges_view(["nanyang_road", "nanyang_wilds"])
+    joins = [o for o in m["options"] if o["id"].startswith("battle:join:")]
+    assert len(joins) == 2 and all("@" in o["id"] for o in joins)  # 一場一顆，鈕上寫是哪一場
+    cls, row = _join_row(m)
+    assert "pick" in cls.split()  # 修前是空的：兩顆擠在名字那一行
+    assert row.count('data-act="choose"') == 2
+
+
+@pytest.mark.slow
+def test_fb553_one_join_button_stays_beside_the_name():
+    cls, row = _join_row(_sieges_view(["nanyang_road"]))
+    assert cls == "" and row.count('data-act="choose"') == 1  # 一顆的照舊（FB-105 的排法，一個像素都不變）
+
+
+def test_fb553_stacked_row_takes_its_own_line():
+    """.pick 那一排另起一行、一顆一行、鈕佔滿那一行（字長也只往下折，不往右撐）。"""
+    css = (ROOT / "web" / "style.css").read_text(encoding="utf-8").split("@media (min-width: 641px)")[0]
+    assert ".scene .muster-join.pick { flex-basis: 100%; flex-direction: column; }" in css
+    assert re.search(r"\.scene \.muster-join\.pick \.btn \{ width: 100%; min-width: 0;", css)
+
+
 # ── 見聞「形勢」頁（乙）──
 
 ESSAYS = {"on": True, "pending": False, "essays": [

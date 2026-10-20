@@ -471,17 +471,19 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .scene .muster-join { display: flex; flex: none; flex-wrap: wrap; gap: 6px; margin: 0; }
 .scene .muster-join .btn { width: auto; margin: -8px 0; }
 .scene .muster-join.wide { flex-basis: 100%; }
+.scene .muster-join.wide .btn { flex: 1 1 0; min-width: 0; margin: 0; padding: 6px 8px; justify-content: center; }
+/* 挑同伴那一步（FB-360）：另起一行、一顆一行，鈕上寫份量與氣血。同一州兩場以上自己這一邊的攻城一起集結（FB-553）也是這一排：
+   加入鈕一場一顆、鈕上寫是哪一場，擠在名字那一行會撐出橫捲（375 寬 488px）；一顆佔滿一行，字長只往下折 */
+.scene .muster-join.pick { flex-basis: 100%; flex-direction: column; }
+.scene .muster-join.pick .btn { width: 100%; min-width: 0; margin: 0; padding: 6px 8px; }
 /* 攻城戰畫面最上面那一條（領地爭奪第三批 A，企劃者挑甲；app.js 的 siegeStrip）：取代場景的名字那一行，「攻城・地點｜守方：某某」——
    一道城牆色的左框、淡底；名字照原本的襯線字，後面幾段小一號。每一段不折行（.nb），只在「｜」那裡換行。排在 .scene > p:first-child 與
-   .muster-head > p 後面（同一級，後寫的贏）。集結時投效的鈕照舊接在它右邊，放不下就自己折成兩行（flex: 0 1 auto） */
+   .muster-head > p 後面（同一級，後寫的贏）。集結時這一條自己佔一行（比名字長，跟「報名在這裡」與加入的鈕擠一行會把那一小句擠成一個字），
+   那一小句與鈕排在它底下 */
 .scene > p.siege-strip { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 2px; margin: 0 0 6px; padding: 4px 10px; border-left: 3px solid var(--accent); border-radius: 6px; background: var(--card-2); font: 500 13px/1.6 var(--sans); color: var(--ink-2); }
-.scene .muster-head > p.siege-strip { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 2px; flex: 0 1 auto; min-width: 0; margin: 0; padding: 4px 10px; border-left: 3px solid var(--accent); border-radius: 6px; background: var(--card-2); font: 500 13px/1.6 var(--sans); color: var(--ink-2); }
+.scene .muster-head > p.siege-strip { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 2px; flex: 1 1 100%; min-width: 0; margin: 0; padding: 4px 10px; border-left: 3px solid var(--accent); border-radius: 6px; background: var(--card-2); font: 500 13px/1.6 var(--sans); color: var(--ink-2); }
 .siege-strip .ss-title { font: 600 15px/1.6 var(--serif); color: var(--ink); }
 .siege-strip .ss-sep { padding: 0 2px; opacity: 0.55; }
-.scene .muster-join.wide .btn { flex: 1 1 0; min-width: 0; margin: 0; padding: 6px 8px; justify-content: center; }
-/* 挑同伴那一步（FB-360）：另起一行、一顆一行，鈕上寫份量與氣血 */
-.scene .muster-join.pick { flex-basis: 100%; flex-direction: column; }
-.scene .muster-join.pick .btn { width: 100%; margin: 0; padding: 6px 8px; }
 /* 決戰：對面上一回合的出招比例與自己的結果（引擎寫成一段 markdown 引用「> 」，伺服器轉成 blockquote）：小字、淡色、行距緊、
    沒有瀏覽器預設的縮排與邊線，375px 上約 65px（含上面一段的間距；15.5px 兩段是 95px） */
 .scene blockquote { margin: 2px 0; padding: 0; border: 0; font-size: 13px; line-height: 1.5; color: var(--ink-2); }
