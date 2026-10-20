@@ -5079,6 +5079,13 @@
   const WORLD_INK = "#3A3127", WORLD_RIM = "#5B4A38", WORLD_GOLD = "#C8961E";
   const WORLD_NAME_PX = 16, WORLD_LINE_PX = 11; // 大區名、大區名底下那一行，螢幕上的大小
   const WORLD_FULL_PX = 330, WORLD_SHRINK = 0.82; // 取景框在螢幕上不到這麼寬時字照比例縮，最多縮到這麼多（11px 的那一行縮到 9px）
+  // 大區名的位置都會壓到時往哪裡挪（照框的寬、高的倍數）：左右最多一個半框、上下最多兩格半，近的先（框是橫的：左右挪一個框算兩格遠）
+  const WORLD_NUDGE = worldNudge();
+  function worldNudge() {
+    const out = [];
+    for (let dx = -1.5; dx <= 1.5; dx += 0.5) for (let dy = -2.5; dy <= 2.5; dy += 0.5) if (dx || dy) out.push([dx, dy]);
+    return out.sort((a, z) => Math.hypot(2 * a[0], a[1]) - Math.hypot(2 * z[0], z[1]) || a[1] - z[1] || a[0] - z[0]);
+  }
   // 正在翻（設計 4.1）：攻方的斜紋照進度泛進那一格，進度 100 時多濃（底下守方的地面照樣看得到）；斜紋的間距與線寬照螢幕（px）。
   // 資料是疊層的 places[id].tug（{攻方: 進度}，翻地規則那一批 dev/flip-1 補），沒有就不畫
   const WORLD_TUG_MAX = 0.75, WORLD_TUG_GAP = 5, WORLD_TUG_LINE = 2.2;
@@ -5117,7 +5124,8 @@
     return out;
   }
   // 大區名與底下那一行「官 N・巾 N・寶 N」（照疊層的 sides：會佔地的幾方；只寫不是 0 的，全是 0 就沒有那一行）：每一區一個框（地圖單位，k＝1／倍率）。
-  // 底圖給每一區幾個可以擺的位置（好的在前）；小的大區先挑（底圖的 area），前一個會壓到已經擺好的就換下一個，都不行用第一個；夾在取景框裡
+  // 底圖給每一區幾個可以擺的位置（好的在前）；小的大區先挑（底圖的 area），前一個會壓到已經擺好的（或你）就換下一個，都不行在第一個附近挪一挪
+  // （WORLD_NUDGE），再不行用第一個；夾在取景框裡
   function worldLabels(base, st, ctrl, k) {
     const wd = base.world, n = worldCounts(base, st, ctrl), sides = st.sides || sideOrder(base);
     const [fx, fy, fw, fh] = wd.frame, placed = {};
@@ -5125,6 +5133,9 @@
     const shrink = Math.max(WORLD_SHRINK, Math.min(1, fw / k / WORLD_FULL_PX));
     const np = WORLD_NAME_PX * shrink, lp = WORLD_LINE_PX * shrink;
     const order = [...wd.regions].sort((a, z) => (a.area || 0) - (z.area || 0));
+    // 你（紅點、紅旗、外面那一圈；畫在上面那一張，會蓋住字）先佔一塊：大區名讓開它
+    const me = st.journey || placeOf(base, st.here);
+    if (me && me.x !== undefined) placed[""] = { x: me.x + 2 * k, y: me.y - 7 * k, w: 24 * k, h: 34 * k };
     for (const r of order) {
       const c = n[r.id] || { rich: 0 };
       // 只寫有的：是 0 的那一方、寶 0 都不寫；全是 0 那一行就不畫（企劃者 2026-10-20 從對比圖選乙）
@@ -5133,8 +5144,11 @@
       const h = (line ? np + 3 + lp : np) * k + 4 * k;
       const fit = ([x, y]) => [Math.min(fx + fw - w / 2, Math.max(fx + w / 2, x)), Math.min(fy + fh - h / 2, Math.max(fy + h / 2, y))];
       const spots = (r.spots && r.spots.length ? r.spots : [[r.lx, r.ly]]).map(fit);
-      const clash = ([x, y]) => Object.values(placed).some((b) => Math.abs(b.x - x) * 2 < b.w + w && Math.abs(b.y - y) * 2 < b.h + h);
-      const [x, y] = spots.find((p) => !clash(p)) || spots[0];
+      const clash = ([x, y], me) => Object.entries(placed).some(([id, b]) => (me || id !== "") && Math.abs(b.x - x) * 2 < b.w + w && Math.abs(b.y - y) * 2 < b.h + h);
+      // 底圖給的位置都會壓到（320 寬時天下圖只剩約 0.17 倍、大區名比大區還大）：在第一個位置附近挪一挪找不壓的；連你都讓開找不到時，
+      // 只讓開別的大區名（大區名彼此不壓是硬規矩，蓋到你一角可以）；再不行才用第一個
+      const free = (me) => spots.find((p) => !clash(p, me)) || WORLD_NUDGE.map(([dx, dy]) => fit([spots[0][0] + dx * w, spots[0][1] + dy * h])).find((p) => !clash(p, me));
+      const [x, y] = free(true) || free(false) || spots[0];
       placed[r.id] = { id: r.id, x, y, w, h, name: r.name, line, np, lp };
     }
     return wd.regions.map((r) => placed[r.id]);
@@ -5235,7 +5249,8 @@
     if (!pts.length) return clampView({ s: fitScale(vw, vh, W, H), cx: W / 2, cy: H / 2 }, vw, vh, W, H, pad);
     const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
     const x0 = Math.min(...xs) - REGION_MARGIN, x1 = Math.max(...xs) + 2 * REGION_MARGIN, y0 = Math.min(...ys) - REGION_MARGIN, y1 = Math.max(...ys) + REGION_MARGIN;
-    const s = clampScale(Math.min((vw - REGION_RIGHT) / (x1 - x0), (vh - pad - REGION_TOP) / (y1 - y0)), vw, vh, W, H);
+    // 倍率不低於看大局那一檔（MAP_FAR）：真實地形的潁川汝南很寬，整區塞進 375 寬會只剩點與大區名；寬的大區兩邊各切掉一點
+    const s = clampScale(Math.max(MAP_FAR, Math.min((vw - REGION_RIGHT) / (x1 - x0), (vh - pad - REGION_TOP) / (y1 - y0))), vw, vh, W, H);
     return clampView({ s, cx: (x0 + x1) / 2 + REGION_RIGHT / 2 / s, cy: (y0 + y1) / 2 - (REGION_TOP - pad) / 2 / s }, vw, vh, W, H, pad);
   }
   // 換層：天下圖 ↔ 區圖。外圍的鈕與抽屜整個換掉（同 showMapHost 的做法），地圖本身留著

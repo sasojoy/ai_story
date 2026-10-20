@@ -163,21 +163,24 @@ def test_a_region_with_nothing_to_count_has_no_second_line():
     assert group[: group.index("</g>")].count("<text") == 1
 
 
-# 地圖框的大小（寬 × 高）：手機的畫面減掉上面的狀態列（約 89）與底下的分頁列（約 56）。375×812、375×667、360×640、320×568
-SIZES = [(375, 667), (375, 522), (360, 495), (320, 423)]
+# 地圖框的大小（寬 × 高）：實機量的（2026-10-21，world3.localhost 預覽、狀態列底下多一行心得提示時最矮）：375×812 → 375×624、
+# 375×667 → 375×479、360×640 → 360×452、320×568 → 320×344（320 寬的狀態列折成好幾行，天下圖只剩約 0.17 倍）
+SIZES = [(375, 624), (375, 479), (360, 452), (320, 344)]
 FIT = """
 const wd = H.S.mapBase.world, v = H.worldFit({vw}, {vh}, wd.frame, 54, 58, {W}, {H});
 const labels = H.worldLabels(H.S.mapBase, H.S.mapState, H.controlAt(H.S.mapState, H.S.mapState.now_week), 1 / v.s);
 const scr = (x, y) => [{vw} / 2 + (x - v.cx) * v.s, {vh} / 2 + (y - v.cy) * v.s];
 const boxes = labels.map((l) => {{ const [x, y] = scr(l.x - l.w / 2, l.y - l.h / 2); return [l.id, x, y, l.w * v.s, l.h * v.s]; }});
 const [fx, fy] = scr(wd.frame[0], wd.frame[1]), [gx, gy] = scr(wd.frame[0] + wd.frame[2], wd.frame[1] + wd.frame[3]);
-return {{ boxes, frame: [fx, fy, gx, gy], map: [scr(0, 0)[1], scr({W}, {H})[1]] }};
+const here = H.S.mapBase.places.find((p) => p.id === H.S.mapState.here), [ux, uy] = scr(here.x, here.y);
+return {{ boxes, frame: [fx, fy, gx, gy], map: [scr(0, 0)[1], scr({W}, {H})[1]], you: [ux - 10, uy - 24, 24, 34] }};
 """
 
 
 @pytest.mark.parametrize("vw,vh", SIZES)
 def test_region_labels_do_not_overlap_on_a_phone(vw, vh):
-    """375 寬（與 360、320）：天下圖整張在地圖框裡（不橫捲），大區名框兩兩不相交、都在框裡（設計第十二章）。"""
+    """375 寬（與 360、320）：天下圖整張在地圖框裡（不橫捲），大區名框兩兩不相交、都在框裡（設計第十二章）；360 寬以上也不壓到
+    你（紅點與紅旗畫在上面那一張，會蓋住字）。320 寬的天下圖只剩約 0.17 倍，五個大區名擠不開時先讓彼此、再讓你。"""
     game = _game()
     m = game.content.map
     out = run(game, FIT.format(vw=vw, vh=vh, W=m.width, H=m.height))
@@ -185,7 +188,7 @@ def test_region_labels_do_not_overlap_on_a_phone(vw, vh):
     assert fx >= 0 and gx <= vw and fy >= 58 - 1 and gy <= vh - 54 + 1  # 取景框整個在露出來的那一塊（不橫捲、不被抽屜蓋）
     top, bottom = out["map"]
     assert top <= 58 + 0.5 or bottom <= vh - 54 + 0.5  # 地圖比露出來的那一塊高時，上面不留一條空白的紙
-    boxes = out["boxes"]
+    boxes = out["boxes"] + ([["你", *out["you"]]] if vw >= 360 else [])
     for i, (a, ax, ay, aw, ah) in enumerate(boxes):
         assert ax >= 0 and ax + aw <= vw, a
         for b, bx, by, bw, bh in boxes[i + 1:]:
@@ -208,6 +211,20 @@ def test_region_view_frames_that_regions_places():
         y = 650 / 2 + (p["y"] - out["cy"]) * out["s"]
         assert 0 <= x <= 375 and 0 <= y <= 650 - 230, p["id"]
     assert out["s"] >= 0.62  # 不掉進看大局那一檔
+
+
+def test_region_view_never_drops_into_the_far_view():
+    """點一區（區圖第 4 批之前的替身）要看得到地名：真實地形的潁川汝南很寬，照地點外框塞進 375 寬會掉進看大局那一檔（只剩點與大區名），
+    所以倍率最低是看大局那一檔，取景照那一區的地點置中（寬的大區兩邊各切掉一點）。"""
+    game = _game()
+    for r in game.content.map.regions:
+        out = run(game, f"return [H.regionView(H.S.mapBase, '{r.id}', 375, 624, 900, 1340, 230), {re.search(r'MAP_FAR = ([\d.]+)', APP.read_text(encoding='utf-8')).group(1)}];")
+        view, far = out
+        assert view["s"] >= far - 1e-9, r.id
+        places = [p for p in game.map_base()["places"] if p["region"] == r.id]
+        mid_x = (min(p["x"] for p in places) + max(p["x"] for p in places)) / 2
+        x = 375 / 2 + (mid_x - view["cx"]) * view["s"]
+        assert 0 <= x <= 375, r.id  # 那一區的中間在畫面裡
 
 
 def test_the_world_drawer_line_says_where_you_are_and_offers_to_enter():
