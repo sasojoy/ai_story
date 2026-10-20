@@ -4078,7 +4078,8 @@ class Game:
         p = s.player
         if cache is None or cache.loc != loc_id or seal.shard_of(view.registry, p.name) is not None:
             return []
-        own = bool(p.faction) and conquest.holder(s.world, c, loc_id) == p.faction
+        side = self._side()  # allied.side_of（＝rules.side_of）：豪強依附一軍就是那一軍（FB-571，同地盤折扣）；散人沒有自家、不乘（PM 裁決）：side 是 None，不能跟沒人佔的 None 湊成自家
+        own = side is not None and conquest.holder(s.world, c, loc_id) == side
         if not seal.find(view.registry, view.tianji, p.name, p.explore_seq, own, c.config.seal):
             return []
         found = {"ok": False}
@@ -12419,7 +12420,9 @@ class Game:
         def _apply(shared) -> None:
             reg = seal.filled(shared.seal, c)
             season = shared.season_number
-            if reg.emerge_season == season:
+            if seal.mandate_now(reg, season):
+                out.append(seal.HIDE_MANDATE)
+            elif reg.emerge_season == season:
                 out.append(seal.HIDE_EMERGED)
             elif seal.live_cache(reg, season) is not None:
                 out.append(seal.HIDE_HAS)

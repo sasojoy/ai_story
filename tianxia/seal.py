@@ -130,6 +130,7 @@ HIDE_HAS = "已經藏著一片了，不換地方。"  # 待 joy 潤
 HIDE_EMERGED = "這一季已經現世過一片了，一季最多一片。"  # 待 joy 潤
 HIDE_NONE = "沒有可藏的碎片（七片都已經現世過，或你指的那一片不是未現世）。"  # 待 joy 潤
 HIDE_NO_SPOT = "這一季沒有開季中立的區塊可藏。"  # 待 joy 潤
+HIDE_MANDATE = "這一季是天命之季，不藏碎片。"  # 待 joy 潤（FB-570：天命之季七片都現世過了，沒有碎片要藏）
 
 
 def conquest_season(content: Content, season: WorldState | None) -> bool:
@@ -164,7 +165,7 @@ def hide(
     hidden = sorted(s.id for s in reg.shards.values() if s.state == "hidden")
     if shard is not None:
         hidden = [shard] if shard in hidden else []
-    if not hidden or not spots or reg.emerge_season == season:
+    if not hidden or not spots or reg.emerge_season == season or mandate_now(reg, season):  # 天命之季不藏（FB-570）
         return None
     rng = dice(reg.salt, tianji, "seal-hide", season)
     if rng.random() >= content.config.seal.cache.hide_chance and not force:
@@ -177,8 +178,8 @@ def hide(
 def live_cache(reg: SealRegistry, season: int) -> SealCache | None:
     """這一季藏著、還沒被撿走的那一片：藏處是這一季的、那一片還是未現世（管理者中途改過登記就不算）、這一季還沒現世過。"""
     cache = reg.cache
-    if cache is None or cache.season != season or reg.emerge_season == season:
-        return None
+    if cache is None or cache.season != season or reg.emerge_season == season or mandate_now(reg, season):
+        return None  # 天命之季（管理者中途蓋章）就算登記上還留著也當它不存在（FB-570）
     shard = reg.shards.get(cache.shard)
     return cache if shard is not None and shard.state == "hidden" else None
 
@@ -294,6 +295,7 @@ def stamp_mandate(shared: SharedWorldState, content: Content, at: float) -> str:
     season.schedule[event.id] = at
     emerged = bool(content.seal) and all(reg.shards[s].emerged_round == reg.round for s in content.seal if s in reg.shards)
     reg.mandate_season, reg.mandate_pending = shared.season_number, False
+    reg.cache = None  # 天命之季不藏（FB-570）：自然換季 stamp_cache 本來就不藏；管理者中途蓋章的這一刻把這一季藏著的那一片收掉（碎片還是未現世）
     text = (MANDATE_OPEN if emerged else MANDATE_OPEN_EARLY).format(battle=battle.name if battle is not None else event.title)
     rumor(season, text)
     chronicle(season, text)

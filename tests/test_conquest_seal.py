@@ -272,6 +272,34 @@ def test_the_find_roll_scales_for_the_holding_side(monkeypatch):
     assert calls == [False, True, False]
 
 
+def test_a_gentry_follower_gets_the_scale_on_the_side_he_follows_and_a_ranger_never_does(monkeypatch):
+    """FB-571（PM 裁決）：豪強依附一軍，那一軍佔著的藏處算他的自家（照 rules.side_of，同療傷、打造、買馬的地盤折扣）；散人沒有自家、不乘
+    ——沒人佔的藏處控制方是 None、散人的 side 也是 None，不能被 None == None 騙成「自家」。"""
+    game = _game(find=0.0)
+    loc = _cache(game).loc
+    calls = []
+    monkeypatch.setattr(seal, "find", lambda reg_, tianji, name, seq, own_, cfg_: calls.append(own_) or False)
+    _stand(game, loc, "haoqiang")
+    p = game.state.player
+    assert game.state.world.haoqiang_allied
+    p.ally = "guan"
+    game._explore_mode(_mode_for(game, "seek"))  # 沒人佔：不算
+    conquest.set_control(game.state.world, game.content, loc, "guan")
+    game._explore_mode(_mode_for(game, "seek"))  # 他依附的官軍佔下了：算自家
+    conquest.set_control(game.state.world, game.content, loc, "huang")
+    game._explore_mode(_mode_for(game, "seek"))  # 另一軍佔著：不算
+    p.ally = "huang"
+    game._explore_mode(_mode_for(game, "seek"))  # 改依附黃巾：算
+    assert calls == [False, True, False, True]
+    calls.clear()
+    p.faction, p.ally = None, None  # 散人
+    conquest.set_control(game.state.world, game.content, loc, None)
+    game._explore_mode(_mode_for(game, "seek"))  # 沒人佔（控制方 None）：散人也不算
+    conquest.set_control(game.state.world, game.content, loc, "guan")
+    game._explore_mode(_mode_for(game, "seek"))
+    assert calls == [False, False]
+
+
 def test_the_find_dice_never_touch_game_rng():
     """擲骰用密鹽的亂數，不碰 Game.rng：整季測試與量表的序列不位移。"""
     game = _game(find=0.0)
@@ -279,6 +307,49 @@ def test_the_find_dice_never_touch_game_rng():
     before = game.rng.getstate()
     game._seal_find(game.state.player.location)
     assert game.rng.getstate() == before
+
+
+def _admin_game(hide: float = 1.0, find: float = 1.0):
+    c = _content(hide, find)
+    c.config.admins = [NAME]
+    return _game(content=c)
+
+
+def test_stamping_the_mandate_mid_season_clears_the_cache():
+    """FB-570：管理者在這一季「立刻蓋天命之季的章」，藏著的那一片當場清掉（跟自然換季那條路一樣：天命之季不藏），天命之季裡探索撿不到；
+    登記上那一片還是未現世。"""
+    game = _admin_game()
+    cache = _cache(game)
+    assert cache is not None
+    out = game.admin_seal_mandate("now")
+    assert game.world.get_season().mandate and any("天命之季" in line for line in out)
+    assert _cache(game) is None
+    _stand(game, cache.loc)
+    game._explore_mode(_mode_for(game, "seek"))
+    reg = _reg(game)
+    assert seal.shard_of(reg, NAME) is None and reg.shards[cache.shard].state == "hidden" and reg.emerge_season is None
+
+
+def test_a_cache_left_in_a_mandate_season_is_not_live():
+    """FB-570：就算登記上留著一個藏處（舊資料、別的路徑蓋章），天命之季也當它不存在。"""
+    c = _content()
+    reg = seal.filled(SealRegistry(), c)
+    reg.cache = SealCache(season=3, shard="chishou", loc=_neutral(c)[0])
+    assert seal.live_cache(reg, 3) is reg.cache
+    reg.mandate_season = 3
+    assert seal.live_cache(reg, 3) is None
+    spots = seal.hide_spots(c, _game(content=_content()).state.world)
+    assert seal.hide(reg, c, 3, 0, spots, force=True) is None
+
+
+def test_hide_now_says_no_in_a_mandate_season():
+    """FB-570：天命之季裡按「現在藏一片」回一句不藏的話，不登記藏處（自然換季天命之季本來就不藏）。"""
+    game = _admin_game(hide=0.0, find=1.0)
+    assert _cache(game) is None
+    game.admin_seal_mandate("now")
+    out = game.admin_seal_emerge("guixin")
+    assert _cache(game) is None and any(seal.HIDE_MANDATE in line for line in out)
+    assert "天命之季" in seal.HIDE_MANDATE
 
 
 # ── 不漏 ────────────────────────────────────────────
