@@ -1189,6 +1189,11 @@ class WorldState(BaseModel):
     # ── 時刻表決戰開集結（計畫 T8）：季的事在 mutate 裡只記號，mutate 外面才開（world.open_waiting_showdown）──
     showdowns_waiting: list[str] = Field(default_factory=list)  # 時間到了、還沒開成的決戰 id，照時間先後（另一場還在打就等）
     showdowns_opened: dict[str, str] = Field(default_factory=dict)  # 開過集結的決戰 id → 開的那一筆 BattleDef；開過就不再開
+    # 開集結的那一刻（世界秒，world._claim_showdown 記；照季分、不動資料庫結構）：輿圖照它判斷這一場「到了沒、歸在第幾週」（FB-563），
+    # 管理者提早開的決戰才不會跟著收場或此刻換週。舊存檔沒記的（開在這個欄位出現之前）退回收場那一刻、此刻。
+    showdown_opened_at: dict[str, float] = Field(default_factory=dict)
+    # 開打後被管理者取消、還沒有結果的決戰 id（Game.admin_cancel_battle 記）：輿圖不列（FB-563）；之後管理者「定結果」了就照有結果的寫法列
+    showdowns_cancelled: list[str] = Field(default_factory=list)
     # 人物活起來（figure_life）：不是大勢人物的人物此刻在哪（人物 id → 地點；沒寫的照 talk_at／recruit_at），與每日行事做到第幾輪
     whereabouts: dict[str, str] = Field(default_factory=dict)
     life_turn: int = -1

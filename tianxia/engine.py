@@ -11907,6 +11907,10 @@ class Game:
         line = f"{name}臨時取消，這一仗沒有打成。"
         self.state.world = self.world.get_season()  # 收場時間記此刻的季時間（同 admin_end_season）
         self._shelve_unfinished_battle(f"{name}臨時取消，這一仗沒有打成，不算勝負。")
+        event_id = definition.timetable_event if definition else None
+        w = self.state.world
+        if event_id and event_id in w.showdowns_opened and event_id not in w.timeline and event_id not in w.showdowns_cancelled:
+            w.showdowns_cancelled.append(event_id)  # 取消的時刻表決戰：輿圖不列（FB-563；之後「定結果」了才照有結果的寫法列）
         add_rumor(self.state, line, content=self.content, layer="world")
         self._save_season()
         self._write("取消決戰", [line], tag="管理者")

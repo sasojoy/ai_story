@@ -6275,6 +6275,8 @@ NOT_IN_THE_FINGERPRINT = {
         "hooked_week": "週初掛鉤的內部記號",
         "hooked_day": "21 天季每天掛鉤的內部記號",
         "showdowns_waiting": "排隊等著開的決戰記號，開成集結之後 active_battle 的指紋就變了",
+        "showdown_opened_at": "開集結那一刻（輿圖歸週用），跟 showdowns_opened 一起寫，那一下指紋已經變了（FB-563）",
+        "showdowns_cancelled": "管理者取消的決戰：取消那一下另寫天下大事（傳聞流水號已在指紋裡），輿圖不列它下次輪詢才補（FB-563）",
         "orders": "陣營軍令只有那個陣營看得到（推送計畫 F4）",
         "plots": "集體密謀只有自己陣營的人看得到（發起的軍情是陣營軍情，不進天下大事的流水號）；算進去，別的陣營會從『又被叫醒了』看出對方有動靜（乙二）",
         "promoted_today": "晉升的每日彙整，進陣營軍情，不是共用畫面",
