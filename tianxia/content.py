@@ -2364,6 +2364,10 @@ def validate(c: Content) -> None:
              f"陣營 {faction.id}：allies 只能寫劇本裡別的陣營（{faction.allies}）")
         need(not any(c.scenario.find_faction(a) is not None and c.scenario.find_faction(a).allies for a in faction.allies),
              f"陣營 {faction.id}：allies 寫的陣營自己不能再有 allies")
+    # 輿圖上的一個字（輿圖重製第 2 批，FactionInk.short）：天下圖州名底下「官 N・巾 N」照它認是哪一方，兩方同一個字就分不出來
+    shorts = [f.ink.short for f in c.scenario.factions if f.ink is not None and f.ink.short]
+    need(len(shorts) == len(set(shorts)), f"劇本：陣營在輿圖上的一個字（ink.short）重複了：{'、'.join(shorts)}")
+    need(all(len(s) == 1 for s in shorts), f"劇本：陣營在輿圖上的一個字（ink.short）只能是一個字：{'、'.join(shorts)}")
 
     showdown_events = {e.id: e for e in [*c.timetable, *c.mandate_timetable] if e.kind == "showdown"}  # 含天命之爭（玉璽二）
     showdown_battles: dict[tuple[str, str | None], str] = {}  # （時刻表決戰, 版本）→ 第一筆寫它的戰鬥

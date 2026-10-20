@@ -833,6 +833,8 @@ class MapRegion(_Strict):
     name: str
     trends: list[str] = Field(default_factory=list)  # 對應的大勢線：大地圖局勢層依它上色
     front: str | None = None  # 這一區的戰況算在哪條戰線（第一季濃縮版）；洛陽這類沒有戰況的大區是 None
+    # 這一州屬三圈的哪一圈（輿圖簡化設計 3.1、3.6：外圈出生州、內圈高級資源、核心；跟著劇本）；天下圖照它標「璽」。不寫是不分圈
+    ring: Literal["outer", "inner", "core"] | None = None
     points: list[list[int]]
     fill: str = Field(pattern=HEX_COLOR)
     text_fill: str = Field(pattern=HEX_COLOR)
@@ -868,6 +870,7 @@ class MapLayout(_Strict):
     width: int = 680
     height: int = 420
     background: str = Field(default="#E9E2CC", pattern=HEX_COLOR)  # 紙色（輿圖美術設計 2.1）
+    unheld: str = Field(default="#D2CBBC", pattern=HEX_COLOR)  # 天下圖上沒人佔的地面（輿圖重製第 2 批；設計 3.6 不寫死）
     regions: list[MapRegion] = Field(default_factory=list)
     rivers: list[MapRiver] = Field(default_factory=list)
     terrain: list[Terrain] = Field(default_factory=list)
@@ -1191,6 +1194,18 @@ class Hints(_Strict):
     season_return: str = ""  # 第二季起開季時師父的一句（設計 7.1）；空的就沒有
 
 
+class FactionInk(_Strict):
+    """一方在輿圖上的樣子（輿圖重製第 2 批；輿圖簡化設計 3.6：幾方、每一方的顏色都從劇本讀，程式不寫死）。
+    color 是印、紅線兩邊、年表、勢力條；soft 是天下圖的地面；tint 是大區的淡底色（soft、tint 沒寫照 color 往紙色淡）。
+    short 是一個字（天下圖州名底下「官 N」那種）；label 是輿圖上寫的名字（沒寫照 FactionDef.name）。"""
+
+    color: str = Field(pattern=HEX_COLOR)
+    soft: str | None = Field(default=None, pattern=HEX_COLOR)
+    tint: str | None = Field(default=None, pattern=HEX_COLOR)
+    short: str = ""
+    label: str = ""
+
+
 class FactionDef(_Strict):
     """一季的玩家陣營（第一季設計第五節）：在 join_at 的地點可以投靠；拜入 sects 裡的門派也算投靠這個陣營。
     goals 是這個陣營想把各條大勢線往哪推（伺服器假人照它打分數）。"""
@@ -1204,6 +1219,7 @@ class FactionDef(_Strict):
     # 豪強分屬兩軍（企劃者 2026-10-15）：這個陣營在依附的季（allied.on）要依附其中一軍；寫的是可以依附的陣營 id（暫名）。
     # 空的＝這個陣營本身就是一軍
     allies: list[str] = Field(default_factory=list)
+    ink: FactionInk | None = None  # 輿圖上的顏色與字（輿圖重製第 2 批）；沒寫的照網頁的退路色盤
 
 
 class SeasonOneOff(_Strict):
