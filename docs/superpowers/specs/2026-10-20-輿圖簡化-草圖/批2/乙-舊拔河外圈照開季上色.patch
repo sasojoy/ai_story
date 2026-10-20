@@ -1,0 +1,15 @@
+﻿diff --git a/web/app.js b/web/app.js
+index 806ff50e..244b5caf 100644
+--- a/web/app.js
++++ b/web/app.js
+@@ -5138,7 +5138,9 @@
+   // 天下圖的記號（純函式）：o = { k: 1／倍率, week: 看哪一週, tl: 正在看版圖變化, sel: 年表上圈起來的地點 }。回 [底下那一張, 上面那一張]
+   // （同 marksParts：會跳的圈與你畫在上面那一張 #mkt）
+   function worldParts(base, st, o) {
+-    const wd = base.world, k = o.k, ctrl = controlAt(st, o.week), pos = Object.fromEntries(base.places.map((p) => [p.id, p]));
++    const wd = base.world, k = o.k, ctrl = { ...controlAt(st, o.week) }, pos = Object.fromEntries(base.places.map((p) => [p.id, p]));
++    const HOME = { luoyang: "guan", nanyang: "guan", jizhou: "huang", qingzhou: "huang" }; // 乙：示意用，正式做要從區塊表讀
++    for (const c of wd.cells) if (!ctrl[c.id] && HOME[c.region]) ctrl[c.id] = HOME[c.region];
+     const ground = (id) => (ctrl[id] ? sideInk(ctrl[id]).soft : wd.unheld);
+     const out = [`<defs>${wd.regions.map((r) => `<clipPath id="wc-${esc(r.id)}"><path d="${r.d}"/></clipPath>`).join("")}</defs>`];
+     // 地面：整州先塗沒人佔（一州沒有分地面的地點就是一整片沒人佔），再一格一格塗誰佔著，照那一州的輪廓裁

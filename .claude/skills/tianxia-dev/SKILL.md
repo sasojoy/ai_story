@@ -26,6 +26,8 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   - 繞法：git 一條一條下、路徑寫死。要改檔就用 Write 工具寫一支 Python 腳本到 scratchpad，再用 `python 腳本 .` 跑。
   - 實測（2026-10-21）：`cd <自己的工作樹> && git commit -q -F - <<'EOF' … EOF`（訊息從 stdin 進、路徑寫死）過得了；先設 `SP=…` 再 `git archive -o "$SP/…"`、`git ls-files` 配 `for` 迴圈與 `$'\r'` 的被擋。
   - 要跑 venv 的 python、讀 `$env:TEMP` 的 log，改用 PowerShell 工具。
+- **scratchpad 是同一個 session 派出的子代理共用的**（2026-10-20 輿圖第 2 批：平行的另一位開發把 scratchpad 根目錄的 `msg1.txt` 蓋成它自己的 commit 訊息）：自己的東西一律放進 scratchpad 底下自己的子資料夾（例 `map2/`）——commit 訊息檔、log、暫存資料庫、無頭 Chromium 的 `--user-data-dir`、拍圖的腳本都是。
+- **PowerShell 的 `tar` 是 Windows 的 bsdtar**：沒有 `--force-local`（那是 Git Bash 的 GNU tar 才要的），直接 `tar -x -f <檔> -C <目錄>`。拿 `git archive <基底>` 解一份出來單跑一條測試，是確認「這條在基底本來就紅」最快的做法。
 - **中文輸出**：Python 印中文前包 UTF-8（`PYTHONIOENCODING=utf-8` 或 `sys.stdout = io.TextIOWrapper(...)`），不然 cp950 會炸（連 `print` 一個 `−` 都會）。
 - **TIANXIA_DB**：每次跑測試、跑腳本都設到 repo 外一個新的暫存檔（`$env:TEMP\tx_xxx.db`）。舊的資料庫會讓測試假失敗。
 - **git stash 是所有工作樹共用的**，別的 session 也在用。
