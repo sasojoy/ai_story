@@ -50,8 +50,9 @@ def day_of(content: Content, world: WorldState) -> int:
 
 
 def last_day(content: Content, world: WorldState) -> int:
-    """這一季簽到的最後一天是第幾天：季末照舊是最後一週之後的週一 00:00，週一以外開季就少開季前那幾天。"""
-    return content.config.season_weeks * 7 - calendar.open_day(content, world)
+    """這一季簽到的最後一天是第幾天：季末照舊是最後一週之後的週一 00:00，週一以外開季就少開季前那幾天。
+    7 天濃縮季錨在開季那一天，一定是第 7 天（calendar.total_days）。"""
+    return calendar.total_days(content) - calendar.open_day(content, world)
 
 
 def in_season(content: Content, world: WorldState) -> bool:

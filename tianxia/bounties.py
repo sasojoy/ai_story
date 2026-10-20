@@ -124,7 +124,8 @@ def close_board(p: PlayerState) -> None:
 
 
 def week_seconds(state: GameState, content: Content) -> float:
-    return calendar.WEEK / calendar.cal_scale(content, state.world)
+    """通緝的「一週」（post_weeks 照它退押金）：季曆一週；7 天濃縮季是一段的平均（calendar.week_seconds）。"""
+    return calendar.week_seconds(content, state.world)
 
 
 def quota(content: Content) -> int:
