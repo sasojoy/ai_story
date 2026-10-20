@@ -79,6 +79,8 @@ def train_line(foes: bool, gains: Sequence[str], drops: bool, push: bool, drill_
 SORTIE_NOTES = {  # 待 joy 潤：行動列底下出陣那一行（設計第二節）
     "attack": "這裡歸別人：打一場，打贏{push}；只拿對手 {share} 成的心得與經驗，{loot}",
     "hold": "這裡是自家地盤：不用打，{push}（量是攻的{half}）；拿自家隊伍 {share} 成的心得與經驗。",
+    # 領地爭奪第二批：自家沒被公告的區塊守（{push} 是 SORTIE_NOT_TODAY_HOLD，「量是攻的一半」已經寫在它的括號裡，裁決 21）
+    "hold_idle": "這裡是自家地盤：不用打，{push}；拿自家隊伍 {share} 成的心得與經驗。",
     "stir": "不用打，把這一帶的戰局往中間攪（量是攻的{half}）；拿此地隊伍 {share} 成的心得與經驗。",
     # 截糧週在自家佔著的截糧地點出陣是攻打運糧隊（FB-255）：地方是自己的，不寫「這裡歸別人」
     "convoy": "對面的運糧隊正打這裡經過：打一場，打贏{push}；只拿對手 {share} 成的心得與經驗，{loot}",
@@ -96,19 +98,25 @@ SORTIE_NO_PUSH = "今天這條線推滿了，推不動"
 SORTIE_PROGRESS = "推這一塊的進度、記貢獻"  # 領地爭奪：出陣不推線、推那一塊的進度（設計 3.7）；待 joy 潤
 SORTIE_NO_PROGRESS = "推不動進度（這裡搶不下來）"  # 領地爭奪：大本營、廣宗沒有進度；待 joy 潤
 SORTIE_NOT_TODAY = "推不動進度（這一塊今天沒有公告攻城）"  # 領地爭奪第二批：只有今天公告、還沒開打的目標推得動；待 joy 潤
+# 自家沒被公告的區塊守：那一句本來接「（量是攻的一半）」，兩個括號連在一起（第二批 QA 第 8 項，計畫第八節裁決 21）——合成一個括號、
+# 意思不變（推不動；有公告時守推的量是攻的幾成）。待 joy 潤
+SORTIE_NOT_TODAY_HOLD = "推不動進度（這一塊今天沒有公告攻城；有公告時守推的量是攻的{half}）"
 SORTIE_LEFT = "今日還能出陣 {n} 次。"
 
 
 def sortie_line(how: str, push: bool, left: int, content: Content, progress: bool | None = None, today: bool = True) -> str:
     """出陣這一下會怎樣（Game._sortie_line 照規則算好傳進來）。數字讀 Config：給自己的成數、守與攪局是攻的幾成。
     progress：領地爭奪在這一季生效時給（這一塊的進度推不推得動），推的那一句換成推進度；沒給（關著）一個字都不變、照 push。
-    today：推不動是因為今天沒有公告（第二批）時給 False，寫 SORTIE_NOT_TODAY；搶不下來的照舊 SORTIE_NO_PROGRESS。"""
+    today：推不動是因為今天沒有公告（第二批）時給 False，寫 SORTIE_NOT_TODAY；搶不下來的照舊 SORTIE_NO_PROGRESS。
+    自家沒被公告的區塊守（hold、推不動、today 假）寫 SORTIE_NOTES["hold_idle"]＋SORTIE_NOT_TODAY_HOLD：一個括號（裁決 21）。"""
     cfg = content.config
     half = "一半" if cfg.sortie.hold_share == 0.5 else f" {cfg.sortie.hold_share * 10:g} 成"
     if progress is None:
         pushed = SORTIE_PUSH if push else SORTIE_NO_PUSH
     else:
         pushed = SORTIE_PROGRESS if progress else SORTIE_NO_PROGRESS if today else SORTIE_NOT_TODAY
+    if how == "hold" and progress is False and not today:
+        how, pushed = "hold_idle", SORTIE_NOT_TODAY_HOLD.format(half=half)
     text = SORTIE_NOTES[how].format(push=pushed, share=f"{cfg.drill_reward_share * 10:g}", half=half,
                                     loot=sortie_loot(content))
     return text + SORTIE_LEFT.format(n=left)
@@ -432,9 +440,13 @@ def conquest_lines(content: Content) -> list[str]:
         f"每天 {cfg.settle_hour}:00 結算一次：投靠了官軍或黃巾的人每天投一票，挑明天打哪一塊、幾點開打"
         f"（{cfg.slot_first // 60}:00～{cfg.slot_last // 60}:00 的整點或半點）。有第 4 階的人投票時，第 4 階的票合起來佔"
         f" {cfg.rank4_share * 100:g}%；沒人投、平手由主將定奪。只公開各塊的比例，不公開誰投了什麼。",
-        f"一邊一天打一兩塊（中立地多、季短就兩塊），兩軍挑中同一塊、同一刻就併成一場；開打前 {cfg.muster_minutes} 分鐘開集結，"
+        f"一邊一天打一兩塊（中立地多、季短就兩塊）；開打前 {cfg.muster_minutes} 分鐘開集結，"
         "人要在那個大區才加得進去。攻城戰是決戰的縮小版：攻方贏了就易手，守方沒人時打那裡的留守，攻方沒人到這一場作罷。"
         f"軍餉是決戰的{_tenth(cfg.pay_share)}。",
+        # 裁決 22（企劃者 2026-10-21）；待 joy 潤
+        "兩軍挑中同一塊中立地、同一刻開打，就是三方混戰：那裡的守將兩邊都打，兩軍之間也照常交鋒；強攻打得到守將，"
+        "戰線壓向哪一軍，那一軍打守將就越有力。誰補上守將最後一刀，這一塊就歸誰；回合打完守將還沒倒，照舊沒人佔。"
+        "散人可以投效兩軍之一，或助守。",
         f"人站在自家領地：療傷、打造、買馬便宜{_tenth(1 - terr.own_price)}，在敵方的領地貴{_tenth(terr.enemy_price - 1)}"
         f"（新手期在敵方領地療傷不加價）；找素材有 {gather} 的機會多撿一個，靜心感悟更容易抓住。",
         "散人在開季是中立地的地方也算自家：一樣便宜、一樣多撿一份，不論那裡此刻被誰佔了。",
