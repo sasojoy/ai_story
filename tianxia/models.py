@@ -946,6 +946,7 @@ REVEAL_KEYS = frozenset({
     "all",  # 全部亮齊（出師那一步）
     "stamina", "hp", "silver", "xinde", "stats",  # 狀態列：體力、氣血、銀兩、心得、點名號展開屬性與配點
     "tab:jianghu", "tab:practice", "tab:craft", "tab:map", "tab:news",  # 底下的分頁
+    "tab:mall",  # 商城的兩個入口（底部第六格、齒輪旁的錠子鈕；網頁的 data-glow，商城開著才畫）：序章裡寫了才亮，出了草廬一律在（web/app.js 的 mallShown）
     "act:explore", "act:train", "act:rest", "act:social", "act:move",  # 江湖頁行動列的五格
     "board", "quest", "fronts", "orders", "minimap",  # 江湖頁的公告卡、主線與目標、戰況、軍令卡、小地圖
     "stances",  # 江湖頁最上面那一排小標裡的「態勢」（第一季才有）；跟公告卡（board）一起亮，見 Task 6 的 shown("stances")
@@ -2780,6 +2781,50 @@ class CheckIn(_Strict):
     pill_drop: float = Field(default=0.02, ge=0, le=1)  # 找素材、練功各擲一次掉一顆回體丹（6.4）
 
 
+class MallTuning(_Strict):
+    """商城（docs/superpowers/specs/2026-10-20-商城架構-design.md；tianxia/mall.py、tianxia/wallet.py）。enabled 預設關、測試內容明寫關、
+    正式內容與 week7 開；關著時不發元寶、不讀不寫商城的三張表（月卡不加上限）、商城的 API 都 404，其餘一個字都不變（4.10）。
+    設定覆寫檔是淺合併：覆寫檔寫 mall 就要整個寫（例 week7 寫 {"enabled": true, "beta_grant": 5000}），不然 enabled 會回到預設的關。"""
+
+    enabled: bool = False
+    # 封閉測試的元寶（4.2）：每個錢包第一次進來（本人那一輪，Game.own_turn_checks）時發一次，寫一列「封測發放」；0 是不發。
+    # 正式內容 0、week7 5000【預設】；之後再開新的一季不再發（編號 grant:beta:<主人> 只記一次）
+    beta_grant: int = Field(default=0, ge=0)
+    card_pill_bonus: int = Field(default=1, ge=0)  # 月卡：每天能服的回體丹多幾顆（企劃者 10/17「月卡每天多 1 顆」；平常 2→3、新手期 5→6）
+    records_shown: int = Field(default=50, ge=1)  # 購買紀錄與帳的畫面、管理者查帳最多列幾筆【預設】
+
+
+class MallLimit(_Strict):
+    """一件商品的限購（4.3）：每天（台灣 00:00 換日，同回體丹）、每季、每個帳號各幾次；不寫是不限。數的是沒退的購買。"""
+
+    day: int | None = Field(default=None, ge=1)
+    season: int | None = Field(default=None, ge=1)
+    account: int | None = Field(default=None, ge=1)
+
+
+class MallWindow(_Strict):
+    """一件商品的上架期間（4.3）：哪幾季（空的是每一季）、哪一段日子（台灣日期 YYYY-MM-DD，含頭尾；不寫是不限）。"""
+
+    seasons: list[int] = Field(default_factory=list)
+    start: str | None = None
+    end: str | None = None
+
+
+class MallItem(_Strict):
+    """商城的一件商品（content/mall.json，joy 寫；4.3）。效果只能從 mall.EFFECTS（允許的效果表）挑、種類要對得上，載入時
+    content.check_mall 擋表外的。外觀（look）、通行證（pass）的種類留著，這一版允許表裡沒有它們的效果，所以寫不出來（4.3）。"""
+
+    id: str
+    name: str  # 過 naming.name_problem
+    note: str = ""  # 一句說明（joy 寫）
+    price: int = Field(gt=0)  # 元寶
+    kind: Literal["look", "consumable", "card", "pass"]
+    effects: dict[str, int] = Field(default_factory=dict)  # 效果 → 數量（例 {"pills": 5}、{"card_days": 30}）
+    limit: MallLimit = Field(default_factory=MallLimit)
+    on_sale: MallWindow = Field(default_factory=MallWindow)
+    draft: str = ""  # 作者的備註（例「PM 佔位：名字、說明、價錢待 joy」）；不給玩家看
+
+
 class Config(_Strict):
     stamina_max: int = 150
     stamina_regen_seconds: float = 180  # 自然回復：每幾秒（遊戲時間）回 1 點體力（地圖擴充設計第二節：每 3 分鐘 1 點）
@@ -2840,6 +2885,7 @@ class Config(_Strict):
     duel: DuelTuning = Field(default_factory=DuelTuning)  # 單人頭目戰（見 DuelTuning；內容在 content/duels.json）
     arena: ArenaTuning = Field(default_factory=ArenaTuning)  # 擂台賽（見 ArenaTuning；tianxia/arena.py）
     tavern: TavernTuning = Field(default_factory=TavernTuning)  # 酒肆（見 TavernTuning；tianxia/tavern.py）
+    mall: MallTuning = Field(default_factory=MallTuning)  # 商城：元寶錢包、商品、月卡、封測發放（見 MallTuning；商品在 content/mall.json）
     raid: Raid = Field(default_factory=Raid)  # 截殺敵對陣營的人（見 Raid）
     bounties: Bounties = Field(default_factory=Bounties)  # 懸賞榜（見 Bounties）
     sortie: SortieRules = Field(default_factory=SortieRules)  # 出陣（見 SortieRules）
@@ -4115,6 +4161,7 @@ class Content(_Strict):
     mingtie: MingtieContent = Field(default_factory=lambda: MingtieContent())  # 名帖的現成的畫與假人的自題句庫（content/mingtie.json）；沒有這個檔就是空的
     shop_lines: dict[str, dict[str, list[str]]] = Field(default_factory=dict)  # 店面上掌櫃的話（content/shop_lines.json，店面獨立介面設計 1.4）：店 → 情況 → 句子；沒有這個檔就是空的
     seal: dict[str, ShardDef] = Field(default_factory=dict)  # 玉璽碎片（content/seal.json，照 id）；沒有這個檔就是空的（碎片關著）
+    mall: dict[str, MallItem] = Field(default_factory=dict)  # 商城的商品（content/mall.json，照 id、照檔案的順序）；沒有這個檔就是空的
     relations: list[RelationDef] = Field(default_factory=list)  # 人物之間的關係（content/relations.json，大勢人物擴充第二批）；沒有這個檔就是沒有
     gather_branches: dict[str, GatherBranch] = Field(default_factory=dict)  # 找素材分支（content/gather_branches.json，照內容的順序）；沒有這個檔就是空的（分支關著）
     map: MapLayout

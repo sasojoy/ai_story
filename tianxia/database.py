@@ -225,11 +225,56 @@ SCHEMA_V5_TABLES: tuple[str, ...] = (
     )""",
 )
 
-SCHEMA: tuple[str, ...] = SCHEMA_V1 + SCHEMA_V2_TABLES + SCHEMA_V3_TABLES + SCHEMA_V4_TABLES + SCHEMA_V5_TABLES  # 新檔一次建好
+# 第 6 版（商城架構設計 4.1、4.4、4.5、4.9；PM 排給商城）：元寶的帳本、購買紀錄、月卡這類有到期的東西。錢包不另存餘額：
+# 餘額＝帳的加總（對得起來）。owner 是角色名號的 casefold（同 characters.key、真人的 accounts.character_key；假人沒有帳號也有錢包，
+# 見 tianxia/wallet.py）。帳與購買都帶不重複的編號 ref，同一個編號重送不會算兩次（之後接金流的回呼也靠它）。跨季保留、不照季分。
+SCHEMA_V6_TABLES: tuple[str, ...] = (
+    # 一次購買一列：day 是回體丹換日的那一天（台灣 00:00）、season 是那時的季數（限購照它們數）；data 是發了什麼（退的時候照它收回）
+    """CREATE TABLE mall_purchases (
+        id INTEGER PRIMARY KEY,
+        owner TEXT NOT NULL,
+        ref TEXT NOT NULL UNIQUE,
+        item TEXT NOT NULL,
+        price INTEGER NOT NULL CHECK (price >= 0),
+        time REAL NOT NULL,
+        day INTEGER NOT NULL,
+        season INTEGER NOT NULL,
+        data TEXT NOT NULL DEFAULT '{}',
+        refunded REAL
+    )""",
+    "CREATE INDEX mall_purchases_by_owner ON mall_purchases (owner, item, id)",
+    # 每一筆進出：原因是封測發放 grant、購買 buy、退款 refund、補發 reissue、扣回 revoke、儲值 topup（留給之後的金流）；admin 是經手的管理者
+    """CREATE TABLE mall_ledger (
+        id INTEGER PRIMARY KEY,
+        owner TEXT NOT NULL,
+        time REAL NOT NULL,
+        delta INTEGER NOT NULL,
+        reason TEXT NOT NULL CHECK (reason IN ('grant', 'buy', 'refund', 'reissue', 'revoke', 'topup')),
+        ref TEXT NOT NULL UNIQUE,
+        purchase_id INTEGER REFERENCES mall_purchases (id),
+        admin TEXT,
+        note TEXT NOT NULL DEFAULT ''
+    )""",
+    "CREATE INDEX mall_ledger_by_owner ON mall_ledger (owner, id)",
+    # 跟著帳號的東西：月卡 card（key 是效果，例 pill_cap；start_day～end_day，不含 end_day）、通行證 pass、外觀 look（這一版還沒有）
+    """CREATE TABLE mall_entitlements (
+        owner TEXT NOT NULL,
+        kind TEXT NOT NULL CHECK (kind IN ('card', 'pass', 'look')),
+        key TEXT NOT NULL,
+        start_day INTEGER,
+        end_day INTEGER,
+        data TEXT NOT NULL DEFAULT '{}',
+        PRIMARY KEY (owner, kind, key)
+    )""",
+)
+
+SCHEMA: tuple[str, ...] = (  # 新檔一次建好
+    SCHEMA_V1 + SCHEMA_V2_TABLES + SCHEMA_V3_TABLES + SCHEMA_V4_TABLES + SCHEMA_V5_TABLES + SCHEMA_V6_TABLES
+)
 MIGRATIONS: dict[int, tuple[str, ...]] = {  # 第 n 版 → 第 n+1 版要跑的句子
-    1: SCHEMA_V2_TABLES, 2: SCHEMA_V3_TABLES, 3: SCHEMA_V4_TABLES, 4: SCHEMA_V5_TABLES,
+    1: SCHEMA_V2_TABLES, 2: SCHEMA_V3_TABLES, 3: SCHEMA_V4_TABLES, 4: SCHEMA_V5_TABLES, 5: SCHEMA_V6_TABLES,
 }
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 
 def default_path() -> Path:

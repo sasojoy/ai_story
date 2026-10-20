@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from . import (
     allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, checkin, chuangong, clinic, companion_agent, cultivation, defection, divine, economy, encounter, enlist, equipment, event_llm, explore_modes, escorts,
     fight_llm, figure_aid, figure_life, figures, foreshadow, four_tiers, gather_llm, generals, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, letters, library, mapdata, martial_arts, feasts,
-    materials, mounts, naming, opportunities, orders, precise, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
+    mall, materials, mounts, naming, opportunities, orders, precise, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
     shopview, signature, signature_arms, silver, skill_slots, skillview, smithing,
     social, sortie, styles, tactics, team, terrain, territory, timetable, traits, treasures, weapons, works, zh, yuedan,
 )
@@ -37,6 +37,7 @@ from . import hints as hint_rules  # 碰到才說（新手引導計畫三）；�
 from . import tavern as tavern_rules  # 酒肆（企劃者 2026-10-18）；叫 tavern_rules：跟其他 *_rules 一樣避開區域變數
 from . import prologue as prologue_rules  # Game.new 有個參數也叫 prologue，所以模組在這裡一律叫 prologue_rules
 from . import rumor_view  # 傳聞分層的畫面：見聞頁的四層、你不在的時候（計畫 2026-10-06 傳聞分層一）
+from .accounts import AccountStore
 from .characters import CharacterStore, name_key
 from .events import (
     choice_label, event_candidates, free_text_note, has_events_here, pick_event, stamina_note, visible_choices,
@@ -63,6 +64,7 @@ from .rules import (
     world_day, world_trend_value,
 )
 from .sqlite_world import open_world
+from .wallet import Wallet
 from .state import (
     ONBOARDING_VERSION, PLAYER, ArenaEntry, ArenaFight, ArenaReport, ArenaResult, ArenaSide, BattleRecord, Convoy, CrowdNote, DuelState, Equipment, Feast, GameState, HintNote, JournalEntry, Journey, Mingtie, Rumor, Tagalong, TavernHit, TavernWatch, TimelineResult,
     Whisper, WorldState,
@@ -370,6 +372,9 @@ class Game:
         self._gather_said: tuple[str, int, str] | None = None
         self.last_gamble: FreeTextOutcome | None = None  # 上一次 answer_event 擲完骰的結果（server.py 拿去潤色）
         self.smith_result: dict | None = None  # 上一次 smith_forge 的出爐卡（server 的 /api/do/smith_forge 回給網頁）；被拒絕是 None
+        self.mall_bought: str | None = None  # 上一次 mall_buy 買成的商品 id（/api/mall/buy 回給網頁：成了換掌櫃道謝、不成換原因）；不成是 None
+        # 上一次 mall_buy 送的編號早就買好了（第一次的回應沒收到、同一個編號再送）：那一筆的商品 id，網頁照成了的樣子講（FB-491）；其餘是 None
+        self.mall_already: str | None = None
         # 上一次玩家卡動作的一句短話（peer_act 每次清掉；論武合成了才填，FB-242）：網頁等回應時卡已經關了或換了人，提示泡泡只講這一句
         self.peer_brief: str | None = None
         self.forged = False  # 上一次 forge() 真的合成了（被拒絕的是 False）：煉製頁拿它決定爐子要不要清空（server.api_menxia_do）
@@ -1010,8 +1015,10 @@ class Game:
 
     def own_turn_checks(self) -> None:
         """本人這一輪（mark_seen；假人程式自己那一輪也叫）：系統通緝這一週還沒掛就掛（bounties.post_auto，名聲 4.6、5.4），被掛的那幾句
-        寫進一則「懸賞」紀錄。結伴同行的人、管理者查玩家、玩家卡動到別人建的 Game 都不叫、不掛。"""
+        寫進一則「懸賞」紀錄。結伴同行的人、管理者查玩家、玩家卡動到別人建的 Game 都不叫、不掛。
+        商城的封測元寶也在這裡發（_mall_grant）：錢包第一次進來的那一下，真人假人一樣；暫停中照發（帳跟世界無關）。"""
         self.own_turn = True
+        self._mall_grant()
         if self.world.paused_at() is not None:  # 賽季時鐘暫停中世界不變（線上架構 8.3）：mark_seen 在 server.act 的暫停擋之前
             return
         posted = bounties.post_auto(self.state, self.content)
@@ -9215,11 +9222,162 @@ class Game:
         return int((self.pill_now() + self.content.config.pill_day_utc_offset_hours * HOUR) // (24 * HOUR))
 
     def pill_cap(self) -> int:
-        """一天最多服幾顆：新手期照 newbie_pills_per_day（有寫才算），其餘照 stamina_pills_per_day；0 是不限。"""
+        """一天最多服幾顆：新手期照 newbie_pills_per_day（有寫才算），其餘照 stamina_pills_per_day；0 是不限。
+        商城的月卡（mall.card_bonus）讓有上限的那一個多 Config.mall.card_pill_bonus 顆（平常 2→3、新手期 5→6）；不限照舊不限。"""
         cfg = self.content.config
         if cfg.stamina_pills_per_day > 0 and cfg.newbie_pills_per_day > 0 and roster.newbie(self.state, self.content):
-            return cfg.newbie_pills_per_day
-        return cfg.stamina_pills_per_day
+            cap = cfg.newbie_pills_per_day
+        else:
+            cap = cfg.stamina_pills_per_day
+        return cap if cap <= 0 else cap + self._pill_card_bonus()
+
+    def _pill_card_bonus(self) -> int:
+        """今天月卡讓回體丹上限多幾顆（mall.card_bonus）；商城關著、沒有卡、今天不在卡的期間裡是 0。
+        pill_cap 與體力條的說明（howto.stamina_lines 的 card，FB-480）都讀這一份，兩邊寫的上限才對得上。"""
+        wallet = self._wallet()
+        return 0 if wallet is None else mall.card_bonus(self.content, wallet, self._mall_owner(), self._pill_day())
+
+    # ── 商城（docs/superpowers/specs/2026-10-20-商城架構-design.md；規則在 mall.py、錢包在 wallet.py）──
+
+    def _wallet(self) -> Wallet | None:
+        """商城開著時這個資料庫的錢包；關著（或這個 world 沒有資料庫）是 None，呼叫端什麼都不讀不寫。"""
+        db = getattr(self.world, "db", None)
+        return Wallet(db) if mall.on(self.content) and db is not None else None
+
+    def _mall_owner(self) -> str:
+        """錢包的主人：角色名號的 casefold（同 characters.key、真人的 accounts.character_key；假人沒有帳號也有錢包）。"""
+        return name_key(self.state.player.name)
+
+    def _mall_grant(self) -> None:
+        """封測發放（mall.grant_beta）：這個錢包還沒發過就發，寫一則「商城」江湖紀錄。own_turn_checks 叫。"""
+        wallet = self._wallet()
+        if wallet is None:
+            return
+        amount = mall.grant_beta(self.content, wallet, self._mall_owner(), self.now)
+        if amount:
+            journal.add_entry(self.state, JournalEntry(
+                time=self.state.world.time, title=mall.TITLE, lines=[mall.GRANT_LINE.format(n=amount)], changes=[f"元寶 +{amount}"],
+            ))
+
+    def mall_buy(self, item_id: str, ref: str) -> list[str]:
+        """買一件商品（mall.buy）：ref 是這一次購買的編號（網頁按下確認那一刻產，重送同一個不會買兩次）。成了寫一則「商城」
+        江湖紀錄（變化寫元寶與拿到的東西）；不成、或這個編號已經買過了只回一句、不寫紀錄。伺服器在行動鎖裡叫：扣元寶、
+        寫購買紀錄、發貨同一筆交易。時間照回體丹那一套（pill_now、_pill_day），不讀時鐘。買成了 self.mall_bought 記那件的 id，
+        不成（含這個編號已經買過了）是 None；這個編號已經買過了 self.mall_already 記那一筆的商品 id（FB-491），其餘是 None。"""
+        self.mall_bought = self.mall_already = None
+        wallet = self._wallet()
+        if wallet is None:
+            return self._log([mall.OFF])
+        result = mall.buy(
+            self.state, self.content, wallet, item_id, ref,
+            now=self.pill_now(), day=self._pill_day(), season=self.world.get_season_number(),
+        )
+        if isinstance(result, str):
+            done = wallet.purchase_by_ref(mall.buy_ref(self._mall_owner(), ref))
+            self.mall_already = done.item if done is not None else None
+            return self._log([result])
+        journal.add_entry(self.state, JournalEntry(
+            time=self.state.world.time, title=mall.TITLE, lines=result.lines, changes=result.changes,
+        ))
+        self.mall_bought = result.item.id
+        return self._log(result.lines)
+
+    def mall_entry(self) -> dict | None:
+        """狀態列的商城入口（齒輪旁的錠子鈕、底部第六格；商城第二批）：{balance}；商城關著是 None（沒有入口）。
+        江湖畫面每次都送，所以只讀餘額（帳的加總），不排商品。"""
+        wallet = self._wallet()
+        return None if wallet is None else {"balance": wallet.balance(self._mall_owner())}
+
+    def mall_view(self) -> dict | None:
+        """商城那一頁的資料（mall.view）；商城關著是 None。另附貨架上面兩張小卡與購買確認要的回體丹（pills：名字、手上幾顆、
+        今天還能服幾顆〔不限是 None〕、一天上限〔含月卡；0 是不限〕、一顆回多少、月卡多幾顆）與封測發了多少（grant，商城第二批）。"""
+        wallet = self._wallet()
+        if wallet is None:
+            return None
+        view = mall.view(self.content, wallet, self._mall_owner(), self._pill_day(), self.world.get_season_number())
+        cfg = self.content.config
+        view["pills"] = {
+            "name": cfg.stamina_pill_name, "count": self.state.player.stamina_pills, "today": self.pills_left_today(),
+            "cap": self.pill_cap(), "restore": cfg.stamina_pill_restore, "bonus": cfg.mall.card_pill_bonus,
+        }
+        view["grant"] = cfg.mall.beta_grant
+        return view
+
+    def mall_records(self) -> dict | None:
+        """自己的購買紀錄與帳（mall.records，不寫經手的管理者）；商城關著是 None。"""
+        wallet = self._wallet()
+        return None if wallet is None else mall.records(self.content, wallet, self._mall_owner())
+
+    def _mall_admin(self, action: str) -> tuple[Wallet | None, str | None]:
+        """管理者商城工具的共同檢查：(錢包, None)，或 (None, 拒絕的那一句)。帳跟季無關：籌備中、休季、暫停中都做得了。"""
+        if not self.is_admin():
+            return None, f"（只有管理者能{action}。）"
+        wallet = self._wallet()
+        return (None, mall.OFF) if wallet is None else (wallet, None)
+
+    def _mall_target(self, wallet: Wallet, text: str) -> tuple[str, str] | None:
+        """管理者填的名號或帳號 → (錢包的主人, 名號)。先照角色找（真人假人一樣），再照帳號找它綁的角色；都沒有是 None。"""
+        text = (text or "").strip()
+        if not text:
+            return None
+        shown = wallet.character_name(name_key(text))
+        if shown is not None:
+            return name_key(text), shown
+        account = AccountStore(self.world.db).get(text)
+        if account is None or account.character is None:
+            return None
+        shown = wallet.character_name(name_key(account.character))
+        return None if shown is None else (name_key(account.character), shown)
+
+    def _mall_adjust(self, name: str, amount: int, note: str, ref: str, reason: str) -> list[str]:
+        wallet, refusal = self._mall_admin("補發元寶" if reason == "reissue" else "扣回元寶")
+        if refusal:
+            return self._log([refusal])
+        target = self._mall_target(wallet, name)
+        if target is None:
+            return self._log([NO_SUCH_PLAYER.format(name=(name or "").strip())])
+        owner, shown = target
+        msg = mall.adjust(wallet, owner, shown, amount, reason, ref, now=self.now, admin=self.state.player.name, note=note)
+        if not msg.startswith("（"):
+            self._write("商城", [msg], tag="管理者")
+        return self._log([msg])
+
+    def admin_mall_reissue(self, name: str, amount: int, note: str, ref: str) -> list[str]:
+        """管理者替某個名號（或帳號）補發元寶（4.7）：原因必填、寫進帳（誰、何時、為什麼）；ref 是這一筆的編號（伺服器產）。"""
+        return self._mall_adjust(name, amount, note, ref, "reissue")
+
+    def admin_mall_revoke(self, name: str, amount: int, note: str, ref: str) -> list[str]:
+        """管理者從某個名號（或帳號）扣回元寶（4.7）：餘額不能是負的。"""
+        return self._mall_adjust(name, amount, note, ref, "revoke")
+
+    def admin_mall_refund(self, name: str, purchase_id: int, note: str) -> list[str]:
+        """管理者退一筆購買（mall.refund）：元寶全退、收回手上還有的回體丹、月卡扣回天數；改到的存檔存回去（_save_target）。"""
+        wallet, refusal = self._mall_admin("退購買")
+        if refusal:
+            return self._log([refusal])
+        target = self._mall_target(wallet, name)
+        game = None if target is None else self._admin_target(target[1])
+        if game is None:
+            return self._log([NO_SUCH_PLAYER.format(name=(name or "").strip())])
+        msg = mall.refund(game.state, self.content, wallet, purchase_id, now=self.now, admin=self.state.player.name, note=note)
+        self._save_target(game)
+        if not msg.startswith("（"):
+            self._write("商城", [msg], tag="管理者")
+        return self._log([msg])
+
+    def admin_mall_ledger(self, name: str) -> dict:
+        """管理者查某個名號（或帳號）的帳（4.7）：{name, balance, card, ledger, purchases}，帳多寫編號與經手的管理者；
+        不是管理者、商城關著、查不到回 {refusal}。真人假人回的一模一樣（不寫帳號）。只讀。"""
+        wallet, refusal = self._mall_admin("查帳")
+        if refusal:
+            return {"refusal": refusal}
+        target = self._mall_target(wallet, name)
+        if target is None:
+            return {"refusal": NO_SUCH_PLAYER.format(name=(name or "").strip())}
+        owner, shown = target
+        data = mall.records(self.content, wallet, owner, admin=True)
+        return {"name": shown, "balance": data["balance"], "card": mall.card_view(self.content, wallet, owner, self._pill_day()),
+                "ledger": data["ledger"], "purchases": data["purchases"]}
 
     def pills_left_today(self) -> int | None:
         """今天還能服幾顆回體丹（pill_cap）；不限是 None。不看手上有幾顆。"""
@@ -12803,6 +12961,7 @@ class Game:
         newbie = roster.newbie(s, c, c.config.newbie_stamina_days)
         data["stamina_help"] = howto.stamina_lines(
             c, w, newbie, p.stamina_pills, button=data["pills"] is not None, today=self.pills_left_today(),
+            card=self._pill_card_bonus() if c.config.stamina_pills_per_day > 0 else 0,  # 月卡（FB-480）：上限照 pill_cap 寫
         )
         # 江湖頁行動列底下的「玩法說明」入口（explain-2）：新手期（跟體力回復加快同一段，newbie_stamina_days）才有、序章裡沒有（師父會說）；
         # 過了新手期只剩設定抽屜那一顆

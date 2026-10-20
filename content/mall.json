@@ -1,0 +1,31 @@
+[
+  {
+    "id": "pills_5",
+    "name": "回體丹五顆",
+    "note": "五顆回體丹，買下就收進行囊。每天能服幾顆照舊。",
+    "price": 100,
+    "kind": "consumable",
+    "effects": {"pills": 5},
+    "limit": {"day": 5},
+    "draft": "PM 佔位：名字、說明、價錢、限購待 joy"
+  },
+  {
+    "id": "pills_30",
+    "name": "回體丹三十顆",
+    "note": "三十顆回體丹，買下就收進行囊。每天能服幾顆照舊。",
+    "price": 500,
+    "kind": "consumable",
+    "effects": {"pills": 30},
+    "draft": "PM 佔位：名字、說明、價錢待 joy"
+  },
+  {
+    "id": "card_30",
+    "name": "月卡",
+    "note": "三十天內，每天能多服一顆回體丹。再買一張接著往後算。",
+    "price": 600,
+    "kind": "card",
+    "effects": {"card_days": 30},
+    "limit": {"account": 3},
+    "draft": "PM 佔位：名字、說明、價錢、天數、限購待 joy"
+  }
+]
