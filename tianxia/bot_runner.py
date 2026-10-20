@@ -91,7 +91,7 @@ class BotRunner:
             log_failure(exc)
             report.failed += 1
         season = self.world.get_season_number()
-        battle = self._battle_sides()
+        battle = self._battle_sides()  # 決戰與攻城戰（領地爭奪第二批）每一場一筆
         owes = self._battle_owes()
         for state in self.characters.all(bots_only=True):
             profile = state.player.bot
@@ -275,18 +275,15 @@ class BotRunner:
 
     def _online(
         self, profile: BotProfile, state: GameState, now: float,
-        battle: tuple[float, set[str], set[str]] | None,
+        battles: list[tuple[float, set[str], set[str]]],
     ) -> bool:
-        """照作息在線；或者自己的陣營正在打全服戰鬥，而這個假人擲中了趕來參戰，且還沒出局
-        （趕來的假人在線到戰鬥結束或自己出局，設計第六節）。"""
+        """照作息在線；或者自己的陣營正在打全服戰鬥（或攻城戰），而這個假人擲中了趕來參戰，且還沒出局
+        （趕來的假人在線到戰鬥結束或自己出局，設計第六節）。每一場各擲一次（識別值是那一場的集結截止時間）。"""
         if server_bots.is_online(profile, now):
             return True
-        if battle is None:
-            return False
-        key, sides, out = battle
-        return (
-            state.player.faction in sides and state.player.name not in out
-            and server_bots.attends_battle(profile, key)
+        return any(
+            state.player.faction in sides and state.player.name not in out and server_bots.attends_battle(profile, key)
+            for key, sides, out in battles
         )
 
     def _battle_owes(self) -> frozenset[str]:
@@ -297,20 +294,27 @@ class BotRunner:
             if not p.eliminated and not p.away and p.name not in battle.round.pending_actions
         )
 
-    def _battle_sides(self) -> tuple[float, set[str], set[str]] | None:
-        """進行中的全服戰鬥：（這場的識別值＝集結截止時間, 會趕來的陣營, 已經出局的參戰者名號）；
-        沒有或已經結束回傳 None。"""
-        battle = self.world.get_battle()
-        if battle is None or battle.phase == "ended":
-            return None
-        definition = self.content.battles.get(battle.battle_id)
-        if definition is None:
-            return None
-        out = {p.name for p in battle.participants.values() if p.eliminated}
-        # 會趕來的陣營：兩軍，加上劇本其他的陣營（豪強的假人也擲趕來，到了臨時投效人少的一軍，bot.enlist_pick；豪強分屬兩軍的季
-        # 站依附的那一軍，Game._free_agent）；散人不趕來
-        sides = set(battle_instance.sides(definition)) | {f.id for f in self.content.scenario.factions}
-        return battle.muster_deadline_real, sides, out
+    def _battle_sides(self) -> list[tuple[float, set[str], set[str]]]:
+        """進行中的每一場（決戰、攻城戰）：（這場的識別值＝集結截止時間, 會趕來的陣營, 已經出局的參戰者名號）；沒有是空的。"""
+        rows = []
+        for battle in self._battles():
+            if battle.phase == "ended":
+                continue
+            definition = self.content.battles.get(battle.battle_id)
+            if definition is None:
+                continue
+            out = {p.name for p in battle.participants.values() if p.eliminated}
+            if battle.siege is not None:
+                # 攻城戰（領地爭奪第二批）：攻方、佔著的那一方，加上要依附別人的陣營（豪強分屬兩軍的季依附那一軍，到了照 rally_region 判）；
+                # 另一軍站不進守將那一格（裁決 8），不趕來
+                sides = set(battle.siege.attackers) | ({battle.siege.holder} if battle.siege.holder else set())
+                sides |= {f.id for f in self.content.scenario.factions if f.allies}
+            else:
+                # 會趕來的陣營：兩軍，加上劇本其他的陣營（豪強的假人也擲趕來，到了臨時投效人少的一軍，bot.enlist_pick；豪強分屬兩軍的季
+                # 站依附的那一軍，Game._free_agent）；散人不趕來
+                sides = set(battle_instance.sides(definition)) | {f.id for f in self.content.scenario.factions}
+            rows.append((battle.muster_deadline_real, sides, out))
+        return rows
 
     def _fill(self, now: float, report: TickReport) -> None:
         """補人；補成一個就記一個進 report.added（中途出錯時，已經補成的仍算數）。

@@ -369,7 +369,9 @@ def enlist_pick(game: Game, option_ids: list[str]) -> str | None:
     sides = [i for i in option_ids if i.startswith("battle:enlist:")]
     if battle is None or not sides or game.state.player.faction is None:
         return None
-    counts = {i: sum(1 for p in battle.participants.values() if p.faction == i.removeprefix("battle:enlist:")) for i in sides}
+    counts = {  # 鈕 id 可能帶「@流水號」（同一個大區兩場以上，領地爭奪第二批）
+        i: sum(1 for p in battle.participants.values() if p.faction == i.removeprefix("battle:enlist:").partition("@")[0]) for i in sides
+    }
 
     def tie(option_id: str) -> str:
         return hashlib.sha256(f"{game.state.player.name}|{battle.battle_id}|{option_id}".encode()).hexdigest()

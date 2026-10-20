@@ -7065,7 +7065,10 @@ class Game:
     def rally_region(self) -> str | None:
         """自己這一方正在集結或開打的全服決戰、而自己人不在現場時，回傳那場決戰的大區 id，給伺服器假人決定要不要
         趕路（地圖擴充設計 3.4）。不在現場的意思：還沒參戰的人不在那個大區或在路上；參戰者離開了大區
-        （見 _in_battle_region）。沒有這種決戰、決戰不限地點、打不了這場、已經在場上或倒下了，都是 None。"""
+        （見 _in_battle_region）。沒有這種決戰、決戰不限地點、打不了這場、已經在場上或倒下了，都是 None。
+        有攻城戰時（領地爭奪第二批）每一場都看（決戰在前、再照開集結的先後）：攻城認自己那一邊的攻方、守方（守將那一格不算，裁決 8）。"""
+        if self._sieges():
+            return self._rally_any()
         status = self._battle_status(tick=False)
         if status is None:
             return None
@@ -7079,6 +7082,29 @@ class Game:
         if me is not None:
             return definition.region if me.away and not me.eliminated else None
         return None if self._at_battle(definition) else definition.region
+
+    def _rally_any(self) -> str | None:
+        """rally_region 在有攻城戰時：自己已經在某一場的名單上就只看那一場（離開了大區、還沒倒下才回它的大區）；不然照先後找第一場
+        自己這一方打得進去、自己人又不在現場的那一場的大區。散人不為了投效趕過去（同決戰）；攻城戰另照 siege.slots。"""
+        name = self.state.player.name
+        showdown = self.world.get_battle()
+        live = ([showdown] if showdown is not None and showdown.phase != "ended" else []) + self._sieges()
+        mine = next((b for b in live if name in b.participants), None)
+        if mine is not None:
+            d = self._definition_of(mine)
+            me = mine.participants[name]
+            return d.region if d is not None and d.region is not None and me.away and not me.eliminated else None
+        for b in live:
+            d = self._definition_of(b)
+            if d is None or d.region is None:
+                continue
+            if self.state.player.faction is None and self._free_agent(d):
+                continue  # 散人沒有自己的一方：不會為了投效趕過去
+            if b.siege is not None and not siege.slots(b.siege, self._conquest_side()):
+                continue
+            if not self._at_battle(d):
+                return d.region
+        return None
 
     def _gauge_of(self, battle: battle_instance.BattleInstance, definition: BattleDef, side: str | None) -> dict:
         """battle_instance.gauge 的參數：時刻表決戰（第一季開著）照偏離中線分大勝，其餘照 outcomes 的門檻。"""
