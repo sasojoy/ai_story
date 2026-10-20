@@ -210,14 +210,16 @@ TROOPS_LINE = "你帶著{names}上陣，強攻、奇襲多 {pct}"  # 待 joy 潤
 TROOPS_REPORT = "{names}跟著你衝陣"  # 待 joy 潤（PM 2026-10-12）：決戰的戰報
 # 領地爭奪第二批：每天投票（裁決 9；待 joy 潤）
 VOTE_TITLE = "攻城投票"
-VOTED_LINE = "你投了一票：明日 {time} 攻{place}。"
+# 時刻照 calendar.stamp_text 寫那一場真正的日子（同公告 conquest_day.ANNOUNCE）：票替「此刻的下一天」投，一天從 22:00 起算，
+# 22:00～24:00 投的排在後天，寫「明日」就錯了（FB-541）
+VOTED_LINE = "你投了一票：{time}攻{place}。"
 VOTE_HOW = "眾議"  # 明天怎麼定：有人投就是眾議（只寫加權之後的比例）
 VOTE_NONE = "還沒有人投票，22:00 由主將定奪"
 CONQUEST_OFF = "這一季沒有攻城戰。"
 CONQUEST_ENDED = "這一季已經收了。"
 VOTE_RANGER = "投靠了官軍或黃巾（豪強：依附了一軍）才能投票。"
 VOTE_NOT_TARGET = "那裡此刻打不到：要是這一邊碰得到、搶得下來的地方。"
-VOTE_BAD_SLOT = "那個時辰不能開打：只能挑明天 12:00～21:00 的整點或半點，時刻表決戰前後不排。"
+VOTE_BAD_SLOT = "那個時辰不能開打：只能挑{first}～{last} 的整點或半點，時刻表決戰前後不排。"  # first 是那一天的第一個時段（照 stamp_text，FB-541）
 SIEGE_STATUS = {"planned": "未開", "waiting": "即將集結", "open": "集結・交戰中", "void": "作罷"}
 SIEGE_TAKEN = "{side}拿下"
 SIEGE_HELD = "守住了"
@@ -9632,6 +9634,12 @@ class Game:
         """這一下投的票是替哪一天投的：此刻的下一天（22:00 結算時排那一天的攻城，conquest_day.day_key）。"""
         return conquest_day.day_key(self.pill_now(), self.content.config) + 1
 
+    def _vote_stamp(self, minute: int) -> str:
+        """這一票的時段寫給人看的那一刻（FB-541）：照結算排那一場的算法換成世界秒（conquest_day.to_world，同 SiegeSlot.at），再照
+        calendar.stamp_text 寫——跟公告同一個寫法；22:00～24:00 投的是後天，不寫「明日」。"""
+        c = self.content
+        return self.stamp(conquest_day.to_world(minute, self._vote_key(), self.pill_now(), self.state.world.time, c.config))
+
     def _vote_problem(self, loc: str | None = None, minute: int | None = None) -> str | None:
         """投不了票的那一句（不含括號）；投得了是 None。loc、minute 給了再驗那一票。"""
         c, w = self.content, self.state.world
@@ -9645,7 +9653,8 @@ class Game:
         if loc is not None and loc not in conquest.targets(w, c, side):
             return VOTE_NOT_TARGET
         if minute is not None and minute not in conquest_day.slots(w, c, self._vote_key(), self.pill_now()):
-            return VOTE_BAD_SLOT
+            cfg = c.config.conquest
+            return VOTE_BAD_SLOT.format(first=self._vote_stamp(cfg.slot_first), last=conquest_day.slot_text(cfg.slot_last))
         return None
 
     def conquest_vote(self, loc: str, minute: int) -> list[str]:
@@ -9659,7 +9668,7 @@ class Game:
         if state.votes_for != key:  # 前一天的票（結算吃過、或沒人結算）不帶過來
             state.votes, state.votes_for = {}, key
         state.votes.setdefault(self._conquest_side(), {})[self.state.player.name] = Pick(loc=loc, minute=minute)
-        line = VOTED_LINE.format(time=conquest_day.slot_text(minute), place=self.content.locations[loc].name)
+        line = VOTED_LINE.format(time=self._vote_stamp(minute), place=self.content.locations[loc].name)
         self._write(VOTE_TITLE, [line])
         self._save_season()
         return self._log([line])
