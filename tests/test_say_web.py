@@ -20,12 +20,12 @@ def talking(monkeypatch):
     monkeypatch.setattr(server.CONTENT.config, "auto_open_first_season", True)  # 正式內容預設要管理者開季
     game = Game.new(server.CONTENT, "測試")
     p = game.state.player
-    p.location, p.fortune = "luzhi_camp", True
-    p.flags.add("結識:luzhi")
+    p.location, p.fortune = "baima_temple", True  # 輿圖重製：盧植搬到孟津渡、跟董卓同地（要開求見名單），換白馬寺只有一位的華佗
+    p.flags.add("結識:huatuo")
     turn = companion_agent.CompanionTurn(narrative="他點了點頭。", options=["閒聊幾句", "就此告辭"], option_tags=["尋常寒暄", "尋常寒暄"])
     with mock.patch.object(companion_agent, "generate_turn", return_value=turn):
         server.choose(game, "act:socialize")
-    assert game.state.player.pending_companion == "luzhi"
+    assert game.state.player.pending_companion == "huatuo"
     return server.main_view(game)
 
 
