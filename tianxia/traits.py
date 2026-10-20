@@ -31,11 +31,22 @@ def traits_of(art: MartialArt) -> list[str]:
     return [art.attribute] if art.origin == "historical" and art.attribute else []
 
 
-def general(content: Content, attribute: str) -> GeneralTrait:
+def general(content: Content, key: str) -> GeneralTrait:
+    """一般功效的鍵換成內容：第一個功效的鍵就是屬性，第二個起是 id（意境效果池）。"""
     for trait in content.traits.general:
-        if trait.attribute == attribute:
+        if trait.key == key:
             return trait
-    raise KeyError(f"content/traits.json 沒有屬性 {attribute} 的一般功效")
+    raise KeyError(f"content/traits.json 沒有一般功效 {key}")
+
+
+def highs_of(content: Content, art: MartialArt) -> list:
+    """這一門帶的大獎（高階技能），照槽的先後、同一個只算一次；內容沒有那個 id 的略過。"""
+    out = []
+    for hid in dict.fromkeys(h for h in (art.high, *art.extra_highs) if h):
+        top = high(content, hid)
+        if top is not None:
+            out.append(top)
+    return out
 
 
 def special(content: Content, special_id: str | None) -> SpecialTrait | None:
@@ -83,10 +94,10 @@ def loadout(state: GameState, content: Content, world: WorldStateStore) -> Loado
             if sp is not None and sp.hook not in out.specials:
                 out.specials[sp.hook] = sp
                 best.setdefault(sp.name, (1.0, art.name))
-        top = high(content, art.high)
-        if top is not None and all(t.name != top.tactic.name for t in out.highs):
-            out.highs.append(top.tactic)
-            best.setdefault(top.tactic.name, (1.0, art.name))
+        for top in highs_of(content, art):
+            if all(t.name != top.tactic.name for t in out.highs):
+                out.highs.append(top.tactic)
+                best.setdefault(top.tactic.name, (1.0, art.name))
     out.source = {name: art_name for name, (_, art_name) in best.items()}
     return out
 
@@ -134,12 +145,11 @@ def ultimate_trait(content: Content, art: MartialArt | None) -> GeneralTrait | N
     art 要是玩家自己那一份（team.player_art：品質照自己修到的）。不是絕學、是內容武學、那個功效沒寫絕招都是 None。"""
     if art is None or art.id in content.skills or art.quality != MASTERED or not content.traits.general:
         return None
-    mine = traits_of(art)
-    if not mine:  # 意境槽空著的絕學：沒有功效可立招
+    mine = [k for k in traits_of(art) if any(t.key == k and t.ultimate is not None for t in content.traits.general)]
+    if not mine:  # 意境槽空著、或只裝著沒有絕招的功效（各路第二個功效）：沒有功效可立招
         return None
     top = max(dict.fromkeys(mine), key=mine.count)
-    trait = general(content, top)
-    return trait if trait.ultimate is not None else None
+    return general(content, top)
 
 
 def ultimate_of(content: Content, art: MartialArt | None) -> TacticDef | None:
@@ -193,8 +203,7 @@ def card_line(content: Content, art: MartialArt) -> str:
         sp = special(content, sid)
         if sp is not None:
             parts.append(f"〔{sp.name}〕" + sp.desc.replace("{value}", _value(sp.hook, sp.amount)))
-    top = high(content, art.high)
-    if top is not None:
+    for top in highs_of(content, art):
         parts.append(HIGH_MARK.format(name=top.name) + top.desc)
     if not parts:
         return (EMPTY_LINE + (f"\n{tail}" if tail else "")) if not fixed_art(content, art) else tail

@@ -21,7 +21,7 @@ import hashlib
 import random
 import re
 
-from . import insights
+from . import insight_fx, insights
 from .martial_arts import QUALITIES, Insight, MartialArt
 from .models import ArtPattern, Content, InsightPattern, SecretRecipe
 from .state import GameState, Manual
@@ -73,7 +73,7 @@ def art_fits(pattern: ArtPattern, art: MartialArt, quality: str) -> bool:
 def insight_fits(pattern: InsightPattern, insight: Insight, content: Content) -> bool:
     """私有意境（感悟悟來的，insights.is_own）沒有全服的 id：寫了 id 的格子照那個基本意境的屬性認，跟配方鍵認私有意境同一套
     （fusion.fuse_key）——大多數人手上的意境是自己悟的，不這樣認，秘方幾乎沒人合得上。"""
-    if pattern.id is not None and insight.id != pattern.id:
+    if pattern.id is not None and insight_fx.base_id(insight.id) != pattern.id:  # 第二份起「feng~2」照那一種認
         known = content.insights.get(pattern.id)
         if not (insights.is_own(insight.id) and known is not None and known.attribute == insight.attribute):
             return False
@@ -113,7 +113,7 @@ def match_slots(
     if not art.affinity:  # 兼容並蓄：屬性照槽裡強度最高那一格（同 arts.apply），不照內容原本寫的
         top, best = "", 0
         for insight_id, ins in zip(slots, resolved):
-            strength = state.player.insight_strength.get(insight_id, 1)
+            strength = insight_fx.strength(state, insight_id)
             if ins is not None and ins.attribute and strength > best:
                 top, best = ins.attribute, strength
         art = art.model_copy(update={"affinity": [top] if top else [], "attribute": top})

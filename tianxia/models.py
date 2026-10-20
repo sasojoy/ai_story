@@ -20,6 +20,8 @@ Quality = Literal["下品", "中品", "上品", "絕學"]  # 見 tianxia/martial
 Lean = Literal["正", "邪", "無"]  # 武學與成長設計 7.3
 TRAIT_HOOKS = (  # 一般功效掛在遭遇戰的哪一步（武學與成長設計 13.2）；程式照這幾個實作
     "big_win", "luck_narrow", "difficulty_cut", "toll_cut", "win_reward", "win_heal", "luck_widen", "condition_floor",
+    # 意境效果池（武學重構第二批，Joy 2026-10-20「每個意境可能有3-4種效果」）：每一路第二個一般功效，只在回合裡起作用
+    "fx_shadow", "fx_heavy", "fx_mend", "fx_steady", "fx_tide", "fx_disarm", "fx_foresight", "fx_wall",
 )
 SPECIAL_HOOKS = (  # 特別功效的掛點（13.4）：一個掛點只能有一個特別功效（身上的特別功效照掛點記，validate 擋共用）。
     # 這 7 個掛點現在都被初版的 7 個特別功效佔了，所以新的特別功效要嘛換掉掛同一點的那一個、要嘛加新的掛點（要寫程式）
@@ -573,6 +575,9 @@ class GeneralTrait(_Strict):
     attribute: Attribute
     name: str
     hook: Literal[TRAIT_HOOKS]
+    # 意境效果池（第二批）：一路有兩個一般功效，第一個（id 空著）的鍵就是屬性（舊存檔、內容武學的 traits 照舊寫屬性），
+    # 第二個寫 id。意境身上記的、武學 traits 清單裡的都是這個鍵（key）
+    id: str = ""
     per_layer: float = Field(ge=0)
     cap: float = Field(ge=0)
     desc: str
@@ -584,6 +589,10 @@ class GeneralTrait(_Strict):
     # bond 是神器原品「以器配招」綁了那一門時加強多少（發動率或回合，照招挑一種）
     ultimate: TacticDef | None = None
     ultimate_bond: TacticBond | None = None
+
+    @property
+    def key(self) -> str:
+        return self.id or self.attribute
 
 
 class SpecialTrait(_Strict):
@@ -995,6 +1004,7 @@ class TutorialStep(_Strict):
     fuse_base: str | None = None  # 這一步只准把意境裝進這一門的意境槽（武學重構；以前是合成的底）
     melt_only: str | None = None  # 這一步只准熔這一門
     give_art: GiveArt | None = None  # 完成這一步時給的武學
+    give_piece: bool = False  # 完成這一步時再給一份手上那個意境（揣摩要同一種意境兩份；效果照第一份抄，序章才合得成二重）
     # 師父的話太長、一次放不下時分頁（T7 審查 I1）：網頁照 \n\n 切成幾頁、一頁一頁按「下一段 ▸」，最後一頁是要做的事；話整段都在、不切。
     # 只有 reveal 之後這一步的行動列落到分頁列底下才用得到（量測見 Task 7 報告）；至少要有兩段
     paged: bool = False
@@ -2246,6 +2256,22 @@ class ArtsTuning(_Strict):
     create_neutral_any_scale: float = Field(default=2.0, ge=1)
     create_redo: int = Field(default=1, ge=0)
     create_slots: int = Field(default=4, ge=1)  # 成形擲幾格（品級開幾格就用前幾格；上品四格全開）
+    # 意境效果池（第二批，tianxia/insight_fx.py）：悟到一份意境先擲品質（insight_quality_odds；在那一路最濃的地方升一品；
+    # 悟性每高過 5 一點多 insight_quality_per_wis 的機會再升一品、最多 insight_quality_wis_cap），再擲效果：第一個是那一路兩個一般功效挑一個（一重），
+    # 照品質有 insight_second 的機會出第二個，第二個有 insight_grand 的機會是大獎（那一路的高階技能）、不然是另一個一般功效。
+    # 兩個不同的意境合出來的照兩份裡較好的品質擲，第二個效果多 compound_second_bonus、大獎機會 ×compound_grand_scale。
+    # 揣摩（同一種意境兩份）：同一個一般功效的層數相加（最多三重），都沒有大獎時照品質擲 insight_grand × deepen_grand_scale；
+    # 一份意境最多 insight_max_effects 個效果，多的拿掉層數最少的一般功效。同一種意境手上最多 insight_piece_cap 份，再悟到化成心得
+    insight_quality_odds: dict[str, float] = Field(default_factory=lambda: {"下品": 60, "中品": 30, "上品": 10})
+    insight_quality_per_wis: float = Field(default=0.03, ge=0)
+    insight_quality_wis_cap: float = Field(default=0.4, ge=0, le=1)
+    insight_second: dict[str, float] = Field(default_factory=lambda: {"下品": 0.2, "中品": 0.5, "上品": 0.8})
+    insight_grand: dict[str, float] = Field(default_factory=lambda: {"下品": 0.05, "中品": 0.15, "上品": 0.35})
+    compound_second_bonus: float = Field(default=0.3, ge=0)
+    compound_grand_scale: float = Field(default=2.0, ge=0)
+    deepen_grand_scale: float = Field(default=1.0, ge=0)
+    insight_max_effects: int = Field(default=2, ge=1)
+    insight_piece_cap: int = Field(default=4, ge=1)
 
 
 class SignatureArtTuning(_Strict):

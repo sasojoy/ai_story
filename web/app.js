@@ -3484,7 +3484,7 @@
     rigRedraw(svg);
   }
   document.addEventListener("pointerdown", (ev) => {
-    const t = ev.target, svg = t && t.closest ? t.closest("#create-rig") : null;
+    const t = ev && ev.target, svg = t && t.closest ? t.closest("#create-rig") : null;
     if (!svg || !t.dataset || !t.dataset.j || !S.createPose) return;
     rigDrag = { svg, j: t.dataset.j };
     try { svg.setPointerCapture(ev.pointerId); } catch (e) { /* 舊瀏覽器 */ }

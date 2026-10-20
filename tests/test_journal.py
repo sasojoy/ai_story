@@ -481,9 +481,9 @@ def test_landing_on_what_you_already_own_writes_nothing_and_does_not_shine(game)
     for refused in (
         _forge(game, "basic_fist", ["feng"], "旋風腿"),  # 已經裝著
         _forge(game, "basic_breath", [], "踏浪拳", other_art="lake_kick"),  # 反過來放也是同一個配方
-        _forge(game, None, ["huo", "feng"], "燎原"),
+        _forge(game, None, ["feng", "feng"], "燎原"),  # 意境效果池：合過的意境再合是另一份，這裡改用同一份放兩次被拒絕
     ):
-        assert len(refused) == 1 and "已經" in refused[0]
+        assert len(refused) == 1 and ("已經" in refused[0] or "兩份" in refused[0])
         assert journal._line_class(refused[0]) == "tx-line"
     assert game.state.journal == before and len(shines(game.now_entry_html())) == 2  # 後兩爐的那兩行照舊亮、沒多一行
 

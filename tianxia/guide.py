@@ -108,6 +108,8 @@ def note_action(state: GameState, content: Content, world: WorldStateStore, acti
             msgs += reward
         if step.give_art is not None:
             msgs += prologue.give_art(state, content, world, step.give_art)
+        if step.give_piece:
+            msgs += prologue.give_piece(state, content, world)
     if completed:  # 引導這一次有完成的步驟（序章的步驟可以沒有任何一行訊息，所以看 completed，不看 msgs）
         if tutorial_active(state, content):
             nxt = todo[state.player.tutorial_step]

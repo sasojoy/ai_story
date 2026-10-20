@@ -4,7 +4,7 @@
 """
 from __future__ import annotations
 
-from . import armor, arts as arts_mod, atlas, clinic, create as create_mod, cultivation, encounter, equipment, forge_secrets, fusion, insights, martial_arts, materials, mounts, prologue, renown, seal, signature, smithing, team, traits, treasures, weapons
+from . import armor, arts as arts_mod, atlas, clinic, create as create_mod, cultivation, encounter, equipment, forge_secrets, fusion, insight_fx, insights, martial_arts, materials, mounts, prologue, renown, seal, signature, smithing, team, traits, treasures, weapons
 from .library import TOWN_TAG, cap_of, held_count, level_of, melt_confirm, melt_note, melt_problem, melt_value, owned_arts
 from .martial_arts import MAX_LEVEL, QUALITIES, Insight, MartialArt, next_quality, power_at, shown_creator
 from .models import Content
@@ -99,13 +99,16 @@ def _known_recipe(state: GameState, content: Content, world: WorldStateStore, ke
 
 def _known_insight_recipe(state: GameState, world: WorldStateStore, key: str) -> str:
     """意境＋意境的配方有沒有人合過（跟 _known_recipe 同一套說法，FB-082）：已知的寫「會合出「X」（屬…）」，沒人合過的寫「沒人合過」；
-    合出來的那一個你已經悟得了就不寫（下面的 ⚠ 本來就會說「你已經悟得了」）。只在兩個都是你悟得的時候才會呼叫。（待 joy 潤）"""
+    合出來的那一種你手上已經有了寫「再合一份」（意境效果池：每一份各自擲效果）。只在兩個都是你悟得的時候才會呼叫。（待 joy 潤）"""
     known = world.lookup_insight_recipe(key)
     if known is None:
         return "\n沒人合過。"
     if known.id in state.player.insights:
-        return ""
+        return AGAIN_PIECE.format(name=known.name)
     return f"\n會合出「{known.name}」（屬{known.attribute}）。"
+
+
+AGAIN_PIECE = "\n再合一份「{name}」，效果另擲。"  # 待 joy 潤
 
 
 # 爐裡只放了一樣東西時，煉製頁的說明那一行（W4）；句子待 joy 潤
@@ -153,10 +156,11 @@ def _slot_head(state: GameState, content: Content, world: WorldStateStore, art_i
         return None
     slots = arts_mod.slots_of(state, content, art)
     strength = arts_mod.strength_of(state, insight_id)
+    fx = insight_fx.record(state, content, world, insight_id, insight)
     return {
         "art": art, "insight": insight, "slot": (slots.index(None) + 1) if None in slots else None, "total": len(slots),
-        "skill": arts_mod.skill_name(content, insight), "mark": arts_mod.strength_mark(strength),
-        "desc": arts_mod.skill_desc(content, insight, strength), "affinity": arts_mod.affinity_text(art),
+        "skill": arts_mod.skill_name(content, insight, fx), "mark": arts_mod.strength_mark(strength), "fx": fx,
+        "desc": arts_mod.skill_desc(content, insight, strength, fx), "affinity": arts_mod.affinity_text(art),
         "problem": arts_mod.slot_problem(state, content, world, art_id, insight_id),
     }
 
@@ -202,7 +206,7 @@ def forge_line(
         where = f"第 {info['slot']} 格（共 {info['total']} 格）" if info["slot"] else f"（{info['total']} 格都滿了）"
         head = (
             f"**裝意境**　把「{info['insight'].name}」裝進【{info['art'].name}】{where}，{NO_CHARGE}。"
-            f"\n這一招是〔{info['skill']}〕{info['mark']}：{info['desc']}"
+            f"\n這一份是{info['fx'].quality}：{info['desc']}"
         )
         problem = info["problem"]
     elif not art_id and not other_art and len(insight_ids) == 2:
@@ -211,12 +215,15 @@ def forge_line(
         a, b = (insights.resolve(i, content, world, state) for i in insight_ids)
         if a is None or b is None:
             return "（選了不存在的東西。）"
-        if a.id == b.id:
-            now = arts_mod.strength_of(state, a.id)
+        if fusion.same_kind(state, a, b):
+            merged, chance = _deepen_preview(state, content, world, a, b)
             head = (
-                f"**揣摩**　「{a.name}」反覆揣摩，體會從{arts_mod.strength_mark(now)}到{arts_mod.strength_mark(now + 1)}（這一招更強），"
+                f"**揣摩**　兩份「{a.name}」揉成一份（{merged.quality}・{insight_fx.label(content, merged)}"
+                + (f"，{chance}% 的機會悟出大獎" if chance else "") + "），另一份用掉，"
                 f"花 {cfg.merge_xinde} 點心得、{cfg.merge_stamina} 點體力（你有 {xinde} 點心得）。"
             )
+        elif a.id == b.id:
+            head = f"**揣摩**　「{a.name}」要兩份才揣摩得了。"
         else:
             attribute, _ = fusion.merge_shape(world, a, b, content, state)  # 跟 fusion.merge 真的登記的同一個函式算的（FB-082）
             high = arts_mod.high_of(content, attribute)
@@ -280,9 +287,9 @@ def forge_preview(
         where = f"第 {info['slot']} 格" if info["slot"] else "（槽滿了）"
         return {
             **empty, "kind": "裝意境", "made": f"【{info['art'].name}】{where}", "attribute": info["insight"].attribute,
-            "attribute_why": f"【{info['art'].name}】{arts_mod.takes_text(info['affinity'])}", "quality": None,
-            "slots": f"共 {info['total']} 格", "traits": [{"name": info["skill"], "layers": arts_mod.strength_of(state, insight_ids[0])}],
-            "depth": f"〔{info['skill']}〕{info['mark']}：{info['desc']}",
+            "attribute_why": f"【{info['art'].name}】{arts_mod.takes_text(info['affinity'])}",
+            "slots": f"共 {info['total']} 格", "traits": fx_traits(content, info["fx"]), "quality": info["fx"].quality,
+            "depth": info["desc"] or None,
             "known": None, "cost": NO_CHARGE, "problem": info["problem"],
         }
     if not art_id and not other_art and len(insight_ids) == 2:
@@ -292,25 +299,51 @@ def forge_preview(
         if a is None or b is None:
             return None
         merge_cost = f"心得 {cfg.merge_xinde}・體力 {cfg.merge_stamina}（你有 {xinde} 點心得）"
-        if a.id == b.id:
-            now = arts_mod.strength_of(state, a.id)
+        if a.id == b.id or fusion.same_kind(state, a, b):
+            merged, chance = _deepen_preview(state, content, world, a, b)
             return {
-                **empty, "kind": "揣摩", "made": f"「{a.name}」{arts_mod.strength_mark(min(arts_mod.MAX_STRENGTH, now + 1))}",
-                "attribute": a.attribute, "quality": None, "slots": None,
-                "traits": [{"name": arts_mod.skill_name(content, a), "layers": min(arts_mod.MAX_STRENGTH, now + 1)}],
-                "depth": arts_mod.skill_desc(content, a, min(arts_mod.MAX_STRENGTH, now + 1)),
+                **empty, "kind": "揣摩", "made": f"「{a.name}」{insight_fx.label(content, merged)}", "attribute": a.attribute, "quality": merged.quality, "slots": None,
+                "traits": fx_traits(content, merged),
+                "depth": "；".join(f"〔{e['name']}〕{e['desc']}" for e in insight_fx.effects(content, merged) if e["desc"]) or None,
+                "odds": f"大獎機會 {chance}%" if chance else None, "keep": DEEPEN_KEEP,
                 "known": None, "cost": merge_cost, "problem": fusion.merge_problem(state, content, world, *insight_ids),
             }
         attribute, _ = fusion.merge_shape(world, a, b, content, state)
         high = arts_mod.high_of(content, attribute)
+        quality = insight_fx.better(insight_fx.quality_of(state, a.id), insight_fx.quality_of(state, b.id))
+        pool = [t.name for t in insight_fx.generals(content, attribute)]
         return {
-            **empty, "kind": "合併", "made": "一個新的意境", "attribute": attribute, "quality": None, "slots": None,
-            "traits": [{"name": high.name, "layers": 1}] if high is not None else [],
-            "depth": f"裝進槽是〔{high.name}〕：{high.desc}" if high is not None else None,
+            **empty, "kind": "合併", "made": "一個新的意境", "attribute": attribute, "quality": quality, "slots": None,
+            "traits": [{"name": n, "layers": 1} for n in pool] + ([{"name": high.name, "layers": 0, "grand": True}] if high is not None else []),
+            "depth": (f"擲一到兩個效果：{'或'.join(pool)}" + (f"，大獎〔{high.name}〕：{high.desc}" if high is not None else "")) if pool else None,
+            "odds": f"大獎機會約 {_compound_grand(content, quality)}%" if high is not None else None,
             "known": _strip_note(_known_insight_recipe(state, world, fusion.merge_key(*insight_ids))),
             "cost": merge_cost, "problem": fusion.merge_problem(state, content, world, *insight_ids),
         }
     return None
+
+
+DEEPEN_KEEP = "同一個功效的層數相加（最多三重），品質取好的；另一份用掉。"  # 待 joy 潤
+
+
+def _deepen_preview(state: GameState, content: Content, world: WorldStateStore, a, b) -> tuple:
+    """揣摩之後那一份的樣子（不擲大獎）與擲到大獎的機會（百分比整數）。"""
+    if a.id == b.id:
+        fx = insight_fx.record(state, content, world, a.id, a)
+        return fx, 0
+    fa, fb = insight_fx.record(state, content, world, a.id, a), insight_fx.record(state, content, world, b.id, b)
+    return insight_fx.deepen(content, fa, fb, None), round(insight_fx.grand_chance(content, fa, fb) * 100)
+
+
+def _compound_grand(content: Content, quality: str) -> int:
+    cfg = content.config.arts
+    second = min(1.0, cfg.insight_second.get(quality, 0.0) + cfg.compound_second_bonus)
+    return round(second * min(1.0, cfg.insight_grand.get(quality, 0.0) * cfg.compound_grand_scale) * 100)
+
+
+def fx_traits(content: Content, fx) -> list[dict]:
+    """卡上的效果籤：一般功效寫層數，大獎 layers 0、grand true。"""
+    return [{"name": e["name"], "layers": e["layers"], "grand": e["grand"]} for e in insight_fx.effects(content, fx)]
 
 
 def _no(problem: str) -> dict:
@@ -490,8 +523,7 @@ def melt_judge(state: GameState, content: Content, world: WorldStateStore, art: 
                  for a in dict.fromkeys(mine)]
         names += [{"name": sp.name, "layers": 1, "tier": 2}
                   for sp in (traits.special(content, sid) for sid in art.extra_specials) if sp is not None]
-        top = traits.high(content, art.high)
-        if top is not None:
+        for top in traits.highs_of(content, art):
             names.append({"name": top.name, "layers": 1, "tier": 3})
     special = traits.special(content, art.special)
     ult = traits.ultimate_of(content, art)
@@ -518,9 +550,11 @@ def slot_rows(state: GameState, content: Content, world: WorldStateStore, art: M
             rows.append(None)
             continue
         strength = arts_mod.strength_of(state, insight_id)
+        fx = insight_fx.record(state, content, world, insight_id, ins)
         rows.append({
-            "id": insight_id, "name": ins.name, "attribute": ins.attribute, "skill": arts_mod.skill_name(content, ins),
-            "mark": arts_mod.strength_mark(strength), "strength": strength, "desc": arts_mod.skill_desc(content, ins, strength),
+            "id": insight_id, "name": ins.name, "attribute": ins.attribute, "skill": arts_mod.skill_name(content, ins, fx),
+            "mark": arts_mod.strength_mark(strength), "strength": strength, "desc": arts_mod.skill_desc(content, ins, strength, fx),
+            "quality": fx.quality, "fx": fx_traits(content, fx),  # 意境效果池：這一份的品質與每一個效果（大獎 grand）
         })
     return rows
 
@@ -556,15 +590,20 @@ def insight_rows(state: GameState, content: Content, world: WorldStateStore) -> 
     for insight_id in state.player.insights:
         insight = insights.resolve(insight_id, content, world, state)
         if insight is not None:
+            fx = insight_fx.record(state, content, world, insight_id, insight)
+            strength = insight_fx.strength(state, insight_id)
             row = {
                 "id": insight_id, "name": insight.name, "attribute": insight.attribute, "lean": insight.lean,
                 # 武學重構：意境就是技能——那一招叫什麼、強度（●～●●●）、裝在哪一門上（None 沒裝）
-                "skill": arts_mod.skill_name(content, insight), "strength": arts_mod.strength_of(state, insight_id),
-                "mark": arts_mod.strength_mark(arts_mod.strength_of(state, insight_id)),
-                "skill_desc": arts_mod.skill_desc(content, insight, arts_mod.strength_of(state, insight_id)),
+                "skill": arts_mod.skill_name(content, insight, fx), "strength": strength,
+                "mark": arts_mod.strength_mark(strength),
+                "skill_desc": arts_mod.skill_desc(content, insight, strength, fx),
                 "slotted": _slotted_name(state, content, world, insight_id),
-                "depth": f"〔{arts_mod.skill_name(content, insight)}〕{arts_mod.strength_mark(arts_mod.strength_of(state, insight_id))}",
-                "rank": arts_mod.strength_of(state, insight_id), "mood": None,  # 批量熔煉的篩選還讀這兩個鍵
+                "depth": f"〔{arts_mod.skill_name(content, insight, fx)}〕",
+                "rank": strength, "mood": None,  # 批量熔煉的篩選還讀這兩個鍵
+                # 意境效果池：同一種可以有好幾份，每一份的品質與效果（大獎 grand）；piece 是第幾份（第一份 1）
+                "quality": fx.quality, "fx": fx_traits(content, fx), "grand": fx.grand is not None,
+                "piece": insight_fx.pieces(state, insight_fx.base_id(insight_id)).index(insight_id) + 1 if not insights.is_own(insight_id) else 1,
                 "note": insight.note, "melt": content.config.melt_insight_xinde, "blocked": blocked,
                 # 感悟悟來的私有意境（悟意境設計 0.2b）：在哪裡悟的、畫的那一筆（修練頁畫小縮圖）
                 "own": insights.is_own(insight_id), "place": insight.place, "glyph": insight.glyph,

@@ -392,7 +392,7 @@ def test_forge_line_shows_slotting_an_insight(state, content, world):
     state.player.stats["xinde"] = 0  # 不花心得：心得 0 也裝得進去
     line = skillview.forge_line(state, content, world, "basic_fist", ["feng"])
     assert "**裝意境**" in line and "把「風」裝進【粗淺拳腳】第 1 格（共 2 格）" in line and skillview.NO_CHARGE in line
-    assert "〔先手〕一重" in line and "⚠" not in line and "合成" not in line and "品質看造化" not in line
+    assert "這一份是中品：〔先手〕" in line and "⚠" not in line and "合成" not in line and "品質看造化" not in line
 
 
 def test_forge_line_slot_count_follows_the_players_own_quality(state, content, world):
@@ -416,7 +416,10 @@ def test_forge_line_explains_why_it_cannot_be_done(state, content, world):
     state.player.member.wugong_id = "basic_fist"
     state.player.insights = ["feng"]
     state.player.stats["xinde"] = 0
-    assert "⚠ 心得不足" in skillview.forge_line(state, content, world, None, ["feng", "feng"])  # 揣摩加深也花心得
+    assert "⚠ 揣摩要同一種意境的兩份" in skillview.forge_line(state, content, world, None, ["feng", "feng"])  # 同一份放兩次
+    state.player.insights.append("feng~2")
+    assert "⚠ 心得不足" in skillview.forge_line(state, content, world, None, ["feng", "feng~2"])  # 揣摩也花心得
+    state.player.insights.remove("feng~2")
     assert f"⚠ {arts_mod.NO_INSIGHT}" in skillview.forge_line(state, content, world, "basic_fist", ["huo"])  # 沒悟到的裝不進槽
     state.player.art_slots["basic_fist"] = ["feng", None]  # 已經裝著：再裝一次被擋
     assert "⚠ 【粗淺拳腳】上已經有「風」了。" in skillview.forge_line(state, content, world, "basic_fist", ["feng"])
@@ -591,7 +594,8 @@ def test_art_rows_of_an_art_with_a_slotted_insight_say_the_skill_and_no_longer_a
     (row,) = skillview.art_rows(state, content, world)
     assert row["insight"] is None and row["affinity"] == "快" and row["attribute"] == "快"
     assert [s and s["name"] for s in row["slots"]] == ["風", None]
-    assert row["slots"][0]["skill"] == "先手" and row["slots"][0]["mark"] == "一重" and row["slots"][0]["strength"] == 1
+    assert row["slots"][0]["skill"] == "先手一重" and row["slots"][0]["mark"] == "一重" and row["slots"][0]["strength"] == 1
+    assert row["slots"][0]["quality"] == "中品" and row["slots"][0]["fx"][0]["name"] == "先手"  # 這一版之前悟到的：照舊的樣子、中品
     assert not row["cultivate"]["ok"] and row["cultivate"]["note"] == cultivation.NO_RANK_LINE and row["cultivate"]["xinde"] is None
     assert "功效：〔先手〕" in row["card"] and "合成" in row["card"] and "意境：" not in row["card"]
     assert "forge_odds" not in row and "forge_with" not in row and "forge_fixed" not in row
@@ -968,7 +972,7 @@ def test_the_card_of_a_fused_art_lists_every_trait_and_the_special(state, conten
     state.player.art_slots[art.id] = ["huo", "feng", secret.id]
     (row,) = [r for r in skillview.art_rows(state, content, world) if r["id"] == art.id]
     assert "〔破甲〕強攻剋中對手時，有 30% 的機會" in row["card"] and "〔先手〕" in row["card"] and "〔悟招〕每被對手剋中一次" in row["card"]
-    assert [s["skill"] for s in row["slots"]] == ["破甲", "先手", "悟招"] and row["slots"][0]["mark"] == "二重"
+    assert [s["skill"] for s in row["slots"]] == ["破甲二重", "先手一重", "悟招"] and row["slots"][0]["mark"] == "二重"
 
 
 def test_the_furnace_shows_a_known_blend_too_and_says_nothing_for_an_unknown_one(state, content, world):

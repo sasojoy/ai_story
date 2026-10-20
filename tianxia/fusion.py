@@ -24,7 +24,7 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 
-from . import annals, arts as arts_mod, calendar, insights, library, naming, rules, secret_recipes, sensing, team
+from . import annals, arts as arts_mod, calendar, insight_fx, insights, library, naming, rules, secret_recipes, sensing, team
 from .martial_arts import MAX_LEVEL, QUALITIES, Insight, MartialArt, generate_from_name, shown_creator
 from .models import Content, PresetRecipe
 from .ollama_client import OllamaClient
@@ -541,7 +541,21 @@ def _store_forged(
 # ── 意境合成（意境＋意境）──────────────────────────────────
 
 DEEPEN_LINE = "你把「{name}」反覆揣摩，體會又深了一層（{mark}）。"  # 同＋同（待 joy 潤）
+MIXED_LINE = "你把兩份「{name}」揉成了一份。"  # 揣摩：兩份的功效不同、層數沒有變深（待 joy 潤）
+PIECE_LINE = "這一份是{quality}：{label}。"  # 待 joy 潤
+GRAND_LINE = "揉到深處，悟出了大獎〔{name}〕！"  # 待 joy 潤
 DEEPEST = "「{name}」已經體會到極處（{mark}），再揣摩也深不下去了。"
+SAME_PIECE = "揣摩要同一種意境的兩份：再悟一次「{name}」，就有第二份。"  # 待 joy 潤
+PIECE_FULL = "「{name}」你手上已經有 {n} 份了，先揣摩或熔掉一份。"  # 待 joy 潤
+
+
+def same_kind(state: GameState, ia: Insight, ib: Insight) -> bool:
+    """揣摩的兩份是不是同一種：同一種意境的兩份（feng、feng~2）；自己悟的（私有）沒有第二份，同屬性、都不是合出來的就算同一種。"""
+    if ia.id == ib.id:
+        return False
+    if insights.is_own(ia.id) and insights.is_own(ib.id):
+        return ia.attribute == ib.attribute and not ia.parents and not ib.parents
+    return insight_fx.base_id(ia.id) == insight_fx.base_id(ib.id)
 OWN_IN_DISCUSS = "心裡那份自己悟的意境，說不出口，論武時拿不出來。"
 
 
@@ -560,7 +574,13 @@ def merge_problem(
     if a == b:
         if partner is not None:
             return _refuse("論武要兩個不同的意境。", "同一個")
-        if arts_mod.strength_of(state, a) >= arts_mod.MAX_STRENGTH:
+        return _refuse(SAME_PIECE.format(name=ia.name), "要兩份")
+    if same_kind(state, ia, ib):  # 揣摩（意境效果池）：同一種的兩份揉成一份
+        if partner is not None:
+            return _refuse("論武要兩個不同的意境。", "同一種")
+        fa, fb = insight_fx.record(state, content, world, a, ia), insight_fx.record(state, content, world, b, ib)
+        merged = insight_fx.deepen(content, fa, fb, None)
+        if (merged.general, merged.grand) == (fa.general, fa.grand) and insight_fx.grand_chance(content, fa, fb) == 0:
             return _refuse(DEEPEST.format(name=ia.name, mark=arts_mod.strength_mark(arts_mod.MAX_STRENGTH)), "已到極處")
     else:
         secret = secret_recipes.match_merge(content, world, ia, ib)
@@ -570,8 +590,9 @@ def merge_problem(
                 return _refuse(f"這兩個你已經合過了，化成的「{made.name}」還在你心裡。", "已經有了")
         else:
             known = world.lookup_insight_recipe(secret_recipes.key(secret) if secret is not None else merge_key(a, b))
-            if known is not None and known.id in held:
-                return _refuse(f"這兩個合起來還是「{known.name}」，你已經悟得了。", "已經有了")
+            if known is not None and not insight_fx.room_for(state, content, known.id):
+                n = len(insight_fx.pieces(state, known.id))
+                return _refuse(PIECE_FULL.format(name=known.name, n=n), "已經夠了")
         if library.full(state, content):
             return _full_line(state, content)
     xinde, stamina = _price(content, partner, "merge")
@@ -609,8 +630,8 @@ def merge(
     if problem is not None:
         return None, [problem]
     ia, ib = insights.resolve(a, content, world, state), insights.resolve(b, content, world, state)
-    if a == b:
-        return _deepen(state, content, ia)
+    if same_kind(state, ia, ib):
+        return _deepen(state, content, world, ia, ib)
     key = merge_key(a, b)
     tianji = recipe_seed(world, key)[0]
     attribute, lean = merge_shape(world, ia, ib)
@@ -630,7 +651,7 @@ def merge(
         for candidate_name in _candidates(content, world, key, "意境", tianji, name):
             candidate = Insight(
                 id=candidate_name, name=candidate_name, attribute=attribute, lean=lean, **_makers(state, partner),
-                note=note if candidate_name == name else "", parents=sorted([a, b]),
+                note=note if candidate_name == name else "", parents=sorted([insight_fx.base_id(a), insight_fx.base_id(b)]),
                 secret=secret.id if secret is not None else None, secret_special=special,
             )
             result, first = world.claim_insight_recipe(key, candidate)
@@ -638,10 +659,13 @@ def merge(
                 break
         if result is None:
             return None, ["兩股意念始終融不到一塊（名字都被用掉了，再試一次）。"]
-    if result.id in state.player.insights:
-        return None, [f"這兩個合起來還是「{result.name}」，你已經悟得了。"]
-    state.player.insights.append(result.id)
-    head = f"「{ia.name}」與「{ib.name}」在你心中交融，化成「{result.name}」（屬{result.attribute}・{arts_mod.skill_name(content, result)}）！"
+    if not insight_fx.room_for(state, content, result.id):
+        return None, [PIECE_FULL.format(name=result.name, n=len(insight_fx.pieces(state, result.id)))]
+    piece = insight_fx.new_piece_id(state, result.id)  # 合出來的也一份一份的（再合一次是第二份）
+    quality = insight_fx.better(insight_fx.quality_of(state, a), insight_fx.quality_of(state, b))
+    state.player.insights.append(piece)
+    fx = insight_fx.roll(state, content, world, piece, quality=quality, compound=True)
+    head = f"「{ia.name}」與「{ib.name}」在你心中交融，化成「{result.name}」（屬{result.attribute}・{fx.quality}・{arts_mod.skill_name(content, result, fx)}）！"
     if result.note:
         head += f"\n{result.note}"
     other = None if first else _partner_of(result, state.player.name)
@@ -655,17 +679,37 @@ def merge(
     if first:
         annals.note(state, content, annals.DEED, f"江湖上第一個悟出意境「{result.name}」。", 3)
     extra = _secret_lines(state, content, world, secret, f"「{result.name}」", first, result)
-    return result, [head] + extra + _charge(state, *_price(content, partner, "merge"))
+    mine = result if piece == result.id else result.model_copy(update={"id": piece})
+    return mine, [head] + extra + _charge(state, *_price(content, partner, "merge"))
 
 
-def _deepen(state: GameState, content: Content, insight: Insight) -> tuple[Insight, list[str]]:
-    """同一個意境合自己：強度升一級（裝在武學上的照舊裝著、當下就變強）。"""
+def _deepen(state: GameState, content: Content, world: WorldStateStore, ia: Insight, ib: Insight) -> tuple[Insight, list[str]]:
+    """揣摩（意境效果池）：同一種意境的兩份揉成一份——同一個一般功效的層數相加（最多三重）、品質取好的、
+    沒有大獎時照品質擲一次（insight_fx.deepen）。裝在槽上的那一份留下（都裝著留第一份），另一份用掉、從槽上拆下。"""
     p = state.player
-    now = arts_mod.strength_of(state, insight.id)
-    p.insight_strength[insight.id] = now + 1
+    keep, gone = ia, ib
+    if arts_mod.where_slotted(state, gone.id) is not None and arts_mod.where_slotted(state, keep.id) is None:
+        keep, gone = gone, keep
+    fa = insight_fx.record(state, content, world, keep.id, keep)
+    fb = insight_fx.record(state, content, world, gone.id, gone)
+    before = insight_fx.strength(state, keep.id)
+    merged = insight_fx.deepen(content, fa, fb, insight_fx.deepen_rng(state, world, keep.id, gone.id))
+    p.insight_fx[keep.id] = merged
+    p.insight_strength.pop(keep.id, None)
+    where = arts_mod.where_slotted(state, gone.id)
+    if where is not None:
+        p.art_slots[where] = [None if i == gone.id else i for i in p.art_slots[where]]
+    p.insights.remove(gone.id)
+    insight_fx.drop(state, gone.id)
+    p.own_insights.pop(gone.id, None)
+    after = insight_fx.strength(state, keep.id)
+    head = DEEPEN_LINE.format(name=keep.name, mark=arts_mod.strength_mark(after)) if after > before else MIXED_LINE.format(name=keep.name)
+    lines = [head, PIECE_LINE.format(quality=merged.quality, label=insight_fx.label(content, merged))]
+    if merged.grand and not fa.grand and not fb.grand:
+        g = insight_fx.grand(content, merged.grand)
+        lines.append(GRAND_LINE.format(name=g.name if g else merged.grand))
     cfg = content.config
-    line = DEEPEN_LINE.format(name=insight.name, mark=arts_mod.strength_mark(now + 1))
-    return insight, [line] + _charge(state, cfg.merge_xinde, cfg.merge_stamina)
+    return keep, lines + _charge(state, cfg.merge_xinde, cfg.merge_stamina)
 
 
 def _merge_own(
@@ -681,7 +725,9 @@ def _merge_own(
         id="", name=name, attribute=attribute, lean=lean, creator=p.name, creator_shown=p.name, note=note,
         parents=sorted([ia.id, ib.id]), place=ia.place or ib.place,
     ))
-    head = f"「{ia.name}」與「{ib.name}」在你心中交融，化成「{result.name}」（屬{result.attribute}・{arts_mod.skill_name(content, result)}）！"
+    quality = insight_fx.better(insight_fx.quality_of(state, ia.id), insight_fx.quality_of(state, ib.id))
+    fx = insight_fx.roll(state, content, world, result.id, quality=quality, compound=True)
+    head = f"「{ia.name}」與「{ib.name}」在你心中交融，化成「{result.name}」（屬{result.attribute}・{fx.quality}・{arts_mod.skill_name(content, result, fx)}）！"
     if result.note:
         head += f"\n{result.note}"
     head += "\n這份領悟是你自己的，江湖上沒有第二份。"
@@ -721,6 +767,8 @@ def forge_request(
         a, b = insight_ids
         if a == b or merge_problem(state, content, world, a, b, partner) is not None:
             return None
+        if same_kind(state, insights.resolve(a, content, world, state), insights.resolve(b, content, world, state)):
+            return None  # 揣摩：不取名
         key = merge_key(a, b)
         ia, ib = insights.resolve(a, content, world, state), insights.resolve(b, content, world, state)
         if secret_recipes.match_merge(content, world, ia, ib) is not None:

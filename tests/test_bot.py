@@ -3,7 +3,7 @@ from unittest import mock
 
 import pytest
 
-from tianxia import arts as arts_mod, bot, fusion, library, team
+from tianxia import insight_fx, arts as arts_mod, bot, fusion, library, team
 from tianxia.bot import pick, play_season, spend_xinde, wants_heal
 from tianxia.engine import Game
 from tianxia.martial_arts import generate_from_name
@@ -232,13 +232,13 @@ def test_the_bot_slots_its_insight_and_melts_when_full(content, world):
 
 
 def test_the_bot_sometimes_merges_two_insights_instead(content, world):
-    """手上有兩個以上意境時，一部分機會改做合併。武學重構：Fixed(0.0) 兩次都挑到「風」，同＋同＝揣摩，「風」的強度加深一層；
-    意境一個都不少、也沒有合成。"""
+    """手上有兩個以上意境時，一部分機會改做合併。意境效果池：Fixed(0.0) 第一格挑到「風」、第二格從其餘的挑到「風」的另一份，
+    同一種的兩份＝揣摩，「風」到二重、另一份用掉；也沒有合成。"""
     game = armed(content, world)
-    game.state.player.insights = ["feng", "huo"]
+    game.state.player.insights = ["feng", "feng~2", "huo"]
     bot.forge_and_cultivate(game, Fixed(0.0))
     p = game.state.player
-    assert p.insights == ["feng", "huo"] and p.insight_strength.get("feng") == 2
+    assert p.insights == ["feng", "huo"] and insight_fx.strength(game.state, "feng") == 2
     assert p.stats["xinde"] == 100 - content.config.merge_xinde  # 揣摩照合併收錢
     assert library.owned_arts(game.state) == ["basic_fist"]  # 這一輪做的是合併，沒有合成
 

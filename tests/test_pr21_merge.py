@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from tianxia import library, prologue, sensing, skillview, team
+from tianxia import insight_fx, library, prologue, sensing, skillview, team
 from tianxia.content import load_content
 from tianxia.engine import Game
 
@@ -91,7 +91,7 @@ def test_prologue_step_4_the_real_hut_slots_the_insight_into_the_basic_fist(real
 
 
 def test_prologue_steps_5_to_10_level_deepen_and_melting_pays_sixteen(real, world):
-    """武學重構：第 5 步把裝了意境的基礎拳腳練到第三成、第 6 步同一個意境放兩次揣摩成二重（以前是一次修練就到中品）；
+    """武學重構：第 5 步把裝了意境的基礎拳腳練到第三成、第 6 步同一種意境的兩份揣摩成二重（以前是一次修練就到中品）；
     第 10 步熔蠻牛拳照舊退 16 點心得。"""
     game = _hut_up_to_the_fusion(real, world)
     insight = game.state.player.insights[0]
@@ -99,8 +99,8 @@ def test_prologue_steps_5_to_10_level_deepen_and_melting_pays_sixteen(real, worl
     game.practice("武學")
     game.practice("武學")
     assert library.level_of(game.state, "jichu_quanjiao") == 3 and game.state.player.tutorial_step == 5
-    game.forge(None, [insight, insight], proposed=(None, ""))
-    assert game.state.player.insight_strength[insight] == 2 and prologue.deepened(game.state)
+    game.forge(None, [insight, f"{insight}~2"], proposed=(None, ""))  # 意境效果池：練到第三成時師父多給的那一份
+    assert insight_fx.strength(game.state, insight) == 2 and prologue.deepened(game.state)
     assert game.state.player.tutorial_step == 6
     game.choose("act:rest")
     game.choose("act:train")

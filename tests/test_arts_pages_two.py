@@ -209,11 +209,11 @@ def test_the_merge_preview_names_the_attribute_the_merge_really_gives(content, w
         assert shown, line
         made, _ = fusion.merge(state, content, world, _named(f"新意境{n}"), a, b)
         assert made is not None and made.attribute == shown.group(1), (a, b, line)
-    for a in ids:
-        state = _merger(content, f"乙{a}", [a])
-        line = skillview.forge_line(state, content, world, None, [a, a])
-        assert line.startswith("**揣摩**") and "從一重到二重" in line, line
-        fusion.merge(state, content, world, None, a, a)
+    for a in ids:  # 意境效果池：同一種的兩份是揣摩，預覽寫揉完的層數，合了真的到二重
+        state = _merger(content, f"乙{a}", [a, f"{a}~2"])
+        line = skillview.forge_line(state, content, world, None, [a, f"{a}~2"])
+        assert line.startswith("**揣摩**") and "二重" in line, line
+        fusion.merge(state, content, world, None, a, f"{a}~2")
         assert arts.strength_of(state, a) == 2
 
 
@@ -222,8 +222,8 @@ def test_the_merge_preview_says_nobody_has_merged_it_before_or_what_it_becomes(c
     assert skillview.forge_line(first, content, world, None, ["feng", "huo"]).endswith("\n沒人合過。")
     made, _ = fusion.merge(first, content, world, _named("燎原"), "feng", "huo")
     again = skillview.forge_line(first, content, world, None, ["feng", "huo"])
-    assert "沒人合過" not in again and "會合出" not in again  # 你自己已經悟得了：下面的 ⚠ 本來就說「你已經悟得了」
-    assert "⚠ 這兩個合起來還是「燎原」" in again
+    assert "沒人合過" not in again and "會合出" not in again
+    assert "\n再合一份「燎原」，效果另擲。" in again and "⚠" not in again  # 意境效果池：合過的再合是另一份
     other = _merger(content, "乙", ["feng", "huo"])
     line = skillview.forge_line(other, content, world, None, ["huo", "feng"])  # 別人首創、你還沒有的：照樣能合，預覽寫它會是什麼
     assert f"\n會合出「燎原」（屬{made.attribute}）。" in line and "沒人合過" not in line

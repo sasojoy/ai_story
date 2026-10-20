@@ -21,10 +21,10 @@ def test_slotting_previews_the_slot_and_the_skill_and_costs_nothing(designed, co
     """武學＋意境：不是合成，是裝進第一個空槽；卡上寫第幾格、這一招與強度，不花錢。"""
     card = skillview.forge_preview(designed, content, world, "basic_fist", ["feng"])
     line = skillview.forge_line(designed, content, world, "basic_fist", ["feng"])
-    assert card["kind"] == "裝意境" and card["problem"] is None and card["quality"] is None
+    assert card["kind"] == "裝意境" and card["problem"] is None and card["quality"] == "中品"  # 意境效果池：那一份的品質
     assert card["made"] == "【粗淺拳腳】第 1 格" and "第 1 格" in line
-    assert card["attribute"] == "快" and card["traits"] == [{"name": "先手", "layers": 1}]
-    assert card["depth"].startswith("〔先手〕一重：") and "〔先手〕一重" in line
+    assert card["attribute"] == "快" and card["traits"] == [{"name": "先手", "layers": 1, "grand": False}]
+    assert card["depth"].startswith("〔先手〕剋中對手後") and "這一份是中品：〔先手〕" in line
     assert card["cost"] == "不花心得體力" and "不花心得體力" in line
 
 
@@ -51,16 +51,20 @@ def test_blending_previews_a_new_art_with_its_grade_and_empty_slots(designed, co
 def test_merging_two_different_insights_previews_a_new_insight(designed, content, world):
     card = skillview.forge_preview(designed, content, world, None, ["feng", "huo"])
     line = skillview.forge_line(designed, content, world, None, ["feng", "huo"])
-    assert card["kind"] == "合併" and card["made"] == "一個新的意境" and card["quality"] is None
+    assert card["kind"] == "合併" and card["made"] == "一個新的意境" and card["quality"] == "中品"  # 兩份裡較好的品質
     assert f"屬{card['attribute']}" in line and card["known"] == "沒人合過。"
+    assert card["depth"].startswith("擲一到兩個效果：")
 
 
 def test_pondering_the_same_insight_previews_one_more_dot(designed, content, world):
-    """同一個意境放兩次是揣摩：卡上寫加深之後的強度與那一招的數字。"""
-    card = skillview.forge_preview(designed, content, world, None, ["feng", "feng"])
-    assert card["kind"] == "揣摩" and card["made"] == "「風」二重"
-    assert card["traits"] == [{"name": "先手", "layers": 2}]
+    """同一種意境的兩份是揣摩：卡上寫揉完之後的層數與那一招的數字；同一份放兩次照樣是揣摩的卡、寫為什麼不成。"""
+    designed.player.insights.append("feng~2")
+    card = skillview.forge_preview(designed, content, world, None, ["feng", "feng~2"])
+    assert card["kind"] == "揣摩" and card["made"] == "「風」先手二重" and card["problem"] is None
+    assert card["traits"] == [{"name": "先手", "layers": 2, "grand": False}]
     assert "20%" in card["depth"]  # 先手一層 10%，兩層 20%
+    same = skillview.forge_preview(designed, content, world, None, ["feng", "feng"])
+    assert same["kind"] == "揣摩" and same["problem"].short == "要兩份"
 
 
 def test_no_card_for_an_empty_pot_a_single_thing_or_what_is_not_yours(designed, content, world):

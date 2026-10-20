@@ -7,16 +7,19 @@ def test_learning_a_new_insight_keeps_it_for_good(state, content, world):
     assert state.player.insights == ["feng"] and "風" in msgs[0]
 
 
-def test_learning_it_again_deepens_it_and_only_the_fourth_time_turns_into_xinde(state, content, world):
-    """武學重構：意境就是技能，再悟到一次這一招深一層（●→●●→●●●）；到了極處再悟到才化成心得。"""
+def test_learning_it_again_gives_another_piece_until_the_cap_then_xinde(state, content, world):
+    """意境效果池：再悟到一次是另一份（feng~2，自己擲品質與效果），揣摩要兩份；手上滿 insight_piece_cap 份才化成心得。"""
+    cap = content.config.arts.insight_piece_cap
     state.player.insights = ["feng"]
     state.player.stats["xinde"] = 0
     msgs = insights.learn(state, content, world, "feng")
-    assert state.player.insights == ["feng"] and state.player.insight_strength["feng"] == 2 and "二重" in msgs[0]
-    insights.learn(state, content, world, "feng")
-    assert state.player.insight_strength["feng"] == 3 and state.player.stats["xinde"] == 0
+    assert state.player.insights == ["feng", "feng~2"] and "又悟得一份「風」" in msgs[0]
+    assert state.player.insight_fx["feng~2"].quality in ("下品", "中品", "上品")
+    for _ in range(cap - 2):
+        insights.learn(state, content, world, "feng")
+    assert len(state.player.insights) == cap and state.player.stats["xinde"] == 0
     msgs = insights.learn(state, content, world, "feng")
-    assert state.player.insight_strength["feng"] == 3 and state.player.stats["xinde"] == 10
+    assert len(state.player.insights) == cap and state.player.stats["xinde"] == 10
     assert "心得 +10" in msgs
 
 
@@ -149,13 +152,13 @@ def test_the_grant_is_remembered_with_a_flag_so_a_second_call_adds_nothing(state
     assert state.player.insights == ["haoran"]
 
 
-def test_an_insight_already_known_deepens_but_is_still_counted_as_granted(state, content, world):
+def test_an_insight_already_known_gives_another_piece_but_is_still_counted_as_granted(state, content, world):
     state.player.insights = ["haoran"]  # 例如別條路已經悟過
     state.player.stats["good"] = 15
     state.player.stats["xinde"] = 0
     msgs = insights.grant_by_name(state, content, world)
-    assert state.player.insights == ["haoran"] and state.player.insight_strength["haoran"] == 2  # 武學重構：再悟到先加深
+    assert state.player.insights == ["haoran", "haoran~2"]  # 意境效果池：再悟到是另一份
     assert state.player.stats["xinde"] == 0
-    assert insights.grant_by_name(state, content, world) == []  # 旗標記下了，不會每次加名聲都再加深一層
-    assert state.player.insight_strength["haoran"] == 2 and msgs
+    assert insights.grant_by_name(state, content, world) == []  # 旗標記下了，不會每次加名聲都再給一份
+    assert state.player.insights == ["haoran", "haoran~2"] and msgs
 

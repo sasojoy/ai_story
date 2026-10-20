@@ -252,6 +252,14 @@ class SmithDraft(BaseModel):
     aux: str | None = None
 
 
+class InsightFx(BaseModel):
+    """一份意境身上的效果（武學重構第二批，tianxia/insight_fx.py）：品質、一般功效（鍵 → 層數一到三）、大獎（高階技能 id）。"""
+
+    quality: str = "中品"
+    general: dict[str, int] = Field(default_factory=dict)
+    grand: str | None = None
+
+
 class CreateDraft(BaseModel):
     """自創武學走到哪（tianxia/create.py；Joy 2026-10-20 改成五步）：執器（kind、form）開單 → 擺式（pose）→ 立意（intent，
     模型讀出 read、lean、score；引擎照兵器＋姿勢＋意擲出 colors）→ 立名（付心得、擲品級、登記）。redo 是還能免費重來幾次。"""
@@ -643,7 +651,9 @@ class PlayerState(BaseModel):
     naming: str | None = None  # 第一個修到絕學、等著取正式名字的功法 id
     # ── 武學重構（tianxia/arts.py，Joy 2026-10-20）──
     art_slots: dict[str, list[str | None]] = Field(default_factory=dict)  # 功法 id → 意境槽（每格裝的意境 id，None 空）；一個意境只裝一門
-    insight_strength: dict[str, int] = Field(default_factory=dict)  # 意境 id → 強度 2 或 3（沒記是 1）；同一個意境再悟到、同＋同合成升一級
+    insight_strength: dict[str, int] = Field(default_factory=dict)  # 舊存檔：意境 id → 強度 2 或 3（沒記是 1）；第二批起照 insight_fx
+    # 意境 id（第二份起「feng~2」）→ 這一份的品質與效果；沒記的照舊存檔的樣子算（insight_fx.record）
+    insight_fx: dict[str, InsightFx] = Field(default_factory=dict)
     arts_migrated: bool = False  # 舊存檔的功效轉成槽做過了沒（arts.migrate 只做一次）
     created_count: int = 0  # 這一季自創了幾門（Config.arts.create_per_season、價錢遞增）；角色每季重來
     creating: CreateDraft | None = None  # 自創走到一半的單子（tianxia/create.py）；取名那一步才付心得

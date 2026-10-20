@@ -338,23 +338,26 @@ def test_the_insight_branch_teaches_an_insight_from_the_location(game):
 
 
 def test_the_insight_branch_always_gives_something_and_a_repeat_turns_into_xinde(game):
-    """抽到「悟意境」那一支必定有收穫：第一次是新意境；武學重構：悟到已經會的先加深一層（●●、●●●），到頂了才化成心得。"""
+    """抽到「悟意境」那一支必定有收穫：第一次是新意境（多一句這一份的品質與效果）；意境效果池：悟到已經會的是另一份，
+    手上滿 insight_piece_cap 份了才化成心得。"""
     game.content.locations["town"].insights = ["huo"]
     game.content.config.rare_explore_chance = 0.0
     _only(game, insight=1, wild=0, event=0)
     game.state.player.stats["xinde"] = 0
     first = game._explore()
-    assert first == ["你在小鎮靜下心來，看了好一陣。", "你悟得了「火」的意境（屬剛）！"]
+    assert first[:2] == ["你在小鎮靜下心來，看了好一陣。", "你悟得了「火」的意境（屬剛）！"] and first[2].startswith("這一份是")
     assert game.state.player.insights == ["huo"] and game.state.player.stats["xinde"] == 0
-    for mark in ("二重", "三重"):
+    cap = game.content.config.arts.insight_piece_cap
+    for _ in range(cap - 1):
         msgs = game._explore()
-        assert msgs == ["你在小鎮靜下心來，看了好一陣。", f"你對「火」的體會又深了一層（{mark}）。"]
-    assert game.state.player.insight_strength["huo"] == 3 and game.state.player.stats["xinde"] == 0
+        assert msgs[0] == "你在小鎮靜下心來，看了好一陣。" and msgs[1].startswith("你又悟得一份「火」")
+    pieces = ["huo"] + [f"huo~{n}" for n in range(2, cap + 1)]
+    assert game.state.player.insights == pieces and game.state.player.stats["xinde"] == 0
     for n in range(1, 4):
         msgs = game._explore()
         assert msgs[0] == "你在小鎮靜下心來，看了好一陣。" and msgs[-1] == "心得 +10"
         assert not any("悟得" in m for m in msgs)
-        assert game.state.player.insights == ["huo"] and game.state.player.stats["xinde"] == 10 * n
+        assert game.state.player.insights == pieces and game.state.player.stats["xinde"] == 10 * n
 
 
 def test_a_place_with_no_insights_listed_still_teaches_a_basic_one(game):

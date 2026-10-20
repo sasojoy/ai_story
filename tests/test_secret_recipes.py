@@ -103,8 +103,9 @@ def test_hitting_a_merge_secret_registers_the_named_insight_with_a_special_and_t
     assert any("參透了一句口訣" in m for m in msgs)
     assert any("參透口訣" in r.text for r in ready.world.chronicle)
     assert ready.player.manual.solved == ["t_merge"]
-    again, why = fusion.merge(ready, secret_content, world, must_not_ask(), "shan", "shui")
-    assert again is None and "已經悟得" in why[0]
+    again, msgs = fusion.merge(ready, secret_content, world, must_not_ask(), "shan", "shui")
+    assert again.id == f"{made.id}~2" and again.secret_special == made.secret_special  # 意境效果池：再合是另一份
+    assert not any("參透了一句口訣" in m for m in msgs) and ready.player.manual.solved == ["t_merge"]
     other = new_game_state(secret_content, "乙")
     other.player.insights = ["shan", "shui"]
     other.player.stats["xinde"] = 100

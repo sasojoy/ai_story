@@ -63,7 +63,7 @@ def _named(attribute="剛"):
 
 def test_every_general_trait_has_an_ultimate_with_a_bond():
     content = real_content()
-    for trait in content.traits.general:
+    for trait in (t for t in content.traits.general if not t.id):  # 每一路第一個功效有絕招；意境效果池的第二個沒有
         assert trait.ultimate is not None and trait.ultimate.kind in tactics.KINDS, trait.name
         assert trait.ultimate_bond is not None and trait.ultimate_bond.desc.startswith("以器配招"), trait.name
         assert "{" not in tactics.card_text(trait.ultimate, traits.ULTIMATE_TITLE)

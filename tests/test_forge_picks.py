@@ -50,7 +50,10 @@ def test_with_an_art_in_the_pot_each_insight_and_art_is_marked(ready, content, w
 def test_with_an_insight_in_the_pot_each_art_and_insight_is_marked(ready, content, world):
     picks = skillview.forge_picks(ready, content, world, None, ["feng"])
     assert picks["arts"] == {"basic_fist": None, "lake_kick": None}  # 兩門都裝得下
-    assert picks["insights"] == {"feng": None, "huo": None}  # 合併：同一個意境也能放兩次（揣摩）
+    assert picks["insights"]["huo"] is None and picks["insights"]["feng"]["short"] == "要兩份"  # 同一份放兩次不成（揣摩要兩份）
+    ready.player.insights.append("feng~2")
+    assert skillview.forge_picks(ready, content, world, None, ["feng"])["insights"]["feng~2"] is None  # 同一種的另一份：揣摩
+    ready.player.insights.remove("feng~2")
     arts_mod.slot(ready, content, world, "basic_fist", "feng")
     picks = skillview.forge_picks(ready, content, world, None, ["feng"])
     assert picks["arts"]["lake_kick"]["why"] == arts_mod.ELSEWHERE_LINE.format(insight="風", other="粗淺拳腳")  # 一個意境只裝一門

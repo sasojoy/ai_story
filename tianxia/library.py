@@ -5,7 +5,7 @@
 """
 from __future__ import annotations
 
-from . import insights, renown, signature, team
+from . import insight_fx, insights, renown, signature, team
 from .martial_arts import QUALITIES, MartialArt, content_art, is_renamed
 from .models import Content, SkillDef
 from .state import GameState
@@ -307,6 +307,7 @@ def melt_many(
             skipped.append(f"「{insight.name if insight else insight_id}」沒熔：{stuck}")
             continue
         p.insights.remove(insight_id)
+        insight_fx.drop(state, insight_id)
         refund += content.config.melt_insight_xinde
         melted.append(f"「{insight.name if insight else insight_id}」")
         insight_count += 1
@@ -348,6 +349,7 @@ def melt_insight(state: GameState, content: Content, world: WorldStateStore, ins
         return [problem]
     insight = insights.resolve(insight_id, content, world, state)
     p.insights.remove(insight_id)
+    insight_fx.drop(state, insight_id)
     amount = content.config.melt_insight_xinde
     p.stats["xinde"] = p.stats.get("xinde", 0) + amount
     name = insight.name if insight else insight_id

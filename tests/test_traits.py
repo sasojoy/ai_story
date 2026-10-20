@@ -14,7 +14,9 @@ def _art(name, attribute="快", traits_=(), special=None, kind="武學"):
 
 
 def test_every_attribute_has_one_general_trait(content):
-    assert sorted(t.attribute for t in content.traits.general) == sorted(ATTRIBUTES)
+    primary = [t for t in content.traits.general if not t.id]  # 意境效果池：每一路第一個（鍵是屬性），第二個寫 id
+    assert sorted(t.attribute for t in primary) == sorted(ATTRIBUTES)
+    assert sorted(t.attribute for t in content.traits.general if t.id) == sorted(ATTRIBUTES)
     assert traits.general(content, "快").name == "先手" and traits.general(content, "實").name == "厚"
 
 

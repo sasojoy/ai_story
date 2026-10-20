@@ -789,7 +789,7 @@ def test_every_general_trait_stops_at_its_cap_and_nothing_goes_negative(state, c
         _wear(state, world, outer, inner, quality="絕學")
         lo = traits.loadout(state, content, world)
         for trait in content.traits.general:
-            if trait.attribute == attribute:
+            if trait.key == attribute:  # 那一路第一個功效（第二個寫 id，鍵不是屬性）
                 assert traits.amount(content, lo, trait.hook) == pytest.approx(trait.cap)
         mods = team.trait_mods(content, lo)
         assert mods.luck_scale >= 0 and 0 <= mods.big_win_cut <= 0.2 and 0 <= mods.difficulty_cut <= 0.2

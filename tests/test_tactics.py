@@ -176,7 +176,7 @@ def test_every_trait_and_gear_tactic_runs_and_together_they_cover_every_kind():
     content = real_content()
     t = content.config.tactics
     own = _own_tactics(content)
-    assert len(own) == 7 + 7 + 9 + 7 + 8 + 8  # 厚沒有回合裡的戰法；絕招八個；高階技能八個
+    assert len(own) == 7 + 8 + 7 + 9 + 7 + 8 + 8  # 厚沒有回合裡的戰法；意境效果池每一路的第二個一般功效八個；絕招八個；高階技能八個
     kinds = {content.skills[s].tactic.kind for s, sk in content.skills.items() if sk.tactic is not None}
     assert kinds | {x.kind for x in own} == set(tactics.KINDS)
     for tactic in own:

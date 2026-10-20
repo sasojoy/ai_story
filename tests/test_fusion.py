@@ -6,7 +6,9 @@ from unittest import mock
 
 import pytest
 
-from tianxia import arts as arts_mod
+from tianxia.state import InsightFx
+
+from tianxia import insight_fx, arts as arts_mod
 from tianxia import fusion, insights, library, naming, skillview, team
 from tianxia.martial_arts import generate_from_name, power_at
 from tianxia.state import new_game_state
@@ -489,39 +491,73 @@ def test_a_slotted_compound_insight_gives_its_attribute_and_lean_to_the_art(read
     assert arts_mod.slot_problem(ready, content, world, "basic_fist", good.id) is None
     arts_mod.slot(ready, content, world, "basic_fist", good.id)
     mine = team.player_art(ready, content, world, "basic_fist")
-    assert mine.traits == [good.attribute] and mine.lean == "正" and mine.attribute == good.attribute  # 基礎拳腳兼容並蓄：屬性照槽裡強度最高那一格
+    fx = ready.player.insight_fx[good.id]  # 意境效果池：合出來的那一份照較好的品質擲一到兩個效果
+    assert mine.traits == [k for k, n in fx.general.items() for _ in range(n)]
+    assert mine.lean == "正" and mine.attribute == good.attribute  # 基礎拳腳兼容並蓄：屬性照槽裡強度最高那一格
     assert "正派" in skillview.art_card(mine, 1)
 
 
-def test_merging_an_insight_with_itself_deepens_it(ready, content, world):
-    """同＋同＝揣摩（武學重構）：強度升一級、不取名、不登記、照樣收一次錢；到 ●●● 就不能再揣摩。"""
-    before = ready.player.stamina
-    insight, msgs = fusion.merge(ready, content, world, must_not_ask(), "feng", "feng")
+def test_the_same_piece_twice_is_refused(ready, content, world):
+    """同一份放兩次不成：揣摩要同一種的兩份（意境效果池）。"""
+    problem = fusion.merge_problem(ready, content, world, "feng", "feng")
+    assert problem == fusion.SAME_PIECE.format(name="風") and problem.short == "要兩份"
+
+
+def test_two_pieces_of_one_kind_deepen_into_one(ready, content, world):
+    """同一種的兩份＝揣摩：同一個功效的層數相加（最多三重）、不取名、不登記、照樣收一次錢；第二份用掉；揉不出新東西就不准。"""
+    p = ready.player
+    p.insights += ["feng~2", "feng~3"]
+    for piece in ("feng", "feng~2", "feng~3"):
+        p.insight_fx[piece] = InsightFx(quality="中品", general={"快": 1})
+    before = p.stamina
+    insight, msgs = fusion.merge(ready, content, world, must_not_ask(), "feng", "feng~2")
     assert insight.id == "feng" and arts_mod.strength_of(ready, "feng") == 2
     assert msgs[0] == fusion.DEEPEN_LINE.format(name="風", mark="二重")
-    assert ready.player.stats["xinde"] == 100 - content.config.merge_xinde and ready.player.stamina == before - content.config.merge_stamina
-    assert ready.player.insights == ["feng", "huo"] and world.lookup_insight_recipe(fusion.merge_key("feng", "feng")) is None
-    _, msgs = fusion.merge(ready, content, world, must_not_ask(), "feng", "feng")
-    assert msgs[0] == fusion.DEEPEN_LINE.format(name="風", mark="三重")
-    problem = fusion.merge_problem(ready, content, world, "feng", "feng")
+    assert p.stats["xinde"] == 100 - content.config.merge_xinde and p.stamina == before - content.config.merge_stamina
+    assert p.insights == ["feng", "huo", "feng~3"] and "feng~2" not in p.insight_fx
+    assert world.lookup_insight_recipe(fusion.merge_key("feng", "feng~2")) is None
+    _, msgs = fusion.merge(ready, content, world, must_not_ask(), "feng", "feng~3")
+    assert msgs[0] == fusion.DEEPEN_LINE.format(name="風", mark="三重") and p.insight_fx["feng"].general == {"快": 3}
+    p.insights.append("feng~2")
+    p.insight_fx["feng~2"] = InsightFx(quality="中品", general={"快": 1}, grand=None)
+    content.config.arts.insight_grand = {}  # 揉不出大獎：三重再揉什麼都不變
+    problem = fusion.merge_problem(ready, content, world, "feng", "feng~2")
     assert problem == fusion.DEEPEST.format(name="風", mark="三重") and problem.short == "已到極處"
-    none, msgs = fusion.merge(ready, content, world, must_not_ask(), "feng", "feng")
-    assert none is None and msgs == [problem] and ready.player.stats["xinde"] == 100 - 2 * content.config.merge_xinde
+    none, msgs = fusion.merge(ready, content, world, must_not_ask(), "feng", "feng~2")
+    assert none is None and msgs == [problem] and p.stats["xinde"] == 100 - 2 * content.config.merge_xinde
+
+
+def test_deepening_two_different_effects_keeps_both_and_takes_the_better_quality(ready, content, world):
+    p = ready.player
+    p.insights.append("feng~2")
+    p.insight_fx["feng"] = InsightFx(quality="下品", general={"快": 2})
+    p.insight_fx["feng~2"] = InsightFx(quality="上品", general={"lueying": 1})
+    content.config.arts.insight_grand = {}
+    _, msgs = fusion.merge(ready, content, world, must_not_ask(), "feng", "feng~2")
+    assert p.insight_fx["feng"] == InsightFx(quality="上品", general={"快": 2, "lueying": 1})
+    assert msgs[0] == fusion.MIXED_LINE.format(name="風")
 
 
 def test_a_deepened_insight_stays_slotted_and_counts_more_layers(ready, content, world):
-    arts_mod.slot(ready, content, world, "basic_fist", "feng")
-    fusion.merge(ready, content, world, must_not_ask(), "feng", "feng")
+    ready.player.insights.append("feng~2")
+    arts_mod.slot(ready, content, world, "basic_fist", "feng~2")
+    fusion.merge(ready, content, world, must_not_ask(), "feng", "feng~2")
     mine = team.player_art(ready, content, world, "basic_fist")
-    assert arts_mod.slots_of(ready, content, mine) == ["feng", None] and mine.traits == ["快", "快"]
+    assert arts_mod.slots_of(ready, content, mine) == ["feng~2", None] and mine.traits == ["快", "快"]
+    assert "feng" not in ready.player.insights  # 裝在槽上的那一份留下，另一份用掉
 
 
-def test_merge_is_refused_for_an_insight_you_already_hold(ready, content, world):
-    fusion.merge(ready, content, world, named("燎原"), "huo", "feng")
+def test_merging_again_gives_another_piece_until_the_cap(ready, content, world):
+    """意境效果池：合過的再合一次是另一份（自己擲效果）；手上滿 insight_piece_cap 份就不准。"""
+    first, _ = fusion.merge(ready, content, world, named("燎原"), "huo", "feng")
+    second, msgs = fusion.merge(ready, content, world, named("燎原"), "huo", "feng")
+    assert second.id == f"{first.id}~2" and second.name == first.name and second.id in ready.player.insight_fx
+    while len(insight_fx.pieces(ready, first.id)) < content.config.arts.insight_piece_cap:
+        ready.player.insights.append(insight_fx.new_piece_id(ready, first.id))
     problem = fusion.merge_problem(ready, content, world, "feng", "huo")
-    assert "已經悟得" in problem and problem.short == "已經有了"
+    assert "已經有" in problem and problem.short == "已經夠了"
     ready.player.stats["xinde"], ready.player.stamina = 0, 0
-    assert "已經悟得" in fusion.merge_problem(ready, content, world, "feng", "huo")  # 排在花費之前
+    assert problem == fusion.merge_problem(ready, content, world, "feng", "huo")  # 排在花費之前
 
 
 @pytest.mark.parametrize(("change", "reason"), [
@@ -678,13 +714,14 @@ def test_the_engine_forge_is_titled_after_the_craft_tab_and_only_written_when_so
         blended = game.state.journal[0]
         game.forge(None, ["feng", "huo"])
         merged = game.state.journal[0]
-        game.forge(None, ["feng", "feng"])
+        p.insights.append("feng~2")
+        game.forge(None, ["feng", "feng~2"])
         deepened = game.state.journal[0]
     assert (blended.title, merged.title, deepened.title) == ("煉製", "煉製", "煉製")
     assert blended.tag.startswith("合成【") and merged.tag.startswith("合併「") and deepened.tag == "合併「風」"
     assert game.forged_thing == ("ins", "feng")
     length = len(game.state.journal)
-    game.forge(None, ["feng", "huo"])  # 已經悟得了：被拒絕
+    game.forge(None, ["feng", "feng"])  # 同一份放兩次：被拒絕
     assert len(game.state.journal) == length
 
 

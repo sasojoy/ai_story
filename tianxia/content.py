@@ -740,7 +740,11 @@ def check_traits(c: Content, need) -> None:
             f"config.trait_quality_multiplier 缺少品質 {quality}（沒寫的那一品，功效強度會悄悄變成 ×1）",
         )
     if book.general or book.special:
-        need(sorted(t.attribute for t in book.general) == sorted(ATTRIBUTES), "content/traits.json：一般功效要一個屬性一個，八個都要有")
+        primaries = [t.attribute for t in book.general if not t.id]
+        need(sorted(primaries) == sorted(ATTRIBUTES), "content/traits.json：每個屬性要有一個第一個一般功效（沒寫 id 的那個），八個都要有")
+        keys = [t.key for t in book.general]
+        need(len(keys) == len(set(keys)), "content/traits.json：一般功效的 id 不能重複，也不能跟屬性同名")
+        need(not {t.id for t in book.general if t.id} & {h.id for h in book.high}, "content/traits.json：一般功效的 id 不能跟高階技能的 id 一樣")
         names = [t.name for t in book.general] + [t.name for t in book.special]
         need(len(names) == len(set(names)), "content/traits.json：功效的名字不能重複")
         need(len(specials) == len(book.special), "content/traits.json：特別功效的 id 不能重複")
@@ -2356,7 +2360,7 @@ def validate(c: Content) -> None:
         where = f"新手引導 {step.id}"
         special = (step.explore_event or step.enemies
                    or step.force_tier or step.deepen or step.instant_rest or step.fuse_base or step.melt_only
-                   or step.give_art or step.paged or step.after)
+                   or step.give_art or step.give_piece or step.paged or step.after)
         need(not special or i < t.prologue_steps, f"{where}：序章才有的欄位只能寫在前 {t.prologue_steps} 步")
         # 畫面的那幾樣（旁白、收起來那一行、亮、發光、選單）序章與初入江湖（序章之後、不分季的步驟，新手引導第四段）都可以寫
         screen = step.scene or step.line or step.reveal or step.glow or step.allow

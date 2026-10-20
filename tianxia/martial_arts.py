@@ -76,6 +76,7 @@ class MartialArt(BaseModel):
     # 身上的樣子（arts.apply）：只在玩家自己那一份上填，全服登記的那一份永遠是空的
     extra_specials: list[str] = Field(default_factory=list)  # 空格擲到的中階技能（特別功效 id）
     high: str | None = None  # 擲到的高階技能（content/traits.json 的 high 的 id）
+    extra_highs: list[str] = Field(default_factory=list)  # 槽裡第二個以後的大獎（意境效果池；同名的只算一個）
     dormant: list[str] = Field(default_factory=list)  # 來路有、格子不夠還沒亮的一般功效（屬性）；特別功效沒亮寫「特:id」
 
 

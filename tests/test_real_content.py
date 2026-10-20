@@ -17,7 +17,7 @@ from unittest import mock
 import pytest
 
 from conftest import real_content
-from tianxia import calendar, companion_agent, fusion, team
+from tianxia import calendar, companion_agent, fusion, insight_fx, prologue, team
 from tianxia.rules import audience_hint
 from tianxia.atlas import region_of
 from tianxia.bot import play_season
@@ -146,7 +146,8 @@ def _walk_the_hut(game, ambush="choice:0", attribute="快", luck=None):
     game.practice("武學")
     game.practice("武學")
     assert p.tutorial_step == 5
-    game.forge(None, [insight, insight], proposed=(None, ""))  # 揣摩：同一個意境放兩次，強度到二重
+    assert f"{insight}~2" in p.insights  # 練到第三成那一下師父多給一份（意境效果池：揣摩要同一種的兩份）
+    game.forge(None, [insight, f"{insight}~2"], proposed=(None, ""))  # 揣摩：同一種意境的兩份揉成一份，到二重
     assert p.tutorial_step == 6
     game.choose("act:rest")
     if luck is not None:
@@ -176,7 +177,8 @@ def test_the_real_prologue_walks_to_yingchuan(content, world):
     p = game.state.player
     silver = p.stats["silver"]
     art = _walk_the_real_prologue(game)
-    assert art.id == "jichu_quanjiao" and p.art_slots["jichu_quanjiao"][0] == "feng" and p.insight_strength["feng"] == 2
+    assert art.id == "jichu_quanjiao" and p.art_slots["jichu_quanjiao"][0] == "feng"
+    assert insight_fx.strength(game.state, "feng") == 2 and "feng~2" not in p.insights  # 兩份揣摩成一份
     assert p.location == "yingchuan" and p.tutorial_step == content.tutorial.prologue_steps == 11
     assert p.stats["silver"] == silver + 30  # 序章裡銀兩只有出師的盤纏會動
     # 心得的帳：20 → 裝意境不花 → 練到第三成 −6 → 揣摩 −5 → 熔蠻牛拳 +16 → 25（練成每成 2N，企劃者 2026-10-07 方案 A；熔煉退八成跟著翻倍）
@@ -200,7 +202,8 @@ def test_every_way_through_the_real_hut_reaches_yingchuan_with_the_insight_slott
     art = _walk_the_real_prologue(game, ambush=ambush, attribute=attribute)
     insight = INSIGHT_OF[attribute]
     p = game.state.player
-    assert art.id == "jichu_quanjiao" and p.art_slots["jichu_quanjiao"] == [insight, None] and p.insight_strength[insight] == 2
+    assert art.id == "jichu_quanjiao" and p.art_slots["jichu_quanjiao"] == [insight, None]
+    assert insight_fx.strength(game.state, insight) == 2
     assert game.state.player.location == "yingchuan" and game.state.player.tutorial_step == content.tutorial.prologue_steps
 
 
@@ -321,7 +324,7 @@ def test_the_real_steps_glow_on_the_page_you_are_on_and_on_the_tab_that_leads_to
     assert all("switch" not in r["glow"] and "pick:art" not in r["glow"] for r in game.art_rows())
     game.practice("武學")
     game.practice("武學")
-    assert [i["id"] for i in game.insight_rows() if "pick:insight" in i["glow"]] == ["shan"]  # 揣摩那一步：同一個意境發光
+    assert [i["id"] for i in game.insight_rows() if "pick:insight" in i["glow"]] == ["shan", "shan~2"]  # 揣摩那一步：同一種的兩份都發光
 
 
 # 一步做完的時候玩家在哪一頁，下一步要按的東西在哪一頁（T7 走查 W-G：步驟 7 一開始在修練頁，打坐在江湖頁，江湖分頁卻沒發光）。
@@ -885,7 +888,8 @@ def test_the_level_step_waits_for_a_real_practice_not_for_having_the_art(content
     game.practice("武學")
     assert game.state.player.tutorial_step == index  # 裝了意境、練到第二成，還不算
     game.practice("武學")
-    assert game.state.player.tutorial_step == index + 1 and game.state.player.guide_done == []  # 序章的步驟沒有「✔ 引導完成」
+    assert game.state.player.tutorial_step == index + 1  # 序章的步驟沒有「✔ 引導完成」；完成列只有師父多給的那一份
+    assert game.state.player.guide_done == [prologue.GIVE_PIECE.format(name="風")]
 
 def test_a_new_character_can_afford_the_first_practices_the_tutorial_asks_for(content):
     """練成花心得（武學與成長 4.2）：開局 20 點心得，第 1 成升第 2 成只花 2 點（每成 2N，企劃者 2026-10-07 方案 A），

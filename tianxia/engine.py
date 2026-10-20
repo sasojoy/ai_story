@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from . import arts as arts_mod
 from . import (
     allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, chuangong, clinic, companion_agent, create, cultivation, defection, economy, encounter, enlist, equipment, event_llm, explore_modes,
-    feasts, fight_llm, figure_aid, figure_life, figures, foreshadow, generals, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, letters, library, mapdata, martial_arts,
+    feasts, fight_llm, figure_aid, figure_life, figures, foreshadow, generals, forge_secrets, front_lines, fusion, gender, howto, insight_fx, insights, invites, journal, letters, library, mapdata, martial_arts,
     materials, mounts, naming, opportunities, orders, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
     shopview, signature, signature_arms, skillview, smithing,
     social, sortie, styles, tactics, team, territory, timetable, traits, treasures, weapons, works, yuedan, zh,
@@ -522,8 +522,12 @@ class Game:
                 self.switch_art(art.id)
             else:
                 self.practice(art.kind)
-        elif goal.deepened and p.insights:  # 武學重構：揣摩（同一個意境合兩個，層數 +1）
-            self.forge(None, [p.insights[0], p.insights[0]])
+        elif goal.deepened and p.insights:  # 揣摩（意境效果池：同一種意境的兩份）
+            base = insight_fx.base_id(p.insights[0])
+            pair = insight_fx.pieces(self.state, base)[:2]
+            if len(pair) < 2:
+                return False
+            self.forge(None, pair)
         elif goal.action in ("rest", "train", "explore"):
             self.choose(f"act:{goal.action}")
         elif goal.action == "allocate":

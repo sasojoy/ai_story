@@ -17,6 +17,7 @@ team.pairing、weapons）照舊讀那幾個欄位，一個字不改。
 """
 from __future__ import annotations
 
+from . import insight_fx
 from .martial_arts import QUALITIES, MartialArt, Insight, power_at
 from .models import Content, GeneralTrait, HighTrait, SpecialTrait
 from .state import GameState
@@ -49,7 +50,8 @@ def slots_of(state: GameState, content: Content, art: MartialArt) -> list[str | 
 
 
 def strength_of(state: GameState, insight_id: str) -> int:
-    return max(1, min(MAX_STRENGTH, int(state.player.insight_strength.get(insight_id, 1))))
+    """這一份意境最深的一般功效是幾重（意境效果池；舊存檔照 insight_strength）。"""
+    return insight_fx.strength(state, insight_id)
 
 
 def strength_mark(n: int) -> str:
@@ -86,9 +88,13 @@ def is_compound(content: Content, insight: Insight) -> bool:
     return len(insight.parents) == 2 and insight.parents[0] != insight.parents[1] and insight.id not in content.insights
 
 
-def skill_name(content: Content, insight: Insight) -> str:
-    """這個意境是哪一招（技能的名字）：秘方的特別功效 → 高階 → 一般功效；內容沒有功效表時是屬性。"""
+def skill_name(content: Content, insight: Insight, fx=None) -> str:
+    """這個意境是哪一招（技能的名字）：秘方的特別功效 → 高階 → 一般功效；內容沒有功效表時是屬性。
+    給了 fx（insight_fx.record，那一份的效果）照它寫：「掠影二重・流光」，秘方的特別功效排在最前面。"""
     sp = special_of(content, insight.secret_special) if insight.secret_special else None
+    if fx is not None:
+        label = insight_fx.label(content, fx)
+        return "・".join(x for x in (sp.name if sp is not None else "", label) if x) or insight.attribute
     if sp is not None:
         return sp.name
     if is_compound(content, insight):
@@ -99,11 +105,15 @@ def skill_name(content: Content, insight: Insight) -> str:
     return g.name if g is not None else insight.attribute
 
 
-def skill_desc(content: Content, insight: Insight, strength: int) -> str:
-    """這一招在回合裡做什麼（卡上那一句，數字照強度）。"""
+def skill_desc(content: Content, insight: Insight, strength: int, fx=None) -> str:
+    """這一招在回合裡做什麼（卡上那一句，數字照強度）。給了 fx 照那一份的每一個效果各寫一句「〔名〕…」。"""
     from . import traits as traits_mod
 
     sp = special_of(content, insight.secret_special) if insight.secret_special else None
+    if fx is not None:
+        parts = [f"〔{sp.name}〕" + sp.desc.replace("{value}", traits_mod._value(sp.hook, sp.amount))] if sp is not None else []
+        parts += [f"〔{e['name']}〕{e['desc']}" for e in insight_fx.effects(content, fx) if e["desc"]]
+        return "；".join(parts)
     if sp is not None:
         return sp.desc.replace("{value}", traits_mod._value(sp.hook, sp.amount))
     if is_compound(content, insight):
@@ -118,9 +128,13 @@ def skill_desc(content: Content, insight: Insight, strength: int) -> str:
     return g.desc.replace("{value}", traits_mod._value(g.hook, number)).replace("{extra}", traits_mod._value(g.hook, extra))
 
 
-def skill_weight(content: Content, insight: Insight, strength: int) -> float:
-    """戰力裡這一招值多少（Config.arts 的三個權重 × 強度；高階與特別功效強度固定算 1）。"""
+def skill_weight(content: Content, insight: Insight, strength: int, fx=None) -> float:
+    """戰力裡這一招值多少（Config.arts 的三個權重 × 強度；高階與特別功效強度固定算 1）。給了 fx 照那一份的每一個效果加起來。"""
     cfg = content.config.arts
+    if fx is not None:
+        total = cfg.special_weight if insight.secret_special else 0.0
+        total += sum(cfg.general_weight * min(MAX_STRENGTH, n) for n in fx.general.values())
+        return total + (cfg.high_weight if fx.grand else 0.0)
     if insight.secret_special:
         return cfg.special_weight
     if is_compound(content, insight):
@@ -140,7 +154,7 @@ def apply(state: GameState, content: Content, world: WorldStateStore, art: Marti
 
     traits: list[str] = []
     special = None
-    high = None
+    highs: list[str] = []  # 槽裡的大獎（意境效果池）：同一個只算一次，第一個記在 high、其餘在 extra_highs
     lean = art.lean if art.lean in LEAN_OF else "無"  # 內容寫的正邪（守義劍、剪徑刀…）與自創挑的正邪是底，槽裡帶正邪的意境蓋過它
     lean_strength = 0
     top_attr, top_strength = "", 0  # 兼容並蓄的武學：屬性照強度最高的那一格（一樣高取前面的；定案第二節）
@@ -153,10 +167,11 @@ def apply(state: GameState, content: Content, world: WorldStateStore, art: Marti
         strength = strength_of(state, insight_id)
         if ins.secret_special and special is None and special_of(content, ins.secret_special) is not None:
             special = ins.secret_special
-        elif is_compound(content, ins) and high is None and high_of(content, ins.attribute) is not None:
-            high = high_of(content, ins.attribute).id
-        else:
-            traits += [ins.attribute] * strength
+        fx = insight_fx.record(state, content, world, insight_id, ins)
+        for key, layers in fx.general.items():  # 一般功效：一層一個鍵（第一個功效的鍵就是屬性，舊的下游照讀）
+            traits += [key] * max(1, min(MAX_STRENGTH, layers))
+        if fx.grand and fx.grand not in highs and insight_fx.grand(content, fx.grand) is not None:
+            highs.append(fx.grand)
         if ins.attribute and strength > top_strength:
             top_attr, top_strength = ins.attribute, strength
         if ins.lean in LEAN_OF and strength > lean_strength:
@@ -170,7 +185,8 @@ def apply(state: GameState, content: Content, world: WorldStateStore, art: Marti
         if recipe is not None:
             special = secret_recipes.special_for(content, recipe, secret_recipes.tianji_of(world))
     return art.model_copy(update={
-        "traits": traits, "special": special, "high": high, "extra_specials": [], "dormant": [],
+        "traits": traits, "special": special, "high": highs[0] if highs else None, "extra_highs": highs[1:],
+        "extra_specials": [], "dormant": [],
         "attribute": attribute, "lean": lean, "insight": None, "insight_attr": None,
     })
 
@@ -186,8 +202,7 @@ def rating(content: Content, view: MartialArt, level: int, state: GameState | No
         bonus += cfg.general_weight * min(MAX_STRENGTH, n)
     if view.special and special_of(content, view.special) is not None:
         bonus += cfg.special_weight
-    if view.high:
-        bonus += cfg.high_weight
+    bonus += cfg.high_weight * len({h for h in (view.high, *view.extra_highs) if h})
     if content.skills.get(view.id) is not None and content.skills[view.id].tactic is not None:
         bonus += cfg.signature_weight
     return int(round(power_at(view, level) * (1 + bonus)))
@@ -421,3 +436,4 @@ def prune(state: GameState, content: Content, world: WorldStateStore) -> None:
         kept[art_id] = row
     p.art_slots = kept
     p.insight_strength = {k: v for k, v in p.insight_strength.items() if k in p.insights and v > 1}
+    p.insight_fx = {k: v for k, v in p.insight_fx.items() if k in p.insights}

@@ -382,7 +382,7 @@ def _trait_names(content: Content, art: MartialArt) -> list[str]:
     只看「有沒有」：層數不同不算不同（功法卡的「功效」那一行才寫數字）。art 要是 player_art 那一份（槽已經填上）。"""
     names = []
     for attribute in dict.fromkeys(traits.traits_of(art)):
-        trait = next((t for t in content.traits.general if t.attribute == attribute), None)
+        trait = next((t for t in content.traits.general if t.key == attribute), None)
         if trait is not None:
             names.append(trait.name)
     sp = traits.special(content, art.special)
@@ -392,8 +392,7 @@ def _trait_names(content: Content, art: MartialArt) -> list[str]:
         extra = traits.special(content, sid)
         if extra is not None and extra.name not in names:
             names.append(extra.name)
-    top = traits.high(content, art.high)
-    if top is not None:
+    for top in traits.highs_of(content, art):
         names.append(top.name)
     return names
 

@@ -245,7 +245,9 @@ def test_a_private_insight_goes_into_a_slot_instead_of_a_fusion(lake, content, w
     assert msgs[0] == arts.SLOTTED_LINE.format(insight="湖心月", art="粗淺拳腳", i=1)
     assert p.art_slots["basic_fist"][0] == "悟:1" and p.stats["xinde"] == 100 and p.stamina == 150
     assert world.lookup_recipe(fusion.fuse_key("basic_fist", "悟:1", "陰")) is None  # 沒有配方
-    assert team.player_art(lake.state, content, world, "basic_fist").traits == ["陰"]
+    fx = p.insight_fx["悟:1"]  # 意境效果池：悟到時擲的那一份（陰那一路的一般功效）
+    assert team.player_art(lake.state, content, world, "basic_fist").traits == [k for k, n in fx.general.items() for _ in range(n)]
+    assert fx.general and all(t.attribute == "陰" for t in content.traits.general if t.key in fx.general)
     assert fusion.fuse_problem(lake.state, content, world, "basic_fist", "悟:1") == fusion.FUSE_GONE
 
 

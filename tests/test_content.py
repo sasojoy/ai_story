@@ -2360,10 +2360,15 @@ def test_content_without_traits_still_loads(tmp_path):
 
 
 def test_the_real_traits_are_the_designed_table():
-    """正式的功效照設計 13.2、13.4（八個一般、七個特別，數字都是預設）；演出句是 S1 的 45 句（每個功效三句）。"""
+    """正式的功效照設計 13.2、13.4（八個一般、七個特別，數字都是預設），意境效果池每一路多一個一般功效（寫 id）；
+    演出句每個功效三句。"""
     content = load_content(ROOT / "content")
     book = content.traits
-    assert [t.name for t in book.general] == ["先手", "穩", "破甲", "化勁", "乘勝", "吸取", "險", "厚"]
+    assert [t.name for t in book.general] == [
+        "先手", "穩", "破甲", "化勁", "乘勝", "吸取", "險", "厚", "掠影", "沉勁", "回瀾", "守拙", "朝陽", "陰勁", "料敵", "鐵壁",
+    ]
+    assert [t.key for t in book.general[8:]] == ["lueying", "chenjin", "huilan", "shouzhuo", "zhaoyang", "yinjin", "liaodi", "tiebi"]
+    assert sorted(t.attribute for t in book.general[8:]) == sorted(t.attribute for t in book.general[:8])  # 每一路各一個
     assert [t.name for t in book.special] == ["連環", "不動", "護命", "悟招", "借力", "回春", "輕身"]
     assert all(t.pool for t in book.special)
     assert sorted(content.trait_lines) == sorted(t.name for t in [*book.general, *book.special])

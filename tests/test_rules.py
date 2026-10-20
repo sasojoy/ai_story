@@ -289,15 +289,16 @@ def test_an_effect_can_grant_an_insight(state, content, world):
     assert state.player.insights == ["feng"] and any("悟得" in m for m in msgs)
 
 
-def test_an_effect_that_grants_a_known_insight_again_deepens_it_or_gives_xinde_at_the_top(state, content, world):
-    """武學重構：再悟到一次先加深那一招（●→●●）；已經 ●●● 的才化成心得。"""
+def test_an_effect_that_grants_a_known_insight_again_gives_a_piece_or_xinde_when_full(state, content, world):
+    """意境效果池：再悟到一次是另一份；手上已經滿 insight_piece_cap 份的才化成心得。"""
     state.player.insights = ["feng"]
     state.player.stats["xinde"] = 0
     msgs = apply_effect(Effect(insights=["feng"]), state, content, world)
-    assert state.player.insights == ["feng"] and state.player.insight_strength["feng"] == 2 and any("二重" in m for m in msgs)
-    state.player.insight_strength["feng"] = 3
+    assert state.player.insights == ["feng", "feng~2"] and any("又悟得一份" in m for m in msgs)
+    state.player.insights += [f"feng~{n}" for n in range(3, content.config.arts.insight_piece_cap + 1)]
+    held = list(state.player.insights)
     msgs = apply_effect(Effect(insights=["feng"]), state, content, world)
-    assert state.player.insights == ["feng"] and state.player.stats["xinde"] == 10 and "心得 +10" in msgs
+    assert state.player.insights == held and state.player.stats["xinde"] == 10 and "心得 +10" in msgs
 
 
 def test_current_day(state):

@@ -1446,7 +1446,7 @@ def test_a_trait_line_never_looks_like_a_round_to_the_numbers_only_fold():
         for text in pool:
             for foe in ("波才", "黃巾散兵"):
                 lines.append(f"〔{name}〕" + text.format(who="沈浪", art="基礎拳腳", foe=foe))
-    assert len(lines) == 90
+    assert len(lines) == 2 * 3 * len(server.CONTENT.trait_lines) == 138  # 23 個功效（意境效果池多八個）
     script = f"const lines = {json.dumps(lines, ensure_ascii=False)}; console.log(JSON.stringify(lines.map(compactRound)));"
     assert json.loads(_app_functions_in_node(js, script)) == [None] * len(lines)
 
@@ -2411,7 +2411,7 @@ def test_a_recipe_registered_between_the_two_trips_gives_the_registered_art():
 
 @pytest.mark.parametrize(("art", "picked", "other", "refusal"), [
     ("jichu_quanjiao", [], "jichu_tuna", "你已經有了"),  # 武學重構：合出武學的是武學＋武學
-    (None, ["feng", "huo"], None, "你已經悟得了"),
+    # 意境＋意境不在這裡：意境效果池之後合過的再合一次是另一份（照收錢），不是重複扣（網頁 busy 擋連按）
 ])
 def test_the_same_forge_sent_twice_while_naming_is_charged_once(art, picked, other, refusal):
     """企劃者 2026-10-05（不能重複扣）：同一個人連按兩下、重新整理再按、開兩個分頁，兩個請求都在配方登記之前

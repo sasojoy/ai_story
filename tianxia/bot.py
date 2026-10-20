@@ -176,7 +176,8 @@ def pick_forge(
         return None
     if len(p.insights) >= 2 and rng.random() < merge_share:
         for _ in range(FORGE_TRIES):
-            a, b = rng.choice(p.insights), rng.choice(p.insights)
+            a = rng.choice(p.insights)  # 意境效果池：同一份放兩次合不了，第二格從其餘的挑（同一種的另一份就是揣摩）
+            b = rng.choice([i for i in p.insights if i != a])
             if fusion.merge_problem(state, content, world, a, b) is None:
                 return ForgePlan(None, (a, b), None)
         return None

@@ -5,7 +5,7 @@ import random
 import pytest
 from conftest import next_season
 
-from tianxia import atlas, prologue, sensing
+from tianxia import insight_fx, atlas, prologue, sensing
 from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.state import ONBOARDING_VERSION
@@ -242,7 +242,7 @@ def _to_step(game, n: int) -> None:
         lambda g: _sense(g, "快"),  # 2 → 3：松林聽風，悟到風
         lambda g: g.forge("basic_fist", ["feng"]),  # 3 → 4：把風裝進基礎拳腳的意境槽（武學＋意境就是裝槽，不花心得體力）
         lambda g: (g.practice("武學"), g.practice("武學")),  # 4 → 5：基礎拳腳本來就在身上，練到第三成
-        lambda g: g.forge(None, ["feng", "feng"]),  # 5 → 6：揣摩（同一個意境合兩個），風到二重
+        lambda g: g.forge(None, ["feng", "feng~2"]),  # 5 → 6：揣摩（同一個意境合兩個），風到二重
         lambda g: _walk(g, "act:rest"),  # 6 → 7：體力見底，一坐就回滿
         lambda g: _walk(g, "act:train"),  # 7 → 8：險勝斷眉，掉出一門雜學
         lambda g: g.allocate_stat("str"),  # 8 → 9：升到第 2 級的那一點
@@ -393,7 +393,9 @@ def test_the_level_goal_needs_the_level(fresh):
     s.player.member.wugong_level = 2
     assert guide.note_action(s, c, fresh.world, "practice") == [] and s.player.tutorial_step == 4
     s.player.member.wugong_level = 3
-    assert guide.note_action(s, c, fresh.world, "practice")[0].startswith("【師父】") and s.player.tutorial_step == 5
+    msgs = guide.note_action(s, c, fresh.world, "practice")
+    assert any(m.startswith("【師父】") for m in msgs) and s.player.tutorial_step == 5
+    assert any("又悟得一份「風」" in m for m in msgs) and "feng~2" in s.player.insights  # 揣摩那一步之前多給一份
 
 
 def test_the_deepen_goal_needs_a_second_layer_not_just_the_level(fresh):
@@ -481,9 +483,10 @@ def test_deepening_finishes_the_deepen_step(fresh):
     """武學重構：第 6 步揣摩（同一個意境合兩個）做成了，風到二重、步驟推進（以前是修練一定升中品）。"""
     _slot_the_insight(fresh)
     fresh.state.player.tutorial_step = 5
-    msgs = fresh.forge(None, ["feng", "feng"])
+    fresh.state.player.insights.append("feng~2")  # 第 5 步做完師父多給的那一份（TutorialStep.give_piece）
+    msgs = fresh.forge(None, ["feng", "feng~2"])
     assert "體會又深了一層" in msgs[0]
-    assert prologue.deepened(fresh.state) and fresh.state.player.insight_strength["feng"] == 2
+    assert prologue.deepened(fresh.state) and insight_fx.strength(fresh.state, "feng") == 2
     assert fresh.state.player.tutorial_step == 6
 
 
@@ -590,17 +593,17 @@ def test_deepening_only_in_its_step(fresh):
     """武學重構（取代「一定升品只保證一次」）：揣摩只在第 6 步准開爐；做成了之後下一步再揣摩被擋下、不花心得體力；序章外隨時揣摩得了。"""
     _to_step(fresh, 5)
     p = fresh.state.player
-    fresh.forge(None, ["feng", "feng"])
-    assert p.insight_strength["feng"] == 2 and p.tutorial_step == 6
+    fresh.forge(None, ["feng", "feng~2"])
+    assert insight_fx.strength(fresh.state, "feng") == 2 and p.tutorial_step == 6
     xinde, stamina = p.stats["xinde"], p.stamina
-    assert "師父" in fresh.forge(None, ["feng", "feng"])[0]  # 序章裡下一步沒叫你開爐：擋下、不花心得體力
-    assert p.insight_strength["feng"] == 2 and (p.stats["xinde"], p.stamina) == (xinde, stamina)
+    assert "師父" in fresh.forge(None, ["feng", "feng~2"])[0]  # 序章裡下一步沒叫你開爐：擋下、不花心得體力
+    assert insight_fx.strength(fresh.state, "feng") == 2 and (p.stats["xinde"], p.stamina) == (xinde, stamina)
     outside = Game.new(fresh.content, "路人", rng=random.Random(0))
-    outside.state.player.insights.append("feng")
+    outside.state.player.insights += ["feng", "feng~2"]
     outside.state.player.stats["xinde"] = 20
-    assert prologue.fuse_problem(outside.state, outside.content, None, ["feng", "feng"]) is None  # 序章外不擋
-    outside.forge(None, ["feng", "feng"])
-    assert outside.state.player.insight_strength["feng"] == 2
+    assert prologue.fuse_problem(outside.state, outside.content, None, ["feng", "feng~2"]) is None  # 序章外不擋
+    outside.forge(None, ["feng", "feng~2"])
+    assert insight_fx.strength(outside.state, "feng") == 2
 
 
 def test_rest_refills_at_once(fresh):
@@ -822,7 +825,7 @@ def test_the_preview_in_the_hut_says_which_move_the_insight_becomes(fresh):
     （裝槽不是配方）、不寫師門；序章外同一句寫法。"""
     _to_step(fresh, 3)
     line = fresh.forge_line("basic_fist", ["feng"])
-    assert "裝意境" in line and "第 1 格" in line and "這一招是〔" in line
+    assert "裝意境" in line and "第 1 格" in line and "這一份是" in line and "〔先手〕" in line
     assert "沒人合過" not in line and "師門" not in line
     outside = Game.new(fresh.content, "路人", rng=random.Random(0), world=fresh.world)
     outside.state.player.insights.append("feng")
@@ -902,7 +905,7 @@ def test_a_hut_step_can_write_its_own_result_line(fresh):
     slotted = fresh.forge("basic_fist", ["feng"])
     assert slotted == ["「風」裝進了【粗淺拳腳】第 1 格。"]  # 不花心得體力：沒有「心得 -5」
     _to_step(fresh, 5)
-    deepened = fresh.forge(None, ["feng", "feng"])
+    deepened = fresh.forge(None, ["feng", "feng~2"])
     assert deepened[0] == "你把「風」反覆揣摩，體會又深了一層（二重）。" and "心得 -5" in deepened
     _to_step(fresh, 9)
     melted = fresh.melt_art("junk")
@@ -1022,7 +1025,7 @@ def test_prologue_refuses_off_script_moves(fresh):
     _to_step(fresh, 3)
     before, level = fresh.state.player.stats["xinde"], fresh.state.player.member.wugong_level
     fresh.forge("basic_breath", ["feng"])  # 拿別的底合成：擋下、不收心得
-    fresh.forge(None, ["feng", "feng"])  # 揣摩：裝意境那一步也擋（武學重構：以前是合併）
+    fresh.forge(None, ["feng", "feng~2"])  # 揣摩：裝意境那一步也擋（武學重構：以前是合併）
     fresh.forge("basic_fist", [], other_art="basic_breath")  # 兩門武學合成：也擋
     assert fresh.state.player.stats["xinde"] == before and fresh.state.player.tutorial_step == 3
     fresh.melt_insight("feng")

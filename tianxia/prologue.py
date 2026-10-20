@@ -266,8 +266,11 @@ def fuse_problem(
             return f"師父要你把意境裝進【{content.skills[current.fuse_base].name}】。"
         return None
     if current.deepen:
-        if art_id or other_art or len(insight_ids) != 2 or insight_ids[0] != insight_ids[1]:
-            return "師父要你拿同一個意境揣摩，合成二重。"
+        from . import insight_fx  # noqa: PLC0415
+
+        if (art_id or other_art or len(insight_ids) != 2 or insight_ids[0] == insight_ids[1]
+                or insight_fx.base_id(insight_ids[0]) != insight_fx.base_id(insight_ids[1])):
+            return "師父要你拿同一種意境的兩份揣摩，合成二重。"
         return None
     return "師父這一步沒叫你開爐。"
 
@@ -357,8 +360,32 @@ def slotted_arts(state: GameState, content: Content, world: WorldStateStore) -> 
 
 
 def deepened(state: GameState) -> bool:
-    """揣摩過：手上有一個意境二重以上（PlayerState.insight_strength）。"""
-    return any(state.player.insight_strength.get(i, 1) >= 2 for i in state.player.insights)
+    """揣摩過：手上有一個意境二重以上（insight_fx.strength）。"""
+    from . import insight_fx  # noqa: PLC0415
+
+    return any(insight_fx.strength(state, i) >= 2 for i in state.player.insights)
+
+
+GIVE_PIECE = "你把那份意又咀嚼了一回，又悟得一份「{name}」。"  # 待 joy 潤
+
+
+def give_piece(state: GameState, content: Content, world: WorldStateStore) -> list[str]:
+    """序章裡揣摩那一步之前（TutorialStep.give_piece）：再給一份手上那個意境（裝在槽上的先），效果照第一份抄，揣摩才合得成二重。
+    手上沒有意境、那一種已經有兩份以上就不給。"""
+    from . import arts, insight_fx, insights  # noqa: PLC0415
+
+    held = state.player.insights
+    pick = next((i for i in held if arts.where_slotted(state, i)), held[0] if held else None)
+    if pick is None:
+        return []
+    base = insight_fx.base_id(pick)
+    if len(insight_fx.pieces(state, base)) >= 2 or insights.is_own(pick):
+        return []
+    ins = insights.resolve(pick, content, world, state)
+    piece = insight_fx.new_piece_id(state, base)
+    held.append(piece)
+    insight_fx.copy(state, content, world, pick, piece)
+    return [GIVE_PIECE.format(name=ins.name if ins else base)]
 
 
 def fill(text: str, state: GameState, content: Content, world: WorldStateStore) -> str:
