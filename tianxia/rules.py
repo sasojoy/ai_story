@@ -150,7 +150,9 @@ def day_turn(content: Content, world: WorldState, time: float | None = None) -> 
     end = day_ends(content, world, time)
     if end >= season_end_time(world, content) - calendar.EPS_SECONDS:
         return ("season", None)
-    if end >= season_length_days(world, content) * DAY - calendar.EPS_SECONDS:
+    # 名義季末照 calendar.nominal_end（FB-505，同 FB-500）：照現實天的季扣開季偏移（週三 14:00 開的 7 天季是 7 天減 14 小時），
+    # 其他季就是季長 × DAY（一個字都不變）
+    if end >= calendar.nominal_end(content, world) - calendar.EPS_SECONDS:
         return ("later", None)
     if not calendar.season_one_on(world, content):
         end = math.ceil(end / calendar.MINUTE - calendar.EPS_MINUTES) * calendar.MINUTE
