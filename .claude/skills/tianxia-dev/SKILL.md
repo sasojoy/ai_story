@@ -19,7 +19,8 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 
 ## 工作樹與指令的坑
 
-- **檔案是 CRLF**（`core.autocrlf=true`）。用腳本改檔：讀進來 `\r\n`→`\n`，比對替換，寫回前轉回去。每一處替換都要 `assert count == 1`。一處一個腳本或一次一處，不要「多處替換、最後統一寫檔」（中途 assert 失敗會讓人以為改好了）。Edit 工具直接改 CRLF 的檔沒問題（換行照原樣留著，2026-10-20 量過 `web/app.js` 改完全是 CRLF），只有自己寫腳本才要轉。
+- **檔案是 CRLF**（`core.autocrlf=true`）。用腳本改檔：讀進來 `\r\n`→`\n`，比對替換，寫回前轉回去。每一處替換都要 `assert count == 1`。一處一個腳本或一次一處，不要「多處替換、最後統一寫檔」（中途 assert 失敗會讓人以為改好了）。
+  PowerShell 裡不要先 `IndexOf` 記下位置、再 `Replace`、再拿舊的位置 `Substring`（位置已經移了，會把檔切壞；2026-10-20 切壞過 `bot_policy.py`，`git checkout --` 救回）：要刪一整段就用 Python 腳本照標記找頭尾。Edit 工具直接改 CRLF 的檔沒問題（換行照原樣留著，2026-10-20 量過 `web/app.js` 改完全是 CRLF），只有自己寫腳本才要轉。
 - **Bash 在 worktree 隔離下會擋**：
   - 帶 git 的 heredoc、`git -C`、用 `$VAR` 或 `$(...)` 組出來的路徑或指令名，這幾種會被拒。不帶 git 的 heredoc（`cd … && cat > 檔 <<'EOF'`、`cat >> tests/x.py <<'EOF'`）也一樣被拒（2026-10-20）：寫檔、加測試一律用 Write／Edit 工具。
   - 繞法：git 一條一條下、路徑寫死。要改檔就用 Write 工具寫一支 Python 腳本到 scratchpad，再用 `python 腳本 .` 跑。
@@ -52,7 +53,10 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 - **修 bug 先寫會紅的測試**：先確認它在修之前真的失敗、失敗的數字跟 QA 回報的一樣，再修。回報時寫「修前重現了什麼」。
 - 用正式內容測舊規則的測試，要在 helper 裡把新開關關掉（例 `c.config.precise_actions = False`、`four_tiers.enabled = False`）。新規則另開一個測試檔，不要改寫舊的斷言去迎合新規則。
   例外：PM 的裁決直接推翻還沒上線的這一批的做法（不是開關後面的舊季）時，鎖住舊做法的那一條斷言照裁決翻過來，註明哪一條裁決、新規則的測試在哪一個檔（例：裁決 19 之後 `test_siege_void_when_no_attacker` 改成「沒有作罷的天下大事」，新的在 `test_conquest_void_quiet.py`）。
-- 江湖紀錄 `state.journal` 新的在前（index 0）。找某一則照標題找，不要拿 `[-1]`。
+- 江湖紀錄 `state.journal` 新的在前（index 0）。找某一則照標題找，不要拿 `[-1]`。`_write` 寫的那一則，「銀兩 +N」這種數值變化在 `entry.changes`、不在 `entry.lines`。
+- **兩個人的測試**（截殺、領地爭奪的混戰，2026-10-20 翻地與爭搶）：`Game.new` 不存角色，另一個人要被 `_load_kin` 讀到就先 `CharacterStore(world.db).save(game.state)`；
+  照伺服器的做法每一個動作從資料庫重讀自己（`tests/test_raid.py::_do`、`tests/test_conquest_clash.py::_do`）。season21 的新手期看 `newbie_real_hours`（現實 48 小時），
+  只設 `newbie_days = -1` 擋不掉，要一起設 `newbie_real_hours = 0`。
 - **證明開關關著一個字都不變**：一條條「關著不變」的測試之外，最省事的是拿 QA 的整份畫面對照（`tianxia-qa/引擎驗收.md` 第 7 節；scratchpad 裡 QA 留過 `conqqa/cmp_off.py`）：開這一批之前那一版與 HEAD 各 `git archive` 一份跑，比雜湊。腳本 `import server`，所以要連頂層的 `server.py server_push.py zhuan_html.py llm_queue.py console.py` 一起 archive（只 archive `tianxia content` 會 `No module named 'server_push'`）。領地爭奪第一批修正：season21／week7／weekend 三種季 573／569／567 行一個位元組都一樣。
 
 ## 內容改動的雷

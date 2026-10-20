@@ -1,15 +1,12 @@
-"""FB-531：攻城軍令的地點只列打得到敵方陣營隊伍、打贏真的記得到的區塊（軍令卡、記功、假人同一個判斷）。
+"""FB-531：攻城軍令的地點只列打贏真的記得到的區塊（軍令卡、記功、假人同一個判斷）。
 
-被敵方佔下的中立地站的是中立駐軍與流寇（沒有陣營），在那裡打贏記不到攻城，所以不列。第二批起攻城地點是今天公告的目標
-（裁決 11），合併時疊起來（計畫 6.2「合併 conquest-1 修正」）：這幾條先把要比的區塊公告了再比。
-
-裁決 20（PM 2026-10-21）推翻了「中立駐軍不算」那一半：今天公告的目標打贏那裡的守軍就記功，中立駐軍也算。下面鎖住舊做法的那幾條
-斷言照裁決翻過來（列與記功照舊同一個判斷，FB-531 的教訓不變）；新規則的測試在 test_conquest_siege_garrison.py。"""
+第二批起攻城地點是今天公告的目標（裁決 11），裁決 20（PM 2026-10-21）讓中立駐軍也算。翻地與爭搶（PM 2026-10-20 第 1 條）之後改讀成
+「這一邊此刻進度最高、推得動的那一塊」：這幾條先把要比的區塊推到最高再比；列與記功照舊同一個判斷（FB-531 的教訓不變）。"""
 from __future__ import annotations
 
 import pytest
 
-from conquest_kit import announce, conquest_game, go, join, plain_game, win_sortie
+from conquest_kit import conquest_game, go, join, plain_game, win_sortie
 from tianxia import atlas, conquest, orders
 from tianxia.state import Order
 
@@ -27,15 +24,15 @@ def _siege(game, faction="guan", front="yingru"):
 def _hilltop_to_huang(game):
     w, c = game.state.world, game.content
     assert conquest.set_control(w, c, "hilltop_wilds", "huang")  # QA：管理者把荒丘定給黃巾
-    announce(game, "hilltop_wilds", "guan")  # 第二批：兩塊都是官軍今天公告的目標
-    announce(game, "runan_wilds", "guan")
+    for loc in ("hilltop_wilds", "runan_wilds"):  # 兩塊並列官軍此刻進度最高
+        conquest.push(w, c, loc, "guan", "某", 20, "attack")
     return w, c
 
 
 def test_a_captured_neutral_block_is_a_siege_place_since_ruling_20():
     game = conquest_game("season21")
     w, c = _hilltop_to_huang(game)
-    assert orders.siege_places(c, "guan", "yingru", w) == ["hilltop_wilds", "runan_wilds"]  # 裁決 20：公告了，中立駐軍也算
+    assert orders.siege_places(c, "guan", "yingru", w) == ["hilltop_wilds", "runan_wilds"]  # 裁決 20：中立駐軍也算
 
 
 def test_the_card_names_only_where_a_win_counts():
@@ -43,7 +40,7 @@ def test_the_card_names_only_where_a_win_counts():
     _hilltop_to_huang(game)
     order = _siege(game)
     how = atlas.siege_how(game.state, game.content, order)
-    assert "汝南荒野" in how and "荒丘" in how  # 裁決 20：兩塊打贏都記得到，兩塊都寫（FB-531 修的時候只寫汝南荒野）
+    assert "汝南荒野" in how and "荒丘" in how and "嵩山深處" not in how
 
 
 def test_bots_go_where_a_win_counts():
@@ -51,15 +48,15 @@ def test_bots_go_where_a_win_counts():
     s, c = game.state, game.content
     _hilltop_to_huang(game)
     _siege(game)
-    assert orders.win_counts(s, c, "guan", "hilltop_wilds")  # 裁決 20：記得到就帶過去（FB-531 修的時候是 False）
-    assert orders.win_counts(s, c, "guan", "runan_wilds")
+    assert orders.win_counts(s, c, "guan", "hilltop_wilds") and orders.win_counts(s, c, "guan", "runan_wilds")
+    assert not orders.win_counts(s, c, "guan", "deep_mountain")  # 進度不是最高：記不到
     assert "hilltop_wilds" in orders.targets(s, c, "guan")
 
 
 def test_every_listed_place_credits_a_sortie_win():
     """列出來的地方打贏一定記得到：在汝南荒野出陣攻打贏，那一道攻城記一次。"""
     game = go(join(conquest_game("season21"), "guan"), "runan_wilds")
-    announce(game, "runan_wilds", "guan")
+    conquest.push(game.state.world, game.content, "runan_wilds", "guan", "某", 10, "attack")
     order = _siege(game)
     assert "runan_wilds" in orders.siege_places(game.content, "guan", "yingru", game.state.world)
     win_sortie(game)
@@ -67,13 +64,12 @@ def test_every_listed_place_credits_a_sortie_win():
 
 
 def test_a_siege_is_issued_where_only_captured_neutral_blocks_are_enemy_held():
-    """一條線上敵方只佔了中立地（黃巾在南陽拿下南陽官道；官軍那一側南陽沒有黃巾的陣營區塊碰得到）：裁決 20 之後照樣發攻城
-    （FB-531 修的時候不發）。"""
+    """一條線上敵方只佔了中立地（黃巾在南陽拿下南陽官道）：照樣發攻城（中立駐軍也算）。"""
     game = conquest_game("season21")
     w, c = game.state.world, game.content
     conquest.set_control(w, c, "nanyang_road", "huang")
-    announce(game, "nanyang_road", "guan")
-    assert orders.siege_places(c, "guan", "nanyang", w) == ["nanyang_road"]  # 裁決 20：中立駐軍也算
+    conquest.push(w, c, "nanyang_road", "guan", "某", 10, "attack")
+    assert orders.siege_places(c, "guan", "nanyang", w) == ["nanyang_road"]
 
 
 def test_switch_off_siege_places_unchanged():

@@ -696,9 +696,10 @@ def advance_world_state(
         if not season.ended and _season_due(season, content):
             msgs += end_season(vehicle, content, world, rng)
         if not season.ended and season.conquest is not None:
-            from . import siege  # noqa: PLC0415  siege → conquest_day → timetable：延後 import
+            from . import conquest, siege  # noqa: PLC0415  siege → conquest_day → timetable：延後 import
 
             siege.mark_due(season, content)  # 領地爭奪第二批：到了開集結的攻城記成 waiting（start_pending_battle 開）
+            conquest.decay(season, content)  # 翻地與爭搶：跨過季曆日交界，前一整天沒人推的塊往回（輿圖簡化設計 4.1）
     return msgs
 
 
