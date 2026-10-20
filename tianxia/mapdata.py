@@ -8,8 +8,8 @@ import hashlib
 from collections.abc import Callable
 
 from . import (
-    atlas, bounties, calendar, equipment, figures, insights, mapart, mapview, mounts, orders, rules, sensing, terrain, territory,
-    timetable,
+    atlas, bounties, calendar, conquest, equipment, figures, insights, mapart, mapview, mounts, orders, rules, sensing, terrain,
+    territory, timetable,
 )
 from .models import Content, Location
 from .state import GameState, TerritoryWeek, WorldState
@@ -237,6 +237,14 @@ def _weeks(state: GameState, content: Content, now_week: int, ropes: list[dict])
     return out
 
 
+def _conquest_kind(world: WorldState, content: Content, loc_id: str) -> str | None:
+    """領地爭奪開著的季，地點那一格的 kind（大本營、fixed 在呼叫端先判）：開季中立的區塊 neutral（被佔下了也是，網頁的抽屜寫「開季是中立地」），
+    搶得下來的陣營區塊 line（同拔河的可易手），不是區塊 None。"""
+    if conquest.start_kind(world, content, loc_id) == conquest.NEUTRAL:
+        return "neutral"
+    return "line" if conquest.capturable(content, loc_id) else None
+
+
 def _held(world: WorldState, content: Content, control: dict[str, str]) -> dict[str, str]:
     """快照裡的控制方拿掉不算誰的地盤的大本營（territory.unheld；FB-274：修好之前的快照記著豪強佔著自己的投靠點）。"""
     return {loc: side for loc, side in control.items() if not territory.unheld(world, content, loc)}
@@ -301,6 +309,7 @@ def state(
     armed = mapview.armed_places(s, c)  # ⚔ 標在哪裡：跟舊輿圖同一個判斷（FB-251）；出陣關著是 None，照內容的 enemies
     base_ids = territory.bases(c) if on else {}
     fixed = c.scenario.territory.fixed if on else {}
+    conquest_on = conquest.on(c, w)
     places = {}
     for loc_id in shown:
         loc = c.locations[loc_id]
@@ -313,6 +322,7 @@ def state(
         places[loc_id] = {
             "control": territory.controller(w, c, loc_id),
             "kind": "base" if loc_id in base_ids else "fixed" if loc_id in fixed
+            else _conquest_kind(w, c, loc_id) if conquest_on  # 領地爭奪：中立地 neutral、搶得下來的陣營區塊 line（網頁照它畫灰、寫「可易手」）
             else "line" if on and territory.line_of(c, loc_id) else None,
             "odds": None if worst is None else {"word": worst[1], "tone": ODDS_TONE.get(worst[1], "ok")},
             "sortie": sortie_mode(loc_id),

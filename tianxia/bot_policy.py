@@ -10,7 +10,7 @@ import hashlib
 import random
 from dataclasses import dataclass
 
-from . import allied, arena, atlas, battle_instance, bot, bounties, cultivation, duel, explore_modes, forge_secrets, invites, leaderboard, library, mingtie, naming, orders, precise, rules, sensing, server_bots, social, sortie, team
+from . import allied, arena, atlas, battle_instance, bot, bounties, conquest, cultivation, duel, explore_modes, forge_secrets, invites, leaderboard, library, mingtie, naming, orders, precise, rules, sensing, server_bots, social, sortie, team
 from .bot import allocate_points, can_practise, wants_heal
 from .engine import FREE_TEXT_OPTION, IDLE_MARK, Game, Option
 from .models import MOVES, Content, Effect, SkillDef
@@ -850,6 +850,8 @@ def _train_value(game: Game, profile: BotProfile, loc_id: str | None = None) -> 
     """在這個地點（預設所在地）出陣（關著時遊歷）對自己陣營的大勢分（同 effect_score 的一點抵十分）。出陣今天用完了就是 0：
     不再往戰線地點拉（出陣探索與地盤設計第七節：次數用完就去探索找素材練功）。"""
     goals = _goals(game, profile)
+    if conquest.on(game.content, game.state.world):  # 領地爭奪：出陣推進度、不推線——照推得動的名目量（大本營、不是區塊是 0）
+        return TREND_WEIGHT * game.sortie_progress(loc_id) if game.sorties_left() > 0 else 0.0
     if sortie.on(game.content):
         pushes = game.sortie_push(loc_id) if game.sorties_left() > 0 else {}
     else:

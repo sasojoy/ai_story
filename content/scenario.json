@@ -201,6 +201,7 @@
       "xiaquyang": ["nz_youxia"],
       "juma_river": ["nz_shuifei"],
       "yanshan_foot": ["nz_huqi"]
-    }
+    },
+    "side_garrison": {"guan": ["guan_patrol", "jun_bing"], "huang": ["louluo", "shuikou"]}
   }
 }

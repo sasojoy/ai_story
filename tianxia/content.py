@@ -1678,6 +1678,11 @@ def check_conquest_blocks(c: Content, need, known, front_ids: list[str]) -> None
         need(loc_id in t.blocks and t.blocks[loc_id].kind == conquest.NEUTRAL, f"{here}：只能寫在開季中立的區塊")
         known(here, squads, c.squads, "隊伍")
         need(all(c.squads[s].faction is None for s in squads if s in c.squads), f"{here}：中立駐軍要是沒有陣營的隊伍")
+    for side, squads in t.side_garrison.items():
+        here = f"領地爭奪的控制方巡邏 {side}"
+        need(side in conquest.SIDES, f"{here}：只能是交戰兩軍")
+        known(here, squads, c.squads, "隊伍")
+        need(all(c.squads[s].faction == side for s in squads if s in c.squads), f"{here}：要是 {side} 的隊伍")
 
 
 def check_duels(c: Content, need, known) -> None:

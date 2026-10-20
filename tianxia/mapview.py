@@ -8,7 +8,7 @@ from __future__ import annotations
 import math
 from html import escape
 
-from . import atlas, mapart, mounts, orders, sortie, territory
+from . import atlas, conquest, mapart, mounts, orders, sortie, territory
 from .atlas import KNOWN, Odds
 from .mapart import fmt
 from .models import Content, Location, MapLabel, MapLayout, MapRegion
@@ -19,7 +19,9 @@ LOOKS = {"current": "full", "visible": "full", "remembered": "faded", "outline":
 CURRENT_RING = 17  # 所在地的紅圈
 DANGER_RING = {1: "#639922", 2: "#BA7517", 3: "#A32D2D"}
 ENEMY_DISC = 0.5  # 敵情層：圓盤是危險色往圓盤原色淡幾成
-CONTROL_DISC = {"guan": "#CFDCEA", "huang": "#F1DC9E", "haoqiang": "#D6E2C8"}  # 局勢層：地點底下的圓盤照控制方（待 joy 對顏色）
+CONTROL_DISC = {"guan": "#CFDCEA", "huang": "#F1DC9E", "haoqiang": "#D6E2C8",  # 局勢層：地點底下的圓盤照控制方（待 joy 對顏色）
+                "neutral": "#E4E1DA"}  # 領地爭奪：還沒人佔的中立地（灰白；甲乙兩版等企劃者挑，待 joy 對顏色）
+LEGEND_NEUTRAL = "灰白是還沒人佔的中立地"  # 待 joy 潤：領地爭奪開著時圖例多的那一句
 TEXT_DARK = "#2C2C2A"
 TEXT_MUTED = "#8A8577"
 NOTE_FILL = "#8C3B2A"  # 名字底下那行小字（常出沒、最險、體力）
@@ -255,7 +257,8 @@ def legend_data(state: GameState, content: Content, layer: str = "situation") ->
         "states": LEGEND_STATES_OPEN if opened else LEGEND_STATES,
         "ring": LEGEND_RING_SORTIE if sortie.on(content) else LEGEND_RING,
         "layer": LEGEND_STORY.format(days=atlas.news_days(content)) if layer == "story" else (
-            LEGEND_LAYERS.get(layer, "") + (f"　{LEGEND_CONTROL}" if layer == "situation" and territory.on(content) else "")),
+            LEGEND_LAYERS.get(layer, "") + (f"　{LEGEND_CONTROL}" if layer == "situation" and territory.on(content) else "")
+            + (f"，{LEGEND_NEUTRAL}" if layer == "situation" and conquest.on(content, state.world) else "")),
         "strike": (LEGEND_STRIKE_OPEN if opened else LEGEND_STRIKE) if strike_places or strike_regions else "",
     }
 
@@ -280,6 +283,9 @@ def _layer_marks(
             side = territory.controller(state.world, content, loc_id)
             if side in CONTROL_DISC:  # 地盤易手（設計 4.3 第 2 點；完整的勢力版圖是第 7 塊）
                 discs[loc_id] = CONTROL_DISC[side]
+            elif side is None and conquest.start_kind(state.world, content, loc_id) == conquest.NEUTRAL \
+                    and conquest.on(content, state.world):  # 領地爭奪：還沒人佔的中立地（甲乙兩版等企劃者挑，先一個最小的灰）
+                discs[loc_id] = CONTROL_DISC[conquest.NEUTRAL]
     elif layer == "enemies":
         for loc_id in known:
             loc = content.locations[loc_id]

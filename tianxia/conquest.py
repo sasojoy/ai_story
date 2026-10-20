@@ -18,6 +18,8 @@ from .state import ConquestState, GameState, Rumor, TerritoryState, WorldState
 
 SIDES = ("guan", "huang")  # 交戰兩軍（設計 4.1：豪強不佔地）；戰線往 100 是黃巾、往 0 是官軍（劇本的 goals）
 NEUTRAL = "neutral"
+NEUTRAL_LINE = "中立地・高階獵場，還沒有人佔"  # 待 joy 潤：輿圖詳情欄局勢那一行（還沒人佔的中立地）
+NEUTRAL_HELD = "（開季是中立地）"  # 待 joy 潤：被佔下的中立地，接在「此刻由某某控制」後面
 
 
 def eligible(content: Content) -> bool:
@@ -93,6 +95,82 @@ def neutral_squads(world: WorldState | None, content: Content, loc_id: str) -> l
 
 
 HOME_GATHER_LINE = "自家地盤，多撿了一份。"  # 待 joy 潤：人站在自家領地找素材多給的那一個（設計 4.5）
+
+# ── 攻城目標的進度（設計 3.7、4.4；計畫 2.3）：0～100，往黃巾為正（戰線的方向），沒寫是 50 ──
+# 玩家看到的一句話（同戰況變化不露數字的規矩）：照推完之後、從推的那一方看的局面挑一句。待 joy 潤
+PROGRESS_LINES = (
+    (30, "{place}一帶，我軍已佔盡上風。"),
+    (1, "{place}一帶，我軍漸佔上風。"),
+    (0, "{place}一帶，兩軍相持不下。"),
+    (-100, "{place}一帶敵勢仍盛，我軍扳回了幾分。"),
+)
+
+
+def sortie_foes(world: WorldState, content: Content, loc_id: str, own: str | None) -> list[str]:
+    """出陣攻打的對手（Game._sortie_foes 在開關開著時叫；截糧的運糧隊另外由呼叫端加）：自家控制的區塊沒有（守）；開季中立的區塊是
+    那裡站的全部（中立駐軍與流寇野獸，計畫 Task 6）；別人控制的陣營區塊是控制方站的隊伍，那裡沒寫 garrison 時照
+    Scenario.territory.side_garrison（控制方的巡邏，待 joy），不然官軍的城鎮誰都攻不了。不是區塊是空的。"""
+    if loc_id not in blocks(content):
+        return []
+    side = holder(world, content, loc_id)
+    if side is not None and side == own:
+        return []
+    squads = territory.squads_at(world, content, loc_id)
+    if start_kind(world, content, loc_id) == NEUTRAL:
+        return squads
+    if side is None:
+        return [sid for sid in squads if content.squads[sid].faction != own]
+    mine = [sid for sid in squads if content.squads[sid].faction == side]
+    return mine or list(content.scenario.territory.side_garrison.get(side, []))
+
+
+def progress_open(world: WorldState, content: Content, loc_id: str) -> bool:
+    """這一塊的進度推得動（第一批：任何搶得下來的區塊；第二批起只有今天公告、還沒打的目標）。"""
+    return on(content, world) and capturable(content, loc_id)
+
+
+def progress_of(world: WorldState, loc_id: str) -> float:
+    state = world.conquest
+    return state.progress.get(loc_id, 50.0) if state is not None else 50.0
+
+
+def direction(content: Content, side: str | None, loc_id: str) -> int:
+    """side 推這一塊的進度往哪邊：往 100 那一方 +1、往 0 那一方 −1（照那條線的兩頭；不算進任何一條線的照兩軍：黃巾 +1、官軍 −1）。"""
+    line = line_of(None, content, loc_id)
+    low, high = _sides(content, line) if line else ("guan", "huang")
+    return 1 if side == high else -1 if side == low else 0
+
+
+def sortie_nominal(content: Content, loc_id: str, how: str) -> float:
+    """出陣推進度的名目量（貢獻照它記；計畫 2.3）：max(1, 地點寫的推量合計) ×（攻 1、守 Config.sortie.hold_share）。"""
+    loc = content.locations[loc_id]
+    share = 1.0 if how == "attack" else content.config.sortie.hold_share
+    return max(1.0, float(sum(abs(v) for v in loc.train_trend.values()))) * share
+
+
+def push_progress(world: WorldState, content: Content, side: str, loc_id: str, amount: float) -> float:
+    """side 把這一塊的進度往自己那一邊推 amount（夾 0～100），回新值。推不動（不是進度開著的區塊、side 不是兩頭之一）照原值回。"""
+    before = progress_of(world, loc_id)
+    sign = direction(content, side, loc_id)
+    if not sign or not progress_open(world, content, loc_id) or world.conquest is None:
+        return before
+    after = max(0.0, min(100.0, before + sign * amount))
+    world.conquest.progress[loc_id] = after
+    return after
+
+
+def progress_shift(world: WorldState, content: Content, loc_id: str) -> int:
+    """攻城戰的起點照進度偏幾點（設計 4.4，第二批才用）：每偏 50 十點偏 start_shift_per_10，夾 ±start_shift_cap；往黃巾為正。"""
+    cfg = content.config.conquest
+    shift = int((progress_of(world, loc_id) - 50) / 10 * cfg.start_shift_per_10)
+    return max(-cfg.start_shift_cap, min(cfg.start_shift_cap, shift))
+
+
+def progress_line(content: Content, loc_id: str, value_after: float, side: str) -> str:
+    """推完之後那一句（不寫數字）：從推的那一方看，進度站在自己那一邊多少挑 PROGRESS_LINES。"""
+    mine = (value_after - 50) * direction(content, side, loc_id)
+    text = next(line for floor, line in PROGRESS_LINES if mine >= floor)
+    return text.format(place=content.locations[loc_id].name)
 
 
 def is_home(world: WorldState, content: Content, side: str | None, loc_id: str) -> bool:

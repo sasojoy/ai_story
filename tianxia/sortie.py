@@ -59,6 +59,14 @@ def mode(content: Content, world: WorldState, faction: str | None, loc_id: str, 
     有截糧的運糧隊照打。"""
     if faction is None or not on(content):
         return None
+    from . import conquest  # noqa: PLC0415  conquest → territory → rules：在函式裡 import
+
+    if conquest.on(content, world):  # 領地爭奪（計畫 Task 6）：每一塊區塊都有出陣；自家的守（有截糧的運糧隊照打），別人的、中立的攻
+        if loc_id not in conquest.blocks(content):
+            return None
+        if conquest.holder(world, content, loc_id) == faction:
+            return "attack" if foes else "hold"
+        return "attack" if foes else None
     line = territory.line_of(content, loc_id)
     side = content.scenario.find_faction(faction)
     if line is None or side is None:

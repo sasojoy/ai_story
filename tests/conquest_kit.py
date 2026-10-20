@@ -4,9 +4,11 @@ from __future__ import annotations
 import random
 import tempfile
 from pathlib import Path
+from unittest import mock
 
 from conftest import real_content
-from tianxia import territory
+from tianxia import team, territory
+from tianxia.encounter import EncounterResult
 from tianxia.engine import Game
 from tianxia.models import Content
 from tianxia.sqlite_world import open_world
@@ -37,3 +39,35 @@ def conquest_game(profile: str = "season21", name: str = "沈浪", world=None) -
 def plain_game(profile: str = "weekend", name: str = "沈浪", world=None) -> Game:
     """同上，領地爭奪關著（正式內容的預設）。"""
     return _new(real_content(profile), name, world)
+
+
+def join(game: Game, side: str | None) -> Game:
+    """直接把陣營寫進存檔（不走投靠的確認），引導走完、體力補滿：完成步驟的獎勵與序章不混進出陣的帳。"""
+    p, c = game.state.player, game.content
+    p.faction = side
+    p.tutorial_step = len(c.tutorial.steps)
+    p.stamina = float(c.config.stamina_max)
+    return game
+
+
+def go(game: Game, loc_id: str) -> Game:
+    p = game.state.player
+    p.location, p.journey = loc_id, None
+    p.visited.add(loc_id)
+    return game
+
+
+def fight(tier: str = "大勝"):
+    """單次判定照給的結果（同 test_sortie._fight）。"""
+    return mock.patch.object(team, "fight", return_value=EncounterResult(tier=tier, margin=50, our_power=200, difficulty=40))
+
+
+def win_sortie(game: Game) -> list[str]:
+    """在所在地出陣攻、打贏一場（固定結果）。"""
+    with fight():
+        return game.choose("act:train")
+
+
+def contribution(game: Game) -> int:
+    """本季的貢獻（push.add_contribution 寫進的那一份）。"""
+    return game.state.player.contrib

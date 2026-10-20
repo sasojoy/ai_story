@@ -145,6 +145,15 @@ def siege_places(content: Content, faction: str, front: str, world: WorldState |
     T6 審查 I2：沒有這種地點的戰線，攻城永遠湊不滿，不發攻城。潁川汝南以前沒有官軍隊伍、黃巾在那裡不發攻城；
     FB-184 開了官軍大營（整支官軍）之後黃巾在潁川汝南也有攻城（攻打官軍大營）。"""
     enemy = ENEMY.get(faction)
+    from . import conquest  # noqa: PLC0415  conquest → territory → rules：在函式裡 import
+
+    if conquest.on(content, world):
+        # 領地爭奪（第一批）：這條線上此刻能挑成目標、而且歸敵方的區塊（攻城只算打贏敵方陣營的隊伍，中立駐軍不算，所以中立地不列；
+        # 第二批起攻城改成今天公告的目標，裁決 11）
+        return [
+            loc_id for loc_id in conquest.targets(world, content, faction)
+            if conquest.line_of(world, content, loc_id) == front and conquest.holder(world, content, loc_id) == enemy
+        ]
     if world is not None and territory.on(content):
         return [
             loc_id for loc_id in content.locations

@@ -3179,6 +3179,7 @@ class Game:
             else:
                 effect = choice.effect if success else failed(choice.fail_effect, c)  # 失手另扣的體力減半（體力平衡提案）
             msgs += self._apply(effect, once=event.once)
+            msgs += self._event_progress()  # 領地爭奪：隨口應對了結也推一次進度（開關關著是空的）
             self._begin_enlistment(faction_before)  # 隨口應對的結果也可能拜入門派
             self._greet_rejoin(faction_before)  # 同樣：入伍段早就走完的人拜入門派，引薦人打個招呼（新手引導計畫三）
             gifts = self._general_gifts() + self._signature_arms()  # 隨口應對的效果也可能加情誼（同 choose：另起一則）
@@ -7441,6 +7442,8 @@ class Game:
                 pushes = self.sortie_push(loc.id, "attack") if as_sortie else self.train_trend_push(loc.id)
                 for trend_id, delta in pushes.items():  # 換算過的線，照舊交給 T3 的 push_trend
                     extra += self.push_trend(trend_id, delta, source="sortie" if as_sortie else "train")
+                if as_sortie and conquest.on(c, s.world):  # 領地爭奪：出陣攻打贏推這一塊的進度、不推線（設計 3.7）
+                    extra += self._push_progress(loc.id, conquest.sortie_nominal(c, loc.id, "attack"), "sortie")
                 region = atlas.region_of(c, p.location)  # 官銀（伏筆，濃縮版內容表 4.0）：只有遊歷打贏才擲
                 extra += foreshadow.after_win(s, c, squad, self.rng, region.id if region is not None else None)
                 extra += self._order_credit(  # 軍令（計畫 T6）：攻城看戰線與敵方陣營，截糧看地點與運糧隊
@@ -7595,10 +7598,13 @@ class Game:
         s, c = self.state, self.content
         own = self._side()  # 豪強分屬兩軍：依附的那一軍
         side = territory.controller(s.world, c, loc.id)
-        ids = [
-            sid for sid in territory.squads_at(s.world, c, loc.id)
-            if (faction := c.squads[sid].faction) is not None and faction != own and (side is None or faction == side)
-        ]
+        if conquest.on(c, s.world):  # 領地爭奪：中立地打那裡的駐軍與流寇野獸，敵方的陣營區塊打控制方的兵（conquest.sortie_foes）
+            ids = conquest.sortie_foes(s.world, c, loc.id, own)
+        else:
+            ids = [
+                sid for sid in territory.squads_at(s.world, c, loc.id)
+                if (faction := c.squads[sid].faction) is not None and faction != own and (side is None or faction == side)
+            ]
         extra = orders.extra_enemies(s, c, loc.id, own)
         return ids + [sid for sid in extra if sid not in ids]
 
@@ -7617,9 +7623,50 @@ class Game:
         loc = c.locations[loc_id or s.player.location]
         how = how or self._sortie_mode(loc)
         side = self._side()  # 豪強分屬兩軍：照依附那一軍的目標推
-        if how is None or side is None:
+        if how is None or side is None or conquest.on(c, s.world):  # 領地爭奪：出陣不推線、推進度（sortie_progress）
             return {}
         return sortie.pushes(c, s.world, side, loc.id, how)
+
+    def sortie_progress(self, loc_id: str | None = None, how: str | None = None) -> float:
+        """領地爭奪：在這個地點（預設所在地）出陣往自己那一邊推進度的名目量（conquest.sortie_nominal；還沒打人數緩衝）。
+        開關關著、沒有出陣、這一塊的進度推不動（大本營、不是區塊）是 0。假人照它挑往哪裡走（bot_policy._train_value）。"""
+        s, c = self.state, self.content
+        loc = c.locations[loc_id or s.player.location]
+        if not conquest.on(c, s.world) or self._side() is None or not conquest.progress_open(s.world, c, loc.id):
+            return 0.0
+        how = how or self._sortie_mode(loc)
+        return conquest.sortie_nominal(c, loc.id, how) if how is not None else 0.0
+
+    def _push_progress(self, loc_id: str, nominal: float, source: str) -> list[str]:
+        """領地爭奪：往自己那一邊推這一塊的進度（計畫 2.3）。推多少＝nominal × Config.conquest.progress_scale（出陣）÷ √n（n 同推線的人數緩衝：
+        自己那一邊 active_window_days 內推過的人，含這一次的自己），沒有每人上限（出陣一天幾次本身就是上限）；事件（source="event"）
+        推 event_progress、不乘 progress_scale。出陣照推線那一本帳記貢獻（名目量，不然出陣不推線之後沒人升得到第 4 階），也進活躍名單。
+        回推完那一句話（不寫數字）；推不動是空的。"""
+        s, c = self.state, self.content
+        w, p = s.world, s.player
+        side = self._side()
+        if side is None or not conquest.progress_open(w, c, loc_id):
+            return []
+        cfg = c.config
+        window = cfg.active_window_days * DAY / calendar.cal_scale(c, w)
+        scale = cfg.conquest.progress_scale if source == "sortie" else 1.0
+        amount = push.buffered(nominal * scale, push.active_count(s, side, w.time, window))
+        after = conquest.push_progress(w, c, side, loc_id, amount)
+        if source == "sortie" and calendar.season_one_on(w, c):
+            gained = push.contribution(nominal, 1.0, 1.0, cfg.contrib_per_push, cfg.over_cap_contrib_ratio)
+            push.add_contribution(p, calendar.point(w.time, c, w).week, gained)
+        w.active_pushers.setdefault(side, {})[p.name] = w.time
+        w.active_pushers = push.drop_stale(w.active_pushers, w.time, window)
+        return [conquest.progress_line(c, loc_id, after, side)]
+
+    def _event_progress(self) -> list[str]:
+        """領地爭奪：在一塊區塊做完一則事件，往自己那一邊推一次進度（Config.conquest.event_progress；計畫 2.3）。散人、在路上、
+        事件還串著下一則、開關關著都是空的。"""
+        s, c = self.state, self.content
+        p = s.player
+        if s.pending_event is not None or p.journey is not None or not conquest.on(c, s.world) or p.location is None:
+            return []
+        return self._push_progress(p.location, c.config.conquest.event_progress, "event")
 
     def _sortie_option(self, loc: Location, cost: int, odds: bool) -> Option | None:
         """出陣的鈕（設計 2.2、2.3）：沒有出陣是 None；今天次數用完灰掉、寫什麼時候再來；攻照遊歷的寫法寫對手與勝算、必敗先問、
@@ -7786,8 +7833,12 @@ class Game:
             msgs += self._drill_gains(host, self._hold_share())
         for trend_id, amount in self.sortie_push(loc.id, how).items():
             msgs += self.push_trend(trend_id, amount, source="sortie")
+        on = conquest.on(c, s.world)
+        if on:  # 領地爭奪：守把這一塊的進度推回自己那一邊（設計 3.7、4.4）
+            msgs += self._push_progress(loc.id, conquest.sortie_nominal(c, loc.id, how), "sortie")
         if how == "hold":
-            msgs += self._order_credit(kind="duty", front=territory.line_of(c, loc.id))
+            front = conquest.line_of(s.world, c, loc.id) if on else territory.line_of(c, loc.id)
+            msgs += self._order_credit(kind="duty", front=front)
         return msgs
 
     def _resisted_line(self) -> str:
@@ -8729,7 +8780,8 @@ class Game:
         if choice.combat:
             if rare:
                 annals.note(s, c, annals.DEED, what + "。", 3)
-            return msgs + self._event_battle(event, choice)
+            msgs += self._event_battle(event, choice)
+            return msgs + self._event_progress()  # 領地爭奪：在區塊了結一則事件推一次進度（開關關著是空的）
         if choice.check:
             success = roll_check(choice.check, s, c, self.world, self.rng)
             tag, line = check_result_line(success)  # 一律是本人：不寫誰出手（企劃者 2026-10-05）
@@ -8737,10 +8789,12 @@ class Game:
             self._outcome(tag, line)
             if rare:
                 annals.note(s, c, annals.DEED, what + ("，成了。" if success else "，沒成。"), 3)
-            return msgs + self._apply(choice.effect if success else failed(choice.fail_effect, c), once=event.once) + self._tale_clue(event)
+            msgs += self._apply(choice.effect if success else failed(choice.fail_effect, c), once=event.once) + self._tale_clue(event)
+            return msgs + self._event_progress()
         if rare:
             annals.note(s, c, annals.DEED, what + "。", 3)
-        return msgs + self._apply(choice.effect, once=event.once) + self._tale_clue(event)
+        msgs += self._apply(choice.effect, once=event.once) + self._tale_clue(event)
+        return msgs + self._event_progress()
 
     def _tale_clue(self, event: Event) -> list[str]:
         """說書的事件了結時，偶爾多一句說書版的口訣（武學，Config.secrets，tianxia/secret_recipes.py），記進武學譜；鑄器另擲一次

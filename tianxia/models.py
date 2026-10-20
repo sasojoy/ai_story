@@ -1243,6 +1243,8 @@ class TerritoryDef(_Strict):
     # ── 領地爭奪（第 38 項改版，docs/superpowers/specs/2026-10-20-領地爭奪-design.md；tianxia/conquest.py；Config.conquest 開著才讀）──
     blocks: dict[str, BlockDef] = Field(default_factory=dict)  # 地點 → 區塊（開季歸哪一種、算進哪條戰線）；不寫的地點不是區塊
     neutral_garrison: dict[str, list[str]] = Field(default_factory=dict)  # 開季中立的區塊 → 另一套駐軍（無陣營的強對手，設計 3.3；待 joy）
+    # 陣營區塊沒寫 garrison 時，出陣攻打碰上的控制方巡邏（陣營 → 隊伍；conquest.sortie_foes；待 joy）：城鎮這類沒有兵的區塊也攻得了
+    side_garrison: dict[str, list[str]] = Field(default_factory=dict)
 
 
 class Scenario(_Strict):

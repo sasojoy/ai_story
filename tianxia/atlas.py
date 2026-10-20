@@ -13,7 +13,7 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from . import allied, figures, insights, mounts, orders, prologue, sortie, terrain, territory
+from . import allied, conquest, figures, insights, mounts, orders, prologue, sortie, terrain, territory
 from .calendar import point, stamp_text
 from .models import Content, Location, MapRegion, SimPlayer, TravelMode
 from .rules import (
@@ -844,8 +844,12 @@ def detail_text(state: GameState, content: Content, loc_id: str, odds: Odds) -> 
         trends = "、".join(f"{name} {value}" for name, value in region_trends(state, content, region))
         situation.append(region.name + (f"（{trends}）" if trends else ""))
     side = territory.controller(state.world, content, loc_id)
+    neutral = conquest.on(content, state.world) and conquest.start_kind(state.world, content, loc_id) == conquest.NEUTRAL
     if side is not None:  # 地盤易手（出陣探索與地盤設計 4.3 第 2 點）
-        situation.append(territory.CONTROL_LINE.format(side=content.scenario.faction_name(side, side)))
+        line = territory.CONTROL_LINE.format(side=content.scenario.faction_name(side, side))
+        situation.append(line + (conquest.NEUTRAL_HELD if neutral else ""))  # 領地爭奪：被佔下的中立地多寫一句開季是中立地
+    elif neutral:
+        situation.append(conquest.NEUTRAL_LINE)
     people = haunters(state, content, loc_id)
     standing = [  # 沒有時刻表的季：此刻站在這裡、沒有同名龍頭人物那一段的大勢人物（挑戰每季都有設計 3.8，照地點合併、不照名字）
         fid for fid in figures.present_at(state, content, loc_id) if figures.name_of(content, fid) not in people
