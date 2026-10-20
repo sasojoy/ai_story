@@ -2394,3 +2394,29 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
 .mt-admin { display: grid; gap: 10px; margin-bottom: 10px; }
 .mt-admin-row { display: grid; grid-template-columns: 64px 1fr; gap: 10px; align-items: start; }
 .mt-admin-row .muted { margin: 2px 0 6px; font-size: 12px; }
+
+/* 武學重構：意境槽（修練頁每一門武學一排格子；意境就是技能）。裝著的格子寫「意境」〔技能〕●●、右上一個 ×（點了拆下）；
+   空格虛線框、點了在底下攤開手上空著的意境（.slot-pick），收不下的灰掉。字待 joy 潤 */
+.slots { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0 2px; }
+.slots .slab { font-size: 11px; color: var(--ink-2); letter-spacing: 0.06em; flex: none; }
+.islot { position: relative; min-height: 40px; border-radius: 10px; padding: 4px 22px 4px 9px; text-align: left; font-size: 13px; cursor: pointer; line-height: 1.3; }
+.islot.full { border: 1px solid color-mix(in srgb, var(--gold) 60%, var(--line)); background: color-mix(in srgb, var(--gold) 10%, var(--card)); color: var(--ink); }
+.islot.full small { display: block; font-size: 11px; color: var(--ink-2); }
+.islot.full i { position: absolute; top: 4px; right: 7px; font-style: normal; font-size: 13px; color: var(--ink-2); }
+.islot.empty { border: 1px dashed var(--line); background: transparent; color: var(--ink-2); padding: 4px 12px; min-width: 64px; }
+.islot.empty.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.slot-pick { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; padding: 8px; border-radius: 10px; background: var(--card-2); }
+.slot-pick button { border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 10px; padding: 5px 9px; text-align: left; font-size: 13px; cursor: pointer; min-height: 40px; }
+.slot-pick button small { display: block; font-size: 11px; color: var(--ink-2); }
+.slot-pick button.no, .slot-pick button:disabled { opacity: 0.45; cursor: default; }
+.insight .ins-skill { color: var(--ink); }
+/* 自創武學那一塊（煉製頁爐子底下）：每一行左邊一個小標、右邊選項；品級機率一行三個印 */
+.card.create .crow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 8px 0; }
+.card.create .crow > span:first-child { flex: none; width: 5.5em; font-size: 12px; color: var(--ink-2); }
+.card.create .crow .input { flex: 1; min-width: 0; }
+.card.create .crow > small { flex-basis: 100%; }
+.fchips.wrap { flex-wrap: wrap; }
+.card.create .acts { display: flex; gap: 8px; margin-top: 10px; }
+.card.create .acts .btn { flex: 1; }
+.create-sum { margin: 0 0 4px; font-size: 13px; }
+.odds-line { display: flex; align-items: center; gap: 4px; margin: 0 0 6px; font-size: 12px; color: var(--ink-2); }

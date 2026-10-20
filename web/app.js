@@ -120,6 +120,8 @@
     meltNote: null, // 批量熔煉的結果（伺服器的 message HTML），寫在功法庫標題底下；下一個修練頁動作就清掉
     rackAll: false, // 裝備庫列完了沒（兵器多時先只列 LIB_PAGE 件，同功法庫）
     insOpen: null, // 修練頁點開的那一個意境（攤開說明與「化成心得」）
+    slotPick: null, // 修練頁點開的那一個空槽（{ art, i }）：底下攤開手上空著的意境挑一個裝進去
+    createForm: null, // 煉製頁自創武學第一步（形意）填到一半的表單：{ kind, affinity, lean, text }，輪詢重畫不會清掉
     mxNote: null, // 修練頁其他動作（裝備、意境、門下、療傷）的結果：{ at, html }，寫在按的那一塊裡（mxPlace）；切分頁、做別的動作就清掉
     artNote: null, // 修練（衝品質）的結果：{ id, html }，寫在那一門卡片的按鈕底下（W7）；點別的卡片、切分頁、做別的動作就清掉
     legendTick: {}, // 修練頁每一門武學「服下破境丹」勾了沒（id → true）；預設不勾，輪詢重畫不會悄悄取消，修練送出之後清掉
@@ -2483,11 +2485,7 @@
     const [ch, cls] = QUALITY_SEAL[q] || ["？", "q1"];
     return `<span class="qseal ${cls}${big ? " big" : ""}">${ch}</span>`;
   };
-  // 合成品質的機率條：伺服器在這一門帶了 forge_odds（[{quality, pct}]，配手上最好的那個意境 forge_with 算的）才畫；沒帶就不畫，不寫死數字
-  // 合成即設計（forge_fixed）：品級定了，不畫一格 100% 的條，寫「配「風」合出來是中品」帶品級印
-  const forgeOdds = (a) => (a.forge_fixed ? `<div class="odds fixed"><span>${a.forge_with ? `配「${esc(a.forge_with)}」煉製` : "拿去煉製"}合出來是</span>${seal(a.forge_fixed)}<em>${esc(a.forge_fixed)}</em></div>`
-    : Array.isArray(a.forge_odds) && a.forge_odds.length ? `<div class="odds"><span>${a.forge_with ? `配「${esc(a.forge_with)}」煉製會出` : "拿去煉製會出"}</span>${a.forge_odds
-    .map((o) => `<b class="${(QUALITY_SEAL[o.quality] || [, "q1"])[1]}" style="flex-grow:${Math.max(1, Number(o.pct) || 0)}">${esc(String(o.quality).slice(0, 1))} ${Number(o.pct) || 0}%</b>`).join("")}</div>` : "");
+  // 武學重構：品級是武學本身的（合出來、自創時就定了），沒有「修練衝品」的機率條了；意境裝進槽裡是技能（slotsHtml）
 
   // 功法卡、人物卡（伺服器的 Markdown）裡的十成進度「●●●○○○○○○○」換成跟卷軸卡同一種格子（企劃者 10/6：不要圈圈）。
   // 只換剛好十個圈的那一串，換成的是固定的標記，不帶任何伺服器的字
@@ -2526,7 +2524,7 @@
   // 勾的時候武學、內功、意境排成同一張清單（meltItems）：每一列寫判斷好壞要的（威力、比身上強弱、境界、功效、絕招；意境寫幾重、圓融駁雜、正邪）
   // 與熔了退多少心得，點右邊的 ▾ 攤開細節。篩選與排序只記在這一頁（S.meltView），不存瀏覽器
   const MELT_SORTS = [["", "原本的順序"], ["power", "威力低的在前"], ["quality", "品質低的在前"], ["value", "心得多的在前"]];
-  const MELT_RANKS = ["", "一重", "二重", "三重", "四重", "五重"];
+  const MELT_RANKS = ["", "●", "●●", "●●●"]; // 意境（技能）的強度：揣摩一次加一顆
   const MELT_NO_GEN = "未合成"; // 境界是空字串（基礎、內容寫的武學）時篩選上寫的字
   function meltView() {
     S.meltView = S.meltView || { kind: "", attr: "", quality: "", gen: "", rank: "", weak: false, sort: "" };
@@ -2582,7 +2580,7 @@
       ["attr", "屬性", vals((it) => it.attr).sort().map((a) => [a, `屬${a}`])],
       ["quality", "品質", vals((it) => it.quality).sort((a, b) => qrank(a) - qrank(b)).map((q) => [q, q])],
       ["gen", "境界", vals((it) => (it.t === "arts" ? it.gen || MELT_NO_GEN : "")).sort((a, b) => ["未合成", "初成", "精進", "化境"].indexOf(a) - ["未合成", "初成", "精進", "化境"].indexOf(b)).map((g) => [g, g])],
-      ["rank", "重數", vals((it) => (it.t === "ins" && it.rank ? it.rank : "")).sort().map((r) => [String(r), MELT_RANKS[r] || `${r}重`])],
+      ["rank", "強度", vals((it) => (it.t === "ins" && it.rank ? it.rank : "")).sort().map((r) => [String(r), MELT_RANKS[r] || `${r}重`])],
     ].filter(([key, , opts]) => opts.length > 1 || v[key]);
     const sel = (key, label, opts) => `<label><span>${label}</span><select class="input" data-act="melt-view" data-key="${key}" aria-label="${label}">
       <option value="">全部</option>${opts.map(([val, text]) => `<option value="${esc(val)}"${v[key] === val ? " selected" : ""}>${esc(text)}</option>`).join("")}</select></label>`;
@@ -2625,7 +2623,8 @@
     const lines = [];
     if (it.t === "arts") {
       const j = it.j, a = it.a;
-      lines.push(`第${a.level}成${it.power !== null ? `，威力 ${it.power}` : ""}${it.gen ? `・${esc(it.gen)}` : ""}${a.insight ? `・融「${esc(a.insight)}」` : ""}`);
+      lines.push(`第${a.level}成${it.power !== null ? `，威力 ${it.power}` : ""}${a.affinity ? `・收${esc(a.affinity)}` : ""}${typeof a.rating === "number" ? `・戰力 ${a.rating}` : ""}`);
+      if ((a.slots || []).length) lines.push(`意境槽 ${a.slots.length} 格：${a.slots.map((t) => (t ? `「${esc(t.name)}」〔${esc(t.skill)}〕${esc(t.mark)}` : "空")).join("、")}`);
       if ((j.traits || []).length) lines.push(`功效：${j.traits.map((t) => `〔${esc(t.name)}〕${t.layers > 1 ? `${t.layers} 層` : ""}`).join("")}`);
       if (j.special) lines.push(`特別功效〔${esc(j.special)}〕`);
       if (j.ultimate) lines.push(`絕招〔${esc(j.ultimate)}〕`);
@@ -2745,13 +2744,30 @@
     if (target) target.scrollIntoView({ block: "start", behavior: "smooth" });
   }
 
+  // 意境槽（武學重構：意境就是技能）：一門武學一排格子，裝著的寫「意境」〔技能〕●●、點了拆下；空格點了在底下攤開手上空著的意境，
+  // 收得下的（相容屬性，a.affinity：「快、陽、虛」或「兼容並蓄」）點了裝進去，收不下的灰掉寫原因。裝、拆都不花東西，送 /api/menxia/slot、unslot。
+  // 寫死的武學（基礎、本命）slots 是空清單，不畫。字待 joy 潤
+  function slotsHtml(a, x) {
+    if (!Array.isArray(a.slots) || !a.slots.length) return "";
+    const pick = S.slotPick && S.slotPick.art === a.id ? S.slotPick.i : null;
+    const cells = a.slots.map((s, i) => s
+      ? `<button type="button" class="islot full" data-act="slot-out" data-id="${esc(a.id)}" data-ins="${esc(s.id)}" title="${esc(s.desc || "")}">「${esc(s.name)}」<small>〔${esc(s.skill)}〕${esc(s.mark)}</small><i aria-hidden="true">×</i></button>`
+      : `<button type="button" class="islot empty${pick === i ? " on" : ""}" data-act="slot-pick" data-id="${esc(a.id)}" data-i="${i}"><small>空槽</small></button>`).join("");
+    let picker = "";
+    if (pick !== null) {
+      const fits = (i) => !a.affinity || a.affinity === "兼容並蓄" || String(a.affinity).split("、").includes(i.attribute);
+      const free = (x.insights || []).filter((i) => !i.slotted);
+      picker = `<div class="slot-pick">${free.length ? free.map((i) => `<button type="button" class="${fits(i) ? "" : "no"}" data-act="slot-in" data-id="${esc(a.id)}" data-ins="${esc(i.id)}" ${fits(i) ? "" : "disabled"} title="${esc(fits(i) ? i.skill_desc || "" : `【${a.name}】只收${a.affinity}的意境`)}">「${esc(i.name)}」<small>${esc(i.depth || "")}${fits(i) ? "" : "・收不下"}</small></button>`).join("")
+        : '<span class="muted">手上沒有空著的意境——去探索悟一個，或從別門武學上拆下來。</span>'}</div>`;
+    }
+    return `<div class="slots"><span class="slab">意境槽</span>${cells}</div>${picker}`;
+  }
+
   // 以心得換破境丹（Joy 2026-10-18）：衝絕學那一步的卡上一顆小鈕；換不了時灰掉、原因寫在後面（a.cultivate.buy 是伺服器算好的）
   function buyPill(a) {
-    const xs = a.cultivate.xinde; // 以心得修練：付心得不付體力；換不了時灰掉、原因寫在後面
-    const byX = xs ? `<div class="buy-pill"><button class="btn small" data-act="cultivate" data-xinde="1" data-id="${esc(a.id)}" ${xs.ok ? "" : "disabled"} title="${esc(xs.why)}">${esc(xs.label)}</button>${xs.ok ? "" : `<span class="why">${esc(xs.why)}</span>`}</div>` : "";
     const b = a.cultivate.buy;
-    if (!b) return byX;
-    return byX + `<div class="buy-pill"><button class="btn small" data-act="mx" data-op="buy_legend" ${b.ok ? "" : "disabled"} title="${esc(b.why)}">${esc(b.label)}</button>${b.ok ? "" : `<span class="why">${esc(b.why)}</span>`}</div>`;
+    if (!b) return "";
+    return `<div class="buy-pill"><button class="btn small" data-act="mx" data-op="buy_legend" ${b.ok ? "" : "disabled"} title="${esc(b.why)}">${esc(b.label)}</button>${b.ok ? "" : `<span class="why">${esc(b.why)}</span>`}</div>`;
   }
 
   function pagePractice() {
@@ -2788,13 +2804,13 @@
       // 功法庫的卡：跟身上同一種那門的比較（W6）直接寫在鈕的上面，改練之前看得到，不必先點「詳情」；點開詳情時功法卡裡也有，這裡就不重複
       const compare = !slot && a.compare && !info ? `<p class="cmp">${esc(a.compare)}</p>` : "";
       return `<div class="ten">${Array.from({ length: 10 }, (_, k) => `<i${k < level ? ' class="on"' : ""}></i>`).join("")}</div>
-        <div class="lvline"><b>第${level}成</b><span>${esc(a.kind)}・屬${esc(a.attribute)}${a.gen ? `・${esc(a.gen)}` : ""}${a.insight ? `・意境「${esc(a.insight)}」` : ""}</span></div>
+        <div class="lvline"><b>第${level}成</b><span>${esc(a.kind)}${a.attribute ? `・屬${esc(a.attribute)}` : ""}・收${esc(a.affinity || "")}${typeof a.rating === "number" ? `・戰力 ${a.rating}` : ""}</span></div>
+        ${slotsHtml(a, x)}
         ${compare}
         <div class="acts">${first}${cult}</div>
         ${S.artNote && S.artNote.id === a.id ? `<div class="msg art-result">${S.artNote.html}</div>` : ""}
         ${lg ? `<label class="legend"><input type="checkbox" data-legend="${esc(a.id)}" ${ticked ? "checked" : ""}><span>${esc(lg.label)}</span></label>` : ""}
         ${buyPill(a)}
-        ${forgeOdds(a)}
         <div class="more">
           ${a.melt.ok ? "" : `<span class="why">${esc(a.melt.note)}</span>`}
           <button class="linkish" data-act="melt"${has("melt") ? ' data-glow="melt"' : ""} data-id="${esc(a.id)}" data-name="${esc(a.name)}" data-confirm="${esc(a.melt.confirm)}" ${a.melt.ok ? "" : "disabled"} title="${esc(a.melt.note)}">熔煉${a.melt.ok ? `（${/^退回/.test(a.melt.note) ? esc(a.melt.note.replace(/^退回/, "")) : "只空出一格"}）` : ""}</button>
@@ -2833,7 +2849,7 @@
     const libRow = (a) => {
       const todo = ["switch", "cultivate", "melt"].filter((key) => (a.glow || []).includes(key)).join(" ");
       const open = S.artOpen === a.id;
-      return `<button class="art libr ${open ? "on" : ""}" data-act="art" data-id="${esc(a.id)}"${todo && !open ? ` data-glow="${todo}"` : ""}>${seal(a.quality)}<span class="txt"><b>${esc(a.name)}</b><small>${esc(a.kind)}・屬${esc(a.attribute)}${a.gen ? `・${esc(a.gen)}` : ""}・第${a.level}成${a.insight ? `・「${esc(a.insight)}」` : ""}</small></span></button>
+      return `<button class="art libr ${open ? "on" : ""}" data-act="art" data-id="${esc(a.id)}"${todo && !open ? ` data-glow="${todo}"` : ""}>${seal(a.quality)}<span class="txt"><b>${esc(a.name)}</b><small>${esc(a.kind)}${a.attribute ? `・屬${esc(a.attribute)}` : ""}・第${a.level}成${typeof a.rating === "number" ? `・戰力 ${a.rating}` : ""}${(a.slots || []).some(Boolean) ? `・${(a.slots || []).filter(Boolean).map((t) => `〔${esc(t.skill)}〕`).join("")}` : ""}</small></span></button>
         ${open ? `<div class="art-body ${(QUALITY_SEAL[a.quality] || [, "q1"])[1]}">${body(a, null)}</div>` : ""}`;
     };
     const tutorial = x.owned_arts.some((a) => a.glow) || x.insights.some((i) => i.blocked);
@@ -2867,7 +2883,7 @@
     }).join("")}</div>` : "";
     // 意境：一顆一顆的籤，點一下攤開模型寫的那句說明與「化成心得」
     const insOpen = x.insights.find((i) => i.id === S.insOpen);
-    const insChips = x.insights.map((i) => `<button class="${S.insOpen === i.id ? "on" : ""}" data-act="ins-open" data-id="${esc(i.id)}">${i.own ? glyphSvg(i.glyph, "glyph-mini") : ""}「${esc(i.name)}」<small>屬${esc(i.attribute)}${i.lean !== "無" ? `・${esc(i.lean)}` : ""}${i.depth ? `・${esc(i.depth)}` : ""}</small></button>`).join("");
+    const insChips = x.insights.map((i) => `<button class="${S.insOpen === i.id ? "on" : ""}" data-act="ins-open" data-id="${esc(i.id)}">${i.own ? glyphSvg(i.glyph, "glyph-mini") : ""}「${esc(i.name)}」<small>屬${esc(i.attribute)}${i.lean !== "無" ? `・${esc(i.lean)}` : ""}${i.depth ? `・${esc(i.depth)}` : ""}${i.slotted ? `・裝在【${esc(i.slotted)}】` : ""}</small></button>`).join("");
     // 名冊只有本人一列（還沒有同伴）時跟上面的本人卡重複，不畫（C6）
     const mates = x.roster.length > 1;
     // 裝備（裝備四欄設計 2.5）：開著的欄位一段一段（武器、防具、坐騎、寶物），每段先列身上那件、再列裝備庫裡同一欄的。
@@ -2981,7 +2997,7 @@
       ${showAll ? "" : `<button class="btn ghost lib-more" data-act="lib-all">再列 ${picked.length - LIB_PAGE} 門</button>`}`}
       ${meltOn ? "" : `<div class="label">意境</div>
       ${x.insights.length ? `<div class="ins">${insChips}</div>${noteAt("ins")}
-        ${insOpen && !meltOn ? `<div class="insight"><div>${insOpen.own ? glyphSvg(insOpen.glyph, "glyph-big") : ""}<b>「${esc(insOpen.name)}」</b>${insOpen.note ? `<p>${esc(insOpen.note)}</p>` : ""}${insOpen.own ? `<p class="glyph-from">悟於${esc(insOpen.place || "某處")}・只屬於你</p>` : ""}</div>
+        ${insOpen && !meltOn ? `<div class="insight"><div>${insOpen.own ? glyphSvg(insOpen.glyph, "glyph-big") : ""}<b>「${esc(insOpen.name)}」</b>${insOpen.skill ? `<p class="ins-skill">技能〔${esc(insOpen.skill)}〕${esc(insOpen.mark || "")}${insOpen.skill_desc ? `：${esc(insOpen.skill_desc)}` : ""}${insOpen.slotted ? `・裝在【${esc(insOpen.slotted)}】` : "・還沒裝上任何武學"}</p>` : ""}${insOpen.note ? `<p>${esc(insOpen.note)}</p>` : ""}${insOpen.own ? `<p class="glyph-from">悟於${esc(insOpen.place || "某處")}・只屬於你</p>` : ""}</div>
           <button class="btn small" data-act="melt-insight" data-id="${esc(insOpen.id)}" data-name="${esc(insOpen.name)}" ${insOpen.blocked ? "disabled" : ""}>化成心得 ${insOpen.melt}</button>${insOpen.blocked ? `<small class="muted">${esc(insOpen.blocked)}</small>` : ""}</div>` : ""}`
         : '<p class="muted">還沒悟到任何意境。去探索，荒郊野外最容易有所領悟。</p>'}`}
       <div class="label">門下</div>
@@ -3159,7 +3175,7 @@
     const a = (x.owned_arts || []).find((r) => r.id === item.id);
     if (!a) return "";
     const j = a.judge || {};
-    const sub = [a.kind, `屬${a.attribute}`, a.gen, `第${a.level}成`].filter(Boolean);
+    const sub = [a.kind, a.attribute ? `屬${a.attribute}` : "", a.affinity ? `收${a.affinity}` : "", `第${a.level}成`].filter(Boolean);
     const diff = typeof j.worn_diff === "number" ? j.worn_diff : null;
     const verdict = diff === null ? ""
       : diff > 0 ? `<b class="up">比身上那門強 ${meltNum(diff)}</b>` : diff < 0 ? `<b class="down">比身上那門弱 ${meltNum(diff)}</b>` : "跟身上那門一樣";
@@ -3169,6 +3185,7 @@
     (j.dormant || []).forEach((n) => tags.push(`<i class="tr off"><em>未開</em>${esc(n)}</i>`));
     if (j.ultimate) tags.push(`<i class="hi">絕招〔${esc(j.ultimate)}〕</i>`);
     if (j.tactic) tags.push(`<i class="hi">本命戰法〔${esc(j.tactic)}〕</i>`);
+    (a.slots || []).forEach((t) => tags.push(t ? `<i class="tr t2"><em>槽</em>「${esc(t.name)}」〔${esc(t.skill)}〕${esc(t.mark)}</i>` : `<i class="tr off">空槽</i>`));
     return `<div class="made-card">
       <div class="mc-head">${seal(a.quality, true)}<div><b>【${esc(a.name)}】</b><small>${sub.map(esc).join("・")}</small></div>
         ${typeof j.power === "number" ? `<span class="mc-power">威力<b>${j.power}</b></span>` : ""}</div>
@@ -3232,7 +3249,7 @@
         <div class="top-row"><h3 style="flex:1">${title}</h3><button type="button" class="btn small ghost" data-act="pot-close">關閉</button></div>
         <div class="label">功法${filterChips("craft")}</div>
         ${craftFilterRow(x)}
-        ${artFilter("craft") === "意境" ? "" : `${arts.length ? `<div class="chips">${artsShown.map((a) => craftChip("art", a, `${a.quality}・屬${a.attribute}・第${a.level}成${a.gen ? `・${a.gen}` : ""}`, QUALITY_RANK[a.quality] || 1,
+        ${artFilter("craft") === "意境" ? "" : `${arts.length ? `<div class="chips">${artsShown.map((a) => craftChip("art", a, `${a.quality}${a.attribute ? `・屬${a.attribute}` : ""}・第${a.level}成・收${a.affinity || ""}`, QUALITY_RANK[a.quality] || 1,
           (a.glow || []).includes("pick:art") ? ' data-glow="pick:art"' : "", inPot(a.id))).join("")}</div>` : '<p class="muted">沒有合這些條件的武學。</p>'}
         ${artsShown.length < arts.length ? `<button class="btn ghost lib-more" data-act="craft-all">再列 ${arts.length - artsShown.length} 門</button>` : ""}`}
         <div class="label">意境 <small class="muted">同一個也能放兩次</small></div>
@@ -3267,12 +3284,77 @@
       <div id="forge-line">${forgeLineHtml(x)}</div>
       ${ready ? "" : `<button type="button" class="btn pot-open" data-act="pot-open">${S.forgeSel.length ? "再放一樣進爐" : "挑東西放進爐"}<small>武學與意境的清單</small></button>`}
       ${result}
+      ${createHtml()}
       ${attrNoteHtml(x)}
       ${x.clue_items?.length ? `<div class="label">伏筆物品</div>
       <div class="chips clues">${x.clue_items.map((i) => `<div class="clue"><b>${esc(i.name)}</b><span>×${i.count}</span></div>`).join("")}</div>` : ""}
       ${manualEntry("arts")}${manualEntry("forge")}
       <details class="fold"><summary>背包</summary><div class="fold-body">${x.bag}</div></details>
       ${S.craftPick ? craftSheetHtml(x) : ""}`;
+  }
+
+  // 自創武學（武學重構，Joy 2026-10-20「玩家可以消耗大量心得直接自創一門武學……設定形意、式、最後取名」）：煉製頁爐子底下一塊，
+  // 三步：形意（種類、相容屬性最多三種〔一種都不挑是兼容並蓄〕、正邪、一句 2～20 字的意，送 /api/do/create_intent 請模型評意分）→
+  // 式（武學挑兵器、挑一個意境裝進第一格，menxia create_form）→ 取名（名字、多付心得加分，menxia create_name；作罷 create_cancel）。
+  // 資料全是伺服器給的 status.create（create.view）：能不能、價錢、剩幾門、走到哪一步、每一步的選項、品級機率；網頁不算。字待 joy 潤
+  function createForm(c) {
+    if (!S.createForm) S.createForm = { kind: c.kinds.includes("武學") ? "武學" : c.kinds[0], affinity: [], lean: c.leans[0] || "無", text: "" };
+    return S.createForm;
+  }
+  function createHtml() {
+    const c = S.main && S.main.status && S.main.status.create;
+    if (!c || !c.on) return "";
+    const head = `<div class="label">自創武學 <small class="muted">本季還可自創 ${c.left | 0} 門</small></div>`;
+    const draft = c.draft;
+    if (!draft) {
+      if (c.problem) return `${head}<div class="card create"><p class="muted">${esc(c.problem)}</p></div>`;
+      const f = createForm(c);
+      const pick = (key, opts, val) => opts.map((o) => `<button type="button" class="fchip${val === o ? " on" : ""}" data-act="create-set" data-key="${key}" data-val="${esc(o)}">${esc(o)}</button>`).join("");
+      const attrs = c.attributes.map((o) => `<button type="button" class="fchip${f.affinity.includes(o) ? " on" : ""}" data-act="create-attr" data-val="${esc(o)}">${esc(o)}</button>`).join("");
+      return `${head}<div class="card create">
+        <p class="muted">用心得立一門自己的武學：先定形意，再定式，最後取名。意寫得越有章法，模型評的意分越高、品級越好。</p>
+        <div class="crow"><span>種類</span><div class="fchips">${pick("kind", c.kinds, f.kind)}</div></div>
+        <div class="crow"><span>收什麼意境</span><div class="fchips wrap">${attrs}</div><small class="muted">${f.affinity.length ? `收${esc(f.affinity.join("、"))}` : "一種都不挑就是兼容並蓄（什麼意境都收，但槽少一格）"}・最多 ${c.max_affinity | 0} 種</small></div>
+        <div class="crow"><span>正邪</span><div class="fchips">${pick("lean", c.leans, f.lean)}</div></div>
+        <div class="crow"><span>意</span><input class="input" id="create-text" maxlength="${c.intent_max | 0}" placeholder="這門武學的意，2～${c.intent_max | 0} 字" value="${esc(f.text)}"></div>
+        <p class="mc-cost">心得 ${c.price | 0}（你有 ${c.xinde | 0} 點）</p>
+        <button class="btn primary" data-act="create-intent">立形意<small>請模型評意分</small></button>
+      </div>`;
+    }
+    const odds = draft.odds ? Object.entries(draft.odds).map(([q, pct]) => `${seal(q)}${Math.round(pct)}%`).join(" ") : "";
+    const sum = `<p class="create-sum"><b>${esc(draft.kind)}</b>・收${esc(draft.affinity_text)}${draft.lean && draft.lean !== "無" ? `・${esc(draft.lean)}` : ""}・意「${esc(draft.intent)}」</p>
+      ${odds ? `<p class="odds-line">品級看造化：${odds}</p>` : ""}`;
+    if (c.step === "form") {
+      const weapon = draft.kind === "武學" ? `<div class="crow"><span>兵器</span><select class="input" id="create-weapon">${c.weapons.map((w) => `<option value="${esc(w)}"${draft.weapon === w ? " selected" : ""}>${esc(w)}</option>`).join("")}</select></div>` : "";
+      const ins = draft.insight_choices.length
+        ? `<select class="input" id="create-insight">${draft.insight_choices.map((i) => `<option value="${esc(i.id)}"${draft.insight === i.id ? " selected" : ""}>「${esc(i.name)}」屬${esc(i.attribute)}${esc(i.mark || "")}</option>`).join("")}</select>`
+        : `<span class="muted">手上沒有收得下的空著的意境——先悟一個，或從別門武學拆下來。</span>`;
+      return `${head}<div class="card create">${sum}
+        ${weapon}
+        <div class="crow"><span>第一招</span>${ins}</div>
+        <div class="acts"><button class="btn primary" data-act="create-form" ${draft.insight_choices.length ? "" : "disabled"}>定式<small>挑好兵器與第一個意境</small></button><button class="btn ghost" data-act="create-cancel">作罷</button></div>
+      </div>`;
+    }
+    return `${head}<div class="card create">${sum}
+      <p class="muted">${draft.weapon ? `兵器 ${esc(draft.weapon)}・` : ""}第一招「${esc((draft.insight_choices.find((i) => i.id === draft.insight) || {}).name || "")}」</p>
+      <div class="crow"><span>名字</span><input class="input" id="create-name" maxlength="6" placeholder="2～6 個字，全服不能重名"></div>
+      <div class="crow"><span>多付心得</span><input class="input" id="create-extra" type="number" min="0" step="${c.bonus_per | 0}" value="0"><small class="muted">每 ${c.bonus_per | 0} 點多 5 分，最多加 ${c.bonus_cap | 0} 分</small></div>
+      <div class="acts"><button class="btn primary" data-act="create-name">取名開爐<small>心得 ${c.price | 0}＋多付的</small></button><button class="btn ghost" data-act="create-cancel">作罷</button></div>
+    </div>`;
+  }
+  async function createIntent() {
+    const c = S.main && S.main.status && S.main.status.create;
+    if (!c) return;
+    const f = createForm(c);
+    const box = document.getElementById("create-text");
+    if (box) f.text = box.value;
+    await busy(async () => {
+      const r = await api("/api/do/create_intent", { kind: f.kind, affinity: f.affinity, lean: f.lean, text: f.text });
+      applyMain(r.main);
+      const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      if (text) toast(text);
+      if (r.main && r.main.status && r.main.status.create && r.main.status.create.draft) S.createForm = null; // 開了單：表單清掉
+    }, WAIT_LINES.forge || SENT_WAITING);
   }
 
   // 武學譜（status.manual，secret_recipes.view；企劃者 2026-10-10「武學譜能不能獨立一頁，做得更豪華一些」）：
@@ -6175,6 +6257,7 @@
         return a ? { from: card(S.kind), to: card(S.kind), note: "art:" + a.id } : null;
       }
       case "cultivate": return extra.art ? { from: ['[data-act="cultivate"]', extra.art], to: ['[data-act="cultivate"]', extra.art], note: "art:" + extra.art } : null;
+      case "slot": case "unslot": return extra.art ? { from: ['.slots .islot', extra.art], to: ['.slots .islot', extra.art], note: "art:" + extra.art } : null; // 裝、拆意境：留在那門的卡上
       case "switch": { // 改練：從庫裡那一列換到身上那張卡，畫完讓那張卡停在剛才按的地方
         const a = arts.find((r) => r.id === extra.art);
         return a ? { from: ['[data-act="switch"]', extra.art], to: card(a.kind), note: "art:" + extra.art } : null;
@@ -6641,6 +6724,25 @@
         case "melt-go": askMeltMany(el); break;
         case "rack-all": S.rackAll = true; renderPage(); break;
         case "ins-open": S.insOpen = S.insOpen === el.dataset.id ? null : el.dataset.id; renderPage(); break;
+        case "slot-pick": { // 空槽：攤開（再點收起）手上空著的意境
+          const same = S.slotPick && S.slotPick.art === el.dataset.id && S.slotPick.i === Number(el.dataset.i);
+          S.slotPick = same ? null : { art: el.dataset.id, i: Number(el.dataset.i) };
+          renderPage(); break;
+        }
+        case "slot-in": S.slotPick = null; await mx("slot", { art: el.dataset.id, insight: el.dataset.ins }); break;
+        case "create-set": { const c = S.main.status.create; const f = createForm(c); const box = document.getElementById("create-text"); if (box) f.text = box.value; f[el.dataset.key] = el.dataset.val; renderPage(); break; }
+        case "create-attr": { // 相容屬性：點了加上、再點拿掉；最多 max_affinity 種
+          const c = S.main.status.create; const f = createForm(c); const box = document.getElementById("create-text"); if (box) f.text = box.value;
+          const v = el.dataset.val;
+          if (f.affinity.includes(v)) f.affinity = f.affinity.filter((a) => a !== v);
+          else if (f.affinity.length < (c.max_affinity | 0)) f.affinity = [...f.affinity, v];
+          renderPage(); break;
+        }
+        case "create-intent": await createIntent(); break;
+        case "create-form": { const w = document.getElementById("create-weapon"), i = document.getElementById("create-insight"); await mx("create_form", { weapon: w ? w.value : "", insight: i ? i.value : "" }); break; }
+        case "create-name": { const n = document.getElementById("create-name"), e = document.getElementById("create-extra"); await mx("create_name", { name: n ? n.value.trim() : "", extra: e ? Number(e.value) || 0 : 0 }); break; }
+        case "create-cancel": await mx("create_cancel"); break;
+        case "slot-out": await mx("unslot", { art: el.dataset.id, insight: el.dataset.ins }); break;
         case "person":
           S.person = S.person === el.dataset.key ? null : el.dataset.key;
           await loadMenxia();
@@ -6713,8 +6815,7 @@
           const ticked = !!(row && row.cultivate.legend && S.legendTick[id]);
           const was = S.menxia;
           delete S.legendTick[id];
-          // 以心得修練那一顆（data-xinde）：同一個修練，付心得不付體力（Joy 2026-10-18）
-          await mx("cultivate", { art: id, use_legend: ticked, ...(el.dataset.xinde ? { by_xinde: true } : {}) });
+          await mx("cultivate", { art: id, use_legend: ticked });
           if (ticked && S.menxia === was) S.legendTick[id] = true;
           break;
         }
