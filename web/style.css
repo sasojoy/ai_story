@@ -153,6 +153,11 @@ ul { padding-left: 1.3em; margin: 0.4em 0; }
    會折行的行不能留著 .where 的 overflow／省略號：行尾的全形括號尾端會被瀏覽器收掉半格，剛好塞滿一行時
    scrollWidth 仍比寬度多幾 px，省略號就把最後一個字蓋掉（FB-062） */
 .where.sub { white-space: normal; font-size: 11px; line-height: 1.45; overflow: visible; text-overflow: clip; }
+/* 所在那一行放不下（FB-493，企劃者 2026-10-20 挑乙：齒輪旁的錠子鈕把名號那一欄擠窄，375 寬在潁川郡、第 10 週以後，320 寬幾乎一直）：
+   地名一行、時刻一行，字一個不改、間隔拿掉；各自放不下才收「…」。.split 由 app.js 的 fitBars 量了才加，放得下照舊一行、一個像素都不動 */
+.where.split > span { display: block; overflow: hidden; text-overflow: ellipsis; }
+.where.split > .where-gap { display: none; }
+.where.split > .where-at { margin-top: 1px; }
 .icon-btn {
   flex: none; width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--line);
   background: var(--card); display: grid; place-items: center; cursor: pointer; font-size: 18px;
