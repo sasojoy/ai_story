@@ -8,7 +8,7 @@
 名字一律寫名號：陣營軍情不匿名（傳聞分層第七節；rules.display_name 只給地方傳聞用），所以帳上不另存顯示名。"""
 from __future__ import annotations
 
-from . import factions
+from . import calendar, factions
 from .models import Content
 from .rules import add_rumor, season_one
 from .state import GameState, WorldState
@@ -107,7 +107,8 @@ def rotate(state: GameState, content: Content, week: int) -> list[str]:
         ranked = sorted(order, key=lambda name: (-ledger[name].get(week - 1, 0), order[name]))
         holders = ranked[:n]
         if holders:
-            # 新寫，待 joy 潤：每週在任名單的陣營軍情
-            add_rumor(state, f"本週在任的{title}：{'、'.join(holders)}。", content=content, layer="faction", faction=faction)
+            # 新寫，待 joy 潤：每週在任名單的陣營軍情（7 天濃縮季「這一段在任的」，calendar.week_word，FB-501）
+            this = calendar.week_word("this", content, w)
+            add_rumor(state, f"{this}在任的{title}：{'、'.join(holders)}。", content=content, layer="faction", faction=faction)
         w.seats[faction] = holders
     return []

@@ -281,8 +281,11 @@ def _commander(state: GameState, content: Content, order: Order) -> str:
 
 
 def fill(state: GameState, content: Content, order: Order, text: str) -> str:
-    """填插槽：{戰線}{地點}{起點}{終點}{人物}；{主將} 是那條戰線己方當下的主將，沒有就寫泛稱（RF3）；{號令} 是黃巾發令的人。"""
+    """填插槽：{戰線}{地點}{起點}{終點}{人物}；{主將} 是那條戰線己方當下的主將，沒有就寫泛稱（RF3）；{號令} 是黃巾發令的人；
+    {本週}{這週} 照季寫（7 天濃縮季的軍令每天一道，寫「今日」「今天」；其他季原本的字，calendar.week_word，FB-501）。"""
     slots = {
+        "{本週}": calendar.week_word("order_this", content, state.world),
+        "{這週}": calendar.week_word("order_that", content, state.world),
         "{戰線}": rules.trend_name(content, order.front) if order.front else "",
         "{地點}": _loc_name(content, order.location),
         "{起點}": _loc_name(content, order.start),

@@ -536,10 +536,10 @@ def board_help(content: Content) -> list[str]:
     return lines
 
 
-def quest_help(content: Content, allied: bool = False) -> list[str]:
+def quest_help(content: Content, allied: bool = False, season: WorldState | None = None) -> list[str]:
     """主線小標點開的說明：你能怎麼影響這一季（遊歷、軍令、伏筆）。FB-112：推線只說有些地方；伏筆只有會鎖定大事的兩方
     （foreshadow.LOCK_SIDES＝timetable.SIDE_NAMES）改寫得了，豪強做完是第三方（揭曉時留名、照 third_party_trends 推割據，結果不變），
-    散人做不了（foreshadow.capable 要陣營對得上）。"""
+    散人做不了（foreshadow.capable 要陣營對得上）。season 給了照季寫軍令多久一道（7 天濃縮季「每天」，FB-501）。"""
     locks = "、".join(timetable.SIDE_NAMES.values())
     third = "" if allied else "、".join(STANCE_NAMES.get(f, f) for f in _geju_sides(content))  # 豪強分屬兩軍：沒有第三方
     geju = any(rules.GEJU in e.third_party_trends for e in content.timetable)
@@ -547,7 +547,8 @@ def quest_help(content: Content, allied: bool = False) -> list[str]:
     if allied:  # 新寫
         aside = f"地方{STANCE_NAMES['haoqiang']}照依附的那一邊；"
     return [
-        f"你能做的：{SORTIE_PLACES if sortie.on(content) else SOME_PLACES}；投靠陣營之後每週一有軍令，照做記功，全陣營湊滿額度就一起見效；"
+        f"你能做的：{SORTIE_PLACES if sortie.on(content) else SOME_PLACES}；"
+        f"投靠陣營之後{calendar.week_word('order_each', content, season)}有軍令，照做記功，全陣營湊滿額度就一起見效；"
         f"{locks}的人聽傳聞、跟人物交好，湊齊關鍵伏筆，能暗中改寫一件大事（{aside}散人拿不到伏筆）。",
     ]
 
@@ -559,7 +560,7 @@ def war_help(state: GameState, content: Content) -> dict[str, list[str]]:
         "stance": stance_help(content, allied),
         "fronts": fronts_help(state, content),
         "board": board_help(content),
-        "quest": quest_help(content, allied),
+        "quest": quest_help(content, allied, state.world),
     }
 
 
@@ -712,12 +713,12 @@ def renown_lines(content: Content, season: WorldState) -> list[str]:
     if note:
         lines.append(note)
     for tier in range(1, len(fb) + 1):
-        perks = renown.fame_perks(content, tier)
+        perks = renown.fame_perks(content, tier, season)
         if perks:
             lines.append(f"{renown.FAME_TITLES[tier]}：{'；'.join(perks)}。")
     for way in renown.PATHS:
         for tier in range(1, len(vb) + 1):
-            perks = renown.virtue_perks(content, way, tier)
+            perks = renown.virtue_perks(content, way, tier, season)
             if perks:
                 lines.append(f"{renown.VIRTUE_TITLES[way][tier]}：{'；'.join(perks)}。")
     if renown.on(content, "deed_fame"):
@@ -781,8 +782,9 @@ def join_lines(content: Content, season: WorldState) -> list[str]:
     effects += [f"{'、'.join(denting)}挫大勢人物的聲威"] if denting else []
     met = f"全陣營湊滿額度的那一刻一起見效（{'，'.join(effects)}）" if effects else "全陣營湊滿額度的那一刻一起見效"
     lines += [
-        f"**軍令**：每週一發令（{kinds}，各陣營拿到的不一樣），照做一次記一次功；{met}。"
-        "本週的軍令卡在江湖頁行動列底下。",
+        # 7 天濃縮季的軍令每天一道：「每天發令」「今日的軍令卡」（calendar.week_word，FB-501）
+        f"**軍令**：{calendar.week_word('order_each', content, season)}發令（{kinds}，各陣營拿到的不一樣），照做一次記一次功；{met}。"
+        f"{calendar.week_word('order_this', content, season)}的軍令卡在江湖頁行動列底下。",
         f"**晉升**：替陣營出力記貢獻（推 1 點戰況記 {cfg.contrib_per_push}），到 {cfg.rank2_contrib} 會有人召見，去應召就晉升；"
         f"自己陣營的大勢人物，你每晉升一階，求見他的門檻就低 {cfg.audience_rank_discount}。"
         + (f"地方豪強最多做到第 {allied_rules.CAP_RANK} 階。" if allied else ""),
@@ -856,7 +858,7 @@ def season_page_lines(content: Content, season: WorldState, rule: str = "") -> l
     lines = [season_line(content, allied), front_rule(content, card=False, allied=allied), stance, *board_help(content)]
     if rule:
         lines.append(f"收季：{rule}")
-    lines += quest_help(content, allied)
+    lines += quest_help(content, allied, season)
     lines.append("江湖頁最上面的「態勢」「大事」「主線」與底下的戰況圖卡，點開都有說明。")
     return lines
 

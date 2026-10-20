@@ -1738,7 +1738,7 @@ class Game:
         if wait > 0:
             why = explore_modes.BOSS_COOLING.format(wait=arena.wait_text(wait / c.config.time_scale))
         else:
-            why = explore_modes.BOSS_GONE_WEEK if c.config.duel.per_boss_week else explore_modes.BOSS_GONE_SEASON
+            why = explore_modes.boss_gone(s, c)  # 7 天濃縮季寫「這一段…第 N 天 00:00 再來」（FB-501）
         return Option(id=oid, label=f"{name}（{why}）", enabled=False)
 
     def _nearest_practice(self) -> atlas.Route | None:
@@ -12863,6 +12863,9 @@ class Game:
         }
         if orders.daily(self.state, c):  # 21 天季的軍令每天一道：軍令卡收起來照季曆第幾天記（網頁 orderKey），隔天重新展開
             cal["day"] = at.cal_day
+        words = calendar.week_words(c, w)  # 7 天濃縮季：畫面上寫「週」的地方換成段（網頁 calWords，FB-501）；其他季沒有這個鍵
+        if words is not None:
+            cal["words"] = words
         return {
             "calendar": cal,
             "next_event": None if upcoming is None else {

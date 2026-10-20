@@ -298,6 +298,59 @@ def point_text(at: CalPoint, *, by_day: bool = False) -> str:
     return f"第 {at.week} 週・週{WEEKDAYS[at.weekday]} {at.hour:02d}:{at.minute:02d}"
 
 
+# ── 7 天濃縮季的「週」是段（FB-501，PM 2026-10-20）────────────────────
+# 季曆有段的季（week7_on）畫面上寫「週」的地方，換字一律走 week_word／week_label（網頁走 week_words 送的那一份）；
+# 其他季（21 天、週末、14 天）照原本的字，一個字都不變。7 天季的字待 joy 潤。
+WEEK_WORDS = {  # 鍵：(照週的季, 7 天濃縮季)
+    "this": ("本週", "這一段"),  # 本週大事、本週在任
+    "this_one": ("這一週", "這一段"),  # 頭目「這一週他不再現身」
+    "each": ("每週", "每段"),  # 名聲：每週通緝、每週貼海捕文書
+    "order_this": ("本週", "今日"),  # 軍令：7 天季每天一道（21 天季也是每天一道，這一批不動）
+    "order_that": ("這週", "今天"),  # 軍令的傳聞「這週連敗幾陣」
+    "order_each": ("每週一", "每天"),  # 玩法說明、主線「每週一有軍令」
+    "realign": ("星期", "日子"),  # 暫停再繼續：季曆對回現實的星期（21 天季）／日子（7 天季）
+}
+
+
+def week_word(key: str, content: Content, season: WorldState | None) -> str:
+    """WEEK_WORDS[key] 照季挑一個：7 天濃縮季（week7_on）是後一個，其他季是前一個（原本的字）。"""
+    return WEEK_WORDS[key][1 if week7_on(season, content) else 0]
+
+
+def segment_days(week: int, content: Content) -> tuple[int, int]:
+    """第 week 週（7 天濃縮季是第幾段）是季曆第幾天到第幾天（從 1 起）：[2, 2, 3] 的第 3 段是 (5, 7)。"""
+    days = _week_days(content)
+    first = _week_start_day(week, content) + 1
+    return first, first + (days[week - 1] if 0 < week <= len(days) else 7) - 1
+
+
+def week_label(week: int, content: Content, season: WorldState | None, *, form: str = "") -> str:
+    """「第 N 週」照季寫：7 天濃縮季寫「第 N 段（第 a～b 天）」（FB-501；待 joy 潤）。form：
+    ""＝「第 N 週」、"tight"＝「第N週」（管理者時刻表）、"end"＝「第 N 週週末」（天下怎麼變；7 天季「第 N 段末（第 b 天）」）、
+    "inner"＝括號裡用的（月旦評；7 天季「第 N 段・第 a～b 天」）。"""
+    if not week7_on(season, content):
+        return {"tight": f"第{week}週", "end": f"第 {week} 週週末"}.get(form, f"第 {week} 週")
+    first, last = segment_days(week, content)
+    if form == "end":
+        return f"第 {week} 段末（第 {last} 天）"
+    if form == "inner":
+        return f"第 {week} 段・第 {first}～{last} 天"
+    return f"第 {week} 段（第 {first}～{last} 天）"
+
+
+def week_words(content: Content, season: WorldState | None) -> dict | None:
+    """給網頁的那一份（status.calendar.words；網頁 calWords／wkWord／wkName）：7 天濃縮季的 WEEK_WORDS 與每一段的 week_label
+    （names、ends）；其他季是 None，網頁照原本的字。"""
+    if not week7_on(season, content):
+        return None
+    weeks = range(1, len(content.config.season_segments) + 1)
+    return {
+        **{key: pair[1] for key, pair in WEEK_WORDS.items()},
+        "names": [week_label(w, content, season) for w in weeks],
+        "ends": [week_label(w, content, season, form="end") for w in weeks],
+    }
+
+
 def stamp_text(time: float, content: Content, season: WorldState | None, *, clock: bool = True) -> str:
     """玩家看得到的遊戲時間，全部走這裡：第一季（開關開著、這一季也蓋了章）寫成狀態列那樣的「第 3 週・週二 21:40」（point_text）；
     其他時候照舊——clock 時「第2天 14:05」，不要時刻（江湖史、傳聞）時「第2天」，一個字都不變。

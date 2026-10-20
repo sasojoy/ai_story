@@ -781,8 +781,10 @@ def start_pending_battle(world: WorldStateStore, content: Content, now: float) -
 RESUME_SKIP_ALL = "這一段不算進賽季，季末往後延一樣長"
 RESUME_SKIP_PART = "其中 {skipped}不算進賽季，季末往後延一樣長；不足一個季曆鐘頭的零頭（{rest}）照算進賽季"
 RESUME_SKIP_NONE = "停不到一個季曆鐘頭（現實約 {grid}），不另外扣：這一段照算進賽季，季末不另外往後延"
-# 21 天季（PM 2026-10-19）：季曆對回現實的星期（realign_paused_calendar）。待 joy 潤
-RESUME_SKIP_REAL = "21 天的季：季曆對回現實的星期，暫停期間的大事在這一刻一起發生，季末照原本的日期"
+# 照現實天的季（PM 2026-10-19）：季曆對回現實的星期（realign_paused_calendar）。待 joy 潤
+# 照季寫季長與對回什麼（FB-501：7 天濃縮季寫「7 天的季：季曆對回現實的日子」；calendar.week_word 的 realign），21 天季一個字都不變
+RESUME_SKIP_REAL_LINE = "{days:g} 天的季：季曆對回現實的{unit}，暫停期間的大事在這一刻一起發生，季末照原本的日期"
+RESUME_SKIP_REAL = RESUME_SKIP_REAL_LINE.format(days=21, unit="星期")  # 21 天季那一句（以前寫死的就是它）
 
 
 def _span_text(seconds: float) -> str:
@@ -797,11 +799,16 @@ def _span_text(seconds: float) -> str:
     return f"{hours} 小時" + (f" {rest // 60} 分" if rest // 60 else "")
 
 
+def realign_line(season: WorldState, content: Content) -> str:
+    """照現實天的季繼續時那一句（RESUME_SKIP_REAL_LINE）：照這一季蓋章的季長與 calendar.week_word("realign")（FB-501）。"""
+    return RESUME_SKIP_REAL_LINE.format(days=season_length_days(season, content), unit=calendar.week_word("realign", content, season))
+
+
 def resume_skip_text(season: WorldState, content: Content, span: float) -> str:
     """停了 span 個現實秒，繼續時賽季到底扣了多少，照實說（RESUME_SKIP_*）：全扣（beta 那一季、或剛好整數個曆時）、
     扣了整個曆時的部分零頭照算、什麼都沒扣（不足一個曆時）。21 天季照實說季曆對回現實的星期（RESUME_SKIP_REAL）。"""
     if calendar.season21_on(season, content):
-        return RESUME_SKIP_REAL
+        return realign_line(season, content)
     if not calendar.season_one_on(season, content):
         return RESUME_SKIP_ALL
     grid = calendar.cal_hour_seconds(content, season) / content.config.time_scale
