@@ -214,6 +214,20 @@ def test_silver_outlets_and_season_caps_are_a_third():
     assert cfg.season21_daily == real_content("season21").config.season21_daily  # 每天的那一批照天，跟 21 天季一樣
 
 
+def test_week7_shortens_the_calendar_day_spans_pm_ruling_5():
+    """PM 裁決第 5 條（2026-10-20，照「佔一季幾成」縮）：人物被打退後 1 天回來、復仇／追剿懸賞 2 天、求援 1 天；新手期不動。
+    設定覆寫檔是淺層合併（content._config）：figure_life 只寫兩個鍵，其餘照預設——跟 21 天季的 figure_life 只差這兩個。"""
+    c7, c21, wk, c14 = real_content("week7"), real_content("season21"), real_content("weekend"), real_content()
+    cfg = c7.config
+    assert cfg.figure_return_days == 1
+    assert (cfg.figure_life.revenge_cal_days, cfg.figure_life.rally_cal_days) == (2, 1)
+    for other in (c21, wk, c14):  # 21 天季、週末、14 天照舊：3 天、7 天、3 天
+        o = other.config
+        assert (o.figure_return_days, o.figure_life.revenge_cal_days, o.figure_life.rally_cal_days) == (3, 7, 3)
+    assert cfg.figure_life.model_copy(update={"revenge_cal_days": 7.0, "rally_cal_days": 3.0}) == c21.config.figure_life
+    assert cfg.newbie_real_hours == c21.config.newbie_real_hours == 48  # 新手期 48 小時不動
+
+
 def test_the_weekly_treasure_cap_resets_each_segment():
     """Review Focus 3：照週的上限照段重算（第 3 天 00:00）。一季上限 1 件時第二段就不再掉，所以這裡把一季上限放開來看段。"""
     c7 = real_content("week7")
