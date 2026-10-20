@@ -31,6 +31,7 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   - 要用就 `git stash push -m <獨一無二的標籤> -- <檔>`，`git stash list --format='%H %gd %gs'` 找到自己那一筆，`git stash apply <sha>`，再照標籤找 `stash@{n}` 去 drop。
   - 想證明測試「修之前是紅的」，最簡單的就是這樣把改動暫時收起來跑一次。
 - 背景長跑（量表）用 `run_in_background`。輸出導到檔案時 python 會緩衝，加 `-u` 才看得到進度。等它結束的通知，不要輪詢。
+- **PowerShell 的 `git commit -F - @'…'@` 不會走 stdin**：here-string 被當成一個路徑參數，合併中會報 `cannot do a partial commit during a merge`（不在合併中就變成只提交那個「路徑」）。commit 訊息用 Write 寫進 scratchpad 的檔，`git commit -F <檔>`（2026-10-20）。
 - **Git Bash 的 `sed -i` 會把 CRLF 的檔整個改成 LF**（2026-10-20 改 `bot_policy.py` 一行，整個檔變 LF）：改一行也用 Edit 工具，或照上面「讀進來轉 `\n`、寫回轉回去」的腳本。
 - **Bash 的隔離檢查會擋「太複雜」的 python heredoc**（一次改兩個檔的 dict 迴圈就被擋過）：改檔腳本寫進 scratchpad 的 `.py`（裡面放一個 `edit(相對路徑, [(舊, 新, 次數)])` 的小函式，照上面 CRLF 的規矩），用 PowerShell 跑 `python 腳本 .`。
 - **實機開自己的伺服器**（不碰 7861）：
@@ -50,6 +51,7 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 - 新測試超過一秒（建 `Game`、載真實內容通常就超過）標 `@pytest.mark.slow`。
 - **修 bug 先寫會紅的測試**：先確認它在修之前真的失敗、失敗的數字跟 QA 回報的一樣，再修。回報時寫「修前重現了什麼」。
 - 用正式內容測舊規則的測試，要在 helper 裡把新開關關掉（例 `c.config.precise_actions = False`、`four_tiers.enabled = False`）。新規則另開一個測試檔，不要改寫舊的斷言去迎合新規則。
+  例外：PM 的裁決直接推翻還沒上線的這一批的做法（不是開關後面的舊季）時，鎖住舊做法的那一條斷言照裁決翻過來，註明哪一條裁決、新規則的測試在哪一個檔（例：裁決 19 之後 `test_siege_void_when_no_attacker` 改成「沒有作罷的天下大事」，新的在 `test_conquest_void_quiet.py`）。
 - 江湖紀錄 `state.journal` 新的在前（index 0）。找某一則照標題找，不要拿 `[-1]`。
 - **證明開關關著一個字都不變**：一條條「關著不變」的測試之外，最省事的是拿 QA 的整份畫面對照（`tianxia-qa/引擎驗收.md` 第 7 節；scratchpad 裡 QA 留過 `conqqa/cmp_off.py`）：開這一批之前那一版與 HEAD 各 `git archive` 一份跑，比雜湊。腳本 `import server`，所以要連頂層的 `server.py server_push.py zhuan_html.py llm_queue.py console.py` 一起 archive（只 archive `tianxia content` 會 `No module named 'server_push'`）。領地爭奪第一批修正：season21／week7／weekend 三種季 573／569／567 行一個位元組都一樣。
 
@@ -109,6 +111,10 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 - 一張回饋單一個 commit；commit 訊息一句英文，結尾 `Co-Authored-By:`（照當時 system 給的那一行）。
 - 推之前合派工指定的分支（衝突兩邊都留）。推完用 `git merge-base --is-ancestor HEAD origin/<分支>` 確認推到了。
   - `天下大勢` 這份 clone 的 `remote.origin.fetch` 只寫了 main 等三條，**`git fetch origin` 不會更新 `origin/dev/*`、`origin/feature/*`**（2026-10-20：推上去了，`origin/dev/conquest-1` 還停在舊的那一版，上面那一行就判成沒推到）。推完先 `git fetch origin refs/heads/<分支>:refs/remotes/origin/<分支>` 再比，或直接看 `git ls-remote origin refs/heads/<分支>`。拿 `origin/feature/<名字>` 當 `test_for` 的 base 之前也照這樣更新一次。
+- **疊批合回上一批的修正**（`dev/<x>-2` 合 `dev/<x>-1` QA 之後的 FB 修正；2026-10-20 領地爭奪第二批合第一批修正）：
+  - 衝突多半是同一個判斷兩邊各改一半：上一批的修正收緊條件（攻城只算打贏敵方陣營的隊伍，FB-531），這一批換掉來源（攻城地點改成今天公告的目標，還放寬成「中立駐軍也算」）。照 PM 定的疊法，兩個條件都套在**列清單**與**記功**兩邊（同一個判斷函式），不要只把兩段文字接起來。疊出來的代價（例：只公告中立地的那一天攻城軍令記不到、也不發）寫進計畫交 PM。
+  - 上一批修正帶進來的測試是照上一批的前提寫的（任何搶得下來的區塊都推得動進度、攻城地點不看時程表），**自動合併、沒有衝突標記，照樣會紅**：合完、提交合併之前先跑兩批的測試檔。補上這一批的前提（例 `conquest_kit.announce` 先公告那一塊），不改斷言，測試檔開頭寫一句為什麼。
+  - 兩邊各寫了同一個節號（兩個「6.2」）：都留、照 commit 時間排（`git log -1 --format=%ci <sha>`），不重新編號（回饋單寫著「計畫 6.2」），合併怎麼解另起一段接在最後。
 - 回報寫：
   - 每張的 commit 與一兩句怎麼修。修前重現了什麼。
   - 跑了哪些測試、幾條過。
