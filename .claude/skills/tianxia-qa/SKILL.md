@@ -78,6 +78,13 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
   - 江湖頁的戰況圖卡是 `div.war`，點了攤開 `.war-help.fronts-help`；主線是 `.peek-chip.quest`。
   - 行動列的格子是 `button.act-ink`（灰的多一個 `.off`，小字是裡面的 `small`，量字有沒有被切比 `small.scrollWidth` 與 `button` 的左右邊）；格子底下每一格的說明在 `.act-notes p`（開頭是粗體的格名）。截圖前先 `document.querySelector('.act-notes').scrollIntoView({block:'end'})`。軍令卡是 `<details>` 裡的 `summary`（「📜 本週軍令」），要看內容先 `open = true`。
   - 輿圖 ⚔（`g.armed`）不在 `g[data-loc]` 裡面，它前面最近的 `g[data-loc]` 兄弟才是那個地點（往 `previousElementSibling` 找）；點了輿圖分頁要等約 3 秒才畫好，頭一次數到 0 不是沒有。
+- **SVG 與輿圖上的點擊**（2026-10-20 輿圖重製第 1 批）：
+  - 煉製頁的爐子格子（`g[data-act="pot-open"]`）、開爐（`g[data-act="forge-hub"]`）是 SVG 的 `g`，沒有 `.click()`：用 `el.dispatchEvent(new MouseEvent('click',{bubbles:true}))`。
+  - 輿圖上選地點不認 click，認的是 pointer：對 `g[data-loc="<id>"] circle` 送同一個 `pointerId` 的 `pointerdown` 再 `pointerup`（帶 `clientX/Y`＝圓心），之後抽屜才有 `[data-act="map-travel"][data-mode="walk|dash"]`。
+  - 序章要照引導按：發光的東西都帶 `data-glow`，挑東西的籤是 `[data-act="pick"][data-id=…]`，熔煉的確認鈕是 `[data-act="ask-yes"]`。
+  - 量地名壓到：輿圖不同縮放的地名不一定在 `g[data-loc]` 裡（縮放之後另外畫），用地名清單去對整張 SVG 的 `text`，再比 `g[data-loc]` 最後一個 `circle` 與 `g.armed` 的包圍盒。
+- **cookie 是 HttpOnly**：分頁裡已經有一個 `tx_session`（例如之前登入過、伺服器重開了），`document.cookie = …` 蓋不掉它，頁面照樣掉回登入頁；先 `await fetch('/api/logout',{method:'POST'})` 再寫 cookie、再單獨一次 reload。
+- 截圖前先確認視窗還是 375×812（回合結束會被重設，截出來是 800×600 或兩倍像素），不對就再 `resize_window` 一次。
 
 ## 存檔、資料庫與假人
 - 換季之後、玩家第一次同步之前改的存檔，會被換季重設洗掉。要等他同步完再改。
