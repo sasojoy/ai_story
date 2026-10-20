@@ -13,6 +13,7 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 - 一批一個工作樹，從派工指定的分支開（多半是 `origin/feature/formal-season`）。分支名照派工寫的。
   如果是 `git worktree add -b` 開的，要加 `--no-track`，或開完 `git branch --unset-upstream`：不然它跟著功能分支，`git push` 可能推錯地方。推的時候一律寫明 `git push origin <你的分支>`。
 - 工作樹沒有 `.venv`：python 用 `C:/Ray/專案/天下大勢/.venv/Scripts/python.exe`，PowerShell 呼叫。
+- **子代理的工作樹一開始停在別的分支上，技能檔是跟著分支走的**：Skill 工具回「Unknown skill: tianxia-dev」時，先 `git fetch origin '+refs/heads/dev/*:refs/remotes/origin/dev/*'`、`git switch -c <別名> origin/dev/<名字>`，再直接 Read `.claude/skills/tianxia-dev/SKILL.md`（換分支之前讀不到，2026-10-20 輿圖重製 1b）。
 - 先寫計畫 `docs/superpowers/plans/<日期>-<名字>.md`（派工說「不必給企劃者審」就不審），一張回饋單不用計畫。不開子代理、不開 Workflow，除非派工明講。
 - 派工若要「先合某分支」，合之前先 `git merge-base --is-ancestor <那一版> origin/feature/formal-season` 看是不是已經在功能分支上。PM 前後兩則指示衝突時照後一則；合到一半發現不對就 `git merge --abort`。
 - 派工寫 `git switch -c dev/<名字> origin/dev/<名字>`，但 `git worktree list` 看得到那條本地分支已經在別的工作樹 checkout 著（上一位開發的）：同一條本地分支不能兩處同時 checkout，`switch -c` 也會說已經存在。開一條別名的本地分支（例 `conquest-1-fix`）從 `origin/dev/<名字>` 開，推的時候寫 `git push origin HEAD:dev/<名字>`，不去動別人的工作樹（2026-10-20 領地爭奪第一批修正）。
@@ -33,6 +34,8 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 - 背景長跑（量表）用 `run_in_background`。輸出導到檔案時 python 會緩衝，加 `-u` 才看得到進度。等它結束的通知，不要輪詢。
 - **PowerShell 的 `git commit -F - @'…'@` 不會走 stdin**：here-string 被當成一個路徑參數，合併中會報 `cannot do a partial commit during a merge`（不在合併中就變成只提交那個「路徑」）。commit 訊息用 Write 寫進 scratchpad 的檔，`git commit -F <檔>`（2026-10-20）。
 - **Git Bash 的 `sed -i` 會把 CRLF 的檔整個改成 LF**（2026-10-20 改 `bot_policy.py` 一行，整個檔變 LF）：改一行也用 Edit 工具，或照上面「讀進來轉 `\n`、寫回轉回去」的腳本。
+- **PowerShell 5.1 讀沒有 BOM 的 `.ps1` 會把中文路徑讀成亂碼**（`Set-Location` 說找不到路徑）：長指令直接放進 PowerShell 工具的 `command`（工具會處理編碼），要一長串檔名就寫進 ASCII 的 txt、用 `Get-Content` 讀。
+- **逐行改測試檔的小工具**（LF／CRLF 都通用）：`open(path, newline="").read().split("\n")`，指定行號、`assert "舊字" in 那一行` 再替換，寫回時 `"\n".join`；整段替換的版本先把 `\r\n` 轉 `\n`、每一處 `assert text.count(舊) == 次數`。次數用「出現幾次」不是 `grep -c` 的行數（同一行出現兩次會差一）。
 - **Bash 的隔離檢查會擋「太複雜」的 python heredoc**（一次改兩個檔的 dict 迴圈就被擋過）：改檔腳本寫進 scratchpad 的 `.py`（裡面放一個 `edit(相對路徑, [(舊, 新, 次數)])` 的小函式，照上面 CRLF 的規矩），用 PowerShell 跑 `python 腳本 .`。
 - **實機開自己的伺服器**（不碰 7861）：
   - 設定不必動 `content/profiles/`：`TIANXIA_PROFILE` 給絕對路徑（不寫 `.json`）就讀那個檔，抄一份要的設定檔到 scratchpad、打開要試的開關，順便把 `ollama_url` 指到死埠（`http://127.0.0.1:9`）。
@@ -48,6 +51,10 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   - 你自己合了別的分支進來時，base 用合完那一個 commit，只量你這一輪的改動，不然會把別人的東西全挑進來。
   - `--list` 先看挑到哪些檔。
 - 改到 `tianxia/engine.py` 幾乎會挑到大半套（八千多條、約 6～8 分鐘），正常。只動內容或小模組時會少很多。
+- **`test_for.py` 自己已經帶 `-q`**：`--` 後面再傳 `-q` 就變 `-qq`，跑完 exit 0 卻不印「N passed」那一行（2026-10-20 輿圖重製 1b 的前一位開發就是這樣沒留下數字）。`--` 後面只傳 `-n 6`。
+- **內容的名字或位置改了（人物開季站位、地點歸屬、線名），`test_for.py` 挑不到「用真實內容、斷言寫死舊名字或舊位置」的測試**：它只挑 import 改到的模組的檔，內容改了只補 `test_content`／`test_real_content` 這幾個。輿圖重製 1b 搬七位人物、線名改「中原」，`test_for` 的 20 個檔全綠，另外 15 個檔、79 條是紅的（`test_front_lines`、`test_orders`、`test_ranks`、`test_figure_aid`、`test_precise_actions`、`test_challenge_season`……）。做法：
+  - 把改到的 id 與顯示名（人物 id、中文名、地點 id、線名）列成 token，寫一支小腳本掃 `tests/test_*.py`：含 token、又用真實內容（`real_content`、`real` fixture）的檔，扣掉 `test_for` 已經跑過的，一起 `pytest -n 6 -m "slow or not slow"`（87 個檔約一分鐘多，比想的快）。
+  - 紅的照「換成新位置／新名字，斷言的意思不變」改；找「剛好只有一位人物的地方」不要猜，寫小腳本對每個地點印 `_people_here()` 與交友鈕（本批：白馬寺華佗、黃巾別部營寨波才、白馬津卜己）。人物搬走後「風聞聽眾」「悲憤」這類靠大區找人的測試，要先把人物擺回原位（`figures._ensure(...).location = ...`），或換一位還站在那一區的人，不要把斷言改成沒意義的。
 - 新測試超過一秒（建 `Game`、載真實內容通常就超過）標 `@pytest.mark.slow`。
 - **修 bug 先寫會紅的測試**：先確認它在修之前真的失敗、失敗的數字跟 QA 回報的一樣，再修。回報時寫「修前重現了什麼」。
 - 用正式內容測舊規則的測試，要在 helper 裡把新開關關掉（例 `c.config.precise_actions = False`、`four_tiers.enabled = False`）。新規則另開一個測試檔，不要改寫舊的斷言去迎合新規則。

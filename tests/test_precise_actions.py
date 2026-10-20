@@ -197,9 +197,9 @@ def test_season21_boss_is_twice_a_week():
 
 
 def test_one_figure_talks_straight_away():
-    game = _game(at="luoyang_road")
+    game = _game(at="baima_temple")  # 輿圖重製 1b：洛陽官道站了四位，只有一位的地方換成白馬寺的華佗
     opts = _ids(game)
-    assert opts["act:socialize"].label == "交友（體力 3・跟唐周說話）" and opts["act:socialize"].enabled
+    assert opts["act:socialize"].label == "交友（體力 3・跟華佗說話）" and opts["act:socialize"].enabled
     assert not any(i.startswith("call:") or i == "act:call" for i in opts)  # 求見不再單獨列
     assert game.dialogue_request("act:socialize") is not None
 
@@ -216,7 +216,7 @@ def test_two_figures_open_the_list_for_free():
 
 
 def test_no_one_to_talk_to_greys_out_and_costs_nothing():
-    game = _game(at="changshe")
+    game = _game(at="huangjin_camp")  # 輿圖重製 1b：長社沒有人物了，換成波才一位的黃巾別部營寨
     option = _ids(game)["act:socialize"]
     assert not option.enabled and option.label == "交友（名望還差 15）"
     option = _ids(_game(at="yingchuan"))["act:socialize"]
@@ -263,18 +263,18 @@ def test_joining_a_sect_is_its_own_button():
 def test_fortune_with_no_one_free_gives_no_xinde(monkeypatch):
     from tianxia import roster
 
-    game = _game(at="luoyang_road")
+    game = _game(at="baima_temple")  # 輿圖重製 1b：只有一位能談的地方（洛陽官道現在有四位）
     monkeypatch.setattr(roster, "owned_by", lambda *a, **k: "別人")
     monkeypatch.setattr(roster, "fortune_due", lambda *a, **k: True)
     xinde = game.state.player.stats.get("xinde", 0)
-    assert game._social_plan() == ("talk", "tangzhou")
+    assert game._social_plan() == ("talk", "huatuo")
     assert game._deliver_fortune() == [] and game.state.player.stats.get("xinde", 0) == xinde
 
 
 def test_a_summons_place_still_talks(monkeypatch):
     from tianxia import ranks
 
-    game = _game(at="luoyang_road")
+    game = _game(at="baima_temple")
     monkeypatch.setattr(ranks, "summons_event", lambda *a, **k: next(iter(game.content.events)))
     assert "act:summons" in _ids(game) and game.dialogue_request("act:socialize") is not None
 

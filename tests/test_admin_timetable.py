@@ -355,7 +355,7 @@ def test_admin_revives_a_fallen_figure_at_half_on_his_old_front(on):
     figures.apply(s, on, "bocai", FigureChange(fate="退場"))
     game._save_season()
     assert game.admin_fallen() == ["bocai"]
-    assert game.admin_revive_figure("bocai") == [figures.BACK_LINE.format(name="波才", where="，回到潁川汝南")]
+    assert game.admin_revive_figure("bocai") == [figures.BACK_LINE.format(name="波才", where="，回到中原")]
     stored = game.world.get_season().figures
     assert stored["bocai"].status == "active" and stored["bocai"].prestige == 30 and stored["bocai"].front == "yingru"
     assert stored["pengtuo"].front is None and game.admin_fallen() == []

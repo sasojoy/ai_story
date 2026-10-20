@@ -126,7 +126,7 @@ def test_switch_off_world_and_screens_look_as_before(real):
     assert (w.trends, w.revealed) == ({"huangjin": 25, "yuxi": 0}, {"huangjin"})
     assert fresh_season(real).trends == {"huangjin": 25, "yuxi": 0}
     text = game.trends_text()
-    assert "黃巾聲勢" in text and not any(name in text for name in ("潁川汝南", "南陽", "冀州", "豪強割據"))
+    assert "黃巾聲勢" in text and not any(name in text for name in ("中原", "南陽", "冀州", "豪強割據"))
     regions = {r.id: atlas.region_trends(game.state, real, r) for r in real.map.regions}
     huangjin = [("黃巾聲勢", 25)]  # 輿圖重製第 1 批：九州（外圈洛陽、青州沒有戰線）
     assert regions == {
@@ -247,11 +247,11 @@ def test_old_world_leader_activity_still_names_the_front_pushes(on):
     """同一種舊季（存檔的 revealed 沒有三條戰線）：龍頭人物的活動說明照樣寫出他推哪條戰線，不會把公開的戰線當成還沒浮現。"""
     game = _game(on)
     s = game.state
-    assert "潁川汝南下降" in atlas.leader_activity(s, on, "皇甫嵩")  # 新的一季：基準
+    assert "中原下降" in atlas.leader_activity(s, on, "皇甫嵩")  # 新的一季：基準
     s.world.trends = {"huangjin": 25, "yuxi": 0}
     s.world.revealed = {"huangjin"}
-    assert "潁川汝南下降" in atlas.leader_activity(s, on, "皇甫嵩")
-    assert "潁川汝南上升" in atlas.leader_activity(s, on, "波才")
+    assert "中原下降" in atlas.leader_activity(s, on, "皇甫嵩")
+    assert "中原上升" in atlas.leader_activity(s, on, "波才")
 
 
 def test_front_key_at_luoyang_pushes_nothing_when_on(on):
@@ -406,7 +406,7 @@ def test_map_tints_each_region_by_its_front(on):
     regions = {r.id: atlas.region_trends(s, on, r) for r in on.map.regions}
     assert regions == {
         "luoyang": [], "qingzhou": [], "nanyang": [("南陽", 70)], "jizhou": [("冀州", 90)],
-        **dict.fromkeys(("yingchuan", "dongjun", "chenliu", "runan", "core"), [("潁川汝南", 30)]),
+        **dict.fromkeys(("yingchuan", "dongjun", "chenliu", "runan", "core"), [("中原", 30)]),
     }
     svg = mapview.render_map(s, on, "situation")
     fills = {r.id: r.fill for r in on.map.regions}
@@ -508,7 +508,7 @@ def test_status_shows_three_fronts_and_stances(real):
     _set_fronts(game.state, 30, 70, 90)
     data = game.status_data()
     assert data["fronts"] == [
-        {"id": "yingru", "name": "潁川汝南", "value": 30, "chaos": False},
+        {"id": "yingru", "name": "中原", "value": 30, "chaos": False},
         {"id": "nanyang", "name": "南陽", "value": 70, "chaos": False},
         {"id": "jizhou", "name": "冀州", "value": 90, "chaos": False},
     ]
@@ -517,7 +517,7 @@ def test_status_shows_three_fronts_and_stances(real):
 
 # ── FB-065：圖卡標亂局帶、態勢那一行寫出數字是怎麼來的 ──────────────
 
-# 三條戰線的值（潁川汝南、南陽、冀州）→ 在亂局（戰況 35～65）的有幾條
+# 三條戰線的值（中原、南陽、冀州）→ 在亂局（戰況 35～65）的有幾條
 CHAOS_CASES = [((20, 80, 10), 0), ((40, 80, 10), 1), ((40, 50, 10), 2), ((40, 50, 60), 3)]
 
 
@@ -711,7 +711,7 @@ def test_switch_on_but_season_unstamped_behaves_like_switch_off(real):
     assert "fronts" not in game.status_data() and "stances" not in game.status_data()
     regions = {r.id: atlas.region_trends(s, real, r) for r in real.map.regions}
     assert regions["jizhou"] == [("黃巾聲勢", 30)] and regions["luoyang"] == []
-    assert "潁川汝南" not in game.trends_text()
+    assert "中原" not in game.trends_text()
 
 
 # ── Task 6：假人往輸得最多的戰線走 ─────────────────────────

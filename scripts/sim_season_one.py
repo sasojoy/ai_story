@@ -245,7 +245,7 @@ def run_season(
 
 
 SIDE_NAMES = {"guan": "官軍", "huang": "黃巾", "haoqiang": "豪強"}
-FRONT_NAMES = {"yingru": "潁川汝南", "nanyang": "南陽", "jizhou": "冀州", "geju": "割據"}
+FRONT_NAMES = {"yingru": "中原", "nanyang": "南陽", "jizhou": "冀州", "geju": "割據"}
 
 
 def summary(seed: int, r: dict) -> str:
@@ -253,7 +253,7 @@ def summary(seed: int, r: dict) -> str:
     head = f"種子 {seed}：" + (f"{r['ending']}（{r['end_stamp']} 收季）" if r["ended"] else f"沒收季（停在{r['end_stamp']}）")
     lines = [head + f"　卡住：{'是' if r['stuck'] else '否'}　假人：" + "、".join(
         f"{SIDE_NAMES[s]} {n}" for s, n in r["bots"].items())]
-    lines.append("  每週末（潁川汝南/南陽/冀州/割據）：" + "　".join(
+    lines.append("  每週末（中原/南陽/冀州/割據）：" + "　".join(
         f"{w}:{v['yingru']}/{v['nanyang']}/{v['jizhou']}/{v['geju']}" for w, v in sorted(r["weekly"].items())))
     lines.append(f"  割據首次到（投靠名冊 {r['roster']} 人）：" + "　".join(
         f"{line}＝" + (f"第 {hit[0]} 週（{hit[1]}）" if hit else "沒到") for line, hit in r["geju_first"].items()))

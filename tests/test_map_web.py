@@ -90,7 +90,7 @@ def test_region_tint_follows_the_majority():
 
 def test_the_overview_answers_where_to_sortie_today():
     out = run(_game(), "return H.overviewHtml(H.S.mapBase, H.S.mapState);")
-    assert "今天去哪裡出陣" in out and out.count('data-act="map-pick"') >= 1 and "潁川汝南" in out
+    assert "今天去哪裡出陣" in out and out.count('data-act="map-pick"') >= 1 and "中原" in out
 
 
 def test_the_overview_without_sortie_skips_the_suggestions():

@@ -24,7 +24,7 @@ def real():
     return c
 
 
-def _player(content, store, name, faction, at="changshe") -> Game:
+def _player(content, store, name, faction, at="luoyang_road") -> Game:  # 輿圖重製 1b：皇甫嵩、朱儁開季站洛陽官道（以前在長社）
     game = Game.new(content, name, rng=random.Random(0), world=store)
     p = game.state.player
     p.faction, p.location = faction, at

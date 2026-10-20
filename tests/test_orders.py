@@ -270,7 +270,7 @@ def test_siege_credit_by_win_at_front_only_against_the_enemy(on):
     siege = _order(game, "siege", "guan", front="yingru")
     s, c = game.state, on
     assert orders.credit(s, c, "guan", "甲", kind="win", front="yingru", squad_faction="huang") == [
-        "（軍令「攻城・潁川汝南」：你 1 次，陣營 1／4）",
+        "（軍令「攻城・中原」：你 1 次，陣營 1／4）",
     ]
     assert orders.credit(s, c, "guan", "甲", kind="win", front="nanyang", squad_faction="huang") == []  # 別的戰線
     assert orders.credit(s, c, "guan", "甲", kind="win", front="yingru", squad_faction=None) == []  # 流寇不是敵方陣營
@@ -290,7 +290,7 @@ def test_order_done_applies_effect_once_and_names_top_three(on):
     msgs = orders.credit(s, c, "guan", "丙", kind="win", front="yingru", squad_faction="huang", shown="某位少俠")
     assert siege.done and siege.applied == 8
     assert rules.trend_value(s, c, "yingru") == 42
-    assert any("【軍令達成】潁川汝南的黃巾營壘被我軍連拔數處。出力最多：乙、甲、某位少俠。" in m for m in msgs)
+    assert any("【軍令達成】中原的黃巾營壘被我軍連拔數處。出力最多：乙、甲、某位少俠。" in m for m in msgs)
     assert front_lines.mark("yingru", -8) in msgs  # 軍令達成推的戰況；畫面上由 front_lines 換成一句話（FB-064）
     news = [r for r in s.world.rumors if r.layer == "faction" and "軍令達成" in r.text]
     assert len(news) == 1 and news[0].faction == "guan"
@@ -399,7 +399,7 @@ def test_win_at_front_counts_for_siege_but_a_drill_does_not(on):
     _order(game, "siege", "guan", front="yingru")
     with _win():
         msgs = game.choose("act:train")
-    assert any("軍令「攻城・潁川汝南」：你 1 次" in m for m in msgs)
+    assert any("軍令「攻城・中原」：你 1 次" in m for m in msgs)
     on.squads["louluo"].faction = "guan"  # 自己人：操練不算
     on.squads["shuikou"].faction = "guan"
     game.state.player.stamina = 150
@@ -428,8 +428,8 @@ def test_duty_pushes_the_front_and_counts_for_defend(on):
     msgs = game.choose("act:duty")
     assert msgs[0].startswith("你在長社的村口講了一段黃天的道理")
     # 守勢行動推的一點戰況：回給呼叫端的話是一句話（小的那一段三句裡的一句）、不是數字（FB-064）
-    assert sum(m in {f"潁川汝南：黃巾{p}" for p in ("稍佔上風", "略有斬獲", "小有進展")} for m in msgs) == 1
-    assert any("軍令「守城・潁川汝南」：你 1 次" in m for m in msgs)
+    assert sum(m in {f"中原：黃巾{p}" for p in ("稍佔上風", "略有斬獲", "小有進展")} for m in msgs) == 1
+    assert any("軍令「守城・中原」：你 1 次" in m for m in msgs)
     assert game.state.player.stamina == game.content.config.stamina_max - 10
     assert game.state.player.contrib == 10  # 推 1 點記 10 貢獻（T3）
     assert game.state.journal[0].title == "傳道・長社"
@@ -745,14 +745,14 @@ def test_a_new_guan_recruit_finishes_a_week_one_order_without_leaving_yingru(on)
     assert orders.week_of(game.state, on) == 1
     game.view_orders()  # 入伍段第一步：軍令卡出現在畫面上
     defend = next(o for o in orders.current(game.state, on, "guan") if o.template == "defend")
-    assert orders.title(on, defend) == "守城・潁川汝南"
+    assert orders.title(on, defend) == "守城・中原"
     assert defend.id in [card["id"] for card in game.orders_view()]  # 軍令卡上看得到
     game.state.player.location = here = "yingchuan"  # 回到潁川郡：中原那一條線
     assert rules.front_of(on, here) == defend.front
     msgs = game.choose("act:duty")
     assert game.state.player.location == here
     assert defend.progress.get("甲") == 1
-    assert any("守城・潁川汝南" in m for m in msgs)
+    assert any("守城・中原" in m for m in msgs)
     assert enlist.done(game.state, on) and game.state.player.tutorial_step == BASE  # 入伍段的「第一道軍令」也跟著過
 
 
@@ -1024,10 +1024,10 @@ def test_switch_off_no_orders_in_any_week(real):
 
 # （陣營, 目標人物, 他的所在, 大區 id, 大區名）：三邊的打擊模板各一道。這三位開季時，新角色都還沒摸清他們的所在
 # （新角色摸得清的只有開局那十個地點）；要「摸清」就把所在加進 visited。
-STRIKES = [  # 輿圖重製第 1 批：州＝大區，黃巾別部營寨在潁川、盧植營在東郡、南陽黃巾營在汝南（人物的開季站位還沒搬，設計 3.1）
+STRIKES = [  # 輿圖重製 1b：州＝大區；波才還在潁川的黃巾別部營寨，盧植搬到洛陽的孟津渡、張曼成搬到青州的泰山腳（設計 3.1 開季站自家外圈）
     ("guan", "bocai", "huangjin_camp", "yingchuan", "潁川"),
-    ("huang", "luzhi", "luzhi_camp", "dongjun", "東郡"),
-    ("haoqiang", "zhangmancheng", "nanyang_huangjin_camp", "runan", "汝南"),
+    ("huang", "luzhi", "mengjin_ford", "luoyang", "洛陽"),
+    ("haoqiang", "zhangmancheng", "taishan_foot", "qingzhou", "青州"),
 ]
 
 
@@ -1064,18 +1064,18 @@ def test_strike_card_without_map_regions_only_says_it_is_not_found(on):
     game, _ = _strike_game(on, "haoqiang", "zhangmancheng")
     [card] = game.orders_view()
     assert card["how"] == _how("張曼成", "他在哪裡你還沒摸清")
-    assert on.locations["nanyang_huangjin_camp"].name not in card["how"]
+    assert on.locations["taishan_foot"].name not in card["how"]
 
 
 @pytest.mark.parametrize("change", [{"front": None}, {"status": "retired"}, {"status": "jailed"}, {"status": "crippled"}])
 def test_strike_card_says_so_when_the_target_cannot_be_challenged(on, change):
     game, _ = _strike_game(on, "haoqiang", "zhangmancheng")
-    game.state.player.visited.add("nanyang_huangjin_camp")  # 就算摸清了他的所在，也不指路
+    game.state.player.visited.add("taishan_foot")  # 就算摸清了他的所在，也不指路
     for key, value in change.items():
         setattr(game.state.world.figures["zhangmancheng"], key, value)
     [card] = game.orders_view()
     assert card["how"] == _how("張曼成", "他眼下沒在戰線上領兵，挑戰不了")
-    assert on.locations["nanyang_huangjin_camp"].name not in card["how"]
+    assert on.locations["taishan_foot"].name not in card["how"]
 
 
 def test_strike_card_follows_the_figure_not_where_he_stood_when_the_order_went_out(on):
@@ -1102,8 +1102,8 @@ def test_every_open_card_says_how_to_do_it(on):
     defend = _order(game, "defend", "guan", front="yingru")
     cards = {card["id"]: card for card in game.orders_view()}
     assert len(cards) == 3 and all("how" in card for card in cards.values())
-    assert cards[siege.id]["how"] == "到潁川汝南一帶遊歷，打贏一場對面的兵記一次。"
-    assert cards[defend.id]["how"] == "在潁川汝南一帶按「巡哨」（收在「此地還能做」裡），做一次記一次。"
+    assert cards[siege.id]["how"] == "到中原一帶遊歷，打贏一場對面的兵記一次。"
+    assert cards[defend.id]["how"] == "在中原一帶按「巡哨」（收在「此地還能做」裡），做一次記一次。"
     for o in (strike, siege, defend):
         o.done = True
     assert all("how" not in card for card in game.orders_view())

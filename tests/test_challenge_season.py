@@ -55,11 +55,11 @@ def test_a_fourteen_day_season_draws_the_challenge_buttons(real, world):
     bocai = next(o for o in guan.options() if o.id == "act:challenge:bocai")
     assert bocai.enabled and bocai.label.startswith(f"挑戰波才（體力 {cost}・")
     assert figures.difficulty(guan.state, real, "bocai") == 120
-    for name, faction, at in (("黃乙", "huang", "huangjin_camp"), ("散丙", None, "huangjin_camp"), ("官丁", "guan", "changshe")):
+    for name, faction, at in (("黃乙", "huang", "huangjin_camp"), ("散丙", None, "huangjin_camp"), ("官丁", "guan", "luoyang_road")):  # 輿圖重製 1b：皇甫嵩、朱儁在洛陽官道
         assert not any(i.startswith("act:challenge:") for i in _ids(_player(real, world, name, faction, at))), name
-    assert {"act:challenge:huangfusong", "act:challenge:zhujun"} <= set(_ids(_player(real, world, "豪戊", "haoqiang", "changshe")))
+    assert {"act:challenge:huangfusong", "act:challenge:zhujun"} <= set(_ids(_player(real, world, "豪戊", "haoqiang", "luoyang_road")))
     assert "act:challenge:dongzhuo" not in _ids(_player(real, world, "黃己", "huang", "mengjin_ford"))  # 戰線空著：沒有時刻表的季不畫
-    assert "act:challenge:zhaohong" not in _ids(_player(real, world, "官庚", "guan", "nanyang_huangjin_camp"))
+    assert "act:challenge:zhaohong" not in _ids(_player(real, world, "官庚", "guan", "taishan_foot"))  # 輿圖重製 1b：趙弘站泰山腳
     assert "act:challenge:hejin" in _ids(_player(real, world, "黃辛", "huang", "dajiangjun_fu"))  # challenge_off_front
 
 
@@ -219,7 +219,8 @@ def test_huangfusong_out_stops_his_pushes_and_leaves_the_map(real, world):
     hfs = next(sim for sim in real.scenario.sim_players if sim.name == "皇甫嵩")
     assert not sim_active(hfs, s, real) and sim_active(hfs, s)  # 不給 content 的舊呼叫照舊
     assert "皇甫嵩" not in atlas.haunters(s, real, "changshe") and "皇甫嵩" not in atlas.haunters(s, real, "yingchuan")
-    assert "act:challenge:zhujun" in _ids(_player(real, world, "黃乙", "huang", "changshe"))
+    assert "皇甫嵩" not in atlas.haunters(s, real, "luoyang_road")  # 輿圖重製 1b：大勢人物的皇甫嵩站洛陽官道，退場了就不在地圖上
+    assert "act:challenge:zhujun" in _ids(_player(real, world, "黃乙", "huang", "luoyang_road"))
 
 
 def test_the_switch_off_brings_back_the_leaders_even_after_a_retirement(real, world):
@@ -303,7 +304,7 @@ def test_the_rare_cap_counts_across_a_defection(real, world):
         game.choose("act:challenge:bocai")
     assert _tier3_count(game.state, real) == 0  # 到上限：第一次打贏也不給
     game.state.player.faction = "huang"  # 叛投不清
-    game.state.player.location = "changshe"
+    game.state.player.location = "luoyang_road"
     with _won():
         game.choose("act:challenge:huangfusong")
     assert _tier3_count(game.state, real) == 0
@@ -343,15 +344,15 @@ def test_the_map_lists_the_figures_here_in_a_fourteen_day_season(real, world):
     game = _player(real, world, "官甲", "guan", "huangjin_camp")
     camp = _detail(game, "huangjin_camp")
     assert "聲威 60" in camp and atlas.REGEN_NOTE in camp and atlas.HERE_TITLE not in camp  # 波才併在龍頭人物那一段
-    nanyang = _detail(game, "nanyang_huangjin_camp")
+    nanyang = _detail(game, "taishan_foot")  # 輿圖重製 1b：張曼成、趙弘從南陽黃巾營搬到泰山腳
     assert atlas.HERE_TITLE in nanyang and "張曼成" in nanyang and "趙弘" in nanyang and atlas.IDLE_NOTE in nanyang
     assert "沒有龍頭人物在此出沒" not in nanyang
     ford = _detail(game, "mengjin_ford")
     assert "董卓" in ford and atlas.IDLE_NOTE in ford and "沒有龍頭人物在此出沒" not in ford
-    assert "聲威" not in atlas.leader_text(game.state, real, "皇甫嵩", "yingchuan")  # 人物站在長社，潁川那一段不寫聲威
-    assert "聲威" in atlas.leader_text(game.state, real, "皇甫嵩", "changshe")
+    assert "聲威" not in atlas.leader_text(game.state, real, "皇甫嵩", "yingchuan")  # 人物站在洛陽官道，潁川郡那一段不寫聲威
+    assert "聲威" in atlas.leader_text(game.state, real, "皇甫嵩", "luoyang_road")
     real.config.figure_challenge_every_season = False
-    off = _detail(game, "nanyang_huangjin_camp")
+    off = _detail(game, "taishan_foot")
     assert atlas.HERE_TITLE not in off and "聲威" not in _detail(game, "huangjin_camp")
 
 

@@ -97,7 +97,7 @@ def test_a_figure_beaten_out_comes_back_at_half_and_takes_his_front_back():
     assert figures.revive(s, on) == [] and figures.is_out(s, "bocai")
     s.world.time += 1
     lines = figures.revive(s, on)
-    assert lines == [figures.BACK_LINE.format(name="波才", where="，回到潁川汝南")]
+    assert lines == [figures.BACK_LINE.format(name="波才", where="，回到中原")]
     assert bocai.status == "active" and bocai.prestige == 30 and bocai.front == "yingru" and bocai.back_at is None
     assert pengtuo.status == "active" and pengtuo.front is None  # 接位的人把戰線交還
     assert figures.commander(s, on, "yingru", "huang") == "bocai" and figures.can_challenge(s, on, "bocai")

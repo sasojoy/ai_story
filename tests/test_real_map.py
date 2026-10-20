@@ -267,12 +267,12 @@ def test_towns_and_offices_have_no_enemies(content):
         assert content.locations[loc_id].enemies == [], loc_id
 
 
-FIGURE_PLACES = {  # 設計 7.3、第一季設計 8.1
-    "zhangjiao": "guangzong", "zhangbao": "xiaquyang", "zhangliang": "guangzong", "luzhi": "luzhi_camp",
+FIGURE_PLACES = {  # 設計 7.3、第一季設計 8.1；輿圖重製 1b（設計 3.1）：兩軍的人物開季站自家外圈，皇甫嵩、朱儁在洛陽官道、盧植在孟津渡、張曼成與趙弘在泰山腳
+    "zhangjiao": "guangzong", "zhangbao": "xiaquyang", "zhangliang": "guangzong", "luzhi": "mengjin_ford",
     "dongzhuo": "mengjin_ford", "hejin": "dajiangjun_fu", "yuanshao": "dajiangjun_fu",
-    "huangfusong": "changshe", "zhujun": "changshe", "caocao": "qiao_county", "sunjian": "wan_city",
+    "huangfusong": "luoyang_road", "zhujun": "luoyang_road", "caocao": "qiao_county", "sunjian": "wan_city",
     "liubei": "zhuo_county", "guanyu": "zhuo_county", "zhangfei": "zhuo_county", "taoqian": "runan_market",
-    "bocai": "huangjin_camp", "zhangmancheng": "nanyang_huangjin_camp", "zhaohong": "nanyang_huangjin_camp",  # 人物誌 §6
+    "bocai": "huangjin_camp", "zhangmancheng": "taishan_foot", "zhaohong": "taishan_foot",  # 人物誌 §6
 }
 JOIN_POINTS = {  # 設計 7.2、第一季設計 5.1；輿圖重製第 1 批：官軍、黃巾的投靠點只在外圈出生州，兩州各一處（企劃者）
     "guan": {"dajiangjun_fu", "wan_city"},

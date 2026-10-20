@@ -33,7 +33,7 @@ def test_each_war_element_has_its_explanation_in_season_one(on):
     assert set(help_) == {"stance", "fronts", "board", "quest"}
     assert all(help_[k] and all(isinstance(line, str) and line for line in help_[k]) for k in help_)
     stance = "".join(help_["stance"])
-    assert f"這一季是{on.scenario.name}" in stance and "潁川汝南、南陽、冀州" in stance and "割據" in stance  # 在打什麼、割據
+    assert f"這一季是{on.scenario.name}" in stance and "中原、南陽、冀州" in stance and "割據" in stance  # 在打什麼、割據
     assert "亂局" in "".join(help_["fronts"]) and "0 是官軍穩控、100 是黃巾控制" in help_["fronts"][0]  # 三條戰線與亂局帶
     board = "".join(help_["board"])
     assert "擲骰" in board and "看戰況" in board and "史書寫定" in board and "決戰" in board and "關鍵伏筆" in board  # 大事怎麼定：戰況、伏筆、寫定的
@@ -65,7 +65,7 @@ def test_the_fronts_explanation_names_the_fronts_in_chaos_from_the_rule(on):
     assert names and f"現在{'、'.join(names)}在亂局。" in line  # 開季的起始值 40／35／55：三條都在 35～65
     on.config.chaos_low, on.config.chaos_high = 36, 54  # 起始值 40 在、35 與 55 都不在
     assert rules.chaos_fronts(s, on) == ["yingru"]
-    assert "現在潁川汝南在亂局。" in game.status_data()["war_help"]["fronts"][0]
+    assert "現在中原在亂局。" in game.status_data()["war_help"]["fronts"][0]
     on.config.chaos_low, on.config.chaos_high = 90, 95
     assert rules.chaos_fronts(s, on) == [] and "現在沒有戰線在亂局。" in game.status_data()["war_help"]["fronts"][0]
 

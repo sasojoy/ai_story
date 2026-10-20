@@ -66,10 +66,10 @@ def test_real_promotions_valid(real):
     by_side = {p.faction: p for p in rank2}
     assert set(by_side) == {"guan", "huang", "haoqiang"} and len(rank2) == 3
     guan, huang, gentry = by_side["guan"], by_side["huang"], by_side["haoqiang"]
-    assert (guan.figure, guan.successor, guan.location) == ("huangfusong", "zhujun", "changshe")
+    assert (guan.figure, guan.successor, guan.location) == ("huangfusong", "zhujun", "luoyang_road")  # 輿圖重製 1b：從長社搬到洛陽官道
     assert (huang.figure, huang.successor, huang.location) == ("bocai", "pengtuo", "huangjin_camp")
     assert (gentry.figure, gentry.successor, gentry.location, gentry.event_handoff) == (None, None, "nearest_base", None)
-    assert guan.summons_text == "皇甫嵩召你到長社營中。" and guan.summons_handoff == "朱儁召你到長社營中。"
+    assert guan.summons_text == "皇甫嵩召你到{據點}。" and guan.summons_handoff == "朱儁召你到{據點}。"
     assert gentry.summons_text == "中山的馬商張世平、蘇雙到了{據點}，指名要見你。"
     for p in rank2:
         for event_id in filter(None, (p.event_main, p.event_handoff)):
@@ -152,7 +152,7 @@ def _logged(game, text: str) -> bool:
     return any(text in line for e in game.state.journal for line in (*e.lines, *e.changes, e.tag))
 
 
-def _summoned(game, figure="huangfusong", at="changshe"):
+def _summoned(game, figure="huangfusong", at="luoyang_road"):  # 輿圖重製 1b：官軍第 2 階的召見地點是洛陽官道
     game.state.player.summons = Summons(rank=2, figure=figure, location=at)
     return game
 
@@ -162,7 +162,7 @@ def _ids(game):
 
 
 def test_summons_when_contribution_crosses_threshold(on):
-    """貢獻 290 不發召見；巡哨推一次（+10）過 300 → 「皇甫嵩召你到長社營中。」寫進江湖紀錄、記下召見；再推不重發。"""
+    """貢獻 290 不發召見；巡哨推一次（+10）過 300 → 「皇甫嵩召你到洛陽官道。」寫進江湖紀錄、記下召見；再推不重發。"""
     game = _game(on, faction="guan", at="changshe")
     p = game.state.player
     p.contrib = 290
@@ -170,10 +170,10 @@ def test_summons_when_contribution_crosses_threshold(on):
     assert p.summons is None
     p.contrib = 295
     msgs = game.choose("act:duty")
-    assert p.contrib >= 300 and "皇甫嵩召你到長社營中。" in msgs and _logged(game, "皇甫嵩召你到長社營中。")
-    assert (p.summons.rank, p.summons.figure, p.summons.location) == (2, "huangfusong", "changshe")
+    assert p.contrib >= 300 and "皇甫嵩召你到洛陽官道。" in msgs and _logged(game, "皇甫嵩召你到洛陽官道。")
+    assert (p.summons.rank, p.summons.figure, p.summons.location) == (2, "huangfusong", "luoyang_road")
     since = p.summons.since
-    assert "皇甫嵩召你到長社營中。" not in game.choose("act:duty") and p.summons.since == since
+    assert "皇甫嵩召你到洛陽官道。" not in game.choose("act:duty") and p.summons.since == since
 
 
 def test_summons_after_a_challenge_win(on):
@@ -182,7 +182,7 @@ def test_summons_after_a_challenge_win(on):
     game.state.player.contrib = 260
     with _win():
         msgs = game.choose("act:challenge:bocai")
-    assert game.state.player.contrib == 310 and "皇甫嵩召你到長社營中。" in msgs
+    assert game.state.player.contrib == 310 and "皇甫嵩召你到洛陽官道。" in msgs
 
 
 def test_summons_on_sync_when_contribution_came_outside_an_action(on):
@@ -190,27 +190,28 @@ def test_summons_on_sync_when_contribution_came_outside_an_action(on):
     game = _game(on, faction="guan", at="changshe")
     game.state.player.contrib = 300
     game.sync(game.now + 1)
-    assert game.state.player.summons is not None and _logged(game, "皇甫嵩召你到長社營中。")
+    assert game.state.player.summons is not None and _logged(game, "皇甫嵩召你到洛陽官道。")
 
 
 def test_summons_goes_to_successor_when_figure_gone(on):
-    """RF1：皇甫嵩重挫轉去冀州、朱儁守長社：召見寫朱儁，到了長社演接手版。"""
-    game = _game(on, faction="guan", at="changshe")
-    figures.apply(game.state, on, "huangfusong", FigureChange(fate="重挫", front="jizhou", location="luzhi_camp"))
+    """RF1：皇甫嵩重挫轉去冀州、朱儁守洛陽官道：召見寫朱儁，到了洛陽官道演接手版。"""
+    game = _game(on, faction="guan", at="changshe")  # 巡哨在長社做（戰線地點），召見在洛陽官道
+    figures.apply(game.state, on, "huangfusong", FigureChange(fate="重挫", front="jizhou", location="mengjin_ford"))
     game.state.player.contrib = 300
-    assert "朱儁召你到長社營中。" in idle_step(game)
+    assert "朱儁召你到洛陽官道。" in idle_step(game)
     assert game.state.player.summons.figure == "zhujun"
     idle_step(game)
+    game.state.player.location = "luoyang_road"
     game.choose("act:summons")
     assert game.state.pending_event == "promo_guan_2_handoff"
 
 
 def test_handoff_version_when_figure_left_after_summons(on):
     """RF1：召見發出時皇甫嵩還在，之後才重挫離開：到了現場照當下挑人，演接手版；主線與目標裡的召見也改寫朱儁。"""
-    game = _summoned(_game(on, faction="guan", at="changshe"))
-    assert "**召見**：皇甫嵩召你到長社營中。" in game.quest_text()
-    figures.apply(game.state, on, "huangfusong", FigureChange(fate="重挫", front="jizhou", location="luzhi_camp"))
-    assert "**召見**：朱儁召你到長社營中。" in game.quest_text()
+    game = _summoned(_game(on, faction="guan", at="luoyang_road"))
+    assert "**召見**：皇甫嵩召你到洛陽官道。" in game.quest_text()
+    figures.apply(game.state, on, "huangfusong", FigureChange(fate="重挫", front="jizhou", location="mengjin_ford"))
+    assert "**召見**：朱儁召你到洛陽官道。" in game.quest_text()
     game.choose("act:summons")
     assert game.state.pending_event == "promo_guan_2_handoff"
     assert on.events["promo_guan_2_handoff"].text.startswith("長社營中。朱儁")
@@ -231,13 +232,13 @@ def test_summons_option_only_when_idle_at_the_place(on):
     演到一半季結束，晉升不發生。"""
     game = _summoned(_game(on, faction="guan", at="luzhi_camp"))
     assert "act:summons" not in _ids(game)
-    game.state.player.location = "changshe"
+    game.state.player.location = "luoyang_road"
     summons = next(o for o in game.options() if o.id == "act:summons")
     assert summons.enabled and summons.label == "應召"
     road = next(o.id for o in game.options() if o.id.startswith("move:"))
     game.choose(road)
     assert game.state.player.journey is not None and "act:summons" not in _ids(game)
-    other = _summoned(_game(on, name="乙", faction="guan", at="changshe"))
+    other = _summoned(_game(on, name="乙", faction="guan", at="luoyang_road"))
     stamina = other.state.player.stamina
     other.choose("act:summons")
     assert other.state.pending_event == "promo_guan_2" and other.state.player.stamina == stamina
@@ -252,7 +253,7 @@ def test_summons_option_only_when_idle_at_the_place(on):
 ])
 def test_every_choice_promotes_and_gives_two_followers(on, pick, reaction, affinity):
     """三個選項都晉升：第 2 階、頭銜「官軍・屯長」、兩名部下、情誼照表（從 20 起）；接著是結尾那一句；召見清掉、記進當天的彙整。"""
-    game = _summoned(_game(on, faction="guan", at="changshe"))
+    game = _summoned(_game(on, faction="guan", at="luoyang_road"))
     p = game.state.player
     p.affinities["huangfusong"] = 20
     game.choose("act:summons")
@@ -269,7 +270,7 @@ def test_every_choice_promotes_and_gives_two_followers(on, pick, reaction, affin
 
 def test_affinity_clamps_and_needs_a_character(on):
     """情誼夾在 0～100：從 1 扣 3 是 0、訊息寫實際的 -1；效果裡的情誼要是對話人物。"""
-    game = _summoned(_game(on, faction="guan", at="changshe"))
+    game = _summoned(_game(on, faction="guan", at="luoyang_road"))
     game.state.player.affinities["huangfusong"] = 1
     game.choose("act:summons")
     assert "皇甫嵩情誼 -1" in game.choose("choice:2") and game.state.player.affinities["huangfusong"] == 0
@@ -281,7 +282,7 @@ def test_affinity_clamps_and_needs_a_character(on):
 
 def test_explore_at_the_place_opens_the_promotion(on):
     """人在召見的地點探索、交友：直接端出晉升奇遇（照扣體力），不擲其他東西。"""
-    game = _summoned(_game(on, faction="guan", at="changshe"))
+    game = _summoned(_game(on, faction="guan", at="luoyang_road"))
     stamina = game.state.player.stamina
     game.choose("act:explore")
     assert game.state.pending_event == "promo_guan_2"
@@ -296,7 +297,7 @@ def test_rank_two_news_is_one_line_per_day(on):
     收季時當天的照發（寫「今日」）。"""
     games = []
     for name in ("甲", "乙"):
-        game = _summoned(_game(on, name=name, faction="guan", at="changshe"))
+        game = _summoned(_game(on, name=name, faction="guan", at="luoyang_road"))
         game.choose("act:summons")
         game.choose("choice:1")
         games.append(game)
@@ -306,7 +307,7 @@ def test_rank_two_news_is_one_line_per_day(on):
     [rumor] = news(games[1])
     assert (rumor.text, rumor.layer, rumor.faction) == ("昨日升為屯長的有：甲、乙。", "faction", "guan")
     on.config.admins = ["管"]
-    late = _summoned(_game(on, name="丙", faction="guan", at="changshe"))
+    late = _summoned(_game(on, name="丙", faction="guan", at="luoyang_road"))
     late.choose("act:summons")
     late.choose("choice:0")
     _game(on, "管").admin_end_season(now=late.now)
@@ -315,7 +316,7 @@ def test_rank_two_news_is_one_line_per_day(on):
 
 def test_switch_off_no_summons(real):
     """開關關著：貢獻再多也不發召見，沒有「應召」，召見地點也端不出奇遇。"""
-    game = _game(real, faction="guan", at="changshe")
+    game = _game(real, faction="guan", at="luoyang_road")
     game.state.player.contrib = 900
     idle_step(game)
     assert game.state.player.summons is None
@@ -403,7 +404,8 @@ def test_bot_answers_summons(on):
 
 def test_real_guan_reaches_rank_two(on):
     """真實內容走一遍：新角色走到宛城投靠官軍（官軍・鄉勇）、回長社巡哨把貢獻推過 300、收到召見、應召、選第二個選項，
-    狀態列「官軍・屯長」、兩名部下，遊歷的威力變高。輿圖重製第 1 批：投靠點只在外圈（v1 是在長社投靠），皇甫嵩照舊站在長社。"""
+    狀態列「官軍・屯長」、兩名部下，遊歷的威力變高。輿圖重製第 1 批：投靠點只在外圈（v1 是在長社投靠）；1b：皇甫嵩站洛陽官道，
+    巡哨在長社（戰線地點）做、召見到洛陽官道應召。"""
     game = _game(on, at="wan_city")
     game.state.player.stamina = 150
     game.choose("faction:guan")
@@ -412,9 +414,10 @@ def test_real_guan_reaches_rank_two(on):
     assert game.status_data()["affiliation"] == "官軍・鄉勇"
     game.state.player.contrib = 290
     game.state.player.stamina = 150
-    assert "皇甫嵩召你到長社營中。" in game.choose("act:duty")
+    assert "皇甫嵩召你到洛陽官道。" in game.choose("act:duty")
     squad = game._train_squad_ids(on.locations["changshe"])[0]
     before = _spied_power(lambda: team.estimate(game.state, on, game.world, squad))[0]
+    game.state.player.location = "luoyang_road"
     game.choose("act:summons")
     assert "皇甫嵩微微一笑。" in game.choose("choice:1")
     assert game.status_data()["affiliation"] == "官軍・屯長"

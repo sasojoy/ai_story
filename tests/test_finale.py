@@ -268,7 +268,7 @@ def test_season_result_view(on):
     assert [(s["side"], s["name"], s["value"]) for s in result["stances"]] == [
         ("guan", "官軍", 60), ("huang", "黃巾軍", 40), ("haoqiang", "地方豪強", 20),
     ]
-    assert [(f["name"], f["value"]) for f in result["fronts"]] == [("潁川汝南", 40), ("南陽", 40), ("冀州", 40)]
+    assert [(f["name"], f["value"]) for f in result["fronts"]] == [("中原", 40), ("南陽", 40), ("冀州", 40)]
     rows = result["timeline"]
     assert len(rows) == 12 and (rows[-1]["week"], rows[-1]["title"]) == (12, "下曲陽・季末")
     assert rows[-1]["text"].startswith(PREFACE) and rows[-1]["locked_by"] is None

@@ -104,10 +104,14 @@ def test_a_beaten_figure_is_hurt_and_easier(c):
 
 def test_an_ally_falling_on_the_same_line_makes_grief(c):
     s = _season(c)
-    figures.defeat(s, c, "zhujun", 999)  # 朱儁倒下（同一條潁川汝南線）
+    figures.defeat(s, c, "zhujun", 999)  # 朱儁倒下（同一條中原線）
     assert figures.mood_of(s, c, "huangfusong") == "悲憤"
-    assert figures.mood_of(s, c, "fuxie") == "悲憤"  # 偏將沒有戰線，照所在地點的大區
     assert figures.mood_scale(s, c, "huangfusong") == c.config.figure_life.grief_scale
+    # 偏將沒有戰線，照所在地點的大區。輿圖重製 1b：傅燮搬到洛陽官道（外圈、沒有線），不再為中原的事悲憤；
+    # 黃巾那邊站在東郡（中原）的卜己，在波才倒下時照樣悲憤
+    assert figures.mood_of(s, c, "fuxie") is None and figures.mood_of(s, c, "buji") != "悲憤"
+    figures.defeat(s, c, "bocai", 999)
+    assert figures.mood_of(s, c, "buji") == "悲憤"
 
 
 def test_regen_and_recruits_share_one_daily_cap(c):
@@ -128,6 +132,7 @@ def test_beating_a_figure_spreads_to_people_in_that_region(c):
     s = _season(c)
     p = s.player
     p.location = "changshe"
+    figures._ensure(s, c, "huangfusong").location = "changshe"  # noqa: SLF001  輿圖重製 1b：皇甫嵩開季在洛陽官道；這裡量風聞怎麼傳，先把他擺回潁川
     lines = figure_life.spread(s, c, "beat", "bocai", at="changshe", side="huang", text="在長社打退了波才")
     tuning = c.config.figure_life
     assert p.affinities.get("huangfusong") == tuning.foe_beaten  # 對頭聽了高興
@@ -187,6 +192,7 @@ def test_routing_a_figure_in_the_engine_spreads_the_word(c):
     p.faction = "guan"
     p.location = "huangjin_camp"
     figures._ensure(game.state, c, "liupi").location = "changshe"  # noqa: SLF001  同上：劉辟擺回潁川
+    p.affinities["liupi"] = 20  # 輿圖重製 1b：潁川已經沒有官軍的人物聽了高興，劉辟的情誼要有得掉，風聞才寫得出那一句
     msgs = game._rout("bocai")
     assert any("聽說了這件事" in m for m in msgs)
     assert p.hearsay["liupi"][0].endswith("打退了波才")  # 同一區的劉辟聽說了

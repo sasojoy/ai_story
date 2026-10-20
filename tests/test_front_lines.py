@@ -91,7 +91,7 @@ def test_the_chip_names_the_front_the_side_and_one_phrase_of_the_band(on, size, 
     """戰況 0 是官軍穩控、100 是黃巾控制：往下是官軍佔了便宜，往上是黃巾。方向從內容來（陣營的 goals），
     陣營名寫在句子裡（front_lines.json 的 sides）；「戰線：陣營＋句子」，句子是那一段三句裡的一句。"""
     ((classes, text),) = push(make(on), sign * size)
-    assert text in {f"潁川汝南：{side}{phrase}" for phrase in pool}
+    assert text in {f"中原：{side}{phrase}" for phrase in pool}
 
 
 def test_each_front_is_named_by_itself(on):
@@ -105,7 +105,7 @@ def test_two_pushes_on_one_front_merge_before_the_phrase_is_chosen(on):
     game = make(on)
     game._write("測試", rules.change_trend(game.state, on, "yingru", -1) + rules.change_trend(game.state, on, "yingru", -2))
     (text,) = texts(chips(game.latest_entry_html()))
-    assert text in {f"潁川汝南：官軍{phrase}" for phrase in MEDIUM}
+    assert text in {f"中原：官軍{phrase}" for phrase in MEDIUM}
 
 
 def test_pushes_that_cancel_out_show_nothing(on):
@@ -118,7 +118,7 @@ def test_different_fronts_keep_their_own_chips(on):
     game = make(on)
     game._write("測試", rules.change_trend(game.state, on, "yingru", -1) + rules.change_trend(game.state, on, "nanyang", 4))
     first, second = texts(chips(game.latest_entry_html()))
-    assert first in {f"潁川汝南：官軍{p}" for p in SMALL} and second in {f"南陽：黃巾{p}" for p in LARGE}
+    assert first in {f"中原：官軍{p}" for p in SMALL} and second in {f"南陽：黃巾{p}" for p in LARGE}
 
 
 def test_the_same_entry_draws_the_same_phrase_every_time(on):
@@ -200,7 +200,7 @@ def test_no_digit_in_the_messages_an_action_hands_back(on):
     """管理者推戰況的回話（工具列的提示）與 GameState.log 也是玩家看得到的地方。"""
     admin = make(on, None, "Rayal")
     msgs = admin.admin_push_trend("yingru", -3)
-    assert len(msgs) == 1 and msgs[0] in {f"潁川汝南：官軍{phrase}" for phrase in MEDIUM}
+    assert len(msgs) == 1 and msgs[0] in {f"中原：官軍{phrase}" for phrase in MEDIUM}
     assert not any(front_lines.MARK in m or re.search(r"\d", m) for m in msgs + admin.state.log)
     assert texts(chips(admin.latest_entry_html())) == msgs  # 回話與「剛剛」卡片上的標籤是同一句
     (msg,) = admin.admin_set_trend("nanyang", 60)  # 35 → 60，一次推 25
@@ -241,7 +241,7 @@ def test_a_win_that_moves_the_front_shows_the_chip_under_the_battle_card(on):
     game.state.battle_card = record.id
     extra = [(tone(c), t) for c, t in chips(game.battle_extra_html()) if "：" in t]
     assert [kind for kind, _ in extra] == ["up"]
-    assert extra[0][1] in {f"潁川汝南：官軍{phrase}" for phrase in SMALL}
+    assert extra[0][1] in {f"中原：官軍{phrase}" for phrase in SMALL}
 
 
 def test_the_home_page_payload_carries_the_chip_for_the_logged_in_viewer(on):
@@ -249,7 +249,7 @@ def test_the_home_page_payload_carries_the_chip_for_the_logged_in_viewer(on):
     game._write("測試", rules.change_trend(game.state, on, "yingru", -1))
     view = server.main_view(game)
     ((classes, text),) = chips(view["now"])
-    assert tone(classes) == "down" and text in {f"潁川汝南：官軍{phrase}" for phrase in SMALL}
+    assert tone(classes) == "down" and text in {f"中原：官軍{phrase}" for phrase in SMALL}
     assert chips(view["latest"]) == chips(view["now"])
 
 
@@ -285,9 +285,9 @@ def test_a_showdown_result_shows_the_front_move_as_a_phrase_chip_under_the_card(
     assert game.shows_battle_card()
     (front, geju) = chips(game.battle_extra_html())
     assert (tone(front[0]), tone(geju[0])) == (front_tone, geju_tone)
-    assert front[1] in {f"潁川汝南：官軍{phrase}" for phrase in LARGE} and geju[1] in GEJU_UP
+    assert front[1] in {f"中原：官軍{phrase}" for phrase in LARGE} and geju[1] in GEJU_UP
     for card in (battlelog.card_text(record), battlelog.detail_text(record)):
-        assert "**大勢**" not in card and "潁川汝南 -15" not in card and not re.search(r"[+-]\d", card), card
+        assert "**大勢**" not in card and "中原 -15" not in card and not re.search(r"[+-]\d", card), card
 
 
 def test_a_showdown_that_pulls_the_geju_down_is_red_for_haoqiang(on):
@@ -305,7 +305,7 @@ def test_last_seasons_showdown_says_the_front_move_in_words_without_a_number(on)
     assert entry.changes == [] and record.changes == []
     said = [line for line in entry.lines if line.startswith("（第 1 季）")]
     assert len(said) == 2
-    assert said[0].removeprefix("（第 1 季）") in {f"潁川汝南：官軍{phrase}" for phrase in LARGE}
+    assert said[0].removeprefix("（第 1 季）") in {f"中原：官軍{phrase}" for phrase in LARGE}
     assert said[1].removeprefix("（第 1 季）") in GEJU_UP
     assert said == [line for line in record.notes if line.startswith("（第 1 季）")]
     assert not any(re.search(r"[+-]\d", line) for line in (*entry.lines, *record.notes))
@@ -354,7 +354,7 @@ def test_a_stale_mark_in_an_action_reply_is_dropped_too(on):
     game = make(on)
     msgs = ["你喝了一口茶。", front_lines.mark("ghost", -2), front_lines.mark("yingru", -1)]
     out = rules.humanize(on, msgs, "1")
-    assert out[0] == "你喝了一口茶。" and len(out) == 2 and out[1].startswith("潁川汝南：官軍")
+    assert out[0] == "你喝了一口茶。" and len(out) == 2 and out[1].startswith("中原：官軍")
     before = list(game.state.log)  # 開場白已經在 log 裡
     assert game._log([front_lines.mark("ghost", 3)]) == []  # 只有這一枚：什麼都不回、也不寫進 log
     assert game.state.log == before
@@ -415,7 +415,7 @@ def test_variants_are_picked_by_hash_and_never_touch_the_rng(on):
         front, geju = texts(chips(game.latest_entry_html()))
         seen.add(front)
         seen_geju.add(geju)
-    assert len(seen) > 1 and all(s.startswith("潁川汝南：官軍句") for s in seen)
+    assert len(seen) > 1 and all(s.startswith("中原：官軍句") for s in seen)
     assert len(seen_geju) > 1 and all(s.startswith("豪強起") for s in seen_geju)
     assert game.rng.getstate() == state
 
@@ -424,9 +424,9 @@ def test_a_side_with_its_own_phrase_beats_the_generic_one_and_the_generic_is_the
     on.front_lines.generic = {"1": ["稍佔上風"], "2-3": ["步步進逼"], "4+": ["大舉推進"]}
     on.front_lines.by_side = {"huang": {"4+": ["旌旗漫天"]}}
     game = make(on)
-    assert texts(push(game, 5)) == ["潁川汝南：黃巾旌旗漫天"]
-    assert texts(push(game, 1)) == ["潁川汝南：黃巾稍佔上風"]  # 這一段他沒寫，退回通用
-    assert texts(push(game, -5)) == ["潁川汝南：官軍大舉推進"]  # 官軍沒寫
+    assert texts(push(game, 5)) == ["中原：黃巾旌旗漫天"]
+    assert texts(push(game, 1)) == ["中原：黃巾稍佔上風"]  # 這一段他沒寫，退回通用
+    assert texts(push(game, -5)) == ["中原：官軍大舉推進"]  # 官軍沒寫
 
 
 def test_the_side_name_in_the_chip_comes_from_the_table_and_falls_back_to_the_faction_name(on):
@@ -434,8 +434,8 @@ def test_the_side_name_in_the_chip_comes_from_the_table_and_falls_back_to_the_fa
     on.front_lines.generic = {"1": ["稍佔上風"], "2-3": ["步步進逼"], "4+": ["大舉推進"]}
     on.front_lines.sides = {"guan": "朝廷大軍"}
     game = make(on)
-    assert texts(push(game, -1)) == ["潁川汝南：朝廷大軍稍佔上風"]
-    assert texts(push(game, 1)) == ["潁川汝南：黃巾軍稍佔上風"]
+    assert texts(push(game, -1)) == ["中原：朝廷大軍稍佔上風"]
+    assert texts(push(game, 1)) == ["中原：黃巾軍稍佔上風"]
 
 
 # ── 內容檔：模型、載入、驗證 ───────────────────────────────────────────
