@@ -110,11 +110,14 @@ PROGRESS_LINES = (
 def sortie_foes(world: WorldState, content: Content, loc_id: str, own: str | None) -> list[str]:
     """出陣攻打的對手（Game._sortie_foes 在開關開著時叫；截糧的運糧隊另外由呼叫端加）：自家控制的區塊沒有（守）；開季中立的區塊是
     那裡站的全部（中立駐軍與流寇野獸，計畫 Task 6）；別人控制的陣營區塊是控制方站的隊伍，那裡沒寫 garrison 時照
-    Scenario.territory.side_garrison（控制方的巡邏，待 joy），不然官軍的城鎮誰都攻不了。不是區塊是空的。"""
+    Scenario.territory.side_garrison（控制方的巡邏，待 joy），不然官軍的城鎮誰都攻不了。不是區塊是空的；別人的大本營與廣宗
+    （搶不下來，不在爭奪之列）也是空的——不給攻、輿圖不畫 ⚔（計畫第八章裁決 18）。"""
     if loc_id not in blocks(content):
         return []
     side = holder(world, content, loc_id)
     if side is not None and side == own:
+        return []
+    if not capturable(content, loc_id):
         return []
     squads = territory.squads_at(world, content, loc_id)
     if start_kind(world, content, loc_id) == NEUTRAL:

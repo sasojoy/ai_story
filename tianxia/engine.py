@@ -1203,6 +1203,8 @@ class Game:
                 opts.append(option)
             elif sortie.ranger_here(c, self._side(), loc.id, s.world):  # 散人站在戰線上：灰的一顆寫真正的原因（FB-250）
                 opts.append(Option(id="act:train", label=f"{sortie.NAME}（{sortie.RANGER_NOTE}）", enabled=False))
+            elif sortie.out_of_contest(c, s.world, self._side(), loc.id):  # 領地爭奪：別人的大本營、廣宗不給攻（裁決 18）
+                opts.append(Option(id="act:train", label=f"{sortie.NAME}（{sortie.OUT_NOTE}）", enabled=False))
         opts += self._challenge_options(odds)  # 挑戰本人（T4；每季都有，figures.challenge_on）：有陣營、這裡站著敵方的大勢人物時才有
         if ranks.summons_event(s, c) is not None:
             # 晉升奇遇（計畫 T5）：人在召見的地點才有，不花體力。一類一顆開著時網頁畫成行動列上面一條金框橫幅（設計 9.1 第 1 組乙），
@@ -1940,6 +1942,8 @@ class Game:
         """出陣那一行（howto.sortie_line）：這裡是哪一種、推不推得動（_push_room，同第 3、4 階行動）、今天還能出陣幾次；用完寫什麼時候再來。"""
         how = self._sortie_mode(loc)
         if how is None:
+            if sortie.out_of_contest(self.content, self.state.world, self._side(), loc.id):
+                return sortie.OUT_LINE  # 領地爭奪：別人的大本營、廣宗不給攻（裁決 18）
             if not sortie.ranger_here(self.content, self._side(), loc.id, self.state.world):
                 return ""
             return sortie.RANGER_LINE_PRECISE if precise.on(self.content, self.state.world) else sortie.RANGER_LINE
@@ -1956,6 +1960,8 @@ class Game:
         note = "convoy" if own else how  # 自家地盤上攻的只有運糧隊（FB-255）
         if on and how == "hold" and not conquest.capturable(self.content, loc.id):
             note = "home"  # 自家的大本營、廣宗：不在爭奪之列（FB-532）
+        elif on and how == "attack" and not conquest.capturable(self.content, loc.id):
+            note = "convoy_out"  # 大本營、廣宗上攻的只有截糧的運糧隊（裁決 18）：只算截糧、沒有進度
         elif on and note == "attack" and conquest.holder(self.state.world, self.content, loc.id) is None:
             note = "open"  # 還沒人佔的中立地：不寫「這裡歸別人」（FB-533）
         return howto.sortie_line(note, push_ok, left, self.content, progress)
