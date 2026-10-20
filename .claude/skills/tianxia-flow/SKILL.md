@@ -62,6 +62,12 @@ description: 《天下大勢》的分支、測試與合併規矩（企劃者 202
   3. 重派新的子代理（Agent 工具、`isolation: "worktree"`），派工單寫「從 `origin/<分支>` 開 `git switch -c <分支> origin/<分支>`，舊的工作樹不要用」，再把那一步之前做完的寫清楚；
   4. 交接第二節改成新派的這幾個。
 - **PM 不能寫別的工作樹的檔**（有 hook 擋）：PM 要改 develop 上的文件，在 scratchpad 開一個自己的工作樹（`git worktree add <scratchpad>/pmwt -b pm/<名字> origin/develop`；不要切主 clone 的分支，主 clone 是大家讀 `CLAUDE.md` 的地方），改完 `git push origin HEAD:develop`（快轉）。git 指令可以 `git -C` 別的工作樹。
+- **這份 clone 的 `git fetch origin` 不會更新 `origin/dev/*`、`origin/feature/*`、`origin/qa/*`**（refspec 只有一部分）：核對推送、挑測試的 base、算 diff 之前，明確 fetch 那個分支（`git fetch origin +refs/heads/dev/x:refs/remotes/origin/dev/x`，或 `+refs/heads/dev/*:refs/remotes/origin/dev/*`），或直接看 `git ls-remote`。不然會把「推到了」誤判成「沒推到」、拿舊的 base 跑測試。
+- **提前做（企劃者 2026-10-20「能提前先做的部分就加開任務」）**：
+  - 下一批的引擎那一半疊在還沒 QA 完的上一批上開（`dev/<x>-2` 從 `dev/<x>-1`），派工單寫「每做完一個 Task、推之前先 `git merge --no-ff origin/dev/<x>-1`」；要等企劃者挑圖的網頁那一段留到最後。
+  - 對比圖另開一條只放圖的分支（`dev/<x>-mock`），跟正在推程式的分支分開，合併時不會撞。
+  - 要一起部署的幾條線，在正式合併之前先派一個 QA 做**整合預演**（`qa/integ-<名字>`，從 develop 開、把幾條線此刻的 HEAD 合進來）：衝突、整套、資料庫升級預演、部署說明草稿。正式合併時照它的紀錄解衝突。
+  - 同時跑很多子代理時，派工單寫 pytest 用 `-n 6`～`-n 8`、不要 `-n auto`，免得互相搶 CPU。
 - **分支名字別撞**：同一個字已經有別的意思時換個寫法並在交接註明（例：正式季第七批的 `qa/season-7` 與 7 天季的 `qa/season7`）。
 - **合併的衝突**：
   - `試玩回饋.md` 兩邊都留，表格照 FB 編號排，檔尾的驗收紀錄照時間排。
