@@ -1994,7 +1994,9 @@ class Game:
             note = "convoy_out"  # 大本營、廣宗上攻的只有截糧的運糧隊（裁決 18）：只算截糧、沒有進度
         elif on and note == "attack" and conquest.holder(self.state.world, self.content, loc.id) is None:
             note = "open"  # 還沒人佔的中立地：不寫「這裡歸別人」（FB-533）
-        return howto.sortie_line(note, push_ok, left, self.content, progress, today)
+        # FB-552：推不動、不是搶不下來的區塊，這一塊今天其實排過攻城（集結中、開打中、打完、作罷）時照實寫在哪一步，不寫「今天沒有公告攻城」
+        siege = conquest.siege_state(self.state.world, loc.id) if on and not today else None
+        return howto.sortie_line(note, push_ok, left, self.content, progress, today, siege)
 
     def _choice_label(self, choice: Choice, odds: bool) -> str:
         """動手的選項寫對手與勝算，後面照樣接體力的代價（輸了多扣的，企劃者裁決 E6；events.stamina_note）；

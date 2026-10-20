@@ -101,22 +101,34 @@ SORTIE_NOT_TODAY = "推不動進度（這一塊今天沒有公告攻城）"  # �
 # 自家沒被公告的區塊守：那一句本來接「（量是攻的一半）」，兩個括號連在一起（第二批 QA 第 8 項，計畫第八節裁決 21）——合成一個括號、
 # 意思不變（推不動；有公告時守推的量是攻的幾成）。待 joy 潤
 SORTIE_NOT_TODAY_HOLD = "推不動進度（這一塊今天沒有公告攻城；有公告時守推的量是攻的{half}）"
+# FB-552（PM 2026-10-20）：這一塊今天其實公告過攻城，只是已經不在「還沒開打」那一步——照實寫在哪一步（conquest.siege_state），
+# 不寫成「今天沒有公告攻城」。待 joy 潤
+SORTIE_SIEGE = {
+    "muster": "推不動進度（這一塊的攻城正在集結，去加入攻城）",
+    "fight": "推不動進度（這一塊的攻城正在開打）",
+    "done": "推不動進度（這一塊今天的攻城已經打過了）",
+    "void": "推不動進度（這一塊今天的攻城作罷了）",
+}
 SORTIE_LEFT = "今日還能出陣 {n} 次。"
 
 
-def sortie_line(how: str, push: bool, left: int, content: Content, progress: bool | None = None, today: bool = True) -> str:
+def sortie_line(
+    how: str, push: bool, left: int, content: Content, progress: bool | None = None, today: bool = True, siege: str | None = None,
+) -> str:
     """出陣這一下會怎樣（Game._sortie_line 照規則算好傳進來）。數字讀 Config：給自己的成數、守與攪局是攻的幾成。
     progress：領地爭奪在這一季生效時給（這一塊的進度推不推得動），推的那一句換成推進度；沒給（關著）一個字都不變、照 push。
     today：推不動是因為今天沒有公告（第二批）時給 False，寫 SORTIE_NOT_TODAY；搶不下來的照舊 SORTIE_NO_PROGRESS。
-    自家沒被公告的區塊守（hold、推不動、today 假）寫 SORTIE_NOTES["hold_idle"]＋SORTIE_NOT_TODAY_HOLD：一個括號（裁決 21）。"""
+    自家沒被公告的區塊守（hold、推不動、today 假）寫 SORTIE_NOTES["hold_idle"]＋SORTIE_NOT_TODAY_HOLD：一個括號（裁決 21）。
+    siege（FB-552，conquest.siege_state）：推不動、不是因為搶不下來、而且這一塊今天其實排過攻城（muster／fight／done／void）時，
+    推不動那一句照實寫攻城在哪一步（SORTIE_SIEGE），不寫「今天沒有公告攻城」；守的那一行也一樣（hold_idle，不接「有公告時…」）。"""
     cfg = content.config
     half = "一半" if cfg.sortie.hold_share == 0.5 else f" {cfg.sortie.hold_share * 10:g} 成"
     if progress is None:
         pushed = SORTIE_PUSH if push else SORTIE_NO_PUSH
     else:
-        pushed = SORTIE_PROGRESS if progress else SORTIE_NO_PROGRESS if today else SORTIE_NOT_TODAY
+        pushed = SORTIE_PROGRESS if progress else SORTIE_NO_PROGRESS if today else SORTIE_SIEGE.get(siege or "", SORTIE_NOT_TODAY)
     if how == "hold" and progress is False and not today:
-        how, pushed = "hold_idle", SORTIE_NOT_TODAY_HOLD.format(half=half)
+        how, pushed = "hold_idle", SORTIE_SIEGE[siege] if siege in SORTIE_SIEGE else SORTIE_NOT_TODAY_HOLD.format(half=half)
     text = SORTIE_NOTES[how].format(push=pushed, share=f"{cfg.drill_reward_share * 10:g}", half=half,
                                     loot=sortie_loot(content))
     return text + SORTIE_LEFT.format(n=left)
