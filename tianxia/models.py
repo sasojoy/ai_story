@@ -946,6 +946,7 @@ REVEAL_KEYS = frozenset({
     "all",  # 全部亮齊（出師那一步）
     "stamina", "hp", "silver", "xinde", "stats",  # 狀態列：體力、氣血、銀兩、心得、點名號展開屬性與配點
     "tab:jianghu", "tab:practice", "tab:craft", "tab:map", "tab:news",  # 底下的分頁
+    "tab:mall",  # 商城的兩個入口（底部第六格、齒輪旁的錠子鈕；網頁的 data-glow，商城開著才畫）：序章裡寫了才亮，出了草廬一律在（web/app.js 的 mallShown）
     "act:explore", "act:train", "act:rest", "act:social", "act:move",  # 江湖頁行動列的五格
     "board", "quest", "fronts", "orders", "minimap",  # 江湖頁的公告卡、主線與目標、戰況、軍令卡、小地圖
     "stances",  # 江湖頁最上面那一排小標裡的「態勢」（第一季才有）；跟公告卡（board）一起亮，見 Task 6 的 shown("stances")

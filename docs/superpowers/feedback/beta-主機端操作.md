@@ -493,6 +493,57 @@ Rename-Item tianxia.db.pre-restore-20261006-050000-shm tianxia.db-shm   # 腳本
 
 **挑戰大勢人物每季都有上線之後要退回舊程式**：先試緊急開關——`content/config.json` 加一行 `"figure_challenge_every_season": false`，兩個程式重開：第一季以外的季沒有挑戰鈕、不閉門、求見照 `talk_at`、聲威不回、虛擬玩家照常出手、輿圖跟以前一樣（已經記下的 `bocai_defeated` 留著）。真的要退版：資料庫結構沒變（第 5 版），舊程式打得開檔；`PlayerState.figure_rare_drops`、`trend_accum` 的 `regen:`、`lost:` 鍵、14 天的季寫進去的 `WorldState.figures` 舊程式都不讀或略過；退版前先把 `content/config.json` 裡這一批新的設定（`figure_challenge_every_season`、`figure_prestige_regen`、`figure_daily_loss_cap`、`figure_rare_cap`、`figure_treasure_cap`）拿掉，`content/figures.json` 的 `out_flag` 跟著程式一起退——舊程式的 `Config`、`FigureDef` 不認得這些欄位，讀設定就會報錯。`tier3_per_figure` 退回 2 照舊程式的值。照慣例先停伺服器和假人、拿上線前的備份還原最乾淨。
 
+## 商城上線：資料庫升到第 6 版（2026-10-20）
+
+商城（元寶、回體丹、月卡；規則見 `docs/guide/商城.md`）是這一版的程式第一次改資料庫結構：新程式第一次打開資料庫（伺服器、假人程式、`set_password.py` 誰先開都一樣），會把第 5 版的檔就地升到第 6 版——多三張表：元寶的帳 `mall_ledger`、購買紀錄 `mall_purchases`、月卡 `mall_entitlements`。升級在同一筆交易裡做完，中途出錯整筆撤回、檔還是第 5 版。原本的角色、帳號、江湖史一筆都不動。
+
+**升上去就回不去**：舊程式（第 5 版）打開第 6 版的檔，會直接報「資料庫結構是第 6 版，這版程式只認得第 5 版」、開不起來。要退版只能拿升級前的備份還原（上面「怎麼還原」）。所以這一次**部署前一定先手動備份**：
+
+1. 先停伺服器和假人（上面「怎麼停」；記得先放 `PAUSED` 暫停看守）。
+2. 手動備份（新舊程式的備份腳本都認得第 5 版，用哪一份都可以）：
+
+   ```powershell
+   cd C:\Ray\專案\天下大勢
+   $env:TIANXIA_DB = "C:\Ray\tianxia-play\tianxia.db"
+   .venv\Scripts\python.exe scripts\backup_db.py --dest C:\Ray\tianxia-play\backup
+   ```
+
+   要看到「已備份：…tianxia-manual-…db（**結構第 5 版**、帳號 N、角色 N、季 N、江湖史 N）」才往下走。手動備份永遠留著，不會被每日備份的保留規則刪掉。這一份就是退版要用的那一份，檔名記下來。
+3. 換程式，照平常的方式開伺服器和假人。開機印的「資料庫：…」兩邊要一樣。
+4. 驗：再做一次手動備份（同上），這一次印的要是「**結構第 6 版**」，帳號、角色、季、江湖史的數字跟第 2 步一樣。
+
+全新的資料庫（例如七天封測另開一份）一開始就直接建成第 6 版，不必備份也沒有升級這一步。
+
+**元寶只在 `TIANXIA_PROFILE=week7` 發**：
+
+- 封測的 5000 元寶寫在 `content/profiles/week7.json` 的 `"mall": {"enabled": true, "beta_grant": 5000}`。兩個程式啟動前都設 `$env:TIANXIA_PROFILE = "week7"`，開機印的「設定：week7（第一季濃縮版規則開啟、季長 7 天、人數上限 20）」兩邊要一樣。
+- 每個角色第一次進來（登入之後第一次讀到江湖畫面；假人是它自己那一輪）發一次、江湖紀錄一則「商城」；之後再開新的一季、重新登入都不再發。還沒建角色的帳號要等建了角色才發。
+- 其他設定（不設、`weekend`、`season21`）照 `content/config.json` 的 `"mall": {"enabled": true}`：商城照樣開著、看得到，但**不發元寶**（大家都是 0，買不了東西）。
+- 要臨時關掉商城：沒設 `week7` 時改 `content/config.json` 的 `"mall"` 成 `{"enabled": false}`；設了 `week7` 時改的是 `content/profiles/week7.json` 那一段的 `"enabled"`（設定覆寫檔是整段蓋過去的，改 `config.json` 沒用）。兩個程式一起重開。關著時沒有入口、商城的網址都回 404、月卡不加回體丹上限、也不發元寶；帳都還在資料庫裡，開回來照舊。
+
+**對帳：`scripts/mall_ledger.py`**（只讀；伺服器開著也可以跑）
+
+```powershell
+cd C:\Ray\專案\天下大勢
+.venv\Scripts\python.exe scripts\mall_ledger.py --db C:\Ray\tianxia-play\tianxia.db --out C:\Ray\tianxia-play\ledger-20261025.csv
+```
+
+- **`--db` 一定要寫**：不寫就照這個視窗的 `$env:TIANXIA_DB`，沒設是 repo 裡的 `saves\tianxia.db`（不是線上那一份）。
+- 它用 SQLite 的唯讀模式開檔：不升級、不拿寫入權、不改任何一筆。伺服器沒開著時資料庫旁邊會多出空的 `-wal`、`-shm`，是 SQLite 自己的，不用管。
+- `--out` 寫成 CSV（utf-8-sig，Excel 直接開不亂碼）；不給 `--out` 就印在畫面上。一筆帳一列：編號、時間（台灣）、名號、錢包、增減、原因（封測發放／購買／退款／補發／扣回）、單號、購買（連著哪一筆購買）、經手（補發、扣回、退款的管理者）、說明、那一筆之後這個錢包的餘額。
+- 畫面最後兩行是總結：
+
+  ```
+  帳 128 筆、錢包 25 個；發出 125000、花掉 9600、餘額合計 115400
+  負的餘額：沒有
+  ```
+
+  怎麼看：封測期間「發出」大約是 5000 × 錢包數，再加補發與退款；「花掉」是購買加扣回。「負的餘額」照理永遠是「沒有」（程式擋著扣到負的）；寫了名號就是出事了，結束碼是 1，把 CSV 和這兩行一起交給開發。
+- 檔案還是第 5 版（新程式還沒開過它）：印「這份資料庫還是第 5 版（還沒升級），沒有商城的帳」，不寫 CSV。路徑打錯、不是資料庫：印「打不開資料庫檔：…」，結束碼 1。
+- 個別一個人的帳、補發、扣回、退一筆購買在遊戲裡做：用管理者登入，⚙ → 管理者工具 →「商城」那一組（每一筆都寫進帳：誰、何時、為什麼）。
+
+正式開服時整份資料庫換新，元寶、購買紀錄、月卡一起清掉。
+
 ## 換成第一季濃縮版的那一天
 
 企劃者定了「換季重來、不開新資料庫」：帳號和江湖史留著，beta 這一季收掉，開新的一季。順序照下面走（PM 2026-10-04 定）。

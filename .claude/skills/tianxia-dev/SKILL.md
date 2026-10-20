@@ -23,12 +23,20 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   - 帶 git 的 heredoc、`git -C`、用 `$VAR` 或 `$(...)` 組出來的路徑或指令名，這幾種會被拒。
   - 繞法：git 一條一條下、路徑寫死。要改檔就用 Write 工具寫一支 Python 腳本到 scratchpad，再用 `python 腳本 .` 跑。
   - 要跑 venv 的 python、讀 `$env:TEMP` 的 log，改用 PowerShell 工具。
+  - 用 `;`、`&` 串起來的、`cat > 檔 <<EOF` 寫檔的，也常被當成「太複雜」拒絕：寫檔用 Write 工具，指令一條一條下。
+- **在 scratchpad 解一份複本跑伺服器**（2026-10-20）：`git archive HEAD -o <scratchpad>/<名字>/src.tar`，再 `tar --force-local -x -f <tar> -C <目錄>`。不加 `--force-local` 時 Git Bash 的 tar 把 `C:/…` 的 `C:` 當成遠端主機（「Cannot connect to C: resolve failed」）。
 - **中文輸出**：Python 印中文前包 UTF-8（`PYTHONIOENCODING=utf-8` 或 `sys.stdout = io.TextIOWrapper(...)`），不然 cp950 會炸（連 `print` 一個 `−` 都會）。
 - **TIANXIA_DB**：每次跑測試、跑腳本都設到 repo 外一個新的暫存檔（`$env:TEMP\tx_xxx.db`）。舊的資料庫會讓測試假失敗。
 - **git stash 是所有工作樹共用的**，別的 session 也在用。
   - 不要裸 `git stash` / `pop`。
   - 要用就 `git stash push -m <獨一無二的標籤> -- <檔>`，`git stash list --format='%H %gd %gs'` 找到自己那一筆，`git stash apply <sha>`，再照標籤找 `stash@{n}` 去 drop。
   - 想證明測試「修之前是紅的」，最簡單的就是這樣把改動暫時收起來跑一次。
+- **用 `python -I` 跑腳本時 `PYTHONIOENCODING` 不生效**（`-I` 忽略所有 PYTHON 開頭的環境變數）：在腳本裡 `sys.stdout.reconfigure(encoding="utf-8")`。
+- **實機看畫面**：PM 會給你一個埠與 `<名字>.localhost`（別的子代理同時在跑伺服器，cookie 照主機名分開）；瀏覽器窗格是共用的，**每一個動作都帶自己的 tabId**，看完把視窗設回 desktop、關掉自己的分頁、`taskkill /T` 關伺服器。窗格在背後時截圖可能拍到動畫中途，數字用 `javascript_tool` 量。
+- **這台的 Ollama 沒有 `gemma4:12b`**（只有 26b 等舊模型，2026-10-20 查的）：真模型實測叫不動就照實回報；不要改拿 26b 代跑（17GB、keep_alive 12 小時會一直佔著顯卡）。
+- **開伺服器又不能打到 11434**：模型網址（`Config.ollama_url`）沒有環境變數可改，設定覆寫檔照派工指定的（例 `week7`）就不另寫一份。在 scratchpad 寫一支包裝：`sys.path.insert(0, 工作樹)`、`import server`、`server.CONTENT.config.ollama_url = "http://127.0.0.1:9"`、`server.main(["--port", 埠])`，用 `Start-Process` 跑它（`TIANXIA_DB`、`TIANXIA_PROFILE` 照設在 PowerShell 裡，子行程繼承）。角色在每次建 `Game` 時才照設定建 client，所以先改再 `main` 就全部指到那裡（FB-490～493 這一輪）。
+- **實機要某一步的角色**（例：初入江湖第一步）：`/api/register`＋`/api/character` 建一個（密碼產生後寫進 scratchpad 的檔），再用 `CharacterStore.load`／`save` 改 `tutorial_step`（與 `location`）存回去；伺服器每次進鎖都從資料庫重讀，不必重開。序章那幾步（0～10，含出師那一步）要 `location` 是 `mentor_hut`，不然 `m.prologue` 是 None、看起來像出了草廬。
+- **計畫要對現行程式**：派工給的計畫可能是照 main 或更早的版本寫的；開工先核對，差異寫進計畫，前提不在了就停下來回報 PM。
 - 背景長跑（量表）用 `run_in_background`。輸出導到檔案時 python 會緩衝，加 `-u` 才看得到進度。等它結束的通知，不要輪詢。
 
 ## 測試怎麼挑
@@ -41,6 +49,7 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 - 改到 `tianxia/engine.py` 幾乎會挑到大半套（八千多條、約 6～8 分鐘），正常。只動內容或小模組時會少很多。
 - 新測試超過一秒（建 `Game`、載真實內容通常就超過）標 `@pytest.mark.slow`。
 - **修 bug 先寫會紅的測試**：先確認它在修之前真的失敗、失敗的數字跟 QA 回報的一樣，再修。回報時寫「修前重現了什麼」。
+- **「確認並守住」的測試**（程式沒改、一寫就綠，例：假人不買商城的東西）：要證明它抓得到退步，另寫一個暫時的測試檔 import 它，monkeypatch 一個退步（例 `bot_policy.take_turn` 先叫 `mall_buy`、`social.card` 多塞一個「元寶」），跑一次看它紅，再刪掉那個暫時的檔（不提交）。
 - 用正式內容測舊規則的測試，要在 helper 裡把新開關關掉（例 `c.config.precise_actions = False`、`four_tiers.enabled = False`）。新規則另開一個測試檔，不要改寫舊的斷言去迎合新規則。
 - 江湖紀錄 `state.journal` 新的在前（index 0）。找某一則照標題找，不要拿 `[-1]`。
 
@@ -92,6 +101,7 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 
 - 一張回饋單一個 commit；commit 訊息一句英文，結尾 `Co-Authored-By:`（照當時 system 給的那一行）。
 - 推之前合派工指定的分支（衝突兩邊都留）。推完用 `git merge-base --is-ancestor HEAD origin/<分支>` 確認推到了。
+  - 這份 clone 的 `remote.origin.fetch` 只列 `tianxia`、`feature/sanguo-companions`、`main`：`git fetch origin`（或 `git fetch origin <分支>`）**不會**更新 `origin/dev/*`、`origin/develop`，推完馬上比會假失敗、開工時讀到的也可能是舊的。要比之前先 `git fetch origin +refs/heads/<分支>:refs/remotes/origin/<分支>`，或直接 `git ls-remote origin refs/heads/<分支>` 對 `git rev-parse HEAD`（2026-10-20 商城第二批修正那一次）。
 - 回報寫：
   - 每張的 commit 與一兩句怎麼修。修前重現了什麼。
   - 跑了哪些測試、幾條過。
