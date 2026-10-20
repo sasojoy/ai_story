@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pydantic import BaseModel
 
 from . import (
-    allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, checkin, chuangong, clinic, companion_agent, conquest, cultivation, defection, divine, economy, encounter, enlist, equipment, event_llm, explore_modes, escorts,
+    allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, checkin, chuangong, clinic, companion_agent, conquest, conquest_day, cultivation, defection, divine, economy, encounter, enlist, equipment, event_llm, explore_modes, escorts,
     fight_llm, figure_aid, figure_life, figures, foreshadow, four_tiers, gather_llm, generals, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, letters, library, mapdata, martial_arts, feasts,
     materials, mounts, naming, opportunities, orders, precise, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
     shopview, signature, signature_arms, silver, skill_slots, skillview, smithing,
@@ -64,7 +64,7 @@ from .rules import (
 )
 from .sqlite_world import open_world
 from .state import (
-    ONBOARDING_VERSION, PLAYER, ArenaEntry, ArenaFight, ArenaReport, ArenaResult, ArenaSide, BattleRecord, Convoy, CrowdNote, DuelState, Equipment, Feast, GameState, HintNote, JournalEntry, Journey, Mingtie, Rumor, Tagalong, TavernHit, TavernWatch, TimelineResult,
+    ONBOARDING_VERSION, PLAYER, ArenaEntry, ArenaFight, ArenaReport, ArenaResult, ArenaSide, BattleRecord, Convoy, CrowdNote, DuelState, Equipment, Feast, GameState, HintNote, JournalEntry, Journey, Mingtie, Pick, Rumor, Tagalong, TavernHit, TavernWatch, TimelineResult,
     Whisper, WorldState,
     new_game_state,
 )
@@ -207,6 +207,28 @@ ESCORT_SCENE = "隨你出陣：{name}（氣血 {hp}/{cap}）"
 ESCORT_FELL = "隨你出陣：{name}（敗走）"
 TROOPS_LINE = "你帶著{names}上陣，強攻、奇襲多 {pct}"  # 待 joy 潤（PM 2026-10-12）：決戰畫面，接在騎兵那一句後面（加入時的快照）
 TROOPS_REPORT = "{names}跟著你衝陣"  # 待 joy 潤（PM 2026-10-12）：決戰的戰報
+# 領地爭奪第二批：每天投票（裁決 9；待 joy 潤）
+VOTE_TITLE = "攻城投票"
+VOTED_LINE = "你投了一票：明日 {time} 攻{place}。"
+VOTE_HOW = "眾議"  # 明天怎麼定：有人投就是眾議（只寫加權之後的比例）
+VOTE_NONE = "還沒有人投票，22:00 由主將定奪"
+CONQUEST_OFF = "這一季沒有攻城戰。"
+CONQUEST_ENDED = "這一季已經收了。"
+VOTE_RANGER = "投靠了官軍或黃巾（豪強：依附了一軍）才能投票。"
+VOTE_NOT_TARGET = "那裡此刻打不到：要是這一邊碰得到、搶得下來的地方。"
+VOTE_BAD_SLOT = "那個時辰不能開打：只能挑明天 12:00～21:00 的整點或半點，時刻表決戰前後不排。"
+SIEGE_STATUS = {"planned": "未開", "waiting": "即將集結", "open": "集結・交戰中", "void": "作罷"}
+SIEGE_TAKEN = "{side}拿下"
+SIEGE_HELD = "守住了"
+
+
+def siege_status_text(content: Content, slot) -> str:
+    """時程表上一場攻城的狀態那幾個字（待 joy 潤）。"""
+    if slot.status == "done":
+        return SIEGE_TAKEN.format(side=content.scenario.faction_name(slot.winner, slot.winner)) if slot.winner else SIEGE_HELD
+    return SIEGE_STATUS.get(slot.status, "")
+
+
 # 賽季時鐘暫停（線上架構設計第四節、8.3）：選單上那一顆灰的，伺服器擋動作也回這一句（server._refuse_while_paused）。待 S1／joy 潤
 PAUSED_TEXT = "賽季暫停中（停機維護）：這段時間不能行動，畫面照常可看"
 PAUSE_LINE = (  # 待 S1／joy 潤
@@ -9278,6 +9300,82 @@ class Game:
         if not checkin.on(c, s.world) or not checkin.in_season(c, s.world) or prologue_rules.active(s, c):
             return None
         return checkin.view(s, c, s.world)
+
+    # ── 領地爭奪第二批：每天投票、時程表（conquest_day；設計 3.6、4.3，裁決 9）──
+
+    def _conquest_side(self) -> str | None:
+        """替哪一軍投票、打攻城（豪強分屬兩軍：依附的那一軍）；散人、不是兩軍是 None。"""
+        side = allied.side_of(self.state, self.content)
+        return side if side in conquest.SIDES else None
+
+    def _vote_key(self) -> int:
+        """這一下投的票是替哪一天投的：此刻的下一天（22:00 結算時排那一天的攻城，conquest_day.day_key）。"""
+        return conquest_day.day_key(self.pill_now(), self.content.config) + 1
+
+    def _vote_problem(self, loc: str | None = None, minute: int | None = None) -> str | None:
+        """投不了票的那一句（不含括號）；投得了是 None。loc、minute 給了再驗那一票。"""
+        c, w = self.content, self.state.world
+        if not conquest.on(c, w) or w.conquest is None:
+            return CONQUEST_OFF
+        if w.ended:
+            return CONQUEST_ENDED
+        side = self._conquest_side()
+        if side is None:
+            return VOTE_RANGER
+        if loc is not None and loc not in conquest.targets(w, c, side):
+            return VOTE_NOT_TARGET
+        if minute is not None and minute not in conquest_day.slots(w, c, self._vote_key(), self.pill_now()):
+            return VOTE_BAD_SLOT
+        return None
+
+    def conquest_vote(self, loc: str, minute: int) -> list[str]:
+        """投一票：明天打哪一塊、幾點開打（裁決 9：投靠了官軍或黃巾的人每天都投；一人一票、可以改；只公開加權之後的比例）。
+        票記在共用賽季（ConquestState.votes，votes_for 是替哪一天），22:00 結算時照 conquest_day.plan 定。"""
+        problem = self._vote_problem(loc, minute)
+        if problem is not None:
+            return self._log([f"（{problem}）"])
+        w = self.state.world
+        state, key = w.conquest, self._vote_key()
+        if state.votes_for != key:  # 前一天的票（結算吃過、或沒人結算）不帶過來
+            state.votes, state.votes_for = {}, key
+        state.votes.setdefault(self._conquest_side(), {})[self.state.player.name] = Pick(loc=loc, minute=minute)
+        line = VOTED_LINE.format(time=conquest_day.slot_text(minute), place=self.content.locations[loc].name)
+        self._write(VOTE_TITLE, [line])
+        self._save_season()
+        return self._log([line])
+
+    def conquest_view(self) -> dict | None:
+        """攻城的畫面資料（Task 13 的網頁畫它；server.main_view 的 conquest）：today 是最近一次結算排的時程表（地點、攻方、時刻、狀態，
+        誰都看得到）；tomorrow 是自己這一邊明天的眾議（只有加權之後的比例，不帶名號、不帶票數）或主將定奪；mine 是自己那一票；
+        can_vote／why；targets 與 slots 是能投的區塊與時段。開關關著、季收了是 None。散人看得到 today，tomorrow 是 None。"""
+        c, w = self.content, self.state.world
+        if not conquest.on(c, w) or w.ended or w.conquest is None:
+            return None
+        state, side, key = w.conquest, self._conquest_side(), self._vote_key()
+        names = {f.id: f.name for f in c.scenario.factions}
+        today = [{
+            "id": slot.id, "loc": slot.loc, "place": c.locations[slot.loc].name,
+            "attackers": [names.get(a, a) for a in slot.attackers], "time": self.stamp(slot.at), "minute": slot.minute,
+            "status": slot.status, "status_text": siege_status_text(c, slot),
+            "by": {names.get(a, a): conquest_day.BY_WORDS.get(slot.by.get(a, ""), "") for a in slot.attackers},
+        } for slot in state.schedule]
+        problem = self._vote_problem()
+        view: dict = {"today": today, "tomorrow": None, "mine": None, "can_vote": problem is None, "why": problem or "",
+                      "targets": [], "slots": [], "per_day": conquest_day.per_day(c, w)}
+        if side is None:
+            return view
+        votes = state.votes.get(side, {}) if state.votes_for == key else {}
+        shares = conquest_day.shares(votes, set(w.seats.get(side, [])), c.config.conquest.rank4_share)
+        rows = [{"loc": loc, "place": c.locations[loc].name, "share": round(share * 100)}
+                for loc, share in sorted(shares.items(), key=lambda kv: -kv[1])]
+        view["tomorrow"] = {"how": "vote" if rows else "none", "text": VOTE_HOW if rows else VOTE_NONE, "rows": rows}
+        mine = votes.get(self.state.player.name)
+        if mine is not None:
+            view["mine"] = {"loc": mine.loc, "place": c.locations[mine.loc].name, "minute": mine.minute,
+                            "time": conquest_day.slot_text(mine.minute)}
+        view["targets"] = [{"id": loc, "name": c.locations[loc].name} for loc in conquest.targets(w, c, side)]
+        view["slots"] = [{"minute": m, "text": conquest_day.slot_text(m)} for m in conquest_day.slots(w, c, key, self.pill_now())]
+        return view
 
     def pill_now(self) -> float:
         """回體丹換日看的現實時間：sync 給的 now，加上 advance 推過的那一截（advanced_real）。"""
