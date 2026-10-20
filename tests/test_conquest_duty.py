@@ -140,11 +140,18 @@ def test_howto_says_duty_stays_on_own_ground():
     assert "守勢行動" not in " ".join(howto.territory_lines(off.content, True, off.state.world))  # 關著：拔河那一版，一個字不變
 
 
-def test_switch_off_the_duty_button_is_unchanged():
-    """領地爭奪關著（正式內容的預設，週末、14 天、21 天都一樣）：別人的地方、中立地照舊按得下去、照舊那一個標籤。"""
-    for profile in ("weekend", None, "season21"):  # 週末、14 天（不帶設定檔）、21 天
-        game = go(join(plain_game(profile), "guan"), "huangjin_camp")
-        option = _duty(game)
-        assert option is not None and option.enabled
-        assert option.label.startswith(game.content.orders.duties["guan"].name)
-        assert sortie.DUTY_OUT_OTHER not in option.label and sortie.DUTY_OUT_OPEN not in option.label
+@pytest.mark.parametrize("profile", ["weekend", None, "season21"])  # 週末、14 天（不帶設定檔）、21 天；一個測試只開一季
+def test_switch_off_the_duty_button_is_unchanged(profile):
+    """領地爭奪關著（正式內容的預設，週末、14 天、21 天都一樣）：每一個地點都沒有灰掉的原因；別人的地方、中立地照舊按得下去、
+    照舊那一個標籤。14 天的季沒有第一季規則、沒有軍令，守勢行動本來就不在選單上（修前修後都一樣）。"""
+    game = go(join(plain_game(profile), "guan"), "huangjin_camp")
+    for loc_id in game.content.locations:
+        assert sortie.duty_problem(game.content, game.state.world, "guan", loc_id) == ""
+    option = _duty(game)
+    if profile is None:
+        assert option is None
+        return
+    assert option is not None and option.enabled
+    assert option.label.startswith(game.content.orders.duties["guan"].name)
+    assert sortie.DUTY_OUT_OTHER not in option.label and sortie.DUTY_OUT_OPEN not in option.label
+    assert go(game, "deep_mountain") is game and _duty(game).enabled
