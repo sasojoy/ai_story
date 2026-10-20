@@ -404,6 +404,18 @@ def _today(content: Content, world: WorldState | None, side: str | None, how: st
     return conquest_day.today(world, content, side, how) if world is not None and side is not None else []
 
 
+def defend_places(content: Content, world: WorldState | None, o: Order) -> list[str]:
+    """領地爭奪在這一季生效時，這道守城軍令記得了次數的地點（裁決 11、24；FB-565）：這條戰線上自家今天被公告要攻、還沒打完的區塊
+    （conquest_day.today 的 defend：此刻佔著的是自己、不是攻方）。記功（_counts）、假人往哪走（targets）、守城軍令卡的做法
+    （atlas.order_how）、輿圖的守城標記（mapdata._order_marks）、duty_counts 都問它，列的與記的不會對不上。
+    關著的季是空的（舊規則整條戰線都記，各處照舊）。"""
+    from . import conquest  # noqa: PLC0415  conquest → territory → rules：在函式裡 import
+
+    if o.front is None or not conquest.on(content, world):
+        return []
+    return [loc for loc in _today(content, world, o.faction, "defend") if conquest.line_of(world, content, loc) == o.front]
+
+
 def _counts(
     content: Content, o: Order, kind: str, location: str | None, front: str | None, squad: str | None,
     squad_faction: str | None, figure: str | None, order: str | None, world: WorldState | None = None,
@@ -416,10 +428,12 @@ def _counts(
     from . import conquest  # noqa: PLC0415
 
     if o.template in ("siege", "defend") and conquest.on(content, world):
-        spots = _today(content, world, o.faction, "attack" if o.template == "siege" else "defend")
+        if o.template == "defend":
+            return location in defend_places(content, world, o)  # 守城認自家今天被公告的那一塊（裁決 24；FB-565 卡與輿圖也讀它）
+        spots = _today(content, world, o.faction, "attack")
         if location not in spots or conquest.line_of(world, content, location) != o.front:
             return False
-        return o.template == "defend" or siege_win(o.faction, squad_faction, garrison=True)
+        return siege_win(o.faction, squad_faction, garrison=True)
     if o.template == "siege":  # 在那條戰線遊歷打贏一場敵方陣營的隊伍（操練、流寇不算）
         return front == o.front and siege_win(o.faction, squad_faction)
     if o.template == "intercept":  # 在運糧隊在的那幾站（intercept_spots）打贏敵方的運糧隊
@@ -597,8 +611,7 @@ def targets(state: GameState, content: Content, faction: str | None) -> list[str
             wanted |= set(siege_places(content, o.faction, o.front, state.world))
         elif o.template == "defend":
             if conquest.on(content, state.world):  # 領地爭奪第二批：自家今天被公告的那一塊（裁決 11）
-                wanted |= {loc for loc in _today(content, state.world, o.faction, "defend")
-                           if conquest.line_of(state.world, content, loc) == o.front}
+                wanted |= set(defend_places(content, state.world, o))
             else:
                 wanted |= {loc for loc in content.locations if rules.front_of(content, loc) == o.front}
         elif o.template == "intercept" and o.location is not None:

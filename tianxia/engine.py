@@ -1994,7 +1994,9 @@ class Game:
             note = "convoy_out"  # 大本營、廣宗上攻的只有截糧的運糧隊（裁決 18）：只算截糧、沒有進度
         elif on and note == "attack" and conquest.holder(self.state.world, self.content, loc.id) is None:
             note = "open"  # 還沒人佔的中立地：不寫「這裡歸別人」（FB-533）
-        return howto.sortie_line(note, push_ok, left, self.content, progress, today)
+        # FB-552：推不動、不是搶不下來的區塊，這一塊今天其實排過攻城（集結中、開打中、打完、作罷）時照實寫在哪一步，不寫「今天沒有公告攻城」
+        siege = conquest.siege_state(self.state.world, loc.id) if on and not today else None
+        return howto.sortie_line(note, push_ok, left, self.content, progress, today, siege)
 
     def _choice_label(self, choice: Choice, odds: bool) -> str:
         """動手的選項寫對手與勝算，後面照樣接體力的代價（輸了多扣的，企劃者裁決 E6；events.stamina_note）；
@@ -4388,9 +4390,13 @@ class Game:
 
     def _duty_option(self, name: str) -> Option:
         """守勢行動的鈕。出陣開著時每用一次扣一次出陣次數（PM 2026-10-14：跟攻、守、攪局共用每日的次數），鈕上寫今天還能幾次、
-        用完灰掉、寫跟出陣同一句；關著照舊。"""
+        用完灰掉、寫跟出陣同一句；關著照舊。領地爭奪在這一季生效時，站在不是自家的區塊（別人的、沒佔下的中立地）灰掉寫原因，
+        按下去不扣體力與次數、不推線、不記守城（裁決 24；choose 照選單驗，灰的按不下去）。"""
         c = self.content
         cost = c.config.duty_stamina
+        problem = sortie.duty_problem(c, self.state.world, self._side(), self.state.player.location)
+        if problem:
+            return Option(id="act:duty", label=f"{name}（{problem}）", enabled=False)
         if not sortie.on(c):
             return self._cost_option("act:duty", name, cost)
         left = self.sorties_left()

@@ -137,6 +137,23 @@ def progress_open(world: WorldState, content: Content, loc_id: str) -> bool:
     return any(slot.loc == loc_id and slot.status in ("planned", "waiting") for slot in world.conquest.schedule)
 
 
+def siege_state(world: WorldState | None, loc_id: str) -> str | None:
+    """這一塊今天的攻城在哪一步（FB-552：出陣那一行照實寫，不再一律寫「今天沒有公告攻城」）：今天沒排過是 None；
+    planned＝公告了、還沒開打（planned、waiting：進度推得動，progress_open）；muster＝開了集結、還沒到開打的時刻；fight＝開打了、還在打；
+    done＝打完了；void＝作罷了。這一塊排了不只一場時取最後排的那一場（時程表照先後）。只讀 WorldState，不判進度推不推得動。"""
+    if world is None or world.conquest is None:
+        return None
+    slots = [slot for slot in world.conquest.schedule if slot.loc == loc_id]
+    if not slots:
+        return None
+    slot = slots[-1]
+    if slot.status in ("planned", "waiting"):
+        return "planned"
+    if slot.status == "open":
+        return "muster" if world.time < slot.at else "fight"
+    return slot.status
+
+
 def progress_of(world: WorldState, loc_id: str) -> float:
     state = world.conquest
     return state.progress.get(loc_id, 50.0) if state is not None else 50.0
