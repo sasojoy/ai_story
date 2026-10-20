@@ -294,7 +294,7 @@ def test_an_effect_that_grants_a_known_insight_again_deepens_it_or_gives_xinde_a
     state.player.insights = ["feng"]
     state.player.stats["xinde"] = 0
     msgs = apply_effect(Effect(insights=["feng"]), state, content, world)
-    assert state.player.insights == ["feng"] and state.player.insight_strength["feng"] == 2 and any("●●" in m for m in msgs)
+    assert state.player.insights == ["feng"] and state.player.insight_strength["feng"] == 2 and any("二重" in m for m in msgs)
     state.player.insight_strength["feng"] = 3
     msgs = apply_effect(Effect(insights=["feng"]), state, content, world)
     assert state.player.insights == ["feng"] and state.player.stats["xinde"] == 10 and "心得 +10" in msgs

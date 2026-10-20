@@ -2395,20 +2395,67 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
 .mt-admin-row { display: grid; grid-template-columns: 64px 1fr; gap: 10px; align-items: start; }
 .mt-admin-row .muted { margin: 2px 0 6px; font-size: 12px; }
 
-/* 武學重構：意境槽（修練頁每一門武學一排格子；意境就是技能）。裝著的格子寫「意境」〔技能〕●●、右上一個 ×（點了拆下）；
-   空格虛線框、點了在底下攤開手上空著的意境（.slot-pick），收不下的灰掉。字待 joy 潤 */
-.slots { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0 2px; }
-.slots .slab { font-size: 11px; color: var(--ink-2); letter-spacing: 0.06em; flex: none; }
-.islot { position: relative; min-height: 40px; border-radius: 10px; padding: 4px 22px 4px 9px; text-align: left; font-size: 13px; cursor: pointer; line-height: 1.3; }
-.islot.full { border: 1px solid color-mix(in srgb, var(--gold) 60%, var(--line)); background: color-mix(in srgb, var(--gold) 10%, var(--card)); color: var(--ink); }
-.islot.full small { display: block; font-size: 11px; color: var(--ink-2); }
-.islot.full i { position: absolute; top: 4px; right: 7px; font-style: normal; font-size: 13px; color: var(--ink-2); }
-.islot.empty { border: 1px dashed var(--line); background: transparent; color: var(--ink-2); padding: 4px 12px; min-width: 64px; }
-.islot.empty.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
-.slot-pick { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; padding: 8px; border-radius: 10px; background: var(--card-2); }
-.slot-pick button { border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 10px; padding: 5px 9px; text-align: left; font-size: 13px; cursor: pointer; min-height: 40px; }
-.slot-pick button small { display: block; font-size: 11px; color: var(--ink-2); }
+/* 武學重構：意境槽（Joy 2026-10-20「●好醜…槽位，包含整張卡都很醜」）。一門武學一排玉環：環的顏色就是這一格收哪一路的意境
+   （單色一路、雙色兩路各半、八色一圈什麼都收），環心是裝著的意境名字的頭兩個字，底下〔技能〕與三節玉（一重～三重）。
+   空的環淡一點、環心一個＋；點了在底下攤開手上空著的意境（.slot-pick），顏色不合的灰掉。顏色是礦物顏料，深色另一組 */
+:root {
+  --at-gang: #a8322a; --at-kuai: #2f5d8a; --at-rou: #3f7d5c; --at-man: #9a6a2a;
+  --at-yang: #c58a1c; --at-yin: #5a4b8a; --at-xu: #7a7a86; --at-shi: #55702e;
+  --jade-lv: #c9a24a; --jade-lv-off: #e3d8c3;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --at-gang: #c2473c; --at-kuai: #4a7cae; --at-rou: #55a079; --at-man: #b98634;
+    --at-yang: #e0b04a; --at-yin: #8f80c8; --at-xu: #a3a3ad; --at-shi: #8db35a;
+    --jade-lv: #e0b85c; --jade-lv-off: #3d352b;
+  }
+}
+.jring { position: relative; flex: none; display: inline-grid; place-items: center; width: 44px; height: 44px; border-radius: 50%;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.35), inset 0 -2px 3px rgba(0, 0, 0, 0.18), 0 1px 2px rgba(60, 40, 20, 0.15); }
+.jring.one { background: radial-gradient(circle at 32% 28%, color-mix(in srgb, var(--a) 55%, #fff) 0, var(--a) 46%, color-mix(in srgb, var(--a) 78%, #000) 100%); }
+.jring.two { background: linear-gradient(135deg, var(--a) 0 50%, var(--b) 50% 100%); }
+.jring.two::before { content: ""; position: absolute; inset: 0; border-radius: 50%; background: radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.35), transparent 55%); }
+.jring.any { background: conic-gradient(from -22.5deg, var(--at-gang) 0 12.5%, var(--at-yang) 0 25%, var(--at-kuai) 0 37.5%, var(--at-xu) 0 50%,
+  var(--at-rou) 0 62.5%, var(--at-yin) 0 75%, var(--at-man) 0 87.5%, var(--at-shi) 0 100%); }
+.jring::after { content: ""; position: absolute; inset: 7px; border-radius: 50%; background: var(--card);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.22); }
+.jring .jin { position: relative; z-index: 1; font: 700 12px/1.1 var(--serif); color: var(--ink); text-align: center; letter-spacing: 0; }
+.jring .jin i { font-style: normal; font-size: 16px; font-weight: 400; color: var(--ink-2); }
+.jring.vacant { opacity: 0.55; }
+.jring.jchip { width: 22px; height: 22px; }
+.jring.jchip::after { inset: 4px; }
+.jring.jchip .jin { font-size: 10px; }
+.jring.jmini { width: 18px; height: 18px; }
+.jring.jmini::after { inset: 4px; }
+.jade { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 2px; }
+.jd { display: grid; justify-items: center; gap: 2px; min-width: 64px; padding: 6px 4px 5px; border: 1px solid transparent; border-radius: 12px;
+  background: transparent; color: var(--ink); cursor: pointer; line-height: 1.25; }
+.jd.full { background: color-mix(in srgb, var(--gold) 7%, var(--card)); border-color: color-mix(in srgb, var(--gold) 30%, var(--line)); }
+.jd.empty { border-style: dashed; border-color: var(--line); }
+.jd.empty.on { border-color: var(--accent); background: var(--accent-soft); }
+.jd.empty.on .jring.vacant { opacity: 1; }
+.jd small { font-size: 11px; color: var(--ink-2); white-space: nowrap; }
+.jd small.dim { color: var(--ink-2); opacity: 0.8; }
+.lv { display: inline-flex; gap: 2px; vertical-align: middle; }
+.lv i { width: 9px; height: 4px; border-radius: 2px; background: var(--jade-lv-off); }
+.lv i.on { background: var(--jade-lv); box-shadow: 0 0 3px color-mix(in srgb, var(--jade-lv) 60%, transparent); }
+.slot-pick { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; padding: 8px; border-radius: 12px; background: var(--card-2); }
+.slot-pick button { display: flex; align-items: center; gap: 7px; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 10px;
+  padding: 5px 9px; text-align: left; font-size: 13px; cursor: pointer; min-height: 40px; }
+.slot-pick button small { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--ink-2); }
 .slot-pick button.no, .slot-pick button:disabled { opacity: 0.45; cursor: default; }
+/* 一門武學的圖示：自創時擺的火柴人（沒擺過的照兵器挑一個起手式） */
+svg.fig { flex: none; color: var(--ink); overflow: visible; }
+svg.fig .bone { fill: none; stroke: currentColor; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }
+svg.fig circle.bone { fill: var(--card); }
+svg.fig .blade { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linecap: round; }
+svg.fig .blade.thick { stroke-width: 5; }
+svg.fig .blade.bow { stroke-width: 3; }
+.card-fig { width: 42px; height: 52px; margin-left: auto; padding: 3px; border-radius: 10px; background: var(--card-2); color: var(--ink-2); }
+.acard .hd .card-fig ~ .worn { margin-left: 0; }
+.tile-fig { width: 46px; height: 58px; }
+.cr-fig { width: 64px; height: 80px; }
+.cr-fig.big { width: 84px; height: 104px; }
 .insight .ins-skill { color: var(--ink); }
 /* 自創武學那一塊（煉製頁爐子底下）：每一行左邊一個小標、右邊選項；品級機率一行三個印 */
 .card.create .crow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 8px 0; }
@@ -2420,3 +2467,36 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
 .card.create .acts .btn { flex: 1; }
 .create-sum { margin: 0 0 4px; font-size: 13px; }
 .odds-line { display: flex; align-items: center; gap: 4px; margin: 0 0 6px; font-size: 12px; color: var(--ink-2); }
+
+/* 自創五步（執器→擺式→立意→成形→立名）：步驟一排、兵器一格一張小圖、擺式左邊拖曳的大圖右邊說明、成形一排玉環 */
+.cr-steps { display: flex; gap: 4px; margin: 0 0 10px; padding: 0; list-style: none; counter-reset: cr; }
+.cr-steps li { flex: 1; min-width: 0; padding: 4px 0 3px; border-bottom: 2px solid var(--line); font-size: 12px; color: var(--ink-2); text-align: center; white-space: nowrap; }
+.cr-steps li.done { border-color: color-mix(in srgb, var(--gold) 60%, var(--line)); color: var(--ink); }
+.cr-steps li.on { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+.cr-forms { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; margin: 8px 0; }
+.cr-form { display: grid; justify-items: center; gap: 3px; padding: 8px 6px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--ink); cursor: pointer; text-align: center; }
+.cr-form b { font: 700 15px var(--serif); }
+.cr-form small { font-size: 11px; color: var(--ink-2); line-height: 1.35; }
+.cr-form.on { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 1px var(--accent) inset; }
+.cr-bias { display: flex; gap: 3px; min-height: 22px; }
+.cr-rig { display: grid; grid-template-columns: minmax(0, 220px) minmax(0, 1fr); gap: 12px; align-items: start; margin: 6px 0; }
+@media (max-width: 420px) { .cr-rig { grid-template-columns: 1fr; justify-items: center; } }
+#create-rig { width: 100%; max-width: 220px; aspect-ratio: 220 / 240; border-radius: 12px; background: var(--card-2); color: var(--ink);
+  touch-action: none; user-select: none; -webkit-user-select: none; }
+#create-rig .ground { stroke: var(--line); stroke-width: 2; stroke-dasharray: 4 5; }
+#create-rig .jt { fill: var(--gold); stroke: var(--card); stroke-width: 2; pointer-events: none; }
+#create-rig .jhit { fill: transparent; cursor: grab; }
+#create-rig .jhit:active { cursor: grabbing; }
+.cr-side { min-width: 0; }
+.cr-side .fchips { margin: 4px 0 8px; }
+.cr-read { margin: 6px 0 2px; font: 700 15px var(--serif); color: var(--accent); }
+.cr-mini, .cr-made { display: flex; align-items: center; gap: 10px; margin: 4px 0 8px; padding: 6px 10px; border-radius: 12px; background: var(--card-2); }
+.cr-mini p, .cr-made p { margin: 0; }
+.cr-made > div { min-width: 0; }
+.cr-rings { display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0; }
+.cr-ring { display: grid; justify-items: center; gap: 2px; min-width: 64px; }
+.cr-ring small { font-size: 11px; color: var(--ink); }
+.cr-ring em { font-style: normal; font-size: 10.5px; color: var(--ink-2); }
+.card.create p.small { font-size: 12px; }
+.card.create .acts { flex-wrap: wrap; }
+.card.create .acts:has(.btn:nth-child(3)) .btn.primary { flex-basis: 100%; }

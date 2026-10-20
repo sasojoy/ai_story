@@ -903,7 +903,7 @@ def test_a_hut_step_can_write_its_own_result_line(fresh):
     assert slotted == ["「風」裝進了【粗淺拳腳】第 1 格。"]  # 不花心得體力：沒有「心得 -5」
     _to_step(fresh, 5)
     deepened = fresh.forge(None, ["feng", "feng"])
-    assert deepened[0] == "你把「風」反覆揣摩，體會又深了一層（●●）。" and "心得 -5" in deepened
+    assert deepened[0] == "你把「風」反覆揣摩，體會又深了一層（二重）。" and "心得 -5" in deepened
     _to_step(fresh, 9)
     melted = fresh.melt_art("junk")
     assert melted[0] == "你把蠻牛拳熔了，換回 8 點心得。" and "心得 +8" in melted

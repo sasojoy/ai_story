@@ -346,7 +346,7 @@ def test_the_insight_branch_always_gives_something_and_a_repeat_turns_into_xinde
     first = game._explore()
     assert first == ["你在小鎮靜下心來，看了好一陣。", "你悟得了「火」的意境（屬剛）！"]
     assert game.state.player.insights == ["huo"] and game.state.player.stats["xinde"] == 0
-    for mark in ("●●", "●●●"):
+    for mark in ("二重", "三重"):
         msgs = game._explore()
         assert msgs == ["你在小鎮靜下心來，看了好一陣。", f"你對「火」的體會又深了一層（{mark}）。"]
     assert game.state.player.insight_strength["huo"] == 3 and game.state.player.stats["xinde"] == 0

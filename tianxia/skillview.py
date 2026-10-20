@@ -4,7 +4,7 @@
 """
 from __future__ import annotations
 
-from . import armor, arts as arts_mod, atlas, clinic, cultivation, encounter, equipment, forge_secrets, fusion, insights, martial_arts, materials, mounts, prologue, renown, seal, signature, smithing, team, traits, treasures, weapons
+from . import armor, arts as arts_mod, atlas, clinic, create as create_mod, cultivation, encounter, equipment, forge_secrets, fusion, insights, martial_arts, materials, mounts, prologue, renown, seal, signature, smithing, team, traits, treasures, weapons
 from .library import TOWN_TAG, cap_of, held_count, level_of, melt_confirm, melt_note, melt_problem, melt_value, owned_arts
 from .martial_arts import MAX_LEVEL, QUALITIES, Insight, MartialArt, next_quality, power_at, shown_creator
 from .models import Content
@@ -431,6 +431,7 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
         value = melt_value(state, content, world, art_id) if stuck is None else 0
         worn = art_id in (member.neigong_id, member.wugong_id)
         relearn = None if worn else relearn_note(state, content, art_id)  # 熔了怎麼拿回來（FB-081）：身上正在練的不能熔，不寫
+        weapon = weapons.art_weapon(art_id, content, world) if art.kind == "武學" else None
         compare = team.compare_with_worn(state, content, world, art)  # 跟身上同一種那門比的一句（W6、FB-088）；身上那門自己是空字串
         row = {
             "id": art_id, "name": art.name, "kind": art.kind, "quality": art.quality, "attribute": art.attribute,
@@ -443,7 +444,8 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
             "affinity": arts_mod.affinity_text(art),  # 相容屬性（「快、陽、虛」或「兼容並蓄」）
             "slots": slot_rows(state, content, world, art),  # 意境槽：每格裝的那一招（None 是空的）；寫死的武學是空清單
             "colors": arts_mod.slot_colors(state, content, art),  # 每一格收哪幾種屬性（跟 slots 一樣長；[] 是任色）
-            "pose": dict(art.pose),  # 自創時擺的式（火柴人的九個角度）；內容武學是空的，網頁照兵器畫預設的
+            "pose": create_mod.icon_pose(content, art, weapon),  # 功法卡上的小火柴人：自創的照自己擺的式，其餘照兵器挑預設架式
+            "weapon": weapon,  # 小圖上手裡拿什麼（內功、推不出來的是 None）
             "rating": arts_mod.rating(content, art, level or 1, state, world),  # 戰力：威力 ×（1＋槽裡技能的加成）
             "compare": compare,  # 卷軸卡直接把它寫在功法庫那張卡的鈕上面（改練之前看得到）；點開「詳情」時功法卡裡也有
             "cultivate": {

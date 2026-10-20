@@ -121,7 +121,9 @@
     rackAll: false, // 裝備庫列完了沒（兵器多時先只列 LIB_PAGE 件，同功法庫）
     insOpen: null, // 修練頁點開的那一個意境（攤開說明與「化成心得」）
     slotPick: null, // 修練頁點開的那一個空槽（{ art, i }）：底下攤開手上空著的意境挑一個裝進去
-    createForm: null, // 煉製頁自創武學第一步（形意）填到一半的表單：{ kind, affinity, lean, text }，輪詢重畫不會清掉
+    createPick: null, // 自創第一步挑到一半的種類與兵器：{ kind, form }，輪詢重畫不會清掉
+    createPose: null, // 擺式那一步拖到一半的姿勢（各關節角度），送出前只在這裡
+    createText: null, // 立意那一步打到一半的那一句
     mxNote: null, // 修練頁其他動作（裝備、意境、門下、療傷）的結果：{ at, html }，寫在按的那一塊裡（mxPlace）；切分頁、做別的動作就清掉
     artNote: null, // 修練（衝品質）的結果：{ id, html }，寫在那一門卡片的按鈕底下（W7）；點別的卡片、切分頁、做別的動作就清掉
     legendTick: {}, // 修練頁每一門武學「服下破境丹」勾了沒（id → true）；預設不勾，輪詢重畫不會悄悄取消，修練送出之後清掉
@@ -2524,7 +2526,7 @@
   // 勾的時候武學、內功、意境排成同一張清單（meltItems）：每一列寫判斷好壞要的（威力、比身上強弱、境界、功效、絕招；意境寫幾重、圓融駁雜、正邪）
   // 與熔了退多少心得，點右邊的 ▾ 攤開細節。篩選與排序只記在這一頁（S.meltView），不存瀏覽器
   const MELT_SORTS = [["", "原本的順序"], ["power", "威力低的在前"], ["quality", "品質低的在前"], ["value", "心得多的在前"]];
-  const MELT_RANKS = ["", "●", "●●", "●●●"]; // 意境（技能）的強度：揣摩一次加一顆
+  const MELT_RANKS = ["", "一重", "二重", "三重"]; // 意境（技能）的強度：揣摩一次加一重（Joy 2026-10-20「●好醜」）
   const MELT_NO_GEN = "未合成"; // 境界是空字串（基礎、內容寫的武學）時篩選上寫的字
   function meltView() {
     S.meltView = S.meltView || { kind: "", attr: "", quality: "", gen: "", rank: "", weak: false, sort: "" };
@@ -2744,23 +2746,105 @@
     if (target) target.scrollIntoView({ block: "start", behavior: "smooth" });
   }
 
-  // 意境槽（武學重構：意境就是技能）：一門武學一排格子，裝著的寫「意境」〔技能〕●●、點了拆下；空格點了在底下攤開手上空著的意境，
-  // 收得下的（相容屬性，a.affinity：「快、陽、虛」或「兼容並蓄」）點了裝進去，收不下的灰掉寫原因。裝、拆都不花東西，送 /api/menxia/slot、unslot。
-  // 寫死的武學（基礎、本命）slots 是空清單，不畫。字待 joy 潤
+  // ── 玉環與火柴人（Joy 2026-10-20：槽分顏色、自創擺式當圖示；草案 https://claude.ai/artifact/54XJZ7jutrsND8YLnyCC4x）──
+  // 每一格是一枚玉環：單色一種屬性、雙色斜分兩種、任色八色一圈。顏色照屬性（--at-*，style.css）。
+  const ATTR_VAR = { 剛: "gang", 柔: "rou", 快: "kuai", 慢: "man", 陽: "yang", 陰: "yin", 虛: "xu", 實: "shi" };
+  function ringHtml(colors, inner, cls) {
+    const c = (colors || []).filter((k) => ATTR_VAR[k]);
+    const kind = c.length === 0 ? "any" : c.length === 1 ? "one" : "two";
+    const style = c.length ? ` style="--a:var(--at-${ATTR_VAR[c[0]]});--b:var(--at-${ATTR_VAR[c[c.length > 1 ? 1 : 0]]})"` : "";
+    return `<span class="jring ${kind}${cls ? ` ${cls}` : ""}"${style}><span class="jin">${inner || ""}</span></span>`;
+  }
+  const ringWord = (colors) => ((colors || []).length ? `收${colors.join("")}` : "任意皆收"); // 待 joy 潤
+  // 意境的強度（一重～三重）畫成三節玉
+  const lvHtml = (n) => `<span class="lv" role="img" aria-label="${["", "一重", "二重", "三重"][Math.max(1, Math.min(3, n | 0))]}">${[1, 2, 3].map((k) => `<i${k <= (n | 0) ? ' class="on"' : ""}></i>`).join("")}</span>`;
+
+  // 火柴人：九個角度（create.POSE_KEYS，度；0 朝下、正的往右），骨架跟 tianxia/create.py 同一組數字（伺服器照同一個幾何讀偏向）
+  const RIG = { CX: 110, SY: 96, HIPY: 146, UA: 27, FA: 25, TH: 31, SH: 29 };
+  const POSE_KEYS = ["t", "lS", "lE", "rS", "rE", "lH", "lK", "rH", "rK"];
+  const WEAPON_LEN = { 劍: 40, 刀: 32, 槍: 70, 棍: 60 };
+  function rigJoints(P) {
+    const d2r = (d) => (d * Math.PI) / 180, g = (k) => Number(P && P[k]) || 0;
+    const { CX, SY, HIPY, UA, FA, TH, SH } = RIG, t = d2r(g("t"));
+    const chain = (x, y, a1, l1, a2, l2) => { const e = { x: x + Math.sin(a1) * l1, y: y + Math.cos(a1) * l1 }; return [e, { x: e.x + Math.sin(a1 + a2) * l2, y: e.y + Math.cos(a1 + a2) * l2 }]; };
+    const J = { neck: { x: CX - Math.sin(t) * 10, y: SY - Math.cos(t) * 10 }, head: { x: CX - Math.sin(t) * 24, y: SY - Math.cos(t) * 24 },
+      lSh: { x: CX - 9, y: SY }, rSh: { x: CX + 9, y: SY }, lHip: { x: CX - 7, y: HIPY }, rHip: { x: CX + 7, y: HIPY }, root: { x: CX, y: SY } };
+    [J.lEl, J.lHa] = chain(J.lSh.x, J.lSh.y, d2r(g("lS")) + t, UA, d2r(g("lE")), FA);
+    [J.rEl, J.rHa] = chain(J.rSh.x, J.rSh.y, d2r(g("rS")) + t, UA, d2r(g("rE")), FA);
+    [J.lKn, J.lFt] = chain(J.lHip.x, J.lHip.y, d2r(g("lH")), TH, d2r(g("lK")), SH);
+    [J.rKn, J.rFt] = chain(J.rHip.x, J.rHip.y, d2r(g("rH")), TH, d2r(g("rK")), SH);
+    J.hand = d2r(g("rS")) + t + d2r(g("rE"));
+    return J;
+  }
+  // 姿勢讀出的偏向（create.pose_scores 的同一套規則；伺服器在擺定那一下再讀一次，以伺服器為準）
+  function poseRead(P) {
+    const J = rigJoints(P), { CX, SY, HIPY, UA, FA, TH, SH } = RIG;
+    const reach = Math.max(Math.abs(J.rHa.x - CX), Math.abs(J.lHa.x - CX)) / (UA + FA);
+    const high = Math.max(SY - J.rHa.y, SY - J.lHa.y) / (UA + FA);
+    const tucked = Math.hypot(J.rHa.x - CX, J.rHa.y - (SY + 20)) < 30 && Math.hypot(J.lHa.x - CX, J.lHa.y - (SY + 20)) < 30;
+    const spread = Math.abs(J.lFt.x - J.rFt.x) / (TH + SH), lift = Math.min(J.lFt.y, J.rFt.y) < HIPY + TH * 1.3, lean = Number(P.t) || 0;
+    const s = { 剛: 0, 柔: 0, 快: 0, 慢: 0, 虛: 0, 實: 0 };
+    s.剛 += Math.max(0, reach - 0.95) * 8 + Math.max(0, high - 0.15) * 2;
+    if (tucked) s.柔 += 1.6;
+    s.實 += Math.max(0, spread - 0.9) * 3; s.慢 += Math.max(0, spread - 1.1) * 2;
+    if (lift) { s.虛 += 2; s.快 += 1; }
+    if (lean < -12) s.快 += (-lean - 12) / 15;
+    if (lean > 10) s.慢 += (lean - 10) / 15;
+    const order = ["陰", "陽", "剛", "柔", "快", "慢", "虛", "實"];
+    const top = Object.entries(s).sort((p, q) => q[1] - p[1] || order.indexOf(p[0]) - order.indexOf(q[0]));
+    const attrs = top[0][1] < 0.35 ? [] : [top[0][0], ...(top[1][1] > 0.35 && top[1][1] > top[0][1] * 0.6 ? [top[1][0]] : [])];
+    const why = [];
+    if (reach > 0.95) why.push("手伸得遠"); if (high > 0.15) why.push("手抬得高"); if (tucked) why.push("雙手收在胸前");
+    if (spread > 0.9) why.push("馬步寬"); if (lift) why.push("單腳提起"); if (lean < -12) why.push("身子前傾"); if (lean > 10) why.push("身子後仰");
+    return { attrs, why };
+  }
+  const poseReadText = (attrs) => (attrs.length ? `此式偏${attrs[0]}${attrs[1] ? `、兼${attrs[1]}` : ""}` : "此式平正，不偏一路"); // 待 joy 潤
+  // 骨頭與兵器（拖曳的大圖與功法卡的小圖共用）；joints 為真時多畫可拖的關節點
+  function figBody(P, weapon, joints) {
+    const J = rigJoints(P || {}), f = (v) => v.toFixed(1);
+    const L = (p, q, cls) => `<line class="${cls || "bone"}" x1="${f(p.x)}" y1="${f(p.y)}" x2="${f(q.x)}" y2="${f(q.y)}"/>`;
+    let arm = "";
+    const len = WEAPON_LEN[weapon];
+    if (len) {
+      const tip = { x: J.rHa.x + Math.sin(J.hand) * len, y: J.rHa.y + Math.cos(J.hand) * len };
+      const back = weapon === "棍" || weapon === "槍" ? { x: J.rHa.x - Math.sin(J.hand) * 14, y: J.rHa.y - Math.cos(J.hand) * 14 } : J.rHa;
+      arm = L(back, tip, `blade${weapon === "刀" || weapon === "棍" ? " thick" : ""}`);
+    } else if (weapon === "弓弩") {
+      const n = { x: Math.cos(J.hand), y: -Math.sin(J.hand) }, h = J.rHa;
+      arm = `<path class="blade bow" d="M${f(h.x + n.x * 18)} ${f(h.y + n.y * 18)} Q${f(h.x + Math.sin(J.hand) * 14)} ${f(h.y + Math.cos(J.hand) * 14)} ${f(h.x - n.x * 18)} ${f(h.y - n.y * 18)}"/>`;
+    }
+    const bones = L(J.neck, { x: RIG.CX, y: RIG.HIPY }) + L(J.lSh, J.lEl) + L(J.lEl, J.lHa) + L(J.rSh, J.rEl) + L(J.rEl, J.rHa)
+      + L(J.lHip, J.lKn) + L(J.lKn, J.lFt) + L(J.rHip, J.rKn) + L(J.rKn, J.rFt) + L(J.lSh, J.rSh);
+    const head = `<circle class="bone" cx="${f(J.head.x)}" cy="${f(J.head.y)}" r="13"/>`;
+    const dots = joints ? ["head", "lEl", "lHa", "rEl", "rHa", "lKn", "lFt", "rKn", "rFt"].map((k) =>
+      `<circle class="jt" data-j="${k}" cx="${f(J[k].x)}" cy="${f(J[k].y)}" r="${k === "head" ? 7 : 8}"/><circle class="jhit" data-j="${k}" cx="${f(J[k].x)}" cy="${f(J[k].y)}" r="18"/>`).join("") : "";
+    return arm + bones + head + dots;
+  }
+  // 功法卡上的小圖（一門武學的圖示）：裁到人形那一塊
+  const figSvg = (P, weapon, cls) => `<svg class="fig${cls ? ` ${cls}` : ""}" viewBox="30 40 160 200" aria-hidden="true">${figBody(P, weapon, false)}</svg>`;
+
+  // 意境槽：一門武學一排玉環。裝著的環心寫意境的名字、底下〔技能〕與三節玉，點了拆下；空的環照它的顏色畫、底下寫收什麼，
+  // 點了在底下攤開手上空著的意境，顏色收得下的點了裝進「這一格」（送 index），收不下的灰掉寫原因。裝、拆都不花東西。
+  // 寫死的武學（本命、部下的上品）slots 是空清單，不畫。字待 joy 潤
   function slotsHtml(a, x) {
     if (!Array.isArray(a.slots) || !a.slots.length) return "";
+    const colors = Array.isArray(a.colors) ? a.colors : [];
     const pick = S.slotPick && S.slotPick.art === a.id ? S.slotPick.i : null;
-    const cells = a.slots.map((s, i) => s
-      ? `<button type="button" class="islot full" data-act="slot-out" data-id="${esc(a.id)}" data-ins="${esc(s.id)}" title="${esc(s.desc || "")}">「${esc(s.name)}」<small>〔${esc(s.skill)}〕${esc(s.mark)}</small><i aria-hidden="true">×</i></button>`
-      : `<button type="button" class="islot empty${pick === i ? " on" : ""}" data-act="slot-pick" data-id="${esc(a.id)}" data-i="${i}"><small>空槽</small></button>`).join("");
+    const cells = a.slots.map((s, i) => {
+      const c = colors[i] || [];
+      return s
+        ? `<button type="button" class="jd full" data-act="slot-out" data-id="${esc(a.id)}" data-ins="${esc(s.id)}" title="${esc(`「${s.name}」〔${s.skill}〕${s.desc || ""}（點了拆下）`)}">${ringHtml(c, `<b>${esc(String(s.name).slice(0, 2))}</b>`)}<small>〔${esc(s.skill)}〕</small>${lvHtml(s.strength)}</button>`
+        : `<button type="button" class="jd empty${pick === i ? " on" : ""}" data-act="slot-pick" data-id="${esc(a.id)}" data-i="${i}" title="${esc(ringWord(c))}">${ringHtml(c, "<i>＋</i>", "vacant")}<small class="dim">${esc(ringWord(c))}</small></button>`;
+    }).join("");
     let picker = "";
     if (pick !== null) {
-      const fits = (i) => !a.affinity || a.affinity === "兼容並蓄" || String(a.affinity).split("、").includes(i.attribute);
+      const c = colors[pick] || [];
+      const fits = (i) => !c.length || c.includes(i.attribute);
       const free = (x.insights || []).filter((i) => !i.slotted);
-      picker = `<div class="slot-pick">${free.length ? free.map((i) => `<button type="button" class="${fits(i) ? "" : "no"}" data-act="slot-in" data-id="${esc(a.id)}" data-ins="${esc(i.id)}" ${fits(i) ? "" : "disabled"} title="${esc(fits(i) ? i.skill_desc || "" : `【${a.name}】只收${a.affinity}的意境`)}">「${esc(i.name)}」<small>${esc(i.depth || "")}${fits(i) ? "" : "・收不下"}</small></button>`).join("")
+      picker = `<div class="slot-pick">${free.length ? free.map((i) => `<button type="button" class="${fits(i) ? "" : "no"}" data-act="slot-in" data-id="${esc(a.id)}" data-i="${pick}" data-ins="${esc(i.id)}" ${fits(i) ? "" : "disabled"} title="${esc(fits(i) ? i.skill_desc || "" : `這一格${ringWord(c)}`)}">${ringHtml([i.attribute], "", "jmini")}<span>「${esc(i.name)}」<small>〔${esc(i.skill || "")}〕${lvHtml(i.strength)}${fits(i) ? "" : "・顏色不合"}</small></span></button>`).join("")
         : '<span class="muted">手上沒有空著的意境——去探索悟一個，或從別門武學上拆下來。</span>'}</div>`;
     }
-    return `<div class="slots"><span class="slab">意境槽</span>${cells}</div>${picker}`;
+    return `<div class="jade">${cells}</div>${picker}`;
   }
 
   // 以心得換破境丹（Joy 2026-10-18）：衝絕學那一步的卡上一顆小鈕；換不了時灰掉、原因寫在後面（a.cultivate.buy 是伺服器算好的）
@@ -2824,7 +2908,7 @@
       const a = x.owned_arts.find((r) => r.worn && r.kind === k);
       if (!a) return `<div class="acard empty">${slot.card || `你還沒有${esc(k)}。`}</div>`;
       return `<div class="acard ${(QUALITY_SEAL[a.quality] || [, "q1"])[1]}" data-worn="${esc(k)}">
-        <div class="hd">${seal(a.quality, true)}<div><h3>${esc(a.name)}</h3><div class="sub">${esc(a.quality)}</div></div><span class="worn">身上</span></div>
+        <div class="hd">${seal(a.quality, true)}<div><h3>${esc(a.name)}</h3><div class="sub">${esc(a.quality)}</div></div>${a.pose ? figSvg(a.pose, a.weapon, "card-fig") : ""}<span class="worn">身上</span></div>
         ${body(a, slot)}</div>`;
     }).join("");
     // 功法庫：身上以外的。篩選（全部／武學／內功／可修練）與「再列 N 門」只是看的方式，記在 S，輪詢重畫不會跳回去
@@ -3293,69 +3377,123 @@
       ${S.craftPick ? craftSheetHtml(x) : ""}`;
   }
 
-  // 自創武學（武學重構，Joy 2026-10-20「玩家可以消耗大量心得直接自創一門武學……設定形意、式、最後取名」）：煉製頁爐子底下一塊，
-  // 三步：形意（種類、相容屬性最多三種〔一種都不挑是兼容並蓄〕、正邪、一句 2～20 字的意，送 /api/do/create_intent 請模型評意分）→
-  // 式（武學挑兵器、挑一個意境裝進第一格，menxia create_form）→ 取名（名字、多付心得加分，menxia create_name；作罷 create_cancel）。
-  // 資料全是伺服器給的 status.create（create.view）：能不能、價錢、剩幾門、走到哪一步、每一步的選項、品級機率；網頁不算。字待 joy 潤
-  function createForm(c) {
-    if (!S.createForm) S.createForm = { kind: c.kinds.includes("武學") ? "武學" : c.kinds[0], affinity: [], lean: c.leans[0] || "無", text: "" };
-    return S.createForm;
-  }
+  // 自創武學（Joy 2026-10-20：先選兵器、擺姿勢當圖示、寫一句意，槽分顏色）：煉製頁爐子底下一塊，五步——
+  // 執器（內功／武學、兵器或行功之法，menxia create_begin）→ 擺式（拖火柴人，menxia create_pose）→ 立意（一句 2～20 字的意，
+  // /api/do/create_intent 請模型讀）→ 成形（伺服器擲好四格顏色，這裡畫成玉環）→ 立名（menxia create_name；重來 create_back、作罷 create_cancel）。
+  // 資料全是伺服器給的 status.create（create.view）；擺式時讀出的偏向網頁先照同一套規則算給人看，擺定那一下以伺服器為準。字待 joy 潤
+  const CREATE_STEPS = [["form", "執器"], ["pose", "擺式"], ["intent", "立意"], ["name", "成形・立名"]];
+  const biasHtml = (bias) => Object.entries(bias || {}).sort((p, q) => q[1] - p[1]).map(([k]) => ringHtml([k], esc(k), "jchip")).join("");
   function createHtml() {
     const c = S.main && S.main.status && S.main.status.create;
     if (!c || !c.on) return "";
+    const step = c.step, at = CREATE_STEPS.findIndex((p) => p[0] === step);
     const head = `<div class="label">自創武學 <small class="muted">本季還可自創 ${c.left | 0} 門</small></div>`;
+    const steps = `<ol class="cr-steps">${CREATE_STEPS.map(([k, w], i) => `<li class="${i === at ? "on" : i < at ? "done" : ""}">${w}</li>`).join("")}</ol>`;
     const draft = c.draft;
+    if (step !== "pose") S.createPose = null;
     if (!draft) {
       if (c.problem) return `${head}<div class="card create"><p class="muted">${esc(c.problem)}</p></div>`;
-      const f = createForm(c);
-      const pick = (key, opts, val) => opts.map((o) => `<button type="button" class="fchip${val === o ? " on" : ""}" data-act="create-set" data-key="${key}" data-val="${esc(o)}">${esc(o)}</button>`).join("");
-      const attrs = c.attributes.map((o) => `<button type="button" class="fchip${f.affinity.includes(o) ? " on" : ""}" data-act="create-attr" data-val="${esc(o)}">${esc(o)}</button>`).join("");
-      return `${head}<div class="card create">
-        <p class="muted">用心得立一門自己的武學：先定形意，再定式，最後取名。意寫得越有章法，模型評的意分越高、品級越好。</p>
-        <div class="crow"><span>種類</span><div class="fchips">${pick("kind", c.kinds, f.kind)}</div></div>
-        <div class="crow"><span>收什麼意境</span><div class="fchips wrap">${attrs}</div><small class="muted">${f.affinity.length ? `收${esc(f.affinity.join("、"))}` : "一種都不挑就是兼容並蓄（什麼意境都收，但槽少一格）"}・最多 ${c.max_affinity | 0} 種</small></div>
-        <div class="crow"><span>正邪</span><div class="fchips">${pick("lean", c.leans, f.lean)}</div></div>
-        <div class="crow"><span>意</span><input class="input" id="create-text" maxlength="${c.intent_max | 0}" placeholder="這門武學的意，2～${c.intent_max | 0} 字" value="${esc(f.text)}"></div>
-        <p class="mc-cost">心得 ${c.price | 0}（你有 ${c.xinde | 0} 點）</p>
-        <button class="btn primary" data-act="create-intent">立形意<small>請模型評意分</small></button>
+      const f = S.createPick || (S.createPick = { kind: c.kinds.includes("武學") ? "武學" : c.kinds[0], form: "" });
+      const forms = (c.forms && c.forms[f.kind]) || [];
+      const kinds = c.kinds.map((k) => `<button type="button" class="fchip${f.kind === k ? " on" : ""}" data-act="create-kind" data-val="${esc(k)}">${esc(k)}</button>`).join("");
+      const tiles = forms.map((o) => `<button type="button" class="cr-form${f.form === o.key ? " on" : ""}" data-act="create-pick" data-val="${esc(o.key)}">
+          ${f.kind === "武學" ? figSvg((c.presets.find((p) => p.name === ({ 拳腳: "起手", 棍: "守禦", 弓弩: "奇變" }[o.key] || "進擊")) || {}).angles, o.key, "tile-fig") : ""}
+          <b>${esc(o.key)}</b><span class="cr-bias">${biasHtml(o.bias)}</span><small>${esc(o.blurb)}</small></button>`).join("");
+      return `${head}<div class="card create">${steps}
+        <p class="muted">花心得立一門自己的功夫。手裡拿什麼、擺什麼架式、心裡存什麼意，都會讓它偏向不同的路數。</p>
+        <div class="crow"><span>要立</span><div class="fchips">${kinds}</div></div>
+        <div class="cr-forms">${tiles}</div>
+        <p class="mc-cost">心得 ${c.price | 0}（你有 ${c.xinde | 0} 點）・立名那一步才付</p>
+        <button class="btn primary" data-act="create-begin" ${f.form ? "" : "disabled"}>${f.form ? `握起${esc(f.form)}` : "先挑一樣"}<small>下一步：擺個架式</small></button>
       </div>`;
     }
+    const weapon = draft.kind === "武學" ? draft.form : null;
+    const sum = `<p class="create-sum"><b>${esc(draft.kind)}</b>・${esc(draft.form)}${draft.intent ? `・意「${esc(draft.intent)}」` : ""}</p>`;
+    const quit = `<button class="btn ghost" data-act="create-cancel">作罷</button>`;
+    if (step === "pose") {
+      const P = S.createPose || (S.createPose = { ...draft.pose });
+      const read = poseRead(P);
+      const presets = c.presets.map((p) => `<button type="button" class="fchip" data-act="create-preset" data-val="${esc(p.name)}">${esc(p.name)}</button>`).join("");
+      return `${head}<div class="card create">${steps}${sum}
+        <div class="cr-rig"><svg id="create-rig" class="fig" viewBox="0 0 220 240" data-weapon="${esc(weapon || "")}"><line class="ground" x1="20" y1="226" x2="200" y2="226"/>${figBody(P, weapon, true)}</svg>
+          <div class="cr-side"><p class="muted">拖金色的關節擺出這一門的架式，它會成為這門功夫的圖示。也可以從這幾個起手：</p>
+            <div class="fchips wrap">${presets}</div>
+            <p class="cr-read" id="create-read">${esc(poseReadText(read.attrs))}</p>
+            <p class="muted small" id="create-why">${esc(read.why.length ? `看的是：${read.why.join("、")}。` : "手伸出去、馬步放寬、提腿或前傾，都會讓它偏向一路。")}</p></div></div>
+        <div class="acts"><button class="btn primary" data-act="create-pose">擺定<small>下一步：立意</small></button>${quit}</div>
+      </div>`;
+    }
+    if (step === "intent") {
+      return `${head}<div class="card create">${steps}${sum}
+        <div class="cr-mini">${figSvg(draft.pose, weapon, "cr-fig")}<p>${esc(draft.pose_read)}</p></div>
+        <div class="crow"><span>意</span><input class="input" id="create-text" maxlength="${c.intent_max | 0}" placeholder="一句話說這門功夫的神，2～${c.intent_max | 0} 字" value="${esc(S.createText || "")}"></div>
+        <p class="muted small">寫得有神有象，品級越好；意裡帶出的神韻也會讓它偏向那一路。</p>
+        <div class="acts"><button class="btn primary" data-act="create-intent">立意<small>下一步：成形</small></button><button class="btn ghost" data-act="create-back" data-to="pose">重擺架式</button>${quit}</div>
+      </div>`;
+    }
+    const open = (i) => (i < (c.slots["下品"] | 0) ? "必開" : i < (c.slots["中品"] | 0) ? "中品起" : "上品才開");
+    const rings = (draft.colors || []).map((cc, i) => `<div class="cr-ring">${ringHtml(cc, `<b>${i + 1}</b>`)}<small>${esc(ringWord(cc))}</small><em>${open(i)}</em></div>`).join("");
     const odds = draft.odds ? Object.entries(draft.odds).map(([q, pct]) => `${seal(q)}${Math.round(pct)}%`).join(" ") : "";
-    const sum = `<p class="create-sum"><b>${esc(draft.kind)}</b>・收${esc(draft.affinity_text)}${draft.lean && draft.lean !== "無" ? `・${esc(draft.lean)}` : ""}・意「${esc(draft.intent)}」</p>
-      ${odds ? `<p class="odds-line">品級看造化：${odds}</p>` : ""}`;
-    if (c.step === "form") {
-      const weapon = draft.kind === "武學" ? `<div class="crow"><span>兵器</span><select class="input" id="create-weapon">${c.weapons.map((w) => `<option value="${esc(w)}"${draft.weapon === w ? " selected" : ""}>${esc(w)}</option>`).join("")}</select></div>` : "";
-      const ins = draft.insight_choices.length
-        ? `<select class="input" id="create-insight">${draft.insight_choices.map((i) => `<option value="${esc(i.id)}"${draft.insight === i.id ? " selected" : ""}>「${esc(i.name)}」屬${esc(i.attribute)}${esc(i.mark || "")}</option>`).join("")}</select>`
-        : `<span class="muted">手上沒有收得下的空著的意境——先悟一個，或從別門武學拆下來。</span>`;
-      return `${head}<div class="card create">${sum}
-        ${weapon}
-        <div class="crow"><span>第一招</span>${ins}</div>
-        <div class="acts"><button class="btn primary" data-act="create-form" ${draft.insight_choices.length ? "" : "disabled"}>定式<small>挑好兵器與第一個意境</small></button><button class="btn ghost" data-act="create-cancel">作罷</button></div>
-      </div>`;
-    }
-    return `${head}<div class="card create">${sum}
-      <p class="muted">${draft.weapon ? `兵器 ${esc(draft.weapon)}・` : ""}第一招「${esc((draft.insight_choices.find((i) => i.id === draft.insight) || {}).name || "")}」</p>
+    const redo = draft.redo > 0 ? `<button class="btn ghost" data-act="create-back" data-to="pose">重擺</button><button class="btn ghost" data-act="create-back" data-to="intent">重立意</button>` : "";
+    return `${head}<div class="card create">${steps}
+      <div class="cr-made">${figSvg(draft.pose, weapon, "cr-fig big")}<div><p class="create-sum"><b>${esc(draft.kind)}</b>・${esc(draft.form)}</p><p>意「${esc(draft.intent)}」</p><p class="muted small">${esc(draft.pose_read)}・${esc(draft.read_text)}</p></div></div>
+      <div class="cr-rings">${rings}</div>
+      <p class="muted small">品級決定開幾格：下品開前 ${c.slots["下品"] | 0} 格、中品 ${c.slots["中品"] | 0} 格、上品 ${c.slots["上品"] | 0} 格。每一格只收自己顏色的意境，八色一圈的什麼都收。</p>
+      ${odds ? `<p class="odds-line">品級看造化：${odds}</p>` : ""}
+      ${draft.redo > 0 ? `<p class="muted small">不滿意這個形，可以免費重來一次。</p>` : ""}
       <div class="crow"><span>名字</span><input class="input" id="create-name" maxlength="6" placeholder="2～6 個字，全服不能重名"></div>
       <div class="crow"><span>多付心得</span><input class="input" id="create-extra" type="number" min="0" step="${c.bonus_per | 0}" value="0"><small class="muted">每 ${c.bonus_per | 0} 點多 5 分，最多加 ${c.bonus_cap | 0} 分</small></div>
-      <div class="acts"><button class="btn primary" data-act="create-name">取名開爐<small>心得 ${c.price | 0}＋多付的</small></button><button class="btn ghost" data-act="create-cancel">作罷</button></div>
+      <div class="acts"><button class="btn primary" data-act="create-name">立名開派<small>心得 ${c.price | 0}＋多付的</small></button>${redo}${quit}</div>
     </div>`;
   }
   async function createIntent() {
-    const c = S.main && S.main.status && S.main.status.create;
-    if (!c) return;
-    const f = createForm(c);
     const box = document.getElementById("create-text");
-    if (box) f.text = box.value;
+    if (box) S.createText = box.value;
     await busy(async () => {
-      const r = await api("/api/do/create_intent", { kind: f.kind, affinity: f.affinity, lean: f.lean, text: f.text });
+      const r = await api("/api/do/create_intent", { text: S.createText || "" });
       applyMain(r.main);
       const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
       if (text) toast(text);
-      if (r.main && r.main.status && r.main.status.create && r.main.status.create.draft) S.createForm = null; // 開了單：表單清掉
+      if (r.main && r.main.status && r.main.status.create && r.main.status.create.step === "name") S.createText = "";
     }, WAIT_LINES.forge || SENT_WAITING);
   }
+  // 擺式的拖曳：按在關節上開始，指頭移到哪、那一節就轉向哪裡。只重畫那張圖與讀出來的那兩句，不重畫整頁
+  const RIG_DRAG = { head: null, lEl: ["lSh", "lS", []], lHa: ["lEl", "lE", ["lS"]], rEl: ["rSh", "rS", []], rHa: ["rEl", "rE", ["rS"]],
+    lKn: ["lHip", "lH", null], lFt: ["lKn", "lK", ["lH"]], rKn: ["rHip", "rH", null], rFt: ["rKn", "rK", ["rH"]] };
+  let rigDrag = null;
+  const rigNorm = (d) => { while (d > 180) d -= 360; while (d < -180) d += 360; return Math.round(d * 10) / 10; };
+  function rigRedraw(svg) {
+    const P = S.createPose;
+    svg.innerHTML = `<line class="ground" x1="20" y1="226" x2="200" y2="226"/>${figBody(P, svg.dataset.weapon || null, true)}`;
+    const read = poseRead(P), out = document.getElementById("create-read"), why = document.getElementById("create-why");
+    if (out) out.textContent = poseReadText(read.attrs);
+    if (why) why.textContent = read.why.length ? `看的是：${read.why.join("、")}。` : "手伸出去、馬步放寬、提腿或前傾，都會讓它偏向一路。";
+  }
+  function rigMove(ev) {
+    if (!rigDrag || !S.createPose) return;
+    const { svg, j } = rigDrag, P = S.createPose;
+    const pt = svg.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY;
+    const m = pt.matrixTransform(svg.getScreenCTM().inverse()), J = rigJoints(P), r2d = (r) => (r * 180) / Math.PI;
+    const spec = RIG_DRAG[j];
+    if (!spec) P.t = Math.max(-35, Math.min(35, Math.round(r2d(Math.atan2(-(m.x - RIG.CX), -(m.y - RIG.SY))))));
+    else {
+      const from = J[spec[0]], a = r2d(Math.atan2(m.x - from.x, m.y - from.y));
+      const minus = (spec[2] === null ? 0 : P.t || 0) + (spec[2] || []).reduce((acc, k) => acc + (P[k] || 0), 0);
+      P[spec[1]] = rigNorm(a - minus);
+    }
+    rigRedraw(svg);
+  }
+  document.addEventListener("pointerdown", (ev) => {
+    const t = ev.target, svg = t && t.closest ? t.closest("#create-rig") : null;
+    if (!svg || !t.dataset || !t.dataset.j || !S.createPose) return;
+    rigDrag = { svg, j: t.dataset.j };
+    try { svg.setPointerCapture(ev.pointerId); } catch (e) { /* 舊瀏覽器 */ }
+    ev.preventDefault();
+  });
+  document.addEventListener("pointermove", (ev) => { if (rigDrag) { ev.preventDefault(); rigMove(ev); } }, { passive: false });
+  const rigEnd = () => { rigDrag = null; };
+  document.addEventListener("pointerup", rigEnd);
+  document.addEventListener("pointercancel", rigEnd);
 
   // 武學譜（status.manual，secret_recipes.view；企劃者 2026-10-10「武學譜能不能獨立一頁，做得更豪華一些」）：
   // 煉製頁上只放入口（manualEntry），點了開全螢幕的一本書（bookHtml，S.book，疊在整個畫面上、左上返回）。
@@ -6257,7 +6395,7 @@
         return a ? { from: card(S.kind), to: card(S.kind), note: "art:" + a.id } : null;
       }
       case "cultivate": return extra.art ? { from: ['[data-act="cultivate"]', extra.art], to: ['[data-act="cultivate"]', extra.art], note: "art:" + extra.art } : null;
-      case "slot": case "unslot": return extra.art ? { from: ['.slots .islot', extra.art], to: ['.slots .islot', extra.art], note: "art:" + extra.art } : null; // 裝、拆意境：留在那門的卡上
+      case "slot": case "unslot": return extra.art ? { from: ['.jade .jd', extra.art], to: ['.jade .jd', extra.art], note: "art:" + extra.art } : null; // 裝、拆意境：留在那門的卡上
       case "switch": { // 改練：從庫裡那一列換到身上那張卡，畫完讓那張卡停在剛才按的地方
         const a = arts.find((r) => r.id === extra.art);
         return a ? { from: ['[data-act="switch"]', extra.art], to: card(a.kind), note: "art:" + extra.art } : null;
@@ -6729,17 +6867,18 @@
           S.slotPick = same ? null : { art: el.dataset.id, i: Number(el.dataset.i) };
           renderPage(); break;
         }
-        case "slot-in": S.slotPick = null; await mx("slot", { art: el.dataset.id, insight: el.dataset.ins }); break;
-        case "create-set": { const c = S.main.status.create; const f = createForm(c); const box = document.getElementById("create-text"); if (box) f.text = box.value; f[el.dataset.key] = el.dataset.val; renderPage(); break; }
-        case "create-attr": { // 相容屬性：點了加上、再點拿掉；最多 max_affinity 種
-          const c = S.main.status.create; const f = createForm(c); const box = document.getElementById("create-text"); if (box) f.text = box.value;
-          const v = el.dataset.val;
-          if (f.affinity.includes(v)) f.affinity = f.affinity.filter((a) => a !== v);
-          else if (f.affinity.length < (c.max_affinity | 0)) f.affinity = [...f.affinity, v];
-          renderPage(); break;
+        case "slot-in": S.slotPick = null; await mx("slot", { art: el.dataset.id, insight: el.dataset.ins, index: Number(el.dataset.i) }); break;
+        case "create-kind": { const c = S.main.status.create; S.createPick = { kind: el.dataset.val, form: "" }; if (c) renderPage(); break; }
+        case "create-pick": { if (S.createPick) S.createPick.form = el.dataset.val; renderPage(); break; }
+        case "create-begin": if (S.createPick && S.createPick.form) await mx("create_begin", { kind: S.createPick.kind, form: S.createPick.form }); break;
+        case "create-preset": { // 起手的幾個架式：套上再拖
+          const p = ((S.main.status.create || {}).presets || []).find((q) => q.name === el.dataset.val);
+          if (p) { S.createPose = { ...p.angles }; const svg = document.getElementById("create-rig"); if (svg) rigRedraw(svg); }
+          break;
         }
+        case "create-pose": if (S.createPose) await mx("create_pose", { pose: S.createPose }); break;
         case "create-intent": await createIntent(); break;
-        case "create-form": { const w = document.getElementById("create-weapon"), i = document.getElementById("create-insight"); await mx("create_form", { weapon: w ? w.value : "", insight: i ? i.value : "" }); break; }
+        case "create-back": await mx("create_back", { to: el.dataset.to }); break;
         case "create-name": { const n = document.getElementById("create-name"), e = document.getElementById("create-extra"); await mx("create_name", { name: n ? n.value.trim() : "", extra: e ? Number(e.value) || 0 : 0 }); break; }
         case "create-cancel": await mx("create_cancel"); break;
         case "slot-out": await mx("unslot", { art: el.dataset.id, insight: el.dataset.ins }); break;

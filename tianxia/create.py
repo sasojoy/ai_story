@@ -153,6 +153,16 @@ def preset(content: Content, name: str = DEFAULT_PRESET) -> dict[str, float]:
     return {k: float(angles.get(k, 0.0)) for k in POSE_KEYS}
 
 
+# 功法卡上的小圖：自創的照自己擺的式；其餘照兵器挑一個預設的架式（內功與推不出兵器的照 None）
+ICON_PRESET = {"拳腳": "起手", "劍": "進擊", "刀": "進擊", "槍": "進擊", "棍": "守禦", "弓弩": "奇變", None: "守禦"}
+
+
+def icon_pose(content: Content, art: MartialArt, weapon: str | None) -> dict[str, float]:
+    if art.pose:
+        return {k: float(art.pose.get(k, 0.0)) for k in POSE_KEYS}
+    return preset(content, ICON_PRESET.get(weapon if art.kind == "武學" else None, DEFAULT_PRESET))
+
+
 def begin(state: GameState, content: Content, kind: str, form: str) -> list[str]:
     problem = begin_problem(state, content, kind, form)
     if problem is not None:
