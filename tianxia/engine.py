@@ -5762,8 +5762,9 @@ class Game:
 
     def _battle_now(self) -> battle_instance.BattleInstance | None:
         """這個人看的那一場：沒有攻城戰時就是決戰那一格（world.get_battle，一個字都不變）。有攻城戰時照這個順序：按鈕指定的那一場
-        （_battle_ref：加入鈕帶 @流水號）＞自己是參戰者的那一場＞自己大區裡集結中或開打的（決戰在前）＞決戰那一格——別處的攻城戰不畫在
-        別人的場景上（一天最多四場，全服都看會很吵；決戰照舊全服看得到）。"""
+        （_battle_ref：加入鈕帶 @流水號）＞自己是參戰者的那一場＞自己站得進去的那一場（_joinable 的第一場，FB-566：同一個大區兩場同時
+        集結、排在前面的那一場自己站不進去時，以前回排第一的那一場，選單沒有加入鈕、場景寫「插不上手」）＞自己大區裡集結中或開打的
+        （決戰在前）＞決戰那一格——別處的攻城戰不畫在別人的場景上（全服都看會很吵；決戰照舊全服看得到）。"""
         showdown = self.world.get_battle()
         sieges = self._sieges()
         if not sieges:
@@ -5775,6 +5776,9 @@ class Game:
         mine = next((b for b in live if name in b.participants), None)
         if mine is not None:
             return mine
+        joinable = self._joinable()  # FB-566：自己站得進去的那一場先
+        if joinable:
+            return joinable[0]
         here = self._in_region(live)
         return here[0] if here else showdown
 
