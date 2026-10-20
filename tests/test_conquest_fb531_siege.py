@@ -3,7 +3,10 @@
 被敵方佔下的中立地站的是中立駐軍與流寇（沒有陣營），在那裡打贏記不到攻城，所以不列。第二批起攻城地點是今天公告的目標
 （裁決 11），合併時疊起來（計畫 6.2「合併 conquest-1 修正」）：這幾條先把要比的區塊公告了再比。
 輿圖重製第 1 批（新天下）：中原那一條線上全是中立地、外圈的陣營區塊不算進任何一條線，正式內容裡找不到「線上的敵方陣營區塊」；
-這幾條把汝南荒野改回 v1 的黃巾陣營區塊（conquest_kit.conquest_game_with）來量同一條規則。"""
+這幾條把汝南荒野改回 v1 的黃巾陣營區塊（conquest_kit.conquest_game_with）來量同一條規則。
+
+裁決 20（PM 2026-10-21）推翻了「中立駐軍不算」那一半：今天公告的目標打贏那裡的守軍就記功，中立駐軍也算。下面鎖住舊做法的那幾條
+斷言照裁決翻過來（列與記功照舊同一個判斷，FB-531 的教訓不變）；新規則的測試在 test_conquest_siege_garrison.py。"""
 from __future__ import annotations
 
 import pytest
@@ -37,10 +40,10 @@ def _hilltop_to_huang(game):
     return w, c
 
 
-def test_a_captured_neutral_block_is_not_a_siege_place():
+def test_a_captured_neutral_block_is_a_siege_place_since_ruling_20():
     game = _game()
     w, c = _hilltop_to_huang(game)
-    assert orders.siege_places(c, "guan", "yingru", w) == ["runan_wilds"]  # 修前多了荒丘
+    assert orders.siege_places(c, "guan", "yingru", w) == ["hilltop_wilds", "runan_wilds"]  # 裁決 20：公告了，中立駐軍也算
 
 
 def test_the_card_names_only_where_a_win_counts():
@@ -48,17 +51,17 @@ def test_the_card_names_only_where_a_win_counts():
     _hilltop_to_huang(game)
     order = _siege(game)
     how = atlas.siege_how(game.state, game.content, order)
-    assert "汝南荒野" in how and "荒丘" not in how  # 修前「到荒丘或汝南荒野出陣」
+    assert "汝南荒野" in how and "荒丘" in how  # 裁決 20：兩塊打贏都記得到，兩塊都寫（FB-531 修的時候只寫汝南荒野）
 
 
-def test_bots_are_not_sent_where_a_win_does_not_count():
+def test_bots_go_where_a_win_counts():
     game = join(_game(), "guan")
     s, c = game.state, game.content
     _hilltop_to_huang(game)
     _siege(game)
-    assert not orders.win_counts(s, c, "guan", "hilltop_wilds")  # 修前 True
+    assert orders.win_counts(s, c, "guan", "hilltop_wilds")  # 裁決 20：記得到就帶過去（FB-531 修的時候是 False）
     assert orders.win_counts(s, c, "guan", "runan_wilds")
-    assert "hilltop_wilds" not in orders.targets(s, c, "guan")
+    assert "hilltop_wilds" in orders.targets(s, c, "guan")
 
 
 def test_every_listed_place_credits_a_sortie_win():
@@ -71,13 +74,14 @@ def test_every_listed_place_credits_a_sortie_win():
     assert order.progress.get(game.state.player.name) == 1
 
 
-def test_no_siege_is_issued_where_only_captured_neutral_blocks_are_enemy_held():
-    """一條線上敵方只佔了中立地（新天下：黃巾拿下中原的荒丘；中原那一條線上沒有黃巾的陣營區塊）：不發攻城。"""
+def test_a_siege_is_issued_where_only_captured_neutral_blocks_are_enemy_held():
+    """一條線上敵方只佔了中立地（新天下：黃巾拿下中原的荒丘；中原那一條線上沒有黃巾的陣營區塊）：裁決 20 之後照樣發攻城
+    （FB-531 修的時候不發）。"""
     game = conquest_game("season21")
     w, c = game.state.world, game.content
     conquest.set_control(w, c, "hilltop_wilds", "huang")
     announce(game, "hilltop_wilds", "guan")
-    assert orders.siege_places(c, "guan", "yingru", w) == []  # 修前 ["hilltop_wilds"]
+    assert orders.siege_places(c, "guan", "yingru", w) == ["hilltop_wilds"]  # 裁決 20：中立駐軍也算
 
 
 def test_switch_off_siege_places_unchanged():

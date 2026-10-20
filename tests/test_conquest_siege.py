@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from conquest_kit import announce, conquest_game, go, join, plain_game
-from tianxia import battlelog, conquest, conquest_day, rules, siege
+from tianxia import battle_instance, battlelog, conquest, conquest_day, rules, siege
 from tianxia.state import BattleRecord
 
 pytestmark = pytest.mark.slow  # 建 Game、載正式內容
@@ -153,11 +153,14 @@ def test_later_siege_fights_the_new_holder():
     assert battle.commanders and {c.faction for c in battle.commanders} == {"guan"}  # 守方是官軍的留守
 
 
-def test_merged_siege_has_no_guard():
+def test_merged_siege_keeps_the_guard():
+    # 裁決 22（企劃者 2026-10-21）翻過來：以前兩軍同時搶同一塊中立地拿掉守將、兩軍正面打；現在是三方混戰，守將留著站第三格
+    # （新規則的測試在 tests/test_conquest_melee.py）
     game = _game()
     _open(game, announce(game, "hilltop_wilds", "huang", merged=("guan", "huang")))
     battle = game.world.get_sieges()[0]
-    assert battle.siege.attackers == ["guan", "huang"] and battle.siege.guard_side is None and battle.commanders == []
+    assert battle.siege.attackers == ["guan", "huang"] and battle.siege.guard_side == battle_instance.GUARD
+    assert [c.faction for c in battle.commanders] == [battle_instance.GUARD]
 
 
 def test_pay_is_half_of_a_showdown():

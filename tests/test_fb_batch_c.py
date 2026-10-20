@@ -269,4 +269,4 @@ def test_fb221_three_or_more_places_still_say_the_whole_front(on):
     classic_rules(on)  # FB-221 的攻城地名照舊站法（出陣探索與地盤之前）；地盤開著時照控制方，另見 tests/test_territory.py
     places = orders.siege_places(on, "guan", "yingru")
     assert len(places) > atlas.SIEGE_NAMED_MAX
-    assert _siege_card(on, "guan", "yingru", at="changshe", visited=places) == "到潁川汝南一帶遊歷，打贏一場對面的兵記一次。"
+    assert _siege_card(on, "guan", "yingru", at="changshe", visited=places) == "到中原一帶遊歷，打贏一場對面的兵記一次。"  # 輿圖重製 1b：線的顯示名「潁川汝南」→「中原」

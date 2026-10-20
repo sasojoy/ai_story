@@ -6,10 +6,12 @@ from __future__ import annotations
 
 import pytest
 
-from conquest_kit import announce, conquest_game, go, join, plain_game
+from conquest_kit import announce, conquest_game, conquest_game_with, go, join, plain_game
 from tianxia import conquest, howto
 
 pytestmark = pytest.mark.slow  # 建 Game、載正式內容
+
+V1_RUNAN = {"runan_wilds": ("huang", "yingru")}  # v1：汝南荒野是黃巾的陣營區塊、在潁川汝南那一條線上（輿圖重製第 1 批：新天下只剩中立的中原）
 
 
 def _note(game, loc_id):
@@ -36,6 +38,25 @@ def test_own_capturable_block_hold_line_is_unchanged():
     assert _note(game, "nanyang_road") == (
         "這裡是自家地盤：不用打，推這一塊的進度、記貢獻（量是攻的一半）；拿自家隊伍 3 成的心得與經驗。今日還能出陣 5 次。"
     )
+
+
+@pytest.mark.parametrize("loc", ["hilltop_wilds", "runan_wilds"])
+def test_own_unannounced_block_hold_line_has_one_parenthesis(loc):
+    """第二批 QA 第 8 項（計畫第八節裁決 21）：自家沒被公告的區塊守，那一行不再是「推不動進度（這一塊今天沒有公告攻城）（量是攻的一半）」
+    兩個括號連在一起——合成一個括號、意思不變。荒丘是被管理者定給黃巾的中立地，汝南荒野是黃巾開季的陣營區塊。"""
+    game = go(join(conquest_game_with(V1_RUNAN), "huang"), loc)
+    conquest.set_control(game.state.world, game.content, "hilltop_wilds", "huang")
+    note = _note(game, loc)
+    assert "）（" not in note and note.count("（") == 1  # 修前兩個括號
+    assert note == (
+        "這裡是自家地盤：不用打，推不動進度（這一塊今天沒有公告攻城；有公告時守推的量是攻的一半）；拿自家隊伍 3 成的心得與經驗。今日還能出陣 5 次。"
+    )
+
+
+def test_others_unannounced_block_line_is_unchanged():
+    """別人的沒公告區塊本來就只有一個括號：照舊。"""
+    game = go(join(conquest_game_with(V1_RUNAN), "guan"), "runan_wilds")
+    assert _note(game, "runan_wilds").startswith("這裡歸別人：打一場，打贏推不動進度（這一塊今天沒有公告攻城）；只拿對手 3 成的心得與經驗，")
 
 
 def test_switch_off_hold_line_is_unchanged():

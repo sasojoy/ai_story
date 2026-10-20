@@ -24,6 +24,7 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 - **Bash 在 worktree 隔離下會擋**：
   - 帶 git 的 heredoc、`git -C`、用 `$VAR` 或 `$(...)` 組出來的路徑或指令名，這幾種會被拒。不帶 git 的 heredoc（`cd … && cat > 檔 <<'EOF'`、`cat >> tests/x.py <<'EOF'`）也一樣被拒（2026-10-20）：寫檔、加測試一律用 Write／Edit 工具。
   - 繞法：git 一條一條下、路徑寫死。要改檔就用 Write 工具寫一支 Python 腳本到 scratchpad，再用 `python 腳本 .` 跑。
+  - 實測（2026-10-21）：`cd <自己的工作樹> && git commit -q -F - <<'EOF' … EOF`（訊息從 stdin 進、路徑寫死）過得了；先設 `SP=…` 再 `git archive -o "$SP/…"`、`git ls-files` 配 `for` 迴圈與 `$'\r'` 的被擋。
   - 要跑 venv 的 python、讀 `$env:TEMP` 的 log，改用 PowerShell 工具。
 - **中文輸出**：Python 印中文前包 UTF-8（`PYTHONIOENCODING=utf-8` 或 `sys.stdout = io.TextIOWrapper(...)`），不然 cp950 會炸（連 `print` 一個 `−` 都會）。
 - **TIANXIA_DB**：每次跑測試、跑腳本都設到 repo 外一個新的暫存檔（`$env:TEMP\tx_xxx.db`）。舊的資料庫會讓測試假失敗。
@@ -55,6 +56,12 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 - **內容的名字或位置改了（人物開季站位、地點歸屬、線名），`test_for.py` 挑不到「用真實內容、斷言寫死舊名字或舊位置」的測試**：它只挑 import 改到的模組的檔，內容改了只補 `test_content`／`test_real_content` 這幾個。輿圖重製 1b 搬七位人物、線名改「中原」，`test_for` 的 20 個檔全綠，另外 15 個檔、79 條是紅的（`test_front_lines`、`test_orders`、`test_ranks`、`test_figure_aid`、`test_precise_actions`、`test_challenge_season`……）。做法：
   - 把改到的 id 與顯示名（人物 id、中文名、地點 id、線名）列成 token，寫一支小腳本掃 `tests/test_*.py`：含 token、又用真實內容（`real_content`、`real` fixture）的檔，扣掉 `test_for` 已經跑過的，一起 `pytest -n 6 -m "slow or not slow"`（87 個檔約一分鐘多，比想的快）。
   - 紅的照「換成新位置／新名字，斷言的意思不變」改；找「剛好只有一位人物的地方」不要猜，寫小腳本對每個地點印 `_people_here()` 與交友鈕（本批：白馬寺華佗、黃巾別部營寨波才、白馬津卜己）。人物搬走後「風聞聽眾」「悲憤」這類靠大區找人的測試，要先把人物擺回原位（`figures._ensure(...).location = ...`），或換一位還站在那一區的人，不要把斷言改成沒意義的。
+- **把規則分支合進新地理分支**（2026-10-21，領地爭奪 97567ff0 合進輿圖 1）：兩邊碰的是不同批檔（輿圖只動內容與測試、領地爭奪只動程式與測試），git 的衝突只有 3 個（一份指南、兩個測試檔），**但自動合進來、沒衝突的新測試會因舊地點整批紅**（55 條，4 個檔，沒有一條是規則壞了）。流程：
+  - 合完先 commit 衝突的解法，再跑 `tests/test_conquest_*.py` 全部（PowerShell 呼叫 pytest 不展開萬用字元，整串會當成一個不存在的檔名、`no tests ran`、exit 5：`$f = @(Get-ChildItem tests -Filter "test_conquest_*.py" | % { "tests/" + $_.Name }); pytest @f`），把舊地點換成新的另開一個 commit，merge commit 保持乾淨；
+  - 借舊地點當「有某隊守軍的中立地」的測試：查 `content.scenario.territory.neutral_garrison`（地點 → 隊伍 id）找守軍隊伍相同的新中立地（南陽官道的劫道響馬 → 潁川郊野），戰報裡的地名斷言跟著換——**先替換舊地名、最後才插入含舊地名的註解**，不然 `assert count` 會數到註解；
+  - 借舊地點當「線上的敵方陣營區塊」的，用 `conquest_game_with({"runan_wilds": ("huang", "yingru")})`（1b 的做法），不要改成中立地；舊的南陽／冀州線沒有區塊，要一條有區塊的線一律用 `yingru`；
+  - `test_for` 紅的幾條，先到**合併前那一版**（`git archive <SHA> -o 檔.tar`，另一步 `tar --force-local -x -f 檔.tar -C 目錄`，兩步不能併成一條指令；在解出來的目錄跑那幾條）看是不是原本就紅：這次 4 條（`test_onboard` 投靠點、`test_fb_batch_c` 線名、`test_say_web` 盧植搬家）在 `dev/map-1` 就是紅的，1b 的 token 掃描沒掃到，不是這次合併造成的——回報要分開寫，照同一個原則（意思不變）換新地點。
+  - 順手量：每塊中立地的 `conquest.sortie_foes(world, content, loc, 陣營)`；新地理上潁川郡（沒有 `enemies`、`neutral_garrison` 沒有它）是空的，它會被公告成目標卻打不起來（回報 PM，沒動）。
 - 新測試超過一秒（建 `Game`、載真實內容通常就超過）標 `@pytest.mark.slow`。
 - **修 bug 先寫會紅的測試**：先確認它在修之前真的失敗、失敗的數字跟 QA 回報的一樣，再修。回報時寫「修前重現了什麼」。
 - 用正式內容測舊規則的測試，要在 helper 裡把新開關關掉（例 `c.config.precise_actions = False`、`four_tiers.enabled = False`）。新規則另開一個測試檔，不要改寫舊的斷言去迎合新規則。

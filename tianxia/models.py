@@ -2643,6 +2643,9 @@ class ConquestRules(_Strict):
     muster_minutes: int = Field(default=30, ge=1)  # 【預設】開打前幾分鐘開集結（設計 4.3）；結算晚了，過了「現在＋這麼久」的時段往後挪
     rank4_share: float = Field(default=0.55, ge=0, le=1)  # 【企劃者】有第 4 階的人投票時，第 4 階的票合起來佔的比例；其他人合起來佔其餘（裁決 9）
     pay_share: float = Field(default=0.5, ge=0)  # 【預設】攻城戰的軍餉與貢獻是決戰的幾成（設計 4.4）
+    # 【預設】兩軍同時攻同一塊中立地（三方混戰，裁決 22）：守將的池子＝這個 × 集結結束時兩軍到場的人數（至少算 2 人，siege.size_melee_guard）。
+    # 一個人五回合都強攻、戰線在中線打得掉 15×5＝75：兩軍平均四成的回合出強攻，守將撐不過五回合（一回合最多打掉四分之一，最快第 4 回合倒）
+    melee_pool_per_head: float = Field(default=30.0, gt=0)
 
 
 class AmbushRules(_Strict):

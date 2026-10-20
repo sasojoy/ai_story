@@ -114,7 +114,7 @@ def test_joining_a_side_hands_the_rest_to_the_recruiter(newcomer):
     """走到最後一步（投靠與輿圖）就投靠了：初入江湖當場走完，框不跟引薦人搶。"""
     p = newcomer.state.player
     p.tutorial_step = len(newcomer.content.tutorial.steps) - 1
-    p.location = "changshe"
+    p.location = "dajiangjun_fu"  # 輿圖重製：官軍的投靠點換成大將軍府、宛城（長社不是投靠點了）
     newcomer.choose("faction:guan")
     newcomer.choose("faction:confirm")
     assert p.faction == "guan" and p.tutorial_step == len(newcomer.content.tutorial.steps)
