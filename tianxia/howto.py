@@ -165,10 +165,10 @@ def regen_line(content: Content) -> str:
     return f"體力每 {_clock(cfg.stamina_regen_seconds / cfg.time_scale)}回 1 點，滿 {cfg.stamina_max} 就不再回。"
 
 
-def newbie_line(content: Content, season: WorldState, still: bool | None = None) -> str:
+def newbie_line(content: Content, season: WorldState, still: bool | None = None, card: int = 0) -> str:
     """新手期體力回復加快（roster.newbie 的 newbie_stamina_days、newbie_stamina_multiplier）：第一季從自己加入的那一刻起算，beta 那一季
     從開季算，都是季曆天；寫成現實時間（季曆天 ÷ cal_scale ÷ time_scale，季長照這一季蓋的章）。倍數是 1 時沒有這一行（空字串）。
-    still 給了就補一句還在不在這段時間裡。"""
+    still 給了就補一句還在不在這段時間裡。card：今天月卡讓回體丹上限多幾顆（Game._pill_card_bonus，FB-480），0 一個字都不變。"""
     cfg = content.config
     tail = "" if still is None else ("（你還在新手期）" if still else "（你的新手期已經過了）")
     if cfg.newbie_real_hours > 0:  # 新手期照現實時間（Joy 2026-10-17「新手期 48 小時」）：寫這段時間裡有什麼
@@ -176,7 +176,8 @@ def newbie_line(content: Content, season: WorldState, still: bool | None = None)
         if cfg.newbie_stamina_multiplier > 1:
             perks.append(f"體力回復 ×{cfg.newbie_stamina_multiplier:g}")
         if cfg.stamina_pills_per_day > 0 and cfg.newbie_pills_per_day > 0:
-            perks.append(f"{cfg.stamina_pill_name}一天能服 {cfg.newbie_pills_per_day} 顆")
+            extra = f"（月卡多 {card} 顆）" if card > 0 else ""  # 待 joy 潤
+            perks.append(f"{cfg.stamina_pill_name}一天能服 {cfg.newbie_pills_per_day + card} 顆{extra}")
         if cfg.raid.enabled:
             perks.append("別人截殺不了你")
         if not perks:
@@ -191,10 +192,11 @@ def newbie_line(content: Content, season: WorldState, still: bool | None = None)
     return f"新手期：{since}的{gap}{span}內，體力回復 ×{cfg.newbie_stamina_multiplier:g}{tail}。"
 
 
-def pill_line(content: Content, count: int | None = None, today: int | None = None) -> str:
+def pill_line(content: Content, count: int | None = None, today: int | None = None, card: int = 0) -> str:
     """體力條右端那顆鈕：測試期間一鍵補滿打開時（Config.beta_free_refill）是「補滿」，不花丹；關著時是回體丹，一顆回多少
     （count 給了就寫還有幾顆，0 顆沒有這一行；None 是玩法說明那種不看個人的說法）。一天有上限時（stamina_pills_per_day）
-    多一句上限與換日，today 給了再寫今天還能服幾顆。"""
+    多一句上限與換日，today 給了再寫今天還能服幾顆。card：今天月卡讓上限多幾顆（Game._pill_card_bonus，跟 Game.pill_cap 加的同一份；
+    FB-480），兩個上限都加上去、括號裡寫月卡多幾顆；0 一個字都不變。"""
     cfg = content.config
     if cfg.beta_free_refill:
         return f"測試期間按體力條上的「{cfg.beta_free_refill_label}」直接補滿，不花{cfg.stamina_pill_name}。"
@@ -204,20 +206,23 @@ def pill_line(content: Content, count: int | None = None, today: int | None = No
     line = f"{cfg.stamina_pill_name}一顆回 {cfg.stamina_pill_restore} 點{have}，按體力條右端的「丹」服下。"
     if cfg.stamina_pills_per_day > 0:
         left = "" if today is None else f"（今天還能服 {today} 顆）"
-        rookie = f"（新手期 {cfg.newbie_pills_per_day} 顆）" if cfg.newbie_pills_per_day > 0 else ""
-        line += f"一天最多服 {cfg.stamina_pills_per_day} 顆{rookie}，每天 00:00（台灣時間）重新計算{left}。"
+        parts = [f"新手期 {cfg.newbie_pills_per_day + card} 顆"] * (cfg.newbie_pills_per_day > 0)
+        parts += [f"月卡多 {card} 顆"] * (card > 0)  # 待 joy 潤
+        rookie = f"（{'；'.join(parts)}）" if parts else ""
+        line += f"一天最多服 {cfg.stamina_pills_per_day + card} 顆{rookie}，每天 00:00（台灣時間）重新計算{left}。"
     return line
 
 
 def stamina_lines(
     content: Content, season: WorldState, newbie: bool | None = None, pills: int | None = None, button: bool = True,
-    today: int | None = None,
+    today: int | None = None, card: int = 0,
 ) -> list[str]:
     """體力條點開的說明（也是玩法說明「體力」那一節）：回復、新手期、回體丹或補滿。button：體力條上有沒有那顆鈕
-    （序章裡沒有，就不提）。today：今天還能服幾顆（Game.pills_left_today）。空的行不列。打坐 2026-10-12 拿掉了。"""
-    lines = [regen_line(content), newbie_line(content, season, newbie)]
+    （序章裡沒有，就不提）。today：今天還能服幾顆（Game.pills_left_today）。card：今天月卡讓回體丹上限多幾顆（FB-480；
+    玩法說明不看個人，是 0）。空的行不列。打坐 2026-10-12 拿掉了。"""
+    lines = [regen_line(content), newbie_line(content, season, newbie, card)]
     if button:
-        lines.append(pill_line(content, pills, today))
+        lines.append(pill_line(content, pills, today, card))
     return [line for line in lines if line]
 
 

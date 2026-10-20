@@ -6131,6 +6131,7 @@ def test_only_the_action_endpoints_tell_other_tabs():
     assert _users_in_server("_tell_tabs") == {
         "api_choose", "api_answer", "api_say", "api_do", "api_menxia_do", "api_travel", "api_sense", "api_peer_act", "api_party_leave",
         "api_mingtie_do",  # 名帖定稿、檢舉（Joy 2026-10-19）
+        "api_mall_buy",  # 商城的購買（2026-10-20）：手上的回體丹變了，其他分頁跟著刷新
     }
 
 
