@@ -1,7 +1,8 @@
 """領地爭奪：第一批的修正（FB-531、裁決 18）合進第二批之後疊起來的規則（計畫 6.2「合併 conquest-1 修正」，PM 2026-10-20）。
 
 - 攻城軍令記得到功、軍令卡列得出來的地方＝今天公告的目標裡、`orders.siege_win` 也成立的那幾塊：公告了的中立地站的是中立駐軍，
-  打贏記不到，不列。
+  打贏記不到，不列。**裁決 20（PM 2026-10-21）推翻了這一半**：今天公告的目標打贏那裡的守軍就記功，中立駐軍也算；下面鎖住舊做法的
+  兩條斷言照裁決翻過來，新規則的測試在 test_conquest_siege_garrison.py。
 - 敵方大本營與廣宗（搶不下來）不會被公告成目標：票投到那裡不算，主將也不挑；就算時程表上硬塞一場，也不列成攻城地點。"""
 from __future__ import annotations
 
@@ -27,22 +28,22 @@ def _out_of_contest(game) -> list[str]:
     return [loc for loc in conquest.blocks(c) if not conquest.capturable(c, loc)]
 
 
-def test_an_announced_neutral_target_is_not_a_siege_place():
+def test_an_announced_neutral_target_is_a_siege_place_again():
     game = conquest_game("season21")
     w, c = game.state.world, game.content
     assert conquest.holder(w, c, "hilltop_wilds") is None and conquest.line_of(w, c, "hilltop_wilds") == "yingru"
     announce(game, "hilltop_wilds", "guan")
     announce(game, "runan_wilds", "guan")
-    assert orders.siege_places(c, "guan", "yingru", w) == ["runan_wilds"]  # 第二批原本兩塊都列（中立駐軍也算）
+    assert orders.siege_places(c, "guan", "yingru", w) == ["hilltop_wilds", "runan_wilds"]  # 裁決 20：回到第二批原本的兩塊都列
 
 
-def test_a_win_at_an_announced_neutral_target_does_not_credit_the_siege():
+def test_a_win_at_an_announced_neutral_target_credits_the_siege():
     game = go(join(conquest_game("season21"), "guan"), "hilltop_wilds")
     announce(game, "hilltop_wilds", "guan")
     order = _siege(game)
     win_sortie(game)
-    assert game.state.player.name not in order.progress  # 第二批原本記一次
-    assert not orders.win_counts(game.state, game.content, "guan", "hilltop_wilds")
+    assert order.progress.get(game.state.player.name) == 1  # 裁決 20：記一次（合併 conquest-1 的時候不記）
+    assert orders.win_counts(game.state, game.content, "guan", "hilltop_wilds")
 
 
 def test_a_win_at_an_announced_enemy_block_credits_the_siege():
