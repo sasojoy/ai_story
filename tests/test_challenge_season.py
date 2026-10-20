@@ -51,11 +51,11 @@ def test_challenge_on_needs_figures_factions_and_the_switch(real, world):
 
 def test_a_fourteen_day_season_draws_the_challenge_buttons(real, world):
     cost = real.config.action_cost["train"]
-    guan = _player(real, world, "官甲", "guan", "huangjin_camp")
+    guan = _player(real, world, "官甲", "guan", "julu_altar")
     bocai = next(o for o in guan.options() if o.id == "act:challenge:bocai")
     assert bocai.enabled and bocai.label.startswith(f"挑戰波才（體力 {cost}・")
     assert figures.difficulty(guan.state, real, "bocai") == 120
-    for name, faction, at in (("黃乙", "huang", "huangjin_camp"), ("散丙", None, "huangjin_camp"), ("官丁", "guan", "luoyang_road")):  # 輿圖重製 1b：皇甫嵩、朱儁在洛陽官道
+    for name, faction, at in (("黃乙", "huang", "julu_altar"), ("散丙", None, "julu_altar"), ("官丁", "guan", "luoyang_road")):  # 輿圖重製 1b：皇甫嵩、朱儁在洛陽官道
         assert not any(i.startswith("act:challenge:") for i in _ids(_player(real, world, name, faction, at))), name
     assert {"act:challenge:huangfusong", "act:challenge:zhujun"} <= set(_ids(_player(real, world, "豪戊", "haoqiang", "luoyang_road")))
     assert "act:challenge:dongzhuo" not in _ids(_player(real, world, "黃己", "huang", "mengjin_ford"))  # 戰線空著：沒有時刻表的季不畫
@@ -64,7 +64,7 @@ def test_a_fourteen_day_season_draws_the_challenge_buttons(real, world):
 
 
 def test_a_fourteen_day_win_takes_five_prestige_snubs_and_records_no_contribution(real, world):
-    game = _player(real, world, "官甲", "guan", "huangjin_camp")
+    game = _player(real, world, "官甲", "guan", "julu_altar")
     before = game.state.player.affinities.get("bocai", 0) + 10
     game.state.player.affinities["bocai"] = before
     with _won():
@@ -81,7 +81,7 @@ def test_a_fourteen_day_win_takes_five_prestige_snubs_and_records_no_contributio
 
 
 def test_people_stand_at_their_talk_at_until_someone_retires(real, world):
-    game = _player(real, world, "官甲", "guan", "huangjin_camp")
+    game = _player(real, world, "官甲", "guan", "julu_altar")
     placed = figures.placed_characters(game.state, real)
     for fid, fig in real.figures.items():
         if fig.character is not None and fig.start_status == "active":
@@ -91,7 +91,7 @@ def test_people_stand_at_their_talk_at_until_someone_retires(real, world):
 
 
 def test_a_retired_figure_leaves_the_audience_list(real, world):
-    game = _player(real, world, "官甲", "guan", "huangjin_camp")
+    game = _player(real, world, "官甲", "guan", "julu_altar")
     figures.defeat(game.state, real, "bocai", 60)
     assert figures.is_out(game.state, "bocai") and "bocai" not in game._figures_here()
     assert figures.state_of(game.state, real, "pengtuo").status == "active"  # 彭脫接手
@@ -100,7 +100,7 @@ def test_a_retired_figure_leaves_the_audience_list(real, world):
 def test_a_running_fourteen_day_season_gets_the_buttons_at_once(real, world):
     """上線那一刻（設計第六節情形一）：14 天的季已經走到第 8 週、存檔裡沒有人物，一同步就看得到挑戰鈕，人物照開季值。"""
     from tianxia import calendar
-    game = _player(real, world, "官甲", "guan", "huangjin_camp")
+    game = _player(real, world, "官甲", "guan", "julu_altar")
     world.mutate_season(lambda s: setattr(s, "time", calendar.week_start(8, real, s)))
     game.sync(game.now)
     assert world.get_season().figures == {}
@@ -117,7 +117,7 @@ def test_figures_on_stage_must_start_where_they_are_met(real):
 def test_a_figure_loses_at_most_fifteen_a_game_day_but_the_win_still_pays(real, world):
     """甲 (d)：沒有時刻表的季每位人物每個遊戲日最多被打掉 figure_daily_loss_cap 點；額度用完之後打贏照拿獎勵、情誼照扣、照樣閉門不見，
     只是聲威不動，回話寫「部眾死守不退」；隔天額度回來，舊日子的 lost: 鍵清掉。"""
-    s = _player(real, world, "官甲", "guan", "huangjin_camp").state
+    s = _player(real, world, "官甲", "guan", "julu_altar").state
     for _ in range(3):
         figures.defeat(s, real, "bocai", 5, cap=15)
     assert figures.state_of(s, real, "bocai").prestige == 45
@@ -130,7 +130,7 @@ def test_a_figure_loses_at_most_fifteen_a_game_day_but_the_win_still_pays(real, 
 
 
 def test_the_engine_passes_the_cap_only_without_a_timetable(real, world):
-    game = _player(real, world, "官甲", "guan", "huangjin_camp")
+    game = _player(real, world, "官甲", "guan", "julu_altar")
     real.config.snub_hours = 0
     real.config.figure_dent_once_per_day = False  # 量一天上限本身：同一個人連打也每場都扣
     with _won():
@@ -143,7 +143,7 @@ def test_the_engine_passes_the_cap_only_without_a_timetable(real, world):
 def test_prestige_creeps_back_one_point_a_calendar_day_up_to_the_start(real, world):
     """甲 (b)：沒有時刻表的季，被打下來的聲威每個季曆天回 figure_prestige_regen 點，回到開季值為止；退場的不回、
     沒被打過的不寫存檔、人物表沒有的 id 跳過；第一季不回。"""
-    s = _player(real, world, "官甲", "guan", "huangjin_camp").state
+    s = _player(real, world, "官甲", "guan", "julu_altar").state
     figures.defeat(s, real, "bocai", 10)
     s.world.figures["ghost"] = figures.FigureState(prestige=1, status="active")
     figures.recover(s, real, 12)
@@ -159,7 +159,7 @@ def test_prestige_creeps_back_one_point_a_calendar_day_up_to_the_start(real, wor
 
 
 def test_recovery_over_one_long_step_matches_many_short_ones(real, world):
-    a = _player(real, world, "官甲", "guan", "huangjin_camp").state
+    a = _player(real, world, "官甲", "guan", "julu_altar").state
     b = a.model_copy(deep=True)
     for s in (a, b):
         figures.defeat(s, real, "bocai", 20)
@@ -171,7 +171,7 @@ def test_recovery_over_one_long_step_matches_many_short_ones(real, world):
 
 def test_the_world_clock_drives_the_recovery_without_touching_the_game_dice(real, world):
     from tianxia.world import advance_world_state
-    game = _player(real, world, "官甲", "guan", "huangjin_camp")
+    game = _player(real, world, "官甲", "guan", "julu_altar")
     figures.defeat(game.state, real, "bocai", 10)
     world.mutate_season(lambda w: w.figures.update(game.state.world.figures))
     before = game.rng.getstate()
@@ -182,7 +182,7 @@ def test_the_world_clock_drives_the_recovery_without_touching_the_game_dice(real
 
 def test_season_one_keeps_no_cap_and_no_recovery(real, world):
     real.config.season_one = True
-    s = _player(real, world, "官甲", "guan", "huangjin_camp").state
+    s = _player(real, world, "官甲", "guan", "julu_altar").state
     s.world.season_one = True
     figures.defeat(s, real, "bocai", 10)
     figures.recover(s, real, 24 * 30)
@@ -197,7 +197,7 @@ def _retire(game, fid):
 def test_beating_bocai_out_marks_him_defeated_and_stops_his_sim_player(real, world):
     """丙 (c)：波才退場（14 天的季）記 bocai_defeated，kou_boss 不再是候選，波才虛擬玩家不再推黃巾聲勢；第一季打到退場不記。"""
     from tianxia.world import sim_active
-    game = _player(real, world, "官甲", "guan", "huangjin_camp")
+    game = _player(real, world, "官甲", "guan", "julu_altar")
     real.config.figure_daily_loss_cap = 0
     real.config.snub_hours = 0
     real.config.figure_dent_once_per_day = False
@@ -239,7 +239,7 @@ def test_the_switch_off_brings_back_the_leaders_even_after_a_retirement(real, wo
 def test_season_one_records_no_out_flag(real, world):
     real.config.season_one = True
     world.mutate_season(lambda w: setattr(w, "season_one", True))  # 這一季蓋第一季的章
-    game = _player(real, world, "官甲", "guan", "huangjin_camp")
+    game = _player(real, world, "官甲", "guan", "julu_altar")
     real.config.snub_hours = 0
     with _won():
         for _ in range(40):
@@ -251,7 +251,7 @@ def test_season_one_records_no_out_flag(real, world):
 
 def test_a_new_season_brings_the_retired_back(real, world):
     from conftest import next_season
-    game = _player(real, world, "官甲", "guan", "huangjin_camp")
+    game = _player(real, world, "官甲", "guan", "julu_altar")
     real.config.figure_daily_loss_cap = 0
     real.config.snub_hours = 0
     real.config.figure_dent_once_per_day = False
@@ -276,7 +276,7 @@ def _tier3_count(state, content):
 def test_only_the_first_win_over_a_figure_gives_tier_three(real, world):
     """丁 (c)：這一季第一次打贏某位人物，保證一個三階（打造第二批的 _figure_tier3）＋預設表照擲；之後再打贏，預設表的三階那一擲
     照擲、擲中不給（Game.rng 的序列跟以前一樣），保證那一個也不給。"""
-    game = _player(real, world, "官甲", "guan", "huangjin_camp")
+    game = _player(real, world, "官甲", "guan", "julu_altar")
     real.config.snub_hours = 0
     real.config.figure_daily_loss_cap = 0
     with _won():
@@ -298,7 +298,7 @@ def test_the_capped_tier_three_roll_still_uses_the_game_dice(real):
 
 
 def test_the_rare_cap_counts_across_a_defection(real, world):
-    game = _player(real, world, "官甲", "guan", "huangjin_camp")
+    game = _player(real, world, "官甲", "guan", "julu_altar")
     game.state.player.figure_rare_drops = real.config.figure_rare_cap
     with _won():
         game.choose("act:challenge:bocai")
@@ -312,7 +312,7 @@ def test_the_rare_cap_counts_across_a_defection(real, world):
 
 def test_a_weakened_figure_pays_less_xinde_and_exp(real, world):
     """戊 (b)：心得、經驗乘「此刻難度 ÷ 開季難度」（夾在 1 以下）：波才聲威 0 時難度 75，80 × 75 ÷ 120 四捨五入是 50。"""
-    game = _player(real, world, "官甲", "guan", "huangjin_camp")
+    game = _player(real, world, "官甲", "guan", "julu_altar")
     s = game.state
     figures._ensure(s, real, "bocai").prestige = 0
     xinde = s.player.stats.get("xinde", 0)
@@ -326,7 +326,7 @@ def test_challenge_treasures_stop_at_two_a_season(real, world):
     from tianxia import treasures
     real.config.treasures.enabled = True
     real.config.treasures.challenge_chance = 1.0
-    s = _player(real, world, "官甲", "guan", "huangjin_camp").state
+    s = _player(real, world, "官甲", "guan", "julu_altar").state
     s.player.treasure_drops = {"zhangjiao", "zhangbao"}
     assert treasures.challenge_drop(s, real, "bocai", 1, 99) == (None, [])
 
@@ -341,9 +341,11 @@ def test_the_map_lists_the_figures_here_in_a_fourteen_day_season(real, world):
     """設計 3.8：沒有時刻表的季，龍頭人物那一段只有人物此刻就站在這裡才寫聲威、情誼；其餘站在這裡的大勢人物列在
     「此地的大勢人物」，戰線空著的寫「按兵不動」，聲威會回時寫「沒人去打……慢慢回來」。緊急開關關著時一個字都不變。"""
     from tianxia import atlas
-    game = _player(real, world, "官甲", "guan", "huangjin_camp")
-    camp = _detail(game, "huangjin_camp")
-    assert "聲威 60" in camp and atlas.REGEN_NOTE in camp and atlas.HERE_TITLE not in camp  # 波才併在龍頭人物那一段
+    game = _player(real, world, "官甲", "guan", "julu_altar")
+    camp = _detail(game, "huangjin_camp")  # 輿圖重製 1c：龍頭人物波才照舊標在黃巾別部營寨，人卻站在鉅鹿道壇
+    assert "波才" in camp and "聲威" not in camp and atlas.HERE_TITLE not in camp
+    altar = _detail(game, "julu_altar")  # 不是他常出沒的地方：列在「此地的大勢人物」
+    assert atlas.HERE_TITLE in altar and "波才　聲威 60" in altar and atlas.REGEN_NOTE in altar
     nanyang = _detail(game, "taishan_foot")  # 輿圖重製 1b：張曼成、趙弘從南陽黃巾營搬到泰山腳
     assert atlas.HERE_TITLE in nanyang and "張曼成" in nanyang and "趙弘" in nanyang and atlas.IDLE_NOTE in nanyang
     assert "沒有龍頭人物在此出沒" not in nanyang
@@ -353,7 +355,7 @@ def test_the_map_lists_the_figures_here_in_a_fourteen_day_season(real, world):
     assert "聲威" in atlas.leader_text(game.state, real, "皇甫嵩", "luoyang_road")
     real.config.figure_challenge_every_season = False
     off = _detail(game, "taishan_foot")
-    assert atlas.HERE_TITLE not in off and "聲威" not in _detail(game, "huangjin_camp")
+    assert atlas.HERE_TITLE not in off and "聲威" not in _detail(game, "julu_altar")
 
 
 def test_the_howto_explains_challenges_in_a_fourteen_day_season(real, world):
@@ -371,7 +373,7 @@ def test_the_howto_explains_challenges_in_a_fourteen_day_season(real, world):
 def test_season_bots_pick_a_challenge_by_its_odds(real, world):
     """第九節：整季機器人隨機挑選時，挑戰鈕只在勝算「穩勝」「有把握」時留著（同假人）；火候滿了等契機時五五波以上也打。"""
     from tianxia import bot
-    game = _player(real, world, "官甲", "guan", "huangjin_camp")
+    game = _player(real, world, "官甲", "guan", "julu_altar")
     options = [o for o in game.options(odds=False) if o.enabled]
     assert "act:challenge:bocai" in [o.id for o in options]
     with mock.patch.object(Game, "challenge_odds", return_value="五五波"):

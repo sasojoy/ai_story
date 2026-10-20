@@ -1024,8 +1024,8 @@ def test_switch_off_no_orders_in_any_week(real):
 
 # （陣營, 目標人物, 他的所在, 大區 id, 大區名）：三邊的打擊模板各一道。這三位開季時，新角色都還沒摸清他們的所在
 # （新角色摸得清的只有開局那十個地點）；要「摸清」就把所在加進 visited。
-STRIKES = [  # 輿圖重製 1b：州＝大區；波才還在潁川的黃巾別部營寨，盧植搬到洛陽的孟津渡、張曼成搬到青州的泰山腳（設計 3.1 開季站自家外圈）
-    ("guan", "bocai", "huangjin_camp", "yingchuan", "潁川"),
+STRIKES = [  # 輿圖重製 1b：州＝大區；1c：波才搬到冀州的鉅鹿道壇，盧植搬到洛陽的孟津渡、張曼成搬到青州的泰山腳（設計 3.1 開季站自家外圈）
+    ("guan", "bocai", "julu_altar", "jizhou", "冀州"),
     ("huang", "luzhi", "mengjin_ford", "luoyang", "洛陽"),
     ("haoqiang", "zhangmancheng", "taishan_foot", "qingzhou", "青州"),
 ]
@@ -1080,7 +1080,7 @@ def test_strike_card_says_so_when_the_target_cannot_be_challenged(on, change):
 
 def test_strike_card_follows_the_figure_not_where_he_stood_when_the_order_went_out(on):
     game, order = _strike_game(on, "guan", "bocai")
-    order.location = "huangjin_camp"  # 發令時他在這裡，之後挪了窩
+    order.location = "julu_altar"  # 發令時他在這裡，之後挪了窩
     game.state.world.figures["bocai"].location = "yingchuan_wilds"
     [card] = game.orders_view()
     assert card["how"] == _how("波才", f"他現在在{on.locations['yingchuan_wilds'].name}")
@@ -1177,8 +1177,8 @@ def test_unknown_strike_target_place_marks_its_region_label_never_the_place(on, 
 
 def test_no_strike_mark_for_other_sides_loners_finished_orders_or_a_target_you_cannot_challenge(on):
     game, order = _strike_game(on, "guan", "bocai")
-    game.state.player.visited.add("huangjin_camp")
-    assert atlas.strike_marks(game.state, on) == ({"huangjin_camp"}, set())
+    game.state.player.visited.add("julu_altar")
+    assert atlas.strike_marks(game.state, on) == ({"julu_altar"}, set())
     nothing = (set(), set())
     game.state.player.faction = "huang"  # 別陣營的打擊，黃巾的人看不到
     assert atlas.strike_marks(game.state, on) == nothing and "◎" not in mapview.render_map(game.state, on, "situation")

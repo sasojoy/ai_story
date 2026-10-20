@@ -108,9 +108,11 @@ def test_an_ally_falling_on_the_same_line_makes_grief(c):
     assert figures.mood_of(s, c, "huangfusong") == "悲憤"
     assert figures.mood_scale(s, c, "huangfusong") == c.config.figure_life.grief_scale
     # 偏將沒有戰線，照所在地點的大區。輿圖重製 1b：傅燮搬到洛陽官道（外圈、沒有線），不再為中原的事悲憤；
-    # 黃巾那邊站在東郡（中原）的卜己，在波才倒下時照樣悲憤
+    # 1c：卜己也搬回黃巾的外圈（濟水河畔，青州沒有線）——開季不為中原的事悲憤，人走到東郡（中原）就會
     assert figures.mood_of(s, c, "fuxie") is None and figures.mood_of(s, c, "buji") != "悲憤"
     figures.defeat(s, c, "bocai", 999)
+    assert figures.mood_of(s, c, "buji") != "悲憤"
+    figures._ensure(s, c, "buji").location = "baima_ford"  # noqa: SLF001  東郡
     assert figures.mood_of(s, c, "buji") == "悲憤"
 
 

@@ -1095,7 +1095,7 @@
     "attribute": "剛",
     "quality": "下品",
     "learn": {
-      "at": "luzhi_camp",
+      "at": "dajiangjun_fu",
       "faction": "guan"
     },
     "desc": "官軍營中操練的制式刀法，劈砍直截了當。",
@@ -1120,7 +1120,7 @@
     "attribute": "剛",
     "quality": "下品",
     "learn": {
-      "at": "nanyang_huangjin_camp",
+      "at": "qingzhou_camp",
       "faction": "huang"
     },
     "desc": "黃巾力士的刀法，刀刀搶攻，不留後路。",
@@ -1133,7 +1133,7 @@
     "attribute": "陰",
     "quality": "下品",
     "learn": {
-      "at": "huangjin_camp",
+      "at": "julu_altar",
       "faction": "huang"
     },
     "desc": "太平道傳下的掌法，掌力陰寒，中者如飲冷水。",

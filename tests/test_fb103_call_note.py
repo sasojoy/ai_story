@@ -4,7 +4,7 @@
 名望不夠時格子是「求見董卓」（選單上寫「名望還差 N」），那一行寫「名望不夠，董卓會打發你」。現在那一行照選項括號裡的話寫：
 閉門不見寫整句「剛吃了敗仗，閉門不見」，名望不夠寫「名望還差 N」與會被打發，談滿照舊，見得到照舊。
 
-用真實內容（週末設定）：官軍站在黃巾別部營寨，那裡只站著波才。句子待 joy 潤：這裡比的是選項括號裡的話有沒有出現在那一行，不鎖死字句。"""
+用真實內容（週末設定）：官軍站在鉅鹿道壇（輿圖重製 1c 以前是黃巾別部營寨），那裡只站著波才。句子待 joy 潤：這裡比的是選項括號裡的話有沒有出現在那一行，不鎖死字句。"""
 from __future__ import annotations
 
 import random
@@ -24,7 +24,7 @@ def guan(on, world):
     game = Game.new(on, "官甲", rng=random.Random(0), world=world)
     game.client = None
     p = game.state.player
-    p.faction, p.location = "guan", "huangjin_camp"
+    p.faction, p.location = "guan", "julu_altar"
     p.tutorial_step = len(on.tutorial.steps)
     game.now = 1000.0
     return game

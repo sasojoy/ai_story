@@ -269,6 +269,15 @@ class Commander(BaseModel):
     settled: bool = False  # 收場後聲威扣過了（generals.after_battle 只扣一次）
 
 
+class HomeNote(BaseModel):
+    """主場（輿圖重製 1c；home_ground.on_muster）開集結那一刻的快照：那一塊歸誰（陣營 id，還沒人佔是 "neutral"）、起點偏了幾點
+    （正的往 factions[0]，同 trend 的方向）、調到那一塊的主場人物（沒調是 None：被打退、退場、下獄、還沒出場）。決戰畫面那一句照它寫。"""
+
+    holder: str
+    shift: int = 0
+    figure: str | None = None
+
+
 def standing_commanders(instance: BattleInstance, side: str) -> list[Commander]:
     """這一方還在陣上的人物，照位階。"""
     return sorted((c for c in instance.commanders if c.faction == side and c.fallen_round is None), key=lambda c: c.rank)
@@ -408,6 +417,7 @@ class BattleInstance(BaseModel):
     trend_start: int | None = None  # 開打時的戰局（時刻表決戰照戰況算，不一定是 50）；舊資料沒有是 None
     seal_lean: dict[str, int] = Field(default_factory=dict)  # 天命之爭開集結那一刻各方握幾片（玉璽碎片設計 8.3；起點已經照兩軍的數偏過）
     supply_lean: dict[str, int] = Field(default_factory=dict)  # 屯糧練兵（works.on_muster）：開集結那一刻兩軍各屯了幾下（起點已經照它偏過）
+    home: HomeNote | None = None  # 主場（輿圖重製 1c，home_ground.on_muster）：開集結那一刻的快照（起點已經照它偏過）；沒有主場是 None
     act_index: int = 0
     round_number: int = 0  # 已經結算了幾回合（換幕與最後一回合都照這個數，見 resolve_round）
     round: BattleRound = Field(default_factory=BattleRound)

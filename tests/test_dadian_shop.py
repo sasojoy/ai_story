@@ -58,7 +58,7 @@ def test_a_ranger_is_told_to_join_before_donating():
 
 
 def test_each_figure_here_gets_a_bribe_entry():
-    game = _game(at="changshe")
+    game = _game(at="luoyang_road")  # FB-550：輿圖重製 1b 把皇甫嵩、朱儁、傅燮從長社搬到洛陽官道，長社沒有人物了
     game.choose("act:dadian")
     view = game.shop_view()
     bribes = [e for e in view["pages"][1]["entries"] if e["name"].startswith("打點門路・")]

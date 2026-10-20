@@ -97,7 +97,8 @@ def test_every_neutral_block_is_reachable_from_each_sides_land():
 
 
 def test_opening_reach_is_balanced():
-    """開季兩邊碰得到的中立區塊數相近（裁決 2）：差不超過 1。現在各 5 塊（數字寫進計畫給 PM 對）。"""
+    """開季兩邊碰得到的中立區塊數相近（裁決 2）：差不超過 1。現在官軍 4 塊、黃巾 5 塊（數字寫進計畫給 PM 對）：
+    1c 的 PM 裁決把沒有對手的潁川郡（新手第一站，刻意不放守軍）排出目標，官軍從 5 塊變 4 塊。"""
     game = conquest_game("season21")
     w, c = game.state.world, game.content
     reach = {
@@ -107,9 +108,23 @@ def test_opening_reach_is_balanced():
     counts = [len(v) for v in reach.values()]
     assert min(counts) >= 1 and max(counts) - min(counts) <= 1, reach
     assert reach == {
-        "guan": ["baima_ford", "guan_camp", "hilltop_wilds", "nanyang_huangjin_camp", "yingchuan"],
+        "guan": ["baima_ford", "guan_camp", "hilltop_wilds", "nanyang_huangjin_camp"],
         "huang": ["baima_ford", "guandu", "jiwu", "luzhi_camp", "qiao_county"],
     }
+
+
+def test_targets_always_have_someone_to_fight():
+    """1c 的 PM 裁決（鈕寫什麼就要給什麼）：能挑成目標、會被公告的區塊，那一方出陣一定找得到對手（conquest.sortie_foes）。
+    潁川郡開季中立、沒有中立守軍、地點本身也沒有敵人：不列；之後給它守軍（出生點設計把新手第一站搬走），就自然回來。"""
+    game = conquest_game("season21")
+    w, c = game.state.world, game.content
+    for side in _sides(c):
+        for loc in conquest.targets(w, c, side):
+            assert conquest.sortie_foes(w, c, loc, side), (side, loc)
+    assert not conquest.sortie_foes(w, c, "yingchuan", "guan")
+    assert "yingchuan" not in conquest.targets(w, c, "guan")
+    c.scenario.territory.neutral_garrison["yingchuan"] = ["nz_luanbing"]  # 有了守軍：回到目標名單
+    assert "yingchuan" in conquest.targets(w, c, "guan")
 
 
 def test_outer_ring_states_touch_along_the_ring():
@@ -130,7 +145,8 @@ def test_outer_ring_states_touch_along_the_ring():
 
 # ── 第 1 批補做（1b）：設計 3.1 列在批 1、跟著投靠點搬的那幾件 ─────────────────────
 
-MOVED = ("huangfusong", "zhujun", "fuxie", "luzhi", "zhangmancheng", "zhaohong", "hanzhong")  # 設計 3.1 點名的七位
+MOVED = ("huangfusong", "zhujun", "fuxie", "luzhi", "zhangmancheng", "zhaohong", "hanzhong",  # 設計 3.1 點名的七位
+         "bocai", "pengtuo", "buji", "liupi")  # 1c（企劃者 2026-10-20）：還站在中原的四位也搬回黃巾的外圈
 LUZHI_CAMP_FRAGMENTS = {  # 本來掛冀州、講盧植營裡的事的伏筆片段（監軍、營裡傳出來的話、盧植自己說的）
     ("fs_luzhi_guan", 0), ("fs_luzhi_guan", 1), ("fs_luzhi_huang", 0), ("fs_zhangjiao_guan", 1),
 }
@@ -177,6 +193,16 @@ def test_moved_figures_open_on_their_own_outer_ring():
             assert ch.talk_at == fig.location and (not ch.haunts or ch.haunts[0] == fig.location), fid
 
 
+def test_no_figure_opens_in_the_middle():
+    """1c（企劃者 2026-10-20）：搬完之後中原與核心開季沒有任何一方的人物——人物表上每一位（還沒出場的接位人也算）開季站在
+    自家的外圈；要到中原，靠時刻表與主場（長社火攻開集結那一刻把波才調到長社，tianxia/home_ground.py）。"""
+    c = real_content("season21")
+    for fid, fig in c.figures.items():
+        rid = _region(c, fig.location)
+        assert rid not in INNER and rid != CORE, (fid, fig.location, rid)
+        assert _owner(c, rid) == fig.faction, (fid, fig.location, rid)
+
+
 def test_promotions_summon_you_to_where_the_figure_stands():
     """晉升召見寫了出面的人物又寫了地點的，地點就是那位人物會站的地方（開季的所在、或時刻表調他去的地方）；
     人物搬了、召見沒跟著搬，主版就永遠演不到（ranks.presenter／_cast_ok 要人物正好在那裡）。"""
@@ -215,6 +241,27 @@ def test_outer_ring_showdowns_keep_the_attackers_commanders_at_home():
             for fid, loc in spots:
                 rid = _region(c, loc)
                 assert _owner(c, rid) == side and frozenset((rid, battle.region)) in touching, (battle.id, fid, loc)
+
+
+def test_faction_lessons_are_taught_on_their_own_outer_ring():
+    """FB-551（PM 裁決：搬到外圈，同「投靠點只在外圈」）：陣營武學（learn.faction）在自家陣營的外圈教——有領地的陣營照那一州開季
+    歸誰（不在中原的中立地，不必走進對方家門口學自家刀法）；沒有領地的陣營（豪強）在自己的投靠點教。入伍簡報點得出每一處教的地方。"""
+    c = real_content("season21")
+    landed = set(_sides(c))
+    taught = 0
+    for sid, skill in c.skills.items():
+        learn = skill.learn
+        if learn is None or learn.faction is None:
+            continue
+        taught += 1
+        if learn.faction in landed:
+            rid = _region(c, learn.at)
+            assert rid not in INNER and rid != CORE and _owner(c, rid) == learn.faction, (sid, learn.at, rid)
+        else:
+            assert learn.at in c.scenario.faction(learn.faction).join_at, (sid, learn.at)
+        intro = c.tutorial.enlist.recruiters[learn.faction].intro
+        assert c.locations[learn.at].name in intro and skill.name in intro, (sid, learn.at)
+    assert taught >= len(landed)
 
 
 def test_luzhi_camp_fragments_follow_the_camp():

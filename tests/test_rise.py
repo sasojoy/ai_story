@@ -83,7 +83,7 @@ def test_wounds_still_hurt_against_a_risen_figure(real, world):
 
 
 def test_the_reward_follows_the_prestige_not_the_risen_difficulty(real, world):
-    game = _player(real, world, mates=("guanyu", "zhangfei"))
+    game = _player(real, world, mates=("guanyu", "zhangfei"), at="julu_altar")  # 輿圖重製 1c：波才開季站鉅鹿道壇
     game.state.player.stamina = 200.0
     base = figures.squad_of(game.state, real, "bocai")
     risen = game._figure_squad("bocai")

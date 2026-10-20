@@ -1697,9 +1697,9 @@ def test_the_next_leg_surveys_its_way(on):
 
 def test_rank_two_is_surveyed_too(on):
     """第 2 階的召見也一樣（企劃者「發召見」說的是每一種召見）：宛城投靠的官軍召到洛陽官道（輿圖重製 1b 以前是長社）、
-    鉅鹿道壇投靠的黃巾召到黃巾別部營寨。"""
+    青州黃巾營投靠的黃巾召到鉅鹿道壇（輿圖重製 1c：波才搬到鉅鹿道壇，以前是鉅鹿道壇投靠、召到黃巾別部營寨）。"""
     closed_map(on)  # 召見摸清路是全圖開放之前的規則
-    for faction, join, dest in (("guan", "wan_city", "luoyang_road"), ("huang", "julu_altar", "huangjin_camp")):
+    for faction, join, dest in (("guan", "wan_city", "luoyang_road"), ("huang", "qingzhou_camp", "julu_altar")):
         game = _fresh(on, faction, join)
         assert game.travel_refusal(dest, "dash") == "無法安排前往這裡"
         assert _issue(game, 2)

@@ -1704,6 +1704,25 @@ def check_siege_templates(c: Content, need) -> None:
         need(battle.timetable_event is None and battle.version is None, f"{where}：攻城範本不是時刻表決戰")
 
 
+def check_home_grounds(c: Content, need) -> None:
+    """主場（BattleDef.home，輿圖重製 1c；tianxia/home_ground.py）：看的那一塊要是搶得下來的區塊（不然沒人佔得下、永遠是中立）、
+    主場人物要在人物表上、是這一場交戰的兩軍之一；攻城範本不寫（範本打哪一塊記在每一場上）。"""
+    from . import conquest  # noqa: PLC0415  同 check_territory
+
+    for battle in c.battles.values():
+        home = battle.home
+        if home is None:
+            continue
+        where = f"戰鬥 {battle.id} 的主場"
+        need(not battle.siege, f"{where}：攻城範本不寫主場")
+        need(home.block in conquest.blocks(c) and conquest.capturable(c, home.block),
+             f"{where}：{home.block} 要是搶得下來的區塊（scenario.json 的 territory.blocks，不是大本營、不是 fixed）")
+        fig = c.figures.get(home.figure)
+        need(fig is not None, f"{where}：未知的大勢人物 {home.figure}")
+        need(fig is None or fig.faction in {f.id for f in battle.factions},
+             f"{where}：主場人物 {home.figure} 要是這一場交戰的兩軍之一（現在是 {fig.faction if fig else None}）")
+
+
 def check_duels(c: Content, need, known) -> None:
     """單人頭目戰（content/duels.json）：地點、素材認得；每個陣營都挑得到一個不是自己人的面貌（散人挑第一個）；
     面貌的陣營認得；出招偏好只寫三招、權重不是負的、加起來大於 0。"""
@@ -2723,6 +2742,7 @@ def validate(c: Content) -> None:
     check_territory(c, need, known, front_ids)
     check_conquest_blocks(c, need, known, front_ids)
     check_siege_templates(c, need)
+    check_home_grounds(c, need)
 
     for key, where in sorted(marks_written.items()):
         need(key in marks_read, f"{where}：痕跡 {key} 寫了卻沒有任何條件或文字讀它")

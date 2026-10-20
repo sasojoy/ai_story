@@ -216,7 +216,7 @@ def test_two_figures_open_the_list_for_free():
 
 
 def test_no_one_to_talk_to_greys_out_and_costs_nothing():
-    game = _game(at="huangjin_camp")  # 輿圖重製 1b：長社沒有人物了，換成波才一位的黃巾別部營寨
+    game = _game(at="julu_altar")  # 輿圖重製 1b：長社沒有人物了，換成波才一位的黃巾別部營寨；1c：波才搬到鉅鹿道壇
     option = _ids(game)["act:socialize"]
     assert not option.enabled and option.label == "交友（名望還差 15）"
     option = _ids(_game(at="yingchuan"))["act:socialize"]

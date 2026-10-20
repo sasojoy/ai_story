@@ -113,7 +113,7 @@ def test_your_own_place_offers_sortie_and_explore_back_on_jianghu():
 
 def test_search_finds_a_place_by_person():
     out = run(_game(), 'return H.searchHtml(H.S.mapBase, H.S.mapState, "波才");')
-    assert 'data-act="map-pick" data-id="huangjin_camp"' in out and "長社" not in out
+    assert 'data-act="map-pick" data-id="julu_altar"' in out and "長社" not in out
 
 
 def test_search_with_nothing_typed_lists_every_place_by_region():

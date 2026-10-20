@@ -311,7 +311,7 @@ def test_notes_are_escaped():
 def test_a_talked_out_lone_audience_cell_says_so_briefly_and_the_note_row_names_the_moment():
     """day-scale 審查 I1：這裡唯一那位人物談滿了、又沒有交友的事時，行動列的交友格放的是灰掉的「求見某某」。格子約 60 px、不換行，
     放不下「第 1 週・週日 00:00 之後再來」（會被切成「週・週日 00:0」這種碎片）：格子寫「已談滿」，整句連同換日的那一刻寫在底下那一行。
-    白馬津（卜己一位）是正式內容裡真的會這樣的地方（週末設定；輿圖重製 1b 以前是孟津渡的董卓，現在孟津渡站了盧植與董卓兩位）。"""
+    濟水河畔（卜己一位）是正式內容裡真的會這樣的地方（週末設定；輿圖重製 1b 以前是孟津渡的董卓，現在孟津渡站了盧植與董卓兩位；1c 以前卜己在白馬津）。"""
     from tianxia import rules
 
     content = real_content("weekend")
@@ -320,7 +320,7 @@ def test_a_talked_out_lone_audience_cell_says_so_briefly_and_the_note_row_names_
     game = Game.new(content, "沈浪", rng=random.Random(0))
     game.client = None
     p = game.state.player
-    p.location = "baima_ford"
+    p.location = "jishui"
     (cid,) = game._figures_here()
     p.flags.add(f"結識:{cid}")
     p.fortune = True

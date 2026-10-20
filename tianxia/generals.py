@@ -2,13 +2,14 @@
 
 決戰開集結那一刻（world._open_claimed），每一方照那條戰線（沒寫戰線的照決戰的大區）取在場的前幾位大勢人物上陣，寫進
 BattleInstance.commanders。回合裡怎麼打在 battle_instance（call_orders、_strike_commanders）；收場之後敗走的人扣聲威
-（after_battle，engine._apply_battle_outcome 一開頭叫）。只 import models、state、world_state、figures、atlas、battle_instance。
+（after_battle，engine._apply_battle_outcome 一開頭叫）。只 import models、state、world_state、figures、atlas、battle_instance、
+home_ground（主場人物遠道而來時的份量，輿圖重製 1c）。
 """
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from . import atlas, battle_instance, figures
+from . import atlas, battle_instance, figures, home_ground
 from .models import BattleDef, Content
 from .state import GameState, Rumor
 
@@ -56,7 +57,8 @@ def pick(state: GameState, content: Content, definition: BattleDef) -> list[batt
             now = figures.state_of(state, content, fid)
             might = battle_instance.strength(tuning, content.squads[fig.squad].difficulty)
             standing = min(1.0, now.prestige / fig.start_prestige) if fig.start_prestige else 1.0
-            score = round(might * gen.ranks[rank] * (0.5 + 0.5 * standing), 1)
+            away = home_ground.weight(state, content, definition, fid)  # 主場（輿圖重製 1c）：那一塊歸他的對面時他遠道而來，打折
+            score = round(might * gen.ranks[rank] * (0.5 + 0.5 * standing) * away, 1)
             out.append(battle_instance.Commander(
                 fid=fid, name=fig.name, faction=side.id, rank=rank, score=score,
                 neili=gen.pool[rank], neili_cap=gen.pool[rank], prestige=now.prestige,

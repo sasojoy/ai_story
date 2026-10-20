@@ -35,6 +35,7 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   - 要用就 `git stash push -m <獨一無二的標籤> -- <檔>`，`git stash list --format='%H %gd %gs'` 找到自己那一筆，`git stash apply <sha>`，再照標籤找 `stash@{n}` 去 drop。
   - 想證明測試「修之前是紅的」，最簡單的就是這樣把改動暫時收起來跑一次。
 - 背景長跑（量表）用 `run_in_background`。輸出導到檔案時 python 會緩衝，加 `-u` 才看得到進度。等它結束的通知，不要輪詢。
+- **scratchpad 是同一個 session 的子代理共用的**（2026-10-20 輿圖 1c：另一個同時跑的子代理寫了同名的 `dump_locs.py`，把我的蓋掉）：放進去的腳本、log 檔名一律加自己這一批的前綴（例 `m1c_`）。
 - **PowerShell 的 `git commit -F - @'…'@` 不會走 stdin**：here-string 被當成一個路徑參數，合併中會報 `cannot do a partial commit during a merge`（不在合併中就變成只提交那個「路徑」）。commit 訊息用 Write 寫進 scratchpad 的檔，`git commit -F <檔>`（2026-10-20）。
 - **Git Bash 的 `sed -i` 會把 CRLF 的檔整個改成 LF**（2026-10-20 改 `bot_policy.py` 一行，整個檔變 LF）：改一行也用 Edit 工具，或照上面「讀進來轉 `\n`、寫回轉回去」的腳本。
 - **PowerShell 5.1 讀沒有 BOM 的 `.ps1` 會把中文路徑讀成亂碼**（`Set-Location` 說找不到路徑）：長指令直接放進 PowerShell 工具的 `command`（工具會處理編碼），要一長串檔名就寫進 ASCII 的 txt、用 `Get-Content` 讀。
@@ -57,6 +58,8 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 - **`test_for.py` 自己已經帶 `-q`**：`--` 後面再傳 `-q` 就變 `-qq`，跑完 exit 0 卻不印「N passed」那一行（2026-10-20 輿圖重製 1b 的前一位開發就是這樣沒留下數字）。`--` 後面只傳 `-n 6`。
 - **內容的名字或位置改了（人物開季站位、地點歸屬、線名），`test_for.py` 挑不到「用真實內容、斷言寫死舊名字或舊位置」的測試**：它只挑 import 改到的模組的檔，內容改了只補 `test_content`／`test_real_content` 這幾個。輿圖重製 1b 搬七位人物、線名改「中原」，`test_for` 的 20 個檔全綠，另外 15 個檔、79 條是紅的（`test_front_lines`、`test_orders`、`test_ranks`、`test_figure_aid`、`test_precise_actions`、`test_challenge_season`……）。做法：
   - 把改到的 id 與顯示名（人物 id、中文名、地點 id、線名）列成 token，寫一支小腳本掃 `tests/test_*.py`：含 token、又用真實內容（`real_content`、`real` fixture）的檔，扣掉 `test_for` 已經跑過的，一起 `pytest -n 6 -m "slow or not slow"`（87 個檔約一分鐘多，比想的快）。
+  - **不要只掃「直接讀真實內容」的檔**（FB-550：`test_dadian_shop` 從 `test_silver_outlets` 借 `_game` 建局，自己檔裡沒有 `real_content`，1b 的掃描漏了，站在搬空的長社一直紅）：含 token 就跑，多幾個檔不貴；token 也要列**舊的地點 id**（人搬走之後、原地還被寫死的那些），不只新的。1c 的做法：掃完扣掉 `test_for` 那一份，剩 10 個檔、約兩分鐘。
+  - 人搬家之後最常紅的是「站在某地挑戰／求見那位人物」的測試：輿圖重製 1c 搬了四位，第一輪 `test_for` 紅 88 條、19 個檔，全是站錯地方（`_player(..., "huangjin_camp")` 挑戰波才）。改法照舊是換成新位置；同一個地點被拿來當兩種用途（例：`kou_boss` 事件照舊在黃巾別部營寨）的那幾條沒紅就別動。
   - 紅的照「換成新位置／新名字，斷言的意思不變」改；找「剛好只有一位人物的地方」不要猜，寫小腳本對每個地點印 `_people_here()` 與交友鈕（本批：白馬寺華佗、黃巾別部營寨波才、白馬津卜己）。人物搬走後「風聞聽眾」「悲憤」這類靠大區找人的測試，要先把人物擺回原位（`figures._ensure(...).location = ...`），或換一位還站在那一區的人，不要把斷言改成沒意義的。
 - **把規則分支合進新地理分支**（2026-10-21，領地爭奪 97567ff0 合進輿圖 1）：兩邊碰的是不同批檔（輿圖只動內容與測試、領地爭奪只動程式與測試），git 的衝突只有 3 個（一份指南、兩個測試檔），**但自動合進來、沒衝突的新測試會因舊地點整批紅**（55 條，4 個檔，沒有一條是規則壞了）。流程：
   - 合完先 commit 衝突的解法，再跑 `tests/test_conquest_*.py` 全部（PowerShell 呼叫 pytest 不展開萬用字元，整串會當成一個不存在的檔名、`no tests ran`、exit 5：`$f = @(Get-ChildItem tests -Filter "test_conquest_*.py" | % { "tests/" + $_.Name }); pytest @f`），把舊地點換成新的另開一個 commit，merge commit 保持乾淨；

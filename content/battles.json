@@ -110,6 +110,7 @@
     "timetable_event": "changshe_fire",
     "defender": "guan",
     "front": "yingru",
+    "home": {"block": "changshe", "figure": "bocai"},
     "factions": [
       {"id": "guan", "name": "官軍"},
       {"id": "huang", "name": "黃巾軍"}
