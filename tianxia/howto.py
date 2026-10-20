@@ -79,6 +79,8 @@ def train_line(foes: bool, gains: Sequence[str], drops: bool, push: bool, drill_
 SORTIE_NOTES = {  # 待 joy 潤：行動列底下出陣那一行（設計第二節）
     "attack": "這裡歸別人：打一場，打贏{push}；只拿對手 {share} 成的心得與經驗，{loot}",
     "hold": "這裡是自家地盤：不用打，{push}（量是攻的{half}）；拿自家隊伍 {share} 成的心得與經驗。",
+    # 領地爭奪第二批：自家沒被公告的區塊守（{push} 是 SORTIE_NOT_TODAY_HOLD，「量是攻的一半」已經寫在它的括號裡，裁決 21）
+    "hold_idle": "這裡是自家地盤：不用打，{push}；拿自家隊伍 {share} 成的心得與經驗。",
     "stir": "不用打，把這一帶的戰局往中間攪（量是攻的{half}）；拿此地隊伍 {share} 成的心得與經驗。",
     # 截糧週在自家佔著的截糧地點出陣是攻打運糧隊（FB-255）：地方是自己的，不寫「這裡歸別人」
     "convoy": "對面的運糧隊正打這裡經過：打一場，打贏{push}；只拿對手 {share} 成的心得與經驗，{loot}",
@@ -96,19 +98,25 @@ SORTIE_NO_PUSH = "今天這條線推滿了，推不動"
 SORTIE_PROGRESS = "推這一塊的進度、記貢獻"  # 領地爭奪：出陣不推線、推那一塊的進度（設計 3.7）；待 joy 潤
 SORTIE_NO_PROGRESS = "推不動進度（這裡搶不下來）"  # 領地爭奪：大本營、廣宗沒有進度；待 joy 潤
 SORTIE_NOT_TODAY = "推不動進度（這一塊今天沒有公告攻城）"  # 領地爭奪第二批：只有今天公告、還沒開打的目標推得動；待 joy 潤
+# 自家沒被公告的區塊守：那一句本來接「（量是攻的一半）」，兩個括號連在一起（第二批 QA 第 8 項，計畫第八節裁決 21）——合成一個括號、
+# 意思不變（推不動；有公告時守推的量是攻的幾成）。待 joy 潤
+SORTIE_NOT_TODAY_HOLD = "推不動進度（這一塊今天沒有公告攻城；有公告時守推的量是攻的{half}）"
 SORTIE_LEFT = "今日還能出陣 {n} 次。"
 
 
 def sortie_line(how: str, push: bool, left: int, content: Content, progress: bool | None = None, today: bool = True) -> str:
     """出陣這一下會怎樣（Game._sortie_line 照規則算好傳進來）。數字讀 Config：給自己的成數、守與攪局是攻的幾成。
     progress：領地爭奪在這一季生效時給（這一塊的進度推不推得動），推的那一句換成推進度；沒給（關著）一個字都不變、照 push。
-    today：推不動是因為今天沒有公告（第二批）時給 False，寫 SORTIE_NOT_TODAY；搶不下來的照舊 SORTIE_NO_PROGRESS。"""
+    today：推不動是因為今天沒有公告（第二批）時給 False，寫 SORTIE_NOT_TODAY；搶不下來的照舊 SORTIE_NO_PROGRESS。
+    自家沒被公告的區塊守（hold、推不動、today 假）寫 SORTIE_NOTES["hold_idle"]＋SORTIE_NOT_TODAY_HOLD：一個括號（裁決 21）。"""
     cfg = content.config
     half = "一半" if cfg.sortie.hold_share == 0.5 else f" {cfg.sortie.hold_share * 10:g} 成"
     if progress is None:
         pushed = SORTIE_PUSH if push else SORTIE_NO_PUSH
     else:
         pushed = SORTIE_PROGRESS if progress else SORTIE_NO_PROGRESS if today else SORTIE_NOT_TODAY
+    if how == "hold" and progress is False and not today:
+        how, pushed = "hold_idle", SORTIE_NOT_TODAY_HOLD.format(half=half)
     text = SORTIE_NOTES[how].format(push=pushed, share=f"{cfg.drill_reward_share * 10:g}", half=half,
                                     loot=sortie_loot(content))
     return text + SORTIE_LEFT.format(n=left)

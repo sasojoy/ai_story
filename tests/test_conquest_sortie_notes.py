@@ -37,6 +37,25 @@ def test_own_capturable_block_hold_line_is_unchanged():
     )
 
 
+@pytest.mark.parametrize("loc", ["hilltop_wilds", "runan_wilds"])
+def test_own_unannounced_block_hold_line_has_one_parenthesis(loc):
+    """第二批 QA 第 8 項（計畫第八節裁決 21）：自家沒被公告的區塊守，那一行不再是「推不動進度（這一塊今天沒有公告攻城）（量是攻的一半）」
+    兩個括號連在一起——合成一個括號、意思不變。荒丘是被管理者定給黃巾的中立地，汝南荒野是黃巾開季的陣營區塊。"""
+    game = go(join(conquest_game("season21"), "huang"), loc)
+    conquest.set_control(game.state.world, game.content, "hilltop_wilds", "huang")
+    note = _note(game, loc)
+    assert "）（" not in note and note.count("（") == 1  # 修前兩個括號
+    assert note == (
+        "這裡是自家地盤：不用打，推不動進度（這一塊今天沒有公告攻城；有公告時守推的量是攻的一半）；拿自家隊伍 3 成的心得與經驗。今日還能出陣 5 次。"
+    )
+
+
+def test_others_unannounced_block_line_is_unchanged():
+    """別人的沒公告區塊本來就只有一個括號：照舊。"""
+    game = go(join(conquest_game("season21"), "guan"), "runan_wilds")
+    assert _note(game, "runan_wilds").startswith("這裡歸別人：打一場，打贏推不動進度（這一塊今天沒有公告攻城）；只拿對手 3 成的心得與經驗，")
+
+
 def test_switch_off_hold_line_is_unchanged():
     """關著：自家大本營照舊寫推動戰局（a73c111e 上量的）。"""
     game = go(join(plain_game("season21"), "guan"), "changshe")
