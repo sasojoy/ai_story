@@ -1032,6 +1032,31 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .map-hud small { font-size: 10.5px; color: var(--ink-2); margin-left: 2px; }
 .map-banner[hidden] { display: none; }
 .map-banner { position: absolute; left: 50%; transform: translateX(-50%); top: 46px; background: var(--accent); color: #fff; font-size: 12.5px; padding: 4px 12px; border-radius: 16px; white-space: nowrap; pointer-events: none; }
+/* ── 天下圖（輿圖重製第 2 批；輿圖簡化設計 4.1）：同一張底圖換一個固定的取景（app.js 的 worldFit），不拖不縮。
+   .mapx.world 時藏起區圖那一套（找地點與濾鏡、右上角那一欄、「天下」那一條），換成上面一排「天下・找地點・⏱ 版圖」 */
+.mapx.world .map-top, .mapx.world .map-ctl, .mapx.world .map-hud { display: none; }
+.mapx.world .map-wrap { cursor: default; } /* 路照舊在底圖裡，從地面底下淡淡透上來（企劃者 2026-10-20 從對比圖選乙） */
+.w-top { position: absolute; left: 10px; right: 10px; top: 10px; display: none; gap: 8px; align-items: center; pointer-events: none; }
+.mapx.world .w-top { display: flex; }
+.mapx.world.tl-mode .w-top { display: none; } /* 版圖變化：那一排收起，抽屜上面整塊給天下圖（同 FB-261） */
+.mapx.world.tl-mode .map-banner { top: 8px; }
+.w-top > * { pointer-events: auto; }
+.w-top .map-search { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.w-here, .w-tl, .w-back {
+  flex: none; height: 40px; padding: 0 13px; border-radius: 20px; border: 1px solid var(--line); box-shadow: var(--shadow); cursor: pointer;
+  background: color-mix(in srgb, var(--card) 96%, transparent); color: var(--ink); font: inherit; font-size: 14px; white-space: nowrap;
+}
+.w-here { color: var(--accent); font-weight: 700; font-family: var(--serif); letter-spacing: 2px; }
+.w-tl { color: var(--accent); }
+.w-tl.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.w-back { padding: 0 11px; color: var(--accent); }
+.m-srow { display: flex; gap: 6px; }
+.m-srow .map-search { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 天下圖抽屜那一行：你在哪＋「進入此區 ›」 */
+.m-wline { display: flex; align-items: center; gap: 8px; min-height: 30px; }
+.m-wline .m-mini, .m-wline .m-where { flex: 1; min-width: 0; width: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 14px; }
+.m-enter { flex: none; min-height: 30px; padding: 0 2px; border: 0; background: none; color: var(--accent); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.m-wline + .m-h1 { margin-top: 6px; border-top: 1px dashed var(--line); padding-top: 8px; }
 /* 抽屜：收著 230、點了地點 240、拉高、全開（高度由 app.js 的 setMapDrawer 寫在 style 上）；把手可以拖 */
 .mdrawer {
   position: absolute; left: 0; right: 0; bottom: 0; height: 230px; z-index: 2; display: flex; flex-direction: column;
@@ -1052,8 +1077,13 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
    閒置不吃主執行緒；線跟著變粗（2.5 → 約 5.6 px，企劃者接受）。圈畫在疊在底圖上面的那一張（app.js 的 marksParts） */
 @keyframes mk-pulse { 0% { transform: scale(1); opacity: 0.9; } 100% { transform: scale(2.25); opacity: 0; } }
 .mapx .pulse { animation: mk-pulse 1.6s ease-out infinite; transform-box: fill-box; transform-origin: center; }
+/* 天下圖的激戰（輿圖簡化設計 5.1、4.3：兩邊同時在推的那一格紅光一閃一閃；app.js 的 worldParts，資料由翻地規則那一批補）：
+   只動 opacity，合成器自己跑 */
+@keyframes w-melee { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+.w-melee { animation: w-melee 1.1s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) {
   .mapx .pulse { animation: none; }
+  .w-melee { animation: none; } /* 不閃，照樣是一圈紅 */
   .mdrawer, .map-top { transition: none; }
 }
 /* 桌機（寬 900 以上）：地圖佔滿左邊、抽屜是右邊 360px 一欄（不受 640 欄的限制，設計第七節） */
@@ -1065,6 +1095,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
   .mapx .mgrab { display: none; }
   .mapx .mbody { padding-top: 14px; }
   .map-top { right: 424px; max-width: 520px; }
+  .w-top { right: 370px; }
   .map-ctl { right: 370px; }
   .map-hud { left: calc((100% - 360px) / 2); }
   .map-banner { left: calc((100% - 360px) / 2); }

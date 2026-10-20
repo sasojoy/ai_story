@@ -130,8 +130,9 @@ FAKE_WRAP = """
 
 
 def _run(game, script, **S):
+    # 這一檔量的是區圖那一層（可以拖縮的那一張）：輿圖第三版第 3 批起打開輿圖第一眼是天下圖（S.mapLayer "world"），這裡照舊停在區圖
     payload = {"m": server.main_view(game), "script": script,
-               "S": {"mapBase": game.map_base(), "mapState": game.map_state(), **S}, "menxia": None, "stored": {}, "responses": {}}
+               "S": {"mapBase": game.map_base(), "mapState": game.map_state(), "mapLayer": "region", **S}, "menxia": None, "stored": {}, "responses": {}}
     return webharness.run(DRIVER, payload)
 
 
