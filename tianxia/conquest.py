@@ -92,6 +92,28 @@ def neutral_squads(world: WorldState | None, content: Content, loc_id: str) -> l
     return own + [sid for sid in extra if sid not in own]
 
 
+HOME_GATHER_LINE = "自家地盤，多撿了一份。"  # 待 joy 潤：人站在自家領地找素材多給的那一個（設計 4.5）
+
+
+def is_home(world: WorldState, content: Content, side: str | None, loc_id: str) -> bool:
+    """這一塊算不算 side 的地盤（設計 4.5、4.6；開關開著才有）：有一方的照此刻的控制方；散人（side None）照開季的種類——開季中立的
+    區塊不論此刻歸誰都算散人的。不是區塊一律不算。"""
+    if not on(content, world) or loc_id not in blocks(content):
+        return False
+    if side is None:
+        return start_kind(world, content, loc_id) == NEUTRAL
+    return holder(world, content, loc_id) == side
+
+
+def home(state: GameState, content: Content) -> bool:
+    """人此刻站在自家領地（吃加成）：開關開著、不在路上、所在是區塊，而且是自己那一邊控制的（豪強分屬兩軍：依附那一軍，rules.side_of），
+    散人是開季中立的區塊。只在人站在那裡時才吃（設計 3.4）。"""
+    p = state.player
+    if p.journey is not None or p.location is None:
+        return False
+    return is_home(state.world, content, rules.side_of(state, content), p.location)
+
+
 def _opened(world: WorldState, content: Content, loc_id: str) -> bool:
     """劇情開放了（同 atlas.is_unlocked，但不看人站在哪裡）：不是序章專屬、unlock_flag 立了或第一季直接開放的地點。"""
     loc = content.locations[loc_id]

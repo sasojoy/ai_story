@@ -167,6 +167,11 @@ def _one(content: Content, kinds: set[str], tier: int, rng: random.Random) -> st
     return rng.choice(pool).id if pool else None
 
 
+def one_of(content: Content, kinds: set[str], tier: int, rng: random.Random) -> str | None:
+    """同 _one（給別的模組用：領地爭奪在自家領地多給的那一個，Game._home_gather）。"""
+    return _one(content, kinds, tier, rng)
+
+
 def gather_finds(
     content: Content, loc: Location, rng: random.Random, sure: bool = False, attributes: list[str] | None = None,
 ) -> list[str]:

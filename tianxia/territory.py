@@ -285,30 +285,46 @@ def squads_at(world: WorldState, content: Content, loc_id: str) -> list[str]:
 
 def price_factor(world: WorldState, content: Content, faction: str | None, loc_id: str) -> float:
     """地盤福利（設計 4.3 第 3 點）：在自己陣營控制的地方 own_price、別的陣營控制的地方 enemy_price；散人、沒有控制方是 1。
-    faction 是那一邊（rules.side_of）。豪強分屬兩軍的季，豪強的投靠點不算哪一軍的地盤（held_bases：沒有控制方），照原價。"""
+    faction 是那一邊（rules.side_of）。豪強分屬兩軍的季，豪強的投靠點不算哪一軍的地盤（held_bases：沒有控制方），照原價。
+    領地爭奪開著的季（conquest.on），散人在開季中立的區塊算自家（設計 4.6：中立地算散人的地盤，不論此刻歸誰）。"""
+    from . import conquest  # noqa: PLC0415
+
+    cfg = content.config.territory
+    if faction is None and conquest.is_home(world, content, None, loc_id):
+        return cfg.own_price
     side = controller(world, content, loc_id)
     if side is None or faction is None:
         return 1.0
-    cfg = content.config.territory
     return cfg.own_price if side == faction else cfg.enemy_price
 
 
-def price_here(state: GameState, content: Content) -> float:
+def _land_here(state: GameState, content: Content, heal: bool = False) -> float:
+    """此刻所在地的地盤福利（price_factor，照 rules.side_of）。heal：療傷——領地爭奪開著的季，新手期（roster.newbie）在敵方領地療傷
+    不吃加價（裁決 4：潁川郡是黃巾新手出序章的第一站）。"""
+    from . import conquest, roster  # noqa: PLC0415  roster → rules：延後 import
+
+    p = state.player
+    land = price_factor(state.world, content, rules.side_of(state, content), p.location)
+    if heal and land > 1 and conquest.on(content, state.world) and roster.newbie(state, content):
+        return 1.0
+    return land
+
+
+def price_here(state: GameState, content: Content, heal: bool = False) -> float:
     """此刻在這裡買東西的倍數（名聲設計 4.1）：地盤福利（price_factor）× 名望的店家折扣（renown.price_factor）。
     療傷、打造工錢、升階工錢、買馬都走這裡；輿圖詳情欄照舊只寫地盤（那是地點的，mapdata 讀 price_factor）。
+    heal：療傷那一條（_land_here：領地爭奪的新手期在敵方領地不加價）。
     放在 territory 而不是 renown：territory → rules → renown，renown 再 import territory 就繞成環。"""
-    p = state.player  # 自家地盤照那一邊算（rules.side_of：豪強分屬兩軍的季，豪強是依附的那一軍）
-    return price_factor(state.world, content, rules.side_of(state, content), p.location) * renown.price_factor(state, content)
+    return _land_here(state, content, heal) * renown.price_factor(state, content)
 
 
-def price_parts(state: GameState, content: Content) -> list[str]:
+def price_parts(state: GameState, content: Content, heal: bool = False) -> list[str]:
     """價錢打折的原因，一樣一段：「自家地盤・九折」「名動一方・九四折」（名聲 4.1 的寫法）；名聲關著、兩樣都沒有是空的。
-    醫館另有俠的那一半（renown.clinic_part），skillview.heal_note 接在後面、寫在同一個括號裡（FB-294）。"""
+    醫館另有俠的那一半（renown.clinic_part），skillview.heal_note 接在後面、寫在同一個括號裡（FB-294）。heal 同 price_here。"""
     if not renown.on(content, "discount"):
         return []
-    p = state.player
     parts = []
-    land = price_factor(state.world, content, rules.side_of(state, content), p.location)
+    land = _land_here(state, content, heal)
     if land != 1.0:
         parts.append(("自家地盤" if land < 1 else "敵方地盤") + "・" + renown.discount_word(land))
     fame = renown.price_factor(state, content)

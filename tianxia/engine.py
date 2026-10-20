@@ -4154,9 +4154,9 @@ class Game:
         if branch is not None:
             msgs = [branch.line.format(place=loc.name)]
             attrs = None if branch.deep else branch.attributes
-            found = [line for mid in explore_modes.gather_finds(c, loc, rng, sure=True, attributes=attrs)
-                     if (line := materials.grant(s, c, mid))]
-            msgs += found or [explore_modes.GATHER_NONE]
+            mids = explore_modes.gather_finds(c, loc, rng, sure=True, attributes=attrs)
+            found = [line for mid in mids if (line := materials.grant(s, c, mid))]
+            msgs += (found or [explore_modes.GATHER_NONE]) + self._home_gather(loc, mids)
             if branch.deep:
                 sensed = explore_modes.deep_insight(c, loc, rng)
                 if sensed is not None:
@@ -4166,11 +4166,28 @@ class Game:
         if boss is not None and rng.random() < c.config.duel.explore_chance * renown.duel_chance(s, c):  # 名聲 4.4
             return self._duel_start(boss)
         msgs = [explore_modes.GATHER_LINE.format(place=loc.name)]
-        found = [line for mid in explore_modes.gather_finds(c, loc, rng, sure=sure) if (line := materials.grant(s, c, mid))]
-        msgs += found or [explore_modes.GATHER_NONE]
+        mids = explore_modes.gather_finds(c, loc, rng, sure=sure)
+        found = [line for mid in mids if (line := materials.grant(s, c, mid))]
+        msgs += (found or [explore_modes.GATHER_NONE]) + self._home_gather(loc, mids)
         if not sure and explore_modes.encounter_due(c, loc, rng):
             msgs += self._gather_fight(loc, rng)
         return msgs
+
+    def _home_gather(self, loc: Location, mids: list[str]) -> list[str]:
+        """領地爭奪：人站在自家領地找素材，Config.conquest.gather_bonus_chance 的機會多一個同屬性的一階（設計 4.5；散人在開季中立的區塊也算）。
+        屬性照這一下找到的第一個素材，沒找到照地點寫的第一種素材；擲骰用這一次探索自己的亂數（用途「領地」），不碰 Game.rng。
+        開關關著、不在自家是空的，一個字都不變。"""
+        s, c = self.state, self.content
+        if not conquest.home(s, c):
+            return []
+        rng = explore_modes.rng_for(self.world.get_season_number(), s.player.name, s.player.explore_seq, "領地")
+        if rng.random() >= c.config.conquest.gather_bonus_chance:
+            return []
+        pool = [m for m in [*mids, *loc.materials] if m in c.materials]
+        attribute = c.materials[pool[0]].attribute if pool else None
+        mid = explore_modes.one_of(c, {attribute} if attribute else set(), 1, rng)
+        line = materials.grant(s, c, mid) if mid is not None else None
+        return [conquest.HOME_GATHER_LINE, line] if line else []
 
     def _gather_say(self, loc: Location, rng: random.Random, say_rng: random.Random) -> list[str]:
         """找素材的「自己說」（第 32 項，計畫 2.3）：照模型挑的屬性一定給一份（同分支），成算＝模型分數＋悟性修正、夾 5～85
@@ -4187,7 +4204,7 @@ class Game:
         if success:
             mids += explore_modes.say_bonus(c, loc, say_rng, attribute)
         found = [granted for mid in mids if (granted := materials.grant(s, c, mid))]
-        return msgs + (found or [explore_modes.GATHER_NONE])
+        return msgs + (found or [explore_modes.GATHER_NONE]) + self._home_gather(loc, mids)
 
     def _practice(self, loc: Location, rng: random.Random) -> list[str]:
         """練功（正式季整合 2.5）：一定打一場。有頭目時先擲頭目戰（5% × 名聲倍數，renown.duel_chance）；這裡只有頭目、沒有一般對手時

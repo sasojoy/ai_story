@@ -428,7 +428,7 @@ def heal_note(state: GameState, content: Content) -> str:
 
     points, cost, left = team.heal_plan(state, content, state.player.member)
     # 名聲 4.1、5.2：價錢後面寫原因，地盤、名望、俠的醫館折扣寫在同一個括號（FB-294）；名聲關著是空的
-    why = renown.reasons_text(territory.price_parts(state, content) + [renown.clinic_part(state, content)])
+    why = renown.reasons_text(territory.price_parts(state, content, heal=True) + [renown.clinic_part(state, content)])
     if left > 0:
         return f"治 {points} 點・{cost} 兩（還剩 {left} 點）{why}"
     return f"內傷 {int(state.player.member.injury)}・{cost} 兩{why}"
