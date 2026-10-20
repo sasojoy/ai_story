@@ -46,7 +46,7 @@ ABSENT_SCENE_LINE = "{absent}沒有人趕到，這一場只剩對面一軍來攻
 TAKEN_TITLE = "{side}{margin}，拿下{place}"  # 待 joy 潤：戰報與紀錄的結果
 HELD_TITLE = "{side}守住{place}"
 STALEMATE_TITLE = "相持，{place}照舊"
-GUARD_NAME = "{squad}（守將）"  # 待 joy 潤：中立地的守將（那裡最強的一路隊伍）
+GUARD_NAME = "{squad}" + battle_instance.GUARD_SUFFIX  # 待 joy 潤：中立地的守將（那裡最強的一路隊伍）
 LATE_MUSTER_SECONDS = 600  # 【開發】開集結晚了（伺服器停過）：集結至少留這麼久，免得一開就截止、攻方來不及加入就作罷
 SCENE_LINE = "{attackers}攻{place}；守方：{defender}。"  # 待 joy 潤：攻城戰的場景第二行
 
