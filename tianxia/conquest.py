@@ -5,7 +5,8 @@
 - 開著時控制方只照佔領（攻城戰的結果、時刻表指定、管理者改），不拔河、不割據；此刻的控制方照舊記在 TerritoryState.control
   （所以讀控制方的地方都不用改），開季中立而沒人佔的區塊不在裡面（controller 回 None）。
 - 三條戰線的值＝佔領的基準＋其他來源累積的偏移，夾在 0～100（設計 4.7）；值照舊存在 world.trends[戰線]，讀線的地方都不用改。
-  別處直接改了線（rules.change_trend、決戰收場、管理者），下一次 reweigh 照上一次的基準重錨偏移（推進牆的部分丟掉，同以前）。
+  rules.change_trend 推的是偏移（apply_push，夾值只在顯示那一刻做，FB-530）；決戰收場、管理者這類直接改了線的，下一次 reweigh
+  照上一次的基準重錨偏移。
 - 出陣不推線、推攻城目標的進度（ConquestState.progress，第一批任何可奪的區塊都記）。
 只讀寫 WorldState；天下大事與江湖史照 territory._announce。territory 反過來在函式裡延後 import 這裡。"""
 from __future__ import annotations
@@ -352,15 +353,25 @@ def assign(world: WorldState, content: Content, given: dict[str, str]) -> None:
 
 
 def apply_push(world: WorldState, content: Content, line: str, delta: int) -> int:
-    """其他來源推一條戰線（rules.change_trend 在開關開著時叫）：新值＝夾過的（此刻的值＋delta），偏移照它重錨（推進牆的部分丟掉，
-    同以前）；回實際推動量。寫回 world.trends，之後的 recompute_trends、territory.update 照舊由呼叫端做。"""
+    """其他來源推一條戰線（rules.change_trend 在開關開著時叫）：推的是偏移（設計 4.7「其他來源」），夾值只在顯示那一刻做（FB-530）。
+    推過牆的那一截丟掉（同以前）：往 100 推時未夾的（基準＋偏移）最多 max(原本的, 100)，往 0 推時最少 min(原本的, 0)——基準已經在牆外時
+    往牆那一邊推整個丟掉、偏移不動，往回推照實記進偏移。回實際推動量（顯示的值前後差）。寫回 world.trends，之後的 recompute_trends、
+    territory.update 照舊由呼叫端做。"""
     state = world.conquest
     if state is None or world.territory is None:
         update(world, content)
         state = world.conquest
+    _sync(world, content, state)  # 別處直接寫過線、還沒重算：先照上一次的基準重錨
     now = rules.world_trend_value(world, content, line)
-    after = max(0, min(100, now + delta))
-    state.offset[line] = after - state.base.get(line, base(world, content, line))
+    floor = state.base.get(line, base(world, content, line))
+    raw = floor + state.offset.get(line, 0.0)
+    pushed = raw + delta
+    if delta > 0 and pushed > 100:
+        pushed = max(raw, 100.0)
+    elif delta < 0 and pushed < 0:
+        pushed = min(raw, 0.0)
+    state.offset[line] = pushed - floor
+    after = _clamp(pushed)
     world.trends[line] = after
     return after - now
 
