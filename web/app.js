@@ -21,6 +21,7 @@
   const NEWS = [
     { id: "reports", name: "戰報" },
     { id: "trends", name: "大勢" },
+    { id: "xingshi", name: "形勢" }, // 領地爭奪第三批 A：每天一篇〈天下形勢〉（/api/xingshi）；只有開著的季（main.xingshi）才畫這一顆（newsSegHtml）
     { id: "rumors", name: "傳聞" },
     { id: "chronicle", name: "江湖史" },
     { id: "journal", name: "紀錄" },
@@ -1517,15 +1518,18 @@
   }
   // 場景卡（伺服器的 Markdown）第一段是戰場名字（「**廣宗決戰**」）：包成一行，名字、那一小句、加入的鈕排在同一行；散人臨時投效的
   // 兩顆字多，另起一行排在名字底下（.wide，鈕上只寫「臨時投效【官軍】」，「只算這一場」寫在那一小句裡）。認不出第一段就排在卡片最上面。
-  // 那一小句用 aria-describedby 接到那一排鈕上（一頁只有一張場景卡，id 不會重複）
+  // 那一小句用 aria-describedby 接到那一排鈕上（一頁只有一張場景卡，id 不會重複）。
+  // FB-553：同一州兩場以上自己這一邊的攻城一起集結，加入鈕一場一顆、鈕上寫是哪一場（字長），兩顆擠在名字那一行把整頁撐出橫捲
+  // （375 寬 488px）：兩顆以上照挑同伴那一步，另起一行、一顆一行（.pick），那一小句往下指；一顆的照舊在名字右邊
   function musterScene(m, scene) {
     const joins = musterJoins(m);
     if (!joins.length) return scene;
     const kind = joins.some((o) => o.id.startsWith("battle:escort:")) ? "escort"
       : joins.some((o) => o.id.startsWith("battle:enlist:")) ? "enlist" : "join";
     const wide = kind === "enlist";
-    const note = `<span class="muster-note" id="muster-note">${esc(MUSTER_NOTE[kind])}<span aria-hidden="true"> ${MUSTER_ARROW[kind]}</span></span>`;
-    const cls = wide ? " wide" : kind === "escort" ? " pick" : "";
+    const stacked = kind === "escort" || (kind === "join" && joins.length > 1);
+    const note = `<span class="muster-note" id="muster-note">${esc(MUSTER_NOTE[kind])}<span aria-hidden="true"> ${stacked ? MUSTER_ARROW.escort : MUSTER_ARROW[kind]}</span></span>`;
+    const cls = wide ? " wide" : stacked ? " pick" : "";
     const row = `<div class="options muster-join${cls}" role="group" aria-label="參戰" aria-describedby="muster-note">${joins.map((o) =>
       `<button class="btn small primary" data-act="choose" data-id="${esc(o.id)}"><span>${esc(wide ? optParts(o)[0] : o.label)}</span></button>`).join("")}</div>`;
     const head = /^<p>([\s\S]*?)<\/p>\n?/.exec(scene);
@@ -1651,6 +1655,19 @@
     const muster = html.startsWith('<div class="muster-head">') ? html.indexOf("</div></div>\n") : -1;
     const cut = muster >= 0 ? muster + "</div></div>\n".length : html.startsWith("<p>") ? html.indexOf("</p>") + 4 : 0;
     return html.slice(0, cut) + gaugeHtml(g) + html.slice(cut);
+  }
+  // 攻城戰畫面（領地爭奪第三批 A，企劃者挑甲）：沿用決戰畫面，最上面那一行換成一條「攻城・地點｜守方：某某（或守將）」（main.siege，
+  // engine.siege_banner；三方混戰、轉回單方、兩軍相爭的字是伺服器給的）。引擎場景第一行是 **攻城・地點**：把那一行換成這一條（不多佔一行；
+  // 集結時這一條自己一行，「報名在這裡」與加入的鈕排在它底下，見 style.css）；找不到那一行就疊在最上面；收成一行的觀戰（battle-fold）不畫。
+  // 每一段包成不折行的小段，只在「｜」那裡換行。
+  // 排在 withGauge 之後：withGauge 認的是原本那一行 <p>，換掉之前先把戰局條插好
+  function siegeStrip(html, s) {
+    if (!s || html.startsWith('<p class="battle-fold"')) return html;
+    const strip = `<p class="siege-strip" role="note"><span class="nb ss-title">${esc(s.title)}</span>${(s.parts || []).map((p) =>
+      `<span class="ss-sep" aria-hidden="true">｜</span><span class="nb">${esc(p)}</span>`).join("")}</p>`;
+    const head = `<p><strong>${esc(s.title)}</strong></p>`;
+    const at = html.indexOf(head);
+    return at >= 0 ? html.slice(0, at) + strip + html.slice(at + head.length) : strip + html;
   }
   // 攤開、收起都整頁重畫，原本有焦點的那一行（那一顆）跟著不見：焦點放回新畫出來的開關，鍵盤再按一次就收起、再攤開
   // （同戰況圖卡的 frontsTap，審查 M4）
@@ -2243,7 +2260,7 @@
     const scene = masterTalks ? ""
       : m.on_road
         ? `<section class="card scene road${S.sceneOpen ? "" : " clamp"}" data-act="scene-more" role="button" tabindex="0" aria-expanded="${!!S.sceneOpen}">${m.scene}</section>`
-        : `<section class="card scene">${withGauge(musterScene(m, roundBlocks(battleScene(m), m.battle_gauge)), m.battle_gauge)}${myTurn ? "" : people}</section>`;
+        : `<section class="card scene">${siegeStrip(withGauge(musterScene(m, roundBlocks(battleScene(m), m.battle_gauge)), m.battle_gauge), m.siege)}${myTurn ? "" : people}</section>`;
     const peopleAfter = myTurn && people && !masterTalks && !m.on_road ? `<section class="card people-after">${people}</section>` : "";
     // 序章：小地圖與江湖紀錄的連結要等「輿圖、見聞」亮了才畫（shown("minimap")）
     const tail = shown("minimap") ? `<div class="mini" data-act="tab" data-tab="map" role="button" aria-label="展開輿圖">${m.minimap}</div>
@@ -5597,8 +5614,35 @@
     });
   }
 
+  // 見聞的籤（NEWS）：「形勢」只有〈天下形勢〉開著的季（main.xingshi）才畫。九顆在 375 寬一排放不下（每顆 13px 的字、四 px 的內距，九顆
+  // 要約 362px，那一欄只有 343），排成兩排（.wrap：上五顆、下四顆各自撐滿，字照預設的大小，不橫捲、不藏；領地爭奪第三批 A，計畫 6.4）。
+  // 關著的季照舊一排八顆，一個像素都不變
+  function newsSegHtml(m) {
+    const tabs = NEWS.filter((n) => n.id !== "xingshi" || (m && m.xingshi));
+    return `<div class="seg news-seg${tabs.length > 8 ? " wrap" : ""}">${tabs.map((n) => `<button class="${S.news === n.id ? "on" : ""}" data-act="news" data-news="${n.id}">${n.name}</button>`).join("")}</div>`;
+  }
+
+  // 見聞「形勢」（領地爭奪第三批 A，企劃者挑乙）：一篇一行（「是日：…」＋時刻），最新一篇攤開、其餘點了攤開（<details>）；攤開、收起記在
+  // S.xingshiOpen（篇次 → 開著沒），重畫照樣。文章是伺服器給的純文字（模型寫的或照固定段拼的，看不出差別），一段一個 <p>、照字跳脫。字待 joy 潤
+  const XS_EMPTY = "天下尚無定論。";
+  const XS_PENDING = "今日的形勢，史官還在落筆。";
+  function xingshiParas(text) {
+    return String(text || "").split(/\n+/).filter((p) => p.trim()).map((p) => `<p>${esc(p.trim())}</p>`).join("");
+  }
+  function xingshiHtml(x) {
+    if (!x) return '<p class="muted">載入中…</p>';
+    if (!x.on) return '<div class="card"><p class="muted">這一季沒有〈天下形勢〉。</p></div>';
+    const open = S.xingshiOpen || (S.xingshiOpen = new Map());
+    const pending = x.pending ? `<p class="muted xs-pending">${XS_PENDING}</p>` : "";
+    if (!x.essays.length) return `<div class="card xs-card">${pending || `<p class="muted">${XS_EMPTY}</p>`}</div>`;
+    const row = (e, i) => `<details class="xs-essay" data-n="${Number(e.n)}"${(open.has(e.n) ? open.get(e.n) : i === 0) ? " open" : ""}>
+        <summary><span class="xs-line">${esc(e.line)}</span><span class="xs-time">${esc(e.time)}</span></summary>
+        <div class="xs-body"><p class="xs-title">${esc(e.title)}</p>${xingshiParas(e.essay)}</div></details>`;
+    return `<div class="card xs-card">${pending}${x.essays.map(row).join("")}</div>`;
+  }
+
   function pageNews() {
-    const seg = `<div class="seg news-seg">${NEWS.map((n) => `<button class="${S.news === n.id ? "on" : ""}" data-act="news" data-news="${n.id}">${n.name}</button>`).join("")}</div>`;
+    const seg = newsSegHtml(S.main);
     const m = S.main;
     let body = "";
     if (S.news === "reports") {
@@ -5614,6 +5658,7 @@
           + (rest.length ? `${big.length ? '<p class="report-group">最近的仗</p>' : ""}<div class="list">${rest.map(item).join("")}</div>` : "");
       }
     } else if (S.news === "trends") body = `<div class="card">${m.trends}</div>`;
+    else if (S.news === "xingshi") body = xingshiHtml(S.xingshi);
     else if (S.news === "rumors") body = m.rumor_layers ? rumorLayersHtml(m.rumor_layers) : `<div class="card">${m.rumors}</div>`;
     else if (S.news === "chronicle") body = `<div class="card">${m.chronicle}</div>`;
     else if (S.news === "annals") body = annalsHtml(S.annals);
@@ -5688,6 +5733,9 @@
               ${a.season_one ? `
                 <p class="muted">每週的事（照週一的做法立刻再做一次；下週一照常）</p>
                 <div class="row wrap"><button class="btn small" data-act="admin" data-op="issue_orders">立刻發本週軍令</button><button class="btn small" data-act="admin" data-op="rotate_seats">立刻輪替第 4 階席次</button></div>` : ""}
+              ${a.xingshi ? `
+                <p class="muted">天下形勢（每天 22:00 自動開一篇；測試時立刻照上一篇以來的事開一篇）</p>
+                <div class="row wrap"><button class="btn small" data-act="admin" data-op="xingshi_now">現在就開一篇天下形勢</button></div>` : ""}
               ${a.showdowns && a.showdowns.length ? `
                 <p class="muted">三場大戲（照時刻表開集結；開過就算這一場開過了，排定的時間到了不會再開）</p>
                 ${a.showdowns.map((s) => `<div class="row ad-row"><span class="ad-tag">${esc(s.label)}</span>${s.note ? `<span class="muted ad-note">${esc(s.note)}</span>` : ""}<button class="btn small" data-act="admin" data-op="start_showdown" data-id="${esc(s.id)}"${s.enabled ? "" : " disabled"}>立刻開這一場</button></div>`).join("")}` : ""}
@@ -5823,6 +5871,8 @@
       // 管理者觸發鈕（企劃者 2026-10-07）：照 Game.admin_issue_orders／admin_rotate_seats 實際做的事寫
       issue_orders: ["立刻發本週軍令：這一週還沒達成的軍令照週一的做法重挑、換掉（它們的進度不算了），各陣營發一則軍情；已經達成的照舊留著、不會再達成一次；下週一照常發令，確定？", "確定重發"],
       rotate_seats: ["立刻輪替第 4 階席次：照上一週的貢獻重排各陣營在任的人、發一則名單軍情；下週一照常再排，確定？", "確定輪替"],
+      // 照 Game.admin_xingshi_now 實際做的事寫（領地爭奪第三批 A；待 joy 潤）
+      xingshi_now: ["現在就開一篇〈天下形勢〉：照上一篇以來的事開一張單，伺服器在背景請模型寫（寫不出來照固定段），收下那一刻發一則天下大事、記一筆江湖史；還在等的那一篇先照固定段收。每天 22:00 照常再開，確定？", "確定開一篇"],
       start_showdown: [`立刻開「${body.title}」：照時刻表開集結（起點照此刻的戰況），這一場算開過了，排定的時間到了不會再開，確定？`, "確定開戰"],
       summon: [`立刻替 ${body.name} 發召見（${(S.adPlayer && S.adPlayer.summons && S.adPlayer.summons.note) || "下一階"}；不看貢獻與機緣的門檻，其餘照自然發召見的做法），確定？`, "確定發召見"],
       // 情誼型多一句（伺服器算好的 note：情誼補到幾、招募成算、其他話題、換季帶幾成，審查 M-5）
@@ -5927,6 +5977,11 @@
     if (S.tab === "news") renderPage();
   }
 
+  async function loadXingshi() {
+    S.xingshi = await api("/api/xingshi");
+    if (S.tab === "news" && S.news === "xingshi") renderPage();
+  }
+
   async function loadReports(id) {
     S.reports = await api(`/api/reports${id != null ? `?id=${id}` : ""}`);
     if (S.tab === "news") renderPage();
@@ -5965,6 +6020,7 @@
       }
       if (tab === "news" && S.news === "reports") await loadReports(null);
       if (tab === "news" && S.news === "annals") await loadAnnals();
+      if (tab === "news" && S.news === "xingshi") await loadXingshi();
       if (tab === "news" && S.news === "boards") await loadBoards();
       if (tab === "news" && S.news === "mingtie") await loadMingtie();
     } catch (e) { /* api() 已經提示過 */ }
@@ -6989,6 +7045,7 @@
           renderPage();
           if (S.news === "reports") await loadReports(null);
           if (S.news === "annals") await loadAnnals();
+          if (S.news === "xingshi") await loadXingshi();
           if (S.news === "boards") await loadBoards();
           if (S.news === "mingtie") await loadMingtie();
           break;
@@ -7533,6 +7590,10 @@
     else if (box instanceof Element && box.matches("details.b-round")) {
       const open = S.roundsOpen || (S.roundsOpen = new Set());
       if (box.open) open.add(box.dataset.round); else open.delete(box.dataset.round);
+    }
+    // 見聞「形勢」攤開、收起哪一篇（xingshiHtml）：記篇次，重畫照樣（最新那一篇收起來也記得）
+    else if (box instanceof Element && box.matches("details.xs-essay")) {
+      (S.xingshiOpen || (S.xingshiOpen = new Map())).set(Number(box.dataset.n), box.open);
     }
     // 摺疊開了或收了：發光的鈕在裡面的話，光在鈕與標題列之間換邊（glowTarget）
     if (S.stage === "game") applyGlow();
