@@ -74,7 +74,8 @@ description: 《天下大勢》的分支、測試與合併規矩（企劃者 202
     - 線後來又動了，用 `git merge-tree` 試合新的 HEAD，不動分支；
     - 資料庫升級預演：舊程式（`origin/main`）在暫存資料庫開季、建幾個角色、做幾個動作 → 備份 → 新程式開同一份 → 驗版本、資料都在、發放、對帳 → 舊程式開新版會擋 → 還原備份舊程式打得開；季中那一份另外試（季曆換算會不會錯）。
   - PM 用 Bash heredoc 跑 Python 改中文路徑時，一般字串裡的 `\a`（例 `專案\ai遊戲`、`worktrees\agent-*`）會變成響鈴字元：路徑一律用 raw string，寫完 `assert '\x07' not in s`。
-  - 同時跑很多子代理時，派工單寫 pytest 用 `-n 6`～`-n 8`、不要 `-n auto`，免得互相搶 CPU。
+  - 同時跑很多子代理時，派工單寫 pytest 用 `-n 6`～`-n 8`、不要 `-n auto`，免得互相搶 CPU（六、七個同時跑時用 `-n 4`）。
+  - **子代理共用 PM 的 scratchpad**（2026-10-20 有一個的 `edit_guide.py` 被另一個蓋掉）：派工單寫明暫存檔放在 scratchpad 底下自己的子資料夾（用分支名，例 `qa-small-1020/`）。
   - 子代理（尤其 sonnet）有時用 Skill 工具找不到 `tianxia-dev`／`tianxia-qa`（2026-10-21 有一個回報「這份 checkout 沒有這個技能」，其實檔案在）：派工單寫「Skill 工具找不到就直接 Read 工作樹裡的 `.claude/skills/<技能>/SKILL.md`」。
   - 派工單要開的本地分支名，可能已經被別的工作樹佔著（舊的子代理留下的同名本地分支，`git switch -c` 會失敗）：寫明「同名本地分支已存在就開 `<分支>-work`，推的時候照樣推到 `origin/<分支>`」。
 - **分支名字別撞**：同一個字已經有別的意思時換個寫法並在交接註明（例：正式季第七批的 `qa/season-7` 與 7 天季的 `qa/season7`）。
