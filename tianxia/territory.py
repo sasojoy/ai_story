@@ -181,8 +181,13 @@ def _remember(t: TerritoryState) -> None:
 def update(world: WorldState, content: Content) -> None:
     """重算一次（設計 4.2 最後一段）：rules.change_trend 真的動了一條線、決戰結果直接寫進季（Game._apply_outcome_trends_and_flags）、
     推進世界（world.advance_world_state）時叫。這一季第一次算（world.territory 是 None）不發天下大事；之後控制方換了的地點各發
-    一句天下大事、記一筆江湖史。開關關著什麼都不做。"""
+    一句天下大事、記一筆江湖史。開關關著什麼都不做。領地爭奪開著的季（conquest.on）改走 conquest.update：不拔河、不割據。"""
     if not on(content):
+        return
+    from . import conquest  # noqa: PLC0415  conquest → territory：在函式裡 import，避免循環
+
+    if conquest.on(content, world):
+        conquest.update(world, content)
         return
     first = world.territory is None
     t = world.territory or TerritoryState()
@@ -203,6 +208,11 @@ def assign(world: WorldState, content: Content, given: dict[str, str]) -> None:
     「這一刻規則算出來的控制方」（pinned），之後規則算出來的改變那一刻才回到規則；固定的地點（廣宗）換了就是換了。大本營不收
     （載入時也擋）。換了的地點照樣發天下大事。"""
     if not on(content) or not given:
+        return
+    from . import conquest  # noqa: PLC0415
+
+    if conquest.on(content, world):  # 領地爭奪：指定了就是指定了（不記 pinned、不回到規則），重算三條線
+        conquest.assign(world, content, given)
         return
     update(world, content)
     t = world.territory
@@ -243,6 +253,10 @@ def controller(world: WorldState, content: Content, loc_id: str) -> str | None:
     """這個地點此刻歸誰；不是戰線地點也不是大本營、或開關關著是 None。這一季還沒算過時照規則現算（不存，Review Focus 4）。"""
     if not on(content) or unheld(world, content, loc_id):
         return None
+    from . import conquest  # noqa: PLC0415
+
+    if conquest.on(content, world):  # 領地爭奪：只有區塊有控制方，中立而沒人佔是 None
+        return conquest.holder(world, content, loc_id)
     t = world.territory
     if t is not None and loc_id in t.control:
         return t.control[loc_id]

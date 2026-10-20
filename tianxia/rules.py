@@ -905,9 +905,14 @@ def change_trend(
         w.revealed.add(trend_id)
         msgs.append(f"（江湖暗流湧動——「{trend_name(content, trend_id)}」浮上檯面。）")
     before = world_trend_value(w, content, trend_id)
-    after = min(100, max(0, before + delta))
-    w.trends[trend_id] = after
-    actual = after - before
+    from . import conquest  # noqa: PLC0415  conquest → rules：在函式裡 import，避免循環
+
+    if conquest.on(content, w) and trend_id in front_ids(content):
+        actual = conquest.apply_push(w, content, trend_id, delta)  # 領地爭奪：其他來源推的是偏移（設計 4.7），值照舊寫回 w.trends
+    else:
+        after = min(100, max(0, before + delta))
+        w.trends[trend_id] = after
+        actual = after - before
     if actual:
         recompute_trends(w, content)  # 開關開著時推了戰線，黃巾聲勢跟著重算
         from . import territory  # noqa: PLC0415  territory → rules：在函式裡 import，避免循環

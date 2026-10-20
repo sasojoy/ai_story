@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pydantic import BaseModel
 
 from . import (
-    allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, checkin, chuangong, clinic, companion_agent, cultivation, defection, divine, economy, encounter, enlist, equipment, event_llm, explore_modes, escorts,
+    allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, checkin, chuangong, clinic, companion_agent, conquest, cultivation, defection, divine, economy, encounter, enlist, equipment, event_llm, explore_modes, escorts,
     fight_llm, figure_aid, figure_life, figures, foreshadow, four_tiers, gather_llm, generals, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, letters, library, mapdata, martial_arts, feasts,
     materials, mounts, naming, opportunities, orders, precise, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
     shopview, signature, signature_arms, silver, skill_slots, skillview, smithing,
@@ -11672,6 +11672,31 @@ class Game:
         self._write("定戰況", msgs or ["大勢紋絲不動。"], tag="管理者")
         self._save_season()
         return self._log(msgs)
+
+    def admin_conquest_set(self, loc_id: str, side: str | None) -> list[str]:
+        """領地爭奪（第 38 項改版）：管理者把一塊改成某一軍的（side None 或空字串＝放回中立）。第一批沒有攻城戰，地圖只能靠這裡與時刻表
+        指定易手動；易手的天下大事、江湖史、三條線的重算跟自然易手一樣（conquest.set_control）。只收搶得下來的區塊、官軍或黃巾。"""
+        refusal = self._admin_refusal("定一塊歸誰")
+        if refusal:
+            return self._log(refusal)
+        c, w = self.content, self.state.world
+        if not conquest.on(c, w):
+            return self._log(["（這一季沒有開領地爭奪。）"])
+        side = side or None
+        if not conquest.capturable(c, loc_id):
+            return self._log(["（這裡不是搶得下來的區塊：大本營、廣宗、不是區塊的地點都不收。）"])
+        if side is not None and side not in conquest.SIDES:
+            return self._log(["（只能定給官軍或黃巾。）"])
+        before = territory.controller(w, c, loc_id)
+        if before == side:
+            return self._log(["（這一塊本來就是這樣。）"])
+        conquest.set_control(w, c, loc_id, side)
+        msgs = check_thresholds(self.state, c, self.world, self._quick_client(), now=self.now)
+        name = c.locations[loc_id].name
+        line = f"{name}改歸{c.scenario.faction_name(side, side)}。" if side else f"{name}放回中立。"  # 管理者看的，不是天下大事
+        self._write("定一塊歸誰", [line] + msgs, tag="管理者")
+        self._save_season()
+        return self._log([line] + msgs)
 
     def admin_resolve_event(self, event_id: str, key: str) -> list[str]:
         """定結果：管理者直接定一件大事的結果（不含版本的鍵，例如「成」「guan:險勝」），照時刻表結算（公告、江湖史、

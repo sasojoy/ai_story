@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import random
+import tempfile
+from pathlib import Path
 
 from conftest import real_content
 from tianxia import territory
@@ -16,19 +18,22 @@ def conquest_rules(content: Content) -> Content:
     return content
 
 
-def _new(content: Content, name: str) -> Game:
+def _new(content: Content, name: str, world=None) -> Game:
+    """world 沒給：每一局自己一個資料庫檔（同一條測試建兩局時，第二局不會讀到第一局種下、蓋了別的章的季）。"""
     content.config.auto_open_first_season = True
-    game = Game.new(content, name, rng=random.Random(0), world=open_world())
+    if world is None:
+        world = open_world(Path(tempfile.mkdtemp(prefix="conquest-")) / "tianxia.db")
+    game = Game.new(content, name, rng=random.Random(0), world=world)
     game.client = None
     territory.update(game.state.world, content)  # 開季那一下：第一次算，不發天下大事
     return game
 
 
-def conquest_game(profile: str = "season21", name: str = "沈浪") -> Game:
+def conquest_game(profile: str = "season21", name: str = "沈浪", world=None) -> Game:
     """正式內容、開季時就打開領地爭奪的一局（同 test_territory._game 的建法）。"""
-    return _new(conquest_rules(real_content(profile)), name)
+    return _new(conquest_rules(real_content(profile)), name, world)
 
 
-def plain_game(profile: str = "weekend", name: str = "沈浪") -> Game:
+def plain_game(profile: str = "weekend", name: str = "沈浪", world=None) -> Game:
     """同上，領地爭奪關著（正式內容的預設）。"""
-    return _new(real_content(profile), name)
+    return _new(real_content(profile), name, world)

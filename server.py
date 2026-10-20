@@ -1923,6 +1923,8 @@ ADMIN_ACTIONS = {
     "schedule": lambda g, b: g.admin_schedule(str(b.get("id", "")), _float(b.get("at"), 0.0), time.time()),
     "jump_next": lambda g, b: g.admin_jump_next(time.time()),
     "set_trend": lambda g, b: g.admin_set_trend(str(b.get("id", "")), _int(b.get("value"), 0)),
+    # 領地爭奪（第 38 項改版第一批）：定一塊歸誰（side 空字串＝放回中立）；第一批沒有攻城戰，地圖只靠這裡與時刻表指定易手
+    "conquest_set": lambda g, b: g.admin_conquest_set(str(b.get("id", "")), str(b.get("side", "")) or None),
     "resolve_event": lambda g, b: g.admin_resolve_event(str(b.get("id", "")), str(b.get("key", ""))),
     "clear_lock": lambda g, b: g.admin_clear_lock(str(b.get("id", ""))),
     "cancel_battle": lambda g, b: g.admin_cancel_battle(),
