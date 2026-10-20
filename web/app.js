@@ -4097,6 +4097,8 @@
   };
   const MALL_NOTE = "封閉測試先發每個帳號 {n} 元寶，正式開服時清空重來。"; // 貨架底下那一句（封測有發才寫）；待 joy 潤
   const MALL_LOG_NOTE = "只記這個帳號的元寶進出。"; // 待 joy 潤
+  // 購買確認：上一筆同一件送出去沒等到回音、貨架也還沒變（不知道成了沒），這一次照同一個編號再送（FB-491）；待 joy 潤
+  const MALL_AGAIN = "上一筆「{name}」還沒等到回音：這一次照同一筆再送，已經買好了就不會扣兩次。";
   const MALL_TABS = [["shelf", "貨架"], ["log", "紀錄"]];
   const MALL_NB = "，。、；"; // 貨架上的說明、限購切成不折行的小段（同 nbHtml 的做法，多切「。」）
   // 掌櫃那一句（買成了的、買不了的原因）：切在「，。：；！？」後面與「（」前面，375 寬「元／寶 -600」「（還剩／4300）」不在詞中間斷
@@ -4215,9 +4217,19 @@
     render(); // 底下那一頁與狀態列照最新的 main 畫（開著的時候輪詢不畫被蓋住的頁面）
   }
 
+  // 貨架的指紋：買成一件一定會動到其中一樣（元寶、手上的丹、月卡到哪天）
+  function mallMark(d) { return d ? `${d.balance}|${d.pills ? d.pills.count : ""}|${d.card ? d.card.until : ""}` : ""; }
+
+  // 換上新抓到的貨架。上一筆沒等到回音（S.mallPending）、貨架卻變了：那一筆其實成了（或別處動了帳），下一次點是新的一筆、
+  // 用新的編號，確認框照新的貨架算；不然照舊編號送出去，伺服器回「已經買好了」，確認框講的卻是再買一件（FB-491）
+  function mallGot(d) {
+    S.mallData = d;
+    if (S.mallPending && d && mallMark(d) !== S.mallPending.mark) S.mallPending = null;
+  }
+
   async function loadMall() {
     try {
-      S.mallData = await api("/api/mall");
+      mallGot(await api("/api/mall"));
       S.mallFail = false;
     } catch (e) { S.mallFail = true; }
     if (S.mallOpen) renderMall();
@@ -4260,7 +4272,8 @@
   }
 
   // 購買確認（設計 4.6；草圖子的「點了十顆」）：貼在下緣的紙，寫花多少、元寶剩多少、丹或月卡變成多少（還沒有月卡時多寫一天最多服幾顆），
-  // 底下照商品的說明與限購。編號在這一刻產；上一次同一件送出去沒拿到回應（逾時、斷線），用回那一個（伺服器回「已經買好了」、不扣兩次）
+  // 底下照商品的說明與限購。編號在這一刻產；上一次同一件送出去沒拿到回應（逾時、斷線）、貨架也還沒變，用回那一個（伺服器回「已經買好了」、
+  // 不扣兩次），這時標題底下寫明是上一筆再送一次、鈕寫「再送一次」，不假裝是新的一筆（FB-491）
   function mallAsk(it, d) {
     const p = d.pills, g = it.gives || {};
     const rows = [["花", `<b>${it.price | 0} 元寶</b>`], ["元寶", `<s>${d.balance | 0} →</s> <b>${it.after | 0}</b>`]];
@@ -4270,7 +4283,8 @@
       if (!d.card && p.cap > 0) rows.push(["每天最多服", `<s>${p.cap | 0} →</s> <b>${(p.cap | 0) + (p.bonus | 0)} 顆</b>`]);
     }
     const note = [it.note, it.limit].filter(Boolean).map(esc).join("<br>"); // 說明一行、限購一行（說明自己帶句號，接在一起讀起來是「。；」）
-    const ref = S.mallPending && S.mallPending.id === it.id ? S.mallPending.ref : mallRef();
+    const again = !!(S.mallPending && S.mallPending.id === it.id);
+    const ref = again ? S.mallPending.ref : mallRef();
     closeAsk();
     askGo = () => mallBuy(it.id, ref);
     document.body.insertAdjacentHTML("beforeend", `
@@ -4278,18 +4292,20 @@
         <div class="ask-bg" data-act="ask-no"></div>
         <div class="ask mall-ask" role="alertdialog" aria-modal="true" aria-labelledby="ask-text">
           <h4 id="ask-text">買下【${esc(it.name)}】？</h4>
+          ${again ? `<p class="mall-ask-again">${nbHtml(MALL_AGAIN.replace("{name}", it.name), MALL_SAY_AFTER)}</p>` : ""}
           <dl class="mall-sum">${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>
           ${note ? `<p class="mall-ask-note">${note}</p>` : ""}
-          <div class="row"><button class="btn" data-act="ask-no">再想想</button><button class="btn primary" data-act="ask-yes">買下（${it.price | 0}）</button></div>
+          <div class="row"><button class="btn" data-act="ask-no">再想想</button><button class="btn primary" data-act="ask-yes">${again ? "再送一次" : "買下"}（${it.price | 0}）</button></div>
         </div>
       </div>`);
     document.querySelector('.ask [data-act="ask-no"]')?.focus?.();
   }
 
-  // 買：回來的 mall 換掉貨架、main 換掉狀態列（錠子鈕的餘額、丹鈕當場換），掌櫃那一句換成伺服器回的那一句（bought 有值是成了）
+  // 買：回來的 mall 換掉貨架、main 換掉狀態列（錠子鈕的餘額、丹鈕當場換），掌櫃那一句換成伺服器回的那一句（bought 有值是成了；
+  // already 有值是同一個編號早就買好了〔逾時重送〕，也是成了的樣子，FB-491）。送出去之前記下貨架的指紋（mallGot 拿來比）
   async function mallBuy(id, ref) {
     await busy(async () => {
-      S.mallPending = { id, ref };
+      S.mallPending = { id, ref, mark: mallMark(S.mallData) };
       const r = await api("/api/mall/buy", { item: id, ref });
       S.mallPending = null;
       if (r.mall) S.mallData = r.mall;
@@ -4297,7 +4313,7 @@
       S.mallPick = null;
       S.mallLog = null;
       const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-      S.mallSay = text ? { text, ok: !!r.bought } : null;
+      S.mallSay = text ? { text, ok: !!(r.bought || r.already) } : null;
       renderTop();
       if (S.mallOpen) renderMall(); else render();
     });

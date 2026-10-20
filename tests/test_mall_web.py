@@ -283,6 +283,63 @@ def test_a_buy_that_got_no_answer_reuses_its_ref_next_time(m_on):
     assert out["first"] and posts and posts[-1][1]["ref"] == out["first"]
 
 
+LOST_BUY = """
+      const real = T.ctx.fetch;
+      T.ctx.fetch = (url, opts) => url === "/api/mall/buy" ? Promise.reject(new Error("斷線")) : real(url, opts);
+      """ + _click('{ act: "mall-pick", id: "pills_5" }') + _click('{ act: "ask-yes" }') + """
+      const first = H.S.mallPending && H.S.mallPending.ref;
+      T.ctx.fetch = real;
+      """  # 第一次送出去沒拿到回應（逾時、斷線）：伺服器可能其實買好了
+
+
+def test_a_resend_that_already_went_through_is_said_as_done(m_on):
+    """FB-491：同一個編號再送、伺服器回「這一筆已經買好了」（already 有值）：照成了的樣子講（綠的），不是買不了的紅字。"""
+    dup = {"message": "<p>這一筆已經買好了：「回體丹五顆」。</p>", "bought": None, "already": "pills_5",
+           "mall": _view(balance=4900, count=33), "main": m_on}
+    out = _layer(m_on, _click('{ act: "mall-pick", id: "pills_5" }') + _click('{ act: "ask-yes" }'),
+                 responses={"/api/mall/buy": dup})
+    assert "這一筆已經買好了：「回體丹五顆」。" in _text(out["app"])
+    assert 'class="shop-line said ok"' in out["app"] and "said no" not in out["app"]
+
+
+def test_a_lost_buy_resent_says_it_is_the_same_one(m_on):
+    """FB-491：沒等到回音、貨架也還沒變（不知道成了沒）：再點同一件，確認框照實講這是上一筆再送一次（同一個編號、不會扣兩次），
+    不假裝是新的一筆。"""
+    out = run(m_on, _async(_click('{ act: "mall-open" }') + LOST_BUY + _click('{ act: "mall-pick", id: "pills_5" }') + """
+      const asked = T.bodyHtml.slice(-1)[0];
+      """ + _click('{ act: "ask-yes" }') + """
+      return { first, asked, calls: T.calls };"""),
+        responses={"/api/mall/buy": {"message": "", "bought": None, "already": None, "mall": _view()}, "/api/mall": _view()})
+    posts = [c for c in out["calls"] if c[0] == "/api/mall/buy"]
+    assert out["first"] and posts[-1][1]["ref"] == out["first"]
+    asked = _text(out["asked"])
+    assert "上一筆「回體丹五顆」還沒等到回音" in asked and "不會扣兩次" in asked and "再送一次（100）" in asked
+    assert "買下（100）" not in asked
+
+
+def test_a_lost_buy_that_shows_up_on_the_shelf_lets_the_next_one_be_new(m_on):
+    """FB-491：沒等到回音，可是之後重抓到的貨架變了（元寶少了、丹多了：那一筆其實成了）：再點一件是新的一筆、用新的編號，
+    確認框照新的貨架算（4900 → 4800），不寫「再送一次」。"""
+    richer = copy.deepcopy(m_on)
+    richer["mall"]["balance"] = 4900
+    out = run(m_on, _async(_click('{ act: "mall-open" }') + LOST_BUY + """
+      const later = T.ctx.fetch;
+      T.ctx.fetch = (url, opts) => url === "/api/mall" ? (T.calls.push([url, null]), Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(H.S.landed) })) : later(url, opts);
+      const was = H.S.main; H.setMain(H.S.next); await H.refreshPage(was);
+      const pending = H.S.mallPending;
+      """ + _click('{ act: "mall-pick", id: "pills_5" }') + """
+      const asked = T.bodyHtml.slice(-1)[0];
+      """ + _click('{ act: "ask-yes" }') + """
+      return { first, pending, asked, calls: T.calls };"""), S={"next": richer, "landed": _view(balance=4900, count=33)},
+        responses={"/api/mall/buy": {"message": "", "bought": None, "already": None, "mall": _view(balance=4800, count=38)},
+                   "/api/mall": _view()})
+    assert out["first"] and out["pending"] is None
+    posts = [c for c in out["calls"] if c[0] == "/api/mall/buy"]
+    assert posts[-1][1]["ref"] != out["first"] and REF.match(posts[-1][1]["ref"])
+    asked = _text(out["asked"])
+    assert "還沒等到回音" not in asked and "買下（100）" in asked and "4900 →" in asked and "4800" in asked
+
+
 def test_a_refused_buy_lets_the_shopkeeper_say_it(m_on):
     refused = {"message": "<p>沒有這件商品。</p>", "bought": None, "mall": _view(), "main": m_on}
     out = _layer(m_on, _click('{ act: "mall-pick", id: "pills_5" }') + _click('{ act: "ask-yes" }'),

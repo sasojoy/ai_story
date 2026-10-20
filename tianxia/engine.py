@@ -373,6 +373,8 @@ class Game:
         self.last_gamble: FreeTextOutcome | None = None  # 上一次 answer_event 擲完骰的結果（server.py 拿去潤色）
         self.smith_result: dict | None = None  # 上一次 smith_forge 的出爐卡（server 的 /api/do/smith_forge 回給網頁）；被拒絕是 None
         self.mall_bought: str | None = None  # 上一次 mall_buy 買成的商品 id（/api/mall/buy 回給網頁：成了換掌櫃道謝、不成換原因）；不成是 None
+        # 上一次 mall_buy 送的編號早就買好了（第一次的回應沒收到、同一個編號再送）：那一筆的商品 id，網頁照成了的樣子講（FB-491）；其餘是 None
+        self.mall_already: str | None = None
         # 上一次玩家卡動作的一句短話（peer_act 每次清掉；論武合成了才填，FB-242）：網頁等回應時卡已經關了或換了人，提示泡泡只講這一句
         self.peer_brief: str | None = None
         self.forged = False  # 上一次 forge() 真的合成了（被拒絕的是 False）：煉製頁拿它決定爐子要不要清空（server.api_menxia_do）
@@ -9261,8 +9263,8 @@ class Game:
         """買一件商品（mall.buy）：ref 是這一次購買的編號（網頁按下確認那一刻產，重送同一個不會買兩次）。成了寫一則「商城」
         江湖紀錄（變化寫元寶與拿到的東西）；不成、或這個編號已經買過了只回一句、不寫紀錄。伺服器在行動鎖裡叫：扣元寶、
         寫購買紀錄、發貨同一筆交易。時間照回體丹那一套（pill_now、_pill_day），不讀時鐘。買成了 self.mall_bought 記那件的 id，
-        不成（含這個編號已經買過了）是 None。"""
-        self.mall_bought = None
+        不成（含這個編號已經買過了）是 None；這個編號已經買過了 self.mall_already 記那一筆的商品 id（FB-491），其餘是 None。"""
+        self.mall_bought = self.mall_already = None
         wallet = self._wallet()
         if wallet is None:
             return self._log([mall.OFF])
@@ -9271,6 +9273,8 @@ class Game:
             now=self.pill_now(), day=self._pill_day(), season=self.world.get_season_number(),
         )
         if isinstance(result, str):
+            done = wallet.purchase_by_ref(mall.buy_ref(self._mall_owner(), ref))
+            self.mall_already = done.item if done is not None else None
             return self._log([result])
         journal.add_entry(self.state, JournalEntry(
             time=self.state.world.time, title=mall.TITLE, lines=result.lines, changes=result.changes,
