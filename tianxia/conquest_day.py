@@ -290,6 +290,18 @@ def void(world: WorldState, content: Content, slot: SiegeSlot, text: str = "") -
         _rumor(world, text, slot.loc)
 
 
+def note_void(world: WorldState, slot: SiegeSlot, why: str) -> None:
+    """作罷了不發天下大事的那幾種（攻方沒人到，裁決 19）在當天的 day_log 記一筆：那一場的每一個攻方各一筆（照結算排定的那一筆抄，
+    void 寫原因）。時程表那一場由 void 記成作罷，公告卡照常寫。"""
+    if world.conquest is None:
+        return
+    for side in slot.attackers:
+        world.conquest.day_log.append(DayNote(
+            key=slot.key, side=side, loc=slot.loc, minute=slot.minute, by=slot.by.get(side, ""),
+            reason=slot.reasons.get(side, ""), void=why,
+        ))
+
+
 def _announce(world: WorldState, content: Content, slot: SiegeSlot) -> str:
     """公告一場：一句天下大事（時刻照 calendar.stamp_text），回那一句。"""
     line = ANNOUNCE_BOTH if len(slot.attackers) > 1 else ANNOUNCE

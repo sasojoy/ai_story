@@ -125,7 +125,7 @@ def test_siege_void_when_no_attacker():
     assert ended is not None and ended.unfinished and ended.siege.void
     _, found = _siege_of(game, slot)
     assert found.status == "void" and conquest.progress_of(game.state.world, "nanyang_road") == 50
-    assert any("作罷" in r.text for r in game.state.world.rumors if r.layer == "world")
+    assert not any("作罷" in r.text for r in game.state.world.rumors if r.layer == "world")  # 裁決 19：不發天下大事（test_conquest_void_quiet）
     assert not any(r.battle_ref == battle.record_id and r.kind == "siege" for r in game.state.battles)  # 沒有戰報、沒有軍餉
 
 

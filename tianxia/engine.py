@@ -6026,7 +6026,8 @@ class Game:
 
     def _settle_siege(self, battle: battle_instance.BattleInstance) -> None:
         """攻城戰剛收場（_apply_battle_outcome 分進來；只做一次，SiegeInfo.settled）：龍頭上陣的留守敗走扣聲威（守將是隊伍，不扣）；
-        最有戲的一搏與兩軍首功照決戰上天下大事；易手（「落入／收復」）、守住或作罷各一句天下大事、進度歸 50、時程表記 done 或 void
+        最有戲的一搏與兩軍首功照決戰上天下大事；易手（「落入／收復」）、守住各一句天下大事（作罷不發，攻方沒人到記 day_log，裁決 19）、
+        進度歸 50、時程表記 done 或 void
         （siege.settle）；戰鬥那一列寫上結果（贏的一方、大勝或險勝、「某某大勝，拿下某地」）；參戰者照決戰補戰報與軍餉（軍餉、貢獻乘
         Config.conquest.pay_share，_showdown_pay）。隨行同伴不放回江湖（裁決 14）。收場的那一場留在共用狀態裡到每天結算才拿掉
         （最後一回合的放手一搏劇情收場之後才寫好）。"""

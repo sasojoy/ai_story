@@ -26,7 +26,6 @@ if TYPE_CHECKING:
 TITLE = "攻城・{place}"  # 待 joy 潤：畫面、戰報、天下大事一律走 title
 MUSTER_LINE = "{title}：{who}的集結號角吹響了，開打前趕到{region}就能加入。"  # 待 joy 潤：開集結那一刻的天下大事
 VOID_HELD = "{who}原定攻{place}，那裡已經是{who}的了，這一仗作罷。"  # 待 joy 潤：開集結那一刻攻方已經是主人（Review Focus 3）
-VOID_ABSENT = "{title}：{who}一個人都沒到，這一仗作罷。"  # 待 joy 潤：集結結束時攻方沒有參戰者（設計 4.4）
 VOID_ABSENT_NOTE = "攻方一個人都沒到，這一仗作罷，不算勝負。"  # 參戰者（守方、助守的人）那一則江湖紀錄
 HELD_LINE = "{title}：{side}守住了{place}。"  # 待 joy 潤：攻方沒打下來的天下大事（打下來的照 territory 的「落入」那一句）
 STALEMATE_LINE = "{title}：兩軍相持不下，{place}照舊沒人佔。"  # 待 joy 潤：兩軍同時搶同一塊中立地、戰局停在中線
@@ -241,21 +240,21 @@ def void_absent(content: Content, battle: battle_instance.BattleInstance) -> boo
 
 
 def settle(world: WorldState, content: Content, battle: battle_instance.BattleInstance, definition: BattleDef) -> dict:
-    """收場那一下改季（Game._settle_siege 在 mutate_season 裡叫）：易手（conquest.set_control 發「落入／收復」）、守住或作罷各一句
-    天下大事、進度歸 50、時程表那一場記 done（winner）或 void。回 {"taken", "winner", "margin", "title"} 給戰鬥那一列寫結果。"""
+    """收場那一下改季（Game._settle_siege 在 mutate_season 裡叫）：易手（conquest.set_control 發「落入／收復」）或守住各一句
+    天下大事、進度歸 50、時程表那一場記 done（winner）或 void；作罷不發天下大事，攻方沒人到的另記一筆 day_log（裁決 19）。
+    回 {"taken", "winner", "margin", "title"} 給戰鬥那一列寫結果。"""
     info_ = battle.siege
     name = title(content, info_)
     place = content.locations[info_.loc].name
     slot = next((s for s in world.conquest.schedule if s.id == info_.slot_id), None) if world.conquest is not None else None
     if info_.void or battle.unfinished:
-        who = "、".join(content.scenario.faction_name(a, a) for a in info_.attackers)
-        text = VOID_ABSENT.format(title=name, who=who) if info_.void == "absent" else ""
+        # 作罷不發天下大事（攻方沒人到：人少的服每天空轉會洗版，PM 裁決 19）：時程表記 void（公告卡照常寫），沒人到的另記一筆 day_log
         if slot is not None:
-            conquest_day.void(world, content, slot, text)
+            conquest_day.void(world, content, slot)
+            if info_.void == "absent":
+                conquest_day.note_void(world, slot, "absent")
         elif world.conquest is not None:
             world.conquest.progress.pop(info_.loc, None)
-            if text:
-                _rumor(world, text, info_.loc)
         return {"taken": None, "winner": "", "margin": "", "title": battle.outcome_title or battle_instance.UNFINISHED_TITLE}
     taken, winner, margin = verdict(info_, battle, definition)
     if taken is not None:

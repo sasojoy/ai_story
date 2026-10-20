@@ -1151,7 +1151,8 @@ class SiegeSlot(BaseModel):
 
 
 class DayNote(BaseModel):
-    """每天結算時記一筆（第三批〈天下形勢〉讀）：哪一邊打哪一塊、幾點、怎麼定的、主將為什麼挑這裡、眾議的比例。"""
+    """每天結算時記一筆（第三批〈天下形勢〉讀）：哪一邊打哪一塊、幾點、怎麼定的、主將為什麼挑這裡、眾議的比例；攻方沒人到作罷時
+    那一場的每一個攻方再記一筆（void）。"""
 
     key: int
     side: str
@@ -1160,6 +1161,8 @@ class DayNote(BaseModel):
     by: str  # vote／commander
     reason: str = ""
     share: float = 0.0  # 眾議：這一塊加權之後的比例（0～1）
+    # 作罷了另記一筆（conquest_day.note_void）：原因 absent＝攻方一個人都沒到（這種不發天下大事，裁決 19）；空的是結算那一下排定的那一筆
+    void: str = ""
 
 
 class ConquestState(BaseModel):
