@@ -1645,6 +1645,41 @@ def check_territory(c: Content, need, known, front_ids: list[str]) -> None:
                 stands(where, loc_id, side)
 
 
+def check_conquest_blocks(c: Content, need, known, front_ids: list[str]) -> None:
+    """領地爭奪的區塊（Scenario.territory.blocks，第 38 項改版計畫 Task 2）：只在寫了區塊時查。地點認得；大本營是自己陣營的種類；
+    豪強（要依附別人的陣營）的投靠點與序章專屬的地點不是區塊；fixed 是陣營的種類；line 是戰線或 null；每一塊中立至少跟一塊區塊直通。
+    中立駐軍（neutral_garrison）只寫在開季中立的區塊、隊伍認得、沒有陣營。"""
+    from . import conquest, territory  # noqa: PLC0415  延後 import（同 check_territory）
+
+    t = c.scenario.territory
+    if t is None or not t.blocks:
+        need(t is None or not t.neutral_garrison, "領地爭奪：寫了 neutral_garrison 卻沒有 blocks")
+        return
+    where = "領地爭奪的區塊"
+    known(where, list(t.blocks), c.locations, "地點")
+    bases = territory.bases(c)
+    allies = {f.id for f in c.scenario.factions if f.allies}
+    for loc_id, block in t.blocks.items():
+        if loc_id not in c.locations:
+            continue
+        here = f"{where} {loc_id}"
+        if loc_id in bases:
+            side = bases[loc_id]
+            need(side not in allies, f"{here}：{side} 要依附別的陣營，它的投靠點不是區塊（設計 4.1）")
+            need(side in allies or block.kind == side, f"{here}：大本營要是自己陣營（{side}）的種類")
+        need(not c.locations[loc_id].prologue_only, f"{here}：序章專屬的地點不是區塊")
+        if loc_id in t.fixed:
+            need(block.kind == t.fixed[loc_id], f"{here}：fixed 的地點種類要是開季的控制方（{t.fixed[loc_id]}）")
+        need(block.line is None or block.line in front_ids, f"{here}：line「{block.line}」不是戰線")
+        if block.kind == conquest.NEUTRAL:
+            need(bool(conquest.adjacent(c, loc_id)), f"{here}：中立區塊至少要跟一塊區塊直通（不然誰都打不到）")
+    for loc_id, squads in t.neutral_garrison.items():
+        here = f"領地爭奪的中立駐軍 {loc_id}"
+        need(loc_id in t.blocks and t.blocks[loc_id].kind == conquest.NEUTRAL, f"{here}：只能寫在開季中立的區塊")
+        known(here, squads, c.squads, "隊伍")
+        need(all(c.squads[s].faction is None for s in squads if s in c.squads), f"{here}：中立駐軍要是沒有陣營的隊伍")
+
+
 def check_duels(c: Content, need, known) -> None:
     """單人頭目戰（content/duels.json）：地點、素材認得；每個陣營都挑得到一個不是自己人的面貌（散人挑第一個）；
     面貌的陣營認得；出招偏好只寫三招、權重不是負的、加起來大於 0。"""
@@ -2655,6 +2690,7 @@ def validate(c: Content) -> None:
     check_core_loop(c, need)
     check_gather_branches(c, need)
     check_territory(c, need, known, front_ids)
+    check_conquest_blocks(c, need, known, front_ids)
 
     for key, where in sorted(marks_written.items()):
         need(key in marks_read, f"{where}：痕跡 {key} 寫了卻沒有任何條件或文字讀它")

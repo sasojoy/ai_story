@@ -37,5 +37,66 @@ def on(content: Content, world: WorldState | None) -> bool:
 
 
 def blocks(content: Content) -> dict[str, BlockDef]:
+    """地點 → 區塊（Scenario.territory.blocks）；劇本沒寫是空的。"""
     t = content.scenario.territory
     return dict(t.blocks) if t is not None else {}
+
+
+def start_kind(world: WorldState | None, content: Content, loc_id: str) -> str | None:
+    """這個區塊開季那一刻的種類（neutral／guan／huang）：這一季算過就讀抄下來的（之後內容改了不跟著動），沒算過照內容；不是區塊是 None。"""
+    if world is not None and world.conquest is not None and loc_id in world.conquest.start:
+        return world.conquest.start[loc_id]
+    block = blocks(content).get(loc_id)
+    return block.kind if block is not None else None
+
+
+def line_of(world: WorldState | None, content: Content, loc_id: str) -> str | None:
+    """這個區塊算進哪一條戰線（BlockDef.line）；不是區塊、或不算進任何一條是 None。"""
+    block = blocks(content).get(loc_id)
+    return block.line if block is not None else None
+
+
+def capturable(content: Content, loc_id: str) -> bool:
+    """搶得下來的區塊：是區塊、不是大本營（投靠點，設計 3.2）、不是 fixed（廣宗只照廣宗決戰易手）。"""
+    t = content.scenario.territory
+    return loc_id in blocks(content) and loc_id not in territory.bases(content) and (t is None or loc_id not in t.fixed)
+
+
+def adjacent(content: Content, loc_id: str) -> list[str]:
+    """跟這一塊有路直通的區塊（設計 3.2「輿圖上有路直通」）：照 Location.connections（兩個方向都算），不穿過不是區塊的地點；照內容順序。"""
+    table = blocks(content)
+    loc = content.locations.get(loc_id)
+    if loc is None:
+        return []
+    near = {str(x) for x in loc.connections}
+    near |= {other for other, place in content.locations.items() if loc_id in {str(x) for x in place.connections}}
+    return [other for other in table if other in near and other != loc_id]
+
+
+def holder(world: WorldState | None, content: Content, loc_id: str) -> str | None:
+    """這一塊此刻歸誰（中立而沒人佔是 None）：這一季算過照 TerritoryState.control，還沒算過照開季的種類。"""
+    t = world.territory if world is not None else None
+    if world is not None and world.conquest is not None and t is not None:
+        return t.control.get(loc_id)
+    kind = start_kind(world, content, loc_id)
+    return kind if kind in SIDES else None
+
+
+def _opened(world: WorldState, content: Content, loc_id: str) -> bool:
+    """劇情開放了（同 atlas.is_unlocked，但不看人站在哪裡）：不是序章專屬、unlock_flag 立了或第一季直接開放的地點。"""
+    loc = content.locations[loc_id]
+    if loc.prologue_only:
+        return False
+    if loc_id in rules.season_one_off(content, world, "unlocks"):
+        return True
+    return not loc.unlock_flag or loc.unlock_flag in world.flags
+
+
+def targets(world: WorldState, content: Content, side: str) -> list[str]:
+    """side 此刻能挑成目標的區塊（設計 3.2）：搶得下來、此刻不是 side 的、跟 side 此刻控制的某一塊直通、劇情開放了；照內容順序。"""
+    mine = {loc for loc in blocks(content) if holder(world, content, loc) == side}
+    return [
+        loc for loc in blocks(content)
+        if capturable(content, loc) and holder(world, content, loc) != side and _opened(world, content, loc)
+        and any(x in mine for x in adjacent(content, loc))
+    ]
