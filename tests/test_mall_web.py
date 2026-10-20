@@ -429,6 +429,29 @@ def test_admin_reissue_asks_first_then_posts_with_a_ref_and_keeps_the_sheet(m_on
     assert out["sheet"] is True and "已替沈浪補發 300 元寶" in out["msg"]
 
 
+def _admin_result(m_on, op, message):
+    """管理者補發或扣回（先問、確定），回之後重畫的設定抽屜（結果寫在查帳那一行）。"""
+    admin = {**m_on, "admin": True}
+    return run(admin, _async("""
+      const fields = { "ad-mall-name": { value: "沈浪" }, "ad-mall-amount": { value: "300" }, "ad-mall-note": { value: "維修補償" } };
+      const orig = T.ctx.document.getElementById;
+      T.ctx.document.getElementById = (id) => fields[id] || orig(id);
+      T.qs['.ask [data-act="ask-no"]'] = { focus() {} };
+      """ + _click('{ act: "mall-admin", op: "' + op + '" }') + _click('{ act: "ask-yes" }') + """
+      return H.sheetHtml();"""),
+        S={"sheet": True, "admin": None},
+        responses={f"/api/do/{op}": {"main": admin, "message": message},
+                   "/api/admin/mall": {"name": "沈浪", "balance": 400, "card": None, "ledger": [], "purchases": []}})
+
+
+def test_admin_result_that_went_through_is_not_red(m_on):
+    """FB-492：補發、扣回、退一筆做成了，查帳那一行帶 ok（不是被拒的紅字）；被拒的那一句（包在全形括號裡）照舊紅字。"""
+    done = _admin_result(m_on, "mall_reissue", "<p>已替沈浪補發 300 元寶（餘額 400）。</p>")
+    assert '<p class="form-msg ok" role="alert">已替沈浪補發 300 元寶（餘額 400）。</p>' in done
+    refused = _admin_result(m_on, "mall_revoke", "<p>（沈浪只有 100 元寶，扣不了 300：餘額不能是負的。）</p>")
+    assert '<p class="form-msg" role="alert">（沈浪只有 100 元寶，扣不了 300：餘額不能是負的。）</p>' in refused
+
+
 def test_admin_refund_asks_then_posts_the_purchase_of_the_looked_up_player(m_on):
     admin = {**m_on, "admin": True}
     book = {"name": "沈浪", "balance": 4900, "card": None, "ledger": [], "purchases": [

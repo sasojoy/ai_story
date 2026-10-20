@@ -112,6 +112,7 @@
     adMallName: "", // 管理者區商城那一組查的名號或帳號
     adMallNote: "", // 管理者區商城那一組填的原因（抽屜重畫時放回去；成了就清掉）
     adMallMsg: "", // 管理者區商城那一組上一下的結果（補發、扣回、退一筆、要寫原因），寫在查帳那一行
+    adMallOk: false, // 那一句是做成了的（帶 ok、不是紅字，FB-492）；被拒的、要先填的是 false
     here: null, // 江湖頁「此地還能做」摺疊的開合：{ at 地點, open }，玩家自己開關的、或發光那一步自動打開的；重畫（鈕被擋下來、輪詢）照它補回，換了地方就不對得上（FB-087）
     hereAuto: {}, // 發光那一步（框的 key）在哪一處自動打開過摺疊了：「key@地點」→ true；每一步在每一處只自動打開一次，之後照玩家的（FB-087）
     sceneOpen: false, // 在路上時場景那段說明展開著嗎（預設只露兩行，FB-055）；下了路就清掉
@@ -4117,7 +4118,7 @@
   // 換了帳號、登出：那一層收起、抓過的帳丟掉（另一個錢包）
   function forgetMall() {
     S.mallOpen = false; S.mallTab = "shelf"; S.mallData = null; S.mallLog = null; S.mallSay = null; S.mallPick = null; S.mallPending = null; S.mallFail = false;
-    S.adMall = null; S.adMallName = ""; S.adMallNote = ""; S.adMallMsg = "";
+    S.adMall = null; S.adMallName = ""; S.adMallNote = ""; S.adMallMsg = ""; S.adMallOk = false;
   }
 
   // 交給 shopHtml 的那一份：招牌、掌櫃那一句（剛買成了的、買不了的原因蓋過平常那一句）、餘額（紀錄頁照紀錄那一份，其餘照貨架、還沒抓到照狀態列）
@@ -5974,7 +5975,7 @@
   function mallAdminHtml() {
     const r = S.adMall;
     return `<p class="muted">商城（元寶的帳；補發、扣回、退一筆都要寫原因，每一筆都記進帳）</p>
-      <form id="ad-mall-form"><div class="row"><input class="input" id="ad-mall-name" name="name" placeholder="名號或帳號" aria-label="商城查帳的名號或帳號" value="${esc(S.adMallName || "")}"><button class="btn small" type="submit">查帳</button></div><p class="form-msg" role="alert">${esc(S.adMallMsg || (r && r.refusal) || "")}</p></form>
+      <form id="ad-mall-form"><div class="row"><input class="input" id="ad-mall-name" name="name" placeholder="名號或帳號" aria-label="商城查帳的名號或帳號" value="${esc(S.adMallName || "")}"><button class="btn small" type="submit">查帳</button></div><p class="form-msg${S.adMallMsg && S.adMallOk ? " ok" : ""}" role="alert">${esc(S.adMallMsg || (r && r.refusal) || "")}</p></form>
       <div class="row ad-row"><span class="ad-tag">元寶</span><input class="input" id="ad-mall-amount" type="number" min="1" step="1" value="100" aria-label="元寶數" style="max-width:96px"><input class="input" id="ad-mall-note" placeholder="原因（必填）" aria-label="原因" maxlength="100" value="${esc(S.adMallNote || "")}"></div>
       <div class="row wrap"><button class="btn small" data-act="mall-admin" data-op="mall_reissue">補發</button><button class="btn warn small" data-act="mall-admin" data-op="mall_revoke">扣回</button></div>
       ${r && !r.refusal ? mallBookHtml(r) : ""}`;
@@ -5997,6 +5998,7 @@
     S.adMallNote = note;
     const say = (text) => {
       S.adMallMsg = text;
+      S.adMallOk = false;
       const form = document.getElementById("ad-mall-form");
       if (form) formMsg(form, text);
     };
@@ -6025,7 +6027,8 @@
       if (r.main) setMain(r.main);
       const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
       S.adMallMsg = text || "已完成。";
-      if (!text.startsWith("（")) S.adMallNote = ""; // 成了：原因欄清掉（被拒的那一句都包在括號裡，見 tianxia/mall.py），免得同一句誤送第二次
+      S.adMallOk = !text.startsWith("（"); // 被拒的那一句都包在括號裡（見 tianxia/mall.py）；成了的帶 ok、不是紅字（FB-492）
+      if (S.adMallOk) S.adMallNote = ""; // 成了：原因欄清掉，免得同一句誤送第二次
       S.adMallName = body.name;
       S.adMall = await api("/api/admin/mall", { name: body.name }); // 補完、退完重查一次那個人的帳
       renderKeepingSheet();
@@ -7563,7 +7566,7 @@
         // 管理者查一個人的元寶帳（商城第二批）：查到了畫在表單底下，查不到的原因寫在表單那一行。抽屜不關
         const name = (data.name || "").trim();
         S.adMallName = name;
-        S.adMallMsg = "";
+        S.adMallMsg = ""; S.adMallOk = false;
         S.adMallNote = String((document.getElementById("ad-mall-note") || {}).value || "");
         if (!name) { S.adMall = null; formMsg(form, "先填名號或帳號。"); return; }
         S.adMall = await api("/api/admin/mall", { name });
