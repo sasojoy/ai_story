@@ -183,5 +183,5 @@ def test_signature_might_only_counts_in_player_versus_player_bouts():
         f.begin(1, 50.0, [])
         assert f.push_mod == pytest.approx(want)
     assert tactics.MIGHT_NOTE.format(pct=round(hs[0].tactic.might * 100)) in tactics.card_text(hs[0].tactic)
-    # 武學重構之後滿配變強，張梁也加了一點（2026-10-20），卡上照實寫
-    assert "推力 +7%" in tactics.card_text(content.skills["zhangliang_wugong"].tactic)
+    # 武學重構第三批滿配變強，張梁的底蘊也重調過（2026-10-20），卡上照實寫
+    assert "推力 +64%" in tactics.card_text(content.skills["zhangliang_wugong"].tactic)
