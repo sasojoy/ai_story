@@ -61,7 +61,7 @@ import server_push
 import zhuan_html
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
-    arena_crowd, battle_instance, biography, calendar, companion_agent, divine, duel, event_llm, feasts, fight_llm, foreshadow, gather_llm, gender, glyph, insight_llm, leaderboard, letters, mapdata,
+    arena_crowd, battle_instance, biography, calendar, companion_agent, divine, duel, event_llm, feasts, fight_llm, foreshadow, gather_llm, gender, glyph, insight_llm, leaderboard, letters, mall, mapdata,
     naming,
     ollama_client, rules,
     precise, seal, seal_duel, server_bots, social, sortie, speech, tavern, team, timetable, treasures, yuedan,
@@ -1951,6 +1951,69 @@ ADMIN_ACTIONS = {
 }
 PLAYER_ADMIN_ACTIONS = frozenset({"summon", "give_opportunity", "give_fragment", "mingtie_remove"})  # 動到別人的存檔：做完也叫他的分頁刷新
 
+# ── 商城（docs/superpowers/specs/2026-10-20-商城架構-design.md；規則在 tianxia/mall.py、錢包在 tianxia/wallet.py）──
+# 開關 Config.mall.enabled 關著時這裡的 API 全部 404（4.10）。購買在行動鎖裡（act）：扣元寶、寫購買紀錄、發貨同一筆交易。
+
+MALL_REF = re.compile(r"[A-Za-z0-9_-]{8,64}")
+
+
+def _mall_ref(raw) -> str:
+    """這一筆的編號：網頁送的是 8～64 個英數字、底線、減號就照用（網頁按下確認那一刻產，重送同一個不會算兩次），
+    其餘（沒送、送了怪東西）由伺服器產一個。"""
+    text = raw if isinstance(raw, str) else ""
+    return text if MALL_REF.fullmatch(text) else secrets.token_urlsafe(12)
+
+
+def _mall_on() -> None:
+    if not mall.on(CONTENT):
+        raise HTTPException(404)
+
+
+# 管理者的商城工具（4.7）：補發、扣回、退一筆；原因 note 必填、每一筆寫進帳（誰、何時、為什麼）。查帳是 /api/admin/mall
+MALL_ADMIN_ACTIONS = {
+    "mall_reissue": lambda g, b: g.admin_mall_reissue(
+        str(b.get("name", ""))[:40], _int(b.get("amount"), 0), str(b.get("note", ""))[:100], _mall_ref(b.get("ref"))),
+    "mall_revoke": lambda g, b: g.admin_mall_revoke(
+        str(b.get("name", ""))[:40], _int(b.get("amount"), 0), str(b.get("note", ""))[:100], _mall_ref(b.get("ref"))),
+    "mall_refund": lambda g, b: g.admin_mall_refund(str(b.get("name", ""))[:40], _int(b.get("id"), 0), str(b.get("note", ""))[:100]),
+}
+
+
+@app.get("/api/mall")
+def api_mall(request: Request):
+    """商城那一頁（Game.mall_view）：同步之後的餘額、月卡、上架的商品。"""
+    _mall_on()
+    return act_look(_game(request), lambda g: None, lambda g: g.mall_view())[1]
+
+
+@app.get("/api/mall/records")
+def api_mall_records(request: Request):
+    """自己的購買紀錄與帳（Game.mall_records）。"""
+    _mall_on()
+    return act_look(_game(request), lambda g: None, lambda g: g.mall_records())[1]
+
+
+@app.post("/api/mall/buy")
+def api_mall_buy(request: Request, body: dict = Body(...)):
+    """買一件（Game.mall_buy）：{item, ref}；回 {message, mall}。賽季時鐘暫停中照其他動作擋。"""
+    _mall_on()
+    game = _game(request)
+    item, ref = str(body.get("item", ""))[:40], _mall_ref(body.get("ref"))
+    msgs = act(game, lambda g: g.mall_buy(item, ref))
+    _tell_tabs(game)
+    return {"message": joined(msgs), "mall": look(game, lambda g: g.mall_view())}
+
+
+@app.post("/api/admin/mall")
+def api_admin_mall(request: Request, body: dict = Body(...)):
+    """管理者查一個名號（或帳號）的帳（Game.admin_mall_ledger）。名號放在 POST 的內容裡、不放在網址上；查不到回 {refusal}。"""
+    _mall_on()
+    game = _game(request)
+    if not game.is_admin():
+        raise HTTPException(403)
+    name = str(body.get("name", ""))[:40]
+    return act_look(game, lambda g: None, lambda g: g.admin_mall_ledger(name))[1]
+
 
 @app.post("/api/choose")
 def api_choose(request: Request, body: dict = Body(...)):
@@ -1986,8 +2049,14 @@ def api_say(request: Request, body: dict = Body(...)):
 
 @app.post("/api/do/{op}")
 def api_do(op: str, request: Request, body: dict = Body(default={})):
+    if op in MALL_ADMIN_ACTIONS:
+        _mall_on()  # 商城關著：沒有這個東西（先於登入的檢查，跟 /api/mall 一樣）
     game = _game(request)
-    if op in ADMIN_ACTIONS:
+    if op in MALL_ADMIN_ACTIONS:
+        if not game.is_admin():
+            raise GameError("只有管理者能這麼做。")
+        msgs = act(game, lambda g: MALL_ADMIN_ACTIONS[op](g, body), paused_ok=True)  # 帳跟季無關：暫停中也做得了
+    elif op in ADMIN_ACTIONS:
         if not game.is_admin():
             raise GameError("只有管理者能這麼做。")
         msgs = act(game, lambda g: ADMIN_ACTIONS[op](g, body), paused_ok=True)  # 暫停中要按得到「繼續」；其他的引擎自己擋

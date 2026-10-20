@@ -28,7 +28,7 @@ from .materials import DEFAULT_DROPS, TIER_NAMES
 from .models import (
     FRONT_KEY, GLOW_KEYS, GOOD_HORSE, MOVES, RECRUITER_ALLIED_FIELDS, REVEAL_KEYS, ROADS, STATS, TREASURE_EFFECTS, WEAPON_KINDS, Attribute, BattleDef, CharacterDef, CheckVoice,
     CombatLines, Condition, Config, Content, CraftNames, DuelBoss, Effect, Event, FigureDef, FollowerDef, ForgeSecret, Foreshadows, FrontLines, GatherBranch, GearBook,
-    GiftDef, Hints, MingtieContent, InsightDef, Location, OppDef,
+    GiftDef, Hints, MingtieContent, InsightDef, Location, MallItem, OppDef,
     InsightScene, OrdersContent, PresetRecipe, PromotionDef, RelationDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, ShardDef, SimRumor, SkillDef,
     SignatureArmDef, SteedDef, Squad, Tier4Named, TimetableEvent, TraitBook, TreasureDef, Tutorial, allow_known,
 )
@@ -122,6 +122,7 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         mingtie=MingtieContent(**_read(root / "mingtie.json")) if (root / "mingtie.json").exists() else MingtieContent(),
         arena_crowd=_read(root / "arena_crowd.json") if (root / "arena_crowd.json").exists() else {},
         seal=_shards(root / "seal.json"),
+        mall=_index(MallItem, _read(root / "mall.json")) if (root / "mall.json").exists() else {},  # 商城的商品（joy 寫）
         relations=[_build(RelationDef, raw) for raw in _read(root / "relations.json")] if (root / "relations.json").exists() else [],
         gather_branches=_index(GatherBranch, _read(root / "gather_branches.json")) if (root / "gather_branches.json").exists() else {},
         figures=_index(FigureDef, _read(root / "figures.json")) if (root / "figures.json").exists() else {},
@@ -651,6 +652,21 @@ def check_arena_crowd(c: Content, need) -> None:
     if c.arena_crowd and c.config.arena.enabled and c.config.arena.crowd.enabled:
         for kind in arena_crowd.KINDS:
             need(bool(c.arena_crowd.get(kind)), f"arena_crowd 缺少種類 {kind}")
+
+
+def check_mall(c: Content, need) -> None:
+    """商城的商品（content/mall.json，商城架構設計 4.3）：每一件照 mall.item_problems（效果在允許的效果表裡、種類對得上、數量、
+    名字過命名過濾、上架日期與季的格式）；商品之間不同名。開關關著也照驗（檔案寫壞了早點知道）。"""
+    from . import mall  # noqa: PLC0415  mall → naming：在函式裡 import，跟其他 check_* 一樣
+
+    for item in c.mall.values():
+        for problem in mall.item_problems(item, c):
+            need(False, problem)
+    seen: dict[str, str] = {}
+    for item in c.mall.values():
+        if item.name in seen:
+            need(False, f"商城 {item.id}：跟 {seen[item.name]} 同名「{item.name}」")
+        seen.setdefault(item.name, item.id)
 
 
 def check_shop_lines(c: Content, need) -> None:
@@ -2059,6 +2075,7 @@ def validate(c: Content) -> None:
     check_front_lines(c, need)
     check_combat_lines(c, need)
     check_shop_lines(c, need)
+    check_mall(c, need)
     check_arena_crowd(c, need)
     check_traits(c, need)
     check_signature_arts(c, need)
