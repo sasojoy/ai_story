@@ -607,8 +607,6 @@ class PlayerState(BaseModel):
     smith_draft: SmithDraft | None = None  # 鐵匠鋪「打造兵器…／打造防具…」挑到哪一步；打開、打完、不打了都清掉，凡是把 picking_smith 收起來的地方（離開、存檔修補、同步時人不在城鎮、出發）一起清
     arts: list[str] = Field(default_factory=list)  # 功法庫：煉出來但沒配上身的功法 id
     art_levels: dict[str, int] = Field(default_factory=dict)  # 每門學過的功法各自的「成」；改練時存進來／取出來
-    # 合成時承底白送的成數（合成即設計定案第二節，Config.fusion_depth.inherit_share）：功法 id → 拿到時就有的那一成，熔了那幾成不退
-    art_free_levels: dict[str, int] = Field(default_factory=dict)
     # ── 武學與成長（設計第三、四節）──
     insights: list[str] = Field(default_factory=list)  # 悟得的意境 id，照悟得的先後
     # ── 悟意境（悟意境設計第零節、0.2b；舊存檔沒這幾欄就是空的）──
@@ -621,9 +619,12 @@ class PlayerState(BaseModel):
     stat_points: int = 0  # 升級得到、還沒分配的屬性點（武學與成長設計 6.2）
     art_quality: dict[str, str] = Field(default_factory=dict)  # 功法 id → 自己那一份的品質（沒記＝全服登記的品質）
     art_mastery: dict[str, int] = Field(default_factory=dict)  # 功法 id → 修練往下一品失敗了幾次（熟練度）
-    # 功法 id → 合成時擲到的品質（Config.fuse_quality_odds）：熔的時候當成「登記時就有」，只有修練上去的幾階才有加給
-    art_rolled: dict[str, str] = Field(default_factory=dict)
     naming: str | None = None  # 第一個修到絕學、等著取正式名字的功法 id
+    # ── 武學重構（tianxia/arts.py，Joy 2026-10-20）──
+    art_slots: dict[str, list[str | None]] = Field(default_factory=dict)  # 功法 id → 意境槽（每格裝的意境 id，None 空）；一個意境只裝一門
+    insight_strength: dict[str, int] = Field(default_factory=dict)  # 意境 id → 強度 2 或 3（沒記是 1）；同一個意境再悟到、同＋同合成升一級
+    arts_migrated: bool = False  # 舊存檔的功效轉成槽做過了沒（arts.migrate 只做一次）
+    created_count: int = 0  # 這一季自創了幾門（Config.arts.create_per_season、價錢遞增）；角色每季重來
     stamina_pills: int = 0  # 回體丹（Config.stamina_pill_name）的數量：建立角色時的內測贈送；跨季保留（Game._reset_player_for_new_season）
     # 回體丹補到過幾顆（企劃者 2026-10-12 拿掉一鍵補滿、改送合適的數量）：Config.beta_gift_stamina_pills 比它多時，讀檔那一刻手上不到那個數的
     # 補到那個數、寫一行紀錄，再記成那個數（一個數只補一次；之後再調高會再補一次）。新角色建立時就記成送的數。

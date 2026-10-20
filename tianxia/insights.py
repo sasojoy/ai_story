@@ -89,11 +89,20 @@ def learn(
     d = content.insights.get(insight.id)
     lead = [d.strong_line] if strong and d is not None and d.strong_line else []
     if insight.id in p.insights:
+        from . import arts as arts_mod  # noqa: PLC0415
+
+        now = arts_mod.strength_of(state, insight.id)
+        if now < arts_mod.MAX_STRENGTH:  # 武學重構：再悟到一次，這一招深一層（●→●●→●●●）
+            p.insight_strength[insight.id] = now + 1
+            return lead + [DEEPENED.format(name=insight.name, mark=arts_mod.strength_mark(now + 1))]
         amount = content.config.insight_strong.duplicate_xinde if strong else content.config.duplicate_insight_xinde
         p.stats["xinde"] = p.stats.get("xinde", 0) + amount
         return lead + [f"你又悟到一次「{insight.name}」，這份體會化成了心得。", f"心得 +{amount}"]
     p.insights.append(insight.id)
     return lead + [f"你悟得了「{insight.name}」的意境（屬{insight.attribute}）！"]
+
+
+DEEPENED = "你對「{name}」的體會又深了一層（{mark}）。"  # 待 joy 潤
 
 
 GRANT_LINES = {"good": "你行俠日久，胸中多了一股{name}之氣。", "evil": "你橫行日久，胸中多了一股{name}之氣。"}  # 名聲 5.1，待 joy 潤

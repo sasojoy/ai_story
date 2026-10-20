@@ -195,8 +195,8 @@ def pick_forge(
     state, content, world = game.state, game.content, game.world
     p = state.player
     arts = library.owned_arts(state)
-    can_fuse, can_blend = bool(p.insights and arts), len(arts) >= 2
-    if not (can_fuse or can_blend) or p.stamina < FORGE_RESERVE:
+    can_fuse, can_blend = False, len(arts) >= 2  # 武學＋意境不再開爐（武學重構）；亂數的用法照舊
+    if not (len(p.insights) >= 2 or can_blend) or p.stamina < FORGE_RESERVE:
         return None
     if len(p.insights) >= 2 and rng.random() < merge_share:
         for _ in range(FORGE_TRIES):
@@ -210,11 +210,7 @@ def pick_forge(
             if fusion.blend_problem(state, content, world, a, b) is None:
                 return ForgePlan(a, (), b)
         return None
-    for _ in range(FORGE_TRIES):
-        art_id, insight_id = rng.choice(arts), rng.choice(p.insights)
-        if fusion.fuse_problem(state, content, world, art_id, insight_id) is None:
-            return ForgePlan(art_id, (insight_id,), None)
-    return None
+    return None  # 武學重構：武學＋意境不再是合成（意境裝進槽走 bot.slot_insights）
 
 
 def forge_and_cultivate(game: Game, rng: random.Random) -> None:

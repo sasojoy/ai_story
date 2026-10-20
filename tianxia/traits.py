@@ -6,7 +6,7 @@
 | 這裡 | 一門武學帶哪幾個（traits_of）、本人身上兩門加起來各幾層（loadout）、換算成數字（amount） |
 | encounter／team／engine | 照 hook 把數字用在遭遇戰的各一步 |
 
-一門武學的一般功效記成**屬性的清單**（MartialArt.traits：一個屬性一層，前面是這一代的、後面是傳下來的；怎麼傳見 depth.py）；
+一門武學的一般功效記成**屬性的清單**（MartialArt.traits：一個屬性一層；玩家自己的武學照意境槽填，arts.apply）；
 舊資料與內容寫的武學沒有這個欄位，當作只有自己的屬性。功效只算玩家本人身上那兩門（13.1）。
 程式裡叫 trait，不叫 effect：models.Effect 是事件的效果。
 """
@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 
 from .martial_arts import MartialArt
 from .models import Content, GeneralTrait, SpecialTrait, TacticDef
-from . import signature, skill_slots, tactics
+from . import signature, tactics
 from .state import GameState
 from .world_state import WorldStateStore
 
@@ -24,8 +24,11 @@ POINT_HOOKS = {"win_xinde", "train_stamina"}  # 這兩個的數字是點數（�
 
 
 def traits_of(art: MartialArt) -> list[str]:
-    """這一門的一般功效（屬性的清單，照順序）；舊資料與內容寫的武學沒有，當作只有自己的屬性。"""
-    return list(art.traits) or [art.attribute]
+    """這一門的一般功效（屬性的清單，照順序）：玩家自己的武學照槽填（arts.apply）；槽寫死的內容武學沒寫 traits 時當作只有自己的屬性；
+    槽空著的武學是空的。"""
+    if art.traits:
+        return list(art.traits)
+    return [art.attribute] if art.origin == "historical" and art.attribute else []
 
 
 def general(content: Content, attribute: str) -> GeneralTrait:
@@ -54,7 +57,7 @@ class Loadout:
     layers: dict[str, float] = field(default_factory=dict)
     specials: dict[str, SpecialTrait] = field(default_factory=dict)
     source: dict[str, str] = field(default_factory=dict)
-    highs: list[TacticDef] = field(default_factory=list)  # 高階技能（skill_slots）：強度固定，同名的只算一個
+    highs: list[TacticDef] = field(default_factory=list)  # 高階技能（不同意境合出來的意境裝進槽，arts.apply）：強度固定，同名的只算一個
 
 
 def loadout(state: GameState, content: Content, world: WorldStateStore) -> Loadout:
@@ -65,8 +68,7 @@ def loadout(state: GameState, content: Content, world: WorldStateStore) -> Loado
     if not content.traits.general:
         return out
     for skill_id in (state.player.member.wugong_id, state.player.member.neigong_id):
-        # 自己那一份：品質照自己修到的；技能照自己那一品亮了的格子（skill_slots.apply）
-        art = skill_slots.apply(state, content, team.player_art(state, content, world, skill_id))
+        art = team.player_art(state, content, world, skill_id)  # 自己那一份：槽裡裝的技能已經填上（arts.apply）
         if art is None:
             continue
         mult, mine = multiplier(content, art.quality), traits_of(art)
@@ -81,7 +83,7 @@ def loadout(state: GameState, content: Content, world: WorldStateStore) -> Loado
             if sp is not None and sp.hook not in out.specials:
                 out.specials[sp.hook] = sp
                 best.setdefault(sp.name, (1.0, art.name))
-        top = skill_slots.high(content, art.high)
+        top = high(content, art.high)
         if top is not None and all(t.name != top.tactic.name for t in out.highs):
             out.highs.append(top.tactic)
             best.setdefault(top.tactic.name, (1.0, art.name))
@@ -133,6 +135,8 @@ def ultimate_trait(content: Content, art: MartialArt | None) -> GeneralTrait | N
     if art is None or art.id in content.skills or art.quality != MASTERED or not content.traits.general:
         return None
     mine = traits_of(art)
+    if not mine:  # 意境槽空著的絕學：沒有功效可立招
+        return None
     top = max(dict.fromkeys(mine), key=mine.count)
     trait = general(content, top)
     return trait if trait.ultimate is not None else None
@@ -189,28 +193,26 @@ def card_line(content: Content, art: MartialArt) -> str:
         sp = special(content, sid)
         if sp is not None:
             parts.append(f"〔{sp.name}〕" + sp.desc.replace("{value}", _value(sp.hook, sp.amount)))
-    top = skill_slots.high(content, art.high)
+    top = high(content, art.high)
     if top is not None:
         parts.append(HIGH_MARK.format(name=top.name) + top.desc)
+    if not parts:
+        return (EMPTY_LINE + (f"\n{tail}" if tail else "")) if not fixed_art(content, art) else tail
     line = "功效：" + "・".join(parts)
-    asleep = dormant_names(content, art)
-    if asleep:
-        line += "\n" + DORMANT_LINE.format(names="、".join(asleep))
     return line + (f"\n{tail}" if tail else "")
 
 
 HIGH_MARK = "〔高階・{name}〕"
-DORMANT_LINE = "未開：{names}（修練升品就會亮起來）"
+EMPTY_LINE = "功效：（意境槽空著，到煉製頁裝意境）"  # 待 joy 潤
 
 
-def dormant_names(content: Content, art: MartialArt) -> list[str]:
-    """還沒亮的功效的名字（skill_slots.apply 填的 dormant）。"""
-    out = []
-    for item in art.dormant:
-        if item.startswith(skill_slots.SPECIAL_MARK):
-            sp = special(content, item[len(skill_slots.SPECIAL_MARK):])
-            if sp is not None:
-                out.append(sp.name)
-        elif any(t.attribute == item for t in content.traits.general):
-            out.append(general(content, item).name)
-    return out
+def high(content: Content, high_id: str | None):
+    if not high_id:
+        return None
+    return next((h for h in content.traits.high if h.id == high_id), None)
+
+
+def fixed_art(content: Content, art: MartialArt) -> bool:
+    from . import arts as arts_mod
+
+    return arts_mod.fixed(content, art.id)

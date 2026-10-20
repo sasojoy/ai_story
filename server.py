@@ -2013,6 +2013,9 @@ MENXIA_ACTIONS = {
     # 這裡也帶 NO_NAME，就算有人直接拿它在鎖裡呼叫，也不會叫模型
     "forge": lambda g, b: _forge_without_naming(g, *forge_args(b)),
     "switch": lambda g, b: g.switch_art(str(b.get("art") or "")),
+    # 武學重構：把意境裝進武學的意境槽、或拆下來（修練頁與煉製頁都走這裡；不花心得體力）
+    "slot": lambda g, b: g.slot_insight(str(b.get("art") or ""), str(b.get("insight") or "")),
+    "unslot": lambda g, b: g.unslot_insight(str(b.get("art") or ""), str(b.get("insight") or "")),
     # 用融的意境修練一次，衝下一品；use_legend 是勾了「服下破境丹」。只認真正的布林 true：字串、數字都不算勾
     "cultivate": lambda g, b: g.cultivate(
         str(b.get("art") or ""), use_legend=b.get("use_legend") is True, by_xinde=b.get("by_xinde") is True,  # 以心得修練（Joy 2026-10-18）

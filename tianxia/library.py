@@ -64,8 +64,7 @@ SWITCH_HINT = "到「修練」的功法庫把它改練上身。"  # 合成的結
 
 def store_art(state: GameState, art: MartialArt, quality: str | None = None) -> list[str]:
     """新拿到的武學放哪：對應的欄位空著就配上身（第一成），否則進功法庫。quality 是玩家這一份的品質
-    （合成擲出來的，Config.fuse_quality_odds）：跟全服登記的不一樣時記成自己那一份的品質，也記成「擲到的」
-    （art_rolled），熔的時候那幾階不給加給。
+    （武學＋武學合出來的照兩門來源算，fusion.blend_grade）：跟全服登記的不一樣時記成自己那一份的品質。
     這裡不看上限：該不該擋住由呼叫端決定（合成、學藝擋，奇遇給的、買來的不擋）。"""
     p = state.player
     if art.id in owned_arts(state):  # 已經有了（配在身上或在庫裡）：不重複收，也不動它的品質與熟練度
@@ -74,7 +73,6 @@ def store_art(state: GameState, art: MartialArt, quality: str | None = None) -> 
         p.renames_told.append(art.id)
     if quality is not None and quality != art.quality:
         p.art_quality[art.id] = quality
-        p.art_rolled[art.id] = quality
     slot = "neigong_id" if art.kind == "內功" else "wugong_id"
     if getattr(p.member, slot) is None:
         setattr(p.member, slot, art.id)
@@ -147,7 +145,7 @@ def learn(state: GameState, content: Content, skill_id: str) -> list[str]:
     fee = skill.learn.silver if skill.learn is not None else 0
     state.player.stats["silver"] = state.player.stats.get("silver", 0) - fee
     msgs = [f"你學會了【{skill.name}】（{skill.kind}・下品・屬{skill.attribute}）。"] + ([f"銀兩 -{fee}"] if fee else [])
-    return msgs + store_art(state, content_art(skill.id, skill.name, skill.kind, skill.attribute, skill.quality, lean=skill.lean))
+    return msgs + store_art(state, content_art(skill.id, skill.name, skill.kind, skill.attribute, skill.quality, lean=skill.lean, affinity=skill.affinity))
 
 
 # ── 熔煉（設計 4.3）──────────────────────────────────────
@@ -201,18 +199,17 @@ def melt_problem(
 
 def melt_value(state: GameState, content: Content, world: WorldStateStore, art_id: str) -> int:
     """熔掉功法庫裡的 art_id 會退多少心得。熔煉頁寫的「退回心得 N」（skillview.art_rows）與 melt_art 真的退的
-    共用這一個數：玩家自己那一份的品質跟全服登記的那一份（沒個人化）比，只有修練上去的幾階有加給。
+    共用這一個數：武學重構之後品級不靠修練衝，所以只退練成花的八成；品質加給只剩全服登記的那一階之上（絕學契機那一階）。
     FB-068 的基本值（Config.melt_min_refund）只給全服登記的武學（合成出來的；art_id 不是內容裡的武學）：
     內容裡的基礎武學有的免費教、學藝也不花體力，給了基本值就是「學、熔、再學」的無本迴圈。"""
     mine = team.player_art(state, content, world, art_id)
     registered = team.resolve_art(art_id, content, world)
     minimum = 0 if art_id in content.skills else content.config.melt_min_refund
     start = registered.quality if registered else "下品"
-    rolled = state.player.art_rolled.get(art_id)  # 合成時擲到的品質也算「登記時就有」：合到上品馬上熔掉不能賺加給
-    if rolled in QUALITIES and QUALITIES.index(rolled) > QUALITIES.index(start):
-        start = rolled
+    grade = state.player.art_quality.get(art_id)  # 合出來的品級是兩門來源帶來的、不是修練上去的：不給加給
+    if grade in QUALITIES and QUALITIES.index(grade) > QUALITIES.index(start) and grade != "絕學":
+        start = grade
     free = content.config.signature_arts.start_level if signature.is_signature(content, art_id) else 1
-    free = max(free, state.player.art_free_levels.get(art_id, 1))  # 合成承底白送的成數也不退（合成即設計定案第二節）
     return melt_refund(
         content, state.player.art_levels.get(art_id, 1), mine.quality if mine else "下品", start, minimum, free,
     )
@@ -237,11 +234,14 @@ def melt_confirm(name: str, value: int, relearn: str | None = None) -> str:
 
 
 def remove_art(state: GameState, art_id: str) -> None:
-    """功法庫拿掉一門，連同 PlayerState 以功法 id 為鍵的全部私有紀錄（成、自己那一份的品質、熟練度、擲到的品質）。
+    """功法庫拿掉一門，連同 PlayerState 以功法 id 為鍵的全部私有紀錄（成、自己那一份的品質、熟練度）；槽裡的意境拆回背包。
     熔煉（melt_art）與交出懸賞（bounties.give，懸賞榜設計 4.6）共用；呼叫端先擋（身上的、等著定名的）。全服登記的那一門不動。"""
+    from . import arts as arts_mod
+
     p = state.player
     p.arts.remove(art_id)
-    for record in (p.art_levels, p.art_quality, p.art_mastery, p.art_rolled, p.art_free_levels):
+    arts_mod.release_all(state, art_id)
+    for record in (p.art_levels, p.art_quality, p.art_mastery):
         record.pop(art_id, None)
 
 

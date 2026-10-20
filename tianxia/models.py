@@ -582,6 +582,9 @@ class SkillDef(_Strict):
     tactic: TacticDef | None = None
     # 名聲 5.1：正邪（正派吃善名、邪派吃惡名，team.resonance）。只有新的四門正邪武學寫；現有的不加，免得手上那一門威力季中途變了
     lean: Literal["正", "邪", "無"] = "無"
+    # 基礎武學的相容屬性（武學重構，Joy 2026-10-20）：意境槽只收這幾種屬性的意境；沒寫＝兼容並蓄（什麼都收）。
+    # 追風步寫快與快的複合（陽、虛）：「只能塞風跟快的意境」
+    affinity: list[Attribute] = Field(default_factory=list)
 
 
 class GeneralTrait(_Strict):
@@ -618,7 +621,7 @@ class SpecialTrait(_Strict):
 
 class HighTrait(_Strict):
     """高階技能（武學技能分檔，Joy 2026-10-17；草案 https://claude.ai/artifact/3rLJgnmA7m8BiEsXGcBDUX）：一個屬性一個，照武學的主屬性給；
-    合成出來的武學照自己那一份的品質擲（skill_slots.py），一門最多一個。強度固定、不分品質，約本命戰法的六成，對電腦對手也有效。"""
+    不同意境合出來的意境裝進槽就是這一招（arts.apply），一門最多一個。強度固定、不分品質，約本命戰法的六成，對電腦對手也有效。"""
 
     id: str
     attribute: Attribute
@@ -2234,45 +2237,24 @@ class ChuangongTuning(_Strict):
     follower_str_xinde: int = Field(default=20, ge=1)
 
 
-class SkillSlotTuning(_Strict):
-    """武學技能分檔（Joy 2026-10-17「下品 1-2 個、極低機率出現高階技能；中品 2-3、低機率；上品 3-4、中機率」；tianxia/skill_slots.py）：
-    自己合成的武學，自己那一份照品質亮幾格技能（slots：品質 → [少的格數, 多的格數, 擲到多的機率]；絕學照上品）。
-    格子照順序填：層數最多的一般功效、首創走向的特別功效、其他來路的一般功效（層數多的先）；還有空格照 extra_mid 擲中階（特別功效）、
-    其餘擲低階（一個沒有的一般功效，一層）。高階技能照 high_rate 擲（每升一品照新品質再擲一次，中了就留著），佔最後一格。
-    來路的功效比格子多時，多的「未開」，修練升品才亮。擲骰照「技能|名號|功法 id|…」的雜湊，不碰亂數、不存檔：同一個人同一門同一品永遠一樣。
-    enabled 關著（測試內容）是舊規則：來路的功效全亮、沒有擲出來的技能。"""
+class ArtsTuning(_Strict):
+    """武學重構（Joy 2026-10-20；tianxia/arts.py）：品級只管威力上限（martial_arts.QUALITY_TOP_POWER）與意境槽數（slots）；
+    意境就是技能，裝進槽生效。戰力＝威力 ×（1 ＋ Σ 權重）：一般功效每級 general_weight、高階 high_weight、特別功效 special_weight、
+    本命戰法 signature_weight（只用來排清單與寫卡，不進戰鬥）。自創：create_xinde 起、一季每多一門 ×create_step、最多 create_per_season 門；
+    多付 create_bonus_per 心得加 5 分、最多 create_bonus_cap 分；品級從 create_odds 起算（下／中／上），意分與加分往上推。數字是佔位，量表定。"""
 
-    enabled: bool = False
-    slots: dict[str, list[float]] = Field(default_factory=lambda: {
-        "下品": [1, 2, 0.3], "中品": [2, 3, 0.4], "上品": [3, 4, 0.4], "絕學": [3, 4, 0.4],
-    })
-    high_rate: dict[str, float] = Field(default_factory=lambda: {"下品": 0.02, "中品": 0.08, "上品": 0.20, "絕學": 0.0})
-    extra_mid: float = Field(default=0.3, ge=0, le=1)
-
-
-class FusionDepthTuning(_Strict):
-    """合成的深度（合成與意境改法定案，企劃者 2026-10-16「合出來的意境不知道好壞，然後合成也一直無限往下沒有邏輯」；tianxia/depth.py）：
-    - 意境分重：悟來的一重，合一次二重（兩個來源取高的那一重再加一），最多 max_rank 重；到頂的不能再合。
-      兩個來源相生（剛＋快、柔＋慢、快＋柔、剛＋慢，或同屬性相疊；陰陽虛實與它的兩個來源也算）是圓融，其餘是駁雜。
-    - 融進武學時那個意境給 重數 ＋ harmony_bonus（圓融）／－ clash_penalty（駁雜）層功效（一重不分）。
-    - 武學分代：基礎與內容寫的武學是第零代，合一次第一代，最多 max_gen 代；到頂的不能再當底、不能再拿去合。
-    - 一脈相承：新意境（武學＋武學是合出來的那個屬性）跟底的主屬性相同或相生，底的功效層數整串留著、疊上去；
-      相剋的打散（一層都不留）；不相干的留 apart_keep（照留新的、丟舊的）。一門最多 max_layers 層。
-    - 首創時的走向：引擎從共用的特別功效裡照配方排 directions 種，模型讀兩樣東西的名字說明挑一種、寫一句招意；
-      清單外、叫不動照配方挑。全服照配方合的都是那一種。"""
-
-    max_rank: int = Field(default=3, ge=1)
-    max_gen: int = Field(default=3, ge=1)
-    harmony_bonus: int = Field(default=1, ge=0)
-    clash_penalty: int = Field(default=1, ge=0)
-    apart_keep: float = Field(default=0.5, ge=0, le=1)
-    # 一門最多幾層：9 層時一脈相承排得出來最強的第三代上品功效強度 3.5，本命武學 1.8～1.95；5 層時 2.0，跟本命平手
-    # （scripts/measure_depth.py，2026-10-16）。功效每個有上限，層數多了只是把三四個功效都推到頂。
-    max_layers: int = Field(default=5, ge=1)
-    directions: int = Field(default=3, ge=1)
-    # 一脈相承連成數也傳（合成即設計定案第二節）：合出來的武學繼承底（兩門時取平均）這麼多比例的成數（無條件捨去、至少第一成），
-    # 白送的那幾成記在 PlayerState.art_free_levels、熔了不退。0 是舊規則（從第一成起修）。
-    inherit_share: float = Field(default=0, ge=0, le=1)
+    slots: dict[str, int] = Field(default_factory=lambda: {"下品": 2, "中品": 3, "上品": 4, "絕學": 4})
+    general_weight: float = Field(default=0.05, ge=0)
+    high_weight: float = Field(default=0.12, ge=0)
+    special_weight: float = Field(default=0.10, ge=0)
+    signature_weight: float = Field(default=0.15, ge=0)
+    create_xinde: int = Field(default=400, ge=0)
+    create_step: float = Field(default=1.5, ge=1)
+    create_per_season: int = Field(default=3, ge=0)
+    create_bonus_per: int = Field(default=100, ge=1)
+    create_bonus_cap: int = Field(default=20, ge=0)
+    create_odds: dict[str, float] = Field(default_factory=lambda: {"下品": 50, "中品": 30, "上品": 20})
+    create_point_shift: float = Field(default=0.4, ge=0)  # 「意」分＋加分每一分把下品的機率往上品挪多少個百分點
 
 
 class SignatureArtTuning(_Strict):
@@ -2663,8 +2645,7 @@ class Config(_Strict):
     mounts: MountRules = Field(default_factory=MountRules)  # 坐騎（見 MountRules；裝備四欄設計第五節）
     follower: FollowerTuning = Field(default_factory=FollowerTuning)  # 部下的成長與決戰份量（見 FollowerTuning）
     chuangong: ChuangongTuning = Field(default_factory=ChuangongTuning)  # 傳功門下：心得花在同伴、部下身上（見 ChuangongTuning）
-    skill_slots: SkillSlotTuning = Field(default_factory=SkillSlotTuning)  # 武學技能分檔：品質決定亮幾個技能、擲不擲得到高階（見 SkillSlotTuning）
-    fusion_depth: FusionDepthTuning = Field(default_factory=FusionDepthTuning)  # 合成的深度：意境分重、武學分代、首創的走向（見 FusionDepthTuning）
+    arts: ArtsTuning = Field(default_factory=ArtsTuning)  # 武學重構：品級的槽數、戰力的權重、自創的價錢（見 ArtsTuning）
     signature_arts: SignatureArtTuning = Field(default_factory=SignatureArtTuning)  # 本命武學的威力與學到時的成數（見 SignatureArtTuning）
     tactics: TacticTuning = Field(default_factory=TacticTuning)  # 一般的仗的回合與本命戰法（見 TacticTuning）
     figure_life: FigureLifeTuning = Field(default_factory=FigureLifeTuning)  # 人物活起來：每日行事、心事、風聞（見 FigureLifeTuning）
