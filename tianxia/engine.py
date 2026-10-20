@@ -372,6 +372,7 @@ class Game:
         self._gather_said: tuple[str, int, str] | None = None
         self.last_gamble: FreeTextOutcome | None = None  # 上一次 answer_event 擲完骰的結果（server.py 拿去潤色）
         self.smith_result: dict | None = None  # 上一次 smith_forge 的出爐卡（server 的 /api/do/smith_forge 回給網頁）；被拒絕是 None
+        self.mall_bought: str | None = None  # 上一次 mall_buy 買成的商品 id（/api/mall/buy 回給網頁：成了換掌櫃道謝、不成換原因）；不成是 None
         # 上一次玩家卡動作的一句短話（peer_act 每次清掉；論武合成了才填，FB-242）：網頁等回應時卡已經關了或換了人，提示泡泡只講這一句
         self.peer_brief: str | None = None
         self.forged = False  # 上一次 forge() 真的合成了（被拒絕的是 False）：煉製頁拿它決定爐子要不要清空（server.api_menxia_do）
@@ -9259,7 +9260,9 @@ class Game:
     def mall_buy(self, item_id: str, ref: str) -> list[str]:
         """買一件商品（mall.buy）：ref 是這一次購買的編號（網頁按下確認那一刻產，重送同一個不會買兩次）。成了寫一則「商城」
         江湖紀錄（變化寫元寶與拿到的東西）；不成、或這個編號已經買過了只回一句、不寫紀錄。伺服器在行動鎖裡叫：扣元寶、
-        寫購買紀錄、發貨同一筆交易。時間照回體丹那一套（pill_now、_pill_day），不讀時鐘。"""
+        寫購買紀錄、發貨同一筆交易。時間照回體丹那一套（pill_now、_pill_day），不讀時鐘。買成了 self.mall_bought 記那件的 id，
+        不成（含這個編號已經買過了）是 None。"""
+        self.mall_bought = None
         wallet = self._wallet()
         if wallet is None:
             return self._log([mall.OFF])
@@ -9272,14 +9275,29 @@ class Game:
         journal.add_entry(self.state, JournalEntry(
             time=self.state.world.time, title=mall.TITLE, lines=result.lines, changes=result.changes,
         ))
+        self.mall_bought = result.item.id
         return self._log(result.lines)
 
+    def mall_entry(self) -> dict | None:
+        """狀態列的商城入口（齒輪旁的錠子鈕、底部第六格；商城第二批）：{balance}；商城關著是 None（沒有入口）。
+        江湖畫面每次都送，所以只讀餘額（帳的加總），不排商品。"""
+        wallet = self._wallet()
+        return None if wallet is None else {"balance": wallet.balance(self._mall_owner())}
+
     def mall_view(self) -> dict | None:
-        """商城那一頁的資料（mall.view）；商城關著是 None。"""
+        """商城那一頁的資料（mall.view）；商城關著是 None。另附貨架上面兩張小卡與購買確認要的回體丹（pills：名字、手上幾顆、
+        今天還能服幾顆〔不限是 None〕、一天上限〔含月卡；0 是不限〕、一顆回多少、月卡多幾顆）與封測發了多少（grant，商城第二批）。"""
         wallet = self._wallet()
         if wallet is None:
             return None
-        return mall.view(self.content, wallet, self._mall_owner(), self._pill_day(), self.world.get_season_number())
+        view = mall.view(self.content, wallet, self._mall_owner(), self._pill_day(), self.world.get_season_number())
+        cfg = self.content.config
+        view["pills"] = {
+            "name": cfg.stamina_pill_name, "count": self.state.player.stamina_pills, "today": self.pills_left_today(),
+            "cap": self.pill_cap(), "restore": cfg.stamina_pill_restore, "bonus": cfg.mall.card_pill_bonus,
+        }
+        view["grant"] = cfg.mall.beta_grant
+        return view
 
     def mall_records(self) -> dict | None:
         """自己的購買紀錄與帳（mall.records，不寫經手的管理者）；商城關著是 None。"""

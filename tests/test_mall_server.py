@@ -77,6 +77,22 @@ def test_buy_and_records():
     assert len(records["purchases"]) == 1
 
 
+def test_buy_returns_main_and_whether_it_went_through():
+    """商城第二批：網頁買完當場換狀態列（錠子鈕的餘額、丹鈕），成不成換掌櫃那一句。"""
+    client = _player()
+    assert client.get("/api/main").json()["mall"] == {"balance": 5000}
+    done = client.post("/api/mall/buy", json={"item": "pills_5", "ref": "click-0101"}).json()
+    assert done["bought"] == "pills_5" and done["main"]["mall"] == {"balance": 4900}
+    assert done["main"]["status"]["pills"]["count"] == done["mall"]["pills"]["count"]
+    again = client.post("/api/mall/buy", json={"item": "pills_5", "ref": "click-0101"}).json()
+    assert again["bought"] is None and again["main"]["mall"] == {"balance": 4900}  # 同一筆重送：沒有再買
+
+
+def test_main_has_no_mall_key_when_off(monkeypatch):
+    monkeypatch.setattr(server.CONTENT.config.mall, "enabled", False)
+    assert "mall" not in _player().get("/api/main").json()
+
+
 def test_a_missing_or_odd_ref_gets_one_from_the_server():
     client = _player()
     client.post("/api/mall/buy", json={"item": "pills_5"})

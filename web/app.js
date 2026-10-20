@@ -2,7 +2,7 @@
  *
  * 畫面只有三種：登入、取名號、遊戲。遊戲畫面 = 頂上的狀態列 + 一頁內容 + 底部五個分頁：
  *   江湖（場景與選項）、修練（練成、閉關、武學與意境、修練與熔煉、名冊）、煉製（太極火爐：武學＋意境、武學＋武學合成，意境＋意境合併）、
- *   輿圖、見聞（戰報、大勢、傳聞、江湖史、紀錄）。
+ *   輿圖、見聞（戰報、大勢、傳聞、江湖史、紀錄）。商城開著時多第六格「商城」與齒輪旁的錠子鈕，都打開商城那一層（不是一頁）。
  * 設定與管理者工具收在右上角的抽屜裡。
  *
  * 伺服器給的 HTML（場景、角色卡、戰報、江湖紀錄、地圖）已經在伺服器端跳脫過；
@@ -99,6 +99,19 @@
     boardStamp: null, // 剛交差的那一張：{ id, note, at }（交出之前那一份告示與它排第幾），照原本的位置蓋「交差」、淡出之後清掉（boardHanded）
     divineWhy: {}, // 神器原品定名被拒的原因（FB-193）：裝備 id → 那一句；表單裡留一行，改字時看得到（修練頁與店面共用）
     sealShut: {}, // 兩張玉璽卡收起來的狀態（FB-182，照懸賞卡）：duel＝奪璽卡那一場的 id、card＝碎片卡的 sealCardKey；換了一場、被牽動了就重新展開
+    // 商城（商城第二批，企劃者 2026-10-20 挑的入口乙＋丙、那一層子）：跟三間店不同，開不開只在網頁這一邊（伺服器沒有「人在店裡」這件事）
+    mallOpen: false, // 商城那一層開著沒（齒輪旁的錠子鈕、底部第六格打開，左上「出店」收起）
+    mallTab: "shelf", // 停在哪一頁（shelf 貨架／log 紀錄）；每次打開從貨架來
+    mallData: null, // /api/mall 那一份（餘額、月卡、回體丹、上架的商品）：打開時重抓、買完換成回來的那一份
+    mallLog: null, // /api/mall/records 那一份（紀錄頁）：切到紀錄頁就重抓
+    mallSay: null, // 掌櫃那一句換成什麼：{ text, ok }（買成了的那一句、買不了的原因）；換頁、出店清掉
+    mallPick: null, // 正在問要不要買的那一件（商品 id）：貨架上那一格框起來
+    mallPending: null, // 送出去還沒拿到回應的那一筆 { id, ref }：逾時、斷線時留著，再按同一件用同一個編號（伺服器照編號不會扣兩次）
+    mallFail: false, // 這一頁的資料沒拿到（連不上）：畫一句與「再試一次」
+    adMall: null, // 管理者區商城那一組查到的帳（/api/admin/mall）
+    adMallName: "", // 管理者區商城那一組查的名號或帳號
+    adMallNote: "", // 管理者區商城那一組填的原因（抽屜重畫時放回去；成了就清掉）
+    adMallMsg: "", // 管理者區商城那一組上一下的結果（補發、扣回、退一筆、要寫原因），寫在查帳那一行
     here: null, // 江湖頁「此地還能做」摺疊的開合：{ at 地點, open }，玩家自己開關的、或發光那一步自動打開的；重畫（鈕被擋下來、輪詢）照它補回，換了地方就不對得上（FB-087）
     hereAuto: {}, // 發光那一步（框的 key）在哪一處自動打開過摺疊了：「key@地點」→ true；每一步在每一處只自動打開一次，之後照玩家的（FB-087）
     sceneOpen: false, // 在路上時場景那段說明展開著嗎（預設只露兩行，FB-055）；下了路就清掉
@@ -300,6 +313,7 @@
     S.here = null; // 「此地還能做」摺疊的開合與自動打開過的記錄也重來（FB-087）
     S.hereAuto = {};
     S.moveMode = "walk"; // 登入、重新登入、建角的畫面都是伺服器照步行排的（_entry 不看走法），切換鈕跟著回到步行
+    forgetMall(); // 商城那一層與管理者查的帳也是：換了帳號是另一個錢包
     if (data.stage === "game") {
       S.stage = "game";
       setMain(data.main);
@@ -361,7 +375,8 @@
 
   // ── 整體 ──
   function render() {
-    if (S.stage !== "game" || (!S.sheet && !S.peer)) closeAsk(); // 確認框疊在設定抽屜或玩家卡上；抽屜關了、被登出就一起收掉
+    if (S.mallOpen && !(S.main && S.main.mall)) S.mallOpen = false; // 商城關了（主機關掉開關）：那一層跟著收
+    if (S.stage !== "game" || (!S.sheet && !S.peer && !S.mallOpen)) closeAsk(); // 確認框疊在設定抽屜、玩家卡或商城上；抽屜關了、被登出就一起收掉
     if (S.stage !== "game") hideMapHost(true); // 登出、換帳號：常駐的輿圖那一層整個清掉
     if (S.stage === "gate") return renderGate();
     if (S.stage === "create") return renderCreate();
@@ -376,7 +391,7 @@
       </div>
       ${tabsHtml()}
       ${S.sheet ? sheetHtml() : S.peer ? peerHtml() : ""}
-      ${S.main && S.main.shop ? shopHtml(S.main.shop) : ""}
+      ${S.main && S.main.shop ? shopHtml(S.main.shop) : S.mallOpen ? shopHtml(mallShop()) : ""}
       ${S.book ? bookHtml() : ""}
       ${S.zhuan ? zhuanHtml(S.zhuan) : ""}
       ${S.mtEdit && S.mingtie ? mtEditHtml() : ""}
@@ -410,13 +425,17 @@
   }
 
   // 底部分頁列：序章裡只畫亮起來的分頁（格數跟著變，不是固定五格），一個都沒有就整列不畫。data-glow 給序章指路（applyGlow）
+  // 商城開著（main.mall）時多第六格「商城」（商城第二批，企劃者 2026-10-20 挑的入口丙）：點了打開商城那一層、不換頁（出店回到原本那一頁）。
+  // 序章裡跟其他還沒開放的分頁一樣藏著：reveal 沒有 tab:mall 這個鍵，亮齊（all）那一步才出來（齒輪旁的錠子鈕同一條）
   function tabsHtml() {
     const list = TABS.filter((t) => shown(`tab:${t.id}`));
     if (!list.length) return "";
-    return `<nav class="tabs"><div class="tabs-inner" style="grid-template-columns:repeat(${list.length}, 1fr)">${list.map((t) => `
+    const mall = !!(S.main && S.main.mall) && shown("tab:mall");
+    return `<nav class="tabs"><div class="tabs-inner" style="grid-template-columns:repeat(${list.length + (mall ? 1 : 0)}, 1fr)">${list.map((t) => `
         <button class="tab ${S.tab === t.id ? "on" : ""}" data-act="tab" data-tab="${t.id}" data-glow="tab:${t.id}">
           <span class="ico">${t.ico}</span>${t.name}${t.id === "news" && S.unseen && S.tab !== "news" ? '<i class="dot"></i>' : ""}
-        </button>`).join("")}</div></nav>`;
+        </button>`).join("")}${mall ? `
+        <button class="tab tab-mall" data-act="mall-open" data-tab="mall" data-glow="tab:mall" aria-label="商城，元寶 ${S.main.mall.balance | 0}"><span class="ico">寶</span>商城</button>` : ""}</div></nav>`;
   }
 
   // 奪璽卡（玉璽碎片設計 5.10，status.seal_duel）：全服看得到、可以摺疊，排在懸賞卡下面（不擠 375×812 的第一屏）。
@@ -566,6 +585,7 @@
           ${whoNameHtml(s)}
           <div class="where">${where}</div>
         </div>
+        ${S.main.mall && shown("tab:mall") ? mallBtnHtml(S.main.mall) : ""}
         <button class="icon-btn" data-act="sheet" aria-label="設定">⚙</button>
       </div>
       ${S.showMore && S.renownOpen && s.renown ? renownStripHtml(s.renown) : ""}
@@ -3440,22 +3460,25 @@
   // 電腦上整片寬的 .shop-body 照舊捲，內容照遊戲那一欄排（style.css 的 FB-225 那一段；手機上 .shop-col 沒有樣式）
   function shopHtml(shop) {
     const kind = shop.shop || "smith";
-    const back = shop.picked
-      ? '<button class="shop-back" data-act="shop-leave">‹ 出店</button>'
+    // 商城（商城第二批）：網頁自己開的那一層（mallShop），出店只是收起來、不送伺服器
+    const back = kind === "mall" ? '<button class="shop-back" data-act="mall-close">‹ 出店</button>'
+      : shop.picked ? '<button class="shop-back" data-act="shop-leave">‹ 出店</button>'
       : `<button class="shop-back" data-act="choose" data-id="${esc(shop.back)}">‹ 出店</button>`;
     // 鐵匠講神器的規矩（背包有四階時，shop.rule；設計 9.1 第 2 批甲）：就畫在平常那一句的位置、金框標出來；順口講配方線索那一下伺服器給空的
+    // shop.said：商城掌櫃那一句換成買成了的那一句（said ok）或買不了的原因（said no），左邊那條線換色
     const line = shop.rule ? `<p class="shop-line rule">${esc(shop.rule)}</p>`
-      : `<p class="shop-line">${kind === "dadian" ? sayHtml(shop.line) : esc(shop.line)}</p>`; // 打點：掮客那一句不在詞中間斷（FB-433）
+      : `<p class="shop-line${shop.said ? ` ${esc(shop.said)}` : ""}">${kind === "dadian" ? sayHtml(shop.line) : kind === "mall" ? nbHtml(shop.line, MALL_SAY_AFTER) : esc(shop.line)}</p>`; // 打點：掮客那一句不在詞中間斷（FB-433）；商城見 MALL_SAY_AFTER
     // 鐵匠鋪的架上頁照草圖 A 把鐵匠那一句放在爐火底下（smithHtml 畫，企劃者 2026-10-14）；其他頁、馬市、懸賞榜緊接招牌
     const underForge = kind === "smith" && smithTab(shop) === "shelf";
-    const body = kind === "market" ? marketHtml(shop) : kind === "board" ? boardHtml(shop) : kind === "arena" ? arenaHtml(shop)
+    const body = kind === "mall" ? mallHtml(shop) : kind === "market" ? marketHtml(shop) : kind === "board" ? boardHtml(shop) : kind === "arena" ? arenaHtml(shop)
       : kind === "donate" ? donateHtml(shop) : kind === "dadian" ? dadianHtml(shop) : kind === "tavern" ? tavernHtml(shop) : smithHtml(shop, underForge ? line : "");
     // 擂台打到一半：左上那一顆是認輸（先問一次），不是直接離開
     const leave = kind === "arena" && shop.fight
       ? `<button class="shop-back" data-act="shop-ask" data-id="${esc(shop.fight.yield.id)}" data-confirm="${esc(shop.fight.yield.confirm)}" data-yes="認輸">‹ 認輸</button>`
       : kind === "arena" ? back.replace("‹ 出店", "‹ 離開") : back;
+    const purse = kind === "mall" ? `${ingotSvg()}元寶 ${shop.balance | 0}` : shop.purse ? esc(shop.purse) : `銀 ${shop.silver | 0}`;
     return `<div class="shop-layer shop-${esc(kind)}" role="dialog" aria-label="${esc(shop.sign)}">
-      <header class="shop-bar">${leave}<span class="shop-sign">${esc(shop.sign)}</span><span class="shop-silver">${shop.purse ? esc(shop.purse) : `銀 ${shop.silver | 0}`}</span></header>
+      <header class="shop-bar">${leave}<span class="shop-sign">${esc(shop.sign)}</span><span class="shop-silver">${purse}</span></header>
       ${underForge ? "" : line}
       ${body}
     </div>`;
@@ -4054,6 +4077,227 @@
       else { renderShop(); if (now === "smith" && S.shopPot && (S.shopPot.main || S.shopPot.aux)) updateSmithLine(); }
     }
     return true;
+  }
+
+  // ── 商城（商城第二批，docs/superpowers/specs/2026-10-20-商城架構-design.md 4.6；企劃者 2026-10-20 從對比圖挑「子」）：
+  // 沿用店面那一層（shopHtml 多一間「mall」）：招牌、掌櫃那一句、左上出店，底下貨架、紀錄兩頁。跟三間店不同，伺服器沒有「人在店裡」
+  // 這件事：開不開只在網頁這一邊（S.mallOpen），資料自己抓（/api/mall、/api/mall/records），買是 /api/mall/buy（編號在按下確認那一刻產）。
+  // 錢一律寫「元寶」，不寫儲值、付款（這一版沒有金流）。店名、掌櫃的話都是佔位，待 joy 潤 ──
+  const MALL_SIGN = "萬寶閣"; // 待 joy
+  const MALL_SAY = { // 掌櫃那一句（照停在哪一頁）；待 joy 潤
+    shelf: "客官看看。丹藥照顆算，月卡照天數算。",
+    log: "帳都在這兒，一筆不差。",
+    loading: "掌櫃翻帳中……",
+    fail: "帳簿沒拿到，連不上伺服器。",
+    empty: "架上這會兒空著，過些時候再來。",
+    nolog: "還沒有進出。",
+  };
+  const MALL_NOTE = "封閉測試先發每個帳號 {n} 元寶，正式開服時清空重來。"; // 貨架底下那一句（封測有發才寫）；待 joy 潤
+  const MALL_LOG_NOTE = "只記這個帳號的元寶進出。"; // 待 joy 潤
+  const MALL_TABS = [["shelf", "貨架"], ["log", "紀錄"]];
+  const MALL_NB = "，。、；"; // 貨架上的說明、限購切成不折行的小段（同 nbHtml 的做法，多切「。」）
+  // 掌櫃那一句（買成了的、買不了的原因）：切在「，。：；！？」後面與「（」前面，375 寬「元／寶 -600」「（還剩／4300）」不在詞中間斷
+  // （打點的 sayHtml 一段超過 14 字就不包，「元寶 -600（還剩 4300）。」整段 18 字照常折行，所以不用它）
+  const MALL_SAY_AFTER = "，。：；！？";
+
+  // 元寶的錠子圖示（草圖 mall-mock 的 #ingot）：狀態列的鈕、商城招牌旁的元寶、貨架上的價錢共用；顏色照外面的 class（style.css）
+  function ingotSvg() { return '<svg class="ingot" viewBox="0 0 24 16" aria-hidden="true"><path d="M1.5 6.2c1 5.4 5 7.6 10.5 7.6s9.5-2.2 10.5-7.6c-2.2 1.3-4.3 1.6-6 1.1C16 4 14.3 2.2 12 2.2S8 4 7.5 7.3c-1.7.5-3.8.2-6-1.1z"/><path class="shine" d="M8.6 8.4c.6-3.3 1.8-4.8 3.4-4.8s2.8 1.5 3.4 4.8c-2.2.6-4.6.6-6.8 0z"/></svg>'; }
+
+  // 入口乙（企劃者 2026-10-20 挑的）：齒輪左邊一顆錠子鈕寫元寶餘額（main.mall.balance），點了打開商城那一層
+  function mallBtnHtml(mall) {
+    const n = mall.balance | 0;
+    return `<button class="mall-btn" data-act="mall-open" aria-label="商城，元寶 ${n}">${ingotSvg()}<span>${n}</span></button>`;
+  }
+
+  // 換了帳號、登出：那一層收起、抓過的帳丟掉（另一個錢包）
+  function forgetMall() {
+    S.mallOpen = false; S.mallTab = "shelf"; S.mallData = null; S.mallLog = null; S.mallSay = null; S.mallPick = null; S.mallPending = null; S.mallFail = false;
+    S.adMall = null; S.adMallName = ""; S.adMallNote = ""; S.adMallMsg = "";
+  }
+
+  // 交給 shopHtml 的那一份：招牌、掌櫃那一句（剛買成了的、買不了的原因蓋過平常那一句）、餘額（紀錄頁照紀錄那一份，其餘照貨架、還沒抓到照狀態列）
+  function mallShop() {
+    const tab = S.mallTab === "log" ? "log" : "shelf";
+    const d = tab === "log" ? S.mallLog : S.mallData;
+    const say = S.mallSay;
+    const balance = d ? d.balance : S.mallData ? S.mallData.balance : ((S.main && S.main.mall) || {}).balance;
+    return {
+      shop: "mall", sign: MALL_SIGN, tab, balance,
+      line: say ? say.text : !d && !S.mallFail ? MALL_SAY.loading : MALL_SAY[tab],
+      said: say ? (say.ok ? "said ok" : "said no") : "",
+    };
+  }
+
+  function mallHtml(shop) {
+    const body = shop.tab === "log" ? mallLogHtml(S.mallLog) : mallShelfHtml(S.mallData);
+    return `<div class="shop-body mall-body"><div class="shop-col">${body}</div></div>
+      <nav class="shop-tabs">${MALL_TABS.map(([k, name]) => `<button class="shop-tab${shop.tab === k ? " on" : ""}" data-act="mall-tab" data-tab="${k}">${name}</button>`).join("")}</nav>`;
+  }
+
+  // 沒拿到資料：還在抓什麼都不畫（掌櫃那一句寫翻帳中），連不上畫一句與「再試一次」
+  function mallFailHtml() {
+    return S.mallFail ? `<p class="shop-empty">${esc(MALL_SAY.fail)}</p><button class="btn small ghost" data-act="mall-retry">再試一次</button>` : "";
+  }
+
+  // 貨架：上面兩張小卡（手上幾顆丹、今天還能服幾顆；月卡到哪天、一天最多服幾顆），底下照種類分（照 content/mall.json 的順序，
+  // 種類第一次出現的排前面）：消耗品一格一件（三欄），月卡一張寬卡。買不了的畫淡、照樣點得到（點了掌櫃講原因）
+  function mallShelfHtml(d) {
+    if (!d) return mallFailHtml();
+    const p = d.pills;
+    const status = `<div class="mall-status">
+        <div><b>${esc(p.name)} ${p.count | 0} 顆</b>${p.today == null ? "每天不限" : `今天還能服 ${p.today | 0} 顆`}</div>
+        <div><b>月卡 ${d.card ? `到 ${esc(d.card.until)}` : "還沒開"}</b>${p.cap > 0 ? `每天最多服 ${p.cap | 0} 顆` : "每天不限"}</div></div>`;
+    const groups = [];
+    for (const it of d.items) {
+      let g = groups.find((one) => one.kind === it.kind);
+      if (!g) groups.push((g = { kind: it.kind, name: it.kind_name, items: [] }));
+      g.items.push(it);
+    }
+    const section = (g) => (g.kind === "card"
+      ? `<div class="mall-sub">${esc(g.name)}</div>${g.items.map(mallCardHtml).join("")}`
+      : `<div class="mall-sub">${esc(g.name)}${g.kind === "consumable" ? `<small>一顆${esc(p.name)}回 ${p.restore | 0} 點體力</small>` : ""}</div>
+        <div class="mall-grid">${g.items.map(mallTileHtml).join("")}</div>`);
+    const empty = d.items.length ? "" : `<p class="shop-empty">${esc(MALL_SAY.empty)}</p>`;
+    const note = d.grant > 0 ? `<p class="mall-note">${nbHtml(MALL_NOTE.replace("{n}", String(d.grant | 0)), MALL_NB)}</p>` : "";
+    return status + groups.map(section).join("") + empty + note;
+  }
+
+  function mallTileHtml(it) {
+    const cls = `mall-item${it.can ? "" : " off"}${S.mallPick === it.id ? " on" : ""}`;
+    return `<button class="${cls}" data-act="mall-pick" data-id="${esc(it.id)}"${it.can ? "" : ' aria-disabled="true"'}>
+        <span class="dan" aria-hidden="true">${(it.gives || {}).pills ? "丹" : "寶"}</span><b>${esc(it.name)}</b>
+        <span class="price">${ingotSvg()}${it.price | 0}</span>${it.limit ? `<small>${nbHtml(it.limit, MALL_NB)}</small>` : ""}</button>`;
+  }
+
+  function mallCardHtml(it) {
+    const cls = `mall-card${it.can ? "" : " off"}${S.mallPick === it.id ? " on" : ""}`;
+    return `<button class="${cls}" data-act="mall-pick" data-id="${esc(it.id)}"${it.can ? "" : ' aria-disabled="true"'}>
+        <span class="moon" aria-hidden="true">月</span>
+        <span class="mt"><b>${esc(it.name)}</b>${it.note ? `<span>${nbHtml(it.note, MALL_NB)}</span>` : ""}${it.limit ? `<span>${nbHtml(it.limit, MALL_NB)}</span>` : ""}</span>
+        <span class="price">${ingotSvg()}${it.price | 0}</span></button>`;
+  }
+
+  // 紀錄：元寶的每一筆進出（新的在前）；連著一筆購買的寫商品名、退了的掛「已退」，右邊增減與那一筆之後的餘額
+  function mallLogHtml(r) {
+    if (!r) return mallFailHtml();
+    // （這一段在修練頁到輿圖之間：不用單字母 x，tests/test_server.py 會把 x 讀的欄位當成 menxia_view 的欄位查）
+    const row = (line) => `<div class="mall-log-row"><b>${esc(line.item || line.reason)}${line.refunded ? '<span class="mall-tag">已退</span>' : ""}</b>
+        <span class="amt${line.delta > 0 ? " in" : ""}">${line.delta > 0 ? "+" : "−"}${Math.abs(line.delta | 0)}</span>
+        <span>${esc(line.time)}${line.item ? `・${esc(line.reason)}` : ""}${line.note ? `・${esc(line.note)}` : ""}</span><span class="bal">餘 ${line.balance | 0}</span></div>`;
+    const rows = r.ledger.map(row).join("");
+    return `<div class="mall-log-head"><span>元寶餘額</span><b>${r.balance | 0}</b></div>
+      ${rows ? `<div class="mall-log">${rows}</div>` : `<p class="shop-empty">${esc(MALL_SAY.nolog)}</p>`}<p class="mall-note">${esc(MALL_LOG_NOTE)}</p>`;
+  }
+
+  // 只重畫商城那一層（換頁、點一件、買完、輪詢重抓）；畫面上還沒有那一層就整個重畫。捲到哪裡照放回去，換頁（keep 為假）從頂上開始
+  function renderMall(keep = true) {
+    const layer = document.querySelector(".shop-layer.shop-mall");
+    if (!layer || !S.mallOpen) { render(); return; }
+    const spot = shopSpot();
+    if (spot && !keep) spot.top = 0;
+    layer.outerHTML = shopHtml(mallShop());
+    putShopSpot(spot);
+  }
+
+  async function openMall() {
+    if (!S.main || !S.main.mall) return;
+    S.mallOpen = true; S.mallTab = "shelf"; S.mallSay = null; S.mallPick = null; S.mallLog = null; S.mallFail = false;
+    render();
+    await loadMall();
+  }
+
+  function closeMall() {
+    S.mallOpen = false; S.mallSay = null; S.mallPick = null;
+    closeAsk();
+    render(); // 底下那一頁與狀態列照最新的 main 畫（開著的時候輪詢不畫被蓋住的頁面）
+  }
+
+  async function loadMall() {
+    try {
+      S.mallData = await api("/api/mall");
+      S.mallFail = false;
+    } catch (e) { S.mallFail = true; }
+    if (S.mallOpen) renderMall();
+  }
+
+  async function loadMallLog() {
+    try {
+      S.mallLog = await api("/api/mall/records");
+      S.mallFail = false;
+    } catch (e) { S.mallFail = true; }
+    if (S.mallOpen && S.mallTab === "log") renderMall();
+  }
+
+  async function mallTabTo(tab) {
+    S.mallTab = tab === "log" ? "log" : "shelf";
+    S.mallSay = null; S.mallPick = null; S.mallFail = false;
+    closeAsk();
+    renderMall(false);
+    if (S.mallTab === "log") await loadMallLog(); // 紀錄每次切過去都重抓（別的分頁買的、管理者補的）
+  }
+
+  // 點一件：買不了（元寶不夠、限購）掌櫃講原因、不問；買得了框起來、問一次
+  function mallPick(id) {
+    const d = S.mallData;
+    const it = d && d.items.find((one) => one.id === id);
+    if (!it) return;
+    if (!it.can) { S.mallPick = null; S.mallSay = { text: it.why || "", ok: false }; renderMall(); return; }
+    S.mallPick = id; S.mallSay = null;
+    renderMall();
+    mallAsk(it, d);
+  }
+
+  // 這一筆購買的編號（伺服器照用 8～64 個英數字；同一個編號送兩次只算一次）
+  function mallRef() {
+    const abc = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    const buf = new Uint8Array(16);
+    if (typeof crypto !== "undefined" && crypto.getRandomValues) crypto.getRandomValues(buf);
+    else for (let i = 0; i < buf.length; i++) buf[i] = Math.floor(Math.random() * 256);
+    return `m${Array.from(buf, (b) => abc[b % abc.length]).join("")}`;
+  }
+
+  // 購買確認（設計 4.6；草圖子的「點了十顆」）：貼在下緣的紙，寫花多少、元寶剩多少、丹或月卡變成多少（還沒有月卡時多寫一天最多服幾顆），
+  // 底下照商品的說明與限購。編號在這一刻產；上一次同一件送出去沒拿到回應（逾時、斷線），用回那一個（伺服器回「已經買好了」、不扣兩次）
+  function mallAsk(it, d) {
+    const p = d.pills, g = it.gives || {};
+    const rows = [["花", `<b>${it.price | 0} 元寶</b>`], ["元寶", `<s>${d.balance | 0} →</s> <b>${it.after | 0}</b>`]];
+    if (g.pills) rows.push([esc(p.name), `<s>${p.count | 0} →</s> <b>${(p.count | 0) + (g.pills | 0)} 顆</b>`]);
+    if (g.card_days) {
+      rows.push(["月卡", `<s>${d.card ? `到 ${esc(d.card.until)}` : "還沒開"} →</s> <b>到 ${esc(it.card_to || "")}</b>`]);
+      if (!d.card && p.cap > 0) rows.push(["每天最多服", `<s>${p.cap | 0} →</s> <b>${(p.cap | 0) + (p.bonus | 0)} 顆</b>`]);
+    }
+    const note = [it.note, it.limit].filter(Boolean).map(esc).join("<br>"); // 說明一行、限購一行（說明自己帶句號，接在一起讀起來是「。；」）
+    const ref = S.mallPending && S.mallPending.id === it.id ? S.mallPending.ref : mallRef();
+    closeAsk();
+    askGo = () => mallBuy(it.id, ref);
+    document.body.insertAdjacentHTML("beforeend", `
+      <div class="ask-layer">
+        <div class="ask-bg" data-act="ask-no"></div>
+        <div class="ask mall-ask" role="alertdialog" aria-modal="true" aria-labelledby="ask-text">
+          <h4 id="ask-text">買下【${esc(it.name)}】？</h4>
+          <dl class="mall-sum">${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>
+          ${note ? `<p class="mall-ask-note">${note}</p>` : ""}
+          <div class="row"><button class="btn" data-act="ask-no">再想想</button><button class="btn primary" data-act="ask-yes">買下（${it.price | 0}）</button></div>
+        </div>
+      </div>`);
+    document.querySelector('.ask [data-act="ask-no"]')?.focus?.();
+  }
+
+  // 買：回來的 mall 換掉貨架、main 換掉狀態列（錠子鈕的餘額、丹鈕當場換），掌櫃那一句換成伺服器回的那一句（bought 有值是成了）
+  async function mallBuy(id, ref) {
+    await busy(async () => {
+      S.mallPending = { id, ref };
+      const r = await api("/api/mall/buy", { item: id, ref });
+      S.mallPending = null;
+      if (r.mall) S.mallData = r.mall;
+      if (r.main) setMain(r.main);
+      S.mallPick = null;
+      S.mallLog = null;
+      const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      S.mallSay = text ? { text, ok: !!r.bought } : null;
+      renderTop();
+      if (S.mallOpen) renderMall(); else render();
+    });
   }
 
   // 店裡的換上、拆解、神器定名：走修練頁那幾條（/api/menxia/…），回來照新的畫面畫、話用提示泡泡講
@@ -5699,8 +5943,74 @@
               ${a.mingtie && a.mingtie.length ? mingtieAdminHtml(a.mingtie) : ""}
               <p class="muted">重設密碼（朋友忘記密碼時用；臨時密碼私下告訴他）</p>
               <form id="reset-form"><div class="row"><input class="input" name="target" placeholder="帳號或名號"><input class="input" name="temp" placeholder="臨時密碼"><button class="btn small" type="submit">重設</button></div><p class="form-msg" role="alert"></p></form>` : ""}
+            ${S.main.mall ? mallAdminHtml() : ""}
           </section>` : ""}
       </div>`;
+  }
+
+  // 管理者區「商城」一組（商城架構設計 4.7；計畫第二節第 5 條：設定頁的表單放第二批）：查帳、補發、扣回、退一筆。商城開著（main.mall）才畫，
+  // 不靠 /api/admin 那一份（那一份沒拿到也查得了帳）。原因必填，每一筆寫進帳（誰、何時、為什麼）；按了照舊先問一次，結果寫在查帳那一行、
+  // 抽屜不關，做完重查一次那個人的帳。補發、扣回的編號在問的那一刻產（同一個確認框重送不會記兩次）。字待 joy 潤
+  const MALL_NEED_NOTE = "先填原因：每一筆都會記進帳。"; // 待 joy 潤
+  function mallAdminHtml() {
+    const r = S.adMall;
+    return `<p class="muted">商城（元寶的帳；補發、扣回、退一筆都要寫原因，每一筆都記進帳）</p>
+      <form id="ad-mall-form"><div class="row"><input class="input" id="ad-mall-name" name="name" placeholder="名號或帳號" aria-label="商城查帳的名號或帳號" value="${esc(S.adMallName || "")}"><button class="btn small" type="submit">查帳</button></div><p class="form-msg" role="alert">${esc(S.adMallMsg || (r && r.refusal) || "")}</p></form>
+      <div class="row ad-row"><span class="ad-tag">元寶</span><input class="input" id="ad-mall-amount" type="number" min="1" step="1" value="100" aria-label="元寶數" style="max-width:96px"><input class="input" id="ad-mall-note" placeholder="原因（必填）" aria-label="原因" maxlength="100" value="${esc(S.adMallNote || "")}"></div>
+      <div class="row wrap"><button class="btn small" data-act="mall-admin" data-op="mall_reissue">補發</button><button class="btn warn small" data-act="mall-admin" data-op="mall_revoke">扣回</button></div>
+      ${r && !r.refusal ? mallBookHtml(r) : ""}`;
+  }
+
+  // 查到的那個人的帳：餘額與月卡、購買（沒退的一筆一顆「退這一筆」）、帳（新的在前；寫原因與經手的管理者）
+  function mallBookHtml(r) {
+    const buy = (x) => `<div class="mall-ad-buy"><span class="muted">#${x.id | 0}・${esc(x.time)}</span><span>${esc(x.item)}・${x.price | 0} 元寶</span>${x.refunded
+      ? '<span class="muted">已退</span>' : `<button class="btn small" data-act="mall-admin" data-op="mall_refund" data-id="${x.id | 0}">退這一筆</button>`}</div>`;
+    const line = (x) => `<li>${esc(x.time)} ${esc(x.reason)}${x.item ? `「${esc(x.item)}」` : ""} <b>${x.delta > 0 ? "+" : "−"}${Math.abs(x.delta | 0)}</b>（餘 ${x.balance | 0}）${
+      x.note ? `・${esc(x.note)}` : ""}${x.admin ? `・經手 ${esc(x.admin)}` : ""}</li>`;
+    return `<div class="mall-ad"><p><b>${esc(r.name)}</b>：元寶 ${r.balance | 0}${r.card ? `・月卡到 ${esc(r.card.until)}` : ""}</p>
+      ${r.purchases.length ? `<p class="muted">購買（新的在前）</p>${r.purchases.map(buy).join("")}` : ""}
+      ${r.ledger.length ? `<p class="muted">帳（新的在前）</p><ol class="mall-ad-log">${r.ledger.map(line).join("")}</ol>` : ""}</div>`;
+  }
+
+  function mallAdminAsk(op, id) {
+    const val = (k) => String((document.getElementById(k) || {}).value || "").trim();
+    const note = val("ad-mall-note");
+    S.adMallNote = note;
+    const say = (text) => {
+      S.adMallMsg = text;
+      const form = document.getElementById("ad-mall-form");
+      if (form) formMsg(form, text);
+    };
+    if (op === "mall_refund") {
+      const r = S.adMall, x = r && (r.purchases || []).find((p) => String(p.id) === String(id));
+      if (!x) return;
+      if (!note) { say(MALL_NEED_NOTE); return; }
+      const body = { name: r.name, id: x.id | 0, note };
+      ask(`退${r.name}的「${x.item}」（#${x.id | 0}）：元寶 +${x.price | 0} 全退；回體丹收回手上還有的、用掉的不追；月卡扣回那一張的天數。寫進帳（原因：${note}），確定？`,
+        "確定退這一筆", () => mallAdminDo(op, body));
+      return;
+    }
+    const name = val("ad-mall-name"), amount = Math.floor(Number(val("ad-mall-amount")));
+    if (!name) { say("先填名號或帳號。"); return; }
+    if (!(amount >= 1)) { say("元寶要寫正整數。"); return; }
+    if (!note) { say(MALL_NEED_NOTE); return; }
+    const body = { name, amount, note, ref: mallRef() };
+    const reissue = op === "mall_reissue";
+    ask(reissue ? `替${name}補發 ${amount} 元寶（原因：${note}），寫進帳，確定？` : `從${name}扣回 ${amount} 元寶（原因：${note}；餘額不能扣成負的），寫進帳，確定？`,
+      reissue ? "確定補發" : "確定扣回", () => mallAdminDo(op, body));
+  }
+
+  async function mallAdminDo(op, body) {
+    await busy(async () => {
+      const r = await api(`/api/do/${op}`, body);
+      if (r.main) setMain(r.main);
+      const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      S.adMallMsg = text || "已完成。";
+      if (!text.startsWith("（")) S.adMallNote = ""; // 成了：原因欄清掉（被拒的那一句都包在括號裡，見 tianxia/mall.py），免得同一句誤送第二次
+      S.adMallName = body.name;
+      S.adMall = await api("/api/admin/mall", { name: body.name }); // 補完、退完重查一次那個人的帳
+      renderKeepingSheet();
+    });
   }
 
   // 管理者區「玩家個人劇情」查到的那個人（/api/admin/player，Game.admin_player_choices）：他是誰、召見（發不了的灰掉、寫為什麼）、
@@ -6813,8 +7123,18 @@
           if (go) await go();
           break;
         }
-        case "ask-no": closeAsk(); break;
-        case "logout": closeEvents(); await api("/api/logout", {}); resetOrdersWatch(); forgetHowto(); S.sheet = false; S.peer = null; S.adPlayer = null; S.adPlayerName = ""; S.stage = "gate"; S.main = null; forgetMap(); render(); break;
+        case "ask-no":
+          closeAsk();
+          if (S.mallOpen && S.mallPick) { S.mallPick = null; renderMall(); } // 商城的購買確認按了再想想：那一格不再框著
+          break;
+        // 商城（商城第二批）：齒輪旁的錠子鈕與底部第六格都打開那一層（不換頁）
+        case "mall-open": await openMall(); break;
+        case "mall-close": closeMall(); break;
+        case "mall-tab": await mallTabTo(el.dataset.tab); break;
+        case "mall-pick": mallPick(el.dataset.id); break;
+        case "mall-retry": await (S.mallTab === "log" ? loadMallLog() : loadMall()); break;
+        case "mall-admin": mallAdminAsk(el.dataset.op, el.dataset.id); break;
+        case "logout": closeEvents(); await api("/api/logout", {}); resetOrdersWatch(); forgetHowto(); S.sheet = false; S.peer = null; S.adPlayer = null; S.adPlayerName = ""; S.stage = "gate"; S.main = null; forgetMap(); forgetMall(); render(); break;
         case "kind": S.kind = el.dataset.kind; renderPage(); break;
         case "mx": if (el.dataset.kind) S.kind = el.dataset.kind; await mx(el.dataset.op); break; // 卷軸卡上的練成鈕帶著是哪一欄
         case "art-info": S.artInfo = S.artInfo === el.dataset.id ? null : el.dataset.id; renderPage(); break;
@@ -7220,6 +7540,15 @@
             toast(text); // S.main 不動，換過去的那一頁交給下一輪輪詢照它自己的方式補上
           }
         });
+      } else if (form.id === "ad-mall-form") {
+        // 管理者查一個人的元寶帳（商城第二批）：查到了畫在表單底下，查不到的原因寫在表單那一行。抽屜不關
+        const name = (data.name || "").trim();
+        S.adMallName = name;
+        S.adMallMsg = "";
+        S.adMallNote = String((document.getElementById("ad-mall-note") || {}).value || "");
+        if (!name) { S.adMall = null; formMsg(form, "先填名號或帳號。"); return; }
+        S.adMall = await api("/api/admin/mall", { name });
+        renderKeepingSheet();
       } else if (form.id === "ad-player-form") {
         // 管理者查一個玩家（玩家個人劇情）：查到了畫他的召見、機緣、伏筆三列；查不到的原因寫在表單那一行。抽屜不關
         const name = (data.name || "").trim();
@@ -7289,6 +7618,14 @@
   // 重抓回來時玩家若已經切了分頁、按了別的（那份資料已經換過）、正在忙或正在打字，就不動畫面，下一輪再說。
   async function refreshPage(old) {
     if (shopPolled(old)) return; // 店面開著（或剛開、剛收）：只管店面那一層（店面獨立介面設計 1.3）
+    if (S.mallOpen) { // 商城那一層開著：底下的頁面被蓋住、不畫（出店時整個重畫）；餘額變了（管理者補發、別的分頁買了）才重抓這一頁
+      if (!S.main.mall) { closeMall(); return; }
+      if ((old && old.mall ? old.mall.balance : null) !== S.main.mall.balance) {
+        await loadMall();
+        if (S.mallTab === "log") await loadMallLog();
+      }
+      return;
+    }
     const tab = S.tab;
     if (tab === "jianghu") {
       if (pageKey(old) !== pageKey(S.main)) { // 只有狀態列變了（時鐘在走）：上面 renderTop 已經畫過

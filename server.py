@@ -1393,6 +1393,9 @@ def _main_view_body(game: Game) -> dict:
     shop = game.shop_view([o.id for o in options])  # 店面（店面獨立介面設計 6.1）：開關開著、店開著、鐵匠鋪那一串是眼前的選單才有
     if shop is not None:
         view["shop"] = shop
+    entry = game.mall_entry()  # 商城的入口（商城第二批：齒輪旁的錠子鈕＋餘額、底部第六格）；商城關著沒有這個鍵
+    if entry is not None:
+        view["mall"] = entry
     if view["guide"] is not None:  # 入伍段「出一次力」：選單上能完成它的那幾顆（FB-093）；網頁讓它們發光，「此地還能做」攤開
         view["guide"]["glow"] = game.enlist_glow([o.id for o in options if o.enabled])
     if "fronts" in status:  # 第一季濃縮版才有：江湖頁的三條戰況（開關關著時不送，頁面照舊）
@@ -1995,13 +1998,21 @@ def api_mall_records(request: Request):
 
 @app.post("/api/mall/buy")
 def api_mall_buy(request: Request, body: dict = Body(...)):
-    """買一件（Game.mall_buy）：{item, ref}；回 {message, mall}。賽季時鐘暫停中照其他動作擋。"""
+    """買一件（Game.mall_buy）：{item, ref}；回 {message, bought, mall, main}。bought 是買成的商品 id（不成是 None：網頁照它換
+    掌櫃那一句）、main 是江湖畫面（狀態列的錠子鈕與丹鈕當場換，商城第二批）。賽季時鐘暫停中照其他動作擋。"""
     _mall_on()
     game = _game(request)
     item, ref = str(body.get("item", ""))[:40], _mall_ref(body.get("ref"))
-    msgs = act(game, lambda g: g.mall_buy(item, ref))
+    got: dict = {}
+
+    def buy(g: Game):
+        out = g.mall_buy(item, ref)
+        got["bought"] = g.mall_bought  # 在鎖裡讀：出了鎖別的請求可能又動了這一份 Game
+        return out
+
+    msgs = act(game, buy)
     _tell_tabs(game)
-    return {"message": joined(msgs), "mall": look(game, lambda g: g.mall_view())}
+    return {"message": joined(msgs), "bought": got.get("bought"), "mall": look(game, lambda g: g.mall_view()), "main": look(game, main_view)}
 
 
 @app.post("/api/admin/mall")
