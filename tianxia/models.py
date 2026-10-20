@@ -2274,7 +2274,8 @@ class ArtsTuning(_Strict):
     insight_piece_cap: int = Field(default=4, ge=1)
     # 評分（武學重構第三批；Joy 2026-10-20「武學的總評分就是看各意境效果疊加分數……可能滿一百是絕學」，選法 B）：
     # 槽裡每一份意境的效果加總——一般功效每重 score_per_layer、大獎 score_grand、特別功效 score_special，單色格裡的 ×score_single_color；
-    # 上品、第十成、評分到 master_score 才能衝絕學（契機或破境丹照舊是最後那一下）。寫死的武學照它的功效算、只寫在卡上。
+    # 評分不是衝絕學的門檻（Joy 2026-10-20「評分可以超過100呀……武學衝絕品跟評分無關」）：只寫在卡上、排武學榜與內功榜。
+    # 寫死的武學照它的功效算。master_score 沒有地方讀了（留著讓舊設定讀得進來）。
     score_per_layer: float = Field(default=8, ge=0)
     score_grand: float = Field(default=28, ge=0)
     score_special: float = Field(default=20, ge=0)

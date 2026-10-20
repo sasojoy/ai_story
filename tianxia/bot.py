@@ -226,7 +226,7 @@ def worn_first(game: Game) -> list[str]:
 
 
 def awaits_chance(game: Game) -> bool:
-    """身上有一門上品到了極處（cultivation.ready：第十成、評分滿百）、等著契機：機器人這時有挑戰本人可打就去打（見 pick）。"""
+    """身上有一門上品到了極處（cultivation.ready：第十成）、等著契機：機器人這時有挑戰本人可打就去打（見 pick）。"""
     state, content, world = game.state, game.content, game.world
     member = state.player.member
     if content.config.breakthrough.chance <= 0 or state.player.naming is not None:

@@ -791,10 +791,10 @@ def test_the_glow_lists_the_server_sends_decide_every_hook_on_the_cards():
     rows = [_art("w1", "武學", "甲拳", worn=True, glow=["cultivate"]),
             _art("w2", "武學", "乙拳", glow=["switch", "melt"]), _art("w3", "武學", "丙拳", glow=["cultivate"])]
     html = _practice(rows, "S.artOpen = 'w2';")
-    body = html.split('<div class="art-body')[1].split("</div></div>")[0]
+    body = html.split('<div class="art-body')[1].split('<button class="art libr')[0]
     assert re.search(r'<button class="linkish" data-act="melt" data-glow="melt" data-id="w2"', body)  # m2
     assert re.search(r'data-act="switch" data-glow="switch" data-id="w2"', body)
-    assert re.search(r'data-act="cultivate" data-id="w2"', body) and 'data-act="cultivate" data-glow' not in body  # 這一門的修練不在名單上
+    assert 'data-act="cultivate"' not in body  # 下品、修練不在名單上：沒有「衝絕學」那一塊（只有上品與序章點名的才畫）
     worn = html.split('<div class="art-body')[0]
     assert re.search(r'data-act="cultivate" data-glow="cultivate" data-id="w1"', worn)  # 身上那張卡讀它自己那一列的 glow
     assert re.search(r'<button class="art libr "[^>]*data-id="w3" data-glow="cultivate">', html)  # 收著的那一列只亮名單上的

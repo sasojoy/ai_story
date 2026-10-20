@@ -8125,7 +8125,7 @@ class Game:
 
     @_not_while_preparing
     def cultivate(self, art_id: str, use_legend: bool = False) -> list[str]:
-        """修練（武學重構，Joy 2026-10-20）：品級不靠修練衝，這裡只剩上品到了極處（第十成、評分滿百）服一枚破境丹強行衝絕學
+        """修練（武學重構，Joy 2026-10-20）：品級不靠修練衝，這裡只剩上品到了極處（第十成）服一枚破境丹強行衝絕學
         （見 cultivation.py）。花體力與一枚丹。真的擲了骰才寫江湖紀錄；被拒絕（還沒到極處、沒有丹、體力不足、沒有這門武學）只回一句話。
         use_legend：玩家勾了「服下破境丹」；沒勾就只回「等契機或服丹」那一句。"""
         problem = cultivation.cultivate_problem(self.state, self.content, self.world, art_id, use_legend=use_legend)

@@ -78,7 +78,7 @@ def test_button_shows_only_on_the_last_step(game):
     p.stats["xinde"] = 100
     buy = row()["cultivate"]["buy"]
     assert not buy["ok"] and "心得不足" in buy["why"]
-    p.art_slots["旋風腿"] = ["feng", "huo", "shui", None]  # 槽沒裝滿：還沒到極處，換丹那一顆不畫
+    p.member.wugong_level = 9  # 還沒第十成：還沒到極處，換丹那一顆不畫（評分不是門檻，Joy 2026-10-20）
     assert row()["cultivate"]["buy"] is None
 
 

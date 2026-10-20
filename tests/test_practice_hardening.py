@@ -104,7 +104,7 @@ def test_the_practice_row_shows_the_force_odds_not_a_climb(kicker, hard, world):
 
 
 def _worn(state, level=10, slots=BASICS):
-    """旋風腿穿在身上、上品、第十成、槽裝滿。"""
+    """旋風腿穿在身上、上品、第十成、槽照 slots 裝。"""
     p = state.player
     p.arts, p.member.wugong_id = [], "旋風腿"
     return ripen(state, level=level, slots=slots)
@@ -124,9 +124,9 @@ def test_a_missed_chance_leaves_a_soft_hint(kicker, hard, world):
 
 
 @pytest.mark.parametrize(("ratio", "level", "slots"), [
-    (0.29, 10, BASICS), (0.5, 9, BASICS), (0.5, 10, ["feng", "huo", "shui", None]),
+    (0.29, 10, BASICS), (0.5, 9, BASICS),
 ])
-def test_no_chance_without_a_hard_enough_fight_ten_levels_and_full_slots(kicker, hard, world, ratio, level, slots):
+def test_no_chance_without_a_hard_enough_fight_and_ten_levels(kicker, hard, world, ratio, level, slots):
     _worn(kicker, level=level, slots=slots)
     assert cultivation.seize(kicker, hard, world, ratio, WIN) == []
     assert kicker.player.art_quality["旋風腿"] == "上品"

@@ -629,7 +629,7 @@ def _ripe(world, state, content, quality="上品"):
 
 
 def test_the_peerless_step_note_says_to_wait_for_a_chance_or_take_the_pill(state, content, world):
-    """武學重構：上品到了極處（第十成、槽裝滿）那一步不在練功房裡——沒有丹時那一顆灰掉、寫等契機或服丹；
+    """武學重構：上品到了極處（第十成）那一步不在練功房裡——沒有丹時那一顆灰掉、寫等契機或服丹；
     還沒到極處寫差在哪（第幾成、槽幾格）；不是上品一律寫品級不靠修練。"""
     _wind_kick(world, state, "上品")
     row = _cultivate_row(state, content, world)

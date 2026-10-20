@@ -2764,7 +2764,7 @@
   const qMark = (q) => (Q_SHORT[q] ? `<em class="iq q-${Q_SHORT[q] === "上" ? 3 : Q_SHORT[q] === "中" ? 2 : 1}" title="${esc(q)}">${Q_SHORT[q]}</em>` : "");
   const FX_LAYERS = ["", "一重", "二重", "三重"];
   // 評分（第三批）：「・評 87」；上品還沒成絕學的寫門檻「・評 87／100」
-  const scoreText = (a) => (typeof a.score === "number" ? `・評 ${a.score}${a.bar ? `／${a.bar}` : ""}` : "");
+  const scoreText = (a) => (typeof a.score === "number" ? `・評 ${a.score}` : ""); // 評分沒有上限、不是門檻（Joy 2026-10-20）
   const fxOne = (e) => e.grand ? `<i class="fx grand${e.maybe ? " maybe" : ""}">${esc(e.name)}</i>`
     : e.special ? `<i class="fx sp">${esc(e.name)}</i>`
     : `<i class="fx${e.maybe ? " maybe" : ""}">${esc(e.name)}${e.maybe ? "" : lvHtml(e.layers)}</i>`;
@@ -2885,29 +2885,39 @@
       // 序章指路（T7 走查 W-A）：卡裡哪幾顆鈕發光由伺服器說（a.glow，只有序章裡才有；art_rows 照序章的拒絕算過），網頁不猜。
       // data-glow 的鍵寫成字面（test_content 掃 app.js 對照 models.GLOW_KEYS，內容才叫得動它們）
       const has = (key) => (a.glow || []).includes(key);
-      let first;
+      // 練成（Joy 2026-10-20「練成第x成這邊介面按鈕超醜」）：十成的格子旁邊一顆朱印「練」，下一格會亮；按不下去時印是灰的、原因寫在底下一行
+      let train = "", why = "";
       if (slot) {
-        const why = slot.blocked ? esc(slot.blocked) : slot.maxed ? "已到第十成" : "";
-        first = `<button class="btn ${why ? "" : "primary"}" data-act="mx" data-op="practice" data-glow="practice" data-kind="${esc(a.kind)}" ${why ? "disabled" : ""}>${
-          why || `練成第${level + 1}成<small>心得 ${slot.price}</small>`}${slot.maxed && !slot.blocked ? "<small>練滿了</small>" : ""}</button>`;
-      } else {
-        first = `<button class="btn" data-act="switch"${has("switch") ? ' data-glow="switch"' : ""} data-id="${esc(a.id)}">改練這一門<small>換上身，熟練度各自保留</small></button>`;
+        why = slot.blocked || "";
+        const off = !!slot.blocked || slot.maxed;
+        const label = slot.maxed ? "已到第十成" : `練成第${level + 1}成（心得 ${slot.price}）`;
+        train = `<button class="train-go${off ? "" : " hot"}" data-act="mx" data-op="practice" data-glow="practice" data-kind="${esc(a.kind)}" aria-label="${esc(slot.blocked || label)}" title="${esc(slot.blocked || label)}" ${off ? "disabled" : ""}><b>${slot.maxed ? "滿" : "練"}</b><small>${slot.maxed ? "十成" : `心得 ${slot.price}`}</small></button>`;
       }
-      // 修練：按得下去時寫機率；按不下去時寫原因（伺服器的那一句）。不寫下一品是哪一品（企劃者 2026-10-06）
-      const hot = a.cultivate.ok && !(slot && !slot.maxed && !slot.blocked); // 練成還能按時，練成是主鈕
-      const cult = `<button class="btn ${a.cultivate.ok && hot ? "primary" : ""}" data-act="cultivate"${has("cultivate") ? ' data-glow="cultivate"' : ""} data-id="${esc(a.id)}" ${a.cultivate.ok ? "" : "disabled"}>${
-        "修練"}<small class="cnote">${esc(ticked ? lg.note : a.cultivate.note)}</small></button>`;
+      const next = slot && !slot.blocked && !slot.maxed ? level : -1; // 練下去會亮的那一格
+      const pips = `<div class="ten">${Array.from({ length: 10 }, (_, k) => `<i${k < level ? ' class="on"' : k === next ? ' class="next"' : ""}></i>`).join("")}</div>`;
+      const switchBtn = slot ? "" : `<div class="acts"><button class="btn" data-act="switch"${has("switch") ? ' data-glow="switch"' : ""} data-id="${esc(a.id)}">改練這一門<small>換上身，熟練度各自保留</small></button></div>`;
+      // 衝絕學（武學重構）：只有上品還沒成絕學的才有這一塊；到了極處才有「衝關」與破境丹，沒到只寫還差什麼。不寫下一品是哪一品（企劃者 2026-10-06）
+      const peakOn = a.cultivate.ok || has("cultivate") || (a.quality === "上品" && (a.slots || []).length > 0);
+      const peak = !peakOn ? "" : `<div class="peak${a.cultivate.ok ? " ready" : ""}">
+          <div class="pk-txt"><b>衝絕學</b><small class="cnote">${esc(ticked ? lg.note : a.cultivate.note)}</small></div>
+          ${a.cultivate.ok || has("cultivate") ? `<button class="btn small ${a.cultivate.ok ? "primary" : ""}" data-act="cultivate"${has("cultivate") ? ' data-glow="cultivate"' : ""} data-id="${esc(a.id)}" ${a.cultivate.ok ? "" : "disabled"}>衝關</button>` : ""}
+          ${lg ? `<label class="legend"><input type="checkbox" data-legend="${esc(a.id)}" ${ticked ? "checked" : ""}><span>${esc(lg.label)}</span></label>` : ""}
+          ${buyPill(a)}
+        </div>`;
       const info = S.artInfo === a.id;
       // 功法庫的卡：跟身上同一種那門的比較（W6）直接寫在鈕的上面，改練之前看得到，不必先點「詳情」；點開詳情時功法卡裡也有，這裡就不重複
       const compare = !slot && a.compare && !info ? `<p class="cmp">${esc(a.compare)}</p>` : "";
-      return `<div class="ten">${Array.from({ length: 10 }, (_, k) => `<i${k < level ? ' class="on"' : ""}></i>`).join("")}</div>
-        <div class="lvline"><b>第${level}成</b><span>${esc(a.kind)}${a.attribute ? `・屬${esc(a.attribute)}` : ""}・收${esc(a.affinity || "")}${esc(scoreText(a))}</span></div>
+      return `<div class="train">
+          <div class="tr-meter"><div class="tr-lv"><b>第${level}成</b>${typeof a.score === "number" ? `<span class="score">評 ${a.score}</span>` : ""}</div>${pips}</div>
+          ${train}
+        </div>
+        ${why ? `<p class="train-why">${esc(why)}</p>` : ""}
+        <div class="lvline"><span>${esc(a.kind)}${a.attribute ? `・屬${esc(a.attribute)}` : ""}・收${esc(a.affinity || "")}</span></div>
         ${slotsHtml(a, x)}
         ${compare}
-        <div class="acts">${first}${cult}</div>
+        ${switchBtn}
         ${S.artNote && S.artNote.id === a.id ? `<div class="msg art-result">${S.artNote.html}</div>` : ""}
-        ${lg ? `<label class="legend"><input type="checkbox" data-legend="${esc(a.id)}" ${ticked ? "checked" : ""}><span>${esc(lg.label)}</span></label>` : ""}
-        ${buyPill(a)}
+        ${peak}
         <div class="more">
           ${a.melt.ok ? "" : `<span class="why">${esc(a.melt.note)}</span>`}
           <button class="linkish" data-act="melt"${has("melt") ? ' data-glow="melt"' : ""} data-id="${esc(a.id)}" data-name="${esc(a.name)}" data-confirm="${esc(a.melt.confirm)}" ${a.melt.ok ? "" : "disabled"} title="${esc(a.melt.note)}">熔煉${a.melt.ok ? `（${/^退回/.test(a.melt.note) ? esc(a.melt.note.replace(/^退回/, "")) : "只空出一格"}）` : ""}</button>

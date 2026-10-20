@@ -1,5 +1,5 @@
 """修練（武學重構，Joy 2026-10-20）：品級不再靠修練衝——合成（fusion.blend_grade）與自創才長品級。
-修練頁的「修練」只剩最後一步：上品練到第十成、評分滿百了，就等契機晉為絕學（seize：打贏一場硬仗、在決戰裡出手滿幾回合，
+修練頁的「修練」只剩最後一步：上品練到第十成，就等契機晉為絕學（seize：打贏一場硬仗、在決戰裡出手滿幾回合，
 擲一次頓悟），或服一枚破境丹關起門來強行衝關（cultivate(use_legend=True)，force_odds）。
 品質是每個人各練各的（PlayerState.art_quality）；升品時「成」不變。
 第一個把某門武學修到絕學的人替全服取正式名字：功法 id 不變，只改顯示的名字（world.rename_skill）——
@@ -17,13 +17,14 @@ from .rules import add_chronicle
 from .state import GameState
 from .world_state import WorldStateStore
 
-NO_RANK_LINE = "品級不靠修練：合成或自創才長品級。練到第十成、評分滿百的上品，等一場硬仗的契機，便能晉為絕學。"  # 待 joy 潤
+NO_RANK_LINE = "品級不靠修練：合成或自創才長品級。練到第十成的上品，等一場硬仗的契機，或服一枚破境丹，便能晉為絕學。"  # 待 joy 潤
 CHANCE_LINE = "【{name}】已到上品的極處，剩下那一步不在練功房裡——打一場硬仗等契機，或服一枚{pill}強行衝關。"  # 待 joy 潤
-NOT_RIPE_LINE = "【{name}】還沒到極處：練到第十成、評分滿 {need}，才談得上絕學（現在第{level}成、評 {score}）。"  # 待 joy 潤
+NOT_RIPE_LINE = "【{name}】還沒到極處：練到第十成，才談得上絕學（現在第{level}成）。"  # 待 joy 潤
 
 
 def ready(state: GameState, content: Content, world: WorldStateStore, art_id: str) -> tuple[bool, str | None]:
-    """這一門到了衝絕學的門檻沒：上品、第十成、評分到 Config.arts.master_score（第三批，選法 B；寫死的武學不衝）。回（到了沒, 沒到的原因）。"""
+    """這一門到了衝絕學的門檻沒：上品、第十成（寫死的武學不衝）。回（到了沒, 沒到的原因）。
+    評分不是門檻（Joy 2026-10-20「武學衝絕品跟評分無關，等契機、破鏡丹、大量心得」）：評分只拿來比高下、排武學榜。"""
     art = team.resolve_art(art_id, content, world)
     if art is None or arts_mod.fixed(content, art_id):
         return False, None
@@ -31,10 +32,8 @@ def ready(state: GameState, content: Content, world: WorldStateStore, art_id: st
         return False, None
     level = library.level_of(state, art_id) or 1
     need = max(content.config.cultivate_min_level.get("絕學", MAX_LEVEL), 1)
-    bar = content.config.arts.master_score
-    score = arts_mod.score(state, content, world, team.player_art(state, content, world, art_id))
-    if level < need or score < bar:
-        return False, NOT_RIPE_LINE.format(name=art.name, level=level, need=bar, score=score)
+    if level < need:
+        return False, NOT_RIPE_LINE.format(name=art.name, level=level)
     return True, None
 
 

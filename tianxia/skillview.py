@@ -484,9 +484,8 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
             "pose": create_mod.icon_pose(content, art, weapon),  # 功法卡上的小火柴人：自創的照自己擺的式，其餘照兵器挑預設架式
             "weapon": weapon,  # 小圖上手裡拿什麼（內功、推不出來的是 None）
             "rating": arts_mod.rating(content, art, level or 1, state, world),  # 戰力：威力 ×（1＋槽裡技能的加成）
-            # 評分（第三批）：槽裡效果的分數加總；bar 是衝絕學的門檻（只有上品還沒成絕學的那幾門給，其餘 None）
+            # 評分（第三批）：槽裡效果的分數加總，沒有上限；不是衝絕學的門檻（Joy 2026-10-20），只拿來比高下、排武學榜
             "score": arts_mod.score(state, content, world, art),
-            "bar": content.config.arts.master_score if art.quality == "上品" and not arts_mod.fixed(content, art_id) else None,
             "compare": compare,  # 卷軸卡直接把它寫在功法庫那張卡的鈕上面（改練之前看得到）；點開「詳情」時功法卡裡也有
             "cultivate": {
                 "ok": problem is None, "note": note, "legend": legend, "buy": _buy_choice(state, content, world, art),
@@ -567,7 +566,7 @@ def slot_rows(state: GameState, content: Content, world: WorldStateStore, art: M
 
 
 def _buy_choice(state: GameState, content: Content, world: WorldStateStore, art) -> dict | None:
-    """「以心得換破境丹」那一顆（Joy 2026-10-18）：這門上品到了極處（cultivation.ready：第十成、評分滿百）、換丹開著才有，
+    """「以心得換破境丹」那一顆（Joy 2026-10-18）：這門上品到了極處（cultivation.ready：第十成）、換丹開著才有，
     否則 None（丹只在強行衝關那一下用得上）。ok／why 跟 cultivation.buy_legend 同一個判斷。"""
     price = cultivation.legend_price(state, content)
     if price is None or prologue.active(state, content) or not cultivation.ready(state, content, world, art.id)[0]:

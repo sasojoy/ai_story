@@ -1,4 +1,4 @@
-"""賽季榜單：天下武學榜／內功榜（設計文件 6.5），依威力排名，是玩家的具體終局目標
+"""賽季榜單：天下武學榜／內功榜（設計文件 6.5），依評分排名（Joy 2026-10-20「武學榜高的在上面」：arts.score，一樣高看威力），是玩家的具體終局目標
 之一，寫進賽季結束的江湖史（見 world.py::end_season）。
 企劃者 2026-10-14 加善人榜、惡人榜、名人榜、宗師榜（compute_boards），見聞的「榜單」分頁讀它（server.api_boards，
 伺服器那邊快取一陣子：掃全部角色不便宜，二三十人在線時每個人點開都掃一次划不來；引擎不讀時鐘，快取不放這裡）。
@@ -11,14 +11,14 @@
 """
 from __future__ import annotations
 
-from . import arena, library, martial_arts, team
+from . import arena, arts, library, martial_arts, team
 from .characters import CharacterStore, open_characters
 from .models import Content
 from .world_state import WorldStateStore
 
 TOP_N = 10
 
-LeaderboardRow = tuple[str, str, str, float]  # (玩家名號, 功法名稱, 品質, 威力)
+LeaderboardRow = tuple[str, str, str, float, int]  # (玩家名號, 功法名稱, 品質, 威力, 評分)
 
 
 def compute_leaderboard(
@@ -39,8 +39,8 @@ BOARDS: tuple[tuple[str, str, str], ...] = (
     ("惡人", "惡人榜", "這一季攢下的惡名"),
     ("名人", "名人榜", "這一季的名望"),
     ("宗師", "宗師榜", "練成絕學的門數；一樣多時看首創的武學與意境"),
-    ("武學", "天下武學榜", "身上那門武學的威力"),
-    ("內功", "內功榜", "身上那門內功的威力"),
+    ("武學", "天下武學榜", "身上那門武學的評分；一樣高看威力"),  # 待 joy 潤
+    ("內功", "內功榜", "身上那門內功的評分；一樣高看威力"),  # 待 joy 潤
     ("擂台", "擂台榜", "擂台上的名次；前十名有稱號"),
 )
 STAT_BOARDS = {"善人": ("good", "善名"), "惡人": ("evil", "惡名"), "名人": ("fame", "名望")}
@@ -70,7 +70,7 @@ def compute_boards(
             if art is None:
                 continue
             level = getattr(member, slot.replace("_id", "_level"))
-            board[kind].append((p.name, art.name, art.quality, martial_arts.power_at(art, level)))
+            board[kind].append((p.name, art.name, art.quality, martial_arts.power_at(art, level), arts.score(state, content, world, art)))
         for kind, (stat, label) in STAT_BOARDS.items():
             value = p.stats.get(stat, 0)
             if value > 0:
@@ -85,7 +85,7 @@ def compute_boards(
             board["擂台"].append((e.name, (-e.rank,), "・".join(t for t in (title, arena.record_text(e)) if t)))
     for kind, rows in board.items():
         if kind in ("武學", "內功"):
-            rows.sort(key=lambda row: (-row[3], row[0]))
+            rows.sort(key=lambda row: (-row[4], -row[3], row[0]))
         else:
             rows.sort(key=lambda row: (tuple(-v for v in row[1]), row[0]))
         board[kind] = rows if top is None else rows[:top]
@@ -95,8 +95,8 @@ def compute_boards(
 def row_text(kind: str, row) -> tuple[str, str]:
     """一列寫給人看的兩段：(名號, 後面那一段)。"""
     if kind in ("武學", "內功"):
-        owner, name, quality, power = row
-        return owner, f"【{name}】（{quality}，威力 {power:.1f}）"
+        owner, name, quality, power, score = row
+        return owner, f"【{name}】（{quality}，評 {score}，威力 {power:.1f}）"
     return row[0], row[2]
 
 
@@ -135,8 +135,8 @@ def chronicle_lines(board: dict[str, list], season: int) -> list[str]:
 def _view_row(kind: str, row, rank: int, me: str | None) -> dict:
     """畫面上的一列：名號、後面那一段；武學榜、內功榜的那一段拆成功法名（text）與品質威力（sub），375 寬才排得下。"""
     if kind in ("武學", "內功"):
-        owner, name, quality, power = row
-        return {"rank": rank, "name": owner, "text": f"【{name}】", "sub": f"{quality}・威力 {power:.1f}", "you": owner == me}
+        owner, name, quality, power, score = row
+        return {"rank": rank, "name": owner, "text": f"【{name}】", "sub": f"{quality}・評 {score}・威力 {power:.1f}", "you": owner == me}
     return {"rank": rank, "name": row[0], "text": row[2], "you": row[0] == me}
 
 

@@ -473,10 +473,11 @@ def test_the_practice_page_points_at_the_buttons_of_the_step(hut):
 def test_the_practice_button_is_greyed_with_the_masters_reason(hut):
     m, x = pages_at(hut, 1)  # 看修練頁那一步：沒叫你練功
     page = run(m, "return H.pagePractice();", menxia=x)
-    assert re.search(r'data-op="practice" data-glow="practice" data-kind="\w+" disabled>師父這一步沒叫你練功。', page)
+    assert re.search(r'data-op="practice" data-glow="practice" data-kind="\w+" aria-label="師父這一步沒叫你練功。"[^>]*disabled>', page)
+    assert '<p class="train-why">師父這一步沒叫你練功。</p>' in page  # 原因寫在朱印底下那一行
     m, x = pages_at(hut, 4)  # 練到第三成那一步：裝了意境的基礎拳腳就在身上（武學重構：不必先換上），武學那一欄練得下去
     page = run(m, "return H.pagePractice();", menxia=x)
-    assert re.search(r'data-op="practice" data-glow="practice" data-kind="武學" >練成第\d+成<small>心得', page)
+    assert re.search(r'data-op="practice" data-glow="practice" data-kind="武學" aria-label="練成第\d+成（心得 \d+）"[^>]*><b>練</b><small>心得', page)
 
 
 LONG_WORDS = "這一段師父的話很長很長，" * 8 + "\n\n" + "最後一段才是要你做的事：按底下的鈕。"

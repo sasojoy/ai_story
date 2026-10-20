@@ -2571,7 +2571,7 @@ def _a_peerless_candidate(client, pills=2):
     art = team.resolve_art(art_id, server.CONTENT, game.world)
     n = len(arts.slots_of(game.state, server.CONTENT, art))
     game.state.player.art_slots[art_id] = ["feng", "huo", "shui", "shan"][:n]  # 兩門基礎武學合出來兼容並蓄：什麼都收
-    from tests.test_cultivation import STRONG  # 第三批：評分要滿百才到極處，槽裡放效果夠濃的意境
+    from tests.test_cultivation import STRONG  # 槽裡放效果夠濃的意境（評分不是門檻，只是讓卡上有東西）
     from tianxia.state import InsightFx
 
     for ins in game.state.player.art_slots[art_id]:

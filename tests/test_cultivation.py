@@ -1,5 +1,5 @@
 """修練（武學重構，Joy 2026-10-20「我想改整個架構，不要縫縫補補」）：品級不靠修練衝——合成與自創才長品級。
-修練頁只剩最後一步：上品、第十成、意境槽裝滿（cultivation.ready）→ 打贏硬仗的契機（seize）擲一次頓悟，
+修練頁只剩最後一步：上品、第十成（cultivation.ready；評分不是門檻）→ 打贏硬仗的契機（seize）擲一次頓悟，
 或服一枚破境丹強行衝關（cultivate(use_legend=True)，force_odds）。衝品的階梯（40／60／必成、保底、搭配、火候）都拿掉了，
 這裡只量剩下的：門檻、服丹衝關、契機、第一個練成絕學的人定名、引擎寫不寫江湖紀錄。"""
 import random
@@ -7,7 +7,7 @@ import re
 
 import pytest
 
-from tianxia import cultivation, fusion, library, skillview, team
+from tianxia import arts as arts_mod, cultivation, fusion, library, skillview, team
 from tianxia.martial_arts import Insight, generate_from_name
 from tianxia.state import InsightFx, new_game_state
 
@@ -47,7 +47,7 @@ def equip(state, art_id="旋風腿", insights=BASICS):
 
 
 def ripen(state, art_id="旋風腿", level=10, quality="上品", slots=BASICS):
-    """練到極處（cultivation.ready）：上品、第十成、意境槽（上品 4 格）都裝滿。"""
+    """練到極處（cultivation.ready）：上品、第十成；意境槽（上品 4 格）照 slots 裝。"""
     p = state.player
     p.art_quality[art_id] = quality
     if art_id == p.member.wugong_id:
@@ -57,7 +57,7 @@ def ripen(state, art_id="旋風腿", level=10, quality="上品", slots=BASICS):
     else:
         p.art_levels[art_id] = level
     p.art_slots[art_id] = list(slots)
-    for insight_id in slots:  # 評分（第三批）：每一份是那一路三重加第二個功效一重（32 分），四格 128 過一百、三格 96 不到
+    for insight_id in slots:  # 每一份是那一路三重加第二個功效一重（評分 32 分；評分不是門檻，只是讓卡上有東西）
         if insight_id in STRONG:
             p.insight_fx[insight_id] = InsightFx(quality="上品", general=dict(STRONG[insight_id]))
     return state
@@ -70,18 +70,21 @@ def kicker(state, world):
     return ripen(equip(state))
 
 
-# ── 門檻：上品、第十成、槽裝滿 ──────────────────────────
+# ── 門檻：上品、第十成 ──────────────────────────
 
 
-def test_ready_needs_an_upper_grade_art_at_ten_levels_with_every_slot_filled(kicker, content, world):
+def test_ready_needs_an_upper_grade_art_at_ten_levels(kicker, content, world):
     assert cultivation.ready(kicker, content, world, "旋風腿") == (True, None)
     kicker.player.art_levels["旋風腿"] = 9
     ok, why = cultivation.ready(kicker, content, world, "旋風腿")
-    assert not ok and why == cultivation.NOT_RIPE_LINE.format(name="旋風腿", level=9, need=100, score=128)
-    kicker.player.art_levels["旋風腿"] = 10
-    kicker.player.art_slots["旋風腿"] = ["feng", "huo", "shui", None]  # 評分（第三批）：三格 96，差一點不到一百
-    ok, why = cultivation.ready(kicker, content, world, "旋風腿")
-    assert not ok and "評 96" in why
+    assert not ok and why == cultivation.NOT_RIPE_LINE.format(name="旋風腿", level=9)
+
+
+def test_the_score_is_no_gate(kicker, content, world):
+    """Joy 2026-10-20「武學衝絕品跟評分無關，等契機、破鏡丹、大量心得」：槽空著、評分 0 的上品第十成照樣到了極處。"""
+    kicker.player.art_slots["旋風腿"] = [None, None, None, None]
+    assert arts_mod.score(kicker, content, world, team.player_art(kicker, content, world, "旋風腿")) == 0
+    assert cultivation.ready(kicker, content, world, "旋風腿") == (True, None)
 
 
 @pytest.mark.parametrize("quality", ["下品", "中品", "絕學"])
@@ -197,7 +200,6 @@ def test_the_notes_use_the_configured_pill_name(kicker, content, world):
 
 
 @pytest.mark.parametrize("break_it", [
-    lambda p: p.art_slots.update({"旋風腿": ["feng", "huo", "shui", None]}),  # 槽沒裝滿
     lambda p: p.art_levels.update({"旋風腿": 9}),                            # 還沒第十成
     lambda p: setattr(p, "stamina", 5),                                       # 體力不足
     lambda p: setattr(p, "naming", "別的絕學"),                                 # 還有一門絕學等著取名
@@ -240,7 +242,7 @@ def test_a_roll_says_what_it_cost_in_stamina_right_after_the_result(kicker, cont
 
 
 def _worn(state, level=10, slots=BASICS):
-    """旋風腿穿在身上、上品、第十成、槽裝滿。"""
+    """旋風腿穿在身上、上品、第十成、槽照 slots 裝。"""
     p = state.player
     p.arts, p.member.wugong_id = [], "旋風腿"
     return ripen(state, level=level, slots=slots)
@@ -262,9 +264,8 @@ def test_a_missed_chance_leaves_a_soft_hint_and_changes_nothing(kicker, content,
 @pytest.mark.parametrize(("ratio", "level", "slots"), [
     (0.29, 10, BASICS),                          # 仗不夠硬
     (0.5, 9, BASICS),                            # 還沒第十成
-    (0.5, 10, ["feng", "huo", "shui", None]),    # 槽沒裝滿
 ])
-def test_no_chance_without_a_hard_enough_fight_ten_levels_and_full_slots(kicker, content, world, ratio, level, slots):
+def test_no_chance_without_a_hard_enough_fight_and_ten_levels(kicker, content, world, ratio, level, slots):
     _worn(kicker, level=level, slots=slots)
     assert cultivation.seize(kicker, content, world, ratio, WIN) == []
     assert kicker.player.art_quality["旋風腿"] == "上品"
@@ -577,7 +578,7 @@ def test_the_stamina_change_is_not_written_for_a_naming(adept):
 
 
 @pytest.mark.parametrize("break_it", [
-    lambda p: p.art_slots.update({"旋風腿": ["feng", "huo", "shui", None]}),  # 槽沒裝滿
+    lambda p: p.art_levels.update({"旋風腿": 9}),                            # 還沒第十成
     lambda p: setattr(p, "arts", []),                                         # 沒有這門武學
     lambda p: setattr(p, "stamina", 5),                                       # 體力不足
     lambda p: p.art_quality.update({"旋風腿": "絕學"}),                        # 已經是絕學
@@ -643,7 +644,7 @@ def test_the_practice_row_only_offers_the_pill_on_the_last_step(adept):
     assert row["cultivate"]["xinde"] is None  # 武學重構：沒有以心得修練了
     adept.state.player.art_levels["旋風腿"] = 9
     row = next(r for r in skillview.art_rows(adept.state, adept.content, adept.world) if r["id"] == "旋風腿")
-    assert not row["cultivate"]["ok"] and row["cultivate"]["legend"] is None and "評 128" in row["cultivate"]["note"]
+    assert not row["cultivate"]["ok"] and row["cultivate"]["legend"] is None and "第9成" in row["cultivate"]["note"]
     adept.state.player.art_levels["旋風腿"] = 10
     adept.state.player.art_quality["旋風腿"] = "中品"
     row = next(r for r in skillview.art_rows(adept.state, adept.content, adept.world) if r["id"] == "旋風腿")
