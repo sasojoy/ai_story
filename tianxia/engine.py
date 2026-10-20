@@ -7225,7 +7225,10 @@ class Game:
         count = f"（第 {battle.round_number + 1}／{battle_instance.total_rounds(definition)} 回合・{self._round_wait(battle, definition)}）"
         lines = [header, *self._idle_note(battle), f"【{act.title}】{count}{battle_instance.act_text(battle, definition)}"]
         p = battle.participants.get(self.state.player.name)
-        lines += self._chief_lines(battle, definition, p.faction if p is not None else self._side())
+        mine = p.faction if p is not None else self._side()
+        if p is None and mine is not None and mine == battle_instance.neutral_guard(battle):
+            mine = None  # FB-543：單方攻中立地，守將站的是這個人陣營的 id，人沒參戰（旁觀）：守將的令不是他這邊的令，不寫。助守的人（p 在守將那一格）照寫
+        lines += self._chief_lines(battle, definition, mine)
         lines += self._round_blocks(battle, definition)
         if p is not None and (role := battle_instance.role_text(self.content.config.battle, p.role)):
             lines.append(f"你的職位：{role}")

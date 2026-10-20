@@ -339,6 +339,7 @@ class SiegeInfo(BaseModel):
     absent: str = ""
 
 
+GUARD_SUFFIX = "（守將）"  # 待 joy 潤：中立地守將顯示名的後綴（siege.GUARD_NAME 用它；find_commander 的 guard_alias 拿它拆回隊伍名）
 GUARD = "guard"  # 三方混戰（裁決 22，企劃者 2026-10-21）：守將與助守的人站的第三格；範本照舊只有官軍、黃巾兩格
 GUARD_SIDE = "守軍"  # 待 joy 潤：單方攻中立地時守將那一格在畫面、戰報、天下大事上的名字（不冠任何一軍，FB-540）
 # 單方攻中立地時的幕文字（範本的 text_by_lead 寫的是兩軍對打，「漢家的旗」「官軍的陣線」對中立的守軍不對，FB-540）；待 joy 潤
@@ -1661,17 +1662,41 @@ def find_escort(instance: BattleInstance, definition: BattleDef, name: str, text
     return owner, owner.escort
 
 
+def guard_alias(c: Commander) -> str:
+    """中立地的守將（隊伍當的，fid 是「squad:…」，顯示名是「隊伍名（守將）」）放手一搏也點得到他的另一個叫法：拿掉後綴的隊伍名本身
+    （FB-542）。其他人物沒有，是空字串。"""
+    return c.name.removesuffix(GUARD_SUFFIX) if c.fid.startswith("squad:") and c.name.endswith(GUARD_SUFFIX) else ""
+
+
+def _alias_at(alias: str, text: str, instance: BattleInstance) -> int:
+    """隊伍名在文字裡最先出現的位置（沒有是 -1）。隊伍名只是別人名字的一部分時不算（「劫道響馬王」是一位參戰者、或另一位人物的名號：
+    寫的是他，不是守將）：先把那些比它長、又含著它的名號蓋掉再找；蓋掉用同樣長度的填字，位置不變。"""
+    longer = sorted(
+        {n for n in (*instance.participants, *(c.name for c in instance.commanders)) if len(n) > len(alias) and alias in n},
+        key=len, reverse=True,
+    )
+    for n in longer:
+        text = text.replace(n, "\u3000" * len(n))
+    return text.find(alias)
+
+
 def find_commander(instance: BattleInstance, definition: BattleDef, name: str, text: str) -> Commander | None:
     """放手一搏的文字裡點名的對面上陣人物（同 find_target：名字 2 字以上、最先出現的那一個）；只認還在陣上的。
-    三方混戰（裁決 22）的守將站 GUARD 那一格：兩軍的人點得到他。"""
+    三方混戰（裁決 22）的守將站 GUARD 那一格：兩軍的人點得到他。中立地的守將顯示名帶著「（守將）」，照抄整個名字、或只寫隊伍名
+    本身都算點名到他（FB-542；guard_alias，隊伍名也要 2 字以上，也不能只是別人名字的一部分）。"""
     me = instance.participants.get(name)
     armies = set(fields(instance, definition))
     if me is None or me.faction not in armies:
         return None
-    found = [
-        (text.find(c.name), -len(c.name), i) for i, c in enumerate(instance.commanders)
-        if c.faction in armies and c.faction != me.faction and c.fallen_round is None and len(c.name) >= 2 and c.name in text
-    ]
+    found = []
+    for i, c in enumerate(instance.commanders):
+        if c.faction not in armies or c.faction == me.faction or c.fallen_round is not None or len(c.name) < 2:
+            continue
+        if c.name in text:
+            found.append((text.find(c.name), -len(c.name), i))
+        alias = guard_alias(c)
+        if len(alias) >= 2 and (at := _alias_at(alias, text, instance)) >= 0:
+            found.append((at, -len(alias), i))
     return instance.commanders[min(found)[2]] if found else None
 
 
