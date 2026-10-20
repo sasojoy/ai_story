@@ -61,6 +61,8 @@ description: 《天下大勢》的分支、測試與合併規矩（企劃者 202
   2. 半成品由 PM 提交成 WIP 推上它的分支（commit 訊息寫停在哪一步）；
   3. 重派新的子代理（Agent 工具、`isolation: "worktree"`），派工單寫「從 `origin/<分支>` 開 `git switch -c <分支> origin/<分支>`，舊的工作樹不要用」，再把那一步之前做完的寫清楚；
   4. 交接第二節改成新派的這幾個。
+  - **派之前先看自己的對話在哪個目錄**（2026-10-20 晚學到的）：新對話常常開在主 clone（`C:\Ray\專案\ai遊戲`），那裡停在 `main`：CLAUDE.md 是舊的大份、也沒有 `tianxia-dev`／`tianxia-qa` 技能，從這裡派的子代理（`isolation: "worktree"`）兩樣都拿錯。先開自己的 PM 工作樹（`git worktree add <主 clone>/.claude/worktrees/pm-<名字> -b pm/<名字> origin/develop`），用 `mcp__ccd_directory__change_directory` 把對話搬過去（這一輪結束才生效：開一個很短的背景指令〔例如 fetch〕讓自己被叫回來），Bash 也 `cd` 過去，確認 `pwd` 是那個工作樹再派。
+  - 半成品的 WIP 推到 `dev/<x>b` 這種另開的分支，不直接推回原本的 `dev/<x>`（QA 會從那裡開）；接手的子代理收尾之後再 fast-forward 推進 `dev/<x>`。
 - **PM 不能寫別的工作樹的檔**（有 hook 擋）：PM 要改 develop 上的文件，在 scratchpad 開一個自己的工作樹（`git worktree add <scratchpad>/pmwt -b pm/<名字> origin/develop`；不要切主 clone 的分支，主 clone 是大家讀 `CLAUDE.md` 的地方），改完 `git push origin HEAD:develop`（快轉）。git 指令可以 `git -C` 別的工作樹。
 - **這份 clone 的 `git fetch origin` 不會更新 `origin/dev/*`、`origin/feature/*`、`origin/qa/*`**（refspec 只有一部分）：核對推送、挑測試的 base、算 diff 之前，明確 fetch 那個分支（`git fetch origin +refs/heads/dev/x:refs/remotes/origin/dev/x`，或 `+refs/heads/dev/*:refs/remotes/origin/dev/*`），或直接看 `git ls-remote`。不然會把「推到了」誤判成「沒推到」、拿舊的 base 跑測試。
 - **提前做（企劃者 2026-10-20「能提前先做的部分就加開任務」）**：
