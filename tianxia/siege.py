@@ -11,6 +11,9 @@
 - 兩軍同時攻同一塊中立地＝三方混戰（裁決 22，企劃者 2026-10-21）：守將留著、站第三格 battle_instance.GUARD，兩軍都打他、兩軍之間也互打，
   誰補上守將最後一刀誰拿下；回合打完守將沒倒，守住、照舊中立。散人可以投效兩軍之一或助守。守將的池子在集結結束那一刻照兩軍到場的人數定
   （size_melee_guard）。回合裡的規則在 battle_instance（resolve_round、_strike_guard）。
+- 集結結束只有一軍到場（裁決 23，PM 2026-10-21）：另一軍一個人都沒來算棄權，這一場轉回單方攻中立地（lone_army）——攻方只剩到場的那一軍，
+  守將站棄權那一軍那一格、池子照單方（Config.battle.generals.pool 第一個），之後守將照舊、戰線過了照原本的門檻就拿下，不用把守將打倒。
+  兩軍都沒人到照舊作罷（void_absent，裁決 19）；兩軍都有人到照三方混戰。
 - 留守（commanders）：守方是陣營時照龍頭上陣的挑法派那一區守方的大勢人物，沒有人物或中立地時是那裡最強的一路隊伍當守將（guard_squad）。
 - 收場（verdict）：攻方贏（大勝或險勝）就易手；否則原主人留著（中立還是中立）。三方混戰照誰補上最後一刀。攻方一個人都沒到（集結結束時）作罷。
 只 import models、state、battle_instance、generals、territory、conquest、conquest_day（作罷）、world_state 型別。"""
@@ -39,6 +42,7 @@ MELEE_HELD_LINE = "{title}：兩軍都沒能補上最後一刀，守軍守住了
 MELEE_TAKEN_TITLE = "{side}補上最後一刀，拿下{place}"  # 戰報與紀錄的結果
 MELEE_SCENE_LINE = "{attackers}同時攻{place}，守方{defender}兩頭迎戰；守將的氣血照開打時兩軍到場的人數定，誰補上最後一刀誰拿下這一塊。"
 MELEE_MIN_HEADS = 2  # 【開發】三方混戰守將的池子至少照幾個人算（一軍只到一個人也不會一碰就倒）
+ABSENT_SCENE_LINE = "{absent}沒有人趕到，這一場只剩對面一軍來攻。"  # 待 joy 潤：三方混戰集結結束只有一軍到場（裁決 23），場景第二行多的一句
 TAKEN_TITLE = "{side}{margin}，拿下{place}"  # 待 joy 潤：戰報與紀錄的結果
 HELD_TITLE = "{side}守住{place}"
 STALEMATE_TITLE = "相持，{place}照舊"
@@ -92,6 +96,12 @@ def start_trend(world: WorldState, content: Content, info: SiegeInfo) -> int:
     return battle_instance.CENTER - conquest.progress_shift(world, content, info.loc)
 
 
+def _guard_pool(content: Content) -> float:
+    """單方攻中立地時守將的池子：同龍頭上陣的主將（Config.battle.generals.pool 第一個）。"""
+    pool = content.config.battle.generals.pool
+    return pool[0] if pool else 1000.0
+
+
 def guard_squad(world: WorldState, content: Content, loc_id: str, side_slot: str) -> Commander | None:
     """那裡最強的一路隊伍當守將（站 side_slot 那一格；fid 是「squad:隊伍 id」，收場時 generals.after_battle 自然略過）：
     份量＝strength(難度) × 龍頭上陣主將的倍數，池子照主將（三方混戰站 GUARD 時先照 MELEE_MIN_HEADS 個人算，集結結束再照到場的人數定，
@@ -101,7 +111,7 @@ def guard_squad(world: WorldState, content: Content, loc_id: str, side_slot: str
         return None
     best = max(squads, key=lambda sid: (content.squads[sid].difficulty, sid))
     gen = content.config.battle.generals
-    rank, pool = (gen.ranks[0] if gen.ranks else 1.0), (gen.pool[0] if gen.pool else 1000.0)
+    rank, pool = (gen.ranks[0] if gen.ranks else 1.0), _guard_pool(content)
     if side_slot == GUARD:
         pool = content.config.conquest.melee_pool_per_head * MELEE_MIN_HEADS
     score = round(battle_instance.strength(content.config.battle, content.squads[best].difficulty) * rank, 1)
@@ -121,6 +131,32 @@ def commanders(state: GameState, content: Content, info: SiegeInfo, definition: 
             return rows
     guard = guard_squad(state.world, content, info.loc, side)
     return [guard] if guard is not None else []
+
+
+def lone_army(content: Content, battle: battle_instance.BattleInstance, definition: BattleDef) -> bool:
+    """三方混戰集結結束、開打的那一下（Game._advance_battle_round 在 close_muster、void_absent 之後、size_melee_guard 之前叫，在 mutate 裡）：
+    兩軍裡只有一軍有人到場（另一軍一個人都沒來，算棄權；裁決 23，PM 2026-10-21），這一場轉回單方攻中立地——到場的那一軍是攻方，守將改站
+    棄權那一軍那一格（SiegeInfo.guard_side，跟單方攻中立地一樣：另一軍站不進去、散人可以助守），池子改回單方的（_guard_pool），助守的人
+    （GUARD）跟著守將站過去，將令重喊一次；之後一切照單方攻中立地（守將照舊、戰線過了門檻就拿下，不用把守將打倒）。
+    SiegeInfo.absent 記沒到場的那一軍（場景多一句）。回轉了沒；兩軍都有人到（照三方混戰）、兩軍都沒人（void_absent 已經作罷）不動。
+    到場＝有參戰者站那一軍那一格（臨時投效的散人也算）。"""
+    if not battle_instance.melee(battle) or battle.phase != "active":
+        return False
+    present = [a for a in battle.siege.attackers if any(p.faction == a for p in battle.participants.values())]
+    if len(present) != 1:
+        return False
+    keep = present[0]
+    absent = _other(keep)
+    battle.siege.attackers, battle.siege.guard_side, battle.siege.absent = [keep], absent, absent
+    pool = _guard_pool(content)
+    for c in battle.commanders:
+        if c.faction == GUARD:
+            c.faction, c.neili, c.neili_cap = absent, pool, pool
+    for p in battle.participants.values():
+        if p.faction == GUARD:
+            p.faction = absent
+    battle_instance.call_orders(battle, definition, content.config.battle)
+    return True
 
 
 def size_melee_guard(content: Content, battle: battle_instance.BattleInstance) -> None:
@@ -216,7 +252,10 @@ def scene_line(content: Content, info: SiegeInfo, battle: battle_instance.Battle
     else:
         guard = next((c.name for c in battle.commanders if c.fid.startswith("squad:")), "")
         side = guard or ("兩軍相爭" if defender(info) is None else "守將")
-    return SCENE_LINE.format(attackers=who, place=content.locations[info.loc].name, defender=side)
+    line = SCENE_LINE.format(attackers=who, place=content.locations[info.loc].name, defender=side)
+    if info.absent:  # 三方混戰只有一軍到場、轉回單方攻中立地（裁決 23）：多一句沒到場的是誰
+        line += ABSENT_SCENE_LINE.format(absent=content.scenario.faction_name(info.absent, info.absent))
+    return line
 
 
 def _rumor(world: WorldState, text: str, loc: str | None = None) -> None:

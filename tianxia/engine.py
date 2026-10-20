@@ -5937,6 +5937,7 @@ class Game:
             if siege.void_absent(self.content, battle):  # 攻城戰（領地爭奪第二批）：攻方一個人都沒到，這一場作罷
                 battle.end_time = self.state.world.time
                 return [battle.unfinished_text]
+            siege.lone_army(self.content, battle, definition)  # 三方混戰只有一軍到場（裁決 23）：轉回單方攻中立地
             siege.size_melee_guard(self.content, battle)  # 三方混戰（裁決 22）：守將的池子照兩軍到場的人數定
         if battle.phase != "active":
             return []
