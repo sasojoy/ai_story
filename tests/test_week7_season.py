@@ -188,6 +188,81 @@ def test_the_bounty_notice_counts_days():
     assert bounties.due_short(b, c7, v.world).startswith("到第 2 天・剩 ")
 
 
+def _hang_day_less(content, now, day=2):
+    """沒有「第幾天」（b.day 是 0）的那幾種懸賞，各走真正掛單的函式掛一張，掛在季曆第 day 天 12:00（週末、14 天的季是第 day 天 12:00）：
+    系統掛的陣營通緝與官府通緝（post_auto）、玩家押錢掛的通緝（post）、大勢人物的追剿與復仇（post_figure）。回 (季, {名字: 那一張})。"""
+    from tianxia import bounties
+
+    season = _season(content, now)
+    state = new_game_state(content, "甲")
+    state.world = season
+    start = calendar.day_start(day, content, season) if calendar.season21_on(season, content) else (day - 1) * DAY
+    season.time = start + 12 * HOUR
+    me = state.player
+    me.faction, me.joined_at = "guan", -1e9  # 過了新手期
+    me.stats.update({"fame": 1000, "evil": 100, "silver": 1000})  # 名聲、惡名夠高：陣營與官府都掛
+    foe = new_game_state(content, "乙")
+    foe.world = season
+    foe.player.faction, foe.player.joined_at = "huang", -1e9
+    assert bounties.post_auto(state, content)
+    assert bounties.post(state, content, foe, 100)[0].startswith("你押了")
+    for motive in ("追剿", "復仇"):
+        assert bounties.post_figure(state, content, "qinjie", motive, "nanyang", "wan_city") is not None
+    hung = {}
+    for b in season.bounties:
+        label = b.motive or (f"{b.auto_by}通緝" if b.auto_by else "押錢通緝")
+        hung[label] = b
+    assert set(hung) >= {"陣營通緝", "押錢通緝", "追剿", "復仇"}
+    assert {b.day for b in hung.values()} == {0}  # 這幾種都沒有第幾天（FB-506 的前提）
+    return season, hung
+
+
+def test_day_less_bounty_notices_count_days_on_week7_fb506():
+    """FB-506（7 天季複驗）：追剿、復仇、系統掛的通緝、玩家押錢掛的通緝沒有 b.day，告示掉到第一季那一支照週次寫「期限 第 2 週・剩 1」
+    （7 天季的週是段，對不上任何東西），點開的紙上卻寫「第 4 天 12:00」。修後告示照到期那一刻寫第幾天，跟每天掛的那一批一個寫法：
+    00:00 到期寫最後還有效的那一天（「到第 2 天」）、其他時刻寫「期限 第 4 天」。"""
+    from tianxia import bounties
+
+    c7 = real_content("week7")
+    season, hung = _hang_day_less(c7, WED14)  # 第 2 天 12:00 掛
+    assert calendar.stamp_text(season.time, c7, season) == "第 2 天 12:00"
+    want = {  # 名字: (紙上, 告示)
+        "陣營通緝": ("第 3 天 00:00", "到第 2 天・剩 1"),  # 掛在第 1 段，第 2 段（第 3 天）00:00 到期
+        "官府通緝": ("第 3 天 00:00", "到第 2 天・剩 1"),
+        "押錢通緝": ("第 4 天 20:00", "期限 第 4 天・剩 1"),
+        "追剿": ("第 4 天 12:00", "期限 第 4 天・剩 1"),  # 追剿、復仇掛 2 個季曆天
+        "復仇": ("第 4 天 12:00", "期限 第 4 天・剩 1"),
+    }
+    assert {name: (bounties.due_text(b, c7, season), bounties.due_short(b, c7, season)) for name, b in hung.items()} == want
+
+
+def test_day_less_bounties_hung_in_the_last_segment_say_season_end_on_week7():
+    """最後一段（第 5～7 天）掛的系統通緝撐到季末（到期在季曆終點）：告示與紙上都寫「到季末」，不寫成「第 8 天」或週次。"""
+    from tianxia import bounties
+
+    c7 = real_content("week7")
+    season, hung = _hang_day_less(c7, WED14, day=6)
+    for name in ("陣營通緝", "官府通緝"):
+        b = hung[name]
+        assert bounties.due_text(b, c7, season) == bounties.SEASON_END
+        assert bounties.due_short(b, c7, season) == f"{bounties.SEASON_END}・剩 1"
+
+
+@pytest.mark.parametrize("profile, want", [
+    ("season21", ["到第 1 週・剩 1", "期限 第 2 週・剩 1", "期限 第 2 週・剩 1", "期限 第 2 週・剩 1"]),  # 21 天季：週就是週，不動
+    ("weekend", ["到第 8 週・剩 1", "到第 8 週・剩 1", "期限 第 9 週・剩 1", "期限 第 9 週・剩 1", "期限 第 9 週・剩 1"]),
+    (None, ["期限 第3天・剩 1"] * 5),  # 14 天的季只寫第幾天
+])
+def test_day_less_bounty_notices_are_unchanged_outside_week7_fb506(profile, want):
+    """21 天季、週末、14 天的季：沒有第幾天的懸賞告示一個字不變（拿掉 b.day 的條件只動 7 天季那一支）。"""
+    from tianxia import bounties
+
+    content = real_content(profile) if profile else real_content()
+    season, hung = _hang_day_less(content, WED14)
+    notices = [bounties.due_short(b, content, season) for b in season.bounties]
+    assert notices == want
+
+
 def test_check_in_runs_seven_days_with_pills_on_days_3_and_6():
     c7 = real_content("week7")
     state = _player(c7)

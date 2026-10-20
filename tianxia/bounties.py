@@ -266,11 +266,13 @@ def due_short(b: Bounty, content: Content, world: WorldState) -> str:
     """店面告示上那一行短的（FB-196，草圖「期限 第 6 週・剩 2」）：第一季只寫週次、規則關著只寫第幾天，到季末寫「到季末・剩 N」。
     兩欄的告示在 375 寬放不下 due_line 那一整行；完整的時刻與「名額還剩 N」留在點開的紙上。待 joy 潤：寫法。
     週次寫最後還有效的那一週（PM 2026-10-14）：自動掛的單在第 N 週週一 00:00 到期，第 N 週一開始就過了，寫「到第 N−1 週」；
-    到期不在週一 00:00 的（管理者改過、照實際時刻的）寫到期那一刻所在的週「期限 第 N 週」。第 1 週週一 00:00 沒有前一週，照後者寫。"""
+    到期不在週一 00:00 的（管理者改過、照實際時刻的）寫到期那一刻所在的週「期限 第 N 週」。第 1 週週一 00:00 沒有前一週，照後者寫。
+    7 天濃縮季（week7_on）週是段，對不上任何東西：每一張都照到期那一刻寫第幾天（00:00 到期寫「到第 N−1 天」，其餘「期限 第 N 天」），
+    不分每天掛的那一批、大勢人物的追剿復仇、系統與玩家掛的通緝（FB-506）；其他季一個字不變（21 天季仍只有每天那一批寫週幾，其餘寫週次）。"""
     left = _left(b)
     if to_season_end(b, content, world):
         return f"{SEASON_END}・剩 {left}"
-    if b.day and calendar.week7_on(world, content):  # 7 天濃縮季：同 21 天季，只寫第幾天（calendar.point_text 的 by_day；待 joy 潤）
+    if calendar.week7_on(world, content):  # 7 天濃縮季：只寫第幾天（calendar.point_text 的 by_day；待 joy 潤）。不看 b.day：追剿、復仇、系統與玩家掛的通緝沒有第幾天，也照到期那一刻寫（FB-506）
         at = calendar.point(b.expires, content, world)
         if (at.hour, at.minute) == (0, 0):
             return f"到第 {calendar.point(b.expires - 1, content, world).cal_day} 天・剩 {left}"
