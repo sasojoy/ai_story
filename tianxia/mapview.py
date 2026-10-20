@@ -12,6 +12,7 @@ from . import atlas, conquest, mapart, mounts, orders, sortie, territory
 from .atlas import KNOWN, Odds
 from .mapart import fmt
 from .models import Content, Location, MapLabel, MapLayout, MapRegion
+from .rules import side_of
 from .state import GameState
 
 NODE_SIZE = {"current": 13, "visible": 13, "remembered": 13, "outline": 11, "dot": 4}  # 摸清的是圓盤半徑，未知是剪影
@@ -228,6 +229,12 @@ def armed_places(state: GameState, content: Content) -> set[str] | None:
     if side is None:
         return set()
     out: set[str] = set()
+    if conquest.on(content, state.world):  # 領地爭奪：每一塊不是自家的區塊都能出陣攻（同 sortie.mode），加上截糧的糧隊
+        own = side_of(state, content)  # 豪強分屬兩軍：依附那一軍
+        return {
+            loc_id for loc_id in content.locations
+            if conquest.sortie_foes(state.world, content, loc_id, own) or orders.extra_enemies(state, content, loc_id, own)
+        }
     for loc_id in content.locations:
         line = territory.line_of(content, loc_id)
         if line is None or not side.goals.get(line):

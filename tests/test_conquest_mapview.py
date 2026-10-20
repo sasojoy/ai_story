@@ -41,6 +41,13 @@ def test_old_svg_paints_the_neutral_disc_and_legend():
     assert mapview.LEGEND_NEUTRAL in mapview.legend_data(game.state, game.content, "situation")["layer"]
 
 
+def test_crossed_swords_on_every_block_you_can_attack():
+    game = _game()
+    armed = mapview.armed_places(game.state, game.content)
+    assert {"deep_mountain", "hilltop_wilds", "runan_wilds", "zhuo_county"} <= armed  # 中立地、黃巾的陣營區塊（城鎮照控制方的巡邏）
+    assert not armed & {"yingchuan", "changshe", "haozu_fort"}  # 自家的、不是區塊的
+
+
 def test_switch_off_map_unchanged():
     game = go(join(plain_game("weekend"), "guan"), "yingchuan")
     places = game.map_state()["places"]
