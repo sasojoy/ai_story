@@ -91,14 +91,16 @@ def finale_default(content: Content, season: WorldState | None) -> float:
 
 
 DEFAULT_DATES = "預設在{battles}、季末第 {end} 天過完"  # 待 joy 潤：管理者開季、開下一季的問句括號裡（FB-501，7 天濃縮季）
+DEFAULT_DATES_WEEKLY = "預設在{battles}、季末第 {end} 週週日過完"  # 待 joy 潤：同上，21 天季（季曆是現實的週，PM 2026-10-20）
 
 
 def default_dates_note(content: Content) -> str | None:
     """管理者開季、開下一季的問句「記得排三場大戲與季末的時間（…）」括號裡那一句，照這份設定的時刻表寫（FB-501）：
     7 天濃縮季（Config.season_segments，開季之前還沒有章，照設定）「預設在第 2、4、7 天 20:00、季末第 7 天過完」；
-    其他季是 None，網頁照原本那一句。"""
+    21 天季（PM 2026-10-20：網頁原本那一句寫週末的第 6、9、11 週，21 天季只有 3 週）「預設在第 1、2、3 週週六 20:00、季末第 3 週週日過完」，
+    照 content.timetable（season21_timetable 換過的 week／weekday／hour）寫；週末與 14 天是 None，網頁照原本那一句。"""
     if not content.config.season_segments:
-        return None
+        return _weekly_dates_note(content) if content.config.season21 else None
     shows = [e.real7 for e in content.timetable if e.kind == "showdown" and e.real7 is not None]
     end = next((e.real7.day for e in content.timetable if e.kind == "finale" and e.real7 is not None), calendar.total_days(content))
     hours = {r.hour for r in shows}
@@ -109,16 +111,40 @@ def default_dates_note(content: Content) -> str | None:
     return DEFAULT_DATES.format(battles=battles, end=end)
 
 
+def _weekly_dates_note(content: Content) -> str | None:
+    """21 天季那一句：三場決戰各自的「第 N 週週X HH:00」（時刻都一樣就合起來寫「第 1、2、3 週週六 20:00」）、季末那一週。"""
+    shows = [(e.week, SHOWDOWN_WEEKDAY if e.weekday is None else e.weekday, SHOWDOWN_HOUR if e.hour is None else e.hour)
+             for e in content.timetable if e.kind == "showdown"]
+    end = next((e.week for e in content.timetable if e.kind == "finale"), None)
+    if not shows or end is None:
+        return None
+    if len({(day, hour) for _, day, hour in shows}) == 1:
+        _, day, hour = shows[0]
+        battles = f"第 {'、'.join(str(week) for week, _, _ in shows)} 週週{calendar.WEEKDAYS[day]} {hour:02d}:00"
+    else:
+        battles = "、".join(f"第 {week} 週週{calendar.WEEKDAYS[day]} {hour:02d}:00" for week, day, hour in shows)
+    return DEFAULT_DATES_WEEKLY.format(battles=battles, end=end)
+
+
 MANDATE_AT = "第 {day} 天 {hour:02d}:00"  # 待 joy 潤（FB-503）
+MANDATE_AT_WEEKLY = "第 {week} 週週{weekday} {hour:02d}:{minute:02d}"  # 待 joy 潤：21 天季，寫法同網頁原本那一句「第 12 週週一 20:00」
 
 
 def mandate_note(content: Content, season: WorldState | None) -> str | None:
     """管理者「這一季立刻蓋天命之季的章」問句裡天命之爭排在哪一刻（FB-503）：7 天濃縮季（week7_on）照時刻表的 real7 寫
-    「第 7 天 22:00」；其他季是 None，網頁照原本那一句（21 天季那一句也寫「第 12 週週一」，這一批不動）。"""
-    if not calendar.week7_on(season, content):
+    「第 7 天 22:00」；21 天季（PM 2026-10-20，以前也是 None、網頁退回週末的「第 12 週週一 20:00」）照蓋章真正會排的預設時刻
+    （default_time，天命之爭的 week／weekday／hour 已經是 season21_timetable 換過的）換成季曆寫「第 3 週週日 20:00」；
+    週末與 14 天是 None，網頁照原本那一句（週末的第 12 週週一 20:00 是對的）。"""
+    if not calendar.season21_on(season, content):
         return None
-    when = next((e.real7 for e in content.mandate_timetable if e.real7 is not None), None)
-    return None if when is None else MANDATE_AT.format(day=when.day, hour=when.hour)
+    if calendar.week7_on(season, content):
+        when = next((e.real7 for e in content.mandate_timetable if e.real7 is not None), None)
+        return None if when is None else MANDATE_AT.format(day=when.day, hour=when.hour)
+    event = next(iter(content.mandate_timetable), None)
+    if event is None:
+        return None
+    at = calendar.point(default_time(event, content, season), content, season)
+    return MANDATE_AT_WEEKLY.format(week=at.week, weekday=calendar.WEEKDAYS[at.weekday], hour=at.hour, minute=at.minute)
 
 
 # ── 決戰避開半夜（企劃者 2026-10-15，經 PM；Config.battle_quiet_hours）─────────────

@@ -206,8 +206,22 @@ def test_seat_rotation_rumor_says_this_segment_on_week7():
 
 def test_default_dates_follow_the_week7_timetable():
     assert timetable.default_dates_note(real_content("week7")) == "預設在第 2、4、7 天 20:00、季末第 7 天過完"
-    for profile in ("season21", "weekend", None):
+    for profile in ("weekend", None):
         assert timetable.default_dates_note(_content(profile)) is None
+
+
+def test_default_dates_follow_the_season21_timetable():
+    """修前重現：21 天季這一句 None，網頁退回週末的「預設在第 6、9、11 週中、第 12 週末」（21 天季只有 3 週；PM 2026-10-20）。
+    寫的要跟開季真正排進 schedule 的時刻對得上。"""
+    c21 = real_content("season21")
+    assert timetable.default_dates_note(c21) == "預設在第 1、2、3 週週六 20:00、季末第 3 週週日過完"
+    season = _season(c21)
+    for e in (e for e in c21.timetable if e.kind == "showdown"):
+        p = calendar.point(timetable.when_in(season, c21, e), c21, season)
+        assert (p.week, calendar.WEEKDAYS[p.weekday], p.hour) == (e.week, "六", 20), e.id
+    finale = next(e for e in c21.timetable if e.kind == "finale")
+    assert timetable.when_in(season, c21, finale) == calendar.calendar_end(c21, season)  # 最後一週週日過完
+    assert calendar.point(calendar.calendar_end(c21, season) - 60, c21, season).week == finale.week
 
 
 def test_resume_line_names_the_season_length():
@@ -251,7 +265,8 @@ def test_status_sends_the_words_only_on_week7(profile):
 ADMIN = {  # 管理者時刻表第一列與最後一列的開頭、暫停那一句、開季問句括號裡那一句
     "week7": ("第 1 段（第 1～2 天）　三十六方起義", "第 3 段（第 5～7 天）　", {"days": "7", "unit": "日子"},
               "預設在第 2、4、7 天 20:00、季末第 7 天過完"),
-    "season21": ("第1週　三十六方起義", "第3週　", {"days": "21", "unit": "星期"}, None),
+    "season21": ("第1週　三十六方起義", "第3週　", {"days": "21", "unit": "星期"},
+                 "預設在第 1、2、3 週週六 20:00、季末第 3 週週日過完"),
     "weekend": ("第1週　三十六方起義", "第12週　", None, None),
 }
 
