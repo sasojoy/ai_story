@@ -79,6 +79,20 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
   - 超過兩分鐘的跑法放背景。
   - 回報時寫清楚哪幾項是引擎驗的、哪幾項是實機。
 
+## 整合預演與資料庫升級（2026-10-20 學到的）
+- **整合預演**：在自己的工作樹 `git switch -c qa/<名字> origin/develop`，照派工單的順序 `git merge --no-ff`。合的當下用 `git rev-parse origin/<分支>` 記下 SHA：同一份 clone 別的 session 會 fetch，`origin/*` 做到一半就往前走（10/20 合完半小時 dev/shop-2、develop 都動了）。要知道後來的 HEAD 合不合得進來，用 `git merge-tree --write-tree --name-only HEAD origin/<分支>` 試合，不動工作樹。
+- **隔離工作樹的 git 防護**：一行裡有 for 迴圈、`$(git …)`、`git rev-parse a b` 再接別的指令這種組合會被擋（「too complex to verify」），一個 git 指令一次 Bash 呼叫。
+- **整套背景跑**：PowerShell `$p = Start-Process -FilePath <python> -ArgumentList "-m","pytest","-q","-n","8","-m","`"slow or not slow`"","-p","no:cacheprovider" -WorkingDirectory <工作樹> -RedirectStandardOutput <log> -RedirectStandardError <err> -Wait -PassThru -WindowStyle Hidden; "EXIT=$($p.ExitCode)" | Out-File -Append <log>`，`run_in_background`。背景任務的通知一律寫 exit 0，要看 log 最後的「N failed, M passed」與 `EXIT=`。
+- **紅的歸誰**：把那條線合進來的那一個 commit `git archive` 解到 scratchpad，只跑紅的那幾條（`<python> -m pytest -q -p no:cacheprovider tests/x.py::test_y`）；那條線後來有新 commit 也解一份跑，看是不是已經修了。合起來才紅的才開單。
+- **資料庫升級預演**（舊程式＝`git archive origin/main`，新程式＝整合分支，各解一份、`ollama_url` 都擋掉，同一個埠輪流起，同一份暫存資料庫）：
+  1. 舊程式建帳號（用舊的 `set_password.py`）、管理者開季、玩家做幾個動作；要留「季中」的樣子就用 sqlite `backup()` 複製一份，再收季、停掉。
+  2. 新程式的唯讀腳本（`mall_ledger.py`、`backup_db.py`）先對舊檔跑，跑完 `PRAGMA user_version` 還是舊版。
+  3. 新程式開同一份：讀 `user_version`、表、每個角色的存檔與季的章；啟動那幾行有沒有「⚠」。
+  4. 回滾：舊程式的 `tianxia.database.open_database` 開新版的檔要被擋（`RuntimeError`）；`restore_db.py <升級前的備份> --db <練習檔>` 之後舊程式打得開。
+  5. 「季中」那一份用新程式開：設定檔名字沒變、內容換了（例：week7 從週末式改成照現實天）時，正在跑的季會怎樣（FB-520）。
+- **量狀態列那一行放不放得下**：把那個元素 `cloneNode(true)`，設 `position: absolute; visibility: hidden; width: auto; max-width: none; white-space: nowrap` 掛到 body，把每一個地名（`content.locations` 的 `name`）配最長的時刻塞進去量寬，跟原本那一格的 `clientWidth` 比，量完 `remove()`。
+- **腳本讀季**：`open_world(path).get_season()`。季末不是照大事 id 排的，是 `season.schedule["finale"]`（`timetable.when_in`）。
+
 ## 試玩回饋（`docs/superpowers/feedback/試玩回饋.md`）
 - **只改這一個檔。** 檔案是 CRLF，用 Python 改：
   1. 讀進來，把 `\r\n` 轉成 `\n`。
