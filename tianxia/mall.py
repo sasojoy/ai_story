@@ -17,6 +17,7 @@ from datetime import date, timedelta
 
 from . import naming
 from .models import Content, MallItem
+from .wallet import Wallet
 
 
 @dataclass(frozen=True)
@@ -37,9 +38,33 @@ CARD_KEY = "pill_cap"  # 月卡記在 mall_entitlements 的哪一格（回體丹
 _DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 _EPOCH = date(1970, 1, 1)
 
+TITLE = "商城"  # 江湖紀錄的標題（發放、購買）
+GRANT_LINE = "封閉測試期間，帳上先撥給你 {n} 元寶，可以到商城看看。"  # 待 joy 潤
+
 
 def on(content: Content) -> bool:
     return content.config.mall.enabled
+
+
+def grant_ref(owner: str) -> str:
+    return f"grant:beta:{owner}"
+
+
+def grant_beta(content: Content, wallet: Wallet, owner: str, now: float) -> int:
+    """封測發放（4.2）：這個錢包還沒發過就發 Config.mall.beta_grant，回發了幾個；發過了、數字是 0、開關關著回 0。
+    編號只看主人（grant:beta:<主人>），所以換季、再登入、換一份設定都不會再發一次。"""
+    amount = content.config.mall.beta_grant
+    if not on(content) or amount <= 0:
+        return 0
+    return amount if wallet.post(owner, amount, "grant", grant_ref(owner), time=now) else 0
+
+
+def card_bonus(content: Content, wallet: Wallet, owner: str, day: int) -> int:
+    """月卡（4.5）：day 這一天在卡的期間裡（開始日～到期日，不含到期日）就回 Config.mall.card_pill_bonus，其餘 0。"""
+    if not on(content):
+        return 0
+    span = wallet.card(owner, CARD_KEY)
+    return content.config.mall.card_pill_bonus if span is not None and span[0] <= day < span[1] else 0
 
 
 def date_day(text: str) -> int:

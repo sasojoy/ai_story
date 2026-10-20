@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from . import (
     allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, checkin, chuangong, clinic, companion_agent, cultivation, defection, divine, economy, encounter, enlist, equipment, event_llm, explore_modes, escorts,
     fight_llm, figure_aid, figure_life, figures, foreshadow, four_tiers, gather_llm, generals, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, letters, library, mapdata, martial_arts, feasts,
-    materials, mounts, naming, opportunities, orders, precise, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
+    mall, materials, mounts, naming, opportunities, orders, precise, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
     shopview, signature, signature_arms, silver, skill_slots, skillview, smithing,
     social, sortie, styles, tactics, team, terrain, territory, timetable, traits, treasures, weapons, works, zh, yuedan,
 )
@@ -63,6 +63,7 @@ from .rules import (
     world_day, world_trend_value,
 )
 from .sqlite_world import open_world
+from .wallet import Wallet
 from .state import (
     ONBOARDING_VERSION, PLAYER, ArenaEntry, ArenaFight, ArenaReport, ArenaResult, ArenaSide, BattleRecord, Convoy, CrowdNote, DuelState, Equipment, Feast, GameState, HintNote, JournalEntry, Journey, Mingtie, Rumor, Tagalong, TavernHit, TavernWatch, TimelineResult,
     Whisper, WorldState,
@@ -1010,8 +1011,10 @@ class Game:
 
     def own_turn_checks(self) -> None:
         """本人這一輪（mark_seen；假人程式自己那一輪也叫）：系統通緝這一週還沒掛就掛（bounties.post_auto，名聲 4.6、5.4），被掛的那幾句
-        寫進一則「懸賞」紀錄。結伴同行的人、管理者查玩家、玩家卡動到別人建的 Game 都不叫、不掛。"""
+        寫進一則「懸賞」紀錄。結伴同行的人、管理者查玩家、玩家卡動到別人建的 Game 都不叫、不掛。
+        商城的封測元寶也在這裡發（_mall_grant）：錢包第一次進來的那一下，真人假人一樣；暫停中照發（帳跟世界無關）。"""
         self.own_turn = True
+        self._mall_grant()
         if self.world.paused_at() is not None:  # 賽季時鐘暫停中世界不變（線上架構 8.3）：mark_seen 在 server.act 的暫停擋之前
             return
         posted = bounties.post_auto(self.state, self.content)
@@ -9215,11 +9218,39 @@ class Game:
         return int((self.pill_now() + self.content.config.pill_day_utc_offset_hours * HOUR) // (24 * HOUR))
 
     def pill_cap(self) -> int:
-        """一天最多服幾顆：新手期照 newbie_pills_per_day（有寫才算），其餘照 stamina_pills_per_day；0 是不限。"""
+        """一天最多服幾顆：新手期照 newbie_pills_per_day（有寫才算），其餘照 stamina_pills_per_day；0 是不限。
+        商城的月卡（mall.card_bonus）讓有上限的那一個多 Config.mall.card_pill_bonus 顆（平常 2→3、新手期 5→6）；不限照舊不限。"""
         cfg = self.content.config
         if cfg.stamina_pills_per_day > 0 and cfg.newbie_pills_per_day > 0 and roster.newbie(self.state, self.content):
-            return cfg.newbie_pills_per_day
-        return cfg.stamina_pills_per_day
+            cap = cfg.newbie_pills_per_day
+        else:
+            cap = cfg.stamina_pills_per_day
+        if cap <= 0:
+            return cap
+        wallet = self._wallet()
+        return cap if wallet is None else cap + mall.card_bonus(self.content, wallet, self._mall_owner(), self._pill_day())
+
+    # ── 商城（docs/superpowers/specs/2026-10-20-商城架構-design.md；規則在 mall.py、錢包在 wallet.py）──
+
+    def _wallet(self) -> Wallet | None:
+        """商城開著時這個資料庫的錢包；關著（或這個 world 沒有資料庫）是 None，呼叫端什麼都不讀不寫。"""
+        db = getattr(self.world, "db", None)
+        return Wallet(db) if mall.on(self.content) and db is not None else None
+
+    def _mall_owner(self) -> str:
+        """錢包的主人：角色名號的 casefold（同 characters.key、真人的 accounts.character_key；假人沒有帳號也有錢包）。"""
+        return name_key(self.state.player.name)
+
+    def _mall_grant(self) -> None:
+        """封測發放（mall.grant_beta）：這個錢包還沒發過就發，寫一則「商城」江湖紀錄。own_turn_checks 叫。"""
+        wallet = self._wallet()
+        if wallet is None:
+            return
+        amount = mall.grant_beta(self.content, wallet, self._mall_owner(), self.now)
+        if amount:
+            journal.add_entry(self.state, JournalEntry(
+                time=self.state.world.time, title=mall.TITLE, lines=[mall.GRANT_LINE.format(n=amount)], changes=[f"元寶 +{amount}"],
+            ))
 
     def pills_left_today(self) -> int | None:
         """今天還能服幾顆回體丹（pill_cap）；不限是 None。不看手上有幾顆。"""
