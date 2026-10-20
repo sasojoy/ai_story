@@ -56,7 +56,13 @@ description: 《天下大勢》的分支、測試與合併規矩（企劃者 202
   - 小的修正與複驗可以派 `model: sonnet`。
 - **疊批**：趕時間時，下一批可以接在還在 QA 的上一批上面開（例：`dev/shop-2` 從 `dev/shop-1` 開）；上一批的修正推回上一批的分支，下一批合進來再推。
 - **暫停與用量上限**：企劃者喊暫停就用 TaskStop 停掉全部子代理，再查每個工作樹留下什麼：已推的記下來，沒推的由 PM 提交成 WIP 推上去，再派新的子代理接手。子代理撞到用量上限時，用 SendMessage 叫它從中斷的地方接著做，不要重派。
-- **PM 不能寫別的工作樹的檔**（有 hook 擋）：PM 要改 develop 上的文件，就在自己的工作樹 `git switch -c pm/<名字> origin/develop`，改完 `git push origin HEAD:develop`（快轉）。git 指令可以 `git -C` 別的工作樹。
+- **換帳號、對話斷掉，子代理全部停**（不是暫停，不會自己接回來；10/20 下午換帳號那一次三個都停在半路）。新的 PM：
+  1. 兩份 clone 的 `.claude/worktrees/agent-*` 都看（工作樹開在派工那個 PM 對話所在的 clone），`git -C <工作樹> status`、`git log origin/<分支>..HEAD` 找沒提交、沒推的東西；
+  2. 半成品由 PM 提交成 WIP 推上它的分支（commit 訊息寫停在哪一步）；
+  3. 重派新的子代理（Agent 工具、`isolation: "worktree"`），派工單寫「從 `origin/<分支>` 開 `git switch -c <分支> origin/<分支>`，舊的工作樹不要用」，再把那一步之前做完的寫清楚；
+  4. 交接第二節改成新派的這幾個。
+- **PM 不能寫別的工作樹的檔**（有 hook 擋）：PM 要改 develop 上的文件，在 scratchpad 開一個自己的工作樹（`git worktree add <scratchpad>/pmwt -b pm/<名字> origin/develop`；不要切主 clone 的分支，主 clone 是大家讀 `CLAUDE.md` 的地方），改完 `git push origin HEAD:develop`（快轉）。git 指令可以 `git -C` 別的工作樹。
+- **分支名字別撞**：同一個字已經有別的意思時換個寫法並在交接註明（例：正式季第七批的 `qa/season-7` 與 7 天季的 `qa/season7`）。
 - **合併的衝突**：
   - `試玩回饋.md` 兩邊都留，表格照 FB 編號排，檔尾的驗收紀錄照時間排。
   - `CLAUDE.md` 一律留瘦身版，對方新加的那一行搬進對應的 `docs/guide/`。
