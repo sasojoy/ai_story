@@ -16,6 +16,7 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 - 不開多代理工作流程，也不要一個驗收項目開一個子代理。
 - **在隔離的工作樹裡**（PM 用 Agent 派的子代理）：Bash 工具會擋帶中文路徑的 python（`C:/Ray/專案/…/python.exe`），python 一律從 PowerShell 跑，git 照樣用 Bash。PowerShell 傳 JSON 參數會壞：把 JSON 寫進腳本，或讓腳本收一般參數。
   Bash 也會擋「`cd` 到工作樹外面」或太複雜的指令（heredoc 加管線、`od` 之類，回「too complex to verify that it stays inside the worktree」）：小腳本用 Write 寫進 scratchpad、用絕對路徑跑（系統的 `python` 可以），git 一律 `git -C <自己的工作樹>`。
+- **PowerShell 腳本檔（`.ps1`）不要寫中文路徑**（2026-10-20 領地爭奪複驗，一整輪空跑）：Write 工具寫的檔沒有 BOM，PowerShell 5.1 當 ANSI 讀，`$PY` 變成亂碼、回「The term … is not recognized」，錯誤落在工作輸出、不在導向的 log 裡，檔案一個都沒生出來。python 指令直接寫在 PowerShell 工具的呼叫裡（路徑照常寫中文），`.ps1` 只放 ASCII 路徑；要跑好幾次就在同一個呼叫裡寫 `foreach`。
 - **scratchpad 跟同一個 PM 派出的其他子代理共用**（2026-10-20 在 `shots/` 看到別人的檔）：自己的複本、資料庫、截圖，都放在用這次驗收命名的子資料夾。
 
 ## 開伺服器與登入
@@ -59,6 +60,7 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 - 頁面每 10 秒打一次 `/api/main`。用 API 改了狀態之後，等 11 秒或 reload 再看。
 - **按鈕用 JS 的 `el.click()`**，座標點擊常常沒反應。
 - **換帳號**：同一個分頁重打 `/api/login` 就換掉 cookie，再單獨一次 reload。兩個帳號要同時登著才需要換 host。
+- **不把密碼貼進對話**：用 python `requests` 登入、只印 `tx_session`（`s.cookies.get("tx_session")`），再在分頁裡 `document.cookie = "tx_session=<值>; path=/"`、另起一次呼叫 `location.reload()`。換帳號就再取一個值、再寫一次 cookie；這個 token 只在你自己的暫存伺服器上有效。
 - **截圖檔**：存在 `~/.claude/projects/<session>/tool-results/`，檔名是 `mcp-Claude_Browser-blob-*-<尾碼>.jpg`，截圖結果那一行寫著。回報要附路徑時，照尾碼複製到自己的子資料夾、改成看得懂的名字。
 - **量版面用 JS**：
   - 同一行：比 `getBoundingClientRect().top`。
@@ -71,11 +73,14 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
   - 輿圖總覽（「今天去哪裡出陣」、三條戰線的繩 `.m-rope`、繩上的地點 `.bead`）在底下那張卡裡，收著時點卡頭攤開。
   - 輿圖上的 ⚔ 是 `g.armed`，數量拿去跟引擎的 `mapview.armed_places` 比；地點圓盤在 `g[data-loc="<id>"]` 裡，顏色與虛線直接讀 `circle` 的屬性。
   - 江湖頁的戰況圖卡是 `div.war`，點了攤開 `.war-help.fronts-help`；主線是 `.peek-chip.quest`。
+  - 行動列的格子是 `button.act-ink`（灰的多一個 `.off`，小字是裡面的 `small`，量字有沒有被切比 `small.scrollWidth` 與 `button` 的左右邊）；格子底下每一格的說明在 `.act-notes p`（開頭是粗體的格名）。截圖前先 `document.querySelector('.act-notes').scrollIntoView({block:'end'})`。軍令卡是 `<details>` 裡的 `summary`（「📜 本週軍令」），要看內容先 `open = true`。
+  - 輿圖 ⚔（`g.armed`）不在 `g[data-loc]` 裡面，它前面最近的 `g[data-loc]` 兄弟才是那個地點（往 `previousElementSibling` 找）；點了輿圖分頁要等約 3 秒才畫好，頭一次數到 0 不是沒有。
 
 ## 存檔、資料庫與假人
 - 換季之後、玩家第一次同步之前改的存檔，會被換季重設洗掉。要等他同步完再改。
 - **改存檔不驗型別**：list 欄位寫成 None（例 `duel_last = None`），`CharacterStore.save` 照樣存進去，讀的時候才炸：伺服器 `_reload` 回 500，網頁掉回登入頁。清空一律用欄位的預設值（`[]`、`{}`）；已經壞了，就直接改 `characters` 那一列的 JSON。
 - **讀資料庫只開唯讀**：`sqlite3.connect("file:<db>?mode=ro", uri=True)`。`characters` 有 `is_bot` 和 `data`（JSON，`player`、`journal`），江湖紀錄只留最近 30 則。
+- **伺服器開著也能改存檔與掛軍令**（伺服器每次動作都重讀資料庫）：角色用 `CharacterStore(open_database(db))` 的 `load`／`save`；軍令用 `open_world(db)`、`with w.db.transaction(): w.mutate_season(fn)`（`s.orders` 加一筆 `Order`）。21 天季的軍令 `Order.week` 是季曆第幾天，不是週：`calendar.point(season.time, c, season).cal_day`。改完讓角色的頁面 reload 一次就看得到。
 - **複製資料庫**用 sqlite 的 `backup()`，不要只複製 `.db`，WAL 裡的資料會漏掉。
 - `battles` 是最新的在前（`battles[0]`）。腳本移動角色之前先略過序章（`skip_tutorial` 會重設地點）。自動選事件的迴圈要排除 `choice:free`（那一顆要打字）。
 - 決戰的「定結果」只能定還沒開打的。要驗發獎勵就實際打完：用腳本把 `muster_deadline_real` 和 `round.opened_real` 拉到過去。
