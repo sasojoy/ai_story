@@ -485,6 +485,127 @@ def test_admin_needs_a_reason_before_asking(m_on):
     assert out["msg"]  # 表單那一行寫要填原因
 
 
+# ── FB-493：錠子鈕擠窄了名號那一欄，所在那一行放不下時把季曆時刻折到下一行（企劃者 2026-10-20 挑乙）──
+# 名號底下 .where（「📍 地名　時刻」）：地名、間隔、時刻各一格（.where-loc／.where-gap／.where-at），放得下照舊一行、字與排法一樣；
+# 放不下（375 寬在潁川郡、第 10～12 週，320 寬幾乎一直）fitBars 量了才加 .split：地名一行、時刻一行、間隔拿掉。topHtml 從不帶 .split。
+
+WHERE = re.compile(r'<div class="who[^"]*"[^>]*>.*?<div class="(where[^"]*)">(.*?)</div>\s*</div>', re.S)
+
+
+def _where(top: str) -> tuple[str, str]:
+    """名號那一塊裡的 .where：(class, 裡面的 HTML)。下一件、閉關那幾行（.where.sub）在名號那一塊外面，不算。"""
+    found = WHERE.search(top)
+    assert found, top
+    return found.group(1), found.group(2)
+
+
+def test_fb493_the_time_has_its_own_span_and_top_html_never_folds(m_on):
+    m = copy.deepcopy(m_on)
+    m["status"]["location"] = "潁川郡（陽翟）"  # 最長的地名（起點、醫館）
+    m["status"]["calendar"] = {"week": 12, "weekday": 6, "clock": "23:59", "weeks": 12, "text": "第 12 週・週日 23:59"}
+    cls, inner = _where(run(m, "return H.topHtml();"))
+    assert cls == "where"  # 量了才折：畫出來一律是一行
+    assert inner == '<span class="where-loc">📍 潁川郡（陽翟）</span><span class="where-gap">　</span><span class="where-at">第 12 週・週日 23:59</span>'
+    assert _text(inner) == "📍 潁川郡（陽翟）　第 12 週・週日 23:59"  # 字跟以前一個不差
+    expanded = run(m, "H.S.showMore = true; return H.topHtml();")  # 點名號展開也是同一行
+    assert _where(expanded) == (cls, inner)
+
+
+def test_fb493_the_day_clock_folds_the_same_way(m_on):
+    """第一季規則關著的季沒有季曆（status 沒有 calendar）：時刻是「第 N 天 HH:MM／共 N 天」，一樣整段放進 .where-at。"""
+    assert "calendar" not in m_on["status"]
+    s = m_on["status"]
+    cls, inner = _where(run(m_on, "return H.topHtml();"))
+    assert cls == "where"
+    assert inner.startswith(f'<span class="where-loc">📍 {s["location"]}</span><span class="where-gap">　</span><span class="where-at">第 {s["day"]} 天 ')
+    assert inner.endswith("天</small></span>") and inner.count("<small>") == 1
+
+
+def test_fb493_the_prologue_writes_only_the_place(m_on):
+    m = with_reveal(m_on, ["stamina", "hp", "silver", "xinde", "stats"])
+    cls, inner = _where(run(m, "return H.topHtml();"))
+    assert (cls, inner) == ("where", f"📍 {m_on['status']['location']}")  # 序章只寫地名：沒有時刻可折
+
+
+_FOLD_DRIVER = r"""
+eval(fn("setVar"));
+eval(fn("fitBars"));
+let current = null, el = null;
+const vars = {};
+const mk = (c) => {
+  const classes = new Set(c.start || []);
+  const folded = () => classes.has("split");
+  return {
+    classes,
+    where: {
+      clientWidth: Math.round(c.width),
+      classList: { add: (...x) => x.forEach((y) => classes.add(y)), remove: (...x) => x.forEach((y) => classes.delete(y)), contains: (x) => classes.has(x) },
+      querySelector: (sel) => (sel === ".where-at" && c.at !== false ? {} : null),
+      getBoundingClientRect: () => ({ left: 16, right: 16 + c.width }),
+      end: () => 16 + (folded() ? c.folded : c.needs), // 字尾（Range）：一行時整段多寬、折了之後最寬的那一行
+    },
+    head: { hidden: false, get offsetHeight() { return folded() ? 126 : 105; } }, // 折了狀態列多一行
+  };
+};
+globalThis.document = {
+  documentElement: { style: { getPropertyValue: (n) => vars[n] || "", setProperty: (n, v) => { vars[n] = v; } } },
+  getElementById: (id) => (id === "top" ? Object.assign(el.head, { querySelector: (sel) => (sel === ".who > .where" ? el.where : null), querySelectorAll: () => [] }) : null),
+  createRange: () => ({ selectNodeContents(n) { current = n; }, getBoundingClientRect: () => ({ right: current.end() }) }),
+};
+finish(input.cases.map((c) => {
+  el = mk(c);
+  fitBars();
+  return [[...el.classes].sort(), vars["--top-h"]];
+}));
+"""
+
+
+def test_fb493_fit_bars_folds_the_where_line_only_when_it_does_not_fit():
+    """假瀏覽器沒有排版：給每一種情形「一行要多寬、折了要多寬、那一欄多寬」，看 fitBars 折不折；--top-h 照折好之後的高度寫
+    （煉製頁的太極爐黏在狀態列底下）。寬度是 QA 量的：375 寬那一欄 214、320 寬 159，潁川郡＋第 12 週那一行要 221。"""
+    out = webharness.run(_FOLD_DRIVER, {"cases": [
+        {"width": 214, "needs": 221, "folded": 106},  # 375 寬：收掉尾巴 → 折
+        {"width": 159, "needs": 221, "folded": 106},  # 320 寬 → 折
+        {"width": 214, "needs": 214, "folded": 106},  # 剛好放得下：不折
+        {"width": 220.5, "needs": 220.547, "folded": 106},  # 只多出不到半 px（scrollWidth 與 clientWidth 都是 221）：瀏覽器照樣收「…」，要折
+        {"width": 295, "needs": 221, "folded": 106, "start": ["split"]},  # 上一次折過、這一次放得下（轉橫、商城關了）：拿掉
+        {"width": 0, "needs": 221, "folded": 106},  # 還沒排版：不動
+        {"width": 159, "needs": 300, "folded": 300, "at": False},  # 序章只寫地名，沒有時刻可折：照舊一行收「…」
+    ]})
+    assert out == [[["split"], "126px"], [["split"], "126px"], [[], "105px"], [["split"], "126px"], [[], "105px"], [[], "105px"],
+                   [[], "105px"]]
+
+
+def test_fb493_render_measures_the_top_before_the_first_screen():
+    """江湖頁第一屏放不下行動列時一步一步收（fitFirstScreen，在 renderPage 裡）：狀態列折成兩行會高一截，要先量好才收，
+    不然行動列被推到分頁列底下也沒人收。頁面畫上去之後照舊再量一次（電腦上捲軸出來，狀態列跟著窄）。"""
+    names = ["S", "closeAsk", "hideMapHost", "renderGate", "renderCreate", "shown", "prologueKey", "topHtml", "$app", "tabsHtml",
+             "sheetHtml", "peerHtml", "shopHtml", "mallShop", "bookHtml", "zhuanHtml", "mtEditHtml", "mtZoomHtml", "renderPage",
+             "mtPadReady", "fitBars", "document", "sheetWheel"]
+    driver = r"""
+const seen = [];
+const stubs = { S: { stage: "game", tab: "jianghu" }, closeAsk() {}, hideMapHost() {}, renderGate() {}, renderCreate() {}, shown: () => true,
+  prologueKey: () => "k", topHtml: () => "<div></div>", $app: { innerHTML: "" }, tabsHtml: () => "", sheetHtml: () => "", peerHtml: () => "",
+  shopHtml: () => "", mallShop: () => null, bookHtml: () => "", zhuanHtml: () => "", mtEditHtml: () => "", mtZoomHtml: () => "",
+  renderPage: () => seen.push("renderPage"), mtPadReady() {}, fitBars: () => seen.push("fitBars"), document: { querySelector: () => null },
+  sheetWheel() {} };
+const render = new Function(...input.names, fn("render") + "\nreturn render;")(...input.names.map((n) => stubs[n]));
+render();
+finish(seen);
+"""
+    assert webharness.run(driver, {"names": names}) == ["fitBars", "renderPage", "fitBars"]
+
+
+def test_fb493_the_fold_is_a_line_each_and_drops_the_gap():
+    from test_shop2_web import _css, _rule
+
+    css = _css()
+    assert "display: block" in _rule(css, ".where.split > span")  # 地名一行、時刻一行
+    assert "text-overflow: ellipsis" in _rule(css, ".where.split > span")  # 各自放不下才收「…」
+    assert "display: none" in _rule(css, ".where.split > .where-gap")  # 折了就不必隔開
+    assert css.index(".where.split > span {") < css.index("@media (min-width: 641px)")  # 手機那一半（電腦寬永遠放得下）
+
+
 # ── 樣式 ──────────────────────────────────────
 
 
