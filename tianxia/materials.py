@@ -216,6 +216,19 @@ def may_drop(squad: Squad, content: Content) -> bool:
     return any(chance > 0 and by_tier(content, tier, squad.attribute) for tier, chance in _default_rolls(squad))
 
 
+def possible_drops(squad: Squad, content: Content, max_tier: int | None = None) -> list[tuple[int, str | None, int]]:
+    """打贏這支隊伍有機會掉什麼（輿圖卡上「今日產出」那一句，輿圖簡化設計 4.5）：跟 roll_squad_drops 讀同一份表，不擲骰。
+    每一筆是（階, 素材 id, 一次掉幾個）：寫了 drops 的照它（機率 0 的不算）；預設表那一階挑得到素材就是（階, None, 1）——照屬性挑、不定哪一個。
+    max_tier 同 roll_squad_drops（剛易手的中立地只掉一階）：比它高的不算。"""
+    def allowed(tier: int) -> bool:
+        return max_tier is None or tier <= max_tier
+
+    if squad.drops:
+        return [(content.materials[d.material].tier, d.material, d.count) for d in squad.drops
+                if d.material in content.materials and d.chance > 0 and allowed(content.materials[d.material].tier)]
+    return [(tier, None, 1) for tier, chance in _default_rolls(squad) if chance > 0 and allowed(tier) and by_tier(content, tier, squad.attribute)]
+
+
 def roll_squad_drops(squad: Squad, content: Content, rng: random.Random, max_tier: int | None = None) -> list[tuple[str, int]]:
     """打贏這支隊伍掉什麼：`Squad.drops` 寫了就照它，沒寫就走依難度的預設表。
 

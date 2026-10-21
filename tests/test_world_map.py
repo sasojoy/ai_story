@@ -245,6 +245,35 @@ def test_fb632_old_tug_of_war_weeks_are_unchanged():
     assert changed and all(e["from"] is not None and e["to"] is not None for e in changed)
 
 
+def test_yield_line_reads_the_drop_tables_without_rolling():
+    """卡上「今日產出」那一句（輿圖第三版第 4 批；設計 4.5、5.3 第 6 段）：站在那裡的隊伍打贏有機會掉的最高那一階——寫了掉落表的寫素材名、
+    照預設表的寫幾品素材；剛易手的中立地照 conquest.drop_cap 只算一階；沒有隊伍是空字串。跟真的擲骰讀同一份表（materials.possible_drops）。"""
+    from tianxia import materials
+
+    game = conquest_game("weekend")
+    w, c = game.state.world, game.content
+    st = game.map_state()
+    assert all("yield" in p for p in st["places"].values())
+    for loc, p in st["places"].items():
+        squads = [c.squads[s] for s in territory_squads(w, c, loc) if s in c.squads]
+        found = [d for sq in squads for d in materials.possible_drops(sq, c, max_tier=conquest.drop_cap(w, c, loc))]
+        assert bool(p["yield"]) == bool(found), loc
+        if found:
+            top = max(t for t, _, _ in found)
+            named = [c.materials[m].name for t, m, _ in found if t == top and m]
+            assert p["yield"].startswith("今日產出：") and (named[0] in p["yield"] if named else f"{materials.TIER_NAMES[top]}素材" in p["yield"]), loc
+    rich = next(x for x, p in st["places"].items() if p["rich"] and p["yield"])
+    conquest.push(w, c, rich, "guan", "甲", 100, "attack")  # 推滿易手：冷卻中只掉一階
+    capped = game.map_state()["places"][rich]["yield"]
+    assert capped != st["places"][rich]["yield"] or "凡品" in capped
+
+
+def territory_squads(w, c, loc):
+    from tianxia import territory
+
+    return territory.squads_at(w, c, loc)
+
+
 def test_a_scenario_without_blocks_seeds_every_open_place():
     """劇本沒寫區塊表：開放的地點全部分地面（序章專屬的不算）。"""
     c = real_content("weekend")

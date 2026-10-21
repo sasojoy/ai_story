@@ -8,8 +8,8 @@ import hashlib
 from collections.abc import Callable
 
 from . import (
-    atlas, bounties, calendar, conquest, equipment, figures, insights, mapart, mapview, mounts, orders, rules, sensing, terrain,
-    territory, timetable, worldgeo,
+    atlas, bounties, calendar, conquest, equipment, figures, insights, mapart, mapview, materials, mounts, orders, rules, sensing,
+    terrain, territory, timetable, worldgeo,
 )
 from .models import Content, FactionDef, Location
 from .state import GameState, TerritoryWeek, WorldState
@@ -258,6 +258,34 @@ def _price(world: WorldState, content: Content, faction: str | None, loc_id: str
     return ""
 
 
+YIELD_LINE = "今日產出：{items}"  # 輿圖卡的第 6 段（輿圖簡化設計 4.5、5.3）；待 joy 潤
+YIELD_TIER = "{tier}素材"  # 照預設掉落表（照對手的屬性挑、不定哪一樣）
+YIELD_ITEM = "{name} ×{count}"  # 寫了掉落表的素材
+YIELD_MORE = "等"
+YIELD_NAMES = 2  # 同一階最多寫幾樣
+
+
+def yield_line(world: WorldState, content: Content, loc_id: str) -> str:
+    """今日產出那一句（輿圖卡第 6 段）：站在這裡的隊伍（territory.squads_at：開季中立的區塊是中立駐軍）打贏有機會掉的素材裡最高的那一階
+    （materials.possible_drops，跟真的擲骰讀同一份表）——寫了掉落表的寫素材名（同一階最多 YIELD_NAMES 樣），照預設表的寫「靈品素材」；
+    開季中立的區塊剛易手照 conquest.drop_cap 夾（高階回饋暫停，翻地與爭搶）。只讀表、不擲骰、不看誰在看。沒有隊伍或一樣都掉不了是空字串。"""
+    cap = conquest.drop_cap(world, content, loc_id)
+    found: list[tuple[int, str | None, int]] = []
+    for sid in territory.squads_at(world, content, loc_id):
+        if sid in content.squads:
+            found += materials.possible_drops(content.squads[sid], content, max_tier=cap)
+    if not found:
+        return ""
+    top = max(tier for tier, _, _ in found)
+    named = list(dict.fromkeys((mid, count) for tier, mid, count in found if tier == top and mid is not None))
+    items = [YIELD_ITEM.format(name=content.materials[mid].name, count=count) for mid, count in named[:YIELD_NAMES]]
+    if not items:
+        items = [YIELD_TIER.format(tier=materials.TIER_NAMES.get(top, str(top)))]
+    elif len(named) > YIELD_NAMES or any(tier == top and mid is None for tier, mid, _ in found):
+        items[-1] += YIELD_MORE
+    return YIELD_LINE.format(items="、".join(items))
+
+
 def _titles(state: GameState, content: Content, week: int, now_week: int) -> list[str]:
     """第 week 週時刻表的大事（第一季才有）：只列已經到了的。
     「到了沒」照這一件真正的時刻（timetable.happened_at：決戰照排定的時刻、季末照排定的季末，其餘照季曆；FB-504）：時刻表決戰只寫了
@@ -401,7 +429,7 @@ def state(
     {"key", "now_week", "weeks_total", "season_one", "territory", "faction", "sides", "here", "stamina", "sorties_left",
      "journey": None | {"to","to_name","minutes","next_name","x","y"}, "travel_block": None | {"reason","to_jianghu"},
      "places": {地點: {"control","kind","odds","sortie","armed","minutes","stamina","order","bounty","goal","news","people","services",
-                       "price","squads","danger","flips","rich"} ＋ 領地爭奪開著時區塊多 "tug","melee","cool"（flip_marks）},
+                       "price","squads","danger","flips","rich","yield"} ＋ 領地爭奪開著時區塊多 "tug","melee","cool"（flip_marks）},
      "ropes": [{"id","name","value","delta","beads": [{"id","threshold","control"}],"low","high"}], "geju", "geju_side", "events",
      "suggest": [{"id","sortie","why": [[字, 種類]],"minutes","score","lose"}], "chart": [{"name","spots"}],
      "weeks": [{"week","control","ropes","geju","events","changed"}], "start": None | {地點: 開季那一刻的控制方}}"""
@@ -457,6 +485,7 @@ def state(
             "danger": loc.danger, "flips": _flips(w, c, loc_id, now_week) if on else [],
             # 高級資源地（天下圖的金點，輿圖簡化設計 5.1）：開季中立的區塊，不管此刻誰佔著；領地爭奪關著的季照內容的區塊表
             "rich": conquest.start_kind(w, c, loc_id) == conquest.NEUTRAL,
+            "yield": yield_line(w, c, loc_id),  # 卡上「今日產出」那一句（輿圖第三版第 4 批）；沒有是空字串
         }
         if conquest_on and loc_id in blocks:  # 「正在翻」「激戰」「冷卻」：領地爭奪關著的季沒有這三個鍵（網頁就不畫）
             places[loc_id].update(flip_marks(w, c, loc_id))
