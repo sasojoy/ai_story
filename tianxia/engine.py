@@ -210,8 +210,8 @@ TROOPS_LINE = "你帶著{names}上陣，強攻、奇襲多 {pct}"  # 待 joy 潤
 TROOPS_REPORT = "{names}跟著你衝陣"  # 待 joy 潤（PM 2026-10-12）：決戰的戰報
 # 領地爭奪：戰書（翻地與爭搶，輿圖簡化設計 4.4；投票與 22:00 公告結算拿掉了，PM 2026-10-20）。待 joy 潤
 LETTER_TITLE = "下戰書"
-LETTER_DONE = "你替{side}下了戰書：{time}攻{place}。這一塊的進度凍結到那一場打完。"
-LETTER_JOINED = "你替{side}下了戰書，併進{time}那一場：跟{others}同時攻{place}。"
+LETTER_DONE = "你替{side}下了戰書：{time} 攻{place}。這一塊的進度凍結到那一場打完。"
+LETTER_JOINED = "你替{side}下了戰書，併進{time} 那一場：跟{others}同時攻{place}。"
 LETTER_RANK = "只有這一週在任的第 4 階才能下戰書"
 LETTER_NO_SLOT = "今明兩天都排不出攻城的時段"
 CONQUEST_OFF = "這一季沒有攻城戰。"

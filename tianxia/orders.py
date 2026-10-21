@@ -607,16 +607,17 @@ def strike_on(state: GameState, content: Content, faction: str | None, fid: str)
     return any(o.template == "strike" and not o.done and o.figure == fid for o in current(state, content, faction))
 
 
-def targets(state: GameState, content: Content, faction: str | None) -> list[str]:
+def targets(state: GameState, content: Content, faction: str | None, skip: frozenset[str] = frozenset()) -> list[str]:
     """假人往哪裡走：這週還沒達成的軍令要去的地點（攻城、守城：那條戰線的地點；截糧：運糧隊在的那幾站〔intercept_spots〕；護糧：身上有
-    這一道的糧車就是終點，沒有而且糧草夠就是起點；打擊：人物當下的所在），照內容檔的地點順序。"""
+    這一道的糧車就是終點，沒有而且糧草夠就是起點；打擊：人物當下的所在），照內容檔的地點順序。skip 裡的那幾種軍令不算（假人分辨「只為了截糧才去」，
+    bot_policy._order_hop）。"""
     from . import conquest  # noqa: PLC0415  conquest → territory → rules：在函式裡 import
     from .materials import grain_of  # noqa: PLC0415  只有這裡用得到
 
     p = state.player
     wanted: set[str] = {p.convoy.to_loc} if p.convoy is not None else set()  # 押著的車一定送到（那一道沒了也照送，T6 審查 I3）
     for o in current(state, content, faction):
-        if o.done:
+        if o.done or o.template in skip:
             continue
         if o.template == "siege":
             wanted |= set(siege_places(content, o.faction, o.front, state.world))

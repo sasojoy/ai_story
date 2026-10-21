@@ -812,6 +812,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
             s, c = game.state, game.content
             if sortie.on(c) and game.sortie_mode() == "stir":
                 return STIR_SCORE if game.sortie_push() else None  # 線在 50：攪局什麼都不推
+            if _cannot_push(game, s.player.location):  # 領地爭奪：推不動的地方不出陣（翻地 QA 順帶：真人看得出有人一直在推不動的地方出陣）
+                return None
             bonus = ORDER_SCORE if orders.win_counts(s, c, game._side(), s.player.location) else 0.0
             if sortie.on(c) and game.sortie_mode() == "hold" and orders.duty_counts(s, c, game._side(), s.player.location):
                 bonus += ORDER_SCORE  # 出陣的守算一次守城（同守勢行動）
@@ -1059,6 +1061,22 @@ def _bounty_hop(game: Game) -> str | None:
 
 
 def _order_hop(game: Game) -> str | None:
-    """往這週軍令要去的地方，路程最近的那一站；已經在、沒有軍令、走不到時是 None（計畫 T6）。"""
-    places = orders.targets(game.state, game.content, game._side())
+    """往這週軍令要去的地方，路程最近的那一站；已經在、沒有軍令、走不到時是 None（計畫 T6）。
+    領地爭奪：只為了截糧才去、去了出陣推不動的地方不去（翻地 QA 順帶：開季的截糧軍令把假人拉到碰不到的中立地，一直在那裡出陣、連輸中立駐軍）；
+    攻城、守城的地方照 orders.targets（自家被戰書凍結的那一塊推不動，但要去加入攻城站守方，FB-605）。"""
+    s, c, side = game.state, game.content, game._side()
+    places = orders.targets(s, c, side)
+    if places and conquest.on(c, s.world):
+        others = set(orders.targets(s, c, side, skip=frozenset({"intercept"})))
+        places = [loc for loc in places if loc in others or not _cannot_push(game, loc)]
     return next_hop(game, places) if places else None
+
+
+def _cannot_push(game: Game, loc_id: str | None) -> bool:
+    """領地爭奪的季，在這一塊出陣（自家的守、別人的與中立地的攻）推不動進度（conquest.push_problem）。不是區塊、開關關著、散人都是假（照舊）。"""
+    s, c = game.state, game.content
+    side = game._side()
+    if loc_id is None or side is None or not conquest.on(c, s.world) or loc_id not in conquest.blocks(c):
+        return False
+    how = "hold" if conquest.holder(s.world, c, loc_id) == side else "attack"
+    return conquest.push_problem(s.world, c, side, loc_id, how) is not None

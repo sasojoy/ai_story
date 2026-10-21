@@ -127,6 +127,9 @@ PUSH_LINE = "你在{place}替{side}推進了 {moved}，進度 {value}／100{note
 FOCUS_NOTE = "，集火 +{pct}%"  # 一小時內同一邊還有別人推過這一塊（設計 4.2）
 CLASH_NOTE = "，混戰得勝推得更多"  # 撞上對面、打贏了那一下（設計 4.3）
 PULL_LINE = "你在{place}守了一陣，把對面的進度拉回了 {moved}{notes}。"
+# 這一下不到半點（四捨五入是 0）：不寫「推進了 0」「拉回了 0」，寫「一點」（翻地 QA 順帶：拉回 0.41 寫成「拉回了 0」接「全數歸零」）。待 joy 潤
+PUSH_LITTLE = "你在{place}替{side}推進了一點，進度 {value}／100{notes}。"
+PULL_LITTLE = "你在{place}守了一陣，把對面的進度拉回了一點{notes}。"
 PULL_ZERO = "對面在{place}的進度全數歸零。"
 FLIP_LINE = "{place}的進度推滿了，當場易手！"  # 推滿那一下，接著是 territory 的「落入／收復」天下大事
 GUARDED_LINE = "{place}守住了：對面的進度從五成以上被拉回零。"  # 守城功（設計 4.5）
@@ -391,6 +394,11 @@ def _int(x: float) -> int:
     return int(x + 0.5)
 
 
+def _little(moved: float) -> bool:
+    """這一下推（拉）動了、可是四捨五入寫出來是 0：那一句改寫「一點」（PUSH_LITTLE、PULL_LITTLE）。"""
+    return moved > 0 and _int(moved) == 0
+
+
 def _note_day(world: WorldState, content: Content, loc_id: str, side: str, by: str, reason: str) -> None:
     """〈天下形勢〉讀的 day_log 記一筆（戰書、推滿易手）：哪一天照最近一次換天（settled_key）、時刻照季曆的那一刻。"""
     state = world.conquest
@@ -470,8 +478,8 @@ def push(
         line.pushers[name] = line.pushers.get(name, 0.0) + out.moved
         if line.value >= cfg.alarm_at:
             fight.alarm = True
-        out.lines.append(PUSH_LINE.format(place=place, side=content.scenario.faction_name(side, side),
-                                          moved=_int(out.moved), value=_int(out.value), notes=notes))
+        out.lines.append((PUSH_LITTLE if _little(out.moved) else PUSH_LINE).format(
+            place=place, side=content.scenario.faction_name(side, side), moved=_int(out.moved), value=_int(out.value), notes=notes))
         if line.value >= FULL:
             out.flipped = True
             out.lines.append(FLIP_LINE.format(place=place))
@@ -485,7 +493,7 @@ def push(
             del fight.bars[other]
     fight.guards[name] = fight.guards.get(name, 0.0) + out.moved
     out.value = max((b.value for b in fight.bars.values()), default=0.0)
-    out.lines.append(PULL_LINE.format(place=place, moved=_int(out.moved), notes=notes))
+    out.lines.append((PULL_LITTLE if _little(out.moved) else PULL_LINE).format(place=place, moved=_int(out.moved), notes=notes))
     if not fight.bars:
         out.lines.append(PULL_ZERO.format(place=place))
         if fight.alarm:

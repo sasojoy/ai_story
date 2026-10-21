@@ -28,8 +28,8 @@ BY_WORDS = {LETTER: "戰書", VOTE: "眾議", COMMANDER: "主將定奪"}  # 待 
 REASON_PLAIN = "主將看準了{place}，下令攻打。"  # 舊季的主將定奪沒寫原因時（〈天下形勢〉讀）
 
 # 天下大事（待 joy 潤）：時刻照 calendar.stamp_text（玩家看得到的時刻只有一個寫法），寫在句子中間（傳聞列表自己在前面寫發出的時刻）
-LETTER_RUMOR = "{name}替{who}下了戰書：定於{time}攻{place}。"  # 只有真人會下戰書，具名
-LETTER_JOIN_RUMOR = "{name}替{who}也下了戰書：{time}跟{others}同時攻{place}。"
+LETTER_RUMOR = "{name}替{who}下了戰書：定於{time} 攻{place}。"  # 只有真人會下戰書，具名
+LETTER_JOIN_RUMOR = "{name}替{who}也下了戰書：{time} 跟{others}同時攻{place}。"
 VOID_LATE = "{who}原定攻{place}，時辰已過，這一仗作罷。"
 VOID_CANCEL = "{who}攻{place}這一仗作罷。"  # 管理者取消（公告不寫管理者）
 
@@ -155,7 +155,7 @@ def place_letter(world: WorldState, content: Content, side: str, loc_id: str, na
     return slot, text
 
 
-ANNOUNCE = "{who}定於{time}攻{place}。"  # 管理者「立刻下戰書」的天下大事（公告不寫管理者；待 joy 潤）
+ANNOUNCE = "{who}定於{time} 攻{place}。"  # 管理者「立刻下戰書」的天下大事（公告不寫管理者；待 joy 潤）
 
 
 def place_now(world: WorldState, content: Content, side: str, loc_id: str, real_now: float) -> str:
