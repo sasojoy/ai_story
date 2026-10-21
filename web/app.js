@@ -1275,8 +1275,32 @@
           <p class="form-msg" role="alert"></p>
           <button class="btn primary" type="submit">${reg ? "註冊" : "登入"}</button>
         </form>
+        <section class="gate-patch" id="gate-patch" aria-label="近期改版">${gatePatchHtml(S.patchNotes)}</section>
       </div>`;
     if (playing) $app.querySelector(".gate .promo").replaceWith(playing);
+    if (S.patchNotes === undefined) loadPatchNotes();
+  }
+
+  // 登入頁的近期改版（Joy 2026-10-21「登入首頁加改版資訊」）：登入表單底下一塊，最新一次的新功能、調整一項一行，更早的各收成一行、
+  // 點了攤開。字是伺服器讀 content/patch_notes.json 給的（/api/patch_notes，不用登入，新的在前）；讀不到或沒有就不畫
+  function patchLines(p) {
+    return [["新功能", p.new], ["調整", p.tweak], ["修正", p.fix]].filter(([, rows]) => rows && rows.length)
+      .map(([head, rows]) => `<h4>${head}</h4><ul>${rows.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>`).join("");
+  }
+  function gatePatchHtml(notes) {
+    if (!notes || !notes.length) return "";
+    const [top, ...older] = notes;
+    return `<div class="card patch-card"><h3>改版資訊 ${esc(top.date)}</h3>${patchLines(top)}${
+      older.map((p) => `<details class="patch-old"><summary>改版資訊 ${esc(p.date)}</summary>${patchLines(p)}</details>`).join("")}</div>`;
+  }
+  async function loadPatchNotes() {
+    S.patchNotes = null; // 讀著，不重複讀
+    try {
+      const r = await fetch("/api/patch_notes");
+      S.patchNotes = r.ok ? (await r.json()).notes || [] : [];
+    } catch (e) { S.patchNotes = []; }
+    const box = document.getElementById("gate-patch");
+    if (box) box.innerHTML = gatePatchHtml(S.patchNotes);
   }
 
   function renderCreate() {

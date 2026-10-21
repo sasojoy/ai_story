@@ -36,6 +36,7 @@ import argparse
 import contextlib
 import contextvars
 import hashlib
+import json
 import os
 import re
 import secrets
@@ -1427,6 +1428,41 @@ def seal_text(game: Game, text: str) -> list[str]:
 # ── 畫面資料 ──────────────────────────────────────────
 
 
+PATCH_FILE = ROOT / "content" / "patch_notes.json"
+PATCH_SHOW = 3  # 首頁「改版」那一格列最近幾次
+_patch_cache: dict = {"mtime": None, "notes": []}
+
+
+def patch_notes(path: Path | None = None) -> list[dict]:
+    """登入頁宣傳影片底下的「近期改版」（Joy 2026-10-21「首頁應該有地方顯示近期的更版資訊」）。
+
+    讀 content/patch_notes.json 的 notes（新的在前），最多 PATCH_SHOW 次；檔案改了照修改時間重讀，不必重開伺服器。
+    每一次只留 date、new、tweak、fix 四欄（字串與字串清單），寫壞的那一次跳過、檔案讀不了就是空的（首頁不畫那一格）。"""
+    path = path or PATCH_FILE
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        return []
+    if path == PATCH_FILE and _patch_cache["mtime"] == mtime:
+        return _patch_cache["notes"]
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8")).get("notes", [])
+    except (OSError, ValueError, AttributeError):
+        raw = []
+    notes = []
+    for item in raw if isinstance(raw, list) else []:
+        if not isinstance(item, dict) or not isinstance(item.get("date"), str) or not item["date"].strip():
+            continue
+        lines = {key: [x for x in item.get(key) or [] if isinstance(x, str) and x.strip()] for key in ("new", "tweak", "fix")}
+        if any(lines.values()):
+            notes.append({"date": item["date"].strip(), **lines})
+        if len(notes) >= PATCH_SHOW:
+            break
+    if path == PATCH_FILE:
+        _patch_cache.update(mtime=mtime, notes=notes)
+    return notes
+
+
 def main_view(game: Game) -> dict:
     """江湖畫面與頂上的狀態列；每次動作、每次計時器都回這一份。呼叫端要拿著行動鎖。"""
     with game.phase_memo():  # 這一次建構裡「籌備中嗎」只讀一次共用狀態（見 Game.phase_memo）
@@ -1966,6 +2002,12 @@ def index():
 @app.get("/journal.css")
 def journal_css():
     return Response(JOURNAL_CSS, media_type="text/css", headers=NO_CACHE)
+
+
+@app.get("/api/patch_notes")
+def api_patch_notes() -> dict:
+    """登入頁的近期改版：不用登入、不拿行動鎖，只讀 content/patch_notes.json。"""
+    return {"notes": patch_notes()}
 
 
 @app.get("/api/me")
