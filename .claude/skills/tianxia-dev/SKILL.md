@@ -40,6 +40,7 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 - **開伺服器又不能打到 11434**：模型網址（`Config.ollama_url`）沒有環境變數可改，設定覆寫檔照派工指定的（例 `week7`）就不另寫一份。在 scratchpad 寫一支包裝：`sys.path.insert(0, 工作樹)`、`import server`、`server.CONTENT.config.ollama_url = "http://127.0.0.1:9"`、`server.main(["--port", 埠])`，用 `Start-Process` 跑它（`TIANXIA_DB`、`TIANXIA_PROFILE` 照設在 PowerShell 裡，子行程繼承）。角色在每次建 `Game` 時才照設定建 client，所以先改再 `main` 就全部指到那裡（FB-490～493 這一輪）。
 - **實機要某一步的角色**（例：初入江湖第一步）：`/api/register`＋`/api/character` 建一個（密碼產生後寫進 scratchpad 的檔），再用 `CharacterStore.load`／`save` 改 `tutorial_step`（與 `location`）存回去；伺服器每次進鎖都從資料庫重讀，不必重開。序章那幾步（0～10，含出師那一步）要 `location` 是 `mentor_hut`，不然 `m.prologue` 是 None、看起來像出了草廬。
 - **計畫要對現行程式**：派工給的計畫可能是照 main 或更早的版本寫的；開工先核對，差異寫進計畫，前提不在了就停下來回報 PM。
+- **等背景測試跑完**（2026-10-21 小單，279 個檔 `-n 6` 約 10 分鐘）：`Monitor` 一啟動就回傳，接著的指令不會等它，連開幾個 `sleep` 的 Monitor 只是排通知、不是真的在等。要原地等就用前景 Bash：`until grep -qE " in [0-9.]+s" "$TEMP/xxx.log"; do sleep 5; done; tail -n 15 "$TEMP/xxx.log"`，`timeout` 給 590000（單獨一條 `sleep N` 會被擋，until 迴圈不會）。pytest 跑到 99% 之後常再等好幾分鐘（最後幾條是整季模擬），不是卡住。
 - 背景長跑（量表）用 `run_in_background`。輸出導到檔案時 python 會緩衝，加 `-u` 才看得到進度。等它結束的通知，不要輪詢。
 - **PowerShell 的變數名不分大小寫**（2026-10-21）：迴圈裡 `$O`（腳本資料夾）被後面的 `$o`（雜湊）蓋掉，路徑變成一串雜湊。路徑變數取長一點的名字（`$CMP`、`$SCRIPTS`）。外部程式往 stderr 印字（`2> 檔`）時 5.1 會報 NativeCommandError、整條指令退出碼非 0，但迴圈會接著跑；要看真的有沒有失敗，看輸出檔與 `.err` 的內容。
 - **用 Write 寫的 `.ps1` 在 PowerShell 5.1 讀成系統編碼**（UTF-8 沒有 BOM）：腳本裡的中文路徑（`C:/Ray/專案/天下大勢/.venv/...`）變亂碼、找不到 python（2026-10-21）。迴圈直接寫在 PowerShell 工具那一行裡，不要另存 `.ps1`。
@@ -51,6 +52,8 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   - 管理者的名號在 `/api/character` 取不到（玩家不能取管理者的名號）：用 `scripts/set_password.py <帳號> --character <名號> --db <暫存資料庫> --local-dir <scratchpad>` 建（密碼寫在 scratchpad 的檔），啟動伺服器前設 `TIANXIA_ADMINS=<名號>`。其他測試角色走 `/api/register`、`/api/character`，陣營與所在地可以直接寫進同一個資料庫（`open_characters()` 照 `TIANXIA_DB`），伺服器每次拿鎖都重讀角色。
   - 正式設定的排程是關的（啟動時印「排程：關」）：世界時間只在有人連線時推，集結截止、回合逾時要有人輪詢才會發生——驅動腳本要一直打 `/api/main`。
   - 長的等待：PowerShell 的 `Start-Sleep` 超過一定秒數會被擋；在瀏覽器分頁裡 `javascript_tool` 跑 `await new Promise(r => setTimeout(r, 30000))` 再抓 `/api/main`，或用 Monitor。
+- **Bash 隔離會擋「`diff <(…) <(…)` 加 `git add` 串在一起」的指令**（too complex，2026-10-21）：拆成兩條，一條比檔、一條 git。
+- **PowerShell 把含雙引號的字串傳給外部程式時，雙引號被吃掉**（2026-10-21 變異腳本的「舊字串」引數是 `phase == "preparing"`，到 python 手上變 `phase == preparing`，斷言「舊字串在檔裡 0 處」、什麼都沒跑）：引數用單引號、而且挑一段不含雙引號的獨特片段（例：`season.ended or phase == ` 換成 `season.ended or phase != `）。變異腳本（自己在 scratchpad 寫一支，參數 `<工作樹> <相對檔> <測試檔> <舊> <新>`）：舊字串先斷言剛好一處（換 CRLF 檔先轉 `\n`）、`finally` 寫回原檔 bytes、跑完 `git status` 確認沒留下改壞的檔。
 - **不要寫帶中文路徑的 `.ps1`**：Write 工具寫出的 .ps1 沒有 BOM，Windows PowerShell 5.1 照 ANSI 讀，`C:/Ray/專案/…/python.exe` 變亂碼、每一行都 CommandNotFound（2026-10-20 背景跑對照表踩到，log 只看得到一串錯）。要串好幾個 python 程式，就寫一支 Python 調度腳本，用 `sys.executable` 叫子程式，再從 PowerShell 跑那一支。
 
 ## 測試怎麼挑
@@ -151,6 +154,8 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 - 資料庫結構（第 5 版）不改，要改先問 PM。新狀態欄位加在 `PlayerState`／`WorldState`，舊存檔讀得進來。
 - **全服戰鬥不只一場了**（領地爭奪第二批：攻城戰跟時刻表決戰同時打，`SharedWorldState.sieges`）：引擎裡讀「這個人的那一場」用 `Game._battle_now()`（假人程式、bot_policy 用 `game.battle_now()`），改它用 `_mutate_battle_of(battle, fn)`，全部列出來用 `battles_now()`；**不要再寫 `world.get_battle()`／`world.mutate_battle()`**，除非真的只講時刻表決戰（璽動、管理者的決戰工具、`_settle_showdown`）。新的 `SharedWorldState`／`BattleInstance` 欄位照舊要分進 `tests/test_server.py` 的推送指紋表。
 - **存進全服狀態的「現實時間」一律用 `self.now`，不要用 `pill_now()`**（FB-577，2026-10-21）：`pill_now()`＝`now`＋`advanced_real`，管理者快轉推的 `advanced_real` 只活在那一個 `Game` 物件的記憶體裡；拿它寫進共用狀態的時刻（`XingshiTicket.opened_real`、`retry_at`），別的 `Game`（伺服器排程 `world_tick`、別的玩家）拿自己的 `now` 比，會差上快轉的那十幾個小時。換天、回體丹換日這種「快轉跨過了就該算」的判斷才用 `pill_now()`（`conquest_day.day_key` 有「日子只准往前走」擋著）。測試：一個 `Game` 先 `advance` 跨過換天開單，另一個 `Game.for_world` 照現實時鐘 `world_tick`，看單有沒有照寬限收。
+- **「設定裡有、章上沒有」的值（`season_weeks`、`season_segments`）：畫一季的時刻、週數、季曆長度時，函式要收 `season`**（FB-635，2026-10-21）：上一季是舊程式的週末式季曆（章上 `season21` false），新程式的設定已經是照現實天的，直接讀 `content.config.season_weeks` 會把上一季的每個時刻照新季曆寫（休季換程式、開下一季之前才看得到：開了季就蓋新章）。`calendar.weekend_style(season, content)` 判斷（只管休季；還在跑的舊季時刻表與曆時交界仍照新設定走，只換畫面會跟大事對不上，不換）、`calendar.weeks/total_days/cal_scale/point/week_start/calendar_end` 都收 `season`；新寫「按季曆算」的函式照辦，不要再讀 `content.config.season_*`。測試用差異法：同一季（舊內容開的）、同一個世界秒，新內容與舊內容各算一次要一字不差（`tests/test_fb635_rest_season_calendar.py`）；重現要走「舊內容開季→`admin_end_season`→新內容 `Game.for_world` 讀同一份資料庫」整條，單看 `stamp_text` 看不出狀態列的 `weeks` 與輿圖 `weeks_total`。還讀設定沒動的：`rules.decisive_week`、`stance_rule_note`、`checkin.last_day`、`timetable.finale_default`（跑著的舊季本來就不該換程式，PM 定的是休季才換）。
+- **啟動時印的警告（`server.main`、`run_bots.main`）的測試**：`uvicorn.run` monkeypatch 掉、`server.PROFILE`／`server.CONTENT` 換成要試的設定、`server.main([])`；假人用 `monkeypatch.setenv("TIANXIA_PROFILE", …)`＋`run_bots.main(ticks=0)`；`capsys` 看輸出。要試的狀態有四種：全新資料庫（什麼都沒種，`open_world().season_phase()` 是 preparing）、`seed_first_season` 種好沒開、`open_season` 用另一份設定開了、同一份設定開了；警告函式收的是 `season_phase()`，不是從 `WorldState` 猜（全新資料庫讀回來的季是沒蓋章的空殼，章上 `season21` false，會跟任何 season21 的設定對不上；`tests/test_fb636_preparing_warning.py`）。
 - **兩局測試各有一份內容**：`conquest_kit.conquest_game()`（同 `test_territory._game`）每一局各載一份 `real_content` 的複本，同一個資料庫開兩局時，在測試裡往內容加東西（例：借一份戰鬥範本）要兩局都加，不然第二局找不到、畫面靜靜地沒有那一場。
 
 ## 量表怎麼讀
@@ -166,6 +171,8 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 ## 回報 PM
 
 - 一張回饋單一個 commit；commit 訊息一句英文，結尾 `Co-Authored-By:`（照當時 system 給的那一行）。
+  - 同一個檔裡有兩張單的改動：先用 Edit 把第二張的那一段暫時改回去、`git add` 只放第一張的檔、提交，再把那一段改回來提交第二張（備份一份完整檔到 scratchpad，改回來之後 `diff` 對一次）。
+  - 提交完才發現前一張要補（例：測試完決定收窄範圍）：補的檔 `git commit --fixup <那張的 hash>`，其餘沒提交的先提交成一個 docs commit（工作樹不乾淨 rebase 會拒絕），再 `GIT_SEQUENCE_EDITOR=true git rebase -i --autosquash <base>`（沒推出去才這樣做；hash 全變，回饋單的「已修 `<commit>`」等重寫完才填）。
 - 推之前合派工指定的分支（衝突兩邊都留）。推完用 `git merge-base --is-ancestor HEAD origin/<分支>` 確認推到了。
   - `天下大勢` 這份 clone 的 `remote.origin.fetch` 只寫了 main 等三條，**`git fetch origin` 不會更新 `origin/dev/*`、`origin/feature/*`**（2026-10-20：推上去了，`origin/dev/conquest-1` 還停在舊的那一版，上面那一行就判成沒推到）。推完先 `git fetch origin refs/heads/<分支>:refs/remotes/origin/<分支>` 再比，或直接看 `git ls-remote origin refs/heads/<分支>`。拿 `origin/feature/<名字>` 當 `test_for` 的 base 之前也照這樣更新一次。
   - 這份 clone 的 `remote.origin.fetch` 只列 `tianxia`、`feature/sanguo-companions`、`main`：`git fetch origin`（或 `git fetch origin <分支>`）**不會**更新 `origin/dev/*`、`origin/develop`，推完馬上比會假失敗、開工時讀到的也可能是舊的。要比之前先 `git fetch origin +refs/heads/<分支>:refs/remotes/origin/<分支>`，或直接 `git ls-remote origin refs/heads/<分支>` 對 `git rev-parse HEAD`（2026-10-20 商城第二批修正那一次）。

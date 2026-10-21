@@ -481,11 +481,12 @@ def back(state: GameState, content: Content, to: str) -> list[str]:
     return [BACK_LINE]
 
 
-# ── 第五步：立名、擲品級、登記 ───────────────────────────
+# ── 第五步：立名、登記 ───────────────────────────
 
 
 def seal_points(state: GameState, content: Content) -> int:
-    """玉璽赤璋（fuse_points）：加在自創的意分上（夾之前加，品級機率照它挪）。"""
+    """玉璽赤璋（fuse_points）：加在自創的意分上（夾 0～100 之前加），底子威力的倍數（power_scale_of）跟著往上推。
+    品級不擲，自創的一律是 create_grade（武學重構之後合成不擲品質，PM 2026-10-21 合 develop 時定：改版 +10、子開關關著照舊 +5）。"""
     return int(treasures.amount(state, content, "fuse_points"))
 
 

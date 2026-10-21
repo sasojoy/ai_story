@@ -34,7 +34,7 @@ def main(ticks: int | None = None) -> None:
     print(f"資料庫：{database.default_path().resolve()}", flush=True)  # 跟 server.py 要是同一個檔；TIANXIA_DB 設錯時一眼看得出來
     open_world().mutate(lambda st: seal.ensure_salt(st.seal))  # 玉璽碎片的密鹽（設計 5.13）：兩個程式誰先啟動誰產生，另一個看到已經有了就不動
     print(profile_line(content, profile), flush=True)
-    warning = calendar.profile_warning(content, open_world().get_season())  # 這一季蓋了第一季的章、這個程式卻沒開（FB-157）
+    warning = calendar.profile_warning(content, open_world().get_season(), open_world().season_phase())  # 這一季蓋了第一季的章、這個程式卻沒開（FB-157）；籌備中不印（FB-636）
     if warning:
         print(warning, flush=True)
     done = 0
