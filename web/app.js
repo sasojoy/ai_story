@@ -522,6 +522,8 @@
   const SEAL_PICK = { yinjiang: "指定一位大勢人物", chuanxi: "指定一條戰線", shouxin: "指定一位人物",
     zhendi: "指定一塊此刻佔著的地", bujue: "指定一塊剛被翻走的地" }; // 名單的標題（待 joy 潤）
   const SEAL_NONE = "這一邊此刻沒有能指定的地方。"; // 散人挑了一邊、那一軍沒有能鎮（補）的地（待 joy 潤）
+  // 按不下去、可是有一列列的地可看（FB-645：鎮地、補缺每一塊都灰著，伺服器照樣給 targets）：鈕打得開那一層、各列灰著寫原因
+  const sealBrowse = (a) => !!a && !a.ok && a.kind in SEAL_VERB && (a.targets || []).length > 0;
   function sealActNow() {
     const s = S.main && S.main.status && S.main.status.seal;
     return s && s.act ? s.act : null;
@@ -539,7 +541,8 @@
   // （.rwhy，手機沒有 title 可看），這一片的行動此刻還在生效的那一句也寫在底下
   function heirloomRow(h, a) {
     const notes = a ? [a.ok ? "" : a.why, a.live].filter(Boolean) : [];
-    const btn = a ? `<div class="wbtns"><button class="btn small primary" data-act="seal-act"${a.ok ? "" : ` disabled title="${esc(a.why)}"`}>${esc(a.name)}・剩 ${a.left | 0} 次</button></div>` : "";
+    const look = sealBrowse(a); // FB-645：只能看、按不下去：不是 primary，打得開那一層
+    const btn = a ? `<div class="wbtns"><button class="btn small${look ? "" : " primary"}" data-act="seal-act"${a.ok || look ? "" : ` disabled title="${esc(a.why)}"`}>${esc(a.name)}・剩 ${a.left | 0} 次</button></div>` : "";
     return `<div class="wrow heirloom"><div class="winfo"><b>【${esc(h.name)}】</b><span>傳承・${esc(h.effect_text)}</span>${notes.map((t) => `<small class="rwhy">${esc(t)}</small>`).join("")}</div>${btn}</div>`;
   }
 
@@ -8023,12 +8026,16 @@
         // 江湖頁碎片卡那一行跳到修練頁那一顆
         case "seal-act": {
           const a = sealActNow();
-          if (!a || !a.ok) { if (a && a.why) toast(a.why); break; }
+          if (!a || (!a.ok && !sealBrowse(a))) { if (a && a.why) toast(a.why); break; }
           if (a.kind in SEAL_VERB) { S.sealAct = true; S.sealSide = null; await keepScroll(render); } else sealAsk(a, null);
           break;
         }
         case "seal-side": { S.sealSide = el.dataset.side; const a = sealActNow(); if (a) redrawSealAct(a); break; }
-        case "seal-pick": { const a = sealActNow(); const t = a && (a.targets || []).find((r) => r.id === el.dataset.id); if (t) sealAsk(a, t); break; }
+        case "seal-pick": { // 灰著的那一列不問（FB-645 起整顆按不下去時也列得出灰的）
+          const a = sealActNow(); const t = a && (a.targets || []).find((r) => r.id === el.dataset.id);
+          if (t && a.ok && !t.why) sealAsk(a, t);
+          break;
+        }
         case "seal-act-close": S.sealAct = false; S.sealSide = null; await keepScroll(render); break;
         case "seal-act-go": await goTab("practice"); document.querySelector(".gear .wrow.heirloom")?.scrollIntoView({ block: "center" }); break;
         case "bind-art": { // 以器配招：送挑好的那一門（select 的 id 帶冒號，用 getElementById）

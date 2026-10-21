@@ -276,6 +276,34 @@ def test_a_ranger_picking_an_army_with_nothing_to_mend_is_told_so():
     assert [(name, tid) for name, tid, _, _ in _rows(huang)] == [("汝南", "runan")] and "被官軍翻走・" in huang and ">補回</button>" in huang
 
 
+def test_fb645_every_block_greyed_still_opens_the_layer_and_lists_them():
+    """FB-645：剛被翻走的地全都補不了時，鈕照樣打得開那一層（不是 primary）、那幾塊灰著各寫原因、上面寫整顆的原因；灰的那一列按了不問。
+    一塊都沒有、或在間隔裡（targets 是空的）照舊灰掉不開。"""
+    from tianxia import conquest as cq
+    from tianxia.state import SealAct
+    from test_seal_acts3 import _season
+
+    c, w, g = _land("jinjiao", side="huang", at="runan")
+    _season(c, w, lambda wd: cq.push(wd, c, "runan", "guan", "官甲", 100, "attack"), now=100.0)
+    _season(c, w, lambda wd: wd.seal_acts.append(SealAct(kind="bujue", shard="jinjiao", start=50.0, until=50.0, target="runan",
+                                                         side="huang")), now=110.0)
+    m = _do(c, w, "懷璽", server.main_view, now=200.0)
+    act = m["status"]["seal"]["act"]
+    row = run(m, 'return H.heirloomRow({name: "金角", effect_text: "x"}, H.sealActNow());')
+    assert re.search(r'<button class="btn small" data-act="seal-act">補缺・剩 2 次</button>', row)
+    assert f'<small class="rwhy">{act["why"]}</small>' in row
+    out = click(m, [{"act": "seal-act"}, {"act": "seal-pick", "id": "runan"}])
+    opened, picked = out["out"]
+    assert opened["open"] is True and f'<p class="shop-warn">{act["why"]}</p>' in opened["app"]
+    assert _rows(opened["app"]) == [("汝南", "runan", True, "這一季已經補過一次")] and "被官軍翻走・" in opened["app"]
+    assert picked["asked"] == "" and out["calls"] == []
+    c, w, g = _land("jinjiao", side="huang", at="runan")  # 還沒丟過地：照舊灰掉、不開
+    m = server.main_view(g)
+    assert re.search(r'data-act="seal-act" disabled', run(m, 'return H.heirloomRow({name: "金角", effect_text: "x"}, H.sealActNow());'))
+    out = click(m, [{"act": "seal-act"}])
+    assert out["out"][0]["open"] is not True and "shop-seal" not in out["out"][0]["app"]
+
+
 def test_without_conquest_the_card_line_says_why_not_how_many():
     """領地爭奪關著的季（正式內容的三種季）：鎮地的鈕灰著、碎片卡那一行寫原因（不寫「還能起用 2 次」，FB-626 那種一句說能用一句說不能）。"""
     c, w, m = _view("chishou", at="changshe")

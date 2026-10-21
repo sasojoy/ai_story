@@ -261,9 +261,35 @@ def test_bujue_greys_a_block_whose_siege_is_mustering():
     game.sync(210.0)
     assert [(t["id"], t["why"]) for t in seal_acts.land_rows(game.state, c, "bujue")] == [("runan", seal_acts.SIEGING)]
     act = _act(c, w, now=210.0)
-    assert act["why"] == seal_acts.NOTHING["bujue"]  # 唯一的一塊灰著：鈕整個灰掉
-    assert seal_acts.NOTHING["bujue"] in _use(c, w, target="runan", now=220.0)[0]
+    # 唯一的一塊灰著：整顆按不下去，那一塊照樣列出來、寫原因（FB-645 起；以前是 NOTHING、不列）
+    assert act["why"] == seal_acts.ALL_GREY["bujue"] and [(t["id"], t["why"]) for t in act["targets"]] == [("runan", seal_acts.SIEGING)]
+    assert seal_acts.ALL_GREY["bujue"] in _use(c, w, target="runan", now=220.0)[0]
     assert _uses(w) == []
+
+
+def test_fb645_when_every_flipped_block_is_greyed_they_are_still_listed():
+    """FB-645：剛被翻走的地全都補不了（這一季補過、正在攻城）時，以前只寫「此刻沒有剛被翻走、補得回來的地」、那一塊與原因都不列（字跟
+    天下大事剛寫的易手對不上）。改成照樣列出那幾塊、灰掉、各寫原因（mend_rows 同一個判斷），整顆的原因換一句 ALL_GREY（待 joy 潤）；
+    按下去照舊什麼都不動。一塊都沒有的時候照舊 NOTHING。"""
+    c, w, g = _holder("jinjiao")
+    _season(c, w, lambda wd: conquest.push(wd, c, "runan", "guan", "官甲", 100, "attack"), now=100.0)
+    _season(c, w, lambda wd: wd.seal_acts.append(SealAct(kind="bujue", shard="jinjiao", start=50.0, until=50.0, target="runan",
+                                                         side="huang")), now=110.0)  # 這一季補過汝南（之後又被翻走）
+    act = _act(c, w, now=200.0)
+    assert (act["ok"], act["why"], act["idle"]) == (False, seal_acts.ALL_GREY["bujue"], False)
+    assert [(t["id"], t["side"], t["why"]) for t in act["targets"]] == [("runan", "huang", seal_acts.MENDED)]
+    assert act["targets"][0]["info"].startswith("被官軍翻走・")
+    assert _use(c, w, target="runan", now=210.0) == [f"（{seal_acts.ALL_GREY['bujue']}）"] and _uses(w) == []
+    assert conquest.holder(w.get_season(), c, "runan") == "guan"
+
+
+def test_fb645_zhendi_with_every_block_cooling_lists_them_greyed(monkeypatch):
+    c, w, g = _holder("chishou")
+    monkeypatch.setattr(conquest, "cooling", lambda world, content, loc_id: True)
+    act = _act(c, w)
+    assert (act["ok"], act["why"]) == (False, seal_acts.ALL_GREY["zhendi"])
+    assert [(t["id"], t["why"]) for t in act["targets"]] == [(loc, seal_acts.LAND_COOLING) for loc in HUANG_BLOCKS]
+    assert _use(c, w, target="runan") == [f"（{seal_acts.ALL_GREY['zhendi']}）"] and _uses(w) == []
 
 
 def test_mend_rows_only_count_flips():

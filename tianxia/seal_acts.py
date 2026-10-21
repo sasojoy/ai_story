@@ -84,6 +84,8 @@ PICK_SIDE = "先挑這一次照哪一軍算。"
 BAD_SIDE = "這條線上沒有那一軍。"
 NO_CONQUEST = "這一季沒有領地爭奪，起用不了。"  # 鎮地、補缺（設計第四章：領地爭奪沒開的季按不下去）
 NOTHING = {"zhendi": "此刻沒有能鎮的地。", "bujue": "此刻沒有剛被翻走、補得回來的地。"}  # 一個能指定的都沒有
+# 有能列的地、可是每一塊都灰著（FB-645：那幾塊照樣列出來、各寫原因，整顆寫這一句）。待 joy 潤
+ALL_GREY = {"zhendi": "佔著的地此刻都鎮不了。", "bujue": "剛被翻走的地此刻都補不回來。"}
 # 目標灰掉的原因（短）
 PINNED = "正被引著"
 HERE = "已經在這裡"
@@ -575,7 +577,8 @@ def problem(
     stamp: Callable[[float], str],
 ) -> str | None:
     """這一刻整個按不下去的原因（不看目標）；按得下去是 None。鎮地、補缺在領地爭奪關著的季一律 NO_CONQUEST（設計第四章），
-    排在季沒在跑、暫停之前（FB-644：整季都用不上，暫停、休季時碎片卡那一行也寫這一句）；一個能指定的都沒有（散人看兩軍合起來）時 NOTHING。"""
+    排在季沒在跑、暫停之前（FB-644：整季都用不上，暫停、休季時碎片卡那一行也寫這一句）；一個能列的都沒有（散人看兩軍合起來）時 NOTHING，
+    有能列的、可是每一塊都灰著時 ALL_GREY（FB-645）。"""
     from . import conquest  # noqa: PLC0415
 
     holding = mine(state, content, reg)
@@ -597,8 +600,12 @@ def problem(
         return ON_ROAD
     if kind == "chenglu" and region_of(content, state.player.location) is None:
         return NO_REGION + "。"
-    if kind in LAND and not any(not row["why"] for row in land_rows(state, content, kind)):
-        return NOTHING[kind]
+    if kind in LAND:
+        rows = land_rows(state, content, kind)
+        if not rows:
+            return NOTHING[kind]
+        if all(row["why"] for row in rows):  # FB-645：有地、可是全灰著——view 照樣列出那幾塊（各寫原因）
+            return ALL_GREY[kind]
     return None
 
 
@@ -689,7 +696,8 @@ def view(
     （{target} 換成目標的 name、{side} 換成挑的那一軍，由畫面換）。改版關著、手上沒有有行動的碎片是 None。
     鎮地、補缺的目標每一列多 side（那一塊算哪一軍的；散人挑了哪一軍畫面只列那一軍的）與 info（底下那一小行）；idle：這一季整季都用不上
     （領地爭奪關著，NO_CONQUEST；暫停、休季也是這一句，FB-644），江湖頁碎片卡那一行寫原因、不寫「還能起用 N 次」（FB-626 那種一句說能用、
-    一句說不能用）。
+    一句說不能用）。按得下去才給目標；例外是鎮地、補缺每一塊都灰著（ALL_GREY）：照樣給那幾塊（各寫原因、不給 sides），畫面打得開那一層看
+    （FB-645）。
     入口畫面企劃者 2026-10-21 挑了乙（docs/superpowers/specs/2026-10-21-玉璽碎片改版-草圖/第2批/）。"""
     holding = mine(state, content, reg)
     if holding is None:
@@ -704,7 +712,8 @@ def view(
     here = state.player.location if state.player.journey is None else ""
     region = region_of(content, here) if here else None
     count = left(shard, season, content)
-    rows = targets(state, content, kind, w.time + span(content, w)) if why is None else []
+    browse = why is None or why == ALL_GREY.get(kind)  # FB-645：每一塊都灰著時照樣列出來（各寫原因；畫面打得開那一層、按不下去）
+    rows = targets(state, content, kind, w.time + span(content, w)) if browse else []
     every = lines(content, w) if kind == "chuanxi" else []
     ask = CONFIRM_WIDE if every and all(wide(content, line) for line in every) else CONFIRM  # FB-627：只有合成的那一條
     out = {
