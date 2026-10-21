@@ -1,11 +1,14 @@
 """玉璽碎片改版第 1 批：持有者平時藏起來（docs/superpowers/specs/2026-10-21-玉璽碎片改版-design.md 第一章第 8 條、第三章；
 計畫 docs/superpowers/plans/2026-10-21-玉璽碎片改版-1.md Task 5）。江湖史七格只寫「已現世」、璽動不點名、沒開成單挑那一句不點名、
 隱沒不點名、「戰功居前」兩軍都給、酒肆的名氣不算碎片；奪璽單挑那一場照舊露面。假人持璽跟真人一樣藏。
-守門：(1) 掃過旁人看得到的各處，持有者的名號不跟碎片一起出現；(2) 兩個只差「誰持有」的世界，旁人看到的一個字不差。"""
+守門：(1) 掃過旁人看得到的各處，持有者的名號不跟碎片一起出現；(2) 兩個只差「誰持有」的世界，旁人看到的一個字不差。
+QA 之後的修正（FB-625、FB-615）把 (2) 延伸到側門：截殺鈕上的勝算、擂台挑人的「身手」、切磋／截殺／擂台戰報上的「對手威力」
+（企劃者 2026-10-21「給別人看的…照不含碎片的算，真的打起來照吃碎片的戰力」）。"""
 from __future__ import annotations
 
 import json
 import random
+import re
 import tempfile
 from pathlib import Path
 
@@ -15,7 +18,7 @@ import server
 from conftest import real_content
 from test_seal import _ended, _registry, sealed  # noqa: F401  sealed 是夾具
 from test_seal_revamp import revamp
-from tianxia import battle_instance, leaderboard, seal, seal_duel, social, tavern
+from tianxia import battle_instance, battlelog, leaderboard, seal, seal_duel, social, tavern
 from tianxia import world as world_rules
 from tianxia.characters import CharacterStore
 from tianxia.engine import Game
@@ -77,7 +80,7 @@ def _active(viewer):
 
 def _seen(viewer) -> dict:
     """旁觀客看得到的一切：江湖頁與狀態列（/api/main）、江湖史、天下大事與傳聞、決戰畫面、打到一半的「戰功居前」、酒肆查兩個假人
-    （名氣與回話）、兩個假人的玩家卡（不含卡上的鈕：截殺的勝算照實力算，見計畫第三節第 1 條）、榜單。"""
+    （名氣與回話）、兩個假人的玩家卡（連卡上的鈕：截殺的勝算照不含碎片的算，FB-625）、榜單。"""
     c, w = viewer.content, viewer.world
     season = w.get_season()
     battle, definition = w.get_battle(), c.battles["changshe_fire"]
@@ -97,7 +100,6 @@ def _seen(viewer) -> dict:
         out[f"fame:{name}"] = tavern.person_fame(other, c)
         out[f"seek:{name}"] = tavern.seek_lines(viewer.state, c, other, 100.0, set())
         card = social.card(viewer, viewer._kin(other))
-        card.pop("actions")
         out[f"card:{name}"] = json.dumps(card, ensure_ascii=False, sort_keys=True, default=str)
     return out
 
@@ -151,6 +153,147 @@ def test_two_worlds_that_differ_only_in_the_holder_look_the_same():
     old_a, old_b = _seen(_world("甲客", on=False)[2]), _seen(_world("乙客", on=False)[2])
     differs = {key for key in old_a if old_a[key] != old_b[key]}
     assert {"main", "chronicle", "rumors", "scene", "spotlight", "fame:甲客", "fame:乙客", "seek:甲客"} <= differs, differs
+
+
+# ── 側門（FB-625、FB-615）：截殺鈕的勝算、擂台挑人的「身手」、切磋／截殺／擂台戰報的「對手威力」──
+# 碎片的戰力 ×1.10 是真的，打起來照吃；但這三種給別人看的字照持有者**不含碎片**的算，不然兩個只差誰持有的世界會露出來。
+
+SIDE_AT = "yingchuan_wilds"  # 不是城鎮類：截殺打得下去
+SIDE_CAST = (  # 名號、陣營、武學等級、臂力；強度挑在含碎片會讓字變的位置（旁觀客：勝算字；旁觀客二：身手字）
+    ("甲客", "guan", 1, 5), ("乙客", "guan", 1, 5), ("旁觀客", "huang", 1, 5), ("旁觀客二", "huang", 4, 5),
+)
+
+
+def _side_world(holder: str, *, on: bool = True):
+    """正式內容（21 天季）：官軍兩個伺服器假人甲客、乙客（一模一樣）與黃巾兩個真人旁觀客都在同一處（不是城鎮），holder 懷著螭首。
+    回（內容, 資料庫）。"""
+    c = real_content("season21")
+    c.config.auto_open_first_season = True
+    c.config.seal.revamp.enabled = on
+    c.config.newbie_days, c.config.newbie_real_hours = -1, 0  # 不等新手期（截殺要兩邊都過了）
+    c.config.arena.enabled = True
+    w = open_world(Path(tempfile.mkdtemp(prefix="seal1s-")) / "t.db")
+
+    def _give(st):
+        shard = seal.filled(st.seal, c).shards["chishou"]
+        shard.state, shard.holder, shard.since_season = "held", holder, 0
+
+    w.mutate(_give)
+    for name, side, level, strength in SIDE_CAST:
+        g = _character(c, w, name, side, SIDE_AT)
+        p = g.state.player
+        p.member.wugong_level, p.stats["str"], p.stamina = level, strength, 200.0
+        if name in ("甲客", "乙客"):
+            p.bot = BotProfile(personality="普通", seed=1, faction=side, season_number=1)
+        g.sync(1.0)  # 傳承那一格照登記抄好
+        CharacterStore(w.db).save(g.state)
+    return c, w
+
+
+def _act(c, w, name, fn, now=100.0):
+    """照伺服器：重讀這個人、補算到此刻、做一個動作、存回去（連同共用賽季）。"""
+    game = Game(c, CharacterStore(w.db).load(name), random.Random(0), w)
+    game.client = None
+    game.sync(now)
+    out = fn(game)
+    game._save_season()
+    CharacterStore(w.db).save(game.state)
+    return out
+
+
+def _shown_power(record) -> int:
+    return int(re.search(r"對手威力 (\d+)", battlelog.detail_text(record)).group(1))
+
+
+def _join_ring(g):
+    g.choose("act:arena")
+    g.choose("arena:join")
+    g.choose("arena:back")
+
+
+def _challenge_and_yield(foe: str):
+    """挑一個人、馬上認輸（結果固定是落敗：名次不動，兩個世界後面的步驟才排得一樣）；戰報照樣寫「對手威力」。"""
+    def go(g):
+        g.choose("act:arena")
+        g.choose(f"arena:fight:{foe}")
+        g.choose("arena:yield")
+        g.choose("arena:back")
+    return go
+
+
+def _side_seen(c, w) -> dict:
+    """旁觀客與兩個伺服器假人互相看得到的側門：玩家卡與截殺鈕（旁觀客看假人；假人看旁觀客）、擂台挑人的身手（挑人選單與擂台那一頁）、
+    切磋、截殺、擂台各打一輪之後每個人戰報上的「對手威力」（只比對手那一格：勝負、氣血本來就隨誰持有而不同）。
+    看的在打之前；打的順序讓每個人至多打一場有損耗的仗（氣血的狀態不會把兩個世界的數字帶開）。"""
+    store = CharacterStore(w.db)
+    out = {}
+    names = ("甲客", "乙客")
+    for viewer in ("旁觀客", "旁觀客二"):
+        for other in names:
+            out[f"card:{viewer}>{other}"] = _act(
+                c, w, viewer,
+                lambda g, o=other: json.dumps(social.card(g, g._kin(store.load(o))), ensure_ascii=False, sort_keys=True, default=str))
+    for bot in names:  # 持有者自己看自己的也照不含碎片的算
+        for target in ("旁觀客", "旁觀客二"):
+            out[f"odds:{bot}>{target}"] = _act(c, w, bot, lambda g, t=target: g.raid_odds(g._kin(store.load(t))))
+    for name in ("旁觀客", "甲客", "乙客", "旁觀客二"):  # 榜：旁觀客 1、甲客 2、乙客 3、旁觀客二 4
+        _act(c, w, name, _join_ring, now=150.0)
+
+    def ring_labels(g):
+        return [o.label for o in g._arena_options() if o.id.startswith("arena:fight:")]
+
+    def ring_page(g):
+        g.choose("act:arena")
+        view = g.shop_view()
+        g.choose("arena:back")
+        return json.dumps([(f["name"], f["strength"]) for f in view["foes"]], ensure_ascii=False)
+
+    for name in ("旁觀客", "甲客", "乙客", "旁觀客二"):
+        out[f"ring:{name}"] = _act(c, w, name, ring_labels, now=160.0)
+        out[f"page:{name}"] = _act(c, w, name, ring_page, now=160.0)
+    for inviter, answerer in (("旁觀客", "甲客"), ("乙客", "旁觀客")):  # 切磋：持有者答應、持有者發邀請各一次
+        _act(c, w, inviter, lambda g, o=answerer: g.peer_act(o, "spar", {"arg": "invite"}), now=200.0)
+        iid = w.get_season().invites[0].id
+        _act(c, w, answerer, lambda g, i=iid: g.choose(f"invite:yes:{i}"), now=210.0)
+    _act(c, w, "旁觀客", lambda g: g.peer_act("甲客", "raid"), now=300.0)  # 截殺：旁觀客截殺甲客、乙客截殺旁觀客二
+    _act(c, w, "乙客", lambda g: g.peer_act("旁觀客二", "raid"), now=310.0)
+    _act(c, w, "旁觀客二", _challenge_and_yield("甲客"), now=400.0)  # 擂台：旁觀客二挑甲客、甲客挑旁觀客、乙客挑旁觀客
+    _act(c, w, "甲客", _challenge_and_yield("旁觀客"), now=410.0)
+    _act(c, w, "乙客", _challenge_and_yield("旁觀客"), now=420.0)
+    for name in ("旁觀客", "甲客", "乙客", "旁觀客二"):  # 守擂的人同步，補戰報
+        _act(c, w, name, lambda g: None, now=500.0)
+    for name in ("旁觀客", "旁觀客二", "甲客", "乙客"):
+        out[f"records:{name}"] = [(r.kind, r.event, _shown_power(r)) for r in store.load(name).battles]
+    return out
+
+
+def test_the_side_doors_look_the_same_in_two_worlds_that_differ_only_in_the_holder():
+    """差異測試（延伸到側門）：甲客或乙客懷著螭首，其餘一模一樣。旁觀客看到的玩家卡（含截殺鈕上的勝算）、擂台挑人的身手、
+    戰報上的「對手威力」一個字不差；兩個假人自己看旁觀客的勝算也一樣（持有者自己看自己的也照不含碎片的算）。"""
+    a, b = _side_seen(*_side_world("甲客")), _side_seen(*_side_world("乙客"))
+    assert a.keys() == b.keys()
+    for key in a:
+        assert a[key] == b[key], key
+
+
+def test_the_side_door_guard_has_teeth(monkeypatch):
+    """守門抓得到漏：把「給別人看的威力」改回含碎片的（_spar_power 不理 seal、擂台不記不含碎片的那一份），兩個世界就看得出差別——
+    勝算字、身手字、三種戰報的「對手威力」都在裡面。（子開關關著時碎片沒有 ×1.10，這幾處本來就看不出，所以這條用還原漏洞來證明。）"""
+    spar_power = Game._spar_power
+    monkeypatch.setattr(Game, "_spar_power", staticmethod(lambda who, against, *, seal=True: spar_power(who, against, seal=True)))
+    monkeypatch.setattr(Game, "_arena_bare", lambda self: None)
+    a, b = _side_seen(*_side_world("甲客")), _side_seen(*_side_world("乙客"))
+    differs = {key for key in a if a[key] != b[key]}
+    assert {"card:旁觀客>甲客", "card:旁觀客>乙客", "ring:旁觀客二", "page:旁觀客二", "records:旁觀客", "records:旁觀客二"} <= differs, differs
+
+
+def test_the_side_doors_cost_the_holder_nothing_in_a_real_fight():
+    """打起來照吃碎片的戰力：甲客懷著螭首，威力是不含碎片的 1.10 倍；旁觀客截殺他，判定收到的是含碎片的那一份。"""
+    c, w = _side_world("甲客")
+    holder = _act(c, w, "甲客", lambda g: g)
+    other = _act(c, w, "旁觀客", lambda g: g)
+    assert Game._spar_power(holder, other) == pytest.approx(Game._spar_power(holder, other, seal=False) * 1.1)
+    assert holder._battle_power() == pytest.approx(holder._battle_power(seal=False) * 1.1)
 
 
 # ── 一處一條：純規則 ──

@@ -5150,7 +5150,7 @@ class Game:
         if shop is None or not self._shop_live(option_ids, shop):
             return None
         if shop == "arena":
-            return shopview.arena_view(s, c, self.world, self._battle_power(), self.arena_left())
+            return shopview.arena_view(s, c, self.world, self._battle_power(), self.arena_left(), bare=self._battle_power(seal=False))
         if shop == "donate":
             return shopview.donate_view(s, c, self._pill_day())
         if shop == "dadian":
@@ -10251,9 +10251,10 @@ class Game:
         self._pair_tick(self.state.world.spar_tally, them.name)
         self._save_season()
         ours, theirs = self._spar_power(self, other), self._spar_power(other, self)
+        ours_shown, theirs_shown = self._spar_power(self, other, seal=False), self._spar_power(other, self, seal=False)  # 戰報給對方看的（先算：記完戰報可能升級）
         result = encounter.resolve_encounter(theirs, ours, self.rng)  # 從發邀請的那一方看：他的威力對上你的
-        other._spar_record(result, me.name, ours, self)
-        return self._spar_record(self._spar_mirror(result, ours), them.name, theirs, other)
+        other._spar_record(result, me.name, ours, self, shown=ours_shown)
+        return self._spar_record(self._spar_mirror(result, ours), them.name, theirs, other, shown=theirs_shown)
 
     # ── 論武（玩家互動第二層）：兩個人各出一樣（武學或意境）合成一樣新的，兩人都拿到；首創算兩人共有，價錢各付一半 ──
     # 走 fusion 的三種合成（fusion.Partner：對方出的那一樣不必是你的、不佔你的持有）；血統、持有上限、「已經有了」照舊各自擋。
@@ -10452,8 +10453,10 @@ class Game:
             tier = "大勝" if -result.margin >= big else "險勝"
         return result.model_copy(update={"tier": tier, "margin": -result.margin, "our_power": power, "difficulty": result.our_power})
 
-    def _spar_record(self, result: encounter.EncounterResult, rival: str, rival_power: float, rival_game: Game) -> list[str]:
-        """這一邊的戰報、獎勵與紀錄。對手寫成一支只為這一場存在的隊伍（名號、威力、身上那一門的屬性），戰報只列本人。"""
+    def _spar_record(self, result: encounter.EncounterResult, rival: str, rival_power: float, rival_game: Game,
+                     *, shown: float | None = None) -> list[str]:
+        """這一邊的戰報、獎勵與紀錄。對手寫成一支只為這一場存在的隊伍（名號、威力、身上那一門的屬性），戰報只列本人。
+        shown：戰報上「對手威力 N」寫的數字＝對手不含玉璽碎片的威力（改版 FB-615；打起來照 result，含碎片）；不給就照 result。"""
         s, c, cfg = self.state, self.content, self.content.config.spar
         p = s.player
         squad = Squad(
@@ -10461,6 +10464,8 @@ class Game:
             attribute=team.worn_attribute(rival_game.state, c, rival_game.world),
         )
         record = battlelog.new_record(s, c, self.world, squad, result, "spar")
+        if shown is not None:
+            record.difficulty = shown
         record.ours = record.ours[:1]
         xinde = cfg.win_xinde if result.tier in team.WIN_TIERS else cfg.draw_xinde if result.tier in team.DRAW_TIERS else cfg.lose_xinde
         p.stats["xinde"] = p.stats.get("xinde", 0) + xinde
@@ -10532,10 +10537,12 @@ class Game:
         return None
 
     def raid_odds(self, other: Game) -> str:
-        """截殺的勝算（「有把握」這種字，同遊歷的按鈕）：本人對本人的威力，照固定種子模擬。"""
-        theirs = self._spar_power(other, self)
+        """截殺的勝算（「有把握」這種字，同遊歷的按鈕）：本人對本人的威力，照固定種子模擬。兩邊都照**不含玉璽碎片**的威力算
+        （改版 FB-625：給別人看的字不能讓人對同一個人看出他有沒有碎片，持有者自己看也照這一份，免得畫面對不上；
+        打起來 raid() 照含碎片的威力擲，勝負不變）。"""
+        theirs = self._spar_power(other, self, seal=False)
         squad = Squad(id=f"raid:{other.state.player.name}", name=other.state.player.name, difficulty=theirs)
-        return team.odds_word(self._spar_power(self, other), squad)
+        return team.odds_word(self._spar_power(self, other, seal=False), squad)
 
     def raid_targets(self) -> list[tuple[str, str]]:
         """此地截殺得了的人與勝算：[(名號, 勝算)]，照名號排序（假人挑對象用；真人看卡上的鈕）。截殺關著時是空的（raid_shown 擋）；
@@ -10564,6 +10571,7 @@ class Game:
         if flee > 0 and random.Random(f"截殺脫身|{me.name}|{them.name}|{s.world.time}").random() < flee:
             return self._raid_fled(other)
         ours, theirs = self._spar_power(self, other), self._spar_power(other, self)
+        ours_shown, theirs_shown = self._spar_power(self, other, seal=False), self._spar_power(other, self, seal=False)  # 戰報給對方看的（FB-615）
         result = encounter.resolve_encounter(ours, theirs, self.rng)
         mirrored = self._spar_mirror(result, theirs)
         if result.tier in team.WIN_TIERS:
@@ -10576,8 +10584,8 @@ class Game:
         official = winner is self and renown.on(c, "official_wanted") and bounties.official_hit(s, c, them.name)
         spoils = winner._raid_spoils(loser, evil=c.config.renown.official_evil_loss if official else 0) if winner is not None else None
         self.touched.add(them.name)
-        other._raid_record(mirrored, me.name, ours, self, spoils, attacker=False)
-        msgs = self._raid_record(result, them.name, theirs, other, spoils, attacker=True)
+        other._raid_record(mirrored, me.name, ours, self, spoils, attacker=False, shown=ours_shown)
+        msgs = self._raid_record(result, them.name, theirs, other, spoils, attacker=True, shown=theirs_shown)
         if winner is self:
             msgs += self._raid_bounty(them.name)
             heard = figure_life.spread(s, c, "raid", name_key(them.name), at=me.location, side=them.faction,
@@ -10649,9 +10657,9 @@ class Game:
 
     def _raid_record(
         self, result: encounter.EncounterResult, rival: str, rival_power: float, rival_game: Game,
-        spoils: RaidSpoils | None, *, attacker: bool,
+        spoils: RaidSpoils | None, *, attacker: bool, shown: float | None = None,
     ) -> list[str]:
-        """這一邊的戰報與紀錄。對手寫成一支只為這一場存在的隊伍（同切磋），戰報只列本人。"""
+        """這一邊的戰報與紀錄。對手寫成一支只為這一場存在的隊伍（同切磋），戰報只列本人。shown 同 _spar_record。"""
         s, c = self.state, self.content
         p = s.player
         squad = Squad(
@@ -10659,6 +10667,8 @@ class Game:
             attribute=team.worn_attribute(rival_game.state, c, rival_game.world),
         )
         record = battlelog.new_record(s, c, self.world, squad, result, "raid")
+        if shown is not None:
+            record.difficulty = shown
         record.ours = record.ours[:1]
         won = spoils is not None and name_key(spoils.winner) == name_key(p.name)
         hp_lost: int | None = 0
@@ -10911,6 +10921,7 @@ class Game:
         w.raided[name_key(me.name)] = max(w.raided.get(name_key(me.name), when), when)
         amb.caught += 1
         ours, theirs = self._spar_power(owner, self), self._spar_power(self, owner)
+        ours_shown, theirs_shown = self._spar_power(owner, self, seal=False), self._spar_power(self, owner, seal=False)  # 戰報給對方看的（FB-615）
         result = encounter.resolve_encounter(ours, theirs, random.Random(f"設伏|{amb.owner}|{me.name}|{when}"))
         mirrored = self._spar_mirror(result, theirs)
         if result.tier in team.WIN_TIERS:
@@ -10927,9 +10938,9 @@ class Game:
                 owner.state.player.ambush = None
             amb.lifted_at = max(amb.set_at, when)
         self.touched.add(amb.owner)
-        owner._ambush_record(result, me.name, theirs, self, spoils, as_owner=True,
+        owner._ambush_record(result, me.name, theirs, self, spoils, as_owner=True, shown=theirs_shown,
                              extra=[ambush_rules.BROKEN.format(rival=me.name, to=c.locations[amb.to].name)] if broke else [])
-        msgs = self._ambush_record(mirrored, owner.state.player.name, ours, owner, spoils, as_owner=False)
+        msgs = self._ambush_record(mirrored, owner.state.player.name, ours, owner, spoils, as_owner=False, shown=ours_shown)
         if winner is owner:
             owner._raid_bounty(me.name)  # 伏兵揭了通緝他：交差（寫在伏兵自己的紀錄）
         elif winner is self:
@@ -10973,9 +10984,10 @@ class Game:
 
     def _ambush_record(
         self, result: encounter.EncounterResult, rival: str, rival_power: float, rival_game: Game,
-        spoils: RaidSpoils | None, *, as_owner: bool, extra: list[str] | None = None,
+        spoils: RaidSpoils | None, *, as_owner: bool, extra: list[str] | None = None, shown: float | None = None,
     ) -> list[str]:
-        """這一邊的戰報與紀錄（同截殺，戰報只列本人）。伏兵這一邊不在行動裡，寫一則「設伏・對手」；路過的人併進這一趟路的那一則。"""
+        """這一邊的戰報與紀錄（同截殺，戰報只列本人）。伏兵這一邊不在行動裡，寫一則「設伏・對手」；路過的人併進這一趟路的那一則。
+        shown 同 _spar_record。"""
         s, c = self.state, self.content
         p = s.player
         squad = Squad(
@@ -10983,6 +10995,8 @@ class Game:
             attribute=team.worn_attribute(rival_game.state, c, rival_game.world),
         )
         record = battlelog.new_record(s, c, self.world, squad, result, "ambush")
+        if shown is not None:
+            record.difficulty = shown
         record.ours = record.ours[:1]
         won = spoils is not None and name_key(spoils.winner) == name_key(p.name)
         hp_lost: int | None = 0
@@ -11418,8 +11432,15 @@ class Game:
         _, cap = self._player_hp_and_cap()
         return ArenaSide(
             name=self.state.player.name, power=self._battle_power(), scores=self._battle_scores(mounted=False),
-            role=self._battle_role(), hp=cap, hp_cap=cap,
+            role=self._battle_role(), hp=cap, hp_cap=cap, bare=self._arena_bare(),
         )
+
+    def _arena_bare(self) -> float | None:
+        """戴著玉璽碎片（改版開著，treasures.power_scale 不是 1）時，不含碎片戰力的威力；沒有是 None（威力本身就是給別人看的那一份）。
+        擂台挑人的「身手」與四種戰報的「對手威力」照它寫（FB-625、FB-615）；打起來照 power（含碎片）。"""
+        if treasures.power_scale(self.state, self.content) == 1.0:
+            return None
+        return self._battle_power(seal=False)
 
     def _arena_arts(self) -> list[str]:
         s, c, m = self.state, self.content, self.state.player.member
@@ -11449,6 +11470,7 @@ class Game:
         cfg = c.config.arena
         mine = arena.entry_of(s.world, p.name)
         power = self._battle_power()
+        shown = self._battle_power(seal=False)  # 身手兩邊都照不含玉璽碎片的算（FB-625）：自己看自己也一樣，畫面才跟別人看到的對得上
         left = self.arena_left()
         opts = [Option(id=arena.JOIN_ID, label=arena.UPDATE if mine is not None else arena.JOIN, enabled=power > 0)]
         others = arena.challengers(s.world, c, p.name, left)
@@ -11456,7 +11478,7 @@ class Game:
             note = problem or arena.LEFT.format(n=left)
             title = arena.title_for(e.rank)
             label = (f"挑{e.name}（第 {e.rank} 名{'・' + title if title else ''}・{arena.record_text(e)}・"
-                     f"身手{arena.strength_words(c, power, e.power)}・{note}）")
+                     f"身手{arena.strength_words(c, shown, e.shown)}・{note}）")
             opts.append(Option(id=f"arena:fight:{name_key(e.name)}", label=label, enabled=problem is None))
         if mine is not None and not others:
             opts.append(Option(id="arena:none", label=arena.NOBODY if mine.rank == 1 else arena.NOBODY_AHEAD, enabled=False))
@@ -11488,11 +11510,12 @@ class Game:
         if entry is not None:
             entry.name, entry.power, entry.scores, entry.role, entry.hp_cap, entry.arts, entry.famed = (
                 p.name, side.power, side.scores, side.role, side.hp_cap, arts, famed)
+            entry.bare = side.bare  # 碎片沒了再更新分身：不含碎片的那一份跟著清掉
             entry.kit = team.self_side(s, self.content, self.world)
             entry.crowd = arena_crowd.snapshot(s, self.content, self.world)  # 場邊事件看的底細（照更新這一刻）
             return [arena.UPDATED.format(arts=text)]
         entry = arena.join(s.world, ArenaEntry(
-            name=p.name, power=side.power, scores=side.scores, role=side.role, hp_cap=side.hp_cap, arts=arts, joined=s.world.time,
+            name=p.name, power=side.power, bare=side.bare, scores=side.scores, role=side.role, hp_cap=side.hp_cap, arts=arts, joined=s.world.time,
             kit=team.self_side(s, self.content, self.world), famed=famed, crowd=arena_crowd.snapshot(s, self.content, self.world),
         ))
         return [arena.JOINED.format(rank=entry.rank, arts=text)]
@@ -11512,7 +11535,8 @@ class Game:
         s.world.arena_seq += 1
         fight = ArenaFight(
             id=s.world.arena_seq, foe_key=key, me=self._arena_side(), rounds=cfg.rounds,
-            foe=ArenaSide(name=foe.name, power=foe.power, scores=dict(foe.scores), role=foe.role, hp=foe.hp_cap, hp_cap=foe.hp_cap),
+            foe=ArenaSide(name=foe.name, power=foe.power, scores=dict(foe.scores), role=foe.role, hp=foe.hp_cap, hp_cap=foe.hp_cap,
+                          bare=foe.bare),
             edge=c.config.duel.start,
             crowd_me=arena_crowd.snapshot(s, c, self.world), crowd_foe=foe.crowd,  # 場邊事件看的底細（arena_crowd）
         )
@@ -11686,7 +11710,7 @@ class Game:
         score = arena.SCORES[tier]
         squad = Squad(id=f"arena:{fight.foe_key}", name=f"{fight.foe.name}的分身", difficulty=fight.foe.power)
         result = encounter.EncounterResult(tier=tier, margin=fight.edge - c.config.duel.start, our_power=fight.me.power,
-                                           difficulty=fight.foe.power)
+                                           difficulty=fight.foe.shown)  # 戰報的「對手威力」不含玉璽碎片（FB-615）；打是照 power 打的
         title = f"{arena.ARENA}・{fight.foe.name}"
         record = battlelog.new_record(s, c, self.world, squad, result, "arena", event=title)
         record.ours = record.ours[:1]
@@ -11701,7 +11725,7 @@ class Game:
             record.changes.append(arena.SWAPPED.format(before=before_me, after=mine.rank) if moved else arena.KEPT.format(rank=mine.rank))
             foe.inbox.append(ArenaReport(
                 challenger=p.name, tier=arena.defender_tier(tier, fight.edge, c.config.duel), time=w.time,
-                rank=foe.rank, before=before_foe, power=fight.me.power,
+                rank=foe.rank, before=before_foe, power=fight.me.power, bare=fight.me.bare,
             ))
             if moved and was_first:
                 news.append(arena.NEW_FIRST.format(winner=p.name, loser=foe.name))
@@ -11743,7 +11767,7 @@ class Game:
             return
         for report in entry.inbox:
             squad = Squad(id=f"arena:{name_key(report.challenger)}", name=report.challenger, difficulty=report.power)
-            result = encounter.EncounterResult(tier=report.tier, margin=0.0, our_power=entry.power, difficulty=report.power)
+            result = encounter.EncounterResult(tier=report.tier, margin=0.0, our_power=entry.power, difficulty=report.shown)  # 不含碎片（FB-615）
             title = f"守擂・{report.challenger}"
             record = battlelog.new_record(s, c, self.world, squad, result, "arena", event=title)
             record.time = report.time
