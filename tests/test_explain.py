@@ -583,9 +583,10 @@ def _odd_numbers(cfg):
     cfg.duplicate_insight_xinde, cfg.recruit_affinity_bonus = 23, 0.27
     cfg.stamina_regen_seconds, cfg.time_scale, cfg.stamina_max, cfg.newbie_stamina_multiplier = 300, 1.0, 222, 3.5
     cfg.stamina_pill_restore, cfg.beta_free_refill = 133, False
+    cfg.arts.slots = {"下品": 31, "中品": 32, "上品": 33, "絕學": 34}  # 意境那一節寫每一品幾格槽（武學重構）
     # 2：換季帶 0.2 → 2 成（操練 0.4 → 4 成已在上面）；5：每 300 秒＝5 分鐘；1：「回 1 點」是 stamina_regen_seconds 的定義（每幾秒回一點）
     return {"7", "8", "4", "6", "9", "66", "11", "12", "13", "14", "16", "17", "19", "21", "23", "27",
-            "5", "222", "3.5", "133", "2", "1"}
+            "5", "222", "3.5", "133", "2", "1", "31", "32", "33", "34"}
 
 
 def test_the_howto_page_has_every_section_and_reads_the_config(game):

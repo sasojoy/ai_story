@@ -236,6 +236,9 @@ def test_deep_sometimes_senses_and_known_ones_turn_into_xinde(monkeypatch):
     learned = [i for i in insights.explore_gives(game.content.locations["deep_mountain"], game.content) if i in p.insights]
     assert len(learned) == 1
     p.insights += [i for i in insights.explore_gives(game.content.locations["deep_mountain"], game.content) if i not in p.insights]
+    cap = game.content.config.arts.insight_piece_cap  # 武學重構（意境效果池）：會了的先多一份，份數滿了才化心得
+    for i in insights.explore_gives(game.content.locations["deep_mountain"], game.content):
+        p.insights += [f"{i}~{n}" for n in range(2, cap + 1) if f"{i}~{n}" not in p.insights]
     xinde = p.stats.get("xinde", 0)
     p.stamina = 250.0
     game.choose("explore:gather:deep")

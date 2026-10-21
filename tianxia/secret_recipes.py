@@ -21,7 +21,7 @@ import hashlib
 import random
 import re
 
-from . import insights
+from . import insight_fx, insights
 from .martial_arts import QUALITIES, Insight, MartialArt
 from .models import ArtPattern, Content, InsightPattern, SecretRecipe
 from .state import GameState, Manual
@@ -56,9 +56,14 @@ def key(recipe: SecretRecipe) -> str:
 # ── 合不合得上 ─────────────────────────────────────────
 
 
+def _attrs(art: MartialArt) -> list[str]:
+    """武學重構：秘方認武學的屬性照相容屬性（門面）；寫死的武學沒有相容屬性，照內容的屬性。兼容並蓄的沒有屬性，認不上寫了屬性的格子。"""
+    return list(art.affinity) if art.affinity else ([art.attribute] if art.attribute else [])
+
+
 def art_fits(pattern: ArtPattern, art: MartialArt, quality: str) -> bool:
     return (
-        (pattern.attribute is None or art.attribute == pattern.attribute)
+        (pattern.attribute is None or pattern.attribute in _attrs(art))
         and (pattern.kind is None or art.kind == pattern.kind)
         and (pattern.lean is None or art.lean == pattern.lean)
         and (pattern.min_quality is None or QUALITIES.index(quality) >= QUALITIES.index(pattern.min_quality))
@@ -68,7 +73,7 @@ def art_fits(pattern: ArtPattern, art: MartialArt, quality: str) -> bool:
 def insight_fits(pattern: InsightPattern, insight: Insight, content: Content) -> bool:
     """私有意境（感悟悟來的，insights.is_own）沒有全服的 id：寫了 id 的格子照那個基本意境的屬性認，跟配方鍵認私有意境同一套
     （fusion.fuse_key）——大多數人手上的意境是自己悟的，不這樣認，秘方幾乎沒人合得上。"""
-    if pattern.id is not None and insight.id != pattern.id:
+    if pattern.id is not None and insight_fx.base_id(insight.id) != pattern.id:  # 第二份起「feng~2」照那一種認
         known = content.insights.get(pattern.id)
         if not (insights.is_own(insight.id) and known is not None and known.attribute == insight.attribute):
             return False
@@ -84,6 +89,7 @@ def _quality(state: GameState, art_id: str, art: MartialArt) -> str:
 def match_fuse(
     state: GameState, content: Content, world: WorldStateStore, art_id: str, art: MartialArt, insight: Insight,
 ) -> SecretRecipe | None:
+    """一門武學配一個意境合不合這一季的「裝滿」秘方（只看形狀，不看槽滿了沒；量表與 match_slots 用）。"""
     if not content.secret_recipes:
         return None
     quality = _quality(state, art_id, art)
@@ -92,6 +98,34 @@ def match_fuse(
         if r.kind == "fuse" and r.art is not None and r.insight is not None
         and art_fits(r.art, art, quality) and insight_fits(r.insight, insight, content)
     ), None)
+
+
+def match_slots(
+    state: GameState, content: Content, world: WorldStateStore, art_id: str, art: MartialArt, slots: list,
+) -> SecretRecipe | None:
+    """武學重構：「屬性＋指定意境裝滿」——kind fuse 的秘方（以前是武學＋意境合成）改成：武學合得上那一格（相容屬性、種類、
+    自己那一份的品級門檻），槽全部裝滿、其中一格是指定的意境，就暗合口訣（arts.apply 給那條特別功效，arts.slot 報一句）。
+    art 是門面那一份（相容屬性）；先只看內容的形狀，對得上才讀天機。"""
+    if not content.secret_recipes or not slots or None in slots:
+        return None
+    quality = _quality(state, art_id, art)
+    resolved = [insights.resolve(i, content, world, state) for i in slots]
+    if not art.affinity:  # 兼容並蓄：屬性照槽裡強度最高那一格（同 arts.apply），不照內容原本寫的
+        top, best = "", 0
+        for insight_id, ins in zip(slots, resolved):
+            strength = insight_fx.strength(state, insight_id)
+            if ins is not None and ins.attribute and strength > best:
+                top, best = ins.attribute, strength
+        art = art.model_copy(update={"affinity": [top] if top else [], "attribute": top})
+    candidates = [
+        r for r in content.secret_recipes
+        if r.kind == "fuse" and r.art is not None and r.insight is not None and art_fits(r.art, art, quality)
+        and any(ins is not None and insight_fits(r.insight, ins, content) for ins in resolved)
+    ]
+    if not candidates:
+        return None
+    live = {r.id for r in active(content, tianji_of(world))}
+    return next((r for r in candidates if r.id in live), None)
 
 
 def match_merge(content: Content, world: WorldStateStore, left: Insight, right: Insight) -> SecretRecipe | None:
@@ -119,6 +153,31 @@ def match_blend(
         if (art_fits(one, art_a, qa) and art_fits(two, art_b, qb)) or (art_fits(one, art_b, qb) and art_fits(two, art_a, qa)):
             return r
     return None
+
+
+SET_LINE = "【{art}】的意境槽一裝滿，竟暗合口訣，使出來是一路【{name}】——多了一條「{special}」。"  # 待 joy 潤
+
+
+def set_lines(state: GameState, content: Content, world: WorldStateStore, recipe: SecretRecipe, art_name: str) -> list[str]:
+    """「裝滿」秘方暗合的那一下（arts.slot 裝滿最後一格時）：記進武學譜；這一季第一個暗合的人江湖上傳一句、寫進江湖史
+    （WorldState.secret_sets 記誰先，跟著這一下動作最後的 _save_season 存）。拆了再裝回來照樣說一句，傳聞只有第一次。"""
+    from .rules import add_chronicle, add_rumor
+
+    cfg = content.config.secrets
+    tianji = tianji_of(world)
+    solve(state, tianji, recipe)
+    sp = next((t for t in content.traits.special if t.id == special_for(content, recipe, tianji)), None)
+    lines = [SET_LINE.format(art=art_name, name=recipe.name, special=sp.name if sp else "特別功效")]
+    season = getattr(state, "world", None)
+    if season is not None and recipe.id not in season.secret_sets:
+        who = state.player.name
+        season.secret_sets[recipe.id] = who
+        thing = f"【{recipe.name}】"
+        rumor = cfg.rumor.format(who=who, thing=thing)
+        add_rumor(state, rumor, None, content=content, named=True)
+        add_chronicle(state, cfg.chronicle.format(who=who, thing=thing))
+        lines.append(rumor)
+    return lines
 
 
 def special_for(content: Content, recipe: SecretRecipe, tianji: int) -> str | None:

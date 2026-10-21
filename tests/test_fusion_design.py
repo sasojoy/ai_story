@@ -1,139 +1,73 @@
-"""合成即設計（Joy 2026-10-19「戰力應該更重要」「試試看這樣吧」；/mnt/project-files/plan/合成即設計定案.md）：
-品質由投入決定、承底的成數、功效預覽、相剋不相干時照重數境界挑屬性。測試內容關著，這裡自己打開。"""
-from unittest import mock
-
+"""煉製頁的預覽卡（skillview.forge_preview；武學重構之後）：兩格都放好時，合成前就看得到合出來的樣子。
+武學重構（Joy 2026-10-20，/mnt/project-files/plan/武學重構定案.md）拿掉了「合成即設計」那一批的東西——品質照投入定（fuse_quality.fixed）、
+承底的成數（fusion_depth.inherit_share、art_free_levels）、重數境界挑屬性（depth.merge_attribute、pick_note）、代數挑屬性（blend_shape 的 gens）、
+武學列的 forge_fixed／forge_odds——那些測試整批刪掉；這裡只留預覽卡，改測新的四種：合成、裝意境、合併、揣摩。"""
 import pytest
 
-from tianxia import depth, fusion, insights, library, naming, skillview, team
-from tianxia.martial_arts import Insight
-
-
-def named(name, description="一句話說明。"):
-    client = mock.Mock()
-    client.chat_structured.return_value = naming.NameReply(name=name, description=description)
-    return client
+from tianxia import arts as arts_mod
+from tianxia import skillview
 
 
 @pytest.fixture
-def designed(state, content):
-    content.config.fuse_quality.fixed = True
-    content.config.fusion_depth.inherit_share = 0.5
+def designed(state):
     state.player.member.wugong_id = "basic_fist"
+    state.player.arts = ["lake_kick"]
     state.player.insights = ["feng", "huo"]
     state.player.stats["xinde"] = 100
     return state
 
 
-def _odds(state, content, world, art_id, insight_id):
-    return fusion.fuse_odds(
-        state, content, art_id, team.player_art(state, content, world, art_id), insights.resolve(insight_id, content, world),
-    )
-
-
-def test_quality_follows_the_score_not_the_dice(content):
-    content.config.fuse_quality.fixed = True
-    low = fusion._points(content, [("quality", -5), ("level", -6)])
-    mid = fusion._points(content, [("quality", 5), ("level", 1.5)])
-    high = fusion._points(content, [("quality", 12), ("level", 3), ("attribute", 8), ("insight", 6)])
-    assert (low.fixed, mid.fixed, high.fixed) == ("下品", "中品", "上品")
-    assert low.odds == {"下品": 100.0, "中品": 0.0, "上品": 0.0}
-    assert mid.short_of == pytest.approx(24 - 6.5) and high.short_of is None
-    # 擲骰的函式照 fixed 回，不碰亂數
-    rng = mock.Mock()
-    assert fusion.roll_quality(high, rng) == "上品" and not rng.choices.called
-
-
-def test_the_same_inputs_always_fuse_into_the_same_quality(designed, content, world):
-    """同樣的底、同樣的意境，合十次都是同一品（換季天機不同另算）。"""
-    designed.player.art_quality["basic_fist"] = "上品"
-    designed.player.member.wugong_level = 8
-    designed.player.insights.append("feng")
-    odds = _odds(designed, content, world, "basic_fist", "feng")
-    assert odds.fixed == "中品"  # 上品的底八成（12＋4.5）、基本意境、實對快不相干：16.5 分，過 6 不到 24
-    art, _ = fusion.fuse(designed, content, world, named("旋風腿"), "basic_fist", "feng")
-    assert team.player_art(designed, content, world, art.id).quality == "中品"
-    assert designed.player.art_rolled[art.id] == "中品"
-
-
-def test_preview_writes_the_quality_and_a_hint_when_the_next_grade_is_near(designed, content, world):
-    designed.player.art_quality["basic_fist"] = "上品"
-    designed.player.member.wugong_level = 10
-    line = skillview.forge_line(designed, content, world, "basic_fist", ["feng"])
-    assert "合出來是中品（" in line and "再講究些便是上品" in line  # 12＋7.5＝19.5，離 24 不到 8
-    assert "品質看造化" not in line
-    assert "功效：先手 ×1、厚 ×" in line or "功效：先手 ×1" in line  # 合出來的功效先寫出來
-    assert "承底子的火候，一上手便是第5成" in line
-
-
-def test_a_fused_art_inherits_half_the_base_level_and_those_levels_do_not_melt_back(designed, content, world):
-    designed.player.member.wugong_level = 7
-    art, msgs = fusion.fuse(designed, content, world, named("旋風腿"), "basic_fist", "feng")
-    assert designed.player.art_levels[art.id] == 3 and designed.player.art_free_levels[art.id] == 3
-    assert any("一上手便是第3成" in m for m in msgs)
-    assert library.level_of(designed, art.id) == 3
-    # 白送的三成熔了不退：照第三成起算，等於只退基本值
-    value = library.melt_value(designed, content, world, art.id)
-    assert value == content.config.melt_min_refund
-    library.remove_art(designed, art.id)
-    assert art.id not in designed.player.art_free_levels
-
-
-def test_a_first_level_base_inherits_nothing_and_says_nothing(designed, content, world):
-    art, msgs = fusion.fuse(designed, content, world, named("旋風腿"), "basic_fist", "feng")
-    assert library.level_of(designed, art.id) == 1 and art.id not in designed.player.art_free_levels
-    assert not any("一上手" in m for m in msgs)
-
-
-def test_inheritance_lands_on_the_worn_slot_when_the_art_goes_straight_on(designed, content, world):
-    designed.player.member.neigong_id = "basic_breath"
-    designed.player.member.neigong_level = 9
-    designed.player.member.wugong_level = 5
-    art, _ = fusion.blend(designed, content, world, named("混元功"), "basic_breath", "basic_fist")
-    assert library.level_of(designed, art.id) == 3  # (9＋5)/2 × 0.5 ＝ 3.5 → 3
-    assert designed.player.art_free_levels[art.id] == 3
-
-
-def test_clashing_insights_merge_into_the_deeper_side(content, world):
-    """相剋、不相干時照重數高的那一邊；一樣高時複合的意（陰陽虛實）為主；再一樣才照配方挑。"""
-    a = Insight(id="甲", name="甲", attribute="剛", rank=1)
-    b = Insight(id="乙", name="乙", attribute="柔", rank=3)
-    assert depth.merge_attribute(a, b, "種子", (1, 3)) == "柔"
-    assert depth.merge_attribute(b, a, "種子", (3, 1)) == "柔"
-    c = Insight(id="丙", name="丙", attribute="虛", rank=1)
-    assert depth.merge_attribute(a, c, "種子", (1, 1)) == "虛"  # 不相干、一樣深：複合的意
-    assert depth.merge_attribute(a, b, "種子") in ("剛", "柔")  # 沒給重數：舊規則照雜湊
-    assert depth.pick_note(a, b, 1, 3, "種子", "重數") == "兩股意相剋，照重數高的那一邊的「柔」"
-    assert depth.pick_note(a, Insight(id="丁", name="丁", attribute="剛"), 1, 1, "x", "重數") is None  # 同屬性不寫
-
-
-def test_blend_picks_the_attribute_of_the_higher_generation(content, world):
-    fist = team.resolve_art("basic_fist", content, world)  # 實
-    windy = fist.model_copy(update={"id": "風拳", "name": "風拳", "attribute": "快", "gen": 2, "origin": "fused", "base": "basic_fist"})
-    gens = (0, 2)
-    assert fusion.blend_shape(fist, windy, "0|兼|x", gens).attribute == "快"
-    assert fusion.blend_shape(windy, fist, "0|兼|x", (2, 0)).attribute == "快"
-
-
-def test_the_preview_card_carries_the_same_quality_level_and_traits_as_the_line(designed, content, world):
-    """煉製頁的預覽卡（skillview.forge_preview，合成即設計的 UI）：跟說明那一行同一套函式算——品級、第幾成、功效一樣；
-    空爐、只放一樣、不是你的東西都是 None（網頁照舊畫那一行）。"""
-    designed.player.art_quality["basic_fist"] = "上品"
-    designed.player.member.wugong_level = 8
+def test_slotting_previews_the_slot_and_the_skill_and_costs_nothing(designed, content, world):
+    """武學＋意境：不是合成，是裝進第一個空槽；卡上寫第幾格、這一招與強度，不花錢。"""
     card = skillview.forge_preview(designed, content, world, "basic_fist", ["feng"])
     line = skillview.forge_line(designed, content, world, "basic_fist", ["feng"])
-    assert card["kind"] == "合成" and card["quality"] == "中品" and f"合出來是{card['quality']}" in line
-    assert card["level"] == 4 and "一上手便是第4成" in line
-    assert card["attribute"] == "快" and card["gen"] == "初成" and card["problem"] is None
-    assert card["traits"] and all(set(t) == {"name", "layers"} for t in card["traits"])
+    assert card["kind"] == "裝意境" and card["problem"] is None and card["quality"] == "中品"  # 意境效果池：那一份的品質
+    assert card["made"] == "【粗淺拳腳】第 1 格" and "第 1 格" in line
+    assert card["attribute"] == "快" and card["traits"] == [{"name": "先手", "layers": 1, "grand": False}]
+    assert card["depth"].startswith("〔先手〕剋中對手後") and "這一份是中品：〔先手〕" in line
+    assert card["cost"] == "不花心得體力" and "不花心得體力" in line
+
+
+def test_a_full_slot_is_named_on_the_card(designed, content, world):
+    """槽滿了：卡上寫「槽滿了」，problem 是 arts.slot_problem 那一句。"""
+    arts_mod.slot(designed, content, world, "basic_fist", "huo")
+    designed.player.insights.append("shui")
+    arts_mod.slot(designed, content, world, "basic_fist", "shui")
+    card = skillview.forge_preview(designed, content, world, "basic_fist", ["feng"])
+    assert card["made"].endswith("（槽滿了）")
+    assert card["problem"] == arts_mod.slot_problem(designed, content, world, "basic_fist", "feng")
+
+
+def test_blending_previews_a_new_art_with_its_grade_and_empty_slots(designed, content, world):
+    """武學＋武學：一門新武學，品級兩門取高，從第一成起練，槽是空的。"""
+    card = skillview.forge_preview(designed, content, world, "basic_fist", [], other_art="lake_kick")
+    line = skillview.forge_line(designed, content, world, "basic_fist", [], "lake_kick")
+    assert card["kind"] == "合成" and card["problem"] is None
+    assert card["made"] == "一門新武學" and card["quality"] == "下品" and card["level"] == 1
+    assert card["slots"] == "意境槽 2 格（空的）" and "意境槽 2 格" in line
     assert card["known"] == "沒人合過。" and "心得" in card["cost"]
+
+
+def test_merging_two_different_insights_previews_a_new_insight(designed, content, world):
+    card = skillview.forge_preview(designed, content, world, None, ["feng", "huo"])
+    line = skillview.forge_line(designed, content, world, None, ["feng", "huo"])
+    assert card["kind"] == "合併" and card["made"] == "一個新的意境" and card["quality"] == "中品"  # 兩份裡較好的品質
+    assert f"屬{card['attribute']}" in line and card["known"] == "沒人合過。"
+    assert card["depth"].startswith("擲一到兩個效果：")
+
+
+def test_pondering_the_same_insight_previews_one_more_dot(designed, content, world):
+    """同一種意境的兩份是揣摩：卡上寫揉完之後的層數與那一招的數字；同一份放兩次照樣是揣摩的卡、寫為什麼不成。"""
+    designed.player.insights.append("feng~2")
+    card = skillview.forge_preview(designed, content, world, None, ["feng", "feng~2"])
+    assert card["kind"] == "揣摩" and card["made"] == "「風」先手二重" and card["problem"] is None
+    assert card["traits"] == [{"name": "先手", "layers": 2, "grand": False}]
+    assert "20%" in card["depth"]  # 先手一層 10%，兩層 20%
+    same = skillview.forge_preview(designed, content, world, None, ["feng", "feng"])
+    assert same["kind"] == "揣摩" and same["problem"].short == "要兩份"
+
+
+def test_no_card_for_an_empty_pot_a_single_thing_or_what_is_not_yours(designed, content, world):
     assert skillview.forge_preview(designed, content, world, None, []) is None
     assert skillview.forge_preview(designed, content, world, "basic_fist", []) is None
     assert skillview.forge_preview(designed, content, world, "caocao_wugong", ["feng"]) is None  # 不是你的：不露
-    merged = skillview.forge_preview(designed, content, world, None, ["feng", "huo"])
-    assert merged["kind"] == "合併" and merged["quality"] is None and "二重" in merged["depth"]
-
-
-def test_the_scroll_card_names_the_fixed_quality_instead_of_an_odds_bar(designed, content, world):
-    rows = {r["id"]: r for r in skillview.art_rows(designed, content, world)}
-    row = rows["basic_fist"]
-    assert row["forge_fixed"] in ("下品", "中品", "上品") and row["forge_odds"]

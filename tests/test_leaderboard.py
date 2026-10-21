@@ -71,9 +71,9 @@ def test_format_lines_shows_a_placeholder_when_nobody_has_a_skill():
 
 
 def test_format_lines_shows_ranked_entries_with_quality_and_power():
-    board = {"武學": [("強者", "九陰白骨爪", "絕學", 50.0)], "內功": []}
+    board = {"武學": [("強者", "九陰白骨爪", "絕學", 50.0, 120)], "內功": []}
     lines = leaderboard.format_lines(board)
-    assert "　1. 強者・【九陰白骨爪】（絕學，威力 50.0）" in lines
+    assert "　1. 強者・【九陰白骨爪】（絕學，評 120，威力 50.0）" in lines
 
 
 def test_the_board_shows_each_players_own_quality_and_power(content, world):
@@ -92,6 +92,28 @@ def test_the_board_shows_each_players_own_quality_and_power(content, world):
     assert rows["平凡"][3] == martial_arts.power_at(art, 5)
     assert rows["苦修"][3] == martial_arts.power_at(martial_arts.with_quality(art, "上品"), 5) > rows["平凡"][3]
 
+
+
+def test_the_arts_board_ranks_by_score_before_power(content, world):
+    """Joy 2026-10-20「武學榜高的在上面」：評分高的排前面，就算威力低一些；評分一樣高才看威力。"""
+    from tianxia.state import InsightFx
+
+    art = generate_from_name("旋風腿", "武學", "旋風腿", weights={"下品": 0, "中品": 0, "上品": 100, "絕學": 0})
+    world.claim_skill_name(art)
+    skilled = _player(content, "巧手", wugong_id="旋風腿", wugong_level=2)
+    skilled.player.art_quality["旋風腿"] = "上品"
+    skilled.player.insights.append("feng")
+    skilled.player.insight_fx["feng"] = InsightFx(quality="上品", general={"快": 3})
+    skilled.player.art_slots["旋風腿"] = ["feng", None, None, None]
+    brute = _player(content, "苦練", wugong_id="旋風腿", wugong_level=10)
+    brute.player.art_quality["旋風腿"] = "上品"
+    open_characters().save(skilled)
+    open_characters().save(brute)
+    rows = leaderboard.compute_leaderboard(content, world)["武學"]
+    assert [r[0] for r in rows] == ["巧手", "苦練"]
+    assert rows[0][4] > rows[1][4] == 0 and rows[0][3] < rows[1][3]
+    sub = next(b for b in leaderboard.view({"武學": rows}) if b["id"] == "武學")["rows"][0]["sub"]
+    assert sub.startswith("上品・評 ") and "威力" in sub
 
 # ── 善人、惡人、名人、宗師榜（企劃者 2026-10-14）──
 
@@ -157,9 +179,9 @@ def test_chronicle_lines_write_the_top_three_of_each_board_that_has_anyone():
     board = {
         "善人": [("甲", (30,), "善名 30"), ("乙", (20,), "善名 20"), ("丙", (10,), "善名 10"), ("丁", (5,), "善名 5")],
         "惡人": [],
-        "武學": [("強者", "長拳", "上品", 50.0)],
+        "武學": [("強者", "長拳", "上品", 50.0, 64)],
     }
     assert leaderboard.chronicle_lines(board, 3) == [
         "第 3 季善人榜：甲（善名 30）、乙（善名 20）、丙（善名 10）",
-        "第 3 季天下武學榜：強者【長拳】（上品，威力 50.0）",
+        "第 3 季天下武學榜：強者【長拳】（上品，評 64，威力 50.0）",
     ]

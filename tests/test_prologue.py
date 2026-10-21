@@ -5,7 +5,7 @@ import random
 import pytest
 from conftest import next_season
 
-from tianxia import atlas, prologue, sensing
+from tianxia import insight_fx, atlas, prologue, sensing
 from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.state import ONBOARDING_VERSION
@@ -21,8 +21,8 @@ def test_new_character_starts_in_the_hut_with_the_ambush(fresh, prologue_content
     assert s.player.location == "hut"
     assert s.pending_event == "p_ambush"
     assert s.player.tutorial_step == 0
-    # 探索 10＋合成 5（武學與成長計畫五的 fuse_stamina）＋修練 10；設計 3.2 寫的是 20（那時合成不花體力）
-    assert s.player.stamina == prologue.start_stamina(prologue_content) == 25
+    # 武學重構：探索 10＋揣摩 5（merge_stamina）；裝意境不花體力、衝品質的修練沒有了（以前是 25：探索＋合成＋修練）
+    assert s.player.stamina == prologue.start_stamina(prologue_content) == 15
     assert prologue.active(s, prologue_content)
 
 
@@ -234,15 +234,15 @@ def _sense(game, attribute: str) -> None:
 
 
 def _to_step(game, n: int) -> None:
-    """照正常的玩法把序章走到第 n 步開頭（0 起算）：遇險、拜師、看修練頁、探索選松林、合成、換上並練到第三成、修練、打坐、
-    雪恥一戰、配點、熔雜學。每一輪都要真的前進一步：卡住就當場失敗，不要無窮迴圈。"""
+    """照正常的玩法把序章走到第 n 步開頭（0 起算）：遇險、拜師、看修練頁、探索選松林、把風裝進基礎拳腳、練到第三成、揣摩、打坐、
+    雪恥一戰、配點、熔雜學（武學重構：合成與一定升品的修練那兩步換成裝意境與揣摩）。每一輪都要真的前進一步：卡住就當場失敗，不要無窮迴圈。"""
     script = [
         lambda g: _walk(g, "choice:0", "choice:0"),  # 0 → 1
         lambda g: g.view_tab("practice"),  # 1 → 2
         lambda g: _sense(g, "快"),  # 2 → 3：松林聽風，悟到風
-        lambda g: g.forge("basic_fist", ["feng"]),  # 3 → 4：穿林腿
-        lambda g: (g.switch_art(_fused(g)), g.practice("武學"), g.practice("武學")),  # 4 → 5：換上、練到第三成
-        lambda g: g.cultivate(_fused(g)),  # 5 → 6：一定升中品
+        lambda g: g.forge("basic_fist", ["feng"]),  # 3 → 4：把風裝進基礎拳腳的意境槽（武學＋意境就是裝槽，不花心得體力）
+        lambda g: (g.practice("武學"), g.practice("武學")),  # 4 → 5：基礎拳腳本來就在身上，練到第三成
+        lambda g: g.forge(None, ["feng", "feng~2"]),  # 5 → 6：揣摩（同一個意境合兩個），風到二重
         lambda g: _walk(g, "act:rest"),  # 6 → 7：體力見底，一坐就回滿
         lambda g: _walk(g, "act:train"),  # 7 → 8：險勝斷眉，掉出一門雜學
         lambda g: g.allocate_stat("str"),  # 8 → 9：升到第 2 級的那一點
@@ -255,7 +255,8 @@ def _to_step(game, n: int) -> None:
 
 
 def _fused(game) -> str:
-    return prologue.fused_arts(game.state, game.content, game.world)[0].id
+    """師父點名、裝了意境的那一門（武學重構：以前是合成出來的新武學，現在就是基礎拳腳）。"""
+    return prologue.slotted_arts(game.state, game.content, game.world)[0].id
 
 
 def test_first_step_has_no_box_and_choosing_moves_on(fresh):
@@ -345,65 +346,69 @@ def test_each_step_can_have_its_own_speaker(fresh, prologue_content):
 
 
 def test_the_fused_goals_need_a_fused_art(fresh):
-    """done_when 的 fused／fused_level：有一門合成出來的武學、而且練到第幾成才算。"""
+    """done_when 的 fused／fused_level：有一門裝了意境的武學、而且練到第幾成才算（武學重構：以前是合成出來的那一門）。"""
     from tianxia import guide
 
     steps = fresh.content.tutorial.steps
     s, c = fresh.state, fresh.content
-    assert not guide._step_done(s, c, fresh.world, steps[3], "x")  # 還沒合成
-    s.player.insights, s.player.tutorial_step = ["feng"], 3  # 序章只准在合成那一步開爐
+    assert not guide._step_done(s, c, fresh.world, steps[3], "x")  # 還沒裝
+    s.player.insights, s.player.tutorial_step = ["feng"], 3  # 序章只准在裝意境那一步開爐
     fresh.forge("basic_fist", ["feng"])
-    assert prologue.fused_arts(s, c, fresh.world) and guide._step_done(s, c, fresh.world, steps[3], "x")
-    assert not guide._step_done(s, c, fresh.world, steps[4], "x")  # 還在庫裡、第一成
-    fresh.switch_art(_fused(fresh))
+    assert prologue.slotted_arts(s, c, fresh.world) and guide._step_done(s, c, fresh.world, steps[3], "x")
+    assert not guide._step_done(s, c, fresh.world, steps[4], "x")  # 身上那一門還是第一成
     s.player.member.wugong_level = 3
     assert guide._step_done(s, c, fresh.world, steps[4], "x")
 
 
-def _wear_a_fused_art(game) -> str:
-    """合成一門、換上身（第一成、下品）：序章第 5、6 步的起點。回傳那一門的 id。"""
-    game.state.player.insights, game.state.player.tutorial_step = ["feng"], 3  # 序章只准在合成那一步開爐
+def _slot_the_insight(game) -> str:
+    """把風裝進身上的基礎拳腳（第一成、下品）：序章第 5、6 步的起點。回傳那一門的 id（武學重構：以前是合成一門、換上身）。"""
+    game.state.player.insights, game.state.player.tutorial_step = ["feng"], 3  # 序章只准在裝意境那一步開爐
     game.state.pending_event = None  # 開場的遇險不用演
     game.forge("basic_fist", ["feng"])
-    game.switch_art(_fused(game))
     return _fused(game)
 
 
-def test_the_prologue_fusion_is_always_the_lowest_quality(fresh):
-    """序章那一爐照劇本固定下品第一成，不擲品質（企劃者 2026-10-06 改成合成擲品質，序章除外）；
-    說明也照劇本寫「從下品起修」，不寫機率。"""
+def test_the_prologue_slot_costs_nothing_and_rolls_nothing(fresh):
+    """武學重構：序章那一爐是把意境裝進槽，不花心得體力、不擲品質、那一門的品級不動（以前序章的合成固定下品、不擲）；
+    說明寫「裝意境」與不花心得體力，不寫品級與機率。"""
     fresh.state.player.insights, fresh.state.player.tutorial_step = ["feng"], 3
     fresh.state.pending_event = None
-    assert "從下品起修" in fresh.forge_line("basic_fist", ["feng"])
+    p = fresh.state.player
+    xinde, stamina = p.stats["xinde"], p.stamina
+    line = fresh.forge_line("basic_fist", ["feng"])
+    assert "裝意境" in line and "不花心得體力" in line and "下品" not in line
     fresh.rng.choices = lambda *a, **k: ["上品"]  # 萬一擲了就是上品
     fresh.forge("basic_fist", ["feng"])
     art = _fused(fresh)
-    assert art not in fresh.state.player.art_quality and art not in fresh.state.player.art_rolled
+    assert p.art_slots[art] == ["feng", None] and art not in p.art_quality
+    assert p.stats["xinde"] == xinde and p.stamina == stamina
 
 
 def test_the_level_goal_needs_the_level(fresh):
     from tianxia import guide
 
     s, c = fresh.state, fresh.content
-    _wear_a_fused_art(fresh)
-    s.player.tutorial_step = 4  # 第 5 步：換上、練到第三成
+    _slot_the_insight(fresh)
+    s.player.tutorial_step = 4  # 第 5 步：練到第三成（裝了意境的基礎拳腳就在身上）
     s.player.member.wugong_level = 2
     assert guide.note_action(s, c, fresh.world, "practice") == [] and s.player.tutorial_step == 4
     s.player.member.wugong_level = 3
-    assert guide.note_action(s, c, fresh.world, "practice")[0].startswith("【師父】") and s.player.tutorial_step == 5
+    msgs = guide.note_action(s, c, fresh.world, "practice")
+    assert any(m.startswith("【師父】") for m in msgs) and s.player.tutorial_step == 5
+    assert any("又悟得一份「風」" in m for m in msgs) and "feng~2" in s.player.insights  # 揣摩那一步之前多給一份
 
 
-def test_the_quality_goal_needs_a_promotion_not_just_the_level(fresh):
-    """第 6 步：成數夠了、身上也是合成的那一門，但還是下品、沒升品，不算完成；升了中品才算。"""
+def test_the_deepen_goal_needs_a_second_layer_not_just_the_level(fresh):
+    """第 6 步（武學重構：揣摩）：成數夠了、意境也裝著，但風還是一重，不算完成；揣摩到二重才算（以前是修練升中品）。"""
     from tianxia import guide
 
     s, c = fresh.state, fresh.content
-    art_id = _wear_a_fused_art(fresh)
+    _slot_the_insight(fresh)
     s.player.member.wugong_level = 3
     s.player.tutorial_step = 5
-    assert guide.note_action(s, c, fresh.world, "cultivate") == [] and s.player.tutorial_step == 5
-    s.player.art_quality[art_id] = "中品"  # 升了品
-    assert guide.note_action(s, c, fresh.world, "cultivate")[0].startswith("【師父】") and s.player.tutorial_step == 6
+    assert guide.note_action(s, c, fresh.world, "practice") == [] and s.player.tutorial_step == 5
+    s.player.insight_strength["feng"] = 2  # 揣摩到二重
+    assert guide.note_action(s, c, fresh.world, "practice")[0].startswith("【師父】") and s.player.tutorial_step == 6
 
 
 def test_finishing_a_step_gives_its_art(fresh):
@@ -419,13 +424,13 @@ def test_finishing_a_step_gives_its_art(fresh):
 
 
 def test_the_box_and_the_next_step_line_name_the_fused_art(fresh):
-    """{武學} 換成合成出來的那一門：對話框的話與完成上一步時記在江湖紀錄裡的那一行都一樣。"""
+    """{武學} 換成裝了意境的那一門（武學重構：以前是合成出來的）：對話框的話與完成上一步時記在江湖紀錄裡的那一行都一樣。"""
     s = fresh.state
     s.pending_event, s.player.tutorial_step, s.player.insights = None, 3, ["feng"]
     fresh.forge("basic_fist", ["feng"])
     assert s.player.tutorial_step == 4
-    name = prologue.fused_arts(s, fresh.content, fresh.world)[0].name
-    line = f"把【{name}】換上，練到第三成。"
+    name = prologue.slotted_arts(s, fresh.content, fresh.world)[0].name
+    line = f"把【{name}】練到第三成。"
     assert fresh.guide_box()["text"] == line
     assert s.journal[0].guide[-1] == f"【師父】{line}"
 
@@ -474,20 +479,20 @@ def test_melting_finishes_its_step(fresh, prologue_content):
     assert fresh.guide_box()["text"] == "去城裡吧。"
 
 
-def test_cultivating_finishes_the_quality_step(fresh):
-    from conftest import FixedRandom
-
-    art_id = _wear_a_fused_art(fresh)
+def test_deepening_finishes_the_deepen_step(fresh):
+    """武學重構：第 6 步揣摩（同一個意境合兩個）做成了，風到二重、步驟推進（以前是修練一定升中品）。"""
+    _slot_the_insight(fresh)
     fresh.state.player.tutorial_step = 5
-    fresh.rng = FixedRandom(0.99)  # 平常的擲骰一定落空；序章這一步的修練不看它（prologue.sure_rng）
-    fresh.cultivate(art_id)
-    assert fresh.state.player.art_quality[art_id] == "中品"
+    fresh.state.player.insights.append("feng~2")  # 第 5 步做完師父多給的那一份（TutorialStep.give_piece）
+    msgs = fresh.forge(None, ["feng", "feng~2"])
+    assert "體會又深了一層" in msgs[0]
+    assert prologue.deepened(fresh.state) and insight_fx.strength(fresh.state, "feng") == 2
     assert fresh.state.player.tutorial_step == 6
 
 
 def test_box_fills_in_the_fused_art(fresh):
-    _to_step(fresh, 4)  # 合成完、換上之前：松林的風，師門配方叫穿林腿
-    assert fresh.guide_box()["text"] == "把【穿林腿】換上，練到第三成。"
+    _to_step(fresh, 4)  # 裝好意境：師父點名的是基礎拳腳本身（武學重構：以前是師門配方合出來的穿林腿）
+    assert fresh.guide_box()["text"] == "把【粗淺拳腳】練到第三成。"
 
 
 def test_fill_leaves_text_alone_until_something_is_fused(fresh, prologue_content):
@@ -584,20 +589,21 @@ def test_safe_practice_does_not_even_roll_for_an_injury(prologue_content, world)
     assert hurt.player.member.injury > 0  # 不安全的照舊會傷
 
 
-def test_sure_cultivate_only_once(fresh):
-    from conftest import FixedRandom
-
+def test_deepening_only_in_its_step(fresh):
+    """武學重構（取代「一定升品只保證一次」）：揣摩只在第 6 步准開爐；做成了之後下一步再揣摩被擋下、不花心得體力；序章外隨時揣摩得了。"""
     _to_step(fresh, 5)
-    art = _fused(fresh)
-    fresh.rng = FixedRandom(0.99)  # 平常的擲骰一定落空
-    fresh.cultivate(art)
-    assert fresh.state.player.art_quality[art] == "中品"
-    assert fresh.state.player.tutorial_step == 6
-    assert prologue.sure_rng(fresh.state, fresh.content) is None  # 下一步不再保證
-    stamina = fresh.state.player.stamina
-    assert "師父" in fresh.cultivate(art)[0] and fresh.state.player.stamina == stamina  # 序章裡下一步沒叫你修練：擋下、不花體力
+    p = fresh.state.player
+    fresh.forge(None, ["feng", "feng~2"])
+    assert insight_fx.strength(fresh.state, "feng") == 2 and p.tutorial_step == 6
+    xinde, stamina = p.stats["xinde"], p.stamina
+    assert "師父" in fresh.forge(None, ["feng", "feng~2"])[0]  # 序章裡下一步沒叫你開爐：擋下、不花心得體力
+    assert insight_fx.strength(fresh.state, "feng") == 2 and (p.stats["xinde"], p.stamina) == (xinde, stamina)
     outside = Game.new(fresh.content, "路人", rng=random.Random(0))
-    assert prologue.sure_rng(outside.state, outside.content) is None  # 序章外沒有任何保證
+    outside.state.player.insights += ["feng", "feng~2"]
+    outside.state.player.stats["xinde"] = 20
+    assert prologue.fuse_problem(outside.state, outside.content, None, ["feng", "feng~2"]) is None  # 序章外不擋
+    outside.forge(None, ["feng", "feng~2"])
+    assert insight_fx.strength(outside.state, "feng") == 2
 
 
 def test_rest_refills_at_once(fresh):
@@ -667,13 +673,16 @@ def test_the_practice_buttons_follow_the_script(fresh):
     def blocked():
         return {c["kind"]: c["blocked"] for c in server.menxia_view(fresh)["slot_cards"]}
 
+    from tianxia.models import GiveArt
+
     _to_step(fresh, 1)
     assert all(v and "師父" in v for v in blocked().values())  # 看修練頁那一步：還不能練
-    _to_step(fresh, 4)  # 練成那一步，但還沒換上新得的那一門
+    _to_step(fresh, 4)  # 練成那一步：師父點名的基礎拳腳本來就在身上（武學重構：不必先換上）
+    assert blocked()["武學"] is None  # 武學那顆亮
+    assert blocked()["內功"]  # 內功還是基本功、沒裝意境：不能練
+    prologue.give_art(fresh.state, fresh.content, fresh.world, GiveArt(id="junk", level=5))
+    fresh.switch_art("junk")  # 換上一門沒裝意境的：要練的是裝了意境的那一門，先換回去
     assert blocked()["武學"] and "換上" in blocked()["武學"]
-    fresh.switch_art(_fused(fresh))
-    assert blocked()["武學"] is None  # 換上之後：武學那顆亮
-    assert blocked()["內功"]  # 內功還是基本功：不能練
     outside = Game.new(fresh.content, "路人", rng=random.Random(0))
     assert all(c["blocked"] is None for c in server.menxia_view(outside)["slot_cards"])
 
@@ -764,26 +773,33 @@ def test_the_guide_box_says_when_a_step_is_paged(fresh, prologue_content):
 
 
 def test_only_the_art_the_master_names_is_the_switch_target(fresh):
-    """步驟 5 的改練（W-A）：伺服器說哪一列是師父點名的那一門——換上之前只有合成出來的那一列要發光，換上之後沒有一列發光
-    （不然被換下來的基礎拳腳會變成新的改練目標，邀人換回去）。不加新的拒絕：這只管發光。序章外的列沒有 glow 這個鍵。"""
+    """步驟 5 的改練（W-A）：伺服器說哪一列是師父點名的那一門——這一步的 glow 有 switch、裝了意境的那一門不在身上時只有它要發光，
+    換上之後沒有一列發光（不然被換下來的會變成新的改練目標，邀人換回去）。武學重構：點名的是裝了意境的基礎拳腳，它本來就在身上，
+    所以內容這一步沒寫 switch；這裡自己加上、換上一門雜學來看。不加新的拒絕：這只管發光。序章外的列沒有 glow 這個鍵。"""
+    from tianxia.models import GiveArt
+
     _to_step(fresh, 4)
     named = _fused(fresh)
+    assert all("switch" not in row["glow"] for row in fresh.art_rows())  # 點名的那一門就在身上：沒有一列要人改練
+    fresh.content.tutorial.steps[4].glow.append("switch")
+    prologue.give_art(fresh.state, fresh.content, fresh.world, GiveArt(id="junk", level=5))
+    fresh.switch_art("junk")
     rows = {row["id"]: row for row in fresh.art_rows()}
     assert [art_id for art_id, row in rows.items() if "switch" in row["glow"]] == [named]
     fresh.switch_art(named)
     assert fresh.state.player.tutorial_step == 4  # 還在第 5 步：換上不算完成
     assert all("switch" not in row["glow"] for row in fresh.art_rows())
-    assert any(row["id"] == "basic_fist" for row in fresh.art_rows())  # 被換下來的在功法庫裡
-    assert fresh.switch_art("basic_fist") and fresh.state.player.member.wugong_id == "basic_fist"  # 沒有新的拒絕：想換回去還是換得了
+    assert any(row["id"] == "junk" for row in fresh.art_rows())  # 被換下來的在功法庫裡
+    assert fresh.switch_art("junk") and fresh.state.player.member.wugong_id == "junk"  # 沒有新的拒絕：想換回去還是換得了
     outside = Game.new(fresh.content, "路人", rng=random.Random(0), world=fresh.world)
     assert all("glow" not in row for row in outside.art_rows())
 
 
 def test_the_server_names_which_row_each_other_glow_belongs_to(fresh):
-    """修練的那一列（步驟 6）與熔煉的那一列（步驟 10）也由伺服器說：只有按得下去的那一門有那個鍵。"""
+    """熔煉的那一列（步驟 10）也由伺服器說：只有按得下去的那一門有那個鍵。修練（武學重構：只剩上品到極處衝絕學那一格）在草廬裡
+    沒有一門按得下去，哪一步都不發光。"""
     _to_step(fresh, 5)
-    named = _fused(fresh)
-    assert [r["id"] for r in fresh.art_rows() if "cultivate" in r["glow"]] == [named]
+    assert not any("cultivate" in r["glow"] for r in fresh.art_rows())  # 下品的基礎拳腳：修練那一格灰著
     _to_step(fresh, 9)
     assert [r["id"] for r in fresh.art_rows() if "melt" in r["glow"]] == ["junk"]
     assert all("switch" not in r["glow"] for r in fresh.art_rows())  # 步驟 10 不叫人改練
@@ -804,18 +820,16 @@ def test_the_forge_pick_lists_name_what_to_put_in_the_furnace(fresh):
     assert all("glow" not in i for i in outside.insight_rows())
 
 
-def test_the_preview_says_a_preset_recipe_is_the_masters_way(fresh):
-    """W-E：師門配方的預覽不寫「沒人合過」（結果會說這是師門傳下來的路數）；別的配方照舊。"""
+def test_the_preview_in_the_hut_says_which_move_the_insight_becomes(fresh):
+    """武學重構（取代 W-E 的師門配方預覽）：煉製頁的預覽寫這一爐是「裝意境」、裝進哪一格、意境是哪一招；不寫「沒人合過」
+    （裝槽不是配方）、不寫師門；序章外同一句寫法。"""
     _to_step(fresh, 3)
     line = fresh.forge_line("basic_fist", ["feng"])
-    assert "師門傳下來" in line and "沒人合過" not in line
+    assert "裝意境" in line and "第 1 格" in line and "這一份是" in line and "〔先手〕" in line
+    assert "沒人合過" not in line and "師門" not in line
     outside = Game.new(fresh.content, "路人", rng=random.Random(0), world=fresh.world)
     outside.state.player.insights.append("feng")
-    assert "沒人合過" in outside.forge_line("basic_breath", ["feng"]) and "師門" not in outside.forge_line("basic_breath", ["feng"])
-    fresh.forge("basic_fist", ["feng"])  # 做出來之後別人看到的是「會合出【穿林腿】」
-    other = Game.new(fresh.content, "老手", rng=random.Random(0), world=fresh.world)
-    other.state.player.insights.append("feng")
-    assert "會合出【穿林腿】" in other.forge_line("basic_fist", ["feng"])
+    assert "裝意境" in outside.forge_line("basic_breath", ["feng"]) and "沒人合過" not in outside.forge_line("basic_breath", ["feng"])
 
 
 def test_the_hut_steps_show_no_done_chip(fresh):
@@ -885,27 +899,20 @@ def test_a_late_step_outside_the_hut_still_shows_its_chip_and_reward(prologue_ro
 
 
 def test_a_hut_step_can_write_its_own_result_line(fresh):
-    """T7 審查 M1：10.3 的三句「…之後（場景）」（合成、修練、熔煉）寫在步驟的 after 上，草廬裡這一步的結果就用它，不用引擎的一般那句：
-    {意境}、{武學}、{心得} 換成這一次真的合出來的、修練的、退回的。合成那一句後面接武學自己的說明，不再接「這是師門傳下來的路數。」
-    （師父的下一句 p5 開頭寫的是同一件事）。"""
-    from tianxia import journal
-
+    """T7 審查 M1：10.3 的「…之後（場景）」寫在步驟的 after 上，草廬裡這一步的結果就用它，不用引擎的一般那句：{心得} 換成這一次真的退回的。
+    武學重構：裝意境與揣摩那兩步沒有 after（引擎那一句本來就是一句話），寫的是引擎的句子、序章內外一樣；熔煉那一步照舊用 after。"""
     _to_step(fresh, 3)
-    fused = fresh.forge("basic_fist", ["feng"])
-    assert fused[0] == "你把粗淺拳腳融進風之意境，練出了一門新武學——【穿林腿】。\n腿隨風走。"
-    assert "師門傳下來" not in "\n".join(fused) and "心得 -5" in fused
-    assert journal._line_class(fused[0]) == "tx-line tx-new"  # 拿到新東西那一行照樣掃光
+    slotted = fresh.forge("basic_fist", ["feng"])
+    assert slotted == ["「風」裝進了【粗淺拳腳】第 1 格。"]  # 不花心得體力：沒有「心得 -5」
     _to_step(fresh, 5)
-    cultivated = fresh.cultivate(_fused(fresh))
-    assert cultivated[0] == "這一遍修練，你忽然摸到了門道——【穿林腿】從下品升到了中品！"
-    assert journal._line_class(cultivated[0]) == "tx-line tx-new"
+    deepened = fresh.forge(None, ["feng", "feng~2"])
+    assert deepened[0] == "你把「風」反覆揣摩，體會又深了一層（二重）。" and "心得 -5" in deepened
     _to_step(fresh, 9)
     melted = fresh.melt_art("junk")
     assert melted[0] == "你把蠻牛拳熔了，換回 8 點心得。" and "心得 +8" in melted
     outside = Game.new(fresh.content, "路人", rng=random.Random(0))
     outside.state.player.insights.append("feng")
-    outside.state.player.stats["xinde"] = 20
-    assert "你以【粗淺拳腳】融入「風」" in outside.forge("basic_fist", ["feng"], proposed=("旋風腿", ""))[0]  # 序章外照舊
+    assert outside.forge("basic_fist", ["feng"], proposed=("旋風腿", ""))[0] == "「風」裝進了【粗淺拳腳】第 1 格。"  # 序章外同一句
 
 
 def test_the_sight_is_said_once_in_the_card(fresh):
@@ -1018,22 +1025,25 @@ def test_prologue_refuses_off_script_moves(fresh):
     _to_step(fresh, 3)
     before, level = fresh.state.player.stats["xinde"], fresh.state.player.member.wugong_level
     fresh.forge("basic_breath", ["feng"])  # 拿別的底合成：擋下、不收心得
-    fresh.forge(None, ["feng", "feng"])  # 合併：序章裡也擋
+    fresh.forge(None, ["feng", "feng~2"])  # 揣摩：裝意境那一步也擋（武學重構：以前是合併）
     fresh.forge("basic_fist", [], other_art="basic_breath")  # 兩門武學合成：也擋
     assert fresh.state.player.stats["xinde"] == before and fresh.state.player.tutorial_step == 3
     fresh.melt_insight("feng")
     assert fresh.state.player.insights == ["feng"]  # 序章裡不熔意境
     fresh.practice("武學")  # 這一步沒叫你練功（F11）：不花心得
-    fresh.cultivate("basic_fist")  # 這一步沒叫你修練：不花體力
+    stamina = fresh.state.player.stamina
+    fresh.cultivate("basic_fist")  # 修練（武學重構：只剩上品衝絕學那一格）：下品按不下去，不花體力
     assert fresh.state.player.stats["xinde"] == before and fresh.state.player.member.wugong_level == level
+    assert fresh.state.player.stamina == stamina
     _to_step(fresh, 4)
     cost = fresh.state.player.stats["xinde"]
-    fresh.practice("武學")  # 練功那一步，但身上還是基本功：要練的是新得的那一門（F11）
-    fresh.practice("內功")
-    assert fresh.state.player.stats["xinde"] == cost and fresh.state.player.member.wugong_level == level
+    fresh.practice("內功")  # 練功那一步，但要練的是裝了意境的那一門（F11）：內功沒裝意境，不花心得
+    assert fresh.state.player.stats["xinde"] == cost and fresh.state.player.member.neigong_level == 1
+    fresh.practice("武學")  # 裝了意境的基礎拳腳就在身上：練得了
+    assert fresh.state.player.stats["xinde"] < cost and fresh.state.player.member.wugong_level == level + 1
     _to_step(fresh, 9)
     fresh.melt_art("basic_fist")
-    assert "basic_fist" in fresh.state.player.arts  # 只准熔雜學
+    assert fresh.state.player.member.wugong_id == "basic_fist"  # 只准熔雜學（武學重構：基礎拳腳就是練著的那一門，還在身上）
     fresh.melt_art("junk")
     assert "junk" not in fresh.state.player.arts and fresh.state.player.tutorial_step == 10
 
@@ -1105,7 +1115,7 @@ def test_prologue_recap_reads_the_whole_prologue(prologue_content, content, worl
     text = game.prologue_recap()
     assert text.index("城外") < text.index("草廬") < text.index("去看修練頁。") < text.index("草廬已經看不見了。")
     assert text.index("斷眉來了。") < text.index("跟他打。")  # 旁白排在話的前面
-    assert "{武學}" not in text and "把【新武學】換上，練到第三成。" in text
+    assert "{武學}" not in text and "把【新武學】練到第三成。" in text  # 武學重構：點名的那一門本來就在身上，不寫「換上」
     assert Game.new(content, "路人", world=world).prologue_recap() == ""  # 測試內容沒有序章
 
 
@@ -1115,7 +1125,7 @@ def test_the_recap_includes_the_masters_reply_and_the_four_sights(prologue_conte
     assert text.index("想學嗎？") < text.index("好徒兒。") < text.index("去看修練頁。")  # 拜師的結果在師父第一步的話之前
     scene = prologue_content.insight_scenes["hut_four"]  # 草廬四景（有所感）：場景的引子與四個做法，排在探索那一步之後、合成那一步之前
     assert text.index("去探索。") < text.index(scene.text) < min(text.index(m.text) for m in scene.methods)
-    assert max(text.index(m.text) for m in scene.methods) < text.index("去合成。")
+    assert max(text.index(m.text) for m in scene.methods) < text.index("去裝意境。")  # 武學重構：合成那一步換成裝意境
     assert all(m.text in text for m in scene.methods) and "{" not in text
 
 
@@ -1126,11 +1136,11 @@ def test_the_recap_does_not_depend_on_where_you_are(fresh):
 
 
 def test_the_quest_card_fills_in_the_fused_art(fresh):
-    """任務欄「下一步」的話跟對話框一樣：{武學} 換成合成出來的那一門，不寫出字面的佔位。"""
+    """任務欄「下一步」的話跟對話框一樣：{武學} 換成裝了意境的那一門（武學重構），不寫出字面的佔位。"""
     _to_step(fresh, 4)
-    name = prologue.fused_arts(fresh.state, fresh.content, fresh.world)[0].name
+    name = prologue.slotted_arts(fresh.state, fresh.content, fresh.world)[0].name
     quest = fresh.quest_text()
-    assert f"把【{name}】換上，練到第三成。" in quest and "{武學}" not in quest
+    assert f"把【{name}】練到第三成。" in quest and "{武學}" not in quest
 
 
 def test_the_quest_card_has_no_blank_master_before_he_is_met(fresh):
@@ -1146,7 +1156,8 @@ def test_the_quest_card_has_no_blank_master_before_he_is_met(fresh):
 # ── 假人與腳本：序章之後的樣子要跟真人一樣（Game.new(graduated=True)，M8）────────────
 
 def _look(game):
-    """別人一眼看得到的樣子：等級、功法欄與功法庫裡每一門的（品質, 第幾成）、銀兩、位置、有沒有內傷。名字不比（四門師門功夫看種子）。"""
+    """別人一眼看得到的樣子：等級、功法欄與功法庫裡每一門的（品質, 第幾成）、每一門哪幾格裝了意境、有沒有揣摩到二重、銀兩、位置、
+    有沒有內傷。裝的是哪一個意境不比（四景悟到哪一個看種子；武學重構：以前是四門師門功夫）。"""
     from tianxia import library, team
 
     s = game.state
@@ -1158,6 +1169,8 @@ def _look(game):
     return {
         "level": m.level, "wugong": art(m.wugong_id, m.wugong_level), "neigong": art(m.neigong_id, m.neigong_level),
         "library": sorted((team.player_art(s, game.content, game.world, a).quality, library.level_of(s, a)) for a in p.arts),
+        "slots": {art_id: [cell is not None for cell in cells] for art_id, cells in p.art_slots.items()},
+        "deepened": prologue.deepened(s),
         "silver": p.stats["silver"], "location": p.location, "stamina": p.stamina, "step": p.tutorial_step,
         "hurt": m.injury > 0,
     }
@@ -1173,8 +1186,9 @@ def _walked(prologue_content, world):
 
 
 def test_a_graduated_bot_looks_like_a_human_who_walked_the_hut(prologue_content, world):
-    """假人不走序章，但離開起點時的樣子要跟走完草廬的真人一樣：不然新人頭一個鐘頭就看得出誰是假人（等級 2、一門中品
-    第三成的師門功夫、剩一點內傷、多了盤纏）。做法是把序章用真的行動走一遍（Game._graduate），不是手抄一份清單。"""
+    """假人不走序章，但離開起點時的樣子要跟走完草廬的真人一樣：不然新人頭一個鐘頭就看得出誰是假人（等級 2、基礎拳腳裝了一個
+    二重的意境、練到第三成、剩一點內傷、多了盤纏；武學重構：以前是一門中品第三成的師門功夫）。做法是把序章用真的行動走一遍
+    （Game._graduate），不是手抄一份清單。"""
     human = _walked(prologue_content, world)
     bot = Game.new(prologue_content, "假人", rng=random.Random(1), world=world, graduated=True)
     assert _look(bot) == _look(human)
@@ -1182,21 +1196,23 @@ def test_a_graduated_bot_looks_like_a_human_who_walked_the_hut(prologue_content,
     s, p = bot.state, bot.state.player
     assert s.pending_event is None and not prologue.active(s, prologue_content)
     assert p.tutorial_step == prologue_content.tutorial.prologue_steps and p.stamina == prologue_content.config.stamina_max
-    fused = prologue.fused_arts(s, prologue_content, world)
-    assert [a.name for a in fused] and fused[0].preset and fused[0].name in {"穿林腿", "坐山拳", "回瀾手", "烈爐拳"}
-    assert fused[0].quality == "中品" and fused[0].creator is None  # 師門功夫，沒有首創者
+    fused = prologue.slotted_arts(s, prologue_content, world)
+    assert [a.id for a in fused] == ["basic_fist"] and fused[0].quality == "下品"  # 師父點名的基礎拳腳裝了意境（武學重構：沒有師門配方了）
+    assert p.art_slots["basic_fist"][0] in {"feng", "shan", "shui", "huo"} and prologue.deepened(s)  # 四景悟到哪一個看種子；揣摩到二重
+    assert p.member.wugong_id == "basic_fist" and p.member.wugong_level == 3
     assert "junk" not in p.arts  # 雜學熔掉了，跟真人一樣
     assert len(s.journal) <= 1 and s.battles == []  # 序章走過的痕跡不留在假人的紀錄裡（回到跟沒走序章的假人一樣乾淨）
 
 
-def test_graduating_picks_one_of_the_four_presets_by_seed(prologue_content, world):
-    names = {}
+def test_graduating_slots_one_of_the_four_insights_by_seed(prologue_content, world):
+    """四景悟到哪一個、裝進基礎拳腳的是哪一個看種子（武學重構：以前是四門師門功夫）。"""
+    slotted = {}
     for seed in range(24):
         game = Game.new(prologue_content, f"假人{seed}", rng=random.Random(seed), world=world, graduated=True)
-        names[seed] = prologue.fused_arts(game.state, prologue_content, world)[0].name
-    assert set(names.values()) == {"穿林腿", "坐山拳", "回瀾手", "烈爐拳"}  # 四種都有人
+        slotted[seed] = game.state.player.art_slots["basic_fist"][0]
+    assert set(slotted.values()) == {"feng", "shan", "shui", "huo"}  # 四種都有人
     again = Game.new(prologue_content, "假人3", rng=random.Random(3), world=world, graduated=True)
-    assert prologue.fused_arts(again.state, prologue_content, world)[0].name == names[3]  # 同一顆種子同一門
+    assert again.state.player.art_slots["basic_fist"][0] == slotted[3]  # 同一顆種子同一個
 
 
 def test_graduating_does_not_ask_the_model_and_leaves_no_season_footprint(prologue_content, world, monkeypatch):
@@ -1215,24 +1231,6 @@ def test_graduating_does_not_ask_the_model_and_leaves_no_season_footprint(prolog
     bot = Game.new(prologue_content, "假人", rng=random.Random(2), world=world, graduated=True)
     assert asked == [] and world.get_season().time == before
     assert bot.client is not None  # 走完序章把客戶端還回去（伺服器假人之後由 bot_runner 自己設成 None）
-
-
-def test_graduating_does_not_ask_the_model_even_for_a_recipe_nobody_wrote(prologue_content, world, monkeypatch):
-    """師門配方被拿掉（內容改版）時，首次出現的配方平常要在這裡叫模型取名：走序章的假人不叫（走退路字表），一次也不叫。"""
-    from tianxia.ollama_client import OllamaClient
-
-    asked = []
-
-    def ask(self, *args, **kwargs):
-        asked.append(args)
-        raise RuntimeError("連不上")
-
-    monkeypatch.setattr(OllamaClient, "chat_text", ask)
-    monkeypatch.setattr(OllamaClient, "chat_structured", ask)
-    prologue_content.preset_recipes.clear()
-    bot = Game.new(prologue_content, "假人", rng=random.Random(2), world=world, graduated=True)
-    assert asked == [] and prologue.fused_arts(bot.state, prologue_content, world)  # 合成了、沒有問模型
-    assert bot.state.player.location == "town"
 
 
 def test_graduating_only_takes_choices_that_lead_to_the_step_flag(prologue_content, world):
@@ -1254,16 +1252,15 @@ def test_a_graduated_bot_in_season_two_is_the_same_as_in_season_one(prologue_con
 
 
 def test_graduating_a_script_that_cannot_be_followed_falls_back_to_the_purse(prologue_content, world):
-    """內容改版讓某一步照著走不通（這裡把修練那一步的「一定升品」拿掉，師父那一步沒叫你修練、修練被擋）：假人不能卡在
-    草廬，走不下去就像略過一樣直接出師、拿盤纏。"""
-    prologue_content.tutorial.steps[5].sure_cultivate = False
+    """內容改版讓某一步照著走不通（這裡把揣摩那一步的 deepen 拿掉，師父那一步沒叫你開爐、揣摩被擋；武學重構：以前拿掉的是
+    修練那一步的「一定升品」）：假人不能卡在草廬，走不下去就像略過一樣直接出師、拿盤纏。"""
+    prologue_content.tutorial.steps[5].deepen = False
     bot = Game.new(prologue_content, "假人", rng=random.Random(1), world=world, graduated=True)
     p = bot.state.player
     assert p.location == "town" and p.tutorial_step == prologue_content.tutorial.prologue_steps
     assert not prologue.active(bot.state, prologue_content) and bot.state.pending_event is None
     assert p.stamina == prologue_content.config.stamina_max
-    fused = prologue.fused_arts(bot.state, prologue_content, world)[0]
-    assert fused.quality != "中品" and p.member.level == 1  # 真的卡在第 6 步：後面的雪恥、配點都沒走到
+    assert not prologue.deepened(bot.state) and p.member.level == 1  # 真的卡在第 6 步：後面的雪恥、配點都沒走到
     assert p.stats["silver"] == prologue_content.config.start_stats["silver"] + 30  # 盤纏照拿
 
 
@@ -1289,7 +1286,7 @@ def test_the_season_bot_leaves_the_start_like_a_human_on_content_with_a_prologue
     prologue_content.config.auto_open_first_season = False
     game = bot.play_season(prologue_content, 1, max_steps=0, world=open_world(tmp_path / "w.db"))
     assert _look(game) == _look(human) and _look(game)["level"] == 2
-    assert game.state.player.location == "town" and prologue.fused_arts(game.state, prologue_content, game.world)[0].preset
+    assert game.state.player.location == "town" and prologue.slotted_arts(game.state, prologue_content, game.world)  # 基礎拳腳裝了意境
 
 
 @pytest.mark.slow
@@ -1315,7 +1312,8 @@ def test_the_season_bot_plays_the_same_game_on_content_without_a_prologue(conten
 
 
 def test_the_fire_recipe_does_not_clash_with_the_starting_breath(world):
-    """FB-092：序章選了火，師父要你改練的【烈爐拳】不跟開局的【基礎吐納】（柔）相剋；師門配方寫成陽，比照四條路都不吃 −20%。"""
+    """FB-092：序章選了火，裝進【基礎拳腳】不跟開局的【基礎吐納】（柔）相剋：基礎武學兼容並蓄、沒有自己的屬性，內外搭配是 1
+    （武學重構：以前師門配方【烈爐拳】寫成陽來避開）。"""
     from conftest import real_content
     from tianxia import team
 
@@ -1323,11 +1321,12 @@ def test_the_fire_recipe_does_not_clash_with_the_starting_breath(world):
     content.config.auto_open_first_season = True
     game = Game.new(content, "烈火", rng=random.Random(0), world=world)
     game.state.player.insights.append("huo")
-    game.state.player.stats["xinde"] = 50
     msgs = game.forge("jichu_quanjiao", ["huo"])
-    assert "【烈爐拳】" in msgs[0] and "屬陽" in msgs[0] and not any("相剋" in m for m in msgs)
-    art = next(a for a in (team.player_art(game.state, content, game.world, i) for i in game.state.player.arts) if a and a.name == "烈爐拳")
-    assert team.pairing(content, art, content.skills["jichu_tuna"]) == 1.0
+    assert "裝進了【基礎拳腳】" in msgs[0] and not any("相剋" in m for m in msgs)
+    art = team.player_art(game.state, content, game.world, "jichu_quanjiao")
+    assert art.attribute == "剛" and art.traits == ["剛"]  # 身上的樣子：兼容並蓄的屬性照槽裡那一格（剛）；內功槽空著沒有屬性，不相剋
+    breath = team.player_art(game.state, content, game.world, "jichu_tuna")  # 身上那一份：槽空著，沒有屬性
+    assert breath.attribute == "" and team.pairing(content, art, breath) == 1.0
 
 
 def test_a_masters_recipe_that_clashes_with_the_starting_art_is_refused(prologue_root):

@@ -5,6 +5,7 @@ from tianxia.atlas import (
     place_choices, recent_news, region_of, region_trends, road_hops, road_spot, routes, travel_block, travel_options,
     travel_refusal, travel_seconds, travel_stamina, views, way_to, whole_minutes, worst_foe,
 )
+from tianxia import insight_fx
 from tianxia.models import Condition, Connection, Location, SimPlayer
 from tianxia.state import Journey, Rumor
 
@@ -498,7 +499,7 @@ def test_the_insights_the_map_promises_are_exactly_what_exploring_teaches(game):
     listed = text.split("這裡能悟：")[1].split("\n")[0].split("、")
     for _ in range(80):
         game._explore()
-    learned = [c.insights[i].name for i in p.insights]
+    learned = list(dict.fromkeys(c.insights[insight_fx.base_id(i)].name for i in p.insights))  # 同一種悟到幾份都算一種
     assert sorted(learned) == sorted(listed) == ["水", "風"]
 
 

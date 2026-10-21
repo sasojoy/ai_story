@@ -28,7 +28,7 @@ from .state import Equipment, GameState, PlayerState
 # 乘的效果（中性值 1）；其餘是加的（中性值 0）。碎片的乘法鍵（玉璽碎片設計 7.2）也在這裡；talk_turns、dodge、fuse_points 是加的
 MULTIPLY = frozenset({"cultivate", "insight", "legend", "hp_cap", "practice", "stamina_regen", "mate_exp"})
 EFFECT_TEXT = {  # 待 joy 潤：角色卡、修練頁、拿到時那一句（數字照 Config.treasures.effects；{item} 是破境丹的名字 Config.legend_item_name）
-    "cultivate": "修練升品的機會 ×{x}",
+    "cultivate": "衝絕學的機會 ×{x}",
     "insight": "探索悟得意境的機會 ×{x}",
     "win_xinde_pct": "打贏的心得 +{pct}",
     "win_exp_pct": "打贏的經驗 +{pct}",
@@ -40,7 +40,7 @@ EFFECT_TEXT = {  # 待 joy 潤：角色卡、修練頁、拿到時那一句（�
 INSIGHT_SENSE_TEXT = "靜心感悟擲中的機會 +{n} 個百分點"  # 待 joy 潤：探索三選一開著時觀山石那一句（effect_text）
 SEAL_EFFECT_TEXT = {  # 待 joy 潤：玉璽碎片的七種效果（數字照 Config.seal.effects；seal.effect_text 轉呼叫這裡，字只留一份）
     "hp_cap": "氣血上限 ×{x}", "talk_turns": "每位人物每日多談 {n} 輪", "practice": "練成的心得 ×{x}",
-    "dodge": "落敗閃成僵持的機會 +{pct}", "stamina_regen": "體力回復 ×{x}", "fuse_points": "合成的造化 +{n}",
+    "dodge": "落敗閃成僵持的機會 +{pct}", "stamina_regen": "體力回復 ×{x}", "fuse_points": "自創的意分 +{n}",
     "mate_exp": "同伴拿到的經驗 ×{x}",
 }
 HEIRLOOM_LABEL = "傳承"  # 待 joy 潤：寶物段那一列的小標、角色卡那一行的開頭

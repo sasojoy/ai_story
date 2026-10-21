@@ -27,7 +27,7 @@ from .front_lines import BAND_KEYS, GEJU_KEYS
 from .materials import DEFAULT_DROPS, TIER_NAMES
 from .models import (
     FRONT_KEY, GLOW_KEYS, GOOD_HORSE, MOVES, RECRUITER_ALLIED_FIELDS, REVEAL_KEYS, ROADS, STATS, TREASURE_EFFECTS, WEAPON_KINDS, Attribute, BattleDef, CharacterDef, CheckVoice,
-    CombatLines, Condition, Config, Content, CraftNames, DuelBoss, Effect, Event, FigureDef, FollowerDef, ForgeSecret, Foreshadows, FrontLines, GatherBranch, GearBook,
+    CombatLines, Condition, Config, Content, CraftNames, CreateForms, DuelBoss, Effect, Event, FigureDef, FollowerDef, ForgeSecret, Foreshadows, FrontLines, GatherBranch, GearBook,
     GiftDef, Hints, MingtieContent, InsightDef, Location, MallItem, OppDef,
     InsightScene, OrdersContent, PresetRecipe, PromotionDef, RealDay, RealSlot, RelationDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, ShardDef,
     SimRumor, SkillDef,
@@ -119,6 +119,7 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         forge_secrets=_forge_secrets(root / "forge_secrets.json"),
         tier4_named=_index(Tier4Named, _read(root / "tier4_named.json")) if (root / "tier4_named.json").exists() else {},
         shop_lines=_read(root / "shop_lines.json") if (root / "shop_lines.json").exists() else {},
+        create_forms=CreateForms(**_read(root / "create_forms.json")) if (root / "create_forms.json").exists() else CreateForms(),
         banned_words=_read(root / "banned_words.json") if (root / "banned_words.json").exists() else [],
         mingtie=MingtieContent(**_read(root / "mingtie.json")) if (root / "mingtie.json").exists() else MingtieContent(),
         arena_crowd=_read(root / "arena_crowd.json") if (root / "arena_crowd.json").exists() else {},
@@ -830,7 +831,11 @@ def check_traits(c: Content, need) -> None:
             f"config.trait_quality_multiplier 缺少品質 {quality}（沒寫的那一品，功效強度會悄悄變成 ×1）",
         )
     if book.general or book.special:
-        need(sorted(t.attribute for t in book.general) == sorted(ATTRIBUTES), "content/traits.json：一般功效要一個屬性一個，八個都要有")
+        primaries = [t.attribute for t in book.general if not t.id]
+        need(sorted(primaries) == sorted(ATTRIBUTES), "content/traits.json：每個屬性要有一個第一個一般功效（沒寫 id 的那個），八個都要有")
+        keys = [t.key for t in book.general]
+        need(len(keys) == len(set(keys)), "content/traits.json：一般功效的 id 不能重複，也不能跟屬性同名")
+        need(not {t.id for t in book.general if t.id} & {h.id for h in book.high}, "content/traits.json：一般功效的 id 不能跟高階技能的 id 一樣")
         names = [t.name for t in book.general] + [t.name for t in book.special]
         need(len(names) == len(set(names)), "content/traits.json：功效的名字不能重複")
         need(len(specials) == len(book.special), "content/traits.json：特別功效的 id 不能重複")
@@ -2541,8 +2546,8 @@ def validate(c: Content) -> None:
     for i, step in enumerate(t.steps):
         where = f"新手引導 {step.id}"
         special = (step.explore_event or step.enemies
-                   or step.force_tier or step.sure_cultivate or step.instant_rest or step.fuse_base or step.melt_only
-                   or step.give_art or step.paged or step.after)
+                   or step.force_tier or step.deepen or step.instant_rest or step.fuse_base or step.melt_only
+                   or step.give_art or step.give_piece or step.paged or step.after)
         need(not special or i < t.prologue_steps, f"{where}：序章才有的欄位只能寫在前 {t.prologue_steps} 步")
         # 畫面的那幾樣（旁白、收起來那一行、亮、發光、選單）序章與初入江湖（序章之後、不分季的步驟，新手引導第四段）都可以寫
         screen = step.scene or step.line or step.reveal or step.glow or step.allow
@@ -2578,8 +2583,7 @@ def validate(c: Content) -> None:
         need(step.force_tier is None or step.force_tier in encounter.TIERS, f"{where}：force_tier {step.force_tier} 不是判定結果")
         for art in (step.fuse_base, step.melt_only, step.give_art.id if step.give_art else None):
             need(art is None or art in c.skills, f"{where}：武學 {art} 不存在")
-    # 草廬裡新人拿得到的每個意境（開場遇險、拜師那一串事件、四景、序章每一步的獎勵），都要有一筆師門配方接上合成那一步的底：
-    # 沒有的話那個新人的合成要等模型取名、或拿到退路的名字（「合成不等模型」落空）；加了第五景、或配方的意境 id 打錯，載入時就報錯
+    # 武學重構：序章裝意境那一步點名的那一門要收得下草廬悟得到的每個意境（相容屬性），不然新人照師父的話做會被擋
     sights: set[str] = set()
     for step in t.steps[: t.prologue_steps]:
         sights.update(step.reward.insights)
@@ -2601,11 +2605,11 @@ def validate(c: Content) -> None:
                 sights.update(effect.insights)
                 if effect.next_event:
                     todo.append(effect.next_event)
-    have = {(recipe.base, recipe.insight) for recipe in c.preset_recipes}
     for step in t.steps[: t.prologue_steps]:
-        if step.fuse_base:
-            missing = sorted(i for i in sights if (step.fuse_base, i) not in have)
-            need(not missing, f"新手引導 {step.id}：草廬悟得到的意境 {missing} 沒有以 {step.fuse_base} 為底的師門配方（preset_recipes.json）")
+        base_def = c.skills.get(step.fuse_base) if step.fuse_base else None
+        if base_def is not None and base_def.affinity:
+            wrong = sorted(i for i in sights if i in c.insights and c.insights[i].attribute not in base_def.affinity)
+            need(not wrong, f"新手引導 {step.id}：{step.fuse_base} 的相容屬性 {base_def.affinity} 收不下草廬悟得到的意境 {wrong}")
     recipe_keys, recipe_names = set(), set()
     for recipe in c.preset_recipes:
         where = f"師門配方 {recipe.base}+{recipe.insight}"
