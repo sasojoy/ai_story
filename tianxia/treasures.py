@@ -50,6 +50,7 @@ SEAL_REVAMP_TEXT = {  # 待 joy 潤：改版的常駐成長、生活效果（玉
     "practice": "練成的心得 ×{x}", "keep_silver": "落敗不失銀兩", "stamina_regen": "體力回復 ×{x}",
     "fuse_points": "合成的造化 +{n}", "mate_exp": "同伴拿到的經驗 ×{x}", "chuangong": "傳功的心得 ×{x}",
 }
+KEEP_SILVER = "懷中的『{shard}』護住了錢囊，銀兩分文未失。"  # 待 joy 潤：金角（改版）落敗那一下，戰報與江湖紀錄（Game._lose_silver）
 HEIRLOOM_LABEL = "傳承"  # 待 joy 潤：寶物段那一列的小標、角色卡那一行的開頭
 GOT = "你得到了寶物【{name}】（{effect}）。"  # 待 joy 潤
 GOT_HORSE = "你得到一匹{grade}的【{name}】。"  # 待 joy 潤（grade 是 mounts.grade：「良駒・中品」）

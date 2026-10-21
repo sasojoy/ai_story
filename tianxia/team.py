@@ -917,6 +917,7 @@ def take_encounter_toll(
     同伴照他自己的身法、根骨（人物資質設計 14.3）。本人身上的防具（裝備四欄設計 4.3）跟化勁相加，合計夾在
     `Config.armor.total_cap`；同伴不吃防具。
     share：對手真的打到你的回合佔幾成（本命戰法讓他定身、打空、打到自己、化影的回合不算，tactics.Clash.blocked_share）；平常是 1。
+    本人帶螭首（玉璽碎片改版，treasures.amount 的 injury）時變成內傷的那一份再乘它；同伴不吃。
     """
     cfg = content.config
     fraction = cfg.encounter_neili_loss.get(tier, 0.0) * (cfg.wild_neili_loss_factor if wild else 1.0) * max(0.0, share)
@@ -932,6 +933,7 @@ def take_encounter_toll(
             lost, hurt = _apply_toll(
                 content, state.player.member, fraction * (1 - cut),
                 agi=stats.get("agi", BASE_STAT), con=con_of(state, content, world, PLAYER),
+                injury=treasures.amount(state, content, "injury"),  # 螭首（玉璽碎片改版）：變成內傷的減半；沒帶是 1
             )
             if round(lost) > 0:  # 本來就見底、一滴都沒得扣時不寫「氣血 -0」（零的變化是雜訊）；內傷照樣寫
                 msgs.append(f"氣血 -{lost:.0f}")  # 照既有慣例寫變化量（跟「銀兩 -5」「心得 +12」同一串）

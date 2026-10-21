@@ -170,3 +170,138 @@ def test_got_and_assigned_lines_name_the_revamp_effects(content, world):
     game.sync(1.0)
     lines = [line for e in game.state.journal if e.title == seal.SEAL_TITLE for line in [e.tag, *e.lines]]
     assert any("戰力 ×1.1、體力回復 ×1.25" in line for line in lines), lines
+
+
+# ── Task 3：新的掛點（螭首、金角、歸心的傳功、玄紐的求見）──
+
+def _two(content, world, shard):
+    """持有 shard 的「懷璽」與一樣新的「平人」（都同步過、都學了拳腳，威力一樣）。"""
+    from tianxia import rules
+    from tianxia.engine import Game
+
+    game = holding(content, world, shard)
+    plain = Game.new(content, "平人", rng=random.Random(0), world=world)
+    plain.sync(0.0)
+    for g in (game, plain):
+        g.client = None
+        rules.learn_skill(g.state, content, "fist")
+    return game, plain
+
+
+def _lost():
+    from tianxia import encounter
+
+    return encounter.EncounterResult(tier="落敗", margin=-50, our_power=10, difficulty=20)
+
+
+def test_chishou_halves_the_injury_of_an_ordinary_fight(content, world):
+    """螭首：一場仗（遊歷、出陣、探索野怪、挑戰本人都走 take_encounter_toll）變成內傷的減半；掉的氣血照舊。"""
+    from tianxia import team
+
+    revamp(content)
+    game, plain = _two(content, world, "chishou")
+    team.take_encounter_toll(game.state, content, world, "落敗")
+    team.take_encounter_toll(plain.state, content, world, "落敗")
+    assert plain.state.player.member.injury > 0
+    assert game.state.player.member.injury == pytest.approx(plain.state.player.member.injury * 0.5)
+    assert game.state.player.member.neili == pytest.approx(plain.state.player.member.neili)
+    content.config.seal.revamp.enabled = False  # 關著照舊
+    before = game.state.player.member.injury
+    team.take_encounter_toll(game.state, content, world, "落敗")
+    assert game.state.player.member.injury - before > plain.state.player.member.injury * 0.5 + 1e-9
+
+
+def test_chishou_halves_the_injury_of_a_boss_fight(content, world):
+    """頭目戰收場：池子掉的氣血扣回本人時，變成內傷的那一份減半（Game._duel_finish）。"""
+    from test_duel import _boss
+
+    revamp(content)
+    content.duels = {"lake_boss": _boss()}
+    content.config.train_event_chance = 0.0
+    hurt = []
+    for game in _two(content, world, "chishou"):
+        game.state.player.location = "lake"
+        game._duel_start(content.duels["lake_boss"])
+        duel = game.state.player.duel
+        duel.hp = duel.hp_start - 40
+        game._duel_finish("落敗", "（測試）")
+        hurt.append(game.state.player.member.injury)
+    assert hurt[1] > 0 and hurt[0] == pytest.approx(hurt[1] * 0.5)
+
+
+def test_chishou_halves_the_injury_a_hired_killer_leaves(content, world):
+    """酒肆買兇的殺手打贏那一場：變成內傷的減半（Game._tavern_hit_fight）。"""
+    from unittest import mock
+
+    from tianxia import encounter
+    from tianxia.state import TavernHit
+
+    revamp(content)
+    hurt = []
+    for game in _two(content, world, "chishou"):
+        hit = TavernHit(id=1, client="雇主", target=game.state.player.name, tier=0, price=10, place="town", placed_real=0.0,
+                        until_real=1e12)
+        with mock.patch.object(encounter, "resolve_encounter", return_value=_lost()):
+            game._tavern_hit_fight(hit, random.Random(0))
+        hurt.append(game.state.player.member.injury)
+    assert hurt[1] > 0 and hurt[0] == pytest.approx(hurt[1] * 0.5)
+
+
+def test_jinjiao_keeps_the_silver_when_you_lose(content, world):
+    """金角：落敗不失銀兩（只管 Game._lose_silver：遊歷、出陣、探索野怪、挑戰本人，PM 五之一 3）；戰報與紀錄寫一句（待 joy 潤）。
+    沒有銀兩可丟時不寫；關著照舊失落一成。"""
+    from types import SimpleNamespace
+
+    from tianxia import treasures as tr
+
+    revamp(content)
+    game, plain = _two(content, world, "jinjiao")
+    for g in (game, plain):
+        g.state.player.stats["silver"] = 100
+    record, other = SimpleNamespace(id=1, notes=[], silver=0), SimpleNamespace(id=1, notes=[], silver=0)
+    line = tr.KEEP_SILVER.format(shard="金角")
+    assert game._lose_silver(record) == [line] and record.notes == [line] and record.silver == 0
+    assert game.state.player.stats["silver"] == 100
+    assert plain._lose_silver(other) == ["銀兩 -10"] and plain.state.player.stats["silver"] == 90
+    game.state.player.stats["silver"] = 5  # 一成是 0：本來就不丟，不寫那一句
+    assert game._lose_silver(SimpleNamespace(id=2, notes=[], silver=0)) == []
+    game.state.player.stats["silver"] = 100
+    content.config.seal.revamp.enabled = False
+    assert game._lose_silver(SimpleNamespace(id=3, notes=[], silver=0)) == ["銀兩 -10"]
+
+
+def test_guixin_discounts_every_chuangong_lesson(content, world):
+    """歸心：傳功的心得 ×0.9（照 round、最少 1，同雲篆的練成）；鈕上寫的跟扣的是同一個數。"""
+    from test_chuangong import _with_mate
+
+    from tianxia import chuangong
+
+    revamp(content)
+    game, plain = _two(content, world, "guixin")
+    rule = content.config.chuangong
+    for g in (plain, game):  # 同一位同伴輪流歸兩人名下（_with_mate 改 owner）：最後歸懷璽
+        _with_mate(g)
+        mine = {row["what"]: row for row in g.chuangong_lessons("mate")}
+        scale = 0.9 if g is game else 1.0
+        assert mine["wugong"]["label"].endswith(f"{max(1, round(rule.mate_art_xinde * scale))} 心得")
+        assert mine["str"]["label"].endswith(f"{max(1, round(rule.mate_stat_xinde * scale))} 心得")
+    before = game.state.player.stats["xinde"]
+    game.chuangong("mate", "wugong")
+    assert before - game.state.player.stats["xinde"] == max(1, round(rule.mate_art_xinde * 0.9))
+    assert chuangong.price_of(game.state, content, 1) == 1 and chuangong.price_of(game.state, content, 100) == 90
+    assert chuangong.price_of(plain.state, content, 100) == 100
+
+
+def test_xuanniu_cuts_the_audience_bar_as_its_own_line(content, world):
+    """玄紐：求見門檻 −5，在折抵裡另列一項、寫碎片的名字（不跟寶物併成一項、不寫成寶物的名字）。"""
+    from tianxia import rules
+
+    revamp(content)
+    content.characters["mate"].audience_fame = 20
+    game, plain = _two(content, world, "xuanniu")
+    mine, theirs = rules.audience_parts(game.state, content, "mate"), rules.audience_parts(plain.state, content, "mate")
+    assert mine.bar == theirs.bar == 20 and theirs.discounts == []
+    assert mine.discounts == [("玄紐", 5)]
+    assert rules.audience_bar(game.state, content, "mate") == 15
+    content.config.seal.revamp.enabled = False
+    assert rules.audience_parts(game.state, content, "mate").discounts == []

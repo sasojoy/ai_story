@@ -2636,7 +2636,8 @@ class Game:
             record.silver = -lost
             con = team.con_of(s, c, self.world, PLAYER)
             cut = team.armor_cut(s, c, self.world)
-            hp, _ = team._apply_toll(c, me.member, cfg.hit_hp_loss * (1 - cut), agi=me.stats.get("agi", team.BASE_STAT), con=con)
+            hp, _ = team._apply_toll(c, me.member, cfg.hit_hp_loss * (1 - cut), agi=me.stats.get("agi", team.BASE_STAT), con=con,
+                                     injury=treasures.amount(s, c, "injury"))  # 螭首（玉璽碎片改版）：變成內傷的減半
             hp_lost = round(hp)
             if hp_lost > 0:
                 record.changes.append(f"氣血 -{hp_lost}")
@@ -8293,9 +8294,15 @@ class Game:
     def _lose_silver(self, record) -> list[str]:
         """落敗失落一成銀兩（遊歷、探索野怪、挑戰本人共用），記在戰報上。騎著馬有機會策馬脫身、保住這一成（裝備四欄 5.11）：
         只保銀兩，氣血、內傷、戰報結果照舊是落敗；擲骰用自己的亂數（「脫身|季數|名號|戰報流水號」：戰報流水號每季從頭算，少了季數
-        每一季第 N 場的結果都一樣），不動 Game.rng，整季測試與量表的基準不位移。沒有銀兩可丟（一成是 0）就不擲。"""
+        每一季第 N 場的結果都一樣），不動 Game.rng，整季測試與量表的基準不位移。沒有銀兩可丟（一成是 0）就不擲。
+        帶著金角（玉璽碎片改版，treasures.amount 的 keep_silver）落敗不失銀兩，寫一句 treasures.KEEP_SILVER（截殺、設伏、混戰、
+        買兇的殺手各有自己的扣法，不走這裡，照舊）。"""
         p = self.state.player
         loss = p.stats["silver"] // 10
+        if loss and treasures.amount(self.state, self.content, "keep_silver") > 0:  # 金角（玉璽碎片改版，PM 五之一 3）：落敗不失銀兩
+            line = treasures.KEEP_SILVER.format(shard=p.heirloom.name if p.heirloom is not None else "")
+            record.notes.append(line)
+            return [line]  # 保住了就不擲策馬脫身（那一份亂數是自己的，不擲不會讓別的擲骰位移）
         chance = mounts.escape(self.state, self.content)
         seed = f"脫身|{self.world.get_season_number()}|{p.name}|{record.id}"
         if loss and chance > 0 and random.Random(seed).random() < chance:
@@ -11326,7 +11333,8 @@ class Game:
         now, _ = self._player_hp_and_cap()
         if lost > 0:
             con = team.con_of(s, c, self.world, PLAYER)
-            p.member.injury += lost * c.config.injury_share * max(0.0, 1 - team.stat_bonus(c, con))
+            injury = treasures.amount(s, c, "injury")  # 螭首（玉璽碎片改版）：變成內傷的減半；沒帶是 1
+            p.member.injury += lost * c.config.injury_share * max(0.0, 1 - team.stat_bonus(c, con)) * injury
             p.member.neili = max(0.0, now - lost)
         title = f"頭目戰・{foe.name}"
         if tier is None:

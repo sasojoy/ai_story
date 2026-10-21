@@ -43,7 +43,8 @@ class AudienceParts(NamedTuple):
 
 def audience_parts(state: GameState, content: Content, companion_id: str) -> AudienceParts:
     """求見門檻拆開（名聲設計 6.3）：門檻與每一項折抵——同陣營的階（ranks.rank_of 每比第 1 階高一階抵 audience_rank_discount）、
-    散人的遊俠名號（名聲開著時是善惡稱號的段，ranger.audience_discount）、寶物（treasures.amount 的 audience）。
+    散人的遊俠名號（名聲開著時是善惡稱號的段，ranger.audience_discount）、寶物（treasures.amount 的 audience，只算寶物那一格）、
+    玄紐（玉璽碎片改版：傳承那一格的 audience，另列一項、寫碎片的名字）。
     長的季整條一起乘季長倍數（名聲 2.4，折抵跟著門檻同比例，renown.scale；沒有章、名聲關著是 1，跟以前一字不差）。"""
     from . import ranger, ranks, renown  # noqa: PLC0415  ranks、ranger → rules：在函式裡 import，避免循環
 
@@ -59,9 +60,12 @@ def audience_parts(state: GameState, content: Content, companion_id: str) -> Aud
     ranger_cut = ranger.audience_discount(state, content)  # 散人的遊俠名號：每一階抵幾點，對所有人物都算（陣營的人是 0）
     if ranger_cut:
         parts.append((renown.virtue_title(state, content) or ranger.title(content, state) or "遊俠名號", ranger_cut))
-    treasure = round(treasures.amount(state, content, "audience"))  # 寶物「求見門檻」（裝備四欄 6.2）：扣完遊俠名號再扣
+    treasure = round(treasures.amount(state, content, "audience", source="treasure"))  # 寶物「求見門檻」（裝備四欄 6.2）：扣完遊俠名號再扣
     if treasure:
         parts.append((treasures.audience_name(state), treasure))
+    shard = round(treasures.amount(state, content, "audience", source="heirloom"))  # 玄紐（玉璽碎片改版）：另列一項、寫碎片的名字
+    if shard:
+        parts.append((treasures.heirloom_name(state), shard))
     return AudienceParts(int(bar * k + 0.5), [(name, int(n * k + 0.5)) for name, n in parts])
 
 
