@@ -177,7 +177,9 @@ def test_switched_off_there_is_no_button_no_line_and_no_layer():
 
 
 def test_a_shard_without_an_act_draws_nothing_extra():
-    c, w, m = _view("chishou")
+    c, w, g = _holder("chishou", at="changshe")
+    c.seal["chishou"].act = None  # 第 3 批起七片都有行動：沒有行動的那一條路（測試內容、改版關著還走它）拿掉這一片的行動來測
+    m = server.main_view(g)
     assert m["status"]["seal"]["act"] is None
     assert "獨門行動" not in run(m, "return H.pageJianghu();")
     assert "seal-act" not in run(m, 'return H.heirloomRow({name: "螭首", effect_text: "x"}, H.sealActNow());')
@@ -221,6 +223,97 @@ def test_the_layer_css_follows_the_shop_and_the_640_column():
     assert ".shop-layer.shop-seal { font-size: 17px; background-color: var(--paper); background-size: min(100%, 640px) 100%" in desk
     first = CSS.index("@media (min-width: 641px)")
     assert CSS.index(".shop-layer.shop-seal {") > first  # 電腦寬那一段以後（test_bounty_tags 照第一個 641px 切手機那一半）
+
+
+# ── 第 3 批：鎮地、補缺（領地爭奪打開的 21 天季；tests/test_seal_acts3.py 的建法）──
+
+def _land(shard, *, side, at):
+    from test_seal_acts3 import _holder as land_holder
+
+    return land_holder(shard, side=side, at=at)
+
+
+def test_zhendi_lists_blocks_with_a_line_under_each():
+    """鎮地那一層：一塊地一列、鈕寫「鎮住」，底下那一小行寫對面推到多少；問句帶自家。"""
+    from tianxia import conquest as cq
+    from test_seal_acts3 import _season
+
+    c, w, g = _land("chishou", side="guan", at="zhuo_county")
+    _season(c, w, lambda wd: cq.push(wd, c, "zhuo_county", "huang", "巾甲", 30, "attack"))
+    m = _do(c, w, "懷璽", server.main_view, now=20.0)
+    html = _layer(m)
+    rows = {name: (tid, off) for name, tid, off, _ in _rows(html)}
+    assert rows["涿郡"] == ("zhuo_county", False) and "汝南" not in rows
+    assert "黃巾軍推到 30" in html and ">鎮住</button>" in html and "指定一塊此刻佔著的地" in html
+    out = click(m, [{"act": "seal-act"}, {"act": "seal-pick", "id": "zhuo_county"}])
+    assert "起用『螭首』，替官軍鎮住涿郡半日？" in out["out"][1]["asked"]
+
+
+def test_a_ranger_sees_only_the_blocks_of_the_army_picked():
+    """散人鎮地：還沒挑邊不列地、寫要先挑；挑了哪一軍只列那一軍的地，送出帶那一軍。"""
+    c, w, g = _land("chishou", side=None, at="yingchuan")
+    m = server.main_view(g)
+    html = _layer(m)
+    assert _rows(html) == [] and "先挑這一次照哪一軍算" in html and html.count('data-act="seal-side"') == 2
+    huang = {name for name, *_ in _rows(_layer(m, {"sealSide": "huang"}))}
+    guan = {name for name, *_ in _rows(_layer(m, {"sealSide": "guan"}))}
+    assert "汝南" in huang and "汝南" not in guan and "涿郡" in guan and not huang & guan
+    out = click(m, [{"act": "seal-act"}, {"act": "seal-side", "side": "huang"}, {"act": "seal-pick", "id": "runan"}, {"act": "ask-yes"}])
+    assert "替黃巾軍鎮住汝南半日" in out["out"][2]["asked"]
+    assert out["calls"] == [["/api/do/seal_use", {"target": "runan", "side": "huang"}]]
+
+
+def test_a_ranger_picking_an_army_with_nothing_to_mend_is_told_so():
+    from tianxia import conquest as cq
+    from test_seal_acts3 import _season
+
+    c, w, g = _land("jinjiao", side=None, at="yingchuan")
+    _season(c, w, lambda wd: cq.push(wd, c, "runan", "guan", "官甲", 100, "attack"), now=100.0)
+    m = _do(c, w, "懷璽", server.main_view, now=200.0)
+    guan = _layer(m, {"sealSide": "guan"})
+    assert _rows(guan) == [] and "這一邊此刻沒有能指定的地方。" in guan
+    huang = _layer(m, {"sealSide": "huang"})
+    assert [(name, tid) for name, tid, _, _ in _rows(huang)] == [("汝南", "runan")] and "被官軍翻走・" in huang and ">補回</button>" in huang
+
+
+def test_fb645_every_block_greyed_still_opens_the_layer_and_lists_them():
+    """FB-645：剛被翻走的地全都補不了時，鈕照樣打得開那一層（不是 primary）、那幾塊灰著各寫原因、上面寫整顆的原因；灰的那一列按了不問。
+    一塊都沒有、或在間隔裡（targets 是空的）照舊灰掉不開。"""
+    from tianxia import conquest as cq
+    from tianxia.state import SealAct
+    from test_seal_acts3 import _season
+
+    c, w, g = _land("jinjiao", side="huang", at="runan")
+    _season(c, w, lambda wd: cq.push(wd, c, "runan", "guan", "官甲", 100, "attack"), now=100.0)
+    _season(c, w, lambda wd: wd.seal_acts.append(SealAct(kind="bujue", shard="jinjiao", start=50.0, until=50.0, target="runan",
+                                                         side="huang")), now=110.0)
+    m = _do(c, w, "懷璽", server.main_view, now=200.0)
+    act = m["status"]["seal"]["act"]
+    row = run(m, 'return H.heirloomRow({name: "金角", effect_text: "x"}, H.sealActNow());')
+    assert re.search(r'<button class="btn small" data-act="seal-act">補缺・剩 2 次</button>', row)
+    assert f'<small class="rwhy">{act["why"]}</small>' in row
+    out = click(m, [{"act": "seal-act"}, {"act": "seal-pick", "id": "runan"}])
+    opened, picked = out["out"]
+    assert opened["open"] is True and f'<p class="shop-warn">{act["why"]}</p>' in opened["app"]
+    assert _rows(opened["app"]) == [("汝南", "runan", True, "這一季已經補過一次")] and "被官軍翻走・" in opened["app"]
+    assert picked["asked"] == "" and out["calls"] == []
+    c, w, g = _land("jinjiao", side="huang", at="runan")  # 還沒丟過地：照舊灰掉、不開
+    m = server.main_view(g)
+    assert re.search(r'data-act="seal-act" disabled', run(m, 'return H.heirloomRow({name: "金角", effect_text: "x"}, H.sealActNow());'))
+    out = click(m, [{"act": "seal-act"}])
+    assert out["out"][0]["open"] is not True and "shop-seal" not in out["out"][0]["app"]
+
+
+def test_without_conquest_the_card_line_says_why_not_how_many():
+    """領地爭奪關著的季（正式內容的三種季）：鎮地的鈕灰著、碎片卡那一行寫原因（不寫「還能起用 2 次」，FB-626 那種一句說能用一句說不能）。"""
+    c, w, m = _view("chishou", at="changshe")
+    act = m["status"]["seal"]["act"]
+    assert act["idle"] and not act["ok"]
+    assert "獨門行動・鎮地：這一季沒有領地爭奪，起用不了。" in run(m, "return H.pageJianghu();")
+    row = run(m, 'return H.heirloomRow({name: "螭首", effect_text: "x"}, H.sealActNow());')
+    assert re.search(r'data-act="seal-act" disabled title="這一季沒有領地爭奪', row)
+    c, w, m = _view("xuanniu", at="changshe")
+    assert "獨門行動・引將：這一季還能起用 2 次" in run(m, "return H.pageJianghu();")  # 別的照舊
 
 
 def _bot_world(bot: bool):

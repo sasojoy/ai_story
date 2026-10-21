@@ -21,6 +21,7 @@ DAY = 24 * HOUR
 
 LETTER = "letter"  # SiegeSlot.by、DayNote.by：戰書排的
 FLIP = "flip"  # DayNote.by：推滿當場易手（conquest.flip）
+MEND = "mend"  # DayNote.by：補缺當場退回原主（conquest.restore，玉璽碎片改版第 3 批；不記是誰，FB-646）
 # 舊季（第二批投票那一版）的 day_log 還有這兩種；〈天下形勢〉照舊認得（第三批 A 讀它們），新的不再寫
 VOTE = "vote"
 COMMANDER = "commander"

@@ -517,17 +517,23 @@
   // 入口是修練頁傳承那一列的一顆鈕（heirloomRow）；要指定目標的三種（引將、傳檄、收心）開一層店面樣式的（sealActHtml：招牌寫行動名、右上剩幾次、
   // 一人一列寫此刻在哪與灰掉的原因、每列一顆；散人傳檄先照店面頁籤挑一邊），頒詔、承露按了直接問。問句、說明、原因全是伺服器的字（seal_acts.view）；
   // 這裡只有鈕上的動詞、名單的標題與江湖頁那一行（待 joy 潤）。碎片卡與這一份本來就只給持有者自己，改版關著沒有 act（鈕與那一行都不畫）
-  const SEAL_VERB = { yinjiang: "引來", chuanxi: "傳檄", shouxin: "收心" }; // 要指定目標的三種：鈕上的動詞（待 joy 潤）
-  const SEAL_PICK = { yinjiang: "指定一位大勢人物", chuanxi: "指定一條戰線", shouxin: "指定一位人物" }; // 名單的標題（待 joy 潤）
+  // 第 3 批多鎮地、補缺（目標是區塊、分軍：每一列多 side 與底下那一小行 info；散人挑了哪一軍只列那一軍的）
+  const SEAL_VERB = { yinjiang: "引來", chuanxi: "傳檄", shouxin: "收心", zhendi: "鎮住", bujue: "補回" }; // 要指定目標的：鈕上的動詞（待 joy 潤）
+  const SEAL_PICK = { yinjiang: "指定一位大勢人物", chuanxi: "指定一條戰線", shouxin: "指定一位人物",
+    zhendi: "指定一塊此刻佔著的地", bujue: "指定一塊剛被翻走的地" }; // 名單的標題（待 joy 潤）
+  const SEAL_NONE = "這一邊此刻沒有能指定的地方。"; // 散人挑了一邊、那一軍沒有能鎮（補）的地（待 joy 潤）
+  // 按不下去、可是有一列列的地可看（FB-645：鎮地、補缺每一塊都灰著，伺服器照樣給 targets）：鈕打得開那一層、各列灰著寫原因
+  const sealBrowse = (a) => !!a && !a.ok && a.kind in SEAL_VERB && (a.targets || []).length > 0;
   function sealActNow() {
     const s = S.main && S.main.status && S.main.status.seal;
     return s && s.act ? s.act : null;
   }
 
-  // 江湖頁碎片卡底下那一行提醒（企劃者 2026-10-21：只是字，按了跳到修練頁傳承那一列那一顆）；這一片沒有行動（螭首、金角）不畫
+  // 江湖頁碎片卡底下那一行提醒（企劃者 2026-10-21：只是字，按了跳到修練頁傳承那一列那一顆）；這一片沒有行動不畫。
+  // 這一季整季都用不上（idle：鎮地、補缺在領地爭奪關著的季）寫原因，不寫「還能起用 N 次」（FB-626 那種一句說能用、一句說不能用）
   function sealActLine(a) {
     if (!a) return "";
-    const left = a.left > 0 ? `這一季還能起用 ${a.left | 0} 次` : "這一季的次數用完了";
+    const left = a.idle ? a.why : a.left > 0 ? `這一季還能起用 ${a.left | 0} 次` : "這一季的次數用完了";
     return `<p class="seal-act-line"><button class="seal-act-go" data-act="seal-act-go">獨門行動・${esc(a.name)}：${left}</button></p>`;
   }
 
@@ -535,27 +541,31 @@
   // （.rwhy，手機沒有 title 可看），這一片的行動此刻還在生效的那一句也寫在底下
   function heirloomRow(h, a) {
     const notes = a ? [a.ok ? "" : a.why, a.live].filter(Boolean) : [];
-    const btn = a ? `<div class="wbtns"><button class="btn small primary" data-act="seal-act"${a.ok ? "" : ` disabled title="${esc(a.why)}"`}>${esc(a.name)}・剩 ${a.left | 0} 次</button></div>` : "";
+    const look = sealBrowse(a); // FB-645：只能看、按不下去：不是 primary，打得開那一層
+    const btn = a ? `<div class="wbtns"><button class="btn small${look ? "" : " primary"}" data-act="seal-act"${a.ok || look ? "" : ` disabled title="${esc(a.why)}"`}>${esc(a.name)}・剩 ${a.left | 0} 次</button></div>` : "";
     return `<div class="wrow heirloom"><div class="winfo"><b>【${esc(h.name)}】</b><span>傳承・${esc(h.effect_text)}</span>${notes.map((t) => `<small class="rwhy">${esc(t)}</small>`).join("")}</div>${btn}</div>`;
   }
 
-  // 選目標的那一層：店面的框（招牌、收起、右上剩幾次、說明那一句），捲的那一層一人一列。散人傳檄還沒挑邊時每一列都灰著、上面寫要先挑
+  // 選目標的那一層：店面的框（招牌、收起、右上剩幾次、說明那一句），捲的那一層一人一列。散人還沒挑邊時：不分軍的（傳檄的戰線）每一列都灰著、
+  // 分軍的（鎮地、補缺的地，t.side）先不列，上面寫要先挑；挑了只列那一軍的，那一軍一塊都沒有寫 SEAL_NONE
   function sealActHtml(a) {
     const sides = a.sides || [];
     const needSide = sides.length > 0 && !sides.some((s) => s.id === S.sealSide);
     const tabs = sides.length ? `<div class="shop-pages seal-sides" role="group" aria-label="這一次算哪一軍">${sides.map((s) => `
         <button class="shop-page${S.sealSide === s.id ? " on" : ""}" data-act="seal-side" data-side="${esc(s.id)}" aria-pressed="${S.sealSide === s.id}">這一次算${esc(s.name)}</button>`).join("")}</div>` : "";
-    const rows = (a.targets || []).map((t) => {
+    const shown = (a.targets || []).filter((t) => !t.side || !sides.length || (!needSide && t.side === S.sealSide));
+    const rows = shown.map((t) => {
       const why = t.why || (needSide ? a.side_note : "");
-      return `<div class="shop-row seal-row"><div class="winfo"><b>${esc(t.name)}</b>${t.where ? `<span>此刻在${esc(t.where)}</span>` : ""}${t.why ? `<span class="seal-why">${esc(t.why)}</span>` : ""}</div>
+      return `<div class="shop-row seal-row"><div class="winfo"><b>${esc(t.name)}</b>${t.where ? `<span>此刻在${esc(t.where)}</span>` : ""}${t.info ? `<span>${esc(t.info)}</span>` : ""}${t.why ? `<span class="seal-why">${esc(t.why)}</span>` : ""}</div>
         <div class="wbtns"><button class="btn small${why ? "" : " primary"}" data-act="seal-pick" data-id="${esc(t.id)}"${why ? ` disabled title="${esc(why)}"` : ""}>${SEAL_VERB[a.kind] || "起用"}</button></div></div>`;
     }).join("");
+    const none = a.ok && !rows && sides.length && !needSide ? `<p class="shop-cap">${SEAL_NONE}</p>` : "";
     return `<div class="shop-layer shop-seal" role="dialog" aria-label="${esc(a.name)}">
       <header class="shop-bar"><button class="shop-back" data-act="seal-act-close">‹ 收起</button><span class="shop-sign">${esc(a.name)}</span><span class="shop-silver">剩 ${a.left | 0} 次</span></header>
       <p class="shop-line">${esc(a.text)}</p>
       <div class="shop-body"><div class="shop-col">${tabs}${needSide ? `<p class="shop-warn">${esc(a.side_note)}</p>` : ""}
         <p class="shop-cap">${esc(a.rule)}</p>${a.live ? `<p class="shop-cap seal-live">${esc(a.live)}</p>` : ""}${a.ok ? "" : `<p class="shop-warn">${esc(a.why)}</p>`}
-        ${rows ? `<h4 class="seal-h">${SEAL_PICK[a.kind] || ""}</h4>${rows}` : ""}</div></div>
+        ${rows ? `<h4 class="seal-h">${SEAL_PICK[a.kind] || ""}</h4>${rows}` : ""}${none}</div></div>
     </div>`;
   }
 
@@ -8016,12 +8026,16 @@
         // 江湖頁碎片卡那一行跳到修練頁那一顆
         case "seal-act": {
           const a = sealActNow();
-          if (!a || !a.ok) { if (a && a.why) toast(a.why); break; }
+          if (!a || (!a.ok && !sealBrowse(a))) { if (a && a.why) toast(a.why); break; }
           if (a.kind in SEAL_VERB) { S.sealAct = true; S.sealSide = null; await keepScroll(render); } else sealAsk(a, null);
           break;
         }
         case "seal-side": { S.sealSide = el.dataset.side; const a = sealActNow(); if (a) redrawSealAct(a); break; }
-        case "seal-pick": { const a = sealActNow(); const t = a && (a.targets || []).find((r) => r.id === el.dataset.id); if (t) sealAsk(a, t); break; }
+        case "seal-pick": { // 灰著的那一列不問（FB-645 起整顆按不下去時也列得出灰的）
+          const a = sealActNow(); const t = a && (a.targets || []).find((r) => r.id === el.dataset.id);
+          if (t && a.ok && !t.why) sealAsk(a, t);
+          break;
+        }
         case "seal-act-close": S.sealAct = false; S.sealSide = null; await keepScroll(render); break;
         case "seal-act-go": await goTab("practice"); document.querySelector(".gear .wrow.heirloom")?.scrollIntoView({ block: "center" }); break;
         case "bind-art": { // 以器配招：送挑好的那一門（select 的 id 帶冒號，用 getElementById）

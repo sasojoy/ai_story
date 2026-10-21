@@ -19,13 +19,23 @@ from .state import AnnalEntry, GameState
 
 SHOWDOWN, FIGURE, FIGHT, DEED = "showdown", "figure", "fight", "deed"
 CONQUER = "conquer"  # 翻地與爭搶（輿圖簡化設計 4.5）：推最多、率先攻入一塊地，或拉回最多、守住一塊地
-KINDS = {SHOWDOWN: "大戰", FIGURE: "人物", FIGHT: "交手", DEED: "行事", CONQUER: "攻守"}  # 行狀頁的小標（待 joy 潤）
+# 起用玉璽碎片的獨門行動（Game.seal_use）：持有者平時藏起來（碎片改版設計第二、三章「行狀只記在用的人自己的行狀裡」），酒肆與買兇找人
+# 不讀這一類（heard；FB-643）。本人的行狀頁照「行事」寫、季末的傳歸在出身與行事那一段（GROUPS），跟一般的事一樣
+SEAL = "seal"
+KINDS = {SHOWDOWN: "大戰", FIGURE: "人物", FIGHT: "交手", DEED: "行事", CONQUER: "攻守", SEAL: "行事"}  # 行狀頁的小標（待 joy 潤）
+GROUPS = {SEAL: DEED}  # 季末的傳（biography._group）照哪一段寫：沒列的照自己的種類
+UNHEARD = frozenset({SEAL})  # 酒肆打聽不到的種類
 TEXT_MAX, QUOTE_MAX, REPLY_MAX = 80, 40, 80
 MASTERED = "絕學"  # martial_arts.QUALITIES 的最後一品
 
 
 def on(content: Content) -> bool:
     return content.config.biography.enabled
+
+
+def heard(entry: AnnalEntry) -> bool:
+    """這一則酒肆打聽得到嗎（打聽交情的近來的事、近況、名氣都只算打聽得到的；FB-643）。"""
+    return entry.kind not in UNHEARD
 
 
 def clip(text: str, limit: int) -> str:

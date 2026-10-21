@@ -76,9 +76,12 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   同一條測試裡把開關關掉再比一次、斷言「關著時看得出差別」（列出哪幾項不一樣），才證明這條測試抓得到漏（玉璽碎片改版第 1 批 `test_two_worlds_that_differ_only_in_the_holder_look_the_same`）。要找名號字串時，名號別跟固定的字撞（拿「懷璽」當持有者的名號，會撞到「懷璽之人」），用「甲客」「持璽客」這種。
 - **差異測試要讓「世界差在祕密、後面的步驟不被結果帶開」**（玉璽碎片改版第 1 批修正，側門）：兩個世界裡誰贏誰輸、誰掉了氣血會不同，之後算威力的步驟（氣血係數 `condition` 也在 `_spar_power` 裡）就跟著差，測試紅了不是漏而是被結果帶開。做法：先把所有「看」的畫面讀完再打；每個人至多打一場有損耗的仗（截殺各挑沒打過的人）；擂台挑了就認輸（`arena:yield`，結果固定是落敗、名次不動）；只比「對手那一格」的數字，不比勝負與氣血。
 - **差異測試抓不抓得到，用「還原漏洞」證明**：當祕密只在子開關開著時存在（關著本來就看不出差別），不能靠「關著看得出差別」那招，改成 `monkeypatch` 把防線拆掉（例：`Game._spar_power` 不理 `seal`、`_arena_bare` 回 None），斷言兩個世界在該有的鍵上真的不一樣（`test_the_side_door_guard_has_teeth`）。另外對實作做變異檢查：一處一處換掉、跑那組測試、看會紅；腳本把原檔 bytes 存在記憶體、`finally` 寫回，比反向替換安全（不會因為換回去的字串不唯一而卡在改壞的狀態）。
+- **差異測試的「旁觀者」要站在看得到的位置**（FB-643，2026-10-21）：第 2 批的不具名守門有比「酒肆查兩人」，可是旁觀客在別處、兩人名望 0，打聽度只到 3，「近來的事」根本不列，漏了也比不出來。照被測的那個門檻擺人：同陣營、同一間酒肆（地頭熟）、名望第一段（打聽度 4 才列近來的事）、份量 4 的舊事湊到差一件就加名氣、舊事的時刻挪到兩天前（近況只看新的那一件），再斷言「看得到的那一行真的有出現」（`tests/test_seal_fb643_tavern.py`）。
+- **要對某些讀者藏起來的資料，先找現成的分類欄位**（FB-643：起用碎片的行狀不給酒肆讀）：`AnnalEntry` 加一個布林欄位會讓每個人每一則行狀的 JSON 都多一個鍵（`model_dump_json` 不省預設值，資料庫對照會整片不一樣）；改用新的 `kind`（`annals.SEAL`），顯示的地方給同一個標籤（`KINDS`）、季末的傳照舊歸段（`GROUPS`），讀者那幾處問 `annals.heard`。資料庫只有那幾則的 `kind` 變。
+- **假瀏覽器的點擊不管 `disabled`**（`test_seal_acts_web.CLICK` 直接呼叫 click 的監聽器）：灰掉的鈕在真的瀏覽器按不到，在測試裡按得到。動作的處理要自己再驗一次（`seal-pick` 只收按得下去、那一列沒灰的），不要只靠 `disabled`。
 - **給別人看的數字（勝算、身手、戰報的「對手威力」）每一處都要走同一個「給別人看的那一份」**：選單、玩家卡、頁面（`shopview`）、戰報兩邊各一份（發的與收的、守的與挑的）、假人讀的勝算清單；寫在存檔裡的快照（擂台分身）要另記一份，欄位加預設 `None`（舊存檔讀得進來、沒碎片時狀態不多一個字）。算這個數字的時機要排在記戰報之前：第一邊的記帳可能升級，第二邊再算就變了（`_spar`、`raid`、`_ambush_fight` 都在算 `ours`／`theirs` 的同一處先算好）。
 - **一包 `**kwargs` 的標記（`Game._battle_marks` 這種）加新鍵**：有舊測試斷言整包一字不差（`test_joining_snapshots_turncoat_and_newbie`）。新鍵只在有值時才放進去，關著的季那一包一個字不變。
-- **「關著一個字不變」的畫面對照，探針只問兩版都有的東西**：問到新版才有的效果鍵，舊版當成加的（中性值 0）、新版當成乘的（中性值 1），雜湊就不一樣，但那不是畫面。改問掛點本身的輸出（扣血、內傷、價錢、回話）。玉璽碎片改版第 1 批的腳本在當時 scratchpad 的 `sealcmp/cmp_seal_off.py`（七片各一個持有者、第一個是假人；三種季各 204 行）。
+- **「關著一個字不變」的畫面對照，探針只問兩版都有的東西**：問到新版才有的效果鍵，舊版當成加的（中性值 0）、新版當成乘的（中性值 1），雜湊就不一樣，但那不是畫面。改問掛點本身的輸出（扣血、內傷、價錢、回話）。玉璽碎片改版第 1 批的腳本在當時 scratchpad 的 `sealcmp/cmp_seal_off.py`（七片各一個持有者、第一個是假人；三種季各 204 行）。第 3 批 QA 的 `seal3qa/cmp3.py`＋`kit3.py`（PM 這個 session 的 scratchpad；`QA_ROOT=<archive 根> python cmp3.py <weekend|none|season21|conquest> <畫面檔> <資料庫檔>`，`PYTHONHASHSEED=0`、不加 `-I`）更完整：兩份 archive × 四種用一支 Python 調度腳本開八個子行程平行跑，約十分鐘（2026-10-21 碎片第 3 批修正：子開關關著跟 `a46ac1dc` 比四種畫面一樣，資料庫只差翻地帳的 `flipped_from`；把 `revamp=False` 換成 True 跟合進來那一版比，畫面一樣、資料庫只差那一則行狀的 `kind`）。
 - **修 bug 先寫會紅的測試**：先確認它在修之前真的失敗、失敗的數字跟 QA 回報的一樣，再修。回報時寫「修前重現了什麼」。
 - **「確認並守住」的測試**（程式沒改、一寫就綠，例：假人不買商城的東西）：要證明它抓得到退步，另寫一個暫時的測試檔 import 它，monkeypatch 一個退步（例 `bot_policy.take_turn` 先叫 `mall_buy`、`social.card` 多塞一個「元寶」），跑一次看它紅，再刪掉那個暫時的檔（不提交）。
 - 用正式內容測舊規則的測試，要在 helper 裡把新開關關掉（例 `c.config.precise_actions = False`、`four_tiers.enabled = False`）。新規則另開一個測試檔，不要改寫舊的斷言去迎合新規則。
@@ -168,6 +171,7 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 ## 回報 PM
 
 - 一張回饋單一個 commit；commit 訊息一句英文，結尾 `Co-Authored-By:`（照當時 system 給的那一行）。
+  - **幾張單改在同一個檔、甚至同一個函式裡**（2026-10-21 玉璽碎片改版第 3 批：批本身與 FB-627 都改 `seal_acts.view`）：不必把工作樹改回去再改回來。寫一支 scratchpad 腳本：讀工作樹的檔（CRLF→LF）、照「拿掉哪幾處」換掉（每一處 `assert count == 1`）、`git hash-object -w --stdin --path <檔>` 寫成 blob、`git update-index --add --cacheinfo 100644,<blob>,<檔>` 放進索引——工作樹一個位元組不動，`git diff` 剩下的就是下一張單。先提交最大的那一批，再一張一張 `git add`。每一筆提交之後 `git archive HEAD` 解到 scratchpad 跑那幾個測試檔，確認單獨一筆也是綠的。
 - 推之前合派工指定的分支（衝突兩邊都留）。推完用 `git merge-base --is-ancestor HEAD origin/<分支>` 確認推到了。
   - `天下大勢` 這份 clone 的 `remote.origin.fetch` 只寫了 main 等三條，**`git fetch origin` 不會更新 `origin/dev/*`、`origin/feature/*`**（2026-10-20：推上去了，`origin/dev/conquest-1` 還停在舊的那一版，上面那一行就判成沒推到）。推完先 `git fetch origin refs/heads/<分支>:refs/remotes/origin/<分支>` 再比，或直接看 `git ls-remote origin refs/heads/<分支>`。拿 `origin/feature/<名字>` 當 `test_for` 的 base 之前也照這樣更新一次。
   - 這份 clone 的 `remote.origin.fetch` 只列 `tianxia`、`feature/sanguo-companions`、`main`：`git fetch origin`（或 `git fetch origin <分支>`）**不會**更新 `origin/dev/*`、`origin/develop`，推完馬上比會假失敗、開工時讀到的也可能是舊的。要比之前先 `git fetch origin +refs/heads/<分支>:refs/remotes/origin/<分支>`，或直接 `git ls-remote origin refs/heads/<分支>` 對 `git rev-parse HEAD`（2026-10-20 商城第二批修正那一次）。

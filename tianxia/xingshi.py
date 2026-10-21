@@ -1,7 +1,8 @@
 """領地爭奪第三批 A：〈天下形勢〉——每天 22:00 結算那一刻一篇的旁白（設計 3.10；計畫第五章 Task 16、17，第六章 6.3、6.4）。
 
 開單（Game._xingshi_open，_conquest_tick 換天〔conquest_day.day_turn〕之後）：事實（facts）是上一篇以來的 day_log——收場的易手、守住、相持
-（DayNote.result）、推滿當場易手（by="flip"，翻地與爭搶）、攻方沒人到的作罷、誰下了戰書約戰哪裡（by="letter"；舊季的眾議與主將定奪照舊認得）
+（DayNote.result）、推滿當場易手（by="flip"，翻地與爭搶）、補缺退回原主（by="mend"，玉璽碎片改版第 3 批，不寫是誰）、攻方沒人到的作罷、
+誰下了戰書約戰哪裡（by="letter"；舊季的眾議與主將定奪照舊認得）
 ——加上傍晚還沒打完的那幾場、三條戰線比上一篇往哪一邊動（寫「略偏黃巾」這種詞，不寫數字）、上一篇以來的天下大事
 （不帶數字、不是〈天下形勢〉自己那一句的）；「是日：…」那一句（summary_line）照收場的那幾筆寫。
 伺服器鎖外請模型照事實寫一篇（write；三段式 Game.xingshi_request → write → Game.settle_xingshi），過 clean（轉繁體、去標記、一百二十到八百字、
@@ -35,9 +36,11 @@ NIGHT_FROM, NIGHT_UNTIL = 18, 6  # 【開發】當地幾點到幾點開的單算
 # 推滿當場易手（reason 是推最多的人；這一輪沒人推過就翻的沒有名號）。plan_vote、plan_commander 留給舊季（第二批投票那一版）的 day_log。
 # letter_done／letter_done_plain：那一場已經打完、作罷或正在打的戰書，寫成已經發生的事、照時間順序排在結果前面（FB-610）；
 # fighting_day：白天開的單（管理者「現在就開一篇」）正在打的那一場，不寫「打到入夜」
+# mended／mended_late、summary 的 taken_mended／mended：補缺當場退回原主（by="mend"，玉璽碎片改版第 3 批；不點名起用的人，FB-646，待 joy 潤）——
+# 同一篇裡先被翻走（推滿、攻城戰拿下）的接在那一筆後面寫「旋即又退回」、「是日」併成「某軍拿下某地，旋即被補回」；翻走是上一篇以前的事寫 *_late／mended
 FACT_KEYS = ("taken", "taken_blow", "held", "stalemate", "void", "fighting", "fighting_day", "plan_vote", "plan_commander", "letter",
-             "letter_plain", "letter_done", "letter_done_plain", "flip", "flip_plain", "line")
-SUMMARY_KEYS = ("taken", "held", "stalemate", "void", "none")
+             "letter_plain", "letter_done", "letter_done_plain", "flip", "flip_plain", "mended", "mended_late", "line")
+SUMMARY_KEYS = ("taken", "taken_mended", "mended", "held", "stalemate", "void", "none")
 LEAN_KEYS = ("strong", "up", "slight", "even")
 MOVE_KEYS = ("toward", "still")
 # content.check_xingshi_lines 拿它填一次每一句：填得進去、填完沒有阿拉伯數字
@@ -90,9 +93,12 @@ def _sides(content: Content, sides: list[str]) -> str:
 
 
 def note_fact(content: Content, note: DayNote, over: bool = False) -> str | None:
-    """day_log 的一筆寫成一條事實；認不得的是 None。over：那一場已經打完（或作罷、正在打）的戰書，寫成已經發生的事（FB-610）。"""
+    """day_log 的一筆寫成一條事實；認不得的是 None。over：那一場已經打完（或作罷、正在打）的戰書，寫成已經發生的事（FB-610）；
+    補缺那一筆是這一篇裡它被翻走之後的事（「旋即又退回」，FB-646）。"""
     fact = lines(content)["fact"]
     place = _place(content, note.loc)
+    if note.by == conquest_day.MEND:  # 補缺：不寫是誰（持有者要藏）
+        return fact["mended" if over else "mended_late"].format(side=_side(content, note.side), place=place)
     if note.result == "taken":
         key = "taken_blow" if note.blow else "taken"
         return fact[key].format(side=_side(content, note.taken), margin=note.margin, place=place, who=note.blow)
@@ -149,12 +155,12 @@ def line_values(world: WorldState, content: Content) -> dict[str, int]:
 
 def facts(world: WorldState, content: Content, notes: list[DayNote], lines_then: dict[str, int], rumors_from: int = 0,
           night: bool = True) -> list[str]:
-    """這一篇的事實（新的一張單；照順序、最多 Config.xingshi.facts_max 條）：已經發生的事照時間順序（day_log 的順序：收場、作罷、推滿易手，
-    與那一場已經打完、作罷或正在打的戰書〔寫成「某某下戰書攻某地」，FB-610〕）→ 還沒打完的那幾場（night 是假〔白天開的單〕不寫「打到入夜」）
+    """這一篇的事實（新的一張單；照順序、最多 Config.xingshi.facts_max 條）：已經發生的事照時間順序（day_log 的順序：收場、作罷、推滿易手、
+    補缺退回〔不寫是誰，FB-646〕，與那一場已經打完、作罷或正在打的戰書〔寫成「某某下戰書攻某地」，FB-610〕）→ 還沒打完的那幾場（night 是假〔白天開的單〕不寫「打到入夜」）
     → 三條戰線各一句（偏向、比上一篇往哪一邊動）→ 下一仗打哪裡（還沒開打的戰書；舊季是結算排定的那幾筆，主將定奪的寫原因）→ 上一篇以來的
     天下大事（rumors_from 之後，新的在前；帶數字的〔公告的時刻〕與〈天下形勢〉自己那一句不收）。每一條都不帶阿拉伯數字。"""
     out: list[str] = []
-    over = {i for i, n in enumerate(notes) if _letter_over(world, notes, i)}
+    over = {i for i, n in enumerate(notes) if _letter_over(world, notes, i) or _mend_after(notes, i)}
     done = [(n, i in over) for i, n in enumerate(notes) if _happened(n) or i in over]
     plans = [n for i, n in enumerate(notes) if not _happened(n) and i not in over]
     for note, past in done:
@@ -170,8 +176,8 @@ def facts(world: WorldState, content: Content, notes: list[DayNote], lines_then:
     for note in plans:
         out.append(note_fact(content, note))
     seen = set(out)
-    for note, _ in done:  # 易手那一刻 territory 另發的「落入／收復」：跟收場（或推滿易手）那一條是同一件事
-        if note.result == "taken" or note.by == conquest_day.FLIP:
+    for note, _ in done:  # 易手那一刻 territory 另發的「落入／收復」：跟收場（推滿易手、補缺退回）那一條是同一件事
+        if _taken(note) or note.by == conquest_day.MEND:
             place, side = _place(content, note.loc), _side(content, note.taken or note.side)
             seen |= {territory.FLIP_LINE.format(place=place, side=side), territory.RETAKE_LINE.format(place=place, side=side)}
     for rumor in reversed(world.rumors[rumors_from:]):
@@ -185,8 +191,19 @@ def facts(world: WorldState, content: Content, notes: list[DayNote], lines_then:
 
 
 def _happened(note: DayNote) -> bool:
-    """這一筆是已經發生的事（收場、作罷、推滿易手），不是排下的下一仗（戰書、舊季的眾議與主將定奪）。"""
-    return bool(note.result or note.void or note.by == conquest_day.FLIP)
+    """這一筆是已經發生的事（收場、作罷、推滿易手、補缺退回），不是排下的下一仗（戰書、舊季的眾議與主將定奪）。"""
+    return bool(note.result or note.void or note.by in (conquest_day.FLIP, conquest_day.MEND))
+
+
+def _taken(note: DayNote) -> bool:
+    """這一筆是易手給攻方（攻城戰拿下、推滿當場易手）。"""
+    return note.result == "taken" or note.by == conquest_day.FLIP
+
+
+def _mend_after(notes: list[DayNote], i: int) -> bool:
+    """notes[i] 是補缺退回，而同一塊在這一篇裡、它前面被翻走過（FB-646：「旋即又退回」）。"""
+    note = notes[i]
+    return note.by == conquest_day.MEND and any(_taken(n) and n.loc == note.loc for n in notes[:i])
 
 
 def _letter_over(world: WorldState, notes: list[DayNote], i: int) -> bool:
@@ -204,13 +221,23 @@ def _letter_over(world: WorldState, notes: list[DayNote], i: int) -> bool:
 
 
 def summary_line(notes: list[DayNote], content: Content) -> str:
-    """「是日：…」那一句：這一天收場的那幾場（拿下、守住、相持）、推滿當場易手的（寫成拿下）與攻方沒人到作罷的；都沒有寫「各路按兵」。"""
+    """「是日：…」那一句：這一天收場的那幾場（拿下、守住、相持）、推滿當場易手的（寫成拿下）與攻方沒人到作罷的；都沒有寫「各路按兵」。
+    補缺退回（FB-646）照時間順序：同一篇裡前面拿下的那一句換成「某軍拿下某地，旋即被補回」（taken_mended），前面沒有的寫「某軍補回某地」。"""
     words = lines(content)["summary"]
     parts: list[str] = []
+    taken_at: dict[str, tuple[int, str]] = {}  # 地點 → 拿下那一句在 parts 的第幾個、拿下的那一軍（還沒被補回的）
     for note in notes:
         place = _place(content, note.loc)
-        if note.result == "taken" or note.by == conquest_day.FLIP:
-            part = words["taken"].format(side=_side(content, note.taken or note.side), place=place)
+        if note.by == conquest_day.MEND:
+            if note.loc in taken_at:
+                i, taker = taken_at.pop(note.loc)
+                parts[i] = words["taken_mended"].format(side=taker, place=place)
+                continue
+            part = words["mended"].format(side=_side(content, note.side), place=place)
+        elif _taken(note):
+            taker = _side(content, note.taken or note.side)
+            part = words["taken"].format(side=taker, place=place)
+            taken_at[note.loc] = (parts.index(part) if part in parts else len(parts), taker)
         elif note.result == "held":
             part = words["held"].format(keeper=_side(content, note.keeper), place=place)
         elif note.result == "stalemate":
