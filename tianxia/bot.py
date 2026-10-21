@@ -278,6 +278,8 @@ def create_art(game: Game, rng: random.Random) -> bool:
     照關鍵字表讀（假人不叫模型）；名字走退路字表（看得出來是假人：之後要補模型取名）。伺服器假人與整季機器人共用。"""
     state, content, world = game.state, game.content, game.world
     p = state.player
+    if p.creating is not None and p.creating.paid and p.creating.step == "name":
+        return _name_draft(game)  # 立意時付過心得的單子（上一次取名取不到）：接著取名，不丟掉
     if create.allowed(state, content) is not None or p.stats.get("xinde", 0) - create.price(state, content) < CREATE_RESERVE:
         return False
     if p.creating is not None:
@@ -299,12 +301,21 @@ def create_art(game: Game, rng: random.Random) -> bool:
     if p.creating is None or p.creating.step != "name":
         game.create_cancel()
         return False
+    return _name_draft(game)
+
+
+def _name_draft(game: Game) -> bool:
+    """替成了形的單子取名（退路字表）。都撞名就留著單子（心得立意時付過了），下一次接著取：第一次用原本那一批，
+    之後照這一刻的時辰換一批（不然每次都撞同幾個名字）。"""
+    p = game.state.player
+    draft = p.creating
+    seed = f"自創|{p.name}|{p.created_count}" + (f"|{int((game.now or 0) // 3600)}" if draft.name_tries else "")
+    draft.name_tries += 1
     for salt in range(naming.CLAIM_ATTEMPTS):
-        name = naming.fallback_name(content, f"自創|{p.name}|{p.created_count}", kind, salt=salt)
+        name = naming.fallback_name(game.content, seed, draft.kind, salt=salt)
         game.create_name(name)
         if p.creating is None:
             return True
-    game.create_cancel()
     return False
 
 

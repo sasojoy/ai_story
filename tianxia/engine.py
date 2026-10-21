@@ -702,6 +702,9 @@ class Game:
         fresh.player.bot = old.player.bot  # 伺服器假人的身分與作息跨季保留
         fresh.player.gender, fresh.player.gender_chosen = old.player.gender, old.player.gender_chosen  # 性別跨季保留
         fresh.player.stamina_pills = old.player.stamina_pills  # 回體丹是建角色時送的，換季不再送，剩下的帶著走
+        # 破境丹、重悟帖萬寶閣賣（花元寶買的不能換季就不見），同回體丹剩下的帶著走（Joy 2026-10-21「再研究一下有沒有什麼瑕疵」）
+        fresh.player.legend_items = old.player.legend_items
+        fresh.player.create_rerolls = old.player.create_rerolls
         fresh.player.pills_topped_to = old.player.pills_topped_to  # 補過的不再補（第二季起建的角色在這裡還沒拿贈送）
         fresh.player.pill_day, fresh.player.pills_today = old.player.pill_day, old.player.pills_today  # 換季不能多吃一輪
         fresh.player.sortie_day, fresh.player.sorties_today = old.player.sortie_day, old.player.sorties_today  # 換季不能多出一輪陣
@@ -9735,7 +9738,8 @@ class Game:
             [f"{self.content.config.legend_item_name} -{taken}"] if taken > 0 else []
         )
         # 結果標記是擲骰的結果（「【X】衝開了…」「【X】撞在…」，一定以【開頭）；前面服丹那一句與後面定名的話都不是
-        tag = next((m for m in msgs if m.startswith("【")), msgs[0])
+        # 自創的那一門衝開了是「閉門衝關，〔招〕撞開了…【X】破境」（ascend.FORCED_LINE），不以【開頭，另外認
+        tag = next((m for m in msgs if m.startswith("【") or m.startswith(ascend.FORCED_LINE.split("〔")[0])), msgs[0])
         msgs = self._log(msgs)
         self._menxia_entry(tag, xinde, guide=True, action="cultivate", extra=extra or None)
         return msgs

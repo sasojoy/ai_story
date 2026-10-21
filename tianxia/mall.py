@@ -41,7 +41,7 @@ EFFECTS: dict[str, EffectSpec] = {
     "holding": EffectSpec("consumable", "功法庫多放 {n} 格（這一季）", 999),
     # 破境丹（Joy 2026-10-21「把破境丹也加入商城，取消可以用心得衝」）：收進行囊（PlayerState.legend_items），到了極處服下強行衝關
     "legend": EffectSpec("consumable", "{legend} {n} 顆", 99),
-    # 重悟帖（Joy 2026-10-21「弄個商城道具可以直接重骰，有上限」）：自創成形之後直接重骰一次（PlayerState.create_rerolls，只這一季）
+    # 重悟帖（Joy 2026-10-21「弄個商城道具可以直接重骰，有上限」）：自創成形之後直接重骰一次（PlayerState.create_rerolls，換季帶著走；一門最多 Config.arts.create_reroll_cap 次）
     "create_reroll": EffectSpec("consumable", "自創重骰 {n} 次", 99),
 }
 KIND_NAMES = {"look": "外觀", "consumable": "消耗品", "card": "月卡", "pass": "通行證"}
@@ -107,6 +107,13 @@ class Bought:
 
 def on(content: Content) -> bool:
     return content.config.mall.enabled
+
+
+def item_for(content: Content, effect: str) -> str | None:
+    """賣這一種效果的第一件商品（照 content/mall.json 的順序）；商城關著或沒賣是 None。"""
+    if not on(content):
+        return None
+    return next((item.id for item in content.mall.values() if item.effects.get(effect)), None)
 
 
 def grant_ref(owner: str) -> str:
@@ -501,7 +508,7 @@ def refund(
             if back < legend:
                 took.append(PILLS_USED.format(n=legend - back))
         rerolls = int(bought.data.get("create_reroll", 0))
-        if rerolls and (season is None or bought.season == season):  # 上一季買的換季時已經跟著歸零了
+        if rerolls:  # 重悟帖換季帶著走（同回體丹）：還在手上的收回，用掉的不追
             back = min(rerolls, state.player.create_rerolls)
             state.player.create_rerolls -= back
             took.append(REROLL_BACK.format(n=back))

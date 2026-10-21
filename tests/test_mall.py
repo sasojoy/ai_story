@@ -7,7 +7,7 @@ import random
 import pytest
 from conftest import next_season
 
-from tianxia import mall, roster
+from tianxia import mall, roster, skillview
 from tianxia.characters import name_key, open_characters
 from tianxia.engine import Game
 from tianxia.models import MallItem
@@ -474,3 +474,34 @@ def test_buying_reroll_slips_and_refunding_the_unused(on):
     msgs = _admin(on).admin_mall_refund("沈浪", pid, "買錯了")
     assert "重悟帖收回 1 張" in msgs[0]
     assert open_characters().load("沈浪").player.create_rerolls == 0
+
+
+def test_pills_and_reroll_slips_bought_with_ingots_survive_the_season_change(on):
+    """花元寶買的破境丹、重悟帖換季不能就不見（Joy 2026-10-21「再研究一下有沒有什麼瑕疵」）：同回體丹，剩下的帶著走。"""
+    player = _ready(on)
+    p = player.state.player
+    p.legend_items, p.create_rerolls, p.created_count = 2, 3, 4
+    player._reset_player_for_new_season(p.season_number + 1)
+    p = player.state.player
+    assert (p.legend_items, p.create_rerolls, p.created_count) == (2, 3, 0)
+
+
+def test_the_practice_row_sends_a_player_without_a_pill_to_the_mall(on):
+    """到了極處、手上沒丹：修練頁那一格帶上萬寶閣賣破境丹那一件（Joy 2026-10-21「破境丹沒有可以引導他去商城」）。"""
+    from test_cultivation import equip, kicker_art, ripen
+
+    on.mall["legend_1"] = MallItem(id="legend_1", name="破境丹", price=150, kind="consumable", effects={"legend": 1})
+    game = _ready(on)
+    game.world.claim_skill_name(kicker_art())
+    ripen(equip(game.state))
+    row = lambda: next(r for r in skillview.art_rows(game.state, on, game.world) if r["id"] == "旋風腿")  # noqa: E731
+    game.state.player.legend_items = 0
+    assert row()["cultivate"]["shop"] == "legend_1"
+    game.state.player.legend_items = 1
+    assert row()["cultivate"]["shop"] is None  # 有丹就直接服
+    game.state.player.legend_items = 0
+    game.state.player.art_levels["旋風腿"] = 9
+    assert row()["cultivate"]["shop"] is None  # 還沒到極處，買了也用不上
+    game.state.player.art_levels["旋風腿"] = 10
+    on.config.mall.enabled = False
+    assert row()["cultivate"]["shop"] is None  # 商城關著
