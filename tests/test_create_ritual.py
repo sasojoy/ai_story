@@ -335,3 +335,28 @@ def test_rerolls_are_capped_per_art_not_per_purchase(content):
     assert game.create_reroll() == [create.REROLL_CAPPED.format(cap=cap)]
     assert p.create_rerolls == 3 and p.creating.rerolled == cap  # 骰不了的那一下不扣帖子
 
+
+
+def test_a_paid_draft_can_still_be_named_when_the_season_cap_is_reached(content):
+    """立意就數進這一季的門數：有每季上限時，付過的那一門照樣立得了名（不能卡在那裡、心得白付）。"""
+    content.config.arts.create_per_season = 1
+    try:
+        game = _game(content)
+        _walk(game, reading=create.IntentReading(score=60, attributes=["快"]))
+        assert game.state.player.created_count == 1
+        art, msgs = create.finish(game.state, content, game.world, "流雲步")
+        assert art is not None, msgs
+        assert create.allowed(game.state, content) == create.CAP_LINE.format(n=1)  # 下一門才擋
+    finally:
+        content.config.arts.create_per_season = 0
+
+
+def test_a_bot_keeps_a_paid_draft_and_names_it_next_time(content):
+    """假人取名都撞名時不丟掉付過心得的單子，下一次接著取。"""
+    from tianxia import bot
+
+    game = _game(content)
+    _walk(game, reading=create.IntentReading(score=60, attributes=["快"]))
+    xinde = game.state.player.stats["xinde"]
+    assert bot.create_art(game, random.Random(1))
+    assert game.state.player.creating is None and game.state.player.stats["xinde"] == xinde

@@ -298,6 +298,7 @@ class CreateDraft(BaseModel):
     paid: int = 0  # 立意時付了多少心得（Joy 2026-10-21 改在立意收；0＝還沒付，這一版之前的單子在立名時收）
     rolls: int = 0  # 擲過幾次（成形的亂數種子用）
     rerolled: int = 0  # 用重悟帖重骰過幾次（一門最多 Config.arts.create_reroll_cap）
+    name_tries: int = 0  # 假人取名取了幾輪（都撞名時留著單子下次接著取，換一批名字；bot._name_draft）
     move: str = ""  # 以意成招：模型從立意那一句起的招名（2～4 字；空的用 moves 表的預設名）
     say: str = ""  # 招式出手那一行的一句話（模型寫；空的用 moves 表的）
     rare: bool = False  # 立意時擲中變招（有變招的那一格才擲）
@@ -715,8 +716,8 @@ class PlayerState(BaseModel):
     insight_fx: dict[str, InsightFx] = Field(default_factory=dict)
     arts_migrated: bool = False  # 舊存檔的功效轉成槽做過了沒（arts.migrate 只做一次）
     created_count: int = 0  # 這一季自創付了幾次心得（立意那一刻數；Config.arts.create_per_season、價錢遞增、第一門優惠）；角色每季重來
-    create_rerolls: int = 0  # 重悟帖（萬寶閣）：自創成形之後直接重骰一次（一門最多 create_reroll_cap 次）；角色每季重來
-    creating: CreateDraft | None = None  # 自創走到一半的單子（tianxia/create.py）；取名那一步才付心得
+    create_rerolls: int = 0  # 重悟帖（萬寶閣）：自創成形之後直接重骰一次（一門最多 create_reroll_cap 次）；換季帶著走（同回體丹）
+    creating: CreateDraft | None = None  # 自創走到一半的單子（tianxia/create.py）；立意那一刻付心得（CreateDraft.paid）
     ascension: Ascension | None = None  # 剛破境、還沒看過的破境卡（tianxia/ascend.py）
     holding_bonus: int = 0  # 功法庫多放幾格（萬寶閣的擴充道具，Joy 2026-10-21「一張多放15格，沒有上限」）：只這一季，換季照新角色歸零（library.cap_of 加上它）
     stamina_pills: int = 0  # 回體丹（Config.stamina_pill_name）的數量：建立角色時的內測贈送；跨季保留（Game._reset_player_for_new_season）
@@ -770,7 +771,7 @@ class PlayerState(BaseModel):
     guarded_until_real: float = 0.0  # 雇的保鏢跟到幾時（現實秒）
     xinde_cultivations: int = 0  # 這一季花心得修練了幾次（以心得修練拿掉了，欄位留著讓舊存檔讀得進來）；角色每季重來
     legend_bought: int = 0  # 10-18～10-21 用心得換了幾枚破境丹；換丹拿掉了（Joy 2026-10-21），留著讓舊存檔讀得進來，不再用
-    legend_items: int = 0  # 破境丹（Config.legend_item_name）的數量：探索撿到，玩家在修練頁勾了、衝絕學那一次才服一枚；角色每季重來
+    legend_items: int = 0  # 破境丹（Config.legend_item_name）的數量：探索撿到，玩家在修練頁勾了、衝絕學那一次才服一枚；探索撿到、醫館與萬寶閣買到，換季帶著走（同回體丹）
 
     seen_events: set[str] = Field(default_factory=set)
     # （舊的 event_seen 看過次數已拿掉：joy #16 的輪替取代了 FB-058 的 0.5^次數 遞減。舊存檔裡還有這一欄也讀得進來——

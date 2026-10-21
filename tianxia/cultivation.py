@@ -65,6 +65,15 @@ def cultivate_problem(
     return None
 
 
+def needs_pill(state: GameState, content: Content, world: WorldStateStore, art_id: str) -> bool:
+    """到了極處、只差一枚破境丹（手上沒有）：修練頁那一格引去萬寶閣（Joy 2026-10-21「破境丹沒有可以引導他去商城」）。"""
+    if state.player.legend_items > 0:
+        return False
+    art = team.resolve_art(art_id, content, world)
+    return art is not None and cultivate_problem(state, content, world, art_id, use_legend=True) == CHANCE_LINE.format(
+        name=art.name, pill=content.config.legend_item_name)
+
+
 def cultivate(
     state: GameState, content: Content, world: WorldStateStore, art_id: str, rng: random.Random,
     use_legend: bool = False, gate: bool = True,

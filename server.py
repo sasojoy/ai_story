@@ -1631,6 +1631,7 @@ def menxia_view(game: Game, person: str | None = None) -> dict:
         "gear": game.gear_rows(),
         # 全身的戰力（招式與絕學稿案第四輪；tianxia/might.py）：修練頁人形圖氣血旁邊那個數，換上清單的「→ N」跟它比
         "might": might.now(game.state, game.content, game.world),
+        "legend_items": game.state.player.legend_items,  # 手上的破境丹：服丹衝關有沒有真的擲骰，網頁照它少沒少一枚判斷
         # 自創武學的入口從煉製搬到修練（第四輪）：開關關著、還在序章裡是 None
         "create": {"price": create.price(game.state, game.content), "problem": create.allowed(game.state, game.content)}
         if create.on(game.content) else None,

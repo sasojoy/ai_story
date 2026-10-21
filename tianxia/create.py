@@ -10,7 +10,7 @@
 4. 成形（roll_colors，立意之後馬上擲）：照權重擲四格顏色——第一格一定是權重最高那一路的單色（玩家引導的方向），
    其餘每格照 create_slot_odds 擲單色、雙色、任色。意讀出「不偏」時任色的機會加倍（create_neutral_any_scale）。
    不滿意可以回頭重擺或重寫一次（create_redo，免費）；亂數是「自創｜天機｜名號｜第幾門｜第幾擲」，不碰 Game.rng。
-5. 立名（finish）：自己取名；這一步才付心得。自創的一律是 Config.arts.create_grade（上品，Joy 2026-10-21「自創武學應該保底
+5. 立名（finish）：自己取名（心得在立意那一刻收，Joy 2026-10-21；這一版之前成形、還沒付的單子在這裡收）。自創的一律是 Config.arts.create_grade（上品，Joy 2026-10-21「自創武學應該保底
    都是上品」；多付心得加分拿掉了，「多付心得很莫名其妙」），四格全開；意分＋赤璋只定底子（power_scale_of）；
    威力從第一成起練；注解就是那一句意。
    這一門自己長出一招（以意成招，tianxia/moves.py）：擺式定勢（stance_of）、主屬性定路數、意分定火候（生熟透），
@@ -111,7 +111,8 @@ def allowed(state: GameState, content: Content) -> str | None:
         return IN_PROLOGUE
     if state.player.naming is not None:
         return NAMING_FIRST
-    if cfg.create_per_season and state.player.created_count >= cfg.create_per_season:
+    paid = state.player.creating is not None and state.player.creating.paid  # 立意付過了：這一門已經數進去，照樣走完
+    if cfg.create_per_season and not paid and state.player.created_count >= cfg.create_per_season:
         return CAP_LINE.format(n=state.player.created_count)
     if library.full(state, content):
         return FULL_LINE

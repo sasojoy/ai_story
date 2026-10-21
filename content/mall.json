@@ -5,6 +5,6 @@
   {"id": "rewrite_zhuan", "name": "重修列傳", "note": "休季時，你的列傳能多重寫一次。一季最多買兩張。", "price": 200, "kind": "consumable", "effects": {"zhuan_rewrite": 1}, "limit": {"season": 2}, "draft": "Joy 2026-10-21 定案；說明待 joy 潤"},
   {"id": "rename", "name": "易名帖", "note": "改你的名號，當場生效，江湖史會記上一筆。到設定頁使用。一季一張。", "price": 300, "kind": "consumable", "effects": {"rename": 1}, "limit": {"season": 1}, "draft": "Joy 2026-10-21 定案；說明待 joy 潤"},
   {"id": "holding_15", "name": "藏經匣", "note": "功法庫多放十五格武學與意境，買下就生效，用到這一季結束。買幾張都行。", "price": 300, "kind": "consumable", "effects": {"holding": 15}, "draft": "Joy 2026-10-21「一張多放15格，沒有上限」；名字、說明、價錢待 joy"},
-  {"id": "legend_1", "name": "破境丹", "note": "一顆破境丹，買下就收進行囊。上品練到第十成的武學，到修練頁服下就能強行衝關。", "price": 150, "kind": "consumable", "effects": {"legend": 1}, "draft": "PM 佔位：價錢待 joy"},
-  {"id": "reroll_1", "name": "重悟帖", "note": "自創武學成了形、還沒立名時，同一個架式與意直接再推演一次，三格顏色與變招重擲。買幾張都行，一門武學最多重骰五次；用到這一季結束。", "price": 200, "kind": "consumable", "effects": {"create_reroll": 1}, "draft": "Joy 2026-10-21「一次創造武學的時候可能最多重骰3或是5，總共要買幾張都可以」；PM 佔位：名字、價錢、每門上限 3 或 5 待 joy"}
+  {"id": "legend_1", "name": "破境丹", "note": "一顆破境丹，買下就收進行囊。上品練到第十成的武學，到修練頁服下就能強行衝關。換季也帶著走。", "price": 150, "kind": "consumable", "effects": {"legend": 1}, "draft": "PM 佔位：價錢待 joy"},
+  {"id": "reroll_1", "name": "重悟帖", "note": "自創武學成了形、還沒立名時，同一個架式與意直接再推演一次，三格顏色與變招重擲。買幾張都行，一門武學最多重骰五次；換季也帶著走。", "price": 200, "kind": "consumable", "effects": {"create_reroll": 1}, "draft": "Joy 2026-10-21「一次創造武學的時候可能最多重骰3或是5，總共要買幾張都可以」；PM 佔位：名字、價錢、每門上限 3 或 5 待 joy"}
 ]

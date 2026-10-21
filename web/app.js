@@ -3144,6 +3144,8 @@
     const lg = a.cultivate.legend;
     const glow = has("cultivate") ? ' data-glow="cultivate"' : "";
     if (lg) return `<div class="pk-btns"><button class="btn small primary" data-act="cultivate" data-by="pill"${glow} data-id="${esc(a.id)}">服丹衝關<small>剩 ${lg.count | 0} 枚</small></button></div>`;
+    // 到了極處、手上沒丹：一顆去萬寶閣的鈕，打開就停在破境丹那一件（Joy 2026-10-21「破境丹沒有可以引導他去商城」）。字待 joy 潤
+    if (a.cultivate.shop) return `<div class="pk-btns"><button class="btn small" data-act="mall-goto" data-id="${esc(a.cultivate.shop)}">去萬寶閣<small>買破境丹</small></button></div>`;
     return has("cultivate") ? `<div class="pk-btns"><button class="btn small" data-act="cultivate"${glow} data-id="${esc(a.id)}" disabled>衝關</button></div>` : "";
   }
 
@@ -3761,7 +3763,7 @@
         <p class="muted">花心得立一門自己的功夫。手裡拿什麼、擺什麼架式、心裡存什麼意，都會讓它偏向不同的路數。</p>
         <div class="crow"><span>要立</span><div class="fchips">${kinds}</div></div>
         <div class="cr-forms">${tiles}</div>
-        <p class="mc-cost">心得 ${c.price | 0}（你有 ${c.xinde | 0} 點）・立名那一步才付</p>
+        <p class="mc-cost">心得 ${c.price | 0}（你有 ${c.xinde | 0} 點）・按下立意那一刻收，之後擱下不退</p>
         <button class="btn primary" data-act="create-begin" ${f.form ? "" : "disabled"}>${f.form ? `握起${esc(f.form)}` : "先挑一樣"}<small>下一步：擺個架式</small></button>
       </div>`;
     }
@@ -3811,7 +3813,7 @@
         : `<span class="muted small">萬寶閣的重悟帖可以直接重骰這個形，不必重來（一門最多 ${draft.reroll_left | 0} 次）。</span>`}</div>
       <div class="crow"><span>名字</span><input class="input" id="create-name" maxlength="6" placeholder="2～6 個字，全服不能重名"></div>
       <div class="crow"><span>招名</span><input class="input" id="create-move" maxlength="4" value="${esc(draft.move || "")}" placeholder="2～4 個字"></div>
-      <div class="acts"><button class="btn primary" data-act="create-name">立名<small>心得已在立意時付了</small></button>${redo}${quit}</div>
+      <div class="acts"><button class="btn primary" data-act="create-name">立名<small>${draft.paid ? "心得已在立意時付了" : `心得 ${c.price | 0}`}</small></button>${redo}${quit}</div>
     </div>`;
   }
   // 自創單獨一頁（Joy 2026-10-21「創造武學不要卡在煉成的中間」）：入口在修練頁功法庫的頂上（招式與絕學稿案第四輪從煉製搬來），
@@ -7794,6 +7796,7 @@
           break;
         // 商城（商城第二批）：齒輪旁的錠子鈕與底部第六格都打開那一層（不換頁）
         case "mall-open": await openMall(); break;
+        case "mall-goto": await openMall(); mallPick(el.dataset.id); break; // 別頁引過來買某一件（修練頁沒丹時的破境丹）
         case "mall-close": closeMall(); break;
         case "mall-tab": await mallTabTo(el.dataset.tab); break;
         case "mall-pick": mallPick(el.dataset.id); break;
@@ -7917,12 +7920,13 @@
           // 才播衝關的小動畫：那一門變成絕學是衝開了，不然是彈回來
           const id = el.dataset.id, pill = el.dataset.by === "pill";
           const row = (S.menxia?.owned_arts || []).find((a) => a.id === id);
-          const was = S.menxia;
+          const was = S.menxia?.legend_items;
           await mx("cultivate", { art: id, use_legend: pill });
-          if (row && pill && S.menxia !== was) {
+          if (row && pill && typeof was === "number") {
+            // 看手上的丹（不是那一列的 legend：被拒絕時那一列也會變成 null，例如體力在別處花掉了，那時不能播彈回）
             const now = (S.menxia?.owned_arts || []).find((a) => a.id === id);
             const won = !!now && now.quality === "絕學";
-            if (won || (!!now && (now.cultivate.legend?.count ?? 0) < (row.cultivate.legend?.count ?? 0))) breakAnim(row, won);
+            if (won || (S.menxia?.legend_items ?? was) < was) breakAnim(row, won);
           }
           break;
         }
