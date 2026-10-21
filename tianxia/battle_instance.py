@@ -978,7 +978,7 @@ def resolve_round(
         edge = instance.trend if p.faction == first else 100 - instance.trend
         ratio = p.neili / p.neili_cap if p.neili_cap else 1.0
         out = tactics.war_round(p.kit, move, 1 if coef > 1 else 0, rnd_no, edge, ratio, tactic, _war_rng(instance, name, rnd_no))
-        if out.lines:
+        if out.lines:  # 招一句一行（「〔名〕某某……」），哪一軍的由場景照名號標（Game._battle_rounds 的 side_of），不另寫標頭
             fired.setdefault(p.faction, []).extend(out.lines)
         if out.hp:
             p.neili = max(0.0, min(p.neili_cap, p.neili + p.neili_cap * out.hp))
@@ -1248,9 +1248,8 @@ def resolve_round(
         moved = f"三招交鋒，戰線往{leader}那邊推了{shove_size(round(push))}" if round(push) else "三招交鋒，兩軍持平"
         msgs.insert(0, f"{sides}（{moved}）")
     instance.trend = max(0, min(100, instance.trend + round(push) + gamble_delta + fall_delta))
-    for side in (first, second):  # 這一回合哪一邊有人發動本命戰法（放在固定句之後，回合原因之前插在第二行）
-        if fired.get(side):
-            msgs.append(tactics.WAR_LINE.format(side=names[side], who="；".join(fired[side])))
+    for side in (first, second):  # 這一回合發動的招，一招一行（放在固定句之後，回合原因之前）
+        msgs.extend(fired.get(side, []))
     if tactic is not None:
         gained = instance.trend - trend_before
         for q in instance.participants.values():

@@ -626,6 +626,6 @@ def view(state: GameState, content: Content, world: WorldStateStore) -> dict:
         "colors": [list(c) for c in draft.colors], "colors_text": [arts_mod.color_text(c) for c in draft.colors],
         "redo": draft.redo,
         "power": POWER_LINE.format(pct=round(power_scale_of(content, draft.score + seal_points(state, content)) * 100)),
-        "tactic": tactics.card_text(t) if (t := tactics.of(content, minor_for(state, content, draft))) is not None else "",
+        "tactic": tactics.card_text(t, state.player.name[:1] or tactics.MINOR_TITLE) if (t := tactics.of(content, minor_for(state, content, draft))) is not None else "",
     }
     return base

@@ -333,7 +333,7 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
             # 評分（第三批）：槽裡效果的分數加總，沒有上限；不是衝絕學的門檻（Joy 2026-10-20），只拿來比高下、排武學榜
             "score": arts_mod.score(state, content, world, art),
             # 本命戰法或小戰法那一句（tactics.card_text）：直接寫在卡上，學來的武學靠它看得出跟別門不一樣（Joy 2026-10-21）；沒有是空字串
-            "tactic": tactics_mod.card_text(sig) if (sig := tactics_mod.of_art(content, art)) is not None else "",
+            "tactic": tactics_mod.card_text(sig, tactics_mod.title_of(sig, art)) if (sig := tactics_mod.of_art(content, art)) is not None else "",
             "compare": compare,  # 卷軸卡直接把它寫在功法庫那張卡的鈕上面（改練之前看得到）；點開「詳情」時功法卡裡也有
             "cultivate": {
                 "ok": problem is None, "note": note, "legend": legend, "buy": _buy_choice(state, content, world, art),
@@ -389,7 +389,7 @@ def melt_judge(state: GameState, content: Content, world: WorldStateStore, art: 
         "special": special.name if special is not None else None,
         "ultimate": ult.name if ult is not None else None,
         "tactic": sig.name if sig is not None else None,
-        "tactic_title": tactics_mod.title_of(sig) if sig is not None else None,  # 本命戰法或小戰法
+        "tactic_title": tactics_mod.title_of(sig, art) if sig is not None else None,  # 招名前面那一枚印（本命、看家、私印）
     }
 
 
@@ -573,7 +573,7 @@ def member_card(state: GameState, content: Content, world: WorldStateStore, key:
     if key == PLAYER and (worn_treasure := treasures.card_line(state, content)):
         lines.append(worn_treasure)  # 寶物（裝備四欄設計 2.5）：沒帶或開關關著不寫
     # 本命戰法與小戰法（tactics.py）：身上練著的各一行；同伴練著自己的本命武學也會發動（連招），一樣寫
-    lines += [tactics_mod.card_text(t) for t in (tactics_mod.of_id(content, s, world) for s in (member.wugong_id, member.neigong_id)) if t]
+    lines += [t for t in (tactics_mod.line_of_id(content, s, world) for s in (member.wugong_id, member.neigong_id)) if t]
     if key != PLAYER and member.taught:  # 傳功（Config.chuangong）傳給他的屬性
         lines.append("傳功　" + "、".join(f"{content.config.stat_names.get(k, k)} +{n}" for k, n in member.taught.items() if n))
     if key == PLAYER and (boosts := boost_line(state, content, world)):  # 共鳴與功效只算本人，同伴的卡這一版不寫加成那一行

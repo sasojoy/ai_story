@@ -836,8 +836,9 @@ def test_each_melt_row_says_enough_to_judge_it_and_opens_for_details():
     html = _practice(_judged_rows(), "H.S.meltSel = { arts: [], ins: [] }; H.S.meltOpen = 'arts:w2';", insights=DEEP)
     assert "<span>武學</span>・<span>屬快</span>・<span>精進</span>・<span>6成</span>・<span>威力 12.4</span>" in html
     assert '<i class="down">比身上弱 −2.1</i><i>破甲2</i><i>借力</i>' in html
-    assert '<i class="up">比身上強 +4.5</i><i class="hi">絕招</i>' in html
-    assert '<i>跟身上一樣</i><i class="hi">本命戰法</i>' in html
+    # 招前面蓋印（招式與絕學稿案第一節）：絕招金印「絕」、人物的本命朱印「本命」，後面是招名
+    assert '<i class="up">比身上強 +4.5</i><i class="hi"><b class="tseal gold">絕</b>武1</i>' in html
+    assert '<i>跟身上一樣</i><i class="hi"><b class="tseal red">本命</b>長坂一喝</i>' in html
     assert "<span>意境</span>・<span>屬快</span>・<span>二重</span>・<span>圓融</span>・<span>正</span>" in html and "心得<b>10</b>" in html
     detail = html[html.index('class="mdetail"'):]
     assert "功效：〔破甲〕2 層〔借力〕" in detail and "比身上的甲拳弱一些" in detail and "熔了退回心得 3" in detail

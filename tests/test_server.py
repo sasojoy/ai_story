@@ -1160,7 +1160,7 @@ def _app_functions_in_node(js: str, script: str) -> str:
     consts = [m.group(0) for name in names if (m := re.search(rf"(?m)^  const {name} = .*;$", js))]
     funcs = [
         _js_function(js, f"function {name}(") + "\n  }"
-        for name in ("roundsFold", "withReportLink", "fightCard", "compactRound", "foldTraitItems", "foldTraitText")
+        for name in ("roundsFold", "withReportLink", "fightCard", "trailMoves", "compactRound", "foldTraitItems", "foldTraitText")
         if f"function {name}(" in js
     ]
     prelude = 'const S = { roundsOpen: null };\nconst roundsMore = (open) => (open ? "收起過程 ▴" : "展開過程 ▾");\n'
@@ -1516,7 +1516,9 @@ def test_the_folded_fight_card_leads_with_round_one_and_hides_the_trait_lines():
     seen = _fold_view(cards)
     folded, opened = seen["list"]["shut"], seen["list"]["open"]
     assert len(folded) == 1 and folded[0].startswith("第1回合") and not any("〔" in line for line in folded)
-    assert [line[:4] for line in opened] == ["〔先手〕", "〔險〕沈", "第1回合", "第2回合", "第3回合", "〔化勁〕"]
+    # 清單的一條人在前、招在後（app.js 的 trailMoves，招式與絕學稿案第一節）：「沈浪搶得先機……〔先手〕」
+    assert [line[:4] for line in opened] == ["沈浪搶得", "沈浪兵行", "第1回合", "第2回合", "第3回合", "沈浪以【"]
+    assert opened[0].endswith("〔先手〕") and opened[-1].endswith("〔化勁〕")
     assert seen["list"]["compact"] == "第1回合　對手氣勢 -34，你氣血 -12……"  # 太高時 fitFirstRound 換成的數字行：第一回合的數字一個沒少
     assert 'ul class="rounds"' in seen["list"]["shutHtml"] and seen["list"]["shutHtml"].count('<li class="trait">') == 3
     tale_shut, tale_open = seen["tale"]["shut"], seen["tale"]["open"]

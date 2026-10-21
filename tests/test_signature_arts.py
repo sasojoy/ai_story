@@ -70,7 +70,7 @@ def test_cards_show_the_tactic():
     content, game = _game()
     art = team.player_art(game.state, content, game.world, "liubei_neigong")
     line = traits.card_line(content, art)
-    assert "本命戰法〔仁義聚眾〕起手・每回合必定" in line and "回氣血 4%" in line
+    assert "本命〔仁義聚眾〕起手・每回合必定" in line and "回氣血 4%" in line
     _wear(game, "zhangfei_wugong", "zhangfei_neigong")
     card = skillview.member_card(game.state, content, game.world, PLAYER)
     assert "〔長坂一喝〕出招・每回合 40%" in card and "〔丈八狂瀾〕心法・第 1 回合一直在" in card

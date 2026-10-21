@@ -107,7 +107,7 @@ def test_the_same_tactic_on_two_people_counts_once_player_first():
 def test_cards_say_kind_rate_and_effect():
     content = real_content()
     text = tactics.card_text(content.skills["zhangfei_wugong"].tactic)
-    assert text.startswith("本命戰法〔長坂一喝〕出招・每回合 40%：") and "{" not in text
+    assert text.startswith("本命〔長坂一喝〕出招・每回合 40%：") and "{" not in text  # 招名前面蓋「本命」印（招式與絕學稿案第一節）
 
 
 def _fighter(content):

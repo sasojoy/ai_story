@@ -884,6 +884,12 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 /* 功法庫那張卡的比較句（W6、FB-088）：跟身上同一種那門比，寫在兩顆大鈕上面，改練之前看得到 */
 .art-body .cmp { margin: 6px 0 0; font-size: 12px; line-height: 1.5; color: var(--ink-2); }
 .art-tactic { margin: 8px 0 0; padding: 6px 10px; font-size: 12.5px; line-height: 1.55; color: var(--ink-2); border-left: 3px solid var(--accent); background: color-mix(in srgb, var(--accent) 6%, transparent); border-radius: 0 6px 6px 0; }
+/* 招的印記（招式與絕學稿案第一節，app.js 的 tsealHtml）：看家墨印、本命朱印、絕金印、自創的私印（朱框白底） */
+.tseal { display: inline-grid; place-items: center; min-width: 1.5em; height: 1.5em; padding: 0 3px; margin-right: 4px; border-radius: 3px; font: 700 11px/1 var(--serif, serif); letter-spacing: 0; vertical-align: 1px; transform: rotate(-3deg); color: #fff; background: var(--ink); }
+.tseal.red { background: var(--accent); }
+.tseal.gold { background: var(--gold); }
+.tseal.own { background: transparent; color: var(--accent); box-shadow: inset 0 0 0 1.5px var(--accent); }
+.t-move { margin-left: 2px; font-weight: 600; color: var(--accent); white-space: nowrap; }
 .acts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
 .acts:has(> :only-child) { grid-template-columns: 1fr; }
 .acard .legend, .art-body .legend { display: flex; align-items: center; gap: 10px; min-height: 44px; margin-top: 6px; font-size: 14px; color: var(--gold); cursor: pointer; }

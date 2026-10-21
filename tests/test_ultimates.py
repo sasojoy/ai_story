@@ -76,7 +76,7 @@ def test_only_a_self_made_mastered_art_gets_an_ultimate_named_after_it():
     mine = team.player_art(game.state, content, game.world, art.id)
     ult = traits.ultimate_of(content, mine)
     assert ult is not None and ult.name == "裂岳狂風拳" and ult.kind == "swift"  # 層數最多的是快：先手的絕招
-    assert traits.card_line(content, mine) is None or "絕招〔裂岳狂風拳〕" in traits.card_line(content, mine)
+    assert traits.card_line(content, mine) is None or "絕〔裂岳狂風拳〕" in traits.card_line(content, mine)
     game.state.player.art_quality[art.id] = "上品"
     assert traits.ultimate_of(content, team.player_art(game.state, content, game.world, art.id)) is None
     assert traits.ultimate_of(content, team.player_art(game.state, content, game.world, "guanyu_wugong")) is None
