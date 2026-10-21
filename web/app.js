@@ -1557,6 +1557,9 @@
   const MOVE_ICON = '<path d="M13 3l-3 7h5l-4 11 8-10h-5z"/>';
   const SHORT_SUB = { "act:rest": "回體力", "act:call": "挑一位" };  // 求見先打開名單挑人（FB-044：以前又寫一次「求見」；挑了人才花體力）
   const TALKED_OUT = "已經談滿", TALKED_OUT_SUB = "已談滿";  // 談滿了的求見（Game._talked_out_note 的開頭）在行動列格子裡的短說法（待 joy 潤）
+  // 灰格小字最多六個字（一行約 60 px、10 px 的字不換行，同 sortie.OUT_NOTE 的註解）。原因比這長的：格子寫短的，整句放行動列底下那一行
+  // （actionBar 的 noted 第三項 → actNotesHtml）。FB-664：交友灰著、這裡沒有人時（engine.SOCIAL_NO_ONE），10 個字的整句在 375 寬兩頭被切掉
+  const SOCIAL_NO_ONE = "這裡沒有能說上話的人", SOCIAL_NO_ONE_SUB = "沒有人";  // 待 joy 潤
   // 出陣（出陣探索與地盤設計第二節）：出陣開著時（m.sortie）遊歷那一格叫「出陣」，散人、不在戰線上的地點沒有出陣鈕時灰著寫「不在戰線」（待 joy 潤）
   const SORTIE_CELL = { name: "出陣", none: "不在戰線" };
   const SORTIE_LEFT = /今日還能 (\d+) 次/; // 鈕上的「今日還能 N 次」：格子小字寫「今日 N 次」
@@ -1778,7 +1781,7 @@
     // （只會花體力換同一句打發，Game._brush_off），選單上只剩直接列的「求見某某」（設計 9.1）：社交那一格改放它。
     // 交友或求見名單（兩位以上）在選單上時照舊，這顆收在摺疊裡
     const loneCall = m.options.find((o) => o.id.startsWith("call:") && o.id !== "call:back");
-    const noted = []; // 畫出來、伺服器又寫了說明的格子：[格子上的名字, 選項 id]（行動列底下那幾行，見 actNotesHtml）
+    const noted = []; // 畫出來、伺服器又寫了說明的格子：[格子上的名字, 選項 id（, 整句）]（行動列底下那幾行，見 actNotesHtml）
     // 探索三選一（出陣探索與地盤設計第三節）：三顆畫在探索那一格點開的卡上，不掉進「此地還能做」
     // 找素材分支（第 32 項）畫在「找素材」底下那一排，不算進三選一的那幾顆
     const modes = m.options.filter((o) => o.id.startsWith(EXPLORE_PREFIX) && !o.id.startsWith(GATHER_BRANCH));
@@ -1798,7 +1801,10 @@
       const lone = o.id.startsWith("call:");
       const [label, detail] = optParts(o);
       const name = lone ? "求見" : label;  // 格子窄：名字寫「求見」，人物的名字放在下面一行
-      noted.push([name, o.id]);
+      // 灰著、原因太長的交友（一類一顆開著時單人地點的交友是 act:socialize，不是 call:）：格子寫短的，整句帶句號放底下那一行（FB-664）。
+      // 單人的求見（lone）伺服器自己寫了同一句（action_notes），不動
+      const longWhy = !o.enabled && !lone && (detail === SOCIAL_NO_ONE || detail.startsWith(TALKED_OUT));
+      noted.push(longWhy ? [name, o.id, `${detail}。`] : [name, o.id]);
       // 按不下去的原因：標籤括號裡寫的是體力就是「體力不夠」，寫別的就照寫；整句太長、格子裝不下（約 60 px、不換行）時只留
       // 最後一小句（例：挑戰本人打贏之後「剛吃了敗仗，閉門不見」只寫「閉門不見」，T4）
       // 談滿了的求見（「已經談滿 3 輪，第 1 週・週日 00:00 之後再來」）：最後一小句是換日的那一刻，格子裝不下會被切成碎片，
@@ -1809,7 +1815,8 @@
       const wheel = d.key === "explore" && modes.length > 0 && o.enabled;
       const sub = wheel ? EXPLORE_SUB
         : o.enabled ? (lone ? label.replace(/^求見/, "") : left ? `今日 ${left[1]} 次` : (SHORT_SUB[o.id] || detail.replace(/^體力 (\d+).*$/, "體力 $1")))
-        : lone && detail.startsWith(TALKED_OUT) ? TALKED_OUT_SUB
+        : detail === SOCIAL_NO_ONE ? SOCIAL_NO_ONE_SUB
+        : detail.startsWith(TALKED_OUT) ? TALKED_OUT_SUB
         : SORTIE_USED.test(detail) ? SORTIE_FULL_SUB
         : (detail && !detail.startsWith("體力") ? detail.split("，").pop() : "體力不夠");
       // 體力之後還有說明（遊歷的「體力 10・2 路對手・必敗」）：挑出勝算那一段另起一行（FB-044；對手數放不下就不寫）。
@@ -1901,7 +1908,9 @@
   const HOWTO_ENTRY = '<p class="howto-entry"><button class="linkish" data-act="howto-open" aria-haspopup="dialog">玩法說明 ›</button>這一季在打什麼、名望怎麼來、投靠與軍令</p>';
   function actNotesHtml(m, noted) {
     const notes = m.action_notes || {};
-    const rows = noted.filter(([, id]) => notes[id]).map(([name, id]) => `<p><b>${esc(name)}</b>${esc(notes[id])}</p>`);
+    // full（可有可無）：格子裡寫了短說法的灰格自己帶整句（FB-664），蓋過伺服器那一句——伺服器的「結識這裡的人」說的是按得下去的時候。
+    // 伺服器沒給這一格的說明（舊版、序章裡是空的）就照舊不畫：有沒有這一行由伺服器說了算，這裡只換句子
+    const rows = noted.filter(([, id]) => notes[id]).map(([name, id, full]) => `<p><b>${esc(name)}</b>${esc(full || notes[id])}</p>`);
     if (m.status && m.status.howto_entry) rows.push(m.status.renown ? HOWTO_ENTRY.replace("名望怎麼來", "名聲怎麼來") : HOWTO_ENTRY);  // 名聲開著時那一節叫「名聲」
     return rows.length ? `<div class="act-notes">${rows.join("")}</div>` : "";
   }
