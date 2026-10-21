@@ -136,7 +136,7 @@ def tactic_defs(content: Content, lo: Loadout) -> list[TacticDef]:
     return out + list(lo.highs)
 
 
-ULTIMATE_TITLE = "絕招"
+ULTIMATE_TITLE = tactics.ULTIMATE_SEAL  # 絕招那一行蓋金印「絕」（招式與絕學稿案第一節）
 MASTERED = "絕學"
 
 
@@ -186,9 +186,9 @@ def card_line(content: Content, art: MartialArt) -> str:
     內容沒有功效（沒有 traits.json）就是空字串，卡片不畫這一行。
     本命武學另起一行寫本命特效（signature.card_text：名字、說明、數字），有沒有 traits.json 都寫。"""
     sig = tactics.of_art(content, art)  # 本命戰法、學來的武學的小戰法、自創借來的小戰法
-    tail = tactics.card_text(sig) if sig is not None else ""
+    tail = tactics.card_text(sig, tactics.title_of(sig, art)) if sig is not None else ""
     ult = ultimate_of(content, art)
-    if ult is not None:  # 絕學立招：「絕招〔名〕乘勢・剋中對手後 100%：……」
+    if ult is not None:  # 絕學立招：「絕〔名〕乘勢・剋中對手後 100%：……」
         tail = tactics.card_text(ult, ULTIMATE_TITLE)
     if not content.traits.general:
         return tail

@@ -6297,6 +6297,8 @@ class Game:
         names = sorted(owner, key=len, reverse=True)  # 名號長的先比：「沈浪」不能先認走「沈浪子」
 
         def side_of(item: str) -> str:
+            if item.startswith(tactics.LEAD) and "〕" in item:  # 招那一句「〔招名〕某某……」：照招名後面的名號認
+                item = item.split("〕", 1)[1]
             who = next((n for n in names if item.startswith(n)), None)
             fid = owner[who] if who is not None else next((f for f, nm in sides.items() if item.startswith(nm)), None)
             return SIDE_TAG.format(side=sides[fid]) if fid in sides else ""

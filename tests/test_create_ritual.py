@@ -194,7 +194,8 @@ def test_a_created_art_carries_the_minor_tactic_shown_before_naming(real):
     attribute = create.affinity_of(draft.colors)[0]
     assert source in create.minor_pool(real, "武學", attribute)
     shown = game.create_view()["draft"]["tactic"]
-    assert shown == tactics.card_text(tactics.of(real, source)) and "小戰法" in shown
+    seal = game.state.player.name[:1]  # 自創的招蓋創的人名號的第一個字（私印，招式與絕學稿案第一節）
+    assert shown == tactics.card_text(tactics.of(real, source), seal) and shown.startswith(seal + "〔")
     game.create_name("追影拳")
     art = team.resolve_art("追影拳", real, game.world)
     assert art.tactic_from == source and tactics.of_art(real, art) is tactics.of(real, source)

@@ -102,7 +102,9 @@ CLICK = """const tap = async (act) => { const el = { dataset: { act }, classList
 
 def _sided(html):
     """戰報裡「〔官軍〕」開頭的那一句（有人發動戰法；開局的【基礎吐納】就帶小戰法），網頁畫成陣營的小章（觀戰的是官軍：官軍・我方）。"""
-    return _text(html).replace("〔官軍〕", "官軍・我方")
+    import re
+    # 網頁把「〔招名〕某某……」畫成「某某……〔招名〕」（app.js 的 trailMoves，招式與絕學稿案第一節）
+    return re.sub(r"〔官軍〕〔([^〕]+)〕([^〔]*?)(?=【|$)", r"官軍・我方\2〔\1〕", _text(html))
 
 
 # ── 只能觀戰的人：收成一行，點了攤開 ─────────────────────────────

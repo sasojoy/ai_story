@@ -1299,7 +1299,13 @@
   // 「剛剛」的戰鬥卡片：有「過程」那一行（roundsFold 認得出來，卡片因此變了）連結就在那一行裡，沒有才接在最後一段的句尾
   function fightCard(card, id) {
     const folded = roundsFold(card, id);
-    return folded !== card ? folded : withReportLink(card, id);
+    return trailMoves(folded !== card ? folded : withReportLink(card, id));
+  }
+  // 戰報裡招、功效、狀態那一句引擎寫成「〔疾風追影〕某某腳下一錯……」；畫面上人在前、招在後（招式與絕學稿案第一節）：
+  // 「某某腳下一錯……〔疾風追影〕」，招名畫成一枚小籤。只動清單的一條（<li>），決戰那一條前面的陣營小標籤留在最前面
+  function trailMoves(html) {
+    const MOVE_LEAD = /(<li[^>]*>(?:<span class="b-tag">[^<]*<\/span>)?)〔([^〕<\n]{1,12})〕([^<\n]+)/g;
+    return String(html).replace(MOVE_LEAD, (all, head, name, rest) => `${head}${rest}<span class="t-move">〔${name}〕</span>`);
   }
 
   // 收著的「過程」第一回合最多兩行、而且不藏任何數字（PM 2026-10-05）：句子放得進兩行就照原樣；放不進就整句省略，只留數字
@@ -1562,7 +1568,7 @@
         const w = sides[name];
         return w ? `<li class="b-side side-${esc(w.id)}${w.mine ? " mine" : ""}"><span class="b-tag">${name}${w.mine ? "・我方" : ""}</span>` : tag;
       });
-      const list = `<ul class="b-lines">\n${items}</ul>`;
+      const list = `<ul class="b-lines">\n${trailMoves(items)}</ul>`;
       if (newest) {
         newest = false;
         return `<div class="b-round latest"><p class="b-rhead">第 ${n} 回合</p>${list}</div>\n`;
@@ -2602,8 +2608,8 @@
       const j = it.j;
       sub = [it.kind, `屬${it.attr}`, it.gen, `${it.a.level}成`, it.power !== null ? `威力 ${it.power}` : ""].filter(Boolean);
       if (it.diff !== null) tags.push(it.diff > 0 ? `<i class="up">比身上強 ${meltNum(it.diff)}</i>` : it.diff < 0 ? `<i class="down">比身上弱 ${meltNum(it.diff)}</i>` : "<i>跟身上一樣</i>");
-      if (j.tactic) tags.push(`<i class="hi">${esc(j.tactic_title || "本命戰法")}</i>`);
-      if (j.ultimate) tags.push(`<i class="hi">絕招</i>`);
+      if (j.tactic) tags.push(`<i class="hi">${tsealHtml(j.tactic_title || "本命")}${esc(j.tactic)}</i>`);
+      if (j.ultimate) tags.push(`<i class="hi">${tsealHtml("絕")}${esc(j.ultimate)}</i>`);
       const tr = j.traits || [];
       tr.slice(0, 2).forEach((t) => tags.push(`<i>${esc(t.name)}${t.layers > 1 ? t.layers : ""}</i>`));
       if (tr.length > 2) tags.push(`<i>+${tr.length - 2}</i>`);
@@ -2629,8 +2635,8 @@
       if ((a.slots || []).length) lines.push(`意境槽 ${a.slots.length} 格：${a.slots.map((t) => (t ? `「${esc(t.name)}」〔${esc(t.skill)}〕${esc(t.mark)}` : "空")).join("、")}`);
       if ((j.traits || []).length) lines.push(`功效：${j.traits.map((t) => `〔${esc(t.name)}〕${t.layers > 1 ? `${t.layers} 層` : ""}`).join("")}`);
       if (j.special) lines.push(`特別功效〔${esc(j.special)}〕`);
-      if (j.ultimate) lines.push(`絕招〔${esc(j.ultimate)}〕`);
-      if (j.tactic) lines.push(`${esc(j.tactic_title || "本命戰法")}〔${esc(j.tactic)}〕`);
+      if (j.ultimate) lines.push(`${tsealHtml("絕")}〔${esc(j.ultimate)}〕`);
+      if (j.tactic) lines.push(`${tsealHtml(j.tactic_title || "本命")}〔${esc(j.tactic)}〕`);
       if (a.compare) lines.push(esc(a.compare));
       if (a.relearn) lines.push(esc(a.relearn));
     } else {
@@ -2769,6 +2775,14 @@
     : e.special ? `<i class="fx sp">${esc(e.name)}</i>`
     : `<i class="fx${e.maybe ? " maybe" : ""}">${esc(e.name)}${e.maybe ? "" : lvHtml(e.layers)}</i>`;
   const fxHtml = (fx, cls) => (Array.isArray(fx) && fx.length ? `<span class="fxs${cls ? ` ${cls}` : ""}">${fx.map(fxOne).join("")}</span>` : "");
+  // 招的印記（招式與絕學稿案第一節）：伺服器寫「看家〔拄棍守村〕應招・…」「本命〔…〕」「絕〔…〕」「沈〔…〕」（自創：創的人名號第一個字），
+  // 開頭那幾個字畫成一枚印——看家墨印、本命朱印、絕金印、其餘是私印；後面照字寫
+  const TSEAL = { 看家: "ink", 本命: "red", 絕: "gold" };
+  const tsealHtml = (word) => `<b class="tseal ${TSEAL[word] || "own"}">${esc(word)}</b>`;
+  function tacticHtml(text) {
+    const m = /^([^〔]{1,2})〔/.exec(String(text || ""));
+    return m ? `${tsealHtml(m[1])}${esc(String(text).slice(m[1].length))}` : esc(text || "");
+  }
   // 純文字版（清單的小字、title）：「掠影二重・流光」
   const fxText = (fx) => (Array.isArray(fx) ? fx.map((e) => (e.grand || e.special ? e.name : `${e.name}${FX_LAYERS[e.layers] || ""}`)).join("・") : "");
 
@@ -2916,7 +2930,7 @@
         ${why ? `<p class="train-why">${esc(why)}</p>` : ""}
         <div class="lvline"><span>${esc(a.kind)}${a.attribute ? `・屬${esc(a.attribute)}` : ""}・收${esc(a.affinity || "")}</span></div>
         ${slotsHtml(a, x)}
-        ${a.tactic && !info ? `<p class="art-tactic">${esc(a.tactic)}</p>` : ""}
+        ${a.tactic && !info ? `<p class="art-tactic">${tacticHtml(a.tactic)}</p>` : ""}
         ${compare}
         ${switchBtn}
         ${S.artNote && S.artNote.id === a.id ? `<div class="msg art-result">${S.artNote.html}</div>` : ""}
@@ -3286,8 +3300,8 @@
     (j.traits || []).forEach((t) => tags.push(`<i class="tr${t.tier ? ` t${t.tier}` : ""}">${t.tier && TRAIT_TIERS[t.tier] ? `<em>${TRAIT_TIERS[t.tier]}</em>` : ""}${esc(t.name)}${t.layers > 1 ? `<small>${t.layers} 層</small>` : ""}</i>`));
     if (j.special) tags.push(`<i class="tr t2"><em>中</em>${esc(j.special)}</i>`); // 來路帶的特別功效：中階
     (j.dormant || []).forEach((n) => tags.push(`<i class="tr off"><em>未開</em>${esc(n)}</i>`));
-    if (j.ultimate) tags.push(`<i class="hi">絕招〔${esc(j.ultimate)}〕</i>`);
-    if (j.tactic) tags.push(`<i class="hi">${esc(j.tactic_title || "本命戰法")}〔${esc(j.tactic)}〕</i>`);
+    if (j.ultimate) tags.push(`<i class="hi">${tsealHtml("絕")}〔${esc(j.ultimate)}〕</i>`);
+    if (j.tactic) tags.push(`<i class="hi">${tsealHtml(j.tactic_title || "本命")}〔${esc(j.tactic)}〕</i>`);
     (a.slots || []).forEach((t) => tags.push(t ? `<i class="tr t2"><em>槽</em>「${esc(t.name)}」〔${esc(t.skill)}〕${esc(t.mark)}</i>` : `<i class="tr off">空槽</i>`));
     return `<div class="made-card">
       <div class="mc-head">${seal(a.quality, true)}<div><b>【${esc(a.name)}】</b><small>${sub.map(esc).join("・")}</small></div>
@@ -3451,7 +3465,7 @@
       <div class="cr-rings">${rings}</div>
       <p class="muted small">自創的功夫一律${seal(grade)}${esc(grade)}，${c.slots[grade] | 0} 格全開。每一格只收自己顏色的意境，八色一圈的什麼都收。</p>
       ${draft.power ? `<p class="muted small">${esc(draft.power)}</p>` : ""}
-      ${draft.tactic ? `<p class="art-tactic">${esc(draft.tactic)}</p>` : ""}
+      ${draft.tactic ? `<p class="art-tactic">${tacticHtml(draft.tactic)}</p>` : ""}
       ${draft.redo > 0 ? `<p class="muted small">不滿意這個形，可以免費重來一次。</p>` : ""}
       <div class="crow"><span>名字</span><input class="input" id="create-name" maxlength="6" placeholder="2～6 個字，全服不能重名"></div>
       <div class="acts"><button class="btn primary" data-act="create-name">立名開派<small>心得 ${c.price | 0}</small></button>${redo}${quit}</div>
@@ -5707,7 +5721,7 @@
     if (S.news === "reports") {
       const r = S.reports;
       if (!r) body = '<p class="muted">載入中…</p>';
-      else if (S.reportOpen && r.selected != null) body = `<button class="linkish back" data-act="report-list">‹ 全部戰報</button><div class="card report-detail">${gaugeHtml(r.gauge)}${roundBlocks(r.detail, r.gauge, r.selected)}</div>`;
+      else if (S.reportOpen && r.selected != null) body = `<button class="linkish back" data-act="report-list">‹ 全部戰報</button><div class="card report-detail">${gaugeHtml(r.gauge)}${trailMoves(roundBlocks(r.detail, r.gauge, r.selected))}</div>`;
       else if (!r.list.length) body = `<div class="card">${r.detail}</div>`;
       else {
         // 決戰與奪璽單挑另外一組排在最上面，不跟遊歷野怪混在一起（Joy 2026-10-14「這種大事件的決戰不應該跟一般的放在一起被洗掉」）
