@@ -163,7 +163,9 @@ def edict_sense(world: WorldState, content: Content) -> int:
 
 
 def edict_cultivate(world: WorldState, content: Content) -> float:
-    """頒詔：修練升品的機會倍數（cultivation.odds_for，跟寶物同一個位置）；沒有是 1。"""
+    """頒詔的第二半：修練升品的機會倍數（cultivation.odds_for 只叫這一處，跟寶物同一個倍數位置）；沒有是 1。
+    【等 main 合回來再定換成什麼】（PM 2026-10-21：main 上 Joy 的武學重構拿掉了「修練衝品質」）：這是頒詔第二半唯一的掛點，
+    要換就換這個函式（與 odds_for 那一處呼叫）；Config.seal.revamp.acts.cultivate 設 1 等於拿掉這一半。"""
     factor = 1.0
     if on(content):
         for _ in live(world, "banzhao"):
@@ -374,7 +376,7 @@ def figure_targets(state: GameState, content: Content, until: float) -> list[dic
         why = (PINNED if pinned(state.world, fid) is not None else HERE if now.location == here
                else CLASH if clash(state, content, fid, until) else "")
         place = content.locations[now.location].name if now.location in content.locations else now.location
-        out.append({"id": fid, "name": f"{fig.name}（{place}）", "why": why})
+        out.append({"id": fid, "name": fig.name, "where": place, "why": why})  # where：他此刻在哪（畫面寫在名字旁）
     return out
 
 
@@ -388,14 +390,14 @@ def person_targets(state: GameState, content: Content) -> list[dict]:
             continue
         fid = figures.of_character(content, cid)
         gone = fid is not None and figures.state_of(state, content, fid).status != "active"
-        out.append({"id": cid, "name": ch.name, "why": GONE if gone else ""})
+        out.append({"id": cid, "name": ch.name, "where": "", "why": GONE if gone else ""})
     return out
 
 
 def line_targets(state: GameState, content: Content) -> list[dict]:
     from .rules import trend_name  # noqa: PLC0415
 
-    return [{"id": line, "name": trend_name(content, line), "why": ""} for line in lines(content, state.world)]
+    return [{"id": line, "name": trend_name(content, line), "where": "", "why": ""} for line in lines(content, state.world)]
 
 
 def targets(state: GameState, content: Content, kind: str, until: float) -> list[dict]:
@@ -508,8 +510,9 @@ def view(
     stamp: Callable[[float], str],
 ) -> dict | None:
     """碎片卡上的獨門行動（status.seal.act；碎片卡本來就只給持有者自己）：哪一種、說明、還剩幾次、按不按得下去與原因、這一片此刻生效中的
-    那一句、能指定的目標（每一個可以帶灰掉的原因）、要不要挑一邊（sides）、確認的問句（{target}、{side} 由畫面換）。改版關著、手上
-    沒有有行動的碎片是 None。"""
+    那一句、能指定的目標（id、name、where〔引將：他此刻在哪；其他是空的〕、why〔灰掉的原因〕）、要不要挑一邊（sides）、確認的問句
+    （{target} 換成目標的 name、{side} 換成挑的那一軍，由畫面換）。改版關著、手上沒有有行動的碎片是 None。
+    入口畫面的三種畫法見 docs/superpowers/specs/2026-10-21-玉璽碎片改版-草圖/第2批/（等企劃者挑）。"""
     held = mine(state, content, reg)
     if held is None:
         return None

@@ -565,6 +565,22 @@ def test_chenglu_makes_the_clinic_free_in_its_region():
 
 
 @pytest.mark.slow
+def test_chenglu_heals_someone_without_a_coin():
+    """不收錢就不看銀兩：一兩都沒有也治得了（平常是「銀兩不足」）。"""
+    from tianxia import team
+
+    c, w, g = _holder("chenglu", at="yingchuan_wilds")
+    patient = _person(c, w, "窮人", side="guan", at="yingchuan")
+    patient.state.player.member.injury = 12.0
+    patient.state.player.stats["silver"] = 0
+    CharacterStore(w.db).save(patient.state)
+    assert team.heal_problem(patient.state, c, patient.state.player.member) is not None
+    _use(c, w)
+    injury = _do(c, w, "窮人", lambda game: (game.heal(), game.state.player.member.injury)[1])
+    assert injury == 0
+
+
+@pytest.mark.slow
 def test_chenglu_does_not_free_the_clinic_elsewhere():
     from tianxia import team
 
