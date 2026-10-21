@@ -298,6 +298,61 @@ def test_region_labels_do_not_overlap_on_a_phone(profile, vw, vh):
     assert run(game, OVERLAP.replace("VW", str(vw)).replace("VH", str(vh))) == []
 
 
+# FB-648：開季那一刻量不到的局面——翻地中名字框會變大（攻方在推多一條進度條、剛易手多一行「冷卻 N 分」），你站的那一處多朱圈與旗。
+# QA 量到的那幾組（試玩回饋 FB-648 與檔尾那一節，scratchpad 的 lbl.py、lbl2.py）：黃巾推潁川郊野 40（甲）、汝南荒野官軍 65／黃巾 12（乙）、
+# 潁水河畔剛被黃巾推滿在冷卻（丙）；上一批開發的 test_world_map.flipping() 那一組也一起量
+def _qa_push(game, combo):
+    w, c = game.state.world, game.content
+    pushes = {"甲": [("yingchuan_wilds", "huang", 40)], "乙": [("runan_wilds", "guan", 65), ("runan_wilds", "huang", 12)], "丙": [("yingshui", "huang", 100)]}
+    for k in combo:
+        for loc, side, n in pushes[k]:
+            conquest.push(w, c, loc, side, "推" + k + side, n, "attack")
+    return game
+
+
+@pytest.mark.parametrize("vw,vh", PHONES)
+@pytest.mark.parametrize("profile", ["weekend", "season21"])
+def test_fb648_region_labels_do_not_overlap_while_flipping(profile, vw, vh):
+    """FB-648：翻地進行中（潁川郊野有進度條、潁水河畔在冷卻）你站潁川郡，375／360 寬名字框互壓（修前 375 寬 4 對、360 寬 6 對）。
+    名字框照樣只貼著小圖擺（企劃者選的乙）；第一輪的位置擺不開時第二輪沿著小圖四邊滑、你的朱圈照圓的算、鄰區出口原本的位置也讓開。
+    QA 的幾組（甲丙、甲乙丙、只有甲、只有丙）與上一批的 flipping()，你站潁川郡、長社、汝南，每一個地圖框都 0 對。"""
+    from test_world_map import flipping
+
+    for at in ("yingchuan", "changshe", "runan"):
+        for combo in ("甲丙", "甲乙丙", "甲", "丙", None):
+            game = _game(profile=profile, at=at)
+            game = _qa_push(game, combo) if combo else flipping(game)
+            if combo and "丙" in combo:
+                assert game.map_state()["places"]["yingshui"]["cool"]  # 剛易手：冷卻那一行在
+            assert run(game, OVERLAP.replace("VW", str(vw)).replace("VH", str(vh))) == [], (at, combo)
+
+
+@pytest.mark.parametrize("vw,vh", [(375, 604), (375, 479)])
+def test_fb648_a_neighbour_exit_never_lands_on_a_name_frame(vw, vh):
+    """FB-648 同一個原因的另一種：第一輪擺得下名字框，可是鄰區出口（regionExits 在名字框擺好之後沿著邊滑）怎麼滑都會壓到名字框——
+    洛陽、你站大將軍府、大將軍府被對面推（框下多一條進度條）。這種也當作第一輪沒擺好，第二輪把出口原本的位置讓開重擺。"""
+    game = _game(profile="season21", at="dajiangjun_fu")
+    w, c = game.state.world, game.content
+    holder = game.map_state()["places"]["dajiangjun_fu"]["control"]
+    conquest.push(w, c, "dajiangjun_fu", next(s for s in ("guan", "huang") if s != holder), "推甲", 40, "attack")
+    assert game.map_state()["places"]["dajiangjun_fu"]["tug"]
+    assert run(game, OVERLAP.replace("VW", str(vw)).replace("VH", str(vh))) == []
+
+
+@pytest.mark.parametrize("vw,vh", [(360, 452), (360, 436)])
+def test_fb648_when_the_crowded_corner_cannot_fit_the_rest_stays_clean(vw, vh):
+    """FB-648 還沒解的那一種（等企劃者挑畫法，見試玩回饋 FB-648）：360 寬、你站潁川郡、潁川郡自己被推（框下多一條進度條）、潁水河畔在冷卻——
+    嵩山、潁川那一角照現在的畫法怎麼擺都放不下（第二輪一起找把每一種擺法試完）。擺不開時反覆把壓到東西的那幾處換位置，壓到的只留在那一角，
+    汝南那一頭不受連累（修前汝南集市壓譙縣）。"""
+    game = _game(profile="season21")
+    w, c = game.state.world, game.content
+    conquest.push(w, c, "yingchuan", "huang", "推甲", 40, "attack")
+    conquest.push(w, c, "yingshui", "huang", "推乙", 100, "attack")
+    bad = run(game, OVERLAP.replace("VW", str(vw)).replace("VH", str(vh)))
+    corner = {"yingchuan", "yingshui", "songshan_foot", "deep_mountain", "jade_cave", "yingchuan_academy"}
+    assert bad and all(x in corner for _, a, b in bad for x in (a, b.split(":")[-1])), bad
+
+
 def test_labels_hug_their_icons_without_leader_lines():
     """企劃者 2026-10-21 從對比圖選乙：名字框不拉細點線回小圖，只在緊貼小圖的那幾個位置挑（右、左、下、上與上下左右錯開）；
     畫出來沒有細線那一組，每一個名字框最近的那一點離自己的小圖不遠。"""

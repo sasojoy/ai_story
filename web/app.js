@@ -5935,23 +5935,30 @@
   // 鄰區出口的字擺哪（名字框擺好之後）：貼著出去的那一邊、往框裡收 3px，壓到名字框或小圖就沿著那一邊滑開（近的先，最多 120px），
   // 都不行挑壓得最少的。回 [{ to, text, box: [左, 上, 右, 下]（螢幕 px） }]
   const R_EXIT_SLIDE = [0, ...Array.from({ length: 20 }, (_, i) => (i % 2 ? -1 : 1) * 6 * (Math.floor(i / 2) + 1) * 2)];
-  function regionExits(base, rid, v, vw, vh, labels = []) {
+  // 鄰區出口的字能擺的那一塊（螢幕 px：取景框與上面那一排、地圖框的交集）與沿著邊滑 d px 的那一格
+  function regionExitRoom(v, vw, vh) {
     const scr = (x, y) => [vw / 2 + (x - v.cx) * v.s, vh / 2 + (y - v.cy) * v.s];
     const [bx0, by0] = scr(v.frame[0], v.frame[1]), [bx1, by1] = scr(v.frame[2], v.frame[3]);
-    const top = Math.max(REGION_TOP + 2, by0), bottom = Math.min(vh - 2, by1), left = Math.max(2, bx0), right = Math.min(vw - 2, bx1);
+    return { top: Math.max(REGION_TOP + 2, by0), bottom: Math.min(vh - 2, by1), left: Math.max(2, bx0), right: Math.min(vw - 2, bx1) };
+  }
+  function regionExitBox(e, d, room) {
+    const along = e.edge === "l" || e.edge === "r" ? [0, 1] : [1, 0]; // 沿著那一邊滑：左右兩邊上下滑、上下兩邊左右滑
+    let l = e.edge === "r" ? e.X - e.w - 3 : e.edge === "l" ? e.X + 3 : e.X - e.w / 2;
+    let t = e.edge === "b" ? e.Y - e.h - 3 : e.edge === "t" ? e.Y + 3 : e.Y - e.h / 2;
+    l = Math.max(room.left, Math.min(room.right - e.w, l + along[0] * d));
+    t = Math.max(room.top, Math.min(room.bottom - e.h, t + along[1] * d));
+    return [l, t, l + e.w, t + e.h];
+  }
+  function regionExits(base, rid, v, vw, vh, labels = []) {
+    const room = regionExitRoom(v, vw, vh);
     const z = regionSizes(v.s);
     const taken = [...labels.flatMap((l) => l.rows), ...labels.map((l) => [l.X - z.hw, l.Y - z.hh, l.X + z.hw, l.Y + z.hh])];
     const inter = (a, b) => Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0])) * Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1]));
     const out = [];
     for (const e of regionExitAnchors(base, rid, v, vw, vh)) {
-      const along = e.edge === "l" || e.edge === "r" ? [0, 1] : [1, 0]; // 沿著那一邊滑：左右兩邊上下滑、上下兩邊左右滑
       let best = null;
       for (const d of R_EXIT_SLIDE) {
-        let l = e.edge === "r" ? e.X - e.w - 3 : e.edge === "l" ? e.X + 3 : e.X - e.w / 2;
-        let t = e.edge === "b" ? e.Y - e.h - 3 : e.edge === "t" ? e.Y + 3 : e.Y - e.h / 2;
-        l = Math.max(left, Math.min(right - e.w, l + along[0] * d));
-        t = Math.max(top, Math.min(bottom - e.h, t + along[1] * d));
-        const box = [l, t, l + e.w, t + e.h], cost = [...taken, ...out.map((x) => x.box)].reduce((n, b) => n + inter(box, b), 0);
+        const box = regionExitBox(e, d, room), cost = [...taken, ...out.map((x) => x.box)].reduce((n, b) => n + inter(box, b), 0);
         if (!best || cost < best.cost - 1e-6) best = { cost, box };
         if (cost <= 0) break;
       }
@@ -5982,10 +5989,24 @@
     for (const f of [0, 0.5, -0.5]) out.push([-W / 2 + W * f, hh + H * 0.9], [-W / 2 + W * f, -hh - H * 1.9]);
     return out;
   }
-  const REGION_SEARCH = 20000; // 一起找名字框的位置最多試幾次，再多就改成一個一個擺
+  const REGION_SEARCH = 20000; // 第一輪一起找名字框的位置最多試幾次，再多就換第二輪
+  // 第二輪（FB-648）：位置每 R_SLIDE px 一格；一起找最多試 R_SEARCH_WIDE 次；還找不到（真的放不下）時反覆換位置最多 R_SETTLE 次
+  const R_SLIDE = 3, R_SEARCH_WIDE = 3000, R_SETTLE = 400;
+  // 第二輪的名字框位置：第一輪那幾個在前，再補沿著小圖四邊滑的（離小圖由近到遠），範圍不比第一輪遠（照樣貼著小圖、不拉線，企劃者選的乙）
+  function regionLabelSpotsWide(L, z) {
+    const hw = z.hw + R_GAP, hh = z.hh + R_GAP, mid = -L.fh / 2, W = L.W, H = L.H, extra = [];
+    for (let d = R_SLIDE; d <= 1.8 * H; d += R_SLIDE) for (const s of [1, -1]) extra.push([hw, mid + s * d], [-hw - W, mid + s * d]);
+    for (let d = R_SLIDE; d <= W; d += R_SLIDE) for (const s of [1, -1]) extra.push([-W / 2 + s * d, hh], [-W / 2 + s * d, -hh - H]);
+    for (let d = 0; d <= W / 2; d += R_SLIDE) for (const s of d ? [1, -1] : [1]) extra.push([-W / 2 + s * d, hh + H * 0.9], [-W / 2 + s * d, -hh - H * 1.9]);
+    const gap = ([dx, dy]) => Math.hypot(Math.max(dx, 0, -(dx + W)), Math.max(dy, 0, -(dy + H))); // 小圖中心到名字框最近那一點
+    return [...regionLabelSpots(L, z), ...extra.sort((a, b) => gap(a) - gap(b))];
+  }
   // 名字框擺哪（設計第十二章：375 寬互相不壓）。每一處先列出不壓小圖（每一處的）、你的旗與朱圈、也不出取景框的位置；
   // 再一起找「彼此也不壓」的擺法（同 mapview._place_labels：每次挑剩下位置最少的先擺，擺不下回頭改前面的），找到之後再一處一處往前挪
-  // （離小圖近的位置）。試了 REGION_SEARCH 次還找不到：照舊一個一個擺（你那一處先、附近地點多的先），每一個挑壓得最少的。
+  // （離小圖近的位置）。第一輪只用 regionLabelSpots 那幾個位置；找不到、或擺好之後鄰區出口沿著邊滑也讓不開名字框（FB-648：翻地中
+  // 名字框多了進度條、「冷卻 N 分」，你站的那一處多朱圈與旗），第二輪換 regionLabelSpotsWide、鄰區出口原本的位置也讓開，再找一次。
+  // 第一輪擺得下（出口也讓得開）的畫面跟以前一樣。第二輪也找不到（照這種畫法真的放不下，例：360 寬你站潁川郡、潁川郡自己被推）：
+  // 先一個一個擺，再反覆把壓到東西的那幾處換位置（settle），壓到的只留在擠的那一角。
   // 回每一處（照這一區的地點順序）：大小、框左上角（螢幕 px）、佔的兩列、壓到多少（0＝不壓）
   function regionLabels(base, st, rid, v, vw, vh) {
     const pts = regionPlaces(base, rid), scr = (x, y) => [vw / 2 + (x - v.cx) * v.s, vh / 2 + (y - v.cy) * v.s];
@@ -5995,62 +6016,91 @@
     const fixed = pts.map((p) => [at[p.id][0] - z.hw, at[p.id][1] - z.hh, at[p.id][0] + z.hw, at[p.id][1] + z.hh]);
     const me = !st.journey && pts.find((p) => p.id === st.here);
     if (me) { const [X, Y] = at[me.id]; fixed.push([X + 10, Y - 40, X + 34, Y - 12], [X - 19, Y - 19, X + 19, Y + 19]); }
-    const inter = (a, b) => Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0])) * Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1]));
+    const inter = (a, b) => { // 兩個框相交的面積（第二輪的位置多，這一段最常跑：不碰 Math）
+      const w = (a[2] < b[2] ? a[2] : b[2]) - (a[0] > b[0] ? a[0] : b[0]);
+      if (w <= 0) return 0;
+      const h = (a[3] < b[3] ? a[3] : b[3]) - (a[1] > b[1] ? a[1] : b[1]);
+      return h > 0 ? w * h : 0;
+    };
     const outside = (r) => (r[2] - r[0]) * (r[3] - r[1]) - inter(r, bounds);
     const against = (rows, boxes) => rows.reduce((n, r) => n + boxes.reduce((m, b) => m + inter(r, b), 0) + 4 * outside(r), 0);
-    const items = pts.map((p, i) => {
-      const L = regionLabelSize(base, st, p, z), [X, Y] = at[p.id];
-      const opts = regionLabelSpots(L, z).map(([dx, dy]) => {
+    const sizes = pts.map((p) => regionLabelSize(base, st, p, z));
+    const lay = (spots, walls) => pts.map((p, i) => {
+      const L = sizes[i], [X, Y] = at[p.id];
+      const opts = spots(L, z).map(([dx, dy]) => {
         const l = X + dx, t = Y + dy, rows = [[l, t, l + L.w1, t + L.fh]];
         if (L.low) rows.push([l, t + L.fh, l + L.w2, t + L.H]);
-        return { l, t, rows, cost: against(rows, fixed) };
+        return { l, t, rows, bb: [l, t, l + L.W, t + L.H], cost: against(rows, walls) };
       });
       return { p, i, L, X, Y, opts };
     });
-    const clash = (a, b) => a.rows.some((r) => b.rows.some((q) => inter(r, q) > 0));
-    let budget = REGION_SEARCH;
-    const search = (todo, room) => {
-      if (!todo.length) return {};
-      const i = todo.reduce((a, z) => (room[z].length < room[a].length ? z : a));
-      const rest = todo.filter((x) => x !== i);
-      for (const o of room[i]) {
-        if (--budget < 0) return null;
-        const after = room.slice();
-        if (rest.some((j) => !(after[j] = room[j].filter((q) => !clash(o, q))).length)) continue;
-        const found = search(rest, after);
-        if (found) return { ...found, [i]: o };
-        if (budget < 0) return null;
-      }
-      return null;
-    };
-    const free = items.map((it) => it.opts.filter((o) => o.cost <= 0));
-    let pick = free.every((r) => r.length) ? search(items.map((it) => it.i), free) : null;
-    if (pick) {
-      // 找到了：再一處一處往前挪——換成更前面（離小圖更近）、照樣不壓別人的位置，挪到挪不動為止
+    const meet = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3]; // 兩個框的外框碰不碰得到（先擋掉遠的，省時間）
+    const clash = (a, b) => meet(a.bb, b.bb) && a.rows.some((r) => b.rows.some((q) => inter(r, q) > 0));
+    // 再一處一處往前挪——換成更前面（離小圖更近）、不壓牆也不壓別人的位置，挪到挪不動為止
+    const forward = (items, pick) => {
       for (let round = 0, moved = true; moved && round < 6; round++) {
         moved = false;
         for (const it of items) {
-          const now = free[it.i].indexOf(pick[it.i]);
-          const better = free[it.i].slice(0, now).find((o) => items.every((x) => x === it || !clash(o, pick[x.i])));
+          const now = it.opts.indexOf(pick[it.i]);
+          const better = it.opts.slice(0, now).find((o) => o.cost <= 0 && items.every((x) => x === it || !clash(o, pick[x.i])));
           if (better) { pick[it.i] = better; moved = true; }
         }
       }
-    }
-    if (!pick) {
-      pick = {};
-      const taken = [...fixed];
+      return pick;
+    };
+    // 一起找：每次挑剩下位置最少的先擺，擺不下回頭改前面的；試了 budget 次還沒找到回 null
+    const solve = (items, budget) => {
+      const free = items.map((it) => it.opts.filter((o) => o.cost <= 0));
+      // 每一處所有位置合起來的外框：碰不到的那幾處不必一個一個比
+      const reach = free.map((r) => r.reduce((b, o) => [Math.min(b[0], o.bb[0]), Math.min(b[1], o.bb[1]), Math.max(b[2], o.bb[2]), Math.max(b[3], o.bb[3])], [Infinity, Infinity, -Infinity, -Infinity]));
+      const search = (todo, room) => {
+        if (!todo.length) return {};
+        const i = todo.reduce((a, z) => (room[z].length < room[a].length ? z : a));
+        const rest = todo.filter((x) => x !== i);
+        for (const o of room[i]) {
+          if (--budget < 0) return null;
+          const after = room.slice();
+          if (rest.some((j) => meet(o.bb, reach[j]) && !(after[j] = room[j].filter((q) => !clash(o, q))).length)) continue;
+          const found = search(rest, after);
+          if (found) return { ...found, [i]: o };
+          if (budget < 0) return null;
+        }
+        return null;
+      };
+      const pick = free.every((r) => r.length) ? search(items.map((it) => it.i), free) : null;
+      return pick && forward(items, pick);
+    };
+    // 一個一個擺（你那一處先、附近地點多的先），每一個挑壓得最少的；再反覆把壓到東西的那幾處之一換到壓得最少的位置（同分挑前面的；
+    // 偶爾隨便換一格，免得來回打轉；種子固定，同樣的畫面擺出來一樣），記住壓得最少的那一次
+    const settle = (items, steps) => {
+      const pick = {};
+      const over = (o, i) => items.reduce((n, x) => (x.i === i || !pick[x.i] || !meet(o.bb, pick[x.i].bb) ? n : n + o.rows.reduce((m, r) => m + pick[x.i].rows.reduce((k, q) => k + inter(r, q), 0), 0)), o.cost);
+      const best = (it) => it.opts.reduce((b, o) => { const c = over(o, it.i); return c < b.c - 1e-6 ? { o, c } : b; }, { o: null, c: Infinity }).o;
       const crowd = (it) => items.filter((o) => o !== it && Math.hypot(o.X - it.X, o.Y - it.Y) < 110).length;
       const order = items.slice().sort((a, z) => (z.p === me) - (a.p === me) || crowd(z) - crowd(a) || (z.p.big ? 1 : 0) - (a.p.big ? 1 : 0) || a.i - z.i);
-      for (const it of order) {
-        let best = null;
-        for (const o of it.opts) {
-          const cost = against(o.rows, taken);
-          if (!best || cost < best.cost - 1e-6) best = { ...o, cost };
-          if (cost <= 0) break;
-        }
-        taken.push(...best.rows);
-        pick[it.i] = best;
+      for (const it of order) pick[it.i] = best(it);
+      let seed = 20261021, keep = { ...pick }, low = Infinity;
+      const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+      for (let step = 0; step <= steps; step++) {
+        const hurt = items.filter((it) => over(pick[it.i], it.i) > 0);
+        const total = hurt.reduce((n, it) => n + over(pick[it.i], it.i), 0);
+        if (total < low - 1e-6) { low = total; keep = { ...pick }; }
+        if (!hurt.length || step === steps) break;
+        const it = hurt[Math.floor(rnd() * hurt.length)];
+        pick[it.i] = rnd() < 0.1 ? it.opts[Math.floor(rnd() * it.opts.length)] : best(it);
       }
+      return forward(items, keep);
+    };
+    // 鄰區出口（regionExits 在名字框擺好之後沿著邊滑開）：第一輪擺好之後還壓到名字框，就當作沒找到
+    const exits = regionExitAnchors(base, rid, v, vw, vh), room = regionExitRoom(v, vw, vh);
+    const exitHit = (items, pick) => regionExits(base, rid, v, vw, vh, items.map((it) => ({ X: it.X, Y: it.Y, rows: pick[it.i].rows })))
+      .some((e) => items.some((it) => pick[it.i].rows.some((r) => inter(r, e.box) > 0.5)));
+    let items = lay(regionLabelSpots, fixed);
+    let pick = solve(items, REGION_SEARCH);
+    if (pick && exits.length && exitHit(items, pick)) pick = null;
+    if (!pick) {
+      items = lay(regionLabelSpotsWide, [...fixed, ...exits.map((e) => regionExitBox(e, 0, room))]);
+      pick = solve(items, R_SEARCH_WIDE) || settle(items, R_SETTLE);
     }
     return items.map((it) => {
       const o = pick[it.i], others = items.filter((x) => x !== it).map((x) => pick[x.i]);
