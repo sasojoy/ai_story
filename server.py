@@ -1422,7 +1422,7 @@ def patch_notes(path: Path | None = None) -> list[dict]:
     """登入頁宣傳影片底下的「近期改版」（Joy 2026-10-21「首頁應該有地方顯示近期的更版資訊」）。
 
     讀 content/patch_notes.json 的 notes（新的在前），最多 PATCH_SHOW 次；檔案改了照修改時間重讀，不必重開伺服器。
-    每一次只留 date、new、tweak 三欄（字串與字串清單），寫壞的那一次跳過、檔案讀不了就是空的（首頁不畫那一格）。"""
+    每一次只留 date、new、tweak、fix 四欄（字串與字串清單），寫壞的那一次跳過、檔案讀不了就是空的（首頁不畫那一格）。"""
     path = path or PATCH_FILE
     try:
         mtime = path.stat().st_mtime
@@ -1438,8 +1438,8 @@ def patch_notes(path: Path | None = None) -> list[dict]:
     for item in raw if isinstance(raw, list) else []:
         if not isinstance(item, dict) or not isinstance(item.get("date"), str) or not item["date"].strip():
             continue
-        lines = {key: [x for x in item.get(key) or [] if isinstance(x, str) and x.strip()] for key in ("new", "tweak")}
-        if lines["new"] or lines["tweak"]:
+        lines = {key: [x for x in item.get(key) or [] if isinstance(x, str) and x.strip()] for key in ("new", "tweak", "fix")}
+        if any(lines.values()):
             notes.append({"date": item["date"].strip(), **lines})
         if len(notes) >= PATCH_SHOW:
             break

@@ -24,14 +24,14 @@ def test_real_file_reads_and_is_short():
     notes = server.patch_notes()
     assert notes and len(notes) <= server.PATCH_SHOW
     for note in notes:
-        assert note["date"] and (note["new"] or note["tweak"])
-        assert all(len(line) <= 60 for line in note["new"] + note["tweak"])  # 一項一行，不寫細節
+        assert note["date"] and (note["new"] or note["tweak"] or note["fix"])
+        assert all(len(line) <= 60 for line in note["new"] + note["tweak"] + note["fix"])  # 一項一行，不寫細節
 
 
 def test_bad_entries_are_skipped(tmp_path):
     path = tmp_path / "p.json"
     path.write_text(json.dumps({"notes": [{"date": ""}, "x", {"date": "1/1", "new": ["a", 3, " "]}, {"date": "1/2"}]}), encoding="utf-8")
-    assert server.patch_notes(path) == [{"date": "1/1", "new": ["a"], "tweak": []}]
+    assert server.patch_notes(path) == [{"date": "1/1", "new": ["a"], "tweak": [], "fix": []}]
     path.write_text("{", encoding="utf-8")
     assert server.patch_notes(path) == []
     assert server.patch_notes(tmp_path / "missing.json") == []
