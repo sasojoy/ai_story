@@ -1066,7 +1066,7 @@ def tactic_holders(state: GameState, content: Content, world: WorldStateStore) -
     for key in state.player.team:
         mate = world.get_companion(key)
         rows.append((member_name(state, content, key), key, mate.wugong_id, mate.neigong_id))
-    return own_extras(state, content, world, tactics.holders_of(content, rows))
+    return own_extras(state, content, world, tactics.holders_of(content, rows, world))
 
 
 def gear_tactics(state: GameState, content: Content) -> list[tuple[str, TacticDef, str | None]]:
@@ -1155,7 +1155,10 @@ def foe_tactics(
     char = content.characters.get(figure.character) if figure is not None else None
     if char is None:
         return None
-    holders = tactics.holders_of(content, [(figure.name, tactics.FOE_KEY, char.starting_wugong, char.starting_neigong)])
+    own = tactics.figure_arts(content, char)  # 只認本命（FB-640：起始帶的學來的武學不算）
+    wugong = char.starting_wugong if char.starting_wugong in own else None
+    neigong = char.starting_neigong if char.starting_neigong in own else None
+    holders = tactics.holders_of(content, [(figure.name, tactics.FOE_KEY, wugong, neigong)])
     if not holders:
         return None
     from . import territory  # territory → rules → team：照用的時候才 import
@@ -1189,7 +1192,7 @@ def self_side(state: GameState, content: Content, world: WorldStateStore, *, mou
     對手的名字與身法開打時才換上（tactics.open_bout）；mounted、troops 是這種仗算不算坐騎與部下（決戰算、單挑不算）。
     本人沒有本命戰法是 None。"""
     p = state.player
-    holders = own_extras(state, content, world, tactics.holders_of(content, [(p.name, PLAYER, p.member.wugong_id, p.member.neigong_id)]))
+    holders = own_extras(state, content, world, tactics.holders_of(content, [(p.name, PLAYER, p.member.wugong_id, p.member.neigong_id)], world))
     if not holders:
         return None
     mount = p.mount if mounted and mounts.on(content) else None

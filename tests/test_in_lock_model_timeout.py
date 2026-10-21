@@ -160,13 +160,12 @@ def _a_dialogue_turn_that_consolidates_memory_and_drift(game):
 def _a_forge_named_in_the_lock(game):
     """直接呼叫 Game.forge、沒給 proposed（伺服器一律給，整季機器人與腳本才走這條）：鎖內取名，取不到就走退路字表。"""
     p = game.state.player
-    p.member.wugong_id, p.member.neigong_id = "basic_fist", "basic_breath"
-    p.insights = ["feng", "huo"]
+    p.insights = ["feng", "huo", "shui"]
     p.stats["xinde"] = 100
-    msgs = game.forge("basic_fist", [], other_art="basic_breath")  # 武學重構：要取名的合成是武學＋武學（武學＋意境只是裝槽）
-    assert any("第一次" in m for m in msgs) and len(p.arts) == 1
-    msgs = game.forge(None, ["feng", "huo"])
-    assert len(p.insights) == 3, msgs
+    msgs = game.forge(None, ["feng", "huo"])  # 煉製只剩意境＋意境：兩爐各是一個新配方，都要取名
+    assert any("第一次" in m for m in msgs) and len(p.insights) == 4, msgs
+    msgs = game.forge(None, ["huo", "shui"])
+    assert len(p.insights) == 5, msgs
 
 
 SCENARIOS = {

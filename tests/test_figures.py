@@ -776,7 +776,8 @@ def test_a_challenge_can_be_dodged_into_a_draw(on, world):
     assert (record.event, record.tier) == ("挑戰波才", "僵持") and record.notes[0] == battlelog.DODGE_NOTE
     assert p.stats["silver"] == 50 and "銀兩 -5" not in msgs
     assert world.get_season().figures["bocai"].prestige == 60 and p.snubbed_until == {}
-    assert record.changes == team.take_encounter_toll(before, on, world, "僵持")
+    # 開局的【基礎吐納】帶小戰法〔吐故納新〕，每回合回一點氣血（10/21）：那一行另外算，其餘照僵持扣
+    assert [c for c in record.changes if not c.startswith("氣血 +")] == team.take_encounter_toll(before, on, world, "僵持")
 
 
 def test_the_rout_is_buffered_by_the_sides_active_members(on, world):

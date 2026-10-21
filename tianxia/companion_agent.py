@@ -552,7 +552,9 @@ def _maybe_grant_signature_skill(state: GameState, content: Content, character: 
     if flag in p.flags:
         return []
     # 本命武學是絕學（十八位大勢人物的都是）；歷史武將同行補的起始武學是一般的內容武學，不算本命、不教（FB-364）。沒有可教的不寫那一句、不記旗標
-    taught = [s for s in (character.starting_wugong, character.starting_neigong) if s and content.skills[s].quality == "絕學"]
+    from .tactics import figure_arts  # 本命的判斷只有一處（FB-640）
+
+    taught = figure_arts(content, character)
     if not taught:
         return []
     p.flags.add(flag)

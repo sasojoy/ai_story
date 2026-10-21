@@ -31,12 +31,17 @@ import random
 
 from pydantic import BaseModel, Field
 
-from .models import BEATS, MOVES, Content, TacticBond, TacticDef, TacticTuning
+from .models import BEATS, MOVES, CharacterDef, Content, TacticBond, TacticDef, TacticTuning
 
 CONTROLS = ("卸勁", "亂神", "定身", "失神")  # 守一擋得下的
 DOTS = ("焚身", "風沙", "血創")
 LEAD = "〔"  # 戰法句一律以「〔戰法名〕」開頭（同功效句，battlelog.TRAIT_LEAD：網頁收著的卡片先藏起來）
-TITLE = "本命戰法"
+# 招的印記（招式與絕學稿案第一節，Joy 2026-10-21 按建議）：卡上不寫分類（「本命戰法」「小戰法」），招名前面蓋一枚印——
+# 人物的本命寫「本命」（朱印）、學來的武學寫「看家」（墨印，看家本領）、自創的寫創的人名號的第一個字（私印）、絕招寫「絕」（金印）。
+# 網頁照開頭這幾個字畫成印（app.js 的 tacticHtml）
+TITLE = "本命"
+MINOR_TITLE = "看家"  # 學來的武學帶的（TacticDef.minor）
+ULTIMATE_SEAL = "絕"
 IMMUNE_KEYS = {"stun": "定身", "daze": "失神", "disarm": "卸勁", "confuse": "亂神"}  # immune 那一種的 params 鍵 → 狀態
 SHRUG = "{state}沒能沾身"
 PLAYER_KEY = "player"  # 同 state.PLAYER（這裡不 import state）
@@ -133,10 +138,20 @@ def when_text(tactic: TacticDef) -> str:
     return f"{tactic.timing}・{text}"
 
 
-def card_text(tactic: TacticDef, title: str = TITLE) -> str:
-    """功法卡、修練頁、角色卡那一段：「本命戰法〔長坂一喝〕出招・每回合 40%：一聲大喝……」；兵器卡寫「特技〔虛影〕……」。"""
+def title_of(tactic: TacticDef, art=None) -> str:
+    """招名前面蓋哪一枚印：自創的武學（art 有姿勢或借來的招）寫創的人名號的第一個字，學來的寫「看家」，其餘「本命」。"""
+    if art is not None and art.id and getattr(art, "tactic_from", None):
+        who = getattr(art, "creator_shown", None) or getattr(art, "creator", None) or ""
+        if who[:1]:
+            return who[:1]
+    return MINOR_TITLE if tactic.minor else TITLE
+
+
+def card_text(tactic: TacticDef, title: str | None = None) -> str:
+    """功法卡、修練頁、角色卡那一段：「本命〔長坂一喝〕出招・每回合 40%：一聲大喝……」；兵器卡寫「特技〔虛影〕……」。"""
     # 本命底蘊照實際寫（19.5%，PM 2026-10-16）：以前 round 到整數、又是逢五取偶，19.5 寫成 20、22.5 寫成 22
     tail = MIGHT_NOTE.format(pct=f"{round(tactic.might * 100, 1):g}") if tactic.might else ""
+    title = title or title_of(tactic)
     return f"{title}〔{tactic.name}〕{when_text(tactic)}：{desc_text(tactic)}{tail}"
 
 
@@ -261,6 +276,8 @@ class Status(BaseModel):
     reflect_by: str = ""
     wards: int = 0  # 守一擋下了幾次控制（海內儒宗）
     immune: dict[str, tuple[float, str, str]] = Field(default_factory=dict)  # 這一回合不受哪幾種控制：狀態 →（機會, 戰法名, 那一句）（穩、不動、嶽峙鎧）
+    # 一直在的心法（timing 心法、必定）這一仗已經寫過一次的（「誰｜招名」）：之後每回合照樣生效，戰報不再重複（招式與絕學稿案第一節）
+    told: list[str] = Field(default_factory=list)
 
     def has(self, name: str) -> bool:
         return self.states.get(name, 0) > 0
@@ -341,7 +358,12 @@ class _Fight:
         if h.tactic.say:
             values = {k: value_text(k, v) for k, v in h.tactic.params.items()}
             text = h.tactic.say.format(foe=self.ctx.foe, **{**values, **extra})
-        self.lines.append(f"{LEAD}{h.tactic.name}〕{h.who}{text}")
+        steady = h.tactic.timing == "心法" and h.tactic.rate >= 1
+        mark = f"{h.who}|{h.tactic.name}"
+        if not steady or mark not in self.us.told:
+            self.lines.append(f"{LEAD}{h.tactic.name}〕{h.who}{text}")
+            if steady:
+                self.us.told.append(mark)
         self.fired.append(h.tactic.name)
         if h.key not in (PLAYER_KEY, FOE_KEY):
             self.ally_fires += 1
@@ -1511,9 +1533,6 @@ def divine_line(h: Holder) -> str:
 # ── 決戰：沒有單一的對手，只算自己身上的（WAR_KINDS）──────────────
 
 
-WAR_LINE = "{side}這一回合發動本命戰法：{who}"
-
-
 class War(BaseModel):
     """決戰裡一個人這一回合戰法改了什麼：份量多幾成（連環、推力加減、固守加重、援兵）、剋制係數至少 1（無隙）、
     挨的打乘多少（化影 0）、氣血池回或扣上限的幾成、這一回合發動了哪幾門（〔名〕開頭）。"""
@@ -1573,22 +1592,59 @@ def of(content: Content, skill_id: str | None) -> TacticDef | None:
     return skill.tactic if skill is not None else None
 
 
+def figure_arts(content: Content, character: CharacterDef) -> list[str]:
+    """這位人物的本命武學與本命內功（FB-640）：人物表 starting_wugong／starting_neigong 裡品質是絕學的那幾門（十八位大勢人物的
+    都是，各寫一個本命戰法；寫本命戰法的一定是絕學，content.check_signature_arts 擋）。歷史武將同行補的起始武學（FB-364：
+    王允、華佗……）是各地教的內容武學（下品的帶小戰法、上品的什麼都不帶），不是本命：誰的都不算（figure_of）、情誼到了不教
+    （companion_agent）、名帖不寫「親傳」（mingtie）；玩家照樣在各地學得到。"""
+    out = []
+    for skill_id in (character.starting_wugong, character.starting_neigong):
+        skill = content.skills.get(skill_id) if skill_id else None
+        if skill is not None and skill.quality == "絕學":
+            out.append(skill_id)
+    return out
+
+
+def of_art(content: Content, art) -> TacticDef | None:
+    """這一門帶的戰法：內容寫的（本命戰法、小戰法），或自創借來的小戰法（MartialArt.tactic_from）。"""
+    if art is None:
+        return None
+    tactic = of(content, art.id)
+    return tactic if tactic is not None or not art.tactic_from else of(content, art.tactic_from)
+
+
+def of_id(content: Content, skill_id: str | None, world=None) -> TacticDef | None:
+    """認 id 的那一種：內容裡的照 of；全服登記的（自創）查 world 拿 tactic_from。world 是 None 只認內容。"""
+    if not skill_id or skill_id in content.skills or world is None:
+        return of(content, skill_id)
+    return of_art(content, world.get_skill(skill_id))
+
+
+def line_of_id(content: Content, skill_id: str | None, world=None) -> str | None:
+    """角色卡那一行：認 id 找招（of_id），蓋上那一門的印（title_of）。沒有招是 None。"""
+    tactic = of_id(content, skill_id, world)
+    if tactic is None:
+        return None
+    art = world.get_skill(skill_id) if world is not None and skill_id not in content.skills else None
+    return card_text(tactic, title_of(tactic, art))
+
+
 def figure_of(content: Content, skill_id: str) -> str | None:
-    """這門本命武學是哪位人物的（人物表的 starting_wugong／starting_neigong）。"""
+    """這門本命武學是哪位人物的（figure_arts）；學來的武學（小戰法，同伴起始帶的那幾門也是）不是誰的，None。"""
     for ch in content.characters.values():
-        if skill_id in (ch.starting_wugong, ch.starting_neigong):
+        if skill_id in figure_arts(content, ch):
             return ch.id
     return None
 
 
-def holders_of(content: Content, rows: list[tuple[str, str, str | None, str | None]]) -> list[Holder]:
+def holders_of(content: Content, rows: list[tuple[str, str, str | None, str | None]], world=None) -> list[Holder]:
     """（名字, 鍵, 武學 id, 內功 id）一列一個人 → 帶著本命戰法的那幾門（武學在前）。同一門戰法兩個人都帶著時只算第一個
-    （本人在前）：同一招不會一回合發兩次。"""
+    （本人在前）：同一招不會一回合發兩次。給了 world 才認得自創借來的小戰法（of_id）。"""
     out: list[Holder] = []
     seen: set[str] = set()
     for who, key, wugong, neigong in rows:
         for skill_id in (wugong, neigong):
-            tactic = of(content, skill_id)
+            tactic = of_id(content, skill_id, world)
             if tactic is None or tactic.name in seen:
                 continue
             seen.add(tactic.name)

@@ -215,7 +215,8 @@ def test_a_war_round_with_a_kit_writes_the_line_and_pushes_more():
         msgs = battle_instance.resolve_round(inst, defn, random.Random(0), now=1, tactic=t)
         pushes.append(inst.trend - 50)
         if with_kit:
-            assert any(line.startswith("官軍這一回合發動本命戰法：〔先登斬將〕") for line in msgs)
+            assert any(line.startswith("〔先登斬將〕甲") for line in msgs)  # 招一句一行，不再寫「官軍這一回合發動戰法」的標頭
+            assert not any("發動戰法" in line for line in msgs)
             assert "〔先登斬將〕" in inst.participants["甲"].moves[1]
         else:
             assert not any("本命戰法" in line for line in msgs)

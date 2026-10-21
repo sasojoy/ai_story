@@ -10,8 +10,11 @@
 4. 成形（roll_colors，立意之後馬上擲）：照權重擲四格顏色——第一格一定是權重最高那一路的單色（玩家引導的方向），
    其餘每格照 create_slot_odds 擲單色、雙色、任色。意讀出「不偏」時任色的機會加倍（create_neutral_any_scale）。
    不滿意可以回頭重擺或重寫一次（create_redo，免費）；亂數是「自創｜天機｜名號｜第幾門｜第幾擲」，不碰 Game.rng。
-5. 立名（finish）：自己取名、可以多付心得加分；這一步才付心得。品級引擎擲（grade_odds，意分＋加分往上推），
-   品級決定開幾格（下 2、中 3、上 4，照第 4 步的前幾格）；威力從第一成起練；注解就是那一句意。
+5. 立名（finish）：自己取名；這一步才付心得。自創的一律是 Config.arts.create_grade（上品，Joy 2026-10-21「自創武學應該保底
+   都是上品」；多付心得加分拿掉了，「多付心得很莫名其妙」），四格全開；意分＋赤璋只定底子（power_scale_of）；
+   威力從第一成起練；注解就是那一句意。
+   同時自動配一個小戰法（Joy 2026-10-21 決策卡選「自動配」，minor_for）：照開著的格子的主屬性，從學來的武學裡挑一門同種類、
+   同屬性的借它的小戰法；成形之後頁面上就看得到，立名時照樣定下來（亂數只看名號、第幾門、種類）。
 
 價錢：Config.arts.create_xinde × create_step^（這一季已自創幾門），一季最多 create_per_season 門。
 只改狀態與回傳訊息；數字全由這裡算，模型只給一個分數與兩個屬性字。
@@ -20,11 +23,12 @@ from __future__ import annotations
 
 import math
 import random
+import zlib
 from dataclasses import dataclass
 
 from pydantic import BaseModel, Field
 
-from . import annals, arts as arts_mod, library, naming, team, treasures
+from . import annals, arts as arts_mod, library, naming, tactics, team, treasures
 from .martial_arts import ATTRIBUTES, QUALITY_BASE_POWER, QUALITY_TOP_POWER, MartialArt, scaled
 from .models import Content
 from .ollama_client import OllamaClient
@@ -64,7 +68,6 @@ FORM_LINE = "{kind}要挑一種：{forms}。"
 INTENT_LINE = f"「意」要 {INTENT_MIN}～{INTENT_MAX} 個字，一句話說這門功夫的神。"
 NO_REDO = "已經重來過了，這一回就照這個形立名吧（或擱下重起）。"  # 待 joy 潤
 NAME_TAKEN = "這個名字已經有人用了，換一個。"
-EXTRA_LINE = "加付的心得要是 0 或正數，而且付得起。"
 BEGUN_LINE = "你握起{form}，想立一門自己的{kind}。先擺個架式。"  # 待 joy 潤
 POSED_LINE = "你擺定了這一式：{read}。"  # 待 joy 潤
 FORMED_LINE = "你閉目良久，「{intent}」——這門功夫有了形：{colors}。"  # 待 joy 潤
@@ -72,7 +75,6 @@ BACK_LINE = "你散了架式，重新來過。"  # 待 joy 潤
 CREATED_LINE = "你開宗立派，自創了一門{kind}【{name}】（{grade}）！"  # 待 joy 潤
 CHRONICLE_LINE = "{who}自創了一門{kind}【{name}】。"
 CANCELLED = "你把這門還沒成形的功夫擱下了。"
-BONUS_LINE = "多付的 {extra} 點心得化成了底子（+{bonus} 分）。"
 FLAT_LINE = "此式平正，不偏一路"  # 待 joy 潤
 LEAN_TEXT = {"正": "，帶一股正氣", "邪": "，帶一股邪氣", "無": ""}  # 待 joy 潤
 
@@ -482,48 +484,21 @@ def back(state: GameState, content: Content, to: str) -> list[str]:
 # ── 第五步：立名、擲品級、登記 ───────────────────────────
 
 
-def bonus_of(content: Content, extra: int) -> int:
-    cfg = content.config.arts
-    return min(cfg.create_bonus_cap, 5 * (max(0, extra) // cfg.create_bonus_per))
-
-
 def seal_points(state: GameState, content: Content) -> int:
     """玉璽赤璋（fuse_points）：加在自創的意分上（夾之前加，品級機率照它挪）。"""
     return int(treasures.amount(state, content, "fuse_points"))
 
 
-POWER_LINE = "底子：同品級威力的 {pct}%（意寫得越好越厚，多付心得也加）。"  # 待 joy 潤
+POWER_LINE = "底子：同品級威力的 {pct}%（意寫得越好越厚）。"  # 待 joy 潤
 
 
 def power_scale_of(content: Content, points: int) -> float:
-    """自創的基本威力倍數：意分＋加分＋赤璋（夾 0～100）從 power_scale_range 的下限線性推到上限。"""
+    """自創的基本威力倍數：意分＋赤璋（夾 0～100）從 power_scale_range 的下限線性推到上限。"""
     low, high = content.config.arts.power_scale_range
     return round(low + (high - low) * max(0, min(100, points)) / 100, 3)
 
 
-def grade_odds(content: Content, score_value: int, bonus: int) -> dict[str, float]:
-    """品級機率（%）：從 create_odds 起算，意分＋加分每一分把下品挪 create_point_shift 個百分點，三分之二到上品、三分之一到中品。"""
-    cfg = content.config.arts
-    odds = {q: float(cfg.create_odds.get(q, 0)) for q in ("下品", "中品", "上品")}
-    move = min(odds["下品"], (score_value + bonus) * cfg.create_point_shift)
-    odds["下品"] -= move
-    odds["上品"] += move * 2 / 3
-    odds["中品"] += move / 3
-    return odds
-
-
-def roll_grade(content: Content, score_value: int, bonus: int, rng: random.Random) -> str:
-    odds = grade_odds(content, score_value, bonus)
-    roll = rng.random() * sum(odds.values())
-    acc = 0.0
-    for grade in ("下品", "中品", "上品"):
-        acc += odds[grade]
-        if roll < acc:
-            return grade
-    return "上品"
-
-
-def name_problem(state: GameState, content: Content, world: WorldStateStore, name: str, extra: int = 0) -> str | None:
+def name_problem(state: GameState, content: Content, world: WorldStateStore, name: str) -> str | None:
     problem = allowed(state, content)
     if problem is not None:
         return problem
@@ -534,8 +509,8 @@ def name_problem(state: GameState, content: Content, world: WorldStateStore, nam
     if problem is not None:
         return problem
     need = price(state, content)
-    if extra < 0 or _xinde(state) < need + extra:
-        return EXTRA_LINE if extra else XINDE_LINE.format(price=need, have=_xinde(state))
+    if _xinde(state) < need:
+        return XINDE_LINE.format(price=need, have=_xinde(state))
     return None
 
 
@@ -544,18 +519,44 @@ def affinity_of(colors: list[list[str]]) -> list[str]:
     return list(dict.fromkeys(a for c in colors for a in c))
 
 
+NO_MINOR_KINDS = ("marshal",)  # 同袍一心要有部下才有用：自動配不配它
+
+
+def minor_pool(content: Content, kind: str, attribute: str) -> list[str]:
+    """自動配挑得到的那幾門（帶小戰法的內容武學 id）：同種類同屬性的先；沒有就放寬到同屬性、再到同種類。"""
+    rows = [(sid, s) for sid, s in content.skills.items()
+            if s.tactic is not None and s.tactic.minor and s.tactic.kind not in NO_MINOR_KINDS]
+    for ok in (lambda s: s.kind == kind and s.attribute == attribute, lambda s: s.attribute == attribute,
+               lambda s: s.kind == kind):
+        pool = sorted(sid for sid, s in rows if ok(s))
+        if pool:
+            return pool
+    return sorted(sid for sid, _ in rows)
+
+
+def minor_for(state: GameState, content: Content, draft: CreateDraft) -> str | None:
+    """這一份草稿會配到哪一門的小戰法（成形之後才有；沒成形是 None）。主屬性＝開著的格子裡第一個出現的屬性。"""
+    if not draft.colors:
+        return None
+    affinity = affinity_of(draft.colors[: arts_mod.slot_count(content, content.config.arts.create_grade)])
+    pool = minor_pool(content, draft.kind, affinity[0] if affinity else "")
+    if not pool:
+        return None
+    seed = f"{state.player.name}|{state.player.created_count}|{draft.kind}"
+    return pool[zlib.crc32(seed.encode("utf-8")) % len(pool)]
+
+
 def finish(
-    state: GameState, content: Content, world: WorldStateStore, name: str, rng: random.Random, extra: int = 0,
+    state: GameState, content: Content, world: WorldStateStore, name: str,
 ) -> tuple[MartialArt | None, list[str]]:
-    """取名、擲品級、登記、付錢；名字被人用了回 (None, [NAME_TAKEN])，什麼都不收。"""
-    problem = name_problem(state, content, world, name, extra)
+    """取名、登記、付錢；名字被人用了回 (None, [NAME_TAKEN])，什麼都不收。品級一律 create_grade。"""
+    problem = name_problem(state, content, world, name)
     if problem is not None:
         return None, [problem]
     draft = state.player.creating
     clean = naming.clean_name(name)
-    bonus = bonus_of(content, extra)
     points = draft.score + seal_points(state, content)
-    grade = roll_grade(content, points, bonus, rng)
+    grade = content.config.arts.create_grade
     affinity = affinity_of(draft.colors[: arts_mod.slot_count(content, grade)])
     art = MartialArt(
         id=clean, name=clean, kind=draft.kind, quality="下品", attribute=affinity[0] if affinity else "",
@@ -563,20 +564,19 @@ def finish(
         creator=state.player.name, creator_shown=state.player.name, note=draft.intent, lean=draft.lean,
         affinity=affinity, slot_colors=[list(c) for c in draft.colors], pose=dict(draft.pose),
         weapon=draft.form if draft.kind == "武學" else None, method=draft.form if draft.kind == "內功" else None,
+        tactic_from=minor_for(state, content, draft),
     )
-    art = scaled(art, power_scale_of(content, points + bonus))
+    art = scaled(art, power_scale_of(content, points))
     if not world.claim_skill_name(art):
         return None, [NAME_TAKEN]
     p = state.player
     need = price(state, content)
-    p.stats["xinde"] = _xinde(state) - need - extra
+    p.stats["xinde"] = _xinde(state) - need
     p.created_count += 1
     p.creating = None
     msgs = [CREATED_LINE.format(kind=art.kind, name=art.name, grade=grade), art.note]
-    if bonus:
-        msgs.append(BONUS_LINE.format(extra=extra, bonus=bonus))
     msgs += library.store_art(state, art, grade)
-    msgs.append(f"心得 -{need + extra}")
+    msgs.append(f"心得 -{need}")
     add_chronicle(state, CHRONICLE_LINE.format(who=p.name, kind=art.kind, name=art.name))
     annals.note(state, content, annals.DEED, f"自創了一門{art.kind}【{art.name}】。", 3)
     if art.id in p.arts:
@@ -613,7 +613,7 @@ def view(state: GameState, content: Content, world: WorldStateStore) -> dict:
         "left": max(0, cfg.create_per_season - state.player.created_count), "kinds": list(KINDS),
         "forms": {k: [{"key": f.key, "blurb": f.blurb, "bias": dict(f.bias)} for f in forms_of(content, k)] for k in KINDS},
         "presets": [{"name": p.name, "angles": {k: float(p.angles.get(k, 0.0)) for k in POSE_KEYS}} for p in content.create_forms.presets],
-        "intent_max": INTENT_MAX, "bonus_per": cfg.create_bonus_per, "bonus_cap": cfg.create_bonus_cap,
+        "intent_max": INTENT_MAX, "grade": cfg.create_grade,
         "slots": {q: arts_mod.slot_count(content, q) for q in ("下品", "中品", "上品")},
         "step": "form" if draft is None else draft.step, "draft": None,
     }
@@ -624,7 +624,8 @@ def view(state: GameState, content: Content, world: WorldStateStore) -> dict:
         "intent": draft.intent, "read": list(draft.read), "lean": draft.lean,
         "read_text": ("意偏" + "、".join(draft.read) if draft.read else "意不偏一路") + LEAN_TEXT.get(draft.lean, ""),
         "colors": [list(c) for c in draft.colors], "colors_text": [arts_mod.color_text(c) for c in draft.colors],
-        "redo": draft.redo, "odds": grade_odds(content, draft.score + seal_points(state, content), 0),
+        "redo": draft.redo,
         "power": POWER_LINE.format(pct=round(power_scale_of(content, draft.score + seal_points(state, content)) * 100)),
+        "tactic": tactics.card_text(t, state.player.name[:1] or tactics.MINOR_TITLE) if (t := tactics.of(content, minor_for(state, content, draft))) is not None else "",
     }
     return base

@@ -85,16 +85,15 @@ def measure(seed: int, profile: str | None, reserve: int) -> tuple[dict[str, tup
 
     def counted_round(game, rng):
         p = game.state.player
-        arts = library.owned_arts(game.state)
-        could = bool(p.insights and arts) or len(arts) >= 2  # 結構上有東西可合（跟 bot.forge_and_cultivate 一樣的判斷）
+        could = len(p.insights) >= 2  # 結構上有東西可合（跟 bot.pick_forge 一樣的判斷）
         if could and p.stamina < bot.FORGE_RESERVE:
             calls["held"] += 1  # 有東西可合、但體力沒到保留量：這一輪的合成被擋下
         original_round(game, rng)
 
-    def counted_forge(self, art_id, insight_ids, proposed=None, other_art=None):
+    def counted_forge(self, art_id, insight_ids, proposed=None):
         before = library.held_count(self.state)
-        out = original_forge(self, art_id, insight_ids, proposed=proposed, other_art=other_art)
-        kind = "兼" if other_art else "融" if art_id else "合"
+        out = original_forge(self, art_id, insight_ids, proposed=proposed)
+        kind = "合"
         calls[f"forge{kind}"] += 1
         text = "".join(out or [])
         if library.held_count(self.state) > before:

@@ -147,6 +147,7 @@ def test_gear_runs_to_the_end_and_names_every_effect(m):
 
 
 def test_chizhang_row_reads_the_create_odds(m, content):
-    """武學重構：赤璋改加自創的意分（create.seal_points），那一行照 create.grade_odds／power_scale_of 寫。"""
+    """武學重構：赤璋改加自創的意分（create.seal_points），那一行照 create.power_scale_of 寫。main 的 d0ca2c25 起自創一律
+    Config.arts.create_grade（create.grade_odds 拿掉了），那一行改寫品級固定、意分只推底子（release/1021 合併，FB-640 那一輪）。"""
     line = m._indirect(content, next(r for r in m.gear_rows(content) if r.key == "fuse_points"))
-    assert "自創的意分" in line and "底子" in line
+    assert "自創的意分" in line and "底子" in line and content.config.arts.create_grade in line

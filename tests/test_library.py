@@ -40,19 +40,17 @@ def test_putting_a_point_into_lore_frees_room_to_fuse(state, content):
 
 
 def test_losing_lore_can_leave_you_over_the_cap(state, content, world):
-    """Review Focus 4：博聞掉下來、持有已經超過上限——照設計 4.5，熔回上限以內之前不能合成、合併，
+    """Review Focus 4：博聞掉下來、持有已經超過上限——照設計 4.5，熔回上限以內之前不能合併意境，
     但悟得的意境照收（不然奇遇給的稀有意境會直接消失）。"""
     p = state.player
     p.stats["lore"] = 7
     p.member.wugong_id = "basic_fist"
-    p.arts = ["lake_kick"]  # 武學重構：合成只剩武學＋武學，要第二門
     p.insights = ["feng", "huo"]
     p.insights += [f"x{i}" for i in range(library.cap_of(state, content) - library.held_count(state))]
     assert library.held_count(state) == library.cap_of(state, content)  # 博聞 7 時正好滿
     p.stats["lore"] = 5
     assert library.held_count(state) > library.cap_of(state, content) and library.full(state, content)
     assert "滿了" in fusion.merge_problem(state, content, world, "feng", "huo")  # 合併被擋
-    assert "滿了" in fusion.blend_problem(state, content, world, "basic_fist", "lake_kick")  # 合成也被擋
     before = library.held_count(state)
     insights.learn(state, content, world, "shui")  # 悟意境不擋：新的意境照收
     assert "shui" in p.insights and library.held_count(state) == before + 1
