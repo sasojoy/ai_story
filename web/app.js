@@ -6135,7 +6135,9 @@
       // 第二輪：你的朱圈（半徑 17、線寬 2.4）照圓的算（五塊疊成一個圓，圓外那四個角讓名字框擺得進去），鄰區出口原本的位置也讓開
       const ring = me ? R_RING.map(([a, b]) => [at[me.id][0] - a, at[me.id][1] - b, at[me.id][0] + a, at[me.id][1] + b]) : [];
       items = lay(regionLabelSpotsWide, [...(me ? fixed.slice(0, -1) : fixed), ...ring, ...exits.map((e) => regionExitBox(e, 0, room))]);
-      pick = solve(items, R_SEARCH_WIDE) || settle(items, R_SETTLE);
+      // 先照「離自己的小圖多近」的先後一起找（找得到名字就都在自己的小圖旁邊），找不到再照原本的先後找一次，再找不到才換位置
+      const near = items.map((it) => ({ ...it, opts: it.opts.slice().sort((a, b) => a.rank - b.rank) }));
+      pick = solve(near, R_SEARCH_WIDE) || solve(items, R_SEARCH_WIDE) || settle(items, R_SETTLE);
     }
     return items.map((it) => {
       const o = pick[it.i], others = items.filter((x) => x !== it).map((x) => pick[x.i]);

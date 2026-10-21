@@ -327,6 +327,24 @@ def test_fb648_region_labels_do_not_overlap_while_flipping(profile, vw, vh):
             assert run(game, OVERLAP.replace("VW", str(vw)).replace("VH", str(vh))) == [], (at, combo)
 
 
+GAPS = """
+const v = H.regionFit(H.S.mapBase, 'yingru', VW, VH);
+return H.regionLabels(H.S.mapBase, H.S.mapState, 'yingru', v, VW, VH).map((l) => {
+  const f = l.rows[0], nx = Math.max(f[0], Math.min(f[2], l.X)), ny = Math.max(f[1], Math.min(f[3], l.Y));
+  return Math.hypot(nx - l.X, ny - l.Y);
+});
+"""
+
+
+@pytest.mark.parametrize("vw,vh", PHONES)
+def test_fb648_names_stay_beside_their_own_icons_while_flipping(vw, vh):
+    """FB-648：第二輪擺好的名字框不被擠到別處的小圖旁邊——QA 那一組（甲丙、你站潁川郡）每一個名字框離自己的小圖最遠的那一個，
+    不比沒翻地時遠（第二輪先照「離自己的小圖多近」的先後一起找，往前挪也照近的挪）。"""
+    plain = run(_game(profile="season21"), GAPS.replace("VW", str(vw)).replace("VH", str(vh)))
+    flip = run(_qa_push(_game(profile="season21"), "甲丙"), GAPS.replace("VW", str(vw)).replace("VH", str(vh)))
+    assert max(flip) <= max(plain) + 0.5, (round(max(flip)), round(max(plain)))
+
+
 @pytest.mark.parametrize("vw,vh", PHONES[:3])
 def test_fb648_your_ring_is_round_in_the_second_round(vw, vh):
     """FB-648 同一個原因：你站的那一處多了朱圈與旗。你站嵩山深處（左邊緊貼畫面、旁邊是嵩山腳、南華觀、潁川書院）時 375 寬第一輪擺不下
