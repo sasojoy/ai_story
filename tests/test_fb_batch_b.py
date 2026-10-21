@@ -112,19 +112,17 @@ def test_fb116_a_pair_discusses_at_most_twice_a_game_day(pair):
     content, world = pair
     cap = content.config.discuss_per_pair_day
     assert cap == 2
-    from test_fb117 import _kick
-
-    _kick(world)  # 武學重構：寫死的【長拳】不能當合成的料，乙改練【湖邊腿法】
-    _invite(content, world, "art:basic_fist")
-    assert "烈焰拳" in _accept(content, world, "art:lake_kick")[0]  # 武學重構：武學＋意境不再合，第一回改武學＋武學
     _invite(content, world, "insight:feng")
+    assert "烈焰境" in _accept(content, world, "insight:huo")[0]  # 武學重構（10/21）：論武只合意境
+    made = world.lookup_insight_recipe(fusion.merge_key("feng", "huo"))
+    _invite(content, world, f"insight:{made.id}")
     # 第二張邀請還在等的時候，這一對人今天的帳被別處用滿了（另一個分頁、假人）：答應那一下重驗，不開爐
     key = "|".join(sorted(("甲", "乙")))
     world.mutate_season(lambda s: s.discuss_tally.update({key: [game_day(content, s), cap]}))
     full = _do(content, world, "乙", lambda g: social.pair_full(g, "discuss"))[0]
     assert _accept(content, world, "insight:huo", ("風火境", "風助火勢。")) == [full]
-    assert world.lookup_insight_recipe(fusion.merge_key("feng", "huo")) is None
-    msgs, _ = _do(content, world, "甲", lambda g: g.peer_act("乙", "discuss", {"arg": "invite:art:basic_fist"}))
+    assert world.lookup_insight_recipe(fusion.merge_key(made.id, "huo")) is None
+    msgs, _ = _do(content, world, "甲", lambda g: g.peer_act("乙", "discuss", {"arg": "invite:insight:feng"}))
     assert msgs == [full]  # 卡上那一顆也按不下去
 
 

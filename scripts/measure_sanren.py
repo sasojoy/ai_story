@@ -9,16 +9,16 @@
 印每個種子、每一邊的季末：等級、本人威力、全隊威力（本人＋同伴＋部下）、銀兩、名望、同伴數、部下數、心得，
 散人另印俠名與名號的階、懸賞完成幾張；陣營另印陣營、階與貢獻。每一邊另印傷與體力（企劃者 2026-10-12 療傷只在醫館）：
 一季平均的內傷（佔氣血上限的幾成，每一步取樣）、療傷幾次、花多少銀兩、往醫館繞了幾段路（bot.clinic_hop）、吃了幾顆回體丹、選單上的行動一共花掉多少體力、體力連一次探索都不夠的時間佔一季的幾成（見底%，照賽季時間加權）。底下兩行（懸賞榜設計 11.1）：每一種懸賞交差幾張（包住
-bounties._complete 數），以及求藝、求兵各拿到多少（銀兩、經驗、心得、素材、求藝送的兵器；交出去的武學幾門〔其中幾門是交了再
-照同一個配方合的〕、兵器幾把〔其中幾把是自己打的〕；包住 bounties.give 數）。最後兩行是兩邊的中位數。
+bounties._complete 數），以及求兵拿到多少（銀兩、經驗、心得；交出去的兵器幾把〔其中幾把是自己打的〕；包住 bounties.give 數；
+求藝企劃者 2026-10-21 拿掉）。最後兩行是兩邊的中位數。
 一個種子一個資料庫、只有一個機器人，碰不到別人，截殺一場都不會有：截殺的量看 scripts/sim_server_bots.py（設計 11.2）。
 
 用法：.venv/Scripts/python.exe scripts/measure_sanren.py --seeds 1 2 3 4 5 [--profile weekend|none] [--faction guan|huang|haoqiang] [--no-give] [--bare]
 （--profile 預設 weekend：第一季規則開著的週末設定；none 是不套設定覆寫檔，量預設設定〔14 天、第一季規則關著〕的季——
 懸賞榜、名號、截殺每季都有之後，那種季也有懸賞可揭〔懸賞榜設計 11.1〕。不用空字串：PowerShell 5.1 會把它吞掉。
 --faction 指定陣營那一邊投靠誰：還沒投靠時一路往那個陣營的投靠點走、只投它（不給就照舊投選單上第一個出現的，量不到豪強）；
---no-give 只拿掉求藝、求兵（有懸賞榜第一批、沒有第二批：豪強的基準，跟 --faction haoqiang 比）；
---bare 是對照組：拿掉懸賞榜〔含求藝、求兵〕與名號的經驗加成，看這一版之前散人跟陣營差多少）
+--no-give 只拿掉求兵（有懸賞榜第一批、沒有第二批：豪強的基準，跟 --faction haoqiang 比）；
+--bare 是對照組：拿掉懸賞榜〔含求兵〕與名號的經驗加成，看這一版之前散人跟陣營差多少）
 """
 from __future__ import annotations
 
@@ -49,18 +49,16 @@ from tianxia.sqlite_world import open_world  # noqa: E402
 
 STEER = 0.5  # 有目標的玩家：一半的時候照手上的懸賞、軍令走
 COLUMNS = ("等級", "本人威力", "全隊威力", "銀兩", "名望", "同伴", "部下", "心得", "內傷%", "療傷", "療傷銀", "繞路", "吃丹", "花體力", "見底%")
-KINDS = ("strike", "scout", "escort", "wanted", "art", "arms")
-GOT = ("銀兩", "經驗", "心得", "一階素材", "二階素材", "三階素材", "兵器")
-TIER_WORDS = {1: "一階素材", 2: "二階素材", 3: "三階素材"}
+KINDS = ("strike", "scout", "escort", "wanted", "arms")
+GOT = ("銀兩", "經驗", "心得")
 
 
 class Tally:
-    """一季的懸賞帳（懸賞榜設計 11.1）：每一種交差幾張（包住 bounties._complete），求藝、求兵各拿到多少（包住 bounties.give，交成了才記）。"""
+    """一季的懸賞帳（懸賞榜設計 11.1）：每一種交差幾張（包住 bounties._complete），求兵拿到多少（包住 bounties.give，交成了才記）。"""
 
     def __init__(self) -> None:
         self.done: Counter = Counter()
-        self.got: dict[str, Counter] = {"art": Counter(), "arms": Counter()}
-        self.arts: list[str] = []  # 交出去的武學 id：同一個 id 第二次出現＝交了之後照同一個配方再合出來的那一門
+        self.got: Counter = Counter()
         self.weapons = 0
         self.forged = 0  # 交出去的兵器裡自己打的（Weapon.recipe 不是 None）
 
@@ -75,36 +73,24 @@ class Tally:
             p = state.player
             b = next((x for x in state.world.bounties if x.id == bounty_id), None)
             w = bounties._weapon(state, item_id)
-            silver, xinde, bag = p.stats.get("silver", 0), p.stats.get("xinde", 0), dict(p.materials)
-            held = {x.id for x in (p.weapon, *p.rack) if x is not None}
+            silver, xinde = p.stats.get("silver", 0), p.stats.get("xinde", 0)
             msgs = real(state, content, world, bounty_id, item_id)
             if b is None or not msgs[0].startswith(bounties.GIVEN_PREFIX):
                 return msgs
-            got = self.got[b.kind]
+            got = self.got
             got["銀兩"] += p.stats.get("silver", 0) - silver
             got["心得"] += p.stats.get("xinde", 0) - xinde
             got["經驗"] += sum(int(m.partition("+")[2]) for m in msgs if m.startswith("經驗 +"))
-            for mid, n in p.materials.items():
-                if n > bag.get(mid, 0):
-                    got[TIER_WORDS.get(content.materials[mid].tier, "素材")] += n - bag.get(mid, 0)
-            got["兵器"] += len({x.id for x in (p.weapon, *p.rack) if x is not None} - held)
-            if b.kind == "art":
-                self.arts.append(item_id)
-            else:
-                self.weapons += 1
-                self.forged += int(w is not None and w.recipe is not None)
+            self.weapons += 1
+            self.forged += int(w is not None and w.recipe is not None)
             return msgs
         return counted
 
     def lines(self) -> list[str]:
-        def got(kind: str) -> str:
-            return "・".join(f"{k} {self.got[kind][k]}" for k in GOT if self.got[kind][k]) or "什麼都沒拿到"
-
-        again = len(self.arts) - len(set(self.arts))
+        got = "・".join(f"{k} {self.got[k]}" for k in GOT if self.got[k]) or "什麼都沒拿到"
         return [
             "　交差：" + "・".join(f"{bounties.KIND_NAMES[k]} {self.done[k]}" for k in KINDS),
-            f"　求藝：交 {len(self.arts)} 門（同一配方再交 {again} 門），{got('art')}；"
-            f"求兵：交 {self.weapons} 把（自己打的 {self.forged} 把），{got('arms')}",
+            f"　求兵：交 {self.weapons} 把（自己打的 {self.forged} 把），{got}",
         ]
 
 
@@ -176,7 +162,7 @@ def _join(game, options, faction: str | None) -> tuple[str | None, list]:
 
 
 def _strip(content, bare: bool, no_give: bool) -> None:
-    """對照組：no_give 只拿掉求藝、求兵（懸賞榜第一批還在：豪強在第二批之前的基準）；bare 拿掉整個懸賞榜（含求藝、求兵）
+    """對照組：no_give 只拿掉求兵（懸賞榜第一批還在：豪強在第二批之前的基準）；bare 拿掉整個懸賞榜（含求兵）
     與名號的經驗加成（這一版之前的散人）。"""
     if bare or no_give:
         content.config.bounties.give_kinds = []
@@ -283,8 +269,8 @@ def main() -> None:
     parser.add_argument("--profile", default="weekend",
                         help="設定覆寫檔（content/profiles/<名字>.json）；none＝不套，量預設設定（14 天、第一季規則關著）的季")
     parser.add_argument("--faction", default=None, help="陣營那一邊投靠誰（劇本的陣營 id，例如 guan、huang、haoqiang）；不給就投第一個碰到的")
-    parser.add_argument("--no-give", action="store_true", help="對照組：只拿掉求藝、求兵（豪強的基準）")
-    parser.add_argument("--bare", action="store_true", help="對照組：拿掉懸賞榜（含求藝、求兵）與名號的經驗加成")
+    parser.add_argument("--no-give", action="store_true", help="對照組：只拿掉求兵（豪強的基準）")
+    parser.add_argument("--bare", action="store_true", help="對照組：拿掉懸賞榜（含求兵）與名號的經驗加成")
     args = parser.parse_args()
     profile = None if args.profile == "none" else args.profile
     content = load_content(ROOT / "content", profile=profile)

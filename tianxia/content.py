@@ -35,6 +35,7 @@ from .models import (
 )
 from .martial_arts import ATTRIBUTE_COUNTERS, ATTRIBUTES, QUALITIES
 from .naming import FORGE_CLASH, GEAR_CLASH, PRESET_CLASH, SEAL_CLASH, name_problem
+from .tactics import figure_arts
 from .armor import FORGE_NOUNS as ARMOR_FORGE_NOUNS, FORGE_WORDS as ARMOR_FORGE_WORDS, word_problem as armor_word_problem
 from .weapons import ATTR_WORDS as WEAPON_ATTR_WORDS, NOUNS as WEAPON_NOUNS, WEAPON_WORDS, kind_problem as weapon_kind_problem, shop_name as weapon_shop_name
 from .zh import to_traditional
@@ -799,9 +800,11 @@ def _placeholder_problem(line: str) -> str | None:
 
 def check_signature_arts(c: Content, need) -> None:
     """本命武學（tianxia/signature.py、tactics.py，企劃者 2026-10-15）：寫了本命戰法（SkillDef.tactic）的只能是人物的本命武學或本命內功
-    （CharacterDef.starting_*，玩家只在情誼到了才學得到）、品質要是絕學；戰法的名字不重複、不撞一般與特別功效的名字；說明裡的 {鍵}
-    都要在 params 裡（卡上換成數字）；allies 是人物、foe_faction 是劇本的陣營；寫了一般功效（SkillDef.traits）的第一個要是自己的屬性、不重複。"""
+    （CharacterDef.starting_*，玩家只在情誼到了才學得到）、品質要是絕學；小戰法（TacticDef.minor）只寫在下品、不是本命的武學上；戰法的名字不重複、不撞一般與特別功效的名字；說明裡的 {鍵}
+    都要在 params 裡（卡上換成數字）；allies 是人物、foe_faction 是劇本的陣營；寫了一般功效（SkillDef.traits）的第一個要是自己的屬性、不重複。
+    本命是人物起始武學裡的絕學（tactics.figure_arts，FB-640）：歷史武將同行起始帶的學來的下品武學（FB-364）照樣帶小戰法、不是本命。"""
     starts = {s for ch in c.characters.values() for s in (ch.starting_wugong, ch.starting_neigong) if s}
+    own_arts = {s for ch in c.characters.values() for s in figure_arts(c, ch)}  # 人物的本命武學與本命內功
     trait_names = {t.name for t in c.traits.general} | {t.name for t in c.traits.special}
     factions = {f.id for f in c.scenario.factions}
     seen: dict[str, str] = {}
@@ -812,8 +815,14 @@ def check_signature_arts(c: Content, need) -> None:
         tactic = skill.tactic
         if tactic is None:
             continue
-        need(skill.id in starts, f"武學 {skill.id}：本命戰法只能寫在人物的本命武學或本命內功上")
-        need(skill.quality == "絕學", f"武學 {skill.id}：本命武學的品質要是絕學")
+        if tactic.minor:  # 小戰法（學來的武學，Joy 2026-10-21）：下品的內容武學、不是人物的本命；沒有本命底蘊與連動
+            need(skill.id not in own_arts, f"武學 {skill.id}：人物的本命武學寫的是本命戰法，不是小戰法")
+            need(skill.quality == "下品", f"武學 {skill.id}：小戰法只寫在下品的武學上")
+            need(not tactic.might and not tactic.allies and tactic.foe_faction is None,
+                 f"武學 {skill.id}：小戰法不寫 might、allies、foe_faction")
+        else:
+            need(skill.id in starts, f"武學 {skill.id}：本命戰法只能寫在人物的本命武學或本命內功上")
+            need(skill.quality == "絕學", f"武學 {skill.id}：本命武學的品質要是絕學")
         first = seen.setdefault(tactic.name, skill.id)
         need(first == skill.id, f"本命戰法的名字「{tactic.name}」重複（{first}、{skill.id}）")
         need(tactic.name not in trait_names, f"武學 {skill.id}：本命戰法的名字「{tactic.name}」跟一般或特別功效同名")
@@ -838,8 +847,7 @@ def check_signature_arts(c: Content, need) -> None:
         need(arm.bond is None or bool(arm.bond.desc), f"名將本命兵器 {arm.character}：人器合一要寫說明")
         if arm.bond is not None:  # 加強的是那位名將的哪一門（PM 2026-10-16：只加卡上寫的那一門）
             ch = c.characters.get(arm.character)
-            own = [c.skills[s].tactic.name for s in ((ch.starting_wugong, ch.starting_neigong) if ch else ())
-                   if s in c.skills and c.skills[s].tactic is not None]
+            own = [c.skills[s].tactic.name for s in (figure_arts(c, ch) if ch else ()) if c.skills[s].tactic is not None]
             need(arm.bond.tactic in own, f"名將本命兵器 {arm.character}：人器合一的 tactic 要是他本命的一門戰法 {own}，寫的是「{arm.bond.tactic}」")
             need(not arm.bond.tactic or arm.bond.tactic in arm.bond.desc, f"名將本命兵器 {arm.character}：人器合一的說明要寫到加強的那一門「{arm.bond.tactic}」")
     for trait in c.traits.general:  # 絕學立招：絕招的名字到時候換成那門絕學的名字，這裡只驗說明的 {鍵} 與以器配招的說明
@@ -1621,17 +1629,18 @@ def check_foreshadows(
 
 
 def check_bounties(c: Content, need) -> None:
-    """懸賞榜的設定（Config.bounties，懸賞榜設計 4.1 末段）：種類只能是認得的（不認得的 bounties.issue 會默默跳過）；求藝、求兵挑屬性的
+    """懸賞榜的設定（Config.bounties，懸賞榜設計 4.1 末段）：種類只能是認得的（不認得的 bounties.issue 會默默跳過）；求兵挑屬性的
     範圍至少一個、而且是認得的屬性；求兵的價錢剛好寫三個品質與三個階（少一個，交那種兵器時會 KeyError）。
-    give_kinds、give_attributes 不能重複：kinds 寫兩次 strike 是「掛兩張」，give_kinds 寫兩次 art 卻只會掛一張（issue 照種類各掛一張），
+    give_kinds 只能是 arms（求藝企劃者 2026-10-21 拿掉，寫 art 直接報錯，不默默跳過）。
+    give_kinds、give_attributes 不能重複：kinds 寫兩次 strike 是「掛兩張」，give_kinds 寫兩次 arms 卻只會掛一張（issue 照種類各掛一張），
     照 kinds 的習慣寫會被默默吃掉；give_attributes 重複會讓三方抽到同一個屬性。
     賞的字典（silver、exp、deeds、xinde）：設定覆寫檔寫了就是整張換掉，少寫 give_kinds 裡某一種的那一項，掛得出來、交得了，領到的卻默默是 0
     （bounties.py 都是 .get(種類, 0)）。所以預設有寫的項目，掛出去的每一種都要留著（預設 silver 沒有 arms：求兵的銀兩走 arms_silver × arms_tier）。"""
     cfg = c.config.bounties
     need(set(cfg.kinds) <= {"strike", "scout", "escort"}, f"Config.bounties.kinds 只能有 strike、scout、escort：{cfg.kinds}")
     need(
-        set(cfg.give_kinds) <= {"art", "arms"} and len(set(cfg.give_kinds)) == len(cfg.give_kinds),
-        f"Config.bounties.give_kinds 只能有 art、arms，各最多寫一次：{cfg.give_kinds}",
+        set(cfg.give_kinds) <= {"arms"} and len(set(cfg.give_kinds)) == len(cfg.give_kinds),
+        f"Config.bounties.give_kinds 只能有 arms（求藝 2026-10-21 拿掉），最多寫一次：{cfg.give_kinds}",
     )
     need(
         bool(cfg.give_attributes) and set(cfg.give_attributes) <= set(ATTRIBUTES)
@@ -2863,7 +2872,7 @@ def _validate_secrets(c: Content, need) -> None:
     """秘方池（content/secret_recipes.json）與 Config.secrets：每一種寫對該寫的格子、形狀裡的值都在清單裡、名號過得了命名過濾、
     口訣三句各 20 字內而且不帶數字（只講意象）。"""
     cfg = c.config.secrets
-    need(set(cfg.per_season) <= {"fuse", "merge", "blend"}, f"Config.secrets.per_season 只能有 fuse、merge、blend：{sorted(cfg.per_season)}")
+    need(set(cfg.per_season) <= {"fuse", "merge"}, f"Config.secrets.per_season 只能有 fuse、merge：{sorted(cfg.per_season)}")
     for event_id in cfg.tale_events:
         need(event_id in c.events, f"Config.secrets.tale_events：事件 {event_id} 不存在")
     special_ids = {t.id for t in c.traits.special}
@@ -2895,24 +2904,19 @@ def _validate_secrets(c: Content, need) -> None:
             need(0 < len(clue) <= 20, f"{where}：第 {i + 1} 句口訣要 1～20 字")
             need(not re.search(r"[0-9０-９]", clue), f"{where}：第 {i + 1} 句口訣不寫數字")
         if recipe.kind == "fuse":
-            need(recipe.art is not None and recipe.insight is not None and not recipe.arts and recipe.left is None and recipe.right is None,
+            need(recipe.art is not None and recipe.insight is not None and recipe.left is None and recipe.right is None,
                  f"{where}：武學＋意境只寫 art 與 insight")
             if recipe.art is not None:
                 art_ok(f"{where} 的武學", recipe.art)
             if recipe.insight is not None:
                 insight_ok(f"{where} 的意境", recipe.insight)
         elif recipe.kind == "merge":
-            need(recipe.left is not None and recipe.right is not None and recipe.art is None and recipe.insight is None and not recipe.arts,
+            need(recipe.left is not None and recipe.right is not None and recipe.art is None and recipe.insight is None,
                  f"{where}：意境＋意境只寫 left 與 right")
             need(recipe.special is None, f"{where}：合出意境的秘方沒有特別功效")
             for side in ("left", "right"):
                 if getattr(recipe, side) is not None:
                     insight_ok(f"{where} 的 {side}", getattr(recipe, side))
-        else:
-            need(len(recipe.arts) == 2 and recipe.art is None and recipe.insight is None and recipe.left is None and recipe.right is None,
-                 f"{where}：武學＋武學只寫 arts 兩門")
-            for i, pattern in enumerate(recipe.arts):
-                art_ok(f"{where} 的第 {i + 1} 門", pattern)
 
 
 def _validate_tier4_named(c: Content, need) -> None:
