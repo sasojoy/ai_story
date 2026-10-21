@@ -142,6 +142,8 @@ def title_of(tactic: TacticDef, art=None) -> str:
     """招名前面蓋哪一枚印：自創的武學（moves.is_own 那一種：來歷是自創、有創的人）寫創的人名號的第一個字，
     學來的寫「看家」，其餘「本命」。"""
     if art is not None and art.id and getattr(art, "origin", "") == "created" and getattr(art, "creator", None):
+        if getattr(art, "quality", "") == "絕學":  # 破境之後自己的招是絕招：金印「絕」
+            return ULTIMATE_SEAL
         who = getattr(art, "creator_shown", None) or getattr(art, "creator", None) or ""
         if who[:1]:
             return who[:1]
@@ -1635,16 +1637,18 @@ def figure_of(content: Content, skill_id: str) -> str | None:
 
 def holders_of(
     content: Content, rows: list[tuple[str, str, str | None, str | None]], world=None,
-    levels: dict[str, int] | None = None,
+    levels: dict[str, int] | None = None, mine: dict | None = None,
 ) -> list[Holder]:
     """（名字, 鍵, 武學 id, 內功 id）一列一個人 → 帶著本命戰法的那幾門（武學在前）。同一門戰法兩個人都帶著時只算第一個
-    （本人在前）：同一招不會一回合發兩次。給了 world 才認得自創的招（of_id）；levels 是本人那兩門練到第幾成（自創的招還生不生）。"""
+    （本人在前）：同一招不會一回合發兩次。給了 world 才認得自創的招（of_id）；levels 是本人那兩門練到第幾成（自創的招還生不生），
+    mine 是本人那兩門自己那一份（team.player_art：破境了的自創招升為絕招）。"""
     out: list[Holder] = []
     seen: set[str] = set()
     for who, key, wugong, neigong in rows:
         for skill_id in (wugong, neigong):
             level = (levels or {}).get(skill_id) if key == PLAYER_KEY else None
-            tactic = of_id(content, skill_id, world, level)
+            own = (mine or {}).get(skill_id) if key == PLAYER_KEY else None
+            tactic = of_art(content, own, level) if own is not None else of_id(content, skill_id, world, level)
             if tactic is None or tactic.name in seen:
                 continue
             seen.add(tactic.name)

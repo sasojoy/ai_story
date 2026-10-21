@@ -260,6 +260,21 @@ class InsightFx(BaseModel):
     grand: str | None = None
 
 
+class Ascension(BaseModel):
+    """破境卡（tianxia/ascend.py；招式與絕學稿案第三節）：剛破境的那一門，收場後跳出來的那一張。看過（dismiss）就收掉。"""
+
+    art: str  # 功法 id
+    name: str  # 門名（寫卡時的顯示名）
+    via: str = "seize"  # seize（仗裡的契機）／pill（服破境丹閉門衝關）
+    before: str = ""  # 破境前那一招（tactics.card_text，蓋私印）
+    after: str = ""  # 破境後的絕招（蓋金印「絕」）
+    after_tail: str = ""  # 後勁那一行（八種照屬性配的絕招；沒有是空字串）
+    power: list[int] = Field(default_factory=list)  # 戰力：破境前、破境後（arts.rating，第十成）
+    chronicle: str = ""  # 江湖史那一行
+    line: str = ""  # 模型照那一句意寫的一句（三段式；叫不動照套句）
+    intent: str = ""  # 自創時那一句意（給模型當背景）
+
+
 class CreateDraft(BaseModel):
     """自創武學走到哪（tianxia/create.py；Joy 2026-10-20 改成五步）：執器（kind、form）開單 → 擺式（pose）→ 立意（intent，
     模型讀出 read、lean、score；引擎照兵器＋姿勢＋意擲出 colors）→ 立名（付心得、擲品級、登記）。redo 是還能免費重來幾次。"""
@@ -660,6 +675,7 @@ class PlayerState(BaseModel):
     arts_migrated: bool = False  # 舊存檔的功效轉成槽做過了沒（arts.migrate 只做一次）
     created_count: int = 0  # 這一季自創了幾門（Config.arts.create_per_season、價錢遞增）；角色每季重來
     creating: CreateDraft | None = None  # 自創走到一半的單子（tianxia/create.py）；取名那一步才付心得
+    ascension: Ascension | None = None  # 剛破境、還沒看過的破境卡（tianxia/ascend.py）
     stamina_pills: int = 0  # 回體丹（Config.stamina_pill_name）的數量：建立角色時的內測贈送；跨季保留（Game._reset_player_for_new_season）
     # 回體丹補到過幾顆（企劃者 2026-10-12 拿掉一鍵補滿、改送合適的數量）：Config.beta_gift_stamina_pills 比它多時，讀檔那一刻手上不到那個數的
     # 補到那個數、寫一行紀錄，再記成那個數（一個數只補一次；之後再調高會再補一次）。新角色建立時就記成送的數。

@@ -5386,6 +5386,7 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
         "tavern_ask",  # 酒肆問酒家：三段同 duel_text，模型只寫酒家那一句
         "feast_text",  # 宴客自己寫的那一句敬酒（大勢人物擴充第三批）：三段同 answer_event
         "create_intent",  # 自創武學的形意那一句（武學重構）：鎖外請模型評分（create.score），結果交給 C 段
+        "ascend_line",  # 破境卡那一句（招式與絕學稿案第三節）：三段同 create_intent
     }
     # 宣告、model_call 讀、main() 建佇列；另外兩個只看不排：/api/queue 問位置、管理者那份資料抄總數（admin_choices 在 look 的鎖裡，
     # 但 snapshot 只碰佇列自己的短鎖、不等任何一件，不算在行動鎖裡排隊）

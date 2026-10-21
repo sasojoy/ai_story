@@ -2260,6 +2260,8 @@ class ArtsTuning(_Strict):
     # 撞出來的稀有（招式與絕學稿案「強不強、稀有不稀有」）：三格全單色「純」、三格全任色「渾」，槽裡意境的一般功效打架時再乘 1＋這個數
     pure_bonus: float = Field(default=0.10, ge=0)
     whole_bonus: float = Field(default=0.15, ge=0)
+    # 破境（招式與絕學稿案第三節）：自創的練成絕學，自己的招升為絕招——發動率升到必定，會長的數再乘 ascend_scale
+    ascend_scale: float = Field(default=1.5, ge=1)
     # 基本威力（Joy 2026-10-21「基本威力你先自己用一版」）：同一品級的威力區間再乘一個倍數，夾在 power_scale_range。
     # 自創照「意」分＋加分＋赤璋（夾 0～100）從下限線性推到上限；武學＋武學合出來的照兩門來源的倍數平均再加 blend_power_step。
     # 以前是名字雜湊的 ±10%；已經登記的武學照舊、不重算

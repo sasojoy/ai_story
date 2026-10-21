@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from pydantic import BaseModel
 
 from . import arts as arts_mod
+from . import ascend  # 破境卡（招式與絕學稿案第三節）
 from . import (
     allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, chuangong, clinic, companion_agent, create, cultivation, defection, economy, encounter, enlist, equipment, event_llm, explore_modes,
     feasts, fight_llm, figure_aid, figure_life, figures, foreshadow, generals, forge_secrets, front_lines, fusion, gender, howto, insight_fx, insights, invites, journal, letters, library, mapdata, martial_arts,
@@ -8234,6 +8235,18 @@ class Game:
     def create_cancel(self) -> list[str]:
         return self._log(create.cancel(self.state))
 
+    def ascend_request(self):
+        """破境卡那一句的 A 段（鎖內、只讀）：有一張還沒寫那一句的卡，回請模型寫的單子；沒有是 None。"""
+        return ascend.request(self.state)
+
+    def ascend_line(self, req, line: str) -> list[str]:
+        """破境卡那一句的 C 段：卡還是同一張才存。"""
+        return ascend.set_line(self.state, req, line)
+
+    def ascend_dismiss(self) -> list[str]:
+        """看過破境卡了，收掉。"""
+        return ascend.dismiss(self.state)
+
     def create_view(self) -> dict:
         """煉製頁「自創」那一塊（create.view）。只讀。"""
         return create.view(self.state, self.content, self.world)
@@ -11870,6 +11883,7 @@ class Game:
             # 鑄譜（打造的隱藏配方）：這一季聽過口訣或打中過的，一條一筆 {"clues", "solved", "recipe"}（打造隱藏配方設計 6.3）
             "forge_manual": forge_secrets.view(s, c, self.world),
             "create": self.create_view(),  # 自創武學那一塊（煉製頁；tianxia/create.py）
+            "ascension": ascend.view(self.state),  # 剛破境、還沒看過的破境卡（tianxia/ascend.py）
             "anonymous": p.anonymous,
             "gender": gender.of(p),  # 性別：修練頁的人物面板照它換男女版（web/app.js 的 HERO_FIGURES）
             "gender_chosen": p.gender_chosen,  # 選過了沒：設定頁沒選過的舊角色給一次改的機會

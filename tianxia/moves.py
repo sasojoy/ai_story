@@ -92,12 +92,37 @@ def build(content: Content, kind: str, attribute: str, stance: str, fire: str, r
     )
 
 
+MASTERED = "絕學"
+
+
+def ascend(content: Content, move: CreateMove, tactic: TacticDef) -> TacticDef:
+    """破境：招升為絕招——發動率升到必定，會長的數（rate 以外）再乘 Config.arts.ascend_scale（本來就必定的靠這一截變強）。"""
+    k = content.config.arts.ascend_scale
+    params = dict(tactic.params)
+    for key in move.grow:
+        if key == "rate" or key not in params:
+            continue
+        params[key] = round(1 + (params[key] - 1) * k, 3) if key == "mult" else round(params[key] * k, 4)
+    return tactic.model_copy(update={"rate": 1.0, "params": params})
+
+
+def ascended(art) -> bool:
+    """這一份（玩家自己那一份，team.player_art）練成絕學了沒。"""
+    return getattr(art, "quality", "") == MASTERED
+
+
 def move_of(content: Content, art, level: int | None = None) -> TacticDef | None:
-    """一門自創武學的招（不是自創的是 None）：存著的招名、火候、稀有；勢照存著的姿勢讀。"""
+    """一門自創武學的招（不是自創的是 None）：存著的招名、火候、稀有；勢照存著的姿勢讀。
+    art 是玩家自己那一份而且練成絕學了（ascended）：升為絕招（ascend，不再看招生不生）。"""
     if not is_own(content, art):
         return None
-    return build(content, art.kind, art.attribute, stance_of_art(content, art), art.move_fire or DEFAULT_FIRE,
-                 art.move_rare, art.move_name, art.move_say, level)
+    stance = stance_of_art(content, art)
+    fire = art.move_fire or DEFAULT_FIRE
+    if ascended(art):
+        base = build(content, art.kind, art.attribute, stance, fire, art.move_rare, art.move_name, art.move_say)
+        row = cell(content, art.attribute, timing_of(art.kind, stance), art.move_rare)
+        return ascend(content, row, base) if base is not None and row is not None else base
+    return build(content, art.kind, art.attribute, stance, fire, art.move_rare, art.move_name, art.move_say, level)
 
 
 PURE, WHOLE = "純", "渾"  # 待 joy 潤

@@ -63,6 +63,8 @@ def main() -> None:
     parser.add_argument("--kits", action="store_true", help="只量第三批：本命對自組上品、神器特技、名將本命兵器")
     parser.add_argument("--catch-up", action="store_true", help="只量玩家武學追上本命：十八位本命對滿配絕學＋配招兵器")
     parser.add_argument("--own", action="store_true", help="只量以意成招：十八位本命對自創滿配（兩門自創上品、各一招透的招）")
+    parser.add_argument("--own-all", action="store_true", help="--own 另量空手、招熟、舊滿配")
+    parser.add_argument("--move-scale", type=float, help="自創的招（content/create_forms.json 的 moves）會長的數全部乘這個數（只量）")
     parser.add_argument("--strength", type=int, default=3, help="--catch-up 滿配裡每個意境的強度（一重～三重）")
     parser.add_argument("--bout-strike", type=float, help="試別的 Config.tactics.bout_strike（只量）")
     parser.add_argument("--war-scale", type=float, help="試別的 Config.tactics.war_scale（只量）")
@@ -106,6 +108,11 @@ def main() -> None:
         catch_up(content, args.runs, args.strength)
         return
     if args.own:
+        global OWN_ALL
+        OWN_ALL = args.own_all
+        if args.move_scale is not None:
+            from tianxia import moves
+            content.create_forms.moves = [m.model_copy(update=moves.scaled(m, args.move_scale)) for m in content.create_forms.moves]
         own(content, args.runs, args.strength)
         return
     ctx = tactics.Ctx(foe="對手", our_agility=8, foe_agility=rounds.foe_agility(DIFFICULTY), team=["player", "a", "b"])
@@ -289,6 +296,7 @@ def bouts(content, runs):
 # ── 第三批 ──────────────────────────────────────────
 
 SELF_KITS = 12  # 隨機自組幾套
+OWN_ALL = False  # --own 時另量空手、招熟、舊滿配（--own-all）
 GRAND_SHARE = 1.0  # 滿配每一格的第二個效果是大獎的機會（--grand-share 改；意境效果池之後，第三批）
 ATTRS = ("快", "慢", "剛", "柔", "陽", "陰", "虛", "實")
 
@@ -405,15 +413,18 @@ def catch_up(content, runs, strength=3):
     print(f"  十八位平均 {sum(rows) / len(rows):.1%}，最低 {min(rows):.1%}、最高 {max(rows):.1%}")
 
 
-def own_kit(content, seed, strength=3, gear=True, fire="透"):
+def own_kit(content, seed, strength=3, gear=True, fire="透", ascended=False):
     """自創滿配（以意成招，破境之前）：武學、內功各一門自創上品，三格裝滿（每格那一路一個一般功效 strength 重＋大獎），
     各一招自己長出來的招（隨機路數與勢、火候 fire、練過前幾成）；gear 時另帶一把以器配招的神器原品。純、渾不算（另量）。"""
     from tianxia import moves
     rng = random.Random(f"own|{seed}")
-    hs = piece_kit(content, seed, "上品", strength, GRAND_SHARE, 0.5, ults=False)
+    hs = piece_kit(content, seed, "絕學" if ascended else "上品", strength, GRAND_SHARE, 0.5, ults=ascended)
     level = content.config.arts.move_raw_levels + 1
     for kind in ("武學", "內功"):
-        move = moves.build(content, kind, rng.choice(ATTRS), rng.choice(moves.STANCES), fire, level=level)
+        attribute, stance = rng.choice(ATTRS), rng.choice(moves.STANCES)
+        move = moves.build(content, kind, attribute, stance, fire, level=level)
+        if ascended:  # 破境：自己的招升為絕招（piece_kit 的 ults 就是接在後面的後勁）
+            move = moves.ascend(content, moves.cell(content, attribute, moves.timing_of(kind, stance)), move)
         hs.append(tactics.Holder(who="你", key="player", skill=f"own:{kind}", tactic=move))
     if gear:
         arm = rng.choice([r for r in content.forge_secrets.values() if r.tactic is not None and r.slot == "weapon"])
@@ -427,8 +438,12 @@ def own(content, runs, strength=3):
     arms = {a.character: a for a in content.gear.signature_arms}
     for label, kits in (
         ("自創滿配＋配招兵器", [own_kit(content, k, strength) for k in range(SELF_KITS)]),
+        ("破境滿配＋配招兵器", [own_kit(content, k, strength, ascended=True) for k in range(SELF_KITS)]),
+    ) if not OWN_ALL else (
+        ("自創滿配＋配招兵器", [own_kit(content, k, strength) for k in range(SELF_KITS)]),
         ("自創滿配、空手", [own_kit(content, k, strength, gear=False) for k in range(SELF_KITS)]),
         ("自創滿配、招熟", [own_kit(content, k, strength, fire="熟") for k in range(SELF_KITS)]),
+        ("破境滿配＋配招兵器", [own_kit(content, k, strength, ascended=True) for k in range(SELF_KITS)]),
     ):
         rows = []
         for fid in figures_with(content):
@@ -440,9 +455,10 @@ def own(content, runs, strength=3):
             vs = [share(sig, k) for k in kits]
             rows.append(sum(vs) / len(vs))
         print(f"本命對{label}：十八位平均 {sum(rows) / len(rows):.1%}，最低 {min(rows):.1%}、最高 {max(rows):.1%}")
-    fulls = [full_kit(content, k, strength) for k in range(SELF_KITS)]
-    owns = [own_kit(content, k, strength) for k in range(SELF_KITS)]
-    print(f"舊滿配（兩門絕學＋絕招）對自創滿配：{sum(share(a, b) for a, b in zip(fulls, owns)) / SELF_KITS:.1%}")
+    if OWN_ALL:
+        fulls = [full_kit(content, k, strength) for k in range(SELF_KITS)]
+        owns = [own_kit(content, k, strength) for k in range(SELF_KITS)]
+        print(f"舊滿配（兩門絕學＋絕招）對自創滿配：{sum(share(a, b) for a, b in zip(fulls, owns)) / SELF_KITS:.1%}")
 
 
 def gear_holder(tactic):

@@ -606,12 +606,12 @@ def fire_of_draft(state: GameState, content: Content, draft: CreateDraft) -> str
 
 def draft_move(state: GameState, content: Content, draft: CreateDraft, name: str | None = None) -> TacticDef | None:
     """這一份草稿會長出哪一招（成形之後才有；沒成形是 None）：路數＝主屬性、勢照姿勢、火候照意分。
-    招名照 name（立名時玩家給的）、模型起的、表上的預設名的順序；還沒練，照第一成算（招還生）。"""
+    招名照 name（立名時玩家給的）、模型起的、表上的預設名的順序；照練開之後的數算（前幾成招還生，戰鬥時才打折）。"""
     if not draft.colors:
         return None
     return moves.build(
         content, draft.kind, top_of(content, draft), stance_of(draft.pose), fire_of_draft(state, content, draft),
-        draft.rare, name or draft.move or None, draft.say, level=1,
+        draft.rare, name or draft.move or None, draft.say,
     )
 
 
@@ -721,7 +721,7 @@ def view(state: GameState, content: Content, world: WorldStateStore) -> dict:
     fire = fire_of_draft(state, content, draft) if draft.colors else None
     marks = marks_of(draft.colors, fire, draft.rare) if draft.colors else []
     base["draft"].update({
-        # 成形之後長出來的招：蓋自己名號第一個字的私印，照第一成算（招還生）
+        # 成形之後長出來的招：蓋自己名號第一個字的私印，照練開之後的數算
         "tactic": tactics.card_text(move, state.player.name[:1] or tactics.MINOR_TITLE) if move is not None else "",
         "move": move.name if move is not None else "", "say": move.say if move is not None else "",
         "fire": fire, "look": look_text(marks), "tier": tier_of(marks), "marks": marks,

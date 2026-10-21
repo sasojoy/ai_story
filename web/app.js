@@ -316,6 +316,8 @@
   }
 
   function setMain(main) {
+    // 破境卡：動作回來的與輪詢拿到的都走這裡（S.main 換好之後才畫）。測試只抽 setMain 出來跑，沒有 ascendCard 就不畫
+    if (typeof ascendCard === "function") setTimeout(ascendCard, 0);
     if (main.event_free_text == null) S.answering = false; // 事件過去了，輸入框跟著收起
     if (!(main.options || []).some((o) => o.id === SAY_OPTION)) S.saying = false; // 交談結束了，「自己說」的輸入框跟著收起
     if (S.sensing && !(main.options || []).some((o) => o.id === SENSE_DRAW)) closeSense(); // 感悟狀態過去了（悟成、作廢），畫布跟著收起
@@ -2777,7 +2779,7 @@
   const fxHtml = (fx, cls) => (Array.isArray(fx) && fx.length ? `<span class="fxs${cls ? ` ${cls}` : ""}">${fx.map(fxOne).join("")}</span>` : "");
   // 招的印記（招式與絕學稿案第一節）：伺服器寫「看家〔拄棍守村〕應招・…」「本命〔…〕」「絕〔…〕」「沈〔…〕」（自創：創的人名號第一個字），
   // 開頭那幾個字畫成一枚印——看家墨印、本命朱印、絕金印、其餘是私印；後面照字寫
-  const TSEAL = { 看家: "ink", 本命: "red", 絕: "gold" };
+  const TSEAL = { 看家: "ink", 本命: "red", 絕: "gold", 後勁: "gold" };
   const tsealHtml = (word) => `<b class="tseal ${TSEAL[word] || "own"}">${esc(word)}</b>`;
   function tacticHtml(text) {
     const m = /^([^〔]{1,2})〔/.exec(String(text || ""));
@@ -2873,7 +2875,12 @@
       picker = `<div class="slot-pick">${free.length ? free.map((i) => `<button type="button" class="${fits(i) ? "" : "no"}" data-act="slot-in" data-id="${esc(a.id)}" data-i="${pick}" data-ins="${esc(i.id)}"${glowSlot} ${fits(i) ? "" : "disabled"} title="${esc(fits(i) ? i.skill_desc || "" : `這一格${ringWord(c)}`)}">${ringHtml([i.attribute], "", "jmini")}<span>「${esc(i.name)}」${qMark(i.quality)}<small>${fxHtml(i.fx) || `〔${esc(i.skill || "")}〕${lvHtml(i.strength)}`}${fits(i) ? "" : "・顏色不合"}</small></span></button>`).join("")
         : '<span class="muted">手上沒有空著的意境——去探索悟一個，或從別門武學上拆下來。</span>'}</div>`;
     }
-    return `<div class="jade">${cells}</div>${picker}`;
+    // 第五個玉環（自創的才有，招式與絕學稿案第三節）：破境了亮金色寫絕招，還沒破境是暗的
+    const f = a.fifth;
+    const fifth = !f ? "" : f.on
+      ? `<span class="jd fifth on" title="絕招〔${esc(f.name)}〕">${ringHtml([], `<b>絕</b>`, "gold")}<small>〔${esc(f.name)}〕</small></span>`
+      : `<span class="jd fifth" title="${esc(f.note)}">${ringHtml([], "<i>絕</i>", "vacant")}<small class="dim">${esc(f.note)}</small></span>`;
+    return `<div class="jade">${cells}${fifth}</div>${picker}`;
   }
 
   // 以心得換破境丹（Joy 2026-10-18）：衝絕學那一步的卡上一顆小鈕；換不了時灰掉、原因寫在後面（a.cultivate.buy 是伺服器算好的）
@@ -2915,7 +2922,7 @@
       // 衝絕學（武學重構）：只有上品還沒成絕學的才有這一塊；到了極處才有「衝關」與破境丹，沒到只寫還差什麼。不寫下一品是哪一品（企劃者 2026-10-06）
       const peakOn = a.cultivate.ok || has("cultivate") || (a.quality === "上品" && (a.slots || []).length > 0);
       const peak = !peakOn ? "" : `<div class="peak${a.cultivate.ok ? " ready" : ""}">
-          <div class="pk-txt"><b>衝絕學</b><small class="cnote">${esc(ticked ? lg.note : a.cultivate.note)}</small></div>
+          <div class="pk-txt"><b>破境</b><small class="cnote">${esc(ticked ? lg.note : a.cultivate.note)}</small></div>
           ${a.cultivate.ok || has("cultivate") ? `<button class="btn small ${a.cultivate.ok ? "primary" : ""}" data-act="cultivate"${has("cultivate") ? ' data-glow="cultivate"' : ""} data-id="${esc(a.id)}" ${a.cultivate.ok ? "" : "disabled"}>衝關</button>` : ""}
           ${lg ? `<label class="legend"><input type="checkbox" data-legend="${esc(a.id)}" ${ticked ? "checked" : ""}><span>${esc(lg.label)}</span></label>` : ""}
           ${buyPill(a)}
@@ -6175,6 +6182,29 @@
     return () => { alive = false; };
   }
 
+  // 破境卡（tianxia/ascend.py；招式與絕學稿案第三節）：剛破境就蓋一張在畫面上——左邊破境前的招、右邊絕招、中間模型寫的一句、
+  // 戰力從多少到多少、底下江湖史那一行。那一句還沒寫就請伺服器寫一次（/api/do/ascend_line，三段式）；收下了才收掉。字待 joy 潤
+  let ascendAsked = "";
+  function ascendCard() {
+    const card = S.main && S.main.status && S.main.status.ascension;
+    let box = document.getElementById("ascend");
+    if (!card) { if (box) box.remove(); return; }
+    if (!box) { box = document.createElement("div"); box.id = "ascend"; box.className = "asc-wrap"; document.body.appendChild(box); }
+    const [was, now] = card.power || [];
+    box.innerHTML = `<div class="asc-card" role="dialog" aria-label="破境">
+      <p class="asc-head">${tsealHtml("絕")}<b>【${esc(card.name)}】破境</b></p>
+      <div class="asc-moves"><div class="asc-was"><small>破境前</small><p>${tacticHtml(card.before)}</p></div>
+        <div class="asc-arrow">›</div><div class="asc-now"><small>絕招</small><p>${tacticHtml(card.after)}</p>${card.after_tail ? `<p>${tacticHtml(card.after_tail)}</p>` : ""}</div></div>
+      <p class="asc-line">${card.line ? `「${esc(card.line)}」` : `<span class="muted">……</span>`}</p>
+      ${was != null && now != null ? `<p class="asc-power">戰力 ${was | 0} → <b>${now | 0}</b></p>` : ""}
+      <p class="muted small asc-chron">江湖史：${esc(card.chronicle || "")}</p>
+      <button class="btn primary" data-act="ascend-ok">收下</button></div>`;
+    if (!card.line && ascendAsked !== card.art) {
+      ascendAsked = card.art;
+      api("/api/do/ascend_line", {}).then((r) => { if (r && r.main) applyMain(r.main); }).catch(() => {});
+    }
+  }
+
   function applyMain(main) {
     const before = S.main ? S.main.status : null;
     setMain(main); // 見聞的紅點在 setMain 裡判斷（新的一場才亮）
@@ -6935,6 +6965,7 @@
         case "create-pose": if (S.createPose) await mx("create_pose", { pose: S.createPose }); break;
         case "create-intent": await createIntent(); break;
         case "create-back": await mx("create_back", { to: el.dataset.to }); break;
+        case "ascend-ok": await mx("ascend_dismiss", {}); break;
         case "create-name": {
           const n = document.getElementById("create-name"), m = document.getElementById("create-move");
           await mx("create_name", { name: n ? n.value.trim() : "", move: m ? m.value.trim() : "" }); createDone(); break;

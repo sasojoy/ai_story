@@ -991,13 +991,25 @@ def tactic_holders(state: GameState, content: Content, world: WorldStateStore) -
     for key in state.player.team:
         mate = world.get_companion(key)
         rows.append((member_name(state, content, key), key, mate.wugong_id, mate.neigong_id))
-    return own_extras(state, content, world, tactics.holders_of(content, rows, world, own_levels(state)))
+    return own_extras(state, content, world, tactics.holders_of(content, rows, world, own_levels(state), own_copies(state, content, world)))
 
 
 def own_levels(state: GameState) -> dict[str, int]:
     """本人身上兩門練到第幾成（自創的招前幾成還生，tactics.holders_of）。"""
     m = state.player.member
     return {k: v for k, v in ((m.wugong_id, m.wugong_level), (m.neigong_id, m.neigong_level)) if k}
+
+
+def own_copies(state: GameState, content: Content, world: WorldStateStore) -> dict[str, MartialArt]:
+    """本人身上兩門裡自創的那幾門，自己那一份（player_art：品級照自己修到的，破境了招升為絕招）。"""
+    out: dict[str, MartialArt] = {}
+    m = state.player.member
+    for sid in (m.wugong_id, m.neigong_id):
+        if sid and sid not in content.skills:
+            art = player_art(state, content, world, sid)
+            if art is not None:
+                out[sid] = art
+    return out
 
 
 def gear_tactics(state: GameState, content: Content) -> list[tuple[str, TacticDef, str | None]]:
@@ -1120,7 +1132,7 @@ def self_side(state: GameState, content: Content, world: WorldStateStore, *, mou
     對手的名字與身法開打時才換上（tactics.open_bout）；mounted、troops 是這種仗算不算坐騎與部下（決戰算、單挑不算）。
     本人沒有本命戰法是 None。"""
     p = state.player
-    holders = own_extras(state, content, world, tactics.holders_of(content, [(p.name, PLAYER, p.member.wugong_id, p.member.neigong_id)], world, own_levels(state)))
+    holders = own_extras(state, content, world, tactics.holders_of(content, [(p.name, PLAYER, p.member.wugong_id, p.member.neigong_id)], world, own_levels(state), own_copies(state, content, world)))
     if not holders:
         return None
     mount = p.mount if mounted and mounts.on(content) else None

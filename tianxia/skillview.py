@@ -36,9 +36,28 @@ def tactic_line(content: Content, art: MartialArt, level: int | None) -> str:
     if sig is None:
         return ""
     text = tactics_mod.card_text(sig, tactics_mod.title_of(sig, art))
-    if level is not None and moves.is_own(content, art) and moves.raw(content, level):
-        text += f"（{moves.RAW_WORD}）"
+    if level is not None and moves.is_own(content, art) and not moves.ascended(art):
+        if moves.raw(content, level):
+            text += f"（{moves.RAW_WORD}）"
+        elif level >= MAX_LEVEL:
+            text += f"（{RIPE_MOVE}）"
+    if moves.is_own(content, art) and (tail := traits.ultimate_of(content, art)) is not None:  # 破境之後接一行後勁
+        text += "\n" + tactics_mod.card_text(tail, traits.AFTER_TITLE)
     return text
+
+
+RIPE_MOVE = "將升"  # 待 joy 潤：第十成還沒破境，招那一行標的
+RIPE_NOTE = "圓滿・待破境"  # 待 joy 潤
+
+
+def fifth_ring(content: Content, art: MartialArt, level: int | None) -> dict | None:
+    """第五個玉環（招式與絕學稿案第三節）：自創的才有；破境了亮（寫絕招的名字），還沒破境是暗的（第十成寫圓滿・待破境）。"""
+    if not moves.is_own(content, art):
+        return None
+    if moves.ascended(art):
+        move = moves.move_of(content, art)
+        return {"on": True, "name": move.name if move is not None else art.name, "note": ""}
+    return {"on": False, "name": "", "note": RIPE_NOTE if (level or 0) >= MAX_LEVEL else "破境"}
 
 def stat_uses(content: Content) -> list[tuple[str, str]]:
     """五屬性的（名字, 用途），順序同 team.COMBAT_STATS——也就是狀態列 attrs、＋鈕的順序。"""
@@ -346,6 +365,7 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
             # 本命戰法或小戰法那一句（tactics.card_text）：直接寫在卡上，學來的武學靠它看得出跟別門不一樣（Joy 2026-10-21）；沒有是空字串
             # 自創的招照這一門練到的成數算（前幾成還生，卡上補一句）
             "tactic": tactic_line(content, art, level),
+            "fifth": fifth_ring(content, art, level),  # 自創的第五個玉環（破境的絕招）；不是自創是 None
             "compare": compare,  # 卷軸卡直接把它寫在功法庫那張卡的鈕上面（改練之前看得到）；點開「詳情」時功法卡裡也有
             "cultivate": {
                 "ok": problem is None, "note": note, "legend": legend, "buy": _buy_choice(state, content, world, art),
