@@ -341,6 +341,18 @@ def test_switched_off_the_card_has_no_act_and_the_action_says_no():
     assert "uses" not in g.admin_seal_choices()
 
 
+def test_bots_never_use_an_act():
+    """假人不用獨門行動（設計第四章【PM】：不具名，看不出誰沒用；假人亂用會把天下攪亂）：起用不是選單上的一顆（bot.pick 碰不到），
+    假人程式與整季機器人也不叫 seal_use。"""
+    import inspect
+
+    import run_bots
+    from tianxia import bot, bot_policy, bot_runner, server_bots
+
+    for module in (bot, bot_policy, bot_runner, server_bots, run_bots):
+        assert "seal_use" not in inspect.getsource(module), module.__name__
+
+
 def test_the_player_action_is_seal_use_not_an_admin_one():
     """玩家動作跟管理者動作不同名（FB-609）。"""
     assert "seal_use" in server.MAIN_ACTIONS and "seal_use" not in server.ADMIN_ACTIONS
