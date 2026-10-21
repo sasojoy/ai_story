@@ -1,4 +1,5 @@
-"""領地爭奪第一批：輿圖上的中立地（計畫三、Task 6 最後一段；甲乙兩版等企劃者挑，這裡守的是挑之前那個最小的中立色）。"""
+"""領地爭奪第一批：輿圖上的中立地（計畫三、Task 6 最後一段）。網頁那一條在輿圖第三版第 4 批改寫：中立地的虛線圈拿掉了（輿圖簡化設計 5.4），
+區圖上是灰的印章框加朱印「寶」。舊的 SVG（render_map）那幾條照舊。"""
 from __future__ import annotations
 
 import pytest
@@ -63,23 +64,28 @@ def test_ropes_hang_no_beads_without_tug_of_war():
     assert any(r["beads"] for r in plain.map_state()["ropes"])
 
 
-def _place_svg(out: str, loc_id: str) -> str:
-    """marksSvg 裡那一處的 <g data-loc> 一段（點擊區、外圈、圓盤、字）。"""
-    start = out.index(f'<g data-loc="{loc_id}"')
-    return out[start:out.index("</g>", start)]
+def _frame(out: str, loc_id: str) -> str:
+    """區圖裡那一處的印章框那一個 <rect class="r-frame">。"""
+    start = out.index(f'<g class="r-label" data-act="region-place" data-id="{loc_id}"')
+    start = out.index('<rect class="r-frame"', start)
+    return out[start:out.index("/>", start)]
 
 
 @pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
-def test_web_marks_draw_unheld_neutral_as_grey_disc_with_dashed_ring():
+def test_web_region_map_draws_unheld_neutral_with_a_grey_frame_and_the_seal():
+    """輿圖第三版第 4 批（輿圖簡化設計 5.4）：中立地的虛線圈／細金邊拿掉了——還沒人佔的中立地是灰的印章框（沒人佔一色，照底圖的 unheld 調）
+    加朱印「寶」；被佔下照佔領方的顏色、寶照樣在（開季中立的，不管此刻誰佔著）。卡上那一句寫「中立・高級資源領地，還沒有人佔」。"""
+    import test_region_map_web
+
     game = _game()
-    out = test_map_web.marks(game)
-    wilds = _place_svg(out, "nanyang_wilds")
-    assert "#ECE9E2" in wilds and "stroke-dasharray" in wilds  # 甲：灰白圓盤＋虛線圈（還沒人佔）
-    assert "stroke-dasharray" not in _place_svg(out, "yingshui")  # 陣營的區塊照舊實線
-    far = _place_svg(test_map_web.marks(game, k=2.5, far="true"), "nanyang_wilds")
-    assert "#CFCBC2" in far and "stroke-dasharray" in far  # 看大局：小點也是灰、虛線邊
-    drawer = test_map_web.run(game, 'return H.placeHtml(H.S.mapBase, H.S.mapState, "nanyang_wilds");')
-    assert "中立地" in drawer and "還沒有人佔" in drawer
+    ink = {s["id"]: s for s in game.map_base()["world"]["sides"]}
+    low, _ = test_region_map_web.parts(game, "nanyang")
+    wilds = _frame(low, "nanyang_wilds")
+    assert "stroke-dasharray" not in low.split('class="r-label"', 1)[1]  # 名字框、小圖都不畫虛線
+    assert all(f'fill="{s["tint"]}"' not in wilds for s in ink.values())  # 沒人佔：灰框，不是任何一方的顏色
+    assert 'class="r-seal"' in test_region_map_web._label(low, "nanyang_wilds")
+    card = test_map_web.run(game, 'return H.placeCard(H.S.mapBase, H.S.mapState, "nanyang_wilds");')
+    assert "中立・高級資源領地，還沒有人佔" in card
     conquest.set_control(game.state.world, game.content, "nanyang_wilds", "huang")
-    held = _place_svg(test_map_web.marks(game), "nanyang_wilds")
-    assert "stroke-dasharray" not in held and "#ECE9E2" not in held  # 被佔下了：照佔領方的顏色，不再是虛線
+    held, _ = test_region_map_web.parts(game, "nanyang")
+    assert f'fill="{ink["huang"]["tint"]}"' in _frame(held, "nanyang_wilds") and f'stroke="{ink["huang"]["color"]}"' in _frame(held, "nanyang_wilds")

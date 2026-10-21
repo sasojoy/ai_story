@@ -66,7 +66,8 @@ def test_map_counts_two_sides():
 
     game = _timeline_game_allied()
     assert game.map_state()["sides"] == ["guan", "huang"]
+    # 「天下」那一條（hudHtml）輿圖第三版第 4 批拿掉了；天下圖大區名底下那一行照疊層的 sides（worldLabels）
     for script in ("return H.timelineHtml(H.S.mapBase, H.S.mapState, H.S.mapState.now_week);",
-                   "return H.hudHtml(H.S.mapBase, H.S.mapState, H.S.mapState.now_week);"):
+                   "return JSON.stringify(H.worldLabels(H.S.mapBase, H.S.mapState, H.controlAt(H.S.mapState, H.S.mapState.now_week), 2.5));"):
         out = run(game, script)
-        assert "豪強" not in out and ">豪 <" not in out, script
+        assert "豪強" not in out and ">豪 <" not in out and "豪 " not in out, script
