@@ -1377,6 +1377,8 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .ink-icon { width: 22px; height: 22px; margin-bottom: 2px; fill: none; stroke: #d0c4b2; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round;
   transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), stroke 0.2s ease; }
 .act-ink b { font-size: 13px; font-weight: 800; letter-spacing: 0.5px; }
+/* FB-671：帶「・」的名字（inkName 包成 .nb，「出陣・守」「出陣・攻」）字距收到 0：360 寬格子內寬 52.8 px，54 px 差 1 px 會折成兩行、整排長高 21.5 px；52 px 放得進 */
+.act-ink b .nb { letter-spacing: 0; }
 .act-ink small { font-size: 10px; color: #9e8e7c; margin-top: 2px; white-space: nowrap; }
 /* 遊歷的勝算（FB-044）：體力底下一行，照風險上色（黑底上的淺色） */
 .act-ink small.ink-note { margin-top: 0; font-weight: 700; }
