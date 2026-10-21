@@ -3043,8 +3043,8 @@ svg.fig .blade.bow { stroke-width: 3; }
 .won .cg-burst { animation: cg-burst 3s ease-out forwards; }
 .cg-crack { fill: none; stroke: var(--ink); stroke-width: 3; stroke-linejoin: round; stroke-dasharray: 200; stroke-dashoffset: 200; opacity: 0; }
 .lost .cg-crack { animation: cg-crack 3s ease-out forwards; }
-.cg-stamp { position: absolute; right: 1rem; top: .8rem; margin: 0; padding: .1em .35em; font-family: var(--serif); font-size: 1.9rem; font-weight: 700;
-  letter-spacing: .1em; border: 3px solid currentColor; border-radius: 6px; opacity: 0; transform: rotate(-8deg); animation: cg-stamp 3s ease-out forwards; }
+.cg-stamp { position: absolute; left: 50%; top: .6rem; margin: 0; padding: .1em .35em; font-family: var(--serif); font-size: 1.9rem; font-weight: 700;
+  letter-spacing: .1em; border: 3px solid currentColor; border-radius: 6px; opacity: 0; transform: translateX(-50%) rotate(-8deg); animation: cg-stamp 3s ease-out forwards; }
 .won .cg-stamp { color: var(--accent); }
 .lost .cg-stamp { color: var(--ink-2); }
 .cg-line { margin: .4em 0 0; text-align: center; font-size: 1.02em; opacity: 0; animation: cg-line 3s ease-out forwards; }
@@ -3063,7 +3063,7 @@ svg.fig .blade.bow { stroke-width: 3; }
 @keyframes cg-burst { 0%, 42% { opacity: 0; transform: scale(.2); } 46% { opacity: .9; } 75% { opacity: 0; transform: scale(9); } 100% { opacity: 0; transform: scale(9); } }
 @keyframes cg-shake { 0%, 43% { transform: none; } 46% { transform: translateX(7px); } 49% { transform: translateX(-5px); } 52% { transform: translateX(3px); } 56%, 100% { transform: none; } }
 @keyframes cg-crack { 0%, 44% { opacity: 0; stroke-dashoffset: 200; } 46% { opacity: 1; } 58%, 100% { opacity: 1; stroke-dashoffset: 0; } }
-@keyframes cg-stamp { 0%, 56% { opacity: 0; transform: rotate(-8deg) scale(2.2); } 64%, 100% { opacity: 1; transform: rotate(-8deg) scale(1); } }
+@keyframes cg-stamp { 0%, 56% { opacity: 0; transform: translateX(-50%) rotate(-8deg) scale(2.2); } 64%, 100% { opacity: 1; transform: translateX(-50%) rotate(-8deg) scale(1); } }
 @keyframes cg-line { 0%, 58% { opacity: 0; } 70%, 100% { opacity: 1; } }
 .pk-btns { display: flex; flex-wrap: wrap; gap: .4em; margin-top: .4em; }
 .pk-btns .btn small { display: block; font-size: .78em; opacity: .85; }
