@@ -139,8 +139,11 @@ def when_text(tactic: TacticDef) -> str:
 
 
 def title_of(tactic: TacticDef, art=None) -> str:
-    """招名前面蓋哪一枚印：自創的武學（art 有姿勢或借來的招）寫創的人名號的第一個字，學來的寫「看家」，其餘「本命」。"""
-    if art is not None and art.id and getattr(art, "tactic_from", None):
+    """招名前面蓋哪一枚印：自創的武學（moves.is_own 那一種：來歷是自創、有創的人）寫創的人名號的第一個字，
+    學來的寫「看家」，其餘「本命」。"""
+    if art is not None and art.id and getattr(art, "origin", "") == "created" and getattr(art, "creator", None):
+        if getattr(art, "quality", "") == "絕學":  # 破境之後自己的招是絕招：金印「絕」
+            return ULTIMATE_SEAL
         who = getattr(art, "creator_shown", None) or getattr(art, "creator", None) or ""
         if who[:1]:
             return who[:1]
@@ -470,7 +473,7 @@ def _roar(f: _Fight, h: Holder) -> None:  # 張飛〔長坂一喝〕
     state = "定身" if f.roll(h.tactic.params.get("stun_pct", 0.3)) else "失神"
     turns = int(h.tactic.params.get("turns", 1))
     if f.put(f.foe, state, turns, now=True):
-        f.say(h, f"一聲大喝，{f.ctx.foe}{state} {turns} 回合")
+        f.say(h, f"一聲大喝，{f.ctx.foe}{state} {turns} 回合", state=state)  # 自創的招 say 寫了 {state}
 
 
 def _unbroken(f: _Fight, h: Holder) -> None:  # 張飛〔丈八狂瀾〕
@@ -1156,6 +1159,10 @@ def _answer(f: _Fight, mine: str | None, his: str | None) -> tuple[float, bool]:
                 shrug = f.roll(p.get("guard_pct", 0.5))
                 stop = stop or shrug
                 f.say(h, "穩如山岳，這一下只吃了一半" + ("，沒傷到氣血" if shrug else ""))
+        elif t.kind == "rebound_guard":  # 自創的應招〔反照〕：出固守、對手強攻時擲發動率，他吃自己那一下的一部分（心法那一種見 _rebound_guard）
+            if mine == "固守" and his == "強攻" and not f.no_borrow and f.roll(f.rate(h)):
+                f.rebound += p.get("share_pct", 0.0)
+                f.say(h, f"{f.ctx.foe}一記強攻撞在牆上，自己吃了回去")
         elif t.kind == "first_shot":  # 追電弩〔先發〕：對手出了被你剋的招，他那一回合定身
             if counter(mine, his) > 0 and f.roll(f.rate(h)) and f.put(f.foe, "定身", 1, now=True):
                 out += u
@@ -1605,24 +1612,28 @@ def figure_arts(content: Content, character: CharacterDef) -> list[str]:
     return out
 
 
-def of_art(content: Content, art) -> TacticDef | None:
-    """這一門帶的戰法：內容寫的（本命戰法、小戰法），或自創借來的小戰法（MartialArt.tactic_from）。"""
+def of_art(content: Content, art, level: int | None = None) -> TacticDef | None:
+    """這一門帶的戰法：內容寫的（本命戰法、小戰法），或自創長出來的招（moves.move_of；level 給了照那一成算生不生）。"""
     if art is None:
         return None
     tactic = of(content, art.id)
-    return tactic if tactic is not None or not art.tactic_from else of(content, art.tactic_from)
+    if tactic is not None:
+        return tactic
+    from . import moves  # moves 會 import create，create 會 import 這個模組
+
+    return moves.move_of(content, art, level)
 
 
-def of_id(content: Content, skill_id: str | None, world=None) -> TacticDef | None:
-    """認 id 的那一種：內容裡的照 of；全服登記的（自創）查 world 拿 tactic_from。world 是 None 只認內容。"""
+def of_id(content: Content, skill_id: str | None, world=None, level: int | None = None) -> TacticDef | None:
+    """認 id 的那一種：內容裡的照 of；全服登記的（自創）查 world 算它的招。world 是 None 只認內容。"""
     if not skill_id or skill_id in content.skills or world is None:
         return of(content, skill_id)
-    return of_art(content, world.get_skill(skill_id))
+    return of_art(content, world.get_skill(skill_id), level)
 
 
-def line_of_id(content: Content, skill_id: str | None, world=None) -> str | None:
+def line_of_id(content: Content, skill_id: str | None, world=None, level: int | None = None) -> str | None:
     """角色卡那一行：認 id 找招（of_id），蓋上那一門的印（title_of）。沒有招是 None。"""
-    tactic = of_id(content, skill_id, world)
+    tactic = of_id(content, skill_id, world, level)
     if tactic is None:
         return None
     art = world.get_skill(skill_id) if world is not None and skill_id not in content.skills else None
@@ -1637,14 +1648,20 @@ def figure_of(content: Content, skill_id: str) -> str | None:
     return None
 
 
-def holders_of(content: Content, rows: list[tuple[str, str, str | None, str | None]], world=None) -> list[Holder]:
+def holders_of(
+    content: Content, rows: list[tuple[str, str, str | None, str | None]], world=None,
+    levels: dict[str, int] | None = None, mine: dict | None = None,
+) -> list[Holder]:
     """（名字, 鍵, 武學 id, 內功 id）一列一個人 → 帶著本命戰法的那幾門（武學在前）。同一門戰法兩個人都帶著時只算第一個
-    （本人在前）：同一招不會一回合發兩次。給了 world 才認得自創借來的小戰法（of_id）。"""
+    （本人在前）：同一招不會一回合發兩次。給了 world 才認得自創的招（of_id）；levels 是本人那兩門練到第幾成（自創的招還生不生），
+    mine 是本人那兩門自己那一份（team.player_art：破境了的自創招升為絕招）。"""
     out: list[Holder] = []
     seen: set[str] = set()
     for who, key, wugong, neigong in rows:
         for skill_id in (wugong, neigong):
-            tactic = of_id(content, skill_id, world)
+            level = (levels or {}).get(skill_id) if key == PLAYER_KEY else None
+            own = (mine or {}).get(skill_id) if key == PLAYER_KEY else None
+            tactic = of_art(content, own, level) if own is not None else of_id(content, skill_id, world, level)
             if tactic is None or tactic.name in seen:
                 continue
             seen.add(tactic.name)

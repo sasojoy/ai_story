@@ -110,11 +110,11 @@ def _worn(state, level=10, slots=BASICS):
     return ripen(state, level=level, slots=slots)
 
 
-def test_a_hard_win_at_the_peak_can_break_through_and_names_the_first(kicker, hard, world):
+def test_a_hard_win_at_the_peak_can_break_through(kicker, hard, world):
     _worn(kicker)
     msgs = cultivation.seize(kicker, hard, world, 0.5, WIN)
-    assert msgs[0] == "這一戰打到最後，【旋風腿】忽然通了——從上品晉為絕學！"
-    assert kicker.player.art_quality["旋風腿"] == "絕學" and kicker.player.naming == "旋風腿"
+    assert msgs == ["這一戰打到最後，【旋風腿】忽然通了——從上品晉為絕學！"]
+    assert kicker.player.art_quality["旋風腿"] == "絕學" and kicker.player.naming is None
 
 
 def test_a_missed_chance_leaves_a_soft_hint(kicker, hard, world):

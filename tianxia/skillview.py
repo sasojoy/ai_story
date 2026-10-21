@@ -4,7 +4,7 @@
 """
 from __future__ import annotations
 
-from . import armor, arts as arts_mod, atlas, clinic, create as create_mod, cultivation, encounter, equipment, forge_secrets, fusion, insight_fx, insights, martial_arts, materials, mounts, prologue, renown, seal, smithing, tactics as tactics_mod, team, traits, treasures, weapons
+from . import armor, arts as arts_mod, atlas, clinic, create as create_mod, cultivation, encounter, equipment, forge_secrets, fusion, insight_fx, insights, martial_arts, materials, might, mounts, moves, prologue, renown, seal, smithing, tactics as tactics_mod, team, traits, treasures, weapons
 from .library import TOWN_TAG, cap_of, held_count, level_of, melt_confirm, melt_note, melt_problem, melt_value, owned_arts
 from .martial_arts import (
     MAX_LEVEL, QUALITIES, MartialArt, power_at, shown_creator,
@@ -28,6 +28,36 @@ STAT_USES = {
 # tests/test_engine.py 的 test_the_stat_note_says_four_until_an_event_checks_lore 到時候會失敗提醒
 STAT_CHECK_NOTE = "事件的檢定看前四項。"
 
+
+
+def tactic_line(content: Content, art: MartialArt, level: int | None) -> str:
+    """功法卡上那一句招（tactics.card_text 蓋印）；自創的招還生時後面補「（招還生）」。沒有招是空字串。"""
+    sig = tactics_mod.of_art(content, art, level)
+    if sig is None:
+        return ""
+    text = tactics_mod.card_text(sig, tactics_mod.title_of(sig, art))
+    if level is not None and moves.is_own(content, art) and not moves.ascended(art):
+        if moves.raw(content, level):
+            text += f"（{moves.RAW_WORD}）"
+        elif level >= MAX_LEVEL:
+            text += f"（{RIPE_MOVE}）"
+    if moves.is_own(content, art) and (tail := traits.ultimate_of(content, art)) is not None:  # 破境之後接一行後勁
+        text += "\n" + tactics_mod.card_text(tail, traits.AFTER_TITLE)
+    return text
+
+
+RIPE_MOVE = "將升"  # 待 joy 潤：第十成還沒破境，招那一行標的
+RIPE_NOTE = "圓滿・待破境"  # 待 joy 潤
+
+
+def fifth_ring(content: Content, art: MartialArt, level: int | None) -> dict | None:
+    """第五個玉環（招式與絕學稿案第三節）：自創的才有；破境了亮（寫絕招的名字），還沒破境是暗的（第十成寫圓滿・待破境）。"""
+    if not moves.is_own(content, art):
+        return None
+    if moves.ascended(art):
+        move = moves.move_of(content, art)
+        return {"on": True, "name": move.name if move is not None else art.name, "note": ""}
+    return {"on": False, "name": "", "note": RIPE_NOTE if (level or 0) >= MAX_LEVEL else "破境"}
 
 def stat_uses(content: Content) -> list[tuple[str, str]]:
     """五屬性的（名字, 用途），順序同 team.COMBAT_STATS——也就是狀態列 attrs、＋鈕的順序。"""
@@ -129,8 +159,7 @@ def forge_line(state: GameState, content: Content, world: WorldStateStore, insig
     if fusion.same_kind(state, a, b):
         merged, chance = _deepen_preview(state, content, world, a, b)
         head = (
-            f"**揣摩**　兩份「{a.name}」揉成一份（{merged.quality}・{insight_fx.label(content, merged)}"
-            + (f"，{chance}% 的機會悟出大獎" if chance else "") + "），另一份用掉，"
+            f"**揣摩**　兩份「{a.name}」揉成一份（{insight_fx.label(content, merged)}・{fire_of(chance, merged)['word']}），另一份用掉，"
             f"花 {cfg.merge_xinde} 點心得、{cfg.merge_stamina} 點體力（你有 {xinde} 點心得）。"
         )
     elif a.id == b.id:
@@ -167,10 +196,11 @@ def forge_preview(state: GameState, content: Content, world: WorldStateStore, in
     if a.id == b.id or fusion.same_kind(state, a, b):
         merged, chance = _deepen_preview(state, content, world, a, b)
         return {
-            **empty, "kind": "揣摩", "made": f"「{a.name}」{insight_fx.label(content, merged)}", "attribute": a.attribute, "quality": merged.quality, "slots": None,
+            **empty, "kind": "揣摩", "made": f"「{a.name}」{insight_fx.label(content, merged)}", "attribute": a.attribute, "quality": None, "slots": None,
+            "fire": fire_of(chance, merged),
             "traits": fx_traits(content, merged, a),
             "depth": "；".join(f"〔{e['name']}〕{e['desc']}" for e in insight_fx.effects(content, merged) if e["desc"]) or None,
-            "odds": f"大獎機會 {chance}%" if chance else None, "keep": DEEPEN_KEEP,
+            "keep": DEEPEN_KEEP,
             "known": None, "cost": merge_cost, "problem": fusion.merge_problem(state, content, world, *insight_ids),
         }
     attribute, _ = fusion.merge_shape(world, a, b, content, state)
@@ -178,16 +208,36 @@ def forge_preview(state: GameState, content: Content, world: WorldStateStore, in
     quality = insight_fx.better(insight_fx.quality_of(state, a.id), insight_fx.quality_of(state, b.id))
     pool = [t.name for t in insight_fx.generals(content, attribute)]
     return {
-        **empty, "kind": "合併", "made": "一個新的意境", "attribute": attribute, "quality": quality, "slots": None,
+        **empty, "kind": "合併", "made": "一個新的意境", "attribute": attribute, "quality": None, "slots": None,
+        "fire": fire_of(_compound_grand(content, quality) if high is not None else 0),
         "traits": [{"name": n, "layers": 1, "maybe": True} for n in pool] + ([{"name": high.name, "layers": 0, "grand": True, "maybe": True}] if high is not None else []),
         "depth": (f"擲一到兩個效果：{'或'.join(pool)}" + (f"，大獎〔{high.name}〕：{high.desc}" if high is not None else "")) if pool else None,
-        "odds": f"大獎機會約 {_compound_grand(content, quality)}%" if high is not None else None,
         "known": _strip_note(_known_insight_recipe(state, world, fusion.merge_key(*insight_ids))),
         "cost": merge_cost, "problem": fusion.merge_problem(state, content, world, *insight_ids),
     }
 
 
-DEEPEN_KEEP = "同一個功效的層數相加（最多三重），品質取好的；另一份用掉。"  # 待 joy 潤
+# 爐火（招式與絕學稿案第五輪，Joy 2026-10-21 按建議）：預覽不寫品級、不寫機率，只寫火候四段與一句話。
+# 引擎照真的大獎機會（百分比）分段；揣摩另看揉好那一份的品相，已經很好的不會寫成火弱。字待 joy 潤
+FIRES = (
+    ("火弱", "兩道意揉得勉強，能成，火候不足。"),
+    ("火平", "兩道意相合，火候平平。"),
+    ("火旺", "兩道意相契，爐火正旺。"),
+    ("火熾", "兩道意一觸即融，爐火熾白，隱隱有光。"),
+)
+FIRE_CUTS = (10, 30, 55)  # 大獎機會 < 10% 火弱、< 30% 火平、< 55% 火旺，其餘火熾
+
+
+def fire_of(chance: int, merged=None) -> dict:
+    """{level 0～3, word, line}：chance 是大獎機會（百分比整數）；merged 是揣摩揉好的那一份（品相凡佳珍神各墊到 0～3）。"""
+    level = sum(chance >= cut for cut in FIRE_CUTS)
+    if merged is not None:
+        level = max(level, insight_fx.LOOKS.index(insight_fx.look(merged)))
+    word, line = FIRES[level]
+    return {"level": level, "word": word, "line": line}
+
+
+DEEPEN_KEEP = "同一個功效的層數相加（最多三重）；另一份用掉。"  # 待 joy 潤（第四輪起不寫品質）
 
 
 def _deepen_preview(state: GameState, content: Content, world: WorldStateStore, a, b) -> tuple:
@@ -333,7 +383,12 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
             # 評分（第三批）：槽裡效果的分數加總，沒有上限；不是衝絕學的門檻（Joy 2026-10-20），只拿來比高下、排武學榜
             "score": arts_mod.score(state, content, world, art),
             # 本命戰法或小戰法那一句（tactics.card_text）：直接寫在卡上，學來的武學靠它看得出跟別門不一樣（Joy 2026-10-21）；沒有是空字串
-            "tactic": tactics_mod.card_text(sig, tactics_mod.title_of(sig, art)) if (sig := tactics_mod.of_art(content, art)) is not None else "",
+            # 自創的招照這一門練到的成數算（前幾成還生，卡上補一句）
+            "tactic": tactic_line(content, art, level),
+            "fifth": fifth_ring(content, art, level),  # 自創的第五個玉環（破境的絕招）；不是自創是 None
+            # 戰力（招式與絕學稿案第四輪）：庫裡這一門換上身之後全身的戰力；身上那一門是 None（看狀態列那個數）
+            "might": None if worn else might.with_art(state, content, world, art_id),
+            **_look(content, art),  # 自創的品相（純、渾、透、稀有路數；兩樣珍、三樣神）
             "compare": compare,  # 卷軸卡直接把它寫在功法庫那張卡的鈕上面（改練之前看得到）；點開「詳情」時功法卡裡也有
             "cultivate": {
                 "ok": problem is None, "note": note, "legend": legend, "buy": _buy_choice(state, content, world, art),
@@ -410,6 +465,7 @@ def slot_rows(state: GameState, content: Content, world: WorldStateStore, art: M
             "id": insight_id, "name": ins.name, "attribute": ins.attribute, "skill": arts_mod.skill_name(content, ins, fx),
             "mark": arts_mod.strength_mark(strength), "strength": strength, "desc": arts_mod.skill_desc(content, ins, strength, fx),
             "quality": fx.quality, "fx": fx_traits(content, fx, ins),  # 意境效果池：這一份的品質與每一個效果（大獎 grand）
+            "look": insight_fx.look(fx),  # 品相凡佳珍神（玉環上那一枚印；底子 quality 不給玩家看）
         })
     return rows
 
@@ -438,6 +494,38 @@ def _force_choice(state: GameState, content: Content, world: WorldStateStore, ar
     }
 
 
+def _look(content: Content, art: MartialArt) -> dict:
+    """自創那一門撞到了什麼（create.marks_of）：look 是卡上那一行，tier 是珍或神（兩樣以上）；不是自創、沒撞到都是空的。"""
+    if not moves.is_own(content, art):
+        return {"look": "", "tier": None}
+    marks = create_mod.marks_of(art.slot_colors, art.move_fire, art.move_rare)
+    return {"look": create_mod.look_text(marks), "tier": create_mod.tier_of(marks)}
+
+
+def _fits(state: GameState, content: Content, world: WorldStateStore, insight_id: str) -> list[dict]:
+    """這一份意境裝得進身上哪一門的哪一格（招式與絕學稿案第四輪：從意境這邊也裝得了）：{art, name, i}，i 從 0 起。"""
+    member, out = state.player.member, []
+    for art_id in (member.wugong_id, member.neigong_id):
+        if art_id is None or arts_mod.slot_problem(state, content, world, art_id, insight_id) is not None:
+            continue
+        art = team.resolve_art(art_id, content, world)
+        ins = insights.resolve(insight_id, content, world, state)
+        slots = arts_mod.slots_of(state, content, art)
+        out.append({"art": art_id, "name": art.name,
+                    "i": arts_mod._open_slot(slots, arts_mod.colors_of(art, len(slots)), ins.attribute if ins else "")})
+    return out
+
+
+def insight_effects(content: Content, fx, insight=None) -> list[dict]:
+    """意境卡的功效，一個一句白話（traits 的 desc）：{name, layers, grand, special, desc}；秘方合出來的多一條特別功效。"""
+    out = [{"name": e["name"], "layers": e["layers"], "grand": e["grand"], "special": False, "desc": e["desc"]}
+           for e in insight_fx.effects(content, fx)]
+    sp = arts_mod.special_of(content, insight.secret_special) if insight is not None and insight.secret_special else None
+    if sp is not None:
+        out.append({"name": sp.name, "layers": 0, "grand": False, "special": True, "desc": getattr(sp, "desc", "")})
+    return out
+
+
 def insight_rows(state: GameState, content: Content, world: WorldStateStore) -> list[dict]:
     """悟得的意境，照悟得的先後。"""
     rows = []
@@ -458,6 +546,9 @@ def insight_rows(state: GameState, content: Content, world: WorldStateStore) -> 
                 "rank": strength, "mood": None,  # 批量熔煉的篩選還讀這兩個鍵
                 # 意境效果池：同一種可以有好幾份，每一份的品質與效果（大獎 grand）；piece 是第幾份（第一份 1）
                 "quality": fx.quality, "fx": fx_traits(content, fx, insight), "grand": fx.grand is not None,
+                # 意境卡（招式與絕學稿案第五輪）：品相凡佳珍神（底子 quality 不給玩家看）、每個功效一句白話、裝得進哪裡
+                "look": insight_fx.look(fx), "effects": insight_effects(content, fx, insight),
+                "fits": [] if arts_mod.where_slotted(state, insight_id) else _fits(state, content, world, insight_id),
                 "piece": insight_fx.pieces(state, insight_fx.base_id(insight_id)).index(insight_id) + 1 if not insights.is_own(insight_id) else 1,
                 "note": insight.note, "melt": content.config.melt_insight_xinde, "blocked": blocked,
                 # 感悟悟來的私有意境（悟意境設計 0.2b）：在哪裡悟的、畫的那一筆（修練頁畫小縮圖）
@@ -573,7 +664,8 @@ def member_card(state: GameState, content: Content, world: WorldStateStore, key:
     if key == PLAYER and (worn_treasure := treasures.card_line(state, content)):
         lines.append(worn_treasure)  # 寶物（裝備四欄設計 2.5）：沒帶或開關關著不寫
     # 本命戰法與小戰法（tactics.py）：身上練著的各一行；同伴練著自己的本命武學也會發動（連招），一樣寫
-    lines += [t for t in (tactics_mod.line_of_id(content, s, world) for s in (member.wugong_id, member.neigong_id)) if t]
+    levels = team.own_levels(state) if key == PLAYER else {}  # 自創的招前幾成還生
+    lines += [t for t in (tactics_mod.line_of_id(content, s, world, levels.get(s)) for s in (member.wugong_id, member.neigong_id)) if t]
     if key != PLAYER and member.taught:  # 傳功（Config.chuangong）傳給他的屬性
         lines.append("傳功　" + "、".join(f"{content.config.stat_names.get(k, k)} +{n}" for k, n in member.taught.items() if n))
     if key == PLAYER and (boosts := boost_line(state, content, world)):  # 共鳴與功效只算本人，同伴的卡這一版不寫加成那一行
@@ -627,6 +719,9 @@ def gear_rows(state: GameState, content: Content, world: WorldStateStore) -> dic
             # 等著定名的原品排在裝備庫最前面（終審 I1）：手上已經有一把時原品放在最後一格，網頁只預設列前 8 件，表單會被「再列 N 件」藏起來；
             # 照有沒有 divine 排（穩定排序，其餘維持放進去的先後），定了名就回到原位
             block["rack"].sort(key=lambda row: row["divine"] is None)
+    for block in slots:
+        for row in block.get("rack", []):
+            row["might"] = might.with_gear(state, content, world, row["id"])  # 換上後的戰力（招式與絕學稿案第四輪）
     return {"cap": content.config.weapons.rack_cap, "used": len(state.player.rack), "slots": slots, "held_note": treasures.held_note(state)}
 
 

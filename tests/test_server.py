@@ -2694,7 +2694,9 @@ def test_a_library_art_without_a_note_leaves_no_blank_line(client):
     assert "<br />\n<br />" not in card and "<br />\n</p>" not in card
     # 來源之後一行功效：武學重構之後功效照槽裡裝的意境寫，槽空著寫一句指路（不是空行）；
     # W6：功法庫裡的功法再多一行跟身上同一種那門的比較，沒有說明句時它是最後一行（本人身上那門自己的卡沒有）
-    assert "來源：自創（沈浪 所創）<br />\n功效：（意境槽空著，到煉製頁裝意境）<br />\n比身上的【基礎拳腳】：威力 " in card
+    # 自創的武學在功效之後多一行自己長出來的招（以意成招，私印是創的人名號的第一個字）
+    assert "來源：自創（沈浪 所創）<br />\n功效：（意境槽空著，到煉製頁裝意境）<br />\n沈〔" in card
+    assert "<br />\n比身上的【基礎拳腳】：威力 " in card
     assert card.rstrip().endswith("（第一成）</p>")
 
 
@@ -5387,6 +5389,7 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
         "feast_text",  # 宴客自己寫的那一句敬酒（大勢人物擴充第三批）：三段同 answer_event
         "gather_text",  # 找素材的「自己說」（第 32 項）：三段同 feast_text
         "create_intent",  # 自創武學的形意那一句（武學重構）：鎖外請模型評分（create.score），結果交給 C 段
+        "ascend_line",  # 破境卡那一句（招式與絕學稿案第三節）：三段同 create_intent
     }
     # 宣告、model_call 讀、main() 建佇列；另外兩個只看不排：/api/queue 問位置、管理者那份資料抄總數（admin_choices 在 look 的鎖裡，
     # 但 snapshot 只碰佇列自己的短鎖、不等任何一件，不算在行動鎖裡排隊）

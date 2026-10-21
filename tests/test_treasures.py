@@ -537,7 +537,7 @@ def test_gear_rows_have_a_treasure_slot_with_effects(content, world):
     assert (slot["slot"], slot["label"], slot["empty"], slot["note"]) == ("treasure", "寶物", treasures.EMPTY, treasures.RACK_NOTE)
     assert slot["worn"]["effect_text"] == treasures.effect_text(content, "audience")
     assert [(r["id"], r["effect"]) for r in slot["rack"]] == [("寶:2", "win_material")]
-    assert set(slot["rack"][0]) == {"id", "name", "effect", "effect_text"}  # 沒有「能不能換」的旗標：寶物隨時能換（2.3）
+    assert set(slot["rack"][0]) == {"id", "name", "effect", "effect_text", "might"}  # 沒有「能不能換」的旗標：寶物隨時能換（2.3）；might 是換上後的戰力
     assert gear["held_note"] == ""
     p.held_gear = [_item("seclusion", "寶:3")]
     assert "【入定蒲團】" in skillview.gear_rows(game.state, content, world)["held_note"]

@@ -142,6 +142,20 @@ def label(content: Content, fx: InsightFx) -> str:
 # ── 擲 ───────────────────────────────────────────────────
 
 
+LOOKS = ("凡", "佳", "珍", "神")  # 意境的品相（招式與絕學稿案第五輪）：照實際長出什麼算，底子（下中上）不給玩家看
+
+
+def look(fx: InsightFx) -> str:
+    """凡：一個一般功效、一重；佳：二重，或兩個一般功效；珍：三重，或帶大獎；神：三重或兩個一般功效，再帶大獎。"""
+    layers = max(fx.general.values(), default=0)
+    many = len(fx.general) >= 2
+    if fx.grand is not None:
+        return "神" if layers >= 3 or many else "珍"
+    if layers >= 3:
+        return "珍"
+    return "佳" if layers >= 2 or many else "凡"
+
+
 def _tianji(world: WorldStateStore) -> int:
     from . import secret_recipes  # noqa: PLC0415
 

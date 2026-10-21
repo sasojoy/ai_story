@@ -246,7 +246,8 @@ def test_a_merged_insight_shows_its_card_too(made):
     game.forge(None, ["feng", "huo"], proposed=("風火意", "一句話說明。"))
     html = run(server.main_view(game), "return H.pageCraft();", menxia=server.menxia_view(game),
                S={"tab": "craft", "forgeSel": [], "forgeResult": {"html": "<p>合成了。</p>"}, "forgeMade": {"type": "ins", "id": game.forged_thing[1]}})
-    assert 'class="made-card"' in html and "「風火意」" in html.split('class="made-card"', 1)[1]
+    card = html.split('class="made-card ins-made"', 1)[1]  # 跟修練頁抽屜同一張意境卡（招式與絕學稿案第五輪）
+    assert "「風火意」" in card and 'class="ins-card' in card and "ic-head" in card
 
 
 def test_the_furnace_itself_holds_both_slots_and_the_forge_button_and_flashes_what_was_just_put_in(made):

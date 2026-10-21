@@ -17,7 +17,7 @@ team.pairing、weapons）照舊讀那幾個欄位，一個字不改。
 """
 from __future__ import annotations
 
-from . import insight_fx
+from . import insight_fx, moves
 from .martial_arts import QUALITIES, MartialArt, Insight, power_at
 from .models import Content, GeneralTrait, HighTrait, SpecialTrait
 from .state import GameState
@@ -206,8 +206,8 @@ def rating(content: Content, view: MartialArt, level: int, state: GameState | No
     bonus += cfg.high_weight * len({h for h in (view.high, *view.extra_highs) if h})
     if content.skills.get(view.id) is not None and content.skills[view.id].tactic is not None:
         bonus += cfg.signature_weight * (0.5 if content.skills[view.id].tactic.minor else 1.0)  # 小戰法算半個
-    elif view.tactic_from:
-        bonus += cfg.signature_weight * 0.5  # 自創借來的小戰法：同學來的
+    elif moves.is_own(content, view):  # 自創長出來的招：表上的數是本命的八成，再照火候打折
+        bonus += cfg.signature_weight * 0.8 * float(cfg.move_fire.get(view.move_fire or moves.DEFAULT_FIRE, 0.8))
     return int(round(power_at(view, level) * (1 + bonus)))
 
 

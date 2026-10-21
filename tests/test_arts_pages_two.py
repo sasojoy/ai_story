@@ -487,8 +487,8 @@ def test_the_same_order_reaches_the_page_data(real):
     assert page[:2] == ["jichu_tuna", "jichu_quanjiao"] and len(page) == 5  # 身上兩門同品質同成，照名字（吐 < 拳）
 
 
-PRACTICE_STUBS = 'const guideHtml = () => "", proGuide = () => "";'
-CRAFT_STUBS = PRACTICE_STUBS + 'const furnaceSvg = () => "<svg></svg>", toast = () => {}, spinAt = () => "", createEntry = () => "";'  # 自創那一頁的入口（自創單獨一頁）這裡不看
+PRACTICE_STUBS = 'const guideHtml = () => "", proGuide = () => "", createEntry = () => "";'  # 自創的入口（修練頁功法庫頂上）這裡不看
+CRAFT_STUBS = PRACTICE_STUBS + 'const furnaceSvg = () => "<svg></svg>", toast = () => {}, spinAt = () => "";'  # 自創那一頁的入口（自創單獨一頁）這裡不看
 CRAFT_FNS = ["pageCraft", "forgeBody", "forgeReady", "artFilter", "setArtFilter", "filterChips", "showArts",
              "pickMark", "craftView", "craftFilterRow", "craftChip", "kilnWarn", "kilnHtml", "madeCardHtml", "previewCardHtml", "forgeLineHtml", "craftSheetHtml", "potGlow", "kilnPeek", "manualRows", "manualEntry", "bookIcon"]
 CRAFT_CONSTS = ["ART_FILTERS", "filterKey", "CRAFT_SORTS", "CRAFT_PAGE", "BOOKS"]
@@ -547,7 +547,12 @@ def _craft(filter_for=None, **S):
 
 
 def _library_names(html):
-    return re.findall(r'<button class="art libr[^"]*"[^>]*><span class="qseal[^"]*">.</span><span class="txt"><b>(.+?)</b>', html)
+    return re.findall(r'<button class="art libr[^"]*"[^>]*>.*?<span class="txt"><b>(.+?)</b>', html)
+
+
+def _drawer(html):
+    """修練頁底下那一個抽屜（招式與絕學稿案第四輪：點什麼，內容就從底下升起）"""
+    return html.split('class="sheet pr-sheet"')[1]
 
 
 def _craft_names(html):
@@ -601,7 +606,7 @@ def test_the_open_card_is_listed_even_when_it_sits_past_the_first_page():
     assert "內3" in _library_names(html)
     twelve = rows + [_art("w20", "武學", "武X"), _art("w21", "武學", "武Y")]  # 十二門：第一頁 8 門，按「再列 N 門」才全
     names = _library_names(_practice(twelve, "S.artOpen = 'w21';"))
-    assert len(names) == 9 and names[-1] == "武Y"
+    assert len(names) == 9 and "武Y" in names and "武X" not in names  # 照種類分兩段列（招式與絕學稿案第四輪），點開的那一門補在它那一段
 
 
 @needs_node
@@ -734,9 +739,9 @@ def test_w6_the_library_card_writes_the_comparison_above_its_buttons_but_the_wor
     cmp = "比身上的【甲拳】：威力 +2.0（第一成）、多了〔化勁〕；換上後跟內功同屬，整體 +20%"
     rows = [_art("w1", "武學", "甲拳", worn=True), _art("w2", "武學", "乙拳", compare=cmp)]
     html = _practice(rows, "S.artOpen = 'w2';")
-    body = html.split('<div class="art-body')[1]
+    body = _drawer(html)
     assert f'<p class="cmp">{cmp}</p>' in body and body.index('class="cmp"') < body.index('class="acts"')  # 鈕的上面，改練之前看得到
-    assert 'class="cmp"' not in html.split('<div class="art-body')[0]  # 身上那張卡（沒有 compare）不寫
+    assert 'class="cmp"' not in _drawer(_practice(rows, "S.pdrawer = {t: 'worn', key: '武學'};"))  # 身上那一門（沒有 compare）不寫
     opened = _practice(rows, "S.artOpen = 'w2'; S.artInfo = 'w2';")
     assert 'class="cmp"' not in opened  # 點開詳情時功法卡裡有，這裡不重複
 
@@ -748,12 +753,12 @@ def test_the_glow_lists_the_server_sends_decide_every_hook_on_the_cards():
     rows = [_art("w1", "武學", "甲拳", worn=True, glow=["cultivate"]),
             _art("w2", "武學", "乙拳", glow=["switch", "melt"]), _art("w3", "武學", "丙拳", glow=["cultivate"])]
     html = _practice(rows, "S.artOpen = 'w2';")
-    body = html.split('<div class="art-body')[1].split('<button class="art libr')[0]
+    body = _drawer(html)
     assert re.search(r'<button class="linkish" data-act="melt" data-glow="melt" data-id="w2"', body)  # m2
     assert re.search(r'data-act="switch" data-glow="switch" data-id="w2"', body)
     assert 'data-act="cultivate"' not in body  # 下品、修練不在名單上：沒有「衝絕學」那一塊（只有上品與序章點名的才畫）
-    worn = html.split('<div class="art-body')[0]
-    assert re.search(r'data-act="cultivate" data-glow="cultivate" data-id="w1"', worn)  # 身上那張卡讀它自己那一列的 glow
+    worn = _drawer(_practice(rows, "S.pdrawer = {t: 'worn', key: '武學'};"))  # 點了身上那一門的光點（招式與絕學稿案第四輪的抽屜）
+    assert re.search(r'data-act="cultivate" data-glow="cultivate" data-id="w1"', worn)  # 身上那一門讀它自己那一列的 glow
     assert re.search(r'<button class="art libr "[^>]*data-id="w3" data-glow="cultivate">', html)  # 收著的那一列只亮名單上的
     outside = _practice([_art("w1", "武學", "甲拳", worn=True), _art("w2", "武學", "乙拳")], "S.artOpen = 'w2';")
     assert 'data-glow="melt"' not in outside and 'data-glow="switch"' not in outside and 'data-glow="cultivate"' not in outside
@@ -768,12 +773,12 @@ def test_a_greyed_melt_says_why_in_the_card_where_a_phone_player_can_read_it():
         _art("w2", "武學", "乙拳", melt={"ok": False, "note": hut_why, "confirm": ""}),
         _art("w3", "武學", "丙拳"),
     ]
-    html = _practice(rows, "S.artOpen = 'w2';")
-    worn_card, lib = html.split('<div class="art-body')[0], html.split('<div class="art-body')[1]
+    lib = _drawer(_practice(rows, "S.artOpen = 'w2';"))
+    worn_card = _drawer(_practice(rows, "S.pdrawer = {t: 'worn', key: '武學'};"))
     assert f'<span class="why">{worn_why}</span>' in worn_card  # 身上那張卡
     assert f'<span class="why">{hut_why}</span>' in lib  # 功法庫點開的那張
     assert re.search(r'<div class="more">\s*<span class="why">', lib)  # 在同一排的最前面（左邊的空位）
-    ok = _practice(rows, "S.artOpen = 'w3';").split('<div class="art-body')[1]
+    ok = _drawer(_practice(rows, "S.artOpen = 'w3';"))
     assert 'class="why"' not in ok  # 熔得掉的：不寫
     assert f'title="{hut_why}"' in lib  # title 照舊留著（桌面滑鼠停著看得到）
 
