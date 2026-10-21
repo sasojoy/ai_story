@@ -665,8 +665,9 @@ def _contrast(a, b):
 
 
 def test_fb650_side_coloured_card_text_reads_in_dark_mode():
-    """FB-650：深色主題時卡上照陣營上色的字（第 2 段那一句、正在翻的名字、誰在推那一句、戰線的繩上「推進」那一句）對比 ≥ 4.5:1；
-    淺色照劇本的 color 一個字不變。深色那一版照劇本的顏色算（對比不夠的往那一方的 soft 調亮），本來就夠的（黃巾 5.0:1）不動；不寫死哪一方。"""
+    """FB-650：深色主題時卡上照陣營上色的字（第 2 段那一句、正在翻的名字、誰在推那一句、戰線的繩上「推進」那一句）對比 ≥ 4.5:1。
+    深色那一版照劇本的顏色算（對比不夠的往那一方的 soft 調亮），本來就夠的（黃巾 5.0:1）不動；不寫死哪一方。修的時候淺色照劇本的 color
+    一個字不變；FB-652（2026-10-22）淺色那一版也照同一個做法往墨色調深，見下一條。"""
     from test_world_map import flipping
 
     game = flipping(_game())
@@ -677,10 +678,12 @@ def test_fb650_side_coloured_card_text_reads_in_dark_mode():
     assert _contrast(color["guan"], DARK_CARD_2) < 4.5 <= _contrast(color["huang"], DARK_CARD_2)  # 修前：官軍的藍 2.6:1（QA 量的是 #211C17）
     cards = run(game, "return ['runan_wilds', 'yingchuan', 'hilltop_wilds'].map((id) => H.placeCard(H.S.mapBase, H.S.mapState, id)).join('');")
     pairs = set(re.findall(r'--sc:(#[0-9A-F]{6});--sd:(#[0-9A-F]{6})', cards))
-    assert {sc for sc, _ in pairs} == {color["guan"], color["huang"]}
+    # FB-652（2026-10-22）之後淺色那一版（--sc）不一定是劇本的 color（黃巾在淺色調深了，見 test_fb652）：這裡只管深色那一版
+    assert len(pairs) == 2
     for sc, sd in pairs:
         assert _contrast(sd, DARK_CARD_2) >= 4.5, (sc, sd)
-        assert sd == sc if _contrast(sc, DARK_CARD_2) >= 4.5 else sd != sc
+    assert any(sd == color["huang"] for _, sd in pairs)  # 黃巾在深色本來就夠（5.0:1），不動
+    assert not any(sd == color["guan"] for _, sd in pairs)  # 官軍的藍在深色調亮
     assert re.search(r'<div class="m-line" style="--sc:#[0-9A-F]{6};--sd:#[0-9A-F]{6}">官軍的基礎資源領地', cards)
     assert re.search(r'<span class="nm" style="--sc:', cards) and re.search(r'<span class="m-sc" style="--sc:[^"]+">官軍</span> 1 人正在攻', cards)
     assert all(f"color:{x}" not in cards for x in color.values())  # 照陣營上色的字都走 --sc／--sd（勝算的字照舊）
@@ -694,6 +697,35 @@ def test_fb650_side_coloured_card_text_reads_in_dark_mode():
     for text in out:
         sc, sd = re.match(r"--sc:(#[0-9A-F]{6});--sd:(#[0-9A-F]{6})", text).groups()
         assert _contrast(sd, DARK_CARD_2) >= 4.5, text
+
+
+LIGHT_CARD_2 = "#EFE6D5"  # 淺色主題抽屜裡最深的底（style.css 的 --card-2；抽屜本身是 --card #FBF7EF，更亮）
+LIGHT_CARD = "#FBF7EF"
+
+
+def test_fb652_side_coloured_card_text_reads_in_light_mode():
+    """FB-652：淺色主題卡上照陣營上色的字也要 ≥ 4.5:1——QA 量到黃巾 #B9821A 在卡底 #FBF7EF 上只有 3.13:1（第 2 段整句、正在翻的名字、
+    誰在推、戰線的繩、版圖變化）。照 sideText 深色那一版（FB-650）的做法：淺色那一版（--sc）在淺色最深的底（--card-2）上對比不到 4.5:1 的
+    往墨色調深到夠，本來就夠的（官軍 #3D5F8F）不動；照劇本讀、不寫死哪一方（四方劇本每一方都夠）。進度條照舊用劇本的 color。"""
+    from test_world_map import flipping
+
+    game = flipping(_game())
+    w, c = game.state.world, game.content
+    conquest.mark(w, c, "runan_wilds", "映雪", "guan", "attack", 12)
+    conquest.mark(w, c, "runan_wilds", "黃天客", "huang", "attack", 6)
+    color = {s["id"]: s["color"] for s in game.map_base()["world"]["sides"]}
+    assert _contrast(color["huang"], LIGHT_CARD) < 4.5 <= _contrast(color["guan"], LIGHT_CARD_2)  # 修前：黃巾 3.13:1
+    cards = run(game, "return ['runan_wilds', 'yingchuan', 'hilltop_wilds'].map((id) => H.placeCard(H.S.mapBase, H.S.mapState, id)).join('');")
+    light = {sc for sc, _ in re.findall(r'--sc:(#[0-9A-F]{6});--sd:(#[0-9A-F]{6})', cards)}
+    assert light and all(_contrast(sc, LIGHT_CARD_2) >= 4.5 for sc in light), light
+    assert color["guan"] in light and color["huang"] not in light  # 官軍本來就夠、不動；黃巾換深一點的那一版
+    assert f"background:{color['huang']}" in cards  # 進度條照舊是劇本的顏色
+    four, _ = _four_sides()
+    out = run(four, "return ['guan', 'huang', 'wei', 'wu'].map((k) => [H.sideInk(k).color, H.sideText(k)]);")
+    for raw, text in out:
+        sc = re.match(r"--sc:(#[0-9A-F]{6});", text).group(1)
+        assert _contrast(sc, LIGHT_CARD_2) >= 4.5, text
+        assert sc == raw if _contrast(raw, LIGHT_CARD_2) >= 4.5 else sc != raw
 
 
 def test_the_removed_pieces_are_gone():

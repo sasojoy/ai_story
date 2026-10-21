@@ -5133,11 +5133,12 @@
     const [x, y] = [lum(a), lum(b)];
     return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
   }
-  // 抽屜裡照陣營上色的字（FB-650）：淺色照劇本的 color；深色主題的抽屜底（最亮的是 --card-2 #2B251E）上對比不到 4.5:1 的，
-  // 往那一方的 soft 調亮到夠（soft 都不夠再往白），本來就夠的不動。回 style 裡的兩個變數（--sc 淺色、--sd 深色；style.css 照主題挑）。
+  // 抽屜裡照陣營上色的字：從劇本的 color 起算，對比不到 4.5:1 的調到夠，本來就夠的不動。回 style 裡的兩個變數（--sc 淺色、--sd 深色；
+  // style.css 照主題挑）。深色（FB-650）：在深色抽屜最亮的底 --card-2 #2B251E 上，往那一方的 soft 調亮（soft 都不夠再往白）；
+  // 淺色（FB-652）：在淺色抽屜最深的底 --card-2 #EFE6D5 上，往墨色 --ink 調深（黃巾的 #B9821A 在卡底只有 3.13:1）。
   // k 是陣營 id（或 sideInk 給的那一份）；顏色照劇本讀，不寫死哪一方
-  const DARK_TEXT_BG = "#2B251E", DARK_TEXT_MIN = 4.5;
-  const sideDarkMemo = {};
+  const DARK_TEXT_BG = "#2B251E", LIGHT_TEXT_BG = "#EFE6D5", LIGHT_TEXT_INK = "#2A241D", DARK_TEXT_MIN = 4.5;
+  const sideDarkMemo = {}, sideLightMemo = {};
   function sideText(k) {
     const ink = k && typeof k === "object" ? k : sideInk(k), key = `${ink.color}|${ink.soft}`;
     if (!(key in sideDarkMemo)) {
@@ -5147,7 +5148,12 @@
       for (let i = 1; i <= 20 && !ok(c); i++) c = mixHex(ink.soft || ink.color, "#FFFFFF", i / 20);
       sideDarkMemo[key] = c;
     }
-    return `--sc:${ink.color};--sd:${sideDarkMemo[key]}`;
+    if (!(ink.color in sideLightMemo)) {
+      let c = ink.color;
+      for (let i = 1; i <= 20 && hexContrast(c, LIGHT_TEXT_BG) < DARK_TEXT_MIN; i++) c = mixHex(ink.color, LIGHT_TEXT_INK, i / 20);
+      sideLightMemo[ink.color] = c;
+    }
+    return `--sc:${sideLightMemo[ink.color]};--sd:${sideDarkMemo[key]}`;
   }
 
   // 那一週的控制方：現在照疊層；選了別的週照那一週的快照（還沒記到是空的）
