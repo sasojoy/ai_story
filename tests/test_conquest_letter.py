@@ -148,7 +148,7 @@ def test_day_turn_only_voids_letters_that_never_opened():
 def test_votes_and_the_22_settle_are_gone():
     assert "conquest_vote" not in server.MAIN_ACTIONS and "conquest_letter" in server.MAIN_ACTIONS
     assert "conquest_settle_now" not in server.ADMIN_ACTIONS
-    assert {"conquest_progress", "conquest_letter"} <= set(server.ADMIN_ACTIONS)
+    assert {"conquest_progress", "admin_conquest_letter"} <= set(server.ADMIN_ACTIONS)  # FB-609：管理者那一個改名，不蓋掉玩家的
     assert not hasattr(Game, "conquest_vote")
     assert not any(hasattr(conquest_day, name) for name in ("tally", "plan", "merge", "settle", "settle_now", "commander_picks"))
     assert "conquest_letter" not in inspect.getsource(bot_policy)  # 假人不下戰書
