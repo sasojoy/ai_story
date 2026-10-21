@@ -5878,11 +5878,11 @@
 
   // ── 區圖（輿圖簡化設計 5.2、5.5、5.6；輿圖第三版第 4 批）──
   // 點一區（或「進入此區」、找地點挑一處）：同一張底圖換一個固定的取景（regionFit：這一區地點的外框加邊），不拖不縮。只畫這一區的地點：
-  // 墨筆小圖（線色＝誰佔著）、名字裝在印章框裡（框色＝誰的，顏色照劇本 sideInk、沒人佔照底圖的 unheld；大城框粗）、框下一條細進度條
-  // （攻方的顏色；剛易手灰掉寫冷卻）、朱印「寶」、名字底下最多兩個意境字（最濃的在前）、你的朱圈與旗、通到鄰區的路在取景框邊寫「→ 南陽」
+  // 墨筆小圖（線色＝誰佔著）、名字裝在印章框裡（框色＝誰的，顏色照劇本 sideInk、沒人佔照底圖的 unheld；大城框粗）、框裡的下緣一條細進度條
+  // （攻方的顏色；剛易手整條灰、不寫字，FB-648 第二段乙）、朱印「寶」、名字底下最多兩個意境字（最濃的在前）、你的朱圈與旗、通到鄰區的路在取景框邊寫「→ 南陽」
   // （點了換到那一區）、取景框外蓋一層半透明的紙。底圖的州界點劃線收掉、大區名藏起來，路照 CSS 換成一種淡實線（style.css 的
   // .mapx.region .tx-roads）。「塗層」開了多一層照歸屬融成一片的淡彩（草圖清甲）。名字框的位置照螢幕大小挑（regionLabels）：不壓別的名字框、
-  // 小圖、你的旗、鄰區出口。點一處：抽屜半開那一處的卡，地圖不動（取景先替半開的卡留位子，peekPx）。字待 joy 潤
+  // 小圖、你的旗、鄰區出口；擠不下時這一區的名字縮一號。點一處：抽屜半開那一處的卡，地圖不動（取景先替半開的卡留位子，peekPx）。字待 joy 潤
   const REGION_TOP = 58; // 上面那一排（‹ 天下・大區・版圖）讓開多高（px）
   const REGION_PAD = 54; // 抽屜收著那一行
   // 取景框四邊留多少（px）：旗在上面、意境字在下面；左右只留一點（名字框靠邊的往裡擺），寬的大區（潁川汝南）倍率才拉得上去
@@ -5890,16 +5890,26 @@
   // 優先替半開的卡留多高（px）：留了倍率還不低於 REGION_READ 才照留，不然整塊照放（短的螢幕：卡拉開時會蓋到下緣）
   const REGION_CARD = 270, REGION_READ = 0.9, REGION_MAX = 2, REGION_PEEK_MIN = 200;
   const R_PADX = 5, R_PADY = 3.5, R_GAP = 3; // 印章框的內距、框離小圖多遠（px）
-  const R_BAR = 3, R_BAR_GAP = 2, R_INS_GAP = 1, R_COOL = 9.5, R_SEAL = 15, R_SEAL_GAP = 3, R_EXIT = 11.5;
+  // 進度條收在印章框裡的下緣（FB-648 第二段，企劃者 2026-10-22 選乙）：高 R_BAR、貼著框線內側（框線一般 R_LINE、大城 R_LINE_BIG），
+  // 名字的字腳碰不到（框底的內距 R_PADY 夠放）
+  const R_BAR = 2.5, R_LINE = 1, R_LINE_BIG = 1.7, R_INS_GAP = 1, R_SEAL = 15, R_SEAL_GAP = 3, R_EXIT = 11.5;
   // 區圖記號在螢幕上多大（px）：放得大的區（倍率 1 以上）小圖與字大一號；擠的區（潁川汝南在手機上約 0.68 倍）照小的那一號才擺得開
   // （設計第十二章：375 寬互相不壓）。icon 是墨筆小圖照草圖（20px 見方）放大幾倍，hw、hh 是小圖在螢幕上佔的半寬、半高
   function regionSizes(s) {
     return s >= 1 ? { icon: 1.2, hw: 12.5, hh: 11.5, name: 14, nameBig: 15, ins: 11.5 } : { icon: 1, hw: 10.5, hh: 10, name: 12, nameBig: 13, ins: 10 };
   }
-  const RICH_SEAL = "#B03A2E", BAR_TRACK = "#D8CDB4", COOL_GREY = "#B3AA98", COOL_TEXT = "#7A7262";
+  // 擠不下時這一區的名字縮一號（FB-648 第二段乙，企劃者 2026-10-22）：小圖不變，名字與底下的意境字換小一號——大一號的那一區（倍率 1 以上：
+  // 14／15、意境字 11.5）換回平常那一號（12／13、10），平常那一號再小一點（R_SMALL：11／12、9）。只縮名字、意境字不縮的話，360 寬你站嵩山深處、
+  // 南陽 375×624 你站宛城等幾處還是擠不下（量過）
+  const R_SMALL = { name: 11, nameBig: 12, ins: 9 };
+  function regionSmaller(z) {
+    const plain = regionSizes(0);
+    return z.name > plain.name ? { ...z, name: plain.name, nameBig: plain.nameBig, ins: plain.ins } : { ...z, ...R_SMALL };
+  }
+  const RICH_SEAL = "#B03A2E", BAR_TRACK = "#D8CDB4", COOL_GREY = "#B3AA98";
   const R_WASH = { r: 64, blur: 8, warp: 20, freq: 0.024, op: 0.42 }; // 塗層（草圖清甲）：每一處一團多大、暈開、邊緣扭幾分（px）、整層多濃
   const R_MASK = 3, R_MASK_STEP = 7, R_MASK_OP = 0.35; // 取景框外的紙：三層、每層往外推 7px、每層多濃（最外面約七成三）
-  const WASH_WORD = "塗層", COOL_WORD = "冷卻 {n} 分"; // 待 joy 潤
+  const WASH_WORD = "塗層"; // 待 joy 潤
   const WASH_KEY = "tx-map-wash"; // 塗層開關記在這個瀏覽器（平常關著）
   function washOn() {
     if (S.mapWash === undefined) { try { S.mapWash = localStorage.getItem(WASH_KEY) === "1"; } catch (e) { S.mapWash = false; } }
@@ -6004,18 +6014,16 @@
     }
     return out;
   }
-  // 一處的名字框有多大（px）：上一列是印章框（＋朱印寶），下一列是進度條與意境字（＋冷卻幾分）
+  // 一處的名字框有多大（px）：上一列是印章框（＋朱印寶），下一列是意境字。進度條收在印章框裡、剛易手不寫「冷卻幾分」（幾分鐘寫在卡上，
+  // placeLine）——FB-648 第二段乙（企劃者 2026-10-22）：框的大小翻不翻地都一樣，名字擺的位置跟沒翻地時一樣，翻地的那一刻名字不跳
   function regionLabelSize(base, st, p, z) {
     const q = st.places[p.id] || {};
     const fs = p.big ? z.nameBig : z.name, fw = textW(p.name, fs) + 2 * R_PADX, fh = fs + 2 * R_PADY;
     const tug = tugOf(st, p.id, q.control || null), cool = !!q.control && !!q.cool;
     const ins = (p.insights || []).map((id) => insightInk(base, id)).filter(Boolean).slice(0, 2);
-    const coolText = cool ? COOL_WORD.replace("{n}", Number(q.cool)) : "", insW = ins.length * (z.ins + 2);
-    const bar = !!(tug || cool), words = ins.length > 0 || !!coolText;
-    const w1 = fw + (q.rich ? R_SEAL_GAP + R_SEAL : 0);
-    const w2 = Math.max(bar ? fw : 0, insW + (coolText ? (insW ? R_GAP : 0) + textW(coolText, R_COOL) : 0));
-    const low = (bar ? R_BAR_GAP + R_BAR : 0) + (words ? R_INS_GAP + z.ins + 2 : 0);
-    return { fs, fw, fh, w1, w2, low, W: Math.max(w1, w2), H: fh + low, tug, cool, coolText, ins, insPx: z.ins, bar, rich: !!q.rich, big: !!p.big };
+    const w1 = fw + (q.rich ? R_SEAL_GAP + R_SEAL : 0), w2 = ins.length * (z.ins + 2);
+    const low = ins.length ? R_INS_GAP + z.ins + 2 : 0;
+    return { fs, fw, fh, w1, w2, low, W: Math.max(w1, w2), H: fh + low, tug, cool, ins, insPx: z.ins, bar: !!(tug || cool), rich: !!q.rich, big: !!p.big };
   }
   // 名字框可以擺的位置（框左上角離地點中心多遠，px），好的在前：右、左、下、上，再往上下（左右）錯開，再隔一層。
   // 只貼著小圖擺、不拉線（企劃者 2026-10-21 從對比圖選乙：潁川汝南擠的地方不拉細點線回小圖）
@@ -6031,6 +6039,7 @@
   // 第二輪（FB-648）：位置每 R_SLIDE px 一格；一起找最多試 R_SEARCH_WIDE 次；還找不到（真的放不下）時反覆換位置最多 R_SETTLE 次
   const R_SLIDE = 3, R_SEARCH_WIDE = 3000, R_SETTLE = 400;
   const R_RING = [[19, 8], [17, 11], [14, 14], [11, 17], [8, 19]]; // 你的朱圈在第二輪照圓的算：五塊框的半寬、半高疊成一個半徑約 19 的圓
+  const R_YOU = 18; // 你的朱圈的外緣（半徑 17、線寬 2.4 的一半，少一點點）：「擠不下」照真的那一圈量
   // 第二輪的名字框位置：第一輪那幾個在前，再補沿著小圖四邊滑的（離小圖由近到遠），範圍不比第一輪遠（照樣貼著小圖、不拉線，企劃者選的乙）。
   // 每一個位置的第三格是「往前挪」時的先後：照離小圖多遠（每 R_NEAR px 一級，同一級照上面的先後），擺好之後名字才挪得回自己的小圖旁邊、
   // 不會留在別處的小圖旁邊（一起找與擺不開時的換位置照上面的先後）
@@ -6048,17 +6057,26 @@
   // 再一起找「彼此也不壓」的擺法（同 mapview._place_labels：每次挑剩下位置最少的先擺，擺不下回頭改前面的），找到之後再一處一處往前挪
   // （離小圖近的位置）。第一輪只用 regionLabelSpots 那幾個位置；找不到、或擺好之後鄰區出口沿著邊滑也讓不開名字框（FB-648：翻地中
   // 名字框多了進度條、「冷卻 N 分」，你站的那一處多朱圈與旗），第二輪換 regionLabelSpotsWide、鄰區出口原本的位置也讓開，再找一次。
-  // 第一輪擺得下（出口也讓得開）的畫面跟以前一樣。第二輪也找不到（照這種畫法真的放不下，例：360 寬你站潁川郡、潁川郡自己被推）：
-  // 先一個一個擺，再反覆把壓到東西的那幾處換位置（settle），壓到的只留在擠的那一角。
+  // 第一輪擺得下（出口也讓得開）的畫面跟以前一樣。第二輪也找不到（照這種畫法真的放不下）：先一個一個擺，再反覆把壓到東西的那幾處換位置
+  // （settle），壓到的只留在擠的那一角。擺好了還互壓（名字框兩兩相交、壓到別處的小圖、你的旗與朱圈、鄰區出口，或出了取景框）＝擠不下：
+  // 這一區的名字縮一號（regionSmaller）重擺一次（FB-648 第二段乙，企劃者 2026-10-22）。名字框的大小不看翻地（regionLabelSize），
+  // 擺法與縮不縮只看這一區、你站哪、地圖框多大：翻地的那一刻名字不跳。
   // 回每一處（照這一區的地點順序）：大小、框左上角（螢幕 px）、佔的兩列、壓到多少（0＝不壓）
   function regionLabels(base, st, rid, v, vw, vh) {
+    const z = regionSizes(v.s), [out, tight] = regionLabelsAt(base, st, rid, v, vw, vh, z);
+    return tight ? regionLabelsAt(base, st, rid, v, vw, vh, regionSmaller(z))[0] : out;
+  }
+  // 照名字的字級 z 擺一次：回 [每一處, 擠不下（還互壓）]
+  function regionLabelsAt(base, st, rid, v, vw, vh, z) {
     const pts = regionPlaces(base, rid), scr = (x, y) => [vw / 2 + (x - v.cx) * v.s, vh / 2 + (y - v.cy) * v.s];
     const [bx0, by0] = scr(v.frame[0], v.frame[1]), [bx1, by1] = scr(v.frame[2], v.frame[3]);
     const bounds = [Math.max(2, bx0), Math.max(REGION_TOP + 2, by0), Math.min(vw - 2, bx1), Math.min(vh - 2, by1)];
-    const at = Object.fromEntries(pts.map((p) => [p.id, scr(p.x, p.y)])), z = regionSizes(v.s);
+    const at = Object.fromEntries(pts.map((p) => [p.id, scr(p.x, p.y)]));
     const fixed = pts.map((p) => [at[p.id][0] - z.hw, at[p.id][1] - z.hh, at[p.id][0] + z.hw, at[p.id][1] + z.hh]);
     const me = !st.journey && pts.find((p) => p.id === st.here);
     if (me) { const [X, Y] = at[me.id]; fixed.push([X + 10, Y - 40, X + 34, Y - 12], [X - 19, Y - 19, X + 19, Y + 19]); }
+    // 你的朱圈（半徑 17、線寬 2.4）照圓的算：五塊疊成一個圓（第二輪的牆與「擠不下」都照它）
+    const ring = me ? R_RING.map(([a, b]) => [at[me.id][0] - a, at[me.id][1] - b, at[me.id][0] + a, at[me.id][1] + b]) : [];
     const inter = (a, b) => { // 兩個框相交的面積（第二輪的位置多，這一段最常跑：不碰 Math）
       const w = (a[2] < b[2] ? a[2] : b[2]) - (a[0] > b[0] ? a[0] : b[0]);
       if (w <= 0) return 0;
@@ -6142,18 +6160,30 @@
     let pick = solve(items, REGION_SEARCH);
     if (pick && exits.length && exitHit(items, pick)) pick = null;
     if (!pick) {
-      // 第二輪：你的朱圈（半徑 17、線寬 2.4）照圓的算（五塊疊成一個圓，圓外那四個角讓名字框擺得進去），鄰區出口原本的位置也讓開
-      const ring = me ? R_RING.map(([a, b]) => [at[me.id][0] - a, at[me.id][1] - b, at[me.id][0] + a, at[me.id][1] + b]) : [];
+      // 第二輪：你的朱圈照圓的算（圓外那四個角讓名字框擺得進去），鄰區出口原本的位置也讓開
       items = lay(regionLabelSpotsWide, [...(me ? fixed.slice(0, -1) : fixed), ...ring, ...exits.map((e) => regionExitBox(e, 0, room))]);
       // 先照「離自己的小圖多近」的先後一起找（找得到名字就都在自己的小圖旁邊），找不到再照原本的先後找一次，再找不到才換位置
       const near = items.map((it) => ({ ...it, opts: it.opts.slice().sort((a, b) => a.rank - b.rank) }));
       pick = solve(near, R_SEARCH_WIDE) || solve(items, R_SEARCH_WIDE) || settle(items, R_SETTLE);
     }
-    return items.map((it) => {
+    const out = items.map((it) => {
       const o = pick[it.i], others = items.filter((x) => x !== it).map((x) => pick[x.i]);
       return { ...it.L, id: it.p.id, X: it.X, Y: it.Y, l: o.l, t: o.t, rows: o.rows,
         cost: against(o.rows, fixed) + others.reduce((n, q) => n + (clash(o, q) ? 1 : 0), 0) };
     });
+    const exitBoxes = regionExits(base, rid, v, vw, vh, out).map((e) => e.box);
+    return [out, regionCrowded(out, fixed.slice(0, pts.length), me ? fixed[pts.length] : null, me ? at[me.id] : null, exitBoxes, bounds)];
+  }
+  // 擠不下（FB-648 第二段乙）＝擺好的名字框 labels 還互壓：兩兩相交、壓到別處的小圖 icons（照地點順序）或你的旗 flag、碰到你的朱圈
+  // （圓心 you；真的那一圈：圓心到框最近那一點不到外緣 R_YOU）、鄰區出口 exits（照 regionExits 滑好的位置；出口的框四周有留白，
+  // 同測試的量法多過 2px² 才算），或出了 bounds（取景框與上面那一排底下）。沒有旗、朱圈（不在這一區、在路上）給 null
+  function regionCrowded(labels, icons, flag, you, exits, bounds) {
+    const inter = (a, b) => Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0])) * Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1]));
+    const outside = (r) => (r[2] - r[0]) * (r[3] - r[1]) - inter(r, bounds);
+    const ring = (r) => !!you && Math.hypot(Math.max(r[0] - you[0], 0, you[0] - r[2]), Math.max(r[1] - you[1], 0, you[1] - r[3])) < R_YOU;
+    return labels.some((l, i) => l.rows.some((r) => outside(r) > 0.5 || ring(r) || (!!flag && inter(r, flag) > 0.5)
+      || icons.some((b, j) => j !== i && inter(r, b) > 0.5) || exits.some((b) => inter(r, b) > 2)
+      || labels.some((m, j) => j !== i && m.rows.some((q) => inter(r, q) > 0.5))));
   }
   // 墨筆小圖（草圖「一乙」的城、營、寺、渡、山、野；底圖給的 glyph）：線色＝誰佔著，底是紙色；20×20、中心在 (0, 0)
   function inkIcon(glyph, ink, paper) {
@@ -6203,26 +6233,23 @@
       out.push(`<g class="r-icon" data-act="region-place" data-id="${esc(p.id)}" transform="translate(${p.x},${p.y}) scale(${f2(z.icon * k)})" style="cursor:pointer">`
         + `<rect x="-14" y="-14" width="28" height="28" fill="#000000" fill-opacity="0"/>${inkIcon(p.glyph, inkOf(p.id).color, MAP_HALO)}</g>`);
     }
-    // 名字框：印章框（框色＝誰的）、朱印寶、進度條（冷卻灰掉）、意境字
+    // 名字框：印章框（框色＝誰的）、框裡下緣的進度條（冷卻整條灰、不寫字）、名字、朱印寶、意境字
     for (const L of labels) {
-      const p = pos[L.id], ink = inkOf(L.id), [x, y] = mp(L.l, L.t), fw = L.fw * k, fh = L.fh * k;
+      const p = pos[L.id], ink = inkOf(L.id), [x, y] = mp(L.l, L.t), fw = L.fw * k, fh = L.fh * k, line = L.big ? R_LINE_BIG : R_LINE;
       const parts = [`<g class="r-label" data-act="region-place" data-id="${esc(L.id)}" style="cursor:pointer;font-family:serif">`,
-        `<rect class="r-frame" x="${f1(x)}" y="${f1(y)}" width="${f1(fw)}" height="${f1(fh)}" fill="${ink.tint}" fill-opacity=".95" stroke="${ink.color}" stroke-width="${f2((L.big ? 1.7 : 1) * k)}"/>`,
-        `<text x="${f1(x + R_PADX * k)}" y="${f1(y + (R_PADY + L.fs * 0.86) * k)}" font-size="${f1(L.fs * k)}" font-weight="${L.big ? 700 : 500}" fill="${MAP_INK}">${esc(p.name)}</text>`];
+        `<rect class="r-frame" x="${f1(x)}" y="${f1(y)}" width="${f1(fw)}" height="${f1(fh)}" fill="${ink.tint}" fill-opacity=".95" stroke="${ink.color}" stroke-width="${f2(line * k)}"/>`];
+      if (L.bar) { // 貼著框線內側：左右下各讓半條框線
+        const i = (line / 2) * k, bx = x + i, bw = fw - 2 * i, bh = R_BAR * k, by = y + fh - i - bh;
+        parts.push(`<rect class="r-bar" x="${f1(bx)}" y="${f1(by)}" width="${f1(bw)}" height="${f1(bh)}" fill="${L.cool ? COOL_GREY : BAR_TRACK}"/>`);
+        if (!L.cool && L.tug) parts.push(`<rect class="r-bar-fill" data-side="${esc(L.tug.side)}" x="${f1(bx)}" y="${f1(by)}" width="${f1((bw * L.tug.pct) / 100)}" height="${f1(bh)}" fill="${sideInk(L.tug.side).color}"/>`);
+      }
+      parts.push(`<text x="${f1(x + R_PADX * k)}" y="${f1(y + (R_PADY + L.fs * 0.86) * k)}" font-size="${f1(L.fs * k)}" font-weight="${L.big ? 700 : 500}" fill="${MAP_INK}">${esc(p.name)}</text>`);
       if (L.rich) {
         const sx = x + fw + R_SEAL_GAP * k, sy = y + ((L.fh - R_SEAL) / 2) * k;
         parts.push(`<g class="r-seal"><rect x="${f1(sx)}" y="${f1(sy)}" width="${f1(R_SEAL * k)}" height="${f1(R_SEAL * k)}" rx="${f1(2 * k)}" fill="${RICH_SEAL}"/><text x="${f1(sx + (R_SEAL / 2) * k)}" y="${f1(sy + 11.3 * k)}" font-size="${f1(11 * k)}" text-anchor="middle" fill="#FFFFFF">${RICH_WORD}</text></g>`);
       }
-      let low = y + fh;
-      if (L.bar) {
-        const by = low + R_BAR_GAP * k;
-        parts.push(`<rect class="r-bar" x="${f1(x)}" y="${f1(by)}" width="${f1(fw)}" height="${f1(R_BAR * k)}" fill="${L.cool ? COOL_GREY : BAR_TRACK}"/>`);
-        if (!L.cool && L.tug) parts.push(`<rect class="r-bar-fill" data-side="${esc(L.tug.side)}" x="${f1(x)}" y="${f1(by)}" width="${f1((fw * L.tug.pct) / 100)}" height="${f1(R_BAR * k)}" fill="${sideInk(L.tug.side).color}"/>`);
-        low = by + R_BAR * k;
-      }
-      const base0 = low + (R_INS_GAP + L.insPx * 0.9) * k;
+      const base0 = y + fh + (R_INS_GAP + L.insPx * 0.9) * k;
       L.ins.forEach((ins, i) => parts.push(`<text class="r-ins" x="${f1(x + i * (L.insPx + 2) * k)}" y="${f1(base0)}" font-size="${f1(L.insPx * k)}" font-weight="700" fill="${ins.c}" stroke="${MAP_HALO}" stroke-width="${f1(2.6 * k)}" paint-order="stroke">${esc(ins.name)}</text>`));
-      if (L.coolText) parts.push(`<text class="r-cool" x="${f1(x + (L.ins.length * (L.insPx + 2) + (L.ins.length ? R_GAP : 0)) * k)}" y="${f1(base0)}" font-size="${f1(R_COOL * k)}" fill="${COOL_TEXT}" stroke="${MAP_HALO}" stroke-width="${f1(2.4 * k)}" paint-order="stroke">${esc(L.coolText)}</text>`);
       out.push(parts.join("") + "</g>");
     }
     // 上面那一張：你（朱圈與旗；在路上畫在路上，在取景框裡才畫）

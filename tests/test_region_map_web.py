@@ -1,6 +1,7 @@
 """輿圖第三版第 4 批：區圖與卡（輿圖簡化設計 5.2、5.3、5.4、5.6、第十二章；計畫 docs/superpowers/plans/2026-10-21-輿圖v3-區圖與卡.md）。
-點一區進的是區圖：同一張底圖換一個固定的取景（regionFit），只畫這一區的地點——墨筆小圖、印章框（框色＝誰的，顏色照劇本）、框下的進度條
-（攻方的顏色；剛易手灰掉寫冷卻）、朱印「寶」、名字底下的意境字、你的朱圈與旗、鄰區出口；「塗層」開了多一層淡彩。點一處抽屜半開那一處的卡。
+點一區進的是區圖：同一張底圖換一個固定的取景（regionFit），只畫這一區的地點——墨筆小圖、印章框（框色＝誰的，顏色照劇本）、框裡下緣的進度條
+（攻方的顏色；剛易手整條灰、不寫字：FB-648 第二段乙）、朱印「寶」、名字底下的意境字、你的朱圈與旗、鄰區出口；「塗層」開了多一層淡彩；
+擠不下時這一區的名字縮一號。點一處抽屜半開那一處的卡。
 在 node 裡跑整支 app.js（tests/webharness.py），餵伺服器真的會給的底圖、疊層與 main_view（翻地那一份）；沒有 node 就略過。"""
 from __future__ import annotations
 
@@ -24,7 +25,7 @@ from tianxia.state import TerritoryState
 
 pytestmark = [pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過"), pytest.mark.slow]
 NAMES = ["S", "pageMap", "regionFit", "regionLabels", "regionExits", "regionParts", "regionTopHtml", "placeCard", "placeLine",
-         "flipSection", "drawerHtml", "worldDrawerHtml", "sideInk", "sideText"]
+         "flipSection", "drawerHtml", "worldDrawerHtml", "sideInk", "sideText", "regionCrowded"]
 DRIVER = re.sub(r"wholeApp\(\[.*?\]\)", "wholeApp(" + repr(NAMES).replace("'", '"') + ")", test_prologue_web.DRIVER, count=1, flags=re.S)
 APP = Path(server.WEB) / "app.js"
 # 地圖框（寬 × 高）：實機量的。375×812 → 375×604（2026-10-21 map4.localhost，狀態列多一行心得提示、商城開著）、375×624（第 3 批量的）、
@@ -160,8 +161,15 @@ def test_insight_words_sit_under_the_name_strongest_first_at_most_two():
         assert words == [kinds[i]["name"] for i in p["insights"]][:2], p["id"]
 
 
+def _rect(svg, cls):
+    m = re.search(rf'<rect class="{cls}"[^>]*x="([\d.-]+)" y="([\d.-]+)" width="([\d.]+)" height="([\d.]+)"', svg)
+    x, y, w, h = map(float, m.groups())
+    return x, y, x + w, y + h
+
+
 def test_progress_bars_show_the_top_attacker_and_cooling_is_grey():
-    """框下的進度條（設計 5.2、4.1）：進度最高的那一方的顏色、長度照進度；守方自己的不畫；剛易手整條灰、寫冷卻幾分。"""
+    """進度條（設計 5.2、4.1）：進度最高的那一方的顏色、長度照進度；守方自己的不畫；剛易手整條灰。
+    FB-648 第二段乙（企劃者 2026-10-22）：進度條收在印章框裡的下緣（在名字的字底下、框線裡面），冷卻不寫「冷卻 N 分」（幾分鐘寫在卡上）。"""
     from test_world_map import flipping
 
     game = flipping(_game())
@@ -169,12 +177,18 @@ def test_progress_bars_show_the_top_attacker_and_cooling_is_grey():
     ink = {s["id"]: s for s in game.map_base()["world"]["sides"]}
     low, _ = parts(game)
     wilds = _label(low, "runan_wilds")  # 中立地：官軍 60、黃巾 25 → 畫官軍那一條、六成
-    track = float(re.search(r'class="r-bar"[^>]*width="([\d.]+)"', wilds).group(1))
+    frame, track = _rect(wilds, "r-frame"), _rect(wilds, "r-bar")
     fill = re.search(r'class="r-bar-fill" data-side="([a-z]+)"[^>]*width="([\d.]+)"[^>]*fill="(#[0-9A-F]{6})"', wilds)
-    assert fill.group(1) == "guan" and float(fill.group(2)) == pytest.approx(track * 0.6, abs=0.15) and fill.group(3) == ink["guan"]["color"]
+    assert fill.group(1) == "guan" and float(fill.group(2)) == pytest.approx((track[2] - track[0]) * 0.6, abs=0.15) and fill.group(3) == ink["guan"]["color"]
+    baseline = float(re.search(r'<text x="[\d.]+" y="([\d.]+)"', wilds).group(1))
+    assert frame[0] < track[0] and track[2] < frame[2] and baseline < track[1] and track[3] < frame[3]  # 框裡的下緣、名字底下
+    assert frame[3] - track[3] < 1.5  # 貼著框線內側
     assert 'data-side="huang"' in _label(low, "yingchuan_wilds")  # 官軍的地被黃巾推：畫黃巾那一條
     cool = _label(low, "hilltop_wilds")
-    assert 'class="r-bar"' in cool and "r-bar-fill" not in cool and f"冷卻 {st['places']['hilltop_wilds']['cool']} 分" in cool
+    assert 'class="r-bar"' in cool and "r-bar-fill" not in cool and "冷卻" not in cool and "r-cool" not in low
+    assert _rect(cool, "r-bar")[3] < _rect(cool, "r-frame")[3]
+    n = st["places"]["hilltop_wilds"]["cool"]
+    assert f"{n} 分後才能再推" in run(game, 'return H.placeCard(H.S.mapBase, H.S.mapState, "hilltop_wilds");')  # 幾分鐘寫在卡上
     assert "r-bar" not in _label(low, "yingchuan")  # 沒人推、沒冷卻：沒有進度條
 
 
@@ -298,7 +312,8 @@ def test_region_labels_do_not_overlap_on_a_phone(profile, vw, vh):
     assert run(game, OVERLAP.replace("VW", str(vw)).replace("VH", str(vh))) == []
 
 
-# FB-648：開季那一刻量不到的局面——翻地中名字框會變大（攻方在推多一條進度條、剛易手多一行「冷卻 N 分」），你站的那一處多朱圈與旗。
+# FB-648：開季那一刻量不到的局面——第一段那一版翻地中名字框會變大（攻方在推多一條進度條、剛易手多一行「冷卻 N 分」；第二段照乙收進框裡、
+# 不寫字，框的大小就不變了），你站的那一處多朱圈與旗。
 # QA 量到的那幾組（試玩回饋 FB-648 與檔尾那一節，scratchpad 的 lbl.py、lbl2.py）：黃巾推潁川郊野 40（甲）、汝南荒野官軍 65／黃巾 12（乙）、
 # 潁水河畔剛被黃巾推滿在冷卻（丙）；上一批開發的 test_world_map.flipping() 那一組也一起量
 def _qa_push(game, combo):
@@ -365,18 +380,155 @@ def test_fb648_a_neighbour_exit_never_lands_on_a_name_frame(vw, vh):
     assert run(game, OVERLAP.replace("VW", str(vw)).replace("VH", str(vh))) == []
 
 
+# FB-648 第二段（企劃者 2026-10-22 選乙）的掃描：每一區、你站每一處與在路上 × 沒人推／能推的塊一塊一塊有進度條或冷卻／全部有進度條／
+# 全部冷卻／隨機配的，五個手機地圖框——名字框都不互壓（OVERLAP 同一套量法）、翻地不挪任何一個名字（擺的位置與字級跟沒翻地時一樣）、
+# 名字離自己的小圖最遠的那一個不比上一輪（第一段那一版）沒翻地時量到的遠（GAP_LAST）。第一段那一版（甲）同一套掃描：潁川汝南 170＋146、
+# 南陽 73＋21、洛陽 15＋27、冀州 0＋0、幽州 11＋4 種局面互壓（「＋」前是一塊一塊來的，後是沒人推與全部一起的）
+FLIP_SWEEP = """
+const inter = (a, b) => Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0])) * Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1]));
+const base = H.S.mapBase, st0 = H.S.mapState, rid = H.S.rid, capt = H.S.capt, sides = base.world.sides.map((s) => s.id);
+function bad(L, ex, v, VW) {
+  const out = [], z = v.s >= 1 ? 12.5 : 10.5, zh = v.s >= 1 ? 11.5 : 10;
+  for (let i = 0; i < L.length; i++) {
+    for (const a of L[i].rows) if (a[0] < 0 || a[2] > VW) out.push([L[i].id, "screen"]);
+    for (let j = 0; j < L.length; j++) {
+      if (j > i) for (const a of L[i].rows) for (const b of L[j].rows) if (inter(a, b) > 0.5) out.push([L[i].id, L[j].id]);
+      if (j !== i) for (const a of L[i].rows) if (inter(a, [L[j].X - z, L[j].Y - zh, L[j].X + z, L[j].Y + zh]) > 0.5) out.push([L[i].id, "icon:" + L[j].id]);
+    }
+    for (const e of ex) for (const a of L[i].rows) if (inter(a, e.box) > 2) out.push([L[i].id, "exit:" + e.text]);
+  }
+  return out;
+}
+function variant(assign, here) {  // assign：{ 地點: "bar"（對面推了 40）| "cool"（剛易手，冷卻 59 分）}；here：你站哪（"@road"＝在路上）
+  const st = JSON.parse(JSON.stringify(st0));
+  for (const [id, kind] of Object.entries(assign)) {
+    const q = st.places[id];
+    if (kind === "bar") { q.tug = { [sides.find((s) => s !== q.control)]: 40 }; q.cool = null; }
+    if (kind === "cool") { q.control = q.control || sides[0]; q.tug = null; q.cool = 59; }
+  }
+  if (here === "@road") st.journey = { x: 0, y: 0 }; else { st.journey = null; st.here = here; }
+  return st;
+}
+const gapOf = (l) => { const f = l.rows[0], nx = Math.max(f[0], Math.min(f[2], l.X)), ny = Math.max(f[1], Math.min(f[3], l.Y)); return Math.hypot(nx - l.X, ny - l.Y); };
+let seed = 7;
+const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+const ids = base.places.filter((p) => p.region === rid).map((p) => p.id), heres = [...ids, "@road"];
+const fails = [], moved = [], gaps = [];
+for (const [VW, VH] of H.S.phones) {
+  const v = H.regionFit(base, rid, VW, VH);
+  let far = 0;
+  for (const here of heres) {
+    const cases = [{}, Object.fromEntries(capt.map((id) => [id, "bar"])), Object.fromEntries(capt.map((id) => [id, "cool"]))];
+    for (const id of capt) cases.push({ [id]: "bar" }, { [id]: "cool" });
+    for (let n = 0; n < 2; n++) {
+      const a = {};
+      for (const id of capt) { const x = rnd(); if (x < 0.3) a[id] = "bar"; else if (x < 0.5) a[id] = "cool"; }
+      cases.push(a);
+    }
+    let ref = null;
+    for (const assign of cases) {
+      const L = H.regionLabels(base, variant(assign, here), rid, v, VW, VH), b = bad(L, H.regionExits(base, rid, v, VW, VH, L), v, VW);
+      if (b.length) fails.push([VW, VH, here, assign, b]);
+      const sig = JSON.stringify(L.map((l) => [l.id, l.l, l.t, l.fs, l.insPx]));
+      if (ref === null) ref = sig; else if (sig !== ref) moved.push([VW, VH, here, assign]);
+      for (const l of L) far = Math.max(far, gapOf(l));
+    }
+  }
+  gaps.push(far);
+}
+return { fails, moved, gaps };
+"""
+# 名字離自己的小圖最遠的那一個（px），照 PHONES 的順序：上一輪（第一段那一版 f46d237a）沒翻地、你站每一處與在路上量到的最遠
+GAP_LAST = {"yingru": (55.7, 55.7, 55.7, 55.7, 55.7), "nanyang": (31.4, 60.9, 31.4, 31.4, 31.4), "luoyang": (55.7, 56.9, 31.4, 31.4, 31.4),
+            "jizhou": (39.3, 39.3, 39.3, 39.3, 39.3), "youzhou": (61.9, 60.9, 51, 51, 51)}
+
+
+@pytest.mark.parametrize("rid", ["yingru", "nanyang", "luoyang", "jizhou", "youzhou"])
+@pytest.mark.parametrize("profile", ["weekend", "season21"])
+def test_fb648_no_name_frame_overlaps_or_moves_while_blocks_flip(profile, rid):
+    """FB-648 第二段乙：進度條收進框裡、冷卻不寫字（框的大小翻不翻地都一樣），擠不下時這一區的名字縮一號。掃描見 FLIP_SWEEP 上面那一段。"""
+    game = _game(profile=profile)
+    mine = {p["id"] for p in game.map_base()["places"] if p["region"] == rid}
+    capt = [k for k, b in server.main_view(game)["conquest"]["blocks"].items() if b["capturable"] and k in mine]
+    assert capt
+    out = run(game, FLIP_SWEEP, rid=rid, capt=capt, phones=PHONES, mapRegion=rid)
+    assert out["fails"] == [] and out["moved"] == []
+    assert all(g <= last + 0.5 for g, last in zip(out["gaps"], GAP_LAST[rid])), (out["gaps"], GAP_LAST[rid])
+
+
+def test_fb648_what_counts_as_crowded():
+    """FB-648 第二段乙「擠不下」的判斷（regionCrowded）一樣一樣來：兩個名字框相交、壓到別處的小圖、壓到你的旗、碰到你的朱圈
+    （照真的那一圈，圓外的角不算）、壓到鄰區出口（出口的框有留白，多過 2px² 才算）、出了取景框；自己的小圖不算（名字本來就貼著它）。"""
+    game = _game()
+    out = run(game, """
+const lab = (id, l, t) => ({ id, rows: [[l, t, l + 40, t + 19]] });
+const icons = [[100, 100, 121, 120], [300, 100, 321, 120]], bounds = [2, 60, 370, 600];
+const C = (labels, o = {}) => H.regionCrowded(labels, icons, o.flag || null, o.you || null, o.exits || [], bounds);
+const a = lab("a", 124, 101), b = lab("b", 324, 101);
+return {
+  clean: C([a, b]),
+  labels: C([a, lab("b", 150, 110)]),
+  icon: C([a, lab("b", 80, 110)]),
+  ownIcon: C([lab("a", 110, 101), b]),
+  flag: C([a, b], { flag: [150, 95, 174, 123] }),
+  ringNear: C([a, b], { you: [110, 130] }),
+  ringCorner: C([a, b], { you: [108, 133] }),
+  exitBig: C([a, b], { exits: [[160, 115, 200, 130]] }),
+  exitSliver: C([a, b], { exits: [[163, 119, 200, 130]] }),
+  outside: C([lab("a", 124, 50), b]),
+};""")
+    assert out == {"clean": False, "labels": True, "icon": True, "ownIcon": False, "flag": True, "ringNear": True, "ringCorner": False,
+                   "exitBig": True, "exitSliver": False, "outside": True}
+
+
+LAYOUT = """
+const v = H.regionFit(H.S.mapBase, 'RID', VW, VH);
+return H.regionLabels(H.S.mapBase, H.S.mapState, 'RID', v, VW, VH).map((l) => [l.id, l.l, l.t, l.fs, l.insPx]);
+"""
+
+
+def _layout(game, rid, vw, vh):
+    return run(game, LAYOUT.replace("RID", rid).replace("VW", str(vw)).replace("VH", str(vh)), mapRegion=rid)
+
+
 @pytest.mark.parametrize("vw,vh", [(360, 452), (360, 436)])
-def test_fb648_when_the_crowded_corner_cannot_fit_the_rest_stays_clean(vw, vh):
-    """FB-648 還沒解的那一種（等企劃者挑畫法，見試玩回饋 FB-648）：360 寬、你站潁川郡、潁川郡自己被推（框下多一條進度條）、潁水河畔在冷卻——
-    嵩山、潁川那一角照現在的畫法怎麼擺都放不下（第二輪一起找把每一種擺法試完）。擺不開時反覆把壓到東西的那幾處換位置，壓到的只留在那一角，
-    汝南那一頭不受連累（修前汝南集市壓譙縣）。"""
+def test_fb648_the_crowded_corner_fits_once_the_bar_sits_inside_the_frame(vw, vh):
+    """FB-648 第一段擺不下的那一種：360 寬、你站潁川郡、潁川郡自己被推、潁水河畔在冷卻——照第一段的畫法（框下多一條進度條、多一行
+    「冷卻 N 分」）嵩山、潁川那一角怎麼擺都放不下。第二段照企劃者選的乙（2026-10-22）：進度條收進框裡、冷卻不寫字，框的大小翻不翻地都一樣，
+    名字擺的位置跟沒翻地時一模一樣（翻地的那一刻不跳），這一組也不壓了。"""
+    plain = _game(profile="season21")
     game = _game(profile="season21")
     w, c = game.state.world, game.content
     conquest.push(w, c, "yingchuan", "huang", "推甲", 40, "attack")
     conquest.push(w, c, "yingshui", "huang", "推乙", 100, "attack")
-    bad = run(game, OVERLAP.replace("VW", str(vw)).replace("VH", str(vh)))
-    corner = {"yingchuan", "yingshui", "songshan_foot", "deep_mountain", "jade_cave", "yingchuan_academy"}
-    assert bad and all(x in corner for _, a, b in bad for x in (a, b.split(":")[-1])), bad
+    st = game.map_state()
+    assert st["places"]["yingchuan"]["tug"] and st["places"]["yingshui"]["cool"]
+    assert run(game, OVERLAP.replace("VW", str(vw)).replace("VH", str(vh))) == []
+    assert _layout(game, "yingru", vw, vh) == _layout(plain, "yingru", vw, vh)
+
+
+def test_fb648_a_crowded_region_takes_its_names_one_size_smaller():
+    """FB-648 第二段乙：擺好了還互壓（擠不下）時，這一區的名字縮一號重擺——平常那一號 12／13（意境字 10）→ 11／12（9），
+    大一號的區（倍率 1 以上：14／15、11.5）→ 平常那一號；小圖不變。擺得下的不縮（同一區、同一個地圖框，你站別處就照原本那一號）。
+    量過的（第一段的畫法）：360 寬你站嵩山深處，嵩山深處的框壓到潁川書院的小圖；南陽 375×624 你站宛城，框壓到小圖、鄰區出口。"""
+    game = _game(profile="season21", at="deep_mountain")
+    small = _layout(game, "yingru", 360, 452)
+    assert {(fs, ins) for _, _, _, fs, ins in small} <= {(11, 9), (12, 9)} and any(fs == 11 for _, _, _, fs, _ in small)
+    assert run(game, OVERLAP.replace("VW", "360").replace("VH", "452")) == []
+    plain = _layout(game, "yingru", 375, 604)  # 375 寬你站嵩山深處擺得下：不縮
+    assert {(fs, ins) for _, _, _, fs, ins in plain} <= {(12, 10), (13, 10)}
+    # 畫出來的字也縮了：同一個地圖框（倍率一樣）你站潁川郡（擺得下）對你站嵩山深處，同一處的名字字級是 12 比 11
+    size = lambda low, loc: float(re.search(r'<text x="[\d.]+" y="[\d.]+" font-size="([\d.]+)"', _label(low, loc)).group(1))  # noqa: E731
+    shrunk, _ = parts(game, vw=360, vh=452)
+    roomy, _ = parts(_game(profile="season21", at="yingchuan"), vw=360, vh=452)
+    assert size(shrunk, "songshan_foot") / size(roomy, "songshan_foot") == pytest.approx(11 / 12, abs=0.01)
+    wan = _game(profile="season21", at="wan_city")
+    assert run(wan, "return H.regionFit(H.S.mapBase, 'nanyang', 375, 624).s;", mapRegion="nanyang") >= 1
+    big = _layout(wan, "nanyang", 375, 624)  # 南陽在 375×624 倍率剛好 1，用大一號（14／15）；你站宛城擠不下 → 平常那一號
+    assert {(fs, ins) for _, _, _, fs, ins in big} <= {(12, 10), (13, 10)}
+    assert run(wan, OVERLAP.replace("VW", "375").replace("VH", "624")) == []
+    away = _layout(_game(profile="season21", at="yingchuan"), "nanyang", 375, 624)  # 你不在南陽：擺得下，照大一號
+    assert {(fs, ins) for _, _, _, fs, ins in away} <= {(14, 11.5), (15, 11.5)}
 
 
 def test_labels_hug_their_icons_without_leader_lines():
