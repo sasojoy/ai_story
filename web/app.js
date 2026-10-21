@@ -6021,14 +6021,18 @@
   // 第二輪（FB-648）：位置每 R_SLIDE px 一格；一起找最多試 R_SEARCH_WIDE 次；還找不到（真的放不下）時反覆換位置最多 R_SETTLE 次
   const R_SLIDE = 3, R_SEARCH_WIDE = 3000, R_SETTLE = 400;
   const R_RING = [[19, 8], [17, 11], [14, 14], [11, 17], [8, 19]]; // 你的朱圈在第二輪照圓的算：五塊框的半寬、半高疊成一個半徑約 19 的圓
-  // 第二輪的名字框位置：第一輪那幾個在前，再補沿著小圖四邊滑的（離小圖由近到遠），範圍不比第一輪遠（照樣貼著小圖、不拉線，企劃者選的乙）
+  // 第二輪的名字框位置：第一輪那幾個在前，再補沿著小圖四邊滑的（離小圖由近到遠），範圍不比第一輪遠（照樣貼著小圖、不拉線，企劃者選的乙）。
+  // 每一個位置的第三格是「往前挪」時的先後：照離小圖多遠（每 R_NEAR px 一級，同一級照上面的先後），擺好之後名字才挪得回自己的小圖旁邊、
+  // 不會留在別處的小圖旁邊（一起找與擺不開時的換位置照上面的先後）
+  const R_NEAR = 8;
   function regionLabelSpotsWide(L, z) {
     const hw = z.hw + R_GAP, hh = z.hh + R_GAP, mid = -L.fh / 2, W = L.W, H = L.H, extra = [];
     for (let d = R_SLIDE; d <= 1.8 * H; d += R_SLIDE) for (const s of [1, -1]) extra.push([hw, mid + s * d], [-hw - W, mid + s * d]);
     for (let d = R_SLIDE; d <= W; d += R_SLIDE) for (const s of [1, -1]) extra.push([-W / 2 + s * d, hh], [-W / 2 + s * d, -hh - H]);
     for (let d = 0; d <= W / 2; d += R_SLIDE) for (const s of d ? [1, -1] : [1]) extra.push([-W / 2 + s * d, hh + H * 0.9], [-W / 2 + s * d, -hh - H * 1.9]);
     const gap = ([dx, dy]) => Math.hypot(Math.max(dx, 0, -(dx + W)), Math.max(dy, 0, -(dy + H))); // 小圖中心到名字框最近那一點
-    return [...regionLabelSpots(L, z), ...extra.sort((a, b) => gap(a) - gap(b))];
+    const all = [...regionLabelSpots(L, z), ...extra.sort((a, b) => gap(a) - gap(b))];
+    return all.map((o, i) => [o[0], o[1], Math.floor(gap(o) / R_NEAR) * all.length + i]);
   }
   // 名字框擺哪（設計第十二章：375 寬互相不壓）。每一處先列出不壓小圖（每一處的）、你的旗與朱圈、也不出取景框的位置；
   // 再一起找「彼此也不壓」的擺法（同 mapview._place_labels：每次挑剩下位置最少的先擺，擺不下回頭改前面的），找到之後再一處一處往前挪
@@ -6056,22 +6060,22 @@
     const sizes = pts.map((p) => regionLabelSize(base, st, p, z));
     const lay = (spots, walls) => pts.map((p, i) => {
       const L = sizes[i], [X, Y] = at[p.id];
-      const opts = spots(L, z).map(([dx, dy]) => {
+      const opts = spots(L, z).map(([dx, dy, rank], j) => {
         const l = X + dx, t = Y + dy, rows = [[l, t, l + L.w1, t + L.fh]];
         if (L.low) rows.push([l, t + L.fh, l + L.w2, t + L.H]);
-        return { l, t, rows, bb: [l, t, l + L.W, t + L.H], cost: against(rows, walls) };
+        return { l, t, rows, bb: [l, t, l + L.W, t + L.H], cost: against(rows, walls), rank: rank === undefined ? j : rank };
       });
       return { p, i, L, X, Y, opts };
     });
     const meet = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3]; // 兩個框的外框碰不碰得到（先擋掉遠的，省時間）
     const clash = (a, b) => meet(a.bb, b.bb) && a.rows.some((r) => b.rows.some((q) => inter(r, q) > 0));
-    // 再一處一處往前挪——換成更前面（離小圖更近）、不壓牆也不壓別人的位置，挪到挪不動為止
+    // 再一處一處往前挪——換成更前面（rank 小：離小圖更近）、不壓牆也不壓別人的位置，挪到挪不動為止
     const forward = (items, pick) => {
       for (let round = 0, moved = true; moved && round < 6; round++) {
         moved = false;
         for (const it of items) {
-          const now = it.opts.indexOf(pick[it.i]);
-          const better = it.opts.slice(0, now).find((o) => o.cost <= 0 && items.every((x) => x === it || !clash(o, pick[x.i])));
+          const now = pick[it.i].rank;
+          const better = it.opts.reduce((b, o) => (o.rank < now && (!b || o.rank < b.rank) && o.cost <= 0 && items.every((x) => x === it || !clash(o, pick[x.i])) ? o : b), null);
           if (better) { pick[it.i] = better; moved = true; }
         }
       }
