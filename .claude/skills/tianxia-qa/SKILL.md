@@ -115,6 +115,9 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 - **改存檔不驗型別**：list 欄位寫成 None（例 `duel_last = None`），`CharacterStore.save` 照樣存進去，讀的時候才炸：伺服器 `_reload` 回 500，網頁掉回登入頁。清空一律用欄位的預設值（`[]`、`{}`）；已經壞了，就直接改 `characters` 那一列的 JSON。
 - **讀資料庫只開唯讀**：`sqlite3.connect("file:<db>?mode=ro", uri=True)`。`characters` 有 `is_bot` 和 `data`（JSON，`player`、`journal`），江湖紀錄只留最近 30 則。
 - **伺服器開著也能改存檔與掛軍令**（伺服器每次動作都重讀資料庫）：角色用 `CharacterStore(open_database(db))` 的 `load`／`save`；軍令用 `open_world(db)`、`with w.db.transaction(): w.mutate_season(fn)`（`s.orders` 加一筆 `Order`）。21 天季的軍令 `Order.week` 是季曆第幾天，不是週：`calendar.point(season.time, c, season).cal_day`。改完讓角色的頁面 reload 一次就看得到。
+- **籌備中管理者動作都不能用**（`seal_assign` 回「賽季沒有在進行，無法觸發」，2026-10-21）：要驗籌備中的碎片卡，登記上直接給：`open_world(db)`、`w.mutate(lambda st: …)`，`s = seal.filled(st.seal, c).shards[片 id]; s.state, s.holder, s.since_season = "held", 名號, 0`（伺服器開著也能改）。
+- **在預覽行程裡打開領地爭奪**（不改複本的檔）：包一支 `serve.py`，`import server` 之後 `server.CONTENT.config.ollama_url = "http://127.0.0.1:9"`、`server.CONTENT.config.conquest.enabled = True` 再 `server.main(["--port", …])`；同一個埠先後開兩台（開著與關著，各自的資料庫與 `local/` 資料夾）驗兩種季。`Start-Process` 回的 PID 是 venv 的 launcher，底下還有子行程，`taskkill /PID <回傳的> /T /F` 一次關乾淨，再用 `netstat` 確認埠沒人聽。
+- **湊「每一塊都灰」**：鎮地要全部冷卻——對每一塊搶得下來的區塊 `conquest._fight(s, c, loc).flipped_at = s.time`（`w.mutate_season`，31 塊；伺服器開著也能改）；補缺要「這一季補過一次、隔 3 天、又被翻走」——管理者 `conquest_progress` 定到 100 翻、`seal_use` 補、`fast_forward 73` 小時、再定到 100 翻；再翻一塊並 `admin_conquest_letter` 讓它進集結，就是兩列各寫一種原因。快轉 73 小時會碰到長社火攻，不礙事。
 - **複製資料庫**用 sqlite 的 `backup()`，不要只複製 `.db`，WAL 裡的資料會漏掉。
 - **商城的帳**：資料表 `mall_purchases`、`mall_ledger`、`mall_entitlements`，`owner` 是名號不是帳號。`scripts/mall_ledger.py --db <db> --out <csv>` 對帳（只讀，印錢包數與餘額合計，沒有負的餘額、exit 0）。
 - `battles` 是最新的在前（`battles[0]`）。腳本移動角色之前先略過序章（`skip_tutorial` 會重設地點）。自動選事件的迴圈要排除 `choice:free`（那一顆要打字）。
@@ -132,6 +135,9 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 - **機率**：一種跑幾千次，報次數與百分比；也要跑「不該發生」的那幾種，確認是 0。
 - 滿級換心得、頭目戰、切磋、決戰軍餉、求援傳聞。
 - **不具名（「兩個只差誰做的世界」）要連酒肆一起比**（FB-643）：`tavern_do("ties", 名號)` 打聽交情在打聽度 4 以上會列那個人份量 3 以上的最近三件行狀，`tavern.fresh`（24 小時內有份量 4 的行狀）打聽度 +1、`seek` 的回話跟著變。名望 0 的陣營中人碰不到門檻：把兩人的 `stats["fame"]` 拉到「小有名氣」、看客同陣營站同一間酒肆（`picking_tavern = True`、銀兩給夠），另跑一份兩人是散人（沒有「投靠」那一筆行狀蓋過 `fresh`）。
+  - **旁觀客只站同一間酒肆是不夠的，沒有牙**（2026-10-21 FB-643 複驗：同一間酒肆查人本來就問得確切，託酒家留意根本沒託成，修前修後都過）：另放旁觀客在別的城（`yingchuan`、`market_town`、`wan_city`、`zhuo_county`，打聽度落在 2～3 的邊上），修前一版 32 組全敗、修後全過。名望要掃 0／小有名氣／名動一方三段（`renown.fame_bars(c, world)[tier - 1]`），份量 4 的舊事各兩件挪到兩天前（再多算一件就多一點名氣）。
+  - **反查**要換成「甲或乙去打聽看客、看客再 `tavern_do("trace")`」：反查讀的是**打聽的人**的名氣（`person_fame(asker)`），所以旁觀客站的位置不重要，要讓打聽的人名望 0（風聲不具名）、打聽度剛好在 2／3 的界線上。
+  - **買兇找人整條路**：兩個敵陣營的人各 `tavern_do("seek", 目標)` 再 `tavern_do("hit", 目標, "0")` 雇（散人沒有仇、雇不成，兩個世界回同一句拒絕），目標走到城外（`location = "runan_wilds"`），每隔 600 秒叫一次 `g._tavern_hit_check()`，比每一次擲「找到／沒找到」的序列；**不要比找到之後的戰報字**：持有者本人的威力含碎片（戰力 ×1.1），同一組亂數也會打出不同的結果，那是設計，旁人看不到。
 - **用自己亂數的掉落**（名號＋戰報流水號）：先照種子挑出擲得中的名號建角色，再實打。
 - **注意**：
   - 腳本用暫存的 `TIANXIA_DB`；設定檔要用 `load_content(Path("content"), profile)` 傳進去，環境變數讀不到。
