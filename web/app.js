@@ -2307,7 +2307,7 @@
     const fronts = (m.fronts && shown("fronts") ? frontsBlock(m) : "") + armsLine(m);
     // 休季的結算卡排在最上面（計畫 T9）；季收了、有行狀時緊接一張「讀你的傳」（玩家傳第二批，m.zhuan）
     const resultCard = (m.season_result ? resultHtml(m.season_result) : "") + (m.zhuan ? zhuanEntry(m.zhuan, "這一季收了，史官替你立傳", "讀你的傳") : "");
-    const letter = letterHtml(m.letter); // 書信小卡排在「剛剛」上面（大勢人物擴充第二批）
+    const letter = dailyCardHtml(m) + letterHtml(m.letter); // 書信小卡排在「剛剛」上面（大勢人物擴充第二批）；月卡今天的份還沒領時更上面一張
     // 本週軍令排在行動列（與路上捷徑）下面、三條戰況上面：不擠掉第一屏的「剛剛」、場景與行動列（計畫 T6）
     // 收起來照週記；21 天季的軍令每天一道，照季曆第幾天記（status.calendar.day），隔天的新軍令重新展開
     const orderKey = (m.status && m.status.calendar && m.status.calendar.day) || week;
@@ -4178,7 +4178,7 @@
     const p = d.pills;
     const status = `<div class="mall-status">
         <div><b>${esc(p.name)} ${p.count | 0} 顆</b>${p.today == null ? "每天不限" : `今天還能服 ${p.today | 0} 顆`}</div>
-        <div><b>月卡 ${d.card ? `到 ${esc(d.card.until)}` : "還沒開"}</b>${p.cap > 0 ? `每天最多服 ${p.cap | 0} 顆` : "每天不限"}</div></div>`;
+        <div><b>月卡 ${d.card ? `到 ${esc(d.card.until)}` : "還沒開"}</b>${p.cap > 0 ? `每天最多服 ${p.cap | 0} 顆` : "每天不限"}${mallDailyHtml(d.card)}</div></div>`;
     const groups = [];
     for (const it of d.items) {
       let g = groups.find((one) => one.kind === it.kind);
@@ -4205,8 +4205,50 @@
     const cls = `mall-card${it.can ? "" : " off"}${S.mallPick === it.id ? " on" : ""}`;
     return `<button class="${cls}" data-act="mall-pick" data-id="${esc(it.id)}"${it.can ? "" : ' aria-disabled="true"'}>
         <span class="moon" aria-hidden="true">月</span>
-        <span class="mt"><b>${esc(it.name)}</b>${it.note ? `<span>${nbHtml(it.note, MALL_NB)}</span>` : ""}${it.limit ? `<span>${nbHtml(it.limit, MALL_NB)}</span>` : ""}</span>
+        <span class="mt"><b>${esc(it.name)}</b>${perks(it)}${!(it.perks || []).length && it.note ? `<span>${nbHtml(it.note, MALL_NB)}</span>` : ""}${it.limit ? `<span>${nbHtml(it.limit, MALL_NB)}</span>` : ""}</span>
         <span class="price">${ingotSvg()}${it.price | 0}</span></button>`;
+  }
+
+  // 月卡的好處逐條列在卡上（萬寶閣販賣清單定案，Joy 2026-10-21；字是伺服器 mall.perks 寫的）。卡本身是一顆鈕，裡面不能再放鈕：
+  // 用 span 排成一條一條（不用 ul，button 裡只准放 phrasing content）
+  function perks(it) {
+    const list = it.perks || [];
+    return list.length ? `<span class="mall-perks">${list.map((t) => `<span class="perk">${nbHtml(t, MALL_NB)}</span>`).join("")}</span>` : "";
+  }
+
+  // 月卡今天的份（定案甲・每日領）：貨架上面那張月卡小卡裡一顆「領取」，領過了寫「今天已領」。card.daily 是 None（沒有這一份）不畫
+  function mallDailyHtml(card) {
+    const today = card && card.daily;
+    if (!today) return "";
+    return today.claimed ? `<small class="mall-daily done">今天的份已領</small>`
+      : `<button class="btn small primary mall-daily" data-act="mall-claim">領今天的份</button>`;
+  }
+
+  function dailyWhat(today) {
+    const pill = (S.mallData && S.mallData.pills && S.mallData.pills.name) || "回體丹";
+    return [today.ingots ? `${today.ingots | 0} 元寶` : "", today.pills ? `${pill} ${today.pills | 0} 顆` : ""].filter(Boolean).join("＋");
+  }
+
+  // 江湖頁「月卡・今日份」小卡（定案：月卡生效、今天還沒領時，「剛剛」上面一張；領完收起）。資料是狀態列那一份 main.mall.daily
+  function dailyCardHtml(m) {
+    const today = m.mall && m.mall.daily;
+    if (!today || today.claimed || !mallShown()) return "";
+    return `<section class="card mall-today"><span class="moon" aria-hidden="true">月</span>
+      <span class="mt"><b>月卡・今日份</b><span>${esc(dailyWhat(today))}，沒上線那天不補</span></span>
+      <button class="btn small primary" data-act="mall-claim">領取</button></section>`;
+  }
+
+  // 領月卡今天的份：回來的 mall 換貨架、main 換狀態列與江湖頁那張小卡（領了就收起），話用提示泡泡講（商城開著時掌櫃講）
+  async function mallClaim() {
+    await busy(async () => {
+      const r = await api("/api/mall/claim", {});
+      if (r.mall) mallGot(r.mall);
+      if (r.main) setMain(r.main);
+      const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      renderTop();
+      if (S.mallOpen) { S.mallSay = text ? { text, ok: /領了/.test(text) } : null; renderMall(); }
+      else { render(); if (text) toast(text); }
+    });
   }
 
   // 紀錄：元寶的每一筆進出（新的在前）；連著一筆購買的寫商品名、退了的掛「已退」，右邊增減與那一筆之後的餘額
@@ -4245,7 +4287,7 @@
   }
 
   // 貨架的指紋：買成一件一定會動到其中一樣（元寶、手上的丹、月卡到哪天）
-  function mallMark(d) { return d ? `${d.balance}|${d.pills ? d.pills.count : ""}|${d.card ? d.card.until : ""}` : ""; }
+  function mallMark(d) { return d ? `${d.balance}|${d.pills ? d.pills.count : ""}|${d.card ? d.card.until : ""}|${d.card && d.card.daily ? d.card.daily.claimed : ""}` : ""; }
 
   // 換上新抓到的貨架。上一筆沒等到回音（S.mallPending）、貨架卻變了：那一筆其實成了（或別處動了帳），下一次點是新的一筆、
   // 用新的編號，確認框照新的貨架算；不然照舊編號送出去，伺服器回「已經買好了」，確認框講的卻是再買一件（FB-491）
@@ -4308,7 +4350,11 @@
     if (g.card_days) {
       rows.push(["月卡", `<s>${d.card ? `到 ${esc(d.card.until)}` : "還沒開"} →</s> <b>到 ${esc(it.card_to || "")}</b>`]);
       if (!d.card && p.cap > 0) rows.push(["每天最多服", `<s>${p.cap | 0} →</s> <b>${(p.cap | 0) + (p.bonus | 0)} 顆</b>`]);
+      if (g.card_rebate) rows.push(["當場回", `<b>${g.card_rebate | 0} 元寶</b>（已算進上面的元寶）`]);
+      const daily = d.daily;
+      if (daily) rows.push(["每天領", `<b>${esc(dailyWhat(daily))}</b>（沒上線那天不補）`]);
     }
+    if (g.zhuan_rewrite) rows.push(["列傳", `<b>多重寫 ${g.zhuan_rewrite | 0} 次</b>`]);
     const note = [it.note, it.limit].filter(Boolean).map(esc).join("<br>"); // 說明一行、限購一行（說明自己帶句號，接在一起讀起來是「。；」）
     const again = !!(S.mallPending && S.mallPending.id === it.id);
     const ref = again ? S.mallPending.ref : mallRef();
@@ -5920,6 +5966,30 @@
       <button class="btn small" data-act="gender-pick" data-value="男">男</button><button class="btn small" data-act="gender-pick" data-value="女">女</button></div>`;
   }
 
+  // 易名帖（萬寶閣；Joy 2026-10-21 當場生效）：手上有帖（main.mall.rename）才畫一格：輸入新名號 →「改名」先問一次（S.renameAsk）→ 確定才送
+  function renameRow() {
+    const n = S.main && S.main.mall && S.main.mall.rename;
+    if (!n) return "";
+    if (S.renameAsk) {
+      return `<div class="rename-row card"><p>從此改名「${esc(S.renameAsk)}」？用掉一張易名帖，當場生效；江湖史會記一行。</p>
+        <div class="row"><button class="btn small primary" data-act="rename-go">確定改名</button><button class="btn small ghost" data-act="rename-back">再想想</button></div></div>`;
+    }
+    return `<div class="rename-row card"><p>易名帖 ${n | 0} 張：改你的名號，當場生效。</p>
+      <div class="row"><input class="input" id="rename-name" maxlength="16" placeholder="新的名號" autocomplete="off"><button class="btn small" data-act="rename-ask">改名</button></div></div>`;
+  }
+
+  async function renameGo() {
+    const name = S.renameAsk;
+    S.renameAsk = null;
+    await busy(async () => {
+      const r = await api("/api/mall/rename", { name });
+      if (r.main) applyMain(r.main);
+      const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      if (text) toast(text);
+      render();
+    });
+  }
+
   // 管理者「每週的事」那一行在 7 天濃縮季的寫法（軍令每天、第 4 階席次每段；FB-501，待 joy 潤）
   const ADMIN_DAILY_WEEK7 = "每天、每段的事（照 00:00 的做法立刻再做一次；之後照常）";
   // 21 天季：軍令每天、第 4 階席次照舊每週一（FB-502，待 joy 潤）
@@ -5935,6 +6005,7 @@
         <div class="grip"></div>
         <div class="top-row"><h3 style="flex:1">設定</h3>${S.main.admin ? `<button class="btn small ghost" data-act="to-admin">管理者工具 ↓</button>` : ""}<button class="btn small ghost" data-act="sheet-close">關閉</button></div>
         ${genderRow(s)}
+        ${renameRow()}
         <label class="toggle"><input type="checkbox" id="anon" ${s.anonymous ? "checked" : ""}> 匿名行走（只在地方傳聞裡不寫名號；天下大事、軍情、江湖史、排行照寫）</label>
         <div class="stack">
           <button class="btn" data-act="howto" aria-expanded="${!!S.howtoOpen}" aria-controls="howto">玩法說明</button>
@@ -7133,6 +7204,9 @@
         case "letter-read": S.letterOpen = null; await doMain("letter_read", { id: Number(el.dataset.id) }); break;
         case "letter-decline": await doMain("letter_decline", { id: Number(el.dataset.id) }); break;
         case "gender-pick": S.genderPick = el.dataset.value || null; render(); break;
+        case "rename-ask": { const v = (document.getElementById("rename-name") || {}).value || ""; if (v.trim()) { S.renameAsk = v.trim(); render(); } break; }
+        case "rename-back": S.renameAsk = null; render(); break;
+        case "rename-go": await renameGo(); break;
         case "gender-go": S.genderPick = null; await doMain("gender", { value: el.dataset.value }); break;
         case "admin": {
           const op = el.dataset.op;
@@ -7195,6 +7269,7 @@
         case "mall-close": closeMall(); break;
         case "mall-tab": await mallTabTo(el.dataset.tab); break;
         case "mall-pick": mallPick(el.dataset.id); break;
+        case "mall-claim": await mallClaim(); break;
         case "mall-retry": await (S.mallTab === "log" ? loadMallLog() : loadMall()); break;
         case "mall-admin": mallAdminAsk(el.dataset.op, el.dataset.id); break;
         case "logout": closeEvents(); await api("/api/logout", {}); resetOrdersWatch(); forgetHowto(); S.sheet = false; S.peer = null; S.adPlayer = null; S.adPlayerName = ""; S.stage = "gate"; S.main = null; forgetMap(); forgetMall(); render(); break;

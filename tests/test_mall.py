@@ -341,7 +341,7 @@ def test_view_lists_items_with_why(on):
     card = rows["card_30"]
     assert card["can"] is True and card["why"] is None and card["after"] == 4200
     game.mall_buy("card_30", "v3")
-    assert game.mall_view()["card"] == {"until": mall.day_text(DAY0 + 29), "bonus": 1}
+    assert game.mall_view()["card"] == {"until": mall.day_text(DAY0 + 29), "bonus": 1, "left": 30, "daily": None}
 
 
 def test_records_show_the_ledger_with_running_balance(on):

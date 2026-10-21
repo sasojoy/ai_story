@@ -2794,6 +2794,10 @@ class MallTuning(_Strict):
     # 正式內容 0、week7 5000【預設】；之後再開新的一季不再發（編號 grant:beta:<主人> 只記一次）
     beta_grant: int = Field(default=0, ge=0)
     card_pill_bonus: int = Field(default=1, ge=0)  # 月卡：每天能服的回體丹多幾顆（企劃者 10/17「月卡每天多 1 顆」；平常 2→3、新手期 5→6）
+    # 月卡每日領（Joy 2026-10-21 定案甲・每日領，/mnt/project-files/plan/萬寶閣販賣清單定案.md）：卡的期間裡每天（台灣 00:00 換日）上線
+    # 按一下領這麼多元寶與回體丹，沒上線那天不補（Joy「沒上線不補」）。0 是沒有這一份（舊規則）；正式內容與 week7 寫 60／1
+    card_daily_ingots: int = Field(default=0, ge=0)
+    card_daily_pills: int = Field(default=0, ge=0)
     records_shown: int = Field(default=50, ge=1)  # 購買紀錄與帳的畫面、管理者查帳最多列幾筆【預設】
 
 

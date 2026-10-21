@@ -543,6 +543,47 @@ class SqliteWorldStore:
         out["public"] = bool(out["public"])
         return out
 
+    def rename_character(self, old: str, new: str) -> None:
+        """易名帖（rename.py）：資料庫裡名號當身分的地方一起從 old 換成 new，一筆交易。只換整個字串相等的（rename.swap）；
+        這一季的全服狀態、決戰、全服登記與投靠名冊照換，以前的季不動；列傳、錢包、帳號、見聞紀錄跨季照鍵搬；
+        別人的存檔裡提到他的（邀請、結伴、風聞……）照換。自己那一列角色由呼叫端用新名號存（這裡刪掉舊的那一列）。"""
+        from .rename import swap_json
+        okey, nkey = name_key(old), name_key(new)
+        mapping = {old: new, okey: nkey}
+        number = self.get_season_number()
+        with self.db.transaction() as conn:
+            row = conn.execute("SELECT data FROM world WHERE id = 1").fetchone()
+            if row is not None:
+                conn.execute("UPDATE world SET data = ? WHERE id = 1", (swap_json(row["data"], mapping),))
+            for r in conn.execute("SELECT number, data FROM seasons WHERE number = ?", (number,)).fetchall():
+                conn.execute("UPDATE seasons SET data = ? WHERE number = ?", (swap_json(r["data"], mapping), r["number"]))
+            for r in conn.execute("SELECT id, data FROM battles WHERE season = ?", (number,)).fetchall():
+                conn.execute("UPDATE battles SET data = ? WHERE id = ?", (swap_json(r["data"], mapping), r["id"]))
+                for rr in conn.execute("SELECT id, data FROM battle_rounds WHERE battle_id = ?", (r["id"],)).fetchall():
+                    conn.execute("UPDATE battle_rounds SET data = ? WHERE id = ?", (swap_json(rr["data"], mapping), rr["id"]))
+            for table, col in (("skills", "creator"), ("recipes", "creator"), ("insights", "creator"), ("insight_recipes", "creator"),
+                               ("insight_firsts", "creator"), ("gear_recipes", "creator"), ("masters", "master"),
+                               ("faction_rolls", "character"), ("rumors", "character")):
+                for o, n in mapping.items():
+                    conn.execute(f"UPDATE {table} SET {col} = ? WHERE season = ? AND {col} = ?", (n, number, o))
+            for table in ("skills", "insights", "gear_recipes"):
+                for r in conn.execute(f"SELECT rowid, data FROM {table} WHERE season = ?", (number,)).fetchall():
+                    conn.execute(f"UPDATE {table} SET data = ? WHERE rowid = ?", (swap_json(r["data"], mapping), r["rowid"]))
+            conn.execute("UPDATE rumor_heard SET character = ? WHERE character IN (?, ?)", (nkey, old, okey))
+            conn.execute("UPDATE biographies SET key = ? WHERE key = ?", (nkey, okey))
+            conn.execute("UPDATE character_backups SET key = ? WHERE key = ?", (nkey, okey))
+            conn.execute("UPDATE accounts SET character = ?, character_key = ? WHERE character_key = ?", (new, nkey, okey))
+            for table in ("mall_ledger", "mall_purchases"):
+                for r in conn.execute(f"SELECT id, ref FROM {table} WHERE owner = ?", (okey,)).fetchall():
+                    ref = ":".join(nkey if part == okey else part for part in r["ref"].split(":"))
+                    conn.execute(f"UPDATE {table} SET owner = ?, ref = ? WHERE id = ?", (nkey, ref, r["id"]))
+            conn.execute("UPDATE mall_entitlements SET owner = ? WHERE owner = ?", (nkey, okey))
+            conn.execute("DELETE FROM characters WHERE key = ?", (okey,))
+            for r in conn.execute("SELECT key, data FROM characters").fetchall():
+                data = swap_json(r["data"], mapping)
+                if data != r["data"]:
+                    conn.execute("UPDATE characters SET data = ? WHERE key = ?", (data, r["key"]))
+
     def biography(self, season: int, name: str) -> dict | None:
         with self.db.snapshot() as conn:
             row = conn.execute("SELECT * FROM biographies WHERE season = ? AND key = ?", (season, name_key(name))).fetchone()

@@ -177,3 +177,24 @@ def test_export_script_does_not_create_a_missing_file(tmp_path):
     run = _ledger_script(db_path, tmp_path / "ledger.csv")
     assert run.returncode == 1 and "打不開" in run.stderr
     assert not db_path.exists()
+
+
+def test_month_card_daily_claim_and_rename_over_http():
+    """萬寶閣販賣清單定案：月卡當場回 300、每天領一次（江湖畫面的 mall.daily 跟著收起）；易名帖改了名號，下一個請求照新名號找得到。"""
+    client = _player()
+    bought = client.post("/api/mall/buy", json={"item": "card_30", "ref": "card-0001"}).json()
+    assert bought["mall"]["balance"] == 5000 - 600 + 300
+    assert bought["main"]["mall"]["daily"]["claimed"] is False
+    got = client.post("/api/mall/claim", json={}).json()
+    assert "元寶 +60" in got["message"] and got["main"]["mall"]["daily"]["claimed"] is True
+    assert "已經領過" in client.post("/api/mall/claim", json={}).json()["message"]
+    client.post("/api/mall/buy", json={"item": "rename", "ref": "name-0001"})
+    assert client.get("/api/main").json()["mall"]["rename"] == 1
+    assert client.post("/api/mall/rename", json={"name": "沈"*17}).status_code == 400
+    r = client.post("/api/mall/rename", json={"name": "沈白衣"}).json()
+    assert r["renamed"] is True and r["name"] == "沈白衣"
+    main = client.get("/api/main").json()
+    assert main["status"]["name"] == "沈白衣" and "rename" not in main["mall"]
+    assert _wallet().balance(name_key("沈白衣")) == 5000 - 600 + 300 + 60 - 300
+    other = _player("ye_01", "葉孤")
+    assert other.post("/api/mall/rename", json={"name": "沈白衣"}).json()["renamed"] is False  # 沒有帖
