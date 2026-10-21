@@ -109,6 +109,13 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
   - 提示泡泡（`#toast`，3.2 秒）與離線橫幅會蓋在確認框上；要看底下的字就等它消失，或用 JS 讀 DOM。
   - 每跑一次 node 就是新的瀏覽器，登入的 cookie 留不下來：用 `set_password.py` 建的帳號，node 自己讀 `local/<帳號>_password.txt` 打 `/api/login`（密碼不進對話）。在瀏覽器裡用隨機密碼註冊的帳號，下一輪就登不進去了。
   - 逐像素比修前修後，同一版也要跑兩次：煉製的太極爐、輿圖的紅旗、修練的人物面板是動畫，跑兩次就不一樣。只有新對新、舊對舊都一樣，新對舊才不一樣的，才算改動造成的。
+  - **改版面的修前修後：兩份複本、同埠輪流起、同一個資料庫**（2026-10-21 FB-663／664）：`git archive -o <檔>.tar <sha> tianxia content web server.py server_push.py zhuan_html.py llm_queue.py console.py scripts run_bots.py`（只要這幾樣；解 `docs/`、`.claude/` 的中文檔名會壞），修前、修後各一份，`content/config.json` 只在複本裡加 `ollama_url`；用 Python `tarfile` 解、用 `filecmp` 逐檔比（只該差 `web/app.js`、`web/style.css`：伺服器端一個位元組都一樣，兩邊的 `/api/main` 就一樣，差的只會是網頁怎麼畫）。解出來的檔是 CRLF（autocrlf），拿它的 hash 去對 `git show <sha>:<檔>` 要先 `tr -d '\r'`。
+  - **一個 node 迴圈掃全部地點**：`node:sqlite`（node 22.23 不必加旗標，要 `node --no-warnings`）`new DatabaseSync(<db>)`、`PRAGMA busy_timeout=30000`，`UPDATE characters SET data = json_set(data, '$.player.location', ?, '$.player.journey', json('null'), '$.player.stamina', 250) WHERE name = ?`，改完 `page.goto` 重載、抓 `.act-bar` 的 `outerHTML` 與 `.act-notes` 的 `innerHTML`、每一格小字的 Range 矩形對格子矩形；43 個地點約 2.5 分鐘。修前一份、修後一份，Python 逐地點比 HTML：不一樣的地點應該只差要改的那一格（這次是 21 處交友灰格，其餘 22 處逐字一樣）。陣營改 `characters.faction` 與 `$.player.faction` 兩處。
+  - **序章的畫面要同時清 `$.pending_event`**：只改 `$.player.tutorial_step` 不夠，新人還掛著開場事件（遇險那三個選項），江湖頁只畫那三顆、行動列根本不畫，量到的全是空的。步驟 0～10 的行動列（草廬）、11～14（初入江湖）都要 `'$.pending_event', json('null')` 加 `tutorial_step`；`m.prologue.reveal`／`m.onboard` 看得出現在是哪一段。
+  - **「點了之後捲到哪」要等 2 秒以上再量，而且要找得到壞掉的版面**：`scrollIntoView({block:'nearest'})` 只在卡的底緣落在「視窗內、分頁列底下」那一條 56px 帶時才不捲；自然底緣（`scrollY` 0 時的位置）超出視窗的版面，修前也捲得對，量不出毛病。要重現就把視窗高度掃過那一帶（卡的自然底緣 y0，高度 H 落在 y0 到 y0+56 之間；375 寬、按掉師父那張「知道了」之後，潁川郡探索卡 y0 約 838）。量法：`.tabs` 的 top、`#top`（狀態列）的 bottom、卡與最後一顆鈕的矩形，再用 `document.elementFromPoint` 點最後一顆鈕的中心與底緣上 3px，真的點到那顆鈕才算沒被蓋住。「師父說過」那張卡的「知道了」是存在伺服器（`guide_ack`）的：按一次，那個角色以後的江湖頁就一直短一截，同一個角色修前修後要在同一種狀態下比（或另建一個角色專門量按掉之後）。
+  - **Monitor 的 until 迴圈不要每圈印一行**：每一行都是一則通知（印進度的迴圈洗了十幾則）。等檔案出現就 `for i in $(seq 1 N); do [ -f <檔> ] && break; sleep 4; done; ls <檔>` 結尾只印一次；Bash 前台的 `timeout N bash -c` 與 `sleep` 一樣被擋。
+  - **等背景的 node／python 跑完**：PowerShell 先 `Get-CimInstance Win32_Process -Filter "Name='node.exe'"` 照命令列找出 PID，再 `Wait-Process -Id <pid> -Timeout 170`（Start-Sleep 與 Bash 的 sleep 都被擋，Wait-Process 不被擋，一個呼叫最多撐 170 秒左右、不夠就再呼叫一次）。一輪量測最好一個腳本跑完一整批（一個瀏覽器掃全部地點、全部視窗高度），不要一個情況開一個瀏覽器：後者每個約 10 秒、27 個情況要 5 分鐘。
+  - **新測試對修前的程式有沒有牙**：`git archive -o tests.tar <修後 sha> tests pyproject.toml`，`shutil.copytree` 修前複本再把 tar 解進去，在那裡跑新測試檔。抓行為的測試（這次的 `test_fb664_*`）會失敗，只驗新函式的測試（`test_fb663_*` 切 `REVEAL_GAP`）會因為「找不到 const」整個失敗、說明不了行為，行為的證據要靠實機。
 
 ## 存檔、資料庫與假人
 - 換季之後、玩家第一次同步之前改的存檔，會被換季重設洗掉。要等他同步完再改。
