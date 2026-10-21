@@ -67,6 +67,80 @@
    "per_layer": 0.05,
    "cap": 0.25,
    "desc": "氣血掉得越多，推力打折得越少：最多多保住 {value} 的推力（滿血時沒差）"
+  },
+  {
+   "attribute": "快",
+   "id": "lueying",
+   "name": "掠影",
+   "hook": "fx_shadow",
+   "per_layer": 0.06,
+   "cap": 0.3,
+   "desc": "前 2 回合每回合有 {value} 的機會化影（那一回合不掉氣血）"
+  },
+  {
+   "attribute": "剛",
+   "id": "chenjin",
+   "name": "沉勁",
+   "hook": "fx_heavy",
+   "per_layer": 0.06,
+   "cap": 0.3,
+   "desc": "每回合有一半的機會勁力沉到底，這一回合推力 +{value}"
+  },
+  {
+   "attribute": "柔",
+   "id": "huilan",
+   "name": "回瀾",
+   "hook": "fx_mend",
+   "per_layer": 0.01,
+   "cap": 0.05,
+   "desc": "每回合開始回氣血 {value}"
+  },
+  {
+   "attribute": "慢",
+   "id": "shouzhuo",
+   "name": "守拙",
+   "hook": "fx_steady",
+   "per_layer": 0.1,
+   "cap": 0.5,
+   "desc": "氣勢落後時固守加重 {value}"
+  },
+  {
+   "attribute": "陽",
+   "id": "zhaoyang",
+   "name": "朝陽",
+   "hook": "fx_tide",
+   "per_layer": 0.04,
+   "cap": 0.2,
+   "extra_per_layer": 0.01,
+   "extra_cap": 0.05,
+   "desc": "單數回合推力 +{value}，雙數回合回氣血 {extra}"
+  },
+  {
+   "attribute": "陰",
+   "id": "yinjin",
+   "name": "陰勁",
+   "hook": "fx_disarm",
+   "per_layer": 0.04,
+   "cap": 0.2,
+   "desc": "剋中對手後有 {value} 的機會讓他卸勁 1 回合（出不了強攻）"
+  },
+  {
+   "attribute": "虛",
+   "id": "liaodi",
+   "name": "料敵",
+   "hook": "fx_foresight",
+   "per_layer": 0.04,
+   "cap": 0.2,
+   "desc": "每回合有 {value} 的機會看穿來路，下一回合出剋他的那一招"
+  },
+  {
+   "attribute": "實",
+   "id": "tiebi",
+   "name": "鐵壁",
+   "hook": "fx_wall",
+   "per_layer": 0.06,
+   "cap": 0.3,
+   "desc": "出固守時把挨的打 {value} 借力還回去"
   }
  ],
  "special": [

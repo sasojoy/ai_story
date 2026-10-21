@@ -66,14 +66,14 @@ def goal_met(state: GameState, content: Content, world: WorldStateStore, goal: T
         return False
     if goal.has_wugong and state.player.member.wugong_id is None:
         return False
-    if goal.fused or goal.fused_level or goal.fused_quality:  # 序章：合成出來的那一門（新手引導計畫一）
-        arts = prologue.fused_arts(state, content, world)
+    if goal.fused or goal.fused_level:  # 序章：裝了意境的那一門（武學重構；以前是合成出來的那一門）
+        arts = prologue.slotted_arts(state, content, world)
         if not arts:
             return False
-        if goal.fused_level and max(library.level_of(state, a.id) for a in arts) < goal.fused_level:
+        if goal.fused_level and max(library.level_of(state, a.id) or 1 for a in arts) < goal.fused_level:
             return False
-        if goal.fused_quality and max(QUALITIES.index(a.quality) for a in arts) < QUALITIES.index(goal.fused_quality):
-            return False
+    if goal.deepened and not prologue.deepened(state):  # 序章：揣摩過一個意境（二重以上）
+        return False
     return check_condition(goal.condition, state, content)
 
 
@@ -108,6 +108,8 @@ def note_action(state: GameState, content: Content, world: WorldStateStore, acti
             msgs += reward
         if step.give_art is not None:
             msgs += prologue.give_art(state, content, world, step.give_art)
+        if step.give_piece:
+            msgs += prologue.give_piece(state, content, world)
     if completed:  # 引導這一次有完成的步驟（序章的步驟可以沒有任何一行訊息，所以看 completed，不看 msgs）
         if tutorial_active(state, content):
             nxt = todo[state.player.tutorial_step]

@@ -910,11 +910,15 @@ def test_art_detail_of_a_worn_art_uses_the_slots_level(game):
 def test_art_detail_of_a_library_art_uses_its_own_kept_level(game):
     """功法庫裡的那一門用換下來時存的熟練度（art_levels）；沒存過的從第一成算（見 team.switch_art）。"""
     stored = MartialArt(
-        id="沉柳纏勁", name="沉柳纏勁", kind="武學", quality="上品", attribute="柔",
+        id="沉柳纏勁", name="沉柳纏勁", kind="武學", quality="上品", attribute="柔", affinity=["柔"],
         base_power=28.0, top_power=72.0, creator="沈浪", note="以柔勁纏住兵刃，借力卸力。",
     )
     assert game.world.claim_skill_name(stored)
     game.state.player.arts.append(stored.id)
+    # 武學重構：屬性照相容屬性、功效照槽裡的意境（「水」裝進第一格）；卡照身上那一份（team.player_art）寫
+    game.state.player.insights = ["shui"]
+    game.state.player.art_slots[stored.id] = ["shui"]
+    stored = team.player_art(game.state, game.content, game.world, stored.id)
     line = traits.card_line(game.content, stored)  # 功法卡多一行功效（計畫六 Task 4）
     assert game.art_detail(stored.id) == skillview.art_card(stored, 1, trait_line=line)
     game.state.player.art_levels[stored.id] = 4
@@ -926,7 +930,7 @@ def test_art_detail_of_a_library_art_uses_its_own_kept_level(game):
 def test_art_detail_shows_the_players_own_quality(game):
     """武學與成長 Task 3：功法卡寫玩家自己那一份的品質與威力，全服登記的那一筆不動。"""
     registered = MartialArt(
-        id="沉柳纏勁", name="沉柳纏勁", kind="武學", quality="中品", attribute="柔",
+        id="沉柳纏勁", name="沉柳纏勁", kind="武學", quality="中品", attribute="柔", affinity=["柔"],  # 武學重構：屬性照相容屬性
         base_power=16.0, top_power=44.0, creator="沈浪",
     )
     assert game.world.claim_skill_name(registered)
@@ -941,8 +945,15 @@ def test_art_detail_shows_the_players_own_quality_of_a_basic_art(game):
     """開局送的基礎武學也一樣：功法卡寫玩家自己那一份的品質，內容裡那一筆不動。"""
     game.state.player.member.wugong_id = "basic_fist"
     game.state.player.art_quality["basic_fist"] = "上品"
-    assert game.art_detail("basic_fist").startswith("【粗淺拳腳】上品・屬實")
+    assert game.art_detail("basic_fist").startswith("【粗淺拳腳】上品")
     assert game.content.skills["basic_fist"].quality == "下品"
+
+
+def test_a_universal_art_card_has_no_dangling_attribute(game):
+    """武學重構：基礎武學兼容並蓄、沒有屬性，功法卡的名下不留一個空的「・屬」（網頁那邊 4d0238d 已經不留「・」）。"""
+    game.state.player.member.wugong_id = "basic_fist"
+    head = game.art_detail("basic_fist").split("\n")[0]
+    assert not head.endswith("・屬") and "・屬・" not in head, head
 
 
 def test_art_detail_of_an_art_that_is_not_yours_is_not_found(game):
@@ -1992,7 +2003,11 @@ def test_the_world_ticker_plays_the_three_moves_with_nobody_online(content, game
 
 def test_battle_scores_read_the_players_two_arts(game):
     p = game.state.player
-    p.member.wugong_id, p.member.neigong_id = "basic_fist", "basic_breath"  # 屬實、屬柔
+    # 武學重構：基礎武學兼容並蓄、沒有屬性；登記兩門相容屬性是實、柔的（武學的屬性照相容屬性的第一個）
+    for art in (MartialArt(id="實拳", name="實拳", kind="武學", quality="下品", attribute="實", affinity=["實"], base_power=10.0, top_power=30.0),
+                MartialArt(id="柔功", name="柔功", kind="內功", quality="下品", attribute="柔", affinity=["柔"], base_power=10.0, top_power=30.0)):
+        assert game.world.claim_skill_name(art)
+    p.member.wugong_id, p.member.neigong_id = "實拳", "柔功"  # 屬實、屬柔
     scores = game._battle_scores()
     power = game._battle_power()
     assert scores == battle_instance.move_scores(game.content.config.battle, power, "實", "柔")
@@ -6749,11 +6764,31 @@ def test_the_status_bar_and_the_card_show_the_same_hp_at_root_6(game):
 
 
 def _wear_trait_art(game, name, attribute, trait_list, special=None, kind="武學", quality="下品"):
-    """合成武學直接登記到全服、穿到本人身上（品質照 quality）。"""
+    """合成武學直接登記到全服、穿到本人身上（品質照 quality）。
+    武學重構：身上那一份的功效由槽裡的意境決定（arts.apply 蓋掉登記的 traits），所以 trait_list 每一種屬性造一個私有意境
+    （強度＝那一種的層數，最多 ●●●；陰陽虛實沒有基本意境，只能這樣造）、special 另造一個帶特別功效的意境，全部裝進槽；
+    相容屬性寫 attribute（武學的屬性照它），槽不夠就加 slot_adjust。"""
+    from tianxia import arts as arts_mod
+    from tianxia.martial_arts import Insight
+
+    p = game.state.player
+    cells = []
+    for i, attr in enumerate(dict.fromkeys(trait_list)):
+        iid = f"悟:{name}{i}"
+        p.own_insights[iid] = Insight(id=iid, name=f"{name}{attr}", attribute=attr)
+        p.insight_strength[iid] = min(arts_mod.MAX_STRENGTH, trait_list.count(attr))
+        cells.append(iid)
+    if special:
+        iid = f"悟:{name}特"
+        p.own_insights[iid] = Insight(id=iid, name=f"{name}特", attribute=attribute, secret_special=special)
+        cells.append(iid)
+    p.insights = [*p.insights, *cells]
     art = generate_from_name(name, kind, name, attribute=attribute).model_copy(
-        update={"origin": "fused", "traits": trait_list, "special": special},
+        update={"origin": "fused", "affinity": [attribute],
+                "slot_adjust": max(0, len(cells) - arts_mod.slot_count(game.content, quality))},
     )
     game.world.claim_skill_name(art)
+    p.art_slots[art.id] = cells
     slot = "neigong_id" if art.kind == "內功" else "wugong_id"
     setattr(game.state.player.member, slot, art.id)
     game.state.player.art_quality[art.id] = quality
@@ -7117,31 +7152,32 @@ def test_world_tick_opens_and_settles_a_scheduled_showdown_with_nobody_online(co
 
 
 def test_a_forge_request_for_a_caller_who_names_outside(game):
-    """伺服器假人的 Game 沒有 client，但假人程式在鎖外自己叫模型：named_outside 時照樣開單。"""
+    """伺服器假人的 Game 沒有 client，但假人程式在鎖外自己叫模型：named_outside 時照樣開單。
+    武學重構：武學＋意境不再開爐（直接裝槽，不要名字），要取名的是武學＋武學。"""
     p = game.state.player
-    p.member.wugong_id, p.insights, p.stats["xinde"], p.stamina = "basic_fist", ["feng"], 100, 150
+    p.member.wugong_id, p.member.neigong_id, p.stats["xinde"], p.stamina = "basic_fist", "basic_breath", 100, 150
     game.client = None
-    assert game.forge_request("basic_fist", ["feng"]) is None
-    request = game.forge_request("basic_fist", ["feng"], named_outside=True)
-    assert request is not None and request.kind == "fuse"
+    assert game.forge_request("basic_fist", [], other_art="basic_breath") is None
+    request = game.forge_request("basic_fist", [], other_art="basic_breath", named_outside=True)
+    assert request is not None and request.kind == "blend"
 
 
 def test_a_forge_request_while_the_season_is_preparing_stays_none_even_if_naming_outside(game):
     """賽季籌備中什麼都不能做：named_outside 只換掉「沒有 client」那一條，籌備中照舊不開單。"""
     p = game.state.player
-    p.member.wugong_id, p.insights, p.stats["xinde"], p.stamina = "basic_fist", ["feng"], 100, 150
+    p.member.wugong_id, p.member.neigong_id, p.stats["xinde"], p.stamina = "basic_fist", "basic_breath", 100, 150  # 武學重構：武學＋武學
     game.client = None
     with mock.patch.object(game.world, "season_phase", return_value="preparing"):
-        assert game.forge_request("basic_fist", ["feng"], named_outside=True) is None
+        assert game.forge_request("basic_fist", [], other_art="basic_breath", named_outside=True) is None
 
 
 def test_a_mastery_request_asks_for_a_new_name(game):
     """練成絕學、輪到自己定名：開一張請模型另取新名字的單（伺服器假人用；真人自己填）。沒有等著定名的是 None。"""
     p = game.state.player
-    p.member.wugong_id, p.insights, p.stats["xinde"], p.stamina = "basic_fist", ["feng"], 100, 150
+    p.member.wugong_id, p.member.neigong_id, p.stats["xinde"], p.stamina = "basic_fist", "basic_breath", 100, 150
     assert game.mastery_request() is None
-    game.forge("basic_fist", ["feng"], proposed=("凌風拳", "一句話。"))
-    p.naming = next(a for a in library.owned_arts(game.state) if a != "basic_fist")
+    game.forge("basic_fist", [], proposed=("凌風拳", "一句話。"), other_art="basic_breath")  # 武學重構：合成是武學＋武學
+    p.naming = next(a for a in library.owned_arts(game.state) if a not in ("basic_fist", "basic_breath"))
     request = game.mastery_request()
     assert request.kind == "master" and request.key == f"定名|{p.naming}" and request.name_kind == "武學"
     assert "凌風拳" in request.messages[-1]["content"] and "不一樣" in request.messages[-1]["content"]
@@ -7150,9 +7186,9 @@ def test_a_mastery_request_asks_for_a_new_name(game):
 def test_a_mastery_request_is_only_a_read_and_waits_for_the_season(game):
     """開單只讀（A 段在鎖內、很快）；賽季籌備中不開。"""
     p = game.state.player
-    p.member.wugong_id, p.insights, p.stats["xinde"], p.stamina = "basic_fist", ["feng"], 100, 150
-    game.forge("basic_fist", ["feng"], proposed=("凌風拳", "一句話。"))
-    p.naming = next(a for a in library.owned_arts(game.state) if a != "basic_fist")
+    p.member.wugong_id, p.member.neigong_id, p.stats["xinde"], p.stamina = "basic_fist", "basic_breath", 100, 150
+    game.forge("basic_fist", [], proposed=("凌風拳", "一句話。"), other_art="basic_breath")  # 武學重構：合成是武學＋武學
+    p.naming = next(a for a in library.owned_arts(game.state) if a not in ("basic_fist", "basic_breath"))
     before = game.state.model_dump()
     assert game.mastery_request() is not None
     assert game.state.model_dump() == before

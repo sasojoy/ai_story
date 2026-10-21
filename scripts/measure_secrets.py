@@ -6,9 +6,8 @@
 - 全知：一開季就知道這一季的秘方，湊得出就合（上限：一季下來材料湊不湊得到）。
 模型一律不連（同 measure_forge）：整季機器人跟人物說不上話，所以「人物順口版」的口訣量不到，只有說書與殘譜兩個來源。
 
-印每個種子、每一邊：合中幾條（這一季幾條裡）、聽到幾句口訣（說書／殘譜）、合成幾爐、天時地利讓上品機率平均多幾個百分點
-（每一爐照實際的機率與把天時地利的權重歸零的機率相減）、碰到天時地利的爐占幾成、秘方那幾爐與一般那幾爐擲到上品的比例。
-最後一行是各欄的平均。
+印每個種子、每一邊：合中幾條（這一季幾條裡）、聽到幾句口訣（說書／殘譜）、合成幾爐（武學＋武學、意境＋意境）。
+最後一行是各欄的平均。（武學重構之後合成不擲品質、沒有天時地利，那幾欄拿掉了。）
 
 鑄器（打造隱藏配方第一批；設計第十二節第 1、2、4 項）：同一季另印一行——摸到幾條隱藏配方（這一季幾條裡，照「兵／甲＋階」分）、
 聽到幾句鑄器口訣（說書／鐵匠／殘譜）、這一季打了幾爐（兵器加防具）、其中幾件名器。解口訣與全知兩邊照鑄譜去湊那一爐（聽過那一條的
@@ -45,7 +44,6 @@ from tianxia.ollama_client import OllamaClient  # noqa: E402
 from tianxia.sqlite_world import open_world  # noqa: E402
 
 SIDES = ("隨機", "解口訣", "全知")
-SETTING_KEYS = ("terrain", "night_match", "night_clash", "battlefield", "calm")
 GROUP_WORDS = {
     "weapon:1": "兵一階", "weapon:2": "兵二階", "weapon:3": "兵三階", "armor:1": "甲一階", "armor:2": "甲二階", "armor:3": "甲三階",
     "weapon:divine": "兵神器", "armor:divine": "甲神器",
@@ -128,19 +126,14 @@ def _prep(game, recipe):
 
 class Tally:
     def __init__(self) -> None:
-        self.pending: tuple[float, float, bool] | None = None
-        self.uplift: list[float] = []  # 每一爐：天時地利讓上品多幾個百分點
-        self.touched = 0  # 碰到天時地利的爐
-        self.secret_top: list[bool] = []  # 秘方那幾爐擲到上品
-        self.plain_top: list[bool] = []
+        self.forges = 0  # 真的合成了幾爐（武學＋武學、意境＋意境）
 
 
 def measure(seed: int, profile: str | None, side: str) -> dict:
     content = load_content(ROOT / "content", profile=profile)
     world = open_world(TMP / f"{side}{seed}.db")
     tally = Tally()
-    original_pick_forge, fuse_odds, blend_odds, roll_quality = bot.pick_forge, fusion.fuse_odds, fusion.blend_odds, fusion.roll_quality
-    rule = content.config.fuse_quality
+    original_pick_forge, original_blend, original_merge = bot.pick_forge, fusion.blend, fusion.merge
     forged = {"爐": 0, "名器": 0, "原品": 0, "仿品": 0}
     tier3 = {"全部": 0, "新來源": 0}
     original_forge_plan, original_armor_plan, original_forge = smithing.forge_plan, smithing.armor_plan, smithing.forge
@@ -186,33 +179,13 @@ def measure(seed: int, profile: str | None, side: str) -> dict:
         tier3["新來源"] += mid is not None
         return mid
 
-    def bare(fn, *args, **kwargs):
-        saved = {k: getattr(rule, k) for k in SETTING_KEYS}
-        for k in SETTING_KEYS:
-            setattr(rule, k, 0)
-        try:
-            return fn(*args, **kwargs)
-        finally:
-            for k, v in saved.items():
-                setattr(rule, k, v)
-
-    def stash(fn):
+    def counted(original):
+        """數真的合成了幾爐：回傳的東西不是 None 才算（被拒絕的不算）。"""
         def wrapped(*args, **kwargs):
-            odds = fn(*args, **kwargs)
-            plain = bare(fn, *args, **kwargs)
-            tally.pending = (odds.odds["上品"], plain.odds["上品"], bool(kwargs.get("secret")))
-            return odds
+            made, msgs = original(*args, **kwargs)
+            tally.forges += made is not None
+            return made, msgs
         return wrapped
-
-    def rolled(odds, rng):
-        quality = roll_quality(odds, rng)
-        if tally.pending is not None and rng is not None:
-            top, plain, secret = tally.pending
-            tally.uplift.append(top - plain)
-            tally.touched += top != plain
-            (tally.secret_top if secret else tally.plain_top).append(quality == "上品")
-        tally.pending = None
-        return quality
 
     def pick_forge(game, rng, *args, **kwargs):
         if side != "隨機" and game.state.player.stamina >= bot.FORGE_RESERVE:
@@ -234,8 +207,7 @@ def measure(seed: int, profile: str | None, side: str) -> dict:
             mock.patch.object(OllamaClient, "chat_structured", refuse), mock.patch.object(OllamaClient, "chat_text", refuse), \
             mock.patch("requests.post", refuse), mock.patch("requests.get", refuse), \
             mock.patch.object(bot, "pick_forge", pick_forge), \
-            mock.patch.object(fusion, "fuse_odds", stash(fuse_odds)), mock.patch.object(fusion, "blend_odds", stash(blend_odds)), \
-            mock.patch.object(fusion, "roll_quality", rolled), \
+            mock.patch.object(fusion, "blend", counted(original_blend)), mock.patch.object(fusion, "merge", counted(original_merge)), \
             mock.patch.object(smithing, "forge_plan", steer("weapon", original_forge_plan)), \
             mock.patch.object(smithing, "armor_plan", steer("armor", original_armor_plan)), mock.patch.object(smithing, "forge", counted_forge), \
             mock.patch.object(materials, "grant", counted_grant), mock.patch.object(materials, "tier3_pick", counted_pick):
@@ -246,16 +218,10 @@ def measure(seed: int, profile: str | None, side: str) -> dict:
     fbook = forge_secrets.manual(game.state, tianji)
     fheard = [i for idx in fbook.heard.values() for i in idx]
     pieces = sum(len(got) for got in fbook.pieces.values())  # 拆了片的季聽到的神器線索片子（FB-270；不分來源）
-    forges = len(tally.uplift)
     return {
         "合中": len(book.solved), "這一季": len(secret_recipes.active(content, tianji)),
         "說書": heard.count(secret_recipes.TALE), "殘譜": heard.count(secret_recipes.SCRAP),
-        "爐": forges,
-        "天時地利": statistics.mean(tally.uplift) if tally.uplift else 0.0,
-        "碰到": tally.touched / forges if forges else 0.0,
-        "秘方上品": statistics.mean(tally.secret_top) if tally.secret_top else None,
-        "一般上品": statistics.mean(tally.plain_top) if tally.plain_top else None,
-        "秘方爐": len(tally.secret_top),
+        "爐": tally.forges,
         "哪幾條": ",".join(book.solved),
         "鑄器摸到": len(fbook.solved), "鑄器這一季": len(forge_secrets.active(content, tianji, game.state.world)),  # 照季的章（FB-270）
         "鑄器組": Counter(forge_secrets.group_of(content.forge_secrets[rid]) for rid in fbook.solved),
@@ -267,12 +233,7 @@ def measure(seed: int, profile: str | None, side: str) -> dict:
 
 
 def _fmt(row: dict) -> str:
-    pct = lambda v: "—" if v is None else f"{v * 100:.0f}%"  # noqa: E731
-    return (
-        f"合中 {row['合中']}/{row['這一季']}　口訣 說書 {row['說書']}・殘譜 {row['殘譜']}　爐 {row['爐']}"
-        f"　天時地利 +{row['天時地利']:.1f} 點（碰到 {pct(row['碰到'])}）"
-        f"　上品 秘方 {pct(row['秘方上品'])}（{row['秘方爐']} 爐）・一般 {pct(row['一般上品'])}　{row['哪幾條']}"
-    )
+    return f"合中 {row['合中']}/{row['這一季']}　口訣 說書 {row['說書']}・殘譜 {row['殘譜']}　爐 {row['爐']}　{row['哪幾條']}"
 
 
 def _fmt_forge(row: dict) -> str:
@@ -303,12 +264,9 @@ def main() -> None:
         print(f"種子 {seed} 三邊合起來：鑄器摸到 {len(union)}/{seed_rows[0]['鑄器這一季']}", flush=True)
     for side, side_rows in rows.items():
         mean = lambda k: statistics.mean(r[k] for r in side_rows)  # noqa: E731
-        tops = [r["秘方上品"] for r in side_rows if r["秘方上品"] is not None]
-        plain = [r["一般上品"] for r in side_rows if r["一般上品"] is not None]
         print(
             f"{side}平均：合中 {mean('合中'):.1f}/{mean('這一季'):.0f}　口訣 說書 {mean('說書'):.1f}・殘譜 {mean('殘譜'):.1f}"
-            f"　爐 {mean('爐'):.0f}　天時地利 +{mean('天時地利'):.1f} 點（碰到 {mean('碰到') * 100:.0f}%）"
-            f"　上品 秘方 {statistics.mean(tops) * 100 if tops else 0:.0f}%・一般 {statistics.mean(plain) * 100 if plain else 0:.0f}%"
+            f"　爐 {mean('爐'):.0f}"
         )
         print(
             f"{side}平均 鑄器：摸到 {mean('鑄器摸到'):.1f}/{mean('鑄器這一季'):.0f}　口訣 說書 {mean('鑄說書'):.1f}・鐵匠 {mean('鑄鐵匠'):.1f}"

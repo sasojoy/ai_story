@@ -7,6 +7,7 @@ from __future__ import annotations
 import hashlib
 import random
 
+from . import insight_fx
 from .martial_arts import Insight
 from .models import Content, InsightScene, Location
 from .state import GameState
@@ -37,12 +38,14 @@ def resolve(
     私有的 id 只在悟的人自己的存檔裡：沒給 state（或給的是別人的）就找不到。"""
     if insight_id is None:
         return None
-    d = content.insights.get(insight_id)
+    base = insight_fx.base_id(insight_id)  # 第二份起「feng~2」：照那一種查，id 換成這一份的（意境效果池）
+    d = content.insights.get(base)
     if d is not None:
-        return Insight(id=d.id, name=d.name, attribute=d.attribute, lean=d.lean, note=d.desc)
+        return Insight(id=insight_id, name=d.name, attribute=d.attribute, lean=d.lean, note=d.desc)
     if is_own(insight_id):
         return state.player.own_insights.get(insight_id) if state is not None else None
-    return world.get_insight(insight_id)
+    got = world.get_insight(base)
+    return got if got is None or base == insight_id else got.model_copy(update={"id": insight_id})
 
 
 def art_attribute(art, content: Content, world: WorldStateStore, state: GameState | None = None) -> str | None:
@@ -88,12 +91,22 @@ def learn(
     strong = strong_of(at, content) == insight.id
     d = content.insights.get(insight.id)
     lead = [d.strong_line] if strong and d is not None and d.strong_line else []
-    if insight.id in p.insights:
+    if insight_fx.pieces(state, insight.id):
+        if not is_own(insight.id) and insight_fx.room_for(state, content, insight.id):  # 意境效果池：再悟到一次是另一份，自己的品質與效果（揣摩要兩份）
+            piece = insight_fx.new_piece_id(state, insight.id)
+            p.insights.append(piece)
+            fx = insight_fx.roll(state, content, world, piece, strong=strong)
+            return lead + [AGAIN.format(name=insight.name, quality=fx.quality, label=insight_fx.label(content, fx))]
         amount = content.config.insight_strong.duplicate_xinde if strong else content.config.duplicate_insight_xinde
         p.stats["xinde"] = p.stats.get("xinde", 0) + amount
         return lead + [f"你又悟到一次「{insight.name}」，這份體會化成了心得。", f"心得 +{amount}"]
     p.insights.append(insight.id)
-    return lead + [f"你悟得了「{insight.name}」的意境（屬{insight.attribute}）！"]
+    fx = insight_fx.roll(state, content, world, insight.id, strong=strong)
+    return lead + [f"你悟得了「{insight.name}」的意境（屬{insight.attribute}）！", FX_LINE.format(quality=fx.quality, label=insight_fx.label(content, fx))]
+
+
+AGAIN = "你又悟得一份「{name}」（{quality}・{label}）。"  # 待 joy 潤
+FX_LINE = "這一份是{quality}：{label}。"  # 待 joy 潤
 
 
 GRANT_LINES = {"good": "你行俠日久，胸中多了一股{name}之氣。", "evil": "你橫行日久，胸中多了一股{name}之氣。"}  # 名聲 5.1，待 joy 潤
@@ -169,7 +182,7 @@ def roll_explore(loc: Location, content: Content, rng: random.Random) -> str | N
 
 def merge_key(a: str, b: str) -> str:
     """合併的配方鍵：兩個意境 id 排序後接起來（A＋B 與 B＋A 是同一個配方；自己跟自己也可以）。"""
-    return "+".join(sorted((a, b)))
+    return "+".join(sorted((insight_fx.base_id(a), insight_fx.base_id(b))))  # 第二份起照那一種（同一個配方）
 
 
 def merged_attribute(a, b, seed: str) -> str:

@@ -5,7 +5,7 @@
 """
 from __future__ import annotations
 
-from . import insights, renown, signature, team
+from . import insight_fx, insights, renown, signature, team
 from .martial_arts import QUALITIES, MartialArt, content_art, is_renamed
 from .models import Content, SkillDef
 from .state import GameState
@@ -64,8 +64,7 @@ SWITCH_HINT = "到「修練」的功法庫把它改練上身。"  # 合成的結
 
 def store_art(state: GameState, art: MartialArt, quality: str | None = None) -> list[str]:
     """新拿到的武學放哪：對應的欄位空著就配上身（第一成），否則進功法庫。quality 是玩家這一份的品質
-    （合成擲出來的，Config.fuse_quality_odds）：跟全服登記的不一樣時記成自己那一份的品質，也記成「擲到的」
-    （art_rolled），熔的時候那幾階不給加給。
+    （武學＋武學合出來的照兩門來源算，fusion.blend_grade）：跟全服登記的不一樣時記成自己那一份的品質。
     這裡不看上限：該不該擋住由呼叫端決定（合成、學藝擋，奇遇給的、買來的不擋）。"""
     p = state.player
     if art.id in owned_arts(state):  # 已經有了（配在身上或在庫裡）：不重複收，也不動它的品質與熟練度
@@ -74,7 +73,6 @@ def store_art(state: GameState, art: MartialArt, quality: str | None = None) -> 
         p.renames_told.append(art.id)
     if quality is not None and quality != art.quality:
         p.art_quality[art.id] = quality
-        p.art_rolled[art.id] = quality
     slot = "neigong_id" if art.kind == "內功" else "wugong_id"
     if getattr(p.member, slot) is None:
         setattr(p.member, slot, art.id)
@@ -147,7 +145,7 @@ def learn(state: GameState, content: Content, skill_id: str) -> list[str]:
     fee = skill.learn.silver if skill.learn is not None else 0
     state.player.stats["silver"] = state.player.stats.get("silver", 0) - fee
     msgs = [f"你學會了【{skill.name}】（{skill.kind}・下品・屬{skill.attribute}）。"] + ([f"銀兩 -{fee}"] if fee else [])
-    return msgs + store_art(state, content_art(skill.id, skill.name, skill.kind, skill.attribute, skill.quality, lean=skill.lean))
+    return msgs + store_art(state, content_art(skill.id, skill.name, skill.kind, skill.attribute, skill.quality, lean=skill.lean, affinity=skill.affinity))
 
 
 # ── 熔煉（設計 4.3）──────────────────────────────────────
@@ -182,7 +180,7 @@ def melt_problem(
     兩邊才不會各說各話。name 是這門武學現在的名字（寫進「先替它定名」那一句；不給就寫「這一門」）。
     only：序章（新手引導計畫一）只准熔師父說的那一門，空字串是這一步一門都不准熔；None＝不限。
     由呼叫端查序章再傳進來（prologue 會 import rules、rules 會 import 這個模組，這裡不能反過來 import 它）。
-    content 給了才認得本命武學（signature.is_signature）：本命熔不得（Joy 2026-10-16），拿去當底合成照舊可以。"""
+    content 給了才認得本命武學（signature.is_signature）：本命熔不得（Joy 2026-10-16），武學重構之後也不能當合成的料（fusion.blend_problem 擋 arts.fixed）。"""
     if only is not None and art_id != only:
         return "師父沒叫你熔這一門。"
     p = state.player
@@ -201,18 +199,17 @@ def melt_problem(
 
 def melt_value(state: GameState, content: Content, world: WorldStateStore, art_id: str) -> int:
     """熔掉功法庫裡的 art_id 會退多少心得。熔煉頁寫的「退回心得 N」（skillview.art_rows）與 melt_art 真的退的
-    共用這一個數：玩家自己那一份的品質跟全服登記的那一份（沒個人化）比，只有修練上去的幾階有加給。
+    共用這一個數：武學重構之後品級不靠修練衝，所以只退練成花的八成；品質加給只剩全服登記的那一階之上（絕學契機那一階）。
     FB-068 的基本值（Config.melt_min_refund）只給全服登記的武學（合成出來的；art_id 不是內容裡的武學）：
     內容裡的基礎武學有的免費教、學藝也不花體力，給了基本值就是「學、熔、再學」的無本迴圈。"""
     mine = team.player_art(state, content, world, art_id)
     registered = team.resolve_art(art_id, content, world)
     minimum = 0 if art_id in content.skills else content.config.melt_min_refund
     start = registered.quality if registered else "下品"
-    rolled = state.player.art_rolled.get(art_id)  # 合成時擲到的品質也算「登記時就有」：合到上品馬上熔掉不能賺加給
-    if rolled in QUALITIES and QUALITIES.index(rolled) > QUALITIES.index(start):
-        start = rolled
+    grade = state.player.art_quality.get(art_id)  # 合出來的品級是兩門來源帶來的、不是修練上去的：不給加給
+    if grade in QUALITIES and QUALITIES.index(grade) > QUALITIES.index(start) and grade != "絕學":
+        start = grade
     free = content.config.signature_arts.start_level if signature.is_signature(content, art_id) else 1
-    free = max(free, state.player.art_free_levels.get(art_id, 1))  # 合成承底白送的成數也不退（合成即設計定案第二節）
     return melt_refund(
         content, state.player.art_levels.get(art_id, 1), mine.quality if mine else "下品", start, minimum, free,
     )
@@ -237,11 +234,14 @@ def melt_confirm(name: str, value: int, relearn: str | None = None) -> str:
 
 
 def remove_art(state: GameState, art_id: str) -> None:
-    """功法庫拿掉一門，連同 PlayerState 以功法 id 為鍵的全部私有紀錄（成、自己那一份的品質、熟練度、擲到的品質）。
+    """功法庫拿掉一門，連同 PlayerState 以功法 id 為鍵的全部私有紀錄（成、自己那一份的品質、熟練度）；槽裡的意境拆回背包。
     熔煉（melt_art）與交出懸賞（bounties.give，懸賞榜設計 4.6）共用；呼叫端先擋（身上的、等著定名的）。全服登記的那一門不動。"""
+    from . import arts as arts_mod
+
     p = state.player
     p.arts.remove(art_id)
-    for record in (p.art_levels, p.art_quality, p.art_mastery, p.art_rolled, p.art_free_levels):
+    arts_mod.release_all(state, art_id)
+    for record in (p.art_levels, p.art_quality, p.art_mastery):
         record.pop(art_id, None)
 
 
@@ -296,16 +296,18 @@ def melt_many(
         remove_art(state, art_id)
         melted.append(f"【{name}】")
         art_count += 1
-    # 熔意境之前記下哪幾門還找得到修練用的意境，熔完再比（同 melt_insight 那一句）
-    kept = [art for art in (team.resolve_art(a, content, world) for a in owned_arts(state)) if art is not None]
-    leaned = {art.id for art in kept if insights.for_cultivation(state, content, world, art) is not None}
     insight_count = 0
     for insight_id in ins:
         if insight_id not in p.insights:
             skipped.append(f"「{insight_id}」沒熔：你沒有這個意境。")
             continue
         insight = insights.resolve(insight_id, content, world, state)
+        stuck = melt_insight_problem(state, content, world, insight_id)
+        if stuck is not None:
+            skipped.append(f"「{insight.name if insight else insight_id}」沒熔：{stuck}")
+            continue
         p.insights.remove(insight_id)
+        insight_fx.drop(state, insight_id)
         refund += content.config.melt_insight_xinde
         melted.append(f"「{insight.name if insight else insight_id}」")
         insight_count += 1
@@ -320,26 +322,35 @@ def melt_many(
     msgs += skipped[:MELT_MANY_SKIPS]
     if len(skipped) > MELT_MANY_SKIPS:
         msgs.append(f"還有 {len(skipped) - MELT_MANY_SKIPS} 樣沒熔。")
-    needing = [art.name for art in kept if art.id in leaned and insights.for_cultivation(state, content, world, art) is None]
-    if needing:
-        msgs.append(f"{'、'.join(f'【{n}】' for n in needing)}從此不能再修練（修練要用的意境熔掉了）。")
     return msgs
+
+
+INSIGHT_SLOTTED = "「{name}」還裝在【{art}】上，先拆下來。"  # 待 joy 潤
+
+
+def melt_insight_problem(state: GameState, content: Content, world: WorldStateStore, insight_id: str) -> str | None:
+    """這個意境熔不熔得掉：不是自己的、或還裝在某一門武學的意境槽上（武學重構）都不行。None＝可以。"""
+    from . import arts as arts_mod  # arts import library
+
+    if insight_id not in state.player.insights:
+        return "你沒有這個意境。"
+    where = arts_mod.where_slotted(state, insight_id)
+    if where is not None:
+        insight = insights.resolve(insight_id, content, world, state)
+        art = team.resolve_art(where, content, world)
+        return INSIGHT_SLOTTED.format(name=insight.name if insight else insight_id, art=art.name if art else where)
+    return None
 
 
 def melt_insight(state: GameState, content: Content, world: WorldStateStore, insight_id: str) -> list[str]:
     p = state.player
-    if insight_id not in p.insights:
-        return ["你沒有這個意境。"]
+    problem = melt_insight_problem(state, content, world, insight_id)
+    if problem is not None:
+        return [problem]
     insight = insights.resolve(insight_id, content, world, state)
-    arts = [art for art in (team.resolve_art(a, content, world) for a in owned_arts(state)) if art is not None]
-    leaned = {art.id for art in arts if insights.for_cultivation(state, content, world, art) is not None}
     p.insights.remove(insight_id)
+    insight_fx.drop(state, insight_id)
     amount = content.config.melt_insight_xinde
     p.stats["xinde"] = p.stats.get("xinde", 0) + amount
     name = insight.name if insight else insight_id
-    msgs = [f"你把「{name}」的領悟化成了心得。", f"心得 +{amount}"]
-    # 熔掉之後再也找不到修練用的意境的那幾門（手上還有同屬性的，換那一個來修，不算）
-    needing = [art.name for art in arts if art.id in leaned and insights.for_cultivation(state, content, world, art) is None]
-    if needing:
-        msgs.append(f"{'、'.join(f'【{n}】' for n in needing)}從此不能再修練（修練要用「{name}」）。")
-    return msgs
+    return [f"你把「{name}」的領悟化成了心得。", f"心得 +{amount}"]

@@ -1991,27 +1991,8 @@ def test_prologue_allow_entries_must_be_menu_ids(prologue_root, entry):
     assert "models.ALLOW_FIXED" in str(caught.value) and "ALLOW_FAMILIES" in str(caught.value)  # 內容作者知道去哪補
 
 
-def test_every_sight_in_the_hut_has_a_preset_recipe(prologue_root):
-    """review-t4-5 M4：草廬悟得到的每個意境，合成那一步的底都要有師門配方；少了的那個新人的合成就要等模型。"""
-    def drop_fire(recipes):
-        recipes[:] = [r for r in recipes if r["insight"] != "huo"]
-
-    edit_json(prologue_root / "preset_recipes.json", drop_fire)
-    with pytest.raises(ContentError, match=r"\['huo'\].*basic_fist.*師門配方"):
-        load_content(prologue_root)
-
-
-
-def test_a_recipe_on_the_wrong_base_does_not_cover_the_sight(prologue_root):
-    """配方有、但底不是合成那一步指定的那一門：那個景還是沒有配方。"""
-    def wrong_base(recipes):
-        next(r for r in recipes if r["insight"] == "shui")["base"] = "basic_breath"
-
-    edit_json(prologue_root / "preset_recipes.json", wrong_base)
-    with pytest.raises(ContentError, match=r"\['shui'\].*basic_fist.*師門配方"):
-        load_content(prologue_root)
-
-
+# 武學重構：武學＋意境不再合成，序章合成那一步改成裝槽、揣摩，「草廬悟得到的每個意境都要有師門配方」的檢查拿掉了
+# （tianxia/content.py），測它的六條（少了火、底不對、接下去的事件、檢定失敗才給、開場那一串、那一步的獎勵）一併刪除。
 P_INSIGHT = {"id": "p_insight", "title": "四景", "text": "挑一處。", "actions": [], "choices": [
     {"text": "松林", "effect": {"text": "風。", "insights": ["feng"], "flags_add": ["序章:悟"]}},
     {"text": "石崖", "effect": {"text": "山。", "insights": ["shan"], "flags_add": ["序章:悟"]}},
@@ -2058,52 +2039,6 @@ def test_a_blank_line_in_an_insight_scene_is_refused(prologue_root, field, label
 
     edit_json(prologue_root / "insight_scenes.json", blank)
     with pytest.raises(ContentError, match=f"有所感 hut_four的{label}：有空白的句子"):
-        load_content(prologue_root)
-
-
-def test_a_sight_that_chains_on_is_checked_too(prologue_root):
-    """四景選了之後接下去的事件（next_event）悟到的意境也算。"""
-    _sights_as_event(prologue_root)
-
-    def chain(events):
-        sight = next(e for e in events if e["id"] == "p_insight")
-        sight["choices"][0]["effect"]["next_event"] = "p_more"
-        events.append({"id": "p_more", "title": "再看", "text": "再看一眼。", "actions": [], "choices": [
-            {"text": "好", "effect": {"text": "嗯。", "insights": ["xuesha"]}}]})
-
-    edit_json(prologue_root / "events" / "prologue.json", chain)
-    with pytest.raises(ContentError, match=r"\['xuesha'\]"):
-        load_content(prologue_root)
-
-
-def test_a_sight_that_only_a_failed_check_grants_is_checked_too(prologue_root):
-    """檢定失敗才給的意境（fail_effect）也是新人會拿到的：沒有配方的話那個新人的合成一樣要等模型。"""
-    _sights_as_event(prologue_root)
-
-    def gamble(events):
-        sight = next(e for e in events if e["id"] == "p_insight")
-        sight["choices"][0]["check"] = {"stat": "str", "difficulty": 5}
-        sight["choices"][0]["fail_effect"] = {"text": "摔了一跤。", "insights": ["xuesha"]}
-
-    edit_json(prologue_root / "events" / "prologue.json", gamble)
-    with pytest.raises(ContentError, match=r"\['xuesha'\]"):
-        load_content(prologue_root)
-
-
-def test_a_sight_in_the_opening_chain_needs_a_preset_too(prologue_root):
-    """T6 review M6：遇險、拜師那一串事件給的意境，新人也拿得到、也能拿去合成：沒有配方就要等模型。"""
-    def gift(events):
-        ambush = next(e for e in events if e["id"] == "p_ambush")
-        ambush["choices"][0]["effect"]["insights"] = ["xuesha"]
-
-    edit_json(prologue_root / "events" / "prologue.json", gift)
-    with pytest.raises(ContentError, match=r"\['xuesha'\].*basic_fist.*師門配方"):
-        load_content(prologue_root)
-
-
-def test_a_sight_a_step_reward_hands_over_needs_a_preset_too(prologue_root):
-    edit_json(prologue_root / "tutorial.json", lambda t: t["steps"][1].update({"reward": {"insights": ["xuesha"]}}))
-    with pytest.raises(ContentError, match=r"\['xuesha'\].*basic_fist.*師門配方"):
         load_content(prologue_root)
 
 
@@ -2425,10 +2360,15 @@ def test_content_without_traits_still_loads(tmp_path):
 
 
 def test_the_real_traits_are_the_designed_table():
-    """正式的功效照設計 13.2、13.4（八個一般、七個特別，數字都是預設）；演出句是 S1 的 45 句（每個功效三句）。"""
+    """正式的功效照設計 13.2、13.4（八個一般、七個特別，數字都是預設），意境效果池每一路多一個一般功效（寫 id）；
+    演出句每個功效三句。"""
     content = load_content(ROOT / "content")
     book = content.traits
-    assert [t.name for t in book.general] == ["先手", "穩", "破甲", "化勁", "乘勝", "吸取", "險", "厚"]
+    assert [t.name for t in book.general] == [
+        "先手", "穩", "破甲", "化勁", "乘勝", "吸取", "險", "厚", "掠影", "沉勁", "回瀾", "守拙", "朝陽", "陰勁", "料敵", "鐵壁",
+    ]
+    assert [t.key for t in book.general[8:]] == ["lueying", "chenjin", "huilan", "shouzhuo", "zhaoyang", "yinjin", "liaodi", "tiebi"]
+    assert sorted(t.attribute for t in book.general[8:]) == sorted(t.attribute for t in book.general[:8])  # 每一路各一個
     assert [t.name for t in book.special] == ["連環", "不動", "護命", "悟招", "借力", "回春", "輕身"]
     assert all(t.pool for t in book.special)
     assert sorted(content.trait_lines) == sorted(t.name for t in [*book.general, *book.special])

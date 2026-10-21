@@ -19,7 +19,7 @@ from types import SimpleNamespace
 
 from pydantic import BaseModel, Field
 
-from . import gender, glyph, insight_llm, insights, mounts, naming, treasures
+from . import gender, glyph, insight_fx, insight_llm, insights, mounts, naming, treasures
 from .martial_arts import Insight
 from .models import Content, InsightScene, Location
 from .ollama_client import OllamaClient
@@ -364,7 +364,8 @@ def finish(
         id="", name=name, attribute=attribute, lean="無", note=note, creator=p.name, creator_shown=p.name,
         place=loc.name, glyph=req.points,
     ))
-    msgs = lead + [f"你悟得了「{own.name}」的意境（屬{own.attribute}）！"]
+    fx = insight_fx.roll(state, content, world, own.id)  # 意境效果池：自己悟的也擲品質與效果
+    msgs = lead + [f"你悟得了「{own.name}」的意境（屬{own.attribute}）！", insights.FX_LINE.format(quality=fx.quality, label=insight_fx.label(content, fx))]
     if own.note:
         msgs.append(own.note)
     msgs.append("這份領悟是你自己的，江湖上沒有第二份。")

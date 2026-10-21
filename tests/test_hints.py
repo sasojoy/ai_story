@@ -10,8 +10,6 @@ from pathlib import Path
 
 import pytest
 from conftest import FixedRandom, idle_step, next_season
-from test_cultivation import kicker_art
-from test_practice_hardening import harden
 from tests.test_orders import _game as _real_game  # 真內容的 real、on 是 tests/conftest.py 的 fixture（每個測試自己的一份複本）
 from tianxia import defection, guide
 from tianxia.content import ContentError, load_content
@@ -507,7 +505,10 @@ def test_clash_when_inner_and_outer_arts_counter_each_other(game):
     member.neigong_id, member.wugong_id = "calm", "fist"  # 虛／剛：不相剋
     game._check_hints()
     assert game.guide_box() is None
-    member.wugong_id = "basic_fist"  # 虛／實：相剋
+    member.wugong_id = "basic_fist"  # 武學重構：基礎拳腳兼容並蓄、沒有自己的屬性（apply 之後是空的），跟誰都不相剋
+    game._check_hints()
+    assert game.guide_box() is None
+    game.content.skills["basic_fist"].affinity = ["實"]  # 相容屬性寫了實，武學的屬性就是實：虛／實相剋
     game._check_hints()
     assert _key(game) == "h_clash"
 
@@ -521,48 +522,14 @@ def test_clash_needs_both_arts(game):
     assert game.guide_box() is None and _queued(game) == []
 
 
-def test_a_failed_refinement_triggers_refine_fail(game):
+def test_refine_fail_never_triggers_after_the_rework(game):
+    """武學重構（Joy 2026-10-20）：品級不靠修練衝，沒有「修練失敗」這件事——h_refine_fail 留在提示表裡，但舊存檔留下的熟練度
+    （art_mastery）也叫不出它（Game._refine_failed 永遠是假）。"""
     _with(game.content, "h_refine_fail")
     game.skip_tutorial()
-    game.state.player.art_mastery = {"basic_fist": 0}  # 成功就歸零
-    game._check_hints()
-    assert game.guide_box() is None
     game.state.player.art_mastery = {"basic_fist": 2}
     game._check_hints()
-    assert _key(game) == "h_refine_fail"
-
-
-def _tempering_game(hints_content, world):
-    """joy 的加難（方案 C，breakthrough.heat = 8，跟正式內容一樣）：上品、第十成的【旋風腿】，下一次修練是往絕學添火候。"""
-    c = harden(hints_content)
-    _with(c, "h_refine_fail")
-    game = Game.new(c, "沈浪", rng=random.Random(0), world=world)
-    game.skip_tutorial()
-    world.claim_skill_name(kicker_art())
-    p = game.state.player
-    p.arts, p.insights, p.stamina, p.location = ["旋風腿"], ["feng"], 150, "cave"
-    p.art_levels["旋風腿"], p.art_quality["旋風腿"] = 10, "上品"
-    return game
-
-
-def test_tempering_toward_mastery_is_not_a_failed_refinement(hints_content, world):
-    """往絕學修練只添火候（cultivation._temper，也記在 art_mastery），不擲骰、沒有失敗：師父不說「沒成也不白修」（整合審查 I1）。"""
-    game = _tempering_game(hints_content, world)
-    assert game.cultivate("旋風腿")[0].startswith("【旋風腿】又添了一分火候")
-    assert game.state.player.art_mastery["旋風腿"] == 1
-    assert "h_refine_fail" not in _queued(game) and _key(game) != "h_refine_fail"
-
-
-def test_a_real_failure_on_the_way_to_upper_grade_still_says_it(hints_content, world):
-    """同樣的加難設定，往上品修練真的擲骰失敗了：照舊說（art_mastery 記的是失敗幾次）。"""
-    game = _tempering_game(hints_content, world)
-    game.state.player.art_quality["旋風腿"] = "中品"
-    for _ in range(5):
-        game.cultivate("旋風腿")
-        if game.state.player.art_mastery.get("旋風腿", 0) > 0:
-            break
-    assert game.state.player.art_quality["旋風腿"] == "中品" and game.state.player.art_mastery["旋風腿"] > 0
-    assert _key(game) == "h_refine_fail"
+    assert game.guide_box() is None and "h_refine_fail" not in _queued(game)
 
 
 def test_a_lost_fight_triggers_lose_but_a_win_or_a_lost_showdown_does_not(game):
@@ -1167,18 +1134,18 @@ def test_allocating_a_point_notices_it_too(game):
 
 
 def test_a_page_action_notices_it_too(game):
-    """修練頁、煉製頁的動作（療傷、練成、修練、熔煉、合成、改練都經過 _menxia_entry）：修練失敗就是在這裡留下熟練度的。"""
-    _with(game.content, "h_refine_fail")
+    """修練頁、煉製頁的動作（療傷、練成、修練、熔煉、合成、改練都經過 _menxia_entry）也看一遍提示。
+    武學重構：沒有修練失敗了，這裡拿第二個意境（h_merge）來看。"""
     game.skip_tutorial()
-    game.state.player.art_mastery = {"basic_fist": 1}
+    game.state.player.insights = ["feng", "huo"]
     game.heal()
-    assert _key(game) == "h_refine_fail"
-    assert f"【{MENTOR}】h_refine_fail 的話" in _journal_guides(game)
+    assert _key(game) == "h_merge"
+    assert f"【{MENTOR}】意境可以合。" in _journal_guides(game)
 
 
 def test_every_page_action_looks_for_hints(game, monkeypatch):
-    """修練頁、煉製頁的每一種動作做完都經過 _menxia_entry、看一遍提示（療傷、練成、改練、熔武學、熔意境、合成、修練）：
-    一個一個做、每做成一個，檢查就多叫一次。"""
+    """修練頁、煉製頁的每一種動作做完都經過 _menxia_entry、看一遍提示（療傷、練成、改練、裝意境、拆意境、合成、熔武學、熔意境、修練）：
+    一個一個做、每做成一個，檢查就多叫一次。武學重構：合成是兩門武學合一門，武學＋意境是裝槽（lake_kick 是下品的內容武學，裝得了）。"""
     from tianxia import cultivation
 
     game.skip_tutorial()
@@ -1186,8 +1153,9 @@ def test_every_page_action_looks_for_hints(game, monkeypatch):
     p.stats.update(xinde=500)
     p.stamina = float(game.content.config.stamina_max)
     p.member.neigong_id, p.member.wugong_id = "breath", "fist"
-    p.arts = ["sword", "step"]
+    p.arts = ["sword", "step", "lake_kick"]
     p.insights = ["feng", "huo", "shui"]
+    game.content.skills["step"].quality = "下品"  # 寫死的武學不能當合成的料；測試內容的追風步沒寫品級（絕學），改成下品才合得
     calls = []
     real = game._check_hints
     monkeypatch.setattr(game, "_check_hints", lambda *args, **kwargs: (calls.append(1), real(*args, **kwargs))[1])
@@ -1197,9 +1165,11 @@ def test_every_page_action_looks_for_hints(game, monkeypatch):
         "heal": lambda: game.heal(),
         "practice": lambda: game.practice("武學"),
         "switch_art": lambda: game.switch_art("sword"),
+        "slot": lambda: game.forge("lake_kick", ["feng"]),
+        "unslot": lambda: game.unslot_insight("lake_kick", "feng"),
+        "forge": lambda: game.forge("step", [], other_art="lake_kick"),
         "melt_art": lambda: game.melt_art("step"),
         "melt_insight": lambda: game.melt_insight("shui"),
-        "forge": lambda: game.forge("sword", ["feng"]),
         "cultivate": lambda: game.cultivate("sword"),
     }
     for name, act in actions.items():

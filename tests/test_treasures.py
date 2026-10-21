@@ -211,21 +211,15 @@ def test_amount_is_neutral_unless_worn_and_switched_on(content, state):
     assert treasures.amount(state, content, "audience") == 0.0
 
 
-def test_cultivate_treasure_multiplies_the_odds_within_the_cap_but_not_the_sure_try_or_forcing(content, state, world):
-    """設計 6.2：中品第一次 40→48、上品第一次 6→7、中品第三次照舊 100（寫明必成那一次直接回 100）。中品寫在 cultivate_sure_by 裡，
-    odds_for 照樣算寶物（不併進搭配）；服丹衝關（force_odds）與頓悟不吃寶物。"""
+def test_cultivate_treasure_now_multiplies_the_last_step(content, state, world):
+    """武學重構：衝品拿掉了，寶物「cultivate」改乘絕學這一步——服丹衝關（force_odds）照 ×1.2（夾 max_chance 之前）。"""
     from tianxia import cultivation
-    content.config.cultivate_odds = {"中品": (40, 20), "上品": (6, 3), "絕學": (4, 3)}
-    content.config.cultivate_sure_by = {"中品": 3}
-    assert cultivation.chance(content, "中品", 0, treasure=1.2) == 48
-    assert cultivation.chance(content, "上品", 0, treasure=1.2) == 7
-    assert cultivation.chance(content, "中品", 2, treasure=1.2) == 100
     _book(content)
+    content.config.legend_item_bonus = 20  # 照悟性 5 是 20%，乘 1.2 是 24%，不碰 max_chance
     forcing = cultivation.force_odds(state, content, world, "nope")
-    assert cultivation.odds_for(state, content, "中品", 0) == 40
     state.player.treasure = _item("cultivate")
-    assert cultivation.odds_for(state, content, "中品", 0) == 48
-    assert cultivation.force_odds(state, content, world, "nope") == forcing
+    assert treasures.amount(state, content, "cultivate") == 1.2
+    assert cultivation.force_odds(state, content, world, "nope") == round(forcing * 1.2)
 
 
 def test_insight_treasure_weighs_only_the_insight_branch(content, world):
