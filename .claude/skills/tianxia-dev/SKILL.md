@@ -168,6 +168,7 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 ## 回報 PM
 
 - 一張回饋單一個 commit；commit 訊息一句英文，結尾 `Co-Authored-By:`（照當時 system 給的那一行）。
+  - **幾張單改在同一個檔、甚至同一個函式裡**（2026-10-21 玉璽碎片改版第 3 批：批本身與 FB-627 都改 `seal_acts.view`）：不必把工作樹改回去再改回來。寫一支 scratchpad 腳本：讀工作樹的檔（CRLF→LF）、照「拿掉哪幾處」換掉（每一處 `assert count == 1`）、`git hash-object -w --stdin --path <檔>` 寫成 blob、`git update-index --add --cacheinfo 100644,<blob>,<檔>` 放進索引——工作樹一個位元組不動，`git diff` 剩下的就是下一張單。先提交最大的那一批，再一張一張 `git add`。每一筆提交之後 `git archive HEAD` 解到 scratchpad 跑那幾個測試檔，確認單獨一筆也是綠的。
 - 推之前合派工指定的分支（衝突兩邊都留）。推完用 `git merge-base --is-ancestor HEAD origin/<分支>` 確認推到了。
   - `天下大勢` 這份 clone 的 `remote.origin.fetch` 只寫了 main 等三條，**`git fetch origin` 不會更新 `origin/dev/*`、`origin/feature/*`**（2026-10-20：推上去了，`origin/dev/conquest-1` 還停在舊的那一版，上面那一行就判成沒推到）。推完先 `git fetch origin refs/heads/<分支>:refs/remotes/origin/<分支>` 再比，或直接看 `git ls-remote origin refs/heads/<分支>`。拿 `origin/feature/<名字>` 當 `test_for` 的 base 之前也照這樣更新一次。
   - 這份 clone 的 `remote.origin.fetch` 只列 `tianxia`、`feature/sanguo-companions`、`main`：`git fetch origin`（或 `git fetch origin <分支>`）**不會**更新 `origin/dev/*`、`origin/develop`，推完馬上比會假失敗、開工時讀到的也可能是舊的。要比之前先 `git fetch origin +refs/heads/<分支>:refs/remotes/origin/<分支>`，或直接 `git ls-remote origin refs/heads/<分支>` 對 `git rev-parse HEAD`（2026-10-20 商城第二批修正那一次）。

@@ -1329,15 +1329,16 @@ class SealAct(BaseModel):
     （誰用的只記在全服登記那一筆 use 與起用的人自己的紀錄裡）。生效的區間是 [start, ended 或 until)；期滿、提前結束的留到季末
     （承露補算體力要讀已經結束的那一段）。"""
 
-    kind: str  # yinjiang／banzhao／chenglu／chuanxi／shouxin（models.SealActKind）
+    kind: str  # yinjiang／banzhao／chenglu／chuanxi／shouxin／zhendi／bujue（models.SealActKind；後兩種是第 3 批）
     shard: str  # 哪一片（content/seal.json 的 id）
     start: float  # 世界秒
-    until: float  # 預定期滿的世界秒
-    ended: float | None = None  # 提前結束（引將被時刻表搬走、退場）或期滿處理過的世界秒；None＝還沒處理
-    target: str = ""  # 人物 id（引將是大勢人物 id、收心是人物 id）、大區 id（承露）、戰線 id（傳檄）；頒詔是空的
+    until: float  # 預定期滿的世界秒（補缺當場生效，等於 start）
+    ended: float | None = None  # 提前結束（引將被時刻表搬走、退場；鎮地那一塊換了主人）或期滿處理過的世界秒；None＝還沒處理
+    # 人物 id（引將是大勢人物 id、收心是人物 id）、大區 id（承露）、戰線 id（傳檄）、區塊的地點 id（鎮地、補缺）；頒詔是空的
+    target: str = ""
     place: str = ""  # 引將：引到哪個地點
     origin: str = ""  # 引將：原本在哪個地點（期滿回這裡）
-    side: str = ""  # 傳檄：這一次照哪一軍算
+    side: str = ""  # 傳檄：這一次照哪一軍算；鎮地：替哪一軍鎮；補缺：退回給哪一軍
 
 
 class WorldState(BaseModel):
