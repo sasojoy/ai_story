@@ -15,6 +15,7 @@ TW_MIDNIGHT = 16 * 3600
 def _game(at="yingchuan", faction="guan", bag=None, silver=500, same=None):
     c = real_content("weekend")
     c.config.auto_open_first_season = True
+    c.config.four_tiers.enabled = False  # 素材四階之前的規則；四階的機器人在 test_four_tiers
     if same is not None:
         c.config.economy.upgrade_same_share = same
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world())

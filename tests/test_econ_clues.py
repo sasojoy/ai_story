@@ -56,12 +56,13 @@ def test_three_pieces_make_the_book_line_complete():
     c = real_content("weekend")
     g = _game(c)
     sword = next(r for r in _divine(c, g.state.world) if r.kind == "劍")
-    assert forge_secrets.piece_line(c, sword, [forge_secrets.MAIN]) == "？：快三＋？"
-    assert forge_secrets.piece_line(c, sword, list(forge_secrets.PIECES)) == "劍：快三＋柔三"
+    # 神器配方改用四階（正式季整合 5.5）：鑄譜那一行寫「快四」
+    assert forge_secrets.piece_line(c, sword, [forge_secrets.MAIN]) == "？：快四＋？"
+    assert forge_secrets.piece_line(c, sword, list(forge_secrets.PIECES)) == "劍：快四＋柔四"
     book = forge_secrets.manual(g.state, g.state.world.tianji)
     book.pieces[sword.id] = [forge_secrets.MAIN, forge_secrets.KIND]
     row = next(r for r in forge_secrets.view(g.state, c, g.world) if r["recipe"] and r["recipe"].endswith("＋？"))
-    assert row["recipe"] == "劍：快三＋？" and row["solved"] is None
+    assert row["recipe"] == "劍：快四＋？" and row["solved"] is None
     assert row["clues"] == [forge_secrets.piece_text(c, sword, forge_secrets.KIND), forge_secrets.piece_text(c, sword, forge_secrets.MAIN)]
 
 

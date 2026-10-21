@@ -15,8 +15,9 @@ from collections import OrderedDict
 from collections.abc import Callable
 
 from . import armor, calendar, encounter, equipment, mounts, rounds, signature, styles, tactics, traits, treasures, weapons
+from . import terrain as terrain_mod  # 地利（_styled_fighters 的參數 terrain 是開關，模組另取名字）
 from .martial_arts import MAX_LEVEL, MartialArt, content_art, counters, power_at, with_quality
-from .models import Content, FollowerDef, Squad, TacticBond, TacticDef
+from .models import Content, FollowerDef, InsightDef, Squad, TacticBond, TacticDef
 from .state import PLAYER, MAX_TEAM_COMPANIONS, FollowerDrill, GameState, LevelUps, Member
 from .world_state import CompanionProgress, WorldStateStore
 
@@ -201,6 +202,32 @@ def follower_power(
 CN_DIGITS = "零一兩三四五六七八九十"
 
 
+def mate_power(state: GameState, content: Content, world: WorldStateStore, key: str) -> float:
+    """一位同伴此刻的威力（不看對手、氣血係數照滿的）：他自己的兩門武學、他自己的加成（mate_boost）。
+    決戰的隨行同伴照它算份量（歷史武將同行第五節，Game._escort_of）。"""
+    progress = world.get_companion(key)
+    arts = {sid: art for sid in (progress.neigong_id, progress.wugong_id) if sid and (art := resolve_art(sid, content, world))}
+    return encounter.member_power(progress, arts, None, 1.0, mate_boost(state, content, world, key))
+
+
+def mate_pool(state: GameState, content: Content, world: WorldStateStore, key: str) -> float:
+    """一位同伴的氣血池（決戰加入時快照）：他的氣血上限，照他自己的等級與根骨（member_neili，不乘螭首）。"""
+    _, cap = member_neili(content, world.get_companion(key), con_of(state, content, world, key), plain=True)
+    return cap
+
+
+def mate_side(state: GameState, content: Content, world: WorldStateStore, key: str) -> tactics.BoutSide | None:
+    """一位同伴在決戰帶的本命戰法：只算他自己身上的兩門（照決戰的規矩，tactics.war_round）；沒有是 None。"""
+    progress = world.get_companion(key)
+    holders = tactics.holders_of(content, [(content.characters[key].name, key, progress.wugong_id, progress.neigong_id)])
+    if not holders:
+        return None
+    agility = member_stats(state, content, world, key).get("agi", BASE_STAT)
+    return tactics.side_for(holders, tactics.Ctx(
+        foe="", our_agility=float(agility), night=calendar.is_night(state.world.time, content, state.world), team=[key],
+    ))
+
+
 def follower_share(state: GameState, content: Content, world: WorldStateStore, squad: Squad) -> tuple[float, float]:
     """這一場（照對手算：相剋、路數都在，同 fight）部下的威力合計與其餘的人（本人、同伴）的威力合計。沒有部下是 (0, 全隊)。"""
     rows = follower_rows(state, content)
@@ -246,16 +273,16 @@ def _more(ratio: float | None) -> str:
 
 
 def _fighters(
-    state: GameState, content: Content, world: WorldStateStore,
+    state: GameState, content: Content, world: WorldStateStore, *, seal: bool = True,
 ) -> tuple[list, list[float], list[encounter.Boost]]:
     """打一場的陣容、各自的氣血係數與加成：本人、出戰的同伴，再加上部下（滿血）。
     每個人的加成吃他自己的屬性（本人、同伴、部下各一份，見 team_boosts），不吃別人的。
-    三份一樣長（encounter.team_power 會檢查），部下才不會被默默漏掉（F17）。"""
+    三份一樣長（encounter.team_power 會檢查），部下才不會被默默漏掉（F17）。seal 見 player_boost。"""
     followers = follower_units(state, content)
     return (
         team_participants(state, world) + followers,
         team_conditions(state, content, world) + [1.0] * len(followers),
-        team_boosts(state, content, world),
+        team_boosts(state, content, world, seal=seal),
     )
 
 
@@ -531,7 +558,7 @@ def _price_here(state: GameState | None, content: Content) -> float:
         return 1.0
     from . import figure_life, renown, territory  # noqa: PLC0415
 
-    return (territory.price_here(state, content) * renown.clinic_factor(state, content)  # price_here 照依附那一軍算自家地盤
+    return (territory.price_here(state, content, heal=True) * renown.clinic_factor(state, content)  # price_here 照依附那一軍算自家地盤
             * figure_life.healer_factor(state, content))  # 華佗坐診的醫館
 
 
@@ -620,6 +647,31 @@ def exp_view(content: Content, member) -> dict | None:
     if member.level >= cfg.max_level:
         return None
     return {"have": int(member.exp), "need": level_cost(cfg, member.level)}
+
+
+MAXED_XINDE = "已達頂級，經驗化作心得 +{n}。"  # 待 joy 潤：滿級之後的經驗換成心得那一句（正式季整合 3.5，江湖紀錄）
+
+
+def maxed(content: Content, member) -> bool:
+    """這個人滿級了（Config.max_level）。"""
+    return member.level >= content.config.max_level
+
+
+def as_xinde(content: Content, exp: int) -> int:
+    """滿級之後這一筆經驗換得幾點心得（3.5：Config.maxed_exp_per_xinde 換 1，不足的捨去）。只算、不給。"""
+    return max(0, exp) // content.config.maxed_exp_per_xinde
+
+
+def maxed_xinde(state: GameState, content: Content, exp: int) -> int:
+    """本人這一筆經驗在滿級時換成心得（3.5，第 8 批通用）：已經滿級才換、記進心得、回換了幾點；沒滿級回 0（經驗照舊走 add_exp）。
+    升到滿級那一下剩下的經驗不換（照舊丟掉）。同伴不換，照拿經驗（grant_team_exp）。"""
+    p = state.player
+    if not maxed(content, p.member):
+        return 0
+    gained = as_xinde(content, exp)
+    if gained:
+        p.stats["xinde"] = p.stats.get("xinde", 0) + gained
+    return gained
 
 
 def add_exp(content: Content, member, amount: int, name: str) -> list[str]:
@@ -784,18 +836,23 @@ def resonance(state: GameState, content: Content, art: MartialArt | None) -> flo
     return 1 + min(cfg.resonance_cap, max(0.0, state.player.stats.get(stat, 0) * cfg.resonance_per_point))
 
 
-def player_boost(state: GameState, content: Content, world: WorldStateStore) -> encounter.Boost:
+def player_boost(state: GameState, content: Content, world: WorldStateStore, *, seal: bool = True) -> encounter.Boost:
     """玩家本人的加成：臂力管外功、根骨管內功（武學與成長設計 6.1）；整個人再乘上內外搭配與兩門各自的
     正邪共鳴（5.1、7.4）。搭配至少是 BOOST_FLOOR、共鳴至少是 1，所以乘出來的 factor 不會低於下限。
-    再乘身上兵器的加成（兵器設計第三節）。"""
+    再乘身上兵器的加成（兵器設計第三節）與玉璽碎片的戰力（改版第三章，treasures.power_scale：沒碎片、開關關著是 1）。
+    seal=False 不乘碎片：奪璽單挑的快照與江湖水漲的浮動難度照這一份（改版：碎片搶得走、強者的 +10% 不被對手同步吃掉）。"""
     stats, member = state.player.stats, state.player.member
     wugong = player_art(state, content, world, member.wugong_id)
     neigong = player_art(state, content, world, member.neigong_id)
+    factor = (pairing(content, wugong, neigong) * resonance(state, content, wugong) * resonance(state, content, neigong)
+              * (1 + weapons.bonus(state.player.weapon, wugong, content, world)))  # 兵器（兵器設計 3.1）：配不上是 1
+    scale = treasures.power_scale(state, content) if seal else 1.0
+    if scale != 1.0:  # 沒碎片時一個位元也不動（不多乘一次 1.0 之外的東西）
+        factor *= scale
     return encounter.Boost(
         outer=stat_bonus(content, stats.get("str", BASE_STAT)),
         inner=stat_bonus(content, con_of(state, content, world, PLAYER)),
-        factor=pairing(content, wugong, neigong) * resonance(state, content, wugong) * resonance(state, content, neigong)
-        * (1 + weapons.bonus(state.player.weapon, wugong, content, world)),  # 兵器（兵器設計 3.1）：配不上是 1
+        factor=factor,
     )
 
 
@@ -822,11 +879,12 @@ def follower_boost(content: Content, follower: FollowerDef, drill: FollowerDrill
     return encounter.Boost(outer=stat_bonus(content, follower_strength(content, follower, drill)))
 
 
-def team_boosts(state: GameState, content: Content, world: WorldStateStore) -> list[encounter.Boost]:
+def team_boosts(state: GameState, content: Content, world: WorldStateStore, *, seal: bool = True) -> list[encounter.Boost]:
     """跟陣容一一對應（本人、出戰的同伴、部下），一個都不能少——少一個 encounter.team_power 就會報錯，
-    而不是默默漏算（F17、計畫二 G1）。同伴、部下吃自己的屬性（人物資質設計 14.3；原本是空的加成）。"""
+    而不是默默漏算（F17、計畫二 G1）。同伴、部下吃自己的屬性（人物資質設計 14.3；原本是空的加成）。
+    seal 見 player_boost（只動本人那一份；同伴、部下本來就不吃碎片）。"""
     return (
-        [player_boost(state, content, world)]
+        [player_boost(state, content, world, seal=seal)]
         + [mate_boost(state, content, world, key) for key in state.player.team]
         + [follower_boost(content, follower, drill_of(state, key)) for key, follower in follower_rows(state, content)]
     )
@@ -861,6 +919,7 @@ def take_encounter_toll(
     同伴照他自己的身法、根骨（人物資質設計 14.3）。本人身上的防具（裝備四欄設計 4.3）跟化勁相加，合計夾在
     `Config.armor.total_cap`；同伴不吃防具。
     share：對手真的打到你的回合佔幾成（本命戰法讓他定身、打空、打到自己、化影的回合不算，tactics.Clash.blocked_share）；平常是 1。
+    本人帶螭首（玉璽碎片改版，treasures.amount 的 injury）時變成內傷的那一份再乘它；同伴不吃。
     """
     cfg = content.config
     fraction = cfg.encounter_neili_loss.get(tier, 0.0) * (cfg.wild_neili_loss_factor if wild else 1.0) * max(0.0, share)
@@ -876,6 +935,7 @@ def take_encounter_toll(
             lost, hurt = _apply_toll(
                 content, state.player.member, fraction * (1 - cut),
                 agi=stats.get("agi", BASE_STAT), con=con_of(state, content, world, PLAYER),
+                injury=treasures.amount(state, content, "injury"),  # 螭首（玉璽碎片改版）：變成內傷的減半；沒帶是 1
             )
             if round(lost) > 0:  # 本來就見底、一滴都沒得扣時不寫「氣血 -0」（零的變化是雜訊）；內傷照樣寫
                 msgs.append(f"氣血 -{lost:.0f}")  # 照既有慣例寫變化量（跟「銀兩 -5」「心得 +12」同一串）
@@ -1034,7 +1094,7 @@ def gear_bond(content: Content, art: MartialArt, item) -> tuple[TacticBond, str]
         return None
     if item.original and item.secret and item.bound_art == art.id and trait.ultimate_bond is not None:
         return trait.ultimate_bond, BOUND_SOURCE
-    if item.secret and not item.original and item.copy_of is None and item.attribute == art.attribute:
+    if equipment.is_named(item) and item.attribute == art.attribute:  # 隱藏配方的名器與四階名器（正式季整合 5.2：好處照現在的名器）
         rate = content.config.tactics.named_bond_rate
         return TacticBond(desc=NAMED_BOND.format(pct=round(rate * 100)), rate=rate), NAMED_SOURCE
     return None
@@ -1098,7 +1158,10 @@ def foe_tactics(
     char = content.characters.get(figure.character) if figure is not None else None
     if char is None:
         return None
-    holders = tactics.holders_of(content, [(figure.name, tactics.FOE_KEY, char.starting_wugong, char.starting_neigong)])
+    own = tactics.figure_arts(content, char)  # 只認本命（FB-640：起始帶的學來的武學不算）
+    wugong = char.starting_wugong if char.starting_wugong in own else None
+    neigong = char.starting_neigong if char.starting_neigong in own else None
+    holders = tactics.holders_of(content, [(figure.name, tactics.FOE_KEY, wugong, neigong)])
     if not holders:
         return None
     from . import territory  # territory → rules → team：照用的時候才 import
@@ -1220,11 +1283,11 @@ def _odds_text(wins: int, draws: int, runs: int) -> str:
 
 def estimate(
     state: GameState, content: Content, world: WorldStateStore, squad_id: str, *, difficulty: float | None = None,
-    draw_floor: float | None = None, memo: OddsMemo | None = None,
+    draw_floor: float | None = None, memo: OddsMemo | None = None, at: str | None = None,
 ) -> str:
     """勝算的文字；difficulty、draw_floor 同 fight。含會改到贏的機會的功效（破甲、先手、穩、險、借力、連環、厚），不含護命與閃避：
     勝算是贏的機會，那兩個只把落敗變成僵持（人物資質設計 14.4、武學與成長設計 13.4）。memo：模擬的輸入一樣就拿記住的字（OddsMemo，
-    FB-321）；輸入（威力、功效、戰法與條件）照舊每次算，只有四十場的模擬省下來。"""
+    FB-321）；輸入（威力、功效、戰法與條件）照舊每次算，只有四十場的模擬省下來。at：照哪一處的地利（輿圖替別處算，power_vs）。"""
     squad = content.squads[squad_id]
     if difficulty is not None:
         squad = squad.model_copy(update={"difficulty": difficulty})
@@ -1233,17 +1296,22 @@ def estimate(
     mods = trait_mods(content, traits.loadout(state, content, world))
     if draw_floor is not None:
         mods = mods.model_copy(update={"draw_floor": draw_floor})
-    power, foe = power_vs(state, content, world, squad), foe_tactics(state, content, squad, ctx)
+    power, foe = power_vs(state, content, world, squad, at=at), foe_tactics(state, content, squad, ctx)
     if memo is None:
         return odds_word(power, squad, mods=mods, plan=plan, foe=foe)
     return memo.get(odds_key(power, squad, mods, plan, foe), lambda: odds_word(power, squad, mods=mods, plan=plan, foe=foe))
 
 
-def power_vs(state: GameState, content: Content, world: WorldStateStore, squad: Squad, fresh: bool = False) -> float:
-    """全隊此刻對上這一路的威力（氣血係數、加成、屬性相剋、一門打不遍都算；勝算與打起來同一份）。
-    fresh：氣血係數一律當滿的——江湖水漲（rise.big）照這一份浮難度，帶傷上陣照樣吃虧（不然傷得越重對手跟著越弱）。"""
+def power_vs(
+    state: GameState, content: Content, world: WorldStateStore, squad: Squad, fresh: bool = False,
+    *, at: str | None = None, terrain: bool = True, seal: bool = True,
+) -> float:
+    """全隊此刻對上這一路的威力（氣血係數、加成、屬性相剋、一門打不遍、地利都算；勝算與打起來同一份）。
+    fresh：氣血係數一律當滿的——江湖水漲（rise.big）照這一份浮難度，帶傷上陣照樣吃虧（不然傷得越重對手跟著越弱）。
+    at、terrain 照 _styled_fighters：江湖水漲浮難度傳 terrain=False（不然地利被浮上去的難度吃掉，計畫 2026-10-18 2.1）。
+    seal：江湖水漲浮難度傳 False（玉璽碎片的戰力不浮上去，PM 五之一 2），見 player_boost。"""
     arts = team_arts(state, content, world)
-    members, conditions, boosts = _styled_fighters(state, content, world, arts, squad)
+    members, conditions, boosts = _styled_fighters(state, content, world, arts, squad, at=at, terrain=terrain, seal=seal)
     if fresh:
         conditions = [1.0] * len(conditions)
     return encounter.team_power(*_with_attribute((members, conditions, boosts), arts, squad.attribute))
@@ -1251,10 +1319,13 @@ def power_vs(state: GameState, content: Content, world: WorldStateStore, squad: 
 
 def _styled_fighters(
     state: GameState, content: Content, world: WorldStateStore, arts: dict[str, MartialArt], squad: Squad,
+    *, at: str | None = None, terrain: bool = True, seal: bool = True,
 ) -> tuple[list, list[float], list[encounter.Boost]]:
-    """_fighters，再把大場面對手的路數（styles，一門打不遍）乘進每個人的加成：照他身上那一門武學的屬性。
-    fight 與 estimate 都走這裡，勝算才跟打起來一樣。"""
-    members, conditions, boosts = _fighters(state, content, world)
+    """_fighters，再把大場面對手的路數（styles，一門打不遍）乘進每個人的加成：照他身上那一門武學的屬性；
+    最後是地利（terrain_mod.factor，計畫 2026-10-18）：本人與出戰同伴身上的武學、內功一門一門比這一地最濃的意境，部下不吃。
+    at：照哪一處的地利（輿圖替別處算勝算）；不給是玩家此刻腳下（在路上沒有）。terrain=False 不算地利（江湖水漲浮難度）。
+    fight 與 estimate 都走這裡，勝算才跟打起來一樣。seal 見 player_boost。"""
+    members, conditions, boosts = _fighters(state, content, world, seal=seal)
     style = styles.style_of(state, content, world, squad)
     attributes = [arts[m.wugong_id].attribute if m.wugong_id in arts else None for m in members]
     boosts = styles.styled(boosts, attributes, content, style)
@@ -1263,7 +1334,43 @@ def _styled_fighters(
                                 content, world, style)
     if worn != 1.0:
         boosts = [boosts[0].model_copy(update={"factor": boosts[0].factor * worn}), *boosts[1:]]
+    strong = None if not terrain else terrain_mod.here(state, content) if at is None else terrain_mod.strong_at(content, at)
+    if strong is not None:
+        people = 1 + len(state.player.team)  # 本人與出戰同伴在前（team_participants），部下接在後面、不吃
+        boosts = [_on_terrain(b, m, arts, content, strong) if i < people else b
+                  for i, (m, b) in enumerate(zip(members, boosts, strict=True))]
     return members, conditions, boosts
+
+
+def _on_terrain(
+    boost: encounter.Boost, member: encounter.HasMartialArts, arts: dict[str, MartialArt], content: Content, strong: InsightDef,
+) -> encounter.Boost:
+    """一個人的地利：武學那一門的倍數進 outer_scale、內功那一門進 inner_scale；兩門都不相干照原樣。"""
+    def attribute(skill_id: str | None) -> str | None:
+        return arts[skill_id].attribute if skill_id in arts else None
+
+    outer = terrain_mod.factor(attribute(member.wugong_id), content, strong)
+    inner = terrain_mod.factor(attribute(member.neigong_id), content, strong)
+    if outer == 1.0 and inner == 1.0:
+        return boost
+    return boost.model_copy(update={"outer_scale": boost.outer_scale * outer, "inner_scale": boost.inner_scale * inner})
+
+
+def terrain_attributes(
+    state: GameState, content: Content, world: WorldStateStore,
+) -> tuple[list[str | None], list[tuple[str, list[str | None]]]]:
+    """戰報地利那一句要的屬性（terrain_mod.note）：本人身上兩門（照自己那一份）、出戰同伴每一位（名字, 兩門）。"""
+    p = state.player
+    mine = [art.attribute if (art := player_art(state, content, world, sid)) else None
+            for sid in (p.member.wugong_id, p.member.neigong_id)]
+    shared = world.read()
+    mates = []
+    for key in p.team:
+        progress = shared.companions.get(key, CompanionProgress())
+        mates.append((content.characters[key].name, [
+            art.attribute if (art := resolve_art(sid, content, world)) else None for sid in (progress.wugong_id, progress.neigong_id)
+        ]))
+    return mine, mates
 
 
 def worn_attribute(state: GameState, content: Content, world: WorldStateStore) -> str | None:

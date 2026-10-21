@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 
+from .four_tiers import TOP_COMMON
 from .insights import PAIR_ATTRIBUTES
 from .materials import by_tier
 from .models import Content, Material
@@ -51,7 +52,7 @@ STORED = "【{name}】放上了裝備庫。"
 WIELD_MISSING = "裝備庫上沒有這一件。"  # 待 joy 潤（原本 weapons.wield 寫「這一把」：防具也走這一句，量詞跟 DISMANTLE_MISSING 一樣用「一件」）
 WIELDED = "你換上了【{name}】。"  # Game.wield_weapon 照開頭「你換上了」寫修練紀錄
 NOT_NOW = "（此刻無法這麼做。）"
-TIER_WORDS = {1: "一階", 2: "二階", 3: "三階"}
+TIER_WORDS = {1: "一階", 2: "二階", 3: "三階", 4: "四階"}
 NAMED_MARK = "・名器"  # 待 joy 潤：照隱藏配方打出來的那一件，階品後面多這一段（打造隱藏配方設計 4.2）
 DIVINE_MARK = "・神器"  # 待 joy 潤：神器原品，階品後面多這一段（打造隱藏配方設計 5.3）
 COPY_MARK = "・仿品"  # 待 joy 潤：神器仿品
@@ -69,6 +70,24 @@ DISMANTLE_LOST = "，淬過的 {n} 次也一起沒了"  # 待 joy 潤
 DISMANTLE_YES = "拆掉"  # 待 joy 潤：確認層上那一顆
 ORIGINAL_KEPT = "原品不能拆"  # 待 joy 潤：神器原品那一列的拆解鈕灰掉時寫的原因（打造隱藏配方設計 5.4）
 ORIGINAL_KEPT_LINE = "這是神器的原品，一季全江湖只有這一{unit}，拆不得。"  # 待 joy 潤：引擎收到拆原品時回的那一句
+
+
+WEAR_LOW = "還差 {n} 級才穿得上神器"  # 待 joy 潤：神器（原品、仿品）本人 wear_level 級才穿得上（正式季整合 5.8）
+
+
+def wear_problem(state: GameState, content: Content, item: Equipment) -> str | None:
+    """這一件此刻穿不穿得上：輪替季打的神器（collected）要本人 Config.forge_secrets.wear_level 級；其餘一律 None。
+    修練頁與店面那一列的「換上」（wield_ok／wield_note）、鐵匠鋪的「換上」、機器人挑換上的都問它，wield 也擋。"""
+    if not item.collected or item.signature is not None:
+        return None
+    short = content.config.forge_secrets.wear_level - state.player.member.level
+    return WEAR_LOW.format(n=short) if short > 0 else None
+
+
+def wear_row(row: dict, state: GameState, content: Content, item: Equipment) -> dict:
+    """修練頁、店面裝備庫那一列多兩欄（同坐騎那一列）：「換上」按不按得下去、為什麼（wear_problem）。"""
+    problem = wear_problem(state, content, item)
+    return {**row, "wield_ok": problem is None, "wield_note": problem or ""}
 
 
 def kept(item: Equipment) -> str:
@@ -120,11 +139,12 @@ def next_id(state: GameState, slot: str) -> str:
     return f"{SLOTS[slot].prefix}:{state.player.weapon_serial}"
 
 
-def store(state: GameState, item: Equipment) -> str:
-    """拿到一件（2.2）：這一欄身上空著就穿上（重設這一欄的提醒：穿上的是另一件），不然放進裝備庫（呼叫端先用 rack_full 擋）。"""
+def store(state: GameState, item: Equipment, content: Content | None = None) -> str:
+    """拿到一件（2.2）：這一欄身上空著就穿上（重設這一欄的提醒：穿上的是另一件），不然放進裝備庫（呼叫端先用 rack_full 擋）。
+    給了 content、這一件此刻穿不上（wear_problem：15 級以下的神器）就直接進裝備庫（滿了也放：打出來的神器不丟）。"""
     p = state.player
     entry = SLOTS[item.slot]
-    if worn(p, item.slot) is None:
+    if worn(p, item.slot) is None and (content is None or wear_problem(state, content, item) is None):
         setattr(p, item.slot, item)
         if entry.warned:
             setattr(p, entry.warned, False)  # 寶物沒有磨損、沒有提醒旗標（warned 是空字串）
@@ -149,6 +169,9 @@ def wield(state: GameState, content: Content, item_id: str, slots: tuple[str, ..
         return [NOT_NOW]
     if SLOTS[chosen.slot].road_locked and p.journey is not None:
         return [ROAD_LOCKED.format(label=SLOTS[chosen.slot].label)]  # 坐騎（2.3）：閉關中照樣能換，只擋路上
+    problem = wear_problem(state, content, chosen)
+    if problem is not None:  # 神器 15 級才穿得上（正式季整合 5.8）
+        return [f"（{problem}。）"]
     p.rack.remove(chosen)
     current = worn(p, chosen.slot)
     if current is not None:
@@ -179,17 +202,27 @@ def mark_word(item: Equipment) -> str:
         mark = DIVINE_MARK
     elif item.copy_of is not None:
         mark = COPY_MARK
-    elif item.secret is not None:
+    elif is_named(item):
         mark = NAMED_MARK
     else:
         mark = ""
     return mark.removeprefix("・")
 
 
+def is_named(item: Equipment | None) -> bool:
+    """存檔上看是不是名器（不查內容）：照隱藏配方打出來的（secret，神器的原品、仿品不算），或四階擲出來的名器（named_entry，正式季整合 5.2）。
+    階品「・名器」、光色、江湖紀錄、名器同氣都照它認；加成照 named（內容拿掉了那一條就照一般的算）。"""
+    if item is None or item.original or item.copy_of is not None:
+        return False
+    return item.secret is not None or item.named_entry is not None
+
+
 def named(content: Content, item: Equipment | None) -> bool:
-    """名器（打造隱藏配方設計 4.2）：照隱藏配方打出來的（secret），而且內容裡還有那一條（拿掉了加成照一般的算）。仿品、原品不算（它們有自己的基本值，4.3）。"""
-    return (item is not None and item.secret is not None and item.secret in content.forge_secrets
-            and item.copy_of is None and not item.original)
+    """名器（打造隱藏配方設計 4.2）：照隱藏配方打出來的（secret），或四階擲出來的（named_entry，正式季整合 5.2），而且內容裡還有那一條
+    （拿掉了加成照一般的算）。仿品、原品不算（它們有自己的基本值，4.3）。"""
+    if not is_named(item):
+        return False
+    return item.secret in content.forge_secrets if item.secret is not None else item.named_entry in content.tier4_named
 
 
 def grade_line(item: Equipment) -> str:
@@ -200,12 +233,13 @@ def grade_line(item: Equipment) -> str:
 def dismantle_material(content: Content, item: Equipment) -> Material:
     """拆一件拿到的素材（兵器設計 4.7.1、裝備四欄 4.8）：同階；屬性剛柔快慢直接對，陰陽虛實是兩個屬性合出來的
     （insights.PAIR_ATTRIBUTES），從兩個來源裡挑一個，由 id 的 sha256 決定（同一件永遠拆出同一種；演算法不能改，不然舊兵器拆出來的會變）。
-    該階該屬性沒有素材時 by_tier 退回同階的全部。"""
+    該階該屬性沒有素材時 by_tier 退回同階的全部。主料四階的一件拆出三階（正式季整合 12.3 第 37 條：擋住一直重打洗屬性）。"""
     attribute = item.attribute
     sources = next((sorted(pair) for pair, result in PAIR_ATTRIBUTES.items() if result == attribute), None)
     if sources is not None:
         attribute = sources[hashlib.sha256(item.id.encode("utf-8")).digest()[0] % 2]
-    return (by_tier(content, item.tier, attribute) or by_tier(content, 1, attribute) or list(content.materials.values()))[0]
+    tier = min(item.tier, TOP_COMMON)
+    return (by_tier(content, tier, attribute) or by_tier(content, 1, attribute) or list(content.materials.values()))[0]
 
 
 def dismantle_order(item: Equipment) -> tuple[int, int, str]:
@@ -298,4 +332,4 @@ def close_smith(p: PlayerState) -> None:
     """收起鐵匠鋪：選單、打造的單子、停在哪一頁、店面上掌櫃那一句（店面獨立介面設計 1.4）一起清。凡是把 picking_smith 設成 False 的地方
     都走這裡（離開、存檔修補、同步時人不在城鎮、出發），存檔裡不留舊的單子或舊的頁（裝備四欄設計 3.2）。"""
     p.picking_smith, p.smith_draft, p.smith_page = False, None, SMITH_PAGES[0]
-    p.shop_line, p.shop_clue, p.shop_hold = "", "", ""
+    p.shop_line, p.shop_clue, p.shop_hold, p.smith_rule = "", "", "", ""

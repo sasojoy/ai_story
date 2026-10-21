@@ -18,6 +18,12 @@ from tianxia.models import Condition, Effect
 from tianxia.state import PlayerState, TimelineResult
 
 
+@pytest.fixture
+def real(real):
+    real.config.affinity_gain_scale = 1.0  # 這裡量的是寫好的情誼數字；歷史武將同行的情誼放慢（Config.affinity_gain_scale）另測（tests/test_companions.py）
+    return real
+
+
 def _game(content, name="甲", faction="huang", at=None, rank=0):
     game = Game.new(content, name, rng=random.Random(0))
     game.client = None  # 沒有任何地方會叫模型

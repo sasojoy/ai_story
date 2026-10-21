@@ -13,7 +13,7 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from . import allied, figures, insights, mounts, orders, prologue, sortie, territory
+from . import allied, conquest, figures, insights, mounts, orders, prologue, sortie, terrain, territory
 from .calendar import point, stamp_text
 from .models import Content, Location, MapRegion, SimPlayer, TravelMode
 from .rules import (
@@ -239,8 +239,8 @@ def _figure_activity(state: GameState, content: Content, name: str) -> str:
     fig, front = content.figures[fid], figures.state_of(state, content, fid).front
     front_name = next((t.name for t in content.scenario.trends if t.id == front), front)
     text = f"每天約出手 {fig.actions_per_day:g} 次，讓{front_name}{'上升' if goal > 0 else '下降'}"
-    if point(state.world.time, content, state.world).week < fig.active_from_week:
-        text += f"（第 {fig.active_from_week} 週起）"
+    if not figures.started(state, content, fid, state.world.time):
+        text += figures.start_text(state, content, fid)
     return text
 
 
@@ -258,7 +258,7 @@ IDLE_NOTE = "按兵不動，不出營應戰"  # 待 joy 潤：戰線空著、挑
 
 def _regen_note(state: GameState, content: Content) -> str:
     """聲威那一行後面接的「沒人去打……慢慢回來」：沒有時刻表的季、回復開著才有。"""
-    return f"；{REGEN_NOTE}" if figures.untimed(content, state.world) and content.config.figure_prestige_regen > 0 else ""
+    return f"；{REGEN_NOTE}" if figures.upkept(content, state.world) and content.config.figure_prestige_regen > 0 else ""
 
 
 def _here_text(state: GameState, content: Content, fid: str) -> str:
@@ -342,18 +342,39 @@ SIEGE_UNSEEN = "（那裡你還沒摸清）"  # 待 joy 潤（FB-221）：記得
 SIEGE_SOME_UNSEEN = "（另一處你還沒摸清）"  # 待 joy 潤（FB-221）：兩處裡摸清了一處
 SIEGE_AT_SORTIE = "到{where}出陣，打贏一場{enemy}記一次{note}。"  # 待 joy 潤：出陣開著時的攻城（設計第七節）
 SIEGE_AREA_SORTIE = "到{front}一帶{enemy}的地盤出陣，打贏一場記一次。"  # 待 joy 潤
+# 領地爭奪開著時（裁決 20；翻地與爭搶 PM 2026-10-20 第 1 條）：攻城認這一邊此刻進度最高、推得動的那一塊，打贏那裡的守軍（敵方的兵、中立駐軍都算），卡上照 siege_places 寫；待 joy 潤
+SIEGE_CONQUEST_FOE = "守軍"
+SIEGE_AREA_CONQUEST = "到{front}一帶我軍進度最高的幾處出陣，打贏一場守軍記一次。"  # 並列最高的多過 SIEGE_NAMED_MAX（全是 0 時就是那一帶推得動的每一處）
+SIEGE_NONE_CONQUEST = "{front}一帶此刻沒有我軍推得動的地方（剛易手、下了戰書、或碰不到），在那裡打贏記不到。"
 INTERCEPT_SORTIE = "到{place}出陣，撞上對面的運糧隊、打贏記一次。"  # 待 joy 潤（FB-248：出陣開著時糧隊只在這一處，orders.intercept_spots）
 DEFEND_SORTIE = "在{front}一帶自家的地盤出陣守一回，或按「{duty}」（收在「此地還能做」裡），做一次記一次。"  # 待 joy 潤
+# 領地爭奪開著時（裁決 24、FB-565；翻地與爭搶 PM 2026-10-20 第 1 條）：守城記的是自家被對面推得最高、守得動的那幾塊（orders.defend_places），
+# 卡上照它寫，輿圖也只標那幾處；沒有就直說此刻沒有可守的（記不到）。投票與 22:00 公告拿掉了，不再寫「被公告要攻」（dev/flip-1 收尾）。待 joy 潤
+DEFEND_ACT_SORTIE = "出陣守一回，或按「{duty}」（收在「此地還能做」裡）"
+DEFEND_ACT_PLAIN = "按「{duty}」（收在「此地還能做」裡）"
+DEFEND_AT_CONQUEST = "到{where}{act}，做一次記一次。"  # 對面推得最高的自家地方只有一兩處（SIEGE_NAMED_MAX）時寫出地名
+DEFEND_AREA_CONQUEST = "到{front}一帶對面推得最高的幾處自家地方{act}，做一次記一次。"  # 並列最高的多過 SIEGE_NAMED_MAX
+DEFEND_NONE_CONQUEST = "{front}一帶此刻沒有對面在推、守得動的自家地方（剛易手的也守不動），沒有可守的，守了也記不到。"
+# 自家被戰書凍結的那一塊（FB-605，PM 2026-10-21）：照樣列進守城，那一場攻城站守方、守住記一次（出陣守、守勢行動在那裡不算）。待 joy 潤
+DEFEND_SIEGE_CONQUEST = "{where}正等著一場攻城：加入那一場、站守方，守住記一次。"
 
 
 def siege_how(state: GameState, content: Content, order: Order) -> str:
     """軍令卡上攻城那道多寫的一行（FB-221）：記得了次數的地點（orders.siege_places：這條戰線上有敵方陣營隊伍的地方）只有一兩處時
     寫出地名（「到官軍大營遊歷，打贏一場官軍記一次。」）——潁川汝南的黃巾只有官軍大營記得到，寫「一帶」會讓人在潁川郊野、長社白打。
     沒摸清的地點同打擊（strike_how）只寫大區（沒有大區寫戰線），不洩漏名字。三處以上、或一處都沒有（舊存檔），照舊寫那條戰線一帶。
-    出陣開著時說「出陣」、地點照控制方（設計第七節：攻城認出陣的攻打贏）。"""
+    出陣開著時說「出陣」、地點照控制方（設計第七節：攻城認出陣的攻打贏）。
+    領地爭奪開著時（裁決 20；翻地與爭搶）：地點是此刻進度最高的那一塊（siege_places），對手寫「守軍」（中立駐軍也算）；這條線此刻沒有推得動的地方就直說
+    記不到，不指「某一帶敵方的地盤」（那裡打贏記不到：列與記功同一個判斷）。"""
     front = trend_name(content, order.front) if order.front else "戰線"
     places = orders.siege_places(content, order.faction, order.front, state.world) if order.front else []
     enemy = content.scenario.faction_name(orders.ENEMY.get(order.faction or "")) or "對面的兵"
+    if conquest.on(content, state.world):
+        if not places:
+            return SIEGE_NONE_CONQUEST.format(front=front)
+        if len(places) > SIEGE_NAMED_MAX:
+            return SIEGE_AREA_CONQUEST.format(front=front)
+        enemy = SIEGE_CONQUEST_FOE
     if not places or len(places) > SIEGE_NAMED_MAX:
         if sortie.on(content):
             return SIEGE_AREA_SORTIE.format(front=front, enemy=enemy)
@@ -385,6 +406,22 @@ def order_how(state: GameState, content: Content, order: Order) -> str:
     if order.template == "defend":
         duty = content.orders.duties.get(order.faction)
         name = duty.name if duty else "守勢"
+        if conquest.on(content, state.world):  # 領地爭奪（裁決 24、FB-565）：只寫記得到的那幾處，列與記同一個判斷
+            listed = orders.defend_places(content, state.world, order)
+            if not listed:
+                return DEFEND_NONE_CONQUEST.format(front=front)
+            sieged = [loc_id for loc_id in listed if conquest.frozen(state.world, loc_id) is not None]  # 被戰書凍結的（FB-605）：記攻城戰守住
+            places = [loc_id for loc_id in listed if loc_id not in sieged]
+            parts: list[str] = []
+            if places:
+                act = (DEFEND_ACT_SORTIE if sortie.on(content) else DEFEND_ACT_PLAIN).format(duty=name)
+                if len(places) > SIEGE_NAMED_MAX:
+                    parts.append(DEFEND_AREA_CONQUEST.format(front=front, act=act))
+                else:
+                    parts.append(DEFEND_AT_CONQUEST.format(where="或".join(content.locations[loc_id].name for loc_id in places), act=act))
+            if sieged:
+                parts.append(DEFEND_SIEGE_CONQUEST.format(where="、".join(content.locations[loc_id].name for loc_id in sieged)))
+            return "".join(parts)
         if sortie.on(content):
             return DEFEND_SORTIE.format(front=front, duty=name)
         return f"在{front}一帶按「{name}」（收在「此地還能做」裡），做一次記一次。"
@@ -720,6 +757,8 @@ def travel_block(state: GameState, content: Content) -> TravelBlock | None:
         return TravelBlock("鐵匠鋪還開著，先離開才能安排前往", to_jianghu=True)
     if p.picking_market:
         return TravelBlock(mounts.TRAVEL_BLOCKED, to_jianghu=True)  # 待 joy 潤的字在 mounts（atlas 為了騎馬的步調與省體力 import mounts，這句就近讀它）
+    if p.picking_dadian:  # 打點（21 天季的銀兩出口）；待 joy 潤
+        return TravelBlock("還在茶樓雅間裡，先離開才能安排前往", to_jianghu=True)
     if p.picking_donate:  # 大本營的捐軍備（素材與經濟設計第六節）；待 joy 潤
         return TravelBlock("還在軍需官帳前，先離開才能安排前往", to_jianghu=True)
     if p.picking_tavern:  # 酒肆（企劃者 2026-10-18）；同 tavern.TRAVEL_BLOCKED（atlas 不 import tavern：tavern → atlas），待 joy 潤
@@ -815,6 +854,7 @@ def _names(content: Content, loc_ids) -> str:
 
 INSIGHT_LABEL = "**意境**　"
 HERE_INSIGHTS = "這裡能悟：{names}"  # 詳情欄那一行（W3；待 joy 潤）
+TERRAIN_LABEL = "**地利**　"  # 詳情欄地利那一行的標題，字在 terrain.place_line（武學隨地理環境；待 joy 潤）
 
 
 def insight_names(content: Content, loc: Location) -> list[str]:
@@ -841,8 +881,12 @@ def detail_text(state: GameState, content: Content, loc_id: str, odds: Odds) -> 
         trends = "、".join(f"{name} {value}" for name, value in region_trends(state, content, region))
         situation.append(region.name + (f"（{trends}）" if trends else ""))
     side = territory.controller(state.world, content, loc_id)
+    neutral = conquest.on(content, state.world) and conquest.start_kind(state.world, content, loc_id) == conquest.NEUTRAL
     if side is not None:  # 地盤易手（出陣探索與地盤設計 4.3 第 2 點）
-        situation.append(territory.CONTROL_LINE.format(side=content.scenario.faction_name(side, side)))
+        line = territory.CONTROL_LINE.format(side=content.scenario.faction_name(side, side))
+        situation.append(line + (conquest.NEUTRAL_HELD if neutral else ""))  # 領地爭奪：被佔下的中立地多寫一句開季是中立地
+    elif neutral:
+        situation.append(conquest.NEUTRAL_LINE)
     people = haunters(state, content, loc_id)
     standing = [  # 沒有時刻表的季：此刻站在這裡、沒有同名龍頭人物那一段的大勢人物（挑戰每季都有設計 3.8，照地點合併、不照名字）
         fid for fid in figures.present_at(state, content, loc_id) if figures.name_of(content, fid) not in people
@@ -861,6 +905,9 @@ def detail_text(state: GameState, content: Content, loc_id: str, odds: Odds) -> 
     gives = insight_names(content, loc)
     if gives:  # 探索在這裡悟不到什麼（比例是 0、序章的草廬）就整行不寫；摸清了才走到這裡，沒摸清的地點上面已經回了
         parts.append(INSIGHT_LABEL + HERE_INSIGHTS.format(names="、".join(gives)))
+    lie = terrain.place_line(content, loc_id)
+    if lie:  # 地利（武學隨地理環境）：開關關著、這一處沒寫最濃、序章專屬的地方都是空的，整行不寫
+        parts.append(TERRAIN_LABEL + lie)
 
     story: list[str] = []
     if not storyline_off(state, content):  # 第一季不觸發的 beta 主線：玩家看不到它，這一行也不寫（審查 M-3）

@@ -13,9 +13,14 @@
   "heal_at_clinic": false,
   "sortie": {"enabled": false},
   "explore_modes": {"enabled": false},
+  "precise_actions": false,
+  "gather_branches": {"enabled": false},
   "insight_strong": {"enabled": false},
+  "terrain_arts": {"enabled": false},
   "economy": {"gather_cut": false, "sortie_silver": false, "sell": false, "upgrade": false, "donate": false},
+  "four_tiers": {"enabled": false},
   "territory": {"enabled": false},
+  "conquest": {"enabled": false},
   "ambush": {"enabled": false},
   "fortify": {"enabled": false},
   "figure_aid": {"enabled": false},
@@ -39,5 +44,6 @@
     "news": false, "faction_wanted": false, "arena_reach": false, "virtue_insight": false, "lessons": false, "prompt": false,
     "clinic": false, "black_market": false, "virtue_choices": false, "official_wanted": false, "explain": false
   },
-  "battle_from_week": 1
+  "battle_from_week": 1,
+  "mall": {"enabled": false}
 }

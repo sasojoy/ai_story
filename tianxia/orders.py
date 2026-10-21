@@ -23,6 +23,7 @@ SIGN = {"guan": -1, "huang": 1}  # 往己方推：戰況 0 是官軍穩控、100
 ENEMY = {"guan": "huang", "huang": "guan"}
 TOP = 3  # 達成時陣營軍情列出前幾名（軍令文件第二節）
 ISSUED = "本週軍令："  # 發令那一則陣營軍情的開頭
+ISSUED_DAY = "今日軍令："  # 21 天季每天發令那一則的開頭（正式季整合設計 7.1；待 joy 潤）
 DONE = "【軍令達成】"  # 達成那一則陣營軍情的開頭（「你不在的時候」照這兩個開頭挑陣營軍情的要點）
 OPENING_WEEK = 1  # 開局週（OrderWhen.opening_fronts 只在這一週放寬）
 
@@ -42,12 +43,32 @@ def week_of(state: GameState, content: Content) -> int:
     return calendar.point(state.world.time, content, state.world).week
 
 
+def daily(state: GameState, content: Content) -> bool:
+    """21 天季：軍令每天 00:00 發一批（正式季整合設計 7.1），照「期」記的是季曆第幾天；其他季照週。軍令的字照同一個判斷
+    （calendar.orders_daily，FB-502）。"""
+    return calendar.orders_daily(state.world, content)
+
+
+def period_of(state: GameState, content: Content) -> int:
+    """軍令這一期的號碼（Order.week 存的就是它）：21 天季是季曆第幾天，其他季是第幾週。貢獻照舊照週記（week_of）。"""
+    at = calendar.point(state.world.time, content, state.world)
+    return at.cal_day if daily(state, content) else at.week
+
+
+def deadline(state: GameState, content: Content, order: Order) -> float:
+    """這一道的截止（世界秒）：21 天季是隔天 00:00，其他季是下週一 00:00。"""
+    w = state.world
+    if daily(state, content):
+        return calendar.day_start(order.week + 1, content, w)
+    return calendar.week_start(order.week + 1, content, w)
+
+
 def current(state: GameState, content: Content, faction: str | None) -> list[Order]:
     """這一週、這個陣營的軍令（含已達成的）；散人、開關關著是空的。"""
     if faction is None or not active(state, content):
         return []
-    week = week_of(state, content)
-    return [o for o in state.world.orders if o.faction == faction and o.week == week]
+    period = period_of(state, content)
+    return [o for o in state.world.orders if o.faction == faction and o.week == period]
 
 
 def template_of(content: Content, order: Order) -> OrderTemplate:
@@ -106,7 +127,7 @@ def _event_within(state: GameState, content: Content, front: str, weeks: float):
     event = timetable.next_event_on(state, content, front)
     if event is None:
         return None
-    horizon = weeks * calendar.WEEK / calendar.cal_scale(content, state.world)
+    horizon = weeks * calendar.week_seconds(content, state.world)  # 7 天濃縮季的「週」是一段的平均
     gap = timetable.when(state, content, event) - state.world.time
     return event if gap <= horizon + calendar.EPS_SECONDS else None
 
@@ -125,6 +146,17 @@ def siege_places(content: Content, faction: str, front: str, world: WorldState |
     T6 審查 I2：沒有這種地點的戰線，攻城永遠湊不滿，不發攻城。潁川汝南以前沒有官軍隊伍、黃巾在那裡不發攻城；
     FB-184 開了官軍大營（整支官軍）之後黃巾在潁川汝南也有攻城（攻打官軍大營）。"""
     enemy = ENEMY.get(faction)
+    from . import conquest  # noqa: PLC0415  conquest → territory → rules：在函式裡 import
+
+    if conquest.on(content, world):
+        # 領地爭奪（裁決 11；翻地與爭搶 PM 2026-10-20 第 1 條）：這條線上這一邊此刻進度最高、推得動的那一塊（conquest_day.today），而且那裡出陣攻打的對手每一路打贏都記得到
+        # （同 _counts 的 siege_win，FB-531）。打贏那裡的守軍就算，公告了的中立地、被敵方佔下的中立地站的中立駐軍與流寇也算
+        # （裁決 20，PM 2026-10-21）。敵方大本營與廣宗搶不下（conquest.targets 先排掉），推不動、不列（裁決 18）
+        return [
+            loc_id for loc_id in _today(content, world, faction, "attack")
+            if conquest.line_of(world, content, loc_id) == front
+            and _all_enemy(content, faction, conquest.sortie_foes(world, content, loc_id, faction), garrison=True)
+        ]
     if world is not None and territory.on(content):
         return [
             loc_id for loc_id in content.locations
@@ -137,13 +169,28 @@ def siege_places(content: Content, faction: str, front: str, world: WorldState |
     ]
 
 
-def _issuable(state: GameState, content: Content, t: OrderTemplate, front: str, week: int) -> bool:
+def siege_win(faction: str | None, squad_faction: str | None, garrison: bool = False) -> bool:
+    """打贏這一路算不算 faction 的攻城（軍令文件 3.1：敵方陣營的隊伍；操練、流寇、中立駐軍不算）。記功（_counts）與領地爭奪開著時
+    列地點（siege_places）都問它：軍令卡、假人、記功同一個判斷（FB-531）。
+    garrison（領地爭奪在這一季生效，裁決 20，PM 2026-10-21）：攻城＝此刻進度最高的那一塊（翻地與爭搶），打贏那裡的守軍就算——敵方陣營的兵，
+    或沒有陣營的中立駐軍、流寇；自家的、別的陣營（豪強）的隊伍照舊不算。地點是不是那一塊由呼叫端看。"""
+    if garrison and squad_faction is None:
+        return True
+    return squad_faction is not None and squad_faction == ENEMY.get(faction or "")
+
+
+def _all_enemy(content: Content, faction: str, squads: list[str], garrison: bool = False) -> bool:
+    """這裡出陣攻打的對手（至少一路）每一路打贏都算 faction 的攻城（garrison 同 siege_win）。"""
+    return bool(squads) and all(siege_win(faction, content.squads[sid].faction, garrison) for sid in squads)
+
+
+def _issuable(state: GameState, content: Content, t: OrderTemplate, front: str, week: int, opening: bool) -> bool:
     """這種軍令這週在這條戰線發不發得出來（濃縮版內容表 3.1「什麼時候發」）；攻城另外要那條戰線打得到敵方隊伍。
     例外：第 1 週（OPENING_WEEK）、這條戰線在 when.opening_fronts 裡就直接發，front_min／front_max、event_within_weeks、
     losing_by 都不看（FB-054，新手第一週要有一道走得到的軍令）；攻城的「打得到敵方隊伍」照舊先看。"""
     if t.kind == "siege" and not siege_places(content, t.side, front, state.world):
         return False
-    if week == OPENING_WEEK and front in t.when.opening_fronts:  # 開局週：這條戰線不看局勢（FB-054）
+    if opening and front in t.when.opening_fronts:  # 開局週：這條戰線不看局勢（FB-054；21 天季是季曆第 1 週的每一天）
         return True
     when, v = t.when, _value(state, content, front)
     if when.front_min is not None and v < when.front_min:
@@ -202,6 +249,7 @@ def _picks(state: GameState, content: Content, faction: str, week: int) -> list[
     偏好的那一種（preferred_offense）有對象就發它，沒有就改發另一種，兩種都沒有就照優先序給下一道；其餘兩格照舊。
     每週只有一格時沒有「其中一格」可留，照優先序。發出的次序仍照優先序（進攻的那一道排在它的優先序上）。"""
     found: list[tuple[tuple[int, int, int, int], OrderTemplate, str | None, str | None]] = []
+    opening = calendar.point(state.world.time, content, state.world).week == 1 if daily(state, content) else week == OPENING_WEEK
     for rank, t in enumerate(content.orders.templates):
         if t.side != faction:
             continue
@@ -212,9 +260,12 @@ def _picks(state: GameState, content: Content, faction: str, week: int) -> list[
             continue
         turn = 1 if t.kind in SUPPLY and t.kind != preferred_supply(week) else 0  # 這週不輪到的那一種補給排後面
         for front in rules.front_ids(content):
-            if front in content.orders.slots and _issuable(state, content, t, front, week):
+            if front in content.orders.slots and _issuable(state, content, t, front, week, opening):
                 found.append(((t.priority, turn, -_pressure(faction, _value(state, content, front)), rank), t, front, None))
     found.sort(key=lambda item: item[0])
+    if daily(state, content):
+        chosen = _daily_choice(found, week, content.config.season21_daily.orders_per_day)
+        return [(t, front, fid) for _, t, front, fid in chosen]
     slots = content.config.orders_per_week
     reserved = None  # 留給進攻的那一道；沒有留（只有一格、或兩種進攻都沒有對象）就是 None
     if slots >= 2:
@@ -225,6 +276,22 @@ def _picks(state: GameState, content: Content, faction: str, week: int) -> list[
     chosen = rest[:slots] if reserved is None else rest[: slots - 1] + [reserved]
     chosen.sort(key=lambda item: item[0])
     return [(t, front, fid) for _, t, front, fid in chosen]
+
+
+DAILY_TURNS = ("defend", "offense", "supply")  # 21 天季一天一道時輪流的三組：守、進攻（攻城、打擊）、補給（截糧、護糧）
+
+
+def _daily_choice(found: list, day: int, slots: int) -> list:
+    """21 天季一天的軍令（正式季整合設計 7.1，五種照舊）：第一格照第幾天輪流挑守、進攻、補給（進攻與補給照 preferred_offense／
+    preferred_supply 偏好那一種），那一組這一天沒有候選就照優先序；其餘的格照優先序。found 已照優先序排好。"""
+    if slots <= 0 or not found:
+        return []
+    group = DAILY_TURNS[(day - 1) % len(DAILY_TURNS)]
+    kinds = {"defend": ("defend",), "offense": (preferred_offense(day), "strike" if preferred_offense(day) == "siege" else "siege"),
+             "supply": (preferred_supply(day), "escort" if preferred_supply(day) == "intercept" else "intercept")}[group]
+    first = next((item for kind in kinds for item in found if item[1].kind == kind), found[0])
+    rest = [item for item in found if item is not first][: slots - 1]
+    return sorted([first, *rest], key=lambda item: item[0])
 
 
 def _caller(state: GameState, content: Content) -> str:
@@ -241,8 +308,12 @@ def _commander(state: GameState, content: Content, order: Order) -> str:
 
 
 def fill(state: GameState, content: Content, order: Order, text: str) -> str:
-    """填插槽：{戰線}{地點}{起點}{終點}{人物}；{主將} 是那條戰線己方當下的主將，沒有就寫泛稱（RF3）；{號令} 是黃巾發令的人。"""
+    """填插槽：{戰線}{地點}{起點}{終點}{人物}；{主將} 是那條戰線己方當下的主將，沒有就寫泛稱（RF3）；{號令} 是黃巾發令的人；
+    {本週}{這週} 照季寫（軍令每天一道的季〔21 天季、7 天濃縮季〕寫「今日」「今天」；其他季原本的字，calendar.week_word，
+    FB-501、FB-502）。"""
     slots = {
+        "{本週}": calendar.week_word("order_this", content, state.world),
+        "{這週}": calendar.week_word("order_that", content, state.world),
         "{戰線}": rules.trend_name(content, order.front) if order.front else "",
         "{地點}": _loc_name(content, order.location),
         "{起點}": _loc_name(content, order.start),
@@ -283,6 +354,14 @@ def _faction_news(state: GameState, faction: str, text: str) -> None:
     rules.add_rumor(state, text, layer="faction", faction=faction)
 
 
+def issue_day(state: GameState, content: Content, day: int, rng: random.Random, *, redraw: bool = False) -> list[str]:
+    """21 天季每天 00:00 發令（world.DAY_HOOKS；正式季整合設計 7.1）：同 issue，期是季曆第幾天、一個陣營 orders_per_day 道（輪流挑，
+    _daily_choice）、陣營軍情寫「今日軍令：」。其他季什麼都不做（照週一那一串）。"""
+    if not active(state, content) or not daily(state, content):
+        return []
+    return _issue(state, content, day, ISSUED_DAY, redraw)
+
+
 def issue(state: GameState, content: Content, week: int, rng: random.Random, *, redraw: bool = False) -> list[str]:
     """週初發令（world.WEEK_HOOKS 每週一 00:00 跑一次，week 是剛跨進的那一週）。先清掉上週沒達成的（達成的留著）；
     只發「現在這一週」：追趕時一次跨過好幾週，跨過的週不補發（RF1）。每道寫一則陣營軍情「本週軍令：…」。
@@ -290,11 +369,16 @@ def issue(state: GameState, content: Content, week: int, rng: random.Random, *, 
     redraw：管理者的「立刻發本週軍令」（管理者觸發鈕，審查 I-1）——這一週還沒達成的拿掉、照同樣的挑法重挑；已經達成的原封不動
     （進度、套過的效果、給 _enemy_order 與下週 or_enemy_siege 讀的紀錄都留著），重挑出來跟它同一個 id 的那一道跳過、不發軍情，
     所以同一道不會達成兩次。週一的掛鉤不帶它，照舊。"""
-    if not active(state, content):
+    if not active(state, content) or daily(state, content):  # 21 天季改走每天那一串（issue_day）
         return []
+    return _issue(state, content, week, ISSUED, redraw)
+
+
+def _issue(state: GameState, content: Content, week: int, prefix: str, redraw: bool) -> list[str]:
+    """發一期軍令（issue、issue_day 共用；week 是這一期的號碼，21 天季是季曆第幾天）。"""
     w = state.world
     w.orders = [o for o in w.orders if o.done or o.week >= week]
-    if week != week_of(state, content):
+    if week != period_of(state, content):
         return []
     done = {o.id for o in w.orders if o.week == week and o.done}
     if redraw:
@@ -309,24 +393,65 @@ def issue(state: GameState, content: Content, week: int, rng: random.Random, *, 
             if order.id in done:
                 continue
             w.orders.append(order)
-            _faction_news(state, faction.id, f"{ISSUED}{order.text}")
+            _faction_news(state, faction.id, f"{prefix}{order.text}")
     return []
 
 
 # ── 記功與達成 ────────────────────────────────────────────
 
 PERSONAL = {"siege": "win", "defend": "duty", "intercept": "win", "escort": "convoy", "strike": "challenge"}
+# 領地爭奪：自家被戰書凍結的那一塊，攻城戰站守方、守住了（Game._settle_siege 替每一個守方的人記一次；FB-605）。那一塊守不動進度，
+# 在那裡出陣守、按守勢行動（duty）不算；別的守城地方反過來只認 duty
+SIEGE_GUARD = "siege_guard"
+
+
+def _today(content: Content, world: WorldState | None, side: str | None, how: str) -> list[str]:
+    """領地爭奪：這一邊此刻進度最高、推得動的那一塊（attack），或自家被推得最高、守得動的那一塊（defend）（conquest_day.today；
+    翻地與爭搶 PM 2026-10-20 第 1 條，第二批是今天公告的目標）。"""
+    from . import conquest_day  # noqa: PLC0415  conquest_day → conquest → territory → rules：在函式裡 import
+
+    return conquest_day.today(world, content, side, how) if world is not None and side is not None else []
+
+
+def defend_places(content: Content, world: WorldState | None, o: Order) -> list[str]:
+    """領地爭奪在這一季生效時，這道守城軍令記得了次數的地點（裁決 11、24；FB-565）：這條戰線上自家佔著、被推得最高、守得動的區塊
+    （conquest_day.today 的 defend，翻地與爭搶 PM 2026-10-20 第 1 條；沒人在推就沒有），加上自家被戰書凍結的那幾塊（FB-605：那裡記的是攻城戰守住，
+    _counts 的 SIEGE_GUARD）。記功（_counts）、假人往哪走（targets）、守城軍令卡的做法
+    （atlas.order_how）、輿圖的守城標記（mapdata._order_marks）、duty_counts 都問它，列的與記的不會對不上。
+    關著的季是空的（舊規則整條戰線都記，各處照舊）。"""
+    from . import conquest  # noqa: PLC0415  conquest → territory → rules：在函式裡 import
+
+    if o.front is None or not conquest.on(content, world):
+        return []
+    return [loc for loc in _today(content, world, o.faction, "defend") if conquest.line_of(world, content, loc) == o.front]
 
 
 def _counts(
     content: Content, o: Order, kind: str, location: str | None, front: str | None, squad: str | None,
-    squad_faction: str | None, figure: str | None, order: str | None,
+    squad_faction: str | None, figure: str | None, order: str | None, world: WorldState | None = None,
 ) -> bool:
-    """這一次個人行動算不算這道軍令的一次（軍令文件 3.1～3.4、4.5）。"""
-    if PERSONAL.get(o.template) != kind:
+    """這一次個人行動算不算這道軍令的一次（軍令文件 3.1～3.4、4.5）。world 給了而且領地爭奪在這一季生效時，攻城與守城照今天的時程表
+    （裁決 11；翻地與爭搶 PM 2026-10-20 第 1 條：攻城＝這一邊此刻進度最高的那一塊打贏那裡的守軍〔siege_win(garrison=True)：敵方陣營的兵，
+    中立駐軍、流寇也算，裁決 20；同 siege_places，FB-531〕；守城＝自家被推得最高的那一塊，被戰書凍結的那一塊認攻城戰守住〔SIEGE_GUARD，FB-605〕）。"""
+    from . import conquest  # noqa: PLC0415
+
+    guarding = kind == SIEGE_GUARD and o.template == "defend"
+    if PERSONAL.get(o.template) != kind and not guarding:
         return False
+    on = conquest.on(content, world)
+    if o.template == "defend" and on:
+        if location not in defend_places(content, world, o):  # 守城認自家被推得最高的那一塊（裁決 24；FB-565 卡與輿圖也讀它）
+            return False
+        return guarding == (conquest.frozen(world, location) is not None)  # 凍結的那一塊只認攻城戰守住，別處只認出陣守、守勢行動
+    if guarding:  # 攻城戰只在領地爭奪的季
+        return False
+    if o.template == "siege" and on:
+        spots = _today(content, world, o.faction, "attack")
+        if location not in spots or conquest.line_of(world, content, location) != o.front:
+            return False
+        return siege_win(o.faction, squad_faction, garrison=True)
     if o.template == "siege":  # 在那條戰線遊歷打贏一場敵方陣營的隊伍（操練、流寇不算）
-        return front == o.front and squad_faction is not None and squad_faction == ENEMY.get(o.faction)
+        return front == o.front and siege_win(o.faction, squad_faction)
     if o.template == "intercept":  # 在運糧隊在的那幾站（intercept_spots）打贏敵方的運糧隊
         enemy = content.orders.convoy_squads.get(ENEMY.get(o.faction, ""))
         return squad is not None and squad == enemy and location is not None and o.location is not None \
@@ -362,8 +487,8 @@ def _leak(state: GameState, content: Content, o: Order, text: str) -> None:
 def front_push(state: GameState, content: Content, front: str, amount: int) -> tuple[int, list[str]]:
     """軍令達成推戰線 amount 點（帶正負號）：盡頭阻力開著時照推之前的戰線打折（push.resistance，出陣探索與地盤設計 5.1），
     四捨五入成整點（push.round_half_away）。回傳（真的推的整點, change_trend 的訊息）。時刻表、決戰、管理者不走這裡。"""
-    tuning = content.config.push_resistance
-    moved = amount
+    tuning = push.tuning_for(state.world, content)  # 21 天季照自己那一組（7.4）
+    moved = push.round_half_away(amount)
     if tuning.enabled and amount:
         moved = push.round_half_away(push.resistance(rules.trend_value(state, content, front), amount, tuning))
     return moved, rules.change_trend(state, content, front, moved)
@@ -375,10 +500,11 @@ def _complete(state: GameState, content: Content, o: Order) -> list[str]:
     o.done, o.done_time = True, state.world.time
     t = template_of(content, o)
     effect, sign = t.effect, SIGN.get(o.faction, 0)
+    share = content.config.season21_daily.order_effect_share if daily(state, content) else 1.0  # 21 天季一天一道：效果量打折（7.1）
     msgs: list[str] = []
 
     def apply(nominal: int) -> int:
-        moved, lines = front_push(state, content, o.front, sign * nominal)
+        moved, lines = front_push(state, content, o.front, sign * nominal * share)
         msgs.extend(lines)
         return abs(moved) if sign else nominal
 
@@ -399,7 +525,7 @@ def _complete(state: GameState, content: Content, o: Order) -> list[str]:
             timetable.add_mod(state, content, event.id, o.faction, effect.event_mod)  # 沒有 roll_side 的大事 add_mod 自己略過
     elif o.template == "strike" and o.figure is not None:
         if figures.state_of(state, content, o.figure).status == "active":  # 已經退場、下獄的不再扣（RF3）
-            msgs += figures.defeat(state, content, o.figure, -effect.figure_prestige)
+            msgs += figures.defeat(state, content, o.figure, -effect.figure_prestige * share)
     top = sorted(o.progress.items(), key=lambda item: -item[1])[:TOP]  # 同次數照先出力的順序（sorted 是穩定的）
     names = "、".join(o.shown.get(name, name) for name, _ in top)
     news = f"{DONE}{fill(state, content, o, t.faction_rumor)}出力最多：{names}。"
@@ -419,7 +545,7 @@ def credit(
     「某位少俠」照舊。散人、開關關著回空。"""
     msgs: list[str] = []
     for o in current(state, content, faction):
-        if o.done or not _counts(content, o, kind, location, front, squad, squad_faction, figure, order):
+        if o.done or not _counts(content, o, kind, location, front, squad, squad_faction, figure, order, state.world):
             continue
         o.progress[name] = o.progress.get(name, 0) + weight
         o.shown[name] = shown or name
@@ -471,7 +597,12 @@ def win_counts(state: GameState, content: Content, faction: str | None, loc_id: 
 
 
 def duty_counts(state: GameState, content: Content, faction: str | None, loc_id: str) -> bool:
-    """在這裡做守勢行動，會替這週還沒達成的守城記一次。"""
+    """在這裡做守勢行動，會替這週還沒達成的守城記一次（領地爭奪：自家被推得最高的那一塊，裁決 11、翻地與爭搶）。"""
+    from . import conquest  # noqa: PLC0415
+
+    if conquest.on(content, state.world):
+        return any(o.template == "defend" and not o.done and _counts(content, o, "duty", loc_id, None, None, None, None, None, state.world)
+                   for o in current(state, content, faction))
     front = rules.front_of(content, loc_id)
     return any(o.template == "defend" and not o.done and o.front == front for o in current(state, content, faction))
 
@@ -481,20 +612,25 @@ def strike_on(state: GameState, content: Content, faction: str | None, fid: str)
     return any(o.template == "strike" and not o.done and o.figure == fid for o in current(state, content, faction))
 
 
-def targets(state: GameState, content: Content, faction: str | None) -> list[str]:
+def targets(state: GameState, content: Content, faction: str | None, skip: frozenset[str] = frozenset()) -> list[str]:
     """假人往哪裡走：這週還沒達成的軍令要去的地點（攻城、守城：那條戰線的地點；截糧：運糧隊在的那幾站〔intercept_spots〕；護糧：身上有
-    這一道的糧車就是終點，沒有而且糧草夠就是起點；打擊：人物當下的所在），照內容檔的地點順序。"""
+    這一道的糧車就是終點，沒有而且糧草夠就是起點；打擊：人物當下的所在），照內容檔的地點順序。skip 裡的那幾種軍令不算（假人分辨「只為了截糧才去」，
+    bot_policy._order_hop）。"""
+    from . import conquest  # noqa: PLC0415  conquest → territory → rules：在函式裡 import
     from .materials import grain_of  # noqa: PLC0415  只有這裡用得到
 
     p = state.player
     wanted: set[str] = {p.convoy.to_loc} if p.convoy is not None else set()  # 押著的車一定送到（那一道沒了也照送，T6 審查 I3）
     for o in current(state, content, faction):
-        if o.done:
+        if o.done or o.template in skip:
             continue
         if o.template == "siege":
             wanted |= set(siege_places(content, o.faction, o.front, state.world))
         elif o.template == "defend":
-            wanted |= {loc for loc in content.locations if rules.front_of(content, loc) == o.front}
+            if conquest.on(content, state.world):  # 領地爭奪：自家被推得最高的那一塊（裁決 11、翻地與爭搶；同記功，FB-565）
+                wanted |= set(defend_places(content, state.world, o))
+            else:
+                wanted |= {loc for loc in content.locations if rules.front_of(content, loc) == o.front}
         elif o.template == "intercept" and o.location is not None:
             wanted |= intercept_spots(content, o.location)
         elif o.template == "escort":

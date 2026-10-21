@@ -132,7 +132,8 @@ def test_the_state_is_small_and_counts_each_squad_once():
     game = _game()
     calls = []
     real = game.odds
-    game.odds = lambda sid: calls.append(sid) or real(sid)
+    game.odds = lambda sid, at=None: calls.append(sid) or real(sid, at=at)  # 每一處照那一處的地利問（武學隨地理環境）
+    game.content.config.terrain_arts.enabled = False  # 同一支隊伍只算一次：地利關著時（開著時同一路對手、同一種地利一次，見 test_terrain_arts）
     st = game.map_state()
     assert len(json.dumps(st, ensure_ascii=False).encode()) < 40_000
     assert calls and len(calls) == len(set(calls))

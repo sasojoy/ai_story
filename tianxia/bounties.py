@@ -19,12 +19,13 @@ from __future__ import annotations
 
 import math
 import random
+from typing import NamedTuple
 
-from . import allied, calendar, equipment, gender, ranger, renown, roster, team, territory, treasures, weapons
+from . import allied, calendar, equipment, gender, materials, ranger, renown, roster, team, territory, treasures, weapons
 from .characters import name_key
 from .models import WEAPON_KINDS, Choice, Content, Location
 from .state import Bounty, GameState, PlayerState, Weapon, WorldState
-from .world_state import WorldStateStore, season_length_days
+from .world_state import WorldStateStore
 
 KIND_NAMES = {"strike": "討伐", "scout": "打探", "escort": "護送", "wanted": "通緝", "arms": "求兵"}
 GIVE_KINDS = ("arms",)  # 求兵：不用揭，在懸賞榜上直接交（懸賞榜設計第四節）；求藝企劃者 2026-10-21 拿掉
@@ -57,6 +58,12 @@ SIGNATURE_KEPT = "本命兵器交不得"  # 待 joy 潤（打造第三批：手�
 ONLY_ORIGINAL = "（你身上對得上的只有神器的原品，原品交不得）"  # 待 joy 潤：灰掉那一行裡、只有原品對得上的那一張後面（FB-145）
 ONLY_SIGNATURE = "（你身上對得上的只有名將的本命兵器，本命兵器交不得）"  # 待 joy 潤（打造第三批；FB-145 的本命兵器版）
 WANT_ARMS = "這一張要屬{attribute}的{noun}。"  # 待 joy 潤（noun 照 _noun）
+# 21 天季每張附的那一樣（正式季整合設計 6.1 第 2 點）：賞那一段最後寫一句（待 joy 潤）
+ATTACH_NOTES = {"strike": "・二階素材（偶有三階）", "scout": "・{pill} 一顆", "escort": "・二階素材"}
+# 21 天季的懸賞卡與告示把賞拆成小籤（企劃者挑第 5 批畫面第三組丙）：reward_tags 一格一樣，重賞那一格與「照等級」那一句
+PRIZE_TAG = "重賞：{what}"  # 待 joy 潤
+GIFT_SHORT = {"strike": "＋二階", "escort": "＋二階", "scout": "＋{pill}"}  # 待 joy 潤：告示正面附贈那一格（FB-391，紙上那一格的短寫）；求藝那一格 2026-10-21 跟求藝一起拿掉
+LEVEL_NOTE = "賞照你第 {level} 級"  # 待 joy 潤
 ENEMY = {"guan": "huang", "huang": "guan"}  # 自動掛單的兩個陣營與他們的對頭（同軍令）
 BOARD = "懸賞榜"
 SEASON_END = "到季末"  # 待 joy 潤：期限到季末或過了季末時寫這個（due_text）
@@ -104,7 +111,8 @@ def close_board(p: PlayerState) -> None:
 
 
 def week_seconds(state: GameState, content: Content) -> float:
-    return calendar.WEEK / calendar.cal_scale(content, state.world)
+    """通緝的「一週」（post_weeks 照它退押金）：季曆一週；7 天濃縮季是一段的平均（calendar.week_seconds）。"""
+    return calendar.week_seconds(content, state.world)
 
 
 def quota(content: Content) -> int:
@@ -150,16 +158,26 @@ def title(content: Content, b: Bounty) -> str:
 
 STRIKE_SORTIE = "出陣攻打贏"  # 待 joy 潤（FB-249）：出陣開著時討伐怎麼交差
 STRIKE_GATHER = "找素材撞上的那一場也算"  # 待 joy 潤：探索三選一開著時多的那半句（散人不出陣，討伐靠這裡）
+# 一類一顆生效的季（FB-420）：找素材不打仗，討伐在練功交差（待 joy 潤）
+STRIKE_PRECISE = "到{target}練功或出陣攻打贏一場{enemy}的隊伍"
+STRIKE_PRACTICE = "到{target}練功打贏一場{enemy}的隊伍"
 
 
-def how(content: Content, b: Bounty) -> str:
-    """怎麼完成（一句）。討伐在出陣開著時寫出陣攻（與探索三選一的找素材撞上），不寫遊歷（FB-249）。"""
+def how(content: Content, b: Bounty, state: GameState | None = None, world: WorldState | None = None) -> str:
+    """怎麼完成（一句）。討伐在出陣開著時寫出陣攻（與探索三選一的找素材撞上），不寫遊歷（FB-249）；一類一顆在這一季生效時
+    （precise.on，要給 state 或 world）寫練功（FB-420：找素材不打仗了），看的人是散人（不出陣）只寫練功。懸賞卡、告示、紙上、揭下的回話、
+    傳聞與書信都走這一句；只給 world 的（陣營傳聞，沒有看的人）照陣營的人寫（FB-435）。"""
+    world = state.world if state is not None else world
     if b.motive == "求援":  # 求援委託：護衛、犒軍那位人物也算（大勢人物擴充第三批，跟「大勢人物參戰與護衛」對齊）
-        return how(content, b.model_copy(update={"motive": None})) + RALLY_AID.format(who=issuer(content, b))
+        return how(content, b.model_copy(update={"motive": None}), state, world) + RALLY_AID.format(who=issuer(content, b))
     if b.kind == "strike":
-        from . import explore_modes, sortie  # noqa: PLC0415  延後 import 只是保險
+        from . import explore_modes, precise, sortie  # noqa: PLC0415  延後 import 只是保險
 
         target = _loc_name(content, b.location)
+        if precise.on(content, world):
+            ranger = state is not None and state.player.faction is None  # 散人不出陣
+            line = STRIKE_PRECISE if sortie.on(content) and not ranger else STRIKE_PRACTICE
+            return line.format(target=target, enemy=_enemy_name(content, b))
         if sortie.on(content):
             ways = f"{STRIKE_SORTIE}，{STRIKE_GATHER}" if explore_modes.on(content) else STRIKE_SORTIE
             return f"到{target}打贏一場{_enemy_name(content, b)}的隊伍（{ways}）"
@@ -197,9 +215,11 @@ def _left(b: Bounty) -> int:
 
 
 def to_season_end(b: Bounty, content: Content, world: WorldState) -> bool:
-    """這一張的期限寫「到季末」：到期在名義季長（開季時蓋的章）或之後。第 11 週掛的正好到季末、第 12 週掛的在季末後一週。
-    比的是名義季長，不是真正收季的時刻：第一季管理者可以把季末往後排（Game.admin_schedule），這種單要撐到季真的收了（past_due）。"""
-    return b.expires >= season_length_days(world, content) * calendar.DAY - calendar.EPS_SECONDS
+    """這一張的期限寫「到季末」：到期在名義季末（calendar.nominal_end：季長照開季時蓋的章）或之後。第 11 週掛的正好到季末、第 12 週掛的在季末後一週。
+    比的是名義季末，不是真正收季的時刻：第一季管理者可以把季末往後排（Game.admin_schedule），這種單要撐到季真的收了（past_due）。
+    照現實天的季（21 天、7 天）名義季末要扣開季偏移（FB-500：週三 14:00 開的 7 天季季末是 7 天減 14 小時，以前比季長 × DAY，
+    剛好在季末到期的第 6 天那一批判不成「到季末」）；週末、14 天的季偏移是 0，照舊是季長 × DAY。"""
+    return b.expires >= calendar.nominal_end(content, world) - calendar.EPS_SECONDS
 
 
 def past_due(b: Bounty, content: Content, world: WorldState) -> bool:
@@ -229,10 +249,23 @@ def due_short(b: Bounty, content: Content, world: WorldState) -> str:
     """店面告示上那一行短的（FB-196，草圖「期限 第 6 週・剩 2」）：第一季只寫週次、規則關著只寫第幾天，到季末寫「到季末・剩 N」。
     兩欄的告示在 375 寬放不下 due_line 那一整行；完整的時刻與「名額還剩 N」留在點開的紙上。待 joy 潤：寫法。
     週次寫最後還有效的那一週（PM 2026-10-14）：自動掛的單在第 N 週週一 00:00 到期，第 N 週一開始就過了，寫「到第 N−1 週」；
-    到期不在週一 00:00 的（管理者改過、照實際時刻的）寫到期那一刻所在的週「期限 第 N 週」。第 1 週週一 00:00 沒有前一週，照後者寫。"""
+    到期不在週一 00:00 的（管理者改過、照實際時刻的）寫到期那一刻所在的週「期限 第 N 週」。第 1 週週一 00:00 沒有前一週，照後者寫。
+    7 天濃縮季（week7_on）週是段，對不上任何東西：每一張都照到期那一刻寫第幾天（00:00 到期寫「到第 N−1 天」，其餘「期限 第 N 天」），
+    不分每天掛的那一批、大勢人物的追剿復仇、系統與玩家掛的通緝（FB-506）；其他季一個字不變（21 天季仍只有每天那一批寫週幾，其餘寫週次）。"""
     left = _left(b)
     if to_season_end(b, content, world):
         return f"{SEASON_END}・剩 {left}"
+    if calendar.week7_on(world, content):  # 7 天濃縮季：只寫第幾天（calendar.point_text 的 by_day；待 joy 潤）。不看 b.day：追剿、復仇、系統與玩家掛的通緝沒有第幾天，也照到期那一刻寫（FB-506）
+        at = calendar.point(b.expires, content, world)
+        if (at.hour, at.minute) == (0, 0):
+            return f"到第 {calendar.point(b.expires - 1, content, world).cal_day} 天・剩 {left}"
+        return f"期限 第 {at.cal_day} 天・剩 {left}"
+    if b.day and calendar.season21_on(world, content):  # 21 天季每天一批：在某天 00:00 到期，寫最後還有效的那一天（待 joy 潤）
+        at = calendar.point(b.expires, content, world)
+        if (at.hour, at.minute) == (0, 0):
+            last = calendar.point(b.expires - 1, content, world)
+            return f"到第 {last.week} 週週{calendar.WEEKDAYS[last.weekday]}・剩 {left}"
+        return f"期限 第 {at.week} 週週{calendar.WEEKDAYS[at.weekday]}・剩 {left}"
     if calendar.season_one_on(world, content):
         at = calendar.point(b.expires, content, world)
         if (at.weekday, at.hour, at.minute) == (0, 0, 0) and at.week > 1:
@@ -395,25 +428,84 @@ def has_prize(content: Content, b: Bounty) -> bool:
     return bool(b.prize) and not b.done_by and treasures.prize_on(content, b.prize)
 
 
-def reward_text(state: GameState, content: Content, b: Bounty) -> str:
-    """賞的那一段（選單、懸賞卡、揭下的回話共用）：「賞銀 20・經驗 15・俠名 +3」。功績只有散人看得到（ranger.active）；
-    名聲開著時功績記成善名或惡名，照此刻走的路寫（deed_word）。
-    求兵的銀兩照交的那一把，寫成一段範圍（每顆交出鈕上另寫實拿多少，懸賞榜設計 4.7）。"""
+class RewardBits(NamedTuple):
+    """賞的每一樣（reward_text 接成一行、reward_tags 拆成小籤，兩邊讀同一份）。silver 是寫出來的字（求兵是一段範圍），
+    silver_short 只有數字（告示角上的朱印）；deed 是（帳的名字, 功績）或 None；gift 是附的那一樣（不帶開頭的「・」）。"""
+
+    silver: str
+    silver_short: str
+    exp: int
+    xinde: int
+    deed: tuple[str, int] | None
+    gift: str
+    prize: str
+
+
+def reward_bits(state: GameState, content: Content, b: Bounty) -> RewardBits:
+    """賞的那幾樣（照 reward_text 原本的算法）：功績只有散人看得到（ranger.active）；名聲開著時功績記成善名或惡名（deed_word）。
+    求兵的銀兩照交的那一把，寫成一段範圍（每顆交出鈕上另寫實拿多少，懸賞榜設計 4.7）；21 天季滿級經驗換成心得（3.5）。"""
     cfg = content.config.bounties
     deeds = b.deeds if ranger.active(state, content) else 0
     exp = _exp(state, content, b)
     xinde = cfg.xinde.get(b.kind, 0)
+    if exp and team.maxed(content, state.player.member):  # 滿級：經驗換成心得（3.5，第 8 批起每一種季都是）
+        xinde, exp = xinde + team.as_xinde(content, exp), 0
     if b.kind == "arms":
         low, high = (_silver(state, content, b, base=price * cfg.arms_tier["1"])
                      for price in (min(cfg.arms_silver.values()), max(cfg.arms_silver.values())))
-        silver = f"{low}～{high}（照品質，高階另加）"  # 待 joy 潤
+        short = f"{low}～{high}"
+        silver = f"{short}（照品質，高階另加）"  # 待 joy 潤
     else:
-        silver = str(_silver(state, content, b))
-    text = f"賞銀 {silver}" + (f"・經驗 {exp}" if exp else "") + (f"・心得 {xinde}" if xinde else "") \
-        + (f"・{deed_word(state, content)} +{deeds}" if deeds else "")
-    if has_prize(content, b):  # 重賞（裝備四欄 6.4）：只給第一個交差的人，給出去了就不再寫
-        text += treasures.PRIZE_NOTE.format(what=treasures.PRIZE_WORDS[b.prize])
+        silver = short = str(_silver(state, content, b))
+    gift = ""
+    if b.kind in ATTACH_NOTES and _daily_pay(state, content, b):
+        gift = ATTACH_NOTES[b.kind].format(pill=content.config.stamina_pill_name)
+    prize = treasures.PRIZE_WORDS[b.prize] if has_prize(content, b) else ""  # 重賞只給第一個交差的人，給出去了就不再寫
+    return RewardBits(silver, short, exp, xinde, (deed_word(state, content), deeds) if deeds else None, gift.removeprefix("・"), prize)
+
+
+def reward_text(state: GameState, content: Content, b: Bounty) -> str:
+    """賞的那一段（選單、懸賞卡、揭下的回話共用）：「賞銀 20・經驗 15・俠名 +3」，附的那一樣與重賞接在後面（reward_bits）。"""
+    r = reward_bits(state, content, b)
+    text = f"賞銀 {r.silver}" + (f"・經驗 {r.exp}" if r.exp else "") + (f"・心得 {r.xinde}" if r.xinde else "") \
+        + (f"・{r.deed[0]} +{r.deed[1]}" if r.deed else "")
+    if r.gift:
+        text += f"・{r.gift}"
+    if r.prize:
+        text += treasures.PRIZE_NOTE.format(what=r.prize)
     return text
+
+
+def reward_tags(state: GameState, content: Content, b: Bounty) -> list[dict] | None:
+    """21 天季的懸賞卡與放大的紙把賞拆成小籤（企劃者挑第 5 批畫面第三組丙）：一樣一格，{"k": 名目, "v": 數字}；附的那一樣
+    {"v": …, "kind": "gift"}（金框）、重賞 {"v": …, "kind": "prize"}（紅框）。週末與 14 天的季是 None：網頁照舊寫 reward_text 那一行。"""
+    if not calendar.season21_on(state.world, content):
+        return None
+    r = reward_bits(state, content, b)
+    tags = [{"k": "銀", "v": r.silver}]
+    if r.exp:
+        tags.append({"k": "經驗", "v": str(r.exp)})
+    if r.xinde:
+        tags.append({"k": "心得", "v": str(r.xinde)})
+    if r.deed:
+        tags.append({"k": r.deed[0], "v": f"+{r.deed[1]}"})
+    if r.gift:
+        tags.append({"v": r.gift, "kind": "gift"})
+    if r.prize:
+        tags.append({"v": PRIZE_TAG.format(what=r.prize), "kind": "prize"})
+    return tags
+
+
+def gift_short(state: GameState, content: Content, b: Bounty) -> str:
+    """告示正面附贈那一格（FB-391）：有附的那一樣（reward_bits 的 gift）才有，照種類寫短的；沒有是空字串。"""
+    if not reward_bits(state, content, b).gift:
+        return ""
+    return GIFT_SHORT.get(b.kind, "").format(pill=content.config.stamina_pill_name)
+
+
+def level_note(state: GameState, content: Content, b: Bounty) -> str:
+    """賞照揭的人的等級長的那幾張（_daily_pay）寫「賞照你第 N 級」；其餘空字串。"""
+    return LEVEL_NOTE.format(level=state.player.member.level) if _daily_pay(state, content, b) else ""
 
 
 def deed_word(state: GameState, content: Content) -> str:
@@ -437,11 +529,49 @@ def _silver(state: GameState, content: Content, b: Bounty, base: int | None = No
     if b.kind == "wanted":
         return b.silver
     amount = b.silver if base is None else base
+    if _daily_pay(state, content, b):  # 21 天季（6.1）：等級 × 每級的錢；求兵照那一把再加這一份
+        per = content.config.season21_daily.silver_per_level.get(b.kind, 0) * state.player.member.level
+        amount = per if base is None else base + per
     return round(amount * ranger.bounty_factor(state, content) * _share(state, content, b))
 
 
 def _exp(state: GameState, content: Content, b: Bounty) -> int:
+    if _daily_pay(state, content, b):  # 21 天季（6.1）：這一級升下一級的經驗 × 比例
+        ratio = content.config.season21_daily.exp_ratio.get(b.kind, 0)
+        return round(team.level_cost(content.config, state.player.member.level) * ratio * _share(state, content, b))
     return round(content.config.bounties.exp.get(b.kind, 0) * _share(state, content, b))
+
+
+def _daily_pay(state: GameState, content: Content, b: Bounty) -> bool:
+    """這一張照 21 天季的算法給（正式季整合設計 6.1）：賞照揭的人的等級長、討伐打探護送各附一樣東西。通緝照押金，不算。"""
+    return calendar.season21_on(state.world, content) and b.kind in content.config.season21_daily.exp_ratio
+
+
+def _attached(state: GameState, content: Content, world: WorldStateStore, b: Bounty) -> list[str]:
+    """21 天季每張附的那一樣（6.1 第 2 點）：討伐給這一路對手屬性的二階一個、另擲 strike_tier3_chance 一個同屬性三階；
+    打探給一顆回體丹；護送給終點那一處屬性的二階一個。對手、終點沒寫屬性就照同階隨便一個（materials.by_tier 退回同階全部）。
+    自己一份亂數（季數＋名號＋懸賞 id），不碰 Game.rng；陣營的人也全給（一半的只有銀兩與經驗）。"""
+    if b.kind not in ATTACH_NOTES or not _daily_pay(state, content, b):
+        return []
+    if b.kind == "scout":
+        state.player.stamina_pills += 1
+        return [f"{content.config.stamina_pill_name} +1"]
+    rng = random.Random(f"bounty-attach|{world.get_season_number()}|{state.player.name}|{b.id}")
+    if b.kind == "strike":
+        squad = content.squads.get(b.squad or "")
+        attribute = squad.attribute if squad is not None else None
+    else:
+        loc = content.locations.get(b.end or "")  # 終點的屬性照它的素材（Location.materials 是素材 id，同路邊採集）
+        found = [content.materials[m].attribute for m in (loc.materials if loc is not None else []) if m in content.materials]
+        attribute = rng.choice(found) if found else None
+    msgs: list[str] = []
+    tiers = [2] + ([3] if b.kind == "strike" and rng.random() < content.config.season21_daily.strike_tier3_chance else [])
+    for tier in tiers:
+        pool = materials.by_tier(content, tier, attribute)
+        line = materials.grant(state, content, rng.choice(pool).id, 1) if pool else None
+        if line:
+            msgs.append(line)
+    return msgs
 
 
 def take(state: GameState, content: Content, bounty_id: str) -> list[str]:
@@ -453,7 +583,7 @@ def take(state: GameState, content: Content, bounty_id: str) -> list[str]:
         return [problem]
     if name_key(state.player.name) not in (name_key(t) for t in b.takers):
         b.takers.append(state.player.name)
-    return [f"你揭下了「{title(content, b)}」：{how(content, b)}。（{reward_text(state, content, b)}；{due_line(state, content, b)}）"]
+    return [f"你揭下了「{title(content, b)}」：{how(content, b, state)}。（{reward_text(state, content, b)}；{due_line(state, content, b)}）"]
 
 
 def drop(state: GameState, content: Content, bounty_id: str) -> list[str]:
@@ -477,9 +607,15 @@ def _complete(state: GameState, content: Content, world: WorldStateStore, b: Bou
     p.bounties_done += 1
     msgs = [f"【懸賞】「{title(content, b)}」交差了，{issuer(content, b)}的賞銀送到。", f"銀兩 +{silver}"]
     exp = _exp(state, content, b)
-    if exp:
+    if exp and team.maxed(content, p.member):  # 滿級：本人的經驗照 5 換 1 換成心得（3.5，team.maxed_xinde），同伴照拿經驗
+        gained = team.maxed_xinde(state, content, exp)
+        if gained:
+            msgs += [team.MAXED_XINDE.format(n=gained), f"心得 +{gained}"]  # 跟其他來源同一句（FB-452）
+        msgs += team.add_team_exp(state, content, world, exp)
+    elif exp:
         msgs.append(f"經驗 +{exp}")
         msgs += team.add_team_exp(state, content, world, exp)
+    msgs += _attached(state, content, world, b)
     msgs[2:2] = ranger.add_deeds(state, content, b.deeds)  # 散人的功績（名聲開著時記成善名或惡名）
     if b.kind != "wanted":  # 通緝照押金給，沒有加成（_silver）
         msgs += renown.ranger_bounty_note(state, content, ranger.bounty_factor(state, content))  # 名聲 6.3：加成說出原因
@@ -1000,6 +1136,29 @@ def _hang_prizes(w: WorldState, content: Content, week: int) -> None:
             b.prize = prize
 
 
+def prize_rolls_day(tianji: int, day: int, faction: str, content: Content) -> tuple[bool, bool]:
+    """21 天季每天每邊的重賞（正式季整合設計 6.1 第 3 點）：寶物、良駒各擲一次（Season21Daily 的機率），種子「天機｜第幾天｜陣營」，
+    同 prize_rolls 不碰掛單那一份。"""
+    cfg = content.config.season21_daily
+    rng = random.Random(f"bounty-prize-day|{tianji}|{day}|{faction}")
+    return rng.random() < cfg.prize_treasure_chance, rng.random() < cfg.prize_horse_chance
+
+
+def _hang_prizes_day(w: WorldState, content: Content, day: int) -> None:
+    """21 天季的重賞掛上去（6.1 第 3 點【PM】）：寶物掛當天的討伐、良駒掛當天的打探或護送（那一張沒掛出來就掛討伐，討伐已經有寶物就沒了）。
+    那一欄關著的不掛。"""
+    for faction in ENEMY:
+        today = [b for b in w.bounties if b.day == day and b.faction == faction]
+        strike = next((b for b in today if b.kind == "strike"), None)
+        second = next((b for b in today if b.kind in ("scout", "escort")), None)
+        treasure, horse = prize_rolls_day(w.tianji, day, faction, content)
+        if treasure and strike is not None and treasures.prize_on(content, "treasure"):
+            strike.prize = "treasure"
+        target = second if second is not None else (strike if strike is not None and strike.prize is None else None)
+        if horse and target is not None and treasures.prize_on(content, "horse"):
+            target.prize = "horse"
+
+
 def tick(state: GameState, content: Content) -> list[str]:
     """第一季規則關著的季的週初掛單（world.advance_world_state 每一步、world.settle_season_start 開季那一刻）：季曆跨進新的一週
     就掛這一週的（只掛這一週，以前的週不補掛；同一週只掛一次，見 issue 的兩道擋）。每一步最多一小時，所以最多晚一小時掛，
@@ -1115,6 +1274,8 @@ def issue(state: GameState, content: Content, week: int, rng: random.Random | No
     兩道擋（懸賞榜設計 3.2）：只掛「這一週」（week 要等於此刻的季曆週，同 orders.issue；不然停機補算、管理者快轉會把以前的週補掛出來），
     這一週掛過了不再掛（bounty_week）。期限錨在週初：week_start(週次＋auto_weeks)，晚掛也不會多掛。"""
     w, cfg = state.world, content.config.bounties
+    if calendar.season21_on(w, content):  # 21 天季改走每天那一串（issue_day）
+        return []
     if not active(state, content) or week != calendar.point(w.time, content, w).week or week <= w.bounty_week:
         return []
     w.bounty_week = week
@@ -1122,13 +1283,56 @@ def issue(state: GameState, content: Content, week: int, rng: random.Random | No
     # 天機（開季時蓋進季裡）：每一季同一週的單不一樣；天機是 0（測試、量表、功能上線前開的季）時種子一字不差，基準不位移（計畫「要 PM 定的」第 1 條）
     salt = f"|{w.tianji}" if w.tianji else ""
     rng = random.Random(f"bounty|{week}|{w.bounty_seq}|{sorted(w.trends.items())}{salt}")
+    _clear_stale(w, content)
+    expires = calendar.week_start(week + cfg.auto_weeks, content, w)
+    _hang_bills(w, content, rng, cfg.kinds, week=week, day=0, expires=expires)
+    # 求兵（懸賞榜設計 4.1；求藝企劃者 2026-10-21 拿掉）：劇本的每個陣營（含地方豪強，照劇本的順序）各掛 give_kinds 裡的每一種；屬性從 give_attributes 挑，
+    # 同一期同一種各方不重複，求兵另挑種類（可以重複）。兵器開關關著不掛求兵。另開一份亂數：從上面那一份抽的話，
+    # 後面每一張討伐、打探、護送的地點都會位移。種子帶天機（天機是 0 時照舊），每一季第 1 週的屬性不再一樣（設計 14.2 第 7 條，裝備三一起做）
+    give_rng = random.Random(f"bounty-give|{week}|{sorted(w.trends.items())}{salt}")
+    _hang_asks(w, content, give_rng, cfg.give_kinds, week=week, day=0, expires=expires)
+    _hang_prizes(w, content, week)  # 重賞（裝備四欄 6.4）：另一份亂數，上面掛出來的單一張都不動
+    return []
+
+
+def issue_day(state: GameState, content: Content, day: int, rng: random.Random | None = None) -> list[str]:
+    """21 天季每天 00:00 掛一批（world.DAY_HOOKS；正式季整合設計 7.2）：官軍、黃巾各掛討伐一張，再一張打探或護送（單數天打探、
+    雙數天護送）；雙數天劇本的每個陣營（豪強分屬兩軍時不掛豪強那一張）再各一張求兵（兵器關著不掛）。單數天原本掛的求藝
+    企劃者 2026-10-21 拿掉（「懸賞榜直接把武學拿掉」），單數天就沒有要交東西的那一張。
+    期限 bounty_days 天後的 00:00；名額、地點不重複、只挑已開放的地點照 issue。重賞每天每邊擲（_hang_prizes_day）。
+    兩道擋同 issue：只掛今天（day 要等於此刻的季曆第幾天，停機補算跨過的天不補），掛過了不再掛（bounty_day）。其他季什麼都不做。"""
+    w, cfg = state.world, content.config.bounties
+    if not calendar.season21_on(w, content) or not active(state, content):
+        return []
+    at = calendar.point(w.time, content, w)
+    if day != at.cal_day or day <= w.bounty_day:
+        return []
+    w.bounty_day = day
+    salt = f"|{w.tianji}" if w.tianji else ""
+    rng = random.Random(f"bounty-day|{day}|{w.bounty_seq}|{sorted(w.trends.items())}{salt}")
+    _clear_stale(w, content)
+    expires = calendar.day_start(day + content.config.season21_daily.bounty_days, content, w)
+    second = "scout" if day % 2 else "escort"
+    _hang_bills(w, content, rng, [k for k in ("strike", second) if k in cfg.kinds], week=at.week, day=day, expires=expires)
+    give_rng = random.Random(f"bounty-give-day|{day}|{sorted(w.trends.items())}{salt}")
+    _hang_asks(w, content, give_rng, ["arms"] if day % 2 == 0 and "arms" in cfg.give_kinds else [], week=at.week, day=day, expires=expires)
+    _hang_prizes_day(w, content, day)
+    return []
+
+
+def _clear_stale(w: WorldState, content: Content) -> None:
+    """陣營掛的舊單下榜（issue、issue_day 共用）：過期的拿掉，通緝照自己的期限，過期了還有人揭著的留著。"""
     w.bounties = [
         b for b in w.bounties
         if not past_due(b, content, w)
         or (b.kind == "wanted" and b.poster and not b.refunded and not b.done_by)  # 過期的通緝留到押金退回（系統掛的沒有押金，照一般的單下榜）
         or b.takers  # 過期了還有人揭著：留到他們同步時聽到那一句（deliver_lapses）
     ]
-    expires = calendar.week_start(week + cfg.auto_weeks, content, w)
+
+
+def _hang_bills(w: WorldState, content: Content, rng: random.Random, kinds: list[str], *, week: int, day: int, expires: float) -> None:
+    """官軍、黃巾各掛 kinds 裡的每一張討伐、打探、護送（issue、issue_day 共用）。"""
+    cfg = content.config.bounties
     # 同一地點不重複掛（FB-121 第 2 件：同一處兩張一樣的單，一次遊歷或探索交兩張差）：避開榜上還有效的同種單已經用掉的地點。
     # 討伐只看同一個陣營（兩邊打的對頭不同，on_win 不會一次交兩張）；打探不分陣營；護送不分陣營、不重複終點。濾完沒地方可挑就跳過那一張
     live = [b for b in w.bounties if not past_due(b, content, w) and _left(b) > 0]
@@ -1138,7 +1342,7 @@ def issue(state: GameState, content: Content, week: int, rng: random.Random | No
         if faction not in {f.id for f in content.scenario.factions}:
             continue
         used = {b.location for b in live if b.kind == "strike" and b.faction == faction}
-        for kind in cfg.kinds:
+        for kind in kinds:
             spec: dict = {}
             if kind == "strike":
                 spot = _strike(content, w, faction, rng, used)
@@ -1162,17 +1366,19 @@ def issue(state: GameState, content: Content, week: int, rng: random.Random | No
                 continue
             w.bounty_seq += 1
             w.bounties.append(Bounty(
-                id=f"b{w.bounty_seq}", kind=kind, faction=faction, week=week, expires=expires,
+                id=f"b{w.bounty_seq}", kind=kind, faction=faction, week=week, day=day, expires=expires,
                 silver=cfg.silver.get(kind, 0), deeds=cfg.deeds.get(kind, 0), quota=quota(content), **spec,
             ))
-    # 求兵（懸賞榜設計 4.1；求藝企劃者 2026-10-21 拿掉）：劇本的每個陣營（含地方豪強，照劇本的順序）各掛 give_kinds 裡的每一種；屬性從 give_attributes 挑，
-    # 同一期同一種各方不重複，求兵另挑種類（可以重複）。兵器開關關著不掛求兵。另開一份亂數：從上面那一份抽的話，
-    # 後面每一張討伐、打探、護送的地點都會位移。種子帶天機（天機是 0 時照舊），每一季第 1 週的屬性不再一樣（設計 14.2 第 7 條，裝備三一起做）
-    give_rng = random.Random(f"bounty-give|{week}|{sorted(w.trends.items())}{salt}")
+
+
+def _hang_asks(w: WorldState, content: Content, give_rng: random.Random, give_kinds: list[str], *, week: int, day: int,
+               expires: float) -> None:
+    """劇本的每個陣營各掛 give_kinds 裡的每一種求兵（issue、issue_day 共用；求藝企劃者 2026-10-21 拿掉）。"""
+    cfg = content.config.bounties
     # 豪強分屬兩軍的季（企劃者 2026-10-15）：豪強那一張不掛，豪強交依附那一軍的（一批 10 張）
     factions = [f.id for f in content.scenario.factions if not (f.allies and allied.on(content, w))]
     asks: dict[str, list[tuple[str, str]]] = {}
-    for kind in cfg.give_kinds:
+    for kind in give_kinds:
         if kind not in GIVE_KINDS or not content.config.weapons.enabled:  # 兵器關著不掛求兵
             continue
         attributes = _spread(give_rng, cfg.give_attributes, len(factions))
@@ -1182,11 +1388,10 @@ def issue(state: GameState, content: Content, week: int, rng: random.Random | No
             attribute, weapon_kind = picks[i]
             w.bounty_seq += 1
             w.bounties.append(Bounty(
-                id=f"b{w.bounty_seq}", kind=kind, faction=faction, week=week, expires=expires, silver=cfg.silver.get(kind, 0),
-                deeds=cfg.deeds.get(kind, 0), quota=cfg.give_quota, attribute=attribute, weapon_kind=weapon_kind,
+                id=f"b{w.bounty_seq}", kind=kind, faction=faction, week=week, day=day, expires=expires,
+                silver=cfg.silver.get(kind, 0), deeds=cfg.deeds.get(kind, 0), quota=cfg.give_quota, attribute=attribute,
+                weapon_kind=weapon_kind,
             ))
-    _hang_prizes(w, content, week)  # 重賞（裝備四欄 6.4）：另一份亂數，上面掛出來的單一張都不動
-    return []
 
 
 def targets(state: GameState, content: Content) -> list[str]:
@@ -1201,8 +1406,12 @@ def targets(state: GameState, content: Content) -> list[str]:
 
 
 def _row(state: GameState, content: Content, b: Bounty) -> dict:
-    return {"id": b.id, "title": title(content, b), "how": how(content, b), "reward": reward_text(state, content, b),
-            "issuer": issuer(content, b), "due": due_line(state, content, b)}
+    row = {"id": b.id, "title": title(content, b), "how": how(content, b, state), "reward": reward_text(state, content, b),
+           "issuer": issuer(content, b), "due": due_line(state, content, b)}
+    tags = reward_tags(state, content, b)
+    if tags is not None:  # 21 天季：賞拆成小籤、照等級的那一句（週末與 14 天的季沒有這兩個鍵）
+        row.update(tags=tags, level=level_note(state, content, b))
+    return row
 
 
 def have_text(state: GameState, content: Content, world: WorldStateStore, b: Bounty, items: list[str]) -> str:

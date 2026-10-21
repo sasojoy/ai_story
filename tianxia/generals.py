@@ -102,17 +102,22 @@ def lineup(battle: battle_instance.BattleInstance, side: str) -> str:
     )
 
 
-def after_battle(world: WorldStateStore, content: Content, battle: battle_instance.BattleInstance) -> None:
+def after_battle(
+    world: WorldStateStore, content: Content, battle: battle_instance.BattleInstance, where: str | None = None, mutate=None,
+) -> None:
     """收場之後：這一場敗走的人物聲威 −fall_prestige（figures.defeat，不受一天只扣一次與一天上限的限制，可能直接退場、照退場的規則回來），
-    天下大事一句（最後一擊的人具名）。每一位只扣一次（Commander.settled 記在戰鬥那一列）。季終收兵的不扣。"""
+    天下大事一句（最後一擊的人具名）。每一位只扣一次（Commander.settled 記在戰鬥那一列）。季終收兵的不扣。
+    攻城戰（領地爭奪第二批）的留守也走這裡：where 是那一場的名字（攻城・地點），mutate 是改那一場的那一個（store.mutate_siege）；
+    沒給照決戰（定義的名字、mutate_battle）。"""
     gen = content.config.battle.generals
     due = [c for c in battle.commanders if c.fallen_round is not None and not c.settled and c.fid in content.figures]
     if battle.unfinished or not due:
         return
     from .world import _season_vehicle  # noqa: PLC0415
 
-    definition = content.battles.get(battle.battle_id)
-    where = definition.name if definition is not None else battle.battle_id
+    if where is None:
+        definition = content.battles.get(battle.battle_id)
+        where = definition.name if definition is not None else battle.battle_id
 
     def _hit(season) -> None:
         vehicle = _season_vehicle(content, season)
@@ -132,7 +137,7 @@ def after_battle(world: WorldStateStore, content: Content, battle: battle_instan
                 if c.fid in keys:
                     c.settled = True
 
-    world.mutate_battle(_mark)
+    (mutate or world.mutate_battle)(_mark)
     for c in battle.commanders:
         if c.fid in keys:
             c.settled = True

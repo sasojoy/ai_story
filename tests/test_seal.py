@@ -20,8 +20,10 @@ SALT = "測試的密鹽"
 
 
 def put_shards(content):
-    """測試內容沒有 content/seal.json（碎片關著）：裝上七片。"""
+    """測試內容沒有 content/seal.json（碎片關著）：裝上七片。改版（Config.seal.revamp，預設開）在這裡關掉：這幾個檔測的是舊的
+    七個效果與點名的寫法；改版的測試在 test_seal_revamp*.py（test_seal_revamp.revamp 打開）。"""
     content.seal = {sid: ShardDef(id=sid, name=name, part="印", effect=key) for sid, name, key in SHARDS}
+    content.config.seal.revamp.enabled = False
     return content
 
 
@@ -401,7 +403,7 @@ def test_joining_snapshots_turncoat_and_newbie(sealed, world):
     game.state.player.defected = True
     marks = game._battle_marks()
     # 新角色還在新手期；沒有本命戰法；稱號（名聲 2.5）測試內容關著
-    assert marks == {"turncoat": True, "newbie": True, "kit": None, "renown": []}
+    assert marks == {"turncoat": True, "newbie": True, "kit": None, "renown": [], "escort": None}  # 沒派同伴（歷史武將同行）
     b = BattleInstance(battle_id="changshe_fire")
     battle_instance.join_faction(b, "甲", "guan", 300.0, **marks)
     assert (b.participants["甲"].turncoat, b.participants["甲"].newbie) == (True, True)

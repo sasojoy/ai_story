@@ -45,7 +45,7 @@ def test_black_market_for_rogues():
     s = new_game_state(c, "甲")
     assert economy.sell_price_for(s, c, 1) == economy.sell_price(c, 1) == 2
     s.player.stats["evil"] = 5
-    assert (economy.sell_price_for(s, c, 1), economy.sell_price_for(s, c, 2), economy.sell_price_for(s, c, 3)) == (3, 8, None)
+    assert (economy.sell_price_for(s, c, 1), economy.sell_price_for(s, c, 2), economy.sell_price_for(s, c, 3)) == (3, 8, 24)  # 素材四階：三階也收（正式季整合 6.6）
     c.config.renown.black_market = False
     assert economy.sell_price_for(s, c, 1) == 2
 
@@ -77,4 +77,6 @@ def test_the_store_says_black_market_and_the_smith_says_so_too():
 def test_the_virtue_perks_name_the_clinic_and_the_market():
     c = real_content("weekend")
     assert "醫館療傷八五折" in renown.virtue_perks(c, "俠", 2)
+    assert "鐵匠鋪收購一階 3 兩、二階 8 兩、三階 24 兩" in renown.virtue_perks(c, "寇", 1)
+    c.config.four_tiers.enabled = False  # 素材四階關著：照舊不收三階
     assert "鐵匠鋪收購一階 3 兩、二階 8 兩" in renown.virtue_perks(c, "寇", 1)

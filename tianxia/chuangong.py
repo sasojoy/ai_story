@@ -9,12 +9,13 @@
   全服決戰的份量照部下的人數算（Game._battle_troops），不看部下的威力，所以傳功不動決戰的份量；同伴本來就不進決戰。
 
 修練頁名冊點一個人，人物卡底下一排「傳功」鈕（lessons），寫價錢與效果；按下去走 Game.chuangong（MENXIA_ACTIONS["chuangong"]）。
-整季機器人與假人照 cheapest 挑最便宜的一項（bot.teach）。只 import models、state、world_state、martial_arts、team。"""
+整季機器人與假人照 cheapest 挑最便宜的一項（bot.teach）。只 import models、state、world_state、martial_arts、team、treasures。
+帶著歸心（玉璽碎片改版）每一項的心得照 price_of 打折。"""
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from . import team
+from . import team, treasures
 from .martial_arts import MAX_LEVEL, power_at
 from .models import Content
 from .state import PLAYER, FollowerDrill, GameState
@@ -72,6 +73,13 @@ def _pct(value: float) -> str:
     return f"{value:.0%}"
 
 
+def price_of(state: GameState, content: Content, base: int) -> int:
+    """一項傳功的心得：原價乘歸心的折扣（玉璽碎片改版，treasures.amount 的 chuangong；沒帶是 1、原價照舊），照 round、最少 1
+    （同雲篆的練成，team.practice_price）。四種傳功都經過這裡：鈕上寫的跟 teach 扣的是同一個數。"""
+    scale = treasures.amount(state, content, "chuangong")
+    return base if scale == 1.0 else max(1, round(base * scale))
+
+
 def _short(state: GameState, price: int) -> str | None:
     have = state.player.stats.get("xinde", 0)
     return SHORT.format(price=price, have=have) if have < price else None
@@ -93,7 +101,7 @@ def mate_lessons(state: GameState, content: Content, world: WorldStateStore, key
         if level >= MAX_LEVEL:
             out.append(Lesson(key, what, f"練{kind}（已滿）", "", None, ART_FULL.format(name=art.name)))
             continue
-        price = rule.mate_art_xinde * level
+        price = price_of(state, content, rule.mate_art_xinde * level)
         gain = power_at(art, level + 1) - power_at(art, level)
         out.append(Lesson(key, what, f"練{kind}・{price} 心得", f"【{art.name}】第{level}成→第{level + 1}成，威力 +{gain:.1f}",
                           price, _short(state, price)))
@@ -104,7 +112,7 @@ def mate_lessons(state: GameState, content: Content, world: WorldStateStore, key
         if progress.taught.get(stat, 0) >= rule.mate_stat_max:
             out.append(Lesson(key, stat, f"傳{label}（已滿）", "", None, STAT_FULL.format(stat=label, cap=rule.mate_stat_max)))
             continue
-        price = rule.mate_stat_xinde * (taught + 1)
+        price = price_of(state, content, rule.mate_stat_xinde * (taught + 1))
         effect = f"{name}的{label} {stats[stat]:.0f}→{stats[stat] + 1:.0f}：" + STAT_EFFECT[stat].format(pct=_pct(cfg.stat_bonus_per_point))
         out.append(Lesson(key, stat, f"傳{label}・{price} 心得", effect, price, _short(state, price)))
     return out
@@ -122,7 +130,7 @@ def follower_lessons(state: GameState, content: Content, key: str) -> list[Lesso
     if level >= MAX_LEVEL:
         out.append(Lesson(key, "wugong", "多練一成（已滿）", "", None, LINE_FULL))
     else:
-        price = rule.follower_cheng_xinde * (drill.cheng + 1)
+        price = price_of(state, content, rule.follower_cheng_xinde * (drill.cheng + 1))
         out.append(Lesson(key, "wugong", f"多練一成・{price} 心得", f"武學第{level}成→第{level + 1}成（照你的等級是第"
                           f"{team.follower_line(state, content, follower)}成，多練的跟著帶上去）", price, _short(state, price)))
     strength = team.follower_strength(content, follower, drill)
@@ -130,7 +138,7 @@ def follower_lessons(state: GameState, content: Content, key: str) -> list[Lesso
     if strength >= cfg.stat_cap:
         out.append(Lesson(key, "str", f"傳{label}（已滿）", "", None, STRENGTH_FULL.format(cap=cfg.stat_cap)))
     else:
-        price = rule.follower_str_xinde * (drill.arm + 1)
+        price = price_of(state, content, rule.follower_str_xinde * (drill.arm + 1))
         out.append(Lesson(key, "str", f"傳{label}・{price} 心得",
                           f"{label} {strength}→{strength + 1}：" + STAT_EFFECT["str"].format(pct=_pct(cfg.stat_bonus_per_point)),
                           price, _short(state, price)))

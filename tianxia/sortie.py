@@ -26,6 +26,18 @@ STIR_FLAT_LINE = "這條戰線正在中間，攪局推不動；等戰局偏向�
 # 散人站在戰線地點（FB-250）：出陣那一顆灰著寫這個原因（不寫「不在戰線」）；行動列底下那一行寫 RANGER_LINE。待 joy 潤
 RANGER_NOTE = "散人不能出陣"
 RANGER_LINE = "散人不能出陣：投靠陣營之後才有。散人靠懸賞、事件與找素材撞上的仗出力。"
+RANGER_LINE_PRECISE = "散人不能出陣：投靠陣營之後才有。散人靠懸賞、事件與練功打的仗出力。"  # 一類一顆（FB-420；待 joy 潤）
+# 領地爭奪：別人的大本營與廣宗搶不下來、不推進度，不給攻（計畫第八章裁決 18）：出陣那一顆灰著寫 OUT_NOTE、行動列底下那一行寫 OUT_LINE。待 joy 潤
+# OUT_NOTE 是行動列格子裡的小字：一行約 60 px、10 px 的字只放得下六個（同 RANGER_NOTE），「此地」兩個字留給底下那一行
+OUT_NOTE = "不在爭奪之列"
+OUT_LINE = "此地不在爭奪之列：各家的大本營與廣宗搶不下來，出陣推不了進度，這裡不能攻。"
+# 領地爭奪：守勢行動（巡哨、傳道、保境安民）只守自家的地方（計畫第八章裁決 24，PM 2026-10-20）：別人的區塊（含大本營、廣宗）、還沒佔下的
+# 中立地，那一顆灰著寫原因（跟出陣用完同一種寫法：「{名字}（{原因}）」，在「此地還能做」裡），按下去什麼都不給。待 joy 潤
+DUTY_OUT_OTHER = "守勢只守自家的地盤，這裡歸別人"
+DUTY_OUT_OPEN = "守勢只守自家的地盤，這裡還沒人佔"
+
+
+MERIT_LINE = "軍功賞銀 {silver} 兩已記上。"  # 待 joy 潤：出陣攻打贏的軍功賞（正式季整合 2.6），寫進這一場戰報的敘事
 
 
 def on(content: Content) -> bool:
@@ -33,9 +45,43 @@ def on(content: Content) -> bool:
     return content.config.sortie.enabled and bool(content.scenario.factions)
 
 
-def ranger_here(content: Content, faction: str | None, loc_id: str) -> bool:
-    """散人站在戰線地點（FB-250）：投靠了陣營的人在這裡會有出陣，散人沒有——那一格寫原因，不寫「不在戰線」。"""
-    return faction is None and on(content) and territory.line_of(content, loc_id) is not None
+def ranger_here(content: Content, faction: str | None, loc_id: str, world: WorldState | None = None) -> bool:
+    """散人站在戰線地點（FB-250）：投靠了陣營的人在這裡會有出陣，散人沒有——那一格寫原因，不寫「不在戰線」。
+    領地爭奪在這一季生效時（給了 world）出陣在每一塊區塊都有，照區塊判（不只戰線地點）。"""
+    if faction is not None or not on(content):
+        return False
+    from . import conquest  # noqa: PLC0415  conquest → territory → rules：在函式裡 import
+
+    if conquest.on(content, world):
+        return loc_id in conquest.blocks(content)
+    return territory.line_of(content, loc_id) is not None
+
+
+def out_of_contest(content: Content, world: WorldState | None, faction: str | None, loc_id: str) -> bool:
+    """領地爭奪在這一季生效時，投靠了陣營的人站在搶不下來、又不是自家的區塊（別人的大本營、廣宗；計畫第八章裁決 18）：這裡沒有出陣
+    （截糧的運糧隊經過時例外，那時 mode 是攻），那一格灰著寫 OUT_NOTE。"""
+    if faction is None or not on(content):
+        return False
+    from . import conquest  # noqa: PLC0415  conquest → territory → rules：在函式裡 import
+
+    return (conquest.on(content, world) and loc_id in conquest.blocks(content) and not conquest.capturable(content, loc_id)
+            and conquest.holder(world, content, loc_id) != faction)
+
+
+def duty_problem(content: Content, world: WorldState | None, faction: str | None, loc_id: str) -> str:
+    """領地爭奪在這一季生效時，守勢行動（巡哨、傳道、保境安民）站的地方不是自家的區塊（別人的大本營與區塊、廣宗、還沒佔下的中立地）：
+    灰掉的原因（DUTY_OUT_OTHER／DUTY_OUT_OPEN）；給得了（自家的區塊、不是區塊的地點、關著的季）是空字串。faction 是依附那一軍的
+    side（Game._side：豪強分屬兩軍的季是依附的那一軍）。不是區塊的地點（南華觀、豪強三處投靠點）誰也不佔，這一版不動。"""
+    if faction is None:
+        return ""
+    from . import conquest  # noqa: PLC0415  conquest → territory → rules：在函式裡 import
+
+    if not conquest.on(content, world) or loc_id not in conquest.blocks(content):
+        return ""
+    holder = conquest.holder(world, content, loc_id)
+    if holder == faction:
+        return ""
+    return DUTY_OUT_OPEN if holder is None else DUTY_OUT_OTHER
 
 
 def left_today(p: PlayerState, content: Content, today: int) -> int:
@@ -55,6 +101,14 @@ def mode(content: Content, world: WorldState, faction: str | None, loc_id: str, 
     有截糧的運糧隊照打。"""
     if faction is None or not on(content):
         return None
+    from . import conquest  # noqa: PLC0415  conquest → territory → rules：在函式裡 import
+
+    if conquest.on(content, world):  # 領地爭奪（計畫 Task 6）：每一塊區塊都有出陣；自家的守（有截糧的運糧隊照打），別人的、中立的攻
+        if loc_id not in conquest.blocks(content):
+            return None
+        if conquest.holder(world, content, loc_id) == faction:
+            return "attack" if foes else "hold"
+        return "attack" if foes else None
     line = territory.line_of(content, loc_id)
     side = content.scenario.find_faction(faction)
     if line is None or side is None:

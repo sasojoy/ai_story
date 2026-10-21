@@ -18,7 +18,8 @@ from .models import Content
 from .state import AnnalEntry, GameState
 
 SHOWDOWN, FIGURE, FIGHT, DEED = "showdown", "figure", "fight", "deed"
-KINDS = {SHOWDOWN: "大戰", FIGURE: "人物", FIGHT: "交手", DEED: "行事"}  # 行狀頁的小標（待 joy 潤）
+CONQUER = "conquer"  # 翻地與爭搶（輿圖簡化設計 4.5）：推最多、率先攻入一塊地，或拉回最多、守住一塊地
+KINDS = {SHOWDOWN: "大戰", FIGURE: "人物", FIGHT: "交手", DEED: "行事", CONQUER: "攻守"}  # 行狀頁的小標（待 joy 潤）
 TEXT_MAX, QUOTE_MAX, REPLY_MAX = 80, 40, 80
 MASTERED = "絕學"  # martial_arts.QUALITIES 的最後一品
 
@@ -115,7 +116,8 @@ def figure_name(content: Content, figure: str) -> str:
 
 def _notable(item) -> bool:
     """哪些裝備值得寫：寶物、良駒名駒（二階以上的馬）、名器（照隱藏配方打的）、神器的原品。"""
-    return item.slot == "treasure" or (item.slot == "mount" and item.tier >= 2) or bool(item.secret) or item.original
+    return (item.slot == "treasure" or (item.slot == "mount" and item.tier >= 2) or bool(item.secret)
+            or item.named_entry is not None or item.original)  # 四階擲出的名器也算（正式季整合 5.2）
 
 
 def _gear(state: GameState) -> dict[str, str]:

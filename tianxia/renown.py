@@ -7,11 +7,12 @@ titles 關著時這裡每個函式都回「沒有」（段 0、空清單、None�
 只 import models、state、gender、world_state；rules、ranger、territory、team、bounties、arena……反過來呼叫它。"""
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from . import gender
+from . import calendar, four_tiers, gender
 from .models import Content
 from .state import GameState, RenownSeen, WorldState
 
@@ -275,8 +276,9 @@ def annotate(changes: list[str], state: GameState, content: Content) -> list[str
 # ── 每一段給什麼（說明卡、跨段那一行）──────────────────────────────
 
 
-def fame_perks(content: Content, tier: int) -> list[str]:
-    """名望第 tier 段給什麼（設計第四節的表），照開關組；數字讀 Config。沒做好、開關關著的不寫。"""
+def fame_perks(content: Content, tier: int, world: WorldState | None = None) -> list[str]:
+    """名望第 tier 段給什麼（設計第四節的表），照開關組；數字讀 Config。沒做好、開關關著的不寫。
+    world 給了才照季寫「每週」（7 天濃縮季「每段」，calendar.week_word，FB-501）；不給照原本的字。"""
     cfg = content.config.renown
     out: list[str] = []
     if on(content, "discount"):
@@ -297,7 +299,7 @@ def fame_perks(content: Content, tier: int) -> list[str]:
         if on(content, "news"):
             out.append("天下大事傳開你的名號")
         if on(content, "faction_wanted"):
-            out.append("敵方陣營每週通緝你")
+            out.append(f"敵方陣營{calendar.week_word('each', content, world)}通緝你")  # 7 天濃縮季「每段」（FB-501）
     elif tier == 4:
         if on(content, "news"):
             out.append("打大場面天下大事都點名")
@@ -308,15 +310,15 @@ def fame_perks(content: Content, tier: int) -> list[str]:
     return out
 
 
-# 善惡各段給什麼：乙線每一樣（正邪武學、情誼、醫館、黑市、俠寇選項、官府通緝）各自登記一個 (content, 路, 段) -> list[str]，
-# 照開關回空清單——甲線先上時說明卡不會寫還沒做的東西。散人另有的好處見 sanren_perks。
-VIRTUE_PERKS: list[Callable[[Content, str, int], list[str]]] = []
+# 善惡各段給什麼：乙線每一樣（正邪武學、情誼、醫館、黑市、俠寇選項、官府通緝）各自登記一個 (content, 路, 段, 季) -> list[str]，
+# 照開關回空清單——甲線先上時說明卡不會寫還沒做的東西。散人另有的好處見 sanren_perks。季（可以是 None）給照季換字的那幾樣（FB-501）。
+VIRTUE_PERKS: list[Callable[[Content, str, int, WorldState | None], list[str]]] = []
 
 
 GREENWOOD_FLAG = "綠林開寨"  # 綠林山寨的 unlock_flag（名聲 5.1）：lessons 開著時開季立（world._open_greenwood）
 
 
-def _lesson_perks(content: Content, way: str, tier: int) -> list[str]:
+def _lesson_perks(content: Content, way: str, tier: int, world: WorldState | None = None) -> list[str]:
     """正邪武學（5.1）：走這條路、這一段起肯教的那幾門，照內容的 LearnRule.title 組；lessons 關著不寫。"""
     if not on(content, "lessons"):
         return []
@@ -339,7 +341,7 @@ MEET_FAME_FLAG = "初見:{cid}:名"  # 名望那一份給過了（一季一位�
 MEET_VIRTUE_FLAG = "初見:{cid}:{way}"  # 後面接給到第幾段：「初見:liubei:俠2」
 
 
-def _affinity_perks(content: Content, way: str, tier: int) -> list[str]:
+def _affinity_perks(content: Content, way: str, tier: int, world: WorldState | None = None) -> list[str]:
     """善惡各段的情誼那一項（5.2）：敬俠／喜狠的人見面情誼 +3×段；寇第 1 段起敬俠的人對你冷淡。affinity 關著不寫。"""
     if not on(content, "affinity"):
         return []
@@ -381,16 +383,24 @@ def black_market_price(state: GameState, content: Content, tier: int) -> int | N
     cfg = content.config.renown
     if not (on(content, "black_market") and meets(state, content, "寇", cfg.black_market_tier)):
         return None
-    return cfg.black_market_prices.get(tier)
+    return _dark_prices(content).get(tier)
 
 
-def _trade_perks(content: Content, way: str, tier: int) -> list[str]:
+def _dark_prices(content: Content) -> dict[int, int]:
+    """黑市收哪幾階、各幾兩：Config.renown.black_market_prices，三階只在素材四階開著時收（正式季整合 4.2、6.6：24 兩；關著照舊只收
+    一、二階），四階一律不收（同 economy.sell_tiers；這裡不 import economy，economy 會 import 這裡）。"""
+    top = four_tiers.TOP_COMMON if four_tiers.on(content) else 2
+    return {t: p for t, p in content.config.renown.black_market_prices.items() if t <= top}
+
+
+def _trade_perks(content: Content, way: str, tier: int, world: WorldState | None = None) -> list[str]:
     cfg = content.config.renown
     out = []
     if way == "俠" and tier == cfg.clinic_tier and on(content, "clinic"):
         out.append(f"醫館療傷{discount_word(cfg.clinic_share)}")
-    if way == "寇" and tier == cfg.black_market_tier and on(content, "black_market") and cfg.black_market_prices:
-        out.append("鐵匠鋪收購" + "、".join(f"{_CN[t]}階 {p} 兩" for t, p in sorted(cfg.black_market_prices.items())))
+    prices = _dark_prices(content)
+    if way == "寇" and tier == cfg.black_market_tier and on(content, "black_market") and prices:
+        out.append("鐵匠鋪收購" + "、".join(f"{_CN[t]}階 {p} 兩" for t, p in sorted(prices.items())))
     return out
 
 
@@ -406,7 +416,7 @@ def needs_line(state: GameState, way: str, tier: int) -> str:
     return NEEDS.format(title=named(VIRTUE_TITLES[way][tier], state))
 
 
-def _choice_perks(content: Content, way: str, tier: int) -> list[str]:
+def _choice_perks(content: Content, way: str, tier: int, world: WorldState | None = None) -> list[str]:
     """俠寇選項（5.3）：內容裡有要這一條路、這一段的選項才寫；virtue_choices 關著不寫。"""
     if not on(content, "virtue_choices"):
         return []
@@ -418,13 +428,13 @@ def _choice_perks(content: Content, way: str, tier: int) -> list[str]:
 VIRTUE_PERKS.append(_choice_perks)
 
 
-def _wanted_perks(content: Content, way: str, tier: int) -> list[str]:
+def _wanted_perks(content: Content, way: str, tier: int, world: WorldState | None = None) -> list[str]:
     """官府通緝（5.4）：寇 official_tier 段起官府每週貼海捕文書（賞照段）；俠 official_hunter_tier 段揭得了。official_wanted 關著不寫。"""
     if not on(content, "official_wanted"):
         return []
     cfg = content.config.renown
     if way == "寇" and tier >= cfg.official_tier and tier in cfg.official_silver:
-        return [f"官府每週貼你的海捕文書（賞 {cfg.official_silver[tier]} 兩）"]
+        return [f"官府{calendar.week_word('each', content, world)}貼你的海捕文書（賞 {cfg.official_silver[tier]} 兩）"]  # 7 天濃縮季「每段」（FB-501）
     if way == "俠" and tier == cfg.official_hunter_tier:
         return ["揭得了官府通緝"]
     return []
@@ -438,6 +448,15 @@ def _cold_to(state: GameState, content: Content, character_id: str) -> bool:
     ch = content.characters.get(character_id)
     return (on(content, "affinity") and ch is not None and ch.regard == "敬俠" and path(state) == "寇"
             and virtue_tier(state, content) >= 1)
+
+
+def warmed(content: Content, delta: int) -> int:
+    """情誼放慢（歷史武將同行第三節、9.4；Config.affinity_gain_scale）：加的那一筆乘倍數、四捨五入，原本加 1 以上的至少加 1；
+    扣的與 0 原樣，倍數 1 原樣。不存零頭、不改存檔。對話、事件、名聲起步、風聞加情誼之前都先過它。"""
+    scale = content.config.affinity_gain_scale
+    if delta <= 0 or scale >= 1:
+        return delta
+    return max(1, math.floor(delta * scale + 0.5 + 1e-9))  # 浮點：5×0.7 是 3.4999…，照十進位的 3.5 進位
 
 
 def first_meet(state: GameState, content: Content, character_id: str) -> list[str]:
@@ -455,7 +474,7 @@ def first_meet(state: GameState, content: Content, character_id: str) -> list[st
 
     def bump(n: int) -> int:
         before = p.affinities.get(character_id, 0)
-        p.affinities[character_id] = max(0, min(100, before + n))
+        p.affinities[character_id] = max(0, min(100, before + warmed(content, n)))
         return p.affinities[character_id] - before
 
     flag = MEET_FAME_FLAG.format(cid=character_id)
@@ -509,9 +528,9 @@ def prompt_lines(state: GameState, content: Content, character_id: str) -> str:
     return out
 
 
-def virtue_perks(content: Content, way: str, tier: int) -> list[str]:
-    """善惡第 tier 段（way 那一條路）給什麼：人人都有的那幾樣（VIRTUE_PERKS 登記的）。"""
-    return [line for fn in VIRTUE_PERKS for line in fn(content, way, tier)]
+def virtue_perks(content: Content, way: str, tier: int, world: WorldState | None = None) -> list[str]:
+    """善惡第 tier 段（way 那一條路）給什麼：人人都有的那幾樣（VIRTUE_PERKS 登記的）。world 同 fame_perks。"""
+    return [line for fn in VIRTUE_PERKS for line in fn(content, way, tier, world)]
 
 
 def sanren_perks(state: GameState, content: Content) -> list[list[str]] | None:
@@ -574,7 +593,7 @@ def status(state: GameState, content: Content) -> dict | None:
             "n": fame, "tier": ft, "title": FAME_TITLES[ft],
             "at": fb[ft] if ft < top else None, "gap": fb[ft] - fame if ft < top else None,
             "next": FAME_TITLES[ft + 1] if ft < top else None,
-            "ladder": _ladder(FAME_TITLES, fb, lambda t: fame_perks(content, t)),
+            "ladder": _ladder(FAME_TITLES, fb, lambda t: fame_perks(content, t, w)),
         },
         "virtue": {
             "good": st.get("good", 0), "evil": st.get("evil", 0), "path": way,
@@ -582,7 +601,7 @@ def status(state: GameState, content: Content) -> dict | None:
             "title": virtue_title(state, content) or "",
             "at": vb[vt] if vt < top else None, "gap": vb[vt] - value if vt < top else None,
             "next": named(VIRTUE_TITLES[way][vt + 1], state) if vt < top else None,
-            "ladder": {w_: _ladder(VIRTUE_TITLES[w_], vb, lambda t, w_=w_: virtue_perks(content, w_, t), state) for w_ in PATHS},
+            "ladder": {w_: _ladder(VIRTUE_TITLES[w_], vb, lambda t, w_=w_: virtue_perks(content, w_, t, w), state) for w_ in PATHS},
         },
         "sanren": sanren_perks(state, content),
         "scale_note": scale_note(w, content),
@@ -635,7 +654,7 @@ def watch(state: GameState, content: Content, day: int) -> Crossing:
         return out
     if f > seen.best_fame:
         title = FAME_TITLES[f]
-        out.lines += [UP_FAME.format(title=title), perk_line(fame_perks(content, f))]
+        out.lines += [UP_FAME.format(title=title), perk_line(fame_perks(content, f, state.world))]
         out.up.append(title)
         out.annals.append((UP_FAME.format(title=title), 3 if f >= 3 else 2))
         seen.best_fame = f
@@ -652,7 +671,7 @@ def watch(state: GameState, content: Content, day: int) -> Crossing:
         title = named(VIRTUE_TITLES[way][v], state)
         if not switched:
             out.lines.append(UP_VIRTUE.format(title=title))
-        out.lines.append(perk_line(virtue_perks(content, way, v)))
+        out.lines.append(perk_line(virtue_perks(content, way, v, state.world)))
         out.up.append(title)
         out.annals.append((UP_VIRTUE.format(title=title), 3 if v >= 3 else 2))
         if way == "俠":

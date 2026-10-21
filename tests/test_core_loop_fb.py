@@ -92,6 +92,9 @@ def test_fb250_a_ranger_on_a_front_sees_why_there_is_no_sortie():
     game = _game(None, "runan_wilds")
     option = _sortie(game)
     assert option is not None and not option.enabled and option.label == f"{sortie.NAME}（{sortie.RANGER_NOTE}）"
+    # 一類一顆（正式內容開著）：找素材不打仗，那一行寫練功（FB-420 同一批）；沒蓋章的季照舊寫找素材撞上的仗
+    assert game.action_notes([o.id for o in game.options(odds=False)])["act:train"] == sortie.RANGER_LINE_PRECISE
+    game.state.world.precise_actions = False
     assert game.action_notes([o.id for o in game.options(odds=False)])["act:train"] == sortie.RANGER_LINE
     assert game.choose("act:train") == ["（此刻無法這麼做。）"]
     assert _sortie(_game(None, "yingshui")) is None
@@ -305,7 +308,11 @@ def test_fb257_the_fame_line_does_not_mention_training_when_sorties_are_on():
     from tianxia.world_state import fresh_season
 
     c = real_content("weekend")
-    line = " ".join(howto.fame_lines(c, fresh_season(c)))
+    season = fresh_season(c)
+    line = " ".join(howto.fame_lines(c, season))
+    assert "遊歷" not in line and "找事件" in line  # 一類一顆：事件都在找事件（FB-420 同一批）
+    season.precise_actions = False  # 沒蓋章的季：出陣開著，戰後事件接在找素材撞上的那一場之後
+    line = " ".join(howto.fame_lines(c, season))
     assert "遊歷" not in line and "找素材" in line
     old = classic_rules(real_content("weekend"))
     assert "遊歷之後" in " ".join(howto.fame_lines(old, fresh_season(old)))

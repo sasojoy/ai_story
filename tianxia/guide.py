@@ -1,9 +1,9 @@
 """新手引導、個人目標與任務區塊：讓玩家知道這一季在發生什麼、下一步該做什麼。"""
 from __future__ import annotations
 
-from . import enlist, library, prologue, ranks
+from . import calendar, enlist, library, prologue, ranks
 from .martial_arts import QUALITIES
-from .models import Content, TutorialGoal, TutorialStep
+from .models import Content, Ending, TutorialGoal, TutorialStep
 from .rules import apply_effect, check_condition, pending_event_title, season_one, season_one_off
 from .state import GameState
 from .world import current_act, current_storyline, early_end_flags, early_end_note, season_endings, storyline_off
@@ -159,11 +159,19 @@ def next_hint(state: GameState, content: Content, world: WorldStateStore | None 
         return f"（{speaker_of(content, step)}）{step_text(state, content, world)}"
     who = enlist.recruiter(state, content)
     if who is not None and enlist.active(state, content):  # 入伍段進行中：引薦人這一步交代的事（收起來那一行，不帶名字）
-        return f"（{who.name}）{pending_line(state, content) or who.lines[state.player.enlist_step]}"  # 有事件待處理時跟框一樣（F12）
+        # 有事件待處理時跟框一樣（F12）；那一行的 {本週} 照軍令多久一道換（enlist.step_line，FB-502）
+        return f"（{who.name}）{pending_line(state, content) or enlist.step_line(who, state.player.enlist_step, state, content)}"
     hints = [] if storyline_off(state, content) else [current_act(state, content).goal]
     if state.player.stamina >= content.config.stamina_max * 0.9 and _idle(state):
         hints.append(STAMINA_FULL_NOTE if state.player.stamina >= content.config.stamina_max else FULL_STAMINA_NOTE)
     return "　".join(hints)
+
+
+def ending_hint(ending: Ending, state: GameState, content: Content) -> str:
+    """任務區塊裡一種結局怎麼達成的那一句：21 天季（不提前收季，正式季整合設計 1.1）有寫 hint_season21 就用它，其餘照 hint。"""
+    if ending.hint_season21 and calendar.season21_on(state.world, content):
+        return ending.hint_season21
+    return ending.hint
 
 
 def quest_text(state: GameState, content: Content, world: WorldStateStore | None = None) -> str:
@@ -182,7 +190,7 @@ def quest_text(state: GameState, content: Content, world: WorldStateStore | None
         # 由收季門檻造成的結局（黃巾稱霸）：規則關著的季決定性那一週以前，照實補一句最早什麼時候才會提前收季（FB-165，待 joy 潤）
         note, early = early_end_note(state, content), early_end_flags(content)
         parts.append("**可能的結局**\n\n" + "\n".join(
-            f"- {e.title}：{e.hint}{note if set(e.condition.world_flags_all) & early else ''}" for e in endings
+            f"- {e.title}：{ending_hint(e, state, content)}{note if set(e.condition.world_flags_all) & early else ''}" for e in endings
         ))
     hidden = season_one_off(content, w, "milestones")  # 第一季做不到的 beta 個人目標不列（計畫 T8）
     milestones = [m for m in content.scenario.milestones if m.id not in hidden]

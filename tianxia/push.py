@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import math
 
-from .models import PushResistance
-from .state import GameState, PlayerState
+from . import calendar
+from .models import Content, PushResistance
+from .state import GameState, PlayerState, WorldState
 
 FRACTION_DIGITS = 9  # 浮點誤差：1.9999999999 要算成 2，不能少推一點
 
@@ -95,6 +96,8 @@ def add_contribution(player: PlayerState, week: int, points: int) -> None:
 
 
 RESISTED_LINE = "深入敵境，推進艱難。"  # 待 joy 潤：盡頭阻力打了折的那一下，推動那一行後面多這一句（出陣探索與地盤設計 5.1）
+# 站在自家陣營控制的地方（守、巡哨、傳道……）推過頭：不是深入敵境（FB-432；待 joy 潤）
+STEADY_LINE = "此地已穩，再推也只是聊盡人事。"
 
 
 def resistance_share(value: float, direction: float, tuning: PushResistance) -> float:
@@ -109,6 +112,16 @@ def resistance_share(value: float, direction: float, tuning: PushResistance) -> 
     if far <= tuning.half_within:
         return tuning.mid_share
     return tuning.far_share
+
+
+def tuning_for(world: WorldState, content: Content) -> PushResistance:
+    """這一季的盡頭阻力用哪一組數字：21 天季照 Season21Daily 的兩檔（push_mid_share、push_far_share；離 50 的兩個邊界與開關照
+    Config.push_resistance，正式季整合設計 7.4），其他季就是 Config.push_resistance 本身。出陣、事件、軍令、大勢人物、割據都走它。"""
+    tuning = content.config.push_resistance
+    if not calendar.season21_on(world, content):
+        return tuning
+    s21 = content.config.season21_daily
+    return tuning.model_copy(update={"mid_share": s21.push_mid_share, "far_share": s21.push_far_share})
 
 
 def resistance(value: float, delta: float, tuning: PushResistance) -> float:

@@ -24,17 +24,19 @@ from . import hints as hint_rules
 from .companion_agent import DIALOGUE_TAGS
 from .encounter import FALLBACK_TIER, TIER_RATIOS
 from .front_lines import BAND_KEYS, GEJU_KEYS
-from .materials import TIER_NAMES
+from .materials import DEFAULT_DROPS, TIER_NAMES
 from .models import (
     FRONT_KEY, GLOW_KEYS, GOOD_HORSE, MOVES, RECRUITER_ALLIED_FIELDS, REVEAL_KEYS, ROADS, STATS, TREASURE_EFFECTS, WEAPON_KINDS, Attribute, BattleDef, CharacterDef, CheckVoice,
-    CombatLines, Condition, Config, Content, CraftNames, CreateForms, DuelBoss, Effect, Event, FigureDef, FollowerDef, ForgeSecret, Foreshadows, FrontLines, GearBook,
-    GiftDef, Hints, MingtieContent, InsightDef, Location, OppDef,
-    InsightScene, OrdersContent, PresetRecipe, PromotionDef, RelationDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, ShardDef, SimRumor, SkillDef,
-    SignatureArmDef, SteedDef, Squad, TimetableEvent, TraitBook, TreasureDef, Tutorial, allow_known,
+    CombatLines, Condition, Config, Content, CraftNames, CreateForms, DuelBoss, Effect, Event, FigureDef, FollowerDef, ForgeSecret, Foreshadows, FrontLines, GatherBranch, GearBook,
+    GiftDef, Hints, MingtieContent, InsightDef, Location, MallItem, OppDef,
+    InsightScene, OrdersContent, PresetRecipe, PromotionDef, RealDay, RealSlot, RelationDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, ShardDef,
+    SimRumor, SkillDef,
+    SignatureArmDef, SteedDef, Squad, Tier4Named, TimetableEvent, TraitBook, TreasureDef, Tutorial, allow_known,
 )
 from .martial_arts import ATTRIBUTE_COUNTERS, ATTRIBUTES, QUALITIES
 from .naming import FORGE_CLASH, GEAR_CLASH, PRESET_CLASH, SEAL_CLASH, name_problem
-from .armor import FORGE_NOUNS as ARMOR_FORGE_NOUNS, word_problem as armor_word_problem
+from .tactics import figure_arts
+from .armor import FORGE_NOUNS as ARMOR_FORGE_NOUNS, FORGE_WORDS as ARMOR_FORGE_WORDS, word_problem as armor_word_problem
 from .weapons import ATTR_WORDS as WEAPON_ATTR_WORDS, NOUNS as WEAPON_NOUNS, WEAPON_WORDS, kind_problem as weapon_kind_problem, shop_name as weapon_shop_name
 from .zh import to_traditional
 
@@ -79,8 +81,11 @@ def load_content(root: Path, profile: str | None = None) -> Content:
                 raise ContentError(f"事件 id 重複：{event.id}（{path.name}）")
             events[event.id] = event
     timetable_events = [_build(TimetableEvent, raw) for raw in _read(root / "timetable.json")] if (root / "timetable.json").exists() else []
+    config = _config(root, profile)
+    if config.season21:  # 21 天季自己一份時刻表（正式季整合設計 1.2 給開發 1）：驗證之前套上，週末與 14 天不經過這裡
+        timetable_events = season21_timetable(timetable_events, config.season_segments)
     content = Content(
-        config=_config(root, profile),
+        config=config,
         scenario=Scenario(**_read(root / "scenario.json")),
         locations=_index(Location, _read(root / "locations.json")),
         skills=_index(SkillDef, _read(root / "skills.json")),
@@ -113,13 +118,17 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         secret_recipes=[_build(SecretRecipe, raw) for raw in _read(root / "secret_recipes.json")]
         if (root / "secret_recipes.json").exists() else [],
         forge_secrets=_forge_secrets(root / "forge_secrets.json"),
+        tier4_named=_index(Tier4Named, _read(root / "tier4_named.json")) if (root / "tier4_named.json").exists() else {},
         shop_lines=_read(root / "shop_lines.json") if (root / "shop_lines.json").exists() else {},
         create_forms=CreateForms(**_read(root / "create_forms.json")) if (root / "create_forms.json").exists() else CreateForms(),
         banned_words=_read(root / "banned_words.json") if (root / "banned_words.json").exists() else [],
         mingtie=MingtieContent(**_read(root / "mingtie.json")) if (root / "mingtie.json").exists() else MingtieContent(),
         arena_crowd=_read(root / "arena_crowd.json") if (root / "arena_crowd.json").exists() else {},
+        xingshi_lines=_read(root / "xingshi_lines.json") if (root / "xingshi_lines.json").exists() else {},
         seal=_shards(root / "seal.json"),
+        mall=_index(MallItem, _read(root / "mall.json")) if (root / "mall.json").exists() else {},  # 商城的商品（joy 寫）
         relations=[_build(RelationDef, raw) for raw in _read(root / "relations.json")] if (root / "relations.json").exists() else [],
+        gather_branches=_index(GatherBranch, _read(root / "gather_branches.json")) if (root / "gather_branches.json").exists() else {},
         figures=_index(FigureDef, _read(root / "figures.json")) if (root / "figures.json").exists() else {},
         duels=_index(DuelBoss, _read(root / "duels.json")) if (root / "duels.json").exists() else {},
         gear=_gear(root / "gear.json"),
@@ -134,6 +143,47 @@ def load_content(root: Path, profile: str | None = None) -> Content:
     validate(content)
     _scale_marks(content, content.config.mark_threshold_scale)
     return content
+
+
+def _segment_slot(real7: RealDay | None, segments: list[int]) -> RealSlot | None:
+    """7 天濃縮季的第幾天、幾點換成季曆的（第幾段, 段裡第幾天, 幾點）：段 [2, 2, 3] 時第 4 天是第 2 段的第 1 天（weekday 1）。"""
+    if real7 is None:
+        return None
+    start = 0
+    for week, length in enumerate(segments, 1):
+        if real7.day <= start + length:
+            return RealSlot(week=week, weekday=real7.day - start - 1, hour=real7.hour)
+        start += length
+    return None  # 超過段的和（content.validate 擋）
+
+
+def season21_timetable(events: list[TimetableEvent], segments: list[int] | None = None) -> list[TimetableEvent]:
+    """21 天季的時刻表（Config.season21）：每一件照 real 換掉時刻——一般大事 day＝星期＋鐘點÷24（週二 12:00 是 1.5）、決戰與天命之爭
+    寫 weekday、hour、季末只換週（季末的時刻照錨點算，timetable.finale_default）——再照時刻排（同一刻照檔案順序；季末排在那一週最後），
+    畫面上的時刻表照時間排（正式季整合設計 1.2 給開發 4）。沒寫 real 的照原樣（content.validate 擋）。
+    7 天濃縮季（segments 是 Config.season_segments）照 real7（第幾天、幾點）換成段裡的時刻，其餘一樣。"""
+    moved = []
+    for event in events:
+        slot = _segment_slot(event.real7, segments) if segments else event.real
+        if slot is None:
+            moved.append(event)
+        elif event.kind == "showdown":
+            moved.append(event.model_copy(update={"week": slot.week, "weekday": slot.weekday, "hour": slot.hour}))
+        elif event.kind == "finale":
+            moved.append(event.model_copy(update={"week": slot.week}))
+        else:
+            moved.append(event.model_copy(update={"week": slot.week, "day": slot.weekday + slot.hour / 24}))
+
+    def at(pair: tuple[int, TimetableEvent]) -> tuple[int, float, int]:
+        order, event = pair
+        if event.kind == "finale":
+            return event.week, 7.0, order
+        if event.kind == "showdown":
+            weekday = 3 if event.weekday is None else event.weekday  # 同 timetable.SHOWDOWN_WEEKDAY、SHOWDOWN_HOUR
+            return event.week, weekday + (20 if event.hour is None else event.hour) / 24, order
+        return event.week, event.day, order
+
+    return [event for _, event in sorted(enumerate(moved), key=at)]
 
 
 def _config(root: Path, profile: str | None) -> Config:
@@ -401,6 +451,12 @@ def _material_sources(c: Content) -> set[str]:
             reachable |= set(ch.effect.materials) | set(ch.fail_effect.materials)
     for sight in c.road_sights.values():
         reachable |= set(sight.effect.materials)
+    # 四階（正式季整合 4.5）只從幾條路來，這一批只有鐵匠鋪的三換四：素材四階與升階都開著時，同屬性有三階的四階拿得到
+    if c.config.four_tiers.enabled and c.config.economy.upgrade:
+        tier3 = {m.attribute for m in c.materials.values() if m.tier == 3}
+        reachable |= {m.id for m in c.materials.values() if m.tier == 4 and m.attribute in tier3}
+    if c.config.four_tiers.enabled and c.config.checkin.enabled:  # 21 天季的簽到（第 7 批）：第 6、13、20 天自己挑一種四階
+        reachable |= {m.id for m in c.materials.values() if m.tier == 4}
     return reachable
 
 
@@ -495,6 +551,25 @@ def check_insight_strong(c: Content, need) -> None:
         hinted = [scene for scene in scenes if scene.hints]
         need(not hinted or any(d.attribute in scene.hints for scene in hinted),
              f"{where}：有所感的場景沒有一段線索指得到最濃的「{d.name}」（{d.attribute}）")
+
+
+def check_terrain_arts(c: Content, need) -> None:
+    """地利（武學隨地理環境）：開著時，每一種當過最濃的意境都要有戰報那兩句（match:<id>、clash:<id>），它的屬性與它剋的那一路
+    都要有輿圖那一行的字（words）；同伴那一句要帶 {name}。不然戰報、輿圖會悄悄少一句。"""
+    cfg = c.config.terrain_arts
+    if not cfg.enabled or not c.config.insight_strong.enabled:
+        return
+    from .martial_arts import ATTRIBUTE_COUNTERS  # noqa: PLC0415  同 check_insight_strong 延後
+
+    for sid in sorted({loc.insight_strong for loc in c.locations.values() if loc.insight_strong}):
+        d = c.insights.get(sid)
+        if d is None:
+            continue  # 認不得的意境由 check_insight_strong 擋
+        for key in (f"match:{sid}", f"clash:{sid}"):
+            need(bool(cfg.lines.get(key)), f"地利：最濃的意境 {sid} 要寫戰報那一句 terrain_arts.lines[{key}]")
+        for attribute in (d.attribute, ATTRIBUTE_COUNTERS.get(d.attribute)):
+            need(attribute in cfg.words, f"地利：最濃的意境 {sid} 要寫輿圖那一行的屬性字 terrain_arts.words[{attribute}]")
+    need("{name}" in cfg.lines.get("mate_match", ""), "地利：同伴那一句 terrain_arts.lines[mate_match] 要帶 {name}")
 
 
 def check_faction_choices(c: Content, need) -> None:
@@ -596,6 +671,59 @@ def check_arena_crowd(c: Content, need) -> None:
             need(bool(c.arena_crowd.get(kind)), f"arena_crowd 缺少種類 {kind}")
 
 
+def check_xingshi_lines(c: Content, need) -> None:
+    """〈天下形勢〉的句型（content/xingshi_lines.json，領地爭奪第三批 A；Joy 直接改字）：寫了這個檔就每一組都要齊——open、close 是一串句子，
+    fact、summary、lean、move 每一個鍵（xingshi.FACT_KEYS 這幾組）都要有一句、不能多寫認不得的鍵；每一句照 xingshi.SAMPLE 填得進去、
+    填完不能空、不能有阿拉伯數字（文章不准有數字，固定段就是拿這些句子拼的）。沒有這個檔就沒有〈天下形勢〉（xingshi.on）。"""
+    from . import xingshi  # noqa: PLC0415
+
+    lines = c.xingshi_lines
+    if not lines:
+        return
+
+    def check(where: str, text) -> None:
+        try:
+            filled = str(text).format(**xingshi.SAMPLE)
+        except (KeyError, IndexError, ValueError) as e:
+            need(False, f"xingshi_lines.{where}：「{text}」填不進去（{e}）")
+            return
+        need(isinstance(text, str) and bool(filled.strip()) and not any(ch.isdigit() for ch in filled),
+             f"xingshi_lines.{where}：「{text}」不能空、不能有數字")
+
+    groups = {"fact": xingshi.FACT_KEYS, "summary": xingshi.SUMMARY_KEYS, "lean": xingshi.LEAN_KEYS, "move": xingshi.MOVE_KEYS}
+    for key in lines:
+        need(key in groups or key in ("open", "close"), f"xingshi_lines：不認得的鍵 {key}")
+    for key in ("open", "close"):
+        pool = lines.get(key)
+        need(isinstance(pool, list) and bool(pool), f"xingshi_lines.{key}：要寫成一串句子")
+        for text in pool if isinstance(pool, list) else []:
+            check(key, text)
+    for group, keys in groups.items():
+        table = lines.get(group)
+        need(isinstance(table, dict), f"xingshi_lines.{group}：要寫成「鍵：句子」")
+        table = table if isinstance(table, dict) else {}
+        for key in keys:
+            need(key in table, f"xingshi_lines.{group} 缺少 {key}")
+        for key, text in table.items():
+            need(key in keys, f"xingshi_lines.{group}：不認得的鍵 {key}")
+            check(f"{group}.{key}", text)
+
+
+def check_mall(c: Content, need) -> None:
+    """商城的商品（content/mall.json，商城架構設計 4.3）：每一件照 mall.item_problems（效果在允許的效果表裡、種類對得上、數量、
+    名字過命名過濾、上架日期與季的格式）；商品之間不同名。開關關著也照驗（檔案寫壞了早點知道）。"""
+    from . import mall  # noqa: PLC0415  mall → naming：在函式裡 import，跟其他 check_* 一樣
+
+    for item in c.mall.values():
+        for problem in mall.item_problems(item, c):
+            need(False, problem)
+    seen: dict[str, str] = {}
+    for item in c.mall.values():
+        if item.name in seen:
+            need(False, f"商城 {item.id}：跟 {seen[item.name]} 同名「{item.name}」")
+        seen.setdefault(item.name, item.id)
+
+
 def check_shop_lines(c: Content, need) -> None:
     """店面上掌櫃的話（content/shop_lines.json，店面獨立介面設計 1.4；Joy 直接改字）：寫了的只能是認得的店與情況，每一句不能空、
     只用繁體中文、不寫數字；店面開關開著時，開門的店那一組每一種情況都要有句子：鐵匠鋪（兵器或防具開著）、馬市（坐騎開著）、
@@ -613,9 +741,12 @@ def check_shop_lines(c: Content, need) -> None:
         "market": c.config.mounts.enabled,
         "board": c.config.bounties.enabled and bool(c.scenario.factions),
         "donate": c.config.economy.donate and bool(c.scenario.factions),  # 大本營的軍需帳（素材與經濟 B6）
+        "dadian": c.config.silver_outlets.enabled,  # 打點（21 天季的銀兩出口）
         "tavern": c.config.tavern.enabled and any("酒肆" in loc.tags for loc in c.locations.values()),  # 酒肆（企劃者 2026-10-18）
     }
     switched = {"sell": c.config.economy.sell, "upgrade": c.config.economy.upgrade,  # 素材與經濟：收購、升階關著時不必有那一句
+                "rules": c.config.four_tiers.enabled,  # 素材四階關著時鐵匠不講神器的規矩（正式季整合 5.10）
+                "have_divine": c.config.forge_secrets.rotation,  # 神器輪替關著時不會擋「已經有這一件神器」（FB-403）
                 "black_market": c.config.economy.sell and c.config.renown.titles and c.config.renown.black_market}  # 名聲 5.2
     for shop, on in opened.items():
         if c.config.shop_screens and on:
@@ -670,8 +801,10 @@ def _placeholder_problem(line: str) -> str | None:
 def check_signature_arts(c: Content, need) -> None:
     """本命武學（tianxia/signature.py、tactics.py，企劃者 2026-10-15）：寫了本命戰法（SkillDef.tactic）的只能是人物的本命武學或本命內功
     （CharacterDef.starting_*，玩家只在情誼到了才學得到）、品質要是絕學；小戰法（TacticDef.minor）只寫在下品、不是本命的武學上；戰法的名字不重複、不撞一般與特別功效的名字；說明裡的 {鍵}
-    都要在 params 裡（卡上換成數字）；allies 是人物、foe_faction 是劇本的陣營；寫了一般功效（SkillDef.traits）的第一個要是自己的屬性、不重複。"""
+    都要在 params 裡（卡上換成數字）；allies 是人物、foe_faction 是劇本的陣營；寫了一般功效（SkillDef.traits）的第一個要是自己的屬性、不重複。
+    本命是人物起始武學裡的絕學（tactics.figure_arts，FB-640）：歷史武將同行起始帶的學來的下品武學（FB-364）照樣帶小戰法、不是本命。"""
     starts = {s for ch in c.characters.values() for s in (ch.starting_wugong, ch.starting_neigong) if s}
+    own_arts = {s for ch in c.characters.values() for s in figure_arts(c, ch)}  # 人物的本命武學與本命內功
     trait_names = {t.name for t in c.traits.general} | {t.name for t in c.traits.special}
     factions = {f.id for f in c.scenario.factions}
     seen: dict[str, str] = {}
@@ -683,7 +816,7 @@ def check_signature_arts(c: Content, need) -> None:
         if tactic is None:
             continue
         if tactic.minor:  # 小戰法（學來的武學，Joy 2026-10-21）：下品的內容武學、不是人物的本命；沒有本命底蘊與連動
-            need(skill.id not in starts, f"武學 {skill.id}：人物的本命武學寫的是本命戰法，不是小戰法")
+            need(skill.id not in own_arts, f"武學 {skill.id}：人物的本命武學寫的是本命戰法，不是小戰法")
             need(skill.quality == "下品", f"武學 {skill.id}：小戰法只寫在下品的武學上")
             need(not tactic.might and not tactic.allies and tactic.foe_faction is None,
                  f"武學 {skill.id}：小戰法不寫 might、allies、foe_faction")
@@ -714,8 +847,7 @@ def check_signature_arts(c: Content, need) -> None:
         need(arm.bond is None or bool(arm.bond.desc), f"名將本命兵器 {arm.character}：人器合一要寫說明")
         if arm.bond is not None:  # 加強的是那位名將的哪一門（PM 2026-10-16：只加卡上寫的那一門）
             ch = c.characters.get(arm.character)
-            own = [c.skills[s].tactic.name for s in ((ch.starting_wugong, ch.starting_neigong) if ch else ())
-                   if s in c.skills and c.skills[s].tactic is not None]
+            own = [c.skills[s].tactic.name for s in (figure_arts(c, ch) if ch else ()) if c.skills[s].tactic is not None]
             need(arm.bond.tactic in own, f"名將本命兵器 {arm.character}：人器合一的 tactic 要是他本命的一門戰法 {own}，寫的是「{arm.bond.tactic}」")
             need(not arm.bond.tactic or arm.bond.tactic in arm.bond.desc, f"名將本命兵器 {arm.character}：人器合一的說明要寫到加強的那一門「{arm.bond.tactic}」")
     for trait in c.traits.general:  # 絕學立招：絕招的名字到時候換成那門絕學的名字，這裡只驗說明的 {鍵} 與以器配招的說明
@@ -790,6 +922,11 @@ def check_traits(c: Content, need) -> None:
             need(not NUMBER_IN_TEXT.search(line), f"{where}：不能寫數字或百分比，功效的數字由規則算、句子只寫打法（「{line[:12]}」）")
 
 
+def _week7(c: Content) -> bool:
+    """這一份設定是 7 天濃縮季（照現實天的季、季曆分段）：內容要照天另寫 7 天的那一份（real7、active_from_day7、cal_day_*7）。"""
+    return bool(c.config.season21 and c.config.season_segments)
+
+
 def check_timetable(c: Content, need, known, front_ids: list[str], trend_ids: set[str]) -> None:
     """時刻表（content/timetable.json，計畫 T2）：戰線（大事的 front、人物效果的 front 與 only_if、@commander 的戰線）
     寫的是戰線 id（大區的 front，T1：yingru／nanyang／jizhou），不是大區 id——幽州是大區、它的戰線是冀州，寫 youzhou
@@ -843,9 +980,27 @@ def check_timetable(c: Content, need, known, front_ids: list[str], trend_ids: se
         known(where, change.only_if.values(), front_ids, "戰線")
         check_text(where, change.note)
 
+    segments = c.config.season_segments
+    need(  # 21 天季的季曆就是現實的週（正式季整合設計 1.1）：cal_scale 要是 1
+        not c.config.season21 or segments or c.config.season_weeks * 7 == c.config.season_days,
+        f"設定：21 天季的季曆就是現實的週，season_weeks × 7（{c.config.season_weeks * 7}）要等於 season_days（{c.config.season_days:g}）",
+    )
+    if segments:  # 7 天濃縮季（企劃者 2026-10-20）：季曆的週換成段，也是照現實天（cal_scale 1）；內容照天另寫的那一份是 7 天的
+        need(c.config.season21, "設定：season_segments（季曆分段）只給照現實天的季，要一起打開 season21")
+        need(all(n >= 1 for n in segments), f"設定：season_segments 每一段至少一天（{segments}）")
+        need(len(segments) == c.config.season_weeks, f"設定：season_segments 有 {len(segments)} 段，season_weeks 要一樣（{c.config.season_weeks}）")
+        need(
+            sum(segments) == c.config.season_days == 7,
+            f"設定：season_segments 的和（{sum(segments)}）要等於 season_days（{c.config.season_days:g}），而且只做 7 天的季（內容照天另寫的是 7 天）",
+        )
+    week7 = _week7(c)
     for ev in table:
         where = f"時刻表 {ev.id}"
         need(ev.week <= c.config.season_weeks, f"{where}：第 {ev.week} 週超出季曆的 {c.config.season_weeks} 週")
+        if week7:
+            need(ev.real7 is not None, f"{where}：7 天濃縮季的時刻表每一件都要寫 real7（第幾天、幾點）")
+        else:
+            need(not c.config.season21 or ev.real is not None, f"{where}：21 天季的時刻表每一件都要寫 real（現實的週、星期、鐘點）")
         if ev.front is not None:
             known(where, [ev.front], front_ids, "戰線")
         if ev.kind == "roll":
@@ -953,12 +1108,27 @@ def check_relations(c: Content, need, known) -> None:
             known(where, [rel.faction], factions, "陣營")
 
 
+def check_companions(c: Content, need) -> None:
+    """歷史武將同行（Config.companions）：標了 recruitable 的人物不能是任何大勢人物（人物表寫了 character 的那十六位帶不走），
+    要能深度對話（招募鈕照 Game._figures_here），side 寫的要是劇本的陣營。"""
+    big = {fig.character for fig in c.figures.values() if fig.character}
+    faction_ids = {f.id for f in c.scenario.factions}
+    for cid, ch in c.characters.items():
+        if not ch.recruitable:
+            continue
+        where = f"人物 {cid}"
+        need(cid not in big, f"{where}：大勢人物不能標 recruitable（人物表寫了他）")
+        need(ch.deep_interaction, f"{where}：標了 recruitable 要能深度對話（deep_interaction）")
+        need(ch.side is None or ch.side in faction_ids, f"{where}：side {ch.side} 不是劇本的陣營")
+
+
 def check_figures(c: Content, need, known, front_ids: list[str]) -> None:
     """大勢人物（content/figures.json，計畫 T4）：對話人物、陣營、戰線（戰線 id，不是大區）、地點、代表本人的隊伍都存在，
     隊伍跟人物同一個陣營；一個對話人物只能是一位大勢人物，而且人物的 id 就是對話人物的 id（伏筆用對話人物的 id 讀人物的
     狀態）；接位的人存在、同一個陣營、接位鏈不繞回來；名字只用繁體中文。"""
     faction_ids = [f.id for f in c.scenario.factions]
     owner: dict[str, str] = {}  # 對話人物 → 第一個用它的大勢人物
+    week7 = _week7(c)
     for fid, fig in c.figures.items():
         where = f"大勢人物 {fid}"
         if fig.character is not None:
@@ -975,6 +1145,18 @@ def check_figures(c: Content, need, known, front_ids: list[str]) -> None:
         need(
             fig.active_from_week <= c.config.season_weeks,
             f"{where}：第 {fig.active_from_week} 週超出季曆的 {c.config.season_weeks} 週",
+        )
+        need(  # 21 天季照天數出兵（正式季整合設計 1.2 給開發 5）：第 1 週以後才出兵的人物要另寫天數
+            not c.config.season21 or week7 or fig.active_from_week <= 1 or fig.active_from_day is not None,
+            f"{where}：21 天季照天數出兵，第 {fig.active_from_week} 週起的人物要寫 active_from_day",
+        )
+        need(  # 7 天濃縮季同上，寫 7 天的那一份
+            not week7 or fig.active_from_week <= 1 or fig.active_from_day7 is not None,
+            f"{where}：7 天濃縮季照天數出兵，第 {fig.active_from_week} 週起的人物要寫 active_from_day7",
+        )
+        need(
+            fig.active_from_day7 is None or fig.active_from_day7 < 7,
+            f"{where}：active_from_day7（{fig.active_from_day7:g}）超出 7 天" if fig.active_from_day7 is not None else "",
         )
         need(to_traditional(fig.name) == fig.name, f"{where}：名字只能用繁體中文（{fig.name}）")
         if fig.out_flag is not None:  # 丙 (c)：退場時記的世界旗標要有人讀（劇本或事件的條件），打錯字才抓得到
@@ -996,7 +1178,8 @@ def check_figures(c: Content, need, known, front_ids: list[str]) -> None:
         need(nxt not in chain, f"{where}：接位鏈繞回來了（{'→'.join(chain)}→{nxt}）")
 
 
-ORDER_SLOTS = ("{戰線}", "{地點}", "{起點}", "{終點}", "{主將}", "{人物}", "{號令}")
+ORDER_SLOTS = ("{戰線}", "{地點}", "{起點}", "{終點}", "{主將}", "{人物}", "{號令}", "{本週}", "{這週}")  # 後兩個照季換字（FB-501）
+RECRUITER_SLOTS = ("{本週}", "{每週}")  # 入伍段引薦人的話裡照軍令多久一道換的字（enlist.SLOTS，FB-502）
 ORDER_PERSONAL = {"siege": "win", "defend": "duty", "intercept": "win", "escort": "convoy", "strike": "challenge"}
 
 
@@ -1465,7 +1648,7 @@ def check_bounties(c: Content, need) -> None:
         f"Config.bounties.give_attributes 至少一個、不重複，而且只能是 {'、'.join(ATTRIBUTES)}：{cfg.give_attributes}",
     )
     need(set(cfg.arms_silver) == {"下品", "中品", "上品"}, f"Config.bounties.arms_silver 要剛好寫下品、中品、上品：{sorted(cfg.arms_silver)}")
-    need(set(cfg.arms_tier) == {"1", "2", "3"}, f"Config.bounties.arms_tier 要剛好寫 1、2、3：{sorted(cfg.arms_tier)}")
+    need(set(cfg.arms_tier) == {"1", "2", "3", "4"}, f"Config.bounties.arms_tier 要剛好寫 1、2、3、4：{sorted(cfg.arms_tier)}")
     defaults = type(cfg)()  # 預設長什麼樣，就是「該寫哪幾項」的依據
     for field in ("silver", "exp", "deeds", "xinde"):
         given = getattr(cfg, field)
@@ -1486,6 +1669,31 @@ def check_core_loop(c: Content, need) -> None:
          f"Config.push_resistance：full_within 不能大於 half_within（{r.full_within}、{r.half_within}）")
     need(set(c.config.explore_modes.second_tier) <= {1, 2, 3},
          f"Config.explore_modes.second_tier 的鍵是危險度 1～3：{sorted(c.config.explore_modes.second_tier)}")
+
+
+GATHER_BRANCH_FIELDS = {"place"}  # 分支第一句能用的佔位（GatherBranch.line）
+
+
+def check_gather_branches(c: Content, need) -> None:
+    """找素材分支（content/gather_branches.json，第 32 項）：id 不能是「自己說」那一顆的 say；屬性只能是素材表裡有的；
+    不是深入的要寫 attributes；標籤要有地點用；深入最多一條；第一句只能用 {place}。開關開著卻有城外地點一條都沒有不擋
+    （那裡照舊直接找素材，PM）。id 重複在載入時（_index）就擋。"""
+    from .explore_modes import SAY  # noqa: PLC0415  延後 import（同 validate 的 atlas）
+
+    attributes = {m.attribute for m in c.materials.values()}
+    tags = {tag for loc in c.locations.values() for tag in loc.tags}
+    where = "content/gather_branches.json"
+    need(sum(b.deep for b in c.gather_branches.values()) <= 1, f"{where}：深入（deep）最多一條")
+    for b in c.gather_branches.values():
+        need(b.id != SAY, f"{where}：id 不能是 {SAY}（「自己說」那一顆用掉了）")
+        need(b.deep or bool(b.attributes), f"{where}：{b.id} 不是深入，要寫 attributes")
+        known_attrs = [a for a in b.attributes if a not in attributes]
+        need(not known_attrs, f"{where}：{b.id} 的屬性 {known_attrs} 不在素材表裡")
+        need(len(set(b.attributes)) == len(b.attributes), f"{where}：{b.id} 的屬性重複")
+        unused = [t for t in b.tags if t not in tags]
+        need(bool(b.tags) and not unused, f"{where}：{b.id} 的標籤 {unused or '（空的）'} 沒有地點用")
+        fields = set(STEP_PLACEHOLDER.findall(b.line))
+        need(fields <= GATHER_BRANCH_FIELDS, f"{where}：{b.id} 的第一句只能用 {{place}}：{sorted(fields)}")
 
 
 def check_territory(c: Content, need, known, front_ids: list[str]) -> None:
@@ -1546,6 +1754,74 @@ def check_territory(c: Content, need, known, front_ids: list[str]) -> None:
                 need(loc_id in t.fixed or loc_id in lined, f"{where}：control 的 {loc_id} 不是可易手或 fixed 的地點（大本營不易手）")
                 need(side in factions, f"{where}：control 的 {side} 不是陣營")
                 stands(where, loc_id, side)
+
+
+def check_conquest_blocks(c: Content, need, known, front_ids: list[str]) -> None:
+    """領地爭奪的區塊（Scenario.territory.blocks，第 38 項改版計畫 Task 2）：只在寫了區塊時查。地點認得；大本營是自己陣營的種類；
+    豪強（要依附別人的陣營）的投靠點與序章專屬的地點不是區塊；fixed 是陣營的種類；line 是戰線或 null；每一塊中立至少跟一塊區塊直通，
+    而且每一方都走得到（conquest.reach：從自家開季的區塊出發、只走自家與中立的區塊；輿圖簡化設計 3.2）。
+    中立駐軍（neutral_garrison）只寫在開季中立的區塊、隊伍認得、沒有陣營。"""
+    from . import conquest, territory  # noqa: PLC0415  延後 import（同 check_territory）
+
+    t = c.scenario.territory
+    if t is None or not t.blocks:
+        need(t is None or not t.neutral_garrison, "領地爭奪：寫了 neutral_garrison 卻沒有 blocks")
+        return
+    where = "領地爭奪的區塊"
+    known(where, list(t.blocks), c.locations, "地點")
+    bases = territory.bases(c)
+    allies = {f.id for f in c.scenario.factions if f.allies}
+    for loc_id, block in t.blocks.items():
+        if loc_id not in c.locations:
+            continue
+        here = f"{where} {loc_id}"
+        if loc_id in bases:
+            side = bases[loc_id]
+            need(side not in allies, f"{here}：{side} 要依附別的陣營，它的投靠點不是區塊（設計 4.1）")
+            need(side in allies or block.kind == side, f"{here}：大本營要是自己陣營（{side}）的種類")
+        need(not c.locations[loc_id].prologue_only, f"{here}：序章專屬的地點不是區塊")
+        if loc_id in t.fixed:
+            need(block.kind == t.fixed[loc_id], f"{here}：fixed 的地點種類要是開季的控制方（{t.fixed[loc_id]}）")
+        need(block.line is None or block.line in front_ids, f"{here}：line「{block.line}」不是戰線")
+        if block.kind == conquest.NEUTRAL:
+            need(bool(conquest.adjacent(c, loc_id)), f"{here}：中立區塊至少要跟一塊區塊直通（不然誰都打不到）")
+    # 每一塊中立地，每一方都要有一條路從自家開季持有的區塊走得到、只走自家與中立的區塊（輿圖簡化設計 3.2，PM 2026-10-21）
+    neutral = [loc_id for loc_id, block in t.blocks.items() if block.kind == conquest.NEUTRAL and loc_id in c.locations]
+    for side in sorted({block.kind for block in t.blocks.values()} - {conquest.NEUTRAL}):
+        reached = conquest.reach(c, side)
+        name = c.scenario.faction_name(side, side)
+        for loc_id in neutral:
+            need(loc_id in reached, f"{where} {loc_id}（{c.locations[loc_id].name}）：{name}走不到這塊中立地"
+                                    f"（從{name}開季的區塊出發、只走{name}與中立的區塊；輿圖簡化設計 3.2）")
+    for loc_id, squads in t.neutral_garrison.items():
+        here = f"領地爭奪的中立駐軍 {loc_id}"
+        need(loc_id in t.blocks and t.blocks[loc_id].kind == conquest.NEUTRAL, f"{here}：只能寫在開季中立的區塊")
+        known(here, squads, c.squads, "隊伍")
+        need(all(c.squads[s].faction is None for s in squads if s in c.squads), f"{here}：中立駐軍要是沒有陣營的隊伍")
+    for side, squads in t.side_garrison.items():
+        here = f"領地爭奪的控制方巡邏 {side}"
+        need(side in conquest.SIDES, f"{here}：只能是交戰兩軍")
+        known(here, squads, c.squads, "隊伍")
+        need(all(c.squads[s].faction == side for s in squads if s in c.squads), f"{here}：要是 {side} 的隊伍")
+    # 第二批：每一塊搶得下來的區塊所在的大區都要有攻城範本（content/battles.json 的 siege_<大區>，tianxia/siege.py）
+    from . import atlas  # noqa: PLC0415
+
+    for loc_id in t.blocks:
+        if loc_id in c.locations and conquest.capturable(c, loc_id):
+            region = atlas.region_of(c, loc_id)
+            tid = f"siege_{region.id}" if region is not None else None
+            need(tid in c.battles and c.battles[tid].siege, f"{where} {loc_id}：所在的大區要有攻城範本（battles.json 的 {tid}）")
+
+
+def check_siege_templates(c: Content, need) -> None:
+    """攻城範本（BattleDef.siege，領地爭奪第二批）：id 是 siege_<大區>、寫了大區、兩軍依序是官軍與黃巾（戰局以官軍為正向）、不是時刻表決戰。"""
+    for battle in c.battles.values():
+        if not battle.siege:
+            continue
+        where = f"攻城範本 {battle.id}"
+        need(battle.region is not None and battle.id == f"siege_{battle.region}", f"{where}：id 要是 siege_<大區>、要寫 region")
+        need([f.id for f in battle.factions] == ["guan", "huang"], f"{where}：陣營要依序是 guan、huang")
+        need(battle.timetable_event is None and battle.version is None, f"{where}：攻城範本不是時刻表決戰")
 
 
 def check_duels(c: Content, need, known) -> None:
@@ -1749,8 +2025,18 @@ def validate(c: Content) -> None:
         known(where, cond.factions_none, faction_ids, "陣營")
         known(where, cond.controlled_by, faction_ids, "陣營")
         known(where, cond.clue_items, item_ids, "伏筆物品")
-        for week in (cond.week_min, cond.week_max):
-            need(week is None or 1 <= week <= c.config.season_weeks, f"{where}：週次 {week} 不在 1～{c.config.season_weeks} 之間")
+        weekly = cond.week_min is not None or cond.week_max is not None
+        if _week7(c) and weekly:  # 7 天濃縮季同 21 天季照天數，寫 7 天的那一份（cal_day_*7，1～7 在模型裡驗）
+            need(cond.week_min is None or cond.cal_day_min7 is not None, f"{where}：7 天濃縮季照天數，寫了 week_min 也要寫 cal_day_min7")
+            need(cond.week_max is None or cond.cal_day_max7 is not None, f"{where}：7 天濃縮季照天數，寫了 week_max 也要寫 cal_day_max7")
+        elif c.config.season21 and weekly:  # 21 天季不看週、只看天（正式季整合設計 1.2 給開發 6）：寫了哪一頭的週就要寫那一頭的天
+            need(cond.week_min is None or cond.cal_day_min is not None, f"{where}：21 天季照天數，寫了 week_min 也要寫 cal_day_min")
+            need(cond.week_max is None or cond.cal_day_max is not None, f"{where}：21 天季照天數，寫了 week_max 也要寫 cal_day_max")
+        else:
+            for week in (cond.week_min, cond.week_max):
+                need(week is None or 1 <= week <= c.config.season_weeks, f"{where}：週次 {week} 不在 1～{c.config.season_weeks} 之間")
+        for day in (cond.cal_day_min, cond.cal_day_max):
+            need(day is None or day <= c.config.season_weeks * 7, f"{where}：第 {day} 天超出季曆的 {c.config.season_weeks * 7} 天")
         for sub in cond.any_of:
             check_condition(where, sub, after_fight)
 
@@ -1904,7 +2190,11 @@ def validate(c: Content) -> None:
     # 每一種素材都要至少有一個拿得到的管道，否則它是死內容。第一版的「鎮山鐵」就是這樣
     # 漏掉的：掉天品的兩個對手屬剛與屬柔、奇遇給屬快，屬慢沒人負責，而難度 >=100 的對手
     # 都寫了明確 drops，所以依難度的預設表（會按對手屬性挑）對它們根本不執行。
-    unreachable = sorted(set(c.materials) - _material_sources(c))
+    unreachable = set(c.materials) - _material_sources(c)
+    if not (c.config.four_tiers.enabled and (c.config.economy.upgrade or c.config.checkin.enabled)):
+        # FB-340：素材四階或升階關著時四階料拿不到是預期的（四階料是內容收不回的，設計 10.1：關著時九件神器實際上打不出來），不擋載入
+        unreachable = {mid for mid in unreachable if c.materials[mid].tier < 4}
+    unreachable = sorted(unreachable)
     need(
         not unreachable,
         "這些素材沒有任何取得管道（沒有對手掉、沒有地點撿、沒有事件給）："
@@ -1946,15 +2236,19 @@ def validate(c: Content) -> None:
     check_check_voice(c, need)
     check_insight_scenes(c, need)
     check_insight_strong(c, need)
+    check_terrain_arts(c, need)
     check_faction_choices(c, need)
     check_front_lines(c, need)
     check_combat_lines(c, need)
     check_shop_lines(c, need)
+    check_mall(c, need)
     check_arena_crowd(c, need)
+    check_xingshi_lines(c, need)
     check_traits(c, need)
     check_signature_arts(c, need)
     # 沒寫 drops 的對手走 materials.py 依難度的預設掉落表，所以每一階都得有素材可挑。
-    for tier in sorted(TIER_NAMES):
+    # 只看預設表會掉的階（一到三階）：四階是神器的料，掉落表不給（正式季整合 4.5），測試內容也沒有
+    for tier in sorted({t for _, rolls in DEFAULT_DROPS for t, _ in rolls}):
         need(
             any(m.tier == tier for m in c.materials.values()),
             f"content/materials.json 沒有任何第 {tier} 階（{TIER_NAMES[tier]}）的素材，預設掉落表會挑不到東西",
@@ -2111,6 +2405,7 @@ def validate(c: Content) -> None:
             known(where, [th.location], c.locations, "地點")
         if th.starts_battle:
             known(where, [th.starts_battle], c.battles, "戰鬥")
+            need(th.starts_battle not in c.battles or not c.battles[th.starts_battle].siege, f"{where}：攻城範本不能從門檻開")
         need(
             not (th.trend in hidden and th.op == "<="),
             f"{where}：隱藏大勢線不能用 <= 門檻（未浮現時數值為 0，會立刻觸發）",
@@ -2164,6 +2459,8 @@ def validate(c: Content) -> None:
             known(f"世界事件 {event.id}", [event.location], c.locations, "地點")
         if event.starts_battle:
             known(f"世界事件 {event.id}", [event.starts_battle], c.battles, "戰鬥")
+            need(event.starts_battle not in c.battles or not c.battles[event.starts_battle].siege,
+                 f"世界事件 {event.id}：攻城範本不能從世界事件開")
     # 第一季不觸發的 beta 內容（計畫 T8、與 T4 說好的格式）：照種類各自檢查 id 存在，不跨種類比對
     off = c.scenario.season_one_off
     for kind, ids, valid, label in (
@@ -2308,6 +2605,9 @@ def validate(c: Content) -> None:
             for field, text in who.allied.items():  # 豪強分屬兩軍的季換的那幾句（Recruiter.allied）
                 need(field in RECRUITER_ALLIED_FIELDS, f"入伍段：引薦人 {who.name} 的 allied 不認得 {field}（只認 {RECRUITER_ALLIED_FIELDS}）")
                 need(bool(text.strip()) and to_traditional(text) == text, f"入伍段：引薦人 {who.name} 的 allied.{field} 要是繁體、不能是空的")
+            texts = [who.intro, who.briefing, who.order_hint, who.done, who.rejoin, *who.lines, *who.allied.values()]
+            for slot in sorted({s for text in texts for s in re.findall(r"\{[^{}]*\}", text)}):  # enlist.fill 只換這兩個（FB-502）
+                need(slot in RECRUITER_SLOTS, f"入伍段：引薦人 {who.name} 的話裡 {slot} 不認得（只認 {RECRUITER_SLOTS}）")
 
     # ── 碰到才說（新手引導計畫三）：id 不重複、只能是設計 5.2 的十八條（hints.KNOWN）；師父的條要有 text、引薦人的條要有 texts，
     # texts 的鍵是劇本的陣營、每一句都不是空的；寫反了（師父的條寫 texts、引薦人的條寫 text）多半是填錯欄位，載入時就報錯 ──
@@ -2455,6 +2755,8 @@ def validate(c: Content) -> None:
 
     _validate_secrets(c, need)
     _validate_forge_secrets(c, need)
+    _validate_tier4_named(c, need)
+    _validate_named_clash(c, need)
     _validate_seal(c, need)
 
     # ── 意境與基礎武學（武學與成長設計附錄 A～C）──
@@ -2530,6 +2832,7 @@ def validate(c: Content) -> None:
     check_timetable(c, need, known, front_ids, trend_ids)
     check_figures(c, need, known, front_ids)
     check_relations(c, need, known)
+    check_companions(c, need)
     check_foreshadows(c, need, known, region_ids, front_ids, counters_written)
     check_orders(c, need, known, front_ids)
     check_promotions(c, need, known)
@@ -2539,7 +2842,10 @@ def validate(c: Content) -> None:
     check_signature_arms(c, need, known)
     check_bounties(c, need)
     check_core_loop(c, need)
+    check_gather_branches(c, need)
     check_territory(c, need, known, front_ids)
+    check_conquest_blocks(c, need, known, front_ids)
+    check_siege_templates(c, need)
 
     for key, where in sorted(marks_written.items()):
         need(key in marks_read, f"{where}：痕跡 {key} 寫了卻沒有任何條件或文字讀它")
@@ -2609,9 +2915,64 @@ def _validate_secrets(c: Content, need) -> None:
                     insight_ok(f"{where} 的 {side}", getattr(recipe, side))
 
 
+def _validate_tier4_named(c: Content, need) -> None:
+    """四階名器名字表（content/tier4_named.json，正式季整合 5.2）：兵器的種類合法、防具不寫種類；每一條的名字過命名過濾、兵器名對得上
+    種類（weapons.kind_problem）、防具名帶防具的字（armor.word_problem），不跟一般組合字表組得出的名字、隱藏配方、別的條目同名；
+    每一個欄位（兵器照種類）× 每一種屬性至少一條（不然那一爐擲中名器卻挑不到名字）。沒有這個檔（測試內容）不檢查。"""
+    if not c.tier4_named:
+        return
+    table = forge_rules.table_names(c)
+    names: set[str] = set()
+    for entry in c.tier4_named.values():
+        where = f"四階名器 {entry.id}"
+        if entry.slot == "weapon":
+            need(entry.kind in WEAPON_KINDS, f"{where}：兵器要寫種類（{'、'.join(WEAPON_KINDS)}）")
+            shape = weapon_kind_problem(entry.kind, entry.name) if entry.kind in WEAPON_KINDS else None
+        else:
+            need(entry.kind is None, f"{where}：防具不寫種類")
+            shape = armor_word_problem(entry.name)
+        problem = name_problem(entry.name, c)
+        need(problem is None, f"{where}：名字 {entry.name} 過不了命名過濾（{problem}）")
+        need(shape is None, f"{where}：名字 {entry.name} 過不了（{shape}）")
+        need(entry.name not in table, f"{where}：名字 {entry.name} 跟鐵匠鋪一般組合的名字同名")
+        need(entry.name not in names, f"{where}：名字 {entry.name} 重複")
+        names.add(entry.name)
+        need(0 < len(entry.note) <= 30, f"{where}：說明要 1～30 字")
+    for slot, kind in [("weapon", k) for k in WEAPON_KINDS] + [("armor", None)]:
+        for attribute in ATTRIBUTES:
+            need(any(e.slot == slot and e.kind == kind and e.attribute == attribute for e in c.tier4_named.values()),
+                 f"四階名器名字表少了 {kind or '防具'}・{attribute}")
+
+
+def _named_stem(name: str, slot: str, kind: str | None) -> str:
+    """名器名字拿掉最後的兵器字（劍、拳套）或防具字（甲鎧袍衫），剩下的是取名的那幾個字（_validate_named_clash 比這一段）。"""
+    tail = WEAPON_NOUNS.get(kind or "", kind or "") if slot == "weapon" else next((w for w in ARMOR_FORGE_WORDS if name.endswith(w)), "")
+    return name[: -len(tail)] if tail and name.endswith(tail) else name
+
+
+def _validate_named_clash(c: Content, need) -> None:
+    """名器（隱藏配方的名器、四階名器名字表）的名字不跟神器、名將本命兵器的名字，與任何戰法、特技的名字共用連著的兩個字（FB-431：
+    三階名器【隕星鎧】跟神器【隕星刀】、【墜星劍】跟特技〔墜星〕）。名器那一邊先拿掉最後的兵器字、防具字（拳套、長刀的刀不算撞字）。"""
+    great = [r.name for r in c.forge_secrets.values() if r.divine] + [a.name for a in c.gear.signature_arms]
+    tactics = [s.tactic.name for s in c.skills.values() if s.tactic is not None]
+    tactics += [r.tactic.name for r in c.forge_secrets.values() if r.tactic is not None]
+    tactics += [a.tactic.name for a in c.gear.signature_arms if a.tactic is not None]
+
+    def pairs(text: str) -> set[str]:
+        return {text[i:i + 2] for i in range(len(text) - 1)}
+
+    named = [(f"名器 {r.id}", r.name, r.slot, r.kind) for r in c.forge_secrets.values() if not r.divine]
+    named += [(f"四階名器 {e.id}", e.name, e.slot, e.kind) for e in c.tier4_named.values()]
+    for where, name, slot, kind in named:
+        stem = pairs(_named_stem(name, slot, kind))
+        for other in great + tactics:
+            shared = sorted(stem & pairs(other))
+            need(not shared, f"{where}：名字 {name} 跟【{other}】共用「{'、'.join(shared)}」（FB-431：名器不跟神器、特技撞字）")
+
+
 def _validate_forge_secrets(c: Content, need) -> None:
     """隱藏配方池（content/forge_secrets.json）與 Config.forge_secrets（打造隱藏配方設計 3.1、3.2、3.5）：每一組夠挑（神器組從打造第二批起照挑）；
-    每一條的種類、主料寫死階、輔料二選一、屬性是素材有的而且素材表合得上、不收剛柔快慢兩對、神器配方兩樣三階、名字（命名過濾、
+    每一條的種類、主料寫死階、輔料二選一、屬性是素材有的而且素材表合得上、不收剛柔快慢兩對、神器配方兩樣四階、名字（命名過濾、
     種類字或防具字、不重複、不跟武學秘方同名；跟寶物名駒、對照表同名由 name_problem 與字表那一圈擋）、口訣（1～20 字、不寫數字、
     不寫「配方」「秘方」），同一個組合只能有一條（min_tier 算它涵蓋的每一階）。"""
     cfg = c.config.forge_secrets
@@ -2638,8 +2999,8 @@ def _validate_forge_secrets(c: Content, need) -> None:
             need(any(forge_rules.fits(side, m) for m in c.materials.values()), f"{where}：素材表裡找不到合得上的{label}")
         need({r.main.attribute, r.aux.attribute} not in forge_rules.SEED_PAIRS,
              f"{where}：剛柔、快慢合出來的屬性每季不同，名器的說明會對不上")
-        if r.divine:
-            need(r.main.tier == 3 and min(forge_rules.covers(r.aux), default=0) == 3, f"{where}：神器配方的主料、輔料都要三階")
+        if r.divine:  # 正式季整合 5.5：九件神器改用四階（四階才是神器的料）
+            need(r.main.tier == 4 and r.aux.tier == 4, f"{where}：神器配方的主料、輔料都要四階")
         need(r.name not in names, f"{where}：名字 {r.name} 重複")
         names.add(r.name)
         problem = name_problem(r.name, c)
@@ -2658,12 +3019,21 @@ def _validate_forge_secrets(c: Content, need) -> None:
             combo = (r.slot, r.kind, r.main.attribute, r.main.tier, r.aux.attribute, tier)
             other = combos.setdefault(combo, r.id)
             need(other == r.id, f"{where}：跟隱藏配方 {other} 認同一個組合")
+    # 神器（正式季整合 5.6、5.9）：每件的特色（特技的做法）不重複；要有 wave 1 的（這個伺服器第一季全開的那幾件）。
+    # 同一種兵器（防具算一種）兩件神器不能是同一對料，上面「認同一個組合」已經擋（神器兩樣都寫死四階）
+    divine = [r for r in c.forge_secrets.values() if r.divine]
+    kinds: dict[str, str] = {}
+    for r in divine:
+        if r.tactic is not None:
+            other = kinds.setdefault(r.tactic.kind, r.id)
+            need(other == r.id, f"神器 {r.id}：特技的做法 {r.tactic.kind} 跟神器 {other} 一樣（5.9：每件神器的特色不重複）")
+    need(not divine or any(r.wave == 1 for r in divine), "神器配方：要有 wave 1 的（這個伺服器第一季全開的那幾件）")
 
 
 def _validate_seal(c: Content, need) -> None:
     """玉璽碎片（玉璽碎片設計 13.4、8.5）：係數都不超過 1（一場最多 cap）；沒有 content/seal.json 可以（碎片關著：時刻表的標記與
     emerge_skill 都不檢查——測試內容沒有混元一氣，預設的 emerge_skill 不能讓它載入失敗）；有就 emerge_skill 認得、剛好七片、名字不重複、
-    效果鍵在 Config.seal.effects、名字過命名過濾；時刻表不是空的時標 emerge 的剛好一件、標了 seal 的都是決戰。
+    效果鍵在 Config.seal.effects（改版的 effects 在 Config.seal.revamp.effects）、名字過命名過濾；時刻表不是空的時標 emerge 的剛好一件、標了 seal 的都是決戰。
     天命之爭（玉璽二）：最多一件、是決戰、沒標 seal、有它的戰鬥、mandate_endings 指到交戰兩軍與標了 mandate 的結局；標了 mandate 的結局都有人指。"""
     cfg = c.config.seal
     for label, table in (("side_factor", cfg.side_factor), ("take_share", cfg.take_share)):
@@ -2675,6 +3045,8 @@ def _validate_seal(c: Content, need) -> None:
     need(len({s.name for s in c.seal.values()}) == len(c.seal), "content/seal.json：七片的名字要不重複")
     for shard in c.seal.values():
         need(shard.effect in cfg.effects, f"content/seal.json：{shard.id} 的效果 {shard.effect} 不在 Config.seal.effects")
+        for key in shard.effects:  # 改版的常駐效果（玉璽碎片改版第三章）：開關關著也檢查，打開那一刻不會才發現內容寫錯
+            need(key in cfg.revamp.effects, f"content/seal.json：{shard.id} 的改版效果 {key} 不在 Config.seal.revamp.effects")
         problem = name_problem(shard.name, c)
         need(problem in (None, SEAL_CLASH), f"content/seal.json：{shard.id} 的名字「{shard.name}」{problem}")
     mandates = c.mandate_timetable  # 天命之爭（玉璽二；8.3、8.5）

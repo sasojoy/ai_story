@@ -8,7 +8,8 @@ import hashlib
 from collections.abc import Callable
 
 from . import (
-    atlas, bounties, calendar, equipment, figures, insights, mapart, mapview, mounts, orders, rules, sensing, territory, timetable,
+    atlas, bounties, calendar, conquest, equipment, figures, insights, mapart, mapview, mounts, orders, rules, sensing, terrain,
+    territory, timetable,
 )
 from .models import Content, Location
 from .state import GameState, TerritoryWeek, WorldState
@@ -51,7 +52,7 @@ def insight_pool(loc: Location, content: Content) -> list[str]:
 
 def base(state: GameState, content: Content) -> dict:
     """底圖與清單（這裡不快取：伺服器 server.map_base_view 照 base_key 快取）。每個地點帶悟得到什麼、最濃、地形（意境提示設計第六節：
-    內容的事實，不是這一刻的狀態，所以放底圖不放疊層）。"""
+    內容的事實，不是這一刻的狀態，所以放底圖不放疊層），與地利那一行（terrain.place_line，同一個道理）。"""
     shown = mapview.open_places(state, content)
     keep = set(shown)
     places = []
@@ -63,6 +64,7 @@ def base(state: GameState, content: Content) -> dict:
             "big": loc.important, "region": region.id if region is not None else None,
             "insights": insight_pool(loc, content), "strong": None if loc.prologue_only else insights.strong_of(loc, content),
             "terrain": next(iter(sensing.terrain_tags(loc)), ""),
+            "terrain_arts": terrain.place_line(content, loc_id),  # 地利那一行（武學隨地理環境）；沒有地利是空字串
         })
     edges = [[a, z] for a in shown for z in content.locations[a].connections if a < z and z in keep]
     regions = [{
@@ -78,7 +80,8 @@ def base(state: GameState, content: Content) -> dict:
 
 
 def _order_marks(state: GameState, content: Content, faction: str | None) -> dict[str, str]:
-    """你這一週還沒達成的軍令在哪裡記功（地點 → 軍令名）；守城只標自家地盤上的戰線地點（不然整條戰線都掛牌）。"""
+    """你這一週還沒達成的軍令在哪裡記功（地點 → 軍令名）；守城只標自家地盤上的戰線地點（不然整條戰線都掛牌）。領地爭奪開著時守城只標
+    自家被對面推得最高、守得動的那幾塊（orders.defend_places，跟記功、卡上寫的同一個判斷；裁決 24、FB-565，翻地與爭搶），沒有就不標。"""
     if faction is None or not orders.active(state, content):
         return {}
     w, marks = state.world, {}
@@ -88,6 +91,8 @@ def _order_marks(state: GameState, content: Content, faction: str | None) -> dic
         spots: list[str] = []
         if o.template == "siege" and o.front is not None:
             spots = list(orders.siege_places(content, o.faction, o.front, w))
+        elif o.template == "defend" and o.front is not None and conquest.on(content, w):
+            spots = orders.defend_places(content, w, o)  # 領地爭奪：自家被推得最高的那一塊（裁決 24、FB-565：列與記同一個判斷）
         elif o.template == "defend" and o.front is not None:
             spots = [loc for loc in content.locations if rules.front_of(content, loc) == o.front
                      and territory.line_of(content, loc) and territory.controller(w, content, loc) == faction]
@@ -167,21 +172,29 @@ def _price(world: WorldState, content: Content, faction: str | None, loc_id: str
 
 
 def _titles(state: GameState, content: Content, week: int, now_week: int) -> list[str]:
-    """第 week 週時刻表的大事（第一季才有）：以前的週全列，這一週只列已經到了的。"""
+    """第 week 週時刻表的大事（第一季才有）：只列已經到了的。
+    「到了沒」照這一件真正的時刻（timetable.happened_at：決戰照排定的時刻、季末照排定的季末，其餘照季曆；FB-504）：時刻表決戰只寫了
+    星期與鐘點，照 calendar.event_time 會被當成那一週（段）第一天就到了（7 天季第 1 天就列出長社火攻、21 天季與週末在決戰那一週
+    的週一就列出）。以前的週也照它（管理者往後排到還沒到的不列）。週末 PM 2026-10-20 改修，跟 21 天季、7 天季同一個寫法：
+    除了決戰與季末，其他大事的時刻就是 calendar.event_time，週末列的時刻一個字都不變。
+    FB-561：管理者提早開的決戰一開就列，不等排定的時刻，FB-563：照開的那一刻（WorldState.showdown_opened_at）歸週，之後收場、
+    過了週界也不換週，開打後被管理者取消、沒有結果的不列（showdowns_cancelled）；FB-562：決戰與季末歸在實際排定的時刻落的那一週
+    （timetable.happened_week；被「避開半夜」或管理者挪到別週的，不照時刻表原本寫的那一週）。now_week 只留著給呼叫端對齊。"""
     w = state.world
     if not rules.season_one(content, w):
         return []
     return [e.title for e in timetable.events(w, content)
-            if e.week == week and (week < now_week or calendar.event_time(e, content, w) <= w.time)]
+            if timetable.happened_week(w, content, e) == week and timetable.happened_at(w, content, e) <= w.time]
 
 
 def _ropes(state: GameState, content: Content, now_week: int) -> list[dict]:
-    """三條戰線（第一季）或一根黃巾聲勢（規則關著的季）：值、比上一週推了多少、繩上的可易手地點（地盤開著才有）。"""
+    """三條戰線（第一季）或一根黃巾聲勢（規則關著的季）：值、比上一週推了多少、繩上的可易手地點（地盤開著才有）。
+    領地爭奪開著的季沒有拔河：地點不照戰線的門檻易手，繩上不掛地點（不然小方印擺在已經不作用的門檻上）。"""
     w = state.world
     fronts = rules.front_ids(content)
     if not fronts:
         return []
-    lines = content.scenario.territory.lines if territory.on(content) else {}
+    lines = content.scenario.territory.lines if territory.on(content) and not conquest.on(content, w) else {}
     names = {t.id: t.name for t in content.scenario.trends}
     prev = territory.week_at(w, now_week - 1) if now_week > 1 else None
 
@@ -235,6 +248,14 @@ def _weeks(state: GameState, content: Content, now_week: int, ropes: list[dict])
     return out
 
 
+def _conquest_kind(world: WorldState, content: Content, loc_id: str) -> str | None:
+    """領地爭奪開著的季，地點那一格的 kind（大本營、fixed 在呼叫端先判）：開季中立的區塊 neutral（被佔下了也是，網頁的抽屜寫「開季是中立地」），
+    搶得下來的陣營區塊 line（同拔河的可易手），不是區塊 None。"""
+    if conquest.start_kind(world, content, loc_id) == conquest.NEUTRAL:
+        return "neutral"
+    return "line" if conquest.capturable(content, loc_id) else None
+
+
 def _held(world: WorldState, content: Content, control: dict[str, str]) -> dict[str, str]:
     """快照裡的控制方拿掉不算誰的地盤的大本營（territory.unheld；FB-274：修好之前的快照記著豪強佔著自己的投靠點）。"""
     return {loc: side for loc, side in control.items() if not territory.unheld(world, content, loc)}
@@ -261,10 +282,11 @@ def _flips(world: WorldState, loc_id: str, now_week: int) -> list[dict]:
 
 
 def state(
-    state: GameState, content: Content, *, odds: atlas.Odds, sortie_mode: Callable[[str], str | None],
+    state: GameState, content: Content, *, odds: Callable[..., str], sortie_mode: Callable[[str], str | None],
     sorties_left: int | None, real_minutes: Callable[[float], int],
 ) -> dict:
-    """疊層（設計第九節）。odds 是 Game.odds（這裡記住、同一支隊伍只算一次）；sortie_mode(地點) 是 sortie.mode 的結果；
+    """疊層（設計第九節）。odds 是 Game.odds，照 odds(隊伍, at=地點) 問：每一處的勝算照那一處的地利算（terrain.strong_at，
+    武學隨地理環境計畫第六節）；這裡記住，同一支隊伍、同一種地利只算一次；sortie_mode(地點) 是 sortie.mode 的結果；
     sorties_left 是今天還能出陣幾次（散人、出陣關著是 None）；real_minutes 把世界秒換成現實分鐘（Game._real_minutes）。
 
     {"key", "now_week", "weeks_total", "season_one", "territory", "faction", "sides", "here", "stamina", "sorties_left",
@@ -275,12 +297,17 @@ def state(
      "suggest": [{"id","sortie","why": [[字, 種類]],"minutes","score","lose"}], "chart": [{"name","spots"}],
      "weeks": [{"week","control","ropes","geju","events","changed"}], "start": None | {地點: 開季那一刻的控制方}}"""
     s, c, w, p = state, content, state.world, state.player
-    memo: dict[str, str] = {}
+    memo: dict[tuple[str, str | None], str] = {}
 
-    def odds_once(squad_id: str) -> str:
-        if squad_id not in memo:
-            memo[squad_id] = odds(squad_id)
-        return memo[squad_id]
+    def odds_at(loc_id: str) -> atlas.Odds:
+        strong = terrain.strong_at(c, loc_id)
+        lie = strong.id if strong is not None else None
+
+        def ask(squad_id: str) -> str:
+            if (squad_id, lie) not in memo:
+                memo[squad_id, lie] = odds(squad_id, at=loc_id)
+            return memo[squad_id, lie]
+        return ask
 
     faction, on = rules.side_of(s, c), territory.on(c)  # 豪強分屬兩軍：照依附那一軍算自家、敵方
     weeks_total = c.config.season_weeks
@@ -293,6 +320,7 @@ def state(
     armed = mapview.armed_places(s, c)  # ⚔ 標在哪裡：跟舊輿圖同一個判斷（FB-251）；出陣關著是 None，照內容的 enemies
     base_ids = territory.bases(c) if on else {}
     fixed = c.scenario.territory.fixed if on else {}
+    conquest_on = conquest.on(c, w)
     places = {}
     for loc_id in shown:
         loc = c.locations[loc_id]
@@ -300,11 +328,12 @@ def state(
         route = None if here else (routes.get(loc_id) if p.journey is None else atlas.way_to(s, c, loc_id))
         if route is not None and not route.path:
             route = None
-        listed = _foes(s, c, loc, odds_once, faction)
+        listed = _foes(s, c, loc, odds_at(loc_id), faction)
         worst = _worst(listed)
         places[loc_id] = {
             "control": territory.controller(w, c, loc_id),
             "kind": "base" if loc_id in base_ids else "fixed" if loc_id in fixed
+            else _conquest_kind(w, c, loc_id) if conquest_on  # 領地爭奪：中立地 neutral、搶得下來的陣營區塊 line（網頁照它畫灰、寫「可易手」）
             else "line" if on and territory.line_of(c, loc_id) else None,
             "odds": None if worst is None else {"word": worst[1], "tone": ODDS_TONE.get(worst[1], "ok")},
             "sortie": sortie_mode(loc_id),

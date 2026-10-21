@@ -15,7 +15,7 @@ from __future__ import annotations
 from . import calendar, push, relations
 from .calendar import DAY
 from .models import Content, FigureChange, FigureDef, Squad
-from .rules import add_rumor, change_trend, season_one, trend_shown, trend_value
+from .rules import add_rumor, change_trend, season_one, trend_shown, trend_value, world_day
 from .state import FigureState, GameState, WorldState
 
 OUT = ("retired", "crippled")  # 退場（非天命）、重創（天命）：本季不再出現；下獄不算（時刻表結算 5.2）
@@ -95,6 +95,18 @@ def challenge_on(content: Content, world: WorldState) -> bool:
 def untimed(content: Content, world: WorldState) -> bool:
     """沒有時刻表的季：有挑戰本人、但不是第一季（14 天的預設設定）。聲威回復、一天上限、龍頭人物退場停手、out_flag 只在這種季。"""
     return challenge_on(content, world) and not season_one(content, world)
+
+
+def upkept(content: Content, world: WorldState) -> bool:
+    """大勢人物的聲威有回復（recover）與一天上限（loss_cap）的季：沒有時刻表的季，加上 21 天季的第一季（正式季整合 3.9、12.3 第 17 條：
+    讓人物撐到時刻表寫到他的那一天）。週末的第一季照舊沒有。龍頭人物退場停手、out_flag 照舊只在沒有時刻表的季（untimed）。"""
+    return untimed(content, world) or (season_one(content, world) and calendar.season21_on(world, content))
+
+
+def loss_cap(content: Content, world: WorldState) -> int | None:
+    """挑戰本人打贏時，這位人物這一天最多被打掉幾點（figure_daily_loss_cap；0 或不是 upkept 的季是 None）。"""
+    cap = content.config.figure_daily_loss_cap
+    return cap if cap and upkept(content, world) else None
 
 
 def by_name(content: Content, name: str) -> str | None:
@@ -185,6 +197,29 @@ def push_goal(state: GameState, content: Content, fid: str) -> int:
     return faction.goals.get(now.front, 0) if faction is not None else 0
 
 
+def started(state: GameState, content: Content, fid: str, time: float) -> bool:
+    """這位人物在世界秒 time 已經出兵推線了沒（tick；atlas 寫「…起」）：21 天季照天數（FigureDef.active_from_day，沒寫是 0；
+    正式季整合設計 1.2 給開發 5），其他季照週次（active_from_week）。"""
+    fig = content.figures[fid]
+    if calendar.season21_on(state.world, content):
+        return calendar.cal_days(time, content, state.world) + calendar.EPS_SECONDS >= _from_day(fig, content, state.world)
+    return calendar.point(time, content, state.world).week >= fig.active_from_week
+
+
+def _from_day(fig: FigureDef, content: Content, world: WorldState) -> float:
+    """照現實天的季這位人物第幾天才出兵（季曆第 1 週週初起幾天，沒寫是 0）：7 天濃縮季讀 active_from_day7，21 天季 active_from_day。"""
+    return (fig.active_from_day7 if calendar.week7_on(world, content) else fig.active_from_day) or 0.0
+
+
+def start_text(state: GameState, content: Content, fid: str) -> str:
+    """還沒出兵時「（…起）」那一句（atlas）：21 天季寫出兵的那一刻（季曆，calendar.stamp_text），其他季寫第幾週。待 joy 潤。"""
+    fig, w = content.figures[fid], state.world
+    if calendar.season21_on(w, content):
+        at = (_from_day(fig, content, w) * calendar.DAY - w.cal_offset) / calendar.cal_scale(content, w)
+        return f"（{calendar.stamp_text(at, content, w)} 起）"
+    return f"（第 {fig.active_from_week} 週起）"
+
+
 def tick(state: GameState, content: Content, cal_hours: float) -> None:
     """大勢人物的日常推動（第一季設計 8.2 第 1、2 條，總計畫 T4）：決定性的累積，不擲骰。每位推得動的人物把
     actions_per_day × cal_hours ÷ 24 累積進 trend_accum["fig:<id>"]，每滿 1 就往自己陣營的方向推所在戰線 push 點；
@@ -199,17 +234,16 @@ def tick(state: GameState, content: Content, cal_hours: float) -> None:
         return
     cfg = content.config
     middle = max(0.0, w.time - cal_hours * calendar.cal_hour_seconds(content, w) / 2)
-    week = calendar.point(middle, content, w).week
     for fid, fig in content.figures.items():
         goal = push_goal(state, content, fid)
-        if not goal or week < fig.active_from_week:
+        if not goal or not started(state, content, fid, middle):
             continue
         front = state_of(state, content, fid).front
         value = trend_value(state, content, front)
         losing = (50 - value) * goal >= cfg.figure_reaction_lean
         rate = fig.actions_per_day * (cfg.figure_reaction_mult if losing else 1.0)
         if cfg.push_resistance.enabled:  # 盡頭阻力（出陣探索與地盤設計 5.1）：往對方老巢推得慢，累積照推之前的戰線打折
-            rate *= push.resistance_share(value, goal, cfg.push_resistance)
+            rate *= push.resistance_share(value, goal, push.tuning_for(w, content))
         key = f"fig:{fid}"
         pending = w.trend_accum.get(key, 0.0) + rate * cal_hours / 24
         whole = int(pending + 1e-9)  # 容一點浮點誤差：24 個 1/24 才剛好湊成 1（同 rules.geju_tick；累積不先四捨五入，誤差才不會越滾越大）
@@ -321,7 +355,7 @@ def defeat(state: GameState, content: Content, fid: str, amount: float, cap: int
         return []
     w = state.world
     if cap:
-        day_key = f"lost:{fid}:{int(w.time // DAY)}"
+        day_key = f"lost:{fid}:{world_day(content, w)}"
         for old in [k for k in w.trend_accum if k.startswith(f"lost:{fid}:") and k != day_key]:
             del w.trend_accum[old]
         left = cap - w.trend_accum.get(day_key, 0.0)
@@ -369,7 +403,7 @@ def recover(state: GameState, content: Content, cal_hours: float) -> None:
     累積拿掉；人物表已經沒有的 id 跳過。決定性的，不擲骰，不發傳聞。由 world.advance_world_state 每一步呼叫。"""
     w = state.world
     rate = content.config.figure_prestige_regen
-    if not untimed(content, w) or rate <= 0:
+    if not upkept(content, w) or rate <= 0:  # 21 天季的第一季也回（正式季整合 3.9）
         return
     for fid, now in w.figures.items():
         fig = content.figures.get(fid)

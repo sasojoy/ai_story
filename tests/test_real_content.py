@@ -478,10 +478,13 @@ def test_the_real_enlistment_has_three_recruiters_and_the_drifter_line_names_eve
         assert who.intro and who.briefing and who.order_hint and who.done and who.rejoin
         assert len(who.lines) == len(e.steps) == 2 and all(who.lines)
         assert not any(line.startswith(who.name) for line in who.lines)  # 框上的名字另外寫（F9）
-        assert who.lines == ["看看「本週軍令」", "挑一道軍令，出一次力"]
+        assert who.lines == ["看看「{本週}軍令」", "挑一道軍令，出一次力"]  # {本週} 照軍令多久一道換（enlist.fill，FB-502）
         # FB-093／FB-094：「出一次力」那一步點明軍令卡寫了怎麼做，一時做不到就按營裡的守勢行動（不在軍令裡也算）
         assert "卡上" in who.order_hint and f"「{content.orders.duties[faction_id].name}」" in who.order_hint
-        assert "{" not in "".join([who.intro, who.briefing, who.order_hint, who.done, who.rejoin, *who.lines])  # 沒有留下的預留位
+        said = "".join([who.intro, who.briefing, who.order_hint, who.done, who.rejoin, *who.lines])
+        for slot in ("{本週}", "{每週}"):  # 照軍令多久一道換字的插槽（enlist.SLOTS，FB-502）
+            said = said.replace(slot, "")
+        assert "{" not in said  # 沒有留下的預留位
     skills = {skill.name for skill in content.skills.values()}  # 引薦人說的營地武學，內容裡真的有（N13）
     for faction_id, names in {
         "guan": ("行伍刀法", "行伍練氣"), "huang": ("黃天刀法", "符水掌", "太平導引"), "haoqiang": ("塢堡樁功",),
@@ -589,6 +592,7 @@ def test_every_figure_has_three_brush_off_lines(content):
 
 
 def test_a_newcomer_calling_on_a_figure_hears_one_of_his_own_lines_and_the_fame_gap(content):
+    content.config.precise_actions = False  # 一類一顆之前的交友、求見（新規則在 tests/test_precise_actions.py，設計 8.4）
     game = Game.new(content, "試玩者", rng=random.Random(1))
     game.world.open_season(game.content, now=0.0)
     game.state.player.location = content.characters["luzhi"].talk_at
@@ -615,16 +619,22 @@ def test_nobody_is_recruitable_anywhere(content):
     assert [cid for cid, at in recruitable.items() if at in content.locations] == []
 
 
-def test_the_recruit_hint_is_dormant_while_nobody_can_be_recruited(content):
-    """碰到才說的 h_recruit（設計 5.2 第 8 條，「第一次碰到能招募的同伴」）寫好了、也接好了（Game._hint_triggers 看 _recruit_target），
-    可是這一季的內容沒有任何人能招募（上面幾個測試），所以它現在在任何地方都不會說。這個測試是留給之後的人看的：哪天有人把某位人物改成
-    可招募（recruitable、有 recruit_at），這裡會叫——那一刻 h_recruit 開始會說：確認它的話（「先交友，交情越深越肯跟你走」）
-    還對得上招募真正的做法、招募的按鈕真的在，再把這個測試改成相反的。"""
+def test_the_recruit_hint_speaks_where_someone_will_follow_you(content):
+    """碰到才說的 h_recruit（設計 5.2 第 8 條，「第一次碰到能招募的同伴」）：歷史武將同行（2026-10-19）把十五位改成可招之後開始說。
+    它的話（「先交友，交情越深越肯跟你走」）對得上招募真正的做法（成功率照情誼長、招募鈕在選單上），只在此地有人招得了你的地方說
+    （_recruitable_here：照陣營、名下沒滿；灰掉的鈕不算）。散人只招得到沒寫 side 的那幾位。舊的 recruit_at 那一條正式內容沒有人。"""
+    from tianxia import roster
+
     game = Game.new(content, "甲", rng=random.Random(0))
+    spoke = []
     for loc_id in content.locations:
         game.state.player.location = loc_id
         assert game._recruit_target() is None, loc_id
-        assert "h_recruit" not in game._hint_triggers(), loc_id
+        usable = [cid for cid in game._recruit_targets() if roster.recruit_problem(game.state, content, game.world, cid) is None]
+        assert ("h_recruit" in game._hint_triggers()) == bool(usable), loc_id
+        assert all(content.characters[cid].side is None for cid in usable), loc_id
+        spoke += [loc_id] if usable else []
+    assert "yingchuan_academy" in spoke and "zhuo_county" not in spoke  # 荀彧誰都招得到；劉關張只追隨官軍
 
 
 # ── 碰到才說的正式內容（新手引導計畫三 Task 3；設計 10.5、10.6）──────────────────────────────
@@ -810,6 +820,7 @@ def test_meeting_events_mark_the_acquaintance_instead_of_handing_out_companions(
 def test_the_fortune_turns_into_a_gift_when_nobody_can_be_recruited(content, tmp_path):
     from tianxia.sqlite_world import open_world
 
+    content.config.precise_actions = False  # 一類一顆之前的交友、求見（新規則在 tests/test_precise_actions.py，設計 8.4）
     game = Game.new(content, "測試俠客", rng=random.Random(0), world=open_world(tmp_path / "world.db"))
     msgs = game._deliver_fortune()
     assert any("賀禮" in m for m in msgs)
@@ -979,7 +990,7 @@ def test_a_hero_with_a_signature_skill_still_cannot_beat_bocai(content):
     assert _win_rate(content, "fanjianglong", wugong_id) <= 0.05
 
 
-# ── 戰後事件的文字假設打贏了：「倒地的對手」只在遊歷打贏之後接（跟 FB-001 同一類）──────────
+# ── 戰後事件（正式季整合 2.5：改寫成不必剛打過一場的版本，「倒地的對手」改成「倒地的漢子」、拿掉 fight_tiers）──────────
 
 
 def _after_a_fight(content, tier):
@@ -1003,45 +1014,11 @@ def _after_fight_events(content, tier):
     return {e.id for e in event_candidates(game.state, content, "train")}
 
 
-@pytest.mark.parametrize("tier", ["大勝", "險勝"])
-def test_the_fallen_foe_can_follow_a_win(content, tier):
-    assert "train_fallen_foe" in _after_fight_events(content, tier)
-
-
-@pytest.mark.parametrize("tier", ["僵持", "落敗"])
-def test_the_fallen_foe_never_follows_a_draw_or_a_loss(content, tier):
+@pytest.mark.parametrize("tier", ["大勝", "險勝", "僵持", "落敗"])
+def test_the_fallen_man_follows_any_fight_now_that_the_text_no_longer_assumes_a_win(content, tier):
+    """舊規則（沒蓋一類一顆的季）照舊在仗後面接戰後事件；文字改寫過、不再假設你剛打贏，所以不挑結果。"""
     after = _after_fight_events(content, tier)
-    assert "train_fallen_foe" not in after
-    assert "train_campfire" in after  # 結果不挑的戰後事件照舊接得到
-
-
-def test_the_fallen_foe_needs_a_fight_in_this_very_action(content):
-    """上一次行動打贏了、這一次沒打（戰鬥卡片已經清掉）：紀錄還在，也抽不到它。"""
-    from tianxia.events import event_candidates
-
-    game = _after_a_fight(content, "大勝")
-    game.state.battle_card = None
-    assert "train_fallen_foe" not in {e.id for e in event_candidates(game.state, content, "train")}
-
-
-def test_playing_the_real_fight_the_fallen_foe_only_ever_comes_after_a_win(content, monkeypatch):
-    """真實內容、固定種子、戰後事件一定接：新角色在只有流寇散兵的地方遊歷，打贏與沒打贏都有，倒地的對手只跟著打贏。
-    測的是舊遊歷（出陣開著時散人沒有出陣鈕），所以關掉出陣。"""
-    monkeypatch.setattr(content.config, "train_event_chance", 1.0)
-    monkeypatch.setattr(content.config.sortie, "enabled", False)
-    place = next(loc.id for loc in content.locations.values() if loc.enemies == ["dipi"])
-    tiers: dict[str, int] = {}
-    fired_after: set[str] = set()
-    for seed in range(120):
-        game = Game.new(content, f"遊歷{seed}", rng=random.Random(seed))
-        game.state.player.location = place
-        game.choose("act:train")
-        tier = game.state.battles[0].tier
-        tiers[tier] = tiers.get(tier, 0) + 1
-        if game.state.pending_event == "train_fallen_foe":
-            fired_after.add(tier)
-    assert set(tiers) & {"僵持", "落敗"} and set(tiers) & {"大勝", "險勝"}  # 輸贏都打出來過，下面才不是空轉
-    assert fired_after and fired_after <= {"大勝", "險勝"}, (fired_after, tiers)
+    assert {"train_fallen_foe", "train_campfire"} <= after
 
 
 # ── 事件檢定的難度帶（企劃者 2026-10-05「成功率毫無道理可言」）────────

@@ -20,7 +20,7 @@ import re
 from dataclasses import dataclass
 from collections import deque
 
-from . import atlas, figures, gender, renown, rules, territory
+from . import atlas, figures, gender, renown, rules, territory, treasures
 from pydantic import BaseModel
 
 from .characters import name_key
@@ -237,7 +237,8 @@ def hops(content: Content, start: str, goal: str) -> int:
 
 def person_fame(other: GameState, content: Content, wanted: set[str] | None = None) -> int:
     """一個玩家的名氣（0～5）：名望段，加上善惡稱號第三段以上、擂台前十、手上有玉璽碎片、身上有通緝、行狀份量 4 以上的事三件以上各 +1。
-    wanted 是身上有通緝的名號鍵（呼叫端從懸賞榜算好傳進來）。"""
+    wanted 是身上有通緝的名號鍵（呼叫端從懸賞榜算好傳進來）。玉璽碎片改版開著時碎片那一項不算（持有者平時藏起來：不然查一個人
+    查得準不準，看得出他有沒有碎片）。"""
     from . import arena  # noqa: PLC0415  arena → … ：在函式裡 import
 
     p = other.player
@@ -246,7 +247,7 @@ def person_fame(other: GameState, content: Content, wanted: set[str] | None = No
         score += 1
     if arena.on(content) and arena.title_of(other.world, p.name):
         score += 1
-    if p.heirloom is not None:
+    if p.heirloom is not None and not treasures.revamp_on(content):
         score += 1
     if wanted and name_key(p.name) in wanted:
         score += 1

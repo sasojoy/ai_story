@@ -246,12 +246,13 @@ def recipe_text(content: Content, key: str | None) -> str | None:
 
 def new_weapon(
     state: GameState, *, name: str, kind: str, attribute: str, tier: int, quality: str, recipe: str | None = None,
-    secret: str | None = None, original: bool = False, copy_of: str | None = None,
+    secret: str | None = None, original: bool = False, copy_of: str | None = None, named_entry: str | None = None,
+    collected: bool = False,
 ) -> Weapon:
     """新的一把（四欄共用的流水號 +1，id「兵:N」）；recipe 是自己打的那一把的配方鍵，買的與掉落的沒有；secret 是名器或神器的隱藏配方 id；
     original／copy_of 是神器的原品與仿品（copy_of 記「鑄|配方 id」，打造隱藏配方設計 5.3）。"""
     return Weapon(id=equipment.next_id(state, "weapon"), name=name, kind=kind, attribute=attribute, tier=tier, quality=quality,
-                  recipe=recipe, secret=secret, original=original, copy_of=copy_of)
+                  recipe=recipe, secret=secret, original=original, copy_of=copy_of, named_entry=named_entry, collected=collected)
 
 
 def rack_full(state: GameState, content: Content) -> bool:
@@ -363,7 +364,8 @@ def wanted(state: GameState, content: Content, world: WorldStateStore, art: Mart
         return None
     p = state.player
     if not usable(p.weapon, art, content, world):
-        fit = next((w for w in equipment.in_slot(p, "weapon") if usable(w, art, content, world)), None)  # 裝備四欄 3.3：只看武器那一欄
+        fit = next((w for w in equipment.in_slot(p, "weapon") if usable(w, art, content, world)
+                    and equipment.wear_problem(state, content, w) is None), None)  # 裝備四欄 3.3：只看武器那一欄；穿不上的神器不挑
         if fit is not None:
             return f"smith:wield:{fit.id}"
         kind = art_weapon(art.id, content, world)
@@ -445,6 +447,6 @@ def rows(state: GameState, content: Content, world: WorldStateStore, art: Martia
     return {
         "fit_line": fit_line(art, content, world),
         "worn": _row(p.weapon, art, content, world, worn=True) if p.weapon else None,
-        "rack": [_row(w, art, content, world) for w in equipment.in_slot(p, "weapon")],  # 只列武器那一欄（裝備四欄 3.3）
+        "rack": [equipment.wear_row(_row(w, art, content, world), state, content, w) for w in equipment.in_slot(p, "weapon")],  # 只列武器那一欄（裝備四欄 3.3）
         "cap": content.config.weapons.rack_cap,
     }

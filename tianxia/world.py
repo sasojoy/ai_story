@@ -30,6 +30,13 @@ WEEK_HOOKS: list[Callable[[GameState, Content, random.Random], list[str]]] = [
     lambda state, content, rng: bounties.issue(state, content, state.world.hooked_week, rng),  # 懸賞榜：兩個陣營各掛討伐、打探、護送
 ]
 
+# 21 天季每天 00:00 的掛鉤（正式季整合設計 7.1、7.2）：季曆每跨進新的一天各跑一次，排在週初掛鉤之後、那一刻的大事之前
+# （跑的時候 hooked_day 已經是剛跨進的那一天）。軍令、懸賞在 21 天季改走這一串，週初那一串略過（orders.issue、bounties.issue）
+DAY_HOOKS: list[Callable[[GameState, Content, random.Random], list[str]]] = [
+    lambda state, content, rng: orders.issue_day(state, content, state.world.hooked_day, rng),
+    lambda state, content, rng: bounties.issue_day(state, content, state.world.hooked_day, rng),  # 懸賞榜：每天一批（7.2）
+]
+
 
 def _now_for_battle(now: float | None) -> float:
     """開戰要知道現在的現實時間（集結截止時間從這裡算）。引擎不自己讀電腦時鐘，呼叫端要傳 now。"""
@@ -372,7 +379,7 @@ def season_end_time(season: WorldState, content: Content) -> float:
     """這一季在世界時鐘上何時收：第一季照排定的季末（schedule["finale"]，管理者可改，計畫 T10；舊季沒排就是季長），
     其他照季長（沒蓋章的舊季 14 天）。"""
     if calendar.season_one_on(season, content) and any(e.kind == "finale" for e in content.timetable):
-        return season.schedule.get("finale", season_length_days(season, content) * DAY)
+        return season.schedule.get("finale", timetable.finale_default(content, season))
     return season_length_days(season, content) * DAY
 
 
@@ -420,6 +427,12 @@ def season_events(state: GameState, content: Content, rng: random.Random) -> lis
         w.hooked_week += 1
         for hook in WEEK_HOOKS:
             msgs += hook(state, content, rng)
+    if calendar.season21_on(w, content):  # 21 天季：每天 00:00 的掛鉤（軍令、懸賞每天一批；只發今天的，跨過的天不補）
+        day = calendar.point(w.time, content, w).cal_day
+        while w.hooked_day < day:
+            w.hooked_day += 1
+            for hook in DAY_HOOKS:
+                msgs += hook(state, content, rng)
     for event in timetable.due(state, content):
         msgs += settle_waiting_showdowns(state, content, rng, before=event)
         msgs += timetable.resolve(state, content, event, rng)
@@ -518,6 +531,7 @@ def _claim_showdown(state: GameState, content: Content, event_id: str) -> tuple[
     if definition is None:
         return None
     w.showdowns_opened[event_id] = definition.id
+    w.showdown_opened_at[event_id] = w.time  # 開的那一刻：輿圖歸週、判斷到了沒照它（FB-563）
     return definition, showdown_start(state, content, definition)
 
 
@@ -655,7 +669,8 @@ def advance_world_state(
     while remaining > 0 and not season.ended:
         step = min(remaining, HOUR)
         crossed = False
-        if cal_hour is not None and (to_mark := _to_next_cal_hour(season.time, cal_hour)) <= step + calendar.EPS_SECONDS:
+        # 曆時交界照季曆的整點（21 天季在 10:30 開季時，第一個交界在 11:00，calendar.next_hour_mark）
+        if cal_hour is not None and (to_mark := calendar.next_hour_mark(season.time, content, season)) <= step + calendar.EPS_SECONDS:
             step, crossed = to_mark, True
         remaining -= step
         season.time += step
@@ -666,8 +681,10 @@ def advance_world_state(
             msgs += sim_tick(vehicle, content, hours, rng)
         if cal_hour is None and not season.ended:
             msgs += bounties.tick(vehicle, content)  # 第一季規則關著的季：季曆跨進新的一週就掛這一週的懸賞（只掛這一週，懸賞榜設計第三節）
-            figures.recover(vehicle, content, step * calendar.cal_scale(content, season) / HOUR)  # 甲 (b)：沒有時刻表的季被打下來的聲威慢慢回
         if not season.ended:
+            # 甲 (b)：被打下來的聲威慢慢回。沒有時刻表的季，加上 21 天的第一季（正式季第 6 批）；recover 自己照 figures.upkept 擋掉
+            # 週末的第一季。以前只在上面那一支（第一季規則關著）叫，21 天季永遠走不到（FB-350）
+            figures.recover(vehicle, content, step * calendar.cal_scale(content, season) / HOUR)
             msgs += figures.revive(vehicle, content)  # 被挑戰打退的人物過幾個季曆天回來（PM 2026-10-16，兩種季都有）
             figure_life.tick(vehicle, content)  # 人物的每日行事（大勢人物擴充第一批）：走動、募兵、襲擾，只寫傳聞
             feasts.settle(vehicle, content)  # 時間到了的宴散席（第三批）：席間最佳那一句上天下大事
@@ -679,6 +696,11 @@ def advance_world_state(
                 msgs += end_season(vehicle, content, world, rng, ending=decisive)
         if not season.ended and _season_due(season, content):
             msgs += end_season(vehicle, content, world, rng)
+        if not season.ended and season.conquest is not None:
+            from . import conquest, siege  # noqa: PLC0415  siege → conquest_day → timetable：延後 import
+
+            siege.mark_due(season, content)  # 領地爭奪第二批：到了開集結的攻城記成 waiting（start_pending_battle 開）
+            conquest.decay(season, content)  # 翻地與爭搶：跨過季曆日交界，前一整天沒人推的塊往回（輿圖簡化設計 4.1）
     return msgs
 
 
@@ -689,11 +711,30 @@ def pause_skip(season: WorldState, content: Content, span: float) -> float:
     """賽季時鐘停了 span 個現實秒，繼續時賽季要跳過幾個現實秒（WorldStateStore.resume_clock 把對時點往後挪這麼多）。
     第一季（有季曆、有排好的決戰）照整個曆時往下取整：曆時的交界在現實時間上不動，排好的決戰才能分秒不差地照原本的現實時間開
     （季的事只在曆時交界把時間到了的決戰記下來）；不足一個曆時的零頭算進賽季（週末那季最多現實 1 分 47 秒）。
-    其他（beta 那一季）照 span 一秒不差。"""
-    if not calendar.season_one_on(season, content):
+    其他（beta 那一季）照 span 一秒不差。21 天季也是整段（季曆另外對回現實的星期，realign_paused_calendar）。"""
+    if not calendar.season_one_on(season, content) or calendar.season21_on(season, content):
         return span
     grid = calendar.cal_hour_seconds(content, season) / content.config.time_scale
     return math.floor(span / grid + EPS_CAL_HOURS) * grid
+
+
+RESUME_NUDGE = 0.002  # 世界秒：21 天季繼續時賽季多走這一點點，暫停那一刻與繼續那一刻寫下的時刻才分得出用哪一個偏移（FB-332）
+
+
+def realign_paused_calendar(season: WorldState, content: Content, skipped: float, until: float | None = None) -> None:
+    """21 天季（PM 2026-10-19：季曆就是現實的週，畫面上的週六 20:00 就是真的週六晚上）：暫停的這一段整段不算進賽季（pause_skip），
+    季曆的偏移加回同樣長，季曆對回現實的星期；季末照原本的現實日期收場（排定的世界秒往前挪同樣長，不往後延）。決戰照
+    keep_showdowns_on_time 挪；暫停期間該發生的一般大事在繼續那一刻依序結算（resume_season_clock）。其他季什麼都不做。
+    只改傳進來的 season（WorldStateStore.resume_clock 在它的 mutate 裡、keep_showdowns_on_time 之前呼叫）。
+    until（FB-332）是舊的偏移用到哪一個世界秒為止（暫停那一刻與繼續那一刻之間，見 RESUME_NUDGE）：記進 cal_offset_history，
+    以前寫下的時刻照舊的偏移換成季曆，不跟著往後挪。沒給（舊的呼叫）照季現在的時間記。"""
+    if not calendar.season21_on(season, content):
+        return
+    shift = skipped * content.config.time_scale
+    season.cal_offset_history.append((season.time if until is None else until, season.cal_offset))
+    season.cal_offset += shift * calendar.cal_scale(content, season)
+    if "finale" in season.schedule:
+        season.schedule["finale"] -= shift
 
 
 def keep_showdowns_on_time(season: WorldState, content: Content, skipped: float, season_now: float) -> None:
@@ -709,6 +750,11 @@ def keep_showdowns_on_time(season: WorldState, content: Content, skipped: float,
         return
     vehicle = _season_vehicle(content, season)
     shift = skipped * content.config.time_scale
+    if season.conquest is not None:  # 領地爭奪第二批：排好、還沒開集結的攻城也照原本的現實時間開（Review Focus 5）
+        for slot in season.conquest.schedule:
+            if slot.status in ("planned", "waiting"):
+                slot.at -= shift
+                slot.muster_at -= shift
     cal_hour = calendar.cal_hour_seconds(content, season)
     regular = [e for e in timetable._pending(vehicle, content) if e.kind not in timetable.NOT_BY_SEASON_HOUR]  # noqa: SLF001
     for event in timetable.events(season, content):  # 天命之季含天命之爭（玉璽二）
@@ -718,7 +764,9 @@ def keep_showdowns_on_time(season: WorldState, content: Content, skipped: float,
             continue
         was = timetable.when(vehicle, content, event)
         at = was - shift
-        earlier = [timetable.when(vehicle, content, e) for e in regular if timetable.when(vehicle, content, e) < was]
+        # 21 天季的一般大事已經跟著季曆一起挪過了（realign_paused_calendar，排在這之前）：先後不會亂，照挪過的時刻比
+        ref = at if calendar.season21_on(season, content) else was
+        earlier = [timetable.when(vehicle, content, e) for e in regular if timetable.when(vehicle, content, e) < ref]
         if earlier and at <= max(earlier) + calendar.EPS_SECONDS:  # 不跑到原本排在它前面、還沒結算的一般大事之前（B13）
             at = max(earlier) + cal_hour
         if at <= season_now + calendar.EPS_SECONDS:
@@ -736,6 +784,10 @@ def start_pending_battle(world: WorldStateStore, content: Content, now: float) -
     msgs = _start_threshold_battle(world, content, now) if season.pending_battle is not None else []
     if season.showdowns_waiting:
         msgs += open_waiting_showdown(world, content, now)
+    if season.conquest is not None and any(slot.status == "waiting" for slot in season.conquest.schedule):
+        from . import siege  # noqa: PLC0415
+
+        msgs += siege.open_waiting(world, content, now)  # 領地爭奪第二批：時間到了的攻城開集結（跟決戰同時打）
     return msgs
 
 
@@ -744,6 +796,10 @@ def start_pending_battle(world: WorldStateStore, content: Content, now: float) -
 RESUME_SKIP_ALL = "這一段不算進賽季，季末往後延一樣長"
 RESUME_SKIP_PART = "其中 {skipped}不算進賽季，季末往後延一樣長；不足一個季曆鐘頭的零頭（{rest}）照算進賽季"
 RESUME_SKIP_NONE = "停不到一個季曆鐘頭（現實約 {grid}），不另外扣：這一段照算進賽季，季末不另外往後延"
+# 照現實天的季（PM 2026-10-19）：季曆對回現實的星期（realign_paused_calendar）。待 joy 潤
+# 照季寫季長與對回什麼（FB-501：7 天濃縮季寫「7 天的季：季曆對回現實的日子」；calendar.week_word 的 realign），21 天季一個字都不變
+RESUME_SKIP_REAL_LINE = "{days:g} 天的季：季曆對回現實的{unit}，暫停期間的大事在這一刻一起發生，季末照原本的日期"
+RESUME_SKIP_REAL = RESUME_SKIP_REAL_LINE.format(days=21, unit="星期")  # 21 天季那一句（以前寫死的就是它）
 
 
 def _span_text(seconds: float) -> str:
@@ -758,9 +814,16 @@ def _span_text(seconds: float) -> str:
     return f"{hours} 小時" + (f" {rest // 60} 分" if rest // 60 else "")
 
 
+def realign_line(season: WorldState, content: Content) -> str:
+    """照現實天的季繼續時那一句（RESUME_SKIP_REAL_LINE）：照這一季蓋章的季長與 calendar.week_word("realign")（FB-501）。"""
+    return RESUME_SKIP_REAL_LINE.format(days=season_length_days(season, content), unit=calendar.week_word("realign", content, season))
+
+
 def resume_skip_text(season: WorldState, content: Content, span: float) -> str:
     """停了 span 個現實秒，繼續時賽季到底扣了多少，照實說（RESUME_SKIP_*）：全扣（beta 那一季、或剛好整數個曆時）、
-    扣了整個曆時的部分零頭照算、什麼都沒扣（不足一個曆時）。"""
+    扣了整個曆時的部分零頭照算、什麼都沒扣（不足一個曆時）。21 天季照實說季曆對回現實的星期（RESUME_SKIP_REAL）。"""
+    if calendar.season21_on(season, content):
+        return realign_line(season, content)
     if not calendar.season_one_on(season, content):
         return RESUME_SKIP_ALL
     grid = calendar.cal_hour_seconds(content, season) / content.config.time_scale
@@ -790,6 +853,15 @@ def resume_season_clock(
         return None
     line = resume_line.format(minutes=int(span // 60), skip=resume_skip_text(world.get_season(), content, span))
     caught = list(world.catch_up_season(content, now, rng))
+    if calendar.season21_on(world.get_season(), content):  # 21 天季：季曆對回來了，暫停期間該發生的一般大事這一刻依序結算
+        settled: list[str] = []
+
+        def _settle(season: WorldState) -> None:
+            if not season.ended:
+                settled.extend(season_events(_season_vehicle(content, season), content, rng))
+
+        world.mutate_season(_settle)
+        caught += settled
     return [line] + caught + start_pending_battle(world, content, now)
 
 

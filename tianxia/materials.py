@@ -18,7 +18,7 @@ from .insights import PAIR_ATTRIBUTES
 from .models import Content, Material, Squad
 from .state import GameState
 
-TIER_NAMES = {1: "凡品", 2: "靈品", 3: "天品"}
+TIER_NAMES = {1: "凡品", 2: "靈品", 3: "天品", 4: "神品"}  # 神品：四階，神器的料（正式季整合 4.4；待 joy 潤）
 
 # 沒寫 drops 的對手走這張表（設計 §4.1）：難度上限 -> [(階, 機率), ...]。
 # 內容不必每隻敵人都填掉落，難度本身就是強弱的唯一指標（見 models.Squad 的說明）。
@@ -152,17 +152,18 @@ GRAIN_ATTRIBUTE = "慢"
 
 
 def _grain_value(content: Content, material: Material) -> int:
-    """一個素材算幾份糧草（Config.grain_values，凡、靈、天）；階超出表的照最後一格。"""
+    """一個素材算幾份糧草（Config.grain_values，凡、靈、天）；階超出表的（四階神品，正式季整合 4.6）不算糧草，是 0。"""
     values = content.config.grain_values
-    return values[min(material.tier, len(values)) - 1] if values else 0
+    return values[material.tier - 1] if 1 <= material.tier <= len(values) else 0
 
 
 def _grain_in_bag(state: GameState, content: Content) -> list[tuple[Material, int]]:
-    """背包裡的慢屬性素材，低階在前（同階照內容順序）。"""
+    """背包裡算糧草的慢屬性素材（不在 Config.grain_values 表上的階不算，四階不會被押糧車吃掉），低階在前（同階照內容順序）。"""
     order = {mid: i for i, mid in enumerate(content.materials)}
     items = [
         (content.materials[mid], n) for mid, n in state.player.materials.items()
         if mid in content.materials and n > 0 and content.materials[mid].attribute == GRAIN_ATTRIBUTE
+        and _grain_value(content, content.materials[mid]) > 0
     ]
     return sorted(items, key=lambda pair: (pair[0].tier, order.get(pair[0].id, 0)))
 
@@ -245,15 +246,20 @@ def roll_squad_drops(squad: Squad, content: Content, rng: random.Random, max_tie
 
 
 def tier3_pick(content: Content, attribute: str | None, seed: str) -> str | None:
-    """三階素材的新來源（兵器設計 4.9；打造第二批）挑哪一個：剛柔快慢直接對；陰陽虛實是兩個屬性合出來的（insights.PAIR_ATTRIBUTES），
-    照種子的 sha256 從兩個來源挑一個（同 equipment.dismantle_material）；沒寫屬性、該屬性沒有三階素材時在全部三階裡照種子挑。
-    決定性、不擲 Game.rng。沒有三階素材是 None。"""
+    """三階素材的新來源（兵器設計 4.9；打造第二批）挑哪一個：見 tier_pick。"""
+    return tier_pick(content, attribute, seed, 3)
+
+
+def tier_pick(content: Content, attribute: str | None, seed: str, tier: int) -> str | None:
+    """照對手的屬性挑一個 tier 階的素材（三階的新來源、四階的挑戰本人首勝）：剛柔快慢直接對；陰陽虛實是兩個屬性合出來的
+    （insights.PAIR_ATTRIBUTES），照種子的 sha256 從兩個來源挑一個（同 equipment.dismantle_material）；沒寫屬性、該屬性沒有那一階的
+    素材時在那一階全部裡照種子挑。決定性、不擲 Game.rng。沒有那一階的素材是 None。"""
     digest = hashlib.sha256(seed.encode("utf-8")).digest()
     sources = next((sorted(pair) for pair, result in PAIR_ATTRIBUTES.items() if result == attribute), None)
     if sources is not None:
         attribute = sources[digest[0] % 2]
-    tier3 = [m for m in content.materials.values() if m.tier == 3]
-    pool = [m for m in tier3 if m.attribute == attribute] or tier3
+    same_tier = [m for m in content.materials.values() if m.tier == tier]
+    pool = [m for m in same_tier if m.attribute == attribute] or same_tier
     return pool[digest[1] % len(pool)].id if pool else None
 
 

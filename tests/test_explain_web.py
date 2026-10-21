@@ -316,6 +316,7 @@ def test_a_talked_out_lone_audience_cell_says_so_briefly_and_the_note_row_names_
 
     content = real_content("weekend")
     content.config.auto_open_first_season = True
+    content.config.precise_actions = False  # 一類一顆之前的交友、求見（新規則在 tests/test_precise_actions.py，設計 8.4）
     game = Game.new(content, "沈浪", rng=random.Random(0))
     game.client = None
     p = game.state.player

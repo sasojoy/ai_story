@@ -115,8 +115,8 @@ def test_validate_checks_the_armor_table(content):
 
 def test_armor_forging_numbers_follow_the_weapons_and_live_in_the_armor_config(content):
     rule = content.config.armor
-    assert rule.forge_silver == {"1": 20, "2": 60, "3": 150} and rule.temper_max == 5
-    assert rule.temper_silver == {"1": 0, "2": 30, "3": 80} and rule.temper_step == 0.01
+    assert rule.forge_silver == {"1": 20, "2": 60, "3": 150, "4": 300} and rule.temper_max == 5  # 四階 300（正式季整合 5.1）
+    assert rule.temper_silver == {"1": 0, "2": 30, "3": 80, "4": 150} and rule.temper_step == 0.01
     assert rule.quality.odds == {"下品": 50, "中品": 30, "上品": 20} and (rule.quality.terrain, rule.quality.calm) == (0, 0)
     q = real_content().config.armor.quality
     assert (q.terrain, q.battlefield, q.calm) == (10, 10, 8) and q.setting_good

@@ -21,9 +21,12 @@ MAX_RECORDS = 20  # 存檔保留最近幾場（一般的仗；BIG_KINDS 另外�
 # 一季頂多十來場，BIG_KEEP 只是保險
 BIG_KINDS = ("showdown", "seal")
 BIG_KEEP = 40
+# 攻城戰（領地爭奪第二批，裁決 14）：寫法同決戰（SHOWDOWN_KINDS），自己另留 SIEGE_KEEP 場（一天最多四場，不擠掉大決戰、也不被遊歷洗掉）
+SIEGE_KEEP = 20
+SHOWDOWN_KINDS = ("showdown", "siege")
 FULL_LOG_HEAD = "**完整戰況**"  # 決戰戰報最後一段（BattleRecord.log）：網頁照「第 N 回合」把每一回合收成一行、點了展開（app.js 的 roundBlocks）
 TIER_WORDS = {"大勝": "大勝", "險勝": "險勝", "僵持": "平手", "落敗": "落敗"}
-KIND_WORDS = {"train": "遊歷", "event": "劇情", "wild": "探索遇敵", "showdown": "決戰", "spar": "切磋", "raid": "截殺", "duel": "頭目戰", "seal": "奪璽", "arena": "擂台", "sortie": "出陣", "ambush": "設伏", "assassin": "殺手"}
+KIND_WORDS = {"train": "遊歷", "event": "劇情", "wild": "探索遇敵", "showdown": "決戰", "siege": "攻城", "spar": "切磋", "raid": "截殺", "duel": "頭目戰", "seal": "奪璽", "arena": "擂台", "sortie": "出陣", "ambush": "設伏", "assassin": "殺手", "melee": "混戰"}
 NO_RECORD = "（還沒有戰報。）"
 DODGE_NOTE = "身法一閃，躲過了這一敗。"  # 落敗被閃成僵持時，戰報與場景的戰鬥卡片多這一句（人物資質設計 14.4）
 DAY = 86400
@@ -78,15 +81,16 @@ def new_record(
 
 
 def add_record(state: GameState, record: BattleRecord) -> None:
-    """最新的放最前面：一般的仗只留最近 MAX_RECORDS 場，決戰與奪璽單挑（BIG_KINDS）另外留最近 BIG_KEEP 場。"""
+    """最新的放最前面：一般的仗只留最近 MAX_RECORDS 場，決戰與奪璽單挑（BIG_KINDS）另外留最近 BIG_KEEP 場，攻城戰另外留 SIEGE_KEEP 場。"""
     state.battle_seq = record.id
     state.battles.insert(0, record)
-    counts = {True: 0, False: 0}
+    counts = {"big": 0, "siege": 0, "small": 0}
+    keep = {"big": BIG_KEEP, "siege": SIEGE_KEEP, "small": MAX_RECORDS}
     kept = []
     for r in state.battles:
-        big = r.kind in BIG_KINDS
-        counts[big] += 1
-        if counts[big] <= (BIG_KEEP if big else MAX_RECORDS):
+        group = "big" if r.kind in BIG_KINDS else "siege" if r.kind == "siege" else "small"
+        counts[group] += 1
+        if counts[group] <= keep[group]:
             kept.append(r)
     state.battles[:] = kept
 
@@ -105,7 +109,7 @@ def clock_text(time: float) -> str:
 
 def outcome_text(record: BattleRecord) -> str:
     """結果的短句，例如「擊退劫道山賊（大勝）」；江湖紀錄拿它當那一則的結果標記。決戰的結果本身就是一句話（「官軍大勝」）。"""
-    if record.kind == "showdown":
+    if record.kind in SHOWDOWN_KINDS:
         return record.tier
     return f"{TIER_WORDS[record.tier]}{record.opponent}"
 
@@ -130,11 +134,11 @@ def _when(record: BattleRecord, when: Callable[[float], str]) -> str:
 
 
 def _result_line(record: BattleRecord) -> str:
-    if record.kind == "showdown":  # 全服決戰沒有我方威力與對手難度：寫結果與自己站的那一邊
+    if record.kind in SHOWDOWN_KINDS:  # 全服決戰（與攻城戰）沒有我方威力與對手難度：寫結果與自己站的那一邊
         return f"**{record.tier}**　你站在{record.side}"
     if record.kind == "seal":  # 奪璽單挑（玉璽碎片設計 5.9）：雙方都是快照，沒有我方威力與對手難度；待 joy 潤
         return f"**{record.tier}**　陣前單挑"
-    rival = "對手威力" if record.kind in ("spar", "raid", "arena", "ambush", "assassin") else "對手難度"  # 切磋、截殺的對手是另一個玩家：寫他的威力
+    rival = "對手威力" if record.kind in ("spar", "raid", "arena", "ambush", "assassin", "melee") else "對手難度"  # 切磋、截殺的對手是另一個玩家：寫他的威力
     return f"**{record.tier}**　我方威力 {record.our_power:.0f}　{rival} {record.difficulty:.0f}"
 
 
@@ -260,7 +264,7 @@ def _story_part(
 def _gains_part(record: BattleRecord, label: str) -> str:
     """得失那一句（label 是它的標籤：戰報頁寫「獲得與損失」、卡片寫「得失」）。全服決戰沒有經驗、銀兩這些得失，只有大勢的
     增減，標籤固定寫「大勢」；上一季打的那一場，大勢的增減寫在結果的敘事裡（標了第幾季），沒有這一句（空字串）。"""
-    if record.kind == "showdown":
+    if record.kind in SHOWDOWN_KINDS:
         return f"**大勢**　{'　'.join(record.changes)}" if record.changes else ""
     return f"**{label}**　{gains_text(record)}"
 
@@ -310,7 +314,7 @@ def detail_text(record: BattleRecord, when: Callable[[float], str] = clock_text)
     return "\n\n".join([
         _title(record),
         f"{_when(record, when)}　第 {record.id} 場",
-        *([] if record.kind in ("showdown", "seal") else [f"**我方**　{_ours_line(record)}"]),  # 決戰、奪璽單挑不列陣容
+        *([] if record.kind in ("showdown", "siege", "seal") else [f"**我方**　{_ours_line(record)}"]),  # 決戰、攻城、奪璽單挑不列陣容
         _result_line(record),
         *_rounds_block(record),
         *_story_block(record),
