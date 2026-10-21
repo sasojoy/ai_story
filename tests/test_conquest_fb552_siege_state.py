@@ -84,8 +84,8 @@ def test_the_base_and_unannounced_neutral_keep_their_lines():
     """大本營（搶不下來）與沒有排過的中立地的字不動。"""
     game = go(join(conquest_game("season21"), "guan"), "changshe")
     assert "沒有進度可推" in _note(game, "changshe")
-    go(game, "deep_mountain")
-    assert howto.SORTIE_NOT_TODAY in _note(game, "deep_mountain")
+    go(game, "runan_wilds")  # 區塊表 v3 之前用嵩山深處（現在是官軍的）
+    assert howto.SORTIE_NOT_TODAY in _note(game, "runan_wilds")
 
 
 @pytest.mark.parametrize("profile", ["weekend", None, "season21"])  # 一個測試只開一季

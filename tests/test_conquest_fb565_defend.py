@@ -12,7 +12,8 @@ from tianxia.state import Order
 
 pytestmark = pytest.mark.slow  # 建 Game、載正式內容
 
-GUAN_BLOCKS = ("yingchuan", "yingshui", "yingchuan_wilds", "songshan_foot", "yingchuan_academy")  # 潁川汝南線上官軍的區塊（不含大本營長社）
+GUAN_BLOCKS = ("yingchuan", "yingshui", "yingchuan_wilds", "songshan_foot", "yingchuan_academy", "guan_camp",
+               "deep_mountain")  # 潁川汝南線上官軍的區塊（不含大本營長社；官軍大營、嵩山深處是區塊表 v3 給官軍的）
 
 
 def _game(profile: str = "season21"):
@@ -107,9 +108,9 @@ def test_a_block_my_own_side_is_attacking_is_not_one_to_defend():
     game = _game()
     order = _defend(game)
     huang_order = _defend(game, side="huang")
-    announce(game, "runan_wilds", "guan")
+    announce(game, "runan", "guan")  # 區塊表 v3 之前用汝南荒野（現在是中立地）
     assert _agree(game, order) == set()
-    assert _agree(game, huang_order, side="huang") == {"runan_wilds"}
+    assert _agree(game, huang_order, side="huang") == {"runan"}
 
 
 def test_other_fronts_are_not_listed():

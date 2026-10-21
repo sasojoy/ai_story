@@ -33,9 +33,9 @@ def test_per_day_follows_neutral_count_and_season_length():
     game = conquest_game("season21")
     w, c = game.state.world, game.content
     neutral = sum(1 for loc in conquest.blocks(c) if conquest.start_kind(w, c, loc) == conquest.NEUTRAL)
-    assert neutral == 10
-    assert conquest_day.per_day(c, w) == 1  # 10 ÷ 21 ＜ 0.5（設計 4.2：21 天的季要 11 塊以上才 2 塊）
-    c.config.conquest.two_per_day_ratio = 0.4
+    assert neutral == 9  # 區塊表 v3（計畫「區塊表 v3」那一節）
+    assert conquest_day.per_day(c, w) == 1  # 9 ÷ 21 ＜ 0.5（設計 4.2：21 天的季要 11 塊以上才 2 塊）
+    c.config.conquest.two_per_day_ratio = 0.3
     assert conquest_day.per_day(c, w) == 2
     weekend = conquest_game("weekend")
     assert conquest_day.per_day(weekend.content, weekend.state.world) == 2  # 週末 2.5 天一律 2 塊
@@ -49,16 +49,16 @@ def test_commander_picks_are_deterministic_and_prefer_worked_blocks():
     assert first == conquest_day.commander_picks(w, c, "huang", 2, key, set())  # 同一天同一邊挑一樣的
     assert [p.minute for p, _ in first] == [21 * 60, 20 * 60]  # 第二塊用 20:00（裁決 7）
     assert all(why for _, why in first)
-    targets = conquest.targets(w, c, "guan")  # 開季官軍碰得到黃巾的汝南荒野，黃巾開季碰得到的全是中立地
+    targets = conquest.targets(w, c, "huang")  # 開季黃巾碰得到官軍的涿郡（區塊表 v3），官軍開季碰得到的全是中立地
     neutral = [loc for loc in targets if conquest.start_kind(w, c, loc) == conquest.NEUTRAL]
     enemy = [loc for loc in targets if loc not in neutral]
     assert neutral and enemy
-    assert conquest_day.commander_picks(w, c, "guan", 1, key, set())[0][0].loc in neutral  # 進度都在 50：中立先於敵方陣營
-    w.conquest.progress[enemy[0]] = 50 + 30 * conquest.direction(c, "guan", enemy[0])  # 那一塊的進度往官軍偏
-    worked = conquest_day.commander_picks(w, c, "guan", 1, key, set())
+    assert conquest_day.commander_picks(w, c, "huang", 1, key, set())[0][0].loc in neutral  # 進度都在 50：中立先於敵方陣營
+    w.conquest.progress[enemy[0]] = 50 + 30 * conquest.direction(c, "huang", enemy[0])  # 那一塊的進度往黃巾偏
+    worked = conquest_day.commander_picks(w, c, "huang", 1, key, set())
     assert worked[0][0].loc == enemy[0]
     assert "已佔上風" in worked[0][1]
-    assert conquest_day.commander_picks(w, c, "guan", 1, key, {enemy[0]})[0][0].loc != enemy[0]  # 已經定了的不再挑
+    assert conquest_day.commander_picks(w, c, "huang", 1, key, {enemy[0]})[0][0].loc != enemy[0]  # 已經定了的不再挑
 
 
 def test_tally_rank4_votes_weigh_55_percent():
@@ -87,7 +87,7 @@ def test_tally_boundary_tie_goes_to_the_commander():
 def test_plan_votes_then_commander_fills():
     game = conquest_game("season21")
     w, c = game.state.world, game.content
-    c.config.conquest.two_per_day_ratio = 0.4  # 一天兩塊
+    c.config.conquest.two_per_day_ratio = 0.3  # 一天兩塊（中立 9 塊 ÷ 21 天）
     target = conquest.targets(w, c, "huang")[-1]
     picks = conquest_day.plan(w, c, "huang", 20000, 0.0, {"甲": Pick(loc=target, minute=19 * 60)}, set())
     assert [(p.loc, p.minute, by) for p, by, _ in picks][0] == (target, 19 * 60, conquest_day.VOTE)
