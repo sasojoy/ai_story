@@ -1,6 +1,6 @@
 """領地爭奪：每天的鐘與攻城時段（純規則；設計 4.3，裁決 6）。翻地與爭搶（輿圖簡化設計 4.4，PM 2026-10-20）之後的樣子：
 
-- 投票與每天 22:00 的公告結算拿掉了（第二批 Task 8、9 的 tally／plan／merge／settle／settle_now、主將定奪都不在了）。攻城戰改成第 4 階的人
+- 投票與每天 22:00 的公告結算拿掉了（第二批 Task 8、9 的 tally／plan／merge／settle／settle_now、主將定奪、眾議的字都不在了）。攻城戰改成第 4 階的人
   下戰書觸發（place_letter）：時段挑最近一個開得了集結的（今天的 slot_first～slot_last 整點半點，時刻表決戰前後不排；今天沒有了挑下一天的
   第一個），同一塊別一邊已經下了、還沒開集結就併進同一場（中立地就是三方混戰）。
 - 一天＝當地時間（Config.pill_day_utc_offset_hours，跟回體丹同一個時區）settle_hour（22:00）起算的 24 小時，day_key 是第幾天；一邊一天一張
@@ -22,11 +22,9 @@ DAY = 24 * HOUR
 LETTER = "letter"  # SiegeSlot.by、DayNote.by：戰書排的
 FLIP = "flip"  # DayNote.by：推滿當場易手（conquest.flip）
 MEND = "mend"  # DayNote.by：補缺當場退回原主（conquest.restore，玉璽碎片改版第 3 批；不記是誰，FB-646）
-# 舊季（第二批投票那一版）的 day_log 還有這兩種；〈天下形勢〉照舊認得（第三批 A 讀它們），新的不再寫
-VOTE = "vote"
-COMMANDER = "commander"
-BY_WORDS = {LETTER: "戰書", VOTE: "眾議", COMMANDER: "主將定奪"}  # 待 joy 潤：畫面上怎麼寫這一場是怎麼定的
-REASON_PLAIN = "主將看準了{place}，下令攻打。"  # 舊季的主將定奪沒寫原因時（〈天下形勢〉讀）
+# 畫面上怎麼寫這一場是怎麼定的（main_view 的 conquest.today）；待 joy 潤。第二批的眾議、主將定奪（vote、commander）輿圖第三版第 5 批收掉了：
+# 領地爭奪從沒合進 develop／main，沒有哪一季的 day_log 是投票那一版
+BY_WORDS = {LETTER: "戰書"}
 
 # 天下大事（待 joy 潤）：時刻照 calendar.stamp_text（玩家看得到的時刻只有一個寫法），寫在句子中間（傳聞列表自己在前面寫發出的時刻）
 LETTER_RUMOR = "{name}替{who}下了戰書：定於{time} 攻{place}。"  # 只有真人會下戰書，具名

@@ -1109,7 +1109,7 @@ def yuedan_once(game: Game) -> bool:
         return game.apply_yuedan(note, lines)
 
 
-# 〈天下形勢〉（領地爭奪第三批 A；tianxia/xingshi.py）：每天 22:00 結算那一刻開一張單，這裡在背景請模型照事實寫一篇。
+# 〈天下形勢〉（領地爭奪第三批 A；tianxia/xingshi.py）：每天 22:00 換天那一刻開一張單，這裡在背景請模型照事實寫一篇。
 # 全服同時只有一條在寫（XINGSHI_RUNNING）；佇列開著時當成假人排在真人後面（名號是 XINGSHI_OWNER，不是任何一個角色）。
 XINGSHI_RUNNING: set[str] = set()
 XINGSHI_OWNER = "§史官"
