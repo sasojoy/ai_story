@@ -2026,6 +2026,38 @@ def api_mall_buy(request: Request, body: dict = Body(...)):
             "mall": look(game, lambda g: g.mall_view()), "main": look(game, main_view)}
 
 
+@app.post("/api/mall/claim")
+def api_mall_claim(request: Request):
+    """領月卡今天的份（Game.mall_claim；定案甲・每日領）：回 {message, mall, main}（錠子鈕、丹鈕與江湖頁那張小卡當場換）。"""
+    _mall_on()
+    game = _game(request)
+    msgs = act(game, lambda g: g.mall_claim())
+    _tell_tabs(game)
+    return {"message": joined(msgs), "mall": look(game, lambda g: g.mall_view()), "main": look(game, main_view)}
+
+
+@app.post("/api/mall/rename")
+def api_mall_rename(request: Request, body: dict = Body(...)):
+    """易名帖（Game.mall_rename；Joy 2026-10-21 當場生效）：{name}；回 {message, renamed, main}。名號的寫法照建角色（NFKC、長度、
+    看不見的字元），撞名照 name_taken 同一句。改成了：GAMES 換到新名號底下（帳號已經指向新名號，下一個請求照新名號找）。"""
+    _mall_on()
+    name = unicodedata.normalize("NFKC", str(body.get("name", ""))).strip()
+    if not name:
+        raise GameError("請先輸入新的名號。")
+    if len(name) > NAME_MAX or any(unicodedata.category(ch) in ("Cc", "Cf") for ch in name):
+        raise GameError(BAD_NAME)
+    game = _game(request)
+    old = game.state.player.name
+    msgs = act(game, lambda g: g.mall_rename(name, name_taken))
+    new = game.state.player.name
+    if new != old:
+        with _GAMES_LOCK:
+            GAMES.pop(old.casefold(), None)
+            GAMES[new.casefold()] = game
+    _tell_tabs(game)
+    return {"message": joined(msgs), "renamed": new != old, "name": new, "main": look(game, main_view)}
+
+
 @app.post("/api/admin/mall")
 def api_admin_mall(request: Request, body: dict = Body(...)):
     """管理者查一個名號（或帳號）的帳（Game.admin_mall_ledger）。名號放在 POST 的內容裡、不放在網址上；查不到回 {refusal}。"""

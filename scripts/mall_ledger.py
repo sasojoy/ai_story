@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from tianxia.database import default_path  # noqa: E402
-from tianxia.mall import REASONS  # noqa: E402
+from tianxia.mall import reason_text  # noqa: E402
 from tianxia.wallet import Wallet  # noqa: E402
 
 HEADER = ["編號", "時間（台灣）", "名號", "錢包", "增減", "原因", "單號", "購買", "經手", "說明", "之後的餘額"]
@@ -54,7 +54,7 @@ def rows(wallet: Wallet, offset_hours: float) -> tuple[list[list[str]], dict[str
         balances[row.owner] = balances.get(row.owner, 0) + row.delta
         out.append([
             str(row.id), datetime.fromtimestamp(row.time, tz=tz).strftime("%Y-%m-%d %H:%M:%S"), shown or "", row.owner,
-            str(row.delta), REASONS.get(row.reason, row.reason), row.ref, "" if row.purchase_id is None else str(row.purchase_id),
+            str(row.delta), reason_text(row.reason, row.ref), row.ref, "" if row.purchase_id is None else str(row.purchase_id),
             row.admin or "", row.note, str(balances[row.owner]),
         ])
     return out, balances

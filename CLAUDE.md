@@ -33,7 +33,7 @@
 | [大勢人物與賽季](docs/guide/大勢人物與賽季.md) | 季曆與時刻表、21 天季、7 天濃縮季、戰線推力與軍令、晉升、叛投、伏筆、大勢人物、人物活起來、同伴 | calendar、checkin、timetable、figures、figure_life、relations、letters、orders、defection、foreshadow、front_lines、figure_aid、roster | 第一季濃縮版（`rules.season_one` 開著時才有）、挑戰大勢人物（每季都有）、人物活起來（每季都有，`Config.figure_life`；`tianxia/figure_life.py`） |
 | [散人與玩家互動](docs/guide/散人與玩家互動.md) | 遊俠名號、懸賞榜、求藝求兵、截殺、玩家卡、切磋、論武 | ranger、bounties、raid | 第一季濃縮版（`rules.season_one` 開著時才有）、散人、懸賞與截殺（每季都有） |
 | [玉璽碎片](docs/guide/玉璽碎片.md) | 七片碎片、璽動與奪璽單挑、天命之季與天命之爭 | seal、seal_duel | 玉璽碎片（玉璽一；天命之爭是玉璽二） |
-| [商城](docs/guide/商城.md) | 元寶錢包與帳本、商品表與允許的效果、購買發貨、月卡、封測發放、管理者工具、資料庫第 6 版 | mall、wallet | —（2026-10-20 新開） |
+| [商城](docs/guide/商城.md) | 元寶錢包與帳本、商品表與允許的效果、購買發貨、月卡（每日領）、重修列傳、易名帖（改名當場生效）、封測發放、管理者工具、資料庫第 6 版 | mall、wallet、rename | —（2026-10-20 新開） |
 | [地圖與介面](docs/guide/地圖與介面.md) | 輿圖資料與畫法、網頁各分頁與店面的畫面 | atlas、mapview、mapart | 介面（`web/`） |
 | [模型與假人](docs/guide/模型與假人.md) | Ollama 與三段式、繁體、省電與維修頁、伺服器假人、整季機器人 | ollama_client、power_save、zh、event_llm、server_bots、bot_policy、bot_runner、bot | 模型呼叫 |
 | [量表與教訓](docs/guide/量表與教訓.md) | 量表與模擬腳本、好玩度量表、量平衡的教訓、歷史 | — | 量表與教訓、歷史（已完成或已取代，細節看原文件） |

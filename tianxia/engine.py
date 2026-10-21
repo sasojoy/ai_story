@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from . import (
     allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, checkin, chuangong, clinic, companion_agent, cultivation, defection, divine, economy, encounter, enlist, equipment, event_llm, explore_modes, escorts,
     fight_llm, figure_aid, figure_life, figures, foreshadow, four_tiers, gather_llm, generals, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, letters, library, mapdata, martial_arts, feasts,
-    mall, materials, mounts, naming, opportunities, orders, precise, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
+    mall, materials, mounts, naming, rename, server_bots, opportunities, orders, precise, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
     shopview, signature, signature_arms, silver, skill_slots, skillview, smithing,
     social, sortie, styles, tactics, team, terrain, territory, timetable, traits, treasures, weapons, works, zh, yuedan,
 )
@@ -38,6 +38,7 @@ from . import tavern as tavern_rules  # 酒肆（企劃者 2026-10-18）；叫 t
 from . import prologue as prologue_rules  # Game.new 有個參數也叫 prologue，所以模組在這裡一律叫 prologue_rules
 from . import rumor_view  # 傳聞分層的畫面：見聞頁的四層、你不在的時候（計畫 2026-10-06 傳聞分層一）
 from .accounts import AccountStore
+from .accounts import NAME_TAKEN as NAME_IN_USE  # 易名帖撞名：跟建角色同一句（不洩漏誰是假人）
 from .characters import CharacterStore, name_key
 from .events import (
     choice_label, event_candidates, free_text_note, has_events_here, pick_event, stamina_note, visible_choices,
@@ -9297,7 +9298,78 @@ class Game:
         """狀態列的商城入口（齒輪旁的錠子鈕、底部第六格；商城第二批）：{balance}；商城關著是 None（沒有入口）。
         江湖畫面每次都送，所以只讀餘額（帳的加總），不排商品。"""
         wallet = self._wallet()
-        return None if wallet is None else {"balance": wallet.balance(self._mall_owner())}
+        if wallet is None:
+            return None
+        owner = self._mall_owner()
+        card = mall.card_view(self.content, wallet, owner, self._pill_day())
+        # 月卡今天的份（定案甲）：卡有效、有每天領的份才有這個鍵；江湖頁照它畫「月卡・今日份」小卡（領過了收起）
+        daily = card["daily"] if card is not None else None
+        names = len(mall.rename_tokens(wallet, owner))  # 手上的易名帖：設定頁照它畫改名那一格（沒有不送這個鍵）
+        return {"balance": wallet.balance(owner), **({"daily": daily} if daily is not None else {}), **({"rename": names} if names else {})}
+
+    def mall_rename_left(self) -> int:
+        """手上還沒用掉的易名帖幾張（設定頁照它畫改名那一格）；商城關著是 0。"""
+        wallet = self._wallet()
+        return 0 if wallet is None else len(mall.rename_tokens(wallet, self._mall_owner()))
+
+    def mall_rename(self, new: str, taken: Callable[[str], bool] | None = None) -> list[str]:
+        """易名帖：改自己的名號，當場生效（Joy 2026-10-21 決策卡「當場生效」；rename.py）。new 是伺服器量過長度、去過看不見的字元的；
+        taken 是伺服器的「名號有人用」（角色、帳號、保留的名號同一句話，不洩漏誰是假人），沒給（測試、腳本）照角色表與保留名號查。
+        成了：資料庫裡名號當身分的地方一起換（world.rename_character）、自己的存檔照新名號存、用掉一張帖、江湖史一行、一則「商城」紀錄。
+        不成只回一句、什麼都不動。呼叫端要拿著行動鎖（server 的 act）。"""
+        wallet = self._wallet()
+        if wallet is None:
+            return [mall.OFF]
+        p = self.state.player
+        old = p.name
+        left = mall.rename_tokens(wallet, self._mall_owner())
+        if not left:
+            return [mall.NO_RENAME]
+        if p.bot is not None or self.is_admin():
+            return [mall.RENAME_ADMIN]
+        if new == old:
+            return [mall.RENAME_SAME]
+        if taken is None:
+            store = CharacterStore(self.world.db)
+            reserved = {n.casefold() for n in server_bots.reserved_names(self.content)}
+            taken = lambda n: store.exists(n) or n.casefold() in reserved  # noqa: E731
+        if name_key(new) != name_key(old) and taken(new):
+            return [NAME_IN_USE]
+        if rename.clash(old, name_key(old), self.content) or rename.clash(new, name_key(new), self.content):
+            return [rename.CLASHED]
+        shared = self.world.read()
+        live = shared.model_dump_json(include={"seal_duels"}) + (shared.active_battle.model_dump_json() if shared.active_battle else "")
+        if f'"{old}"' in live or f'"{name_key(old)}"' in live:
+            return [mall.RENAME_BUSY]
+        self._save_season()  # 先把這一次同步動到的季寫回去，改名照資料庫那一份換
+        self.world.rename_character(old, new)
+        mapping = {old: new, name_key(old): name_key(new)}
+        self.state = GameState.model_validate(rename.swap(self.state.model_dump(mode="json"), mapping))
+        self._reconcile_season()
+        wallet.mark_used(left[0], self.pill_now())
+        self.state.world.chronicle.append(Rumor(time=self.state.world.time, text=mall.RENAMED_CHRONICLE.format(old=old, new=new)))
+        line = mall.RENAMED.format(new=new)
+        journal.add_entry(self.state, JournalEntry(
+            time=self.state.world.time, title=mall.TITLE, lines=[line], changes=[f"名號 {old} → {new}"],
+        ))
+        self._save_season()
+        CharacterStore(self.world.db).save(self.state)
+        self.touched.update(n for n in CharacterStore(self.world.db).names() if n != new)  # 別人的分頁也重抓（他們存檔裡的名字換了）
+        return self._log([line])
+
+    def mall_claim(self) -> list[str]:
+        """領月卡今天的份（mall.claim_daily；Joy 2026-10-21 定案甲・每日領）：成了寫一則「商城」江湖紀錄，不成只回一句。
+        一天照回體丹那一套（_pill_day，台灣 00:00 換日）；沒上線那一天不補（編號一天一個，過了那天就領不到）。"""
+        wallet = self._wallet()
+        if wallet is None:
+            return self._log([mall.OFF])
+        result = mall.claim_daily(self.state, self.content, wallet, now=self.pill_now(), day=self._pill_day())
+        if isinstance(result, str):
+            return self._log([result])
+        journal.add_entry(self.state, JournalEntry(
+            time=self.state.world.time, title=mall.TITLE, lines=result.lines, changes=result.changes,
+        ))
+        return self._log(result.lines)
 
     def mall_view(self) -> dict | None:
         """商城那一頁的資料（mall.view）；商城關著是 None。另附貨架上面兩張小卡與購買確認要的回體丹（pills：名字、手上幾顆、
@@ -13208,7 +13280,7 @@ class Game:
                 entries = tuple(e.model_dump() for e in sorted(p.annals, key=lambda e: e.time))
                 profile = annals.profile(self.state, c)
             written = row["text"] is not None
-            if written != rewrite or (rewrite and row["rewrites"] >= c.config.biography.rewrites):
+            if written != rewrite or (rewrite and row["rewrites"] >= self._rewrites_allowed()):
                 return None
         if not entries:
             return None
@@ -13229,14 +13301,33 @@ class Game:
         if request.season == p.season_number and p.annals:
             self.world.save_annals(request.season, p.name, list(request.annals), dict(request.profile))
         by = biography.MODEL if text else biography.RULE
-        return self.world.store_biography(
+        row = self.world.biography(request.season, p.name) if request.rewrite else None
+        stored = self.world.store_biography(
             request.season, p.name, text or biography.rule_text(request), by, now, request.rewrite,
         )
+        if stored and row is not None and row["rewrites"] >= self.content.config.biography.rewrites:
+            self._use_rewrite_token(now)  # 白送的重寫用完了，這一次是萬寶閣買的「重修列傳」
+        return stored
+
+    def _rewrite_tokens(self) -> list[int]:
+        """萬寶閣「重修列傳」還沒用掉的那幾筆購買（mall.rewrite_tokens）；商城關著是空的。"""
+        wallet = self._wallet()
+        return [] if wallet is None else mall.rewrite_tokens(wallet, self._mall_owner())
+
+    def _rewrites_allowed(self) -> int:
+        """一篇傳能重寫幾次：Config.biography.rewrites 加上手上還沒用掉的「重修列傳」（Joy 2026-10-21 定案：200 元寶、一季兩次）。"""
+        return self.content.config.biography.rewrites + len(self._rewrite_tokens())
+
+    def _use_rewrite_token(self, now: float) -> None:
+        tokens = self._rewrite_tokens()
+        wallet = self._wallet()
+        if tokens and wallet is not None:
+            wallet.mark_used(tokens[0], now)
 
     def biography_view(self, season: int) -> dict | None:
         """修練之外的一本書（網頁的「讀你的傳」）：篇名、段落、誰寫的、公開了沒、分享代碼、還能不能重寫、還沒寫成時寫不寫得了。
         那一季沒有（沒有行狀、還沒收季）回 None。"""
-        p, cfg = self.state.player, self.content.config.biography
+        p = self.state.player
         row = self.world.biography(season, p.name)
         if row is None or row["text"] is None:
             ready = self.biography_request(season) is not None
@@ -13249,7 +13340,7 @@ class Game:
         return {
             "season": season, "title": biography.title(row["name"]), "written": True, "paragraphs": row["text"].split("\n\n"),
             "by": row["written_by"], "public": row["public"], "code": row["share_code"] if row["public"] else None,
-            "can_rewrite": row["rewrites"] < cfg.rewrites, "scenario": self.content.scenario.name,
+            "can_rewrite": row["rewrites"] < self._rewrites_allowed(), "scenario": self.content.scenario.name,
         }
 
     def share_biography(self, season: int, public: bool, code: str) -> str | None:

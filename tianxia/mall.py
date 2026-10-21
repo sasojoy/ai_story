@@ -29,13 +29,20 @@ class EffectSpec:
     max: int  # 一件商品最多寫多少
 
 
-# 允許的效果表（4.3）：第一版只有回體丹與月卡。要加新的效果先改這張表、再上架；外觀、通行證開了才會有它們的效果。
+# 允許的效果表（4.3）：回體丹、月卡、月卡當場回的元寶、重修列傳。要加新的效果先改這張表、再上架；外觀、通行證開了才會有它們的效果
+# （Joy 2026-10-21：外觀不做）。月卡每天領的那一份不是商品的效果，寫在 Config.mall（card_daily_*），買哪一張卡都一樣。
 EFFECTS: dict[str, EffectSpec] = {
     "pills": EffectSpec("consumable", "{pill} {n} 顆", 999),
-    "card_days": EffectSpec("card", "月卡 {n} 天（每天多服 {bonus} 顆{pill}）", 366),
+    "card_days": EffectSpec("card", "月卡 {n} 天（每天多服 {bonus} 顆{pill}{daily}）", 366),
+    "card_rebate": EffectSpec("card", "當場回 {n} 元寶", 100000),  # 月卡買下當場拿回的元寶（定案甲：600 回 300）；要比價錢少
+    "zhuan_rewrite": EffectSpec("consumable", "列傳多重寫 {n} 次", 9),  # 重修列傳：休季時列傳多重寫幾次（Config.biography.rewrites 之外）
+    "rename": EffectSpec("consumable", "易名帖 {n} 張", 1),  # 易名帖：買了得一張帖，在設定頁改名、當場生效（rename.py）
 }
 KIND_NAMES = {"look": "外觀", "consumable": "消耗品", "card": "月卡", "pass": "通行證"}
 REASONS = {"grant": "封測發放", "buy": "購買", "refund": "退款", "reissue": "補發", "revoke": "扣回", "topup": "儲值"}
+# 月卡的元寶照舊記成 grant（帳本的原因有 CHECK，加原因要改結構；不改結構版本），照編號的開頭認是月卡的哪一份：
+# 當場回的 card:rebate:<購買 id>、每天領的 card:daily:<主人>:<日>；退款時扣回當場回的那一份 refund:rebate:<購買 id>（revoke）
+CARD_REFS = {"card:rebate:": "月卡回饋", "card:daily:": "月卡每日", "refund:rebate:": "扣回月卡回饋"}
 CARD_KEY = "pill_cap"  # 月卡記在 mall_entitlements 的哪一格（回體丹每天的上限）
 _DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 _EPOCH = date(1970, 1, 1)
@@ -66,6 +73,20 @@ REFUNDED = "已退{name}的「{item}」：元寶 +{price}（餘額 {left}）。{
 PILLS_BACK = "{pill}收回 {n} 顆。"
 PILLS_USED = "用掉的 {n} 顆不追。"
 CARD_BACK = "月卡少 {n} 天。"
+REBATE_BACK = "當場回的 {n} 元寶扣回。"
+# 月卡每日領（定案甲）：待 joy 潤
+DAILY_PART = "，每天領 {ingots} 元寶與 {pills} 顆{pill}"  # 效果那一句（月卡）多這一段
+CLAIMED = "領了月卡今天的份：元寶 +{ingots}、{pill} +{pills}（元寶 {left}）。"
+CLAIMED_BEFORE = "月卡今天的份已經領過了，明日 00:00 後再來。"
+NO_CARD = "你沒有月卡，或月卡已經到期。"
+NO_DAILY = "月卡沒有每天領的份。"
+# 易名帖（rename.py）：待 joy 潤
+NO_RENAME = "你手上沒有易名帖，先到萬寶閣買一張。"
+RENAME_SAME = "新名號跟原本的一樣。"
+RENAME_BUSY = "決戰或奪璽單挑還沒打完，先別改名。"
+RENAME_ADMIN = "管理者的名號不能用易名帖改。"
+RENAMED = "你從此改名「{new}」。"
+RENAMED_CHRONICLE = "{old}改名{new}。"
 
 
 @dataclass(frozen=True)
@@ -113,11 +134,19 @@ def day_text(day: int) -> str:
     return f"{d.month}/{d.day}"
 
 
+def daily_amounts(content: Content) -> tuple[int, int]:
+    """月卡每天領的元寶與回體丹（Config.mall.card_daily_*）；兩個都是 0 是沒有這一份。"""
+    m = content.config.mall
+    return m.card_daily_ingots, m.card_daily_pills
+
+
 def effects_text(item: MallItem, content: Content) -> str:
-    """這件買了拿到什麼（照允許表的寫法，例「回體丹 5 顆」「月卡 30 天（每天多服 1 顆回體丹）」）。"""
+    """這件買了拿到什麼（照允許表的寫法，例「回體丹 5 顆」「月卡 30 天（每天多服 1 顆回體丹，每天領 60 元寶與 1 顆回體丹）」）。"""
     cfg = content.config
+    ingots, pills = daily_amounts(content)
+    daily = DAILY_PART.format(ingots=ingots, pills=pills, pill=cfg.stamina_pill_name) if ingots or pills else ""
     return "、".join(
-        EFFECTS[key].label.format(n=n, pill=cfg.stamina_pill_name, bonus=cfg.mall.card_pill_bonus)
+        EFFECTS[key].label.format(n=n, pill=cfg.stamina_pill_name, bonus=cfg.mall.card_pill_bonus, daily=daily)
         for key, n in item.effects.items() if key in EFFECTS
     )
 
@@ -180,7 +209,7 @@ def buy(
         pid = wallet.add_purchase(owner, full, item.id, item.price, time=now, day=day, season=season, data=dict(item.effects))
         if not wallet.post(owner, -item.price, "buy", full, time=now, purchase_id=pid):
             raise RuntimeError(f"購買編號 {full} 已經記過帳，購買紀錄卻沒有")  # 兩張表對不上：整筆撤回，不發貨
-        changes = _deliver(state, content, wallet, owner, item, day)
+        changes = _deliver(state, content, wallet, owner, item, day, pid, now)
         left = wallet.balance(owner)
     line = BOUGHT.format(name=item.name, effects=effects_text(item, content), price=item.price, left=left)
     return Bought(item=item, lines=[line], changes=[f"元寶 -{item.price}", *changes])
@@ -193,14 +222,25 @@ def card_span(span: tuple[int, int] | None, day: int, days: int) -> tuple[int, i
     return day, day + days
 
 
-def _deliver(state: GameState, content: Content, wallet: Wallet, owner: str, item: MallItem, day: int) -> list[str]:
-    """發貨：月卡寫進 mall_entitlements、回體丹進角色（走拿到回體丹的那條路：手上的顆數加上去）。回江湖紀錄的變化。"""
+def _deliver(
+    state: GameState, content: Content, wallet: Wallet, owner: str, item: MallItem, day: int, pid: int, now: float,
+) -> list[str]:
+    """發貨：月卡寫進 mall_entitlements（當場回的元寶記一筆帳 card:rebate:<購買>）、回體丹進角色（走拿到回體丹的那條路：手上的
+    顆數加上去）；重修列傳不用發，那一筆購買就是一次（rewrite_tokens 數沒用掉的）。回江湖紀錄的變化。"""
     changes: list[str] = []
     days = item.effects.get("card_days", 0)
     if days:
         start, end = card_span(wallet.card(owner, CARD_KEY), day, days)
         wallet.set_card(owner, CARD_KEY, start, end)
         changes.append(CARD_UNTIL.format(day=day_text(end - 1)))
+    rebate = item.effects.get("card_rebate", 0)
+    if rebate:
+        wallet.post(owner, rebate, "grant", f"card:rebate:{pid}", time=now, purchase_id=pid, note=CARD_REFS["card:rebate:"])
+        changes.append(f"元寶 +{rebate}（{CARD_REFS['card:rebate:']}）")
+    if item.effects.get("zhuan_rewrite", 0):
+        changes.append(f"列傳重寫 +{item.effects['zhuan_rewrite']}")
+    if item.effects.get("rename", 0):
+        changes.append("易名帖 +1（到設定頁改名）")
     pills = item.effects.get("pills", 0)
     if pills:
         state.player.stamina_pills += pills
@@ -216,11 +256,90 @@ def real_text(now: float, content: Content) -> str:
 
 
 def card_view(content: Content, wallet: Wallet, owner: str, day: int) -> dict | None:
-    """月卡此刻有沒有效：有效回 {until: 用到哪一天（含）, bonus: 多幾顆}，其餘 None。"""
+    """月卡此刻有沒有效：有效回 {until: 用到哪一天（含）, bonus: 多幾顆, left: 連今天還有幾天, daily: 今天的份}，其餘 None。
+    daily 是 {ingots, pills, claimed: 今天領過了沒}；Config.mall 沒有每天領的份是 None。"""
     span = wallet.card(owner, CARD_KEY)
     if span is None or not span[0] <= day < span[1]:
         return None
-    return {"until": day_text(span[1] - 1), "bonus": content.config.mall.card_pill_bonus}
+    ingots, pills = daily_amounts(content)
+    daily = {"ingots": ingots, "pills": pills, "claimed": wallet.has_ref(daily_ref(owner, day))} if ingots or pills else None
+    return {"until": day_text(span[1] - 1), "bonus": content.config.mall.card_pill_bonus, "left": span[1] - day, "daily": daily}
+
+
+def daily_ref(owner: str, day: int) -> str:
+    """月卡每天那一份的編號：一個主人一天一個，所以同一天只領得到一次；沒領的那一天沒有這一筆，之後也補不回來（Joy：沒上線不補）。"""
+    return f"card:daily:{owner}:{day}"
+
+
+@dataclass(frozen=True)
+class Claimed:
+    lines: list[str]
+    changes: list[str]
+
+
+def claim_daily(state: GameState, content: Content, wallet: Wallet, *, now: float, day: int) -> Claimed | str:
+    """領月卡今天的份（定案甲）：卡在期間裡、今天還沒領過才給；元寶記一筆帳（card:daily:<主人>:<日>，原因 grant），回體丹進角色。
+    回字串是領不了的那一句，什麼都沒寫。先寫帳、最後才動 state（同 buy）。"""
+    if not on(content):
+        return OFF
+    owner = name_key(state.player.name)
+    ingots, pills = daily_amounts(content)
+    if not ingots and not pills:
+        return NO_DAILY
+    with wallet.db.transaction():
+        span = wallet.card(owner, CARD_KEY)
+        if span is None or not span[0] <= day < span[1]:
+            return NO_CARD
+        ref = daily_ref(owner, day)
+        if wallet.has_ref(ref):
+            return CLAIMED_BEFORE
+        # 元寶 0 也記一筆 0 的帳：編號就是「今天領過了」的記號
+        wallet.post(owner, ingots, "grant", ref, time=now, note=CARD_REFS["card:daily:"])
+        left = wallet.balance(owner)
+    state.player.stamina_pills += pills
+    pill = content.config.stamina_pill_name
+    changes = ([f"元寶 +{ingots}"] if ingots else []) + ([f"{pill} +{pills}"] if pills else [])
+    return Claimed(lines=[CLAIMED.format(ingots=ingots, pills=pills, pill=pill, left=left)], changes=changes)
+
+
+def tokens(wallet: Wallet, owner: str, effect: str) -> list[int]:
+    """帶著 effect（zhuan_rewrite、rename）還沒用掉的那幾筆購買（id，舊的在前）：沒退、data 裡沒有 used。每一筆是一次。"""
+    return [b.id for b in reversed(wallet.purchases(owner)) if b.refunded is None and b.data.get(effect) and not b.data.get("used")]
+
+
+def rewrite_tokens(wallet: Wallet, owner: str) -> list[int]:
+    """重修列傳還沒用掉的那幾筆購買。"""
+    return tokens(wallet, owner, "zhuan_rewrite")
+
+
+def rename_tokens(wallet: Wallet, owner: str) -> list[int]:
+    """易名帖還沒用掉的那幾筆購買。"""
+    return tokens(wallet, owner, "rename")
+
+
+def reason_text(reason: str, ref: str) -> str:
+    """帳那一列的原因：月卡的那幾份照編號的開頭寫（CARD_REFS），其餘照 REASONS。"""
+    for head, text in CARD_REFS.items():
+        if ref.startswith(head):
+            return text
+    return REASONS.get(reason, reason)
+
+
+def perks(item: MallItem, content: Content) -> list[str]:
+    """月卡的好處一條一條（貨架那一張大卡與購買確認列的；定案甲）。待 joy 潤。"""
+    cfg = content.config
+    pill = cfg.stamina_pill_name
+    out = []
+    rebate = item.effects.get("card_rebate", 0)
+    if rebate:
+        out.append(f"買下當場拿回 {rebate} 元寶")
+    ingots, pills = daily_amounts(content)
+    if ingots or pills:
+        out.append("每天上線領 " + "＋".join(([f"{ingots} 元寶"] if ingots else []) + ([f"{pill} {pills} 顆"] if pills else [])) + "（沒上線那天不補）")
+    if cfg.mall.card_pill_bonus:
+        out.append(f"每天能多服 {cfg.mall.card_pill_bonus} 顆{pill}")
+    out.append(f"{item.effects.get('card_days', 0)} 天；再買從到期日往後接")
+    return out
 
 
 def limit_text(item: MallItem, wallet: Wallet, owner: str, day: int, season: int) -> str:
@@ -250,11 +369,14 @@ def view(content: Content, wallet: Wallet, owner: str, day: int, season: int) ->
         items.append({
             "id": item.id, "name": item.name, "note": item.note, "price": item.price, "kind": item.kind,
             "kind_name": KIND_NAMES[item.kind], "effects": effects_text(item, content),
-            "limit": limit_text(item, wallet, owner, day, season), "can": why is None, "why": why, "after": balance - item.price,
+            "limit": limit_text(item, wallet, owner, day, season), "can": why is None, "why": why, "after": balance - item.price + item.effects.get("card_rebate", 0),
             "gives": {key: n for key, n in item.effects.items() if key in EFFECTS},
             "card_to": day_text(card_span(span, day, days)[1] - 1) if days else None,
+            "perks": perks(item, content) if days else [],
         })
-    return {"balance": balance, "card": card_view(content, wallet, owner, day), "items": items}
+    ingots, pills = daily_amounts(content)
+    daily = {"ingots": ingots, "pills": pills} if ingots or pills else None  # 月卡每天領的份（購買確認那一列）
+    return {"balance": balance, "card": card_view(content, wallet, owner, day), "items": items, "daily": daily}
 
 
 def records(content: Content, wallet: Wallet, owner: str, *, admin: bool = False) -> dict:
@@ -267,7 +389,7 @@ def records(content: Content, wallet: Wallet, owner: str, *, admin: bool = False
     for row in wallet.ledger(owner, shown):
         bought = wallet.purchase(row.purchase_id) if row.purchase_id is not None else None
         known = content.mall.get(bought.item) if bought is not None else None
-        line = {"time": real_text(row.time, content), "delta": row.delta, "reason": REASONS.get(row.reason, row.reason),
+        line = {"time": real_text(row.time, content), "delta": row.delta, "reason": reason_text(row.reason, row.ref),
                 "note": row.note, "balance": after, "item": (known.name if known else bought.item) if bought is not None else None,
                 "refunded": bought is not None and bought.refunded is not None}
         if admin:
@@ -332,6 +454,11 @@ def refund(
         if days and span is not None and bought.day >= span[0]:
             wallet.set_card(owner, CARD_KEY, span[0], max(span[0], span[1] - days))
             took.append(CARD_BACK.format(n=days))
+        rebate = int(bought.data.get("card_rebate", 0))
+        if rebate and wallet.has_ref(f"card:rebate:{bought.id}"):  # 當場回的那一份扣回（退了全價，餘額一定夠：回饋比價錢少）
+            wallet.post(owner, -rebate, "revoke", f"refund:rebate:{bought.id}", time=now, admin=admin,
+                        note=CARD_REFS["refund:rebate:"], purchase_id=bought.id)
+            took.append(REBATE_BACK.format(n=rebate))
         pills = int(bought.data.get("pills", 0))
         if pills:
             back = min(pills, state.player.stamina_pills)
@@ -359,6 +486,10 @@ def item_problems(item: MallItem, content: Content) -> list[str]:
             out.append(f"{where}：效果 {key} 是{KIND_NAMES[spec.kind]}的，這件的種類寫{KIND_NAMES[item.kind]}")
         if not 1 <= n <= spec.max:
             out.append(f"{where}：{key} 的數量要 1～{spec.max}（寫了 {n}）")
+    if item.effects.get("card_rebate", 0) >= item.price:
+        out.append(f"{where}：當場回的元寶（{item.effects['card_rebate']}）要比價錢（{item.price}）少")
+    if item.effects.get("card_rebate") and not item.effects.get("card_days"):
+        out.append(f"{where}：card_rebate 要跟 card_days 寫在同一張月卡上")
     problem = naming.name_problem(item.name, content)
     if problem:
         out.append(f"{where}：名字「{item.name}」{problem}")

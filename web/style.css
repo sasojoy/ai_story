@@ -2268,6 +2268,18 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
   font: 700 18px var(--serif); transform: rotate(-5deg); }
 .shop-layer.shop-mall .mall-card b { font: 600 15px var(--serif); color: #f2e5c6; }
 .shop-layer.shop-mall .mall-card .mt > span { display: block; font-size: 12px; line-height: 1.5; color: #c9b28a; }
+/* 月卡的好處逐條（萬寶閣販賣清單定案）：每一條自己一行、前面一個金點，折行對齊字不對齊點 */
+.shop-layer.shop-mall .mall-card .mall-perks { display: block; margin: 4px 0 2px; }
+.shop-layer.shop-mall .mall-card .perk { position: relative; display: block; padding-left: 12px; font-size: 13px; line-height: 1.55; color: #ead9b4; }
+.shop-layer.shop-mall .mall-card .perk::before { content: ""; position: absolute; left: 2px; top: 0.62em; width: 5px; height: 5px; border-radius: 50%; background: #f2c46a; }
+.shop-layer.shop-mall .mall-status .mall-daily { display: block; margin-top: 6px; }
+.shop-layer.shop-mall .mall-status button.mall-daily { width: 100%; min-height: 36px; }
+.shop-layer.shop-mall .mall-status small.mall-daily { color: #9fd18b; }
+/* 江湖頁「月卡・今日份」小卡：月卡生效、今天還沒領時「剛剛」上面一張，領完收起 */
+.card.mall-today { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 12px; border-left: 3px solid var(--gold); }
+.card.mall-today .moon { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-family: var(--serif); }
+.card.mall-today b { display: block; font-family: var(--serif); }
+.card.mall-today .mt > span { display: block; font-size: 13px; color: var(--ink-2); }
 .shop-layer.shop-mall .mall-note { margin: 12px 2px 0; font-size: 12px; line-height: 1.55; color: #c9b28a; }
 .shop-layer.shop-mall .mall-log-head { display: flex; justify-content: space-between; align-items: baseline; margin: 6px 2px 4px; font-size: 12px; color: #c9b28a; }
 .shop-layer.shop-mall .mall-log-head b { font: 600 18px var(--sans); color: #f2c46a; font-variant-numeric: tabular-nums; }
@@ -2643,3 +2655,8 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
 .mt-admin { display: grid; gap: 10px; margin-bottom: 10px; }
 .mt-admin-row { display: grid; grid-template-columns: 64px 1fr; gap: 10px; align-items: start; }
 .mt-admin-row .muted { margin: 2px 0 6px; font-size: 12px; }
+/* 設定頁的易名帖那一格（萬寶閣）：手上有帖才畫 */
+.rename-row { margin: 8px 0; }
+.rename-row p { margin: 0 0 6px; }
+.rename-row .row { display: flex; gap: 8px; align-items: center; }
+.rename-row .input { flex: 1; min-width: 0; }
