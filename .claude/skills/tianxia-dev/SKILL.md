@@ -110,6 +110,7 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 - **新的全服登記欄位（`SealRegistry` 這類）在開季才寫**：寫的地方有三個進入點——`seed_first_season`（自動開季）、`open_season`、`next_season`；沒蓋章的季連登記都不要碰（`filled(...)` 也會改登記），舊的季才一個字不變。
 - 資料庫結構（第 5 版）不改，要改先問 PM。新狀態欄位加在 `PlayerState`／`WorldState`，舊存檔讀得進來。
 - **全服戰鬥不只一場了**（領地爭奪第二批：攻城戰跟時刻表決戰同時打，`SharedWorldState.sieges`）：引擎裡讀「這個人的那一場」用 `Game._battle_now()`（假人程式、bot_policy 用 `game.battle_now()`），改它用 `_mutate_battle_of(battle, fn)`，全部列出來用 `battles_now()`；**不要再寫 `world.get_battle()`／`world.mutate_battle()`**，除非真的只講時刻表決戰（璽動、管理者的決戰工具、`_settle_showdown`）。新的 `SharedWorldState`／`BattleInstance` 欄位照舊要分進 `tests/test_server.py` 的推送指紋表。
+- **存進全服狀態的「現實時間」一律用 `self.now`，不要用 `pill_now()`**（FB-577，2026-10-21）：`pill_now()`＝`now`＋`advanced_real`，管理者快轉推的 `advanced_real` 只活在那一個 `Game` 物件的記憶體裡；拿它寫進共用狀態的時刻（`XingshiTicket.opened_real`、`retry_at`），別的 `Game`（伺服器排程 `world_tick`、別的玩家）拿自己的 `now` 比，會差上快轉的那十幾個小時。換天、回體丹換日這種「快轉跨過了就該算」的判斷才用 `pill_now()`（`conquest_day.day_key` 有「日子只准往前走」擋著）。測試：一個 `Game` 先 `advance` 跨過換天開單，另一個 `Game.for_world` 照現實時鐘 `world_tick`，看單有沒有照寬限收。
 - **兩局測試各有一份內容**：`conquest_kit.conquest_game()`（同 `test_territory._game`）每一局各載一份 `real_content` 的複本，同一個資料庫開兩局時，在測試裡往內容加東西（例：借一份戰鬥範本）要兩局都加，不然第二局找不到、畫面靜靜地沒有那一場。
 
 ## 量表怎麼讀
@@ -131,6 +132,10 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   - 衝突多半是同一個判斷兩邊各改一半：上一批的修正收緊條件（攻城只算打贏敵方陣營的隊伍，FB-531），這一批換掉來源（攻城地點改成今天公告的目標，還放寬成「中立駐軍也算」）。照 PM 定的疊法，兩個條件都套在**列清單**與**記功**兩邊（同一個判斷函式），不要只把兩段文字接起來。疊出來的代價（例：只公告中立地的那一天攻城軍令記不到、也不發）寫進計畫交 PM。
   - 上一批修正帶進來的測試是照上一批的前提寫的（任何搶得下來的區塊都推得動進度、攻城地點不看時程表），**自動合併、沒有衝突標記，照樣會紅**：合完、提交合併之前先跑兩批的測試檔。補上這一批的前提（例 `conquest_kit.announce` 先公告那一塊），不改斷言，測試檔開頭寫一句為什麼。
   - 兩邊各寫了同一個節號（兩個「6.2」）：都留、照 commit 時間排（`git log -1 --format=%ci <sha>`），不重新編號（回饋單寫著「計畫 6.2」），合併怎麼解另起一段接在最後。
+- **換掉一套機制的批合回還照舊機制往前做的功能分支**（2026-10-21 輿圖第三版第 1 批 dev/flip-1 合 feature/territory-conquest：這一批拿掉投票與 22:00 公告、改成戰書；功能分支那邊同時做了第三批 A、B、FB-552、FB-565）：
+  - 文字衝突照新機制解，但**沒衝突的那幾處更要看**：功能分支新加的程式可能 import 已經拿掉的東西（`state.Pick`、`howto.SORTIE_SIEGE`、`conquest.progress_open`），合完先 `python -c "import server"`、再 grep 拿掉的名字（`progress_open|conquest_vote|SORTIE_NOT_TODAY|…`）。
+  - 功能分支帶進來的測試拿舊機制當前提（`conquest_kit.announce` 當「這一塊被公告要攻」；翻地之後它等於那一塊被戰書凍結、守不動）：前提換成新機制的等價（`conquest_kit.press`：對面在那裡推了一截），斷言不動、檔頭寫一句為什麼；斷言本身鎖的是舊機制的字（FB-552 的「今天沒有公告攻城」）就照新機制改寫那一檔，檔頭寫原本鎖什麼、現在鎖什麼。
+  - 合併提交只放「解衝突＋讓帶進來的測試照新前提跑」；計畫裡寫好「合進來時接上」的介面（〈天下形勢〉的新句型、碎片問冷卻）各一個 commit、先寫會紅的測試。合併提交當下還紅、要下一個 commit 才綠的測試，寫在合併的 commit 訊息裡。
 - 回報寫：
   - 每張的 commit 與一兩句怎麼修。修前重現了什麼。
   - 跑了哪些測試、幾條過。
