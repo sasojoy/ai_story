@@ -4089,7 +4089,8 @@ class Game:
 
     def _seal_find(self, loc_id: str) -> list[str]:
         """領地爭奪的季，探索撿玉璽碎片（領地爭奪設計 3.9、4.8；計畫 Task 14）：探索的四種（找素材、找事件、靜心感悟、練功）收尾各叫一次。
-        只在這一季藏著一片、人就站在藏碎片的那一塊、手上還沒有碎片（一人一片）時擲 seal.find（那一塊此刻歸你的陣營機率高一點）；
+        只在這一季藏著一片、人就站在藏碎片的那一塊、那一塊不在剛易手的冷卻期（conquest.cooling）、手上還沒有碎片（一人一片）時擲 seal.find
+        （那一塊此刻歸你的陣營機率高一點）；
         別的塊、沒藏碎片的季一律不擲、不碰任何登記。擲中就把那一片記到自己名下（登記記一筆 emerge，所以補紀錄、同一季學會混元一氣、
         天命之季的判斷都照現世的老路），清掉藏處；接著 _deliver_seal_results 馬上補送。天下大事與江湖史都不寫是在哪裡撿到的。
         骰子是密鹽的亂數，不碰 Game.rng；寫登記用一次 world.mutate、寫入時整個重驗（別人搶先撿走了就落空）。回要接在探索結果後面的句子。"""
@@ -4100,6 +4101,8 @@ class Game:
         cache = seal.live_cache(view.registry, view.season)
         p = s.player
         if cache is None or cache.loc != loc_id or seal.shard_of(view.registry, p.name) is not None:
+            return []
+        if conquest.cooling(s.world, c, loc_id):  # 翻地與爭搶：剛易手還在冷卻的那一塊加成暫停，碎片也不擲（輿圖簡化設計 4.1）
             return []
         side = self._side()  # allied.side_of（＝rules.side_of）：豪強依附一軍就是那一軍（FB-571，同地盤折扣）；散人沒有自家、不乘（PM 裁決）：side 是 None，不能跟沒人佔的 None 湊成自家
         own = side is not None and conquest.holder(s.world, c, loc_id) == side
