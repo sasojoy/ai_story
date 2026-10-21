@@ -1,0 +1,68 @@
+diff --git a/web/app.js b/web/app.js
+index dfefd406..eeb2c985 100644
+--- a/web/app.js
++++ b/web/app.js
+@@ -1565,6 +1565,11 @@
+   const SORTIE_FULL_SUB = "今日已滿"; // 用完了：整句（什麼時候再來）在行動列底下那一行（待 joy 潤）
+   const EXPLORE_PREFIX = "explore:"; // 探索三選一（出陣探索與地盤設計第三節）：探索那一格點了展開這三顆
+   const EXPLORE_SUB = "三選一"; // 探索那一格是展開鈕時的小字（待 joy 潤）
++  // 【草圖丙】行動列的練功那一格（待 joy 潤）
++  const PRACTICE_ID = "explore:practice";
++  const PRACTICE_SUB = "不限次數", PRACTICE_OUT = "城外才有";
++  const PRACTICE_LEAD = true; // 帶路版：城裡那一格亮著、按了走到最近的練功點
++  const PRACTICE_ICON = '<path d="M14.5 17.5L3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2M9.5 14.5L21 3h-3L6.5 14.5M11 19l-6-6M8 16l-4 4M3 19l2 2"/>';
+   // 找素材分支（第 32 項，計畫 2.1 甲）：選單上有 explore:gather:<分支> 時「找素材」是展開鈕，點了在它底下再攤一排分支（S.gatherOpen）；
+   // 最後一顆「自己說…」點了出 20 字的輸入框（S.gatherSaying），送 /api/do/gather_text（同事件的隨口應對那一個輸入框）
+   const GATHER_ID = "explore:gather"; // engine：explore_modes.option_id(GATHER)
+@@ -1782,7 +1787,10 @@
+     const noted = []; // 畫出來、伺服器又寫了說明的格子：[格子上的名字, 選項 id]（行動列底下那幾行，見 actNotesHtml）
+     // 探索三選一（出陣探索與地盤設計第三節）：三顆畫在探索那一格點開的卡上，不掉進「此地還能做」
+     // 找素材分支（第 32 項）畫在「找素材」底下那一排，不算進三選一的那幾顆
+-    const modes = m.options.filter((o) => o.id.startsWith(EXPLORE_PREFIX) && !o.id.startsWith(GATHER_BRANCH));
++    // 【草圖丙】練功從探索卡搬到行動列自己一格（排在探索後面）；探索卡回到真的三選一
++    const practice = byId[PRACTICE_ID];
++    if (practice) used.add(practice.id);
++    const modes = m.options.filter((o) => o.id.startsWith(EXPLORE_PREFIX) && !o.id.startsWith(GATHER_BRANCH) && o.id !== PRACTICE_ID);
+     const branches = m.options.filter((o) => o.id.startsWith(GATHER_BRANCH));
+     modes.forEach((o) => used.add(o.id));
+     branches.forEach((o) => used.add(o.id));
+@@ -1823,6 +1831,30 @@
+     });
+     const moves = m.options.filter((o) => followsMode(o.id));
+     moves.forEach((o) => used.add(o.id));
++    // 【草圖丙】練功那一格：亮著寫「不限次數」＋勝算；城裡灰著寫「城外才有」，行動列底下那一行寫最近的在哪、走多久（待 joy 潤）
++    // PRACTICE_LEAD（帶路版）：城裡那一格也亮著，小字「往某地」，按了就是那一條「前往」
++    const practiceNotes = {};
++    const practiceCell = (() => {
++      if (!practice || !shown("act:explore")) return "";
++      const [, detail] = optParts(practice);
++      const at = Math.max(0, noted.findIndex(([, id]) => id === "act:explore") + 1);
++      noted.splice(at, 0, ["練功", practice.id]);
++      if (practice.enabled) {
++        const parts = detail.split("・");
++        practiceNotes[practice.id] = `打這裡的${parts[1] || "對手"}，不限次數，打贏是經驗的大宗`;
++        return inkCell("practice", "練功", PRACTICE_SUB, PRACTICE_ICON, `data-act="choose" data-id="${esc(practice.id)}"`, "", parts.find((x) => x in ODDS_TONE) || "");
++      }
++      const near = /最近的在(.+)$/.exec(detail);
++      const go = near && moves.find((x) => x.enabled && x.label.startsWith(`前往 ${near[1]}（`));
++      const walk = go ? `（${optParts(go)[1]}）` : "";
++      if (near && go && PRACTICE_LEAD) {
++        practiceNotes[practice.id] = `城裡沒有對手：按一下走到${near[1]}${walk}，到了再按練功`;
++        return inkCell("practice", "練功", `往${near[1]}`, PRACTICE_ICON, `data-act="choose" data-id="${esc(go.id)}"`, "");
++      }
++      practiceNotes[practice.id] = near ? `城外才有對手，最近的在${near[1]}${walk}` : detail;
++      return inkCell("practice", "練功", near ? PRACTICE_OUT : detail.split("，").pop(), PRACTICE_ICON, "disabled", " off");
++    })();
++    cells.splice(1, 0, practiceCell);
+     // 奪璽單挑的三招（或灰的「已出招」「來不及了」）：自己是一方時伺服器排在選單最前面（玉璽碎片設計 5.5），
+     // 畫在行動列上面一排，不掉進收起來的「此地還能做」（同 FB-105 的集結鈕）
+     const sealMoves = m.options.filter((o) => o.id.startsWith("seal:"));
+@@ -1863,7 +1895,7 @@
+     // 行動列底下那幾行（explain-1）排在行動列之後：不推動「剛剛」、場景與整排行動（375×812 第一屏）。展開移動時讓位（走法與目的地那張卡
+     // 緊貼在行動列底下），入伍段要按的鈕在「此地還能做」裡時也讓位（不把發光的那一顆往下推）
+     // 展開探索三選一時同樣讓位（三顆緊貼在行動列底下）
+-    const notes = open || exploreOpen || hotHere ? "" : actNotesHtml(m, noted);
++    const notes = open || exploreOpen || hotHere ? "" : actNotesHtml({ ...m, action_notes: { ...(m.action_notes || {}), ...practiceNotes } }, noted);
+     return `${sealRow}${summonsRow}${drawn.length ? `<div class="act-bar" role="group" aria-label="行動" style="--cells:${Math.max(4, drawn.length)}">${drawn.join("")}</div>` : ""}${notes}${moveCard}${exploreCard}${here}`;
+   }
+ 

@@ -1,0 +1,38 @@
+diff --git a/web/app.js b/web/app.js
+index dfefd406..3b0110be 100644
+--- a/web/app.js
++++ b/web/app.js
+@@ -1846,8 +1846,17 @@
+           <button class="${S.moveMode === x.id ? "on" : ""}" data-act="move-mode" data-mode="${x.id}" aria-pressed="${S.moveMode === x.id}">${x.name}</button>`).join("")}</div>
+         <div class="options">${moves.map((o) => `<button class="btn go" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}>
+           <span class="k">→</span><span>${esc(o.label)}</span></button>`).join("")}</div></div>`;
+-    const exploreCard = !exploreOpen ? "" : `<div class="card act-explore"><div class="options">${modes.map((o) => o.id === GATHER_ID && branches.length
+-      ? gatherWheel(o, branches) : `
++    // 【草圖乙】練功排第一顆；灰著時字不淡（只有鈕灰、虛線框），「最近的在某地」拆到底下一行小字（待 joy 潤）
++    const practiceOff = (o) => {
++      if (o.id !== "explore:practice" || o.enabled) return "";
++      const near = /^(.*?)，最近的在(.+?)）$/.exec(o.label);
++      return `
++          <button class="btn practice-off" data-act="choose" data-id="${esc(o.id)}" disabled><span>${esc(near ? `${near[1]}）` : o.label)}</span></button>${near
++        ? `<p class="practice-hint">城外才有對手：最近的在${esc(near[2])}</p>` : ""}`;
++    };
++    const ordered = [...modes.filter((o) => o.id === "explore:practice"), ...modes.filter((o) => o.id !== "explore:practice")];
++    const exploreCard = !exploreOpen ? "" : `<div class="card act-explore"><div class="options">${ordered.map((o) => o.id === GATHER_ID && branches.length
++      ? gatherWheel(o, branches) : practiceOff(o) || `
+           <button class="btn" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}><span>${esc(o.label)}</span></button>`).join("")}</div></div>`;
+     // 其他只在此地才有的行動（招募、投靠、多出來的求見）收在摺疊裡，不佔行動列的高度。
+     // 入伍段要你按的那一顆收在這裡（巡哨、傳道、保境安民、接糧車……，伺服器在框上帶的 guide.glow，FB-093）：那一步在這一處開頭摺疊先打開
+diff --git a/web/style.css b/web/style.css
+index 22579a55..f21f844e 100644
+--- a/web/style.css
++++ b/web/style.css
+@@ -1409,6 +1409,9 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
+ .act-move, .act-explore { margin-bottom: 12px; scroll-margin-bottom: calc(64px + var(--bottom)); }
+ .act-move .options { margin: 8px 0 0; }
+ .act-explore .options { margin: 0; } /* 探索三選一點開的三顆（出陣探索與地盤）：沒有走法那一列，三顆貼著卡頂 */
++/* 【草圖乙】灰著的練功：字不淡，只有鈕灰（底色換 card-2、虛線框）；底下一行小字寫最近的對手在哪 */
++.act-explore .btn.practice-off:disabled { opacity: 1; background: var(--card-2); border-style: dashed; color: var(--ink); }
++.act-explore .practice-hint { margin: -2px 6px 4px; font-size: 12px; line-height: 1.5; color: var(--ink-2); }
+ /* 找素材分支（第 32 項，計畫 2.1 甲）：「找素材」是展開鈕，底下一排分支——兩欄，名字一行、「體力 6・剛、慢」一行（小段不折在詞中間，nbHtml）；
+    「自己說…」與它的輸入框佔一整列。左邊一條細線表示是「找素材」底下的 */
+ .act-explore .btn.gather-head { justify-content: space-between; }
