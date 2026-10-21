@@ -5114,6 +5114,31 @@
     const [A, B] = [rgb(a), rgb(b)];
     return `#${A.map((x, i) => Math.round(x + (B[i] - x) * t).toString(16).padStart(2, "0")).join("").toUpperCase()}`;
   }
+  // 兩個 #RRGGBB 的對比（WCAG 的算法，1～21）
+  function hexContrast(a, b) {
+    const lum = (h) => {
+      const [r, g, bl] = [1, 3, 5].map((i) => { const c = (parseInt(String(h).slice(i, i + 2), 16) || 0) / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
+    };
+    const [x, y] = [lum(a), lum(b)];
+    return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+  }
+  // 抽屜裡照陣營上色的字（FB-650）：淺色照劇本的 color；深色主題的抽屜底（最亮的是 --card-2 #2B251E）上對比不到 4.5:1 的，
+  // 往那一方的 soft 調亮到夠（soft 都不夠再往白），本來就夠的不動。回 style 裡的兩個變數（--sc 淺色、--sd 深色；style.css 照主題挑）。
+  // k 是陣營 id（或 sideInk 給的那一份）；顏色照劇本讀，不寫死哪一方
+  const DARK_TEXT_BG = "#2B251E", DARK_TEXT_MIN = 4.5;
+  const sideDarkMemo = {};
+  function sideText(k) {
+    const ink = k && typeof k === "object" ? k : sideInk(k), key = `${ink.color}|${ink.soft}`;
+    if (!(key in sideDarkMemo)) {
+      const ok = (c) => hexContrast(c, DARK_TEXT_BG) >= DARK_TEXT_MIN;
+      let c = ink.color;
+      for (let i = 1; i <= 20 && !ok(c); i++) c = mixHex(ink.color, ink.soft || "#FFFFFF", i / 20);
+      for (let i = 1; i <= 20 && !ok(c); i++) c = mixHex(ink.soft || ink.color, "#FFFFFF", i / 20);
+      sideDarkMemo[key] = c;
+    }
+    return `--sc:${ink.color};--sd:${sideDarkMemo[key]}`;
+  }
 
   // 那一週的控制方：現在照疊層；選了別的週照那一週的快照（還沒記到是空的）
   function controlAt(st, week) {
@@ -5238,8 +5263,8 @@
   const ropeEnds = (r) => [sideInk(r.low || "guan"), sideInk(r.high || "huang")];
   function ropeHtml(r) {
     const [lo, hi] = ropeEnds(r);
-    const trend = r.delta > 0 ? `<small style="color:${hi.color}">▶ ${esc(hi.name)}推進 ${r.delta}</small>`
-      : r.delta < 0 ? `<small style="color:${lo.color}">◀ ${esc(lo.name)}推進 ${-r.delta}</small>` : "<small>持平</small>";
+    const trend = r.delta > 0 ? `<small class="m-sc" style="${sideText(hi)}">▶ ${esc(hi.name)}推進 ${r.delta}</small>`
+      : r.delta < 0 ? `<small class="m-sc" style="${sideText(lo)}">◀ ${esc(lo.name)}推進 ${-r.delta}</small>` : "<small>持平</small>";
     const beads = r.beads.map((b) => `<span class="bead" style="left:${b.threshold}%;background:${b.control ? sideInk(b.control).color : "#A2967F"}"></span>`).join("");
     return `<div class="m-rope"><div class="rl"><span>${esc(lo.name)}</span><b>${esc(r.name)} ${trend}</b><span>${esc(hi.name)}</span></div><div class="bar" style="background:linear-gradient(90deg, ${lo.tint}, ${hi.tint})"><span class="chaos"></span>${beads}<span class="knot" style="left:${Number(r.value)}%"></span></div></div>`;
   }
@@ -5305,7 +5330,7 @@
     if (!bars.length && !blk.frozen && !(blk.how === "attack" && !blk.why)) return "";
     const rows = bars.map((b) => {
       const ink = sideInk(b.side), v = Math.min(100, Number(b.value));
-      return `<div class="m-fbar"><span class="nm" style="color:${ink.color}">${esc(ink.name)}</span><span class="tr"><i style="width:${v}%;background:${ink.color}"></i></span><b>${v}</b><small>／100</small></div>`;
+      return `<div class="m-fbar"><span class="nm" style="${sideText(ink)}">${esc(ink.name)}</span><span class="tr"><i style="width:${v}%;background:${ink.color}"></i></span><b>${v}</b><small>／100</small></div>`;
     }).join("") || `<div class="m-sub">${FLIP_IDLE}</div>`;
     const by = {};
     for (const r of blk.pushers || []) (by[r.side] = by[r.side] || []).push(r);
@@ -5314,7 +5339,7 @@
       const list = by[sd].slice().sort((a, z) => Number(z.moved) - Number(a.moved));
       const names = list.slice(0, 3).map((r) => `${esc(r.name)} +${Number(r.moved)}`).join("、") + (list.length > 3 ? "…" : "");
       const how = list.some((r) => r.how === "attack") ? FLIP_ATTACK : FLIP_HOLD;
-      return `<span style="color:${sideInk(sd).color}">${esc(sideInk(sd).name)}</span> ${list.length} 人${how}（${names}）`;
+      return `<span class="m-sc" style="${sideText(sd)}">${esc(sideInk(sd).name)}</span> ${list.length} 人${how}（${names}）`;
     }).join("、");
     const focus = Object.entries(blk.focus || {}).filter(([, pct]) => Number(pct) > 0)
       .map(([sd, pct]) => FOCUS_WORD.replace("{side}", esc(sideInk(sd).name)).replace("{pct}", Number(pct))).join("、");
@@ -5356,10 +5381,11 @@
     const flips = p.flips.map((f) => `${wkName(Number(f.week), `第 ${Number(f.week)} 週`)} ${flipSide(f.from)}→${flipSide(f.to)}`).join("；");
     const held = st.territory && (p.price || strip || flips) ? `<div class="m-sec"><h4>這一季誰佔過</h4>${p.price ? esc(p.price) : ""}${strip}${flips ? `<div class="m-sub">易手：${flips}</div>` : ""}</div>` : "";
     const far = here ? "" : p.minutes !== null && p.minutes !== undefined ? `步行 ${Number(p.minutes)} 分` : "";
-    const lineInk = p.control ? sideInk(p.control).color : "var(--ink-2)";
+    // 第 2 段照控制方上色（--sc／--sd，FB-650 深色換夠亮的那一版）；沒人佔照 style.css 的 --ink-2
+    const lineInk = p.control ? ` style="${sideText(p.control)}"` : "";
     // 在路上：第一行照舊是往哪裡、還有幾分鐘、喊停（計畫 1.2、設計 5.3；FB-649）。擋路的那一則寫在動作那一排，這裡不重複
     return `${st.journey ? journeyHtml(st, false) : ""}<div class="m-h1">${ctrlSeal(p.control)}<span class="nm">${esc(b.name)}${here ? "（你）" : ""}</span><span class="meta">${p.rich ? `<b class="m-rich">${CARD_RICH}</b>` : ""}${far ? `<span>${far}</span>` : ""}</span><button type="button" class="m-x" data-act="map-back" aria-label="收起">✕</button></div>
-      <div class="m-line" style="color:${lineInk}">${esc(placeLine(st, id))}</div>
+      <div class="m-line"${lineInk}>${esc(placeLine(st, id))}</div>
       ${flipSection(id)}${insightRow(base, b)}
       <div class="m-foes"><small>此地的對手</small><span>${foes}</span>${p.people.length ? `<div class="m-sub">人物：${p.people.map(esc).join("、")}</div>` : ""}</div>
       ${p.yield ? `<div class="m-yield">${esc(p.yield)}</div>` : ""}
@@ -5447,7 +5473,7 @@
     const sum = (st.sides || sideOrder(base)).map((sd) => `<div style="background:${sideInk(sd).color}"><b>${now[sd] || 0}</b>${esc(sideInk(sd).name)}${from ? `<small>　${signed((now[sd] || 0) - (from.n[sd] || 0))}</small>` : ""}</div>`).join("")
       + (from ? `<small class="m-sum-note">${from.label}</small>` : "");
     const name = (id) => esc((placeOf(base, id) || { name: id }).name);
-    const side = (k) => `<span style="color:${k ? sideInk(k).color : "inherit"}">${esc(flipSide(k))}</span>`;
+    const side = (k) => `<span${k ? ` class="m-sc" style="${sideText(k)}"` : ""}>${esc(flipSide(k))}</span>`;
     const list = [...row.events.map((t) => `<div class="m-evt">📜 <b>${esc(t)}</b></div>`),
       ...row.changed.map((e) => `<div class="m-evt">⇄ ${name(e.id)}：${side(e.from)} → ${side(e.to)}</div>`)].join("");
     const wk = Number(week); // 7 天濃縮季寫段（wkName，FB-501）

@@ -24,7 +24,7 @@ from tianxia.state import TerritoryState
 
 pytestmark = [pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過"), pytest.mark.slow]
 NAMES = ["S", "pageMap", "regionFit", "regionLabels", "regionExits", "regionParts", "regionTopHtml", "placeCard", "placeLine",
-         "flipSection", "drawerHtml", "worldDrawerHtml", "sideInk"]
+         "flipSection", "drawerHtml", "worldDrawerHtml", "sideInk", "sideText"]
 DRIVER = re.sub(r"wholeApp\(\[.*?\]\)", "wholeApp(" + repr(NAMES).replace("'", '"') + ")", test_prologue_web.DRIVER, count=1, flags=re.S)
 APP = Path(server.WEB) / "app.js"
 # 地圖框（寬 × 高）：實機量的。375×812 → 375×604（2026-10-21 map4.localhost，狀態列多一行心得提示、商城開著）、375×624（第 3 批量的）、
@@ -480,6 +480,50 @@ def test_fb649_the_card_on_the_road_starts_with_where_you_are_going():
         card = run(game, f'return H.placeCard(H.S.mapBase, H.S.mapState, "{loc}");', m=m)
         assert card.startswith('<div class="m-journey">') and "往 <b>汝南</b>・還有 12 分鐘・下一站潁水河畔" in card, loc
         assert card.count('class="m-journey"') == 1 and 'data-act="choose" data-id="act:halt"' in card, loc
+
+
+DARK_CARD_2 = "#2B251E"  # 深色主題抽屜裡最亮的底（style.css 的 --card-2；抽屜本身是 --card #211C17，更暗）
+
+
+def _contrast(a, b):
+    def lum(h):
+        c = [int(h[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+        c = [x / 12.92 if x <= 0.03928 else ((x + 0.055) / 1.055) ** 2.4 for x in c]
+        return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+    hi, lo = sorted((lum(a), lum(b)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def test_fb650_side_coloured_card_text_reads_in_dark_mode():
+    """FB-650：深色主題時卡上照陣營上色的字（第 2 段那一句、正在翻的名字、誰在推那一句、戰線的繩上「推進」那一句）對比 ≥ 4.5:1；
+    淺色照劇本的 color 一個字不變。深色那一版照劇本的顏色算（對比不夠的往那一方的 soft 調亮），本來就夠的（黃巾 5.0:1）不動；不寫死哪一方。"""
+    from test_world_map import flipping
+
+    game = flipping(_game())
+    w, c = game.state.world, game.content
+    conquest.mark(w, c, "runan_wilds", "映雪", "guan", "attack", 12)
+    conquest.mark(w, c, "runan_wilds", "黃天客", "huang", "attack", 6)
+    color = {s["id"]: s["color"] for s in game.map_base()["world"]["sides"]}
+    assert _contrast(color["guan"], DARK_CARD_2) < 4.5 <= _contrast(color["huang"], DARK_CARD_2)  # 修前：官軍的藍 2.6:1（QA 量的是 #211C17）
+    cards = run(game, "return ['runan_wilds', 'yingchuan', 'hilltop_wilds'].map((id) => H.placeCard(H.S.mapBase, H.S.mapState, id)).join('');")
+    pairs = set(re.findall(r'--sc:(#[0-9A-F]{6});--sd:(#[0-9A-F]{6})', cards))
+    assert {sc for sc, _ in pairs} == {color["guan"], color["huang"]}
+    for sc, sd in pairs:
+        assert _contrast(sd, DARK_CARD_2) >= 4.5, (sc, sd)
+        assert sd == sc if _contrast(sc, DARK_CARD_2) >= 4.5 else sd != sc
+    assert re.search(r'<div class="m-line" style="--sc:#[0-9A-F]{6};--sd:#[0-9A-F]{6}">官軍的基礎資源領地', cards)
+    assert re.search(r'<span class="nm" style="--sc:', cards) and re.search(r'<span class="m-sc" style="--sc:[^"]+">官軍</span> 1 人正在攻', cards)
+    assert all(f"color:{x}" not in cards for x in color.values())  # 照陣營上色的字都走 --sc／--sd（勝算的字照舊）
+    css = (Path(server.WEB) / "style.css").read_text(encoding="utf-8").replace("\r\n", "\n")
+    dark = re.findall(r"@media \(prefers-color-scheme: dark\) \{([^\n]*)\}", css)
+    assert any(".m-line" in d and ".m-fbar .nm" in d and ".m-sc" in d and "var(--sd" in d for d in dark)
+    assert re.search(r"\.m-line \{[^}]*color: var\(--sc, var\(--ink-2\)\)", css) and ".m-fbar .nm, .m-sc { color: var(--sc); }" in css  # 淺色照劇本
+    # 四方的劇本：每一方深色那一版都夠
+    four, _ = _four_sides()
+    out = run(four, "return ['guan', 'huang', 'wei', 'wu'].map((k) => H.sideText(k));")
+    for text in out:
+        sc, sd = re.match(r"--sc:(#[0-9A-F]{6});--sd:(#[0-9A-F]{6})", text).groups()
+        assert _contrast(sd, DARK_CARD_2) >= 4.5, text
 
 
 def test_the_removed_pieces_are_gone():

@@ -1188,7 +1188,10 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .m-h1 .meta { display: flex; align-items: baseline; gap: 6px; white-space: nowrap; }
 .m-h1 .meta span { color: var(--ink-2); letter-spacing: 0; }
 .m-rich { color: var(--gold); font-weight: 700; letter-spacing: 0; }
-.m-line { font-size: 13.5px; font-weight: 600; margin: 4px 0 8px; }
+.m-line { font-size: 13.5px; font-weight: 600; margin: 4px 0 8px; color: var(--sc, var(--ink-2)); }
+/* 抽屜裡照陣營上色的字（FB-650）：--sc 是劇本的顏色；深色主題換 --sd（app.js 的 sideText：在 --card-2 上對比不到 4.5:1 的往那一方的 soft 調亮） */
+.m-fbar .nm, .m-sc { color: var(--sc); }
+@media (prefers-color-scheme: dark) { .m-line, .m-fbar .nm, .m-sc { color: var(--sd, var(--sc, var(--ink-2))); } }
 .m-flip { margin-top: 2px; margin-bottom: 8px; }
 .m-flip h4 { display: flex; align-items: center; gap: 6px; }
 .m-clash { color: #fff; background: #a8322a; border-radius: 6px; padding: 0 6px; letter-spacing: 1px; font-size: 11px; }
