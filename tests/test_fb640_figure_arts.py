@@ -92,13 +92,14 @@ def test_old_save_flags_for_the_new_nine_lift_nothing():
 
 
 def test_companion_card_and_fight_use_the_minor_tactic(world):
-    """華佗招到之後身上是趕山腿、基礎吐納：卡上寫「小戰法」、不寫本命戰法，有戰力（FB-364），打仗時照小戰法發動、不算誰的本命
+    """華佗招到之後身上是趕山腿、基礎吐納：卡上蓋「看家」印、不蓋「本命」，有戰力（FB-364），打仗時照小戰法發動、不算誰的本命
     （沒有連動、底蘊）；關羽的本命照舊認得是他的。"""
     c = real_content()
     game = Game.new(c, "測試俠客", rng=random.Random(0), world=world)
     roster._seed_starting_skills(world, "huatuo", c.characters["huatuo"])
     card = skillview.member_card(game.state, c, world, "huatuo")
-    assert "小戰法〔搶山一腿〕" in card and "小戰法〔吐故納新〕" in card and "本命戰法" not in card
+    # main 632cc5e5：卡上不寫「小戰法」，學來的武學招名前蓋「看家」印、本命蓋「本命」印（tactics.title_of）
+    assert "看家〔搶山一腿〕" in card and "看家〔吐故納新〕" in card and "本命〔" not in card
     assert team.mate_power(game.state, c, world, "huatuo") > 0
     held = tactics.holders_of(c, [("華佗", "huatuo", "ganshan_tui", "jichu_tuna")])
     assert [h.tactic.name for h in held] == ["搶山一腿", "吐故納新"]
