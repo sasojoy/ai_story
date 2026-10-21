@@ -1145,7 +1145,8 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
         # 片段只給做得了那條鏈的人（foreshadow.capable 要陣營對得上）：散人聽不到（審查 M4，待 joy 潤）
         bond.append("- 情誼夠深，他會跟你聊起一些風聲：機緣的話題，還有你那一邊的伏筆的片段（散人聽不到片段）。")
     if recruitable:
-        bond.append(f"- 想招攬的人，情誼越高成算越高（最多多 {cfg.recruit_affinity_bonus * 100:g} 個百分點）。")
+        gate = f"情誼到 {cfg.recruit_min_affinity} 才開得了口招攬，" if cfg.recruit_min_affinity > 0 else ""
+        bond.append(f"- 想招攬的人，{gate}情誼越高成算越高（最多多 {cfg.recruit_affinity_bonus * 100:g} 個百分點）。")
     bond.append(f"- 換季只帶 {cfg.affinity_carry_ratio * 10:g} 成到下一季。")
     challenge = _challenge_lines(content, season)  # 挑戰大勢人物本人：每季都有（figures.challenge_on），另起一段（FB-190）
     old_train = [  # 出陣關著時的遊歷（出陣開著時換成 sortie_lines）
