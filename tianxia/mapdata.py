@@ -310,7 +310,7 @@ def state(
         return ask
 
     faction, on = rules.side_of(s, c), territory.on(c)  # 豪強分屬兩軍：照依附那一軍算自家、敵方
-    weeks_total = c.config.season_weeks
+    weeks_total = calendar.weeks(c, w)
     now_week = min(calendar.point(w.time, c, w).week, weeks_total)
     shown = mapview.open_places(s, c)
     routes = atlas.routes(s, c) if p.journey is None else {}

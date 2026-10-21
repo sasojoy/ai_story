@@ -16,7 +16,7 @@ import math
 import time as time_module  # 只拿 gmtime 換算傳進來的現實秒（FB-439），不讀時鐘；叫 time_module 是因為這個檔的參數多半叫 time
 from typing import NamedTuple
 
-from .models import Content, TimetableEvent
+from .models import Config, Content, TimetableEvent
 from .state import WorldState
 from .world_state import season_length_days
 
@@ -56,33 +56,59 @@ def week7_on(season: WorldState | None, content: Content) -> bool:
     return season21_on(season, content) and bool(content.config.season_segments)
 
 
-def _week_days(content: Content) -> list[int]:
-    """季曆每一週幾天：7 天濃縮季照段（[2, 2, 3]），其他季一律 season_weeks 個 7 天。季曆的長度與週的分法只看設定
-    （同 season_weeks 不在章上；設定與章對不上時 profile_warning 印一行）。"""
-    return list(content.config.season_segments) or [7] * content.config.season_weeks
+LEGACY_SEASON_WEEKS: int = Config.model_fields["season_weeks"].default  # 週末式季曆的週數（12）：Config 的預設，週末與 14 天的季都是它
 
 
-def total_days(content: Content) -> int:
+def weekend_style(season: WorldState | None, content: Content) -> bool:
+    """休季的這一季用的是週末式季曆（12 週、每週 7 天、沒有段），這個程式的設定卻已經是照現實天的（Config.season21）：
+    季曆的週數（season_weeks）與段（season_segments）不蓋在季上，直接讀設定會把這一季的時刻照新程式的季曆算
+    （FB-635：舊 week7 的季休季了，換上新 week7 的程式、開下一季之前，上一季的時刻全擠進「第 1 週・週二」）。
+    開季時沒蓋 season21 的章就是週末式的季（舊的 week7、週末、14 天），休季之後它的時刻照它自己的季曆畫。
+    只管休季（season.ended）：還在跑的季（換程式沒等休季，啟動時 profile_warning 印的那一種）時刻表、曆時交界還是照新設定在跑，
+    只換畫面會讓畫面和大事對不上，那一種照舊（FB-520：新程式要等休季再部署）。
+    設定沒開 season21 的程式（週末、14 天）本來就是週末式，不必換，一個字都不變。沒有季（蓋章之前）照設定。"""
+    return season is not None and season.ended and content.config.season21 and not season.season21
+
+
+def weeks(content: Content, season: WorldState | None = None) -> int:
+    """季曆一共幾週（狀態列的 weeks、輿圖的 weeks_total、季曆最後一刻）：照這一季自己的季曆（weekend_style）。"""
+    return LEGACY_SEASON_WEEKS if weekend_style(season, content) else content.config.season_weeks
+
+
+def _segments(content: Content, season: WorldState | None = None) -> list[int]:
+    """季曆的段（7 天濃縮季 [2, 2, 3]，其他季是空的）：週末式的季沒有段（weekend_style）。"""
+    return [] if weekend_style(season, content) else list(content.config.season_segments)
+
+
+def _week_days(content: Content, season: WorldState | None = None) -> list[int]:
+    """季曆每一週幾天：7 天濃縮季照段（[2, 2, 3]），其他季一律 season_weeks 個 7 天。季曆的長度與週的分法照設定
+    （season_weeks 不在章上；設定與章對不上時 profile_warning 印一行），只有開季時沒蓋 season21 的章、設定卻是照現實天的季
+    照它自己的週末式季曆（weekend_style，FB-635）。給了 season 才看得出是哪一種。"""
+    return _segments(content, season) or [7] * weeks(content, season)
+
+
+def total_days(content: Content, season: WorldState | None = None) -> int:
     """季曆一共幾天：週末與 14 天的季 84（12 週）、21 天季 21、7 天濃縮季 7。"""
-    return sum(_week_days(content))
+    return sum(_week_days(content, season))
 
 
-def _split(day: int, content: Content) -> tuple[int, int]:
+def _split(day: int, content: Content, season: WorldState | None = None) -> tuple[int, int]:
     """季曆第 day 天（從 0 起）在第幾週（從 1 起）、那一週的第幾天（從 0 起）。沒有段時就是 day // 7 + 1、day % 7。"""
-    if not content.config.season_segments:
+    segments = _segments(content, season)
+    if not segments:
         return day // 7 + 1, day % 7
     start = 0
-    for week, length in enumerate(content.config.season_segments, 1):
+    for week, length in enumerate(segments, 1):
         if day < start + length:
             return week, day - start
         start += length
     beyond = day - start  # 季曆之外（point 夾在季末，碰不到）：之後照 7 天一週往下數
-    return len(content.config.season_segments) + beyond // 7 + 1, beyond % 7
+    return len(segments) + beyond // 7 + 1, beyond % 7
 
 
-def _week_start_day(week: int, content: Content) -> int:
+def _week_start_day(week: int, content: Content, season: WorldState | None = None) -> int:
     """第 week 週週初是季曆第幾天（從 0 起）。沒有段時就是 (week − 1) × 7；段數之後照 7 天一週往下數。"""
-    segments = content.config.season_segments
+    segments = _segments(content, season)
     if not segments or week <= 1:
         return (week - 1) * 7
     return sum(segments[:week - 1]) + max(0, week - 1 - len(segments)) * 7
@@ -145,18 +171,18 @@ def profile_warning(content: Content, season: WorldState | None) -> str | None:
 def cal_scale(content: Content, season: WorldState | None = None) -> float:
     """季曆秒 ÷ 世界秒。季長照 season 蓋的章（沒有章的舊季照 DEFAULT_SEASON_DAYS）；不給 season 時照現在的設定。"""
     days = season_length_days(season, content) if season is not None else content.config.season_days
-    return total_days(content) / days
+    return total_days(content, season) / days
 
 
 def point(time: float, content: Content, season: WorldState | None = None) -> CalPoint:
     """世界秒落在季曆的哪一刻。季末那一刻（或之後）寫成最後一週週日 23:59，不會冒出不存在的下一週。
     7 天濃縮季的 week 是第幾段、weekday 是段裡第幾天（季末夾在第 7 天 23:59）。"""
-    total = total_days(content) * DAY
+    total = total_days(content, season) * DAY
     # 照那一刻當時的偏移（FB-332：暫停再繼續之後，以前寫下的時刻不跟著往後挪）；現在與之後的時刻就是 cal_offset
     cal = min(max(0.0, time * cal_scale(content, season) + offset_at(time, content, season)), total - MINUTE)
     minutes = math.floor(cal / MINUTE + EPS_MINUTES)
     day, minute_of_day = divmod(minutes, 24 * 60)
-    week, weekday = _split(day, content)
+    week, weekday = _split(day, content, season)
     return CalPoint(
         week=week, weekday=weekday, hour=minute_of_day // 60, minute=minute_of_day % 60, cal_day=day + 1,
     )
@@ -164,7 +190,7 @@ def point(time: float, content: Content, season: WorldState | None = None) -> Ca
 
 def week_start(week: int, content: Content, season: WorldState | None = None) -> float:
     """第 week 週週一 00:00 的世界秒（21 天季在週一以外開季時，第 1 週週一是負的：開季之前）。7 天濃縮季是第 week 段的第一天 00:00。"""
-    return (_week_start_day(week, content) * DAY - _offset(content, season)) / cal_scale(content, season)
+    return (_week_start_day(week, content, season) * DAY - _offset(content, season)) / cal_scale(content, season)
 
 
 def week_seconds(content: Content, season: WorldState | None = None) -> float:
@@ -261,7 +287,7 @@ PAST_END = "季曆最後一刻（{end}）之後 {span}，現實 {real}"  # 待 j
 
 def calendar_end(content: Content, season: WorldState | None = None) -> float:
     """季曆最後一刻之後那一瞬（最後一週之後的週一 00:00）的世界秒：季曆時刻到這裡就停在最後一週週日 23:59（point）。"""
-    return week_start(content.config.season_weeks + 1, content, season)
+    return week_start(weeks(content, season) + 1, content, season)
 
 
 def nominal_end(content: Content, season: WorldState) -> float:
