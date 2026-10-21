@@ -1419,7 +1419,7 @@ _patch_cache: dict = {"mtime": None, "notes": []}
 
 
 def patch_notes(path: Path | None = None) -> list[dict]:
-    """首頁（江湖頁）那排小標「改版」點開的改版資訊（Joy 2026-10-21「首頁應該有地方顯示近期的更版資訊」）。
+    """登入頁宣傳影片底下的「近期改版」（Joy 2026-10-21「首頁應該有地方顯示近期的更版資訊」）。
 
     讀 content/patch_notes.json 的 notes（新的在前），最多 PATCH_SHOW 次；檔案改了照修改時間重讀，不必重開伺服器。
     每一次只留 date、new、tweak 三欄（字串與字串清單），寫壞的那一次跳過、檔案讀不了就是空的（首頁不畫那一格）。"""
@@ -1501,8 +1501,7 @@ def _main_view_body(game: Game) -> dict:
         "here": game.peers_here(),
         "calls": game.calls_here(),  # 別人遞給你、還沒回的打招呼、結伴、切磋邀請（玩家互動第二層）；回應鈕是選單上的 invite: 選項
         "party": game.party_view(),  # 結伴同行的那一行；沒有是 None
-        "bulletin": [md(text) for text in game.bulletin()],
-        "patch": patch_notes(),  # 江湖頁那排小標「改版」：最近幾次的改版資訊（新的在前），沒有就不畫  # 江湖頁那排小標「大事」點開的本週大事（新的在前）；開關關著是空的
+        "bulletin": [md(text) for text in game.bulletin()],  # 江湖頁那排小標「大事」點開的本週大事（新的在前）；開關關著是空的
         "trends": md(game.trends_text()),
         "rumors": md(game.rumors_text()),
         "chronicle": md(game.chronicle_text()),
@@ -1983,6 +1982,12 @@ def index():
 @app.get("/journal.css")
 def journal_css():
     return Response(JOURNAL_CSS, media_type="text/css", headers=NO_CACHE)
+
+
+@app.get("/api/patch_notes")
+def api_patch_notes() -> dict:
+    """登入頁的近期改版：不用登入、不拿行動鎖，只讀 content/patch_notes.json。"""
+    return {"notes": patch_notes()}
 
 
 @app.get("/api/me")

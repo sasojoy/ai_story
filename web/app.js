@@ -1270,8 +1270,32 @@
           <p class="form-msg" role="alert"></p>
           <button class="btn primary" type="submit">${reg ? "註冊" : "登入"}</button>
         </form>
+        <section class="gate-patch" id="gate-patch" aria-label="近期改版">${gatePatchHtml(S.patchNotes)}</section>
       </div>`;
     if (playing) $app.querySelector(".gate .promo").replaceWith(playing);
+    if (S.patchNotes === undefined) loadPatchNotes();
+  }
+
+  // 登入頁的近期改版（Joy 2026-10-21「登入首頁加改版資訊」）：登入表單底下一塊，最新一次的新功能、調整一項一行，更早的各收成一行、
+  // 點了攤開。字是伺服器讀 content/patch_notes.json 給的（/api/patch_notes，不用登入，新的在前）；讀不到或沒有就不畫
+  function patchLines(p) {
+    return [["新功能", p.new], ["調整", p.tweak]].filter(([, rows]) => rows && rows.length)
+      .map(([head, rows]) => `<h4>${head}</h4><ul>${rows.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>`).join("");
+  }
+  function gatePatchHtml(notes) {
+    if (!notes || !notes.length) return "";
+    const [top, ...older] = notes;
+    return `<div class="card patch-card"><h3>改版資訊 ${esc(top.date)}</h3>${patchLines(top)}${
+      older.map((p) => `<details class="patch-old"><summary>改版資訊 ${esc(p.date)}</summary>${patchLines(p)}</details>`).join("")}</div>`;
+  }
+  async function loadPatchNotes() {
+    S.patchNotes = null; // 讀著，不重複讀
+    try {
+      const r = await fetch("/api/patch_notes");
+      S.patchNotes = r.ok ? (await r.json()).notes || [] : [];
+    } catch (e) { S.patchNotes = []; }
+    const box = document.getElementById("gate-patch");
+    if (box) box.innerHTML = gatePatchHtml(S.patchNotes);
   }
 
   function renderCreate() {
@@ -2082,41 +2106,7 @@
     };
   }
 
-  // 近期改版（Joy 2026-10-21「首頁應該有地方顯示近期的更版資訊」）：收進這一排小標最後一顆「改版」，有沒看過的一次就亮點，
-  // 點開是最新那一次的新功能、調整（一項一行），更早的幾次各收成一行、點了攤開。字是伺服器讀 content/patch_notes.json 給的（m.patch，
-  // 新的在前）；看過記最新那一次的日期（這個瀏覽器的 localStorage，不分角色）。序章裡不畫
-  const PATCH_SEEN_KEY = "tx-patch-seen";
-  function patchSeen() {
-    if (S.patchSeen !== undefined) return S.patchSeen;
-    try { S.patchSeen = localStorage.getItem(PATCH_SEEN_KEY) || ""; } catch (e) { S.patchSeen = ""; }
-    return S.patchSeen;
-  }
-  function markPatchSeen(m) {
-    const top = m.patch && m.patch[0];
-    if (!top) return;
-    S.patchSeen = top.date;
-    try { localStorage.setItem(PATCH_SEEN_KEY, top.date); } catch (e) { /* 存不了就只在這一頁有效 */ }
-  }
-  function patchLines(p) {
-    return [["新功能", p.new], ["調整", p.tweak]].filter(([, rows]) => rows && rows.length)
-      .map(([head, rows]) => `<h4>${head}</h4><ul>${rows.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>`).join("");
-  }
-  function patchPeek(m) {
-    const list = m.patch || [];
-    if (!list.length || pro()) return null;
-    const [top, ...older] = list;
-    return {
-      id: "patch",
-      label: `改版資訊 ${top.date}`,
-      chip: '<span class="peek-name">改版</span>',
-      flag: patchSeen() !== top.date,
-      dotNote: "，有新的改版",
-      panel: `<div class="patch-head">天下大勢　改版資訊 ${esc(top.date)}</div>${patchLines(top)}`
-        + older.map((p) => `<details class="patch-old"><summary>改版資訊 ${esc(p.date)}</summary>${patchLines(p)}</details>`).join(""),
-    };
-  }
-
-  const peekParts = (m) => [shown("stances") ? stancePeek(m) : null, shown("board") ? boardPeek(m, peekWeek(m)) : null, shown("quest") ? questPeek(m) : null, checkinPeek(m), patchPeek(m)];
+  const peekParts = (m) => [shown("stances") ? stancePeek(m) : null, shown("board") ? boardPeek(m, peekWeek(m)) : null, shown("quest") ? questPeek(m) : null, checkinPeek(m)];
 
   function peekHtml(parts, week) {
     const list = parts.filter(Boolean);
@@ -2138,7 +2128,6 @@
     const was = S.peekOpen && S.peekOpen.week === week ? S.peekOpen.id : null;
     S.peekOpen = was === id ? null : { id, week };
     if (was === "board" || id === "board") markBoardSeen(m); // 打開或離開「大事」都算看過：開著的時候又來的新事，離開時一併算
-    if (id === "patch") markPatchSeen(m);
     const box = document.getElementById("peek");
     if (box) box.outerHTML = peekBlock(m);
     const chip = document.querySelector(`.peek-chip[data-id="${id}"]`);

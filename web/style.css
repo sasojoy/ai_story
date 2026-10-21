@@ -637,15 +637,6 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .peek-panel { margin-top: 6px; padding: 10px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); max-height: 50vh; overflow: auto; }
 .peek-panel.board { border-color: var(--gold); }
 .peek-panel.quest { font-size: 14px; }
-/* 近期改版（Joy 2026-10-21）：標題一行、新功能與調整各一小段、一項一行；更早的幾次各收成一行 */
-.peek-panel.patch { font-size: 14px; }
-.patch-head { font-family: var(--serif); font-weight: 700; color: var(--gold); margin-bottom: 4px; }
-.peek-panel.patch h4 { margin: 8px 0 2px; font-size: 13px; color: var(--ink-2); }
-.peek-panel.patch ul { margin: 0; padding: 0; list-style: none; }
-.peek-panel.patch li { padding-left: 1em; text-indent: -1em; line-height: 1.6; }
-.peek-panel.patch li::before { content: "・"; }
-.patch-old { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 6px; }
-.patch-old summary { cursor: pointer; color: var(--ink-2); }
 .peek-panel.quest h3 { font-size: 15px; margin-top: 0; }
 .peek-panel > .fronts { margin-bottom: 8px; }
 .peek-panel > :last-child { margin-bottom: 0; }
@@ -1885,6 +1876,16 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
 .gate.has-promo { padding-top: var(--top); }
 .gate.has-promo .brand { margin: 14px 0 18px; }
 .gate.has-promo .brand h1 { font-size: 32px; }
+/* 登入頁的近期改版（Joy 2026-10-21）：表單底下一張卡，一項一行；更早的幾次各收成一行 */
+.gate-patch { margin-top: 18px; }
+.patch-card { font-size: 14px; }
+.patch-card h3 { margin: 0 0 4px; font-family: var(--serif); font-size: 16px; color: var(--gold); }
+.patch-card h4 { margin: 8px 0 2px; font-size: 13px; color: var(--ink-2); }
+.patch-card ul { margin: 0; padding: 0; list-style: none; }
+.patch-card li { padding-left: 1em; text-indent: -1em; line-height: 1.6; }
+.patch-card li::before { content: "・"; }
+.patch-old { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 6px; }
+.patch-old summary { cursor: pointer; color: var(--ink-2); }
 .promo { position: relative; margin: 0 -20px; aspect-ratio: 864 / 496; max-width: calc(100% + 40px); background: #e9e2d3; overflow: hidden; }
 .promo video, .promo img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .promo::after { content: ""; position: absolute; inset: auto 0 0; height: 28%; pointer-events: none;
