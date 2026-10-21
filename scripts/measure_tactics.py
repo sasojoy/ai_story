@@ -12,18 +12,19 @@
 - 擂台：同樣身手的兩個人，挑的人帶戰法、守的分身沒有（以及兩邊都帶同一位人物的），挑的人贏面；
 - 決戰：一個人一回合的份量平均乘多少（tactics.war_round，隨機出招、三成剋中），十八位各自。
 
-第三批（--kits）另量：本命對玩家自組上品（兩門上品合成武學的功效換成的戰法，隨機 SELF_KITS 套）、神器特技、名將本命兵器（含人器合一）。
+第三批（--kits）另量：本命對玩家自組上品（兩門上品、意境槽裝滿的技能換成的戰法，隨機 SELF_KITS 套）、神器特技、名將本命兵器（含人器合一）。
 擂台同樣身手的兩個人對打（兩邊都照架勢出招），兩個方向都量；另量一般的仗多的贏面與決戰的份量。
 
-合成深度（--depth third.json …，measure_depth.py --dump 寫的）另量：十八位本命對那一季合出的第三代滿配（兩門第三代練到絕學、
-各自的功效與走向、絕招、以器配招的神器原品），--layers 試一門最多幾層。
+武學重構（2026-10-20，tianxia/arts.py）之後的「滿配」（第三批：意境效果池之後）：兩門絕學各 4 格都裝滿、每一格一路不同的意境，
+一個一般功效三重加一個大獎（--grand-share 試大獎的比例，沒有大獎的那一格換成第二個一般功效），一半帶秘方的特別功效，
+各一招絕招、一把以器配招的神器原品。自組上品是 4 格各一重（新悟到的意境）。--strength 試滿配的一般功效重數（1～3）。
 
 寶物與玉璽（--gear，企劃者 10/17 清單第 35 項「武學平衡要包含寶物，玉璽也是」；計畫 docs/superpowers/plans/2026-10-18-武學平衡含寶物玉璽.md）：
 寶物八種效果、玉璽七片一樣一列，分直接（進打仗的數字：金角、螭首）、間接（改成長快慢）、不碰（跟打仗無關）三類（KIND）；
 直接的量出在哪幾種仗、勝負各變幾個百分點（金角在一般的仗、螭首在連打與擂台），間接的印它改哪一條成長、改多少，不換算成威力。
 數字一律照 Config 讀，調了數字重跑就是新表；只量不改。
 
-用法：.venv/Scripts/python.exe scripts/measure_tactics.py [--runs 4000] [--bouts] [--kits] [--catch-up] [--depth JSON… --layers N…]
+用法：.venv/Scripts/python.exe scripts/measure_tactics.py [--runs 4000] [--bouts] [--kits] [--catch-up [--strength 3]]
       [--gear [--chain N]]
 """
 from __future__ import annotations
@@ -68,14 +69,12 @@ def main() -> None:
     parser.add_argument("--bouts", action="store_true", help="只量第二批：挑戰本人的對手戰法、頭目戰、擂台、決戰")
     parser.add_argument("--kits", action="store_true", help="只量第三批：本命對自組上品、神器特技、名將本命兵器")
     parser.add_argument("--catch-up", action="store_true", help="只量玩家武學追上本命：十八位本命對滿配絕學＋配招兵器")
-    parser.add_argument("--slots", choices=["off", "rolled", "best"], default="rolled",
-                        help="--catch-up 的滿配照武學技能分檔（skill_slots）：off＝舊規則三格全亮；rolled＝照格數與高階機率擲；best＝兩門都帶高階")
-    parser.add_argument("--depth", nargs="+", metavar="JSON",
-                        help="合成深度：十八位本命對第三代滿配（measure_depth.py --dump 寫的第三代武學，一份一種季）")
-    parser.add_argument("--layers", type=int, nargs="+", help="--depth 試幾種一門最多幾層（從第三代的功效清單前面截，只量）")
+    parser.add_argument("--strength", type=int, default=3, help="--catch-up 滿配裡每個意境的強度（一重～三重）")
     parser.add_argument("--bout-strike", type=float, help="試別的 Config.tactics.bout_strike（只量）")
     parser.add_argument("--war-scale", type=float, help="試別的 Config.tactics.war_scale（只量）")
     parser.add_argument("--might-scale", type=float, help="本命底蘊（TacticDef.might）全部乘這個數（只量）")
+    parser.add_argument("--grand-share", type=float, help="--catch-up 滿配每一格第二個效果是大獎的機會（預設 1.0）")
+    parser.add_argument("--might-add", type=float, help="本命底蘊（TacticDef.might）每一門都加這個數（只量；一位人物兩門，合計加兩倍）")
     parser.add_argument("--tweak", nargs="+", default=[], metavar="技能.欄=數",
                         help="試別的本命戰法數字（只量）：zhangfei_wugong.rate=0.3、zhangliang_wugong.per_pct=0.05（params 裡的照鍵名）")
     parser.add_argument("--gear", action="store_true", help="只量寶物八種與玉璽七片：哪些進打仗、勝負變幾個百分點，哪些只改成長（第 35 項）")
@@ -98,6 +97,10 @@ def main() -> None:
         for sk in content.skills.values():
             if sk.tactic is not None:
                 sk.tactic.might *= args.might_scale
+    if args.might_add is not None:
+        for sk in content.skills.values():
+            if sk.tactic is not None:
+                sk.tactic.might += args.might_add
     if args.bouts:
         bouts(content, args.runs)
         return
@@ -107,13 +110,11 @@ def main() -> None:
     if args.gear:
         gear(content, args.runs, args.chain)
         return
+    if args.grand_share is not None:
+        global GRAND_SHARE
+        GRAND_SHARE = args.grand_share
     if args.catch_up:
-        catch_up(content, args.runs, args.slots if content.config.skill_slots.enabled else "off")
-        return
-    if args.depth:
-        for cap in args.layers or [content.config.fusion_depth.max_layers]:
-            for path in args.depth:
-                depth_vs(content, args.runs, path, cap)
+        catch_up(content, args.runs, args.strength)
         return
     ctx = tactics.Ctx(foe="對手", our_agility=8, foe_agility=rounds.foe_agility(DIFFICULTY), team=["player", "a", "b"])
     print("贏面（大勝＋險勝），威力 ÷ 難度：" + "　".join(f"{r:g}" for r in RATIOS))
@@ -296,104 +297,107 @@ def bouts(content, runs):
 # ── 第三批 ──────────────────────────────────────────
 
 SELF_KITS = 12  # 隨機自組幾套
+GRAND_SHARE = 1.0  # 滿配每一格的第二個效果是大獎的機會（--grand-share 改；意境效果池之後，第三批）
 ATTRS = ("快", "慢", "剛", "柔", "陽", "陰", "虛", "實")
 
 
-def self_kit(content, seed, quality="上品", special_share=0.5):
-    """一套自組：武學、內功各一門合成武學（品質 quality），各三格功效（第一格是自己的屬性），一半的機會帶一個特別功效。"""
+def slots_kit(content, seed, quality, strength, special_share=0.5, high_share=0.0, ults=False):
+    """武學重構之後的一套：武學、內功各一門自己合成的武學（品級 quality），意境槽（Config.arts.slots）每一格裝一個意境、
+    每個強度 strength（一般功效 strength 層，乘品級的倍數 traits.multiplier）；special_share 的機會第一門一格換成秘方的特別功效、
+    high_share 的機會第二門一格換成不同意境合出來的高階技能；ults 時各一招絕招（層數最多的那個一般功效，第一招帶以器配招）。"""
     from tianxia import traits
     rng = random.Random(f"kit|{seed}")
     mult = traits.multiplier(content, quality)
+    n = int(content.config.arts.slots.get(quality, 2))
     lo = traits.Loadout()
-    for _art in range(2):
-        own = rng.choice(ATTRS)
-        cells = [own, rng.choice(ATTRS), rng.choice(ATTRS)]
+    out = []
+    for i in range(2):
+        cells = [rng.choice(ATTRS) for _ in range(n)]
+        if i == 0 and rng.random() < special_share:
+            sp = rng.choice([t for t in content.traits.special if t.pool])
+            lo.specials[sp.hook] = sp
+            cells = cells[1:]
+        elif i == 1 and rng.random() < high_share and content.traits.high:
+            top = rng.choice(content.traits.high)
+            if all(t.name != top.tactic.name for t in lo.highs):
+                lo.highs.append(top.tactic)
+            cells = cells[1:]
         for a in cells:
             hook = traits.general(content, a).hook
-            lo.layers[hook] = lo.layers.get(hook, 0.0) + mult
-    if rng.random() < special_share:
-        sp = rng.choice([t for t in content.traits.special if t.pool])
-        lo.specials[sp.hook] = sp
-    return [tactics.Holder(who="你", key="player", skill=f"trait:{t.name}", tactic=t) for t in traits.tactic_defs(content, lo)]
+            lo.layers[hook] = lo.layers.get(hook, 0.0) + mult * strength
+        if ults and cells:
+            best = traits.general(content, max(dict.fromkeys(cells), key=cells.count))
+            if best.ultimate is not None:
+                ult = best.ultimate.model_copy(update={"name": f"絕學{i + 1}"})
+                out.append(tactics.bonded(ult, best.ultimate_bond) if i == 0 else ult)
+    hs = [tactics.Holder(who="你", key="player", skill=f"ult:{u.name}", tactic=u) for u in out]
+    hs += [tactics.Holder(who="你", key="player", skill=f"trait:{t.name}", tactic=t) for t in traits.tactic_defs(content, lo)]
+    hs += [tactics.Holder(who="你", key="player", skill=f"high:{t.name}", tactic=t) for t in lo.highs]
+    return hs
 
 
-def full_kit(content, seed, special_share=0.5):
-    """滿配（玩家武學追上本命）：武學、內功各一門自己合成的絕學（各三格功效，第一格是自己的屬性），兩門的功效戰法、各一招絕招
-    （層數最多的那一格，traits.ultimate_trait 的挑法），一把以器配招的神器原品（兵器的特技＋綁在武學那一招上的 ultimate_bond）。"""
-    from tianxia import traits
-    rng = random.Random(f"full|{seed}")
-    mult = traits.multiplier(content, "絕學")
+def piece_kit(content, seed, quality, strength, grand_share=1.0, special_share=0.5, ults=False):
+    """意境效果池之後（第二批）的一套：武學、內功各一門（品級 quality），每一格裝一份意境——那一路的一個一般功效 strength 重，
+    再加第二個效果：grand_share 的機會是那一路的大獎（同一個大獎只算一次，撞了換成另一個一般功效 strength 重），其餘是另一個一般功效
+    strength 重。一格裡的兩個效果最多三重（insight_fx.MAX_LAYERS）。special_share 的機會第一門一格換成秘方的特別功效。"""
+    from tianxia import insight_fx, traits
+    rng = random.Random(f"piece|{seed}")
+    mult = traits.multiplier(content, quality)
+    n = int(content.config.arts.slots.get(quality, 2))
     lo = traits.Loadout()
-    ults = []
+    out = []
     for i in range(2):
-        cells = [rng.choice(ATTRS) for _ in range(3)]
+        cells = rng.sample(ATTRS, n)
+        if i == 0 and rng.random() < special_share:
+            sp = rng.choice([t for t in content.traits.special if t.pool])
+            lo.specials[sp.hook] = sp
+            cells = cells[1:]
+        layer_count: dict[str, float] = {}
         for a in cells:
-            hook = traits.general(content, a).hook
-            lo.layers[hook] = lo.layers.get(hook, 0.0) + mult
-        top = traits.general(content, max(dict.fromkeys(cells), key=cells.count))
-        ult = top.ultimate.model_copy(update={"name": f"絕學{i + 1}"})
-        ults.append(tactics.bonded(ult, top.ultimate_bond) if i == 0 else ult)
-    if rng.random() < special_share:
-        sp = rng.choice([t for t in content.traits.special if t.pool])
-        lo.specials[sp.hook] = sp
-    arm = rng.choice([r for r in content.forge_secrets.values() if r.tactic is not None and r.slot == "weapon"])
-    out = [tactics.Holder(who="你", key="player", skill=f"ult:{u.name}", tactic=u) for u in ults]
-    out += [tactics.Holder(who="你", key="player", skill=f"trait:{t.name}", tactic=t) for t in traits.tactic_defs(content, lo)]
-    return out + [gear_holder(arm.tactic)]
+            pool = insight_fx.generals(content, a)
+            first = rng.choice(pool)
+            picks = [first]
+            top = insight_fx.grand_of(content, a)
+            if rng.random() < grand_share and top is not None and all(t.name != top.tactic.name for t in lo.highs):
+                lo.highs.append(top.tactic)
+            else:
+                picks += [t for t in pool if t.key != first.key][:1]
+            for t in picks:
+                lo.layers[t.hook] = lo.layers.get(t.hook, 0.0) + mult * strength
+                layer_count[t.key] = layer_count.get(t.key, 0) + strength
+        if ults and layer_count:
+            ultable = {k: v for k, v in layer_count.items() if traits.general(content, k).ultimate is not None}
+            if ultable:
+                best = traits.general(content, max(ultable, key=ultable.get))
+                ult = best.ultimate.model_copy(update={"name": f"絕學{i + 1}"})
+                out.append(tactics.bonded(ult, best.ultimate_bond) if i == 0 else ult)
+    hs = [tactics.Holder(who="你", key="player", skill=f"ult:{u.name}", tactic=u) for u in out]
+    hs += [tactics.Holder(who="你", key="player", skill=f"trait:{t.name}", tactic=t) for t in traits.tactic_defs(content, lo)]
+    hs += [tactics.Holder(who="你", key="player", skill=f"high:{t.name}", tactic=t) for t in lo.highs]
+    return hs
 
 
-def slot_kit(content, seed, mode, special_share=0.5):
-    """滿配照武學技能分檔（skill_slots）：同 full_kit 的兩門絕學（各三格來路、一半帶特別功效），照絕學的格數亮、空格擲中階低階、
-    高階照合成擲到的品質（照 Config.fuse_quality_odds 的機率挑）一路擲到絕學；best 是兩門都帶高階（最強的情形）。"""
-    from tianxia import skill_slots, traits
-    from tianxia.martial_arts import MartialArt
+def self_kit(content, seed, quality="上品", special_share=0.5):
+    """一套自組上品：四格各裝一個剛悟到的意境（●），一半的機會帶一個特別功效。"""
+    return slots_kit(content, seed, quality, 1, special_share)
+
+
+def full_kit(content, seed, strength=3, special_share=0.5):
+    """滿配（玩家武學追上本命）：兩門絕學四格都裝滿、每格三重加大獎、一半帶特別功效、各一招絕招、一把以器配招的神器原品。"""
     rng = random.Random(f"full|{seed}")
-    mult = traits.multiplier(content, "絕學")
-    lo = traits.Loadout()
-    ults = []
-    odds = content.config.fuse_quality_odds
-    for i in range(2):
-        cells = [rng.choice(ATTRS) for _ in range(3)]
-        sp = rng.choice([t for t in content.traits.special if t.pool]).id if rng.random() < special_share else None
-        art = MartialArt(id=f"kit{seed}-{i}", name=f"絕學{i + 1}", kind="武學" if i == 0 else "內功", quality="絕學",
-                         attribute=cells[0], base_power=1, top_power=1, origin="fused", traits=cells, special=sp)
-        rolled = rng.choices(list(odds), weights=list(odds.values()))[0]
-        lay = skill_slots.layout(content, f"kit{seed}", art, "絕學", rolled)
-        lit = {a for k, a in lay.lit if k == "g"}
-        for a in dict.fromkeys(cells):
-            if a in lit and a not in lay.extra_traits:
-                hook = traits.general(content, a).hook
-                lo.layers[hook] = lo.layers.get(hook, 0.0) + cells.count(a) * mult
-        for a in lay.extra_traits:
-            hook = traits.general(content, a).hook
-            lo.layers[hook] = lo.layers.get(hook, 0.0) + mult
-        for kind, sid in lay.lit:
-            if kind == "s":
-                t = traits.special(content, sid)
-                lo.specials.setdefault(t.hook, t)
-        top_high = next((sid for k, sid in lay.lit if k == "h"), None)
-        if mode == "best" and top_high is None:
-            top_high = next((h.id for h in content.traits.high if h.attribute == art.attribute), None)
-        high = skill_slots.high(content, top_high)
-        if high is not None and all(t.name != high.tactic.name for t in lo.highs):
-            lo.highs.append(high.tactic)
-        top = traits.general(content, max(dict.fromkeys(cells), key=cells.count))
-        ult = top.ultimate.model_copy(update={"name": f"絕學{i + 1}"})
-        ults.append(tactics.bonded(ult, top.ultimate_bond) if i == 0 else ult)
+    hs = piece_kit(content, seed, "絕學", strength, GRAND_SHARE, special_share, ults=True)
     arm = rng.choice([r for r in content.forge_secrets.values() if r.tactic is not None and r.slot == "weapon"])
-    out = [tactics.Holder(who="你", key="player", skill=f"ult:{u.name}", tactic=u) for u in ults]
-    out += [tactics.Holder(who="你", key="player", skill=f"trait:{t.name}", tactic=t) for t in traits.tactic_defs(content, lo)]
-    return out + [gear_holder(arm.tactic)]
+    return hs + [gear_holder(arm.tactic)]
 
 
-def catch_up(content, runs, slots="off"):
-    """玩家武學追上本命（定案的分寸）：十八位本命（有本命兵器的加上兵器與人器合一）逐一對滿配（full_kit，SELF_KITS 套），
-    本命的贏面要落在 52～60%、玩家不能反超。"""
+def catch_up(content, runs, strength=3):
+    """玩家武學追上本命（Joy 2026-10-17 的分寸：本命對玩家最強的一套 50～52%）：十八位本命（有本命兵器的加上兵器與人器合一）
+    逐一對滿配（full_kit，SELF_KITS 套）。"""
     share = ring_share(content, runs)
     arms = {a.character: a for a in content.gear.signature_arms}
-    fulls = [full_kit(content, k) if slots == "off" else slot_kit(content, k, slots) for k in range(SELF_KITS)]
+    fulls = [full_kit(content, k, strength) for k in range(SELF_KITS)]
     selfs = [self_kit(content, k) for k in range(SELF_KITS)]
-    print(f"擂台（兩邊威力 150，兩個方向各 {runs} 場）：本命對滿配絕學＋配招兵器（{SELF_KITS} 套，技能分檔 {slots}）")
+    print(f"擂台（兩邊威力 150，兩個方向各 {runs} 場）：本命對滿配絕學＋配招兵器（{SELF_KITS} 套，每格{'一二三'[strength - 1]}重＋大獎）")
     print(f"  滿配對自組上品：{sum(share(a, b) for a, b in zip(fulls, selfs)) / SELF_KITS:.1%}")
     rows = []
     for fid in figures_with(content):
@@ -407,81 +411,6 @@ def catch_up(content, runs, slots="off"):
         tag = "＋本命兵器" if arm is not None else ""
         print(f"  {content.characters[fid].name:<4}{tag:<6}{rows[-1]:5.1%}（最低 {min(vs):.0%}、最高 {max(vs):.0%}）")
     print(f"  十八位平均 {sum(rows) / len(rows):.1%}，最低 {min(rows):.1%}、最高 {max(rows):.1%}")
-
-
-DEPTH_KITS = 24  # 從一種季的第三代裡配幾套
-
-
-def depth_kit(content, arts, seed):
-    """合成深度的第三代滿配：兩門第三代合成武學都練到絕學（功效照各自的清單、品質倍數照絕學、特別功效照各自的走向），
-    各一招絕招（traits.ultimate_trait 的挑法），一把以器配招的神器原品綁在第一招上（同 full_kit）。"""
-    from tianxia import traits
-    from tianxia.martial_arts import with_quality
-    rng = random.Random(f"depth|{seed}")
-    mult = traits.multiplier(content, "絕學")
-    lo = traits.Loadout()
-    ults = []
-    for i, art in enumerate(arts):
-        art = with_quality(art, "絕學")
-        mine = traits.traits_of(art)
-        for attribute in dict.fromkeys(mine):
-            hook = traits.general(content, attribute).hook
-            lo.layers[hook] = lo.layers.get(hook, 0.0) + mine.count(attribute) * mult
-        sp = traits.special(content, art.special)
-        if sp is not None and sp.hook not in lo.specials:
-            lo.specials[sp.hook] = sp
-        top = traits.ultimate_trait(content, art)
-        if top is not None:
-            ult = top.ultimate.model_copy(update={"name": f"絕學{i + 1}"})
-            ults.append(tactics.bonded(ult, top.ultimate_bond) if not ults else ult)
-    arm = rng.choice([r for r in content.forge_secrets.values() if r.tactic is not None and r.slot == "weapon"])
-    out = [tactics.Holder(who="你", key="player", skill=f"ult:{u.name}", tactic=u) for u in ults]
-    out += [tactics.Holder(who="你", key="player", skill=f"trait:{t.name}", tactic=t) for t in traits.tactic_defs(content, lo)]
-    return out + [gear_holder(arm.tactic)]
-
-
-def depth_vs(content, runs, path, cap):
-    """合成深度（Joy 2026-10-15「本命還是強一點點」）：十八位本命（同 catch_up，含本命兵器與人器合一）逐一對第三代滿配。
-    滿配從那一季全服登記的第三代裡配（武學一門＋內功一門，湊不出來就任兩門），DEPTH_KITS 套；另寫十八位對哪一套的平均最低
-    （玩家最強的那一套）。功效清單照 cap 從前面截（fuse_traits 擠掉的是最舊的）。"""
-    import json
-    from tianxia.martial_arts import MartialArt
-    arts = [MartialArt.model_validate(a) for a in json.loads(Path(path).read_text(encoding="utf-8"))]
-    arts = [a.model_copy(update={"traits": list(a.traits)[:cap]}) for a in arts]
-    if len(arts) < 2:
-        print(f"{path}：第三代不到兩門，配不出滿配")
-        return
-    share = ring_share(content, runs)
-    rng = random.Random("depth-pairs")
-    wu = [a for a in arts if a.kind != "內功"] or arts
-    nei = [a for a in arts if a.kind == "內功"] or arts
-    pairs = []
-    for _ in range(DEPTH_KITS):
-        a = rng.choice(wu)
-        b = rng.choice([x for x in nei if x.id != a.id] or [x for x in arts if x.id != a.id])
-        pairs.append((a, b))
-    kits = [depth_kit(content, p, k) for k, p in enumerate(pairs)]
-    arms = {a.character: a for a in content.gear.signature_arms}
-    layers = sorted(len(a.traits) for a in arts)
-    print(f"{Path(path).name}：一門最多 {cap} 層；第三代 {len(arts)} 門（層數中位 {layers[len(layers) // 2]}）；"
-          f"擂台兩邊威力 150、兩個方向各 {runs} 場；本命對 {DEPTH_KITS} 套第三代滿配")
-    rows, grid = [], []
-    for fid in figures_with(content):
-        sig = holders(content, [("你", "player", fid)])
-        arm = arms.get(fid)
-        if arm is not None:
-            sig = [h.model_copy(update={"tactic": tactics.bonded(h.tactic, arm.bond)}) if arm.bond and tactics.bond_fits(h, fid, arm.bond) else h for h in sig]
-            sig = sig + [gear_holder(arm.tactic)]
-        vs = [share(sig, k) for k in kits]
-        grid.append(vs)
-        rows.append(sum(vs) / len(vs))
-        print(f"  {content.characters[fid].name:<4}{rows[-1]:5.1%}（最低 {min(vs):.0%}、最高 {max(vs):.0%}）")
-    per_kit = [sum(col) / len(col) for col in zip(*grid)]
-    strong = min(range(len(kits)), key=per_kit.__getitem__)
-    a, b = pairs[strong]
-    print(f"  十八位平均 {sum(rows) / len(rows):.1%}（最低 {min(rows):.1%}、最高 {max(rows):.1%}）")
-    print(f"  最強的一套（{''.join(a.traits)}＋{''.join(b.traits)}）：十八位對它平均 {per_kit[strong]:.1%}、"
-          f"最低 {min(col[strong] for col in grid):.1%}；最弱的一套 {max(per_kit):.1%}")
 
 
 def gear_holder(tactic):
@@ -614,7 +543,7 @@ KIND = {
     "injury": INDIRECT, "keep_silver": UNTOUCHED, "chuangong": INDIRECT,
 }
 NOTE = {  # 一句：改的是哪一條（量表的字，不是玩家看的，不必給 joy 潤）
-    "cultivate": "修練衝中品、上品那一擲（cultivation.chance 的 treasure；不碰頓悟與服丹衝關）",
+    "cultivate": "衝絕學的機會（cultivation.seize 契機頓悟、force_odds 服丹衝關）",
     "insight": "探索悟意境（三選一開著：靜心感悟擲中，sensing.rate；關著：悟意境那一支的比重）",
     "win_xinde_pct": "打贏的心得（遊歷、出陣、野怪、挑戰本人、劇情戰）",
     "win_exp_pct": "打贏的經驗（整隊一起多；滿級之後換成心得）",
@@ -627,7 +556,7 @@ NOTE = {  # 一句：改的是哪一條（量表的字，不是玩家看的，�
     "practice": "練成的心得（熔煉照原價退）",
     "dodge": "落敗閃成僵持（team.dodge_chance，只在 team.fight 收尾擲）",
     "stamina_regen": "體力自然回復",
-    "fuse_points": "合成的造化分（fusion.fuse_odds／blend_odds）",
+    "fuse_points": "自創的意分（create.seal_points：品級機率與底子）",
     "mate_exp": "同伴拿到的經驗",
     "injury": "一場仗變成內傷的倍數（改版螭首；team.take_encounter_toll、頭目戰收場、買兇的殺手）：內傷少，療傷少花銀兩、上蓋掉得慢",
     "keep_silver": "落敗不失銀兩（改版金角；Game._lose_silver）",
@@ -696,8 +625,8 @@ def wearing(content, key=None, agi=team.BASE_STAT, wis=team.BASE_STAT):
 
 
 def kit_full(content, seed):
-    """滿配：照 --catch-up 的挑法（武學技能分檔開著用 slot_kit 的 rolled，關著用 full_kit）。"""
-    return slot_kit(content, seed, "rolled") if content.config.skill_slots.enabled else full_kit(content, seed)
+    """滿配：照 --catch-up 的挑法（武學重構之後的 full_kit：兩門絕學每格三重、一半帶特別功效）。"""
+    return full_kit(content, seed)
 
 
 def dodge_table(content, runs, kit, ratio, chances, agi=8, draw_floor=None):
@@ -859,41 +788,16 @@ def _gear_hp(content, runs, chain, rows):
     print("  決戰、奪璽單挑：不吃（池子是加入決戰時的快照，team._cap_of 的 plain 不乘；隨行同伴 team.mate_pool 也是）")
 
 
-def lift_bands(content, amt):
-    """合成即設計（Config.fuse_quality.fixed）開著時，造化分多 amt 讓哪幾段的爐升品（FB-454）：[(原品, 升到, 下限, 上限)]，下限算、上限不算
-    （造化分可以有小數：兩門的底取平均、悟性係數）。品級直接問 fusion._points（score >= mid_from 中品、>= up_from 上品），
-    所以只在門檻與「門檻 − amt」上會變：照這幾個點切段，每一段取中間問一次，同一種升法接起來。fixed 關著回空的。"""
-    from tianxia import fusion
-    rule = content.config.fuse_quality
-
-    def quality(score):
-        return fusion._points(content, [("score", score)]).fixed
-
-    cuts = sorted({rule.mid_from, rule.up_from, rule.mid_from - amt, rule.up_from - amt})
-    bands = []
-    for lo, hi in zip(cuts, cuts[1:]):
-        mid = (lo + hi) / 2
-        was, now = quality(mid), quality(mid + amt)
-        if was == now:
-            continue
-        if bands and bands[-1][:2] == (was, now) and bands[-1][3] == lo:
-            bands[-1] = (was, now, bands[-1][2], hi)
-        else:
-            bands.append((was, now, lo, hi))
-    return bands
-
-
 def _indirect(content, r):
     """間接那一列：改哪一條成長、改多少（照遊戲裡真的掛點算，不換算成威力）。"""
-    from tianxia import cultivation, fusion, sensing, treasures
+    from tianxia import sensing, treasures
     cfg = content.config
     amt = treasures.amount(wearing(content, r.key), content, r.key)
     if r.key == "cultivate":
-        steps = [f"衝{q}第一次 {cultivation.chance(content, q, 0)}% → {cultivation.chance(content, q, 0, treasure=amt)}%"
-                 for q in ("中品", "上品")]
-        sure = "、".join(f"衝{q}第 {n} 次必成" for q, n in cfg.cultivate_sure_by.items())
-        heat = "；上品往絕學走火候與契機（Config.breakthrough），不吃" if cfg.breakthrough.heat > 0 else ""
-        return f"修練升品 ×{amt:g}：" + "、".join(steps) + f"（悟性 5、普通搭配；{sure}不受影響、上限 Config.cultivate_cap 照夾{heat}）"
+        base = cfg.legend_item_bonus  # 悟性 5
+        hi = cfg.breakthrough.max_chance
+        return (f"衝絕學的機會 ×{amt:g}：服丹衝關 {min(hi, base):g}% → {min(hi, base * amt):g}%，契機頓悟同一個倍數"
+                f"（悟性 5；夾在 Config.breakthrough.max_chance {hi:g}%）")
     if r.key == "insight":
         if cfg.explore_modes.enabled:
             loc = next(iter(content.locations.values()))
@@ -921,17 +825,12 @@ def _indirect(content, r):
         cut = sum(team.practice_price(content, n, amt) for n in range(1, team.MAX_LEVEL))
         return f"練成 ×{amt:g}：練滿十成的心得 {full} → {cut}（每一成 round(原價×{amt:g})、最少 1；熔煉照原價退）"
     if r.key == "fuse_points":
-        rule, base = cfg.fuse_quality, cfg.fuse_quality_odds
-        up0 = fusion.odds_from_points([], rule, base).odds["上品"]
-        up1 = fusion.odds_from_points([("seal", amt)], rule, base).odds["上品"]
-        rolled = f"擲骰（fixed 關著）時普通一爐上品 {up0:g}% → {up1:g}%（{up1 - up0:+g}）"
-        if not rule.fixed:
-            return f"造化分 +{amt:g}：{rolled}（此刻 fixed 關著）"
-        band = rule.up_from - rule.mid_from
-        lifts = "；".join(f"{lo:g} 以上、未滿 {hi:g} 的{'爐' if i == 0 else ''}由{was}升{now}"
-                         for i, (was, now, lo, hi) in enumerate(lift_bands(content, amt)))
-        return (f"造化分 +{amt:g}：合成即設計（Config.fuse_quality.fixed 開著）不擲骰，+{amt:g} 佔中品那一段（{rule.mid_from:g}～{rule.up_from:g}，"
-                f"{band:g} 分）的 {amt / band:.0%}——造化分 {lifts}；對照：{rolled}")
+        from tianxia import create
+        mid = 50
+        a, b = create.grade_odds(content, mid, 0), create.grade_odds(content, mid + int(amt), 0)
+        lo, hi = create.power_scale_of(content, mid), create.power_scale_of(content, mid + int(amt))
+        return (f"自創的意分 +{amt:g}：意分 {mid} 的那一門上品 {a.get('上品', 0):g}% → {b.get('上品', 0):g}%，"
+                f"底子 {lo:.0%} → {hi:.0%}（create.grade_odds、power_scale_of）")
     if r.key == "mate_exp":
         return f"同伴拿到的經驗 ×{amt:g}（本人不變）"
     return f"{r.text}（{NOTE.get(r.key, '')}）"

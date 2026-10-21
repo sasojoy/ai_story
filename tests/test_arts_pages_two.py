@@ -195,17 +195,26 @@ def _merger(content, name, ids):
 
 
 def test_the_merge_preview_names_the_attribute_the_merge_really_gives(content, world):
-    """六個基本意境兩兩合併（含自己合自己）：預覽寫的屬性跟 fusion.merge 真的給的一樣——同一個函式算的，不是另寫一份。"""
+    """六個基本意境兩兩合併：預覽寫的屬性跟 fusion.merge 真的給的一樣——同一個函式算的，不是另寫一份。
+    武學重構：自己合自己是揣摩（強度加深一級，不是新的意境），預覽寫「揣摩」與強度從幾到幾，合了真的加深那一級。"""
     import itertools
 
+    from tianxia import arts
+
     ids = list(content.insights)
-    for n, (a, b) in enumerate(itertools.combinations_with_replacement(ids, 2)):
+    for n, (a, b) in enumerate(itertools.combinations(ids, 2)):
         state = _merger(content, f"甲{n}", [a, b])
         line = skillview.forge_line(state, content, world, None, [a, b])
-        shown = re.search(r"→ 一個新的意境（屬(.)），", line)
+        shown = re.search(r"→ 一個新的意境（屬(.)・", line)
         assert shown, line
         made, _ = fusion.merge(state, content, world, _named(f"新意境{n}"), a, b)
         assert made is not None and made.attribute == shown.group(1), (a, b, line)
+    for a in ids:  # 意境效果池：同一種的兩份是揣摩，預覽寫揉完的層數，合了真的到二重
+        state = _merger(content, f"乙{a}", [a, f"{a}~2"])
+        line = skillview.forge_line(state, content, world, None, [a, f"{a}~2"])
+        assert line.startswith("**揣摩**") and "二重" in line, line
+        fusion.merge(state, content, world, None, a, f"{a}~2")
+        assert arts.strength_of(state, a) == 2
 
 
 def test_the_merge_preview_says_nobody_has_merged_it_before_or_what_it_becomes(content, world):
@@ -213,8 +222,8 @@ def test_the_merge_preview_says_nobody_has_merged_it_before_or_what_it_becomes(c
     assert skillview.forge_line(first, content, world, None, ["feng", "huo"]).endswith("\n沒人合過。")
     made, _ = fusion.merge(first, content, world, _named("燎原"), "feng", "huo")
     again = skillview.forge_line(first, content, world, None, ["feng", "huo"])
-    assert "沒人合過" not in again and "會合出" not in again  # 你自己已經悟得了：下面的 ⚠ 本來就說「你已經悟得了」
-    assert "⚠ 這兩個合起來還是「燎原」" in again
+    assert "沒人合過" not in again and "會合出" not in again
+    assert "\n再合一份「燎原」，效果另擲。" in again and "⚠" not in again  # 意境效果池：合過的再合是另一份
     other = _merger(content, "乙", ["feng", "huo"])
     line = skillview.forge_line(other, content, world, None, ["huo", "feng"])  # 別人首創、你還沒有的：照樣能合，預覽寫它會是什麼
     assert f"\n會合出「燎原」（屬{made.attribute}）。" in line and "沒人合過" not in line
@@ -228,8 +237,12 @@ def test_the_merge_preview_matches_the_other_two_kinds_in_shape(content, world, 
     fuse = skillview.forge_line(state, content, world, "basic_fist", ["feng"])
     blend = skillview.forge_line(state, content, world, "basic_fist", [], other_art="lake_kick")
     merge = skillview.forge_line(state, content, world, None, ["feng", "huo"])
-    for line in (fuse, blend, merge):
-        assert re.search(r"（屬.[，）]", line) and line.endswith("\n沒人合過。"), line  # 屬性、花費、沒人合過，三種都有
+    # 武學重構：武學＋意境是裝進槽（不花心得體力、沒有配方），只有兩種合成寫「沒人合過」；合出來的武學寫品級、槽數與收什麼
+    assert fuse.startswith("**裝意境**") and "不花心得體力" in fuse and "沒人合過" not in fuse
+    assert re.search(r"（下品・意境槽 \d 格・", blend) and blend.endswith("\n沒人合過。"), blend
+    assert re.search(r"（屬.・", merge) and merge.endswith("\n沒人合過。"), merge
+    for line in (blend, merge):
+        assert "花 5 點心得、5 點體力" in line
 
 
 def test_the_merge_preview_still_refuses_what_you_do_not_hold(content, world, state):
@@ -362,14 +375,14 @@ def test_a_forge_that_lands_on_a_named_art_does_not_tell_the_forger_either(conte
     from tianxia.state import new_game_state
 
     master, late = _two_players(content, world)
-    for game in (master, late):
-        game.state.player.insights = ["feng"]
+    for game in (master, late):  # 武學重構：合成是武學＋武學（武學＋意境改成裝槽）
+        game.state.player.arts = ["lake_kick"]
         game.state.player.stats["xinde"] = 50
         game.state.player.member.wugong_id = "basic_fist"
-    made, _ = fusion.fuse(master.state, content, world, _named("旋風腿"), "basic_fist", "feng")
+    made, _ = fusion.blend(master.state, content, world, _named("旋風腿"), "basic_fist", "lake_kick")
     assert made.id == "旋風腿"
     _name_it(master, made, "旋風不歸腿")
-    got, _ = fusion.fuse(late.state, content, world, _named("不會用到"), "basic_fist", "feng")
+    got, _ = fusion.blend(late.state, content, world, _named("不會用到"), "basic_fist", "lake_kick")
     assert got.id == "旋風腿" and "旋風腿" in late.state.player.arts
     late.sync(1000.0)
     assert _notices(late) == [] and new_game_state is not None
@@ -416,7 +429,7 @@ def test_the_record_is_a_player_field_and_needs_no_schema_change(content):
     from tianxia import database
     from tianxia.state import PlayerState, new_game_state
 
-    assert database.SCHEMA_VERSION == 5  # 兵器第二批（gear_recipes）升到 4、玩家傳（biographies）升到 5；renames_told 自己是 PlayerState 的欄位，沒有升版
+    assert database.SCHEMA_VERSION == 6  # 兵器第二批（gear_recipes）升到 4、玩家傳（biographies）升到 5、商城升到 6；renames_told 自己是 PlayerState 的欄位，沒有升版
     data = new_game_state(content, "舊檔").player.model_dump()
     assert data.pop("renames_told") == []
     assert PlayerState.model_validate(data).renames_told == []  # 沒有這個欄位的舊存檔照樣讀得進來
@@ -500,7 +513,7 @@ def test_the_same_order_reaches_the_page_data(real):
 
 
 PRACTICE_STUBS = 'const guideHtml = () => "", proGuide = () => "";'
-CRAFT_STUBS = PRACTICE_STUBS + 'const furnaceSvg = () => "<svg></svg>", toast = () => {}, spinAt = () => "";'
+CRAFT_STUBS = PRACTICE_STUBS + 'const furnaceSvg = () => "<svg></svg>", toast = () => {}, spinAt = () => "", createHtml = () => "";'  # 自創那張卡（武學重構）這裡不看
 CRAFT_FNS = ["pageCraft", "forgeBody", "forgeReady", "artFilter", "setArtFilter", "filterChips", "showArts",
              "pickMark", "craftView", "craftFilterRow", "craftChip", "kilnWarn", "kilnHtml", "madeCardHtml", "previewCardHtml", "forgeLineHtml", "craftSheetHtml", "potGlow", "kilnPeek", "manualRows", "manualEntry", "bookIcon"]
 CRAFT_CONSTS = ["ART_FILTERS", "filterKey", "CRAFT_SORTS", "CRAFT_PAGE", "BOOKS"]
@@ -778,10 +791,10 @@ def test_the_glow_lists_the_server_sends_decide_every_hook_on_the_cards():
     rows = [_art("w1", "武學", "甲拳", worn=True, glow=["cultivate"]),
             _art("w2", "武學", "乙拳", glow=["switch", "melt"]), _art("w3", "武學", "丙拳", glow=["cultivate"])]
     html = _practice(rows, "S.artOpen = 'w2';")
-    body = html.split('<div class="art-body')[1].split("</div></div>")[0]
+    body = html.split('<div class="art-body')[1].split('<button class="art libr')[0]
     assert re.search(r'<button class="linkish" data-act="melt" data-glow="melt" data-id="w2"', body)  # m2
     assert re.search(r'data-act="switch" data-glow="switch" data-id="w2"', body)
-    assert re.search(r'data-act="cultivate" data-id="w2"', body) and 'data-act="cultivate" data-glow' not in body  # 這一門的修練不在名單上
+    assert 'data-act="cultivate"' not in body  # 下品、修練不在名單上：沒有「衝絕學」那一塊（只有上品與序章點名的才畫）
     worn = html.split('<div class="art-body')[0]
     assert re.search(r'data-act="cultivate" data-glow="cultivate" data-id="w1"', worn)  # 身上那張卡讀它自己那一列的 glow
     assert re.search(r'<button class="art libr "[^>]*data-id="w3" data-glow="cultivate">', html)  # 收著的那一列只亮名單上的

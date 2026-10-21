@@ -19,16 +19,16 @@ SILVER_SHORT = "還差 {short} 兩"
 DAILY_FULL = "今天已捐滿 {cap} 兩，明日 00:00 後再捐"
 POINTS_FULL = "今天已捐滿 {cap} 點，明日 00:00 後再捐"
 
-MENTOR_LABEL = "名師指點（{silver} 兩：下一次修練升品的機會 +{bonus}%）"
+MENTOR_LABEL = "名師指點（{silver} 兩：下一次衝絕學的機會 +{bonus}%）"  # 待 joy 潤
 MENTOR_REFUSED = "名師指點（{problem}）"
-MENTOR_DONE = "老大夫領你去見一位隱居的前輩，聽他把修練的關竅點撥了一遍：下一次修練升品的機會多 {bonus}%。"
+MENTOR_DONE = "老大夫領你去見一位隱居的前輩，聽他把修練的關竅點撥了一遍：下一次衝絕學（頓悟或服丹衝關）的機會多 {bonus}%。"  # 待 joy 潤
 MENTOR_READY = "已經請過了，還沒修練"
 MENTOR_TODAY = "今天請過了，明日 00:00 後再來"
 MENTOR_TITLE = "名師指點"
 
 FURNACE_LABEL = "看火候（{silver} 兩：下一爐的品質好一些）"
 FURNACE_REFUSED = "看火候（{problem}）"
-FURNACE_DONE = "老師傅答應下一爐親自替你看火候：不論打造還是合成，出好東西的機會大一些。"
+FURNACE_DONE = "老師傅答應下一爐親自替你看火候：打造出好東西的機會大一些。"  # 待 joy 潤
 FURNACE_READY = "已經請過了，還沒開爐"
 FURNACE_TODAY = "今天請過了，明日 00:00 後再來"
 FURNACE_PROLOGUE = "初入江湖，還請不動老師傅"
@@ -54,9 +54,8 @@ SHOP_ENTERED = "你掀開竹簾，走進茶樓的雅間。掮客正替你斟茶�
 SHOP_BACK = "離開"
 SHOP_CLOSED = "你放下茶碗，起身離了雅間。"
 PAGE_SELF, PAGE_FAVOR = "修為", "人情"  # 帳簿左頁、右頁
-MENTOR_DESC = "下一次修練升品的機會 +{bonus}%"
-FURNACE_DESC = "下一爐（打造或合成）：下 {low}／中 {mid}／上 {high}"
-FURNACE_DESC_FORGE = "下一爐打造：下 {low}／中 {mid}／上 {high}"  # 合成即設計開著時合成照投入定品，看火候只管打造（待 joy 潤）
+MENTOR_DESC = "下一次衝絕學的機會 +{bonus}%"  # 待 joy 潤
+FURNACE_DESC = "下一爐打造：下 {low}／中 {mid}／上 {high}"  # 武學合成不擲品質，看火候只管打造（待 joy 潤）
 LEGEND_DESC = "修練衝絕學時服下"
 BRIBE_DESC = "{name}的門房：情誼 {now} → {then}，最多打點到 {top}"
 BRIBE_DESC_AWAY = "塞門房說幾句好話：情誼 +{gain}，最多打點到 {top}"
@@ -71,7 +70,7 @@ WHERE = {  # 這裡做不了時朱筆批的去處
     "bribe": "到大勢人物所在的地方打點", "donate": "到自家大本營捐", "donate_ranger": "投靠之後，到大本營捐",
 }
 HANG_HEAD = "記帳："
-HANG_MENTOR = "名師指點 1 次（下次修練用掉）"
+HANG_MENTOR = "名師指點 1 次（下次衝絕學用掉）"  # 待 joy 潤
 HANG_FURNACE = "看火候 1 次（下一爐用掉）"
 
 
@@ -141,7 +140,7 @@ def mentor_problem(state: GameState, content: Content, day: int) -> str | None:
 
 
 def mentor(state: GameState, content: Content, day: int) -> list[str]:
-    """請名師指點：付錢、記下這一天，下一次修練升品的機會加 mentor_bonus（cultivation.odds_for 照 mentor_bonus 讀，擲一次用掉）。"""
+    """請名師指點：付錢、記下這一天，下一次衝絕學的機會加 mentor_bonus（cultivation.seize／force_odds 照 mentor_bonus 讀，擲一次用掉；武學重構拿掉衝品之後從修練升品搬過來）。"""
     problem = mentor_problem(state, content, day)
     if problem is not None:
         return [f"（{problem}。）"]
@@ -176,7 +175,7 @@ def furnace_problem(state: GameState, content: Content, day: int, in_prologue: b
 
 
 def furnace(state: GameState, content: Content, day: int, in_prologue: bool = False) -> list[str]:
-    """請老師傅看火候：付錢、記下這一天，下一次合成或打造的品質基準換成 furnace_odds（furnace_base），打一爐用掉（use_furnace）。"""
+    """請老師傅看火候：付錢、記下這一天，下一次打造的品質基準換成 furnace_odds（furnace_base），打一爐用掉（use_furnace）；武學合成不擲品質了，只剩打造用得上。"""
     problem = furnace_problem(state, content, day, in_prologue)
     if problem is not None:
         return [f"（{problem}。）"]

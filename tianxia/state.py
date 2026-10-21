@@ -259,6 +259,35 @@ class SmithDraft(BaseModel):
     aux: str | None = None
 
 
+class InsightFx(BaseModel):
+    """一份意境身上的效果（武學重構第二批，tianxia/insight_fx.py）：品質、一般功效（鍵 → 層數一到三）、大獎（高階技能 id）。"""
+
+    quality: str = "中品"
+    general: dict[str, int] = Field(default_factory=dict)
+    grand: str | None = None
+
+
+class CreateDraft(BaseModel):
+    """自創武學走到哪（tianxia/create.py；Joy 2026-10-20 改成五步）：執器（kind、form）開單 → 擺式（pose）→ 立意（intent，
+    模型讀出 read、lean、score；引擎照兵器＋姿勢＋意擲出 colors）→ 立名（付心得、擲品級、登記）。redo 是還能免費重來幾次。"""
+
+    kind: str  # 內功／武學
+    form: str = ""  # 執器：武學的兵器種類（劍、刀…）或內功的行功之法（吐納、導引…）
+    pose: dict[str, float] = Field(default_factory=dict)  # 擺式：九個角度（create.POSE_KEYS）
+    intent: str = ""  # 立意那一句（2～20 字）
+    read: list[str] = Field(default_factory=list)  # 模型（或關鍵字表）讀出這一句偏哪幾路，偏得多的在前；空的是不偏
+    lean: str = "無"  # 正／邪／無：意讀出來的
+    score: int = 40  # 模型評的意分（0～100，夾 5～85；評不到 40）
+    colors: list[list[str]] = Field(default_factory=list)  # 成形擲出的每一格顏色（MartialArt.slot_colors）
+    redo: int = 1  # 還能免費重來幾次（回到擺式或立意再擲一次）
+    rolls: int = 0  # 擲過幾次（成形的亂數種子用）
+    step: str = "pose"  # 下一步：pose（擺式）、intent（立意）、name（立名）
+    # 舊單子（這一版之前的三步）的欄位，讀得進來就好；讀檔時 create.prune 收掉
+    affinity: list[str] = Field(default_factory=list)
+    weapon: str | None = None
+    insight: str | None = None
+
+
 class Manual(BaseModel):
     """武學譜（tianxia/secret_recipes.py）：這一季聽過的口訣與合中過的秘方。秘方每季照天機換一批，所以記著是哪一季的天機，
     對不上就當空的。鑄譜（PlayerState.forge_manual）用同一個型別，多記 made。"""
@@ -646,8 +675,6 @@ class PlayerState(BaseModel):
     smith_draft: SmithDraft | None = None  # 鐵匠鋪「打造兵器…／打造防具…」挑到哪一步；打開、打完、不打了都清掉，凡是把 picking_smith 收起來的地方（離開、存檔修補、同步時人不在城鎮、出發）一起清
     arts: list[str] = Field(default_factory=list)  # 功法庫：煉出來但沒配上身的功法 id
     art_levels: dict[str, int] = Field(default_factory=dict)  # 每門學過的功法各自的「成」；改練時存進來／取出來
-    # 合成時承底白送的成數（合成即設計定案第二節，Config.fusion_depth.inherit_share）：功法 id → 拿到時就有的那一成，熔了那幾成不退
-    art_free_levels: dict[str, int] = Field(default_factory=dict)
     # ── 武學與成長（設計第三、四節）──
     insights: list[str] = Field(default_factory=list)  # 悟得的意境 id，照悟得的先後
     # ── 悟意境（悟意境設計第零節、0.2b；舊存檔沒這幾欄就是空的）──
@@ -660,9 +687,15 @@ class PlayerState(BaseModel):
     stat_points: int = 0  # 升級得到、還沒分配的屬性點（武學與成長設計 6.2）
     art_quality: dict[str, str] = Field(default_factory=dict)  # 功法 id → 自己那一份的品質（沒記＝全服登記的品質）
     art_mastery: dict[str, int] = Field(default_factory=dict)  # 功法 id → 修練往下一品失敗了幾次（熟練度）
-    # 功法 id → 合成時擲到的品質（Config.fuse_quality_odds）：熔的時候當成「登記時就有」，只有修練上去的幾階才有加給
-    art_rolled: dict[str, str] = Field(default_factory=dict)
     naming: str | None = None  # 第一個修到絕學、等著取正式名字的功法 id
+    # ── 武學重構（tianxia/arts.py，Joy 2026-10-20）──
+    art_slots: dict[str, list[str | None]] = Field(default_factory=dict)  # 功法 id → 意境槽（每格裝的意境 id，None 空）；一個意境只裝一門
+    insight_strength: dict[str, int] = Field(default_factory=dict)  # 舊存檔：意境 id → 強度 2 或 3（沒記是 1）；第二批起照 insight_fx
+    # 意境 id（第二份起「feng~2」）→ 這一份的品質與效果；沒記的照舊存檔的樣子算（insight_fx.record）
+    insight_fx: dict[str, InsightFx] = Field(default_factory=dict)
+    arts_migrated: bool = False  # 舊存檔的功效轉成槽做過了沒（arts.migrate 只做一次）
+    created_count: int = 0  # 這一季自創了幾門（Config.arts.create_per_season、價錢遞增）；角色每季重來
+    creating: CreateDraft | None = None  # 自創走到一半的單子（tianxia/create.py）；取名那一步才付心得
     stamina_pills: int = 0  # 回體丹（Config.stamina_pill_name）的數量：建立角色時的內測贈送；跨季保留（Game._reset_player_for_new_season）
     # 回體丹補到過幾顆（企劃者 2026-10-12 拿掉一鍵補滿、改送合適的數量）：Config.beta_gift_stamina_pills 比它多時，讀檔那一刻手上不到那個數的
     # 補到那個數、寫一行紀錄，再記成那個數（一個數只補一次；之後再調高會再補一次）。新角色建立時就記成送的數。
@@ -712,7 +745,7 @@ class PlayerState(BaseModel):
     tavern_watches: list[TavernWatch] = Field(default_factory=list)  # 託酒家留意的人（最多 Config.tavern.watch_keep 個）
     tavern_guard_until: float = 0.0  # 雇的保鏢跟到幾時（現實秒）
     guarded_until_real: float = 0.0  # 雇的保鏢跟到幾時（現實秒）
-    xinde_cultivations: int = 0  # 這一季花心得修練了幾次（Config.cultivate_xinde_price，越修越貴）；角色每季重來
+    xinde_cultivations: int = 0  # 這一季花心得修練了幾次（以心得修練拿掉了，欄位留著讓舊存檔讀得進來）；角色每季重來
     legend_bought: int = 0  # 這一季用心得換了幾枚破境丹（Config.legend_xinde_price，越換越貴）；角色每季重來
     legend_items: int = 0  # 破境丹（Config.legend_item_name）的數量：探索撿到，玩家在修練頁勾了、衝絕學那一次才服一枚；角色每季重來
 
@@ -1341,6 +1374,11 @@ class WorldState(BaseModel):
     # ── 時刻表決戰開集結（計畫 T8）：季的事在 mutate 裡只記號，mutate 外面才開（world.open_waiting_showdown）──
     showdowns_waiting: list[str] = Field(default_factory=list)  # 時間到了、還沒開成的決戰 id，照時間先後（另一場還在打就等）
     showdowns_opened: dict[str, str] = Field(default_factory=dict)  # 開過集結的決戰 id → 開的那一筆 BattleDef；開過就不再開
+    # 開集結的那一刻（世界秒，world._claim_showdown 記；照季分、不動資料庫結構）：輿圖照它判斷這一場「到了沒、歸在第幾週」（FB-563），
+    # 管理者提早開的決戰才不會跟著收場或此刻換週。舊存檔沒記的（開在這個欄位出現之前）退回收場那一刻、此刻。
+    showdown_opened_at: dict[str, float] = Field(default_factory=dict)
+    # 開打後被管理者取消、還沒有結果的決戰 id（Game.admin_cancel_battle 記）：輿圖不列（FB-563）；之後管理者「定結果」了就照有結果的寫法列
+    showdowns_cancelled: list[str] = Field(default_factory=list)
     # 人物活起來（figure_life）：不是大勢人物的人物此刻在哪（人物 id → 地點；沒寫的照 talk_at／recruit_at），與每日行事做到第幾輪
     whereabouts: dict[str, str] = Field(default_factory=dict)
     life_turn: int = -1
@@ -1396,6 +1434,9 @@ class WorldState(BaseModel):
     # 名將贈禮給了誰：人物 id → 名號（6.4：每位名將每季全服只送一人；換季整個重來）。跟懸賞榜第二批的求藝送兵器（bounty-gift）、
     # 玩家之間的贈物無關，所以不叫 gifts
     general_gifts: dict[str, str] = Field(default_factory=dict)
+    # 武學重構：「裝滿」那種秘方（kind fuse）這一季第一個暗合的人：秘方 id → 寫給別人看的名號（換季整個重來；小的整份覆寫，
+    # 跟 general_gifts 一樣走這一下動作最後的 _save_season）
+    secret_sets: dict[str, str] = Field(default_factory=dict)
     # 名將本命兵器給了誰：人物 id → SignatureClaim（兵器設計 4.10：每位名將每季全服一人；換季整個重來）。神器譜跨季讀 seasons 表
     # 的這一欄（WorldStateStore.signature_records），所以舊季的也留著
     signature_arms: dict[str, SignatureClaim] = Field(default_factory=dict)

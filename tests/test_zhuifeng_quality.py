@@ -11,7 +11,7 @@ import pytest
 from conftest import real_content
 from test_content import copy_fixture, edit_json
 
-from tianxia import library, team
+from tianxia import team
 from tianxia.content import ContentError, load_content
 from tianxia.engine import Game
 from tianxia.models import Effect
@@ -58,9 +58,9 @@ def test_the_peerless_record_written_by_the_keep_version_is_dropped_on_load():
     content = real_content()
     game = _learned(content)
     p = game.state.player
-    p.art_quality["zhuifeng"] = p.art_rolled["zhuifeng"] = "絕學"  # 7f993d2 那一版讀檔時寫的
+    p.art_quality["zhuifeng"] = "絕學"  # 7f993d2 那一版讀檔時寫的（武學重構拿掉了 art_rolled，只剩 art_quality 那一份）
     loaded = Game(content, game.state, random.Random(0), game.world)
-    assert "zhuifeng" not in loaded.state.player.art_quality and "zhuifeng" not in loaded.state.player.art_rolled
+    assert "zhuifeng" not in loaded.state.player.art_quality
     assert team.player_art(loaded.state, content, loaded.world, "zhuifeng").quality == "下品"
 
 

@@ -27,9 +27,10 @@ from .front_lines import BAND_KEYS, GEJU_KEYS
 from .materials import DEFAULT_DROPS, TIER_NAMES
 from .models import (
     FRONT_KEY, GLOW_KEYS, GOOD_HORSE, MOVES, RECRUITER_ALLIED_FIELDS, REVEAL_KEYS, ROADS, STATS, TREASURE_EFFECTS, WEAPON_KINDS, Attribute, BattleDef, CharacterDef, CheckVoice,
-    CombatLines, Condition, Config, Content, CraftNames, DuelBoss, Effect, Event, FigureDef, FollowerDef, ForgeSecret, Foreshadows, FrontLines, GatherBranch, GearBook,
-    GiftDef, Hints, MingtieContent, InsightDef, Location, OppDef,
-    InsightScene, OrdersContent, PresetRecipe, PromotionDef, RelationDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, ShardDef, SimRumor, SkillDef,
+    CombatLines, Condition, Config, Content, CraftNames, CreateForms, DuelBoss, Effect, Event, FigureDef, FollowerDef, ForgeSecret, Foreshadows, FrontLines, GatherBranch, GearBook,
+    GiftDef, Hints, MingtieContent, InsightDef, Location, MallItem, OppDef,
+    InsightScene, OrdersContent, PresetRecipe, PromotionDef, RealDay, RealSlot, RelationDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, ShardDef,
+    SimRumor, SkillDef,
     SignatureArmDef, SteedDef, Squad, Tier4Named, TimetableEvent, TraitBook, TreasureDef, Tutorial, allow_known,
 )
 from .martial_arts import ATTRIBUTE_COUNTERS, ATTRIBUTES, QUALITIES
@@ -81,7 +82,7 @@ def load_content(root: Path, profile: str | None = None) -> Content:
     timetable_events = [_build(TimetableEvent, raw) for raw in _read(root / "timetable.json")] if (root / "timetable.json").exists() else []
     config = _config(root, profile)
     if config.season21:  # 21 天季自己一份時刻表（正式季整合設計 1.2 給開發 1）：驗證之前套上，週末與 14 天不經過這裡
-        timetable_events = season21_timetable(timetable_events)
+        timetable_events = season21_timetable(timetable_events, config.season_segments)
     content = Content(
         config=config,
         scenario=Scenario(**_read(root / "scenario.json")),
@@ -118,11 +119,13 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         forge_secrets=_forge_secrets(root / "forge_secrets.json"),
         tier4_named=_index(Tier4Named, _read(root / "tier4_named.json")) if (root / "tier4_named.json").exists() else {},
         shop_lines=_read(root / "shop_lines.json") if (root / "shop_lines.json").exists() else {},
+        create_forms=CreateForms(**_read(root / "create_forms.json")) if (root / "create_forms.json").exists() else CreateForms(),
         banned_words=_read(root / "banned_words.json") if (root / "banned_words.json").exists() else [],
         mingtie=MingtieContent(**_read(root / "mingtie.json")) if (root / "mingtie.json").exists() else MingtieContent(),
         arena_crowd=_read(root / "arena_crowd.json") if (root / "arena_crowd.json").exists() else {},
         xingshi_lines=_read(root / "xingshi_lines.json") if (root / "xingshi_lines.json").exists() else {},
         seal=_shards(root / "seal.json"),
+        mall=_index(MallItem, _read(root / "mall.json")) if (root / "mall.json").exists() else {},  # 商城的商品（joy 寫）
         relations=[_build(RelationDef, raw) for raw in _read(root / "relations.json")] if (root / "relations.json").exists() else [],
         gather_branches=_index(GatherBranch, _read(root / "gather_branches.json")) if (root / "gather_branches.json").exists() else {},
         figures=_index(FigureDef, _read(root / "figures.json")) if (root / "figures.json").exists() else {},
@@ -141,13 +144,26 @@ def load_content(root: Path, profile: str | None = None) -> Content:
     return content
 
 
-def season21_timetable(events: list[TimetableEvent]) -> list[TimetableEvent]:
+def _segment_slot(real7: RealDay | None, segments: list[int]) -> RealSlot | None:
+    """7 天濃縮季的第幾天、幾點換成季曆的（第幾段, 段裡第幾天, 幾點）：段 [2, 2, 3] 時第 4 天是第 2 段的第 1 天（weekday 1）。"""
+    if real7 is None:
+        return None
+    start = 0
+    for week, length in enumerate(segments, 1):
+        if real7.day <= start + length:
+            return RealSlot(week=week, weekday=real7.day - start - 1, hour=real7.hour)
+        start += length
+    return None  # 超過段的和（content.validate 擋）
+
+
+def season21_timetable(events: list[TimetableEvent], segments: list[int] | None = None) -> list[TimetableEvent]:
     """21 天季的時刻表（Config.season21）：每一件照 real 換掉時刻——一般大事 day＝星期＋鐘點÷24（週二 12:00 是 1.5）、決戰與天命之爭
     寫 weekday、hour、季末只換週（季末的時刻照錨點算，timetable.finale_default）——再照時刻排（同一刻照檔案順序；季末排在那一週最後），
-    畫面上的時刻表照時間排（正式季整合設計 1.2 給開發 4）。沒寫 real 的照原樣（content.validate 擋）。"""
+    畫面上的時刻表照時間排（正式季整合設計 1.2 給開發 4）。沒寫 real 的照原樣（content.validate 擋）。
+    7 天濃縮季（segments 是 Config.season_segments）照 real7（第幾天、幾點）換成段裡的時刻，其餘一樣。"""
     moved = []
     for event in events:
-        slot = event.real
+        slot = _segment_slot(event.real7, segments) if segments else event.real
         if slot is None:
             moved.append(event)
         elif event.kind == "showdown":
@@ -692,6 +708,21 @@ def check_xingshi_lines(c: Content, need) -> None:
             check(f"{group}.{key}", text)
 
 
+def check_mall(c: Content, need) -> None:
+    """商城的商品（content/mall.json，商城架構設計 4.3）：每一件照 mall.item_problems（效果在允許的效果表裡、種類對得上、數量、
+    名字過命名過濾、上架日期與季的格式）；商品之間不同名。開關關著也照驗（檔案寫壞了早點知道）。"""
+    from . import mall  # noqa: PLC0415  mall → naming：在函式裡 import，跟其他 check_* 一樣
+
+    for item in c.mall.values():
+        for problem in mall.item_problems(item, c):
+            need(False, problem)
+    seen: dict[str, str] = {}
+    for item in c.mall.values():
+        if item.name in seen:
+            need(False, f"商城 {item.id}：跟 {seen[item.name]} 同名「{item.name}」")
+        seen.setdefault(item.name, item.id)
+
+
 def check_shop_lines(c: Content, need) -> None:
     """店面上掌櫃的話（content/shop_lines.json，店面獨立介面設計 1.4；Joy 直接改字）：寫了的只能是認得的店與情況，每一句不能空、
     只用繁體中文、不寫數字；店面開關開著時，開門的店那一組每一種情況都要有句子：鐵匠鋪（兵器或防具開著）、馬市（坐騎開著）、
@@ -839,7 +870,11 @@ def check_traits(c: Content, need) -> None:
             f"config.trait_quality_multiplier 缺少品質 {quality}（沒寫的那一品，功效強度會悄悄變成 ×1）",
         )
     if book.general or book.special:
-        need(sorted(t.attribute for t in book.general) == sorted(ATTRIBUTES), "content/traits.json：一般功效要一個屬性一個，八個都要有")
+        primaries = [t.attribute for t in book.general if not t.id]
+        need(sorted(primaries) == sorted(ATTRIBUTES), "content/traits.json：每個屬性要有一個第一個一般功效（沒寫 id 的那個），八個都要有")
+        keys = [t.key for t in book.general]
+        need(len(keys) == len(set(keys)), "content/traits.json：一般功效的 id 不能重複，也不能跟屬性同名")
+        need(not {t.id for t in book.general if t.id} & {h.id for h in book.high}, "content/traits.json：一般功效的 id 不能跟高階技能的 id 一樣")
         names = [t.name for t in book.general] + [t.name for t in book.special]
         need(len(names) == len(set(names)), "content/traits.json：功效的名字不能重複")
         need(len(specials) == len(book.special), "content/traits.json：特別功效的 id 不能重複")
@@ -877,6 +912,11 @@ def check_traits(c: Content, need) -> None:
             need(bool(line.strip()), f"{where}：有空白的句子")
             need(to_traditional(line) == line, f"{where}：文字只能用繁體中文（「{line[:12]}」）")
             need(not NUMBER_IN_TEXT.search(line), f"{where}：不能寫數字或百分比，功效的數字由規則算、句子只寫打法（「{line[:12]}」）")
+
+
+def _week7(c: Content) -> bool:
+    """這一份設定是 7 天濃縮季（照現實天的季、季曆分段）：內容要照天另寫 7 天的那一份（real7、active_from_day7、cal_day_*7）。"""
+    return bool(c.config.season21 and c.config.season_segments)
 
 
 def check_timetable(c: Content, need, known, front_ids: list[str], trend_ids: set[str]) -> None:
@@ -932,14 +972,27 @@ def check_timetable(c: Content, need, known, front_ids: list[str], trend_ids: se
         known(where, change.only_if.values(), front_ids, "戰線")
         check_text(where, change.note)
 
+    segments = c.config.season_segments
     need(  # 21 天季的季曆就是現實的週（正式季整合設計 1.1）：cal_scale 要是 1
-        not c.config.season21 or c.config.season_weeks * 7 == c.config.season_days,
+        not c.config.season21 or segments or c.config.season_weeks * 7 == c.config.season_days,
         f"設定：21 天季的季曆就是現實的週，season_weeks × 7（{c.config.season_weeks * 7}）要等於 season_days（{c.config.season_days:g}）",
     )
+    if segments:  # 7 天濃縮季（企劃者 2026-10-20）：季曆的週換成段，也是照現實天（cal_scale 1）；內容照天另寫的那一份是 7 天的
+        need(c.config.season21, "設定：season_segments（季曆分段）只給照現實天的季，要一起打開 season21")
+        need(all(n >= 1 for n in segments), f"設定：season_segments 每一段至少一天（{segments}）")
+        need(len(segments) == c.config.season_weeks, f"設定：season_segments 有 {len(segments)} 段，season_weeks 要一樣（{c.config.season_weeks}）")
+        need(
+            sum(segments) == c.config.season_days == 7,
+            f"設定：season_segments 的和（{sum(segments)}）要等於 season_days（{c.config.season_days:g}），而且只做 7 天的季（內容照天另寫的是 7 天）",
+        )
+    week7 = _week7(c)
     for ev in table:
         where = f"時刻表 {ev.id}"
         need(ev.week <= c.config.season_weeks, f"{where}：第 {ev.week} 週超出季曆的 {c.config.season_weeks} 週")
-        need(not c.config.season21 or ev.real is not None, f"{where}：21 天季的時刻表每一件都要寫 real（現實的週、星期、鐘點）")
+        if week7:
+            need(ev.real7 is not None, f"{where}：7 天濃縮季的時刻表每一件都要寫 real7（第幾天、幾點）")
+        else:
+            need(not c.config.season21 or ev.real is not None, f"{where}：21 天季的時刻表每一件都要寫 real（現實的週、星期、鐘點）")
         if ev.front is not None:
             known(where, [ev.front], front_ids, "戰線")
         if ev.kind == "roll":
@@ -1067,6 +1120,7 @@ def check_figures(c: Content, need, known, front_ids: list[str]) -> None:
     狀態）；接位的人存在、同一個陣營、接位鏈不繞回來；名字只用繁體中文。"""
     faction_ids = [f.id for f in c.scenario.factions]
     owner: dict[str, str] = {}  # 對話人物 → 第一個用它的大勢人物
+    week7 = _week7(c)
     for fid, fig in c.figures.items():
         where = f"大勢人物 {fid}"
         if fig.character is not None:
@@ -1085,8 +1139,16 @@ def check_figures(c: Content, need, known, front_ids: list[str]) -> None:
             f"{where}：第 {fig.active_from_week} 週超出季曆的 {c.config.season_weeks} 週",
         )
         need(  # 21 天季照天數出兵（正式季整合設計 1.2 給開發 5）：第 1 週以後才出兵的人物要另寫天數
-            not c.config.season21 or fig.active_from_week <= 1 or fig.active_from_day is not None,
+            not c.config.season21 or week7 or fig.active_from_week <= 1 or fig.active_from_day is not None,
             f"{where}：21 天季照天數出兵，第 {fig.active_from_week} 週起的人物要寫 active_from_day",
+        )
+        need(  # 7 天濃縮季同上，寫 7 天的那一份
+            not week7 or fig.active_from_week <= 1 or fig.active_from_day7 is not None,
+            f"{where}：7 天濃縮季照天數出兵，第 {fig.active_from_week} 週起的人物要寫 active_from_day7",
+        )
+        need(
+            fig.active_from_day7 is None or fig.active_from_day7 < 7,
+            f"{where}：active_from_day7（{fig.active_from_day7:g}）超出 7 天" if fig.active_from_day7 is not None else "",
         )
         need(to_traditional(fig.name) == fig.name, f"{where}：名字只能用繁體中文（{fig.name}）")
         if fig.out_flag is not None:  # 丙 (c)：退場時記的世界旗標要有人讀（劇本或事件的條件），打錯字才抓得到
@@ -1108,7 +1170,8 @@ def check_figures(c: Content, need, known, front_ids: list[str]) -> None:
         need(nxt not in chain, f"{where}：接位鏈繞回來了（{'→'.join(chain)}→{nxt}）")
 
 
-ORDER_SLOTS = ("{戰線}", "{地點}", "{起點}", "{終點}", "{主將}", "{人物}", "{號令}")
+ORDER_SLOTS = ("{戰線}", "{地點}", "{起點}", "{終點}", "{主將}", "{人物}", "{號令}", "{本週}", "{這週}")  # 後兩個照季換字（FB-501）
+RECRUITER_SLOTS = ("{本週}", "{每週}")  # 入伍段引薦人的話裡照軍令多久一道換的字（enlist.SLOTS，FB-502）
 ORDER_PERSONAL = {"siege": "win", "defend": "duty", "intercept": "win", "escort": "convoy", "strike": "challenge"}
 
 
@@ -1954,7 +2017,10 @@ def validate(c: Content) -> None:
         known(where, cond.controlled_by, faction_ids, "陣營")
         known(where, cond.clue_items, item_ids, "伏筆物品")
         weekly = cond.week_min is not None or cond.week_max is not None
-        if c.config.season21 and weekly:  # 21 天季不看週、只看天（正式季整合設計 1.2 給開發 6）：寫了哪一頭的週就要寫那一頭的天
+        if _week7(c) and weekly:  # 7 天濃縮季同 21 天季照天數，寫 7 天的那一份（cal_day_*7，1～7 在模型裡驗）
+            need(cond.week_min is None or cond.cal_day_min7 is not None, f"{where}：7 天濃縮季照天數，寫了 week_min 也要寫 cal_day_min7")
+            need(cond.week_max is None or cond.cal_day_max7 is not None, f"{where}：7 天濃縮季照天數，寫了 week_max 也要寫 cal_day_max7")
+        elif c.config.season21 and weekly:  # 21 天季不看週、只看天（正式季整合設計 1.2 給開發 6）：寫了哪一頭的週就要寫那一頭的天
             need(cond.week_min is None or cond.cal_day_min is not None, f"{where}：21 天季照天數，寫了 week_min 也要寫 cal_day_min")
             need(cond.week_max is None or cond.cal_day_max is not None, f"{where}：21 天季照天數，寫了 week_max 也要寫 cal_day_max")
         else:
@@ -2166,6 +2232,7 @@ def validate(c: Content) -> None:
     check_front_lines(c, need)
     check_combat_lines(c, need)
     check_shop_lines(c, need)
+    check_mall(c, need)
     check_arena_crowd(c, need)
     check_xingshi_lines(c, need)
     check_traits(c, need)
@@ -2529,6 +2596,9 @@ def validate(c: Content) -> None:
             for field, text in who.allied.items():  # 豪強分屬兩軍的季換的那幾句（Recruiter.allied）
                 need(field in RECRUITER_ALLIED_FIELDS, f"入伍段：引薦人 {who.name} 的 allied 不認得 {field}（只認 {RECRUITER_ALLIED_FIELDS}）")
                 need(bool(text.strip()) and to_traditional(text) == text, f"入伍段：引薦人 {who.name} 的 allied.{field} 要是繁體、不能是空的")
+            texts = [who.intro, who.briefing, who.order_hint, who.done, who.rejoin, *who.lines, *who.allied.values()]
+            for slot in sorted({s for text in texts for s in re.findall(r"\{[^{}]*\}", text)}):  # enlist.fill 只換這兩個（FB-502）
+                need(slot in RECRUITER_SLOTS, f"入伍段：引薦人 {who.name} 的話裡 {slot} 不認得（只認 {RECRUITER_SLOTS}）")
 
     # ── 碰到才說（新手引導計畫三）：id 不重複、只能是設計 5.2 的十八條（hints.KNOWN）；師父的條要有 text、引薦人的條要有 texts，
     # texts 的鍵是劇本的陣營、每一句都不是空的；寫反了（師父的條寫 texts、引薦人的條寫 text）多半是填錯欄位，載入時就報錯 ──
@@ -2587,8 +2657,8 @@ def validate(c: Content) -> None:
     for i, step in enumerate(t.steps):
         where = f"新手引導 {step.id}"
         special = (step.explore_event or step.enemies
-                   or step.force_tier or step.sure_cultivate or step.instant_rest or step.fuse_base or step.melt_only
-                   or step.give_art or step.paged or step.after)
+                   or step.force_tier or step.deepen or step.instant_rest or step.fuse_base or step.melt_only
+                   or step.give_art or step.give_piece or step.paged or step.after)
         need(not special or i < t.prologue_steps, f"{where}：序章才有的欄位只能寫在前 {t.prologue_steps} 步")
         # 畫面的那幾樣（旁白、收起來那一行、亮、發光、選單）序章與初入江湖（序章之後、不分季的步驟，新手引導第四段）都可以寫
         screen = step.scene or step.line or step.reveal or step.glow or step.allow
@@ -2624,8 +2694,7 @@ def validate(c: Content) -> None:
         need(step.force_tier is None or step.force_tier in encounter.TIERS, f"{where}：force_tier {step.force_tier} 不是判定結果")
         for art in (step.fuse_base, step.melt_only, step.give_art.id if step.give_art else None):
             need(art is None or art in c.skills, f"{where}：武學 {art} 不存在")
-    # 草廬裡新人拿得到的每個意境（開場遇險、拜師那一串事件、四景、序章每一步的獎勵），都要有一筆師門配方接上合成那一步的底：
-    # 沒有的話那個新人的合成要等模型取名、或拿到退路的名字（「合成不等模型」落空）；加了第五景、或配方的意境 id 打錯，載入時就報錯
+    # 武學重構：序章裝意境那一步點名的那一門要收得下草廬悟得到的每個意境（相容屬性），不然新人照師父的話做會被擋
     sights: set[str] = set()
     for step in t.steps[: t.prologue_steps]:
         sights.update(step.reward.insights)
@@ -2647,11 +2716,11 @@ def validate(c: Content) -> None:
                 sights.update(effect.insights)
                 if effect.next_event:
                     todo.append(effect.next_event)
-    have = {(recipe.base, recipe.insight) for recipe in c.preset_recipes}
     for step in t.steps[: t.prologue_steps]:
-        if step.fuse_base:
-            missing = sorted(i for i in sights if (step.fuse_base, i) not in have)
-            need(not missing, f"新手引導 {step.id}：草廬悟得到的意境 {missing} 沒有以 {step.fuse_base} 為底的師門配方（preset_recipes.json）")
+        base_def = c.skills.get(step.fuse_base) if step.fuse_base else None
+        if base_def is not None and base_def.affinity:
+            wrong = sorted(i for i in sights if i in c.insights and c.insights[i].attribute not in base_def.affinity)
+            need(not wrong, f"新手引導 {step.id}：{step.fuse_base} 的相容屬性 {base_def.affinity} 收不下草廬悟得到的意境 {wrong}")
     recipe_keys, recipe_names = set(), set()
     for recipe in c.preset_recipes:
         where = f"師門配方 {recipe.base}+{recipe.insight}"

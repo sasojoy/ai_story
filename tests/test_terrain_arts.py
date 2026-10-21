@@ -118,6 +118,9 @@ def test_an_unrelated_art_does_not_change(content, world):
 def test_a_matching_neigong_only_scales_the_neigong(content, world):
     g = _lake(content, world, wugong="step", neigong="basic_breath")  # 快的武學、柔的內功
     s, c = g.state, g.content
+    # 武學重構：基礎吐納兼容並蓄，屬性照槽裡最強那一格——裝一個水（柔）才是柔的內功
+    s.player.insights = sorted({*s.player.insights, "shui"})
+    s.player.art_slots["basic_breath"] = ["shui", None]
     arts = team.team_arts(s, c, g.world)
     members, conditions, boosts = team._styled_fighters(s, c, g.world, arts, _thug(g), terrain=False)
     want = encounter.member_power(members[0], arts, "剛", conditions[0], boosts[0].model_copy(update={"inner_scale": 1.10}))

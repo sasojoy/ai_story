@@ -61,7 +61,7 @@ import server_push
 import zhuan_html
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
-    arena_crowd, battle_instance, biography, calendar, companion_agent, divine, duel, event_llm, feasts, fight_llm, foreshadow, gather_llm, gender, glyph, insight_llm, leaderboard, letters, mapdata,
+    arena_crowd, battle_instance, biography, calendar, companion_agent, create, divine, duel, event_llm, feasts, fight_llm, foreshadow, gather_llm, gender, glyph, insight_llm, leaderboard, letters, mall, mapdata,
     naming,
     ollama_client, rules,
     precise, seal, seal_duel, server_bots, social, sortie, speech, tavern, team, timetable, treasures, xingshi, yuedan,
@@ -75,6 +75,7 @@ from tianxia.models import FREE_TEXT_MAX
 from tianxia.journal import CSS as JOURNAL_CSS
 from tianxia.sqlite_world import open_world
 from tianxia.ollama_client import OllamaClient
+from tianxia.world_state import season_length_days
 
 ROOT = Path(__file__).parent
 WEB = ROOT / "web"
@@ -1351,6 +1352,25 @@ def duel_text(game: Game, text: str) -> list[str]:
     return act(game, lambda g: g.duel_gamble(request.text, verdict.rate, (verdict.win, verdict.lose), request=request, crowd=crowd))
 
 
+def create_intent(game: Game, body: dict) -> list[str]:
+    """自創武學的立意（tianxia/create.py），三段同 duel_text：A Game.create_request（只讀）→ B 鎖外 create.read 讀這一句意
+    （分數、最多兩路屬性、正邪；預算同隨口應對）→ C Game.create_intent(reading=) 整個重驗再成形。叫不動照關鍵字表讀。"""
+    text = str(body.get("text") or "")[:create.INTENT_MAX * 2]
+    started, request = _open_request(game, lambda: game.create_request(text))
+    if isinstance(request, list):
+        return request
+    total = game.content.config.free_text_budget_seconds
+
+    def reading():
+        return create.read(within_budget(game.client, total - (_monotonic() - started)), request, game.content)
+
+    value = model_call(
+        game, reading, fallback=create.fallback_read(game.content, request.text),
+        left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT,
+    )
+    return act(game, lambda g: g.create_intent(request.text, reading=value))
+
+
 def tavern_ask(game: Game, text: str) -> list[str]:
     """問酒家（酒肆，設計第八節），三段：A Game.tavern_ask_request（只讀；問到秘密的單子不叫模型）→ B 鎖外 tavern.ask_write
     （預算 Config.tavern.ask_budget_seconds）→ C Game.tavern_ask 重驗同一間、同一句再收錢；叫不動模型退全額。"""
@@ -1468,6 +1488,9 @@ def _main_view_body(game: Game) -> dict:
     shop = game.shop_view([o.id for o in options])  # 店面（店面獨立介面設計 6.1）：開關開著、店開著、鐵匠鋪那一串是眼前的選單才有
     if shop is not None:
         view["shop"] = shop
+    entry = game.mall_entry()  # 商城的入口（商城第二批：齒輪旁的錠子鈕＋餘額、底部第六格）；商城關著沒有這個鍵
+    if entry is not None:
+        view["mall"] = entry
     if view["guide"] is not None:  # 入伍段「出一次力」：選單上能完成它的那幾顆（FB-093）；網頁讓它們發光，「此地還能做」攤開
         view["guide"]["glow"] = game.enlist_glow([o.id for o in options if o.enabled])
     if "fronts" in status:  # 第一季濃縮版才有：江湖頁的三條戰況（開關關著時不送，頁面照舊）
@@ -1629,6 +1652,13 @@ def admin_choices(game: Game) -> dict:
         "season_one": rules.season_one(CONTENT, world),
         # 21 天季（季曆就是現實的週）：暫停、繼續的問句多說一句季曆會對回現實的星期（PM 2026-10-19）
         "season21": calendar.season21_on(world, CONTENT),
+        # 那一句照季寫（FB-501）：「21 天的季…對回現實的星期」「7 天的季…對回現實的日子」（同 world.realign_line）
+        "realign": {"days": f"{season_length_days(world, CONTENT):g}", "unit": calendar.week_word("realign", CONTENT, world)}
+        if calendar.season21_on(world, CONTENT) else None,
+        # 開季、開下一季的問句括號裡那一句：7 天濃縮季照時刻表寫（timetable.default_dates_note）；其他季 None，網頁照原本的字
+        "default_dates": timetable.default_dates_note(CONTENT),
+        # 「這一季立刻蓋天命之季的章」問句裡天命之爭的時刻：7 天濃縮季照時刻表寫（timetable.mandate_note，FB-503）；其他季 None，網頁照原本的字
+        "mandate_at": timetable.mandate_note(CONTENT, world),
         # 三場大戲各一顆「立刻開這一場」（Game.admin_showdowns）：開不了的灰掉、寫為什麼（開過了、結算了、宛城要等第 3 週……）
         "showdowns": [
             {"id": event.id, "label": event.title, "enabled": why is None, "note": why or ""}
@@ -1687,7 +1717,8 @@ def timetable_choices(game: Game) -> dict:
     rows = []
     for row in timetable.status_rows(state, CONTENT, cancelled=game.cancelled_showdowns()):
         rows.append({
-            "id": row["id"], "label": f"第{row['week']}週　{row['title']}",
+            # 7 天濃縮季寫「第 1 段（第 1～2 天）」（calendar.week_label，FB-501）；其他季「第1週」
+            "id": row["id"], "label": f"{calendar.week_label(row['week'], CONTENT, world, form='tight')}　{row['title']}",
             "state": row["state"], "state_text": TIMETABLE_STATES[row["state"]],
             "result": (_ending_title(row["result"]) if row["kind"] == "finale" else _done_label(row["result"]))
             if row["result"] else None,
@@ -2046,6 +2077,111 @@ ADMIN_ACTIONS = {
 }
 PLAYER_ADMIN_ACTIONS = frozenset({"summon", "give_opportunity", "give_fragment", "mingtie_remove"})  # 動到別人的存檔：做完也叫他的分頁刷新
 
+# ── 商城（docs/superpowers/specs/2026-10-20-商城架構-design.md；規則在 tianxia/mall.py、錢包在 tianxia/wallet.py）──
+# 開關 Config.mall.enabled 關著時這裡的 API 全部 404（4.10）。購買在行動鎖裡（act）：扣元寶、寫購買紀錄、發貨同一筆交易。
+
+MALL_REF = re.compile(r"[A-Za-z0-9_-]{8,64}")
+
+
+def _mall_ref(raw) -> str:
+    """這一筆的編號：網頁送的是 8～64 個英數字、底線、減號就照用（網頁按下確認那一刻產，重送同一個不會算兩次），
+    其餘（沒送、送了怪東西）由伺服器產一個。"""
+    text = raw if isinstance(raw, str) else ""
+    return text if MALL_REF.fullmatch(text) else secrets.token_urlsafe(12)
+
+
+def _mall_on() -> None:
+    if not mall.on(CONTENT):
+        raise HTTPException(404)
+
+
+# 管理者的商城工具（4.7）：補發、扣回、退一筆；原因 note 必填、每一筆寫進帳（誰、何時、為什麼）。查帳是 /api/admin/mall
+MALL_ADMIN_ACTIONS = {
+    "mall_reissue": lambda g, b: g.admin_mall_reissue(
+        str(b.get("name", ""))[:40], _int(b.get("amount"), 0), str(b.get("note", ""))[:100], _mall_ref(b.get("ref"))),
+    "mall_revoke": lambda g, b: g.admin_mall_revoke(
+        str(b.get("name", ""))[:40], _int(b.get("amount"), 0), str(b.get("note", ""))[:100], _mall_ref(b.get("ref"))),
+    "mall_refund": lambda g, b: g.admin_mall_refund(str(b.get("name", ""))[:40], _int(b.get("id"), 0), str(b.get("note", ""))[:100]),
+}
+
+
+@app.get("/api/mall")
+def api_mall(request: Request):
+    """商城那一頁（Game.mall_view）：同步之後的餘額、月卡、上架的商品。"""
+    _mall_on()
+    return act_look(_game(request), lambda g: None, lambda g: g.mall_view())[1]
+
+
+@app.get("/api/mall/records")
+def api_mall_records(request: Request):
+    """自己的購買紀錄與帳（Game.mall_records）。"""
+    _mall_on()
+    return act_look(_game(request), lambda g: None, lambda g: g.mall_records())[1]
+
+
+@app.post("/api/mall/buy")
+def api_mall_buy(request: Request, body: dict = Body(...)):
+    """買一件（Game.mall_buy）：{item, ref}；回 {message, bought, already, mall, main}。bought 是買成的商品 id（不成是 None：網頁照它換
+    掌櫃那一句）、already 是這個編號早就買好的那一件（逾時重送，網頁照成了的樣子講，FB-491；其餘是 None）、main 是江湖畫面
+    （狀態列的錠子鈕與丹鈕當場換，商城第二批）。賽季時鐘暫停中照其他動作擋。"""
+    _mall_on()
+    game = _game(request)
+    item, ref = str(body.get("item", ""))[:40], _mall_ref(body.get("ref"))
+    got: dict = {}
+
+    def buy(g: Game):
+        out = g.mall_buy(item, ref)
+        got["bought"], got["already"] = g.mall_bought, g.mall_already  # 在鎖裡讀：出了鎖別的請求可能又動了這一份 Game
+        return out
+
+    msgs = act(game, buy)
+    _tell_tabs(game)
+    return {"message": joined(msgs), "bought": got.get("bought"), "already": got.get("already"),
+            "mall": look(game, lambda g: g.mall_view()), "main": look(game, main_view)}
+
+
+@app.post("/api/mall/claim")
+def api_mall_claim(request: Request):
+    """領月卡今天的份（Game.mall_claim；定案甲・每日領）：回 {message, mall, main}（錠子鈕、丹鈕與江湖頁那張小卡當場換）。"""
+    _mall_on()
+    game = _game(request)
+    msgs = act(game, lambda g: g.mall_claim())
+    _tell_tabs(game)
+    return {"message": joined(msgs), "mall": look(game, lambda g: g.mall_view()), "main": look(game, main_view)}
+
+
+@app.post("/api/mall/rename")
+def api_mall_rename(request: Request, body: dict = Body(...)):
+    """易名帖（Game.mall_rename；Joy 2026-10-21 當場生效）：{name}；回 {message, renamed, main}。名號的寫法照建角色（NFKC、長度、
+    看不見的字元），撞名照 name_taken 同一句。改成了：GAMES 換到新名號底下（帳號已經指向新名號，下一個請求照新名號找）。"""
+    _mall_on()
+    name = unicodedata.normalize("NFKC", str(body.get("name", ""))).strip()
+    if not name:
+        raise GameError("請先輸入新的名號。")
+    if len(name) > NAME_MAX or any(unicodedata.category(ch) in ("Cc", "Cf") for ch in name):
+        raise GameError(BAD_NAME)
+    game = _game(request)
+    old = game.state.player.name
+    msgs = act(game, lambda g: g.mall_rename(name, name_taken))
+    new = game.state.player.name
+    if new != old:
+        with _GAMES_LOCK:
+            GAMES.pop(old.casefold(), None)
+            GAMES[new.casefold()] = game
+    _tell_tabs(game)
+    return {"message": joined(msgs), "renamed": new != old, "name": new, "main": look(game, main_view)}
+
+
+@app.post("/api/admin/mall")
+def api_admin_mall(request: Request, body: dict = Body(...)):
+    """管理者查一個名號（或帳號）的帳（Game.admin_mall_ledger）。名號放在 POST 的內容裡、不放在網址上；查不到回 {refusal}。"""
+    _mall_on()
+    game = _game(request)
+    if not game.is_admin():
+        raise HTTPException(403)
+    name = str(body.get("name", ""))[:40]
+    return act_look(game, lambda g: None, lambda g: g.admin_mall_ledger(name))[1]
+
 
 @app.post("/api/choose")
 def api_choose(request: Request, body: dict = Body(...)):
@@ -2081,8 +2217,14 @@ def api_say(request: Request, body: dict = Body(...)):
 
 @app.post("/api/do/{op}")
 def api_do(op: str, request: Request, body: dict = Body(default={})):
+    if op in MALL_ADMIN_ACTIONS:
+        _mall_on()  # 商城關著：沒有這個東西（先於登入的檢查，跟 /api/mall 一樣）
     game = _game(request)
-    if op in ADMIN_ACTIONS:
+    if op in MALL_ADMIN_ACTIONS:
+        if not game.is_admin():
+            raise GameError("只有管理者能這麼做。")
+        msgs = act(game, lambda g: MALL_ADMIN_ACTIONS[op](g, body), paused_ok=True)  # 帳跟季無關：暫停中也做得了
+    elif op in ADMIN_ACTIONS:
         if not game.is_admin():
             raise GameError("只有管理者能這麼做。")
         msgs = act(game, lambda g: ADMIN_ACTIONS[op](g, body), paused_ok=True)  # 暫停中要按得到「繼續」；其他的引擎自己擋
@@ -2092,6 +2234,8 @@ def api_do(op: str, request: Request, body: dict = Body(default={})):
         msgs = seal_text(game, str(body.get("text", "")))
     elif op == "duel_text":  # 頭目戰的放手一搏：同上（見 duel_text）
         msgs = duel_text(game, str(body.get("text", "")))
+    elif op == "create_intent":  # 自創武學的形意：意分在行動鎖外評（見 create_intent）
+        msgs = create_intent(game, body)
     elif op == "tavern_ask":  # 問酒家：回話在行動鎖外寫（見 tavern_ask）
         msgs = tavern_ask(game, str(body.get("text", ""))[:60])
     elif op == "feast_text":  # 宴席上自己寫的敬酒詞：分數在行動鎖外評（見 feast_text）
@@ -2124,6 +2268,14 @@ def _forge_without_naming(game: Game, art_id: str | None, insight_ids: list[str]
     return game.forge(art_id, insight_ids, proposed=NO_NAME, other_art=other_art)
 
 
+def _int_of(value) -> int:
+    """網頁送來的一個整數（自創多付的心得）：不是整數、負的一律當 0。"""
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 0
+
+
 def _id_list(value) -> list[str]:
     """網頁送來的一串 id：只收字串串列，其他（字串、數字、物件）一律當空的。"""
     return [str(v) for v in value if isinstance(v, str)] if isinstance(value, list) else []
@@ -2136,10 +2288,19 @@ MENXIA_ACTIONS = {
     # 這裡也帶 NO_NAME，就算有人直接拿它在鎖裡呼叫，也不會叫模型
     "forge": lambda g, b: _forge_without_naming(g, *forge_args(b)),
     "switch": lambda g, b: g.switch_art(str(b.get("art") or "")),
-    # 用融的意境修練一次，衝下一品；use_legend 是勾了「服下破境丹」。只認真正的布林 true：字串、數字都不算勾
-    "cultivate": lambda g, b: g.cultivate(
-        str(b.get("art") or ""), use_legend=b.get("use_legend") is True, by_xinde=b.get("by_xinde") is True,  # 以心得修練（Joy 2026-10-18）
+    # 武學重構：把意境裝進武學的意境槽、或拆下來（修練頁與煉製頁都走這裡；不花心得體力）
+    "slot": lambda g, b: g.slot_insight(
+        str(b.get("art") or ""), str(b.get("insight") or ""), _int_of(b.get("index")) if b.get("index") is not None else None,
     ),
+    "unslot": lambda g, b: g.unslot_insight(str(b.get("art") or ""), str(b.get("insight") or "")),
+    # 自創武學（tianxia/create.py）：執器、擺式、回頭、立名、擱下；立意走 /api/do/create_intent（三段式，模型讀這一句意）
+    "create_begin": lambda g, b: g.create_begin(str(b.get("kind") or ""), str(b.get("form") or "")),
+    "create_pose": lambda g, b: g.create_pose(b.get("pose") if isinstance(b.get("pose"), dict) else {}),
+    "create_back": lambda g, b: g.create_back(str(b.get("to") or "")),
+    "create_name": lambda g, b: g.create_name(str(b.get("name") or ""), _int_of(b.get("extra"))),
+    "create_cancel": lambda g, b: g.create_cancel(),
+    # 用融的意境修練一次，衝下一品；use_legend 是勾了「服下破境丹」。只認真正的布林 true：字串、數字都不算勾
+    "cultivate": lambda g, b: g.cultivate(str(b.get("art") or ""), use_legend=b.get("use_legend") is True),
     "melt": lambda g, b: g.melt_art(str(b.get("art") or "")),  # 功法庫裡的一門熔成心得
     "melt_insight": lambda g, b: g.melt_insight(str(b.get("insight") or "")),
     "buy_legend": lambda g, b: g.buy_legend(),  # 以心得換一枚破境丹（Joy 2026-10-18，越換越貴）

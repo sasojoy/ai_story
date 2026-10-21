@@ -142,8 +142,9 @@ def test_the_insight_stone_card_follows_the_explore_switch():
 
 
 @pytest.mark.parametrize("skill_id, shown", [
-    ("caocao_wugong", "11"), ("guanyu_wugong", "15"), ("yuanshao_wugong", "18"), ("taoqian_wugong", "28"),
-    ("zhujun_wugong", "9"), ("sunjian_wugong", "2"), ("sunjian_neigong", "2"),
+    # 武學重構第三批照新的滿配（每格三重加大獎）重調過（2026-10-20）；盧植 64 是兩位數那一格
+    ("caocao_wugong", "105"), ("guanyu_wugong", "107"), ("yuanshao_wugong", "105"), ("taoqian_wugong", "122"),
+    ("zhujun_wugong", "105"), ("luzhi_wugong", "64"), ("luzhi_neigong", "64"),
 ])
 def test_the_might_note_writes_the_real_number(skill_id, shown):
     content = real_content()

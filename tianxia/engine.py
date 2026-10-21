@@ -16,11 +16,12 @@ from dataclasses import dataclass
 
 from pydantic import BaseModel
 
+from . import arts as arts_mod
 from . import (
-    allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, checkin, chuangong, clinic, companion_agent, conquest, conquest_day, cultivation, defection, divine, economy, encounter, enlist, equipment, event_llm, explore_modes, escorts,
-    fight_llm, figure_aid, figure_life, figures, foreshadow, four_tiers, gather_llm, generals, forge_secrets, front_lines, fusion, gender, howto, insights, invites, journal, letters, library, mapdata, martial_arts, feasts,
-    materials, mounts, naming, opportunities, orders, precise, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
-    shopview, siege, signature, signature_arms, silver, skill_slots, skillview, smithing,
+    allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, checkin, chuangong, clinic, companion_agent, conquest, conquest_day, create, cultivation, defection, divine, economy, encounter, enlist, equipment, event_llm, explore_modes, escorts,
+    fight_llm, figure_aid, figure_life, figures, foreshadow, four_tiers, gather_llm, generals, forge_secrets, front_lines, fusion, gender, howto, insight_fx, insights, invites, journal, letters, library, mapdata, martial_arts, feasts,
+    mall, materials, mounts, naming, rename, server_bots, opportunities, orders, precise, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
+    shopview, siege, signature, signature_arms, silver, skillview, smithing,
     social, sortie, styles, tactics, team, terrain, territory, timetable, traits, treasures, weapons, works, xingshi, zh, yuedan,
 )
 from . import ambush as ambush_rules  # 設伏劫道（後期體力玩法第一批）；叫 ambush_rules：這個檔裡有區域變數叫 ambush
@@ -37,6 +38,8 @@ from . import hints as hint_rules  # 碰到才說（新手引導計畫三）；�
 from . import tavern as tavern_rules  # 酒肆（企劃者 2026-10-18）；叫 tavern_rules：跟其他 *_rules 一樣避開區域變數
 from . import prologue as prologue_rules  # Game.new 有個參數也叫 prologue，所以模組在這裡一律叫 prologue_rules
 from . import rumor_view  # 傳聞分層的畫面：見聞頁的四層、你不在的時候（計畫 2026-10-06 傳聞分層一）
+from .accounts import AccountStore
+from .accounts import NAME_TAKEN as NAME_IN_USE  # 易名帖撞名：跟建角色同一句（不洩漏誰是假人）
 from .characters import CharacterStore, name_key
 from .events import (
     choice_label, event_candidates, free_text_note, has_events_here, pick_event, stamina_note, visible_choices,
@@ -63,6 +66,7 @@ from .rules import (
     world_day, world_trend_value,
 )
 from .sqlite_world import open_world
+from .wallet import Wallet
 from .state import (
     ONBOARDING_VERSION, PLAYER, ArenaEntry, ArenaFight, ArenaReport, ArenaResult, ArenaSide, BattleRecord, Convoy, CrowdNote, DuelState, Equipment, Feast, GameState, HintNote, JournalEntry, Journey, Mingtie, Rumor, Tagalong, TavernHit, TavernWatch, TimelineResult,
     Whisper, WorldState, XingshiEssay, XingshiMark, XingshiTicket,
@@ -110,7 +114,7 @@ THEIR_SIDE = {
     "持有滿了": "{him}的武學與意境已經滿了",
     "心得不足": "{him}的心得不夠",
     "體力不足": "{him}的體力不夠",
-    "來歷裡融過": "那一門的來歷裡早已融過這股意",
+    "不能當料": "那一門的路數是寫死的，不能拿來合成",
 }
 
 
@@ -263,6 +267,16 @@ RESUME_LINE = (  # 待 S1／joy 潤；{skip} 是實際扣了多少（world.resum
 )
 PAUSED_REFUSAL = "（賽季時鐘暫停中，先按「繼續」。）"  # 暫停中的管理者動作；待 S1／joy 潤
 NO_SUCH_PLAYER = "（江湖上沒有「{name}」這個人。）"  # 管理者的「玩家個人劇情」查不到名號（管理者觸發鈕第 2 組；只有管理者看得到）
+# 管理者「立刻發軍令」的回話照軍令多久一道（orders.daily：照週一發、每天 00:00 發；FB-502，待 joy 潤）
+ADMIN_REISSUE_HOW = {False: "週一", True: " 00:00 "}  # 「已照週一的做法重發」「已照 00:00 的做法重發」
+ADMIN_REISSUE_NONE = {False: "這一週沒有要重挑的軍令", True: "今天沒有要重挑的軍令"}
+# 管理者「立刻輪替第 4 階席次」的回話：7 天濃縮季照段（calendar.week7_on；FB-503，待 joy 潤）
+ADMIN_ROTATE_FIRST = {
+    False: "（第 1 週沒有上一週的貢獻可排；空缺照常由有資格的人補上。）",
+    True: "（第 1 段沒有上一段的貢獻可排；空缺照常由有資格的人補上。）",
+}
+ADMIN_ROTATE_AGAIN = {False: "下週一照常再排", True: "下一段第一天 00:00 照常再排"}
+ADMIN_ROTATE_LAST = "這是最後一段，季末之前不再排"  # 7 天濃縮季的最後一段沒有下一段
 
 
 @dataclass(frozen=True)
@@ -418,6 +432,9 @@ class Game:
         self._gather_said: tuple[str, int, str] | None = None
         self.last_gamble: FreeTextOutcome | None = None  # 上一次 answer_event 擲完骰的結果（server.py 拿去潤色）
         self.smith_result: dict | None = None  # 上一次 smith_forge 的出爐卡（server 的 /api/do/smith_forge 回給網頁）；被拒絕是 None
+        self.mall_bought: str | None = None  # 上一次 mall_buy 買成的商品 id（/api/mall/buy 回給網頁：成了換掌櫃道謝、不成換原因）；不成是 None
+        # 上一次 mall_buy 送的編號早就買好了（第一次的回應沒收到、同一個編號再送）：那一筆的商品 id，網頁照成了的樣子講（FB-491）；其餘是 None
+        self.mall_already: str | None = None
         # 上一次玩家卡動作的一句短話（peer_act 每次清掉；論武合成了才填，FB-242）：網頁等回應時卡已經關了或換了人，提示泡泡只講這一句
         self.peer_brief: str | None = None
         self.forged = False  # 上一次 forge() 真的合成了（被拒絕的是 False）：煉製頁拿它決定爐子要不要清空（server.api_menxia_do）
@@ -575,24 +592,28 @@ class Game:
             else:
                 self.choose(sensing.LET_GO)
             return True
-        fused = prologue_rules.fused_arts(s, c, self.world)
+        fused = prologue_rules.slotted_arts(s, c, self.world)
         if goal.action == "view_tab":
             tab = next((flag.removeprefix("看過:") for flag in goal.condition.flags_all if flag.startswith("看過:")), "")
             self.view_tab(tab)
         elif step.explore_event is not None or step.explore_scene is not None:
             self.choose("act:explore")
-        elif goal.fused:
+        elif goal.fused:  # 武學重構：把悟到的意境裝進師父點名的那一門
             if not p.insights or step.fuse_base is None:
                 return False
-            self.forge(step.fuse_base, [self.rng.choice(p.insights)])
+            self.slot_insight(step.fuse_base, self.rng.choice(p.insights))
         elif goal.fused_level and fused:
             art = fused[0]
             if art.id not in (p.member.wugong_id, p.member.neigong_id):
                 self.switch_art(art.id)
             else:
                 self.practice(art.kind)
-        elif goal.fused_quality and fused:
-            self.cultivate(fused[0].id)
+        elif goal.deepened and p.insights:  # 揣摩（意境效果池：同一種意境的兩份）
+            base = insight_fx.base_id(p.insights[0])
+            pair = insight_fx.pieces(self.state, base)[:2]
+            if len(pair) < 2:
+                return False
+            self.forge(None, pair)
         elif goal.action in ("rest", "train", "explore"):
             self.choose(f"act:{goal.action}")
         elif goal.action == "allocate":
@@ -721,9 +742,8 @@ class Game:
         （art_quality、art_rolled），這裡拿掉。追風步沒融意境、修練不了，自己那一份記成絕學只可能是那一版寫的，
         不會碰到自己修練上去的紀錄；絕學定名、江湖史只記修練上去的絕學，也碰不到它。"""
         p = self.state.player
-        for record in (p.art_quality, p.art_rolled):
-            if record.get("zhuifeng") == "絕學":
-                del record["zhuifeng"]
+        if p.art_quality.get("zhuifeng") == "絕學":
+            del p.art_quality["zhuifeng"]
 
     def _drop_stale_references(self) -> None:
         """內容檔改版後，舊存檔可能引用已刪除的事件、地點、武學或人物；丟掉這些引用以免當機。"""
@@ -820,7 +840,9 @@ class Game:
         owned = set(library.owned_arts(s))
         p.art_quality = {k: v for k, v in p.art_quality.items() if k in owned and v in QUALITIES}
         p.art_mastery = {k: v for k, v in p.art_mastery.items() if k in owned and v > 0}
-        p.art_rolled = {k: v for k, v in p.art_rolled.items() if k in owned and v in QUALITIES}
+        arts_mod.migrate(s, c, self.world)  # 武學重構：舊存檔的功效轉成槽（只做一次）
+        arts_mod.prune(s, c, self.world)  # 槽只留自己還有的武學與意境
+        create.prune(s, c)  # 自創的舊三步單子收掉（還沒付錢）
         if p.naming is not None and (p.naming not in owned or self.world.master_of(p.naming) != p.name):
             p.naming = None
         chains = {ch.id for ch in c.foreshadows.chains}  # 伏筆：內容改版後拿掉的鏈與物品
@@ -1063,8 +1085,10 @@ class Game:
 
     def own_turn_checks(self) -> None:
         """本人這一輪（mark_seen；假人程式自己那一輪也叫）：系統通緝這一週還沒掛就掛（bounties.post_auto，名聲 4.6、5.4），被掛的那幾句
-        寫進一則「懸賞」紀錄。結伴同行的人、管理者查玩家、玩家卡動到別人建的 Game 都不叫、不掛。"""
+        寫進一則「懸賞」紀錄。結伴同行的人、管理者查玩家、玩家卡動到別人建的 Game 都不叫、不掛。
+        商城的封測元寶也在這裡發（_mall_grant）：錢包第一次進來的那一下，真人假人一樣；暫停中照發（帳跟世界無關）。"""
         self.own_turn = True
+        self._mall_grant()
         if self.world.paused_at() is not None:  # 賽季時鐘暫停中世界不變（線上架構 8.3）：mark_seen 在 server.act 的暫停擋之前
             return
         posted = bounties.post_auto(self.state, self.content)
@@ -1793,7 +1817,7 @@ class Game:
         if wait > 0:
             why = explore_modes.BOSS_COOLING.format(wait=arena.wait_text(wait / c.config.time_scale))
         else:
-            why = explore_modes.BOSS_GONE_WEEK if c.config.duel.per_boss_week else explore_modes.BOSS_GONE_SEASON
+            why = explore_modes.boss_gone(s, c)  # 7 天濃縮季寫「這一段…第 N 天 00:00 再來」（FB-501）
         return Option(id=oid, label=f"{name}（{why}）", enabled=False)
 
     def _nearest_practice(self) -> atlas.Route | None:
@@ -3659,13 +3683,8 @@ class Game:
             self._surface_hint()
 
     def _refine_failed(self) -> bool:
-        """有一門往下一品修練失敗過、還沒練成（art_mastery 記失敗幾次）：h_refine_fail 的條件。joy 的加難方案 C 衝絕學時，art_mastery
-        記的是火候（cultivation._temper）：添火候不擲骰、不是失敗，不算（服丹強行衝關沒成也留著火候，那也沒有越修越容易，一樣不算）。"""
-        s, c = self.state, self.content
-        for art_id, count in s.player.art_mastery.items():
-            art = team.resolve_art(art_id, c, self.world) if count > 0 else None
-            if art is not None and not cultivation.heat_mode(c, martial_arts.next_quality(team.art_quality(s, art))):
-                return True
+        """h_refine_fail 的條件。武學重構（Joy 2026-10-20）之後品級不靠修練衝、沒有「修練失敗」這件事（art_mastery 不再記失敗），
+        永遠是假；函式留著讓提示的表不改。"""
         return False
 
     def _hint_triggers(self, only: set[str] | None = None) -> list[str]:
@@ -4523,8 +4542,9 @@ class Game:
             if not rank_actions.where_ok(s, c, action, loc.id):
                 continue
             option_id = f"{RANK_ACTION_PREFIX}{action.id}"
-            if rank_actions.left(s, c, action) <= 0:
-                opts.append(Option(id=option_id, enabled=False, label=f"{action.name}（這週已經做滿 {action.weekly} 次）"))
+            if rank_actions.left(s, c, action) <= 0:  # 7 天濃縮季照段記、寫「這一段」（calendar.week_word，FB-503）
+                this = calendar.week_word("this_short", c, s.world)
+                opts.append(Option(id=option_id, enabled=False, label=f"{action.name}（{this}已經做滿 {action.weekly} 次）"))
             elif line is not None and self._push_room(line) <= 0:
                 opts.append(Option(id=option_id, enabled=False, label=f"{action.name}（今天這條線已經推滿）"))  # 新寫，待 joy 潤
             else:  # 有檢定的（煽動起事）照事件選項的寫法接在體力後面，體力不夠時不寫（裁決 E5.3、審查 I1，同 _rank2_options）
@@ -9635,23 +9655,13 @@ class Game:
         if refusal is not None:
             return self._log([refusal])
         xinde, stamina = self._xinde(), self.state.player.stamina
-        # 新武學自己那一份的品質照機率擲（Config.fuse_quality_odds）；序章那一爐照劇本固定下品，不擲
-        rng = None if prologue_rules.fuse_base(self.state, self.content) is not None else self.rng
         if art_id and other_art and not insight_ids:
             art, msgs = fusion.blend(
-                self.state, self.content, self.world, self._quick_client(), art_id, other_art, proposed=proposed, rng=rng,
+                self.state, self.content, self.world, self._quick_client(), art_id, other_art, proposed=proposed, rng=self.rng,
             )
             tag = f"合成【{art.name}】" if art is not None else None
-        elif art_id and not other_art and len(insight_ids) == 1:
-            art, msgs = fusion.fuse(
-                self.state, self.content, self.world, self._quick_client(), art_id, insight_ids[0], proposed=proposed, rng=rng,
-            )
-            tag = f"合成【{art.name}】" if art is not None else None
-            if art is not None:  # 草廬這一步寫了結果那一句（設計 10.3「合成之後」）就用它，後面接武學自己的說明（T7 審查 M1）
-                insight = insights.resolve(insight_ids[0], self.content, self.world)
-                line = prologue_rules.after_line(self.state, self.content, 意境=insight.name if insight else "", 武學=art.name)
-                if line is not None:
-                    msgs[0] = line + (f"\n{art.note}" if art.note else "")
+        elif art_id and not other_art and len(insight_ids) == 1:  # 武學重構：武學＋意境不再是合成，是把意境裝進那一門的槽（不花心得體力）
+            return self.slot_insight(art_id, insight_ids[0])
         elif not art_id and not other_art and len(insight_ids) == 2:
             insight, msgs = fusion.merge(self.state, self.content, self.world, self._quick_client(), *insight_ids, proposed=proposed)
             tag = f"合併「{insight.name}」" if insight is not None else None
@@ -9684,32 +9694,22 @@ class Game:
         return skillview.forge_picks(self.state, self.content, self.world, art_id, insight_ids, other_art=other_art)
 
     @_not_while_preparing
-    def cultivate(self, art_id: str, use_legend: bool = False, by_xinde: bool = False) -> list[str]:
-        """修練：武學＋它融的意境，衝下一品（見 cultivation.py）。花體力。真的擲了骰（成功或失敗）才寫江湖紀錄；
-        被拒絕（意境熔掉了、沒融過意境、已經絕學、體力不足、沒有這門武學）只回一句話（武學與成長計畫 F12）。
-        use_legend：玩家勾了「服下破境丹」；真的服了才在紀錄裡寫「破境丹 -1」（丹沒了、下一步不是絕學都照一般的機率擲）。"""
-        sure = prologue_rules.sure_rng(self.state, self.content)  # 序章第 6 步：第一次修練一定升品，也不看成數門檻（劇本只練到第三成）
-        problem = prologue_rules.cultivate_problem(self.state, self.content) or cultivation.cultivate_problem(
-            self.state, self.content, self.world, art_id, gate=sure is None, use_legend=use_legend, by_xinde=by_xinde,
-        )
+    def cultivate(self, art_id: str, use_legend: bool = False) -> list[str]:
+        """修練（武學重構，Joy 2026-10-20）：品級不靠修練衝，這裡只剩上品到了極處（第十成）服一枚破境丹強行衝絕學
+        （見 cultivation.py）。花體力與一枚丹。真的擲了骰才寫江湖紀錄；被拒絕（還沒到極處、沒有丹、體力不足、沒有這門武學）只回一句話。
+        use_legend：玩家勾了「服下破境丹」；沒勾就只回「等契機或服丹」那一句。"""
+        problem = cultivation.cultivate_problem(self.state, self.content, self.world, art_id, use_legend=use_legend)
         if problem is not None:
             return self._log([problem])
         xinde, stamina, pills = self._xinde(), self.state.player.stamina, self.state.player.legend_items
-        msgs = cultivation.cultivate(
-            self.state, self.content, self.world, art_id, sure or self.rng, use_legend, gate=sure is None, by_xinde=by_xinde,
-        )
-        spent = round(stamina - self.state.player.stamina)  # 輸了也花了體力：數值變化寫在紀錄上，跟別的行動一樣
+        msgs = cultivation.cultivate(self.state, self.content, self.world, art_id, self.rng, use_legend)
+        spent = round(stamina - self.state.player.stamina)  # 沒衝開也花了體力：數值變化寫在紀錄上，跟別的行動一樣
         taken = pills - self.state.player.legend_items
         extra = ([f"體力 -{spent}"] if spent > 0 else []) + (
             [f"{self.content.config.legend_item_name} -{taken}"] if taken > 0 else []
         )
-        # 結果標記是擲骰的結果（「【X】修練…」，一定以【開頭）；前面服丹、沒服的提示與後面定名的話都不是
+        # 結果標記是擲骰的結果（「【X】衝開了…」「【X】撞在…」，一定以【開頭）；前面服丹那一句與後面定名的話都不是
         tag = next((m for m in msgs if m.startswith("【")), msgs[0])
-        won = next((i for i, m in enumerate(msgs) if "修練有成，從" in m), None)
-        art = team.resolve_art(art_id, self.content, self.world)
-        line = prologue_rules.after_line(self.state, self.content, 武學=art.name if art else "") if won is not None else None
-        if line is not None:  # 草廬這一步寫了結果那一句（設計 10.3「修練之後」）：它就是結果標記，也是敘事那一句（T7 審查 M1）
-            msgs[won] = tag = line
         msgs = self._log(msgs)
         self._menxia_entry(tag, xinde, guide=True, action="cultivate", extra=extra or None)
         return msgs
@@ -9763,6 +9763,83 @@ class Game:
         # 江湖紀錄的標記是「你改練【…】」那一句；換上後內外搭配變了時最後多一句（FB-088），不拿它當標記
         tag = next((m for m in reversed(msgs) if m.startswith("你改練")), msgs[-1] if msgs else "改練")
         self._menxia_entry(tag, xinde)
+        return msgs
+
+    # ── 自創武學（五步：執器、擺式、立意、成形、立名；tianxia/create.py）──────────────────
+
+    @_not_while_preparing
+    def create_begin(self, kind: str, form: str) -> list[str]:
+        """執器：內功或武學、兵器種類或行功之法。只開單、不收錢、不寫紀錄。"""
+        return self._log(create.begin(self.state, self.content, kind, form))
+
+    @_not_while_preparing
+    def create_pose(self, pose: dict) -> list[str]:
+        """擺式：火柴人的九個角度（create.POSE_KEYS）。只改單子。"""
+        return self._log(create.set_pose(self.state, self.content, pose))
+
+    def create_request(self, text: str) -> create.IntentRequest | list[str]:
+        """立意的 A 段（鎖內、只讀）：送得出去回傳要在鎖外請模型讀的單子，不行回傳那一句話。"""
+        if self._preparing():
+            return [PREPARING_REFUSAL]
+        problem = create.intent_problem(self.state, self.content, text)
+        if problem is not None:
+            return [problem]
+        return create.request(self.state, text)
+
+    @_not_while_preparing
+    def create_intent(self, text: str, reading: create.IntentReading | None = None) -> list[str]:
+        """立意（C 段，或直接呼叫）：reading 是鎖外讀好的；沒給（假人、整季機器人、腳本）照關鍵字表讀。
+        記下之後馬上成形（擲四格顏色）。只改單子、不收錢、不寫紀錄。"""
+        return self._log(create.set_intent(self.state, self.content, self.world, text, reading))
+
+    @_not_while_preparing
+    def create_back(self, to: str) -> list[str]:
+        """回頭重擺式或重立意（成形之後回頭用掉一次重來）。"""
+        return self._log(create.back(self.state, self.content, to))
+
+    @_not_while_preparing
+    def create_name(self, name: str, extra: int = 0) -> list[str]:
+        """立名：付心得、擲品級、登記（create.finish）。做成了寫一則煉製紀錄，被拒絕只回一句。"""
+        xinde = self._xinde()
+        art, msgs = create.finish(self.state, self.content, self.world, name, self.rng, extra)
+        self.forged = art is not None
+        self.forged_thing = ("art", art.id) if art is not None else None
+        msgs = self._log(msgs)
+        if art is not None:
+            self._menxia_entry(msgs[0], xinde, guide=True, title=journal.CRAFT, action="forge", lines=msgs[1:])
+        return msgs
+
+    @_not_while_preparing
+    def create_cancel(self) -> list[str]:
+        return self._log(create.cancel(self.state))
+
+    def create_view(self) -> dict:
+        """煉製頁「自創」那一塊（create.view）。只讀。"""
+        return create.view(self.state, self.content, self.world)
+
+    @_not_while_preparing
+    def slot_insight(self, art_id: str, insight_id: str, index: int | None = None) -> list[str]:
+        """把一個意境裝進一門武學的意境槽（武學重構；修練頁與煉製頁都走這裡，MENXIA_ACTIONS["slot"]）：不花心得體力，
+        裝成了寫一則「裝意境」江湖紀錄，被拒絕只回一句。"""
+        xinde = self._xinde()
+        problem = arts_mod.slot_problem(self.state, self.content, self.world, art_id, insight_id, index)
+        if problem is not None:
+            self.forged = False
+            return self._log([problem])
+        msgs = self._log(arts_mod.slot(self.state, self.content, self.world, art_id, insight_id, index))
+        self.forged = True
+        self.forged_thing = None
+        self._menxia_entry(msgs[0], xinde, guide=True, action="slot")
+        return msgs
+
+    @_not_while_preparing
+    def unslot_insight(self, art_id: str, insight_id: str) -> list[str]:
+        """把一個意境從武學的槽上拆下來（MENXIA_ACTIONS["unslot"]）：不花東西；拆成了寫一則江湖紀錄。"""
+        xinde = self._xinde()
+        slots = self.state.player.art_slots.get(art_id, [])
+        msgs = self._log(arts_mod.unslot(self.state, self.content, self.world, art_id, insight_id))
+        if insight_id in slots:
+            self._menxia_entry(msgs[0], xinde)
         return msgs
 
     @_not_while_preparing
@@ -10200,11 +10277,233 @@ class Game:
         return int((self.pill_now() + self.content.config.pill_day_utc_offset_hours * HOUR) // (24 * HOUR))
 
     def pill_cap(self) -> int:
-        """一天最多服幾顆：新手期照 newbie_pills_per_day（有寫才算），其餘照 stamina_pills_per_day；0 是不限。"""
+        """一天最多服幾顆：新手期照 newbie_pills_per_day（有寫才算），其餘照 stamina_pills_per_day；0 是不限。
+        商城的月卡（mall.card_bonus）讓有上限的那一個多 Config.mall.card_pill_bonus 顆（平常 2→3、新手期 5→6）；不限照舊不限。"""
         cfg = self.content.config
         if cfg.stamina_pills_per_day > 0 and cfg.newbie_pills_per_day > 0 and roster.newbie(self.state, self.content):
-            return cfg.newbie_pills_per_day
-        return cfg.stamina_pills_per_day
+            cap = cfg.newbie_pills_per_day
+        else:
+            cap = cfg.stamina_pills_per_day
+        return cap if cap <= 0 else cap + self._pill_card_bonus()
+
+    def _pill_card_bonus(self) -> int:
+        """今天月卡讓回體丹上限多幾顆（mall.card_bonus）；商城關著、沒有卡、今天不在卡的期間裡是 0。
+        pill_cap 與體力條的說明（howto.stamina_lines 的 card，FB-480）都讀這一份，兩邊寫的上限才對得上。"""
+        wallet = self._wallet()
+        return 0 if wallet is None else mall.card_bonus(self.content, wallet, self._mall_owner(), self._pill_day())
+
+    # ── 商城（docs/superpowers/specs/2026-10-20-商城架構-design.md；規則在 mall.py、錢包在 wallet.py）──
+
+    def _wallet(self) -> Wallet | None:
+        """商城開著時這個資料庫的錢包；關著（或這個 world 沒有資料庫）是 None，呼叫端什麼都不讀不寫。"""
+        db = getattr(self.world, "db", None)
+        return Wallet(db) if mall.on(self.content) and db is not None else None
+
+    def _mall_owner(self) -> str:
+        """錢包的主人：角色名號的 casefold（同 characters.key、真人的 accounts.character_key；假人沒有帳號也有錢包）。"""
+        return name_key(self.state.player.name)
+
+    def _mall_grant(self) -> None:
+        """封測發放（mall.grant_beta）：這個錢包還沒發過就發，寫一則「商城」江湖紀錄。own_turn_checks 叫。"""
+        wallet = self._wallet()
+        if wallet is None:
+            return
+        amount = mall.grant_beta(self.content, wallet, self._mall_owner(), self.now)
+        if amount:
+            journal.add_entry(self.state, JournalEntry(
+                time=self.state.world.time, title=mall.TITLE, lines=[mall.GRANT_LINE.format(n=amount)], changes=[f"元寶 +{amount}"],
+            ))
+
+    def mall_buy(self, item_id: str, ref: str) -> list[str]:
+        """買一件商品（mall.buy）：ref 是這一次購買的編號（網頁按下確認那一刻產，重送同一個不會買兩次）。成了寫一則「商城」
+        江湖紀錄（變化寫元寶與拿到的東西）；不成、或這個編號已經買過了只回一句、不寫紀錄。伺服器在行動鎖裡叫：扣元寶、
+        寫購買紀錄、發貨同一筆交易。時間照回體丹那一套（pill_now、_pill_day），不讀時鐘。買成了 self.mall_bought 記那件的 id，
+        不成（含這個編號已經買過了）是 None；這個編號已經買過了 self.mall_already 記那一筆的商品 id（FB-491），其餘是 None。"""
+        self.mall_bought = self.mall_already = None
+        wallet = self._wallet()
+        if wallet is None:
+            return self._log([mall.OFF])
+        result = mall.buy(
+            self.state, self.content, wallet, item_id, ref,
+            now=self.pill_now(), day=self._pill_day(), season=self.world.get_season_number(),
+        )
+        if isinstance(result, str):
+            done = wallet.purchase_by_ref(mall.buy_ref(self._mall_owner(), ref))
+            self.mall_already = done.item if done is not None else None
+            return self._log([result])
+        journal.add_entry(self.state, JournalEntry(
+            time=self.state.world.time, title=mall.TITLE, lines=result.lines, changes=result.changes,
+        ))
+        self.mall_bought = result.item.id
+        return self._log(result.lines)
+
+    def mall_entry(self) -> dict | None:
+        """狀態列的商城入口（齒輪旁的錠子鈕、底部第六格；商城第二批）：{balance}；商城關著是 None（沒有入口）。
+        江湖畫面每次都送，所以只讀餘額（帳的加總），不排商品。"""
+        wallet = self._wallet()
+        if wallet is None:
+            return None
+        owner = self._mall_owner()
+        card = mall.card_view(self.content, wallet, owner, self._pill_day())
+        # 月卡今天的份（定案甲）：卡有效、有每天領的份才有這個鍵；江湖頁照它畫「月卡・今日份」小卡（領過了收起）
+        daily = card["daily"] if card is not None else None
+        names = len(mall.rename_tokens(wallet, owner))  # 手上的易名帖：設定頁照它畫改名那一格（沒有不送這個鍵）
+        return {"balance": wallet.balance(owner), **({"daily": daily} if daily is not None else {}), **({"rename": names} if names else {})}
+
+    def mall_rename_left(self) -> int:
+        """手上還沒用掉的易名帖幾張（設定頁照它畫改名那一格）；商城關著是 0。"""
+        wallet = self._wallet()
+        return 0 if wallet is None else len(mall.rename_tokens(wallet, self._mall_owner()))
+
+    def mall_rename(self, new: str, taken: Callable[[str], bool] | None = None) -> list[str]:
+        """易名帖：改自己的名號，當場生效（Joy 2026-10-21 決策卡「當場生效」；rename.py）。new 是伺服器量過長度、去過看不見的字元的；
+        taken 是伺服器的「名號有人用」（角色、帳號、保留的名號同一句話，不洩漏誰是假人），沒給（測試、腳本）照角色表與保留名號查。
+        成了：資料庫裡名號當身分的地方一起換（world.rename_character）、自己的存檔照新名號存、用掉一張帖、江湖史一行、一則「商城」紀錄。
+        不成只回一句、什麼都不動。呼叫端要拿著行動鎖（server 的 act）。"""
+        wallet = self._wallet()
+        if wallet is None:
+            return [mall.OFF]
+        p = self.state.player
+        old = p.name
+        left = mall.rename_tokens(wallet, self._mall_owner())
+        if not left:
+            return [mall.NO_RENAME]
+        if p.bot is not None or self.is_admin():
+            return [mall.RENAME_ADMIN]
+        if new == old:
+            return [mall.RENAME_SAME]
+        if taken is None:
+            store = CharacterStore(self.world.db)
+            reserved = {n.casefold() for n in server_bots.reserved_names(self.content)}
+            taken = lambda n: store.exists(n) or n.casefold() in reserved  # noqa: E731
+        if name_key(new) != name_key(old) and taken(new):
+            return [NAME_IN_USE]
+        if rename.clash(old, name_key(old), self.content) or rename.clash(new, name_key(new), self.content):
+            return [rename.CLASHED]
+        shared = self.world.read()
+        live = shared.model_dump_json(include={"seal_duels"}) + (shared.active_battle.model_dump_json() if shared.active_battle else "")
+        if f'"{old}"' in live or f'"{name_key(old)}"' in live:
+            return [mall.RENAME_BUSY]
+        self._save_season()  # 先把這一次同步動到的季寫回去，改名照資料庫那一份換
+        self.world.rename_character(old, new)
+        mapping = {old: new, name_key(old): name_key(new)}
+        self.state = GameState.model_validate(rename.swap(self.state.model_dump(mode="json"), mapping))
+        self._reconcile_season()
+        wallet.mark_used(left[0], self.pill_now())
+        self.state.world.chronicle.append(Rumor(time=self.state.world.time, text=mall.RENAMED_CHRONICLE.format(old=old, new=new)))
+        line = mall.RENAMED.format(new=new)
+        journal.add_entry(self.state, JournalEntry(
+            time=self.state.world.time, title=mall.TITLE, lines=[line], changes=[f"名號 {old} → {new}"],
+        ))
+        self._save_season()
+        CharacterStore(self.world.db).save(self.state)
+        self.touched.update(n for n in CharacterStore(self.world.db).names() if n != new)  # 別人的分頁也重抓（他們存檔裡的名字換了）
+        return self._log([line])
+
+    def mall_claim(self) -> list[str]:
+        """領月卡今天的份（mall.claim_daily；Joy 2026-10-21 定案甲・每日領）：成了寫一則「商城」江湖紀錄，不成只回一句。
+        一天照回體丹那一套（_pill_day，台灣 00:00 換日）；沒上線那一天不補（編號一天一個，過了那天就領不到）。"""
+        wallet = self._wallet()
+        if wallet is None:
+            return self._log([mall.OFF])
+        result = mall.claim_daily(self.state, self.content, wallet, now=self.pill_now(), day=self._pill_day())
+        if isinstance(result, str):
+            return self._log([result])
+        journal.add_entry(self.state, JournalEntry(
+            time=self.state.world.time, title=mall.TITLE, lines=result.lines, changes=result.changes,
+        ))
+        return self._log(result.lines)
+
+    def mall_view(self) -> dict | None:
+        """商城那一頁的資料（mall.view）；商城關著是 None。另附貨架上面兩張小卡與購買確認要的回體丹（pills：名字、手上幾顆、
+        今天還能服幾顆〔不限是 None〕、一天上限〔含月卡；0 是不限〕、一顆回多少、月卡多幾顆）與封測發了多少（grant，商城第二批）。"""
+        wallet = self._wallet()
+        if wallet is None:
+            return None
+        view = mall.view(self.content, wallet, self._mall_owner(), self._pill_day(), self.world.get_season_number())
+        cfg = self.content.config
+        view["pills"] = {
+            "name": cfg.stamina_pill_name, "count": self.state.player.stamina_pills, "today": self.pills_left_today(),
+            "cap": self.pill_cap(), "restore": cfg.stamina_pill_restore, "bonus": cfg.mall.card_pill_bonus,
+        }
+        view["grant"] = cfg.mall.beta_grant
+        return view
+
+    def mall_records(self) -> dict | None:
+        """自己的購買紀錄與帳（mall.records，不寫經手的管理者）；商城關著是 None。"""
+        wallet = self._wallet()
+        return None if wallet is None else mall.records(self.content, wallet, self._mall_owner())
+
+    def _mall_admin(self, action: str) -> tuple[Wallet | None, str | None]:
+        """管理者商城工具的共同檢查：(錢包, None)，或 (None, 拒絕的那一句)。帳跟季無關：籌備中、休季、暫停中都做得了。"""
+        if not self.is_admin():
+            return None, f"（只有管理者能{action}。）"
+        wallet = self._wallet()
+        return (None, mall.OFF) if wallet is None else (wallet, None)
+
+    def _mall_target(self, wallet: Wallet, text: str) -> tuple[str, str] | None:
+        """管理者填的名號或帳號 → (錢包的主人, 名號)。先照角色找（真人假人一樣），再照帳號找它綁的角色；都沒有是 None。"""
+        text = (text or "").strip()
+        if not text:
+            return None
+        shown = wallet.character_name(name_key(text))
+        if shown is not None:
+            return name_key(text), shown
+        account = AccountStore(self.world.db).get(text)
+        if account is None or account.character is None:
+            return None
+        shown = wallet.character_name(name_key(account.character))
+        return None if shown is None else (name_key(account.character), shown)
+
+    def _mall_adjust(self, name: str, amount: int, note: str, ref: str, reason: str) -> list[str]:
+        wallet, refusal = self._mall_admin("補發元寶" if reason == "reissue" else "扣回元寶")
+        if refusal:
+            return self._log([refusal])
+        target = self._mall_target(wallet, name)
+        if target is None:
+            return self._log([NO_SUCH_PLAYER.format(name=(name or "").strip())])
+        owner, shown = target
+        msg = mall.adjust(wallet, owner, shown, amount, reason, ref, now=self.now, admin=self.state.player.name, note=note)
+        if not msg.startswith("（"):
+            self._write("商城", [msg], tag="管理者")
+        return self._log([msg])
+
+    def admin_mall_reissue(self, name: str, amount: int, note: str, ref: str) -> list[str]:
+        """管理者替某個名號（或帳號）補發元寶（4.7）：原因必填、寫進帳（誰、何時、為什麼）；ref 是這一筆的編號（伺服器產）。"""
+        return self._mall_adjust(name, amount, note, ref, "reissue")
+
+    def admin_mall_revoke(self, name: str, amount: int, note: str, ref: str) -> list[str]:
+        """管理者從某個名號（或帳號）扣回元寶（4.7）：餘額不能是負的。"""
+        return self._mall_adjust(name, amount, note, ref, "revoke")
+
+    def admin_mall_refund(self, name: str, purchase_id: int, note: str) -> list[str]:
+        """管理者退一筆購買（mall.refund）：元寶全退、收回手上還有的回體丹、月卡扣回天數；改到的存檔存回去（_save_target）。"""
+        wallet, refusal = self._mall_admin("退購買")
+        if refusal:
+            return self._log([refusal])
+        target = self._mall_target(wallet, name)
+        game = None if target is None else self._admin_target(target[1])
+        if game is None:
+            return self._log([NO_SUCH_PLAYER.format(name=(name or "").strip())])
+        msg = mall.refund(game.state, self.content, wallet, purchase_id, now=self.now, admin=self.state.player.name, note=note)
+        self._save_target(game)
+        if not msg.startswith("（"):
+            self._write("商城", [msg], tag="管理者")
+        return self._log([msg])
+
+    def admin_mall_ledger(self, name: str) -> dict:
+        """管理者查某個名號（或帳號）的帳（4.7）：{name, balance, card, ledger, purchases}，帳多寫編號與經手的管理者；
+        不是管理者、商城關著、查不到回 {refusal}。真人假人回的一模一樣（不寫帳號）。只讀。"""
+        wallet, refusal = self._mall_admin("查帳")
+        if refusal:
+            return {"refusal": refusal}
+        target = self._mall_target(wallet, name)
+        if target is None:
+            return {"refusal": NO_SUCH_PLAYER.format(name=(name or "").strip())}
+        owner, shown = target
+        data = mall.records(self.content, wallet, owner, admin=True)
+        return {"name": shown, "balance": data["balance"], "card": mall.card_view(self.content, wallet, owner, self._pill_day()),
+                "ledger": data["ledger"], "purchases": data["purchases"]}
 
     def pills_left_today(self) -> int | None:
         """今天還能服幾顆回體丹（pill_cap）；不限是 None。不看手上有幾顆。"""
@@ -10588,8 +10887,8 @@ class Game:
         client, rng = self._quick_client(), self.rng
         if other_art is not None:
             thing, msgs = fusion.blend(self.state, self.content, self.world, client, art_id, other_art, proposed, rng, partner)
-        elif art_id is not None:
-            thing, msgs = fusion.fuse(self.state, self.content, self.world, client, art_id, insight_ids[0], proposed, rng, partner)
+        elif art_id is not None:  # 武學重構：論武不再拿武學配意境（fuse_problem 一律擋，這裡只是保險）
+            thing, msgs = None, [fusion.fuse_problem(self.state, self.content, self.world, art_id, insight_ids[0], partner)]
         else:
             thing, msgs = fusion.merge(self.state, self.content, self.world, client, *insight_ids, proposed, partner)
         return thing, msgs
@@ -12151,7 +12450,7 @@ class Game:
             return "（找不到這門功法。）"
         return skillview.art_card(
             art, level, parent_names=skillview.parent_names(art, self.content, self.world),
-            trait_line=traits.card_line(self.content, skill_slots.apply(self.state, self.content, art)),
+            trait_line=traits.card_line(self.content, art),
             compare_line=team.compare_with_worn(self.state, self.content, self.world, art),  # W6
             gen_word=skillview.gen_word(art, self.content, self.world),
         )
@@ -12857,6 +13156,10 @@ class Game:
         line = f"{name}臨時取消，這一仗沒有打成。"
         self.state.world = self.world.get_season()  # 收場時間記此刻的季時間（同 admin_end_season）
         self._shelve_unfinished_battle(f"{name}臨時取消，這一仗沒有打成，不算勝負。")
+        event_id = definition.timetable_event if definition else None
+        w = self.state.world
+        if event_id and event_id in w.showdowns_opened and event_id not in w.timeline and event_id not in w.showdowns_cancelled:
+            w.showdowns_cancelled.append(event_id)  # 取消的時刻表決戰：輿圖不列（FB-563；之後「定結果」了才照有結果的寫法列）
         add_rumor(self.state, line, content=self.content, layer="world")
         self._save_season()
         self._write("取消決戰", [line], tag="管理者")
@@ -13089,16 +13392,17 @@ class Game:
         """立刻發本週軍令：這一週還沒達成的軍令換成照週一的做法（orders.issue，週一掛鉤用的同一個函式，redraw）此刻重新挑的一批，
         各陣營照常發「本週軍令：…」的陣營軍情。換掉的那幾道進度不算了；已經達成的原封不動、不會再達成一次（審查 I-1：重挑的 id
         是決定性的，不留著的話同一道會達成兩次、效果套兩次）。不動 hooked_week：下週一照常發令。"""
-        refusal = self._admin_refusal("發本週軍令")
+        refusal = self._admin_refusal(f"發{calendar.week_word('order_this', self.content, self.state.world)}軍令")
         if refusal:
             return self._log(refusal)
         s, c = self.state, self.content
         if not orders.active(s, c):
             return self._log(["（這一季沒有軍令。）"])
         week = orders.period_of(s, c)  # 21 天季是季曆第幾天（每天一期）
+        daily = orders.daily(s, c)
         replaced = sum(1 for o in s.world.orders if o.week == week and not o.done)
         kept = {o.id for o in s.world.orders if o.week == week and o.done}
-        if orders.daily(s, c):
+        if daily:
             orders.issue_day(s, c, week, self.rng, redraw=True)
         else:
             orders.issue(s, c, week, self.rng, redraw=True)
@@ -13107,9 +13411,9 @@ class Game:
         listing = "；".join(
             f"{f.name}：{'、'.join(orders.title(c, o) for o in issued if o.faction == f.id)}"
             for f in c.scenario.factions if any(o.faction == f.id for o in issued)
-        ) or "這一週沒有要重挑的軍令"
-        label = f"第 {week} 天" if orders.daily(s, c) else f"第 {week} 週"
-        msg = (f"已照週一的做法重發{label}的軍令，換掉沒達成的 {replaced} 道（進度不算了；已達成的 {len(kept)} 道照舊）"
+        ) or ADMIN_REISSUE_NONE[daily]
+        label = f"第 {week} 天" if daily else f"第 {week} 週"
+        msg = (f"已照{ADMIN_REISSUE_HOW[daily]}的做法重發{label}的軍令，換掉沒達成的 {replaced} 道（進度不算了；已達成的 {len(kept)} 道照舊）"
                f"——{listing}。")
         self._write("重發軍令", [msg], tag="管理者")
         return self._log([msg])
@@ -13125,8 +13429,9 @@ class Game:
         if not season_one(c, s.world):
             return self._log(["（這一季沒有第 4 階席次。）"])
         week = calendar.point(s.world.time, c, s.world).week
+        segments = calendar.week7_on(s.world, c)  # 7 天濃縮季照段寫（FB-503，待 joy 潤）
         if week < 2:
-            return self._log(["（第 1 週沒有上一週的貢獻可排；空缺照常由有資格的人補上。）"])
+            return self._log([ADMIN_ROTATE_FIRST[segments]])
         seats.rotate(s, c, week)
         self._save_season()
         held = s.world.seats
@@ -13134,7 +13439,9 @@ class Game:
             f"{f.name}{ranks.TITLES[f.id][seats.SEAT_RANK]}：{'、'.join(held.get(f.id, [])) or '沒有人'}"
             for f in c.scenario.factions if f.id in s.world.seat_ledger and f.id in ranks.TITLES
         ) or "帳上還沒有人有第 4 階的資格"
-        msg = f"已照第 {week - 1} 週的貢獻輪替第 4 階席次（下週一照常再排）——{listing}。"
+        last = segments and week >= len(c.config.season_segments)
+        again = ADMIN_ROTATE_LAST if last else ADMIN_ROTATE_AGAIN[segments]
+        msg = f"已照{calendar.week_label(week - 1, c, s.world)}的貢獻輪替第 4 階席次（{again}）——{listing}。"
         self._write("輪替席次", [msg], tag="管理者")
         return self._log([msg])
 
@@ -13908,6 +14215,7 @@ class Game:
             "armament": self.armament_view(),  # 陣營的軍備存量（素材與經濟設計第六節）；散人、捐軍備關著是 None
             # 鑄譜（打造的隱藏配方）：這一季聽過口訣或打中過的，一條一筆 {"clues", "solved", "recipe"}（打造隱藏配方設計 6.3）
             "forge_manual": forge_secrets.view(s, c, self.world),
+            "create": self.create_view(),  # 自創武學那一塊（煉製頁；tianxia/create.py）
             "anonymous": p.anonymous,
             "gender": gender.of(p),  # 性別：修練頁的人物面板照它換男女版（web/app.js 的 HERO_FIGURES）
             "gender_chosen": p.gender_chosen,  # 選過了沒：設定頁沒選過的舊角色給一次改的機會
@@ -13954,6 +14262,7 @@ class Game:
         newbie = roster.newbie(s, c, c.config.newbie_stamina_days)
         data["stamina_help"] = howto.stamina_lines(
             c, w, newbie, p.stamina_pills, button=data["pills"] is not None, today=self.pills_left_today(),
+            card=self._pill_card_bonus() if c.config.stamina_pills_per_day > 0 else 0,  # 月卡（FB-480）：上限照 pill_cap 寫
         )
         # 江湖頁行動列底下的「玩法說明」入口（explain-2）：新手期（跟體力回復加快同一段，newbie_stamina_days）才有、序章裡沒有（師父會說）；
         # 過了新手期只剩設定抽屜那一顆
@@ -14009,10 +14318,15 @@ class Game:
         upcoming = None if w.ended or self._preparing() else timetable.next_event(self.state, c)
         cal = {
             "week": at.week, "weekday": at.weekday, "clock": f"{at.hour:02d}:{at.minute:02d}",
-            "weeks": c.config.season_weeks, "text": calendar.point_text(at),  # 畫面第二行直接用這一句，不自己拼
+            # 畫面第二行直接用這一句，不自己拼（7 天濃縮季寫「第 N 天 HH:MM」）
+            "weeks": c.config.season_weeks, "text": calendar.point_text(at, by_day=calendar.week7_on(w, c)),
         }
         if orders.daily(self.state, c):  # 21 天季的軍令每天一道：軍令卡收起來照季曆第幾天記（網頁 orderKey），隔天重新展開
             cal["day"] = at.cal_day
+        # 7 天濃縮季：畫面上寫「週」的地方換成段（網頁 calWords，FB-501）；21 天季只有軍令的字（FB-502）；週末、14 天沒有這個鍵
+        words = calendar.week_words(c, w)
+        if words is not None:
+            cal["words"] = words
         return {
             "calendar": cal,
             "next_event": None if upcoming is None else {
@@ -14176,7 +14490,7 @@ class Game:
                 entries = tuple(e.model_dump() for e in sorted(p.annals, key=lambda e: e.time))
                 profile = annals.profile(self.state, c)
             written = row["text"] is not None
-            if written != rewrite or (rewrite and row["rewrites"] >= c.config.biography.rewrites):
+            if written != rewrite or (rewrite and row["rewrites"] >= self._rewrites_allowed()):
                 return None
         if not entries:
             return None
@@ -14197,14 +14511,33 @@ class Game:
         if request.season == p.season_number and p.annals:
             self.world.save_annals(request.season, p.name, list(request.annals), dict(request.profile))
         by = biography.MODEL if text else biography.RULE
-        return self.world.store_biography(
+        row = self.world.biography(request.season, p.name) if request.rewrite else None
+        stored = self.world.store_biography(
             request.season, p.name, text or biography.rule_text(request), by, now, request.rewrite,
         )
+        if stored and row is not None and row["rewrites"] >= self.content.config.biography.rewrites:
+            self._use_rewrite_token(now)  # 白送的重寫用完了，這一次是萬寶閣買的「重修列傳」
+        return stored
+
+    def _rewrite_tokens(self) -> list[int]:
+        """萬寶閣「重修列傳」還沒用掉的那幾筆購買（mall.rewrite_tokens）；商城關著是空的。"""
+        wallet = self._wallet()
+        return [] if wallet is None else mall.rewrite_tokens(wallet, self._mall_owner())
+
+    def _rewrites_allowed(self) -> int:
+        """一篇傳能重寫幾次：Config.biography.rewrites 加上手上還沒用掉的「重修列傳」（Joy 2026-10-21 定案：200 元寶、一季兩次）。"""
+        return self.content.config.biography.rewrites + len(self._rewrite_tokens())
+
+    def _use_rewrite_token(self, now: float) -> None:
+        tokens = self._rewrite_tokens()
+        wallet = self._wallet()
+        if tokens and wallet is not None:
+            wallet.mark_used(tokens[0], now)
 
     def biography_view(self, season: int) -> dict | None:
         """修練之外的一本書（網頁的「讀你的傳」）：篇名、段落、誰寫的、公開了沒、分享代碼、還能不能重寫、還沒寫成時寫不寫得了。
         那一季沒有（沒有行狀、還沒收季）回 None。"""
-        p, cfg = self.state.player, self.content.config.biography
+        p = self.state.player
         row = self.world.biography(season, p.name)
         if row is None or row["text"] is None:
             ready = self.biography_request(season) is not None
@@ -14217,7 +14550,7 @@ class Game:
         return {
             "season": season, "title": biography.title(row["name"]), "written": True, "paragraphs": row["text"].split("\n\n"),
             "by": row["written_by"], "public": row["public"], "code": row["share_code"] if row["public"] else None,
-            "can_rewrite": row["rewrites"] < cfg.rewrites, "scenario": self.content.scenario.name,
+            "can_rewrite": row["rewrites"] < self._rewrites_allowed(), "scenario": self.content.scenario.name,
         }
 
     def share_biography(self, season: int, public: bool, code: str) -> str | None:

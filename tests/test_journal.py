@@ -3,6 +3,8 @@ import json
 import re
 from html import escape
 
+import pytest
+
 from conftest import FixedRandom, walk_to
 
 from tianxia import howto, journal
@@ -124,6 +126,31 @@ def test_a_new_insight_or_art_line_gets_the_shine():
         "兩門都要是你會的武學。",
     ):
         assert journal._line_class(line) == "tx-line", line
+
+
+def test_the_rework_lines_shine_only_when_something_new_arrives():
+    """武學重構的新句子：自創成了（create.CREATED_LINE）拿到一門新武學，亮；把意境裝進槽、拆下來、揣摩加深強度都沒拿到新東西，不亮。"""
+    from tianxia import arts, create, fusion
+
+    assert journal._line_class(create.CREATED_LINE.format(kind="武學", name="斷水刀", grade="中品")) == "tx-line tx-new"
+    for line in (
+        arts.SLOTTED_LINE.format(insight="風", art="粗淺拳腳", i=1),
+        arts.UNSLOTTED_LINE.format(insight="風", art="粗淺拳腳"),
+        fusion.DEEPEN_LINE.format(name="風", mark="●●"),
+    ):
+        assert journal._line_class(line) == "tx-line", line
+
+
+def test_reaching_the_peerless_rank_shines():
+    """武學重構之後修練只剩衝絕學：契機與服丹衝關成了的那一句都是拿到新東西，該亮。"""
+    for line in ("這一戰打到最後，【長拳】忽然通了——從上品晉為絕學！", "【長拳】衝開了最後那一層，從上品晉為絕學！"):
+        assert journal._line_class(line) == "tx-line tx-new", line
+
+
+def test_the_create_cap_refusal_does_not_shine():
+    from tianxia import create
+
+    assert journal._line_class(create.CAP_LINE.format(n=3)) == "tx-line"
 
 
 def test_explore_that_meets_an_event_tags_it_and_drops_the_intro(game):
@@ -347,13 +374,12 @@ def test_forging_that_finishes_a_guide_step_writes_it_into_the_journal(game):
     from tianxia import naming
     from tianxia.models import TutorialGoal
 
-    game.state.player.member.wugong_id = "fist"
-    game.state.player.insights = ["feng"]
+    game.state.player.member.wugong_id, game.state.player.arts = "basic_fist", ["lake_kick"]  # 武學重構：合成只剩武學＋武學
     game.state.player.stats["xinde"] = 100
     _guide_waits_for(game, TutorialGoal(action="practice"))
     reply = naming.NameReply(name="鐵腕勁", description="一句話。")
     with mock.patch.object(game.client, "chat_structured", return_value=reply):
-        msgs = game.forge("fist", ["feng"])
+        msgs = game.forge("basic_fist", [], other_art="lake_kick")
     assert "✔ 引導完成" not in msgs and "✔ 引導完成" in game.state.player.guide_done  # 合成結果也不夾引導（8.1.3）
     entry = latest(game)
     assert entry.title == "煉製" and entry.tag == "合成【鐵腕勁】"
@@ -371,10 +397,10 @@ def test_practice_and_forging_are_titled_after_their_tabs(game):
     _train(game)
     game.practice("武學")
     assert latest(game).title == "修練" and len([e for e in game.state.journal if e.title == "修練"]) == 1
-    game.state.player.insights = ["feng", "huo"]
+    game.state.player.arts, game.state.player.insights = ["basic_fist", "lake_kick"], ["feng", "huo"]  # 武學重構：合成是武學＋武學
     reply = naming.NameReply(name="鐵腕勁", description="一句話。")
     with mock.patch.object(game.client, "chat_structured", return_value=reply):
-        game.forge("fist", ["feng"])
+        game.forge("basic_fist", [], other_art="lake_kick")
     assert [e.title for e in game.state.journal[:2]] == ["煉製", "修練"]
     assert "合成【鐵腕勁】" == latest(game).tag
     with mock.patch.object(game.client, "chat_structured", side_effect=RuntimeError):
@@ -410,16 +436,19 @@ def shines(card: str) -> list[str]:
     return re.findall(r'<div class="tx-line tx-new">(.*?)</div>', card)
 
 
-def test_a_fuse_writes_its_result_sentence_into_the_journal_and_it_shines(game):
+def test_slotting_an_insight_writes_a_practice_entry_and_charges_nothing(game):
+    """武學重構：武學＋意境不是合成了——爐子上放這兩樣是把意境裝進槽，記成一則「修練」、不花心得體力；
+    拆下來也記一則。被擋下的（再裝一次）不寫紀錄。"""
     _forger(game)
-    msgs = _forge(game, "basic_fist", ["feng"], "旋風腿")
+    before = len(game.state.journal)
+    msgs = game.forge("basic_fist", ["feng"])
     entry = latest(game)
-    assert (entry.title, entry.tag) == ("煉製", "合成【旋風腿】")  # 結果標記照舊
-    assert entry.lines == [msgs[0]] and msgs[0].startswith("你以【粗淺拳腳】融入「風」，衍生出一門武學【旋風腿】")
-    assert journal._line_class(entry.lines[0]) == "tx-line tx-new"
-    assert shines(game.now_entry_html()) == [escape(msgs[0]).replace("\n", "<br>")]  # 「剛剛」卡片
-    assert shines(journal.rows_html([entry])) == shines(game.now_entry_html())  # 江湖紀錄那一列點開也亮
-    assert entry.changes == ["心得 -5", "體力 -5"]  # 數值變化沒有多一份、也沒有少
+    assert msgs == ["「風」裝進了【粗淺拳腳】第 1 格。"] and game.state.player.art_slots["basic_fist"] == ["feng", None]
+    assert (entry.title, entry.tag, entry.changes) == ("修練", msgs[0], []) and len(game.state.journal) == before + 1
+    assert game.state.player.stats["xinde"] == 100 and game.forged is True
+    assert game.forge("basic_fist", ["feng"]) == ["【粗淺拳腳】上已經有「風」了。"] and len(game.state.journal) == before + 1
+    assert game.unslot_insight("basic_fist", "feng") == ["「風」從【粗淺拳腳】拆了下來。"]
+    assert latest(game).tag == "「風」從【粗淺拳腳】拆了下來。" and game.state.player.art_slots["basic_fist"] == [None, None]
 
 
 def test_a_merge_writes_its_result_sentence_into_the_journal_and_it_shines(game):
@@ -442,49 +471,27 @@ def test_a_blend_writes_its_result_sentence_into_the_journal_and_it_shines(game)
     assert entry.changes == ["心得 -5", "體力 -5"]
 
 
-def test_landing_on_an_art_someone_else_made_shines_too(game):
-    """合到舊的（別人首創的那一門）對這個玩家一樣是新東西：那一句寫進紀錄、也亮。"""
-    from unittest import mock
-
-    from tianxia import fusion, naming
-    from tianxia.state import new_game_state
-
-    content = game.content
-    other = new_game_state(content, "乙")
-    other.player.member.wugong_id, other.player.insights, other.player.stats["xinde"] = "basic_fist", ["feng"], 100
-    client = mock.Mock()
-    client.chat_structured.return_value = naming.NameReply(name="旋風腿", description="一句話。")
-    fusion.fuse(other, content, game.world, client, "basic_fist", "feng")
-    content.config.land_chance_per_candidate, content.config.land_chance_cap = 1.0, 1.0  # 有候選就一定合到舊的
-    _forger(game, arts=["lake_kick"])
-    msgs = _forge(game, "lake_kick", ["feng"], "不會用到的名字")
-    assert "合出來的竟是一門已有的武學【旋風腿】" in msgs[0]
-    entry = latest(game)
-    assert entry.tag == "合成【旋風腿】" and entry.lines == [msgs[0]]
-    assert shines(game.now_entry_html()) == [escape(msgs[0]).replace("\n", "<br>")]
-
-
 def test_landing_on_what_you_already_own_writes_nothing_and_does_not_shine(game):
     """合出來的是你已經有的：被拒絕、不收錢、不寫紀錄；那句拒絕的話也不亮。三種合成都一樣。"""
-    _forger(game, arts=["lake_kick"])
-    _forge(game, "basic_fist", ["feng"], "旋風腿")
-    _forge(game, "basic_fist", [], "踏浪拳", other_art="lake_kick")
+    _forger(game, arts=["lake_kick", "basic_breath"])
+    _forge(game, "basic_fist", ["feng"], "旋風腿")  # 武學重構：這一下是把風裝進槽（一則「修練」），合成剩下面兩爐
+    _forge(game, "lake_kick", [], "踏浪拳", other_art="basic_breath")  # 不拿粗淺拳腳當料：合成會把槽裡的風拆回背包
     _forge(game, None, ["feng", "huo"], "燎原")
     before = list(game.state.journal)
     for refused in (
-        _forge(game, "basic_fist", ["feng"], "旋風腿"),
-        _forge(game, "lake_kick", [], "踏浪拳", other_art="basic_fist"),  # 反過來放也是同一個配方
-        _forge(game, None, ["huo", "feng"], "燎原"),
+        _forge(game, "basic_fist", ["feng"], "旋風腿"),  # 已經裝著
+        _forge(game, "basic_breath", [], "踏浪拳", other_art="lake_kick"),  # 反過來放也是同一個配方
+        _forge(game, None, ["feng", "feng"], "燎原"),  # 意境效果池：合過的意境再合是另一份，這裡改用同一份放兩次被拒絕
     ):
-        assert len(refused) == 1 and "已經" in refused[0]
+        assert len(refused) == 1 and ("已經" in refused[0] or "兩份" in refused[0])
         assert journal._line_class(refused[0]) == "tx-line"
-    assert game.state.journal == before and len(shines(game.now_entry_html())) == 3  # 前三爐的那三行照舊亮、沒多一行
+    assert game.state.journal == before and len(shines(game.now_entry_html())) == 2  # 後兩爐的那兩行照舊亮、沒多一行
 
 
 def test_two_forges_in_a_row_keep_both_sentences_and_both_shine(game):
     """連做幾爐併成一則（同一種連續的門下動作）：每一爐的那一句都在、照順序、各一次，每一句都亮；數值變化加總。"""
-    _forger(game)
-    first = _forge(game, "basic_fist", ["feng"], "旋風腿")[0]
+    _forger(game, arts=["lake_kick"])
+    first = _forge(game, "basic_fist", [], "旋風腿", other_art="lake_kick")[0]  # 武學重構：合成是武學＋武學
     second = _forge(game, None, ["feng", "huo"], "燎原")[0]
     crafts = [e for e in game.state.journal if e.title == "煉製"]
     assert len(crafts) == 1
@@ -500,10 +507,10 @@ def test_two_forges_in_a_row_keep_both_sentences_and_both_shine(game):
 
 
 def test_three_different_forges_in_a_row_all_shine(game):
-    """合成、武學＋武學、合併接著做：三種句型各自亮、各一行。"""
-    _forger(game)
+    """武學＋武學兩爐、合併接著做：句型各自亮、各一行。（武學重構：武學＋意境是裝槽、不算一爐）"""
+    _forger(game, arts=["lake_kick"])
     said = [
-        _forge(game, "basic_fist", ["feng"], "旋風腿")[0],
+        _forge(game, "basic_fist", [], "旋風腿", other_art="lake_kick")[0],
         _forge(game, "basic_fist", [], "烈風拳", other_art="旋風腿")[0],
         _forge(game, None, ["feng", "huo"], "燎原")[0],
     ]
@@ -616,11 +623,11 @@ def test_twice_forging_reads_as_two_lines_on_the_just_now_card(game):
 
     from tianxia import naming
 
-    game.state.player.member.wugong_id = "fist"
+    game.state.player.member.wugong_id, game.state.player.arts = "basic_fist", ["lake_kick"]  # 武學重構：合成是武學＋武學
     game.state.player.insights = ["feng", "huo"]
     game.state.player.stats["xinde"] = 100
     with mock.patch.object(game.client, "chat_structured", return_value=naming.NameReply(name="鐵腕勁", description="一句話。")):
-        fused_said = game.forge("fist", ["feng"])[0]
+        fused_said = game.forge("basic_fist", [], other_art="lake_kick")[0]
     fused = latest(game).tag
     with mock.patch.object(game.client, "chat_structured", side_effect=RuntimeError):
         merged_said = game.forge(None, ["feng", "huo"])[0]

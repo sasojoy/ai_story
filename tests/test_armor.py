@@ -27,12 +27,21 @@ def _blade(aid="兵:3", name="厚背刀", kind="刀", attribute="剛"):
     return Weapon(id=aid, name=name, kind=kind, attribute=attribute, tier=1, quality="下品")
 
 
+SOFT_INNER = "柔息功"  # 一門登記的內功、屬柔、槽空著（不帶化勁）
+
+
 def _game(content, world, name="試甲", inner="calm"):
-    """身上一門內功（預設靜心訣，屬虛：它的一般功效是「險」，不碰扣血；粗淺吐納屬柔，會帶化勁）。"""
+    """身上一門內功（預設靜心訣，屬虛：它的一般功效是「險」，不碰扣血）。
+    武學重構：粗淺吐納兼容並蓄、沒有屬性了，要屬柔的內功時用 SOFT_INNER（登記一門相容屬性是柔的內功）。"""
     from tianxia.engine import Game
+    from tianxia.martial_arts import generate_from_name
     game = Game.new(content, name, rng=random.Random(0), world=world)
     game.client = None
-    rules.learn_skill(game.state, content, inner)
+    if inner == SOFT_INNER:
+        art = generate_from_name(inner, "內功", inner, attribute="柔").model_copy(update={"origin": "fused", "affinity": ["柔"]})
+        game.world.claim_skill_name(art)
+    else:
+        rules.learn_skill(game.state, content, inner)
     game.state.player.member.neigong_id = inner
     return game
 
@@ -219,7 +228,7 @@ def test_repair_needs_a_tier_one_material_and_silver_at_the_smith(content, world
 
 
 def test_wanted_wields_a_better_piece_then_buys_then_repairs(content, world):
-    game = _town(content, world, inner="basic_breath")  # 粗淺吐納：屬柔，架上有軟皮甲
+    game = _town(content, world, inner=SOFT_INNER)  # 屬柔，架上有軟皮甲
     s, p = game.state, game.state.player
     ng = _neigong(game, content, world)
     assert armor.wanted(s, content, ng) == f"{armor.BUY}柔"  # 跟內功同屬性的那一件
@@ -292,14 +301,19 @@ def _hp_lost(state, content, world, tier):
 
 
 def _soft(game, layers=3):
-    """身上換一門化勁 layers 層的武學（照 tests/test_trait_numbers.py::_wear；三層是 30%）。"""
-    from tianxia.martial_arts import generate_from_name
-    art = generate_from_name("護體拳", "武學", "護體拳", attribute="柔").model_copy(
-        update={"origin": "fused", "traits": ["柔"] * layers, "special": None},
-    )
+    """身上換一門化勁 layers 層的武學（照 tests/test_trait_numbers.py::_wear；三層是 30%）。
+    武學重構：功效照槽裡的意境，裝一個強度 layers 的柔意境（自己悟的）進槽。"""
+    from tianxia.martial_arts import Insight, generate_from_name
+    art = generate_from_name("護體拳", "武學", "護體拳", attribute="柔").model_copy(update={"origin": "fused", "affinity": ["柔"]})
     game.world.claim_skill_name(art)
-    game.state.player.member.wugong_id = art.id
-    game.state.player.art_quality[art.id] = "下品"
+    p = game.state.player
+    p.member.wugong_id = art.id
+    p.art_quality[art.id] = "下品"
+    ins = Insight(id="悟:化勁", name="化勁意", attribute="柔")
+    p.own_insights[ins.id] = ins
+    p.insights.append(ins.id)
+    p.insight_strength[ins.id] = layers
+    p.art_slots[art.id] = [ins.id]
     return art
 
 
@@ -460,7 +474,7 @@ def test_with_only_weapons_on_the_menu_has_no_page_button(content, world):
 
 
 def test_armor_page_buys_repairs_wields_and_dismantles(content, world):
-    game = _town(content, world, inner="basic_breath")  # 粗淺吐納：屬柔
+    game = _town(content, world, inner=SOFT_INNER)  # 屬柔
     p = game.state.player
     game.choose("act:smith")
     opts = _ids(game)
@@ -676,7 +690,7 @@ def test_smith_want_does_this_page_first_then_switches(content, world):
 
 def test_visit_smith_buys_repairs_and_wields_armor_though_the_smith_opens_on_the_weapon_page(content, world):
     from tianxia import bot
-    game = _town(content, world, weapons_on=True, inner="basic_breath")  # 粗淺吐納：屬柔
+    game = _town(content, world, weapons_on=True, inner=SOFT_INNER)  # 屬柔
     p = game.state.player
     rules.learn_skill(game.state, content, "sword")
     p.member.wugong_id = "sword"

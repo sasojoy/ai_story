@@ -13,7 +13,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from . import allied as allied_rules
-from . import calendar, conquest, economy, equipment, explore_modes, figures, four_tiers, precise, renown, rules, seal, sortie, territory, timetable
+from . import calendar, conquest, economy, equipment, explore_modes, figures, four_tiers, mall, precise, renown, rules, seal, sortie, territory, timetable
 from .models import Content
 from .rules import STANCE_NAMES  # 態勢卡上三方的叫法（官軍、黃巾、豪強）：說明跟卡上同一個叫法
 from .state import GameState, WorldState
@@ -193,10 +193,10 @@ def regen_line(content: Content) -> str:
     return f"體力每 {_clock(cfg.stamina_regen_seconds / cfg.time_scale)}回 1 點，滿 {cfg.stamina_max} 就不再回。"
 
 
-def newbie_line(content: Content, season: WorldState, still: bool | None = None) -> str:
+def newbie_line(content: Content, season: WorldState, still: bool | None = None, card: int = 0) -> str:
     """新手期體力回復加快（roster.newbie 的 newbie_stamina_days、newbie_stamina_multiplier）：第一季從自己加入的那一刻起算，beta 那一季
     從開季算，都是季曆天；寫成現實時間（季曆天 ÷ cal_scale ÷ time_scale，季長照這一季蓋的章）。倍數是 1 時沒有這一行（空字串）。
-    still 給了就補一句還在不在這段時間裡。"""
+    still 給了就補一句還在不在這段時間裡。card：今天月卡讓回體丹上限多幾顆（Game._pill_card_bonus，FB-480），0 一個字都不變。"""
     cfg = content.config
     tail = "" if still is None else ("（你還在新手期）" if still else "（你的新手期已經過了）")
     if cfg.newbie_real_hours > 0:  # 新手期照現實時間（Joy 2026-10-17「新手期 48 小時」）：寫這段時間裡有什麼
@@ -204,7 +204,8 @@ def newbie_line(content: Content, season: WorldState, still: bool | None = None)
         if cfg.newbie_stamina_multiplier > 1:
             perks.append(f"體力回復 ×{cfg.newbie_stamina_multiplier:g}")
         if cfg.stamina_pills_per_day > 0 and cfg.newbie_pills_per_day > 0:
-            perks.append(f"{cfg.stamina_pill_name}一天能服 {cfg.newbie_pills_per_day} 顆")
+            extra = f"（月卡多 {card} 顆）" if card > 0 else ""  # 待 joy 潤
+            perks.append(f"{cfg.stamina_pill_name}一天能服 {cfg.newbie_pills_per_day + card} 顆{extra}")
         if cfg.raid.enabled:
             perks.append("別人截殺不了你")
         if not perks:
@@ -219,10 +220,11 @@ def newbie_line(content: Content, season: WorldState, still: bool | None = None)
     return f"新手期：{since}的{gap}{span}內，體力回復 ×{cfg.newbie_stamina_multiplier:g}{tail}。"
 
 
-def pill_line(content: Content, count: int | None = None, today: int | None = None) -> str:
+def pill_line(content: Content, count: int | None = None, today: int | None = None, card: int = 0) -> str:
     """體力條右端那顆鈕：測試期間一鍵補滿打開時（Config.beta_free_refill）是「補滿」，不花丹；關著時是回體丹，一顆回多少
     （count 給了就寫還有幾顆，0 顆沒有這一行；None 是玩法說明那種不看個人的說法）。一天有上限時（stamina_pills_per_day）
-    多一句上限與換日，today 給了再寫今天還能服幾顆。"""
+    多一句上限與換日，today 給了再寫今天還能服幾顆。card：今天月卡讓上限多幾顆（Game._pill_card_bonus，跟 Game.pill_cap 加的同一份；
+    FB-480），兩個上限都加上去、括號裡寫月卡多幾顆；0 一個字都不變。"""
     cfg = content.config
     if cfg.beta_free_refill:
         return f"測試期間按體力條上的「{cfg.beta_free_refill_label}」直接補滿，不花{cfg.stamina_pill_name}。"
@@ -232,20 +234,23 @@ def pill_line(content: Content, count: int | None = None, today: int | None = No
     line = f"{cfg.stamina_pill_name}一顆回 {cfg.stamina_pill_restore} 點{have}，按體力條右端的「丹」服下。"
     if cfg.stamina_pills_per_day > 0:
         left = "" if today is None else f"（今天還能服 {today} 顆）"
-        rookie = f"（新手期 {cfg.newbie_pills_per_day} 顆）" if cfg.newbie_pills_per_day > 0 else ""
-        line += f"一天最多服 {cfg.stamina_pills_per_day} 顆{rookie}，每天 00:00（台灣時間）重新計算{left}。"
+        parts = [f"新手期 {cfg.newbie_pills_per_day + card} 顆"] * (cfg.newbie_pills_per_day > 0)
+        parts += [f"月卡多 {card} 顆"] * (card > 0)  # 待 joy 潤
+        rookie = f"（{'；'.join(parts)}）" if parts else ""
+        line += f"一天最多服 {cfg.stamina_pills_per_day + card} 顆{rookie}，每天 00:00（台灣時間）重新計算{left}。"
     return line
 
 
 def stamina_lines(
     content: Content, season: WorldState, newbie: bool | None = None, pills: int | None = None, button: bool = True,
-    today: int | None = None,
+    today: int | None = None, card: int = 0,
 ) -> list[str]:
     """體力條點開的說明（也是玩法說明「體力」那一節）：回復、新手期、回體丹或補滿。button：體力條上有沒有那顆鈕
-    （序章裡沒有，就不提）。today：今天還能服幾顆（Game.pills_left_today）。空的行不列。打坐 2026-10-12 拿掉了。"""
-    lines = [regen_line(content), newbie_line(content, season, newbie)]
+    （序章裡沒有，就不提）。today：今天還能服幾顆（Game.pills_left_today）。card：今天月卡讓回體丹上限多幾顆（FB-480；
+    玩法說明不看個人，是 0）。空的行不列。打坐 2026-10-12 拿掉了。"""
+    lines = [regen_line(content), newbie_line(content, season, newbie, card)]
     if button:
-        lines.append(pill_line(content, pills, today))
+        lines.append(pill_line(content, pills, today, card))
     return [line for line in lines if line]
 
 
@@ -629,7 +634,7 @@ def board_help(content: Content) -> list[str]:
 def quest_help(content: Content, allied: bool = False, season: WorldState | None = None) -> list[str]:
     """主線小標點開的說明：你能怎麼影響這一季（遊歷、軍令、伏筆）。FB-112：推線只說有些地方；伏筆只有會鎖定大事的兩方
     （foreshadow.LOCK_SIDES＝timetable.SIDE_NAMES）改寫得了，豪強做完是第三方（揭曉時留名、照 third_party_trends 推割據，結果不變），
-    散人做不了（foreshadow.capable 要陣營對得上）。"""
+    散人做不了（foreshadow.capable 要陣營對得上）。season 給了照季寫軍令多久一道（軍令每天發的季〔21 天季、7 天濃縮季〕「每天」，FB-501、FB-502）。"""
     locks = "、".join(timetable.SIDE_NAMES.values())
     third = "" if allied else "、".join(STANCE_NAMES.get(f, f) for f in _geju_sides(content))  # 豪強分屬兩軍：沒有第三方
     geju = any(rules.GEJU in e.third_party_trends for e in content.timetable)
@@ -637,7 +642,8 @@ def quest_help(content: Content, allied: bool = False, season: WorldState | None
     if allied:  # 新寫
         aside = f"地方{STANCE_NAMES['haoqiang']}照依附的那一邊；"
     return [
-        f"你能做的：{_sortie_places(content, season)}；投靠陣營之後每週一有軍令，照做記功，全陣營湊滿額度就一起見效；"
+        f"你能做的：{_sortie_places(content, season)}；"
+        f"投靠陣營之後{calendar.week_word('order_each', content, season)}有軍令，照做記功，全陣營湊滿額度就一起見效；"
         f"{locks}的人聽傳聞、跟人物交好，湊齊關鍵伏筆，能暗中改寫一件大事（{aside}散人拿不到伏筆）。",
     ]
 
@@ -807,12 +813,12 @@ def renown_lines(content: Content, season: WorldState) -> list[str]:
     if note:
         lines.append(note)
     for tier in range(1, len(fb) + 1):
-        perks = renown.fame_perks(content, tier)
+        perks = renown.fame_perks(content, tier, season)
         if perks:
             lines.append(f"{renown.FAME_TITLES[tier]}：{'；'.join(perks)}。")
     for way in renown.PATHS:
         for tier in range(1, len(vb) + 1):
-            perks = renown.virtue_perks(content, way, tier)
+            perks = renown.virtue_perks(content, way, tier, season)
             if perks:
                 lines.append(f"{renown.VIRTUE_TITLES[way][tier]}：{'；'.join(perks)}。")
     if renown.on(content, "deed_fame"):
@@ -877,8 +883,9 @@ def join_lines(content: Content, season: WorldState) -> list[str]:
     effects += [f"{'、'.join(denting)}挫大勢人物的聲威"] if denting else []
     met = f"全陣營湊滿額度的那一刻一起見效（{'，'.join(effects)}）" if effects else "全陣營湊滿額度的那一刻一起見效"
     lines += [
-        f"**軍令**：每週一發令（{kinds}，各陣營拿到的不一樣），照做一次記一次功；{met}。"
-        "本週的軍令卡在江湖頁行動列底下。",
+        # 軍令每天一道的季（21 天季、7 天濃縮季）：「每天發令」「今日的軍令卡」（calendar.week_word，FB-501、FB-502）
+        f"**軍令**：{calendar.week_word('order_each', content, season)}發令（{kinds}，各陣營拿到的不一樣），照做一次記一次功；{met}。"
+        f"{calendar.week_word('order_this', content, season)}的軍令卡在江湖頁行動列底下。",
         f"**晉升**：替陣營出力記貢獻（推 1 點戰況記 {cfg.contrib_per_push}），到 {cfg.rank2_contrib} 會有人召見，去應召就晉升；"
         f"自己陣營的大勢人物，你每晉升一階，求見他的門檻就低 {cfg.audience_rank_discount}。"
         + (f"地方豪強最多做到第 {allied_rules.CAP_RANK} 階。" if allied else ""),
@@ -960,28 +967,50 @@ def season_page_lines(content: Content, season: WorldState, rule: str = "") -> l
 def legend_buy_lines(content: Content) -> list[str]:
     """玩法說明「心得」那一節：以心得換破境丹（Joy 2026-10-18）；關著是空的。數字讀 Config。"""
     cfg = content.config
-    lines = []
-    if cfg.cultivate_xinde_price > 0:
-        lines.append(
-            f"- 修練也可以改付心得、不花體力：這一季第一次 {cfg.cultivate_xinde_price}，之後每修一次多 {cfg.cultivate_xinde_step}。"
-            "後期改練一門新功夫，攢下的心得就能直接拿來衝品質、添火候。"
-        )
+    lines = []  # 以心得修練在武學重構時拿掉了（修練只剩絕學那一步），這裡只剩換丹那一句
     if cfg.legend_xinde_price <= 0:
         return lines
     return lines + [
-        f"- 一門武學衝到絕學那一步時，可以在修練頁花心得換一枚{cfg.legend_item_name}：這一季第一枚 {cfg.legend_xinde_price}，"
+        f"- 一門武學到了絕學那一步時，可以在修練頁花心得換一枚{cfg.legend_item_name}：這一季第一枚 {cfg.legend_xinde_price}，"
         f"之後每換一枚多 {cfg.legend_xinde_step}。後期改練一門新功夫，不必只等打仗時的頓悟。",
     ]
+
+
+MALL_TITLE = "商城"  # 玩法說明那一節的標題（商城第三批）；以下待 joy 潤
+MALL_WHERE = "齒輪旁的元寶鈕、底部的「寶」都打開商城，架上的東西花元寶買；買過的、元寶的進出在「紀錄」那一頁查得到。"
+MALL_COIN = "元寶只能儲值取得，不能拿銀兩換，也換不成銀兩。"
+MALL_BETA = "這一版是封閉測試：每個角色第一次進來先撥 {n} 元寶（只發一次，之後開新的一季也不再發），正式開服時清空。"
+MALL_CARD = "月卡：有效的那幾天，每天能服的{pill}多 {bonus} 顆（{caps}）。買的那一天算第一天；還沒到期再買，從到期日往後接。"
+
+
+def mall_lines(content: Content) -> list[str]:
+    """玩法說明「商城」那一節（商城架構設計 4.2、4.5；商城第三批）：入口、元寶怎麼來、封測發放（Config.mall.beta_grant，0 不寫）、
+    月卡（架上有月卡、回體丹一天有上限才寫；上限照 Config，跟 Game.pill_cap 加的同一份 card_pill_bonus）。不看個人：
+    這個人此刻的上限寫在點體力條看的那幾句（stamina_lines 的 card，FB-480）。商城關著是空的（玩法說明一個字都不提）。"""
+    if not mall.on(content):
+        return []
+    cfg = content.config
+    lines = [MALL_WHERE, MALL_COIN]
+    if cfg.mall.beta_grant > 0:
+        lines.append(MALL_BETA.format(n=cfg.mall.beta_grant))
+    bonus = cfg.mall.card_pill_bonus
+    sells_card = any("card_days" in item.effects for item in content.mall.values())
+    if sells_card and bonus > 0 and cfg.stamina_pills_per_day > 0:
+        caps = [f"平常 {cfg.stamina_pills_per_day} → {cfg.stamina_pills_per_day + bonus}"]
+        caps += [f"新手期 {cfg.newbie_pills_per_day} → {cfg.newbie_pills_per_day + bonus}"] * (cfg.newbie_pills_per_day > 0)
+        lines.append(MALL_CARD.format(pill=cfg.stamina_pill_name, bonus=bonus, caps="、".join(caps)))
+    return lines
 
 
 def pages_lines() -> list[str]:
     """玩法說明「修練與煉製」：底部兩個分頁各做什麼（修練頁 pagePractice、煉製頁 pageCraft 的實際內容）。價錢寫在「心得」那一節。"""
     return [
-        "**修練**：最上面是你的人物，點身上的光點看那一門功夫或那一件裝備。練成（花心得升一成）、修練（融過意境的武學，"
-        "拿它融的那個意境衝品質，花體力；衝中品要先練到四成、上品七成、絕學十成）、改練、熔掉用不上的武學與意境（拿回心得；"
-        "功法庫上頭的「批量熔煉」一次勾一堆）、閉關、療傷（只在有醫館的城鎮）；底下是裝備（兵器、防具、坐騎、寶物）、"
-        "同伴與部下（心得夠了可以傳功給他們）。",
-        "**煉製**：太極火爐。一門武學＋一個意境合出新武學、兩門武學合出第三門、兩個意境合出新的意境；放進爐裡的都不會用掉。"
+        "**修練**：最上面是你的人物，點身上的光點看那一門功夫或那一件裝備。練成（花心得升一成）、每一門底下的意境槽（點空格裝意境、"
+        "點 × 拆下，隨時換；槽收得下的屬性才裝得進去）、改練、熔掉用不上的武學與意境（拿回心得；功法庫上頭的「批量熔煉」一次勾一堆）、"
+        "閉關、療傷（只在有醫館的城鎮）；上品、練滿十成的武學才有「修練」那一顆：等打贏硬仗的契機，或服破境丹強行衝關；"
+        "底下是裝備（兵器、防具、坐騎、寶物）、同伴與部下（心得夠了可以傳功給他們）。",
+        "**煉製**：太極火爐。兩門武學合出第三門、兩個不同的意境合出新的意境、同一個意境放兩次揣摩得更深；放進爐裡的都不會用掉。"
+        "一門武學＋一個意境放進爐裡就是把它裝進槽、不花錢。爐子底下可以花心得自創一門武學（形意、式、取名三步）。"
         "最底下是背包。",
     ]
 
@@ -1168,11 +1197,12 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
         + "選對了還要看機緣（沒抓住也有一點心得），"
         "抓住了可以畫一筆，也可以順其自然。哪裡悟得到什麼看地形。" + (STRONG_HOWTO if cfg.insight_strong.enabled else ""),
         *([TERRAIN_HOWTO] if cfg.terrain_arts.enabled and cfg.insight_strong.enabled else []),
-        "- 善名、惡名夠高也會悟到意境。合成、合併都不會把意境用掉（自己熔掉才沒了）。",
-        "- 一門武學融一個意境，合成新的武學；兩門武學也能合出第三門；兩個意境合併成新的意境。"
+        "- 善名、惡名夠高也會悟到意境。合併、揣摩都不會把意境用掉（自己熔掉才沒了）。",
+        "- 意境就是技能：裝進武學的意境槽才生效，一個意境同時只能裝在一門上。武學的品級定槽數"
+        f"（{'、'.join(f'{q} {n} 格' for q, n in cfg.arts.slots.items())}），也定威力的上限；槽只收那門武學相容的屬性（基礎武學什麼都收）。"
         f"悟到已經會的，化成 {cfg.duplicate_insight_xinde} 心得。",
-        "- 合出來的武學有境界：初成、精進、化境，每合一次往上一層；到了化境就不能再往下合。"
-        "意境合一次多一重（最多三重），二重起分圓融、駁雜；重數越高、越圓融，融進武學的功效越多。",
+        "- 同一個意境放兩次揣摩，強度從 ● 到 ●●●，就是那一招的層數；兩個不同的意境合出複合的意境，是更高階的一招。"
+        "兩門武學合出第三門：品級取高的，兩門都練滿、槽都裝滿再升一品（最高上品），槽收的屬性是兩門合起來。",
         "",
         "#### 背包",
         "- 素材不進太極火爐：拿去鐵匠鋪當主料、輔料打兵器防具，修兵器、餵馬也用得上；第一季裡還折成糧草，押糧車、準備伏筆都要用。",
@@ -1180,5 +1210,8 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
     economy = economy_lines(content, allied)
     if economy:  # 素材與經濟（收購、升階、捐軍備）：開著的才寫
         lines += ["", *_section(ECONOMY_TITLE, economy)]
+    shop = mall_lines(content)
+    if shop:  # 商城（商城第三批）：開著才寫，關著一個字都不變
+        lines += ["", *_section(MALL_TITLE, shop)]
     return "\n".join(lines)
 

@@ -172,12 +172,19 @@ def _price(world: WorldState, content: Content, faction: str | None, loc_id: str
 
 
 def _titles(state: GameState, content: Content, week: int, now_week: int) -> list[str]:
-    """第 week 週時刻表的大事（第一季才有）：以前的週全列，這一週只列已經到了的。"""
+    """第 week 週時刻表的大事（第一季才有）：只列已經到了的。
+    「到了沒」照這一件真正的時刻（timetable.happened_at：決戰照排定的時刻、季末照排定的季末，其餘照季曆；FB-504）：時刻表決戰只寫了
+    星期與鐘點，照 calendar.event_time 會被當成那一週（段）第一天就到了（7 天季第 1 天就列出長社火攻、21 天季與週末在決戰那一週
+    的週一就列出）。以前的週也照它（管理者往後排到還沒到的不列）。週末 PM 2026-10-20 改修，跟 21 天季、7 天季同一個寫法：
+    除了決戰與季末，其他大事的時刻就是 calendar.event_time，週末列的時刻一個字都不變。
+    FB-561：管理者提早開的決戰一開就列，不等排定的時刻，FB-563：照開的那一刻（WorldState.showdown_opened_at）歸週，之後收場、
+    過了週界也不換週，開打後被管理者取消、沒有結果的不列（showdowns_cancelled）；FB-562：決戰與季末歸在實際排定的時刻落的那一週
+    （timetable.happened_week；被「避開半夜」或管理者挪到別週的，不照時刻表原本寫的那一週）。now_week 只留著給呼叫端對齊。"""
     w = state.world
     if not rules.season_one(content, w):
         return []
     return [e.title for e in timetable.events(w, content)
-            if e.week == week and (week < now_week or calendar.event_time(e, content, w) <= w.time)]
+            if timetable.happened_week(w, content, e) == week and timetable.happened_at(w, content, e) <= w.time]
 
 
 def _ropes(state: GameState, content: Content, now_week: int) -> list[dict]:

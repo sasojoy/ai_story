@@ -46,6 +46,48 @@ description: 《天下大勢》的分支、測試與合併規矩（企劃者 202
 - 交接寫在 `docs/superpowers/handoff/`：分支與 HEAD、還沒提交的東西、開著的伺服器與埠、還開著的 FB、踩過的坑。
 - 開發照技能 `tianxia-dev`（改網頁另看同資料夾的 `網頁.md`），QA 照技能 `tianxia-qa`（只能靠引擎驗的看同資料夾的 `引擎驗收.md`）；派工單寫明要用哪一個技能。這兩個技能是 10/19 收工的四個老對話寫的。
 
+## PM 平行派工（2026-10-20 這一輪學到的）
+
+- **交接是活的**：企劃者 2026-10-20「token 到上限我可能換帳號，要能接續開發」。PM 每合一次、派一次工、企劃者每定一件事，就更新 `docs/superpowers/handoff/` 最新那一份（分支與 HEAD、進行中的子代理與它們推到哪、下一步、等企劃者決定的、FB 號段與埠）並推上 develop。
+- **派工前先核對現行程式**：計畫寫的「現在的程式」常常已經過時（例如計畫照 main 寫、develop 多了正式季十批）。派工單第一步寫「核對現行程式，差異寫進計畫第六節；前提不在了就停下來回報」。
+- **平行的子代理**：
+  - 每個 QA 給一段不重疊的 FB 號段（例：FB-460～469、470～479）。
+  - 每個要開伺服器的給一個埠、一個 `<名字>.localhost`；瀏覽器一律帶自己的 tabId（10/20 有 QA 沒帶 tabId，動到另一個子代理的分頁）。
+  - 小的修正與複驗可以派 `model: sonnet`。
+- **疊批**：趕時間時，下一批可以接在還在 QA 的上一批上面開（例：`dev/shop-2` 從 `dev/shop-1` 開）；上一批的修正推回上一批的分支，下一批合進來再推。
+- **暫停與用量上限**：企劃者喊暫停就用 TaskStop 停掉全部子代理，再查每個工作樹留下什麼：已推的記下來，沒推的由 PM 提交成 WIP 推上去，再派新的子代理接手。子代理撞到用量上限時，用 SendMessage 叫它從中斷的地方接著做，不要重派。
+- **換帳號、對話斷掉，子代理全部停**（不是暫停，不會自己接回來；10/20 下午換帳號那一次三個都停在半路）。新的 PM：
+  1. 兩份 clone 的 `.claude/worktrees/agent-*` 都看（工作樹開在派工那個 PM 對話所在的 clone），`git -C <工作樹> status`、`git log origin/<分支>..HEAD` 找沒提交、沒推的東西；
+  2. 半成品由 PM 提交成 WIP 推上它的分支（commit 訊息寫停在哪一步）；
+  3. 重派新的子代理（Agent 工具、`isolation: "worktree"`），派工單寫「從 `origin/<分支>` 開 `git switch -c <分支> origin/<分支>`，舊的工作樹不要用」，再把那一步之前做完的寫清楚；
+  4. 交接第二節改成新派的這幾個。
+  - **派之前先看自己的對話在哪個目錄**（2026-10-20 晚學到的）：新對話常常開在主 clone（`C:\Ray\專案\ai遊戲`），那裡停在 `main`：CLAUDE.md 是舊的大份、也沒有 `tianxia-dev`／`tianxia-qa` 技能，從這裡派的子代理（`isolation: "worktree"`）兩樣都拿錯。先開自己的 PM 工作樹（`git worktree add <主 clone>/.claude/worktrees/pm-<名字> -b pm/<名字> origin/develop`），用 `mcp__ccd_directory__change_directory` 把對話搬過去（這一輪結束才生效：開一個很短的背景指令〔例如 fetch〕讓自己被叫回來），Bash 也 `cd` 過去，確認 `pwd` 是那個工作樹再派。
+  - 半成品的 WIP 推到 `dev/<x>b` 這種另開的分支，不直接推回原本的 `dev/<x>`（QA 會從那裡開）；接手的子代理收尾之後再 fast-forward 推進 `dev/<x>`。
+- **PM 不能寫別的工作樹的檔**（有 hook 擋）：PM 要改 develop 上的文件，在 scratchpad 開一個自己的工作樹（`git worktree add <scratchpad>/pmwt -b pm/<名字> origin/develop`；不要切主 clone 的分支，主 clone 是大家讀 `CLAUDE.md` 的地方），改完 `git push origin HEAD:develop`（快轉）。git 指令可以 `git -C` 別的工作樹。
+- **這份 clone 的 `git fetch origin` 不會更新 `origin/dev/*`、`origin/feature/*`、`origin/qa/*`**（refspec 只有一部分）：核對推送、挑測試的 base、算 diff 之前，明確 fetch 那個分支（`git fetch origin +refs/heads/dev/x:refs/remotes/origin/dev/x`，或 `+refs/heads/dev/*:refs/remotes/origin/dev/*`），或直接看 `git ls-remote`。不然會把「推到了」誤判成「沒推到」、拿舊的 base 跑測試。
+- **提前做（企劃者 2026-10-20「能提前先做的部分就加開任務」）**：
+  - 下一批的引擎那一半疊在還沒 QA 完的上一批上開（`dev/<x>-2` 從 `dev/<x>-1`），派工單寫「每做完一個 Task、推之前先 `git merge --no-ff origin/dev/<x>-1`」；要等企劃者挑圖的網頁那一段留到最後。
+  - 對比圖另開一條只放圖的分支（`dev/<x>-mock`），跟正在推程式的分支分開，合併時不會撞。
+  - 要一起部署的幾條線，在正式合併之前先派一個 QA 做**整合預演**（`qa/integ-<名字>`，從 develop 開、把幾條線此刻的 HEAD 合進來）：衝突、整套、資料庫升級預演、部署說明草稿。正式合併時照它的紀錄解衝突。10/20 第一次做（`qa/integ-7day`）學到的：
+    - 合的當下用 `git rev-parse` 記下每一條的 SHA（同一份 clone 別人會 fetch，`origin/*` 做到一半就往前走）；
+    - 整套紅了，到那條線自己的 commit 上單獨重跑紅的那幾條，判斷是「合起來才壞」還是「原本就紅」；
+    - 線後來又動了，用 `git merge-tree` 試合新的 HEAD，不動分支；
+    - 資料庫升級預演：舊程式（`origin/main`）在暫存資料庫開季、建幾個角色、做幾個動作 → 備份 → 新程式開同一份 → 驗版本、資料都在、發放、對帳 → 舊程式開新版會擋 → 還原備份舊程式打得開；季中那一份另外試（季曆換算會不會錯）。
+  - PM 用 Bash heredoc 跑 Python 改中文路徑時，一般字串裡的 `\a`（例 `專案\ai遊戲`、`worktrees\agent-*`）會變成響鈴字元：路徑一律用 raw string，寫完 `assert '\x07' not in s`。
+  - 同時跑很多子代理時，派工單寫 pytest 用 `-n 6`～`-n 8`、不要 `-n auto`，免得互相搶 CPU（六、七個同時跑時用 `-n 4`）。
+  - **派工單裡每一行 pytest 都寫 `-m "slow or not slow"`**（2026-10-20 小單 QA：`pyproject.toml` 的 `addopts` 預設擋掉 slow，整個檔都標 slow 的 `test_fb504_*` 一條都沒跑，合併那一刻的整套才會紅）。`scripts/test_for.py` 自己會帶，不必加。
+  - **子代理共用 PM 的 scratchpad**（2026-10-20 有一個的 `edit_guide.py` 被另一個蓋掉）：派工單寫明暫存檔放在 scratchpad 底下自己的子資料夾（用分支名，例 `qa-small-1020/`）。
+  - 子代理（尤其 sonnet）有時用 Skill 工具找不到 `tianxia-dev`／`tianxia-qa`（2026-10-21 有一個回報「這份 checkout 沒有這個技能」，其實檔案在）：派工單寫「Skill 工具找不到就直接 Read 工作樹裡的 `.claude/skills/<技能>/SKILL.md`」。
+  - 派工單要開的本地分支名，可能已經被別的工作樹佔著（舊的子代理留下的同名本地分支，`git switch -c` 會失敗）：寫明「同名本地分支已存在就開 `<分支>-work`，推的時候照樣推到 `origin/<分支>`」。
+- **分支名字別撞**：同一個字已經有別的意思時換個寫法並在交接註明（例：正式季第七批的 `qa/season-7` 與 7 天季的 `qa/season7`）。
+- **合併的衝突**：
+  - `試玩回饋.md` 兩邊都留，表格照 FB 編號排，檔尾的驗收紀錄照時間排。
+  - `CLAUDE.md` 一律留瘦身版，對方新加的那一行搬進對應的 `docs/guide/`。
+  - 用腳本解衝突時保留檔案原本的換行（`newline=""`），每一處 assert。
+- **合併的順序**：功能分支合進 develop 之前，先把 develop（與 main 的新東西）合進功能分支，在那裡跑整套；合進 develop 時內容跟測過的一樣（`git diff --quiet HEAD <功能分支>`）就不必再跑一次。
+- **跑整套的指令**：`TIANXIA_DB=<scratchpad>/db/x.db PYTHONIOENCODING=utf-8 C:/Ray/專案/天下大勢/.venv/Scripts/python.exe -m pytest -q -n auto -m "slow or not slow" -p no:cacheprovider > log 2>&1; echo EXIT=$? >> log`，背景跑，看最後那一行「N passed」與 EXIT 再推。
+- **設計稿請人審**：寫完設計稿派一個子代理用「拿這份能不能開工」讀一遍，只把「只有企劃者能答」的問題一次問完，其餘 PM 自己定、標【PM】。
+
 ## 流程
 
 1. **設計定了**：開發 session 照設計寫這一批的計畫（superpowers:writing-plans，存 `docs/superpowers/plans/`，不必給企劃者審），再照計畫在 session 裡一步一步做（executing-plans，不開子代理）。

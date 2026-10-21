@@ -58,12 +58,25 @@ class MartialArt(BaseModel):
     lean: str = "無"  # 正、邪、無：跟著最後融的意境（設計 7.3）
     traits: list[str] = Field(default_factory=list)  # 一般功效：屬性的清單，第一個是自己的、後面是傳下來的（13.3）；空的＝只有自己屬性
     special: str | None = None  # 特別功效的 id（13.4）；不傳給後代
-    secret: str | None = None  # 秘方合出來的（content/secret_recipes.json 的 id）：不當「合到舊的」的候選
-    # 第幾代（tianxia/depth.py）：基礎與內容寫的是第零代，合一次一代；None 是這一版之前登記的，照血統（base、parents）補算
-    gen: int | None = None
-    # 武學技能分檔（skill_slots.apply）：只在玩家自己那一份的「身上的樣子」上填，全服登記的那一份永遠是空的
+    secret: str | None = None  # 秘方合出來的（content/secret_recipes.json 的 id）
+    # 相容屬性（武學重構，Joy 2026-10-20「武學槽是有屬性對應的，例如追風步只能塞風跟快的意境、太極拳可以適配全部」）：
+    # 意境槽只收這幾種屬性的意境；空的＝兼容並蓄、什麼都收（基礎武學）。武學自己的屬性＝第一個；兼容並蓄的沒有屬性（attribute ""）。
+    # 合成出來的＝兩門來源合起來（任一門兼容並蓄就兼容並蓄）；自創的照形意那一步挑
+    affinity: list[str] = Field(default_factory=list)
+    # 自創的武學（tianxia/create.py）：式那一步挑的兵器種類（內功是 None）；合成、內容武學照 weapons.art_weapon 推，這欄空著
+    weapon: str | None = None
+    slot_adjust: int = 0  # 意境槽比品級的格數多或少幾格（自創挑「兼容並蓄」少一格）；最少留一格
+    # 槽分顏色（Joy 2026-10-20「武學出來的槽位就是分屬性的，有些是單色，有些是雙色，有些是全部都能放」；arts.colors_of）：
+    # 照格子的先後，每一格收哪幾種屬性的意境（一種是單色、兩種是雙色、空清單是全色、什麼都收）。品級開幾格就用前幾格；
+    # 沒寫的（內容武學、這一版之前的）每一格都照 affinity。自創的在成形那一步擲（create.roll_colors），合成的從兩門來源的格子裡抽
+    slot_colors: list[list[str]] = Field(default_factory=list)
+    # 自創那一步玩家拖出來的姿勢（create.POSE_KEYS 九個角度，度）：功法卡的小圖照它畫；空的照兵器的預設姿勢畫
+    pose: dict[str, float] = Field(default_factory=dict)
+    method: str | None = None  # 自創的內功挑的行功之法（吐納、導引、坐忘、閉息）；武學與其他是 None
+    # 身上的樣子（arts.apply）：只在玩家自己那一份上填，全服登記的那一份永遠是空的
     extra_specials: list[str] = Field(default_factory=list)  # 空格擲到的中階技能（特別功效 id）
     high: str | None = None  # 擲到的高階技能（content/traits.json 的 high 的 id）
+    extra_highs: list[str] = Field(default_factory=list)  # 槽裡第二個以後的大獎（意境效果池；同名的只算一個）
     dormant: list[str] = Field(default_factory=list)  # 來路有、格子不夠還沒亮的一般功效（屬性）；特別功效沒亮寫「特:id」
 
 
@@ -81,6 +94,7 @@ class Insight(BaseModel):
     note: str = ""  # 模型寫的一句說明；基本意境是內容的 desc
     parents: list[str] = Field(default_factory=list)  # 合併出來的：兩個來源的 id（排序過）
     secret: str | None = None  # 秘方合出來的（同 MartialArt.secret）
+    secret_special: str | None = None  # 秘方合出來的意境帶的特別功效 id（武學重構：這個意境裝進槽就是那一招）
     # 幾重、圓融還是駁雜（tianxia/depth.py）：悟來的一重、不分圓融駁雜；None 是這一版之前合的，照 parents 補算
     rank: int | None = None
     harmony: str | None = None  # "圓融"、"駁雜"；一重是 None
@@ -176,7 +190,7 @@ def historical_art(skill_id: str, name: str, kind: str, attribute: str, quality:
 
 def content_art(
     skill_id: str, name: str, kind: str, attribute: str, quality: str, special: str | None = None,
-    traits: list[str] | None = None, lean: str = "無",
+    traits: list[str] | None = None, lean: str = "無", affinity: list[str] | None = None,
 ) -> MartialArt:
     """內容手寫的武學：下品是基礎武學（武學與成長設計附錄 B，origin "basic"）；
     其他品質照舊走 historical_art（本命武學的絕學、部下用的上品武學，來源標本命，不算基礎武學）。
@@ -190,7 +204,7 @@ def content_art(
     return MartialArt(
         id=skill_id, name=name, kind=kind, quality=quality, attribute=attribute,
         base_power=QUALITY_BASE_POWER[quality], top_power=QUALITY_TOP_POWER[quality], origin="basic",
-        special=special, lean=lean,
+        special=special, lean=lean, affinity=list(affinity or []),
     )
 
 
@@ -204,6 +218,19 @@ def with_quality(art: MartialArt, quality: str) -> MartialArt:
         "quality": quality,
         "base_power": round(QUALITY_BASE_POWER[quality] * scale, 1),
         "top_power": round(QUALITY_TOP_POWER[quality] * scale, 1),
+    })
+
+
+def power_scale(art: MartialArt) -> float:
+    """這門武學的基本威力倍數：同品級的區間乘多少（內容寫的與基礎武學是 1）。"""
+    return art.base_power / QUALITY_BASE_POWER[art.quality]
+
+
+def scaled(art: MartialArt, scale: float) -> MartialArt:
+    """照品級的區間乘 scale 重寫第一成與第十成的威力。"""
+    return art.model_copy(update={
+        "base_power": round(QUALITY_BASE_POWER[art.quality] * scale, 1),
+        "top_power": round(QUALITY_TOP_POWER[art.quality] * scale, 1),
     })
 
 

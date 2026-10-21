@@ -288,14 +288,15 @@ def test_fitting_lists_the_art_that_melts_for_least_first(beta_setup):
 
 
 def test_arts_that_melt_for_the_same_give_the_lower_quality_one_first(beta_setup):
-    """PM 2026-10-11：熔煉值一樣時，品質低的先（求藝照熔煉值、品質〔低的先〕、再照名字）。熔煉值只算自己修練上去的幾階，
-    合成時就擲到上品的那門（art_rolled）跟下品的那門同成同值，名字又排在下品那門前面——只看熔煉值與名字的話，上品的會被排在前面交出去。"""
+    """PM 2026-10-11：熔煉值一樣時，品質低的先（求藝照熔煉值、品質〔低的先〕、再照名字）。熔煉值只算絕學契機那一階的加給，
+    合成就是上品的那門（武學重構：品級是兩門來源帶來的，以前叫 art_rolled）跟下品的那門同成同值，名字又排在下品那門前面——
+    只看熔煉值與名字的話，上品的會被排在前面交出去。"""
     content, world = beta_setup
     upper, lower = _fused(world, "烈焰掌"), _fused(world, "鐵砂掌")  # 「烈」排在「鐵」前面
 
     def library_of(p):
         p.arts = [upper.id, lower.id]
-        p.art_quality[upper.id] = p.art_rolled[upper.id] = "上品"  # 合成時擲到上品：登記的是下品，自己這一份是上品，熔煉沒有加給
+        p.art_quality[upper.id] = "上品"  # 合成出來就是上品：登記的是下品，自己這一份是上品，熔煉沒有加給（武學重構：沒有 art_rolled 了）
 
     _edit(world, "丙", library_of)
     art = _art(world)
@@ -330,20 +331,24 @@ def _give(bounty_id, item_id):
 
 
 def test_handing_in_an_art_takes_it_and_its_records_but_the_recipe_stays(beta_setup):
-    """設計 4.6：交出去就沒了——功法庫拿掉、四份私有紀錄（成、自己那一份的品質、熟練度、擲到的品質）清掉、不退心得；
-    全服登記的那一門照舊，照同一個配方再合一次查表就有、不叫模型（設計 4.10：這不是漏洞）。"""
+    """設計 4.6：交出去就沒了——功法庫拿掉、私有紀錄（成、自己那一份的品質、熟練度、意境槽）清掉、不退心得；
+    全服登記的那一門照舊，照同一個配方再合一次查表就有、不叫模型（設計 4.10：這不是漏洞）。
+    武學重構：合成只剩武學＋武學，用兩門相容屬性是快的武學合（合出來的相容屬性是聯集，屬性是快）。"""
     content, world = beta_setup
+    one, two = _fused(world, "迅雷腿", attribute="快", affinity=["快"]), _fused(world, "追影掌", attribute="快", affinity=["快"])
+    pair = (one.id, two.id)
 
     def forge(g):
-        g.state.player.insights.append("feng")
+        g.state.player.arts += list(pair)
         g.state.player.stats["xinde"] = 50
-        return g.forge("fist", ["feng"], proposed=("疾風拳", "一句話。"))
+        return g.forge(one.id, [], proposed=("疾風拳", "一句話。"), other_art=two.id)
 
     _do(content, world, "丙", forge)
-    art_id = _load(world, "丙").player.arts[0]
+    art_id = next(a for a in _load(world, "丙").player.arts if a not in pair)
 
     def records(p):
-        p.art_levels[art_id], p.art_quality[art_id], p.art_mastery[art_id], p.art_rolled[art_id] = 3, "中品", 1, "中品"
+        p.insights.append("feng")
+        p.art_levels[art_id], p.art_quality[art_id], p.art_mastery[art_id], p.art_slots[art_id] = 3, "中品", 1, ["feng", None, None]
 
     _edit(world, "丙", records)
     b = _art(world, attribute="快")
@@ -351,10 +356,11 @@ def test_handing_in_an_art_takes_it_and_its_records_but_the_recipe_stays(beta_se
     msgs, game = _direct(content, world, "丙", _give(b.id, art_id))
     p = game.state.player
     assert msgs[0] == bounties.GIVEN.format(name="疾風拳", issuer="官軍", title="求藝・快")
-    assert art_id not in p.arts and all(art_id not in r for r in (p.art_levels, p.art_quality, p.art_mastery, p.art_rolled))
+    assert art_id not in p.arts and all(art_id not in r for r in (p.art_levels, p.art_quality, p.art_mastery, p.art_slots))
+    assert "feng" in p.insights  # 槽裡的意境拆回背包
     assert p.stats["xinde"] == before + content.config.bounties.xinde["art"]  # 只有賞的心得，不退熔煉的
     assert world.get_skill(art_id).creator == "丙"  # 全服登記的那一門不受影響，你是首創者也一樣
-    _do(content, world, "丙", lambda g: g.forge("fist", ["feng"]))  # 沒給 proposed：配方已經登記，查表、不叫模型
+    _do(content, world, "丙", lambda g: g.forge(one.id, [], other_art=two.id))  # 沒給 proposed：配方已經登記，查表、不叫模型
     assert art_id in _load(world, "丙").player.arts
 
 

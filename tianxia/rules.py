@@ -154,7 +154,9 @@ def day_turn(content: Content, world: WorldState, time: float | None = None) -> 
     end = day_ends(content, world, time)
     if end >= season_end_time(world, content) - calendar.EPS_SECONDS:
         return ("season", None)
-    if end >= season_length_days(world, content) * DAY - calendar.EPS_SECONDS:
+    # 名義季末照 calendar.nominal_end（FB-505，同 FB-500）：照現實天的季扣開季偏移（週三 14:00 開的 7 天季是 7 天減 14 小時），
+    # 其他季就是季長 × DAY（一個字都不變）
+    if end >= calendar.nominal_end(content, world) - calendar.EPS_SECONDS:
         return ("later", None)
     if not calendar.season_one_on(world, content):
         end = math.ceil(end / calendar.MINUTE - calendar.EPS_MINUTES) * calendar.MINUTE
@@ -271,13 +273,18 @@ def check_condition(cond: Condition, state: GameState, content: Content | None =
         if fought is None or fought.tier not in cond.fight_tiers:
             return False
     if (cond.night is not None or cond.week_min is not None or cond.week_max is not None
-            or cond.cal_day_min is not None or cond.cal_day_max is not None):
+            or cond.cal_day_min is not None or cond.cal_day_max is not None
+            or cond.cal_day_min7 is not None or cond.cal_day_max7 is not None):
         if content is None or not calendar.season_one_on(w, content):
             return False
         if cond.night is not None and calendar.is_night(w.time, content, w) != cond.night:
             return False
         at = calendar.point(w.time, content, w)
-        if calendar.season21_on(w, content):  # 21 天季照天數、不看週（正式季整合設計 1.2 給開發 6）
+        if calendar.week7_on(w, content):  # 7 天濃縮季照天數、讀 7 天的那一份（開季那天是第 1 天）
+            if ((cond.cal_day_min7 is not None and at.cal_day < cond.cal_day_min7)
+                    or (cond.cal_day_max7 is not None and at.cal_day > cond.cal_day_max7)):
+                return False
+        elif calendar.season21_on(w, content):  # 21 天季照天數、不看週（正式季整合設計 1.2 給開發 6）
             if ((cond.cal_day_min is not None and at.cal_day < cond.cal_day_min)
                     or (cond.cal_day_max is not None and at.cal_day > cond.cal_day_max)):
                 return False
@@ -1020,7 +1027,7 @@ def learn_skill(state: GameState, content: Content, skill_id: str) -> list[str]:
     skill = content.skills[skill_id]
     if skill_id in library.owned_arts(state):
         return []
-    stored = library.store_art(state, content_art(skill.id, skill.name, skill.kind, skill.attribute, skill.quality, lean=skill.lean))
+    stored = library.store_art(state, content_art(skill.id, skill.name, skill.kind, skill.attribute, skill.quality, lean=skill.lean, affinity=skill.affinity))
     return [f"你習得了【{skill.name}】！"] + (stored if skill_id in state.player.arts else [])
 
 

@@ -39,6 +39,11 @@ def _pick(g: Game, attribute: str) -> list[str]:
     return g.choose(f"sense:{index}")
 
 
+def _full(p, base: str, content) -> None:
+    """手上這一種意境放滿 insight_piece_cap 份。"""
+    p.insights += [base] + [f"{base}~{n}" for n in range(2, content.config.arts.insight_piece_cap + 1)]
+
+
 def _here(g: Game):
     return g.content.locations["lake"]
 
@@ -89,9 +94,19 @@ def test_learning_another_kind_here_has_no_line(lake):
     assert "feng" in lake.state.player.insights and not any("最濃" in m for m in msgs)
 
 
-def test_a_repeat_of_the_strongest_gives_more_xinde(lake):
+def test_a_repeat_of_the_strongest_gives_another_piece_with_the_line(lake):
+    """意境效果池：再悟到一次是另一份（品質在最濃的地方往上推一級）；最濃的那一句照樣在前面。"""
     p = lake.state.player
     p.insights.append("shui")
+    before = p.stats.get("xinde", 0)
+    msgs = insights.learn(lake.state, lake.content, lake.world, "shui", at=_here(lake))
+    assert p.insights[-1] == "shui~2" and p.stats.get("xinde", 0) == before and msgs[0] == LINE and "又悟得一份" in msgs[1]
+    assert p.insight_fx["shui~2"].quality != "下品"  # 最濃的地方：品質至少中品
+
+
+def test_a_repeat_of_the_strongest_gives_more_xinde(lake):
+    p = lake.state.player
+    _full(p, "shui", lake.content)  # 意境效果池：手上滿了才化成心得
     before = p.stats.get("xinde", 0)
     msgs = insights.learn(lake.state, lake.content, lake.world, "shui", at=_here(lake))
     assert p.stats["xinde"] == before + 15 and msgs[0] == LINE
@@ -99,7 +114,7 @@ def test_a_repeat_of_the_strongest_gives_more_xinde(lake):
 
 def test_a_repeat_of_another_kind_gives_the_usual_xinde(lake):
     p = lake.state.player
-    p.insights.append("feng")
+    _full(p, "feng", lake.content)  # 意境效果池：手上滿了才化成心得
     before = p.stats.get("xinde", 0)
     insights.learn(lake.state, lake.content, lake.world, "feng", at=_here(lake))
     assert p.stats["xinde"] == before + lake.content.config.duplicate_insight_xinde
@@ -107,7 +122,7 @@ def test_a_repeat_of_another_kind_gives_the_usual_xinde(lake):
 
 def test_a_repeat_without_a_place_gives_the_usual_xinde(lake):
     p = lake.state.player
-    p.insights.append("shui")
+    _full(p, "shui", lake.content)  # 意境效果池：手上滿了才化成心得
     before = p.stats.get("xinde", 0)
     msgs = insights.learn(lake.state, lake.content, lake.world, "shui")
     assert p.stats["xinde"] == before + lake.content.config.duplicate_insight_xinde and LINE not in msgs
@@ -124,7 +139,7 @@ def test_switch_off_changes_nothing(lake):
     lake.content.config.insight_strong.enabled = False
     assert sensing.rate(lake.state, lake.content, _here(lake), "柔") == sensing.rate(lake.state, lake.content, _here(lake))
     p = lake.state.player
-    p.insights.append("shui")
+    _full(p, "shui", lake.content)  # 意境效果池：手上滿了才化成心得
     before = p.stats.get("xinde", 0)
     msgs = insights.learn(lake.state, lake.content, lake.world, "shui", at=_here(lake))
     assert p.stats["xinde"] == before + 10 and not any("最濃" in m for m in msgs)

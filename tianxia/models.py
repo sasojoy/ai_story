@@ -20,6 +20,8 @@ Quality = Literal["下品", "中品", "上品", "絕學"]  # 見 tianxia/martial
 Lean = Literal["正", "邪", "無"]  # 武學與成長設計 7.3
 TRAIT_HOOKS = (  # 一般功效掛在遭遇戰的哪一步（武學與成長設計 13.2）；程式照這幾個實作
     "big_win", "luck_narrow", "difficulty_cut", "toll_cut", "win_reward", "win_heal", "luck_widen", "condition_floor",
+    # 意境效果池（武學重構第二批，Joy 2026-10-20「每個意境可能有3-4種效果」）：每一路第二個一般功效，只在回合裡起作用
+    "fx_shadow", "fx_heavy", "fx_mend", "fx_steady", "fx_tide", "fx_disarm", "fx_foresight", "fx_wall",
 )
 SPECIAL_HOOKS = (  # 特別功效的掛點（13.4）：一個掛點只能有一個特別功效（身上的特別功效照掛點記，validate 擋共用）。
     # 這 7 個掛點現在都被初版的 7 個特別功效佔了，所以新的特別功效要嘛換掉掛同一點的那一個、要嘛加新的掛點（要寫程式）
@@ -80,6 +82,9 @@ class Condition(_Strict):
     # 內容裡也要寫這兩個（content.validate）
     cal_day_min: int | None = Field(default=None, ge=1)
     cal_day_max: int | None = Field(default=None, ge=1)
+    # 7 天濃縮季（Config.season_segments）照天數另寫的那一份（開季那天是第 1 天）：7 天濃縮季只看這兩個；寫了週的條件在 7 天的內容裡也要寫
+    cal_day_min7: int | None = Field(default=None, ge=1, le=7)
+    cal_day_max7: int | None = Field(default=None, ge=1, le=7)
     clue_items: dict[str, int] = Field(default_factory=dict)  # 伏筆專用物品至少幾個（原數字，不照伺服器規模換算）
     grain_min: int = Field(default=0, ge=0)  # 糧草至少幾份（基準量，照 foreshadow.need 換算；0＝不檢查；正式版丙二的帶糧選項）
     # 戰後事件用：這次行動打的那一場（戰鬥卡片 state.battle_card 指著的那筆）的結果（大勝／險勝／僵持／落敗）在清單裡才成立；
@@ -276,32 +281,12 @@ class FuseQuality(_Strict):
     })
 
 
-class CultivateFit(_Strict):
-    """修練的機率看這一回的搭配（企劃者 2026-10-07 選 PR #28 方案 B；原則同 FuseQuality：「不要套死固數值」）。
-    cultivation.fit 把三樣乘起來：練到第幾成（×（level_base＋成×level_step））、用的是不是原本融進去的那個意境（代用
-    ×substitute）、在不在對味的地方修（所在地點探索悟得到同屬性的意境 ×home_ground）。寫了必成的那一階（Config.cultivate_sure_by，
-    W8 剛放寬的第一階）不看搭配。全設成 level_base 1、其他 0 或 1 就是不乘（以前的樣子）。
-    lines 是修練頁與修練結果裡那一句話（含蓄，不寫倍數）：因素 → 句子，空字串就不說。"""
-
-    level_base: float = Field(default=0.5, ge=0)
-    level_step: float = Field(default=0.05, ge=0)
-    substitute: float = Field(default=0.7, ge=0)
-    home_ground: float = Field(default=1.5, ge=0)
-    lines: dict[str, str] = Field(default_factory=lambda: {
-        "home_ground": "此地的氣象跟這路功夫相投，練起來格外順手。",
-        "substitute": "拿別的意境代替，總是隔了一層。",
-        "raw": "招式還不夠熟，心思有一半花在招上。",
-    })
-    raw_below: float = Field(default=0.8, ge=0)  # 成數那一項低於這個倍數才說 raw 那一句
-
-
 class Breakthrough(_Strict):
     """絕學要契機（企劃者 2026-10-07 選 PR #28 方案 C）：上品往絕學不再擲骰。在上品反覆修練只累積火候（Player.art_mastery，
     一次 +1），火候滿 heat、成數也到了，剩下那一步要等契機——拿身上這一門打贏一場不輕鬆的仗（對手難度 ÷ 我方威力 ≥ min_ratio），
     或在全服決戰裡出手滿 showdown_rounds 回合（當成難度比 showdown_ratio 的一仗）。每個契機擲一次頓悟：
-    chance ×（難度比 ÷ par_ratio）× 修練的搭配（CultivateFit）× 悟性，夾在 1～max_chance。破境丹不等契機：火候滿了勾著丹修練，
-    就是服丹強行衝關（legend_item_bonus × 搭配 × 悟性，cultivation.force_odds）。
-    heat 是 0 就是關著：上品往絕學照以前的機率擲（Config.cultivate_odds 的「絕學」）。"""
+    chance ×（難度比 ÷ par_ratio）× 悟性，夾在 1～max_chance。破境丹不等契機：服丹強行衝關（legend_item_bonus × 悟性，
+    cultivation.force_odds）。武學重構之後火候（heat）沒有地方讀：絕學那一步只看上品、第十成、槽裝滿（cultivation.ready）。"""
 
     heat: int = Field(default=8, ge=0)
     chance: float = Field(default=25, ge=0, le=100)
@@ -538,7 +523,7 @@ class TacticDef(_Strict):
     say: str = ""
     # 本命底蘊（玩家武學追上本命，Joy 2026-10-15「本命還是強一點點」）：本人身上練著這一門時，擂台、奪璽單挑（玩家對玩家，Bout.pvp）每一回合推力多這麼多
     # （跟發動率無關、一直在；一般的仗、頭目戰、決戰、同伴練的、大勢人物本人當對手時都不算）。每一位照擂台量表對滿配絕學的贏面各調，內外兩門各一半
-    might: float = Field(default=0.0, ge=0, le=1)
+    might: float = Field(default=0.0, ge=0, le=2)
 
 
 class TacticBond(_Strict):
@@ -587,6 +572,9 @@ class SkillDef(_Strict):
     tactic: TacticDef | None = None
     # 名聲 5.1：正邪（正派吃善名、邪派吃惡名，team.resonance）。只有新的四門正邪武學寫；現有的不加，免得手上那一門威力季中途變了
     lean: Literal["正", "邪", "無"] = "無"
+    # 基礎武學的相容屬性（武學重構，Joy 2026-10-20）：意境槽只收這幾種屬性的意境；沒寫＝兼容並蓄（什麼都收）。
+    # 追風步寫快與快的複合（陽、虛）：「只能塞風跟快的意境」
+    affinity: list[Attribute] = Field(default_factory=list)
 
 
 class GeneralTrait(_Strict):
@@ -595,6 +583,9 @@ class GeneralTrait(_Strict):
     attribute: Attribute
     name: str
     hook: Literal[TRAIT_HOOKS]
+    # 意境效果池（第二批）：一路有兩個一般功效，第一個（id 空著）的鍵就是屬性（舊存檔、內容武學的 traits 照舊寫屬性），
+    # 第二個寫 id。意境身上記的、武學 traits 清單裡的都是這個鍵（key）
+    id: str = ""
     per_layer: float = Field(ge=0)
     cap: float = Field(ge=0)
     desc: str
@@ -606,6 +597,10 @@ class GeneralTrait(_Strict):
     # bond 是神器原品「以器配招」綁了那一門時加強多少（發動率或回合，照招挑一種）
     ultimate: TacticDef | None = None
     ultimate_bond: TacticBond | None = None
+
+    @property
+    def key(self) -> str:
+        return self.id or self.attribute
 
 
 class SpecialTrait(_Strict):
@@ -623,7 +618,7 @@ class SpecialTrait(_Strict):
 
 class HighTrait(_Strict):
     """高階技能（武學技能分檔，Joy 2026-10-17；草案 https://claude.ai/artifact/3rLJgnmA7m8BiEsXGcBDUX）：一個屬性一個，照武學的主屬性給；
-    合成出來的武學照自己那一份的品質擲（skill_slots.py），一門最多一個。強度固定、不分品質，約本命戰法的六成，對電腦對手也有效。"""
+    不同意境合出來的意境裝進槽就是這一招（arts.apply），一門最多一個。強度固定、不分品質，約本命戰法的六成，對電腦對手也有效。"""
 
     id: str
     attribute: Attribute
@@ -935,10 +930,10 @@ class TutorialGoal(_Strict):
     # 初入江湖（新手引導第四段）：身上沒有內傷，或這一下就是療傷（銀兩不夠全治時治一部分也算，不卡住）
     healthy: bool = False
     has_wugong: bool = False  # 身上要有一門武學才算（沒有武學威力是 0，出城只有挨打的份）
-    # 序章：有一門合成出來的武學（fused）、它至少第幾成（fused_level）、至少什麼品質（fused_quality，看自己那一份）
+    # 序章（武學重構）：有一門裝了意境的武學（fused）、它至少第幾成（fused_level）；有一個意境揣摩到二重以上（deepened）
     fused: bool = False
     fused_level: int = 0
-    fused_quality: Quality | None = None
+    deepened: bool = False
 
 
 # 序章每一步 reveal 可以寫的畫面元件（網頁照它藏／亮，見 web/app.js 的 pro()）；content.validate 擋拼錯的
@@ -946,6 +941,7 @@ REVEAL_KEYS = frozenset({
     "all",  # 全部亮齊（出師那一步）
     "stamina", "hp", "silver", "xinde", "stats",  # 狀態列：體力、氣血、銀兩、心得、點名號展開屬性與配點
     "tab:jianghu", "tab:practice", "tab:craft", "tab:map", "tab:news",  # 底下的分頁
+    "tab:mall",  # 商城的兩個入口（底部第六格、齒輪旁的錠子鈕；網頁的 data-glow，商城開著才畫）：序章裡寫了才亮，出了草廬一律在（web/app.js 的 mallShown）
     "act:explore", "act:train", "act:rest", "act:social", "act:move",  # 江湖頁行動列的五格
     "board", "quest", "fronts", "orders", "minimap",  # 江湖頁的公告卡、主線與目標、戰況、軍令卡、小地圖
     "stances",  # 江湖頁最上面那一排小標裡的「態勢」（第一季才有）；跟公告卡（board）一起亮，見 Task 6 的 shown("stances")
@@ -1019,11 +1015,12 @@ class TutorialStep(_Strict):
     explore_scene: str | None = None  # 在草廬探索時一定端出這段有所感（InsightScene，prologue 要是 true；跟 explore_event 二選一）
     enemies: list[str] = Field(default_factory=list)  # 這一步草廬的對手（遊歷才出現）
     force_tier: str | None = None  # 這一步的遊歷結果照寫好的（雪恥：險勝）
-    sure_cultivate: bool = False  # 這一步的修練一定升品
+    deepen: bool = False  # 這一步准揣摩（同一個意境合兩個，層數 +1；武學重構）；序章裡別的步驟不准開爐
     instant_rest: str = ""  # 非空：這一步的打坐一坐就回滿，說這一句
-    fuse_base: str | None = None  # 這一步的合成只准拿這一門當底
+    fuse_base: str | None = None  # 這一步只准把意境裝進這一門的意境槽（武學重構；以前是合成的底）
     melt_only: str | None = None  # 這一步只准熔這一門
     give_art: GiveArt | None = None  # 完成這一步時給的武學
+    give_piece: bool = False  # 完成這一步時再給一份手上那個意境（揣摩要同一種意境兩份；效果照第一份抄，序章才合得成二重）
     # 師父的話太長、一次放不下時分頁（T7 審查 I1）：網頁照 \n\n 切成幾頁、一頁一頁按「下一段 ▸」，最後一頁是要做的事；話整段都在、不切。
     # 只有 reveal 之後這一步的行動列落到分頁列底下才用得到（量測見 Task 7 報告）；至少要有兩段
     paged: bool = False
@@ -2333,45 +2330,65 @@ class ChuangongTuning(_Strict):
     follower_str_xinde: int = Field(default=20, ge=1)
 
 
-class SkillSlotTuning(_Strict):
-    """武學技能分檔（Joy 2026-10-17「下品 1-2 個、極低機率出現高階技能；中品 2-3、低機率；上品 3-4、中機率」；tianxia/skill_slots.py）：
-    自己合成的武學，自己那一份照品質亮幾格技能（slots：品質 → [少的格數, 多的格數, 擲到多的機率]；絕學照上品）。
-    格子照順序填：層數最多的一般功效、首創走向的特別功效、其他來路的一般功效（層數多的先）；還有空格照 extra_mid 擲中階（特別功效）、
-    其餘擲低階（一個沒有的一般功效，一層）。高階技能照 high_rate 擲（每升一品照新品質再擲一次，中了就留著），佔最後一格。
-    來路的功效比格子多時，多的「未開」，修練升品才亮。擲骰照「技能|名號|功法 id|…」的雜湊，不碰亂數、不存檔：同一個人同一門同一品永遠一樣。
-    enabled 關著（測試內容）是舊規則：來路的功效全亮、沒有擲出來的技能。"""
+class ArtsTuning(_Strict):
+    """武學重構（Joy 2026-10-20；tianxia/arts.py）：品級只管威力上限（martial_arts.QUALITY_TOP_POWER）與意境槽數（slots）；
+    意境就是技能，裝進槽生效。戰力＝威力 ×（1 ＋ Σ 權重）：一般功效每級 general_weight、高階 high_weight、特別功效 special_weight、
+    本命戰法 signature_weight（只用來排清單與寫卡，不進戰鬥）。自創：create_xinde 起、一季每多一門 ×create_step、最多 create_per_season 門；
+    多付 create_bonus_per 心得加 5 分、最多 create_bonus_cap 分；品級從 create_odds 起算（下／中／上），意分與加分往上推。數字是佔位，量表定。"""
 
-    enabled: bool = False
-    slots: dict[str, list[float]] = Field(default_factory=lambda: {
-        "下品": [1, 2, 0.3], "中品": [2, 3, 0.4], "上品": [3, 4, 0.4], "絕學": [3, 4, 0.4],
-    })
-    high_rate: dict[str, float] = Field(default_factory=lambda: {"下品": 0.02, "中品": 0.08, "上品": 0.20, "絕學": 0.0})
-    extra_mid: float = Field(default=0.3, ge=0, le=1)
-
-
-class FusionDepthTuning(_Strict):
-    """合成的深度（合成與意境改法定案，企劃者 2026-10-16「合出來的意境不知道好壞，然後合成也一直無限往下沒有邏輯」；tianxia/depth.py）：
-    - 意境分重：悟來的一重，合一次二重（兩個來源取高的那一重再加一），最多 max_rank 重；到頂的不能再合。
-      兩個來源相生（剛＋快、柔＋慢、快＋柔、剛＋慢，或同屬性相疊；陰陽虛實與它的兩個來源也算）是圓融，其餘是駁雜。
-    - 融進武學時那個意境給 重數 ＋ harmony_bonus（圓融）／－ clash_penalty（駁雜）層功效（一重不分）。
-    - 武學分代：基礎與內容寫的武學是第零代，合一次第一代，最多 max_gen 代；到頂的不能再當底、不能再拿去合。
-    - 一脈相承：新意境（武學＋武學是合出來的那個屬性）跟底的主屬性相同或相生，底的功效層數整串留著、疊上去；
-      相剋的打散（一層都不留）；不相干的留 apart_keep（照留新的、丟舊的）。一門最多 max_layers 層。
-    - 首創時的走向：引擎從共用的特別功效裡照配方排 directions 種，模型讀兩樣東西的名字說明挑一種、寫一句招意；
-      清單外、叫不動照配方挑。全服照配方合的都是那一種。"""
-
-    max_rank: int = Field(default=3, ge=1)
-    max_gen: int = Field(default=3, ge=1)
-    harmony_bonus: int = Field(default=1, ge=0)
-    clash_penalty: int = Field(default=1, ge=0)
-    apart_keep: float = Field(default=0.5, ge=0, le=1)
-    # 一門最多幾層：9 層時一脈相承排得出來最強的第三代上品功效強度 3.5，本命武學 1.8～1.95；5 層時 2.0，跟本命平手
-    # （scripts/measure_depth.py，2026-10-16）。功效每個有上限，層數多了只是把三四個功效都推到頂。
-    max_layers: int = Field(default=5, ge=1)
-    directions: int = Field(default=3, ge=1)
-    # 一脈相承連成數也傳（合成即設計定案第二節）：合出來的武學繼承底（兩門時取平均）這麼多比例的成數（無條件捨去、至少第一成），
-    # 白送的那幾成記在 PlayerState.art_free_levels、熔了不退。0 是舊規則（從第一成起修）。
-    inherit_share: float = Field(default=0, ge=0, le=1)
+    slots: dict[str, int] = Field(default_factory=lambda: {"下品": 2, "中品": 3, "上品": 4, "絕學": 4})
+    general_weight: float = Field(default=0.05, ge=0)
+    high_weight: float = Field(default=0.12, ge=0)
+    special_weight: float = Field(default=0.10, ge=0)
+    signature_weight: float = Field(default=0.15, ge=0)
+    create_xinde: int = Field(default=400, ge=0)
+    create_step: float = Field(default=1.5, ge=1)
+    create_per_season: int = Field(default=3, ge=0)
+    create_bonus_per: int = Field(default=100, ge=1)
+    create_bonus_cap: int = Field(default=20, ge=0)
+    create_odds: dict[str, float] = Field(default_factory=lambda: {"下品": 50, "中品": 30, "上品": 20})
+    create_point_shift: float = Field(default=0.4, ge=0)  # 「意」分＋加分每一分把下品的機率往上品挪多少個百分點
+    # 成形（create.roll_colors）：每一路屬性的權重＝底 create_base_weight ＋ 兵器或行功之法的偏向（content/create_forms.json）
+    # ＋ 姿勢讀出的偏向（第一路 create_pose_weights[0]、第二路 [1]）＋ 意讀出的偏向（create_intent_weights）。
+    # 第一格一定是權重最高的那一路單色（定向）；其餘每一格先照 create_slot_odds 擲單色、雙色、全色，再照權重抽顏色（格與格之間可以重複）。
+    # 意讀不出偏向（不偏）時全色的機率 ×create_neutral_any_scale。create_redo：一張單子能免費重來幾次
+    create_base_weight: float = Field(default=0.5, ge=0)
+    create_pose_weights: list[float] = Field(default_factory=lambda: [1.5, 0.75])
+    create_intent_weights: list[float] = Field(default_factory=lambda: [2.5, 1.25])
+    create_slot_odds: dict[str, float] = Field(default_factory=lambda: {"單": 55, "雙": 35, "全": 10})
+    create_neutral_any_scale: float = Field(default=2.0, ge=1)
+    create_redo: int = Field(default=1, ge=0)
+    create_slots: int = Field(default=4, ge=1)  # 成形擲幾格（品級開幾格就用前幾格；上品四格全開）
+    # 基本威力（Joy 2026-10-21「基本威力你先自己用一版」）：同一品級的威力區間再乘一個倍數，夾在 power_scale_range。
+    # 自創照「意」分＋加分＋赤璋（夾 0～100）從下限線性推到上限；武學＋武學合出來的照兩門來源的倍數平均再加 blend_power_step。
+    # 以前是名字雜湊的 ±10%；已經登記的武學照舊、不重算
+    power_scale_range: list[float] = Field(default_factory=lambda: [0.9, 1.1], min_length=2, max_length=2)
+    blend_power_step: float = Field(default=0.02, ge=0)
+    # 意境效果池（第二批，tianxia/insight_fx.py）：悟到一份意境先擲品質（insight_quality_odds；在那一路最濃的地方升一品；
+    # 悟性每高過 5 一點多 insight_quality_per_wis 的機會再升一品、最多 insight_quality_wis_cap），再擲效果：第一個是那一路兩個一般功效挑一個（一重），
+    # 照品質有 insight_second 的機會出第二個，第二個有 insight_grand 的機會是大獎（那一路的高階技能）、不然是另一個一般功效。
+    # 兩個不同的意境合出來的照兩份裡較好的品質擲，第二個效果多 compound_second_bonus、大獎機會 ×compound_grand_scale。
+    # 揣摩（同一種意境兩份）：同一個一般功效的層數相加（最多三重），都沒有大獎時照品質擲 insight_grand × deepen_grand_scale；
+    # 一份意境最多 insight_max_effects 個效果，多的拿掉層數最少的一般功效。同一種意境手上最多 insight_piece_cap 份，再悟到化成心得
+    insight_quality_odds: dict[str, float] = Field(default_factory=lambda: {"下品": 60, "中品": 30, "上品": 10})
+    insight_quality_per_wis: float = Field(default=0.03, ge=0)
+    insight_quality_wis_cap: float = Field(default=0.4, ge=0, le=1)
+    insight_second: dict[str, float] = Field(default_factory=lambda: {"下品": 0.2, "中品": 0.5, "上品": 0.8})
+    insight_grand: dict[str, float] = Field(default_factory=lambda: {"下品": 0.05, "中品": 0.15, "上品": 0.35})
+    compound_second_bonus: float = Field(default=0.3, ge=0)
+    compound_grand_scale: float = Field(default=2.0, ge=0)
+    deepen_grand_scale: float = Field(default=1.0, ge=0)
+    insight_max_effects: int = Field(default=2, ge=1)
+    insight_piece_cap: int = Field(default=4, ge=1)
+    # 評分（武學重構第三批；Joy 2026-10-20「武學的總評分就是看各意境效果疊加分數……可能滿一百是絕學」，選法 B）：
+    # 槽裡每一份意境的效果加總——一般功效每重 score_per_layer、大獎 score_grand、特別功效 score_special，單色格裡的 ×score_single_color；
+    # 評分不是衝絕學的門檻（Joy 2026-10-20「評分可以超過100呀……武學衝絕品跟評分無關」）：只寫在卡上、排武學榜與內功榜。
+    # 寫死的武學照它的功效算。master_score 沒有地方讀了（留著讓舊設定讀得進來）。
+    score_per_layer: float = Field(default=8, ge=0)
+    score_grand: float = Field(default=28, ge=0)
+    score_special: float = Field(default=20, ge=0)
+    score_single_color: float = Field(default=1.1, ge=0)
+    master_score: int = Field(default=100, ge=0)
 
 
 class SignatureArtTuning(_Strict):
@@ -2905,6 +2922,54 @@ class CheckIn(_Strict):
     pill_drop: float = Field(default=0.02, ge=0, le=1)  # 找素材、練功各擲一次掉一顆回體丹（6.4）
 
 
+class MallTuning(_Strict):
+    """商城（docs/superpowers/specs/2026-10-20-商城架構-design.md；tianxia/mall.py、tianxia/wallet.py）。enabled 預設關、測試內容明寫關、
+    正式內容與 week7 開；關著時不發元寶、不讀不寫商城的三張表（月卡不加上限）、商城的 API 都 404，其餘一個字都不變（4.10）。
+    設定覆寫檔是淺合併：覆寫檔寫 mall 就要整個寫（例 week7 寫 {"enabled": true, "beta_grant": 5000}），不然 enabled 會回到預設的關。"""
+
+    enabled: bool = False
+    # 封閉測試的元寶（4.2）：每個錢包第一次進來（本人那一輪，Game.own_turn_checks）時發一次，寫一列「封測發放」；0 是不發。
+    # 正式內容 0、week7 5000【預設】；之後再開新的一季不再發（編號 grant:beta:<主人> 只記一次）
+    beta_grant: int = Field(default=0, ge=0)
+    card_pill_bonus: int = Field(default=1, ge=0)  # 月卡：每天能服的回體丹多幾顆（企劃者 10/17「月卡每天多 1 顆」；平常 2→3、新手期 5→6）
+    # 月卡每日領（Joy 2026-10-21 定案甲・每日領，/mnt/project-files/plan/萬寶閣販賣清單定案.md）：卡的期間裡每天（台灣 00:00 換日）上線
+    # 按一下領這麼多元寶與回體丹，沒上線那天不補（Joy「沒上線不補」）。0 是沒有這一份（舊規則）；正式內容與 week7 寫 60／1
+    card_daily_ingots: int = Field(default=0, ge=0)
+    card_daily_pills: int = Field(default=0, ge=0)
+    records_shown: int = Field(default=50, ge=1)  # 購買紀錄與帳的畫面、管理者查帳最多列幾筆【預設】
+
+
+class MallLimit(_Strict):
+    """一件商品的限購（4.3）：每天（台灣 00:00 換日，同回體丹）、每季、每個帳號各幾次；不寫是不限。數的是沒退的購買。"""
+
+    day: int | None = Field(default=None, ge=1)
+    season: int | None = Field(default=None, ge=1)
+    account: int | None = Field(default=None, ge=1)
+
+
+class MallWindow(_Strict):
+    """一件商品的上架期間（4.3）：哪幾季（空的是每一季）、哪一段日子（台灣日期 YYYY-MM-DD，含頭尾；不寫是不限）。"""
+
+    seasons: list[int] = Field(default_factory=list)
+    start: str | None = None
+    end: str | None = None
+
+
+class MallItem(_Strict):
+    """商城的一件商品（content/mall.json，joy 寫；4.3）。效果只能從 mall.EFFECTS（允許的效果表）挑、種類要對得上，載入時
+    content.check_mall 擋表外的。外觀（look）、通行證（pass）的種類留著，這一版允許表裡沒有它們的效果，所以寫不出來（4.3）。"""
+
+    id: str
+    name: str  # 過 naming.name_problem
+    note: str = ""  # 一句說明（joy 寫）
+    price: int = Field(gt=0)  # 元寶
+    kind: Literal["look", "consumable", "card", "pass"]
+    effects: dict[str, int] = Field(default_factory=dict)  # 效果 → 數量（例 {"pills": 5}、{"card_days": 30}）
+    limit: MallLimit = Field(default_factory=MallLimit)
+    on_sale: MallWindow = Field(default_factory=MallWindow)
+    draft: str = ""  # 作者的備註（例「PM 佔位：名字、說明、價錢待 joy」）；不給玩家看
+
+
 class Config(_Strict):
     stamina_max: int = 150
     stamina_regen_seconds: float = 180  # 自然回復：每幾秒（遊戲時間）回 1 點體力（地圖擴充設計第二節：每 3 分鐘 1 點）
@@ -2965,6 +3030,7 @@ class Config(_Strict):
     duel: DuelTuning = Field(default_factory=DuelTuning)  # 單人頭目戰（見 DuelTuning；內容在 content/duels.json）
     arena: ArenaTuning = Field(default_factory=ArenaTuning)  # 擂台賽（見 ArenaTuning；tianxia/arena.py）
     tavern: TavernTuning = Field(default_factory=TavernTuning)  # 酒肆（見 TavernTuning；tianxia/tavern.py）
+    mall: MallTuning = Field(default_factory=MallTuning)  # 商城：元寶錢包、商品、月卡、封測發放（見 MallTuning；商品在 content/mall.json）
     raid: Raid = Field(default_factory=Raid)  # 截殺敵對陣營的人（見 Raid）
     bounties: Bounties = Field(default_factory=Bounties)  # 懸賞榜（見 Bounties）
     sortie: SortieRules = Field(default_factory=SortieRules)  # 出陣（見 SortieRules）
@@ -2996,8 +3062,7 @@ class Config(_Strict):
     mounts: MountRules = Field(default_factory=MountRules)  # 坐騎（見 MountRules；裝備四欄設計第五節）
     follower: FollowerTuning = Field(default_factory=FollowerTuning)  # 部下的成長與決戰份量（見 FollowerTuning）
     chuangong: ChuangongTuning = Field(default_factory=ChuangongTuning)  # 傳功門下：心得花在同伴、部下身上（見 ChuangongTuning）
-    skill_slots: SkillSlotTuning = Field(default_factory=SkillSlotTuning)  # 武學技能分檔：品質決定亮幾個技能、擲不擲得到高階（見 SkillSlotTuning）
-    fusion_depth: FusionDepthTuning = Field(default_factory=FusionDepthTuning)  # 合成的深度：意境分重、武學分代、首創的走向（見 FusionDepthTuning）
+    arts: ArtsTuning = Field(default_factory=ArtsTuning)  # 武學重構：品級的槽數、戰力的權重、自創的價錢（見 ArtsTuning）
     signature_arts: SignatureArtTuning = Field(default_factory=SignatureArtTuning)  # 本命武學的威力與學到時的成數（見 SignatureArtTuning）
     tactics: TacticTuning = Field(default_factory=TacticTuning)  # 一般的仗的回合與本命戰法（見 TacticTuning）
     figure_life: FigureLifeTuning = Field(default_factory=FigureLifeTuning)  # 人物活起來：每日行事、心事、風聞（見 FigureLifeTuning）
@@ -3093,9 +3158,15 @@ class Config(_Strict):
     # 21 天季的骨架（正式季整合設計第一章；12.3 第 41 條：預設關，只有 content/profiles/season21.json 打開，週末與 14 天一個字都不變）：
     # 季曆就是現實的三週（season_weeks 3、season_days 21，cal_scale 1），錨在開季那一週的台灣週一 00:00（WorldState.cal_offset）；
     # 21 天季自己的時刻表（TimetableEvent.real）、官軍將領與伏筆照天數、不提前收季、「今天」是現實的一天（台灣 00:00 換日）。
-    # 開季時蓋章（WorldState.season21），正在跑的季照它開季時的章
+    # 開季時蓋章（WorldState.season21），正在跑的季照它開季時的章。
+    # 名字是歷史的：現在是「照現實天的季」的骨架，7 天濃縮季（content/profiles/week7.json，企劃者 2026-10-20）也打開，另寫 season_segments
     season21: bool = False
     season_weeks: int = Field(default=12, ge=1)  # 季曆：一季壓成幾週（計畫第六節：季曆秒＝世界秒 × 週數 × 7 ÷ season_days）
+    # 7 天濃縮季（企劃者 2026-10-20；計畫 docs/superpowers/plans/2026-10-20-七天濃縮季.md）：照現實天的季把季曆的「週」換成幾段、每段幾天
+    # （week7 寫 [2, 2, 3]：第 1～2、3～4、5～7 天）。照週算的東西（第四階輪替、月旦評、寶物每週上限、頭目每週次數、貢獻的週帳、版圖變化）
+    # 一律照段；錨點是開季那一天的台灣 00:00（開季那天是第 1 天），畫面寫「第 N 天 HH:MM」（calendar.week7_on）。
+    # 空的是一週 7 天（21 天季與其他季，一個字都不變）。載入時驗：要 season21、段數＝season_weeks、段的和＝season_days＝7
+    season_segments: list[int] = Field(default_factory=list)
     # 決定性勝利（黃巾聲勢 ≥85、≤15）季曆第幾週起才提前收季；之前到了門檻也不收，季末照常比（企劃者 2026-10-05，計畫 T9）。
     # 割據 ≥85 不提前收季、季末才判群雄並起（FB-254，企劃者 2026-10-15「提前收季只看戰線」；rules.ends_early）
     decisive_from_week: int = Field(default=10, ge=1)
@@ -3278,31 +3349,11 @@ class Config(_Strict):
     fuse_quality_odds: dict[str, float] = Field(default_factory=lambda: {"下品": 50, "中品": 30, "上品": 20})
     # 上面那組是「普通搭配」的平均；每一爐照它的組成往上或往下推（企劃者 2026-10-06，fusion.quality_odds）
     fuse_quality: FuseQuality = Field(default_factory=FuseQuality)
-    # 12.2 合到舊的：一個組合第一次被合時，候選每有一個，機會加這麼多，最多到 land_chance_cap（企劃者定九成）；0 就永遠長新的
-    land_chance_per_candidate: float = Field(default=0.05, ge=0, le=1)
-    land_chance_cap: float = Field(default=0.9, ge=0, le=1)
     cultivate_stamina: int = 10  # 修練一次的體力
-    # 修練升到這一品：第一次的機率、每失敗一次加多少（%）（設計 3.5）。中品、上品加到 100 就必成；
-    # 絕學沒有保底：累積的機率最多到 cultivate_cap（企劃者 2026-10-05），剩下靠破境丹
-    # 企劃者 2026-10-06（W8）：第一階（下品→中品）放寬成 40% 起、每失敗一次 +20%、第三次必成（見 cultivate_sure_by）。理由：試玩
-    # 走一遍，連續四次（40 體力）還是下品，第一次玩一個 session 可能什麼都沒得到；第一階是新手第一次感覺到「修練有用」的地方，
-    # 要夠快。中品→上品（10%、+6）、上品→絕學（4%、+3）一個數字都沒動
-    # 企劃者 2026-10-07（PR #28 方案 B）：中品→上品改成 6%、+3，再乘這一回的搭配（cultivate_fit）。上品→絕學在方案 C（breakthrough）
-    # 開著時不擲骰（火候＋契機），「絕學」那一組只在 breakthrough.heat 是 0 時用得到
-    cultivate_odds: dict[str, tuple[int, int]] = Field(
-        default_factory=lambda: {"中品": (40, 20), "上品": (6, 3), "絕學": (4, 3)}
-    )
-    # 第幾次修練必成（W8）：寫了的那一階，第 N 次（失敗 N−1 次之後）機會直接是 100%——蓋過悟性的乘數與 cultivate_cap。
-    # 沒寫的那一階照舊：機會加到 100% 才必成（上品第 16 次），絕學沒有保底。預設只有第一階寫了，第三次必成
-    cultivate_sure_by: dict[str, int] = Field(default_factory=lambda: {"中品": 3})
-    # 企劃者 2026-10-05：絕學沒有保底，靠破境丹提升。累積機率的上限（%）：沒寫的那一階上限是 100（照舊必成）；
-    # 破境丹是探索偶爾撿到的傳奇道具，玩家在修練頁勾了、而且這一次衝的是絕學，才服下一枚：那一次多 legend_item_bonus%，
-    # 成不成都用掉（不勾就不服；被拒絕的修練不擲骰、丹也不動）
-    cultivate_cap: dict[str, int] = Field(default_factory=lambda: {"絕學": 50})
+    # 武學重構：衝品拿掉了，cultivate_odds／sure_by／cap／fit 跟著拿掉（舊設定檔寫了照讀不進來，所以內容檔一起刪）
     # 企劃者 2026-10-07（PR #28 方案 A）：衝哪一品之前要先練到第幾成（「火候不到，練不出那一品」）。沒寫的那一品不擋。
     # 序章安排好一定升品的那一步不看這個（劇本只練到第三成）
     cultivate_min_level: dict[str, int] = Field(default_factory=lambda: {"中品": 4, "上品": 7, "絕學": 10})
-    cultivate_fit: CultivateFit = Field(default_factory=CultivateFit)  # 方案 B：修練的機率看搭配
     breakthrough: Breakthrough = Field(default_factory=Breakthrough)  # 方案 C：絕學要契機
     legend_item_name: str = "破境丹"
     legend_item_note: str = "衝擊絕學時可以服下，那一次的機會多幾分。"
@@ -3312,11 +3363,6 @@ class Config(_Strict):
     # 量到的（scripts/measure_xinde_flow.py，週末 60 小時）：沒有門下的人一季剩六千多點心得沒處花；300 起、每枚 +100，
     # 六千點約換八到九枚，服丹強行衝關一次約一成五到兩成，一季大約多出一兩門絕學
     legend_xinde_price: int = Field(default=0, ge=0)
-    # 以心得修練（Joy 2026-10-18 決策卡選「心得修練」）：修練每一次都可以改付心得、不付體力，這一季第 k 次（從 0 數）
-    # 要 cultivate_xinde_price + k × cultivate_xinde_step；0 是關著（測試內容）。量到的：轉一門新功夫從下品修到上品再添滿火候
-    # 約 27 次修練（約 270 體力，十幾個小時的回復）；40 起、每次 +4，一季溢出的六千點大約修得到五十次，約兩門
-    cultivate_xinde_price: int = Field(default=0, ge=0)
-    cultivate_xinde_step: int = Field(default=4, ge=0)
     legend_xinde_step: int = Field(default=100, ge=0)
     # 回體丹（企劃者 2026-10-07「新增物品回體丹可以回體力100點，新手進來都送20顆，現在是內測期間，讓大家初期可以盡情遊玩體驗」）：
     # 狀態列體力條旁邊按「服丹」吃一顆，回 stamina_pill_restore 點體力，夾在體力上限（不溢出；體力是滿的不讓吃）
@@ -3602,6 +3648,9 @@ class FigureDef(_Strict):
     # 21 天季（Config.season21，正式季整合設計 1.2 給開發 5）照天數：第 1 週週一 00:00 起幾天才推（1.5＝週二 12:00，跟朝廷出兵同時）；
     # 21 天季只看它（沒寫是 0）、不看 active_from_week。active_from_week 大於 1 的人物在 21 天季的內容裡要寫（content.validate）
     active_from_day: float | None = Field(default=None, ge=0)
+    # 7 天濃縮季（Config.season_segments）照天數另寫：開季那天 00:00 起幾天才推（0.5＝第 1 天 12:00，跟朝廷出兵同時）；
+    # 7 天濃縮季只看它，active_from_week 大於 1 的人物在 7 天的內容裡要寫（content.validate）
+    active_from_day7: float | None = Field(default=None, ge=0)
     start_status: Literal["active", "away"] = "active"  # 輕量接位者開季時還沒出場，接手時才出現
     challenge_off_front: bool = False  # 沒有戰線也能挑戰（何進）；其他人戰線空著時不受挑戰（PM 2026-10-05 定）
     # 丙 (c)，企劃者 2026-10-13：沒有時刻表的季這位人物被打到退場時記下的世界旗標（波才寫 bocai_defeated：等於「擊敗波才」）；第一季不記
@@ -3630,6 +3679,14 @@ class RealSlot(_Strict):
 
     week: int = Field(ge=1)
     weekday: int = Field(default=0, ge=0, le=6)
+    hour: int = Field(default=0, ge=0, le=23)
+
+
+class RealDay(_Strict):
+    """7 天濃縮季（Config.season_segments，企劃者 2026-10-20）這一件大事排在第幾天（開季那天是第 1 天）、幾點：大決戰在第 2、4、7 天，
+    鐘點沿用 21 天季那一場。載入時（content.season21_timetable）照段換成 week（第幾段）、weekday（段裡第幾天）、hour。"""
+
+    day: int = Field(ge=1, le=7)
     hour: int = Field(default=0, ge=0, le=23)
 
 
@@ -3673,6 +3730,7 @@ class TimetableEvent(_Strict):
     weekday: int | None = Field(default=None, ge=0, le=6)  # 決戰的預設時刻：週幾（0 是週一）；None 照 timetable.SHOWDOWN_WEEKDAY
     hour: int | None = Field(default=None, ge=0, le=23)  # 同上，幾點；None 照 timetable.SHOWDOWN_HOUR
     real: RealSlot | None = None  # 21 天季的時刻（RealSlot）；21 天季的內容每一件都要寫（content.validate），其他季不看
+    real7: RealDay | None = None  # 7 天濃縮季的時刻（第幾天、幾點）；7 天濃縮季的內容每一件都要寫（content.validate），其他季不看
 
 
 FsKind = Literal["天時地利", "推理", "反直覺抉擇", "拼圖", "累積", "情誼", "集體密謀"]  # 第一季設計 11.3 的類型（只是標記）
@@ -4205,6 +4263,32 @@ class MingtieContent(_Strict):
     mottos: list[str] = Field(default_factory=list)  # 假人自題的那一句從這裡挑（真人自己寫）
 
 
+class CreateForm(_Strict):
+    """自創武學的執器那一步（content/create_forms.json 的 forms）：一種兵器或一種行功之法，偏向哪幾路屬性。"""
+
+    kind: str  # 武學／內功
+    key: str  # 武學是兵器種類（WEAPON_KINDS）；內功是行功之法的名字
+    blurb: str = ""  # 鈕底下那一句
+    bias: dict[str, float] = Field(default_factory=dict)  # 屬性 → 權重（主偏向 3、次 2、再次 1）
+
+
+class PosePreset(_Strict):
+    """擺式那一步的起點架式（點一下套上再拖）。angles 是 create.POSE_KEYS 九個角度（度）。"""
+
+    name: str
+    angles: dict[str, float]
+
+
+class CreateForms(_Strict):
+    """自創武學的內容（content/create_forms.json；Joy 2026-10-20）：執器的兵器與行功之法、擺式的起點架式、
+    模型讀不出意時的關鍵字表（屬性 → 字；正邪 → 字）。沒有這個檔：沒有偏向、沒有起點架式、讀不出就是不偏。"""
+
+    forms: list[CreateForm] = Field(default_factory=list)
+    presets: list[PosePreset] = Field(default_factory=list)
+    keywords: dict[str, list[str]] = Field(default_factory=dict)
+    lean_words: dict[str, list[str]] = Field(default_factory=dict)
+
+
 class Content(_Strict):
     config: Config
     scenario: Scenario
@@ -4247,9 +4331,11 @@ class Content(_Strict):
     mingtie: MingtieContent = Field(default_factory=lambda: MingtieContent())  # 名帖的現成的畫與假人的自題句庫（content/mingtie.json）；沒有這個檔就是空的
     shop_lines: dict[str, dict[str, list[str]]] = Field(default_factory=dict)  # 店面上掌櫃的話（content/shop_lines.json，店面獨立介面設計 1.4）：店 → 情況 → 句子；沒有這個檔就是空的
     seal: dict[str, ShardDef] = Field(default_factory=dict)  # 玉璽碎片（content/seal.json，照 id）；沒有這個檔就是空的（碎片關著）
+    mall: dict[str, MallItem] = Field(default_factory=dict)  # 商城的商品（content/mall.json，照 id、照檔案的順序）；沒有這個檔就是空的
     relations: list[RelationDef] = Field(default_factory=list)  # 人物之間的關係（content/relations.json，大勢人物擴充第二批）；沒有這個檔就是沒有
     gather_branches: dict[str, GatherBranch] = Field(default_factory=dict)  # 找素材分支（content/gather_branches.json，照內容的順序）；沒有這個檔就是空的（分支關著）
     map: MapLayout
     tutorial: Tutorial
     hints: Hints = Field(default_factory=Hints)  # 碰到才說（content/hints.json，新手引導計畫三）；沒有這個檔就是沒有提示
     check_voice: CheckVoice = Field(default_factory=CheckVoice)  # 檢定選項括號裡的那一句（content/check_voice.json，載入時必備）
+    create_forms: CreateForms = Field(default_factory=CreateForms)  # 自創武學的兵器偏向、起點架式、關鍵字表（content/create_forms.json）

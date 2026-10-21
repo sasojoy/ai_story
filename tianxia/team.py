@@ -100,7 +100,7 @@ def resolve_art(skill_id: str | None, content: Content, world: WorldStateStore) 
         return None
     if skill_id in content.skills:
         s = content.skills[skill_id]
-        return content_art(skill_id, s.name, s.kind, s.attribute, s.quality, special=s.special, traits=s.traits, lean=s.lean)
+        return content_art(skill_id, s.name, s.kind, s.attribute, s.quality, special=s.special, traits=s.traits, lean=s.lean, affinity=s.affinity)
     return world.get_skill(skill_id)
 
 
@@ -115,7 +115,9 @@ def player_art(state: GameState, content: Content, world: WorldStateStore, skill
     art = resolve_art(skill_id, content, world)
     if art is None:
         return None
-    mine = with_quality(art, art_quality(state, art))
+    from . import arts as arts_mod  # arts 會 import 這個模組
+
+    mine = arts_mod.apply(state, content, world, with_quality(art, art_quality(state, art)))
     k = signature.scale(content, art.id)
     if k == 1.0:
         return mine
@@ -404,12 +406,10 @@ COMPARE_LESS = "少了{names}"
 
 def _trait_names(content: Content, art: MartialArt) -> list[str]:
     """這門武學帶的功效的名字（一般功效照屬性的清單、去掉重複的層數，再加特別功效、空格擲到的中階與高階），內容沒有那個功效就略過。
-    只看「有沒有」：層數不同不算不同（功法卡的「功效」那一行才寫數字）。art 要是 skill_slots.apply 過的那一份（只算亮了的格子）。"""
-    from . import skill_slots
-
+    只看「有沒有」：層數不同不算不同（功法卡的「功效」那一行才寫數字）。art 要是 player_art 那一份（槽已經填上）。"""
     names = []
     for attribute in dict.fromkeys(traits.traits_of(art)):
-        trait = next((t for t in content.traits.general if t.attribute == attribute), None)
+        trait = next((t for t in content.traits.general if t.key == attribute), None)
         if trait is not None:
             names.append(trait.name)
     sp = traits.special(content, art.special)
@@ -419,8 +419,7 @@ def _trait_names(content: Content, art: MartialArt) -> list[str]:
         extra = traits.special(content, sid)
         if extra is not None and extra.name not in names:
             names.append(extra.name)
-    top = skill_slots.high(content, art.high)
-    if top is not None:
+    for top in traits.highs_of(content, art):
         names.append(top.name)
     return names
 
@@ -442,11 +441,8 @@ def compare_with_worn(state: GameState, content: Content, world: WorldStateStore
     diff = power_at(mine, 1) - power_at(worn, 1)
     power = COMPARE_SAME_POWER if round(diff, 1) == 0 else COMPARE_POWER.format(diff=f"{diff:+.1f}".replace("-", "−"))
     parts = [COMPARE_HEAD.format(worn=worn.name, power=power)]
-    from . import skill_slots
-
-    # 只比亮了的格子（武學技能分檔）：來路上還「未開」的功效不算多了
-    have = _trait_names(content, skill_slots.apply(state, content, mine))
-    had = _trait_names(content, skill_slots.apply(state, content, worn))
+    have = _trait_names(content, mine)  # 槽裡裝了什麼（player_art 已經填上）
+    had = _trait_names(content, worn)
     more, less = [n for n in have if n not in had], [n for n in had if n not in have]
     if more:
         parts.append(COMPARE_MORE.format(names="".join(f"〔{n}〕" for n in more)))
@@ -820,7 +816,7 @@ def trait_mods(content: Content, lo: traits.Loadout) -> encounter.Mods:
 def pairing(content: Content, wugong: MartialArt | None, neigong: MartialArt | None) -> float:
     """內功與武學的搭配（武學與成長設計 5.1）：同屬性加成、相剋的一對打折、其他不變；少一門就不算。
     加成與打折兩支都夾在 encounter.BOOST_FLOOR 以上（設定寫錯也一樣），不會讓整個人的威力變成負的。"""
-    if wugong is None or neigong is None:
+    if wugong is None or neigong is None or not wugong.attribute or not neigong.attribute:  # 兼容並蓄的武學沒有屬性：不搭也不剋
         return 1.0
     cfg = content.config
     if wugong.attribute == neigong.attribute:
@@ -1359,7 +1355,7 @@ def terrain_attributes(
 def worn_attribute(state: GameState, content: Content, world: WorldStateStore) -> str | None:
     """本人身上那一門武學的屬性（戰報的路數那一句、決戰的隊伍多樣性看它）；沒有武學是 None。"""
     art = player_art(state, content, world, state.player.member.wugong_id)
-    return art.attribute if art is not None else None
+    return (art.attribute or None) if art is not None else None  # 兼容並蓄的沒有屬性：None（Squad 的屬性是 Literal，空字串進不去）
 
 
 def _with_attribute(
