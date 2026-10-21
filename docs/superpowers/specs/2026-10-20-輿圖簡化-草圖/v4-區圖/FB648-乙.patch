@@ -1,0 +1,46 @@
+--- a/web/app.js
++++ b/web/app.js
+@@ -6000,10 +6000,10 @@
+     const fs = p.big ? z.nameBig : z.name, fw = textW(p.name, fs) + 2 * R_PADX, fh = fs + 2 * R_PADY;
+     const tug = tugOf(st, p.id, q.control || null), cool = !!q.control && !!q.cool;
+     const ins = (p.insights || []).map((id) => insightInk(base, id)).filter(Boolean).slice(0, 2);
+-    const coolText = cool ? COOL_WORD.replace("{n}", Number(q.cool)) : "", insW = ins.length * (z.ins + 2);
+-    const bar = !!(tug || cool), words = ins.length > 0 || !!coolText;
++    const coolText = "", insW = ins.length * (z.ins + 2);
++    const bar = false, words = ins.length > 0;
+     const w1 = fw + (q.rich ? R_SEAL_GAP + R_SEAL : 0);
+-    const w2 = Math.max(bar ? fw : 0, insW + (coolText ? (insW ? R_GAP : 0) + textW(coolText, R_COOL) : 0));
++    const w2 = insW;
+     const low = (bar ? R_BAR_GAP + R_BAR : 0) + (words ? R_INS_GAP + z.ins + 2 : 0);
+     return { fs, fw, fh, w1, w2, low, W: Math.max(w1, w2), H: fh + low, tug, cool, coolText, ins, insPx: z.ins, bar, rich: !!q.rich, big: !!p.big };
+   }
+@@ -6042,10 +6042,16 @@
+   // 先一個一個擺，再反覆把壓到東西的那幾處換位置（settle），壓到的只留在擠的那一角。
+   // 回每一處（照這一區的地點順序）：大小、框左上角（螢幕 px）、佔的兩列、壓到多少（0＝不壓）
+   function regionLabels(base, st, rid, v, vw, vh) {
++    const z0 = regionSizes(v.s), tiers = [z0, { ...z0, name: Math.min(z0.name, 12), nameBig: Math.min(z0.nameBig, 13), ins: Math.min(z0.ins, 10) }, { ...z0, name: 11, nameBig: 12, ins: 9 }];
++    let out = null;
++    for (const zz of tiers) { out = regionLabelsAt(base, st, rid, v, vw, vh, zz); if (out.every((l) => l.cost <= 0)) return out; }
++    return out;
++  }
++  function regionLabelsAt(base, st, rid, v, vw, vh, zz) {
+     const pts = regionPlaces(base, rid), scr = (x, y) => [vw / 2 + (x - v.cx) * v.s, vh / 2 + (y - v.cy) * v.s];
+     const [bx0, by0] = scr(v.frame[0], v.frame[1]), [bx1, by1] = scr(v.frame[2], v.frame[3]);
+     const bounds = [Math.max(2, bx0), Math.max(REGION_TOP + 2, by0), Math.min(vw - 2, bx1), Math.min(vh - 2, by1)];
+-    const at = Object.fromEntries(pts.map((p) => [p.id, scr(p.x, p.y)])), z = regionSizes(v.s);
++    const at = Object.fromEntries(pts.map((p) => [p.id, scr(p.x, p.y)])), z = zz;
+     const fixed = pts.map((p) => [at[p.id][0] - z.hw, at[p.id][1] - z.hh, at[p.id][0] + z.hw, at[p.id][1] + z.hh]);
+     const me = !st.journey && pts.find((p) => p.id === st.here);
+     if (me) { const [X, Y] = at[me.id]; fixed.push([X + 10, Y - 40, X + 34, Y - 12], [X - 19, Y - 19, X + 19, Y + 19]); }
+@@ -6202,6 +6208,11 @@
+       if (L.rich) {
+         const sx = x + fw + R_SEAL_GAP * k, sy = y + ((L.fh - R_SEAL) / 2) * k;
+         parts.push(`<g class="r-seal"><rect x="${f1(sx)}" y="${f1(sy)}" width="${f1(R_SEAL * k)}" height="${f1(R_SEAL * k)}" rx="${f1(2 * k)}" fill="${RICH_SEAL}"/><text x="${f1(sx + (R_SEAL / 2) * k)}" y="${f1(sy + 11.3 * k)}" font-size="${f1(11 * k)}" text-anchor="middle" fill="#FFFFFF">${RICH_WORD}</text></g>`);
++      }
++      if (L.tug || L.cool) {
++        const by = y + fh - 3 * k, bx = x + 1 * k, bw = fw - 2 * k, bh = 2.5 * k;
++        parts.push(`<rect class="r-bar" x="${f1(bx)}" y="${f1(by)}" width="${f1(bw)}" height="${f1(bh)}" fill="${L.cool ? COOL_GREY : BAR_TRACK}"/>`);
++        if (!L.cool && L.tug) parts.push(`<rect class="r-bar-fill" data-side="${esc(L.tug.side)}" x="${f1(bx)}" y="${f1(by)}" width="${f1((bw * L.tug.pct) / 100)}" height="${f1(bh)}" fill="${sideInk(L.tug.side).color}"/>`);
+       }
+       let low = y + fh;
+       if (L.bar) {
