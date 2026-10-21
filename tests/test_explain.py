@@ -339,7 +339,8 @@ def test_the_old_word_finder_sees_strings_but_not_docstrings_or_prompts(tmp_path
 
 
 # content/ 裡還寫著舊說法的地方（joy 的字，這一版不改、列給 joy；見 docs/superpowers/specs/2026-10-06-新手引導-待joy潤的句子.md）
-CONTENT_OLD_WORDS = {("hints.json", "h_recruit")}
+# 改版資訊（登入頁那張卡）10/19 那一則照 PM 給的草稿寫「大勢人物有了交情與仇怨」：PM 的字，照樣列著
+CONTENT_OLD_WORDS = {("hints.json", "h_recruit"), ("patch_notes.json", None)}
 
 
 def _old_words_in(node, where, file, out):
