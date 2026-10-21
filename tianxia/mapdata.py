@@ -330,8 +330,11 @@ def _weeks(state: GameState, content: Content, now_week: int, ropes: list[dict])
             out.append({"week": week, "control": None, "ropes": {}, "geju": None, "events": events, "changed": []})
             continue
         control = _held(w, content, snap.control)
+        # 沒人佔↔有人佔也算易手（FB-632：開季中立的地第一次被佔下，同規則那一邊 conquest._announce 發天下大事；from／to 是 None＝沒人佔）。
+        # 舊拔河的季每一處每一週都有控制方，照舊只有換手
         changed = [] if before is None else [
-            {"id": loc, "from": before.get(loc), "to": side} for loc, side in control.items() if before.get(loc) not in (None, side)
+            {"id": loc, "from": before.get(loc), "to": control.get(loc)} for loc in [*control, *(x for x in before if x not in control)]
+            if before.get(loc) != control.get(loc)
         ]
         out.append({"week": week, "control": control, "ropes": _rope_values(snap, ropes), "geju": snap.geju,
                     "events": events, "changed": changed})
@@ -358,17 +361,21 @@ def _start_control(world: WorldState, content: Content) -> dict[str, str] | None
     return _held(world, content, start.control) if start is not None else None
 
 
-def _flips(world: WorldState, loc_id: str, now_week: int) -> list[dict]:
-    """這個地點這一季每一次易手（第幾週、從誰到誰），照每週的快照比；有開季那一刻的就從它比起（第 1 週的易手也算，FB-264）。"""
+def _flips(world: WorldState, content: Content, loc_id: str, now_week: int) -> list[dict]:
+    """這個地點這一季每一次易手（第幾週、從誰到誰），照每週的快照比；有開季那一刻的就從它比起（第 1 週的易手也算，FB-264）。
+    沒人佔↔有人佔也算（FB-632，from／to 是 None）；還沒記到的週（快照是 None）不算。不算誰的地盤的大本營（territory.unheld）沒有易手。"""
+    if territory.unheld(world, content, loc_id):
+        return []
     start = world.territory.weeks.get(territory.START_WEEK) if world.territory is not None else None
-    out, last = [], (start.control.get(loc_id) if start is not None else None)
+    out, known, last = [], start is not None, (start.control.get(loc_id) if start is not None else None)
     for week in range(1, now_week + 1):
         snap = territory.week_at(world, week)
-        side = snap.control.get(loc_id) if snap is not None else None
-        if last is not None and side is not None and side != last:
+        if snap is None:
+            continue
+        side = snap.control.get(loc_id)
+        if known and side != last:
             out.append({"week": week, "from": last, "to": side})
-        if side is not None:
-            last = side
+        known, last = True, side
     return out
 
 
@@ -447,7 +454,7 @@ def state(
             "goal": loc_id in goals, "news": loc_id in news, "people": people.get(loc_id, []),
             "services": _services(c, loc), "price": _price(w, c, faction, loc_id),
             "squads": [{"name": name, "odds": word} for name, word in listed],
-            "danger": loc.danger, "flips": _flips(w, loc_id, now_week) if on else [],
+            "danger": loc.danger, "flips": _flips(w, c, loc_id, now_week) if on else [],
             # 高級資源地（天下圖的金點，輿圖簡化設計 5.1）：開季中立的區塊，不管此刻誰佔著；領地爭奪關著的季照內容的區塊表
             "rich": conquest.start_kind(w, c, loc_id) == conquest.NEUTRAL,
         }

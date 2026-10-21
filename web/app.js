@@ -5095,6 +5095,9 @@
     return list ? list.map((x) => x.id) : MAP_SIDE_ORDER;
   }
   const sideName = (k) => (k ? sideInk(k).name : "無人控制");
+  // 沒人佔的那一頭（版圖變化的「⇄ 某地：中立 → 官軍」、卡上的易手；FB-632：中立地第一次被佔下也算易手）。待 joy 潤
+  const NEUTRAL_WORD = "中立";
+  const flipSide = (k) => (k ? sideInk(k).name : NEUTRAL_WORD);
   const f1 = (n) => Math.round(n * 10) / 10;
   const mapWeek = () => S.mapWeek || (S.mapState && S.mapState.now_week) || 1;
 
@@ -5423,7 +5426,7 @@
       const w = i + 1, row = (st.weeks || []).find((x) => x.week === w), c = row && row.control ? row.control[id] : null;
       return `<span class="${w > st.now_week ? "future" : ""}${w === st.now_week ? " now" : ""}" style="background:${c ? sideInk(c).color : "#CDBF9F"}"></span>`;
     }).join("")}</div>` : "";
-    const flips = p.flips.map((f) => `${wkName(Number(f.week), `第 ${Number(f.week)} 週`)} ${sideName(f.from)}→${sideName(f.to)}`).join("；");
+    const flips = p.flips.map((f) => `${wkName(Number(f.week), `第 ${Number(f.week)} 週`)} ${flipSide(f.from)}→${flipSide(f.to)}`).join("；");
     const kind = p.kind === "base" ? "大本營" : p.kind === "fixed" ? "照大事易手" : p.kind === "neutral" ? "中立地" : p.kind ? "可易手" : ""; // 中立地：領地爭奪（待 joy 潤）
     const tone = (word) => TONE_COLOR[ODDS_TONE_WEB[word] || "ok"];
     return `<div class="m-h1">${ctrlSeal(p.control)}<span class="nm">${esc(b.name)}</span><span class="meta">${insightOn(base, new Set(S.mapLayers)) && b.terrain ? `<span class="terrain">${esc(b.terrain)}</span>` : ""}${"★".repeat(Number(p.danger) || 0)}</span><button type="button" class="m-x" data-act="map-back" aria-label="收起">✕</button></div>
@@ -5501,7 +5504,7 @@
         const w = i + 1, row = byWeek[w], prev = w === 1 && st.start ? { control: st.start } : byWeek[w - 1]; // 第 1 週跟開季比（FB-264）
         if (w > st.now_week) return '<span class="cell future"></span>';
         if (!row || !row.control) return `<span class="cell blank" data-act="map-week" data-week="${w}"></span>`;
-        const c = row.control[id], flip = prev && prev.control && prev.control[id] && prev.control[id] !== c;
+        const c = row.control[id], flip = prev && prev.control && (prev.control[id] || null) !== (c || null);
         return `<span class="cell${w === week ? " now" : ""}${flip ? " flip" : ""}" data-act="map-week" data-week="${w}" style="background:${c ? sideInk(c).color : "#CDBF9F"}"></span>`;
       }).join("");
     }).join("")).join("");
@@ -5515,7 +5518,7 @@
     const sum = (st.sides || sideOrder(base)).map((sd) => `<div style="background:${sideInk(sd).color}"><b>${now[sd] || 0}</b>${esc(sideInk(sd).name)}${from ? `<small>　${signed((now[sd] || 0) - (from.n[sd] || 0))}</small>` : ""}</div>`).join("")
       + (from ? `<small class="m-sum-note">${from.label}</small>` : "");
     const name = (id) => esc((placeOf(base, id) || { name: id }).name);
-    const side = (k) => `<span style="color:${k ? sideInk(k).color : "inherit"}">${esc(sideName(k))}</span>`;
+    const side = (k) => `<span style="color:${k ? sideInk(k).color : "inherit"}">${esc(flipSide(k))}</span>`;
     const list = [...row.events.map((t) => `<div class="m-evt">📜 <b>${esc(t)}</b></div>`),
       ...row.changed.map((e) => `<div class="m-evt">⇄ ${name(e.id)}：${side(e.from)} → ${side(e.to)}</div>`)].join("");
     const wk = Number(week); // 7 天濃縮季寫段（wkName，FB-501）

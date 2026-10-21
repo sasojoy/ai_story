@@ -185,6 +185,26 @@ def test_the_chart_draws_unknown_weeks_as_blank():
     assert 'class="cell blank' in out and 'class="cell future' in out
 
 
+def test_fb632_a_neutral_block_taken_shows_in_the_timeline_and_the_chart():
+    """FB-632：開季中立的地第一次被佔下，版圖變化那一週的清單寫「中立 → 官軍」、年表那一格打白點（以前寫「沒有地點易手」、沒有白點）。"""
+    from conquest_kit import conquest_game
+
+    from tianxia import calendar, conquest, territory
+
+    game = conquest_game("weekend")
+    w, c = game.state.world, game.content
+    spots = [x for g in game.map_state()["chart"] for x in g["spots"]]
+    spot = next(x for x in spots if conquest.start_kind(w, c, x) == conquest.NEUTRAL)  # 年表上的一塊中立地
+    conquest.assign(w, c, {spot: "guan"})
+    w.time = calendar.week_start(2, c, w) + 60
+    territory.update(w, c)
+    tl, chart = run(game, "return [H.timelineHtml(H.S.mapBase, H.S.mapState, 1), H.chartHtml(H.S.mapBase, H.S.mapState, 1)];")
+    week1 = tl[tl.index("第 1 週</h4>"):]
+    assert f"{c.locations[spot].name}：" in week1 and ">中立</span> → " in week1 and "沒有地點易手" not in week1
+    row = chart[chart.index(f'data-id="{spot}"'):]
+    assert row[row.index("<span class=\"cell"):].startswith('<span class="cell now flip"')  # 那一格（第 1 週）打白點
+
+
 def test_the_timeline_without_territory_says_so():
     out = run(_game(classic=True), "return H.timelineHtml(H.S.mapBase, H.S.mapState, 1);")
     assert "這一季沒有地盤易手" in out and "<polyline" not in out

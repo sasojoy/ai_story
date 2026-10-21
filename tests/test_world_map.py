@@ -209,6 +209,42 @@ def test_no_flip_marks_when_conquest_is_off(profile):
     assert not any(FLIP_KEYS & set(p) for p in game.map_state()["places"].values())
 
 
+def test_fb632_a_neutral_block_taken_for_the_first_time_counts_as_a_flip():
+    """FB-632：開季中立的地第一次被佔下（領地爭奪最常見的一種易手；規則那一邊 conquest._announce 照樣發天下大事），版圖變化那一週的
+    changed 列得出來（from 是 None：網頁寫「中立 → 官軍」、天下圖閃一圈）、那一處的易手（卡上「這一季誰佔過」）也記得到；換手照舊。"""
+    from tianxia import calendar, territory
+
+    game = conquest_game("weekend")
+    w, c = game.state.world, game.content
+    conquest.assign(w, c, {"nanyang_wilds": "guan", "yingchuan_wilds": "huang"})  # 第 1 週：中立地被官軍佔下、官軍的地被黃巾拿走
+    w.time = calendar.week_start(2, c, w) + 60
+    territory.update(w, c)
+    conquest.set_control(w, c, "nanyang_wilds", None)  # 第 2 週：管理者放回中立
+    st = game.map_state()
+    week1 = next(x for x in st["weeks"] if x["week"] == 1)["changed"]
+    week2 = next(x for x in st["weeks"] if x["week"] == 2)["changed"]
+    assert {"id": "nanyang_wilds", "from": None, "to": "guan"} in week1
+    assert {"id": "yingchuan_wilds", "from": "guan", "to": "huang"} in week1
+    assert week2 == [{"id": "nanyang_wilds", "from": "guan", "to": None}]
+    assert st["places"]["nanyang_wilds"]["flips"] == [{"week": 1, "from": None, "to": "guan"}, {"week": 2, "from": "guan", "to": None}]
+    assert st["places"]["yingchuan_wilds"]["flips"] == [{"week": 1, "from": "guan", "to": "huang"}]
+    assert st["places"]["runan_wilds"]["flips"] == []  # 一直沒人佔：不算易手
+
+
+def test_fb632_old_tug_of_war_weeks_are_unchanged():
+    """FB-632 的修法只多算「沒人佔↔有人佔」：舊拔河的季每一處每一週都有控制方，changed 跟以前一樣（推線換手的那幾處）。"""
+    from tianxia import calendar, territory
+
+    game = _game()
+    w, c = game.state.world, game.content
+    territory.update(w, c)
+    w.time = calendar.week_start(2, c, w) + 60
+    w.trends["yingru"] = 95
+    territory.update(w, c)
+    changed = next(x for x in game.map_state()["weeks"] if x["week"] == 2)["changed"]
+    assert changed and all(e["from"] is not None and e["to"] is not None for e in changed)
+
+
 def test_a_scenario_without_blocks_seeds_every_open_place():
     """劇本沒寫區塊表：開放的地點全部分地面（序章專屬的不算）。"""
     c = real_content("weekend")
