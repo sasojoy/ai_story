@@ -481,6 +481,82 @@ return {
                    "exitBig": True, "exitSliver": False, "outside": True}
 
 
+# FB-651：不同地點的兩列（印章框＋朱印寶那一列、意境字那一列）之間至少隔 R_ROW_GAP px——QA：南陽 375×479 南陽官道的意境字「風火」
+# 那一列貼著南陽郊野的朱印「寶」（模型的列只隔 1.4px，畫出來的字形框還交疊 0.35px），讀起來像「南陽郊野 寶 風火」。
+# 量法：兩列在 x、y 兩個方向的間隔取大的（兩列錯開到對角也算隔開；x、y 都不到 R_ROW_GAP 才算貼著）
+ROW_GAPS = """
+const out = [];
+const gap = (a, b) => Math.max(a[0] - b[2], b[0] - a[2], a[1] - b[3], b[1] - a[3]);
+for (const rid of H.S.rids) {
+  const ids = H.S.mapBase.places.filter((p) => p.region === rid).map((p) => p.id);
+  for (const [VW, VH] of H.S.phones) {
+    const v = H.regionFit(H.S.mapBase, rid, VW, VH);
+    for (const here of H.S.heres ? [...ids, "@road"] : [H.S.mapState.here]) {
+      const st = { ...H.S.mapState, journey: here === "@road" ? { x: 0, y: 0 } : null, here: here === "@road" ? H.S.mapState.here : here };
+      const L = H.regionLabels(H.S.mapBase, st, rid, v, VW, VH);
+      for (let i = 0; i < L.length; i++) for (let j = i + 1; j < L.length; j++) {
+        let low = Infinity;
+        for (const a of L[i].rows) for (const b of L[j].rows) low = Math.min(low, gap(a, b));
+        if (low < H.S.need) out.push([rid, VW, VH, here, L[i].id, L[j].id, Math.round(low * 10) / 10]);
+      }
+    }
+  }
+}
+return out;
+"""
+ROW_GAP = float(re.search(r"R_ROW_GAP = ([\d.]+)", APP.read_text(encoding="utf-8")).group(1)) if "R_ROW_GAP = " in APP.read_text(encoding="utf-8") else 3.0
+
+
+def test_fb651_nanyang_road_insights_keep_clear_of_nanyang_wilds_seal():
+    """FB-651 QA 那一處：南陽 375×479（375×667 狀態列兩行），南陽官道的意境字那一列與南陽郊野那一列（印章框＋寶）至少隔 R_ROW_GAP（修前 1.4px）。"""
+    assert ROW_GAP >= 2
+    game = _game(profile="season21")
+    out = run(game, ROW_GAPS, rids=["nanyang"], phones=[(375, 479)], heres=False, need=ROW_GAP, mapRegion="nanyang")
+    assert not [x for x in out if {x[4], x[5]} == {"nanyang_road", "nanyang_wilds"}], out
+    assert out == []
+
+
+# FB-651 照不相交擺好之後再找「隔得開」的擺法，名字不准因此離自己的小圖更遠 R_NEAR 以上、不為了留空縮字：照這個規矩還隔不開的局面
+# （區, 地圖框寬, 高, 你站哪）——2026-10-22 量的，weekend、season21 一樣，修前 238 對、這裡 30 對；多半是你站嵩山深處、南陽 375×624（大一號的字）。
+# 只准變少（交 PM：要不要為了留空縮一號，計畫第四節）
+TIGHT_LEFT = {
+    ("youzhou", 375, 604, "zhuo_militia_hall"),
+    *(("yingru", 375, h, "deep_mountain") for h in (604, 624, 479)),
+    *(("yingru", 360, h, here) for h in (452, 436) for here in ("yingshui", "deep_mountain", "huangjin_camp")),
+    *(("nanyang", 375, 624, here) for here in ("nanyang_huangjin_camp", "yu_river", "lulin_zhai", "@road")),
+}
+
+
+@pytest.mark.parametrize("profile", ["weekend", "season21"])
+def test_fb651_rows_of_different_places_keep_apart(profile):
+    """FB-651：每一區 × 你站每一處與在路上 × 五個手機地圖框（同 FB-648 掃描；名字框的大小不看翻地，沒翻地的這一套就是全部），
+    不同地點的兩列之間都隔 R_ROW_GAP——只有 TIGHT_LEFT 那幾種照這個規矩隔不開（修前 238 對，這裡最多 30 對），QA 那一對（南陽官道、
+    南陽郊野）哪一種都隔得開。"""
+    game = _game(profile=profile)
+    rids = [r["id"] for r in game.map_base()["regions"]]
+    out = run(game, ROW_GAPS, rids=rids, phones=PHONES, heres=True, need=ROW_GAP - 0.05)
+    assert {tuple(x[:4]) for x in out} <= TIGHT_LEFT, sorted({tuple(x[:4]) for x in out} - TIGHT_LEFT)
+    assert len(out) <= 30
+    assert not [x for x in out if {x[4], x[5]} == {"nanyang_road", "nanyang_wilds"}]
+
+
+def test_fb651_keeping_apart_never_moves_a_name_farther_from_its_icon():
+    """FB-651 的代價有上限：為了讓兩列隔開而換的位置，每一處的名字離自己的小圖不比照不相交擺的那一次遠 R_NEAR（8px）以上；
+    掃描裡名字離自己的小圖最遠的那一個跟修前一樣（GAP_LAST 照舊）。"""
+    game = _game(profile="season21")
+    out = run(game, """
+const hug = (l) => { const f = l.rows[0]; return Math.hypot(Math.max(f[0] - l.X, 0, l.X - f[2]), Math.max(f[1] - l.Y, 0, l.Y - f[3])); };
+const out = [];
+for (const r of H.S.mapBase.regions) for (const [VW, VH] of H.S.phones) {
+  const v = H.regionFit(H.S.mapBase, r.id, VW, VH);
+  out.push([r.id, VW, VH, Math.max(...H.regionLabels(H.S.mapBase, H.S.mapState, r.id, v, VW, VH).map(hug))]);
+}
+return out;""", phones=PHONES)
+    last = {rid: dict(zip(PHONES, vals)) for rid, vals in GAP_LAST.items()}
+    for rid, vw, vh, far in out:
+        assert far <= last[rid][(vw, vh)] + 0.5, (rid, vw, vh, far)
+
+
 LAYOUT = """
 const v = H.regionFit(H.S.mapBase, 'RID', VW, VH);
 return H.regionLabels(H.S.mapBase, H.S.mapState, 'RID', v, VW, VH).map((l) => [l.id, l.l, l.t, l.fs, l.insPx]);

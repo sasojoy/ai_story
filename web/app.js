@@ -5899,6 +5899,11 @@
   // 進度條收在印章框裡的下緣（FB-648 第二段，企劃者 2026-10-22 選乙）：高 R_BAR、貼著框線內側（框線一般 R_LINE、大城 R_LINE_BIG），
   // 名字的字腳碰不到（框底的內距 R_PADY 夠放）
   const R_BAR = 2.5, R_LINE = 1, R_LINE_BIG = 1.7, R_INS_GAP = 1, R_SEAL = 15, R_SEAL_GAP = 3, R_EXIT = 11.5;
+  // 不同地點的兩列（印章框＋寶那一列、意境字那一列）之間至少隔多少 px（FB-651：南陽官道的意境字貼著南陽郊野的「寶」只隔 1.3px，
+  // 意境字的紙色描邊再往外 1.3px，讀起來像「南陽郊野 寶 風火」）：x、y 兩個方向都不到這麼遠就算貼著。照不相交擺好之後再試著讓開
+  // （regionLabelsAt 的 spaced：名字不准因此離自己的小圖更遠 R_NEAR 以上），讓不開照原本的；擠不下（縮一號）照舊只看相交，不為了留空縮字
+  const R_ROW_GAP = 3;
+  const rowGrow = (r) => [r[0] - R_ROW_GAP, r[1] - R_ROW_GAP, r[2] + R_ROW_GAP, r[3] + R_ROW_GAP];
   // 區圖記號在螢幕上多大（px）：放得大的區（倍率 1 以上）小圖與字大一號；擠的區（潁川汝南在手機上約 0.68 倍）照小的那一號才擺得開
   // （設計第十二章：375 寬互相不壓）。icon 是墨筆小圖照草圖（20px 見方）放大幾倍，hw、hh 是小圖在螢幕上佔的半寬、半高
   function regionSizes(s) {
@@ -6097,12 +6102,17 @@
       const opts = spots(L, z).map(([dx, dy, rank], j) => {
         const l = X + dx, t = Y + dy, rows = [[l, t, l + L.w1, t + L.fh]];
         if (L.low) rows.push([l, t + L.fh, l + L.w2, t + L.H]);
-        return { l, t, rows, bb: [l, t, l + L.W, t + L.H], cost: against(rows, walls), rank: rank === undefined ? j : rank };
+        const bb = [l, t, l + L.W, t + L.H];
+        // pad、bp：每一列、外框各往外撐 R_ROW_GAP（FB-651：跟別處的列比的時候用，兩列之間不到 R_ROW_GAP 就算壓到）
+        return { l, t, rows, bb, pad: rows.map(rowGrow), bp: rowGrow(bb), cost: against(rows, walls), rank: rank === undefined ? j : rank };
       });
       return { p, i, L, X, Y, opts };
     });
     const meet = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3]; // 兩個框的外框碰不碰得到（先擋掉遠的，省時間）
-    const clash = (a, b) => meet(a.bb, b.bb) && a.rows.some((r) => b.rows.some((q) => inter(r, q) > 0));
+    // 兩處的名字框壓不壓：gapOn 時不同地點的兩列之間不到 R_ROW_GAP 也算（FB-651，spaced 那一下）
+    let gapOn = false;
+    const clash = (a, b) => (gapOn ? meet(a.bp, b.bb) && a.pad.some((r) => b.rows.some((q) => inter(r, q) > 0))
+      : meet(a.bb, b.bb) && a.rows.some((r) => b.rows.some((q) => inter(r, q) > 0)));
     // 再一處一處往前挪——換成更前面（rank 小：離小圖更近）、不壓牆也不壓別人的位置，挪到挪不動為止
     const forward = (items, pick) => {
       for (let round = 0, moved = true; moved && round < 6; round++) {
@@ -6127,7 +6137,7 @@
         for (const o of room[i]) {
           if (--budget < 0) return null;
           const after = room.slice();
-          if (rest.some((j) => meet(o.bb, reach[j]) && !(after[j] = room[j].filter((q) => !clash(o, q))).length)) continue;
+          if (rest.some((j) => meet(gapOn ? o.bp : o.bb, reach[j]) && !(after[j] = room[j].filter((q) => !clash(o, q))).length)) continue;
           const found = search(rest, after);
           if (found) return { ...found, [i]: o };
           if (budget < 0) return null;
@@ -6162,15 +6172,29 @@
     const exits = regionExitAnchors(base, rid, v, vw, vh), room = regionExitRoom(v, vw, vh);
     const exitHit = (items, pick) => regionExits(base, rid, v, vw, vh, items.map((it) => ({ X: it.X, Y: it.Y, rows: pick[it.i].rows })))
       .some((e) => items.some((it) => pick[it.i].rows.some((r) => inter(r, e.box) > 0.5)));
+    // 名字框離自己的小圖多遠（小圖中心到印章框最近那一點）
+    const hugOf = (it, o) => { const f = o.rows[0]; return Math.hypot(Math.max(f[0] - it.X, 0, it.X - f[2]), Math.max(f[1] - it.Y, 0, it.Y - f[3])); };
+    // FB-651：照不相交擺好之後，再找一次「不同地點的兩列都隔得開 R_ROW_GAP」的擺法——每一處只准用離自己的小圖不比剛才遠 R_NEAR 的位置
+    // （留空是寧可：不為了它把名字擺得離小圖更遠、不為了它縮字），找不到照剛才的
+    const spaced = (items, pick, budget) => {
+      gapOn = true;
+      const lim = items.map((it) => ({ ...it, opts: it.opts.filter((o) => hugOf(it, o) <= hugOf(it, pick[it.i]) + R_NEAR) }));
+      const got = solve(lim, budget);
+      gapOn = false;
+      return got && !(exits.length && exitHit(items, got)) ? got : pick;
+    };
+    gapOn = false;
     let items = lay(regionLabelSpots, fixed);
     let pick = solve(items, REGION_SEARCH);
     if (pick && exits.length && exitHit(items, pick)) pick = null;
-    if (!pick) {
+    if (pick) pick = spaced(items, pick, REGION_SEARCH);
+    else {
       // 第二輪：你的朱圈照圓的算（圓外那四個角讓名字框擺得進去），鄰區出口原本的位置也讓開
       items = lay(regionLabelSpotsWide, [...(me ? fixed.slice(0, -1) : fixed), ...ring, ...exits.map((e) => regionExitBox(e, 0, room))]);
       // 先照「離自己的小圖多近」的先後一起找（找得到名字就都在自己的小圖旁邊），找不到再照原本的先後找一次，再找不到才換位置
       const near = items.map((it) => ({ ...it, opts: it.opts.slice().sort((a, b) => a.rank - b.rank) }));
-      pick = solve(near, R_SEARCH_WIDE) || solve(items, R_SEARCH_WIDE) || settle(items, R_SETTLE);
+      pick = solve(near, R_SEARCH_WIDE) || solve(items, R_SEARCH_WIDE);
+      pick = pick ? spaced(near, pick, R_SEARCH_WIDE) : settle(items, R_SETTLE);
     }
     const out = items.map((it) => {
       const o = pick[it.i], others = items.filter((x) => x !== it).map((x) => pick[x.i]);
