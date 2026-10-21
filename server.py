@@ -1990,6 +1990,9 @@ MAIN_ACTIONS = {
     "checkin": lambda g, b: g.check_in(str(b.get("attribute", ""))[:2]),
     # 領地爭奪第二批：每天投票（裁決 9）——明天打哪一塊（loc）、幾點開打（minute：當地時間的分鐘）
     "conquest_vote": lambda g, b: g.conquest_vote(str(b.get("loc", "")), _int(b.get("minute"), -1)),
+    # 玉璽碎片改版第 2 批：起用懷中那一片的獨門行動。target 是指定的目標（大勢人物、戰線、人物 id），side 是散人傳檄挑的那一軍；
+    # 玩家的叫 seal_use，跟管理者那一組 seal_* 不同名（FB-609）
+    "seal_use": lambda g, b: g.seal_use(str(b.get("target", ""))[:40], str(b.get("side", ""))[:20]),
 }
 # 賽季時鐘暫停中也照做的畫面設定（不推任何東西、不碰別人）：匿名、不再提示、略過引導、打開輿圖（頁面靠它載入輿圖）、軍令卡出現（入伍段第一步，
 # 只動自己的引導；被擋下的話網頁已經記成「送過了」，這個工作階段不會再送）、對話框的「知道了」

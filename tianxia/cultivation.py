@@ -19,7 +19,7 @@ from __future__ import annotations
 import random
 from typing import NamedTuple
 
-from . import insights, library, naming, silver, team, treasures
+from . import insights, library, naming, seal_acts, silver, team, treasures
 from .martial_arts import next_quality
 from .models import Content
 from .rules import add_chronicle
@@ -114,9 +114,12 @@ def odds_for(
         factor = fit(state, content, world, art_id).factor
     # 寶物在 cultivate_sure_by 的判斷之外另外傳（裝備四欄 6.2）：併進 factor 的話衝中品（寫在 cultivate_sure_by 裡）時寶物永遠不起作用；
     # 也不乘進 fit()：那樣頓悟（seize）與服丹衝關（force_odds）也會跟著放大，絕學要的是契機
+    treasure = treasures.amount(state, content, "cultivate")
+    if (edict := seal_acts.edict_cultivate(state.world, content)) != 1.0:  # 頒詔（玉璽碎片改版第 2 批）：跟寶物同一個倍數位置
+        treasure *= edict
     return chance(
         content, target_quality, failures, boost, wis=state.player.stats.get("wis", team.BASE_STAT), fit=factor,
-        treasure=treasures.amount(state, content, "cultivate"), mentor=silver.mentor_bonus(state, content),
+        treasure=treasure, mentor=silver.mentor_bonus(state, content),
     )
 
 

@@ -7,7 +7,7 @@ import re
 from collections.abc import Callable
 from typing import Literal, NamedTuple
 
-from . import calendar, front_lines, gender, insights, library, materials, renown, rise, roster, team, treasures  # 與 roster 互相 import：只能引入整個模組、呼叫時才取屬性，不能 from .roster import …
+from . import calendar, front_lines, gender, insights, library, materials, renown, rise, roster, seal_acts, team, treasures  # 與 roster 互相 import：只能引入整個模組、呼叫時才取屬性，不能 from .roster import …
 from .allied import hidden_trends as allied_hidden
 from .allied import on as haoqiang_allied  # noqa: F401  豪強分屬兩軍：設計寫 rules.haoqiang_allied、rules.side_of，其他模組照這兩個名字讀
 from .allied import side_of  # noqa: F401
@@ -88,7 +88,9 @@ def can_meet(state: GameState, content: Content, companion_id: str) -> bool:
     事件認識過（企劃者 2026-10-02 決定）。引擎的求見與交友對話、伏筆的對話片段（名望不夠的人改從行動偷聽，
     foreshadow.hear_after_action）都用這一個判斷，不要在別處再寫一份。"""
     p = state.player
-    return f"結識:{companion_id}" in p.flags or p.stats.get("fame", 0) >= audience_bar(state, content, companion_id)
+    if f"結識:{companion_id}" in p.flags or p.stats.get("fame", 0) >= audience_bar(state, content, companion_id):
+        return True
+    return seal_acts.heart_open(state.world, content, companion_id)  # 收心（玉璽碎片改版第 2 批）：一日之內求見不看門檻
 
 
 def current_day(state: GameState) -> int:

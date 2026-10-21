@@ -14,6 +14,7 @@
   import 的鏈很長，figures、figure_life、team、rules、sensing、cultivation 都會叫這裡）。不擲骰、不讀時鐘。字待 joy 潤。"""
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 
 from . import calendar, treasures
@@ -200,7 +201,7 @@ def dew_factor(state: GameState, content: Content, seconds: float) -> float:
 
 def dew_clinic(state: GameState, content: Content) -> bool:
     """承露：人在承露那一區、此刻不在路上（醫館療傷不收錢）。"""
-    if not on(content) or state.player.journey is not None:
+    if not state.world.seal_acts or not on(content) or state.player.journey is not None:
         return False
     region = region_of(content, state.player.location)
     return region is not None and any(a.target == region for a in live(state.world, "chenglu"))
@@ -245,11 +246,11 @@ def heart_scale(world: WorldState, content: Content, character_id: str) -> float
 
 
 def warmer(world: WorldState, content: Content, character_id: str, delta: int) -> int:
-    """收心放大加的情誼（「漲幅」；扣的照舊），四捨五入。"""
+    """收心放大加的情誼（「漲幅」；扣的照舊），四捨五入（同 renown.warmed 的進位）。"""
     if delta <= 0:
         return delta
     scale = heart_scale(world, content, character_id)
-    return delta if scale == 1.0 else int(delta * scale + 0.5)
+    return delta if scale == 1.0 else math.floor(delta * scale + 0.5 + 1e-9)
 
 
 # ── 引將：拉過去、提前結束、期滿回原處 ───────────────────────────

@@ -427,6 +427,8 @@ def heal_note(state: GameState, content: Content) -> str:
     from . import territory  # noqa: PLC0415  territory → rules：延後 import
 
     points, cost, left = team.heal_plan(state, content, state.player.member)
+    if team.heal_free(state, content):  # 承露那一區（玉璽碎片改版第 2 批）：不收錢，不寫折扣的原因
+        return f"內傷 {int(state.player.member.injury)}・{team.HEAL_FREE_NOTE}"
     # 名聲 4.1、5.2：價錢後面寫原因，地盤、名望、俠的醫館折扣寫在同一個括號（FB-294）；名聲關著是空的
     why = renown.reasons_text(territory.price_parts(state, content, heal=True) + [renown.clinic_part(state, content)])
     if left > 0:

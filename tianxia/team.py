@@ -14,7 +14,7 @@ import threading
 from collections import OrderedDict
 from collections.abc import Callable
 
-from . import armor, calendar, encounter, equipment, mounts, rounds, signature, styles, tactics, traits, treasures, weapons
+from . import armor, calendar, encounter, equipment, mounts, rounds, seal_acts, signature, styles, tactics, traits, treasures, weapons
 from . import terrain as terrain_mod  # 地利（_styled_fighters 的參數 terrain 是開關，模組另取名字）
 from .martial_arts import MAX_LEVEL, MartialArt, content_art, counters, power_at, with_quality
 from .models import Content, FollowerDef, InsightDef, Squad, TacticBond, TacticDef
@@ -578,9 +578,22 @@ def heal_cost(content: Content, member, state: GameState | None = None) -> int:
     return math.ceil(round(injury / max(1.0, content.config.heal_neili_per_silver) * _price_here(state, content), 9))
 
 
+HEAL_FREE = "這一帶承露，醫館分文不取"  # 待 joy 潤：承露（玉璽碎片改版第 2 批）那一區療傷不收錢，療傷那一句的括號
+HEAL_FREE_NOTE = "承露・分文不取"  # 待 joy 潤：療傷鈕上價錢那一格（skillview.heal_note）
+
+
+def heal_free(state: GameState, content: Content) -> bool:
+    """此刻療傷不收錢：人在承露降的那一區（seal_acts.dew_clinic；改版關著、沒有承露一律是假）。價錢（heal_cost）照舊算——
+    heal_cost 是 0 會被 heal_problem 當成「氣血無恙」，所以只在 heal_plan 收 0、說法換一句。"""
+    return seal_acts.dew_clinic(state, content)
+
+
 def heal_plan(state: GameState, content: Content, member) -> tuple[int, int, int]:
     """這一次療傷治多少：（治幾點, 收幾兩, 還剩幾點）。銀兩夠就全治（收 heal_cost）；不夠時能治多少治多少
-    （PM 2026-10-12：療傷只在醫館之後，窮的人內傷越疊越多、一次付不起就永遠治不了），每一兩治 heal_neili_per_silver 點。"""
+    （PM 2026-10-12：療傷只在醫館之後，窮的人內傷越疊越多、一次付不起就永遠治不了），每一兩治 heal_neili_per_silver 點。
+    承露那一區（heal_free）全治、收 0。"""
+    if heal_free(state, content):
+        return round(max(0.0, getattr(member, "injury", 0.0))), 0, 0
     rate = max(1.0, content.config.heal_neili_per_silver) / _price_here(state, content)
     injury = max(0.0, getattr(member, "injury", 0.0))
     silver = max(0, state.player.stats.get("silver", 0))
@@ -599,7 +612,7 @@ def heal_problem(state: GameState, content: Content, member, where: str | None =
         return "氣血無恙，不用療傷。"
     if where is not None:
         return where
-    if state.player.stats.get("silver", 0) < 1:  # 不夠全治時治一部分（heal_plan），一兩都沒有才做不了
+    if state.player.stats.get("silver", 0) < 1 and not heal_free(state, content):  # 不夠全治時治一部分（heal_plan），一兩都沒有才做不了
         return f"銀兩不足：療傷需要 {cost} 兩。"
     return None
 
@@ -617,6 +630,8 @@ def heal(state: GameState, content: Content, member, where: str | None = None) -
         return [f"銀兩只夠治一部分：內傷 -{points}，還剩 {left} 點（銀兩 -{cost}）。"]
     healed = member.injury
     member.injury = 0.0
+    if cost == 0 and heal_free(state, content):
+        return [f"療傷完畢，內傷 -{healed:.0f}、氣血回滿（{HEAL_FREE}）。"]
     return [f"療傷完畢，內傷 -{healed:.0f}、氣血回滿（銀兩 -{cost}）。"]
 
 

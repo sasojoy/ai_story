@@ -6,7 +6,7 @@ import random
 import re
 from collections.abc import Callable
 
-from . import arena, battle_instance, bounties, calendar, feasts, figure_life, figures, flavor, leaderboard, orders, ranks, renown, seats, territory, timetable, yuedan
+from . import arena, battle_instance, bounties, calendar, feasts, figure_life, figures, flavor, leaderboard, orders, ranks, renown, seal_acts, seats, territory, timetable, yuedan
 from .models import Act, BattleDef, Content, Ending, SimPlayer, SimRumor, Storyline, TimetableEvent
 from .ollama_client import OllamaClient
 from .rules import (

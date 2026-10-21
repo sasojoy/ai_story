@@ -19,7 +19,7 @@ from types import SimpleNamespace
 
 from pydantic import BaseModel, Field
 
-from . import gender, glyph, insight_llm, insights, mounts, naming, precise, treasures
+from . import gender, glyph, insight_llm, insights, mounts, naming, precise, seal_acts, treasures
 from .martial_arts import Insight
 from .models import Content, InsightScene, Location
 from .ollama_client import OllamaClient
@@ -146,6 +146,8 @@ def rate(state: GameState, content: Content, loc: Location, method: str | None =
 
     if conquest.home(state, content):  # 領地爭奪：人站在自家領地（散人在開季中立的區塊）擲中多幾個百分點（設計 4.5），同樣夾在上限
         base = min(high, base + cfg.conquest.sense_bonus_points)
+    if edict := seal_acts.edict_sense(state.world, content):  # 頒詔（玉璽碎片改版第 2 批）：全服一日多幾個百分點，同樣夾在上限
+        base = min(high, base + edict)
     bonus = min(cfg.sense_marks_cap, _tier(state.world.marks.get(mark_key(loc.id), 0)) * cfg.sense_marks_bonus)
     return base + bonus
 
