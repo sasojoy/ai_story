@@ -1,0 +1,40 @@
+{
+  "open": [
+    "是日天下，諸路動靜如左。",
+    "史官記是日之事。",
+    "是日各路兵馬，略記如下。"
+  ],
+  "close": [
+    "天下大勢，尚在未定之間。",
+    "勝負之數，猶待來日。",
+    "諸路相持，明日再看分曉。"
+  ],
+  "fact": {
+    "taken": "{side}{margin}，拿下{place}。",
+    "taken_blow": "{who}替{side}補上最後一刀，{side}{margin}，拿下{place}。",
+    "held": "{keeper}守住了{place}，{attackers}無功而返。",
+    "stalemate": "{attackers}在{place}相持不下，誰也沒能拿下。",
+    "void": "{side}原定攻{place}，一個人都沒趕到，這一仗作罷。",
+    "fighting": "{place}一仗打到入夜，還沒分出勝負。",
+    "plan_vote": "{side}眾議已定，下一仗攻{place}。",
+    "plan_commander": "{side}由主將定奪，下一仗攻{place}：{reason}",
+    "line": "{line}一帶，{lean}{move}。"
+  },
+  "lean": {
+    "strong": "{side}佔盡上風",
+    "up": "{side}漸佔上風",
+    "slight": "略偏{side}",
+    "even": "兩軍相持"
+  },
+  "move": {
+    "toward": "，這一日往{side}那一邊推了一截",
+    "still": "，這一日大致未動"
+  },
+  "summary": {
+    "taken": "{side}拿下{place}",
+    "held": "{keeper}守住{place}",
+    "stalemate": "{place}相持不下",
+    "void": "{place}一仗作罷",
+    "none": "各路按兵，未見勝負"
+  }
+}

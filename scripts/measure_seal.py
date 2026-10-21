@@ -13,8 +13,15 @@
 玉璽二：--mandate-mc 數七片湊齊要幾季（純蒙地卡羅，照 --emerge-rate）；--mandate 把每一季直接蓋成天命之季（開季那一刻；--holders N 片記到
 假人名下、--sunk M 片隱沒），量三場必定璽動、單挑、易手、喚回、天命之爭的起點與結果、結局。
 
+領地爭奪第三批 B（計畫 Task 15，設計 4.8）：--mandate-mc 加上 --hide H --find F --explores N [N …] --own-share S [--own-scale X]
+就改量「碎片藏在中立地、探索撿到」的節奏：每季現世率＝H×（1−（1−F）^（N×（1−S））×（1−min(1,F×X)）^（N×S））——開季先擲 H 有沒有一片
+藏著，之後藏碎片的那一塊一季被探索 N 次，其中 S 的比例是那一塊此刻歸你的陣營（機率 ×X），只要撿到一次就現世；再數七片湊齊要幾季
+（同上）。沒給的參數讀 Config.seal.cache（hide_chance／find_chance／own_scale）；N 預設 150 300 600 1000、S 預設 0.5。N 是一個外部的
+假設（一塊中立地一季被探索幾次）：量表算得出的只是「N 是多少時落在 16～20 季」。
+
 執行：.venv/Scripts/python.exe scripts/measure_seal.py --seeds 1 2 3 [--factions 5 5 5] [--force-stir --holders 7] [--duel-mc]
       [--mandate --holders 5 --sunk 2] [--mandate-mc --emerge-rate 0.35 0.2]
+      [--mandate-mc --hide 0.4 --find 0.005 --explores 150 300 600 1000 --own-share 0.5]
 輸出只有數字與陣營，不列名號。
 """
 from __future__ import annotations
@@ -125,6 +132,8 @@ def print_mc(rows: list[dict]) -> None:
 def mandate_mc(emerge_rate: float, trials: int = 4000, seed: int = 0) -> dict:
     """天命之季多久來一次（玉璽二）：每季最多現世一片、機率 emerge_rate，數到七片都現世過要幾季（下一季就是天命之季）。
     只用 random.Random(seed)：同樣的參數結果一樣。回 rate、mean、p10、p50、p90（季）與 cycle（一輪＝湊齊＋天命之季一季）。"""
+    if emerge_rate <= 0:  # 永遠湊不齊（find 是 0 之類）：不跑，免得無窮迴圈
+        return {"rate": emerge_rate, "mean": float("inf"), "p10": float("inf"), "p50": float("inf"), "p90": float("inf"), "cycle": float("inf")}
     rng = random.Random(seed)
     counts = []
     for _ in range(trials):
@@ -140,6 +149,34 @@ def mandate_mc(emerge_rate: float, trials: int = 4000, seed: int = 0) -> dict:
         return counts[min(len(counts) - 1, int(q * len(counts)))]
 
     return {"rate": emerge_rate, "mean": mean, "p10": pick(0.1), "p50": pick(0.5), "p90": pick(0.9), "cycle": round(mean + 1, 1)}
+
+
+def season_rate(hide: float, find: float, explores: int, own_share: float = 0.0, own_scale: float = 1.5) -> float:
+    """領地爭奪的季，一季裡有一片現世的機率（Task 15）：開季先擲 hide 有沒有一片藏著，之後藏碎片的那一塊一季被探索 explores 次，
+    其中 own_share 的比例是那一塊此刻歸你的陣營（每一下 find×own_scale，夾在 1 以下），其餘每一下 find；一次都沒撿到的機率是兩段相乘，
+    撿到至少一次就現世。find 是 1、explores 是 1 時就等於 hide（舊的「每季現世率」）。"""
+    own = min(1.0, find * own_scale)
+    miss = (1.0 - find) ** (explores * (1.0 - own_share)) * (1.0 - own) ** (explores * own_share)
+    return hide * (1.0 - miss)
+
+
+def cache_rows(hide: float, find: float, explores: list[int], own_share: float, own_scale: float, trials: int = 4000, seed: int = 0) -> list[dict]:
+    """每個 explores 一列：mandate_mc 的那幾格加上 explores、p_find（有藏的季裡撿到的機率）、hide、find。"""
+    rows = []
+    for n in explores:
+        rate = season_rate(hide, find, n, own_share, own_scale)
+        row = mandate_mc(rate, trials, seed)
+        row.update(explores=n, p_find=(rate / hide if hide else 0.0), hide=hide, find=find, own_share=own_share, own_scale=own_scale)
+        rows.append(row)
+    return rows
+
+
+def print_cache_mc(rows: list[dict]) -> None:
+    print("碎片藏在中立地、探索撿到（每季現世率 → 七片湊齊要幾季；一輪＝湊齊＋天命之季一季）")
+    for r in rows:
+        mean = "永遠湊不齊" if r["mean"] == float("inf") else f"平均 {r['mean']} 季（p10 {r['p10']}、中位 {r['p50']}、p90 {r['p90']}），一輪約 {r['cycle']} 季"
+        print(f"  藏 {r['hide']:.2f}、每下 {r['find']:.4f}（自家 ×{r['own_scale']:g}、自家佔 {r['own_share']:.0%}）、藏處一季探索 {r['explores']} 次："
+              f"藏著時撿到 {r['p_find']:.0%}，每季現世 {r['rate']:.3f}，{mean}")
 
 
 def print_mandate_mc(rows: list[dict]) -> None:
@@ -367,8 +404,7 @@ def round_up(rows: list[dict], content: Content, emerge_default: float = 0.35) -
     return lines
 
 
-def main() -> None:
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument("--seeds", type=int, nargs="+", default=[1, 2, 3])
     parser.add_argument("--factions", type=int, nargs=3, default=[5, 5, 5], metavar=("GUAN", "HUANG", "HAOQIANG"))
@@ -384,11 +420,38 @@ def main() -> None:
     parser.add_argument("--sunk", type=int, default=0)
     parser.add_argument("--mandate-mc", action="store_true")
     parser.add_argument("--emerge-rate", type=float, nargs="+", default=[0.35, 0.2])
-    args = parser.parse_args()
+    # 領地爭奪第三批 B：碎片藏在中立地、探索撿到（--mandate-mc 底下；沒給的讀 Config.seal.cache）
+    parser.add_argument("--hide", type=float, default=None, help="開季這一季有沒有一片藏著的機率（hide_chance）")
+    parser.add_argument("--find", type=float, default=None, help="在藏處每探索一下撿到的機率（find_chance）")
+    parser.add_argument("--explores", type=int, nargs="+", default=None, help="藏碎片的那一塊一季被探索幾次（外部假設；預設 150 300 600 1000）")
+    parser.add_argument("--own-share", type=float, default=None, help="那些探索裡，藏處歸探索者自己陣營的比例（預設 0.5）")
+    parser.add_argument("--own-scale", type=float, default=None, help="歸自己陣營時的倍數（own_scale）")
+    return parser
+
+
+def cache_mode(args) -> bool:
+    """--mandate-mc 底下有給任何一個「藏在中立地」的參數，就改量那一套。"""
+    return any(x is not None for x in (args.hide, args.find, args.explores, args.own_share, args.own_scale))
+
+
+def cache_args(args, content: Content) -> tuple[float, float, list[int], float, float]:
+    """沒給的讀 Config.seal.cache（hide_chance、find_chance、own_scale）；N 與自家比例用預設。"""
+    cfg = content.config.seal.cache
+    return (cfg.hide_chance if args.hide is None else args.hide, cfg.find_chance if args.find is None else args.find,
+            args.explores or [150, 300, 600, 1000], 0.5 if args.own_share is None else args.own_share,
+            cfg.own_scale if args.own_scale is None else args.own_scale)
+
+
+def main() -> None:
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    args = build_parser().parse_args()
     content = load_content(ROOT / "content", args.profile)
     print(profile_line(content, None if args.profile == "none" else args.profile), flush=True)
     if args.duel_mc:
         print_mc(duel_mc(content, ratios=[0.5, 1.0, 1.5, 2.0, 3.0], trials=args.trials, rates=[30, 50, 70], modes=list(MODES)))
+        return
+    if args.mandate_mc and cache_mode(args):  # 領地爭奪的季：碎片藏在中立地、探索撿到（第三批 B）
+        print_cache_mc(cache_rows(*cache_args(args, content)))
         return
     if args.mandate_mc:  # 天命之季多久來一次（玉璽二）
         print_mandate_mc([mandate_mc(r) for r in args.emerge_rate])
