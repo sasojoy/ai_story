@@ -23,6 +23,7 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
   - Write 寫的 `.ps1` 是沒有 BOM 的 UTF-8，PowerShell 5.1 當 ANSI 讀、中文整個壞掉：寫完用 `[IO.File]::WriteAllText(檔, 內容, (New-Object Text.UTF8Encoding($true)))` 補 BOM。
   - 長跑的 node／python 不要接 `| Select-Object -First N`：拿到 N 行 PowerShell 就收掉行程（exit 255），`finally` 裡關 chromium 那一段不會跑。輸出導進檔案再讀。
 - **PowerShell 腳本檔（`.ps1`）不要寫中文路徑**（2026-10-20 領地爭奪複驗，一整輪空跑）：Write 工具寫的檔沒有 BOM，PowerShell 5.1 當 ANSI 讀，`$PY` 變成亂碼、回「The term … is not recognized」，錯誤落在工作輸出、不在導向的 log 裡，檔案一個都沒生出來。python 指令直接寫在 PowerShell 工具的呼叫裡（路徑照常寫中文），`.ps1` 只放 ASCII 路徑；要跑好幾次就在同一個呼叫裡寫 `foreach`。
+- **PowerShell 5.1 叫原生程式的參數**（2026-10-22 輿圖第 4 批複驗）：空字串參數會被吞掉（profile 要空字串就傳 `default`，腳本裡再換成 `""`）、JSON 的引號被吃掉（傳 `str:值` 讓腳本自己解）；輸出檔名用 ASCII，中文檔名經 PowerShell 傳給 python 會變亂碼；`Remove-Item <scratchpad>\資料夾\*` 帶萬用字元會被擋（protected path），要換一批資料就開新的資料夾或檔名。
 - **git 一個指令一個指令跑**：`W=…; git -C "$W" … | …; git -C "$W" …` 這種變數加管線加好幾個 git 串在同一行，會被擋（too complex）。拆成單一的 `git -C <絕對路徑> …`；要 grep 輸出就先 `> scratchpad 的檔`，再另一個指令 grep。
 - **兩份複本對照要平行跑**：PowerShell `Start-Process -FilePath <python> -ArgumentList '-u','-I',<腳本> -RedirectStandardOutput <檔> -RedirectStandardError <檔> -WindowStyle Hidden -PassThru`，各設自己的 `QA_ROOT`；不加 `-u` 的話輸出要等跑完才寫進檔，看不到進度。
 - **scratchpad 跟同一個 PM 派出的其他子代理共用**（2026-10-20 在 `shots/` 看到別人的檔）：自己的複本、資料庫、截圖，都放在用這次驗收命名的子資料夾。
@@ -107,15 +108,20 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
   - **輿圖第三版第 4 批起**（區圖與卡）上面幾條的 ⚔、小牌子、放大縮小、圓盤 `g[data-loc]` 都拿掉了，路也不再烤進點陣（`#map .tx-roads path`）。區圖：名字框 `#mk g.r-label[data-id]`（`rect.r-frame` 的 fill／stroke＝框色、第一個 `text`＝名字、`.r-seal` 寶、`rect.r-bar`／`.r-bar-fill[data-side]` 進度、`text.r-ins` 悟字、`text.r-cool`），小圖 `g.r-icon`，鄰區出口 `g.r-exit[data-id=大區]`，換區是 `select.r-pick` 設 value 再 `dispatchEvent(new Event("change", {bubbles: true}))`，塗層 `.r-wash`，選了的那一圈在 `#msel`；卡在 `#mbody`（`.m-h1`、`.m-line`、`.m-flip`、`.m-yield`、`.m-acts button`）。**天下圖的 `.w-top` 與區圖的 `.r-top` 都在 DOM 裡、藏的那一層在前**：`querySelector('.mapx.region [data-act="map-world"]')` 拿到的是藏起來的那一顆（0×0），要寫 `.r-top [data-act="map-world"]`、`.r-top .w-tl`。
   - **自動點區圖上的地點之前先看 `elementFromPoint`**（2026-10-21 第 4 批 QA 踩到）：半開的卡會蓋住區圖下緣，照名字框的座標點下去點到的是卡上的「疾行」，角色當場被送走、體力扣掉；點之前確認拿到的是 `[data-act="region-place"]`，不是就先按卡的 ✕ 收起來再點。
   - **名字框互壓用開發自己的量法重現最快**：`import test_region_map_web as T`（`sys.path` 加 `tests/`），`T._game(profile=…, at=…)` 之後照要的局面 `conquest.push(...)`，再 `T.run(game, T.OVERLAP.replace("VW", …).replace("VH", …))`；`textW` 是估的、node 與瀏覽器擺出來一樣，幾秒一組，比開瀏覽器量快，修的人也能直接寫成測試。
+  - **實機量區圖的互壓，照畫出來的量**（2026-10-22 複驗，FB-651）：開發的 `OVERLAP` 用模型的列（意境字那一列從框的左緣起、高度照字級估），別處的「寶」緊貼意境字這種它量不到；實機讀每一個 `rect.r-frame`、`.r-seal rect`、`text.r-ins` 的 `getBoundingClientRect` 自己算，朱圈照真的圓（`#mkt circle.r-you`：半徑 17×倍率＋線寬一半）量框到圓心最近那一點。翻地前後比位置：同一個帳號、同一個地圖框，先量沒人推、再用引擎 `conquest.push` 推、再量，逐框比 `getBoundingClientRect`。
+  - **湊指定的地圖框**（開發的 `PHONES` 是 `#map` 的大小，不是視窗）：讀 `#map` 的 clientWidth／Height，差多少就把視窗高度加減多少再載入一次；狀態列的行數照帳號不同（多一行提示、下一件），同一個 375×812 視窗地圖框有 604／624／651。
 - **共用窗格太擠、或要包 `fetch`、要換樣式表時，自己開 headless chromium**（寫法看 `tianxia-dev/網頁.md` 的「要真實截圖 PNG 的草圖」：playwright 的 chromium-1208、node 22、CDP；一個 node 腳本開一個瀏覽器、跑完 `taskkill /T` 自己的那個）。截圖用 `Page.captureScreenshot` 存 PNG，再用 Read 看。窗格那幾條（`el.click()`、單獨 reload、量 `scrollWidth`）照樣適用。好用的幾招：
   - **回應沒收到**：在頁面裡包 `window.fetch`，對指定的網址等真的回應回來再丟 `TypeError`（伺服器做了、頁面沒收到），或送出前就丟（根本沒到伺服器）；要「馬上再點、輪詢還沒插進來」就讓 `/api/main`、貨架那幾個 GET 先掛著（等一個 promise），點完才放。要「等一次輪詢再點」就不掛、記下輪詢何時打過。
   - **修前修後比版面**：同一個登入、同一頁，把 `git show <舊 sha>:web/style.css` 整份換進頁面（`link[href*="style.css"]` 換成 `<style>`），量同一批元素的 `getComputedStyle`（字級、字重、行高）與 `getBoundingClientRect`，再比兩張截圖的 sha256；不必起兩台伺服器。寬度要跨媒體查詢的邊界各量一次（640、641）。
+  - **換整份 `app.js` 看舊版的畫法**：CDP `Fetch.enable({patterns: [{urlPattern: "*/app.js*", requestStage: "Request"}]})`，收到 `Fetch.requestPaused` 就 `Fetch.fulfillRequest`（200、`application/javascript`、body 是舊版檔案的 base64），同一台伺服器、同一個登入就能比修前修後的區圖（2026-10-22 用來確認 FB-651 第 4 批就有）。
+  - `clickSel` 拿的是第一個符合的元素：先確認它的框不是 0×0（藏起來的那一層在前，見上面 `.r-top`），不然點到別的東西、什麼都沒發生。
   - 提示泡泡（`#toast`，3.2 秒）與離線橫幅會蓋在確認框上；要看底下的字就等它消失，或用 JS 讀 DOM。
   - 每跑一次 node 就是新的瀏覽器，登入的 cookie 留不下來：用 `set_password.py` 建的帳號，node 自己讀 `local/<帳號>_password.txt` 打 `/api/login`（密碼不進對話）。在瀏覽器裡用隨機密碼註冊的帳號，下一輪就登不進去了。
   - 逐像素比修前修後，同一版也要跑兩次：煉製的太極爐、輿圖的紅旗、修練的人物面板是動畫，跑兩次就不一樣。只有新對新、舊對舊都一樣，新對舊才不一樣的，才算改動造成的。
 
 ## 存檔、資料庫與假人
 - 換季之後、玩家第一次同步之前改的存檔，會被換季重設洗掉。要等他同步完再改。
+- **在路上做「擋路」（`travel_block`）**：`player.picking_*` 旗標同步時會被收掉；改 `GameState.pending_event = <任何事件 id>`（`state` 那一層，不是 player）就會擋，畫面寫「先回江湖頁處理「事件名」」，驗完設回 None（2026-10-22，FB-649 複驗）。
 - **改存檔不驗型別**：list 欄位寫成 None（例 `duel_last = None`），`CharacterStore.save` 照樣存進去，讀的時候才炸：伺服器 `_reload` 回 500，網頁掉回登入頁。清空一律用欄位的預設值（`[]`、`{}`）；已經壞了，就直接改 `characters` 那一列的 JSON。
 - **讀資料庫只開唯讀**：`sqlite3.connect("file:<db>?mode=ro", uri=True)`。`characters` 有 `is_bot` 和 `data`（JSON，`player`、`journal`），江湖紀錄只留最近 30 則。
 - **伺服器開著也能改存檔與掛軍令**（伺服器每次動作都重讀資料庫）：角色用 `CharacterStore(open_database(db))` 的 `load`／`save`；軍令用 `open_world(db)`、`with w.db.transaction(): w.mutate_season(fn)`（`s.orders` 加一筆 `Order`）。21 天季的軍令 `Order.week` 是季曆第幾天，不是週：`calendar.point(season.time, c, season).cal_day`。改完讓角色的頁面 reload 一次就看得到。
