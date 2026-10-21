@@ -11,6 +11,7 @@ from tianxia import battle_instance, conquest
 from tianxia.battle_instance import SiegeInfo
 from tianxia.bot_runner import BotRunner
 from tianxia.characters import open_characters
+from tianxia.database import SCHEMA_VERSION
 from tianxia.sqlite_world import open_world
 
 pytestmark = pytest.mark.slow  # 建 Game、載正式內容
@@ -59,7 +60,8 @@ def test_two_sieges_persist_and_reload():
     assert [s.record_id for s in again.get_sieges()] == [a.record_id, b.record_id]
     assert again.get_sieges()[0].siege.loc == a.siege.loc
     assert again.get_battle() is None  # 決戰那一格不受影響
-    assert _user_version(again) == 5  # 結構版本不動
+    # 結構版本不動：領地爭奪不升版。合 develop 之後基準是商城的第 6 版（以前寫死 5，那時 develop 的商城還沒合進來）
+    assert _user_version(again) == SCHEMA_VERSION == 6
 
 
 def test_submit_in_one_battle_does_not_touch_the_other():
