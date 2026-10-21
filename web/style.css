@@ -1407,7 +1407,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .act-notes b { margin-right: 6px; color: var(--ink); font-weight: 600; }
 /* 新手期的「玩法說明 ›」入口（explain-2）：跟上面幾行同一個字級、同一個行高，不多佔高度；按的範圍用內距加負外距撐大，行高不變 */
 .act-notes .howto-entry button { font-size: 12px; line-height: inherit; font-weight: 600; padding: 8px 6px; margin: -8px 2px -8px -6px; }
-.act-move, .act-explore { margin-bottom: 12px; scroll-margin-bottom: calc(64px + var(--bottom)); }
+.act-move, .act-explore { margin-bottom: 12px; } /* 展開後捲到分頁列上方看得到：app.js 的 revealMoveCard 自己量（FB-663；scroll-margin 在卡還在視窗裡時不算數） */
 .act-move .options { margin: 8px 0 0; }
 .act-explore .options { margin: 0; } /* 探索三選一點開的三顆（出陣探索與地盤）：沒有走法那一列，三顆貼著卡頂 */
 /* 找素材分支（第 32 項，計畫 2.1 甲）：「找素材」是展開鈕，底下一排分支——兩欄，名字一行、「體力 6・剛、慢」一行（小段不折在詞中間，nbHtml）；

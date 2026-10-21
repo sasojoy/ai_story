@@ -1922,13 +1922,29 @@
     return !!(S.here && S.here.at === at && S.here.open);
   }
 
-  // 展開移動（或探索三選一）之後，把展開的那張卡捲到剛好露出來（W18 的作法搬過來：狀態列有心得提示時整頁往下推，
-  // 卡片下緣會落到底部分頁列底下）。block: "nearest"：本來就看得到就不動；離分頁列多遠由 CSS 的 scroll-margin-bottom 決定
+  // 展開移動（或探索三選一、找素材分支）之後，把展開的那張卡整張捲到底部分頁列上方看得到（FB-663，PM 2026-10-21 給號）。
+  // 以前用 scrollIntoView({ block: "nearest" }) 加 CSS 的 scroll-margin-bottom：卡本身還在視窗裡、只是落在分頁列底下時，瀏覽器認為
+  // 「已經看得到」不捲，scroll-margin 不算數（量到：375×812 站潁川郡，探索卡底 797、分頁列頂 756，最後一顆〔練功〕下半截被蓋住，
+  // scrollY 一直 0；野外也蓋住約 13 px）。改成自己量：卡底離分頁列頂（含底部安全區：量的是分頁列真正的頂）至少 REVEAL_GAP，
+  // 只往下捲、不往回捲；卡比分頁列上方看得到的地方還高時，最多捲到卡頂貼在狀態列底下 REVEAL_TOP（第一顆一定看得到）
+  const REVEAL_GAP = 12;
+  const REVEAL_TOP = 8;
+  // card：展開的卡的位置（getBoundingClientRect）；回傳要往下捲幾 px（0＝不捲）
+  function revealShift(card, tabsTop, topEdge) {
+    const over = card.bottom - (tabsTop - REVEAL_GAP);
+    if (over <= 0) return 0;
+    return Math.max(0, Math.min(over, card.top - (topEdge + REVEAL_TOP)));
+  }
   function revealMoveCard() {
     const card = document.querySelector("#page .act-move, #page .act-explore");
-    if (!card) return;
+    const tabs = document.querySelector(".tabs");
+    if (!card || !tabs) return;
+    const head = document.getElementById("top");
+    const topEdge = head && !head.hidden ? head.getBoundingClientRect().bottom : 0;
+    const shift = revealShift(card.getBoundingClientRect(), tabs.getBoundingClientRect().top, topEdge);
+    if (shift < 1) return;
     const calm = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    card.scrollIntoView({ block: "nearest", behavior: calm ? "auto" : "smooth" });
+    window.scrollBy({ top: Math.ceil(shift), behavior: calm ? "auto" : "smooth" });
   }
 
   // 第一季濃縮版的「本週軍令」（計畫 T6；伺服器只送自己陣營的，散人沒有）：預設展開，收起來的狀態照週次記住
