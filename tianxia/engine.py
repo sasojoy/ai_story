@@ -11820,8 +11820,9 @@ class Game:
                 "paused": self.world.paused_at() is not None, "stamp": self.stamp}
 
     def seal_use(self, target: str = "", side: str = "") -> list[str]:
-        """起用懷中那一片的獨門行動（玉璽碎片改版第 2 批；MAIN_ACTIONS["seal_use"]）：target 是指定的目標（引將的大勢人物、傳檄的戰線、
-        收心的人物；頒詔、承露不用），side 是散人傳檄挑的那一軍。不花體力、不花銀兩（PM 五之一 7）。
+        """起用懷中那一片的獨門行動（玉璽碎片改版第 2、3 批；MAIN_ACTIONS["seal_use"]）：target 是指定的目標（引將的大勢人物、傳檄的戰線、
+        收心的人物、鎮地與補缺的區塊；頒詔、承露不用），side 是散人挑的那一軍（傳檄、鎮地、補缺）。不花體力、不花銀兩（PM 五之一 7）。
+        補缺當場把那一塊退回原主（conquest.restore，照翻地的規則記一次易手）；鎮地只記在季上（conquest.push_problem 讀）。
         先照 seal_acts.problem／target_problem 驗（按不下去回原因、什麼都不動）；登記那一筆在 world.mutate 裡整個重驗（碎片剛被搶走、
         次數剛用完就落空），記次數與一筆 use（只給管理者看：有名號）；季上記一筆生效中的（不記是誰）、引將把人物搬過來；天下大事與
         江湖史各一句（不寫是誰，企劃者）；自己一則江湖紀錄與一則行狀。戰報不寫。假人不叫這裡（設計第四章【PM】）。"""
@@ -11864,6 +11865,8 @@ class Game:
         public = seal_acts.public_text(c, act)
         seal.rumor(w, public)  # 天下大事（world 層、不帶地點與人）
         seal.chronicle(w, public)
+        if kind == "bujue":  # 補缺：當場退回原主（「收復」那一句天下大事與江湖史照易手寫，排在起用那一句之後）
+            conquest.restore(w, c, act.target, act.side)
         name = c.seal[shard_id].name
         line = seal_acts.MINE.format(shard=name, what=what, left=left[0])
         self._write(seal.SEAL_TITLE, [line], tag=f"『{name}』")

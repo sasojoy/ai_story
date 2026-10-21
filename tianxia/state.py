@@ -1274,6 +1274,9 @@ class BlockFight(BaseModel):
     guards: dict[str, float] = Field(default_factory=dict)  # 守方的人 → 這一輪拉回了多少（每一條都歸零時清掉）
     alarm: bool = False  # 這一輪有哪一條到過 Config.conquest.alarm_at（守方再拉回全部歸零才有守城功）
     flipped_at: float | None = None  # 世界秒：上一次易手（冷卻從這裡起算）
+    # 上一次易手（flip：推滿、攻城戰打贏；補缺退回也寫）之前那一塊歸誰：中立沒人佔是 None。玉璽碎片改版第 3 批的補缺照它與 flipped_at
+    # 判「一日之內從誰手上翻走的」（設計五之一 5：day_log 只記新主人，沒有原主）
+    flipped_from: str | None = None
     last_push: float | None = None  # 世界秒：上一次有人推或拉（每日回看它）
     marks: list[PushMark] = Field(default_factory=list)  # 最近的出陣（留 presence_seconds／集火／混戰裡最長的那一段）
 

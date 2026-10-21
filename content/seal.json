@@ -1,8 +1,8 @@
 [
-  {"id": "chishou", "name": "螭首", "part": "印紐上的螭頭", "effect": "hp_cap", "effects": ["injury"], "note": "螭首鎮身，一場仗打下來傷得淺一些。"},
+  {"id": "chishou", "name": "螭首", "part": "印紐上的螭頭", "effect": "hp_cap", "effects": ["injury"], "act": "zhendi", "note": "螭首鎮身，一場仗打下來傷得淺一些。"},
   {"id": "xuanniu", "name": "玄紐", "part": "穿綬帶的紐孔", "effect": "talk_turns", "effects": ["talk_turns", "audience"], "act": "yinjiang", "note": "人物見了這枚紐孔，多肯跟你說幾句。"},
   {"id": "yunzhuan", "name": "雲篆", "part": "印面的篆文", "effect": "practice", "effects": ["practice"], "act": "banzhao", "note": "篆文裡藏著運筆的路數，練成省些心得。"},
-  {"id": "jinjiao", "name": "金角", "part": "缺角處以金補上", "effect": "dodge", "effects": ["keep_silver"], "note": "補過的缺角，替你守住錢囊。"},
+  {"id": "jinjiao", "name": "金角", "part": "缺角處以金補上", "effect": "dodge", "effects": ["keep_silver"], "act": "bujue", "note": "補過的缺角，替你守住錢囊。"},
   {"id": "chenglu", "name": "承露", "part": "印台", "effect": "stamina_regen", "effects": ["stamina_regen"], "act": "chenglu", "note": "印台承露，體力回得快一點。"},
   {"id": "chizhang", "name": "赤璋", "part": "朱紅印泥", "effect": "fuse_points", "effects": ["fuse_points"], "act": "chuanxi", "note": "朱泥未乾，自創時多一分造化。"},
   {"id": "guixin", "name": "歸心", "part": "印綬", "effect": "mate_exp", "effects": ["mate_exp", "chuangong"], "act": "shouxin", "note": "綬帶繫人心，同伴長得快些。"}

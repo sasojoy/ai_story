@@ -1,5 +1,6 @@
 """玉璽碎片改版第 2 批：獨門行動——引將（玄紐）、頒詔（雲篆）、承露（承露）、傳檄（赤璋）、收心（歸心）
-（docs/superpowers/specs/2026-10-21-玉璽碎片改版-design.md 第三、四、五、五之一章；計畫 docs/superpowers/plans/2026-10-21-玉璽碎片改版-2.md）。
+（docs/superpowers/specs/2026-10-21-玉璽碎片改版-design.md 第三、四、五、五之一章；計畫 docs/superpowers/plans/2026-10-21-玉璽碎片改版-2.md）；
+第 3 批：鎮地（螭首）、補缺（金角），建在翻地與爭搶（conquest.py）上（計畫 docs/superpowers/plans/2026-10-21-玉璽碎片改版-3.md）。
 
 - 一片一季 Config.seal.revamp.acts.uses 次、兩次之間隔 gap_days 天（次數記在全服的碎片上：SealShard.act_*，換手跟著碎片走，換季歸零）；
   每個行動生效 days 天。「天」照 day_seconds：有季曆的季（第一季的章）是季曆天，14 天的季是世界天。
@@ -10,8 +11,11 @@
 - 不具名（企劃者）：天下大事與江湖史那一句（public_text）不寫是誰；誰用的只在全服登記那一筆 use（管理者看）與起用的人自己的紀錄裡。
 - 引將改大勢人物的所在（pull）、期滿回原處（tick：world.advance_world_state 每一步、人物活起來走動之前叫；期滿那一刻另外切一段，
   next_end）、被時刻表或退場搬動時先回原處再提早結束（release：figures._change、_hand_over 叫）。
-- 只 import models、state、calendar、world_state、treasures；allied、atlas、figures、rules、timetable 在函式裡延後 import（它們反過來
-  import 的鏈很長，figures、figure_life、team、rules、sensing、cultivation 都會叫這裡）。不擲骰、不讀時鐘。字待 joy 潤。"""
+- 鎮地：生效中的那一塊誰都推不動（held：conquest.push_problem、letter_problem 問；held_during：conquest.decay 問，那一天鎮過就不回），
+  那一塊換了主人當場結束（hold_lapse：conquest._announce、set_control 叫）。補缺：當場退回原主（conquest.restore，Game.seal_use 叫），
+  目標照翻地帳記的最近一次易手（BlockFight.flipped_at、flipped_from）。兩種都只在領地爭奪的季（conquest.on），不然灰著（NO_CONQUEST）。
+- 只 import models、state、calendar、world_state、treasures；allied、atlas、conquest、figures、rules、timetable 在函式裡延後 import（它們反過來
+  import 的鏈很長，conquest、figures、figure_life、team、rules、sensing、cultivation 都會叫這裡）。不擲骰、不讀時鐘。字待 joy 潤。"""
 from __future__ import annotations
 
 import math
@@ -22,18 +26,22 @@ from .models import Content
 from .state import GameState, SealAct, WorldState
 from .world_state import SealRegistry, SealShard
 
-KINDS = ("yinjiang", "banzhao", "chenglu", "chuanxi", "shouxin")  # models.SealActKind；第 3 批再加鎮地、補缺
+KINDS = ("yinjiang", "banzhao", "chenglu", "chuanxi", "shouxin", "zhendi", "bujue")  # models.SealActKind
+LAND = ("zhendi", "bujue")  # 建在翻地與爭搶上的兩種（第 3 批）：只在領地爭奪的季按得下去，目標是區塊、分軍
+SIDED = ("chuanxi", *LAND)  # 要看陣營的三片（設計第四章【企劃者】）：散人每次挑一軍當這一次的自家，豪強照依附的那一軍
 EPS = calendar.EPS_SECONDS
 
 # ── 字（待 joy 潤）────────────────────────────────────────────
 
-NAMES = {"yinjiang": "引將", "banzhao": "頒詔", "chenglu": "承露", "chuanxi": "傳檄", "shouxin": "收心"}
+NAMES = {"yinjiang": "引將", "banzhao": "頒詔", "chenglu": "承露", "chuanxi": "傳檄", "shouxin": "收心", "zhendi": "鎮地", "bujue": "補缺"}
 DESC = {  # 碎片卡上那一句（數字照 Config.seal.revamp.acts）
     "yinjiang": "指定一位大勢人物，引到你此刻所在之地坐鎮一日：期間不走動，期滿回原處。",
     "banzhao": "詔令天下一日：人人靜心感悟擲中的機會 +{sense} 個百分點、衝絕學的機會 ×{cultivate}。",
     "chenglu": "甘露降在你此刻所在的大區一日：那一區人人體力回復 ×{stamina}、醫館療傷不收錢。",
     "chuanxi": "指定一條戰線一日：那一軍在那條線上推的量 ×{push}。",
     "shouxin": "指定一位人物一日：人人跟他說話、宴客敬酒的情誼漲幅 ×{affinity}，求見不看門檻。",
+    "zhendi": "指定一塊自家此刻佔著的地鎮住{hold}：那一塊誰都推不動，對面的進度不漲也不回；剛易手還在冷卻的鎮不了，已下的戰書照打。",
+    "bujue": "指定一塊{mend}之內被翻走的自家的地，當場退回自家手中（照易手記一次，冷卻重新起算）；同一塊一季只能補一次。",
 }
 RULE_NOTE = "一季 {uses} 次，兩次之間隔 {gap} 天。天下大事只寫有人起用，不寫是誰。"
 WHAT = {  # 天下大事、江湖史、起用的人自己的紀錄與行狀共用的那一段
@@ -42,6 +50,8 @@ WHAT = {  # 天下大事、江湖史、起用的人自己的紀錄與行狀共�
     "chenglu": "甘露降於{region}，一日之內那一帶體力回得快，醫館療傷分文不取",
     "chuanxi": "檄文傳遍{line}，一日之內{side}在那裡推得更猛",
     "shouxin": "一日之內{person}對來客格外親厚，求見不拒",
+    "zhendi": "{place}被鎮住了，{hold}之內誰都推不動那裡的進度",
+    "bujue": "{place}當場退回{side}手中",
 }
 PUBLIC = "有人起用了『{shard}』：{what}。"  # 天下大事與江湖史（不寫是誰，企劃者）
 BACK = "{figure}坐鎮期滿，回到了{place}。"  # 引將期滿（天下大事；人物移動本來就寫天下大事）
@@ -54,6 +64,8 @@ CONFIRM = {  # 確認的問句；{target}、{side} 由畫面換成挑的那一�
     "chenglu": "起用『{shard}』，讓甘露降在{region}一日？",
     "chuanxi": "起用『{shard}』，替{side}傳檄{target}一日？",
     "shouxin": "起用『{shard}』，讓{target}一日之內來者不拒？",
+    "zhendi": "起用『{shard}』，替{side}鎮住{target}{hold}？",
+    "bujue": "起用『{shard}』，把{target}退回{side}手中？",
 }
 CONFIRM_TAIL = "用了之後這一季還剩 {left} 次，隔 {gap} 天才能再用。"
 # 按不下去的原因
@@ -67,12 +79,21 @@ NO_TARGET = "要先指定一個目標。"
 BAD_TARGET = "指定的目標不對。"
 PICK_SIDE = "先挑這一次照哪一軍算。"
 BAD_SIDE = "這條線上沒有那一軍。"
+NO_CONQUEST = "這一季沒有領地爭奪，起用不了。"  # 鎮地、補缺（設計第四章：領地爭奪沒開的季按不下去）
+NOTHING = {"zhendi": "此刻沒有能鎮的地。", "bujue": "此刻沒有剛被翻走、補得回來的地。"}  # 一個能指定的都沒有
 # 目標灰掉的原因（短）
 PINNED = "正被引著"
 HERE = "已經在這裡"
 CLASH = "一日之內時刻表要動他"
 GONE = "此刻不在江湖上"
 NO_REGION = "這裡不在任何一個大區"
+LAND_COOLING = "剛易手，還在冷卻"  # 鎮地：冷卻中的地不能鎮（設計）
+MENDED = "這一季已經補過一次"  # 補缺：同一塊一季只能補一次（設計）
+SIEGING = "這一塊正在攻城"  # 補缺：攻城集結或開打中的不換主人（開發定）
+# 選目標那一層每一列底下那一小行（info）
+HOLD_BAR = "{side}推到 {value}"  # 鎮地：對面此刻推得最高的那一條
+HOLD_LIVE = "已鎮到 {until}"  # 鎮地：還鎮著（再鎮一次從此刻起算，等於延長）
+MEND_INFO = "被{side}翻走・{when}"  # 補缺：誰、什麼時候翻走的
 
 
 def on(content: Content) -> bool:
@@ -100,8 +121,28 @@ def day_seconds(content: Content, world: WorldState) -> float:
     return calendar.DAY
 
 
-def span(content: Content, world: WorldState) -> float:
+def span(content: Content, world: WorldState, kind: str | None = None) -> float:
+    """一次起用生效多久（世界秒）：鎮地 hold_hours 個季曆小時（一日的 hold_hours/24）、補缺當場（0）、其餘 days 日。"""
+    if kind == "zhendi":
+        return tuning(content).hold_hours / 24 * day_seconds(content, world)
+    if kind == "bujue":
+        return 0.0
     return tuning(content).days * day_seconds(content, world)
+
+
+def days_word(days: float) -> str:
+    """幾日寫成字（說明、天下大事、問句）：半日、一日、兩日…，其餘照數字。"""
+    words = {0.5: "半日", 1.0: "一日", 2.0: "兩日", 3.0: "三日"}
+    return words.get(float(days), f"{days:g} 日")
+
+
+def mend_seconds(content: Content, world: WorldState) -> float:
+    """補缺的窗口（世界秒）：mend_days 日（PM 五之一 5「1 個季曆天內被翻走的地」）與翻後冷卻取長的（設計表格寫的「還在翻後冷卻裡的」
+    一定在內；週末季一個季曆天約 43 分鐘，比一小時的冷卻短）。"""
+    from . import conquest  # noqa: PLC0415  conquest 反過來 import 這裡
+
+    cooldown = conquest._seconds(content, content.config.conquest.cooldown_minutes)  # noqa: SLF001  同一個套件
+    return max(tuning(content).mend_days * day_seconds(content, world), cooldown)
 
 
 def gap(content: Content, world: WorldState) -> float:
@@ -255,6 +296,32 @@ def warmer(world: WorldState, content: Content, character_id: str, delta: int) -
     return delta if scale == 1.0 else math.floor(delta * scale + 0.5 + 1e-9)
 
 
+# ── 鎮地：誰都推不動、那一天不回、換了主人就結束 ─────────────────────
+
+def held(world: WorldState | None, content: Content, loc_id: str, holder: str | None) -> SealAct | None:
+    """鎮地：此刻替這一塊的主人（holder，conquest.holder）鎮住它的那一筆（好幾筆取最晚期滿的）；沒有、改版關著是 None。
+    conquest.push_problem（攻、守、事件都推不動）與 letter_problem（下不了戰書）問它。"""
+    if world is None or not world.seal_acts or holder is None or not on(content):
+        return None
+    rows = [a for a in live(world, "zhendi") if a.target == loc_id and a.side == holder]
+    return max(rows, key=ends, default=None)
+
+
+def held_during(world: WorldState, content: Content, loc_id: str, begin: float, end: float) -> bool:
+    """鎮地：世界秒 [begin, end) 之間這一塊有沒有鎮過（conquest.decay：那一天鎮過就不回——「對面的進度不漲、也不回」）。"""
+    if not world.seal_acts or not on(content):
+        return False
+    return any(a.kind == "zhendi" and a.target == loc_id and a.start < end and ends(a) > begin for a in world.seal_acts)
+
+
+def hold_lapse(world: WorldState, loc_id: str, side: str | None) -> None:
+    """這一塊換了主人（side，放回中立是 None）：替別人鎮著的那幾筆當場結束（攻城戰打贏、時刻表、管理者、補缺；conquest._announce、
+    set_control 叫）。不看開關：關著時季上那一本本來就是空的。"""
+    for act in world.seal_acts:
+        if act.kind == "zhendi" and act.target == loc_id and act.side != side and act.ended is None and active(act, world.time):
+            act.ended = world.time
+
+
 # ── 引將：拉過去、提前結束、期滿回原處 ───────────────────────────
 
 def pull(state: GameState, content: Content, act: SealAct) -> None:
@@ -400,14 +467,85 @@ def line_targets(state: GameState, content: Content) -> list[dict]:
     return [{"id": line, "name": trend_name(content, line), "where": "", "why": ""} for line in lines(content, state.world)]
 
 
+def land_sides(state: GameState, content: Content) -> list[str]:
+    """鎮地、補缺照哪幾軍列目標：有自家（陣營、豪強依附的那一軍）只列自家；散人兩軍都列，每一列寫是哪一軍的（畫面照挑的那一軍篩）。"""
+    own = own_side(state, content)
+    return [own] if own is not None else armies(content, state.world)
+
+
+def _side_name(content: Content, side: str | None) -> str:
+    return content.scenario.faction_name(side, side) if side else ""
+
+
+def hold_rows(state: GameState, content: Content, sides: list[str]) -> list[dict]:
+    """鎮地能指定的地（照區塊表的順序）：此刻歸 sides 裡某一軍、搶得下來的區塊（大本營、廣宗本來就推不動）；剛易手還在冷卻的灰掉
+    （LAND_COOLING）。每一列 side 是那一塊歸哪一軍、info 是對面此刻推得最高的那一條（或「已鎮到…」）。"""
+    from . import conquest  # noqa: PLC0415
+
+    w = state.world
+    out = []
+    for loc_id in conquest.blocks(content):
+        side = conquest.holder(w, content, loc_id)
+        if side not in sides or not conquest.capturable(content, loc_id):
+            continue
+        live_hold = held(w, content, loc_id, side)
+        others = {s: v for s, v in conquest.bars(w, loc_id).items() if s != side}
+        if live_hold is not None:
+            info = HOLD_LIVE.format(until=calendar.stamp_text(ends(live_hold), content, w))
+        elif others:
+            top = max(others, key=lambda s: (others[s], s))
+            info = HOLD_BAR.format(side=_side_name(content, top), value=int(others[top] + 0.5))
+        else:
+            info = ""
+        why = LAND_COOLING if conquest.cooling(w, content, loc_id) else ""
+        out.append({"id": loc_id, "name": content.locations[loc_id].name, "where": "", "why": why, "side": side, "info": info})
+    return out
+
+
+def mend_rows(state: GameState, content: Content, sides: list[str]) -> list[dict]:
+    """補缺能指定的地（照區塊表的順序）：最近一次被翻走（BlockFight.flipped_at；推滿與攻城戰打贏才算，時刻表與管理者指定的不起冷卻、不算）
+    在窗口之內（mend_seconds）、翻走之前歸 sides 裡某一軍（flipped_from）、此刻歸別人的區塊。這一季補過一次的灰掉（MENDED）；
+    那一塊的攻城正在集結或開打的灰掉（SIEGING：換了主人會跟那一場的守方對不上）。每一列 side 是退回給哪一軍、info 是被誰什麼時候翻走的。"""
+    from . import conquest  # noqa: PLC0415
+
+    w = state.world
+    window = mend_seconds(content, w)
+    mended = {a.target for a in w.seal_acts if a.kind == "bujue"}
+    out = []
+    for loc_id in conquest.blocks(content):
+        fight = conquest.fight_of(w, loc_id)
+        if fight is None or fight.flipped_at is None or fight.flipped_from not in sides or not conquest.capturable(content, loc_id):
+            continue
+        now = conquest.holder(w, content, loc_id)
+        if now is None or now == fight.flipped_from or w.time - fight.flipped_at > window + EPS:
+            continue
+        why = MENDED if loc_id in mended else SIEGING if conquest.siege_state(w, loc_id) in ("muster", "fight") else ""
+        info = MEND_INFO.format(side=_side_name(content, now), when=calendar.stamp_text(fight.flipped_at, content, w))
+        out.append({"id": loc_id, "name": content.locations[loc_id].name, "where": "", "why": why, "side": fight.flipped_from,
+                    "info": info})
+    return out
+
+
+def land_rows(state: GameState, content: Content, kind: str, sides: list[str] | None = None) -> list[dict]:
+    """鎮地、補缺的目標（sides 沒給照 land_sides）；領地爭奪關著的季是空的。"""
+    from . import conquest  # noqa: PLC0415
+
+    if not conquest.on(content, state.world):
+        return []
+    sides = land_sides(state, content) if sides is None else sides
+    return hold_rows(state, content, sides) if kind == "zhendi" else mend_rows(state, content, sides)
+
+
 def targets(state: GameState, content: Content, kind: str, until: float) -> list[dict]:
-    """要指定目標的三種（引將、傳檄、收心）的清單；頒詔、承露不用指定（承露照所在的大區），是空的。"""
+    """要指定目標的五種（引將、傳檄、收心、鎮地、補缺）的清單；頒詔、承露不用指定（承露照所在的大區），是空的。"""
     if kind == "yinjiang":
         return figure_targets(state, content, until)
     if kind == "chuanxi":
         return line_targets(state, content)
     if kind == "shouxin":
         return person_targets(state, content)
+    if kind in LAND:
+        return land_rows(state, content, kind)
     return []
 
 
@@ -426,15 +564,20 @@ def problem(
     state: GameState, content: Content, reg: SealRegistry, season: int, *, running: bool, paused: bool,
     stamp: Callable[[float], str],
 ) -> str | None:
-    """這一刻整個按不下去的原因（不看目標）；按得下去是 None。"""
-    held = mine(state, content, reg)
-    if held is None:
+    """這一刻整個按不下去的原因（不看目標）；按得下去是 None。鎮地、補缺在領地爭奪關著的季一律 NO_CONQUEST（設計第四章），
+    一個能指定的都沒有（散人看兩軍合起來）時 NOTHING。"""
+    from . import conquest  # noqa: PLC0415
+
+    holding = mine(state, content, reg)
+    if holding is None:
         return NO_SHARD
     if not running:
         return NOT_RUNNING
     if paused:
         return PAUSED
-    shard, kind = held
+    shard, kind = holding
+    if kind in LAND and not conquest.on(content, state.world):
+        return NO_CONQUEST
     if left(shard, season, content) <= 0:
         return USED_UP.format(n=tuning(content).uses)
     ready = ready_at(shard, season, content, state.world)
@@ -444,11 +587,26 @@ def problem(
         return ON_ROAD
     if kind == "chenglu" and region_of(content, state.player.location) is None:
         return NO_REGION + "。"
+    if kind in LAND and not any(not row["why"] for row in land_rows(state, content, kind)):
+        return NOTHING[kind]
     return None
 
 
 def target_problem(state: GameState, content: Content, kind: str, target: str, side: str) -> str | None:
-    """指定的目標（與散人挑的那一軍）按不按得下去；可以是 None。"""
+    """指定的目標（與散人挑的那一軍）按不按得下去；可以是 None。鎮地、補缺：自家（或散人挑的那一軍）的那幾列裡要有它、沒灰掉。"""
+    if kind in LAND:
+        if not target:
+            return NO_TARGET
+        own = own_side(state, content)
+        if own is None:
+            if not side:
+                return PICK_SIDE
+            if side not in armies(content, state.world):
+                return BAD_SIDE
+        row = next((t for t in land_rows(state, content, kind, [own or side]) if t["id"] == target), None)
+        if row is None:
+            return BAD_TARGET
+        return f"{row['name']}{row['why']}。" if row["why"] else None
     if kind in ("yinjiang", "chuanxi", "shouxin"):
         if not target:
             return NO_TARGET
@@ -466,9 +624,10 @@ def target_problem(state: GameState, content: Content, kind: str, target: str, s
 
 
 def plan(state: GameState, content: Content, shard_id: str, kind: str, target: str, side: str) -> SealAct:
-    """要寫進季上的那一筆（呼叫端先驗過 problem、target_problem）：引將的地點是此刻所在、承露的目標是此刻所在的大區、傳檄照自家或挑的那一軍。"""
+    """要寫進季上的那一筆（呼叫端先驗過 problem、target_problem）：引將的地點是此刻所在、承露的目標是此刻所在的大區、傳檄照自家或挑的那一軍；
+    鎮地、補缺的目標是那一塊、side 是替哪一軍鎮（退回給哪一軍），鎮地生效 hold_hours、補缺當場（until 等於起用那一刻）。"""
     w = state.world
-    act = SealAct(kind=kind, shard=shard_id, start=w.time, until=w.time + span(content, w))
+    act = SealAct(kind=kind, shard=shard_id, start=w.time, until=w.time + span(content, w, kind))
     if kind == "yinjiang":
         act.target, act.place = target, state.player.location
     elif kind == "chenglu":
@@ -477,6 +636,8 @@ def plan(state: GameState, content: Content, shard_id: str, kind: str, target: s
         act.target, act.side = target, own_side(state, content, target) or side
     elif kind == "shouxin":
         act.target = target
+    elif kind in LAND:
+        act.target, act.side = target, own_side(state, content) or side
     return act
 
 
@@ -493,10 +654,13 @@ def what_text(content: Content, act: SealAct) -> str:
     if act.kind == "chenglu":
         return WHAT["chenglu"].format(region=region_name(content, act.target))
     if act.kind == "chuanxi":
-        return WHAT["chuanxi"].format(line=trend_name(content, act.target), side=content.scenario.faction_name(act.side, act.side))
+        return WHAT["chuanxi"].format(line=trend_name(content, act.target), side=_side_name(content, act.side))
     if act.kind == "shouxin":
         person = content.characters[act.target].name if act.target in content.characters else act.target
         return WHAT["shouxin"].format(person=person)
+    if act.kind in LAND:
+        return WHAT[act.kind].format(place=place(act.target), side=_side_name(content, act.side),
+                                     hold=days_word(tuning(content).hold_hours / 24))
     return WHAT[act.kind]
 
 
@@ -512,38 +676,42 @@ def view(
     """碎片卡上的獨門行動（status.seal.act；碎片卡本來就只給持有者自己）：哪一種、說明、還剩幾次、按不按得下去與原因、這一片此刻生效中的
     那一句、能指定的目標（id、name、where〔引將：他此刻在哪；其他是空的〕、why〔灰掉的原因〕）、要不要挑一邊（sides）、確認的問句
     （{target} 換成目標的 name、{side} 換成挑的那一軍，由畫面換）。改版關著、手上沒有有行動的碎片是 None。
-    入口畫面的三種畫法見 docs/superpowers/specs/2026-10-21-玉璽碎片改版-草圖/第2批/（等企劃者挑）。"""
-    held = mine(state, content, reg)
-    if held is None:
+    鎮地、補缺的目標每一列多 side（那一塊算哪一軍的；散人挑了哪一軍畫面只列那一軍的）與 info（底下那一小行）；idle：這一季整季都用不上
+    （領地爭奪關著，NO_CONQUEST），江湖頁碎片卡那一行寫原因、不寫「還能起用 N 次」（FB-626 那種一句說能用、一句說不能用）。
+    入口畫面企劃者 2026-10-21 挑了乙（docs/superpowers/specs/2026-10-21-玉璽碎片改版-草圖/第2批/）。"""
+    holding = mine(state, content, reg)
+    if holding is None:
         return None
-    shard, kind = held
+    shard, kind = holding
     cfg, w = tuning(content), state.world
     name = content.seal[shard.id].name
     why = problem(state, content, reg, season, running=running, paused=paused, stamp=stamp)
     nums = {"sense": cfg.sense_points, "cultivate": f"{cfg.cultivate:g}", "stamina": f"{cfg.stamina:g}", "push": f"{cfg.push:g}",
-            "affinity": f"{cfg.affinity:g}"}
+            "affinity": f"{cfg.affinity:g}", "hold": days_word(cfg.hold_hours / 24), "mend": days_word(cfg.mend_days)}
     current = next((a for a in reversed(w.seal_acts) if a.shard == shard.id and active(a, w.time)), None)
     here = state.player.location if state.player.journey is None else ""
     region = region_of(content, here) if here else None
     count = left(shard, season, content)
+    rows = targets(state, content, kind, w.time + span(content, w)) if why is None else []
     out = {
         "kind": kind, "name": NAMES[kind], "text": DESC[kind].format(**nums),
         "rule": RULE_NOTE.format(uses=cfg.uses, gap=f"{cfg.gap_days:g}"),
-        "left": count, "ok": why is None, "why": why or "",
+        "left": count, "ok": why is None, "why": why or "", "idle": why == NO_CONQUEST,
         "live": LIVE.format(what=what_text(content, current), until=stamp(ends(current))) if current is not None else "",
-        "targets": targets(state, content, kind, w.time + span(content, w)) if why is None else [],
+        "targets": rows,
         "sides": [],
-        "side_note": "",  # 散人傳檄還沒挑邊時那一行（PICK_SIDE；有 sides 才有字）
+        "side_note": "",  # 散人起用要看陣營的三片還沒挑邊時那一行（PICK_SIDE；有 sides 才有字）
         "confirm": CONFIRM[kind].format(
-            shard=name, target="{target}", side="{side}",
+            shard=name, target="{target}", side="{side}", hold=nums["hold"],
             place=content.locations[here].name if here in content.locations else "",
             region=region_name(content, region) if region else "",
         ) + CONFIRM_TAIL.format(left=max(0, count - 1), gap=f"{cfg.gap_days:g}"),
     }
-    if kind == "chuanxi" and why is None and own_side(state, content) is None:
-        out["sides"] = [{"id": f, "name": content.scenario.faction_name(f, f)} for f in armies(content, w)]
-        out["side_note"] = PICK_SIDE
-    if kind == "chuanxi" and why is None and own_side(state, content) is not None:
+    if kind in SIDED and why is None:
         side = own_side(state, content)
-        out["confirm"] = out["confirm"].replace("{side}", content.scenario.faction_name(side, side))
+        if side is None:
+            out["sides"] = [{"id": f, "name": _side_name(content, f)} for f in armies(content, w)]
+            out["side_note"] = PICK_SIDE
+        else:
+            out["confirm"] = out["confirm"].replace("{side}", _side_name(content, side))
     return out
