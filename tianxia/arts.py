@@ -206,6 +206,8 @@ def rating(content: Content, view: MartialArt, level: int, state: GameState | No
     bonus += cfg.high_weight * len({h for h in (view.high, *view.extra_highs) if h})
     if content.skills.get(view.id) is not None and content.skills[view.id].tactic is not None:
         bonus += cfg.signature_weight * (0.5 if content.skills[view.id].tactic.minor else 1.0)  # 小戰法算半個
+    elif view.tactic_from:
+        bonus += cfg.signature_weight * 0.5  # 自創借來的小戰法：同學來的
     return int(round(power_at(view, level) * (1 + bonus)))
 
 

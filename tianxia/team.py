@@ -1051,7 +1051,7 @@ def tactic_holders(state: GameState, content: Content, world: WorldStateStore) -
     for key in state.player.team:
         mate = world.get_companion(key)
         rows.append((member_name(state, content, key), key, mate.wugong_id, mate.neigong_id))
-    return own_extras(state, content, world, tactics.holders_of(content, rows))
+    return own_extras(state, content, world, tactics.holders_of(content, rows, world))
 
 
 def gear_tactics(state: GameState, content: Content) -> list[tuple[str, TacticDef, str | None]]:
@@ -1177,7 +1177,7 @@ def self_side(state: GameState, content: Content, world: WorldStateStore, *, mou
     對手的名字與身法開打時才換上（tactics.open_bout）；mounted、troops 是這種仗算不算坐騎與部下（決戰算、單挑不算）。
     本人沒有本命戰法是 None。"""
     p = state.player
-    holders = own_extras(state, content, world, tactics.holders_of(content, [(p.name, PLAYER, p.member.wugong_id, p.member.neigong_id)]))
+    holders = own_extras(state, content, world, tactics.holders_of(content, [(p.name, PLAYER, p.member.wugong_id, p.member.neigong_id)], world))
     if not holders:
         return None
     mount = p.mount if mounted and mounts.on(content) else None

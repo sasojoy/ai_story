@@ -101,8 +101,8 @@ def test_the_server_bot_simulation_counts_its_forging_in_a_short_season(tmp_path
     assert sum(forge["開爐"].values()) > 0 and forge["首創"] > 0
     assert forge["取名呼叫"] + forge["挑選呼叫"] + forge["定名呼叫"] > 0
     assert forge["庫存最多"] >= 2 and forge["最多可配對"] == forge["庫存最多"] * (forge["庫存最多"] - 1) // 2
-    posted = result["bounties"]["掛出"]  # 預設設定（第一季規則關著）也每週初掛一批，求藝、求兵三方各一張（懸賞榜設計 11.2）
-    assert posted.get("art", 0) >= 3 and posted.get("arms", 0) >= 3 and result["bounties"]["每週最多幾批"] == 1
+    posted = result["bounties"]["掛出"]  # 預設設定（第一季規則關著）也每週初掛一批，求兵三方各一張（懸賞榜設計 11.2；求藝 2026-10-21 拿掉）
+    assert "art" not in posted and posted.get("arms", 0) >= 3 and result["bounties"]["每週最多幾批"] == 1
 
 
 def test_a_weekend_server_bot_season_splits_the_gentry_between_the_armies(tmp_path, monkeypatch):
@@ -242,12 +242,12 @@ def test_the_sanren_measure_script_can_measure_a_season_with_the_season_one_rule
     assert out.splitlines()[0] == "設定：預設"
     assert "種子 1 散人：" in out and "種子 1 陣營：" in out
     assert "散人中位數：" in out and "陣營中位數：" in out
-    assert out.count("　交差：討伐 ") == 2 and out.count("　求藝：交 ") == 2 and "；求兵：交 " in out  # 懸賞榜設計 11.1 第 3 點
+    assert out.count("　交差：討伐 ") == 2 and out.count("　求兵：交 ") == 2 and "求藝" not in out  # 懸賞榜設計 11.1 第 3 點
 
 
 def test_the_sanren_measure_script_can_send_the_faction_side_to_the_local_gentry(capsys, monkeypatch):
     """--faction（懸賞榜設計 11.1 第 3 點）：陣營那一邊一路走到地方豪強的投靠點投它（以前投選單上第一個出現的，量不到豪強）；
-    劇本沒有的陣營直接報錯。--no-give 只清 give_kinds（豪強的基準：有懸賞榜第一批、沒有求藝求兵），--bare 連 kinds、名號的經驗加成一起清。"""
+    劇本沒有的陣營直接報錯。--no-give 只清 give_kinds（豪強的基準：有懸賞榜第一批、沒有求兵），--bare 連 kinds、名號的經驗加成一起清。"""
     measure = _load("measure_sanren")
     content = measure.load_content(ROOT / "content")
     measure._strip(content, bare=False, no_give=True)
@@ -275,17 +275,17 @@ def test_the_server_bot_simulation_tallies_bounties_and_raids():
     def b(bounty_id, kind, week):
         return Bounty(id=bounty_id, kind=kind, faction="guan", week=week, expires=1.0, silver=0, deeds=0)
 
-    tally.see(1, [b("b1", "scout", 1), b("b2", "art", 1)])
-    tally.see(2, [b("b1", "scout", 1), b("b2", "art", 1), b("b3", "strike", 2), b("b4", "wanted", 1)])
+    tally.see(1, [b("b1", "scout", 1), b("b2", "arms", 1)])
+    tally.see(2, [b("b1", "scout", 1), b("b2", "arms", 1), b("b3", "strike", 2), b("b4", "wanted", 1)])
     for winner, lost, hp in (("乙", 5, 20), ("丙", 7, 20)):
         tally.defended("甲", RaidSpoils(winner=winner, lost=lost, taken=0, hp=hp, contrib=0))
     tally.defended("甲", RaidSpoils(winner="甲", lost=9, taken=5, hp=30, contrib=0))  # 反殺：被截一次、輸的是對方
     tally.defended("甲", None)  # 平手
     tally.defended("乙", RaidSpoils(winner="丁", lost=9, taken=5, hp=30, contrib=0))
     report = tally.report()
-    assert report["掛出"] == {"scout": 1, "art": 1, "strike": 1, "wanted": 1} and report["每週最多幾批"] == 1
+    assert report["掛出"] == {"scout": 1, "arms": 1, "strike": 1, "wanted": 1} and report["每週最多幾批"] == 1
     assert report["被截最多"] == {"次數": 4, "銀兩": 12, "氣血": 40}
-    tally.see(3, [b("b5", "art", 2)])  # 第 2 週的單分兩輪冒出來：兩批
+    tally.see(3, [b("b5", "arms", 2)])  # 第 2 週的單分兩輪冒出來：兩批
     assert tally.report()["每週最多幾批"] == 2
 
 

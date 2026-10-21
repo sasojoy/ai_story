@@ -31,7 +31,7 @@
 | [武學與成長](docs/guide/武學與成長.md) | 等級、武學、意境槽、兩種合成、自創、絕學、口訣秘方、熔煉、傳功 | martial_arts、arts、insight_fx、insights、fusion、create、secret_recipes、naming、signature、cultivation、library、chuangong、skillview | 行動、屬性、威力與氣血、武學與成長（武學與成長設計；計畫一～三、二之二、二之三、四、五都已在 main）、第一季濃縮版（`rules.season_one` 開著時才有） |
 | [裝備與店面](docs/guide/裝備與店面.md) | 兵器、防具、坐騎、寶物、素材與四階、神器、鐵匠鋪、馬市、酒肆、打點與銀兩出口 | weapons、smithing、signature_arms、forge_secrets、divine、equipment、armor、mounts、treasures、materials、shopview、tavern | 武學與成長（武學與成長設計；計畫一～三、二之二、二之三、四、五都已在 main） |
 | [大勢人物與賽季](docs/guide/大勢人物與賽季.md) | 季曆與時刻表、21 天季、7 天濃縮季、戰線推力與軍令、晉升、叛投、伏筆、大勢人物、人物活起來、同伴 | calendar、checkin、timetable、figures、figure_life、relations、letters、orders、defection、foreshadow、front_lines、figure_aid、roster | 第一季濃縮版（`rules.season_one` 開著時才有）、挑戰大勢人物（每季都有）、人物活起來（每季都有，`Config.figure_life`；`tianxia/figure_life.py`） |
-| [散人與玩家互動](docs/guide/散人與玩家互動.md) | 遊俠名號、懸賞榜、求藝求兵、截殺、玩家卡、切磋、論武 | ranger、bounties、raid | 第一季濃縮版（`rules.season_one` 開著時才有）、散人、懸賞與截殺（每季都有） |
+| [散人與玩家互動](docs/guide/散人與玩家互動.md) | 遊俠名號、懸賞榜、求兵、截殺、玩家卡、切磋、論武 | ranger、bounties、raid | 第一季濃縮版（`rules.season_one` 開著時才有）、散人、懸賞與截殺（每季都有） |
 | [玉璽碎片](docs/guide/玉璽碎片.md) | 七片碎片、璽動與奪璽單挑、天命之季與天命之爭 | seal、seal_duel | 玉璽碎片（玉璽一；天命之爭是玉璽二） |
 | [商城](docs/guide/商城.md) | 元寶錢包與帳本、商品表與允許的效果、購買發貨、月卡（每日領）、重修列傳、易名帖（改名當場生效）、封測發放、管理者工具、資料庫第 6 版 | mall、wallet、rename | —（2026-10-20 新開） |
 | [地圖與介面](docs/guide/地圖與介面.md) | 輿圖資料與畫法、網頁各分頁與店面的畫面 | atlas、mapview、mapart | 介面（`web/`） |

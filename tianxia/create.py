@@ -13,6 +13,8 @@
 5. 立名（finish）：自己取名；這一步才付心得。自創的一律是 Config.arts.create_grade（上品，Joy 2026-10-21「自創武學應該保底
    都是上品」；多付心得加分拿掉了，「多付心得很莫名其妙」），四格全開；意分＋赤璋只定底子（power_scale_of）；
    威力從第一成起練；注解就是那一句意。
+   同時自動配一個小戰法（Joy 2026-10-21 決策卡選「自動配」，minor_for）：照開著的格子的主屬性，從學來的武學裡挑一門同種類、
+   同屬性的借它的小戰法；成形之後頁面上就看得到，立名時照樣定下來（亂數只看名號、第幾門、種類）。
 
 價錢：Config.arts.create_xinde × create_step^（這一季已自創幾門），一季最多 create_per_season 門。
 只改狀態與回傳訊息；數字全由這裡算，模型只給一個分數與兩個屬性字。
@@ -21,11 +23,12 @@ from __future__ import annotations
 
 import math
 import random
+import zlib
 from dataclasses import dataclass
 
 from pydantic import BaseModel, Field
 
-from . import annals, arts as arts_mod, library, naming, team, treasures
+from . import annals, arts as arts_mod, library, naming, tactics, team, treasures
 from .martial_arts import ATTRIBUTES, QUALITY_BASE_POWER, QUALITY_TOP_POWER, MartialArt, scaled
 from .models import Content
 from .ollama_client import OllamaClient
@@ -516,6 +519,33 @@ def affinity_of(colors: list[list[str]]) -> list[str]:
     return list(dict.fromkeys(a for c in colors for a in c))
 
 
+NO_MINOR_KINDS = ("marshal",)  # 同袍一心要有部下才有用：自動配不配它
+
+
+def minor_pool(content: Content, kind: str, attribute: str) -> list[str]:
+    """自動配挑得到的那幾門（帶小戰法的內容武學 id）：同種類同屬性的先；沒有就放寬到同屬性、再到同種類。"""
+    rows = [(sid, s) for sid, s in content.skills.items()
+            if s.tactic is not None and s.tactic.minor and s.tactic.kind not in NO_MINOR_KINDS]
+    for ok in (lambda s: s.kind == kind and s.attribute == attribute, lambda s: s.attribute == attribute,
+               lambda s: s.kind == kind):
+        pool = sorted(sid for sid, s in rows if ok(s))
+        if pool:
+            return pool
+    return sorted(sid for sid, _ in rows)
+
+
+def minor_for(state: GameState, content: Content, draft: CreateDraft) -> str | None:
+    """這一份草稿會配到哪一門的小戰法（成形之後才有；沒成形是 None）。主屬性＝開著的格子裡第一個出現的屬性。"""
+    if not draft.colors:
+        return None
+    affinity = affinity_of(draft.colors[: arts_mod.slot_count(content, content.config.arts.create_grade)])
+    pool = minor_pool(content, draft.kind, affinity[0] if affinity else "")
+    if not pool:
+        return None
+    seed = f"{state.player.name}|{state.player.created_count}|{draft.kind}"
+    return pool[zlib.crc32(seed.encode("utf-8")) % len(pool)]
+
+
 def finish(
     state: GameState, content: Content, world: WorldStateStore, name: str,
 ) -> tuple[MartialArt | None, list[str]]:
@@ -534,6 +564,7 @@ def finish(
         creator=state.player.name, creator_shown=state.player.name, note=draft.intent, lean=draft.lean,
         affinity=affinity, slot_colors=[list(c) for c in draft.colors], pose=dict(draft.pose),
         weapon=draft.form if draft.kind == "武學" else None, method=draft.form if draft.kind == "內功" else None,
+        tactic_from=minor_for(state, content, draft),
     )
     art = scaled(art, power_scale_of(content, points))
     if not world.claim_skill_name(art):
@@ -595,5 +626,6 @@ def view(state: GameState, content: Content, world: WorldStateStore) -> dict:
         "colors": [list(c) for c in draft.colors], "colors_text": [arts_mod.color_text(c) for c in draft.colors],
         "redo": draft.redo,
         "power": POWER_LINE.format(pct=round(power_scale_of(content, draft.score + seal_points(state, content)) * 100)),
+        "tactic": tactics.card_text(t) if (t := tactics.of(content, minor_for(state, content, draft))) is not None else "",
     }
     return base

@@ -138,9 +138,8 @@ def test_each_day_hangs_a_batch():
     for side in ("guan", "huang"):
         kinds = sorted(b.kind for b in first if b.faction == side and b.kind in ("strike", "scout", "escort"))
         assert kinds == ["scout", "strike"]
-    gives = [b for b in first if b.kind in ("art", "arms")]
-    assert gives and {b.kind for b in gives} == {"art"}  # 第 1 天求藝
-    assert len({b.faction for b in gives}) == len(gives)  # 一個陣營一張
+    # 第 1 天原本掛求藝；求藝 Joy 2026-10-21 拿掉（「懸賞榜直接把武學拿掉」），單數天就沒有要交東西的那一張
+    assert not [b for b in first if b.kind in ("art", "arms")]
     assert all(b.week == 1 for b in first)  # week 照舊是季曆週
     due = calendar.week_start(1, c, v.world) + 2 * DAY / calendar.cal_scale(c, v.world)
     assert all(b.expires == due for b in first)  # 期限：兩天後的 00:00（週三 00:00）
@@ -150,7 +149,9 @@ def test_each_day_hangs_a_batch():
     for side in ("guan", "huang"):
         kinds = sorted(b.kind for b in second if b.faction == side and b.kind in ("strike", "scout", "escort"))
         assert kinds == ["escort", "strike"]
-    assert {b.kind for b in second if b.kind in ("art", "arms")} == {"arms"}  # 第 2 天求兵
+    gives = [b for b in second if b.kind in ("art", "arms")]
+    assert gives and {b.kind for b in gives} == {"arms"}  # 第 2 天求兵
+    assert len({b.faction for b in gives}) == len(gives)  # 一個陣營一張
 
 
 def test_a_wednesday_opening_and_a_long_catch_up_hang_only_today():
@@ -265,6 +266,10 @@ def test_each_bill_brings_one_thing():
     s = game.state
     s.player.faction = None
     escort = _first(s, "escort")
+    # 求藝 2026-10-21 拿掉之後第 1 天少掛三張，第 2 天的亂數（種子帶流水號）跟著位移，掛出來的護送終點都沒寫素材：
+    # 換一個寫了素材的終點，這一段照舊測「照終點的屬性給」（沒寫素材的那一種在下面另測）
+    if not c.locations[escort.end].materials:
+        escort.end = next(lid for lid, loc in c.locations.items() if loc.materials)
     before = dict(s.player.materials)
     bounties._complete(s, c, game.world, escort)
     got = _gained(before, s.player.materials)
@@ -305,8 +310,7 @@ def test_arms_add_the_level_silver():
     s.player.member.level = 10
     arms = _first(s, "arms")
     base = c.config.bounties.arms_silver["中品"] * c.config.bounties.arms_tier["1"]
-    assert bounties._silver(s, c, arms, base=base) == base + 10 * 5
-    assert bounties._silver(s, c, _first(s, "art")) == 10 * 5  # 第 1 天的求藝還掛著：照等級每級 5 兩
+    assert bounties._silver(s, c, arms, base=base) == base + 10 * 5  # 第 1 天的求藝（照等級每級 5 兩）Joy 2026-10-21 拿掉
 
 
 def test_weekend_rewards_unchanged():

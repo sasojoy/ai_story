@@ -125,12 +125,12 @@ def test_the_notice_shows_the_short_due_and_the_paper_the_full_one_fb196(content
 
 
 def test_the_board_css_matches_the_mockup(content, world):
-    """紅色圖釘、色塊小標籤（討伐紅、打探藍、護送綠、求藝求兵金、通緝黑）、紙貼在畫面下緣、紙太長自己捲。"""
+    """紅色圖釘、色塊小標籤（討伐紅、打探藍、護送綠、求兵金、通緝黑）、紙貼在畫面下緣、紙太長自己捲。"""
     from test_shop2_web import _css, _rule
 
     css = _css()
     assert "background: #8e2a22" in _rule(css, ".shop-board .note::before")
-    for kind, color in (("strike", "#a8322a"), ("scout", "#2f5d8a"), ("escort", "#3f7d5c"), ("art", "#9a6a2a"), ("wanted", "#2a241d")):
+    for kind, color in (("strike", "#a8322a"), ("scout", "#2f5d8a"), ("escort", "#3f7d5c"), ("arms", "#9a6a2a"), ("wanted", "#2a241d")):
         assert f".shop-board .note.k-{kind} .tag" in css and color in css[css.index(f".shop-board .note.k-{kind} .tag"):][:200]
     sheet = _rule(css, ".shop-board .board-sheet")
     assert "position: absolute" in sheet and "bottom: calc(12px" in sheet and "max-height:" in sheet and "overflow-y: auto" in sheet

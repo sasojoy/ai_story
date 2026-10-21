@@ -1928,7 +1928,7 @@
     </section>`;
   }
 
-  // 手上揭了的懸賞，加上身上有合用東西的求藝、求兵（status.bounties，bounties.status；後者多一行 have）：一張一行，怎麼交差、賞什麼。懸賞榜在城鎮才看得到，
+  // 手上揭了的懸賞，加上身上有合用兵器的求兵（status.bounties，bounties.status；後者多一行 have）：一張一行，怎麼交差、賞什麼。懸賞榜在城鎮才看得到，
   // 選單上有 act:bounties 時卡底下一顆「看懸賞榜」（就是那個選項，按了走 choose），不在城鎮寫一句去哪裡看。
   // 預設展開，收起來的狀態照手上那幾張記住（S.bountyShut）：揭了新的、交了差，清單變了就重新展開
   // 21 天季的賞拆成小籤（企劃者挑第 5 批畫面第三組丙；bounties.reward_tags）：一樣一格，附的那一樣金框、重賞紅框。字與數字照伺服器給的
@@ -1952,7 +1952,7 @@
     const open = (options || []).some((o) => o.id === "bounty:back" || o.id === "bounty:unpick");
     const foot = open ? "" : board
       ? `<button class="btn small" data-act="choose" data-id="act:bounties" ${board.enabled ? "" : "disabled"}>看懸賞榜</button>`
-      : '<div class="order-meta">到城鎮的懸賞榜前，可以揭新的、放棄，或交出合用的功夫與兵器。</div>';  // 待 joy 潤
+      : '<div class="order-meta">到城鎮的懸賞榜前，可以揭新的、放棄，或交出合用的兵器。</div>';  // 待 joy 潤（2026-10-21 拿掉求藝：不再寫「功夫」）
     return `<details class="fold bounties" data-key="${esc(key)}" ${S.bountyShut === key ? "" : "open"}>
       <summary>🪧 懸賞（${list.length}）${level ? `<span class="order-level">${esc(level)}</span>` : ""}</summary><div class="fold-body">${rows}${foot ? `<div class="bounty-foot">${foot}</div>` : ""}</div></details>`;
   }
@@ -2333,7 +2333,7 @@
     // 收起來照週記；21 天季的軍令每天一道，照季曆第幾天記（status.calendar.day），隔天的新軍令重新展開
     const orderKey = (m.status && m.status.calendar && m.status.calendar.day) || week;
     const orderCard = (m.orders || m.convoy) && shown("orders") ? ordersHtml(m.orders || [], orderKey, m.convoy) : "";
-    // 懸賞卡跟軍令卡排在一起（散人沒有軍令，這張就是他的）：手上沒揭、也沒有合用的求藝求兵可以交時就不畫（status.bounties 兩種都收）
+    // 懸賞卡跟軍令卡排在一起（散人沒有軍令，這張就是他的）：手上沒揭、也沒有合用的求兵可以交時就不畫（status.bounties 兩種都收）
     const bountyCard = m.status && m.status.bounties && m.status.bounties.length && shown("orders") ? bountiesHtml(m.status.bounties, m.options) : "";
     const sealCard = m.status && m.status.seal_duel && shown("orders") ? sealDuelHtml(m.status.seal_duel) : "";
     const sealMine = m.status && m.status.seal && shown("orders") ? sealHtml(m.status.seal) : "";
@@ -3628,6 +3628,7 @@
       <div class="cr-rings">${rings}</div>
       <p class="muted small">自創的功夫一律${seal(grade)}${esc(grade)}，${c.slots[grade] | 0} 格全開。每一格只收自己顏色的意境，八色一圈的什麼都收。</p>
       ${draft.power ? `<p class="muted small">${esc(draft.power)}</p>` : ""}
+      ${draft.tactic ? `<p class="art-tactic">${esc(draft.tactic)}</p>` : ""}
       ${draft.redo > 0 ? `<p class="muted small">不滿意這個形，可以免費重來一次。</p>` : ""}
       <div class="crow"><span>名字</span><input class="input" id="create-name" maxlength="6" placeholder="2～6 個字，全服不能重名"></div>
       <div class="acts"><button class="btn primary" data-act="create-name">立名開派<small>心得 ${c.price | 0}</small></button>${redo}${quit}</div>
@@ -3756,7 +3757,7 @@
   const SHOP_ATTR = { 剛: "gang", 快: "kuai", 柔: "rou", 慢: "man" };
   const SHOP_RACK_LIST = 8;
 
-  // 共用的店面框（1.2）：招牌、銀兩、掌櫃那一句、左上「出店」；底下照哪一間店畫。懸賞榜的第三層（替一張求藝、求兵挑東西）
+  // 共用的店面框（1.2）：招牌、銀兩、掌櫃那一句、左上「出店」；底下照哪一間店畫。懸賞榜的第三層（替一張求兵挑東西）
   // 選單上沒有 bounty:back：出店先送回到懸賞榜（boardLeave）。三間店捲的那一層（.shop-body）裡面一律再包一層 .shop-col：
   // 電腦上整片寬的 .shop-body 照舊捲，內容照遊戲那一欄排（style.css 的 FB-225 那一段；手機上 .shop-col 沒有樣式）
   function shopHtml(shop) {
@@ -4220,7 +4221,7 @@
       </article>`;
   }
 
-  // ── 懸賞榜（第四節）：上面一排手上揭著的格子，木板上釘告示（顏色分種類：討伐紅、打探藍、護送綠、求藝求兵金邊、通緝黑；
+  // ── 懸賞榜（第四節）：上面一排手上揭著的格子，木板上釘告示（顏色分種類：討伐紅、打探藍、護送綠、求兵金邊、通緝黑；
   // 揭了的蓋「已揭」），點一張放大成一張紙。揭下、交出…送現在的選項 id；放棄先問一次（shop-ask）。字待 joy 潤 ──
   function boardHtml(shop) {
     const zoomId = shop.picked || S.boardZoom; // 第三層開著（伺服器的 picked）：放大的一定是那一張
@@ -4271,7 +4272,7 @@
         ${btns}</article></div>`;
   }
 
-  // 第三層（替一張求藝、求兵挑東西）開著時選單上只有那一張的交出鈕與「回到懸賞榜」：放大別張、收起、出店之前先送 bounty:unpick
+  // 第三層（替一張求兵挑東西）開著時選單上只有那一張的交出鈕與「回到懸賞榜」：放大別張、收起、出店之前先送 bounty:unpick
   // （不然按下去會被 Game.choose 擋成「榜上的情形變了」）
   async function boardUnpick(el) {
     const shop = S.main && S.main.shop;
