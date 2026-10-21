@@ -2344,7 +2344,7 @@ class ArtsTuning(_Strict):
     # 這一季第一門自創的價錢（Joy 2026-10-21「第一次自創武學，降低到只需要100心得，之後一樣500，擔心初始門檻太高玩家玩不到那邊就放棄」）；
     # 0＝跟後面一樣（測試內容）。角色每季重來，所以每一季的第一門都是這個價
     create_first_xinde: int = Field(default=0, ge=0)
-    # 重參帖（萬寶閣）一門自創最多重骰幾次（Joy 2026-10-21「一次創造武學的時候可能最多重骰3或是5，總共要買幾張都可以」）
+    # 重悟帖（萬寶閣）一門自創最多重骰幾次（Joy 2026-10-21「一次創造武學的時候可能最多重骰3或是5，總共要買幾張都可以」）
     create_reroll_cap: int = Field(default=5, ge=0)
     create_step: float = Field(default=1.0, ge=1)
     create_per_season: int = Field(default=0, ge=0)

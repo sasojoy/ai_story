@@ -3781,9 +3781,9 @@
       ${draft.say ? `<p class="muted small">出手時：「${esc(draft.say)}」</p>` : ""}
       <p class="muted small">招剛創時還生，練到第四成才使得順。</p>
       ${draft.redo > 0 ? `<p class="muted small">不滿意這個形，可以免費重來一次（重擺或重立意）。</p>` : ""}
-      <div class="cr-reroll">${(draft.reroll_left | 0) <= 0 ? `<span class="muted small">這一門的重骰已經用完了。</span>`
-        : c.rerolls > 0 ? `<button class="btn" data-act="create-reroll">重骰<small>重參帖 剩 ${c.rerolls | 0} 張</small></button><span class="muted small">同一個架式與意，三格顏色與變招再擲一次。這一門還能重骰 ${draft.reroll_left | 0} 次。</span>`
-        : `<span class="muted small">萬寶閣的重參帖可以直接重骰這個形，不必重來（一門最多 ${draft.reroll_left | 0} 次）。</span>`}</div>
+      <div class="cr-reroll">${(draft.reroll_left | 0) <= 0 ? `<button class="btn" disabled>重骰<small>這一門已骰滿 ${c.reroll_cap | 0} 次</small></button><span class="muted small">一門最多重骰 ${c.reroll_cap | 0} 次：留下這個形，或回頭重來。</span>`
+        : c.rerolls > 0 ? `<button class="btn" data-act="create-reroll">重骰<small>重悟帖 剩 ${c.rerolls | 0} 張</small></button><span class="muted small">同一個架式與意，三格顏色與變招再擲一次。這一門還能重骰 ${draft.reroll_left | 0} 次。</span>`
+        : `<span class="muted small">萬寶閣的重悟帖可以直接重骰這個形，不必重來（一門最多 ${draft.reroll_left | 0} 次）。</span>`}</div>
       <div class="crow"><span>名字</span><input class="input" id="create-name" maxlength="6" placeholder="2～6 個字，全服不能重名"></div>
       <div class="crow"><span>招名</span><input class="input" id="create-move" maxlength="4" value="${esc(draft.move || "")}" placeholder="2～4 個字"></div>
       <div class="acts"><button class="btn primary" data-act="create-name">立名<small>心得已在立意時付了</small></button>${redo}${quit}</div>
@@ -7814,7 +7814,7 @@
           await mx("create_name", { name: n ? n.value.trim() : "", move: m ? m.value.trim() : "" }); createDone(); break;
         }
         case "create-cancel": await mx("create_cancel"); createDone(); break;
-        case "create-reroll": await mx("create_reroll"); break; // 重參帖：留在成形那一步，三格換了
+        case "create-reroll": await mx("create_reroll"); break; // 重悟帖：留在成形那一步，三格換了
         case "create-open": S.createOpen = true; S.message = ""; renderPage(); window.scrollTo(0, 0); break;
         case "create-close": S.createOpen = false; S.message = ""; renderPage(); window.scrollTo(0, 0); break;
         case "slot-out": await mx("unslot", { art: el.dataset.id, insight: el.dataset.ins }); break;

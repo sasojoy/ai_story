@@ -2356,7 +2356,7 @@ MENXIA_ACTIONS = {
     "create_back": lambda g, b: g.create_back(str(b.get("to") or "")),
     "create_name": lambda g, b: g.create_name(str(b.get("name") or ""), str(b.get("move") or "")[:create.MOVE_MAX * 2]),
     "create_cancel": lambda g, b: g.create_cancel(),
-    "create_reroll": lambda g, b: g.create_reroll(),  # 重參帖：成了形直接重骰（萬寶閣，Joy 2026-10-21）
+    "create_reroll": lambda g, b: g.create_reroll(),  # 重悟帖：成了形直接重骰（萬寶閣，Joy 2026-10-21）
     "ascend_dismiss": lambda g, b: g.ascend_dismiss(),  # 看過破境卡了
     # 用融的意境修練一次，衝下一品；use_legend 是勾了「服下破境丹」。只認真正的布林 true：字串、數字都不算勾
     "cultivate": lambda g, b: g.cultivate(str(b.get("art") or ""), use_legend=b.get("use_legend") is True),

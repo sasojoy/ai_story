@@ -303,7 +303,7 @@ def test_paying_the_last_xinde_at_intent_still_lets_you_name_it(content):
 
 
 def test_a_reroll_slip_rolls_the_form_again(content):
-    """重參帖（Joy 2026-10-21「弄個商城道具可以直接重骰，有上限」）：成了形直接重擲顏色與變招，不收心得、不用掉免費的重來。"""
+    """重悟帖（Joy 2026-10-21「弄個商城道具可以直接重骰，有上限」）：成了形直接重擲顏色與變招，不收心得、不用掉免費的重來。"""
     game = _game(content)
     p = game.state.player
     assert create.reroll(game.state, content, game.world) == [create.NO_DRAFT]

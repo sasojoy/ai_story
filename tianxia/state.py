@@ -297,7 +297,7 @@ class CreateDraft(BaseModel):
     redo: int = 1  # 還能免費重來幾次（回到擺式或立意再擲一次）
     paid: int = 0  # 立意時付了多少心得（Joy 2026-10-21 改在立意收；0＝還沒付，這一版之前的單子在立名時收）
     rolls: int = 0  # 擲過幾次（成形的亂數種子用）
-    rerolled: int = 0  # 用重參帖重骰過幾次（一門最多 Config.arts.create_reroll_cap）
+    rerolled: int = 0  # 用重悟帖重骰過幾次（一門最多 Config.arts.create_reroll_cap）
     move: str = ""  # 以意成招：模型從立意那一句起的招名（2～4 字；空的用 moves 表的預設名）
     say: str = ""  # 招式出手那一行的一句話（模型寫；空的用 moves 表的）
     rare: bool = False  # 立意時擲中變招（有變招的那一格才擲）
@@ -715,7 +715,7 @@ class PlayerState(BaseModel):
     insight_fx: dict[str, InsightFx] = Field(default_factory=dict)
     arts_migrated: bool = False  # 舊存檔的功效轉成槽做過了沒（arts.migrate 只做一次）
     created_count: int = 0  # 這一季自創付了幾次心得（立意那一刻數；Config.arts.create_per_season、價錢遞增、第一門優惠）；角色每季重來
-    create_rerolls: int = 0  # 重參帖（萬寶閣）：自創成形之後直接重骰一次（一門最多 create_reroll_cap 次）；角色每季重來
+    create_rerolls: int = 0  # 重悟帖（萬寶閣）：自創成形之後直接重骰一次（一門最多 create_reroll_cap 次）；角色每季重來
     creating: CreateDraft | None = None  # 自創走到一半的單子（tianxia/create.py）；取名那一步才付心得
     ascension: Ascension | None = None  # 剛破境、還沒看過的破境卡（tianxia/ascend.py）
     holding_bonus: int = 0  # 功法庫多放幾格（萬寶閣的擴充道具，Joy 2026-10-21「一張多放15格，沒有上限」）：只這一季，換季照新角色歸零（library.cap_of 加上它）

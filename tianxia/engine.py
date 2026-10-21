@@ -9792,7 +9792,7 @@ class Game:
 
     @_not_while_preparing
     def create_reroll(self) -> list[str]:
-        """重參帖：成了形直接重骰（create.reroll）。只改單子與帖數。"""
+        """重悟帖：成了形直接重骰（create.reroll）。只改單子與帖數。"""
         return self._log(create.reroll(self.state, self.content, self.world))
 
     @_not_while_preparing

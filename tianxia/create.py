@@ -79,7 +79,7 @@ MOVE_SHOWN = "招：{card}"  # 待 joy 潤
 CANCELLED = "你把這門還沒成形的功夫擱下了。"
 CANCELLED_PAID = "你把這門功夫擱下了。立意時付的 {paid} 心得不退。"  # 待 joy 潤
 REROLLED = "你又把「{intent}」推演了一遍——這門功夫換了個形：{colors}。"  # 待 joy 潤
-NO_REROLL = "手上沒有重參帖：萬寶閣買得到。"  # 待 joy 潤
+NO_REROLL = "手上沒有重悟帖：萬寶閣買得到。"  # 待 joy 潤
 REROLL_CAPPED = "這一門已經重骰 {cap} 次，不能再骰了：留下這個形，或回頭重來。"  # 待 joy 潤
 REROLL_STEP = "要先立了意、成了形，才能重骰。"  # 待 joy 潤
 FLAT_LINE = "此式平正，不偏一路"  # 待 joy 潤
@@ -562,7 +562,7 @@ def _form(state: GameState, content: Content, world: WorldStateStore, draft: Cre
 
 
 def reroll(state: GameState, content: Content, world: WorldStateStore) -> list[str]:
-    """重參帖（萬寶閣，Joy 2026-10-21「弄個商城道具可以直接重骰，有上限」）：成了形還沒立名，用掉一張，同一個架式與意
+    """重悟帖（萬寶閣，Joy 2026-10-21「弄個商城道具可以直接重骰，有上限」）：成了形還沒立名，用掉一張，同一個架式與意
     直接再擲一次顏色與變招（火候照意分，不變）；不收心得、不用掉免費的重來。帖子買幾張都行，一門最多重骰
     Config.arts.create_reroll_cap 次（Joy「一次創造武學的時候可能最多重骰3或是5」）。"""
     draft = state.player.creating
@@ -580,7 +580,7 @@ def reroll(state: GameState, content: Content, world: WorldStateStore) -> list[s
     draft.rerolled += 1
     _form(state, content, world, draft)
     return [REROLLED.format(intent=draft.intent, colors=colors_text(draft.colors)),
-            f"重參帖 -1（剩 {p.create_rerolls} 張；這一門還能重骰 {cap - draft.rerolled} 次）"]
+            f"重悟帖 -1（剩 {p.create_rerolls} 張；這一門還能重骰 {cap - draft.rerolled} 次）"]
 
 
 def back(state: GameState, content: Content, to: str) -> list[str]:
@@ -750,7 +750,8 @@ def view(state: GameState, content: Content, world: WorldStateStore) -> dict:
         "intent_max": INTENT_MAX, "grade": cfg.create_grade,
         "slots": {q: arts_mod.slot_count(content, q) for q in ("下品", "中品", "上品")},
         "step": "form" if draft is None else draft.step, "draft": None,
-        "rerolls": state.player.create_rerolls,  # 手上的重參帖（萬寶閣）
+        "rerolls": state.player.create_rerolls,  # 手上的重悟帖（萬寶閣）
+        "reroll_cap": cfg.create_reroll_cap,  # 一門最多重骰幾次
     }
     if draft is None:
         return base
