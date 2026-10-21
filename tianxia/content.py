@@ -3049,6 +3049,8 @@ def _validate_seal(c: Content, need) -> None:
             need(key in cfg.revamp.effects, f"content/seal.json：{shard.id} 的改版效果 {key} 不在 Config.seal.revamp.effects")
         problem = name_problem(shard.name, c)
         need(problem in (None, SEAL_CLASH), f"content/seal.json：{shard.id} 的名字「{shard.name}」{problem}")
+    acts = [shard.act for shard in c.seal.values() if shard.act is not None]  # 獨門行動（改版第 2 批）：一種只給一片
+    need(len(acts) == len(set(acts)), f"content/seal.json：同一種獨門行動只能給一片（{acts}）")
     mandates = c.mandate_timetable  # 天命之爭（玉璽二；8.3、8.5）
     need(len(mandates) <= 1, "時刻表：標 mandate_only 的天命之爭最多一件")
     endings = {e.id: e for e in c.scenario.endings}

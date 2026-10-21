@@ -747,6 +747,10 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 /* 奪璽卡（玉璽碎片設計 5.10）：對手的架勢、輪到你出招 */
 .seal-duel .tell { margin: 4px 0; font-size: 13px; color: var(--ink-2); }
 .seal-duel .turn { margin: 4px 0; font-weight: 600; color: var(--accent); }
+/* 碎片卡底下那一行獨門行動的提醒（玉璽碎片改版第 2 批，企劃者 2026-10-21）：只是字、看得出按得下去（朱色、底線），按了跳到修練頁傳承那一列 */
+.seal-card .seal-act-line { margin: 8px 0 0; padding-top: 8px; border-top: 1px solid var(--line); }
+.seal-card .seal-act-go { border: 0; background: none; padding: 0; font: inherit; color: var(--accent); text-align: left; cursor: pointer;
+  text-decoration: underline; text-underline-offset: 3px; }
 .order-head { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; }
 .order-head span { color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .order-text { margin-top: 2px; font-size: 13px; line-height: 1.5; color: var(--ink-2); }
@@ -2899,3 +2903,16 @@ svg.fig .blade.bow { stroke-width: 3; }
 .card.create p.small { font-size: 12px; }
 .card.create .acts { flex-wrap: wrap; }
 .card.create .acts:has(.btn:nth-child(3)) .btn.primary { flex-basis: 100%; }
+
+/* ── 玉璽碎片的獨門行動：選目標的那一層（改版第 2 批，企劃者 2026-10-21 挑了乙；草圖 docs/superpowers/specs/2026-10-21-玉璽碎片改版-草圖/第2批/）。
+   店面那一層的框（招牌、收起、右上剩幾次、掌櫃話那一格寫說明），一人一列照 .shop-row、散人挑一邊照店面頁籤 .shop-page；這裡只補標題、
+   灰掉的原因與生效中那一句的顏色。自己寫的字級一律 em、跟著 .shop-seal 走（手機 13px、電腦寬 ×1.3，同酒肆），電腦上底色照遊戲那一欄 640px（FB-225） ── */
+.shop-layer.shop-seal { font-size: 13px; }
+.shop-seal .seal-sides { justify-content: flex-start; flex-wrap: wrap; margin: 0.6em 0 0.2em; }
+.shop-seal .seal-h { margin: 1.1em 0.15em 0.45em; font: 600 1.05em var(--serif); letter-spacing: 0.2em; color: #f2c46a; }
+.shop-seal .seal-row .winfo { min-width: 0; }
+.shop-seal .seal-why { color: #e0a08a; }
+.shop-seal .seal-live { color: #f2c46a; }
+@media (min-width: 641px) {
+  .shop-layer.shop-seal { font-size: 17px; background-color: var(--paper); background-size: min(100%, 640px) 100%; background-position: 50% 0; background-repeat: no-repeat; }
+}

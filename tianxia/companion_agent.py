@@ -18,7 +18,7 @@ from typing import ClassVar
 
 from pydantic import BaseModel, Field
 
-from . import figure_life, gender, renown, zh
+from . import figure_life, gender, renown, seal_acts, zh
 from .models import CharacterDef, Content
 from .ollama_client import OllamaClient
 from .state import GameState
@@ -335,6 +335,8 @@ def _apply_turn(
     cooled = renown.cold(state, content, companion_id, delta) if content is not None else delta
     chill = cooled != delta
     delta = renown.warmed(content, cooled) if content is not None else cooled  # 情誼放慢（Config.affinity_gain_scale）
+    if content is not None:
+        delta = seal_acts.warmer(state.world, content, companion_id, delta)  # 收心（玉璽碎片改版第 2 批）：一日之內加的情誼 ×2
     before = p.affinities.get(companion_id, 0)
     after = max(0, min(100, before + delta))
     p.affinities[companion_id] = after

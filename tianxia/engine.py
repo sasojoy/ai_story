@@ -20,7 +20,7 @@ from . import arts as arts_mod
 from . import (
     allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, checkin, chuangong, clinic, companion_agent, conquest, conquest_day, create, cultivation, defection, divine, economy, encounter, enlist, equipment, event_llm, explore_modes, escorts,
     fight_llm, figure_aid, figure_life, figures, foreshadow, four_tiers, gather_llm, generals, forge_secrets, front_lines, fusion, gender, howto, insight_fx, insights, invites, journal, letters, library, mapdata, martial_arts, feasts,
-    mall, materials, mounts, naming, rename, server_bots, opportunities, orders, precise, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
+    mall, materials, mounts, naming, rename, server_bots, opportunities, orders, precise, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_acts, seal_duel, seats, secret_recipes, sensing,
     shopview, siege, signature, signature_arms, silver, skillview, smithing,
     social, sortie, styles, tactics, team, terrain, territory, timetable, traits, treasures, weapons, works, xingshi, zh, yuedan,
 )
@@ -1114,6 +1114,8 @@ class Game:
         if roster.newbie(self.state, self.content, cfg.newbie_stamina_days):
             regen *= cfg.newbie_stamina_multiplier  # 新手期體力回復加快（體力平衡提案第〇節）
         regen *= treasures.amount(self.state, self.content, "stamina_regen")  # 承露（玉璽碎片設計 7.1）：跟新手期疊乘
+        if (dew := seal_acts.dew_factor(self.state, self.content, seconds)) != 1.0:  # 承露降在這一區（改版第 2 批，PM 五之一 4）
+            regen *= dew
         p.stamina = min(cfg.stamina_max, p.stamina + regen)
         rate = seconds / (cfg.neili_regen_hours * HOUR)
         if p.busy_until is not None:
@@ -8173,6 +8175,9 @@ class Game:
         cfg = c.config
         window = cfg.active_window_days * DAY / calendar.cal_scale(c, w)
         scale = cfg.conquest.progress_scale if source == "sortie" else 1.0
+        # 傳檄（玉璽碎片改版第 2 批）：這一塊算進的那條線有照自家算的傳檄，進度同樣放大（人數緩衝之前）；沒有時一個字都不變
+        if (writ := seal_acts.writ_factor(w, c, conquest.line_of(w, c, loc_id), side)) != 1.0:
+            scale *= writ
         amount = push.buffered(nominal * scale, push.active_count(s, side, w.time, window))
         notes = ""
         if source == "sortie":
@@ -8960,6 +8965,10 @@ class Game:
         s, c = self.state, self.content
         w, p = s.world, s.player
         amount, resisted = self._shaped(trend_id, delta, source)
+        # 傳檄（玉璽碎片改版第 2 批）：那一軍的人在那條線上往自家目標推，乘在盡頭阻力與季長倍數之後、人數緩衝與每人每日上限之前（上限照舊）；
+        # 貢獻照收到的 delta（名目量）記、不跟著放大。沒有傳檄時一個字都不變（不乘 1.0：int 會變成 float）
+        if (writ := seal_acts.writ_factor(w, c, trend_id, self._side(), amount)) != 1.0:
+            amount *= writ
         tail = [self._resisted_line()] if resisted else []
         if not calendar.season_one_on(w, c):
             # 規則關著的季，事件的大勢效果照季長縮放（FB-165，PM 2026-10-12：季長是週末的 5.6 倍、門檻不變，每一下照舊推就一定提早
@@ -11799,8 +11808,68 @@ class Game:
             self.stamp(timetable.when(_season_vehicle(c, w), c, e)) for e in timetable.events(w, c)
             if (e.seal or e.mandate_only) and e.id not in w.timeline and e.id not in w.showdowns_opened
         ] if season_one(c, w) else []
-        return {"name": c.seal[shard.id].name, "effect_text": seal.shard_text(c, shard.id), "state": state,
-                "stir": stir, "dates": dates}
+        out = {"name": c.seal[shard.id].name, "effect_text": seal.shard_text(c, shard.id), "state": state,
+               "stir": stir, "dates": dates}
+        if seal_acts.on(c):  # 獨門行動（改版第 2 批）：改版關著不多這一鍵（一個字都不變）；這一片沒有行動（螭首、金角）是 None
+            out["act"] = seal_acts.view(self.state, c, seal.filled(view.registry, c), view.season, **self._seal_act_season())
+        return out
+
+    def _seal_act_season(self) -> dict:
+        """seal_acts.problem／view 要的季況：季在跑（籌備、休季都不是）、賽季時鐘停著、時刻怎麼寫（Game.stamp）。"""
+        return {"running": self.world.season_phase() == "running" and not self.state.world.ended,
+                "paused": self.world.paused_at() is not None, "stamp": self.stamp}
+
+    def seal_use(self, target: str = "", side: str = "") -> list[str]:
+        """起用懷中那一片的獨門行動（玉璽碎片改版第 2 批；MAIN_ACTIONS["seal_use"]）：target 是指定的目標（引將的大勢人物、傳檄的戰線、
+        收心的人物；頒詔、承露不用），side 是散人傳檄挑的那一軍。不花體力、不花銀兩（PM 五之一 7）。
+        先照 seal_acts.problem／target_problem 驗（按不下去回原因、什麼都不動）；登記那一筆在 world.mutate 裡整個重驗（碎片剛被搶走、
+        次數剛用完就落空），記次數與一筆 use（只給管理者看：有名號）；季上記一筆生效中的（不記是誰）、引將把人物搬過來；天下大事與
+        江湖史各一句（不寫是誰，企劃者）；自己一則江湖紀錄與一則行狀。戰報不寫。假人不叫這裡（設計第四章【PM】）。"""
+        c, s = self.content, self.state
+        if not seal_acts.on(c):
+            return self._log(["（此刻無法這麼做。）"])
+        view = self.world.seal_state()
+        reg = seal.filled(view.registry, c)
+        why = seal_acts.problem(s, c, reg, view.season, **self._seal_act_season())
+        held = seal_acts.mine(s, c, reg)
+        if why is None and held is not None:
+            why = seal_acts.target_problem(s, c, held[1], target, side)
+        if why is not None or held is None:
+            return self._log([f"（{why or seal_acts.NO_SHARD}）"])
+        shard_id, kind = held[0].id, held[1]
+        act = seal_acts.plan(s, c, shard_id, kind, target, side)
+        what = seal_acts.what_text(c, act)
+        me, w = s.player.name, s.world
+        left: list[int] = []
+
+        def _apply(shared) -> None:
+            r = seal.filled(shared.seal, c)
+            now = seal.shard_of(r, me)
+            number = shared.season_number
+            if now is None or now.id != shard_id or seal_acts.left(now, number, c) <= 0:
+                return
+            ready = seal_acts.ready_at(now, number, c, w)
+            if ready is not None and w.time + seal_acts.EPS < ready:
+                return
+            seal_acts.note_use(now, number, w.time)
+            seal.log(r, number, "use", shard=shard_id, holder=me, result=kind, where=what, at=w.time)
+            left.append(seal_acts.left(now, number, c))
+
+        self.world.mutate(_apply)
+        if not left:
+            return self._log(["（此刻無法這麼做。）"])
+        if kind == "yinjiang":
+            seal_acts.pull(s, c, act)
+        w.seal_acts.append(act)
+        public = seal_acts.public_text(c, act)
+        seal.rumor(w, public)  # 天下大事（world 層、不帶地點與人）
+        seal.chronicle(w, public)
+        name = c.seal[shard_id].name
+        line = seal_acts.MINE.format(shard=name, what=what, left=left[0])
+        self._write(seal.SEAL_TITLE, [line], tag=f"『{name}』")
+        annals.note(s, c, annals.DEED, seal_acts.ANNAL.format(shard=name, what=what), 4)
+        self._save_season()
+        return self._log([line])
 
     def seal_duel_card(self) -> dict | None:
         """江湖頁的「奪璽」卡（5.10）：排第一的那一場，全服看得到；沒有是 None。"""
@@ -13381,7 +13450,7 @@ class Game:
             return None
         view = self.world.seal_state()
         reg = seal.filled(view.registry, c)
-        return {
+        out = {
             "shards": [{"id": s, "name": c.seal[s].name, "state": reg.shards[s].state, "holder": reg.shards[s].holder or ""} for s in c.seal],
             "duel": bool(view.duels), "hung": reg.last_showdown is not None and not reg.last_showdown_dueled,
             "where": reg.last_showdown_where, "qa": c.config.seal.qa_tools,
@@ -13390,6 +13459,14 @@ class Game:
             # 領地爭奪的季「強制現世」是「現在藏一片」（網頁換鈕上的字）；只給有沒有，不給藏在哪
             "hide": seal.conquest_season(c, self.state.world),
         }
+        if seal_acts.on(c):  # 獨門行動（改版第 2 批）：這一季誰起用了哪一片、什麼時候、指定了什麼（救場用，設計【PM】5）；改版關著不多這一鍵
+            out["uses"] = [
+                {"shard": c.seal[e.shard].name if e.shard in c.seal else e.shard or "", "who": e.holder or "",
+                 "act": seal_acts.NAMES.get(e.result or "", e.result or ""), "when": self.stamp(e.at) if e.at is not None else "",
+                 "what": e.where}
+                for e in reg.history if e.kind == "use" and e.season == view.season
+            ]
+        return out
 
     def admin_issue_orders(self) -> list[str]:
         """立刻發本週軍令：這一週還沒達成的軍令換成照週一的做法（orders.issue，週一掛鉤用的同一個函式，redraw）此刻重新挑的一批，

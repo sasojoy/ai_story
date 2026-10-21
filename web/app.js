@@ -114,6 +114,8 @@
     adMallNote: "", // 管理者區商城那一組填的原因（抽屜重畫時放回去；成了就清掉）
     adMallMsg: "", // 管理者區商城那一組上一下的結果（補發、扣回、退一筆、要寫原因），寫在查帳那一行
     adMallOk: false, // 那一句是做成了的（帶 ok、不是紅字，FB-492）；被拒的、要先填的是 false
+    sealAct: false, // 玉璽碎片的獨門行動（改版第 2 批，企劃者挑了乙）：選目標的那一層（店面樣式）開著沒；送出、收起、碎片沒了就關
+    sealSide: null, // 散人起用傳檄挑的那一軍（status.seal.act.sides 的 id）；關掉那一層就清掉，每次重挑
     here: null, // 江湖頁「此地還能做」摺疊的開合：{ at 地點, open }，玩家自己開關的、或發光那一步自動打開的；重畫（鈕被擋下來、輪詢）照它補回，換了地方就不對得上（FB-087）
     hereAuto: {}, // 發光那一步（框的 key）在哪一處自動打開過摺疊了：「key@地點」→ true；每一步在每一處只自動打開一次，之後照玩家的（FB-087）
     sceneOpen: false, // 在路上時場景那段說明展開著嗎（預設只露兩行，FB-055）；下了路就清掉
@@ -416,6 +418,7 @@
       ${tabsHtml()}
       ${S.sheet ? sheetHtml() : S.peer ? peerHtml() : ""}
       ${S.main && S.main.shop ? shopHtml(S.main.shop) : S.mallOpen ? shopHtml(mallShop()) : ""}
+      ${S.sealAct && sealActNow() ? sealActHtml(sealActNow()) : ""}
       ${S.book ? bookHtml() : ""}
       ${S.zhuan ? zhuanHtml(S.zhuan) : ""}
       ${S.mtEdit && S.mingtie ? mtEditHtml() : ""}
@@ -507,7 +510,88 @@
     return `<details class="card seal-card" data-key="${esc(key)}" ${S.sealShut.card === key ? "" : "open"}><summary>傳承・『${esc(s.name)}』</summary>
       <p>${esc(s.effect_text)}</p><p class="muted">${esc(s.state)}</p>
       ${s.stir ? `<p class="turn">${esc(s.stir)}</p>` : ""}
-      ${(s.dates || []).length ? `<p class="muted">這一季的險關：${s.dates.map(esc).join("、")}</p>` : ""}</details>`;
+      ${(s.dates || []).length ? `<p class="muted">這一季的險關：${s.dates.map(esc).join("、")}</p>` : ""}${sealActLine(s.act)}</details>`;
+  }
+
+  // ── 玉璽碎片的獨門行動（改版第 2 批，status.seal.act；企劃者 2026-10-21 挑了乙：草圖 docs/superpowers/specs/2026-10-21-玉璽碎片改版-草圖/第2批/）──
+  // 入口是修練頁傳承那一列的一顆鈕（heirloomRow）；要指定目標的三種（引將、傳檄、收心）開一層店面樣式的（sealActHtml：招牌寫行動名、右上剩幾次、
+  // 一人一列寫此刻在哪與灰掉的原因、每列一顆；散人傳檄先照店面頁籤挑一邊），頒詔、承露按了直接問。問句、說明、原因全是伺服器的字（seal_acts.view）；
+  // 這裡只有鈕上的動詞、名單的標題與江湖頁那一行（待 joy 潤）。碎片卡與這一份本來就只給持有者自己，改版關著沒有 act（鈕與那一行都不畫）
+  const SEAL_VERB = { yinjiang: "引來", chuanxi: "傳檄", shouxin: "收心" }; // 要指定目標的三種：鈕上的動詞（待 joy 潤）
+  const SEAL_PICK = { yinjiang: "指定一位大勢人物", chuanxi: "指定一條戰線", shouxin: "指定一位人物" }; // 名單的標題（待 joy 潤）
+  function sealActNow() {
+    const s = S.main && S.main.status && S.main.status.seal;
+    return s && s.act ? s.act : null;
+  }
+
+  // 江湖頁碎片卡底下那一行提醒（企劃者 2026-10-21：只是字，按了跳到修練頁傳承那一列那一顆）；這一片沒有行動（螭首、金角）不畫
+  function sealActLine(a) {
+    if (!a) return "";
+    const left = a.left > 0 ? `這一季還能起用 ${a.left | 0} 次` : "這一季的次數用完了";
+    return `<p class="seal-act-line"><button class="seal-act-go" data-act="seal-act-go">獨門行動・${esc(a.name)}：${left}</button></p>`;
+  }
+
+  // 修練頁傳承那一列（玉璽碎片的抄本，玉璽碎片設計 7.3）：沒有行動的碎片照舊沒有鈕；有的多一顆「X・剩 N 次」，按不下去灰掉、原因寫在這一列底下
+  // （.rwhy，手機沒有 title 可看），這一片的行動此刻還在生效的那一句也寫在底下
+  function heirloomRow(h, a) {
+    const notes = a ? [a.ok ? "" : a.why, a.live].filter(Boolean) : [];
+    const btn = a ? `<div class="wbtns"><button class="btn small primary" data-act="seal-act"${a.ok ? "" : ` disabled title="${esc(a.why)}"`}>${esc(a.name)}・剩 ${a.left | 0} 次</button></div>` : "";
+    return `<div class="wrow heirloom"><div class="winfo"><b>【${esc(h.name)}】</b><span>傳承・${esc(h.effect_text)}</span>${notes.map((t) => `<small class="rwhy">${esc(t)}</small>`).join("")}</div>${btn}</div>`;
+  }
+
+  // 選目標的那一層：店面的框（招牌、收起、右上剩幾次、說明那一句），捲的那一層一人一列。散人傳檄還沒挑邊時每一列都灰著、上面寫要先挑
+  function sealActHtml(a) {
+    const sides = a.sides || [];
+    const needSide = sides.length > 0 && !sides.some((s) => s.id === S.sealSide);
+    const tabs = sides.length ? `<div class="shop-pages seal-sides" role="group" aria-label="這一次算哪一軍">${sides.map((s) => `
+        <button class="shop-page${S.sealSide === s.id ? " on" : ""}" data-act="seal-side" data-side="${esc(s.id)}" aria-pressed="${S.sealSide === s.id}">這一次算${esc(s.name)}</button>`).join("")}</div>` : "";
+    const rows = (a.targets || []).map((t) => {
+      const why = t.why || (needSide ? a.side_note : "");
+      return `<div class="shop-row seal-row"><div class="winfo"><b>${esc(t.name)}</b>${t.where ? `<span>此刻在${esc(t.where)}</span>` : ""}${t.why ? `<span class="seal-why">${esc(t.why)}</span>` : ""}</div>
+        <div class="wbtns"><button class="btn small${why ? "" : " primary"}" data-act="seal-pick" data-id="${esc(t.id)}"${why ? ` disabled title="${esc(why)}"` : ""}>${SEAL_VERB[a.kind] || "起用"}</button></div></div>`;
+    }).join("");
+    return `<div class="shop-layer shop-seal" role="dialog" aria-label="${esc(a.name)}">
+      <header class="shop-bar"><button class="shop-back" data-act="seal-act-close">‹ 收起</button><span class="shop-sign">${esc(a.name)}</span><span class="shop-silver">剩 ${a.left | 0} 次</span></header>
+      <p class="shop-line">${esc(a.text)}</p>
+      <div class="shop-body"><div class="shop-col">${tabs}${needSide ? `<p class="shop-warn">${esc(a.side_note)}</p>` : ""}
+        <p class="shop-cap">${esc(a.rule)}</p>${a.live ? `<p class="shop-cap seal-live">${esc(a.live)}</p>` : ""}${a.ok ? "" : `<p class="shop-warn">${esc(a.why)}</p>`}
+        ${rows ? `<h4 class="seal-h">${SEAL_PICK[a.kind] || ""}</h4>${rows}` : ""}</div></div>
+    </div>`;
+  }
+
+  // 問句（伺服器的 confirm，{target} 換目標的名字、{side} 換挑的那一軍），按「起用」才送；送出時那一層收起，結果照一般動作寫在提示裡
+  function sealAsk(a, target) {
+    const side = (a.sides || []).find((s) => s.id === S.sealSide);
+    const text = a.confirm.replace("{target}", target ? target.name : "").replace("{side}", side ? side.name : "");
+    const body = { target: target ? target.id : "", side: side ? side.id : "" };
+    ask(text, "起用", async () => { S.sealAct = false; S.sealSide = null; await keepScroll(() => doMain("seal_use", body)); });
+  }
+
+  // 開、收那一層與送出都整個重畫：底下的修練頁停在原處（拇指底下還是傳承那一列）
+  async function keepScroll(draw) {
+    const y = window.scrollY;
+    await draw();
+    window.scrollTo(0, y);
+  }
+
+  // 輪詢（refreshPage 最前面叫）：那一層開著而且資料變了，只換那一層（捲到哪裡留著）；碎片沒了、這一片沒有行動了就收起
+  function sealActPolled(old) {
+    if (!S.sealAct) return;
+    const a = sealActNow();
+    const layer = document.querySelector(".shop-seal");
+    if (!a || !layer) { S.sealAct = false; S.sealSide = null; layer?.remove(); return; }
+    const was = old && old.status && old.status.seal ? old.status.seal.act : null;
+    if (JSON.stringify(was) !== JSON.stringify(a)) redrawSealAct(a);
+  }
+
+  // 只換那一層（挑了一邊、輪詢的資料變了）：捲到哪裡留著，不重畫底下的頁面
+  function redrawSealAct(a) {
+    const layer = document.querySelector(".shop-seal");
+    if (!layer) return;
+    const top = layer.querySelector(".shop-body")?.scrollTop || 0;
+    layer.outerHTML = sealActHtml(a);
+    const body = document.querySelector(".shop-seal .shop-body");
+    if (body) body.scrollTop = top;
   }
 
   function renderTop() {
@@ -3231,10 +3315,11 @@
       const row = GEAR_ROWS[g.slot];
       if (!row) return "";
       const shown = S.rackAll || g.rack.length <= LIB_PAGE ? g.rack : g.rack.slice(0, LIB_PAGE);
-      // 傳承那一列（玉璽碎片的抄本，玉璽碎片設計 7.3）：寶物段身上那件之前，沒有鈕；寶物的開關關著、只有傳承時不寫「身上沒有寶物」（待 joy 潤）
+      // 傳承那一列（玉璽碎片的抄本，玉璽碎片設計 7.3）：寶物段身上那件之前；有獨門行動的碎片多一顆鈕（heirloomRow，改版第 2 批）；
+      // 寶物的開關關著、只有傳承時不寫「身上沒有寶物」（待 joy 潤）
       return `<section class="gear-slot" data-slot="${esc(g.slot)}"><div class="sub">${esc(g.label)}</div>${noteAt("gear:" + g.slot)}
         ${g.fit_line ? `<p class="muted gear-fit">${esc(g.fit_line)}</p>` : ""}
-        ${g.heirloom ? `<div class="wrow heirloom"><div class="winfo"><b>【${esc(g.heirloom.name)}】</b><span>傳承・${esc(g.heirloom.effect_text)}</span></div></div>` : ""}
+        ${g.heirloom ? heirloomRow(g.heirloom, sealActNow()) : ""}
         ${g.worn ? row(g.worn, true) : g.heirloom && !g.rack.length ? "" : `<p class="muted">${esc(g.empty)}</p>`}
         ${shown.map((w) => row(w, false)).join("")}
         ${shown.length < g.rack.length ? `<button class="btn ghost lib-more" data-act="rack-all">再列 ${g.rack.length - shown.length} 件</button>` : ""}
@@ -7903,6 +7988,18 @@
         }
         case "teach": await mx("chuangong", { what: el.dataset.what }); break; // 傳功門下：person 是名冊上點的那個人 // 身上那匹餵一個一階素材（裝備四欄 5.4）
         case "divine-keep": await mx("name_divine", { weapon: el.dataset.id, keep: true }); break; // 神器原品沿用譜名（5.2）
+        // 玉璽碎片的獨門行動（改版第 2 批）：傳承那一列的鈕——要指定目標的開那一層，頒詔、承露直接問；那一層裡挑一邊、挑一個人（先問一次）、收起；
+        // 江湖頁碎片卡那一行跳到修練頁那一顆
+        case "seal-act": {
+          const a = sealActNow();
+          if (!a || !a.ok) { if (a && a.why) toast(a.why); break; }
+          if (a.kind in SEAL_VERB) { S.sealAct = true; S.sealSide = null; await keepScroll(render); } else sealAsk(a, null);
+          break;
+        }
+        case "seal-side": { S.sealSide = el.dataset.side; const a = sealActNow(); if (a) redrawSealAct(a); break; }
+        case "seal-pick": { const a = sealActNow(); const t = a && (a.targets || []).find((r) => r.id === el.dataset.id); if (t) sealAsk(a, t); break; }
+        case "seal-act-close": S.sealAct = false; S.sealSide = null; await keepScroll(render); break;
+        case "seal-act-go": await goTab("practice"); document.querySelector(".gear .wrow.heirloom")?.scrollIntoView({ block: "center" }); break;
         case "bind-art": { // 以器配招：送挑好的那一門（select 的 id 帶冒號，用 getElementById）
           const pick = document.getElementById("bind-art-" + el.dataset.id);
           if (pick && pick.value) ask("綁了之後不能改配（那一門熔掉、交掉才能再配），確定嗎？", "綁上", () => mx("bind_art", { weapon: el.dataset.id, art: pick.value }));
@@ -8357,6 +8454,7 @@
   // 輪詢拿到有變的 main 之後，照目前的分頁補上（QA L1）。江湖、見聞從 S.main 畫；修練、煉製、輿圖重抓自己那一份。
   // 重抓回來時玩家若已經切了分頁、按了別的（那份資料已經換過）、正在忙或正在打字，就不動畫面，下一輪再說。
   async function refreshPage(old) {
+    sealActPolled(old); // 獨門行動選目標的那一層（改版第 2 批）：開著而且資料變了只換那一層；底下的頁面照常補
     if (shopPolled(old)) return; // 店面開著（或剛開、剛收）：只管店面那一層（店面獨立介面設計 1.3）
     if (S.mallOpen) { // 商城那一層開著：底下的頁面被蓋住、不畫（出店時整個重畫）；餘額變了（管理者補發、別的分頁買了）才重抓這一頁
       if (!S.main.mall) { closeMall(); return; }
@@ -8403,6 +8501,7 @@
       const shown = (m) => JSON.stringify(MENXIA_SHOWN[tab].map((k) => m[k]));
       const changed = trimmed || shown(x) !== shown(was)
         || (tab === "practice" && old.status.injury !== S.main.status.injury) // 療傷鈕看的是內傷
+        || (tab === "practice" && JSON.stringify((old.status.seal && old.status.seal.act) || null) !== JSON.stringify(sealActNow())) // 傳承那一列的鈕（獨門行動）
         || S.guideDrawn !== guideSig(); // 對話框換了（輪詢帶來新的提示、提示在別處被收掉）：兩頁最上面畫著它
       if (!changed) {
         // 合成與合併都要花體力、體力隨時間回：爐裡放著東西時說明裡的「體力不足」要跟著更新（只換那一行，不整頁重畫）

@@ -1321,6 +1321,22 @@ class GuardPost(BaseModel):
     blocks: int = 0  # 這一班擋下幾次挑戰
 
 
+class SealAct(BaseModel):
+    """一次起用的玉璽碎片獨門行動（玉璽碎片改版第 2 批，tianxia/seal_acts.py）：記在這一季上（WorldState.seal_acts），不記是誰起用的
+    （誰用的只記在全服登記那一筆 use 與起用的人自己的紀錄裡）。生效的區間是 [start, ended 或 until)；期滿、提前結束的留到季末
+    （承露補算體力要讀已經結束的那一段）。"""
+
+    kind: str  # yinjiang／banzhao／chenglu／chuanxi／shouxin（models.SealActKind）
+    shard: str  # 哪一片（content/seal.json 的 id）
+    start: float  # 世界秒
+    until: float  # 預定期滿的世界秒
+    ended: float | None = None  # 提前結束（引將被時刻表搬走、退場）或期滿處理過的世界秒；None＝還沒處理
+    target: str = ""  # 人物 id（引將是大勢人物 id、收心是人物 id）、大區 id（承露）、戰線 id（傳檄）；頒詔是空的
+    place: str = ""  # 引將：引到哪個地點
+    origin: str = ""  # 引將：原本在哪個地點（期滿回這裡）
+    side: str = ""  # 傳檄：這一次照哪一軍算
+
+
 class WorldState(BaseModel):
     time: float = 0.0  # 賽季開始後經過的遊戲秒數
     trends: dict[str, int] = Field(default_factory=dict)
@@ -1471,6 +1487,8 @@ class WorldState(BaseModel):
     tavern_hits: list[TavernHit] = Field(default_factory=list)  # 殺手單（收了的留到季末）
     tavern_hit_seq: int = 0
     tavern_chatter: dict[str, tuple[float, list[str]]] = Field(default_factory=dict)  # 地點 id →（寫成的世界秒, 鄰桌閒談幾句）
+    # 玉璽碎片改版第 2 批：這一季起用過的獨門行動（seal_acts.py；換季整個重來，改版關著一直是空的）
+    seal_acts: list[SealAct] = Field(default_factory=list)
 
 
 class Fighter(BaseModel):

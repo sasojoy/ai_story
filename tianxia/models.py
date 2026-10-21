@@ -2055,6 +2055,9 @@ class TreasureRules(_Strict):
     dup_silver: int = Field(default=50, ge=0)  # 掉落池都有了、奇遇給的那一件已經有了，改給這麼多銀兩（6.5）
 
 
+SealActKind = Literal["yinjiang", "banzhao", "chenglu", "chuanxi", "shouxin"]  # 引將、頒詔、承露、傳檄、收心（第 3 批再加鎮地、補缺）
+
+
 class ShardDef(_Strict):
     """一片傳國玉璽的碎片（content/seal.json，玉璽碎片設計 7.1）：名字與一句說明交 joy 潤，數字在 Config.seal.effects。"""
 
@@ -2066,6 +2069,8 @@ class ShardDef(_Strict):
     # 改版（Config.seal.revamp 開著）的常駐成長或生活效果：Config.seal.revamp.effects 的鍵，一片可以好幾個（玄紐、歸心）；
     # 戰力 ×revamp.power 每片都有、不寫在這裡（docs/superpowers/specs/2026-10-21-玉璽碎片改版-design.md 第三章）
     effects: list[str] = Field(default_factory=list)
+    # 改版第 2 批：這一片的獨門行動（tianxia/seal_acts.py；設計第三章）。鎮地、補缺是第 3 批，那兩片這一批不寫（沒有行動）
+    act: SealActKind | None = None
 
 
 class MandateTuning(_Strict):
@@ -2099,6 +2104,25 @@ class SealCacheTuning(_Strict):
     core_weight: float = Field(default=3.0, ge=1)
 
 
+class SealActsTuning(_Strict):
+    """玉璽碎片改版第 2 批：獨門行動（設計第三章最右欄、五之一；計畫 docs/superpowers/plans/2026-10-21-玉璽碎片改版-2.md）。
+    全部是【預設】，等 21 天的季試玩再調。「天」在有季曆的季（第一季的章：週末、7 天、21 天）是季曆天，14 天的季是世界天（seal_acts.day_seconds）。
+    - uses、gap_days：每一片一季幾次、兩次之間隔幾天（次數記在全服的碎片上，換手跟著碎片走）；days：每個行動生效幾天。
+    - sense_points、cultivate：頒詔——靜心感悟擲中的機會多幾個百分點（夾在 sense_rate_range 的上限）、修練升品的機會倍數。
+    - stamina：承露——那一區體力回復的倍數（醫館療傷不收錢，沒有數字）。
+    - push：傳檄——那一軍在那條線上推的量的倍數（盡頭阻力與每人每日上限照舊）。
+    - affinity：收心——跟他說話、宴客敬酒的情誼漲幅倍數（求見不看門檻，沒有數字）。"""
+
+    uses: int = Field(default=2, ge=0)
+    gap_days: float = Field(default=3, ge=0)
+    days: float = Field(default=1, gt=0)
+    sense_points: int = Field(default=10, ge=0)
+    cultivate: float = Field(default=1.2, ge=1)
+    stamina: float = Field(default=1.5, ge=1)
+    push: float = Field(default=1.25, ge=1)
+    affinity: float = Field(default=2.0, ge=1)
+
+
 class SealRevampTuning(_Strict):
     """玉璽碎片改版（docs/superpowers/specs/2026-10-21-玉璽碎片改版-design.md；計畫 docs/superpowers/plans/2026-10-21-玉璽碎片改版-1.md）
     第 1 批：常駐效果與持有者平時藏起來。子開關（PM 五之一 6：預設開、部署在休季換程式，不蓋章）；關著時舊的七個效果
@@ -2118,6 +2142,7 @@ class SealRevampTuning(_Strict):
         "injury": 0.5, "talk_turns": 2, "audience": 5, "practice": 0.75, "keep_silver": 1,
         "stamina_regen": 1.25, "fuse_points": 10, "mate_exp": 1.25, "chuangong": 0.9,
     })
+    acts: SealActsTuning = Field(default_factory=SealActsTuning)  # 第 2 批：獨門行動（同一個子開關）
 
 
 class SealTuning(_Strict):

@@ -62,6 +62,7 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   - `--list` 先看挑到哪些檔。
   - **合併還沒提交時別拿 `--list` 的清單**（2026-10-21 輿圖簡化第 2 批收尾）：`test_for` 跟 base 的分岔點比，`--no-commit` 合進來的東西都還算「沒提交的改動」，合功能分支的那一下挑到 327 個檔（幾乎整套）；先跑兩批的測試檔、提交合併，再 `--list` 只剩這一批自己的 117 個。
 - 改到 `tianxia/engine.py` 幾乎會挑到大半套（八千多條、約 6～8 分鐘），正常。只動內容或小模組時會少很多。
+- **功能分支在你做的時候往前走了**（2026-10-21 玉璽碎片第 2 批：開工時 `feature/territory-conquest` 是 `f5686765`，做到一半合進了翻地 `90e52e9b`）：`test_for --base origin/feature/<名字>` 照分岔點比，挑到的還是只有自己的改動，照用；「關著一個位元組都不變」照派工寫的那一版比（不是新的頭）。要不要合新的頭照派工，沒說就不合，回報裡寫功能分支到了哪裡、試合（`git merge-tree --write-tree HEAD origin/feature/<名字>`）有沒有衝突。
 - **`test_for.py -- -n 4` 擋不住 `-n auto`**（2026-10-20 領地爭奪第三批 A）：挑到三個檔以上它自己在最後補 `-n auto`，排在 `--` 之後的參數後面，pytest 照最後一個算。派工要 `-n 4`（同時有好幾個子代理在跑）時，在 scratchpad 寫一支小腳本 `import test_for`、拿 `test_for.pick(test_for.changed_files(base))` 的清單自己叫 pytest（`-q -m "slow or not slow" -n 4`，`TIANXIA_DB` 設新的暫存檔），背景跑、輸出導到檔。PowerShell 一行就夠：`$line = (& $py scripts/test_for.py --base <base> --list | Where-Object { $_ -like '要跑：*' }) -replace '^要跑：',''; $files = $line.Trim() -split '\s+'; & $py -u -m pytest @files -q -n 6 -m "slow or not slow" | Out-File $env:TEMP\x.log`（2026-10-21 玉璽碎片改版修正：改 `engine.py`＋`state.py`，挑到 303 個檔）。
 - **兩張單的測試寫在同一個檔、又要一張一個 commit**（2026-10-21 FB-606、607 都在 `test_conquest_clash.py`）：先把第二張的測試從檔尾剪到 scratchpad（照第一個 `def` 的名字找頭、連前面的空行一起剪），提交第一張，再接回去寫第二張的實作。不要裸 `git stash`。
 - 新測試超過一秒（建 `Game`、載真實內容通常就超過）標 `@pytest.mark.slow`。
@@ -115,6 +116,7 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 
 ## 規則改動的雷
 
+- **一個動作同時寫全服登記與季**（2026-10-21 玉璽碎片第 2 批 `Game.seal_use`）：登記（`SharedWorldState.seal` 這種 world 那一列的東西）在 `self.world.mutate` 裡改、裡面整個重驗；季的東西（`WorldState` 的欄位、人物所在、天下大事）改在 `self.state.world` 上、最後 `self._save_season()`。不要在 mutate 裡改 `shared.season` 之後又拿著同步時讀的 `self.state.world` 繼續做事：之後誰叫 `_save_season()` 都會把 mutate 寫的季整份蓋掉（傳聞與江湖史例外，它們照流水號新增）。
 - **開關與蓋章**：
   - 新規則多半是 `Config` 開關＋開季時蓋在 `WorldState` 的章（例 `precise.on(content, world)` 同時看設定、章、探索三選一）。
   - 判斷開沒開一定走那個 `on()`，要把 world/state 傳進去。只傳 content 時它會回假，悄悄退回舊說法（FB-435 就是這樣：傳聞沒給 world，寫回舊句）。
