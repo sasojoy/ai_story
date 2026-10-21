@@ -558,7 +558,7 @@ NOTE = {  # 一句：改的是哪一條（量表的字，不是玩家看的，�
     "practice": "練成的心得（熔煉照原價退）",
     "dodge": "落敗閃成僵持（team.dodge_chance，只在 team.fight 收尾擲）",
     "stamina_regen": "體力自然回復",
-    "fuse_points": "自創的意分（create.seal_points：品級機率與底子）",
+    "fuse_points": "自創的意分（create.seal_points：底子威力的倍數）",
     "mate_exp": "同伴拿到的經驗",
     "injury": "一場仗變成內傷的倍數（改版螭首；team.take_encounter_toll、頭目戰收場、買兇的殺手）：內傷少，療傷少花銀兩、上蓋掉得慢",
     "keep_silver": "落敗不失銀兩（改版金角；Game._lose_silver）",

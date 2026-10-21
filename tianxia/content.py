@@ -1630,7 +1630,7 @@ def check_foreshadows(
 
 def check_bounties(c: Content, need) -> None:
     """懸賞榜的設定（Config.bounties，懸賞榜設計 4.1 末段）：種類只能是認得的（不認得的 bounties.issue 會默默跳過）；求兵挑屬性的
-    範圍至少一個、而且是認得的屬性；求兵的價錢剛好寫三個品質與三個階（少一個，交那種兵器時會 KeyError）。
+    範圍至少一個、而且是認得的屬性；求兵的價錢剛好寫三個品質與四個階（1～4 階，四階 ×6；少一個，交那種兵器時會 KeyError）。
     give_kinds 只能是 arms（求藝企劃者 2026-10-21 拿掉，寫 art 直接報錯，不默默跳過）。
     give_kinds、give_attributes 不能重複：kinds 寫兩次 strike 是「掛兩張」，give_kinds 寫兩次 arms 卻只會掛一張（issue 照種類各掛一張），
     照 kinds 的習慣寫會被默默吃掉；give_attributes 重複會讓三方抽到同一個屬性。
