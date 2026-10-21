@@ -1,7 +1,7 @@
 """修練（武學重構，Joy 2026-10-20）：品級不再靠修練衝——合成（fusion.blend_grade）與自創才長品級。
 修練頁的「修練」只剩最後一步：上品練到第十成，就等契機晉為絕學（seize：打贏一場硬仗、在決戰裡出手滿幾回合，
-擲一次頓悟），或服一枚破境丹關起門來強行衝關（cultivate(use_legend=True)，force_odds），或直接花心得衝關
-（cultivate(use_xinde=True)：Joy 2026-10-21「心得不是「換」破境丹，是可以直接拿來衝關」；機會同服丹，價錢同以前換一枚丹）。
+擲一次頓悟），或服一枚破境丹關起門來強行衝關（cultivate(use_legend=True)，force_odds）。
+心得換丹、心得衝關都拿掉了（Joy 2026-10-21「把破境丹也加入商城，取消可以用心得衝」）：丹從探索、打點、銀兩與萬寶閣來。
 品質是每個人各練各的（PlayerState.art_quality）；升品時「成」不變。
 練成絕學走 tianxia/ascend.py（破境：招升為絕招、破境卡、江湖史、傳聞）。「第一個練成的人替全服定名」退掉了（招式與絕學稿案
 第二輪）；這一版之前還等著定名的（PlayerState.naming）照舊定得了名（master_request、name_mastered）。
@@ -20,7 +20,6 @@ from .world_state import WorldStateStore
 
 NO_RANK_LINE = "品級不靠修練：合成或自創才長品級。練到第十成的上品，等一場硬仗的契機，或服一枚破境丹，便能晉為絕學。"  # 待 joy 潤
 CHANCE_LINE = "【{name}】已到上品的極處，剩下那一步不在練功房裡——打一場硬仗等契機，或服一枚{pill}強行衝關。"  # 待 joy 潤
-XINDE_LINE = "你把積下的心得一一參透，關起門來強行衝關（心得 -{price}）。"  # 待 joy 潤
 NOT_RIPE_LINE = "【{name}】還沒到極處：練到第十成，才談得上絕學（現在第{level}成）。"  # 待 joy 潤
 
 
@@ -41,9 +40,8 @@ def ready(state: GameState, content: Content, world: WorldStateStore, art_id: st
 
 def cultivate_problem(
     state: GameState, content: Content, world: WorldStateStore, art_id: str, gate: bool = True, use_legend: bool = False,
-    use_xinde: bool = False,
 ) -> str | None:
-    """不能修練的原因；None＝可以（只剩強行衝關：服丹、或 use_xinde 花心得）。gate 留著讓舊呼叫端不改（不看）。"""
+    """不能修練的原因；None＝可以（只剩服丹強行衝關這一條路）。gate 留著讓舊呼叫端不改（不看）。"""
     art = team.resolve_art(art_id, content, world)
     if art is None or art_id not in library.owned_arts(state):
         return "你沒有這門武學。"
@@ -59,11 +57,7 @@ def cultivate_problem(
     ok, why = ready(state, content, world, art_id)
     if not ok:
         return why
-    if use_xinde:
-        problem = xinde_problem(state, content)
-        if problem is not None:
-            return problem
-    elif not (use_legend and state.player.legend_items > 0):
+    if not (use_legend and state.player.legend_items > 0):
         return CHANCE_LINE.format(name=art.name, pill=content.config.legend_item_name)
     cost = content.config.cultivate_stamina
     if state.player.stamina < cost:
@@ -73,15 +67,15 @@ def cultivate_problem(
 
 def cultivate(
     state: GameState, content: Content, world: WorldStateStore, art_id: str, rng: random.Random,
-    use_legend: bool = False, gate: bool = True, use_xinde: bool = False,
+    use_legend: bool = False, gate: bool = True,
 ) -> list[str]:
-    """修練一次＝強行衝絕學：服一枚破境丹，或 use_xinde 花心得（花體力與那一份，成不成都用掉）。被拒絕時只回原因（什麼都不扣）。"""
-    problem = cultivate_problem(state, content, world, art_id, gate, use_legend, use_xinde)
+    """修練一次＝服一枚破境丹強行衝絕學（花體力與一枚丹，成不成都用掉）。被拒絕時只回原因（什麼都不扣）。"""
+    problem = cultivate_problem(state, content, world, art_id, gate, use_legend)
     if problem is not None:
         return [problem]
     cost = content.config.cultivate_stamina
     state.player.stamina -= cost
-    return _force(state, content, world, art_id, rng, use_xinde) + [f"體力 -{cost}"]
+    return _force(state, content, world, art_id, rng) + [f"體力 -{cost}"]
 
 
 def seize(
@@ -120,23 +114,14 @@ def force_odds(state: GameState, content: Content, world: WorldStateStore, art_i
     return round(max(1.0, min(cfg.breakthrough.max_chance, odds)))
 
 
-def _force(
-    state: GameState, content: Content, world: WorldStateStore, art_id: str, rng: random.Random, use_xinde: bool = False,
-) -> list[str]:
-    """強行衝關（待 joy 潤）：成不成都用掉一枚丹（use_xinde 是那一份心得，下一次照 legend_price 漲）；
-    沒成火候還在，下一次照樣可以再衝、或等契機。"""
+def _force(state: GameState, content: Content, world: WorldStateStore, art_id: str, rng: random.Random) -> list[str]:
+    """服丹強行衝關（待 joy 潤）：成不成都用掉一枚；沒成火候還在，下一次照樣可以再服、或等契機。"""
     p, cfg = state.player, content.config
     art = team.resolve_art(art_id, content, world)
     odds = force_odds(state, content, world, art_id)
     silver.take_mentor(state, content)
-    if use_xinde:
-        price = legend_price(state, content)
-        p.stats["xinde"] = p.stats.get("xinde", 0) - price
-        p.legend_bought += 1
-        msgs = [XINDE_LINE.format(price=price)]
-    else:
-        p.legend_items -= 1
-        msgs = [f"你服下一枚【{cfg.legend_item_name}】，關起門來強行衝關。"]
+    p.legend_items -= 1
+    msgs = [f"你服下一枚【{cfg.legend_item_name}】，關起門來強行衝關。"]
     if rng.random() * 100 < odds:
         return msgs + ascend_mod.ascend(state, content, world, art_id, "pill")  # 破境（招式與絕學稿案第三節）
     return msgs + [f"【{art.name}】撞在那一層上，又彈了回來（約 {odds}% 的機會）。"]
@@ -184,23 +169,3 @@ def name_mastered(state: GameState, content: Content, world: WorldStateStore, na
         state.player.renames_told.append(art_id)
     add_chronicle(state, f"{state.player.name}把【{old.name}】練成絕學，為之定名【{name}】。")  # 江湖史一律寫名號（傳聞分層第七節）
     return [f"從今以後，江湖上這門武學就叫【{name}】。"]
-
-
-def legend_price(state: GameState, content: Content) -> int | None:
-    """以心得衝關（Joy 2026-10-21；10-18 起先是換一枚破境丹）：這一季下一次要多少心得；關著（legend_xinde_price 是 0）是 None。
-    換丹與心得衝關共用同一個計數（PlayerState.legend_bought）。"""
-    cfg = content.config
-    if cfg.legend_xinde_price <= 0:
-        return None
-    return cfg.legend_xinde_price + state.player.legend_bought * cfg.legend_xinde_step
-
-
-def xinde_problem(state: GameState, content: Content) -> str | None:
-    """花心得衝關衝不了的原因（心得不夠、關著）；衝得了是 None。"""
-    price = legend_price(state, content)
-    if price is None:
-        return "這一季不能拿心得衝關。"  # 待 joy 潤
-    have = state.player.stats.get("xinde", 0)
-    if have < price:
-        return f"心得不足：衝一次關要 {price}，你有 {have}。"  # 待 joy 潤
-    return None

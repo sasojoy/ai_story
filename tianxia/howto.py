@@ -964,18 +964,6 @@ def season_page_lines(content: Content, season: WorldState, rule: str = "") -> l
     return lines
 
 
-def legend_buy_lines(content: Content) -> list[str]:
-    """玩法說明「心得」那一節：以心得衝關（Joy 2026-10-21；10-18 起先是換破境丹）；關著是空的。數字讀 Config。"""
-    cfg = content.config
-    lines = []  # 以心得修練在武學重構時拿掉了（修練只剩絕學那一步），這裡只剩換丹那一句
-    if cfg.legend_xinde_price <= 0:
-        return lines
-    return lines + [
-        f"- 一門武學到了絕學那一步時，可以在修練頁直接花心得衝關（機會跟服一枚{cfg.legend_item_name}一樣）：這一季第一次 {cfg.legend_xinde_price}，"
-        f"之後每衝一次多 {cfg.legend_xinde_step}。後期改練一門新功夫，不必只等打仗時的頓悟。",  # 待 joy 潤
-    ]
-
-
 MALL_TITLE = "商城"  # 玩法說明那一節的標題（商城第三批）；以下待 joy 潤
 MALL_WHERE = "齒輪旁的元寶鈕、底部的「寶」都打開商城，架上的東西花元寶買；買過的、元寶的進出在「紀錄」那一頁查得到。"
 MALL_COIN = "元寶只能儲值取得，不能拿銀兩換，也換不成銀兩。"
@@ -1186,7 +1174,6 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
         f"兩個意境合併（{cfg.merge_xinde} 心得、{cfg.merge_stamina} 體力）、自創武學都花它。",
         f"- 打贏、操練、閉關（每小時至少 {cfg.seclusion_xinde_per_hour}，悟性越高越多）、邊走邊想（{cfg.road_think_xinde}）都有心得；"
         "用不上的功法熔掉也能拿回一些。狀態列的 💡 會在你付得起、又真的有事可做時提醒你去哪一頁。",
-        *legend_buy_lines(content),
         "",
         *_section("修練與煉製", pages_lines()),
         *_section("鐵匠鋪與神器", forge_lines(content, season)),

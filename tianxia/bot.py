@@ -213,17 +213,9 @@ def awaits_chance(game: Game) -> bool:
 
 
 def break_way(game: Game, art_id: str) -> dict:
-    """這一門到了極處要怎麼強行衝關（cultivate 的關鍵字）：手上有丹就服（use_legend）；沒丹、心得付得起而且衝完還留 TEACH_RESERVE，
-    就花心得衝（use_xinde，Joy 2026-10-21）；都不行是空的（等契機）。整季機器人與假人共用。"""
-    state, content, world = game.state, game.content, game.world
-    if takes_the_pill(game, art_id):
-        return {"use_legend": True}
-    price = cultivation.legend_price(state, content)
-    if price is None or not cultivation.ready(state, content, world, art_id)[0]:
-        return {}
-    if state.player.stats.get("xinde", 0) - price < TEACH_RESERVE:
-        return {}
-    return {"use_xinde": True}
+    """這一門到了極處要怎麼強行衝關（cultivate 的關鍵字）：手上有丹就服（use_legend）；沒丹是空的，等契機
+    （Joy 2026-10-21 拿掉心得衝關；萬寶閣的破境丹假人不買）。整季機器人與假人共用。"""
+    return {"use_legend": True} if takes_the_pill(game, art_id) else {}
 
 
 def takes_the_pill(game: Game, art_id: str) -> bool:

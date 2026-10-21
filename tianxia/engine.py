@@ -9686,15 +9686,15 @@ class Game:
         return skillview.forge_picks(self.state, self.content, self.world, insight_ids)
 
     @_not_while_preparing
-    def cultivate(self, art_id: str, use_legend: bool = False, use_xinde: bool = False) -> list[str]:
+    def cultivate(self, art_id: str, use_legend: bool = False) -> list[str]:
         """修練（武學重構，Joy 2026-10-20）：品級不靠修練衝，這裡只剩上品到了極處（第十成）服一枚破境丹強行衝絕學
         （見 cultivation.py）。花體力與一枚丹。真的擲了骰才寫江湖紀錄；被拒絕（還沒到極處、沒有丹、體力不足、沒有這門武學）只回一句話。
-        use_legend：玩家按的是「服丹衝關」；use_xinde：按的是「心得衝關」（Joy 2026-10-21，機會同服丹）；都沒有就只回「等契機或服丹」那一句。"""
-        problem = cultivation.cultivate_problem(self.state, self.content, self.world, art_id, use_legend=use_legend, use_xinde=use_xinde)
+        use_legend：玩家按的是「服丹衝關」；沒有就只回「等契機或服丹」那一句。"""
+        problem = cultivation.cultivate_problem(self.state, self.content, self.world, art_id, use_legend=use_legend)
         if problem is not None:
             return self._log([problem])
         xinde, stamina, pills = self._xinde(), self.state.player.stamina, self.state.player.legend_items
-        msgs = cultivation.cultivate(self.state, self.content, self.world, art_id, self.rng, use_legend, use_xinde=use_xinde)
+        msgs = cultivation.cultivate(self.state, self.content, self.world, art_id, self.rng, use_legend)
         spent = round(stamina - self.state.player.stamina)  # 沒衝開也花了體力：數值變化寫在紀錄上，跟別的行動一樣
         taken = pills - self.state.player.legend_items
         extra = ([f"體力 -{spent}"] if spent > 0 else []) + (

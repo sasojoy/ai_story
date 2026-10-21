@@ -2358,9 +2358,7 @@ MENXIA_ACTIONS = {
     "create_cancel": lambda g, b: g.create_cancel(),
     "ascend_dismiss": lambda g, b: g.ascend_dismiss(),  # 看過破境卡了
     # 用融的意境修練一次，衝下一品；use_legend 是勾了「服下破境丹」。只認真正的布林 true：字串、數字都不算勾
-    "cultivate": lambda g, b: g.cultivate(
-        str(b.get("art") or ""), use_legend=b.get("use_legend") is True, use_xinde=b.get("use_xinde") is True,
-    ),  # use_xinde：心得衝關（Joy 2026-10-21）；同 use_legend 只認真正的布林 true
+    "cultivate": lambda g, b: g.cultivate(str(b.get("art") or ""), use_legend=b.get("use_legend") is True),
     "melt": lambda g, b: g.melt_art(str(b.get("art") or "")),  # 功法庫裡的一門熔成心得
     "melt_insight": lambda g, b: g.melt_insight(str(b.get("insight") or "")),
     # 批量熔煉：勾好的武學（arts）與意境（insights）一次熔完；不是串列的當沒勾

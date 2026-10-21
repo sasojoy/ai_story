@@ -3113,17 +3113,13 @@
     return `<div class="jade">${cells}${fifth}</div>${picker}`;
   }
 
-  // 衝關的兩顆鈕（Joy 2026-10-21「心得不是「換」破境丹，是可以直接拿來衝關」）：服丹衝關（手上有丹才有）、心得衝關（到了極處就有，
-  // 心得不夠時灰掉、原因寫在底下）。機會一樣，寫在上面那一行（伺服器算好的 note）。序章只認「衝關」那一顆發光的鈕。字待 joy 潤
+  // 衝關鈕（Joy 2026-10-21「把破境丹也加入商城，取消可以用心得衝」）：只剩服丹衝關，手上有丹、到了極處才亮；
+  // 沒丹時這一格只寫等契機（丹從探索、醫館與萬寶閣來）。序章點名的那一顆照舊發光。字待 joy 潤
   function breakBtns(a, has) {
-    const lg = a.cultivate.legend, xd = a.cultivate.xinde;
+    const lg = a.cultivate.legend;
     const glow = has("cultivate") ? ' data-glow="cultivate"' : "";
-    const out = [];
-    if (lg) out.push(`<button class="btn small primary" data-act="cultivate" data-by="pill"${glow} data-id="${esc(a.id)}">服丹衝關<small>剩 ${lg.count | 0} 枚</small></button>`);
-    if (xd) out.push(`<button class="btn small${lg ? "" : " primary"}" data-act="cultivate" data-by="xinde" data-id="${esc(a.id)}" ${xd.ok ? "" : "disabled"} title="${esc(xd.why)}">心得衝關<small>心得 ${xd.price | 0}</small></button>`);
-    if (!out.length && has("cultivate")) out.push(`<button class="btn small" data-act="cultivate"${glow} data-id="${esc(a.id)}" disabled>衝關</button>`);
-    const why = xd && !xd.ok && !lg ? `<p class="why">${esc(xd.why)}</p>` : "";
-    return out.length ? `<div class="pk-btns">${out.join("")}</div>${why}` : "";
+    if (lg) return `<div class="pk-btns"><button class="btn small primary" data-act="cultivate" data-by="pill"${glow} data-id="${esc(a.id)}">服丹衝關<small>剩 ${lg.count | 0} 枚</small></button></div>`;
+    return has("cultivate") ? `<div class="pk-btns"><button class="btn small" data-act="cultivate"${glow} data-id="${esc(a.id)}" disabled>衝關</button></div>` : "";
   }
 
   // 衝關的小動畫（Joy 2026-10-21「衝關那邊做一個小動畫，可以運用到玩家畫的火柴人武學，分成功跟失敗」）：
@@ -3187,7 +3183,7 @@
       const pips = `<div class="ten">${Array.from({ length: 10 }, (_, k) => `<i${k < level ? ' class="on"' : k === next ? ' class="next"' : ""}></i>`).join("")}</div>`;
       const switchBtn = slot ? "" : `<div class="acts"><button class="btn" data-act="switch"${has("switch") ? ' data-glow="switch"' : ""} data-id="${esc(a.id)}">改練這一門<small>換上身，熟練度各自保留</small></button></div>`;
       // 衝絕學（武學重構）：只有上品還沒成絕學的才有這一塊；到了極處才有「衝關」與破境丹，沒到只寫還差什麼。不寫下一品是哪一品（企劃者 2026-10-06）
-      const ripe = a.cultivate.ok || !!a.cultivate.xinde;
+      const ripe = a.cultivate.ok;
       const peakOn = ripe || has("cultivate") || (a.quality === "上品" && (a.slots || []).length > 0);
       const peak = !peakOn ? "" : `<div class="peak${ripe ? " ready" : ""}">
           <div class="pk-txt"><b>破境</b><small class="cnote">${esc(a.cultivate.legend ? a.cultivate.legend.note : a.cultivate.note)}</small></div>
@@ -3223,7 +3219,7 @@
     // 功法庫：身上以外的。篩選（全部／武學／內功／可修練）與「再列 N 門」只是看的方式，記在 S，輪詢重畫不會跳回去
     // 排序是伺服器排好的（FB-085：身上的先，再品質、成、名字），這裡照順序列；選哪一類記在 localStorage（libFilter）
     const lib = x.owned_arts.filter((a) => !a.worn);
-    const pass = (a, f) => f === "all" || (f === "ready" ? a.cultivate.ok || !!(a.cultivate.xinde && a.cultivate.xinde.ok) : a.kind === f);
+    const pass = (a, f) => f === "all" || (f === "ready" ? a.cultivate.ok : a.kind === f);
     // 篩選鈕只在庫超過 LIB_PAGE 門時才畫（chips）：沒畫鈕就不套記著的篩選——不然庫縮到 8 門以下、或換了新角色（序章的草廬庫只有一兩門），
     // 記在瀏覽器裡的篩選會把武學藏起來、又沒有鈕可以改回來（review-ap3 I1）
     const filter = lib.length > LIB_PAGE ? libFilter() : "all";
@@ -7887,17 +7883,16 @@
         }
         case "art": S.artOpen = S.artOpen === el.dataset.id ? null : el.dataset.id; S.artNote = null; S.insOpen = null; S.pdrawer = false; renderPage(); break;
         case "cultivate": {
-          // 按的是哪一顆：服丹（use_legend）或心得（use_xinde），伺服器只認真正的布林 true。
-          // 真的擲了骰（mx 換上了伺服器回來的那一份 menxia）才播衝關的小動畫：那一門變成絕學是衝開了，不然是彈回來
-          const id = el.dataset.id, by = el.dataset.by;
+          // 服丹衝關（use_legend，伺服器只認真正的布林 true）。真的擲了骰（mx 換上了伺服器回來的那一份 menxia、丹少了一枚）
+          // 才播衝關的小動畫：那一門變成絕學是衝開了，不然是彈回來
+          const id = el.dataset.id, pill = el.dataset.by === "pill";
           const row = (S.menxia?.owned_arts || []).find((a) => a.id === id);
           const was = S.menxia;
-          await mx("cultivate", { art: id, use_legend: by === "pill", use_xinde: by === "xinde" });
-          if (row && by && S.menxia !== was) {
+          await mx("cultivate", { art: id, use_legend: pill });
+          if (row && pill && S.menxia !== was) {
             const now = (S.menxia?.owned_arts || []).find((a) => a.id === id);
             const won = !!now && now.quality === "絕學";
-            const rolled = won || (!!now && (by === "pill" ? (now.cultivate.legend?.count ?? 0) < (row.cultivate.legend?.count ?? 0) : (now.cultivate.xinde?.price ?? 0) > (row.cultivate.xinde?.price ?? 0)));
-            if (rolled) breakAnim(row, won);
+            if (won || (!!now && (now.cultivate.legend?.count ?? 0) < (row.cultivate.legend?.count ?? 0))) breakAnim(row, won);
           }
           break;
         }

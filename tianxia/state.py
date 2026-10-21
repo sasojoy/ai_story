@@ -766,7 +766,7 @@ class PlayerState(BaseModel):
     tavern_guard_until: float = 0.0  # 雇的保鏢跟到幾時（現實秒）
     guarded_until_real: float = 0.0  # 雇的保鏢跟到幾時（現實秒）
     xinde_cultivations: int = 0  # 這一季花心得修練了幾次（以心得修練拿掉了，欄位留著讓舊存檔讀得進來）；角色每季重來
-    legend_bought: int = 0  # 這一季花心得衝了幾次關（Config.legend_xinde_price，越衝越貴；10-21 以前是換了幾枚破境丹）；角色每季重來
+    legend_bought: int = 0  # 10-18～10-21 用心得換了幾枚破境丹；換丹拿掉了（Joy 2026-10-21），留著讓舊存檔讀得進來，不再用
     legend_items: int = 0  # 破境丹（Config.legend_item_name）的數量：探索撿到，玩家在修練頁勾了、衝絕學那一次才服一枚；角色每季重來
 
     seen_events: set[str] = Field(default_factory=set)
