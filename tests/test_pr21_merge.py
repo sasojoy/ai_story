@@ -1,7 +1,7 @@
 """arts-polish-2 第三輪：joy 的三個 PR（卷軸卡、合成品質擲機率、docs）併進來之後，序章與這幾條舊規矩還對不對。
 全部跑正式內容（content/）與假內容各一組；Game 一律沒有模型（沒給 client 的測試，conftest 把模型呼叫假成連不上）。
 
-- 序章（草廬）：武學重構之後第 4 步把意境裝進基礎拳腳、第 5 步練到第三成、第 6 步揣摩、第 10 步熔蠻牛拳換回 16 點心得。
+- 序章（草廬）：武學重構之後第 4 步在修練頁把意境裝進基礎拳腳的槽、第 5 步練到第三成、第 6 步在爐裡揣摩、第 10 步熔蠻牛拳換回 16 點心得。
 - W6、W8（合成擲品質、衝品的機率）跟著武學重構拿掉了。"""
 from __future__ import annotations
 
@@ -76,13 +76,15 @@ def _hut_up_to_the_fusion(real, world):
 
 
 def test_prologue_step_4_the_real_hut_slots_the_insight_into_the_basic_fist(real, world):
-    """第 4 步（武學重構：以前是合成一門師門功夫、照劇本固定下品）：把剛悟到的意境裝進基礎拳腳的第一格，不花心得、不擲骰，
-    基礎拳腳照舊是下品。"""
+    """第 4 步（武學重構：以前是合成一門師門功夫、照劇本固定下品）：在修練頁把剛悟到的意境裝進基礎拳腳的第一格
+    （Game.slot_insight；爐裡只合意境），不花心得、不擲骰，基礎拳腳照舊是下品。裝別的門、在爐裡開都擋。"""
     game = _hut_up_to_the_fusion(real, world)
     insight = game.state.player.insights[0]
     xinde = game.state.player.stats["xinde"]
-    assert "裝意境" in game.forge_line("jichu_quanjiao", [insight])
-    game.forge("jichu_quanjiao", [insight], proposed=(None, ""))
+    assert game.forge(None, [insight, insight], proposed=(None, "")) == [prologue.fuse_problem(game.state, real, [insight, insight])]
+    assert game.slot_insight("jichu_tuna", insight) == [prologue.slot_problem(game.state, real, "jichu_tuna")]
+    assert game.state.player.tutorial_step == 3
+    game.slot_insight("jichu_quanjiao", insight)
     assert game.state.player.art_slots["jichu_quanjiao"][0] == insight
     assert [a.id for a in prologue.slotted_arts(game.state, real, game.world)] == ["jichu_quanjiao"]
     assert team.player_art(game.state, real, game.world, "jichu_quanjiao").quality == "下品"
@@ -95,7 +97,7 @@ def test_prologue_steps_5_to_10_level_deepen_and_melting_pays_sixteen(real, worl
     第 10 步熔蠻牛拳照舊退 16 點心得。"""
     game = _hut_up_to_the_fusion(real, world)
     insight = game.state.player.insights[0]
-    game.forge("jichu_quanjiao", [insight], proposed=(None, ""))
+    game.slot_insight("jichu_quanjiao", insight)
     game.practice("武學")
     game.practice("武學")
     assert library.level_of(game.state, "jichu_quanjiao") == 3 and game.state.player.tutorial_step == 5
@@ -114,21 +116,20 @@ def test_prologue_steps_5_to_10_level_deepen_and_melting_pays_sixteen(real, worl
 
 
 def test_the_hut_rows_carry_the_server_glow_lists_and_the_forge_page_the_pick_cues(real, world):
-    """序章的指路由伺服器說（卷軸卡照它畫，不自己猜）：第 4 步（合成）煉製頁要放進爐子的底（基礎拳腳）帶 pick:art、剛悟到的意境帶
-    pick:insight，別的武學都不帶；合成做完（第 5 步）兩個提示都沒有了。（review-ap3 M2：以前這條只看 glow 這個鍵在不在。）"""
+    """序章的指路由伺服器說（卷軸卡照它畫，不自己猜）：第 4 步（裝意境）修練頁要裝槽的那一門（基礎拳腳）帶 slot，
+    別的武學都不帶、意境也不亮（爐子是揣摩那一步才用）；裝好了（第 5 步）提示就沒有了。（review-ap3 M2：以前這條只看 glow 這個鍵在不在。）"""
     game = _hut_up_to_the_fusion(real, world)
     assert game.state.player.tutorial_step == 3
     rows = skillview.art_rows(game.state, real, game.world)
-    assert [r["id"] for r in rows if "pick:art" in r["glow"]] == ["jichu_quanjiao"]  # 底：基礎拳腳；內功基礎吐納不點名
+    assert [r["id"] for r in rows if "slot" in r["glow"]] == ["jichu_quanjiao"]  # 基礎拳腳；內功基礎吐納不點名
     assert all(r["glow"] == [] for r in rows if r["id"] != "jichu_quanjiao")  # 這一步別的武學不亮（沒有修練、熔煉可按）
-    assert all("forge_odds" not in row for row in rows)  # 序章那一爐照劇本、沒有機率條
+    assert all("forge_odds" not in row for row in rows)  # 序章沒有機率條
     ins = game.insight_rows()
-    assert ins and all(r["glow"] == ["pick:insight"] for r in ins)  # 剛悟到的意境
-    game.forge("jichu_quanjiao", [game.state.player.insights[0]], proposed=(None, ""))  # 放進爐裡、開爐：這一步做完
+    assert ins and not any(r.get("glow") for r in ins)  # 意境不亮：這一步不開爐
+    game.slot_insight("jichu_quanjiao", game.state.player.insights[0])  # 裝進槽：這一步做完
     assert game.state.player.tutorial_step == 4
-    assert not any("pick:art" in r["glow"] for r in skillview.art_rows(game.state, real, game.world))
-    assert not any("glow" in r and r["glow"] for r in game.insight_rows())  # 兩個提示都沒有了
+    assert not any("slot" in r["glow"] for r in skillview.art_rows(game.state, real, game.world))
 
 
-# ── W6、W8 拿掉了（武學重構）：合成不再擲品質（品級照 fusion.blend_grade 兩門取高）、修練不再衝品
+# ── W6、W8 拿掉了（武學重構）：合成不再擲品質（武學合成整個拿掉了）、修練不再衝品
 # （沒有 cultivation.odds_for、下品→中品的階梯、擲到的品質那一份），這幾條測的東西都不在了。

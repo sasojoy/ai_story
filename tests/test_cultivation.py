@@ -343,7 +343,8 @@ def test_the_second_to_reach_peerless_sees_an_anonymous_first_by_name(kicker, co
 
 
 def test_the_season_firsts_write_an_anonymous_player_by_name(state, content, world):
-    """換季寫進江湖史的首創（合成、首悟、練成絕學）：匿名行走的人也寫名號，走真的合成（武學＋武學）、合併、服丹衝關、定名。"""
+    """換季寫進江湖史的首創（合成、首悟、練成絕學）：匿名行走的人也寫名號，走真的合併、服丹衝關、定名。
+    武學＋武學的合成拿掉了（Joy 2026-10-21），「合成首創」那一門直接照配方登記（以前合出來的照舊列）。"""
     from unittest import mock
 
     from tianxia import naming
@@ -354,10 +355,12 @@ def test_the_season_firsts_write_an_anonymous_player_by_name(state, content, wor
     state.player.member.wugong_id, state.player.member.neigong_id = "basic_fist", "basic_breath"
     state.player.insights = list(BASICS)
     state.player.stats["xinde"], state.player.stamina = 100, 150
+    art, first = world.claim_recipe(fusion.blend_key("basic_fist", "basic_breath"), kicker_art().model_copy(
+        update={"creator": "沈浪", "creator_shown": "沈浪"}))
+    assert art is not None and first and art.name == "旋風腿"
+    state.player.arts = [art.id]
     model = mock.Mock()
-    model.chat_structured.side_effect = [naming.NameReply(name="旋風腿"), naming.NameReply(name="燎原")]
-    art, _ = fusion.blend(state, content, world, model, "basic_fist", "basic_breath")  # 武學重構：合成只剩武學＋武學
-    assert art is not None and art.name == "旋風腿"
+    model.chat_structured.side_effect = [naming.NameReply(name="燎原")]
     fusion.merge(state, content, world, model, "feng", "huo")
     ripen(state, art.id)
     _master(state, content, world, art.id)
@@ -689,24 +692,23 @@ def test_fb069_the_world_store_knows_every_characters_name_ignoring_case(content
 
 
 def test_fb069_a_forge_never_registers_a_characters_name(ready_forge, content, world):
-    """開爐也一樣（武學重構：合成只剩武學＋武學）：鎖外取到的名字（C 段重驗）、鎖內叫模型取到的名字，撞上角色的名號都不用，改走退路字表。"""
+    """開爐也一樣（煉製只剩意境＋意境）：鎖外取到的名字（C 段重驗）、鎖內叫模型取到的名字，撞上角色的名號都不用，改走退路字表。"""
     from unittest import mock
 
     from tianxia import naming
 
     _save_character(content, "驗收新武")
-    art, _ = fusion.blend(ready_forge, content, world, None, "basic_fist", "basic_breath", proposed=("驗收新武", "一句話。"))
-    assert art is not None and art.name != "驗收新武"
+    insight, _ = fusion.merge(ready_forge, content, world, None, "feng", "huo", proposed=("驗收新武", "一句話。"))
+    assert insight is not None and insight.name != "驗收新武"
     client = mock.Mock()
-    client.chat_structured.side_effect = [naming.NameReply(name="驗收新武"), naming.NameReply(name="裂江訣")]
-    art, _ = fusion.blend(ready_forge, content, world, client, "basic_fist", "lake_kick")
-    assert art is not None and art.name == "裂江訣"  # 第一個名字是角色的名號：再請模型取一次
+    client.chat_structured.side_effect = [naming.NameReply(name="驗收新武"), naming.NameReply(name="裂江")]
+    insight, _ = fusion.merge(ready_forge, content, world, client, "feng", "shui")
+    assert insight is not None and insight.name == "裂江"  # 第一個名字是角色的名號：再請模型取一次
 
 
 @pytest.fixture
 def ready_forge(state):
-    """身上粗淺拳腳與粗淺吐納、庫裡湖邊腿法，心得體力都夠合兩爐。"""
-    state.player.member.wugong_id, state.player.member.neigong_id = "basic_fist", "basic_breath"
-    state.player.arts = ["lake_kick"]
+    """手上風、火、水三個意境，心得體力都夠合兩爐。"""
+    state.player.insights = ["feng", "huo", "shui"]
     state.player.stats["xinde"], state.player.stamina = 100, 150
     return state

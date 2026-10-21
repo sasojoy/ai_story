@@ -232,7 +232,7 @@ def test_the_first_finds_go_into_the_chronicle_at_season_change(lake, content, w
 # ── 私有意境在合成與修練裡 ──────────────────────────
 
 def test_a_private_insight_goes_into_a_slot_instead_of_a_fusion(lake, content, world):
-    """武學重構：武學＋意境不再是合成——爐子裡放一門武學與一個意境就是把它裝進那一門的槽（不花心得體力、不登記配方、不取名）。
+    """武學重構：武學＋意境不再是合成——把意境裝進那一門的槽（修練頁，Game.slot_insight；不花心得體力、不登記配方、不取名）。
     私有意境也一樣裝得進去（基礎拳腳兼容並蓄），裝了之後身上那一份的功效就是它的屬性。"""
     from tianxia import arts, team
 
@@ -241,14 +241,14 @@ def test_a_private_insight_goes_into_a_slot_instead_of_a_fusion(lake, content, w
     p.stats["xinde"], p.stamina = 100, 150
     p.member.wugong_id = "basic_fist"
     assert fusion.forge_request(lake.state, content, world, "basic_fist", ["悟:1"]) is None  # 裝槽不取名
-    msgs = lake.forge("basic_fist", ["悟:1"], proposed=("陰風腿", ""))
+    msgs = lake.slot_insight("basic_fist", "悟:1")
     assert msgs[0] == arts.SLOTTED_LINE.format(insight="湖心月", art="粗淺拳腳", i=1)
     assert p.art_slots["basic_fist"][0] == "悟:1" and p.stats["xinde"] == 100 and p.stamina == 150
     assert world.lookup_recipe(fusion.fuse_key("basic_fist", "悟:1", "陰")) is None  # 沒有配方
     fx = p.insight_fx["悟:1"]  # 意境效果池：悟到時擲的那一份（陰那一路的一般功效）
     assert team.player_art(lake.state, content, world, "basic_fist").traits == [k for k, n in fx.general.items() for _ in range(n)]
     assert fx.general and all(t.attribute == "陰" for t in content.traits.general if t.key in fx.general)
-    assert fusion.fuse_problem(lake.state, content, world, "basic_fist", "悟:1") == fusion.FUSE_GONE
+    assert lake.forge("basic_fist", ["悟:1"]) == [fusion.ART_IN_FURNACE]  # 爐裡只合意境：武學放進爐被拒絕
 
 
 def test_a_slotted_private_insight_cannot_be_melted_until_it_is_taken_off(lake, world):
@@ -258,7 +258,7 @@ def test_a_slotted_private_insight_cannot_be_melted_until_it_is_taken_off(lake, 
     _own(lake)
     p = lake.state.player
     p.member.wugong_id = "basic_fist"
-    lake.forge("basic_fist", ["悟:1"])
+    lake.slot_insight("basic_fist", "悟:1")
     assert lake.melt_insight("悟:1") == [library.INSIGHT_SLOTTED.format(name="湖心月", art="粗淺拳腳")]
     assert "悟:1" in p.insights
     lake.unslot_insight("basic_fist", "悟:1")

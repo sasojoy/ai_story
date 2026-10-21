@@ -253,26 +253,35 @@ def fuse_base(state: GameState, content: Content) -> str | None:
 # 回傳擋下的原因（要寫給玩家看的一句話）；None＝可以做（含不在序章）。跟 melt_only 一樣，動作的拒絕與修練頁、煉製頁的按鈕走同一個判斷。
 
 
-def fuse_problem(
-    state: GameState, content: Content, art_id: str | None, insight_ids: list[str], other_art: str | None = None,
-) -> str | None:
-    """序章裡的爐子（武學重構）：裝意境那一步只准把一個意境裝進師父說的那一門；揣摩那一步只准同一個意境合兩個；
-    別的（別的門、兩門武學、別的意境、別的步驟）都擋。不在序章是 None（不限）。"""
+def fuse_problem(state: GameState, content: Content, insight_ids: list[str]) -> str | None:
+    """序章裡的爐子（只合意境，Joy 2026-10-21）：揣摩那一步只准同一種意境的兩份；裝意境那一步要到修練頁裝槽；
+    別的步驟都擋。不在序章是 None（不限）。"""
     current = step(state, content)
     if current is None:
         return None
     if current.fuse_base:
-        if art_id != current.fuse_base or other_art or len(insight_ids) != 1:
-            return f"師父要你把意境裝進【{content.skills[current.fuse_base].name}】。"
-        return None
+        return f"師父要你到「修練」，把意境裝進【{content.skills[current.fuse_base].name}】的意境槽。"
     if current.deepen:
         from . import insight_fx  # noqa: PLC0415
 
-        if (art_id or other_art or len(insight_ids) != 2 or insight_ids[0] == insight_ids[1]
+        if (len(insight_ids) != 2 or insight_ids[0] == insight_ids[1]
                 or insight_fx.base_id(insight_ids[0]) != insight_fx.base_id(insight_ids[1])):
             return "師父要你拿同一種意境的兩份揣摩，合成二重。"
         return None
     return "師父這一步沒叫你開爐。"
+
+
+def slot_problem(state: GameState, content: Content, art_id: str) -> str | None:
+    """序章裡的意境槽：裝意境那一步只准裝進師父說的那一門，別的步驟不裝也不拆（後面練成那一步要練裝了意境的那一門）。
+    不在序章是 None（不限）。"""
+    current = step(state, content)
+    if current is None:
+        return None
+    if current.fuse_base:
+        if art_id != current.fuse_base:
+            return f"師父要你把意境裝進【{content.skills[current.fuse_base].name}】。"
+        return None
+    return "師父這一步沒叫你動意境槽。"
 
 
 def practice_problem(state: GameState, content: Content, world: WorldStateStore, kind: str) -> str | None:
@@ -318,7 +327,7 @@ def art_glow(
 ) -> list[str]:
     """修練頁、煉製頁的一列武學在這一步可以發光的鍵（網頁照 Task 6 的 glow 清單比對，只有這一步的 glow 有的才真的亮）：
     switch＝師父點名要改練的那一門（switch_target）、cultivate／melt＝按得下去的（伺服器已經照序章的拒絕算過）、
-    pick:art＝煉製頁這一步點名的底（fuse_base）。哪一列是誰由伺服器說，網頁不猜。只在序章裡呼叫。"""
+    slot＝修練頁裝意境那一步點名的那一門（fuse_base）。哪一列是誰由伺服器說，網頁不猜。只在序章裡呼叫。"""
     current = step(state, content)
     keys: list[str] = []
     if switch_target(state, content, world) == art_id:
@@ -328,14 +337,14 @@ def art_glow(
     if melt_ok:
         keys.append("melt")
     if current is not None and current.fuse_base == art_id:
-        keys.append("pick:art")
+        keys.append("slot")
     return keys
 
 
 def insight_glow(state: GameState, content: Content) -> list[str]:
-    """煉製頁這一步（裝意境、揣摩那兩步）剛悟到的意境發光：序章的意境都是這兩步要用的，所以手上的都標。只在序章裡呼叫。"""
+    """煉製頁揣摩那一步手上的意境發光：序章的意境都是這一步要用的，所以手上的都標。只在序章裡呼叫。"""
     current = step(state, content)
-    return ["pick:insight"] if current is not None and (current.fuse_base or current.deepen) else []
+    return ["pick:insight"] if current is not None and current.deepen else []
 
 
 def after_line(state: GameState, content: Content, **names: str | int) -> str | None:

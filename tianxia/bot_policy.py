@@ -50,7 +50,6 @@ SUMMONS_MOVE_SCORE = 15.0
 STRIKE_ODDS = CHALLENGE_ODDS + ("五五波",)  # 有打擊軍令點名這位人物時，五五波也去打
 PRACTICE_CHANCE = 0.2  # 每次行動順便練成一門的機率（付得起心得才練，見 look_after；不是每次行動都練）
 FORGE_CHANCE = 0.25  # 每一輪合成一爐的機會（有東西可合、體力有餘時才擲）【預設】
-SERVER_BLEND_SHARE = 0.15  # 武學＋武學的份額：比整季機器人低，持有 30 門就有 435 對、每一對都是首創要叫模型【預設】
 CULTIVATE_CHANCE = 0.2  # 每一輪修練一次的機會（體力有 bot.CULTIVATE_RESERVE、有東西可修時才擲）【預設】
 # 截殺（Config.raid）：此地有截殺得了、而且勝算夠的敵對陣營的人時，每一輪有 RAID_CHANCE 的機會動手；只挑 RAID_ODDS 的對象
 # （輸了要丟銀兩、掉氣血，跟挑戰大勢人物同一個標準）。真人被假人截殺跟被真人截殺一模一樣【預設】
@@ -106,9 +105,7 @@ NO_NAME: tuple[str | None, str] = (None, "")  # 開爐的 C 段不必取名：�
 class ForgeJob:
     """要請模型取名（或挑一個）的一爐：A 段在鎖內開的單，交給 bot_runner 在鎖外取名、再拿鎖開爐。"""
 
-    art_id: str | None
     insight_ids: tuple[str, ...]
-    other_art: str | None
     request: naming.NamingRequest
 
 
@@ -499,8 +496,7 @@ def tend_arts(game: Game, rng: random.Random, slot: NamingSlot | None = None) ->
     1b. 手上有還沒定名的神器原品：每一輪 DIVINE_NAME_CHANCE 的機會按「沿用譜名」（見 _name_originals）；
     2. 這裡教、自己同一種還沒有這個屬性的，學一門（見 _learn_here）；
     3. 庫滿了熔最弱的一門；
-    4. 有東西可合、體力有餘時，FORGE_CHANCE 的機會合一爐（挑法同整季機器人，武學＋武學的份額低一點；
-       首創的要叫模型，見 _forge）；
+    4. 手上有兩個以上意境、體力有餘時，FORGE_CHANCE 的機會合一爐（挑法同整季機器人；首創的要叫模型，見 _forge）；
     5. 功法庫裡有更強的就改練；
     6. 體力有餘、有東西可修時，CULTIVATE_CHANCE 的機會修練一次（衝絕學、手上有破境丹就服）。
     亂數只在真的有事可做時才擲（有東西可合才擲合成的機會、有東西可修才擲修練的機會、有神器原品等著定名才擲定名的機會）：什麼武學都沒有的假人一次都不擲。
@@ -517,10 +513,8 @@ def tend_arts(game: Game, rng: random.Random, slot: NamingSlot | None = None) ->
     msgs += _learn_here(game)
     if library.full(state, content):
         bot.melt_the_weakest(game)
-    arts = library.owned_arts(state)
-    forgeable = bool(p.insights and arts) or len(arts) >= 2
-    if forgeable and p.stamina >= bot.FORGE_RESERVE and rng.random() < FORGE_CHANCE:
-        plan = bot.pick_forge(game, rng, blend_share=SERVER_BLEND_SHARE)
+    if len(p.insights) >= 2 and p.stamina >= bot.FORGE_RESERVE and rng.random() < FORGE_CHANCE:
+        plan = bot.pick_forge(game, rng)
         if plan is not None:
             msgs += _forge(game, plan, slot)
             if slot is not None and slot.job is not None:
@@ -609,11 +603,11 @@ def _forge(game: Game, plan: bot.ForgePlan, slot: NamingSlot | None) -> list[str
     用字表的名字搶下首創，名字的樣子看得出是假人（企劃者 2026-10-05）。不必叫模型的（配方有了、只有一個候選）照開，
     給 NO_NAME，鎖內一定不叫模型。"""
     insight_ids = list(plan.insight_ids)
-    request = game.forge_request(plan.art_id, insight_ids, other_art=plan.other_art, named_outside=True)
+    request = game.forge_request(None, insight_ids, named_outside=True)
     if request is None:
-        return game.forge(plan.art_id, insight_ids, proposed=NO_NAME, other_art=plan.other_art)
+        return game.forge(None, insight_ids, proposed=NO_NAME)
     if slot is not None and slot.open and slot.job is None:
-        slot.job = ForgeJob(plan.art_id, plan.insight_ids, plan.other_art, request)
+        slot.job = ForgeJob(plan.insight_ids, request)
     elif slot is not None:
         slot.skipped += 1
     return []
@@ -649,7 +643,7 @@ def apply_job(game: Game, job: ForgeJob | MasterJob | SenseJob | DiscussJob, pro
     if isinstance(job, ForgeJob):
         if not job.request.choices and naming.recheck(content, proposed, world.is_character_name)[0] is None:
             return []  # 取新名字的那一爐沒有名字可用：不開，不用字表名字搶下首創（見下面的說明）
-        return game.forge(job.art_id, list(job.insight_ids), proposed=proposed, other_art=job.other_art)
+        return game.forge(None, list(job.insight_ids), proposed=proposed)
     if state.player.naming != job.art_id:
         return []
     old = team.resolve_art(job.art_id, content, world)

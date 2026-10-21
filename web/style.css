@@ -883,6 +883,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .peak .legend, .peak .buy-pill { flex: 1 1 100%; margin-top: 0; }
 /* 功法庫那張卡的比較句（W6、FB-088）：跟身上同一種那門比，寫在兩顆大鈕上面，改練之前看得到 */
 .art-body .cmp { margin: 6px 0 0; font-size: 12px; line-height: 1.5; color: var(--ink-2); }
+.art-tactic { margin: 8px 0 0; padding: 6px 10px; font-size: 12.5px; line-height: 1.55; color: var(--ink-2); border-left: 3px solid var(--accent); background: color-mix(in srgb, var(--accent) 6%, transparent); border-radius: 0 6px 6px 0; }
 .acts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
 .acts:has(> :only-child) { grid-template-columns: 1fr; }
 .acard .legend, .art-body .legend { display: flex; align-items: center; gap: 10px; min-height: 44px; margin-top: 6px; font-size: 14px; color: var(--gold); cursor: pointer; }
@@ -2868,3 +2869,20 @@ svg.fig .blade.bow { stroke-width: 3; }
 .card.create p.small { font-size: 12px; }
 .card.create .acts { flex-wrap: wrap; }
 .card.create .acts:has(.btn:nth-child(3)) .btn.primary { flex-basis: 100%; }
+
+/* 自創單獨一頁（Joy 2026-10-21）：煉製頁的入口與那一頁的標題列 */
+.create-entry {
+  display: flex; align-items: center; gap: 12px; width: 100%; margin: 12px 0; padding: 10px 14px; text-align: left; cursor: pointer;
+  border: 1px solid var(--line); border-radius: var(--radius); color: var(--ink); font: inherit; background: var(--card); box-shadow: var(--shadow);
+}
+.create-entry span { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.create-entry b { font-size: 17px; letter-spacing: 3px; }
+.create-entry small { color: var(--ink-2); font-size: 12px; }
+.create-entry .go { font-style: normal; color: var(--accent); font-weight: 600; white-space: nowrap; }
+.ce-fig { width: 40px; height: 50px; flex: none; }
+.cr-bar {
+  display: flex; align-items: center; gap: 8px; margin: 0 0 8px; padding: 2px 0 6px; border-bottom: 1px solid var(--line);
+}
+.cr-bar .book-back { color: var(--ink); }
+.cr-bar-title { font-weight: 600; letter-spacing: 4px; }
+.cr-left { margin: 4px 0 8px; }

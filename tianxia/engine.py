@@ -9621,58 +9621,48 @@ class Game:
         return [msg]
 
     def forge_request(
-        self, art_id: str | None, insight_ids: list[str], other_art: str | None = None, named_outside: bool = False,
+        self, art_id: str | None, insight_ids: list[str], named_outside: bool = False,
     ) -> naming.NamingRequest | None:
         """開爐首次取名或挑選的 A 段（呼叫端在行動鎖內、很快地呼叫；server.prepare_forge、bot_policy.tend_arts）：這一爐要不要模型？
         要就回送模型的單子（naming.NamingRequest），由呼叫端在鎖外交給 naming.generate（B 段），再進鎖把結果交給
         forge(..., proposed=...)（C 段）。單子有兩種：沒人合過、長新的 → 取名（choices 是空的）；合到舊的、候選兩個以上
         → 從候選挑一個（choices 是候選的名字，見 fusion.forge_request）。不要的時候是 None：這個 Game 沒有 client
         （例如伺服器假人鎖內的 Game）而且呼叫端不會自己叫模型、賽季籌備中、這一爐會被拒絕、配方已經有人登記、合到舊的而且
-        只有一個候選。只讀、不改狀態——跟 dialogue_request 同一個做法。other_art 有、insight_ids 空的是武學＋武學。
+        只有一個候選。只讀、不改狀態——跟 dialogue_request 同一個做法。煉製只剩意境＋意境（Joy 2026-10-21），art_id 有就是 None。
         named_outside：呼叫端會在鎖外自己叫模型（伺服器假人程式：它的 Game 沒有 client，B 段用 bot_runner 自己的 client
         叫 naming.generate），照樣開單。"""
         if (self.client is None and not named_outside) or self._preparing():
             return None
-        if prologue_rules.fuse_problem(self.state, self.content, art_id, insight_ids, other_art) is not None:
-            return None  # 序章裡會被擋下的一爐：不開取名的單子（forge 照常回那句話）
-        return fusion.forge_request(self.state, self.content, self.world, art_id, insight_ids, other_art=other_art)
+        if art_id or prologue_rules.fuse_problem(self.state, self.content, insight_ids) is not None:
+            return None  # 會被擋下的一爐：不開取名的單子（forge 照常回那句話）
+        return fusion.forge_request(self.state, self.content, self.world, art_id, insight_ids)
 
     @_not_while_preparing
     def forge(
         self, art_id: str | None, insight_ids: list[str], proposed: tuple[str | None, str] | None = None,
-        other_art: str | None = None,
     ) -> list[str]:
-        """煉製頁的開爐：一門武學＋一個意境、兩門武學＝合成，兩個意境（可以是同一個）＝合併（見 fusion.py）。
+        """煉製頁的開爐：只剩兩個意境（不同的＝合成、同一種的兩份＝揣摩；見 fusion.py）。武學＋武學、武學＋意境 Joy 2026-10-21
+        拿掉了：art_id 有就回 ART_IN_FURNACE（意境到修練頁裝進武學的槽）。
         proposed 是鎖外先取好的（名字, 說明）（C 段，見 forge_request）：這裡整個重驗（A 段之後意境可能熔掉、心得或體力
         可能花掉、配方可能被別人或同一個人的另一個請求登記了），名字再過一次過濾、登記時原子判斷重名，過不了走退路字表；
         給了 proposed 就不會在這裡叫模型（伺服器與假人程式一律給，不需要模型時是 (None, "")）。沒給（整季機器人、腳本、測試）
         首次出現的配方照舊在這裡叫模型，那是在行動鎖內，所以用 _quick_client 的短逾時複本，取不到名字就走退路字表。
         江湖紀錄的標題照煉製頁寫「煉製」（FB-047），做成了才寫，被拒絕只回一句話、什麼都不收。
-        三種合成都花心得與體力（設計 12.1）：花了的體力跟心得一起寫在這一則的數值變化上。"""
+        合成花心得與體力（設計 12.1）：花了的體力跟心得一起寫在這一則的數值變化上。"""
         self.forged = False
         self.forged_thing = None
-        refusal = prologue_rules.fuse_problem(self.state, self.content, art_id, insight_ids, other_art)  # 序章只准照劇本合成
+        if art_id or len(insight_ids) != 2:
+            return self._log([fusion.ART_IN_FURNACE if art_id else fusion.TWO_INSIGHTS])
+        refusal = prologue_rules.fuse_problem(self.state, self.content, insight_ids)  # 序章只准照劇本合成
         if refusal is not None:
             return self._log([refusal])
         xinde, stamina = self._xinde(), self.state.player.stamina
-        if art_id and other_art and not insight_ids:
-            art, msgs = fusion.blend(
-                self.state, self.content, self.world, self._quick_client(), art_id, other_art, proposed=proposed, rng=self.rng,
-            )
-            tag = f"合成【{art.name}】" if art is not None else None
-        elif art_id and not other_art and len(insight_ids) == 1:  # 武學重構：武學＋意境不再是合成，是把意境裝進那一門的槽（不花心得體力）
-            return self.slot_insight(art_id, insight_ids[0])
-        elif not art_id and not other_art and len(insight_ids) == 2:
-            insight, msgs = fusion.merge(self.state, self.content, self.world, self._quick_client(), *insight_ids, proposed=proposed)
-            tag = f"合併「{insight.name}」" if insight is not None else None
-            if insight is not None:
-                self.forged_thing = ("ins", insight.id)
-        else:
-            return self._log(["放一門武學和一個意境、或放兩門武學（合成），或放兩個意境（合併）。"])
+        insight, msgs = fusion.merge(self.state, self.content, self.world, self._quick_client(), *insight_ids, proposed=proposed)
+        tag = f"合併「{insight.name}」" if insight is not None else None
+        if insight is not None:
+            self.forged_thing = ("ins", insight.id)
         out = self._log(msgs)
         self.forged = tag is not None
-        if tag is not None and self.forged_thing is None:
-            self.forged_thing = ("art", art.id)
         if tag is not None:
             self._save_season()  # 首創秘方會記一則傳聞（fusion._secret_lines）；傳聞在共用賽季裡，要存回去
             spent = round(stamina - self.state.player.stamina)  # 三種合成都花體力：數值變化寫在紀錄上，跟修練一樣
@@ -9682,16 +9672,16 @@ class Game:
             )
         return out
 
-    def forge_line(self, art_id: str | None, insight_ids: list[str], other_art: str | None = None) -> str:
-        return skillview.forge_line(self.state, self.content, self.world, art_id, insight_ids, other_art=other_art)
+    def forge_line(self, insight_ids: list[str]) -> str:
+        return skillview.forge_line(self.state, self.content, self.world, insight_ids)
 
-    def forge_preview(self, art_id: str | None, insight_ids: list[str], other_art: str | None = None) -> dict | None:
-        """兩格都放好時煉製頁的預覽卡（skillview.forge_preview；合成即設計）。只讀。"""
-        return skillview.forge_preview(self.state, self.content, self.world, art_id, insight_ids, other_art=other_art)
+    def forge_preview(self, insight_ids: list[str]) -> dict | None:
+        """兩格都放好時煉製頁的預覽卡（skillview.forge_preview）。只讀。"""
+        return skillview.forge_preview(self.state, self.content, self.world, insight_ids)
 
-    def forge_picks(self, art_id: str | None, insight_ids: list[str], other_art: str | None = None) -> dict | None:
-        """爐裡只放了一樣時，另一格放得進來的每一樣合不合得了（skillview.forge_picks）。只讀。"""
-        return skillview.forge_picks(self.state, self.content, self.world, art_id, insight_ids, other_art=other_art)
+    def forge_picks(self, insight_ids: list[str]) -> dict | None:
+        """爐裡只放了一個意境時，另一格放得進來的每一個合不合得了（skillview.forge_picks）。只讀。"""
+        return skillview.forge_picks(self.state, self.content, self.world, insight_ids)
 
     @_not_while_preparing
     def cultivate(self, art_id: str, use_legend: bool = False) -> list[str]:
@@ -9798,10 +9788,10 @@ class Game:
         return self._log(create.back(self.state, self.content, to))
 
     @_not_while_preparing
-    def create_name(self, name: str, extra: int = 0) -> list[str]:
-        """立名：付心得、擲品級、登記（create.finish）。做成了寫一則煉製紀錄，被拒絕只回一句。"""
+    def create_name(self, name: str) -> list[str]:
+        """立名：付心得、登記（create.finish，一律上品）。做成了寫一則煉製紀錄，被拒絕只回一句。"""
         xinde = self._xinde()
-        art, msgs = create.finish(self.state, self.content, self.world, name, self.rng, extra)
+        art, msgs = create.finish(self.state, self.content, self.world, name)
         self.forged = art is not None
         self.forged_thing = ("art", art.id) if art is not None else None
         msgs = self._log(msgs)
@@ -9822,7 +9812,8 @@ class Game:
         """把一個意境裝進一門武學的意境槽（武學重構；修練頁與煉製頁都走這裡，MENXIA_ACTIONS["slot"]）：不花心得體力，
         裝成了寫一則「裝意境」江湖紀錄，被拒絕只回一句。"""
         xinde = self._xinde()
-        problem = arts_mod.slot_problem(self.state, self.content, self.world, art_id, insight_id, index)
+        problem = prologue_rules.slot_problem(self.state, self.content, art_id) or arts_mod.slot_problem(
+            self.state, self.content, self.world, art_id, insight_id, index)
         if problem is not None:
             self.forged = False
             return self._log([problem])
@@ -9836,6 +9827,9 @@ class Game:
     def unslot_insight(self, art_id: str, insight_id: str) -> list[str]:
         """把一個意境從武學的槽上拆下來（MENXIA_ACTIONS["unslot"]）：不花東西；拆成了寫一則江湖紀錄。"""
         xinde = self._xinde()
+        problem = prologue_rules.slot_problem(self.state, self.content, art_id)
+        if problem is not None:
+            return self._log([problem])
         slots = self.state.player.art_slots.get(art_id, [])
         msgs = self._log(arts_mod.unslot(self.state, self.content, self.world, art_id, insight_id))
         if insight_id in slots:
@@ -10793,19 +10787,15 @@ class Game:
         other._spar_record(result, me.name, ours, self, shown=ours_shown)
         return self._spar_record(self._spar_mirror(result, ours), them.name, theirs, other, shown=theirs_shown)
 
-    # ── 論武（玩家互動第二層）：兩個人各出一樣（武學或意境）合成一樣新的，兩人都拿到；首創算兩人共有，價錢各付一半 ──
-    # 走 fusion 的三種合成（fusion.Partner：對方出的那一樣不必是你的、不佔你的持有）；血統、持有上限、「已經有了」照舊各自擋。
+    # ── 論武（玩家互動第二層）：兩個人各出一個意境合成一個新的，兩人都拿到；首創算兩人共有，價錢各付一半 ──
+    # 走 fusion.merge（fusion.Partner：對方出的那一個不必是你的、不佔你的持有）；持有上限、「已經有了」照舊各自擋。
+    # 武學不再拿來合（Joy 2026-10-21），論武跟著只剩意境。
     # 開爐的是答應的那一方（discuss_request 是 A 段，伺服器在鎖外取名，_discuss 是 C 段），發邀請的那一方接著照配方合出同一門。
 
     def discuss_items(self) -> list[tuple[str, str]]:
-        """論武時你出得了的：身上與功法庫的武學（「art:<id>」）、悟得的全服意境（「insight:<id>」；自己畫圖悟的私有意境不行）。
-        回傳（鍵, 寫給人看的名字），身上的在前。"""
+        """論武時你出得了的：悟得的全服意境（「insight:<id>」；自己畫圖悟的私有意境不行）。回傳（鍵, 寫給人看的名字）。"""
         s, c = self.state, self.content
         out: list[tuple[str, str]] = []
-        for art_id in library.owned_arts(s):
-            art = team.player_art(s, c, self.world, art_id)
-            if art is not None:
-                out.append((f"art:{art_id}", f"【{art.name}】"))
         for insight_id in s.player.insights:
             insight = None if insights.is_own(insight_id) else insights.resolve(insight_id, c, self.world, s)
             if insight is not None:
@@ -10813,9 +10803,9 @@ class Game:
         return out
 
     def _discuss_cost(self) -> tuple[int, int]:
-        """論武這一邊付的（心得, 體力）：一爐的一半（fusion.half_price）；三種合成一樣價錢，照合成的算。"""
+        """論武這一邊付的（心得, 體力）：一爐意境合成的一半（fusion.half_price）。"""
         cfg = self.content.config
-        return fusion.half_price(cfg.fuse_xinde, cfg.fuse_stamina)
+        return fusion.half_price(cfg.merge_xinde, cfg.merge_stamina)
 
     def discuss_refusal(self, other: Game) -> str | None:
         """玩家卡上「論武」按不按得下去：規則開著、兩個人都閒著、付得起一半的體力、之間沒有一張還在等的論武邀請。
@@ -10850,22 +10840,10 @@ class Game:
         self.touched.add(name)
         return [f"你拿出{label}，邀{name}一起論武；等{gender.pronoun(other.state)}回覆。"]
 
-    @staticmethod
-    def _discuss_args(mine: str, theirs: str) -> tuple[str | None, list[str], str | None, str]:
-        """兩樣東西排成 fusion 的三種合成：（武學, 意境們, 第二門武學, 對方出的那一樣的 id）。兩門武學＝blend（你的在前），
-        武學＋意境＝fuse（不管誰出武學），兩個意境＝merge。"""
-        (mk, _, mid), (tk, _, tid) = mine.partition(":"), theirs.partition(":")
-        if mk == tk == "art":
-            return mid, [], tid, tid
-        if mk == "art":
-            return mid, [tid], None, tid
-        if tk == "art":
-            return tid, [mid], None, tid
-        return None, [mid, tid], None, tid
-
     def _discuss_partner(self, mine: str, theirs: str, other_name: str, fresh: bool = False):
-        art_id, insight_ids, other_art, lent = self._discuss_args(mine, theirs)
-        return art_id, insight_ids, other_art, fusion.Partner(lent=lent, name=other_name, price=self._discuss_cost(), fresh=fresh)
+        """兩樣東西排成一爐意境合成：（兩個意境的 id, 借來的那一份）。舊邀請上的「art:」交給 discuss_problem 擋。"""
+        mid, tid = mine.partition(":")[2], theirs.partition(":")[2]
+        return [mid, tid], fusion.Partner(lent=tid, name=other_name, price=self._discuss_cost(), fresh=fresh)
 
     def discuss_request(self, inv, other: Game, item: str) -> naming.NamingRequest | None:
         """論武的 A 段（鎖內、只讀）：答應的那一方出 item、發邀請的那一方出邀請上那一樣，這一爐要不要模型取名或挑？
@@ -10877,31 +10855,24 @@ class Game:
             return None
         if self.discuss_invite_problem(inv, other) is not None or self.discuss_item_problem(inv, other, item) is not None:
             return None
-        art_id, insight_ids, other_art, partner = self._discuss_partner(item, inv.payload.get("item", ""), other.state.player.name)
-        return fusion.forge_request(self.state, self.content, self.world, art_id, insight_ids, other_art=other_art, partner=partner)
+        insight_ids, partner = self._discuss_partner(item, inv.payload.get("item", ""), other.state.player.name)
+        return fusion.forge_request(self.state, self.content, self.world, None, insight_ids, partner=partner)
 
     def _discuss_forge(self, mine: str, theirs: str, other_name: str, proposed, fresh: bool = False):
-        """這一邊開一爐（fusion 的三種合成之一，對方那一樣當作借來的）：（合出來的那一門或那個意境, 訊息）；沒合成是 None。
+        """這一邊開一爐（意境合成，對方那一個當作借來的）：（合出來的那個意境, 訊息）；沒合成是 None。
         fresh：對方剛剛在這一次論武裡首創了這個配方（發邀請的那一方接著合，FB-243）。"""
-        art_id, insight_ids, other_art, partner = self._discuss_partner(mine, theirs, other_name, fresh)
-        client, rng = self._quick_client(), self.rng
-        if other_art is not None:
-            thing, msgs = fusion.blend(self.state, self.content, self.world, client, art_id, other_art, proposed, rng, partner)
-        elif art_id is not None:  # 武學重構：論武不再拿武學配意境（fuse_problem 一律擋，這裡只是保險）
-            thing, msgs = None, [fusion.fuse_problem(self.state, self.content, self.world, art_id, insight_ids[0], partner)]
-        else:
-            thing, msgs = fusion.merge(self.state, self.content, self.world, client, *insight_ids, proposed, partner)
-        return thing, msgs
+        problem = self.discuss_problem(mine, theirs, other_name)
+        if problem is not None:
+            return None, [problem]
+        insight_ids, partner = self._discuss_partner(mine, theirs, other_name, fresh)
+        return fusion.merge(self.state, self.content, self.world, self._quick_client(), *insight_ids, proposed, partner)
 
     def discuss_problem(self, mine: str, theirs: str, other_name: str) -> str | None:
-        """這一邊合不合得成（拒絕的話；fusion 的 *_problem，對方那一樣當作借來的、價錢是一半）。只讀；假人挑要出哪一樣也問它。"""
-        art_id, insight_ids, other_art, partner = self._discuss_partner(mine, theirs, other_name)
-        s, c, w = self.state, self.content, self.world
-        if other_art is not None:
-            return fusion.blend_problem(s, c, w, art_id, other_art, partner)
-        if art_id is not None:
-            return fusion.fuse_problem(s, c, w, art_id, insight_ids[0], partner)
-        return fusion.merge_problem(s, c, w, *insight_ids, partner)
+        """這一邊合不合得成（拒絕的話；fusion.merge_problem，對方那一個當作借來的、價錢是一半）。只讀；假人挑要出哪一樣也問它。"""
+        if not (mine.startswith("insight:") and theirs.startswith("insight:")):
+            return fusion.DISCUSS_ARTS_GONE
+        insight_ids, partner = self._discuss_partner(mine, theirs, other_name)
+        return fusion.merge_problem(self.state, self.content, self.world, *insight_ids, partner)
 
     def discuss_invite_problem(self, inv, other: Game, *, for_sender: bool = False) -> str | None:
         """答應論武時，這一張邀請本身還成不成（不看你挑哪一樣）：還在發邀請的那個地點、兩個人都閒著付得起一半的體力、

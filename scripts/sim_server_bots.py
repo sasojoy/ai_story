@@ -198,10 +198,9 @@ def run_season(
     tally = ForgeTally()
     real_forge, real_generate, real_sense = Game.forge, naming.generate, insight_llm.name
 
-    def counted_forge(self, art_id, insight_ids, proposed=None, other_art=None):
-        kind = "blend" if other_art else "fuse" if art_id else "merge"
-        tally.forged[FORGE_KINDS[kind]] += 1
-        return real_forge(self, art_id, insight_ids, proposed=proposed, other_art=other_art)
+    def counted_forge(self, art_id, insight_ids, proposed=None):
+        tally.forged[FORGE_KINDS["merge"]] += 1
+        return real_forge(self, art_id, insight_ids, proposed=proposed)
 
     def counted_generate(client, content_, request, budget=None, person=None):
         """假人程式的 B 段：照單子的種類記一次呼叫；不是真的模型時，用字表組個名字（挑一個的單就挑第一個）。"""

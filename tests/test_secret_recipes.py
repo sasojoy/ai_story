@@ -1,7 +1,7 @@
 """口訣與秘方（PM 2026-10-10 派工，企劃者選「甲乙都做」）。
 武學重構（Joy 2026-10-20）之後秘方的規則還沒改，這裡照引擎現在實際的行為測：
 - kind fuse 的秘方改成「屬性＋指定意境裝滿」：武學合得上那一格、槽全部裝滿、其中一格是指定的意境，就暗合口訣（給特別功效）；
-- 武學＋武學的秘方照「自己那一份」的屬性認（相容屬性的第一個），兼容並蓄的基礎武學沒有屬性，認不上；
+- 武學＋武學的秘方跟著武學合成一起拿掉了（Joy 2026-10-21）；
 - 意境＋意境的秘方照舊，合出來的意境帶特別功效（裝進槽就是那一招）。
 天時地利（fusion.setting_points）、品質擲骰、合到舊的候選（landing）都拿掉了，那幾條測試刪除。"""
 from __future__ import annotations
@@ -17,7 +17,7 @@ from tianxia.content import ContentError, validate
 from tianxia.engine import Game
 from tianxia.models import ArtPattern, InsightPattern, SecretRecipe
 from tianxia.state import new_game_state
-from test_fusion import _registered, must_not_ask, named
+from test_fusion import must_not_ask, named
 
 FUSE = SecretRecipe(
     id="t_fuse", kind="fuse", art=ArtPattern(attribute="慢"), insight=InsightPattern(id="shan"),
@@ -27,15 +27,9 @@ MERGE = SecretRecipe(
     id="t_merge", kind="merge", left=InsightPattern(id="shan"), right=InsightPattern(id="shui"),
     name="山環水抱", clues=["先立其山。", "山得坐穩。", "山左水右。"],
 )
-BLEND = SecretRecipe(
-    id="t_blend", kind="blend", arts=[ArtPattern(attribute="實"), ArtPattern(attribute="快", kind="武學")],
-    name="疾實勁", clues=["一實一疾。", "又實又快。", "實者為裡。"],
-)
-
-
 @pytest.fixture
 def secret_content(content):
-    content.secret_recipes = [FUSE, MERGE, BLEND]
+    content.secret_recipes = [FUSE, MERGE]
     s = content.config.secrets
     s.quality_points, s.insight_points = 20, 10
     return content
@@ -44,7 +38,6 @@ def secret_content(content):
 @pytest.fixture
 def ready(state, secret_content):
     state.player.member.wugong_id = "basic_fist"  # 武學、屬實
-    state.player.arts = ["step"]  # 武學、屬快
     state.player.insights = ["feng", "huo", "shan", "shui"]
     state.player.stats["xinde"] = 100
     return state
@@ -121,24 +114,6 @@ def test_merge_secret_cares_about_left_and_right(ready, secret_content, world):
     assert (right.name, right.secret) == ("山環水抱", "t_merge") and ready.player.manual.solved == ["t_merge"]
 
 
-def test_blend_secret_ignores_the_order(ready, secret_content, world):
-    """武學重構：武學的屬性＝相容屬性的第一個。兩門帶相容屬性的合成武學（實、快）才認得上；不分先後。"""
-    solid = _registered(world, "實勁拳", ["實"])
-    quick = _registered(world, "疾風腿", ["快"])
-    ready.player.arts = [solid.id, quick.id]
-    art, msgs = fusion.blend(ready, secret_content, world, must_not_ask(), quick.id, solid.id)
-    assert (art.name, art.secret) == ("疾實勁", "t_blend") and secret_content.config.secrets.hit_line in msgs
-    assert sorted(art.parents) == sorted([solid.id, quick.id]) and art.affinity == ["快", "實"]
-
-
-def test_a_blend_secret_does_not_take_the_open_basic_arts(ready, secret_content, world):
-    """基礎拳腳兼容並蓄、沒有屬性（以前屬實）：秘方認不上它，照一般的合成叫模型取名。"""
-    quick = _registered(world, "疾風腿", ["快"])
-    ready.player.arts = [quick.id]
-    art, _ = fusion.blend(ready, secret_content, world, named("風樁腿"), "basic_fist", quick.id)
-    assert art.secret is None and art.name == "風樁腿"
-
-
 def test_a_character_name_clash_falls_back_to_the_word_table(ready, secret_content, world):
     world.is_character_name = lambda name: name == "山環水抱"
     made, _ = fusion.merge(ready, secret_content, world, must_not_ask(), "shan", "shui")
@@ -194,7 +169,7 @@ def test_the_manual_belongs_to_one_season(state, secret_content):
 
 def test_secrets_in_the_real_content_load_and_cover_every_kind():
     c = real_content()
-    assert {r.kind for r in c.secret_recipes} == {"fuse", "merge", "blend"}
+    assert {r.kind for r in c.secret_recipes} == {"fuse", "merge"}
     assert all(len(r.clues) == 3 for r in c.secret_recipes)
     assert c.config.secrets.quality_points > 0  # 天時地利（fuse_quality.terrain）合成不用了，不再查
 
