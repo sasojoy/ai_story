@@ -76,6 +76,11 @@ def recruit_problem(state: GameState, content: Content, world: WorldStateStore, 
     return FULL.format(n=n) if n >= cap(content) else None
 
 
+def affinity_ok(state: GameState, content: Content, companion_id: str) -> bool:
+    """情誼到 Config.recruit_min_affinity 了沒（Joy 2026-10-21）：沒到的人選單上不畫招募鈕、招募也不受理。"""
+    return state.player.affinities.get(companion_id, 0) >= content.config.recruit_min_affinity
+
+
 def recruit_chance(content: Content, state: GameState, companion_id: str) -> float:
     cfg = content.config
     affinity = state.player.affinities.get(companion_id, 0)

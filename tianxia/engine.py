@@ -1718,21 +1718,23 @@ class Game:
         self.move_mode = mode if mode in atlas.MODES else "walk"
 
     def _recruit_target(self) -> str | None:
-        """這個地點目前能嘗試招募的人（自由之身、recruit_at 是這裡）；沒有就是 None。"""
+        """這個地點目前能嘗試招募的人（自由之身、recruit_at 是這裡、情誼到門檻 roster.affinity_ok）；沒有就是 None。"""
         s, c = self.state, self.content
         for cid, ch in c.characters.items():
-            if ch.kind == "recruitable" and ch.recruit_at == s.player.location and roster.owned_by(self.world, cid) is None:
+            if (ch.kind == "recruitable" and ch.recruit_at == s.player.location and roster.owned_by(self.world, cid) is None
+                    and roster.affinity_ok(s, c, cid)):
                 return cid
         return None
 
     def _recruit_targets(self) -> list[str]:
-        """歷史武將同行（Config.companions）：此地此刻站著（_figures_here，照人物此刻的所在）、標了 recruitable、還沒有主的人。
-        關著是空的（舊的 recruit_at 那一條照舊走 _recruit_target）。"""
+        """歷史武將同行（Config.companions）：此地此刻站著（_figures_here，照人物此刻的所在）、標了 recruitable、還沒有主、
+        情誼到門檻（roster.affinity_ok，沒到的不畫鈕）的人。關著是空的（舊的 recruit_at 那一條照舊走 _recruit_target）。"""
         if not roster.on(self.content):
             return []
         return [
             cid for cid in self._figures_here()
             if self.content.characters[cid].recruitable and roster.owned_by(self.world, cid) is None
+            and roster.affinity_ok(self.state, self.content, cid)
         ]
 
     def _recruitable_here(self) -> bool:
