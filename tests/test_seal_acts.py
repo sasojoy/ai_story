@@ -488,25 +488,73 @@ def test_yinjiang_greys_out_a_figure_the_timetable_will_move_within_the_day():
 # ── Task 5：頒詔、承露、收心 ──
 
 @pytest.mark.slow
-def test_banzhao_lifts_sensing_and_cultivation_for_everyone_for_a_day():
-    from tianxia import cultivation, sensing
+def test_banzhao_lifts_sensing_and_the_peak_try_for_everyone_for_a_day():
+    """頒詔一日：人人靜心感悟 +10 個百分點（夾上限）、衝絕學的機會 ×1.2（企劃者 2026-10-21：武學重構之後修練不再擲升品，後半句改成
+    衝絕學；掛在 cultivation.peak_scale，契機與服丹共用）。旁人看的是服丹衝關那一個數（force_odds，修練頁寫的就是擲的）。"""
+    from tianxia import cultivation, sensing, team, treasures
 
     c, w, g = _holder("yunzhuan")
     other = _person(c, w, "旁人", side="guan")
     loc = c.locations[other.state.player.location]
-    before = sensing.rate(other.state, c, loc)
-    quality = next(q for q in c.config.cultivate_odds if q not in c.config.cultivate_sure_by and c.config.cultivate_odds[q][0] < 60)
-    odds = cultivation.odds_for(other.state, c, quality, 0)
+
+    def look(game):
+        return sensing.rate(game.state, c, loc), cultivation.force_odds(game.state, c, game.world, "basic_fist"), cultivation.peak_scale(game.state, c)
+
+    before = look(other)
+    assert before[2] == 1.0 and treasures.amount(other.state, c, "cultivate") == 1.0
     _use(c, w)
-    now = _do(c, w, "旁人", lambda game: (sensing.rate(game.state, c, loc), cultivation.odds_for(game.state, c, quality, 0)))
+    now = _do(c, w, "旁人", look)
     low, high = c.config.sense_rate_range
-    assert now[0] - before == min(10, high - (before - _marks(other, c, loc)))
-    first, _step = c.config.cultivate_odds[quality]
-    assert now[1] == cultivation.chance(c, quality, 0, wis=other.state.player.stats.get("wis", 5), treasure=1.2)
-    assert now[1] > odds
-    after = _do(c, w, "旁人", lambda game: (sensing.rate(game.state, c, loc), cultivation.odds_for(game.state, c, quality, 0)),
-                now=10.0 + DAY + 1)
-    assert after == (before, odds)
+    assert now[0] - before[0] == min(10, high - (before[0] - _marks(other, c, loc)))
+    cfg = c.config
+    raw = cfg.legend_item_bonus * team.stat_factor(c, other.state.player.stats.get("wis", team.BASE_STAT))
+    assert now[2] == pytest.approx(cfg.seal.revamp.acts.cultivate) == pytest.approx(1.2)
+    assert now[1] == round(max(1.0, min(cfg.breakthrough.max_chance, raw * 1.2))) and now[1] > before[1]
+    after = _do(c, w, "旁人", look, now=10.0 + DAY + 1)
+    assert after == before
+
+
+def test_banzhao_multiplies_the_peak_try_on_both_roads(sealed, state, world):
+    """衝絕學的兩條路乘同一個倍數（cultivation.peak_scale，寶物「cultivate」那個位置、在上限之內）：契機（seize，難度比 0.5 是 25%，
+    頒詔之下 30%）與服丹（force_odds，15% → 18%）。期滿、改版關著（生效中的那一筆還在季上）都回到 1。"""
+    from test_cultivation import Fixed, _worn, kicker_art
+
+    from tianxia import cultivation
+
+    acts_on(sealed)
+    world.claim_skill_name(kicker_art())
+
+    def seize(value):
+        _worn(state)
+        state.player.naming = None
+        return cultivation.seize(state, sealed, world, 0.5, Fixed(value))[0]
+
+    state.world.time = 50.0
+    _worn(state)
+    assert cultivation.force_odds(state, sealed, world, "旋風腿") == 15 and seize(0.2899).startswith("打到緊處")
+    state.world.seal_acts = [_act("banzhao")]
+    assert cultivation.peak_scale(state, sealed) == pytest.approx(1.2)
+    assert cultivation.force_odds(state, sealed, world, "旋風腿") == 18
+    assert seize(0.2899).startswith("這一戰") and seize(0.3001).startswith("打到緊處")
+    state.world.time = DAY  # 期滿
+    assert cultivation.peak_scale(state, sealed) == 1.0 and seize(0.2899).startswith("打到緊處")
+    state.world.time = 50.0
+    sealed.config.seal.revamp.enabled = False
+    assert cultivation.peak_scale(state, sealed) == 1.0 and cultivation.force_odds(state, sealed, world, "旋風腿") == 15
+
+
+def test_the_peak_scale_is_the_only_caller_of_the_edict():
+    """頒詔的後半句只有一個掛點：cultivation.peak_scale（seize、force_odds 都經過它）。"""
+    import inspect
+
+    from tianxia import cultivation
+
+    root = Path(__file__).resolve().parent.parent / "tianxia"
+    callers = [f.name for f in root.glob("*.py") if f.name != "seal_acts.py" and "edict_cultivate(" in f.read_text(encoding="utf-8")]
+    assert callers == ["cultivation.py"]
+    assert inspect.getsource(cultivation).count("edict_cultivate(") == 1
+    assert "peak_scale(state, content)" in inspect.getsource(cultivation.seize)
+    assert "peak_scale(state, content)" in inspect.getsource(cultivation.force_odds)
 
 
 def _marks(game, c, loc):

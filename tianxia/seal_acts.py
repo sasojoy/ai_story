@@ -4,7 +4,7 @@
 - 一片一季 Config.seal.revamp.acts.uses 次、兩次之間隔 gap_days 天（次數記在全服的碎片上：SealShard.act_*，換手跟著碎片走，換季歸零）；
   每個行動生效 days 天。「天」照 day_seconds：有季曆的季（第一季的章）是季曆天，14 天的季是世界天。
 - 生效中的行動記在季上（WorldState.seal_acts；SealAct 不記是誰）。掛點讀這裡的查詢：pinned（引將釘住的大勢人物；人物活起來不搬他）、
-  edict_sense／edict_cultivate（頒詔：sensing.rate、cultivation.odds_for）、dew_factor／dew_clinic（承露：Game._advance_player_local、
+  edict_sense／edict_cultivate（頒詔：sensing.rate、cultivation.peak_scale）、dew_factor／dew_clinic（承露：Game._advance_player_local、
   team 的療傷）、writ_factor（傳檄：Game.push_trend、Game._push_progress）、heart_open／heart_scale（收心：rules.can_meet、
   companion_agent._apply_turn、feasts.toast）。改版關著一律中性值（季上那一本本來就是空的，查詢再擋一次）。
 - 不具名（企劃者）：天下大事與江湖史那一句（public_text）不寫是誰；誰用的只在全服登記那一筆 use（管理者看）與起用的人自己的紀錄裡。
@@ -30,7 +30,7 @@ EPS = calendar.EPS_SECONDS
 NAMES = {"yinjiang": "引將", "banzhao": "頒詔", "chenglu": "承露", "chuanxi": "傳檄", "shouxin": "收心"}
 DESC = {  # 碎片卡上那一句（數字照 Config.seal.revamp.acts）
     "yinjiang": "指定一位大勢人物，引到你此刻所在之地坐鎮一日：期間不走動，期滿回原處。",
-    "banzhao": "詔令天下一日：人人靜心感悟擲中的機會 +{sense} 個百分點、修練升品的機會 ×{cultivate}。",
+    "banzhao": "詔令天下一日：人人靜心感悟擲中的機會 +{sense} 個百分點、衝絕學的機會 ×{cultivate}。",
     "chenglu": "甘露降在你此刻所在的大區一日：那一區人人體力回復 ×{stamina}、醫館療傷不收錢。",
     "chuanxi": "指定一條戰線一日：那一軍在那條線上推的量 ×{push}。",
     "shouxin": "指定一位人物一日：人人跟他說話、宴客敬酒的情誼漲幅 ×{affinity}，求見不看門檻。",
@@ -38,7 +38,7 @@ DESC = {  # 碎片卡上那一句（數字照 Config.seal.revamp.acts）
 RULE_NOTE = "一季 {uses} 次，兩次之間隔 {gap} 天。天下大事只寫有人起用，不寫是誰。"
 WHAT = {  # 天下大事、江湖史、起用的人自己的紀錄與行狀共用的那一段
     "yinjiang": "{figure}應召移駐{place}，一日之內按兵不動",
-    "banzhao": "詔令頒行天下，一日之內感悟與修練都順遂幾分",
+    "banzhao": "詔令頒行天下，一日之內感悟與衝關都順遂幾分",
     "chenglu": "甘露降於{region}，一日之內那一帶體力回得快，醫館療傷分文不取",
     "chuanxi": "檄文傳遍{line}，一日之內{side}在那裡推得更猛",
     "shouxin": "一日之內{person}對來客格外親厚，求見不拒",
@@ -163,9 +163,9 @@ def edict_sense(world: WorldState, content: Content) -> int:
 
 
 def edict_cultivate(world: WorldState, content: Content) -> float:
-    """頒詔的第二半：修練升品的機會倍數（cultivation.odds_for 只叫這一處，跟寶物同一個倍數位置）；沒有是 1。
-    【等 main 合回來再定換成什麼】（PM 2026-10-21：main 上 Joy 的武學重構拿掉了「修練衝品質」）：這是頒詔第二半唯一的掛點，
-    要換就換這個函式（與 odds_for 那一處呼叫）；Config.seal.revamp.acts.cultivate 設 1 等於拿掉這一半。"""
+    """頒詔的第二半：衝絕學的機會倍數（企劃者 2026-10-21：武學重構之後修練不再擲升品，後半句從「修練升品 ×1.2」改成
+    「衝絕學的機會 ×1.2」）。只有 cultivation.peak_scale 叫這一處（跟寶物「cultivate」同一個倍數位置；契機 seize 與服丹 force_odds
+    都經過它，在上限之內）；沒有是 1。Config.seal.revamp.acts.cultivate 設 1 等於拿掉這一半。"""
     factor = 1.0
     if on(content):
         for _ in live(world, "banzhao"):

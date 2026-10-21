@@ -2108,7 +2108,8 @@ class SealActsTuning(_Strict):
     """玉璽碎片改版第 2 批：獨門行動（設計第三章最右欄、五之一；計畫 docs/superpowers/plans/2026-10-21-玉璽碎片改版-2.md）。
     全部是【預設】，等 21 天的季試玩再調。「天」在有季曆的季（第一季的章：週末、7 天、21 天）是季曆天，14 天的季是世界天（seal_acts.day_seconds）。
     - uses、gap_days：每一片一季幾次、兩次之間隔幾天（次數記在全服的碎片上，換手跟著碎片走）；days：每個行動生效幾天。
-    - sense_points、cultivate：頒詔——靜心感悟擲中的機會多幾個百分點（夾在 sense_rate_range 的上限）、修練升品的機會倍數。
+    - sense_points、cultivate：頒詔——靜心感悟擲中的機會多幾個百分點（夾在 sense_rate_range 的上限）、衝絕學的機會倍數
+      （契機與服丹都乘，cultivation.peak_scale；企劃者 2026-10-21：武學重構之後修練不再擲升品）。
     - stamina：承露——那一區體力回復的倍數（醫館療傷不收錢，沒有數字）。
     - push：傳檄——那一軍在那條線上推的量的倍數（盡頭阻力與每人每日上限照舊）。
     - affinity：收心——跟他說話、宴客敬酒的情誼漲幅倍數（求見不看門檻，沒有數字）。"""
