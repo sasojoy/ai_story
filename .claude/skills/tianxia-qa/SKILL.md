@@ -21,10 +21,15 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 - **git 一個指令一個指令跑**：`W=…; git -C "$W" … | …; git -C "$W" …` 這種變數加管線加好幾個 git 串在同一行，會被擋（too complex）。拆成單一的 `git -C <絕對路徑> …`；要 grep 輸出就先 `> scratchpad 的檔`，再另一個指令 grep。
 - **兩份複本對照要平行跑**：PowerShell `Start-Process -FilePath <python> -ArgumentList '-u','-I',<腳本> -RedirectStandardOutput <檔> -RedirectStandardError <檔> -WindowStyle Hidden -PassThru`，各設自己的 `QA_ROOT`；不加 `-u` 的話輸出要等跑完才寫進檔，看不到進度。
 - **scratchpad 跟同一個 PM 派出的其他子代理共用**（2026-10-20 在 `shots/` 看到別人的檔）：自己的複本、資料庫、截圖，都放在用這次驗收命名的子資料夾。
+- **Git Bash 的 tar 把 `C:/…` 當成遠端主機**（回「Cannot connect to C: resolve failed」，2026-10-21 輿圖第三版第 2 批）：先 `git -C <工作樹> archive -o <scratchpad>/x.tar <sha>`，再 `tar --force-local -x -f <tar> -C <資料夾>`。
+- **隔離工作樹裡 Bash 也擋這幾種**（2026-10-21 玉璽碎片複驗）：`SP=…` 變數加 `git archive` 加 `tar` 串在同一行、`python <<EOF` 的 heredoc、`python -I x.py` 帶中文 scratchpad 路徑的 Bash。做法：`git -C <工作樹> archive -o <絕對路徑>.tar <sha>` 一個指令一次（路徑寫死、不用變數）；解壓與批次修補檔都用 Write 工具寫成 `.py`（解壓用 `tarfile`，讀自己所在資料夾的 `*.tar`）再從 PowerShell `python -I` 跑；要平行跑一排腳本，在 PowerShell 同一個呼叫裡 `Start-Process` 一排再 `Wait-Process`（輸出導到各自的 `.txt/.out/.err`，`.err` 有東西才看）。
+- **子代理的 Bash 連 tar 都擋**（「computed value」，2026-10-21 翻地複驗）：`git archive -o` 之後用 Python `tarfile`（`untar.py`：`extractall` 時排除 `docs/`、`.claude/`）解；PowerShell 的 tar 解 `docs/` 底下的中文檔名會回 `Invalid empty pathname`，code 檔其實也沒解完。
+- **`Start-Process -ArgumentList` 的陣列元素有空格要自己加引號**：`-m "slow or not slow"` 寫成 `'"slow or not slow"'`；沒加就被拆成四個參數，pytest 回「no tests ran in 3s」、一個測試都沒跑（2026-10-21）。
 
 ## 開伺服器與登入
-- **複本**：在 scratchpad 用 bash `git -C <qa 工作樹> archive HEAD | tar -x -C <scratchpad>/on` 解一份來跑。PowerShell 的 tar 碰到中文路徑會壞。不要在 repo 裡跑伺服器，也不要改 repo 的設定與 `.local/`。
+- **複本**：在 scratchpad 用 bash `git -C <qa 工作樹> archive HEAD | tar -x -C <scratchpad>/on` 解一份來跑。PowerShell 的 tar 碰到中文路徑會壞。先 `git archive -o <檔>.tar` 再解的話，Git Bash 的 tar 要加 `--force-local`（`tar --force-local -xf C:/…/x.tar -C …`），不然把 `C:` 當成遠端主機、回「Cannot connect to C: resolve failed」。不要在 repo 裡跑伺服器，也不要改 repo 的設定與 `.local/`。
 - **擋 11434**：有人登入時，伺服器會預熱模型（`server._warm_model` 連 Ollama）。在複本的 `content/config.json` 加一個鍵 `"ollama_url": "http://127.0.0.1:9"`（只改 scratchpad 的複本），就打不到 11434。
+  - **要看等模型的中間狀態**（〈天下形勢〉的「還在落筆」之類）：`127.0.0.1:9` 一叫就失敗、伺服器馬上照固定段收，中間狀態一次輪詢都撐不過。改開一個假的模型：Python `http.server`，GET 回 `{"models": []}`、POST 睡 25 秒再回 500，複本的 `ollama_url` 指到它（2026-10-21 翻地 QA，FB-578）。
 - **埠與 host**：先用 `netstat -ano | grep LISTEN` 挑沒人用的埠。cookie 照 host 分、不分埠，所以每個驗收都用自己的 `<名字>.localhost`（例 `qa7check.localhost:7893`）。同一個驗收要同時登兩個帳號，也要換 host。
 - **設定**：`TIANXIA_PROFILE` 是 `weekend`、`season21`、`week7`（7 天濃縮季），或空字串（預設，14 天的季）。`TIANXIA_DB` 指到 scratchpad 的暫存檔。伺服器、`set_password.py`、`run_bots.py` 三者要設成一樣的值。
 - **帳號**：`TIANXIA_PROFILE=… <python> scripts/set_password.py <帳號> --character <名號> --db <db> --local-dir <scratchpad>/local`。
@@ -42,6 +47,7 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 
 ## API
 - 打 API 的腳本從 **bash** 跑，PowerShell 會把 JSON 參數弄壞。用 `requests.Session()`，先 `POST /api/login {login,password}`。
+- 被引擎擋的動作（非管理者打管理者的 op）回 400，body 是 `{"error": "只有管理者能這麼做。"}`；找不到的 op 才是 404 `{"detail": "Not Found"}`——檢查字樣讀 `error`，不是 `detail`（2026-10-21，FB-609 複驗）。
 - **玩家**：`GET /api/main` 會同步並回 `status`／`options`／`latest`；按選項是 `POST /api/choose {id}`；其他動作走 `POST /api/do/<op>`。回傳的 `message` 是 HTML，`main` 是畫面。
 - **管理者**也走 `POST /api/do/<op>`，不是 `/api/admin`。常用的：
   - `open_season`、`end_season`、`next_season`
@@ -54,6 +60,7 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
   - 軍令卡在 `main["orders"]`。
   - 按了 `act:bounties` 之後，懸賞榜在 `main["shop"]`（`notes` 每張有 `short`、`due`）。
   - 管理者頁（時刻表每一列、排定的現實時間 `at_real`）要 `GET /api/admin`；`main["admin"]` 只是布林。
+- **`/api/do/<op>` 先查 `ADMIN_ACTIONS`**：玩家動作跟管理者動作同名時，玩家打到的是管理者那一個（回「只有管理者能這麼做。」）。一批加了新動作，先看一次 `set(server.MAIN_ACTIONS) & set(server.ADMIN_ACTIONS)`，再用玩家帳號真的打一次那個路由（2026-10-21 翻地 QA，FB-609：單元測試只看兩張表各有那個鍵）。
 - **實機對照「一個字都不變」**：腳本用 `subprocess.Popen` 在同一個埠輪流起兩份複本的伺服器，各用新的暫存資料庫，只打 API、印要比的欄位；把現實時刻的 `HH:MM` 換掉再 diff，結束時 `taskkill /T`。
 - `status` 裡沒有的鍵就是畫面不畫。要確認某個東西在某種季、某種狀態下不出現，直接看 `status` 有沒有那個鍵，再補打一次那個動作，確認什麼都沒動。
 
@@ -71,13 +78,17 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
   - 字被切掉：元素的 `scrollWidth` 大於 `clientWidth`。
   - 截圖與 `zoom` 拿來當證據。
 - **寬度與深色**：用 `resize_window` 設 375×812、360×780，`colorScheme` 設 dark 或 light。窗格寬度一變、回合結束，這些設定都會被重設，要再設一次。做完設回 `preset: desktop`。
+- **窗格藏著時截圖可能全白**（`tabs_context` 最後一行寫 hidden；2026-10-21）：`scrollIntoView` 之後連拍都是空白，再設一次 `resize_window`、改用 `window.scrollTo(0, y)` 捲過去就拍得到。量版面的 JS 不受影響。
 - **東西在哪**（2026-10-20 找過的）：
   - 玩法說明在齒輪抽屜裡（`[data-act="howto"]`，攤開之後在 `#howto` 找 `h4` 的節名）；江湖頁的「玩法說明 ›」只在新手期出現。
   - 輿圖總覽（「今天去哪裡出陣」、三條戰線的繩 `.m-rope`、繩上的地點 `.bead`）在底下那張卡裡，收著時點卡頭攤開。
   - 輿圖上的 ⚔ 是 `g.armed`，數量拿去跟引擎的 `mapview.armed_places` 比；地點圓盤在 `g[data-loc="<id>"]` 裡，顏色與虛線直接讀 `circle` 的屬性。
   - 江湖頁的戰況圖卡是 `div.war`，點了攤開 `.war-help.fronts-help`；主線是 `.peek-chip.quest`。
   - 行動列的格子是 `button.act-ink`（灰的多一個 `.off`，小字是裡面的 `small`，量字有沒有被切比 `small.scrollWidth` 與 `button` 的左右邊）；格子底下每一格的說明在 `.act-notes p`（開頭是粗體的格名）。截圖前先 `document.querySelector('.act-notes').scrollIntoView({block:'end'})`。軍令卡是 `<details>` 裡的 `summary`（「📜 本週軍令」），要看內容先 `open = true`。
+  - **輿圖上軍令的小牌子**（「令 守城」「令 截糧」，`text` 裡找）你站的地方不掛（`mapBadges`），要驗就把角色挪到隔壁（改存檔 `location`、reload）；引擎給的值在 `GET /api/map/state` 的 `places[loc].order`，軍令卡的字在 `main["orders"][i]["how"]`（翻地複驗，FB-605）。
   - 輿圖 ⚔（`g.armed`）不在 `g[data-loc]` 裡面，它前面最近的 `g[data-loc]` 兄弟才是那個地點（往 `previousElementSibling` 找）；點了輿圖分頁要等約 3 秒才畫好，頭一次數到 0 不是沒有。
+  - **天下圖的路畫在底圖裡**：`.tx-world-map image` 是一張點陣化的 PNG（blob），DOM 找不到路的 `path`；要看某一條路只能截圖：「放大」按到最大（375 寬 ×1.5、320 寬 ×2，按鈕變 disabled）、點「收起」把「今天去哪裡出陣」收下去、再拖地圖。小地圖（`div.mini svg`）的路在 DOM 裡，`path` 的 `d` 是「M甲x,甲y Q… 乙x,乙y」（id 字母小的那頭在前）。
+  - **區塊的歸屬顏色**：`g[data-loc]` 裡第三個 `circle` 的 `stroke`：官軍 #3D5F8F、黃巾 #B9821A、中立 #8F8B82（第二個圓多一個虛線 `stroke-dasharray`），不是區塊的 #7A6A55；第一個圓是點擊範圍（透明）。
 
 ## 存檔、資料庫與假人
 - 換季之後、玩家第一次同步之前改的存檔，會被換季重設洗掉。要等他同步完再改。
@@ -90,6 +101,7 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 - **假人**：只在台灣時間 11:30～13 與 19～24 上線，懶的有些日子整天不上線。
   - 其他時段：把資料庫複製一份，用 `BotRunner(content, client=None, clock=lambda: 假時間)` 一輪一輪 `tick()`。
   - 正式驗「看不出是假人」：查角色存檔以外的每一張表，加上 `status`、玩家卡、傳聞、江湖史。
+  - `battles` 表的 JSON 有欄位名 `is_bot`（`BattleParticipant`：決戰補位的機器人才是 true，伺服器假人一律 false）：掃字樣時它一定會中，要找的是 `"is_bot":true`，欄位名本身不算透露（2026-10-21）。
 
 ## 只能靠引擎腳本驗的（寫法看 `引擎驗收.md`）
 - 跟開季時刻有關的：伺服器開季用真實時間，例如週三開季。

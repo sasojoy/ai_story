@@ -95,6 +95,15 @@ class SealShard(BaseModel):
     absent: int = 0  # 持有者連續幾季沒上線（換季時數，PM 庚；隱沒看它）
 
 
+class SealCache(BaseModel):
+    """領地爭奪的季，這一季藏在中立地的那一片（領地爭奪設計 3.9、4.8；seal.hide）。藏在哪一塊不公開：沒有任何畫面、API、江湖史讀它，
+    只有探索撿碎片（Game._seal_find）與管理者的「現在藏一片」讀。季末沒撿到就在換季時清掉。"""
+
+    season: int
+    shard: str
+    loc: str
+
+
 class SealRegistry(BaseModel):
     """碎片歸屬的正本（玉璽碎片設計 7.4、13.2）：world 那一列的 JSON，不分季、跨季保存。"""
 
@@ -111,6 +120,7 @@ class SealRegistry(BaseModel):
     last_showdown_where: str = ""  # 上面那一場的名字（BattleDef.name）：管理者開的單挑公告照它寫
     mandate_season: int | None = None  # 最近一次蓋上天命之季的季別（seal.mandate_now 看它；WorldState.mandate 同時蓋）
     mandate_pending: bool = False  # 下一個能打天命之爭的季要蓋章（上一次延後、或管理者「下一季」）
+    cache: SealCache | None = None  # 領地爭奪的季，這一季藏著的那一片（不公開；舊資料沒有＝None）
     history: list[SealEvent] = Field(default_factory=list)
 
 

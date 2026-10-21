@@ -121,6 +121,7 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         banned_words=_read(root / "banned_words.json") if (root / "banned_words.json").exists() else [],
         mingtie=MingtieContent(**_read(root / "mingtie.json")) if (root / "mingtie.json").exists() else MingtieContent(),
         arena_crowd=_read(root / "arena_crowd.json") if (root / "arena_crowd.json").exists() else {},
+        xingshi_lines=_read(root / "xingshi_lines.json") if (root / "xingshi_lines.json").exists() else {},
         seal=_shards(root / "seal.json"),
         relations=[_build(RelationDef, raw) for raw in _read(root / "relations.json")] if (root / "relations.json").exists() else [],
         gather_branches=_index(GatherBranch, _read(root / "gather_branches.json")) if (root / "gather_branches.json").exists() else {},
@@ -651,6 +652,44 @@ def check_arena_crowd(c: Content, need) -> None:
     if c.arena_crowd and c.config.arena.enabled and c.config.arena.crowd.enabled:
         for kind in arena_crowd.KINDS:
             need(bool(c.arena_crowd.get(kind)), f"arena_crowd 缺少種類 {kind}")
+
+
+def check_xingshi_lines(c: Content, need) -> None:
+    """〈天下形勢〉的句型（content/xingshi_lines.json，領地爭奪第三批 A；Joy 直接改字）：寫了這個檔就每一組都要齊——open、close 是一串句子，
+    fact、summary、lean、move 每一個鍵（xingshi.FACT_KEYS 這幾組）都要有一句、不能多寫認不得的鍵；每一句照 xingshi.SAMPLE 填得進去、
+    填完不能空、不能有阿拉伯數字（文章不准有數字，固定段就是拿這些句子拼的）。沒有這個檔就沒有〈天下形勢〉（xingshi.on）。"""
+    from . import xingshi  # noqa: PLC0415
+
+    lines = c.xingshi_lines
+    if not lines:
+        return
+
+    def check(where: str, text) -> None:
+        try:
+            filled = str(text).format(**xingshi.SAMPLE)
+        except (KeyError, IndexError, ValueError) as e:
+            need(False, f"xingshi_lines.{where}：「{text}」填不進去（{e}）")
+            return
+        need(isinstance(text, str) and bool(filled.strip()) and not any(ch.isdigit() for ch in filled),
+             f"xingshi_lines.{where}：「{text}」不能空、不能有數字")
+
+    groups = {"fact": xingshi.FACT_KEYS, "summary": xingshi.SUMMARY_KEYS, "lean": xingshi.LEAN_KEYS, "move": xingshi.MOVE_KEYS}
+    for key in lines:
+        need(key in groups or key in ("open", "close"), f"xingshi_lines：不認得的鍵 {key}")
+    for key in ("open", "close"):
+        pool = lines.get(key)
+        need(isinstance(pool, list) and bool(pool), f"xingshi_lines.{key}：要寫成一串句子")
+        for text in pool if isinstance(pool, list) else []:
+            check(key, text)
+    for group, keys in groups.items():
+        table = lines.get(group)
+        need(isinstance(table, dict), f"xingshi_lines.{group}：要寫成「鍵：句子」")
+        table = table if isinstance(table, dict) else {}
+        for key in keys:
+            need(key in table, f"xingshi_lines.{group} 缺少 {key}")
+        for key, text in table.items():
+            need(key in keys, f"xingshi_lines.{group}：不認得的鍵 {key}")
+            check(f"{group}.{key}", text)
 
 
 def check_shop_lines(c: Content, need) -> None:
@@ -1647,7 +1686,8 @@ def check_territory(c: Content, need, known, front_ids: list[str]) -> None:
 
 def check_conquest_blocks(c: Content, need, known, front_ids: list[str]) -> None:
     """領地爭奪的區塊（Scenario.territory.blocks，第 38 項改版計畫 Task 2）：只在寫了區塊時查。地點認得；大本營是自己陣營的種類；
-    豪強（要依附別人的陣營）的投靠點與序章專屬的地點不是區塊；fixed 是陣營的種類；line 是戰線或 null；每一塊中立至少跟一塊區塊直通。
+    豪強（要依附別人的陣營）的投靠點與序章專屬的地點不是區塊；fixed 是陣營的種類；line 是戰線或 null；每一塊中立至少跟一塊區塊直通，
+    而且每一方都走得到（conquest.reach：從自家開季的區塊出發、只走自家與中立的區塊；輿圖簡化設計 3.2）。
     中立駐軍（neutral_garrison）只寫在開季中立的區塊、隊伍認得、沒有陣營。"""
     from . import conquest, territory  # noqa: PLC0415  延後 import（同 check_territory）
 
@@ -1673,6 +1713,14 @@ def check_conquest_blocks(c: Content, need, known, front_ids: list[str]) -> None
         need(block.line is None or block.line in front_ids, f"{here}：line「{block.line}」不是戰線")
         if block.kind == conquest.NEUTRAL:
             need(bool(conquest.adjacent(c, loc_id)), f"{here}：中立區塊至少要跟一塊區塊直通（不然誰都打不到）")
+    # 每一塊中立地，每一方都要有一條路從自家開季持有的區塊走得到、只走自家與中立的區塊（輿圖簡化設計 3.2，PM 2026-10-21）
+    neutral = [loc_id for loc_id, block in t.blocks.items() if block.kind == conquest.NEUTRAL and loc_id in c.locations]
+    for side in sorted({block.kind for block in t.blocks.values()} - {conquest.NEUTRAL}):
+        reached = conquest.reach(c, side)
+        name = c.scenario.faction_name(side, side)
+        for loc_id in neutral:
+            need(loc_id in reached, f"{where} {loc_id}（{c.locations[loc_id].name}）：{name}走不到這塊中立地"
+                                    f"（從{name}開季的區塊出發、只走{name}與中立的區塊；輿圖簡化設計 3.2）")
     for loc_id, squads in t.neutral_garrison.items():
         here = f"領地爭奪的中立駐軍 {loc_id}"
         need(loc_id in t.blocks and t.blocks[loc_id].kind == conquest.NEUTRAL, f"{here}：只能寫在開季中立的區塊")
@@ -2119,6 +2167,7 @@ def validate(c: Content) -> None:
     check_combat_lines(c, need)
     check_shop_lines(c, need)
     check_arena_crowd(c, need)
+    check_xingshi_lines(c, need)
     check_traits(c, need)
     check_signature_arts(c, need)
     # 沒寫 drops 的對手走 materials.py 依難度的預設掉落表，所以每一階都得有素材可挑。
@@ -2915,7 +2964,7 @@ def _validate_forge_secrets(c: Content, need) -> None:
 def _validate_seal(c: Content, need) -> None:
     """玉璽碎片（玉璽碎片設計 13.4、8.5）：係數都不超過 1（一場最多 cap）；沒有 content/seal.json 可以（碎片關著：時刻表的標記與
     emerge_skill 都不檢查——測試內容沒有混元一氣，預設的 emerge_skill 不能讓它載入失敗）；有就 emerge_skill 認得、剛好七片、名字不重複、
-    效果鍵在 Config.seal.effects、名字過命名過濾；時刻表不是空的時標 emerge 的剛好一件、標了 seal 的都是決戰。
+    效果鍵在 Config.seal.effects（改版的 effects 在 Config.seal.revamp.effects）、名字過命名過濾；時刻表不是空的時標 emerge 的剛好一件、標了 seal 的都是決戰。
     天命之爭（玉璽二）：最多一件、是決戰、沒標 seal、有它的戰鬥、mandate_endings 指到交戰兩軍與標了 mandate 的結局；標了 mandate 的結局都有人指。"""
     cfg = c.config.seal
     for label, table in (("side_factor", cfg.side_factor), ("take_share", cfg.take_share)):
@@ -2927,6 +2976,8 @@ def _validate_seal(c: Content, need) -> None:
     need(len({s.name for s in c.seal.values()}) == len(c.seal), "content/seal.json：七片的名字要不重複")
     for shard in c.seal.values():
         need(shard.effect in cfg.effects, f"content/seal.json：{shard.id} 的效果 {shard.effect} 不在 Config.seal.effects")
+        for key in shard.effects:  # 改版的常駐效果（玉璽碎片改版第三章）：開關關著也檢查，打開那一刻不會才發現內容寫錯
+            need(key in cfg.revamp.effects, f"content/seal.json：{shard.id} 的改版效果 {key} 不在 Config.seal.revamp.effects")
         problem = name_problem(shard.name, c)
         need(problem in (None, SEAL_CLASH), f"content/seal.json：{shard.id} 的名字「{shard.name}」{problem}")
     mandates = c.mandate_timetable  # 天命之爭（玉璽二；8.3、8.5）

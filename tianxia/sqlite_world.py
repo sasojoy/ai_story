@@ -694,6 +694,7 @@ class SqliteWorldStore:
             state.season_opened = content.config.auto_open_first_season
             if state.season_opened:  # 自動開的第一季（測試內容）：同開季那一刻挑這一季的神器（divine.stamp，開關關著什麼都不做）
                 divine.stamp(state, content)
+                self._stamp_cache(state, content)
 
         return self.mutate(_apply).season
 
@@ -712,6 +713,7 @@ class SqliteWorldStore:
             state.sieges = []  # 攻城戰（第二批）：籌備中不會有，保險
             state.season.tianji = state.tianji  # 這一季的天機蓋進季裡：週初掛單的重賞亂數看它（裝備四欄 6.4；bounties.issue 讀不到全服那一列）
             divine.stamp(state, content)  # 神器輪替（正式季整合 5.6）：照全服登記挑這一季的神器；開關關著什麼都不做
+            self._stamp_cache(state, content)  # 領地爭奪的季：碎片藏在中立地（Task 14）
             state.season_opened = True
             state.season_last_real = now
             state.seal.opened_real = now  # 「這一季上線過」與隱沒看它（玉璽碎片設計 5.3、7.6）
@@ -736,7 +738,7 @@ class SqliteWorldStore:
                 if content.config.seal.enabled and not mandate:  # 主機關掉碎片時不判隱沒（登記照留）
                     seen = {s.holder: _seen_real(conn, s.holder) for s in reg.shards.values() if s.state == "held" and s.holder}
                     for shard, name in seal.sink(reg, state.season_number, seen, now, content.config.seal):
-                        text = seal.SINK.format(holder=name, shard=content.seal[shard.id].name)
+                        text = seal.sink_text(content, name, content.seal[shard.id].name)  # 改版：不點名
                         state.season.chronicle.append(Rumor(time=state.season.time, text=text))
                         wrote = True
                 for duel in state.seal_duels:  # 還沒收場的單挑記成未分勝負，兩人補得到（開關關著時留下來的也一樣，不帶進下一季）
@@ -763,6 +765,7 @@ class SqliteWorldStore:
             divine.stamp(state, content)  # 同 open_season：新的一季照全服登記挑神器（季數、天機都是新的）
             if content.seal and content.config.seal.enabled:  # 七片這一輪都現世過：新的一季蓋天命之季的章（8.1）
                 self._stamp_mandate(state, content)
+            self._stamp_cache(state, content)  # 上一季沒撿到的清掉；領地爭奪的季（天命之季除外）重擲藏一片（Task 14）
             from .timetable import avoid_quiet_hours  # noqa: PLC0415  延後 import：timetable → rules → world_state
 
             avoid_quiet_hours(state.season, content, now)  # 同開季：季曆排的決戰（含天命之爭）照這一刻挪開半夜
@@ -770,6 +773,16 @@ class SqliteWorldStore:
             state.sieges = []  # 攻城戰同上（領地爭奪第二批）
             self._save(conn, state)
             return True
+
+    @staticmethod
+    def _stamp_cache(state: SharedWorldState, content: Content) -> None:
+        """開季那一刻（自動開的第一季、管理者開季、換季）：碎片藏在中立地（seal.stamp_cache：上一季沒撿到的清掉、領地爭奪的季照
+        hide_chance 擲、天命之季不藏）。直接改 state（同一筆交易、不巢狀 mutate）；內容沒有七片就什麼都不做。"""
+        if not content.seal:
+            return
+        from . import seal  # noqa: PLC0415
+
+        seal.stamp_cache(state, content)
 
     @staticmethod
     def _stamp_mandate(state: SharedWorldState, content: Content) -> None:

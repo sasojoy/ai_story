@@ -256,7 +256,7 @@ def test_wanted_poster_hunter_and_the_raid(setup, monkeypatch):
     assert not any(x["action"] == "raid" for x in _do(content, world, "丙", lambda g: g.peer_card("乙"))[0]["actions"])
     _direct(content, world, "丙", lambda g: bounties.take(g.state, g.content, b.id))
     assert any(x["action"] == "raid" for x in _do(content, world, "丙", lambda g: g.peer_card("乙"))[0]["actions"])
-    monkeypatch.setattr(Game, "_spar_power", staticmethod(lambda who, against: 1000.0 if who.state.player.name == "丙" else 1.0))
+    monkeypatch.setattr(Game, "_spar_power", staticmethod(lambda who, against, seal=True: 1000.0 if who.state.player.name == "丙" else 1.0))
     msgs, game = _do(content, world, "丙", lambda g: g.peer_act("乙", "raid"))
     p = game.state.player
     assert any(m.startswith("【懸賞】") for m in msgs) and p.bounties_done == 1
@@ -275,7 +275,7 @@ def test_a_wanted_closed_by_a_raid_is_saved_to_the_season(setup, monkeypatch):
     _do(content, world, "甲", lambda g: g.peer_act("乙", "wanted", {"amount": 50}))
     b = world.get_season().bounties[-1]
     _direct(content, world, "丙", lambda g: bounties.take(g.state, g.content, b.id))
-    monkeypatch.setattr(Game, "_spar_power", staticmethod(lambda who, against: 1000.0 if who.state.player.name == "丙" else 1.0))
+    monkeypatch.setattr(Game, "_spar_power", staticmethod(lambda who, against, seal=True: 1000.0 if who.state.player.name == "丙" else 1.0))
     msgs, _ = _do(content, world, "丙", lambda g: g.peer_act("乙", "raid"))
     assert any(m.startswith("【懸賞】") for m in msgs)
     saved = next(x for x in world.get_season().bounties if x.id == b.id)
@@ -301,7 +301,7 @@ def test_a_wanted_runs_end_to_end_with_the_season_one_switch_off(beta_setup, mon
     b = world.get_season().bounties[-1]
     _direct(content, world, "丙", lambda g: bounties.take(g.state, g.content, b.id))
     assert any(x["action"] == "raid" for x in _do(content, world, "丙", lambda g: g.peer_card("乙"))[0]["actions"])
-    monkeypatch.setattr(Game, "_spar_power", staticmethod(lambda who, against: 1.0 if who.state.player.name == "乙" else 1000.0))
+    monkeypatch.setattr(Game, "_spar_power", staticmethod(lambda who, against, seal=True: 1.0 if who.state.player.name == "乙" else 1000.0))
     msgs, game = _do(content, world, "丙", lambda g: g.peer_act("乙", "raid"))
     p = game.state.player
     assert any(m.startswith("【懸賞】") for m in msgs) and p.bounties_done == 1

@@ -32,20 +32,21 @@ def test_neutral_garrison_stays_after_capture():
     assert "nz_luanbing" in start and all(c.squads[s].faction is None for s in start)
     conquest.set_control(w, c, "nanyang_wilds", "huang")
     assert _squads(game, "nanyang_wilds") == start  # 駐軍不換成佔領方自己的兵（設計 3.3）
-    assert set(_squads(game, "deep_mountain")) >= {"yelang", "heixiong", "nz_tiger"}  # 地點自己的野獸流寇照舊在
+    river = set(_squads(game, "yu_river"))
+    assert river >= {"he_shuikou", "nz_shuifei"} and "louluo" not in river  # 地點自己的野獸流寇照舊在，有陣營的兵不在
 
 
 def test_faction_block_takes_holder_garrison():
     game = conquest_game("season21")
     w, c = game.state.world, game.content
-    assert set(_squads(game, "runan_wilds")) == {"louluo", "shuikou"}
-    conquest.set_control(w, c, "runan_wilds", "guan")
-    assert set(_squads(game, "runan_wilds")) == {"guan_patrol", "jun_bing"}
+    assert set(_squads(game, "guan_camp")) == {"beijun_wuzu", "liangzhou_cavalry"}
+    conquest.set_control(w, c, "guan_camp", "huang")
+    assert set(_squads(game, "guan_camp")) == {"louluo", "shuikou"}
     assert _squads(game, "zhuo_county") == []  # 沒寫 garrison 的照 Location.enemies
 
 
 @pytest.mark.parametrize("change", [
-    lambda t: t.neutral_garrison.__setitem__("runan_wilds", ["nz_daoke"]),  # 只能寫在開季中立的區塊
+    lambda t: t.neutral_garrison.__setitem__("guan_camp", ["nz_daoke"]),  # 只能寫在開季中立的區塊
     lambda t: t.neutral_garrison.__setitem__("hilltop_wilds", ["louluo"]),  # 要是沒有陣營的隊伍
     lambda t: t.neutral_garrison.__setitem__("hilltop_wilds", ["nobody"]),  # 隊伍要認得
 ])
@@ -59,4 +60,4 @@ def test_validate_rejects_bad_neutral_garrison(change):
 def test_switch_off_squads_unchanged():
     game = plain_game("weekend")
     assert _squads(game, "nanyang_wilds") == ["jun_bing"]  # 地盤易手：官軍控制的那一組
-    assert "nz_tiger" not in _squads(game, "deep_mountain")
+    assert "nz_shuifei" not in _squads(game, "yu_river")

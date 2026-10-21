@@ -271,16 +271,16 @@ def _more(ratio: float | None) -> str:
 
 
 def _fighters(
-    state: GameState, content: Content, world: WorldStateStore,
+    state: GameState, content: Content, world: WorldStateStore, *, seal: bool = True,
 ) -> tuple[list, list[float], list[encounter.Boost]]:
     """打一場的陣容、各自的氣血係數與加成：本人、出戰的同伴，再加上部下（滿血）。
     每個人的加成吃他自己的屬性（本人、同伴、部下各一份，見 team_boosts），不吃別人的。
-    三份一樣長（encounter.team_power 會檢查），部下才不會被默默漏掉（F17）。"""
+    三份一樣長（encounter.team_power 會檢查），部下才不會被默默漏掉（F17）。seal 見 player_boost。"""
     followers = follower_units(state, content)
     return (
         team_participants(state, world) + followers,
         team_conditions(state, content, world) + [1.0] * len(followers),
-        team_boosts(state, content, world),
+        team_boosts(state, content, world, seal=seal),
     )
 
 
@@ -840,18 +840,23 @@ def resonance(state: GameState, content: Content, art: MartialArt | None) -> flo
     return 1 + min(cfg.resonance_cap, max(0.0, state.player.stats.get(stat, 0) * cfg.resonance_per_point))
 
 
-def player_boost(state: GameState, content: Content, world: WorldStateStore) -> encounter.Boost:
+def player_boost(state: GameState, content: Content, world: WorldStateStore, *, seal: bool = True) -> encounter.Boost:
     """玩家本人的加成：臂力管外功、根骨管內功（武學與成長設計 6.1）；整個人再乘上內外搭配與兩門各自的
     正邪共鳴（5.1、7.4）。搭配至少是 BOOST_FLOOR、共鳴至少是 1，所以乘出來的 factor 不會低於下限。
-    再乘身上兵器的加成（兵器設計第三節）。"""
+    再乘身上兵器的加成（兵器設計第三節）與玉璽碎片的戰力（改版第三章，treasures.power_scale：沒碎片、開關關著是 1）。
+    seal=False 不乘碎片：奪璽單挑的快照與江湖水漲的浮動難度照這一份（改版：碎片搶得走、強者的 +10% 不被對手同步吃掉）。"""
     stats, member = state.player.stats, state.player.member
     wugong = player_art(state, content, world, member.wugong_id)
     neigong = player_art(state, content, world, member.neigong_id)
+    factor = (pairing(content, wugong, neigong) * resonance(state, content, wugong) * resonance(state, content, neigong)
+              * (1 + weapons.bonus(state.player.weapon, wugong, content, world)))  # 兵器（兵器設計 3.1）：配不上是 1
+    scale = treasures.power_scale(state, content) if seal else 1.0
+    if scale != 1.0:  # 沒碎片時一個位元也不動（不多乘一次 1.0 之外的東西）
+        factor *= scale
     return encounter.Boost(
         outer=stat_bonus(content, stats.get("str", BASE_STAT)),
         inner=stat_bonus(content, con_of(state, content, world, PLAYER)),
-        factor=pairing(content, wugong, neigong) * resonance(state, content, wugong) * resonance(state, content, neigong)
-        * (1 + weapons.bonus(state.player.weapon, wugong, content, world)),  # 兵器（兵器設計 3.1）：配不上是 1
+        factor=factor,
     )
 
 
@@ -878,11 +883,12 @@ def follower_boost(content: Content, follower: FollowerDef, drill: FollowerDrill
     return encounter.Boost(outer=stat_bonus(content, follower_strength(content, follower, drill)))
 
 
-def team_boosts(state: GameState, content: Content, world: WorldStateStore) -> list[encounter.Boost]:
+def team_boosts(state: GameState, content: Content, world: WorldStateStore, *, seal: bool = True) -> list[encounter.Boost]:
     """跟陣容一一對應（本人、出戰的同伴、部下），一個都不能少——少一個 encounter.team_power 就會報錯，
-    而不是默默漏算（F17、計畫二 G1）。同伴、部下吃自己的屬性（人物資質設計 14.3；原本是空的加成）。"""
+    而不是默默漏算（F17、計畫二 G1）。同伴、部下吃自己的屬性（人物資質設計 14.3；原本是空的加成）。
+    seal 見 player_boost（只動本人那一份；同伴、部下本來就不吃碎片）。"""
     return (
-        [player_boost(state, content, world)]
+        [player_boost(state, content, world, seal=seal)]
         + [mate_boost(state, content, world, key) for key in state.player.team]
         + [follower_boost(content, follower, drill_of(state, key)) for key, follower in follower_rows(state, content)]
     )
@@ -917,6 +923,7 @@ def take_encounter_toll(
     同伴照他自己的身法、根骨（人物資質設計 14.3）。本人身上的防具（裝備四欄設計 4.3）跟化勁相加，合計夾在
     `Config.armor.total_cap`；同伴不吃防具。
     share：對手真的打到你的回合佔幾成（本命戰法讓他定身、打空、打到自己、化影的回合不算，tactics.Clash.blocked_share）；平常是 1。
+    本人帶螭首（玉璽碎片改版，treasures.amount 的 injury）時變成內傷的那一份再乘它；同伴不吃。
     """
     cfg = content.config
     fraction = cfg.encounter_neili_loss.get(tier, 0.0) * (cfg.wild_neili_loss_factor if wild else 1.0) * max(0.0, share)
@@ -932,6 +939,7 @@ def take_encounter_toll(
             lost, hurt = _apply_toll(
                 content, state.player.member, fraction * (1 - cut),
                 agi=stats.get("agi", BASE_STAT), con=con_of(state, content, world, PLAYER),
+                injury=treasures.amount(state, content, "injury"),  # 螭首（玉璽碎片改版）：變成內傷的減半；沒帶是 1
             )
             if round(lost) > 0:  # 本來就見底、一滴都沒得扣時不寫「氣血 -0」（零的變化是雜訊）；內傷照樣寫
                 msgs.append(f"氣血 -{lost:.0f}")  # 照既有慣例寫變化量（跟「銀兩 -5」「心得 +12」同一串）
@@ -1279,13 +1287,14 @@ def estimate(
 
 def power_vs(
     state: GameState, content: Content, world: WorldStateStore, squad: Squad, fresh: bool = False,
-    *, at: str | None = None, terrain: bool = True,
+    *, at: str | None = None, terrain: bool = True, seal: bool = True,
 ) -> float:
     """全隊此刻對上這一路的威力（氣血係數、加成、屬性相剋、一門打不遍、地利都算；勝算與打起來同一份）。
     fresh：氣血係數一律當滿的——江湖水漲（rise.big）照這一份浮難度，帶傷上陣照樣吃虧（不然傷得越重對手跟著越弱）。
-    at、terrain 照 _styled_fighters：江湖水漲浮難度傳 terrain=False（不然地利被浮上去的難度吃掉，計畫 2026-10-18 2.1）。"""
+    at、terrain 照 _styled_fighters：江湖水漲浮難度傳 terrain=False（不然地利被浮上去的難度吃掉，計畫 2026-10-18 2.1）。
+    seal：江湖水漲浮難度傳 False（玉璽碎片的戰力不浮上去，PM 五之一 2），見 player_boost。"""
     arts = team_arts(state, content, world)
-    members, conditions, boosts = _styled_fighters(state, content, world, arts, squad, at=at, terrain=terrain)
+    members, conditions, boosts = _styled_fighters(state, content, world, arts, squad, at=at, terrain=terrain, seal=seal)
     if fresh:
         conditions = [1.0] * len(conditions)
     return encounter.team_power(*_with_attribute((members, conditions, boosts), arts, squad.attribute))
@@ -1293,13 +1302,13 @@ def power_vs(
 
 def _styled_fighters(
     state: GameState, content: Content, world: WorldStateStore, arts: dict[str, MartialArt], squad: Squad,
-    *, at: str | None = None, terrain: bool = True,
+    *, at: str | None = None, terrain: bool = True, seal: bool = True,
 ) -> tuple[list, list[float], list[encounter.Boost]]:
     """_fighters，再把大場面對手的路數（styles，一門打不遍）乘進每個人的加成：照他身上那一門武學的屬性；
     最後是地利（terrain_mod.factor，計畫 2026-10-18）：本人與出戰同伴身上的武學、內功一門一門比這一地最濃的意境，部下不吃。
     at：照哪一處的地利（輿圖替別處算勝算）；不給是玩家此刻腳下（在路上沒有）。terrain=False 不算地利（江湖水漲浮難度）。
-    fight 與 estimate 都走這裡，勝算才跟打起來一樣。"""
-    members, conditions, boosts = _fighters(state, content, world)
+    fight 與 estimate 都走這裡，勝算才跟打起來一樣。seal 見 player_boost。"""
+    members, conditions, boosts = _fighters(state, content, world, seal=seal)
     style = styles.style_of(state, content, world, squad)
     attributes = [arts[m.wugong_id].attribute if m.wugong_id in arts else None for m in members]
     boosts = styles.styled(boosts, attributes, content, style)

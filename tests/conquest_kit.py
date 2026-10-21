@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest import mock
 
 from conftest import real_content
-from tianxia import team, territory
+from tianxia import conquest, team, territory
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game
 from tianxia.models import Content
@@ -15,9 +15,11 @@ from tianxia.sqlite_world import open_world
 from tianxia.state import SiegeSlot
 
 
-def conquest_rules(content: Content) -> Content:
-    """打開領地爭奪（Config.conquest.enabled），回傳同一份內容。"""
+def conquest_rules(content: Content, xingshi: bool = False) -> Content:
+    """打開領地爭奪（Config.conquest.enabled），回傳同一份內容。〈天下形勢〉（第三批 A，Config.xingshi）預設關掉：第一、二批的測試照舊
+    （每天結算不開單、不多一則天下大事），要測它的另外給 xingshi=True。"""
     content.config.conquest.enabled = True
+    content.config.xingshi.enabled = xingshi
     return content
 
 
@@ -32,9 +34,9 @@ def _new(content: Content, name: str, world=None) -> Game:
     return game
 
 
-def conquest_game(profile: str = "season21", name: str = "沈浪", world=None) -> Game:
-    """正式內容、開季時就打開領地爭奪的一局（同 test_territory._game 的建法）。"""
-    return _new(conquest_rules(real_content(profile)), name, world)
+def conquest_game(profile: str = "season21", name: str = "沈浪", world=None, xingshi: bool = False) -> Game:
+    """正式內容、開季時就打開領地爭奪的一局（同 test_territory._game 的建法）；xingshi 打開〈天下形勢〉。"""
+    return _new(conquest_rules(real_content(profile), xingshi), name, world)
 
 
 def plain_game(profile: str = "weekend", name: str = "沈浪", world=None) -> Game:
@@ -85,3 +87,9 @@ def announce(game: Game, loc_id: str, side: str, minute: int = 21 * 60, merged: 
     )
     w.conquest.schedule.append(slot)
     return slot
+
+
+def press(game: Game, loc_id: str, side: str, amount: float = 20, name: str = "敵將") -> None:
+    """side 在這一塊推了一截（翻地與爭搶：守城軍令認「自家被推得最高、守得動」的那幾塊，conquest.focus_blocks）。第二批的測試拿 announce
+    當「這一塊被公告要攻」的，翻地之後換成這個——announce 排進時程表等於那一塊被戰書凍結，凍結的守不動、不算守城的地方。"""
+    conquest.push(game.state.world, game.content, loc_id, side, name, amount, "attack")

@@ -56,7 +56,7 @@ def test_templates_exist_for_every_region_and_stay_off_the_admin_menu():
 def test_siege_opens_at_muster_with_progress_shift():
     game = _game()
     slot = announce(game, "nanyang_road", "huang")
-    game.state.world.conquest.progress["nanyang_road"] = 80  # 往黃巾偏 30 → 起點偏 6（戰局以官軍為正向，往下）
+    conquest.push(game.state.world, game.content, "nanyang_road", "huang", "某", 80, "attack")  # 黃巾那一條 80：偏 6（戰局以官軍為正向，往下）
     msgs = _open(game, slot)
     battle, found = _siege_of(game, slot)
     assert battle is not None and found.status == "open" and found.record_id == battle.record_id
@@ -64,7 +64,8 @@ def test_siege_opens_at_muster_with_progress_shift():
     assert battle.muster_deadline_real == pytest.approx(NOW + 1800)  # 集結截止＝開打的那一刻
     assert battle.siege.loc == "nanyang_road" and battle.siege.attackers == ["huang"] and battle.siege.holder is None
     assert any("攻城・南陽官道" in m for m in msgs)
-    assert conquest.progress_open(game.state.world, game.content, "nanyang_road") is False  # 開打之後進度不再推
+    # 打完之前推不動；集結中的原因照那一步寫（FB-552：去加入攻城），不再是「已下戰書」
+    assert conquest.push_problem(game.state.world, game.content, "huang", "nanyang_road", "attack") == conquest.WHY_MUSTER
 
 
 def test_neutral_siege_has_a_guard_commander():
@@ -80,7 +81,7 @@ def test_neutral_siege_has_a_guard_commander():
 def test_attacker_win_flips_and_reweighs():
     game = _game()
     slot = announce(game, "nanyang_road", "huang")
-    game.state.world.conquest.progress["nanyang_road"] = 70
+    conquest.push(game.state.world, game.content, "nanyang_road", "huang", "沈浪", 70, "attack")
     _open(game, slot)
     battle = game.world.get_sieges()[0]
     game.choose(next(o.id for o in game.options() if o.id.startswith("battle:join:huang")))
@@ -91,7 +92,8 @@ def test_attacker_win_flips_and_reweighs():
     assert conquest.holder(w, game.content, "nanyang_road") == "huang"
     assert rules.world_trend_value(w, game.content, "nanyang") > before  # 照新的基準
     assert any("南陽官道落入" in r.text for r in w.rumors)
-    assert conquest.progress_of(w, "nanyang_road") == 50
+    assert conquest.bars(w, "nanyang_road") == {} and conquest.cooling(w, game.content, "nanyang_road")  # 照推滿易手：清掉、冷卻
+    assert [p.name for p in w.conquest.payouts] == ["沈浪"]  # 推過的人分紅
     _, found = _siege_of(game, slot)
     assert found.status == "done" and found.winner == "huang"
     ended = game.world.ended_battle(after.record_id)
@@ -103,10 +105,12 @@ def test_attacker_win_flips_and_reweighs():
 def test_defender_win_keeps_holder():
     game = _game()
     slot = announce(game, "nanyang_road", "huang")
+    conquest.push(game.state.world, game.content, "nanyang_road", "huang", "某", 70, "attack")
     _open(game, slot)
     battle = game.world.get_sieges()[0]
     _end(game, battle, 60)  # 守將那一邊（官軍那一格）佔上風
     assert conquest.holder(game.state.world, game.content, "nanyang_road") is None  # 中立還是中立
+    assert conquest.bar(game.state.world, "nanyang_road", "huang") == 35  # 打輸進度砍半（設計 4.4）
     _, found = _siege_of(game, slot)
     assert found.status == "done" and found.winner is None
 
@@ -116,7 +120,7 @@ def test_siege_void_when_no_attacker():
     slot = announce(game, "nanyang_road", "huang")
     _open(game, slot)
     battle = game.world.get_sieges()[0]
-    game.state.world.conquest.progress["nanyang_road"] = 70
+    conquest.push(game.state.world, game.content, "nanyang_road", "huang", "某", 70, "attack")
     game._save_season()
     game.now = NOW + 1801  # 集結截止
     game._battle_status(tick=True)
@@ -124,7 +128,7 @@ def test_siege_void_when_no_attacker():
     ended = game.world.ended_battle(battle.record_id)
     assert ended is not None and ended.unfinished and ended.siege.void
     _, found = _siege_of(game, slot)
-    assert found.status == "void" and conquest.progress_of(game.state.world, "nanyang_road") == 50
+    assert found.status == "void" and conquest.bar(game.state.world, "nanyang_road", "huang") == 70  # 作罷：進度照留、解凍
     assert not any("作罷" in r.text for r in game.state.world.rumors if r.layer == "world")  # 裁決 19：不發天下大事（test_conquest_void_quiet）
     assert not any(r.battle_ref == battle.record_id and r.kind == "siege" for r in game.state.battles)  # 沒有戰報、沒有軍餉
 

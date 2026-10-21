@@ -342,12 +342,21 @@ SIEGE_UNSEEN = "（那裡你還沒摸清）"  # 待 joy 潤（FB-221）：記得
 SIEGE_SOME_UNSEEN = "（另一處你還沒摸清）"  # 待 joy 潤（FB-221）：兩處裡摸清了一處
 SIEGE_AT_SORTIE = "到{where}出陣，打贏一場{enemy}記一次{note}。"  # 待 joy 潤：出陣開著時的攻城（設計第七節）
 SIEGE_AREA_SORTIE = "到{front}一帶{enemy}的地盤出陣，打贏一場記一次。"  # 待 joy 潤
-# 領地爭奪開著時（裁決 20）：攻城認今天公告的目標、打贏那裡的守軍（敵方的兵、中立駐軍都算），卡上照 siege_places 寫；待 joy 潤
+# 領地爭奪開著時（裁決 20；翻地與爭搶 PM 2026-10-20 第 1 條）：攻城認這一邊此刻進度最高、推得動的那一塊，打贏那裡的守軍（敵方的兵、中立駐軍都算），卡上照 siege_places 寫；待 joy 潤
 SIEGE_CONQUEST_FOE = "守軍"
-SIEGE_AREA_CONQUEST = "到{front}一帶今天公告要攻的地方出陣，打贏一場守軍記一次。"  # 公告的地方多過 SIEGE_NAMED_MAX
-SIEGE_NONE_CONQUEST = "{front}一帶今天沒有公告要攻的地方，在那裡打贏記不到；每天 {hour}:00 公告下一天的。"  # 打完了、或公告在別條線
+SIEGE_AREA_CONQUEST = "到{front}一帶我軍進度最高的幾處出陣，打贏一場守軍記一次。"  # 並列最高的多過 SIEGE_NAMED_MAX（全是 0 時就是那一帶推得動的每一處）
+SIEGE_NONE_CONQUEST = "{front}一帶此刻沒有我軍推得動的地方（剛易手、下了戰書、或碰不到），在那裡打贏記不到。"
 INTERCEPT_SORTIE = "到{place}出陣，撞上對面的運糧隊、打贏記一次。"  # 待 joy 潤（FB-248：出陣開著時糧隊只在這一處，orders.intercept_spots）
 DEFEND_SORTIE = "在{front}一帶自家的地盤出陣守一回，或按「{duty}」（收在「此地還能做」裡），做一次記一次。"  # 待 joy 潤
+# 領地爭奪開著時（裁決 24、FB-565；翻地與爭搶 PM 2026-10-20 第 1 條）：守城記的是自家被對面推得最高、守得動的那幾塊（orders.defend_places），
+# 卡上照它寫，輿圖也只標那幾處；沒有就直說此刻沒有可守的（記不到）。投票與 22:00 公告拿掉了，不再寫「被公告要攻」（dev/flip-1 收尾）。待 joy 潤
+DEFEND_ACT_SORTIE = "出陣守一回，或按「{duty}」（收在「此地還能做」裡）"
+DEFEND_ACT_PLAIN = "按「{duty}」（收在「此地還能做」裡）"
+DEFEND_AT_CONQUEST = "到{where}{act}，做一次記一次。"  # 對面推得最高的自家地方只有一兩處（SIEGE_NAMED_MAX）時寫出地名
+DEFEND_AREA_CONQUEST = "到{front}一帶對面推得最高的幾處自家地方{act}，做一次記一次。"  # 並列最高的多過 SIEGE_NAMED_MAX
+DEFEND_NONE_CONQUEST = "{front}一帶此刻沒有對面在推、守得動的自家地方（剛易手的也守不動），沒有可守的，守了也記不到。"
+# 自家被戰書凍結的那一塊（FB-605，PM 2026-10-21）：照樣列進守城，那一場攻城站守方、守住記一次（出陣守、守勢行動在那裡不算）。待 joy 潤
+DEFEND_SIEGE_CONQUEST = "{where}正等著一場攻城：加入那一場、站守方，守住記一次。"
 
 
 def siege_how(state: GameState, content: Content, order: Order) -> str:
@@ -355,14 +364,14 @@ def siege_how(state: GameState, content: Content, order: Order) -> str:
     寫出地名（「到官軍大營遊歷，打贏一場官軍記一次。」）——潁川汝南的黃巾只有官軍大營記得到，寫「一帶」會讓人在潁川郊野、長社白打。
     沒摸清的地點同打擊（strike_how）只寫大區（沒有大區寫戰線），不洩漏名字。三處以上、或一處都沒有（舊存檔），照舊寫那條戰線一帶。
     出陣開著時說「出陣」、地點照控制方（設計第七節：攻城認出陣的攻打贏）。
-    領地爭奪開著時（裁決 20）：地點是今天公告的目標（siege_places），對手寫「守軍」（中立駐軍也算）；今天這條線沒有公告的地方就直說
+    領地爭奪開著時（裁決 20；翻地與爭搶）：地點是此刻進度最高的那一塊（siege_places），對手寫「守軍」（中立駐軍也算）；這條線此刻沒有推得動的地方就直說
     記不到，不指「某一帶敵方的地盤」（那裡打贏記不到：列與記功同一個判斷）。"""
     front = trend_name(content, order.front) if order.front else "戰線"
     places = orders.siege_places(content, order.faction, order.front, state.world) if order.front else []
     enemy = content.scenario.faction_name(orders.ENEMY.get(order.faction or "")) or "對面的兵"
     if conquest.on(content, state.world):
         if not places:
-            return SIEGE_NONE_CONQUEST.format(front=front, hour=content.config.conquest.settle_hour)
+            return SIEGE_NONE_CONQUEST.format(front=front)
         if len(places) > SIEGE_NAMED_MAX:
             return SIEGE_AREA_CONQUEST.format(front=front)
         enemy = SIEGE_CONQUEST_FOE
@@ -397,6 +406,22 @@ def order_how(state: GameState, content: Content, order: Order) -> str:
     if order.template == "defend":
         duty = content.orders.duties.get(order.faction)
         name = duty.name if duty else "守勢"
+        if conquest.on(content, state.world):  # 領地爭奪（裁決 24、FB-565）：只寫記得到的那幾處，列與記同一個判斷
+            listed = orders.defend_places(content, state.world, order)
+            if not listed:
+                return DEFEND_NONE_CONQUEST.format(front=front)
+            sieged = [loc_id for loc_id in listed if conquest.frozen(state.world, loc_id) is not None]  # 被戰書凍結的（FB-605）：記攻城戰守住
+            places = [loc_id for loc_id in listed if loc_id not in sieged]
+            parts: list[str] = []
+            if places:
+                act = (DEFEND_ACT_SORTIE if sortie.on(content) else DEFEND_ACT_PLAIN).format(duty=name)
+                if len(places) > SIEGE_NAMED_MAX:
+                    parts.append(DEFEND_AREA_CONQUEST.format(front=front, act=act))
+                else:
+                    parts.append(DEFEND_AT_CONQUEST.format(where="或".join(content.locations[loc_id].name for loc_id in places), act=act))
+            if sieged:
+                parts.append(DEFEND_SIEGE_CONQUEST.format(where="、".join(content.locations[loc_id].name for loc_id in sieged)))
+            return "".join(parts)
         if sortie.on(content):
             return DEFEND_SORTIE.format(front=front, duty=name)
         return f"在{front}一帶按「{name}」（收在「此地還能做」裡），做一次記一次。"

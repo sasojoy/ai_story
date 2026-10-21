@@ -830,10 +830,11 @@ def _ring_short(w, me: str, foe, content: Content, left: int, problem: str | Non
     return [problem, ""]
 
 
-def arena_view(state: GameState, content: Content, world: WorldStateStore, power: float, left: int) -> dict:
+def arena_view(state: GameState, content: Content, world: WorldStateStore, power: float, left: int, bare: float | None = None) -> dict:
     """擂台那一頁：打到一半是這一場（fight）；不然是台下（自己的名次、稱號與分身，報名鈕，挑得到的人各一張、挑擂鈕）與擂台榜（board），
     剛打完的那一場有收場卡（result，PlayerState.arena_last）。鈕都是現在的選項 id（arena:join、arena:fight:<名號鍵>、arena:<招>、
-    arena:yield、arena:back），挑不挑得了照 arena.challengers（同選單）。left 是今天還能挑幾次。只讀。"""
+    arena:yield、arena:back），挑不挑得了照 arena.challengers（同選單）。left 是今天還能挑幾次。只讀。
+    bare：自己不含玉璽碎片戰力的威力（改版 FB-625：挑人卡上的「身手」兩邊都照不含碎片的算）；不給就是 power。"""
     p, w, cfg = state.player, state.world, content.config.arena
     mine = arena.entry_of(w, p.name)
     result = p.arena_last
@@ -857,7 +858,7 @@ def arena_view(state: GameState, content: Content, world: WorldStateStore, power
     for e, problem in arena.challengers(w, content, p.name, left):
         foes.append({
             "id": f"arena:fight:{name_key(e.name)}", "name": e.name, "rank": e.rank, "title": arena.title_for(e.rank),
-            "record": arena.record_text(e), "arts": list(e.arts), "strength": "身手" + arena.strength_words(content, power, e.power),
+            "record": arena.record_text(e), "arts": list(e.arts), "strength": "身手" + arena.strength_words(content, power if bare is None else bare, e.shown),
             "enabled": problem is None, "why": problem, "short": _ring_short(w, p.name, e, content, left, problem),
             "famed": arena.FAMED_NOTE.format(n=arena.reach_of(e, cfg)) if e.famed else "",  # 名聲 4.7
         })

@@ -64,7 +64,7 @@ from tianxia import (
     arena_crowd, battle_instance, biography, calendar, companion_agent, divine, duel, event_llm, feasts, fight_llm, foreshadow, gather_llm, gender, glyph, insight_llm, leaderboard, letters, mapdata,
     naming,
     ollama_client, rules,
-    precise, seal, seal_duel, server_bots, social, sortie, speech, tavern, team, timetable, treasures, yuedan,
+    precise, seal, seal_duel, server_bots, social, sortie, speech, tavern, team, timetable, treasures, xingshi, yuedan,
 )
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import env_profile, load_content, profile_line
@@ -279,6 +279,7 @@ def act(game: Game, action, *, paused_ok: bool = False) -> list[str] | None:
         chat = _chatter_waiting(game)
         mail = _letter_waiting(game)
         review = _yuedan_waiting(game)
+        essay = _xingshi_waiting(game)
     if tales:
         narrate_battle(game)
     if crowd:
@@ -289,6 +290,8 @@ def act(game: Game, action, *, paused_ok: bool = False) -> list[str] | None:
         write_letter(game)
     if review:
         write_yuedan(game)
+    if essay:
+        write_xingshi(game)
     return msgs
 
 
@@ -332,6 +335,7 @@ def act_look(game: Game, action, view) -> tuple[list[str] | None, object]:
         chat = _chatter_waiting(game) if failure is None else None
         mail = failure is None and _letter_waiting(game)
         review = failure is None and _yuedan_waiting(game)
+        essay = failure is None and _xingshi_waiting(game)
     if failure is not None:
         raise failure
     if tales:
@@ -344,6 +348,8 @@ def act_look(game: Game, action, view) -> tuple[list[str] | None, object]:
         write_letter(game)
     if review:
         write_yuedan(game)
+    if essay:
+        write_xingshi(game)
     return msgs, shown
 
 
@@ -1105,6 +1111,71 @@ def yuedan_once(game: Game) -> bool:
         return game.apply_yuedan(note, lines)
 
 
+# 〈天下形勢〉（領地爭奪第三批 A；tianxia/xingshi.py）：每天 22:00 結算那一刻開一張單，這裡在背景請模型照事實寫一篇。
+# 全服同時只有一條在寫（XINGSHI_RUNNING）；佇列開著時當成假人排在真人後面（名號是 XINGSHI_OWNER，不是任何一個角色）。
+XINGSHI_RUNNING: set[str] = set()
+XINGSHI_OWNER = "§史官"
+XINGSHI_SKIPPED = object()  # 佇列沒讓這一趟跑（假人的名額被佔、排不到）：跟「模型寫不出來」分開——前者單子放回去下一輪再試
+
+
+def _xingshi_waiting(game: Game) -> bool:
+    """有一張〈天下形勢〉的單等著模型寫、模型叫得到、還沒有一條在寫（write_xingshi）。行動鎖內叫。只有 main() 打開 TALE_THREADS 的正式伺服器
+    才開背景執行緒（測試直接叫 xingshi_once）；假人程式的 Game 沒有 client，不叫模型。"""
+    if not TALE_THREADS or game.client is None or XINGSHI_RUNNING:
+        return False
+    return game.xingshi_waiting()
+
+
+def write_xingshi(game: Game) -> bool:
+    """開一個背景執行緒寫〈天下形勢〉。A 鎖內拿單子（Game.xingshi_request，記 taken）→ B 鎖外請模型寫（xingshi.write，預算
+    Config.xingshi.budget_seconds；排隊時當假人排）→ C 鎖內重驗同一張單才收（Game.settle_xingshi；寫不出來照固定段）。開了回 True。
+    呼叫端不能握著行動鎖。"""
+    with TALE_LOCK:
+        if XINGSHI_RUNNING:
+            return False
+        XINGSHI_RUNNING.add("xingshi")
+
+    def job() -> None:
+        try:
+            xingshi_once(game)
+        except Exception:  # noqa: BLE001 — 背景執行緒：印出來就好，那一篇過了 grace_seconds 照固定段收
+            traceback.print_exc()
+        finally:
+            with TALE_LOCK:
+                XINGSHI_RUNNING.clear()
+
+    threading.Thread(target=job, name="xingshi", daemon=True).start()
+    return True
+
+
+def xingshi_once(game: Game) -> bool:
+    """寫一篇（write_xingshi 的那一圈；測試直接叫）：收了回 True。呼叫端不能握著行動鎖。
+    佇列沒讓這一趟跑（假人的名額被佔、排不到）：不照固定段收，單子放回去（Game.release_xingshi），隔 retry_seconds 下一輪再試；
+    寬限（grace_seconds）到了還沒寫成，由 Game._xingshi_grace 照固定段收（PM，第三批 A 回報之後）。模型叫了卻寫不出來照舊馬上照固定段。"""
+    with _locked(game):
+        request = game.xingshi_request()
+    if request is None:
+        return False
+    budget = game.content.config.xingshi.budget_seconds
+    started = _monotonic()
+
+    def ask() -> str | None:
+        return xingshi.write(within_budget(game.client, budget - (_monotonic() - started)), request)
+
+    if QUEUE is None:
+        essay = ask()
+    else:
+        try:  # 排在真人的評分後面（當成假人排）
+            essay = QUEUE.run(XINGSHI_OWNER, ask, fallback=XINGSHI_SKIPPED, bot=True, wait=min(budget, 120))
+        except (Busy, QueueTimeout):
+            essay = XINGSHI_SKIPPED
+    with _locked(game):  # 收下那一刻寫天下大事：推送的指紋跟著變，開著的分頁會更新
+        if essay is XINGSHI_SKIPPED:
+            game.release_xingshi(request)
+            return False
+        return game.settle_xingshi(request, essay)
+
+
 def feast_text(game: Game, text: str) -> list[str]:
     """自己寫的敬酒詞（宴客，大勢人物擴充第三批），三段：A Game.feast_text_request（只讀）→ B 鎖外請模型評一個分數
     （feasts.score，預算 Config.figure_life.feast_score_budget_seconds；評不到照 feasts.DEFAULT_SCORE）→ C Game.feast_toast
@@ -1410,9 +1481,15 @@ def _main_view_body(game: Game) -> dict:
     convoy = game.convoy_line()  # 押著的糧車（T6 審查 I3）：軍令卡上寫一行
     if convoy is not None:
         view["convoy"] = convoy
-    conquest_view = game.conquest_view()  # 領地爭奪第二批：攻城的時程表與明天的眾議（開關關著、季收了沒有這個鍵）
+    conquest_view = game.conquest_view()  # 領地爭奪：戰書排的攻城、每一塊的翻地資料、能不能下戰書（開關關著、季收了沒有這個鍵）
     if conquest_view is not None:
         view["conquest"] = conquest_view
+    banner = game.siege_banner()  # 領地爭奪第三批 A：場景裡畫的是攻城戰時，最上面那一條「攻城・地點｜守方：某某」（企劃者挑甲；決戰沒有這個鍵）
+    if banner is not None:
+        view["siege"] = banner
+    if xingshi.on(game.content, game.state.world):  # 〈天下形勢〉開著的季：見聞多一顆「形勢」（文章另外讀 /api/xingshi；關著沒有這個鍵）
+        view["xingshi"] = True
+        view["xingshi_mark"] = game.xingshi_mark()  # FB-578：最新一篇的篇次＋有沒有一張還在寫；變了，停在「形勢」頁的網頁就重抓
     letter = game.letter_view()  # 書信（大勢人物擴充第二批）：江湖頁「剛剛」上面一張小卡；沒有沒看過的信就沒有這個鍵
     if letter is not None:
         view["letter"] = letter
@@ -1562,6 +1639,7 @@ def admin_choices(game: Game) -> dict:
         # 救場「叫回人物」：這一季退場、重創的大勢人物（沒有就不畫那一列）
         "fallen": [{"label": CONTENT.figures[fid].name, "id": fid} for fid in game.admin_fallen()],
         "seal": game.admin_seal_choices(),  # 玉璽一組（碎片關著是 None，不畫）
+        "xingshi": xingshi.on(CONTENT, world),  # 〈天下形勢〉開著的季：管理者區多一顆「現在就開一篇天下形勢」（領地爭奪第三批 A）
         "mingtie": game.admin_mingtie_reports(),  # 被檢舉的名帖（撤下、放回）；沒有是空的
         # 新神器用完了（正式季整合 5.6，FB-400）：主控台啟動時印、換季的回話寫，管理者那一塊也寫一行；沒用完是空字串
         "divine_out": divine.EXHAUSTED if divine.exhausted_now(game.world.divine_state(), game.world.get_season_number()) else "",
@@ -1911,8 +1989,8 @@ MAIN_ACTIONS = {
     "pill": lambda g, b: g.take_stamina_pill(),  # 狀態列體力條上的「丹」：吃一顆回體丹（企劃者 2026-10-07 內測贈送）
     # 江湖頁「簽到」小標攤開的領取鈕（21 天季，正式季整合 6.2）：四階的日子帶 attribute（剛柔快慢）
     "checkin": lambda g, b: g.check_in(str(b.get("attribute", ""))[:2]),
-    # 領地爭奪第二批：每天投票（裁決 9）——明天打哪一塊（loc）、幾點開打（minute：當地時間的分鐘）
-    "conquest_vote": lambda g, b: g.conquest_vote(str(b.get("loc", "")), _int(b.get("minute"), -1)),
+    # 領地爭奪：下戰書（翻地與爭搶，輿圖簡化設計 4.4；這一週在任的第 4 階、自己那一邊在這一塊的進度到門檻）。每天投票拿掉了（PM 2026-10-20）
+    "conquest_letter": lambda g, b: g.conquest_letter(str(b.get("loc", ""))),
 }
 # 賽季時鐘暫停中也照做的畫面設定（不推任何東西、不碰別人）：匿名、不再提示、略過引導、打開輿圖（頁面靠它載入輿圖）、軍令卡出現（入伍段第一步，
 # 只動自己的引導；被擋下的話網頁已經記成「送過了」，這個工作階段不會再送）、對話框的「知道了」
@@ -1934,9 +2012,12 @@ ADMIN_ACTIONS = {
     "set_trend": lambda g, b: g.admin_set_trend(str(b.get("id", "")), _int(b.get("value"), 0)),
     # 領地爭奪（第 38 項改版第一批）：定一塊歸誰（side 空字串＝放回中立）；第一批沒有攻城戰，地圖只靠這裡與時刻表指定易手
     "conquest_set": lambda g, b: g.admin_conquest_set(str(b.get("id", "")), str(b.get("side", "")) or None),
-    # 第二批（救場）：立刻照此刻的票與主將排一次攻城（集結馬上開）、取消今天的一場（id 是時程表那一場的 id）
-    "conquest_settle_now": lambda g, b: g.admin_conquest_settle_now(),
+    # 救場（翻地與爭搶，QA 用）：定一條進度（到 100 照推滿易手）、立刻替一邊下戰書（集結馬上開）、取消一場（id 是時程表那一場的 id）。
+    # 立刻下戰書叫 admin_conquest_letter，不叫 conquest_letter：api_do 先查這一張，同名會把玩家的下戰書（MAIN_ACTIONS）整個蓋掉（FB-609）
+    "conquest_progress": lambda g, b: g.admin_conquest_progress(str(b.get("id", "")), str(b.get("side", "")), _float(b.get("value"), 0.0)),
+    "admin_conquest_letter": lambda g, b: g.admin_conquest_letter(str(b.get("id", "")), str(b.get("side", ""))),
     "conquest_cancel": lambda g, b: g.admin_conquest_cancel(str(b.get("id", ""))),
+    "xingshi_now": lambda g, b: g.admin_xingshi_now(),  # 領地爭奪第三批 A：現在就開一篇〈天下形勢〉
     "resolve_event": lambda g, b: g.admin_resolve_event(str(b.get("id", "")), str(b.get("key", ""))),
     "clear_lock": lambda g, b: g.admin_clear_lock(str(b.get("id", ""))),
     "cancel_battle": lambda g, b: g.admin_cancel_battle(),
@@ -2298,6 +2379,13 @@ def api_annals(request: Request):
     """見聞的「行狀」：這一季至今記下的事（玩家傳第一批；不叫模型）。"""
     game = _game(request)
     return look(game, lambda g: g.annals_view())
+
+
+@app.get("/api/xingshi")
+def api_xingshi(request: Request):
+    """見聞的「形勢」：這一季每天一篇的〈天下形勢〉（領地爭奪第三批 A；只讀，不叫模型——文章在背景寫，write_xingshi）。"""
+    game = _game(request)
+    return look(game, lambda g: g.xingshi_view())
 
 
 # ── 玩家傳第二批：季末寫成《某某傳》、公開分享（企劃者 2026-10-12）──

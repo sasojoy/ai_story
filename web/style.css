@@ -291,6 +291,10 @@ ul { padding-left: 1.3em; margin: 0.4em 0; }
 .seg button { flex: 1 0 auto; border: 0; background: none; padding: 8px 12px; border-radius: 9px; cursor: pointer; font-size: 14px; color: var(--ink-2); white-space: nowrap; }
 .seg button.on { background: var(--card); color: var(--ink); font-weight: 600; box-shadow: var(--shadow); }
 .news-seg button { padding: 8px 4px; font-size: 13px; } /* 見聞八個子分頁（加了榜單、名帖匣）：375 寬一排放得下，不必橫捲才看得到最後一個 */
+/* 見聞九顆（〈天下形勢〉開著的季多「形勢」，領地爭奪第三批 A；app.js 的 newsSegHtml）：九顆一排在 375 寬要約 362px、放不下，排成兩排——
+   上五顆、下四顆各自撐滿，字回到 14px（不橫捲、不藏、不縮字；320 寬一顆也還有 53px）。電腦上照舊一排（見電腦寬那一段）。八顆的季不帶 .wrap，一個像素都不變 */
+.news-seg.wrap { flex-wrap: wrap; overflow-x: visible; }
+.news-seg.wrap button { flex: 1 0 calc(20% - 3px); padding: 8px 4px; font-size: 14px; }
 
 .field { display: block; margin: 0 0 10px; }
 .field > span { display: block; font-size: 12px; color: var(--ink-2); margin: 0 2px 4px; }
@@ -468,9 +472,21 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .scene .muster-join .btn { width: auto; margin: -8px 0; }
 .scene .muster-join.wide { flex-basis: 100%; }
 .scene .muster-join.wide .btn { flex: 1 1 0; min-width: 0; margin: 0; padding: 6px 8px; justify-content: center; }
-/* 挑同伴那一步（FB-360）：另起一行、一顆一行，鈕上寫份量與氣血 */
+/* 挑同伴那一步（FB-360）：另起一行、一顆一行，鈕上寫份量與氣血。同一州兩場以上自己這一邊的攻城一起集結（FB-553）也是這一排：
+   加入鈕一場一顆、鈕上寫是哪一場，擠在名字那一行會撐出橫捲（375 寬 488px）；一顆佔滿一行，字長只往下折 */
 .scene .muster-join.pick { flex-basis: 100%; flex-direction: column; }
-.scene .muster-join.pick .btn { width: 100%; margin: 0; padding: 6px 8px; }
+.scene .muster-join.pick .btn { width: 100%; min-width: 0; margin: 0; padding: 6px 8px; }
+/* 攻城戰畫面最上面那一條（領地爭奪第三批 A，企劃者挑甲；app.js 的 siegeStrip）：取代場景的名字那一行，「攻城・地點｜守方：某某」——
+   一道城牆色的左框、淡底；名字照原本的襯線字，後面幾段小一號。每一段不折行（.nb），只在「｜」那裡換行。排在 .scene > p:first-child 與
+   .muster-head > p 後面（同一級，後寫的贏）。集結時這一條自己佔一行（比名字長，跟「報名在這裡」與加入的鈕擠一行會把那一小句擠成一個字），
+   那一小句與鈕排在它底下 */
+.scene > p.siege-strip { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 2px; margin: 0 0 6px; padding: 4px 10px; border-left: 3px solid var(--accent); border-radius: 6px; background: var(--card-2); font: 500 13px/1.6 var(--sans); color: var(--ink-2); }
+.scene .muster-head > p.siege-strip { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 2px; flex: 1 1 100%; min-width: 0; margin: 0; padding: 4px 10px; border-left: 3px solid var(--accent); border-radius: 6px; background: var(--card-2); font: 500 13px/1.6 var(--sans); color: var(--ink-2); }
+/* FB-576：只有一顆加入鈕時那一排排在攻城條底下，鈕照 FB-105 的 −8px 往上吃，6px 的列距吃掉還壓到條 2px：條底下的這一顆上邊只吃 −4px
+   （留 2px 的縫，那一排多佔 4px）。名字旁邊的那一顆（決戰、沒有攻城條）照舊 −8px；.wide、.pick 本來就是 0 */
+.scene .muster-head > p.siege-strip ~ .muster-join:not(.wide):not(.pick) .btn { margin-top: -4px; }
+.siege-strip .ss-title { font: 600 15px/1.6 var(--serif); color: var(--ink); }
+.siege-strip .ss-sep { padding: 0 2px; opacity: 0.55; }
 /* 決戰：對面上一回合的出招比例與自己的結果（引擎寫成一段 markdown 引用「> 」，伺服器轉成 blockquote）：小字、淡色、行距緊、
    沒有瀏覽器預設的縮排與邊線，375px 上約 65px（含上面一段的間距；15.5px 兩段是 95px） */
 .scene blockquote { margin: 2px 0; padding: 0; border: 0; font-size: 13px; line-height: 1.5; color: var(--ink-2); }
@@ -1688,6 +1704,23 @@ ol.annals { list-style: none; margin: 0; padding: 4px 14px; }
 .annal-quote { color: var(--ink); }
 .annal-reply b { font-weight: 600; color: var(--ink); }
 
+/* 見聞的「形勢」（領地爭奪第三批 A，企劃者挑乙；app.js 的 xingshiHtml）：一篇一行——「是日：…」（收著時最多兩行），底下一行小字是時刻
+   （375 寬時刻放在右邊會把「是日」那一句擠成兩行、尾巴剩一個字），點了攤開文章（標題、一段一個 p）；最新一篇預設攤開。字體跟行狀同一套
+   襯線，像一疊邸報 */
+.xs-card { padding: 4px 14px; }
+.xs-pending { margin: 10px 0; font-size: 14px; }
+details.xs-essay + details.xs-essay { border-top: 1px solid var(--card-2); }
+details.xs-essay > summary { display: grid; grid-template-columns: 11px minmax(0, 1fr); column-gap: 8px; align-items: baseline; padding: 10px 0; cursor: pointer; list-style: none; }
+details.xs-essay > summary::-webkit-details-marker { display: none; }
+details.xs-essay > summary::before { content: "▸"; font-size: 11px; color: var(--ink-2); }
+details.xs-essay[open] > summary::before { content: "▾"; }
+.xs-line { font: 600 15px/1.55 var(--bk-serif); color: var(--ink); }
+details.xs-essay:not([open]) .xs-line { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.xs-time { grid-column: 2; font-size: 12px; color: var(--ink-2); white-space: nowrap; }
+.xs-body { padding: 0 0 12px 19px; }
+.xs-title { margin: 0 0 6px; font: 600 14px var(--bk-serif); letter-spacing: 0.1em; color: var(--ink-2); }
+.xs-body p:not(.xs-title) { margin: 0 0 8px; font-family: var(--bk-serif); line-height: 1.85; text-indent: 2em; }
+
 /* 見聞的「榜單」（boardsHtml）：上面六張榜的籤（兩排三個，375 寬不捲），底下一張卡一次一張榜。前三名的名次是朱紅實心的印，
    其餘是空心；你自己那一列底色淡朱紅。名號與那一段照一般卡片的字，標題用武學譜那一套襯線 */
 .board-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 0 0 12px; } /* 八張（神器譜搬進來，2026-10-17）：兩排四個 */
@@ -2390,6 +2423,12 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
    .shell、店面那一欄、底部分頁列都不跳（江湖頁自己有沒有捲軸也不跳）。只在 641px 以上（手機的捲軸是疊在畫面上的，這一段整段不生效） ── */
 @media (min-width: 641px) {
   html { scrollbar-gutter: stable; }
+}
+
+/* ── 見聞九顆（領地爭奪第三批 A）：電腦上那一欄 640px，九顆一排放得下，照舊一排（手機那一半排兩排，見 .news-seg.wrap） ── */
+@media (min-width: 641px) {
+  .news-seg.wrap { flex-wrap: nowrap; }
+  .news-seg.wrap button { flex: 1 0 auto; }
 }
 
 /* ── 酒肆（企劃者 2026-10-18「可以，做精緻一些，包含氛圍感」；草圖甲「夜燈酒肆」）：跟三間店同一層。夜裡、燈籠、暖光、酒罈的剪影；

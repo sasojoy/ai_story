@@ -87,16 +87,20 @@ def side_of(duel: SealDuel, name: str) -> str | None:
     return next((w for w in SIDES if seal.key(getattr(duel, w).name) == k), None)
 
 
-def unmounted(p: BattleParticipant) -> dict[str, float]:
-    """參戰者的份量拿掉騎兵與部下（強攻、奇襲除回去）：單挑照頭目戰（_battle_scores(mounted=False)）。"""
+def unmounted(p: BattleParticipant, scores: dict[str, float] | None = None) -> dict[str, float]:
+    """參戰者的份量拿掉騎兵與部下（強攻、奇襲除回去）：單挑照頭目戰（_battle_scores(mounted=False)）。scores 沒給是 p.scores
+    （給的是不含碎片的那一份 p.seal_bare.scores，騎兵與部下一樣乘過）。"""
     ride = (1 + p.cavalry) * (1 + p.troop_bonus)
-    return {m: round(v / ride, 1) if m in CAVALRY_MOVES and ride > 0 else v for m, v in p.scores.items()}
+    return {m: round(v / ride, 1) if m in CAVALRY_MOVES and ride > 0 else v for m, v in (p.scores if scores is None else scores).items()}
 
 
 def side_from_participant(p: BattleParticipant, faction: str | None) -> SealSide:
-    """參戰者的快照（5.3 前兩列）：威力、份量、職位、氣血上限；池子從滿血開始（決戰裡那一份池子不帶進來）。"""
+    """參戰者的快照（5.3 前兩列）：威力、份量、職位、氣血上限；池子從滿血開始（決戰裡那一份池子不帶進來）。
+    加入時戴著碎片（改版）的人用不含碎片戰力的那一份（p.seal_bare；奪璽單挑不吃戰力，企劃者第 7 條）。"""
     kit = p.kit.model_copy(update={"ctx": p.kit.ctx.model_copy(update={"mount_tier": 0, "followers": 0})}) if p.kit else None
-    return SealSide(name=p.name, faction=faction, power=p.power, scores=unmounted(p), role=p.role, hp=p.neili_cap, hp_cap=p.neili_cap,
+    bare = p.seal_bare
+    power, scores = (p.power, unmounted(p)) if bare is None else (bare.power, unmounted(p, bare.scores))
+    return SealSide(name=p.name, faction=faction, power=power, scores=scores, role=p.role, hp=p.neili_cap, hp_cap=p.neili_cap,
                     kit=kit)
 
 

@@ -5499,8 +5499,10 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
     # crowd_once：擂台場邊那一句（Joy 2026-10-17），A、C 段各拿一次鎖，模型在兩段之間、當假人排在真人後面
     # letter_once：人物書信重寫那一封（大勢人物擴充第二批），同 crowd_once
     # yuedan_once：月旦評的評語（大勢人物擴充第三批），同 letter_once
+    # xingshi_once：〈天下形勢〉的文章（領地爭奪第三批 A），同 yuedan_once，名號是 XINGSHI_OWNER（不是任何一個角色）
     assert _users_in_server("QUEUE") == {None, "model_call", "main", "api_queue", "admin_choices", "narrate_once", "crowd_once",
-                                         "letter_once", "yuedan_once", "chatter_once"}  # chatter_once：酒肆鄰桌閒談，同 crowd_once 當假人排
+                                         "letter_once", "yuedan_once", "chatter_once",  # chatter_once：酒肆鄰桌閒談，同 crowd_once 當假人排
+                                         "xingshi_once"}
     importers = [
         p.name for p in (server.ROOT / "tianxia").glob("*.py")
         if re.search(r"^\s*(import|from)\s+llm_queue\b", p.read_text(encoding="utf-8"), re.M)
@@ -6298,6 +6300,8 @@ NOT_IN_THE_FINGERPRINT = {
         "bounty_week": "懸賞自動掛單掛到第幾週，玩家看不到",
         "bounty_day": "21 天季懸賞每天掛單掛到第幾天，玩家看不到",
         "raided": "被截殺過的冷卻，只在打開玩家卡時看得到",
+        "clashes": "混戰寫進截殺冷卻的那幾筆（FB-607：拒絕話照實寫），跟 raids 一起寫、一樣只在打開玩家卡時看得到",
+        "clashed": "混戰被撞的護身是混戰寫的（FB-607），跟 raided 一起寫、一樣只在打開玩家卡時看得到",
         "arena": "擂台的分身與名次只在打開擂台、看擂台榜時看得到；稱號在狀態列，守擂的人的戰報與俸在他自己同步時補",
         "arena_pairs": "挑擂的同一對冷卻，只在打開擂台時看得到",
         "arena_seq": "擂台的流水號，玩家看不到",
@@ -6325,6 +6329,9 @@ NOT_IN_THE_FINGERPRINT = {
         "conquest_on": "開季時蓋的章（領地爭奪），開季之後不變",
         "conquest": "領地爭奪的開季種類、偏移與進度：易手另寫天下大事（傳聞流水號已在指紋裡），偏移跟著 trends 一起改；"
                     "進度不露數字、只回推的人自己那一句話",
+        "xingshi": "〈天下形勢〉收下的文章：收下那一刻另寫天下大事與江湖史（都在指紋裡）；見聞「形勢」頁自己去讀，不叫醒全服",
+        "xingshi_ticket": "還在等模型寫的那一張單，誰都看不到",
+        "xingshi_mark": "上一篇讀到哪裡的記號，玩家看不到",
     },
     "BattleInstance": {
         "muster_deadline_real": "現實時間的期限，畫面上的倒數靠輪詢（推送計畫 F4）",

@@ -25,8 +25,9 @@ from . import calendar, equipment, mounts
 from .models import GOOD_HORSE, Content, SteedDef
 from .state import Equipment, GameState, PlayerState
 
-# 乘的效果（中性值 1）；其餘是加的（中性值 0）。碎片的乘法鍵（玉璽碎片設計 7.2）也在這裡；talk_turns、dodge、fuse_points 是加的
-MULTIPLY = frozenset({"cultivate", "insight", "legend", "hp_cap", "practice", "stamina_regen", "mate_exp"})
+# 乘的效果（中性值 1）；其餘是加的（中性值 0）。碎片的乘法鍵（玉璽碎片設計 7.2）也在這裡；talk_turns、dodge、fuse_points 是加的。
+# 改版（Config.seal.revamp）多的兩個乘法鍵：injury（螭首）、chuangong（歸心）；keep_silver（金角）是加的（1＝有）
+MULTIPLY = frozenset({"cultivate", "insight", "legend", "hp_cap", "practice", "stamina_regen", "mate_exp", "injury", "chuangong"})
 EFFECT_TEXT = {  # 待 joy 潤：角色卡、修練頁、拿到時那一句（數字照 Config.treasures.effects；{item} 是破境丹的名字 Config.legend_item_name）
     "cultivate": "修練升品的機會 ×{x}",
     "insight": "探索悟得意境的機會 ×{x}",
@@ -43,6 +44,13 @@ SEAL_EFFECT_TEXT = {  # 待 joy 潤：玉璽碎片的七種效果（數字照 Co
     "dodge": "落敗閃成僵持的機會 +{pct}", "stamina_regen": "體力回復 ×{x}", "fuse_points": "合成的造化 +{n}",
     "mate_exp": "同伴拿到的經驗 ×{x}",
 }
+SEAL_POWER_TEXT = "戰力 ×{x}"  # 待 joy 潤：改版每片都有的那一半（Config.seal.revamp.power），排在最前面
+SEAL_REVAMP_TEXT = {  # 待 joy 潤：改版的常駐成長、生活效果（玉璽碎片改版第三章；數字照 Config.seal.revamp.effects）
+    "injury": "一場仗變成內傷的 ×{x}", "talk_turns": "每位人物每日多談 {n} 輪", "audience": "求見門檻 −{n}",
+    "practice": "練成的心得 ×{x}", "keep_silver": "落敗不失銀兩", "stamina_regen": "體力回復 ×{x}",
+    "fuse_points": "合成的造化 +{n}", "mate_exp": "同伴拿到的經驗 ×{x}", "chuangong": "傳功的心得 ×{x}",
+}
+KEEP_SILVER = "懷中的『{shard}』護住了錢囊，銀兩分文未失。"  # 待 joy 潤：金角（改版）落敗那一下，戰報與江湖紀錄（Game._lose_silver）
 HEIRLOOM_LABEL = "傳承"  # 待 joy 潤：寶物段那一列的小標、角色卡那一行的開頭
 GOT = "你得到了寶物【{name}】（{effect}）。"  # 待 joy 潤
 GOT_HORSE = "你得到一匹{grade}的【{name}】。"  # 待 joy 潤（grade 是 mounts.grade：「良駒・中品」）
@@ -74,6 +82,12 @@ def on(content: Content) -> bool:
     return equipment.on(content, "treasure")
 
 
+def revamp_on(content: Content) -> bool:
+    """玉璽碎片改版開著（同 seal.revamp_on；treasures 不 import seal）：碎片開著（Config.seal.enabled＋內容有七片）、子開關開著。"""
+    cfg = content.config.seal
+    return cfg.enabled and cfg.revamp.enabled and bool(content.seal)
+
+
 def effect_of(content: Content, item: Equipment | None) -> str | None:
     """這一件寶物的效果鍵（照 template 查寶物表）；不是寶物那一欄、沒有 template、內容拿掉了是 None（效果不算）。"""
     if item is None or item.slot != "treasure" or item.template is None:
@@ -95,35 +109,71 @@ def effect_text(content: Content, key: str) -> str:
 
 
 def seal_effect_text(content: Content, key: str) -> str:
-    """碎片那一句（「練成的心得 ×0.9」）：數字照 Config.seal.effects。"""
+    """碎片那一句（「練成的心得 ×0.9」）：數字照 Config.seal.effects（改版關著的那一個效果）。"""
     value = content.config.seal.effects.get(key, 0.0)
     return SEAL_EFFECT_TEXT.get(key, "").format(x=f"{value:g}", n=f"{value:g}", pct=f"{math.floor(value * 100 + 0.5)}%")
 
 
-def _cells(state: GameState, content: Content) -> list[tuple[str, float]]:
+def heirloom_text(content: Content, shard) -> str:
+    """傳承那一格的說明（傳承那一列、角色卡、拿到時、碎片卡；seal.shard_text 轉呼叫這裡）。shard 是 ShardDef。改版開著：
+    「戰力 ×1.1、每位人物每日多談 2 輪、求見門檻 −5」（戰力在前，效果照 content/seal.json 的 effects 順序；待 joy 潤）；
+    關著照舊一句（seal_effect_text）。"""
+    if not revamp_on(content):
+        return seal_effect_text(content, shard.effect)
+    cfg = content.config.seal.revamp
+    parts = [SEAL_POWER_TEXT.format(x=f"{cfg.power:g}")]
+    for key in shard.effects:
+        value = cfg.effects.get(key, 0.0)
+        parts.append(SEAL_REVAMP_TEXT.get(key, "").format(x=f"{value:g}", n=f"{value:g}"))
+    return "、".join(part for part in parts if part)
+
+
+def _cells(state: GameState, content: Content, source: str | None = None) -> list[tuple[str, float]]:
     """身上每一格寶物的（效果鍵, 數字）：一般那一格看寶物的開關（PlayerState.treasure：Config.treasures.enabled、查
     Config.treasures.effects）；傳承那一格只看 Config.seal.enabled 與 content/seal.json（PlayerState.heirloom，查 Config.seal.effects，
-    玉璽碎片設計 7.2），其他掛點都不用動。所以寫成一格一格往清單裡加，不在一般那一格空著時提早回傳。"""
+    玉璽碎片設計 7.2），其他掛點都不用動。所以寫成一格一格往清單裡加，不在一般那一格空著時提早回傳。
+    改版開著（revamp_on）時傳承那一格換成改版的效果：這一片 effects 的每一個鍵各一格，數字查 Config.seal.revamp.effects
+    （玉璽碎片改版第三章；螭首、金角的舊效果因此不給）。source："treasure" 只算一般那一格、"heirloom" 只算傳承那一格、None 兩格都算
+    （求見門檻的折抵要分開寫名字，rules.audience_parts）。"""
     cells: list[tuple[str, float]] = []
-    key = effect_of(content, state.player.treasure) if on(content) else None
+    key = effect_of(content, state.player.treasure) if on(content) and source != "heirloom" else None
     if key is not None:
         cells.append((key, content.config.treasures.effects.get(key, 1.0 if key in MULTIPLY else 0.0)))
     heir = state.player.heirloom  # 傳承那一格（玉璽碎片設計 7.2）：只看 Config.seal.enabled 與內容的七片，不看寶物的開關
     shard = content.seal.get(heir.template) if heir is not None and heir.template and content.config.seal.enabled else None
-    if shard is not None:
-        cells.append((shard.effect, content.config.seal.effects.get(shard.effect, 1.0 if shard.effect in MULTIPLY else 0.0)))
+    if shard is not None and source != "treasure":
+        if revamp_on(content):
+            table = content.config.seal.revamp.effects
+            cells += [(k, table.get(k, 1.0 if k in MULTIPLY else 0.0)) for k in shard.effects]
+        else:
+            cells.append((shard.effect, content.config.seal.effects.get(shard.effect, 1.0 if shard.effect in MULTIPLY else 0.0)))
     return cells
 
 
-def amount(state: GameState, content: Content, effect: str) -> float:
+def amount(state: GameState, content: Content, effect: str, source: str | None = None) -> float:
     """這個效果此刻的數字（設計 6.1：所有掛點都經過這裡）：乘的效果是倍數（沒有是 1）、加的是加多少（沒有是 0）；
-    好幾格都是同一個鍵時乘的相乘、加的相加（玉璽碎片設計 7.2）。沒帶、開關關著、效果對不上都回中性值。"""
+    好幾格都是同一個鍵時乘的相乘、加的相加（玉璽碎片設計 7.2）。沒帶、開關關著、效果對不上都回中性值。source 見 _cells。"""
     multiply = effect in MULTIPLY
     total = 1.0 if multiply else 0.0
-    for key, value in _cells(state, content):
+    for key, value in _cells(state, content, source):
         if key == effect:
             total = total * value if multiply else total + value
     return total
+
+
+def power_scale(state: GameState, content: Content) -> float:
+    """持有者本人的戰力倍數（玉璽碎片改版第三章：每片都是 ×Config.seal.revamp.power，乘在 team.player_boost 的 factor）：
+    改版開著、傳承那一格有內容認得的碎片才是那個數，不然 1（同伴、部下不經過這裡）。"""
+    heir = state.player.heirloom
+    if heir is None or not heir.template or heir.template not in content.seal or not revamp_on(content):
+        return 1.0
+    return content.config.seal.revamp.power
+
+
+def heirloom_name(state: GameState) -> str:
+    """傳承那一格的名字（求見門檻的折抵寫碎片的名字，rules.audience_parts）；沒有是「玉璽碎片」。"""
+    heir = state.player.heirloom
+    return heir.name if heir is not None else "玉璽碎片"
 
 
 def audience_name(state: GameState) -> str:
@@ -297,7 +347,7 @@ def rows(state: GameState, content: Content) -> dict:
     out = {"worn": None, "rack": [], "heirloom": None}
     if heir is not None:
         shard = content.seal[heir.template]
-        out["heirloom"] = {"id": heir.id, "name": heir.name, "effect": shard.effect, "effect_text": seal_effect_text(content, shard.effect)}
+        out["heirloom"] = {"id": heir.id, "name": heir.name, "effect": shard.effect, "effect_text": heirloom_text(content, shard)}
     if on(content):
         out["worn"] = _row(content, p.treasure) if p.treasure is not None else None
         out["rack"] = [_row(content, t) for t in equipment.in_slot(p, "treasure")]
@@ -325,7 +375,7 @@ def card_line(state: GameState, content: Content) -> str:
     heir = state.player.heirloom
     shard = content.seal.get(heir.template) if heir is not None and heir.template and content.config.seal.enabled else None
     if shard is not None:
-        lines.append(f"{HEIRLOOM_LABEL}　【{heir.name}】{seal_effect_text(content, shard.effect)}")
+        lines.append(f"{HEIRLOOM_LABEL}　【{heir.name}】{heirloom_text(content, shard)}")
     return "\n".join(lines)
 
 

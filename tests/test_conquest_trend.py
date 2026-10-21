@@ -30,9 +30,9 @@ def test_opening_base_is_fifty_and_the_offset_keeps_the_scenario_start():
 
 def test_opening_control_follows_the_block_kinds():
     game = conquest_game("season21")
-    assert _owner(game, "changshe") == "guan" and _owner(game, "yingchuan") == "guan" and _owner(game, "yu_river") == "guan"
-    assert _owner(game, "runan") == "huang" and _owner(game, "zhuo_county") == "huang" and _owner(game, "guangzong") == "huang"
-    assert _owner(game, "nanyang_wilds") is None and _owner(game, "guan_camp") is None  # 中立地沒人佔
+    assert _owner(game, "changshe") == "guan" and _owner(game, "yingchuan") == "guan" and _owner(game, "zhuo_county") == "guan"
+    assert _owner(game, "runan") == "huang" and _owner(game, "xinye") == "huang" and _owner(game, "guangzong") == "huang"
+    assert _owner(game, "nanyang_wilds") is None and _owner(game, "yu_river") is None  # 中立地沒人佔（區塊表 v3）
     assert _owner(game, "haozu_fort") is None and _owner(game, "jade_cave") is None  # 不是區塊
     game.advance(3600)
     assert not [r for r in game.state.world.rumors if r.text.endswith("之手。")]  # 第一次算不發天下大事、之後不拔河
@@ -45,8 +45,8 @@ def test_capture_moves_the_base_and_keeps_the_offset():
     pushed = _value(game, "nanyang")
     conquest.set_control(w, c, "nanyang_wilds", "huang")
     assert _owner(game, "nanyang_wilds") == "huang"
-    assert conquest.base(w, c, "nanyang") == pytest.approx(50 + 35 / 3)
-    assert _value(game, "nanyang") == round(pushed + 35 / 3)
+    assert conquest.base(w, c, "nanyang") == pytest.approx(50 + 35 / 4)  # 南陽開季中立 4 塊（區塊表 v3）
+    assert _value(game, "nanyang") == round(pushed + 35 / 4)
     assert any("南陽郊野落入" in r.text for r in w.rumors)
     assert any("南陽郊野落入" in r.text for r in w.chronicle)
 
@@ -67,7 +67,7 @@ def test_push_into_the_wall_is_lost_like_before():
     assert _value(game, "nanyang") == 100
     assert rules.change_trend(game.state, c, "nanyang", 5) == []  # 推進牆：不動、不寫
     conquest.set_control(w, c, "nanyang_road", "guan")  # 官軍拿下一塊中立：基準往下，值＝新基準＋重錨後的偏移（50）
-    assert _value(game, "nanyang") == round(50 - 35 / 3 + 50)
+    assert _value(game, "nanyang") == round(50 - 35 / 4 + 50)
 
 
 def test_a_direct_write_is_reanchored():
@@ -78,29 +78,29 @@ def test_a_direct_write_is_reanchored():
     territory.update(w, c)
     moved = _value(game, "jizhou")
     conquest.set_control(w, c, "xiaquyang", "huang")
-    assert _value(game, "jizhou") == round(moved + 35 / 4)
+    assert _value(game, "jizhou") == round(moved + 35 / 3)  # 冀州開季中立 3 塊（區塊表 v3）
 
 
 def test_capturing_an_enemy_faction_block_weighs_double():
     game = conquest_game("season21")
     w, c = game.state.world, game.content
     before = _value(game, "yingru")
-    conquest.set_control(w, c, "runan_wilds", "guan")  # 黃巾的陣營區塊（權重 2）被官軍拿下
-    assert conquest.base(w, c, "yingru") == pytest.approx(50 - 35 * 2 / 3)
-    assert _value(game, "yingru") == round(before - 35 * 2 / 3)
-    conquest.set_control(w, c, "runan_wilds", "huang")  # 拿回自己的：不算佔得，回到 50
+    conquest.set_control(w, c, "runan", "guan")  # 黃巾的陣營區塊（權重 2）被官軍拿下；潁川汝南開季中立 2 塊（區塊表 v3）
+    assert conquest.base(w, c, "yingru") == pytest.approx(50 - 35 * 2 / 2)
+    assert _value(game, "yingru") == round(before - 35 * 2 / 2)
+    conquest.set_control(w, c, "runan", "huang")  # 拿回自己的：不算佔得，回到 50
     assert conquest.base(w, c, "yingru") == 50
-    assert any("收復汝南荒野" in r.text for r in w.rumors)
+    assert any("收復汝南。" in r.text for r in w.rumors)
 
 
 def test_weigh_by_neutral_full_ring_reaches_the_share():
     game = conquest_game("season21")
     w, c = game.state.world, game.content
-    for loc in ("nanyang_road", "nanyang_wilds", "lulin_zhai"):
+    for loc in ("nanyang_road", "nanyang_wilds", "yu_river", "lulin_zhai"):
         conquest.set_control(w, c, loc, "huang")
     assert conquest.base(w, c, "nanyang") == pytest.approx(85)
-    c.config.conquest.weigh_by = "total"  # 設計 4.7 原文：分母是那條線所有可奪區塊的權重和（中立 3、陣營 2 塊 ×2）
-    assert conquest.base(w, c, "nanyang") == pytest.approx(50 + 35 * 3 / 7)
+    c.config.conquest.weigh_by = "total"  # 設計 4.7 原文：分母是那條線所有可奪區塊的權重和（中立 4、陣營 1 塊〔新野〕×2）
+    assert conquest.base(w, c, "nanyang") == pytest.approx(50 + 35 * 4 / 6)
 
 
 def test_timetable_assign_sticks_and_reweighs():
@@ -114,7 +114,7 @@ def test_timetable_assign_sticks_and_reweighs():
     w = game.state.world  # 推進之後讀回來的那一份
     assert _owner(game, "guangzong") == "guan"  # 規則不會把它翻回去
     territory.assign(w, c, {"xiaquyang": "guan"})  # 時刻表指定一塊中立：指定了就是指定了
-    assert _owner(game, "xiaquyang") == "guan" and conquest.base(w, c, "jizhou") == pytest.approx(50 - 35 / 4)
+    assert _owner(game, "xiaquyang") == "guan" and conquest.base(w, c, "jizhou") == pytest.approx(50 - 35 / 3)
 
 
 def test_switch_off_change_trend_is_unchanged():
@@ -134,8 +134,8 @@ def test_admin_sets_a_block():
     before = _owner(game, "changshe")
     game.admin_conquest_set("changshe", "huang")  # 大本營不收
     assert _owner(game, "changshe") == before
-    game.admin_conquest_set("yu_river", "haoqiang")  # 只收兩軍
-    assert _owner(game, "yu_river") == "guan"
+    game.admin_conquest_set("zhuo_county", "haoqiang")  # 只收兩軍（區塊表 v3 之前用淯水河畔，現在是中立地）
+    assert _owner(game, "zhuo_county") == "guan"
 
 
 def test_admin_set_refused_for_players():

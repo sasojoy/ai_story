@@ -394,6 +394,12 @@ class ArenaSide(BaseModel):
     role: str = ""
     hp: float
     hp_cap: float
+    bare: float | None = None  # 不含玉璽碎片戰力的威力（改版，FB-615）：只有戴著碎片才記；None＝power 本身就是給別人看的那一份
+
+    @property
+    def shown(self) -> float:
+        """戰報上寫給對方看的威力（「對手威力 N」）：不含碎片的那一份。打起來照 power（含碎片）。"""
+        return self.power if self.bare is None else self.bare
 
 
 class ArenaFight(BaseModel):
@@ -440,7 +446,13 @@ class ArenaReport(BaseModel):
     lines: list[str] = Field(default_factory=list)
     rank: int  # 打完之後守的人的名次
     before: int  # 打之前守的人的名次（被換下去才不一樣）
-    power: float = 0.0  # 挑的人的威力（戰報的對手那一格）
+    power: float = 0.0  # 挑的人的威力（打起來的那一份，含玉璽碎片）
+    bare: float | None = None  # 挑的人不含碎片的威力（戰報的對手那一格照它寫，FB-615）；None＝power 本身
+
+    @property
+    def shown(self) -> float:
+        """守的人的戰報上寫的「對手威力」：挑的人不含碎片的那一份。"""
+        return self.power if self.bare is None else self.bare
 
 
 class ArenaEntry(BaseModel):
@@ -448,6 +460,7 @@ class ArenaEntry(BaseModel):
 
     name: str
     power: float
+    bare: float | None = None  # 報名或更新那一刻不含玉璽碎片戰力的威力（改版，FB-625、FB-615：給別人看的身手與戰報照它）；None＝power 本身
     scores: dict[str, float] = Field(default_factory=dict)
     role: str = ""
     hp_cap: float
@@ -472,6 +485,11 @@ class ArenaEntry(BaseModel):
     @property
     def bouts(self) -> int:
         return self.wins + self.losses + self.draws
+
+    @property
+    def shown(self) -> float:
+        """給別人看的身手（挑人選單、擂台那一頁的「身手」）與對方戰報上的「對手威力」：不含玉璽碎片的那一份。打起來照 power。"""
+        return self.power if self.bare is None else self.bare
 
 
 class AnnalEntry(BaseModel):
@@ -1124,15 +1142,8 @@ class TerritoryState(BaseModel):
     forts: dict[str, Fort] = Field(default_factory=dict)  # 可易手的地點 → 工事（修築工事，works.py；易手就拿掉）
 
 
-class Pick(BaseModel):
-    """一票、或排好的一塊（tianxia/conquest_day.py）：打哪一塊、幾點開打（當地時間從 00:00 起算的分鐘）。"""
-
-    loc: str
-    minute: int
-
-
 class SiegeSlot(BaseModel):
-    """一天的時程表裡的一場攻城戰（conquest_day.merge 排出來、Game._conquest_tick 換成世界秒）。兩軍挑中同一塊、同一刻就併成一場
+    """一場攻城戰（翻地與爭搶之後由戰書排，conquest_day.place_letter；第二批是每天結算排的）。兩軍都對同一塊下了戰書就併成一場
     （attackers 兩個）。status：planned 排好了、waiting 到了開集結的時候等著開（world.advance_world_state 記）、open 開了集結
     （record_id 是那一場）、done 打完、void 作廢（結算晚了挪不進、攻方沒人到、攻方已經是主人、管理者取消）。"""
 
@@ -1143,8 +1154,8 @@ class SiegeSlot(BaseModel):
     at: float = 0.0  # 世界秒：開打（集結截止）
     muster_at: float = 0.0  # 世界秒：開集結
     attackers: list[str] = Field(default_factory=list)  # 攻方（官軍、黃巾；兩個是兩軍同時搶同一塊）
-    by: dict[str, str] = Field(default_factory=dict)  # 攻方 → 怎麼定的（vote 眾議、commander 主將定奪）
-    reasons: dict[str, str] = Field(default_factory=dict)  # 攻方 → 主將為什麼挑這裡（〈天下形勢〉讀；眾議是空的）
+    by: dict[str, str] = Field(default_factory=dict)  # 攻方 → 怎麼定的（letter 戰書；舊季的 vote 眾議、commander 主將定奪）
+    reasons: dict[str, str] = Field(default_factory=dict)  # 攻方 → 誰下的戰書（〈天下形勢〉讀）
     status: Literal["planned", "waiting", "open", "done", "void"] = "planned"
     record_id: int | None = None  # 開了集結之後那一場的流水號
     winner: str | None = None  # 打完拿下的一方；守住、作廢是 None
@@ -1158,11 +1169,94 @@ class DayNote(BaseModel):
     side: str
     loc: str
     minute: int
-    by: str  # vote／commander
+    by: str  # letter（下戰書，reason 是下戰書的人）／flip（推滿易手，reason 是推最多的人）；舊季還有 vote／commander
     reason: str = ""
     share: float = 0.0  # 眾議：這一塊加權之後的比例（0～1）
     # 作罷了另記一筆（conquest_day.note_void）：原因 absent＝攻方一個人都沒到（這種不發天下大事，裁決 19）；空的是結算那一下排定的那一筆
     void: str = ""
+    # ── 第三批 A：收場那一下另記一筆（siege.settle；〈天下形勢〉讀）。結算排定的那一筆與作罷的那一筆這幾欄是空的 ──
+    result: str = ""  # taken 攻方拿下、held 守住、stalemate 兩軍相持（沒有守將的中立地停在中線）
+    taken: str = ""  # 拿下的那一方（陣營 id）；沒易手是空的
+    margin: str = ""  # 大勝／險勝（戰場上贏的那一方）
+    keeper: str = ""  # 守方是誰（開集結那一刻）：陣營 id，中立地的守將寫 guard；兩軍同時搶沒有守將的中立地是空的
+    attackers: list[str] = Field(default_factory=list)  # 攻方（兩軍同時攻同一塊是兩個）
+    blow: str = ""  # 三方混戰補上守將最後一刀的人（名號；天下大事本來就具名）
+
+
+class XingshiTicket(BaseModel):
+    """〈天下形勢〉還在等模型的那一張單（WorldState.xingshi_ticket；Game._xingshi_open 開、settle_xingshi 或保底收）：事實與「是日：…」
+    那一句在開單那一刻就定了，模型只照它寫文章。taken：伺服器的背景執行緒拿走了（A 段），同一張不再拿第二次。"""
+
+    n: int  # 這一季第幾篇
+    key: int  # 哪一天（conquest_day.day_key）結算時開的
+    opened_real: float  # 開單的現實時間（過 Config.xingshi.grace_seconds 照固定段收）
+    facts: list[str] = Field(default_factory=list)
+    line: str = ""  # 「是日：…」
+    taken: bool = False
+    retry_at: float = 0.0  # 現實時間：上一趟沒輪到模型（假人的名額被佔），這之前不再拿（Game.release_xingshi，Config.xingshi.retry_seconds）
+
+
+class XingshiEssay(BaseModel):
+    """收下的一篇（WorldState.xingshi）：見聞「形勢」頁一篇一行。by_rule：模型沒寫成、照固定段拼的（畫面上不寫，看不出差別）。"""
+
+    key: int
+    time: float  # 世界秒：收下那一刻
+    n: int
+    essay: str
+    line: str  # 「是日：…」
+    by_rule: bool = False
+
+
+class XingshiMark(BaseModel):
+    """上一篇讀到哪裡（WorldState.xingshi_mark）：下一篇只寫這之後的事。開季後第一次結算（只記 key 的那一下）記起點。"""
+
+    log: int = 0  # ConquestState.day_log 讀到第幾筆
+    rumors: int = 0  # WorldState.rumors 讀到第幾則（傳聞只加不刪，照位置記）
+    lines: dict[str, int] = Field(default_factory=dict)  # 三條戰線那一刻的值（「比前一篇往哪一邊動」）
+
+
+class PushMark(BaseModel):
+    """一次出陣在一塊地上記的一筆（conquest.mark；「正在推這裡的人」、集火、混戰都讀它）：誰、哪一邊、攻或守、這一下推動多少、世界秒。
+    打輸守軍、混戰輸了也記（推了 0）：人確實在那裡推。"""
+
+    name: str
+    side: str
+    how: Literal["attack", "hold"]
+    moved: float = 0.0
+    at: float = 0.0
+
+
+class Bar(BaseModel):
+    """一塊地上某一個攻方的那一條進度（輿圖簡化設計 4.1）：0～100，到 100 易手；pushers 是這一輪（上一次歸零之後）每個人推了多少（分紅照它分）。"""
+
+    value: float = 0.0
+    pushers: dict[str, float] = Field(default_factory=dict)
+
+
+class BlockFight(BaseModel):
+    """一塊地的翻地帳（conquest.py；ConquestState.fights，照季分）：每個攻方一條進度、守方這一輪拉了多少（守城功）、最近的出陣、易手的時刻。"""
+
+    bars: dict[str, Bar] = Field(default_factory=dict)  # 攻方 → 那一條（0 的拿掉）
+    guards: dict[str, float] = Field(default_factory=dict)  # 守方的人 → 這一輪拉回了多少（每一條都歸零時清掉）
+    alarm: bool = False  # 這一輪有哪一條到過 Config.conquest.alarm_at（守方再拉回全部歸零才有守城功）
+    flipped_at: float | None = None  # 世界秒：上一次易手（冷卻從這裡起算）
+    last_push: float | None = None  # 世界秒：上一次有人推或拉（每日回看它）
+    marks: list[PushMark] = Field(default_factory=list)  # 最近的出陣（留 presence_seconds／集火／混戰裡最長的那一段）
+
+
+class ConquestPayout(BaseModel):
+    """一筆分紅（輿圖簡化設計 4.5；conquest.flip、守城功記，Game._deliver_conquest 在那個人自己同步時補）。"""
+
+    name: str
+    kind: Literal["take", "guard"]  # 攻下／守住
+    loc: str
+    side: str
+    silver: int = 0
+    exp: int = 0
+    fame: int = 0
+    share: float = 0.0  # 這一輪佔幾成（0～1）
+    top: bool = False  # 推（拉）最多的那一個：江湖史已經記了，行狀在補的那一下記
+    time: float = 0.0
 
 
 class ConquestState(BaseModel):
@@ -1171,13 +1265,15 @@ class ConquestState(BaseModel):
     start: dict[str, str] = Field(default_factory=dict)  # 區塊 → 開季那一刻的種類（neutral／guan／huang）；之後內容改了，這一季不跟著動
     offset: dict[str, float] = Field(default_factory=dict)  # 戰線 → 其他來源累積的偏移（值＝夾過的基準＋偏移；開季＝劇本起點−50，裁決 5）
     base: dict[str, float] = Field(default_factory=dict)  # 戰線 → 上一次寫回時的佔領基準（別處直接改了線，照它重錨偏移）
-    progress: dict[str, float] = Field(default_factory=dict)  # 區塊 → 攻城目標的進度 0～100（往黃巾為正；沒寫是 50，計畫 2.3）
-    # ── 第二批：每天的鐘（conquest_day.py）──
-    settled_key: int = -1  # 結算到哪一天（day_key）；只准往前走（同 arena.roll_day 的教訓），-1 是還沒記過
-    votes: dict[str, dict[str, Pick]] = Field(default_factory=dict)  # 陣營 → 名號 → 那一票（一人一票、可以改；只公開加權後的比例）
-    votes_for: int = -1  # 這一批票是替哪一天（day_key）投的；結算那一下對不上就不算
-    schedule: list[SiegeSlot] = Field(default_factory=list)  # 今天（最近一次結算排的）的時程表，照開打的先後
-    day_log: list[DayNote] = Field(default_factory=list)  # 每天結算記的那幾筆（〈天下形勢〉讀）
+    # ── 翻地與爭搶（輿圖簡化設計第四章）：每一塊的進度與帳。第二批雙向的 progress 與投票（votes／votes_for）拿掉了，舊存檔讀到照略過 ──
+    fights: dict[str, BlockFight] = Field(default_factory=dict)  # 區塊 → 翻地帳（沒推過的不在裡面）
+    decay_day: int = -1  # 每日回處理到季曆第幾天（calendar.day_index）；-1 是還沒記過（第一次只記下今天）
+    payouts: list[ConquestPayout] = Field(default_factory=list)  # 還沒送到的分紅（每個人同步時拿走自己的）
+    letter_days: dict[str, int] = Field(default_factory=dict)  # 陣營 → 上一次下戰書是哪一天（conquest_day.day_key；一邊一天一張）
+    # ── 每天的鐘（conquest_day.py）──
+    settled_key: int = -1  # 換天換到哪一天（day_key）；只准往前走（同 arena.roll_day 的教訓），-1 是還沒記過
+    schedule: list[SiegeSlot] = Field(default_factory=list)  # 戰書排的攻城（還沒打、在打、今天打完或作罷的），照開打的先後
+    day_log: list[DayNote] = Field(default_factory=list)  # 戰書、推滿易手、作罷記的那幾筆（〈天下形勢〉讀）
 
 
 class GuardPost(BaseModel):
@@ -1279,6 +1375,10 @@ class WorldState(BaseModel):
     # 目標的名號鍵 → 上一次被截殺的世界秒（被截殺過的人一陣子之內誰都不能再截殺他）。換季整個重來
     raids: dict[str, float] = Field(default_factory=dict)
     raided: dict[str, float] = Field(default_factory=dict)
+    # 混戰（翻地與爭搶，Game._clash）寫進上面那兩本的是哪幾筆：同 raids 的鍵（兩個方向）、同 raided 的鍵（被撞的人）→ 那一場的世界秒。
+    # 截殺的拒絕話照它分「混戰過」或「截殺過」（FB-607）：raids／raided 那一筆的時刻跟這裡一樣就是混戰寫的，之後真的截殺會蓋掉 raids／raided。換季整個重來
+    clashes: dict[str, float] = Field(default_factory=dict)
+    clashed: dict[str, float] = Field(default_factory=dict)
     # 設伏劫道（ambush.py）：路段鍵（兩頭的地點 id 排序後用 | 接起來）→ 那一段的埋伏（同一時刻最多一處有效，收了的照留到 keep_hours）
     ambushes: dict[str, list[Ambush]] = Field(default_factory=dict)
     # 屯糧練兵（works.py）：交戰的那一軍 → 這一季到下一場時刻表決戰開集結為止屯了幾下（開集結那一刻換成起點的偏移、整個清空）
@@ -1311,6 +1411,11 @@ class WorldState(BaseModel):
     territory: TerritoryState | None = None  # 地盤易手（出陣探索與地盤設計第四節）；None＝還沒算過
     conquest_on: bool = False  # 這一季開季時領地爭奪是不是開著（Config.conquest；conquest.on 還要設定也開著）；舊季讀檔是 False
     conquest: ConquestState | None = None  # 領地爭奪（tianxia/conquest.py）；None＝這一季還沒算過
+    # 〈天下形勢〉（領地爭奪第三批 A，tianxia/xingshi.py）：這一季收下的每一篇（照先後，最多 Config.xingshi.keep 篇）、還在等模型的那一張單、
+    # 上一篇讀到哪裡（None＝這一季還沒記過起點）
+    xingshi: list[XingshiEssay] = Field(default_factory=list)
+    xingshi_ticket: XingshiTicket | None = None
+    xingshi_mark: XingshiMark | None = None
     # ── 擂台賽（tianxia/arena.py；換季整個重來）──
     arena: dict[str, ArenaEntry] = Field(default_factory=dict)  # 名號鍵 → 守擂的人
     arena_pairs: dict[str, float] = Field(default_factory=dict)  # 「挑的名號鍵>守的名號鍵」→ 上一次挑的世界秒（冷卻）
@@ -1349,7 +1454,7 @@ class BattleRecord(BaseModel):
     id: int  # 流水號，本季從 1 起算
     time: float  # 開打時的遊戲時間（決戰是收場時的）
     location: str  # 地點名稱（決戰是大區名；上一季打的前面加「第 N 季・」）
-    kind: Literal["train", "event", "wild", "showdown", "siege", "spar", "raid", "duel", "seal", "arena", "sortie", "ambush", "assassin"]  # 遊歷／劇情／探索撞上的野怪／全服決戰／跟玩家切磋／截殺（發起或被截殺）／頭目戰／奪璽單挑（玉璽碎片設計 5.9）／出陣（出陣探索與地盤設計；舊戰報的 train 照舊顯示「遊歷」，不遷移）
+    kind: Literal["train", "event", "wild", "showdown", "siege", "spar", "raid", "duel", "seal", "arena", "sortie", "ambush", "assassin", "melee"]  # 遊歷／劇情／探索撞上的野怪／全服決戰／跟玩家切磋／截殺（發起或被截殺）／頭目戰／奪璽單挑（玉璽碎片設計 5.9）／出陣（出陣探索與地盤設計；舊戰報的 train 照舊顯示「遊歷」，不遷移）
     event: str = ""  # 劇情戰的事件標題；決戰是決戰的名稱
     opponent: str  # 敵方隊伍名稱；決戰是敵方陣營名
     ours: list[Fighter]  # 我方陣容，第一位是隊長；等級是開打時的等級（決戰不記，是空的）

@@ -2064,8 +2064,11 @@ class ShardDef(_Strict):
     id: str
     name: str
     part: str  # 取自玉璽的哪一部分
-    effect: str  # Config.seal.effects 的鍵
+    effect: str  # Config.seal.effects 的鍵（改版關著時的那一個效果）
     note: str = ""
+    # 改版（Config.seal.revamp 開著）的常駐成長或生活效果：Config.seal.revamp.effects 的鍵，一片可以好幾個（玄紐、歸心）；
+    # 戰力 ×revamp.power 每片都有、不寫在這裡（docs/superpowers/specs/2026-10-21-玉璽碎片改版-design.md 第三章）
+    effects: list[str] = Field(default_factory=list)
 
 
 class MandateTuning(_Strict):
@@ -2078,6 +2081,45 @@ class MandateTuning(_Strict):
     pay_scale: int = Field(default=2, ge=1)  # 得天命那一方的軍餉（銀兩、經驗）倍數：只寫在這裡，Game._showdown_pay 讀
     decisive_from_week: int = Field(default=13, ge=1)  # 天命之季從第幾週起才提前收季（13：等於不提前收，8.2）
     recall_battles: int = Field(default=2, ge=0)  # 天命之季，時刻表上標了 seal 的前幾場收場時各喚回一片（8.2）
+
+
+class SealCacheTuning(_Strict):
+    """領地爭奪的季，碎片從哪裡來（領地爭奪設計 3.9、4.8；計畫 Task 14、15）：開季先擲 hide_chance，擲中就把一片未現世的碎片藏在
+    一塊開季中立的區塊（核心照 core_weight 加權），之後在那一塊探索（四種都算）每一下擲 find_chance，那一塊此刻歸你的陣營 ×own_scale。
+    一季最多現世一片；季末沒人撿到就清掉、下一季重擲。藏在哪一塊不公開。全部是【預設】，機率照 scripts/measure_seal.py 的
+    --mandate-mc 對到「湊滿七片平均約 16～20 季」（企劃者 2026-10-20），見 docs/guide/玉璽碎片.md 的量表。"""
+
+    # 開季這一季有沒有一片藏在中立地（PM 先定 40%，沒動）。它是速度的上限：探索再多也快不過 7 ÷ 0.4 ＝ 17.5 季
+    hide_chance: float = Field(default=0.4, ge=0, le=1)
+    # 在藏碎片的那一塊每探索一下撿到的機率（非常低）。PM 先定 0.5%，量表（--mandate-mc，藏處一季被探索 300 次）量到平均 20.5 季、
+    # 比企劃者要的 16～20 季長一點，調成 1%：藏處一季被探索 200～1000 次都落在 17.4～18.9 季，150 次約 20.5 季、100 次約 24 季
+    find_chance: float = Field(default=0.01, ge=0, le=1)
+    own_scale: float = Field(default=1.5, ge=1)  # 那一塊此刻歸你的陣營時的倍數（設計 3.9「機率再高一點」；PM 先定 ×1.5）
+    # 核心加權（輿圖簡化設計 3.1，企劃者定「所有開季中立的區塊都可能藏，核心的機率最高」）：地點落在 core_regions 這些大區 id 裡的，
+    # 藏的權重是 core_weight，其餘是 1。新地理的核心自成一區、id 是 "core"（dev/map-1b 的 map.json）；今天的地圖沒有這一區，所以全是 1。
+    # 權重 3＝核心三處合起來約佔四成多（中原十二處＋核心三處），每一處的機率是中原每一處的三倍【暫，待企劃者看過量表】
+    core_regions: list[str] = Field(default_factory=lambda: ["core"])
+    core_weight: float = Field(default=3.0, ge=1)
+
+
+class SealRevampTuning(_Strict):
+    """玉璽碎片改版（docs/superpowers/specs/2026-10-21-玉璽碎片改版-design.md；計畫 docs/superpowers/plans/2026-10-21-玉璽碎片改版-1.md）
+    第 1 批：常駐效果與持有者平時藏起來。子開關（PM 五之一 6：預設開、部署在休季換程式，不蓋章）；關著時舊的七個效果
+    （SealTuning.effects）、江湖史七格與璽動點名、酒肆名氣一個字都不變。判斷一律走 seal.revamp_on（treasures.revamp_on 同一條）。
+    - power：持有者本人的 Boost.factor 倍數（team.player_boost；企劃者「中：約 +10%」）。奪璽單挑的快照與江湖水漲的浮動難度照不含
+      它的那一份算（企劃者第 7 條、PM 五之一 2）；同伴、部下不吃。
+    - effects：content/seal.json 每片 effects 清單的鍵 → 數字（設計第三章；全部【預設】，等 21 天的季試玩再調）。乘的效果
+      （treasures.MULTIPLY）寫倍數、加的寫加多少：injury 螭首每場仗變成內傷的倍數、talk_turns 玄紐每位人物每日多談幾輪、
+      audience 玄紐求見門檻抵幾點、practice 雲篆練成的心得倍數（熔煉照原價退）、keep_silver 金角落敗不失銀兩（1＝有，只管
+      Game._lose_silver，PM 五之一 3）、stamina_regen 承露體力回復倍數、fuse_points 赤璋合成的造化、mate_exp 歸心同伴經驗倍數、
+      chuangong 歸心傳功的心得倍數。"""
+
+    enabled: bool = True
+    power: float = Field(default=1.10, ge=1)
+    effects: dict[str, float] = Field(default_factory=lambda: {
+        "injury": 0.5, "talk_turns": 2, "audience": 5, "practice": 0.75, "keep_silver": 1,
+        "stamina_regen": 1.25, "fuse_points": 10, "mate_exp": 1.25, "chuangong": 0.9,
+    })
 
 
 class SealTuning(_Strict):
@@ -2122,6 +2164,8 @@ class SealTuning(_Strict):
     })
     qa_tools: bool = False
     mandate: MandateTuning = Field(default_factory=MandateTuning)
+    cache: SealCacheTuning = Field(default_factory=SealCacheTuning)  # 領地爭奪的季，碎片藏在中立地、探索撿到（Task 14）
+    revamp: SealRevampTuning = Field(default_factory=SealRevampTuning)  # 改版第 1 批：常駐效果與持有者藏起來（子開關）
 
 
 class TreasureDef(_Strict):
@@ -2612,8 +2656,9 @@ class ConquestRules(_Strict):
     """領地爭奪（第 38 項改版，docs/superpowers/specs/2026-10-20-領地爭奪-design.md；計畫 docs/superpowers/plans/2026-10-20-領地爭奪.md；
     tianxia/conquest.py）。開季時蓋章（WorldState.conquest_on，要第一季規則開著、劇本有官軍與黃巾、寫了 territory.blocks、豪強分屬兩軍），
     正在跑的季不變；enabled 是主機的開關（關掉時照關著）。開著時：控制方只照佔領（不拔河、不割據），三條戰線的值＝佔領的基準＋其他
-    來源的偏移，出陣推攻城目標的進度、不推線，人站在自家領地吃加成，散人在開季中立的區塊也吃。第二批起每天投票、22:00 結算排明天的
-    攻城（conquest_day.py），時間到了開攻城戰（siege.py，決戰的縮小版，跟決戰同時打），攻方贏了就易手。數字全是【預設】，等 21 天的季試玩再調。"""
+    來源的偏移，出陣推那一塊的進度、不推線，人站在自家領地吃加成，散人在開季中立的區塊也吃。翻地與爭搶（輿圖簡化設計第四章）：每一塊對
+    每個攻方一條進度，推滿當場易手、冷卻一小時；兩邊推到同一塊撞上就打（混戰）；一起推有集火；攻下與守住都分紅；第 4 階的人進度過門檻
+    可以下戰書，時間到了開攻城戰（siege.py，決戰的縮小版，跟決戰同時打），攻方贏了就易手。數字全是【預設】，等 21 天的季試玩再調。"""
 
     enabled: bool = False  # 【預設】正式內容先關；三批都做完、QA 過、PM 說可以，再在 season21.json 打開（裁決 15）
     share: float = Field(default=35.0, ge=0)  # 【預設】佔領的份量：中立地全被一方拿下，基準偏到 50±share（分母只算中立時，設計 4.7）
@@ -2628,22 +2673,51 @@ class ConquestRules(_Strict):
     event_progress: float = Field(default=1.0, ge=0)  # 【預設】在區塊做完一則事件，往自己那一邊推進度一次的量（計畫 2.3；散人不推）
     start_shift_per_10: int = Field(default=2, ge=0)  # 【預設】攻城戰起點：進度偏 50 每 10 點偏幾點（設計 4.4；第二批才用）
     start_shift_cap: int = Field(default=10, ge=0)  # 【預設】最多偏幾點（設計 4.4；第二批才用）
-    # ── 第二批：每天的鐘、投票與時程表（tianxia/conquest_day.py；設計 3.6、4.2、4.3，裁決 6、7、9）──
+    # ── 每天的鐘與攻城時段（tianxia/conquest_day.py；設計 4.3，裁決 6；投票與 22:00 公告結算照輿圖簡化設計 4.4 拿掉了，PM 2026-10-20）──
     # 時刻一律是當地時間（照 pill_day_utc_offset_hours，跟回體丹同一個換日的算法）從 00:00 起算的分鐘
-    settle_hour: int = Field(default=22, ge=0, le=23)  # 【預設】每天幾點結算、公告隔天的攻城（設計 4.3）；要晚過 slot_last，當天的仗才打得完
-    slot_first: int = Field(default=12 * 60, ge=0, lt=24 * 60)  # 【預設】最早幾點開打（設計 4.3：12:00～21:00 的整點或半點）
+    settle_hour: int = Field(default=22, ge=0, le=23)  # 【預設】每天幾點換天（Game._conquest_tick 的掛鉤：前一天沒開成的攻城作罷、〈天下形勢〉一篇）；要晚過 slot_last
+    slot_first: int = Field(default=12 * 60, ge=0, lt=24 * 60)  # 【預設】戰書的攻城最早幾點開打（設計 4.3：12:00～21:00 的整點或半點）
     slot_last: int = Field(default=21 * 60, ge=0, lt=24 * 60)  # 【預設】最晚幾點開打
     slot_step_minutes: int = Field(default=30, ge=1)  # 【預設】開打時段的間隔（整點與半點）
-    commander_slots: list[int] = Field(default_factory=lambda: [21 * 60, 20 * 60])  # 【預設】主將替人挑時用的時段，第幾塊用第幾個（裁決 7）
-    two_per_day_ratio: float = Field(default=0.5, ge=0)  # 【預設】中立區塊數 ÷ 季長（天）≥ 這個就一邊一天兩塊，否則一塊（設計 4.2）
     showdown_gap_before: int = Field(default=30, ge=0)  # 【預設】時刻表決戰排定時刻之前幾分鐘不排攻城（裁決 6）
     showdown_gap_after: int = Field(default=45, ge=0)  # 【預設】之後幾分鐘不排攻城（裁決 6）
-    muster_minutes: int = Field(default=30, ge=1)  # 【預設】開打前幾分鐘開集結（設計 4.3）；結算晚了，過了「現在＋這麼久」的時段往後挪
-    rank4_share: float = Field(default=0.55, ge=0, le=1)  # 【企劃者】有第 4 階的人投票時，第 4 階的票合起來佔的比例；其他人合起來佔其餘（裁決 9）
+    muster_minutes: int = Field(default=30, ge=1)  # 【預設】開打前幾分鐘開集結（設計 4.3）；戰書挑的時段要晚過「現在＋這麼久」
     pay_share: float = Field(default=0.5, ge=0)  # 【預設】攻城戰的軍餉與貢獻是決戰的幾成（設計 4.4）
+    # ── 翻地與爭搶（輿圖簡化設計第四章、第九章；計畫 docs/superpowers/plans/2026-10-20-翻地與爭搶.md）──
+    # 進度：一塊地對每一個攻方各一條 0～100，攻推自己那一條、守（此刻佔著的那一方）把每一條都拉下，任一條到 100 當場易手（conquest.push）。
+    # 全部【預設，等 21 天的季試玩】
+    cooldown_minutes: float = Field(default=60.0, ge=0)  # 【預設】剛翻的地幾分鐘（現實）內兩邊都推不動、那一塊的加成暫停（設計 4.1【企劃者】）
+    decay_per_day: float = Field(default=10.0, ge=0)  # 【預設】前一整個季曆日沒人推過的塊，每一條往守方回幾點（設計 4.1、第九章第 1 條）
+    focus_minutes: float = Field(default=60.0, ge=0)  # 【預設】集火：這麼多分鐘內同一邊推過同一塊的其他人才算（設計 4.2）
+    focus_step: float = Field(default=0.1, ge=0)  # 【預設】集火：每多一個人，每一下多幾成
+    focus_cap: float = Field(default=0.5, ge=0)  # 【預設】集火最多多幾成
+    clash_minutes: float = Field(default=10.0, ge=0)  # 【預設】混戰：對面這麼多分鐘內在這一塊出陣過、人還在這裡，撞上就打（設計 4.3【企劃者選 b】）
+    clash_scale: float = Field(default=1.5, ge=0)  # 【預設】混戰打贏那一下的推力倍數（輸的那一下白跑）
+    letter_at: float = Field(default=60.0, ge=0, le=100)  # 【預設】自己那一邊的條到這裡，第 4 階的人可以下戰書（設計 4.4）
+    alarm_at: float = Field(default=50.0, ge=0, le=100)  # 【預設】守城功：哪一條到過這裡、守方再把全部拉回零才算（設計 4.5「從五成以上拉回零」）
+    take_silver: int = Field(default=200, ge=0)  # 【預設】攻下一塊開季中立的地，推過的人照貢獻分的銀兩總額（設計 4.5）
+    take_exp: int = Field(default=300, ge=0)  # 【預設】同上，經驗總額
+    take_fame: int = Field(default=20, ge=0)  # 【預設】同上，名望總額
+    faction_pool_share: float = Field(default=0.5, ge=0)  # 【預設】開季是陣營領地的塊，總額打幾成（設計 4.5「陣營區塊減半」）
+    guard_pool_share: float = Field(default=0.5, ge=0)  # 【預設】守城功的總額是攻下的幾成（設計 4.5）
     # 【預設】兩軍同時攻同一塊中立地（三方混戰，裁決 22）：守將的池子＝這個 × 集結結束時兩軍到場的人數（至少算 2 人，siege.size_melee_guard）。
     # 一個人五回合都強攻、戰線在中線打得掉 15×5＝75：兩軍平均四成的回合出強攻，守將撐不過五回合（一回合最多打掉四分之一，最快第 4 回合倒）
     melee_pool_per_head: float = Field(default=30.0, gt=0)
+
+
+class XingshiTuning(_Strict):
+    """〈天下形勢〉（領地爭奪第三批 A；設計 3.10，計畫第五章 Task 16、17；tianxia/xingshi.py）：每天 22:00 結算那一刻開一張單，伺服器鎖外
+    請模型照那一天的事實寫一篇旁白（三段式，server.write_xingshi），寫不出來照固定段。只在領地爭奪開著（conquest.on）而且這裡開著時有；
+    模型只寫文章，不給任何數字、不定任何勝負。enabled 是主機的開關（關掉時不開單、不碰季的形勢欄位）。"""
+
+    enabled: bool = True  # 【預設】正式開；領地爭奪本身還關著（ConquestRules.enabled），開了領地爭奪就有
+    grace_seconds: float = Field(default=900, ge=0)  # 【預設】單開了這麼久（現實秒）還沒交回，下一個同步的人照固定段收（伺服器關著、模型壞了照樣每天一篇）
+    budget_seconds: int = Field(default=120, ge=0)  # 【預設】鎖外那一趟模型呼叫的總預算（同決戰劇情 battle_tale_budget_seconds）
+    # 【預設】佇列裡假人的名額被佔（或排不到）、這一趟沒叫成模型：單子放回去，隔這麼久（現實秒）再試；寬限（grace_seconds）到了才照固定段
+    # （PM，第三批 A 回報之後）。不隔的話每一次輪詢都撞一次佇列
+    retry_seconds: float = Field(default=30, ge=0)
+    facts_max: int = Field(default=30, ge=1)  # 【預設】一張單最多幾條事實（攻城的在前、三條線、再補天下大事，新的在前）
+    keep: int = Field(default=30, ge=1)  # 【預設】這一季最多留幾篇（21 天的季約 20 篇，留得下一整季）
 
 
 class AmbushRules(_Strict):
@@ -2920,6 +2994,7 @@ class Config(_Strict):
     terrain_arts: TerrainArts = Field(default_factory=TerrainArts)  # 地利：武學跟此地最濃的意境同一路或被剋（見 TerrainArts）
     territory: TerritoryRules = Field(default_factory=TerritoryRules)  # 地盤易手（見 TerritoryRules）
     conquest: ConquestRules = Field(default_factory=ConquestRules)  # 領地爭奪（見 ConquestRules）
+    xingshi: XingshiTuning = Field(default_factory=XingshiTuning)  # 〈天下形勢〉：領地爭奪每天一篇的旁白（見 XingshiTuning）
     ambush: AmbushRules = Field(default_factory=AmbushRules)  # 設伏劫道（見 AmbushRules）
     fortify: FortifyRules = Field(default_factory=FortifyRules)  # 修築工事（見 FortifyRules）
     figure_aid: FigureAidRules = Field(default_factory=FigureAidRules)  # 護衛、犒軍、探望大勢人物（見 FigureAidRules）
@@ -4180,6 +4255,8 @@ class Content(_Strict):
     forge_secrets: dict[str, ForgeSecret] = Field(default_factory=dict)  # 隱藏配方池（content/forge_secrets.json，照 id）；沒有這個檔就是空的
     tier4_named: dict[str, Tier4Named] = Field(default_factory=dict)  # 四階名器名字表（content/tier4_named.json，照 id）；沒有這個檔就是空的（測試內容）
     arena_crowd: dict[str, list[str]] = Field(default_factory=dict)  # 擂台的場邊事件的固定句（content/arena_crowd.json）：種類 → 句子；沒有這個檔就沒有場邊事件
+    # 〈天下形勢〉的句型（content/xingshi_lines.json，領地爭奪第三批 A；tianxia/xingshi.py 讀、content.check_xingshi_lines 驗）；沒有這個檔就沒有〈天下形勢〉
+    xingshi_lines: dict = Field(default_factory=dict)
     banned_words: list[str] = Field(default_factory=list)  # 玩家寫給別人看的話（挑釁那一句、名帖自題）的髒話與辱罵字表（content/banned_words.json）；沒有這個檔就是空的
     mingtie: MingtieContent = Field(default_factory=lambda: MingtieContent())  # 名帖的現成的畫與假人的自題句庫（content/mingtie.json）；沒有這個檔就是空的
     shop_lines: dict[str, dict[str, list[str]]] = Field(default_factory=dict)  # 店面上掌櫃的話（content/shop_lines.json，店面獨立介面設計 1.4）：店 → 情況 → 句子；沒有這個檔就是空的
