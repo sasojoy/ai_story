@@ -4218,23 +4218,23 @@
 
   // 月卡今天的份（定案甲・每日領）：貨架上面那張月卡小卡裡一顆「領取」，領過了寫「今天已領」。card.daily 是 None（沒有這一份）不畫
   function mallDailyHtml(card) {
-    const x = card && card.daily;
-    if (!x) return "";
-    return x.claimed ? `<small class="mall-daily done">今天的份已領</small>`
+    const today = card && card.daily;
+    if (!today) return "";
+    return today.claimed ? `<small class="mall-daily done">今天的份已領</small>`
       : `<button class="btn small primary mall-daily" data-act="mall-claim">領今天的份</button>`;
   }
 
-  function dailyWhat(x) {
+  function dailyWhat(today) {
     const pill = (S.mallData && S.mallData.pills && S.mallData.pills.name) || "回體丹";
-    return [x.ingots ? `${x.ingots | 0} 元寶` : "", x.pills ? `${pill} ${x.pills | 0} 顆` : ""].filter(Boolean).join("＋");
+    return [today.ingots ? `${today.ingots | 0} 元寶` : "", today.pills ? `${pill} ${today.pills | 0} 顆` : ""].filter(Boolean).join("＋");
   }
 
   // 江湖頁「月卡・今日份」小卡（定案：月卡生效、今天還沒領時，「剛剛」上面一張；領完收起）。資料是狀態列那一份 main.mall.daily
   function dailyCardHtml(m) {
-    const x = m.mall && m.mall.daily;
-    if (!x || x.claimed || !mallShown()) return "";
+    const today = m.mall && m.mall.daily;
+    if (!today || today.claimed || !mallShown()) return "";
     return `<section class="card mall-today"><span class="moon" aria-hidden="true">月</span>
-      <span class="mt"><b>月卡・今日份</b><span>${esc(dailyWhat(x))}，沒上線那天不補</span></span>
+      <span class="mt"><b>月卡・今日份</b><span>${esc(dailyWhat(today))}，沒上線那天不補</span></span>
       <button class="btn small primary" data-act="mall-claim">領取</button></section>`;
   }
 
