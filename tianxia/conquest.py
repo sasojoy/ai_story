@@ -84,6 +84,21 @@ def adjacent(content: Content, loc_id: str) -> list[str]:
     return [other for other in table if other in near and other != loc_id]
 
 
+def reach(content: Content, side: str) -> set[str]:
+    """side 開季持有的區塊（大本營、fixed 也算）出發、只走 side 自己與中立的區塊（adjacent：有路直通、不穿過不是區塊的地點）走得到的
+    區塊，照內容的開季種類、不看劇情開放了沒。content.check_conquest_blocks 拿它驗「每一塊中立地每一方都走得到」（輿圖簡化設計 3.2，
+    PM 2026-10-21）；side 是劇本裡任何一方都行，不只兩軍。"""
+    table = blocks(content)
+    seen = {loc for loc, block in table.items() if block.kind == side}
+    todo = list(seen)
+    while todo:
+        for nxt in adjacent(content, todo.pop()):
+            if nxt not in seen and table[nxt].kind in (side, NEUTRAL):
+                seen.add(nxt)
+                todo.append(nxt)
+    return seen
+
+
 def holder(world: WorldState | None, content: Content, loc_id: str) -> str | None:
     """這一塊此刻歸誰（中立而沒人佔是 None）：這一季算過照 TerritoryState.control，還沒算過照開季的種類。"""
     t = world.territory if world is not None else None

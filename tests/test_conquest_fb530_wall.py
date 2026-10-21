@@ -15,15 +15,19 @@ def _value(game, line):
     return rules.world_trend_value(game.state.world, game.content, line)
 
 
+LINE = "jizhou"  # 區塊表 v3 之後南陽沒有官軍搶得下來的陣營區塊（淯水河畔改成中立），換成同樣形狀的冀州
+
+
 def _past_the_wall(game):
-    """QA 的南陽：三塊中立加淯水河畔（官軍的陣營區塊，權重 2）都歸黃巾，基準 50＋35×5÷3＝108.33、偏移 −7、值 100。"""
+    """QA 的南陽（三塊中立加淯水河畔〔官軍的陣營區塊，權重 2〕都歸黃巾）照搬到冀州：三塊中立加涿郡（官軍的陣營區塊）都歸黃巾，
+    基準 50＋35×5÷3＝108.33、偏移 −7、值 100。"""
     w, c = game.state.world, game.content
-    rules.change_trend(game.state, c, "nanyang", 43 - _value(game, "nanyang"))  # QA 那一季開季那一刻張曼成取宛 +8：35 → 43
-    for loc in ("nanyang_road", "nanyang_wilds", "lulin_zhai", "yu_river"):
+    rules.change_trend(game.state, c, LINE, 43 - _value(game, LINE))  # QA 那一季的南陽：開季那一刻張曼成取宛 +8，35 → 43
+    for loc in ("baima_ford", "xiaquyang", "juma_river", "zhuo_county"):
         conquest.set_control(w, c, loc, "huang")
-    assert conquest.base(w, c, "nanyang") == pytest.approx(50 + 35 * 5 / 3)
-    assert w.conquest.offset["nanyang"] == pytest.approx(-7)
-    assert _value(game, "nanyang") == 100
+    assert conquest.base(w, c, LINE) == pytest.approx(50 + 35 * 5 / 3)
+    assert w.conquest.offset[LINE] == pytest.approx(-7)
+    assert _value(game, LINE) == 100
     return w, c
 
 
@@ -31,34 +35,35 @@ def _past_the_wall(game):
 def test_pushing_toward_the_wall_past_it_leaves_the_offset_alone(delta):
     game = conquest_game("season21")
     w, c = _past_the_wall(game)
-    assert rules.change_trend(game.state, c, "nanyang", delta) == []  # 值不動、不寫
-    assert w.conquest.offset["nanyang"] == pytest.approx(-7)
-    conquest.set_control(w, c, "yu_river", "guan")  # 官軍收復淯水河畔：基準 85
-    assert _value(game, "nanyang") == 78  # 85＋(−7)，跟沒推一樣（修前 77）
+    assert rules.change_trend(game.state, c, LINE, delta) == []  # 值不動、不寫
+    assert w.conquest.offset[LINE] == pytest.approx(-7)
+    conquest.set_control(w, c, "zhuo_county", "guan")  # 官軍收復涿郡：基準 85
+    assert _value(game, LINE) == 78  # 85＋(−7)，跟沒推一樣（修前 77）
 
 
 def test_pushing_back_from_past_the_wall_counts_once():
     game = conquest_game("season21")
     w, c = _past_the_wall(game)
-    rules.change_trend(game.state, c, "nanyang", -1)
-    assert w.conquest.offset["nanyang"] == pytest.approx(-8)  # 照推的量記（修前 −9.33）
-    assert _value(game, "nanyang") == 100  # 未夾的 100.33，顯示照舊夾在 100
-    conquest.set_control(w, c, "yu_river", "guan")
-    assert _value(game, "nanyang") == 77  # 85＋(−8)（修前 76）
+    rules.change_trend(game.state, c, LINE, -1)
+    assert w.conquest.offset[LINE] == pytest.approx(-8)  # 照推的量記（修前 −9.33）
+    assert _value(game, LINE) == 100  # 未夾的 100.33，顯示照舊夾在 100
+    conquest.set_control(w, c, "zhuo_county", "guan")
+    assert _value(game, LINE) == 77  # 85＋(−8)（修前 76）
 
 
 def test_pushing_back_far_enough_moves_the_value_and_stops_at_the_other_wall():
     game = conquest_game("season21")
     w, c = _past_the_wall(game)
-    msgs = rules.change_trend(game.state, c, "nanyang", -11)
-    assert _value(game, "nanyang") == 90 and msgs  # 101.33−11＝90.33
-    rules.change_trend(game.state, c, "nanyang", -500)
-    assert _value(game, "nanyang") == 0
-    assert w.conquest.offset["nanyang"] == pytest.approx(-(50 + 35 * 5 / 3))  # 推過 0 那一截丟掉：未夾的剛好 0
+    msgs = rules.change_trend(game.state, c, LINE, -11)
+    assert _value(game, LINE) == 90 and msgs  # 101.33−11＝90.33
+    rules.change_trend(game.state, c, LINE, -500)
+    assert _value(game, LINE) == 0
+    assert w.conquest.offset[LINE] == pytest.approx(-(50 + 35 * 5 / 3))  # 推過 0 那一截丟掉：未夾的剛好 0
 
 
 def test_a_push_with_a_fractional_base_moves_the_offset_by_the_push():
-    """基準有小數（南陽官道歸黃巾：61.67）時，推 1 偏移就走 1（修前照四捨五入過的值重錨，偏移多走 1.33）。"""
+    """基準有小數（南陽官道歸黃巾：58.75，區塊表 v3 南陽中立 4 塊；QA 那時 3 塊是 61.67）時，推 1 偏移就走 1（修前照四捨五入過的值
+    重錨，偏移會多走一截，61.67 時多走 1.33）。"""
     game = conquest_game("season21")
     w, c = game.state.world, game.content
     conquest.set_control(w, c, "nanyang_road", "huang")

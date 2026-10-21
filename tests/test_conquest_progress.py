@@ -44,7 +44,7 @@ def test_hold_at_own_block_pushes_back():
 
 
 def test_sortie_exists_at_non_line_block_but_not_off_the_blocks():
-    game = go(join(conquest_game("season21"), "guan"), "deep_mountain")  # 嵩山深處不是戰線地點
+    game = go(join(conquest_game("season21"), "huang"), "deep_mountain")  # 嵩山深處不是戰線地點（區塊表 v3：官軍的）
     option = _sortie(game)
     assert option is not None and "攻" in option.label
     go(game, "haozu_fort")  # 豪強的投靠點不是區塊
@@ -59,10 +59,10 @@ def test_bases_hold_but_push_no_progress():
 
 
 def test_neutral_block_foes_are_the_neutral_garrison():
-    game = go(join(conquest_game("season21"), "guan"), "deep_mountain")
-    loc = game.content.locations["deep_mountain"]
-    assert set(game._sortie_foes(loc)) == set(territory.squads_at(game.state.world, game.content, "deep_mountain"))
-    assert "nz_tiger" in game._sortie_foes(loc)
+    game = go(join(conquest_game("season21"), "guan"), "yu_river")  # 區塊表 v3 之前用嵩山深處（現在是官軍的）
+    loc = game.content.locations["yu_river"]
+    assert set(game._sortie_foes(loc)) == set(territory.squads_at(game.state.world, game.content, "yu_river"))
+    assert "nz_shuifei" in game._sortie_foes(loc)
 
 
 def test_enemy_block_without_garrison_has_the_holders_patrol():
@@ -108,7 +108,7 @@ def test_siege_places_are_the_highest_block_on_that_line():
     assert "runan_wilds" in orders.siege_places(c, "guan", "yingru", w)  # 全是 0：推得動的每一塊都算
     conquest.push(w, c, "runan_wilds", "guan", "某", 10, "attack")
     assert orders.siege_places(c, "guan", "yingru", w) == ["runan_wilds"]
-    assert orders.siege_places(c, "huang", "yingru", w) == ["hilltop_wilds"]
+    assert orders.siege_places(c, "huang", "yingru", w) == ["runan_wilds"]  # 區塊表 v3：黃巾開季碰不到荒丘
 
 
 def test_fortify_is_not_drawn():

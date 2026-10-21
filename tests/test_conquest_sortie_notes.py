@@ -38,10 +38,10 @@ def test_own_capturable_block_hold_line_is_unchanged():
     )
 
 
-@pytest.mark.parametrize("loc", ["hilltop_wilds", "runan_wilds"])
+@pytest.mark.parametrize("loc", ["hilltop_wilds", "runan"])
 def test_own_idle_block_hold_line_has_one_parenthesis(loc):
     """計畫第八節裁決 21：自家推不動的區塊守（翻地與爭搶之後是「沒人在推」），推不動的原因與「量是攻的一半」合成一個括號。
-    荒丘是被管理者定給黃巾的中立地，汝南荒野是黃巾開季的陣營區塊。"""
+    荒丘是被管理者定給黃巾的中立地，汝南是黃巾開季的陣營區塊（區塊表 v3 之前用汝南荒野）。"""
     game = go(join(conquest_game("season21"), "huang"), loc)
     conquest.set_control(game.state.world, game.content, "hilltop_wilds", "huang")
     note = _note(game, loc)
@@ -67,8 +67,8 @@ def test_switch_off_hold_line_is_unchanged():
 
 def test_unheld_neutral_block_does_not_say_someone_else_holds_it():
     """FB-533（1）：還沒人佔的中立地，出陣那一行不寫「這裡歸別人」。"""
-    game = go(join(conquest_game("season21"), "guan"), "guan_camp")
-    note = _note(game, "guan_camp")
+    game = go(join(conquest_game("season21"), "guan"), "runan_wilds")  # 區塊表 v3 之前用官軍大營（現在是官軍的）
+    note = _note(game, "runan_wilds")
     assert note.startswith("這裡還沒有人佔：打一場，打贏推這一塊的進度、記貢獻；只拿對手 3 成的心得與經驗，")
     assert "這裡歸別人" not in note
 

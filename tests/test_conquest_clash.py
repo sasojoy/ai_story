@@ -2,7 +2,9 @@
 出陣時對面 10 分鐘內在這一塊推過、人還在這裡，照截殺的規則打一場：贏的那一下推得多、輸的白跑、平手照推；保護照截殺（新手期、同一對的冷卻、
 被截過的護身、截殺開關），帳跟截殺共用；城鎮也打；沒有戰利品；兩邊各一份戰報。
 
-兩個角色開在同一個資料庫：每一個動作照伺服器的做法先從資料庫重讀自己，做完存回去。"""
+兩個角色開在同一個資料庫：每一個動作照伺服器的做法先從資料庫重讀自己，做完存回去。
+
+合進區塊表 v3（輿圖第三版第 2 批，feature/territory-conquest b9ee3c9c）之後黃巾開季碰不到荒丘：兩邊撞上的地方從荒丘換成汝南荒野（v3 起是兩邊都碰得到的中立地），斷言不動。"""
 from __future__ import annotations
 
 import random
@@ -18,6 +20,7 @@ from tianxia.engine import Game
 pytestmark = pytest.mark.slow  # 建 Game、載正式內容
 
 NOW = 1_792_000_000.0
+LOC = "runan_wilds"  # 兩邊開季都碰得到的中立地（區塊表 v3 之前用荒丘）
 
 
 def _world():
@@ -63,7 +66,7 @@ def _melee(monkeypatch, tier):
                         lambda ours, theirs, rng, *a, **k: real(ours, theirs, rng).model_copy(update={"tier": tier}))
 
 
-def _pair(loc="hilltop_wilds"):
+def _pair(loc=LOC):
     c, world = _world()
     _seat(c, world, "甲", "guan", loc)
     _seat(c, world, "乙", "huang", loc)
@@ -77,13 +80,13 @@ def _base(c, loc):
 
 def test_a_win_pushes_more_and_both_sides_get_a_report(monkeypatch):
     c, world = _pair()
-    _sortie(c, world, "乙")  # 黃巾先在荒丘推了一下
+    _sortie(c, world, "乙")  # 黃巾先在這裡推了一下
     _melee(monkeypatch, "大勝")
     purse = CharacterStore(world.db).load("乙").player.stats.get("silver", 0)
     msgs, game = _sortie(c, world, "甲")
     w = game.state.world
-    assert conquest.bar(w, "hilltop_wilds", "guan") == pytest.approx(_base(c, "hilltop_wilds") * c.config.conquest.clash_scale)
-    assert any("乙正在荒丘替黃巾軍出力" in m for m in msgs) and any("混戰得勝" in m for m in msgs)
+    assert conquest.bar(w, LOC, "guan") == pytest.approx(_base(c, LOC) * c.config.conquest.clash_scale)
+    assert any("乙正在汝南荒野替黃巾軍出力" in m for m in msgs) and any("混戰得勝" in m for m in msgs)
     mine = [r for r in game.state.battles if r.kind == "melee"]
     assert len(mine) == 1 and mine[0].silver in (None, 0)  # 沒有戰利品
     theirs = CharacterStore(world.db).load("乙")
@@ -100,12 +103,12 @@ def test_a_loss_wastes_the_push_but_spends_the_sortie(monkeypatch):
     before = CharacterStore(world.db).load("甲").player
     msgs, game = _sortie(c, world, "甲")
     w = game.state.world
-    assert conquest.bar(w, "hilltop_wilds", "guan") == 0
+    assert conquest.bar(w, LOC, "guan") == 0
     assert any("這一趟白跑了" in m for m in msgs)
     p = game.state.player
     assert p.sorties_today == before.sorties_today + 1 and p.stamina < before.stamina
     assert [r.kind for r in game.state.battles] == ["melee"]  # 沒有打守軍
-    assert any(row["name"] == "甲" and row["moved"] == 0 for row in conquest.pushers(w, c, "hilltop_wilds"))
+    assert any(row["name"] == "甲" and row["moved"] == 0 for row in conquest.pushers(w, c, LOC))
 
 
 def test_a_draw_pushes_as_usual(monkeypatch):
@@ -113,7 +116,7 @@ def test_a_draw_pushes_as_usual(monkeypatch):
     _sortie(c, world, "乙")
     _melee(monkeypatch, "僵持")
     _, game = _sortie(c, world, "甲")
-    assert conquest.bar(game.state.world, "hilltop_wilds", "guan") == pytest.approx(_base(c, "hilltop_wilds"))
+    assert conquest.bar(game.state.world, LOC, "guan") == pytest.approx(_base(c, LOC))
 
 
 @pytest.mark.parametrize("guard", ["stale", "moved", "cooldown", "shield", "switch", "newbie"])
@@ -135,7 +138,7 @@ def test_protections_keep_a_clash_from_happening(monkeypatch, guard):
     _melee(monkeypatch, "落敗")
     msgs, game = _sortie(c, world, "甲")
     assert not any(r.kind == "melee" for r in game.state.battles)
-    assert conquest.bar(game.state.world, "hilltop_wilds", "guan") > 0  # 照常推
+    assert conquest.bar(game.state.world, LOC, "guan") > 0  # 照常推
 
 
 def test_a_clash_happens_in_a_town_on_a_hold(monkeypatch):
@@ -158,7 +161,7 @@ def test_a_clash_happens_in_a_town_on_a_hold(monkeypatch):
 def test_no_clash_where_the_sortie_cannot_push(monkeypatch):
     c, world = _pair()
     _sortie(c, world, "乙")
-    world.mutate_season(lambda s: s.conquest.fights["hilltop_wilds"].__setattr__("flipped_at", s.time))  # 剛易手：兩邊都推不動
+    world.mutate_season(lambda s: s.conquest.fights[LOC].__setattr__("flipped_at", s.time))  # 剛易手：兩邊都推不動
     _melee(monkeypatch, "落敗")
     _, game = _sortie(c, world, "甲")
     assert not any(r.kind == "melee" for r in game.state.battles)

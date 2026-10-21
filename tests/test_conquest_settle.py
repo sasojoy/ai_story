@@ -115,7 +115,7 @@ def test_resume_shifts_planned_slots():
 def test_siege_and_defend_orders_follow_the_highest_block():
     game = _game(_tw(2026, 10, 20, 10))
     w, c = game.state.world, game.content
-    assert orders.siege_places(c, "huang", "yingru", w) == ["hilltop_wilds"]  # 潁川汝南黃巾推得動的只有荒丘（全是 0：每一塊都算）
+    assert orders.siege_places(c, "huang", "yingru", w) == ["runan_wilds"]  # 潁川汝南黃巾推得動的只有汝南荒野（區塊表 v3；全是 0：每一塊都算）
     held = [loc for loc in conquest.blocks(c) if conquest.capturable(c, loc) and conquest.holder(w, c, loc) == "guan"
             and conquest.line_of(w, c, loc) == "yingru"]
     week = orders.period_of(game.state, c)

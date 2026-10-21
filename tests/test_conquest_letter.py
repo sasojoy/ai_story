@@ -1,6 +1,8 @@
 """翻地與爭搶：戰書（輿圖簡化設計 4.4、第九章第 13 條；PM 2026-10-20 第 1、2 條）——這一週在任的第 4 階、自己那一邊的進度到門檻、一邊一天
 一張、時段挑最近的、下了那一塊凍結到打完、另一邊可以併進同一場；攻城戰打贏照推滿易手（分紅、冷卻）、打輸砍半；換天只作罷沒開成的；
-投票與 22:00 公告結算拿掉了；軍令照「此刻進度最高的那一塊」列與記；救場。"""
+投票與 22:00 公告結算拿掉了；軍令照「此刻進度最高的那一塊」列與記；救場。
+
+合進區塊表 v3（輿圖第三版第 2 批，feature/territory-conquest b9ee3c9c）之後嵩山深處是官軍的、黃巾開季碰不到荒丘：官軍的第二塊目標從嵩山深處換成汝南荒野，兩軍併進同一場的地方從荒丘換成汝南荒野；斷言不動。"""
 from __future__ import annotations
 
 import inspect
@@ -68,8 +70,8 @@ def test_a_seated_rank4_letters_the_nearest_slot_and_freezes_the_block():
     assert any(r.text.startswith("沈浪替官軍下了戰書") for r in w.rumors)  # 只有真人會下戰書：具名
     assert w.conquest.day_log[-1].by == "letter" and w.conquest.letter_days["guan"] == conquest_day.day_key(NOW, c.config)
     assert any(e.title == "下戰書" for e in game.state.journal)
-    _fill(game, "deep_mountain", "guan", 70)
-    again = game.conquest_letter("deep_mountain")
+    _fill(game, "runan_wilds", "guan", 70)
+    again = game.conquest_letter("runan_wilds")
     assert "今天已經下過戰書了" in again[0] and len(game.state.world.conquest.schedule) == 1  # 一邊一天一張
 
 
@@ -84,13 +86,13 @@ def test_only_a_seated_rank4_can_letter_and_only_past_the_threshold():
 
 
 def test_the_other_side_joins_the_same_siege():
-    game = _game()
-    _fill(game, "hilltop_wilds", "guan", 60)
-    _fill(game, "hilltop_wilds", "huang", 65)
-    game.conquest_letter("hilltop_wilds")
+    game = _game(loc="runan_wilds")
+    _fill(game, "runan_wilds", "guan", 60)
+    _fill(game, "runan_wilds", "huang", 65)
+    game.conquest_letter("runan_wilds")
     game._save_season()
-    rival = _game(side="huang", name="張角徒", world=game.world)
-    msgs = rival.conquest_letter("hilltop_wilds")
+    rival = _game(side="huang", loc="runan_wilds", name="張角徒", world=game.world)
+    msgs = rival.conquest_letter("runan_wilds")
     (slot,) = rival.state.world.conquest.schedule
     assert slot.attackers == ["guan", "huang"] and slot.by == {"guan": "letter", "huang": "letter"}
     assert any("併進" in m for m in msgs)
@@ -133,7 +135,7 @@ def test_day_turn_only_voids_letters_that_never_opened():
     w.conquest.settled_key = key
     stale = announce(game, "hilltop_wilds", "guan")
     stale.key = key
-    tomorrow = announce(game, "deep_mountain", "guan")
+    tomorrow = announce(game, "runan_wilds", "guan")
     tomorrow.key = key + 1  # 21:30 之後下的戰書排在下一天
     game.now = conquest_day.key_start(key + 1, c.config) + 60
     msgs = game._conquest_tick(save=False)
@@ -153,17 +155,17 @@ def test_votes_and_the_22_settle_are_gone():
 
 
 def test_orders_list_and_credit_the_highest_block():
-    game = _game(loc="deep_mountain")
+    game = _game(loc="runan_wilds")
     s, c = game.state, game.content
     order = Order(id="t:guan:siege:yingru", template="siege", faction="guan", week=orders.period_of(s, c), front="yingru",
                   quota=6, text="（測試）")
     s.world.orders.append(order)
     _fill(game, "hilltop_wilds", "guan", 30)
-    _fill(game, "deep_mountain", "guan", 10)
+    _fill(game, "runan_wilds", "guan", 10)
     assert orders.siege_places(c, "guan", "yingru", s.world) == ["hilltop_wilds"]
     how = atlas.siege_how(s, c, order)
-    assert "荒丘" in how and "嵩山深處" not in how
-    win_sortie(game)  # 在嵩山深處打贏：不是最高的那一塊，記不到
+    assert "荒丘" in how and "汝南荒野" not in how
+    win_sortie(game)  # 在汝南荒野打贏：不是最高的那一塊，記不到
     assert s.player.name not in order.progress
     go(game, "hilltop_wilds")
     win_sortie(game)
