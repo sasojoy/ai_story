@@ -41,15 +41,16 @@ def _walk(game, kind="武學", form="拳腳", pose=None, text="風過林梢，�
 
 def test_five_steps_make_an_art_with_coloured_slots_and_the_pose(content):
     game = _game(content)
+    xinde = game.state.player.stats["xinde"]
+    need = create.price(game.state, content)
     draft = _walk(game, reading=create.IntentReading(score=60, attributes=["快", "虛"], lean="正"))
     assert draft.step == "name" and len(draft.colors) == content.config.arts.create_slots
     assert draft.colors[0] == [max(ATTRIBUTES, key=lambda a: (create.weights(content, draft)[a], -ATTRIBUTES.index(a)))]
     assert draft.colors[0] == ["快"]  # 拳腳偏快＋意讀出快：權重最高的那一路當第一格單色
-    xinde = game.state.player.stats["xinde"]
-    need = create.price(game.state, content)
+    assert game.state.player.stats["xinde"] == xinde - need and draft.paid == need  # 立意那一刻就收（Joy 2026-10-21）
     game.create_name("飄風手")
     p = game.state.player
-    assert p.creating is None and p.stats["xinde"] == xinde - need
+    assert p.creating is None and p.stats["xinde"] == xinde - need  # 立名不再收
     art = team.resolve_art("飄風手", content, game.world)
     assert art.origin == "created" and art.weapon == "拳腳" and art.lean == "正"
     assert art.slot_colors == draft.colors and art.pose == draft.pose
@@ -275,3 +276,62 @@ def test_the_first_art_of_the_season_is_cheaper(content):
     content.config.arts.create_first_xinde = 0  # 測試內容關著：第一門也照 create_xinde
     p.created_count = 0
     assert create.price(game.state, content) == 500
+
+
+def test_going_back_after_paying_does_not_charge_again_and_cancel_keeps_the_xinde(content):
+    game = _game(content)
+    p = game.state.player
+    xinde = p.stats["xinde"]
+    need = create.price(game.state, content)
+    _walk(game, reading=create.IntentReading(score=60, attributes=["快"]))
+    assert p.stats["xinde"] == xinde - need and p.created_count == 1
+    game.create_back("intent")  # 免費重來一次：回去重立意不再收
+    game.create_intent("風過林梢，影不留痕", reading=create.IntentReading(score=70, attributes=["快"]))
+    assert p.stats["xinde"] == xinde - need and p.created_count == 1 and p.creating.step == "name"
+    msgs = game.create_cancel()
+    assert "不退" in msgs[0] and p.stats["xinde"] == xinde - need and p.creating is None
+
+
+def test_paying_the_last_xinde_at_intent_still_lets_you_name_it(content):
+    """立意收光了心得，立名那一步不能再拿「心得不足」擋下來（整季機器人抓到的）。"""
+    game = _game(content)
+    game.state.player.stats["xinde"] = create.price(game.state, content)
+    _walk(game, reading=create.IntentReading(score=60, attributes=["快"]))
+    assert game.state.player.stats["xinde"] == 0
+    art, msgs = create.finish(game.state, content, game.world, "流雲步")
+    assert art is not None and game.state.player.creating is None, msgs
+
+
+def test_a_reroll_slip_rolls_the_form_again(content):
+    """重悟帖（Joy 2026-10-21「弄個商城道具可以直接重骰，有上限」）：成了形直接重擲顏色與變招，不收心得、不用掉免費的重來。"""
+    game = _game(content)
+    p = game.state.player
+    assert create.reroll(game.state, content, game.world) == [create.NO_DRAFT]
+    _walk(game, reading=create.IntentReading(score=60, attributes=["快"]))
+    assert game.create_reroll() == [create.NO_REROLL]
+    p.create_rerolls = 3
+    xinde, redo, rolls = p.stats["xinde"], p.creating.redo, p.creating.rolls
+    seen = {tuple(map(tuple, p.creating.colors))}
+    for _ in range(3):
+        msgs = game.create_reroll()
+        assert "換了個形" in msgs[0]
+        seen.add(tuple(map(tuple, p.creating.colors)))
+    assert p.create_rerolls == 0 and p.creating.rolls == rolls + 3 and p.creating.redo == redo and p.stats["xinde"] == xinde
+    assert len(seen) > 1  # 三次裡總會擲出不一樣的形
+    assert create.view(game.state, content, game.world)["rerolls"] == 0
+
+
+def test_rerolls_are_capped_per_art_not_per_purchase(content):
+    """Joy 2026-10-21「一次創造武學的時候可能最多重骰3或是5，總共要買幾張都可以」：帖子不限，一門最多 create_reroll_cap 次；下一門重新算。"""
+    game = _game(content)
+    p = game.state.player
+    cap = content.config.arts.create_reroll_cap
+    assert cap == 5
+    _walk(game, reading=create.IntentReading(score=60, attributes=["快"]))
+    p.create_rerolls = cap + 3
+    for i in range(cap):
+        assert "換了個形" in game.create_reroll()[0]
+        assert create.view(game.state, content, game.world)["draft"]["reroll_left"] == cap - i - 1
+    assert game.create_reroll() == [create.REROLL_CAPPED.format(cap=cap)]
+    assert p.create_rerolls == 3 and p.creating.rerolled == cap  # 骰不了的那一下不扣帖子
+

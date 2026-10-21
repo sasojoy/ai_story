@@ -3067,3 +3067,5 @@ svg.fig .blade.bow { stroke-width: 3; }
 @keyframes cg-line { 0%, 58% { opacity: 0; } 70%, 100% { opacity: 1; } }
 .pk-btns { display: flex; flex-wrap: wrap; gap: .4em; margin-top: .4em; }
 .pk-btns .btn small { display: block; font-size: .78em; opacity: .85; }
+.cr-reroll { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: .4em 0; }
+.cr-reroll .btn small { display: block; font-size: .78em; opacity: .85; }

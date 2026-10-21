@@ -9783,8 +9783,17 @@ class Game:
     @_not_while_preparing
     def create_intent(self, text: str, reading: create.IntentReading | None = None) -> list[str]:
         """立意（C 段，或直接呼叫）：reading 是鎖外讀好的；沒給（假人、整季機器人、腳本）照關鍵字表讀。
-        記下之後馬上成形（擲四格顏色）。只改單子、不收錢、不寫紀錄。"""
-        return self._log(create.set_intent(self.state, self.content, self.world, text, reading))
+        記下之後馬上成形（擲四格顏色），心得在這一刻收（一張單子一次，Joy 2026-10-21）：收了寫一則煉製紀錄。"""
+        xinde = self._xinde()
+        msgs = self._log(create.set_intent(self.state, self.content, self.world, text, reading))
+        if self._xinde() != xinde:
+            self._menxia_entry(msgs[0], xinde, title=journal.CRAFT, action="forge")
+        return msgs
+
+    @_not_while_preparing
+    def create_reroll(self) -> list[str]:
+        """重悟帖：成了形直接重骰（create.reroll）。只改單子與帖數。"""
+        return self._log(create.reroll(self.state, self.content, self.world))
 
     @_not_while_preparing
     def create_back(self, to: str) -> list[str]:
