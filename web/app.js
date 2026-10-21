@@ -1568,7 +1568,8 @@
   // 出陣灰著的兩種長原因（sortie.RANGER_NOTE、sortie.OUT_NOTE，六個字）：格子寫短的；整句是伺服器寫的出陣那一行（RANGER_LINE、OUT_LINE）（FB-670；待 joy 潤）
   const SORTIE_LONG_SUB = { "散人不能出陣": "未投靠", "不在爭奪之列": "不在爭奪" };
   // 練功那一格的小字（FB-670；待 joy 潤）：亮著寫「不限次數」（第二行照勝算上色，同遊歷），這裡只有頭目時寫「對上頭目」（頭目有冷卻與次數，
-  // 不是不限次數；鈕上那一段是 explore_modes.BOSS_NOTE）；灰著：沒有對手（explore_modes.NO_FOE）寫「城外才有」、頭目冷卻中或次數用完
+  // 不是不限次數；鈕上那一段是 explore_modes.BOSS_NOTE）；灰著：沒有對手（explore_modes.NO_FOE）寫伺服器在鈕上帶的那一個字（o.note：
+  // 城鎮「城外才有」、城外沒有對手的地方「這裡沒有」，PM 2026-10-22；舊版伺服器沒帶照寫「城外才有」）、頭目冷卻中或次數用完
   // （鈕上寫「…再現身」）寫「頭目不在」、體力不夠照別格。整句（最近的在哪、步行多久；頭目還要等多久）是伺服器的 action_notes，網頁不另算。
   // 不帶路：灰著就是按不下去（企劃者 2026-10-22 選丙、不選丙帶路）
   const PRACTICE_ID = "explore:practice"; // engine：explore_modes.option_id(PRACTICE)
@@ -1832,10 +1833,10 @@
       const left = SORTIE_LEFT.exec(detail);
       // 探索三選一開著：探索那一格是展開鈕（同移動），點了在下面就地展開三顆；入口灰著（三顆都按不下去）時照一般的灰格子
       const wheel = d.key === "explore" && modes.length > 0 && o.enabled;
-      // 練功（FB-670）：亮著「不限次數」（只有頭目時「對上頭目」）；灰著沒有對手「城外才有」、頭目不在「頭目不在」，體力不夠照別格
+      // 練功（FB-670）：亮著「不限次數」（只有頭目時「對上頭目」）；灰著沒有對手照鈕的 note（城外才有／這裡沒有）、頭目不在「頭目不在」，體力不夠照別格
       const practice = d.key === "practice" && (o.enabled || !detail.startsWith("體力"))
         ? (o.enabled ? (detail.split("・").includes(PRACTICE_BOSS) ? PRACTICE_BOSS_SUB : PRACTICE_SUB)
-          : detail.startsWith(PRACTICE_NO_FOE) ? PRACTICE_OUT : PRACTICE_AWAY.test(detail) ? PRACTICE_AWAY_SUB : "")
+          : detail.startsWith(PRACTICE_NO_FOE) ? (o.note || PRACTICE_OUT) : PRACTICE_AWAY.test(detail) ? PRACTICE_AWAY_SUB : "")
         : "";
       const sub = wheel ? EXPLORE_SUB
         : practice ? practice

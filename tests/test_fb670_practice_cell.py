@@ -73,6 +73,26 @@ def test_a_place_out_of_town_without_foes_keeps_the_buttons_words():
     assert _note(game) == f"{_reason(option)}（{walk}）"
 
 
+def test_a_grey_button_without_foes_carries_the_cells_word():
+    """PM 2026-10-22（FB-670 回覆第 1 條）：沒有對手而灰著的練功鈕帶一個格子的字（Option.note，行動列格子的小字）：城鎮「城外才有」，
+    城外（自家大營、營寨、玉洞、草廬）「這裡沒有」；是不是城鎮照 explore_modes.is_town。散人與兩軍各站遍每個地點；亮著的、頭目的不帶。"""
+    game = _game("yingchuan")
+    c, p = game.content, game.state.player
+    seen = {}
+    for faction in (None, "guan", "huang"):
+        for loc_id, loc in c.locations.items():
+            p.location, p.faction = loc_id, faction
+            option = _option(game)
+            if option.enabled or not _reason(option).startswith(explore_modes.NO_FOE):
+                assert option.note == "", (faction, loc_id)
+                continue
+            word = explore_modes.NO_FOE_CELL_TOWN if explore_modes.is_town(c, loc) else explore_modes.NO_FOE_CELL
+            assert option.note == word, (faction, loc_id)
+            seen.setdefault(word, []).append(loc_id)
+    assert explore_modes.NO_FOE_CELL_TOWN == "城外才有" and explore_modes.NO_FOE_CELL == "這裡沒有"
+    assert "yingchuan" in seen["城外才有"] and {"guan_camp", "huangjin_camp", "jade_cave"} <= set(seen["這裡沒有"])
+
+
 def test_a_lit_practice_note_names_the_foe_the_button_names():
     game = _game("yingshui")
     option = _option(game)

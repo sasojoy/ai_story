@@ -34,6 +34,10 @@ SEEK_EMPTY = "這一帶眼下沒什麼事"  # 待 joy 潤：一類一顆的找�
 PRACTICE_LINE = "你在{place}找上{foe}練手。"  # 待 joy 潤：練功開打那一句
 NO_FOE = "這裡沒有可以練手的對手"  # 待 joy 潤（設計 2.5；鈕上不帶句號）
 NO_FOE_NEAR = "，最近的在{place}"  # 待 joy 潤：接在 NO_FOE 後面
+# 沒有對手而灰著的練功鈕帶的格子小字（Option.note；FB-670：練功是行動列自己一格，五格時小字最多四個字）：城鎮寫「城外才有」，
+# 城外沒有對手的地方（自家大營、營寨、玉洞、草廬）人已經在城外，寫「這裡沒有」（PM 2026-10-22）。待 joy 潤
+NO_FOE_CELL_TOWN = "城外才有"
+NO_FOE_CELL = "這裡沒有"
 BOSS_NOTE = "頭目"  # 待 joy 潤：這裡只有頭目時鈕上那一格
 BOSS_COOLING = "頭目{wait}後才會再現身"  # 待 joy 潤：兩場頭目戰之間的冷卻（wait 是 arena.wait_text 的現實倒數）
 BOSS_GONE_WEEK = "這一週他不再現身"  # 待 joy 潤：21 天季這一週的次數用完

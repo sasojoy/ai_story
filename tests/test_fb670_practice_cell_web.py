@@ -1,5 +1,6 @@
 """FB-670（企劃者 2026-10-22 選練功入口「丙」，PM 給號）：練功藏在探索卡最下面、城裡灰著看不到。行動列多一格「練功」，五格：
-探索、練功、出陣、交友、移動。野外亮著寫「不限次數」、第二行照勝算上色；城裡（或沒有對手的地方）灰著寫「城外才有」，整句（最近的在哪、
+探索、練功、出陣、交友、移動。野外亮著寫「不限次數」、第二行照勝算上色；城裡灰著寫「城外才有」（城外沒有對手的地方寫「這裡沒有」，
+PM 2026-10-22；照伺服器給的 note），整句（最近的在哪、
 步行多久）在行動列底下那一行，照伺服器的 action_notes（Game._practice_line，見 tests/test_fb670_practice_cell.py），網頁不另寫判斷；
 不帶路（按不下去）。探索卡回到真的三選一。五格每格約 62 px（320 寬約 51 px）：灰格小字最多四個字，長的原因格子寫短的、整句在底下那一行
 （同 FB-664）；出陣的名字（「出陣・攪局」）只在「・」後面換行。序章與初入江湖照 reveal 的鍵（act:practice）亮，教學沒寫的步驟不畫。
@@ -110,6 +111,31 @@ def test_in_town_the_cell_is_grey_and_the_row_below_says_where_and_how_far():
     assert ("練功", note) in _rows(bar)
 
 
+@pytest.mark.parametrize("faction, at, word", [
+    (None, "yingchuan", "城外才有"),  # 城鎮
+    ("guan", "guan_camp", "這裡沒有"),  # 自家大營：不是城鎮、沒有對手
+    ("huang", "huangjin_camp", "這裡沒有"),
+    (None, "jade_cave", "這裡沒有"),
+])
+def test_a_grey_cell_says_outside_the_walls_only_in_town(faction, at, word):
+    """PM 2026-10-22（FB-670 回覆第 1 條）：城鎮寫「城外才有」；城外、沒有對手的地方（自家大營、黃巾營寨、玉洞、草廬）人已經在城外，
+    寫「這裡沒有」。是不是城鎮照伺服器的判斷（練功鈕的 note，explore_modes.is_town），網頁不另寫。"""
+    m = server.main_view(_game(at, faction))
+    option = next(o for o in m["options"] if o["id"] == PRACTICE)
+    assert not option["enabled"] and option["note"] == word
+    assert f"<b>練功</b><small>{word}</small>" in _cell(_bar(m), "practice")
+
+
+def test_the_grey_cells_word_is_the_servers():
+    """格子的字照伺服器給的那一個（練功鈕的 note）：伺服器換了就照換；舊版伺服器沒給（note 是空的）寫「城外才有」。"""
+    m = server.main_view(_game("guan_camp", "guan"))
+    option = next(o for o in m["options"] if o["id"] == PRACTICE)
+    option["note"] = "伺服器"
+    assert "<b>練功</b><small>伺服器</small>" in _cell(_bar(m), "practice")
+    option["note"] = ""
+    assert "<b>練功</b><small>城外才有</small>" in _cell(_bar(m), "practice")
+
+
 def test_the_row_below_is_only_ever_the_servers_sentence():
     """網頁不另寫判斷：伺服器那一句換了，底下就照換；伺服器沒給（舊版）就不畫那一行，格子照畫。"""
     m = server.main_view(_game("yingchuan"))
@@ -164,7 +190,7 @@ def test_every_grey_cell_says_at_most_four_characters(profile):
         for off in re.findall(r'<button class="act-ink[^"]* off".*?</button>', bar, re.S):
             assert _width(_sub(off)) <= 4, (profile, at, faction, off)
             seen.add(_sub(off))
-    assert {"城外才有", "未投靠", "名望不夠", "不在戰線", "沒有人"} <= seen  # 真的量到了這幾種灰格
+    assert {"城外才有", "這裡沒有", "未投靠", "名望不夠", "不在戰線", "沒有人"} <= seen  # 真的量到了這幾種灰格
 
 
 def test_the_long_reasons_go_to_the_row_below():

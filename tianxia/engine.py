@@ -1811,7 +1811,9 @@ class Game:
         if not bosses:
             route = self._nearest_practice()
             place = explore_modes.NO_FOE_NEAR.format(place=c.locations[route.path[-1]].name) if route is not None else ""
-            return Option(id=oid, label=f"{name}（{explore_modes.NO_FOE}{place}）", enabled=False)
+            # note：行動列練功那一格的小字（FB-670，PM 2026-10-22）：城鎮「城外才有」、城外沒有對手的地方「這裡沒有」——網頁照它寫，不自己判斷
+            cell = explore_modes.NO_FOE_CELL_TOWN if explore_modes.is_town(c, loc) else explore_modes.NO_FOE_CELL
+            return Option(id=oid, label=f"{name}（{explore_modes.NO_FOE}{place}）", enabled=False, note=cell)
         boss = duel_rules.available(s, c)
         if boss is not None:
             return self._cost_option(oid, name, cost, note=f"{self._boss_face(boss)}・{explore_modes.BOSS_NOTE}")
