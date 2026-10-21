@@ -1824,12 +1824,15 @@ class Game:
         return boss.foes[duel_rules.foe_index(boss, self.state.player.faction)].name
 
     def _boss_away(self) -> str:
-        """這裡只有頭目、他此刻遇不上的原因（練功鈕括號裡與行動列底下那一行同一句）：冷卻中寫還要等多久，次數用完寫他不再現身。"""
+        """這裡只有頭目、他此刻遇不上的原因（練功鈕括號裡與行動列底下那一行同一句）：冷卻中寫還要等多久，次數用完寫哪一位頭目不再現身
+        （FB-672：帶名字，名字跟「這裡只有頭目某某」同一個，_boss_face；這裡不只一位時寫次數用完的第一位）。"""
         s, c = self.state, self.content
         wait = duel_rules.cooldown_left(s, c.config.duel)
         if wait > 0:
             return explore_modes.BOSS_COOLING.format(wait=arena.wait_text(wait / c.config.time_scale))
-        return explore_modes.boss_gone(s, c)  # 7 天濃縮季寫「這一段…第 N 天 00:00 再來」（FB-501）
+        bosses = duel_rules.here(s, c)
+        gone = next((b for b in bosses if duel_rules.used_up(s, c, b.id)), bosses[0])
+        return explore_modes.boss_gone(s, c, self._boss_face(gone))  # 7 天濃縮季寫「這一段…第 N 天 00:00 再來」（FB-501）
 
     def _practice_line(self, loc: Location) -> str:
         """行動列底下練功那一行（FB-670，企劃者 2026-10-22 選練功入口「丙」：練功在行動列自己一格）。跟練功鈕（_practice_option）
