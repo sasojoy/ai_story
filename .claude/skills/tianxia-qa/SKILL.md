@@ -32,6 +32,7 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 - **`Start-Process -ArgumentList` 的陣列元素有空格要自己加引號**：`-m "slow or not slow"` 寫成 `'"slow or not slow"'`；沒加就被拆成四個參數，pytest 回「no tests ran in 3s」、一個測試都沒跑（2026-10-21）。
 - **平行驗收**（2026-10-20）：PM 會給你一段 FB 號段、一個埠和一個 `<名字>.localhost`，只用給你的；瀏覽器窗格是共用的，**每一個動作都帶自己的 tabId**（10/20 有 QA 沒帶，動到別的子代理的分頁）。驗完把視窗設回 desktop、配色淺色、關掉自己的分頁、`taskkill /T` 關伺服器。
 - 開關的「一個字都不變」最好的驗法：同一支腳本，在功能分支開出來的那一點（`git archive` 解出來）和這一版各跑一次，比輸出。
+  - **`python -I` 會連 `PYTHONHASHSEED` 一起不讀**（-I 不看任何 `PYTHON*` 環境變數）：存檔裡的 set（`visited`、`revealed`、`seen_events`）每次順序不同，兩版比起來像有差。比對腳本不加 `-I` 跑（腳本放在只有自己腳本的 scratchpad 子資料夾），再把 `time.time` 換成固定值（2026-10-21 第 4 批 QA）。
 
 ## 開伺服器與登入
 - **複本**：在 scratchpad 用 bash `git -C <qa 工作樹> archive HEAD | tar -x -C <scratchpad>/on` 解一份來跑。PowerShell 的 tar 碰到中文路徑會壞。先 `git archive -o <檔>.tar` 再解的話，Git Bash 的 tar 要加 `--force-local`（`tar --force-local -xf C:/…/x.tar -C …`），不然把 `C:` 當成遠端主機、回「Cannot connect to C: resolve failed」。不要在 repo 裡跑伺服器，也不要改 repo 的設定與 `.local/`。
@@ -100,6 +101,9 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
   - 輿圖 ⚔（`g.armed`）不在 `g[data-loc]` 裡面，它前面最近的 `g[data-loc]` 兄弟才是那個地點（往 `previousElementSibling` 找）；點了輿圖分頁要等約 3 秒才畫好，頭一次數到 0 不是沒有。
   - **天下圖的路畫在底圖裡**：`.tx-world-map image` 是一張點陣化的 PNG（blob），DOM 找不到路的 `path`；要看某一條路只能截圖：「放大」按到最大（375 寬 ×1.5、320 寬 ×2，按鈕變 disabled）、點「收起」把「今天去哪裡出陣」收下去、再拖地圖。小地圖（`div.mini svg`）的路在 DOM 裡，`path` 的 `d` 是「M甲x,甲y Q… 乙x,乙y」（id 字母小的那頭在前）。
   - **區塊的歸屬顏色**：`g[data-loc]` 裡第三個 `circle` 的 `stroke`：官軍 #3D5F8F、黃巾 #B9821A、中立 #8F8B82（第二個圓多一個虛線 `stroke-dasharray`），不是區塊的 #7A6A55；第一個圓是點擊範圍（透明）。
+  - **輿圖第三版第 4 批起**（區圖與卡）上面幾條的 ⚔、小牌子、放大縮小、圓盤 `g[data-loc]` 都拿掉了，路也不再烤進點陣（`#map .tx-roads path`）。區圖：名字框 `#mk g.r-label[data-id]`（`rect.r-frame` 的 fill／stroke＝框色、第一個 `text`＝名字、`.r-seal` 寶、`rect.r-bar`／`.r-bar-fill[data-side]` 進度、`text.r-ins` 悟字、`text.r-cool`），小圖 `g.r-icon`，鄰區出口 `g.r-exit[data-id=大區]`，換區是 `select.r-pick` 設 value 再 `dispatchEvent(new Event("change", {bubbles: true}))`，塗層 `.r-wash`，選了的那一圈在 `#msel`；卡在 `#mbody`（`.m-h1`、`.m-line`、`.m-flip`、`.m-yield`、`.m-acts button`）。**天下圖的 `.w-top` 與區圖的 `.r-top` 都在 DOM 裡、藏的那一層在前**：`querySelector('.mapx.region [data-act="map-world"]')` 拿到的是藏起來的那一顆（0×0），要寫 `.r-top [data-act="map-world"]`、`.r-top .w-tl`。
+  - **自動點區圖上的地點之前先看 `elementFromPoint`**（2026-10-21 第 4 批 QA 踩到）：半開的卡會蓋住區圖下緣，照名字框的座標點下去點到的是卡上的「疾行」，角色當場被送走、體力扣掉；點之前確認拿到的是 `[data-act="region-place"]`，不是就先按卡的 ✕ 收起來再點。
+  - **名字框互壓用開發自己的量法重現最快**：`import test_region_map_web as T`（`sys.path` 加 `tests/`），`T._game(profile=…, at=…)` 之後照要的局面 `conquest.push(...)`，再 `T.run(game, T.OVERLAP.replace("VW", …).replace("VH", …))`；`textW` 是估的、node 與瀏覽器擺出來一樣，幾秒一組，比開瀏覽器量快，修的人也能直接寫成測試。
 - **共用窗格太擠、或要包 `fetch`、要換樣式表時，自己開 headless chromium**（寫法看 `tianxia-dev/網頁.md` 的「要真實截圖 PNG 的草圖」：playwright 的 chromium-1208、node 22、CDP；一個 node 腳本開一個瀏覽器、跑完 `taskkill /T` 自己的那個）。截圖用 `Page.captureScreenshot` 存 PNG，再用 Read 看。窗格那幾條（`el.click()`、單獨 reload、量 `scrollWidth`）照樣適用。好用的幾招：
   - **回應沒收到**：在頁面裡包 `window.fetch`，對指定的網址等真的回應回來再丟 `TypeError`（伺服器做了、頁面沒收到），或送出前就丟（根本沒到伺服器）；要「馬上再點、輪詢還沒插進來」就讓 `/api/main`、貨架那幾個 GET 先掛著（等一個 promise），點完才放。要「等一次輪詢再點」就不掛、記下輪詢何時打過。
   - **修前修後比版面**：同一個登入、同一頁，把 `git show <舊 sha>:web/style.css` 整份換進頁面（`link[href*="style.css"]` 換成 `<style>`），量同一批元素的 `getComputedStyle`（字級、字重、行高）與 `getBoundingClientRect`，再比兩張截圖的 sha256；不必起兩台伺服器。寬度要跨媒體查詢的邊界各量一次（640、641）。
