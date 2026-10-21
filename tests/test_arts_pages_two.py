@@ -204,14 +204,14 @@ def test_the_merge_preview_names_the_attribute_the_merge_really_gives(content, w
     ids = list(content.insights)
     for n, (a, b) in enumerate(itertools.combinations(ids, 2)):
         state = _merger(content, f"甲{n}", [a, b])
-        line = skillview.forge_line(state, content, world, None, [a, b])
+        line = skillview.forge_line(state, content, world, [a, b])
         shown = re.search(r"→ 一個新的意境（屬(.)・", line)
         assert shown, line
         made, _ = fusion.merge(state, content, world, _named(f"新意境{n}"), a, b)
         assert made is not None and made.attribute == shown.group(1), (a, b, line)
     for a in ids:  # 意境效果池：同一種的兩份是揣摩，預覽寫揉完的層數，合了真的到二重
         state = _merger(content, f"乙{a}", [a, f"{a}~2"])
-        line = skillview.forge_line(state, content, world, None, [a, f"{a}~2"])
+        line = skillview.forge_line(state, content, world, [a, f"{a}~2"])
         assert line.startswith("**揣摩**") and "二重" in line, line
         fusion.merge(state, content, world, None, a, f"{a}~2")
         assert arts.strength_of(state, a) == 2
@@ -219,35 +219,29 @@ def test_the_merge_preview_names_the_attribute_the_merge_really_gives(content, w
 
 def test_the_merge_preview_says_nobody_has_merged_it_before_or_what_it_becomes(content, world):
     first = _merger(content, "甲", ["feng", "huo"])
-    assert skillview.forge_line(first, content, world, None, ["feng", "huo"]).endswith("\n沒人合過。")
+    assert skillview.forge_line(first, content, world, ["feng", "huo"]).endswith("\n沒人合過。")
     made, _ = fusion.merge(first, content, world, _named("燎原"), "feng", "huo")
-    again = skillview.forge_line(first, content, world, None, ["feng", "huo"])
+    again = skillview.forge_line(first, content, world, ["feng", "huo"])
     assert "沒人合過" not in again and "會合出" not in again
     assert "\n再合一份「燎原」，效果另擲。" in again and "⚠" not in again  # 意境效果池：合過的再合是另一份
     other = _merger(content, "乙", ["feng", "huo"])
-    line = skillview.forge_line(other, content, world, None, ["huo", "feng"])  # 別人首創、你還沒有的：照樣能合，預覽寫它會是什麼
+    line = skillview.forge_line(other, content, world, ["huo", "feng"])  # 別人首創、你還沒有的：照樣能合，預覽寫它會是什麼
     assert f"\n會合出「燎原」（屬{made.attribute}）。" in line and "沒人合過" not in line
 
 
-def test_the_merge_preview_matches_the_other_two_kinds_in_shape(content, world, state):
+def test_the_merge_preview_says_the_attribute_the_recipe_and_the_cost(content, world, state):
+    # 爐裡只合意境（Joy 2026-10-21）：合併寫屬性、有沒有人合過、花多少心得體力
     state.player.member.wugong_id = "basic_fist"
-    state.player.arts = ["lake_kick"]
     state.player.insights = ["feng", "huo"]
     state.player.stats["xinde"] = 100
-    fuse = skillview.forge_line(state, content, world, "basic_fist", ["feng"])
-    blend = skillview.forge_line(state, content, world, "basic_fist", [], other_art="lake_kick")
-    merge = skillview.forge_line(state, content, world, None, ["feng", "huo"])
-    # 武學重構：武學＋意境是裝進槽（不花心得體力、沒有配方），只有兩種合成寫「沒人合過」；合出來的武學寫品級、槽數與收什麼
-    assert fuse.startswith("**裝意境**") and "不花心得體力" in fuse and "沒人合過" not in fuse
-    assert re.search(r"（下品・意境槽 \d 格・", blend) and blend.endswith("\n沒人合過。"), blend
+    merge = skillview.forge_line(state, content, world, ["feng", "huo"])
     assert re.search(r"（屬.・", merge) and merge.endswith("\n沒人合過。"), merge
-    for line in (blend, merge):
-        assert "花 5 點心得、5 點體力" in line
+    assert "花 5 點心得、5 點體力" in merge
 
 
 def test_the_merge_preview_still_refuses_what_you_do_not_hold(content, world, state):
     state.player.insights = ["feng"]
-    line = skillview.forge_line(state, content, world, None, ["feng", "shui"])
+    line = skillview.forge_line(state, content, world, ["feng", "shui"])
     assert line.startswith("⚠") and "屬" not in line and "→" not in line
 
 
@@ -367,25 +361,6 @@ def test_someone_who_got_the_art_after_it_was_named_already_saw_the_new_name_and
     library.store_art(late.state, renamed)  # 晚來的拿到的就是新名
     late.sync(1000.0)
     assert _notices(late) == []
-
-
-def test_a_forge_that_lands_on_a_named_art_does_not_tell_the_forger_either(content, world):
-    """真的走合成：甲先合出來、定名；乙後來合同一組，從配方表拿到的已經是定過名的那門。"""
-    from tianxia import fusion
-    from tianxia.state import new_game_state
-
-    master, late = _two_players(content, world)
-    for game in (master, late):  # 武學重構：合成是武學＋武學（武學＋意境改成裝槽）
-        game.state.player.arts = ["lake_kick"]
-        game.state.player.stats["xinde"] = 50
-        game.state.player.member.wugong_id = "basic_fist"
-    made, _ = fusion.blend(master.state, content, world, _named("旋風腿"), "basic_fist", "lake_kick")
-    assert made.id == "旋風腿"
-    _name_it(master, made, "旋風不歸腿")
-    got, _ = fusion.blend(late.state, content, world, _named("不會用到"), "basic_fist", "lake_kick")
-    assert got.id == "旋風腿" and "旋風腿" in late.state.player.arts
-    late.sync(1000.0)
-    assert _notices(late) == [] and new_game_state is not None
 
 
 def test_two_namings_between_syncs_are_one_entry_with_a_line_each(content, world):
@@ -513,7 +488,7 @@ def test_the_same_order_reaches_the_page_data(real):
 
 
 PRACTICE_STUBS = 'const guideHtml = () => "", proGuide = () => "";'
-CRAFT_STUBS = PRACTICE_STUBS + 'const furnaceSvg = () => "<svg></svg>", toast = () => {}, spinAt = () => "", createHtml = () => "";'  # 自創那張卡（武學重構）這裡不看
+CRAFT_STUBS = PRACTICE_STUBS + 'const furnaceSvg = () => "<svg></svg>", toast = () => {}, spinAt = () => "", createEntry = () => "";'  # 自創那一頁的入口（自創單獨一頁）這裡不看
 CRAFT_FNS = ["pageCraft", "forgeBody", "forgeReady", "artFilter", "setArtFilter", "filterChips", "showArts",
              "pickMark", "craftView", "craftFilterRow", "craftChip", "kilnWarn", "kilnHtml", "madeCardHtml", "previewCardHtml", "forgeLineHtml", "craftSheetHtml", "potGlow", "kilnPeek", "manualRows", "manualEntry", "bookIcon"]
 CRAFT_CONSTS = ["ART_FILTERS", "filterKey", "CRAFT_SORTS", "CRAFT_PAGE", "BOOKS"]
@@ -689,36 +664,18 @@ def test_a_filter_the_page_does_not_know_is_ignored_and_a_new_filter_restarts_th
     assert out == [["武學", True], False]
 
 
-# ── 煉製頁挑東西那一排的篩選（四顆：全部／內功／武學／意境）──
+# ── 煉製頁挑東西的抽屜（爐裡只合意境）──
 
 
 @needs_node
-def test_the_craft_page_filter_narrows_the_arts_but_never_hides_the_insights():
-    """煉製頁是拿「一門武學＋一個意境」合成的地方：記著的「內功」「武學」篩選把意境整排藏起來、又沒有任何提示，會讓人以為意境不見了
-    （review-ap2 的小毛病）。最簡單的做法是煉製頁的意境清單不理會這個篩選；「意境」那一顆則是只看意境、把武學藏起來。"""
+def test_the_craft_page_lists_only_insights_whatever_filter_is_remembered():
+    """爐裡只合意境（Joy 2026-10-21）：抽屜裡不列武學、不畫「功法」那四顆篩選；記著的「內功」「武學」「意境」篩選
+    也不會把意境藏起來（review-ap2 的小毛病：意境整排不見又沒有提示）。"""
     both = ["風", "火"]
-    every = ["甲拳", "乙功", "武0", "武1", "武2", "武3", "武4", "武5", "內0", "內1", "內2", "內3"]
-    assert _craft_names(_craft()) == (every, both)
-    assert _craft_names(_craft("內功")) == (["乙功", "內0", "內1", "內2", "內3"], both)
-    assert _craft_names(_craft("武學")) == (["甲拳", "武0", "武1", "武2", "武3", "武4", "武5"], both)
-    assert _craft_names(_craft("意境")) == ([], both)
-
-
-@needs_node
-def test_the_craft_chips_sit_in_one_row_and_mark_the_current_one():
-    html = _craft("武學")
-    group = re.search(r'<span class="fchips"[^>]*>(.*?)</span>', html, re.S).group(1)
-    chips = re.findall(r'<button[^>]*data-filter="([^"]+)"[^>]*aria-pressed="(true|false)"', group)
-    assert chips == [("全部", "false"), ("內功", "false"), ("武學", "true"), ("意境", "false")]
-    assert html.count('class="fchips"') == 1 and 'data-page="craft"' in group
-
-
-@needs_node
-def test_the_craft_page_filter_sits_in_the_label_row_so_the_first_screen_does_not_grow():
-    """煉製頁的第一屏：篩選鈕併進「功法」那一行標籤（跟以前的「武學」標籤同一行），不另外多一行。"""
-    html = _craft()
-    label = re.search(r'<div class="label[^"]*">(.*?)</div>', html[html.index('id="forge"'):], re.S).group(0)
-    assert "fchips" in label and "data-filter" in label
+    for remembered in (None, "內功", "武學", "意境"):
+        html = _craft(remembered)
+        assert _craft_names(html) == ([], both), remembered
+        assert "fchips" not in html and 'data-act="art-filter"' not in html, remembered
 
 
 @needs_node
@@ -879,8 +836,9 @@ def test_each_melt_row_says_enough_to_judge_it_and_opens_for_details():
     html = _practice(_judged_rows(), "H.S.meltSel = { arts: [], ins: [] }; H.S.meltOpen = 'arts:w2';", insights=DEEP)
     assert "<span>武學</span>・<span>屬快</span>・<span>精進</span>・<span>6成</span>・<span>威力 12.4</span>" in html
     assert '<i class="down">比身上弱 −2.1</i><i>破甲2</i><i>借力</i>' in html
-    assert '<i class="up">比身上強 +4.5</i><i class="hi">絕招</i>' in html
-    assert '<i>跟身上一樣</i><i class="hi">本命戰法</i>' in html
+    # 招前面蓋印（招式與絕學稿案第一節）：絕招金印「絕」、人物的本命朱印「本命」，後面是招名
+    assert '<i class="up">比身上強 +4.5</i><i class="hi"><b class="tseal gold">絕</b>武1</i>' in html
+    assert '<i>跟身上一樣</i><i class="hi"><b class="tseal red">本命</b>長坂一喝</i>' in html
     assert "<span>意境</span>・<span>屬快</span>・<span>二重</span>・<span>圓融</span>・<span>正</span>" in html and "心得<b>10</b>" in html
     detail = html[html.index('class="mdetail"'):]
     assert "功效：〔破甲〕2 層〔借力〕" in detail and "比身上的甲拳弱一些" in detail and "熔了退回心得 3" in detail

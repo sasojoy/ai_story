@@ -453,7 +453,7 @@ def test_an_unclaimed_wanted_refunds_the_poster(setup):
 
 
 def _batch(content) -> int:
-    """一批幾張：官軍、黃巾各 kinds 裡的每一張，加上每個陣營各 give_kinds 裡的每一種（兵器開著才有求兵；正式內容 8＋6＝14 張）。"""
+    """一批幾張：官軍、黃巾各 kinds 裡的每一張，加上每個陣營各 give_kinds 裡的每一種（兵器開著才有求兵；正式內容 8＋3＝11 張，求藝 2026-10-21 拿掉）。"""
     cfg = content.config.bounties
     gives = [k for k in cfg.give_kinds if k != "arms" or content.config.weapons.enabled]
     return 2 * len(cfg.kinds) + len(content.scenario.factions) * len(gives)
@@ -465,7 +465,7 @@ def test_weekly_issue_on_the_real_map():
     again = state.model_copy(deep=True)
     bounties.issue(state, content, 1)
     board = state.world.bounties
-    assert len(board) == _batch(content) == 14
+    assert len(board) == _batch(content) == 11
     for faction in ("guan", "huang"):
         strikes = [b for b in board if b.faction == faction and b.kind == "strike"]
         assert len({b.location for b in strikes}) == len(strikes)
@@ -850,7 +850,7 @@ def test_strike_escort_and_scout_all_skip_a_closed_place_fb150():
     for kind, (field, spot) in closed.items():
         base_kind = kind.split("-")[0]
         assert not any(getattr(b, field) == spot for b in shut if b.kind == base_kind), (kind, spot)
-    assert {b.kind for b in shut if b.kind not in bounties.GIVE_KINDS} == set(content.config.bounties.kinds)  # 求藝、求兵不掛地點，另算
+    assert {b.kind for b in shut if b.kind not in bounties.GIVE_KINDS} == set(content.config.bounties.kinds)  # 求兵不掛地點，另算
 
     _, reopened = _post_seasons(content, flags={"shut_by_test"})
     assert [(b.kind, b.faction, b.location, b.end) for b in reopened] == [(b.kind, b.faction, b.location, b.end) for b in base]
@@ -1133,14 +1133,15 @@ def test_a_season_end_bounty_lasts_until_the_season_closes_then_every_held_bount
     season = world.get_season()
     eleven = _post(world, kind="scout", faction="huang", silver=10, deeds=2, location="lake", expires=calendar.week_start(13, content, season))
     twelve = _post(world, kind="scout", faction="huang", silver=10, deeds=2, location="cave", expires=calendar.week_start(14, content, season))
-    art = _post(world, kind="art", faction="guan", silver=20, deeds=2, quota=3, attribute="剛", expires=calendar.week_start(14, content, season))
-    _hold(content, world, "丙", eleven.id, twelve.id)  # 求藝不用揭
+    arms = _post(world, kind="arms", faction="guan", silver=0, deeds=2, quota=3, attribute="柔", weapon_kind="劍",
+                 expires=calendar.week_start(14, content, season))
+    _hold(content, world, "丙", eleven.id, twelve.id)  # 求兵不用揭
     assert [bounties.due_text(b, content, season) for b in (eleven, twelve)] == [bounties.SEASON_END] * 2
     game = _sync_at(content, world, "丙", NOW + 30 * HOUR)  # 季還在跑
     assert not world.get_season().ended and _told(game) == []
     assert [b.id for b in bounties.mine(game.state, content)] == [eleven.id, twelve.id]
     assert len(game.status_data()["bounties"]) == 2
-    assert art.id in {b.id for b in bounties.visible(game.state, content)} and bounties.board_here(game.state, content)
+    assert arms.id in {b.id for b in bounties.visible(game.state, content)} and bounties.board_here(game.state, content)
     game = _sync_at(content, world, "丙", NOW + 3 * calendar.DAY)  # 走過季末：真的收季
     assert world.get_season().ended
     lines = [bounties.LAPSED_SEASON.format(title=bounties.title(content, b)) for b in (eleven, twelve)]
@@ -1150,7 +1151,7 @@ def test_a_season_end_bounty_lasts_until_the_season_closes_then_every_held_bount
     s, c = game.state, content
     assert bounties.open_bounties(s, c) == [] and bounties.mine(s, c) == [] and bounties.visible(s, c) == []
     assert bounties.status(s, c, world) == [] and not bounties.board_here(s, c)
-    left = next(b for b in s.world.bounties if b.id == art.id)  # 求藝、求兵一樣：榜上看不到、交不了，也沒有作廢的話（沒人揭）
+    left = next(b for b in s.world.bounties if b.id == arms.id)  # 求兵一樣：榜上看不到、交不了，也沒有作廢的話（沒人揭）
     assert left.id not in {b.id for b in bounties.visible(s, c)} and bounties.give_problem(s, c, world, left, "x") == bounties.NOT_NOW
     assert bounties.give_choice(s, c, world) is None
     assert [o.id for o in game.options(odds=False)] == ["season:resting"]  # 休季的選單沒有懸賞榜那一顆

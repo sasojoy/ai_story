@@ -291,7 +291,7 @@ def test_hand_ins_say_how_many_fit_and_open_the_third_layer(content, world):
     p = game.state.player
     p.rack = [Equipment(**SWORD)]
     note = game.shop_view()["notes"][0]
-    assert note["have"] == shopview.HAVE_NOTE.format(n=1, unit=bounties.UNITS["arms"])
+    assert note["have"] == shopview.HAVE_NOTE.format(n=1, unit="把")
     assert note["action"] == {"id": f"bounty:pick:{arms}", "verb": "pick", "enabled": True, "why": None}
     p.rack = []
     note = game.shop_view()["notes"][0]
@@ -422,18 +422,3 @@ def test_closing_a_shop_clears_the_hold(content, world):
     assert game.state.player.shop_hold.startswith("same:")
     game.choose(mounts.BACK)
     assert game.state.player.shop_hold == ""
-
-
-# ── 終審修正 ──
-
-
-def test_a_hand_in_whose_only_fit_is_the_art_you_wear_says_so(content, world):
-    """終審 M1（提為 Important）：求藝唯一對得上的是身上正在練的那門時，告示上「交出…」灰掉寫的是「身上正在練」那一句（同第三層的
-    WORN_NOTE），不是「你身上沒有合用的」。"""
-    from test_bounty_hand_in import _fused
-
-    game = _board(content, world, [dict(kind="art", faction="guan", silver=20, deeds=2, quota=3, attribute="剛")])
-    worn = _fused(world, "開碑拳")
-    game.state.player.member.wugong_id = worn.id
-    note = game.shop_view()["notes"][0]
-    assert not note["action"]["enabled"] and note["action"]["why"] == bounties.WORN_NOTE.format(name="開碑拳")

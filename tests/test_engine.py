@@ -968,11 +968,19 @@ def test_art_detail_of_an_art_that_is_not_yours_is_not_found(game):
     assert game.art_detail("ghost") == "（找不到這門功法。）"
 
 
+def _registered_art(game, name="凌風拳", parents=()):
+    """一門登記在全服、放進功法庫的合成武學（煉製不再合武學，直接登記）。回傳它的 id。"""
+    art = MartialArt(
+        id=name, name=name, kind="武學", quality="中品", attribute="剛", base_power=16.0, top_power=44.0,
+        creator=game.state.player.name, origin="fused", parents=list(parents),
+    )
+    assert game.world.claim_skill_name(art)
+    game.state.player.arts.append(art.id)
+    return art.id
+
+
 def test_art_detail_of_a_blended_art_names_both_parents(game):
-    p = game.state.player
-    p.member.wugong_id, p.member.neigong_id, p.stats["xinde"] = "basic_fist", "basic_breath", 100
-    game.forge("basic_fist", [], proposed=(None, ""), other_art="basic_breath")  # 不叫模型：退路字表取名
-    (made,) = p.arts
+    made = _registered_art(game, parents=["basic_breath", "basic_fist"])
     assert "由【粗淺吐納】與【粗淺拳腳】衍生" in game.art_detail(made)  # 來源照 id 排序（basic_breath 在 basic_fist 前）
     assert "衍生" not in game.art_detail("basic_fist")
 
@@ -7153,31 +7161,30 @@ def test_world_tick_opens_and_settles_a_scheduled_showdown_with_nobody_online(co
 
 def test_a_forge_request_for_a_caller_who_names_outside(game):
     """伺服器假人的 Game 沒有 client，但假人程式在鎖外自己叫模型：named_outside 時照樣開單。
-    武學重構：武學＋意境不再開爐（直接裝槽，不要名字），要取名的是武學＋武學。"""
+    煉製只剩意境＋意境：要取名的是兩個不同意境的合併。"""
     p = game.state.player
-    p.member.wugong_id, p.member.neigong_id, p.stats["xinde"], p.stamina = "basic_fist", "basic_breath", 100, 150
+    p.insights, p.stats["xinde"], p.stamina = ["feng", "huo"], 100, 150
     game.client = None
-    assert game.forge_request("basic_fist", [], other_art="basic_breath") is None
-    request = game.forge_request("basic_fist", [], other_art="basic_breath", named_outside=True)
-    assert request is not None and request.kind == "blend"
+    assert game.forge_request(None, ["feng", "huo"]) is None
+    request = game.forge_request(None, ["feng", "huo"], named_outside=True)
+    assert request is not None and request.kind == "merge"
+    assert game.forge_request("basic_fist", ["feng", "huo"], named_outside=True) is None  # 爐裡放武學：會被擋下，不開單
 
 
 def test_a_forge_request_while_the_season_is_preparing_stays_none_even_if_naming_outside(game):
     """賽季籌備中什麼都不能做：named_outside 只換掉「沒有 client」那一條，籌備中照舊不開單。"""
     p = game.state.player
-    p.member.wugong_id, p.member.neigong_id, p.stats["xinde"], p.stamina = "basic_fist", "basic_breath", 100, 150  # 武學重構：武學＋武學
+    p.insights, p.stats["xinde"], p.stamina = ["feng", "huo"], 100, 150
     game.client = None
     with mock.patch.object(game.world, "season_phase", return_value="preparing"):
-        assert game.forge_request("basic_fist", [], other_art="basic_breath", named_outside=True) is None
+        assert game.forge_request(None, ["feng", "huo"], named_outside=True) is None
 
 
 def test_a_mastery_request_asks_for_a_new_name(game):
     """練成絕學、輪到自己定名：開一張請模型另取新名字的單（伺服器假人用；真人自己填）。沒有等著定名的是 None。"""
     p = game.state.player
-    p.member.wugong_id, p.member.neigong_id, p.stats["xinde"], p.stamina = "basic_fist", "basic_breath", 100, 150
     assert game.mastery_request() is None
-    game.forge("basic_fist", [], proposed=("凌風拳", "一句話。"), other_art="basic_breath")  # 武學重構：合成是武學＋武學
-    p.naming = next(a for a in library.owned_arts(game.state) if a not in ("basic_fist", "basic_breath"))
+    p.naming = _registered_art(game)
     request = game.mastery_request()
     assert request.kind == "master" and request.key == f"定名|{p.naming}" and request.name_kind == "武學"
     assert "凌風拳" in request.messages[-1]["content"] and "不一樣" in request.messages[-1]["content"]
@@ -7186,9 +7193,7 @@ def test_a_mastery_request_asks_for_a_new_name(game):
 def test_a_mastery_request_is_only_a_read_and_waits_for_the_season(game):
     """開單只讀（A 段在鎖內、很快）；賽季籌備中不開。"""
     p = game.state.player
-    p.member.wugong_id, p.member.neigong_id, p.stats["xinde"], p.stamina = "basic_fist", "basic_breath", 100, 150
-    game.forge("basic_fist", [], proposed=("凌風拳", "一句話。"), other_art="basic_breath")  # 武學重構：合成是武學＋武學
-    p.naming = next(a for a in library.owned_arts(game.state) if a not in ("basic_fist", "basic_breath"))
+    p.naming = _registered_art(game)
     before = game.state.model_dump()
     assert game.mastery_request() is not None
     assert game.state.model_dump() == before

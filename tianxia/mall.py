@@ -15,7 +15,7 @@ import re
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 
-from . import library, naming
+from . import naming
 from .characters import name_key
 from .models import Content, MallItem
 from .state import GameState
@@ -37,8 +37,6 @@ EFFECTS: dict[str, EffectSpec] = {
     "card_rebate": EffectSpec("card", "當場回 {n} 元寶", 100000),  # 月卡買下當場拿回的元寶（定案甲：600 回 300）；要比價錢少
     "zhuan_rewrite": EffectSpec("consumable", "列傳多重寫 {n} 次", 9),  # 重修列傳：休季時列傳多重寫幾次（Config.biography.rewrites 之外）
     "rename": EffectSpec("consumable", "易名帖 {n} 張", 1),  # 易名帖：買了得一張帖，在設定頁改名、當場生效（rename.py）
-    # 功法庫擴充：武學與意境合計的持有上限多幾格（PlayerState.holding_bonus），買下當場生效、只這一季（Joy 2026-10-21 一張 15 格、不限張數）
-    "holding": EffectSpec("consumable", "功法庫多放 {n} 格（這一季）", 999),
 }
 KIND_NAMES = {"look": "外觀", "consumable": "消耗品", "card": "月卡", "pass": "通行證"}
 REASONS = {"grant": "封測發放", "buy": "購買", "refund": "退款", "reissue": "補發", "revoke": "扣回", "topup": "儲值"}
@@ -74,8 +72,6 @@ REFUNDED_BEFORE = "（這一筆已經退過了。）"
 REFUNDED = "已退{name}的「{item}」：元寶 +{price}（餘額 {left}）。{took}"
 PILLS_BACK = "{pill}收回 {n} 顆。"
 PILLS_USED = "用掉的 {n} 顆不追。"
-HOLDING_UP = "功法庫上限 +{n}（現在 {cap} 格，這一季）"
-HOLDING_BACK = "功法庫上限收回 {n} 格。"
 CARD_BACK = "月卡少 {n} 天。"
 REBATE_BACK = "當場回的 {n} 元寶扣回。"
 # 月卡每日領（定案甲）：待 joy 潤
@@ -245,10 +241,6 @@ def _deliver(
         changes.append(f"列傳重寫 +{item.effects['zhuan_rewrite']}")
     if item.effects.get("rename", 0):
         changes.append("易名帖 +1（到設定頁改名）")
-    holding = item.effects.get("holding", 0)
-    if holding:
-        state.player.holding_bonus += holding
-        changes.append(HOLDING_UP.format(n=holding, cap=library.cap_of(state, content)))
     pills = item.effects.get("pills", 0)
     if pills:
         state.player.stamina_pills += pills
@@ -437,7 +429,6 @@ def adjust(
 
 def refund(
     state: GameState, content: Content, wallet: Wallet, purchase_id: int, *, now: float, admin: str, note: str,
-    season: int | None = None,
 ) -> str:
     """管理者退一筆購買（4.7）：元寶照價錢全退；回體丹收回手上還有的（最多當初那幾顆，用掉的不追）；月卡把那一張的天數
     扣回去（那一張屬於已經過期的舊卡就不動現在這一張）。一筆只能退一次（編號 refund:<購買>）。state 是那個人的存檔，
@@ -468,11 +459,6 @@ def refund(
             wallet.post(owner, -rebate, "revoke", f"refund:rebate:{bought.id}", time=now, admin=admin,
                         note=CARD_REFS["refund:rebate:"], purchase_id=bought.id)
             took.append(REBATE_BACK.format(n=rebate))
-        holding = int(bought.data.get("holding", 0))
-        if holding and (season is None or bought.season == season):  # 上一季買的擴充換季時已經跟著歸零了，不動這一季的
-            back = min(holding, state.player.holding_bonus)
-            state.player.holding_bonus -= back
-            took.append(HOLDING_BACK.format(n=back))
         pills = int(bought.data.get("pills", 0))
         if pills:
             back = min(pills, state.player.stamina_pills)

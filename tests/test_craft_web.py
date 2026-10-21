@@ -1,83 +1,58 @@
 """煉製頁的網頁那一半（企劃者 2026-10-10「合成流程也很麻煩畫面跳來跳去……武學數量很多的時候，很難選，而且合過的意境不能合，
-常常丟上去按合成才知道」）：合不了的灰掉、寫原因、點了只說為什麼；開爐之後頁面不捲、
+常常丟上去按合成才知道」）：爐裡只合意境（Joy 2026-10-21）；合不了的灰掉、寫原因、點了只說為什麼；開爐之後頁面不捲、
 結果寫在開爐底下、爐裡的東西留著。不替玩家列出合得出來的組合（企劃者同日退回：「這樣改不就變成玩家腦都不用動」）。
 資料是真的引擎給的（skillview.forge_picks），畫面在 tests/test_prologue_web.py 的假瀏覽器裡跑。"""
 from __future__ import annotations
-
-from unittest import mock
 
 import pytest
 from test_prologue_web import run
 
 import server
 import webharness
-from tianxia import fusion, naming
+from tianxia.martial_arts import MartialArt
 
 pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 
 
-def named(name):
-    client = mock.Mock()
-    client.chat_structured.return_value = naming.NameReply(name=name, description="一句話說明。")
-    return client
-
-
 @pytest.fixture
 def made(game):
-    """手上有基礎拳腳、湖邊腿法、風、火，已經合過【旋風腿】（基礎拳腳＋湖邊腿法）。
-    武學重構：武學＋意境不再是合成（改裝槽），合成只剩武學＋武學、意境＋意境，所以先合的那一門改成兩門武學合的。"""
+    """手上有基礎拳腳、湖邊腿法、風、火。煉製只剩意境＋意境（Joy 2026-10-21）：爐裡放的都是意境。"""
     p = game.state.player
     p.member.wugong_id = "basic_fist"
     p.arts = ["lake_kick"]
     p.insights = ["feng", "huo"]
     p.stats["xinde"] = 100
-    art, _ = fusion.blend(game.state, game.content, game.world, named("旋風腿"), "basic_fist", "lake_kick")
-    return game, art
+    return game
 
 
-def test_with_an_art_in_the_pot_the_arts_it_cannot_blend_with_are_greyed_with_a_reason(made):
-    # 武學重構：爐裡放武學，另一格是武學＋武學的合成；合過的那一對（基礎拳腳＋湖邊腿法 → 旋風腿）灰掉寫「已經有了」。
-    # 舊版的「來歷裡融過」（血統擋）拿掉了，所以只剩一門灰掉。
-    game, art = made
-    picks = game.forge_picks("basic_fist", [])
-    S = {"tab": "craft", "craftPick": True, "forgeSel": [{"type": "art", "id": "basic_fist"}], "forgePicks": picks}  # 清單在抽屜裡（Joy 2026-10-19）
-    out = run(server.main_view(game), """
-      const html = H.pageCraft();
-      H.pick("art", "lake_kick");
-      return { html, sel: H.S.forgeSel.length, toast: T.els.toast.textContent };
-    """, S=S, menxia=server.menxia_view(game))
-    assert '<i class="why">已經有了</i>' in out["html"]
-    assert out["html"].count('class="chip r1 no"') == 1  # 只有湖邊腿法；旋風腿合得了
-    assert out["sel"] == 1 and "你已經有了" in out["toast"]  # 點了不放進去，說整句
-
-
-def test_with_an_insight_in_the_pot_the_arts_whose_slots_cannot_take_it_are_greyed(made):
-    # 武學重構：爐裡放意境，另一格放武學＝裝進槽；裝不進的（意境已經裝在別門上）照 arts.slot_problem 灰掉，點了說整句。
-    game, art = made
-    game.slot_insight("basic_fist", "feng")
-    picks = game.forge_picks(None, ["feng"])
-    assert all(mark is not None for mark in picks["arts"].values())
+def test_with_an_insight_in_the_pot_what_cannot_go_with_it_is_greyed_with_a_reason(made):
+    # 爐裡放風：同一份放兩次不成（揣摩要兩份），灰掉寫「要兩份」，點了說整句、不放進去；火合得了照列
+    game = made
+    picks = game.forge_picks(["feng"])
+    assert set(picks) == {"insights"} and picks["insights"]["huo"] is None
     S = {"tab": "craft", "craftPick": True, "forgeSel": [{"type": "ins", "id": "feng"}], "forgePicks": picks}
     out = run(server.main_view(game), """
       const html = H.pageCraft();
-      H.pick("art", "lake_kick");
+      H.pick("ins", "feng");
       return { html, sel: H.S.forgeSel.length, toast: T.els.toast.textContent };
     """, S=S, menxia=server.menxia_view(game))
-    assert out["html"].count('class="chip r1 no"') == 3
-    assert out["sel"] == 1 and "先從那裡拆下來" in out["toast"]
+    assert '<i class="why">要兩份</i>' in out["html"] and out["html"].count(' no"') == 1
+    assert 'data-type="art"' not in out["html"]  # 爐裡只合意境：抽屜裡不列武學
+    assert out["sel"] == 1 and "再悟一次「風」" in out["toast"]
 
 
 def test_only_what_fits_can_be_shown(made):
-    game, art = made
-    # 武學重構：爐裡放基礎拳腳，湖邊腿法（合過了）藏起來，旋風腿合得了照列
-    S = {"tab": "craft", "craftPick": True, "forgeSel": [{"type": "art", "id": "basic_fist"}], "forgePicks": game.forge_picks("basic_fist", []),
+    game = made
+    # 爐裡放風：風自己（要兩份）藏起來，火合得了照列
+    S = {"tab": "craft", "craftPick": True, "forgeSel": [{"type": "ins", "id": "feng"}], "forgePicks": game.forge_picks(["feng"]),
          "craftView": {"attr": "", "quality": "", "sort": "", "okOnly": True, "all": False}}
     html = run(server.main_view(game), "return H.pageCraft();", S=S, menxia=server.menxia_view(game))
-    assert "只看合得了的" in html and 'data-id="lake_kick"' not in html and f'data-id="{art.id}"' in html
+    sheet = html.split('class="sheet craft-sheet"', 1)[1]
+    assert "只看合得了的" in html and 'data-id="feng"' not in sheet and 'data-id="huo"' in sheet
 
 
 def test_forging_empties_the_pot_and_writes_the_result_under_the_button_without_scrolling(made):
-    game, art = made
+    game = made
     after = server.menxia_view(game)
     out = run(server.main_view(game), """return (async () => {
       let scrolled = 0;
@@ -87,11 +62,11 @@ def test_forging_empties_the_pot_and_writes_the_result_under_the_button_without_
       T.ctx.document.getElementById = (id) => (id === "forge" ? btn : byId(id));
       await H.forge();
       return { html: H.pageCraft(), calls: T.calls.map((c) => c[0]), body: (T.calls.find((c) => c[0] === "/api/menxia/forge") || [])[1], result: H.S.forgeResult, sel: H.S.forgeSel.length, scrolled };
-    })();""", S={"tab": "craft", "forgeSel": [{"type": "art", "id": "basic_fist"}, {"type": "ins", "id": "huo"}]},
+    })();""", S={"tab": "craft", "forgeSel": [{"type": "ins", "id": "feng"}, {"type": "ins", "id": "huo"}]},
         menxia=server.menxia_view(game),
         responses={"/api/menxia/forge": {"menxia": after, "message": "<p>煉成了。</p>", "main": server.main_view(game), "made": True},
                    "/api/forge_line": {"line": "", "picks": None}})
-    assert out["calls"].count("/api/menxia/forge") == 1 and out["body"]["art"] == "basic_fist" and out["body"]["insights"] == ["huo"]
+    assert out["calls"].count("/api/menxia/forge") == 1 and out["body"] == {"insights": ["feng", "huo"]}
     assert out["calls"][-1] == "/api/forge_line"  # 心得、體力變了：重問說明
     assert out["result"] == {"html": "<p>煉成了。</p>"} and out["sel"] == 0  # 合成了：兩格清空（Joy 2026-10-12）
     assert out["html"].index('id="forge"') < out["html"].index("煉成了。")  # 結果寫在開爐底下
@@ -102,7 +77,7 @@ def test_forging_empties_the_pot_and_writes_the_result_under_the_button_without_
 def test_a_locked_insight_stays_in_the_pot_after_forging_so_the_next_pairing_is_one_tap_away(made):
     """鎖在爐裡（Joy 2026-10-19「弄一個鎖定的功能，尤其獲得新意境時會想要試他的所有組合」）：每一格有一顆小鎖（pot-lock），
     鎖著的那一樣開爐成了留在爐裡、只清另一格；拿出來就解開；鎖著的不在手上了（熔掉）也解開。"""
-    game, art = made
+    game = made
     after = server.menxia_view(game)
     out = run(server.main_view(game), """return (async () => {
       const btn = { disabled: false, textContent: "開爐", classList: { add() {} } };
@@ -120,11 +95,11 @@ def test_a_locked_insight_stays_in_the_pot_after_forging_so_the_next_pairing_is_
       H.S.craftPick = false;
       H.toggleLock(0); // 再按一次解開
       const unlocked = JSON.stringify(H.S.forgeLock);
-      H.toggleLock(0); H.S.forgeSel.push({ type: "art", id: "basic_fist" }); // 鎖回去、再放武學；熔掉之後重抓：鎖著的不在了
+      H.toggleLock(0); H.S.forgeSel.push({ type: "ins", id: "feng" }); // 鎖回去、再放風；熔掉之後重抓：鎖著的不在了
       H.S.menxia.insights = H.S.menxia.insights.filter((i) => i.id !== "huo");
       const trimmed = H.trimForgeSel();
       return { before, locked, lock, afterForge, sel, stillLocked, sheet, unlocked, trimmed, gone: JSON.stringify(H.S.forgeLock), left: JSON.stringify(H.S.forgeSel) };
-    })();""", S={"tab": "craft", "forgeSel": [{"type": "art", "id": "basic_fist"}, {"type": "ins", "id": "huo"}]},
+    })();""", S={"tab": "craft", "forgeSel": [{"type": "ins", "id": "feng"}, {"type": "ins", "id": "huo"}]},
         menxia=server.menxia_view(game),
         responses={"/api/menxia/forge": {"menxia": after, "message": "<p>煉成了。</p>", "main": server.main_view(game), "made": True},
                    "/api/forge_line": {"line": "", "picks": None}})
@@ -132,19 +107,19 @@ def test_a_locked_insight_stays_in_the_pot_after_forging_so_the_next_pairing_is_
     assert out["lock"] == '{"type":"ins","id":"huo"}'
     assert 'kiln-slot full r2 locked" data-act="unslot" data-i="1"' in out["locked"] and 'class="kiln-pin on" data-act="pot-lock" data-i="1"' in out["locked"]
     assert 'w-slot full r2 locked" data-act="unslot" data-i="1"' in out["locked"] and 'class="w-pin on" data-act="pot-lock" data-i="1"' in out["locked"]
-    assert out["sel"] == '[{"type":"ins","id":"huo"}]' and out["stillLocked"] == out["lock"]  # 合成了：火留在爐裡、鎖還在，武學那一格清了
+    assert out["sel"] == '[{"type":"ins","id":"huo"}]' and out["stillLocked"] == out["lock"]  # 合成了：火留在爐裡、鎖還在，另一格清了
     assert "煉成了。" in out["afterForge"] and "再放一樣進爐" in out["afterForge"]
-    assert "爐裡鎖著「火」，再放一樣" in out["sheet"]
+    assert "爐裡鎖著「火」，再放一個" in out["sheet"]
     assert out["unlocked"] == "null"
-    assert out["trimmed"] is True and out["gone"] == "null" and out["left"] == '[{"type":"art","id":"basic_fist"}]'
+    assert out["trimmed"] is True and out["gone"] == "null" and out["left"] == '[{"type":"ins","id":"feng"}]'
 
 
 def test_the_forge_line_endpoint_gives_marks_only(made, monkeypatch):
-    game, art = made
+    game = made
     monkeypatch.setattr(server, "look", lambda g, view: view(g))
     monkeypatch.setattr(server, "_game", lambda request: game)
-    one = server.api_forge_line(None, {"art": "basic_fist"})  # 武學重構：合過的那一對是武學＋武學
-    assert one["picks"]["arts"]["lake_kick"]["short"] == "已經有了" and "ideas" not in one
+    one = server.api_forge_line(None, {"insights": ["feng"]})
+    assert one["picks"]["insights"]["feng"]["short"] == "要兩份" and "ideas" not in one
     empty = server.api_forge_line(None, {})
     assert empty["picks"] is None and "ideas" not in empty
 
@@ -153,7 +128,7 @@ def test_the_craft_page_has_a_way_into_the_manual_and_it_opens_as_a_book_over_ev
     """武學譜（status.manual；企劃者 2026-10-10「武學譜能不能獨立一頁，做得更豪華一些」）：煉製頁背包上面只放一個入口，
     寫幾則、參透幾則；點了開全螢幕的一本書（S.book），左上返回。一條秘方一頁，口訣照標點斷成一欄一段，合中了蓋朱印寫名號；
     沒聽過的不列、不寫還差幾句。"""
-    game, art = made
+    game = made
     main = server.main_view(game)
     main["status"]["manual"] = [{"clues": ["風過山崗<留痕>，雲自回", "山不動而風自回"], "solved": None},
                                 {"clues": ["火入水中"], "solved": "沸雪掌"}]
@@ -179,7 +154,7 @@ def test_the_craft_page_has_a_way_into_the_manual_and_it_opens_as_a_book_over_ev
 
 
 def test_an_empty_manual_says_so_without_hinting_at_any_recipe(made):
-    game, art = made
+    game = made
     main = server.main_view(game)
     assert main["status"]["manual"] == []  # 測試內容沒有秘方
     out = run(main, "H.S.book = true; return { page: H.pageCraft(), book: H.bookHtml() };", S={"tab": "craft"}, menxia=server.menxia_view(game))
@@ -187,7 +162,7 @@ def test_an_empty_manual_says_so_without_hinting_at_any_recipe(made):
 
 
 def test_changing_tab_closes_the_book(made):
-    game, art = made
+    game = made
     out = run(server.main_view(game), "return (async () => { await H.goTab(\"practice\"); return H.S.book; })();",
               S={"tab": "craft", "book": True}, menxia=server.menxia_view(game))
     assert out is False
@@ -196,7 +171,7 @@ def test_changing_tab_closes_the_book(made):
 def test_the_forge_book_sits_beside_the_arts_book_and_shows_the_mix_once_solved(made):
     """鑄譜（status.forge_manual；打造隱藏配方設計 6.3）：入口擺在武學譜旁邊，點了開同一本線裝書（S.book 記開哪一本）；打中過的蓋朱印、
     寫名字，另外寫出配方；只聽過口訣的不寫配方。"""
-    game, art = made
+    game = made
     main = server.main_view(game)
     main["status"]["forge_manual"] = [
         {"clues": ["那劍客的劍軟如柳條，一閃比燕子還快。"], "solved": "柳影劍", "recipe": "劍：柳絲綿＋驚羽"},
@@ -220,7 +195,7 @@ def test_the_forge_book_sits_beside_the_arts_book_and_shows_the_mix_once_solved(
 
 
 def test_an_empty_forge_book_hints_at_smiths_and_tales_only(made):
-    game, art = made
+    game = made
     main = server.main_view(game)
     assert main["status"]["forge_manual"] == []  # 測試內容沒有隱藏配方
     out = run(main, 'H.S.book = "forge"; return H.bookHtml();', S={"tab": "craft"}, menxia=server.menxia_view(game))
@@ -235,26 +210,24 @@ def test_the_next_season_question_says_the_forge_secrets_change():
 
 
 def test_the_engine_says_what_it_forged_and_the_page_finds_it_in_the_lists(made):
-    """開爐成了，煉製頁在結果底下畫合出來的那一樣（Joy 2026-10-17）：Game.forged_thing 是 ("art"／"ins", id)，
-    id 在 menxia_view 的 owned_arts／insights 裡找得到；被拒絕是 None。"""
-    game, art = made
-    game.forge("basic_fist", [], proposed=("烈焰拳", "一句話說明。"), other_art=art.id)  # 武學重構：武學＋武學才合出新武學
-    kind, art_id = game.forged_thing
-    assert kind == "art" and any(r["id"] == art_id for r in server.menxia_view(game)["owned_arts"])
+    """開爐成了，煉製頁在結果底下畫合出來的那一樣（Joy 2026-10-17）：Game.forged_thing 是 ("ins", id)，
+    id 在 menxia_view 的 insights 裡找得到；被拒絕是 None。"""
+    game = made
     game.forge(None, ["feng", "huo"], proposed=("風火意", "一句話說明。"))
     kind, ins_id = game.forged_thing
     assert kind == "ins" and any(r["id"] == ins_id for r in server.menxia_view(game)["insights"])
-    game.forge("basic_fist", [], proposed=("旋風腿", ""), other_art="lake_kick")  # 已經有了：被拒絕
+    game.forge("basic_fist", ["feng"])  # 爐裡只合意境：放武學被拒絕
     assert game.forged is False and game.forged_thing is None
-    game.forge("basic_fist", ["huo"])  # 武學＋意境是裝進槽：沒有「合出來的那一樣」
-    assert game.forged is True and game.forged_thing is None
 
 
 def test_a_new_art_shows_its_card_under_the_result_with_power_and_how_it_compares(made):
-    game, art = made
-    game.forge("basic_fist", [], proposed=("烈焰拳", "一句話說明。"), other_art=art.id)  # 武學重構：武學＋武學
+    game = made
+    art = MartialArt(id="烈焰拳", name="烈焰拳", kind="武學", quality="上品", attribute="剛", affinity=["剛"],
+                     base_power=10, top_power=100, origin="created")  # 自創立名出來的那一門（煉製頁的自創）
+    assert game.world.claim_skill_name(art)
+    game.state.player.arts.append(art.id)
     menxia = server.menxia_view(game)
-    row = next(r for r in menxia["owned_arts"] if r["id"] == game.forged_thing[1])
+    row = next(r for r in menxia["owned_arts"] if r["id"] == art.id)
     row["judge"]["traits"] = [{"name": "剛猛", "layers": 2, "tier": 1}, {"name": "破軍", "layers": 1, "tier": 3}]  # 檔次（武學技能分檔）
     row["judge"]["dormant"] = ["輕靈"]  # 還沒亮的技能
     row["judge"]["worn_diff"] = -3.5
@@ -269,7 +242,7 @@ def test_a_new_art_shows_its_card_under_the_result_with_power_and_how_it_compare
 
 
 def test_a_merged_insight_shows_its_card_too(made):
-    game, art = made
+    game = made
     game.forge(None, ["feng", "huo"], proposed=("風火意", "一句話說明。"))
     html = run(server.main_view(game), "return H.pageCraft();", menxia=server.menxia_view(game),
                S={"tab": "craft", "forgeSel": [], "forgeResult": {"html": "<p>合成了。</p>"}, "forgeMade": {"type": "ins", "id": game.forged_thing[1]}})
@@ -279,10 +252,10 @@ def test_a_merged_insight_shows_its_card_too(made):
 def test_the_furnace_itself_holds_both_slots_and_the_forge_button_and_flashes_what_was_just_put_in(made):
     """太極爐一直看得到（Joy 2026-10-17「那個太極爐變得很多餘」）：沒有另一條列，同一座爐縮起來時是兩格、小太極開爐鈕、
     底下一行 ⚠ 原因；剛放進去的那一格大爐子與縮起來的都閃一下。"""
-    game, art = made
+    game = made
     out = run(server.main_view(game), """
       H.S.forgeSel = [{ type: "ins", id: "huo" }];
-      H.pick("art", "basic_fist");
+      H.pick("ins", "feng");
       return { html: H.pageCraft(), drawn: T.els.page.innerHTML };
     """, S={"tab": "craft", "forgeSel": [], "forgeLine": "<p>合成 …</p><p>⚠ 心得不夠。</p>"}, menxia=server.menxia_view(game),
         responses={"/api/forge_line": {"line": "", "picks": None}})
@@ -291,7 +264,7 @@ def test_the_furnace_itself_holds_both_slots_and_the_forge_button_and_flashes_wh
     kiln = html.split('id="kiln-wrap"', 1)[1].split('id="forge-line"', 1)[0]
     assert 'class="furnace-wrap"' in kiln  # 大爐子
     mini = kiln.split('class="kiln-mini"', 1)[1]
-    assert mini.count('data-act="unslot"') == 2 and 'id="forge"' in mini and "<b>粗淺拳腳</b>" in mini and "<b>火</b>" in mini
+    assert mini.count('data-act="unslot"') == 2 and 'id="forge"' in mini and "<b>風</b>" in mini and "<b>火</b>" in mini
     assert "⚠ 心得不夠。" in mini
-    assert 'kiln-slot full r1 flash" data-act="unslot" data-i="0"' in out["drawn"]  # 武學放左邊那一格，放進去那一下閃
-    assert 'w-slot full r1 flash" data-act="unslot" data-i="0"' in out["drawn"]  # 大爐子那一格也閃
+    assert 'kiln-slot full r2 flash" data-act="unslot" data-i="1"' in out["drawn"]  # 放進右邊那一格，放進去那一下閃
+    assert 'w-slot full r2 flash" data-act="unslot" data-i="1"' in out["drawn"]  # 大爐子那一格也閃

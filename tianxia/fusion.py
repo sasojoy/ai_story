@@ -5,16 +5,14 @@
 | 模型 | 只取名字＋一句說明，一個數字都不碰 |
 | 引擎 | 配方、品級、意境的屬性與正邪、成本、全服登記 |
 
-武學合成（blend）：武學＋武學 → 第三門新武學，兩門都留著（parents 記兩個來源；base 記種類跟著哪一門，兵器種類照它推）。
-品級＝兩門自己那一份取高（絕學算上品），兩門都練到第十成、意境槽都裝滿再升一品（上品到頂；上→絕不在這裡，要契機）；
-兩門槽裡的意境全部拆回背包，新武學的槽空著、自己裝（arts.slot）。配方鍵 blend_key 不分先後、全服共享、首創取名三段式、
-首創名望回饋、江湖史照舊。沒有血統擋、合到舊的、代數、擲骰、承底。
+煉製只剩意境合成（Joy 2026-10-21「武學跟武學或是武學跟意境乾脆不要合成了，意境跟意境能合成就好」）：
+武學＋武學（blend）拿掉了，新武學只從自創來（create.py）；以前合出來的照舊讀得到（配方鍵 blend_key「兼|」留著認舊的）。
 意境合成（merge）：同一個意境合自己 → 強度升一級（●→●●→●●●，arts.MAX_STRENGTH；不登記、不取名）；
 兩個不同的意境 → 一個複合的新意境（就是那個屬性的高階技能，traits.json 的 high），屬性與正邪照 insights 的規則、
 種子是天機＋配方鍵；秘方合中的帶一條特別功效（Insight.secret_special）。兩個都留著。
-三種動作同一套價錢（設計 12.1）：Config.fuse_xinde／merge_xinde 心得＋fuse_stamina／merge_stamina 體力，真的合成了才收。
+價錢：Config.merge_xinde 心得＋merge_stamina 體力，真的合成了才收。
 武學＋意境的合成拿掉了：意境直接裝進武學的槽（arts.py）。
-伺服器上的取名在行動鎖外：forge_request（A，鎖內）→ naming.generate（B，鎖外）→ blend／merge(proposed=...)（C，鎖內，
+伺服器上的取名在行動鎖外：forge_request（A，鎖內）→ naming.generate（B，鎖外）→ merge(proposed=...)（C，鎖內，
 整個重驗再登記、收費）。沒給 proposed 才在這裡叫模型（整季機器人、腳本、測試）。
 「已經有了」一律照功法的 id 認（改名之後顯示的名字跟 id 不一樣）。
 打造（smithing）借用這裡的品質機率零件：QualityOdds、odds_from_points、roll_quality、quality_odds_text、天時地利三個判斷。
@@ -24,8 +22,8 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 
-from . import annals, arts as arts_mod, calendar, insight_fx, insights, library, naming, rules, secret_recipes, sensing, team
-from .martial_arts import MAX_LEVEL, QUALITIES, Insight, MartialArt, generate_from_name, power_scale, scaled, shown_creator
+from . import annals, arts as arts_mod, calendar, insight_fx, insights, library, naming, rules, secret_recipes, sensing
+from .martial_arts import Insight, MartialArt, shown_creator
 from .models import Content, PresetRecipe
 from .ollama_client import OllamaClient
 from .rules import add_chronicle, add_rumor, season_one
@@ -34,10 +32,8 @@ from .world_state import WorldStateStore
 
 FUSE_PREFIX = "融|"  # 舊配方鍵（武學＋意境）：這一版之前登記的照舊讀得到，不再登記新的
 MERGE_PREFIX = "合|"
-BLEND_PREFIX = "兼|"
+BLEND_PREFIX = "兼|"  # 舊配方鍵（武學＋武學，2026-10-21 拿掉）：以前登記的照舊讀得到
 KINDS = ("內功", "武學")
-LOW_ONLY = {"下品": 100.0, "中品": 0.0, "上品": 0.0, "絕學": 0.0}  # 全服登記的那一份一律是下品（品級在玩家自己身上）
-BLEND_TOP = "上品"  # 武學合成最高合到的品級（絕學要契機）
 
 
 # 合不了的原因帶兩三個字的 short（煉製頁清單上標用）；類別搬到 arts，裝槽的拒絕也帶得上
@@ -306,15 +302,12 @@ def rename_echo(state: GameState, thing_id: str, name: str) -> None:
 
 
 def can_forge(state: GameState, content: Content) -> bool:
-    """現在有沒有可能開爐（狀態列提示用）：持有沒滿，而且付得起一次武學合成（有兩門）或一次意境合成（有意境）。
-    只看結構、不查全服配方表。"""
+    """現在有沒有可能開爐（狀態列提示用）：持有沒滿，而且付得起一次意境合成（手上至少兩個意境）。只看結構、不查全服配方表。"""
     cfg = content.config
     if library.full(state, content):
         return False
     xinde, stamina = state.player.stats.get("xinde", 0), state.player.stamina
-    can_merge = bool(state.player.insights) and xinde >= cfg.merge_xinde and stamina >= cfg.merge_stamina
-    can_blend = len(library.owned_arts(state)) >= 2 and xinde >= cfg.fuse_xinde and stamina >= cfg.fuse_stamina
-    return can_merge or can_blend
+    return len(state.player.insights) >= 2 and xinde >= cfg.merge_xinde and stamina >= cfg.merge_stamina
 
 
 def _named(
@@ -358,194 +351,6 @@ def _secret_lines(
         add_chronicle(state, cfg.chronicle.format(who=who, thing=thing))
         lines.append(rumor)
     return lines
-
-
-# ── 武學合成（武學＋武學）──────────────────────────────────
-
-
-def blend_grade(state: GameState, content: Content, a: str, art_a: MartialArt, b: str, art_b: MartialArt) -> tuple[str, bool]:
-    """合出來的品級（定案第三節）：兩門自己那一份取高（絕學算上品）；兩門都練到第十成、意境槽都裝滿（寫死的武學算滿）再升一品，
-    最高上品。回（品級, 有沒有升）。art_a、art_b 要是 team.player_art 那一份。"""
-    top = QUALITIES.index(BLEND_TOP)
-    grade = max(min(QUALITIES.index(art_a.quality), top), min(QUALITIES.index(art_b.quality), top))
-    ripe = all(
-        (library.level_of(state, art_id) or 1) >= MAX_LEVEL
-        and (arts_mod.fixed(content, art_id) or None not in arts_mod.slots_of(state, content, art))
-        for art_id, art in ((a, art_a), (b, art_b))
-    )
-    if ripe and grade < top:
-        return QUALITIES[grade + 1], True
-    return QUALITIES[grade], False
-
-
-FIXED_LINE = "【{name}】的路數是寫死的，拆不開，不能拿來合成。"  # 待 joy 潤
-
-
-def blend_problem(
-    state: GameState, content: Content, world: WorldStateStore, a: str, b: str, partner: Partner | None = None,
-) -> str | None:
-    """不能把兩門武學合在一起的原因；None＝可以。「你已經有了」排在花費與持有上限之前（同一爐連按兩下不重複扣）。"""
-    owned = library.owned_arts(state)
-    if a == b:
-        return _refuse("要放兩門不同的武學。", "同一門")
-    if (a not in owned and not _lent(partner, a)) or (b not in owned and not _lent(partner, b)):
-        return "兩門都要是你會的武學。"
-    art_a, art_b = team.player_art(state, content, world, a), team.player_art(state, content, world, b)
-    if art_a is None or art_b is None:
-        return "找不到它的資料。"
-    for art_id, art in ((a, art_a), (b, art_b)):  # 定案第一節：寫死的武學（本命、部下的上品）不能當料
-        if arts_mod.fixed(content, art_id):
-            return _refuse(FIXED_LINE.format(name=art.name), "不能當料")
-    secret = secret_recipes.match_blend(state, content, world, a, art_a, b, art_b)
-    known = world.lookup_recipe(secret_recipes.key(secret) if secret is not None else blend_key(a, b))
-    if known is not None and known.id in owned:
-        return _refuse(f"這兩門合出來還是【{known.name}】，你已經有了——換一門吧。", "已經有了")
-    if library.full(state, content):
-        return _full_line(state, content)
-    xinde, stamina = _price(content, partner, "fuse")
-    problem = _xinde_line(state, xinde, "合成")
-    return problem if problem is not None else _stamina_line(state, stamina, "合成")
-
-
-def _blend_messages(a: MartialArt, b: MartialArt, kind: str) -> list[dict[str, str]]:
-    a_note, b_note = _dash_note(a), _dash_note(b)
-    return [
-        {"role": "system", "content": naming.SYSTEM_PROMPT},
-        {"role": "user", "content": (
-            f"第一門：{a.kind}【{a.name}】（{_attr_text(a)}）{a_note}\n"
-            f"第二門：{b.kind}【{b.name}】（{_attr_text(b)}）{b_note}\n"
-            f"兩門合而為一，衍生出一門新的{kind}；名字要看得出是兩門合起來的。\n\n{naming.FORMAT_RULES}"
-        )},
-    ]
-
-
-def blend_kind(a: str, art_a: MartialArt, b: str, art_b: MartialArt, take: str | None) -> tuple[str, str]:
-    """合出來的種類跟著哪一門（定案第三節：玩家在兩門裡挑；沒挑跟第一門）：回（種類, 跟著的那一門 id）。"""
-    follow = b if take == b else a
-    art = art_b if follow == b else art_a
-    return art.kind, follow
-
-
-def _claim_blend(
-    state: GameState, content: Content, world: WorldStateStore, key: str, kind: str, follow: str, a: str, b: str,
-    partner: Partner | None, name: str | None, note: str, secret=None,
-) -> tuple[MartialArt | None, bool]:
-    """登記新武學（門面）：全服那一份一律下品；相容屬性＝兩門來源合起來（任一門兼容並蓄就兼容並蓄），
-    屬性＝相容屬性的第一個；種類跟著 follow 那一門（base，兵器種類照它推），兩門來源記在 parents。
-    秘方合中的名字照內容、記 secret。名字被占用就換下一個再試。"""
-    tianji, _ = recipe_seed(world, key)
-    affinity = blend_affinity(team.resolve_art(a, content, world), team.resolve_art(b, content, world))
-    scale = blend_power_scale(content, team.resolve_art(a, content, world), team.resolve_art(b, content, world))
-    colors = blend_colors(team.resolve_art(a, content, world), team.resolve_art(b, content, world), key, tianji, content)
-    for candidate_name in _candidates(content, world, key, kind, tianji, name):
-        candidate = generate_from_name(candidate_name, kind, candidate_name, tianji, weights=LOW_ONLY, attribute="無")
-        candidate = candidate.model_copy(update={
-            "origin": "fused", **_makers(state, partner), "attribute": affinity[0] if affinity else "", "affinity": affinity,
-            "note": note if candidate_name == name else "",
-            "insight": None, "insight_attr": None, "base": follow, "parents": sorted([a, b]), "lean": "無",
-            "traits": [], "special": None, "secret": secret.id if secret is not None else None, "slot_colors": colors,
-        })
-        candidate = scaled(candidate, scale)
-        art, first = world.claim_recipe(key, candidate)
-        if art is not None:
-            return art, first
-    return None, False
-
-
-def blend_power_scale(content: Content, a: MartialArt | None, b: MartialArt | None) -> float:
-    """合出來的基本威力倍數：兩門來源（全服登記那一份）的倍數平均再加 blend_power_step，夾在 power_scale_range；
-    越往下合、來源越好，底子越厚（Joy 2026-10-21 要基本威力，以前是名字雜湊）。"""
-    low, high = content.config.arts.power_scale_range
-    parts = [power_scale(x) for x in (a, b) if x is not None] or [1.0]
-    return round(max(low, min(high, sum(parts) / len(parts) + content.config.arts.blend_power_step)), 3)
-
-
-def blend_affinity(a: MartialArt | None, b: MartialArt | None) -> list[str]:
-    """合出來的相容屬性：兩門合起來（a 的在前、不重複）；任一門兼容並蓄（空的）就兼容並蓄。
-    （Joy 2026-10-20 同意「合起來」：越合越寬，給玩家理由去合。）"""
-    if a is None or b is None or not a.affinity or not b.affinity:
-        return []
-    return list(dict.fromkeys([*a.affinity, *b.affinity]))
-
-
-def blend_colors(a: MartialArt | None, b: MartialArt | None, key: str, tianji: int, content) -> list[list[str]]:
-    """合出來的每一格顏色：從兩門各自的格（照最多格數攤開）裡照配方鍵挑（不重複挑同一格），全服同一個配方一樣。
-    兩門都沒寫格色、相容屬性也都空（兩門基礎武學）時回空清單（照相容屬性＝什麼都收）。"""
-    if a is None or b is None:
-        return []
-    n = max(content.config.arts.slots.values() or [4])
-    pool = arts_mod.colors_of(a, n) + arts_mod.colors_of(b, n)
-    if all(not c for c in pool):
-        return []
-    rng = random.Random(f"合格|{tianji}|{key}")
-    picked = rng.sample(range(len(pool)), min(n, len(pool)))
-    return [list(pool[i]) for i in picked]
-
-
-RIPE_LINE = "兩門都已練到極處、意境滿槽，底子更上一層。"  # 待 joy 潤
-RELEASED_LINE = "{names}從兩門上拆了下來，回到你心裡。"  # 待 joy 潤
-NO_NAMES = "爐火熄了，這一次什麼也沒合成（名字都被用掉了，再試一次）。"
-
-
-def blend(
-    state: GameState, content: Content, world: WorldStateStore, client: OllamaClient | None,
-    a: str, b: str, proposed: tuple[str | None, str] | None = None, rng: random.Random | None = None,
-    partner: Partner | None = None, take: str | None = None,
-) -> tuple[MartialArt | None, list[str]]:
-    """武學＋武學 → 新武學，兩門都留著；不能合時回 (None, [原因])，什麼都不收、不登記。
-    take：種類跟著哪一門（a 或 b 的 id；沒給跟第一門）。rng 不用了（不擲品質），留著讓呼叫端不必改。
-    進來先整個重驗（A 段之後狀態可能變了），再登記、收費。"""
-    problem = blend_problem(state, content, world, a, b, partner)
-    if problem is not None:
-        return None, [problem]
-    art_a, art_b = team.player_art(state, content, world, a), team.player_art(state, content, world, b)
-    kind, follow = blend_kind(a, art_a, b, art_b, take)
-    key = blend_key(a, b)
-    secret = secret_recipes.match_blend(state, content, world, a, art_a, b, art_b)
-    if secret is not None:
-        key = secret_recipes.key(secret)
-    art, first = world.lookup_recipe(key), False
-    if art is None:
-        if secret is not None:
-            name = None if world.is_character_name(secret.name) else secret.name
-            art, first = _claim_blend(state, content, world, key, kind, follow, a, b, partner, name, secret.note, secret)
-        else:
-            name, note = _named(client, content, world, _blend_messages(art_a, art_b, kind), proposed)
-            art, first = _claim_blend(state, content, world, key, kind, follow, a, b, partner, name, note)
-        if art is None:
-            return None, [NO_NAMES]
-    lead, follow_art = (art_a, art_b) if a <= b else (art_b, art_a)  # 照 id 排，跟 parents、功法卡的「由【甲】與【乙】衍生」同一個先後（FB-073）
-    if art.id in library.owned_arts(state):  # 先被別人登記的，剛好是你已經有的：不收錢
-        return None, [f"這兩門合出來還是【{art.name}】，你已經有了——換一門吧。"]
-    grade, ripe = blend_grade(state, content, a, art_a, b, art_b)
-    head = f"你把【{lead.name}】與【{follow_art.name}】合而為一，衍生出一門{art.kind}【{art.name}】（{grade}）！"
-    msgs = [head + _arrival(art, first, state.player.name, partner)]
-    if ripe:
-        msgs.append(RIPE_LINE)
-    msgs += _secret_lines(state, content, world, secret, f"【{art.name}】", first, art)
-    released = []
-    for art_id in (a, b):
-        if art_id in library.owned_arts(state):
-            released += arts_mod.release_all(state, art_id)
-    if released:
-        names = "".join(f"「{insights.resolve(i, content, world, state).name if insights.resolve(i, content, world, state) else i}」" for i in released)
-        msgs.append(RELEASED_LINE.format(names=names))
-    msgs += _charge(state, *_price(content, partner, "fuse"))
-    echo(state, content, art, first)
-    if first:
-        annals.note(state, content, annals.DEED, f"江湖上第一個合出【{art.name}】。", 3)
-    return art, msgs + _store_forged(state, content, world, art, grade)
-
-
-def _store_forged(
-    state: GameState, content: Content, world: WorldStateStore, art: MartialArt, grade: str | None = None,
-) -> list[str]:
-    """合成出來的新武學放哪：同 library.store_art（grade 是自己那一份的品級）；進了功法庫的再接跟身上那門的比較與一句指路。"""
-    stored = library.store_art(state, art, grade)
-    if not stored or art.id not in state.player.arts:
-        return stored
-    note = team.compare_with_worn(state, content, world, art)
-    return stored + ([note] if note else []) + [library.SWITCH_HINT]
 
 
 # ── 意境合成（意境＋意境）──────────────────────────────────
@@ -747,33 +552,20 @@ def _merge_own(
 
 # ── A 段 ─────────────────────────────────────────────────
 
-FUSE_GONE = "意境不再拿來合武學了：到修練頁把它裝進武學的意境槽。"  # 待 joy 潤
-
-
-def fuse_problem(state: GameState, content: Content, world: WorldStateStore, art_id: str, insight_id: str, partner: Partner | None = None) -> str:
-    """武學＋意境的合成拿掉了（武學重構）：一律回這一句。"""
-    return _refuse(FUSE_GONE, "改裝槽")
+# 爐裡只合意境（Joy 2026-10-21 拿掉武學＋武學、武學＋意境）：放了武學、放不到兩個意境、論武拿武學出來時的那一句（待 joy 潤）
+ART_IN_FURNACE = "爐裡只合意境：武學不再拿來合，意境到「修練」去裝進武學的槽。"
+TWO_INSIGHTS = "放兩個意境：不同的合出新的意境，同一種的兩份是揣摩。"
+DISCUSS_ARTS_GONE = _refuse("論武只合意境，武學不再拿來合了。", "只合意境")
 
 
 def forge_request(
     state: GameState, content: Content, world: WorldStateStore, art_id: str | None, insight_ids: list[str],
-    other_art: str | None = None, partner: Partner | None = None, take: str | None = None,
+    partner: Partner | None = None,
 ) -> naming.NamingRequest | None:
     """A 段（行動鎖內、很快；Game.forge_request 的本體）：這一爐要不要模型取名？要就開一張單子給 B 段（naming.generate）。
-    不要的時候回 None：放的不是兩門武學、也不是兩個意境；這一爐會被拒絕；配方這一季已經有人登記；秘方（名字內容寫好了）；
+    不要的時候回 None：放的不是兩個意境（煉製只剩意境合成）；這一爐會被拒絕；配方這一季已經有人登記；秘方（名字內容寫好了）；
     同一個意境合自己（加深強度、不取名）。只讀，不改任何東西。"""
-    if art_id and other_art and not insight_ids:
-        if blend_problem(state, content, world, art_id, other_art, partner) is not None:
-            return None
-        if world.lookup_recipe(blend_key(art_id, other_art)) is not None:
-            return None
-        art_a = team.player_art(state, content, world, art_id)
-        art_b = team.player_art(state, content, world, other_art)
-        if secret_recipes.match_blend(state, content, world, art_id, art_a, other_art, art_b) is not None:
-            return None
-        kind, _ = blend_kind(art_id, art_a, other_art, art_b, take)
-        return naming.NamingRequest("blend", blend_key(art_id, other_art), kind, _blend_messages(art_a, art_b, kind))
-    if not art_id and not other_art and len(insight_ids) == 2:
+    if not art_id and len(insight_ids) == 2:
         a, b = insight_ids
         if a == b or merge_problem(state, content, world, a, b, partner) is not None:
             return None
