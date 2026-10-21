@@ -2599,7 +2599,8 @@ class Game:
         power = cfg.hit_power[min(hit.tier, len(cfg.hit_power) - 1)]
         if me.tavern_guard_until > self.now:
             power *= cfg.guard_scale
-        killer = max(1.0, mine * power)
+        # 殺手照你自己的威力浮上來（同江湖水漲）：玉璽碎片的戰力不浮上去（改版），沒碎片時跟 mine 一樣
+        killer = max(1.0, self._spar_power(self, self, seal=False) * power)
         result = encounter.resolve_encounter(mine, killer, rng)
         w.raided[name_key(me.name)] = w.time
         hit.done = True
@@ -5567,26 +5568,26 @@ class Game:
 
     # ── 全服即時多人戰鬥（設計討論：集結選陣營→逐幕逐回合鎖步）──────────
 
-    def _battle_power(self) -> float:
+    def _battle_power(self, *, seal: bool = True) -> float:
         """玩家自己目前的武學威力快照，加入戰鬥時存一份進 BattleParticipant.power，
         之後戰鬥結算的威力抵銷只讀這份快照，不會、也不能臨時去查任何人的角色資料
         （見 battle_instance.py::BattleParticipant 的欄位註解）。快照吃本人的加成（臂力、根骨，武學與成長設計 8.4）。
-        同伴不進決戰（人物資質設計 14.5），這裡照舊只算本人。"""
+        同伴不進決戰（人物資質設計 14.5），這裡照舊只算本人。seal=False 不含玉璽碎片的戰力（奪璽單挑、江湖水漲；team.player_boost）。"""
         arts = team.team_arts(self.state, self.content, self.world)
         return encounter.member_power(
-            self.state.player.member, arts, boost=team.player_boost(self.state, self.content, self.world),
+            self.state.player.member, arts, boost=team.player_boost(self.state, self.content, self.world, seal=seal),
         )
 
-    def _battle_scores(self, mounted: bool = True) -> dict[str, float]:
+    def _battle_scores(self, mounted: bool = True, *, seal: bool = True) -> dict[str, float]:
         """加入戰局時的每招份量快照（戰鬥系統 3.4）：實力看武學威力（_battle_power），適性看身上武學與內功的屬性；
         騎著馬時強攻、奇襲再乘（1＋騎兵）（裝備四欄 5.9，_battle_mount），帶著部下再乘（1＋部下）（_battle_troops）。
         mounted=False 不算馬也不算部下：單人頭目戰用同一份份量，騎兵與部下只在全服決戰（設計 2.1；PM 2026-10-12）。只有加入戰局的那個玩家自己的 Game 能算（排程的 Game.for_world 玩家是空白的，
-        不能在 world_tick 裡呼叫）。"""
+        不能在 world_tick 裡呼叫）。seal 見 _battle_power。"""
         p = self.state.player
         outer = team.player_art(self.state, self.content, self.world, p.member.wugong_id)
         inner = team.player_art(self.state, self.content, self.world, p.member.neigong_id)
         return battle_instance.move_scores(
-            self.content.config.battle, self._battle_power(),
+            self.content.config.battle, self._battle_power(seal=seal),
             outer.attribute if outer else None, inner.attribute if inner else None, role=self._battle_role(),
             cavalry=self._battle_mount()[1] if mounted else 0.0, troops=self._battle_troops()[1] if mounted else 0.0,
         )
@@ -5620,10 +5621,21 @@ class Game:
     def _battle_marks(self) -> dict:
         """快照進 BattleParticipant 的「這一季叛投過」與「新手期」（玉璽碎片設計 4.6：挑挑戰者只讀快照），
         與稱號（名聲 2.5、4.5：本場戰功、論功那一句寫；名望名動一方起、善惡第 1 段起，開關關著是空的）。"""
-        return {"turncoat": self.state.player.defected, "newbie": roster.newbie(self.state, self.content),
-                "kit": team.self_side(self.state, self.content, self.world, mounted=True, troops=True),  # 本命戰法（第二批）
-                "renown": renown.titles(self.state, self.content, fame_from=2),
-                "escort": self._escort_carry()}  # 隨你上陣的歷史武將（歷史武將同行第五節）
+        marks = {"turncoat": self.state.player.defected, "newbie": roster.newbie(self.state, self.content),
+                 "kit": team.self_side(self.state, self.content, self.world, mounted=True, troops=True),  # 本命戰法（第二批）
+                 "renown": renown.titles(self.state, self.content, fame_from=2),
+                 "escort": self._escort_carry()}  # 隨你上陣的歷史武將（歷史武將同行第五節）
+        bare = self._seal_bare()
+        if bare is not None:  # 玉璽碎片改版：只有戴著碎片才多這一鍵（沒碎片、改版關著時這一包一個字不變）
+            marks["seal_bare"] = bare
+        return marks
+
+    def _seal_bare(self) -> battle_instance.SealBare | None:
+        """戴著玉璽碎片（改版開著，treasures.power_scale 不是 1）時，不含碎片戰力的威力與份量（快照進 BattleParticipant.seal_bare，
+        奪璽單挑用）；沒有是 None。份量照加入那一刻的算法（騎兵、部下照乘，單挑時 seal_duel.unmounted 再拿掉）。"""
+        if treasures.power_scale(self.state, self.content) == 1.0:
+            return None
+        return battle_instance.SealBare(power=self._battle_power(seal=False), scores=self._battle_scores(seal=False))
 
     def _escort_choices(self) -> list[str]:
         """加入決戰時挑得到的同伴：名下的（歷史武將同行第五節）。開關關著是空的（照舊一下就加入）。"""
@@ -5753,12 +5765,13 @@ class Game:
         if me is None or me.scores or me.eliminated:
             return
         scores, road, role = self._mandate_weight(definition, self._battle_scores()), self._battle_road(), self._battle_role()
-        gear = self._battle_gear()
+        gear, bare = self._battle_gear(), self._seal_bare()
 
         def _fill(b: battle_instance.BattleInstance) -> None:
             mine = b.participants.get(name)
             if mine is not None and not mine.scores:  # 鎖裡再看一次：別的路徑剛補過就不蓋掉
                 mine.scores = dict(scores)
+                mine.seal_bare = mine.seal_bare or bare  # 玉璽碎片改版：份量一起補的，不含碎片的那一份也補
                 mine.attribute = mine.attribute or road
                 mine.role = mine.role or role
                 mine.mount, mine.cavalry = mine.mount or gear["mount"], mine.cavalry or gear["cavalry"]
@@ -6485,9 +6498,9 @@ class Game:
                 kin = self._kin(state)
                 if roster.newbie(kin.state, self.content) or prologue_rules.active(kin.state, self.content):
                     continue
-                out.append((name, 0, seal_duel.side_from(
-                    name, None, kin._battle_power(), kin._battle_scores(mounted=False), kin._battle_role(), kin._battle_neili_cap(),
-                    kit=team.self_side(kin.state, self.content, kin.world),
+                out.append((name, 0, seal_duel.side_from(  # 不含玉璽碎片的戰力（改版：奪璽單挑不吃；手上有碎片的本來就擋掉了）
+                    name, None, kin._battle_power(seal=False), kin._battle_scores(mounted=False, seal=False), kin._battle_role(),
+                    kin._battle_neili_cap(), kit=team.self_side(kin.state, self.content, kin.world),
                 )))
         return out
 
@@ -6501,9 +6514,9 @@ class Game:
         fresh = opened is not None and (seen is None or seen < opened)
         if fresh and game is not self:
             game = self._kin(new_game_state(self.content, name))
-        return seal_duel.side_from(
-            name, self.world.faction_of(name), game._battle_power(), game._battle_scores(mounted=False), game._battle_role(),
-            game._battle_neili_cap(), fresh=fresh, kit=team.self_side(game.state, self.content, game.world),
+        return seal_duel.side_from(  # 不含玉璽碎片的戰力（改版：奪璽單挑不吃，碎片才搶得走）
+            name, self.world.faction_of(name), game._battle_power(seal=False), game._battle_scores(mounted=False, seal=False),
+            game._battle_role(), game._battle_neili_cap(), fresh=fresh, kit=team.self_side(game.state, self.content, game.world),
         )
 
     def _my_seal_duel(self) -> tuple[SealDuel | None, str | None]:
@@ -8467,7 +8480,8 @@ class Game:
         squad = figures.squad_of(s, c, fid)
         if not rise.on(c):
             return squad
-        power = team.power_vs(s, c, self.world, squad, fresh=True, terrain=False)  # 地利不浮上去（武學隨地理環境 2.1）
+        # 地利不浮上去（武學隨地理環境 2.1）；玉璽碎片的戰力也不浮上去（改版 PM 五之一 2）
+        power = team.power_vs(s, c, self.world, squad, fresh=True, terrain=False, seal=False)
         level = rise.big(c, squad.difficulty, power, s.player.figure_wins.get(fid, 0))
         return squad if level == squad.difficulty else squad.model_copy(update={"difficulty": round(level, 1)})
 
@@ -8477,7 +8491,7 @@ class Game:
         s, c = self.state, self.content
         if not rise.on(c) or not self.is_big(squad) or prologue_rules.active(s, c):
             return squad
-        level = rise.big(c, squad.difficulty, team.power_vs(s, c, self.world, squad, fresh=True, terrain=False))  # 地利不浮
+        level = rise.big(c, squad.difficulty, team.power_vs(s, c, self.world, squad, fresh=True, terrain=False, seal=False))  # 地利、碎片不浮
         return squad if level == squad.difficulty else squad.model_copy(update={"difficulty": round(level, 1)})
 
     def _challenge(self, fid: str) -> list[str]:
@@ -10417,10 +10431,11 @@ class Game:
         return msgs
 
     @staticmethod
-    def _spar_power(who: Game, against: Game) -> float:
-        """這個人切磋時的威力：只算本人（同伴、部下不上場），照對手身上那一門武學的屬性算相剋，吃自己的氣血係數與加成。"""
+    def _spar_power(who: Game, against: Game, *, seal: bool = True) -> float:
+        """這個人切磋時的威力：只算本人（同伴、部下不上場），照對手身上那一門武學的屬性算相剋，吃自己的氣血係數與加成。
+        seal=False 不含玉璽碎片的戰力（買兇的殺手照它浮上來，同江湖水漲）。"""
         s, c, w = who.state, who.content, who.world
-        members, conditions, boosts = team._fighters(s, c, w)
+        members, conditions, boosts = team._fighters(s, c, w, seal=seal)
         return encounter.member_power(
             members[0], team.team_arts(s, c, w), team.worn_attribute(against.state, c, against.world), conditions[0], boosts[0],
         )
@@ -11041,7 +11056,8 @@ class Game:
             boss=boss.id, foe=duel_rules.foe_index(boss, p.faction), edge=cfg.start, hp=now, hp_cap=cap, hp_start=now,
             power=power, scores=self._battle_scores(mounted=False), role=self._battle_role(),
             # 頭目戰不算騎兵：設計 2.1 的三個用途沒有頭目戰
-            difficulty=rise.duel(c, boss.difficulty, power, p.duel_tally.get(key, 0)),  # 江湖水漲：照你的武學威力浮上來
+            # 江湖水漲：照你的武學威力浮上來；玉璽碎片的戰力不浮上去（改版 PM 五之一 2），沒碎片時跟 power 一樣
+            difficulty=rise.duel(c, boss.difficulty, self._battle_power(seal=False), p.duel_tally.get(key, 0)),
         )
         p.duel_tally[key] = p.duel_tally.get(key, 0) + 1
         if cfg.per_boss_week:  # 21 天季另記這一週的帳（正式季整合 2.5）；季的帳照記，江湖水漲照它算

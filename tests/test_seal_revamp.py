@@ -305,3 +305,143 @@ def test_xuanniu_cuts_the_audience_bar_as_its_own_line(content, world):
     assert rules.audience_bar(game.state, content, "mate") == 15
     content.config.seal.revamp.enabled = False
     assert rules.audience_parts(game.state, content, "mate").discounts == []
+
+
+# ── Task 4：戰力 ×1.10；奪璽單挑、江湖水漲不吃 ──
+
+def test_the_holder_is_ten_percent_stronger_in_every_fight(content, world):
+    """戰力乘在本人的 Boost.factor（team.player_boost）：一般的仗（power_vs）、決戰與頭目戰、擂台、截殺的快照（_battle_power）都吃；
+    seal=False 是不含碎片的那一份；開關關著一樣強。"""
+    from tianxia import team
+
+    revamp(content)
+    game, plain = _two(content, world, "yunzhuan")
+    assert plain._battle_power() > 0
+    assert game._battle_power() == pytest.approx(plain._battle_power() * 1.10)
+    assert game._battle_power(seal=False) == pytest.approx(plain._battle_power())
+    assert game._battle_scores()["強攻"] > plain._battle_scores()["強攻"]
+    assert game._battle_scores(seal=False) == plain._battle_scores()
+    squad = next(iter(content.squads.values()))
+    ours, theirs = (team.power_vs(g.state, content, world, squad) for g in (game, plain))
+    assert ours == pytest.approx(theirs * 1.10)
+    assert team.power_vs(game.state, content, world, squad, seal=False) == pytest.approx(theirs)
+    content.config.seal.revamp.enabled = False
+    assert game._battle_power() == pytest.approx(plain._battle_power())
+
+
+def test_companions_do_not_take_the_power(content, world):
+    from test_chuangong import _with_mate
+
+    from tianxia import team
+
+    revamp(content)
+    game, _ = _two(content, world, "yunzhuan")
+    _with_mate(game)
+    boosts, bare = team.team_boosts(game.state, content, world), team.team_boosts(game.state, content, world, seal=False)
+    assert len(boosts) == 2
+    assert boosts[0].factor == pytest.approx(bare[0].factor * 1.10)
+    assert boosts[1] == bare[1]  # 同伴照舊
+
+
+def test_joining_a_battle_snapshots_a_bare_copy_for_the_duel(content, world):
+    """決戰加入時的份量快照照吃戰力；另外快照一份不含碎片的（seal_bare，只在有碎片時記），奪璽單挑的快照用它，跟沒碎片時一樣。
+    沒碎片的人那一包標記一個字不變（沒有 seal_bare 這個鍵）。"""
+    from tianxia import battle_instance, seal_duel
+    from tianxia.battle_instance import BattleInstance
+
+    revamp(content)
+    game, plain = _two(content, world, "yunzhuan")
+    marks = game._battle_marks()
+    assert "seal_bare" not in plain._battle_marks()
+    assert marks["seal_bare"].power == pytest.approx(plain._battle_power())
+    assert marks["seal_bare"].scores == plain._battle_scores()
+    b = BattleInstance(battle_id="changshe_fire")
+    battle_instance.join_faction(b, "懷璽", "guan", 300.0, game._battle_power(), scores=game._battle_scores(), **marks)
+    battle_instance.join_faction(b, "平人", "guan", 300.0, plain._battle_power(), scores=plain._battle_scores(), **plain._battle_marks())
+    holder, other = b.participants["懷璽"], b.participants["平人"]
+    assert holder.power == pytest.approx(other.power * 1.10) and holder.scores["強攻"] > other.scores["強攻"]
+    mine, theirs = seal_duel.side_from_participant(holder, "guan"), seal_duel.side_from_participant(other, "guan")
+    assert mine.power == pytest.approx(theirs.power) and mine.scores == theirs.scores
+
+
+def test_a_holder_off_the_field_duels_without_the_power(content, world):
+    """沒參戰的持有者（Game._seal_side_of）現算的那一份照不含碎片的。"""
+    revamp(content)
+    game, plain = _two(content, world, "yunzhuan")
+    side = game._seal_side_of("懷璽")
+    assert side.power == pytest.approx(plain._battle_power())
+    assert side.scores == plain._battle_scores(mounted=False)
+
+
+def test_rising_difficulty_floats_on_the_power_without_the_shard(content, world):
+    """江湖水漲（PM 五之一 2）：劇情大場面與頭目戰的浮動難度照不含碎片的威力算——跟沒碎片的人一樣難，打起來強一成。"""
+    from test_duel import _boss
+
+    from tianxia.models import Squad
+
+    revamp(content)
+    content.config.rise.enabled = True
+    content.config.train_event_chance = 0.0
+    content.duels = {"lake_boss": _boss(difficulty=1)}
+    game, plain = _two(content, world, "yunzhuan")
+    big = Squad(id="試頭目", name="試頭目", difficulty=1, boss=True)
+    for g in (game, plain):
+        g.state.player.tutorial_step = len(content.tutorial.steps)
+    assert plain._story_squad(big).difficulty > 1
+    assert game._story_squad(big).difficulty == pytest.approx(plain._story_squad(big).difficulty)
+    seen = []
+    for g in (game, plain):
+        g.state.player.location = "lake"
+        g._duel_start(content.duels["lake_boss"])
+        seen.append((g.state.player.duel.difficulty, g.state.player.duel.power))
+    assert seen[0][0] == pytest.approx(seen[1][0]) and seen[0][1] == pytest.approx(seen[1][1] * 1.10)
+
+
+def test_a_hired_killer_scales_off_the_power_without_the_shard(content, world):
+    """酒肆買兇的殺手照被找的人自己的威力浮上來（同江湖水漲）：照不含碎片的那一份浮，打起來照含的。"""
+    from unittest import mock
+
+    from tianxia import encounter
+    from tianxia.state import TavernHit
+
+    revamp(content)
+    seen = []
+
+    def spy(power, difficulty, rng, *args, **kwargs):
+        seen.append((power, difficulty))
+        return _lost()
+
+    for game in _two(content, world, "yunzhuan"):
+        hit = TavernHit(id=1, client="雇主", target=game.state.player.name, tier=0, price=10, place="town", placed_real=0.0,
+                        until_real=1e12)
+        with mock.patch.object(encounter, "resolve_encounter", side_effect=spy):
+            game._tavern_hit_fight(hit, random.Random(0))
+    assert seen[0][1] == pytest.approx(seen[1][1]) and seen[0][0] == pytest.approx(seen[1][0] * 1.10)
+
+
+@pytest.mark.slow
+def test_a_figure_challenge_floats_on_the_power_without_the_shard(world):
+    """挑戰大勢人物本人（大場面，rise.big 照 figure_wins）：同一個人有碎片、沒碎片，浮上來的難度一樣；勝算的威力照含碎片的。"""
+    from test_rise import _player
+
+    from tianxia import figures, team
+
+    c = real_content()
+    c.config.auto_open_first_season = True
+    c.config.train_event_chance = 0.0
+    c.config.terrain_arts.enabled = False
+
+    def _give(st):
+        reg = seal.filled(st.seal, c)
+        reg.shards["chishou"].state, reg.shards["chishou"].holder, reg.shards["chishou"].since_season = "held", "官甲", 0
+
+    world.mutate(_give)
+    game = _player(c, world, mates=("guanyu", "zhangfei"))
+    assert game.state.player.heirloom is not None
+    base = figures.squad_of(game.state, c, "bocai")
+    risen = game._figure_squad("bocai").difficulty
+    full = team.power_vs(game.state, c, world, base, fresh=True, terrain=False)
+    bare = team.power_vs(game.state, c, world, base, fresh=True, terrain=False, seal=False)
+    assert full > bare and risen == pytest.approx(bare * c.config.rise.big_scale, abs=0.1)
+    game.state.player.heirloom = None
+    assert game._figure_squad("bocai").difficulty == pytest.approx(risen)

@@ -120,6 +120,15 @@ def escort_key(owner: str) -> str:
     return ESCORT_KEY.format(owner=owner)
 
 
+class SealBare(BaseModel):
+    """不含玉璽碎片戰力的那一份快照（玉璽碎片改版第三章：奪璽單挑不吃戰力，碎片才搶得走）：加入那一刻的威力與每招份量
+    （同 power、scores 的算法，只是本人的加成不乘 treasures.power_scale）。決戰份量照 strength 算、不是威力的倍數，所以不能拿
+    scores 除回去，要另外快照（計畫開工核對第 2 條）。"""
+
+    power: float = 0.0
+    scores: dict[str, float] = Field(default_factory=dict)
+
+
 class BattleParticipant(BaseModel):
     name: str
     faction: str
@@ -180,6 +189,9 @@ class BattleParticipant(BaseModel):
     turncoat: bool = False  # 這一季叛投過（PlayerState.defected）
     newbie: bool = False  # 還在新手期（roster.newbie）
     escort: Escort | None = None  # 隨他上陣的歷史武將（歷史武將同行第五節）；沒派、舊資料是 None
+    # 玉璽碎片改版：加入那一刻身上有碎片（改版開著）時，不含碎片戰力的那一份（奪璽單挑的快照用，seal_duel.side_from_participant）；
+    # 沒碎片、改版關著、舊資料是 None（單挑照 power、scores）
+    seal_bare: SealBare | None = None
 
 
 # 跟按鈕一樣的字（battles.json 三幕的放手一搏按鈕）：只照按鈕抄一遍的不算寫了什麼（長社火攻那一場「最令人印象深刻的一幕」
@@ -547,18 +559,20 @@ def join_faction(
     scores: dict[str, float] | None = None, attribute: str = "", role: str = "", mount: str = "", cavalry: float = 0.0,
     troops: str = "", troop_bonus: float = 0.0, turncoat: bool = False, newbie: bool = False,
     kit: tactics.BoutSide | None = None, renown: list[str] | None = None, escort: Escort | None = None,
+    seal_bare: SealBare | None = None,
 ) -> None:
     """集結期選陣營；已經選過的人再選一次視為改選（還沒進入 active 都還能換）。escort 是隨他上陣的歷史武將（沒給＝沒派）。
     scores 是這個人此刻每招的份量快照（move_scores），之後戰局只讀這份；沒給＝每招 0。
     mount、cavalry 是加入那一刻騎的馬與騎兵加成（裝備四欄 5.9）；沒給＝沒騎馬。troops、troop_bonus 是帶的部下與份量加成（沒給＝沒帶）。
-    turncoat、newbie 是加入那一刻的快照（玉璽碎片設計 4.6）；沒給＝都不是。renown 是加入那一刻的稱號（名聲 2.5；沒給＝沒有）。"""
+    turncoat、newbie 是加入那一刻的快照（玉璽碎片設計 4.6）；沒給＝都不是。renown 是加入那一刻的稱號（名聲 2.5；沒給＝沒有）。
+    seal_bare 是不含玉璽碎片戰力的那一份（改版；沒給＝沒有碎片）。"""
     if instance.phase != "muster":
         return
     instance.participants[name] = BattleParticipant(
         name=name, faction=faction, neili=neili_cap, neili_cap=neili_cap, power=power, is_bot=is_bot,
         scores=dict(scores or {}), attribute=attribute, role=role, mount=mount, cavalry=cavalry,
         troops=troops, troop_bonus=troop_bonus, turncoat=turncoat, newbie=newbie, kit=kit, renown=list(renown or []),
-        escort=escort,
+        escort=escort, seal_bare=seal_bare,
     )
 
 
@@ -585,10 +599,10 @@ def auto_assign_latecomer(
     power: float = 0.0, is_bot: bool = False, faction: str | None = None, scores: dict[str, float] | None = None,
     attribute: str = "", role: str = "", mount: str = "", cavalry: float = 0.0, troops: str = "", troop_bonus: float = 0.0,
     turncoat: bool = False, newbie: bool = False, kit: tactics.BoutSide | None = None, renown: list[str] | None = None,
-    escort: Escort | None = None,
+    escort: Escort | None = None, seal_bare: SealBare | None = None,
 ) -> None:
     """集結期結束後才出現的人（包含機器人）：有指定陣營（劇本分陣營時的玩家、臨時投效的人投效的那一軍）就站自己那邊，
-    否則塞進兩軍裡人數較少的一方，維持陣營平衡。scores、mount、cavalry、troops、troop_bonus、turncoat、newbie、renown
+    否則塞進兩軍裡人數較少的一方，維持陣營平衡。scores、mount、cavalry、troops、troop_bonus、turncoat、newbie、renown、seal_bare
     同 join_faction。三方混戰助守的人（GUARD）照站守軍那一格。"""
     if faction not in sides(definition) and not (faction == GUARD and melee(instance)):
         armies = sides(definition)
@@ -598,7 +612,7 @@ def auto_assign_latecomer(
         name=name, faction=faction, neili=neili_cap, neili_cap=neili_cap, power=power, is_bot=is_bot,
         scores=dict(scores or {}), attribute=attribute, role=role, mount=mount, cavalry=cavalry,
         troops=troops, troop_bonus=troop_bonus, turncoat=turncoat, newbie=newbie, kit=kit, renown=list(renown or []),
-        escort=escort,
+        escort=escort, seal_bare=seal_bare,
     )
 
 
