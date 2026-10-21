@@ -211,7 +211,7 @@ def forge_preview(state: GameState, content: Content, world: WorldStateStore, in
         **empty, "kind": "合併", "made": "一個新的意境", "attribute": attribute, "quality": None, "slots": None,
         "fire": fire_of(_compound_grand(content, quality) if high is not None else 0),
         "traits": [{"name": n, "layers": 1, "maybe": True} for n in pool] + ([{"name": high.name, "layers": 0, "grand": True, "maybe": True}] if high is not None else []),
-        "depth": (f"擲一到兩個效果：{'或'.join(pool)}" + (f"，大獎〔{high.name}〕：{high.desc}" if high is not None else "")) if pool else None,
+        "depth": (f"擲一到兩個效果：{'或'.join(pool)}" + (f"，真意〔{high.name}〕：{high.desc}" if high is not None else "")) if pool else None,
         "known": _strip_note(_known_insight_recipe(state, world, fusion.merge_key(*insight_ids))),
         "cost": merge_cost, "problem": fusion.merge_problem(state, content, world, *insight_ids),
     }
@@ -495,7 +495,7 @@ def _force_choice(state: GameState, content: Content, world: WorldStateStore, ar
 
 
 def _look(content: Content, art: MartialArt) -> dict:
-    """自創那一門撞到了什麼（create.marks_of）：look 是卡上那一行，tier 是珍或神（兩樣以上）；不是自創、沒撞到都是空的。"""
+    """自創那一門撞到了什麼（create.marks_of）：look 是卡上那一行，tier 是品相凡佳珍神（撞到幾樣）；不是自創的都是空的。"""
     if not moves.is_own(content, art):
         return {"look": "", "tier": None}
     marks = create_mod.marks_of(art.slot_colors, art.move_fire, art.move_rare)
