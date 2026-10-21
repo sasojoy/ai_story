@@ -2837,7 +2837,7 @@ def main(argv: list[str] | None = None) -> None:
     print(f"資料庫：{default_path().resolve()}", flush=True)  # 跟 run_bots.py 要是同一個檔；TIANXIA_DB 設錯時一眼看得出來
     open_world().mutate(lambda st: seal.ensure_salt(st.seal))  # 玉璽碎片的密鹽（設計 5.13）：正式伺服器啟動時沒有就產生一次；測試與量表腳本不經過這裡，同樣的種子跑出同樣的結果
     print(profile_line(CONTENT, PROFILE), flush=True)  # TIANXIA_PROFILE 也是：兩個程式要用同一份設定
-    warning = calendar.profile_warning(CONTENT, open_world().get_season())  # 這一季蓋了第一季的章、這個程式卻沒開（FB-157）
+    warning = calendar.profile_warning(CONTENT, open_world().get_season(), open_world().season_phase())  # 這一季蓋了第一季的章、這個程式卻沒開（FB-157）；籌備中不印（FB-636）
     if warning:
         print(warning, flush=True)
     if divine.exhausted_now(open_world().divine_state(), open_world().get_season_number()):  # 新神器用完了（正式季整合 5.6）

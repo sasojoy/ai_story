@@ -153,11 +153,14 @@ SEASON21_MISMATCH = (
 )
 
 
-def profile_warning(content: Content, season: WorldState | None) -> str | None:
+def profile_warning(content: Content, season: WorldState | None, phase: str | None = None) -> str | None:
     """啟動時設定對不上的那一行（FB-157；server.main、run_bots.main 印）：這一季蓋了第一季的章、這個程式卻沒開第一季規則（換版時
     其中一個程式沒帶 TIANXIA_PROFILE=weekend）。反過來（開關剛打開、還在跑的季開季時是關的）是正常的換季過渡，不印。沒有季是 None。
-    季收了（休季）也不印：週末的季收了、主機故意不帶設定重開好開 14 天的下一季，這時印「要帶同一份設定」會叫人帶錯（審查）。"""
-    if season is None or season.ended:
+    季收了（休季）也不印：週末的季收了、主機故意不帶設定重開好開 14 天的下一季，這時印「要帶同一份設定」會叫人帶錯（審查）。
+    籌備中（phase 是 "preparing"，還沒開過任何一季）也不印（FB-636，PM 2026-10-21）：沒種過的季沒有章、種過沒開的季開季時才重新蓋章，
+    什麼都還沒換，印了只會叫主機端的人去還原備份；季真的在跑而且對不上才印。兩個程式啟動時把 open_world().season_phase() 傳進來；
+    不給 phase 的呼叫端（測試與腳本）照舊只看季收了沒。"""
+    if season is None or season.ended or phase == "preparing":
         return None
     if season.season21 != content.config.season21:  # 21 天季的章跟設定對不上（兩個方向）：season_weeks 不在章上，季曆整個對不上
         return SEASON21_MISMATCH
