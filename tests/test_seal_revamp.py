@@ -172,6 +172,20 @@ def test_got_and_assigned_lines_name_the_revamp_effects(content, world):
     assert any("戰力 ×1.1、體力回復 ×1.25" in line for line in lines), lines
 
 
+def test_chizhang_adds_ten_to_the_self_made_intent(content, world):
+    """合 develop（武學重構）時 PM 2026-10-21 定：合成不再擲品質，赤璋改版開著時改成「自創的意分 +10」（create.seal_points，
+    品級機率與底子照它挪）；子開關關著照 main 的 +5（test_seal.py）。說明句跟著寫自創的意分。"""
+    from tianxia import create
+
+    revamp(content)
+    game = holding(content, world, "chizhang")
+    assert create.seal_points(game.state, content) == 10
+    assert seal.shard_text(content, "chizhang") == "戰力 ×1.1、自創的意分 +10"
+    content.config.seal.revamp.enabled = False
+    assert create.seal_points(game.state, content) == 5
+    assert seal.shard_text(content, "chizhang") == "自創的意分 +5"
+
+
 # ── Task 3：新的掛點（螭首、金角、歸心的傳功、玄紐的求見）──
 
 def _two(content, world, shard):

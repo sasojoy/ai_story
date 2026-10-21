@@ -48,7 +48,8 @@ SEAL_POWER_TEXT = "戰力 ×{x}"  # 待 joy 潤：改版每片都有的那一半
 SEAL_REVAMP_TEXT = {  # 待 joy 潤：改版的常駐成長、生活效果（玉璽碎片改版第三章；數字照 Config.seal.revamp.effects）
     "injury": "一場仗變成內傷的 ×{x}", "talk_turns": "每位人物每日多談 {n} 輪", "audience": "求見門檻 −{n}",
     "practice": "練成的心得 ×{x}", "keep_silver": "落敗不失銀兩", "stamina_regen": "體力回復 ×{x}",
-    "fuse_points": "合成的造化 +{n}", "mate_exp": "同伴拿到的經驗 ×{x}", "chuangong": "傳功的心得 ×{x}",
+    # 赤璋：武學重構之後合成不擲品質，改加自創的意分（create.seal_points；PM 2026-10-21 合 develop 時定，改版 +10、關著照舊 +5）
+    "fuse_points": "自創的意分 +{n}", "mate_exp": "同伴拿到的經驗 ×{x}", "chuangong": "傳功的心得 ×{x}",
 }
 KEEP_SILVER = "懷中的『{shard}』護住了錢囊，銀兩分文未失。"  # 待 joy 潤：金角（改版）落敗那一下，戰報與江湖紀錄（Game._lose_silver）
 HEIRLOOM_LABEL = "傳承"  # 待 joy 潤：寶物段那一列的小標、角色卡那一行的開頭

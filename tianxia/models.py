@@ -2094,7 +2094,8 @@ class SealRevampTuning(_Strict):
     - effects：content/seal.json 每片 effects 清單的鍵 → 數字（設計第三章；全部【預設】，等 21 天的季試玩再調）。乘的效果
       （treasures.MULTIPLY）寫倍數、加的寫加多少：injury 螭首每場仗變成內傷的倍數、talk_turns 玄紐每位人物每日多談幾輪、
       audience 玄紐求見門檻抵幾點、practice 雲篆練成的心得倍數（熔煉照原價退）、keep_silver 金角落敗不失銀兩（1＝有，只管
-      Game._lose_silver，PM 五之一 3）、stamina_regen 承露體力回復倍數、fuse_points 赤璋合成的造化、mate_exp 歸心同伴經驗倍數、
+      Game._lose_silver，PM 五之一 3）、stamina_regen 承露體力回復倍數、fuse_points 赤璋自創的意分（create.seal_points；
+      武學重構之後合成不擲品質，PM 2026-10-21 合 develop 時改成自創的意分 +10）、mate_exp 歸心同伴經驗倍數、
       chuangong 歸心傳功的心得倍數。"""
 
     enabled: bool = True
