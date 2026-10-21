@@ -395,6 +395,9 @@ def _issue(state: GameState, content: Content, week: int, prefix: str, redraw: b
 # ── 記功與達成 ────────────────────────────────────────────
 
 PERSONAL = {"siege": "win", "defend": "duty", "intercept": "win", "escort": "convoy", "strike": "challenge"}
+# 領地爭奪：自家被戰書凍結的那一塊，攻城戰站守方、守住了（Game._settle_siege 替每一個守方的人記一次；FB-605）。那一塊守不動進度，
+# 在那裡出陣守、按守勢行動（duty）不算；別的守城地方反過來只認 duty
+SIEGE_GUARD = "siege_guard"
 
 
 def _today(content: Content, world: WorldState | None, side: str | None, how: str) -> list[str]:
@@ -407,7 +410,8 @@ def _today(content: Content, world: WorldState | None, side: str | None, how: st
 
 def defend_places(content: Content, world: WorldState | None, o: Order) -> list[str]:
     """領地爭奪在這一季生效時，這道守城軍令記得了次數的地點（裁決 11、24；FB-565）：這條戰線上自家佔著、被推得最高、守得動的區塊
-    （conquest_day.today 的 defend，翻地與爭搶 PM 2026-10-20 第 1 條；沒人在推就沒有）。記功（_counts）、假人往哪走（targets）、守城軍令卡的做法
+    （conquest_day.today 的 defend，翻地與爭搶 PM 2026-10-20 第 1 條；沒人在推就沒有），加上自家被戰書凍結的那幾塊（FB-605：那裡記的是攻城戰守住，
+    _counts 的 SIEGE_GUARD）。記功（_counts）、假人往哪走（targets）、守城軍令卡的做法
     （atlas.order_how）、輿圖的守城標記（mapdata._order_marks）、duty_counts 都問它，列的與記的不會對不上。
     關著的季是空的（舊規則整條戰線都記，各處照舊）。"""
     from . import conquest  # noqa: PLC0415  conquest → territory → rules：在函式裡 import
@@ -423,14 +427,20 @@ def _counts(
 ) -> bool:
     """這一次個人行動算不算這道軍令的一次（軍令文件 3.1～3.4、4.5）。world 給了而且領地爭奪在這一季生效時，攻城與守城照今天的時程表
     （裁決 11；翻地與爭搶 PM 2026-10-20 第 1 條：攻城＝這一邊此刻進度最高的那一塊打贏那裡的守軍〔siege_win(garrison=True)：敵方陣營的兵，
-    中立駐軍、流寇也算，裁決 20；同 siege_places，FB-531〕；守城＝自家被推得最高的那一塊）。"""
-    if PERSONAL.get(o.template) != kind:
-        return False
+    中立駐軍、流寇也算，裁決 20；同 siege_places，FB-531〕；守城＝自家被推得最高的那一塊，被戰書凍結的那一塊認攻城戰守住〔SIEGE_GUARD，FB-605〕）。"""
     from . import conquest  # noqa: PLC0415
 
-    if o.template in ("siege", "defend") and conquest.on(content, world):
-        if o.template == "defend":
-            return location in defend_places(content, world, o)  # 守城認自家被推得最高的那一塊（裁決 24；FB-565 卡與輿圖也讀它）
+    guarding = kind == SIEGE_GUARD and o.template == "defend"
+    if PERSONAL.get(o.template) != kind and not guarding:
+        return False
+    on = conquest.on(content, world)
+    if o.template == "defend" and on:
+        if location not in defend_places(content, world, o):  # 守城認自家被推得最高的那一塊（裁決 24；FB-565 卡與輿圖也讀它）
+            return False
+        return guarding == (conquest.frozen(world, location) is not None)  # 凍結的那一塊只認攻城戰守住，別處只認出陣守、守勢行動
+    if guarding:  # 攻城戰只在領地爭奪的季
+        return False
+    if o.template == "siege" and on:
         spots = _today(content, world, o.faction, "attack")
         if location not in spots or conquest.line_of(world, content, location) != o.front:
             return False

@@ -354,7 +354,9 @@ DEFEND_ACT_SORTIE = "出陣守一回，或按「{duty}」（收在「此地還�
 DEFEND_ACT_PLAIN = "按「{duty}」（收在「此地還能做」裡）"
 DEFEND_AT_CONQUEST = "到{where}{act}，做一次記一次。"  # 對面推得最高的自家地方只有一兩處（SIEGE_NAMED_MAX）時寫出地名
 DEFEND_AREA_CONQUEST = "到{front}一帶對面推得最高的幾處自家地方{act}，做一次記一次。"  # 並列最高的多過 SIEGE_NAMED_MAX
-DEFEND_NONE_CONQUEST = "{front}一帶此刻沒有對面在推、守得動的自家地方（剛易手、下了戰書的也守不動），沒有可守的，守了也記不到。"
+DEFEND_NONE_CONQUEST = "{front}一帶此刻沒有對面在推、守得動的自家地方（剛易手的也守不動），沒有可守的，守了也記不到。"
+# 自家被戰書凍結的那一塊（FB-605，PM 2026-10-21）：照樣列進守城，那一場攻城站守方、守住記一次（出陣守、守勢行動在那裡不算）。待 joy 潤
+DEFEND_SIEGE_CONQUEST = "{where}正等著一場攻城：加入那一場、站守方，守住記一次。"
 
 
 def siege_how(state: GameState, content: Content, order: Order) -> str:
@@ -405,13 +407,21 @@ def order_how(state: GameState, content: Content, order: Order) -> str:
         duty = content.orders.duties.get(order.faction)
         name = duty.name if duty else "守勢"
         if conquest.on(content, state.world):  # 領地爭奪（裁決 24、FB-565）：只寫記得到的那幾處，列與記同一個判斷
-            places = orders.defend_places(content, state.world, order)
-            if not places:
+            listed = orders.defend_places(content, state.world, order)
+            if not listed:
                 return DEFEND_NONE_CONQUEST.format(front=front)
-            act = (DEFEND_ACT_SORTIE if sortie.on(content) else DEFEND_ACT_PLAIN).format(duty=name)
-            if len(places) > SIEGE_NAMED_MAX:
-                return DEFEND_AREA_CONQUEST.format(front=front, act=act)
-            return DEFEND_AT_CONQUEST.format(where="或".join(content.locations[loc_id].name for loc_id in places), act=act)
+            sieged = [loc_id for loc_id in listed if conquest.frozen(state.world, loc_id) is not None]  # 被戰書凍結的（FB-605）：記攻城戰守住
+            places = [loc_id for loc_id in listed if loc_id not in sieged]
+            parts: list[str] = []
+            if places:
+                act = (DEFEND_ACT_SORTIE if sortie.on(content) else DEFEND_ACT_PLAIN).format(duty=name)
+                if len(places) > SIEGE_NAMED_MAX:
+                    parts.append(DEFEND_AREA_CONQUEST.format(front=front, act=act))
+                else:
+                    parts.append(DEFEND_AT_CONQUEST.format(where="或".join(content.locations[loc_id].name for loc_id in places), act=act))
+            if sieged:
+                parts.append(DEFEND_SIEGE_CONQUEST.format(where="、".join(content.locations[loc_id].name for loc_id in sieged)))
+            return "".join(parts)
         if sortie.on(content):
             return DEFEND_SORTIE.format(front=front, duty=name)
         return f"在{front}一帶按「{name}」（收在「此地還能做」裡），做一次記一次。"

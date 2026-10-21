@@ -6127,8 +6127,13 @@ class Game:
                 if line:
                     self.world.mutate_season(lambda season, line=line: season.rumors.append(Rumor(time=season.time, text=line, layer="world")))
         result: dict = {}
+        guards = self._siege_guards(battle, definition)
 
         def _season(season: WorldState) -> None:
+            if guards:  # FB-605：守方守住，替每一個守方的人記一次守城——那一塊還凍結著（siege.settle 之前），守城的清單照樣列它
+                vehicle, line = _season_vehicle(c, season), conquest.line_of(season, c, battle.siege.loc)
+                for name, side in guards:
+                    orders.credit(vehicle, c, side, name, kind=orders.SIEGE_GUARD, location=battle.siege.loc, front=line)
             result.update(siege.settle(season, c, battle, definition))
 
         self.world.mutate_season(_season)
@@ -6146,6 +6151,24 @@ class Game:
         if after is not None:
             battle.outcome_title, battle.outcome_side, battle.outcome_margin = after.outcome_title, after.outcome_side, after.outcome_margin
         self._deliver_battle_results()
+
+    def _siege_guards(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> list[tuple[str, str]]:
+        """攻城戰守方守住時，替守城軍令記一次的人（FB-605，PM 2026-10-21）：[(名號, 他自己那一邊)]。打的是陣營佔著的那一塊、照常打完
+        （不是作罷、季終收兵）、沒被拿下；站守方那一格、而且自己那一邊（allied.side_of：豪強依附的那一軍）就是守方的人——臨時投效、助守的
+        散人與別的陣營不算（只算這一場，不記貢獻）。讀別人的存檔只為了看他是哪一邊。"""
+        info_ = battle.siege
+        if info_ is None or battle.unfinished or info_.void or info_.holder not in conquest.SIDES:
+            return []
+        if siege.verdict(info_, battle, definition)[0] is not None:
+            return []
+        out: list[tuple[str, str]] = []
+        for name, p in battle.participants.items():
+            if p.faction != info_.holder:
+                continue
+            kin = self if name_key(name) == name_key(self.state.player.name) else self._load_kin(name)
+            if kin is not None and allied.side_of(kin.state, self.content) == info_.holder:
+                out.append((name, info_.holder))
+        return out
 
     def _merit_line(self, battle: battle_instance.BattleInstance, definition: BattleDef | None) -> str:
         """收場時的論功那一則：兩軍各自戰功最高的人（battle_instance.top_merit；臨時投效的人算在投效的那一軍）；

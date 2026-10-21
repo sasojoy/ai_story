@@ -278,6 +278,14 @@ def frozen(world: WorldState | None, loc_id: str) -> SiegeSlot | None:
     return next((s for s in state.schedule if s.loc == loc_id and s.status in ("planned", "waiting", "open")), None)
 
 
+def besieged(world: WorldState | None, content: Content, side: str | None, loc_id: str) -> bool:
+    """side 佔著的這一塊被戰書凍結、正等著（或正在打）一場攻城（FB-605）：守城軍令照樣列它，記功在那一場攻城站守方、守住時記一次。
+    開關關著、搶不下來、不是 side 的都不算。"""
+    if not on(content, world) or side is None or loc_id not in blocks(content) or not capturable(content, loc_id):
+        return False
+    return holder(world, content, loc_id) == side and frozen(world, loc_id) is not None
+
+
 def _target_problem(world: WorldState, content: Content, side: str, loc_id: str) -> str | None:
     """side 能不能把這一塊當成目標（設計 3.2、4.1；PM 2026-10-20 第 3 條：找不到對手的不算）：搶得下來、此刻不是 side 的、劇情開放了、
     跟 side 此刻控制的某一塊直通、那裡出陣攻打找得到對手。能是 None，不能是原因。"""
@@ -546,21 +554,26 @@ def letter_problem(world: WorldState | None, content: Content, side: str | None,
 def focus_blocks(world: WorldState | None, content: Content, side: str | None, how: str) -> list[str]:
     """軍令改讀（PM 2026-10-20 第 1 條、設計 4.5）：每一條戰線（與不算進戰線的那一組）各挑——攻（attack）：side 推得動的目標裡 side 那一條
     最高的那幾塊（並列都算；全是 0 時就是那裡所有推得動的目標）；守（defend）：side 佔著、守得動的塊裡被推得最高（別人最高的那一條）的那幾塊，
-    沒人在推就沒有。照內容順序。軍令卡、記功、假人、輿圖標記都問它（列與記同一個判斷，FB-531、FB-565）。"""
+    沒人在推就沒有。照內容順序。軍令卡、記功、假人、輿圖標記都問它（列與記同一個判斷，FB-531、FB-565）。
+    守另外一律列 side 佔著、被戰書凍結的那幾塊（FB-605，PM 2026-10-21：正等著一場攻城，正是最該守的地方；守不動進度，記功改在那一場攻城站守方、
+    守住時記一次——orders._counts 的 SIEGE_GUARD）。"""
     if not on(content, world) or side is None:
         return []
     groups: dict[str | None, list[tuple[str, float]]] = {}
+    out: set[str] = set()
     for loc_id in blocks(content):
         if how == "attack":
             if push_problem(world, content, side, loc_id, "attack") is not None:
                 continue
             score = bar(world, loc_id, side)
         else:
+            if besieged(world, content, side, loc_id):
+                out.add(loc_id)
+                continue
             if push_problem(world, content, side, loc_id, "hold") is not None:
                 continue
             score = max(bars(world, loc_id).values(), default=0.0)
         groups.setdefault(line_of(world, content, loc_id), []).append((loc_id, score))
-    out: set[str] = set()
     for rows in groups.values():
         top = max(score for _, score in rows)
         out |= {loc_id for loc_id, score in rows if score == top}
