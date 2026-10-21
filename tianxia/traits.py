@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 
 from .martial_arts import MartialArt
 from .models import Content, GeneralTrait, SpecialTrait, TacticDef
-from . import tactics
+from . import moves, tactics
 from .state import GameState
 from .world_state import WorldStateStore
 
@@ -82,7 +82,7 @@ def loadout(state: GameState, content: Content, world: WorldStateStore) -> Loado
         art = team.player_art(state, content, world, skill_id)  # 自己那一份：槽裡裝的技能已經填上（arts.apply）
         if art is None:
             continue
-        mult, mine = multiplier(content, art.quality), traits_of(art)
+        mult, mine = multiplier(content, art.quality) * (1 + moves.look_bonus(content, art)), traits_of(art)
         for attribute in dict.fromkeys(mine):
             trait = general(content, attribute)
             layers = mine.count(attribute) * mult
@@ -192,7 +192,7 @@ def card_line(content: Content, art: MartialArt) -> str:
         tail = tactics.card_text(ult, ULTIMATE_TITLE)
     if not content.traits.general:
         return tail
-    mult, mine, parts = multiplier(content, art.quality), traits_of(art), []
+    mult, mine, parts = multiplier(content, art.quality) * (1 + moves.look_bonus(content, art)), traits_of(art), []
     for attribute in dict.fromkeys(mine):
         trait = general(content, attribute)
         layers = mine.count(attribute) * mult

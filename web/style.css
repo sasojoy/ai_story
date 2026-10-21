@@ -2586,3 +2586,12 @@ svg.fig .blade.bow { stroke-width: 3; }
 .cr-bar .book-back { color: var(--ink); }
 .cr-bar-title { font-weight: 600; letter-spacing: 4px; }
 .cr-left { margin: 4px 0 8px; }
+/* 以意成招（招式與絕學稿案第二節）：勢、火候、撞出來的品相 */
+.cr-stance { margin: .4em 0 .1em; }
+.cr-stance .fire-生 { color: var(--ink-2); }
+.cr-stance .fire-熟 { color: var(--accent); }
+.cr-stance .fire-透 { color: var(--gold); }
+.cr-look { margin: .3em 0; font-weight: 600; letter-spacing: .05em; }
+.cr-look.tier-珍 { color: #8a5cc2; }
+.cr-look.tier-神 { color: var(--gold); }
+.cr-move { font-size: 1.05em; }

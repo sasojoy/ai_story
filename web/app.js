@@ -3413,7 +3413,7 @@
     const c = S.main && S.main.status && S.main.status.create;
     if (!c || !c.on) return "";
     const step = c.step, at = CREATE_STEPS.findIndex((p) => p[0] === step);
-    const head = `<p class="muted small cr-left">本季還可自創 ${c.left | 0} 門・自創的一律${esc(c.grade || "上品")}</p>`;
+    const head = c.left == null ? "" : `<p class="muted small cr-left">本季還可自創 ${c.left | 0} 門</p>`;
     const steps = `<ol class="cr-steps">${CREATE_STEPS.map(([k, w], i) => `<li class="${i === at ? "on" : i < at ? "done" : ""}">${w}</li>`).join("")}</ol>`;
     const draft = c.draft;
     if (step !== "pose") S.createPose = null;
@@ -3459,16 +3459,23 @@
     }
     const rings = (draft.colors || []).map((cc, i) => `<div class="cr-ring">${ringHtml(cc, `<b>${i + 1}</b>`)}<small>${esc(ringWord(cc))}</small></div>`).join("");
     const grade = c.grade || "上品";
+    const stance = draft.stance ? `<p class="cr-stance"><b>${esc(draft.stance)}</b>・${esc(draft.timing || "")}${draft.fire ? `・火候 <b class="fire-${esc(draft.fire)}">${esc(draft.fire)}</b>` : ""}</p>` : "";
+    const look = draft.look ? `<p class="cr-look${draft.tier ? ` tier-${esc(draft.tier)}` : ""}">${esc(draft.look)}</p>` : "";
     const redo = draft.redo > 0 ? `<button class="btn ghost" data-act="create-back" data-to="pose">重擺</button><button class="btn ghost" data-act="create-back" data-to="intent">重立意</button>` : "";
     return `${head}<div class="card create">${steps}
       <div class="cr-made">${figSvg(draft.pose, weapon, "cr-fig big")}<div><p class="create-sum"><b>${esc(draft.kind)}</b>・${esc(draft.form)}</p><p>意「${esc(draft.intent)}」</p><p class="muted small">${esc(draft.pose_read)}・${esc(draft.read_text)}</p></div></div>
       <div class="cr-rings">${rings}</div>
-      <p class="muted small">自創的功夫一律${seal(grade)}${esc(grade)}，${c.slots[grade] | 0} 格全開。每一格只收自己顏色的意境，八色一圈的什麼都收。</p>
+      <p class="muted small">${c.slots[grade] | 0} 格全開。每一格只收自己顏色的意境，八色一圈的什麼都收。</p>
+      ${look}
       ${draft.power ? `<p class="muted small">${esc(draft.power)}</p>` : ""}
-      ${draft.tactic ? `<p class="art-tactic">${tacticHtml(draft.tactic)}</p>` : ""}
+      ${stance}
+      ${draft.tactic ? `<p class="art-tactic cr-move">${tacticHtml(draft.tactic)}</p>` : ""}
+      ${draft.say ? `<p class="muted small">出手時：「${esc(draft.say)}」</p>` : ""}
+      <p class="muted small">招剛創時還生，練到第四成才使得順。</p>
       ${draft.redo > 0 ? `<p class="muted small">不滿意這個形，可以免費重來一次。</p>` : ""}
       <div class="crow"><span>名字</span><input class="input" id="create-name" maxlength="6" placeholder="2～6 個字，全服不能重名"></div>
-      <div class="acts"><button class="btn primary" data-act="create-name">立名開派<small>心得 ${c.price | 0}</small></button>${redo}${quit}</div>
+      <div class="crow"><span>招名</span><input class="input" id="create-move" maxlength="4" value="${esc(draft.move || "")}" placeholder="2～4 個字"></div>
+      <div class="acts"><button class="btn primary" data-act="create-name">立名<small>心得 ${c.price | 0}</small></button>${redo}${quit}</div>
     </div>`;
   }
   // 自創單獨一頁（Joy 2026-10-21「創造武學不要卡在煉成的中間」）：煉製頁只放一個入口，點了整頁換成自創（S.createOpen），
@@ -3480,7 +3487,7 @@
     const d = c.draft;
     const pose = d ? d.pose : ((c.presets || []).find((p) => p.name === "進擊") || {}).angles;
     const sub = d ? `${esc(d.kind)}・${esc(d.form)}，停在「${esc(CREATE_STEP_WORD[c.step] || "")}」`
-      : c.problem ? esc(c.problem) : `本季還可自創 ${c.left | 0} 門・心得 ${c.price | 0}・一律${esc(c.grade || "上品")}`;
+      : c.problem ? esc(c.problem) : (c.left == null ? `心得 ${c.price | 0}` : `本季還可自創 ${c.left | 0} 門・心得 ${c.price | 0}`);
     return `<button class="create-entry" data-act="create-open">${pose ? figSvg(pose, d && d.kind === "武學" ? d.form : null, "ce-fig") : ""}<span><b>自創武學</b><small>${sub}</small></span><i class="go">${d ? "接著立 ›" : "開宗立派 ›"}</i></button>`;
   }
   function createPageHtml() {
@@ -6928,7 +6935,10 @@
         case "create-pose": if (S.createPose) await mx("create_pose", { pose: S.createPose }); break;
         case "create-intent": await createIntent(); break;
         case "create-back": await mx("create_back", { to: el.dataset.to }); break;
-        case "create-name": { const n = document.getElementById("create-name"); await mx("create_name", { name: n ? n.value.trim() : "" }); createDone(); break; }
+        case "create-name": {
+          const n = document.getElementById("create-name"), m = document.getElementById("create-move");
+          await mx("create_name", { name: n ? n.value.trim() : "", move: m ? m.value.trim() : "" }); createDone(); break;
+        }
         case "create-cancel": await mx("create_cancel"); createDone(); break;
         case "create-open": S.createOpen = true; S.message = ""; renderPage(); window.scrollTo(0, 0); break;
         case "create-close": S.createOpen = false; S.message = ""; renderPage(); window.scrollTo(0, 0); break;

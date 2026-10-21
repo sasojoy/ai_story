@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from tianxia import arts as arts_mod, create, team
+from tianxia import arts as arts_mod, create, moves, tactics, team
 from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.martial_arts import ATTRIBUTES, MartialArt as _MA
@@ -56,7 +56,8 @@ def test_five_steps_make_an_art_with_coloured_slots_and_the_pose(content):
     n = len(arts_mod.slots_of(game.state, content, art))
     assert p.art_quality["飄風手"] == "上品"  # Joy 2026-10-21：自創保底上品
     assert n == arts_mod.slot_count(content, "上品")
-    assert art.affinity == create.affinity_of(draft.colors[:n]) and art.attribute == "快"
+    assert art.attribute == "快" and art.affinity[0] == "快"
+    assert set(art.affinity) == {"快", *create.affinity_of(draft.colors[:n])}
 
 
 def test_begin_checks_the_form_and_the_price_but_charges_nothing(content):
@@ -152,7 +153,7 @@ def test_view_lists_forms_presets_and_the_draft(content):
     assert {p["name"] for p in v["presets"]} == {"起手", "進擊", "守禦", "奇變"}
     _walk(game)
     d = game.create_view()["draft"]
-    assert d["form"] == "拳腳" and len(d["colors"]) == 4 and d["colors_text"][0] in ATTRIBUTES
+    assert d["form"] == "拳腳" and len(d["colors"]) == content.config.arts.create_slots
     assert "odds" not in d and v["grade"] == "上品"  # 不擲品級了
 
 
@@ -165,44 +166,93 @@ def test_the_intent_score_sets_the_base_power(content):
     assert create.power_scale_of(content, 150) == pytest.approx(high)
     game = _game(content)
     _walk(game, reading=create.IntentReading(score=80, attributes=["快"], lean="無"))
-    assert game.create_view()["draft"]["power"].startswith("底子：")
+    assert game.create_view()["draft"]["power"].startswith("底子 ")
     game.create_name("厚底拳")
     art = team.resolve_art("厚底拳", content, game.world)
     assert power_scale(art) == pytest.approx(create.power_scale_of(content, 80), abs=0.01)
 
 
-# ── 自創自動配小戰法（Joy 2026-10-21 決策卡選「自動配」）──────────────────
+# ── 以意成招（招式與絕學稿案第二節）──────────────────
 
 
-def test_the_pool_prefers_same_kind_and_attribute_and_skips_marshal(real):
-    from tianxia import tactics
+def test_stance_is_read_from_the_pose(content):
+    assert create.stance_of(create.preset(content, "進擊")) == "攻勢"
+    assert create.stance_of(create.preset(content, "守禦")) == "守勢"
+    assert create.stance_of(create.preset(content, "奇變")) == "變勢"
+    assert create.stance_of(create.preset(content, "起手")) == "起勢"
+    assert moves.timing_of("武學", "攻勢") == "出招" and moves.timing_of("內功", "攻勢") == "心法"
+    assert moves.timing_of("內功", "起勢") == "起手"
 
-    assert create.minor_pool(real, "武學", "快") == sorted(["zhuifeng", "ganshan_tui", "jianjing_dao"])
-    assert create.minor_pool(real, "內功", "陽") == ["yanghao_jue"]  # 同袍一心要部下：不配
-    fast = create.minor_pool(real, "內功", "快")  # 內功沒有快的：放寬到同屬性的武學
-    assert fast and all(real.skills[s].attribute == "快" for s in fast)
-    assert all(tactics.of(real, s).minor for s in create.minor_pool(real, "武學", ""))  # 沒有主屬性：同種類的都行
+
+def test_the_table_covers_every_attribute_and_stance(content):
+    for a in ATTRIBUTES:
+        for timing in ("起手", "出招", "乘勢", "應招", "心法"):
+            assert moves.cell(content, a, timing) is not None, (a, timing)
+    assert sum(m.rare for m in content.create_forms.moves) == len(ATTRIBUTES)
+    for m in content.create_forms.moves:  # 每一種招在那個時機都接得上戰鬥的程式；那一句只用得到 {foe}、params 與 {state}
+        assert m.kind in tactics.KINDS and set(m.grow) <= {"rate", *m.params}
+        m.say.format(foe="某", state="定身", **{k: tactics.value_text(k, v) for k, v in m.params.items()})
 
 
-def test_a_created_art_carries_the_minor_tactic_shown_before_naming(real):
-    from tianxia import skillview, tactics
+def test_fire_follows_the_score_and_scales_the_growing_numbers(content):
+    low, high = content.config.arts.move_fire_cuts
+    assert [moves.fire_of(content, s) for s in (low, low + 1, high, high + 1)] == ["生", "熟", "熟", "透"]
+    clear = moves.build(content, "武學", "快", "攻勢", "透")
+    raw = moves.build(content, "武學", "快", "攻勢", "生")
+    row = moves.cell(content, "快", "出招")
+    assert clear.rate == pytest.approx(row.rate) and raw.rate == pytest.approx(row.rate * content.config.arts.move_fire["生"])
+    young = moves.build(content, "武學", "快", "攻勢", "透", level=1)
+    grown = moves.build(content, "武學", "快", "攻勢", "透", level=content.config.arts.move_raw_levels + 1)
+    assert young.rate == pytest.approx(row.rate * content.config.arts.move_raw_scale) and grown.rate == pytest.approx(row.rate)
 
-    game = _game(real)
-    _walk(game, reading=create.IntentReading(score=60, attributes=["快"], lean="無"))
-    draft = game.state.player.creating
-    source = create.minor_for(game.state, real, draft)
-    attribute = create.affinity_of(draft.colors)[0]
-    assert source in create.minor_pool(real, "武學", attribute)
-    shown = game.create_view()["draft"]["tactic"]
-    seal = game.state.player.name[:1]  # 自創的招蓋創的人名號的第一個字（私印，招式與絕學稿案第一節）
-    assert shown == tactics.card_text(tactics.of(real, source), seal) and shown.startswith(seal + "〔")
-    game.create_name("追影拳")
-    art = team.resolve_art("追影拳", real, game.world)
-    assert art.tactic_from == source and tactics.of_art(real, art) is tactics.of(real, source)
-    assert tactics.of_id(real, "追影拳", game.world) is tactics.of(real, source)
+
+def test_a_created_art_grows_its_own_move(content):
+    from tianxia import skillview
+
+    game = _game(content)
+    reading = create.IntentReading(score=80, attributes=["快"], lean="無", move="追風影", say="腳下一錯追了上去")
+    _walk(game, pose=create.preset(content, "進擊"), reading=reading)
+    d = game.create_view()["draft"]
+    seal = game.state.player.name[:1]  # 自創的招蓋創的人名號的第一個字（私印）
+    assert d["stance"] == "攻勢" and d["timing"] == "出招" and d["fire"] == "透" and d["move"] == "追風影"
+    assert d["tactic"].startswith(seal + "〔追風影〕出招")
+    assert "影不留" not in d["tactic"]
+    assert "招還生" not in d["tactic"]
+    game.create_name("追影拳", move="疾影")
+    art = team.resolve_art("追影拳", content, game.world)
+    assert (art.move_name, art.move_fire, art.move_stance, art.move_say) == ("疾影", "透", "攻勢", "腳下一錯追了上去")
+    move = tactics.of_art(content, art)
+    assert move.name == "疾影" and move.timing == "出招" and move.say == "腳下一錯追了上去"
+    assert tactics.title_of(move, art) == seal
     p = game.state.player
-    p.member.wugong_id = "追影拳"
-    names = [h.tactic.name for h in team.tactic_holders(game.state, real, game.world)]
-    assert tactics.of(real, source).name in names  # 打起來會發動
-    row = next(r for r in skillview.art_rows(game.state, real, game.world) if r["id"] == "追影拳")
-    assert row["tactic"] == shown  # 功法卡上寫著
+    p.member.wugong_id, p.member.wugong_level = "追影拳", 1
+    held = next(h for h in team.tactic_holders(game.state, content, game.world) if h.skill == "追影拳")
+    assert held.tactic.rate < move.rate  # 第一成招還生
+    row = next(r for r in skillview.art_rows(game.state, content, game.world) if r["id"] == "追影拳")
+    assert row["tactic"].startswith(seal + "〔疾影〕") and row["tactic"].endswith("（招還生）")
+    p.member.wugong_level = content.config.arts.move_raw_levels + 1
+    held = next(h for h in team.tactic_holders(game.state, content, game.world) if h.skill == "追影拳")
+    assert held.tactic.rate == pytest.approx(move.rate)
+
+
+def test_a_bad_move_name_is_refused_and_nothing_is_charged(content):
+    game = _game(content)
+    _walk(game)
+    xinde = game.state.player.stats["xinde"]
+    assert game.create_name("飄風手", move="一二三四五六") == [create.MOVE_LINE]
+    assert game.state.player.creating is not None and game.state.player.stats["xinde"] == xinde
+    game.create_name("飄風手")  # 沒給招名：照模型起的，再沒有照表的預設名
+    art = team.resolve_art("飄風手", content, game.world)
+    assert art.move_name == moves.cell(content, art.attribute, moves.timing_of("武學", "起勢")).name
+
+
+def test_pure_slots_add_to_the_trait_layers(content):
+    game = _game(content)
+    art = MartialArt(id="純色掌", name="純色掌", kind="武學", quality="上品", attribute="剛", affinity=["剛"],
+                     slot_colors=[["剛"], ["剛"], ["柔"]], origin="created", creator=game.state.player.name)
+    assert moves.look_bonus(content, art) == pytest.approx(content.config.arts.pure_bonus)
+    mixed = art.model_copy(update={"slot_colors": [["剛"], [], ["柔"]]})
+    assert moves.look_bonus(content, mixed) == 0.0
+    whole = art.model_copy(update={"slot_colors": [[], [], []]})
+    assert moves.look_bonus(content, whole) == pytest.approx(content.config.arts.whole_bonus)
+    assert create.look_text(create.marks_of([["剛"], ["剛"], ["柔"]], "透", False)).startswith("珍・")

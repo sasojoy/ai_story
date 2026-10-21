@@ -2044,7 +2044,7 @@ MENXIA_ACTIONS = {
     "create_begin": lambda g, b: g.create_begin(str(b.get("kind") or ""), str(b.get("form") or "")),
     "create_pose": lambda g, b: g.create_pose(b.get("pose") if isinstance(b.get("pose"), dict) else {}),
     "create_back": lambda g, b: g.create_back(str(b.get("to") or "")),
-    "create_name": lambda g, b: g.create_name(str(b.get("name") or "")),
+    "create_name": lambda g, b: g.create_name(str(b.get("name") or ""), str(b.get("move") or "")[:create.MOVE_MAX * 2]),
     "create_cancel": lambda g, b: g.create_cancel(),
     # 用融的意境修練一次，衝下一品；use_legend 是勾了「服下破境丹」。只認真正的布林 true：字串、數字都不算勾
     "cultivate": lambda g, b: g.cultivate(str(b.get("art") or ""), use_legend=b.get("use_legend") is True),

@@ -4,7 +4,7 @@
 """
 from __future__ import annotations
 
-from . import armor, arts as arts_mod, atlas, clinic, create as create_mod, cultivation, encounter, equipment, forge_secrets, fusion, insight_fx, insights, martial_arts, materials, mounts, prologue, renown, seal, smithing, tactics as tactics_mod, team, traits, treasures, weapons
+from . import armor, arts as arts_mod, atlas, clinic, create as create_mod, cultivation, encounter, equipment, forge_secrets, fusion, insight_fx, insights, martial_arts, materials, mounts, moves, prologue, renown, seal, smithing, tactics as tactics_mod, team, traits, treasures, weapons
 from .library import TOWN_TAG, cap_of, held_count, level_of, melt_confirm, melt_note, melt_problem, melt_value, owned_arts
 from .martial_arts import (
     MAX_LEVEL, QUALITIES, MartialArt, power_at, shown_creator,
@@ -28,6 +28,17 @@ STAT_USES = {
 # tests/test_engine.py 的 test_the_stat_note_says_four_until_an_event_checks_lore 到時候會失敗提醒
 STAT_CHECK_NOTE = "事件的檢定看前四項。"
 
+
+
+def tactic_line(content: Content, art: MartialArt, level: int | None) -> str:
+    """功法卡上那一句招（tactics.card_text 蓋印）；自創的招還生時後面補「（招還生）」。沒有招是空字串。"""
+    sig = tactics_mod.of_art(content, art, level)
+    if sig is None:
+        return ""
+    text = tactics_mod.card_text(sig, tactics_mod.title_of(sig, art))
+    if level is not None and moves.is_own(content, art) and moves.raw(content, level):
+        text += f"（{moves.RAW_WORD}）"
+    return text
 
 def stat_uses(content: Content) -> list[tuple[str, str]]:
     """五屬性的（名字, 用途），順序同 team.COMBAT_STATS——也就是狀態列 attrs、＋鈕的順序。"""
@@ -333,7 +344,8 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
             # 評分（第三批）：槽裡效果的分數加總，沒有上限；不是衝絕學的門檻（Joy 2026-10-20），只拿來比高下、排武學榜
             "score": arts_mod.score(state, content, world, art),
             # 本命戰法或小戰法那一句（tactics.card_text）：直接寫在卡上，學來的武學靠它看得出跟別門不一樣（Joy 2026-10-21）；沒有是空字串
-            "tactic": tactics_mod.card_text(sig, tactics_mod.title_of(sig, art)) if (sig := tactics_mod.of_art(content, art)) is not None else "",
+            # 自創的招照這一門練到的成數算（前幾成還生，卡上補一句）
+            "tactic": tactic_line(content, art, level),
             "compare": compare,  # 卷軸卡直接把它寫在功法庫那張卡的鈕上面（改練之前看得到）；點開「詳情」時功法卡裡也有
             "cultivate": {
                 "ok": problem is None, "note": note, "legend": legend, "buy": _buy_choice(state, content, world, art),
@@ -570,7 +582,8 @@ def member_card(state: GameState, content: Content, world: WorldStateStore, key:
     if key == PLAYER and (worn_treasure := treasures.card_line(state, content)):
         lines.append(worn_treasure)  # 寶物（裝備四欄設計 2.5）：沒帶或開關關著不寫
     # 本命戰法與小戰法（tactics.py）：身上練著的各一行；同伴練著自己的本命武學也會發動（連招），一樣寫
-    lines += [t for t in (tactics_mod.line_of_id(content, s, world) for s in (member.wugong_id, member.neigong_id)) if t]
+    levels = team.own_levels(state) if key == PLAYER else {}  # 自創的招前幾成還生
+    lines += [t for t in (tactics_mod.line_of_id(content, s, world, levels.get(s)) for s in (member.wugong_id, member.neigong_id)) if t]
     if key != PLAYER and member.taught:  # 傳功（Config.chuangong）傳給他的屬性
         lines.append("傳功　" + "、".join(f"{content.config.stat_names.get(k, k)} +{n}" for k, n in member.taught.items() if n))
     if key == PLAYER and (boosts := boost_line(state, content, world)):  # 共鳴與功效只算本人，同伴的卡這一版不寫加成那一行

@@ -8219,10 +8219,10 @@ class Game:
         return self._log(create.back(self.state, self.content, to))
 
     @_not_while_preparing
-    def create_name(self, name: str) -> list[str]:
-        """立名：付心得、登記（create.finish，一律上品）。做成了寫一則煉製紀錄，被拒絕只回一句。"""
+    def create_name(self, name: str, move: str | None = None) -> list[str]:
+        """立名：付心得、登記（create.finish，一律上品）；move 是招名（空的照模型起的）。做成了寫一則煉製紀錄，被拒絕只回一句。"""
         xinde = self._xinde()
-        art, msgs = create.finish(self.state, self.content, self.world, name)
+        art, msgs = create.finish(self.state, self.content, self.world, name, move)
         self.forged = art is not None
         self.forged_thing = ("art", art.id) if art is not None else None
         msgs = self._log(msgs)

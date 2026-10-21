@@ -274,6 +274,9 @@ class CreateDraft(BaseModel):
     colors: list[list[str]] = Field(default_factory=list)  # 成形擲出的每一格顏色（MartialArt.slot_colors）
     redo: int = 1  # 還能免費重來幾次（回到擺式或立意再擲一次）
     rolls: int = 0  # 擲過幾次（成形的亂數種子用）
+    move: str = ""  # 以意成招：模型從立意那一句起的招名（2～4 字；空的用 moves 表的預設名）
+    say: str = ""  # 招式出手那一行的一句話（模型寫；空的用 moves 表的）
+    rare: bool = False  # 立意時擲中變招（有變招的那一格才擲）
     step: str = "pose"  # 下一步：pose（擺式）、intent（立意）、name（立名）
     # 舊單子（這一版之前的三步）的欄位，讀得進來就好；讀檔時 create.prune 收掉
     affinity: list[str] = Field(default_factory=list)

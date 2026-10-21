@@ -2228,14 +2228,16 @@ class ArtsTuning(_Strict):
     本命戰法 signature_weight（只用來排清單與寫卡，不進戰鬥）。自創：create_xinde 起、一季每多一門 ×create_step、最多 create_per_season 門；
     自創的一律是 create_grade（Joy 2026-10-21「自創武學應該保底都是上品」；多付心得加分、擲品級都拿掉了）。數字是佔位，量表定。"""
 
-    slots: dict[str, int] = Field(default_factory=lambda: {"下品": 2, "中品": 3, "上品": 4, "絕學": 4})
+    # 槽（招式與絕學稿案第二輪，Joy 2026-10-21 按建議）：學來的（下品）2、自創與合成的 3、絕學 3（另加絕招那一環，arts.ULTIMATE_SLOT）
+    slots: dict[str, int] = Field(default_factory=lambda: {"下品": 2, "中品": 3, "上品": 3, "絕學": 3})
     general_weight: float = Field(default=0.05, ge=0)
     high_weight: float = Field(default=0.12, ge=0)
     special_weight: float = Field(default=0.10, ge=0)
     signature_weight: float = Field(default=0.15, ge=0)
-    create_xinde: int = Field(default=400, ge=0)
-    create_step: float = Field(default=1.5, ge=1)
-    create_per_season: int = Field(default=3, ge=0)
+    # 自創不限門數、價錢固定（招式與絕學稿案第二輪）：create_per_season 0＝不限；create_step 1＝不漲價
+    create_xinde: int = Field(default=500, ge=0)
+    create_step: float = Field(default=1.0, ge=1)
+    create_per_season: int = Field(default=0, ge=0)
     create_grade: Literal["下品", "中品", "上品"] = "上品"
     # 成形（create.roll_colors）：每一路屬性的權重＝底 create_base_weight ＋ 兵器或行功之法的偏向（content/create_forms.json）
     # ＋ 姿勢讀出的偏向（第一路 create_pose_weights[0]、第二路 [1]）＋ 意讀出的偏向（create_intent_weights）。
@@ -2247,7 +2249,17 @@ class ArtsTuning(_Strict):
     create_slot_odds: dict[str, float] = Field(default_factory=lambda: {"單": 55, "雙": 35, "全": 10})
     create_neutral_any_scale: float = Field(default=2.0, ge=1)
     create_redo: int = Field(default=1, ge=0)
-    create_slots: int = Field(default=4, ge=1)  # 成形擲幾格（品級開幾格就用前幾格；上品四格全開）
+    create_slots: int = Field(default=3, ge=1)  # 成形擲幾格（品級開幾格就用前幾格；第一格也照 create_slot_odds 擲，單色雙色都以權重最高那一路打頭）
+    # 以意成招（tianxia/moves.py）：意分 ≤ move_fire_cuts[0] 生、≤ [1] 熟、其餘透；生熟透照 move_fire 打折表上會長的數；
+    # 稀有路數擲中的機會 move_rare_odds；一到 move_raw_levels 成招還生，再乘 move_raw_scale
+    move_fire_cuts: list[int] = Field(default_factory=lambda: [40, 70], min_length=2, max_length=2)
+    move_fire: dict[str, float] = Field(default_factory=lambda: {"生": 0.6, "熟": 0.8, "透": 1.0})
+    move_rare_odds: float = Field(default=0.1, ge=0, le=1)
+    move_raw_levels: int = Field(default=3, ge=0)
+    move_raw_scale: float = Field(default=0.5, ge=0, le=1)
+    # 撞出來的稀有（招式與絕學稿案「強不強、稀有不稀有」）：三格全單色「純」、三格全任色「渾」，槽裡意境的一般功效打架時再乘 1＋這個數
+    pure_bonus: float = Field(default=0.10, ge=0)
+    whole_bonus: float = Field(default=0.15, ge=0)
     # 基本威力（Joy 2026-10-21「基本威力你先自己用一版」）：同一品級的威力區間再乘一個倍數，夾在 power_scale_range。
     # 自創照「意」分＋加分＋赤璋（夾 0～100）從下限線性推到上限；武學＋武學合出來的照兩門來源的倍數平均再加 blend_power_step。
     # 以前是名字雜湊的 ±10%；已經登記的武學照舊、不重算
@@ -3832,14 +3844,26 @@ class PosePreset(_Strict):
     angles: dict[str, float]
 
 
+class CreateMove(TacticDef):
+    """以意成招（招式與絕學稿案第二節，Joy 2026-10-21）：自創武學的招從表裡出——主屬性（attribute）配擺式讀出的勢（timing：
+    攻勢出招、守勢應招、變勢乘勢、起勢起手；內功除了起勢都是心法）。數字寫的是「透」（十成火候，約人物本命的八成）；
+    火候生、熟照 Config.arts.move_fire 打折，grow 列的那幾個數（rate 是發動率、其餘是 params 的鍵）跟著打折。
+    rare 的那一格是同一路同一勢的稀有路數（成形時照 Config.arts.move_rare_odds 擲到才換成它）。name 是預設的招名（立名時玩家可改）。"""
+
+    attribute: str
+    rare: bool = False
+    grow: list[str] = Field(default_factory=lambda: ["rate"])
+
+
 class CreateForms(_Strict):
     """自創武學的內容（content/create_forms.json；Joy 2026-10-20）：執器的兵器與行功之法、擺式的起點架式、
-    模型讀不出意時的關鍵字表（屬性 → 字；正邪 → 字）。沒有這個檔：沒有偏向、沒有起點架式、讀不出就是不偏。"""
+    模型讀不出意時的關鍵字表（屬性 → 字；正邪 → 字）、以意成招的招表（moves）。沒有這個檔：沒有偏向、沒有起點架式、讀不出就是不偏、沒有招。"""
 
     forms: list[CreateForm] = Field(default_factory=list)
     presets: list[PosePreset] = Field(default_factory=list)
     keywords: dict[str, list[str]] = Field(default_factory=dict)
     lean_words: dict[str, list[str]] = Field(default_factory=dict)
+    moves: list[CreateMove] = Field(default_factory=list)
 
 
 class Content(_Strict):

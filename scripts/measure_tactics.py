@@ -62,6 +62,7 @@ def main() -> None:
     parser.add_argument("--bouts", action="store_true", help="只量第二批：挑戰本人的對手戰法、頭目戰、擂台、決戰")
     parser.add_argument("--kits", action="store_true", help="只量第三批：本命對自組上品、神器特技、名將本命兵器")
     parser.add_argument("--catch-up", action="store_true", help="只量玩家武學追上本命：十八位本命對滿配絕學＋配招兵器")
+    parser.add_argument("--own", action="store_true", help="只量以意成招：十八位本命對自創滿配（兩門自創上品、各一招透的招）")
     parser.add_argument("--strength", type=int, default=3, help="--catch-up 滿配裡每個意境的強度（一重～三重）")
     parser.add_argument("--bout-strike", type=float, help="試別的 Config.tactics.bout_strike（只量）")
     parser.add_argument("--war-scale", type=float, help="試別的 Config.tactics.war_scale（只量）")
@@ -103,6 +104,9 @@ def main() -> None:
         GRAND_SHARE = args.grand_share
     if args.catch_up:
         catch_up(content, args.runs, args.strength)
+        return
+    if args.own:
+        own(content, args.runs, args.strength)
         return
     ctx = tactics.Ctx(foe="對手", our_agility=8, foe_agility=rounds.foe_agility(DIFFICULTY), team=["player", "a", "b"])
     print("贏面（大勝＋險勝），威力 ÷ 難度：" + "　".join(f"{r:g}" for r in RATIOS))
@@ -399,6 +403,46 @@ def catch_up(content, runs, strength=3):
         tag = "＋本命兵器" if arm is not None else ""
         print(f"  {content.characters[fid].name:<4}{tag:<6}{rows[-1]:5.1%}（最低 {min(vs):.0%}、最高 {max(vs):.0%}）")
     print(f"  十八位平均 {sum(rows) / len(rows):.1%}，最低 {min(rows):.1%}、最高 {max(rows):.1%}")
+
+
+def own_kit(content, seed, strength=3, gear=True, fire="透"):
+    """自創滿配（以意成招，破境之前）：武學、內功各一門自創上品，三格裝滿（每格那一路一個一般功效 strength 重＋大獎），
+    各一招自己長出來的招（隨機路數與勢、火候 fire、練過前幾成）；gear 時另帶一把以器配招的神器原品。純、渾不算（另量）。"""
+    from tianxia import moves
+    rng = random.Random(f"own|{seed}")
+    hs = piece_kit(content, seed, "上品", strength, GRAND_SHARE, 0.5, ults=False)
+    level = content.config.arts.move_raw_levels + 1
+    for kind in ("武學", "內功"):
+        move = moves.build(content, kind, rng.choice(ATTRS), rng.choice(moves.STANCES), fire, level=level)
+        hs.append(tactics.Holder(who="你", key="player", skill=f"own:{kind}", tactic=move))
+    if gear:
+        arm = rng.choice([r for r in content.forge_secrets.values() if r.tactic is not None and r.slot == "weapon"])
+        hs.append(gear_holder(arm.tactic))
+    return hs
+
+
+def own(content, runs, strength=3):
+    """以意成招之後（破境之前）：十八位本命對自創滿配，看本命贏幾成（稿案：破境之前本命略佔上風，破境之後追到 50～52%）。"""
+    share = ring_share(content, runs)
+    arms = {a.character: a for a in content.gear.signature_arms}
+    for label, kits in (
+        ("自創滿配＋配招兵器", [own_kit(content, k, strength) for k in range(SELF_KITS)]),
+        ("自創滿配、空手", [own_kit(content, k, strength, gear=False) for k in range(SELF_KITS)]),
+        ("自創滿配、招熟", [own_kit(content, k, strength, fire="熟") for k in range(SELF_KITS)]),
+    ):
+        rows = []
+        for fid in figures_with(content):
+            sig = holders(content, [("你", "player", fid)])
+            arm = arms.get(fid)
+            if arm is not None:
+                sig = [h.model_copy(update={"tactic": tactics.bonded(h.tactic, arm.bond)}) if arm.bond and tactics.bond_fits(h, fid, arm.bond) else h for h in sig]
+                sig = sig + [gear_holder(arm.tactic)]
+            vs = [share(sig, k) for k in kits]
+            rows.append(sum(vs) / len(vs))
+        print(f"本命對{label}：十八位平均 {sum(rows) / len(rows):.1%}，最低 {min(rows):.1%}、最高 {max(rows):.1%}")
+    fulls = [full_kit(content, k, strength) for k in range(SELF_KITS)]
+    owns = [own_kit(content, k, strength) for k in range(SELF_KITS)]
+    print(f"舊滿配（兩門絕學＋絕招）對自創滿配：{sum(share(a, b) for a, b in zip(fulls, owns)) / SELF_KITS:.1%}")
 
 
 def gear_holder(tactic):
