@@ -60,8 +60,9 @@ def test_the_shop_draws_its_colors_only_in_the_game_column():
     """三間店的底色（爐火、土黃、木紋）照欄寬畫在中間、不重複；欄外是遊戲本來的頁面底色。深色主題的馬市那一條在前面，蓋不掉這一條。"""
     col = _column()
     rules = _rules(_block(_css(), "FB-225"))
-    # 軍需帳（素材與經濟 B6）、擂台的紅布（FB-306）同一條
-    bg = rules[".shop-layer.shop-smith, .shop-layer.shop-market, .shop-layer.shop-board, .shop-layer.shop-donate, .shop-layer.shop-arena"]
+    # 軍需帳（素材與經濟 B6）、擂台的紅布（FB-306）、打點的雅間（第 9 批畫面乙）、商城的紫檀（商城第二批）同一條
+    bg = rules[".shop-layer.shop-smith, .shop-layer.shop-market, .shop-layer.shop-board, .shop-layer.shop-donate, .shop-layer.shop-arena, "
+               ".shop-layer.shop-dadian, .shop-layer.shop-mall"]
     assert "background-color: var(--paper)" in bg and f"background-size: min(100%, {col}px) 100%" in bg
     assert "background-position: 50% 0" in bg and "background-repeat: no-repeat" in bg
 

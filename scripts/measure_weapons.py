@@ -103,7 +103,7 @@ def run(seed: int, profile: str | None, weapons_on: bool) -> dict:
             mock.patch.object(smithing, "forge", spent(smithing.forge)), mock.patch.object(smithing, "temper", spent(smithing.temper)):
         game = bot.play_season(content, seed, world=open_world(TMP / f"s{seed}-{int(weapons_on)}.db"), observe=observe)
     p = game.state.player
-    tiers = {1: 0, 2: 0, 3: 0}
+    tiers = {1: 0, 2: 0, 3: 0, 4: 0}  # 四階：挑戰本人首勝、決戰得勝也會給（正式季整合第 4 批）
     for mid, n in p.materials.items():
         tiers[content.materials[mid].tier] += n
     season = game.state.world

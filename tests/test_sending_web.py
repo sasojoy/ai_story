@@ -254,3 +254,11 @@ def test_the_three_ways_to_explore_have_their_own_waiting_lines():
       const { kit } = H;
       return ["explore:gather", "explore:seek", "explore:sense", "explore:unknown"].map((id) => kit.waitLineFor(id));""")
     assert out == ["四下翻找，看看能撿到什麼……", "四處走走，看這一帶有什麼事……", "靜心凝神……", "四下探看，尚無動靜……"]
+
+
+def test_gather_branches_wait_like_gathering_and_the_say_has_its_own():
+    """找素材分支（第 32 項）：分支照找素材那一句，「自己說」另一句。"""
+    out = run("""
+      const { kit } = H;
+      return ["explore:gather:mine", "explore:gather:deep", "explore:gather:say"].map((id) => kit.waitLineFor(id));""")
+    assert out == ["四下翻找，看看能撿到什麼……", "四下翻找，看看能撿到什麼……", "你邊找邊盤算……"]

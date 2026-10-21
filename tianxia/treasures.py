@@ -21,12 +21,13 @@ from __future__ import annotations
 import math
 import random
 
-from . import equipment, mounts
+from . import calendar, equipment, mounts
 from .models import GOOD_HORSE, Content, SteedDef
 from .state import Equipment, GameState, PlayerState
 
-# 乘的效果（中性值 1）；其餘是加的（中性值 0）。碎片的乘法鍵（玉璽碎片設計 7.2）也在這裡；talk_turns、dodge、fuse_points 是加的
-MULTIPLY = frozenset({"cultivate", "insight", "legend", "hp_cap", "practice", "stamina_regen", "mate_exp"})
+# 乘的效果（中性值 1）；其餘是加的（中性值 0）。碎片的乘法鍵（玉璽碎片設計 7.2）也在這裡；talk_turns、dodge、fuse_points 是加的。
+# 改版（Config.seal.revamp）多的兩個乘法鍵：injury（螭首）、chuangong（歸心）；keep_silver（金角）是加的（1＝有）
+MULTIPLY = frozenset({"cultivate", "insight", "legend", "hp_cap", "practice", "stamina_regen", "mate_exp", "injury", "chuangong"})
 EFFECT_TEXT = {  # 待 joy 潤：角色卡、修練頁、拿到時那一句（數字照 Config.treasures.effects；{item} 是破境丹的名字 Config.legend_item_name）
     "cultivate": "衝絕學的機會 ×{x}",
     "insight": "探索悟得意境的機會 ×{x}",
@@ -43,6 +44,14 @@ SEAL_EFFECT_TEXT = {  # 待 joy 潤：玉璽碎片的七種效果（數字照 Co
     "dodge": "落敗閃成僵持的機會 +{pct}", "stamina_regen": "體力回復 ×{x}", "fuse_points": "自創的意分 +{n}",
     "mate_exp": "同伴拿到的經驗 ×{x}",
 }
+SEAL_POWER_TEXT = "戰力 ×{x}"  # 待 joy 潤：改版每片都有的那一半（Config.seal.revamp.power），排在最前面
+SEAL_REVAMP_TEXT = {  # 待 joy 潤：改版的常駐成長、生活效果（玉璽碎片改版第三章；數字照 Config.seal.revamp.effects）
+    "injury": "一場仗變成內傷的 ×{x}", "talk_turns": "每位人物每日多談 {n} 輪", "audience": "求見門檻 −{n}",
+    "practice": "練成的心得 ×{x}", "keep_silver": "落敗不失銀兩", "stamina_regen": "體力回復 ×{x}",
+    # 赤璋：武學重構之後合成不擲品質，改加自創的意分（create.seal_points；PM 2026-10-21 合 develop 時定，改版 +10、關著照舊 +5）
+    "fuse_points": "自創的意分 +{n}", "mate_exp": "同伴拿到的經驗 ×{x}", "chuangong": "傳功的心得 ×{x}",
+}
+KEEP_SILVER = "懷中的『{shard}』護住了錢囊，銀兩分文未失。"  # 待 joy 潤：金角（改版）落敗那一下，戰報與江湖紀錄（Game._lose_silver）
 HEIRLOOM_LABEL = "傳承"  # 待 joy 潤：寶物段那一列的小標、角色卡那一行的開頭
 GOT = "你得到了寶物【{name}】（{effect}）。"  # 待 joy 潤
 GOT_HORSE = "你得到一匹{grade}的【{name}】。"  # 待 joy 潤（grade 是 mounts.grade：「良駒・中品」）
@@ -65,12 +74,19 @@ PRIZE_GOT = "{issuer}另有重賞，交到你手上。"  # 待 joy 潤
 GIFT_LINE = "{general}把【{gift}】交到你手上：『你我投緣，這個你拿著。』"  # 待 joy 潤（6.3；GiftDef.line 沒寫時用這一句）：他就在你身邊
 GIFT_SENT_LINE = "{general}託人送來【{gift}】，捎話說：『你我投緣，這個你拿著。』"  # 待 joy 潤（FB-139）：他不在你身邊
 GIFT_TITLE = "名將贈禮"  # 待 joy 潤（FB-139、FB-149）：名將贈禮與本命兵器另起一則江湖紀錄，不接在當下那個動作裡
+HORSE_GAIN_LINE = "良駒【{name}】"  # 待 joy 潤：出陣掉的良駒寫在戰報「得失」那一格（FB-430，同 GAIN_LINE）
 GAIN_LINE = "寶物【{name}】"  # 待 joy 潤：戰報「得失」那一格（同 weapons.GAIN_LINE：素材寫「精鐵砂 ×1」，寶物寫「寶物【烏木名刺】」）
 DROP_LINE = "{who}走得匆忙，落下了【{name}】，你撿了起來。"  # 待 joy 潤（6.4 挑戰本人；FB-140：前一句已經是「某某敗走。」，不再寫一次敗走）
 
 
 def on(content: Content) -> bool:
     return equipment.on(content, "treasure")
+
+
+def revamp_on(content: Content) -> bool:
+    """玉璽碎片改版開著（同 seal.revamp_on；treasures 不 import seal）：碎片開著（Config.seal.enabled＋內容有七片）、子開關開著。"""
+    cfg = content.config.seal
+    return cfg.enabled and cfg.revamp.enabled and bool(content.seal)
 
 
 def effect_of(content: Content, item: Equipment | None) -> str | None:
@@ -94,35 +110,71 @@ def effect_text(content: Content, key: str) -> str:
 
 
 def seal_effect_text(content: Content, key: str) -> str:
-    """碎片那一句（「練成的心得 ×0.9」）：數字照 Config.seal.effects。"""
+    """碎片那一句（「練成的心得 ×0.9」）：數字照 Config.seal.effects（改版關著的那一個效果）。"""
     value = content.config.seal.effects.get(key, 0.0)
     return SEAL_EFFECT_TEXT.get(key, "").format(x=f"{value:g}", n=f"{value:g}", pct=f"{math.floor(value * 100 + 0.5)}%")
 
 
-def _cells(state: GameState, content: Content) -> list[tuple[str, float]]:
+def heirloom_text(content: Content, shard) -> str:
+    """傳承那一格的說明（傳承那一列、角色卡、拿到時、碎片卡；seal.shard_text 轉呼叫這裡）。shard 是 ShardDef。改版開著：
+    「戰力 ×1.1、每位人物每日多談 2 輪、求見門檻 −5」（戰力在前，效果照 content/seal.json 的 effects 順序；待 joy 潤）；
+    關著照舊一句（seal_effect_text）。"""
+    if not revamp_on(content):
+        return seal_effect_text(content, shard.effect)
+    cfg = content.config.seal.revamp
+    parts = [SEAL_POWER_TEXT.format(x=f"{cfg.power:g}")]
+    for key in shard.effects:
+        value = cfg.effects.get(key, 0.0)
+        parts.append(SEAL_REVAMP_TEXT.get(key, "").format(x=f"{value:g}", n=f"{value:g}"))
+    return "、".join(part for part in parts if part)
+
+
+def _cells(state: GameState, content: Content, source: str | None = None) -> list[tuple[str, float]]:
     """身上每一格寶物的（效果鍵, 數字）：一般那一格看寶物的開關（PlayerState.treasure：Config.treasures.enabled、查
     Config.treasures.effects）；傳承那一格只看 Config.seal.enabled 與 content/seal.json（PlayerState.heirloom，查 Config.seal.effects，
-    玉璽碎片設計 7.2），其他掛點都不用動。所以寫成一格一格往清單裡加，不在一般那一格空著時提早回傳。"""
+    玉璽碎片設計 7.2），其他掛點都不用動。所以寫成一格一格往清單裡加，不在一般那一格空著時提早回傳。
+    改版開著（revamp_on）時傳承那一格換成改版的效果：這一片 effects 的每一個鍵各一格，數字查 Config.seal.revamp.effects
+    （玉璽碎片改版第三章；螭首、金角的舊效果因此不給）。source："treasure" 只算一般那一格、"heirloom" 只算傳承那一格、None 兩格都算
+    （求見門檻的折抵要分開寫名字，rules.audience_parts）。"""
     cells: list[tuple[str, float]] = []
-    key = effect_of(content, state.player.treasure) if on(content) else None
+    key = effect_of(content, state.player.treasure) if on(content) and source != "heirloom" else None
     if key is not None:
         cells.append((key, content.config.treasures.effects.get(key, 1.0 if key in MULTIPLY else 0.0)))
     heir = state.player.heirloom  # 傳承那一格（玉璽碎片設計 7.2）：只看 Config.seal.enabled 與內容的七片，不看寶物的開關
     shard = content.seal.get(heir.template) if heir is not None and heir.template and content.config.seal.enabled else None
-    if shard is not None:
-        cells.append((shard.effect, content.config.seal.effects.get(shard.effect, 1.0 if shard.effect in MULTIPLY else 0.0)))
+    if shard is not None and source != "treasure":
+        if revamp_on(content):
+            table = content.config.seal.revamp.effects
+            cells += [(k, table.get(k, 1.0 if k in MULTIPLY else 0.0)) for k in shard.effects]
+        else:
+            cells.append((shard.effect, content.config.seal.effects.get(shard.effect, 1.0 if shard.effect in MULTIPLY else 0.0)))
     return cells
 
 
-def amount(state: GameState, content: Content, effect: str) -> float:
+def amount(state: GameState, content: Content, effect: str, source: str | None = None) -> float:
     """這個效果此刻的數字（設計 6.1：所有掛點都經過這裡）：乘的效果是倍數（沒有是 1）、加的是加多少（沒有是 0）；
-    好幾格都是同一個鍵時乘的相乘、加的相加（玉璽碎片設計 7.2）。沒帶、開關關著、效果對不上都回中性值。"""
+    好幾格都是同一個鍵時乘的相乘、加的相加（玉璽碎片設計 7.2）。沒帶、開關關著、效果對不上都回中性值。source 見 _cells。"""
     multiply = effect in MULTIPLY
     total = 1.0 if multiply else 0.0
-    for key, value in _cells(state, content):
+    for key, value in _cells(state, content, source):
         if key == effect:
             total = total * value if multiply else total + value
     return total
+
+
+def power_scale(state: GameState, content: Content) -> float:
+    """持有者本人的戰力倍數（玉璽碎片改版第三章：每片都是 ×Config.seal.revamp.power，乘在 team.player_boost 的 factor）：
+    改版開著、傳承那一格有內容認得的碎片才是那個數，不然 1（同伴、部下不經過這裡）。"""
+    heir = state.player.heirloom
+    if heir is None or not heir.template or heir.template not in content.seal or not revamp_on(content):
+        return 1.0
+    return content.config.seal.revamp.power
+
+
+def heirloom_name(state: GameState) -> str:
+    """傳承那一格的名字（求見門檻的折抵寫碎片的名字，rules.audience_parts）；沒有是「玉璽碎片」。"""
+    heir = state.player.heirloom
+    return heir.name if heir is not None else "玉璽碎片"
 
 
 def audience_name(state: GameState) -> str:
@@ -236,17 +288,22 @@ def _silver(state: GameState, content: Content, line: str) -> list[str]:
     return [line, f"銀兩 +{n}"]
 
 
-def _give_horse(state: GameState, content: Content, rng: random.Random, *, hold: bool) -> list[str]:
+def _give_horse(state: GameState, content: Content, rng: random.Random, *, hold: bool, got: list[str] | None = None) -> list[str]:
+    """got 給了就把戰報「得失」那一格的字（HORSE_GAIN_LINE）接上去（出陣，FB-430）。"""
     item = good_horse(state, content, rng)
+    if got is not None:
+        got.append(HORSE_GAIN_LINE.format(name=item.name))
     return [GOT_HORSE.format(grade=mounts.grade(item), name=item.name), *deliver(state, content, item, hold=hold)]
 
 
-def _give_pool(state: GameState, content: Content, rng: random.Random, *, hold: bool) -> list[str]:
-    """從掉落池給一件你還沒有的；都有了改給銀兩。呼叫端（不寄放的）先確認拿得下。"""
+def _give_pool(state: GameState, content: Content, rng: random.Random, *, hold: bool, got: list[str] | None = None) -> list[str]:
+    """從掉落池給一件你還沒有的；都有了改給銀兩。呼叫端（不寄放的）先確認拿得下。got 給了就把「得失」那一格的字接上去（FB-430）。"""
     tid = pick_pool(state, content, rng)
     if tid is None:
         return _silver(state, content, ALL_OWNED.format(silver=content.config.treasures.dup_silver))
     item = new_treasure(state, content, tid)
+    if got is not None:
+        got.append(GAIN_LINE.format(name=item.name))
     effect = effect_text(content, content.gear.treasures[tid].effect)
     return [GOT.format(name=item.name, effect=effect), *deliver(state, content, item, hold=hold)]
 
@@ -291,7 +348,7 @@ def rows(state: GameState, content: Content) -> dict:
     out = {"worn": None, "rack": [], "heirloom": None}
     if heir is not None:
         shard = content.seal[heir.template]
-        out["heirloom"] = {"id": heir.id, "name": heir.name, "effect": shard.effect, "effect_text": seal_effect_text(content, shard.effect)}
+        out["heirloom"] = {"id": heir.id, "name": heir.name, "effect": shard.effect, "effect_text": heirloom_text(content, shard)}
     if on(content):
         out["worn"] = _row(content, p.treasure) if p.treasure is not None else None
         out["rack"] = [_row(content, t) for t in equipment.in_slot(p, "treasure")]
@@ -319,7 +376,7 @@ def card_line(state: GameState, content: Content) -> str:
     heir = state.player.heirloom
     shard = content.seal.get(heir.template) if heir is not None and heir.template and content.config.seal.enabled else None
     if shard is not None:
-        lines.append(f"{HEIRLOOM_LABEL}　【{heir.name}】{seal_effect_text(content, shard.effect)}")
+        lines.append(f"{HEIRLOOM_LABEL}　【{heir.name}】{heirloom_text(content, shard)}")
     return "\n".join(lines)
 
 
@@ -383,6 +440,15 @@ def gifts_due(state: GameState, content: Content, present: frozenset[str] | set[
 
 # ---- 挑戰本人掉落（6.4）----
 
+def _week(state: GameState, content: Content) -> int:
+    return calendar.point(state.world.time, content, state.world).week
+
+
+def week_full(state: GameState, content: Content) -> bool:
+    """這一週（季曆）挑戰本人掉的寶物到了 Config.figure_treasure_weekly 件（0＝不設，週末與 14 天的季）。"""
+    weekly = content.config.figure_treasure_weekly
+    return bool(weekly) and state.player.treasure_weeks.count(_week(state, content)) >= weekly
+
 def challenge_drop(state: GameState, content: Content, figure: str, season: int, record_id: int) -> tuple[Equipment | None, list[str]]:
     """打贏大勢人物本人（Game._challenge 打贏那一支、_rout 之後）：challenge_chance 掉一件掉落池裡你還沒有的寶物（都有了改給銀兩）。
     同一位人物對同一個人每季只掉一次（treasure_drops），一人一季最多 figure_treasure_cap 件（挑戰每季都有設計丁 (c)，叛投不清）；
@@ -393,16 +459,46 @@ def challenge_drop(state: GameState, content: Content, figure: str, season: int,
     cap = content.config.figure_treasure_cap  # 丁 (c)：挑戰本人掉的寶物一人一季最多幾件（照 treasure_drops 的長度；0＝不設）
     if not on(content) or figure in p.treasure_drops or not room_for(state, content, "treasure") or (cap and len(p.treasure_drops) >= cap):
         return None, []
+    if week_full(state, content):  # 每週上限（21 天季，正式季整合 3.8）：到了不擲、也不記掉過
+        return None, []
     rng = random.Random(f"寶|{season}|{p.name}|{record_id}")
     if rng.random() >= cfg.challenge_chance:
         return None, []
     p.treasure_drops.add(figure)
+    p.treasure_weeks.append(_week(state, content))
     tid = pick_pool(state, content, rng)
     if tid is None:
         return None, _silver(state, content, ALL_OWNED.format(silver=cfg.dup_silver))
     item = new_treasure(state, content, tid)
     who = content.figures[figure].name if figure in content.figures else figure
     return item, [DROP_LINE.format(who=who, name=item.name), *deliver(state, content, item)]
+
+
+# ---- 出陣攻打贏的稀有掉落（正式季整合 2.6，第 4 批）----
+
+SORTIE_TREASURE = "敵陣裡翻出一件好東西。"  # 待 joy 潤：出陣掉寶物那一句（接著 GOT）
+SORTIE_HORSE = "敵將棄下的坐騎還繫在營外。"  # 待 joy 潤：出陣掉良駒那一句（接著 GOT_HORSE）
+
+
+def sortie_rare(state: GameState, content: Content, season: int, record_id: int) -> tuple[list[str], list[str], int]:
+    """出陣攻打贏另擲寶物與良駒（2.6；Config.sortie）：寶物從挑戰本人的掉落池抽你還沒有的（都有了換銀兩），帳另記一本
+    （PlayerState.sortie_treasures，一季 treasure_cap 件，不讀挑戰本人的額度）；良駒一季 horse_cap 匹。那一欄關著、到了上限、
+    裝備庫滿了都不擲也不記。自己一份亂數（出陣稀有|季數|名號|戰報流水號|用途），不碰 Game.rng。
+    回（江湖紀錄的話, 戰報「得失」那一格的字〔寶物【X】、良駒【X】，FB-430〕, 掉落池都有了換的銀兩〔算進得失的銀兩，FB-434〕）。"""
+    p, cfg = state.player, content.config.sortie
+    silver = p.stats.get("silver", 0)
+    lines: list[str] = []
+    gains: list[str] = []
+    seed = f"出陣稀有|{season}|{p.name}|{record_id}"
+    if (on(content) and p.sortie_treasures < cfg.treasure_cap and room_for(state, content, "treasure")
+            and random.Random(seed + "|寶物").random() < cfg.rare_treasure):
+        p.sortie_treasures += 1
+        lines += [SORTIE_TREASURE, *_give_pool(state, content, random.Random(seed + "|寶物抽"), hold=False, got=gains)]
+    if (equipment.on(content, "mount") and p.sortie_horses < cfg.horse_cap and room_for(state, content, "mount")
+            and random.Random(seed + "|良駒").random() < cfg.rare_horse):
+        p.sortie_horses += 1
+        lines += [SORTIE_HORSE, *_give_horse(state, content, random.Random(seed + "|良駒抽"), hold=False, got=gains)]
+    return lines, gains, p.stats.get("silver", 0) - silver
 
 
 # ---- 機器人（設計第九節）：整季機器人與伺服器假人共用 ----

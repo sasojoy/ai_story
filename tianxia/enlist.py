@@ -78,10 +78,26 @@ def skip(state: GameState, content: Content) -> None:
 TICK = "✔ 引導完成"
 
 
+SLOTS = {"{本週}": "order_this", "{每週}": "order_every"}  # 引薦人的話裡照軍令多久一道換的字（content/tutorial.json；FB-502）
+
+
+def fill(text: str, state: GameState, content: Content) -> str:
+    """引薦人的話裡的 {本週}{每週}：軍令每天一道的季（21 天季、7 天濃縮季）寫「今日」「每天」，其他季照原本的字「本週」「每週」
+    （calendar.week_word；FB-502，字待 joy 潤）。"""
+    for slot, key in SLOTS.items():
+        text = text.replace(slot, calendar.week_word(key, content, state.world))
+    return text
+
+
 def line(who: Recruiter, field: str, state: GameState, content: Content) -> str:
-    """引薦人的一句：豪強分屬兩軍的季（allied.on）有寫 Recruiter.allied 的換成那一句，其餘照原句。"""
+    """引薦人的一句：豪強分屬兩軍的季（allied.on）有寫 Recruiter.allied 的換成那一句，其餘照原句；插槽照 fill 換。"""
     swapped = who.allied.get(field) if haoqiang_allied(content, state.world) else None
-    return swapped or getattr(who, field)
+    return fill(swapped or getattr(who, field), state, content)
+
+
+def step_line(who: Recruiter, i: int, state: GameState, content: Content) -> str:
+    """第 i 步收起來那一行（Recruiter.lines，例「看看「本週軍令」」）：插槽照 fill 換；沒寫的是空字串。"""
+    return fill(who.lines[i], state, content) if i < len(who.lines) else ""
 
 
 def _texts(who: Recruiter, i: int, state: GameState, content: Content) -> list[str]:
@@ -133,7 +149,7 @@ def expire(state: GameState, content: Content) -> list[str]:
     if p.enlist_since is None:
         p.enlist_since = state.world.time
         return []
-    if state.world.time - p.enlist_since < calendar.WEEK / calendar.cal_scale(content, state.world):
+    if state.world.time - p.enlist_since < calendar.week_seconds(content, state.world):  # 7 天濃縮季是一段的平均
         return []
     p.enlist_step = len(_steps(content))
     p.enlist_end = True
@@ -160,7 +176,7 @@ def box(state: GameState, content: Content) -> dict | None:
         paragraphs = _texts(who, i, state, content)
         box = {
             "speaker": who.name, "key": _steps(content)[i].id, "scene": "", "text": blocked or "\n\n".join(paragraphs),
-            "line": "" if blocked else (who.lines[i] if i < len(who.lines) else ""),
+            "line": "" if blocked else step_line(who, i, state, content),
             "done": list(p.guide_done), "end": False, "pending": blocked is not None, "full": True,
         }
         if len(paragraphs) > 1 and blocked is None:

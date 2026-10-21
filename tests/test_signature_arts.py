@@ -30,7 +30,7 @@ def test_every_figure_art_has_its_own_tactic_and_three_traits():
     names = set()
     for ch in content.characters.values():
         for sid in (ch.starting_wugong, ch.starting_neigong):
-            if not sid:
+            if not sid or content.skills[sid].quality != "絕學":  # 歷史武將同行補的起始武學是一般的內容武學，不是本命（FB-364）
                 continue
             skill = content.skills[sid]
             assert skill.tactic is not None, sid

@@ -31,7 +31,7 @@ import random
 
 from pydantic import BaseModel, Field
 
-from .models import BEATS, MOVES, Content, TacticBond, TacticDef, TacticTuning
+from .models import BEATS, MOVES, CharacterDef, Content, TacticBond, TacticDef, TacticTuning
 
 CONTROLS = ("卸勁", "亂神", "定身", "失神")  # 守一擋得下的
 DOTS = ("焚身", "風沙", "血創")
@@ -1592,6 +1592,19 @@ def of(content: Content, skill_id: str | None) -> TacticDef | None:
     return skill.tactic if skill is not None else None
 
 
+def figure_arts(content: Content, character: CharacterDef) -> list[str]:
+    """這位人物的本命武學與本命內功（FB-640）：人物表 starting_wugong／starting_neigong 裡品質是絕學的那幾門（十八位大勢人物的
+    都是，各寫一個本命戰法；寫本命戰法的一定是絕學，content.check_signature_arts 擋）。歷史武將同行補的起始武學（FB-364：
+    王允、華佗……）是各地教的內容武學（下品的帶小戰法、上品的什麼都不帶），不是本命：誰的都不算（figure_of）、情誼到了不教
+    （companion_agent）、名帖不寫「親傳」（mingtie）；玩家照樣在各地學得到。"""
+    out = []
+    for skill_id in (character.starting_wugong, character.starting_neigong):
+        skill = content.skills.get(skill_id) if skill_id else None
+        if skill is not None and skill.quality == "絕學":
+            out.append(skill_id)
+    return out
+
+
 def of_art(content: Content, art) -> TacticDef | None:
     """這一門帶的戰法：內容寫的（本命戰法、小戰法），或自創借來的小戰法（MartialArt.tactic_from）。"""
     if art is None:
@@ -1617,9 +1630,9 @@ def line_of_id(content: Content, skill_id: str | None, world=None) -> str | None
 
 
 def figure_of(content: Content, skill_id: str) -> str | None:
-    """這門本命武學是哪位人物的（人物表的 starting_wugong／starting_neigong）。"""
+    """這門本命武學是哪位人物的（figure_arts）；學來的武學（小戰法，同伴起始帶的那幾門也是）不是誰的，None。"""
     for ch in content.characters.values():
-        if skill_id in (ch.starting_wugong, ch.starting_neigong):
+        if skill_id in figure_arts(content, ch):
             return ch.id
     return None
 

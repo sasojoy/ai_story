@@ -10,7 +10,7 @@ import pytest
 import webharness
 from conftest import next_season
 from tianxia import annals, battle_instance
-from tianxia.database import SCHEMA, SCHEMA_V5_TABLES, SCHEMA_VERSION, open_database
+from tianxia.database import SCHEMA, SCHEMA_V5_TABLES, SCHEMA_V6_TABLES, SCHEMA_VERSION, open_database
 from tianxia.engine import Game
 from tianxia.state import AnnalEntry
 
@@ -153,7 +153,7 @@ def test_saving_again_replaces_the_annals_until_the_biography_is_written(world):
 def test_a_version_four_file_upgrades_to_five_with_an_empty_biographies_table(tmp_path):
     path = tmp_path / "v4.db"
     conn = sqlite3.connect(path)
-    for sql in SCHEMA[: len(SCHEMA) - len(SCHEMA_V5_TABLES)]:
+    for sql in SCHEMA[: len(SCHEMA) - len(SCHEMA_V5_TABLES) - len(SCHEMA_V6_TABLES)]:  # 第 6 版（商城）接在第 5 版後面
         conn.execute(sql)
     conn.execute("PRAGMA user_version = 4")
     conn.execute("INSERT INTO chronicle (season, time, location, text) VALUES (1, 0, NULL, '舊的江湖史')")
@@ -161,7 +161,7 @@ def test_a_version_four_file_upgrades_to_five_with_an_empty_biographies_table(tm
     conn.close()
     db = open_database(path)
     with db.snapshot() as c:
-        assert c.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 5
+        assert c.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 6  # 一路升到第 6 版（商城）
         assert c.execute("SELECT COUNT(*) FROM biographies").fetchone()[0] == 0
         assert c.execute("SELECT text FROM chronicle").fetchone()[0] == "舊的江湖史"
 

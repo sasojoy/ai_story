@@ -19,7 +19,7 @@ from types import SimpleNamespace
 
 from pydantic import BaseModel, Field
 
-from . import gender, glyph, insight_fx, insight_llm, insights, mounts, naming, treasures
+from . import gender, glyph, insight_fx, insight_llm, insights, mounts, naming, precise, treasures
 from .martial_arts import Insight
 from .models import Content, InsightScene, Location
 from .ollama_client import OllamaClient
@@ -44,6 +44,9 @@ MISS_LINE_SEASON = "心浮氣躁，什麼也沒抓住。這一季之內，這裡
 # 管理者把季末往後排、換日落在名義季長之後（季曆寫不出那一刻，但還會換日）時的兩句：不承諾時刻、也不說整季（FB-102；待 joy 潤）
 MISS_WARNING_LATER = "選錯了做法，這裡要過一陣子才悟得出。"
 MISS_LINE_LATER = "心浮氣躁，什麼也沒抓住。要過一陣子，這裡才悟得出東西。"
+# 一類一顆（正式季整合 2.9【定】）：選錯了做法改給 sense_miss_xinde 心得、不再鎖這一處（待 joy 潤）
+MISS_WARNING_PRECISE = "選錯了做法只留下一點體會，下回可以換個做法再試。"
+MISS_LINE_PRECISE = "心意跟此地的景致合不上，什麼也沒抓住，只留下一點體會。"
 # 選做法那一步的提示（explain-2 第三項，FB-100「有所感只能用猜的、略過序章的人不知道意境是什麼」；待 joy 潤）：
 # 標題後面寫這一處的地形（地點的標籤），做法底下兩行小字（網頁排在鈕的下面，不把做法往下推）：做法跟此地的關係、意境拿來做什麼。
 # 全都不看這一處悟得到哪一種（不讀 pool_attributes）：四個做法換哪一個是對的，卡上的字一個都不變。場景的文字是 joy 的，不動。
@@ -68,6 +71,8 @@ def can_sense(state: GameState, content: Content, loc: Location) -> bool:
 def missed_today(state: GameState, content: Content, loc: Location) -> bool:
     """這個遊戲日在這一處選錯過做法：探索不再落在悟意境那一支（Q2，換日就好；遊戲日跟著季長縮，rules.game_day）。
     帳上記的是別的號碼（前幾天的，或縮放之前照 24 小時記的舊帳）就當沒選錯過。"""
+    if precise.on(content, state.world):  # 一類一顆：選錯不再鎖（2.9）
+        return False
     return state.player.sense_misses.get(loc.id) == game_day(content, state.world)
 
 
@@ -79,7 +84,9 @@ def _until(template: str, season_line: str, later_line: str, state: GameState, c
 
 
 def miss_warning(state: GameState, content: Content) -> str:
-    """選做法之前卡上那一行：選錯了要到哪一刻之後才悟得出（此刻所在的遊戲日結束的那一刻）。"""
+    """選做法之前卡上那一行：選錯了要到哪一刻之後才悟得出（此刻所在的遊戲日結束的那一刻）；一類一顆開著時是給一點心得、可以再試。"""
+    if precise.on(content, state.world):
+        return MISS_WARNING_PRECISE
     return _until(MISS_WARNING, MISS_WARNING_SEASON, MISS_WARNING_LATER, state, content)
 
 
@@ -135,6 +142,10 @@ def rate(state: GameState, content: Content, loc: Location, method: str | None =
     strong = insights.strong_of(loc, content)
     if method is not None and strong is not None and content.insights[strong].attribute == method:
         base = min(high, base + cfg.insight_strong.sense_points)
+    from . import conquest  # noqa: PLC0415  延後 import：conquest → territory → rules
+
+    if conquest.home(state, content):  # 領地爭奪：人站在自家領地（散人在開季中立的區塊）擲中多幾個百分點（設計 4.5），同樣夾在上限
+        base = min(high, base + cfg.conquest.sense_bonus_points)
     bonus = min(cfg.sense_marks_cap, _tier(state.world.marks.get(mark_key(loc.id), 0)) * cfg.sense_marks_bonus)
     return base + bonus
 
@@ -221,6 +232,10 @@ def choose(state: GameState, content: Content, index: int, rng: random.Random) -
     msgs = [f"你{method.text}。"]
     if not scene.prologue and method.attribute not in insights.pool_attributes(loc, content):
         p.sensing = None
+        if precise.on(content, state.world):  # 一類一顆（2.9）：給心得、不鎖這一處
+            amount = content.config.sense_miss_xinde
+            p.stats["xinde"] = p.stats.get("xinde", 0) + amount
+            return msgs + [MISS_LINE_PRECISE, f"心得 +{amount}"]
         p.sense_misses[loc.id] = game_day(content, state.world)
         return msgs + [_until(MISS_LINE, MISS_LINE_SEASON, MISS_LINE_LATER, state, content)]
     if rng.random() * 100 >= rate(state, content, loc, method.attribute):

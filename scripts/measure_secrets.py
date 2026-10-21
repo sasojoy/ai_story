@@ -92,7 +92,7 @@ def measure(seed: int, profile: str | None, side: str) -> dict:
     tally = Tally()
     original_pick_forge, original_merge = bot.pick_forge, fusion.merge
     forged = {"爐": 0, "名器": 0, "原品": 0, "仿品": 0}
-    tier3 = {"全部": 0, "新來源": 0}
+    tier3 = {"全部": 0, "新來源": 0, "四階": 0}  # 四階：素材四階之後神器的料（正式季整合 8.3：數神器料改數四階）
     original_forge_plan, original_armor_plan, original_forge = smithing.forge_plan, smithing.armor_plan, smithing.forge
 
     def steer(slot, original):
@@ -117,6 +117,7 @@ def measure(seed: int, profile: str | None, side: str) -> dict:
         if item is not None:
             forged["爐"] += 1
             forged["名器"] += item.secret is not None and not item.original and item.copy_of is None
+            forged["四階名器"] = forged.get("四階名器", 0) + (item.named_entry is not None)
             forged["原品"] += item.original
             forged["仿品"] += item.copy_of is not None
         return item, msgs
@@ -128,6 +129,8 @@ def measure(seed: int, profile: str | None, side: str) -> dict:
         line = real_grant(state, content_, material_id, count)
         if line and content_.materials[material_id].tier == 3:
             tier3["全部"] += count
+        if line and content_.materials[material_id].tier == 4:
+            tier3["四階"] += count
         return line
 
     def counted_pick(*args, **kwargs):
@@ -185,7 +188,7 @@ def measure(seed: int, profile: str | None, side: str) -> dict:
         "鑄說書": fheard.count(forge_secrets.TALE), "鑄鐵匠": fheard.count(forge_secrets.SMITH), "鑄殘譜": fheard.count(forge_secrets.SCRAP),
         "鑄片": pieces,
         "打造": forged["爐"], "名器": forged["名器"], "鑄器哪幾條": set(fbook.solved),
-        "原品": forged["原品"], "仿品": forged["仿品"], "三階": tier3["全部"], "三階新": tier3["新來源"],
+        "原品": forged["原品"], "仿品": forged["仿品"], "三階": tier3["全部"], "三階新": tier3["新來源"], "四階": tier3["四階"], "四階名器": forged.get("四階名器", 0),
     }
 
 
@@ -199,7 +202,7 @@ def _fmt_forge(row: dict) -> str:
     return (f"鑄器：摸到 {row['鑄器摸到']}/{row['鑄器這一季']}（{groups}）　口訣 說書 {row['鑄說書']}・鐵匠 {row['鑄鐵匠']}・殘譜 {row['鑄殘譜']}"
             f"・神器片子 {row['鑄片']}"
             f"　打造 {row['打造']} 爐、名器 {row['名器']}（{share}）　神器 原品 {row['原品']}・仿品 {row['仿品']}"
-            f"　三階 {row['三階']}（新來源 {row['三階新']}）")
+            f"　三階 {row['三階']}（新來源 {row['三階新']}）・四階 {row['四階']}・四階名器 {row['四階名器']}")
 
 
 def main() -> None:
@@ -228,7 +231,7 @@ def main() -> None:
         print(
             f"{side}平均 鑄器：摸到 {mean('鑄器摸到'):.1f}/{mean('鑄器這一季'):.0f}　口訣 說書 {mean('鑄說書'):.1f}・鐵匠 {mean('鑄鐵匠'):.1f}"
             f"・殘譜 {mean('鑄殘譜'):.1f}・神器片子 {mean('鑄片'):.1f}　打造 {mean('打造'):.1f} 爐、名器 {mean('名器'):.1f}"
-            f"　神器 原品 {mean('原品'):.1f}・仿品 {mean('仿品'):.1f}　三階 {mean('三階'):.1f}（新來源 {mean('三階新'):.1f}）"
+            f"　神器 原品 {mean('原品'):.1f}・仿品 {mean('仿品'):.1f}　三階 {mean('三階'):.1f}（新來源 {mean('三階新'):.1f}）・四階 {mean('四階'):.1f}"
         )
 
 

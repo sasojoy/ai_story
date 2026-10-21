@@ -36,7 +36,7 @@
     "title": "兩路買家",
     "tags": ["待joy寫"],
     "locations": ["runan_market"],
-    "condition": {"factions": ["haoqiang"], "week_min": 4, "week_max": 6},
+    "condition": {"factions": ["haoqiang"], "week_min": 4, "week_max": 6, "cal_day_min": 6, "cal_day_max": 11, "cal_day_min7": 2, "cal_day_max7": 4},
     "text": "官軍的軍需官與黃巾的頭目先後來到集市上買糧，兩邊都出了價。",
     "choices": [
       {"text": "賣給官軍", "effect": {"text": "你把糧賣給了官軍的軍需官。"}},

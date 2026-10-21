@@ -19,6 +19,7 @@ def real():
     c = real_content()
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
+    c.config.terrain_arts.enabled = False  # 這裡拿 power_vs 當浮難度的基準；地利浮不浮在 test_terrain_arts（武學隨地理環境）
     return c
 
 

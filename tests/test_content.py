@@ -794,9 +794,10 @@ def test_a_tier_with_no_material_at_all_rejected(tmp_path):
         load_content(root)
 
 
-def test_a_material_tier_outside_one_to_three_rejected(tmp_path):
+def test_a_material_tier_outside_one_to_four_rejected(tmp_path):
+    """素材四階（正式季整合 4.4）之後階收到 4（神品），5 以上照舊擋。"""
     root = copy_fixture(tmp_path)
-    edit_json(root / "materials.json", lambda d: d[0].update(tier=4))
+    edit_json(root / "materials.json", lambda d: d[0].update(tier=5))
     with pytest.raises(ContentError):
         load_content(root)
 
@@ -1205,7 +1206,8 @@ def test_validate_reports_a_malformed_region_polygon_instead_of_crashing(tmp_pat
 # ── 週末設定（計畫 T2「總開關與週末設定」）：一次切換，不手改 content/config.json ──
 CONTENT_DIR = FIXTURE.parent.parent.parent / "content"
 WEEKEND_KEYS = {"season_one", "season_days", "server_max_players", "late_exp_step",  # 30 級以後的加陡：週末 0.12（50 級加陡）
-                "haoqiang_allied"}  # 第一季豪強分屬兩軍（企劃者 2026-10-15）：週末開、預設關
+                "haoqiang_allied",  # 第一季豪強分屬兩軍（企劃者 2026-10-15）：週末開、預設關
+                "affinity_gain_scale"}  # 情誼放慢（歷史武將同行 3）：正式 0.7、週末 0.85
 BETA_TEST_KEYS = {"beta_free_refill"}  # 一鍵補滿體力（企劃者 2026-10-07 開、2026-10-12 拿掉）：週末設定不再開它
 
 
@@ -1220,6 +1222,7 @@ def test_weekend_profile_overrides_the_season_settings_and_the_test_period_switc
     assert (weekend.beta_free_refill, base.beta_free_refill) == (False, False)
     assert (weekend.late_exp_step, base.late_exp_step) == (0.12, 0.5)
     assert (weekend.haoqiang_allied, base.haoqiang_allied) == (True, False)
+    assert (weekend.affinity_gain_scale, base.affinity_gain_scale) == (0.85, 0.7)
     assert weekend.model_dump(exclude=WEEKEND_KEYS | BETA_TEST_KEYS) == base.model_dump(exclude=WEEKEND_KEYS | BETA_TEST_KEYS)  # 其他設定一個都不動
 
 
@@ -1261,12 +1264,15 @@ def test_the_profile_line_shows_the_refill_switch_only_when_it_is_on(tmp_path):
 
 
 def test_no_profile_overrides_the_time_scale_or_the_season_weeks():
-    """主機端 season_clock.py resume 拿開季時蓋的章（第一季規則開／關、季長）當設定檔的指紋，對得上才繼續
+    """主機端 season_clock.py resume 拿開季時蓋的章（第一季規則開／關、21 天季、季長）當設定檔的指紋，對得上才繼續
     （scripts/season_clock.py::_profile_mismatch）。time_scale 與 season_weeks 沒有蓋在季上，蓋章看不出它們——所以設定檔
-    不准改這兩項；哪天真的要改，先讓季蓋章記下它們、並把主機端的檢查補上，再放寬這一條。"""
+    不准改這兩項；哪天真的要改，先讓季蓋章記下它們、並把主機端的檢查補上，再放寬這一條。
+    21 天季（season21）的 season_weeks 放寬了：season21 的章加季長釘住它（content.validate 要 season_weeks × 7 == season_days），
+    主機端也比對 season21（正式季第 1 批）。"""
     for path in sorted((CONTENT_DIR / "profiles").glob("*.json")):
         overridden = json.loads(path.read_text(encoding="utf-8"))
-        assert not {"time_scale", "season_weeks"} & set(overridden), path.name
+        banned = {"time_scale", "season_weeks"} - ({"season_weeks"} if overridden.get("season21") else set())
+        assert not banned & set(overridden), path.name
 
 
 # 可以打開伺服器排程的設定：只有壓測用的（壓測計畫 Task 4 的 content/profiles/loadtest.json 寫 10）。其他設定（試玩的

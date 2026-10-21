@@ -7,6 +7,8 @@
   同樣的種子跑出同樣的結果。密鹽不顯示、不進指紋。每一份亂數取數的順序寫在用它的函式說明裡。
 - 只 import models、state、world_state、battle_instance、treasures、characters；engine、world、sqlite_world 反過來叫這裡。
   on_muster 會寫 store：呼叫端不在任何 mutate 裡（world._open_claimed）。
+- 領地爭奪的季（Config.conquest；領地爭奪設計 3.9、4.8）碎片不再從宛城現世，改成開季藏一片在中立地、探索撿到（hide／find／stamp_cache）；
+  要認區塊與大區所以在函式裡延後 import conquest、atlas（它們反過來 import 的鏈很長）。
 """
 from __future__ import annotations
 
@@ -17,8 +19,8 @@ from . import battle_instance, treasures
 from .battle_instance import BattleInstance
 from .characters import name_key
 from .models import BattleDef, Content, SealTuning, TimetableEvent
-from .state import Equipment, GameState, Rumor
-from .world_state import SealEvent, SealRegistry, SealShard, SharedWorldState, WorldStateStore
+from .state import Equipment, GameState, Rumor, WorldState
+from .world_state import SealCache, SealEvent, SealRegistry, SealShard, SharedWorldState, WorldStateStore
 
 HEIRLOOM_PREFIX = "璽:"  # 抄本的 id（固定，不吃 weapon_serial，重抄幾次都一樣；不會跟「寶:N」撞號）
 HEIRLOOM_LABEL = treasures.HEIRLOOM_LABEL  # 寶物段裡那一列的小標、角色卡那一行的開頭（字在 treasures，treasures 不 import seal）
@@ -27,6 +29,12 @@ HEIRLOOM_LABEL = treasures.HEIRLOOM_LABEL  # 寶物段裡那一列的小標、�
 def on(content: Content) -> bool:
     """碎片開著：Config.seal.enabled，而且內容有 content/seal.json（測試內容沒有＝關著）。"""
     return content.config.seal.enabled and bool(content.seal)
+
+
+def revamp_on(content: Content) -> bool:
+    """改版第 1 批開著（docs/superpowers/specs/2026-10-21-玉璽碎片改版-design.md）：碎片開著、子開關 Config.seal.revamp.enabled 開著。
+    常駐效果（戰力＋成長生活）與持有者平時藏起來都只問這一條（treasures.revamp_on 是同一條，treasures 不 import seal）。"""
+    return on(content) and treasures.revamp_on(content)
 
 
 def filled(reg: SealRegistry, content: Content) -> SealRegistry:
@@ -73,8 +81,13 @@ def log(reg: SealRegistry, season: int, kind: str, **fields) -> SealEvent:
 
 
 def effect_text(content: Content, effect: str) -> str:
-    """「練成的心得 ×0.9」（字在 treasures.SEAL_EFFECT_TEXT：treasures 不 import seal，字只留一份）。"""
+    """「練成的心得 ×0.9」（字在 treasures.SEAL_EFFECT_TEXT：treasures 不 import seal，字只留一份）。改版關著的那一個效果。"""
     return treasures.seal_effect_text(content, effect)
+
+
+def shard_text(content: Content, shard_id: str) -> str:
+    """這一片的說明（拿到時、碎片卡、傳承那一列）：改版開著寫「戰力 ×1.1、…」，關著照舊一句（treasures.heirloom_text）。"""
+    return treasures.heirloom_text(content, content.seal[shard_id])
 
 
 def copy_heirloom(state: GameState, content: Content, reg: SealRegistry | None) -> None:
@@ -116,6 +129,88 @@ def roll_emerge(reg: SealRegistry, content: Content, season: int, tianji: int) -
     if rng.random() >= content.config.seal.emerge_chance:
         return None
     return rng.choice(hidden)
+
+
+# ── 領地爭奪的季：碎片藏在中立地、探索撿到（領地爭奪設計 3.9、4.8；計畫 Task 14）──────────
+# 藏在哪一塊不公開：下面這些句子與回話都不寫地點（撿的人自己知道自己在哪，公開的天下大事與江湖史不寫）。字待 joy 潤
+
+FIND_SCENE = "你撥開亂石殘土，掌心忽然一涼——竟是一角溫潤的古玉。"  # 待 joy 潤：探索撿到那一下，接在探索的結果後面
+FIND_GOT = "{name}尋得了傳國玉璽的一角——『{shard}』。"  # 待 joy 潤：天下大事與江湖史（現世那一句 EMERGE_GOT 的探索版，不寫地點）
+HIDE_DONE = "已經藏好一片碎片（藏在哪裡不公開）。"  # 待 joy 潤：管理者「現在藏一片」的回話
+HIDE_HAS = "已經藏著一片了，不換地方。"  # 待 joy 潤
+HIDE_EMERGED = "這一季已經現世過一片了，一季最多一片。"  # 待 joy 潤
+HIDE_NONE = "沒有可藏的碎片（七片都已經現世過，或你指的那一片不是未現世）。"  # 待 joy 潤
+HIDE_NO_SPOT = "這一季沒有開季中立的區塊可藏。"  # 待 joy 潤
+HIDE_MANDATE = "這一季是天命之季，不藏碎片。"  # 待 joy 潤（FB-570：天命之季七片都現世過了，沒有碎片要藏）
+
+
+def conquest_season(content: Content, season: WorldState | None) -> bool:
+    """這一季照領地爭奪的規則（conquest.on）：碎片的來源只看這個——蓋了章的季不擲宛城現世、改藏改撿；沒蓋章的季一個字不變。"""
+    from . import conquest  # noqa: PLC0415  延後 import：conquest → territory → rules → world_state
+
+    return conquest.on(content, season)
+
+
+def hide_spots(content: Content, world: WorldState | None) -> list[tuple[str, float]]:
+    """可以藏碎片的地方（地點 id、權重）：所有開季中立的區塊（conquest.start_kind），權重 1；落在 core_regions 這些大區的（核心）權重
+    core_weight（企劃者：核心的機率最高）。照區塊表的順序；一塊都沒有是空的。藏在哪裡一律讀區塊表，不寫死地點 id。"""
+    from . import atlas, conquest  # noqa: PLC0415  延後 import（見模組說明）
+
+    cfg = content.config.seal.cache
+    spots: list[tuple[str, float]] = []
+    for loc_id in conquest.blocks(content):
+        if conquest.start_kind(world, content, loc_id) != conquest.NEUTRAL:
+            continue
+        region = atlas.region_of(content, loc_id) if loc_id in content.locations else None
+        spots.append((loc_id, cfg.core_weight if region is not None and region.id in cfg.core_regions else 1.0))
+    return spots
+
+
+def hide(
+    reg: SealRegistry, content: Content, season: int, tianji: int, spots: list[tuple[str, float]],
+    *, force: bool = False, shard: str | None = None,
+) -> SealCache | None:
+    """開季那一刻擲這一季有沒有一片藏在中立地（設計 4.8）：先擲 hide_chance，擲中再挑一片還沒現世的碎片（shard 指定時只能是它）與一個
+    地方（spots 的權重）。這一季已經現世過一片、沒有可藏的碎片、沒有可藏的地方都回 None。force：管理者「現在藏一片」，略過機率。
+    亂數 seal-hide|季別（密鹽｜天機｜用途｜季別）：先取機率（force 也取，所以強制與自然擲中時藏的是同一片、同一處）、再取哪一片、哪一處。"""
+    hidden = sorted(s.id for s in reg.shards.values() if s.state == "hidden")
+    if shard is not None:
+        hidden = [shard] if shard in hidden else []
+    if not hidden or not spots or reg.emerge_season == season or mandate_now(reg, season):  # 天命之季不藏（FB-570）
+        return None
+    rng = dice(reg.salt, tianji, "seal-hide", season)
+    if rng.random() >= content.config.seal.cache.hide_chance and not force:
+        return None
+    pick = rng.choice(hidden)
+    loc = rng.choices([loc_id for loc_id, _ in spots], weights=[weight for _, weight in spots])[0]
+    return SealCache(season=season, shard=pick, loc=loc)
+
+
+def live_cache(reg: SealRegistry, season: int) -> SealCache | None:
+    """這一季藏著、還沒被撿走的那一片：藏處是這一季的、那一片還是未現世（管理者中途改過登記就不算）、這一季還沒現世過。"""
+    cache = reg.cache
+    if cache is None or cache.season != season or reg.emerge_season == season or mandate_now(reg, season):
+        return None  # 天命之季（管理者中途蓋章）就算登記上還留著也當它不存在（FB-570）
+    shard = reg.shards.get(cache.shard)
+    return cache if shard is not None and shard.state == "hidden" else None
+
+
+def find(reg: SealRegistry, tianji: int, name: str, seq: int, own: bool, cfg: SealTuning) -> bool:
+    """在藏處探索一下撿不撿到（設計 3.9、4.8）：find_chance，那一塊此刻歸你的陣營 ×own_scale（夾在 1 以下）。
+    亂數 seal-find|名號|這個人第幾次探索（密鹽｜天機｜用途｜…），每一下探索各一份、不碰 Game.rng。"""
+    chance = min(1.0, cfg.cache.find_chance * (cfg.cache.own_scale if own else 1.0))
+    return dice(reg.salt, tianji, "seal-find", key(name), seq).random() < chance
+
+
+def stamp_cache(shared: SharedWorldState, content: Content) -> SealCache | None:
+    """開季那一刻（open_season、next_season、自動開的第一季）：上一季沒撿到的清掉；這一季是領地爭奪的季、不是天命之季（天命之季七片都
+    現世過了，不藏），就照 hide_chance 擲一次藏一片。直接改傳進來的 shared（呼叫端在 mutate 裡或手動 _load／_save，不能再巢狀）。"""
+    shared.seal.cache = None
+    if not on(content) or shared.season.mandate or not conquest_season(content, shared.season):
+        return None  # 沒蓋領地爭奪章的季：連七片的登記都不碰（舊的季一個字不變）
+    reg = filled(shared.seal, content)
+    reg.cache = hide(reg, content, shared.season_number, shared.tianji, hide_spots(content, shared.season))
+    return reg.cache
 
 
 def threshold(battle: BattleInstance, cfg: SealTuning) -> int:
@@ -211,6 +306,7 @@ def stamp_mandate(shared: SharedWorldState, content: Content, at: float) -> str:
     season.schedule[event.id] = at
     emerged = bool(content.seal) and all(reg.shards[s].emerged_round == reg.round for s in content.seal if s in reg.shards)
     reg.mandate_season, reg.mandate_pending = shared.season_number, False
+    reg.cache = None  # 天命之季不藏（FB-570）：自然換季 stamp_cache 本來就不藏；管理者中途蓋章的這一刻把這一季藏著的那一片收掉（碎片還是未現世）
     text = (MANDATE_OPEN if emerged else MANDATE_OPEN_EARLY).format(battle=battle.name if battle is not None else event.title)
     rumor(season, text)
     chronicle(season, text)
@@ -229,6 +325,7 @@ def scatter(reg: SealRegistry, season: int) -> list[str]:
         shard.emerged_round, shard.former, shard.absent = None, None, 0
     reg.round += 1
     reg.emerge_season, reg.force_emerge, reg.force_stir, reg.mandate_pending = None, None, None, False
+    reg.cache = None  # 領地爭奪的季藏著的那一片：七片重來，開季時照 hide_chance 重藏（stamp_cache）
     return former
 
 
@@ -236,6 +333,23 @@ STIR = "此役牽動{holder}懷中的『{shard}』。"  # 待 joy 潤：天下�
 STIR_SCENE = "此役牽動{holder}懷中的『{shard}』：懷璽之人那一方若沒能大勝，打完之後陣前單挑。"  # 待 joy 潤：決戰畫面
 STIR_MINE = "此役牽動你懷中的『{shard}』。"  # 待 joy 潤：持有者的碎片卡（Task 10）
 MERIT_HINT = "你此役戰功居前；懷璽之人那一方若沒能大勝，你可能被推上陣前。"  # 待 joy 潤（4.3）
+# 改版（持有者平時藏起來，企劃者 10/21）：璽動不點名（設計第三章「此役牽動〈X〉之主」）；字待 joy 潤
+STIR_HIDDEN = "此役牽動『{shard}』之主。"  # 天下大事、集結公告
+STIR_SCENE_HIDDEN = "此役牽動『{shard}』之主：懷璽之人那一方若沒能大勝，打完之後陣前單挑。"  # 決戰畫面
+# 「戰功居前」兩軍都給（只給持有者對面那一軍的話，誰收到就看得出持有者站哪一軍）：對每個收到的人都是真話
+MERIT_HINT_BOTH = "你此役戰功居前；若懷璽之人不在你這一方、而那一方沒能大勝，你可能被推上陣前。"
+
+
+def stir_text(content: Content, holder: str, shard: str, scene: bool = False) -> str:
+    """璽動那一句（scene：決戰畫面那一版）：改版開著不點名，關著照舊。"""
+    if revamp_on(content):
+        return (STIR_SCENE_HIDDEN if scene else STIR_HIDDEN).format(shard=shard)
+    return (STIR_SCENE if scene else STIR).format(holder=holder, shard=shard)
+
+
+def merit_hint(content: Content) -> str:
+    """「戰功居前」那一句：改版開著兩軍都給（MERIT_HINT_BOTH），關著照舊（MERIT_HINT）。"""
+    return MERIT_HINT_BOTH if revamp_on(content) else MERIT_HINT
 
 
 def roll_stir(reg: SealRegistry, content: Content, season: int, tianji: int, event_id: str, mandate: bool = False) -> str | None:
@@ -279,15 +393,18 @@ def challenger_ok(p, need: int, held: set[str], holder: str | None) -> bool:
 
 def hint_names(battle: BattleInstance, content: Content, held: set[str]) -> set[str]:
     """被璽動的那一場打到一半：交戰兩軍各自合格的人裡戰功前 challenger_pool 名（4.3）——合格照 challenger_ok（同挑挑戰者），
-    陣營不跟持有者的快照相同（快照是 None 就不擋）。只給畫面那一句用，不決定誰上陣（那要看收場時誰贏）。"""
+    陣營不跟持有者的快照相同（快照是 None 就不擋）。只給畫面那一句用，不決定誰上陣（那要看收場時誰贏）。
+    改版開著（持有者平時藏起來）時不看持有者的陣營、兩軍都給（誰收到就看得出持有者站哪一軍），字換成有條件的 MERIT_HINT_BOTH；
+    實際挑人不變，所以「被挑上的人一定收到過」照樣成立（FB-177）。"""
     definition = content.battles.get(battle.battle_id)
     if battle.seal_shard is None or definition is None:
         return set()
     tuning, cfg = content.config.battle, content.config.seal
     need = threshold(battle, cfg)
+    hidden = revamp_on(content)
     out: set[str] = set()
     for side in (f.id for f in definition.factions):
-        if battle.seal_holder_faction is not None and side == battle.seal_holder_faction:
+        if not hidden and battle.seal_holder_faction is not None and side == battle.seal_holder_faction:
             continue
         rows = [
             (p.name, battle_instance.merit(tuning, p)) for p in battle.participants.values()
@@ -299,6 +416,12 @@ def hint_names(battle: BattleInstance, content: Content, held: set[str]) -> set[
 
 DUEL_NOTE = "璽動：{challenger}將與懷璽的{holder}陣前單挑。"  # 決戰的戰報那一行（5.9 最後一條）
 NO_DUEL = "{holder}懷中的『{shard}』安然無恙，懷璽不失。"  # 大勝不打、對面無人能上前、保底收場（只寫天下大事，5.9）
+NO_DUEL_HIDDEN = "『{shard}』之主安然無恙，懷璽不失。"  # 待 joy 潤：改版（沒有單挑就沒有露面，不點名）
+
+
+def no_duel_text(content: Content, holder: str, shard: str) -> str:
+    """沒開成單挑的那一句天下大事：改版開著不點名（沒有那一場單挑就不露面），關著照舊。"""
+    return (NO_DUEL_HIDDEN if revamp_on(content) else NO_DUEL).format(holder=holder, shard=shard)
 
 
 MANDATE_MUSTER = "{battle}集結：{lean}，{shift}。"  # 待 joy 潤：天下大事、集結公告（8.3）
@@ -381,7 +504,9 @@ def on_muster(world: WorldStateStore, content: Content, definition: BattleDef, n
     def _apply(shared) -> None:
         reg = filled(shared.seal, content)
         mandate = shared.season.mandate
-        if mark == "emerge" and not mandate:  # 天命之季不擲現世（8.2、3.2）；管理者的強制現世記號這一季照留，天命之季過後散去時一起清掉（scatter）
+        # 天命之季不擲現世（8.2、3.2）；領地爭奪的季也不擲（碎片改成藏在中立地、探索撿到，stamp_cache）。
+        # 管理者的強制現世記號這兩種季都照留，天命之季過後散去時一起清掉（scatter）
+        if mark == "emerge" and not mandate and not conquest_season(content, shared.season):
             got["emerge"] = roll_emerge(reg, content, shared.season_number, shared.tianji)
             reg.force_emerge = None
         if got["emerge"] is not None:
@@ -398,7 +523,7 @@ def on_muster(world: WorldStateStore, content: Content, definition: BattleDef, n
             faction = world.faction_of(holder)  # 投靠名冊（這一季），不讀存檔裡的 p.faction（4.3）；mutate 裡也讀得到（同 faction_counts）
             got.update(stir=stir, holder=holder, faction=faction)
             log(reg, shared.season_number, "stir", shard=stir, holder=holder)
-            text = STIR.format(holder=holder, shard=content.seal[stir].name)
+            text = stir_text(content, holder, content.seal[stir].name)  # 改版：不點名
             rumor(shared.season, text)
             msgs.append(f"🏺 【天下大事】{text}")
 
@@ -419,8 +544,15 @@ def on_muster(world: WorldStateStore, content: Content, definition: BattleDef, n
 
 
 SINK = "{holder}懷中的『{shard}』不知所蹤。"  # 待 joy 潤（7.6：不寫原因，真人假人一樣）
+SINK_HIDDEN = "『{shard}』不知所蹤。"  # 待 joy 潤：改版（持有者平時藏起來）的江湖史；管理者的「隱沒判斷」照舊點名（SINK）
 BOOK_TITLE = "### 傳國玉璽"  # 待 joy 潤：見聞→江湖史最上面（第十節）
 BOOK_STATES = {"hidden": "未現世", "held": "{holder}懷中", "sunk": "不知所蹤"}
+BOOK_HELD_HIDDEN = "已現世"  # 待 joy 潤：改版的七格（企劃者「平時藏起來」：只寫已現世，不寫誰持有）
+
+
+def sink_text(content: Content, holder: str | None, shard: str) -> str:
+    """隱沒那一句（江湖史）：改版開著不點名（SINK_HIDDEN；那一刻已經不在他手上，點名等於公開他一直拿到現在），關著照舊（SINK）。"""
+    return (SINK_HIDDEN if revamp_on(content) else SINK).format(holder=holder, shard=shard)
 BOOK_EVENTS = "這一輪的大事："
 BOOK_BEFORE = "前史：{text}"
 SEAL_TITLE = "玉璽碎片"  # 待 joy 潤：補送的江湖紀錄標題
@@ -494,12 +626,14 @@ def sink(reg: SealRegistry, season: int, seen: dict[str, float | None], now: flo
 def chronicle_block(content: Content, reg: SealRegistry, before: str = "", mandate: bool = False) -> str:
     """見聞→江湖史最上面那一段（第十節）：七格玉璽（未現世、某某懷中、不知所蹤），這一輪的大事（現世、易主、守住、喚回、天命、隱沒，
     照登記的 text；舊資料沒有 round 當第 1 輪），最後一行前史（舊的 jade_seal_fragments，11.5；沒有就不寫）。第二輪起標題寫第幾輪；
-    天命之季多一句（mandate）。Markdown。"""
+    天命之季多一句（mandate）。Markdown。改版開著（revamp_on，企劃者「平時藏起來」）：有主的那一格只寫「已現世」、隱沒那一句不點名；
+    現世、易主、守住、喚回、天命照舊（公開的大事與奪璽單挑那一場本身）。"""
     reg = filled(reg.model_copy(deep=True), content)
     now = [e for e in reg.history if (e.round or 1) == reg.round]
-    cells = [f"- {content.seal[s].name}：{BOOK_STATES[reg.shards[s].state].format(holder=reg.shards[s].holder or '')}" for s in content.seal]
+    states = dict(BOOK_STATES, held=BOOK_HELD_HIDDEN) if revamp_on(content) else BOOK_STATES
+    cells = [f"- {content.seal[s].name}：{states[reg.shards[s].state].format(holder=reg.shards[s].holder or '')}" for s in content.seal]
     events = [e.text for e in now if e.text and e.kind in ("emerge", "take", "keep", "recall", "mandate")][-10:]
-    sunk = [SINK.format(holder=e.other, shard=content.seal[e.shard].name) for e in now if e.kind == "sink" and e.shard in content.seal]
+    sunk = [sink_text(content, e.other, content.seal[e.shard].name) for e in now if e.kind == "sink" and e.shard in content.seal]
     parts = [BOOK_TITLE if reg.round == 1 else BOOK_ROUND.format(round=reg.round)] + ([BOOK_MANDATE] if mandate else [])
     parts.append("\n".join(cells))
     if events or sunk:

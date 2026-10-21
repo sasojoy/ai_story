@@ -334,7 +334,7 @@ def _apply_turn(
     delta = resolve_tag_delta(tag, character)
     cooled = renown.cold(state, content, companion_id, delta) if content is not None else delta
     chill = cooled != delta
-    delta = cooled
+    delta = renown.warmed(content, cooled) if content is not None else cooled  # 情誼放慢（Config.affinity_gain_scale）
     before = p.affinities.get(companion_id, 0)
     after = max(0, min(100, before + delta))
     p.affinities[companion_id] = after
@@ -549,12 +549,17 @@ def _maybe_grant_signature_skill(state: GameState, content: Content, character: 
     flag = f"學會本命:{companion_id}"
     if flag in p.flags:
         return []
+    # 本命武學是絕學（十八位大勢人物的都是）；歷史武將同行補的起始武學是一般的內容武學，不算本命、不教（FB-364）。沒有可教的不寫那一句、不記旗標
+    from .tactics import figure_arts  # 本命的判斷只有一處（FB-640）
+
+    taught = figure_arts(content, character)
+    if not taught:
+        return []
     p.flags.add(flag)
     msgs: list[str] = [f"你與{character.name}情誼深厚，他願意將本命武學傾囊相授！"]
-    for skill_id in (character.starting_wugong, character.starting_neigong):
-        if skill_id:
-            msgs += learn_skill(state, content, skill_id)
+    for skill_id in taught:
+        msgs += learn_skill(state, content, skill_id)
     from .signature import lift_levels  # 本命武學學到時直接第七成（Config.signature_arts.start_level）
 
-    lift_levels(state, content, (character.starting_wugong, character.starting_neigong))
+    lift_levels(state, content, taught)
     return msgs

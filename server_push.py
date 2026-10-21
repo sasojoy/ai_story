@@ -77,6 +77,7 @@ def _deliver(loop: asyncio.AbstractEventLoop, queue: asyncio.Queue, item) -> boo
 def world_fingerprint(
     season_number: int, phase: str, season, battle, *, rumor_id: int | None = None, chronicle_count: int | None = None,
     paused: bool = False, progress: tuple[int, int] | None = None, seal: list | None = None,
+    sieges: list | None = None,
 ) -> str:
     """大家都看得到的世界部分的指紋。時間本身不算（時鐘一直在走，靠慢速輪詢更新）。
     paused 是賽季時鐘有沒有暫停（SharedWorldState.paused_at 是不是 None）：暫停中每個人的選單都只剩一顆灰的，這是全服看得到的
@@ -86,7 +87,8 @@ def world_fingerprint(
     （Joy 2026-10-13：以前兩軍的數字不算豪強，全員送出了還在等豪強，倒數一直跳）。
     rumor_id（最大的天下大事傳聞流水號）與 chronicle_count（江湖史則數）不給就從 season.rumors、season.chronicle 算；
     伺服器的看守給資料庫數好的（SqliteWorldStore.fingerprint_parts），不必把每一則讀回來。兩種給法算出同一個指紋。
-    seal 是 SharedWorldState.seal_duels（奪璽單挑，玉璽碎片設計 5.10）；空的清單跟 None 算同一個指紋。"""
+    seal 是 SharedWorldState.seal_duels（奪璽單挑，玉璽碎片設計 5.10）；空的清單跟 None 算同一個指紋。
+    sieges 是攻城戰（領地爭奪第二批）：[(那一場, 這一回合的（已送出, 在場）或 None)]，每一場算同決戰那幾樣；空的跟 None 同一個指紋。"""
     if rumor_id is None:
         rumor_id = max((r.id or 0 for r in season.rumors if r.layer == "world"), default=0)
     if chronicle_count is None:
@@ -110,6 +112,8 @@ def world_fingerprint(
         # 奪璽單挑（玉璽碎片設計 5.10）：全服觀戰。只算 id、階段、回合、氣勢與親自送出了幾手；last_seen 不算（每 15 秒就可能動一次）
         "seal": [[d.id, d.phase, d.round, round(d.edge, 1), sorted(d.pending)] for d in seal] if seal else None,
     }
+    if sieges:  # 沒有攻城戰時不放這個鍵：關著的季指紋一個字都不變
+        public["sieges"] = [[b.record_id, b.phase, b.round_number, b.trend, p, len(b.tales)] for b, p in sieges]
     blob = json.dumps(public, sort_keys=True, ensure_ascii=False, default=str)
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 

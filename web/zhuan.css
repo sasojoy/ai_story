@@ -2,6 +2,8 @@
    企劃者 2026-10-12：「圖片跟現在的武學譜重複了」——傳不用武學譜那本線裝書（--bk-*），改成竹簡（三個方向裡她挑了竹簡；
    手卷、碑拓沒留）。深色漆木是竹簡本身的顏色，手機淺色、深色模式一樣。
    標記兩邊一樣：.zh > .zh-head（.zh-orn 裝飾、.zh-label > .zh-title 篇名、.zh-sub）、.zh-tools、.zh-body > .zh-text（p，評曰是 p.ping）、.zh-seals */
+/* 字型：霞鶩文楷 400、700（內文與題簽）、Noto Serif TC 700（印章）。公開的傳也載這個檔，所以只列它用得到的字重；
+   遊戲頁的襯線字要 Noto Serif TC 400，由 web/index.html 另外載（FB-575）：這裡加 400 會讓公開頁白多載一整份 CSS。 */
 @import url("https://fonts.googleapis.com/css2?family=LXGW+WenKai+TC:wght@400;700&family=Noto+Serif+TC:wght@700&display=swap");
 
 .zh { color: var(--zh-ink); background: var(--zh-page); font-family: var(--zh-font); }

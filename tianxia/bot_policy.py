@@ -10,7 +10,7 @@ import hashlib
 import random
 from dataclasses import dataclass
 
-from . import allied, arena, atlas, battle_instance, bot, bounties, cultivation, duel, explore_modes, forge_secrets, invites, leaderboard, library, mingtie, naming, orders, rules, sensing, server_bots, social, sortie, team
+from . import allied, arena, atlas, battle_instance, bot, bounties, conquest, cultivation, duel, explore_modes, forge_secrets, invites, leaderboard, library, mingtie, naming, orders, precise, rules, sensing, server_bots, social, sortie, team
 from .bot import allocate_points, can_practise, wants_heal
 from .engine import FREE_TEXT_OPTION, IDLE_MARK, Game, Option
 from .models import MOVES, Content, Effect, SkillDef
@@ -37,6 +37,9 @@ STIR_SCORE = 1.1  # 豪強攪局（出陣探索與地盤設計第七節）：沒
 GATHER_SCORE = 1.0  # 探索三選一（出陣探索與地盤設計第七節）：找素材是練功的主要來源，跟以前的探索一樣
 SEEK_SCORE = 0.9  # 閒著找事件
 SENSE_SCORE = 0.5  # 悟得到的地方偶爾靜心感悟
+# 一類一顆（正式季整合 9.2）：想要經驗按練功，缺素材才按找素材；出陣照舊排在練功前面（出陣的分數另加 PRACTICE_SCORE）
+PRACTICE_SCORE = 1.0
+PRECISE_GATHER_SCORE = 0.4  # 找素材不再打仗、不給經驗：缺素材時再加 NEED_MATERIAL_SCORE
 # 背包裡的一階素材少於 NEED_MATERIAL_BELOW 個：找素材再加這一份。計畫寫 0.5，那樣缺素材的找素材（1.5）會跟挑戰本人（CHALLENGE_SCORE 1.5）
 # 打平，挑戰本人該比探索高（見 CHALLENGE_SCORE 的說明），所以壓在 0.3
 NEED_MATERIAL_SCORE = 0.3
@@ -204,7 +207,7 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random, slot: NamingS
     if not options and not enlist:
         return msgs
     ids = [o.id for o in options]
-    battle = game.world.get_battle()
+    battle = game.battle_now()  # 有攻城戰時是自己看的那一場（領地爭奪第二批）
     if battle is not None and s.player.name not in battle.participants:
         join = next((i for i in ids if i.startswith("battle:join")), None) or bot.enlist_pick(game, [o.id for o in enlist])
         if join is not None:  # 集結時選單照常有別的事可做（FB-009）；假人一看到加入就加入，不交給強度旋鈕碰運氣；豪強投效人少的一軍
@@ -471,6 +474,7 @@ def look_after(game: Game, rng: random.Random) -> None:
     合成、修練、學藝、改練、熔煉、定名在 tend_arts。"""
     allocate_points(game, rng)
     _make_card(game)  # 名帖（不擲亂數）
+    bot.check_in(game)  # 每日簽到（21 天季，正式季整合 8.1；不擲亂數，四階照名號＋季數的種子挑）
     bot.take_pill(game)  # 體力見底、手上有回體丹就吃一顆（內測贈送，真人假人一樣拿到）
     if wants_heal(game):
         game.heal()
@@ -704,6 +708,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         return None  # 奪璽單挑：假人一律被代打（玉璽碎片設計 14.1），選單上就算出現也不按；在不在場只看 last_seen，假人永遠不記
     if kind == "duel":
         return None  # 頭目戰在 take_turn 前面就出招了（duel_move）
+    if kind == "sect":
+        return None  # 拜入門派（一類一顆從交友搬出來的一顆）：假人不拜門派，同不叛投
     if kind == "choice":
         event = game.content.events[game.state.pending_event]
         effect = event.choices[int(arg)].effect
@@ -711,6 +717,20 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         return effect_score(effect, _goals(game, profile), moved)
     if kind == "explore":  # 探索三選一：缺素材找素材、閒著找事件、悟得到的地方偶爾靜心感悟；打探懸賞三種都算
         scout = BOUNTY_SCORE if _bounty_here(game, "scout") else 0.0
+        if arg == explore_modes.PRACTICE:  # 練功（一類一顆）：一定打一場，不算打探；討伐懸賞在這裡交差
+            if _crippled(game):
+                return None
+            return PRACTICE_SCORE + (BOUNTY_SCORE if _bounty_here(game, "strike") else 0.0)
+        gather, _, branch = arg.partition(":")
+        if gather == explore_modes.GATHER and branch:  # 找素材分支（第 32 項）：「自己說」不寫（不寫自由文字）；缺料時照缺的屬性挑
+            if branch != _gather_branch(game):
+                return None  # 只給一條打分：找素材的份量跟沒有分支層時一樣（隨便挑的那一半不會因為多了幾條路而多去找素材）
+            return PRECISE_GATHER_SCORE + scout + (NEED_MATERIAL_SCORE if _short_of_materials(game) else 0.0)
+        if arg == explore_modes.GATHER and explore_modes.layered(game.content, game.state.world,
+                                                                 game.content.locations[game.state.player.location]):
+            return None  # 有分支層時「找素材」只是展開分支的入口，按了不做事（同 act:explore）
+        if arg == explore_modes.GATHER and precise.on(game.content, game.state.world):  # 一定給素材、不打仗
+            return PRECISE_GATHER_SCORE + scout + (NEED_MATERIAL_SCORE if _short_of_materials(game) else 0.0)
         if arg == explore_modes.GATHER:
             if _crippled(game):
                 return None  # 找素材可能撞上怪：內傷重又付不起醫館的不去
@@ -787,10 +807,13 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
             s, c = game.state, game.content
             if sortie.on(c) and game.sortie_mode() == "stir":
                 return STIR_SCORE if game.sortie_push() else None  # 線在 50：攪局什麼都不推
+            if _cannot_push(game, s.player.location):  # 領地爭奪：推不動的地方不出陣（翻地 QA 順帶：真人看得出有人一直在推不動的地方出陣）
+                return None
             bonus = ORDER_SCORE if orders.win_counts(s, c, game._side(), s.player.location) else 0.0
             if sortie.on(c) and game.sortie_mode() == "hold" and orders.duty_counts(s, c, game._side(), s.player.location):
                 bonus += ORDER_SCORE  # 出陣的守算一次守城（同守勢行動）
             bonus += BOUNTY_SCORE if _bounty_here(game, "strike") else 0.0
+            bonus += PRACTICE_SCORE if precise.on(c, s.world) else 0.0  # 一類一顆：出陣照舊排在練功前面（9.2）
             return TRAIN_SCORE + _train_value(game, profile) + bonus
         if arg == "duty":  # 守勢行動（計畫 T6）：替守城記功才值得做
             s = game.state
@@ -801,7 +824,13 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
             return ORDER_SCORE
         if arg == "summons":  # 應召（計畫 T5）：只在召見的地點出現
             return SUMMONS_SCORE
+        if arg == "dadian":  # 打點（21 天季的銀兩出口收成的一間店）：假人不進（只是打開一間店，同鐵匠鋪沒事不進）
+            return None
+        if arg.startswith("recruit:"):
+            return None  # 招募歷史武將（歷史武將同行第七節）：假人不招
         return ACT_SCORES.get(arg, 0.0)
+    if kind == "dadian":  # 萬一停在打點那一間店裡：只會離開
+        return 0.0
     return None
 
 
@@ -818,6 +847,8 @@ def _train_value(game: Game, profile: BotProfile, loc_id: str | None = None) -> 
     """在這個地點（預設所在地）出陣（關著時遊歷）對自己陣營的大勢分（同 effect_score 的一點抵十分）。出陣今天用完了就是 0：
     不再往戰線地點拉（出陣探索與地盤設計第七節：次數用完就去探索找素材練功）。"""
     goals = _goals(game, profile)
+    if conquest.on(game.content, game.state.world):  # 領地爭奪：出陣推進度、不推線——照推得動的名目量（大本營、不是區塊是 0）
+        return TREND_WEIGHT * game.sortie_progress(loc_id) if game.sorties_left() > 0 else 0.0
     if sortie.on(game.content):
         pushes = game.sortie_push(loc_id) if game.sorties_left() > 0 else {}
     else:
@@ -894,7 +925,7 @@ def _battle_score(game: Game, arg: str) -> float | None:
         return JOIN_BATTLE_SCORE
     if kind != "act":
         return None
-    battle = game.world.get_battle()
+    battle = game.battle_now()  # 自己參戰的那一場（決戰或攻城，領地爭奪第二批）
     definition = game.content.battles[battle.battle_id]
     me = battle.participants.get(game.state.player.name)
     if me is None:
@@ -983,6 +1014,35 @@ def _short_of_materials(game: Game) -> bool:
     return sum(n for mid, n in game.state.player.materials.items() if mid in mats and mats[mid].tier == 1) < NEED_MATERIAL_BELOW
 
 
+def _scarce_attributes(game: Game) -> set[str]:
+    """背包裡一階素材最少的那幾種屬性（找素材分支照它挑：缺剛的去挖礦，第 32 項）。素材表裡一種一階都沒有的屬性不算。"""
+    mats = game.content.materials
+    have = game.state.player.materials
+    counts: dict[str, int] = {}
+    for m in mats.values():
+        if m.tier == 1:
+            counts[m.attribute] = counts.get(m.attribute, 0) + have.get(m.id, 0)
+    if not counts:
+        return set()
+    low = min(counts.values())
+    return {attr for attr, n in counts.items() if n == low}
+
+
+def _gather_branch(game: Game) -> str | None:
+    """假人這一下找素材走哪一條分支（第 32 項）：缺料時挑給得出背包裡一階最少那幾種屬性的分支（缺剛的去挖礦），不缺（或沒有一條給得出）
+    就這裡的每一條；幾條都行時照 explore_seq 輪（不擲骰，同一輪打分前後一致）。這裡沒有分支層是 None。
+    只有這一條打分（bot_policy.score）：pick 有一半是從會按的選項裡隨便挑，幾條路都打分的話假人在這些地方會多去找素材好幾倍。"""
+    c, p = game.content, game.state.player
+    loc = c.locations[p.location]
+    here = explore_modes.layered(c, game.state.world, loc)
+    if not here:
+        return None
+    if _short_of_materials(game):
+        scarce = _scarce_attributes(game)
+        here = [b for b in here if scarce & set(explore_modes.branch_attributes(c, loc, b))] or here
+    return here[p.explore_seq % len(here)].id
+
+
 def _bounty_here(game: Game, kind: str) -> bool:
     """手上有一張要在這裡做的（討伐、打探）。"""
     s = game.state
@@ -996,6 +1056,22 @@ def _bounty_hop(game: Game) -> str | None:
 
 
 def _order_hop(game: Game) -> str | None:
-    """往這週軍令要去的地方，路程最近的那一站；已經在、沒有軍令、走不到時是 None（計畫 T6）。"""
-    places = orders.targets(game.state, game.content, game._side())
+    """往這週軍令要去的地方，路程最近的那一站；已經在、沒有軍令、走不到時是 None（計畫 T6）。
+    領地爭奪：只為了截糧才去、去了出陣推不動的地方不去（翻地 QA 順帶：開季的截糧軍令把假人拉到碰不到的中立地，一直在那裡出陣、連輸中立駐軍）；
+    攻城、守城的地方照 orders.targets（自家被戰書凍結的那一塊推不動，但要去加入攻城站守方，FB-605）。"""
+    s, c, side = game.state, game.content, game._side()
+    places = orders.targets(s, c, side)
+    if places and conquest.on(c, s.world):
+        others = set(orders.targets(s, c, side, skip=frozenset({"intercept"})))
+        places = [loc for loc in places if loc in others or not _cannot_push(game, loc)]
     return next_hop(game, places) if places else None
+
+
+def _cannot_push(game: Game, loc_id: str | None) -> bool:
+    """領地爭奪的季，在這一塊出陣（自家的守、別人的與中立地的攻）推不動進度（conquest.push_problem）。不是區塊、開關關著、散人都是假（照舊）。"""
+    s, c = game.state, game.content
+    side = game._side()
+    if loc_id is None or side is None or not conquest.on(c, s.world) or loc_id not in conquest.blocks(c):
+        return False
+    how = "hold" if conquest.holder(s.world, c, loc_id) == side else "attack"
+    return conquest.push_problem(s.world, c, side, loc_id, how) is not None

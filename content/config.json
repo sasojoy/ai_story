@@ -14,9 +14,12 @@
   "beta_gift_stamina_pills": 30,
   "stamina_pills_per_day": 2,
   "newbie_pills_per_day": 5,
+  "mall": {"enabled": true, "card_daily_ingots": 60, "card_daily_pills": 1},
   "event_fail_stamina_scale": 0.5,
   "newbie_real_hours": 48,
   "newbie_hp_double": false,
+  "companions": {"enabled": true},
+  "affinity_gain_scale": 0.7,
   "ollama_model": "gemma4:12b",
   "ollama_think": false,
   "ollama_keep_alive": "12h",
@@ -44,6 +47,7 @@
   "legend_xinde_price": 300,
   "legend_xinde_step": 100,
   "explore_legend_chance": 0.02,
+  "gather_branches": {"enabled": true},
   "start_stats": {"str": 5, "agi": 5, "con": 5, "wis": 5, "lore": 5, "silver": 50, "good": 0, "evil": 0, "fame": 0, "xinde": 20},
   "starter_skills": ["jichu_tuna", "jichu_quanjiao"],
   "max_log": 200,
@@ -98,17 +102,19 @@
     "talk_affinity": 20
   },
   "forge_secrets": {
-    "per_season": {"weapon:1": 2, "weapon:2": 2, "weapon:divine": 2, "armor:1": 1, "armor:2": 1, "armor:divine": 1},
+    "per_season": {"weapon:1": 2, "weapon:2": 2, "weapon:3": 2, "weapon:divine": 2, "armor:1": 1, "armor:2": 1, "armor:3": 1, "armor:divine": 1},
     "tale_chance": 0.5,
     "smith_chance": 0.25,
     "scrap_chance": 0.04,
     "challenge_tier3": 1,
     "tier3_per_figure": 1,
-    "big_tier3": 0.25
+    "big_tier3": 0.25,
+    "rotation": true
   },
   "ambush": {"enabled": false},
   "fortify": {"enabled": false},
   "stockpile": {"enabled": false},
+  "conquest": {"enabled": false},
   "renown": {
     "titles": true, "scale": true, "deed_fame": true, "discount": true, "prize_gate": true, "affinity": true, "duel": true,
     "news": true, "faction_wanted": true, "arena_reach": true, "virtue_insight": true, "lessons": true, "prompt": true,

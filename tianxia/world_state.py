@@ -15,13 +15,13 @@
 from __future__ import annotations
 
 import random
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from contextlib import AbstractContextManager
 from typing import Literal, NamedTuple, Protocol
 
 from pydantic import BaseModel, Field
 
-from .battle_instance import BattleInstance, BattleRoundRecord
+from .battle_instance import BattleInstance, BattleRoundRecord, SiegeInfo
 from .martial_arts import Insight, MartialArt
 from .models import DEFAULT_SEASON_DAYS, BattleDef, Content
 from .state import GearFind, Rumor, SignatureClaim, WeaponRecipe, WorldState
@@ -57,6 +57,8 @@ class CompanionProgress(BaseModel):
     # 傳功（Config.chuangong）傳給他的屬性點：{"str": 3, "con": 1}，加在內容的起始值與每級成長上面（team.member_stats）。
     # 跟等級、武學成數一樣記在他身上：放走、被別人招去都帶著走（傳過的功是他學到的），換季跟其他進度一起清空
     taught: dict[str, int] = Field(default_factory=dict)
+    # 歷史武將同行 9.6：決戰收場、他從誰身邊回江湖（escorts.after_battle 記）；那個人自己的 Game 同步或按招募之前把情誼減半、拿掉自己的名號
+    parted_from: list[str] = Field(default_factory=list)
 
 
 class SealEvent(BaseModel):
@@ -93,6 +95,15 @@ class SealShard(BaseModel):
     absent: int = 0  # 持有者連續幾季沒上線（換季時數，PM 庚；隱沒看它）
 
 
+class SealCache(BaseModel):
+    """領地爭奪的季，這一季藏在中立地的那一片（領地爭奪設計 3.9、4.8；seal.hide）。藏在哪一塊不公開：沒有任何畫面、API、江湖史讀它，
+    只有探索撿碎片（Game._seal_find）與管理者的「現在藏一片」讀。季末沒撿到就在換季時清掉。"""
+
+    season: int
+    shard: str
+    loc: str
+
+
 class SealRegistry(BaseModel):
     """碎片歸屬的正本（玉璽碎片設計 7.4、13.2）：world 那一列的 JSON，不分季、跨季保存。"""
 
@@ -109,7 +120,16 @@ class SealRegistry(BaseModel):
     last_showdown_where: str = ""  # 上面那一場的名字（BattleDef.name）：管理者開的單挑公告照它寫
     mandate_season: int | None = None  # 最近一次蓋上天命之季的季別（seal.mandate_now 看它；WorldState.mandate 同時蓋）
     mandate_pending: bool = False  # 下一個能打天命之爭的季要蓋章（上一次延後、或管理者「下一季」）
+    cache: SealCache | None = None  # 領地爭奪的季，這一季藏著的那一片（不公開；舊資料沒有＝None）
     history: list[SealEvent] = Field(default_factory=list)
+
+
+class DivineRegistry(BaseModel):
+    """神器輪替與收集的全服登記（正式季整合 5.6、10.4；第 10 批，tianxia/divine.py）：world 那一列的 JSON，不分季、跨季保存（同玉璽碎片）。"""
+
+    seen: list[str] = Field(default_factory=list)  # 這個伺服器現世過的神器配方 id（照第一次現世的先後）；空的＝還沒照這套規則開過季
+    finds: dict[str, GearFind] = Field(default_factory=dict)  # 配方 id → 原品那一筆（主人、定名、全服仿品數、第幾季打出）；只算輪替季打的
+    exhausted: int | None = None  # 新神器用完了的那一季（主控台與管理者的回話提醒）
 
 
 class SealSide(BaseModel):
@@ -196,6 +216,7 @@ class SharedWorldState(BaseModel):
     tianji: int = 0  # 天機：每次換季 +1，自創武學「名字 → 數值」的配方跟著換（跨季不滾雪球第三條）
     # ── 玉璽碎片（玉璽碎片設計 7.4、5.12）：全服、不分季，跟 season 一樣存在 world 那一列的 JSON 裡 ──
     seal: SealRegistry = Field(default_factory=SealRegistry)
+    divine: DivineRegistry = Field(default_factory=DivineRegistry)  # 神器輪替與收集（正式季整合 10.4）：全服、不分季
     seal_duels: list[SealDuel] = Field(default_factory=list)  # 還沒收場的奪璽單挑，第一場在打、其餘排隊（玉璽一一次最多一場）
     # ── 名帖的檢舉（tianxia/mingtie.py）：全服、不分季 ──
     mingtie_reports: dict[str, list[str]] = Field(default_factory=dict)  # 「名號鍵|版本」→ 檢舉的人（名號鍵）
@@ -205,6 +226,10 @@ class SharedWorldState(BaseModel):
     # ── 全服即時多人戰鬥（設計討論：集結選陣營→逐幕逐回合鎖步）────────
     # 同一時間最多一場（先簡化成這樣；真的需要同時好幾場再擴充成 list/dict）。
     active_battle: BattleInstance | None = None
+    # 攻城戰（領地爭奪第二批）：跟決戰、別的攻城戰同時打，另存一串。每一場跟決戰一樣是 battles 表的一列，world 那一列的 JSON 只記
+    # 流水號（siege_records，存檔時照 sieges 寫）；資料庫結構不動。收場、季終收兵之後拿掉（ended_battles 照樣讀得到那一列）
+    sieges: list[BattleInstance] = Field(default_factory=list)
+    siege_records: list[int] = Field(default_factory=list)
 
     def season_phase(self) -> SeasonPhase:
         if not self.season.storyline or not self.season_opened:
@@ -212,27 +237,37 @@ class SharedWorldState(BaseModel):
         return "resting" if self.season.ended else "running"
 
 
-def fresh_season(content: Content) -> WorldState:
+def fresh_season(content: Content, now: float | None = None) -> WorldState:
     """照劇本種出一季全新的共用賽季（大勢起始值、公開的大勢線、第一條主線），並蓋上當下的章（stamp_season）。
-    seed_first_season、next_season 都走這裡；籌備中的季在管理者開季時再蓋一次（open_season）。"""
+    seed_first_season、next_season 都走這裡；籌備中的季在管理者開季時再蓋一次（open_season）。now 是開季那一刻（現實 epoch 秒），
+    21 天季照它算季曆的錨點（stamp_season）；種季（籌備中）時不知道，不給。"""
     from .rules import seed_trends  # rules → world_state：在函式裡 import，避免循環
 
     season = WorldState(storyline=content.scenario.storylines[0].id)
-    stamp_season(season, content)  # 先蓋章：種哪些大勢線看這一季的章（rules.seed_trends）
+    stamp_season(season, content, now=now)  # 先蓋章：種哪些大勢線看這一季的章（rules.seed_trends）
     seed_trends(season, content)
     return season
 
 
-def stamp_season(season: WorldState, content: Content) -> None:
+def stamp_season(season: WorldState, content: Content, now: float | None = None) -> None:
     """把當下的開關與季長蓋章在這一季上（計畫 T2「舊季不會被補算」）：之後換了設定，這一季照它自己的章走。
-    開關開著時順便填決戰與季末的預設時間（管理者開季後可以改，T10）。只在季還沒開始時呼叫：種季、換季、開季。"""
+    開關開著時順便填決戰與季末的預設時間（管理者開季後可以改，T10）。只在季還沒開始時呼叫：種季、換季、開季。
+    21 天季（Config.season21）另蓋季曆的錨點：now（開季那一刻的現實 epoch 秒）給了才算，不然是 0（第 1 週週一 00:00 就是開季那一刻）；
+    要先蓋錨點再排決戰與季末（正式季整合設計 1.1）。"""
     from .figures import seed  # noqa: PLC0415  延後 import：figures → rules → world_state
     from .timetable import default_schedule  # noqa: PLC0415  延後 import：timetable → rules → world_state
 
     cfg = content.config
     season.season_one = cfg.season_one
     season.length_days = cfg.season_days
+    from .calendar import anchor_offset  # noqa: PLC0415  延後 import：calendar → world_state
+    season.season21 = cfg.season21
+    season.precise_actions = cfg.precise_actions  # 一類一顆（正式季整合第二章、12.3 第 13 條）：照開季蓋章，正在跑的季不變
+    season.cal_offset = anchor_offset(now, content) if cfg.season21 and now is not None else 0.0
     season.haoqiang_allied = cfg.season_one and cfg.haoqiang_allied  # 豪強分屬兩軍（企劃者 2026-10-15）：只在第一季的季（allied.on）
+    from . import conquest  # noqa: PLC0415  延後 import：conquest → territory → rules → world_state
+    # 領地爭奪（第 38 項改版）：要第一季規則、劇本有官軍與黃巾、寫了區塊、豪強分屬兩軍（設計 4.1、4.10）；正在跑的季不變
+    season.conquest_on = cfg.conquest.enabled and cfg.season_one and conquest.eligible(content)
     season.schedule = default_schedule(content, season) if cfg.season_one else {}  # 照剛蓋好的季長排
     # 素材與經濟（企劃者 2026-10-15）：神器配方的條數與線索分片從下一季開季起照這個章（正在跑的季沒有＝照舊）
     season.forge_divine_per_kind = cfg.forge_secrets.divine_per_kind
@@ -358,8 +393,10 @@ class WorldStateStore(Protocol):
         ...
 
     # ── 隱藏配方的發現（打造隱藏配方設計 7.1；gear_recipes 裡鍵「鑄|配方 id」那幾列；這一季）──
-    def lookup_gear_find(self, key: str) -> GearFind | None:
-        """這條隱藏配方這一季有沒有人打出來過；有就回首位發現者那一筆。"""
+    def lookup_gear_find(self, key: str, registry: bool | None = None) -> GearFind | None:
+        """這條隱藏配方這一季有沒有人打出來過；有就回首位發現者那一筆。神器輪替（FB-402）：registry 是 None 時這一季蓋了輪替的章
+        讀全服登記、沒蓋讀照季分的那一列；手上有那一件神器時照它的 Equipment.collected 傳（True 只讀登記、False 只讀那一列）。
+        add_copy、name_divine 的 registry 同一個意思。"""
         ...
 
     def claim_gear_find(self, key: str, find: GearFind) -> tuple[GearFind, bool]:
@@ -367,11 +404,11 @@ class WorldStateStore(Protocol):
         鍵不是「鑄|」開頭丟 ValueError（別把兵器的組合鍵寫進來）。"""
         ...
 
-    def add_copy(self, key: str) -> None:
+    def add_copy(self, key: str, registry: bool | None = None) -> None:
         """這一季這條神器配方的仿品數 +1（打造隱藏配方設計 5.3、7.1；神器譜寫「仿品 N 把」）。沒有那一列就什麼都不做。"""
         ...
 
-    def name_divine(self, key: str, owner: str, name: str) -> str | None:
+    def name_divine(self, key: str, owner: str, name: str, registry: bool | None = None) -> str | None:
         """神器原品定名（打造隱藏配方設計 5.2、7.1、7.3；鎖內原子，同 rename_skill）：這一季這條神器配方那一列的原品主人是 owner、還沒定名、
         名字沒被佔（_name_taken：武學、改過的名字、意境、gear_recipes），才把名字欄與 data 一起改掉（定的名字佔名字空間）。
         回 None＝定成了；不行回原因："gone"（沒有那一列、不是神器配方）、"owner"（不是主人）、"named"（已經定過）、"taken"（名字被佔）。"""
@@ -587,6 +624,10 @@ class WorldStateStore(Protocol):
         """有沒有還沒收場的奪璽單挑（提前收季要等它，5.11）。在 mutate 裡也查得到（同 faction_counts）。"""
         ...
 
+    def divine_state(self) -> DivineRegistry:
+        """神器輪替的全服登記（現世過哪幾件、原品那一筆）：只讀 world 那一列，不讀季。"""
+        ...
+
     def fingerprint_parts(self) -> tuple[SharedWorldState, int, int]:
         """（全服狀態，這一季最大的天下大事傳聞流水號，這一季江湖史的則數），同一個唯讀快照裡讀的；賽季裡的傳聞與江湖史
         不讀回每一列。推送的看守用（server.current_fingerprint）。"""
@@ -606,16 +647,35 @@ class WorldStateStore(Protocol):
 
     def clear_battle(self) -> None: ...
 
+    # ── 攻城戰（領地爭奪第二批）：跟決戰同時打，另存一串 ──
+    def get_sieges(self) -> list[BattleInstance]:
+        """還在共用狀態裡的攻城戰（照開集結的先後；收場之後拿掉，見 drop_siege）。"""
+        ...
+
+    def mutate_siege(self, record_id: int, fn: Callable[[BattleInstance], None]) -> BattleInstance | None:
+        """讀出流水號 record_id 那一場攻城→套用 fn→寫回；沒有那一場時 fn 不會被呼叫、回 None。"""
+        ...
+
+    def start_siege(self, definition: BattleDef, now: float, trend_start: int, info: SiegeInfo) -> BattleInstance:
+        """開一場攻城戰的集結（start_muster，再記上 info）；回帶著流水號的那一場。"""
+        ...
+
+    def drop_siege(self, record_id: int) -> None:
+        """把那一場攻城從共用狀態拿掉（收場、季終收兵之後）；battles 表那一列照留。"""
+        ...
+
     def battle_rounds(self, record_id: int) -> list[BattleRoundRecord]:
         """這一場（BattleInstance.record_id）結算過的每一回合，照先後。BattleInstance.rounds 只放這次讀出來
         之後才結算、還沒寫進資料庫的回合，存檔後讀出來是空的；要看以前的回合查這裡。"""
         ...
 
-    def ended_battles(self, after: int = 0) -> list[tuple[int, BattleInstance]]:
+    def ended_battles(self, after: int = 0, skip: Collection[int] = ()) -> list[tuple[int, BattleInstance]]:
         """收場的決戰（phase 是 ended）裡流水號（record_id）比 after 大的，不分季別、照先後，每一場連同它是第幾季
         打的：（季別, 戰鬥），戰鬥帶著 record_id。決戰的結果常常就把季收掉，所以參戰者休季、下一季才回來也要補得到
         （FB-027，見 Game._deliver_battle_results）。只讀。
 
+        skip 是呼叫端已經處理過的流水號（攻城戰跟決戰、別的攻城戰同時打，先開的可能晚收場，領地爭奪第二批）：after 給的是往回讓幾場的
+        下限，流水號在 skip 裡的不讀內容（先只查流水號，便宜）。下面「照開戰的先後收場」的理由只對決戰成立。
         after 是呼叫端已經處理過的最大流水號：決戰照開戰的先後收場，所以比它小的不會再有新收場的。理由——
         同一時間只有一場還沒收場（start_battle 在它收場或被清掉之前不另開），被清掉的（換季 next_season、季終
         clear_battle）不再指到、永遠不會收場，而新開的一場流水號一定比之前的都大（實作要保證這一點，SQLite 版是
@@ -639,7 +699,7 @@ class WorldStateStore(Protocol):
         """讀目前進度；還沒有人動過這位人物時回傳一份預設值（不寫回）。"""
         ...
 
-    def try_recruit(self, companion_id: str, player_name: str) -> bool:
+    def try_recruit(self, companion_id: str, player_name: str, cap: int | None = None) -> bool:
         """把 owner 設成 player_name；已經有主的話失敗（設計文件四.4：唯一、可搶）。"""
         ...
 

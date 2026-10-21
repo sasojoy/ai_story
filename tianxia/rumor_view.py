@@ -27,7 +27,7 @@ AWAY_LINE = "〔{label}〕{when}　{text}"  # 「你不在的時候」的一行�
 AWAY_MORE = "另有 {n} 則沒列出來，到「見聞」的傳聞翻。"  # 摘要放不下時的最後一行（待 joy 潤；算在 Config.away_max 那幾行裡）
 AWAY_TAG = "共 {n} 則"
 LOCAL_REPEAT = "（×{n}）"  # 所在大區那一段同一句傳聞出現 N 次、合成一行時接在句尾（待 joy 潤；N > 1 才寫）
-FACTION_KEYS = (orders.ISSUED, orders.DONE)  # 陣營軍情的「要點」：軍令發布與達成（議事、刺探有了再把它們的開頭加進來）
+FACTION_KEYS = (orders.ISSUED, orders.ISSUED_DAY, orders.DONE)  # 陣營軍情的「要點」：軍令發布與達成（議事、刺探有了再把它們的開頭加進來）
 
 
 def _region_names(content: Content, ears: Ears) -> str:
@@ -111,14 +111,18 @@ def away_lines(
     fresh = [r for r in w.rumors if (since is None or r.time > since) and audible(r, ears)]
     names = {region.id: region.name for region in content.map.regions}
 
-    def week(r: Rumor) -> int:
-        return calendar.point(r.time, content, w).week
+    daily = orders.daily(state, content)  # 21 天季的軍令每天一期：只留最新那一天發的
 
+    def week(r: Rumor) -> int:
+        at = calendar.point(r.time, content, w)
+        return at.cal_day if daily else at.week
+
+    issued = (orders.ISSUED, orders.ISSUED_DAY)
     key_points = [r for r in fresh if r.layer == "faction" and r.text.startswith(FACTION_KEYS)]
-    latest = max((week(r) for r in key_points if r.text.startswith(orders.ISSUED)), default=None)
+    latest = max((week(r) for r in key_points if r.text.startswith(issued)), default=None)
     sections = _newest_only([
         [(WORLD_TITLE, r) for r in fresh if r.layer == "world" and r.text not in announced],
-        [(FACTION_TITLE, r) for r in key_points if not r.text.startswith(orders.ISSUED) or week(r) == latest],
+        [(FACTION_TITLE, r) for r in key_points if not r.text.startswith(issued) or week(r) == latest],
         [(names.get(r.region or "", NO_REGION), r) for r in fresh if r.layer == "local"],
     ])
     total = sum(len(section) for section in sections)

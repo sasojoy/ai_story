@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import random
 
-from . import arts as arts_mod, library, naming, team, treasures
+from . import arts as arts_mod, library, naming, silver, team, treasures
 from .martial_arts import MAX_LEVEL, next_quality
 from .models import Content
 from .rules import add_chronicle
@@ -97,6 +97,7 @@ def seize(
         # 寶物「cultivate」（凝神香囊、檀木念珠）以前乘修練升品，衝品拿掉之後改乘絕學這一步（契機與服丹都乘）
         odds = rule.chance * ratio / rule.par_ratio * team.stat_factor(content, p.stats.get("wis", team.BASE_STAT))
         odds *= treasures.amount(state, content, "cultivate")
+        odds += silver.take_mentor(state, content)  # 名師指點（銀兩出口）：衝品拿掉之後加在絕學這一步，擲一次用掉
         if rng.random() * 100 < max(1.0, min(rule.max_chance, odds)):
             p.art_quality[art_id] = "絕學"
             p.art_mastery.pop(art_id, None)
@@ -110,6 +111,7 @@ def force_odds(state: GameState, content: Content, world: WorldStateStore, art_i
     cfg = content.config
     odds = cfg.legend_item_bonus * team.stat_factor(content, state.player.stats.get("wis", team.BASE_STAT))
     odds *= treasures.amount(state, content, "cultivate")  # 衝絕學的寶物，同 seize
+    odds += silver.mentor_bonus(state, content)  # 名師指點（銀兩出口）：在上限之內加，服丹那一次用掉（_force）
     return round(max(1.0, min(cfg.breakthrough.max_chance, odds)))
 
 
@@ -118,6 +120,7 @@ def _force(state: GameState, content: Content, world: WorldStateStore, art_id: s
     p, cfg = state.player, content.config
     art = team.resolve_art(art_id, content, world)
     odds = force_odds(state, content, world, art_id)
+    silver.take_mentor(state, content)
     p.legend_items -= 1
     msgs = [f"你服下一枚【{cfg.legend_item_name}】，關起門來強行衝關。"]
     if rng.random() * 100 < odds:

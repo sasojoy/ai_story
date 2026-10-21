@@ -13,7 +13,7 @@ from __future__ import annotations
 import hashlib
 from typing import TYPE_CHECKING
 
-from . import arena, calendar, library, ranks, renown
+from . import arena, calendar, library, ranks, renown, tactics
 from .characters import name_key
 from .models import Content
 from .state import GameState, Mingtie, MingtieCopy
@@ -140,8 +140,8 @@ def earned(state: GameState, content: Content, world=None, board: dict | None = 
     if mastered:
         out.append(f"練成絕學{_count(mastered)}門")
     owned = set(library.owned_arts(state))
-    for ch in c.characters.values():
-        if {ch.starting_wugong, ch.starting_neigong} & owned - {None}:
+    for ch in c.characters.values():  # 只認本命（tactics.figure_arts）：基礎吐納、書生劍這種同伴起始帶的學來的武學不是誰親傳的（FB-640）
+        if set(tactics.figure_arts(c, ch)) & owned:
             out.append(f"{ch.name}親傳")
     for item in [p.weapon, p.armor, *p.rack]:
         if item is None:

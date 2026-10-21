@@ -20,6 +20,7 @@ CALL = "call:bocai"
 
 @pytest.fixture
 def guan(on, world):
+    on.config.precise_actions = False  # 一類一顆之前的交友、求見（新規則在 tests/test_precise_actions.py，設計 8.4）
     game = Game.new(on, "官甲", rng=random.Random(0), world=world)
     game.client = None
     p = game.state.player

@@ -13,5 +13,10 @@
 
   {"id": "man_1", "name": "沉淵石", "attribute": "慢", "tier": 1, "description": "深潭底撈上來的圓石，同樣大小比別的石頭重上一倍。"},
   {"id": "man_2", "name": "磐嶽土", "attribute": "慢", "tier": 2, "description": "山根處掘出的黏土，曬乾之後鐵鑿也鑿不進去。"},
-  {"id": "man_3", "name": "鎮山鐵", "attribute": "慢", "tier": 3, "description": "舊寺鎮山塔基裡的一截鐵樁，據說埋著就不許山走。"}
+  {"id": "man_3", "name": "鎮山鐵", "attribute": "慢", "tier": 3, "description": "舊寺鎮山塔基裡的一截鐵樁，據說埋著就不許山走。"},
+
+  {"id": "gang_4", "name": "熔星髓", "attribute": "剛", "tier": 4, "description": "隕鐵在爐裡熬上七天七夜，最後剩下的一滴赤紅，冷了也不黑。"},
+  {"id": "rou_4", "name": "天池露", "attribute": "柔", "tier": 4, "description": "山巔天池清晨結的一顆露，放在掌心不化，也不往下滾。"},
+  {"id": "kuai_4", "name": "奔雷角", "attribute": "快", "tier": 4, "description": "雷雨裡從山上衝下來的那頭野獸斷下的角，拿著手臂發麻。"},
+  {"id": "man_4", "name": "歸墟壤", "attribute": "慢", "tier": 4, "description": "傳說是天下河水最後流去的地方挖來的一捧土，沉得兩手捧不住。"}
 ]

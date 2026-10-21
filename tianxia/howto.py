@@ -13,7 +13,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from . import allied as allied_rules
-from . import calendar, equipment, explore_modes, figures, renown, rules, seal, sortie, territory, timetable
+from . import calendar, conquest, economy, equipment, explore_modes, figures, four_tiers, mall, precise, renown, rules, seal, sortie, territory, timetable
 from .models import Content
 from .rules import STANCE_NAMES  # 態勢卡上三方的叫法（官軍、黃巾、豪強）：說明跟卡上同一個叫法
 from .state import GameState, WorldState
@@ -50,6 +50,9 @@ def explore_line(
 
 EXPLORE_MODES = "點開三選一：找素材{fight}、找事件，或靜心感悟{sense}。"  # 待 joy 潤：行動列底下探索那一行（出陣探索與地盤設計第三節）
 STRONG_HOWTO = "每個地點有一種意境最濃（輿圖「意境」濾鏡上圓盤的顏色），選對那一種的做法比較容易悟成。"  # 意境提示設計第二節（不寫數字）
+# 地利（武學隨地理環境計畫 Task 5；不寫倍數，待 joy 潤）
+TERRAIN_HOWTO = ("- 各地的氣象不同：身上的武學、內功跟此地最濃的意境同一路，打起來順手；被它剋的，施展不開。"
+                 "輿圖上點地點，「地利」那一段寫著此地利哪一路。")
 EXPLORE_FIGHT = "（這裡可能撞上怪，打贏是經驗的大宗）"
 EXPLORE_CALM = "（這裡不會撞上怪）"
 EXPLORE_NO_SENSE = "（這裡悟不出什麼）"
@@ -76,22 +79,50 @@ def train_line(foes: bool, gains: Sequence[str], drops: bool, push: bool, drill_
 SORTIE_NOTES = {  # 待 joy 潤：行動列底下出陣那一行（設計第二節）
     "attack": "這裡歸別人：打一場，打贏{push}；只拿對手 {share} 成的心得與經驗，{loot}",
     "hold": "這裡是自家地盤：不用打，{push}（量是攻的{half}）；拿自家隊伍 {share} 成的心得與經驗。",
+    # 領地爭奪：自家的區塊守、推不動（沒人在推、剛易手、戰書凍結）：{push} 是 SORTIE_BLOCKED_HOLD，「量是攻的一半」寫在它的括號裡（裁決 21）
+    "hold_idle": "這裡是自家地盤：不用打，{push}；拿自家隊伍 {share} 成的心得與經驗。",
     "stir": "不用打，把這一帶的戰局往中間攪（量是攻的{half}）；拿此地隊伍 {share} 成的心得與經驗。",
     # 截糧週在自家佔著的截糧地點出陣是攻打運糧隊（FB-255）：地方是自己的，不寫「這裡歸別人」
     "convoy": "對面的運糧隊正打這裡經過：打一場，打贏{push}；只拿對手 {share} 成的心得與經驗，{loot}",
+    # 領地爭奪：自家的大本營、廣宗（搶不下來的區塊）守，沒有進度可推、不記貢獻（FB-532，不接「量是攻的一半」）
+    "home": "這裡是自家地盤，不在爭奪之列：不用打，也沒有進度可推；拿自家隊伍 {share} 成的心得與經驗。",
+    # 領地爭奪：還沒人佔的中立地是攻，但不是「歸別人」（FB-533）
+    "open": "這裡還沒有人佔：打一場，打贏{push}；只拿對手 {share} 成的心得與經驗，{loot}",
+    # 領地爭奪：大本營、廣宗不在爭奪之列，只有截糧的運糧隊經過時打運糧隊（計畫第八章裁決 18）
+    "convoy_out": "對面的運糧隊正打這裡經過：此地不在爭奪之列，打贏只算截糧、沒有進度可推；只拿對手 {share} 成的心得與經驗，{loot}",
 }
 SORTIE_LOOT = "不給銀兩、不掉東西。"
 SORTIE_LOOT_SILVER = "銀兩也是 {silver} 成，不掉東西。"  # 素材與經濟設計第八節（Config.economy.sortie_silver）；待 joy 潤
 SORTIE_PUSH = "推動戰局、記貢獻"
 SORTIE_NO_PUSH = "今天這條線推滿了，推不動"
+SORTIE_PROGRESS = "推這一塊的進度、記貢獻"  # 領地爭奪：出陣不推線、推那一塊的進度（設計 3.7）；待 joy 潤
+SORTIE_HOLD_PROGRESS = "把對面在這裡的進度拉回來、記貢獻"  # 領地爭奪：守把每一條都拉下（翻地與爭搶，輿圖簡化設計 4.1）；待 joy 潤
+SORTIE_BLOCKED = "推不動進度（{why}）"  # 領地爭奪：推不動的原因照 conquest.push_problem（剛易手、戰書凍結、不相連、搶不下來）；待 joy 潤
+# 自家的區塊守、推不動：那一句本來接「（量是攻的一半）」，兩個括號連在一起（計畫第八節裁決 21）——合成一個括號、意思不變。待 joy 潤
+SORTIE_BLOCKED_HOLD = "推不動進度（{why}；有人來攻時守拉的量是攻的{half}）"
 SORTIE_LEFT = "今日還能出陣 {n} 次。"
 
 
-def sortie_line(how: str, push: bool, left: int, content: Content) -> str:
-    """出陣這一下會怎樣（Game._sortie_line 照規則算好傳進來）。數字讀 Config：給自己的成數、守與攪局是攻的幾成。"""
+def sortie_line(how: str, push: bool, left: int, content: Content, progress: bool | None = None, why: str | None = None) -> str:
+    """出陣這一下會怎樣（Game._sortie_line 照規則算好傳進來）。數字讀 Config：給自己的成數、守與攪局是攻的幾成。
+    progress：領地爭奪在這一季生效時給（這一塊的進度推不推得動，conquest.push_problem），推的那一句換成推進度；沒給（關著）一個字都不變、照 push。
+    why：推不動的原因（push_problem 的那一句），寫在 SORTIE_BLOCKED 的括號裡。自家的區塊守、推不動寫 SORTIE_NOTES["hold_idle"]＋
+    SORTIE_BLOCKED_HOLD：一個括號（裁決 21）；這一塊被戰書凍結（原因是 conquest.FROZEN_WHY 的一句：已下戰書、集結中、開打中）時不接
+    「有人來攻時…」——攻城已經排了，照實寫在哪一步就好（FB-552）。"""
     cfg = content.config
     half = "一半" if cfg.sortie.hold_share == 0.5 else f" {cfg.sortie.hold_share * 10:g} 成"
-    text = SORTIE_NOTES[how].format(push=SORTIE_PUSH if push else SORTIE_NO_PUSH, share=f"{cfg.drill_reward_share * 10:g}", half=half,
+    if progress is None:
+        pushed = SORTIE_PUSH if push else SORTIE_NO_PUSH
+    elif progress:
+        pushed = SORTIE_HOLD_PROGRESS if how == "hold" else SORTIE_PROGRESS
+    else:
+        pushed = SORTIE_BLOCKED.format(why=why or conquest.WHY_OUT)
+    if how == "hold" and progress is False:
+        if why in conquest.FROZEN_WHY.values():
+            how = "hold_idle"
+        else:
+            how, pushed = "hold_idle", SORTIE_BLOCKED_HOLD.format(why=why or conquest.WHY_IDLE, half=half)
+    text = SORTIE_NOTES[how].format(push=pushed, share=f"{cfg.drill_reward_share * 10:g}", half=half,
                                     loot=sortie_loot(content))
     return text + SORTIE_LEFT.format(n=left)
 
@@ -162,10 +193,10 @@ def regen_line(content: Content) -> str:
     return f"體力每 {_clock(cfg.stamina_regen_seconds / cfg.time_scale)}回 1 點，滿 {cfg.stamina_max} 就不再回。"
 
 
-def newbie_line(content: Content, season: WorldState, still: bool | None = None) -> str:
+def newbie_line(content: Content, season: WorldState, still: bool | None = None, card: int = 0) -> str:
     """新手期體力回復加快（roster.newbie 的 newbie_stamina_days、newbie_stamina_multiplier）：第一季從自己加入的那一刻起算，beta 那一季
     從開季算，都是季曆天；寫成現實時間（季曆天 ÷ cal_scale ÷ time_scale，季長照這一季蓋的章）。倍數是 1 時沒有這一行（空字串）。
-    still 給了就補一句還在不在這段時間裡。"""
+    still 給了就補一句還在不在這段時間裡。card：今天月卡讓回體丹上限多幾顆（Game._pill_card_bonus，FB-480），0 一個字都不變。"""
     cfg = content.config
     tail = "" if still is None else ("（你還在新手期）" if still else "（你的新手期已經過了）")
     if cfg.newbie_real_hours > 0:  # 新手期照現實時間（Joy 2026-10-17「新手期 48 小時」）：寫這段時間裡有什麼
@@ -173,7 +204,8 @@ def newbie_line(content: Content, season: WorldState, still: bool | None = None)
         if cfg.newbie_stamina_multiplier > 1:
             perks.append(f"體力回復 ×{cfg.newbie_stamina_multiplier:g}")
         if cfg.stamina_pills_per_day > 0 and cfg.newbie_pills_per_day > 0:
-            perks.append(f"{cfg.stamina_pill_name}一天能服 {cfg.newbie_pills_per_day} 顆")
+            extra = f"（月卡多 {card} 顆）" if card > 0 else ""  # 待 joy 潤
+            perks.append(f"{cfg.stamina_pill_name}一天能服 {cfg.newbie_pills_per_day + card} 顆{extra}")
         if cfg.raid.enabled:
             perks.append("別人截殺不了你")
         if not perks:
@@ -188,10 +220,11 @@ def newbie_line(content: Content, season: WorldState, still: bool | None = None)
     return f"新手期：{since}的{gap}{span}內，體力回復 ×{cfg.newbie_stamina_multiplier:g}{tail}。"
 
 
-def pill_line(content: Content, count: int | None = None, today: int | None = None) -> str:
+def pill_line(content: Content, count: int | None = None, today: int | None = None, card: int = 0) -> str:
     """體力條右端那顆鈕：測試期間一鍵補滿打開時（Config.beta_free_refill）是「補滿」，不花丹；關著時是回體丹，一顆回多少
     （count 給了就寫還有幾顆，0 顆沒有這一行；None 是玩法說明那種不看個人的說法）。一天有上限時（stamina_pills_per_day）
-    多一句上限與換日，today 給了再寫今天還能服幾顆。"""
+    多一句上限與換日，today 給了再寫今天還能服幾顆。card：今天月卡讓上限多幾顆（Game._pill_card_bonus，跟 Game.pill_cap 加的同一份；
+    FB-480），兩個上限都加上去、括號裡寫月卡多幾顆；0 一個字都不變。"""
     cfg = content.config
     if cfg.beta_free_refill:
         return f"測試期間按體力條上的「{cfg.beta_free_refill_label}」直接補滿，不花{cfg.stamina_pill_name}。"
@@ -201,33 +234,36 @@ def pill_line(content: Content, count: int | None = None, today: int | None = No
     line = f"{cfg.stamina_pill_name}一顆回 {cfg.stamina_pill_restore} 點{have}，按體力條右端的「丹」服下。"
     if cfg.stamina_pills_per_day > 0:
         left = "" if today is None else f"（今天還能服 {today} 顆）"
-        rookie = f"（新手期 {cfg.newbie_pills_per_day} 顆）" if cfg.newbie_pills_per_day > 0 else ""
-        line += f"一天最多服 {cfg.stamina_pills_per_day} 顆{rookie}，每天 00:00（台灣時間）重新計算{left}。"
+        parts = [f"新手期 {cfg.newbie_pills_per_day + card} 顆"] * (cfg.newbie_pills_per_day > 0)
+        parts += [f"月卡多 {card} 顆"] * (card > 0)  # 待 joy 潤
+        rookie = f"（{'；'.join(parts)}）" if parts else ""
+        line += f"一天最多服 {cfg.stamina_pills_per_day + card} 顆{rookie}，每天 00:00（台灣時間）重新計算{left}。"
     return line
 
 
 def stamina_lines(
     content: Content, season: WorldState, newbie: bool | None = None, pills: int | None = None, button: bool = True,
-    today: int | None = None,
+    today: int | None = None, card: int = 0,
 ) -> list[str]:
     """體力條點開的說明（也是玩法說明「體力」那一節）：回復、新手期、回體丹或補滿。button：體力條上有沒有那顆鈕
-    （序章裡沒有，就不提）。today：今天還能服幾顆（Game.pills_left_today）。空的行不列。打坐 2026-10-12 拿掉了。"""
-    lines = [regen_line(content), newbie_line(content, season, newbie)]
+    （序章裡沒有，就不提）。today：今天還能服幾顆（Game.pills_left_today）。card：今天月卡讓回體丹上限多幾顆（FB-480；
+    玩法說明不看個人，是 0）。空的行不列。打坐 2026-10-12 拿掉了。"""
+    lines = [regen_line(content), newbie_line(content, season, newbie, card)]
     if button:
-        lines.append(pill_line(content, pills, today))
+        lines.append(pill_line(content, pills, today, card))
     return [line for line in lines if line]
 
 
 def gift_line(content: Content) -> str:
     """建角色時送的回體丹（Config.beta_gift、beta_gift_stamina_pills），記在江湖紀錄開場那一則的一行（建角色那一刻寫下）。
     測試期一鍵補滿打開時（Config.beta_free_refill），體力條那顆鈕寫 beta_free_refill_label、不花丹：說丹先收著、按那顆鈕免費補滿
-    （控制者走查）；關著時說按「丹」服下。兩句都待 joy 潤。"""
+    （控制者走查）；關著時說按「丹」服下。兩句都待 joy 潤。開頭從「內測贈禮」改成「新手福利」（正式季整合 6.3，企劃者 10/16）。"""
     cfg = content.config
     name, n, restore = cfg.stamina_pill_name, cfg.beta_gift_stamina_pills, cfg.stamina_pill_restore
     if cfg.beta_free_refill:
-        return (f"內測贈禮：{name} {n} 顆（一顆回 {restore} 點體力），先收著；"
+        return (f"新手福利：{name} {n} 顆（一顆回 {restore} 點體力），先收著；"
                 f"測試期間按體力條上的「{cfg.beta_free_refill_label}」就能免費補滿，不花丹。")
-    return f"內測贈禮：{name} {n} 顆，一顆回 {restore} 點體力，按體力條右端的「丹」服下。"
+    return f"新手福利：{name} {n} 顆，一顆回 {restore} 點體力，按體力條右端的「丹」服下。"
 
 
 def top_up_line(content: Content, added: int) -> str:
@@ -313,28 +349,48 @@ SORTIE_PLACES = "在戰線上的地點出陣會推動戰況（行動列底下那
 SORTIE_JOIN = "在戰線上的地點出陣：別人的地盤打贏往你那一邊推，自家的地盤守一回、推一半"
 SORTIE_GEJU = "在戰線上出陣攪局、把戰局往中間拉（戰線一亂，割據自然漲）"  # 豪強怎麼推割據
 SORTIE_RANGER = "散人不出陣，靠懸賞與事件出力"
+# 領地爭奪（第 38 項改版第一批）：出陣推的是那一塊的進度、戰線照佔領算——上面三句在這種季換成這幾句（待 joy 潤）
+CONQUEST_PLACES = "在官軍、黃巾的領地與中立地出陣，推的是那一塊的進度，不直接推戰線"
+CONQUEST_JOIN = "在官軍、黃巾的領地與中立地出陣：別人的地方打贏把那一塊的進度往你那一邊推，自家的地方守一回、推一半"
+CONQUEST_FRONTS = "戰線照兩軍佔了多少地來算：佔下中立地、打進敵方的領地，戰線就往那一邊偏"
 
 
-def sortie_lines(content: Content, allied: bool = False) -> list[str]:
+def _sortie_places(content: Content, season: WorldState | None) -> str:
+    """「你能做的」那一句的出陣怎麼推：領地爭奪在這一季生效時推進度（CONQUEST_PLACES），不然照舊。"""
+    if conquest.on(content, season):
+        return CONQUEST_PLACES
+    return SORTIE_PLACES if sortie.on(content) else SOME_PLACES
+
+
+def sortie_lines(content: Content, allied: bool = False, season: WorldState | None = None) -> list[str]:
     """玩法說明「行動」裡出陣那一條（出陣開著時取代遊歷；待 joy 潤）。數字讀 Config。
-    allied：豪強分屬兩軍的季沒有攪局，豪強照依附那一邊攻守（新寫）。"""
+    allied：豪強分屬兩軍的季沒有攪局，豪強照依附那一邊攻守（新寫）。
+    season：領地爭奪在這一季生效時，出陣在每一塊領地都有、推的是那一塊的進度（待 joy 潤）；沒給、關著一個字都不變。"""
     cfg = content.config
     reset = "台灣時間 00:00 換日" if cfg.pill_day_utc_offset_hours == 8 else "每天 00:00 換日"
     half = "一半" if cfg.sortie.hold_share == 0.5 else f" {cfg.sortie.hold_share * 10:g} 成"
     gentry = "地方豪強照依附的那一邊攻守。" if allied else "地方豪強是攪局，把戰局往中間拉。"
     hold = "守" if allied else "守與攪局"
+    where, push_word = "只在戰線上的地點", "打贏推動戰局"
+    others, far = "這裡歸別人", "越往對方老巢推越難推。"
+    if conquest.on(content, season):  # 領地爭奪（第 38 項改版第一批）
+        where, push_word = "官軍、黃巾的領地與中立地上都有（各家的大本營與廣宗不在爭奪之列，攻不得）", "打贏推那一塊的進度"  # 裁決 18
+        others, far = "這裡歸別人或還沒人佔", ""  # 推進度沒有盡頭阻力（FB-533；待 joy 潤）
     return [
-        f"- **出陣**（體力 {cfg.action_cost['train']}，每天 {cfg.sortie.per_day} 次，{reset}）：投靠了陣營才有，只在戰線上的地點。"
-        f"這裡歸別人就打一場，打贏推動戰局、記貢獻；歸自家就守，不用打；{gentry}"
+        f"- **出陣**（體力 {cfg.action_cost['train']}，每天 {cfg.sortie.per_day} 次，{reset}）：投靠了陣營才有，{where}。"
+        f"{others}就打一場，{push_word}、記貢獻；歸自家就守，不用打；{gentry}"
         f"{hold}推的量是攻的{half}。只拿對手 {cfg.drill_reward_share * 10:g} 成的心得與經驗，"
-        + ("攻打贏" + sortie_loot(content) if cfg.economy.sortie_silver else sortie_loot(content)) + "越往對方老巢推越難推。",
+        + ("攻打贏" + sortie_loot(content) if cfg.economy.sortie_silver else sortie_loot(content)) + far,
     ]
 
 
-def explore_lines(content: Content) -> list[str]:
-    """玩法說明「行動」裡探索那一條（三選一開著時取代照地點比例那一條；待 joy 潤）。數字讀 Config。"""
+def explore_lines(content: Content, season: WorldState | None = None) -> list[str]:
+    """玩法說明「行動」裡探索那一條（三選一開著時取代照地點比例那一條；待 joy 潤）。數字讀 Config。
+    一類一顆在這一季生效時（precise.on）寫另一版：找素材一定給、不打仗，練功另一條（FB-422）；舊季一個字都不變。"""
     cfg = content.config
     names = explore_modes.NAMES
+    if precise.on(content, season):
+        return precise_explore_lines(content) + gather_branch_lines(content, season)
     legend = f"三種都有機會撿到{cfg.legend_item_name}。" if cfg.explore_legend_chance > 0 else ""
     econ = cfg.economy  # 素材與經濟設計第七節：一階從一定給改成七成
     first = f"（一階約 {econ.gather_first_chance * 10:g} 成撿得到）" if econ.gather_cut else ""
@@ -345,15 +401,85 @@ def explore_lines(content: Content) -> list[str]:
     ]
 
 
+def precise_explore_lines(content: Content) -> list[str]:
+    """一類一顆的探索與練功（FB-422；正式季整合 2.4、2.5；待 joy 潤）。數字讀 Config。"""
+    cfg = content.config
+    names = explore_modes.NAMES
+    cost = cfg.action_cost["explore"]
+    legend = f"每一種都有機會撿到{cfg.legend_item_name}。" if cfg.explore_legend_chance > 0 else ""
+    return [
+        f"- **探索**（體力 {cost}）：點開來挑一種。{names['gather']}：照這裡的地形一定撿得到素材，不打仗；"
+        f"{names['seek']}：碰上這一帶的事（交友的事也在這裡），偶有奇遇；{names['sense']}：只在悟得到意境的地方。{legend}",
+        f"- **{names['practice']}**（在探索裡，體力 {cost}）：找這裡的對手打一場，一定開打、不限次數，打贏是經驗的大宗；"
+        "城鎮與沒有對手的地方灰著。有頭目的地方，頭目在練功時碰上。",
+    ]
+
+
+def gather_branch_lines(content: Content, season: WorldState | None) -> list[str]:
+    """找素材分支（第 32 項；待 joy 潤）開著時多一條：哪幾條路多給哪幾種屬性、深入偶有所悟、「自己說」。照 content/gather_branches.json 寫，
+    關著是空的（一個字都不變）。"""
+    if not explore_modes.branches_on(content, season):
+        return []
+    names = explore_modes.NAMES
+    roads = "，".join(f"{b.name}多{'、'.join(b.attributes)}" for b in content.gather_branches.values() if not b.deep)
+    deep = next((b for b in content.gather_branches.values() if b.deep), None)
+    deep_line = f"；深山裡「{deep.name}」偶爾另有所悟" if deep is not None and content.config.gather_branches.deep_insight_chance > 0 else ""
+    say = (f"最後一顆「{explore_modes.SAY_LABEL}」寫一句自己的找法（{explore_modes.SAY_MAX} 字內），寫得好多一份。"
+           if content.config.gather_branches.say_enabled else "")
+    return [f"- **{names['gather']}的路**：城外有兩條以上的路可走時，按{names['gather']}會再攤開幾條——{roads}{deep_line}。{say}"]
+
+
 def _tenth(share: float) -> str:
     """0.1 → 一成、0.2 → 兩成（rules.count_word）；不是整成照寫百分比。"""
     tenths = round(share * 10, 6)
     return f"{'兩' if tenths == 2 else rules.count_word(int(tenths))}成" if tenths == int(tenths) else f"{share * 100:g}%"
 
 
-def territory_lines(content: Content, allied: bool = False) -> list[str]:
+def conquest_lines(content: Content) -> list[str]:
+    """玩法說明「地盤」一節的領地爭奪版（第 38 項改版第一批；開關在這一季生效時取代拔河那一版；待 joy 潤）。數字讀 Config。"""
+    cfg, terr = content.config.conquest, content.config.territory
+    gather = f"{cfg.gather_bonus_chance * 100:g}%"
+    lines = [
+        "地圖分三種：官軍的領地、黃巾的領地，和中立地。中立地開季沒人佔，兩軍爭的就是它；各家的投靠點永遠是自家的，廣宗只照廣宗決戰易手。",
+        "能挑的是跟自家領地有路直通的那一塊——中立地，或者敵方的領地，一塊一塊往前推。",
+        f"三條戰線的大勢照兩軍佔了多少地來算：一條線上的中立地全被一方拿下，那條線往那一邊偏 {cfg.share:g} 點；"
+        "打進敵方的領地份量加倍。時刻表的大事、事件、大勢人物、軍令照舊推線。",
+        "出陣不再直接推戰線，推的是那一塊的進度：每一塊對每一個來攻的一方各有一條進度。在別人的地方、還沒人佔的中立地出陣是攻、"
+        "推自己那一條；在自家的地方是守、把對面每一條都拉回來；照樣記貢獻。各家的大本營與廣宗不在爭奪之列：別人的攻不得，"  # 裁決 18
+        "自家的守了也沒有進度。找不到對手的地方推不動。",
+        # 裁決 24（PM 2026-10-20）；待 joy 潤
+        "巡哨、傳道、保境安民這類守勢行動也只在自家的領地做：別人的地方、還沒人佔的中立地，那一顆灰著，按不下去。",
+        f"哪一條推滿 100，那一塊當場易手：天下大事一句，推過的人照出力分銀兩、經驗、名望，推最多的上江湖史。剛易手的地 "
+        f"{cfg.cooldown_minutes:g} 分鐘內兩邊都推不動，那一塊的加成也先停著。沒人推的地每天往回 {cfg.decay_per_day:g}。",  # 待 joy 潤
+        f"同一邊的人一小時內一起推同一塊，每多一個人每一下多推 {cfg.focus_step * 100:g}%（最多 {cfg.focus_cap * 100:g}%）。"
+        f"出陣時對面 {cfg.clash_minutes:g} 分鐘內在這一塊推過、人還在，就撞上打一場（照截殺的規矩，城裡也打、不搶東西）："
+        f"贏的那一下多推 {(cfg.clash_scale - 1) * 100:g}%，輸的那一下白跑。守方把五成以上的進度拉回零，也照出力分守城功。",
+        f"進度到 {cfg.letter_at:g}，那一邊這一週在任的第 4 階可以下戰書（一邊一天一張）：挑最近的攻城時段"
+        f"（{cfg.slot_first // 60}:00～{cfg.slot_last // 60}:00 的整點或半點）打一場攻城戰，那一塊的進度凍結到打完。"
+        f"開打前 {cfg.muster_minutes} 分鐘開集結，人要在那個大區才加得進去。攻城戰是決戰的縮小版：攻方贏了直接易手、"
+        f"輸了進度砍半，守方沒人時打那裡的留守，攻方沒人到這一場作罷。軍餉是決戰的{_tenth(cfg.pay_share)}。",
+        # 裁決 22（企劃者 2026-10-21）；待 joy 潤
+        "兩軍都對同一塊中立地下了戰書，就併成一場三方混戰：那裡的守將兩邊都打，兩軍之間也照常交鋒；強攻打得到守將，"
+        "戰線壓向哪一軍，那一軍打守將就越有力。誰補上守將最後一刀，這一塊就歸誰；回合打完守將還沒倒，照舊沒人佔。"
+        "散人可以投效兩軍之一，或助守。",
+        f"人站在自家領地：療傷、打造、買馬便宜{_tenth(1 - terr.own_price)}，在敵方的領地貴{_tenth(terr.enemy_price - 1)}"
+        f"（新手期在敵方領地療傷不加價）；找素材有 {gather} 的機會多撿一個，靜心感悟更容易抓住。",
+        "散人在開季是中立地的地方也算自家：一樣便宜、一樣多撿一份，不論那裡此刻被誰佔了。",
+        "中立地站著另一批強對手，掉的東西也好；被佔下之後照樣在那裡，兩邊的人去都得打。",
+        "輿圖局勢層的底色就是此刻誰佔著，灰的是還沒人佔的中立地；易手時天下大事會傳一句。",
+    ]
+    if seal.on(content):  # 第三批 B（設計 3.9）：碎片的來源；只說「在哪一類地方」，藏在哪一塊不公開；待 joy 潤
+        lines.insert(-1, "傳說傳國玉璽的碎片就藏在這些中立地的某一處：一季最多一片，到那裡探索（四種探索都算）才有極小的機會撿到，"
+                         "藏在哪一處沒人知道；那一塊此刻若歸你的陣營，機會再高一點；剛易手、還在冷卻的地方撿不到。")
+    return lines
+
+
+def territory_lines(content: Content, allied: bool = False, season: WorldState | None = None) -> list[str]:
     """玩法說明「地盤」一節（地盤開著時；待 joy 潤）。_section 自己會在每一行前面加「- 」。價錢的成數讀 Config.territory。
-    allied：豪強分屬兩軍的季沒有割據佔地，豪強照依附那一邊算自家（新寫）。"""
+    allied：豪強分屬兩軍的季沒有割據佔地，豪強照依附那一邊算自家（新寫）。
+    season：領地爭奪在這一季生效（conquest.on）時寫 conquest_lines；沒給、或關著一個字都不變。"""
+    if conquest.on(content, season):
+        return conquest_lines(content)
     cfg = content.config.territory
     geju = "" if allied else "豪強割據高時也會佔地；"
     gentry = "地方豪強照依附的那一邊算自家。" if allied else ""
@@ -373,24 +499,33 @@ def economy_lines(content: Content, allied: bool = False) -> list[str]:
     allied：豪強分屬兩軍的季，豪強捐的進依附那一邊、在自己的莊院與那一邊的大本營都能捐（新寫）。"""
     econ = content.config.economy
     reset = "台灣時間 00:00 換日" if content.config.pill_day_utc_offset_hours == 8 else "每天 00:00 換日"
-    tier_word = {1: "一階", 2: "二階", 3: "三階"}
+    tier_word = {1: "一階", 2: "二階", 3: "三階", 4: "四階"}
+    four = four_tiers.on(content)
     lines = []
     if econ.sell:
-        prices = [f"{tier_word.get(t, f'{t}階')} {price} 兩" for t, price in sorted(econ.sell_price.items())]
+        tiers = economy.sell_tiers(content)
+        prices = [f"{tier_word.get(t, f'{t}階')} {econ.sell_price[t]} 兩" for t in tiers]
         prices[0] = prices[0].replace(" ", "一個 ", 1)  # 「一階一個 2 兩、二階 6 兩」
-        lines.append(f"城鎮的鐵匠鋪收素材：{'、'.join(prices)}；三階不收，留著打神器。")
+        refused = "四階不收，留著打神器" if four else "三階不收，留著打神器"  # 素材四階（正式季整合 4.2）
+        lines.append(f"城鎮的鐵匠鋪收素材：{'、'.join(prices)}；{refused}。")
         rcfg = content.config.renown
-        if renown.on(content, "black_market") and rcfg.black_market_prices:  # 名聲 5.2：寇的黑市價（待 joy 潤）
+        dark_prices = {t: p for t, p in rcfg.black_market_prices.items() if t in tiers}
+        if renown.on(content, "black_market") and dark_prices:  # 名聲 5.2：寇的黑市價（待 joy 潤）
             title = renown.VIRTUE_TITLES["寇"][rcfg.black_market_tier]
-            dark = "、".join(f"{tier_word.get(t, f'{t}階')} {p} 兩" for t, p in sorted(rcfg.black_market_prices.items()))
+            dark = "、".join(f"{tier_word.get(t, f'{t}階')} {p} 兩" for t, p in sorted(dark_prices.items()))
             lines.append(f"走寇的路、到了「{title}」，鐵匠照黑市價收：{dark}。")
     if econ.upgrade:
         steps = []
-        for tier in sorted(econ.upgrade_need):
-            cap = econ.upgrade_per_day.get(tier)
-            limit = f"，一天{rules.count_word(cap)}個，{reset}" if cap is not None else ""
-            steps.append(f"{tier_word.get(tier - 1)}{rules.count_word(econ.upgrade_need[tier])}個換一個{tier_word.get(tier)}"
-                         f"（工錢 {econ.upgrade_silver.get(tier, 0)} 兩{limit}）")
+        needs = economy.upgrade_needs(content)
+        for tier in sorted(needs):
+            if four:  # 素材四階：一般的不設每日上限，三換四一季幾個、一定同屬性（4.2、4.5）
+                cap_text = f"，一季{four_tiers.count_text(content.config.four_tiers.season_cap)}個、一定出同屬性" if tier == four_tiers.TIER else ""
+            else:
+                cap = econ.upgrade_per_day.get(tier)
+                cap_text = f"，一天{rules.count_word(cap)}個，{reset}" if cap is not None else ""
+            cost = content.config.four_tiers.upgrade_silver if four and tier == four_tiers.TIER else econ.upgrade_silver.get(tier, 0)
+            steps.append(f"{tier_word.get(tier - 1)}{rules.count_word(needs[tier])}個換一個{tier_word.get(tier)}"
+                         f"（工錢 {cost} 兩{cap_text}）")
         astray = ""
         if econ.upgrade_same_share < 1:  # 升階隨機（企劃者 2026-10-15）：投入的屬性幾成，其餘落到別的屬性
             share = round(econ.upgrade_same_share * 10)
@@ -445,7 +580,10 @@ def fronts_help(state: GameState, content: Content) -> list[str]:
     now = f"現在{'、'.join(chaos)}在亂局。" if chaos else "現在沒有戰線在亂局。"
     on = sortie.on(content)
     allied = rules.haoqiang_allied(content, state.world)  # 豪強分屬兩軍：沒有割據、豪強照依附那一邊推
-    parts = [f"{SORTIE_PLACES if on else SOME_PLACES}，往你陣營那一邊推" + ("（地方豪強往依附的那一邊）" if allied else "")]
+    if conquest.on(content, state.world):  # 領地爭奪：出陣不直接推線，戰線照佔領算（設計 3.7、3.8）
+        parts = [f"{CONQUEST_FRONTS}（地方豪強算依附的那一邊）；{CONQUEST_PLACES}，大事、事件、大勢人物照舊推線"]
+    else:
+        parts = [f"{SORTIE_PLACES if on else SOME_PLACES}，往你陣營那一邊推" + ("（地方豪強往依附的那一邊）" if allied else "")]
     pushers = _order_pushers(content)
     if pushers:  # 一個人照做軍令不推戰線，全陣營湊滿額度那一刻才推（orders.credit，審查 Minor 5）
         parts.append(f"{'、'.join(STANCE_NAMES.get(f, f) for f in pushers)}的軍令湊滿額度時整個陣營再推一把")
@@ -493,10 +631,10 @@ def board_help(content: Content) -> list[str]:
     return lines
 
 
-def quest_help(content: Content, allied: bool = False) -> list[str]:
+def quest_help(content: Content, allied: bool = False, season: WorldState | None = None) -> list[str]:
     """主線小標點開的說明：你能怎麼影響這一季（遊歷、軍令、伏筆）。FB-112：推線只說有些地方；伏筆只有會鎖定大事的兩方
     （foreshadow.LOCK_SIDES＝timetable.SIDE_NAMES）改寫得了，豪強做完是第三方（揭曉時留名、照 third_party_trends 推割據，結果不變），
-    散人做不了（foreshadow.capable 要陣營對得上）。"""
+    散人做不了（foreshadow.capable 要陣營對得上）。season 給了照季寫軍令多久一道（軍令每天發的季〔21 天季、7 天濃縮季〕「每天」，FB-501、FB-502）。"""
     locks = "、".join(timetable.SIDE_NAMES.values())
     third = "" if allied else "、".join(STANCE_NAMES.get(f, f) for f in _geju_sides(content))  # 豪強分屬兩軍：沒有第三方
     geju = any(rules.GEJU in e.third_party_trends for e in content.timetable)
@@ -504,7 +642,8 @@ def quest_help(content: Content, allied: bool = False) -> list[str]:
     if allied:  # 新寫
         aside = f"地方{STANCE_NAMES['haoqiang']}照依附的那一邊；"
     return [
-        f"你能做的：{SORTIE_PLACES if sortie.on(content) else SOME_PLACES}；投靠陣營之後每週一有軍令，照做記功，全陣營湊滿額度就一起見效；"
+        f"你能做的：{_sortie_places(content, season)}；"
+        f"投靠陣營之後{calendar.week_word('order_each', content, season)}有軍令，照做記功，全陣營湊滿額度就一起見效；"
         f"{locks}的人聽傳聞、跟人物交好，湊齊關鍵伏筆，能暗中改寫一件大事（{aside}散人拿不到伏筆）。",
     ]
 
@@ -516,7 +655,7 @@ def war_help(state: GameState, content: Content) -> dict[str, list[str]]:
         "stance": stance_help(content, allied),
         "fronts": fronts_help(state, content),
         "board": board_help(content),
-        "quest": quest_help(content, allied),
+        "quest": quest_help(content, allied, state.world),
     }
 
 
@@ -568,7 +707,7 @@ def _plus(span: FameRange) -> str:
 
 def fame_lines(content: Content, season: WorldState) -> list[str]:
     """玩法說明「名望」那一節：從哪裡來（事件三堆、第一季的首創回饋、決戰最有戲的那一搏）、拿來做什麼（求見門檻、視野〔全圖開放時沒有〕、拜師學藝）。數字讀內容與設定。"""
-    return [*_fame_sources(content, season), _fame_uses(content)]
+    return [*_fame_sources(content, season), _fame_uses(content, season=season)]
 
 
 def _fame_sources(content: Content, season: WorldState) -> list[str]:
@@ -578,7 +717,9 @@ def _fame_sources(content: Content, season: WorldState) -> list[str]:
     lines = []
     if "common" in spans:
         # 出陣開著時沒有遊歷，戰後事件接在探索找素材撞上的那一場之後（FB-257；待 joy 潤）
-        where = "探索、交友、找素材撞上的仗之後" if sortie.on(content) else "探索、交友、遊歷之後"
+        # 一類一顆：戰後事件與交友事件都併進找事件（FB-420 同一批；待 joy 潤）
+        where = ("探索找事件時" if precise.on(content, season)
+                 else "探索、交友、找素材撞上的仗之後" if sortie.on(content) else "探索、交友、遊歷之後")
         lines.append(f"事件裡出頭、仗義、露臉的做法（{where}碰上的事）：一次 {_plus(spans['common'])}。")
     if "big" in spans:
         lines.append(f"劇情裡打贏強敵、奇遇與一次性的大事：一次 {_plus(spans['big'])}。")
@@ -612,6 +753,11 @@ def _fame_sources(content: Content, season: WorldState) -> list[str]:
             lines.append(f"擂台每天的俸：第一名 +{ring.wages[0][1]}，前 {len(ring.wages)} 名都有。")
         if ring.prizes:
             lines.append("擂台賽季末前三名：" + "、".join(f"第{'一二三四五'[i]}名 +{fame}" for i, fame in enumerate(ring.prizes)) + "。")
+    land = cfg.conquest
+    if conquest.on(content, season) and land.take_fame > 0:  # 翻地與爭搶的分紅、守城功（Game._deliver_conquest）；待 joy 潤
+        lines.append(f"一塊地推滿易手，推過的人照出力分名望：中立地一塊總共 +{land.take_fame}，敵方的領地 "
+                     f"+{round(land.take_fame * land.faction_pool_share)}；守方把五成以上的進度拉回零，照拉回的分守城功（再打"
+                     f"{_tenth(land.guard_pool_share)}）。")
     from . import tavern  # noqa: PLC0415  酒肆（Game._tavern_treat 請酒、Game._tavern_hit_fight 打退殺手）；待 joy 潤
     if tavern.on(content):
         bar = cfg.tavern
@@ -622,14 +768,17 @@ def _fame_sources(content: Content, season: WorldState) -> list[str]:
     return lines
 
 
-def _fame_uses(content: Content, k: float = 1.0) -> str:
-    """名望拿來做什麼：求見與拜師的門檻乘 k（名聲開著時是這一季的倍數，rules.audience_parts、library 照同一個算法）。"""
+def _fame_uses(content: Content, k: float = 1.0, season: WorldState | None = None) -> str:
+    """名望拿來做什麼：求見與拜師的門檻乘 k（名聲開著時是這一季的倍數，rules.audience_parts、library 照同一個算法）。
+    一類一顆在這一季生效時求見併進交友、不夠的見不到（FB-422）。"""
     cfg = content.config
     scaled = lambda n: int(n * k + 0.5)  # noqa: E731
     bars = sorted(ch.audience_fame for ch in content.characters.values() if ch.deep_interaction and ch.audience_fame > 0)
     uses = []
     if bars:
-        uses.append(f"求見大勢人物（門檻最低 {scaled(bars[0])}、最高 {scaled(bars[-1])}；不夠的會打發你）")
+        span = f"門檻最低 {scaled(bars[0])}、最高 {scaled(bars[-1])}"
+        uses.append(f"跟大勢人物說上話（{span}；不夠的見不到）" if precise.on(content, season)
+                    else f"求見大勢人物（{span}；不夠的會打發你）")
     if not cfg.open_map:  # 全圖開放（企劃者 2026-10-15）沒有視野，名望不再多看一站
         uses.append(f"名望到 {cfg.vision_fame}，輿圖多看一站")
     lessons = sorted(s.learn.fame for s in content.skills.values() if s.learn is not None and s.learn.fame > 0)
@@ -664,12 +813,12 @@ def renown_lines(content: Content, season: WorldState) -> list[str]:
     if note:
         lines.append(note)
     for tier in range(1, len(fb) + 1):
-        perks = renown.fame_perks(content, tier)
+        perks = renown.fame_perks(content, tier, season)
         if perks:
             lines.append(f"{renown.FAME_TITLES[tier]}：{'；'.join(perks)}。")
     for way in renown.PATHS:
         for tier in range(1, len(vb) + 1):
-            perks = renown.virtue_perks(content, way, tier)
+            perks = renown.virtue_perks(content, way, tier, season)
             if perks:
                 lines.append(f"{renown.VIRTUE_TITLES[way][tier]}：{'；'.join(perks)}。")
     if renown.on(content, "deed_fame"):
@@ -687,7 +836,7 @@ def renown_lines(content: Content, season: WorldState) -> list[str]:
     if cfg.battle.top_fame > 0:
         lines.append(RENOWN_TOP.format(n=cfg.battle.top_fame))
     lines += _fame_sources(content, season)
-    lines.append(_fame_uses(content, renown.scale(season)))
+    lines.append(_fame_uses(content, renown.scale(season), season))
     lines.append(RENOWN_VIRTUE_FROM)
     if cfg.resonance_cap > 0:
         lines.append(RENOWN_RESONANCE.format(per=cfg.resonance_per_point * 100, cap=cfg.resonance_cap * 100))
@@ -716,7 +865,8 @@ def join_lines(content: Content, season: WorldState) -> list[str]:
               else "陣營不是交戰的兩軍時，跟散人一樣臨時投效。")
     lines = [
         "**投靠**：在陣營收人的地方按「投靠」，要再確認一次；也可以拜入陣營名下的門派。投靠之後，"
-        f"{SORTIE_JOIN if sortie.on(content) else SOME_PLACES + '，推向你那一邊，遇上自己陣營的隊伍是操練'}；全服決戰替自己的陣營出戰，"
+        f"{CONQUEST_JOIN if conquest.on(content, season) else SORTIE_JOIN if sortie.on(content) else SOME_PLACES + '，推向你那一邊，遇上自己陣營的隊伍是操練'}"
+        "；全服決戰替自己的陣營出戰，"
         f"{gentry}"
         "散人照樣能玩，只是沒有軍令與晉升；遇上決戰，人到了決戰的大區，可以臨時投效交戰兩軍之一，只算那一場，打完照樣是散人。",
     ]
@@ -733,8 +883,9 @@ def join_lines(content: Content, season: WorldState) -> list[str]:
     effects += [f"{'、'.join(denting)}挫大勢人物的聲威"] if denting else []
     met = f"全陣營湊滿額度的那一刻一起見效（{'，'.join(effects)}）" if effects else "全陣營湊滿額度的那一刻一起見效"
     lines += [
-        f"**軍令**：每週一發令（{kinds}，各陣營拿到的不一樣），照做一次記一次功；{met}。"
-        "本週的軍令卡在江湖頁行動列底下。",
+        # 軍令每天一道的季（21 天季、7 天濃縮季）：「每天發令」「今日的軍令卡」（calendar.week_word，FB-501、FB-502）
+        f"**軍令**：{calendar.week_word('order_each', content, season)}發令（{kinds}，各陣營拿到的不一樣），照做一次記一次功；{met}。"
+        f"{calendar.week_word('order_this', content, season)}的軍令卡在江湖頁行動列底下。",
         f"**晉升**：替陣營出力記貢獻（推 1 點戰況記 {cfg.contrib_per_push}），到 {cfg.rank2_contrib} 會有人召見，去應召就晉升；"
         f"自己陣營的大勢人物，你每晉升一階，求見他的門檻就低 {cfg.audience_rank_discount}。"
         + (f"地方豪強最多做到第 {allied_rules.CAP_RANK} 階。" if allied else ""),
@@ -808,7 +959,7 @@ def season_page_lines(content: Content, season: WorldState, rule: str = "") -> l
     lines = [season_line(content, allied), front_rule(content, card=False, allied=allied), stance, *board_help(content)]
     if rule:
         lines.append(f"收季：{rule}")
-    lines += quest_help(content, allied)
+    lines += quest_help(content, allied, season)
     lines.append("江湖頁最上面的「態勢」「大事」「主線」與底下的戰況圖卡，點開都有說明。")
     return lines
 
@@ -823,6 +974,32 @@ def legend_buy_lines(content: Content) -> list[str]:
         f"- 一門武學到了絕學那一步時，可以在修練頁花心得換一枚{cfg.legend_item_name}：這一季第一枚 {cfg.legend_xinde_price}，"
         f"之後每換一枚多 {cfg.legend_xinde_step}。後期改練一門新功夫，不必只等打仗時的頓悟。",
     ]
+
+
+MALL_TITLE = "商城"  # 玩法說明那一節的標題（商城第三批）；以下待 joy 潤
+MALL_WHERE = "齒輪旁的元寶鈕、底部的「寶」都打開商城，架上的東西花元寶買；買過的、元寶的進出在「紀錄」那一頁查得到。"
+MALL_COIN = "元寶只能儲值取得，不能拿銀兩換，也換不成銀兩。"
+MALL_BETA = "這一版是封閉測試：每個角色第一次進來先撥 {n} 元寶（只發一次，之後開新的一季也不再發），正式開服時清空。"
+MALL_CARD = "月卡：有效的那幾天，每天能服的{pill}多 {bonus} 顆（{caps}）。買的那一天算第一天；還沒到期再買，從到期日往後接。"
+
+
+def mall_lines(content: Content) -> list[str]:
+    """玩法說明「商城」那一節（商城架構設計 4.2、4.5；商城第三批）：入口、元寶怎麼來、封測發放（Config.mall.beta_grant，0 不寫）、
+    月卡（架上有月卡、回體丹一天有上限才寫；上限照 Config，跟 Game.pill_cap 加的同一份 card_pill_bonus）。不看個人：
+    這個人此刻的上限寫在點體力條看的那幾句（stamina_lines 的 card，FB-480）。商城關著是空的（玩法說明一個字都不提）。"""
+    if not mall.on(content):
+        return []
+    cfg = content.config
+    lines = [MALL_WHERE, MALL_COIN]
+    if cfg.mall.beta_grant > 0:
+        lines.append(MALL_BETA.format(n=cfg.mall.beta_grant))
+    bonus = cfg.mall.card_pill_bonus
+    sells_card = any("card_days" in item.effects for item in content.mall.values())
+    if sells_card and bonus > 0 and cfg.stamina_pills_per_day > 0:
+        caps = [f"平常 {cfg.stamina_pills_per_day} → {cfg.stamina_pills_per_day + bonus}"]
+        caps += [f"新手期 {cfg.newbie_pills_per_day} → {cfg.newbie_pills_per_day + bonus}"] * (cfg.newbie_pills_per_day > 0)
+        lines.append(MALL_CARD.format(pill=cfg.stamina_pill_name, bonus=bonus, caps="、".join(caps)))
+    return lines
 
 
 def pages_lines() -> list[str]:
@@ -870,6 +1047,7 @@ CHALLENGE_UNTIMED = (
     "- 聲威掉到 0 就退場，這一季不再出現。",
     "- {names}退場之後，不再替自己那一方出力。",
 )
+CHALLENGE_SEASON21_REGEN = "- 沒人去打，大勢人物的聲威會慢慢回來（一天回 {n} 點）。"  # 待 joy 潤：21 天季的第一季（正式季整合 3.9）
 
 
 # 玩法說明「挑戰大勢人物」那一段（FB-190：以前插在「情誼」中間，最後那句「換季只帶一成」讀起來像在講聲威）。待 joy 潤
@@ -902,6 +1080,11 @@ def _challenge_lines(content: Content, season: WorldState) -> list[str]:
     if cfg.figure_draw_share > 0:
         lines.append(CHALLENGE_DRAW)
     if not figures.untimed(content, season):
+        if figures.upkept(content, season):  # 21 天季的第一季（正式季整合 3.9）：聲威會回、一天有上限；退場照時刻表與照舊的規矩
+            if cfg.figure_prestige_regen > 0:
+                lines.append(CHALLENGE_SEASON21_REGEN.format(n=f"{cfg.figure_prestige_regen:g}"))
+            if cfg.figure_daily_loss_cap:
+                lines.append(CHALLENGE_UNTIMED[1].format(cap=cfg.figure_daily_loss_cap))
         return lines
     first = CHALLENGE_UNTIMED[0].format(n=cfg.figure_defeat_prestige)
     lines.append(first if cfg.figure_prestige_regen > 0 else first.partition("；")[0] + "。")
@@ -954,7 +1137,8 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
     allied = rules.haoqiang_allied(content, season)  # 豪強分屬兩軍的季（企劃者 2026-10-15）：沒有第三方、割據、攪局
     legend = f"每次探索還有機會撿到{cfg.legend_item_name}。" if cfg.explore_legend_chance > 0 else ""
     bond = [
-        "- 跟人物談話，照你說的話漲跌；談話時他的名字旁邊寫著（求見名單上也有）。",
+        "- 跟人物談話，照你說的話漲跌；談話時他的名字旁邊寫著（"
+        + ("交友名單上也有）。" if precise.on(content, season) else "求見名單上也有）。"),
         f"- 情誼到 {cfg.signature_affinity}，有些人物會把本命武學傳給你。",
     ]
     if first:
@@ -977,10 +1161,11 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
     lines = [
         *_section("這一季在打什麼", season_page_lines(content, season, rule)),
         "#### 行動",
-        *(explore_lines(content) if explore_modes.on(content) else old_explore),
-        *(sortie_lines(content, allied) if sortie.on(content) else old_train),
+        *(explore_lines(content, season) if explore_modes.on(content) else old_explore),
+        *(sortie_lines(content, allied, season) if sortie.on(content) else old_train),
         f"- **交友**（體力 {cost['socialize']}）：見這裡的人物談話（每輪體力 {cfg.talk_stamina}，同一位人物{day_every(content, season)}最多 "
-        f"{cfg.talk_turns_per_day} 輪），或碰上交友的事。名望不夠的人物會打發你。",
+        + (f"{cfg.talk_turns_per_day} 輪）。名望不夠的人物在名單上灰著，寫還差多少；交友的事在探索的{explore_modes.NAMES['seek']}裡。"
+           if precise.on(content, season) else f"{cfg.talk_turns_per_day} 輪），或碰上交友的事。名望不夠的人物會打發你。"),
         "- **移動**：步行不花體力、只花時間；疾行立刻到、要花體力。步行時，每一段路可以邊走邊想、"
         + ("沿途打聽、路邊採集各一次。" if cfg.open_map else "沿途打聽、留意地形、路邊採集各一次。"),  # 全圖開放拿掉了留意地形
         "",
@@ -991,7 +1176,7 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
         *(_section("名聲", renown_lines(content, season)) if renown.on(content) else _section("名望", fame_lines(content, season))),
         *_section("投靠與軍令", join_lines(content, season)),
         *_section("各陣營有什麼不同" if allied else "三方有什麼不同", faction_lines(content, season)),
-        *(_section("地盤", territory_lines(content, allied)) if territory.on(content) else []),
+        *(_section("地盤", territory_lines(content, allied, season)) if territory.on(content) else []),
         "#### 情誼",
         *bond,
         "",
@@ -1008,9 +1193,12 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
         "#### 意境",
         # 有所感（sensing.choose、sensing.menu）：選對了還要擲一次（rate，沒中給 sense_miss_xinde）；中了可以畫、也可以順其自然（審查 M2）
         # 選錯了要到換日才悟得出（sensing.missed_today；遊戲日跟著季長縮）：說明頁不看此刻，不寫「今天」，寫「一陣子」，時刻看卡上那一行
-        f"- {sense_when}時「有所感」，先選做法：選錯了，那裡要過一陣子才悟得出（選之前卡上就寫著要到什麼時候）；"
-        "選對了還要看機緣（沒抓住也有一點心得），"
+        f"- {sense_when}時「有所感」，先選做法："
+        + (f"選錯了得 {cfg.sense_miss_xinde} 心得，那裡照樣悟得出；" if precise.on(content, season)
+           else "選錯了，那裡要過一陣子才悟得出（選之前卡上就寫著要到什麼時候）；")
+        + "選對了還要看機緣（沒抓住也有一點心得），"
         "抓住了可以畫一筆，也可以順其自然。哪裡悟得到什麼看地形。" + (STRONG_HOWTO if cfg.insight_strong.enabled else ""),
+        *([TERRAIN_HOWTO] if cfg.terrain_arts.enabled and cfg.insight_strong.enabled else []),
         "- 善名、惡名夠高也會悟到意境。合併、揣摩都不會把意境用掉（自己熔掉才沒了）。",
         "- 意境就是技能：裝進武學的意境槽才生效，一個意境同時只能裝在一門上。武學的品級定槽數"
         f"（{'、'.join(f'{q} {n} 格' for q, n in cfg.arts.slots.items())}），也定威力的上限；槽只收那門武學相容的屬性（基礎武學什麼都收）。"
@@ -1024,5 +1212,8 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
     economy = economy_lines(content, allied)
     if economy:  # 素材與經濟（收購、升階、捐軍備）：開著的才寫
         lines += ["", *_section(ECONOMY_TITLE, economy)]
+    shop = mall_lines(content)
+    if shop:  # 商城（商城第三批）：開著才寫，關著一個字都不變
+        lines += ["", *_section(MALL_TITLE, shop)]
     return "\n".join(lines)
 

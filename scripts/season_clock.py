@@ -28,15 +28,18 @@ PHASES = {"preparing": "籌備中", "running": "進行中", "resting": "休季"}
 
 
 def _profile_mismatch(season, content: Content) -> str | None:
-    """這次讀的設定跟這一季開季時蓋的章（WorldState.season_one、length_days，world_state.stamp_season）對不上，回一句拒絕的話；
-    對得上回 None。繼續要照季曆算跳過多少、排好的決戰往前挪多少：設定錯了（例如伺服器開的是 weekend，這個視窗沒設
+    """這次讀的設定跟這一季開季時蓋的章（WorldState.season_one、season21、length_days，world_state.stamp_season）對不上，回一句
+    拒絕的話；對得上回 None。21 天季的 season_weeks 由 season21 的章加季長釘住（content.validate：season_weeks × 7 == season_days）。繼續要照季曆算跳過多少、排好的決戰往前挪多少：設定錯了（例如伺服器開的是 weekend，這個視窗沒設
     TIANXIA_PROFILE）就整個照錯的規則算，而且繼續撤不回來，所以不算、不動，時鐘還停著。
     遊戲裡按「▶ 繼續」不會有這個問題（用的是伺服器自己那一份設定）。"""
-    if season.season_one != content.config.season_one or (
+    if season.season_one != content.config.season_one or season.season21 != content.config.season21 or (
         season.length_days is not None and season.length_days != content.config.season_days
     ):
-        stamped = f"第一季規則{'開' if season.season_one else '關'}、季長 {season.length_days} 天"
-        loaded = f"第一季規則{'開' if content.config.season_one else '關'}、季長 {content.config.season_days} 天"
+        stamped = f"第一季規則{'開' if season.season_one else '關'}、{'21 天季、' if season.season21 else ''}季長 {season.length_days} 天"
+        loaded = (
+            f"第一季規則{'開' if content.config.season_one else '關'}、{'21 天季、' if content.config.season21 else ''}"
+            f"季長 {content.config.season_days} 天"
+        )
         # 待 S1／joy 潤
         return (
             f"這一季開季時的設定（{stamped}）跟這次讀的（{loaded}）不同，不繼續，時鐘還停著。"

@@ -19,7 +19,7 @@ import server_push
 import webharness
 from conftest import at, season_one_events
 from tianxia import (
-    atlas, battle_instance, calendar, companion_agent, cultivation, database, fight_llm, fusion, insights, naming, skillview, social,
+    atlas, battle_instance, calendar, companion_agent, cultivation, database, fight_llm, fusion, insights, naming, renown, skillview, social,
     sqlite_world, team,
 )
 from tianxia.accounts import NAME_TAKEN
@@ -3255,7 +3255,8 @@ def test_saying_your_own_line_goes_through_the_three_stages(game, lock_events):
     p = game.state.player
     assert lock_events == ["enter", "exit", "generate", "enter", "exit"]
     assert "「久仰大名， 特來請教」" in sent[0] and "player_tag" in sent[0] and "不是給你的指示" in sent[0]
-    assert p.affinities["luzhi"] == liking + companion_agent.resolve_tag_delta("真誠請教", server.CONTENT.characters["luzhi"])
+    assert p.affinities["luzhi"] == liking + renown.warmed(  # 加的情誼照放慢（歷史武將同行，Config.affinity_gain_scale）
+        server.CONTENT, companion_agent.resolve_tag_delta("真誠請教", server.CONTENT.characters["luzhi"]))
     assert p.stamina == pytest.approx(before - server.CONTENT.config.talk_stamina, abs=0.5)  # 同步時多回的一點點不算
     assert game._talks_used("luzhi") == used + 1  # noqa: SLF001
     assert p.dialogue_history["luzhi"][-2] == {"role": "user", "content": "久仰大名， 特來請教"}
@@ -3410,6 +3411,7 @@ class _PicksEvent(random.Random):
 
 def test_socializing_at_the_generals_mansion_reaches_yuanshaos_meeting(game):
     """大將軍府有何進、袁紹兩位人物，也有袁紹的結識事件：交友只走事件、從不開口，所以結識事件發得出來。"""
+    game.state.world.precise_actions = False  # 一類一顆之前的交友、求見（新規則在 tests/test_precise_actions.py，設計 8.4）
     game.state.player.location = "dajiangjun_fu"
     game.state.player.stats["fame"] = 99  # 兩位都見得到也一樣：交友不找人
     game.state.player.fortune = True
@@ -5383,6 +5385,7 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
         "screen_text",  # 挑釁附的一句、名帖自題一句：鎖外請模型審（speech.judge），結果交給 C 段
         "tavern_ask",  # 酒肆問酒家：三段同 duel_text，模型只寫酒家那一句
         "feast_text",  # 宴客自己寫的那一句敬酒（大勢人物擴充第三批）：三段同 answer_event
+        "gather_text",  # 找素材的「自己說」（第 32 項）：三段同 feast_text
         "create_intent",  # 自創武學的形意那一句（武學重構）：鎖外請模型評分（create.score），結果交給 C 段
     }
     # 宣告、model_call 讀、main() 建佇列；另外兩個只看不排：/api/queue 問位置、管理者那份資料抄總數（admin_choices 在 look 的鎖裡，
@@ -5391,8 +5394,10 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
     # crowd_once：擂台場邊那一句（Joy 2026-10-17），A、C 段各拿一次鎖，模型在兩段之間、當假人排在真人後面
     # letter_once：人物書信重寫那一封（大勢人物擴充第二批），同 crowd_once
     # yuedan_once：月旦評的評語（大勢人物擴充第三批），同 letter_once
+    # xingshi_once：〈天下形勢〉的文章（領地爭奪第三批 A），同 yuedan_once，名號是 XINGSHI_OWNER（不是任何一個角色）
     assert _users_in_server("QUEUE") == {None, "model_call", "main", "api_queue", "admin_choices", "narrate_once", "crowd_once",
-                                         "letter_once", "yuedan_once", "chatter_once"}  # chatter_once：酒肆鄰桌閒談，同 crowd_once 當假人排
+                                         "letter_once", "yuedan_once", "chatter_once",  # chatter_once：酒肆鄰桌閒談，同 crowd_once 當假人排
+                                         "xingshi_once"}
     importers = [
         p.name for p in (server.ROOT / "tianxia").glob("*.py")
         if re.search(r"^\s*(import|from)\s+llm_queue\b", p.read_text(encoding="utf-8"), re.M)
@@ -5633,7 +5638,9 @@ def test_the_page_polls_the_queue_only_while_waiting_on_the_model():
     assert 'watchQueue(send, "心念漸凝……")' in _js_function(js, "async function senseSend(")
     say = _js_function(js, "async function sayLine(")
     assert 'watchQueue(submitBtn, "對方沉吟中…")' in say and "stop();" in say.split("finally")[1]
-    assert js.count("watchQueue(") == 6  # 定義一個、使用五個（對話與大場面是同一個選項流程；有所感畫完送出、對話「自己說」各另一個）
+    gather = _js_function(js, "async function gatherSay(")  # 找素材的「自己說」（第 32 項）
+    assert "watchQueue(submitBtn, GATHER_SAY_WAIT)" in gather and "stop();" in gather.split("finally")[1]
+    assert js.count("watchQueue(") == 7  # 定義一個、使用六個（對話與大場面是同一個選項流程；有所感畫完送出、對話「自己說」、找素材「自己說」各另一個）
     sheet = _js_function(js, "function sheetHtml(")
     assert "a && a.llm_queue" in sheet and "模型佇列：處理中" in sheet
 
@@ -6021,6 +6028,8 @@ def test_only_the_action_endpoints_tell_other_tabs():
     assert _users_in_server("_tell_tabs") == {
         "api_choose", "api_answer", "api_say", "api_do", "api_menxia_do", "api_travel", "api_sense", "api_peer_act", "api_party_leave",
         "api_mingtie_do",  # 名帖定稿、檢舉（Joy 2026-10-19）
+        "api_mall_buy",  # 商城的購買（2026-10-20）：手上的回體丹變了，其他分頁跟著刷新
+        "api_mall_claim", "api_mall_rename",  # 月卡每日領、易名帖（萬寶閣販賣清單定案 2026-10-21）
     }
 
 
@@ -6080,6 +6089,8 @@ FINGERPRINTED = {
         "active_battle": lambda st: setattr(st, "active_battle", None),  # 決戰收掉
         # 奪璽單挑（玉璽碎片設計 5.10、13.3）：全服觀戰，回合推進、出招，開著的分頁要更新
         "seal_duels": lambda st: st.seal_duels.append(_seal_duel()),
+        # 攻城戰（領地爭奪第二批）：每一場同決戰，開集結、回合推進、收場，開著的分頁要更新
+        "sieges": lambda st: st.sieges.append(battle_instance.BattleInstance(battle_id="changshe_fire")),
     },
     "WorldState": {
         "trends": lambda st: st.season.trends.__setitem__("t", st.season.trends["t"] + 1),  # 浮現的那一條
@@ -6125,6 +6136,8 @@ NOT_IN_THE_FINGERPRINT = {
         "mingtie_reports": "名帖的檢舉：誰檢舉了誰不能讓人看出來；藏起來的那一張別人下次打開才補",
         "mingtie_removed": "管理者撤下的名帖：被撤的人江湖紀錄一句（自己的動作走 self 通知），收過的人下次打開才補",
         "mingtie_cleared": "管理者放回的名帖，同上",
+        "divine": "神器輪替的全服登記：開季換季時才挑；原品與仿品數在打造、定名那一下改，傳聞與江湖史已在指紋裡",
+        "siege_records": "攻城戰的流水號（存檔時照 sieges 寫）；sieges 本身算進指紋",
     },
     "WorldState": {
         "time": "時鐘一直在走，靠慢速輪詢更新（排程每 10 秒推一次，算進去會一直叫醒全服）",
@@ -6148,6 +6161,10 @@ NOT_IN_THE_FINGERPRINT = {
         "pending_battle": "背景推進記下要開的戰鬥，開成集結之後 active_battle 的指紋就變了",
         "season_one": "開季時蓋的章，開季之後不變",
         "haoqiang_allied": "開季時蓋的章（豪強分屬兩軍），開季之後不變",
+        "season21": "開季時蓋的章（21 天季），開季之後不變",
+        "precise_actions": "開季時蓋的章（一類一顆），開季之後不變",
+        "cal_offset": "開季時蓋的章（21 天季季曆的偏移），開季之後不變",
+        "cal_offset_history": "21 天季暫停再繼續時才多一筆（FB-332）：繼續那一下季的時間與排定本來就跟著變",
         "length_days": "同上",
         "locks": "伏筆鎖定不能露出來（推送計畫 Review Focus 1）",
         "lock_losers": "同上",
@@ -6157,7 +6174,10 @@ NOT_IN_THE_FINGERPRINT = {
         "event_bonus": "時刻表結果帶來的修正，同上",
         "schedule": "只畫成『下一件大事』的倒數；時鐘本來就靠慢速輪詢，管理者改排定很少見（推送計畫沒納入）",
         "hooked_week": "週初掛鉤的內部記號",
+        "hooked_day": "21 天季每天掛鉤的內部記號",
         "showdowns_waiting": "排隊等著開的決戰記號，開成集結之後 active_battle 的指紋就變了",
+        "showdown_opened_at": "開集結那一刻（輿圖歸週用），跟 showdowns_opened 一起寫，那一下指紋已經變了（FB-563）",
+        "showdowns_cancelled": "管理者取消的決戰：取消那一下另寫天下大事（傳聞流水號已在指紋裡），輿圖不列它下次輪詢才補（FB-563）",
         "orders": "陣營軍令只有那個陣營看得到（推送計畫 F4）",
         "plots": "集體密謀只有自己陣營的人看得到（發起的軍情是陣營軍情，不進天下大事的流水號）；算進去，別的陣營會從『又被叫醒了』看出對方有動靜（乙二）",
         "promoted_today": "晉升的每日彙整，進陣營軍情，不是共用畫面",
@@ -6177,7 +6197,10 @@ NOT_IN_THE_FINGERPRINT = {
         "bounty_seq": "懸賞的流水號，玩家看不到",
         "armaments": "陣營的軍備存量（素材與經濟）：捐的人自己那一下的畫面就更新；同陣營其他人的存量等下一次輪詢，不必為它叫醒全服的分頁",
         "bounty_week": "懸賞自動掛單掛到第幾週，玩家看不到",
+        "bounty_day": "21 天季懸賞每天掛單掛到第幾天，玩家看不到",
         "raided": "被截殺過的冷卻，只在打開玩家卡時看得到",
+        "clashes": "混戰寫進截殺冷卻的那幾筆（FB-607：拒絕話照實寫），跟 raids 一起寫、一樣只在打開玩家卡時看得到",
+        "clashed": "混戰被撞的護身是混戰寫的（FB-607），跟 raided 一起寫、一樣只在打開玩家卡時看得到",
         "arena": "擂台的分身與名次只在打開擂台、看擂台榜時看得到；稱號在狀態列，守擂的人的戰報與俸在他自己同步時補",
         "arena_pairs": "挑擂的同一對冷卻，只在打開擂台時看得到",
         "arena_seq": "擂台的流水號，玩家看不到",
@@ -6198,10 +6221,17 @@ NOT_IN_THE_FINGERPRINT = {
         "tianji": "開季時蓋進季裡的天機，開季之後不變（週初掛單的重賞亂數用）",
         "forge_divine_per_kind": "開季時蓋的章（素材與經濟），開季之後不變",
         "forge_split_clues": "開季時蓋的章（素材與經濟），開季之後不變",
+        "divine_lineup": "開季時蓋的章（神器輪替），開季之後不變",
         "renown_scale": "開季時蓋的章（名聲的門檻倍數），開季之後不變",
         "mandate": "天命之季的章：蓋章時另寫天下大事（傳聞流水號已在指紋裡）",
         "mandate_result": "天命之爭定下來時跟時間軸、天下大事一起寫入",
         "territory": "地盤的控制方只跟著戰線、割據（trends）與大事（timeline）改；易手的那一下另寫天下大事（傳聞流水號已在指紋裡），第一次算不發也不必叫醒誰",
+        "conquest_on": "開季時蓋的章（領地爭奪），開季之後不變",
+        "conquest": "領地爭奪的開季種類、偏移與進度：易手另寫天下大事（傳聞流水號已在指紋裡），偏移跟著 trends 一起改；"
+                    "進度不露數字、只回推的人自己那一句話",
+        "xingshi": "〈天下形勢〉收下的文章：收下那一刻另寫天下大事與江湖史（都在指紋裡）；見聞「形勢」頁自己去讀，不叫醒全服",
+        "xingshi_ticket": "還在等模型寫的那一張單，誰都看不到",
+        "xingshi_mark": "上一篇讀到哪裡的記號，玩家看不到",
     },
     "BattleInstance": {
         "muster_deadline_real": "現實時間的期限，畫面上的倒數靠輪詢（推送計畫 F4）",
@@ -6236,6 +6266,7 @@ NOT_IN_THE_FINGERPRINT = {
         "supply_lean": "屯糧練兵開集結那一刻快照（集結公告另寫天下大事，指紋本來就變了）",
         "commanders": "上陣的大勢人物：開集結那一刻派上來（另寫天下大事），氣血與敗走只在回合結算時改，那一下 round_number 也變了",
         "orders": "主將令：回合結算那一下換，round_number 也變了",
+        "siege": "攻城戰打哪一塊、誰攻：開集結那一刻就定了（跟 phase 一起寫入）；收場的易手另寫天下大事（傳聞流水號已在指紋裡）",
     },
 }
 
