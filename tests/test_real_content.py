@@ -626,6 +626,11 @@ def test_the_recruit_hint_speaks_where_someone_will_follow_you(content):
     from tianxia import roster
 
     game = Game.new(content, "甲", rng=random.Random(0))
+    for loc_id in content.locations:  # 情誼沒到招募門檻（Joy 2026-10-21）：沒有鈕、也不說
+        game.state.player.location = loc_id
+        assert not game._recruit_targets() and "h_recruit" not in game._hint_triggers(), loc_id
+    game.state.player.affinities.update(
+        {cid: content.config.recruit_min_affinity for cid, ch in content.characters.items() if ch.recruitable})
     spoke = []
     for loc_id in content.locations:
         game.state.player.location = loc_id
