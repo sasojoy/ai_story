@@ -200,3 +200,44 @@ def test_admin_cannot_rename(on):
     admin = _admin(_rename_on(on))
     admin.mall_buy("rename", "a")
     assert admin.mall_rename("新管理") == [mall.RENAME_ADMIN]
+
+
+# ── 藏經匣：功法庫上限擴充（Joy 2026-10-21「一張多放15格，沒有上限」）──
+
+
+def _holding_on(on):
+    on.mall["holding_15"] = MallItem(id="holding_15", name="藏經匣", price=300, kind="consumable", effects={"holding": 15})
+    return on
+
+
+def test_holding_box_adds_fifteen_each_without_a_limit(on):
+    from tianxia import library
+    game = _ready(_holding_on(on))
+    base = library.cap_of(game.state, on)
+    for i in range(4):
+        assert game.mall_buy("holding_15", f"h{i}")[0].startswith("買下")
+    assert library.cap_of(game.state, on) == base + 60 and game.state.player.holding_bonus == 60
+    assert f"功法庫上限 +15（現在 {base + 60} 格，這一季）" in game.state.journal[0].changes
+    card = {row["id"]: row for row in game.mall_view()["items"]}["holding_15"]
+    assert "功法庫多放 15 格（這一季）" in card["effects"]
+
+
+def test_holding_box_lasts_only_this_season(on):
+    from tianxia import library
+    game = _ready(_holding_on(on))
+    base = library.cap_of(game.state, on)
+    game.mall_buy("holding_15", "s1")
+    next_season(on, game.world, game)
+    game.sync(T0 + DAY)
+    assert game.state.player.holding_bonus == 0 and library.cap_of(game.state, on) <= base
+
+
+def test_refunding_a_holding_box_takes_the_slots_back(on):
+    player = _ready(_holding_on(on))
+    from tianxia.characters import open_characters
+    player.mall_buy("holding_15", "r1")
+    open_characters().save(player.state)  # 伺服器每個動作之後都存檔；管理者退款照資料庫裡那一份改
+    pid = _wallet(player).purchases("沈浪")[0].id
+    msg = _admin(on).admin_mall_refund("沈浪", pid, "測試退匣")
+    assert "功法庫上限收回 15 格" in msg[0]
+    assert open_characters().load("沈浪").player.holding_bonus == 0
