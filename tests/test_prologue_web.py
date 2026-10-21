@@ -258,7 +258,7 @@ def test_the_chips_come_back_at_the_farewell_step(newcomer):
 
 def test_the_chips_are_all_there_outside_the_prologue(content):
     plain = season_one_view(server.main_view(Game.new(content, "路人", rng=random.Random(0))))
-    assert chip_ids(run(plain, "return H.peekBlock(m);")) == ["stance", "board", "quest"]
+    assert chip_ids(run(plain, "return H.peekBlock(m);")) == ["stance", "board", "quest", "patch"]  # 改版（Joy 2026-10-21）讀 content/patch_notes.json
 
 
 # ── 江湖頁其他的塊 ───────────────────────────────────
