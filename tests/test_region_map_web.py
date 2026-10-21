@@ -292,10 +292,25 @@ return out;
 @pytest.mark.parametrize("vw,vh", PHONES)
 @pytest.mark.parametrize("profile", ["weekend", "season21"])
 def test_region_labels_do_not_overlap_on_a_phone(profile, vw, vh):
-    """375／360 寬：每一區的名字框兩兩不相交、不壓別處的小圖與鄰區出口、不出畫面（潁川汝南 17 處最擠：擠的地方名字框離小圖遠一點、
-    拉一條細點線）。320 寬（地圖框 320×344）潁川汝南放不開，見計畫第五節。"""
+    """375／360 寬：每一區的名字框兩兩不相交、不壓別處的小圖與鄰區出口、不出畫面（潁川汝南 17 處最擠）。名字框只貼著小圖擺、不拉線
+    （企劃者 2026-10-21 從對比圖選乙）。320 寬（地圖框 320×344）潁川汝南放不開，先這樣（PM 2026-10-21，同企劃者「320 寬先這樣」）。"""
     game = _game(profile=profile)
     assert run(game, OVERLAP.replace("VW", str(vw)).replace("VH", str(vh))) == []
+
+
+def test_labels_hug_their_icons_without_leader_lines():
+    """企劃者 2026-10-21 從對比圖選乙：名字框不拉細點線回小圖，只在緊貼小圖的那幾個位置挑（右、左、下、上與上下左右錯開）；
+    畫出來沒有細線那一組，每一個名字框最近的那一點離自己的小圖不遠。"""
+    game = _game()
+    low, _ = parts(game)
+    assert "r-lead" not in low and "stroke-dasharray" not in low.split('class="r-label"', 1)[1]
+    gaps = run(game, """const v = H.regionFit(H.S.mapBase, 'yingru', 375, 604);
+return H.regionLabels(H.S.mapBase, H.S.mapState, 'yingru', v, 375, 604).map((l) => {
+  const f = l.rows[0], nx = Math.max(f[0], Math.min(f[2], l.X)), ny = Math.max(f[1], Math.min(f[3], l.Y));
+  return ['lead' in l, Math.hypot(nx - l.X, ny - l.Y)];
+});""")
+    assert not any(has for has, _ in gaps)
+    assert max(d for _, d in gaps) < 75  # 最遠的是往上下錯開兩格的那幾個位置（約 2×框高＋小圖半高）
 
 
 # ── 卡（設計 5.3）──

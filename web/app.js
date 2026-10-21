@@ -5950,30 +5950,21 @@
     const low = (bar ? R_BAR_GAP + R_BAR : 0) + (words ? R_INS_GAP + z.ins + 2 : 0);
     return { fs, fw, fh, w1, w2, low, W: Math.max(w1, w2), H: fh + low, tug, cool, coolText, ins, insPx: z.ins, bar, rich: !!q.rich, big: !!p.big };
   }
-  // 離得遠的名字框拉一條細線回小圖（擠的地方：潁川一帶）：八個方向、三種距離（px）
-  const R_LEAD = [44, 68, 92], R_DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1], [0.71, 0.71], [-0.71, 0.71], [0.71, -0.71], [-0.71, -0.71]];
-  const R_LEAD_AT = 14; // 名字框最近的那一點離小圖的邊超過這麼多（px）也拉細線
-  // 名字框可以擺的位置（框左上角離地點中心多遠，px；第三個是要不要拉細線），好的在前：右、左、下、上，再往上下（左右）錯開，
-  // 再隔一層；最後才是離得遠、拉細線的
+  // 名字框可以擺的位置（框左上角離地點中心多遠，px），好的在前：右、左、下、上，再往上下（左右）錯開，再隔一層。
+  // 只貼著小圖擺、不拉線（企劃者 2026-10-21 從對比圖選乙：潁川汝南擠的地方不拉細點線回小圖）
   function regionLabelSpots(L, z) {
     const hw = z.hw + R_GAP, hh = z.hh + R_GAP, mid = -L.fh / 2, W = L.W, H = L.H;
     const out = [[hw, mid], [-hw - W, mid], [-W / 2, hh], [-W / 2, -hh - H]];
     for (const f of [0.35, 0.7, 1.05, 1.4, 1.8]) out.push([hw, mid - H * f], [hw, mid + H * f], [-hw - W, mid - H * f], [-hw - W, mid + H * f]);
     for (const f of [0.25, 0.5, 0.75, 1]) out.push([-W / 2 + W * f, hh], [-W / 2 - W * f, hh], [-W / 2 + W * f, -hh - H], [-W / 2 - W * f, -hh - H]);
     for (const f of [0, 0.5, -0.5]) out.push([-W / 2 + W * f, hh + H * 0.9], [-W / 2 + W * f, -hh - H * 1.9]);
-    for (const d of R_LEAD) {
-      for (const [ux, uy] of R_DIRS) {
-        const ax = ux * d, ay = uy * d;
-        out.push([ux > 0.1 ? ax : ux < -0.1 ? ax - W : ax - W / 2, uy > 0.1 ? ay : uy < -0.1 ? ay - H : ay - L.fh / 2, true]);
-      }
-    }
     return out;
   }
   const REGION_SEARCH = 20000; // 一起找名字框的位置最多試幾次，再多就改成一個一個擺
   // 名字框擺哪（設計第十二章：375 寬互相不壓）。每一處先列出不壓小圖（每一處的）、你的旗與朱圈、也不出取景框的位置；
-  // 再一起找「彼此也不壓」的擺法（同 mapview._place_labels：每次挑剩下位置最少的先擺，擺不下回頭改前面的）。離小圖遠的拉一條細線（lead）。
-  // 試了 REGION_SEARCH 次還找不到：照舊一個一個擺（你那一處先、附近地點多的先），每一個挑壓得最少的。
-  // 回每一處（照這一區的地點順序）：大小、框左上角（螢幕 px）、佔的兩列、細線（沒有是 null）、壓到多少（0＝不壓）
+  // 再一起找「彼此也不壓」的擺法（同 mapview._place_labels：每次挑剩下位置最少的先擺，擺不下回頭改前面的），找到之後再一處一處往前挪
+  // （離小圖近的位置）。試了 REGION_SEARCH 次還找不到：照舊一個一個擺（你那一處先、附近地點多的先），每一個挑壓得最少的。
+  // 回每一處（照這一區的地點順序）：大小、框左上角（螢幕 px）、佔的兩列、壓到多少（0＝不壓）
   function regionLabels(base, st, rid, v, vw, vh) {
     const pts = regionPlaces(base, rid), scr = (x, y) => [vw / 2 + (x - v.cx) * v.s, vh / 2 + (y - v.cy) * v.s];
     const [bx0, by0] = scr(v.frame[0], v.frame[1]), [bx1, by1] = scr(v.frame[2], v.frame[3]);
@@ -5987,10 +5978,10 @@
     const against = (rows, boxes) => rows.reduce((n, r) => n + boxes.reduce((m, b) => m + inter(r, b), 0) + 4 * outside(r), 0);
     const items = pts.map((p, i) => {
       const L = regionLabelSize(base, st, p, z), [X, Y] = at[p.id];
-      const opts = regionLabelSpots(L, z).map(([dx, dy, far]) => {
+      const opts = regionLabelSpots(L, z).map(([dx, dy]) => {
         const l = X + dx, t = Y + dy, rows = [[l, t, l + L.w1, t + L.fh]];
         if (L.low) rows.push([l, t + L.fh, l + L.w2, t + L.H]);
-        return { l, t, rows, far: !!far, cost: against(rows, fixed) };
+        return { l, t, rows, cost: against(rows, fixed) };
       });
       return { p, i, L, X, Y, opts };
     });
@@ -6041,11 +6032,7 @@
     }
     return items.map((it) => {
       const o = pick[it.i], others = items.filter((x) => x !== it).map((x) => pick[x.i]);
-      // 細線：名字框離小圖遠了（拉細線的位置，或框最近的那一點離小圖中心超過 R_LEAD_AT）就從小圖的邊拉到印章框最近的那一點
-      const f = o.rows[0], nx = Math.max(f[0], Math.min(f[2], it.X)), ny = Math.max(f[1], Math.min(f[3], it.Y));
-      const len = Math.hypot(nx - it.X, ny - it.Y) || 1, ex = it.X + ((nx - it.X) / len) * z.hw, ey = it.Y + ((ny - it.Y) / len) * z.hh;
-      const lead = o.far || len > Math.max(z.hw, z.hh) + R_LEAD_AT ? [ex, ey, nx, ny] : null;
-      return { ...it.L, id: it.p.id, X: it.X, Y: it.Y, l: o.l, t: o.t, rows: o.rows, lead,
+      return { ...it.L, id: it.p.id, X: it.X, Y: it.Y, l: o.l, t: o.t, rows: o.rows,
         cost: against(o.rows, fixed) + others.reduce((n, q) => n + (clash(o, q) ? 1 : 0), 0) };
     });
   }
@@ -6097,10 +6084,6 @@
       out.push(`<g class="r-icon" data-act="region-place" data-id="${esc(p.id)}" transform="translate(${p.x},${p.y}) scale(${f2(z.icon * k)})" style="cursor:pointer">`
         + `<rect x="-14" y="-14" width="28" height="28" fill="#000000" fill-opacity="0"/>${inkIcon(p.glyph, inkOf(p.id).color, MAP_HALO)}</g>`);
     }
-    // 離得遠的名字框拉回小圖的細線（畫在名字框底下）
-    const leads = labels.filter((L) => L.lead).map((L) => { const [a, b] = mp(L.lead[0], L.lead[1]), [c, d] = mp(L.lead[2], L.lead[3]); return `<path d="M${f1(a)} ${f1(b)}L${f1(c)} ${f1(d)}"/>`; }).join("");
-    // 細點線（跟路的實線分得開）
-    if (leads) out.push(`<g class="r-lead" stroke="${MAP_INK}" stroke-width="${f2(1.1 * k)}" stroke-dasharray="${f2(1.2 * k)} ${f2(2.2 * k)}" stroke-linecap="round" stroke-opacity=".75" fill="none" pointer-events="none">${leads}</g>`);
     // 名字框：印章框（框色＝誰的）、朱印寶、進度條（冷卻灰掉）、意境字
     for (const L of labels) {
       const p = pos[L.id], ink = inkOf(L.id), [x, y] = mp(L.l, L.t), fw = L.fw * k, fh = L.fh * k;
