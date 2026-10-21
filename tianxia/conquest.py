@@ -413,7 +413,7 @@ def _little(moved: float) -> bool:
 
 
 def _note_day(world: WorldState, content: Content, loc_id: str, side: str, by: str, reason: str) -> None:
-    """〈天下形勢〉讀的 day_log 記一筆（戰書、推滿易手）：哪一天照最近一次換天（settled_key）、時刻照季曆的那一刻。"""
+    """〈天下形勢〉讀的 day_log 記一筆（推滿易手、補缺退回）：哪一天照最近一次換天（settled_key）、時刻照季曆的那一刻。"""
     state = world.conquest
     at = calendar.point(world.time, content, world)
     state.day_log.append(DayNote(key=state.settled_key, side=side, loc=loc_id, minute=at.hour * 60 + at.minute, by=by, reason=reason))
@@ -466,13 +466,15 @@ def flip(world: WorldState, content: Content, loc_id: str, side: str, note: bool
 def restore(world: WorldState, content: Content, loc_id: str, side: str) -> None:
     """玉璽碎片改版第 3 批的補缺：這一塊當場退回 side（原主），照翻地的規則記一次易手——set_control（「落入／收復」天下大事、江湖史、
     三條線當場重算、替別人鎮著的鎮地結束）、所有條與守城功的帳清掉、冷卻重新起算（加成暫停）、flipped_from 記退回之前歸誰。
-    不分紅（沒有人推滿它）、不記 day_log（〈天下形勢〉照天下大事讀得到）。呼叫端（Game.seal_use）先驗過 seal_acts.mend_rows。"""
+    不分紅（沒有人推滿它）。day_log 記一筆（by="mend"，reason 空的：不記是誰，持有者要藏；〈天下形勢〉照時間順序寫「拿下某地，旋即被補回」，
+    FB-646）。呼叫端（Game.seal_use）先驗過 seal_acts.mend_rows。"""
     if not capturable(content, loc_id) or content.scenario.find_faction(side) is None:
         return
     fight = _fight(world, content, loc_id)
     before = holder(world, content, loc_id)
     set_control(world, content, loc_id, side)
     fight.bars, fight.guards, fight.alarm, fight.flipped_at, fight.flipped_from = {}, {}, False, world.time, before
+    _note_day(world, content, loc_id, side, "mend", "")  # conquest_day.MEND（conquest_day 反過來 import 這裡）
 
 
 def halve(world: WorldState, content: Content, loc_id: str, sides: list[str]) -> None:
