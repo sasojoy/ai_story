@@ -139,22 +139,6 @@ def match_merge(content: Content, world: WorldStateStore, left: Insight, right: 
     ), None)
 
 
-def match_blend(
-    state: GameState, content: Content, world: WorldStateStore, a: str, art_a: MartialArt, b: str, art_b: MartialArt,
-) -> SecretRecipe | None:
-    """兩門武學不分先後。"""
-    if not content.secret_recipes:
-        return None
-    qa, qb = _quality(state, a, art_a), _quality(state, b, art_b)
-    for r in active(content, tianji_of(world)):
-        if r.kind != "blend" or len(r.arts) != 2:
-            continue
-        one, two = r.arts
-        if (art_fits(one, art_a, qa) and art_fits(two, art_b, qb)) or (art_fits(one, art_b, qb) and art_fits(two, art_a, qa)):
-            return r
-    return None
-
-
 SET_LINE = "【{art}】的意境槽一裝滿，竟暗合口訣，使出來是一路【{name}】——多了一條「{special}」。"  # 待 joy 潤
 
 

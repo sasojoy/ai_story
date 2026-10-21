@@ -31,9 +31,10 @@ LEAN_OF = {"正": "正", "邪": "邪"}
 
 
 def fixed(content: Content, art_id: str) -> bool:
-    """槽寫死的武學：內容寫了功效或戰法的（本命武學）、不是下品的內容武學（部下用的上品）。基礎武學（下品）有空槽。"""
+    """槽寫死的武學：內容寫了功效或本命戰法的（本命武學）、不是下品的內容武學（部下用的上品）。基礎武學與學來的武學（下品，
+    帶小戰法的也是）有空槽。"""
     s = content.skills.get(art_id)
-    return s is not None and (bool(s.traits) or s.tactic is not None or s.quality != "下品")
+    return s is not None and (bool(s.traits) or (s.tactic is not None and not s.tactic.minor) or s.quality != "下品")
 
 
 def slot_count(content: Content, quality: str) -> int:
@@ -204,7 +205,9 @@ def rating(content: Content, view: MartialArt, level: int, state: GameState | No
         bonus += cfg.special_weight
     bonus += cfg.high_weight * len({h for h in (view.high, *view.extra_highs) if h})
     if content.skills.get(view.id) is not None and content.skills[view.id].tactic is not None:
-        bonus += cfg.signature_weight
+        bonus += cfg.signature_weight * (0.5 if content.skills[view.id].tactic.minor else 1.0)  # 小戰法算半個
+    elif view.tactic_from:
+        bonus += cfg.signature_weight * 0.5  # 自創借來的小戰法：同學來的
     return int(round(power_at(view, level) * (1 + bonus)))
 
 

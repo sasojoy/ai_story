@@ -6,7 +6,7 @@ import pytest
 
 import run_bots
 from test_bot import armed
-from tianxia import bot_policy, bot_runner, database, fusion, library, naming, server_bots, team
+from tianxia import bot, bot_policy, bot_runner, database, fusion, insight_fx, naming, server_bots
 from tianxia.battle_instance import BattleParticipant, BattleRound
 from tianxia.bot_runner import BotRunner
 from tianxia.characters import open_characters
@@ -565,18 +565,23 @@ def test_run_bots_ends_cleanly_on_ctrl_c(monkeypatch, capsys):
 # ── 假人在鎖外請模型取名：首創的配方與絕學定名（A 鎖內開單 → B 鎖外取名 → C 再拿鎖）────────────────────
 
 
-INSIGHTS = ("feng", "huo", "shui", "shan")  # 測試內容裡有的意境：每個假人各拿一個（拿來認是哪一個假人）
-# 武學重構：武學＋意境不再開爐（意境直接裝進槽），要取名的首創改用武學＋武學：每個假人身上兩門各不相同，配方才各不相同
-PAIRS = (("basic_fist", "basic_breath"), ("lake_kick", "basic_breath"))
-KEY = fusion.blend_key(*PAIRS[0])  # 第一個假人那一爐的配方鍵
+# 煉製只剩意境＋意境（Joy 2026-10-21）：要取名的首創是兩個不同的意境合併；每個假人手上兩個各不相同，配方才各不相同
+PAIRS = (("feng", "huo"), ("shui", "shan"))
+KEY = fusion.merge_key(*PAIRS[0])  # 第一個假人那一爐的配方鍵
 FIRST = set(PAIRS[0])
 
 
+def _first_bot(states):
+    """第一個假人（手上有風的那一位）。"""
+    return next(s for s in states if "feng" in s.player.insights)
+
+
 def _armed_bots(runner, content, clock, monkeypatch, count=1):
-    """補好假人，前 count 位換成身上兩門武學（PAIRS，各不相同）、一個意境、心得與體力都夠的（照 test_bot.armed），停在城裡、
+    """補好假人，前 count 位換成手上兩個意境（PAIRS，各不相同）、心得與體力都夠的（照 test_bot.armed），停在城裡、
     投靠好了、沒有在路上也沒有待處理的事件，存回去；每輪必合、不修練、不練成（心得只花在合成上）。"""
     monkeypatch.setattr(server_bots, "is_online", lambda profile, now: True)
     monkeypatch.setattr(bot_policy, "FORGE_CHANCE", 1.0)
+    monkeypatch.setattr(bot, "MERGE_SHARE", 1.0)
     monkeypatch.setattr(bot_policy, "CULTIVATE_CHANCE", 0.0)
     monkeypatch.setattr(bot_policy, "PRACTICE_CHANCE", 0.0)
     content.config.bots_min_per_faction = 1
@@ -585,8 +590,8 @@ def _armed_bots(runner, content, clock, monkeypatch, count=1):
     store = open_characters()
     for i, state in enumerate(_bots()[:count]):
         p = state.player
-        p.member.wugong_id, p.insights, p.stats["xinde"], p.stamina = PAIRS[i][0], [INSIGHTS[i]], 100, 150
-        p.member.neigong_id, p.arts = PAIRS[i][1], []  # 武學重構：兩門在手才有爐可開（武學＋武學）
+        p.member.wugong_id, p.insights, p.stats["xinde"], p.stamina = "basic_fist", list(PAIRS[i]), 100, 150
+        p.arts = []
         p.journey, p.faction, p.location = None, p.bot.faction, "town"
         state.pending_event = None
         store.save(state)
@@ -618,7 +623,7 @@ def _check_b_call(world, content, budget, person):
     assert person == world.is_character_name
 
 
-def _namer(world, events, name="凌風拳", fail=False):
+def _namer(world, events, name="凌風境", fail=False):
     def generate(client, content, request, budget=None, person=None):
         events.append("name")
         assert not world.db.writing()  # 這個執行緒沒拿著寫入交易
@@ -647,7 +652,7 @@ def test_a_bot_names_its_first_recipe_outside_the_lock(runner, world, content, c
     at = lock_events.index("name")
     assert lock_events[at - 1] == "exit" and lock_events[at + 1] == "enter"
     assert report.named == 1 and report.failed == 0
-    assert world.lookup_recipe(KEY).name == "凌風拳"
+    assert world.lookup_insight_recipe(KEY).name == "凌風境"
     assert clients == [None]  # C 段開爐時，假人的 Game 照舊沒有 client
 
 
@@ -671,7 +676,7 @@ def test_without_a_model_client_bots_skip_first_recipes(runner, world, content, 
     _armed_bots(runner, content, clock, monkeypatch)
     report = runner.tick()
     assert report.named == 0 and report.naming_skipped >= 1
-    assert world.lookup_recipe(KEY) is None
+    assert world.lookup_insight_recipe(KEY) is None
 
 
 def test_with_bot_naming_off_bots_skip_first_recipes_even_with_a_client(runner, world, content, clock, monkeypatch):
@@ -681,7 +686,7 @@ def test_with_bot_naming_off_bots_skip_first_recipes_even_with_a_client(runner, 
     monkeypatch.setattr(naming, "generate", _namer(world, []))
     report = runner.tick()
     assert report.named == 0 and report.naming_skipped >= 1
-    assert world.lookup_recipe(KEY) is None
+    assert world.lookup_insight_recipe(KEY) is None
 
 
 def test_a_recipe_claimed_while_the_bot_waited_is_not_charged_twice(runner, world, content, clock, monkeypatch):
@@ -692,27 +697,29 @@ def test_a_recipe_claimed_while_the_bot_waited_is_not_charged_twice(runner, worl
     def generate(client, content_, request, budget=None, person=None):
         _check_b_call(world, content_, budget, person)
         player = armed(content, world, name="真人")
-        player.state.player.member.neigong_id = "basic_breath"
-        player.forge("basic_fist", [], proposed=("先到拳", "一句話。"), other_art="basic_breath")  # 同一爐武學＋武學
-        return ("後到拳", "一句話。")
+        player.state.player.insights = list(PAIRS[0])
+        player.forge(None, list(PAIRS[0]), proposed=("先到境", "一句話。"))  # 同一爐意境＋意境
+        return ("後到境", "一句話。")
 
     monkeypatch.setattr(naming, "generate", generate)
     runner.tick()
-    assert world.lookup_recipe(KEY).name == "先到拳"
-    bot_state = next(s for s in _bots() if s.player.insights == ["feng"] and s.player.member.wugong_id == "basic_fist")
-    fused = [a for a in library.owned_arts(bot_state) if a not in FIRST]
-    assert len(fused) == 1 and team.resolve_art(fused[0], content, world).name == "先到拳"  # 照查到的那一門，沒有「後到拳」
-    assert bot_state.player.stats["xinde"] == 100 - content.config.fuse_xinde  # 收一次
+    assert world.lookup_insight_recipe(KEY).name == "先到境"
+    bot_state = _first_bot(_bots())
+    merged = [i for i in bot_state.player.insights if i not in FIRST]
+    assert [insight_fx.base_id(i) for i in merged] == ["先到境"]  # 照查到的那一個，沒有「後到境」
+    assert bot_state.player.stats["xinde"] == 100 - content.config.merge_xinde  # 收一次
 
 
 def _master_ready(runner, content, world, clock, monkeypatch):
-    """一位假人合出「凌風拳」、練成絕學、輪到自己定名（存回去）；回傳它的名號。"""
+    """一位假人手上一門登記在全服的武學「素拳」（煉製不再合武學，直接登記，見 test_bot._two_arts）、練成絕學、
+    輪到自己定名（存回去）；回傳它的名號。"""
+    from test_bot import _two_arts as registered
+
     runner.client = object()
     _armed_bots(runner, content, clock, monkeypatch)
     state = _bots()[0]
-    game = Game(content, state, random.Random(0), world)
-    game.forge(*PAIRS[0][:1], [], proposed=("凌風拳", "一句話。"), other_art=PAIRS[0][1])  # 武學重構：合成是武學＋武學
-    art_id = next(a for a in library.owned_arts(state) if a not in FIRST)
+    art_id = registered(world)[0].id
+    state.player.arts = [art_id]
     assert world.claim_master(art_id, state.player.name)  # 第一個練成絕學的人：不登記的話，Game 一建好就把取名權當作過期丟掉
     state.player.naming = art_id
     open_characters().save(state)
@@ -740,11 +747,11 @@ def test_a_failed_naming_does_not_claim_the_recipe_with_a_table_name(runner, wor
     monkeypatch.setattr(naming, "generate", _namer(world, [], fail=True))
     report = runner.tick()
     assert report.named == 1 and report.failed == 0
-    assert world.lookup_recipe(KEY) is None
-    bot_state = next(s for s in _bots() if s.player.insights == ["feng"])
-    assert set(library.owned_arts(bot_state)) == FIRST and bot_state.player.stats["xinde"] == 100
+    assert world.lookup_insight_recipe(KEY) is None
+    bot_state = _first_bot(_bots())
+    assert set(bot_state.player.insights) == FIRST and bot_state.player.stats["xinde"] == 100
     runner.tick()  # 時鐘沒動：還在間隔裡，不會立刻再叫一次
-    assert world.lookup_recipe(KEY) is None
+    assert world.lookup_insight_recipe(KEY) is None
 
 
 def test_a_failed_naming_goes_through_for_a_pick_but_not_for_a_new_name(runner, world, content, clock, monkeypatch):
@@ -755,10 +762,8 @@ def test_a_failed_naming_goes_through_for_a_pick_but_not_for_a_new_name(runner, 
     applied = []
     monkeypatch.setattr(bot_policy, "apply_job", lambda game, job, proposed: applied.append(job) or [])
     name = _bots()[0].player.name
-    ask = bot_policy.ForgeJob("basic_fist", ("feng",), None, naming.NamingRequest("fuse", "k", "武學", []))
-    pick = bot_policy.ForgeJob(
-        "basic_fist", ("feng",), None, naming.NamingRequest("fuse", "k", "武學", [], choices=("甲", "乙")),
-    )
+    ask = bot_policy.ForgeJob(PAIRS[0], naming.NamingRequest("merge", "k", "意境", []))
+    pick = bot_policy.ForgeJob(PAIRS[0], naming.NamingRequest("merge", "k", "意境", [], choices=("甲", "乙")))
     runner._name_and_apply(name, ask, bot_runner.TickReport())
     assert applied == []
     runner._name_and_apply(name, pick, bot_runner.TickReport())
@@ -774,7 +779,7 @@ def test_a_failed_mastery_naming_still_names_with_a_different_word_list_name(
     assert runner.tick().failed == 0
     assert open_characters().load(victim).player.naming is None
     lines = [r.text for r in world.get_season().chronicle if "練成絕學，為之定名【" in r.text]
-    assert len(lines) == 1 and "為之定名【凌風拳】" not in lines[0]
+    assert len(lines) == 1 and "為之定名【素拳】" not in lines[0]
 
 
 def test_a_bot_that_lost_the_lock_after_naming_drops_the_name(runner, world, content, clock, monkeypatch):
@@ -790,7 +795,7 @@ def test_a_bot_that_lost_the_lock_after_naming_drops_the_name(runner, world, con
         transaction = holder.transaction()
         transaction.__enter__()  # 取名的時候（鎖外），真人接著拿了行動鎖
         held.append(transaction)
-        return ("凌風拳", "一句話。")
+        return ("凌風境", "一句話。")
 
     monkeypatch.setattr(naming, "generate", generate)
     try:
@@ -800,9 +805,9 @@ def test_a_bot_that_lost_the_lock_after_naming_drops_the_name(runner, world, con
             transaction.__exit__(None, None, None)
         holder.close()
     assert report.named == 1 and report.skipped >= 1
-    assert world.lookup_recipe(KEY) is None
-    bot_state = next(s for s in _bots() if s.player.insights == ["feng"])
-    assert set(library.owned_arts(bot_state)) == FIRST and bot_state.player.stats["xinde"] == 100
+    assert world.lookup_insight_recipe(KEY) is None
+    bot_state = _first_bot(_bots())
+    assert set(bot_state.player.insights) == FIRST and bot_state.player.stats["xinde"] == 100
 
 
 def test_a_season_that_ended_while_the_bot_waited_for_a_name_applies_nothing(runner, world, content, clock, monkeypatch):
@@ -812,12 +817,12 @@ def test_a_season_that_ended_while_the_bot_waited_for_a_name_applies_nothing(run
     def generate(client, content_, request, budget=None, person=None):
         _check_b_call(world, content_, budget, person)
         world.mutate_season(lambda season: setattr(season, "ended", True))  # 取名的時候季結束了
-        return ("凌風拳", "一句話。")
+        return ("凌風境", "一句話。")
 
     monkeypatch.setattr(naming, "generate", generate)
     report = runner.tick()
     assert report.named == 1  # 名字確實請過了（不是根本沒開單）
-    assert world.lookup_recipe(KEY) is None
+    assert world.lookup_insight_recipe(KEY) is None
 
 
 def test_the_apply_step_syncs_the_bot_first_so_a_season_that_ran_out_meanwhile_is_seen(
@@ -834,16 +839,16 @@ def test_the_apply_step_syncs_the_bot_first_so_a_season_that_ran_out_meanwhile_i
         world.mutate_season(lambda season: setattr(season, "time", content.config.season_days * 86400 - 30))
         trends.append(dict(world.get_season().trends))
         clock[0] += 3600  # 取名花了一小時：C 段拿到鎖補算的時候，季就走過季末了
-        return ("凌風拳", "一句話。")
+        return ("凌風境", "一句話。")
 
     monkeypatch.setattr(naming, "generate", generate)
     report = runner.tick()
     assert report.named == 1 and report.failed == 0
     assert world.get_season().ended  # 補算把它收了
     assert trends[0] and set(world.get_season().trends) == set(trends[0])  # 全服的賽季沒被空的賽季蓋掉（補算本來就會動數字）
-    assert world.lookup_recipe(KEY) is None
-    bot_state = next(s for s in _bots() if s.player.insights == ["feng"])
-    assert set(library.owned_arts(bot_state)) == FIRST and bot_state.player.stats["xinde"] == 100
+    assert world.lookup_insight_recipe(KEY) is None
+    bot_state = _first_bot(_bots())
+    assert set(bot_state.player.insights) == FIRST and bot_state.player.stats["xinde"] == 100
 
 
 def test_a_bot_retired_by_a_new_season_while_waiting_for_a_name_is_left_alone(
@@ -861,13 +866,13 @@ def test_a_bot_retired_by_a_new_season_while_waiting_for_a_name_is_left_alone(
         assert world.next_season(content, now=clock[0])
         clock[0] += 120  # 取名花了一點時間：C 段要是還去補算、存檔，角色的 last_real 就變了
         snapshots.append(_saves_snapshot())
-        return ("凌風拳", "一句話。")
+        return ("凌風境", "一句話。")
 
     monkeypatch.setattr(naming, "generate", generate)
     report = runner.tick()
     assert report.named == 1 and report.failed == 0
     assert _saves_snapshot() == snapshots[0]
-    assert world.lookup_recipe(KEY) is None
+    assert world.lookup_insight_recipe(KEY) is None
 
 
 def test_a_pause_that_starts_while_the_bot_waited_for_a_name_registers_no_recipe(
@@ -884,19 +889,19 @@ def test_a_pause_that_starts_while_the_bot_waited_for_a_name_registers_no_recipe
         calls.append(request.kind)
         if len(calls) == 1:
             assert world.pause_clock(clock[0])  # 取名的時候，管理者按了暫停
-        return ("凌風拳", "一句話。")
+        return ("凌風境", "一句話。")
 
     monkeypatch.setattr(naming, "generate", generate)
     report = runner.tick()
     assert report.named == 1 and report.failed == 0
     key = KEY
-    assert world.paused_at() is not None and world.lookup_recipe(key) is None
-    bot_state = next(s for s in _bots() if s.player.insights == ["feng"])
-    assert set(library.owned_arts(bot_state)) == FIRST and bot_state.player.stats["xinde"] == 100
+    assert world.paused_at() is not None and world.lookup_insight_recipe(key) is None
+    bot_state = _first_bot(_bots())
+    assert set(bot_state.player.insights) == FIRST and bot_state.player.stats["xinde"] == 100
     world.resume_clock(content, clock[0])
     clock[0] += content.config.bot_naming_gap_seconds
     assert _tick_cleanly(runner).named == 1
-    assert world.lookup_recipe(key).name == "凌風拳"  # 繼續之後照常取名、登記
+    assert world.lookup_insight_recipe(key).name == "凌風境"  # 繼續之後照常取名、登記
 
 
 def test_a_pause_that_starts_while_the_bot_waited_to_name_a_mastered_art_names_nothing(
@@ -923,7 +928,7 @@ def test_a_failure_while_naming_is_counted_and_leaves_no_name_behind(
     """取名那一段出錯：算一次出錯、不讓整個程式倒下，log 與主控台都看不到名號（連例外訊息裡的也不寫）。"""
     runner.client = object()
     _armed_bots(runner, content, clock, monkeypatch)
-    victim = next(s for s in _bots() if s.player.insights == ["feng"]).player.name
+    victim = _first_bot(_bots()).player.name
 
     def generate(client, content_, request, budget=None, person=None):
         raise OSError(f"連不上（{victim}）")

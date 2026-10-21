@@ -84,7 +84,9 @@ NEW_NINE = {"wangyun", "gongsunzan", "tangzhou", "xuchu", "zhangyan", "xushao", 
 
 
 def test_every_recruitable_companion_has_arts_and_power(real, world):
-    """十五位都有一門武學、一門內功；新補的九位挑現有內容的武學（不新造名字）、不帶本命戰法、不是絕學；招到之後威力不是 0。"""
+    """十五位都有一門武學、一門內功；新補的九位挑現有內容的武學（不新造名字）、不帶本命戰法、不是絕學；招到之後威力不是 0。
+    main 的 d0ca2c25（Joy 2026-10-21）給學來的下品武學各帶一個小戰法，九位起始的下品武學也帶：不是本命戰法（FB-640，
+    原本斷言 tactic 是 None；本命與小戰法的分法在 tests/test_fb640_figure_arts.py）。"""
     from tianxia import team
 
     for cid in FIFTEEN:
@@ -93,7 +95,8 @@ def test_every_recruitable_companion_has_arts_and_power(real, world):
     for cid in NEW_NINE:
         ch = real.characters[cid]
         for sid in (ch.starting_wugong, ch.starting_neigong):
-            assert real.skills[sid].tactic is None and real.skills[sid].quality != "絕學"
+            tactic = real.skills[sid].tactic
+            assert (tactic is None or tactic.minor) and real.skills[sid].quality != "絕學"
     game = _player(real, world, "官甲", "guan", "zhuo_county")
     for cid in NEW_NINE:
         roster._seed_starting_skills(world, cid, real.characters[cid])

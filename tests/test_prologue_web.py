@@ -196,7 +196,9 @@ def test_each_step_lights_up_the_next_thing(hut):
                        if mark in out["top"]],
             "toggle": 'data-act="toggle-more"' in out["top"],
         })
-    assert [s["tabs"] for s in seen[:5]] == [[], ["jianghu", "practice"], ["jianghu", "practice"], ["jianghu", "practice", "craft"], ["jianghu", "practice", "craft"]]
+    # 煉製頁到揣摩那一步（第 6 步）才亮：裝意境那一步在修練頁（爐裡只合意境，Joy 2026-10-21）
+    jp, jpc = ["jianghu", "practice"], ["jianghu", "practice", "craft"]
+    assert [s["tabs"] for s in seen[:6]] == [[], jp, jp, jp, jp, jpc]
     assert seen[1]["vitals"] == ["xinde"] and seen[2]["vitals"] == ["stamina", "xinde"]
     assert seen[2]["cells"] == ["explore"] and seen[6]["cells"] == ["explore", "rest"]
     assert seen[7]["cells"] == ["explore", "train"] and seen[7]["vitals"] == ["stamina", "hp", "xinde"]
@@ -721,34 +723,48 @@ def test_only_the_art_the_master_names_glows_to_be_switched_to(hut):
     assert 'data-act="switch"' in opened and not re.search(r'data-act="switch" data-glow', opened)
 
 
-def test_the_craft_page_lights_the_two_things_to_put_in_the_furnace(hut):
-    """T7 走查 W-B：煉製頁步驟 4，開爐灰著不會發光，要放進爐子的基礎拳腳與剛悟到的意境在挑選清單裡（第一屏之外）：兩樣發光，
-    放進爐子的那一樣就不再發光；兩樣都放好之後開爐發光（既有）。別的武學不發光。"""
+def test_the_slotting_step_lights_the_empty_slots_of_the_base_art_on_the_practice_page(hut):
+    """裝意境那一步（爐裡只合意境之後改在修練頁，Joy 2026-10-21）：師父點名的基礎拳腳的空槽發光（prologue.art_glow 的 "slot"），
+    點開空槽、挑意境的那幾顆也發光；別門武學不發光，頁面上也沒有別的東西發光。"""
     m, x = pages_at(hut, 3)
-    assert m["prologue"]["glow"] == ["tab:craft", "pick:art", "pick:insight", "forge"]
+    assert m["prologue"]["glow"] == ["tab:practice", "slot"]
+    page = run(m, "return H.pagePractice();", menxia=x)
+    slots = re.findall(r'data-act="slot-pick" data-id="(\w+)" data-i="\d+"( data-glow="slot")?', page)
+    assert slots and {i for i, g in slots if g} == {"basic_fist"} and all(g for i, g in slots if i == "basic_fist")
+    tags = re.findall(r"<button[^>]*data-glow=[^>]*>", page)
+    assert {re.search(r'data-glow="([^"]*)"', t).group(1) for t in tags if " disabled" not in t} == {"slot"}
+    picked = run(m, "H.S.slotPick = { art: 'basic_fist', i: 0 }; return H.pagePractice();", menxia=x)
+    assert re.search(r'data-act="slot-in" data-id="basic_fist" data-i="0" data-ins="\w+" data-glow="slot"', picked)
+
+
+def test_the_craft_page_lights_the_two_pieces_to_put_in_the_furnace(hut):
+    """T7 走查 W-B：煉製頁揣摩那一步，開爐灰著不會發光，要放進爐子的兩份意境在挑選清單裡（抽屜）：兩份都發光，
+    放進爐子的那一份就不再發光；兩份都放好之後開爐發光。"""
+    m, x = pages_at(hut, 5)
+    assert m["prologue"]["glow"] == ["tab:craft", "pick:insight", "forge"]
+    pieces = [i["id"] for i in x["insights"]]
+    assert len(pieces) == 2
     page = run(m, "H.S.craftPick = true; return H.pageCraft();", menxia=x)  # 清單在抽屜裡（Joy 2026-10-19）：打開才看得到那幾顆
-    arts = re.findall(r'data-act="pick" data-type="art"( data-glow="[^"]*")? data-id="(\w+)"', page)
-    assert {i: g.strip() for g, i in arts} == {"basic_breath": "", "basic_fist": 'data-glow="pick:art"'}
-    assert re.search(r'data-act="pick" data-type="ins" data-glow="pick:insight" data-id=', page)
+    assert re.findall(r'data-act="pick" data-type="ins" data-glow="pick:insight" data-id="([^"]+)"', page) == pieces
+    assert 'data-type="art"' not in page  # 爐裡只合意境
     closed = run(m, "return H.pageCraft();", menxia=x)
-    assert 'data-act="pot-open" data-glow="pick:art pick:insight"' in closed and 'data-act="pick"' not in closed  # 抽屜關著：空格亮
-    placed = run(m, "H.S.craftPick = true; H.S.forgeSel = [{ type: 'art', id: 'basic_fist' }]; return H.pageCraft();", menxia=x)
-    assert 'data-glow="pick:art"' not in placed and 'data-glow="pick:insight"' in placed  # 武學放進去了，意境還在清單裡
-    both = run(m, "H.S.craftPick = true; H.S.forgeSel = [{ type: 'art', id: 'basic_fist' }, { type: 'ins', id: m.guide && 'feng' }]; return H.pageCraft();",
-               menxia={**x, "insights": [{**i, "id": "feng"} for i in x["insights"]]})
-    assert 'data-glow="pick:' not in both and re.search(r'id="forge" data-act="forge" data-glow="forge"\s*>', both)  # 兩樣都放好：開爐亮了
+    assert 'data-act="pot-open" data-glow="pick:insight"' in closed and 'data-act="pick"' not in closed  # 抽屜關著：空格亮
+    placed = run(m, f"H.S.craftPick = true; H.S.forgeSel = [{{ type: 'ins', id: '{pieces[0]}' }}]; return H.pageCraft();", menxia=x)
+    assert re.findall(r'data-glow="pick:insight" data-id="([^"]+)"', placed) == pieces[1:]  # 放進去的那一份不再亮，另一份還在清單裡
+    both = run(m, f"H.S.forgeSel = [{{ type: 'ins', id: '{pieces[0]}' }}, {{ type: 'ins', id: '{pieces[1]}' }}]; return H.pageCraft();", menxia=x)
+    assert 'data-glow="pick:' not in both and re.search(r'id="forge" data-act="forge" data-glow="forge"\s*>', both)  # 兩份都放好：開爐亮了
 
 
-def test_the_first_glowing_thing_on_the_craft_page_is_the_base_art_chip(hut):
+def test_the_first_glowing_thing_on_the_craft_page_is_an_insight_chip(hut):
     """W-B：師父框上的「在下面 ↓」看的是頁面裡第一個會發光的東西（#page .glow，applyGlow 只加在按得下去的）。這個測試只釘「煉製頁
-    步驟 4 的標記裡，由上往下第一個按得下去又帶發光鍵的是底（基礎拳腳）的那一顆挑選清單，開爐灰著不算」；它不跑 guideCue——
+    揣摩那一步的標記裡，由上往下第一個按得下去又帶發光鍵的是挑選清單裡的意境，開爐灰著不算」；它不跑 guideCue——
     node 的假 DOM 沒有版面，算位置、有沒有「在下面 ↓」的部分由上面 test_the_cue_points_at_a_target_below_the_fold_and_only_then
-    （假的 getBoundingClientRect）釘，真的版面上它出現在 771 的那一顆是無頭 Chrome 量過的（Task 7 第二輪報告）。"""
-    m, x = pages_at(hut, 3)
+    （假的 getBoundingClientRect）釘。"""
+    m, x = pages_at(hut, 5)
     out = run(m, "H.S.craftPick = true; return H.pageCraft();", menxia=x)  # 抽屜開著（關著時亮的是爐子的空格）
     tags = re.findall(r"<button[^>]*data-glow=[^>]*>", out)  # 發光只加在按得下去的（applyGlow 的 :not([disabled])）
     live = [re.search(r'data-glow="([^"]*)"', tag).group(1) for tag in tags if " disabled" not in tag]
-    assert tags and live[0] == "pick:art" and "forge" not in live  # 開爐灰著（不發光），頁面由上往下第一個會發光的是底（基礎拳腳）
+    assert tags and live[0] == "pick:insight" and "forge" not in live  # 開爐灰著（不發光），頁面由上往下第一個會發光的是意境
 
 
 @pytest.mark.parametrize("stored", ["ready", "內功", "武學"])
@@ -774,14 +790,14 @@ def test_a_filter_the_browser_remembers_from_an_earlier_character_never_hides_wh
 
 
 @pytest.mark.parametrize("stored", ["內功", "意境", "武學"])
-def test_a_remembered_craft_filter_is_ignored_in_the_hut_so_the_base_art_and_the_new_insight_show(hut, stored):
-    """同一個毛病在煉製頁：第 4 步（合成）要放進爐子的基礎拳腳與剛悟到的意境，不能被上一個角色留下的篩選藏起來；序章裡也不畫篩選鈕。"""
-    m, x = pages_at(hut, 3)
+def test_a_remembered_craft_filter_never_hides_the_pieces_the_master_points_at(hut, stored):
+    """同一個毛病在煉製頁：揣摩那一步要放進爐子的兩份意境，不能被上一個角色留下的篩選藏起來；煉製頁不再畫功法的篩選鈕
+    （爐裡只合意境），序章裡、序章外都一樣。"""
+    m, x = pages_at(hut, 5)
     page = run(m, "H.S.craftPick = true; return H.pageCraft();", menxia=x, stored={"tx-arts-filter-craft": stored})
-    assert 'data-act="pick" data-type="art" data-glow="pick:art" data-id="basic_fist"' in page
-    assert 'data-glow="pick:insight"' in page and "fchips" not in page
+    assert len(re.findall(r'data-act="pick" data-type="ins" data-glow="pick:insight"', page)) == 2 and "fchips" not in page
     plain = run({**m, "prologue": None}, "H.S.craftPick = true; return H.pageCraft();", menxia=x, stored={"tx-arts-filter-craft": stored})
-    assert "fchips" in plain  # 序章之外照舊：篩選鈕在、記著的篩選照套（煉製頁的鈕一直都畫，改得回來）
+    assert len(re.findall(r'data-act="pick" data-type="ins"', plain)) == 2 and "fchips" not in plain
 
 
 def test_only_the_art_the_master_names_glows_to_be_melted(hut):

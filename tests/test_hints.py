@@ -1145,7 +1145,7 @@ def test_a_page_action_notices_it_too(game):
 
 def test_every_page_action_looks_for_hints(game, monkeypatch):
     """修練頁、煉製頁的每一種動作做完都經過 _menxia_entry、看一遍提示（療傷、練成、改練、裝意境、拆意境、合成、熔武學、熔意境、修練）：
-    一個一個做、每做成一個，檢查就多叫一次。武學重構：合成是兩門武學合一門，武學＋意境是裝槽（lake_kick 是下品的內容武學，裝得了）。"""
+    一個一個做、每做成一個，檢查就多叫一次。爐裡只合意境（Joy 2026-10-21），武學＋意境是裝槽（lake_kick 是下品的內容武學，裝得了）。"""
     from tianxia import cultivation
 
     game.skip_tutorial()
@@ -1155,7 +1155,6 @@ def test_every_page_action_looks_for_hints(game, monkeypatch):
     p.member.neigong_id, p.member.wugong_id = "breath", "fist"
     p.arts = ["sword", "step", "lake_kick"]
     p.insights = ["feng", "huo", "shui"]
-    game.content.skills["step"].quality = "下品"  # 寫死的武學不能當合成的料；測試內容的追風步沒寫品級（絕學），改成下品才合得
     calls = []
     real = game._check_hints
     monkeypatch.setattr(game, "_check_hints", lambda *args, **kwargs: (calls.append(1), real(*args, **kwargs))[1])
@@ -1165,9 +1164,9 @@ def test_every_page_action_looks_for_hints(game, monkeypatch):
         "heal": lambda: game.heal(),
         "practice": lambda: game.practice("武學"),
         "switch_art": lambda: game.switch_art("sword"),
-        "slot": lambda: game.forge("lake_kick", ["feng"]),
+        "slot": lambda: game.slot_insight("lake_kick", "feng"),
         "unslot": lambda: game.unslot_insight("lake_kick", "feng"),
-        "forge": lambda: game.forge("step", [], other_art="lake_kick"),
+        "forge": lambda: game.forge(None, ["feng", "huo"]),
         "melt_art": lambda: game.melt_art("step"),
         "melt_insight": lambda: game.melt_insight("shui"),
         "cultivate": lambda: game.cultivate("sword"),

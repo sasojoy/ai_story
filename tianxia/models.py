@@ -524,6 +524,9 @@ class TacticDef(_Strict):
     # 本命底蘊（玩家武學追上本命，Joy 2026-10-15「本命還是強一點點」）：本人身上練著這一門時，擂台、奪璽單挑（玩家對玩家，Bout.pvp）每一回合推力多這麼多
     # （跟發動率無關、一直在；一般的仗、頭目戰、決戰、同伴練的、大勢人物本人當對手時都不算）。每一位照擂台量表對滿配絕學的贏面各調，內外兩門各一半
     might: float = Field(default=0.0, ge=0, le=2)
+    # 小戰法（Joy 2026-10-21 決策卡「小戰法」：學來的武學要有特色、不然沒有學的必要）：寫在各地教的、事件給的下品內容武學上，
+    # 跟本命戰法同一套做法、數字約本命的五到六成；不算本命（不乘本命的威力、不從第七成起、熔得掉、卡上寫「小戰法」，signature.of 不認）
+    minor: bool = False
 
 
 class TacticBond(_Strict):
@@ -703,8 +706,9 @@ class CharacterDef(_Strict):
     growth: dict[str, float] = Field(default_factory=dict)
     sect: str | None = None
     desc: str = ""
-    starting_wugong: str | None = None  # 本命武學 id（指向 SkillDef，kind 必須是「武學」）
-    starting_neigong: str | None = None  # 本命內功 id（指向 SkillDef，kind 必須是「內功」）
+    # 起始武學與內功：品質是絕學的才是本命（tactics.figure_arts）；歷史武將同行補的是各地教的內容武學，不是本命（FB-640）
+    starting_wugong: str | None = None  # 起始武學 id（指向 SkillDef，kind 必須是「武學」）
+    starting_neigong: str | None = None  # 起始內功 id（指向 SkillDef，kind 必須是「內功」）
     deep_interaction: bool = False  # 是否走 companion_agent.py 的即時 LLM 對話（見設計文件四.3）
     recruit_at: str | None = None  # 可招募的同伴在哪個地點找得到他（龍頭人物不填，用 talk_at）
     talk_at: str | None = None  # kind=locked 的龍頭人物在哪個地點可以深度對話（不可招募，見上一輪「還要改進」5）
@@ -950,7 +954,7 @@ REVEAL_KEYS = frozenset({
 # 序章每一步 glow 可以寫的鍵（網頁的 data-glow，見 web/app.js 的 applyGlow）：亮得起來的元件加上修練頁、煉製頁裡的幾顆鈕。
 # 「all」是全部亮齊的意思，沒有東西可發光，不收。寫錯的鍵悄悄什麼都不亮，帶引號或括號的還會讓 applyGlow 的選擇器丟例外
 # pick:art、pick:insight 是煉製頁挑選清單裡這一步要放進爐子的那門武學與意境（Game.art_rows／insight_rows 的 glow 標出來）
-GLOW_KEYS = (REVEAL_KEYS - {"all"}) | frozenset({"forge", "practice", "switch", "cultivate", "melt", "allocate", "pick:art", "pick:insight"})
+GLOW_KEYS = (REVEAL_KEYS - {"all"}) | frozenset({"forge", "practice", "switch", "cultivate", "melt", "allocate", "pick:insight", "slot"})
 
 
 # 序章每一步 allow 可以寫的選單 id（TutorialStep.allow 是前綴比對，見 prologue.allowed）：照 Game._everyday_options 與它叫的
@@ -1055,15 +1059,14 @@ class SecretRecipe(_Strict):
     """秘方（PM 2026-10-10 派工「口訣與秘方」，企劃者「合成要講究邏輯，最好能隱含技巧都藏彩蛋」）：每季照天機挑一批
     （Config.secrets.per_season，tianxia/secrets.py）。合中了出一門內容寫好名號的武學或意境：品質機率好一截、一定帶一條特別功效，
     首創的人江湖上傳一句、寫進江湖史。線索是三句口訣（clues：說書版、人物順口版、殘譜版），只講意象，不點名意境或屬性。
-    fuse：art＋insight；merge：left、right 兩格分左右；blend：arts 兩門不分先後。"""
+    fuse：art＋insight（裝滿）；merge：left、right 兩格分左右。武學＋武學（blend）2026-10-21 隨武學合成一起拿掉。"""
 
     id: str
-    kind: Literal["fuse", "merge", "blend"]
+    kind: Literal["fuse", "merge"]
     art: ArtPattern | None = None
     insight: InsightPattern | None = None
     left: InsightPattern | None = None
     right: InsightPattern | None = None
-    arts: list[ArtPattern] = Field(default_factory=list)
     name: str
     note: str = ""
     special: str | None = None  # 特別功效 id（traits.json 的 special）；沒寫照天機挑一條。合出意境的秘方不用
@@ -1618,7 +1621,7 @@ class RenownTuning(_Strict):
 class Bounties(_Strict):
     """懸賞榜（PM 2026-10-08 派工「加強散人玩法」；bounties.py）：enabled 開著、劇本有陣營就有，每季都有（懸賞榜設計 2.2），在城鎮類的地點查看（「懸賞榜」不花體力）。
     官軍、黃巾每週一各自動掛 kinds 裡的每一張（討伐兩張、打探、護送各一張）；劇本的每個陣營（官軍、黃巾、地方豪強）每週一另各掛
-    give_kinds 裡的每一種（求藝、求兵，懸賞榜設計第四節）；玩家（投靠了陣營的人）可以花銀兩通緝一個敵對陣營的人。
+    give_kinds 裡的每一種（求兵，懸賞榜設計第四節；求藝企劃者 2026-10-21 拿掉）；玩家（投靠了陣營的人）可以花銀兩通緝一個敵對陣營的人。
     散人兩邊的都能接（通緝也是），陣營的人只能接自己陣營的；接了才算數，一個人同時最多接 max_taken 張。
 
     數字的依據：
@@ -1632,32 +1635,25 @@ class Bounties(_Strict):
     - auto_weeks：陣營的懸賞掛幾週（地點散在整張地圖上，走過去常常要大半週；只掛一週的話整季機器人揭了五十張只做成三張）。
     - quota：一張陣營懸賞前幾個完成的人有賞（照伺服器人數上限換算：100 人的量 3 張，最少 quota_min）。
     - post_min／post_max：通緝的賞金（押金）範圍；沒人完成就在 post_weeks 週後下榜、押金退回。wanted_deeds 是散人接通緝打贏記的俠名。
-    - 求藝（art）、求兵（arms）：不用揭，在城鎮的懸賞榜上直接交（交了就沒了），名額 give_quota、一張一人一次，陣營的人也拿全額
-      （企劃者 2026-10-10）。give_attributes 是挑屬性的範圍（同一期同一種三方不重複），give_list 是交出那一層最多列幾件（同拆解）。
-      求藝的賞（企劃者「比平時歷練的還好一些」；正式內容 19 支遊歷對手打贏的中位數是銀兩 10、經驗 20、心得 16）：silver／exp／
-      xinde／deeds 的 "art"；另給這張屬性的一階素材 art_materials 個，art_material2_chance 再一個同屬性二階，art_weapon_chance 一把
-      一階兵器（上品 art_weapon_top_chance、其餘中品；裝備庫滿了照 arms_silver 折銀兩）。
+    - 求兵（arms）：不用揭，在城鎮的懸賞榜上直接交（交了就沒了），名額 give_quota、一張一人一次，陣營的人也拿全額
+      （企劃者 2026-10-10）。give_attributes 是挑屬性的範圍（同一期三方不重複），give_list 是交出那一層最多列幾件（同拆解）。
+      求藝（art：交一門合成出來的武學）企劃者 2026-10-21 拿掉（「懸賞榜直接把武學拿掉」：武學不再合成，求藝沒有來源），
+      它的賞（"art" 那幾項、art_materials、art_weapon_chance……）一起拿掉。
       求兵的銀兩照交的那一把：arms_silver[品質] × arms_tier[階]（照兵器第二批的打造工錢算；三階 ×4 不是 ×3，手上多出來的三階上品
       交了才不虧工錢，懸賞榜設計 4.7 的期望值表），淬煉不加錢；經驗、心得、俠名是 exp／xinde／deeds 的 "arms"。"""
 
     enabled: bool = True  # 懸賞榜的開關（主機要整個關掉時用）；開著也要劇本有陣營才有（bounties.active）
     kinds: list[str] = Field(default_factory=lambda: ["strike", "strike", "scout", "escort"])
-    give_kinds: list[str] = Field(default_factory=lambda: ["art", "arms"])  # 另立一欄、不塞進 kinds：官軍、黃巾那一圈一個字都不動；每種最多一次
+    give_kinds: list[str] = Field(default_factory=lambda: ["arms"])  # 另立一欄、不塞進 kinds：官軍、黃巾那一圈一個字都不動；每種最多一次
     give_attributes: list[str] = Field(default_factory=lambda: ["剛", "柔", "快", "慢"])
     give_quota: int = Field(default=3, ge=1)  # 不走 quota()：它在 30 人的正式設定與週末設定都算出 1
     give_list: int = Field(default=8, ge=1)
-    silver: dict[str, int] = Field(default_factory=lambda: {"strike": 20, "scout": 10, "escort": 15, "art": 20})
-    deeds: dict[str, int] = Field(default_factory=lambda: {"strike": 3, "scout": 2, "escort": 2, "wanted": 4, "art": 2, "arms": 2})
-    exp: dict[str, int] = Field(
-        default_factory=lambda: {"strike": 15, "scout": 10, "escort": 12, "wanted": 15, "art": 30, "arms": 30},
-    )
-    xinde: dict[str, int] = Field(default_factory=lambda: {"art": 20, "arms": 10})
+    silver: dict[str, int] = Field(default_factory=lambda: {"strike": 20, "scout": 10, "escort": 15})
+    deeds: dict[str, int] = Field(default_factory=lambda: {"strike": 3, "scout": 2, "escort": 2, "wanted": 4, "arms": 2})
+    exp: dict[str, int] = Field(default_factory=lambda: {"strike": 15, "scout": 10, "escort": 12, "wanted": 15, "arms": 30})
+    xinde: dict[str, int] = Field(default_factory=lambda: {"arms": 10})
     arms_silver: dict[str, int] = Field(default_factory=lambda: {"下品": 20, "中品": 35, "上品": 50})
     arms_tier: dict[str, int] = Field(default_factory=lambda: {"1": 1, "2": 2, "3": 4, "4": 6})  # 四階 ×6（正式季整合 5.1）
-    art_materials: int = Field(default=2, ge=0)
-    art_material2_chance: float = Field(default=0.3, ge=0, le=1)
-    art_weapon_chance: float = Field(default=0.2, ge=0, le=1)
-    art_weapon_top_chance: float = Field(default=0.3, ge=0, le=1)
     quota_base: int = Field(default=3, ge=1)
     quota_min: int = Field(default=1, ge=1)
     max_taken: int = Field(default=3, ge=1)
@@ -2250,7 +2246,7 @@ class Secrets(_Strict):
     正式值在 config.json。"""
 
     # 每季照天機挑幾條：種類 → 條數（池子不夠就全上）
-    per_season: dict[str, int] = Field(default_factory=lambda: {"fuse": 2, "merge": 2, "blend": 2})
+    per_season: dict[str, int] = Field(default_factory=lambda: {"fuse": 2, "merge": 2})
     quality_points: float = 0  # 合中秘方的那一爐，造化分加這麼多（+20：普通搭配的上品從兩成拉到三成，還是夾在上限之內）
     insight_points: float = 0  # 拿秘方合出來的意境去融，那一爐的「意境來歷」再加這麼多
     tale_events: list[str] = Field(default_factory=list)  # 這些事件了結之後，有 tale_chance 的機會多一句說書版的口訣
@@ -2375,7 +2371,7 @@ class ArtsTuning(_Strict):
     """武學重構（Joy 2026-10-20；tianxia/arts.py）：品級只管威力上限（martial_arts.QUALITY_TOP_POWER）與意境槽數（slots）；
     意境就是技能，裝進槽生效。戰力＝威力 ×（1 ＋ Σ 權重）：一般功效每級 general_weight、高階 high_weight、特別功效 special_weight、
     本命戰法 signature_weight（只用來排清單與寫卡，不進戰鬥）。自創：create_xinde 起、一季每多一門 ×create_step、最多 create_per_season 門；
-    多付 create_bonus_per 心得加 5 分、最多 create_bonus_cap 分；品級從 create_odds 起算（下／中／上），意分與加分往上推。數字是佔位，量表定。"""
+    自創的一律是 create_grade（Joy 2026-10-21「自創武學應該保底都是上品」；多付心得加分、擲品級都拿掉了）。數字是佔位，量表定。"""
 
     slots: dict[str, int] = Field(default_factory=lambda: {"下品": 2, "中品": 3, "上品": 4, "絕學": 4})
     general_weight: float = Field(default=0.05, ge=0)
@@ -2385,10 +2381,7 @@ class ArtsTuning(_Strict):
     create_xinde: int = Field(default=400, ge=0)
     create_step: float = Field(default=1.5, ge=1)
     create_per_season: int = Field(default=3, ge=0)
-    create_bonus_per: int = Field(default=100, ge=1)
-    create_bonus_cap: int = Field(default=20, ge=0)
-    create_odds: dict[str, float] = Field(default_factory=lambda: {"下品": 50, "中品": 30, "上品": 20})
-    create_point_shift: float = Field(default=0.4, ge=0)  # 「意」分＋加分每一分把下品的機率往上品挪多少個百分點
+    create_grade: Literal["下品", "中品", "上品"] = "上品"
     # 成形（create.roll_colors）：每一路屬性的權重＝底 create_base_weight ＋ 兵器或行功之法的偏向（content/create_forms.json）
     # ＋ 姿勢讀出的偏向（第一路 create_pose_weights[0]、第二路 [1]）＋ 意讀出的偏向（create_intent_weights）。
     # 第一格一定是權重最高的那一路單色（定向）；其餘每一格先照 create_slot_odds 擲單色、雙色、全色，再照權重抽顏色（格與格之間可以重複）。
@@ -2867,11 +2860,12 @@ class Season21Daily(_Strict):
     orders_per_day: int = Field(default=1, ge=0)
     order_effect_share: float = Field(default=0.43, ge=0)
     bounty_days: float = Field(default=2, gt=0)
+    # 求藝（"art"）企劃者 2026-10-21 跟懸賞榜的求藝一起拿掉
     exp_ratio: dict[str, float] = Field(
-        default_factory=lambda: {"strike": 0.15, "escort": 0.12, "scout": 0.08, "art": 0.10, "arms": 0.10},
+        default_factory=lambda: {"strike": 0.15, "escort": 0.12, "scout": 0.08, "arms": 0.10},
     )
     silver_per_level: dict[str, int] = Field(
-        default_factory=lambda: {"strike": 6, "escort": 5, "scout": 3, "art": 5, "arms": 5},
+        default_factory=lambda: {"strike": 6, "escort": 5, "scout": 3, "arms": 5},
     )
     strike_tier3_chance: float = Field(default=0.10, ge=0, le=1)
     prize_treasure_chance: float = Field(default=0.10, ge=0, le=1)
@@ -3375,14 +3369,14 @@ class Config(_Strict):
     shop_screens: bool = True
     # ── 武學與成長（設計第四節；全部【預設】，整季模擬校準見計畫一 Task 14）──
     practice_xinde_per_level: int = 2  # 練成：第 N 成升 N+1 成花 N × 這個數的心得（企劃者 2026-10-07 方案 A：1 → 2，練滿 45 → 90）
-    fuse_xinde: int = 5  # 合成（武學＋意境）一次
+    fuse_xinde: int = 5  # 舊的武學＋意境合成一次（Joy 2026-10-21 起煉製只合意境，沒有地方讀了；設定還在）
     merge_xinde: int = 5  # 合併（意境＋意境）一次
     # 企劃者 2026-10-05：合併要花體力（跟修練一次一樣；那時合成不花，設計 12.1 起三種合成一樣花，見 fuse_stamina）。合併→熔掉（melt_insight_xinde）→再合併
     # 每一圈淨賺心得，決定不擋重合、也不動熔的價，而是讓每一圈都付一次體力：「意境合併要花體力，這樣的話她要拿心得就給他拿」。
     # FB-067（企劃者 2026-10-05）：從 10（跟修練一次一樣）降到 5；修練（含衝絕學）維持 10。一圈淨賺 5 心得＝每點體力 1 心得，
     # 跟「同一個地點探索又悟到同一個意境」（10 體力換 10 心得）一樣划算
     merge_stamina: int = 5
-    # 武學與成長設計 12.1：三種合成同一套價錢——武學＋意境、武學＋武學也收體力
+    # 武學與成長設計 12.1：三種合成同一套價錢；Joy 2026-10-21 起煉製只合意境，fuse_xinde／fuse_stamina 沒有地方讀了（設定還在）
     fuse_stamina: int = Field(default=5, ge=0)
     # 合成出新武學（武學＋意境、武學＋武學）時，每個人自己那一份的品質機率，「普通搭配」的平均（企劃者 2026-10-06：
     # 「不要直接顯示合成出來確定的品級，用機率，下品50%，中品30%，上品20%」）；權重，不必加起來是 100。

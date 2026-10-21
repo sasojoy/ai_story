@@ -26,12 +26,11 @@ CHALLENGE_ODDS = ("穩勝", "有把握")  # 挑戰本人只挑這兩種勝算（
 SPEND_XINDE_EVERY = 5  # 每幾步檢查一次要不要拿心得去練功/療傷
 FORESHADOW_OPTIONS = ("fs:", "talk:clue:", "opp:", "talk:opp:")  # 伏筆的最後一步、對話的片段與機緣（正式版乙一）：機器人不做
 
-FORGE_TRIES = 4  # 武學＋意境、武學＋武學、意境＋意境各試幾組（被擋下就換一組）
+FORGE_TRIES = 4  # 意境＋意境試幾組（被擋下就換一組）
 SENSE_RIGHT = 0.6  # 有所感時挑到選得對的做法的機會（其餘從全部做法裡隨便挑，可能也挑對）：看得懂場景的玩家大多挑得對
 SENSE_DRAW = 0.8  # 進了感悟狀態之後真的畫一筆（其餘順其自然，落回做法那個基本意境）
-MERGE_SHARE = 0.3  # 手上有兩個以上意境時，這麼多的機會改做合併
+MERGE_SHARE = 0.3  # 手上有兩個以上意境時，這麼多的機會開一爐（煉製只剩意境＋意境）
 FORGE_RESERVE = 20  # 三種合成都花體力（武學與成長設計 12.1）：體力留這麼多給探索與遊歷，多出來的才拿去合成
-BLEND_SHARE = 0.3  # 沒做合併、手上有兩門以上武學時，這麼多的機會改做武學＋武學（沒有意境可合成時一定做）
 CULTIVATE_RESERVE = 60  # 體力留這麼多給探索與遊歷，多出來的才拿去修練
 MOUNT_SILVER_RESERVE = 30  # 買了馬至少還留幾兩（療傷用；同 bot_policy.LEARN_SILVER_RESERVE）：設計第九節「100＋保留額度」
 # 素材與經濟（計畫 B5）：整季機器人與假人賣、升、捐都留這麼多（修兵器、餵馬、糧草吃一階；二階留著升三階），三階一個都不賣不捐
@@ -163,51 +162,31 @@ def teach(game: Game, limit: int = TEACH_MAX) -> int:
 
 
 class ForgePlan(NamedTuple):
-    """挑好的一爐（還沒開）：武學＋意境是 (武學, (意境,), None)、武學＋武學是 (第一門, (), 第二門)、意境＋意境是 (None, (甲, 乙), None)。"""
+    """挑好的一爐（還沒開）：兩個意境（煉製只剩意境＋意境，Joy 2026-10-21）。"""
 
-    art_id: str | None
     insight_ids: tuple[str, ...]
-    other_art: str | None
 
 
-def pick_forge(
-    game: Game, rng: random.Random, merge_share: float | None = None, blend_share: float | None = None,
-) -> ForgePlan | None:
-    """挑一爐（整季機器人與伺服器假人共用）：體力低於 FORGE_RESERVE、或什麼都合不了就是 None。只挑、不開爐，什麼都不改。
-    亂數的擲法跟原本寫在 forge_and_cultivate 裡的一模一樣（見那邊的說明），整季機器人的結果不變。
-    兩個份額是引數（伺服器假人的武學＋武學份額比較低）；沒給就在呼叫的當下讀模組常數 MERGE_SHARE、BLEND_SHARE
-    （不是定義時綁死：量平衡的腳本改這兩個常數要有效）。"""
+def pick_forge(game: Game, rng: random.Random, merge_share: float | None = None) -> ForgePlan | None:
+    """挑一爐（整季機器人與伺服器假人共用）：體力低於 FORGE_RESERVE、手上不到兩個意境、或什麼都合不了就是 None。
+    只挑、不開爐，什麼都不改。merge_share 沒給就在呼叫的當下讀模組常數 MERGE_SHARE（量平衡的腳本改它要有效）。"""
     merge_share = MERGE_SHARE if merge_share is None else merge_share
-    blend_share = BLEND_SHARE if blend_share is None else blend_share
     state, content, world = game.state, game.content, game.world
     p = state.player
-    arts = library.owned_arts(state)
-    can_fuse, can_blend = False, len(arts) >= 2  # 武學＋意境不再開爐（武學重構）；亂數的用法照舊
-    if not (len(p.insights) >= 2 or can_blend) or p.stamina < FORGE_RESERVE:
+    if len(p.insights) < 2 or p.stamina < FORGE_RESERVE or rng.random() >= merge_share:
         return None
-    if len(p.insights) >= 2 and rng.random() < merge_share:
-        for _ in range(FORGE_TRIES):
-            a = rng.choice(p.insights)  # 意境效果池：同一份放兩次合不了，第二格從其餘的挑（同一種的另一份就是揣摩）
-            b = rng.choice([i for i in p.insights if i != a])
-            if fusion.merge_problem(state, content, world, a, b) is None:
-                return ForgePlan(None, (a, b), None)
-        return None
-    if can_blend and (not can_fuse or rng.random() < blend_share):
-        for _ in range(FORGE_TRIES):
-            a, b = rng.sample(arts, 2)
-            if fusion.blend_problem(state, content, world, a, b) is None:
-                return ForgePlan(a, (), b)
-        return None
-    return None  # 武學重構：武學＋意境不再是合成（意境裝進槽走 bot.slot_insights）
+    for _ in range(FORGE_TRIES):
+        a = rng.choice(p.insights)  # 意境效果池：同一份放兩次合不了，第二格從其餘的挑（同一種的另一份就是揣摩）
+        b = rng.choice([i for i in p.insights if i != a])
+        if fusion.merge_problem(state, content, world, a, b) is None:
+            return ForgePlan((a, b))
+    return None
 
 
 def forge_and_cultivate(game: Game, rng: random.Random) -> None:
-    """機器人的武學：等著定名的先定名；滿了先熔最弱的；體力有餘就合成（武學＋意境為主，偶爾合併、偶爾武學＋武學）；
-    改練更強的；體力再有餘就修練一次。機器人會用到這套玩法很重要——不然整季模擬碰不到合成與修練，量出來的平衡沒有意義
-    （CLAUDE.md「第三層」的教訓）。
-    亂數的用法：MERGE_SHARE 那一擲只在手上有兩個以上意境時才擲，BLEND_SHARE 那一擲只在武學＋意境與武學＋武學都能做時才擲，
-    所以只有一門武學、一個意境的機器人，亂數的用法跟以前一模一樣——前提是體力有到 FORGE_RESERVE：低於保留量就整段不合成、
-    一次亂數也不擲（保留量是武學＋武學那一刀才加的，以前機器人想合就合）。"""
+    """機器人的武學：等著定名的先定名；滿了先熔最弱的；體力有餘就開一爐意境（合併或揣摩）；自創；改練更強的；
+    意境裝進空槽；體力再有餘就衝絕學一次。機器人會用到這套玩法很重要——不然整季模擬碰不到合成與修練，量出來的平衡沒有意義
+    （CLAUDE.md「第三層」的教訓）。MERGE_SHARE 那一擲只在手上有兩個以上意境、體力到 FORGE_RESERVE 時才擲。"""
     state, content, world = game.state, game.content, game.world
     p = state.player
     if p.naming is not None:
@@ -216,7 +195,7 @@ def forge_and_cultivate(game: Game, rng: random.Random) -> None:
         melt_the_weakest(game)
     plan = pick_forge(game, rng)
     if plan is not None:
-        game.forge(plan.art_id, list(plan.insight_ids), other_art=plan.other_art)
+        game.forge(None, list(plan.insight_ids))
     create_art(game, rng)
     switch_to_the_strongest(game)
     slot_insights(game)  # 武學重構：悟到的意境裝進身上兩門的空槽
@@ -496,8 +475,8 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
 
 
 def take_bounties(game: Game) -> None:
-    """城裡的懸賞榜上有揭得下的就揭、有交得出的求藝求兵就交（打開、揭、一張一張挑一件交、返回，走 Game 的選單；不花體力）。
-    交照 bounties.give_choice（最不值錢的那一件，跟伺服器假人同一個挑法）；求藝、求兵不揭（take_problem 擋）。
+    """城裡的懸賞榜上有揭得下的就揭、有交得出的求兵就交（打開、揭、一張一張挑一件交、返回，走 Game 的選單；不花體力）。
+    交照 bounties.give_choice（最不值錢的那一件，跟伺服器假人同一個挑法）；求兵不揭（take_problem 擋）。
     揭的做不做得成看之後隨機走到哪裡。"""
     s, c = game.state, game.content
 

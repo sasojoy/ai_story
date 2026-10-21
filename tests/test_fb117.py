@@ -45,10 +45,10 @@ def _answers(card):
     return [b for b in card["actions"] if b["action"] == "discuss"]
 
 
-def _kick(world):
-    """武學重構：寫死的武學（fixture 裡的【長拳】是絕學）不能當合成的料，乙改練不寫死的【湖邊腿法】來論武。"""
+def _two_picks(world):
+    """乙手上兩個都跟「風」合得成的意境（火、水）：答應那一格才是下拉清單（論武只合意境）。"""
     state = _load(world, "乙")
-    state.player.member.wugong_id = "lake_kick"
+    state.player.insights = ["huo", "shui"]
     CharacterStore(world.db).save(state)
 
 
@@ -100,7 +100,7 @@ def test_the_scene_and_the_fold_draw_it_as_a_button_that_opens_the_card(pair):
 @needs_node
 def test_opening_the_card_from_the_scene_scrolls_to_the_answer(pair):
     content, world = pair
-    _kick(world)  # 武學重構：乙改出不寫死的【湖邊腿法】
+    _two_picks(world)
     _invite(content, world)
     card = _card(content, world, "乙", "甲")
     script = """
@@ -133,23 +133,22 @@ def test_when_he_is_gone_the_card_says_why_and_what_to_do(pair):
 
 @pytest.fixture
 def twins(content, world):
-    """兩個人都有【粗淺拳腳】：甲出它，乙清單上第一項就是它（同一樣）。
-    武學重構：武學＋意境不再是合成，要「火」合得成，甲得出意境（「風」：風＋火合併），這時乙的【粗淺拳腳】寫「改裝槽」。"""
+    """兩個人都有「風」：甲出它，乙清單上第一項就是它（同一樣），第二項「火」合得成（論武只合意境）。"""
     from conftest import install_season_one
 
     install_season_one(content)
     content.config.auto_open_first_season = True
     _make(content, world, "甲", insights=("feng",))
-    _make(content, world, "乙", insights=("huo",))
+    _make(content, world, "乙", insights=("feng", "huo"))
     return content, world
 
 
 def test_the_list_starts_at_the_first_one_that_fits(twins):
     content, world = twins
-    _invite(content, world, "insight:feng")  # 甲出「風」（武學重構：武學＋意境不再合，乙的【粗淺拳腳】合不成）
+    _invite(content, world, "insight:feng")  # 甲出「風」
     rows = _answers(_card(content, world, "乙", "甲"))
     assert [(b["arg"], b["enabled"], b["pick"]) for b in rows] == [
-        ("yes:art:basic_fist", False, "【粗淺拳腳】（改裝槽）"),
+        ("yes:insight:feng", False, "「風」（同一樣）"),
         ("yes:insight:huo", True, "「火」"),
         ("no", True, ""),
     ]
@@ -159,10 +158,10 @@ def test_the_list_starts_at_the_first_one_that_fits(twins):
 @needs_node
 def test_the_web_list_disables_what_cannot_fit_and_selects_the_first_that_can(twins):
     content, world = twins
-    _invite(content, world, "insight:feng")  # 武學重構：甲出「風」，乙的「火」合得成
+    _invite(content, world, "insight:feng")  # 甲出「風」，乙的「火」合得成
     rows = _answers(_card(content, world, "乙", "甲"))  # 只畫論武那幾顆：索引從 0 起
     html = run(_main(content, world, "乙"), f"return H.peerActsHtml({json.dumps(rows, ensure_ascii=False)});")
-    assert '<option value="0" disabled>【粗淺拳腳】（改裝槽）</option>' in html
+    assert '<option value="0" disabled>「風」（同一樣）</option>' in html
     assert '<option value="1" selected>「火」</option>' in html
     assert '<button class="btn" data-act="peer-pick"><span class="pa-name">以此應之</span>' in html
 
@@ -181,7 +180,7 @@ def test_a_group_with_nothing_to_pick_is_grayed(content):
 
 def test_nothing_fits_one_gray_button_says_why(twins):
     content, world = twins
-    _give(world, "乙", insights=[])  # 乙身上只剩【粗淺拳腳】，跟甲出的同一樣
+    _give(world, "乙", insights=["feng"])  # 乙身上只剩「風」，跟甲出的同一樣
     _invite(content, world)
     rows = _answers(_card(content, world, "乙", "甲"))
     assert [(b["label"], b["enabled"], b["note"]) for b in rows] == [
@@ -192,30 +191,28 @@ def test_nothing_fits_one_gray_button_says_why(twins):
 def test_different_reasons_are_listed_short(twins):
     content, world = twins
     _invite(content, world, "insight:feng")  # 甲出「風」
-    _give(world, "乙", insights=["feng"], stats={**_load(world, "乙").player.stats, "xinde": 0})
+    _give(world, "乙", stats={**_load(world, "乙").player.stats, "xinde": 0})
     rows = _answers(_card(content, world, "乙", "甲"))
-    # 【粗淺拳腳】＋風：武學重構之後不是合成（改裝槽，排在心得之前）；「風」＋「風」：同一樣
+    # 「風」＋「風」：同一樣；「火」＋「風」：心得不足
     assert rows[0]["enabled"] is False and rows[0]["note"] == discuss.NONE_FITS.format(
-        theirs="「風」", why="【粗淺拳腳】改裝槽、「風」同一樣")
+        theirs="「風」", why="「風」同一樣、「火」心得不足")
 
 
 def test_a_pick_that_does_not_fit_keeps_the_invitation(twins):
-    from tianxia import fusion
-
     content, world = twins
-    _invite(content, world, "insight:feng")  # 武學重構：甲出「風」；乙的【粗淺拳腳】＋風不是合成，「火」＋風才合得成
-    msgs = _do(content, world, "乙", lambda g: g.peer_act("甲", "discuss", {"arg": "yes:art:basic_fist", "proposed": (None, "")}))[0]
-    assert msgs == [fusion.FUSE_GONE]
+    _invite(content, world, "insight:feng")  # 甲出「風」；乙的「風」是同一樣，「火」＋風才合得成
+    msgs = _do(content, world, "乙", lambda g: g.peer_act("甲", "discuss", {"arg": "yes:insight:feng", "proposed": (None, "")}))[0]
+    assert msgs == [engine.DISCUSS_SAME]
     assert len(world.get_season().invites) == 1  # 換一樣再答
     assert not any(e.title.startswith("論武不成") for e in _load(world, "甲").journal)
-    msgs = _do(content, world, "乙", lambda g: g.peer_act("甲", "discuss", {"arg": "yes:insight:huo", "proposed": ("烈焰拳", "")}))[0]
-    assert "烈焰拳" in msgs[0] and world.get_season().invites == []
+    msgs = _do(content, world, "乙", lambda g: g.peer_act("甲", "discuss", {"arg": "yes:insight:huo", "proposed": ("烈焰境", "")}))[0]
+    assert "烈焰境" in msgs[0] and world.get_season().invites == []
 
 
 def test_a_lapsed_discussion_tells_the_sender(twins):
     content, world = twins
     _invite(content, world)
-    _give(world, "甲", member=_load(world, "甲").player.member.model_copy(update={"wugong_id": None}))  # 甲要出的那一樣沒了
+    _give(world, "甲", insights=[])  # 甲要出的那一樣沒了
     msgs = _do(content, world, "乙", lambda g: g.peer_act("甲", "discuss", {"arg": "yes:insight:huo", "proposed": (None, "")}))[0]
     assert msgs == ["甲身上已經沒有他要出的那一樣了。"]
     assert world.get_season().invites == []
@@ -254,7 +251,7 @@ def test_a_bot_answers_with_one_that_fits(twins):
     from tianxia import bot_policy
 
     content, world = twins
-    _invite(content, world, "insight:feng")  # 武學重構：甲出「風」，乙按得下去的是「火」
+    _invite(content, world, "insight:feng")  # 甲出「風」，乙按得下去的是「火」（「風」同一樣）
     slot = bot_policy.NamingSlot(open=True)
     _do(content, world, "乙", lambda g: bot_policy._answer_discuss(g, FixedRandom(0.0), slot))
     assert slot.job is not None and slot.job.item == "insight:huo"
@@ -349,11 +346,11 @@ def test_a_reply_after_the_card_was_closed_does_not_reopen_it(twins):
       H.S.peer = {{ name: "甲", card: {json.dumps(card, ensure_ascii=False)} }};
       const p = H.peerAct({i});
       H.S.peer = {{ name: "丙", card: null, gone: "x" }};  // 等的時候關了卡、點開了丙
-      release({{ card: {json.dumps(card, ensure_ascii=False)}, gone: "", main: null, message: "<p>你以【粗淺拳腳】融入「火」……很長的一段</p>",
-                 brief: "論武有結果了：合出【烈焰拳】。詳見江湖紀錄。" }});
+      release({{ card: {json.dumps(card, ensure_ascii=False)}, gone: "", main: null, message: "<p>「火」與「風」在你心中交融……很長的一段</p>",
+                 brief: "論武有結果了：合出「烈焰境」。詳見江湖紀錄。" }});
       return p.then(() => ({{ peer: H.S.peer.name, toast: T.els.toast.textContent }}));"""
     out = run(_main(content, world, "乙"), script)
-    assert out == {"peer": "丙", "toast": "論武有結果了：合出【烈焰拳】。詳見江湖紀錄。"}  # 只講一句（FB-242）
+    assert out == {"peer": "丙", "toast": "論武有結果了：合出「烈焰境」。詳見江湖紀錄。"}  # 只講一句（FB-242）
 
 
 # ── 第五件：玩家卡跟著輪詢更新 ──
@@ -388,7 +385,7 @@ def _refresh_script(before, after, extra=""):
 def test_an_open_card_follows_the_poll(twins):
     content, world = twins
     before = _card(content, world, "乙", "甲")
-    _invite(content, world, "insight:feng")  # 武學重構：甲出「風」，乙有合得成的（「火」），卡上是那一格下拉清單
+    _invite(content, world, "insight:feng")  # 甲出「風」，乙有合得成的（「火」），卡上是那一格下拉清單
     after = _card(content, world, "乙", "甲")
     out = run(_main(content, world, "乙"), _refresh_script(before, after), responses={"/api/peer": {"card": after, "gone": social.GONE}})
     assert out["asked"] == ["/api/peer?name=%E7%94%B2"]
@@ -443,7 +440,7 @@ def test_no_swap_while_a_confirm_or_amount_is_open(twins):
 def test_at_most_two_invitations_under_the_scene(pair):
     content, world = pair
     _card_for(content, world, "甲")
-    for kind, arg in (("greet", "taunt"), ("mingtie", "send"), ("spar", "invite"), ("discuss", "invite:art:basic_fist")):
+    for kind, arg in (("greet", "taunt"), ("mingtie", "send"), ("spar", "invite"), ("discuss", "invite:insight:feng")):
         _do(content, world, "甲", lambda g, k=kind, a=arg: g.peer_act("乙", k, {"arg": a}))
     m = _main(content, world, "乙")
     assert len(m["calls"]) == 4
@@ -569,19 +566,6 @@ def test_on_your_battle_turn_the_people_here_come_after_the_three_moves(pair):
 # ── 第八件：論武共同首創的那一方 ──
 
 
-def test_the_inviter_is_told_they_co_founded_it(pair):
-    from tianxia import fusion
-
-    content, world = pair
-    _kick(world)
-    _invite(content, world)  # 甲出【粗淺拳腳】，乙出【湖邊腿法】（武學重構：武學＋意境不再合，改武學＋武學；寫死的【長拳】不能當料）
-    _do(content, world, "乙", lambda g: g.peer_act("甲", "discuss", {"arg": "yes:art:lake_kick", "proposed": ("烈焰拳", "")}))
-    mine = " ".join(_load(world, "乙").journal[0].lines)
-    theirs = " ".join(_load(world, "甲").journal[0].lines)
-    assert "這是江湖上第一次有人合出這一門" in mine
-    assert fusion.CO_FIRST.format(other="乙").strip() in theirs and "照著合出了同一門" not in theirs
-
-
 def test_the_inviter_is_told_they_co_founded_the_insight(pair):
     from tianxia import fusion
 
@@ -594,13 +578,11 @@ def test_the_inviter_is_told_they_co_founded_the_insight(pair):
 
 def test_someone_else_following_the_recipe_still_reads_who_founded_it(pair):
     content, world = pair
-    _kick(world)  # 武學重構：乙改出不寫死的【湖邊腿法】
-    _invite(content, world)
-    _do(content, world, "乙", lambda g: g.peer_act("甲", "discuss", {"arg": "yes:art:lake_kick", "proposed": ("烈焰拳", "")}))
-    third = _make(content, world, "丙", wugong="lake_kick", insights=())  # 武學重構：照著合的是武學＋武學（【粗淺拳腳】＋【湖邊腿法】）
-    third.state.player.arts.append("basic_fist")
-    lines = " ".join(third.forge("basic_fist", [], proposed=(None, ""), other_art="lake_kick"))
-    assert "這一門由乙、甲首創，你照著合出了同一門。" in lines
+    _invite(content, world)  # 甲出「風」，乙出「火」
+    _do(content, world, "乙", lambda g: g.peer_act("甲", "discuss", {"arg": "yes:insight:huo", "proposed": ("風火境", "")}))
+    third = _make(content, world, "丙", insights=("feng", "huo"))  # 照著合同一爐
+    lines = " ".join(third.forge(None, ["feng", "huo"], proposed=(None, "")))
+    assert "這個意境由乙、甲首悟。" in lines
 
 
 # ── 第九件：同一對人每個遊戲日的上限寫換日的那一刻，三本帳一個寫法 ──
@@ -647,7 +629,6 @@ def test_fb242_the_server_gives_a_brief_line_for_the_toast(pair, monkeypatch):
     from fastapi.testclient import TestClient
 
     content, world = pair
-    _kick(world)  # 武學重構：乙改出不寫死的【湖邊腿法】
     _invite(content, world)
     state = CharacterStore(world.db).load("乙")
     game = engine.Game(content, state, __import__("random").Random(0), world)
@@ -657,11 +638,11 @@ def test_fb242_the_server_gives_a_brief_line_for_the_toast(pair, monkeypatch):
     monkeypatch.setattr(server, "_game", lambda request: game)
     monkeypatch.setattr(server, "act", lambda g, action, **k: action(g))
     monkeypatch.setattr(server, "look", lambda g, view: view(g) if view is not server.main_view else None)
-    monkeypatch.setattr(server, "prepare_peer", lambda *a, **k: ("烈焰拳", "拳勢裹著火氣。"))
+    monkeypatch.setattr(server, "prepare_peer", lambda *a, **k: ("烈焰境", "風助火勢。"))
     monkeypatch.setattr(server, "_tell_tabs", lambda g: None)
     client = TestClient(server.app)
-    r = client.post("/api/peer/act", json={"name": "甲", "action": "discuss", "arg": "yes:art:lake_kick"}).json()  # 武學重構：武學＋武學
-    assert r["brief"] == "論武有結果了：合出【烈焰拳】。詳見江湖紀錄。" and len(r["message"]) > len(r["brief"])
+    r = client.post("/api/peer/act", json={"name": "甲", "action": "discuss", "arg": "yes:insight:huo"}).json()
+    assert r["brief"] == "論武有結果了：合出「烈焰境」。詳見江湖紀錄。" and len(r["message"]) > len(r["brief"])
     monkeypatch.setattr(server, "screen_peer", lambda *a, **k: "")
     r = client.post("/api/peer/act", json={"name": "甲", "action": "greet", "arg": "taunt"}).json()
     assert r["brief"] == "你向甲斜眼打量，出言挑釁。"
@@ -680,43 +661,49 @@ def test_fb242_brief_is_the_first_sentence_cut_short():
 
 
 def test_fb243_a_co_founder_merging_again_is_not_told_it_is_the_first_time(pair):
-    """共同首創的人熔掉之後自己再合一次：寫「這一門是你與某某首創的」，不寫「江湖上第一次」。"""
-    from tianxia import fusion, library
+    """共同首創的人熔掉之後自己再合一次：寫「這個意境是你與某某首悟的」，不寫「江湖上第一次」。"""
+    from tianxia import fusion
 
     content, world = pair
-    _kick(world)
-    _invite(content, world)  # 甲出【粗淺拳腳】，乙出【湖邊腿法】（武學重構：武學＋武學；寫死的【長拳】不能當料）
-    _do(content, world, "乙", lambda g: g.peer_act("甲", "discuss", {"arg": "yes:art:lake_kick", "proposed": ("烈焰拳", "")}))
+    _invite(content, world)  # 甲出「風」，乙出「火」
+    _do(content, world, "乙", lambda g: g.peer_act("甲", "discuss", {"arg": "yes:insight:huo", "proposed": ("風火境", "")}))
     state = _load(world, "甲")
-    art = world.lookup_recipe(fusion.blend_key("basic_fist", "lake_kick"))
-    library.remove_art(state, art.id)  # 熔掉（只拿掉這一門，不必算心得）
-    state.player.arts.append("lake_kick")  # 自己也學會了【湖邊腿法】，自己合一次
+    made = world.lookup_insight_recipe(fusion.merge_key("feng", "huo"))
+    _melt(state, made.id)
+    state.player.insights.append("huo")  # 自己也悟了「火」，自己合一次
     CharacterStore(world.db).save(state)
-    msgs = _do(content, world, "甲", lambda g: g.forge("basic_fist", [], proposed=(None, ""), other_art="lake_kick"))[0]
+    msgs = _do(content, world, "甲", lambda g: g.forge(None, ["feng", "huo"], proposed=(None, "")))[0]
     text = " ".join(msgs)
-    assert fusion.CO_OWN.format(other="乙").strip() in text and "江湖上第一次" not in text
+    assert fusion.CO_OWN_INSIGHT.format(other="乙").strip() in text and "江湖上第一次" not in text
+
+
+def _melt(state, insight_id):
+    """熔掉（只拿掉這一份意境，不必算心得）。"""
+    from tianxia import insight_fx
+
+    state.player.insights.remove(insight_id)
+    insight_fx.drop(state, insight_id)
 
 
 def test_fb243_discussing_the_same_recipe_again_is_not_the_first_time(pair):
-    """同一對人之後再論出同一門（兩人都熔掉了）：發邀請的那一方也不寫「江湖上第一次」。"""
-    from tianxia import fusion, library
+    """同一對人之後再論出同一個意境（兩人都熔掉了）：發邀請的那一方也不寫「江湖上第一次」。"""
+    from tianxia import fusion
 
     content, world = pair
-    _kick(world)  # 武學重構：乙改出不寫死的【湖邊腿法】
     _invite(content, world)
-    _do(content, world, "乙", lambda g: g.peer_act("甲", "discuss", {"arg": "yes:art:lake_kick", "proposed": ("烈焰拳", "")}))  # 武學重構：武學＋武學
-    art = world.lookup_recipe(fusion.blend_key("basic_fist", "lake_kick"))
+    _do(content, world, "乙", lambda g: g.peer_act("甲", "discuss", {"arg": "yes:insight:huo", "proposed": ("風火境", "")}))
+    made = world.lookup_insight_recipe(fusion.merge_key("feng", "huo"))
     for name in ("甲", "乙"):
         state = _load(world, name)
-        library.remove_art(state, art.id)
+        _melt(state, made.id)
         state.player.stamina = 100.0
         CharacterStore(world.db).save(state)
     key = "|".join(sorted(("甲", "乙")))
     world.mutate_season(lambda s: s.discuss_tally.pop(key, None))  # 今天的帳清掉，再論一回
     _invite(content, world)
-    _do(content, world, "乙", lambda g: g.peer_act("甲", "discuss", {"arg": "yes:art:lake_kick", "proposed": (None, "")}))
+    _do(content, world, "乙", lambda g: g.peer_act("甲", "discuss", {"arg": "yes:insight:huo", "proposed": (None, "")}))
     theirs = " ".join(_load(world, "甲").journal[0].lines)
-    assert fusion.CO_OWN.format(other="乙").strip() in theirs and "江湖上第一次" not in theirs
+    assert fusion.CO_OWN_INSIGHT.format(other="乙").strip() in theirs and "江湖上第一次" not in theirs
 
 
 def test_fb243_their_side_refusal_is_written_from_your_side(twins):

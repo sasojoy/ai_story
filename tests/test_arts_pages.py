@@ -29,8 +29,8 @@ const parts = [
   // artFilter…：煉製頁挑東西那一排的篩選（arts-polish-2 FB-085），pageCraft 畫的時候要用
   ...["forgeBody", "forgeReady", "pagePractice", "pageCraft", "artFilter", "setArtFilter", "showArts", "filterChips",
     "pickMark", "craftView", "craftFilterRow", "craftChip", "kilnWarn", "kilnHtml", "madeCardHtml", "previewCardHtml", "forgeLineHtml", "craftSheetHtml", "potGlow", "kilnPeek", "manualRows", "manualEntry", "bookIcon", ...input.fns].map(fn),
-  // createHtml：煉製頁爐子底下的自創卡（武學重構），這裡不看
-  `const guideHtml = () => "", furnaceSvg = () => '<div class="furnace"></div>', proGuide = () => "", spinAt = () => "", createHtml = () => "";`,
+  // createEntry：煉製頁通往自創那一頁的入口（自創單獨一頁，Joy 2026-10-21），這裡不看
+  `const guideHtml = () => "", furnaceSvg = () => '<div class="furnace"></div>', proGuide = () => "", spinAt = () => "", createEntry = () => "";`,
   input.stubs || "",
   "return { " + ["pagePractice", "pageCraft", ...input.fns, ...input.consts].join(", ") + " };",
 ];

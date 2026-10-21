@@ -824,26 +824,25 @@ def test_forge_line_endpoint_says_what_one_lone_item_is_missing(client):
     game = server.game_for("沈青衫")
     game.state.player.insights = ["feng"]
     open_characters().save(game.state)
-    art = client.post("/api/forge_line", json={"art": "jichu_quanjiao"}).json()["line"]
-    assert "再放一個意境（裝進槽）、或另一門武學（合成）。" in art  # 武學重構：武學＋意境是裝槽
     insight = client.post("/api/forge_line", json={"insights": ["feng"]}).json()["line"]
-    assert "再放一門武學（裝進槽）、或另一個意境（合併；放同一個是揣摩加深）。" in insight
+    assert skillview.FORGE_ONE_INSIGHT in insight
 
 
 def test_forge_line_previews_without_forging(client):
     _player(client)
     game = server.game_for("沈青衫")
-    game.state.player.insights = ["feng"]
+    game.state.player.insights = ["feng", "huo"]
     game.state.player.stats["xinde"] = 100
     open_characters().save(game.state)  # 資料庫是唯一的真實來源：進鎖先重讀，只改記憶體的話下一個請求就看不到
-    out = client.post("/api/forge_line", json={"art": "jichu_quanjiao", "insights": ["feng"]}).json()
-    assert "裝意境" in out["line"] and "把「風」裝進【基礎拳腳】第 1 格" in out["line"]  # 武學重構：武學＋意境是裝槽
+    out = client.post("/api/forge_line", json={"insights": ["feng", "huo"]}).json()
+    assert "合併" in out["line"] and "「風」＋「火」→ 一個新的意境" in out["line"]
     out = client.post("/api/forge_line", json={}).json()  # 什麼都沒放：只說怎麼放
-    assert "放一門武學和一個意境" in out["line"]
+    assert "放兩個意境" in out["line"]
     saved = open_characters().load("沈青衫").player
-    assert saved.arts == [] and saved.insights == ["feng"] and saved.stats["xinde"] == 100
+    assert saved.arts == [] and saved.insights == ["feng", "huo"] and saved.stats["xinde"] == 100
+    assert open_world().lookup_insight_recipe(FENG_HUO) is None  # 只是預覽：沒登記
     view = client.get("/api/menxia").json()
-    assert "放一門武學和一個意境" in view["forge_line"] and "craft_line" not in view and "per_craft" not in view
+    assert "放兩個意境" in view["forge_line"] and "craft_line" not in view and "per_craft" not in view
 
 
 def test_the_old_craft_endpoints_are_gone(client):
@@ -1061,22 +1060,16 @@ def _js_function(js: str, header: str) -> str:
     return js[start:js.index("\n  }\n", start)]
 
 
-def test_the_furnace_page_takes_two_arts_and_sends_the_second_one_as_other_art():
-    """武學＋武學（設計 12.3）：網頁沒有測試框架，這裡擋住「伺服器收了第二門武學、網頁卻還擋著或沒送」。"""
+def test_the_furnace_page_sends_only_insights():
+    """爐裡只合意境（Joy 2026-10-21）：網頁沒有測試框架，這裡擋住「伺服器只收意境、網頁卻還送武學」。"""
     js = (server.WEB / "app.js").read_text(encoding="utf-8")
     body = _js_function(js, "function forgeBody(")
-    assert 'type === "art"' in body and "other_art: arts[1]" in body and "art: arts[0]" in body
+    assert "insights:" in body and "other_art" not in body and "art:" not in body.replace("insights:", "")
     ready = _js_function(js, "function forgeReady(")
-    assert "other_art !== null" in ready and "insights.length === 0" in ready  # 兩門武學：不能再放意境
-    assert "insights.length === 1" in ready and "insights.length === 2" in ready  # 武學＋意境、意境＋意境照舊
+    assert "insights.length === 2" in ready  # 兩個意境才放得滿
     pick = _js_function(js, "function pick(")
-    assert "已經放滿了" in pick and "p.id === id" in pick  # 放滿了不再收；同一門不放兩次
-    # 「一門配一個意境，或兩門一起放」那句小字讓位給篩選鈕（FB-085：煉製頁第一屏不能多一行）；兩門一起放的說法在爐子下面那一行（forge_line）
-    assert "一爐只能放一門武學" not in js and "一門配一個意境，或兩門一起放" not in js
-    assert "放兩門武學，合出一門新的" in Game.new(server.CONTENT, "測試").forge_line(None, [])
+    assert "已經放滿了" in pick and 'type !== "ins"' in pick  # 放滿了不再收；武學放不進爐
     assert "/api/forge_line" in js and "/api/menxia/forge" in js and js.count("forgeBody()") >= 2  # 預覽與開爐送同一份 body
-    assert "合併要花體力、體力隨時間回" not in js and "合成與合併都要花體力" in js  # 三種合成都花體力（設計 12.1）
-    assert "放一門武學和一個意境，或兩門武學，或兩個意境。" in js  # 點爐身放不滿時的提示也說兩門武學
 
 
 def test_the_new_map_has_no_legend_box_and_the_chips_carry_the_colors():
@@ -1167,7 +1160,7 @@ def _app_functions_in_node(js: str, script: str) -> str:
     consts = [m.group(0) for name in names if (m := re.search(rf"(?m)^  const {name} = .*;$", js))]
     funcs = [
         _js_function(js, f"function {name}(") + "\n  }"
-        for name in ("roundsFold", "withReportLink", "fightCard", "compactRound", "foldTraitItems", "foldTraitText")
+        for name in ("roundsFold", "withReportLink", "fightCard", "trailMoves", "compactRound", "foldTraitItems", "foldTraitText")
         if f"function {name}(" in js
     ]
     prelude = 'const S = { roundsOpen: null };\nconst roundsMore = (open) => (open ? "收起過程 ▴" : "展開過程 ▾");\n'
@@ -1523,7 +1516,9 @@ def test_the_folded_fight_card_leads_with_round_one_and_hides_the_trait_lines():
     seen = _fold_view(cards)
     folded, opened = seen["list"]["shut"], seen["list"]["open"]
     assert len(folded) == 1 and folded[0].startswith("第1回合") and not any("〔" in line for line in folded)
-    assert [line[:4] for line in opened] == ["〔先手〕", "〔險〕沈", "第1回合", "第2回合", "第3回合", "〔化勁〕"]
+    # 清單的一條人在前、招在後（app.js 的 trailMoves，招式與絕學稿案第一節）：「沈浪搶得先機……〔先手〕」
+    assert [line[:4] for line in opened] == ["沈浪搶得", "沈浪兵行", "第1回合", "第2回合", "第3回合", "沈浪以【"]
+    assert opened[0].endswith("〔先手〕") and opened[-1].endswith("〔化勁〕")
     assert seen["list"]["compact"] == "第1回合　對手氣勢 -34，你氣血 -12……"  # 太高時 fitFirstRound 換成的數字行：第一回合的數字一個沒少
     assert 'ul class="rounds"' in seen["list"]["shutHtml"] and seen["list"]["shutHtml"].count('<li class="trait">') == 3
     tale_shut, tale_open = seen["tale"]["shut"], seen["tale"]["open"]
@@ -1639,17 +1634,16 @@ def _a_player_with_insights(client, insights=("feng", "huo"), xinde=100):
     open_characters().save(game.state)
 
 
-def test_the_forge_slots_an_insight_into_an_art(client):
-    """武學重構：爐子上放一門武學＋一個意境＝把意境裝進那一門的槽（不是合成）：不花心得、不登記配方、不叫模型，意境還在。"""
+def test_the_forge_refuses_an_art_and_points_to_the_practice_page(client):
+    """爐裡只合意境（Joy 2026-10-21）：放一門武學＋一個意境不再是裝槽（裝槽在修練頁，MENXIA_ACTIONS 的 slot），
+    開爐回 fusion.ART_IN_FURNACE 那一句，什麼都不動。"""
     _a_player_with_insights(client)
     out = client.post("/api/menxia/forge", json={"art": "jichu_quanjiao", "insights": ["feng"]})
-    assert out.status_code == 200 and "「風」裝進了【基礎拳腳】第 1 格" in out.json()["message"]
-    assert out.json()["made"] is True  # 煉製頁照它把爐子清空（Joy 2026-10-12）
+    assert out.status_code == 200 and fusion.ART_IN_FURNACE in out.json()["message"]
+    assert out.json()["made"] is False  # 沒做成：煉製頁把東西留在爐裡
     saved = open_characters().load("沈青衫").player
-    assert saved.art_slots["jichu_quanjiao"][0] == "feng" and saved.arts == []
-    assert open_world().recipe_keys() == set()  # 沒有配方
-    assert saved.stats["xinde"] == 100
-    assert saved.insights == ["feng", "huo"]  # 意境不會用掉
+    assert all(x is None for slots in saved.art_slots.values() for x in slots) and saved.arts == []
+    assert saved.stats["xinde"] == 100 and saved.insights == ["feng", "huo"]
 
 
 def test_the_forge_merges_two_insights(client):
@@ -1664,7 +1658,7 @@ def test_the_forge_merges_two_insights(client):
 
 def test_the_forge_refuses_what_it_cannot_do_and_charges_nothing(client):
     _a_player_with_insights(client, insights=("feng",), xinde=2)
-    # 武學重構：武學＋意境（裝槽）不花心得、心得 2 也做得成，所以換成武學＋武學；同一個意境放兩次是揣摩，要 5 點心得
+    # 爐裡只合意境（Joy 2026-10-21）：放了武學一律被拒絕（舊網頁送來的 other_art 也一樣）；同一個意境放兩次是揣摩，要兩份、5 點心得
     for body in ({"art": "jichu_quanjiao", "other_art": "jichu_tuna"}, {"insights": ["feng", "feng"]},
                  {"art": "jichu_quanjiao", "insights": ["huo"]}, {"art": "jichu_quanjiao", "insights": []}):
         out = client.post("/api/menxia/forge", json=body)
@@ -1705,54 +1699,41 @@ def test_the_forge_endpoints_survive_oddly_shaped_bodies(client):
 
 def test_forge_line_warns_about_an_insight_you_have_not_learned(client):
     _player(client)
-    line = client.post("/api/forge_line", json={"art": "jichu_quanjiao", "insights": ["feng"]}).json()["line"]
-    assert line.startswith("<p>⚠") and "你沒有這個意境" in line  # 武學重構：裝槽的拒絕句（arts.NO_INSIGHT）
+    line = client.post("/api/forge_line", json={"insights": ["feng", "huo"]}).json()["line"]
+    assert line.startswith("<p>⚠") and "兩個意境都要是你悟得的" in line
 
 
 def test_forge_line_does_not_leak_an_art_the_player_does_not_have(client):
-    """預覽不能拿來探：別人的本命武學（龍頭人物的）不在你身上，不管放在哪一格，都只回拒絕那一句，不寫名字與屬性。"""
+    """預覽不能拿來探：別人的本命武學（龍頭人物的）不在你身上，不管放在哪一格，都不寫名字與屬性（爐裡只合意境：武學根本不讀）。"""
     _a_player_with_insights(client)
     assert "caocao_wugong" in server.CONTENT.skills  # 真的有這一門（挾風槍法・屬快），探得到才算數
     for body in (
         {"art": "caocao_wugong", "insights": ["feng"]},
+        {"art": "caocao_wugong", "insights": ["feng", "huo"]},
         {"art": "jichu_quanjiao", "other_art": "caocao_wugong", "insights": []},
         {"art": "caocao_wugong", "other_art": "jichu_quanjiao", "insights": []},
     ):
         line = client.post("/api/forge_line", json=body).json()["line"]
-        assert "⚠" in line and ("沒有這一門武學" in line or "你會的武學" in line), (body, line)  # 裝槽的拒絕句是 arts.NOT_OWNED
-        assert "挾風槍法" not in line and "屬快" not in line and "→" not in line, (body, line)
+        assert "挾風槍法" not in line and "屬快" not in line, (body, line)
 
 
-def test_the_forge_blends_two_arts(client):
-    """武學＋武學（設計 12.3）：開局送的兩門就能合，兩門都留著，花 5 心得＋5 體力。"""
-    _a_player_with_insights(client)
-    before = open_characters().load("沈青衫").player
-    out = client.post("/api/menxia/forge", json={"art": "jichu_quanjiao", "other_art": "jichu_tuna", "insights": []})
-    assert out.status_code == 200 and "合而為一" in out.json()["message"]
-    saved = open_characters().load("沈青衫").player
-    art = open_world().lookup_recipe(fusion.blend_key("jichu_quanjiao", "jichu_tuna"))
-    assert art is not None and art.id in saved.arts and art.parents == ["jichu_quanjiao", "jichu_tuna"]
-    assert (saved.member.wugong_id, saved.member.neigong_id) == ("jichu_quanjiao", "jichu_tuna")  # 兩門都留著
-    assert saved.stats["xinde"] == before.stats["xinde"] - 5
-    assert saved.stamina == pytest.approx(before.stamina - server.CONTENT.config.fuse_stamina, abs=0.1)
-
-
-def test_forge_line_previews_a_blend(client):
-    _a_player_with_insights(client)
-    before = open_characters().load("沈青衫").player
-    out = client.post("/api/forge_line", json={"art": "jichu_quanjiao", "other_art": "jichu_tuna"}).json()
-    assert "【基礎拳腳】＋【基礎吐納】" in out["line"] and "（下品・意境槽 2 格・" in out["line"]  # 武學重構：品級兩門取高、槽數照品級
-    saved = open_characters().load("沈青衫").player
-    assert saved.arts == []  # 只是預覽：什麼都沒收、沒登記
-    assert (saved.stats["xinde"], saved.stamina) == (before.stats["xinde"], before.stamina)
-    assert open_world().lookup_recipe(fusion.blend_key("jichu_quanjiao", "jichu_tuna")) is None
+def _an_old_blended_art(name="沈青衫") -> str:
+    """以前武學＋武學合出來的那一門（煉製只剩意境＋意境，Joy 2026-10-21；登記過的照舊讀得到）：直接登記一門下品、兼容並蓄、
+    由基礎拳腳與基礎吐納衍生的武學，放進這個角色的功法庫。回傳 id。"""
+    art = generate_from_name("拳息合一", "武學", "拳息合一", weights={"下品": 100, "中品": 0, "上品": 0, "絕學": 0}).model_copy(
+        update={"origin": "fused", "parents": ["jichu_quanjiao", "jichu_tuna"], "affinity": [], "creator": name},
+    )
+    assert open_world().claim_skill_name(art)
+    game = server.game_for(name)
+    game.state.player.arts.append(art.id)
+    open_characters().save(game.state)
+    return art.id
 
 
 def test_a_blended_art_that_is_worn_names_its_parents_on_the_slot_card(client):
-    """身上兩欄的功法卡也寫「由…衍生」（不只清單裡的卡）：合出來、改練上身，再看修練頁。"""
+    """身上兩欄的功法卡也寫「由…衍生」（不只清單裡的卡）：改練上身，再看修練頁。"""
     _a_player_with_insights(client)
-    client.post("/api/menxia/forge", json={"art": "jichu_quanjiao", "other_art": "jichu_tuna", "insights": []})
-    art = open_world().lookup_recipe(fusion.blend_key("jichu_quanjiao", "jichu_tuna"))
+    art = team.resolve_art(_an_old_blended_art(), server.CONTENT, open_world())
     out = client.post("/api/menxia/switch", json={"art": art.id})
     assert out.status_code == 200
     view = client.get("/api/menxia").json()
@@ -1764,7 +1745,8 @@ def test_a_blended_art_that_is_worn_names_its_parents_on_the_slot_card(client):
 
 # ── 開爐的首次取名在行動鎖外（最終審查 Critical 1）：A 鎖內備料 → B 鎖外取名（有預算）→ C 鎖內重驗、登記、收費 ──
 
-FIST_FENG = fusion.blend_key("jichu_quanjiao", "jichu_tuna")  # 武學重構：武學＋意境不再是合成，取名的配方換成兩門開局武學合成（名字沿用）
+FENG_HUO = fusion.merge_key("feng", "huo")  # 煉製只剩意境＋意境（Joy 2026-10-21）：取名的配方換成風＋火合併（名字沿用）
+SHAN_SHUI = fusion.merge_key("shan", "shui")  # 要第二個新配方時用的
 
 
 def _forger(name="沈青衫", insights=("feng", "huo"), xinde=100) -> Game:
@@ -1809,9 +1791,9 @@ def test_a_new_recipe_is_named_outside_the_action_lock(lock_events):
         return "旋風腿"
 
     with _model(reply):
-        msgs = server.forge(game, "jichu_quanjiao", [], other_art="jichu_tuna")
+        msgs = server.forge(game, None, ["feng", "huo"])
     assert lock_events == ["enter", "exit", "generate", "enter", "exit"]  # 鎖內備料 → 鎖外取名 → 鎖內登記
-    assert open_world().lookup_recipe(FIST_FENG).name == "旋風腿"
+    assert open_world().lookup_insight_recipe(FENG_HUO).name == "旋風腿"
     assert any("第一次" in m for m in msgs)
 
 
@@ -1826,7 +1808,7 @@ def test_the_forge_endpoint_never_asks_the_model_while_holding_the_lock(client):
         return "旋風腿"
 
     with _model(reply):
-        out = client.post("/api/menxia/forge", json={"art": "jichu_quanjiao", "other_art": "jichu_tuna"})
+        out = client.post("/api/menxia/forge", json={"insights": ["feng", "huo"]})
     assert out.status_code == 200 and "旋風腿" in out.json()["message"]
     # 預算 60 秒（扣掉 A 段等鎖的時間）；chat_structured 一次最多送兩趟，所以一趟最多一半。原本那個 client 不動
     assert len(asked) == 1 and 25 < asked[0] <= server.CONTENT.config.naming_budget_seconds / 2
@@ -1855,55 +1837,20 @@ def test_the_forge_naming_outside_the_lock_keeps_its_retry_and_budget(monkeypatc
 
     monkeypatch.setattr("requests.post", post)
     monkeypatch.setattr(OllamaClient, "chat_structured", REAL_CHAT_STRUCTURED)
-    assert server.prepare_forge(game, "jichu_quanjiao", [], other_art="jichu_tuna") == server.NO_NAME
+    assert server.prepare_forge(game, None, ["feng", "huo"]) == server.NO_NAME
     assert len(sent) == 2 and all(25 < t <= server.CONTENT.config.naming_budget_seconds / 2 for t in sent)  # 第一趟＋重問
     assert game.client.timeout == server.CONTENT.config.ollama_timeout and game.client.retry is True
 
 
-def test_a_blend_goes_through_the_three_steps_outside_the_lock(lock_events):
-    """武學＋武學第一次合出來：A 段在鎖內開單、B 段在鎖外取名、C 段進鎖登記，跟武學＋意境同一套。"""
-    game = _forger()
-    lock_events.clear()
-
-    def reply(client, messages):
-        lock_events.append("generate")
-        _nobody_holds_the_lock(game)
-        return "拳息合一"
-
-    with _model(reply):
-        proposed = server.prepare_forge(game, "jichu_quanjiao", [], other_art="jichu_tuna")
-    assert proposed[0] == "拳息合一"
-    msgs = server.act(game, lambda g: g.forge("jichu_quanjiao", [], proposed=proposed, other_art="jichu_tuna"))
-    assert any("【拳息合一】" in m for m in msgs)
-    assert lock_events == ["enter", "exit", "generate", "enter", "exit"]
-    assert open_world().lookup_recipe(fusion.blend_key("jichu_quanjiao", "jichu_tuna")).name == "拳息合一"
-
-
-def test_the_blend_endpoint_asks_the_model_outside_the_lock_and_once(client):
-    _a_player_with_insights(client)
-    game = server.game_for("沈青衫")
-    asked = []
-
-    def reply(model, messages):
-        _nobody_holds_the_lock(game)
-        asked.append(messages[-1]["content"])
-        return "拳息合一"
-
-    with _model(reply):
-        out = client.post("/api/menxia/forge", json={"art": "jichu_quanjiao", "other_art": "jichu_tuna"})
-    assert out.status_code == 200 and "拳息合一" in out.json()["message"]
-    assert len(asked) == 1 and "【基礎拳腳】" in asked[0] and "【基礎吐納】" in asked[0] and "兩門合而為一" in asked[0]
-
-
-def test_a_blend_respects_the_model_breaker_in_the_lock(monkeypatch, breaker_clock):
+def test_a_forge_in_the_lock_respects_the_model_breaker(monkeypatch, breaker_clock):
     """沒給 proposed 直接在鎖內開爐（整季機器人那條路）：斷路器開著時鎖內不叫模型，名字走退路字表。"""
-    game = _forger()
-    server.act(game, lambda g: g.forge(None, ["feng", "huo"]))  # 鎖內取名失敗（conftest 假成連不上）→ 斷路器打開（武學重構：先合一爐意境，跟下面那爐武學不同配方）
+    game = _forger(insights=("feng", "huo", "shan", "shui"))
+    server.act(game, lambda g: g.forge(None, ["feng", "huo"]))  # 鎖內取名失敗（conftest 假成連不上）→ 斷路器打開
     asked = []
-    with _model(lambda model, messages: asked.append(1) or "拳息合一"):
-        msgs = server.act(game, lambda g: g.forge("jichu_quanjiao", [], other_art="jichu_tuna"))
-    assert asked == [] and any("合而為一" in m for m in msgs)
-    assert open_world().lookup_recipe(fusion.blend_key("jichu_quanjiao", "jichu_tuna")).name != "拳息合一"
+    with _model(lambda model, messages: asked.append(1) or "山水清音"):
+        msgs = server.act(game, lambda g: g.forge(None, ["shan", "shui"]))  # 另一個新配方
+    assert asked == [] and any("交融" in m for m in msgs)
+    assert open_world().lookup_insight_recipe(SHAN_SHUI).name != "山水清音"
 
 
 def test_each_lock_hold_gets_a_fresh_model_budget(game, monkeypatch, breaker_clock):
@@ -1976,11 +1923,11 @@ def test_a_failed_in_lock_model_call_trips_the_breaker(game, monkeypatch, breake
 def test_while_it_is_open_another_players_hold_starts_spent_and_asks_nothing(monkeypatch, breaker_clock):
     """甲在鎖內替首次出現的配方取名（沒給 proposed），模型連不上（conftest）：斷路器打開。乙接著也在鎖內開一爐新配方：
     這次拿鎖一開始額度就用完，不叫模型（假的模型一次都沒被叫到），照樣合成、名字走退路字表。"""
-    jia, yi = _forger("甲"), _forger("乙")
-    server.act(jia, lambda g: g.forge("jichu_quanjiao", [], other_art="jichu_tuna"))
+    jia, yi = _forger("甲", insights=("shan", "shui")), _forger("乙")
+    server.act(jia, lambda g: g.forge(None, ["shan", "shui"]))
     asked, spent = [], []
     with _model(lambda model, messages: asked.append(1) or "旋風腿"):
-        msgs = server.act(yi, lambda g: spent.append(g._model_budget.gave_up) or g.forge(None, ["feng", "huo"]))  # 武學重構：乙合一爐意境
+        msgs = server.act(yi, lambda g: spent.append(g._model_budget.gave_up) or g.forge(None, ["feng", "huo"]))  # 乙合另一爐
     assert spent == [True] and asked == []
     assert any("交融" in m for m in msgs)
     assert open_world().lookup_insight_recipe(fusion.merge_key("feng", "huo")).name != "旋風腿"
@@ -2034,12 +1981,12 @@ def test_a_failed_call_trips_it_even_when_the_action_then_errors(game, monkeypat
 
 def test_the_breaker_does_not_gate_model_use_outside_the_lock(monkeypatch, breaker_clock):
     """鎖外的模型呼叫（開爐取名的 B 段；對話、隨口應對的評分也一樣）不歸斷路器管：打開了照樣叫。"""
-    jia, yi = _forger("甲"), _forger("乙")
-    server.act(jia, lambda g: g.forge("jichu_quanjiao", [], other_art="jichu_tuna"))  # 鎖內取名失敗：打開
+    jia, yi = _forger("甲", insights=("shan", "shui")), _forger("乙")
+    server.act(jia, lambda g: g.forge(None, ["shan", "shui"]))  # 鎖內取名失敗：打開
     assert server.look(yi, lambda g: g._quick_client()) is None
     asked = []
     with _model(lambda model, messages: asked.append(1) or "旋風腿"):
-        assert server.prepare_forge(yi, None, ["feng", "huo"])[0] == "旋風腿"  # 武學重構：另一個新配方換成合併意境
+        assert server.prepare_forge(yi, None, ["feng", "huo"])[0] == "旋風腿"  # 另一個新配方
     assert asked == [1]
 
 
@@ -2047,12 +1994,12 @@ def test_when_the_first_trip_saw_no_need_for_the_model_the_lock_never_asks_it(mo
     """A 段說不必叫模型（那一刻會被拒絕、配方有了、沒有 client），C 段進鎖時卻做得成（中間狀態變了）：
     鎖裡也不叫模型，直接用退路字表——伺服器永遠不走「鎖裡取名」那條路。"""
     game = _forger()
-    monkeypatch.setattr(Game, "forge_request", lambda self, art_id, insight_ids, other_art=None: None)
+    monkeypatch.setattr(Game, "forge_request", lambda self, art_id, insight_ids, **kwargs: None)
     asked = []
     with _model(lambda model, messages: asked.append(1) or "旋風腿"):
-        server.forge(game, "jichu_quanjiao", [], other_art="jichu_tuna")
+        server.forge(game, None, ["feng", "huo"])
     assert asked == []
-    assert open_world().lookup_recipe(FIST_FENG).name == naming.fallback_name(server.CONTENT, FIST_FENG, "武學")
+    assert open_world().lookup_insight_recipe(FENG_HUO).name == naming.fallback_name(server.CONTENT, FENG_HUO, "意境")
 
 
 # ── 伺服器自己的排程：排程的一下（world_step）跟玩家請求同一把鎖、同一套鎖內模型守衛 ──────────────
@@ -2392,78 +2339,43 @@ def test_main_starts_the_scheduler_only_when_switched_on(capsys, monkeypatch):
 
 
 def test_a_recipe_registered_between_the_two_trips_gives_the_registered_art():
-    """乙備料、取名的時候，甲把同一個配方合出來登記了：乙進鎖時拿到的是甲登記的那一門（照常付心得），
+    """乙備料、取名的時候，甲把同一個配方合出來登記了：乙進鎖時拿到的是甲登記的那一個意境（照常付心得），
     乙的模型取的名字不登記，全服只有一筆。"""
     first, second = _forger("甲"), _forger("乙")
     with _model(lambda model, messages: "疾風腿"):
-        proposed = server.prepare_forge(second, "jichu_quanjiao", [], other_art="jichu_tuna")  # 乙的 A、B
+        proposed = server.prepare_forge(second, None, ["feng", "huo"])  # 乙的 A、B
     assert proposed == ("疾風腿", "一句話。")
     with _model(lambda model, messages: "旋風腿"):
-        server.forge(first, "jichu_quanjiao", [], other_art="jichu_tuna")  # 甲從頭到尾
-    msgs = server.act(second, lambda g: g.forge("jichu_quanjiao", [], proposed=proposed, other_art="jichu_tuna"))  # 乙的 C
+        server.forge(first, None, ["feng", "huo"])  # 甲從頭到尾
+    msgs = server.act(second, lambda g: g.forge(None, ["feng", "huo"], proposed=proposed))  # 乙的 C
     world = open_world()
-    art = world.lookup_recipe(FIST_FENG)
-    assert art.name == "旋風腿" and world.recipe_keys() == {FIST_FENG} and not world.is_skill_name_taken("疾風腿")
+    made = world.lookup_insight_recipe(FENG_HUO)
+    assert made.name == "旋風腿" and not world.is_skill_name_taken("疾風腿")
     saved = open_characters().load("乙").player
-    assert art.id in saved.arts and saved.stats["xinde"] == 95
-    assert any("由甲首創" in m for m in msgs)
-
-
-@pytest.mark.parametrize(("art", "picked", "other", "refusal"), [
-    ("jichu_quanjiao", [], "jichu_tuna", "你已經有了"),  # 武學重構：合出武學的是武學＋武學
-    # 意境＋意境不在這裡：意境效果池之後合過的再合一次是另一份（照收錢），不是重複扣（網頁 busy 擋連按）
-])
-def test_the_same_forge_sent_twice_while_naming_is_charged_once(art, picked, other, refusal):
-    """企劃者 2026-10-05（不能重複扣）：同一個人連按兩下、重新整理再按、開兩個分頁，兩個請求都在配方登記之前
-    走完 A（都叫了模型）。C 段只有一個成功：第二個重驗時看見配方有了、東西已經在你身上，回「你已經有了／悟得了」，
-    什麼都不收——不扣心得、不扣體力、不寫江湖紀錄；全服只登記一筆。"""
-    game = _forger()
-    names = iter(["旋風腿", "疾風腿"])
-    with _model(lambda model, messages: next(names)):
-        one = server.prepare_forge(game, art, picked, other)
-        two = server.prepare_forge(game, art, picked, other)
-    assert (one[0], two[0]) == ("旋風腿", "疾風腿")  # 兩趟都在配方登記之前：各叫了一次模型
-    before = open_characters().load("沈青衫").player
-    first = server.act(game, lambda g: g.forge(art, picked, proposed=one, other_art=other))
-    after_one = open_characters().load("沈青衫").player
-    crafts = _crafts("沈青衫")
-    second = server.act(game, lambda g: g.forge(art, picked, proposed=two, other_art=other))
-    after_two = open_characters().load("沈青衫").player
-    assert not any(refusal in m for m in first) and len(second) == 1 and refusal in second[0]
-    assert after_one.stats["xinde"] == after_two.stats["xinde"] == before.stats["xinde"] - 5
-    assert after_two.stamina == pytest.approx(after_one.stamina, abs=0.01)  # 體力照現實時間回（sync），只差一點點
-    assert (after_one.arts, after_one.insights) == (after_two.arts, after_two.insights)
-    assert _crafts("沈青衫") == crafts  # 第二下沒有寫紀錄
-    world = open_world()
-    assert not world.is_skill_name_taken("疾風腿")
-    if art:
-        assert world.recipe_keys() == {FIST_FENG} and len(after_two.arts) == 1
-    else:
-        assert world.lookup_insight_recipe(fusion.merge_key("feng", "huo")).name == "旋風腿"
-        assert after_two.insights == ["feng", "huo", "旋風腿"]
-        assert after_two.stamina == pytest.approx(before.stamina - 5, abs=0.01)  # 只扣一次合併的體力（FB-067：5 點）
+    assert made.id in saved.insights and saved.stats["xinde"] == 95
+    assert any("由甲首悟" in m for m in msgs)
 
 
 def test_a_second_tab_that_spends_the_xinde_while_naming_leaves_the_first_forge_refused_and_free():
     """Infra 第 2 點：B 段在鎖外等模型的時候，同一個角色在另一個分頁把同一份心得花在另一爐；C 段進鎖重驗，
     心得不夠了就整個不做：不登記配方、不扣東西、不寫紀錄，告訴玩家變了什麼。"""
-    game = _forger(xinde=5)
+    game = _forger(insights=("feng", "huo", "shan", "shui"), xinde=5)
     depth = []
 
     def reply(model, messages):
         if not depth:
             depth.append(1)
-            server.forge(game, None, ["feng", "huo"])  # 另一個分頁：完整的一爐合併（它自己的取名是下面那一句）；武學重構
+            server.forge(game, None, ["feng", "huo"])  # 另一個分頁：完整的一爐合併（它自己的取名是下面那一句）
             return "旋風腿"
         return "燎原"
 
     with _model(reply):
-        msgs = server.forge(game, "jichu_quanjiao", [], other_art="jichu_tuna")
+        msgs = server.forge(game, None, ["shan", "shui"])
     saved = open_characters().load("沈青衫").player
-    fire = open_world().lookup_insight_recipe(fusion.merge_key("feng", "huo"))
-    assert fire.name == "燎原" and fire.id in saved.insights and saved.arts == [] and saved.stats["xinde"] == 0
+    fire = open_world().lookup_insight_recipe(FENG_HUO)
+    assert fire.name == "燎原" and fire.id in saved.insights and saved.stats["xinde"] == 0
     assert any("心得不足" in m for m in msgs)
-    assert open_world().lookup_recipe(FIST_FENG) is None and not open_world().is_skill_name_taken("旋風腿")
+    assert open_world().lookup_insight_recipe(SHAN_SHUI) is None and not open_world().is_skill_name_taken("旋風腿")
     assert len(_crafts("沈青衫")) == 1 and "燎原" in _crafts("沈青衫")[0]["tag"]
 
 
@@ -2529,15 +2441,17 @@ def test_slot_prices_are_none_when_empty_or_at_the_tenth_level(client, monkeypat
 
 
 def test_forge_cultivate_and_melt_through_the_endpoints(client):
-    # 武學重構：合成（武學＋武學）、修練（只剩上品到了極處衝絕學，沒到灰掉）、熔煉三個端點接不接得上
+    # 合成（意境＋意境）、修練（只剩上品到了極處衝絕學，沒到灰掉）、熔煉三個端點接不接得上
     _a_player_with_insights(client)
-    r = client.post("/api/menxia/forge", json={"art": "jichu_quanjiao", "other_art": "jichu_tuna"}).json()
-    assert "合而為一" in r["message"]
-    new = r["menxia"]["owned_arts"][-1]
+    r = client.post("/api/menxia/forge", json={"insights": ["feng", "huo"]}).json()
+    assert "交融" in r["message"] and r["made"] is True
+    art_id = _an_old_blended_art()
+    new = next(a for a in client.get("/api/menxia").json()["owned_arts"] if a["id"] == art_id)
     assert not new["worn"] and new["cultivate"]["ok"] is False and new["cultivate"]["note"] == cultivation.NO_RANK_LINE  # 下品
+    stamina = open_characters().load("沈青衫").player.stamina
     r = client.post("/api/menxia/cultivate", json={"art": new["id"]}).json()
     assert r["message"] == f"<p>{cultivation.NO_RANK_LINE}</p>\n"  # 被拒絕只回一句：不花體力
-    assert open_characters().load("沈青衫").player.stamina > server.CONTENT.config.stamina_max - server.CONTENT.config.fuse_stamina - 1
+    assert open_characters().load("沈青衫").player.stamina >= stamina
     r = client.post("/api/menxia/melt", json={"art": new["id"]}).json()
     assert "熔成了心得" in r["message"]
     assert all(row["id"] != new["id"] for row in r["menxia"]["owned_arts"])
@@ -2558,13 +2472,12 @@ def test_slotting_and_unslotting_through_the_endpoints(client):
 
 
 def _a_peerless_candidate(client, pills=2):
-    """一門合成出來、已經是上品、練到第十成、意境槽都裝滿的武學（下一步是絕學）、手上有 pills 枚破境丹、體力夠。
+    """一門（以前）合成出來、已經是上品、練到第十成、意境槽都裝滿的武學（下一步是絕學）、手上有 pills 枚破境丹、體力夠。
     回傳（功法 id，Game）。武學重構：沒有火候了，到了極處（cultivation.ready）就只等契機或服丹。"""
     from tianxia import arts
 
     _a_player_with_insights(client, insights=("feng", "huo", "shui", "shan"))
-    r = client.post("/api/menxia/forge", json={"art": "jichu_quanjiao", "other_art": "jichu_tuna"}).json()
-    art_id = r["menxia"]["owned_arts"][-1]["id"]
+    art_id = _an_old_blended_art()
     game = server.game_for("沈青衫")
     game.state.player.art_quality[art_id] = "上品"
     game.state.player.art_levels[art_id] = 10
@@ -2643,8 +2556,8 @@ def test_melting_an_insight_through_the_endpoint(client):
 def test_melting_many_through_the_endpoint(client):
     """批量熔煉：勾的武學與意境一次熔完、寫一則江湖紀錄；不是串列的當沒勾。art_rows 帶每一門熔了退多少（網頁合計用）。"""
     _a_player_with_insights(client, xinde=100)
-    r = client.post("/api/menxia/forge", json={"art": "jichu_quanjiao", "other_art": "jichu_tuna"}).json()
-    fused = next(a for a in r["menxia"]["owned_arts"] if not a["worn"])
+    _an_old_blended_art()
+    fused = next(a for a in client.get("/api/menxia").json()["owned_arts"] if not a["worn"])
     assert fused["melt"]["value"] == server.CONTENT.config.melt_min_refund
     before = open_characters().load("沈青衫").player.stats["xinde"]
     assert "沒有勾選" in client.post("/api/menxia/melt_many", json={"arts": "x", "insights": 3}).json()["message"]
@@ -2659,8 +2572,7 @@ def test_melting_many_through_the_endpoint(client):
 def test_the_naming_row_and_the_name_action(client):
     """練成絕學的第一人：修練頁有等著取名的一列；定了名，那一列消失、武學的名字全服一起改。"""
     _a_player_with_insights(client)
-    r = client.post("/api/menxia/forge", json={"art": "jichu_quanjiao", "other_art": "jichu_tuna"}).json()
-    art_id = r["menxia"]["owned_arts"][-1]["id"]
+    art_id = _an_old_blended_art()
     game = server.game_for("沈青衫")
     game.state.player.naming = art_id
     game.state.player.art_quality[art_id] = "絕學"
@@ -2677,8 +2589,7 @@ def test_the_naming_row_and_the_name_action(client):
 
 def test_a_bad_name_leaves_the_naming_right_in_place(client):
     _a_player_with_insights(client)
-    r = client.post("/api/menxia/forge", json={"art": "jichu_quanjiao", "other_art": "jichu_tuna"}).json()
-    art_id = r["menxia"]["owned_arts"][-1]["id"]
+    art_id = _an_old_blended_art()
     game = server.game_for("沈青衫")
     game.state.player.naming = art_id
     open_characters().save(game.state)
@@ -3042,19 +2953,20 @@ def test_an_ordinary_option_does_not_come_back_with_a_message(client):
     assert "message" not in out
 
 
-def test_a_bounty_option_that_is_no_longer_on_the_menu_tells_the_page_why_and_is_not_journaled(client):
+def test_a_bounty_option_that_is_no_longer_on_the_menu_tells_the_page_why_and_is_not_journaled(client, monkeypatch):
     """FB-162：兩個分頁搶同一張，慢的那一頁按下去的選項已經不在選單上——跟決戰選項一樣回一句 message（網頁跳提示），
-    原因是引擎的拒絕（bounties.give_problem：這一件不在功法庫裡）；不寫江湖紀錄。不是懸賞的、也不在選單上的選項照舊什麼都不回。"""
+    原因是引擎的拒絕（bounties.give_problem：裝備庫裡沒有這一件）；不寫江湖紀錄。不是懸賞的、也不在選單上的選項照舊什麼都不回。"""
     from tianxia import bounties
     from tianxia.state import Bounty
 
+    monkeypatch.setattr(server.CONTENT.config.weapons, "enabled", True)  # 兵器關著時求兵一律回「此刻無法這麼做」，看不出原因
     _player(client)
     # 開季時已經掛了第 1 週的那一批（b1…），這一張另取名字，免得 give_problem 找到的是別張
-    open_world().mutate_season(lambda s: s.bounties.append(
-        Bounty(id="b-race", kind="art", faction="guan", silver=20, deeds=2, quota=3, attribute="剛", week=1, expires=1e12)))
+    open_world().mutate_season(lambda s: s.bounties.append(Bounty(
+        id="b-race", kind="arms", faction="guan", silver=0, deeds=2, quota=3, attribute="柔", weapon_kind="劍", week=1, expires=1e12)))
     before = _journal_titles()
-    out = client.post("/api/choose", json={"id": "bounty:give:b-race:疾風拳"}).json()
-    assert bounties.NO_ART in out["message"]  # 伺服器把話轉成 HTML，網頁跳提示時再去掉標籤
+    out = client.post("/api/choose", json={"id": "bounty:give:b-race:兵:9"}).json()
+    assert bounties.NO_WEAPON in out["message"]  # 伺服器把話轉成 HTML，網頁跳提示時再去掉標籤
     assert bounties.GONE in client.post("/api/choose", json={"id": "bounty:pick:b99"}).json()["message"]
     assert bounties.STALE in client.post("/api/choose", json={"id": "bounty:unpick"}).json()["message"]  # 榜根本沒開著
     assert _journal_titles() == before
@@ -4620,10 +4532,10 @@ def test_fb069_the_forge_never_names_a_recipe_after_a_character(lock_events):
     game = _forger()
     asked = []
     with _model(lambda client, messages: asked.append(1) or "驗收新武"):
-        assert server.prepare_forge(game, "jichu_quanjiao", [], other_art="jichu_tuna") == server.NO_NAME
-        server.forge(game, "jichu_quanjiao", [], other_art="jichu_tuna")
+        assert server.prepare_forge(game, None, ["feng", "huo"]) == server.NO_NAME
+        server.forge(game, None, ["feng", "huo"])
     assert asked == [1, 1]  # 兩次 prepare 各問一次，都被擋下來
-    name = open_world().lookup_recipe(FIST_FENG).name
+    name = open_world().lookup_insight_recipe(FENG_HUO).name
     assert name != "驗收新武" and naming.name_problem(name, server.CONTENT) is None
     assert server.forge(game, None, ["feng", "huo"]) is not None  # 一般的名字照常（武學重構：另一爐換成合併意境）
 
@@ -5080,7 +4992,7 @@ def _ready(site, monkeypatch):
             return "旋風腿", "一句話。"
 
         monkeypatch.setattr(server.naming, "generate", generate)
-        return game, lambda: server.forge(game, "jichu_quanjiao", [], other_art="jichu_tuna"), seen
+        return game, lambda: server.forge(game, None, ["feng", "huo"]), seen
     from tianxia.models import Effect, FreeTextChoice
 
     game = Game.new(server.CONTENT, "測試")
@@ -5136,7 +5048,7 @@ def test_with_the_queue_off_each_site_asks_the_model_directly(site, monkeypatch,
     elif site == "forge":
         [asked] = _asked(seen, "forge")
         assert asked["client"] is game.client and asked["budget"] == config.naming_budget_seconds
-        assert open_world().lookup_recipe(FIST_FENG).name == "旋風腿"
+        assert open_world().lookup_insight_recipe(FENG_HUO).name == "旋風腿"
     elif site == "score":
         [asked] = _asked(seen, "score")
         assert asked["client"] is not game.client and asked["client"].timeout == config.free_text_budget_seconds / 2
@@ -5168,7 +5080,7 @@ def test_a_queue_that_will_not_take_the_job_gives_each_site_its_old_fallback(sit
         record = game.state.battles[0]
         assert record.opponent == "波才" and record.narration == "" and record.rounds
     elif site == "forge":
-        assert open_world().lookup_recipe(FIST_FENG).name == naming.fallback_name(server.CONTENT, FIST_FENG, "武學")
+        assert open_world().lookup_insight_recipe(FENG_HUO).name == naming.fallback_name(server.CONTENT, FENG_HUO, "意境")
     elif site == "score":
         assert _asked(seen, "rate") == [{"kind": "rate", "rate": server.event_llm.DEFAULT_FREE_TEXT_SUCCESS_RATE}]
     else:
@@ -5231,7 +5143,7 @@ def test_a_request_the_queue_refuses_gets_no_fallback(why, site, monkeypatch):
     elif site == "forge":
         with pytest.raises(server.GameError, match=refusal):
             run()
-        assert _asked(seen, "forge") == [] and open_world().lookup_recipe(FIST_FENG) is None
+        assert _asked(seen, "forge") == [] and open_world().lookup_insight_recipe(FENG_HUO) is None
         assert open_characters().load("沈青衫").player.stats["xinde"] == 100
     elif site == "score":
         with pytest.raises(server.GameError, match=refusal):
@@ -5334,9 +5246,9 @@ def test_the_refusals_reach_the_page_as_a_short_message(client, monkeypatch):
     """被擋下來的請求回 400 與那一句話（前端的 api() 會把 error 跳成提示），不是 500。"""
     monkeypatch.setattr(server, "QUEUE", _ScriptedQueue("busy", "busy"))
     _a_player_with_insights(client)
-    forged = client.post("/api/menxia/forge", json={"art": "jichu_quanjiao", "other_art": "jichu_tuna"})
+    forged = client.post("/api/menxia/forge", json={"insights": ["feng", "huo"]})
     assert forged.status_code == 400 and forged.json() == {"error": "上一爐還沒出爐。"}
-    assert open_world().lookup_recipe(FIST_FENG) is None
+    assert open_world().lookup_insight_recipe(FENG_HUO) is None
     game = server.game_for("沈青衫")
     from tianxia.models import Effect, FreeTextChoice
 
@@ -5352,9 +5264,9 @@ def test_a_queue_timeout_reaches_the_page_as_the_same_kind_of_short_message(clie
     """排太久的拒絕跟重複的那一件走同一條路：400 與那一句話（前端的 api() 會跳成提示），什麼都沒登記、沒收、沒擲骰。"""
     monkeypatch.setattr(server, "QUEUE", _ScriptedQueue("timeout", "timeout"))
     _a_player_with_insights(client)
-    forged = client.post("/api/menxia/forge", json={"art": "jichu_quanjiao", "other_art": "jichu_tuna"})
+    forged = client.post("/api/menxia/forge", json={"insights": ["feng", "huo"]})
     assert forged.status_code == 400 and forged.json() == {"error": server.BUSY_QUEUE_TIMEOUT}
-    assert open_world().lookup_recipe(FIST_FENG) is None and open_characters().load("沈青衫").player.stats["xinde"] == 100
+    assert open_world().lookup_insight_recipe(FENG_HUO) is None and open_characters().load("沈青衫").player.stats["xinde"] == 100
     game = server.game_for("沈青衫")
     from tianxia.models import Effect, FreeTextChoice
 
@@ -5512,7 +5424,7 @@ def test_the_forge_endpoint_goes_through_a_real_queue(client, monkeypatch):
     _a_player_with_insights(client)
     asked = []
     with _model(lambda model, messages: asked.append(queue.snapshot()) or "旋風腿"):
-        out = client.post("/api/menxia/forge", json={"art": "jichu_quanjiao", "other_art": "jichu_tuna"})
+        out = client.post("/api/menxia/forge", json={"insights": ["feng", "huo"]})
     assert out.status_code == 200 and "旋風腿" in out.json()["message"]
     assert asked == [{"running": 1, "waiting": 0}]  # 模型叫的時候，這一件正在佇列裡跑
     assert queue.snapshot() == {"running": 0, "waiting": 0}
@@ -5535,17 +5447,17 @@ def test_a_duplicate_forge_is_refused_and_the_first_one_registers_the_models_nam
         return "旋風腿"
 
     with _model(reply):
-        thread = threading.Thread(target=lambda: first.update(msgs=server.forge(game, "jichu_quanjiao", [], other_art="jichu_tuna")))
+        thread = threading.Thread(target=lambda: first.update(msgs=server.forge(game, None, ["feng", "huo"])))
         thread.start()
         assert started.wait(2)
         with pytest.raises(server.GameError, match="上一爐還沒出爐"):
-            server.forge(game, "jichu_quanjiao", [], other_art="jichu_tuna")  # 第一件還在模型那邊的時候，第二件被擋下來
-        assert open_world().lookup_recipe(FIST_FENG) is None  # 第二件什麼都沒登記
+            server.forge(game, None, ["feng", "huo"])  # 第一件還在模型那邊的時候，第二件被擋下來
+        assert open_world().lookup_insight_recipe(FENG_HUO) is None  # 第二件什麼都沒登記
         assert open_characters().load("沈青衫").player.stats["xinde"] == 100  # 也什麼都沒收
         release.set()
         thread.join(5)
     assert asked == [1]  # 模型只被叫一次（第一件的）
-    assert open_world().lookup_recipe(FIST_FENG).name == "旋風腿"  # 登記的是模型取的名字，不是退路字表的
+    assert open_world().lookup_insight_recipe(FENG_HUO).name == "旋風腿"  # 登記的是模型取的名字，不是退路字表的
     assert first["msgs"] is not None
     assert open_characters().load("沈青衫").player.stats["xinde"] == 95  # 只收一次
     assert queue.snapshot() == {"running": 0, "waiting": 0}
@@ -6813,7 +6725,7 @@ def test_fb245_answering_a_discussion_while_he_is_busy_does_not_call_the_model(c
     """FB-245：/api/peer/act 答應論武，發邀請的那個人正忙（這一張邀請已經成不了）：prepare_peer 的 A 段不開取名單子，模型一次都不叫，
     直接回「他此刻正忙」那一句、邀請作廢；他閒下來之後再邀、再答，照舊叫一次模型取名。測試內容的兩個角色（同 test_discuss），
     端點的拿鎖、存檔那一套（act、look、_open_request）換成直接做，prepare_peer、peer_act 照真的走。"""
-    from test_discuss import NOW, CountingClient, _change, _invite, _load, _make
+    from test_discuss import NAME, NOW, CountingClient, _change, _invite, _load, _make
 
     from conftest import install_season_one
     from tianxia.characters import CharacterStore
@@ -6823,7 +6735,7 @@ def test_fb245_answering_a_discussion_while_he_is_busy_does_not_call_the_model(c
     content.config.auto_open_first_season = True
     _make(content, world, "甲", insights=("feng",))
     _make(content, world, "乙", wugong="fist", insights=("huo",))
-    _invite(content, world, item="insight:feng")  # 甲出「風」；乙出「火」是新配方（合併），成得了就要取名（武學重構：武學＋意境不再是合成）
+    _invite(content, world, item="insight:feng")  # 甲出「風」；乙出「火」是新配方（合併），成得了就要取名
     _change(world, "甲", lambda p: setattr(p, "busy_until", 1e9))  # 閉關中：選單上沒有探索，同進了鐵匠鋪
     fake = CountingClient()
     game = Game(content, CharacterStore(world.db).load("乙"), random.Random(0), world)
@@ -6843,7 +6755,7 @@ def test_fb245_answering_a_discussion_while_he_is_busy_does_not_call_the_model(c
     _invite(content, world, item="insight:feng")
     game.state.world = world.get_season()
     r = client.post("/api/peer/act", json=answer).json()
-    assert len(fake.calls) == 1 and "烈焰拳" in r["message"]
+    assert len(fake.calls) == 1 and NAME[0] in r["message"]
 
 
 def test_the_fingerprint_follows_the_seal_duel_but_not_who_was_seen():

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from tianxia import arts as arts_mod, create, fusion, team
+from tianxia import arts as arts_mod, create, team
 from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.martial_arts import ATTRIBUTES, MartialArt as _MA
@@ -54,7 +54,8 @@ def test_five_steps_make_an_art_with_coloured_slots_and_the_pose(content):
     assert art.origin == "created" and art.weapon == "拳腳" and art.lean == "正"
     assert art.slot_colors == draft.colors and art.pose == draft.pose
     n = len(arts_mod.slots_of(game.state, content, art))
-    assert n == arts_mod.slot_count(content, p.art_quality.get("飄風手", "下品"))
+    assert p.art_quality["飄風手"] == "上品"  # Joy 2026-10-21：自創保底上品
+    assert n == arts_mod.slot_count(content, "上品")
     assert art.affinity == create.affinity_of(draft.colors[:n]) and art.attribute == "快"
 
 
@@ -126,18 +127,6 @@ def test_slots_only_take_their_colours_and_pick_a_matching_slot(content):
     assert p.art_slots[art.id][1] == shui  # 柔快那一格（任色的那格留給別的）
 
 
-def test_blend_inherits_slot_colours_from_both_parents(content):
-    a = MartialArt(id="甲", name="甲", kind="武學", quality="下品", attribute="剛", affinity=["剛"], slot_colors=[["剛"], ["剛", "快"]])
-    b = MartialArt(id="乙", name="乙", kind="武學", quality="下品", attribute="柔", affinity=["柔"])
-    colors = fusion.blend_colors(a, b, "兼|甲+乙", 1, content)
-    n = max(content.config.arts.slots.values())
-    pool = arts_mod.colors_of(a, n) + arts_mod.colors_of(b, n)
-    assert len(colors) == n and all(c in pool for c in colors)
-    assert colors == fusion.blend_colors(a, b, "兼|甲+乙", 1, content)
-    base = MartialArt(id="丙", name="丙", kind="武學", quality="下品", attribute="")
-    assert fusion.blend_colors(base, base, "兼|丙+丙", 1, content) == []
-
-
 def test_old_three_step_drafts_are_dropped_on_load(content):
     game = _game(content)
     game.state.player.creating = create.CreateDraft(kind="武學", step="form", affinity=["快"], weapon="劍")
@@ -164,11 +153,11 @@ def test_view_lists_forms_presets_and_the_draft(content):
     _walk(game)
     d = game.create_view()["draft"]
     assert d["form"] == "拳腳" and len(d["colors"]) == 4 and d["colors_text"][0] in ATTRIBUTES
-    assert set(d["odds"]) == {"下品", "中品", "上品"}
+    assert "odds" not in d and v["grade"] == "上品"  # 不擲品級了
 
 
 def test_the_intent_score_sets_the_base_power(content):
-    """基本威力（Joy 2026-10-21）：意分＋加分夾 0～100，從 power_scale_range 下限推到上限；名字不影響。"""
+    """基本威力（Joy 2026-10-21）：意分夾 0～100，從 power_scale_range 下限推到上限；名字不影響。"""
     from tianxia.martial_arts import power_scale
     low, high = content.config.arts.power_scale_range
     assert create.power_scale_of(content, 0) == pytest.approx(low)
@@ -180,3 +169,40 @@ def test_the_intent_score_sets_the_base_power(content):
     game.create_name("厚底拳")
     art = team.resolve_art("厚底拳", content, game.world)
     assert power_scale(art) == pytest.approx(create.power_scale_of(content, 80), abs=0.01)
+
+
+# ── 自創自動配小戰法（Joy 2026-10-21 決策卡選「自動配」）──────────────────
+
+
+def test_the_pool_prefers_same_kind_and_attribute_and_skips_marshal(real):
+    from tianxia import tactics
+
+    assert create.minor_pool(real, "武學", "快") == sorted(["zhuifeng", "ganshan_tui", "jianjing_dao"])
+    assert create.minor_pool(real, "內功", "陽") == ["yanghao_jue"]  # 同袍一心要部下：不配
+    fast = create.minor_pool(real, "內功", "快")  # 內功沒有快的：放寬到同屬性的武學
+    assert fast and all(real.skills[s].attribute == "快" for s in fast)
+    assert all(tactics.of(real, s).minor for s in create.minor_pool(real, "武學", ""))  # 沒有主屬性：同種類的都行
+
+
+def test_a_created_art_carries_the_minor_tactic_shown_before_naming(real):
+    from tianxia import skillview, tactics
+
+    game = _game(real)
+    _walk(game, reading=create.IntentReading(score=60, attributes=["快"], lean="無"))
+    draft = game.state.player.creating
+    source = create.minor_for(game.state, real, draft)
+    attribute = create.affinity_of(draft.colors)[0]
+    assert source in create.minor_pool(real, "武學", attribute)
+    shown = game.create_view()["draft"]["tactic"]
+    seal = game.state.player.name[:1]  # 自創的招蓋創的人名號的第一個字（私印，招式與絕學稿案第一節）
+    assert shown == tactics.card_text(tactics.of(real, source), seal) and shown.startswith(seal + "〔")
+    game.create_name("追影拳")
+    art = team.resolve_art("追影拳", real, game.world)
+    assert art.tactic_from == source and tactics.of_art(real, art) is tactics.of(real, source)
+    assert tactics.of_id(real, "追影拳", game.world) is tactics.of(real, source)
+    p = game.state.player
+    p.member.wugong_id = "追影拳"
+    names = [h.tactic.name for h in team.tactic_holders(game.state, real, game.world)]
+    assert tactics.of(real, source).name in names  # 打起來會發動
+    row = next(r for r in skillview.art_rows(game.state, real, game.world) if r["id"] == "追影拳")
+    assert row["tactic"] == shown  # 功法卡上寫著

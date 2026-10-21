@@ -11,8 +11,9 @@ from .state import GameState
 
 
 def of(content: Content, skill_id: str | None) -> TacticDef | None:
-    """這門武學的本命戰法；不是本命武學是 None。"""
-    return tactics.of(content, skill_id)
+    """這門武學的本命戰法；不是本命武學是 None（學來的武學的小戰法 TacticDef.minor 不算）。"""
+    tactic = tactics.of(content, skill_id)
+    return tactic if tactic is not None and not tactic.minor else None
 
 
 def is_signature(content: Content, skill_id: str | None) -> bool:
@@ -36,7 +37,7 @@ def scale(content: Content, skill_id: str | None) -> float:
 
 
 def card_text(tactic: TacticDef) -> str:
-    """功法卡、修練頁、角色卡那一段（tactics.card_text）。"""
+    """功法卡、修練頁、角色卡那一段（tactics.card_text；小戰法寫「小戰法」）。"""
     return tactics.card_text(tactic)
 
 
@@ -58,11 +59,12 @@ def lift_levels(state: GameState, content: Content, skill_ids) -> None:
 
 
 def learned(state: GameState, content: Content) -> list[str]:
-    """這個角色情誼到了、學過的本命武學（旗標「學會本命:人物 id」），照人物的本命武學與內功列出。"""
+    """這個角色情誼到了、學過的本命武學（旗標「學會本命:人物 id」），照人物的本命武學與內功列出（tactics.figure_arts：
+    歷史武將同行起始帶的學來的武學不算，FB-640）。"""
     out: list[str] = []
     for flag in state.player.flags:
         if flag.startswith("學會本命:"):
             character = content.characters.get(flag.split(":", 1)[1])
             if character is not None:
-                out += [s for s in (character.starting_wugong, character.starting_neigong) if s]
+                out += tactics.figure_arts(content, character)
     return out

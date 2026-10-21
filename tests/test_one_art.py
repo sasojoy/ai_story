@@ -247,16 +247,14 @@ def test_the_creator_gets_the_fame_on_the_next_sync_once(game):
 
 
 def test_a_real_follow_through_the_forge_is_recorded(on, state, world):
-    """真的走兩次合成：甲首創、乙照著合，季裡記乙一筆（甲的 Game 同步時補名望）。
-    武學重構：武學＋意境不再合成（fusion.fuse 拿掉了），改走武學＋武學（fusion.blend）。"""
+    """真的走兩次合成：甲首悟、乙照著合，季裡記乙一筆（甲的 Game 同步時補名望）。
+    煉製只剩意境＋意境（Joy 2026-10-21）：走 fusion.merge。"""
     from test_fusion import named, other_player  # noqa: PLC0415
 
-    state.player.member.wugong_id = "basic_fist"
-    state.player.arts, state.player.stats["xinde"] = ["lake_kick"], 100
-    first, _ = fusion.blend(state, on, world, named("旋風腿"), "basic_fist", "lake_kick")
-    follower = other_player(on)
-    follower.player.arts = ["lake_kick"]
+    state.player.insights, state.player.stats["xinde"] = ["feng", "huo"], 100
+    first, _ = fusion.merge(state, on, world, named("燎原"), "huo", "feng")
+    follower = other_player(on, ("feng", "huo"))
     follower.world = state.world  # 同一季
-    art, msgs = fusion.blend(follower, on, world, None, "basic_fist", "lake_kick")
-    assert art.id == first.id and "照著合出了同一門" in msgs[0]
-    assert state.world.echoes[art.id] == Echo(creator="沈浪", name=f"【{art.name}】", followers=["乙"])
+    insight, msgs = fusion.merge(follower, on, world, None, "feng", "huo")
+    assert insight.id == first.id and "這個意境由沈浪首悟" in msgs[0]
+    assert state.world.echoes[insight.id] == Echo(creator="沈浪", name="「燎原」", followers=["乙"])
