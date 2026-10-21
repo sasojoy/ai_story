@@ -493,6 +493,9 @@ def state(
     for loc_id, info in places.items():
         if info["sortie"] is None:
             continue
+        if conquest_on and loc_id in blocks and conquest.cooling(w, c, loc_id):
+            continue  # 剛易手、還在冷卻：兩邊都推不動（設計 4.1），不推薦（輿圖第三版第 5 批，QA 第 4 批複驗的順帶）
+
         # 理由只寫這一種出陣真的記得到的（FB-258、FB-259）：軍令照記功的判斷；懸賞只有討伐、只有攻打贏了才交得了；
         # 勝算只有攻才看（守、攪局不打）
         how, attack = info["sortie"], info["sortie"] == "attack"
