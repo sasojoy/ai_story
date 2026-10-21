@@ -32,6 +32,8 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 - **`Start-Process -ArgumentList` 的陣列元素有空格要自己加引號**：`-m "slow or not slow"` 寫成 `'"slow or not slow"'`；沒加就被拆成四個參數，pytest 回「no tests ran in 3s」、一個測試都沒跑（2026-10-21）。
 - **平行驗收**（2026-10-20）：PM 會給你一段 FB 號段、一個埠和一個 `<名字>.localhost`，只用給你的；瀏覽器窗格是共用的，**每一個動作都帶自己的 tabId**（10/20 有 QA 沒帶，動到別的子代理的分頁）。驗完把視窗設回 desktop、配色淺色、關掉自己的分頁、`taskkill /T` 關伺服器。
 - 開關的「一個字都不變」最好的驗法：同一支腳本，在功能分支開出來的那一點（`git archive` 解出來）和這一版各跑一次，比輸出。
+  - **`python -I` 會忽略 `PYTHONHASHSEED`**（2026-10-21 玉璽碎片第 3 批）：資料庫轉成文字逐位元組比的時候，集合欄位（`visited`、`revealed`）的順序每跑一次都不同，看起來像兩版不一樣。要逐位元組比就不加 `-I`、設 `PYTHONHASHSEED=0`（腳本自己把複本的根目錄插在 `sys.path` 最前面）；畫面那一份（`main_view` 等）不受影響。
+  - 子代理的 PowerShell 刪 scratchpad 裡的檔（`Remove-Item …\*`）會被擋（protected path）：重跑就寫進新的子資料夾。
 
 ## 開伺服器與登入
 - **複本**：在 scratchpad 用 bash `git -C <qa 工作樹> archive HEAD | tar -x -C <scratchpad>/on` 解一份來跑。PowerShell 的 tar 碰到中文路徑會壞。先 `git archive -o <檔>.tar` 再解的話，Git Bash 的 tar 要加 `--force-local`（`tar --force-local -xf C:/…/x.tar -C …`），不然把 `C:` 當成遠端主機、回「Cannot connect to C: resolve failed」。不要在 repo 裡跑伺服器，也不要改 repo 的設定與 `.local/`。
@@ -81,6 +83,7 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 - 頁面每 10 秒打一次 `/api/main`。用 API 改了狀態之後，等 11 秒或 reload 再看。
 - **按鈕用 JS 的 `el.click()`**，座標點擊常常沒反應。
 - **換帳號**：同一個分頁重打 `/api/login` 就換掉 cookie，再單獨一次 reload。兩個帳號要同時登著才需要換 host。
+  - 分頁用的 `tx_session` 是 `requests` 登入拿的：之後腳本**再登入同一個帳號**（`session(acct)` 打管理者動作、看卡），分頁裡那一個會失效、頁面掉回登入（2026-10-21）。腳本動過那個帳號就重拿一次 token、重寫 cookie、單獨 reload。
 - **不把密碼貼進對話**：用 python `requests` 登入、只印 `tx_session`（`s.cookies.get("tx_session")`），再在分頁裡 `document.cookie = "tx_session=<值>; path=/"`、另起一次呼叫 `location.reload()`。換帳號就再取一個值、再寫一次 cookie；這個 token 只在你自己的暫存伺服器上有效。
 - **截圖檔**：存在 `~/.claude/projects/<session>/tool-results/`，檔名是 `mcp-Claude_Browser-blob-*-<尾碼>.jpg`，截圖結果那一行寫著。回報要附路徑時，照尾碼複製到自己的子資料夾、改成看得懂的名字。
 - **量版面用 JS**：
@@ -128,6 +131,7 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 - 沒有設定檔可切的開關：例如素材四階關掉。
 - **機率**：一種跑幾千次，報次數與百分比；也要跑「不該發生」的那幾種，確認是 0。
 - 滿級換心得、頭目戰、切磋、決戰軍餉、求援傳聞。
+- **不具名（「兩個只差誰做的世界」）要連酒肆一起比**（FB-643）：`tavern_do("ties", 名號)` 打聽交情在打聽度 4 以上會列那個人份量 3 以上的最近三件行狀，`tavern.fresh`（24 小時內有份量 4 的行狀）打聽度 +1、`seek` 的回話跟著變。名望 0 的陣營中人碰不到門檻：把兩人的 `stats["fame"]` 拉到「小有名氣」、看客同陣營站同一間酒肆（`picking_tavern = True`、銀兩給夠），另跑一份兩人是散人（沒有「投靠」那一筆行狀蓋過 `fresh`）。
 - **用自己亂數的掉落**（名號＋戰報流水號）：先照種子挑出擲得中的名號建角色，再實打。
 - **注意**：
   - 腳本用暫存的 `TIANXIA_DB`；設定檔要用 `load_content(Path("content"), profile)` 傳進去，環境變數讀不到。
