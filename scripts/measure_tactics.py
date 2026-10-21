@@ -828,11 +828,10 @@ def _indirect(content, r):
         return f"練成 ×{amt:g}：練滿十成的心得 {full} → {cut}（每一成 round(原價×{amt:g})、最少 1；熔煉照原價退）"
     if r.key == "fuse_points":
         from tianxia import create
-        mid = 50
-        a, b = create.grade_odds(content, mid, 0), create.grade_odds(content, mid + int(amt), 0)
+        mid = 50  # 自創的品級一律 Config.arts.create_grade（main d0ca2c25，Joy 2026-10-21「保底上品」），意分只推底子
         lo, hi = create.power_scale_of(content, mid), create.power_scale_of(content, mid + int(amt))
-        return (f"自創的意分 +{amt:g}：意分 {mid} 的那一門上品 {a.get('上品', 0):g}% → {b.get('上品', 0):g}%，"
-                f"底子 {lo:.0%} → {hi:.0%}（create.grade_odds、power_scale_of）")
+        return (f"自創的意分 +{amt:g}：品級一律{content.config.arts.create_grade}，意分 {mid} 的那一門"
+                f"底子 {lo:.0%} → {hi:.0%}（create.power_scale_of）")
     if r.key == "mate_exp":
         return f"同伴拿到的經驗 ×{amt:g}（本人不變）"
     return f"{r.text}（{NOTE.get(r.key, '')}）"
