@@ -391,8 +391,8 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
             **_look(content, art),  # 自創的品相（純、渾、透、稀有路數；兩樣珍、三樣神）
             "compare": compare,  # 卷軸卡直接把它寫在功法庫那張卡的鈕上面（改練之前看得到）；點開「詳情」時功法卡裡也有
             "cultivate": {
-                "ok": problem is None, "note": note, "legend": legend, "buy": _buy_choice(state, content, world, art),
-                "xinde": None,  # 武學重構：沒有「以心得修練」了（品級不靠修練衝）；網頁還讀這個鍵
+                "ok": problem is None, "note": note, "legend": legend,  # 服丹衝關（心得換丹、心得衝關都拿掉了，Joy 2026-10-21）
+                "xinde": None,  # 網頁與舊測試還讀這個鍵：一律沒有
             },
             "melt": {
                 "ok": stuck is None,
@@ -468,17 +468,6 @@ def slot_rows(state: GameState, content: Content, world: WorldStateStore, art: M
             "look": insight_fx.look(fx),  # 品相凡佳珍神（玉環上那一枚印；底子 quality 不給玩家看）
         })
     return rows
-
-
-def _buy_choice(state: GameState, content: Content, world: WorldStateStore, art) -> dict | None:
-    """「以心得換破境丹」那一顆（Joy 2026-10-18）：這門上品到了極處（cultivation.ready：第十成）、換丹開著才有，
-    否則 None（丹只在強行衝關那一下用得上）。ok／why 跟 cultivation.buy_legend 同一個判斷。"""
-    price = cultivation.legend_price(state, content)
-    if price is None or prologue.active(state, content) or not cultivation.ready(state, content, world, art.id)[0]:
-        return None
-    why = cultivation.buy_legend_problem(state, content)
-    return {"price": price, "ok": why is None, "why": why or "",
-            "label": f"以心得換一枚{content.config.legend_item_name}（心得 {price}）"}
 
 
 def _force_choice(state: GameState, content: Content, world: WorldStateStore, art_id: str) -> dict:

@@ -3369,12 +3369,6 @@ class Config(_Strict):
     legend_item_name: str = "破境丹"
     legend_item_note: str = "衝擊絕學時可以服下，那一次的機會多幾分。"
     legend_item_bonus: int = 15
-    # 以心得換破境丹（Joy 2026-10-18「大量心得可以換一次破境機會，讓玩家後期更好轉功法」）：修練頁衝絕學那一步，
-    # 花心得換一枚破境丹。這一季第 k 枚（從 0 數）要 legend_xinde_price + k × legend_xinde_step；0 是關著（測試內容）。
-    # 量到的（scripts/measure_xinde_flow.py，週末 60 小時）：沒有門下的人一季剩六千多點心得沒處花；300 起、每枚 +100，
-    # 六千點約換八到九枚，服丹強行衝關一次約一成五到兩成，一季大約多出一兩門絕學
-    legend_xinde_price: int = Field(default=0, ge=0)
-    legend_xinde_step: int = Field(default=100, ge=0)
     # 回體丹（企劃者 2026-10-07「新增物品回體丹可以回體力100點，新手進來都送20顆，現在是內測期間，讓大家初期可以盡情遊玩體驗」）：
     # 狀態列體力條旁邊按「服丹」吃一顆，回 stamina_pill_restore 點體力，夾在體力上限（不溢出；體力是滿的不讓吃）
     stamina_pill_name: str = "回體丹"
@@ -3439,6 +3433,9 @@ class Config(_Strict):
     recruit_stamina: int = 15  # 嘗試招募一次的體力
     recruit_base_chance: float = 0.35  # 基礎成功率，情誼會再往上加（見 roster.py）
     recruit_affinity_bonus: float = 0.5  # 情誼每 100 點，成功率加多少（乘上目前好感度/100）
+    # 情誼到這裡才招得了他（Joy 2026-10-21「現在怎麼很隨便的就能邀請武將加入隊伍」，決策卡選「情誼門檻」）：沒到的招募鈕不畫、
+    # 「此地還有人可招」也不說；舊的 recruit_at 那一條與歷史武將同行一樣（roster.affinity_ok）。0 是舊規則
+    recruit_min_affinity: int = 40
     duel_chance_on_fail: float = 0.4  # 招募失敗時，額外觸發對方要求決鬥的機率
     duel_fail_silver_loss: int = 15  # 決鬥吃虧：賠的銀兩（原本只有「你惹上了一場決鬥」的文字，沒有任何實際代價）
     recruit_consolation_xinde: int = 30  # 劇情事件想結識的人已經被別人招走時，改給的心得

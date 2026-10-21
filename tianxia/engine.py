@@ -1718,21 +1718,23 @@ class Game:
         self.move_mode = mode if mode in atlas.MODES else "walk"
 
     def _recruit_target(self) -> str | None:
-        """這個地點目前能嘗試招募的人（自由之身、recruit_at 是這裡）；沒有就是 None。"""
+        """這個地點目前能嘗試招募的人（自由之身、recruit_at 是這裡、情誼到門檻 roster.affinity_ok）；沒有就是 None。"""
         s, c = self.state, self.content
         for cid, ch in c.characters.items():
-            if ch.kind == "recruitable" and ch.recruit_at == s.player.location and roster.owned_by(self.world, cid) is None:
+            if (ch.kind == "recruitable" and ch.recruit_at == s.player.location and roster.owned_by(self.world, cid) is None
+                    and roster.affinity_ok(s, c, cid)):
                 return cid
         return None
 
     def _recruit_targets(self) -> list[str]:
-        """歷史武將同行（Config.companions）：此地此刻站著（_figures_here，照人物此刻的所在）、標了 recruitable、還沒有主的人。
-        關著是空的（舊的 recruit_at 那一條照舊走 _recruit_target）。"""
+        """歷史武將同行（Config.companions）：此地此刻站著（_figures_here，照人物此刻的所在）、標了 recruitable、還沒有主、
+        情誼到門檻（roster.affinity_ok，沒到的不畫鈕）的人。關著是空的（舊的 recruit_at 那一條照舊走 _recruit_target）。"""
         if not roster.on(self.content):
             return []
         return [
             cid for cid in self._figures_here()
             if self.content.characters[cid].recruitable and roster.owned_by(self.world, cid) is None
+            and roster.affinity_ok(self.state, self.content, cid)
         ]
 
     def _recruitable_here(self) -> bool:
@@ -9689,7 +9691,7 @@ class Game:
     def cultivate(self, art_id: str, use_legend: bool = False) -> list[str]:
         """修練（武學重構，Joy 2026-10-20）：品級不靠修練衝，這裡只剩上品到了極處（第十成）服一枚破境丹強行衝絕學
         （見 cultivation.py）。花體力與一枚丹。真的擲了骰才寫江湖紀錄；被拒絕（還沒到極處、沒有丹、體力不足、沒有這門武學）只回一句話。
-        use_legend：玩家勾了「服下破境丹」；沒勾就只回「等契機或服丹」那一句。"""
+        use_legend：玩家按的是「服丹衝關」；沒有就只回「等契機或服丹」那一句。"""
         problem = cultivation.cultivate_problem(self.state, self.content, self.world, art_id, use_legend=use_legend)
         if problem is not None:
             return self._log([problem])
@@ -9879,15 +9881,6 @@ class Game:
         msgs = self._log(library.melt_many(self.state, self.content, self.world, art_ids, insight_ids))
         if library.held_count(self.state) < held:
             self._menxia_entry(msgs[0], xinde)
-        return msgs
-
-    @_not_while_preparing
-    def buy_legend(self) -> list[str]:
-        """修練頁的「以心得換破境丹」（Joy 2026-10-18，cultivation.buy_legend）：換成了寫一則修練紀錄，換不了只回原因。"""
-        xinde, pills = self._xinde(), self.state.player.legend_items
-        msgs = self._log(cultivation.buy_legend(self.state, self.content))
-        if self.state.player.legend_items > pills:
-            self._menxia_entry(msgs[0], xinde, extra=[f"{self.content.config.legend_item_name} +1"])
         return msgs
 
     @_not_while_preparing

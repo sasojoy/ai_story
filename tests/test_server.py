@@ -1104,7 +1104,7 @@ def test_a_refused_name_keeps_what_the_player_typed_and_the_pill_tick_does_not_o
     submit = js[js.index('form.id === "name-art"'):]
     submit = submit[:submit.index('form.id === "seclude"')]
     assert 'await mx("name"' in submit and "again.value = data.name" in submit  # 被拒（表單還在）把字放回去
-    assert "S.legendTick = {}" in _js_function(js, "async function goTab(")  # 回到修練頁時，破境丹的勾是真的沒勾
+    assert "legendTick" not in js  # 破境丹不再是勾的：服丹、心得各一顆衝關鈕（Joy 2026-10-21），沒有勾要收
 
 
 def test_the_fight_card_shows_the_first_round_until_the_player_opens_the_rest():

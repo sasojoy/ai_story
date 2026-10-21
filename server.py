@@ -2361,7 +2361,6 @@ MENXIA_ACTIONS = {
     "cultivate": lambda g, b: g.cultivate(str(b.get("art") or ""), use_legend=b.get("use_legend") is True),
     "melt": lambda g, b: g.melt_art(str(b.get("art") or "")),  # 功法庫裡的一門熔成心得
     "melt_insight": lambda g, b: g.melt_insight(str(b.get("insight") or "")),
-    "buy_legend": lambda g, b: g.buy_legend(),  # 以心得換一枚破境丹（Joy 2026-10-18，越換越貴）
     # 批量熔煉：勾好的武學（arts）與意境（insights）一次熔完；不是串列的當沒勾
     "melt_many": lambda g, b: g.melt_many(_id_list(b.get("arts")), _id_list(b.get("insights"))),
     "name": lambda g, b: g.name_mastered(str(b.get("name") or "")),  # 第一個練成絕學的人替它取正式名字

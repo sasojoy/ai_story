@@ -443,3 +443,19 @@ def test_admin_ledger_looks_the_same_for_bots(on):
     assert a["ledger"][0]["reason"] == b["ledger"][0]["reason"] == "封測發放"
     assert "refusal" in real.admin_mall_ledger("某假人")
     assert "refusal" in admin.admin_mall_ledger("查無此人")
+
+
+def test_buying_a_breakthrough_pill_puts_it_in_the_bag_and_a_refund_takes_back_the_unused(on):
+    """萬寶閣的破境丹（Joy 2026-10-21「把破境丹也加入商城」）：legend_items 加上去；退款收回還在行囊裡的，服掉的不追。"""
+    on.mall["legend_1"] = MallItem(id="legend_1", name="破境丹", price=150, kind="consumable", effects={"legend": 2})
+    player = _ready(on)
+    msgs = player.mall_buy("legend_1", "pj1")
+    assert player.state.player.legend_items == 2 and _wallet(player).balance("沈浪") == 4850
+    assert "破境丹 +2" in player.state.journal[0].changes and any("破境丹" in m for m in msgs)
+    assert mall.effects_text(on.mall["legend_1"], on) == "破境丹 2 顆"
+    player.state.player.legend_items = 1  # 服掉一顆
+    open_characters().save(player.state)
+    pid = _wallet(player).purchases("沈浪")[0].id
+    _admin(on).admin_mall_refund("沈浪", pid, "買錯了")
+    assert open_characters().load("沈浪").player.legend_items == 0 and _wallet(player).balance("沈浪") == 5000
+

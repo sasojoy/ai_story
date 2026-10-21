@@ -169,13 +169,12 @@ def test_clinic_pills_and_xinde_pills_keep_separate_counts():
     from tianxia import cultivation
 
     game = _game(at="yingchuan", money=1000)
-    p, c = game.state.player, game.content
+    p = game.state.player
     p.legend_bought = 2  # 用心得換過兩枚
     assert "這一季還能買 2 枚" in _ids(game)["act:buy_legend"].label
     game.choose("act:buy_legend")
     assert p.legend_silver_bought == 1 and p.legend_bought == 2
-    p.legend_bought = 0
-    assert cultivation.legend_price(game.state, c) == c.config.legend_xinde_price  # 醫館買過的不讓心得那一條變貴
+    assert not hasattr(cultivation, "legend_price")  # 心得那一條拿掉了（Joy 2026-10-21）：只剩醫館這一條計數
 
 
 def test_picked_up_pills_do_not_count():

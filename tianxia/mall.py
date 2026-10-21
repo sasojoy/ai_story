@@ -39,6 +39,8 @@ EFFECTS: dict[str, EffectSpec] = {
     "rename": EffectSpec("consumable", "易名帖 {n} 張", 1),  # 易名帖：買了得一張帖，在設定頁改名、當場生效（rename.py）
     # 功法庫擴充：武學與意境合計的持有上限多幾格（PlayerState.holding_bonus），買下當場生效、只這一季（Joy 2026-10-21 一張 15 格、不限張數）
     "holding": EffectSpec("consumable", "功法庫多放 {n} 格（這一季）", 999),
+    # 破境丹（Joy 2026-10-21「把破境丹也加入商城，取消可以用心得衝」）：收進行囊（PlayerState.legend_items），到了極處服下強行衝關
+    "legend": EffectSpec("consumable", "{legend} {n} 顆", 99),
 }
 KIND_NAMES = {"look": "外觀", "consumable": "消耗品", "card": "月卡", "pass": "通行證"}
 REASONS = {"grant": "封測發放", "buy": "購買", "refund": "退款", "reissue": "補發", "revoke": "扣回", "topup": "儲值"}
@@ -150,7 +152,7 @@ def effects_text(item: MallItem, content: Content) -> str:
     ingots, pills = daily_amounts(content)
     daily = DAILY_PART.format(ingots=ingots, pills=pills, pill=cfg.stamina_pill_name) if ingots or pills else ""
     return "、".join(
-        EFFECTS[key].label.format(n=n, pill=cfg.stamina_pill_name, bonus=cfg.mall.card_pill_bonus, daily=daily)
+        EFFECTS[key].label.format(n=n, pill=cfg.stamina_pill_name, bonus=cfg.mall.card_pill_bonus, daily=daily, legend=cfg.legend_item_name)
         for key, n in item.effects.items() if key in EFFECTS
     )
 
@@ -253,6 +255,10 @@ def _deliver(
     if pills:
         state.player.stamina_pills += pills
         changes.append(f"{content.config.stamina_pill_name} +{pills}")
+    legend = item.effects.get("legend", 0)
+    if legend:
+        state.player.legend_items += legend
+        changes.append(f"{content.config.legend_item_name} +{legend}")
     return changes
 
 
@@ -480,6 +486,13 @@ def refund(
             took.append(PILLS_BACK.format(pill=content.config.stamina_pill_name, n=back))
             if back < pills:
                 took.append(PILLS_USED.format(n=pills - back))
+        legend = int(bought.data.get("legend", 0))
+        if legend:  # 破境丹：還在行囊裡的收回，服掉的不追（同回體丹）
+            back = min(legend, state.player.legend_items)
+            state.player.legend_items -= back
+            took.append(PILLS_BACK.format(pill=content.config.legend_item_name, n=back))
+            if back < legend:
+                took.append(PILLS_USED.format(n=legend - back))
         left = wallet.balance(owner)
     known = content.mall.get(bought.item)
     return REFUNDED.format(name=shown, item=known.name if known else bought.item, price=bought.price, left=left, took="".join(took))

@@ -127,21 +127,7 @@ def spend_xinde(game: Game, rng: random.Random) -> None:
     for kind in ("內功", "武學"):
         if can_practise(game, kind):
             game.practice(kind)
-    buy_pill(game)
     teach(game)
-
-
-def buy_pill(game: Game) -> bool:
-    """以心得換破境丹（Joy 2026-10-18）：身上有一門上品到了極處在等契機、手上沒有丹、換完還留 TEACH_RESERVE，就換一枚。
-    整季機器人與假人共用；只走 Game.buy_legend。"""
-    state, content = game.state, game.content
-    price = cultivation.legend_price(state, content)
-    if price is None or state.player.legend_items > 0 or not awaits_chance(game):
-        return False
-    if state.player.stats.get("xinde", 0) - price < TEACH_RESERVE:
-        return False
-    game.buy_legend()
-    return True
 
 
 TEACH_RESERVE = 30  # 傳功之後至少留幾點心得：合成一爐 5、練成下一成 2×N，留著不至於為了傳功把自己的路堵死
@@ -201,9 +187,9 @@ def forge_and_cultivate(game: Game, rng: random.Random) -> None:
     slot_insights(game)  # 武學重構：悟到的意境裝進身上兩門的空槽
     if p.stamina >= CULTIVATE_RESERVE:
         for art_id in worn_first(game):
-            pill = takes_the_pill(game, art_id)
-            if cultivation.cultivate_problem(state, content, world, art_id, use_legend=pill) is None:
-                game.cultivate(art_id, use_legend=pill)
+            way = break_way(game, art_id)
+            if way and cultivation.cultivate_problem(state, content, world, art_id, **way) is None:
+                game.cultivate(art_id, **way)
                 break
 
 
@@ -224,6 +210,12 @@ def awaits_chance(game: Game) -> bool:
     return any(
         art_id and cultivation.ready(state, content, world, art_id)[0] for art_id in (member.wugong_id, member.neigong_id)
     )
+
+
+def break_way(game: Game, art_id: str) -> dict:
+    """這一門到了極處要怎麼強行衝關（cultivate 的關鍵字）：手上有丹就服（use_legend）；沒丹是空的，等契機
+    （Joy 2026-10-21 拿掉心得衝關；萬寶閣的破境丹假人不買）。整季機器人與假人共用。"""
+    return {"use_legend": True} if takes_the_pill(game, art_id) else {}
 
 
 def takes_the_pill(game: Game, art_id: str) -> bool:

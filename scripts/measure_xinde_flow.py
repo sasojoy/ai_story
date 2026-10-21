@@ -46,9 +46,7 @@ class Ledger(dict):
 
 def run(seed, args):
     content = load_content(mc.ROOT / "content", profile=None if args.profile == "none" else args.profile)
-    if args.no_buy:
-        content.config.legend_xinde_price = 0  # 對照組：沒有以心得換破境丹（以心得修練在武學重構時拿掉了：修練只剩絕學那一步）
-    world = open_world(mc.TMP / f"x{seed}{len(args.mates)}{int(args.no_buy)}.db")
+    world = open_world(mc.TMP / f"x{seed}{len(args.mates)}.db")
     if not world.get_season().storyline:
         world.seed_first_season(content)
     world.open_season(content, now=0)
@@ -128,7 +126,6 @@ def main():
     ap.add_argument("--profile", default="weekend")
     ap.add_argument("--online", type=float, default=24)
     ap.add_argument("--faction", default="guan")
-    ap.add_argument("--no-buy", action="store_true", help="關掉以心得換破境丹（對照組）")
     ap.add_argument("--mates", nargs="*", default=["guanyu", "zhangfei"])
     ap.add_argument("--followers", nargs="*", default=["follower_guan_spear", "follower_guan_crossbow"])
     args = ap.parse_args()

@@ -1,6 +1,7 @@
 """修練（武學重構，Joy 2026-10-20）：品級不再靠修練衝——合成（fusion.blend_grade）與自創才長品級。
 修練頁的「修練」只剩最後一步：上品練到第十成，就等契機晉為絕學（seize：打贏一場硬仗、在決戰裡出手滿幾回合，
 擲一次頓悟），或服一枚破境丹關起門來強行衝關（cultivate(use_legend=True)，force_odds）。
+心得換丹、心得衝關都拿掉了（Joy 2026-10-21「把破境丹也加入商城，取消可以用心得衝」）：丹從探索、打點、銀兩與萬寶閣來。
 品質是每個人各練各的（PlayerState.art_quality）；升品時「成」不變。
 練成絕學走 tianxia/ascend.py（破境：招升為絕招、破境卡、江湖史、傳聞）。「第一個練成的人替全服定名」退掉了（招式與絕學稿案
 第二輪）；這一版之前還等著定名的（PlayerState.naming）照舊定得了名（master_request、name_mastered）。
@@ -168,38 +169,3 @@ def name_mastered(state: GameState, content: Content, world: WorldStateStore, na
         state.player.renames_told.append(art_id)
     add_chronicle(state, f"{state.player.name}把【{old.name}】練成絕學，為之定名【{name}】。")  # 江湖史一律寫名號（傳聞分層第七節）
     return [f"從今以後，江湖上這門武學就叫【{name}】。"]
-
-
-def legend_price(state: GameState, content: Content) -> int | None:
-    """以心得換破境丹（Joy 2026-10-18）：這一季下一枚要多少心得；關著（legend_xinde_price 是 0）是 None。"""
-    cfg = content.config
-    if cfg.legend_xinde_price <= 0:
-        return None
-    return cfg.legend_xinde_price + state.player.legend_bought * cfg.legend_xinde_step
-
-
-def buy_legend_problem(state: GameState, content: Content) -> str | None:
-    """換不了的原因（修練頁那一顆鈕灰掉時寫的、按下去回的是同一句）；換得了是 None。"""
-    price = legend_price(state, content)
-    if price is None:
-        return f"{content.config.legend_item_name}換不到。"
-    have = state.player.stats.get("xinde", 0)
-    if have < price:
-        return f"心得不足：換一枚{content.config.legend_item_name}要 {price}，你有 {have}。"
-    return None
-
-
-def buy_legend(state: GameState, content: Content) -> list[str]:
-    """花心得換一枚破境丹（越換越貴）。被拒絕只回原因、什麼都不扣。"""
-    problem = buy_legend_problem(state, content)
-    if problem is not None:
-        return [problem]
-    p, cfg = state.player, content.config
-    price = legend_price(state, content)
-    p.stats["xinde"] = p.stats.get("xinde", 0) - price
-    p.legend_bought += 1
-    p.legend_items += 1
-    return [
-        f"你把積下的心得一一參透，凝成一枚【{cfg.legend_item_name}】（心得 -{price}）。",
-        f"下一枚要 {legend_price(state, content)} 心得。",
-    ]
