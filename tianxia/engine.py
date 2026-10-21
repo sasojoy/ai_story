@@ -11808,9 +11808,9 @@ class Game:
             self.stamp(timetable.when(_season_vehicle(c, w), c, e)) for e in timetable.events(w, c)
             if (e.seal or e.mandate_only) and e.id not in w.timeline and e.id not in w.showdowns_opened
         ] if season_one(c, w) else []
-        out = {"name": c.seal[shard.id].name, "effect_text": seal.shard_text(c, shard.id), "state": state,
+        out = {"name": c.seal[shard.id].name, "effect_text": seal.shard_text(c, shard.id), "state": seal.card_state(c, state),
                "stir": stir, "dates": dates}
-        if seal_acts.on(c):  # 獨門行動（改版第 2 批）：改版關著不多這一鍵（一個字都不變）；這一片沒有行動（螭首、金角）是 None
+        if seal_acts.on(c):  # 獨門行動（改版第 2、3 批）：改版關著不多這一鍵（一個字都不變）；這一片沒有行動是 None
             out["act"] = seal_acts.view(self.state, c, seal.filled(view.registry, c), view.season, **self._seal_act_season())
         return out
 

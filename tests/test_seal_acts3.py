@@ -358,3 +358,20 @@ def test_two_worlds_that_differ_only_in_who_used_it_look_the_same():
         for key in a:
             assert a[key] == b[key], (shard, key)
         assert any("有人起用了" in text for _, text, _ in a["rumors"])
+
+
+# ── FB-626、FB-627、FB-642 ──
+
+def test_fb626_the_card_says_the_stir_not_the_act():
+    """FB-626：碎片卡「新得之季，此季不動」緊挨獨門行動那一行，讀起來像用不了——改版開著寫明是璽動；關著照舊。"""
+    from test_seal_acts import _holder as plain_holder
+
+    def fresh(st):
+        st.seal.shards["xuanniu"].since_season = st.season_number  # 這一季剛拿到的
+
+    for on, new, calm in ((True, "新得之季：這一季不會被璽動牽動", "這一季可能被璽動牽動"), (False, "新得之季，此季不動", "此季可能被牽動")):
+        c, w, g = plain_holder("xuanniu", on=on)
+        assert g.seal_view()["state"] == calm
+        w.mutate(fresh)
+        assert g.seal_view()["state"] == new
+
