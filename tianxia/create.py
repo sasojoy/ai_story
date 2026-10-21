@@ -16,7 +16,7 @@
    這一門自己長出一招（以意成招，tianxia/moves.py）：擺式定勢（stance_of）、主屬性定路數、意分定火候（生熟透），
    模型照意起的招名玩家可改；成形時有稀有路數那一格照 move_rare_odds 擲。開著的格子全單色是純、全任色是渾（打起來功效多一截）。
 
-價錢：Config.arts.create_xinde × create_step^（這一季已自創幾門）；create_per_season 0 是不限門數。
+價錢：Config.arts.create_xinde × create_step^（這一季已自創幾門）；這一季第一門是 create_first_xinde（有寫的話）；create_per_season 0 是不限門數。
 只改狀態與回傳訊息；數字全由這裡算，模型只給一個分數與兩個屬性字。
 """
 from __future__ import annotations
@@ -90,6 +90,8 @@ def on(content: Content) -> bool:
 
 def price(state: GameState, content: Content) -> int:
     cfg = content.config.arts
+    if cfg.create_first_xinde and state.player.created_count == 0:
+        return cfg.create_first_xinde  # 這一季第一門（Joy 2026-10-21）
     return int(round(cfg.create_xinde * (cfg.create_step ** state.player.created_count)))
 
 
