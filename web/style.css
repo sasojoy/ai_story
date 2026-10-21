@@ -482,6 +482,9 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
    那一小句與鈕排在它底下 */
 .scene > p.siege-strip { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 2px; margin: 0 0 6px; padding: 4px 10px; border-left: 3px solid var(--accent); border-radius: 6px; background: var(--card-2); font: 500 13px/1.6 var(--sans); color: var(--ink-2); }
 .scene .muster-head > p.siege-strip { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 2px; flex: 1 1 100%; min-width: 0; margin: 0; padding: 4px 10px; border-left: 3px solid var(--accent); border-radius: 6px; background: var(--card-2); font: 500 13px/1.6 var(--sans); color: var(--ink-2); }
+/* FB-576：只有一顆加入鈕時那一排排在攻城條底下，鈕照 FB-105 的 −8px 往上吃，6px 的列距吃掉還壓到條 2px：條底下的這一顆上邊只吃 −4px
+   （留 2px 的縫，那一排多佔 4px）。名字旁邊的那一顆（決戰、沒有攻城條）照舊 −8px；.wide、.pick 本來就是 0 */
+.scene .muster-head > p.siege-strip ~ .muster-join:not(.wide):not(.pick) .btn { margin-top: -4px; }
 .siege-strip .ss-title { font: 600 15px/1.6 var(--serif); color: var(--ink); }
 .siege-strip .ss-sep { padding: 0 2px; opacity: 0.55; }
 /* 決戰：對面上一回合的出招比例與自己的結果（引擎寫成一段 markdown 引用「> 」，伺服器轉成 blockquote）：小字、淡色、行距緊、

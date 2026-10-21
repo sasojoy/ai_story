@@ -202,6 +202,32 @@ def test_melee_scene_keeps_only_the_rule():
     assert siege.MELEE_RULE in scene and "兩頭迎戰" not in scene
 
 
+def _rule(css: str, selector: str) -> dict[str, str]:
+    found = re.search(re.escape(selector) + r"\s*\{([^}]*)\}", css)
+    assert found, f"style.css 裡找不到 {selector}"
+    return {k.strip(): v.strip() for k, v in (part.split(":", 1) for part in found.group(1).split(";") if ":" in part)}
+
+
+def _top(margin: str) -> float:
+    """margin 簡寫的上邊（"-8px 0" → -8；"-4px 0 -8px" → -4）。"""
+    return float(margin.split()[0].removesuffix("px"))
+
+
+def test_fb576_single_join_button_clears_the_strip():
+    """FB-576（QA 第三批 A）：只有一顆加入鈕的攻城集結，攻城條自己佔一行、「報名在這裡」與鈕排在它底下；鈕照 FB-105 的 −8px 往上吃，
+    6px 的列距吃掉還多 2px，鈕的上緣壓到條的下緣（375／360／320 都量到 2px）。條底下那一排的鈕上邊至少留 2px：
+    列距（.muster-head 的 gap 第一個值）＋鈕的 margin-top ≥ 2。名字旁邊的那一顆（沒有攻城條、FB-105）、.wide、.pick 不動。"""
+    css = re.sub(r"/\*.*?\*/", "", (ROOT / "web" / "style.css").read_text(encoding="utf-8"), flags=re.S)
+    phone = css.split("@media (min-width: 641px)")[0]
+    gap = float(_rule(phone, ".scene .muster-head")["gap"].split()[0].removesuffix("px"))
+    found = re.search(r"\.scene \.muster-head > p\.siege-strip ~ \.muster-join:not\(\.wide\):not\(\.pick\) \.btn\s*\{([^}]*)\}", phone)
+    margin = found.group(1) if found else ""
+    top = _top(margin.split("margin-top:")[1].split(";")[0]) if "margin-top:" in margin else _top(_rule(phone, ".scene .muster-join .btn")["margin"])
+    assert gap + top >= 2, (gap, top)  # 修前 6 − 8 = −2：壓到 2px
+    assert _rule(phone, ".scene .muster-join .btn")["margin"] == "-8px 0"  # 名字旁邊的那一顆照舊（FB-105）
+    assert _rule(phone, ".scene .muster-join.wide .btn")["margin"] == "0" and _rule(phone, ".scene .muster-join.pick .btn")["margin"] == "0"
+
+
 def test_fb553_stacked_row_takes_its_own_line():
     """.pick 那一排另起一行、一顆一行、鈕佔滿那一行（字長也只往下折，不往右撐）。"""
     css = (ROOT / "web" / "style.css").read_text(encoding="utf-8").split("@media (min-width: 641px)")[0]
