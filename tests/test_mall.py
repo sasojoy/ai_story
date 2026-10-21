@@ -459,3 +459,18 @@ def test_buying_a_breakthrough_pill_puts_it_in_the_bag_and_a_refund_takes_back_t
     _admin(on).admin_mall_refund("沈浪", pid, "買錯了")
     assert open_characters().load("沈浪").player.legend_items == 0 and _wallet(player).balance("沈浪") == 5000
 
+
+
+def test_buying_reroll_slips_and_refunding_the_unused(on):
+    """重參帖（Joy 2026-10-21）：PlayerState.create_rerolls 加上去；退款收回還沒用的。"""
+    on.mall["reroll_1"] = MallItem(id="reroll_1", name="重參帖", price=50, kind="consumable", effects={"create_reroll": 2})
+    player = _ready(on)
+    player.mall_buy("reroll_1", "rr1")
+    assert player.state.player.create_rerolls == 2 and "重參帖 +2" in player.state.journal[0].changes
+    assert mall.effects_text(on.mall["reroll_1"], on) == "自創重骰 2 次"
+    player.state.player.create_rerolls = 1  # 用掉一張
+    open_characters().save(player.state)
+    pid = _wallet(player).purchases("沈浪")[0].id
+    msgs = _admin(on).admin_mall_refund("沈浪", pid, "買錯了")
+    assert "重參帖收回 1 張" in msgs[0]
+    assert open_characters().load("沈浪").player.create_rerolls == 0

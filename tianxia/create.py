@@ -77,6 +77,11 @@ BACK_LINE = "你散了架式，重新來過。"  # 待 joy 潤
 CREATED_LINE = "你自創了一門{kind}【{name}】。"  # 待 joy 潤
 MOVE_SHOWN = "招：{card}"  # 待 joy 潤
 CANCELLED = "你把這門還沒成形的功夫擱下了。"
+CANCELLED_PAID = "你把這門功夫擱下了。立意時付的 {paid} 心得不退。"  # 待 joy 潤
+REROLLED = "你又把「{intent}」推演了一遍——這門功夫換了個形：{colors}。"  # 待 joy 潤
+NO_REROLL = "手上沒有重參帖：萬寶閣買得到。"  # 待 joy 潤
+REROLL_CAPPED = "這一門已經重骰 {cap} 次，不能再骰了：留下這個形，或回頭重來。"  # 待 joy 潤
+REROLL_STEP = "要先立了意、成了形，才能重骰。"  # 待 joy 潤
 FLAT_LINE = "此式平正，不偏一路"  # 待 joy 潤
 LEAN_TEXT = {"正": "，帶一股正氣", "邪": "，帶一股邪氣", "無": ""}  # 待 joy 潤
 
@@ -312,7 +317,7 @@ def intent_problem(state: GameState, content: Content, text: str) -> str | None:
     if not (INTENT_MIN <= len(clean_intent(text)) <= INTENT_MAX):
         return INTENT_LINE
     need = price(state, content)
-    if _xinde(state) < need:
+    if not draft.paid and _xinde(state) < need:  # 付過了（成形之後回頭重立意）不再收
         return XINDE_LINE.format(price=need, have=_xinde(state))
     return None
 
@@ -517,7 +522,9 @@ def colors_text(colors: list[list[str]]) -> str:
 def set_intent(
     state: GameState, content: Content, world: WorldStateStore, text: str, reading: IntentReading | None = None,
 ) -> list[str]:
-    """C 段（或直接呼叫）：記下意與讀出來的東西，馬上成形（擲四格顏色）。reading 沒給照關鍵字表讀。只改單子、不收錢。"""
+    """C 段（或直接呼叫）：記下意與讀出來的東西，馬上成形（擲四格顏色）。reading 沒給照關鍵字表讀。
+    心得在這一刻收（Joy 2026-10-21「應該立意按下去就要收吧，因為那時候就算是骰出來武學的品質了」）：一張單子只收一次
+    （draft.paid；成形之後回頭重立意不再收），這一季自創的門數也在這裡數（price 的第一門優惠照它）；之後擱下不退。"""
     problem = intent_problem(state, content, text)
     if problem is not None:
         return [problem]
@@ -529,17 +536,51 @@ def set_intent(
     draft.score = reading.score
     draft.move = reading.move
     draft.say = reading.say
+    _form(state, content, world, draft)
+    msgs = [FORMED_LINE.format(intent=draft.intent, colors=colors_text(draft.colors))]
+    move = draft_move(state, content, draft)
+    if move is not None:
+        msgs.append(MOVE_SHOWN.format(card=tactics.card_text(move, state.player.name[:1] or tactics.MINOR_TITLE)))
+    if not draft.paid:
+        p = state.player
+        need = price(state, content)
+        p.stats["xinde"] = _xinde(state) - need
+        p.created_count += 1
+        draft.paid = need
+        msgs.append(f"心得 -{need}")
+    return msgs
+
+
+def _form(state: GameState, content: Content, world: WorldStateStore, draft: CreateDraft) -> None:
+    """成形：照兵器、姿勢、意擲每一格的顏色與變招（種子含 draft.rolls，每擲一次換一個）。"""
     rng = random.Random(seed_of(state, world, draft))
     draft.colors = roll_colors(content, draft, rng)
     timing = moves.timing_of(draft.kind, stance_of(draft.pose))
     draft.rare = moves.has_rare(content, top_of(content, draft), timing) and rng.random() < content.config.arts.move_rare_odds
     draft.rolls += 1
     draft.step = "name"
-    msgs = [FORMED_LINE.format(intent=draft.intent, colors=colors_text(draft.colors))]
-    move = draft_move(state, content, draft)
-    if move is not None:
-        msgs.append(MOVE_SHOWN.format(card=tactics.card_text(move, state.player.name[:1] or tactics.MINOR_TITLE)))
-    return msgs
+
+
+def reroll(state: GameState, content: Content, world: WorldStateStore) -> list[str]:
+    """重參帖（萬寶閣，Joy 2026-10-21「弄個商城道具可以直接重骰，有上限」）：成了形還沒立名，用掉一張，同一個架式與意
+    直接再擲一次顏色與變招（火候照意分，不變）；不收心得、不用掉免費的重來。帖子買幾張都行，一門最多重骰
+    Config.arts.create_reroll_cap 次（Joy「一次創造武學的時候可能最多重骰3或是5」）。"""
+    draft = state.player.creating
+    if draft is None:
+        return [NO_DRAFT]
+    if draft.step != "name" or not draft.colors:
+        return [REROLL_STEP]
+    p = state.player
+    cap = content.config.arts.create_reroll_cap
+    if draft.rerolled >= cap:
+        return [REROLL_CAPPED.format(cap=cap)]
+    if p.create_rerolls <= 0:
+        return [NO_REROLL]
+    p.create_rerolls -= 1
+    draft.rerolled += 1
+    _form(state, content, world, draft)
+    return [REROLLED.format(intent=draft.intent, colors=colors_text(draft.colors)),
+            f"重參帖 -1（剩 {p.create_rerolls} 張；這一門還能重骰 {cap - draft.rerolled} 次）"]
 
 
 def back(state: GameState, content: Content, to: str) -> list[str]:
@@ -588,7 +629,7 @@ def name_problem(state: GameState, content: Content, world: WorldStateStore, nam
     if problem is not None:
         return problem
     need = price(state, content)
-    if _xinde(state) < need:
+    if not draft.paid and _xinde(state) < need:  # 立意時付過了，立名不再看心得
         return XINDE_LINE.format(price=need, have=_xinde(state))
     return None
 
@@ -657,15 +698,17 @@ def finish(
     if not world.claim_skill_name(art):
         return None, [NAME_TAKEN]
     p = state.player
-    need = price(state, content)
-    p.stats["xinde"] = _xinde(state) - need
-    p.created_count += 1
+    need = 0 if draft.paid else price(state, content)  # 立意時收過了；這一版之前成形、還沒付的單子在這裡收
+    if need:
+        p.stats["xinde"] = _xinde(state) - need
+        p.created_count += 1
     p.creating = None
     msgs = [CREATED_LINE.format(kind=art.kind, name=art.name), art.note]
     if card is not None:
         msgs.append(MOVE_SHOWN.format(card=tactics.card_text(card, tactics.title_of(card, art))))
     msgs += library.store_art(state, art, grade)
-    msgs.append(f"心得 -{need}")
+    if need:
+        msgs.append(f"心得 -{need}")
     annals.note(state, content, annals.DEED, f"自創了一門{art.kind}【{art.name}】。", 3)
     if art.id in p.arts:
         note = team.compare_with_worn(state, content, world, art)
@@ -674,10 +717,11 @@ def finish(
 
 
 def cancel(state: GameState) -> list[str]:
-    if state.player.creating is None:
+    draft = state.player.creating
+    if draft is None:
         return [NO_DRAFT]
     state.player.creating = None
-    return [CANCELLED]
+    return [CANCELLED_PAID.format(paid=draft.paid) if draft.paid else CANCELLED]
 
 
 def prune(state: GameState, content: Content) -> None:
@@ -706,6 +750,7 @@ def view(state: GameState, content: Content, world: WorldStateStore) -> dict:
         "intent_max": INTENT_MAX, "grade": cfg.create_grade,
         "slots": {q: arts_mod.slot_count(content, q) for q in ("下品", "中品", "上品")},
         "step": "form" if draft is None else draft.step, "draft": None,
+        "rerolls": state.player.create_rerolls,  # 手上的重參帖（萬寶閣）
     }
     if draft is None:
         return base
@@ -715,6 +760,8 @@ def view(state: GameState, content: Content, world: WorldStateStore) -> dict:
         "read_text": ("意偏" + "、".join(draft.read) if draft.read else "意不偏一路") + LEAN_TEXT.get(draft.lean, ""),
         "colors": [list(c) for c in draft.colors], "colors_text": [arts_mod.color_text(c) for c in draft.colors],
         "redo": draft.redo,
+        "paid": draft.paid,  # 立意時付了多少心得（0＝還沒付）
+        "reroll_left": max(0, content.config.arts.create_reroll_cap - draft.rerolled),  # 這一門還能重骰幾次
         "power": "",
     }
     if draft.colors:  # 成形了：換上這一門的戰力（招式與絕學稿案第二輪：付心得之前就知道值不值）

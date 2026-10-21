@@ -41,6 +41,8 @@ EFFECTS: dict[str, EffectSpec] = {
     "holding": EffectSpec("consumable", "功法庫多放 {n} 格（這一季）", 999),
     # 破境丹（Joy 2026-10-21「把破境丹也加入商城，取消可以用心得衝」）：收進行囊（PlayerState.legend_items），到了極處服下強行衝關
     "legend": EffectSpec("consumable", "{legend} {n} 顆", 99),
+    # 重參帖（Joy 2026-10-21「弄個商城道具可以直接重骰，有上限」）：自創成形之後直接重骰一次（PlayerState.create_rerolls，只這一季）
+    "create_reroll": EffectSpec("consumable", "自創重骰 {n} 次", 99),
 }
 KIND_NAMES = {"look": "外觀", "consumable": "消耗品", "card": "月卡", "pass": "通行證"}
 REASONS = {"grant": "封測發放", "buy": "購買", "refund": "退款", "reissue": "補發", "revoke": "扣回", "topup": "儲值"}
@@ -78,6 +80,7 @@ PILLS_BACK = "{pill}收回 {n} 顆。"
 PILLS_USED = "用掉的 {n} 顆不追。"
 HOLDING_UP = "功法庫上限 +{n}（現在 {cap} 格，這一季）"
 HOLDING_BACK = "功法庫上限收回 {n} 格。"
+REROLL_BACK = "重參帖收回 {n} 張。"
 CARD_BACK = "月卡少 {n} 天。"
 REBATE_BACK = "當場回的 {n} 元寶扣回。"
 # 月卡每日領（定案甲）：待 joy 潤
@@ -259,6 +262,10 @@ def _deliver(
     if legend:
         state.player.legend_items += legend
         changes.append(f"{content.config.legend_item_name} +{legend}")
+    rerolls = item.effects.get("create_reroll", 0)
+    if rerolls:
+        state.player.create_rerolls += rerolls
+        changes.append(f"重參帖 +{rerolls}")
     return changes
 
 
@@ -493,6 +500,11 @@ def refund(
             took.append(PILLS_BACK.format(pill=content.config.legend_item_name, n=back))
             if back < legend:
                 took.append(PILLS_USED.format(n=legend - back))
+        rerolls = int(bought.data.get("create_reroll", 0))
+        if rerolls and (season is None or bought.season == season):  # 上一季買的換季時已經跟著歸零了
+            back = min(rerolls, state.player.create_rerolls)
+            state.player.create_rerolls -= back
+            took.append(REROLL_BACK.format(n=back))
         left = wallet.balance(owner)
     known = content.mall.get(bought.item)
     return REFUNDED.format(name=shown, item=known.name if known else bought.item, price=bought.price, left=left, took="".join(took))

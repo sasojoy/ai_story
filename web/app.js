@@ -3742,7 +3742,8 @@
     }
     const weapon = draft.kind === "武學" ? draft.form : null;
     const sum = `<p class="create-sum"><b>${esc(draft.kind)}</b>・${esc(draft.form)}${draft.intent ? `・意「${esc(draft.intent)}」` : ""}</p>`;
-    const quit = `<button class="btn ghost" data-act="create-cancel">作罷</button>`;
+    // 付過心得（立意那一刻收，Joy 2026-10-21）之後作罷不退：鈕上寫明。字待 joy 潤
+    const quit = `<button class="btn ghost" data-act="create-cancel">${draft.paid ? "作罷<small>心得不退</small>" : "作罷"}</button>`;
     if (step === "pose") {
       const P = S.createPose || (S.createPose = { ...draft.pose });
       const read = poseRead(P);
@@ -3760,8 +3761,8 @@
       return `${head}<div class="card create">${steps}${sum}
         <div class="cr-mini">${figSvg(draft.pose, weapon, "cr-fig")}<p>${esc(draft.pose_read)}</p></div>
         <div class="crow"><span>意</span><input class="input" id="create-text" maxlength="${c.intent_max | 0}" placeholder="一句話說這門功夫的神，2～${c.intent_max | 0} 字" value="${esc(S.createText || "")}"></div>
-        <p class="muted small">寫得有神有象，底子越厚；意裡帶出的神韻也會讓它偏向那一路。</p>
-        <div class="acts"><button class="btn primary" data-act="create-intent">立意<small>下一步：成形</small></button><button class="btn ghost" data-act="create-back" data-to="pose">重擺架式</button>${quit}</div>
+        <p class="muted small">寫得有神有象，底子越厚；意裡帶出的神韻也會讓它偏向那一路。${draft.paid ? "" : `立意那一刻就成形、收心得 ${c.price | 0}，之後擱下不退。`}</p>
+        <div class="acts"><button class="btn primary" data-act="create-intent">立意<small>${draft.paid ? "已付過心得" : `心得 ${c.price | 0}`}・下一步：成形</small></button><button class="btn ghost" data-act="create-back" data-to="pose">重擺架式</button>${quit}</div>
       </div>`;
     }
     const rings = (draft.colors || []).map((cc, i) => `<div class="cr-ring">${ringHtml(cc, `<b>${i + 1}</b>`)}<small>${esc(ringWord(cc))}</small></div>`).join("");
@@ -3779,10 +3780,13 @@
       ${draft.tactic ? `<p class="art-tactic cr-move">${tacticHtml(draft.tactic)}</p>` : ""}
       ${draft.say ? `<p class="muted small">出手時：「${esc(draft.say)}」</p>` : ""}
       <p class="muted small">招剛創時還生，練到第四成才使得順。</p>
-      ${draft.redo > 0 ? `<p class="muted small">不滿意這個形，可以免費重來一次。</p>` : ""}
+      ${draft.redo > 0 ? `<p class="muted small">不滿意這個形，可以免費重來一次（重擺或重立意）。</p>` : ""}
+      <div class="cr-reroll">${(draft.reroll_left | 0) <= 0 ? `<span class="muted small">這一門的重骰已經用完了。</span>`
+        : c.rerolls > 0 ? `<button class="btn" data-act="create-reroll">重骰<small>重參帖 剩 ${c.rerolls | 0} 張</small></button><span class="muted small">同一個架式與意，三格顏色與變招再擲一次。這一門還能重骰 ${draft.reroll_left | 0} 次。</span>`
+        : `<span class="muted small">萬寶閣的重參帖可以直接重骰這個形，不必重來（一門最多 ${draft.reroll_left | 0} 次）。</span>`}</div>
       <div class="crow"><span>名字</span><input class="input" id="create-name" maxlength="6" placeholder="2～6 個字，全服不能重名"></div>
       <div class="crow"><span>招名</span><input class="input" id="create-move" maxlength="4" value="${esc(draft.move || "")}" placeholder="2～4 個字"></div>
-      <div class="acts"><button class="btn primary" data-act="create-name">立名<small>心得 ${c.price | 0}</small></button>${redo}${quit}</div>
+      <div class="acts"><button class="btn primary" data-act="create-name">立名<small>心得已在立意時付了</small></button>${redo}${quit}</div>
     </div>`;
   }
   // 自創單獨一頁（Joy 2026-10-21「創造武學不要卡在煉成的中間」）：入口在修練頁功法庫的頂上（招式與絕學稿案第四輪從煉製搬來），
@@ -7810,6 +7814,7 @@
           await mx("create_name", { name: n ? n.value.trim() : "", move: m ? m.value.trim() : "" }); createDone(); break;
         }
         case "create-cancel": await mx("create_cancel"); createDone(); break;
+        case "create-reroll": await mx("create_reroll"); break; // 重參帖：留在成形那一步，三格換了
         case "create-open": S.createOpen = true; S.message = ""; renderPage(); window.scrollTo(0, 0); break;
         case "create-close": S.createOpen = false; S.message = ""; renderPage(); window.scrollTo(0, 0); break;
         case "slot-out": await mx("unslot", { art: el.dataset.id, insight: el.dataset.ins }); break;
