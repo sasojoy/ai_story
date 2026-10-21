@@ -325,7 +325,7 @@ def test_two_worlds_that_differ_only_in_who_used_it_look_the_same():
     兩人的玩家卡一個字不差。補缺那一場先讓官軍翻走汝南。"""
     import json
 
-    from tianxia import social
+    from tianxia import social, tavern
 
     def world(shard: str, user: str) -> dict:
         c, w = _world()
@@ -349,6 +349,12 @@ def test_two_worlds_that_differ_only_in_who_used_it_look_the_same():
             for name in ("甲客", "乙客"):
                 out[f"card:{name}"] = json.dumps(social.card(viewer, viewer._kin(store.load(name))), ensure_ascii=False, sort_keys=True,
                                                  default=str)
+                other = store.load(name)
+                other.world = viewer.state.world
+                # FB-643：酒肆打聽交情、查人在哪、名氣、近況、買兇找人（打聽度夠高的那一種在 test_seal_fb643_tavern.py）
+                out[f"tavern:{name}"] = (tavern.ties_player_lines(viewer.state, c, other, [], set()),
+                                         tavern.seek_lines(viewer.state, c, other, 100.0, set()), tavern.person_fame(other, c),
+                                         tavern.fresh(other, viewer.state.world.time), tavern.hit_reach(c, "runan", other))
             return out
 
         return _do(c, w, "旁觀客", look, now=20.0)

@@ -11842,7 +11842,7 @@ class Game:
         name = c.seal[shard_id].name
         line = seal_acts.MINE.format(shard=name, what=what, left=left[0])
         self._write(seal.SEAL_TITLE, [line], tag=f"『{name}』")
-        annals.note(s, c, annals.DEED, seal_acts.ANNAL.format(shard=name, what=what), 4)
+        annals.note(s, c, annals.SEAL, seal_acts.ANNAL.format(shard=name, what=what), 4)  # 酒肆打聽不到這一類（FB-643）
         self._save_season()
         return self._log([line])
 
