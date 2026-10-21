@@ -531,6 +531,7 @@ def _claim_showdown(state: GameState, content: Content, event_id: str) -> tuple[
     if definition is None:
         return None
     w.showdowns_opened[event_id] = definition.id
+    w.showdown_opened_at[event_id] = w.time  # 開的那一刻：輿圖歸週、判斷到了沒照它（FB-563）
     return definition, showdown_start(state, content, definition)
 
 

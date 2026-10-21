@@ -151,6 +151,8 @@ def mandate_note(content: Content, season: WorldState | None) -> str | None:
 
 # 管理者那一行（開季、開下一季）：兩邊都挪不開、照原時間的那一場。待 joy 潤
 QUIET_KEPT = "（{title}排在現實 {clock}，前後的大事擋著挪不開，照原時間；要改用「排時間」。）"
+# 天命之爭得排在最後一場時刻表決戰之後（FB-564）卻排不好：後面只剩半夜、或放不下集結加打一幕就到季末。待 joy 潤
+ORDER_KEPT = "（{title}要排在{last}之後，排在現實 {clock}，前後的大事擋著挪不開；要改用「排時間」。）"
 
 
 def showdown_span(content: Content, event: TimetableEvent) -> float:
@@ -179,11 +181,35 @@ def _quiet_hit(local: float, span: float, content: Content) -> tuple[float, floa
     return None
 
 
+def _mandate_floor(season: WorldState, content: Content, event: TimetableEvent) -> float | None:
+    """天命之爭最早能排在哪一刻（世界秒；FB-564，PM 2026-10-20）：那一季最後一場時刻表決戰（廣宗）的集結加打一幕之後。
+    不是天命之爭、時刻表上沒有決戰回 None。"""
+    if not event.mandate_only:
+        return None
+    last = next((e for e in reversed(content.timetable) if e.kind == "showdown"), None)
+    if last is None:
+        return None
+    return when_in(season, content, last) + showdown_span(content, last) * content.config.time_scale
+
+
+def _last_showdown(content: Content) -> TimetableEvent:
+    """時刻表上（不含天命之爭）最後一場決戰。"""
+    return next(e for e in reversed(content.timetable) if e.kind == "showdown")
+
+
+def _placed_at(season: WorldState, content: Content, event: TimetableEvent) -> float:
+    """挪的時候排前後順序用的時刻：天命之爭排得比最後一場時刻表決戰早的（管理者先把廣宗排晚了，再蓋章），照它該在的地方算
+    （廣宗收尾之後），其餘就是 when_in。"""
+    at = when_in(season, content, event)
+    floor = _mandate_floor(season, content, event)
+    return at if floor is None else max(at, floor)
+
+
 def _neighbours(season: WorldState, content: Content, event: TimetableEvent) -> tuple[float, float]:
     """這件決戰能挪的範圍（世界秒，兩頭都不含）：時刻表上排在它前面的最後一件之後、後面的第一件之前（照時刻排，同一刻照時刻表的
     順序；季末也算）。前一件是決戰時再讓開它的集結加一幕、後一件是決戰時這一場的集結加一幕要在它之前打完：一次只打一場，
     擠在一起的會排隊、拖過 00:00 才開。"""
-    ordered = sorted(enumerate(events(season, content)), key=lambda pair: (when_in(season, content, pair[1]), pair[0]))
+    ordered = sorted(enumerate(events(season, content)), key=lambda pair: (_placed_at(season, content, pair[1]), pair[0]))
     at = [i for i, (_, e) in enumerate(ordered) if e.id == event.id][0]
     scale = content.config.time_scale
     before, after = float("-inf"), float("inf")
@@ -204,18 +230,43 @@ def quiet_place(season: WorldState, content: Content, event: TimetableEvent, now
     at = when_in(season, content, event)
     span = showdown_span(content, event)
     local = _local(season, content, now, at)
+    floor = _mandate_floor(season, content, event)
+    early = floor is not None and span > 0 and season.time < at < floor  # 天命之爭排在最後一場時刻表決戰收尾之前：得往後挪（FB-564）
     hit = _quiet_hit(local, span, content) if span > 0 and at > season.time else None  # 已經到期的（管理者這一季才蓋章）馬上開，不挪
-    if hit is None:
+    if hit is None and not early:
         return at
     scale = content.config.time_scale
+    before, after = _neighbours(season, content, event)
+    if floor is not None:
+        before = max(before, floor)  # 天命之爭一定排在最後一場時刻表決戰之後，往前挪也不能越過它
+        after = min([after, *(when_in(season, content, e) for e in events(season, content) if e.kind == "finale")])  # 照樣不能越過季末
+    if early:
+        return _place_behind(season, content, now, before, after, span)
     # 取整到季曆的整點（FB-331：21 天季開季不在整點時，世界秒的整點對不到季曆；偏移是 0 的季照舊）
     back = calendar.hour_floor(at - (local - (hit[0] - span)) * scale, content, season)
     forward = _hour_up(at + (hit[1] - local) * scale, content, season)
-    before, after = _neighbours(season, content, event)
     for t in sorted((back, forward), key=lambda t: abs(t - at)):
         if max(before, season.time) < t < after and _quiet_hit(_local(season, content, now, t), span, content) is None:
             return t
     return None
+
+
+def _place_behind(season: WorldState, content: Content, now: float, before: float, after: float, span: float) -> float | None:
+    """before 之後（不含）、after 之前（不含）的第一個集結加打一幕碰不到半夜的季曆整點；半夜躲不開時，先後順序比避開半夜重要
+    （FB-564：天命之爭一定排在最後一場時刻表決戰之後），排在 before 之後最近的整點（碰到半夜，管理者那一行說）；連這個都放不下回 None。"""
+    scale, hour = content.config.time_scale, calendar.cal_hour_seconds(content, season)
+    low = max(before, season.time)
+    first = _hour_up(low, content, season)
+    if first <= low:
+        first += hour
+    t = first
+    while t < after:
+        local = _local(season, content, now, t)
+        hit = _quiet_hit(local, span, content)
+        if hit is None:
+            return t
+        t = max(_hour_up(t + (hit[1] - local) * scale, content, season), t + hour)
+    return first if first < after else None
 
 
 def _hour_up(time: float, content: Content, season: WorldState) -> float:
@@ -255,11 +306,18 @@ def quiet_notes(season: WorldState, content: Content, now: float) -> list[str]:
         return []
     notes = []
     for event in _quiet_pending(season, content):
-        local = _local(season, content, now, when_in(season, content, event))
+        at = when_in(season, content, event)
+        local = _local(season, content, now, at)
         span = showdown_span(content, event)
-        if span > 0 and _quiet_hit(local, span, content) is not None:
-            clock = f"{int(local % DAY // HOUR):02d}:{int(local % HOUR // 60):02d}"
-            notes.append(QUIET_KEPT.format(title=event.title, clock=clock))
+        floor = _mandate_floor(season, content, event)
+        clock = f"{int(local % DAY // HOUR):02d}:{int(local % HOUR // 60):02d}"
+        if floor is not None and span > 0 and at < floor:  # 還排在最後一場時刻表決戰收尾之前：後面放不下（FB-564）
+            notes.append(ORDER_KEPT.format(title=event.title, last=_last_showdown(content).title, clock=clock))
+        elif span > 0 and _quiet_hit(local, span, content) is not None:
+            if floor is not None and at - floor < calendar.cal_hour_seconds(content, season):  # 緊接在它收尾之後、只能排進半夜（FB-564）
+                notes.append(ORDER_KEPT.format(title=event.title, last=_last_showdown(content).title, clock=clock))
+            else:
+                notes.append(QUIET_KEPT.format(title=event.title, clock=clock))
     return notes
 
 
@@ -278,26 +336,41 @@ def when_in(season: WorldState, content: Content, event: TimetableEvent) -> floa
     return calendar.event_time(event, content, season)
 
 
+NEVER = math.inf  # happened_at：這件大事沒有發生（管理者取消的決戰），輿圖不列
+
+
 def happened_at(season: WorldState, content: Content, event: TimetableEvent) -> float:
-    """輿圖「這一段大事」「天下怎麼變」把這件大事當成發生了的世界秒（FB-561、FB-562）：照排定的時刻（when_in）；
-    例外是決戰提早開了或收場了——管理者「立刻開戰」記在 showdowns_opened、收場記在 timeline——不等排定的時刻，開了那一刻就算發生了：
-    收場了取排定的時刻與收場那一刻較早的，開了還沒收場取排定的時刻與此刻較早的（沒有另記開的那一刻；開打的幾分鐘裡跨週，
-    才會跟著此刻換到新的一週）。其他大事（含季末、時間到了才結算的）一律是排定的時刻，跟 when_in 逐刻一樣。"""
+    """輿圖「這一段大事」「天下怎麼變」把這件大事當成發生了的世界秒（FB-561、FB-562、FB-563）：照排定的時刻（when_in）；
+    例外是決戰提早開了——管理者「立刻開戰」記在 showdowns_opened，開的那一刻記在 showdown_opened_at——不等排定的時刻，
+    開了那一刻就算發生了：取排定的時刻與開的那一刻較早的，之後收場了、過了週界也照開的那一刻歸週，不跟著收場或此刻換週。
+    開打後被管理者取消、沒有結果的（showdowns_cancelled）沒有發生，回 NEVER（之後管理者「定結果」了，照有結果的寫法：取排定的時刻
+    與定結果那一刻較早的）。舊存檔沒記開的那一刻的：收場了取排定的時刻與收場那一刻較早的，開了還沒收場取排定的時刻與此刻較早的。
+    其他大事（含季末、時間到了才結算的）一律是排定的時刻，跟 when_in 逐刻一樣。"""
     at = when_in(season, content, event)
     if event.kind != "showdown":
         return at
     done = season.timeline.get(event.id)
+    cancelled = event.id in season.showdowns_cancelled
+    opened = None if cancelled else season.showdown_opened_at.get(event.id)
+    if opened is not None and opened < at - calendar.EPS_SECONDS:  # 自然開的（時間到了才開）不早於排定的時刻，只差浮點誤差的不算提早
+        return opened
     if done is not None:
-        return min(at, done.time)
+        return at if opened is not None else min(at, done.time)
+    if cancelled:
+        return NEVER
+    if opened is not None:
+        return at
     return min(at, season.time) if event.id in season.showdowns_opened else at
 
 
 def happened_week(season: WorldState, content: Content, event: TimetableEvent) -> int:
     """輿圖把這件大事歸在第幾週（7 天季是第幾段）：決戰與季末照實際排定的時刻落在季曆的哪一週（FB-562：被「避開半夜」或管理者挪到
-    別週的，不再照時刻表原本寫的那一週）；其他大事照時刻表寫的週次。"""
+    別週的，不再照時刻表原本寫的那一週），提早開的決戰照開的那一刻（FB-563）；其他大事照時刻表寫的週次。沒有發生的（取消的）
+    不列，歸哪一週都一樣，回時刻表寫的週次。"""
     if event.kind not in NOT_BY_SEASON_HOUR:
         return event.week
-    return calendar.point(happened_at(season, content, event), content, season).week
+    at = happened_at(season, content, event)
+    return event.week if at == NEVER else calendar.point(at, content, season).week
 
 
 def _pending(state: GameState, content: Content) -> list[TimetableEvent]:
