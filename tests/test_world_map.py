@@ -158,6 +158,57 @@ def test_world_geometry_is_cached_by_content():
     assert game.map_base()["world"]["cells"] is _game().map_base()["world"]["cells"]  # 同一份內容（另一局）不再算一次
 
 
+FLIP_KEYS = {"tug", "melee", "cool"}
+
+
+def flipping(game):
+    """造兩塊正在翻、一塊激戰、一塊剛易手（領地爭奪開著的一局）：汝南荒野（兩邊開季都碰得到的中立地）官軍推 60、黃巾推 25；
+    潁川郊野（官軍的）黃巾推 30；荒丘官軍推滿（易手給官軍、冷卻）；汝南（黃巾的）官軍、黃巾這一刻各出陣過一次（激戰）。"""
+    w, c = game.state.world, game.content
+    conquest.push(w, c, "runan_wilds", "guan", "甲", 60, "attack")
+    conquest.push(w, c, "runan_wilds", "huang", "乙", 25, "attack")
+    conquest.push(w, c, "yingchuan_wilds", "huang", "丙", 30, "attack")
+    conquest.push(w, c, "hilltop_wilds", "guan", "丁", 100, "attack")
+    conquest.mark(w, c, "runan", "戊", "guan", "attack", 5)
+    conquest.mark(w, c, "runan", "己", "huang", "hold", 5)
+    return game
+
+
+def test_flip_marks_are_the_conquest_card_under_the_map_names():
+    """收尾（計畫 1.3、收尾）：天下圖的 tug／melee／cool 不另寫判斷，照翻地那一份畫面資料（conquest.block_view，main_view 的
+    conquest.blocks）換名字——tug＝bars 寫出來不是 0 的、melee＝clash、cool＝cooling（沒在冷卻是 None）。每一塊都一樣。"""
+    game = flipping(conquest_game("weekend"))
+    st, blocks = game.map_state(), game.conquest_view()["blocks"]
+    shown = [x for x in blocks if x in st["places"]]
+    assert shown
+    for loc_id in shown:
+        p, row = st["places"][loc_id], blocks[loc_id]
+        assert p["tug"] == ({b["side"]: b["value"] for b in row["bars"] if b["value"] > 0} or None), loc_id
+        assert p["melee"] is row["clash"] and p["cool"] == (row["cooling"] or None), loc_id
+    places = st["places"]
+    assert places["runan_wilds"]["tug"] == {"guan": 60, "huang": 25} and places["yingchuan_wilds"]["tug"] == {"huang": 30}
+    assert places["hilltop_wilds"]["control"] == "guan" and places["hilltop_wilds"]["tug"] is None
+    assert places["hilltop_wilds"]["cool"] == conquest.cooling_minutes(game.state.world, game.content, "hilltop_wilds") >= 1
+    assert [x for x in shown if places[x]["melee"]] == ["runan"]
+    assert [x for x in shown if places[x]["cool"]] == ["hilltop_wilds"]
+    assert not FLIP_KEYS & set(places["cao_manor"])  # 不是區塊的地點沒有這三個鍵
+
+
+def test_flip_marks_cool_off_when_the_cooldown_ends():
+    game = flipping(conquest_game("weekend"))
+    w, c = game.state.world, game.content
+    w.time += conquest.cooling_left(w, c, "hilltop_wilds") + 1
+    assert game.map_state()["places"]["hilltop_wilds"]["cool"] is None
+
+
+@pytest.mark.parametrize("profile", ["weekend", None, "season21"])
+def test_no_flip_marks_when_conquest_is_off(profile):
+    """領地爭奪關著的季（週末、14 天、21 天）：疊層沒有 tug／melee／cool 這三個鍵（網頁就不畫；疊層跟 90e52e9b 一樣）。"""
+    game = _game(profile=profile)
+    assert not conquest.on(game.content, game.state.world)
+    assert not any(FLIP_KEYS & set(p) for p in game.map_state()["places"].values())
+
+
 def test_a_scenario_without_blocks_seeds_every_open_place():
     """劇本沒寫區塊表：開放的地點全部分地面（序章專屬的不算）。"""
     c = real_content("weekend")

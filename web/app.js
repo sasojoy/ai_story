@@ -5084,6 +5084,7 @@
   // 打開輿圖第一眼。不另開一張圖：同一張底圖（山水已經烤成點陣）換一個固定的取景（worldFit：取景框整張放進地圖框露出來的那一塊），
   // 不拖、不縮；記號那一層（#mk、#mkt）畫大區地面——每一區（程式裡叫「州」）的地面照「離哪個地點最近」分給那個地點此刻的控制方
   // （底圖的 world.cells，照那一區的輪廓裁），一方一色、沒人佔一色（顏色照劇本，sideInk）——、正在翻（攻方的斜紋照進度泛進來）、
+  // 剛易手還在冷卻（新主人的淡色、一圈虛線）、
   // 紅線（任兩方的地面相接；真實地形的大區互不相接，前線都在同一區裡）、細墨線（有主與沒人佔相接）、激戰（那一格一圈紅光閃）、
   // 大區的輪廓、金點（高級資源地：實心＝有人佔）、大區名與各方幾處、你。點一區進那一區（enterRegion：第 4 批之前是現在這張可縮放的
   // 地圖、取景對準那一區的地點）。字待 joy 潤
@@ -5104,8 +5105,11 @@
     return out.sort((a, z) => Math.hypot(2 * a[0], a[1]) - Math.hypot(2 * z[0], z[1]) || a[1] - z[1] || a[0] - z[0]);
   }
   // 正在翻（設計 4.1）：攻方的斜紋照進度泛進那一格，進度 100 時多濃（底下守方的地面照樣看得到）；斜紋的間距與線寬照螢幕（px）。
-  // 資料是疊層的 places[id].tug（{攻方: 進度}，翻地規則那一批 dev/flip-1 補），沒有就不畫
+  // 資料是疊層的 places[id].tug（{攻方: 進度}，mapdata.flip_marks 照翻地那一份 conquest.block_view 的 bars 換的名字），沒有就不畫
   const WORLD_TUG_MAX = 0.75, WORLD_TUG_GAP = 5, WORLD_TUG_LINE = 2.2;
+  // 剛易手、還在冷卻（疊層的 places[id].cool：還要幾分鐘；設計 4.1 兩邊都推不動、加成暫停）【開發定】：地面換成新主人那一方的淡色（tint）、
+  // 那一格一圈新主人顏色的虛線（還沒站穩），不閃。虛線的長短照螢幕（px）
+  const WORLD_COOL_DASH = 4, WORLD_COOL_GAP = 3, WORLD_COOL_LINE = 1.4;
   const f2 = (n) => Math.round(n * 100) / 100;
   // 估一段字在螢幕上多寬（px）：中日韓的字一個字寬、數字與英文約六成、空白約三成
   function textW(text, px) {
@@ -5187,11 +5191,13 @@
   // （同 marksParts：會跳的圈與你畫在上面那一張 #mkt）
   function worldParts(base, st, o) {
     const wd = base.world, k = o.k, ctrl = controlAt(st, o.week), pos = Object.fromEntries(base.places.map((p) => [p.id, p]));
-    const ground = (id) => (ctrl[id] ? sideInk(ctrl[id]).soft : wd.unheld);
-    // 正在翻、激戰是「此刻」的事：版圖變化看以前的週時不畫
+    // 正在翻、激戰、冷卻是「此刻」的事：版圖變化看以前的週時不畫
     const live = o.week === st.now_week;
+    const cooling = (id) => live && !!ctrl[id] && !!(st.places[id] && st.places[id].cool);
+    const ground = (id) => (ctrl[id] ? sideInk(ctrl[id])[cooling(id) ? "tint" : "soft"] : wd.unheld);
     const tugs = live ? wd.cells.map((c) => [c, tugOf(st, c.id, ctrl[c.id] || null)]).filter(([, t]) => t) : [];
     const melee = live ? wd.cells.filter((c) => st.places[c.id] && st.places[c.id].melee) : [];
+    const cools = wd.cells.filter((c) => cooling(c.id));
     const patterns = [...new Set(tugs.map(([, t]) => t.side))].map((sd) => tugPattern(sd, k)).join("");
     const out = [`<defs>${wd.regions.map((r) => `<clipPath id="wc-${esc(r.id)}"><path d="${r.d}"/></clipPath>`).join("")}${patterns}</defs>`];
     // 地面：整區先塗沒人佔（一區沒有分地面的地點就是一整片沒人佔），再一格一格塗誰佔著，照那一區的輪廓裁
@@ -5208,6 +5214,8 @@
       if (mine.length) out.push(`<g clip-path="url(#wc-${esc(r.id)})">${mine.map(([c, t]) => `<path class="w-tug" data-cell="${esc(c.id)}" d="${c.d}" fill="url(#wt-${esc(t.side)})" opacity="${f2((t.pct / 100) * WORLD_TUG_MAX)}" pointer-events="none"/>`).join("")}</g>`);
     }
     out.push(`<g class="w-outline" fill="none" stroke="${WORLD_INK}" stroke-width="${f1(1.4 * k)}" stroke-linejoin="round" pointer-events="none">${wd.regions.map((r) => `<path d="${r.d}"/>`).join("")}</g>`);
+    // 冷卻：那一格一圈新主人顏色的虛線（畫在紅線、細墨線底下：前線照樣看得清楚）
+    for (const c of cools) out.push(`<path class="w-cool" data-cell="${esc(c.id)}" d="${c.d}" fill="none" stroke="${sideInk(ctrl[c.id]).color}" stroke-width="${f1(WORLD_COOL_LINE * k)}" stroke-dasharray="${f1(WORLD_COOL_DASH * k)} ${f1(WORLD_COOL_GAP * k)}" stroke-linejoin="round" clip-path="url(#wc-${esc(c.region)})" pointer-events="none"/>`);
     // 邊：兩邊是不同的兩方＝紅線（前線）、一邊有主一邊沒人佔＝細墨線、同一方或都沒人＝不畫（同一區裡的邊照那一區的輪廓裁）
     const front = [], rim = [];
     for (const e of wd.edges) {

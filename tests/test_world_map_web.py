@@ -164,8 +164,9 @@ def test_a_region_with_nothing_to_count_has_no_second_line():
 
 
 # 地圖框的大小（寬 × 高）：實機量的（2026-10-21，world3.localhost 預覽、狀態列底下多一行心得提示時最矮）：375×812 → 375×624、
-# 375×667 → 375×479、360×640 → 360×452、320×568 → 320×344（320 寬的狀態列折成好幾行，天下圖只剩約 0.17 倍）
-SIZES = [(375, 624), (375, 479), (360, 452), (320, 344)]
+# 375×667 → 375×479、360×640 → 360×452、320×568 → 320×344（320 寬的狀態列折成好幾行，天下圖只剩約 0.17 倍）。收尾那一次
+# （2026-10-21，world3b.localhost、翻地合進來之後）360×640 量到 360×436（狀態列折幾行跟著那一刻的字長短變），一起守
+SIZES = [(375, 624), (375, 479), (360, 452), (360, 436), (320, 344)]
 FIT = """
 const wd = H.S.mapBase.world, v = H.worldFit({vw}, {vh}, wd.frame, 54, 58, {W}, {H});
 const labels = H.worldLabels(H.S.mapBase, H.S.mapState, H.controlAt(H.S.mapState, H.S.mapState.now_week), 1 / v.s);
@@ -328,6 +329,40 @@ def test_tug_and_melee_draw_only_with_data():
     assert re.search(r'<pattern id="wt-huang"[^>]*>.*?stroke="#B9821A"', low2)  # 斜紋的顏色照劇本（黃巾的 color）
     assert re.search(r'<g clip-path="url\(#wc-yingru\)"><path class="w-tug"', low2)
     assert len(re.findall(r'class="w-melee" data-cell="changshe"', low2)) == 1 and "w-melee" not in low
+
+
+def test_real_flip_data_draws_tug_melee_and_cooling():
+    """收尾：翻地那一份資料真的接上了（mapdata.flip_marks 照 conquest.block_view 換名字）——兩塊正在翻照進度最高的那一方上斜紋、
+    激戰那一格一圈紅、剛易手的那一格【開發定】換成新主人的淡色（tint）＋一圈新主人顏色的虛線，不閃。版圖變化看以前的週都不畫。"""
+    from test_world_map import flipping
+
+    game = flipping(_game())
+    world = game.map_base()["world"]
+    ink = {s["id"]: s for s in world["sides"]}
+    low, _ = parts(game)
+    tug = re.findall(r'<path class="w-tug" data-cell="([a-z_]+)" d="[^"]+" fill="url\(#wt-([a-z]+)\)" opacity="([\d.]+)"', low)
+    tug_max = float(re.search(r"WORLD_TUG_MAX = ([\d.]+)", APP.read_text(encoding="utf-8")).group(1))
+    assert sorted((a, b) for a, b, _ in tug) == [("runan_wilds", "guan"), ("yingchuan_wilds", "huang")]
+    assert {a: float(v) for a, _, v in tug} == pytest.approx({"runan_wilds": 0.6 * tug_max, "yingchuan_wilds": 0.3 * tug_max}, abs=0.01)
+    assert re.findall(r'class="w-melee" data-cell="([a-z_]+)"', low) == ["runan"]
+    cool = re.findall(r'<path class="w-cool" data-cell="([a-z_]+)" d="[^"]+" fill="none" stroke="([^"]+)"[^>]*stroke-dasharray="[\d.]+ [\d.]+"', low)
+    assert cool == [("hilltop_wilds", ink["guan"]["color"])]
+    assert re.search(rf'data-cell="hilltop_wilds" d="[^"]+" fill="{ink["guan"]["tint"]}"', low)  # 地面是官軍的淡色，不是 soft
+    assert re.search(rf'data-cell="yingchuan_wilds" d="[^"]+" fill="{ink["guan"]["soft"]}"', low)  # 正在被翻的照守方的地面
+    css = re.sub(r"/\*.*?\*/", "", CSS.read_text(encoding="utf-8"), flags=re.S)
+    assert ".w-cool" not in css  # 冷卻不閃
+    # 前線照樣畫在冷卻的虛線上面
+    assert low.index('class="w-cool"') < low.index('class="w-front"')
+    st = {**game.map_state(), "now_week": 2}  # 當成第 2 週在看第 1 週的版圖
+    old, _ = parts(game, "{ k: 2.5, week: 1, tl: true, sel: null }", st=st)
+    assert "data-cell=" in old and "w-tug" not in old and "w-melee" not in old and "w-cool" not in old
+
+
+def test_conquest_off_draws_no_tug_melee_or_cooling():
+    """領地爭奪關著的季：疊層沒有那三個鍵，天下圖一筆都不畫（舊拔河照控制方上色）。"""
+    game = _game(conquest=False)
+    low, _ = parts(game)
+    assert "w-tug" not in low and "w-melee" not in low and "w-cool" not in low and "<pattern" not in low
 
 
 def test_melee_blinks_but_not_for_reduced_motion():

@@ -365,6 +365,17 @@ def _flips(world: WorldState, loc_id: str, now_week: int) -> list[dict]:
     return out
 
 
+def flip_marks(world: WorldState, content: Content, loc_id: str) -> dict:
+    """天下圖的「正在翻」「激戰」「冷卻」（輿圖簡化設計 4.1、4.3；計畫 docs/superpowers/plans/2026-10-20-輿圖v3-天下圖.md 1.3、收尾）：
+    不另寫判斷，照翻地那一份畫面資料（conquest.block_view，server 的 main_view["conquest"]["blocks"] 同一個函式、同一個四捨五入）
+    換成天下圖讀的名字——tug＝bars（{攻方: 進度 0～100}，只列寫出來不是 0 的；沒有是 None）、melee＝clash、cool＝cooling
+    （剛易手還要幾分鐘；沒在冷卻是 None）。看的人是誰不影響這三樣（side 給 None，不算攻守推不推得動）。呼叫端只在領地爭奪開著、
+    這一處是區塊時叫。"""
+    row = conquest.block_view(world, content, loc_id, None)
+    tug = {line["side"]: line["value"] for line in row["bars"] if line["value"] > 0}
+    return {"tug": tug or None, "melee": bool(row["clash"]), "cool": row["cooling"] or None}
+
+
 def state(
     state: GameState, content: Content, *, odds: Callable[..., str], sortie_mode: Callable[[str], str | None],
     sorties_left: int | None, real_minutes: Callable[[float], int],
@@ -376,7 +387,7 @@ def state(
     {"key", "now_week", "weeks_total", "season_one", "territory", "faction", "sides", "here", "stamina", "sorties_left",
      "journey": None | {"to","to_name","minutes","next_name","x","y"}, "travel_block": None | {"reason","to_jianghu"},
      "places": {地點: {"control","kind","odds","sortie","armed","minutes","stamina","order","bounty","goal","news","people","services",
-                       "price","squads","danger","flips","rich"}},
+                       "price","squads","danger","flips","rich"} ＋ 領地爭奪開著時區塊多 "tug","melee","cool"（flip_marks）},
      "ropes": [{"id","name","value","delta","beads": [{"id","threshold","control"}],"low","high"}], "geju", "geju_side", "events",
      "suggest": [{"id","sortie","why": [[字, 種類]],"minutes","score","lose"}], "chart": [{"name","spots"}],
      "weeks": [{"week","control","ropes","geju","events","changed"}], "start": None | {地點: 開季那一刻的控制方}}"""
@@ -405,6 +416,7 @@ def state(
     base_ids = territory.bases(c) if on else {}
     fixed = c.scenario.territory.fixed if on else {}
     conquest_on = conquest.on(c, w)
+    blocks = conquest.blocks(c) if conquest_on else {}
     places = {}
     for loc_id in shown:
         loc = c.locations[loc_id]
@@ -431,9 +443,9 @@ def state(
             "danger": loc.danger, "flips": _flips(w, loc_id, now_week) if on else [],
             # 高級資源地（天下圖的金點，輿圖簡化設計 5.1）：開季中立的區塊，不管此刻誰佔著；領地爭奪關著的季照內容的區塊表
             "rich": conquest.start_kind(w, c, loc_id) == conquest.NEUTRAL,
-            # 「正在翻」「激戰」（設計 4.1、4.3）由翻地規則那一批（dev/flip-1）在這裡補 tug（{攻方: 進度 0～100}）、melee（bool）、
-            # cool（剛易手還要幾分鐘）；網頁（worldParts）沒有這幾個鍵就不畫。計畫 docs/superpowers/plans/2026-10-20-輿圖v3-天下圖.md 1.3
         }
+        if conquest_on and loc_id in blocks:  # 「正在翻」「激戰」「冷卻」：領地爭奪關著的季沒有這三個鍵（網頁就不畫）
+            places[loc_id].update(flip_marks(w, c, loc_id))
     suggest = []
     for loc_id, info in places.items():
         if info["sortie"] is None:
