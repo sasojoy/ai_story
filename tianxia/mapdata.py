@@ -81,7 +81,7 @@ def base(state: GameState, content: Content) -> dict:
 
 def _order_marks(state: GameState, content: Content, faction: str | None) -> dict[str, str]:
     """你這一週還沒達成的軍令在哪裡記功（地點 → 軍令名）；守城只標自家地盤上的戰線地點（不然整條戰線都掛牌）。領地爭奪開著時守城只標
-    自家今天被公告要攻的那一塊（orders.defend_places，跟記功、卡上寫的同一個判斷；裁決 24、FB-565），今天沒有就不標。"""
+    自家被對面推得最高、守得動的那幾塊（orders.defend_places，跟記功、卡上寫的同一個判斷；裁決 24、FB-565，翻地與爭搶），沒有就不標。"""
     if faction is None or not orders.active(state, content):
         return {}
     w, marks = state.world, {}
@@ -92,7 +92,7 @@ def _order_marks(state: GameState, content: Content, faction: str | None) -> dic
         if o.template == "siege" and o.front is not None:
             spots = list(orders.siege_places(content, o.faction, o.front, w))
         elif o.template == "defend" and o.front is not None and conquest.on(content, w):
-            spots = orders.defend_places(content, w, o)  # 領地爭奪：自家今天被公告的那一塊（裁決 24、FB-565：列與記同一個判斷）
+            spots = orders.defend_places(content, w, o)  # 領地爭奪：自家被推得最高的那一塊（裁決 24、FB-565：列與記同一個判斷）
         elif o.template == "defend" and o.front is not None:
             spots = [loc for loc in content.locations if rules.front_of(content, loc) == o.front
                      and territory.line_of(content, loc) and territory.controller(w, content, loc) == faction]

@@ -4,7 +4,8 @@
 關著的季（週末、14 天、21 天）一個字都不變。
 翻地與爭搶（PM 2026-10-20 第 1 條）之後「被公告要攻的那一塊」換成「自家被推得最高、守得動的那一塊」（conquest.focus_blocks）：
 前提從 announce（排進時程表，翻地之後等於那一塊被戰書凍結、守不動）改成對面在那裡推了一截（conquest_kit.press），斷言不動；
-「打完、作罷就不算」換成「對面的進度被拉回零就不算」。"""
+「打完、作罷就不算」換成「對面的進度被拉回零就不算」。卡上的字照翻地改（dev/flip-1 收尾）：「今天沒有…被公告要攻」換成「此刻沒有對面在推…」，
+「被公告要攻的自家地方」換成「對面推得最高的幾處自家地方」（test_the_card_never_talks_about_announcements）。"""
 from __future__ import annotations
 
 import pytest
@@ -58,8 +59,8 @@ def test_no_block_announced_the_card_says_so_and_the_map_marks_nothing():
     order = _defend(game)
     assert _agree(game, order) == set()  # 修前輿圖標長社（自家大本營，記不到）
     text = atlas.order_how(game.state, game.content, order)
-    assert text == atlas.DEFEND_NONE_CONQUEST.format(front=atlas.trend_name(game.content, "yingru"), hour=game.content.config.conquest.settle_hour)
-    assert "今天沒有" in text and "自家的地盤出陣" not in text  # 修前寫「在潁川汝南一帶自家的地盤出陣守一回…做一次記一次」
+    assert text == atlas.DEFEND_NONE_CONQUEST.format(front=atlas.trend_name(game.content, "yingru"))
+    assert "此刻沒有" in text and "自家的地盤出陣" not in text  # 修前寫「在潁川汝南一帶自家的地盤出陣守一回…做一次記一次」
 
 
 def test_one_announced_block_is_named_and_marked():
@@ -68,7 +69,7 @@ def test_one_announced_block_is_named_and_marked():
     press(game, "yingchuan_wilds", "huang")
     assert _agree(game, order) == {"yingchuan_wilds"}
     text = atlas.order_how(game.state, game.content, order)
-    assert "潁川郊野" in text and "做一次記一次" in text and "今天沒有" not in text
+    assert "潁川郊野" in text and "做一次記一次" in text and "此刻沒有" not in text
     assert "巡哨" in text and "出陣" in text
     assert mapdata._order_marks(game.state, game.content, "guan")["yingchuan_wilds"] == "守城"
 
@@ -92,7 +93,7 @@ def test_many_announced_blocks_say_the_area():
     text = atlas.order_how(game.state, game.content, order)
     assert text == atlas.DEFEND_AREA_CONQUEST.format(
         front=atlas.trend_name(game.content, "yingru"), act=atlas.DEFEND_ACT_SORTIE.format(duty="巡哨"))
-    assert "被公告要攻" in text
+    assert "對面推得最高" in text
 
 
 def test_a_siege_that_is_over_or_called_off_no_longer_counts():
@@ -102,7 +103,7 @@ def test_a_siege_that_is_over_or_called_off_no_longer_counts():
     assert _agree(game, order) == {"yingchuan_wilds"}
     conquest.push(game.state.world, game.content, "yingchuan_wilds", "guan", "守將", 100, "hold")  # 拉回零
     assert _agree(game, order) == set()
-    assert "今天沒有" in atlas.order_how(game.state, game.content, order)
+    assert "此刻沒有" in atlas.order_how(game.state, game.content, order)
 
 
 def test_a_block_my_own_side_is_attacking_is_not_one_to_defend():
@@ -133,6 +134,22 @@ def test_every_location_agrees_between_card_map_credit_and_bots():
     assert "changshe" not in _agree(game, order)  # 自家大本營搶不下來，從來不會被公告，也從來不在守城的地點裡
 
 
+def test_the_card_never_talks_about_announcements():
+    """翻地與爭搶（dev/flip-1 收尾）：投票與每天 22:00 的公告拿掉了，守城卡上不能再寫「被公告要攻」「每天 22:00 公告下一天的」——
+    照翻地寫：對面此刻在推的自家地方，沒有就說此刻沒有對面在推的自家地方。"""
+    game = _game()
+    order = _defend(game)
+    texts = [atlas.order_how(game.state, game.content, order)]  # 沒人在推
+    for loc in GUAN_BLOCKS[:3]:
+        press(game, loc, "huang")
+        texts.append(atlas.order_how(game.state, game.content, order))  # 一處、兩處（寫地名）、三處（寫一帶）
+    for text in texts:
+        assert "公告" not in text and "今天" not in text, text  # 修前「今天沒有自家的地方被公告要攻…每天 22:00 公告下一天的」
+    assert texts[0] == atlas.DEFEND_NONE_CONQUEST.format(front=atlas.trend_name(game.content, "yingru"))
+    assert texts[-1] == atlas.DEFEND_AREA_CONQUEST.format(
+        front=atlas.trend_name(game.content, "yingru"), act=atlas.DEFEND_ACT_SORTIE.format(duty="巡哨"))
+
+
 @pytest.mark.parametrize("profile", ["weekend", None, "season21"])  # 一個測試只開一季
 def test_switch_off_the_defend_card_is_the_old_sentence(profile):
     """領地爭奪關著：卡上照舊那一句、輿圖照舊標自家控制的戰線地點（舊規則整條線都記，不問哪一塊被公告）。"""
@@ -142,5 +159,5 @@ def test_switch_off_the_defend_card_is_the_old_sentence(profile):
     c, w = game.content, game.state.world
     assert orders.defend_places(c, w, order) == []  # 新函式只在領地爭奪生效時有東西
     text = atlas.order_how(game.state, c, order)
-    assert "今天沒有" not in text and "被公告" not in text
+    assert "今天沒有" not in text and "被公告" not in text and "此刻沒有" not in text and "對面推得最高" not in text
     assert text.startswith("在潁川汝南一帶") and "巡哨" in text
