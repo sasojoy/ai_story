@@ -296,3 +296,57 @@ def test_real_view_renders():
     out = page(view, m={"xingshi": True})
     assert "天下形勢・第 1 篇" in out["page"] and "是日：" in out["page"]
     assert server.main_view(game).get("xingshi") is True
+
+
+# ── FB-578：形勢頁開著時，新的一篇與「還在落筆」要自己換上 ──
+
+REFRESH = r"""
+const S = { tab: input.tab, news: input.news, main: input.now };
+const calls = [];
+const H = new Function("S", "calls", [
+  "const shopPolled = () => false;",
+  "const pageKey = (m) => JSON.stringify(m.page || '');",
+  "let pointerHeld = false, redrawHeld = false;",
+  "const renderPage = () => calls.push('renderPage');",
+  "const paintSealWhen = () => calls.push('paintSealWhen');",
+  "const redrawPage = () => calls.push('redrawPage');",
+  "const loadXingshi = async () => { calls.push('loadXingshi'); };",
+  fn("refreshPage"),
+  "return { refreshPage };",
+].join("\n"))(S, calls);
+H.refreshPage(input.old).then(() => finish(calls));
+"""
+
+
+def _refresh(old: dict, now: dict, news: str = "xingshi", tab: str = "news") -> list[str]:
+    return webharness.run(REFRESH, {"old": old, "now": now, "news": news, "tab": tab})
+
+
+def test_fb578_open_page_reloads_when_the_marker_moves():
+    """輪詢拿到的 main 裡 xingshi_mark（最新一篇的篇次＋有沒有一張還在寫）變了，停在見聞「形勢」的頁面就重抓 /api/xingshi。
+    修前輪詢不碰它：管理者開了一篇、伺服器一秒內寫好，那一頁等了 25 秒還是舊的，「史官還在落筆」也不會自己換成文章。"""
+    assert _refresh({"xingshi_mark": "6"}, {"xingshi_mark": "6+"}) == ["loadXingshi"]  # 開了一張新單：換上「還在落筆」
+    assert _refresh({"xingshi_mark": "6+"}, {"xingshi_mark": "7"}) == ["loadXingshi"]  # 寫好了：換上第 7 篇
+    assert _refresh({"xingshi_mark": "7"}, {"xingshi_mark": "7"}) == []  # 沒變：不重抓、不重畫
+    assert _refresh({"xingshi_mark": "6"}, {"xingshi_mark": "7"}, news="rumors") == []  # 別的子分頁不抓（那幾欄沒變也不重畫）
+
+
+@pytest.mark.slow
+def test_fb578_main_view_carries_the_marker():
+    """main_view 的 xingshi_mark：收下的最新一篇的篇次，有一張還在寫就多一個「+」。關著的季沒有這個鍵（一個位元組都不變）。"""
+    import calendar as pycal
+    from datetime import datetime
+
+    def tw(h, mi=0, d=20):
+        return float(pycal.timegm(datetime(2026, 10, d, h, mi).timetuple())) - 8 * 3600
+
+    game = join(conquest_game("season21", xingshi=True), "huang")
+    marks = []
+    for now in (tw(10), tw(22, 1), tw(22, 20)):  # 起點、開單、過了寬限照固定段收
+        game.now = now
+        game._conquest_tick()
+        game.state.world = game.world.get_season()
+        marks.append(server.main_view(game)["xingshi_mark"])
+    assert marks == ["0", "0+", "1"]
+    off = join(conquest_game("season21"), "huang")  # 〈天下形勢〉關著
+    assert "xingshi_mark" not in server.main_view(off) and "xingshi" not in server.main_view(off)

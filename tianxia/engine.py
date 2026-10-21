@@ -10078,6 +10078,13 @@ class Game:
                   for e in reversed(w.xingshi)]
         return {"on": True, "pending": w.xingshi_ticket is not None, "essays": essays}
 
+    def xingshi_mark(self) -> str:
+        """見聞「形勢」頁要不要重抓（FB-578；server.main_view 的 xingshi_mark）：收下的最新一篇的篇次，有一張還在寫就多一個「+」。
+        開了新單、寫好了都會變，網頁停在那一頁時看到它變了就重抓 /api/xingshi。只讀。"""
+        w = self.state.world
+        latest = max((e.n for e in w.xingshi), default=0)
+        return f"{latest}{'+' if w.xingshi_ticket is not None else ''}"
+
     def admin_xingshi_now(self) -> list[str]:
         """管理者（測試與試玩用）：現在就開一篇〈天下形勢〉——照上一篇以來的事實開一張單，效果跟每天結算那一下一樣（還在等的那一張先照
         固定段收）。伺服器照常在背景請模型寫，寫不出來照固定段。"""

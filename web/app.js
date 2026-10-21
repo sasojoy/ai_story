@@ -7366,6 +7366,11 @@
       return;
     }
     if (tab === "news") {
+      // 形勢子分頁畫的是 S.xingshi（/api/xingshi）：開了新單、寫好了（main.xingshi_mark 變了）就重抓（FB-578：以前要切籤才換上）
+      if (S.news === "xingshi") {
+        if (old.xingshi_mark !== S.main.xingshi_mark) await loadXingshi();
+        return;
+      }
       // 戰報子分頁畫的是 S.reports，不用重抓；其他子分頁只在它畫的那幾欄真的變了才重畫
       const fields = { trends: ["trends"], rumors: ["rumors", "rumor_layers"], chronicle: ["chronicle"], journal: ["latest", "journal", "older"] }[S.news] || [];
       // rumor_layers 是陣列（每次輪詢都是新的物件）：比內容不比參照，沒變就不重畫

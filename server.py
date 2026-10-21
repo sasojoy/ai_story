@@ -1489,6 +1489,7 @@ def _main_view_body(game: Game) -> dict:
         view["siege"] = banner
     if xingshi.on(game.content, game.state.world):  # 〈天下形勢〉開著的季：見聞多一顆「形勢」（文章另外讀 /api/xingshi；關著沒有這個鍵）
         view["xingshi"] = True
+        view["xingshi_mark"] = game.xingshi_mark()  # FB-578：最新一篇的篇次＋有沒有一張還在寫；變了，停在「形勢」頁的網頁就重抓
     letter = game.letter_view()  # 書信（大勢人物擴充第二批）：江湖頁「剛剛」上面一張小卡；沒有沒看過的信就沒有這個鍵
     if letter is not None:
         view["letter"] = letter
