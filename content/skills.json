@@ -912,9 +912,21 @@
     "quality": "下品",
     "kind": "武學",
     "attribute": "快",
-    "affinity": ["快", "陽", "虛"],
+    "affinity": [
+      "快"
+    ],
     "desc": "江湖上流傳的輕身步法，講究腳下快。",
-    "weapon": "拳腳"
+    "weapon": "拳腳",
+    "tactic": {
+      "name": "疾風追影",
+      "timing": "乘勢",
+      "kind": "surge",
+      "rate": 0.22,
+      "params": {},
+      "desc": "追加一擊：這一回合連環。",
+      "say": "腳下一錯追了上去，這一回合連環",
+      "minor": true
+    }
   },
   {
     "id": "hunyuan",
@@ -984,7 +996,18 @@
     "kind": "內功",
     "attribute": "柔",
     "quality": "下品",
-    "desc": "人人入門先學的呼吸法，氣沉丹田，慢吸慢吐。"
+    "desc": "人人入門先學的呼吸法，氣沉丹田，慢吸慢吐。",
+    "tactic": {
+      "name": "吐故納新",
+      "timing": "心法",
+      "kind": "mend",
+      "params": {
+        "heal_pct": 0.02
+      },
+      "desc": "每回合開始回氣血 {heal_pct}。",
+      "say": "一吐一納，氣血一回合一回合慢慢回了過來",
+      "minor": true
+    }
   },
   {
     "id": "jichu_quanjiao",
@@ -993,7 +1016,18 @@
     "attribute": "實",
     "quality": "下品",
     "desc": "街頭巷尾都學得到的粗淺拳腳，紮實，但沒什麼變化。",
-    "weapon": "拳腳"
+    "weapon": "拳腳",
+    "tactic": {
+      "name": "穩紮穩打",
+      "timing": "心法",
+      "kind": "steady",
+      "params": {
+        "guard_pct": 0.25
+      },
+      "desc": "氣勢落後時，固守的推力 +{guard_pct}。",
+      "say": "落了下風也不慌，一拳一拳守得更紮實",
+      "minor": true
+    }
   },
   {
     "id": "xiangyong_gun",
@@ -1007,7 +1041,18 @@
       "silver": 10
     },
     "desc": "鄉勇在大桑樹下操練的棍法，一招一式穩紮穩打。",
-    "weapon": "棍"
+    "weapon": "棍",
+    "tactic": {
+      "name": "拄棍守村",
+      "timing": "應招",
+      "kind": "quake",
+      "params": {
+        "chance_pct": 0.15
+      },
+      "desc": "每次固守，有 {chance_pct} 的機會讓對手下一回合卸勁。",
+      "say": "棍頭往地上一頓，{foe}下一回合卸勁",
+      "minor": true
+    }
   },
   {
     "id": "ganshan_tui",
@@ -1021,7 +1066,18 @@
       "silver": 10
     },
     "desc": "獵戶翻山追獸練出來的腿腳，又快又遠。",
-    "weapon": "拳腳"
+    "weapon": "拳腳",
+    "tactic": {
+      "name": "搶山一腿",
+      "timing": "起手",
+      "kind": "vanguard",
+      "rate": 0.5,
+      "rounds": 1,
+      "params": {},
+      "desc": "搶先一腿：這一回合連環，推兩次。",
+      "say": "搶步一腿踢在前頭，這一回合連環",
+      "minor": true
+    }
   },
   {
     "id": "yujia_quan",
@@ -1035,7 +1091,19 @@
       "silver": 10
     },
     "desc": "潁水漁家在船頭隨浪起伏練出的拳路，順勢卸力。",
-    "weapon": "拳腳"
+    "weapon": "拳腳",
+    "tactic": {
+      "name": "順水推舟",
+      "timing": "應招",
+      "kind": "borrow",
+      "params": {
+        "chance_pct": 0.25,
+        "share_pct": 0.35
+      },
+      "desc": "挨強攻時有 {chance_pct} 的機會借力，把那一下的 {share_pct} 還回去。",
+      "say": "順著{foe}的來勢一帶，反手推了回去",
+      "minor": true
+    }
   },
   {
     "id": "dukou_duanda",
@@ -1049,7 +1117,17 @@
       "silver": 20
     },
     "desc": "運糧船上的船伕腳夫在擠滿人的船上纏鬥的貼身功夫，虛實難測。",
-    "weapon": "拳腳"
+    "weapon": "拳腳",
+    "tactic": {
+      "name": "隨波閃身",
+      "timing": "應招",
+      "kind": "elude",
+      "rate": 0.1,
+      "params": {},
+      "desc": "對手這一擊打空（推不動你、你不掉氣血）。",
+      "say": "腳下像踩著船板一晃，{foe}這一擊打空",
+      "minor": true
+    }
   },
   {
     "id": "youxia_jian",
@@ -1063,7 +1141,19 @@
       "silver": 20
     },
     "desc": "涿郡遊俠兒的劍法，大開大合，意氣風發。",
-    "weapon": "劍"
+    "weapon": "劍",
+    "tactic": {
+      "name": "意氣風發",
+      "timing": "心法",
+      "kind": "tiger",
+      "params": {
+        "stack_pct": 0.03,
+        "stacks": 5
+      },
+      "desc": "每打一回合推力 +{stack_pct}，最多 {stacks} 層；氣勢落後時一次疊兩層。",
+      "say": "越打越是意氣風發，劍勢疊到了頂",
+      "minor": true
+    }
   },
   {
     "id": "shouling_jinggong",
@@ -1076,7 +1166,20 @@
       "fame": 5,
       "silver": 20
     },
-    "desc": "守陵人在王侯陵墓間獨坐練成的靜功，氣息幽冷。"
+    "desc": "守陵人在王侯陵墓間獨坐練成的靜功，氣息幽冷。",
+    "tactic": {
+      "name": "萬籟俱寂",
+      "timing": "起手",
+      "kind": "veil",
+      "rate": 1.0,
+      "rounds": 3,
+      "params": {
+        "chance_pct": 0.13
+      },
+      "desc": "每回合 {chance_pct} 化影（那一回合不掉氣血）。",
+      "say": "心靜得像夜裡的陵園，氣息一斂，這一回合化影",
+      "minor": true
+    }
   },
   {
     "id": "chanzuo_tiaoxi",
@@ -1089,7 +1192,19 @@
       "fame": 10,
       "silver": 30
     },
-    "desc": "寺中僧人靜坐調息的法門，氣息悠長。"
+    "desc": "寺中僧人靜坐調息的法門，氣息悠長。",
+    "tactic": {
+      "name": "明心見性",
+      "timing": "出招",
+      "kind": "cleanse",
+      "rate": 0.22,
+      "params": {
+        "heal_pct": 0.06
+      },
+      "desc": "清掉自己身上的卸勁、亂神、定身、失神，回氣血 {heal_pct}。",
+      "say": "閉目調息，心神一清，回氣血 {heal_pct}",
+      "minor": true
+    }
   },
   {
     "id": "xingwu_dao",
@@ -1102,7 +1217,19 @@
       "faction": "guan"
     },
     "desc": "官軍營中操練的制式刀法，劈砍直截了當。",
-    "weapon": "刀"
+    "weapon": "刀",
+    "tactic": {
+      "name": "陷陣一刀",
+      "timing": "應招",
+      "kind": "assault",
+      "rate": 1.0,
+      "params": {
+        "push_pct": 0.16
+      },
+      "desc": "出強攻推力 +{push_pct}。",
+      "say": "照營裡操練的路數一刀劈下，強攻加重",
+      "minor": true
+    }
   },
   {
     "id": "xingwu_lianqi",
@@ -1114,7 +1241,18 @@
       "at": "wan_city",
       "faction": "guan"
     },
-    "desc": "軍中壯氣的法子，呼喝之間氣血翻湧。"
+    "desc": "軍中壯氣的法子，呼喝之間氣血翻湧。",
+    "tactic": {
+      "name": "同袍一心",
+      "timing": "心法",
+      "kind": "marshal",
+      "params": {
+        "per_pct": 0.03
+      },
+      "desc": "每帶一名部下，推力 +{per_pct}。",
+      "say": "同袍列陣在側，一口氣提了上來，推力加重",
+      "minor": true
+    }
   },
   {
     "id": "huangtian_dao",
@@ -1127,7 +1265,19 @@
       "faction": "huang"
     },
     "desc": "黃巾力士的刀法，刀刀搶攻，不留後路。",
-    "weapon": "刀"
+    "weapon": "刀",
+    "tactic": {
+      "name": "死戰不退",
+      "timing": "心法",
+      "kind": "bloodrage",
+      "params": {
+        "per_pct": 0.03,
+        "cap_pct": 0.2
+      },
+      "desc": "開打時每少一成氣血，推力 +{per_pct}，最多 +{cap_pct}。",
+      "say": "越是帶傷越是拚命，推力加重",
+      "minor": true
+    }
   },
   {
     "id": "fushui_zhang",
@@ -1140,7 +1290,19 @@
       "faction": "huang"
     },
     "desc": "太平道傳下的掌法，掌力陰寒，中者如飲冷水。",
-    "weapon": "拳腳"
+    "weapon": "拳腳",
+    "tactic": {
+      "name": "符水軟筋",
+      "timing": "乘勢",
+      "kind": "disarm",
+      "rate": 0.18,
+      "params": {
+        "turns": 1
+      },
+      "desc": "對手卸勁 {turns} 回合，出不了強攻。",
+      "say": "符水氣沾上身，{foe}手腳發軟，卸勁 {turns} 回合",
+      "minor": true
+    }
   },
   {
     "id": "taiping_daoyin",
@@ -1152,7 +1314,21 @@
       "at": "julu_altar",
       "faction": "huang"
     },
-    "desc": "太平道的導引術，氣走經絡，飄忽難捉摸。"
+    "desc": "太平道的導引術，氣走經絡，飄忽難捉摸。",
+    "tactic": {
+      "name": "雲氣迷濛",
+      "timing": "起手",
+      "kind": "fog",
+      "rate": 1.0,
+      "rounds": 1,
+      "params": {
+        "turns": 3,
+        "miss_pct": 0.15
+      },
+      "desc": "起霧 {turns} 回合：雙方出招 {miss_pct} 打空；你身法高過對手時只有對手會打空。",
+      "say": "導引的氣息化作一片薄霧，四下迷濛 {turns} 回合",
+      "minor": true
+    }
   },
   {
     "id": "wubao_zhuanggong",
@@ -1164,7 +1340,19 @@
       "at": "haozu_fort",
       "faction": "haoqiang"
     },
-    "desc": "部曲站樁練出的根基，雙腳如生了根。"
+    "desc": "部曲站樁練出的根基，雙腳如生了根。",
+    "tactic": {
+      "name": "築壘自守",
+      "timing": "心法",
+      "kind": "hold_city",
+      "params": {
+        "guard_pct": 0.15,
+        "share_pct": 0.15
+      },
+      "desc": "固守的推力 +{guard_pct}，附帶借力：對手強攻你，他吃自己那一下的 {share_pct}。",
+      "say": "樁步一沉，像塢堡的牆一樣立住",
+      "minor": true
+    }
   },
   {
     "id": "huyuan_quan",
@@ -1177,7 +1365,21 @@
       "sect": "cao_manor"
     },
     "desc": "曹家護院的拳法，守得住門，也打得退賊。",
-    "weapon": "拳腳"
+    "weapon": "拳腳",
+    "tactic": {
+      "name": "看家護院",
+      "timing": "起手",
+      "kind": "gatekeep",
+      "rate": 1.0,
+      "rounds": 2,
+      "params": {
+        "chance_pct": 0.25,
+        "turf_pct": 0.4
+      },
+      "desc": "對手 {chance_pct} 卸勁（在自家陣營的地盤 {turf_pct}）。",
+      "say": "守住門口寸步不讓，{foe}這一回合卸勁",
+      "minor": true
+    }
   },
   {
     "id": "shusheng_jian",
@@ -1190,7 +1392,19 @@
       "sect": "yingchuan_academy"
     },
     "desc": "書院士子佩劍防身的劍法，綿長而有禮。",
-    "weapon": "劍"
+    "weapon": "劍",
+    "tactic": {
+      "name": "溫故知新",
+      "timing": "心法",
+      "kind": "insight",
+      "params": {
+        "step_pct": 0.05,
+        "stacks": 3
+      },
+      "desc": "每被對手剋中一次就看懂一分，之後推力每次 +{step_pct}（最多 {stacks} 次）。",
+      "say": "挨了一記，把來路默記在心",
+      "minor": true
+    }
   },
   {
     "id": "manniu_quan",
@@ -1199,7 +1413,22 @@
     "attribute": "剛",
     "quality": "下品",
     "desc": "斷眉東拼西湊的拳路，全憑一身蠻力；譜上卻密密麻麻記滿了他挨打換來的心得。",
-    "weapon": "拳腳"
+    "weapon": "拳腳",
+    "tactic": {
+      "name": "蠻牛頂角",
+      "timing": "出招",
+      "kind": "heavy_blow",
+      "rate": 0.2,
+      "prep": 1,
+      "params": {
+        "mult": 1.45,
+        "turns": 1,
+        "lead_pct": 0.1
+      },
+      "desc": "蓄力一回合後猛衝（推力 ×{mult}），對手隨機卸勁或亂神 {turns} 回合；氣勢領先時發動率再 +{lead_pct}。",
+      "say": "低頭一頂撞了上去，這一下推力加重",
+      "minor": true
+    }
   },
   {
     "id": "shouyi_jian",
@@ -1217,7 +1446,21 @@
       }
     },
     "desc": "書院裡教給行俠之人的劍法，一招一式講究守住分寸。",
-    "weapon": "劍"
+    "weapon": "劍",
+    "tactic": {
+      "name": "守義不移",
+      "timing": "起手",
+      "kind": "opening_ward",
+      "rate": 1.0,
+      "rounds": 1,
+      "params": {
+        "turns": 1,
+        "reflect_pct": 0.2
+      },
+      "desc": "自己守一 {turns} 回合，不受卸勁、亂神、定身、失神；擋下的控制有 {reflect_pct} 反彈回施放者。",
+      "say": "義字當頭，心神守住 {turns} 回合",
+      "minor": true
+    }
   },
   {
     "id": "yanghao_jue",
@@ -1234,7 +1477,20 @@
         "tier": 2
       }
     },
-    "desc": "養氣於胸、行事無愧的內功。"
+    "desc": "養氣於胸、行事無愧的內功。",
+    "tactic": {
+      "name": "浩氣護身",
+      "timing": "起手",
+      "kind": "ward_all",
+      "rate": 0.6,
+      "rounds": 2,
+      "params": {
+        "per_ward_pct": 0.03
+      },
+      "desc": "自己與同伴守一（不受卸勁、亂神、定身、失神）；每擋下一次控制，推力 +{per_ward_pct}。",
+      "say": "浩氣一提，自己與同伴心神守住",
+      "minor": true
+    }
   },
   {
     "id": "jianjing_dao",
@@ -1252,7 +1508,19 @@
       }
     },
     "desc": "山寨裡攔路劫道的刀法，出手又快又狠。",
-    "weapon": "刀"
+    "weapon": "刀",
+    "tactic": {
+      "name": "月黑風高",
+      "timing": "出招",
+      "kind": "night_raid",
+      "rate": 0.15,
+      "params": {
+        "mult": 1.6
+      },
+      "desc": "這一回合出奇襲，推力 ×{mult}；夜裡必定發動。",
+      "say": "趁黑從暗處殺出，這一回合推力加重",
+      "minor": true
+    }
   },
   {
     "id": "xiaolin_gong",
@@ -1269,6 +1537,19 @@
         "tier": 2
       }
     },
-    "desc": "山寨頭目代代相傳的內功，一聲長嘯震得林子發顫。"
+    "desc": "山寨頭目代代相傳的內功，一聲長嘯震得林子發顫。",
+    "tactic": {
+      "name": "嘯聚山林",
+      "timing": "起手",
+      "kind": "awe",
+      "rate": 0.6,
+      "rounds": 2,
+      "params": {
+        "cut_pct": 0.15
+      },
+      "desc": "對手氣餒，這一回合推力 −{cut_pct}。",
+      "say": "林中一聲長嘯，{foe}心頭發毛，這一回合推力大減",
+      "minor": true
+    }
   }
 ]

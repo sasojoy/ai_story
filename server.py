@@ -733,9 +733,7 @@ def choose(game: Game, option_id: str) -> list[str] | None:
 NO_NAME: tuple[str | None, str] = (None, "")  # 開爐的 B 段沒取到名字（或不必取）：C 段直接走退路字表、不在鎖裡叫模型
 
 
-def prepare_forge(
-    game: Game, art_id: str | None, insight_ids: list[str], other_art: str | None = None,
-) -> tuple[str | None, str]:
+def prepare_forge(game: Game, art_id: str | None, insight_ids: list[str]) -> tuple[str | None, str]:
     """開爐的首次取名或挑選在行動鎖外（最終審查 Critical 1）。首次合出來的配方要等模型取名（合到舊的、候選兩個以上時是
     請模型從候選挑一個名字），以前整段包在行動鎖裡：
     一次最多叫三次、每次最多等 OllamaClient.timeout（120 秒），全服玩家與假人程式都得跟著等，試玩走的 trycloudflare
@@ -749,9 +747,8 @@ def prepare_forge(
     這裡做 A 與 B，回傳 B 的結果（名字, 說明）；不必叫模型時是 NO_NAME。假人程式（bot_runner._name_and_apply）不經過 HTTP，
     照樣走這三段：A 是 Game.forge_request(named_outside=True) 在 action_lock 裡，B 是它自己的 client 在鎖外叫 naming.generate
     （預算 Config.bot_naming_budget_seconds，一次一件、至少隔 bot_naming_gap_seconds），C 是 bot_policy.apply_job 再進鎖交給
-    Game.forge(proposed=...)；絕學定名也是同一條路（Game.mastery_request、Game.name_mastered）。
-    other_art 有、insight_ids 空的是武學＋武學。"""
-    started, request = _open_request(game, lambda: game.forge_request(art_id, insight_ids, other_art=other_art))
+    Game.forge(proposed=...)；絕學定名也是同一條路（Game.mastery_request、Game.name_mastered）。煉製只剩意境＋意境。"""
+    started, request = _open_request(game, lambda: game.forge_request(art_id, insight_ids))
     if request is None:
         return NO_NAME
     total = game.content.config.naming_budget_seconds
@@ -811,15 +808,15 @@ def screen_peer(game: Game, name: str, action: str, params: dict) -> str:
     return "" if got is None else screen_text(game, got[0], got[1])
 
 
-def forge(game: Game, art_id: str | None, insight_ids: list[str], other_art: str | None = None) -> list[str] | None:
+def forge(game: Game, art_id: str | None, insight_ids: list[str]) -> list[str] | None:
     """開爐：A、B 在 prepare_forge，C 進鎖交給 Game.forge。proposed 一定給（不必叫模型時是 NO_NAME），
     所以伺服器上的開爐永遠不會在鎖裡叫模型。同一爐連按兩下、重新整理再按、開兩個分頁：兩個請求可能都走完 A、B，
     C 段重驗時第二個會看見配方有了、東西已經在你身上，什麼都不收（企劃者 2026-10-05：不能重複扣）。
     模型佇列開著時，同一個人已經有一件在等模型（另一個分頁、另一台裝置），第二件在 B 段被擋下來：丟 GameError「上一爐還沒出爐。」
     （BUSY_FORGE），不走 C 段、什麼都不登記、什麼都不收（審查 M2、控制者裁示；以前它拿 NO_NAME 先進鎖，這個配方這一季就用退路
     字表的名字登記，第一件模型取的名字被丟掉）。不必叫模型的爐（配方已經有人合過）不經過佇列，兩個分頁照常都走得完。"""
-    proposed = prepare_forge(game, art_id, insight_ids, other_art)
-    return act(game, lambda g: g.forge(art_id, insight_ids, proposed=proposed, other_art=other_art))
+    proposed = prepare_forge(game, art_id, insight_ids)
+    return act(game, lambda g: g.forge(art_id, insight_ids, proposed=proposed))
 
 
 SENSE_PNG_MAX = 300_000  # 畫布存的小 PNG（base64 字數）最多收這麼多；再大就不給模型看圖，只給文字特徵（畫布 256×256，實際約一兩萬字）
@@ -1463,7 +1460,7 @@ def menxia_view(game: Game, person: str | None = None) -> dict:
         ],
         # 療傷要多少銀兩（修練頁的療傷鈕上寫）：照內傷計價，沒有內傷是 0
         "heal_cost": team.heal_cost(game.content, member, game.state),
-        "forge_line": md(game.forge_line(None, [])),
+        "forge_line": md(game.forge_line([])),
         # 武學與成長（修練頁、煉製頁）：持有數與上限、每門武學一列（身上的在前）、悟得的意境、等著取名的那一門
         "seclude_blocked": game.seclusion_refusal(),  # 序章裡不閉關：閉關鈕灰掉、寫這句；平常是 None
         "holdings": game.holdings(),
@@ -2007,23 +2004,19 @@ def api_do(op: str, request: Request, body: dict = Body(default={})):
     return out
 
 
-def forge_args(body: dict) -> tuple[str | None, list[str], str | None]:
-    """煉製頁送來的東西：爐裡的武學 id（可以沒有）、意境 id 們、第二門武學 id（武學＋武學，可以沒有）。body 是客戶端寫的：
-    武學一律轉成字串、意境不是清單就當作沒放，形狀不對只會得到「不存在／放一門武學和一個意境…」那一句話，不會打出 500。"""
-    art, other, picked = body.get("art"), body.get("other_art"), body.get("insights")
-    return (
-        str(art) if art else None,
-        [str(i) for i in picked] if isinstance(picked, list) else [],
-        str(other) if other else None,
-    )
+def forge_args(body: dict) -> tuple[str | None, list[str]]:
+    """煉製頁送來的東西：意境 id 們（爐裡只合意境）；舊網頁送來的武學 id 照傳，引擎回「爐裡只合意境」那一句。body 是客戶端寫的：
+    意境不是清單就當作沒放，形狀不對只會得到一句話，不會打出 500。"""
+    art, picked = body.get("art"), body.get("insights")
+    return str(art) if art else None, [str(i) for i in picked] if isinstance(picked, list) else []
 
 
-def _forge_without_naming(game: Game, art_id: str | None, insight_ids: list[str], other_art: str | None) -> list[str]:
-    return game.forge(art_id, insight_ids, proposed=NO_NAME, other_art=other_art)
+def _forge_without_naming(game: Game, art_id: str | None, insight_ids: list[str]) -> list[str]:
+    return game.forge(art_id, insight_ids, proposed=NO_NAME)
 
 
 def _int_of(value) -> int:
-    """網頁送來的一個整數（自創多付的心得）：不是整數、負的一律當 0。"""
+    """網頁送來的一個整數（裝意境的第幾格）：不是整數、負的一律當 0。"""
     try:
         return max(0, int(value))
     except (TypeError, ValueError):
@@ -2051,7 +2044,7 @@ MENXIA_ACTIONS = {
     "create_begin": lambda g, b: g.create_begin(str(b.get("kind") or ""), str(b.get("form") or "")),
     "create_pose": lambda g, b: g.create_pose(b.get("pose") if isinstance(b.get("pose"), dict) else {}),
     "create_back": lambda g, b: g.create_back(str(b.get("to") or "")),
-    "create_name": lambda g, b: g.create_name(str(b.get("name") or ""), _int_of(b.get("extra"))),
+    "create_name": lambda g, b: g.create_name(str(b.get("name") or "")),
     "create_cancel": lambda g, b: g.create_cancel(),
     # 用融的意境修練一次，衝下一品；use_legend 是勾了「服下破境丹」。只認真正的布林 true：字串、數字都不算勾
     "cultivate": lambda g, b: g.cultivate(str(b.get("art") or ""), use_legend=b.get("use_legend") is True),
@@ -2205,10 +2198,10 @@ def api_forge_line(request: Request, body: dict = Body(default={})):
     """煉製頁選了東西就更新說明（不算行動、不存檔）。爐裡只放了一樣時多給 picks：另一格放得進來的每一樣合不合得了，
     判斷是開爐時那一套（skillview.forge_picks）；其他時候是 None。"""
     game = _game(request)
-    art, picked, other = forge_args(body)
+    _art, picked = forge_args(body)
     return look(game, lambda g: {
-        "line": md(g.forge_line(art, picked, other_art=other)), "picks": g.forge_picks(art, picked, other_art=other),
-        "preview": g.forge_preview(art, picked, other_art=other),  # 兩格都放好：預覽卡（合成即設計），其餘 None、網頁畫 line
+        "line": md(g.forge_line(picked)), "picks": g.forge_picks(picked),
+        "preview": g.forge_preview(picked),  # 兩格都放好：預覽卡，其餘 None、網頁畫 line
     })
 
 

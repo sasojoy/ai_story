@@ -35,7 +35,7 @@ def test_the_showdown_report_keeps_every_round_in_order_with_my_move(battle):
     rounds = record.log[1:]
     heads = [int(re.match(r"##### 第 (\d+) 回合", block).group(1)) for block in rounds]
     assert heads == list(range(1, len(heads) + 1)) and len(heads) >= 2  # 整場、照先後
-    assert all(block.rstrip().split("\n")[-1] == "- **你**　強攻" for block in rounds)  # 每一回合最後一條是自己出了什麼
+    assert all(block.rstrip().split("\n")[-1].startswith("- **你**　強攻") for block in rounds)  # 每一回合最後一條是自己出了什麼（開局的小戰法發動了，後面接那一句）
     detail = fighter.battle_detail(record.id)
     assert battlelog.FULL_LOG_HEAD in detail and detail.index(battlelog.FULL_LOG_HEAD) < detail.index("##### 第 1 回合")
 

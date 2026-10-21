@@ -38,7 +38,7 @@ sys.path.insert(0, str(ROOT))
 TMP = Path(tempfile.mkdtemp(prefix="measure_secrets_"))
 os.environ["TIANXIA_DB"] = str(TMP / "unused.db")  # 別開到 worktree 的 saves/tianxia.db
 
-from tianxia import bot, database, forge_secrets, fusion, insights, library, materials, naming, secret_recipes, smithing, team  # noqa: E402
+from tianxia import bot, database, forge_secrets, fusion, insights, materials, naming, secret_recipes, smithing  # noqa: E402
 from tianxia.content import load_content  # noqa: E402
 from tianxia.ollama_client import OllamaClient  # noqa: E402
 from tianxia.sqlite_world import open_world  # noqa: E402
@@ -70,70 +70,27 @@ atexit.register(_cleanup)
 
 
 def _plans(game, recipe):
-    """手上湊得出這條秘方的每一爐（只挑合得了的）。"""
+    """手上湊得出這條秘方的每一爐（只挑合得了的）。煉製只剩意境＋意境（2026-10-21）：「裝滿」那一種靠裝槽、不開爐，這裡不湊。"""
     s, c, w = game.state, game.content, game.world
-    arts = library.owned_arts(s)
     held = [i for i in s.player.insights if not insights.is_own(i)]
     resolved = {i: insights.resolve(i, c, w, s) for i in held}
-    if recipe.kind == "fuse":
-        for art_id in arts:
-            art = team.player_art(s, c, w, art_id)
-            for i in held:
-                if art is not None and secret_recipes.match_fuse(s, c, w, art_id, art, resolved[i]) is recipe \
-                        and fusion.fuse_problem(s, c, w, art_id, i) is None:
-                    yield bot.ForgePlan(art_id, (i,), None)
-    elif recipe.kind == "merge":
+    if recipe.kind == "merge":
         for a in held:
             for b in held:
                 if secret_recipes.match_merge(c, w, resolved[a], resolved[b]) is recipe and fusion.merge_problem(s, c, w, a, b) is None:
-                    yield bot.ForgePlan(None, (a, b), None)
-    else:
-        for a in arts:
-            for b in arts:
-                art_a, art_b = team.player_art(s, c, w, a), team.player_art(s, c, w, b)
-                if a < b and art_a is not None and art_b is not None \
-                        and secret_recipes.match_blend(s, c, w, a, art_a, b, art_b) is recipe \
-                        and fusion.blend_problem(s, c, w, a, b) is None:
-                    yield bot.ForgePlan(a, (), b)
-
-
-def _prep(game, recipe):
-    """手上還湊不出、但差一步的：缺的那門武學（屬性、種類）拿手上同種類的武學融一個那個屬性的意境先合出來
-    （讀懂口訣的玩家會這樣走）。只看武學＋意境、武學＋武學；意境要自己去悟，這裡不替它跑。"""
-    s, c, w = game.state, game.content, game.world
-    if recipe.kind == "merge":
-        return
-    arts = library.owned_arts(s)
-    wanted = [recipe.art] if recipe.kind == "fuse" else list(recipe.arts)
-    for pattern in wanted:
-        have = False
-        for a in arts:
-            art = team.player_art(s, c, w, a)
-            if art is not None and secret_recipes.art_fits(pattern, art, s.player.art_quality.get(a, art.quality)):
-                have = True
-        if have or pattern.attribute is None or pattern.min_quality not in (None, "下品"):
-            continue
-        for a in arts:
-            art = team.player_art(s, c, w, a)
-            if art is None or (pattern.kind is not None and art.kind != pattern.kind):
-                continue
-            for i in s.player.insights:
-                insight = insights.resolve(i, c, w, s)
-                if insight is not None and insight.attribute == pattern.attribute and pattern.lean in (None, insight.lean) \
-                        and fusion.fuse_problem(s, c, w, a, i) is None:
-                    yield bot.ForgePlan(a, (i,), None)
+                    yield bot.ForgePlan((a, b))
 
 
 class Tally:
     def __init__(self) -> None:
-        self.forges = 0  # 真的合成了幾爐（武學＋武學、意境＋意境）
+        self.forges = 0  # 真的合成了幾爐（意境＋意境）
 
 
 def measure(seed: int, profile: str | None, side: str) -> dict:
     content = load_content(ROOT / "content", profile=profile)
     world = open_world(TMP / f"{side}{seed}.db")
     tally = Tally()
-    original_pick_forge, original_blend, original_merge = bot.pick_forge, fusion.blend, fusion.merge
+    original_pick_forge, original_merge = bot.pick_forge, fusion.merge
     forged = {"爐": 0, "名器": 0, "原品": 0, "仿品": 0}
     tier3 = {"全部": 0, "新來源": 0}
     original_forge_plan, original_armor_plan, original_forge = smithing.forge_plan, smithing.armor_plan, smithing.forge
@@ -194,7 +151,7 @@ def measure(seed: int, profile: str | None, side: str) -> dict:
             for recipe in secret_recipes.active(game.content, tianji):
                 if recipe.id in book.solved or (side == "解口訣" and not book.heard.get(recipe.id)):
                     continue
-                plan = next(_plans(game, recipe), None) or next(_prep(game, recipe), None)
+                plan = next(_plans(game, recipe), None)
                 if plan is not None:
                     return plan
         return original_pick_forge(game, rng, *args, **kwargs)
@@ -207,7 +164,7 @@ def measure(seed: int, profile: str | None, side: str) -> dict:
             mock.patch.object(OllamaClient, "chat_structured", refuse), mock.patch.object(OllamaClient, "chat_text", refuse), \
             mock.patch("requests.post", refuse), mock.patch("requests.get", refuse), \
             mock.patch.object(bot, "pick_forge", pick_forge), \
-            mock.patch.object(fusion, "blend", counted(original_blend)), mock.patch.object(fusion, "merge", counted(original_merge)), \
+            mock.patch.object(fusion, "merge", counted(original_merge)), \
             mock.patch.object(smithing, "forge_plan", steer("weapon", original_forge_plan)), \
             mock.patch.object(smithing, "armor_plan", steer("armor", original_armor_plan)), mock.patch.object(smithing, "forge", counted_forge), \
             mock.patch.object(materials, "grant", counted_grant), mock.patch.object(materials, "tier3_pick", counted_pick):

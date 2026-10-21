@@ -42,7 +42,8 @@ def test_every_kind_runs():
     content = real_content()
     t = content.config.tactics
     sids = [sid for sid, s in content.skills.items() if s.tactic is not None]
-    assert len(sids) == 36 and {content.skills[s].tactic.kind for s in sids} <= set(tactics.KINDS)
+    minor = [sid for sid in sids if content.skills[sid].tactic.minor]  # 學來的武學帶的小戰法（TacticDef.minor）也要跑得動
+    assert (len(sids) - len(minor), len(minor)) == (36, 23) and {content.skills[s].tactic.kind for s in sids} <= set(tactics.KINDS)
     for sid in sids:
         holder = _only(content, sid, rate=1.0)
         for seed in range(20):

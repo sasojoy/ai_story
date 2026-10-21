@@ -599,7 +599,7 @@ def test_the_howto_page_has_every_section_and_reads_the_config(game):
     assert "打坐" not in text  # 2026-10-12 拿掉了
     assert "（體力 7）" in text and "（體力 8）" in text and "（體力 4）" in text and "每輪體力 6" in text and "最多 9 輪" in text
     assert "對手 4 成" in text and "情誼到 66" in text and "只帶 2 成" in text
-    assert "N×12" in text and "合成（13 心得、14 體力）" in text and "合併（16 心得、17 體力）" in text
+    assert "N×12" in text and "合併（16 心得、17 體力）" in text
     assert "每小時至少 19" in text and "邊走邊想（21）" in text and "化成 23 心得" in text
     assert "體力每 5 分鐘回 1 點，滿 222 就不再回。" in text and "回體丹一顆回 133 點，" in text
     assert "糧草" in text and "伏筆" in text  # 背包：素材是糧草與伏筆用的

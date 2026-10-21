@@ -433,16 +433,15 @@ def test_the_xinde_hint_points_to_the_forge_when_only_a_forge_is_doable(on):
     game = _fresh(on)
     s, cfg = game.state, on.config
     s.player.member.wugong_level = s.player.member.neigong_level = 10  # 兩門都練滿了：沒得練成
-    s.player.stats["xinde"] = max(cfg.fuse_xinde, cfg.merge_xinde)
-    s.player.insights = []
-    hint = game.status_data()["hint"]
-    assert hint and "去「煉製」" in hint and "修練" not in hint  # 武學重構：身上兩門武學就合得了（武學＋武學），沒有意境也提
-    s.player.stats["xinde"] = min(cfg.fuse_xinde, cfg.merge_xinde) - 1
-    assert game.status_data()["hint"] is None  # 付不起一爐：不提
-    s.player.stats["xinde"] = max(cfg.fuse_xinde, cfg.merge_xinde)
+    s.player.stats["xinde"] = cfg.merge_xinde
     s.player.insights = ["feng"]
+    assert game.status_data()["hint"] is None  # 武學重構（10/21）：煉丹爐只合意境＋意境，只有一個意境合不了
+    s.player.insights = ["feng", "huo"]
     hint = game.status_data()["hint"]
     assert hint and "去「煉製」" in hint and "修練" not in hint
+    s.player.stats["xinde"] = cfg.merge_xinde - 1
+    assert game.status_data()["hint"] is None  # 付不起一爐：不提
+    s.player.stats["xinde"] = cfg.merge_xinde
     s.player.stamina = 0
     assert game.status_data()["hint"] is None  # 付不起體力：做不了
 

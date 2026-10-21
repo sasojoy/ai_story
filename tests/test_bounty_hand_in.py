@@ -332,21 +332,12 @@ def _give(bounty_id, item_id):
 
 def test_handing_in_an_art_takes_it_and_its_records_but_the_recipe_stays(beta_setup):
     """設計 4.6：交出去就沒了——功法庫拿掉、私有紀錄（成、自己那一份的品質、熟練度、意境槽）清掉、不退心得；
-    全服登記的那一門照舊，照同一個配方再合一次查表就有、不叫模型（設計 4.10：這不是漏洞）。
-    武學重構：合成只剩武學＋武學，用兩門相容屬性是快的武學合（合出來的相容屬性是聯集，屬性是快）。"""
+    全服登記的那一門照舊（設計 4.10）。煉製不再合武學：丙首創的那一門直接登記（相容屬性是快）。"""
     content, world = beta_setup
-    one, two = _fused(world, "迅雷腿", attribute="快", affinity=["快"]), _fused(world, "追影掌", attribute="快", affinity=["快"])
-    pair = (one.id, two.id)
-
-    def forge(g):
-        g.state.player.arts += list(pair)
-        g.state.player.stats["xinde"] = 50
-        return g.forge(one.id, [], proposed=("疾風拳", "一句話。"), other_art=two.id)
-
-    _do(content, world, "丙", forge)
-    art_id = next(a for a in _load(world, "丙").player.arts if a not in pair)
+    art_id = _fused(world, "疾風拳", attribute="快", affinity=["快"], creator="丙", creator_shown="丙").id
 
     def records(p):
+        p.arts.append(art_id)
         p.insights.append("feng")
         p.art_levels[art_id], p.art_quality[art_id], p.art_mastery[art_id], p.art_slots[art_id] = 3, "中品", 1, ["feng", None, None]
 
@@ -360,8 +351,6 @@ def test_handing_in_an_art_takes_it_and_its_records_but_the_recipe_stays(beta_se
     assert "feng" in p.insights  # 槽裡的意境拆回背包
     assert p.stats["xinde"] == before + content.config.bounties.xinde["art"]  # 只有賞的心得，不退熔煉的
     assert world.get_skill(art_id).creator == "丙"  # 全服登記的那一門不受影響，你是首創者也一樣
-    _do(content, world, "丙", lambda g: g.forge(one.id, [], other_art=two.id))  # 沒給 proposed：配方已經登記，查表、不叫模型
-    assert art_id in _load(world, "丙").player.arts
 
 
 def test_loners_and_faction_members_get_full_pay_and_only_loners_add_deeds(beta_setup):

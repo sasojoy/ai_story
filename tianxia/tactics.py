@@ -37,6 +37,7 @@ CONTROLS = ("卸勁", "亂神", "定身", "失神")  # 守一擋得下的
 DOTS = ("焚身", "風沙", "血創")
 LEAD = "〔"  # 戰法句一律以「〔戰法名〕」開頭（同功效句，battlelog.TRAIT_LEAD：網頁收著的卡片先藏起來）
 TITLE = "本命戰法"
+MINOR_TITLE = "小戰法"  # 學來的武學帶的（TacticDef.minor）
 IMMUNE_KEYS = {"stun": "定身", "daze": "失神", "disarm": "卸勁", "confuse": "亂神"}  # immune 那一種的 params 鍵 → 狀態
 SHRUG = "{state}沒能沾身"
 PLAYER_KEY = "player"  # 同 state.PLAYER（這裡不 import state）
@@ -133,10 +134,16 @@ def when_text(tactic: TacticDef) -> str:
     return f"{tactic.timing}・{text}"
 
 
-def card_text(tactic: TacticDef, title: str = TITLE) -> str:
+def title_of(tactic: TacticDef) -> str:
+    """卡上寫哪一種：學來的武學帶的寫「小戰法」，其餘「本命戰法」。"""
+    return MINOR_TITLE if tactic.minor else TITLE
+
+
+def card_text(tactic: TacticDef, title: str | None = None) -> str:
     """功法卡、修練頁、角色卡那一段：「本命戰法〔長坂一喝〕出招・每回合 40%：一聲大喝……」；兵器卡寫「特技〔虛影〕……」。"""
     # 本命底蘊照實際寫（19.5%，PM 2026-10-16）：以前 round 到整數、又是逢五取偶，19.5 寫成 20、22.5 寫成 22
     tail = MIGHT_NOTE.format(pct=f"{round(tactic.might * 100, 1):g}") if tactic.might else ""
+    title = title or title_of(tactic)
     return f"{title}〔{tactic.name}〕{when_text(tactic)}：{desc_text(tactic)}{tail}"
 
 
@@ -1511,7 +1518,7 @@ def divine_line(h: Holder) -> str:
 # ── 決戰：沒有單一的對手，只算自己身上的（WAR_KINDS）──────────────
 
 
-WAR_LINE = "{side}這一回合發動本命戰法：{who}"
+WAR_LINE = "{side}這一回合發動戰法：{who}"  # 本命戰法、小戰法都寫這一句；待 joy 潤
 
 
 class War(BaseModel):

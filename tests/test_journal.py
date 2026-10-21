@@ -374,15 +374,15 @@ def test_forging_that_finishes_a_guide_step_writes_it_into_the_journal(game):
     from tianxia import naming
     from tianxia.models import TutorialGoal
 
-    game.state.player.member.wugong_id, game.state.player.arts = "basic_fist", ["lake_kick"]  # 武學重構：合成只剩武學＋武學
+    game.state.player.insights = ["feng", "huo"]  # 煉製只剩意境＋意境
     game.state.player.stats["xinde"] = 100
     _guide_waits_for(game, TutorialGoal(action="practice"))
     reply = naming.NameReply(name="鐵腕勁", description="一句話。")
     with mock.patch.object(game.client, "chat_structured", return_value=reply):
-        msgs = game.forge("basic_fist", [], other_art="lake_kick")
+        msgs = game.forge(None, ["feng", "huo"])
     assert "✔ 引導完成" not in msgs and "✔ 引導完成" in game.state.player.guide_done  # 合成結果也不夾引導（8.1.3）
     entry = latest(game)
-    assert entry.title == "煉製" and entry.tag == "合成【鐵腕勁】"
+    assert entry.title == "煉製" and entry.tag == "合併「鐵腕勁」"
     assert entry.guide[0] == "✔ 引導完成" and entry.guide[-1] == f"【{_speaker(game)}】出城。"
     assert f"銀兩 +{GUIDE_REWARD}" in entry.guide and f"銀兩 +{GUIDE_REWARD}" not in entry.changes
 
@@ -397,14 +397,14 @@ def test_practice_and_forging_are_titled_after_their_tabs(game):
     _train(game)
     game.practice("武學")
     assert latest(game).title == "修練" and len([e for e in game.state.journal if e.title == "修練"]) == 1
-    game.state.player.arts, game.state.player.insights = ["basic_fist", "lake_kick"], ["feng", "huo"]  # 武學重構：合成是武學＋武學
+    game.state.player.insights, game.state.player.stats["xinde"] = ["feng", "huo", "shui"], 100  # 煉製只剩意境＋意境
     reply = naming.NameReply(name="鐵腕勁", description="一句話。")
     with mock.patch.object(game.client, "chat_structured", return_value=reply):
-        game.forge("basic_fist", [], other_art="lake_kick")
-    assert [e.title for e in game.state.journal[:2]] == ["煉製", "修練"]
-    assert "合成【鐵腕勁】" == latest(game).tag
-    with mock.patch.object(game.client, "chat_structured", side_effect=RuntimeError):
         game.forge(None, ["feng", "huo"])
+    assert [e.title for e in game.state.journal[:2]] == ["煉製", "修練"]
+    assert "合併「鐵腕勁」" == latest(game).tag
+    with mock.patch.object(game.client, "chat_structured", side_effect=RuntimeError):
+        game.forge(None, ["huo", "shui"])
     assert [e.title for e in game.state.journal[:2]] == ["煉製", "修練"]  # 合併也標「煉製」，併進同一則
     assert latest(game).tag.startswith("合併「")
     assert not any(e.title == "門下" for e in game.state.journal)
@@ -415,20 +415,20 @@ def test_practice_and_forging_are_titled_after_their_tabs(game):
 # （衍生出一門／合出來的竟是一門已有的／在你心中交融……）一次都配不到。現在那一句寫進這一則的敘事。
 
 
-def _forger(game, arts=()):
-    """身上一門武學（粗淺拳腳）、兩個意境（風、火）、心得夠；arts 是功法庫裡另外給的功法。"""
+def _forger(game, insights=("feng", "huo")):
+    """身上一門武學（粗淺拳腳）、幾個意境（預設風、火）、心得夠。"""
     p = game.state.player
-    p.member.wugong_id, p.arts, p.insights, p.stats["xinde"] = "basic_fist", list(arts), ["feng", "huo"], 100
+    p.member.wugong_id, p.arts, p.insights, p.stats["xinde"] = "basic_fist", [], list(insights), 100
 
 
-def _forge(game, art, insight_ids, name, other_art=None):
+def _forge(game, insight_ids, name):
     from unittest import mock
 
     from tianxia import naming
 
     reply = naming.NameReply(name=name, description="一句話。")
     with mock.patch.object(game.client, "chat_structured", return_value=reply):
-        return game.forge(art, insight_ids, other_art=other_art)
+        return game.forge(None, insight_ids)
 
 
 def shines(card: str) -> list[str]:
@@ -437,23 +437,26 @@ def shines(card: str) -> list[str]:
 
 
 def test_slotting_an_insight_writes_a_practice_entry_and_charges_nothing(game):
-    """武學重構：武學＋意境不是合成了——爐子上放這兩樣是把意境裝進槽，記成一則「修練」、不花心得體力；
-    拆下來也記一則。被擋下的（再裝一次）不寫紀錄。"""
+    """武學重構：武學＋意境不是合成了——意境裝進槽，記成一則「修練」、不花心得體力；拆下來也記一則。
+    被擋下的（再裝一次、放進爐子）不寫紀錄。"""
+    from tianxia import fusion
+
     _forger(game)
     before = len(game.state.journal)
-    msgs = game.forge("basic_fist", ["feng"])
+    assert game.forge("basic_fist", ["feng"]) == [fusion.ART_IN_FURNACE] and len(game.state.journal) == before
+    msgs = game.slot_insight("basic_fist", "feng")
     entry = latest(game)
     assert msgs == ["「風」裝進了【粗淺拳腳】第 1 格。"] and game.state.player.art_slots["basic_fist"] == ["feng", None]
     assert (entry.title, entry.tag, entry.changes) == ("修練", msgs[0], []) and len(game.state.journal) == before + 1
     assert game.state.player.stats["xinde"] == 100 and game.forged is True
-    assert game.forge("basic_fist", ["feng"]) == ["【粗淺拳腳】上已經有「風」了。"] and len(game.state.journal) == before + 1
+    assert game.slot_insight("basic_fist", "feng") == ["【粗淺拳腳】上已經有「風」了。"] and len(game.state.journal) == before + 1
     assert game.unslot_insight("basic_fist", "feng") == ["「風」從【粗淺拳腳】拆了下來。"]
     assert latest(game).tag == "「風」從【粗淺拳腳】拆了下來。" and game.state.player.art_slots["basic_fist"] == [None, None]
 
 
 def test_a_merge_writes_its_result_sentence_into_the_journal_and_it_shines(game):
     _forger(game)
-    msgs = _forge(game, None, ["feng", "huo"], "燎原")
+    msgs = _forge(game, ["feng", "huo"], "燎原")
     entry = latest(game)
     assert (entry.title, entry.tag) == ("煉製", "合併「燎原」")
     assert entry.lines == [msgs[0]] and msgs[0].startswith("「風」與「火」在你心中交融，化成「燎原」")
@@ -461,44 +464,32 @@ def test_a_merge_writes_its_result_sentence_into_the_journal_and_it_shines(game)
     assert entry.changes == ["心得 -5", "體力 -5"]
 
 
-def test_a_blend_writes_its_result_sentence_into_the_journal_and_it_shines(game):
-    _forger(game, arts=["lake_kick"])
-    msgs = _forge(game, "basic_fist", [], "踏浪拳", other_art="lake_kick")
-    entry = latest(game)
-    assert (entry.title, entry.tag) == ("煉製", "合成【踏浪拳】")
-    assert entry.lines == [msgs[0]] and "合而為一，衍生出一門武學【踏浪拳】" in msgs[0]
-    assert shines(game.now_entry_html()) == [escape(msgs[0]).replace("\n", "<br>")]
-    assert entry.changes == ["心得 -5", "體力 -5"]
-
-
 def test_landing_on_what_you_already_own_writes_nothing_and_does_not_shine(game):
-    """合出來的是你已經有的：被拒絕、不收錢、不寫紀錄；那句拒絕的話也不亮。三種合成都一樣。"""
-    _forger(game, arts=["lake_kick", "basic_breath"])
-    _forge(game, "basic_fist", ["feng"], "旋風腿")  # 武學重構：這一下是把風裝進槽（一則「修練」），合成剩下面兩爐
-    _forge(game, "lake_kick", [], "踏浪拳", other_art="basic_breath")  # 不拿粗淺拳腳當料：合成會把槽裡的風拆回背包
-    _forge(game, None, ["feng", "huo"], "燎原")
+    """裝過的再裝、同一份放兩次：被拒絕、不收錢、不寫紀錄；那句拒絕的話也不亮。"""
+    _forger(game)
+    game.slot_insight("basic_fist", "feng")  # 一則「修練」
+    _forge(game, ["feng", "huo"], "燎原")
     before = list(game.state.journal)
     for refused in (
-        _forge(game, "basic_fist", ["feng"], "旋風腿"),  # 已經裝著
-        _forge(game, "basic_breath", [], "踏浪拳", other_art="lake_kick"),  # 反過來放也是同一個配方
-        _forge(game, None, ["feng", "feng"], "燎原"),  # 意境效果池：合過的意境再合是另一份，這裡改用同一份放兩次被拒絕
+        game.slot_insight("basic_fist", "feng"),  # 已經裝著
+        _forge(game, ["feng", "feng"], "燎原"),  # 意境效果池：合過的意境再合是另一份，這裡改用同一份放兩次被拒絕
     ):
         assert len(refused) == 1 and ("已經" in refused[0] or "兩份" in refused[0])
         assert journal._line_class(refused[0]) == "tx-line"
-    assert game.state.journal == before and len(shines(game.now_entry_html())) == 2  # 後兩爐的那兩行照舊亮、沒多一行
+    assert game.state.journal == before and len(shines(game.now_entry_html())) == 1  # 那一爐的那一行照舊亮、沒多一行
 
 
 def test_two_forges_in_a_row_keep_both_sentences_and_both_shine(game):
     """連做幾爐併成一則（同一種連續的門下動作）：每一爐的那一句都在、照順序、各一次，每一句都亮；數值變化加總。"""
-    _forger(game, arts=["lake_kick"])
-    first = _forge(game, "basic_fist", [], "旋風腿", other_art="lake_kick")[0]  # 武學重構：合成是武學＋武學
-    second = _forge(game, None, ["feng", "huo"], "燎原")[0]
+    _forger(game, insights=("feng", "huo", "shui"))
+    first = _forge(game, ["feng", "huo"], "旋風")[0]
+    second = _forge(game, ["huo", "shui"], "燎原")[0]
     crafts = [e for e in game.state.journal if e.title == "煉製"]
     assert len(crafts) == 1
     entry = crafts[0]
     assert entry.lines == [first, second] and entry.tag == "合併「燎原」"
     cfg = game.content.config
-    assert entry.changes == [f"心得 -{cfg.fuse_xinde + cfg.merge_xinde}", f"體力 -{cfg.fuse_stamina + cfg.merge_stamina}"]
+    assert entry.changes == [f"心得 -{2 * cfg.merge_xinde}", f"體力 -{2 * cfg.merge_stamina}"]
     card, row = game.now_entry_html(), journal.rows_html([entry])
     wanted = [escape(s).replace("\n", "<br>") for s in (first, second)]
     assert shines(card) == wanted and shines(row) == wanted
@@ -507,12 +498,12 @@ def test_two_forges_in_a_row_keep_both_sentences_and_both_shine(game):
 
 
 def test_three_different_forges_in_a_row_all_shine(game):
-    """武學＋武學兩爐、合併接著做：句型各自亮、各一行。（武學重構：武學＋意境是裝槽、不算一爐）"""
-    _forger(game, arts=["lake_kick"])
+    """三爐合併接著做：各自亮、各一行。"""
+    _forger(game, insights=("feng", "huo", "shui"))
     said = [
-        _forge(game, "basic_fist", [], "旋風腿", other_art="lake_kick")[0],
-        _forge(game, "basic_fist", [], "烈風拳", other_art="旋風腿")[0],
-        _forge(game, None, ["feng", "huo"], "燎原")[0],
+        _forge(game, ["feng", "huo"], "旋風")[0],
+        _forge(game, ["huo", "shui"], "烈霧")[0],
+        _forge(game, ["feng", "shui"], "燎原")[0],
     ]
     (entry,) = [e for e in game.state.journal if e.title == "煉製"]
     assert entry.lines == said and entry.tag == "合併「燎原」"
@@ -524,7 +515,7 @@ def test_an_old_forge_entry_without_a_sentence_still_merges_with_a_new_one(game)
     _forger(game)
     journal.add_entry(game.state, JournalEntry(
         time=game.state.world.time, title="煉製", tag="合成【舊的一爐】", changes=["心得 -5", "體力 -5"]), merge=True)
-    sentence = _forge(game, None, ["feng", "huo"], "燎原")[0]
+    sentence = _forge(game, ["feng", "huo"], "燎原")[0]
     entry = latest(game)
     assert entry.lines == ["合成【舊的一爐】", sentence] and entry.changes == ["心得 -10", "體力 -10"]
     assert shines(game.now_entry_html()) == [escape(sentence).replace("\n", "<br>")]
@@ -617,27 +608,26 @@ def test_twice_practising_reads_as_two_lines_on_the_just_now_card(game):
 
 
 def test_twice_forging_reads_as_two_lines_on_the_just_now_card(game):
-    """合成接著合併（同一則「煉製」）：標題旁是最新那一爐的結果標記、底下是每一爐的那一句（FB-073 起煉製的結果那一句也寫進紀錄，
+    """兩爐合併（同一則「煉製」）：標題旁是最新那一爐的結果標記、底下是每一爐的那一句（FB-073 起煉製的結果那一句也寫進紀錄，
     見上面那一段），照順序、各一次，沒有哪一句重複畫；心得、體力照舊加總。"""
     from unittest import mock
 
     from tianxia import naming
 
-    game.state.player.member.wugong_id, game.state.player.arts = "basic_fist", ["lake_kick"]  # 武學重構：合成是武學＋武學
-    game.state.player.insights = ["feng", "huo"]
+    game.state.player.insights = ["feng", "huo", "shui"]
     game.state.player.stats["xinde"] = 100
     with mock.patch.object(game.client, "chat_structured", return_value=naming.NameReply(name="鐵腕勁", description="一句話。")):
-        fused_said = game.forge("basic_fist", [], other_art="lake_kick")[0]
+        fused_said = game.forge(None, ["feng", "huo"])[0]
     fused = latest(game).tag
     with mock.patch.object(game.client, "chat_structured", side_effect=RuntimeError):
-        merged_said = game.forge(None, ["feng", "huo"])[0]
+        merged_said = game.forge(None, ["huo", "shui"])[0]
     merged = latest(game).tag
-    assert (fused, latest(game).title) == ("合成【鐵腕勁】", "煉製") and merged.startswith("合併「")
+    assert (fused, latest(game).title) == ("合併「鐵腕勁」", "煉製") and merged.startswith("合併「")
     assert latest(game).lines == [fused_said, merged_said]
     assert shown(game.now_entry_html()) == [
         escape(merged), escape(fused_said).replace("\n", "<br>"), escape(merged_said).replace("\n", "<br>")]
     cfg = game.content.config
-    assert f"體力 -{cfg.fuse_stamina + cfg.merge_stamina}" in game.now_entry_html()  # 設計 12.1：合成與合併各收一次，加總
+    assert f"體力 -{2 * cfg.merge_stamina}" in game.now_entry_html()  # 設計 12.1：每一爐各收一次，加總
 
 
 def test_twice_melting_reads_as_two_lines_on_the_just_now_card(game):

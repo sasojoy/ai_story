@@ -669,7 +669,7 @@ def _placeholder_problem(line: str) -> str | None:
 
 def check_signature_arts(c: Content, need) -> None:
     """本命武學（tianxia/signature.py、tactics.py，企劃者 2026-10-15）：寫了本命戰法（SkillDef.tactic）的只能是人物的本命武學或本命內功
-    （CharacterDef.starting_*，玩家只在情誼到了才學得到）、品質要是絕學；戰法的名字不重複、不撞一般與特別功效的名字；說明裡的 {鍵}
+    （CharacterDef.starting_*，玩家只在情誼到了才學得到）、品質要是絕學；小戰法（TacticDef.minor）只寫在下品、不是本命的武學上；戰法的名字不重複、不撞一般與特別功效的名字；說明裡的 {鍵}
     都要在 params 裡（卡上換成數字）；allies 是人物、foe_faction 是劇本的陣營；寫了一般功效（SkillDef.traits）的第一個要是自己的屬性、不重複。"""
     starts = {s for ch in c.characters.values() for s in (ch.starting_wugong, ch.starting_neigong) if s}
     trait_names = {t.name for t in c.traits.general} | {t.name for t in c.traits.special}
@@ -682,8 +682,14 @@ def check_signature_arts(c: Content, need) -> None:
         tactic = skill.tactic
         if tactic is None:
             continue
-        need(skill.id in starts, f"武學 {skill.id}：本命戰法只能寫在人物的本命武學或本命內功上")
-        need(skill.quality == "絕學", f"武學 {skill.id}：本命武學的品質要是絕學")
+        if tactic.minor:  # 小戰法（學來的武學，Joy 2026-10-21）：下品的內容武學、不是人物的本命；沒有本命底蘊與連動
+            need(skill.id not in starts, f"武學 {skill.id}：人物的本命武學寫的是本命戰法，不是小戰法")
+            need(skill.quality == "下品", f"武學 {skill.id}：小戰法只寫在下品的武學上")
+            need(not tactic.might and not tactic.allies and tactic.foe_faction is None,
+                 f"武學 {skill.id}：小戰法不寫 might、allies、foe_faction")
+        else:
+            need(skill.id in starts, f"武學 {skill.id}：本命戰法只能寫在人物的本命武學或本命內功上")
+            need(skill.quality == "絕學", f"武學 {skill.id}：本命武學的品質要是絕學")
         first = seen.setdefault(tactic.name, skill.id)
         need(first == skill.id, f"本命戰法的名字「{tactic.name}」重複（{first}、{skill.id}）")
         need(tactic.name not in trait_names, f"武學 {skill.id}：本命戰法的名字「{tactic.name}」跟一般或特別功效同名")
@@ -2555,7 +2561,7 @@ def _validate_secrets(c: Content, need) -> None:
     """秘方池（content/secret_recipes.json）與 Config.secrets：每一種寫對該寫的格子、形狀裡的值都在清單裡、名號過得了命名過濾、
     口訣三句各 20 字內而且不帶數字（只講意象）。"""
     cfg = c.config.secrets
-    need(set(cfg.per_season) <= {"fuse", "merge", "blend"}, f"Config.secrets.per_season 只能有 fuse、merge、blend：{sorted(cfg.per_season)}")
+    need(set(cfg.per_season) <= {"fuse", "merge"}, f"Config.secrets.per_season 只能有 fuse、merge：{sorted(cfg.per_season)}")
     for event_id in cfg.tale_events:
         need(event_id in c.events, f"Config.secrets.tale_events：事件 {event_id} 不存在")
     special_ids = {t.id for t in c.traits.special}
@@ -2587,24 +2593,19 @@ def _validate_secrets(c: Content, need) -> None:
             need(0 < len(clue) <= 20, f"{where}：第 {i + 1} 句口訣要 1～20 字")
             need(not re.search(r"[0-9０-９]", clue), f"{where}：第 {i + 1} 句口訣不寫數字")
         if recipe.kind == "fuse":
-            need(recipe.art is not None and recipe.insight is not None and not recipe.arts and recipe.left is None and recipe.right is None,
+            need(recipe.art is not None and recipe.insight is not None and recipe.left is None and recipe.right is None,
                  f"{where}：武學＋意境只寫 art 與 insight")
             if recipe.art is not None:
                 art_ok(f"{where} 的武學", recipe.art)
             if recipe.insight is not None:
                 insight_ok(f"{where} 的意境", recipe.insight)
         elif recipe.kind == "merge":
-            need(recipe.left is not None and recipe.right is not None and recipe.art is None and recipe.insight is None and not recipe.arts,
+            need(recipe.left is not None and recipe.right is not None and recipe.art is None and recipe.insight is None,
                  f"{where}：意境＋意境只寫 left 與 right")
             need(recipe.special is None, f"{where}：合出意境的秘方沒有特別功效")
             for side in ("left", "right"):
                 if getattr(recipe, side) is not None:
                     insight_ok(f"{where} 的 {side}", getattr(recipe, side))
-        else:
-            need(len(recipe.arts) == 2 and recipe.art is None and recipe.insight is None and recipe.left is None and recipe.right is None,
-                 f"{where}：武學＋武學只寫 arts 兩門")
-            for i, pattern in enumerate(recipe.arts):
-                art_ok(f"{where} 的第 {i + 1} 門", pattern)
 
 
 def _validate_forge_secrets(c: Content, need) -> None:
