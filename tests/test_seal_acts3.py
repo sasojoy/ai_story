@@ -375,3 +375,20 @@ def test_fb626_the_card_says_the_stir_not_the_act():
         w.mutate(fresh)
         assert g.seal_view()["state"] == new
 
+
+def test_fb627_a_merged_line_is_not_written_as_a_place():
+    """FB-627：14 天的季三條戰線合成黃巾聲勢，傳檄那一句不把線名當地名寫；有戰線的季一個字不變。"""
+    from test_seal_acts import _holder as plain_holder
+    from test_seal_acts import _use as plain_use
+
+    c, w, g = plain_holder("chizhang", side="huang", profile=None)
+    act = server.main_view(g)["status"]["seal"]["act"]
+    assert act["confirm"].startswith("起用『赤璋』，替黃巾軍傳檄天下一日？")
+    plain_use(c, w, target="huangjin")
+    [line] = [r.text for r in w.get_season().rumors if "赤璋" in r.text]
+    assert line == "有人起用了『赤璋』：檄文傳遍天下，一日之內黃巾軍聲勢更盛。"
+    c, w, g = plain_holder("chizhang", side="huang")
+    assert "替黃巾軍傳檄{target}一日？" in server.main_view(g)["status"]["seal"]["act"]["confirm"]
+    plain_use(c, w, target="yingru")
+    assert any(r.text == "有人起用了『赤璋』：檄文傳遍潁川汝南，一日之內黃巾軍在那裡推得更猛。" for r in w.get_season().rumors)
+

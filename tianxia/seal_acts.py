@@ -53,6 +53,8 @@ WHAT = {  # 天下大事、江湖史、起用的人自己的紀錄與行狀共�
     "zhendi": "{place}被鎮住了，{hold}之內誰都推不動那裡的進度",
     "bujue": "{place}當場退回{side}手中",
 }
+# FB-627：傳檄指定的不是戰線（14 天的季三條合成的黃巾聲勢，不是地名）時換這兩句
+WHAT_WIDE = {"chuanxi": "檄文傳遍天下，一日之內{side}聲勢更盛"}
 PUBLIC = "有人起用了『{shard}』：{what}。"  # 天下大事與江湖史（不寫是誰，企劃者）
 BACK = "{figure}坐鎮期滿，回到了{place}。"  # 引將期滿（天下大事；人物移動本來就寫天下大事）
 MINE = "你起用了『{shard}』：{what}。這一季還能再起用 {left} 次。"  # 起用的人自己的江湖紀錄
@@ -67,6 +69,7 @@ CONFIRM = {  # 確認的問句；{target}、{side} 由畫面換成挑的那一�
     "zhendi": "起用『{shard}』，替{side}鎮住{target}{hold}？",
     "bujue": "起用『{shard}』，把{target}退回{side}手中？",
 }
+CONFIRM_WIDE = {"chuanxi": "起用『{shard}』，替{side}傳檄天下一日？"}  # FB-627（同 WHAT_WIDE）
 CONFIRM_TAIL = "用了之後這一季還剩 {left} 次，隔 {gap} 天才能再用。"
 # 按不下去的原因
 NOT_RUNNING = "此刻不是季中，起用不了。"
@@ -467,6 +470,13 @@ def line_targets(state: GameState, content: Content) -> list[dict]:
     return [{"id": line, "name": trend_name(content, line), "where": "", "why": ""} for line in lines(content, state.world)]
 
 
+def wide(content: Content, line: str | None) -> bool:
+    """傳檄指定的不是一條戰線（FB-627：14 天的季三條戰線合成黃巾聲勢，線名不是地名），天下大事與問句換 WHAT_WIDE／CONFIRM_WIDE。"""
+    from .rules import front_ids  # noqa: PLC0415
+
+    return bool(line) and line not in front_ids(content)
+
+
 def land_sides(state: GameState, content: Content) -> list[str]:
     """鎮地、補缺照哪幾軍列目標：有自家（陣營、豪強依附的那一軍）只列自家；散人兩軍都列，每一列寫是哪一軍的（畫面照挑的那一軍篩）。"""
     own = own_side(state, content)
@@ -654,7 +664,8 @@ def what_text(content: Content, act: SealAct) -> str:
     if act.kind == "chenglu":
         return WHAT["chenglu"].format(region=region_name(content, act.target))
     if act.kind == "chuanxi":
-        return WHAT["chuanxi"].format(line=trend_name(content, act.target), side=_side_name(content, act.side))
+        text = WHAT_WIDE["chuanxi"] if wide(content, act.target) else WHAT["chuanxi"]
+        return text.format(line=trend_name(content, act.target), side=_side_name(content, act.side))
     if act.kind == "shouxin":
         person = content.characters[act.target].name if act.target in content.characters else act.target
         return WHAT["shouxin"].format(person=person)
@@ -693,6 +704,8 @@ def view(
     region = region_of(content, here) if here else None
     count = left(shard, season, content)
     rows = targets(state, content, kind, w.time + span(content, w)) if why is None else []
+    every = lines(content, w) if kind == "chuanxi" else []
+    ask = CONFIRM_WIDE if every and all(wide(content, line) for line in every) else CONFIRM  # FB-627：只有合成的那一條
     out = {
         "kind": kind, "name": NAMES[kind], "text": DESC[kind].format(**nums),
         "rule": RULE_NOTE.format(uses=cfg.uses, gap=f"{cfg.gap_days:g}"),
@@ -701,7 +714,7 @@ def view(
         "targets": rows,
         "sides": [],
         "side_note": "",  # 散人起用要看陣營的三片還沒挑邊時那一行（PICK_SIDE；有 sides 才有字）
-        "confirm": CONFIRM[kind].format(
+        "confirm": ask[kind].format(
             shard=name, target="{target}", side="{side}", hold=nums["hold"],
             place=content.locations[here].name if here in content.locations else "",
             region=region_name(content, region) if region else "",
