@@ -7896,11 +7896,16 @@ class Game:
                 pushes = self.sortie_push(loc.id, "attack") if as_sortie else self.train_trend_push(loc.id)
                 for trend_id, delta in pushes.items():  # 換算過的線，照舊交給 T3 的 push_trend
                     extra += self.push_trend(trend_id, delta, source="sortie" if as_sortie else "train")
+                credit: list[str] | None = None
                 if as_sortie and conquest.on(c, s.world):  # 領地爭奪：出陣攻打贏推這一塊的進度、不推線（設計 3.7）
+                    # 軍令照推之前的清單記（FB-608：推滿易手的那一下，推完那一塊已經是自家的、在冷卻，不在攻的清單上）；那一句照舊排在後面
+                    credit = self._order_credit(
+                        kind="win", location=loc.id, front=front_of(c, loc.id), squad=squad.id, squad_faction=squad.faction,
+                    )
                     extra += self._push_progress(loc.id, conquest.sortie_nominal(c, loc.id, "attack"), "sortie", "attack")
                 region = atlas.region_of(c, p.location)  # 官銀（伏筆，濃縮版內容表 4.0）：只有遊歷打贏才擲
                 extra += foreshadow.after_win(s, c, squad, self.rng, region.id if region is not None else None)
-                extra += self._order_credit(  # 軍令（計畫 T6）：攻城看戰線與敵方陣營，截糧看地點與運糧隊
+                extra += credit if credit is not None else self._order_credit(  # 軍令（計畫 T6）：攻城看戰線與敵方陣營，截糧看地點與運糧隊
                     kind="win", location=loc.id, front=front_of(c, loc.id), squad=squad.id, squad_faction=squad.faction,
                 )
                 extra += opportunities.on_win(s, c, front_of(c, loc.id), squad.faction)  # 三路並進（正式版乙二）
@@ -8408,11 +8413,13 @@ class Game:
         for trend_id, amount in self.sortie_push(loc.id, how).items():
             msgs += self.push_trend(trend_id, amount, source="sortie")
         on = conquest.on(c, s.world)
+        credit: list[str] = []
+        if on and how == "hold":  # 守城照拉之前的清單記（FB-608：拉到零的那一下，拉完那一塊沒有條，不在守的清單上）；那一句照舊排在最後
+            credit = self._order_credit(kind="duty", location=loc.id, front=conquest.line_of(s.world, c, loc.id))
         if on:  # 領地爭奪：守把這一塊的進度推回自己那一邊（設計 3.7、4.4）
             msgs += self._push_progress(loc.id, conquest.sortie_nominal(c, loc.id, how), "sortie", how)
         if how == "hold":
-            front = conquest.line_of(s.world, c, loc.id) if on else territory.line_of(c, loc.id)
-            msgs += self._order_credit(kind="duty", location=loc.id, front=front)
+            msgs += credit if on else self._order_credit(kind="duty", location=loc.id, front=territory.line_of(c, loc.id))
         return msgs
 
     def _resisted_line(self) -> str:
