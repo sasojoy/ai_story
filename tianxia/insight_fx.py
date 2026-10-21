@@ -26,7 +26,7 @@ QUALITIES = ("下品", "中品", "上品")
 LEGACY_QUALITY = "中品"
 MAX_LAYERS = 3
 LAYER_MARKS = {1: "一重", 2: "二重", 3: "三重"}
-GRAND_MARK = "大獎"  # 待 joy 潤
+GRAND_MARK = "真意"  # 玩家看到的字（Joy 2026-10-21「可以不要用「大獎」嗎，很出戲」）；程式裡照舊叫 grand。待 joy 潤
 
 
 def base_id(insight_id: str | None) -> str | None:

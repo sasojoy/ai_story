@@ -2966,8 +2966,27 @@
     : `<i class="fx${e.maybe ? " maybe" : ""}">${esc(e.name)}${e.maybe ? "" : lvHtml(e.layers)}</i>`;
   const fxHtml = (fx, cls) => (Array.isArray(fx) && fx.length ? `<span class="fxs${cls ? ` ${cls}` : ""}">${fx.map(fxOne).join("")}</span>` : "");
   // 意境的品相（招式與絕學稿案第五輪）：凡不蓋印，佳藍、珍紫、神金；修練頁的列、抽屜、出爐卡同一枚。底子（下中上）不給玩家看
-  const LOOK_CLS = { 佳: "l2", 珍: "l3", 神: "l4" };
+  const LOOK_CLS = { 凡: "l1", 佳: "l2", 珍: "l3", 神: "l4" };
   const lookSeal = (look, big) => (LOOK_CLS[look] ? `<em class="look ${LOOK_CLS[look]}${big ? " big" : ""}" title="${esc(look)}品">${esc(look)}</em>` : "");
+  // 品相的四級一眼看懂（Joy 2026-10-21「合出來我根本看不懂這是不是好的」「沒有直接把珍品還是什麼顯示在剛合好那邊」）：
+  // 凡佳珍神排成一條，這一份那一級亮著，底下一句這一級是什麼、再往上要什麼（insight_fx.look 的條件）。字待 joy 潤
+  const LOOK_STEPS = [["凡", "一個效果、只有一重"], ["佳", "二重，或兩個效果"], ["珍", "三重，或悟出真意"], ["神", "真意再加三重：最好的一級"]];
+  // 自創武學也走同一條梯子（Joy 2026-10-21「那武學呢 有分？」）：撞到幾樣稀有（create.marks_of：純或渾、招已透、稀有路數）
+  const ART_LOOK_STEPS = [["凡", "三樣稀有一樣都沒撞到"], ["佳", "撞到一樣：三格同是單色或任色、招已透、稀有路數"], ["珍", "撞到兩樣"], ["神", "三樣全撞到：最好的一級"]];
+  function lookLadder(look, steps = LOOK_STEPS) {
+    const at = steps.findIndex(([k]) => k === look);
+    if (at < 0) return "";
+    const up = steps[at + 1];
+    return `<div class="look-ladder"><div class="ll-steps">${steps.map(([k], n) => `<i class="${LOOK_CLS[k]}${n === at ? " on" : n < at ? " past" : ""}">${k}</i>`).join("")}</div>
+      <p><b class="${LOOK_CLS[look]}">${esc(look)}品</b>・四品裡第 ${at + 1} 級：${esc(steps[at][1])}。${up ? `再往上是${up[0]}品：${esc(up[1])}。` : ""}</p></div>`;
+  }
+  // 裝在身上哪一格最強（伺服器 i.best，might.best_place）：會更強寫綠字的戰力，不會寫一句灰字。字待 joy 潤
+  function bestLine(i) {
+    const b = i.best, now = S.menxia && typeof S.menxia.might === "number" ? S.menxia.might : null;
+    if (i.slotted) return "";
+    if (!b || now == null || b.might <= now) return '<p class="ic-best">身上兩門裝在哪一格都不會更強。</p>';
+    return `<p class="ic-best up">裝進【${esc(b.name)}】第 ${(b.i | 0) + 1} 格${b.swap ? `（換下「${esc(b.swap)}」）` : ""}最強：戰力 ${now | 0} → <b>${b.might | 0}</b></p>`;
+  }
   // 意境卡（第五輪第三節）：名字、屬性玉環、品相印；功效籤當摘要，底下每個功效一句白話（大獎金底）；
   // o.fits：「裝進【某門】第 N 格」的鈕（伺服器算好裝得進哪裡，skillview._fits）；o.melt：化成心得；o.reveal：出爐的排場；o.cmp：跟舊的比
   function insightCardHtml(i, o = {}) {
@@ -2978,7 +2997,9 @@
     const rare = i.look === "珍" || i.look === "神";
     return `<div class="ins-card${o.reveal ? " reveal" : ""}${o.reveal && rare ? " rare" : ""}">
       <div class="ic-head">${ringHtml([i.attribute], i.own && i.glyph ? glyphSvg(i.glyph, "glyph-mini") : `<b>${esc(String(i.name).slice(0, 1))}</b>`)}<div><b>「${esc(i.name)}」</b><small>屬${esc(i.attribute)}${i.lean && i.lean !== "無" ? `・${esc(i.lean)}` : ""}</small></div>${lookSeal(i.look, true)}</div>
+      ${lookLadder(i.look)}
       ${fx ? `<ul class="ic-fx">${fx}</ul>` : fxHtml(i.fx)}
+      ${bestLine(i)}
       ${o.cmp ? `<p class="ic-cmp">${esc(o.cmp)}</p>` : ""}
       ${i.note ? `<p class="ic-note">${esc(i.note)}</p>` : ""}
       ${i.own ? `<p class="glyph-from">悟於${esc(i.place || "某處")}・只屬於你</p>` : ""}
@@ -3164,6 +3185,7 @@
     // 一門武學在抽屜裡的樣子（招式與絕學稿案第四輪：身上的兩門、庫裡的都進同一個抽屜）：印記、名字、品相，底下是卡的本體
     const artSheet = (a, slot) => `<div class="acard${a.quality === "絕學" ? " q4" : ""}"${a.worn ? ` data-worn="${esc(a.kind)}"` : ""}>
         <div class="hd">${a.quality === "絕學" ? '<span class="qseal q4 big">絕</span>' : ""}<div><h3>${esc(a.name)}</h3><div class="sub">${[a.kind, a.look].filter(Boolean).map(esc).join("・")}</div></div>${a.pose ? figSvg(a.pose, a.weapon, "card-fig") : ""}${a.worn ? '<span class="worn">身上</span>' : ""}</div>
+        ${a.tier && a.quality !== "絕學" ? lookLadder(a.tier, ART_LOOK_STEPS) : ""}
         ${body(a, slot)}</div>`;
     // 功法庫：身上以外的。篩選（全部／武學／內功／可修練）與「再列 N 門」只是看的方式，記在 S，輪詢重畫不會跳回去
     // 排序是伺服器排好的（FB-085：身上的先，再品質、成、名字），這裡照順序列；選哪一類記在 localStorage（libFilter）
@@ -3579,11 +3601,11 @@
     const merge = v.kind === "合併";
     const sub = [v.attribute ? `屬${v.attribute}` : "", merge ? "" : v.gen, v.level > 1 ? `第${v.level}成` : ""].filter(Boolean);
     const badge = merge ? '<span class="qseal qi big">意</span>' : v.quality ? seal(v.quality, true) : '<span class="qseal q1 big">？</span>';
-    const pair = merge || v.kind === "揣摩"; // 意境＋意境：品質照兩份裡好的，另寫大獎機會
+    const pair = merge || v.kind === "揣摩"; // 意境＋意境：品質照兩份裡好的，另寫真意機會
     const verdict = pair ? `${fireHtml(v.fire)}${merge && v.depth ? `<span class="muted">${esc(v.depth)}</span>` : ""}`
       : v.quality ? `<b>${esc(v.quality)}</b>${v.why && v.why.length ? `<span class="muted">・${v.why.map(esc).join("；")}</span>` : ""}${v.near ? `<span class="near">・${esc(v.near)}</span>` : ""}`
       : `品質看造化：${esc(v.odds || "")}`;
-    const tags = (v.traits || []).map((t) => t.grand ? `<i class="tr grand${t.maybe ? " maybe" : ""}">${esc(t.name)}<small>大獎</small></i>`
+    const tags = (v.traits || []).map((t) => t.grand ? `<i class="tr grand${t.maybe ? " maybe" : ""}">${esc(t.name)}<small>真意</small></i>`
       : t.special ? `<i class="tr sp">${esc(t.name)}</i>`
       : `<i class="tr${t.maybe ? " maybe" : ""}">${esc(t.name)}${t.maybe ? "" : lvHtml(t.layers)}</i>`); // 待 joy 潤
     if (v.slots) tags.push(`<i class="tr off">${esc(v.slots)}</i>`);
@@ -3716,7 +3738,7 @@
     const rings = (draft.colors || []).map((cc, i) => `<div class="cr-ring">${ringHtml(cc, `<b>${i + 1}</b>`)}<small>${esc(ringWord(cc))}</small></div>`).join("");
     const grade = c.grade || "上品";
     const stance = draft.stance ? `<p class="cr-stance"><b>${esc(draft.stance)}</b>・${esc(draft.timing || "")}${draft.fire ? `・火候 <b class="fire-${esc(draft.fire)}">${esc(draft.fire)}</b>` : ""}</p>` : "";
-    const look = draft.look ? `<p class="cr-look${draft.tier ? ` tier-${esc(draft.tier)}` : ""}">${esc(draft.look)}</p>` : "";
+    const look = draft.tier ? `${lookLadder(draft.tier, ART_LOOK_STEPS)}${(draft.marks || []).length ? `<p class="cr-look tier-${esc(draft.tier)}">${esc(draft.look)}</p>` : ""}` : "";
     const redo = draft.redo > 0 ? `<button class="btn ghost" data-act="create-back" data-to="pose">重擺</button><button class="btn ghost" data-act="create-back" data-to="intent">重立意</button>` : "";
     return `${head}<div class="card create">${steps}
       <div class="cr-made">${figSvg(draft.pose, weapon, "cr-fig big")}<div><p class="create-sum"><b>${esc(draft.kind)}</b>・${esc(draft.form)}</p><p>意「${esc(draft.intent)}」</p><p class="muted small">${esc(draft.pose_read)}・${esc(draft.read_text)}</p></div></div>

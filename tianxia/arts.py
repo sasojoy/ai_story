@@ -194,6 +194,12 @@ def apply(state: GameState, content: Content, world: WorldStateStore, art: Marti
 
 def rating(content: Content, view: MartialArt, level: int, state: GameState | None = None, world: WorldStateStore | None = None) -> int:
     """戰力：威力 ×（1 ＋ 槽裡技能的加成總和）。view 是 apply 過的那一份；寫死的武學照它的功效算。"""
+    return int(round(power_at(view, level) * (1 + effect_bonus(content, view))))
+
+
+def effect_bonus(content: Content, view: MartialArt) -> float:
+    """槽裡技能與招的加成總和（rating 與 might.now 共用）：一般功效每級 general_weight、大獎 high_weight、特別功效 special_weight、
+    本命戰法 signature_weight（小戰法半個、自創的招照火候打折）。view 是 apply 過的那一份。"""
     cfg = content.config.arts
     bonus = 0.0
     counts: dict[str, int] = {}
@@ -208,7 +214,7 @@ def rating(content: Content, view: MartialArt, level: int, state: GameState | No
         bonus += cfg.signature_weight * (0.5 if content.skills[view.id].tactic.minor else 1.0)  # 小戰法算半個
     elif moves.is_own(content, view):  # 自創長出來的招：表上的數是本命的八成，再照火候打折
         bonus += cfg.signature_weight * 0.8 * float(cfg.move_fire.get(view.move_fire or moves.DEFAULT_FIRE, 0.8))
-    return int(round(power_at(view, level) * (1 + bonus)))
+    return bonus
 
 
 def score(state: GameState, content: Content, world: WorldStateStore, art: MartialArt | None) -> int:

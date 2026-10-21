@@ -482,7 +482,7 @@ def roll_colors(content: Content, draft: CreateDraft, rng: random.Random) -> lis
 PURE, WHOLE = moves.PURE, moves.WHOLE
 CLEAR, RARE = "透", "奇"  # 待 joy 潤
 MARK_TEXT = {PURE: "三格全單色", WHOLE: "三格全任色", CLEAR: "招已透", RARE: "稀有路數"}  # 待 joy 潤
-TIER_TEXT = {2: "珍", 3: "神"}
+TIER_TEXT = {0: "凡", 1: "佳", 2: "珍", 3: "神"}  # 跟意境的品相同一條梯子（Joy 2026-10-21「那武學呢 有分？」）
 
 
 purity = moves.purity
@@ -499,17 +499,13 @@ def marks_of(colors: list[list[str]], fire: str | None, rare: bool) -> list[str]
 
 
 def tier_of(marks: list[str]) -> str | None:
-    """兩樣以上「珍」、三樣以上「神」；不到是 None。"""
-    n = len(marks)
-    return TIER_TEXT[3] if n >= 3 else TIER_TEXT[2] if n >= 2 else None
+    """品相：一樣都沒撞到「凡」、一樣「佳」、兩樣「珍」、三樣「神」。"""
+    return TIER_TEXT[min(len(marks), 3)]
 
 
 def look_text(marks: list[str]) -> str:
-    """卡上那一行品相：「珍・三格全單色、招已透」；什麼都沒撞到是空字串。"""
-    if not marks:
-        return ""
-    tier = tier_of(marks)
-    return (f"{tier}・" if tier else "") + "、".join(MARK_TEXT[m] for m in marks)
+    """卡上那一行品相：「珍・三格全單色、招已透」；什麼都沒撞到是「凡」。"""
+    return "・".join([tier_of(marks)] + (["、".join(MARK_TEXT[m] for m in marks)] if marks else []))
 
 
 def colors_text(colors: list[list[str]]) -> str:
@@ -735,7 +731,7 @@ def view(state: GameState, content: Content, world: WorldStateStore) -> dict:
         # 成形之後長出來的招：蓋自己名號第一個字的私印，照練開之後的數算
         "tactic": tactics.card_text(move, state.player.name[:1] or tactics.MINOR_TITLE) if move is not None else "",
         "move": move.name if move is not None else "", "say": move.say if move is not None else "",
-        "fire": fire, "look": look_text(marks), "tier": tier_of(marks), "marks": marks,
+        "fire": fire, "look": look_text(marks) if draft.colors else "", "tier": tier_of(marks) if draft.colors else None, "marks": marks,
         "seal": state.player.name[:1],
     })
     return base
