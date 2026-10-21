@@ -284,7 +284,7 @@ class Ascension(BaseModel):
 
 class CreateDraft(BaseModel):
     """自創武學走到哪（tianxia/create.py；Joy 2026-10-20 改成五步）：執器（kind、form）開單 → 擺式（pose）→ 立意（intent，
-    模型讀出 read、lean、score；引擎照兵器＋姿勢＋意擲出 colors）→ 立名（付心得、擲品級、登記）。redo 是還能免費重來幾次。"""
+    模型讀出 read、lean、score；引擎照兵器＋姿勢＋意擲出 colors）→ 立名（付心得、登記；品級不擲，一律 Config.arts.create_grade）。redo 是還能免費重來幾次。"""
 
     kind: str  # 內功／武學
     form: str = ""  # 執器：武學的兵器種類（劍、刀…）或內功的行功之法（吐納、導引…）
