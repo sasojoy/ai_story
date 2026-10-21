@@ -9500,7 +9500,10 @@ class Game:
         game = None if target is None else self._admin_target(target[1])
         if game is None:
             return self._log([NO_SUCH_PLAYER.format(name=(name or "").strip())])
-        msg = mall.refund(game.state, self.content, wallet, purchase_id, now=self.now, admin=self.state.player.name, note=note)
+        msg = mall.refund(
+            game.state, self.content, wallet, purchase_id, now=self.now, admin=self.state.player.name, note=note,
+            season=self.world.get_season_number(),
+        )
         self._save_target(game)
         if not msg.startswith("（"):
             self._write("商城", [msg], tag="管理者")
