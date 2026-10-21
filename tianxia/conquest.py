@@ -400,10 +400,11 @@ def _payout(world: WorldState, content: Content, loc_id: str, side: str, kind: s
     world.chronicle.append(Rumor(time=world.time, text=(TOP_TAKE if kind == "take" else TOP_GUARD).format(name=top, place=place)))
 
 
-def flip(world: WorldState, content: Content, loc_id: str, side: str) -> list[str]:
+def flip(world: WorldState, content: Content, loc_id: str, side: str, note: bool = True) -> list[str]:
     """這一塊易手給 side（推滿那一下、攻城戰打贏；設計 4.1、4.4）：這一輪推過 side 那一條的人照出力分紅、推最多的上江湖史；
     控制方改成 side（set_control：「落入／收復」天下大事、江湖史、三條線當場重算）；所有條與守城功的帳清掉；冷卻從這一刻起算；
-    day_log 記一筆（by="flip"）。回要寫進紀錄的句子。side 不是劇本的陣營、搶不下來的區塊不動（回空的）。"""
+    day_log 記一筆（by="flip"，〈天下形勢〉寫成「某某率先攻入」）——攻城戰打贏的不記（note=False：siege 自己記那一場的結果，同一件事不寫兩條）。
+    回要寫進紀錄的句子。side 不是劇本的陣營、搶不下來的區塊不動（回空的）。"""
     if not capturable(content, loc_id) or content.scenario.find_faction(side) is None:
         return []
     fight = _fight(world, content, loc_id)
@@ -411,8 +412,9 @@ def flip(world: WorldState, content: Content, loc_id: str, side: str) -> list[st
     _payout(world, content, loc_id, side, "take", shares)
     set_control(world, content, loc_id, side)
     fight.bars, fight.guards, fight.alarm, fight.flipped_at = {}, {}, False, world.time
-    top = min(shares, key=lambda n: (-shares[n], n)) if shares else ""
-    _note_day(world, content, loc_id, side, "flip", top)
+    if note:
+        top = min(shares, key=lambda n: (-shares[n], n)) if shares else ""
+        _note_day(world, content, loc_id, side, "flip", top)
     return [PAYOUT_NEXT] if shares else []
 
 

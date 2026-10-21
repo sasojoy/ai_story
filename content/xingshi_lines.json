@@ -18,6 +18,10 @@
     "fighting": "{place}一仗打到入夜，還沒分出勝負。",
     "plan_vote": "{side}眾議已定，下一仗攻{place}。",
     "plan_commander": "{side}由主將定奪，下一仗攻{place}：{reason}",
+    "letter": "{who}替{side}下了戰書，約戰{place}。",
+    "letter_plain": "{side}下了戰書，約戰{place}。",
+    "flip": "{who}替{side}率先攻入{place}，{place}當場易手。",
+    "flip_plain": "{side}一路推進，{place}當場易手。",
     "line": "{line}一帶，{lean}{move}。"
   },
   "lean": {

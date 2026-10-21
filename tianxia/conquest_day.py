@@ -5,7 +5,7 @@
   第一個），同一塊別一邊已經下了、還沒開集結就併進同一場（中立地就是三方混戰）。
 - 一天＝當地時間（Config.pill_day_utc_offset_hours，跟回體丹同一個時區）settle_hour（22:00）起算的 24 小時，day_key 是第幾天；一邊一天一張
   戰書照它算。換天那一刻（Game._conquest_tick 第一個看到新的一天的人觸發，只准往前走）照 day_turn：前一天還沒開成的那幾場作罷、清掉舊的；
-  這個掛鉤也是〈天下形勢〉每天一篇的時刻（第三批 A 合進來時接在 day_turn 後面）。
+  這個掛鉤也是〈天下形勢〉每天一篇的時刻（Game._xingshi_open 接在 day_turn 後面）。
 - 軍令的攻城、守城讀 today：此刻進度最高的那一塊（conquest.focus_blocks；PM 2026-10-20 第 1 條）。
 只 import models、state、conquest、timetable、calendar。"""
 from __future__ import annotations

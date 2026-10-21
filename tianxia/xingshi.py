@@ -1,7 +1,8 @@
 """領地爭奪第三批 A：〈天下形勢〉——每天 22:00 結算那一刻一篇的旁白（設計 3.10；計畫第五章 Task 16、17，第六章 6.3、6.4）。
 
-開單（Game._xingshi_open，_conquest_tick 結算之後）：事實（facts）是上一篇以來的 day_log——收場的易手、守住、相持（DayNote.result）、攻方沒人到的作罷、
-明天打哪裡與主將為什麼挑那裡——加上傍晚還沒打完的那幾場、三條戰線比上一篇往哪一邊動（寫「略偏黃巾」這種詞，不寫數字）、上一篇以來的天下大事
+開單（Game._xingshi_open，_conquest_tick 換天〔conquest_day.day_turn〕之後）：事實（facts）是上一篇以來的 day_log——收場的易手、守住、相持
+（DayNote.result）、推滿當場易手（by="flip"，翻地與爭搶）、攻方沒人到的作罷、誰下了戰書約戰哪裡（by="letter"；舊季的眾議與主將定奪照舊認得）
+——加上傍晚還沒打完的那幾場、三條戰線比上一篇往哪一邊動（寫「略偏黃巾」這種詞，不寫數字）、上一篇以來的天下大事
 （不帶數字、不是〈天下形勢〉自己那一句的）；「是日：…」那一句（summary_line）照收場的那幾筆寫。
 伺服器鎖外請模型照事實寫一篇（write；三段式 Game.xingshi_request → write → Game.settle_xingshi），過 clean（轉繁體、去標記、一百二十到八百字、
 不能有阿拉伯數字或假名）；寫不出來、或過 Config.xingshi.grace_seconds 沒交回，照固定段（rule_text）。收下那一刻天下大事一則、江湖史一筆。
@@ -29,7 +30,10 @@ RULE_FACTS = 12  # 固定段最多拼幾條事實（四條一段）
 LEAN_STRONG, LEAN_UP, LEAN_SLIGHT = 30, 15, 5  # 【開發】戰線離中線幾點算「佔盡上風」「漸佔上風」「略偏」，不到 SLIGHT 是「兩軍相持」
 MOVE_AT = 3  # 【開發】比上一篇動了幾點以上才寫「往某一邊推了一截」
 
-FACT_KEYS = ("taken", "taken_blow", "held", "stalemate", "void", "fighting", "plan_vote", "plan_commander", "line")
+# letter／letter_plain、flip／flip_plain：翻地與爭搶（dev/flip-1）的 day_log 多的兩種 by——下戰書（reason 是下戰書的人；管理者的沒有名號）、
+# 推滿當場易手（reason 是推最多的人；這一輪沒人推過就翻的沒有名號）。plan_vote、plan_commander 留給舊季（第二批投票那一版）的 day_log
+FACT_KEYS = ("taken", "taken_blow", "held", "stalemate", "void", "fighting", "plan_vote", "plan_commander", "letter", "letter_plain",
+             "flip", "flip_plain", "line")
 SUMMARY_KEYS = ("taken", "held", "stalemate", "void", "none")
 LEAN_KEYS = ("strong", "up", "slight", "even")
 MOVE_KEYS = ("toward", "still")
@@ -95,6 +99,9 @@ def note_fact(content: Content, note: DayNote) -> str | None:
         return fact["stalemate"].format(place=place, attackers=_sides(content, note.attackers or [note.side]))
     if note.void:
         return fact["void"].format(side=_side(content, note.side), place=place)
+    if note.by in (conquest_day.LETTER, conquest_day.FLIP):  # 下戰書、推滿易手（翻地與爭搶）：有名號寫名號，沒有寫不帶名號的那一句
+        key = "letter" if note.by == conquest_day.LETTER else "flip"
+        return fact[key if note.reason else f"{key}_plain"].format(who=note.reason, side=_side(content, note.side), place=place)
     if note.by == conquest_day.VOTE:
         return fact["plan_vote"].format(side=_side(content, note.side), place=place)
     if note.by == conquest_day.COMMANDER:
@@ -132,12 +139,12 @@ def line_values(world: WorldState, content: Content) -> dict[str, int]:
 
 
 def facts(world: WorldState, content: Content, notes: list[DayNote], lines_then: dict[str, int], rumors_from: int = 0) -> list[str]:
-    """這一篇的事實（新的一張單；照順序、最多 Config.xingshi.facts_max 條）：收場與作罷（notes 裡有 result 或 void 的）→ 傍晚還沒打完的那幾場
-    → 三條戰線各一句（偏向、比上一篇往哪一邊動）→ 下一仗打哪裡（結算排定的那幾筆，主將定奪的寫原因）→ 上一篇以來的天下大事（rumors_from 之後，
+    """這一篇的事實（新的一張單；照順序、最多 Config.xingshi.facts_max 條）：收場、作罷、推滿易手（_happened）→ 傍晚還沒打完的那幾場
+    → 三條戰線各一句（偏向、比上一篇往哪一邊動）→ 下一仗打哪裡（戰書；舊季是結算排定的那幾筆，主將定奪的寫原因）→ 上一篇以來的天下大事（rumors_from 之後，
     新的在前；帶數字的〔公告的時刻〕與〈天下形勢〉自己那一句不收）。每一條都不帶阿拉伯數字。"""
     out: list[str] = []
-    done = [n for n in notes if n.result or n.void]
-    plans = [n for n in notes if not n.result and not n.void]
+    done = [n for n in notes if _happened(n)]
+    plans = [n for n in notes if not _happened(n)]
     for note in done:
         out.append(note_fact(content, note))
     if world.conquest is not None:
@@ -151,9 +158,9 @@ def facts(world: WorldState, content: Content, notes: list[DayNote], lines_then:
     for note in plans:
         out.append(note_fact(content, note))
     seen = set(out)
-    for note in done:  # 易手那一刻 territory 另發的「落入／收復」：跟收場那一條是同一件事
-        if note.result == "taken":
-            place, side = _place(content, note.loc), _side(content, note.taken)
+    for note in done:  # 易手那一刻 territory 另發的「落入／收復」：跟收場（或推滿易手）那一條是同一件事
+        if note.result == "taken" or note.by == conquest_day.FLIP:
+            place, side = _place(content, note.loc), _side(content, note.taken or note.side)
             seen |= {territory.FLIP_LINE.format(place=place, side=side), territory.RETAKE_LINE.format(place=place, side=side)}
     for rumor in reversed(world.rumors[rumors_from:]):
         text = rumor.text.strip()
@@ -165,14 +172,19 @@ def facts(world: WorldState, content: Content, notes: list[DayNote], lines_then:
     return [f for f in out if f and not _DIGITS.search(f)][: content.config.xingshi.facts_max]
 
 
+def _happened(note: DayNote) -> bool:
+    """這一筆是已經發生的事（收場、作罷、推滿易手），不是排下的下一仗（戰書、舊季的眾議與主將定奪）。"""
+    return bool(note.result or note.void or note.by == conquest_day.FLIP)
+
+
 def summary_line(notes: list[DayNote], content: Content) -> str:
-    """「是日：…」那一句：這一天收場的那幾場（拿下、守住、相持）與攻方沒人到作罷的；都沒有寫「各路按兵」。"""
+    """「是日：…」那一句：這一天收場的那幾場（拿下、守住、相持）、推滿當場易手的（寫成拿下）與攻方沒人到作罷的；都沒有寫「各路按兵」。"""
     words = lines(content)["summary"]
     parts: list[str] = []
     for note in notes:
         place = _place(content, note.loc)
-        if note.result == "taken":
-            part = words["taken"].format(side=_side(content, note.taken), place=place)
+        if note.result == "taken" or note.by == conquest_day.FLIP:
+            part = words["taken"].format(side=_side(content, note.taken or note.side), place=place)
         elif note.result == "held":
             part = words["held"].format(keeper=_side(content, note.keeper), place=place)
         elif note.result == "stalemate":

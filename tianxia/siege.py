@@ -400,11 +400,11 @@ def settle(world: WorldState, content: Content, battle: battle_instance.BattleIn
             line = BLOW_RUMOR if keeper is not None and keeper.felled_by else BLOW_RUMOR_NOBODY
             _rumor(world, line.format(title=name, who=keeper.felled_by if keeper is not None else "", side=side,
                                       guard=keeper.name if keeper is not None else battle_instance.GUARD_SIDE, place=place), info_.loc)
-            conquest.flip(world, content, info_.loc, taken)
+            conquest.flip(world, content, info_.loc, taken, note=False)  # 這一場的結果由 _note_result 記（〈天下形勢〉不寫兩條）
         else:
             _rumor(world, MELEE_HELD_LINE.format(title=name, place=place), info_.loc)
     elif taken is not None:
-        conquest.flip(world, content, info_.loc, taken)
+        conquest.flip(world, content, info_.loc, taken, note=False)
     elif winner and defender(info_) is not None:
         holder = info_.holder
         side = content.scenario.faction_name(holder, holder) if holder else "守將"
