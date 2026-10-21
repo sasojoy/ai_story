@@ -475,8 +475,8 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
 
 
 def take_bounties(game: Game) -> None:
-    """城裡的懸賞榜上有揭得下的就揭、有交得出的求藝求兵就交（打開、揭、一張一張挑一件交、返回，走 Game 的選單；不花體力）。
-    交照 bounties.give_choice（最不值錢的那一件，跟伺服器假人同一個挑法）；求藝、求兵不揭（take_problem 擋）。
+    """城裡的懸賞榜上有揭得下的就揭、有交得出的求兵就交（打開、揭、一張一張挑一件交、返回，走 Game 的選單；不花體力）。
+    交照 bounties.give_choice（最不值錢的那一件，跟伺服器假人同一個挑法）；求兵不揭（take_problem 擋）。
     揭的做不做得成看之後隨機走到哪裡。"""
     s, c = game.state, game.content
 

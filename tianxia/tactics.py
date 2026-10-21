@@ -1593,6 +1593,21 @@ def figure_arts(content: Content, character: CharacterDef) -> list[str]:
     return out
 
 
+def of_art(content: Content, art) -> TacticDef | None:
+    """這一門帶的戰法：內容寫的（本命戰法、小戰法），或自創借來的小戰法（MartialArt.tactic_from）。"""
+    if art is None:
+        return None
+    tactic = of(content, art.id)
+    return tactic if tactic is not None or not art.tactic_from else of(content, art.tactic_from)
+
+
+def of_id(content: Content, skill_id: str | None, world=None) -> TacticDef | None:
+    """認 id 的那一種：內容裡的照 of；全服登記的（自創）查 world 拿 tactic_from。world 是 None 只認內容。"""
+    if not skill_id or skill_id in content.skills or world is None:
+        return of(content, skill_id)
+    return of_art(content, world.get_skill(skill_id))
+
+
 def figure_of(content: Content, skill_id: str) -> str | None:
     """這門本命武學是哪位人物的（figure_arts）；學來的武學（小戰法，同伴起始帶的那幾門也是）不是誰的，None。"""
     for ch in content.characters.values():
@@ -1601,14 +1616,14 @@ def figure_of(content: Content, skill_id: str) -> str | None:
     return None
 
 
-def holders_of(content: Content, rows: list[tuple[str, str, str | None, str | None]]) -> list[Holder]:
+def holders_of(content: Content, rows: list[tuple[str, str, str | None, str | None]], world=None) -> list[Holder]:
     """（名字, 鍵, 武學 id, 內功 id）一列一個人 → 帶著本命戰法的那幾門（武學在前）。同一門戰法兩個人都帶著時只算第一個
-    （本人在前）：同一招不會一回合發兩次。"""
+    （本人在前）：同一招不會一回合發兩次。給了 world 才認得自創借來的小戰法（of_id）。"""
     out: list[Holder] = []
     seen: set[str] = set()
     for who, key, wugong, neigong in rows:
         for skill_id in (wugong, neigong):
-            tactic = of(content, skill_id)
+            tactic = of_id(content, skill_id, world)
             if tactic is None or tactic.name in seen:
                 continue
             seen.add(tactic.name)

@@ -2951,19 +2951,20 @@ def test_an_ordinary_option_does_not_come_back_with_a_message(client):
     assert "message" not in out
 
 
-def test_a_bounty_option_that_is_no_longer_on_the_menu_tells_the_page_why_and_is_not_journaled(client):
+def test_a_bounty_option_that_is_no_longer_on_the_menu_tells_the_page_why_and_is_not_journaled(client, monkeypatch):
     """FB-162：兩個分頁搶同一張，慢的那一頁按下去的選項已經不在選單上——跟決戰選項一樣回一句 message（網頁跳提示），
-    原因是引擎的拒絕（bounties.give_problem：這一件不在功法庫裡）；不寫江湖紀錄。不是懸賞的、也不在選單上的選項照舊什麼都不回。"""
+    原因是引擎的拒絕（bounties.give_problem：裝備庫裡沒有這一件）；不寫江湖紀錄。不是懸賞的、也不在選單上的選項照舊什麼都不回。"""
     from tianxia import bounties
     from tianxia.state import Bounty
 
+    monkeypatch.setattr(server.CONTENT.config.weapons, "enabled", True)  # 兵器關著時求兵一律回「此刻無法這麼做」，看不出原因
     _player(client)
     # 開季時已經掛了第 1 週的那一批（b1…），這一張另取名字，免得 give_problem 找到的是別張
-    open_world().mutate_season(lambda s: s.bounties.append(
-        Bounty(id="b-race", kind="art", faction="guan", silver=20, deeds=2, quota=3, attribute="剛", week=1, expires=1e12)))
+    open_world().mutate_season(lambda s: s.bounties.append(Bounty(
+        id="b-race", kind="arms", faction="guan", silver=0, deeds=2, quota=3, attribute="柔", weapon_kind="劍", week=1, expires=1e12)))
     before = _journal_titles()
-    out = client.post("/api/choose", json={"id": "bounty:give:b-race:疾風拳"}).json()
-    assert bounties.NO_ART in out["message"]  # 伺服器把話轉成 HTML，網頁跳提示時再去掉標籤
+    out = client.post("/api/choose", json={"id": "bounty:give:b-race:兵:9"}).json()
+    assert bounties.NO_WEAPON in out["message"]  # 伺服器把話轉成 HTML，網頁跳提示時再去掉標籤
     assert bounties.GONE in client.post("/api/choose", json={"id": "bounty:pick:b99"}).json()["message"]
     assert bounties.STALE in client.post("/api/choose", json={"id": "bounty:unpick"}).json()["message"]  # 榜根本沒開著
     assert _journal_titles() == before

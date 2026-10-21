@@ -108,7 +108,7 @@ def test_the_board_draws_the_held_row_and_pinned_notes(board):
     shop = m["shop"]
     assert 'class="shop-layer shop-board"' in html and shop["held"]["head"] in html and shop["held"]["left_text"] in html
     assert html.count('data-act="board-zoom"') == 2 and "k-scout" in html and "k-arms" in html  # 手上沒有揭著的：只有兩張告示點得開
-    assert shop["notes"][0]["have"] in html  # 交得出的求藝求兵排在前面（沒揭著的）
+    assert shop["notes"][0]["have"] in html  # 交得出的求兵排在前面（沒揭著的）
     assert 'data-act="choose" data-id="bounty:back"' in html
 
 
