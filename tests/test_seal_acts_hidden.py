@@ -89,7 +89,12 @@ def _seen(c, w) -> dict:
         }
         for name in ("甲客", "乙客"):
             other = store.load(name)
+            other.world = viewer.state.world
             out[f"seek:{name}"] = tavern.seek_lines(viewer.state, c, other, 100.0, set())
+            # FB-643：打聽交情、名氣、近況、買兇找人也一樣（打聽度夠高、看得到近來的事的那一種在 test_seal_fb643_tavern.py）
+            out[f"ties:{name}"] = tavern.ties_player_lines(viewer.state, c, other, [], set())
+            out[f"tavern:{name}"] = (tavern.person_fame(other, c), tavern.fresh(other, viewer.state.world.time),
+                                     tavern.hit_reach(c, VIEWER_AT, other))
             out[f"card:{name}"] = json.dumps(social.card(viewer, viewer._kin(other)), ensure_ascii=False, sort_keys=True, default=str)
         return out
 

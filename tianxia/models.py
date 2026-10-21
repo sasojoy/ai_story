@@ -2051,7 +2051,8 @@ class TreasureRules(_Strict):
     dup_silver: int = Field(default=50, ge=0)  # 掉落池都有了、奇遇給的那一件已經有了，改給這麼多銀兩（6.5）
 
 
-SealActKind = Literal["yinjiang", "banzhao", "chenglu", "chuanxi", "shouxin"]  # 引將、頒詔、承露、傳檄、收心（第 3 批再加鎮地、補缺）
+# 引將、頒詔、承露、傳檄、收心（第 2 批）；鎮地、補缺（第 3 批，建在翻地與爭搶上）
+SealActKind = Literal["yinjiang", "banzhao", "chenglu", "chuanxi", "shouxin", "zhendi", "bujue"]
 
 
 class ShardDef(_Strict):
@@ -2065,7 +2066,7 @@ class ShardDef(_Strict):
     # 改版（Config.seal.revamp 開著）的常駐成長或生活效果：Config.seal.revamp.effects 的鍵，一片可以好幾個（玄紐、歸心）；
     # 戰力 ×revamp.power 每片都有、不寫在這裡（docs/superpowers/specs/2026-10-21-玉璽碎片改版-design.md 第三章）
     effects: list[str] = Field(default_factory=list)
-    # 改版第 2 批：這一片的獨門行動（tianxia/seal_acts.py；設計第三章）。鎮地、補缺是第 3 批，那兩片這一批不寫（沒有行動）
+    # 改版第 2、3 批：這一片的獨門行動（tianxia/seal_acts.py；設計第三章）；載入時一種只給一片
     act: SealActKind | None = None
 
 
@@ -2108,7 +2109,9 @@ class SealActsTuning(_Strict):
       （契機與服丹都乘，cultivation.peak_scale；企劃者 2026-10-21：武學重構之後修練不再擲升品）。
     - stamina：承露——那一區體力回復的倍數（醫館療傷不收錢，沒有數字）。
     - push：傳檄——那一軍在那條線上推的量的倍數（盡頭阻力與每人每日上限照舊）。
-    - affinity：收心——跟他說話、宴客敬酒的情誼漲幅倍數（求見不看門檻，沒有數字）。"""
+    - affinity：收心——跟他說話、宴客敬酒的情誼漲幅倍數（求見不看門檻，沒有數字）。
+    - hold_hours：鎮地（第 3 批）——那一塊誰都推不動幾個季曆小時（「一日」的 hold_hours/24；設計第三章 12 個季曆小時）。
+    - mend_days：補缺（第 3 批）——幾日之內被翻走的地補得回來（PM 五之一 5「1 個季曆天」；冷卻比它長的季照冷卻算）。"""
 
     uses: int = Field(default=2, ge=0)
     gap_days: float = Field(default=3, ge=0)
@@ -2118,6 +2121,8 @@ class SealActsTuning(_Strict):
     stamina: float = Field(default=1.5, ge=1)
     push: float = Field(default=1.25, ge=1)
     affinity: float = Field(default=2.0, ge=1)
+    hold_hours: float = Field(default=12, gt=0)
+    mend_days: float = Field(default=1, gt=0)
 
 
 class SealRevampTuning(_Strict):

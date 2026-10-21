@@ -153,13 +153,16 @@ def conquest_season(content: Content, season: WorldState | None) -> bool:
 
 def hide_spots(content: Content, world: WorldState | None) -> list[tuple[str, float]]:
     """可以藏碎片的地方（地點 id、權重）：所有開季中立的區塊（conquest.start_kind），權重 1；落在 core_regions 這些大區的（核心）權重
-    core_weight（企劃者：核心的機率最高）。照區塊表的順序；一塊都沒有是空的。藏在哪裡一律讀區塊表，不寫死地點 id。"""
+    core_weight（企劃者：核心的機率最高）。照區塊表的順序；一塊都沒有是空的。藏在哪裡一律讀區塊表，不寫死地點 id。
+    劇情還沒開放的跳過（FB-642：例如沒立「綠林開寨」的綠林山寨，去不了也撿不到；同「能不能當成目標」的 conquest._opened）。"""
     from . import atlas, conquest  # noqa: PLC0415  延後 import（見模組說明）
 
     cfg = content.config.seal.cache
     spots: list[tuple[str, float]] = []
     for loc_id in conquest.blocks(content):
         if conquest.start_kind(world, content, loc_id) != conquest.NEUTRAL:
+            continue
+        if world is not None and not conquest._opened(world, content, loc_id):  # noqa: SLF001  同一個套件
             continue
         region = atlas.region_of(content, loc_id) if loc_id in content.locations else None
         spots.append((loc_id, cfg.core_weight if region is not None and region.id in cfg.core_regions else 1.0))
@@ -604,6 +607,18 @@ MANDATE_UNSETTLED_TITLE = "天命未定"  # 待 joy 潤：戰報標題
 MANDATE_MINE = "天命之爭那一刻，『{shard}』在你懷中：你以合璽之人留名。"  # 待 joy 潤：補送的紀錄
 MANDATE_FAME = "天命之爭：得天命的那一軍出陣的人 +{fame}。"  # 待 joy 潤：玩法說明「名望」那一節（howto）
 CARD_NEW, CARD_STIRRED, CARD_CALM = "新得之季，此季不動", "此季已動過", "此季可能被牽動"
+# FB-626：改版開著時碎片卡底下多一行獨門行動（「這一季還能起用 N 次」），「此季不動」「此季已動過」緊挨著讀起來像碎片用不了——
+# 改版開著時這三句寫明說的是璽動（card_state）；關著照舊。待 joy 潤
+CARD_REVAMP = {
+    CARD_NEW: "新得之季：這一季不會被璽動牽動",
+    CARD_STIRRED: "這一季已經被璽動牽動過",
+    CARD_CALM: "這一季可能被璽動牽動",
+}
+
+
+def card_state(content: Content, text: str) -> str:
+    """碎片卡那一句狀態（Game.seal_view）：改版開著換成寫明璽動的那一句（CARD_REVAMP，FB-626）；關著、天命之季那一句照舊。"""
+    return CARD_REVAMP.get(text, text) if revamp_on(content) else text
 
 
 def sink(reg: SealRegistry, season: int, seen: dict[str, float | None], now: float, cfg: SealTuning) -> list[tuple[SealShard, str]]:

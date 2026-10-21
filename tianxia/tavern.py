@@ -20,7 +20,7 @@ import re
 from dataclasses import dataclass
 from collections import deque
 
-from . import atlas, figures, gender, renown, rules, territory, treasures
+from . import annals, atlas, figures, gender, renown, rules, territory, treasures
 from pydantic import BaseModel
 
 from .characters import name_key
@@ -238,7 +238,7 @@ def hops(content: Content, start: str, goal: str) -> int:
 def person_fame(other: GameState, content: Content, wanted: set[str] | None = None) -> int:
     """一個玩家的名氣（0～5）：名望段，加上善惡稱號第三段以上、擂台前十、手上有玉璽碎片、身上有通緝、行狀份量 4 以上的事三件以上各 +1。
     wanted 是身上有通緝的名號鍵（呼叫端從懸賞榜算好傳進來）。玉璽碎片改版開著時碎片那一項不算（持有者平時藏起來：不然查一個人
-    查得準不準，看得出他有沒有碎片）。"""
+    查得準不準，看得出他有沒有碎片）；起用碎片的那一筆行狀也不算（annals.heard，FB-643）。"""
     from . import arena  # noqa: PLC0415  arena → … ：在函式裡 import
 
     p = other.player
@@ -251,14 +251,15 @@ def person_fame(other: GameState, content: Content, wanted: set[str] | None = No
         score += 1
     if wanted and name_key(p.name) in wanted:
         score += 1
-    if sum(1 for a in p.annals if a.weight >= 4) >= 3:
+    if sum(1 for a in p.annals if a.weight >= 4 and annals.heard(a)) >= 3:
         score += 1
     return min(5, score)
 
 
 def fresh(other: GameState, now_world: float) -> bool:
-    """近況：對象 24 小時（世界秒）內做過份量 4 以上的事（打退大勢人物、首創、擂台易主、決戰立功都會記進行狀）。"""
-    return any(a.weight >= 4 and now_world - a.time <= 86400 for a in other.player.annals)
+    """近況：對象 24 小時（世界秒）內做過份量 4 以上的事（打退大勢人物、首創、擂台易主、決戰立功都會記進行狀）。
+    起用碎片不算（annals.heard，FB-643）：查人在哪、買兇找人都經過這裡。"""
+    return any(a.weight >= 4 and now_world - a.time <= 86400 and annals.heard(a) for a in other.player.annals)
 
 
 def figure_fame(content: Content, cid: str) -> int:
@@ -458,8 +459,8 @@ def ties_figure_lines(state: GameState, content: Content, cid: str,
 
 def ties_player_lines(state: GameState, content: Content, other: GameState, mates: list[str],
                       wanted: set[str] | None = None) -> tuple[list[str], bool]:
-    """打聽一個玩家跟誰走得近：照打聽度，2 以上說陣營與稱號，3 以上加身邊的同伴，4 以上加近來的三件事（行狀份量 3 以上、最新的在前）；
-    1 以下沒人聽過（退一半）。"""
+    """打聽一個玩家跟誰走得近：照打聽度，2 以上說陣營與稱號，3 以上加身邊的同伴，4 以上加近來的三件事（行狀份量 3 以上、最新的在前；
+    起用碎片那一筆不列，annals.heard，FB-643）；1 以下沒人聽過（退一半）。"""
     from . import allied  # noqa: PLC0415
 
     score = person_reach(state, content, other, wanted)
@@ -473,7 +474,7 @@ def ties_player_lines(state: GameState, content: Content, other: GameState, mate
     if score >= 3 and mates:
         lines.append(TIES_MATES.format(mates="、".join(mates)))
     if score >= 4:
-        deeds = [a.text for a in sorted(p.annals, key=lambda a: -a.time) if a.weight >= 3][:3]
+        deeds = [a.text for a in sorted(p.annals, key=lambda a: -a.time) if a.weight >= 3 and annals.heard(a)][:3]
         if deeds:
             lines.append(TIES_DEEDS.format(deeds="；".join(deeds)))
     return lines, True
@@ -831,7 +832,7 @@ def hit_tier_name(tier: int) -> str:
 
 
 def hit_reach(content: Content, place: str, other: GameState, wanted: set[str] | None = None) -> int:
-    """殺手找人的打聽度：名氣＋從雇的那間酒肆算的遠近＋近況－藏行跡（殺手沒有地頭熟）。"""
+    """殺手找人的打聽度：名氣＋從雇的那間酒肆算的遠近＋近況－藏行跡（殺手沒有地頭熟）。名氣與近況都不算起用碎片那一筆（FB-643）。"""
     where = other.player.location if other.player.journey is None else _road_end(other)
     now = other.world.time
     score = person_fame(other, content, wanted) + near(content, place, where)

@@ -1277,6 +1277,9 @@ class BlockFight(BaseModel):
     guards: dict[str, float] = Field(default_factory=dict)  # 守方的人 → 這一輪拉回了多少（每一條都歸零時清掉）
     alarm: bool = False  # 這一輪有哪一條到過 Config.conquest.alarm_at（守方再拉回全部歸零才有守城功）
     flipped_at: float | None = None  # 世界秒：上一次易手（冷卻從這裡起算）
+    # 上一次易手（flip：推滿、攻城戰打贏；補缺退回也寫）之前那一塊歸誰：中立沒人佔是 None。玉璽碎片改版第 3 批的補缺照它與 flipped_at
+    # 判「一日之內從誰手上翻走的」（設計五之一 5：day_log 只記新主人，沒有原主）
+    flipped_from: str | None = None
     last_push: float | None = None  # 世界秒：上一次有人推或拉（每日回看它）
     marks: list[PushMark] = Field(default_factory=list)  # 最近的出陣（留 presence_seconds／集火／混戰裡最長的那一段）
 
@@ -1329,15 +1332,16 @@ class SealAct(BaseModel):
     （誰用的只記在全服登記那一筆 use 與起用的人自己的紀錄裡）。生效的區間是 [start, ended 或 until)；期滿、提前結束的留到季末
     （承露補算體力要讀已經結束的那一段）。"""
 
-    kind: str  # yinjiang／banzhao／chenglu／chuanxi／shouxin（models.SealActKind）
+    kind: str  # yinjiang／banzhao／chenglu／chuanxi／shouxin／zhendi／bujue（models.SealActKind；後兩種是第 3 批）
     shard: str  # 哪一片（content/seal.json 的 id）
     start: float  # 世界秒
-    until: float  # 預定期滿的世界秒
-    ended: float | None = None  # 提前結束（引將被時刻表搬走、退場）或期滿處理過的世界秒；None＝還沒處理
-    target: str = ""  # 人物 id（引將是大勢人物 id、收心是人物 id）、大區 id（承露）、戰線 id（傳檄）；頒詔是空的
+    until: float  # 預定期滿的世界秒（補缺當場生效，等於 start）
+    ended: float | None = None  # 提前結束（引將被時刻表搬走、退場；鎮地那一塊換了主人）或期滿處理過的世界秒；None＝還沒處理
+    # 人物 id（引將是大勢人物 id、收心是人物 id）、大區 id（承露）、戰線 id（傳檄）、區塊的地點 id（鎮地、補缺）；頒詔是空的
+    target: str = ""
     place: str = ""  # 引將：引到哪個地點
     origin: str = ""  # 引將：原本在哪個地點（期滿回這裡）
-    side: str = ""  # 傳檄：這一次照哪一軍算
+    side: str = ""  # 傳檄：這一次照哪一軍算；鎮地：替哪一軍鎮；補缺：退回給哪一軍
 
 
 class WorldState(BaseModel):

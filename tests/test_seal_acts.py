@@ -23,7 +23,8 @@ from tianxia.state import SealAct, WorldState
 from tianxia.world_state import SealShard
 
 ACTS = {"xuanniu": "yinjiang", "yunzhuan": "banzhao", "chenglu": "chenglu", "chizhang": "chuanxi", "guixin": "shouxin"}
-NUMBERS = {"uses": 2, "gap_days": 3, "days": 1, "sense_points": 10, "cultivate": 1.2, "stamina": 1.5, "push": 1.25, "affinity": 2.0}
+NUMBERS = {"uses": 2, "gap_days": 3, "days": 1, "sense_points": 10, "cultivate": 1.2, "stamina": 1.5, "push": 1.25, "affinity": 2.0,
+           "hold_hours": 12, "mend_days": 1}  # 後兩個是第 3 批（鎮地、補缺；tests/test_seal_acts3.py）
 
 
 def acts_on(content):
@@ -37,11 +38,11 @@ def acts_on(content):
 # ── Task 1：內容、設定、資料欄位 ──
 
 @pytest.mark.slow
-def test_the_real_content_gives_five_shards_their_acts():
-    """設計第三章：玄紐引將、雲篆頒詔、承露承露、赤璋傳檄、歸心收心；螭首（鎮地）、金角（補缺）是第 3 批，這一批沒有行動。數字是【預設】。"""
+def test_the_real_content_gives_seven_shards_their_acts():
+    """設計第三章：玄紐引將、雲篆頒詔、承露承露、赤璋傳檄、歸心收心；螭首鎮地、金角補缺（第 3 批接上：這一條原本鎖「這兩片沒有行動」，
+    照設計第七章第 3 條翻過來，第 3 批的測試在 tests/test_seal_acts3.py）。數字是【預設】。"""
     c = real_content()
-    assert {sid: s.act for sid, s in c.seal.items() if s.act} == ACTS
-    assert c.seal["chishou"].act is None and c.seal["jinjiao"].act is None
+    assert {sid: s.act for sid, s in c.seal.items() if s.act} == {**ACTS, "chishou": "zhendi", "jinjiao": "bujue"}
     assert c.config.seal.revamp.acts.model_dump() == pytest.approx(NUMBERS)
 
 
@@ -75,7 +76,7 @@ def test_scatter_clears_the_act_counts(sealed):
 def test_switched_off_there_is_no_act(sealed):
     acts_on(sealed)
     assert seal_acts.act_of(sealed, "yunzhuan") == "banzhao"
-    assert seal_acts.act_of(sealed, "chishou") is None  # 鎮地是第 3 批
+    assert seal_acts.act_of(sealed, "chishou") is None  # 測試內容只裝這五片的行動（acts_on）
     sealed.config.seal.revamp.enabled = False
     assert seal_acts.act_of(sealed, "yunzhuan") is None
 
@@ -273,8 +274,9 @@ def test_a_second_use_waits_three_days_and_a_third_is_refused():
 
 @pytest.mark.slow
 def test_the_refusals_change_nothing():
-    """按不下去：季沒在跑、沒有碎片、碎片沒有行動（螭首）、在路上（引將、承露）、目標不對、要挑邊沒挑——什麼都不動。"""
-    c, w, g = _holder("chishou")  # 螭首：鎮地是第 3 批
+    """按不下去：季沒在跑、沒有碎片、碎片沒有行動、在路上（引將、承露）、目標不對、要挑邊沒挑——什麼都不動。"""
+    c, w, g = _holder("chishou")
+    c.seal["chishou"].act = None  # 第 3 批起七片都有行動：沒有行動的那一條路（測試內容、改版關著還走它）拿掉這一片的行動來測
     assert "沒有能起用的碎片" in _use(c, w)[0]
     c, w, g = _holder("xuanniu")
     assert seal_acts.NO_TARGET in _use(c, w)[0]
@@ -329,6 +331,7 @@ def test_the_card_carries_the_act_for_the_holder_only():
 @pytest.mark.slow
 def test_a_shard_without_an_act_shows_none():
     c, w, g = _holder("chishou")
+    c.seal["chishou"].act = None  # 第 3 批起七片都有行動（同上）
     assert server.main_view(g)["status"]["seal"]["act"] is None
 
 

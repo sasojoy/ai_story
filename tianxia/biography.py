@@ -14,6 +14,7 @@ import re
 from dataclasses import dataclass, field
 
 from . import gender, zh
+from .annals import GROUPS
 
 MODEL, RULE = "model", "rule"
 TITLE = "{name}傳"
@@ -49,7 +50,8 @@ def title(name: str) -> str:
 def _group(annals: tuple[dict, ...]) -> dict[str, list[dict]]:
     groups: dict[str, list[dict]] = {"deed": [], "showdown": [], "figure": [], "fight": []}
     for e in annals:
-        groups.setdefault(e.get("kind", "deed"), []).append(e)
+        kind = e.get("kind", "deed")
+        groups.setdefault(GROUPS.get(kind, kind), []).append(e)  # 起用碎片（annals.SEAL）跟一般的事一起寫
     return groups
 
 
