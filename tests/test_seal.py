@@ -20,8 +20,10 @@ SALT = "測試的密鹽"
 
 
 def put_shards(content):
-    """測試內容沒有 content/seal.json（碎片關著）：裝上七片。"""
+    """測試內容沒有 content/seal.json（碎片關著）：裝上七片。改版（Config.seal.revamp，預設開）在這裡關掉：這幾個檔測的是舊的
+    七個效果與點名的寫法；改版的測試在 test_seal_revamp*.py（test_seal_revamp.revamp 打開）。"""
     content.seal = {sid: ShardDef(id=sid, name=name, part="印", effect=key) for sid, name, key in SHARDS}
+    content.config.seal.revamp.enabled = False
     return content
 
 

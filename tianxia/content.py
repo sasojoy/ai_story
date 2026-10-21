@@ -2960,7 +2960,7 @@ def _validate_forge_secrets(c: Content, need) -> None:
 def _validate_seal(c: Content, need) -> None:
     """玉璽碎片（玉璽碎片設計 13.4、8.5）：係數都不超過 1（一場最多 cap）；沒有 content/seal.json 可以（碎片關著：時刻表的標記與
     emerge_skill 都不檢查——測試內容沒有混元一氣，預設的 emerge_skill 不能讓它載入失敗）；有就 emerge_skill 認得、剛好七片、名字不重複、
-    效果鍵在 Config.seal.effects、名字過命名過濾；時刻表不是空的時標 emerge 的剛好一件、標了 seal 的都是決戰。
+    效果鍵在 Config.seal.effects（改版的 effects 在 Config.seal.revamp.effects）、名字過命名過濾；時刻表不是空的時標 emerge 的剛好一件、標了 seal 的都是決戰。
     天命之爭（玉璽二）：最多一件、是決戰、沒標 seal、有它的戰鬥、mandate_endings 指到交戰兩軍與標了 mandate 的結局；標了 mandate 的結局都有人指。"""
     cfg = c.config.seal
     for label, table in (("side_factor", cfg.side_factor), ("take_share", cfg.take_share)):
@@ -2972,6 +2972,8 @@ def _validate_seal(c: Content, need) -> None:
     need(len({s.name for s in c.seal.values()}) == len(c.seal), "content/seal.json：七片的名字要不重複")
     for shard in c.seal.values():
         need(shard.effect in cfg.effects, f"content/seal.json：{shard.id} 的效果 {shard.effect} 不在 Config.seal.effects")
+        for key in shard.effects:  # 改版的常駐效果（玉璽碎片改版第三章）：開關關著也檢查，打開那一刻不會才發現內容寫錯
+            need(key in cfg.revamp.effects, f"content/seal.json：{shard.id} 的改版效果 {key} 不在 Config.seal.revamp.effects")
         problem = name_problem(shard.name, c)
         need(problem in (None, SEAL_CLASH), f"content/seal.json：{shard.id} 的名字「{shard.name}」{problem}")
     mandates = c.mandate_timetable  # 天命之爭（玉璽二；8.3、8.5）

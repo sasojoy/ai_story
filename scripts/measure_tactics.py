@@ -602,13 +602,16 @@ def kits(content, runs):
 # ── 寶物與玉璽（--gear，第 35 項）──────────────────────────
 
 DIRECT, INDIRECT, UNTOUCHED = "直接", "間接", "不碰"
-# 效果鍵 → 類別（計畫 2.1【PM】）：寶物八種（Config.treasures.effects）＋玉璽七片（content/seal.json 的 effect，數字在 Config.seal.effects）。
-# tests/test_measure_tactics_gear.py 驗它涵蓋每一個效果鍵：之後加了新寶物或新碎片效果，要先來這裡分類，平衡表才不會漏
+# 效果鍵 → 類別（計畫 2.1【PM】）：寶物八種（Config.treasures.effects）＋玉璽七片（content/seal.json 的 effect，數字在 Config.seal.effects）
+# ＋玉璽碎片改版的效果（content/seal.json 的 effects，數字在 Config.seal.revamp.effects：injury、keep_silver、chuangong 是新的，其餘沿用）。
+# tests/test_measure_tactics_gear.py 驗它涵蓋每一個效果鍵：之後加了新寶物或新碎片效果，要先來這裡分類，平衡表才不會漏。
+# --gear 量的是舊的七個效果（改版關著）；改版的效果與每片的戰力 ×Config.seal.revamp.power 這一張表還沒量（改版第 1 批不跑平衡）
 KIND = {
     "cultivate": INDIRECT, "insight": INDIRECT, "win_xinde_pct": INDIRECT, "win_exp_pct": INDIRECT,
     "seclusion": INDIRECT, "audience": UNTOUCHED, "win_material": INDIRECT, "legend": INDIRECT,
     "hp_cap": DIRECT, "talk_turns": UNTOUCHED, "practice": INDIRECT, "dodge": DIRECT,
     "stamina_regen": UNTOUCHED, "fuse_points": INDIRECT, "mate_exp": INDIRECT,
+    "injury": INDIRECT, "keep_silver": UNTOUCHED, "chuangong": INDIRECT,
 }
 NOTE = {  # 一句：改的是哪一條（量表的字，不是玩家看的，不必給 joy 潤）
     "cultivate": "修練衝中品、上品那一擲（cultivation.chance 的 treasure；不碰頓悟與服丹衝關）",
@@ -626,6 +629,9 @@ NOTE = {  # 一句：改的是哪一條（量表的字，不是玩家看的，�
     "stamina_regen": "體力自然回復",
     "fuse_points": "合成的造化分（fusion.fuse_odds／blend_odds）",
     "mate_exp": "同伴拿到的經驗",
+    "injury": "一場仗變成內傷的倍數（改版螭首；team.take_encounter_toll、頭目戰收場、買兇的殺手）：內傷少，療傷少花銀兩、上蓋掉得慢",
+    "keep_silver": "落敗不失銀兩（改版金角；Game._lose_silver）",
+    "chuangong": "傳功的心得（改版歸心；chuangong.price_of）",
 }
 TIERS = ("大勝", "險勝", "僵持", "落敗")
 CHAIN_LEVEL = 20  # 【預設】螭首連打：20 級、根骨 5、身法 5
@@ -754,8 +760,11 @@ def gear(content, runs, chain):
     print("寶物與玉璽：哪一樣進打仗（第 35 項；只量不改，數字照 Config 讀）")
     print(f"  寶物（Config.treasures.enabled）{'開著' if treasures.on(content) else '關著'}；"
           f"玉璽（Config.seal.enabled＋content/seal.json {len(content.seal)} 片）{'開著' if seal.on(content) else '關著'}；關著也照樣量")
-    was = cfg.treasures.enabled, cfg.seal.enabled
+    print(f"  玉璽碎片改版（Config.seal.revamp.enabled）{'開著' if cfg.seal.revamp.enabled else '關著'}：這一張量的是舊的七個效果，"
+          "量的時候暫時關掉改版；改版的效果與戰力還沒量")
+    was = cfg.treasures.enabled, cfg.seal.enabled, cfg.seal.revamp.enabled
     cfg.treasures.enabled = cfg.seal.enabled = True
+    cfg.seal.revamp.enabled = False
     try:
         rows = gear_rows(content)
         print("\n── 一覽（直接＝進打仗的數字；間接＝改成長快慢；不碰＝跟打仗無關）──")
@@ -781,7 +790,7 @@ def gear(content, runs, chain):
         print("  間接那幾列只說改哪一條成長、改多少；成長換成戰力要看玩家怎麼玩，不在這裡換算（企劃者 10/14：平衡等試玩回饋）。")
         print("  數字都照 Config 讀：調了 Config.treasures.effects 或 Config.seal.effects 重跑就是新表。")
     finally:
-        cfg.treasures.enabled, cfg.seal.enabled = was
+        cfg.treasures.enabled, cfg.seal.enabled, cfg.seal.revamp.enabled = was
 
 
 def _named(rows, key):

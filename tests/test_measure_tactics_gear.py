@@ -34,12 +34,18 @@ def m():
 
 @pytest.fixture(scope="module")
 def content():
-    return load_content(ROOT / "content")
+    """正式內容、玉璽碎片改版（Config.seal.revamp，預設開）關掉：--gear 量的是舊的七個效果（gear 自己跑的時候也暫時關掉改版）；
+    改版的效果鍵照樣要分類（下一條）。"""
+    c = load_content(ROOT / "content")
+    c.config.seal.revamp.enabled = False
+    return c
 
 
 def test_every_treasure_and_seal_effect_is_classified(m, content):
-    """KIND 涵蓋寶物與玉璽的每一個效果鍵（新加的寶物或碎片效果要先來分類，平衡表才不會漏），也只有這些鍵。"""
-    keys = set(content.config.treasures.effects) | set(TREASURE_EFFECTS) | {s.effect for s in content.seal.values()}
+    """KIND 涵蓋寶物與玉璽的每一個效果鍵（新加的寶物或碎片效果要先來分類，平衡表才不會漏），也只有這些鍵。
+    玉璽碎片改版的效果鍵（content/seal.json 的 effects，數字在 Config.seal.revamp.effects）也算（改版設計第三章）。"""
+    keys = (set(content.config.treasures.effects) | set(TREASURE_EFFECTS) | {s.effect for s in content.seal.values()}
+            | {k for s in content.seal.values() for k in s.effects} | set(content.config.seal.revamp.effects))
     assert set(m.KIND) == keys
     assert set(m.KIND.values()) <= {m.DIRECT, m.INDIRECT, m.UNTOUCHED}
     assert set(m.NOTE) == set(m.KIND)
@@ -136,6 +142,7 @@ def test_gear_runs_to_the_end_and_names_every_effect(m):
         assert head in text
     assert "沒分類" not in text
     assert content.config.treasures.enabled and content.config.seal.enabled  # 量完放回去（正式內容本來就開著）
+    assert content.config.seal.revamp.enabled  # 改版量的時候暫時關掉，量完放回去
 
 
 def _fixed_quality(content, score):

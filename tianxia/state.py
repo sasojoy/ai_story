@@ -394,6 +394,12 @@ class ArenaSide(BaseModel):
     role: str = ""
     hp: float
     hp_cap: float
+    bare: float | None = None  # 不含玉璽碎片戰力的威力（改版，FB-615）：只有戴著碎片才記；None＝power 本身就是給別人看的那一份
+
+    @property
+    def shown(self) -> float:
+        """戰報上寫給對方看的威力（「對手威力 N」）：不含碎片的那一份。打起來照 power（含碎片）。"""
+        return self.power if self.bare is None else self.bare
 
 
 class ArenaFight(BaseModel):
@@ -440,7 +446,13 @@ class ArenaReport(BaseModel):
     lines: list[str] = Field(default_factory=list)
     rank: int  # 打完之後守的人的名次
     before: int  # 打之前守的人的名次（被換下去才不一樣）
-    power: float = 0.0  # 挑的人的威力（戰報的對手那一格）
+    power: float = 0.0  # 挑的人的威力（打起來的那一份，含玉璽碎片）
+    bare: float | None = None  # 挑的人不含碎片的威力（戰報的對手那一格照它寫，FB-615）；None＝power 本身
+
+    @property
+    def shown(self) -> float:
+        """守的人的戰報上寫的「對手威力」：挑的人不含碎片的那一份。"""
+        return self.power if self.bare is None else self.bare
 
 
 class ArenaEntry(BaseModel):
@@ -448,6 +460,7 @@ class ArenaEntry(BaseModel):
 
     name: str
     power: float
+    bare: float | None = None  # 報名或更新那一刻不含玉璽碎片戰力的威力（改版，FB-625、FB-615：給別人看的身手與戰報照它）；None＝power 本身
     scores: dict[str, float] = Field(default_factory=dict)
     role: str = ""
     hp_cap: float
@@ -472,6 +485,11 @@ class ArenaEntry(BaseModel):
     @property
     def bouts(self) -> int:
         return self.wins + self.losses + self.draws
+
+    @property
+    def shown(self) -> float:
+        """給別人看的身手（挑人選單、擂台那一頁的「身手」）與對方戰報上的「對手威力」：不含玉璽碎片的那一份。打起來照 power。"""
+        return self.power if self.bare is None else self.bare
 
 
 class AnnalEntry(BaseModel):

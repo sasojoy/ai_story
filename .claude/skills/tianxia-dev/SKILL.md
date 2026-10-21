@@ -32,6 +32,8 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   - 要用就 `git stash push -m <獨一無二的標籤> -- <檔>`，`git stash list --format='%H %gd %gs'` 找到自己那一筆，`git stash apply <sha>`，再照標籤找 `stash@{n}` 去 drop。
   - 想證明測試「修之前是紅的」，最簡單的就是這樣把改動暫時收起來跑一次。
 - 背景長跑（量表）用 `run_in_background`。輸出導到檔案時 python 會緩衝，加 `-u` 才看得到進度。等它結束的通知，不要輪詢。
+- **PowerShell 的變數名不分大小寫**（2026-10-21）：迴圈裡 `$O`（腳本資料夾）被後面的 `$o`（雜湊）蓋掉，路徑變成一串雜湊。路徑變數取長一點的名字（`$CMP`、`$SCRIPTS`）。外部程式往 stderr 印字（`2> 檔`）時 5.1 會報 NativeCommandError、整條指令退出碼非 0，但迴圈會接著跑；要看真的有沒有失敗，看輸出檔與 `.err` 的內容。
+- **用 Write 寫的 `.ps1` 在 PowerShell 5.1 讀成系統編碼**（UTF-8 沒有 BOM）：腳本裡的中文路徑（`C:/Ray/專案/天下大勢/.venv/...`）變亂碼、找不到 python（2026-10-21）。迴圈直接寫在 PowerShell 工具那一行裡，不要另存 `.ps1`。
 - **PowerShell 的 `git commit -F - @'…'@` 不會走 stdin**：here-string 被當成一個路徑參數，合併中會報 `cannot do a partial commit during a merge`（不在合併中就變成只提交那個「路徑」）。commit 訊息用 Write 寫進 scratchpad 的檔，`git commit -F <檔>`（2026-10-20）。
 - **Git Bash 的 `sed -i` 會把 CRLF 的檔整個改成 LF**（2026-10-20 改 `bot_policy.py` 一行，整個檔變 LF）：改一行也用 Edit 工具，或照上面「讀進來轉 `\n`、寫回轉回去」的腳本。
 - **Bash 的隔離檢查會擋「太複雜」的 python heredoc**（一次改兩個檔的 dict 迴圈就被擋過）：改檔腳本寫進 scratchpad 的 `.py`（裡面放一個 `edit(相對路徑, [(舊, 新, 次數)])` 的小函式，照上面 CRLF 的規矩），用 PowerShell 跑 `python 腳本 .`。
@@ -50,7 +52,7 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   - `--list` 先看挑到哪些檔。
   - **合併還沒提交時別拿 `--list` 的清單**（2026-10-21 輿圖簡化第 2 批收尾）：`test_for` 跟 base 的分岔點比，`--no-commit` 合進來的東西都還算「沒提交的改動」，合功能分支的那一下挑到 327 個檔（幾乎整套）；先跑兩批的測試檔、提交合併，再 `--list` 只剩這一批自己的 117 個。
 - 改到 `tianxia/engine.py` 幾乎會挑到大半套（八千多條、約 6～8 分鐘），正常。只動內容或小模組時會少很多。
-- **`test_for.py -- -n 4` 擋不住 `-n auto`**（2026-10-20 領地爭奪第三批 A）：挑到三個檔以上它自己在最後補 `-n auto`，排在 `--` 之後的參數後面，pytest 照最後一個算。派工要 `-n 4`（同時有好幾個子代理在跑）時，在 scratchpad 寫一支小腳本 `import test_for`、拿 `test_for.pick(test_for.changed_files(base))` 的清單自己叫 pytest（`-q -m "slow or not slow" -n 4`，`TIANXIA_DB` 設新的暫存檔），背景跑、輸出導到檔。
+- **`test_for.py -- -n 4` 擋不住 `-n auto`**（2026-10-20 領地爭奪第三批 A）：挑到三個檔以上它自己在最後補 `-n auto`，排在 `--` 之後的參數後面，pytest 照最後一個算。派工要 `-n 4`（同時有好幾個子代理在跑）時，在 scratchpad 寫一支小腳本 `import test_for`、拿 `test_for.pick(test_for.changed_files(base))` 的清單自己叫 pytest（`-q -m "slow or not slow" -n 4`，`TIANXIA_DB` 設新的暫存檔），背景跑、輸出導到檔。PowerShell 一行就夠：`$line = (& $py scripts/test_for.py --base <base> --list | Where-Object { $_ -like '要跑：*' }) -replace '^要跑：',''; $files = $line.Trim() -split '\s+'; & $py -u -m pytest @files -q -n 6 -m "slow or not slow" | Out-File $env:TEMP\x.log`（2026-10-21 玉璽碎片改版修正：改 `engine.py`＋`state.py`，挑到 303 個檔）。
 - 新測試超過一秒（建 `Game`、載真實內容通常就超過）標 `@pytest.mark.slow`。
   **直接 `pytest <檔>` 時 slow 預設被排除**（pyproject 的 addopts）：整個檔都是 slow 就會「no tests ran」、結束碼 5，要加 `-m "slow or not slow"`（`test_for` 自己會加）。
 - **新測試綠了不等於有用，拿掉實作的一個條件跑一次看會不會紅**（變異檢查，2026-10-20 領地爭奪第三批 B）：用一支腳本「換掉一處、跑那個測試檔、換回來」。三個坑：
@@ -59,11 +61,18 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   (2) 拿掉一個條件測試沒紅，先看是不是「兩層保護」（例：`Game._seal_find` 的藏處檢查在擲骰前、寫入重驗各一次，拿掉一層本來就不紅），是的話改拿掉兩層、或確認這兩層是故意重複；
   (3) 測試裡用的「不該發生」的前提要真的分得開兩個原因（例：天命之季不藏的測試，七片全隱沒時「沒東西可藏」也會是空的，要留一片未現世才測得到「因為天命之季」）。
 - **證明「祕密沒漏出去」用差異測試**：建兩個只差那個祕密的世界（例：碎片藏在 A 或藏在 B），比畫面、API、江湖史、傳聞、管理者的回話與玩家的存檔是不是一個字不差；不要在輸出裡找祕密字串（地名到處都有，找不到也不代表沒漏）。
+  同一條測試裡把開關關掉再比一次、斷言「關著時看得出差別」（列出哪幾項不一樣），才證明這條測試抓得到漏（玉璽碎片改版第 1 批 `test_two_worlds_that_differ_only_in_the_holder_look_the_same`）。要找名號字串時，名號別跟固定的字撞（拿「懷璽」當持有者的名號，會撞到「懷璽之人」），用「甲客」「持璽客」這種。
+- **差異測試要讓「世界差在祕密、後面的步驟不被結果帶開」**（玉璽碎片改版第 1 批修正，側門）：兩個世界裡誰贏誰輸、誰掉了氣血會不同，之後算威力的步驟（氣血係數 `condition` 也在 `_spar_power` 裡）就跟著差，測試紅了不是漏而是被結果帶開。做法：先把所有「看」的畫面讀完再打；每個人至多打一場有損耗的仗（截殺各挑沒打過的人）；擂台挑了就認輸（`arena:yield`，結果固定是落敗、名次不動）；只比「對手那一格」的數字，不比勝負與氣血。
+- **差異測試抓不抓得到，用「還原漏洞」證明**：當祕密只在子開關開著時存在（關著本來就看不出差別），不能靠「關著看得出差別」那招，改成 `monkeypatch` 把防線拆掉（例：`Game._spar_power` 不理 `seal`、`_arena_bare` 回 None），斷言兩個世界在該有的鍵上真的不一樣（`test_the_side_door_guard_has_teeth`）。另外對實作做變異檢查：一處一處換掉、跑那組測試、看會紅；腳本把原檔 bytes 存在記憶體、`finally` 寫回，比反向替換安全（不會因為換回去的字串不唯一而卡在改壞的狀態）。
+- **給別人看的數字（勝算、身手、戰報的「對手威力」）每一處都要走同一個「給別人看的那一份」**：選單、玩家卡、頁面（`shopview`）、戰報兩邊各一份（發的與收的、守的與挑的）、假人讀的勝算清單；寫在存檔裡的快照（擂台分身）要另記一份，欄位加預設 `None`（舊存檔讀得進來、沒碎片時狀態不多一個字）。算這個數字的時機要排在記戰報之前：第一邊的記帳可能升級，第二邊再算就變了（`_spar`、`raid`、`_ambush_fight` 都在算 `ours`／`theirs` 的同一處先算好）。
+- **一包 `**kwargs` 的標記（`Game._battle_marks` 這種）加新鍵**：有舊測試斷言整包一字不差（`test_joining_snapshots_turncoat_and_newbie`）。新鍵只在有值時才放進去，關著的季那一包一個字不變。
+- **「關著一個字不變」的畫面對照，探針只問兩版都有的東西**：問到新版才有的效果鍵，舊版當成加的（中性值 0）、新版當成乘的（中性值 1），雜湊就不一樣，但那不是畫面。改問掛點本身的輸出（扣血、內傷、價錢、回話）。玉璽碎片改版第 1 批的腳本在當時 scratchpad 的 `sealcmp/cmp_seal_off.py`（七片各一個持有者、第一個是假人；三種季各 204 行）。
 - **修 bug 先寫會紅的測試**：先確認它在修之前真的失敗、失敗的數字跟 QA 回報的一樣，再修。回報時寫「修前重現了什麼」。
 - 用正式內容測舊規則的測試，要在 helper 裡把新開關關掉（例 `c.config.precise_actions = False`、`four_tiers.enabled = False`）。新規則另開一個測試檔，不要改寫舊的斷言去迎合新規則。
   例外：PM 的裁決直接推翻還沒上線的這一批的做法（不是開關後面的舊季）時，鎖住舊做法的那一條斷言照裁決翻過來，註明哪一條裁決、新規則的測試在哪一個檔（例：裁決 19 之後 `test_siege_void_when_no_attacker` 改成「沒有作罷的天下大事」，新的在 `test_conquest_void_quiet.py`）。
 - 江湖紀錄 `state.journal` 新的在前（index 0）。找某一則照標題找，不要拿 `[-1]`。
 - **證明開關關著一個字都不變**：一條條「關著不變」的測試之外，最省事的是拿 QA 的整份畫面對照（`tianxia-qa/引擎驗收.md` 第 7 節；scratchpad 裡 QA 留過 `conqqa/cmp_off.py`）：開這一批之前那一版與 HEAD 各 `git archive` 一份跑，比雜湊。腳本 `import server`，所以要連頂層的 `server.py server_push.py zhuan_html.py llm_queue.py console.py` 一起 archive（只 archive `tianxia content` 會 `No module named 'server_push'`），**`web` 也要**（`server` 載入時讀 `web/index.html`，沒有就 `FileNotFoundError`）。領地爭奪第一批修正：season21／week7／weekend 三種季 573／569／567 行一個位元組都一樣。
+  **base 選對**：派工寫的對照版（例 `98c1c0f5`）之後，功能分支又合進了別的批（輿圖 v3 第 2 批 `b9ee3c9c`）時，你合進來之後拿舊版比，畫面會差在那一批動的東西（小地圖多一條路，不是你的改動）。先拿合進來的功能分支 tip 當 base 比到一個位元組不差，再另外拿派工寫的版本比一次、把差異歸給那一批（`diff` 看出差的位置）。玉璽碎片改版第 1 批修正：側門整條（卡、勝算、擂台選單與頁面、切磋、截殺、擂台各打一輪的整份戰報與回合演出）45 行、三種季，`98c1c0f5`／`b9ee3c9c`／HEAD 三版雜湊一樣；碎片全套 204 行，`b9ee3c9c` 對 HEAD 一樣，`98c1c0f5` 對 HEAD 只差輿圖 v3 那條路。
   - **改內容的地理（`locations.json` 的路、描寫）不看任何開關**：加一條路，三種季的輿圖、小地圖、那兩處的「前往」鈕與路程、描寫全都跟著變（輿圖簡化第 2 批的宛城—綠林山寨：開關關著的三種季每一季 85 行不一樣）。對照腳本要多擺人站在路的兩頭、把 `g.options()` 也寫出來才看得到；兩份輸出比對時長的那幾行（svg 十幾萬字）用「去掉共同的頭尾」印差的那一段，`difflib` 會跑好幾分鐘。這種差異是內容的決定，寫進計畫交 PM，不要自己加開關擋。
 
 ## 內容改動的雷
