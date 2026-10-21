@@ -23,8 +23,9 @@ from tianxia.sqlite_world import open_world
 from tianxia.state import TerritoryState
 
 pytestmark = [pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過"), pytest.mark.slow]
+# 輿圖第三版第 4 批：點一區進的是區圖（regionFit，tests/test_region_map_web.py），「天下」那一條（hudHtml）拿掉了
 NAMES = ["S", "pageMap", "mapChrome", "mapxClass", "drawerHtml", "worldFit", "worldParts", "worldLabels", "worldCounts",
-         "worldDrawerHtml", "regionView", "sideInk", "timelineHtml", "chartHtml", "graphSvg", "hudHtml", "controlAt", "textW"]
+         "worldDrawerHtml", "regionFit", "sideInk", "timelineHtml", "chartHtml", "graphSvg", "controlAt", "textW", "worldArea"]
 DRIVER = re.sub(r"wholeApp\(\[.*?\]\)", "wholeApp(" + repr(NAMES).replace("'", '"') + ")", test_prologue_web.DRIVER, count=1, flags=re.S)
 APP = Path(server.WEB) / "app.js"
 CSS = Path(server.WEB) / "style.css"
@@ -196,6 +197,72 @@ def test_region_labels_do_not_overlap_on_a_phone(vw, vh):
             assert ax + aw <= bx or bx + bw <= ax or ay + ah <= by or by + bh <= ay, (a, b)
 
 
+# FB-630、631（輿圖第三版第 4 批順手修）：實機量的地圖框（2026-10-21 map4.localhost，無頭 Chromium）——正常的天下圖（上面讓開 58、
+# 底下讓開收著的抽屜 54）、版圖變化開著（地圖框縮到 320 高的抽屜上面，上面只讓開 36、底下不讓）、橫放的手機
+FRAMES = {
+    "375x812": (375, 604, 58, 54), "375x667": (375, 459, 58, 54), "360x640": (360, 416, 58, 54), "320x568": (320, 323, 58, 54),
+    "375x812-tl": (375, 284, 36, 0), "375x667-tl": (375, 207, 36, 0), "360x640-tl": (360, 187, 36, 0), "320x568-tl": (320, 145, 36, 0),
+    "667x375": (667, 187, 58, 54), "568x320": (568, 132, 58, 54), "667x375-tl": (667, 84, 36, 0), "568x320-tl": (568, 59, 36, 0),
+    # 第 3 批量的四種（狀態列折幾行跟著那一刻的字長短變）
+    "375x812b": (375, 624, 58, 54), "360x640b": (360, 452, 58, 54), "360x640c": (360, 436, 58, 54), "320x568b": (320, 344, 58, 54),
+}
+LAYOUT = """
+const wd = H.S.mapBase.world, v = H.worldFit({vw}, {vh}, wd.frame, {pad}, {top}, {W}, {H}), area = H.worldArea(v, {vw}, {vh}, {top}, {pad});
+const labels = H.worldLabels(H.S.mapBase, H.S.mapState, H.controlAt(H.S.mapState, H.S.mapState.now_week), 1 / v.s, area);
+const scr = (x, y) => [{vw} / 2 + (x - v.cx) * v.s, {vh} / 2 + (y - v.cy) * v.s];
+const boxes = labels.map((l) => {{ const [x, y] = scr(l.x - l.w / 2, l.y - l.h / 2); return [l.id, x, y, l.w * v.s, l.h * v.s, l.line]; }});
+const dots = H.S.mapBase.places.filter((p) => H.S.mapState.places[p.id] && H.S.mapState.places[p.id].rich).map((p) => {{ const [x, y] = scr(p.x, p.y); return [p.id, x - 5, y - 5, 10, 10]; }});
+return {{ boxes, dots }};
+"""
+
+
+def _layout(game, key):
+    vw, vh, top, pad = FRAMES[key]
+    m = game.content.map
+    return run(game, LAYOUT.format(vw=vw, vh=vh, top=top, pad=pad, W=m.width, H=m.height))
+
+
+def _hit(a, b):
+    return not (a[1] + a[3] <= b[1] or b[1] + b[3] <= a[1] or a[2] + a[4] <= b[2] or b[2] + b[4] <= a[2])
+
+
+@pytest.mark.parametrize("key", sorted(FRAMES))
+def test_fb630_fb631_region_names_never_overlap_and_leave_the_gold_dots(key):
+    """FB-631：大區名在小螢幕（版圖變化開著、320 寬、橫放）互相壓住——名字可以擺到取景框外面露出來的空處（worldArea；svg overflow 照畫）、
+    挪的範圍大一點，大區名兩兩不相交、都在畫面裡、底下那一行數字照寫；FB-630：名字讓開高級資源地的金點。"""
+    vw, vh, top, pad = FRAMES[key]
+    out = _layout(_game(), key)
+    boxes = out["boxes"]
+    roomy = vh - top - pad >= 60  # 568×320 橫放：上面那一排與收著的抽屜之間只剩 20px 上下，名字只能疊在那一排上（照樣不互壓）
+    for i, a in enumerate(boxes):
+        assert a[1] >= 0 and a[1] + a[3] <= vw, (key, a)
+        assert not roomy or (a[2] >= top - 0.5 and a[2] + a[4] <= vh - pad + 0.5), (key, a)
+        assert a[5], (key, a[0])  # 底下那一行數字照寫（擺不下才收：這幾種都擺得下）
+        for b in boxes[i + 1:]:
+            assert not _hit(a, b), (key, a[0], b[0])
+        for d in out["dots"]:
+            assert not _hit(a, d), (key, a[0], d[0])
+
+
+def test_fb631_four_sides_on_a_small_phone():
+    """FB-631：四方劇本那一行比兩方長三成（「官 2・巾 6・魏 4・吳 3・寶 2」），320×568 正常畫面照樣不互壓。"""
+    game = _four_sides()
+    for key in ("320x568", "320x568b", "360x640", "375x667-tl"):
+        out = _layout(game, key)
+        boxes = out["boxes"]
+        assert any("魏" in b[5] for b in boxes)
+        for i, a in enumerate(boxes):
+            for b in boxes[i + 1:]:
+                assert not _hit(a, b), (key, a[0], b[0])
+
+
+def test_world_svg_draws_outside_its_viewbox():
+    """名字擺到地圖外面的空處要畫得出來（FB-631）：底圖與上面那一張 svg 不裁在自己的 viewBox（框本身照舊裁在 .map-wrap）。"""
+    css = re.sub(r"/\*.*?\*/", "", CSS.read_text(encoding="utf-8"), flags=re.S)
+    assert re.search(r"\.map-wrap \.tx-world-map > svg \{[^}]*overflow: visible", css)
+    assert re.search(r"\.mapx \.map-wrap \{[^}]*overflow: clip", css)
+
+
 def test_tapping_a_region_enters_it():
     game = _game()
     low, _ = parts(game)
@@ -203,29 +270,15 @@ def test_tapping_a_region_enters_it():
     assert sorted(hits) == sorted(r.id for r in game.content.map.regions)
 
 
-def test_region_view_frames_that_regions_places():
-    game = _game()
-    out = run(game, "return H.regionView(H.S.mapBase, 'luoyang', 375, 650, 900, 1340, 230);")
-    places = [p for p in game.map_base()["places"] if p["region"] == "luoyang"]
-    for p in places:
-        x = 375 / 2 + (p["x"] - out["cx"]) * out["s"]
-        y = 650 / 2 + (p["y"] - out["cy"]) * out["s"]
-        assert 0 <= x <= 375 and 0 <= y <= 650 - 230, p["id"]
-    assert out["s"] >= 0.62  # 不掉進看大局那一檔
-
-
-def test_region_view_never_drops_into_the_far_view():
-    """點一區（區圖第 4 批之前的替身）要看得到地名：真實地形的潁川汝南很寬，照地點外框塞進 375 寬會掉進看大局那一檔（只剩點與大區名），
-    所以倍率最低是看大局那一檔，取景照那一區的地點置中（寬的大區兩邊各切掉一點）。"""
+def test_region_fit_frames_that_regions_places():
+    """點一區進區圖（第 4 批：regionFit 固定取景，不再是可以縮放的那一張的替身）：那一區每一個地點都在畫面裡、整區不切掉。"""
     game = _game()
     for r in game.content.map.regions:
-        out = run(game, f"return [H.regionView(H.S.mapBase, '{r.id}', 375, 624, 900, 1340, 230), {re.search(r'MAP_FAR = ([\d.]+)', APP.read_text(encoding='utf-8')).group(1)}];")
-        view, far = out
-        assert view["s"] >= far - 1e-9, r.id
-        places = [p for p in game.map_base()["places"] if p["region"] == r.id]
-        mid_x = (min(p["x"] for p in places) + max(p["x"] for p in places)) / 2
-        x = 375 / 2 + (mid_x - view["cx"]) * view["s"]
-        assert 0 <= x <= 375, r.id  # 那一區的中間在畫面裡
+        out = run(game, f"return H.regionFit(H.S.mapBase, '{r.id}', 375, 624);")
+        for p in (x for x in game.map_base()["places"] if x["region"] == r.id):
+            x = 375 / 2 + (p["x"] - out["cx"]) * out["s"]
+            y = 624 / 2 + (p["y"] - out["cy"]) * out["s"]
+            assert 0 <= x <= 375 and 58 <= y <= 624 - 54, (r.id, p["id"])
 
 
 def test_the_world_drawer_line_says_where_you_are_and_offers_to_enter():
@@ -234,7 +287,7 @@ def test_the_world_drawer_line_says_where_you_are_and_offers_to_enter():
     assert "你在 <b>潁川汝南</b>・潁川郡（陽翟）" in out and 'data-act="world-enter"' in out and "進入此區" in out
     assert 'data-act="map-open"' in out and "誰佔著" not in out
     full = run(game, "return H.worldDrawerHtml(H.S.mapBase, H.S.mapState);", mapDrawer="half")
-    assert "誰佔著" in full and 'data-act="world-enter"' in full  # 拉開：你腳下這一處的卡（第 4 批之前是 placeHtml）
+    assert 'class="m-line"' in full and "此地的對手" in full and 'data-act="world-enter"' in full  # 拉開：你腳下這一處的卡（placeCard）
 
 
 def test_on_the_road_you_are_drawn_on_the_road_and_the_drawer_says_where():
@@ -308,8 +361,6 @@ def test_three_and_four_sides_each_get_a_colour_and_every_touching_pair_a_front(
     assert by["jizhou"]["line"].startswith("魏 ") and by["nanyang"]["line"].startswith("吳 ")
     assert all(f"{s} " in by["yingru"]["line"] for s in ("官", "巾", "魏", "吳"))
     assert run(game, "return [H.sideInk('wei').color, H.sideInk('wu').name];") == ["#6A3D7A", "吳"]
-    hud = run(game, "return H.hudHtml(H.S.mapBase, H.S.mapState, H.S.mapState.now_week);")
-    assert "#6A3D7A" in hud and "魏 <b>" in hud and "吳 <b>" in hud and "undefined" not in hud
 
 
 def test_tug_and_melee_draw_only_with_data():
@@ -382,31 +433,34 @@ def test_page_map_opens_on_the_world_with_its_top_row():
 
 
 def test_the_region_layer_has_a_way_back_to_the_world():
-    page = run(_game(), "return H.pageMap();", mapLayer="region")
+    page = run(_game(), "return H.pageMap();", mapLayer="region", mapRegion="yingru")
     head = page[page.index('class="mapx'):page.index(">", page.index('class="mapx'))]
-    assert "world" not in head
-    row = page[page.index('class="map-top"'):]
-    row = row[: row.index('class="map-chips"')]
+    assert "world" not in head and "region" in head
+    row = page[page.index('class="r-top"'):]
+    row = row[: row.index("</div>")]
     assert 'data-act="map-world"' in row and "天下" in row
 
 
 def test_the_roads_show_faintly_through_the_world_ground():
-    """天下圖的路淡淡透上來（企劃者 2026-10-20 從對比圖選乙）：路照舊在底圖裡（烤進點陣那張圖），天下圖那一層不藏它；
-    地面不是全不透明的，底下的路與山水看得到。"""
+    """天下圖的路淡淡透上來（企劃者 2026-10-20 從對比圖選乙）：路照舊在底圖裡、樣子不變（官道雙線、路虛線、山路點線），天下圖那一層不藏它；
+    地面不是全不透明的，底下的路與山水看得到。輿圖第三版第 4 批起路包成一組（.tx-roads）、不烤進點陣那張圖：區圖照 CSS 換成一種淡實線
+    （設計 5.2），天下圖不套那幾條（只在 .mapx.region 底下）。"""
     svg = _game().map_base()["svg"]
-    assert 'class="tx-roads"' not in svg and svg.count(" Q") > 20  # 路是底圖裡的二次曲線
+    roads = svg[svg.index('<g class="tx-roads">'):]
+    roads = roads[: roads.index("</g>")]
+    assert roads.count(" Q") > 20 and 'stroke-dasharray="5 4"' in roads and 'class="rd-core"' in roads  # 路是底圖裡的二次曲線，照舊的畫法
     css = re.sub(r"/\*.*?\*/", "", CSS.read_text(encoding="utf-8"), flags=re.S)
-    assert "tx-roads" not in css
+    assert all(m.group(0).startswith(".mapx.region") for m in re.finditer(r"[^\n{}]*\.tx-roads[^{]*", css))
     low, _ = parts(_game())
     ground = re.search(r'class="w-ground" opacity="([\d.]+)"', low)
     assert ground and 0.5 <= float(ground.group(1)) < 1
 
 
-def test_world_layer_ignores_drag_and_wheel():
-    src = APP.read_text(encoding="utf-8").replace("\r\n", "\n")
-    for name in ("gripDown", "mapWheel"):
-        body = src[src.index(f"  function {name}("):]
-        assert 'S.mapLayer === "world"' in body[: body.index("\n  }\n")], name
+def test_neither_layer_drags_or_zooms():
+    """設計第五章：兩張圖都不自由縮放（手勢、滾輪、縮放鈕整套拿掉，第 4 批）。"""
+    src = APP.read_text(encoding="utf-8")
+    for name in ("function gripDown(", "function mapWheel(", "function mapZoom(", 'addEventListener("wheel", mapWheel'):
+        assert name not in src, name
 
 
 def test_no_two_sides_or_side_names_are_hardcoded_in_the_world_map_code():

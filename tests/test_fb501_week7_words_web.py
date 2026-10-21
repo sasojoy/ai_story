@@ -16,7 +16,9 @@ from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 
 pytestmark = [pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過"), pytest.mark.slow]
-NAMES = ["S", "ordersHtml", "boardPeek", "resultHtml", "timelineHtml", "overviewHtml", "placeHtml", "hudHtml", "mapChrome",
+# 輿圖第三版第 4 批：總覽（overviewHtml）挪到卡底下（cardExtras）、地點的卡換成 placeCard、「天下」那一條（hudHtml）拿掉了，
+# 比第幾段改看版圖變化那一格（timelineHtml 的處數底下）
+NAMES = ["S", "ordersHtml", "boardPeek", "resultHtml", "timelineHtml", "cardExtras", "placeCard", "mapChrome",
          "sheetHtml", "adminAsk"]
 DRIVER = re.sub(r"wholeApp\(\[.*?\]\)", "wholeApp(" + repr(NAMES).replace("'", '"') + ")", test_prologue_web.DRIVER, count=1, flags=re.S)
 HOUR, DAY = 3600, 86400
@@ -66,9 +68,9 @@ def _render(game, monkeypatch, app=None):
         board: H.boardPeek(m, 1).label,
         result: H.resultHtml(fb.result),
         timeline: H.timelineHtml(base, st, 1),
-        overview: H.overviewHtml(base, st),
-        place: H.placeHtml(base, st, fb.place),
-        hud: H.hudHtml(base, st, 2),
+        overview: H.cardExtras(base, st),
+        place: H.placeCard(base, st, fb.place),
+        hud: H.timelineHtml(base, st, 2),
         chrome: H.mapChrome(),
         sheet: H.sheetHtml(),
         open: H.adminAsk("open_season", {})[0],

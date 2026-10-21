@@ -209,6 +209,71 @@ def test_no_flip_marks_when_conquest_is_off(profile):
     assert not any(FLIP_KEYS & set(p) for p in game.map_state()["places"].values())
 
 
+def test_fb632_a_neutral_block_taken_for_the_first_time_counts_as_a_flip():
+    """FB-632：開季中立的地第一次被佔下（領地爭奪最常見的一種易手；規則那一邊 conquest._announce 照樣發天下大事），版圖變化那一週的
+    changed 列得出來（from 是 None：網頁寫「中立 → 官軍」、天下圖閃一圈）、那一處的易手（卡上「這一季誰佔過」）也記得到；換手照舊。"""
+    from tianxia import calendar, territory
+
+    game = conquest_game("weekend")
+    w, c = game.state.world, game.content
+    conquest.assign(w, c, {"nanyang_wilds": "guan", "yingchuan_wilds": "huang"})  # 第 1 週：中立地被官軍佔下、官軍的地被黃巾拿走
+    w.time = calendar.week_start(2, c, w) + 60
+    territory.update(w, c)
+    conquest.set_control(w, c, "nanyang_wilds", None)  # 第 2 週：管理者放回中立
+    st = game.map_state()
+    week1 = next(x for x in st["weeks"] if x["week"] == 1)["changed"]
+    week2 = next(x for x in st["weeks"] if x["week"] == 2)["changed"]
+    assert {"id": "nanyang_wilds", "from": None, "to": "guan"} in week1
+    assert {"id": "yingchuan_wilds", "from": "guan", "to": "huang"} in week1
+    assert week2 == [{"id": "nanyang_wilds", "from": "guan", "to": None}]
+    assert st["places"]["nanyang_wilds"]["flips"] == [{"week": 1, "from": None, "to": "guan"}, {"week": 2, "from": "guan", "to": None}]
+    assert st["places"]["yingchuan_wilds"]["flips"] == [{"week": 1, "from": "guan", "to": "huang"}]
+    assert st["places"]["runan_wilds"]["flips"] == []  # 一直沒人佔：不算易手
+
+
+def test_fb632_old_tug_of_war_weeks_are_unchanged():
+    """FB-632 的修法只多算「沒人佔↔有人佔」：舊拔河的季每一處每一週都有控制方，changed 跟以前一樣（推線換手的那幾處）。"""
+    from tianxia import calendar, territory
+
+    game = _game()
+    w, c = game.state.world, game.content
+    territory.update(w, c)
+    w.time = calendar.week_start(2, c, w) + 60
+    w.trends["yingru"] = 95
+    territory.update(w, c)
+    changed = next(x for x in game.map_state()["weeks"] if x["week"] == 2)["changed"]
+    assert changed and all(e["from"] is not None and e["to"] is not None for e in changed)
+
+
+def test_yield_line_reads_the_drop_tables_without_rolling():
+    """卡上「今日產出」那一句（輿圖第三版第 4 批；設計 4.5、5.3 第 6 段）：站在那裡的隊伍打贏有機會掉的最高那一階——寫了掉落表的寫素材名、
+    照預設表的寫幾品素材；剛易手的中立地照 conquest.drop_cap 只算一階；沒有隊伍是空字串。跟真的擲骰讀同一份表（materials.possible_drops）。"""
+    from tianxia import materials
+
+    game = conquest_game("weekend")
+    w, c = game.state.world, game.content
+    st = game.map_state()
+    assert all("yield" in p for p in st["places"].values())
+    for loc, p in st["places"].items():
+        squads = [c.squads[s] for s in territory_squads(w, c, loc) if s in c.squads]
+        found = [d for sq in squads for d in materials.possible_drops(sq, c, max_tier=conquest.drop_cap(w, c, loc))]
+        assert bool(p["yield"]) == bool(found), loc
+        if found:
+            top = max(t for t, _, _ in found)
+            named = [c.materials[m].name for t, m, _ in found if t == top and m]
+            assert p["yield"].startswith("今日產出：") and (named[0] in p["yield"] if named else f"{materials.TIER_NAMES[top]}素材" in p["yield"]), loc
+    rich = next(x for x, p in st["places"].items() if p["rich"] and p["yield"])
+    conquest.push(w, c, rich, "guan", "甲", 100, "attack")  # 推滿易手：冷卻中只掉一階
+    capped = game.map_state()["places"][rich]["yield"]
+    assert capped != st["places"][rich]["yield"] or "凡品" in capped
+
+
+def territory_squads(w, c, loc):
+    from tianxia import territory
+
+    return territory.squads_at(w, c, loc)
+
+
 def test_a_scenario_without_blocks_seeds_every_open_place():
     """劇本沒寫區塊表：開放的地點全部分地面（序章專屬的不算）。"""
     c = real_content("weekend")

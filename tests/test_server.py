@@ -1073,17 +1073,16 @@ def test_the_furnace_page_sends_only_insights():
 
 
 def test_the_new_map_has_no_legend_box_and_the_chips_carry_the_colors():
-    """輿圖升級（設計第一節）：圖例拿掉，濾鏡本身就是圖例（每顆前面一個色點）；地圖框是夾在狀態列與分頁列之間的整頁一層，
-    寬 900 以上抽屜變右欄。網頁的版面與樣式對得上，就靠這一條。"""
+    """輿圖升級（設計第一節）：圖例拿掉；地圖框是夾在狀態列與分頁列之間的整頁一層，寬 900 以上抽屜變右欄。輿圖第三版第 4 批起濾鏡那一排
+    也拿掉了（輿圖簡化設計 5.4：誰的領地看區圖的印章框，其他收進卡）。網頁的版面與樣式對得上，就靠這一條。"""
     js = (server.WEB / "app.js").read_text(encoding="utf-8")
     css = re.sub(r"/\*.*?\*/", "", (server.WEB / "style.css").read_text(encoding="utf-8"), flags=re.S)
     assert "function legendHtml(" not in js and ".map-legend" not in css and "legend-toggle" not in js
-    chips = _js_function(js, "function chipsHtml(")
-    assert "MAP_CHIPS" in chips and "<i style=" in chips and "aria-pressed" in chips
+    # 輿圖第三版第 4 批（輿圖簡化設計 5.4）：濾鏡那一排、右上角那一欄（我在哪、放大、縮小）、手勢都拿掉了，兩張圖都是固定取景
+    assert "MAP_CHIPS" not in js and "function chipsHtml(" not in js and "map-ctl" not in js and ".map-ctl" not in css and "function gripDown(" not in js
     assert re.search(r"\n\.mapx \{[^}]*position: fixed", css) and "var(--map-top, 0px)" in css and "var(--map-bottom, 0px)" in css
     assert "@media (min-width: 900px)" in css and "grid-template-columns: 1fr 360px" in css
-    assert re.search(r"\n\.map-ctl button \{[^}]*width: 44px; height: 44px;", css)  # 觸控目標 44px
-    assert 'closest(".map-ctl")' in _js_function(js, "function gripDown(")  # 在角落的鈕上按下去不是拖地圖
+    assert re.search(r"\n\.w-here, \.w-tl, \.w-back \{[^}]*height: 40px;", css)  # 上面那一排的鈕：觸控目標 40px
     assert "overflow: clip" in css  # 地圖框不能被 scrollIntoView 捲走（overflow: hidden 的框可以）
 
 
