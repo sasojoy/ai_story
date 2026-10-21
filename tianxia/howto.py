@@ -63,6 +63,13 @@ def explore_modes_line(fight: bool, sense: bool) -> str:
     return EXPLORE_MODES.format(fight=EXPLORE_FIGHT if fight else EXPLORE_CALM, sense="" if sense else EXPLORE_NO_SENSE)
 
 
+# 行動列底下練功那一行（FB-670，企劃者 2026-10-22 選練功入口「丙」：練功在行動列自己一格；Game._practice_line 照練功鈕同一個判斷挑一句）。
+# 灰著的城鎮寫 PRACTICE_TOWN_NOTE＋「，最近的在某地（步行約 N 分鐘）」（explore_modes.NO_FOE_NEAR、atlas.route_text）。都待 joy 潤
+PRACTICE_NOTE = "打這裡的{foe}，不限次數，打贏是經驗的大宗"
+PRACTICE_BOSS_NOTE = "這裡只有頭目{foe}，練功直接對上他；打一場要等他再現身，次數有限"
+PRACTICE_TOWN_NOTE = "城外才有對手"
+
+
 def train_line(foes: bool, gains: Sequence[str], drops: bool, push: bool, drill_gains: Sequence[str], drills: bool) -> str:
     """遊歷打完會拿到什麼。foes：這裡有會打的對手（不是自己陣營的）；gains：打贏給的（銀兩、心得、經驗，照會打的對手有沒有
     這一項）；drops：打贏有機會掉素材；push：打贏或操練會推大勢（Game.train_trend_push 不是空的）；drill_gains：跟自己人操練
@@ -410,8 +417,9 @@ def precise_explore_lines(content: Content) -> list[str]:
     return [
         f"- **探索**（體力 {cost}）：點開來挑一種。{names['gather']}：照這裡的地形一定撿得到素材，不打仗；"
         f"{names['seek']}：碰上這一帶的事（交友的事也在這裡），偶有奇遇；{names['sense']}：只在悟得到意境的地方。{legend}",
-        f"- **{names['practice']}**（在探索裡，體力 {cost}）：找這裡的對手打一場，一定開打、不限次數，打贏是經驗的大宗；"
-        "城鎮與沒有對手的地方灰著。有頭目的地方，頭目在練功時碰上。",
+        # 練功在行動列自己一格（FB-670，企劃者 2026-10-22 選丙；以前寫「在探索裡」）。待 joy 潤
+        f"- **{names['practice']}**（行動列自己一格，體力 {cost}）：找這裡的對手打一場，一定開打、不限次數，打贏是經驗的大宗；"
+        "城鎮與沒有對手的地方灰著，行動列底下寫最近的在哪。有頭目的地方，頭目在練功時碰上。",
     ]
 
 

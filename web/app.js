@@ -1549,6 +1549,9 @@
   // 這幾格對到選單上哪一顆、沒有時寫什麼；最後一格是移動（點了在下面展開走法與目的地）
   const ACT_CELLS = [
     { key: "explore", ids: ["act:explore"], name: "探索", none: "不能探索", icon: '<circle cx="12" cy="12" r="9"/><path d="M12 3v3m0 12v3M3 12h3m12 0h3M15 9l-4 2-2 4 4-2z"/>' },
+    // 練功（FB-670，企劃者 2026-10-22 選練功入口「丙」）：以前是探索卡上的第四顆，現在行動列自己一格、排在探索右邊（五格）。
+    // 選項 id 照舊 explore:practice（假人、整季機器人不受影響）；一類一顆沒開、選單上沒有練功時不畫（同調息），序章照 act:practice 的鍵亮
+    { key: "practice", ids: ["explore:practice"], name: "練功", none: "", icon: '<path d="M14.5 17.5L3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2M9.5 14.5L21 3h-3L6.5 14.5M11 19l-6-6M8 16l-4 4M3 19l2 2"/>' },
     { key: "train", ids: ["act:train"], name: "遊歷", none: "沒有對手", icon: '<path d="M14.5 4h-5L7 7h10zM12 7v13M8 12h8"/>' },
     // 打坐 2026-10-12 拿掉了（企劃者）：這一格只在序章教體力那一步有選項（調息），沒有選項就不畫（平常是四顆）
     { key: "rest", ids: ["act:rest"], name: "調息", none: "", icon: '<circle cx="12" cy="7" r="2.5"/><path d="M8 20c0-3 3-4 4-4s4 1 4 4M5 15l3-2m11 2l-3-2"/>' },
@@ -1557,9 +1560,20 @@
   const MOVE_ICON = '<path d="M13 3l-3 7h5l-4 11 8-10h-5z"/>';
   const SHORT_SUB = { "act:rest": "回體力", "act:call": "挑一位" };  // 求見先打開名單挑人（FB-044：以前又寫一次「求見」；挑了人才花體力）
   const TALKED_OUT = "已經談滿", TALKED_OUT_SUB = "已談滿";  // 談滿了的求見（Game._talked_out_note 的開頭）在行動列格子裡的短說法（待 joy 潤）
-  // 灰格小字最多六個字（一行約 60 px、10 px 的字不換行，同 sortie.OUT_NOTE 的註解）。原因比這長的：格子寫短的，整句放行動列底下那一行
-  // （actionBar 的 noted 第三項 → actNotesHtml）。FB-664：交友灰著、這裡沒有人時（engine.SOCIAL_NO_ONE），10 個字的整句在 375 寬兩頭被切掉
+  // 灰格小字最多四個字（FB-670：練功多一格、五格之後每格約 62 px，320 寬約 51 px，扣掉內距與框約 45 px、10 px 的字不換行；四格時是六個字）。
+  // 原因比這長的：格子寫短的，整句放行動列底下那一行（伺服器那一行本來就寫了整句的，例：散人不能出陣、不在爭奪之列；沒寫的帶在
+  // actionBar 的 noted 第三項 → actNotesHtml）。FB-664：交友灰著、這裡沒有人時（engine.SOCIAL_NO_ONE），10 個字的整句在 375 寬兩頭被切掉
   const SOCIAL_NO_ONE = "這裡沒有能說上話的人", SOCIAL_NO_ONE_SUB = "沒有人";  // 待 joy 潤
+  const FAME_GAP = /^名望還差 \d+$/, FAME_GAP_SUB = "名望不夠";  // 交友見不到人（engine._why_not_talk）：還差多少寫在底下那一行（FB-670；待 joy 潤）
+  // 出陣灰著的兩種長原因（sortie.RANGER_NOTE、sortie.OUT_NOTE，六個字）：格子寫短的；整句是伺服器寫的出陣那一行（RANGER_LINE、OUT_LINE）（FB-670；待 joy 潤）
+  const SORTIE_LONG_SUB = { "散人不能出陣": "未投靠", "不在爭奪之列": "不在爭奪" };
+  // 練功那一格的小字（FB-670；待 joy 潤）：亮著寫「不限次數」（第二行照勝算上色，同遊歷），這裡只有頭目時寫「對上頭目」（頭目有冷卻與次數，
+  // 不是不限次數；鈕上那一段是 explore_modes.BOSS_NOTE）；灰著：沒有對手（explore_modes.NO_FOE）寫「城外才有」、頭目冷卻中或次數用完
+  // （鈕上寫「…再現身」）寫「頭目不在」、體力不夠照別格。整句（最近的在哪、步行多久；頭目還要等多久）是伺服器的 action_notes，網頁不另算。
+  // 不帶路：灰著就是按不下去（企劃者 2026-10-22 選丙、不選丙帶路）
+  const PRACTICE_ID = "explore:practice"; // engine：explore_modes.option_id(PRACTICE)
+  const PRACTICE_SUB = "不限次數", PRACTICE_BOSS_SUB = "對上頭目", PRACTICE_BOSS = "頭目";
+  const PRACTICE_NO_FOE = "這裡沒有可以練手的對手", PRACTICE_OUT = "城外才有", PRACTICE_AWAY = /現身/, PRACTICE_AWAY_SUB = "頭目不在";
   // 出陣（出陣探索與地盤設計第二節）：出陣開著時（m.sortie）遊歷那一格叫「出陣」，散人、不在戰線上的地點沒有出陣鈕時灰著寫「不在戰線」（待 joy 潤）
   const SORTIE_CELL = { name: "出陣", none: "不在戰線" };
   const SORTIE_LEFT = /今日還能 (\d+) 次/; // 鈕上的「今日還能 N 次」：格子小字寫「今日 N 次」
@@ -1579,8 +1593,13 @@
   // 籌備中、休季、暫停（season:）與閉關中（act:break）的選單只有一顆通知：那顆要畫成看得見的按鈕，不能掉進行動列的摺疊裡（M2）
   const NOTICE_MENU = /^(choice:|sense:|season:|act:break$)/;
   const idleMenu = (m) => m.options.some((o) => o.id === "act:explore") || (!!m.prologue && !m.on_road && !m.options.some((o) => NOTICE_MENU.test(o.id)));
+  // 格子上的名字（FB-670）：五格時「出陣・守」（320 寬）、「出陣・攪局」（375 寬）一行放不下，瀏覽器會斷在「攪／局」中間：
+  // 照「・」切成不折行的小段（.nb），只在「・」後面換行；沒有「・」的照舊
+  function inkName(name) {
+    return name.includes("・") ? name.split(/(?<=・)/).map((t) => `<span class="nb">${esc(t)}</span>`).join("") : esc(name);
+  }
   const inkCell = (key, name, sub, icon, attrs, cls, note = "") => `<button class="act-ink${cls}" data-key="${key}" data-glow="act:${key}" ${attrs}>
-      <svg class="ink-icon" viewBox="0 0 24 24" aria-hidden="true">${icon}</svg><b>${esc(name)}</b><small>${esc(sub)}</small>${
+      <svg class="ink-icon" viewBox="0 0 24 24" aria-hidden="true">${icon}</svg><b>${inkName(name)}</b><small>${esc(sub)}</small>${
       note ? `<small class="ink-note ${ODDS_TONE[note] || ""}">${esc(note)}</small>` : ""}</button>`;
 
   // 決戰集結時還沒參戰的人（FB-105）：加入（自己陣營那一邊）、散人的臨時投效。以前跟求見、拜師一起收在「此地還能做」的摺疊裡，
@@ -1783,27 +1802,27 @@
     const loneCall = m.options.find((o) => o.id.startsWith("call:") && o.id !== "call:back");
     const noted = []; // 畫出來、伺服器又寫了說明的格子：[格子上的名字, 選項 id（, 整句）]（行動列底下那幾行，見 actNotesHtml）
     // 探索三選一（出陣探索與地盤設計第三節）：三顆畫在探索那一格點開的卡上，不掉進「此地還能做」
-    // 找素材分支（第 32 項）畫在「找素材」底下那一排，不算進三選一的那幾顆
-    const modes = m.options.filter((o) => o.id.startsWith(EXPLORE_PREFIX) && !o.id.startsWith(GATHER_BRANCH));
+    // 找素材分支（第 32 項）畫在「找素材」底下那一排，不算進三選一的那幾顆；練功（explore:practice）在行動列自己一格（FB-670），不在卡上
+    const modes = m.options.filter((o) => o.id.startsWith(EXPLORE_PREFIX) && !o.id.startsWith(GATHER_BRANCH) && o.id !== PRACTICE_ID);
     const branches = m.options.filter((o) => o.id.startsWith(GATHER_BRANCH));
     modes.forEach((o) => used.add(o.id));
     branches.forEach((o) => used.add(o.id));
     // 入口灰著（體力不夠，三顆都按不下去）時就算記著展開也不畫：那一格是灰格子，不是展開鈕
     const exploreOpen = S.wheelSel === "explore" && modes.length > 0 && !!(byId["act:explore"] && byId["act:explore"].enabled);
-    // 序章（新手引導計畫一）：還沒亮的格子不畫（act:explore、act:train、act:rest、act:social、act:move）；
-    // 不畫的格子對到的選項照樣記成用過，不會掉進「此地還能做」那個摺疊裡
+    // 序章（新手引導計畫一）：還沒亮的格子不畫（act:explore、act:practice、act:train、act:rest、act:social、act:move）；
+    // 不畫的格子對到的選項照樣記成用過，不會掉進「此地還能做」那個摺疊裡。練功的鍵教學內容還沒寫：草廬與初入江湖那四步都不畫（FB-670）
     const cells = ACT_CELLS.map((d0) => {
       const d = d0.key === "train" && m.sortie ? { ...d0, ...SORTIE_CELL } : d0;
       const o = d.ids.map((id) => byId[id]).find(Boolean) || (d.key === "social" ? loneCall : undefined);
       if (o) used.add(o.id);
-      if (!shown(`act:${d.key}`) || (d.key === "rest" && !o)) return "";
+      if (!shown(`act:${d.key}`) || ((d.key === "rest" || d.key === "practice") && !o)) return "";
       if (!o) return inkCell(d.key, d.name, d.none, d.icon, "disabled", " off");
       const lone = o.id.startsWith("call:");
       const [label, detail] = optParts(o);
       const name = lone ? "求見" : label;  // 格子窄：名字寫「求見」，人物的名字放在下面一行
       // 灰著、原因太長的交友（一類一顆開著時單人地點的交友是 act:socialize，不是 call:）：格子寫短的，整句帶句號放底下那一行（FB-664）。
-      // 單人的求見（lone）伺服器自己寫了同一句（action_notes），不動
-      const longWhy = !o.enabled && !lone && (detail === SOCIAL_NO_ONE || detail.startsWith(TALKED_OUT));
+      // 名望還差幾點（FB-670：五格時四個字以上會被切）同樣。單人的求見（lone）伺服器自己寫了同一句（action_notes），不動
+      const longWhy = !o.enabled && !lone && (detail === SOCIAL_NO_ONE || detail.startsWith(TALKED_OUT) || FAME_GAP.test(detail));
       noted.push(longWhy ? [name, o.id, `${detail}。`] : [name, o.id]);
       // 按不下去的原因：標籤括號裡寫的是體力就是「體力不夠」，寫別的就照寫；整句太長、格子裝不下（約 60 px、不換行）時只留
       // 最後一小句（例：挑戰本人打贏之後「剛吃了敗仗，閉門不見」只寫「閉門不見」，T4）
@@ -1813,11 +1832,19 @@
       const left = SORTIE_LEFT.exec(detail);
       // 探索三選一開著：探索那一格是展開鈕（同移動），點了在下面就地展開三顆；入口灰著（三顆都按不下去）時照一般的灰格子
       const wheel = d.key === "explore" && modes.length > 0 && o.enabled;
+      // 練功（FB-670）：亮著「不限次數」（只有頭目時「對上頭目」）；灰著沒有對手「城外才有」、頭目不在「頭目不在」，體力不夠照別格
+      const practice = d.key === "practice" && (o.enabled || !detail.startsWith("體力"))
+        ? (o.enabled ? (detail.split("・").includes(PRACTICE_BOSS) ? PRACTICE_BOSS_SUB : PRACTICE_SUB)
+          : detail.startsWith(PRACTICE_NO_FOE) ? PRACTICE_OUT : PRACTICE_AWAY.test(detail) ? PRACTICE_AWAY_SUB : "")
+        : "";
       const sub = wheel ? EXPLORE_SUB
+        : practice ? practice
         : o.enabled ? (lone ? label.replace(/^求見/, "") : left ? `今日 ${left[1]} 次` : (SHORT_SUB[o.id] || detail.replace(/^體力 (\d+).*$/, "體力 $1")))
         : detail === SOCIAL_NO_ONE ? SOCIAL_NO_ONE_SUB
         : detail.startsWith(TALKED_OUT) ? TALKED_OUT_SUB
+        : FAME_GAP.test(detail) ? FAME_GAP_SUB
         : SORTIE_USED.test(detail) ? SORTIE_FULL_SUB
+        : SORTIE_LONG_SUB[detail] ? SORTIE_LONG_SUB[detail]
         : (detail && !detail.startsWith("體力") ? detail.split("，").pop() : "體力不夠");
       // 體力之後還有說明（遊歷的「體力 10・2 路對手・必敗」）：挑出勝算那一段另起一行（FB-044；對手數放不下就不寫）。
       // 不一定是最後一段：有自己人也有敵人的地方後面還接「・或與自己人操練」（畫面批次審查 C1）

@@ -94,8 +94,10 @@ def test_without_server_notes_the_grey_cell_still_draws_no_note_row():
 
 
 def test_the_other_grey_reasons_keep_their_cells_and_notes():
-    """名望還差、閉門不見這種本來就放得下的，格子照舊、底下那一行還是伺服器寫的。"""
+    """名望還差：四格時放得下、格子照寫。FB-670（練功多一格，五格每格約 62 px、320 寬約 51 px，灰格小字最多四個字）起，
+    「名望還差 15」在 320 寬會被切，改照這一張的做法：格子寫「名望不夠」，還差多少帶句號寫在底下那一行。
+    新規則的其他灰格在 tests/test_fb670_practice_cell_web.py。"""
     game = _game("changshe")
     bar = _bar(game)
-    assert "<b>交友</b><small>名望還差 15</small>" in _cell(bar, "social")
-    assert f"<p><b>交友</b>{server.main_view(game)['action_notes']['act:socialize']}</p>" in bar
+    assert "<b>交友</b><small>名望不夠</small>" in _cell(bar, "social") and "名望還差 15" not in _cell(bar, "social")
+    assert "<p><b>交友</b>名望還差 15。</p>" in bar

@@ -1814,14 +1814,41 @@ class Game:
             return Option(id=oid, label=f"{name}（{explore_modes.NO_FOE}{place}）", enabled=False)
         boss = duel_rules.available(s, c)
         if boss is not None:
-            foe_name = boss.foes[duel_rules.foe_index(boss, s.player.faction)].name
-            return self._cost_option(oid, name, cost, note=f"{foe_name}・{explore_modes.BOSS_NOTE}")
+            return self._cost_option(oid, name, cost, note=f"{self._boss_face(boss)}・{explore_modes.BOSS_NOTE}")
+        return Option(id=oid, label=f"{name}（{self._boss_away()}）", enabled=False)
+
+    def _boss_face(self, boss: DuelBoss) -> str:
+        """這一隻頭目對你露的那一面（照你的陣營，duel_rules.foe_index）的名字：練功鈕與行動列底下那一行同一個。"""
+        return boss.foes[duel_rules.foe_index(boss, self.state.player.faction)].name
+
+    def _boss_away(self) -> str:
+        """這裡只有頭目、他此刻遇不上的原因（練功鈕括號裡與行動列底下那一行同一句）：冷卻中寫還要等多久，次數用完寫他不再現身。"""
+        s, c = self.state, self.content
         wait = duel_rules.cooldown_left(s, c.config.duel)
         if wait > 0:
-            why = explore_modes.BOSS_COOLING.format(wait=arena.wait_text(wait / c.config.time_scale))
-        else:
-            why = explore_modes.boss_gone(s, c)  # 7 天濃縮季寫「這一段…第 N 天 00:00 再來」（FB-501）
-        return Option(id=oid, label=f"{name}（{why}）", enabled=False)
+            return explore_modes.BOSS_COOLING.format(wait=arena.wait_text(wait / c.config.time_scale))
+        return explore_modes.boss_gone(s, c)  # 7 天濃縮季寫「這一段…第 N 天 00:00 再來」（FB-501）
+
+    def _practice_line(self, loc: Location) -> str:
+        """行動列底下練功那一行（FB-670，企劃者 2026-10-22 選練功入口「丙」：練功在行動列自己一格）。跟練功鈕（_practice_option）
+        同一個判斷、同一個次序：有對手寫打誰；這裡只有頭目、遇得上寫頭目；頭目不在寫鈕上同一句；都沒有寫最近的在哪、步行多久
+        （_nearest_practice；時間走 atlas.route_text 的步行，跟移動那張卡的「前往」同一個算法）——城鎮開頭寫「城外才有對手」，
+        城外沒有對手的地方（自家的大營、山洞）照鈕上那一句。句子在 howto。只讀，不擲骰。"""
+        s, c = self.state, self.content
+        foe = self._gather_foe(loc)
+        if foe is not None:
+            return howto.PRACTICE_NOTE.format(foe=foe.name)
+        if not duel_rules.here(s, c):
+            head = howto.PRACTICE_TOWN_NOTE if explore_modes.is_town(c, loc) else explore_modes.NO_FOE
+            route = self._nearest_practice()
+            if route is None:
+                return head
+            place = explore_modes.NO_FOE_NEAR.format(place=c.locations[route.path[-1]].name)
+            return f"{head}{place}（{atlas.route_text(s, c, route, 'walk')}）"
+        boss = duel_rules.available(s, c)
+        if boss is not None:
+            return howto.PRACTICE_BOSS_NOTE.format(foe=self._boss_face(boss))
+        return self._boss_away()
 
     def _nearest_practice(self) -> atlas.Route | None:
         """離這裡最近、練得到的地點（有不是自己人的隊伍或此刻遇得上的頭目）：先照摸清的路找，都走不到照所有開放的地點找（同 clinic.nearest）。"""
@@ -1945,7 +1972,7 @@ class Game:
         return f"{who}・{self.odds(hardest.id)}"
 
     def action_notes(self, option_ids: Iterable[str]) -> dict[str, str]:
-        """江湖頁行動列底下那幾行（explain-1）：選單上的探索、遊歷、交友、求見這一下會怎樣，句子在 howto，事實照引擎的規則：
+        """江湖頁行動列底下那幾行（explain-1）：選單上的探索、練功（FB-670，_practice_line）、遊歷、交友、求見這一下會怎樣，句子在 howto，事實照引擎的規則：
         探索的比重是擲骰用的那一份（_explore_weights），遊歷照這裡的對手與操練（_train_line），交友照會不會直接開口談話
         （_socialize_figure）與這裡有沒有交友事件。只給 option_ids 裡有的。序章裡是空的：探索、遊歷照那一步寫好的走（草廬四景、
         斷眉），師父自己會說。只讀，不擲骰。"""
@@ -1964,6 +1991,9 @@ class Game:
             blocked = self._insight_blocked(loc)
             kind, until = day_turn(c, s.world) if blocked else ("at", None)
             notes["act:explore"] = howto.explore_line(self._explore_weights(loc), legend, blocked, until, later=kind == "later")
+        practice = explore_modes.option_id(explore_modes.PRACTICE)
+        if practice in ids:  # 練功在行動列自己一格（FB-670）：灰著的城鎮寫最近的在哪、步行多久
+            notes[practice] = self._practice_line(loc)
         if "act:train" in ids:
             notes["act:train"] = self._sortie_line(loc) if sortie.on(c) and not prologue_rules.active(s, c) else self._train_line(loc)
         if "act:socialize" in ids:
