@@ -3451,6 +3451,7 @@
       <div class="cr-rings">${rings}</div>
       <p class="muted small">自創的功夫一律${seal(grade)}${esc(grade)}，${c.slots[grade] | 0} 格全開。每一格只收自己顏色的意境，八色一圈的什麼都收。</p>
       ${draft.power ? `<p class="muted small">${esc(draft.power)}</p>` : ""}
+      ${draft.tactic ? `<p class="art-tactic">${esc(draft.tactic)}</p>` : ""}
       ${draft.redo > 0 ? `<p class="muted small">不滿意這個形，可以免費重來一次。</p>` : ""}
       <div class="crow"><span>名字</span><input class="input" id="create-name" maxlength="6" placeholder="2～6 個字，全服不能重名"></div>
       <div class="acts"><button class="btn primary" data-act="create-name">立名開派<small>心得 ${c.price | 0}</small></button>${redo}${quit}</div>

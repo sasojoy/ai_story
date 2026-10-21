@@ -169,3 +169,39 @@ def test_the_intent_score_sets_the_base_power(content):
     game.create_name("厚底拳")
     art = team.resolve_art("厚底拳", content, game.world)
     assert power_scale(art) == pytest.approx(create.power_scale_of(content, 80), abs=0.01)
+
+
+# ── 自創自動配小戰法（Joy 2026-10-21 決策卡選「自動配」）──────────────────
+
+
+def test_the_pool_prefers_same_kind_and_attribute_and_skips_marshal(real):
+    from tianxia import tactics
+
+    assert create.minor_pool(real, "武學", "快") == sorted(["zhuifeng", "ganshan_tui", "jianjing_dao"])
+    assert create.minor_pool(real, "內功", "陽") == ["yanghao_jue"]  # 同袍一心要部下：不配
+    fast = create.minor_pool(real, "內功", "快")  # 內功沒有快的：放寬到同屬性的武學
+    assert fast and all(real.skills[s].attribute == "快" for s in fast)
+    assert all(tactics.of(real, s).minor for s in create.minor_pool(real, "武學", ""))  # 沒有主屬性：同種類的都行
+
+
+def test_a_created_art_carries_the_minor_tactic_shown_before_naming(real):
+    from tianxia import skillview, tactics
+
+    game = _game(real)
+    _walk(game, reading=create.IntentReading(score=60, attributes=["快"], lean="無"))
+    draft = game.state.player.creating
+    source = create.minor_for(game.state, real, draft)
+    attribute = create.affinity_of(draft.colors)[0]
+    assert source in create.minor_pool(real, "武學", attribute)
+    shown = game.create_view()["draft"]["tactic"]
+    assert shown == tactics.card_text(tactics.of(real, source)) and "小戰法" in shown
+    game.create_name("追影拳")
+    art = team.resolve_art("追影拳", real, game.world)
+    assert art.tactic_from == source and tactics.of_art(real, art) is tactics.of(real, source)
+    assert tactics.of_id(real, "追影拳", game.world) is tactics.of(real, source)
+    p = game.state.player
+    p.member.wugong_id = "追影拳"
+    names = [h.tactic.name for h in team.tactic_holders(game.state, real, game.world)]
+    assert tactics.of(real, source).name in names  # 打起來會發動
+    row = next(r for r in skillview.art_rows(game.state, real, game.world) if r["id"] == "追影拳")
+    assert row["tactic"] == shown  # 功法卡上寫著
