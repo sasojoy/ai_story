@@ -44,7 +44,7 @@ def test_no_crossed_swords_and_no_map_sortie_there(side, loc):
 def test_crossed_swords_stay_on_blocks_you_can_take():
     game = join(conquest_game("season21"), "guan")
     armed = mapview.armed_places(game.state, game.content)
-    assert {"deep_mountain", "hilltop_wilds", "runan_wilds", "zhuo_county"} <= armed
+    assert {"yu_river", "hilltop_wilds", "runan", "xinye"} <= armed  # 中立地、黃巾的陣營區塊（區塊表 v3）
     assert not armed & {"huangjin_camp", "nanyang_huangjin_camp", "julu_altar", "guangzong", "changshe"}
 
 
