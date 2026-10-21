@@ -575,19 +575,19 @@ def problem(
     stamp: Callable[[float], str],
 ) -> str | None:
     """這一刻整個按不下去的原因（不看目標）；按得下去是 None。鎮地、補缺在領地爭奪關著的季一律 NO_CONQUEST（設計第四章），
-    一個能指定的都沒有（散人看兩軍合起來）時 NOTHING。"""
+    排在季沒在跑、暫停之前（FB-644：整季都用不上，暫停、休季時碎片卡那一行也寫這一句）；一個能指定的都沒有（散人看兩軍合起來）時 NOTHING。"""
     from . import conquest  # noqa: PLC0415
 
     holding = mine(state, content, reg)
     if holding is None:
         return NO_SHARD
+    shard, kind = holding
+    if kind in LAND and not conquest.on(content, state.world):
+        return NO_CONQUEST
     if not running:
         return NOT_RUNNING
     if paused:
         return PAUSED
-    shard, kind = holding
-    if kind in LAND and not conquest.on(content, state.world):
-        return NO_CONQUEST
     if left(shard, season, content) <= 0:
         return USED_UP.format(n=tuning(content).uses)
     ready = ready_at(shard, season, content, state.world)
@@ -688,7 +688,8 @@ def view(
     那一句、能指定的目標（id、name、where〔引將：他此刻在哪；其他是空的〕、why〔灰掉的原因〕）、要不要挑一邊（sides）、確認的問句
     （{target} 換成目標的 name、{side} 換成挑的那一軍，由畫面換）。改版關著、手上沒有有行動的碎片是 None。
     鎮地、補缺的目標每一列多 side（那一塊算哪一軍的；散人挑了哪一軍畫面只列那一軍的）與 info（底下那一小行）；idle：這一季整季都用不上
-    （領地爭奪關著，NO_CONQUEST），江湖頁碎片卡那一行寫原因、不寫「還能起用 N 次」（FB-626 那種一句說能用、一句說不能用）。
+    （領地爭奪關著，NO_CONQUEST；暫停、休季也是這一句，FB-644），江湖頁碎片卡那一行寫原因、不寫「還能起用 N 次」（FB-626 那種一句說能用、
+    一句說不能用）。
     入口畫面企劃者 2026-10-21 挑了乙（docs/superpowers/specs/2026-10-21-玉璽碎片改版-草圖/第2批/）。"""
     holding = mine(state, content, reg)
     if holding is None:

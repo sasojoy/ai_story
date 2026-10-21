@@ -290,6 +290,30 @@ def test_without_conquest_the_button_greys_out_and_nothing_happens(profile, shar
     assert _uses(w) == [] and w.get_season().seal_acts == []
 
 
+@pytest.mark.parametrize("shard", ["chishou", "jinjiao"])
+def test_fb644_without_conquest_a_pause_or_an_idle_season_still_says_why(shard):
+    """FB-644：領地爭奪關著的季，賽季時鐘一暫停（或休季、籌備中），碎片卡那一行又變回「這一季還能起用 2 次」——problem 先回暫停、
+    季沒在跑，輪不到 NO_CONQUEST。改成領地爭奪關著時一律寫 NO_CONQUEST（idle），不管暫停、休季排在前面；按下去回同一句、什麼都不動。"""
+    c, w, g = _holder(shard, conquest_on=False, at="yingchuan")
+    assert w.pause_clock(15.0)
+    act = _act(c, w, now=20.0)
+    assert (act["ok"], act["why"], act["idle"], act["left"]) == (False, seal_acts.NO_CONQUEST, True, 2)
+    assert _use(c, w, target="runan", now=30.0) == [f"（{seal_acts.NO_CONQUEST}）"]
+    assert _uses(w) == [] and w.get_season().seal_acts == []
+    view = w.seal_state()
+    reg = seal.filled(view.registry, c)
+    idle = seal_acts.view(g.state, c, reg, view.season, running=False, paused=False, stamp=g.stamp)  # 休季、籌備中（季沒在跑）
+    assert (idle["why"], idle["idle"]) == (seal_acts.NO_CONQUEST, True)
+
+
+def test_fb644_with_conquest_a_pause_is_still_a_pause():
+    """領地爭奪打開的季，暫停照舊寫暫停（不是整季用不上）。"""
+    c, w, g = _holder("chishou")
+    assert w.pause_clock(15.0)
+    act = _act(c, w, now=20.0)
+    assert (act["ok"], act["why"], act["idle"]) == (False, seal_acts.PAUSED, False)
+
+
 def test_other_acts_are_never_idle():
     from test_seal_acts import _holder as plain_holder
 
