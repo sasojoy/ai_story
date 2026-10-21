@@ -2256,6 +2256,11 @@ class ArtsTuning(_Strict):
     create_neutral_any_scale: float = Field(default=2.0, ge=1)
     create_redo: int = Field(default=1, ge=0)
     create_slots: int = Field(default=4, ge=1)  # 成形擲幾格（品級開幾格就用前幾格；上品四格全開）
+    # 基本威力（Joy 2026-10-21「基本威力你先自己用一版」）：同一品級的威力區間再乘一個倍數，夾在 power_scale_range。
+    # 自創照「意」分＋加分＋赤璋（夾 0～100）從下限線性推到上限；武學＋武學合出來的照兩門來源的倍數平均再加 blend_power_step。
+    # 以前是名字雜湊的 ±10%；已經登記的武學照舊、不重算
+    power_scale_range: list[float] = Field(default_factory=lambda: [0.9, 1.1], min_length=2, max_length=2)
+    blend_power_step: float = Field(default=0.02, ge=0)
     # 意境效果池（第二批，tianxia/insight_fx.py）：悟到一份意境先擲品質（insight_quality_odds；在那一路最濃的地方升一品；
     # 悟性每高過 5 一點多 insight_quality_per_wis 的機會再升一品、最多 insight_quality_wis_cap），再擲效果：第一個是那一路兩個一般功效挑一個（一重），
     # 照品質有 insight_second 的機會出第二個，第二個有 insight_grand 的機會是大獎（那一路的高階技能）、不然是另一個一般功效。

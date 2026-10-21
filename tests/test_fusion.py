@@ -973,3 +973,34 @@ def test_slot_refusals_carry_a_short_word(ready, content, world):
     ready.player.art_slots["basic_fist"] = ["feng", "huo"]
     ready.player.insights.append("shui")
     assert arts.slot_problem(ready, content, world, "basic_fist", "shui").short == "槽滿了"
+
+
+# ── 基本威力（Joy 2026-10-21「基本威力你先自己用一版」）──────────────
+
+
+def test_a_blend_sets_its_base_power_from_the_two_parents(ready, content, world):
+    """兩門基礎武學（倍數 1）合出來是 1＋blend_power_step；登記時寫進全服那一份，跟名字無關。"""
+    from tianxia.martial_arts import QUALITY_BASE_POWER, QUALITY_TOP_POWER, power_scale
+    ready.player.arts = ["lake_kick"]
+    art, _ = fusion.blend(ready, content, world, named("踏浪拳"), "basic_fist", "lake_kick")
+    want = 1 + content.config.arts.blend_power_step
+    assert power_scale(world.get_skill(art.id)) == pytest.approx(want, abs=0.01)
+    assert art.top_power == round(QUALITY_TOP_POWER["下品"] * want, 1)
+    assert art.base_power == round(QUALITY_BASE_POWER["下品"] * want, 1)
+
+
+def test_blend_power_scale_averages_the_parents_and_stays_in_range(content):
+    from tianxia.martial_arts import generate_from_name, scaled
+    low, high = content.config.arts.power_scale_range
+    step = content.config.arts.blend_power_step
+    thin = scaled(generate_from_name("薄", "武學", "薄"), low)
+    thick = scaled(generate_from_name("厚", "武學", "厚"), high)
+    assert fusion.blend_power_scale(content, thin, thick) == pytest.approx((low + high) / 2 + step, abs=0.002)
+    assert fusion.blend_power_scale(content, thick, thick) == pytest.approx(high)
+    assert fusion.blend_power_scale(content, thin, thin) == pytest.approx(low + step, abs=0.002)
+
+
+def test_the_blend_preview_says_how_thick_the_base_is(ready, content, world):
+    ready.player.arts = ["lake_kick"]
+    card = skillview.forge_preview(ready, content, world, "basic_fist", [], "lake_kick")
+    assert card["kind"] == "合成" and card["depth"].startswith("底子：第一成威力")

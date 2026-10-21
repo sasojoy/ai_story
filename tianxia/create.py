@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from pydantic import BaseModel, Field
 
 from . import annals, arts as arts_mod, library, naming, team, treasures
-from .martial_arts import ATTRIBUTES, QUALITY_BASE_POWER, QUALITY_TOP_POWER, MartialArt
+from .martial_arts import ATTRIBUTES, QUALITY_BASE_POWER, QUALITY_TOP_POWER, MartialArt, scaled
 from .models import Content
 from .ollama_client import OllamaClient
 from .rules import add_chronicle
@@ -492,6 +492,15 @@ def seal_points(state: GameState, content: Content) -> int:
     return int(treasures.amount(state, content, "fuse_points"))
 
 
+POWER_LINE = "底子：同品級威力的 {pct}%（意寫得越好越厚，多付心得也加）。"  # 待 joy 潤
+
+
+def power_scale_of(content: Content, points: int) -> float:
+    """自創的基本威力倍數：意分＋加分＋赤璋（夾 0～100）從 power_scale_range 的下限線性推到上限。"""
+    low, high = content.config.arts.power_scale_range
+    return round(low + (high - low) * max(0, min(100, points)) / 100, 3)
+
+
 def grade_odds(content: Content, score_value: int, bonus: int) -> dict[str, float]:
     """品級機率（%）：從 create_odds 起算，意分＋加分每一分把下品挪 create_point_shift 個百分點，三分之二到上品、三分之一到中品。"""
     cfg = content.config.arts
@@ -545,7 +554,8 @@ def finish(
     draft = state.player.creating
     clean = naming.clean_name(name)
     bonus = bonus_of(content, extra)
-    grade = roll_grade(content, draft.score + seal_points(state, content), bonus, rng)
+    points = draft.score + seal_points(state, content)
+    grade = roll_grade(content, points, bonus, rng)
     affinity = affinity_of(draft.colors[: arts_mod.slot_count(content, grade)])
     art = MartialArt(
         id=clean, name=clean, kind=draft.kind, quality="下品", attribute=affinity[0] if affinity else "",
@@ -554,6 +564,7 @@ def finish(
         affinity=affinity, slot_colors=[list(c) for c in draft.colors], pose=dict(draft.pose),
         weapon=draft.form if draft.kind == "武學" else None, method=draft.form if draft.kind == "內功" else None,
     )
+    art = scaled(art, power_scale_of(content, points + bonus))
     if not world.claim_skill_name(art):
         return None, [NAME_TAKEN]
     p = state.player
@@ -614,5 +625,6 @@ def view(state: GameState, content: Content, world: WorldStateStore) -> dict:
         "read_text": ("意偏" + "、".join(draft.read) if draft.read else "意不偏一路") + LEAN_TEXT.get(draft.lean, ""),
         "colors": [list(c) for c in draft.colors], "colors_text": [arts_mod.color_text(c) for c in draft.colors],
         "redo": draft.redo, "odds": grade_odds(content, draft.score + seal_points(state, content), 0),
+        "power": POWER_LINE.format(pct=round(power_scale_of(content, draft.score + seal_points(state, content)) * 100)),
     }
     return base

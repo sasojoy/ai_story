@@ -263,7 +263,7 @@
   - 破境丹（`legend_items`）：探索偶爾撿到；**以心得換破境丹**（Joy 2026-10-18；`cultivation.buy_legend`：300 ＋ 每枚 100，`legend_xinde_price`／`_step`，`PlayerState.legend_bought`）只在那一門 ready 時給鈕。
   - 絕學定名：全服第一個練成的人拿到取名權（`world.claim_master`，一人一次只留一門；還有一門沒定名時不能衝第二門），名字過 `naming.name_problem`、`world.rename_skill`（原子），id 不變只改顯示的名字（沿用原名也算定名），江湖史記一行；等著定名的那門不能熔。
 - **兩種合成**（煉製頁的太極火爐，`Game.forge(art_id, insight_ids, proposed=None, other_art=None)`；都花 `fuse_xinde`／`merge_xinde`（5）心得＋`fuse_stamina`／`merge_stamina`（5）體力，真的合成了才收）：
-  - 武學＋武學 → 第三門新武學（`fusion.blend`，配方鍵 `兼|甲+乙`，兩個 id 排序後接起來）：兩門都留著；種類由 `blend_kind` 照配方種子決定、相容屬性是兩門的聯集（`blend_affinity`）、品級兩門取高、兩門都第十成且槽都裝滿再升一品（最高上品，`blend_grade`）；兩門槽裡的意境拆回背包（`RELEASED_LINE`）；合出來的從第一成起練。
+  - 武學＋武學 → 第三門新武學（`fusion.blend`，配方鍵 `兼|甲+乙`，兩個 id 排序後接起來）：兩門都留著；種類由 `blend_kind` 照配方種子決定、相容屬性是兩門的聯集（`blend_affinity`）、品級兩門取高、兩門都第十成且槽都裝滿再升一品（最高上品，`blend_grade`）；兩門槽裡的意境拆回背包（`RELEASED_LINE`）；合出來的從第一成起練。基本威力（Joy 2026-10-21）：同品級的區間再乘一個倍數（`martial_arts.power_scale`／`scaled`，夾 `Config.arts.power_scale_range` 0.9～1.1），合出來的是兩門來源的倍數平均＋`blend_power_step` 0.02（`fusion.blend_power_scale`，預覽卡寫「底子」），自創照意分＋加分＋赤璋（`create.power_scale_of`）；以前是名字雜湊，已登記的不重算。
   - 意境＋意境 → （`fusion.merge`，`合|甲+乙`）：**同一個放兩次是揣摩**，強度加深一級（●→●●→●●●，`DEEPEN_LINE`，到頂 `DEEPEST`）、不登記配方；兩個不同的合出複合意境（那個屬性的高階技能；屬性的種子是「天機｜配方鍵」），兩個都留著。
   - 武學＋意境不是合成：爐裡放一門武學與一個意境、開爐就是把它裝進第一個空槽（`Game.forge` → `slot_insight`，不收錢；`fusion.fuse_problem` 回 `FUSE_GONE`）。
   - **配方全服共享**：第一個合出來的人等模型取名（叫不動走退路字表），之後查表、不用等；別人首創、你還沒有的照樣能合。**合成的意義是拿到你還沒有的**：配方已經登記、合出來的那一門你已經有了，就不准合（排在花費與持有上限之前）。「已經有了」一律照功法的 id 認。合出來的對應欄位空著就直接配上身，否則進功法庫。

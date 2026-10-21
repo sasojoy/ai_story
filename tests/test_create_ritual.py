@@ -165,3 +165,18 @@ def test_view_lists_forms_presets_and_the_draft(content):
     d = game.create_view()["draft"]
     assert d["form"] == "拳腳" and len(d["colors"]) == 4 and d["colors_text"][0] in ATTRIBUTES
     assert set(d["odds"]) == {"下品", "中品", "上品"}
+
+
+def test_the_intent_score_sets_the_base_power(content):
+    """基本威力（Joy 2026-10-21）：意分＋加分夾 0～100，從 power_scale_range 下限推到上限；名字不影響。"""
+    from tianxia.martial_arts import power_scale
+    low, high = content.config.arts.power_scale_range
+    assert create.power_scale_of(content, 0) == pytest.approx(low)
+    assert create.power_scale_of(content, 100) == pytest.approx(high)
+    assert create.power_scale_of(content, 150) == pytest.approx(high)
+    game = _game(content)
+    _walk(game, reading=create.IntentReading(score=80, attributes=["快"], lean="無"))
+    assert game.create_view()["draft"]["power"].startswith("底子：")
+    game.create_name("厚底拳")
+    art = team.resolve_art("厚底拳", content, game.world)
+    assert power_scale(art) == pytest.approx(create.power_scale_of(content, 80), abs=0.01)

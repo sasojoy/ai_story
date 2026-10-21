@@ -6,7 +6,9 @@ from __future__ import annotations
 
 from . import armor, arts as arts_mod, atlas, clinic, create as create_mod, cultivation, encounter, equipment, forge_secrets, fusion, insight_fx, insights, martial_arts, materials, mounts, prologue, renown, seal, signature, smithing, team, traits, treasures, weapons
 from .library import TOWN_TAG, cap_of, held_count, level_of, melt_confirm, melt_note, melt_problem, melt_value, owned_arts
-from .martial_arts import MAX_LEVEL, QUALITIES, Insight, MartialArt, next_quality, power_at, shown_creator
+from .martial_arts import (
+    MAX_LEVEL, QUALITIES, QUALITY_BASE_POWER, QUALITY_TOP_POWER, Insight, MartialArt, next_quality, power_at, power_scale, shown_creator,
+)
 from .models import Content
 from .state import PLAYER, GameState
 from .world_state import WorldStateStore
@@ -131,6 +133,9 @@ def _released_note(state: GameState, content: Content, world: WorldStateStore, a
     return f"{''.join(names)}會從兩門上拆下來、回到你心裡" if names else None
 
 
+BLEND_POWER_LINE = "底子：第一成威力 {base:.0f}，練到第十成 {top:.0f}。"  # 待 joy 潤
+
+
 def _blend_head(state: GameState, content: Content, world: WorldStateStore, art_id: str, other_art: str) -> tuple[dict, str | None] | None:
     """武學＋武學的預覽資料（forge_line 與 forge_preview 共用）：品級、相容屬性、槽數、拆下來的意境、有沒有人合過、問題。"""
     a, b = team.player_art(state, content, world, art_id), team.player_art(state, content, world, other_art)
@@ -140,8 +145,12 @@ def _blend_head(state: GameState, content: Content, world: WorldStateStore, art_
     kind, _ = fusion.blend_kind(art_id, a, other_art, b, None)
     affinity = fusion.blend_affinity(a, b)
     fake = a.model_copy(update={"affinity": affinity})
+    known = world.lookup_recipe(fusion.blend_key(art_id, other_art))
+    scale = power_scale(known) if known is not None else fusion.blend_power_scale(
+        content, team.resolve_art(art_id, content, world), team.resolve_art(other_art, content, world))
     return {
         "kind": kind, "grade": grade, "ripe": ripe, "affinity": arts_mod.affinity_text(fake),
+        "power": BLEND_POWER_LINE.format(base=QUALITY_BASE_POWER[grade] * scale, top=QUALITY_TOP_POWER[grade] * scale),
         "slots": arts_mod.slot_count(content, grade), "released": _released_note(state, content, world, art_id, other_art),
         "known": _known_recipe(state, content, world, fusion.blend_key(art_id, other_art)),
         "problem": fusion.blend_problem(state, content, world, art_id, other_art),
@@ -275,7 +284,7 @@ def forge_preview(
             **empty, "kind": "合成", "made": f"一門新{info['kind']}", "attribute": affinity[0] if affinity else "",
             "attribute_why": arts_mod.takes_text(info['affinity']), "quality": info["grade"],
             "why": [fusion.RIPE_LINE] if info["ripe"] else [], "slots": f"意境槽 {info['slots']} 格（空的）",
-            "traits": [], "keep": info["released"], "level": 1,
+            "traits": [], "keep": info["released"], "level": 1, "depth": info["power"],
             "known": _strip_note(info["known"]), "cost": cost, "problem": info["problem"],
         }
     if art_id and not other_art and len(insight_ids) == 1:

@@ -3466,6 +3466,7 @@
       <div class="cr-rings">${rings}</div>
       <p class="muted small">品級決定開幾格：下品開前 ${c.slots["下品"] | 0} 格、中品 ${c.slots["中品"] | 0} 格、上品 ${c.slots["上品"] | 0} 格。每一格只收自己顏色的意境，八色一圈的什麼都收。</p>
       ${odds ? `<p class="odds-line">品級看造化：${odds}</p>` : ""}
+      ${draft.power ? `<p class="muted small">${esc(draft.power)}</p>` : ""}
       ${draft.redo > 0 ? `<p class="muted small">不滿意這個形，可以免費重來一次。</p>` : ""}
       <div class="crow"><span>名字</span><input class="input" id="create-name" maxlength="6" placeholder="2～6 個字，全服不能重名"></div>
       <div class="crow"><span>多付心得</span><input class="input" id="create-extra" type="number" min="0" step="${c.bonus_per | 0}" value="0"><small class="muted">每 ${c.bonus_per | 0} 點多 5 分，最多加 ${c.bonus_cap | 0} 分</small></div>

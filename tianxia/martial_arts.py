@@ -221,6 +221,19 @@ def with_quality(art: MartialArt, quality: str) -> MartialArt:
     })
 
 
+def power_scale(art: MartialArt) -> float:
+    """這門武學的基本威力倍數：同品級的區間乘多少（內容寫的與基礎武學是 1）。"""
+    return art.base_power / QUALITY_BASE_POWER[art.quality]
+
+
+def scaled(art: MartialArt, scale: float) -> MartialArt:
+    """照品級的區間乘 scale 重寫第一成與第十成的威力。"""
+    return art.model_copy(update={
+        "base_power": round(QUALITY_BASE_POWER[art.quality] * scale, 1),
+        "top_power": round(QUALITY_TOP_POWER[art.quality] * scale, 1),
+    })
+
+
 def next_quality(quality: str) -> str | None:
     """修練的下一品；絕學是頂，回 None。"""
     i = QUALITIES.index(quality)

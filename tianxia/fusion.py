@@ -25,7 +25,7 @@ import random
 from dataclasses import dataclass
 
 from . import annals, arts as arts_mod, calendar, insight_fx, insights, library, naming, rules, secret_recipes, sensing, team
-from .martial_arts import MAX_LEVEL, QUALITIES, Insight, MartialArt, generate_from_name, shown_creator
+from .martial_arts import MAX_LEVEL, QUALITIES, Insight, MartialArt, generate_from_name, power_scale, scaled, shown_creator
 from .models import Content, PresetRecipe
 from .ollama_client import OllamaClient
 from .rules import add_chronicle, add_rumor, season_one
@@ -435,6 +435,7 @@ def _claim_blend(
     秘方合中的名字照內容、記 secret。名字被占用就換下一個再試。"""
     tianji, _ = recipe_seed(world, key)
     affinity = blend_affinity(team.resolve_art(a, content, world), team.resolve_art(b, content, world))
+    scale = blend_power_scale(content, team.resolve_art(a, content, world), team.resolve_art(b, content, world))
     colors = blend_colors(team.resolve_art(a, content, world), team.resolve_art(b, content, world), key, tianji, content)
     for candidate_name in _candidates(content, world, key, kind, tianji, name):
         candidate = generate_from_name(candidate_name, kind, candidate_name, tianji, weights=LOW_ONLY, attribute="無")
@@ -444,10 +445,19 @@ def _claim_blend(
             "insight": None, "insight_attr": None, "base": follow, "parents": sorted([a, b]), "lean": "無",
             "traits": [], "special": None, "secret": secret.id if secret is not None else None, "slot_colors": colors,
         })
+        candidate = scaled(candidate, scale)
         art, first = world.claim_recipe(key, candidate)
         if art is not None:
             return art, first
     return None, False
+
+
+def blend_power_scale(content: Content, a: MartialArt | None, b: MartialArt | None) -> float:
+    """合出來的基本威力倍數：兩門來源（全服登記那一份）的倍數平均再加 blend_power_step，夾在 power_scale_range；
+    越往下合、來源越好，底子越厚（Joy 2026-10-21 要基本威力，以前是名字雜湊）。"""
+    low, high = content.config.arts.power_scale_range
+    parts = [power_scale(x) for x in (a, b) if x is not None] or [1.0]
+    return round(max(low, min(high, sum(parts) / len(parts) + content.config.arts.blend_power_step)), 3)
 
 
 def blend_affinity(a: MartialArt | None, b: MartialArt | None) -> list[str]:
