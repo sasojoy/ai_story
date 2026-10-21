@@ -31,7 +31,7 @@ DONATE_SITUATIONS = ("enter", "donate", "refused")  # 軍需帳（素材與經�
 TAVERN_SITUATIONS = ("enter", "chatter", "news", "nothing", "asked", "missed", "wall", "treat", "hide", "trace", "short_silver", "refused")  # 酒肆（企劃者 2026-10-18）
 SITUATIONS = {"smith": SMITH_SITUATIONS, "market": MARKET_SITUATIONS, "board": BOARD_SITUATIONS,
               "donate": DONATE_SITUATIONS, "tavern": TAVERN_SITUATIONS}  # 店 → 情況；content.check_shop_lines 照它驗
-# 每間店的離開鈕（Game._shop_live 認「店裡那一串是眼前的選單」）：懸賞榜的第三層（替一張求藝、求兵挑東西）沒有 bounty:back，只有回到懸賞榜
+# 每間店的離開鈕（Game._shop_live 認「店裡那一串是眼前的選單」）：懸賞榜的第三層（替一張求兵挑東西）沒有 bounty:back，只有回到懸賞榜
 BACKS = {"smith": ("smith:back",), "market": (mounts.BACK,), "board": ("bounty:back", bounties.UNPICK_ID), "arena": (arena.BACK_ID, arena.YIELD_ID),
          "donate": ("donate:back",), "tavern": ("tavern:back",)}
 _HELD_HEAD = bounties.HELD_FULL.partition("{")[0]
@@ -590,8 +590,8 @@ def market_view(state: GameState, content: Content, world: WorldStateStore) -> d
 # ── 懸賞榜（第四節）──
 HELD_HEAD = "你手上揭著的（{n}／{cap}）"  # 待 joy 潤：最上面那一排的標題
 SLOT_LEFT = "還能揭 {n} 張"  # 待 joy 潤：那一排最後的空格
-HAVE_NOTE = "你有 {n} {unit}合用"  # 待 joy 潤：求藝、求兵的告示上
-NO_FIT = "你身上沒有合用的"  # 待 joy 潤：求藝、求兵交不出時，放大的紙上「交出…」灰掉的原因
+HAVE_NOTE = "你有 {n} {unit}合用"  # 待 joy 潤：求兵的告示上
+NO_FIT = "你身上沒有合用的"  # 待 joy 潤：求兵交不出時，放大的紙上「交出…」灰掉的原因
 PRIZE_SHORT = "另有重賞"  # 待 joy 潤：告示上（放大的紙上，賞那一段照 reward_text 寫是哪一種）
 DROP_ASK = "把「{title}」放回榜上？放回去就不算你的了。"  # 待 joy 潤：放棄先問一次（選單上的 bounty:drop 沒有問句，問在網頁那一層）
 
@@ -603,8 +603,8 @@ def _headline(title: str) -> str:
 
 def board_view(state: GameState, content: Content, world: WorldStateStore) -> dict:
     """懸賞榜的店面（第四節）：最上面一排手上揭著的（bounties.mine）；木板上是看得到的告示（bounties.visible，同選單的第二層），
-    揭著的在前、交得出的求藝求兵其次、其餘照現在的順序。每一張寫哪一方掛的、標題、要做什麼、賞、期限與名額（紙上的 due_line、告示上短的 due_short，FB-196）、重賞、求藝求兵
-    你有幾件合用（fitting）；底下那一顆照現在的選項 id：揭著的「放棄」（bounty:drop，問句在網頁）、求藝求兵「交出…」（bounty:pick，
+    揭著的在前、交得出的求兵其次、其餘照現在的順序。每一張寫哪一方掛的、標題、要做什麼、賞、期限與名額（紙上的 due_line、告示上短的 due_short，FB-196）、重賞、求兵
+    你有幾件合用（fitting）；底下那一顆照現在的選項 id：揭著的「放棄」（bounty:drop，問句在網頁）、求兵「交出…」（bounty:pick，
     交不出照 only_original 或 NO_FIT）、其餘「揭下」（bounty:take，揭不了照 take_problem）。第三層開著（bounty_pick 指著一張還交得出的；
     同 Game._bounty_options 的判法）時多 picked 與 hand_in（hand_in_options 的每一顆，回到懸賞榜那一顆除外）。掛單的人（通緝的 poster）
     不寫：照現在的選單寫陣營，畫面不露出誰是假人（設計 6.6）。"""
@@ -612,9 +612,8 @@ def board_view(state: GameState, content: Content, world: WorldStateStore) -> di
     shown = bounties.visible(state, content)
     mine = bounties.mine(state, content)
     mine_ids = {b.id for b in mine}
-    memo: dict = {}
     picked = next((b for b in shown if b.id == p.bounty_pick and b.kind in bounties.GIVE_KINDS), None)
-    picked_items = bounties.fitting(state, content, world, picked, memo) if picked is not None else []
+    picked_items = bounties.fitting(state, content, world, picked) if picked is not None else []
     if not picked_items:
         picked = None  # 那一張下榜了、交不出了就當它不存在（同 _bounty_options）
     ranked = []
@@ -631,12 +630,11 @@ def board_view(state: GameState, content: Content, world: WorldStateStore) -> di
             rank = 0
             note["action"] = {"id": f"bounty:drop:{b.id}", "verb": "drop", "enabled": True, "why": None, "confirm": DROP_ASK.format(title=title)}
         elif b.kind in bounties.GIVE_KINDS:
-            items = bounties.fitting(state, content, world, b, memo)
+            items = bounties.fitting(state, content, world, b)
             if items:
                 rank, note["have"] = 1, HAVE_NOTE.format(n=len(items), unit=bounties.unit_of(b))
-            # 交不出的原因照規則：只有神器原品或本命兵器對得上、只有身上正在練或等著定名的那門對得上（同第三層灰掉那幾行），都不是才寫 NO_FIT
-            blocked = bounties.blocked_arts(state, content, world, b, memo)
-            why = None if items else (bounties.only_original(state, b).strip("（）") or (blocked[0][1] if blocked else NO_FIT))
+            # 交不出的原因照規則：只有神器原品或本命兵器對得上的照實寫，不是才寫 NO_FIT
+            why = None if items else (bounties.only_original(state, b).strip("（）") or NO_FIT)
             note["action"] = {"id": f"bounty:pick:{b.id}", "verb": "pick", "enabled": bool(items), "why": why}
         else:
             problem = bounties.take_problem(state, content, b)
@@ -646,7 +644,7 @@ def board_view(state: GameState, content: Content, world: WorldStateStore) -> di
     if picked is not None:
         hand_in = [
             {"id": o.id, "label": o.label, "enabled": o.enabled}
-            for o in bounties.hand_in_options(state, content, world, picked, picked_items, memo) if o.id != bounties.UNPICK_ID
+            for o in bounties.hand_in_options(state, content, world, picked, picked_items) if o.id != bounties.UNPICK_ID
         ]
     cap = content.config.bounties.max_taken
     held = [{"id": b.id, "title": bounties.title(content, b), "due": bounties.due_text(b, content, state.world)} for b in mine]

@@ -152,8 +152,8 @@ def test_fb160_a_fist_bounty_asks_for_a_pair():
     assert "交出一副屬剛的拳套" in bounties.how(None, fist) and bounties.unit_of(fist) == "副"
     bow = fist.model_copy(update={"weapon_kind": "弓弩"})
     assert "交出一把屬剛的弩" in bounties.how(None, bow) and bounties.unit_of(bow) == "把"
-    art = fist.model_copy(update={"kind": "art", "weapon_kind": None})
-    assert bounties.unit_of(art) == "門"
+    scout = fist.model_copy(update={"kind": "scout", "weapon_kind": None})
+    assert bounties.unit_of(scout) == ""  # 不是求兵就沒有量詞（求藝論「門」，2026-10-21 跟著求藝拿掉）
 
 
 # ── FB-146：防具神器的量詞 ──
@@ -512,5 +512,5 @@ def test_f4_the_held_and_unfit_notes_count_a_fist_as_a_pair(content, world):
     state = _new_state(content, world, "交拳")
     state.player.weapon = _blade(kind="拳腳", attribute="剛")
     b = Bounty(id="b1", kind="arms", faction="guan", week=1, silver=0, deeds=2, attribute="剛", weapon_kind="拳腳", expires=0.0)
-    _label, ask = bounties._offer(state, content, world, b, state.player.weapon.id, {})
+    _label, ask = bounties._offer(state, content, b, state.player.weapon.id)
     assert "你手上那副" in ask and "那把" not in ask

@@ -338,7 +338,7 @@ def prize_on(content: Content, prize: str | None) -> bool:
 
 def bounty_prize(state: GameState, content: Content, season: int, bounty_id: str, prize: str, issuer: str) -> list[str]:
     """懸賞的重賞（6.4）：第一個交差的人拿（bounties._complete 判）。哪一件寶物、良駒的毛色與品質到這一刻才定，用自己一份亂數
-    （季數＋名號＋懸賞 id；季數一定要有：懸賞 id 每季從 b1 算起，同懸賞榜第二批 gift_rolls 的理由），不碰 Game.rng。寶物只抽你還沒有的，
+    （季數＋名號＋懸賞 id；季數一定要有：懸賞 id 每季從 b1 算起、選項 id 在網頁上看得到，少了季數，記下哪幾號中過、下一季就專挑那幾張），不碰 Game.rng。寶物只抽你還沒有的，
     都有了改給銀兩；裝備庫滿了寄放（held_gear），不作廢。那一欄關著什麼都不給。"""
     if not prize_on(content, prize):
         return []
