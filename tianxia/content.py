@@ -121,6 +121,7 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         banned_words=_read(root / "banned_words.json") if (root / "banned_words.json").exists() else [],
         mingtie=MingtieContent(**_read(root / "mingtie.json")) if (root / "mingtie.json").exists() else MingtieContent(),
         arena_crowd=_read(root / "arena_crowd.json") if (root / "arena_crowd.json").exists() else {},
+        xingshi_lines=_read(root / "xingshi_lines.json") if (root / "xingshi_lines.json").exists() else {},
         seal=_shards(root / "seal.json"),
         relations=[_build(RelationDef, raw) for raw in _read(root / "relations.json")] if (root / "relations.json").exists() else [],
         gather_branches=_index(GatherBranch, _read(root / "gather_branches.json")) if (root / "gather_branches.json").exists() else {},
@@ -651,6 +652,44 @@ def check_arena_crowd(c: Content, need) -> None:
     if c.arena_crowd and c.config.arena.enabled and c.config.arena.crowd.enabled:
         for kind in arena_crowd.KINDS:
             need(bool(c.arena_crowd.get(kind)), f"arena_crowd 缺少種類 {kind}")
+
+
+def check_xingshi_lines(c: Content, need) -> None:
+    """〈天下形勢〉的句型（content/xingshi_lines.json，領地爭奪第三批 A；Joy 直接改字）：寫了這個檔就每一組都要齊——open、close 是一串句子，
+    fact、summary、lean、move 每一個鍵（xingshi.FACT_KEYS 這幾組）都要有一句、不能多寫認不得的鍵；每一句照 xingshi.SAMPLE 填得進去、
+    填完不能空、不能有阿拉伯數字（文章不准有數字，固定段就是拿這些句子拼的）。沒有這個檔就沒有〈天下形勢〉（xingshi.on）。"""
+    from . import xingshi  # noqa: PLC0415
+
+    lines = c.xingshi_lines
+    if not lines:
+        return
+
+    def check(where: str, text) -> None:
+        try:
+            filled = str(text).format(**xingshi.SAMPLE)
+        except (KeyError, IndexError, ValueError) as e:
+            need(False, f"xingshi_lines.{where}：「{text}」填不進去（{e}）")
+            return
+        need(isinstance(text, str) and bool(filled.strip()) and not any(ch.isdigit() for ch in filled),
+             f"xingshi_lines.{where}：「{text}」不能空、不能有數字")
+
+    groups = {"fact": xingshi.FACT_KEYS, "summary": xingshi.SUMMARY_KEYS, "lean": xingshi.LEAN_KEYS, "move": xingshi.MOVE_KEYS}
+    for key in lines:
+        need(key in groups or key in ("open", "close"), f"xingshi_lines：不認得的鍵 {key}")
+    for key in ("open", "close"):
+        pool = lines.get(key)
+        need(isinstance(pool, list) and bool(pool), f"xingshi_lines.{key}：要寫成一串句子")
+        for text in pool if isinstance(pool, list) else []:
+            check(key, text)
+    for group, keys in groups.items():
+        table = lines.get(group)
+        need(isinstance(table, dict), f"xingshi_lines.{group}：要寫成「鍵：句子」")
+        table = table if isinstance(table, dict) else {}
+        for key in keys:
+            need(key in table, f"xingshi_lines.{group} 缺少 {key}")
+        for key, text in table.items():
+            need(key in keys, f"xingshi_lines.{group}：不認得的鍵 {key}")
+            check(f"{group}.{key}", text)
 
 
 def check_shop_lines(c: Content, need) -> None:
@@ -2119,6 +2158,7 @@ def validate(c: Content) -> None:
     check_combat_lines(c, need)
     check_shop_lines(c, need)
     check_arena_crowd(c, need)
+    check_xingshi_lines(c, need)
     check_traits(c, need)
     check_signature_arts(c, need)
     # 沒寫 drops 的對手走 materials.py 依難度的預設掉落表，所以每一階都得有素材可挑。

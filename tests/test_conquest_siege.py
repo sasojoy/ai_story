@@ -64,7 +64,8 @@ def test_siege_opens_at_muster_with_progress_shift():
     assert battle.muster_deadline_real == pytest.approx(NOW + 1800)  # 集結截止＝開打的那一刻
     assert battle.siege.loc == "nanyang_road" and battle.siege.attackers == ["huang"] and battle.siege.holder is None
     assert any("攻城・南陽官道" in m for m in msgs)
-    assert conquest.push_problem(game.state.world, game.content, "huang", "nanyang_road", "attack") == conquest.WHY_FROZEN  # 打完之前推不動
+    # 打完之前推不動；集結中的原因照那一步寫（FB-552：去加入攻城），不再是「已下戰書」
+    assert conquest.push_problem(game.state.world, game.content, "huang", "nanyang_road", "attack") == conquest.WHY_MUSTER
 
 
 def test_neutral_siege_has_a_guard_commander():

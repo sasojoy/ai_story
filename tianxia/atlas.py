@@ -348,6 +348,13 @@ SIEGE_AREA_CONQUEST = "到{front}一帶我軍進度最高的幾處出陣，打�
 SIEGE_NONE_CONQUEST = "{front}一帶此刻沒有我軍推得動的地方（剛易手、下了戰書、或碰不到），在那裡打贏記不到。"
 INTERCEPT_SORTIE = "到{place}出陣，撞上對面的運糧隊、打贏記一次。"  # 待 joy 潤（FB-248：出陣開著時糧隊只在這一處，orders.intercept_spots）
 DEFEND_SORTIE = "在{front}一帶自家的地盤出陣守一回，或按「{duty}」（收在「此地還能做」裡），做一次記一次。"  # 待 joy 潤
+# 領地爭奪開著時（裁決 24、FB-565）：守城記的是自家今天被公告要攻的那一塊（orders.defend_places），卡上照它寫，輿圖也只標那幾處；
+# 今天沒有就直說沒有可守的（記不到）。待 joy 潤
+DEFEND_ACT_SORTIE = "出陣守一回，或按「{duty}」（收在「此地還能做」裡）"
+DEFEND_ACT_PLAIN = "按「{duty}」（收在「此地還能做」裡）"
+DEFEND_AT_CONQUEST = "到{where}{act}，做一次記一次。"  # 公告的自家地方只有一兩處（SIEGE_NAMED_MAX）時寫出地名
+DEFEND_AREA_CONQUEST = "到{front}一帶今天被公告要攻的自家地方{act}，做一次記一次。"  # 更多處
+DEFEND_NONE_CONQUEST = "{front}一帶今天沒有自家的地方被公告要攻，沒有可守的，守了也記不到；每天 {hour}:00 公告下一天的。"
 
 
 def siege_how(state: GameState, content: Content, order: Order) -> str:
@@ -397,6 +404,14 @@ def order_how(state: GameState, content: Content, order: Order) -> str:
     if order.template == "defend":
         duty = content.orders.duties.get(order.faction)
         name = duty.name if duty else "守勢"
+        if conquest.on(content, state.world):  # 領地爭奪（裁決 24、FB-565）：只寫記得到的那幾處，列與記同一個判斷
+            places = orders.defend_places(content, state.world, order)
+            if not places:
+                return DEFEND_NONE_CONQUEST.format(front=front, hour=content.config.conquest.settle_hour)
+            act = (DEFEND_ACT_SORTIE if sortie.on(content) else DEFEND_ACT_PLAIN).format(duty=name)
+            if len(places) > SIEGE_NAMED_MAX:
+                return DEFEND_AREA_CONQUEST.format(front=front, act=act)
+            return DEFEND_AT_CONQUEST.format(where="或".join(content.locations[loc_id].name for loc_id in places), act=act)
         if sortie.on(content):
             return DEFEND_SORTIE.format(front=front, duty=name)
         return f"在{front}一帶按「{name}」（收在「此地還能做」裡），做一次記一次。"

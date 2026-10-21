@@ -107,7 +107,8 @@ def sortie_line(how: str, push: bool, left: int, content: Content, progress: boo
     """出陣這一下會怎樣（Game._sortie_line 照規則算好傳進來）。數字讀 Config：給自己的成數、守與攪局是攻的幾成。
     progress：領地爭奪在這一季生效時給（這一塊的進度推不推得動，conquest.push_problem），推的那一句換成推進度；沒給（關著）一個字都不變、照 push。
     why：推不動的原因（push_problem 的那一句），寫在 SORTIE_BLOCKED 的括號裡。自家的區塊守、推不動寫 SORTIE_NOTES["hold_idle"]＋
-    SORTIE_BLOCKED_HOLD：一個括號（裁決 21）。"""
+    SORTIE_BLOCKED_HOLD：一個括號（裁決 21）；這一塊被戰書凍結（原因是 conquest.FROZEN_WHY 的一句：已下戰書、集結中、開打中）時不接
+    「有人來攻時…」——攻城已經排了，照實寫在哪一步就好（FB-552）。"""
     cfg = content.config
     half = "一半" if cfg.sortie.hold_share == 0.5 else f" {cfg.sortie.hold_share * 10:g} 成"
     if progress is None:
@@ -117,7 +118,10 @@ def sortie_line(how: str, push: bool, left: int, content: Content, progress: boo
     else:
         pushed = SORTIE_BLOCKED.format(why=why or conquest.WHY_OUT)
     if how == "hold" and progress is False:
-        how, pushed = "hold_idle", SORTIE_BLOCKED_HOLD.format(why=why or conquest.WHY_IDLE, half=half)
+        if why in conquest.FROZEN_WHY.values():
+            how = "hold_idle"
+        else:
+            how, pushed = "hold_idle", SORTIE_BLOCKED_HOLD.format(why=why or conquest.WHY_IDLE, half=half)
     text = SORTIE_NOTES[how].format(push=pushed, share=f"{cfg.drill_reward_share * 10:g}", half=half,
                                     loot=sortie_loot(content))
     return text + SORTIE_LEFT.format(n=left)
@@ -430,7 +434,7 @@ def conquest_lines(content: Content) -> list[str]:
     """玩法說明「地盤」一節的領地爭奪版（第 38 項改版第一批；開關在這一季生效時取代拔河那一版；待 joy 潤）。數字讀 Config。"""
     cfg, terr = content.config.conquest, content.config.territory
     gather = f"{cfg.gather_bonus_chance * 100:g}%"
-    return [
+    lines = [
         "地圖分三種：官軍的領地、黃巾的領地，和中立地。中立地開季沒人佔，兩軍爭的就是它；各家的投靠點永遠是自家的，廣宗只照廣宗決戰易手。",
         "能挑的是跟自家領地有路直通的那一塊——中立地，或者敵方的領地，一塊一塊往前推。",
         f"三條戰線的大勢照兩軍佔了多少地來算：一條線上的中立地全被一方拿下，那條線往那一邊偏 {cfg.share:g} 點；"
@@ -438,6 +442,8 @@ def conquest_lines(content: Content) -> list[str]:
         "出陣不再直接推戰線，推的是那一塊的進度：每一塊對每一個來攻的一方各有一條進度。在別人的地方、還沒人佔的中立地出陣是攻、"
         "推自己那一條；在自家的地方是守、把對面每一條都拉回來；照樣記貢獻。各家的大本營與廣宗不在爭奪之列：別人的攻不得，"  # 裁決 18
         "自家的守了也沒有進度。找不到對手的地方推不動。",
+        # 裁決 24（PM 2026-10-20）；待 joy 潤
+        "巡哨、傳道、保境安民這類守勢行動也只在自家的領地做：別人的地方、還沒人佔的中立地，那一顆灰著，按不下去。",
         f"哪一條推滿 100，那一塊當場易手：天下大事一句，推過的人照出力分銀兩、經驗、名望，推最多的上江湖史。剛易手的地 "
         f"{cfg.cooldown_minutes:g} 分鐘內兩邊都推不動，那一塊的加成也先停著。沒人推的地每天往回 {cfg.decay_per_day:g}。",  # 待 joy 潤
         f"同一邊的人一小時內一起推同一塊，每多一個人每一下多推 {cfg.focus_step * 100:g}%（最多 {cfg.focus_cap * 100:g}%）。"
@@ -457,6 +463,10 @@ def conquest_lines(content: Content) -> list[str]:
         "中立地站著另一批強對手，掉的東西也好；被佔下之後照樣在那裡，兩邊的人去都得打。",
         "輿圖局勢層的底色就是此刻誰佔著，灰的是還沒人佔的中立地；易手時天下大事會傳一句。",
     ]
+    if seal.on(content):  # 第三批 B（設計 3.9）：碎片的來源；只說「在哪一類地方」，藏在哪一塊不公開；待 joy 潤
+        lines.insert(-1, "傳說傳國玉璽的碎片就藏在這些中立地的某一處：一季最多一片，到那裡探索（四種探索都算）才有極小的機會撿到，"
+                         "藏在哪一處沒人知道；那一塊此刻若歸你的陣營，機會再高一點。")
+    return lines
 
 
 def territory_lines(content: Content, allied: bool = False, season: WorldState | None = None) -> list[str]:

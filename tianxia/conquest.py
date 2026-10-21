@@ -121,6 +121,10 @@ PAYOUT_NEXT = "推過這一塊的人照出力分紅，稍後送到。"
 # 推不動的原因（行動列底下出陣那一行、卡上、鈕上；push_problem）。待 joy 潤
 WHY_COOLING = "剛易手，{n} 分後才能再推"  # 設計 4.1【企劃者】
 WHY_FROZEN = "已下戰書，進度凍結到那一場攻城打完"  # 設計 4.4
+# FB-552（PM 2026-10-20）：被戰書凍結的那一塊，原因照那一場攻城在哪一步寫（_step）——開了集結就叫人去加入，開打了就說在打。待 joy 潤
+WHY_MUSTER = "這一塊的攻城正在集結，去加入攻城"
+WHY_FIGHTING = "這一塊的攻城正在開打"
+FROZEN_WHY = {"planned": WHY_FROZEN, "muster": WHY_MUSTER, "fight": WHY_FIGHTING}
 WHY_OUT = "這裡搶不下來"  # 大本營、廣宗
 WHY_CUT = "這裡跟自家的領地不相連"
 WHY_NO_FOE = "這裡找不到對手"
@@ -165,6 +169,26 @@ def sortie_foes(world: WorldState, content: Content, loc_id: str, own: str | Non
         return [sid for sid in squads if content.squads[sid].faction != own]
     mine = [sid for sid in squads if content.squads[sid].faction == side]
     return mine or list(content.scenario.territory.side_garrison.get(side, []))
+
+
+def _step(world: WorldState, slot: SiegeSlot) -> str:
+    """一場攻城在哪一步：planned（planned、waiting：下了戰書、還沒開集結）、muster（開了集結、還沒到開打的時刻）、fight（開打了、還在打）、
+    done、void。"""
+    if slot.status in ("planned", "waiting"):
+        return "planned"
+    if slot.status == "open":
+        return "muster" if world.time < slot.at else "fight"
+    return slot.status
+
+
+def siege_state(world: WorldState | None, loc_id: str) -> str | None:
+    """這一塊的攻城在哪一步（FB-552：出陣那一行照實寫）：沒排過是 None；其餘照 _step（planned＝下了戰書、還沒開集結，那一塊的進度凍結；
+    muster、fight 也凍結；done、void 解凍）。這一塊排了不只一場時取最後排的那一場（時程表照先後）。只讀 WorldState，不判進度推不推得動
+    （push_problem 判；被凍結時的原因照這一步寫，FROZEN_WHY）。"""
+    if world is None or world.conquest is None:
+        return None
+    slots = [slot for slot in world.conquest.schedule if slot.loc == loc_id]
+    return _step(world, slots[-1]) if slots else None
 
 
 def direction(content: Content, side: str | None, loc_id: str) -> int:
@@ -257,15 +281,17 @@ def _target_problem(world: WorldState, content: Content, side: str, loc_id: str)
 
 def push_problem(world: WorldState | None, content: Content, side: str | None, loc_id: str, how: str | None) -> str | None:
     """side 此刻在這一塊攻（attack）或守（hold）推不推得動進度：推得動是 None，不然回原因（WHY_*，行動列底下那一行、卡上照寫）。
-    攻＝這一塊是 side 的目標（_target_problem）；守＝此刻是 side 的、搶得下來、有哪一條 > 0；兩者都要不在冷卻、沒被戰書凍結。"""
+    攻＝這一塊是 side 的目標（_target_problem）；守＝此刻是 side 的、搶得下來、有哪一條 > 0；兩者都要不在冷卻、沒被戰書凍結
+    （凍結的原因照那一場在哪一步：FROZEN_WHY，FB-552）。"""
     if not on(content, world) or side is None or how not in ("attack", "hold") or loc_id not in blocks(content):
         return WHY_OFF
     if not capturable(content, loc_id):
         return WHY_OUT
     if cooling(world, content, loc_id):
         return WHY_COOLING.format(n=cooling_minutes(world, content, loc_id))
-    if frozen(world, loc_id) is not None:
-        return WHY_FROZEN
+    slot = frozen(world, loc_id)
+    if slot is not None:
+        return FROZEN_WHY.get(_step(world, slot), WHY_FROZEN)
     if how == "hold":
         if holder(world, content, loc_id) != side:
             return WHY_OUT

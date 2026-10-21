@@ -112,7 +112,7 @@ def test_a_siege_win_flips_with_payouts_and_cooling():
     assert conquest.bars(w, "nanyang_road") == {}
     (pay,) = [p for p in w.conquest.payouts if p.name == "沈浪"]
     assert (pay.silver, pay.exp, pay.fame, pay.top) == (200, 300, 20, True)
-    assert conquest.push_problem(w, c, "huang", "nanyang_road", "hold") != conquest.WHY_FROZEN  # 打完就解凍（冷卻另算）
+    assert conquest.push_problem(w, c, "huang", "nanyang_road", "hold") not in conquest.FROZEN_WHY.values()  # 打完就解凍（冷卻另算）
 
 
 def test_a_siege_loss_halves_the_bar_and_unfreezes():

@@ -7,6 +7,8 @@
   同樣的種子跑出同樣的結果。密鹽不顯示、不進指紋。每一份亂數取數的順序寫在用它的函式說明裡。
 - 只 import models、state、world_state、battle_instance、treasures、characters；engine、world、sqlite_world 反過來叫這裡。
   on_muster 會寫 store：呼叫端不在任何 mutate 裡（world._open_claimed）。
+- 領地爭奪的季（Config.conquest；領地爭奪設計 3.9、4.8）碎片不再從宛城現世，改成開季藏一片在中立地、探索撿到（hide／find／stamp_cache）；
+  要認區塊與大區所以在函式裡延後 import conquest、atlas（它們反過來 import 的鏈很長）。
 """
 from __future__ import annotations
 
@@ -17,8 +19,8 @@ from . import battle_instance, treasures
 from .battle_instance import BattleInstance
 from .characters import name_key
 from .models import BattleDef, Content, SealTuning, TimetableEvent
-from .state import Equipment, GameState, Rumor
-from .world_state import SealEvent, SealRegistry, SealShard, SharedWorldState, WorldStateStore
+from .state import Equipment, GameState, Rumor, WorldState
+from .world_state import SealCache, SealEvent, SealRegistry, SealShard, SharedWorldState, WorldStateStore
 
 HEIRLOOM_PREFIX = "璽:"  # 抄本的 id（固定，不吃 weapon_serial，重抄幾次都一樣；不會跟「寶:N」撞號）
 HEIRLOOM_LABEL = treasures.HEIRLOOM_LABEL  # 寶物段裡那一列的小標、角色卡那一行的開頭（字在 treasures，treasures 不 import seal）
@@ -118,6 +120,88 @@ def roll_emerge(reg: SealRegistry, content: Content, season: int, tianji: int) -
     return rng.choice(hidden)
 
 
+# ── 領地爭奪的季：碎片藏在中立地、探索撿到（領地爭奪設計 3.9、4.8；計畫 Task 14）──────────
+# 藏在哪一塊不公開：下面這些句子與回話都不寫地點（撿的人自己知道自己在哪，公開的天下大事與江湖史不寫）。字待 joy 潤
+
+FIND_SCENE = "你撥開亂石殘土，掌心忽然一涼——竟是一角溫潤的古玉。"  # 待 joy 潤：探索撿到那一下，接在探索的結果後面
+FIND_GOT = "{name}尋得了傳國玉璽的一角——『{shard}』。"  # 待 joy 潤：天下大事與江湖史（現世那一句 EMERGE_GOT 的探索版，不寫地點）
+HIDE_DONE = "已經藏好一片碎片（藏在哪裡不公開）。"  # 待 joy 潤：管理者「現在藏一片」的回話
+HIDE_HAS = "已經藏著一片了，不換地方。"  # 待 joy 潤
+HIDE_EMERGED = "這一季已經現世過一片了，一季最多一片。"  # 待 joy 潤
+HIDE_NONE = "沒有可藏的碎片（七片都已經現世過，或你指的那一片不是未現世）。"  # 待 joy 潤
+HIDE_NO_SPOT = "這一季沒有開季中立的區塊可藏。"  # 待 joy 潤
+HIDE_MANDATE = "這一季是天命之季，不藏碎片。"  # 待 joy 潤（FB-570：天命之季七片都現世過了，沒有碎片要藏）
+
+
+def conquest_season(content: Content, season: WorldState | None) -> bool:
+    """這一季照領地爭奪的規則（conquest.on）：碎片的來源只看這個——蓋了章的季不擲宛城現世、改藏改撿；沒蓋章的季一個字不變。"""
+    from . import conquest  # noqa: PLC0415  延後 import：conquest → territory → rules → world_state
+
+    return conquest.on(content, season)
+
+
+def hide_spots(content: Content, world: WorldState | None) -> list[tuple[str, float]]:
+    """可以藏碎片的地方（地點 id、權重）：所有開季中立的區塊（conquest.start_kind），權重 1；落在 core_regions 這些大區的（核心）權重
+    core_weight（企劃者：核心的機率最高）。照區塊表的順序；一塊都沒有是空的。藏在哪裡一律讀區塊表，不寫死地點 id。"""
+    from . import atlas, conquest  # noqa: PLC0415  延後 import（見模組說明）
+
+    cfg = content.config.seal.cache
+    spots: list[tuple[str, float]] = []
+    for loc_id in conquest.blocks(content):
+        if conquest.start_kind(world, content, loc_id) != conquest.NEUTRAL:
+            continue
+        region = atlas.region_of(content, loc_id) if loc_id in content.locations else None
+        spots.append((loc_id, cfg.core_weight if region is not None and region.id in cfg.core_regions else 1.0))
+    return spots
+
+
+def hide(
+    reg: SealRegistry, content: Content, season: int, tianji: int, spots: list[tuple[str, float]],
+    *, force: bool = False, shard: str | None = None,
+) -> SealCache | None:
+    """開季那一刻擲這一季有沒有一片藏在中立地（設計 4.8）：先擲 hide_chance，擲中再挑一片還沒現世的碎片（shard 指定時只能是它）與一個
+    地方（spots 的權重）。這一季已經現世過一片、沒有可藏的碎片、沒有可藏的地方都回 None。force：管理者「現在藏一片」，略過機率。
+    亂數 seal-hide|季別（密鹽｜天機｜用途｜季別）：先取機率（force 也取，所以強制與自然擲中時藏的是同一片、同一處）、再取哪一片、哪一處。"""
+    hidden = sorted(s.id for s in reg.shards.values() if s.state == "hidden")
+    if shard is not None:
+        hidden = [shard] if shard in hidden else []
+    if not hidden or not spots or reg.emerge_season == season or mandate_now(reg, season):  # 天命之季不藏（FB-570）
+        return None
+    rng = dice(reg.salt, tianji, "seal-hide", season)
+    if rng.random() >= content.config.seal.cache.hide_chance and not force:
+        return None
+    pick = rng.choice(hidden)
+    loc = rng.choices([loc_id for loc_id, _ in spots], weights=[weight for _, weight in spots])[0]
+    return SealCache(season=season, shard=pick, loc=loc)
+
+
+def live_cache(reg: SealRegistry, season: int) -> SealCache | None:
+    """這一季藏著、還沒被撿走的那一片：藏處是這一季的、那一片還是未現世（管理者中途改過登記就不算）、這一季還沒現世過。"""
+    cache = reg.cache
+    if cache is None or cache.season != season or reg.emerge_season == season or mandate_now(reg, season):
+        return None  # 天命之季（管理者中途蓋章）就算登記上還留著也當它不存在（FB-570）
+    shard = reg.shards.get(cache.shard)
+    return cache if shard is not None and shard.state == "hidden" else None
+
+
+def find(reg: SealRegistry, tianji: int, name: str, seq: int, own: bool, cfg: SealTuning) -> bool:
+    """在藏處探索一下撿不撿到（設計 3.9、4.8）：find_chance，那一塊此刻歸你的陣營 ×own_scale（夾在 1 以下）。
+    亂數 seal-find|名號|這個人第幾次探索（密鹽｜天機｜用途｜…），每一下探索各一份、不碰 Game.rng。"""
+    chance = min(1.0, cfg.cache.find_chance * (cfg.cache.own_scale if own else 1.0))
+    return dice(reg.salt, tianji, "seal-find", key(name), seq).random() < chance
+
+
+def stamp_cache(shared: SharedWorldState, content: Content) -> SealCache | None:
+    """開季那一刻（open_season、next_season、自動開的第一季）：上一季沒撿到的清掉；這一季是領地爭奪的季、不是天命之季（天命之季七片都
+    現世過了，不藏），就照 hide_chance 擲一次藏一片。直接改傳進來的 shared（呼叫端在 mutate 裡或手動 _load／_save，不能再巢狀）。"""
+    shared.seal.cache = None
+    if not on(content) or shared.season.mandate or not conquest_season(content, shared.season):
+        return None  # 沒蓋領地爭奪章的季：連七片的登記都不碰（舊的季一個字不變）
+    reg = filled(shared.seal, content)
+    reg.cache = hide(reg, content, shared.season_number, shared.tianji, hide_spots(content, shared.season))
+    return reg.cache
+
+
 def threshold(battle: BattleInstance, cfg: SealTuning) -> int:
     """現世得主與挑戰者要自己出手滿幾回合：min(3, 這一場實際打了幾回合)，至少 1（壓倒性收場 1～3 回合就打完，3.3）；
     參戰名單不到 small_battle 人時放寬到 1 回合（PM 癸）。"""
@@ -211,6 +295,7 @@ def stamp_mandate(shared: SharedWorldState, content: Content, at: float) -> str:
     season.schedule[event.id] = at
     emerged = bool(content.seal) and all(reg.shards[s].emerged_round == reg.round for s in content.seal if s in reg.shards)
     reg.mandate_season, reg.mandate_pending = shared.season_number, False
+    reg.cache = None  # 天命之季不藏（FB-570）：自然換季 stamp_cache 本來就不藏；管理者中途蓋章的這一刻把這一季藏著的那一片收掉（碎片還是未現世）
     text = (MANDATE_OPEN if emerged else MANDATE_OPEN_EARLY).format(battle=battle.name if battle is not None else event.title)
     rumor(season, text)
     chronicle(season, text)
@@ -229,6 +314,7 @@ def scatter(reg: SealRegistry, season: int) -> list[str]:
         shard.emerged_round, shard.former, shard.absent = None, None, 0
     reg.round += 1
     reg.emerge_season, reg.force_emerge, reg.force_stir, reg.mandate_pending = None, None, None, False
+    reg.cache = None  # 領地爭奪的季藏著的那一片：七片重來，開季時照 hide_chance 重藏（stamp_cache）
     return former
 
 
@@ -381,7 +467,9 @@ def on_muster(world: WorldStateStore, content: Content, definition: BattleDef, n
     def _apply(shared) -> None:
         reg = filled(shared.seal, content)
         mandate = shared.season.mandate
-        if mark == "emerge" and not mandate:  # 天命之季不擲現世（8.2、3.2）；管理者的強制現世記號這一季照留，天命之季過後散去時一起清掉（scatter）
+        # 天命之季不擲現世（8.2、3.2）；領地爭奪的季也不擲（碎片改成藏在中立地、探索撿到，stamp_cache）。
+        # 管理者的強制現世記號這兩種季都照留，天命之季過後散去時一起清掉（scatter）
+        if mark == "emerge" and not mandate and not conquest_season(content, shared.season):
             got["emerge"] = roll_emerge(reg, content, shared.season_number, shared.tianji)
             reg.force_emerge = None
         if got["emerge"] is not None:
