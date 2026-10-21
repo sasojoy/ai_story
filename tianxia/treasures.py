@@ -74,6 +74,12 @@ def on(content: Content) -> bool:
     return equipment.on(content, "treasure")
 
 
+def revamp_on(content: Content) -> bool:
+    """玉璽碎片改版開著（同 seal.revamp_on；treasures 不 import seal）：碎片開著（Config.seal.enabled＋內容有七片）、子開關開著。"""
+    cfg = content.config.seal
+    return cfg.enabled and cfg.revamp.enabled and bool(content.seal)
+
+
 def effect_of(content: Content, item: Equipment | None) -> str | None:
     """這一件寶物的效果鍵（照 template 查寶物表）；不是寶物那一欄、沒有 template、內容拿掉了是 None（效果不算）。"""
     if item is None or item.slot != "treasure" or item.template is None:

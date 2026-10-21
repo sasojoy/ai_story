@@ -2050,8 +2050,11 @@ class ShardDef(_Strict):
     id: str
     name: str
     part: str  # 取自玉璽的哪一部分
-    effect: str  # Config.seal.effects 的鍵
+    effect: str  # Config.seal.effects 的鍵（改版關著時的那一個效果）
     note: str = ""
+    # 改版（Config.seal.revamp 開著）的常駐成長或生活效果：Config.seal.revamp.effects 的鍵，一片可以好幾個（玄紐、歸心）；
+    # 戰力 ×revamp.power 每片都有、不寫在這裡（docs/superpowers/specs/2026-10-21-玉璽碎片改版-design.md 第三章）
+    effects: list[str] = Field(default_factory=list)
 
 
 class MandateTuning(_Strict):
@@ -2083,6 +2086,26 @@ class SealCacheTuning(_Strict):
     # 權重 3＝核心三處合起來約佔四成多（中原十二處＋核心三處），每一處的機率是中原每一處的三倍【暫，待企劃者看過量表】
     core_regions: list[str] = Field(default_factory=lambda: ["core"])
     core_weight: float = Field(default=3.0, ge=1)
+
+
+class SealRevampTuning(_Strict):
+    """玉璽碎片改版（docs/superpowers/specs/2026-10-21-玉璽碎片改版-design.md；計畫 docs/superpowers/plans/2026-10-21-玉璽碎片改版-1.md）
+    第 1 批：常駐效果與持有者平時藏起來。子開關（PM 五之一 6：預設開、部署在休季換程式，不蓋章）；關著時舊的七個效果
+    （SealTuning.effects）、江湖史七格與璽動點名、酒肆名氣一個字都不變。判斷一律走 seal.revamp_on（treasures.revamp_on 同一條）。
+    - power：持有者本人的 Boost.factor 倍數（team.player_boost；企劃者「中：約 +10%」）。奪璽單挑的快照與江湖水漲的浮動難度照不含
+      它的那一份算（企劃者第 7 條、PM 五之一 2）；同伴、部下不吃。
+    - effects：content/seal.json 每片 effects 清單的鍵 → 數字（設計第三章；全部【預設】，等 21 天的季試玩再調）。乘的效果
+      （treasures.MULTIPLY）寫倍數、加的寫加多少：injury 螭首每場仗變成內傷的倍數、talk_turns 玄紐每位人物每日多談幾輪、
+      audience 玄紐求見門檻抵幾點、practice 雲篆練成的心得倍數（熔煉照原價退）、keep_silver 金角落敗不失銀兩（1＝有，只管
+      Game._lose_silver，PM 五之一 3）、stamina_regen 承露體力回復倍數、fuse_points 赤璋合成的造化、mate_exp 歸心同伴經驗倍數、
+      chuangong 歸心傳功的心得倍數。"""
+
+    enabled: bool = True
+    power: float = Field(default=1.10, ge=1)
+    effects: dict[str, float] = Field(default_factory=lambda: {
+        "injury": 0.5, "talk_turns": 2, "audience": 5, "practice": 0.75, "keep_silver": 1,
+        "stamina_regen": 1.25, "fuse_points": 10, "mate_exp": 1.25, "chuangong": 0.9,
+    })
 
 
 class SealTuning(_Strict):
@@ -2128,6 +2151,7 @@ class SealTuning(_Strict):
     qa_tools: bool = False
     mandate: MandateTuning = Field(default_factory=MandateTuning)
     cache: SealCacheTuning = Field(default_factory=SealCacheTuning)  # 領地爭奪的季，碎片藏在中立地、探索撿到（Task 14）
+    revamp: SealRevampTuning = Field(default_factory=SealRevampTuning)  # 改版第 1 批：常駐效果與持有者藏起來（子開關）
 
 
 class TreasureDef(_Strict):

@@ -31,6 +31,12 @@ def on(content: Content) -> bool:
     return content.config.seal.enabled and bool(content.seal)
 
 
+def revamp_on(content: Content) -> bool:
+    """改版第 1 批開著（docs/superpowers/specs/2026-10-21-玉璽碎片改版-design.md）：碎片開著、子開關 Config.seal.revamp.enabled 開著。
+    常駐效果（戰力＋成長生活）與持有者平時藏起來都只問這一條（treasures.revamp_on 是同一條，treasures 不 import seal）。"""
+    return on(content) and treasures.revamp_on(content)
+
+
 def filled(reg: SealRegistry, content: Content) -> SealRegistry:
     """內容的七片在登記上都有一筆（登記沒有的用預設補上）；回傳同一份。"""
     for shard_id in content.seal:
