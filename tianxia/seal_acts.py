@@ -533,6 +533,7 @@ def view(
         "live": LIVE.format(what=what_text(content, current), until=stamp(ends(current))) if current is not None else "",
         "targets": targets(state, content, kind, w.time + span(content, w)) if why is None else [],
         "sides": [],
+        "side_note": "",  # 散人傳檄還沒挑邊時那一行（PICK_SIDE；有 sides 才有字）
         "confirm": CONFIRM[kind].format(
             shard=name, target="{target}", side="{side}",
             place=content.locations[here].name if here in content.locations else "",
@@ -541,6 +542,7 @@ def view(
     }
     if kind == "chuanxi" and why is None and own_side(state, content) is None:
         out["sides"] = [{"id": f, "name": content.scenario.faction_name(f, f)} for f in armies(content, w)]
+        out["side_note"] = PICK_SIDE
     if kind == "chuanxi" and why is None and own_side(state, content) is not None:
         side = own_side(state, content)
         out["confirm"] = out["confirm"].replace("{side}", content.scenario.faction_name(side, side))
