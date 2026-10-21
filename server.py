@@ -61,7 +61,7 @@ import server_push
 import zhuan_html
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
-    arena_crowd, battle_instance, biography, calendar, companion_agent, divine, duel, event_llm, feasts, fight_llm, foreshadow, gather_llm, gender, glyph, insight_llm, leaderboard, letters, mall, mapdata,
+    arena_crowd, battle_instance, biography, calendar, companion_agent, create, divine, duel, event_llm, feasts, fight_llm, foreshadow, gather_llm, gender, glyph, insight_llm, leaderboard, letters, mall, mapdata,
     naming,
     ollama_client, rules,
     precise, seal, seal_duel, server_bots, social, sortie, speech, tavern, team, timetable, treasures, yuedan,
@@ -1277,6 +1277,25 @@ def duel_text(game: Game, text: str) -> list[str]:
     return act(game, lambda g: g.duel_gamble(request.text, verdict.rate, (verdict.win, verdict.lose), request=request, crowd=crowd))
 
 
+def create_intent(game: Game, body: dict) -> list[str]:
+    """自創武學的立意（tianxia/create.py），三段同 duel_text：A Game.create_request（只讀）→ B 鎖外 create.read 讀這一句意
+    （分數、最多兩路屬性、正邪；預算同隨口應對）→ C Game.create_intent(reading=) 整個重驗再成形。叫不動照關鍵字表讀。"""
+    text = str(body.get("text") or "")[:create.INTENT_MAX * 2]
+    started, request = _open_request(game, lambda: game.create_request(text))
+    if isinstance(request, list):
+        return request
+    total = game.content.config.free_text_budget_seconds
+
+    def reading():
+        return create.read(within_budget(game.client, total - (_monotonic() - started)), request, game.content)
+
+    value = model_call(
+        game, reading, fallback=create.fallback_read(game.content, request.text),
+        left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT,
+    )
+    return act(game, lambda g: g.create_intent(request.text, reading=value))
+
+
 def tavern_ask(game: Game, text: str) -> list[str]:
     """問酒家（酒肆，設計第八節），三段：A Game.tavern_ask_request（只讀；問到秘密的單子不叫模型）→ B 鎖外 tavern.ask_write
     （預算 Config.tavern.ask_budget_seconds）→ C Game.tavern_ask 重驗同一間、同一句再收錢；叫不動模型退全額。"""
@@ -2120,6 +2139,8 @@ def api_do(op: str, request: Request, body: dict = Body(default={})):
         msgs = seal_text(game, str(body.get("text", "")))
     elif op == "duel_text":  # 頭目戰的放手一搏：同上（見 duel_text）
         msgs = duel_text(game, str(body.get("text", "")))
+    elif op == "create_intent":  # 自創武學的形意：意分在行動鎖外評（見 create_intent）
+        msgs = create_intent(game, body)
     elif op == "tavern_ask":  # 問酒家：回話在行動鎖外寫（見 tavern_ask）
         msgs = tavern_ask(game, str(body.get("text", ""))[:60])
     elif op == "feast_text":  # 宴席上自己寫的敬酒詞：分數在行動鎖外評（見 feast_text）
@@ -2152,6 +2173,14 @@ def _forge_without_naming(game: Game, art_id: str | None, insight_ids: list[str]
     return game.forge(art_id, insight_ids, proposed=NO_NAME, other_art=other_art)
 
 
+def _int_of(value) -> int:
+    """網頁送來的一個整數（自創多付的心得）：不是整數、負的一律當 0。"""
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 0
+
+
 def _id_list(value) -> list[str]:
     """網頁送來的一串 id：只收字串串列，其他（字串、數字、物件）一律當空的。"""
     return [str(v) for v in value if isinstance(v, str)] if isinstance(value, list) else []
@@ -2164,10 +2193,19 @@ MENXIA_ACTIONS = {
     # 這裡也帶 NO_NAME，就算有人直接拿它在鎖裡呼叫，也不會叫模型
     "forge": lambda g, b: _forge_without_naming(g, *forge_args(b)),
     "switch": lambda g, b: g.switch_art(str(b.get("art") or "")),
-    # 用融的意境修練一次，衝下一品；use_legend 是勾了「服下破境丹」。只認真正的布林 true：字串、數字都不算勾
-    "cultivate": lambda g, b: g.cultivate(
-        str(b.get("art") or ""), use_legend=b.get("use_legend") is True, by_xinde=b.get("by_xinde") is True,  # 以心得修練（Joy 2026-10-18）
+    # 武學重構：把意境裝進武學的意境槽、或拆下來（修練頁與煉製頁都走這裡；不花心得體力）
+    "slot": lambda g, b: g.slot_insight(
+        str(b.get("art") or ""), str(b.get("insight") or ""), _int_of(b.get("index")) if b.get("index") is not None else None,
     ),
+    "unslot": lambda g, b: g.unslot_insight(str(b.get("art") or ""), str(b.get("insight") or "")),
+    # 自創武學（tianxia/create.py）：執器、擺式、回頭、立名、擱下；立意走 /api/do/create_intent（三段式，模型讀這一句意）
+    "create_begin": lambda g, b: g.create_begin(str(b.get("kind") or ""), str(b.get("form") or "")),
+    "create_pose": lambda g, b: g.create_pose(b.get("pose") if isinstance(b.get("pose"), dict) else {}),
+    "create_back": lambda g, b: g.create_back(str(b.get("to") or "")),
+    "create_name": lambda g, b: g.create_name(str(b.get("name") or ""), _int_of(b.get("extra"))),
+    "create_cancel": lambda g, b: g.create_cancel(),
+    # 用融的意境修練一次，衝下一品；use_legend 是勾了「服下破境丹」。只認真正的布林 true：字串、數字都不算勾
+    "cultivate": lambda g, b: g.cultivate(str(b.get("art") or ""), use_legend=b.get("use_legend") is True),
     "melt": lambda g, b: g.melt_art(str(b.get("art") or "")),  # 功法庫裡的一門熔成心得
     "melt_insight": lambda g, b: g.melt_insight(str(b.get("insight") or "")),
     "buy_legend": lambda g, b: g.buy_legend(),  # 以心得換一枚破境丹（Joy 2026-10-18，越換越貴）

@@ -17,6 +17,7 @@ import server
 import webharness
 from tianxia import prologue
 from tianxia.engine import Game
+from tianxia.models import GiveArt
 
 ROOT = Path(__file__).parent.parent
 pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
@@ -249,7 +250,7 @@ def test_with_all_three_chips_hidden_there_is_no_row_at_all(hut):
 def test_the_chips_come_back_at_the_farewell_step(newcomer):
     m = season_one_view(main_at(newcomer(), 10))
     assert chip_ids(run(m, "return H.peekBlock(m);")) == ["stance", "board", "quest"]
-    early = season_one_view(main_at(newcomer(), 5))  # 序章中途（修練那一步）：三塊都還藏著
+    early = season_one_view(main_at(newcomer(), 5))  # 序章中途（揣摩那一步）：三塊都還藏著
     assert chip_ids(run(early, "return H.peekBlock(m);")) == []
 
 
@@ -451,33 +452,32 @@ def test_the_masters_words_top_the_practice_and_craft_pages(hut):
     practice = run(m, "return H.pagePractice();", menxia=x)
     craft = run(m, "return H.pageCraft();", menxia=x)
     for page in (practice, craft):
-        assert page.index("guide") < page.index('id="mx-msg"') and "把【穿林腿】換上，練到第三成。" in page
+        assert page.index("guide") < page.index('id="mx-msg"') and "把【粗淺拳腳】練到第三成。" in page  # 武學重構：點名的是裝了意境的基礎拳腳
     plain = run({**m, "prologue": None}, "return H.pagePractice();", menxia=x)
     assert 'class="card guide"' not in plain  # 序章外的修練頁沒有師父
 
 
 def test_the_practice_page_points_at_the_buttons_of_the_step(hut):
-    m, x = pages_at(hut, 4)  # 換上、練到第三成：練成鈕發光，合成出來的那一列（還沒換上）發光
+    m, x = pages_at(hut, 4)  # 練到第三成：練成鈕發光；師父點名的基礎拳腳本來就在身上（武學重構），功法庫裡沒有一列要人改練
     page = run(m, "return H.pagePractice();", menxia=x)
     assert re.search(r'data-op="practice" data-glow="practice"', page)
     rows = dict(re.findall(r'data-act="art" data-id="(\w+)"( data-glow="[^"]*")?', page))
-    fused = next(k for k in rows if k not in ("basic_fist", "basic_breath"))
-    assert rows[fused] == ' data-glow="switch"'
-    assert "basic_fist" not in rows and "basic_breath" not in rows  # 身上的兩門是卷軸卡，不是功法庫的一列
-    m, x = pages_at(hut, 5)  # 修練那一步：合成出來的那一門換上了，它的列發光
+    assert rows == {} and 'data-glow="switch"' not in page  # 身上的兩門是卷軸卡，不是功法庫的一列；庫裡沒有別的
+    m, x = pages_at(hut, 5)  # 揣摩那一步（武學重構：以前是修練）：修練頁沒有一列發光，煉製頁剛悟到的意境發光
     page = run(m, "return H.pagePractice();", menxia=x)
-    assert 'data-glow="cultivate"' in page
+    assert 'data-glow="cultivate"' not in page and 'data-glow="switch"' not in page
+    craft = run(m, "H.S.craftPick = true; return H.pageCraft();", menxia=x)
+    assert 'data-glow="pick:insight"' in craft
 
 
 def test_the_practice_button_is_greyed_with_the_masters_reason(hut):
     m, x = pages_at(hut, 1)  # 看修練頁那一步：沒叫你練功
     page = run(m, "return H.pagePractice();", menxia=x)
-    assert re.search(r'data-op="practice" data-glow="practice" data-kind="\w+" disabled>師父這一步沒叫你練功。', page)
-    m, x = pages_at(hut, 4)
-    hut.switch_art(prologue.fused_arts(hut.state, hut.content, hut.world)[0].id)
-    x = server.menxia_view(hut)
-    page = run(server.main_view(hut), "return H.pagePractice();", menxia=x)  # 換上了：武學那一欄練得下去
-    assert re.search(r'data-op="practice" data-glow="practice" data-kind="武學" >練成第\d+成<small>心得', page)
+    assert re.search(r'data-op="practice" data-glow="practice" data-kind="\w+" aria-label="師父這一步沒叫你練功。"[^>]*disabled>', page)
+    assert '<p class="train-why">師父這一步沒叫你練功。</p>' in page  # 原因寫在朱印底下那一行
+    m, x = pages_at(hut, 4)  # 練到第三成那一步：裝了意境的基礎拳腳就在身上（武學重構：不必先換上），武學那一欄練得下去
+    page = run(m, "return H.pagePractice();", menxia=x)
+    assert re.search(r'data-op="practice" data-glow="practice" data-kind="武學" aria-label="練成第\d+成（心得 \d+）"[^>]*><b>練</b><small>心得', page)
 
 
 LONG_WORDS = "這一段師父的話很長很長，" * 8 + "\n\n" + "最後一段才是要你做的事：按底下的鈕。"
@@ -634,8 +634,13 @@ def test_the_stats_panel_closes_when_the_stats_step_completes(hut):
 
 
 def test_step_five_points_at_a_row_under_the_arts_library_title(hut):
-    """步驟 5 師父說「先到功法庫把它『改練』上身」：修練頁真的有叫「功法庫」的標題，發光的那一列（改練）在它底下（arts-polish-1）。"""
+    """步驟 5 的改練（arts-polish-1）：修練頁真的有叫「功法庫」的標題，發光的那一列（改練）在它底下。武學重構：師父點名的基礎拳腳
+    本來就在身上、這一步沒寫 switch；這裡自己把 switch 加進這一步的 glow、換上一門雜學，讓點名的那一門落到功法庫裡。"""
     m, x = pages_at(hut, 4)
+    hut.content.tutorial.steps[4].glow.append("switch")
+    prologue.give_art(hut.state, hut.content, hut.world, GiveArt(id="junk", level=5))
+    hut.switch_art("junk")
+    m, x = server.main_view(hut), server.menxia_view(hut)
     page = run(m, "return H.pagePractice();", menxia=x)
     assert page.index("功法庫") < page.index('data-glow="switch"')
 
@@ -692,10 +697,16 @@ def _row_glows(page):
 
 
 def test_only_the_art_the_master_names_glows_to_be_switched_to(hut):
-    """T7 走查 W-A：改練的發光由伺服器說是哪一列（art_rows 的 glow）：換上之前只有合成出來的那一列，換上之後沒有一列；
-    點開基礎拳腳那一列，裡面的「改練這一門」也不發光。"""
+    """T7 走查 W-A：改練的發光由伺服器說是哪一列（art_rows 的 glow）：點名的那一門不在身上時只有它那一列，換上之後沒有一列；
+    點開別的那一列，裡面的「改練這一門」也不發光。武學重構：點名的基礎拳腳本來就在身上、這一步沒寫 switch——先看沒有一列發光，
+    再自己把 switch 加進 glow、換上一門雜學，讓它落到功法庫裡。"""
     m, x = pages_at(hut, 4)
-    named = prologue.fused_arts(hut.state, hut.content, hut.world)[0].id
+    named = prologue.slotted_arts(hut.state, hut.content, hut.world)[0].id
+    assert all("switch" not in v for v in _row_glows(run(m, "return H.pagePractice();", menxia=x)).values())  # 點名的那一門就在身上
+    hut.content.tutorial.steps[4].glow.append("switch")
+    prologue.give_art(hut.state, hut.content, hut.world, GiveArt(id="junk", level=5))
+    hut.switch_art("junk")
+    m, x = server.main_view(hut), server.menxia_view(hut)
     page = run(m, "return H.pagePractice();", menxia=x)
     glows = _row_glows(page)
     assert "switch" in glows[named] and all("switch" not in v for k, v in glows.items() if k != named)
@@ -705,8 +716,8 @@ def test_only_the_art_the_master_names_glows_to_be_switched_to(hut):
     x = server.menxia_view(hut)
     m = server.main_view(hut)
     page = run(m, "return H.pagePractice();", menxia=x)
-    assert all("switch" not in v for v in _row_glows(page).values())  # 基礎拳腳在功法庫裡，不發光
-    opened = run(m, "return H.pagePractice();", menxia=x, S={"artOpen": "basic_fist"})
+    assert all("switch" not in v for v in _row_glows(page).values())  # 雜學在功法庫裡，不發光
+    opened = run(m, "return H.pagePractice();", menxia=x, S={"artOpen": "junk"})
     assert 'data-act="switch"' in opened and not re.search(r'data-act="switch" data-glow', opened)
 
 
@@ -748,6 +759,11 @@ def test_a_filter_the_browser_remembers_from_an_earlier_character_never_hides_wh
     for step, glow in ((4, "switch"), (9, "melt")):
         game = newcomer()
         m, x = pages_at(game, step)
+        if glow == "switch":  # 武學重構：點名的基礎拳腳本來就在身上、這一步沒寫 switch；自己加上、換上一門雜學，讓它落到功法庫裡
+            game.content.tutorial.steps[4].glow.append("switch")
+            prologue.give_art(game.state, game.content, game.world, GiveArt(id="junk", level=5))
+            game.switch_art("junk")
+            m, x = server.main_view(game), server.menxia_view(game)
         page = run(m, "return H.pagePractice();", menxia=x, stored=key)
         assert "這一類沒有功法" not in page and 'class="lib-filter"' not in page  # 庫是短的：沒有鈕，也就沒有篩選
         rows = dict(re.findall(r'data-act="art" data-id="(\w+)"( data-glow="[^"]*")?', page))
@@ -825,15 +841,13 @@ def test_the_status_bar_element_follows_what_the_step_shows(newcomer):
 
 # ── 卷軸卡（2026-10-06，企劃者「先用捲軸卡」）────────────────
 
-def _scroll_page(content, *, arts=0, odds=None, S=None):
-    """序章外的修練頁（序章測試內容開局送兩門基礎武學，但這裡不走序章）：功法庫塞 arts 門假的一列（只為了看清單怎麼畫），odds 有給就掛在身上那門武學上。"""
+def _scroll_page(content, *, arts=0, S=None):
+    """序章外的修練頁（序章測試內容開局送兩門基礎武學，但這裡不走序章）：功法庫塞 arts 門假的一列（只為了看清單怎麼畫）。"""
     game = Game.new(content, "路人", rng=random.Random(0))
     m, x = server.main_view(game), server.menxia_view(game)
     base = next(r for r in x["owned_arts"] if not r["worn"]) if any(not r["worn"] for r in x["owned_arts"]) else x["owned_arts"][0]
     x["owned_arts"] += [{**base, "id": f"lib{i}", "name": f"庫{i}", "worn": False,
                          "kind": "武學" if i % 3 else "內功", "cultivate": {**base["cultivate"], "ok": i % 4 == 0}} for i in range(arts)]
-    if odds is not None:
-        next(r for r in x["owned_arts"] if r["worn"] and r["kind"] == "武學")["forge_odds"] = odds
     return run(m, "return H.pagePractice();", menxia=x, S=S)
 
 
@@ -845,10 +859,9 @@ def test_the_two_worn_arts_are_scroll_cards_with_their_own_buttons(prologue_cont
     assert "lib-filter" not in page and "再列" not in page  # 功法庫少的時候不出篩選
 
 
-def test_the_forge_odds_bar_only_shows_what_the_server_sent(prologue_content):
-    assert 'class="odds"' not in _scroll_page(prologue_content)  # 沒送就不畫，不寫死 50／30／20
-    page = _scroll_page(prologue_content, odds=[{"quality": "下品", "pct": 62}, {"quality": "中品", "pct": 30}, {"quality": "上品", "pct": 8}])
-    assert 'class="odds"' in page and "下 62%" in page and "中 30%" in page and "上 8%" in page
+def test_the_cards_have_no_forge_odds_bar(prologue_content):
+    """武學重構：品級不靠修練衝，卷軸卡上沒有機率條了（以前伺服器送 forge_odds 才畫）。"""
+    assert 'class="odds"' not in _scroll_page(prologue_content)
 
 
 def test_a_big_library_can_be_filtered_and_shows_a_page_at_a_time(prologue_content):

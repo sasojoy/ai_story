@@ -498,7 +498,7 @@ def dadian_view(state: GameState, content: Content, *, day: int, room: int, base
         entry("act:mentor", "名師指點", f"{cfg.mentor_silver} 兩", silver.MENTOR_DESC.format(bonus=cfg.mentor_bonus), silver.ONCE_DAILY,
               clinic, silver.mentor_problem(state, content, day) if clinic else None, silver.WHERE["mentor"]),
         entry("act:furnace", "看火候", f"{cfg.furnace_silver} 兩",
-              (silver.FURNACE_DESC_FORGE if content.config.fuse_quality.fixed else silver.FURNACE_DESC).format(low=f"{odds.get('下品', 0):g}", mid=f"{odds.get('中品', 0):g}", high=f"{odds.get('上品', 0):g}"),
+              silver.FURNACE_DESC.format(low=f"{odds.get('下品', 0):g}", mid=f"{odds.get('中品', 0):g}", high=f"{odds.get('上品', 0):g}"),
               silver.ONCE_DAILY, smith, silver.furnace_problem(state, content, day, prologue) if smith else None, silver.WHERE["furnace"]),
         entry("act:buy_legend", f"買{pill}", f"{cfg.legend_silver} 兩", silver.LEGEND_DESC,
               silver.LEGEND_LEFT.format(left=silver.legend_left(state, content)), clinic,

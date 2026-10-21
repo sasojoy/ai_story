@@ -86,12 +86,14 @@ def test_mentor_adds_ten_within_the_cap_once():
 
     game = _game(at="yingchuan")  # 潁川有醫館、是城鎮
     s, c = game.state, game.content
-    before = cultivation.odds_for(s, c, "上品", 0)
+    w = game.world
+    # 武學重構拿掉了衝品：名師指點加在衝絕學那一步（服丹衝關與契機頓悟），在 breakthrough.max_chance 之內
+    before = cultivation.force_odds(s, c, w, "basic_fist")
     msgs = game.choose("act:mentor")
     assert s.player.mentor_ready and s.player.stats["silver"] == 450 and any("銀兩 -50" in m for m in msgs)
-    assert cultivation.odds_for(s, c, "上品", 0) == before + 10
-    c.config.cultivate_cap["上品"] = before + 4
-    assert cultivation.odds_for(s, c, "上品", 0) == before + 4  # 不超過那一階的上限
+    assert cultivation.force_odds(s, c, w, "basic_fist") == before + 10
+    c.config.breakthrough.max_chance = before + 4
+    assert cultivation.force_odds(s, c, w, "basic_fist") == before + 4  # 不超過衝關的上限
     assert silver.take_mentor(s, c) == 10 and silver.take_mentor(s, c) == 0  # 擲過一次就用掉
     assert not s.player.mentor_ready
 
@@ -117,7 +119,7 @@ def test_mentor_only_at_a_clinic_town():
 
 
 def test_furnace_shifts_the_base_odds_once():
-    from tianxia import fusion, smithing
+    from tianxia import smithing
 
     game = _game(at="yingchuan")
     s, c, w = game.state, game.content, game.world
@@ -127,9 +129,7 @@ def test_furnace_shifts_the_base_odds_once():
     assert s.player.furnace_ready and s.player.stats["silver"] == 450
     warm = smithing.forge_odds(s, c, w, "劍", "gang_1", "gang_1")
     assert warm.odds["上品"] > plain.odds["上品"] and warm.odds["下品"] < plain.odds["下品"]
-    # 合成即設計（fuse_quality.fixed，正式內容開著）照造化分定品：看火候用不上，合成那一爐也不用掉它（PM 2026-10-19 合 develop）
-    assert c.config.fuse_quality.fixed
-    assert fusion._points(c, [], s).odds == fusion._points(c, []).odds
+    # 武學重構：武學合成不擲品質了，看火候只管打造（PM 2026-10-21 合 develop）
     smithing.forge(s, c, w, "劍", "gang_1", "gang_1", rng=random.Random(0))
     assert not s.player.furnace_ready  # 打一爐就用掉：之後照原本的基準
     base = c.config.weapons.quality.odds

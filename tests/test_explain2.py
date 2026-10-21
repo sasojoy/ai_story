@@ -435,7 +435,11 @@ def test_the_xinde_hint_points_to_the_forge_when_only_a_forge_is_doable(on):
     s.player.member.wugong_level = s.player.member.neigong_level = 10  # 兩門都練滿了：沒得練成
     s.player.stats["xinde"] = max(cfg.fuse_xinde, cfg.merge_xinde)
     s.player.insights = []
-    assert game.status_data()["hint"] is None  # 沒有意境：合不了
+    hint = game.status_data()["hint"]
+    assert hint and "去「煉製」" in hint and "修練" not in hint  # 武學重構：身上兩門武學就合得了（武學＋武學），沒有意境也提
+    s.player.stats["xinde"] = min(cfg.fuse_xinde, cfg.merge_xinde) - 1
+    assert game.status_data()["hint"] is None  # 付不起一爐：不提
+    s.player.stats["xinde"] = max(cfg.fuse_xinde, cfg.merge_xinde)
     s.player.insights = ["feng"]
     hint = game.status_data()["hint"]
     assert hint and "去「煉製」" in hint and "修練" not in hint

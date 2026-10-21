@@ -533,31 +533,46 @@ def arts_only(monkeypatch):
     monkeypatch.setattr(bot_policy, "CULTIVATE_CHANCE", 0.0)
 
 
+TWO = {"basic_fist", "basic_breath"}
+
+
+def _two_arts(content, world, name="機器人"):
+    """武學重構：武學＋意境不再開爐（意境直接裝進槽），要取名的首創只剩武學＋武學與意境＋意境。
+    身上兩門基礎武學、一個意境（不會合併）：這一爐一定是武學＋武學。"""
+    game = armed(content, world, name=name)
+    game.client = None
+    game.state.player.member.neigong_id = "basic_breath"
+    return game
+
+
 def test_a_first_time_fusion_waits_for_the_naming_slot(content, world, arts_only):
     """首創的爐要請模型取名：鎖內只開單交給假人程式，什麼都還沒收、還沒合。"""
-    game = armed(content, world)
-    game.client = None
+    game = _two_arts(content, world)
     slot = bot_policy.NamingSlot(open=True)
     bot_policy.tend_arts(game, random.Random(0), slot)
-    assert slot.job is not None and slot.job.request.kind == "fuse"
-    assert (slot.job.art_id, slot.job.insight_ids) == ("basic_fist", ("feng",))
-    assert library.owned_arts(game.state) == ["basic_fist"] and game.state.player.stats["xinde"] == 100
+    assert slot.job is not None and slot.job.request.kind == "blend"
+    assert {slot.job.art_id, slot.job.other_art} == TWO and slot.job.insight_ids == ()
+    assert set(library.owned_arts(game.state)) == TWO and game.state.player.stats["xinde"] == 100
 
 
 def test_no_slot_no_first_time_fusion(content, world, arts_only):
     """Review Focus 4：輪不到取名就不開這一爐，不用字表名字搶首創。"""
-    game = armed(content, world)
-    game.client = None
+    game = _two_arts(content, world)
     slot = bot_policy.NamingSlot(open=False)
     bot_policy.tend_arts(game, random.Random(0), slot)
     assert slot.job is None and slot.skipped == 1
-    assert library.owned_arts(game.state) == ["basic_fist"]
+    assert set(library.owned_arts(game.state)) == TWO
+
+
+def _blend_named(game, name="凌風拳"):
+    """這兩門合一爐、名字照給的（鎖外取好的 C 段）。"""
+    return game.forge("basic_fist", [], proposed=(name, "一句話。"), other_art="basic_breath")
 
 
 def test_a_known_recipe_is_forged_right_away_without_the_model(content, world, arts_only):
-    first = armed(content, world, name="先到")
-    first.forge("basic_fist", ["feng"], proposed=("凌風拳", "一句話。"))  # 先有人合過、登記了名字
-    game = armed(content, world, name="後到")
+    first = _two_arts(content, world, name="先到")
+    _blend_named(first)  # 先有人合過、登記了名字（武學重構：武學＋武學）
+    game = _two_arts(content, world, name="後到")
     game.client = None
     slot = bot_policy.NamingSlot(open=False)
     bot_policy.tend_arts(game, random.Random(0), slot)
@@ -567,11 +582,11 @@ def test_a_known_recipe_is_forged_right_away_without_the_model(content, world, a
 
 
 def _waiting_to_name(content, world):
-    """合出一門「凌風拳」、練成絕學、輪到自己定名的假人（會等著定名的都是合成出來的：內容武學的名字過不了命名過濾）。"""
-    game = armed(content, world)
-    game.forge("basic_fist", ["feng"], proposed=("凌風拳", "一句話。"))
-    game.client = None
-    game.state.player.naming = next(a for a in library.owned_arts(game.state) if a != "basic_fist")
+    """合出一門「凌風拳」、練成絕學、輪到自己定名的假人（會等著定名的都是合成出來的：內容武學的名字過不了命名過濾）。
+    武學重構：合成只剩武學＋武學，這一門是兩門基礎武學合出來的。"""
+    game = _two_arts(content, world)
+    _blend_named(game)
+    game.state.player.naming = next(a for a in library.owned_arts(game.state) if a not in TWO)
     return game
 
 
@@ -633,8 +648,7 @@ def test_bots_keep_silver_for_healing_and_room_for_forging(content, game):
 
 def test_a_turn_holding_a_naming_job_does_nothing_else(content, world, arts_only):
     """手上有一爐在等名字：這一輪只在爐前等，不做別的（不然體力可能花掉，C 段開不成）。"""
-    game = armed(content, world)
-    game.client = None
+    game = _two_arts(content, world)  # 武學重構：首創的爐只剩武學＋武學
     stamina = game.state.player.stamina
     slot = bot_policy.NamingSlot(open=True)
     bot_policy.take_turn(game, _profile("guan"), random.Random(0), slot)
@@ -671,16 +685,15 @@ def test_take_turn_carries_the_art_messages_in_front_of_the_main_action(content,
 
 
 def test_a_full_library_melts_the_weakest_before_anything_else(content, world, arts_only):
-    game = armed(content, world)
-    game.client = None
+    game = _two_arts(content, world)
     p = game.state.player
-    game.forge("basic_fist", ["feng"], proposed=("凌風拳", "一句話。"))
-    p.insights = []
+    _blend_named(game)  # 武學重構：合出來的那一門進功法庫（兩欄都有人）
+    p.insights, p.stats["xinde"] = [], 0  # 心得歸零：熔完之後兩門基礎武學照舊的配方再合（不必取名）也付不起
     held = library.held_count(game.state)
     content.config.holding_cap_base = held  # 正好滿了
     assert library.full(game.state, content) and p.arts
     bot_policy.tend_arts(game, random.Random(0), bot_policy.NamingSlot(open=True))
-    assert library.held_count(game.state) == held - 1  # 熔了庫裡的一門，沒有意境可合了
+    assert library.held_count(game.state) == held - 1  # 熔了庫裡的一門，沒有意境、心得也付不起再合一爐
 
 
 def test_a_bot_switches_to_a_stronger_art_in_the_library(content, world, arts_only):
@@ -696,18 +709,20 @@ def test_a_bot_switches_to_a_stronger_art_in_the_library(content, world, arts_on
     assert p.member.wugong_id == rich.id
 
 
-def test_a_bot_cultivates_a_fused_art_when_it_has_the_stamina(content, world, monkeypatch):
+def test_a_bot_cultivates_a_ripe_art_with_a_pill_when_it_has_the_stamina(content, world, monkeypatch):
+    """武學重構：修練只剩上品到了極處服丹衝絕學那一步（cultivation.ready）。體力低於保留量不衝；夠了就服丹衝一次。"""
+    from test_bot import ready_to_climb
+
     monkeypatch.setattr(bot_policy, "FORGE_CHANCE", 0.0)
     monkeypatch.setattr(bot_policy, "CULTIVATE_CHANCE", 1.0)
-    game = armed(content, world)
-    game.forge("basic_fist", ["feng"], proposed=("凌風拳", "一句話。"))
+    game, _ = ready_to_climb(content, world, "上品")
     p = game.state.player
-    p.stats["xinde"], p.stamina = 0, 150
-    bot_policy.tend_arts(game, random.Random(0), bot_policy.NamingSlot())
-    assert p.stamina < 150  # 修練花體力（有融意境的武學才修得了）
     p.stamina = bot.CULTIVATE_RESERVE - 1
     bot_policy.tend_arts(game, random.Random(0), bot_policy.NamingSlot())
-    assert p.stamina == bot.CULTIVATE_RESERVE - 1  # 低於保留量：體力留給探索與遊歷
+    assert p.stamina == bot.CULTIVATE_RESERVE - 1 and p.legend_items == 1  # 低於保留量：體力留給探索與遊歷
+    p.stamina = 150
+    bot_policy.tend_arts(game, random.Random(0), bot_policy.NamingSlot())
+    assert p.stamina < 150 and p.legend_items == 0  # 衝關花體力、服掉那一枚丹
 
 
 def test_a_second_naming_job_in_the_same_turn_is_skipped(content, world, arts_only):
@@ -720,8 +735,7 @@ def test_a_second_naming_job_in_the_same_turn_is_skipped(content, world, arts_on
 
 
 def test_apply_job_registers_a_first_time_recipe_with_the_models_name(content, world, arts_only):
-    game = armed(content, world)
-    game.client = None
+    game = _two_arts(content, world)  # 武學重構：首創的爐是武學＋武學（價錢同合成 fuse_xinde）
     slot = bot_policy.NamingSlot(open=True)
     bot_policy.tend_arts(game, random.Random(0), slot)
     msgs = bot_policy.apply_job(game, slot.job, ("凌風拳", "一句話。"))
@@ -734,25 +748,24 @@ def test_apply_job_registers_a_first_time_recipe_with_the_models_name(content, w
 def test_apply_job_never_claims_a_first_time_recipe_with_a_name_the_filter_rejects(content, world, arts_only, proposed):
     """F3：取名那一爐沒有拿到過得了過濾的名字（沒取到、或 C 段重驗過不了）：不開、不收費，不用字表名字搶下首創
     （假人搶首創的名字是字表風格，看得出是假人）。"""
-    game = armed(content, world)
-    game.client = None
+    game = _two_arts(content, world)  # 武學重構：首創的爐是武學＋武學
     slot = bot_policy.NamingSlot(open=True)
     bot_policy.tend_arts(game, random.Random(0), slot)
     assert bot_policy.apply_job(game, slot.job, proposed) == []
     assert world.lookup_recipe(slot.job.request.key) is None
-    assert library.owned_arts(game.state) == ["basic_fist"] and game.state.player.stats["xinde"] == 100
+    assert set(library.owned_arts(game.state)) == TWO and game.state.player.stats["xinde"] == 100
 
 
 def test_apply_job_still_forges_a_pick_when_the_model_picked_nothing(content, world, arts_only):
-    """挑一個的單（合到舊的、候選兩個以上）沒挑到：不產生新名字，C 段照常開爐，由規則挑。"""
-    first = armed(content, world, name="先到")
-    first.forge("basic_fist", ["feng"], proposed=("凌風拳", "一句話。"))
-    game = armed(content, world, name="後到")
-    game.client = None
-    request = naming.NamingRequest("fuse", fusion.fuse_key("basic_fist", "feng"), "武學", [], choices=("凌風拳", "別名拳"))
-    job = bot_policy.ForgeJob("basic_fist", ("feng",), None, request)
+    """挑一個的單（候選兩個以上）沒挑到：不產生新名字，C 段照常開爐，由規則挑。
+    武學重構：合到舊的拿掉了，fusion 不再開有候選的單；apply_job 這一條照舊在，用武學＋武學的單測它。"""
+    first = _two_arts(content, world, name="先到")
+    _blend_named(first)
+    game = _two_arts(content, world, name="後到")
+    request = naming.NamingRequest("blend", fusion.blend_key("basic_fist", "basic_breath"), "武學", [], choices=("凌風拳", "別名拳"))
+    job = bot_policy.ForgeJob("basic_fist", (), "basic_breath", request)
     bot_policy.apply_job(game, job, (None, ""))
-    assert len(library.owned_arts(game.state)) == 2
+    assert len(library.owned_arts(game.state)) == 3
 
 
 def test_a_turn_holding_a_mastery_naming_job_does_nothing_else(content, world, arts_only, monkeypatch):
@@ -795,27 +808,8 @@ def _holding_two_arts_and_an_insight(content, world):
     return game
 
 
-def test_a_bot_holding_an_insight_splits_between_fusing_and_blending_by_the_server_share(
-    content, world, arts_only, monkeypatch,
-):
-    """SERVER_BLEND_SHARE（0.15，比整季機器人的 BLEND_SHARE 0.3 低）真的拿來分：手上有意境時，武學＋武學的擲骰過 0.15 才算。
-    第一擲是合成的機會（FORGE_CHANCE），第二擲才是這個份額。"""
-    game = _holding_two_arts_and_an_insight(content, world)
-    assert bot_policy.SERVER_BLEND_SHARE < bot.BLEND_SHARE
-    assert _first_job(game, Rolls(0.5, 0.20)).request.kind == "fuse"  # 0.20 在整季機器人的份額裡是武學＋武學，在假人的不是
-    assert _first_job(game, Rolls(0.5, 0.10)).request.kind == "blend"
-    monkeypatch.setattr(bot_policy, "SERVER_BLEND_SHARE", 0.25)  # 份額是呼叫的當下才讀的
-    assert _first_job(game, Rolls(0.5, 0.20)).request.kind == "blend"
-    assert _first_job(game, Rolls(0.5, 0.30)).request.kind == "fuse"
-
-
-def test_the_server_share_decides_how_many_of_many_picks_are_blends(content, world, arts_only):
-    game = _holding_two_arts_and_an_insight(content, world)
-    rng = random.Random(7)
-    kinds = [_first_job(game, rng).request.kind for _ in range(400)]
-    share = kinds.count("blend") / len(kinds)
-    assert set(kinds) == {"fuse", "blend"}
-    assert 0.10 <= share <= 0.20, share  # 0.15 上下；整季機器人的 0.3 會落在這個區間外
+# 武學重構：武學＋意境不再開爐，兩門在手就一定是武學＋武學，SERVER_BLEND_SHARE 那一擲沒了——
+# 「份額決定武學＋意境與武學＋武學各佔幾成」的兩個測試拿掉（bot.pick_forge 不再擲 blend_share）。
 
 
 def test_a_bot_with_no_insight_always_blends_whatever_the_share(content, world, arts_only, monkeypatch):

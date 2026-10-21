@@ -486,7 +486,6 @@ def look_after(game: Game, rng: random.Random) -> None:
     for kind in ("內功", "武學"):
         if can_practise(game, kind) and rng.random() < PRACTICE_CHANCE:
             game.practice(kind)
-    bot.cultivate_by_xinde(game)  # 以心得修練（Joy 2026-10-18）：心得多出來先顧自己的武學，再傳功
     bot.buy_pill(game)  # 以心得換破境丹（Joy 2026-10-18）：火候滿了在等契機、手上沒有丹才換
     bot.teach(game, TEACH_PER_TICK)  # 傳功門下：心得多出來就傳給同伴、部下（不擲亂數）
     bot.trade_at_smith(game)  # 素材與經濟（計畫 B5）：人在鐵匠鋪就升階、賣多的（不擲亂數；不為了它進鐵匠鋪）
@@ -526,7 +525,9 @@ def tend_arts(game: Game, rng: random.Random, slot: NamingSlot | None = None) ->
             msgs += _forge(game, plan, slot)
             if slot is not None and slot.job is not None:
                 return msgs  # 這一爐在等名字：改練與修練等開完爐再說
+    bot.create_art(game, rng)  # 武學重構：心得多出來就自創一門（假人不叫模型：意分照預設、名字照退路字表）
     bot.switch_to_the_strongest(game)
+    bot.slot_insights(game)  # 悟到的意境裝進身上兩門的空槽（不擲亂數）
     if p.stamina >= bot.CULTIVATE_RESERVE:
         ready = [
             a for a in bot.worn_first(game)

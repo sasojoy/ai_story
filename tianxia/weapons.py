@@ -35,6 +35,8 @@ def art_weapon(art_id: str | None, content: Content, world: WorldStateStore) -> 
         art = world.get_skill(art_id)
         if art is None or art.kind != "武學":
             return None
+        if art.weapon:  # 自創的武學：式那一步挑的種類
+            return art.weapon
         if art.base:
             art_id = art.base
             continue

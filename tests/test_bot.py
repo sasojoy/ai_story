@@ -3,7 +3,9 @@ from unittest import mock
 
 import pytest
 
-from tianxia import bot, fusion, library
+from tianxia import insight_fx, arts as arts_mod, bot, fusion, library, team
+from tianxia.state import InsightFx
+from test_cultivation import STRONG
 from tianxia.bot import pick, play_season, spend_xinde, wants_heal
 from tianxia.engine import Game
 from tianxia.martial_arts import generate_from_name
@@ -106,7 +108,10 @@ def armed(content, world, name="機器人", **stats):
 def _two_arts(world, *, plain_top=30.0, rich_top=29.0, rich_traits=("剛", "剛", "剛"), rich_special=None, quality="下品"):
     """素拳（只有自己屬性的一個功效）與繁拳（多幾層功效、威力少一點）：都登記到全服。"""
     plain = generate_from_name("素拳", "武學", "素拳", attribute="剛").model_copy(
-        update={"origin": "fused", "quality": quality, "base_power": 10.0, "top_power": plain_top, "traits": ["剛"]},
+        update={  # 武學重構：登記的武學是門面，功效由槽裡的意境決定；相容屬性寫剛，槽才收得下「火」
+            "origin": "fused", "quality": quality, "base_power": 10.0, "top_power": plain_top, "traits": ["剛"],
+            "affinity": ["剛"],
+        },
     )
     rich = plain.model_copy(update={
         "id": "繁拳", "name": "繁拳", "top_power": rich_top, "traits": list(rich_traits), "special": rich_special,
@@ -121,6 +126,12 @@ def _wear_and_switch(game, plain, rich, quality="下品"):
     p.member.wugong_id, p.arts = plain.id, [rich.id]
     for art_id in (plain.id, rich.id):
         p.art_quality[art_id] = quality
+    # 武學重構：身上那一份的功效由槽裡的意境決定（arts.apply 蓋掉登記的 traits）——把「火」（剛）裝進繁拳，強度照原本的層數
+    layers = len(rich.traits)
+    if layers:
+        p.insights = [*p.insights, "huo"]
+        p.art_slots[rich.id] = ["huo"]
+        p.insight_strength["huo"] = min(layers, arts_mod.MAX_STRENGTH)
     bot.switch_to_the_strongest(game)
     return p.member.wugong_id
 
@@ -171,15 +182,16 @@ def test_the_bot_weighs_the_traits_of_the_inner_art_too(content, world):
     """內功一樣：功效多的那門內功換上身（照種類各挑各的）。"""
     game = armed(content, world)
     plain = generate_from_name("素功", "內功", "素功", attribute="柔").model_copy(
-        update={"origin": "fused", "quality": "下品", "base_power": 10.0, "top_power": 30.0, "traits": ["柔"]},
+        update={"origin": "fused", "quality": "下品", "base_power": 10.0, "top_power": 30.0, "affinity": ["柔"]},
     )
-    rich = plain.model_copy(update={"id": "繁功", "name": "繁功", "top_power": 29.0, "traits": ["柔", "柔", "柔"]})
+    rich = plain.model_copy(update={"id": "繁功", "name": "繁功", "top_power": 29.0})
     for art in (plain, rich):
         world.claim_skill_name(art)
     p = game.state.player
     p.member.neigong_id, p.arts = plain.id, [rich.id]
     for art_id in (plain.id, rich.id):
         p.art_quality[art_id] = "下品"
+    p.insights, p.art_slots[rich.id], p.insight_strength["shui"] = ["feng", "shui"], ["shui"], 3  # 武學重構：三層「柔」靠槽裡的「水」●●●
     bot.switch_to_the_strongest(game)
     assert p.member.neigong_id == rich.id and p.member.wugong_id == "basic_fist"
 
@@ -204,7 +216,8 @@ def test_the_trait_measure_script_still_runs():
     assert "一、單一功效" in out and "三、勢均力敵的仗" in out
 
 
-def test_the_bot_fuses_cultivates_and_melts_when_full(content, world):
+def test_the_bot_slots_its_insight_and_melts_when_full(content, world):
+    """武學重構：武學＋意境不再開爐，機器人把悟到的意境裝進身上那一門的槽（不花心得）；滿了先熔最弱的一門。"""
     game = Game.new(content, "機器人", rng=random.Random(0), world=world)
     p = game.state.player
     p.member.wugong_id = "basic_fist"
@@ -212,30 +225,44 @@ def test_the_bot_fuses_cultivates_and_melts_when_full(content, world):
     p.stats["xinde"] = 100
     p.stamina = 150
     bot.forge_and_cultivate(game, random.Random(0))
-    fused = [a for a in library.owned_arts(game.state) if a != "basic_fist"]
-    assert len(fused) == 1
-    assert p.art_quality.get(fused[0]) == "中品" or p.art_mastery.get(fused[0]) == 1  # 也修練了一次
-    p.insights = []  # 沒有意境可合成：這一輪只會熔，不會又合成回來
+    assert library.owned_arts(game.state) == ["basic_fist"]  # 沒有合成出新的一門
+    assert p.art_slots["basic_fist"][0] == "feng" and p.stats["xinde"] == 100  # 裝進槽、不花心得
+    p.arts, p.stats["xinde"] = ["lake_kick"], 0  # 功法庫一門雜學、心得歸零：這一輪合不了（武學＋武學付不起），只會熔
     content.config.holding_cap_base = library.held_count(game.state)  # 正好滿了
     bot.forge_and_cultivate(game, random.Random(0))
     assert library.held_count(game.state) == content.config.holding_cap_base - 1  # 滿了先熔一門
 
 
 def test_the_bot_sometimes_merges_two_insights_instead(content, world):
-    """手上有兩個以上意境時，一部分機會改做合併（兩個意境→新意境，兩個都留著）。"""
+    """手上有兩個以上意境時，一部分機會改做合併。意境效果池：Fixed(0.0) 第一格挑到「風」、第二格從其餘的挑到「風」的另一份，
+    同一種的兩份＝揣摩，「風」到二重、另一份用掉；也沒有合成。"""
     game = armed(content, world)
-    game.state.player.insights = ["feng", "huo"]
-    before = set(game.state.player.insights)
+    game.state.player.insights = ["feng", "feng~2", "huo"]
     bot.forge_and_cultivate(game, Fixed(0.0))
-    assert before < set(game.state.player.insights) and len(game.state.player.insights) == 3
+    p = game.state.player
+    assert p.insights == ["feng", "huo"] and insight_fx.strength(game.state, "feng") == 2
+    assert p.stats["xinde"] == 100 - content.config.merge_xinde  # 揣摩照合併收錢
     assert library.owned_arts(game.state) == ["basic_fist"]  # 這一輪做的是合併，沒有合成
 
 
-def test_the_bot_fuses_when_the_merge_chance_does_not_come_up(content, world):
+def test_the_bot_merges_two_different_insights_into_a_compound_one(content, world):
+    """武學重構：不同的兩個意境合出一個複合意境（高階技能），兩個都留著、手上多一個。種子 1 的擲法：合併中、挑到風＋火。"""
+    game = armed(content, world)
+    game.state.player.insights = ["feng", "huo"]
+    before = set(game.state.player.insights)
+    bot.forge_and_cultivate(game, random.Random(1))
+    assert before < set(game.state.player.insights) and len(game.state.player.insights) == 3
+    assert library.owned_arts(game.state) == ["basic_fist"]
+
+
+def test_the_bot_slots_both_insights_when_the_merge_chance_does_not_come_up(content, world):
+    """武學重構：沒擲中合併、只有一門武學，就什麼都不合——兩個意境都裝進身上那一門的槽（基礎武學兩格），不花心得體力。"""
     game = armed(content, world)
     game.state.player.insights = ["feng", "huo"]
     bot.forge_and_cultivate(game, Fixed(0.99))
-    assert len(game.state.player.insights) == 2 and len(library.owned_arts(game.state)) == 2
+    p = game.state.player
+    assert len(p.insights) == 2 and library.owned_arts(game.state) == ["basic_fist"]
+    assert p.art_slots["basic_fist"] == ["feng", "huo"] and p.stats["xinde"] == 100 and p.stamina == 150
 
 
 def test_the_bot_blends_two_arts_when_it_has_no_insight_to_fuse(content, world):
@@ -247,17 +274,18 @@ def test_the_bot_blends_two_arts_when_it_has_no_insight_to_fuse(content, world):
     assert len(library.owned_arts(game.state)) == 3
 
 
-def test_the_bot_sometimes_blends_instead_of_fusing(content, world):
+def test_the_bot_blends_two_arts_when_it_also_holds_an_insight(content, world):
+    """武學重構：手上有意境也照樣武學＋武學（武學＋意境不再是合成）；BLEND_SHARE 以下的數跟以前一樣是合。"""
     game = armed(content, world)
     game.state.player.member.neigong_id = "basic_breath"
     before = set(library.owned_arts(game.state))
-    bot.forge_and_cultivate(game, Fixed(bot.BLEND_SHARE - 0.01))  # 只有一個意境不會合併；這個數落在武學＋武學那一段
+    bot.forge_and_cultivate(game, Fixed(bot.BLEND_SHARE - 0.01))  # 只有一個意境不會合併
     new = [a for a in library.owned_arts(game.state) if a not in before]
     assert len(new) == 1 and game.world.get_skill(new[0]).parents == ["basic_breath", "basic_fist"]
 
 
-def test_the_bot_fuses_when_the_blend_chance_does_not_come_up(content, world):
-    """兩種都能做時，BLEND_SHARE 以上的數仍然是武學＋意境：新的那門有底（base）、沒有 parents。"""
+def test_the_bot_blends_even_when_the_blend_chance_does_not_come_up(content, world):
+    """武學重構：武學＋意境沒了，兩門武學在手就一定是武學＋武學（BLEND_SHARE 那一擲不再擲）；意境裝進身上那一門的槽。"""
     game = armed(content, world)
     game.state.player.member.neigong_id = "basic_breath"
     before = set(library.owned_arts(game.state))
@@ -265,7 +293,8 @@ def test_the_bot_fuses_when_the_blend_chance_does_not_come_up(content, world):
     new = [a for a in library.owned_arts(game.state) if a not in before]
     assert len(new) == 1
     art = game.world.get_skill(new[0])
-    assert art.parents == [] and art.base in ("basic_breath", "basic_fist") and art.insight == "feng"
+    assert art.parents == ["basic_breath", "basic_fist"]  # 武學重構：blend 的 base 照種子挑一門來源（兵器種類往下傳），不再是 None
+    assert arts_mod.where_slotted(game.state, "feng") is not None  # 意境裝進槽了（裝在身上那一門）
 
 
 def test_the_forge_reserve_is_more_than_a_forge_costs(content):
@@ -296,9 +325,10 @@ def test_the_bot_does_not_blend_below_the_forge_reserve(content, world):
 
 def test_the_bot_forges_with_exactly_the_forge_reserve(content, world):
     game = armed(content, world)
+    game.state.player.member.neigong_id = "basic_breath"  # 武學重構：能開的爐只剩武學＋武學，要兩門
     game.state.player.stamina = bot.FORGE_RESERVE
     bot.forge_and_cultivate(game, random.Random(0))
-    assert len(library.owned_arts(game.state)) == 2
+    assert len(library.owned_arts(game.state)) == 3
     assert game.state.player.stamina == bot.FORGE_RESERVE - content.config.fuse_stamina
 
 
@@ -334,9 +364,10 @@ def test_the_bot_pays_only_when_a_blend_really_makes_something(content, world):
 def test_the_bot_names_the_art_it_mastered_with_a_fallback_name(content, world):
     """練成絕學的第一人要自己取名：機器人不叫模型，走退路字表（取出來的名字過得了命名過濾）。"""
     game = armed(content, world)
-    game.forge("basic_fist", ["feng"])
+    game.state.player.member.neigong_id = "basic_breath"
+    game.forge("basic_fist", [], other_art="basic_breath")  # 武學重構：合成只剩武學＋武學
     game.state.player.stats["xinde"] = 0
-    art_id = next(a for a in library.owned_arts(game.state) if a != "basic_fist")
+    art_id = next(a for a in library.owned_arts(game.state) if a not in ("basic_fist", "basic_breath"))
     world.claim_master(art_id, game.state.player.name)
     game.state.player.naming = art_id
     bot.forge_and_cultivate(game, random.Random(0))
@@ -344,63 +375,59 @@ def test_the_bot_names_the_art_it_mastered_with_a_fallback_name(content, world):
     assert world.get_skill(art_id).name != art_id  # 全服的這門改了名
 
 
-def test_forging_outside_the_prologue_rolls_with_the_game_rng(content, world):
-    """Game.forge 用遊戲自己的亂數擲合成出來那一門的品質（Config.fuse_quality_odds）。"""
-    game = armed(content, world)
-    game.rng.choices = lambda population, weights: ["中品"]
-    out = game.forge("basic_fist", ["feng"])
-    art = next(a for a in library.owned_arts(game.state) if a != "basic_fist")
-    assert game.state.player.art_quality[art] == game.state.player.art_rolled[art] == "中品"
-    assert any("（中品・屬" in line for line in out)
-
-
 def test_the_bot_keeps_its_stamina_for_the_road_below_the_reserve(content, world):
     game = armed(content, world)
+    game.state.player.member.neigong_id = "basic_breath"  # 武學重構：能開的爐只剩武學＋武學
     game.state.player.stamina = bot.CULTIVATE_RESERVE - 1
     bot.forge_and_cultivate(game, random.Random(0))
     # 合成也花體力了（設計 12.1）：這一輪合了一爐，但體力沒到修練的保留量，沒有修練
     assert game.state.player.stamina == bot.CULTIVATE_RESERVE - 1 - content.config.fuse_stamina
-    p = game.state.player  # 合成擲到的品質會記在 art_quality（同時記在 art_rolled）；沒修練就只有那一份
-    assert not p.art_mastery and p.art_quality == p.art_rolled
+    assert len(library.owned_arts(game.state)) == 3
 
 
 def ready_to_climb(content, world, quality):
-    """已經融過意境、品質是 quality、手上有一枚破境丹的機器人；心得歸零，所以這一輪只會修練、不會再合成。"""
+    """武學重構：身上的基礎拳腳練到第十成、品級是 quality、意境槽都裝滿、手上有一枚破境丹的機器人；心得歸零，所以這一輪不會合成。
+    只有上品（cultivation.ready）才到得了衝絕學那一步。"""
     game = armed(content, world)
-    game.forge("basic_fist", ["feng"])
     p = game.state.player
-    art_id = next(a for a in library.owned_arts(game.state) if a != "basic_fist")
-    p.art_quality[art_id] = quality
+    p.insights = ["feng", "huo", "shui", "shan"]  # 上品四格都裝得滿（基礎武學兼容並蓄）
+    for insight_id, fx in STRONG.items():  # 評分（第三批）：每一份三重加一重，四格 128 過一百
+        p.insight_fx[insight_id] = InsightFx(quality="上品", general=dict(fx))
+    p.member.wugong_level = 10
+    p.art_quality["basic_fist"] = quality
+    # 槽數照 team.resolve_art 那一份（內容武學要轉成 MartialArt 才有 slot_adjust）
+    assert bot.slot_insights(game) == len(arts_mod.slots_of(game.state, content, team.resolve_art("basic_fist", content, game.world)))
     p.stats["xinde"] = 0
     p.stamina = 150
     p.legend_items = 1
-    return game, art_id
+    return game, "basic_fist"
 
 
 def test_the_bot_takes_a_pill_when_it_goes_for_a_peerless_art(content, world):
-    """破境丹（企劃者：玩家自己決定哪一次衝絕學要服）：機器人手上有、而且這一次衝的是絕學就服。"""
+    """破境丹（企劃者：玩家自己決定哪一次衝絕學要服）：機器人手上有、而且這一門到了極處就服（強行衝關）。"""
     game, art_id = ready_to_climb(content, world, "上品")
     bot.forge_and_cultivate(game, random.Random(0))
     assert game.state.player.legend_items == 0
     assert game.state.player.stamina < 150  # 真的修練了
 
 
-def test_the_bot_keeps_its_pill_for_the_peerless_step(content, world):
-    """下品→中品、中品→上品用不上丹：不傳 use_legend，丹留著、也不會多一句「這一回沒服」。"""
+def test_the_bot_keeps_its_pill_below_the_top_grade(content, world):
+    """武學重構：下品、中品沒有修練這一步（品級靠合成與自創長），丹留著、體力一點不花、也不會多一句「沒服」。"""
     for quality in ("下品", "中品"):
         game, art_id = ready_to_climb(content, world, quality)
         bot.forge_and_cultivate(game, random.Random(0))
         assert game.state.player.legend_items == 1
-        assert game.state.player.stamina < 150  # 真的修練了
+        assert game.state.player.stamina == 150
         assert not any("沒服" in line for line in game.state.log)
 
 
 def test_pick_forge_only_reads(content, world):
-    """挑合成的那一段拆出來給伺服器假人共用：只挑、不開爐，什麼都不改。"""
+    """挑合成的那一段拆出來給伺服器假人共用：只挑、不開爐，什麼都不改。武學重構：能挑的只剩武學＋武學（兩門）與意境＋意境。"""
     game = armed(content, world)
+    game.state.player.member.neigong_id = "basic_breath"
     before = game.state.model_dump()
     plan = bot.pick_forge(game, random.Random(0))
-    assert plan == bot.ForgePlan("basic_fist", ("feng",), None)
+    assert plan == bot.ForgePlan("basic_fist", (), "basic_breath")
     assert game.state.model_dump() == before
 
 
@@ -426,43 +453,37 @@ def test_pick_forge_takes_the_shares_as_arguments(content, world):
     game.state.player.insights = ["feng", "huo"]
     merge = bot.pick_forge(game, Fixed(0.5), merge_share=0.6)  # 0.5 < 0.6：改做合併（意境＋意境，沒有武學）
     assert merge.art_id is None and merge.other_art is None and len(merge.insight_ids) == 2
-    fuse = bot.pick_forge(game, Fixed(0.5), merge_share=0.4)  # 0.5 ≥ 0.4：不合併，只有一門武學所以做武學＋意境
-    assert fuse.art_id == "basic_fist" and len(fuse.insight_ids) == 1 and fuse.other_art is None
+    assert bot.pick_forge(game, Fixed(0.5), merge_share=0.4) is None  # 0.5 ≥ 0.4：不合併；武學重構：只有一門武學就沒爐可開
     game.state.player.member.neigong_id = "basic_breath"
     plan = bot.pick_forge(game, Fixed(0.5), merge_share=0.4, blend_share=0.6)
     assert plan is not None and plan.other_art is not None and plan.insight_ids == ()
 
 
-# 拆出 pick_forge 之前、forge_and_cultivate 裡那一大段挑法實際擲出來的結果（在拆之前的程式上跑出來的）：
-# (情境, 種子) → (開的那一爐, 挑完之後下一個亂數)。亂數的擲法、順序一個字都不能變——整季機器人的種子要重現同樣的一季
+# pick_forge 在武學重構之後實際擲出來的結果：(情境, 種子) → (開的那一爐〔None＝這一輪不合〕, 挑完之後下一個亂數)。
+# 武學＋意境那一條路沒了（一門一意境什麼都不擲、回 None）；武學＋武學不再擲 BLEND_SHARE（兩門在手就直接抽兩門）；
+# 合併那一擲與「只有兩門、沒有意境」的擲法跟重構之前一字不差。亂數的擲法、順序一個字都不能變——整季機器人的種子要重現同樣的一季
 _HANDS = {  # 手上有什麼：(有沒有第二門〔內功 basic_breath，第一門是武學 basic_fist〕, 意境)
-    "一門一意境": (False, ["feng"]), "一門兩意境": (False, ["feng", "huo"]), "兩門沒意境": (True, []),
+    "一門兩意境": (False, ["feng", "huo"]), "兩門沒意境": (True, []),
     "兩門一意境": (True, ["feng"]), "兩門兩意境": (True, ["feng", "huo"]),
 }
-_ONE, _ONE_TWO, _TWO_NONE, _TWO_ONE, _TWO_TWO = _HANDS
-_FIST_FENG = ("basic_fist", ("feng",), None)
-_FIST_HUO = ("basic_fist", ("huo",), None)
-_BREATH_FENG = ("basic_breath", ("feng",), None)
-_BREATH_HUO = ("basic_breath", ("huo",), None)
+_ONE_TWO, _TWO_NONE, _TWO_ONE, _TWO_TWO = _HANDS
 _MERGE = (None, ("feng", "huo"), None)
 _FIST_BREATH = ("basic_fist", (), "basic_breath")
 _BREATH_FIST = ("basic_breath", (), "basic_fist")
 FORGE_PICKS = [
-    (_ONE, 0, _FIST_FENG, 0.04048437818077755), (_ONE, 1, _FIST_FENG, 0.2550690257394217),
-    (_ONE, 3, _FIST_FENG, 0.36995516654807925), (_ONE, 5, _FIST_FENG, 0.7951935655656966),
-    (_ONE_TWO, 0, _FIST_FENG, 0.25891675029296335), (_ONE_TWO, 1, _MERGE, 0.11791870367106105),
-    (_ONE_TWO, 2, _FIST_FENG, 0.08487199515892163), (_ONE_TWO, 3, _MERGE, 0.9159448117309811),
-    (_ONE_TWO, 4, _MERGE, 0.4788783949238976), (_ONE_TWO, 5, _FIST_FENG, 0.8403481205226678),
-    (_ONE_TWO, 6, _FIST_HUO, 0.7622168307127168), (_ONE_TWO, 7, _FIST_HUO, 0.6509344730398537),
+    (_ONE_TWO, 0, None, 0.7579544029403025), (_ONE_TWO, 1, _MERGE, 0.11791870367106105),
+    (_ONE_TWO, 2, None, 0.9478274870593494), (_ONE_TWO, 3, _MERGE, 0.9159448117309811),
+    (_ONE_TWO, 4, _MERGE, 0.4788783949238976), (_ONE_TWO, 5, None, 0.7417869892607294),
+    (_ONE_TWO, 6, None, 0.8219540423197268), (_ONE_TWO, 7, None, 0.15084917392450192),
     (_TWO_NONE, 0, _FIST_BREATH, 0.04048437818077755), (_TWO_NONE, 1, _BREATH_FIST, 0.2550690257394217),
     (_TWO_NONE, 5, _FIST_BREATH, 0.7951935655656966), (_TWO_NONE, 6, _BREATH_FIST, 0.7622168307127168),
-    (_TWO_ONE, 0, _FIST_FENG, 0.25891675029296335), (_TWO_ONE, 1, _BREATH_FIST, 0.11791870367106105),
-    (_TWO_ONE, 2, _BREATH_FENG, 0.08487199515892163), (_TWO_ONE, 3, _BREATH_FIST, 0.9159448117309811),
-    (_TWO_ONE, 5, _FIST_FENG, 0.8403481205226678), (_TWO_ONE, 7, _BREATH_FENG, 0.6509344730398537),
-    (_TWO_TWO, 0, _FIST_FENG, 0.25891675029296335), (_TWO_TWO, 1, _MERGE, 0.11791870367106105),
-    (_TWO_TWO, 2, _BREATH_FENG, 0.08487199515892163), (_TWO_TWO, 4, _MERGE, 0.4788783949238976),
-    (_TWO_TWO, 5, _BREATH_HUO, 0.7759585674357169), (_TWO_TWO, 6, _FIST_HUO, 0.036822743717221273),
-    (_TWO_TWO, 7, _BREATH_FIST, 0.8212742919913083),
+    (_TWO_ONE, 0, _FIST_BREATH, 0.04048437818077755), (_TWO_ONE, 1, _BREATH_FIST, 0.2550690257394217),
+    (_TWO_ONE, 2, _BREATH_FIST, 0.08487199515892163), (_TWO_ONE, 3, _BREATH_FIST, 0.36995516654807925),
+    (_TWO_ONE, 5, _FIST_BREATH, 0.7951935655656966), (_TWO_ONE, 7, _FIST_BREATH, 0.3948234964231735),
+    (_TWO_TWO, 0, _FIST_BREATH, 0.25891675029296335), (_TWO_TWO, 1, _MERGE, 0.11791870367106105),
+    (_TWO_TWO, 2, _BREATH_FIST, 0.08487199515892163), (_TWO_TWO, 4, _MERGE, 0.4788783949238976),
+    (_TWO_TWO, 5, _FIST_BREATH, 0.8403481205226678), (_TWO_TWO, 6, _BREATH_FIST, 0.7622168307127168),
+    (_TWO_TWO, 7, _BREATH_FIST, 0.6509344730398537),
 ]
 
 
@@ -470,7 +491,7 @@ FORGE_PICKS = [
     "hands,seed,expected,next_random", FORGE_PICKS, ids=[f"{hands}-種子{seed}" for hands, seed, *_ in FORGE_PICKS],
 )
 def test_pick_forge_rolls_the_same_numbers_the_inline_pick_did(content, world, hands, seed, expected, next_random):
-    """Review Focus 5：拆出來之後亂數的擲法與順序跟原本寫在 forge_and_cultivate 裡的一模一樣（五種手上有什麼 × 種子）。"""
+    """釘住 pick_forge 的擲法與順序（四種手上有什麼 × 種子）：武學重構之後重釘，之後再改亂數的用法就會在這裡看到。"""
     two_arts, insights = _HANDS[hands]
     game = armed(content, world)
     if two_arts:
@@ -478,55 +499,54 @@ def test_pick_forge_rolls_the_same_numbers_the_inline_pick_did(content, world, h
     game.state.player.insights = list(insights)
     rng = random.Random(seed)
     plan = bot.pick_forge(game, rng)
-    assert (plan.art_id, plan.insight_ids, plan.other_art) == expected
+    assert (None if plan is None else (plan.art_id, plan.insight_ids, plan.other_art)) == expected
     assert rng.random() == next_random
 
 
+def test_pick_forge_with_one_art_and_one_insight_rolls_nothing(content, world):
+    """武學重構：一門武學、一個意境沒有爐可開（意境是拿去裝的），一次亂數都不擲。"""
+    game = armed(content, world)
+    rng = random.Random(3)
+    state = rng.getstate()
+    assert bot.pick_forge(game, rng) is None
+    assert rng.getstate() == state
+
+
 def _every_try_rejected(content, world, monkeypatch, branch):
-    """四種挑法各一個：手上的東西讓那一條路的每一組都被擋下（FORGE_TRIES 組全部 *_problem 不是 None），
-    其他兩條路的 *_problem 都不擋——要是被擋下之後掉到下一條路去，就會挑出一爐來。
-    回傳（game、這一條路該消耗的亂數＝照原本寫在 forge_and_cultivate 裡的擲法逐字重現的參考擲法）。"""
+    """三種挑法各一個：手上的東西讓那一條路的每一組都被擋下（FORGE_TRIES 組全部 *_problem 不是 None），
+    另一條路的 *_problem 不擋——要是被擋下之後掉到下一條路去，就會挑出一爐來。
+    回傳（game、這一條路該消耗的亂數＝照 pick_forge 的擲法逐字重現的參考擲法）。"""
     game = armed(content, world)
     p = game.state.player
     arts = None
-    if branch in ("blend after the roll", "blend only"):
+    if branch in ("blend with an insight in hand", "blend only"):
         p.member.neigong_id = "basic_breath"
-        p.insights = ["feng"] if branch == "blend after the roll" else []
+        p.insights = ["feng"] if branch == "blend with an insight in hand" else []
     elif branch == "merge":
         p.insights = ["feng", "huo"]
     arts = library.owned_arts(game.state)
     insights = list(p.insights)
 
-    def reference(ref):  # 種子 1 的第一擲是 0.134：小於 MERGE_SHARE 與 BLEND_SHARE，所以那一擲「中」，走這一條路
+    def reference(ref):  # 種子 1 的第一擲是 0.134：小於 MERGE_SHARE，所以那一擲「中」，走合併這一條路
         if branch == "merge":
             assert ref.random() < bot.MERGE_SHARE
             for _ in range(bot.FORGE_TRIES):
                 ref.choice(insights), ref.choice(insights)
-        elif branch == "blend after the roll":
-            assert ref.random() < bot.BLEND_SHARE
+        else:  # 武學重構：只有一個意境不擲合併、武學＋武學也不再擲 BLEND_SHARE——兩種都直接抽兩門
             for _ in range(bot.FORGE_TRIES):
                 ref.sample(arts, 2)
-        elif branch == "blend only":  # 沒有意境：不擲，直接走武學＋武學
-            for _ in range(bot.FORGE_TRIES):
-                ref.sample(arts, 2)
-        else:  # fuse：只有一門武學、一個意境，不擲
-            for _ in range(bot.FORGE_TRIES):
-                ref.choice(arts), ref.choice(insights)
 
-    problem = {
-        "merge": "merge_problem", "blend after the roll": "blend_problem", "blend only": "blend_problem",
-        "fuse": "fuse_problem",
-    }[branch]
+    problem = {"merge": "merge_problem", "blend with an insight in hand": "blend_problem", "blend only": "blend_problem"}[branch]
     monkeypatch.setattr(fusion, problem, lambda *args, **kwargs: "被擋下")
     return game, reference
 
 
-@pytest.mark.parametrize("branch", ["merge", "blend after the roll", "blend only", "fuse"])
+@pytest.mark.parametrize("branch", ["merge", "blend with an insight in hand", "blend only"])
 def test_a_forge_pick_whose_every_try_is_rejected_stops_there_and_draws_the_same_numbers(
     content, world, monkeypatch, branch,
 ):
     """挑出來的那一條路每一組都被擋下：這一輪不合（None），不會掉到下一條路去找別的合；亂數也只消耗那一條路的 FORGE_TRIES 組
-    （原本寫在 forge_and_cultivate 裡的擲法：被擋下之後整段結束）。釘住「被擋下」這條路——前面 29 組釘的都是挑得出來的。"""
+    （被擋下之後整段結束）。釘住「被擋下」這條路——FORGE_PICKS 釘的都是挑得出來的。"""
     game, reference = _every_try_rejected(content, world, monkeypatch, branch)
     rng, ref = random.Random(1), random.Random(1)
     assert bot.pick_forge(game, rng) is None
@@ -542,20 +562,20 @@ def test_forge_and_cultivate_does_not_forge_when_every_try_is_rejected(content, 
 
 
 def test_pick_forge_reads_the_shares_when_it_is_called(content, world, monkeypatch):
-    """份額在呼叫的當下才讀模組常數：改 bot.MERGE_SHARE／BLEND_SHARE（量平衡的腳本會這樣掃）要有效，不是定義函式時就綁死。"""
+    """份額在呼叫的當下才讀模組常數：改 bot.MERGE_SHARE（量平衡的腳本會這樣掃）要有效，不是定義函式時就綁死。
+    武學重構：武學＋意境沒了，BLEND_SHARE 不再擲——兩門在手不論份額一律武學＋武學（明確給 blend_share 也一樣）。"""
     game = armed(content, world)
     game.state.player.insights = ["feng", "huo"]
-    monkeypatch.setattr(bot, "MERGE_SHARE", 0.0)  # 擲不出合併：只剩武學＋意境
-    assert bot.pick_forge(game, Fixed(0.5)).art_id == "basic_fist"
+    monkeypatch.setattr(bot, "MERGE_SHARE", 0.0)  # 擲不出合併：只有一門武學，沒爐可開
+    assert bot.pick_forge(game, Fixed(0.5)) is None
     monkeypatch.setattr(bot, "MERGE_SHARE", 0.9)  # 0.5 < 0.9：合併
     assert bot.pick_forge(game, Fixed(0.5)).art_id is None
     game.state.player.member.neigong_id = "basic_breath"
     monkeypatch.setattr(bot, "MERGE_SHARE", 0.0)
-    monkeypatch.setattr(bot, "BLEND_SHARE", 0.0)
-    assert bot.pick_forge(game, Fixed(0.5)).other_art is None
-    monkeypatch.setattr(bot, "BLEND_SHARE", 0.9)
-    assert bot.pick_forge(game, Fixed(0.5)).other_art is not None
-    assert bot.pick_forge(game, Fixed(0.5), blend_share=0.0).other_art is None  # 明確給的份額照舊優先
+    for share in (0.0, 0.9):
+        monkeypatch.setattr(bot, "BLEND_SHARE", share)
+        assert bot.pick_forge(game, Fixed(0.5)).other_art is not None
+    assert bot.pick_forge(game, Fixed(0.5), blend_share=0.0).other_art is not None
 
 
 def test_forge_and_cultivate_forges_what_pick_forge_picked(content, world):
