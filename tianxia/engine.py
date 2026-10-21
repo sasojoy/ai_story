@@ -10031,7 +10031,8 @@ class Game:
         notes = w.conquest.day_log[mark.log:]
         n = max([e.n for e in w.xingshi], default=0) + 1
         w.xingshi_ticket = XingshiTicket(
-            n=n, key=key, opened_real=self.now, facts=xingshi.facts(w, c, notes, mark.lines, mark.rumors),  # 現實時鐘（FB-577）
+            n=n, key=key, opened_real=self.now,  # 現實時鐘（FB-577）
+            facts=xingshi.facts(w, c, notes, mark.lines, mark.rumors, night=xingshi.is_night(self.pill_now(), c)),  # 白天開的不寫「打到入夜」
             line=xingshi.summary_line(notes, c),
         )
         w.xingshi_mark = XingshiMark(log=len(w.conquest.day_log), rumors=len(w.rumors), lines=xingshi.line_values(w, c))

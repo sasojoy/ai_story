@@ -29,11 +29,14 @@ NUM_PREDICT = 1400  # 八百字的文章加 JSON 外殼：只加不減（模型�
 RULE_FACTS = 12  # 固定段最多拼幾條事實（四條一段）
 LEAN_STRONG, LEAN_UP, LEAN_SLIGHT = 30, 15, 5  # 【開發】戰線離中線幾點算「佔盡上風」「漸佔上風」「略偏」，不到 SLIGHT 是「兩軍相持」
 MOVE_AT = 3  # 【開發】比上一篇動了幾點以上才寫「往某一邊推了一截」
+NIGHT_FROM, NIGHT_UNTIL = 18, 6  # 【開發】當地幾點到幾點開的單算入夜（每天 22:00 那一篇都是；管理者白天開的不是，正在打的那一場不寫「打到入夜」）
 
 # letter／letter_plain、flip／flip_plain：翻地與爭搶（dev/flip-1）的 day_log 多的兩種 by——下戰書（reason 是下戰書的人；管理者的沒有名號）、
-# 推滿當場易手（reason 是推最多的人；這一輪沒人推過就翻的沒有名號）。plan_vote、plan_commander 留給舊季（第二批投票那一版）的 day_log
-FACT_KEYS = ("taken", "taken_blow", "held", "stalemate", "void", "fighting", "plan_vote", "plan_commander", "letter", "letter_plain",
-             "flip", "flip_plain", "line")
+# 推滿當場易手（reason 是推最多的人；這一輪沒人推過就翻的沒有名號）。plan_vote、plan_commander 留給舊季（第二批投票那一版）的 day_log。
+# letter_done／letter_done_plain：那一場已經打完、作罷或正在打的戰書，寫成已經發生的事、照時間順序排在結果前面（FB-610）；
+# fighting_day：白天開的單（管理者「現在就開一篇」）正在打的那一場，不寫「打到入夜」
+FACT_KEYS = ("taken", "taken_blow", "held", "stalemate", "void", "fighting", "fighting_day", "plan_vote", "plan_commander", "letter",
+             "letter_plain", "letter_done", "letter_done_plain", "flip", "flip_plain", "line")
 SUMMARY_KEYS = ("taken", "held", "stalemate", "void", "none")
 LEAN_KEYS = ("strong", "up", "slight", "even")
 MOVE_KEYS = ("toward", "still")
@@ -86,8 +89,8 @@ def _sides(content: Content, sides: list[str]) -> str:
     return "、".join(_side(content, s) for s in sides)
 
 
-def note_fact(content: Content, note: DayNote) -> str | None:
-    """day_log 的一筆寫成一條事實；認不得的是 None。"""
+def note_fact(content: Content, note: DayNote, over: bool = False) -> str | None:
+    """day_log 的一筆寫成一條事實；認不得的是 None。over：那一場已經打完（或作罷、正在打）的戰書，寫成已經發生的事（FB-610）。"""
     fact = lines(content)["fact"]
     place = _place(content, note.loc)
     if note.result == "taken":
@@ -100,7 +103,7 @@ def note_fact(content: Content, note: DayNote) -> str | None:
     if note.void:
         return fact["void"].format(side=_side(content, note.side), place=place)
     if note.by in (conquest_day.LETTER, conquest_day.FLIP):  # 下戰書、推滿易手（翻地與爭搶）：有名號寫名號，沒有寫不帶名號的那一句
-        key = "letter" if note.by == conquest_day.LETTER else "flip"
+        key = ("letter_done" if over else "letter") if note.by == conquest_day.LETTER else "flip"
         return fact[key if note.reason else f"{key}_plain"].format(who=note.reason, side=_side(content, note.side), place=place)
     if note.by == conquest_day.VOTE:
         return fact["plan_vote"].format(side=_side(content, note.side), place=place)
@@ -133,22 +136,31 @@ def move_text(content: Content, line: str, now: int, then: int | None) -> str:
     return words["toward"].format(side=_side(content, side))
 
 
+def is_night(real_now: float, content: Content) -> bool:
+    """這一刻（現實秒）在當地（pill_day_utc_offset_hours）算不算入夜：NIGHT_FROM 點以後、NIGHT_UNTIL 點以前。"""
+    hour = int((real_now + content.config.pill_day_utc_offset_hours * 3600) % 86400 // 3600)
+    return hour >= NIGHT_FROM or hour < NIGHT_UNTIL
+
+
 def line_values(world: WorldState, content: Content) -> dict[str, int]:
     """三條戰線此刻的值（XingshiMark.lines 記它）。"""
     return {line: rules.world_trend_value(world, content, line) for line in rules.front_ids(content)}
 
 
-def facts(world: WorldState, content: Content, notes: list[DayNote], lines_then: dict[str, int], rumors_from: int = 0) -> list[str]:
-    """這一篇的事實（新的一張單；照順序、最多 Config.xingshi.facts_max 條）：收場、作罷、推滿易手（_happened）→ 傍晚還沒打完的那幾場
-    → 三條戰線各一句（偏向、比上一篇往哪一邊動）→ 下一仗打哪裡（戰書；舊季是結算排定的那幾筆，主將定奪的寫原因）→ 上一篇以來的天下大事（rumors_from 之後，
-    新的在前；帶數字的〔公告的時刻〕與〈天下形勢〉自己那一句不收）。每一條都不帶阿拉伯數字。"""
+def facts(world: WorldState, content: Content, notes: list[DayNote], lines_then: dict[str, int], rumors_from: int = 0,
+          night: bool = True) -> list[str]:
+    """這一篇的事實（新的一張單；照順序、最多 Config.xingshi.facts_max 條）：已經發生的事照時間順序（day_log 的順序：收場、作罷、推滿易手，
+    與那一場已經打完、作罷或正在打的戰書〔寫成「某某下戰書攻某地」，FB-610〕）→ 還沒打完的那幾場（night 是假〔白天開的單〕不寫「打到入夜」）
+    → 三條戰線各一句（偏向、比上一篇往哪一邊動）→ 下一仗打哪裡（還沒開打的戰書；舊季是結算排定的那幾筆，主將定奪的寫原因）→ 上一篇以來的
+    天下大事（rumors_from 之後，新的在前；帶數字的〔公告的時刻〕與〈天下形勢〉自己那一句不收）。每一條都不帶阿拉伯數字。"""
     out: list[str] = []
-    done = [n for n in notes if _happened(n)]
-    plans = [n for n in notes if not _happened(n)]
-    for note in done:
-        out.append(note_fact(content, note))
+    over = {i for i, n in enumerate(notes) if _letter_over(world, notes, i)}
+    done = [(n, i in over) for i, n in enumerate(notes) if _happened(n) or i in over]
+    plans = [n for i, n in enumerate(notes) if not _happened(n) and i not in over]
+    for note, past in done:
+        out.append(note_fact(content, note, over=past))
     if world.conquest is not None:
-        fighting = lines(content)["fact"]["fighting"]
+        fighting = lines(content)["fact"]["fighting" if night else "fighting_day"]
         out += [fighting.format(place=_place(content, s.loc)) for s in world.conquest.schedule if s.status == "open"]
     names = {t.id: t.name for t in content.scenario.trends}
     line_fact = lines(content)["fact"]["line"]
@@ -158,7 +170,7 @@ def facts(world: WorldState, content: Content, notes: list[DayNote], lines_then:
     for note in plans:
         out.append(note_fact(content, note))
     seen = set(out)
-    for note in done:  # 易手那一刻 territory 另發的「落入／收復」：跟收場（或推滿易手）那一條是同一件事
+    for note, _ in done:  # 易手那一刻 territory 另發的「落入／收復」：跟收場（或推滿易手）那一條是同一件事
         if note.result == "taken" or note.by == conquest_day.FLIP:
             place, side = _place(content, note.loc), _side(content, note.taken or note.side)
             seen |= {territory.FLIP_LINE.format(place=place, side=side), territory.RETAKE_LINE.format(place=place, side=side)}
@@ -175,6 +187,20 @@ def facts(world: WorldState, content: Content, notes: list[DayNote], lines_then:
 def _happened(note: DayNote) -> bool:
     """這一筆是已經發生的事（收場、作罷、推滿易手），不是排下的下一仗（戰書、舊季的眾議與主將定奪）。"""
     return bool(note.result or note.void or note.by == conquest_day.FLIP)
+
+
+def _letter_over(world: WorldState, notes: list[DayNote], i: int) -> bool:
+    """notes[i] 是一張戰書（還沒有結果的那一筆），而那一場已經不是「下一仗」了（FB-610）：這一篇的窗口裡，它後面同一塊有收場或作罷的那一筆，
+    或同一邊對同一塊又下了一張（一邊一塊同時只有一場，前一張一定收了）；不然看時程表上這一塊還有沒有自己那一邊在攻、還沒開集結的那一場
+    （開了集結正在打、作罷〔換天時辰已過、管理者取消，這兩種不記 day_log〕都算已經不是下一仗）。"""
+    note = notes[i]
+    if note.by != conquest_day.LETTER or _happened(note):
+        return False
+    for later in notes[i + 1:]:
+        if later.loc == note.loc and (later.result or later.void or (later.by == conquest_day.LETTER and later.side == note.side)):
+            return True
+    schedule = world.conquest.schedule if world.conquest is not None else []
+    return not any(s.loc == note.loc and s.status in conquest_day.LIVE and note.side in s.attackers for s in schedule)
 
 
 def summary_line(notes: list[DayNote], content: Content) -> str:

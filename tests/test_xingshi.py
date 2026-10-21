@@ -174,7 +174,10 @@ def test_letters_are_facts_with_the_name():
     huang = game.content.scenario.faction_name("huang", "huang")
     guan = game.content.scenario.faction_name("guan", "guan")
     assert words["letter"].format(who="沈浪", side=huang, place="南陽官道") in t.facts  # 修前 note_fact 認不得，沒有這一條
-    assert words["letter_plain"].format(side=guan, place="荒丘") in t.facts
+    # 管理者 21:45 立刻下的那一張，22:00 換天時辰已過作罷（VOID_LATE）：FB-610 之後寫成已經發生的事（letter_done_plain，照樣不帶名號），
+    # 不再當「下一仗」排在後面（修 FB-610 之前這裡斷言 letter_plain；新規則的測試在 test_xingshi_fb610_order.py）
+    assert words["letter_done_plain"].format(side=guan, place="荒丘") in t.facts
+    assert words["letter_plain"].format(side=guan, place="荒丘") not in t.facts
     assert t.line == xingshi.SUMMARY_HEAD + xingshi.lines(game.content)["summary"]["none"] + "。"  # 還沒打：「是日」照舊各路按兵
 
 @pytest.mark.slow
