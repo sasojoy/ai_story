@@ -151,9 +151,8 @@ def test_a_won_force_promotes_this_player_only_and_uses_one_pill(kicker, content
     p = kicker.player
     p.legend_items = 2
     msgs = cultivation.cultivate(kicker, content, world, "旋風腿", WIN, use_legend=True)
-    assert msgs[0] == PILL and "【旋風腿】衝開了最後那一層，從上品晉為絕學！" == msgs[1]
-    assert "取一個正式的名字" in msgs[2] and msgs[3] == "體力 -10"
-    assert p.art_quality["旋風腿"] == "絕學" and p.legend_items == 1 and p.stamina == 140 and p.naming == "旋風腿"
+    assert msgs == [PILL, "【旋風腿】衝開了最後那一層，從上品晉為絕學！", "體力 -10"]
+    assert p.art_quality["旋風腿"] == "絕學" and p.legend_items == 1 and p.stamina == 140 and p.naming is None
     assert world.get_skill("旋風腿").quality == "下品"  # 全服登記的那一份不動
 
 
@@ -226,15 +225,15 @@ def test_a_save_from_before_the_pill_loads_with_none(state):
 
 def test_a_roll_says_what_it_cost_in_stamina_right_after_the_result(kicker, content, world):
     """FB-070 (b)：修練的回話寫出花了多少體力，跟合併的回話（「心得 -5」「體力 -5」）同一種寫法；數字照 Config.cultivate_stamina。
-    服丹的話在前、擲骰的結果、第一個練成絕學的話，體力那一行最後。"""
+    服丹的話在前、擲骰的結果，體力那一行最後。"""
     content.config.cultivate_stamina = 7
     p = kicker.player
     p.legend_items = 2
     lost = cultivation.cultivate(kicker, content, world, "旋風腿", LOSE, use_legend=True)
     assert len(lost) == 3 and "彈了回來" in lost[1] and lost[2] == "體力 -7"
     peerless = cultivation.cultivate(kicker, content, world, "旋風腿", WIN, use_legend=True)
-    assert peerless[0] == PILL and "晉為絕學" in peerless[1] and "取一個正式的名字" in peerless[2]
-    assert peerless[3] == "體力 -7"  # 體力那一行在最後（定名的話也在它前面）
+    assert len(peerless) == 3 and peerless[0] == PILL and "晉為絕學" in peerless[1]
+    assert peerless[2] == "體力 -7"  # 體力那一行在最後
     assert p.stamina == 150 - 2 * 7
 
 
@@ -248,11 +247,13 @@ def _worn(state, level=10, slots=BASICS):
     return ripen(state, level=level, slots=slots)
 
 
-def test_a_hard_win_at_the_last_step_can_break_through_and_names_the_first(kicker, content, world):
+def test_a_hard_win_at_the_last_step_can_break_through_without_naming(kicker, content, world):
+    """破境不取名（招式與絕學稿案第二輪）：宗師榜照舊記第一個練成的人。"""
     _worn(kicker)
     msgs = cultivation.seize(kicker, content, world, 0.5, WIN)
-    assert msgs[0] == "這一戰打到最後，【旋風腿】忽然通了——從上品晉為絕學！"
-    assert kicker.player.art_quality["旋風腿"] == "絕學" and kicker.player.naming == "旋風腿"
+    assert msgs == ["這一戰打到最後，【旋風腿】忽然通了——從上品晉為絕學！"]
+    assert kicker.player.art_quality["旋風腿"] == "絕學" and kicker.player.naming is None
+    assert world.master_of("旋風腿") == "沈浪"
 
 
 def test_a_missed_chance_leaves_a_soft_hint_and_changes_nothing(kicker, content, world):
@@ -300,7 +301,7 @@ def test_the_chance_is_switched_off_by_a_zero_chance(kicker, content, world):
     assert cultivation.seize(kicker, content, world, 1.0, WIN) == []
 
 
-# ── 第一個練成絕學的人定名 ──────────────────────────
+# ── 第一個練成絕學的人定名（退掉了；這一版之前還等著定名的存檔照舊定得了名）──────────────────────────
 
 
 def _master(state, content, world, art_id="旋風腿", rng=WIN):
@@ -309,9 +310,15 @@ def _master(state, content, world, art_id="旋風腿", rng=WIN):
     return cultivation.cultivate(state, content, world, art_id, rng, use_legend=True)
 
 
-def test_the_first_to_reach_peerless_names_it_for_everyone(kicker, content, world):
-    msgs = _master(kicker, content, world)
-    assert kicker.player.naming == "旋風腿" and any("取一個正式的名字" in m for m in msgs)
+def _legacy(state, content, world, art_id="旋風腿"):
+    """練成絕學，再補上舊版留下來的取名權（破境之前的存檔：PlayerState.naming 還等著）。"""
+    _master(state, content, world, art_id)
+    assert state.player.naming is None
+    state.player.naming = art_id
+
+
+def test_a_legacy_save_waiting_for_its_name_still_names_it_for_everyone(kicker, content, world):
+    _legacy(kicker, content, world)
     cultivation.name_mastered(kicker, content, world, "風神腿")
     assert world.get_skill("旋風腿").name == "風神腿" and kicker.player.naming is None
     assert any("風神腿" in r.text for r in kicker.world.chronicle)
@@ -319,7 +326,7 @@ def test_the_first_to_reach_peerless_names_it_for_everyone(kicker, content, worl
 
 def test_the_chronicle_line_names_the_old_name_and_the_new_one(kicker, content, world):
     """F14：每一件各寫一行（換季那一行是另外一份總結，T10）。"""
-    _master(kicker, content, world)
+    _legacy(kicker, content, world)
     cultivation.name_mastered(kicker, content, world, "風神腿")
     assert [r.text for r in kicker.world.chronicle] == ["沈浪把【旋風腿】練成絕學，為之定名【風神腿】。"]
 
@@ -327,19 +334,19 @@ def test_the_chronicle_line_names_the_old_name_and_the_new_one(kicker, content, 
 def test_an_anonymous_namer_goes_into_the_chronicle_by_name(kicker, content, world):
     """匿名行走只作用在地方傳聞（傳聞分層第七節，企劃者 2026-10-06）：江湖史一律寫名號，定名那一筆也是。"""
     kicker.player.anonymous = True
-    _master(kicker, content, world)
+    _legacy(kicker, content, world)
     cultivation.name_mastered(kicker, content, world, "風神腿")
     assert [r.text for r in kicker.world.chronicle] == ["沈浪把【旋風腿】練成絕學，為之定名【風神腿】。"]
 
 
-def test_the_second_to_reach_peerless_sees_an_anonymous_first_by_name(kicker, content, world):
-    """第一個練成的人匿名行走：取名權照名號認（身分），後到的人看到的也是名號（江湖上的首創不能匿名）。"""
+def test_an_anonymous_first_is_recorded_by_name(kicker, content, world):
+    """第一個練成的人匿名行走：宗師榜照名號記（身分，江湖上的首創不能匿名）；後到的人不改宗師榜。"""
     kicker.player.anonymous = True
     _master(kicker, content, world)
-    assert world.master_of("旋風腿") == "沈浪" and kicker.player.naming == "旋風腿"
+    assert world.master_of("旋風腿") == "沈浪"
     other = ripen(equip(new_game_state(content, "乙")))
     msgs = _master(other, content, world)
-    assert "這門武學已由沈浪率先練成絕學。" in msgs and not any("某位少俠" in m for m in msgs)
+    assert world.master_of("旋風腿") == "沈浪" and not any("某位少俠" in m for m in msgs)
 
 
 def test_the_season_firsts_write_an_anonymous_player_by_name(state, content, world):
@@ -363,7 +370,7 @@ def test_the_season_firsts_write_an_anonymous_player_by_name(state, content, wor
     model.chat_structured.side_effect = [naming.NameReply(name="燎原")]
     fusion.merge(state, content, world, model, "feng", "huo")
     ripen(state, art.id)
-    _master(state, content, world, art.id)
+    _legacy(state, content, world, art.id)
     cultivation.name_mastered(state, content, world, "風神腿")
     world.mutate_season(lambda season: setattr(season, "ended", True))
     assert world.next_season(content, now=1.0)
@@ -375,25 +382,22 @@ def test_the_season_firsts_write_an_anonymous_player_by_name(state, content, wor
     ]
 
 
-def test_the_second_to_reach_peerless_does_not_name_it(kicker, content, world):
+def test_the_second_to_reach_peerless_does_not_take_the_masters_list(kicker, content, world):
     world.claim_master("旋風腿", "甲")
-    msgs = _master(kicker, content, world)
-    assert kicker.player.naming is None and any("甲" in m for m in msgs)
+    _master(kicker, content, world)
+    assert kicker.player.naming is None and world.master_of("旋風腿") == "甲"
 
 
-def test_two_players_reaching_peerless_together_only_the_first_names_it(kicker, content, world):
-    """兩個人這一刻都把同一門武學練成絕學：claim_master 是原子的，只有先登記的拿到取名權；
-    後到的沒有 naming，也取不了名（沒有等著他取名的武學），全服的名字只被改一次。"""
+def test_two_players_reaching_peerless_together_name_nothing(kicker, content, world):
+    """兩個人這一刻都把同一門武學練成絕學：claim_master 是原子的，宗師榜只記先登記的；
+    破境不取名，兩個人都沒有 naming，全服的名字不變。"""
     other = ripen(equip(new_game_state(content, "乙")))
     _master(kicker, content, world)
-    msgs = _master(other, content, world)
-    assert kicker.player.naming == "旋風腿" and other.player.naming is None
-    assert any("沈浪" in m for m in msgs) and world.master_of("旋風腿") == "沈浪"
+    _master(other, content, world)
+    assert kicker.player.naming is None and other.player.naming is None and world.master_of("旋風腿") == "沈浪"
     assert cultivation.name_mastered(other, content, world, "裂地腿") == ["（沒有等著你取名的武學。）"]
-    assert world.get_skill("旋風腿").name == "旋風腿"  # 後到的沒改成
-    cultivation.name_mastered(kicker, content, world, "風神腿")
-    assert world.get_skill("旋風腿").name == "風神腿"
-    assert cultivation.name_mastered(kicker, content, world, "另一個名") == ["（沒有等著你取名的武學。）"]  # 一門只取一次
+    assert cultivation.name_mastered(kicker, content, world, "風神腿") == ["（沒有等著你取名的武學。）"]
+    assert world.get_skill("旋風腿").name == "旋風腿"
 
 
 def test_the_last_step_to_peerless_waits_until_the_pending_naming_is_done(kicker, content, world):
@@ -458,7 +462,7 @@ def test_naming_an_art_that_has_gone_missing_says_so_and_changes_nothing(state, 
 def test_after_a_rename_the_name_shows_everywhere_and_the_id_still_keys(kicker, content, world):
     """Task 1 的提醒：改名之後 id 跟顯示的名字不一樣。顯示的地方都要寫新名字（功法庫、功法卡、修練頁那一列），
     認東西的地方都要照 id（擁有、品質、熟練度、登記）。"""
-    _master(kicker, content, world)
+    _legacy(kicker, content, world)
     cultivation.name_mastered(kicker, content, world, "風神腿")
     # 顯示：新名字
     assert team.resolve_art("旋風腿", content, world).name == "風神腿"
@@ -597,9 +601,9 @@ def test_a_refused_cultivation_writes_no_journal_entry(adept, break_it):
 
 
 def test_melting_the_art_waiting_for_its_name_is_refused_without_an_entry(adept):
-    """練成絕學、還沒定名的那門不能熔：熔了，讀檔清理會把取名權連同已登記的第一人一起丟掉。"""
+    """舊存檔練成絕學、還沒定名的那門不能熔：熔了，讀檔清理會把取名權連同已登記的第一人一起丟掉。"""
     adept.cultivate("旋風腿", use_legend=True)
-    assert adept.state.player.naming == "旋風腿"
+    adept.state.player.naming = "旋風腿"
     before = list(adept.state.journal)
     msgs = adept.melt_art("旋風腿")
     assert "先替它定名" in msgs[0] and "旋風腿" in adept.state.player.arts and adept.state.journal == before
@@ -616,7 +620,7 @@ def test_a_basic_art_is_refused_without_a_journal_entry(adept):
 
 def test_naming_writes_the_chronicle_the_journal_and_saves_the_season(adept):
     adept.cultivate("旋風腿", use_legend=True)
-    assert adept.state.player.naming == "旋風腿"
+    adept.state.player.naming = "旋風腿"  # 破境之前的存檔還等著定名
     msgs = adept.name_mastered("風神腿")
     assert "風神腿" in msgs[0] and adept.state.journal[0].tag == msgs[0]
     assert [r.text for r in adept.world.get_season().chronicle][-1] == "沈浪把【旋風腿】練成絕學，為之定名【風神腿】。"  # 存回共用賽季了

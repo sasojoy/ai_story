@@ -61,7 +61,7 @@ import server_push
 import zhuan_html
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
-    arena_crowd, battle_instance, biography, calendar, companion_agent, create, divine, duel, event_llm, feasts, fight_llm, foreshadow, gather_llm, gender, glyph, insight_llm, leaderboard, letters, mall, mapdata,
+    arena_crowd, ascend, battle_instance, biography, calendar, companion_agent, create, divine, duel, event_llm, feasts, fight_llm, foreshadow, gather_llm, gender, glyph, insight_llm, leaderboard, letters, mall, mapdata, might,
     naming,
     ollama_client, rules,
     precise, seal, seal_duel, server_bots, social, sortie, speech, tavern, team, timetable, treasures, xingshi, yuedan,
@@ -1368,6 +1368,21 @@ def create_intent(game: Game, body: dict) -> list[str]:
     return act(game, lambda g: g.create_intent(request.text, reading=value))
 
 
+def ascend_line(game: Game) -> list[str]:
+    """破境卡那一句（tianxia/ascend.py），三段同 create_intent：A Game.ascend_request（只讀）→ B 鎖外 ascend.read
+    （預算同隨口應對）→ C Game.ascend_line 存回卡上（卡換了就不存）。叫不動照套句。"""
+    started, request = _open_request(game, game.ascend_request)
+    if request is None:
+        return []
+    total = game.content.config.free_text_budget_seconds
+
+    def writing():
+        return ascend.read(within_budget(game.client, total - (_monotonic() - started)), request)
+
+    value = model_call(game, writing, fallback=ascend.fallback(request), left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT)
+    return act(game, lambda g: g.ascend_line(request, value))
+
+
 def tavern_ask(game: Game, text: str) -> list[str]:
     """問酒家（酒肆，設計第八節），三段：A Game.tavern_ask_request（只讀；問到秘密的單子不叫模型）→ B 鎖外 tavern.ask_write
     （預算 Config.tavern.ask_budget_seconds）→ C Game.tavern_ask 重驗同一間、同一句再收錢；叫不動模型退全額。"""
@@ -1578,6 +1593,11 @@ def menxia_view(game: Game, person: str | None = None) -> dict:
         # 裝備（裝備四欄設計 2.5）：開著的欄位一段一段（武器、防具、坐騎），每段身上那件、裝備庫裡同一欄的；格數四欄合算。
         # 都關著時 slots 是空的，修練頁那一塊不畫
         "gear": game.gear_rows(),
+        # 全身的戰力（招式與絕學稿案第四輪；tianxia/might.py）：修練頁人形圖氣血旁邊那個數，換上清單的「→ N」跟它比
+        "might": might.now(game.state, game.content, game.world),
+        # 自創武學的入口從煉製搬到修練（第四輪）：開關關著、還在序章裡是 None
+        "create": {"price": create.price(game.state, game.content), "problem": create.allowed(game.state, game.content)}
+        if create.on(game.content) else None,
     }
 
 
@@ -2233,6 +2253,8 @@ def api_do(op: str, request: Request, body: dict = Body(default={})):
         msgs = duel_text(game, str(body.get("text", "")))
     elif op == "create_intent":  # 自創武學的形意：意分在行動鎖外評（見 create_intent）
         msgs = create_intent(game, body)
+    elif op == "ascend_line":  # 破境卡那一句：模型在行動鎖外寫（見 ascend_line）
+        msgs = ascend_line(game)
     elif op == "tavern_ask":  # 問酒家：回話在行動鎖外寫（見 tavern_ask）
         msgs = tavern_ask(game, str(body.get("text", ""))[:60])
     elif op == "feast_text":  # 宴席上自己寫的敬酒詞：分數在行動鎖外評（見 feast_text）
@@ -2290,8 +2312,9 @@ MENXIA_ACTIONS = {
     "create_begin": lambda g, b: g.create_begin(str(b.get("kind") or ""), str(b.get("form") or "")),
     "create_pose": lambda g, b: g.create_pose(b.get("pose") if isinstance(b.get("pose"), dict) else {}),
     "create_back": lambda g, b: g.create_back(str(b.get("to") or "")),
-    "create_name": lambda g, b: g.create_name(str(b.get("name") or "")),
+    "create_name": lambda g, b: g.create_name(str(b.get("name") or ""), str(b.get("move") or "")[:create.MOVE_MAX * 2]),
     "create_cancel": lambda g, b: g.create_cancel(),
+    "ascend_dismiss": lambda g, b: g.ascend_dismiss(),  # 看過破境卡了
     # 用融的意境修練一次，衝下一品；use_legend 是勾了「服下破境丹」。只認真正的布林 true：字串、數字都不算勾
     "cultivate": lambda g, b: g.cultivate(str(b.get("art") or ""), use_legend=b.get("use_legend") is True),
     "melt": lambda g, b: g.melt_art(str(b.get("art") or "")),  # 功法庫裡的一門熔成心得

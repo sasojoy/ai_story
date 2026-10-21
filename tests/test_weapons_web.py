@@ -88,7 +88,7 @@ def test_a_player_with_no_gear_still_gets_a_compact_gear_block_saying_where_to_g
     m, x = views
     x["gear"] = _where_gear()
     page = run(m, "return H.pagePractice();", menxia=x)
-    block = page.split('class="gear gear-empty"')[1].split("功法庫")[0]  # 這一塊後面接的是「功法庫」那一段
+    block = page.split('class="gear gear-empty"')[1].split('<div class="label">門下')[0]  # 這一塊後面接的是「門下」那一段（招式與絕學稿案第四輪：裝備排在功法庫、意境之後）
     assert "裝備" in block
     for slot, label, empty in (("weapon", "武器", "手上沒有兵器。"), ("armor", "防具", "身上沒有防具。"), ("mount", "坐騎", "身上沒有坐騎。"), ("treasure", "寶物", "身上沒有寶物。")):
         line = block.split(f'data-empty="{slot}"')[1].split("</p>")[0]
