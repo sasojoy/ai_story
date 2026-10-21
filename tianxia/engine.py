@@ -9996,7 +9996,7 @@ class Game:
         notes = w.conquest.day_log[mark.log:]
         n = max([e.n for e in w.xingshi], default=0) + 1
         w.xingshi_ticket = XingshiTicket(
-            n=n, key=key, opened_real=self.pill_now(), facts=xingshi.facts(w, c, notes, mark.lines, mark.rumors),
+            n=n, key=key, opened_real=self.now, facts=xingshi.facts(w, c, notes, mark.lines, mark.rumors),  # 現實時鐘（FB-577）
             line=xingshi.summary_line(notes, c),
         )
         w.xingshi_mark = XingshiMark(log=len(w.conquest.day_log), rumors=len(w.rumors), lines=xingshi.line_values(w, c))
@@ -10020,12 +10020,13 @@ class Game:
 
     def _xingshi_grace(self) -> bool:
         """還在等模型的那一張單開了 Config.xingshi.grace_seconds（現實秒）還沒交回：照固定段收（伺服器關著、模型壞了，照樣每天一篇）。
-        暫停中不收（暫停凍結世界的變化）。收了回 True（呼叫端存季）。"""
+        暫停中不收（暫停凍結世界的變化）。收了回 True（呼叫端存季）。開單、寬限、重試一律照現實時鐘 self.now（FB-577：管理者快轉推的
+        advanced_real 只活在那一個 Game 裡，拿 pill_now 開的單，沒快轉過的 Game 要等現實追上十幾個小時才收得掉）；換天照舊認 pill_now。"""
         c, w = self.content, self.state.world
         ticket = w.xingshi_ticket
         if ticket is None or not xingshi.on(c, w) or self.world.paused_at() is not None:
             return False
-        if self.pill_now() - ticket.opened_real < c.config.xingshi.grace_seconds:
+        if self.now - ticket.opened_real < c.config.xingshi.grace_seconds:
             return False
         self._xingshi_finish(None)
         return True
@@ -10033,7 +10034,7 @@ class Game:
     def xingshi_waiting(self) -> bool:
         """有一張單等著伺服器拿去請模型寫（server._xingshi_waiting 問；還沒被拿走、上一趟沒輪到的隔過 retry_seconds 了）。只讀。"""
         ticket = self.state.world.xingshi_ticket
-        return (ticket is not None and not ticket.taken and self.pill_now() >= ticket.retry_at
+        return (ticket is not None and not ticket.taken and self.now >= ticket.retry_at
                 and xingshi.on(self.content, self.state.world))
 
     def release_xingshi(self, request: xingshi.XingshiRequest) -> bool:
@@ -10042,7 +10043,7 @@ class Game:
         ticket = self.state.world.xingshi_ticket
         if ticket is None or ticket.n != request.n or ticket.key != request.key:
             return False
-        ticket.taken, ticket.retry_at = False, self.pill_now() + self.content.config.xingshi.retry_seconds
+        ticket.taken, ticket.retry_at = False, self.now + self.content.config.xingshi.retry_seconds
         self._save_season()
         return True
 

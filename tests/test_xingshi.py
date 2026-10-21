@@ -239,6 +239,31 @@ def test_grace_also_runs_on_the_server_schedule():
 
 
 @pytest.mark.slow
+def test_fb577_grace_and_retry_use_the_real_clock_after_a_fast_forward():
+    """FB-577（QA 第三批 A）：管理者快轉跨過 22:00 開的單，寬限與重試照現實時鐘（Game.now）算——快轉推的 advanced_real 只活在那一個
+    Game 的記憶體裡，沒快轉過的 Game（伺服器排程、別的玩家）拿它比會差上十幾個小時。修前 opened_real 是快轉過的時間，排程要等到現實追上
+    （QA 量到 +47705 秒）才照固定段收。換天本身照舊認快轉過的時鐘（快轉跨過 22:00 就換天）。"""
+    game = _game(DAY0)
+    _tick(game, DAY0)
+    game.advance(13 * 3600 * game.content.config.time_scale)  # 現實 10:00 快轉十三小時：跨過 22:00
+    w = game.world.get_season()
+    ticket = w.xingshi_ticket
+    assert ticket is not None and ticket.n == 1  # 快轉跨過 22:00 照樣換天、開單
+    assert ticket.opened_real == DAY0  # 修前是 DAY0 + 13 小時
+    req = game.xingshi_request()  # 快轉過的那一個 Game 拿走、沒輪到模型（假人的名額被佔）放回去
+    assert req is not None and game.release_xingshi(req)
+    retry = game.content.config.xingshi.retry_seconds
+    assert game.world.get_season().xingshi_ticket.retry_at == DAY0 + retry  # 修前是 DAY0 + 13 小時 + retry
+    ticker = Game.for_world(game.content, game.world)
+    ticker.now = DAY0 + retry + 1
+    ticker.state.world = game.world.get_season()
+    assert ticker.xingshi_waiting()  # 沒快轉過的 Game：重試的時候到了
+    ticker.world_tick(DAY0 + 901)  # 伺服器排程：現實過了 grace_seconds
+    w = game.world.get_season()
+    assert w.xingshi_ticket is None and len(w.xingshi) == 1 and w.xingshi[0].by_rule
+
+
+@pytest.mark.slow
 def test_model_essay_is_kept_and_stale_request_is_dropped():
     game = _game(DAY0)
     _tick(game, DAY0)
