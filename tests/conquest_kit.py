@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest import mock
 
 from conftest import real_content
-from tianxia import team, territory
+from tianxia import conquest, team, territory
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game
 from tianxia.models import Content
@@ -87,3 +87,9 @@ def announce(game: Game, loc_id: str, side: str, minute: int = 21 * 60, merged: 
     )
     w.conquest.schedule.append(slot)
     return slot
+
+
+def press(game: Game, loc_id: str, side: str, amount: float = 20, name: str = "敵將") -> None:
+    """side 在這一塊推了一截（翻地與爭搶：守城軍令認「自家被推得最高、守得動」的那幾塊，conquest.focus_blocks）。第二批的測試拿 announce
+    當「這一塊被公告要攻」的，翻地之後換成這個——announce 排進時程表等於那一塊被戰書凍結，凍結的守不動、不算守城的地方。"""
+    conquest.push(game.state.world, game.content, loc_id, side, name, amount, "attack")

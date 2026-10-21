@@ -69,7 +69,7 @@ def one_day() -> tuple[Game, xingshi.XingshiRequest]:
     game.state.world = game.world.get_season()
     w = game.state.world
     slot = SiegeSlot(id="try-1", key=w.conquest.settled_key, loc="nanyang_road", minute=21 * 60, at=w.time + 1800, muster_at=w.time,
-                     attackers=["huang"], by={"huang": "vote"}, reasons={"huang": ""}, status="waiting")
+                     attackers=["huang"], by={"huang": "letter"}, reasons={"huang": "史官試筆"}, status="waiting")  # 戰書排的（翻地與爭搶）
     w.conquest.schedule.append(slot)
     game._save_season()
     siege.open_waiting(game.world, content, game.now)
@@ -82,7 +82,7 @@ def one_day() -> tuple[Game, xingshi.XingshiRequest]:
     game._apply_battle_outcome(game.world.mutate_siege(battle.record_id, close))
     game.state.world = game.world.get_season()
     game.now = _tw(20, 22, 1)
-    game._conquest_tick()  # 22:01 結算：排明天的攻城、開一張〈天下形勢〉的單
+    game._conquest_tick()  # 22:01 換天：開一張〈天下形勢〉的單（翻地與爭搶之後換天不排攻城）
     game.state.world = game.world.get_season()
     request = game.xingshi_request()
     assert request is not None, "沒開成單（領地爭奪或〈天下形勢〉沒開？）"

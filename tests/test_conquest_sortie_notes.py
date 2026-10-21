@@ -1,11 +1,12 @@
 """領地爭奪第一批 QA 之後：行動列底下出陣那一行照實寫（FB-532、FB-533），敵方大本營與廣宗不給攻（計畫第八章裁決 18）。字待 joy 潤。
 
-第二批起只有今天公告的目標推得動進度：寫「推這一塊的進度」的幾條先把那一塊公告了（計畫 6.2「合併 conquest-1 修正」）。"""
+翻地與爭搶（輿圖簡化設計第四章）之後碰得到的每一塊都推得動（不再只推今天公告的目標），推不動照 conquest.push_problem 寫原因：
+「今天沒有公告」那幾句換成原因（沒人在推、不相連）；裁決 21 的一個括號照留。"""
 from __future__ import annotations
 
 import pytest
 
-from conquest_kit import announce, conquest_game, go, join, plain_game
+from conquest_kit import conquest_game, go, join, plain_game
 from tianxia import conquest, howto
 
 pytestmark = pytest.mark.slow  # 建 Game、載正式內容
@@ -31,29 +32,29 @@ def test_own_fixed_block_hold_line_reads_right():
 
 def test_own_capturable_block_hold_line_is_unchanged():
     game = go(join(conquest_game("season21"), "guan"), "yingchuan_wilds")
-    announce(game, "yingchuan_wilds", "huang")  # 第二批：黃巾今天公告要攻這一塊，官軍守才推得動
+    conquest.push(game.state.world, game.content, "yingchuan_wilds", "huang", "某", 20, "attack")  # 黃巾在推：官軍守拉得回來
     assert _note(game, "yingchuan_wilds") == (
-        "這裡是自家地盤：不用打，推這一塊的進度、記貢獻（量是攻的一半）；拿自家隊伍 3 成的心得與經驗。今日還能出陣 5 次。"
+        "這裡是自家地盤：不用打，把對面在這裡的進度拉回來、記貢獻（量是攻的一半）；拿自家隊伍 3 成的心得與經驗。今日還能出陣 5 次。"
     )
 
 
 @pytest.mark.parametrize("loc", ["hilltop_wilds", "runan"])
-def test_own_unannounced_block_hold_line_has_one_parenthesis(loc):
-    """第二批 QA 第 8 項（計畫第八節裁決 21）：自家沒被公告的區塊守，那一行不再是「推不動進度（這一塊今天沒有公告攻城）（量是攻的一半）」
-    兩個括號連在一起——合成一個括號、意思不變。荒丘是被管理者定給黃巾的中立地，汝南是黃巾開季的陣營區塊（區塊表 v3 之前用汝南荒野）。"""
+def test_own_idle_block_hold_line_has_one_parenthesis(loc):
+    """計畫第八節裁決 21：自家推不動的區塊守（翻地與爭搶之後是「沒人在推」），推不動的原因與「量是攻的一半」合成一個括號。
+    荒丘是被管理者定給黃巾的中立地，汝南是黃巾開季的陣營區塊（區塊表 v3 之前用汝南荒野）。"""
     game = go(join(conquest_game("season21"), "huang"), loc)
     conquest.set_control(game.state.world, game.content, "hilltop_wilds", "huang")
     note = _note(game, loc)
     assert "）（" not in note and note.count("（") == 1  # 修前兩個括號
     assert note == (
-        "這裡是自家地盤：不用打，推不動進度（這一塊今天沒有公告攻城；有公告時守推的量是攻的一半）；拿自家隊伍 3 成的心得與經驗。今日還能出陣 5 次。"
+        "這裡是自家地盤：不用打，推不動進度（沒有人在推這裡，守了也拉不動；有人來攻時守拉的量是攻的一半）；拿自家隊伍 3 成的心得與經驗。今日還能出陣 5 次。"
     )
 
 
-def test_others_unannounced_block_line_is_unchanged():
-    """別人的沒公告區塊本來就只有一個括號：照舊。"""
-    game = go(join(conquest_game("season21"), "guan"), "runan")  # 黃巾開季的陣營區塊（區塊表 v3 之前用汝南荒野）
-    assert _note(game, "runan").startswith("這裡歸別人：打一場，打贏推不動進度（這一塊今天沒有公告攻城）；只拿對手 3 成的心得與經驗，")
+def test_others_block_out_of_reach_line_says_why():
+    """別人的區塊、跟自家的領地不相連：一個括號寫原因。"""
+    game = go(join(conquest_game("season21"), "guan"), "runan")
+    assert _note(game, "runan").startswith("這裡歸別人：打一場，打贏推不動進度（這裡跟自家的領地不相連）；只拿對手 3 成的心得與經驗，")
 
 
 def test_switch_off_hold_line_is_unchanged():
@@ -67,7 +68,6 @@ def test_switch_off_hold_line_is_unchanged():
 def test_unheld_neutral_block_does_not_say_someone_else_holds_it():
     """FB-533（1）：還沒人佔的中立地，出陣那一行不寫「這裡歸別人」。"""
     game = go(join(conquest_game("season21"), "guan"), "runan_wilds")  # 區塊表 v3 之前用官軍大營（現在是官軍的）
-    announce(game, "runan_wilds", "guan")  # 第二批：今天公告的才推得動
     note = _note(game, "runan_wilds")
     assert note.startswith("這裡還沒有人佔：打一場，打贏推這一塊的進度、記貢獻；只拿對手 3 成的心得與經驗，")
     assert "這裡歸別人" not in note
@@ -76,7 +76,6 @@ def test_unheld_neutral_block_does_not_say_someone_else_holds_it():
 def test_neutral_block_held_by_the_enemy_still_says_so():
     game = go(join(conquest_game("season21"), "guan"), "hilltop_wilds")
     conquest.set_control(game.state.world, game.content, "hilltop_wilds", "huang")
-    announce(game, "hilltop_wilds", "guan")  # 第二批：今天公告的才推得動
     assert _note(game, "hilltop_wilds").startswith("這裡歸別人：打一場，打贏推這一塊的進度、記貢獻；")
 
 

@@ -10,7 +10,7 @@ import hashlib
 import random
 from dataclasses import dataclass
 
-from . import allied, arena, atlas, battle_instance, bot, bounties, conquest, conquest_day, cultivation, duel, explore_modes, forge_secrets, invites, leaderboard, library, mingtie, naming, orders, precise, rules, sensing, server_bots, social, sortie, team
+from . import allied, arena, atlas, battle_instance, bot, bounties, conquest, cultivation, duel, explore_modes, forge_secrets, invites, leaderboard, library, mingtie, naming, orders, precise, rules, sensing, server_bots, social, sortie, team
 from .bot import allocate_points, can_practise, wants_heal
 from .engine import FREE_TEXT_OPTION, IDLE_MARK, Game, Option
 from .models import MOVES, Content, Effect, SkillDef
@@ -478,7 +478,6 @@ def look_after(game: Game, rng: random.Random) -> None:
     allocate_points(game, rng)
     _make_card(game)  # 名帖（不擲亂數）
     bot.check_in(game)  # 每日簽到（21 天季，正式季整合 8.1；不擲亂數，四階照名號＋季數的種子挑）
-    _conquest_vote(game)  # 領地爭奪第二批：每天投一票（裁決 9：假人照樣投，含第 4 階；不擲亂數）
     bot.take_pill(game)  # 體力見底、手上有回體丹就吃一顆（內測贈送，真人假人一樣拿到）
     if wants_heal(game):
         game.heal()
@@ -492,22 +491,6 @@ def look_after(game: Game, rng: random.Random) -> None:
     bot.teach(game, TEACH_PER_TICK)  # 傳功門下：心得多出來就傳給同伴、部下（不擲亂數）
     bot.trade_at_smith(game)  # 素材與經濟（計畫 B5）：人在鐵匠鋪就升階、賣多的（不擲亂數；不為了它進鐵匠鋪）
     bot.donate_spare(game)  # 人在自家大本營就捐多的素材（不擲亂數；不為了它繞路）
-
-
-def _conquest_vote(game: Game) -> None:
-    """領地爭奪第二批（裁決 9、設計 4.9）：投靠了官軍或黃巾的假人一天投一次「主將建議的那一組」（conquest_day.commander_picks 的第一組，
-    同一天同一邊大家投得一樣），投過了這一天不再投。在任的第 4 階假人也投（算進 55% 那一組）；不下令（沒有下令這一條了）。"""
-    s, c = game.state, game.content
-    w = s.world
-    if game._vote_problem() is not None:
-        return
-    side, key = game._conquest_side(), game._vote_key()
-    if w.conquest.votes_for == key and s.player.name in w.conquest.votes.get(side, {}):
-        return
-    valid = conquest_day.slots(w, c, key, game.pill_now())
-    picks = conquest_day.commander_picks(w, c, side, 1, key, set(), valid)
-    if picks:
-        game.conquest_vote(picks[0][0].loc, picks[0][0].minute)
 
 
 def tend_arts(game: Game, rng: random.Random, slot: NamingSlot | None = None) -> list[str]:
@@ -829,6 +812,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
             s, c = game.state, game.content
             if sortie.on(c) and game.sortie_mode() == "stir":
                 return STIR_SCORE if game.sortie_push() else None  # 線在 50：攪局什麼都不推
+            if _cannot_push(game, s.player.location):  # 領地爭奪：推不動的地方不出陣（翻地 QA 順帶：真人看得出有人一直在推不動的地方出陣）
+                return None
             bonus = ORDER_SCORE if orders.win_counts(s, c, game._side(), s.player.location) else 0.0
             if sortie.on(c) and game.sortie_mode() == "hold" and orders.duty_counts(s, c, game._side(), s.player.location):
                 bonus += ORDER_SCORE  # 出陣的守算一次守城（同守勢行動）
@@ -1076,6 +1061,22 @@ def _bounty_hop(game: Game) -> str | None:
 
 
 def _order_hop(game: Game) -> str | None:
-    """往這週軍令要去的地方，路程最近的那一站；已經在、沒有軍令、走不到時是 None（計畫 T6）。"""
-    places = orders.targets(game.state, game.content, game._side())
+    """往這週軍令要去的地方，路程最近的那一站；已經在、沒有軍令、走不到時是 None（計畫 T6）。
+    領地爭奪：只為了截糧才去、去了出陣推不動的地方不去（翻地 QA 順帶：開季的截糧軍令把假人拉到碰不到的中立地，一直在那裡出陣、連輸中立駐軍）；
+    攻城、守城的地方照 orders.targets（自家被戰書凍結的那一塊推不動，但要去加入攻城站守方，FB-605）。"""
+    s, c, side = game.state, game.content, game._side()
+    places = orders.targets(s, c, side)
+    if places and conquest.on(c, s.world):
+        others = set(orders.targets(s, c, side, skip=frozenset({"intercept"})))
+        places = [loc for loc in places if loc in others or not _cannot_push(game, loc)]
     return next_hop(game, places) if places else None
+
+
+def _cannot_push(game: Game, loc_id: str | None) -> bool:
+    """領地爭奪的季，在這一塊出陣（自家的守、別人的與中立地的攻）推不動進度（conquest.push_problem）。不是區塊、開關關著、散人都是假（照舊）。"""
+    s, c = game.state, game.content
+    side = game._side()
+    if loc_id is None or side is None or not conquest.on(c, s.world) or loc_id not in conquest.blocks(c):
+        return False
+    how = "hold" if conquest.holder(s.world, c, loc_id) == side else "attack"
+    return conquest.push_problem(s.world, c, side, loc_id, how) is not None

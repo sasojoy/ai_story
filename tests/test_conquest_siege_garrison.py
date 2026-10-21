@@ -1,11 +1,11 @@
-"""領地爭奪：攻城軍令＝今天公告的目標，打贏那裡的守軍就記功，中立駐軍也算（計畫第八節裁決 20，PM 2026-10-21；推翻第一批 FB-531 與
-合併 conquest-1 時「只算敵方陣營的隊伍」那一半）。軍令卡列的、記功的、假人往哪裡走、發不發攻城照舊問同一個判斷（`orders.siege_win`），
-不會列了卻記不到、或記得到卻沒列。沒公告的地方照舊不列、不記；開關關著一個字都不變（test_conquest_fb531_siege 的最後一條）。"""
+"""領地爭奪：攻城軍令打贏那裡的守軍就記功，中立駐軍也算（計畫第八節裁決 20，PM 2026-10-21）。軍令卡列的、記功的、假人往哪裡走、發不發攻城
+照舊問同一個判斷（`orders.siege_win`），不會列了卻記不到、或記得到卻沒列。翻地與爭搶（PM 2026-10-20 第 1 條）之後地點改讀成「這一邊此刻
+進度最高、推得動的那一塊」（第二批是今天公告的目標）；開關關著一個字都不變（test_conquest_fb531_siege 的最後一條）。"""
 from __future__ import annotations
 
 import pytest
 
-from conquest_kit import announce, conquest_game, go, join, win_sortie
+from conquest_kit import conquest_game, go, join, win_sortie
 from tianxia import atlas, conquest, orders
 from tianxia.state import Order
 
@@ -20,62 +20,64 @@ def _siege(game, faction="guan", front="yingru"):
     return order
 
 
-def test_an_announced_neutral_target_is_listed_and_credited():
-    """QA（第二批第 8 項）：今天公告官軍攻荒丘（還沒人佔的中立地），在那裡打贏中立駐軍記攻城一次，軍令卡寫得出荒丘。"""
+def test_the_top_neutral_target_is_listed_and_credited():
+    """官軍在荒丘（還沒人佔的中立地）的進度最高：在那裡打贏中立駐軍記攻城一次，軍令卡寫得出荒丘。"""
     game = go(join(conquest_game("season21"), "guan"), "hilltop_wilds")
     s, c = game.state, game.content
     assert conquest.holder(s.world, c, "hilltop_wilds") is None
-    announce(game, "hilltop_wilds", "guan")
+    conquest.push(s.world, c, "hilltop_wilds", "guan", "某", 10, "attack")
     order = _siege(game)
-    assert orders.siege_places(c, "guan", "yingru", s.world) == ["hilltop_wilds"]  # 修前 []
+    assert orders.siege_places(c, "guan", "yingru", s.world) == ["hilltop_wilds"]
     assert orders.win_counts(s, c, "guan", "hilltop_wilds") and "hilltop_wilds" in orders.targets(s, c, "guan")
     how = atlas.siege_how(s, c, order)
-    assert "荒丘" in how and "黃巾" not in how  # 修前「到潁川汝南一帶黃巾軍的地盤出陣，打贏一場記一次。」
+    assert "荒丘" in how and "黃巾" not in how
     win_sortie(game)
-    assert order.progress.get(s.player.name) == 1  # 修前沒記
+    assert order.progress.get(s.player.name) == 1
 
 
 def test_a_captured_neutral_block_held_by_the_enemy_counts_too():
-    """被敵方佔下的中立地站的照舊是中立駐軍：今天公告了，打贏也算。"""
+    """被敵方佔下的中立地站的照舊是中立駐軍：進度最高，打贏也算。"""
     game = go(join(conquest_game("season21"), "guan"), "hilltop_wilds")
     s, c = game.state, game.content
     assert conquest.set_control(s.world, c, "hilltop_wilds", "huang")
-    announce(game, "hilltop_wilds", "guan")
+    conquest.push(s.world, c, "hilltop_wilds", "guan", "某", 10, "attack")
     order = _siege(game)
     assert orders.siege_places(c, "guan", "yingru", s.world) == ["hilltop_wilds"]
     win_sortie(game)
     assert order.progress.get(s.player.name) == 1
 
 
-def test_a_line_with_only_a_neutral_target_still_issues_a_siege():
-    """只公告中立地的那一天，那條線照樣發得出攻城（計畫 6.2 合併那一段第 2 條的代價拿掉了）。"""
+def test_a_line_with_only_neutral_targets_still_issues_a_siege():
+    """一條線上碰得到的只有中立地（官軍在南陽）：照樣發得出攻城（_issuable 先看的就是 siege_places）。"""
     game = conquest_game("season21")
     w, c = game.state.world, game.content
-    announce(game, "nanyang_road", "guan")
-    assert orders.siege_places(c, "guan", "nanyang", w) == ["nanyang_road"]  # _issuable 先看的就是它
+    assert "nanyang_road" in orders.siege_places(c, "guan", "nanyang", w)
 
 
-def test_enemy_block_and_unannounced_places_are_unchanged():
-    """敵方陣營區塊照舊（打贏敵方的兵記一次）；沒公告的照舊不列、不記。"""
+def test_lower_blocks_do_not_count_until_they_are_the_top():
     game = go(join(conquest_game("season21"), "guan"), "runan_wilds")
     s, c = game.state, game.content
+    conquest.push(s.world, c, "hilltop_wilds", "guan", "某", 20, "attack")
     order = _siege(game)
-    assert orders.siege_places(c, "guan", "yingru", s.world) == []
+    assert orders.siege_places(c, "guan", "yingru", s.world) == ["hilltop_wilds"]
     win_sortie(game)
     assert s.player.name not in order.progress
-    announce(game, "runan_wilds", "guan")
+    conquest.push(s.world, c, "runan_wilds", "guan", "某", 30, "attack")
     assert orders.siege_places(c, "guan", "yingru", s.world) == ["runan_wilds"]
     win_sortie(game)
     assert order.progress.get(s.player.name) == 1
 
 
-def test_card_without_a_target_today_does_not_point_anywhere():
-    """這條線今天沒有公告要攻的地方（打完了、或公告在別條線）：卡上不再指「到某一帶敵方的地盤出陣」——那裡打贏記不到。"""
+def test_card_without_a_pushable_place_does_not_point_anywhere():
+    """這條線此刻沒有推得動的地方（全都剛易手）：卡上不指「到某一帶敵方的地盤出陣」——那裡打贏記不到。"""
     game = join(conquest_game("season21"), "guan")
     s, c = game.state, game.content
+    for loc in conquest.targets(s.world, c, "guan"):
+        conquest._fight(s.world, c, loc).flipped_at = s.world.time
     order = _siege(game)
+    assert orders.siege_places(c, "guan", "yingru", s.world) == []
     how = atlas.siege_how(s, c, order)
-    assert "地盤出陣" not in how and "今天" in how  # 修前「到潁川汝南一帶黃巾軍的地盤出陣，打贏一場記一次。」
+    assert "地盤出陣" not in how and "推得動" in how
 
 
 def test_own_and_unknown_factions_never_count():

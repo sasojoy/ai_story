@@ -94,11 +94,15 @@ def test_no_bot_hint_in_siege_views():
     human = go(join(conquest_game("season21", name="真某"), "huang"), "nanyang_road")
     bot = _bot(go(join(conquest_game("season21", name="假某", world=human.world), "huang"), "nanyang_road"), "huang")
     human.now = bot.now = NOW
+    w, c = human.state.world, human.content
+    conquest.mark(w, c, "nanyang_road", "假某", "huang", "attack", 4)  # 假人推過：「正在推的人」照名號列，跟真人一樣
+    conquest.mark(w, c, "nanyang_road", "真某", "huang", "attack", 4)
     _open(human, announce(human, "nanyang_road", "huang"))
     bot.state.world = bot.world.get_season()
-    bot_policy._conquest_vote(bot)  # 假人投票：只公開比例
     human.state.world = human.world.get_season()
     hv, bv = human.conquest_view(), bot.conquest_view()
-    assert hv["today"] == bv["today"] and hv["tomorrow"]["rows"] == bv["tomorrow"]["rows"]
+    assert hv["today"] == bv["today"] and hv["blocks"] == bv["blocks"]  # 投票拿掉了（翻地與爭搶）；真人假人看到的一樣
+    rows = hv["blocks"]["nanyang_road"]["pushers"]
+    assert {r["name"] for r in rows} == {"真某", "假某"} and all(set(r) == {"name", "side", "how", "moved"} for r in rows)
     blob = json.dumps(hv, ensure_ascii=False) + human.scene_text()
-    assert "假某" not in blob and "假人" not in blob
+    assert "假人" not in blob and "bot" not in blob

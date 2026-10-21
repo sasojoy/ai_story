@@ -237,6 +237,27 @@ def test_someone_who_already_holds_a_shard_does_not_find_a_second():
     assert _cache(game) == cache and seal.shard_of(_reg(game), NAME).id == held
 
 
+def test_no_find_while_the_block_is_cooling():
+    """翻地與爭搶（輿圖簡化設計 4.1；翻地計畫第一節第 9 條）：剛易手、還在冷卻的那一塊加成暫停，碎片也不擲（藏處紋風不動）；冷卻過了照擲。"""
+    game = _game()
+    cache = _cache(game)
+    _stand(game, cache.loc, "guan")
+    w, c = game.state.world, game.content
+    conquest.flip(w, c, cache.loc, "guan")  # 官軍剛拿下：冷卻 cooldown_minutes
+    game._save_season()
+    assert conquest.cooling(game.state.world, c, cache.loc)
+    for _ in range(3):
+        game._explore_mode(_mode_for(game, "seek"))
+        game.state.player.stamina = 250.0
+    assert conquest.cooling(game.state.world, c, cache.loc)
+    assert seal.shard_of(_reg(game), NAME) is None and _cache(game) == cache  # 修前冷卻期照擲（find_chance 1.0：一定撿到）
+    fight = game.state.world.conquest.fights[cache.loc]
+    fight.flipped_at -= conquest._seconds(c, c.config.conquest.cooldown_minutes) + 1  # 冷卻過了
+    game._save_season()
+    game._explore_mode(_mode_for(game, "seek"))
+    assert seal.shard_of(_reg(game), NAME) is not None
+
+
 def test_find_is_not_rolled_when_the_season_is_not_conquest():
     """領地爭奪沒開的季：探索照舊，不碰登記（也沒有藏處可言）。"""
     c = real_content("weekend")

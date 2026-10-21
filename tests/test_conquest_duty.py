@@ -9,7 +9,7 @@ import random
 
 import pytest
 
-from conquest_kit import announce, conquest_game, go, join, plain_game
+from conquest_kit import conquest_game, go, join, plain_game, press
 from tianxia import bot_policy, conquest, howto, orders, sortie
 from tianxia.state import BotProfile, Order
 
@@ -107,12 +107,14 @@ def test_places_that_are_not_blocks_are_untouched():
 
 
 def test_the_defend_order_never_counts_or_lists_an_enemy_base():
-    """守城軍令（裁決 11）：自家今天被公告的那一塊；敵方的大本營、區塊、自家沒被公告的區塊，記不到、假人也不往那裡走。"""
+    """守城軍令（裁決 11）：自家今天被公告的那一塊；敵方的大本營、區塊、自家沒被公告的區塊，記不到、假人也不往那裡走。
+    翻地與爭搶（PM 2026-10-20 第 1 條）之後「被公告的那一塊」換成「自家被推得最高的那一塊」：前提改成黃巾在那裡推了一截（conquest_kit.press），
+    斷言不動。"""
     game = conquest_game("season21")
     w, c = game.state.world, game.content
     guan_block = next(loc for loc in conquest.blocks(c) if conquest.capturable(c, loc) and conquest.holder(w, c, loc) == "guan"
                       and conquest.line_of(w, c, loc) == "yingru")
-    announce(game, guan_block, "huang")
+    press(game, guan_block, "huang")
     w.orders.append(Order(id="t:defend", template="defend", faction="guan", week=orders.period_of(game.state, c), front="yingru",
                           quota=5, text="守"))
     state = join(game, "guan").state

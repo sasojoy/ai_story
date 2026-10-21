@@ -290,6 +290,8 @@ def price_factor(world: WorldState, content: Content, faction: str | None, loc_i
     from . import conquest  # noqa: PLC0415
 
     cfg = content.config.territory
+    if conquest.cooling(world, content, loc_id):  # 領地爭奪：剛易手還在冷卻，那一塊的加成暫停（輿圖簡化設計 4.1）：誰來都照原價
+        return 1.0
     if faction is None and conquest.is_home(world, content, None, loc_id):
         return cfg.own_price
     side = controller(world, content, loc_id)

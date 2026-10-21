@@ -14,7 +14,7 @@ import pytest
 
 import server
 from conquest_kit import announce, conquest_game, go, join
-from tianxia import conquest, rules, siege, xingshi
+from tianxia import conquest, conquest_day, rules, siege, xingshi
 from tianxia.engine import Game
 
 DIGITS = re.compile(r"[0-9０-９]")
@@ -45,6 +45,15 @@ def _world_rumors(game: Game) -> list[str]:
 
 DAY0 = _tw(2026, 10, 20, 10)  # 這一季第一次同步：只記下今天
 SETTLE = _tw(2026, 10, 20, 22, 1)  # 換天：結算、開一張單
+LATE = _tw(2026, 10, 20, 21, 45)  # 今天的時段都過了：這時下的戰書排在下一天的第一個時段
+
+
+def _letter(game: Game, loc: str = "nanyang_road", side: str = "huang", name: str = "沈浪", now: float = LATE):
+    """下一張戰書（翻地與爭搶：投票與 22:00 公告拿掉了，攻城只由戰書排；這裡直接排，不看階與門檻）。"""
+    game.now = now
+    placed = conquest_day.place_letter(game.state.world, game.content, side, loc, name, game.pill_now())
+    game._save_season()
+    return placed[0]
 
 
 # ── 純規則（不建 Game）──
@@ -63,21 +72,25 @@ def test_clean_rejects_digits_kana_and_length():
 
 @pytest.mark.slow
 def test_switch_off_no_ticket():
-    """〈天下形勢〉關著（Config.xingshi.enabled，conquest_kit 的預設）：結算照舊，季上的形勢欄位一個都不動。"""
+    """〈天下形勢〉關著（Config.xingshi.enabled，conquest_kit 的預設）：換天照舊，季上的形勢欄位一個都不動。
+    翻地與爭搶之後換天不排攻城（攻城只由戰書排）：前提改成晚上下了一張戰書，換天照舊留著它。"""
     game = _game(DAY0, on=False)
     _tick(game, DAY0)
+    _letter(game)
     w = _tick(game, SETTLE)
-    assert w.conquest.schedule  # 結算照舊排了明天的攻城
+    assert w.conquest.schedule  # 換天照舊留著明天的那一場
     assert w.xingshi_ticket is None and w.xingshi == [] and w.xingshi_mark is None
     assert game.xingshi_view() == {"on": False}
 
 
 @pytest.mark.slow
 def test_ticket_opens_with_the_daily_settle():
+    """翻地與爭搶之後「明天打哪裡」是戰書排的那一場（day_log 的 by="letter"）：前提改成晚上下了一張戰書，斷言不動。"""
     game = _game(DAY0)
     w = _tick(game, DAY0)
     assert w.xingshi_ticket is None and w.xingshi_mark is not None  # 第一次只記下起點（三條線此刻的值）
     assert set(w.xingshi_mark.lines) == set(rules.front_ids(game.content))
+    _letter(game)
     w = _tick(game, SETTLE)
     t = w.xingshi_ticket
     assert t is not None and t.n == 1 and t.key == w.conquest.settled_key and not t.taken
@@ -115,9 +128,12 @@ def test_outcomes_are_noted_in_the_day_log_and_summed_up():
     assert (note.result, note.taken, note.loc, note.attackers) == ("taken", "huang", "nanyang_road", ["huang"])
     assert note.margin == "大勝" and note.keeper == "guard"
     huang = game.content.scenario.faction_name("huang", "huang")
+    # 翻地與爭搶：攻城戰贏也走 conquest.flip，但那一下記的是攻城的結果，不另記一筆推滿易手（不然同一件事寫兩條）
+    assert not [n for n in game.state.world.conquest.day_log if n.by == conquest_day.FLIP]
     t = _tick(game, SETTLE).xingshi_ticket
     assert f"{huang}拿下南陽官道" in t.line
     assert any("南陽官道" in f and huang in f and "大勝" in f for f in t.facts)
+    assert len([f for f in t.facts if "南陽官道" in f and "拿下" in f]) == 1
 
 
 @pytest.mark.slow
@@ -141,6 +157,59 @@ def test_held_and_void_are_noted():
     assert (note.result, note.taken, note.keeper) == ("held", "", "guard")
     t = _tick(game, SETTLE).xingshi_ticket
     assert "守住南陽官道" in t.line
+
+
+@pytest.mark.slow
+def test_letters_are_facts_with_the_name():
+    """下戰書（day_log 的 by="letter"，reason 是下戰書的人；只有真人會下，天下大事本來就具名）：寫成一條事實，帶名號與地方；
+    管理者「立刻下戰書」沒有名號，寫不帶名號的那一句。"""
+    game = _game(DAY0)
+    _tick(game, DAY0)
+    _letter(game, "nanyang_road", "huang", "沈浪")
+    game.now = LATE
+    conquest_day.place_now(game.state.world, game.content, "guan", "hilltop_wilds", game.pill_now())
+    game._save_season()
+    t = _tick(game, SETTLE).xingshi_ticket
+    words = xingshi.lines(game.content)["fact"]
+    huang = game.content.scenario.faction_name("huang", "huang")
+    guan = game.content.scenario.faction_name("guan", "guan")
+    assert words["letter"].format(who="沈浪", side=huang, place="南陽官道") in t.facts  # 修前 note_fact 認不得，沒有這一條
+    # 管理者 21:45 立刻下的那一張，22:00 換天時辰已過作罷（VOID_LATE）：FB-610 之後寫成已經發生的事（letter_done_plain，照樣不帶名號），
+    # 不再當「下一仗」排在後面（修 FB-610 之前這裡斷言 letter_plain；新規則的測試在 test_xingshi_fb610_order.py）
+    assert words["letter_done_plain"].format(side=guan, place="荒丘") in t.facts
+    assert words["letter_plain"].format(side=guan, place="荒丘") not in t.facts
+    assert t.line == xingshi.SUMMARY_HEAD + xingshi.lines(game.content)["summary"]["none"] + "。"  # 還沒打：「是日」照舊各路按兵
+
+@pytest.mark.slow
+def test_a_flip_is_a_fact_and_the_summary_says_who_took_it():
+    """推滿當場易手（day_log 的 by="flip"，reason 是推最多的人）：是日那一句寫拿下，事實一條帶推最多的人；
+    territory 另發的「落入」天下大事是同一件事，不再收一次。"""
+    game = _game(DAY0)
+    _tick(game, DAY0)
+    w, c = game.state.world, game.content
+    conquest.push(w, c, "hilltop_wilds", "guan", "甲", 70, "attack")
+    conquest.push(w, c, "hilltop_wilds", "guan", "乙", 40, "attack")  # 滿了：官軍拿下荒丘
+    assert conquest.holder(w, c, "hilltop_wilds") == "guan"
+    game._save_season()
+    t = _tick(game, SETTLE).xingshi_ticket
+    guan = c.scenario.faction_name("guan", "guan")
+    assert f"{guan}拿下荒丘" in t.line  # 修前「是日：各路按兵，未見勝負」
+    flip_fact = xingshi.lines(c)["fact"]["flip"].format(who="甲", side=guan, place="荒丘")
+    assert flip_fact in t.facts
+    assert len([f for f in t.facts if "荒丘" in f and ("落入" in f or "收復" in f or "易手" in f)]) == 1
+
+
+@pytest.mark.slow
+def test_a_flip_with_nobody_named_says_it_plainly():
+    """沒有人推過那一條就翻了（直接叫 conquest.flip，同管理者定一條進度到 100 而這一輪沒人推過）：不帶名號的那一句。"""
+    game = _game(DAY0)
+    _tick(game, DAY0)
+    w, c = game.state.world, game.content
+    conquest.flip(w, c, "hilltop_wilds", "guan")
+    game._save_season()
+    t = _tick(game, SETTLE).xingshi_ticket
+    guan = c.scenario.faction_name("guan", "guan")
+    assert xingshi.lines(c)["fact"]["flip_plain"].format(side=guan, place="荒丘") in t.facts
 
 
 @pytest.mark.slow
@@ -168,6 +237,31 @@ def test_grace_also_runs_on_the_server_schedule():
     _tick(game, SETTLE)
     ticker = Game.for_world(game.content, game.world)
     ticker.world_tick(SETTLE + 901)
+    w = game.world.get_season()
+    assert w.xingshi_ticket is None and len(w.xingshi) == 1 and w.xingshi[0].by_rule
+
+
+@pytest.mark.slow
+def test_fb577_grace_and_retry_use_the_real_clock_after_a_fast_forward():
+    """FB-577（QA 第三批 A）：管理者快轉跨過 22:00 開的單，寬限與重試照現實時鐘（Game.now）算——快轉推的 advanced_real 只活在那一個
+    Game 的記憶體裡，沒快轉過的 Game（伺服器排程、別的玩家）拿它比會差上十幾個小時。修前 opened_real 是快轉過的時間，排程要等到現實追上
+    （QA 量到 +47705 秒）才照固定段收。換天本身照舊認快轉過的時鐘（快轉跨過 22:00 就換天）。"""
+    game = _game(DAY0)
+    _tick(game, DAY0)
+    game.advance(13 * 3600 * game.content.config.time_scale)  # 現實 10:00 快轉十三小時：跨過 22:00
+    w = game.world.get_season()
+    ticket = w.xingshi_ticket
+    assert ticket is not None and ticket.n == 1  # 快轉跨過 22:00 照樣換天、開單
+    assert ticket.opened_real == DAY0  # 修前是 DAY0 + 13 小時
+    req = game.xingshi_request()  # 快轉過的那一個 Game 拿走、沒輪到模型（假人的名額被佔）放回去
+    assert req is not None and game.release_xingshi(req)
+    retry = game.content.config.xingshi.retry_seconds
+    assert game.world.get_season().xingshi_ticket.retry_at == DAY0 + retry  # 修前是 DAY0 + 13 小時 + retry
+    ticker = Game.for_world(game.content, game.world)
+    ticker.now = DAY0 + retry + 1
+    ticker.state.world = game.world.get_season()
+    assert ticker.xingshi_waiting()  # 沒快轉過的 Game：重試的時候到了
+    ticker.world_tick(DAY0 + 901)  # 伺服器排程：現實過了 grace_seconds
     w = game.world.get_season()
     assert w.xingshi_ticket is None and len(w.xingshi) == 1 and w.xingshi[0].by_rule
 

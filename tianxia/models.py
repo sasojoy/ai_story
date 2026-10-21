@@ -2642,8 +2642,9 @@ class ConquestRules(_Strict):
     """領地爭奪（第 38 項改版，docs/superpowers/specs/2026-10-20-領地爭奪-design.md；計畫 docs/superpowers/plans/2026-10-20-領地爭奪.md；
     tianxia/conquest.py）。開季時蓋章（WorldState.conquest_on，要第一季規則開著、劇本有官軍與黃巾、寫了 territory.blocks、豪強分屬兩軍），
     正在跑的季不變；enabled 是主機的開關（關掉時照關著）。開著時：控制方只照佔領（不拔河、不割據），三條戰線的值＝佔領的基準＋其他
-    來源的偏移，出陣推攻城目標的進度、不推線，人站在自家領地吃加成，散人在開季中立的區塊也吃。第二批起每天投票、22:00 結算排明天的
-    攻城（conquest_day.py），時間到了開攻城戰（siege.py，決戰的縮小版，跟決戰同時打），攻方贏了就易手。數字全是【預設】，等 21 天的季試玩再調。"""
+    來源的偏移，出陣推那一塊的進度、不推線，人站在自家領地吃加成，散人在開季中立的區塊也吃。翻地與爭搶（輿圖簡化設計第四章）：每一塊對
+    每個攻方一條進度，推滿當場易手、冷卻一小時；兩邊推到同一塊撞上就打（混戰）；一起推有集火；攻下與守住都分紅；第 4 階的人進度過門檻
+    可以下戰書，時間到了開攻城戰（siege.py，決戰的縮小版，跟決戰同時打），攻方贏了就易手。數字全是【預設】，等 21 天的季試玩再調。"""
 
     enabled: bool = False  # 【預設】正式內容先關；三批都做完、QA 過、PM 說可以，再在 season21.json 打開（裁決 15）
     share: float = Field(default=35.0, ge=0)  # 【預設】佔領的份量：中立地全被一方拿下，基準偏到 50±share（分母只算中立時，設計 4.7）
@@ -2658,19 +2659,33 @@ class ConquestRules(_Strict):
     event_progress: float = Field(default=1.0, ge=0)  # 【預設】在區塊做完一則事件，往自己那一邊推進度一次的量（計畫 2.3；散人不推）
     start_shift_per_10: int = Field(default=2, ge=0)  # 【預設】攻城戰起點：進度偏 50 每 10 點偏幾點（設計 4.4；第二批才用）
     start_shift_cap: int = Field(default=10, ge=0)  # 【預設】最多偏幾點（設計 4.4；第二批才用）
-    # ── 第二批：每天的鐘、投票與時程表（tianxia/conquest_day.py；設計 3.6、4.2、4.3，裁決 6、7、9）──
+    # ── 每天的鐘與攻城時段（tianxia/conquest_day.py；設計 4.3，裁決 6；投票與 22:00 公告結算照輿圖簡化設計 4.4 拿掉了，PM 2026-10-20）──
     # 時刻一律是當地時間（照 pill_day_utc_offset_hours，跟回體丹同一個換日的算法）從 00:00 起算的分鐘
-    settle_hour: int = Field(default=22, ge=0, le=23)  # 【預設】每天幾點結算、公告隔天的攻城（設計 4.3）；要晚過 slot_last，當天的仗才打得完
-    slot_first: int = Field(default=12 * 60, ge=0, lt=24 * 60)  # 【預設】最早幾點開打（設計 4.3：12:00～21:00 的整點或半點）
+    settle_hour: int = Field(default=22, ge=0, le=23)  # 【預設】每天幾點換天（Game._conquest_tick 的掛鉤：前一天沒開成的攻城作罷、〈天下形勢〉一篇）；要晚過 slot_last
+    slot_first: int = Field(default=12 * 60, ge=0, lt=24 * 60)  # 【預設】戰書的攻城最早幾點開打（設計 4.3：12:00～21:00 的整點或半點）
     slot_last: int = Field(default=21 * 60, ge=0, lt=24 * 60)  # 【預設】最晚幾點開打
     slot_step_minutes: int = Field(default=30, ge=1)  # 【預設】開打時段的間隔（整點與半點）
-    commander_slots: list[int] = Field(default_factory=lambda: [21 * 60, 20 * 60])  # 【預設】主將替人挑時用的時段，第幾塊用第幾個（裁決 7）
-    two_per_day_ratio: float = Field(default=0.5, ge=0)  # 【預設】中立區塊數 ÷ 季長（天）≥ 這個就一邊一天兩塊，否則一塊（設計 4.2）
     showdown_gap_before: int = Field(default=30, ge=0)  # 【預設】時刻表決戰排定時刻之前幾分鐘不排攻城（裁決 6）
     showdown_gap_after: int = Field(default=45, ge=0)  # 【預設】之後幾分鐘不排攻城（裁決 6）
-    muster_minutes: int = Field(default=30, ge=1)  # 【預設】開打前幾分鐘開集結（設計 4.3）；結算晚了，過了「現在＋這麼久」的時段往後挪
-    rank4_share: float = Field(default=0.55, ge=0, le=1)  # 【企劃者】有第 4 階的人投票時，第 4 階的票合起來佔的比例；其他人合起來佔其餘（裁決 9）
+    muster_minutes: int = Field(default=30, ge=1)  # 【預設】開打前幾分鐘開集結（設計 4.3）；戰書挑的時段要晚過「現在＋這麼久」
     pay_share: float = Field(default=0.5, ge=0)  # 【預設】攻城戰的軍餉與貢獻是決戰的幾成（設計 4.4）
+    # ── 翻地與爭搶（輿圖簡化設計第四章、第九章；計畫 docs/superpowers/plans/2026-10-20-翻地與爭搶.md）──
+    # 進度：一塊地對每一個攻方各一條 0～100，攻推自己那一條、守（此刻佔著的那一方）把每一條都拉下，任一條到 100 當場易手（conquest.push）。
+    # 全部【預設，等 21 天的季試玩】
+    cooldown_minutes: float = Field(default=60.0, ge=0)  # 【預設】剛翻的地幾分鐘（現實）內兩邊都推不動、那一塊的加成暫停（設計 4.1【企劃者】）
+    decay_per_day: float = Field(default=10.0, ge=0)  # 【預設】前一整個季曆日沒人推過的塊，每一條往守方回幾點（設計 4.1、第九章第 1 條）
+    focus_minutes: float = Field(default=60.0, ge=0)  # 【預設】集火：這麼多分鐘內同一邊推過同一塊的其他人才算（設計 4.2）
+    focus_step: float = Field(default=0.1, ge=0)  # 【預設】集火：每多一個人，每一下多幾成
+    focus_cap: float = Field(default=0.5, ge=0)  # 【預設】集火最多多幾成
+    clash_minutes: float = Field(default=10.0, ge=0)  # 【預設】混戰：對面這麼多分鐘內在這一塊出陣過、人還在這裡，撞上就打（設計 4.3【企劃者選 b】）
+    clash_scale: float = Field(default=1.5, ge=0)  # 【預設】混戰打贏那一下的推力倍數（輸的那一下白跑）
+    letter_at: float = Field(default=60.0, ge=0, le=100)  # 【預設】自己那一邊的條到這裡，第 4 階的人可以下戰書（設計 4.4）
+    alarm_at: float = Field(default=50.0, ge=0, le=100)  # 【預設】守城功：哪一條到過這裡、守方再把全部拉回零才算（設計 4.5「從五成以上拉回零」）
+    take_silver: int = Field(default=200, ge=0)  # 【預設】攻下一塊開季中立的地，推過的人照貢獻分的銀兩總額（設計 4.5）
+    take_exp: int = Field(default=300, ge=0)  # 【預設】同上，經驗總額
+    take_fame: int = Field(default=20, ge=0)  # 【預設】同上，名望總額
+    faction_pool_share: float = Field(default=0.5, ge=0)  # 【預設】開季是陣營領地的塊，總額打幾成（設計 4.5「陣營區塊減半」）
+    guard_pool_share: float = Field(default=0.5, ge=0)  # 【預設】守城功的總額是攻下的幾成（設計 4.5）
     # 【預設】兩軍同時攻同一塊中立地（三方混戰，裁決 22）：守將的池子＝這個 × 集結結束時兩軍到場的人數（至少算 2 人，siege.size_melee_guard）。
     # 一個人五回合都強攻、戰線在中線打得掉 15×5＝75：兩軍平均四成的回合出強攻，守將撐不過五回合（一回合最多打掉四分之一，最快第 4 回合倒）
     melee_pool_per_head: float = Field(default=30.0, gt=0)

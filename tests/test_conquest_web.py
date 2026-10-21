@@ -202,6 +202,32 @@ def test_melee_scene_keeps_only_the_rule():
     assert siege.MELEE_RULE in scene and "兩頭迎戰" not in scene
 
 
+def _rule(css: str, selector: str) -> dict[str, str]:
+    found = re.search(re.escape(selector) + r"\s*\{([^}]*)\}", css)
+    assert found, f"style.css 裡找不到 {selector}"
+    return {k.strip(): v.strip() for k, v in (part.split(":", 1) for part in found.group(1).split(";") if ":" in part)}
+
+
+def _top(margin: str) -> float:
+    """margin 簡寫的上邊（"-8px 0" → -8；"-4px 0 -8px" → -4）。"""
+    return float(margin.split()[0].removesuffix("px"))
+
+
+def test_fb576_single_join_button_clears_the_strip():
+    """FB-576（QA 第三批 A）：只有一顆加入鈕的攻城集結，攻城條自己佔一行、「報名在這裡」與鈕排在它底下；鈕照 FB-105 的 −8px 往上吃，
+    6px 的列距吃掉還多 2px，鈕的上緣壓到條的下緣（375／360／320 都量到 2px）。條底下那一排的鈕上邊至少留 2px：
+    列距（.muster-head 的 gap 第一個值）＋鈕的 margin-top ≥ 2。名字旁邊的那一顆（沒有攻城條、FB-105）、.wide、.pick 不動。"""
+    css = re.sub(r"/\*.*?\*/", "", (ROOT / "web" / "style.css").read_text(encoding="utf-8"), flags=re.S)
+    phone = css.split("@media (min-width: 641px)")[0]
+    gap = float(_rule(phone, ".scene .muster-head")["gap"].split()[0].removesuffix("px"))
+    found = re.search(r"\.scene \.muster-head > p\.siege-strip ~ \.muster-join:not\(\.wide\):not\(\.pick\) \.btn\s*\{([^}]*)\}", phone)
+    margin = found.group(1) if found else ""
+    top = _top(margin.split("margin-top:")[1].split(";")[0]) if "margin-top:" in margin else _top(_rule(phone, ".scene .muster-join .btn")["margin"])
+    assert gap + top >= 2, (gap, top)  # 修前 6 − 8 = −2：壓到 2px
+    assert _rule(phone, ".scene .muster-join .btn")["margin"] == "-8px 0"  # 名字旁邊的那一顆照舊（FB-105）
+    assert _rule(phone, ".scene .muster-join.wide .btn")["margin"] == "0" and _rule(phone, ".scene .muster-join.pick .btn")["margin"] == "0"
+
+
 def test_fb553_stacked_row_takes_its_own_line():
     """.pick 那一排另起一行、一顆一行、鈕佔滿那一行（字長也只往下折，不往右撐）。"""
     css = (ROOT / "web" / "style.css").read_text(encoding="utf-8").split("@media (min-width: 641px)")[0]
@@ -270,3 +296,57 @@ def test_real_view_renders():
     out = page(view, m={"xingshi": True})
     assert "天下形勢・第 1 篇" in out["page"] and "是日：" in out["page"]
     assert server.main_view(game).get("xingshi") is True
+
+
+# ── FB-578：形勢頁開著時，新的一篇與「還在落筆」要自己換上 ──
+
+REFRESH = r"""
+const S = { tab: input.tab, news: input.news, main: input.now };
+const calls = [];
+const H = new Function("S", "calls", [
+  "const shopPolled = () => false;",
+  "const pageKey = (m) => JSON.stringify(m.page || '');",
+  "let pointerHeld = false, redrawHeld = false;",
+  "const renderPage = () => calls.push('renderPage');",
+  "const paintSealWhen = () => calls.push('paintSealWhen');",
+  "const redrawPage = () => calls.push('redrawPage');",
+  "const loadXingshi = async () => { calls.push('loadXingshi'); };",
+  fn("refreshPage"),
+  "return { refreshPage };",
+].join("\n"))(S, calls);
+H.refreshPage(input.old).then(() => finish(calls));
+"""
+
+
+def _refresh(old: dict, now: dict, news: str = "xingshi", tab: str = "news") -> list[str]:
+    return webharness.run(REFRESH, {"old": old, "now": now, "news": news, "tab": tab})
+
+
+def test_fb578_open_page_reloads_when_the_marker_moves():
+    """輪詢拿到的 main 裡 xingshi_mark（最新一篇的篇次＋有沒有一張還在寫）變了，停在見聞「形勢」的頁面就重抓 /api/xingshi。
+    修前輪詢不碰它：管理者開了一篇、伺服器一秒內寫好，那一頁等了 25 秒還是舊的，「史官還在落筆」也不會自己換成文章。"""
+    assert _refresh({"xingshi_mark": "6"}, {"xingshi_mark": "6+"}) == ["loadXingshi"]  # 開了一張新單：換上「還在落筆」
+    assert _refresh({"xingshi_mark": "6+"}, {"xingshi_mark": "7"}) == ["loadXingshi"]  # 寫好了：換上第 7 篇
+    assert _refresh({"xingshi_mark": "7"}, {"xingshi_mark": "7"}) == []  # 沒變：不重抓、不重畫
+    assert _refresh({"xingshi_mark": "6"}, {"xingshi_mark": "7"}, news="rumors") == []  # 別的子分頁不抓（那幾欄沒變也不重畫）
+
+
+@pytest.mark.slow
+def test_fb578_main_view_carries_the_marker():
+    """main_view 的 xingshi_mark：收下的最新一篇的篇次，有一張還在寫就多一個「+」。關著的季沒有這個鍵（一個位元組都不變）。"""
+    import calendar as pycal
+    from datetime import datetime
+
+    def tw(h, mi=0, d=20):
+        return float(pycal.timegm(datetime(2026, 10, d, h, mi).timetuple())) - 8 * 3600
+
+    game = join(conquest_game("season21", xingshi=True), "huang")
+    marks = []
+    for now in (tw(10), tw(22, 1), tw(22, 20)):  # 起點、開單、過了寬限照固定段收
+        game.now = now
+        game._conquest_tick()
+        game.state.world = game.world.get_season()
+        marks.append(server.main_view(game)["xingshi_mark"])
+    assert marks == ["0", "0+", "1"]
+    off = join(conquest_game("season21"), "huang")  # 〈天下形勢〉關著
+    assert "xingshi_mark" not in server.main_view(off) and "xingshi" not in server.main_view(off)

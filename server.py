@@ -1481,7 +1481,7 @@ def _main_view_body(game: Game) -> dict:
     convoy = game.convoy_line()  # 押著的糧車（T6 審查 I3）：軍令卡上寫一行
     if convoy is not None:
         view["convoy"] = convoy
-    conquest_view = game.conquest_view()  # 領地爭奪第二批：攻城的時程表與明天的眾議（開關關著、季收了沒有這個鍵）
+    conquest_view = game.conquest_view()  # 領地爭奪：戰書排的攻城、每一塊的翻地資料、能不能下戰書（開關關著、季收了沒有這個鍵）
     if conquest_view is not None:
         view["conquest"] = conquest_view
     banner = game.siege_banner()  # 領地爭奪第三批 A：場景裡畫的是攻城戰時，最上面那一條「攻城・地點｜守方：某某」（企劃者挑甲；決戰沒有這個鍵）
@@ -1489,6 +1489,7 @@ def _main_view_body(game: Game) -> dict:
         view["siege"] = banner
     if xingshi.on(game.content, game.state.world):  # 〈天下形勢〉開著的季：見聞多一顆「形勢」（文章另外讀 /api/xingshi；關著沒有這個鍵）
         view["xingshi"] = True
+        view["xingshi_mark"] = game.xingshi_mark()  # FB-578：最新一篇的篇次＋有沒有一張還在寫；變了，停在「形勢」頁的網頁就重抓
     letter = game.letter_view()  # 書信（大勢人物擴充第二批）：江湖頁「剛剛」上面一張小卡；沒有沒看過的信就沒有這個鍵
     if letter is not None:
         view["letter"] = letter
@@ -1988,8 +1989,8 @@ MAIN_ACTIONS = {
     "pill": lambda g, b: g.take_stamina_pill(),  # 狀態列體力條上的「丹」：吃一顆回體丹（企劃者 2026-10-07 內測贈送）
     # 江湖頁「簽到」小標攤開的領取鈕（21 天季，正式季整合 6.2）：四階的日子帶 attribute（剛柔快慢）
     "checkin": lambda g, b: g.check_in(str(b.get("attribute", ""))[:2]),
-    # 領地爭奪第二批：每天投票（裁決 9）——明天打哪一塊（loc）、幾點開打（minute：當地時間的分鐘）
-    "conquest_vote": lambda g, b: g.conquest_vote(str(b.get("loc", "")), _int(b.get("minute"), -1)),
+    # 領地爭奪：下戰書（翻地與爭搶，輿圖簡化設計 4.4；這一週在任的第 4 階、自己那一邊在這一塊的進度到門檻）。每天投票拿掉了（PM 2026-10-20）
+    "conquest_letter": lambda g, b: g.conquest_letter(str(b.get("loc", ""))),
 }
 # 賽季時鐘暫停中也照做的畫面設定（不推任何東西、不碰別人）：匿名、不再提示、略過引導、打開輿圖（頁面靠它載入輿圖）、軍令卡出現（入伍段第一步，
 # 只動自己的引導；被擋下的話網頁已經記成「送過了」，這個工作階段不會再送）、對話框的「知道了」
@@ -2011,8 +2012,10 @@ ADMIN_ACTIONS = {
     "set_trend": lambda g, b: g.admin_set_trend(str(b.get("id", "")), _int(b.get("value"), 0)),
     # 領地爭奪（第 38 項改版第一批）：定一塊歸誰（side 空字串＝放回中立）；第一批沒有攻城戰，地圖只靠這裡與時刻表指定易手
     "conquest_set": lambda g, b: g.admin_conquest_set(str(b.get("id", "")), str(b.get("side", "")) or None),
-    # 第二批（救場）：立刻照此刻的票與主將排一次攻城（集結馬上開）、取消今天的一場（id 是時程表那一場的 id）
-    "conquest_settle_now": lambda g, b: g.admin_conquest_settle_now(),
+    # 救場（翻地與爭搶，QA 用）：定一條進度（到 100 照推滿易手）、立刻替一邊下戰書（集結馬上開）、取消一場（id 是時程表那一場的 id）。
+    # 立刻下戰書叫 admin_conquest_letter，不叫 conquest_letter：api_do 先查這一張，同名會把玩家的下戰書（MAIN_ACTIONS）整個蓋掉（FB-609）
+    "conquest_progress": lambda g, b: g.admin_conquest_progress(str(b.get("id", "")), str(b.get("side", "")), _float(b.get("value"), 0.0)),
+    "admin_conquest_letter": lambda g, b: g.admin_conquest_letter(str(b.get("id", "")), str(b.get("side", ""))),
     "conquest_cancel": lambda g, b: g.admin_conquest_cancel(str(b.get("id", ""))),
     "xingshi_now": lambda g, b: g.admin_xingshi_now(),  # 領地爭奪第三批 A：現在就開一篇〈天下形勢〉
     "resolve_event": lambda g, b: g.admin_resolve_event(str(b.get("id", "")), str(b.get("key", ""))),

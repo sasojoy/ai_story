@@ -148,9 +148,9 @@ def siege_places(content: Content, faction: str, front: str, world: WorldState |
     from . import conquest  # noqa: PLC0415  conquest → territory → rules：在函式裡 import
 
     if conquest.on(content, world):
-        # 領地爭奪（第二批，裁決 11）：這條線上這一邊今天公告要攻的目標（conquest_day.today），而且那裡出陣攻打的對手每一路打贏都記得到
+        # 領地爭奪（裁決 11；翻地與爭搶 PM 2026-10-20 第 1 條）：這條線上這一邊此刻進度最高、推得動的那一塊（conquest_day.today），而且那裡出陣攻打的對手每一路打贏都記得到
         # （同 _counts 的 siege_win，FB-531）。打贏那裡的守軍就算，公告了的中立地、被敵方佔下的中立地站的中立駐軍與流寇也算
-        # （裁決 20，PM 2026-10-21）。敵方大本營與廣宗搶不下（conquest.targets 先排掉），不會被公告（裁決 18）
+        # （裁決 20，PM 2026-10-21）。敵方大本營與廣宗搶不下（conquest.targets 先排掉），推不動、不列（裁決 18）
         return [
             loc_id for loc_id in _today(content, world, faction, "attack")
             if conquest.line_of(world, content, loc_id) == front
@@ -171,8 +171,8 @@ def siege_places(content: Content, faction: str, front: str, world: WorldState |
 def siege_win(faction: str | None, squad_faction: str | None, garrison: bool = False) -> bool:
     """打贏這一路算不算 faction 的攻城（軍令文件 3.1：敵方陣營的隊伍；操練、流寇、中立駐軍不算）。記功（_counts）與領地爭奪開著時
     列地點（siege_places）都問它：軍令卡、假人、記功同一個判斷（FB-531）。
-    garrison（領地爭奪在這一季生效，裁決 20，PM 2026-10-21）：攻城＝今天公告的目標，打贏那裡的守軍就算——敵方陣營的兵，或沒有陣營的
-    中立駐軍、流寇；自家的、別的陣營（豪強）的隊伍照舊不算。地點是不是今天公告的目標由呼叫端看。"""
+    garrison（領地爭奪在這一季生效，裁決 20，PM 2026-10-21）：攻城＝此刻進度最高的那一塊（翻地與爭搶），打贏那裡的守軍就算——敵方陣營的兵，
+    或沒有陣營的中立駐軍、流寇；自家的、別的陣營（豪強）的隊伍照舊不算。地點是不是那一塊由呼叫端看。"""
     if garrison and squad_faction is None:
         return True
     return squad_faction is not None and squad_faction == ENEMY.get(faction or "")
@@ -395,18 +395,23 @@ def _issue(state: GameState, content: Content, week: int, prefix: str, redraw: b
 # ── 記功與達成 ────────────────────────────────────────────
 
 PERSONAL = {"siege": "win", "defend": "duty", "intercept": "win", "escort": "convoy", "strike": "challenge"}
+# 領地爭奪：自家被戰書凍結的那一塊，攻城戰站守方、守住了（Game._settle_siege 替每一個守方的人記一次；FB-605）。那一塊守不動進度，
+# 在那裡出陣守、按守勢行動（duty）不算；別的守城地方反過來只認 duty
+SIEGE_GUARD = "siege_guard"
 
 
 def _today(content: Content, world: WorldState | None, side: str | None, how: str) -> list[str]:
-    """領地爭奪第二批：這一邊今天公告要攻（attack）、或自家被公告要守（defend）的區塊（conquest_day.today）。"""
+    """領地爭奪：這一邊此刻進度最高、推得動的那一塊（attack），或自家被推得最高、守得動的那一塊（defend）（conquest_day.today；
+    翻地與爭搶 PM 2026-10-20 第 1 條，第二批是今天公告的目標）。"""
     from . import conquest_day  # noqa: PLC0415  conquest_day → conquest → territory → rules：在函式裡 import
 
     return conquest_day.today(world, content, side, how) if world is not None and side is not None else []
 
 
 def defend_places(content: Content, world: WorldState | None, o: Order) -> list[str]:
-    """領地爭奪在這一季生效時，這道守城軍令記得了次數的地點（裁決 11、24；FB-565）：這條戰線上自家今天被公告要攻、還沒打完的區塊
-    （conquest_day.today 的 defend：此刻佔著的是自己、不是攻方）。記功（_counts）、假人往哪走（targets）、守城軍令卡的做法
+    """領地爭奪在這一季生效時，這道守城軍令記得了次數的地點（裁決 11、24；FB-565）：這條戰線上自家佔著、被推得最高、守得動的區塊
+    （conquest_day.today 的 defend，翻地與爭搶 PM 2026-10-20 第 1 條；沒人在推就沒有），加上自家被戰書凍結的那幾塊（FB-605：那裡記的是攻城戰守住，
+    _counts 的 SIEGE_GUARD）。記功（_counts）、假人往哪走（targets）、守城軍令卡的做法
     （atlas.order_how）、輿圖的守城標記（mapdata._order_marks）、duty_counts 都問它，列的與記的不會對不上。
     關著的季是空的（舊規則整條戰線都記，各處照舊）。"""
     from . import conquest  # noqa: PLC0415  conquest → territory → rules：在函式裡 import
@@ -421,15 +426,21 @@ def _counts(
     squad_faction: str | None, figure: str | None, order: str | None, world: WorldState | None = None,
 ) -> bool:
     """這一次個人行動算不算這道軍令的一次（軍令文件 3.1～3.4、4.5）。world 給了而且領地爭奪在這一季生效時，攻城與守城照今天的時程表
-    （裁決 11：攻城＝這一邊今天公告的目標裡打贏那裡的守軍〔siege_win(garrison=True)：敵方陣營的兵，中立駐軍、流寇也算，裁決 20；
-    同 siege_places，FB-531〕；守城＝自家被公告的那一塊）。"""
-    if PERSONAL.get(o.template) != kind:
-        return False
+    （裁決 11；翻地與爭搶 PM 2026-10-20 第 1 條：攻城＝這一邊此刻進度最高的那一塊打贏那裡的守軍〔siege_win(garrison=True)：敵方陣營的兵，
+    中立駐軍、流寇也算，裁決 20；同 siege_places，FB-531〕；守城＝自家被推得最高的那一塊，被戰書凍結的那一塊認攻城戰守住〔SIEGE_GUARD，FB-605〕）。"""
     from . import conquest  # noqa: PLC0415
 
-    if o.template in ("siege", "defend") and conquest.on(content, world):
-        if o.template == "defend":
-            return location in defend_places(content, world, o)  # 守城認自家今天被公告的那一塊（裁決 24；FB-565 卡與輿圖也讀它）
+    guarding = kind == SIEGE_GUARD and o.template == "defend"
+    if PERSONAL.get(o.template) != kind and not guarding:
+        return False
+    on = conquest.on(content, world)
+    if o.template == "defend" and on:
+        if location not in defend_places(content, world, o):  # 守城認自家被推得最高的那一塊（裁決 24；FB-565 卡與輿圖也讀它）
+            return False
+        return guarding == (conquest.frozen(world, location) is not None)  # 凍結的那一塊只認攻城戰守住，別處只認出陣守、守勢行動
+    if guarding:  # 攻城戰只在領地爭奪的季
+        return False
+    if o.template == "siege" and on:
         spots = _today(content, world, o.faction, "attack")
         if location not in spots or conquest.line_of(world, content, location) != o.front:
             return False
@@ -581,7 +592,7 @@ def win_counts(state: GameState, content: Content, faction: str | None, loc_id: 
 
 
 def duty_counts(state: GameState, content: Content, faction: str | None, loc_id: str) -> bool:
-    """在這裡做守勢行動，會替這週還沒達成的守城記一次（領地爭奪第二批：自家今天被公告的那一塊，裁決 11）。"""
+    """在這裡做守勢行動，會替這週還沒達成的守城記一次（領地爭奪：自家被推得最高的那一塊，裁決 11、翻地與爭搶）。"""
     from . import conquest  # noqa: PLC0415
 
     if conquest.on(content, state.world):
@@ -596,21 +607,22 @@ def strike_on(state: GameState, content: Content, faction: str | None, fid: str)
     return any(o.template == "strike" and not o.done and o.figure == fid for o in current(state, content, faction))
 
 
-def targets(state: GameState, content: Content, faction: str | None) -> list[str]:
+def targets(state: GameState, content: Content, faction: str | None, skip: frozenset[str] = frozenset()) -> list[str]:
     """假人往哪裡走：這週還沒達成的軍令要去的地點（攻城、守城：那條戰線的地點；截糧：運糧隊在的那幾站〔intercept_spots〕；護糧：身上有
-    這一道的糧車就是終點，沒有而且糧草夠就是起點；打擊：人物當下的所在），照內容檔的地點順序。"""
+    這一道的糧車就是終點，沒有而且糧草夠就是起點；打擊：人物當下的所在），照內容檔的地點順序。skip 裡的那幾種軍令不算（假人分辨「只為了截糧才去」，
+    bot_policy._order_hop）。"""
     from . import conquest  # noqa: PLC0415  conquest → territory → rules：在函式裡 import
     from .materials import grain_of  # noqa: PLC0415  只有這裡用得到
 
     p = state.player
     wanted: set[str] = {p.convoy.to_loc} if p.convoy is not None else set()  # 押著的車一定送到（那一道沒了也照送，T6 審查 I3）
     for o in current(state, content, faction):
-        if o.done:
+        if o.done or o.template in skip:
             continue
         if o.template == "siege":
             wanted |= set(siege_places(content, o.faction, o.front, state.world))
         elif o.template == "defend":
-            if conquest.on(content, state.world):  # 領地爭奪第二批：自家今天被公告的那一塊（裁決 11）
+            if conquest.on(content, state.world):  # 領地爭奪：自家被推得最高的那一塊（裁決 11、翻地與爭搶；同記功，FB-565）
                 wanted |= set(defend_places(content, state.world, o))
             else:
                 wanted |= {loc for loc in content.locations if rules.front_of(content, loc) == o.front}
