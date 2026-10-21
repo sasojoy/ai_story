@@ -6392,7 +6392,7 @@ class Game:
                     call = seal_duel.CALL if duel.challenger.name in battle.participants else seal_duel.CALL_QA  # 旁觀散人沒有「戰功居前」
                     seal.rumor(shared.season, call.format(challenger=duel.challenger.name, holder=duel.holder.name, shard=shard_label))
                 elif battle.seal_holder:
-                    seal.rumor(shared.season, seal.NO_DUEL.format(holder=battle.seal_holder, shard=shard_label))
+                    seal.rumor(shared.season, seal.no_duel_text(c, battle.seal_holder, shard_label))  # 改版：不點名
             if battle.seal_emerge is None:
                 return
             shard = reg_.shards[battle.seal_emerge]
@@ -7253,7 +7253,7 @@ class Game:
         if battle.siege is not None and (note := siege.scene_note(self.content, battle.siege, battle)):
             header += "\n\n" + note
         if battle.seal_shard and battle.seal_shard in self.content.seal:  # 璽動（4.3）：參戰的人知道打完可能有單挑
-            header += "\n\n" + seal.STIR_SCENE.format(holder=battle.seal_holder or "", shard=self.content.seal[battle.seal_shard].name)
+            header += "\n\n" + seal.stir_text(self.content, battle.seal_holder or "", self.content.seal[battle.seal_shard].name, scene=True)
         if seal.on(self.content) and seal.is_mandate_battle(self.content, definition):  # 天命之爭（8.3）：碎片在哪一軍、懷璽的人份量加重
             shift = seal.lean_shift(battle.seal_lean, definition, self.content.config.seal)  # 同集結那一刻的算法（FB-186）
             weight = seal.MANDATE_WEIGHT if seal.holders(self.world.seal_state().registry) else ""  # 全服沒人持有就不寫（FB-189）
@@ -7396,7 +7396,7 @@ class Game:
             return []
         merit = battle.seal_shard and p.name in seal.hint_names(battle, self.content, seal.holders(self.world.seal_state().registry))
         if p.eliminated:
-            return [seal.MERIT_HINT] if merit else []
+            return [seal.merit_hint(self.content)] if merit else []
         out = []
         hunters = battle.last_targets.get(p.name)
         if hunters:
@@ -7408,7 +7408,7 @@ class Game:
         if battle.marked.get(p.name) == battle.act_index:
             out.append("你在這一幕太顯眼了，對面的強攻會往你身上招呼。")
         if merit:
-            out.append(seal.MERIT_HINT)  # 璽動那一場戰功居前（4.3）：不露數字、不露名次
+            out.append(seal.merit_hint(self.content))  # 璽動那一場戰功居前（4.3）：不露數字、不露名次；改版兩軍都給、字有條件
         return out
 
     def _round_wait(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> str:

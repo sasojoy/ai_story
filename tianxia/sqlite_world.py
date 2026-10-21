@@ -738,7 +738,7 @@ class SqliteWorldStore:
                 if content.config.seal.enabled and not mandate:  # 主機關掉碎片時不判隱沒（登記照留）
                     seen = {s.holder: _seen_real(conn, s.holder) for s in reg.shards.values() if s.state == "held" and s.holder}
                     for shard, name in seal.sink(reg, state.season_number, seen, now, content.config.seal):
-                        text = seal.SINK.format(holder=name, shard=content.seal[shard.id].name)
+                        text = seal.sink_text(content, name, content.seal[shard.id].name)  # 改版：不點名
                         state.season.chronicle.append(Rumor(time=state.season.time, text=text))
                         wrote = True
                 for duel in state.seal_duels:  # 還沒收場的單挑記成未分勝負，兩人補得到（開關關著時留下來的也一樣，不帶進下一季）
