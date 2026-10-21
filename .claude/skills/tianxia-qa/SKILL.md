@@ -23,7 +23,7 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 - **scratchpad 跟同一個 PM 派出的其他子代理共用**（2026-10-20 在 `shots/` 看到別人的檔）：自己的複本、資料庫、截圖，都放在用這次驗收命名的子資料夾。
 
 ## 開伺服器與登入
-- **複本**：在 scratchpad 用 bash `git -C <qa 工作樹> archive HEAD | tar -x -C <scratchpad>/on` 解一份來跑。PowerShell 的 tar 碰到中文路徑會壞。不要在 repo 裡跑伺服器，也不要改 repo 的設定與 `.local/`。
+- **複本**：在 scratchpad 用 bash `git -C <qa 工作樹> archive HEAD | tar -x -C <scratchpad>/on` 解一份來跑。PowerShell 的 tar 碰到中文路徑會壞。先 `git archive -o <檔>.tar` 再解的話，Git Bash 的 tar 要加 `--force-local`（`tar --force-local -xf C:/…/x.tar -C …`），不然把 `C:` 當成遠端主機、回「Cannot connect to C: resolve failed」。不要在 repo 裡跑伺服器，也不要改 repo 的設定與 `.local/`。
 - **擋 11434**：有人登入時，伺服器會預熱模型（`server._warm_model` 連 Ollama）。在複本的 `content/config.json` 加一個鍵 `"ollama_url": "http://127.0.0.1:9"`（只改 scratchpad 的複本），就打不到 11434。
 - **埠與 host**：先用 `netstat -ano | grep LISTEN` 挑沒人用的埠。cookie 照 host 分、不分埠，所以每個驗收都用自己的 `<名字>.localhost`（例 `qa7check.localhost:7893`）。同一個驗收要同時登兩個帳號，也要換 host。
 - **設定**：`TIANXIA_PROFILE` 是 `weekend`、`season21`、`week7`（7 天濃縮季），或空字串（預設，14 天的季）。`TIANXIA_DB` 指到 scratchpad 的暫存檔。伺服器、`set_password.py`、`run_bots.py` 三者要設成一樣的值。
