@@ -2620,3 +2620,59 @@ svg.fig .blade.bow { stroke-width: 3; }
 .jd.fifth .jring.gold { background: conic-gradient(var(--gold), #e8c66a, var(--gold)); }
 .jd.fifth.on b { color: var(--gold); }
 .jd.fifth.on small { color: var(--gold); }
+
+/* ── 招式與絕學稿案第四、五輪：戰力、抽屜、意境卡、品相、爐火 ── */
+.hero-might { color: var(--accent); font-weight: 700; }
+.hero-might b { font: 800 14px var(--serif); }
+.hero-node span { max-width: 8em; overflow: hidden; text-overflow: ellipsis; }
+.hero-node span small { display: block; font-size: 9.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; } /* 招另起一行：左邊那幾個點離圖邊近，一行寫不下 */
+.hero-node.l span { text-align: right; }
+.pr-sheet { max-height: 82vh; }
+.pr-sheet .acard { margin: 0; box-shadow: none; }
+.lib-kind { margin: 8px 0 4px; font-size: 12px; color: var(--ink-2); letter-spacing: 0.1em; }
+.libr .tseal { flex: none; }
+.lib-might { margin-left: auto; flex: none; font-size: 11px; color: var(--ink-2); white-space: nowrap; }
+.lib-might.up { color: #2f7d4f; }
+.lib-might.down { color: var(--accent); }
+.winfo .lib-might { display: block; margin: 2px 0 0; }
+.insl .insr { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--ink); }
+.insl .insr.on { border-color: var(--accent); }
+.insr .txt { display: flex; flex-direction: column; min-width: 0; }
+.insr .txt small { color: var(--ink-2); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.insl { display: grid; gap: 6px; }
+.look { display: inline-grid; place-items: center; width: 1.45em; height: 1.45em; margin-left: 4px; border: 1.5px solid currentColor; border-radius: 4px; font: 700 11px/1 var(--serif); font-style: normal; vertical-align: 1px; }
+.look.big { width: 1.9em; height: 1.9em; font-size: 15px; margin-left: auto; }
+.look.l2 { color: #3b6fa8; }
+.look.l3 { color: #7b4bb0; }
+.look.l4 { color: var(--gold); background: rgba(200, 155, 60, 0.12); }
+.ins-card { display: grid; gap: 8px; }
+.ic-head { display: flex; align-items: center; gap: 10px; }
+.ic-head > div { display: flex; flex-direction: column; min-width: 0; }
+.ic-head small { color: var(--ink-2); font-size: 12px; }
+.ic-fx { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.ic-fx li { padding: 6px 8px; border-radius: 8px; background: var(--card-2); font-size: 13px; line-height: 1.55; }
+.ic-fx li b { margin-right: 6px; font-family: var(--serif); }
+.ic-fx li.grand { background: rgba(200, 155, 60, 0.16); border: 1px solid rgba(200, 155, 60, 0.45); }
+.ic-fx li.sp { background: rgba(178, 45, 21, 0.08); }
+.ic-fits, .ic-melt { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.ic-note, .ic-cmp { margin: 0; font-size: 13px; color: var(--ink-2); }
+/* 爐火四段 */
+.fire { display: inline-flex; align-items: center; gap: 6px; }
+.fire svg { height: 18px; width: auto; flex: none; }
+.fire path { fill: #c8873c; }
+.fire.f0 path { fill: #b9a58c; }
+.fire.f2 path { fill: #e0702a; }
+.fire.f3 path { fill: #f3c54a; filter: drop-shadow(0 0 3px rgba(255, 200, 80, 0.9)); }
+.fire b { font-family: var(--serif); }
+.fire > span { font-size: 13px; color: var(--ink-2); }
+.fire.small { margin-left: auto; flex: none; }
+.fire.small svg { height: 14px; }
+.mc-verdict .fire { display: flex; flex-wrap: wrap; }
+/* 出爐的排場：爐火一閃、卡翻面、品相印最後蓋上；珍以上多一道光（一秒半，不擋操作） */
+.ins-card.reveal { animation: ic-flip 0.9s ease-out both; transform-origin: 50% 0; }
+.ins-card.reveal .look { animation: ic-stamp 0.35s 0.95s ease-out both; }
+.ins-card.reveal.rare { animation: ic-flip 0.9s ease-out both, ic-glow 1.4s 0.9s ease-out; }
+@keyframes ic-flip { 0% { opacity: 0; transform: perspective(600px) rotateX(70deg); filter: brightness(2.2); } 60% { filter: brightness(1.3); } 100% { opacity: 1; transform: none; filter: none; } }
+@keyframes ic-stamp { 0% { opacity: 0; transform: scale(2.4); } 100% { opacity: 1; transform: scale(1); } }
+@keyframes ic-glow { 0% { box-shadow: 0 0 0 0 rgba(255, 200, 80, 0); } 40% { box-shadow: 0 0 22px 6px rgba(255, 200, 80, 0.55); } 100% { box-shadow: 0 0 0 0 rgba(255, 200, 80, 0); } }
+@media (prefers-reduced-motion: reduce) { .ins-card.reveal, .ins-card.reveal .look { animation: none; } }

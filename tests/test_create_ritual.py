@@ -166,7 +166,10 @@ def test_the_intent_score_sets_the_base_power(content):
     assert create.power_scale_of(content, 150) == pytest.approx(high)
     game = _game(content)
     _walk(game, reading=create.IntentReading(score=80, attributes=["快"], lean="無"))
-    assert game.create_view()["draft"]["power"].startswith("底子 ")
+    d = game.create_view()["draft"]
+    m = d["might"]
+    assert d["power"] == create.MIGHT_LINE.format(now=m["now"], first=m["first"], full=m["full"])
+    assert m["full"] > m["first"] > 0  # 練滿比第一成強
     game.create_name("厚底拳")
     art = team.resolve_art("厚底拳", content, game.world)
     assert power_scale(art) == pytest.approx(create.power_scale_of(content, 80), abs=0.01)

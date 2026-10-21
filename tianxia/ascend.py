@@ -14,7 +14,7 @@ from dataclasses import dataclass
 
 from pydantic import BaseModel
 
-from . import annals, arts as arts_mod, moves, tactics, team, traits
+from . import annals, might, moves, tactics, team, traits
 from .martial_arts import MAX_LEVEL
 from .models import Content
 from .ollama_client import OllamaClient
@@ -40,11 +40,17 @@ def move_name(content: Content, art) -> str:
     return move.name if move is not None else art.name
 
 
+def _might(state: GameState, content: Content, world: WorldStateStore, art_id: str) -> int:
+    """這一門在身上時的戰力：穿著的照此刻，躺在功法庫的照換上之後。"""
+    return might.now(state, content, world) if art_id not in state.player.arts else might.with_art(state, content, world, art_id) or 0
+
+
 def ascend(state: GameState, content: Content, world: WorldStateStore, art_id: str, via: str) -> list[str]:
     """把這一門升為絕學（呼叫端已擲中）：改品級、寫破境卡、江湖史、傳聞、行狀。回寫給玩家看的那幾句。
     不是自創的（合成的上品）照舊升品，只多一行江湖史，沒有破境卡。"""
     p = state.player
     before = team.player_art(state, content, world, art_id)
+    was_might = _might(state, content, world, art_id)
     p.art_quality[art_id] = "絕學"
     p.art_mastery.pop(art_id, None)
     after = team.player_art(state, content, world, art_id)
@@ -66,7 +72,7 @@ def ascend(state: GameState, content: Content, world: WorldStateStore, art_id: s
         before=tactics.card_text(was, tactics.title_of(was, before)) if was is not None else "",
         after=tactics.card_text(now, tactics.title_of(now, after)) if now is not None else "",
         after_tail=tactics.card_text(tail, traits.AFTER_TITLE) if tail is not None else "",
-        power=[arts_mod.rating(content, before, MAX_LEVEL, state, world), arts_mod.rating(content, after, MAX_LEVEL, state, world)],
+        power=[was_might, _might(state, content, world, art_id)],  # 全身的戰力（might），破境前後
         chronicle=chronicle, intent=after.note,
     )
     return [head]

@@ -28,7 +28,7 @@ from dataclasses import dataclass
 
 from pydantic import BaseModel, Field
 
-from . import annals, arts as arts_mod, library, moves, naming, tactics, team, treasures
+from . import annals, arts as arts_mod, library, might, moves, naming, tactics, team, treasures
 from .martial_arts import ATTRIBUTES, QUALITY_BASE_POWER, QUALITY_TOP_POWER, MartialArt, scaled
 from .models import Content, TacticDef
 from .ollama_client import OllamaClient
@@ -569,7 +569,8 @@ def seal_points(state: GameState, content: Content) -> int:
     return int(treasures.amount(state, content, "fuse_points"))
 
 
-POWER_LINE = "底子 {pct}%（意寫得越好越厚）。"  # 待 joy 潤
+MIGHT_LINE = "換上這一門：戰力 {now} → {first}，練滿 {full}。"  # 待 joy 潤
+DRAFT_ID = "（成形中）"  # 算戰力時那一門還沒登記的暫名（不給玩家看）
 
 
 def power_scale_of(content: Content, points: int) -> float:
@@ -615,6 +616,24 @@ def draft_move(state: GameState, content: Content, draft: CreateDraft, name: str
     )
 
 
+def draft_art(state: GameState, content: Content, draft: CreateDraft, name: str, move: str | None = None) -> MartialArt:
+    """這一份成形的單子立名之後是哪一門武學（還沒登記）：finish 照它登記，成形那一步拿它算換上後的戰力（might.with_new）。"""
+    grade = content.config.arts.create_grade
+    attribute = top_of(content, draft)
+    affinity = list(dict.fromkeys([attribute, *affinity_of(draft.colors[: arts_mod.slot_count(content, grade)])]))
+    card = draft_move(state, content, draft, move)
+    art = MartialArt(
+        id=name, name=name, kind=draft.kind, quality="下品", attribute=attribute,
+        base_power=QUALITY_BASE_POWER["下品"], top_power=QUALITY_TOP_POWER["下品"], origin="created",
+        creator=state.player.name, creator_shown=state.player.name, note=draft.intent, lean=draft.lean,
+        affinity=affinity, slot_colors=[list(c) for c in draft.colors], pose=dict(draft.pose),
+        weapon=draft.form if draft.kind == "武學" else None, method=draft.form if draft.kind == "內功" else None,
+        move_name=card.name if card is not None else None, move_say=draft.say, move_fire=fire_of_draft(state, content, draft),
+        move_rare=draft.rare, move_stance=stance_of(draft.pose),
+    )
+    return scaled(art, power_scale_of(content, draft.score + seal_points(state, content)))
+
+
 def move_problem(content: Content, world: WorldStateStore, name: str) -> str | None:
     """招名過不過得了：二到四個中文字，過一般的名字過濾（禁用名單、人物、內容武學……）。招名不必全服獨一。"""
     if not (MOVE_MIN <= len(name) <= MOVE_MAX):
@@ -634,23 +653,9 @@ def finish(
     if move_name and (problem := move_problem(content, world, move_name)) is not None:
         return None, [problem]
     draft = state.player.creating
-    clean = naming.clean_name(name)
     grade = content.config.arts.create_grade
-    attribute = top_of(content, draft)
-    affinity = list(dict.fromkeys([attribute, *affinity_of(draft.colors[: arts_mod.slot_count(content, grade)])]))
-    stance = stance_of(draft.pose)
-    fire = fire_of_draft(state, content, draft)
+    art = draft_art(state, content, draft, naming.clean_name(name), move_name or None)
     card = draft_move(state, content, draft, move_name or None)
-    art = MartialArt(
-        id=clean, name=clean, kind=draft.kind, quality="下品", attribute=attribute,
-        base_power=QUALITY_BASE_POWER["下品"], top_power=QUALITY_TOP_POWER["下品"], origin="created",
-        creator=state.player.name, creator_shown=state.player.name, note=draft.intent, lean=draft.lean,
-        affinity=affinity, slot_colors=[list(c) for c in draft.colors], pose=dict(draft.pose),
-        weapon=draft.form if draft.kind == "武學" else None, method=draft.form if draft.kind == "內功" else None,
-        move_name=card.name if card is not None else None, move_say=draft.say, move_fire=fire, move_rare=draft.rare,
-        move_stance=stance,
-    )
-    art = scaled(art, power_scale_of(content, draft.score + seal_points(state, content)))
     if not world.claim_skill_name(art):
         return None, [NAME_TAKEN]
     p = state.player
@@ -712,8 +717,13 @@ def view(state: GameState, content: Content, world: WorldStateStore) -> dict:
         "read_text": ("意偏" + "、".join(draft.read) if draft.read else "意不偏一路") + LEAN_TEXT.get(draft.lean, ""),
         "colors": [list(c) for c in draft.colors], "colors_text": [arts_mod.color_text(c) for c in draft.colors],
         "redo": draft.redo,
-        "power": POWER_LINE.format(pct=round(power_scale_of(content, draft.score + seal_points(state, content)) * 100)),
+        "power": "",
     }
+    if draft.colors:  # 成形了：換上這一門的戰力（招式與絕學稿案第二輪：付心得之前就知道值不值）
+        mine = might.now(state, content, world)
+        first, full = might.with_new(state, content, world, draft_art(state, content, draft, DRAFT_ID), cfg.create_grade)
+        base["draft"]["power"] = MIGHT_LINE.format(now=mine, first=first, full=full)
+        base["draft"]["might"] = {"now": mine, "first": first, "full": full}
     stance = stance_of(draft.pose)
     base["draft"]["stance"] = stance  # 擺式讀出的勢（攻勢／守勢／變勢／起勢）
     base["draft"]["timing"] = moves.timing_of(draft.kind, stance)

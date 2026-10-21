@@ -61,7 +61,7 @@ import server_push
 import zhuan_html
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
-    arena_crowd, ascend, battle_instance, biography, calendar, companion_agent, create, duel, event_llm, feasts, fight_llm, foreshadow, gender, glyph, insight_llm, leaderboard, letters, mapdata,
+    arena_crowd, ascend, battle_instance, biography, calendar, companion_agent, create, duel, event_llm, feasts, fight_llm, foreshadow, gender, glyph, insight_llm, leaderboard, letters, mapdata, might,
     naming,
     ollama_client, rules,
     seal, seal_duel, server_bots, social, sortie, speech, tavern, team, timetable, treasures, yuedan,
@@ -1485,6 +1485,11 @@ def menxia_view(game: Game, person: str | None = None) -> dict:
         # 裝備（裝備四欄設計 2.5）：開著的欄位一段一段（武器、防具、坐騎），每段身上那件、裝備庫裡同一欄的；格數四欄合算。
         # 都關著時 slots 是空的，修練頁那一塊不畫
         "gear": game.gear_rows(),
+        # 全身的戰力（招式與絕學稿案第四輪；tianxia/might.py）：修練頁人形圖氣血旁邊那個數，換上清單的「→ N」跟它比
+        "might": might.now(game.state, game.content, game.world),
+        # 自創武學的入口從煉製搬到修練（第四輪）：開關關著、還在序章裡是 None
+        "create": {"price": create.price(game.state, game.content), "problem": create.allowed(game.state, game.content)}
+        if create.on(game.content) else None,
     }
 
 

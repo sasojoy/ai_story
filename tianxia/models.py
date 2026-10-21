@@ -2277,9 +2277,11 @@ class ArtsTuning(_Strict):
     insight_quality_per_wis: float = Field(default=0.03, ge=0)
     insight_quality_wis_cap: float = Field(default=0.4, ge=0, le=1)
     insight_second: dict[str, float] = Field(default_factory=lambda: {"下品": 0.2, "中品": 0.5, "上品": 0.8})
-    insight_grand: dict[str, float] = Field(default_factory=lambda: {"下品": 0.05, "中品": 0.15, "上品": 0.35})
+    # 大獎（招式與絕學稿案第五輪：先量再改）：上品 .35、合出來 ×2.0 時，週末季整季機器人三十季合出來的有 47% 是珍品、季末手上珍品 19%，
+    # 珍不稀罕了；改 .25 × 1.5 後合出來的珍品 22%、季末手上 12%（量法：每一份悟到、合出來、揣摩出來的照 insight_fx.look 數）
+    insight_grand: dict[str, float] = Field(default_factory=lambda: {"下品": 0.05, "中品": 0.15, "上品": 0.25})
     compound_second_bonus: float = Field(default=0.3, ge=0)
-    compound_grand_scale: float = Field(default=2.0, ge=0)
+    compound_grand_scale: float = Field(default=1.5, ge=0)
     deepen_grand_scale: float = Field(default=1.0, ge=0)
     insight_max_effects: int = Field(default=2, ge=1)
     insight_piece_cap: int = Field(default=4, ge=1)
