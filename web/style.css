@@ -2958,6 +2958,7 @@ svg.fig .blade.bow { stroke-width: 3; }
 .insl { display: grid; gap: 6px; }
 .look { display: inline-grid; place-items: center; width: 1.45em; height: 1.45em; margin-left: 4px; border: 1.5px solid currentColor; border-radius: 4px; font: 700 11px/1 var(--serif); font-style: normal; vertical-align: 1px; }
 .look.big { width: 1.9em; height: 1.9em; font-size: 15px; margin-left: auto; }
+.look.l1 { color: var(--ink-2); }
 .look.l2 { color: #3b6fa8; }
 .look.l3 { color: #7b4bb0; }
 .look.l4 { color: var(--gold); background: rgba(200, 155, 60, 0.12); }
@@ -2992,3 +2993,19 @@ svg.fig .blade.bow { stroke-width: 3; }
 @keyframes ic-stamp { 0% { opacity: 0; transform: scale(2.4); } 100% { opacity: 1; transform: scale(1); } }
 @keyframes ic-glow { 0% { box-shadow: 0 0 0 0 rgba(255, 200, 80, 0); } 40% { box-shadow: 0 0 22px 6px rgba(255, 200, 80, 0.55); } 100% { box-shadow: 0 0 0 0 rgba(255, 200, 80, 0); } }
 @media (prefers-reduced-motion: reduce) { .ins-card.reveal, .ins-card.reveal .look { animation: none; } }
+
+/* 品相四級的梯子與「裝在哪一格最強」（Joy 2026-10-21「合出來我根本看不懂這是不是好的」） */
+.look-ladder { margin: 6px 0 8px; display: grid; gap: 6px; }
+.ll-steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.ll-steps i { font: 700 13px/1 var(--serif); font-style: normal; text-align: center; padding: 7px 0; border-radius: 6px; border: 1px solid var(--line); color: var(--ink-2); opacity: 0.45; }
+.ll-steps i.past { opacity: 0.7; }
+.ll-steps i.on { opacity: 1; font-size: 16px; border-width: 2px; border-color: currentColor; background: var(--card); }
+.ll-steps i.on.l1 { color: var(--ink); }
+.ll-steps i.on.l2 { color: #3b6fa8; background: rgba(59, 111, 168, 0.08); }
+.ll-steps i.on.l3 { color: #7b4bb0; background: rgba(123, 75, 176, 0.09); }
+.ll-steps i.on.l4 { color: var(--gold); background: rgba(200, 155, 60, 0.14); }
+.look-ladder p { margin: 0; font-size: 13px; color: var(--ink-2); }
+.look-ladder p b.l2 { color: #3b6fa8; } .look-ladder p b.l3 { color: #7b4bb0; } .look-ladder p b.l4 { color: var(--gold); }
+.ic-best { margin: 6px 0 0; font-size: 13px; color: var(--ink-2); }
+.ic-best.up { color: #2f7d4a; }
+.ic-best.up b { font: 800 15px var(--serif); }

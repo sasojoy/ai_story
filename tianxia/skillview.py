@@ -549,6 +549,8 @@ def insight_rows(state: GameState, content: Content, world: WorldStateStore) -> 
                 # 意境卡（招式與絕學稿案第五輪）：品相凡佳珍神（底子 quality 不給玩家看）、每個功效一句白話、裝得進哪裡
                 "look": insight_fx.look(fx), "effects": insight_effects(content, fx, insight),
                 "fits": [] if arts_mod.where_slotted(state, insight_id) else _fits(state, content, world, insight_id),
+                # 裝在身上哪一格最強、戰力會到多少（might.best_place；Joy 2026-10-21「合出來我根本看不懂這是不是好的」）；裝著的不算
+                "best": None if arts_mod.where_slotted(state, insight_id) else might.best_place(state, content, world, insight_id),
                 "piece": insight_fx.pieces(state, insight_fx.base_id(insight_id)).index(insight_id) + 1 if not insights.is_own(insight_id) else 1,
                 "note": insight.note, "melt": content.config.melt_insight_xinde, "blocked": blocked,
                 # 感悟悟來的私有意境（悟意境設計 0.2b）：在哪裡悟的、畫的那一筆（修練頁畫小縮圖）
