@@ -22,6 +22,8 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 - **兩份複本對照要平行跑**：PowerShell `Start-Process -FilePath <python> -ArgumentList '-u','-I',<腳本> -RedirectStandardOutput <檔> -RedirectStandardError <檔> -WindowStyle Hidden -PassThru`，各設自己的 `QA_ROOT`；不加 `-u` 的話輸出要等跑完才寫進檔，看不到進度。
 - **scratchpad 跟同一個 PM 派出的其他子代理共用**（2026-10-20 在 `shots/` 看到別人的檔）：自己的複本、資料庫、截圖，都放在用這次驗收命名的子資料夾。
 - **Git Bash 的 tar 把 `C:/…` 當成遠端主機**（回「Cannot connect to C: resolve failed」，2026-10-21 輿圖第三版第 2 批）：先 `git -C <工作樹> archive -o <scratchpad>/x.tar <sha>`，再 `tar --force-local -x -f <tar> -C <資料夾>`。
+- **子代理的 Bash 連 tar 都擋**（「computed value」，2026-10-21 翻地複驗）：`git archive -o` 之後用 Python `tarfile`（`untar.py`：`extractall` 時排除 `docs/`、`.claude/`）解；PowerShell 的 tar 解 `docs/` 底下的中文檔名會回 `Invalid empty pathname`，code 檔其實也沒解完。
+- **`Start-Process -ArgumentList` 的陣列元素有空格要自己加引號**：`-m "slow or not slow"` 寫成 `'"slow or not slow"'`；沒加就被拆成四個參數，pytest 回「no tests ran in 3s」、一個測試都沒跑（2026-10-21）。
 
 ## 開伺服器與登入
 - **複本**：在 scratchpad 用 bash `git -C <qa 工作樹> archive HEAD | tar -x -C <scratchpad>/on` 解一份來跑。PowerShell 的 tar 碰到中文路徑會壞。不要在 repo 裡跑伺服器，也不要改 repo 的設定與 `.local/`。
@@ -44,6 +46,7 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 
 ## API
 - 打 API 的腳本從 **bash** 跑，PowerShell 會把 JSON 參數弄壞。用 `requests.Session()`，先 `POST /api/login {login,password}`。
+- 被引擎擋的動作（非管理者打管理者的 op）回 400，body 是 `{"error": "只有管理者能這麼做。"}`；找不到的 op 才是 404 `{"detail": "Not Found"}`——檢查字樣讀 `error`，不是 `detail`（2026-10-21，FB-609 複驗）。
 - **玩家**：`GET /api/main` 會同步並回 `status`／`options`／`latest`；按選項是 `POST /api/choose {id}`；其他動作走 `POST /api/do/<op>`。回傳的 `message` 是 HTML，`main` 是畫面。
 - **管理者**也走 `POST /api/do/<op>`，不是 `/api/admin`。常用的：
   - `open_season`、`end_season`、`next_season`
@@ -81,6 +84,7 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
   - 輿圖上的 ⚔ 是 `g.armed`，數量拿去跟引擎的 `mapview.armed_places` 比；地點圓盤在 `g[data-loc="<id>"]` 裡，顏色與虛線直接讀 `circle` 的屬性。
   - 江湖頁的戰況圖卡是 `div.war`，點了攤開 `.war-help.fronts-help`；主線是 `.peek-chip.quest`。
   - 行動列的格子是 `button.act-ink`（灰的多一個 `.off`，小字是裡面的 `small`，量字有沒有被切比 `small.scrollWidth` 與 `button` 的左右邊）；格子底下每一格的說明在 `.act-notes p`（開頭是粗體的格名）。截圖前先 `document.querySelector('.act-notes').scrollIntoView({block:'end'})`。軍令卡是 `<details>` 裡的 `summary`（「📜 本週軍令」），要看內容先 `open = true`。
+  - **輿圖上軍令的小牌子**（「令 守城」「令 截糧」，`text` 裡找）你站的地方不掛（`mapBadges`），要驗就把角色挪到隔壁（改存檔 `location`、reload）；引擎給的值在 `GET /api/map/state` 的 `places[loc].order`，軍令卡的字在 `main["orders"][i]["how"]`（翻地複驗，FB-605）。
   - 輿圖 ⚔（`g.armed`）不在 `g[data-loc]` 裡面，它前面最近的 `g[data-loc]` 兄弟才是那個地點（往 `previousElementSibling` 找）；點了輿圖分頁要等約 3 秒才畫好，頭一次數到 0 不是沒有。
   - **天下圖的路畫在底圖裡**：`.tx-world-map image` 是一張點陣化的 PNG（blob），DOM 找不到路的 `path`；要看某一條路只能截圖：「放大」按到最大（375 寬 ×1.5、320 寬 ×2，按鈕變 disabled）、點「收起」把「今天去哪裡出陣」收下去、再拖地圖。小地圖（`div.mini svg`）的路在 DOM 裡，`path` 的 `d` 是「M甲x,甲y Q… 乙x,乙y」（id 字母小的那頭在前）。
   - **區塊的歸屬顏色**：`g[data-loc]` 裡第三個 `circle` 的 `stroke`：官軍 #3D5F8F、黃巾 #B9821A、中立 #8F8B82（第二個圓多一個虛線 `stroke-dasharray`），不是區塊的 #7A6A55；第一個圓是點擊範圍（透明）。
