@@ -355,9 +355,12 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
         # 修練（武學重構）：只剩上品到了極處服丹強行衝絕學那一格；還沒到極處、不是上品都灰掉寫原因
         problem = cultivation.cultivate_problem(state, content, world, art_id, use_legend=True)
         legend = None
+        xinde = None if hut else _xinde_choice(state, content, world, art_id)
         if problem is None:
             note = f"上品已到極處：等一場硬仗的契機，或服丹強行衝關・體力 {content.config.cultivate_stamina}"  # 待 joy 潤
             legend = _force_choice(state, content, world, art_id)
+        elif xinde is not None:
+            note = f"上品已到極處：等一場硬仗的契機，或花心得強行衝關・約 {xinde['odds']}% 衝開・體力 {content.config.cultivate_stamina}"  # 待 joy 潤
         else:
             note = problem
         stuck = melt_problem(state, art_id, art.name, only=prologue.melt_only(state, content), content=content)  # 跟 library.melt_art 同一個判斷
@@ -391,8 +394,8 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
             **_look(content, art),  # 自創的品相（純、渾、透、稀有路數；兩樣珍、三樣神）
             "compare": compare,  # 卷軸卡直接把它寫在功法庫那張卡的鈕上面（改練之前看得到）；點開「詳情」時功法卡裡也有
             "cultivate": {
-                "ok": problem is None, "note": note, "legend": legend, "buy": _buy_choice(state, content, world, art),
-                "xinde": None,  # 武學重構：沒有「以心得修練」了（品級不靠修練衝）；網頁還讀這個鍵
+                # ok／legend 是服丹衝關；xinde 是心得衝關（Joy 2026-10-21，到了極處才有，見 _xinde_choice）
+                "ok": problem is None, "note": note, "legend": legend, "xinde": xinde,
             },
             "melt": {
                 "ok": stuck is None,
@@ -470,15 +473,15 @@ def slot_rows(state: GameState, content: Content, world: WorldStateStore, art: M
     return rows
 
 
-def _buy_choice(state: GameState, content: Content, world: WorldStateStore, art) -> dict | None:
-    """「以心得換破境丹」那一顆（Joy 2026-10-18）：這門上品到了極處（cultivation.ready：第十成）、換丹開著才有，
-    否則 None（丹只在強行衝關那一下用得上）。ok／why 跟 cultivation.buy_legend 同一個判斷。"""
+def _xinde_choice(state: GameState, content: Content, world: WorldStateStore, art_id: str) -> dict | None:
+    """「心得衝關」那一顆（Joy 2026-10-21「心得不是「換」破境丹，是可以直接拿來衝關」）：這門上品到了極處
+    （cultivation.ready：第十成）、心得衝關開著才有，否則 None。ok／why 跟 cultivation.cultivate(use_xinde=True) 同一個判斷；
+    odds 跟服丹同一個數（cultivation.force_odds）。"""
     price = cultivation.legend_price(state, content)
-    if price is None or prologue.active(state, content) or not cultivation.ready(state, content, world, art.id)[0]:
+    if price is None or not cultivation.ready(state, content, world, art_id)[0]:
         return None
-    why = cultivation.buy_legend_problem(state, content)
-    return {"price": price, "ok": why is None, "why": why or "",
-            "label": f"以心得換一枚{content.config.legend_item_name}（心得 {price}）"}
+    why = cultivation.cultivate_problem(state, content, world, art_id, use_xinde=True)
+    return {"price": price, "ok": why is None, "why": why or "", "odds": cultivation.force_odds(state, content, world, art_id)}
 
 
 def _force_choice(state: GameState, content: Content, world: WorldStateStore, art_id: str) -> dict:

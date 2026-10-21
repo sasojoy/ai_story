@@ -880,7 +880,8 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .peak.ready { border: 1px solid var(--gold); background: color-mix(in srgb, var(--gold) 10%, var(--card)); }
 .peak.ready .pk-txt b { color: var(--gold); }
 .peak > .btn { flex: none; min-width: 72px; }
-.peak .legend, .peak .buy-pill { flex: 1 1 100%; margin-top: 0; }
+.peak .pk-btns, .peak > .why { flex: 1 1 100%; margin-top: 0; }
+.peak > .why { margin: 0; font-size: 12px; color: var(--bad); }
 /* 功法庫那張卡的比較句（W6、FB-088）：跟身上同一種那門比，寫在兩顆大鈕上面，改練之前看得到 */
 .art-body .cmp { margin: 6px 0 0; font-size: 12px; line-height: 1.5; color: var(--ink-2); }
 .art-tactic { margin: 8px 0 0; padding: 6px 10px; font-size: 12.5px; line-height: 1.55; color: var(--ink-2); border-left: 3px solid var(--accent); background: color-mix(in srgb, var(--accent) 6%, transparent); border-radius: 0 6px 6px 0; }
@@ -3009,3 +3010,60 @@ svg.fig .blade.bow { stroke-width: 3; }
 .ic-best { margin: 6px 0 0; font-size: 13px; color: var(--ink-2); }
 .ic-best.up { color: #2f7d4a; }
 .ic-best.up b { font: 800 15px var(--serif); }
+
+/* 衝關的小動畫（Joy 2026-10-21；app.js breakAnim）：三秒一齣。0～30% 運氣（兩圈氣一圈圈散開）、30～43% 衝出去、
+   43% 撞上那道關。衝開（.won）：金光炸開、關碎成五塊飛走、人穿過去、蓋「破境」；沒衝開（.lost）：關一震、裂一道縫、
+   人被彈回來、蓋灰色的「彈回」。顏色都走 token，深色也看得清 */
+.cg-wrap { position: fixed; inset: 0; z-index: 70; display: flex; align-items: center; justify-content: center; cursor: pointer;
+  padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+  background: rgba(20, 16, 12, .6); animation: cg-fade .25s ease-out; }
+.cg-stage { position: relative; background: var(--card); color: var(--ink); border: 1px solid var(--gold); border-radius: 12px;
+  width: 100%; max-width: 26rem; padding: .8rem .8rem 1rem; box-shadow: 0 10px 40px rgba(0, 0, 0, .35); overflow: hidden; }
+.cg-scene { display: block; width: 100%; height: auto; overflow: visible; }
+.cg-ground { stroke: var(--line); stroke-width: 2; }
+.cg-man { transform-box: fill-box; transform-origin: 50% 100%; animation: 3s ease-in-out forwards; }
+.won .cg-man { animation-name: cg-man-won; }
+.lost .cg-man { animation-name: cg-man-lost; }
+.cg-fig { color: var(--ink); }
+.cg-aura { fill: none; stroke: var(--gold); stroke-width: 3; opacity: 0; transform-box: fill-box; transform-origin: center; animation: cg-aura 1s ease-out 2 forwards; }
+.cg-aura.a2 { animation-delay: .45s; animation-iteration-count: 1; }
+.cg-brick rect { fill: var(--card-2); stroke: var(--ink-2); stroke-width: 2; }
+.cg-brick line { stroke: var(--line); stroke-width: 2; }
+.cg-brick { transform-box: fill-box; transform-origin: center; }
+.won .cg-brick { animation: cg-brick 3s ease-out forwards; }
+.won .b0 { --dx: 60px; --dy: -70px; --r: 40deg; }
+.won .b1 { --dx: 90px; --dy: -25px; --r: -30deg; }
+.won .b2 { --dx: 110px; --dy: 10px; --r: 70deg; }
+.won .b3 { --dx: 85px; --dy: 45px; --r: -55deg; }
+.won .b4 { --dx: 50px; --dy: 30px; --r: 25deg; }
+.cg-guan { font-family: var(--serif); font-size: 30px; font-weight: 700; text-anchor: middle; fill: var(--accent); }
+.won .cg-guan { animation: cg-gone 3s ease-out forwards; }
+.lost .cg-gate { animation: cg-shake 3s ease-out forwards; }
+.cg-burst { fill: var(--gold); opacity: 0; transform-box: fill-box; transform-origin: center; }
+.won .cg-burst { animation: cg-burst 3s ease-out forwards; }
+.cg-crack { fill: none; stroke: var(--ink); stroke-width: 3; stroke-linejoin: round; stroke-dasharray: 200; stroke-dashoffset: 200; opacity: 0; }
+.lost .cg-crack { animation: cg-crack 3s ease-out forwards; }
+.cg-stamp { position: absolute; right: 1rem; top: .8rem; margin: 0; padding: .1em .35em; font-family: var(--serif); font-size: 1.9rem; font-weight: 700;
+  letter-spacing: .1em; border: 3px solid currentColor; border-radius: 6px; opacity: 0; transform: rotate(-8deg); animation: cg-stamp 3s ease-out forwards; }
+.won .cg-stamp { color: var(--accent); }
+.lost .cg-stamp { color: var(--ink-2); }
+.cg-line { margin: .4em 0 0; text-align: center; font-size: 1.02em; opacity: 0; animation: cg-line 3s ease-out forwards; }
+.won .cg-line { color: var(--gold); font-weight: 600; }
+@keyframes cg-fade { from { opacity: 0; } }
+@keyframes cg-aura { 0% { opacity: .7; transform: scale(.6); } 100% { opacity: 0; transform: scale(1.5); } }
+@keyframes cg-man-won {
+  0% { transform: none; } 25% { transform: translateY(4px) scaleY(.96); } 30% { transform: translateX(-10px); }
+  43% { transform: translateX(118px); } 60% { transform: translateX(205px); } 100% { transform: translateX(205px); } }
+@keyframes cg-man-lost {
+  0% { transform: none; } 25% { transform: translateY(4px) scaleY(.96); } 30% { transform: translateX(-10px); }
+  43% { transform: translateX(118px); } 47% { transform: translateX(110px) rotate(-4deg); }
+  62% { transform: translateX(-8px) rotate(-14deg); } 76% { transform: translateX(0) rotate(0); } 100% { transform: none; } }
+@keyframes cg-brick { 0%, 43% { transform: none; opacity: 1; } 72% { transform: translate(var(--dx), var(--dy)) rotate(var(--r)); opacity: 0; } 100% { opacity: 0; transform: translate(var(--dx), var(--dy)) rotate(var(--r)); } }
+@keyframes cg-gone { 0%, 43% { opacity: 1; } 50%, 100% { opacity: 0; } }
+@keyframes cg-burst { 0%, 42% { opacity: 0; transform: scale(.2); } 46% { opacity: .9; } 75% { opacity: 0; transform: scale(9); } 100% { opacity: 0; transform: scale(9); } }
+@keyframes cg-shake { 0%, 43% { transform: none; } 46% { transform: translateX(7px); } 49% { transform: translateX(-5px); } 52% { transform: translateX(3px); } 56%, 100% { transform: none; } }
+@keyframes cg-crack { 0%, 44% { opacity: 0; stroke-dashoffset: 200; } 46% { opacity: 1; } 58%, 100% { opacity: 1; stroke-dashoffset: 0; } }
+@keyframes cg-stamp { 0%, 56% { opacity: 0; transform: rotate(-8deg) scale(2.2); } 64%, 100% { opacity: 1; transform: rotate(-8deg) scale(1); } }
+@keyframes cg-line { 0%, 58% { opacity: 0; } 70%, 100% { opacity: 1; } }
+.pk-btns { display: flex; flex-wrap: wrap; gap: .4em; margin-top: .4em; }
+.pk-btns .btn small { display: block; font-size: .78em; opacity: .85; }

@@ -482,14 +482,14 @@ def test_the_new_name_cannot_be_taken_by_anyone_else_afterwards(kicker, content,
     assert not world.claim_skill_name(generate_from_name("風神腿", "武學", "風神腿"))
 
 
-# ── 以心得換破境丹（細的在 test_legend_xinde）──────────────────────────
+# ── 以心得衝關（細的在 test_legend_xinde）──────────────────────────
 
 
-def test_buying_a_pill_is_off_when_the_price_is_zero(kicker, content):
-    """測試內容 legend_xinde_price 是 0：換不到、什麼都不扣。"""
+def test_breaking_through_with_xinde_is_off_when_the_price_is_zero(kicker, content, world):
+    """測試內容 legend_xinde_price 是 0：衝不了、什麼都不扣。"""
     assert cultivation.legend_price(kicker, content) is None
     kicker.player.stats["xinde"] = 5000
-    assert cultivation.buy_legend(kicker, content) == ["破境丹換不到。"]
+    assert "不能拿心得衝關" in cultivation.cultivate(kicker, content, world, "旋風腿", WIN, use_xinde=True)[0]
     assert kicker.player.legend_items == 0 and kicker.player.stats["xinde"] == 5000
 
 

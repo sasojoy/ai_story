@@ -483,7 +483,6 @@ def look_after(game: Game, rng: random.Random) -> None:
     for kind in ("內功", "武學"):
         if can_practise(game, kind) and rng.random() < PRACTICE_CHANCE:
             game.practice(kind)
-    bot.buy_pill(game)  # 以心得換破境丹（Joy 2026-10-18）：火候滿了在等契機、手上沒有丹才換
     bot.teach(game, TEACH_PER_TICK)  # 傳功門下：心得多出來就傳給同伴、部下（不擲亂數）
     bot.trade_at_smith(game)  # 素材與經濟（計畫 B5）：人在鐵匠鋪就升階、賣多的（不擲亂數；不為了它進鐵匠鋪）
     bot.donate_spare(game)  # 人在自家大本營就捐多的素材（不擲亂數；不為了它繞路）
@@ -523,12 +522,12 @@ def tend_arts(game: Game, rng: random.Random, slot: NamingSlot | None = None) ->
     bot.switch_to_the_strongest(game)
     bot.slot_insights(game)  # 悟到的意境裝進身上兩門的空槽（不擲亂數）
     if p.stamina >= bot.CULTIVATE_RESERVE:
-        ready = [
+        ready = [  # 服丹或花心得強行衝關（bot.break_way）；兩樣都不行的只能等契機
             a for a in bot.worn_first(game)
-            if cultivation.cultivate_problem(state, content, world, a, use_legend=bot.takes_the_pill(game, a)) is None
+            if bot.break_way(game, a) and cultivation.cultivate_problem(state, content, world, a, **bot.break_way(game, a)) is None
         ]
         if ready and rng.random() < CULTIVATE_CHANCE:
-            msgs += game.cultivate(ready[0], use_legend=bot.takes_the_pill(game, ready[0]))
+            msgs += game.cultivate(ready[0], **bot.break_way(game, ready[0]))
     return msgs
 
 

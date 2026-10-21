@@ -965,14 +965,14 @@ def season_page_lines(content: Content, season: WorldState, rule: str = "") -> l
 
 
 def legend_buy_lines(content: Content) -> list[str]:
-    """玩法說明「心得」那一節：以心得換破境丹（Joy 2026-10-18）；關著是空的。數字讀 Config。"""
+    """玩法說明「心得」那一節：以心得衝關（Joy 2026-10-21；10-18 起先是換破境丹）；關著是空的。數字讀 Config。"""
     cfg = content.config
     lines = []  # 以心得修練在武學重構時拿掉了（修練只剩絕學那一步），這裡只剩換丹那一句
     if cfg.legend_xinde_price <= 0:
         return lines
     return lines + [
-        f"- 一門武學到了絕學那一步時，可以在修練頁花心得換一枚{cfg.legend_item_name}：這一季第一枚 {cfg.legend_xinde_price}，"
-        f"之後每換一枚多 {cfg.legend_xinde_step}。後期改練一門新功夫，不必只等打仗時的頓悟。",
+        f"- 一門武學到了絕學那一步時，可以在修練頁直接花心得衝關（機會跟服一枚{cfg.legend_item_name}一樣）：這一季第一次 {cfg.legend_xinde_price}，"
+        f"之後每衝一次多 {cfg.legend_xinde_step}。後期改練一門新功夫，不必只等打仗時的頓悟。",  # 待 joy 潤
     ]
 
 

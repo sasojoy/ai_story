@@ -3369,8 +3369,8 @@ class Config(_Strict):
     legend_item_name: str = "破境丹"
     legend_item_note: str = "衝擊絕學時可以服下，那一次的機會多幾分。"
     legend_item_bonus: int = 15
-    # 以心得換破境丹（Joy 2026-10-18「大量心得可以換一次破境機會，讓玩家後期更好轉功法」）：修練頁衝絕學那一步，
-    # 花心得換一枚破境丹。這一季第 k 枚（從 0 數）要 legend_xinde_price + k × legend_xinde_step；0 是關著（測試內容）。
+    # 以心得衝關（Joy 2026-10-18「大量心得可以換一次破境機會，讓玩家後期更好轉功法」；10-21「心得不是「換」破境丹，是可以直接拿來衝關」）：
+    # 修練頁衝絕學那一步直接花心得強行衝關，機會同服一枚破境丹（cultivation.force_odds）。這一季第 k 次（從 0 數）要 legend_xinde_price + k × legend_xinde_step；0 是關著（測試內容）。
     # 量到的（scripts/measure_xinde_flow.py，週末 60 小時）：沒有門下的人一季剩六千多點心得沒處花；300 起、每枚 +100，
     # 六千點約換八到九枚，服丹強行衝關一次約一成五到兩成，一季大約多出一兩門絕學
     legend_xinde_price: int = Field(default=0, ge=0)

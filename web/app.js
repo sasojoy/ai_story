@@ -141,7 +141,6 @@
     createText: null, // 立意那一步打到一半的那一句
     mxNote: null, // 修練頁其他動作（裝備、意境、門下、療傷）的結果：{ at, html }，寫在按的那一塊裡（mxPlace）；切分頁、做別的動作就清掉
     artNote: null, // 修練（衝品質）的結果：{ id, html }，寫在那一門卡片的按鈕底下（W7）；點別的卡片、切分頁、做別的動作就清掉
-    legendTick: {}, // 修練頁每一門武學「服下破境丹」勾了沒（id → true）；預設不勾，輪詢重畫不會悄悄取消，修練送出之後清掉
     forgeSel: [], // 爐裡放的：{type: "ins", id}，最多兩個（爐裡只合意境，Joy 2026-10-21）
     forgeLock: null, // 鎖在爐裡的那一樣（{type, id}，一次一樣；Joy 2026-10-19「尤其獲得新意境時會想要試他的所有組合」）：開爐成了它留在爐裡、只清另一格
     wheelSel: null, // 江湖頁行動列展開的那一格（move；探索三選一開著時也有 explore）
@@ -3114,11 +3113,47 @@
     return `<div class="jade">${cells}${fifth}</div>${picker}`;
   }
 
-  // 以心得換破境丹（Joy 2026-10-18）：衝絕學那一步的卡上一顆小鈕；換不了時灰掉、原因寫在後面（a.cultivate.buy 是伺服器算好的）
-  function buyPill(a) {
-    const b = a.cultivate.buy;
-    if (!b) return "";
-    return `<div class="buy-pill"><button class="btn small" data-act="mx" data-op="buy_legend" ${b.ok ? "" : "disabled"} title="${esc(b.why)}">${esc(b.label)}</button>${b.ok ? "" : `<span class="why">${esc(b.why)}</span>`}</div>`;
+  // 衝關的兩顆鈕（Joy 2026-10-21「心得不是「換」破境丹，是可以直接拿來衝關」）：服丹衝關（手上有丹才有）、心得衝關（到了極處就有，
+  // 心得不夠時灰掉、原因寫在底下）。機會一樣，寫在上面那一行（伺服器算好的 note）。序章只認「衝關」那一顆發光的鈕。字待 joy 潤
+  function breakBtns(a, has) {
+    const lg = a.cultivate.legend, xd = a.cultivate.xinde;
+    const glow = has("cultivate") ? ' data-glow="cultivate"' : "";
+    const out = [];
+    if (lg) out.push(`<button class="btn small primary" data-act="cultivate" data-by="pill"${glow} data-id="${esc(a.id)}">服丹衝關<small>剩 ${lg.count | 0} 枚</small></button>`);
+    if (xd) out.push(`<button class="btn small${lg ? "" : " primary"}" data-act="cultivate" data-by="xinde" data-id="${esc(a.id)}" ${xd.ok ? "" : "disabled"} title="${esc(xd.why)}">心得衝關<small>心得 ${xd.price | 0}</small></button>`);
+    if (!out.length && has("cultivate")) out.push(`<button class="btn small" data-act="cultivate"${glow} data-id="${esc(a.id)}" disabled>衝關</button>`);
+    const why = xd && !xd.ok && !lg ? `<p class="why">${esc(xd.why)}</p>` : "";
+    return out.length ? `<div class="pk-btns">${out.join("")}</div>${why}` : "";
+  }
+
+  // 衝關的小動畫（Joy 2026-10-21「衝關那邊做一個小動畫，可以運用到玩家畫的火柴人武學，分成功跟失敗」）：
+  // 那一門的火柴人（自創的是玩家自己擺的式，學來的照兵器挑的架式）運氣、衝向一道「關」。衝開了關碎成幾塊、金光、蓋「破境」；
+  // 沒衝開撞上去、關裂一道縫、人被彈回來、蓋「彈回」。點一下或播完就收掉；破境卡（ascendCard）在它底下，收掉就看得到。
+  // 減少動態的人不播（結果那一句照樣寫在修練頁）。字待 joy 潤
+  function breakAnim(a, won) {
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const old = document.getElementById("cg-anim");
+    if (old) old.remove();
+    const box = document.createElement("div");
+    box.id = "cg-anim";
+    box.className = `cg-wrap ${won ? "won" : "lost"}`;
+    const bricks = [0, 1, 2, 3, 4].map((k) => `<g class="cg-brick b${k}"><rect x="262" y="${28 + k * 38}" width="34" height="36" rx="3"/><line x1="268" y1="${40 + k * 38}" x2="290" y2="${40 + k * 38}"/></g>`).join("");
+    box.innerHTML = `<div class="cg-stage" role="img" aria-label="${won ? "衝關成功" : "衝關失敗"}">
+      <svg class="cg-scene" viewBox="0 0 360 240" aria-hidden="true">
+        <line class="cg-ground" x1="0" y1="222" x2="360" y2="222"/>
+        <circle class="cg-burst" cx="279" cy="122" r="20"/>
+        <g class="cg-gate">${bricks}<text class="cg-guan" x="279" y="132">關</text></g>
+        <path class="cg-crack" d="M279 40 L272 82 L286 110 L270 150 L284 196"/>
+        <g class="cg-man"><circle class="cg-aura a1" cx="90" cy="130" r="46"/><circle class="cg-aura a2" cx="90" cy="130" r="46"/>
+          <svg class="fig cg-fig" x="20" y="22" width="140" height="200" viewBox="30 40 160 200">${figBody(a.pose || {}, a.weapon, false)}</svg></g>
+      </svg>
+      <p class="cg-stamp">${won ? "破境" : "彈回"}</p>
+      <p class="cg-line">${won ? `【${esc(a.name)}】衝開了那一層` : `【${esc(a.name)}】撞在那一層上，又彈了回來`}</p>
+    </div>`;
+    const close = () => { clearTimeout(timer); box.remove(); };
+    const timer = setTimeout(close, 3600);
+    box.addEventListener("click", close);
+    document.body.appendChild(box);
   }
 
   function pagePractice() {
@@ -3136,7 +3171,6 @@
     // 卡的本體（身上的卡、庫裡點開的那一列共用）：十成的格子、第幾成、兩顆大鈕、破境丹、機率條、改練／熔煉／詳情。
     // slot 是這一門那一欄的 slot_cards（只有身上的才有）：練成鈕亮不亮、價錢、序章的原因都看它
     const body = (a, slot) => {
-      const lg = a.cultivate.legend, ticked = !!(lg && S.legendTick[a.id]);
       const level = Math.max(0, Math.min(10, a.level | 0));
       // 序章指路（T7 走查 W-A）：卡裡哪幾顆鈕發光由伺服器說（a.glow，只有序章裡才有；art_rows 照序章的拒絕算過），網頁不猜。
       // data-glow 的鍵寫成字面（test_content 掃 app.js 對照 models.GLOW_KEYS，內容才叫得動它們）
@@ -3153,12 +3187,11 @@
       const pips = `<div class="ten">${Array.from({ length: 10 }, (_, k) => `<i${k < level ? ' class="on"' : k === next ? ' class="next"' : ""}></i>`).join("")}</div>`;
       const switchBtn = slot ? "" : `<div class="acts"><button class="btn" data-act="switch"${has("switch") ? ' data-glow="switch"' : ""} data-id="${esc(a.id)}">改練這一門<small>換上身，熟練度各自保留</small></button></div>`;
       // 衝絕學（武學重構）：只有上品還沒成絕學的才有這一塊；到了極處才有「衝關」與破境丹，沒到只寫還差什麼。不寫下一品是哪一品（企劃者 2026-10-06）
-      const peakOn = a.cultivate.ok || has("cultivate") || (a.quality === "上品" && (a.slots || []).length > 0);
-      const peak = !peakOn ? "" : `<div class="peak${a.cultivate.ok ? " ready" : ""}">
-          <div class="pk-txt"><b>破境</b><small class="cnote">${esc(ticked ? lg.note : a.cultivate.note)}</small></div>
-          ${a.cultivate.ok || has("cultivate") ? `<button class="btn small ${a.cultivate.ok ? "primary" : ""}" data-act="cultivate"${has("cultivate") ? ' data-glow="cultivate"' : ""} data-id="${esc(a.id)}" ${a.cultivate.ok ? "" : "disabled"}>衝關</button>` : ""}
-          ${lg ? `<label class="legend"><input type="checkbox" data-legend="${esc(a.id)}" ${ticked ? "checked" : ""}><span>${esc(lg.label)}</span></label>` : ""}
-          ${buyPill(a)}
+      const ripe = a.cultivate.ok || !!a.cultivate.xinde;
+      const peakOn = ripe || has("cultivate") || (a.quality === "上品" && (a.slots || []).length > 0);
+      const peak = !peakOn ? "" : `<div class="peak${ripe ? " ready" : ""}">
+          <div class="pk-txt"><b>破境</b><small class="cnote">${esc(a.cultivate.legend ? a.cultivate.legend.note : a.cultivate.note)}</small></div>
+          ${breakBtns(a, has)}
         </div>`;
       const info = S.artInfo === a.id;
       // 功法庫的卡：跟身上同一種那門的比較（W6）直接寫在鈕的上面，改練之前看得到，不必先點「詳情」；點開詳情時功法卡裡也有，這裡就不重複
@@ -3190,7 +3223,7 @@
     // 功法庫：身上以外的。篩選（全部／武學／內功／可修練）與「再列 N 門」只是看的方式，記在 S，輪詢重畫不會跳回去
     // 排序是伺服器排好的（FB-085：身上的先，再品質、成、名字），這裡照順序列；選哪一類記在 localStorage（libFilter）
     const lib = x.owned_arts.filter((a) => !a.worn);
-    const pass = (a, f) => f === "all" || (f === "ready" ? a.cultivate.ok : a.kind === f);
+    const pass = (a, f) => f === "all" || (f === "ready" ? a.cultivate.ok || !!(a.cultivate.xinde && a.cultivate.xinde.ok) : a.kind === f);
     // 篩選鈕只在庫超過 LIB_PAGE 門時才畫（chips）：沒畫鈕就不套記著的篩選——不然庫縮到 8 門以下、或換了新角色（序章的草廬庫只有一兩門），
     // 記在瀏覽器裡的篩選會把武學藏起來、又沒有鈕可以改回來（review-ap3 I1）
     const filter = lib.length > LIB_PAGE ? libFilter() : "all";
@@ -6816,7 +6849,6 @@
     S.artOpen = null;
     S.artInfo = null; S.insOpen = null; S.libAll = false; S.rackAll = false; // 攤開的詳情、意境、列完的庫也收起（篩選留著）
     S.artNote = null; S.mxNote = null; S.meltNote = null;
-    S.legendTick = {}; // 破境丹的勾也一起收：回到修練頁時它是真的沒勾（預設不勾）
     S.forgeResult = null; // 上一爐的結果也收起（篩選留著）
     S.forgeMade = null;
     S.book = false; // 武學譜是疊在煉製頁上的一本書：換分頁就闔上
@@ -7855,15 +7887,18 @@
         }
         case "art": S.artOpen = S.artOpen === el.dataset.id ? null : el.dataset.id; S.artNote = null; S.insOpen = null; S.pdrawer = false; renderPage(); break;
         case "cultivate": {
-          // 勾的是畫面上看到的那一份：這一門現在真有「服下破境丹」可勾才算（伺服器也只認真正的布林 true）。
-          // 送出就把勾清掉（mx 回來重畫時已經是沒勾的）；還在忙或請求失敗（mx 沒換上伺服器回來的那一份 menxia）就把勾還回去
-          const id = el.dataset.id;
+          // 按的是哪一顆：服丹（use_legend）或心得（use_xinde），伺服器只認真正的布林 true。
+          // 真的擲了骰（mx 換上了伺服器回來的那一份 menxia）才播衝關的小動畫：那一門變成絕學是衝開了，不然是彈回來
+          const id = el.dataset.id, by = el.dataset.by;
           const row = (S.menxia?.owned_arts || []).find((a) => a.id === id);
-          const ticked = !!(row && row.cultivate.legend && S.legendTick[id]);
           const was = S.menxia;
-          delete S.legendTick[id];
-          await mx("cultivate", { art: id, use_legend: ticked });
-          if (ticked && S.menxia === was) S.legendTick[id] = true;
+          await mx("cultivate", { art: id, use_legend: by === "pill", use_xinde: by === "xinde" });
+          if (row && by && S.menxia !== was) {
+            const now = (S.menxia?.owned_arts || []).find((a) => a.id === id);
+            const won = !!now && now.quality === "絕學";
+            const rolled = won || (!!now && (by === "pill" ? (now.cultivate.legend?.count ?? 0) < (row.cultivate.legend?.count ?? 0) : (now.cultivate.xinde?.price ?? 0) > (row.cultivate.xinde?.price ?? 0)));
+            if (rolled) breakAnim(row, won);
+          }
           break;
         }
         case "melt": askMelt(el); break;
@@ -7964,7 +7999,6 @@
   document.addEventListener("change", async (ev) => {
     if (ev.target.id === "anon") await doMain("anonymous", { value: ev.target.checked });
     if (ev.target.id === "hints-off") await doMain("hints_off", { value: ev.target.checked }); // 碰到才說的小提醒（新手引導計畫三）；打開時排著的清掉
-    if (ev.target.dataset && ev.target.dataset.legend) onLegendTick(ev.target);
     if (ev.target.id === "mt-preset" && S.mtEdit && ev.target.value) { // 名帖：換成一張現成的畫（之後照樣能再畫幾筆）
       const art = (S.mingtie.presets || []).find((p) => p.id === ev.target.value);
       if (art) { S.mtEdit.strokes = art.strokes.map((x) => x.slice()); S.mtEdit.note = ""; mtEditRedraw(); }
@@ -7980,17 +8014,6 @@
       renderPage();
     }
   });
-
-  // 修練頁「服下破境丹」勾了或取消：記在 S.legendTick（輪詢重畫才不會悄悄取消），機率那一行當場換成勾了／沒勾的那一句。
-  // 兩句都是伺服器算好放在 owned_arts 裡的，不再問伺服器
-  function onLegendTick(box) {
-    const id = box.dataset.legend;
-    const row = (S.menxia?.owned_arts || []).find((a) => a.id === id);
-    if (!row || !row.cultivate.legend) return;
-    if (box.checked) S.legendTick[id] = true; else delete S.legendTick[id];
-    const note = box.closest(".acard, .art-body")?.querySelector(".cnote");
-    if (note) note.textContent = box.checked ? row.cultivate.legend.note : row.cultivate.note;
-  }
 
   // 輿圖的手勢：按下在地圖框上（gripDown），移動、放開在這裡收
   document.addEventListener("pointermove", (ev) => {
@@ -8290,10 +8313,6 @@
       S.menxia = x;
       const trimmed = trimForgeSel();
       if (S.artOpen && !x.owned_arts.some((a) => a.id === S.artOpen)) { S.artOpen = null; S.artNote = null; } // 那一門已經不在了（熔掉）
-      for (const id of Object.keys(S.legendTick)) { // 丹用完了、或那一門已經不是衝絕學這一步：勾跟著作廢
-        const row = x.owned_arts.find((a) => a.id === id);
-        if (!row || !row.cultivate.legend) delete S.legendTick[id];
-      }
       if (!S.forgeSel.length) { S.forgeLine = ""; S.forgePreview = null; } // 爐是空的：用伺服器剛給的那一行（心得是新的）
       const shown = (m) => JSON.stringify(MENXIA_SHOWN[tab].map((k) => m[k]));
       const changed = trimmed || shown(x) !== shown(was)
