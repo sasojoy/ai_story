@@ -153,13 +153,16 @@ def conquest_season(content: Content, season: WorldState | None) -> bool:
 
 def hide_spots(content: Content, world: WorldState | None) -> list[tuple[str, float]]:
     """可以藏碎片的地方（地點 id、權重）：所有開季中立的區塊（conquest.start_kind），權重 1；落在 core_regions 這些大區的（核心）權重
-    core_weight（企劃者：核心的機率最高）。照區塊表的順序；一塊都沒有是空的。藏在哪裡一律讀區塊表，不寫死地點 id。"""
+    core_weight（企劃者：核心的機率最高）。照區塊表的順序；一塊都沒有是空的。藏在哪裡一律讀區塊表，不寫死地點 id。
+    劇情還沒開放的跳過（FB-642：例如沒立「綠林開寨」的綠林山寨，去不了也撿不到；同「能不能當成目標」的 conquest._opened）。"""
     from . import atlas, conquest  # noqa: PLC0415  延後 import（見模組說明）
 
     cfg = content.config.seal.cache
     spots: list[tuple[str, float]] = []
     for loc_id in conquest.blocks(content):
         if conquest.start_kind(world, content, loc_id) != conquest.NEUTRAL:
+            continue
+        if world is not None and not conquest._opened(world, content, loc_id):  # noqa: SLF001  同一個套件
             continue
         region = atlas.region_of(content, loc_id) if loc_id in content.locations else None
         spots.append((loc_id, cfg.core_weight if region is not None and region.id in cfg.core_regions else 1.0))

@@ -392,3 +392,15 @@ def test_fb627_a_merged_line_is_not_written_as_a_place():
     plain_use(c, w, target="yingru")
     assert any(r.text == "有人起用了『赤璋』：檄文傳遍潁川汝南，一日之內黃巾軍在那裡推得更猛。" for r in w.get_season().rumors)
 
+
+def test_fb642_the_shard_is_not_hidden_somewhere_not_yet_open():
+    """FB-642：藏碎片的地方跳過劇情還沒開放的區塊（沒立「綠林開寨」的綠林山寨去不了）。"""
+    from conquest_kit import _new
+
+    c, w = _world()
+    wd = _new(c, "藏", world=w).state.world
+    spots = [loc for loc, _ in seal.hide_spots(c, wd)]
+    assert "lulin_zhai" in spots  # 正式內容開季就立了
+    wd.flags.discard(c.locations["lulin_zhai"].unlock_flag)
+    assert "lulin_zhai" not in [loc for loc, _ in seal.hide_spots(c, wd)]
+    assert len(seal.hide_spots(c, wd)) == len(spots) - 1
