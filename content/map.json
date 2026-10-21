@@ -3,6 +3,7 @@
   "height": 1340,
   "mini_window": [360, 240],
   "background": "#E9E2CC",
+  "unheld": "#D2CBBC",
   "regions": [
     {"id": "youzhou", "name": "幽州", "front": "jizhou", "trends": ["jizhou"], "points": [[454, 111], [639, 8], [731, 96], [674, 213], [505, 226]], "fill": "#E2EAF1", "text_fill": "#9FB3C6", "label_x": 700, "label_y": 40},
     {"id": "jizhou", "name": "冀州", "front": "jizhou", "trends": ["jizhou"], "points": [[351, 497], [421, 415], [663, 449], [726, 530], [615, 605]], "fill": "#EFE5CB", "text_fill": "#A08A58", "label_x": 380, "label_y": 420},

@@ -37,8 +37,10 @@ def _game(faction="guan", at="yingchuan", classic=False, third_party=False):
 
 
 def run(game, script, stored=None, **S):
+    # 這一檔測的是區圖那一層（輿圖升級那一張、可以拖縮）：輿圖第三版第 3 批起打開輿圖第一眼是天下圖（S.mapLayer "world"，
+    # tests/test_world_map_web.py），這裡照舊停在區圖
     payload = {"m": server.main_view(game), "script": script,
-               "S": {"mapBase": game.map_base(), "mapState": game.map_state(), **S},
+               "S": {"mapBase": game.map_base(), "mapState": game.map_state(), "mapLayer": "region", **S},
                "menxia": None, "stored": stored or {}, "responses": {}}
     return webharness.run(DRIVER, payload)
 
@@ -500,7 +502,7 @@ def _drawer(stored=None, left=None, script=""):
     st = game.map_state()
     if left is not None:
         st["sorties_left"] = left
-    payload = {"m": server.main_view(game), "S": {"mapBase": game.map_base(), "mapState": st}, "menxia": None, "stored": stored or {}, "responses": {},
+    payload = {"m": server.main_view(game), "S": {"mapBase": game.map_base(), "mapState": st, "mapLayer": "region"}, "menxia": None, "stored": stored or {}, "responses": {},
                "script": DRAWER_DOM + script}
     return webharness.run(DRIVER, payload)
 
