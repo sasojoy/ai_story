@@ -13,7 +13,7 @@ import pytest
 
 from conquest_kit import _new, conquest_rules, fight
 from conftest import real_content
-from tianxia import conquest, encounter
+from tianxia import conquest, encounter, team
 from tianxia.characters import CharacterStore
 from tianxia.engine import Game
 
@@ -165,3 +165,33 @@ def test_no_clash_where_the_sortie_cannot_push(monkeypatch):
     _melee(monkeypatch, "落敗")
     _, game = _sortie(c, world, "甲")
     assert not any(r.kind == "melee" for r in game.state.battles)
+
+
+@pytest.mark.parametrize(("tier", "hit_won"), [("大勝", False), ("落敗", True), ("險勝", False)])
+def test_the_hit_side_story_follows_its_own_result(monkeypatch, tier, hit_won):
+    """FB-606（QA 驗輿圖第三版第 1 批）：被撞的那一方，那一則紀錄「遭某某撞上」與行狀照**自己的**勝負寫，跟他那一份戰報對得上
+    （修前照出陣那一方的結果挑句子：出陣的大勝，被撞的戰報「落敗」，紀錄卻寫「你逼退了他」）。"""
+    c, world = _pair()
+    _sortie(c, world, "乙")
+    _melee(monkeypatch, tier)
+    _sortie(c, world, "甲")
+    theirs = CharacterStore(world.db).load("乙")
+    (record,) = [r for r in theirs.battles if r.kind == "melee"]
+    assert (record.tier in team.WIN_TIERS) is hit_won
+    entry = next(e for e in theirs.journal if e.title == "遭甲撞上")
+    story = next(line for line in entry.lines if "撞上了你" in line)
+    annal = next(a.text for a in theirs.player.annals if "撞上了你" in a.text)
+    for text in (story, annal):
+        if hit_won:
+            assert "你逼退了" in text and "你不敵" not in text, text
+        else:
+            assert "你不敵" in text and "逼退" not in text, text
+
+
+def test_a_draw_story_is_a_draw_on_the_hit_side(monkeypatch):
+    c, world = _pair()
+    _sortie(c, world, "乙")
+    _melee(monkeypatch, "僵持")
+    _sortie(c, world, "甲")
+    theirs = CharacterStore(world.db).load("乙")
+    assert any("撞上了你" in a.text and "不分高下" in a.text for a in theirs.player.annals)

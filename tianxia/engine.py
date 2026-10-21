@@ -8195,7 +8195,9 @@ class Game:
         verdict = {"won": CLASH_WON, "lost": CLASH_LOST, "draw": CLASH_DRAW}[outcome].format(rival=them.name)
         self.touched.add(them.name)
         him = gender.pronoun(s)
-        story = {"won": CLASH_THEIRS_WON, "lost": CLASH_THEIRS_LOST, "draw": CLASH_THEIRS_DRAW}[outcome]
+        # 被撞的那一方照**他自己的**勝負挑句子（FB-606：outcome 是出陣這一方的，出陣的贏＝他輸）；CLASH_THEIRS_WON 是「被撞的人贏了」那一句
+        theirs_outcome = {"won": "lost", "lost": "won", "draw": "draw"}[outcome]
+        story = {"won": CLASH_THEIRS_WON, "lost": CLASH_THEIRS_LOST, "draw": CLASH_THEIRS_DRAW}[theirs_outcome]
         other._melee_record(mirrored, me.name, ours, self, story.format(rival=me.name, place=place, him=him), CLASH_HIT_TITLE)
         msgs = self._melee_record(result, them.name, theirs, other, f"{opening}{verdict}", None)
         self._save_kin(other)
