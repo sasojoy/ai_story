@@ -12,7 +12,7 @@ state 是 GameState（季的事用的是 world._season_vehicle 那個空殼玩�
 人物表沒有的 id（測試夾具）照 T2 最小版的規則：FigureState 的預設值、只改欄位。"""
 from __future__ import annotations
 
-from . import calendar, push, relations
+from . import calendar, push, relations, seal_acts
 from .calendar import DAY
 from .models import Content, FigureChange, FigureDef, Squad
 from .rules import add_rumor, change_trend, season_one, trend_shown, trend_value, world_day
@@ -270,10 +270,24 @@ def apply(state: GameState, content: Content, fid: str, change: FigureChange) ->
     return []
 
 
+MOVING_FATES = ("退場", "重創", "下獄", "重挫", "到任")  # 會搬動或拿掉人物的結局（moves）
+
+
+def moves(now: FigureState, change: FigureChange, content: Content) -> bool:
+    """這一筆效果會不會搬動或拿掉這位人物（玉璽碎片改版第 2 批：引將提前結束、窗口檢查都問它）：退場、重創、下獄、重挫、到任，寫了轉往的
+    地點，或聲威會被扣到 0（_change 照退場或重創處理；聲威大減、受挫沒扣到 0 留在原地）。"""
+    if change.fate in MOVING_FATES or change.location is not None:
+        return True
+    return now.prestige + content.config.fate_prestige.get(change.fate or "", 0) + change.prestige <= 0
+
+
 def _change(state: GameState, content: Content, fid: str, change: FigureChange) -> list[str]:
     """apply 的本體：改這位人物、空出戰線時照接位鏈交接；回傳接手的那一句與倒下時盟友、仇敵的反應（figure_life.on_fall）
-    （apply 拿去發傳聞、defeat 接在退場那句後面）。"""
+    （apply 拿去發傳聞、defeat 接在退場那句後面）。被引將釘著、這一筆又會搬動或拿掉他時，引將先提前結束、回原處（時刻表優先，
+    玉璽碎片改版五之一 1），接位的人才接得到原本的所在。"""
     figure = _ensure(state, content, fid)
+    if seal_acts.pinned(state.world, fid) is not None and figure.status not in OUT and moves(figure, change, content):
+        seal_acts.release(state, content, fid)
     if figure.status in OUT:
         if change.fate in ZEROED:  # 被挑戰打倒、還等著回來的人，時刻表也寫他退場（例：張角病逝）：就不回來了
             figure.back_at = figure.back_front = None
@@ -319,6 +333,7 @@ def _hand_over(state: GameState, content: Content, fid: str, front: str, locatio
         if heir.status == "active" and heir.front == front:
             return []
         if heir.status == "away" or (heir.status == "active" and heir.front is None):
+            seal_acts.release(state, content, nxt)  # 接位的人正被引將釘著：時刻表優先（玉璽碎片改版五之一 1），先回原處再接
             heir = _ensure(state, content, nxt)
             heir.status, heir.front, heir.location = "active", front, location
             return [f"{name_of(content, nxt)}接手{_front_name(content, front)}的戰事。"]

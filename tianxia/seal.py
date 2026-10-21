@@ -323,6 +323,7 @@ def scatter(reg: SealRegistry, season: int) -> list[str]:
             log(reg, season, "scatter", shard=shard.id, other=shard.holder)
         shard.state, shard.holder, shard.since_season, shard.stirred_season = "hidden", None, None, None
         shard.emerged_round, shard.former, shard.absent = None, None, 0
+        shard.act_season, shard.act_uses, shard.act_last = None, 0, None  # 獨門行動的次數（改版第 2 批）：七片重來
     reg.round += 1
     reg.emerge_season, reg.force_emerge, reg.force_stir, reg.mandate_pending = None, None, None, False
     reg.cache = None  # 領地爭奪的季藏著的那一片：七片重來，開季時照 hide_chance 重藏（stamp_cache）

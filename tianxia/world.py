@@ -667,6 +667,9 @@ def advance_world_state(
                  and world.seal_duel_open())
     while remaining > 0 and not season.ended:
         step = min(remaining, HOUR)
+        # 玉璽碎片改版第 2 批：引將期滿那一刻另切一段，剛好在那一刻回原處（沒有還沒期滿的引將時一步都不變）
+        if (pull_end := seal_acts.next_end(season)) is not None and season.time + calendar.EPS_SECONDS < pull_end < season.time + step:
+            step = pull_end - season.time
         crossed = False
         # 曆時交界照季曆的整點（21 天季在 10:30 開季時，第一個交界在 11:00，calendar.next_hour_mark）
         if cal_hour is not None and (to_mark := calendar.next_hour_mark(season.time, content, season)) <= step + calendar.EPS_SECONDS:
@@ -685,6 +688,7 @@ def advance_world_state(
             # 週末的第一季。以前只在上面那一支（第一季規則關著）叫，21 天季永遠走不到（FB-350）
             figures.recover(vehicle, content, step * calendar.cal_scale(content, season) / HOUR)
             msgs += figures.revive(vehicle, content)  # 被挑戰打退的人物過幾個季曆天回來（PM 2026-10-16，兩種季都有）
+            msgs += seal_acts.tick(vehicle, content)  # 引將期滿回原處（玉璽碎片改版第 2 批）：排在人物走動之前（期滿的那一輪他就能走）
             figure_life.tick(vehicle, content)  # 人物的每日行事（大勢人物擴充第一批）：走動、募兵、襲擾，只寫傳聞
             feasts.settle(vehicle, content)  # 時間到了的宴散席（第三批）：席間最佳那一句上天下大事
             yuedan.tick(vehicle, content, world)  # 月旦評（第三批）：跨進新的一週評六個人；給了 store 才評（要掃角色）
