@@ -5994,6 +5994,7 @@
   const REGION_SEARCH = 20000; // 第一輪一起找名字框的位置最多試幾次，再多就換第二輪
   // 第二輪（FB-648）：位置每 R_SLIDE px 一格；一起找最多試 R_SEARCH_WIDE 次；還找不到（真的放不下）時反覆換位置最多 R_SETTLE 次
   const R_SLIDE = 3, R_SEARCH_WIDE = 3000, R_SETTLE = 400;
+  const R_RING = [[19, 8], [17, 11], [14, 14], [11, 17], [8, 19]]; // 你的朱圈在第二輪照圓的算：五塊框的半寬、半高疊成一個半徑約 19 的圓
   // 第二輪的名字框位置：第一輪那幾個在前，再補沿著小圖四邊滑的（離小圖由近到遠），範圍不比第一輪遠（照樣貼著小圖、不拉線，企劃者選的乙）
   function regionLabelSpotsWide(L, z) {
     const hw = z.hw + R_GAP, hh = z.hh + R_GAP, mid = -L.fh / 2, W = L.W, H = L.H, extra = [];
@@ -6101,7 +6102,9 @@
     let pick = solve(items, REGION_SEARCH);
     if (pick && exits.length && exitHit(items, pick)) pick = null;
     if (!pick) {
-      items = lay(regionLabelSpotsWide, [...fixed, ...exits.map((e) => regionExitBox(e, 0, room))]);
+      // 第二輪：你的朱圈（半徑 17、線寬 2.4）照圓的算（五塊疊成一個圓，圓外那四個角讓名字框擺得進去），鄰區出口原本的位置也讓開
+      const ring = me ? R_RING.map(([a, b]) => [at[me.id][0] - a, at[me.id][1] - b, at[me.id][0] + a, at[me.id][1] + b]) : [];
+      items = lay(regionLabelSpotsWide, [...(me ? fixed.slice(0, -1) : fixed), ...ring, ...exits.map((e) => regionExitBox(e, 0, room))]);
       pick = solve(items, R_SEARCH_WIDE) || settle(items, R_SETTLE);
     }
     return items.map((it) => {

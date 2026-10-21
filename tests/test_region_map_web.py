@@ -327,6 +327,14 @@ def test_fb648_region_labels_do_not_overlap_while_flipping(profile, vw, vh):
             assert run(game, OVERLAP.replace("VW", str(vw)).replace("VH", str(vh))) == [], (at, combo)
 
 
+@pytest.mark.parametrize("vw,vh", PHONES[:3])
+def test_fb648_your_ring_is_round_in_the_second_round(vw, vh):
+    """FB-648 同一個原因：你站的那一處多了朱圈與旗。你站嵩山深處（左邊緊貼畫面、旁邊是嵩山腳、南華觀、潁川書院）時 375 寬第一輪擺不下
+    （修前嵩山深處的框壓到潁川書院的小圖）；第二輪朱圈照圓的算，圓外那幾個角擺得進名字框。360 寬照樣擺不下（等企劃者挑畫法）。"""
+    game = _game(profile="season21", at="deep_mountain")
+    assert run(game, OVERLAP.replace("VW", str(vw)).replace("VH", str(vh))) == []
+
+
 @pytest.mark.parametrize("vw,vh", [(375, 604), (375, 479)])
 def test_fb648_a_neighbour_exit_never_lands_on_a_name_frame(vw, vh):
     """FB-648 同一個原因的另一種：第一輪擺得下名字框，可是鄰區出口（regionExits 在名字框擺好之後沿著邊滑）怎麼滑都會壓到名字框——
