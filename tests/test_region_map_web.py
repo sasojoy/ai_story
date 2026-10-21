@@ -460,6 +460,20 @@ def test_the_world_drawer_pulled_up_is_your_card_and_the_road_line_comes_first()
     assert road.startswith('<div class="m-journey">') and "往 <b>潁川郊野</b>" in road
 
 
+def test_fb649_the_card_on_the_road_starts_with_where_you_are_going():
+    """FB-649（計畫 1.2、設計 5.3）：在路上點開任何一處的卡（含目的地），第一行照舊是「往 X・還有 N 分鐘・喊停」（journeyHtml），
+    只有一行；不在路上沒有那一行。"""
+    game = _game()
+    assert "m-journey" not in run(game, 'return H.placeCard(H.S.mapBase, H.S.mapState, "runan_wilds");')
+    game.travel("runan", "walk")  # 走好幾站：選單上有「喊停」
+    m = server.main_view(game)
+    assert any(o["id"] == "act:halt" and o.get("enabled") is not False for o in m["options"])
+    for loc in ("runan", "yingshui", "runan_wilds", "yingchuan"):
+        card = run(game, f'return H.placeCard(H.S.mapBase, H.S.mapState, "{loc}");', m=m)
+        assert card.startswith('<div class="m-journey">') and "往 <b>汝南</b>・還有 12 分鐘・下一站潁水河畔" in card, loc
+        assert card.count('class="m-journey"') == 1 and 'data-act="choose" data-id="act:halt"' in card, loc
+
+
 def test_the_removed_pieces_are_gone():
     """設計 5.4 那一表：濾鏡、意境鈕與意境濾鏡、小牌子、⚔、前線鋸齒、中立地虛線圈、圓盤裡一個字、自由縮放、看大局、「天下」那一條——真的刪了。"""
     src = APP.read_text(encoding="utf-8")
