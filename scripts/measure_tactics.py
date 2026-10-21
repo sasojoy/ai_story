@@ -120,7 +120,7 @@ def main() -> None:
     print("贏面（大勝＋險勝），威力 ÷ 難度：" + "　".join(f"{r:g}" for r in RATIOS))
     plain = [win_rate(content, DIFFICULTY * r, [], args.runs, ctx) for r in RATIOS]
     print(f"{'沒有戰法':<10}" + "　".join(f"{w:5.1%}" for w in plain))
-    figures = [ch.id for ch in content.characters.values() if ch.starting_wugong and content.skills[ch.starting_wugong].tactic]
+    figures = figures_with(content)
     lifts = []
     for fid in figures:
         hs = holders(content, [("你", "player", fid)])
@@ -164,7 +164,9 @@ def plain_rate(power, difficulty, runs):
 
 
 def figures_with(content):
-    return [ch.id for ch in content.characters.values() if ch.starting_wugong and content.skills[ch.starting_wugong].tactic]
+    """十八位有本命戰法的人物（tactics.figure_arts；歷史武將同行起始帶的學來的武學有小戰法、不是本命，FB-640）。"""
+    return [ch.id for ch in content.characters.values()
+            if any(content.skills[s].tactic is not None for s in tactics.figure_arts(content, ch))]
 
 
 def bouts(content, runs):

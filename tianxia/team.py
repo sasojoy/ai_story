@@ -1140,7 +1140,10 @@ def foe_tactics(
     char = content.characters.get(figure.character) if figure is not None else None
     if char is None:
         return None
-    holders = tactics.holders_of(content, [(figure.name, tactics.FOE_KEY, char.starting_wugong, char.starting_neigong)])
+    own = tactics.figure_arts(content, char)  # 只認本命（FB-640：起始帶的學來的武學不算）
+    wugong = char.starting_wugong if char.starting_wugong in own else None
+    neigong = char.starting_neigong if char.starting_neigong in own else None
+    holders = tactics.holders_of(content, [(figure.name, tactics.FOE_KEY, wugong, neigong)])
     if not holders:
         return None
     from . import territory  # territory → rules → team：照用的時候才 import

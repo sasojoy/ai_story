@@ -35,6 +35,7 @@ from .models import (
 )
 from .martial_arts import ATTRIBUTE_COUNTERS, ATTRIBUTES, QUALITIES
 from .naming import FORGE_CLASH, GEAR_CLASH, PRESET_CLASH, SEAL_CLASH, name_problem
+from .tactics import figure_arts
 from .armor import FORGE_NOUNS as ARMOR_FORGE_NOUNS, FORGE_WORDS as ARMOR_FORGE_WORDS, word_problem as armor_word_problem
 from .weapons import ATTR_WORDS as WEAPON_ATTR_WORDS, NOUNS as WEAPON_NOUNS, WEAPON_WORDS, kind_problem as weapon_kind_problem, shop_name as weapon_shop_name
 from .zh import to_traditional
@@ -800,8 +801,10 @@ def _placeholder_problem(line: str) -> str | None:
 def check_signature_arts(c: Content, need) -> None:
     """本命武學（tianxia/signature.py、tactics.py，企劃者 2026-10-15）：寫了本命戰法（SkillDef.tactic）的只能是人物的本命武學或本命內功
     （CharacterDef.starting_*，玩家只在情誼到了才學得到）、品質要是絕學；小戰法（TacticDef.minor）只寫在下品、不是本命的武學上；戰法的名字不重複、不撞一般與特別功效的名字；說明裡的 {鍵}
-    都要在 params 裡（卡上換成數字）；allies 是人物、foe_faction 是劇本的陣營；寫了一般功效（SkillDef.traits）的第一個要是自己的屬性、不重複。"""
+    都要在 params 裡（卡上換成數字）；allies 是人物、foe_faction 是劇本的陣營；寫了一般功效（SkillDef.traits）的第一個要是自己的屬性、不重複。
+    本命是人物起始武學裡的絕學（tactics.figure_arts，FB-640）：歷史武將同行起始帶的學來的下品武學（FB-364）照樣帶小戰法、不是本命。"""
     starts = {s for ch in c.characters.values() for s in (ch.starting_wugong, ch.starting_neigong) if s}
+    own_arts = {s for ch in c.characters.values() for s in figure_arts(c, ch)}  # 人物的本命武學與本命內功
     trait_names = {t.name for t in c.traits.general} | {t.name for t in c.traits.special}
     factions = {f.id for f in c.scenario.factions}
     seen: dict[str, str] = {}
@@ -813,7 +816,7 @@ def check_signature_arts(c: Content, need) -> None:
         if tactic is None:
             continue
         if tactic.minor:  # 小戰法（學來的武學，Joy 2026-10-21）：下品的內容武學、不是人物的本命；沒有本命底蘊與連動
-            need(skill.id not in starts, f"武學 {skill.id}：人物的本命武學寫的是本命戰法，不是小戰法")
+            need(skill.id not in own_arts, f"武學 {skill.id}：人物的本命武學寫的是本命戰法，不是小戰法")
             need(skill.quality == "下品", f"武學 {skill.id}：小戰法只寫在下品的武學上")
             need(not tactic.might and not tactic.allies and tactic.foe_faction is None,
                  f"武學 {skill.id}：小戰法不寫 might、allies、foe_faction")
@@ -844,8 +847,7 @@ def check_signature_arts(c: Content, need) -> None:
         need(arm.bond is None or bool(arm.bond.desc), f"名將本命兵器 {arm.character}：人器合一要寫說明")
         if arm.bond is not None:  # 加強的是那位名將的哪一門（PM 2026-10-16：只加卡上寫的那一門）
             ch = c.characters.get(arm.character)
-            own = [c.skills[s].tactic.name for s in ((ch.starting_wugong, ch.starting_neigong) if ch else ())
-                   if s in c.skills and c.skills[s].tactic is not None]
+            own = [c.skills[s].tactic.name for s in (figure_arts(c, ch) if ch else ()) if c.skills[s].tactic is not None]
             need(arm.bond.tactic in own, f"名將本命兵器 {arm.character}：人器合一的 tactic 要是他本命的一門戰法 {own}，寫的是「{arm.bond.tactic}」")
             need(not arm.bond.tactic or arm.bond.tactic in arm.bond.desc, f"名將本命兵器 {arm.character}：人器合一的說明要寫到加強的那一門「{arm.bond.tactic}」")
     for trait in c.traits.general:  # 絕學立招：絕招的名字到時候換成那門絕學的名字，這裡只驗說明的 {鍵} 與以器配招的說明

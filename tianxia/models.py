@@ -706,8 +706,9 @@ class CharacterDef(_Strict):
     growth: dict[str, float] = Field(default_factory=dict)
     sect: str | None = None
     desc: str = ""
-    starting_wugong: str | None = None  # 本命武學 id（指向 SkillDef，kind 必須是「武學」）
-    starting_neigong: str | None = None  # 本命內功 id（指向 SkillDef，kind 必須是「內功」）
+    # 起始武學與內功：品質是絕學的才是本命（tactics.figure_arts）；歷史武將同行補的是各地教的內容武學，不是本命（FB-640）
+    starting_wugong: str | None = None  # 起始武學 id（指向 SkillDef，kind 必須是「武學」）
+    starting_neigong: str | None = None  # 起始內功 id（指向 SkillDef，kind 必須是「內功」）
     deep_interaction: bool = False  # 是否走 companion_agent.py 的即時 LLM 對話（見設計文件四.3）
     recruit_at: str | None = None  # 可招募的同伴在哪個地點找得到他（龍頭人物不填，用 talk_at）
     talk_at: str | None = None  # kind=locked 的龍頭人物在哪個地點可以深度對話（不可招募，見上一輪「還要改進」5）

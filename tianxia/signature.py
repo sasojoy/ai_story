@@ -59,11 +59,12 @@ def lift_levels(state: GameState, content: Content, skill_ids) -> None:
 
 
 def learned(state: GameState, content: Content) -> list[str]:
-    """這個角色情誼到了、學過的本命武學（旗標「學會本命:人物 id」），照人物的本命武學與內功列出。"""
+    """這個角色情誼到了、學過的本命武學（旗標「學會本命:人物 id」），照人物的本命武學與內功列出（tactics.figure_arts：
+    歷史武將同行起始帶的學來的武學不算，FB-640）。"""
     out: list[str] = []
     for flag in state.player.flags:
         if flag.startswith("學會本命:"):
             character = content.characters.get(flag.split(":", 1)[1])
             if character is not None:
-                out += [s for s in (character.starting_wugong, character.starting_neigong) if s]
+                out += tactics.figure_arts(content, character)
     return out
