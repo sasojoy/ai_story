@@ -1357,6 +1357,10 @@ class WorldState(BaseModel):
     # 目標的名號鍵 → 上一次被截殺的世界秒（被截殺過的人一陣子之內誰都不能再截殺他）。換季整個重來
     raids: dict[str, float] = Field(default_factory=dict)
     raided: dict[str, float] = Field(default_factory=dict)
+    # 混戰（翻地與爭搶，Game._clash）寫進上面那兩本的是哪幾筆：同 raids 的鍵（兩個方向）、同 raided 的鍵（被撞的人）→ 那一場的世界秒。
+    # 截殺的拒絕話照它分「混戰過」或「截殺過」（FB-607）：raids／raided 那一筆的時刻跟這裡一樣就是混戰寫的，之後真的截殺會蓋掉 raids／raided。換季整個重來
+    clashes: dict[str, float] = Field(default_factory=dict)
+    clashed: dict[str, float] = Field(default_factory=dict)
     # 設伏劫道（ambush.py）：路段鍵（兩頭的地點 id 排序後用 | 接起來）→ 那一段的埋伏（同一時刻最多一處有效，收了的照留到 keep_hours）
     ambushes: dict[str, list[Ambush]] = Field(default_factory=dict)
     # 屯糧練兵（works.py）：交戰的那一軍 → 這一季到下一場時刻表決戰開集結為止屯了幾下（開集結那一刻換成起點的偏移、整個清空）

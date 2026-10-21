@@ -233,6 +233,9 @@ CLASH_LOST_TAG = "混戰落敗"  # 出陣那一則的結果（輸了白跑）
 CLASH_THEIRS_WON = "{rival}在{place}出陣，撞上了你；你逼退了{him}，{him}那一下白跑了。"
 CLASH_THEIRS_LOST = "{rival}在{place}出陣，撞上了你；你不敵，{him}那一下推得更多。"
 CLASH_THEIRS_DRAW = "{rival}在{place}出陣，撞上了你；兩人鬥了一陣不分高下，各自退開。"
+# 撞過一場混戰之後，截殺的拒絕話照實寫（FB-607：混戰跟截殺共用冷卻與護身那一本，以前一律寫「截殺過」「被人截殺過」）。待 joy 潤
+RAID_AFTER_CLASH = "你跟{them}不久前才在混戰裡交過手，過一陣子再說。"
+RAID_SHIELD_CLASH = "{them}剛跟人混戰過，元氣未復，這時下手太不講江湖道義。"
 # 領地爭奪第三批 A：管理者「現在就開一篇天下形勢」的回話（管理者看的，待 joy 潤）
 XINGSHI_OFF = "這一季沒有〈天下形勢〉。"
 XINGSHI_OPENED = "第 {n} 篇〈天下形勢〉開了單：伺服器在背景請模型寫，寫不出來或 {minutes} 分鐘沒交回就照固定段收。"
@@ -8183,8 +8186,8 @@ class Game:
         s, c = self.state, self.content
         w, me, them = s.world, s.player, other.state.player
         for key in (self._raid_key(me.name, them.name), self._raid_key(them.name, me.name)):
-            w.raids[key] = w.time
-        w.raided[name_key(them.name)] = w.time
+            w.raids[key] = w.clashes[key] = w.time
+        w.raided[name_key(them.name)] = w.clashed[name_key(them.name)] = w.time  # 記下是混戰寫的：截殺的拒絕話照實寫（FB-607）
         ours, theirs = self._spar_power(self, other), self._spar_power(other, self)
         result = encounter.resolve_encounter(ours, theirs, random.Random(f"混戰|{loc_id}|{me.name}|{them.name}|{w.time}"))
         mirrored = self._spar_mirror(result, theirs)
@@ -10705,11 +10708,16 @@ class Game:
         if problem is not None:
             return problem
         w = s.world
-        last = w.raids.get(self._raid_key(s.player.name, them))
+        key = self._raid_key(s.player.name, them)
+        last = w.raids.get(key)
         if last is not None and w.time - last < cfg.pair_cooldown_seconds:
+            if w.clashes.get(key) == last:  # 那一筆是混戰寫的（翻地與爭搶）：照實寫交過手，不寫截殺過（FB-607）
+                return RAID_AFTER_CLASH.format(them=them)
             return f"你不久前才截殺過{them}，過一陣子再說。"
         hit = w.raided.get(name_key(them))
         if hit is not None and w.time - hit < cfg.shield_seconds:
+            if w.clashed.get(name_key(them)) == hit:
+                return RAID_SHIELD_CLASH.format(them=them)
             return f"{them}剛被人截殺過，元氣未復，這時下手太不講江湖道義。"
         return None
 

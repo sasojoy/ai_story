@@ -195,3 +195,34 @@ def test_a_draw_story_is_a_draw_on_the_hit_side(monkeypatch):
     _sortie(c, world, "甲")
     theirs = CharacterStore(world.db).load("乙")
     assert any("撞上了你" in a.text and "不分高下" in a.text for a in theirs.player.annals)
+
+
+def test_after_a_clash_the_raid_refusal_says_clash_not_raid(monkeypatch):
+    """FB-607（QA 驗輿圖第三版第 1 批）：混戰跟截殺共用冷卻與護身那一本，可是撞過一場之後兩個人互看截殺的拒絕話寫「你不久前才截殺過某某」
+    （被撞的那一個從頭到尾沒截殺過誰）、第三個人去截殺被撞的那一個寫「剛被人截殺過」。照實寫：混戰過的寫混戰（待 joy 潤）。"""
+    c, world = _pair()
+    _sortie(c, world, "乙")
+    _melee(monkeypatch, "僵持")
+    _sortie(c, world, "甲")
+    _seat(c, world, "丙", "guan", LOC)
+    _, hit = _do(c, world, "乙", lambda g: None)
+    _, hitter = _do(c, world, "甲", lambda g: None)
+    _, third = _do(c, world, "丙", lambda g: None)
+    to_hitter = hit.raid_refusal(hit._load_kin("甲"))
+    to_hit = hitter.raid_refusal(hitter._load_kin("乙"))
+    to_shielded = third.raid_refusal(third._load_kin("乙"))
+    for text in (to_hitter, to_hit, to_shielded):
+        assert text is not None and "截殺過" not in text, text
+        assert "混戰" in text, text
+    assert "甲" in to_hitter and "乙" in to_hit and "乙" in to_shielded
+
+
+def test_a_real_raid_still_says_raid():
+    """FB-607 的另一面：真的截殺過，拒絕話照舊寫截殺（同一對的冷卻、剛被截過的護身）。"""
+    c, world = _pair()
+    _do(c, world, "甲", lambda g: g.raid(g._load_kin("乙")))
+    _seat(c, world, "丙", "guan", LOC)
+    _, again = _do(c, world, "甲", lambda g: None)
+    _, third = _do(c, world, "丙", lambda g: None)
+    assert again.raid_refusal(again._load_kin("乙")) == "你不久前才截殺過乙，過一陣子再說。"
+    assert third.raid_refusal(third._load_kin("乙")) == "乙剛被人截殺過，元氣未復，這時下手太不講江湖道義。"
