@@ -259,3 +259,19 @@ def test_pure_slots_add_to_the_trait_layers(content):
     whole = art.model_copy(update={"slot_colors": [[], [], []]})
     assert moves.look_bonus(content, whole) == pytest.approx(content.config.arts.whole_bonus)
     assert create.look_text(create.marks_of([["剛"], ["剛"], ["柔"]], "透", False)).startswith("珍・")
+
+
+def test_the_first_art_of_the_season_is_cheaper(content):
+    """Joy 2026-10-21「第一次自創武學，降低到只需要100心得，之後一樣500」：這一季第一門 create_first_xinde，之後照 create_xinde。"""
+    content.config.arts.create_first_xinde = 100
+    game = _game(content)
+    p = game.state.player
+    assert create.price(game.state, content) == 100
+    xinde = p.stats["xinde"]
+    _walk(game, reading=create.IntentReading(score=60, attributes=["快", "虛"], lean="正"))
+    game.create_name("飄風手")
+    assert p.stats["xinde"] == xinde - 100 and p.created_count == 1
+    assert create.price(game.state, content) == content.config.arts.create_xinde == 500
+    content.config.arts.create_first_xinde = 0  # 測試內容關著：第一門也照 create_xinde
+    p.created_count = 0
+    assert create.price(game.state, content) == 500

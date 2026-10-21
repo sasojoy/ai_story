@@ -43,6 +43,7 @@
   "practice_xinde_per_level": 2,
   "cultivate_min_level": {"中品": 4, "上品": 7, "絕學": 10},
   "breakthrough": {"heat": 8},
+  "arts": {"create_first_xinde": 100},
   "legend_item_bonus": 15,
   "explore_legend_chance": 0.02,
   "gather_branches": {"enabled": true},

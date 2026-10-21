@@ -2341,6 +2341,9 @@ class ArtsTuning(_Strict):
     signature_weight: float = Field(default=0.15, ge=0)
     # 自創不限門數、價錢固定（招式與絕學稿案第二輪）：create_per_season 0＝不限；create_step 1＝不漲價
     create_xinde: int = Field(default=500, ge=0)
+    # 這一季第一門自創的價錢（Joy 2026-10-21「第一次自創武學，降低到只需要100心得，之後一樣500，擔心初始門檻太高玩家玩不到那邊就放棄」）；
+    # 0＝跟後面一樣（測試內容）。角色每季重來，所以每一季的第一門都是這個價
+    create_first_xinde: int = Field(default=0, ge=0)
     create_step: float = Field(default=1.0, ge=1)
     create_per_season: int = Field(default=0, ge=0)
     create_grade: Literal["下品", "中品", "上品"] = "上品"
