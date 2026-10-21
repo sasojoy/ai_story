@@ -6233,7 +6233,7 @@ class Game:
             shard = c.seal[e.shard].name
             same = e.season == current
             if e.kind == "emerge":
-                lines = [seal.GOT.format(shard=shard, effect=seal.effect_text(c, c.seal[e.shard].effect))]
+                lines = [seal.GOT.format(shard=shard, effect=seal.shard_text(c, e.shard))]
                 skill = c.config.seal.emerge_skill
                 if same and skill and skill in c.skills and skill not in library.owned_arts(self.state) and not library.full(self.state, c):
                     lines += learn_skill(self.state, c, skill)  # 混元一氣改給現世的得主（11.2 第 4 條）
@@ -6248,12 +6248,12 @@ class Game:
             elif e.kind == "sink" and seal.key(e.other) == me:
                 self._write(seal.SEAL_TITLE, [seal.SUNK_MINE.format(shard=shard)], tag=f"『{shard}』")
             elif e.kind == "recall" and seal.key(e.holder) == me:  # 喚回（8.2）：只拿碎片，不學 emerge_skill（要 PM 定的第 5 條）
-                line = seal.RECALLED_MINE.format(where=e.where or "", shard=shard, effect=seal.effect_text(c, c.seal[e.shard].effect))
+                line = seal.RECALLED_MINE.format(where=e.where or "", shard=shard, effect=seal.shard_text(c, e.shard))
                 self._write(seal.SEAL_TITLE, [line], tag=f"『{shard}』")
             elif e.kind == "scatter" and seal.key(e.other) == me:  # 天命之季之後七片散去（8.4）：抄本在最後的 _copy_heirloom 照登記清掉
                 self._write(seal.SEAL_TITLE, [seal.SCATTER_MINE.format(shard=shard)], tag=f"『{shard}』")
             elif e.kind == "assign" and seal.key(e.holder) == me:  # 管理者指定給你（公告不寫管理者，紀錄寫成拿到）
-                self._write(seal.SEAL_TITLE, [seal.GOT.format(shard=shard, effect=seal.effect_text(c, c.seal[e.shard].effect))], tag=f"『{shard}』")
+                self._write(seal.SEAL_TITLE, [seal.GOT.format(shard=shard, effect=seal.shard_text(c, e.shard))], tag=f"『{shard}』")
         self._copy_heirloom()
 
     def _file_seal(self, e, shard: str, same: bool) -> None:
@@ -11217,7 +11217,7 @@ class Game:
             self.stamp(timetable.when(_season_vehicle(c, w), c, e)) for e in timetable.events(w, c)
             if (e.seal or e.mandate_only) and e.id not in w.timeline and e.id not in w.showdowns_opened
         ] if season_one(c, w) else []
-        return {"name": c.seal[shard.id].name, "effect_text": seal.effect_text(c, c.seal[shard.id].effect), "state": state,
+        return {"name": c.seal[shard.id].name, "effect_text": seal.shard_text(c, shard.id), "state": state,
                 "stir": stir, "dates": dates}
 
     def seal_duel_card(self) -> dict | None:

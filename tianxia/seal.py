@@ -81,8 +81,13 @@ def log(reg: SealRegistry, season: int, kind: str, **fields) -> SealEvent:
 
 
 def effect_text(content: Content, effect: str) -> str:
-    """「練成的心得 ×0.9」（字在 treasures.SEAL_EFFECT_TEXT：treasures 不 import seal，字只留一份）。"""
+    """「練成的心得 ×0.9」（字在 treasures.SEAL_EFFECT_TEXT：treasures 不 import seal，字只留一份）。改版關著的那一個效果。"""
     return treasures.seal_effect_text(content, effect)
+
+
+def shard_text(content: Content, shard_id: str) -> str:
+    """這一片的說明（拿到時、碎片卡、傳承那一列）：改版開著寫「戰力 ×1.1、…」，關著照舊一句（treasures.heirloom_text）。"""
+    return treasures.heirloom_text(content, content.seal[shard_id])
 
 
 def copy_heirloom(state: GameState, content: Content, reg: SealRegistry | None) -> None:
