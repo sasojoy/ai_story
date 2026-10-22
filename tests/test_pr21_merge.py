@@ -104,7 +104,7 @@ def test_prologue_steps_5_to_10_level_deepen_and_melting_pays_sixteen(real, worl
     game.forge(None, [insight, f"{insight}~2"], proposed=(None, ""))  # 意境效果池：練到第三成時師父多給的那一份
     assert insight_fx.strength(game.state, insight) == 2 and prologue.deepened(game.state)
     assert game.state.player.tutorial_step == 6
-    game.choose("act:rest")
+    game.take_stamina_pill()  # 體力見底：服一顆回體丹（新手引導重做，以前是調息）
     game.choose("act:train")
     game.allocate_stat("str")
     assert game.state.player.tutorial_step == 9

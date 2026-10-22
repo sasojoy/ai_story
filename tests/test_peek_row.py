@@ -41,11 +41,11 @@ const parts = [
   // pro、shown：序章（新手引導計畫一）把小標一塊一塊藏起來要看的；這裡的 m 沒有 prologue，所以全亮
   ...["esc", "pct", "pro", "shown", "STANCE_NAMES", "idleMenu", "BATTLE_MOVE_LABEL", "DEAL_RE", "dealHtml", "optLabelHtml", "PEEK_SEEN_KEY", "peekWeek",
     "peekSeason", "peekParts", "peekBlock", "optParts", "MUSTER_JOIN", "MUSTER_NOTE", "MUSTER_ARROW", "masterTalksOf",
-    "BATTLE_ROUND", "BATTLE_MINE", "BATTLE_PEEK", "BATTLE_SHUT", "CK_ATTR", "CK_LAST"].map(konst),
+    "BATTLE_ROUND", "BATTLE_MINE", "BATTLE_PEEK", "BATTLE_SHUT", "CK_ATTR", "CK_LAST", "NEWBIE_GO"].map(konst),
   // musterJoins、musterScene：決戰集結時還沒參戰的加入鈕畫在場景卡上（FB-105）；battleWatch、battleScene：只能觀戰的人，開打中的
   // 戰場收成一行（FB-120）；gaugeHtml、withGauge：決戰的戰局條；pageJianghu 用它們排場景卡與選項
   // calWords、wkWord、wkName：7 天濃縮季的「週」換成段（FB-501；boardPeek 的「本週江湖大事」走 wkWord）
-  ...["calWords", "wkWord", "wkName", "stanceBars", "boardSeen", "markBoardSeen", "boardUnseen", "warHelp", "stancePeek", "boardPeek", "questPeek", "ckGift", "checkinPeek",
+  ...["calWords", "wkWord", "wkName", "stanceBars", "boardSeen", "markBoardSeen", "boardUnseen", "warHelp", "stancePeek", "boardPeek", "questPeek", "ckGift", "checkinPeek", "newbiePeek",
     "peekHtml", "peekTap", "musterJoins", "musterScene", "battleWatch", "battleScene", "roundBlocks", "trailMoves", "gaugeHtml", "meritHtml", "withGauge",
     "siegeStrip", "armsLine", "pageJianghu"].map(fn),
   // 不相干的畫法換成一行的假貨：要驗的是排在哪裡，不是它們自己長什麼樣
@@ -76,7 +76,15 @@ def on():
 
 
 def _status(content):
-    return Game.new(content, "甲", rng=random.Random(0)).status_data()
+    # 新手目標那一顆（新手引導重做）只在新手期有，另外驗（test_newbie_chip_lists_three_goals_with_go_buttons）；這裡驗其他幾顆
+    return {k: v for k, v in Game.new(content, "甲", rng=random.Random(0)).status_data().items() if k != "newbie"}
+
+
+def test_newbie_chip_lists_three_goals_with_go_buttons(on):
+    status = Game.new(on, "甲", rng=random.Random(0)).status_data()
+    assert status["newbie"] is not None
+    html = run(view(status), "return H.peekBlock(m);")
+    assert 'data-id="newbie"' in html and "新手" in html and html.index('data-id="newbie"') < html.index('data-id="stance"')
 
 
 EVENTS = ["<p><strong>甲事</strong></p>\n<p>甲事的公告。</p>", "<p><strong>乙事</strong></p>\n<p>乙事的公告。</p>"]

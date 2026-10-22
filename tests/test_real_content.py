@@ -112,7 +112,8 @@ def test_the_mentor_explains_travel_and_sitting_down(content):
     （打坐 2026-10-12 拿掉了：講時辰與一天能服幾顆回體丹，這一步只教一下調息）。"""
     texts = {step.id: step.text for step in content.tutorial.steps}
     assert all(word in texts["p11_farewell"] for word in ("步行", "疾行", "體力")) and "趕路" not in texts["p11_farewell"]
-    assert all(word in texts["p7_rest"] for word in ("回體丹", "調息")) and "打坐" not in texts["p7_rest"]
+    # 新手引導重做（2026-10-22）：體力見底那一步改成服一顆回體丹（調息出了草廬就沒有）
+    assert all(word in texts["p7_pill"] for word in ("回體丹", "丹", "五顆")) and "打坐" not in texts["p7_pill"] and "調息" not in texts["p7_pill"]
 
 
 INSIGHT_OF = {"快": "feng", "慢": "shan", "柔": "shui", "剛": "huo"}  # 草廬四景的四個做法（有所感）各悟到哪一個基本意境
@@ -149,7 +150,7 @@ def _walk_the_hut(game, ambush="choice:0", attribute="快", luck=None):
     assert f"{insight}~2" in p.insights  # 練到第三成那一下師父多給一份（意境效果池：揣摩要同一種的兩份）
     game.forge(None, [insight, f"{insight}~2"], proposed=(None, ""))  # 揣摩：同一種意境的兩份揉成一份，到二重
     assert p.tutorial_step == 6
-    game.choose("act:rest")
+    game.take_stamina_pill()  # 體力見底：服一顆回體丹（新手引導重做，以前是調息）
     if luck is not None:
         from conftest import FixedRandom
 
@@ -245,7 +246,7 @@ def test_bots_and_scripts_skip_the_real_prologue_and_look_like_graduates(content
     assert "manniu_quan" not in bot.state.player.arts and not prologue.active(bot.state, content)
 
 
-@pytest.mark.parametrize("old_step, new_step", [(0, 15), (3, 15), (6, 15), (7, 15), (8, 15)])
+@pytest.mark.parametrize("old_step, new_step", [(0, 18), (3, 18), (6, 18), (7, 18), (8, 18)])  # 序章十一步＋初入江湖七步（新手引導重做）
 def test_old_saves_count_as_past_the_real_prologue(content, world, old_step, new_step):
     """舊存檔（舊引導八步：t1～t6、第一季的 t7、t8；onboarding 比序章那一版小）一律當作走過序章、不會被拉回草廬，步數換算成新的
     （不分季的舊六步當作走過序章）。舊的 t7、t8 已經由入伍段取代（新手引導計畫二），指到它們的步數夾在最後一步；初入江湖上線之前的存檔也一起略過（共十五步）：
@@ -333,11 +334,12 @@ def test_the_real_steps_glow_on_the_page_you_are_on_and_on_the_tab_that_leads_to
 # 狀態列，哪一頁都看得到）；裝意境（p4）、練成、熔煉（p5、p10）在修練頁；揣摩（p6）在煉製頁。「目標在」：分頁列與狀態列的東西哪一頁都在（any）。
 COMPLETES_ON = {
     "p1_ambush": "jianghu", "p2_apprentice": "practice", "p3_insight": "jianghu", "p4_fuse": "practice", "p5_level": "practice",
-    "p6_deepen": "craft", "p7_rest": "jianghu", "p8_revenge": "jianghu", "p9_stat": "any", "p10_melt": "practice",  # 武學重構：p6 是煉製頁的揣摩
+    "p6_deepen": "craft", "p7_pill": "craft", "p8_revenge": "jianghu",  # 服丹在狀態列：多半還停在揣摩的煉製頁
+    "p9_stat": "any", "p10_melt": "practice",  # 武學重構：p6 是煉製頁的揣摩
 }
 TARGET_ON = {
     "p2_apprentice": ("any",), "p3_insight": ("jianghu",), "p4_fuse": ("practice",), "p5_level": ("practice",), "p6_deepen": ("craft",),
-    "p7_rest": ("jianghu",), "p8_revenge": ("jianghu",), "p9_stat": ("any",), "p10_melt": ("practice",),
+    "p7_pill": ("any",), "p8_revenge": ("jianghu",), "p9_stat": ("any",), "p10_melt": ("practice",),
     "p11_farewell": ("jianghu", "map"),  # 移動在江湖頁，也可以直接去輿圖（師父的話說的是打開輿圖）
 }
 
@@ -352,7 +354,7 @@ def test_every_step_that_starts_on_another_page_glows_the_tab_that_leads_to_its_
         if start in targets or "any" in targets:
             continue
         assert any(f"tab:{page}" in step.glow for page in targets), (step.id, start, targets, step.glow)
-    assert "tab:jianghu" in {s.id: s for s in steps}["p7_rest"].glow and "tab:jianghu" in {s.id: s for s in steps}["p3_insight"].glow
+    assert "tab:jianghu" in {s.id: s for s in steps}["p8_revenge"].glow and "tab:jianghu" in {s.id: s for s in steps}["p3_insight"].glow
 
 
 def test_the_hut_cards_keep_the_walks_own_results_and_the_reward_comes_with_the_walk(content, world):
@@ -521,7 +523,7 @@ def test_the_real_enlistment_has_three_recruiters_and_the_drifter_line_names_eve
     assert e.drifter_line == "想投靠的話——官軍：長社、宛城、盧植營；黃巾：黃巾別部營寨、南陽黃巾營、鉅鹿道壇；豪強：鄉里結社、曹氏莊院、豪族塢堡。"
     assert not any(step.season_one for step in content.tutorial.steps)
     assert content.tutorial.steps[content.tutorial.prologue_steps - 1].id == "p11_farewell"
-    assert content.tutorial.steps[-1].id == "e4_world"  # 初入江湖的最後一步（老周）之後沒有別的引導步驟：投靠由「主線」那一行與引薦人帶
+    assert content.tutorial.steps[-1].id == "e7_world"  # 初入江湖的最後一步（老周）之後沒有別的引導步驟：投靠由「主線」那一行與引薦人帶
 
 
 def test_every_battle_is_fought_in_the_region_where_it_starts(content):
@@ -653,6 +655,9 @@ def test_the_recruit_hint_speaks_where_someone_will_follow_you(content):
 PLACEHOLDER_LINES = {("h_cap", "text"), ("h_showdown", "guan"), ("h_showdown", "huang"), ("h_showdown", "haoqiang")}
 # explain-1 新寫的 h_bond（第一次交友或談話：情誼有什麼用）兩句，也是待 joy 潤；事實由 tests/test_explain.py 管（數字照設定、風聲只在第一季說）
 PLACEHOLDER_LINES |= {("h_bond", "text"), ("h_bond", "season_one")}
+# 新手引導重做（2026-10-22）新寫、改寫的六句，待 joy 潤：h_basic_art 改寫（拿掉「融進不同的底」的舊規則）、操練練完、練功連輸、夠自創、酒肆、點數沒配
+PLACEHOLDER_LINES |= {("h_basic_art", "text"), ("h_drill_done", "text"), ("h_field_lose", "text"), ("h_create", "text"),
+                      ("h_tavern", "text"), ("h_points", "text")}
 RECRUITER_HINTS = ["h_foreshadow", "h_event_reveal", "h_promotion", "h_showdown", "h_figure"]  # 第 13～17 條
 DRIFTER_HINTS = {"h_foreshadow", "h_event_reveal", "h_figure"}  # 散人也聽得到的三條（師父講，第 13、14、17 條）
 
@@ -661,7 +666,7 @@ def test_the_real_hint_book_has_all_eighteen(content):
     from tianxia import hints
 
     ids = [h.id for h in content.hints.hints]
-    assert len(ids) == 19 and set(ids) == set(hints.KNOWN)  # KNOWN 裡的每一條都有內容（十八條＋explain-1 的 h_bond）
+    assert len(ids) == 23 and set(ids) == set(hints.KNOWN)  # KNOWN 裡的每一條都有內容（十八條＋explain-1 的 h_bond，新手引導重做拿掉一條、多五條）
     assert content.hints.head == "想起師父說過" and content.hints.season_return.strip()
 
 
@@ -745,10 +750,8 @@ def _hint_cells(content):
 HINT_PINS = {
     ("h_merge", "text"): "到『煉製』把兩個意境合在一起試試",
     ("h_clash", "text"): "同一路的，威力多兩成；剛配柔、快配慢這種冤家，打起來互相扯後腿，少兩成",
-    ("h_refine_fail", "text"): "沒成也不白修，下一回機會就大一點",
     ("h_lose", "text"): "打不過就回去練，江湖上沒人笑你，送了命才有人笑",
     ("h_injury", "text"): "內傷可不會，它一直壓著你的氣血",
-    ("h_basic_art", "text"): "同一個意境融進不同的底，長出來的功夫就不一樣",
     ("h_snubbed", "text"): "投了他那一邊、升了階，也算有了門路",
     ("h_recruit", "text"): "交情越深，人家越肯跟你走",
     ("h_free_text", "text"): "自己寫一句打算怎麼做，說得通，成算就高",
@@ -777,7 +780,7 @@ def test_every_hint_line_taken_from_the_design_keeps_its_pinned_sentence(content
     """提示書的三十三句：二十七句是設計 10.5 的原文（各釘一段），六句是待 joy 潤的（PLACEHOLDER_LINES：四句改成現在的事實、兩句是
     explain-1 新寫的 h_bond）；兩邊合起來正好是書裡的每一句，以後多寫一句沒釘也沒標待潤的，這裡會叫。開季那一句（10.6）整句釘。"""
     cells = _hint_cells(content)
-    assert len(cells) == 33 and not set(HINT_PINS) & PLACEHOLDER_LINES
+    assert len(cells) == 37 and not set(HINT_PINS) & PLACEHOLDER_LINES  # 新手引導重做：拿掉 h_refine_fail、多五條
     assert set(cells) == set(HINT_PINS) | PLACEHOLDER_LINES
     for key, sentence in HINT_PINS.items():
         assert sentence in cells[key], key
