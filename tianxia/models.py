@@ -2748,7 +2748,7 @@ class ConquestRules(_Strict):
 
 
 class XingshiTuning(_Strict):
-    """〈天下形勢〉（領地爭奪第三批 A；設計 3.10，計畫第五章 Task 16、17；tianxia/xingshi.py）：每天 22:00 結算那一刻開一張單，伺服器鎖外
+    """〈天下形勢〉（領地爭奪第三批 A；設計 3.10，計畫第五章 Task 16、17；tianxia/xingshi.py）：每天 22:00 換天那一刻開一張單，伺服器鎖外
     請模型照那一天的事實寫一篇旁白（三段式，server.write_xingshi），寫不出來照固定段。只在領地爭奪開著（conquest.on）而且這裡開著時有；
     模型只寫文章，不給任何數字、不定任何勝負。enabled 是主機的開關（關掉時不開單、不碰季的形勢欄位）。"""
 
