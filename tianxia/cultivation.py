@@ -19,6 +19,7 @@ from .state import GameState
 from .world_state import WorldStateStore
 
 NO_RANK_LINE = "品級不靠修練：合成或自創才長品級。練到第十成的上品，等一場硬仗的契機，或服一枚破境丹，便能晉為絕學。"  # 待 joy 潤
+FAIL_RAMP_LINE = "那一層鬆動了些：下一次再衝，約 {odds}% 的機會。"  # 待 joy 潤
 CHANCE_LINE = "【{name}】已到上品的極處，剩下那一步不在練功房裡——打一場硬仗等契機，或服一枚{pill}強行衝關。"  # 待 joy 潤
 NOT_RIPE_LINE = "【{name}】還沒到極處：練到第十成，才談得上絕學（現在第{level}成）。"  # 待 joy 潤
 
@@ -125,12 +126,20 @@ def seize(
 
 
 def force_odds(state: GameState, content: Content, world: WorldStateStore, art_id: str) -> int:
-    """不等契機，服一枚破境丹關起門來強行衝關的機會（%）：legend_item_bonus × 悟性，夾在 1～breakthrough.max_chance。"""
+    """不等契機，服一枚破境丹關起門來強行衝關的機會（%）：legend_item_bonus × 悟性，夾在 1～breakthrough.max_chance；
+    再加上這一門之前沒衝開的次數 × legend_fail_step（Joy 2026-10-22「同一門武學成功率應該逐次上升」），這份可以越過上限、到 legend_fail_cap。"""
     cfg = content.config
     odds = cfg.legend_item_bonus * team.stat_factor(content, state.player.stats.get("wis", team.BASE_STAT))
     odds *= peak_scale(state, content)  # 衝絕學的寶物與頒詔，同 seize
     odds += silver.mentor_bonus(state, content)  # 名師指點（銀兩出口）：在上限之內加，服丹那一次用掉（_force）
-    return round(max(1.0, min(cfg.breakthrough.max_chance, odds)))
+    odds = min(cfg.breakthrough.max_chance, odds)
+    odds += fails_of(state, art_id) * cfg.legend_fail_step
+    return round(max(1.0, min(cfg.legend_fail_cap, odds)))
+
+
+def fails_of(state: GameState, art_id: str) -> int:
+    """這一門服丹衝關沒衝開過幾次（衝開或熔掉就歸零）。"""
+    return int(state.player.legend_fails.get(art_id, 0))
 
 
 def _force(state: GameState, content: Content, world: WorldStateStore, art_id: str, rng: random.Random) -> list[str]:
@@ -142,8 +151,11 @@ def _force(state: GameState, content: Content, world: WorldStateStore, art_id: s
     p.legend_items -= 1
     msgs = [f"你服下一枚【{cfg.legend_item_name}】，關起門來強行衝關。"]
     if rng.random() * 100 < odds:
+        p.legend_fails.pop(art_id, None)
         return msgs + ascend_mod.ascend(state, content, world, art_id, "pill")  # 破境（招式與絕學稿案第三節）
-    return msgs + [f"【{art.name}】撞在那一層上，又彈了回來（約 {odds}% 的機會）。"]
+    p.legend_fails[art_id] = fails_of(state, art_id) + 1
+    after = force_odds(state, content, world, art_id)
+    return msgs + [f"【{art.name}】撞在那一層上，又彈了回來（約 {odds}% 的機會）。", FAIL_RAMP_LINE.format(odds=after)]
 
 
 def master_request(state: GameState, content: Content, world: WorldStateStore) -> naming.NamingRequest | None:

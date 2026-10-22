@@ -241,7 +241,7 @@ def remove_art(state: GameState, art_id: str) -> None:
     p = state.player
     p.arts.remove(art_id)
     arts_mod.release_all(state, art_id)
-    for record in (p.art_levels, p.art_quality, p.art_mastery):
+    for record in (p.art_levels, p.art_quality, p.art_mastery, p.legend_fails):
         record.pop(art_id, None)
 
 

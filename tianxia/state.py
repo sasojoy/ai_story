@@ -774,6 +774,7 @@ class PlayerState(BaseModel):
     guarded_until_real: float = 0.0  # 雇的保鏢跟到幾時（現實秒）
     xinde_cultivations: int = 0  # 這一季花心得修練了幾次（以心得修練拿掉了，欄位留著讓舊存檔讀得進來）；角色每季重來
     legend_bought: int = 0  # 10-18～10-21 用心得換了幾枚破境丹；換丹拿掉了（Joy 2026-10-21），留著讓舊存檔讀得進來，不再用
+    legend_fails: dict[str, int] = Field(default_factory=dict)  # 每一門服丹衝關沒衝開幾次（下一次的機會照它加，cultivation.force_odds）；衝開或熔掉清掉
     legend_items: int = 0  # 破境丹（Config.legend_item_name）的數量：探索撿到，玩家在修練頁勾了、衝絕學那一次才服一枚；探索撿到、醫館與萬寶閣買到，換季帶著走（同回體丹）
 
     seen_events: set[str] = Field(default_factory=set)
@@ -1221,7 +1222,7 @@ class SiegeSlot(BaseModel):
     at: float = 0.0  # 世界秒：開打（集結截止）
     muster_at: float = 0.0  # 世界秒：開集結
     attackers: list[str] = Field(default_factory=list)  # 攻方（官軍、黃巾；兩個是兩軍同時搶同一塊）
-    by: dict[str, str] = Field(default_factory=dict)  # 攻方 → 怎麼定的（letter 戰書；舊季的 vote 眾議、commander 主將定奪）
+    by: dict[str, str] = Field(default_factory=dict)  # 攻方 → 怎麼定的（letter 戰書；第二批的眾議、主將定奪第 5 批收掉了）
     reasons: dict[str, str] = Field(default_factory=dict)  # 攻方 → 誰下的戰書（〈天下形勢〉讀）
     status: Literal["planned", "waiting", "open", "done", "void"] = "planned"
     record_id: int | None = None  # 開了集結之後那一場的流水號
@@ -1229,19 +1230,18 @@ class SiegeSlot(BaseModel):
 
 
 class DayNote(BaseModel):
-    """每天結算時記一筆（第三批〈天下形勢〉讀）：哪一邊打哪一塊、幾點、怎麼定的、主將為什麼挑這裡、眾議的比例；攻方沒人到作罷時
-    那一場的每一個攻方再記一筆（void）。"""
+    """〈天下形勢〉讀的一筆（第三批 A）：下戰書、推滿易手、補缺退回、攻城戰收場時各記一筆——哪一邊、哪一塊、幾點、怎麼來的；攻方沒人到
+    作罷時那一場的每一個攻方再記一筆（void）。第二批每天結算時記的眾議比例（share）第 5 批收掉了，舊資料讀到照略過。"""
 
     key: int
     side: str
     loc: str
     minute: int
-    by: str  # letter（下戰書，reason 是下戰書的人）／flip（推滿易手，reason 是推最多的人）；舊季還有 vote／commander
+    by: str  # letter（下戰書，reason 是下戰書的人）／flip（推滿易手，reason 是推最多的人）／mend（補缺退回）
     reason: str = ""
-    share: float = 0.0  # 眾議：這一塊加權之後的比例（0～1）
-    # 作罷了另記一筆（conquest_day.note_void）：原因 absent＝攻方一個人都沒到（這種不發天下大事，裁決 19）；空的是結算那一下排定的那一筆
+    # 作罷了另記一筆（conquest_day.note_void）：原因 absent＝攻方一個人都沒到（這種不發天下大事，裁決 19）；空的是下戰書那一筆
     void: str = ""
-    # ── 第三批 A：收場那一下另記一筆（siege.settle；〈天下形勢〉讀）。結算排定的那一筆與作罷的那一筆這幾欄是空的 ──
+    # ── 第三批 A：收場那一下另記一筆（siege.settle；〈天下形勢〉讀）。下戰書的那一筆與作罷的那一筆這幾欄是空的 ──
     result: str = ""  # taken 攻方拿下、held 守住、stalemate 兩軍相持（沒有守將的中立地停在中線）
     taken: str = ""  # 拿下的那一方（陣營 id）；沒易手是空的
     margin: str = ""  # 大勝／險勝（戰場上贏的那一方）

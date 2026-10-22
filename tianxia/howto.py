@@ -49,7 +49,8 @@ def explore_line(
 
 
 EXPLORE_MODES = "點開三選一：找素材{fight}、找事件，或靜心感悟{sense}。"  # 待 joy 潤：行動列底下探索那一行（出陣探索與地盤設計第三節）
-STRONG_HOWTO = "每個地點有一種意境最濃（輿圖「意境」濾鏡上圓盤的顏色），選對那一種的做法比較容易悟成。"  # 意境提示設計第二節（不寫數字）
+# 意境提示設計第二節（不寫數字）。輿圖第三版拿掉了意境濾鏡（第 4 批），第 5 批改寫成區圖名字底下的意境字與卡上的「最濃」（PM 2026-10-22；待 joy 潤）
+STRONG_HOWTO = "每個地點有一種意境最濃（區圖上名字底下排第一的意境字、卡上「此地能悟」標著「最濃」的那一個），選對那一種的做法比較容易悟成。"
 # 地利（武學隨地理環境計畫 Task 5；不寫倍數，待 joy 潤）
 TERRAIN_HOWTO = ("- 各地的氣象不同：身上的武學、內功跟此地最濃的意境同一路，打起來順手；被它剋的，施展不開。"
                  "輿圖上點地點，「地利」那一段寫著此地利哪一路。")
@@ -66,7 +67,7 @@ def explore_modes_line(fight: bool, sense: bool) -> str:
 # 行動列底下練功那一行（FB-670，企劃者 2026-10-22 選練功入口「丙」：練功在行動列自己一格；Game._practice_line 照練功鈕同一個判斷挑一句）。
 # 灰著的城鎮寫 PRACTICE_TOWN_NOTE＋「，最近的在某地（步行約 N 分鐘）」（explore_modes.NO_FOE_NEAR、atlas.route_text）。都待 joy 潤
 PRACTICE_NOTE = "打這裡的{foe}，不限次數，打贏是經驗的大宗"
-PRACTICE_BOSS_NOTE = "這裡只有頭目{foe}，練功直接對上他；打一場要等他再現身，次數有限"
+PRACTICE_BOSS_NOTE = "這裡只有頭目{foe}，尋敵直接對上他；打一場要等他再現身，次數有限"
 PRACTICE_TOWN_NOTE = "城外才有對手"
 
 
@@ -420,16 +421,16 @@ def precise_explore_lines(content: Content, season: WorldState | None = None) ->
     if not training.on(content, season):
         return [explore,
                 f"- **{names['practice']}**（在探索裡，體力 {cost}）：找這裡的對手打一場，一定開打、不限次數，打贏是經驗的大宗；"
-                "城鎮與沒有對手的地方灰著。有頭目的地方，頭目在練功時碰上。"]
+                "城鎮與沒有對手的地方灰著。有頭目的地方，頭目在尋敵時碰上。"]
     t = cfg.training
     loot = "、".join(f"{w} ×{x:g}" for w, x in zip(training.TIER_WORDS, t.tier_loot))
     return [
         explore,
         f"- **{training.DRILL}**（城裡，行動列那一格，體力 {cost}）：跟校場的教頭過招，不打仗、不受傷，一天 {t.drill_per_day} 次"
-        f"（00:00 換日）；一次給心得 {t.drill_xinde_base}＋等級、經驗一點點。用完了那一格寫著最近的練功點。",
+        f"（00:00 換日）；一次給心得 {t.drill_xinde_base}＋等級、經驗一點點。用完了那一格寫著最近能尋敵的地方。",
         f"- **{names['practice']}**（城外，同一格，體力 {cost}）：找這裡的對手打一場，一定開打、不限次數，打贏是經驗的大宗。"
-        f"練功點照這裡最弱的對手分三級（難度 {t.tier_bounds[0]} 以下一級、{t.tier_bounds[1]} 以下二級、再上去三級），"
-        f"越遠越兇；打贏的心得與銀兩照級數加成（{loot}），經驗不加成。級數寫在格子上與移動的目的地底下。有頭目的地方，頭目在練功時碰上。",
+        f"照這裡最弱的對手分三等（難度 {t.tier_bounds[0]} 以下、{t.tier_bounds[1]} 以下、再上去），"
+        f"越遠越兇；打贏的心得與銀兩照這一帶多兇加成（{loot}），經驗不加成。多兇寫在格子上與輿圖的地點詳情。有頭目的地方，頭目在尋敵時碰上。",
     ]
 
 
@@ -484,7 +485,8 @@ def conquest_lines(content: Content) -> list[str]:
         f"（新手期在敵方領地療傷不加價）；找素材有 {gather} 的機會多撿一個，靜心感悟更容易抓住。",
         "散人在開季是中立地的地方也算自家：一樣便宜、一樣多撿一份，不論那裡此刻被誰佔了。",
         "中立地站著另一批強對手，掉的東西也好；被佔下之後照樣在那裡，兩邊的人去都得打。",
-        "輿圖局勢層的底色就是此刻誰佔著，灰的是還沒人佔的中立地；易手時天下大事會傳一句。",
+        # 輿圖第三版（第 5 批改字）：沒有局勢層了，天下圖的地面與區圖的名字框照誰佔著上色；待 joy 潤
+        "輿圖上，天下圖的地面、區圖名字框的顏色就是此刻誰佔著，灰的是還沒人佔的中立地；正在翻的地泛著攻方的顏色，易手時天下大事會傳一句。",
     ]
     if seal.on(content):  # 第三批 B（設計 3.9）：碎片的來源；只說「在哪一類地方」，藏在哪一塊不公開；待 joy 潤
         lines.insert(-1, "傳說傳國玉璽的碎片就藏在這些中立地的某一處：一季最多一片，到那裡探索（四種探索都算）才有極小的機會撿到，"
@@ -505,7 +507,8 @@ def territory_lines(content: Content, allied: bool = False, season: WorldState |
         f"戰線上的地點有人佔著：戰局推過去，靠近那一頭的地點就換人；{geju}大事也會讓地點易手。各家的投靠點永遠是自家的。",
         f"換了人，那裡站的兵也換：在自家地盤出陣是守，在別人的地盤出陣是攻。{gentry}",
         f"在自家地盤療傷、打造、買馬便宜{_tenth(1 - cfg.own_price)}，在別人的地盤貴{_tenth(cfg.enemy_price - 1)}；散人照原價。",
-        "輿圖局勢層的底色就是此刻誰佔著；易手時天下大事會傳一句。",
+        # 輿圖第三版沒有局勢層了（第 4 批），關著領地爭奪的季也用新畫法（設計 5.6）；第 5 批改字（PM 2026-10-22），待 joy 潤
+        "輿圖上，天下圖的地面、區圖名字框的顏色就是此刻誰佔著；易手時天下大事會傳一句。",
     ]
 
 
@@ -1209,6 +1212,12 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
         "- 意境就是技能：裝進武學的意境槽才生效，一個意境同時只能裝在一門上。武學的品級定槽數"
         f"（{'、'.join(f'{q} {n} 格' for q, n in cfg.arts.slots.items())}），也定威力的上限；槽只收那門武學相容的屬性（基礎武學什麼都收）。"
         f"悟到已經會的，化成 {cfg.duplicate_insight_xinde} 心得。",
+        # 同效果好幾份（Joy 2026-10-22 選「第二份算半」；「玩家需要知道這個知識」）。照身上兩門一起算（traits.loadout）。待 joy 潤
+        f"- 身上兩門武學的意境一起算：同一個效果第二份起算{'一半' if cfg.arts.stack_share == 0.5 else _tenth(cfg.arts.stack_share)}，"
+        f"最多到上限的{'一倍半' if cfg.arts.stack_ceiling == 1.5 else f' {cfg.arts.stack_ceiling:g} 倍'}；"
+        "同一個真意第二份多一半發動的機會"
+        + (f"（本來就每次發動的{'、'.join(always)}改成多撐一回合）" if (always := [h.name for h in content.traits.high if (h.tactic.rate or 0) >= 1]) else "")
+        + "，第三份起不再加。修練頁格子上寫著每一份算了幾成。",
         "- 同一個意境放兩次揣摩，強度從 ● 到 ●●●，就是那一招的層數；兩個不同的意境合出複合的意境，是更高階的一招。"
         "兩門武學合出第三門：品級取高的，兩門都練滿、槽都裝滿再升一品（最高上品），槽收的屬性是兩門合起來。",
         "",

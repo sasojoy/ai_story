@@ -60,10 +60,14 @@ OFF = "商城沒有開。"
 NO_ITEM = "沒有這件商品。"  # 沒上架的也回這一句（不露下一季、下一段日子要賣什麼）
 DUPLICATE = "這一筆已經買好了：「{name}」。"
 SHORT = "元寶不夠：「{name}」要 {price}，你有 {balance}。"
+SHORT_MANY = "元寶不夠：「{name}」×{n} 要 {price}，你有 {balance}。"
 LIMIT_DAY = "「{name}」今天已經買了 {n} 次，明日 00:00 後再來。"
 LIMIT_SEASON = "「{name}」這一季已經買了 {n} 次。"
 LIMIT_ACCOUNT = "「{name}」每個帳號限買 {n} 次，已經買滿了。"
 BOUGHT = "買下「{name}」：{effects}。元寶 -{price}（還剩 {left}）。"
+BOUGHT_MANY = "買下「{name}」×{n}：每一件{effects}。元寶 -{price}（還剩 {left}）。"  # 一次買好幾件（Joy 2026-10-22）；字待 joy 潤
+CLAMPED = "（限購只剩 {n} 件，就買 {n} 件。）"  # 選的數量比限購剩的多：照剩的買；字待 joy 潤
+MAX_QTY = 99  # 一次最多選幾件（網頁的數量框也照它）
 CARD_UNTIL = "月卡到 {day}"  # 江湖紀錄的變化：卡用到哪一天（含）
 # 管理者工具（4.7）：只有管理者看得到
 NEED_NOTE = "（要寫原因：每一筆都會記進帳。）"
@@ -189,6 +193,18 @@ def limit_problem(item: MallItem, wallet: Wallet, owner: str, day: int, season: 
     return None
 
 
+def limit_left(item: MallItem, wallet: Wallet, owner: str, day: int, season: int) -> int | None:
+    """限購還剩幾件（三種限購取最少的，不會是負的）；沒有限購是 None。"""
+    limit, left = item.limit, []
+    if limit.day is not None:
+        left.append(limit.day - wallet.count(owner, item.id, day=day))
+    if limit.season is not None:
+        left.append(limit.season - wallet.count(owner, item.id, season=season))
+    if limit.account is not None:
+        left.append(limit.account - wallet.count(owner, item.id))
+    return max(0, min(left)) if left else None
+
+
 def buy_problem(item: MallItem, wallet: Wallet, owner: str, day: int, season: int) -> str | None:
     """買不了的那一句（限購、元寶不夠）；買得了是 None。上架由呼叫端先看（on_sale）。"""
     problem = limit_problem(item, wallet, owner, day, season)
@@ -204,10 +220,12 @@ def buy_ref(owner: str, ref: str) -> str:
 
 
 def buy(
-    state: GameState, content: Content, wallet: Wallet, item_id: str, ref: str, *, now: float, day: int, season: int,
+    state: GameState, content: Content, wallet: Wallet, item_id: str, ref: str, *, now: float, day: int, season: int, qty: int = 1,
 ) -> Bought | str:
-    """買一件（4.4）：查重 → 上架 → 限購 → 餘額 → 寫購買紀錄 → 扣元寶 → 發貨，全部在一筆交易裡（呼叫端開著就併進去）。
-    回字串是不成（或這個編號已經買過了）的那一句，什麼都沒寫；發貨途中丟例外整筆撤回。
+    """買 qty 件（4.4；一次買好幾件，Joy 2026-10-22「應該可以一次買多個」）：查重 → 上架 → 限購 → 餘額 → 寫購買紀錄 → 扣元寶 → 發貨，
+    全部在一筆交易裡（呼叫端開著就併進去）。qty 夾在 1～MAX_QTY、再夾在限購剩的件數裡（訊息照實際買的件數寫）；
+    元寶不夠買這麼多件就整筆不買。每一件各記一筆購買與一筆帳（限購、退款、易名帖都照一件一筆數）：第一件的編號就是 ref
+    （重送同一個查得到），第 k 件接「#k」。回字串是不成（或這個編號已經買過了）的那一句，什麼都沒寫；發貨途中丟例外整筆撤回。
     發貨先寫資料庫（月卡）、最後才動 state（回體丹），所以例外丟出來時 state 也還沒被改到。"""
     owner = name_key(state.player.name)
     full = buy_ref(owner, ref)
@@ -222,13 +240,47 @@ def buy(
         problem = buy_problem(item, wallet, owner, day, season)
         if problem:
             return problem
-        pid = wallet.add_purchase(owner, full, item.id, item.price, time=now, day=day, season=season, data=dict(item.effects))
-        if not wallet.post(owner, -item.price, "buy", full, time=now, purchase_id=pid):
-            raise RuntimeError(f"購買編號 {full} 已經記過帳，購買紀錄卻沒有")  # 兩張表對不上：整筆撤回，不發貨
-        changes = _deliver(state, content, wallet, owner, item, day, pid, now)
+        want = max(1, min(MAX_QTY, int(qty)))
+        room = limit_left(item, wallet, owner, day, season)
+        n = want if room is None else min(want, room)
+        balance = wallet.balance(owner)
+        if balance < item.price * n:
+            return (SHORT_MANY.format(name=item.name, n=n, price=item.price * n, balance=balance) if n > 1
+                    else SHORT.format(name=item.name, price=item.price, balance=balance))
+        changes: list[str] = []
+        for k in range(1, n + 1):
+            unit = full if k == 1 else f"{full}#{k}"
+            pid = wallet.add_purchase(owner, unit, item.id, item.price, time=now, day=day, season=season, data=dict(item.effects))
+            if not wallet.post(owner, -item.price, "buy", unit, time=now, purchase_id=pid):
+                raise RuntimeError(f"購買編號 {unit} 已經記過帳，購買紀錄卻沒有")  # 兩張表對不上：整筆撤回，不發貨
+            changes += _deliver(state, content, wallet, owner, item, day, pid, now)
         left = wallet.balance(owner)
-    line = BOUGHT.format(name=item.name, effects=effects_text(item, content), price=item.price, left=left)
-    return Bought(item=item, lines=[line], changes=[f"元寶 -{item.price}", *changes])
+    effects = effects_text(item, content)
+    if n == 1:
+        line = BOUGHT.format(name=item.name, effects=effects, price=item.price, left=left)
+    else:
+        line = BOUGHT_MANY.format(name=item.name, n=n, effects=effects, price=item.price * n, left=left)
+    if n < want:
+        line += CLAMPED.format(n=n)
+    return Bought(item=item, lines=[line], changes=[f"元寶 -{item.price * n}", *_merge(changes)])
+
+
+def _merge(changes: list[str]) -> list[str]:
+    """好幾件的變化併起來：「回體丹 +5」五次寫成「回體丹 +25」，括號裡那一段照最後一件（功法庫上限寫最後的格數）；
+    沒有數字的（「月卡到 11/30」）同一個開頭只留最後一筆。照第一次出現的先後。"""
+    out: dict[str, tuple[int | None, str]] = {}
+    for change in changes:
+        m = _CHANGE.match(change)
+        if m:
+            head, num, rest = m.group(1), int(m.group(2)), m.group(3)
+            prev = out.get(head, (0, ""))[0] or 0
+            out[head] = (prev + num, rest)
+        else:
+            out[change.split(" ", 1)[0]] = (None, change)
+    return [f"{head} +{num}{rest}" if num is not None else rest for head, (num, rest) in out.items()]
+
+
+_CHANGE = re.compile(r"^(.*?) \+(\d+)(.*)$")
 
 
 def card_span(span: tuple[int, int] | None, day: int, days: int) -> tuple[int, int]:
@@ -394,6 +446,9 @@ def view(content: Content, wallet: Wallet, owner: str, day: int, season: int) ->
             continue
         why = buy_problem(item, wallet, owner, day, season)
         days = item.effects.get("card_days", 0)
+        room = limit_left(item, wallet, owner, day, season)
+        # 一次最多買幾件（網頁的數量框，Joy 2026-10-22）：限購剩的、元寶買得起的、MAX_QTY 取最少；月卡一次一張（確認那一行寫用到哪一天）
+        most = 0 if why else 1 if days else min(MAX_QTY, balance // max(1, item.price), MAX_QTY if room is None else room)
         items.append({
             "id": item.id, "name": item.name, "note": item.note, "price": item.price, "kind": item.kind,
             "kind_name": KIND_NAMES[item.kind], "effects": effects_text(item, content),
@@ -401,6 +456,7 @@ def view(content: Content, wallet: Wallet, owner: str, day: int, season: int) ->
             "gives": {key: n for key, n in item.effects.items() if key in EFFECTS},
             "card_to": day_text(card_span(span, day, days)[1] - 1) if days else None,
             "perks": perks(item, content) if days else [],
+            "max": most,
         })
     ingots, pills = daily_amounts(content)
     daily = {"ingots": ingots, "pills": pills} if ingots or pills else None  # 月卡每天領的份（購買確認那一列）

@@ -166,12 +166,16 @@
     mapDrawer: "min", // 抽屜的高度："min"（收著那一行）、"peek"（卡半開）、"half"、"full"、"tl"（版圖變化）
     mapWeek: null, // 版圖變化看的週次；null＝現在
     mapQuery: "", // 找地點的字
-    // 輿圖的哪一層（輿圖第三版）："world" 天下圖（打開輿圖第一眼）、"region" 區圖（第 4 批）；兩張都是固定取景，不拖不縮
+    // 輿圖的哪一層（輿圖第三版）："world" 天下圖（打開輿圖第一眼）、"region" 區圖（第 4 批）；兩張都是固定取景，
+    // 上面再疊一層拖與縮放（企劃者 2026-10-22，mapPan）
     mapLayer: "world",
     mapRegion: null, // 區圖畫哪一區（大區 id）
     worldView: null, // 天下圖此刻的取景（applyMapView 照 worldFit 算）
     regionView: null, // 區圖此刻的取景（applyMapView 照 regionFit 算：{ s, cx, cy, frame, bottom }）
     marksKey: "", // 記號照哪一個取景畫的（viewKey）：一樣就不必重畫
+    mapPan: null, // 取景上面的拖與縮放 { z 倍率 1～PAN_MAX, x, y 螢幕上的位移 }；null＝1 倍（企劃者 2026-10-22）
+    panKey: "", // 拖縮是照哪一個取景（viewKey）疊上去的：取景換了（換區、換層、地圖框換寬）回 1 倍；同一層同一區只換框高帶過去（FB-710）
+    panFrom: null, // 上一次套上去的取景與地圖框 { layer, region, vw, vh, s, cx, cy }（panCarry 照它換算）；明講回 1 倍時清掉
     news: "reports",
     reports: null,
     reportOpen: false,
@@ -616,7 +620,9 @@
     fitBars();
     applyGlow();
     fitTopMoved(before);
-    if (S.tab === "map") mapFrame(); // 狀態列變高變矮：輿圖那一層跟著夾
+    // 狀態列變高變矮：輿圖那一層跟著夾，地圖框換了高就重套取景（FB-710：不重套的話下一次拖縮拿新的框高配舊的取景，先跳 z×框高差÷2；
+    // 同一層、同一區只換框高時拖縮帶過去，applyMapView 的 panCarry）
+    if (S.tab === "map" && mapFrame()) applyMapView();
   }
 
   // 狀態列體力條、氣血條上的「體力」「氣血」兩個字（FB-135、FB-198，PM 2026-10-14「數字放得下就寫全，放不下才讓開」）：
@@ -845,15 +851,19 @@
   function renderPage() {
     const page = document.getElementById("page");
     if (!page) return;
+    let kilnWas = false; // 重畫前爐子已經縮成一條：畫完照樣縮著，不再從上面掉下來一次
     if (S.tab === "map" && showMapHost()) page.innerHTML = ""; // 輿圖畫在常駐的那一層（FB-324）
     else {
       hideMapHost();
       const fn = { jianghu: pageJianghu, practice: pagePractice, craft: pageCraft, map: pageMap, news: pageNews }[S.tab];
+      kilnWas = !!document.querySelector(".kiln.compact");
+      const sheetTop = document.querySelector(".craft-sheet")?.scrollTop; // 挑東西的抽屜開著時重畫：清單捲到哪留在哪
       page.innerHTML = fn();
+      if (sheetTop) { const sheet = document.querySelector(".craft-sheet"); if (sheet) sheet.scrollTop = sheetTop; }
     }
     S.guideDrawn = guideSig(); // 這一頁畫的是哪個對話框：修練、煉製頁的輪詢拿它比，框換了才重畫（見 refreshPage）
     afterPage();
-    if (S.tab === "craft") fixedKiln();
+    if (S.tab === "craft") fixedKiln(kilnWas);
     applyGlow();
   }
 
@@ -1542,7 +1552,7 @@
     const r = 54;
     const flames = Array.from({ length: 16 }, (_, k) => {
       const a = k * 22.5, [x0, y0] = wpt(r + 3, a - 7), [x1, y1] = wpt(r + 10, a), [x2, y2] = wpt(r + 3, a + 7);
-      return `<path d="M${x0},${y0} Q${x1},${y1} ${x2},${y2}" style="animation-delay:-${(k % 4) * 0.23}s"/>`;
+      return `<path d="M${x0},${y0} Q${x1},${y1} ${x2},${y2}" style="animation-delay:-${((performance.now() / 1000 + (k % 4) * 0.23) % 1.8).toFixed(2)}s"/>`; // 照同一個鐘起跳（同 spinAt）：重畫時火舌不從頭竄一次
     }).join("");
     const slot = (m, i) => {
       const x = i ? 26 : -26;
@@ -1645,7 +1655,7 @@
     // 練功（FB-670，企劃者 2026-10-22 選練功入口「丙」）：以前是探索卡上的第四顆，現在行動列自己一格、排在探索右邊（五格）。
     // 選項 id 照舊 explore:practice（選單、模擬腳本都不受影響）；一類一顆沒開、選單上沒有練功時不畫（同調息），序章照 act:practice 的鍵亮。
     // 城裡操練開著時（新手引導重做，Config.training；m.training）城裡這一格是「操練」（act:drill），城外照舊是練功
-    { key: "practice", ids: ["act:drill", "explore:practice"], name: "練功", none: "", icon: '<path d="M14.5 17.5L3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2M9.5 14.5L21 3h-3L6.5 14.5M11 19l-6-6M8 16l-4 4M3 19l2 2"/>' },
+    { key: "practice", ids: ["act:drill", "explore:practice"], name: "尋敵", none: "", icon: '<path d="M14.5 17.5L3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2M9.5 14.5L21 3h-3L6.5 14.5M11 19l-6-6M8 16l-4 4M3 19l2 2"/>' },
     { key: "train", ids: ["act:train"], name: "遊歷", none: "沒有對手", icon: '<path d="M14.5 4h-5L7 7h10zM12 7v13M8 12h8"/>' },
     // 打坐 2026-10-12 拿掉了（企劃者）：這一格只在序章教體力那一步有選項（調息），沒有選項就不畫（平常是四顆）
     { key: "rest", ids: ["act:rest"], name: "調息", none: "", icon: '<circle cx="12" cy="7" r="2.5"/><path d="M8 20c0-3 3-4 4-4s4 1 4 4M5 15l3-2m11 2l-3-2"/>' },
@@ -1676,7 +1686,7 @@
   const SORTIE_FULL_SUB = "今日已滿"; // 用完了：整句（什麼時候再來）在行動列底下那一行（待 joy 潤）
   const EXPLORE_PREFIX = "explore:"; // 探索三選一（出陣探索與地盤設計第三節）：探索那一格點了展開這三顆
   const EXPLORE_SUB = "三選一"; // 探索那一格是展開鈕時的小字（待 joy 潤）
-  const TIER_WORDS = ["一級", "二級", "三級"]; // training.TIER_WORDS：練功那一格的小字寫幾級
+  const TIER_WORDS = ["宵小出沒", "匪寇橫行", "兇徒盤據"]; // training.TIER_WORDS：尋敵那一格的小字寫這一帶多兇（不寫幾級，Joy 2026-10-22）
   const DRILL_FULL = "今日已練滿", DRILL_FULL_SUB = "今日已滿"; // training.DRILL_FULL：用完了，格子寫短的、整句在底下那一行，點了打開移動
   // 找素材分支（第 32 項，計畫 2.1 甲）：選單上有 explore:gather:<分支> 時「找素材」是展開鈕，點了在它底下再攤一排分支（S.gatherOpen）；
   // 最後一顆「自己說…」點了出 20 字的輸入框（S.gatherSaying），送 /api/do/gather_text（同事件的隨口應對那一個輸入框）
@@ -3177,7 +3187,7 @@
   function insightCardHtml(i, o = {}) {
     if (!i) return "";
     const fx = (i.effects || []).map((e) => `<li class="${e.grand ? "grand" : e.special ? "sp" : ""}"><b>${esc(e.name)}${e.grand || e.special ? "" : esc(FX_LAYERS[e.layers] || "")}</b>${e.desc ? `<span>${esc(e.desc)}</span>` : ""}</li>`).join("");
-    const fits = o.fits ? (i.fits || []).map((f) => `<button class="btn small" data-act="slot-in" data-id="${esc(f.art)}" data-i="${f.i | 0}" data-ins="${esc(i.id)}">裝進【${esc(f.name)}】第 ${(f.i | 0) + 1} 格</button>`).join("") : "";
+    const fits = o.fits ? (i.fits || []).map((f) => `<button class="btn small" data-act="slot-in" data-id="${esc(f.art)}" data-i="${f.i | 0}" data-ins="${esc(i.id)}">裝進【${esc(f.name)}】第 ${(f.i | 0) + 1} 格</button>${f.stack ? `<small class="stk">${esc(f.stack)}</small>` : ""}`).join("") : "";
     const where = i.slotted ? `裝在【${esc(i.slotted)}】` : o.fits && !fits ? "身上的武學沒有空格收得下它。" : ""; // 待 joy 潤
     const rare = i.look === "珍" || i.look === "神";
     return `<div class="ins-card${o.reveal ? " reveal" : ""}${o.reveal && rare ? " rare" : ""}">
@@ -3272,6 +3282,8 @@
   // 點了在底下攤開手上空著的意境，顏色收得下的點了裝進「這一格」（送 index），收不下的灰掉寫原因。裝、拆都不花東西。
   // 寫死的武學（本命、部下的上品）slots 是空清單，不畫。字待 joy 潤
   // ro：別人的卡（榜單點開的，Joy 2026-10-22）：一樣畫，但格子點不了、不攤意境
+  // 同效果好幾份（Joy 2026-10-22「第二份算半」）：格子上那一份算了幾成（skillview.slot_stack_marks，伺服器寫好的字）
+  const stkHtml = (t) => (t ? `<small class="stk">${esc(t)}</small>` : "");
   function slotsHtml(a, x, ro = false) {
     if (!Array.isArray(a.slots) || !a.slots.length) return "";
     const colors = Array.isArray(a.colors) ? a.colors : [];
@@ -3281,10 +3293,10 @@
     const cells = a.slots.map((s, i) => {
       const c = colors[i] || [];
       if (ro) return s
-        ? `<span class="jd full" title="${esc(`「${s.name}」${s.look || ""}・${fxText(s.fx) || s.skill}${s.desc ? `：${s.desc}` : ""}`)}">${ringHtml(c, `<b>${esc(String(s.name).slice(0, 2))}</b>`)}${lookSeal(s.look)}${fxHtml(s.fx, "col") || `<small>〔${esc(s.skill)}〕</small>${lvHtml(s.strength)}`}</span>`
+        ? `<span class="jd full" title="${esc(`「${s.name}」${s.look || ""}・${fxText(s.fx) || s.skill}${s.desc ? `：${s.desc}` : ""}`)}">${ringHtml(c, `<b>${esc(String(s.name).slice(0, 2))}</b>`)}${lookSeal(s.look)}${fxHtml(s.fx, "col") || `<small>〔${esc(s.skill)}〕</small>${lvHtml(s.strength)}`}${stkHtml(s.stack)}</span>`
         : `<span class="jd empty">${ringHtml(c, "", "vacant")}<small class="dim">空著</small></span>`;
       return s
-        ? `<button type="button" class="jd full" data-act="slot-out" data-id="${esc(a.id)}" data-ins="${esc(s.id)}" title="${esc(`「${s.name}」${s.look || ""}・${fxText(s.fx) || s.skill}${s.desc ? `：${s.desc}` : ""}（點了拆下）`)}">${ringHtml(c, `<b>${esc(String(s.name).slice(0, 2))}</b>`)}${lookSeal(s.look)}${fxHtml(s.fx, "col") || `<small>〔${esc(s.skill)}〕</small>${lvHtml(s.strength)}`}</button>`
+        ? `<button type="button" class="jd full" data-act="slot-out" data-id="${esc(a.id)}" data-ins="${esc(s.id)}" title="${esc(`「${s.name}」${s.look || ""}・${fxText(s.fx) || s.skill}${s.desc ? `：${s.desc}` : ""}（點了拆下）`)}">${ringHtml(c, `<b>${esc(String(s.name).slice(0, 2))}</b>`)}${lookSeal(s.look)}${fxHtml(s.fx, "col") || `<small>〔${esc(s.skill)}〕</small>${lvHtml(s.strength)}`}${stkHtml(s.stack)}</button>`
         : `<button type="button" class="jd empty${pick === i ? " on" : ""}" data-act="slot-pick" data-id="${esc(a.id)}" data-i="${i}"${glowSlot} title="${esc(ringWord(c))}">${ringHtml(c, "<i>＋</i>", "vacant")}<small class="dim">${esc(ringWord(c))}</small></button>`;
     }).join("");
     let picker = "";
@@ -3292,7 +3304,7 @@
       const c = colors[pick] || [];
       const fits = (i) => !c.length || c.includes(i.attribute);
       const free = (x.insights || []).filter((i) => !i.slotted);
-      picker = `<div class="slot-pick">${free.length ? free.map((i) => `<button type="button" class="${fits(i) ? "" : "no"}" data-act="slot-in" data-id="${esc(a.id)}" data-i="${pick}" data-ins="${esc(i.id)}"${glowSlot} ${fits(i) ? "" : "disabled"} title="${esc(fits(i) ? i.skill_desc || "" : `這一格${ringWord(c)}`)}">${ringHtml([i.attribute], "", "jmini")}<span>「${esc(i.name)}」${lookSeal(i.look)}<small>${fxHtml(i.fx) || `〔${esc(i.skill || "")}〕${lvHtml(i.strength)}`}${fits(i) ? "" : "・顏色不合"}</small></span></button>`).join("")
+      picker = `<div class="slot-pick">${a.stack_rule ? `<p class="stk-rule">${esc(a.stack_rule)}</p>` : ""}${free.length ? free.map((i) => `<button type="button" class="${fits(i) ? "" : "no"}" data-act="slot-in" data-id="${esc(a.id)}" data-i="${pick}" data-ins="${esc(i.id)}"${glowSlot} ${fits(i) ? "" : "disabled"} title="${esc(fits(i) ? i.skill_desc || "" : `這一格${ringWord(c)}`)}">${ringHtml([i.attribute], "", "jmini")}<span>「${esc(i.name)}」${lookSeal(i.look)}<small>${fxHtml(i.fx) || `〔${esc(i.skill || "")}〕${lvHtml(i.strength)}`}${fits(i) ? "" : "・顏色不合"}</small>${a.stack && a.stack[i.id] ? `<em class="stk">${esc(a.stack[i.id])}</em>` : ""}</span></button>`).join("")
         : '<span class="muted">手上沒有空著的意境——去探索悟一個，或從別門武學上拆下來。</span>'}</div>`;
     }
     // 第五個玉環（自創的才有，招式與絕學稿案第三節）：破境了亮金色寫絕招，還沒破境是暗的
@@ -3763,7 +3775,7 @@
       </div></div></div>`;
   }
   // 大爐子捲出狀態列底下時縮成一條、捲回來時放大：捲動時與每次畫完煉製頁都量一次（renderPage 的 afterPage 之後）
-  function fixedKiln() {
+  function fixedKiln(quiet) {
     const wrap = document.getElementById("kiln-wrap"), kiln = document.getElementById("kiln");
     if (!wrap || !kiln || typeof wrap.getBoundingClientRect !== "function" || !kiln.classList) return;
     const head = document.getElementById("top");
@@ -3772,6 +3784,7 @@
     if (compact === kiln.classList.contains("compact")) return;
     if (compact) wrap.style.minHeight = `${wrap.offsetHeight}px`; // 縮起來前先撐住原本的高度，頁面才不往上跳
     kiln.classList.toggle("compact", compact);
+    kiln.classList.toggle("still", compact && !!quiet);
   }
   // 捲動時一幀量一次（只在煉製頁）
   let kilnFrame = 0;
@@ -3854,6 +3867,12 @@
   // 點爐子的空格從底下升起，篩選、武學、意境都在裡面；點一樣就放進去，兩格放滿自動收起、預覽當場更新；放了一樣還缺一樣就留著接著挑。
   // 清單本身（craftChip、篩選、再列、合不了的灰掉）跟以前在頁面上的一模一樣
   function craftSheetHtml(x) {
+    // 抽屜本來就開著（放了一樣、篩選、再列時重畫）：不再從底下升上來一次（Joy 2026-10-22「合成前點第一個素材時畫面也會閃一下」）
+    const still = document.querySelector(".craft-sheet") ? " still" : "";
+    return `<div class="sheet-bg${still}" data-act="pot-close"></div>
+      <div class="sheet craft-sheet${still}" role="dialog" aria-label="挑東西放進爐">${craftSheetInner(x)}</div>`;
+  }
+  function craftSheetInner(x) {
     const v = craftView();
     const keep = (type, thing) => (!v.attr || thing.attribute === v.attr) && (!v.quality || thing.look === v.quality) && (!v.okOnly || !pickMark(type, thing.id));
     const order = (list) => v.sort === "name" ? [...list].sort((a, b) => a.name.localeCompare(b.name, "zh-Hant"))
@@ -3862,8 +3881,7 @@
     const first = S.forgeSel[0];
     const held = first ? x.insights.find((r) => r.id === first.id) : null;
     const title = !first ? "放一個意境進爐" : held ? `爐裡${isLocked(first) ? "鎖著" : "有"}「${esc(held.name)}」，再放一個` : "再放一個";
-    return `<div class="sheet-bg" data-act="pot-close"></div>
-      <div class="sheet craft-sheet" role="dialog" aria-label="挑東西放進爐">
+    return `
         <div class="grip"></div>
         <div class="top-row"><h3 style="flex:1">${title}</h3><button type="button" class="btn small ghost" data-act="pot-close">關閉</button></div>
         ${craftFilterRow(x)}
@@ -3871,8 +3889,7 @@
         ${x.insights.length ? (ins.length ? `<div class="chips">${ins.map((i) => craftChip("ins", i, `${i.look ? `${i.look}品` : ""}・屬${i.attribute}${i.lean !== "無" ? `・${i.lean}` : ""}・${fxText(i.fx) || i.depth || ""}`, i.grand ? 3 : 2,
           (i.glow || []).includes("pick:insight") && !S.forgeSel.some((p) => p.type === "ins" && p.id === i.id) ? ' data-glow="pick:insight"' : "")).join("")}</div>`
           : '<p class="muted">沒有合這些條件的意境。</p>')
-          : '<p class="muted">還沒悟到任何意境。去探索，荒郊野外最容易有所領悟。</p>'}
-      </div>`;
+          : '<p class="muted">還沒悟到任何意境。去探索，荒郊野外最容易有所領悟。</p>'}`;
   }
   function pageCraft() {
     const x = S.menxia;
@@ -3976,6 +3993,8 @@
       ${draft.redo > 0 ? `<p class="muted small">不滿意這個形，可以免費重來一次（重擺或重立意）。</p>` : ""}
       <div class="cr-reroll">${(draft.reroll_left | 0) <= 0 ? `<button class="btn" disabled>重骰<small>這一門已骰滿 ${c.reroll_cap | 0} 次</small></button><span class="muted small">一門最多重骰 ${c.reroll_cap | 0} 次：留下這個形，或回頭重來。</span>`
         : c.rerolls > 0 ? `<button class="btn" data-act="create-reroll">重骰<small>重悟帖 剩 ${c.rerolls | 0} 張</small></button><span class="muted small">同一個架式與意，三格顏色與變招再擲一次。這一門還能重骰 ${draft.reroll_left | 0} 次。</span>`
+        // 手上沒帖：引去萬寶閣，停在重悟帖那一件（Joy 2026-10-22「沒有重悟丹不會自動提示玩家去商城購買」；同修練頁沒丹時的破境丹）
+        : c.shop ? `<button class="btn" data-act="mall-goto" data-id="${esc(c.shop)}">去萬寶閣<small>買重悟帖</small></button><span class="muted small">重悟帖可以直接重骰這個形，不必重來（一門最多 ${draft.reroll_left | 0} 次）。</span>`
         : `<span class="muted small">萬寶閣的重悟帖可以直接重骰這個形，不必重來（一門最多 ${draft.reroll_left | 0} 次）。</span>`}</div>
       <div class="crow"><span>名字</span><input class="input" id="create-name" maxlength="6" placeholder="2～6 個字，全服不能重名"></div>
       <div class="crow"><span>招名</span><input class="input" id="create-move" maxlength="4" value="${esc(draft.move || "")}" placeholder="2～4 個字"></div>
@@ -4000,11 +4019,6 @@
       <div class="msg" id="mx-msg">${S.message || ""}</div>
       ${createHtml()}
     </div>`;
-  }
-  function createDone() { // 立好或作罷了：回煉製頁，結果那一句留在上面
-    const c = S.main && S.main.status && S.main.status.create;
-    if (!S.createOpen || (c && c.draft)) return;
-    S.createOpen = false; renderPage(); window.scrollTo(0, 0);
   }
   async function createIntent() {
     const box = document.getElementById("create-text");
@@ -4963,10 +4977,16 @@
   // 購買確認（設計 4.6；草圖子的「點了十顆」）：貼在下緣的紙，寫花多少、元寶剩多少、丹或月卡變成多少（還沒有月卡時多寫一天最多服幾顆），
   // 底下照商品的說明與限購。編號在這一刻產；上一次同一件送出去沒拿到回應（逾時、斷線）、貨架也還沒變，用回那一個（伺服器回「已經買好了」、
   // 不扣兩次），這時標題底下寫明是上一筆再送一次、鈕寫「再送一次」，不假裝是新的一筆（FB-491）
-  function mallAsk(it, d) {
+  // 一次買好幾件（Joy 2026-10-22「應該可以一次買多個」）：it.max > 1 時多一排數量（−、＋、最多），花的、剩的、變成多少照件數算；
+  // 最多幾件是伺服器算的（限購剩的、元寶買得起的；月卡一次一張）。qty、ref 是按 −／＋ 重畫這張紙時帶回來的（編號不換）
+  function mallAsk(it, d, qty = null, keepRef = null) {
     const p = d.pills, g = it.gives || {};
-    const rows = [["花", `<b>${it.price | 0} 元寶</b>`], ["元寶", `<s>${d.balance | 0} →</s> <b>${it.after | 0}</b>`]];
-    if (g.pills) rows.push([esc(p.name), `<s>${p.count | 0} →</s> <b>${(p.count | 0) + (g.pills | 0)} 顆</b>`]);
+    const most = Math.max(1, it.max | 0);
+    const again = !!(S.mallPending && S.mallPending.id === it.id);
+    const n = Math.max(1, Math.min(most, qty == null ? (again ? S.mallPending.qty || 1 : 1) : qty | 0));
+    const cost = (it.price | 0) * n, after = (d.balance | 0) - ((d.balance | 0) - (it.after | 0)) * n;
+    const rows = [["花", `<b>${cost} 元寶</b>`], ["元寶", `<s>${d.balance | 0} →</s> <b>${after}</b>`]];
+    if (g.pills) rows.push([esc(p.name), `<s>${p.count | 0} →</s> <b>${(p.count | 0) + (g.pills | 0) * n} 顆</b>`]);
     if (g.card_days) {
       rows.push(["月卡", `<s>${d.card ? `到 ${esc(d.card.until)}` : "還沒開"} →</s> <b>到 ${esc(it.card_to || "")}</b>`]);
       if (!d.card && p.cap > 0) rows.push(["每天最多服", `<s>${p.cap | 0} →</s> <b>${(p.cap | 0) + (p.bonus | 0)} 顆</b>`]);
@@ -4974,21 +4994,27 @@
       const daily = d.daily;
       if (daily) rows.push(["每天領", `<b>${esc(dailyWhat(daily))}</b>（沒上線那天不補）`]);
     }
-    if (g.zhuan_rewrite) rows.push(["列傳", `<b>多重寫 ${g.zhuan_rewrite | 0} 次</b>`]);
+    if (g.zhuan_rewrite) rows.push(["列傳", `<b>多重寫 ${(g.zhuan_rewrite | 0) * n} 次</b>`]);
     const note = [it.note, it.limit].filter(Boolean).map(esc).join("<br>"); // 說明一行、限購一行（說明自己帶句號，接在一起讀起來是「。；」）
-    const again = !!(S.mallPending && S.mallPending.id === it.id);
-    const ref = again ? S.mallPending.ref : mallRef();
+    const ref = keepRef || (again ? S.mallPending.ref : mallRef());
+    const qtyRow = most > 1 && !again ? `<div class="mall-qty" role="group" aria-label="數量">
+        <button class="btn small" data-act="mall-qty" data-n="${n - 1}" ${n <= 1 ? "disabled" : ""} aria-label="少一件">−</button>
+        <b aria-live="polite">${n}</b><span>件</span>
+        <button class="btn small" data-act="mall-qty" data-n="${n + 1}" ${n >= most ? "disabled" : ""} aria-label="多一件">＋</button>
+        <button class="btn small ghost" data-act="mall-qty" data-n="${most}" ${n >= most ? "disabled" : ""}>最多 ${most}</button></div>` : "";
     closeAsk();
-    askGo = () => mallBuy(it.id, ref);
+    S.mallAskNow = { id: it.id, ref };
+    askGo = () => mallBuy(it.id, ref, n);
     document.body.insertAdjacentHTML("beforeend", `
       <div class="ask-layer">
         <div class="ask-bg" data-act="ask-no"></div>
         <div class="ask mall-ask" role="alertdialog" aria-modal="true" aria-labelledby="ask-text">
-          <h4 id="ask-text">買下【${esc(it.name)}】？</h4>
+          <h4 id="ask-text">買下【${esc(it.name)}】${n > 1 ? `×${n}` : ""}？</h4>
           ${again ? `<p class="mall-ask-again">${nbHtml(MALL_AGAIN.replace("{name}", it.name), MALL_SAY_AFTER)}</p>` : ""}
+          ${qtyRow}
           <dl class="mall-sum">${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>
           ${note ? `<p class="mall-ask-note">${note}</p>` : ""}
-          <div class="row"><button class="btn" data-act="ask-no">再想想</button><button class="btn primary" data-act="ask-yes">${again ? "再送一次" : "買下"}（${it.price | 0}）</button></div>
+          <div class="row"><button class="btn" data-act="ask-no">再想想</button><button class="btn primary" data-act="ask-yes">${again ? "再送一次" : "買下"}（${cost}）</button></div>
         </div>
       </div>`);
     document.querySelector('.ask [data-act="ask-no"]')?.focus?.();
@@ -4996,10 +5022,10 @@
 
   // 買：回來的 mall 換掉貨架、main 換掉狀態列（錠子鈕的餘額、丹鈕當場換），掌櫃那一句換成伺服器回的那一句（bought 有值是成了；
   // already 有值是同一個編號早就買好了〔逾時重送〕，也是成了的樣子，FB-491）。送出去之前記下貨架的指紋（mallGot 拿來比）
-  async function mallBuy(id, ref) {
+  async function mallBuy(id, ref, qty = 1) {
     await busy(async () => {
-      S.mallPending = { id, ref, mark: mallMark(S.mallData) };
-      const r = await api("/api/mall/buy", { item: id, ref });
+      S.mallPending = { id, ref, qty, mark: mallMark(S.mallData) };
+      const r = await api("/api/mall/buy", { item: id, ref, qty });
       S.mallPending = null;
       if (r.mall) S.mallData = r.mall;
       if (r.main) setMain(r.main);
@@ -5311,7 +5337,7 @@
   }
 
   // ── 輿圖 ──
-  // 輿圖第三版（輿圖簡化設計第五章）：兩張不自由縮放的圖——天下圖（打開輿圖第一眼，S.mapLayer "world"）與區圖（點一區，"region"）——
+  // 輿圖第三版（輿圖簡化設計第五章）：兩張固定取景、能拖能捏合縮放（企劃者 2026-10-22）的圖——天下圖（打開輿圖第一眼，S.mapLayer "world"）與區圖（點一區，"region"）——
   // 加一張卡（抽屜，設計 5.3）。底圖（/api/map/base：紙、大區、山河、路的 SVG）一次載入只抓一次，疊層的 key 換了（劇情開放了新地點）才重抓；
   // 疊層（/api/map/state：誰佔著、勝算、分鐘……）打開輿圖、輪詢（MAP_STATE_EVERY）、做了動作之後重抓。記號照疊層畫在底圖的 <g id="mk">
   // 與疊在上面的 #mkt（drawMarks）；兩張圖都是固定取景（worldFit、regionFit），字與記號照倍率反算、螢幕上大小固定。
@@ -5373,11 +5399,12 @@
     const [x, y] = [lum(a), lum(b)];
     return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
   }
-  // 抽屜裡照陣營上色的字（FB-650）：淺色照劇本的 color；深色主題的抽屜底（最亮的是 --card-2 #2B251E）上對比不到 4.5:1 的，
-  // 往那一方的 soft 調亮到夠（soft 都不夠再往白），本來就夠的不動。回 style 裡的兩個變數（--sc 淺色、--sd 深色；style.css 照主題挑）。
+  // 抽屜裡照陣營上色的字：從劇本的 color 起算，對比不到 4.5:1 的調到夠，本來就夠的不動。回 style 裡的兩個變數（--sc 淺色、--sd 深色；
+  // style.css 照主題挑）。深色（FB-650）：在深色抽屜最亮的底 --card-2 #2B251E 上，往那一方的 soft 調亮（soft 都不夠再往白）；
+  // 淺色（FB-652）：在淺色抽屜最深的底 --card-2 #EFE6D5 上，往墨色 --ink 調深（黃巾的 #B9821A 在卡底只有 3.13:1）。
   // k 是陣營 id（或 sideInk 給的那一份）；顏色照劇本讀，不寫死哪一方
-  const DARK_TEXT_BG = "#2B251E", DARK_TEXT_MIN = 4.5;
-  const sideDarkMemo = {};
+  const DARK_TEXT_BG = "#2B251E", LIGHT_TEXT_BG = "#EFE6D5", LIGHT_TEXT_INK = "#2A241D", DARK_TEXT_MIN = 4.5;
+  const sideDarkMemo = {}, sideLightMemo = {};
   function sideText(k) {
     const ink = k && typeof k === "object" ? k : sideInk(k), key = `${ink.color}|${ink.soft}`;
     if (!(key in sideDarkMemo)) {
@@ -5387,7 +5414,12 @@
       for (let i = 1; i <= 20 && !ok(c); i++) c = mixHex(ink.soft || ink.color, "#FFFFFF", i / 20);
       sideDarkMemo[key] = c;
     }
-    return `--sc:${ink.color};--sd:${sideDarkMemo[key]}`;
+    if (!(ink.color in sideLightMemo)) {
+      let c = ink.color;
+      for (let i = 1; i <= 20 && hexContrast(c, LIGHT_TEXT_BG) < DARK_TEXT_MIN; i++) c = mixHex(ink.color, LIGHT_TEXT_INK, i / 20);
+      sideLightMemo[ink.color] = c;
+    }
+    return `--sc:${sideLightMemo[ink.color]};--sd:${sideDarkMemo[key]}`;
   }
 
   // 那一週的控制方：現在照疊層；選了別的週照那一週的快照（還沒記到是空的）
@@ -5473,7 +5505,7 @@
     stopPlay();
     Object.assign(S, {
       mapBase: null, mapState: null, mapStateAt: 0, mapSel: null, mapMode: "overview", mapDrawer: "min",
-      mapWeek: null, mapQuery: "", mapLayer: "world", mapRegion: null, worldView: null, regionView: null, marksKey: "",
+      mapWeek: null, mapQuery: "", mapLayer: "world", mapRegion: null, worldView: null, regionView: null, marksKey: "", mapPan: null, panKey: "", panFrom: null,
     });
     hideMapHost(true);
   }
@@ -5553,7 +5585,21 @@
   const LINE_RICH_HELD = "{side}佔下的高級資源領地", LINE_FREE = "還沒有人佔", LINE_OFF = "不在戰線上", LINE_FIXED = "只照大事易手";
   const LINE_HELD = "{side}控制", LINE_TUG = "{side}控制，照戰線易手", LINE_COOL = "剛易手，{n} 分後才能再推、加成暫停";
   const FLIP_TITLE = "正在翻", CLASH_WORD = "激戰", FLIP_IDLE = "還沒有人推，進度 0／100", FLIP_ATTACK = "正在攻", FLIP_HOLD = "在守";
-  const FOCUS_WORD = "{side}集火 +{pct}%", FROZEN_WORD = "已下戰書：{sides}・{time} 攻城";
+  const FOCUS_WORD = "{side}集火 +{pct}%";
+  // 攻城戰的三種時刻（輿圖第三版第 5 批，企劃者 2026-10-22 從對比圖挑 A 乙、B 甲、C 甲）：卡上第 2 段底下一段——戰書下了到開集結（A）、
+  // 集結・交戰中（B）、打完到換天（C）；讀 main_view["conquest"]["today"]（Game.conquest_view：攻方、時刻、狀態字、看的人站哪一格 you、
+  // 打完的大勝／險勝 margin）與 muster（開打前幾分鐘開集結）。字待 joy 潤
+  const SIEGE_HEAD = { letter: "戰書", fight: "攻城", done: "攻城戰果" };
+  const SIEGE_JOIN = { attack: "去加入攻城", defend: "去守城", help: "去助陣" }, SIEGE_REPORT = "看戰報";
+  const SIEGE_LETTER_LINE = "{who}約戰 <b>{time}</b>；開打前 {muster} 分鐘在這一帶集結，{join}這一塊的進度凍結到打完。";
+  const SIEGE_FIGHT_LINE = "{who}攻{place}：<b>{status}</b>（{time} 開打）。{join}", SIEGE_DONE_LINE = "{time} 那一仗：<b>{status}</b>{margin}。";
+  // 看的人站不站得進這一場（you 是空的＝另一軍，siege.slots）：戰書那一句寫「人要在某區才加得進去」；集結・交戰中照伺服器的 join
+  // （FB-690：同江湖頁的加入鈕 Game._joinable——人在那一區、不在路上、還沒在任何一場的名單上才加得進去）：go 才畫「去…」那一顆，
+  // in 畫「看戰況」，far 寫要到哪一區、走到這裡幾分（步行、疾行的鈕在卡的動作那一排），busy 寫已經在別的一場
+  const SIEGE_IN_LETTER = "人要在{region}才加得進去。", SIEGE_OUT = "這一場你這一邊站不進去。", SIEGE_WALK = "（走到這裡步行 {n} 分）";
+  const SIEGE_JOIN_WORD = { go: "你在{region}，加得進去。", in: "你已經在這一場的名單上。", busy: "你已經在另一場的名單上，加不進這一場。",
+    far: "人要在{region}才加得進去{walk}。" };
+  const SIEGE_WATCH = "看戰況";
   const LETTER_WORD = "下戰書", LETTER_ASK = "對{place}下戰書？當晚的攻城時段打一場，那一塊的進度凍結到打完；今天一邊只能下一張。";
   // 這一塊翻地那一份畫面資料（server.main_view 的 conquest.blocks，conquest.block_view：進度、冷卻、戰書、正在推的人、激戰、集火、看的人推不推得動）；
   // 領地爭奪關著、不是區塊是 null
@@ -5593,8 +5639,44 @@
     }).join("、");
     const focus = Object.entries(blk.focus || {}).filter(([, pct]) => Number(pct) > 0)
       .map(([sd, pct]) => FOCUS_WORD.replace("{side}", esc(sideInk(sd).name)).replace("{pct}", Number(pct))).join("、");
-    const frozen = blk.frozen ? FROZEN_WORD.replace("{sides}", (blk.frozen.attackers || []).map((a) => esc(sideInk(a).name)).join("、")).replace("{time}", esc(blk.frozen.time || "")) : "";
-    return `<div class="m-sec m-flip"><h4>${FLIP_TITLE}${blk.clash ? `<span class="m-clash">${CLASH_WORD}</span>` : ""}</h4>${rows}${who ? `<div class="m-who">${who}</div>` : ""}${focus ? `<div class="m-sub">${focus}</div>` : ""}${frozen ? `<div class="m-sub">${frozen}</div>` : ""}</div>`;
+    // 被戰書凍結：第 5 批以前這裡多一行「已下戰書：…」，現在寫在上面那一段（siegeSection），這裡不重複
+    return `<div class="m-sec m-flip"><h4>${FLIP_TITLE}${blk.clash ? `<span class="m-clash">${CLASH_WORD}</span>` : ""}</h4>${rows}${who ? `<div class="m-who">${who}</div>` : ""}${focus ? `<div class="m-sub">${focus}</div>` : ""}</div>`;
+  }
+  // 這一處時程表上的那一場（同一處一天可能有兩場：還沒打完的在前，其次是最晚那一場打完的；作罷的不寫）。回 [那一場, 哪一種時刻]
+  function siegeOf(id) {
+    const rows = ((S.main && S.main.conquest && S.main.conquest.today) || []).filter((r) => r.loc === id);
+    const live = rows.find((r) => r.status === "planned" || r.status === "waiting" || r.status === "open");
+    if (live) return [live, live.status === "open" ? "fight" : "letter"];
+    const done = rows.filter((r) => r.status === "done").pop();
+    return done ? [done, "done"] : [null, ""];
+  }
+  // 卡上第 2 段底下那一段（三種時刻；字待 joy 潤）：戰書（誰約戰、幾點、開打前幾分鐘集結、要在哪一區、凍結）、攻城（狀態字、幾點開打；
+  // 此刻加得進去〔join 是 go〕才畫一顆鈕回江湖頁按，字照看的人站哪一格：攻方「去加入攻城」、被打的那一方「去守城」、散人與不是兩軍的人「去助陣」；
+  // 已經在這一場畫「看戰況」；人不在那一區寫要到哪一區、走到這裡幾分，已經在別的一場、另一軍站不進去都只寫一句，FB-690）、
+  // 攻城戰果（那一仗誰拿下或守住、大勝險勝，「看戰報」開見聞的戰報）
+  function siegeSection(id) {
+    const [row, kind] = siegeOf(id);
+    if (!row) return "";
+    const who = esc((row.attackers || []).join("、")), time = esc(row.time || ""), you = row.you || "", join = row.join || "";
+    const region = esc(row.region || "這一區"), q = (S.mapState && S.mapState.places && S.mapState.places[id]) || {};
+    let say = "", btn = "";
+    if (kind === "letter") {
+      say = SIEGE_LETTER_LINE.replace("{who}", who).replace("{time}", time).replace("{muster}", Number(S.main.conquest.muster) || 0)
+        .replace("{join}", you ? SIEGE_IN_LETTER.replace("{region}", region) : SIEGE_OUT);
+    }
+    if (kind === "fight") {
+      const walk = typeof q.minutes === "number" && q.minutes > 0 ? SIEGE_WALK.replace("{n}", Number(q.minutes)) : "";
+      const word = !you ? SIEGE_OUT : (SIEGE_JOIN_WORD[join] || SIEGE_JOIN_WORD.far).replace("{region}", region).replace("{walk}", join === "far" ? walk : "");
+      say = SIEGE_FIGHT_LINE.replace("{who}", who).replace("{place}", esc(row.place)).replace("{status}", esc(row.status_text)).replace("{time}", time)
+        .replace("{join}", word);
+      if (join === "go" && SIEGE_JOIN[you]) btn = `<button type="button" class="main" data-act="tab" data-tab="jianghu">${SIEGE_JOIN[you]}<small>回江湖頁</small></button>`;
+      if (join === "in") btn = `<button type="button" class="main" data-act="tab" data-tab="jianghu">${SIEGE_WATCH}<small>回江湖頁</small></button>`;
+    }
+    if (kind === "done") {
+      say = SIEGE_DONE_LINE.replace("{time}", time).replace("{status}", esc(row.status_text)).replace("{margin}", row.margin ? `（${esc(row.margin)}）` : "");
+      btn = `<button type="button" data-act="map-report">${SIEGE_REPORT}<small>見聞</small></button>`;
+    }
+    return `<div class="m-sec m-siege" data-siege="${kind}"><h4>${SIEGE_HEAD[kind]}</h4><div class="m-say">${say}</div>${btn ? `<div class="m-acts">${btn}</div>` : ""}</div>`;
   }
   // 第 7 段的「下戰書」（設計 4.4）：照伺服器的入口條件（Game.letter_problem；conquest_view 的 letter 只給這一週在任的第 4 階、只列自己那一邊
   // 進度到門檻的塊，why 空字串＝下得了），不另寫判斷。下不了的灰著、原因寫在動作底下
@@ -5636,8 +5718,8 @@
     // 在路上：第一行照舊是往哪裡、還有幾分鐘、喊停（計畫 1.2、設計 5.3；FB-649）。擋路的那一則寫在動作那一排，這裡不重複
     return `${st.journey ? journeyHtml(st, false) : ""}<div class="m-h1">${ctrlSeal(p.control)}<span class="nm">${esc(b.name)}${here ? "（你）" : ""}</span><span class="meta">${p.rich ? `<b class="m-rich">${CARD_RICH}</b>` : ""}${far ? `<span>${far}</span>` : ""}</span><button type="button" class="m-x" data-act="map-back" aria-label="收起">✕</button></div>
       <div class="m-line"${lineInk}>${esc(placeLine(st, id))}</div>
-      ${flipSection(id)}${insightRow(base, b)}
-      <div class="m-foes"><small>此地的對手</small><span>${foes}</span>${p.people.length ? `<div class="m-sub">人物：${p.people.map(esc).join("、")}</div>` : ""}</div>
+      ${siegeSection(id)}${flipSection(id)}${insightRow(base, b)}
+      <div class="m-foes"><small>此地的對手</small><span>${foes}</span>${p.fierce ? `<div class="m-sub">${esc(p.fierce)}</div>` : ""}${p.people.length ? `<div class="m-sub">人物：${p.people.map(esc).join("、")}</div>` : ""}</div>
       ${p.yield ? `<div class="m-yield">${esc(p.yield)}</div>` : ""}
       <div class="m-acts">${acts}${letter.button}</div>${letter.why}
       ${p.order || p.bounty ? `<div class="m-sec"><h4>軍令與懸賞</h4>${p.order ? `軍令「${esc(p.order)}」在這裡記功` : ""}${p.order && p.bounty ? "；" : ""}${p.bounty ? `懸賞「${esc(p.bounty)}」在這裡交差` : ""}</div>` : ""}
@@ -5745,12 +5827,13 @@
       banner.textContent = `正在看${wkName(S.mapWeek, `第 ${S.mapWeek} 週`)}`;
     }
   }
-  // 打開、收起版圖變化（設計 5.1：在天下圖上播）：打開時換到天下圖（地圖框縮到抽屜上面，天下圖照那一塊重新取景）；收起時留在天下圖
+  // 打開、收起版圖變化（設計 5.1：在天下圖上播）：打開時換到天下圖（地圖框縮到抽屜上面，天下圖照那一塊重新取景）；收起時留在天下圖。
+  // 開、收都回 1 倍（地圖框換了大小）；看的時候與播放中照樣能拖縮（播放只換記號，企劃者 2026-10-22 的拖縮計畫 3.1）
   function mapTimeline(open) {
     stopPlay();
     if (!document.getElementById("mapx")) return;
-    if (open) Object.assign(S, { mapLayer: "world", mapMode: "timeline", mapSel: null, mapWeek: S.mapState.now_week, mapDrawer: "tl" });
-    else Object.assign(S, { mapMode: "overview", mapSel: null, mapWeek: null, mapDrawer: "min" });
+    if (open) Object.assign(S, { mapLayer: "world", mapMode: "timeline", mapSel: null, mapWeek: S.mapState.now_week, mapDrawer: "tl", mapPan: null, panFrom: null });
+    else Object.assign(S, { mapMode: "overview", mapSel: null, mapWeek: null, mapDrawer: "min", mapPan: null, panFrom: null });
     remapChrome();
     applyMapView(true);
     drawMarks();
@@ -5862,14 +5945,18 @@
     // 寫它會逼整棵地圖重算樣式（FB-322）
     if (S.mapMode === "timeline") box.style.setProperty("--md-h", `${px}px`);
   }
-  // 整頁那一層夾在狀態列與分頁列之間：狀態列展開收起、視窗換大小時重量
+  // 整頁那一層夾在狀態列與分頁列之間：狀態列展開收起、視窗換大小時重量。回傳兩條邊有沒有變（變了地圖框就換了高，取景要重套：FB-710）
   function mapFrame() {
     const box = document.getElementById("mapx");
-    if (!box) return;
+    if (!box) return false;
     const top = document.getElementById("top"), tabs = document.querySelector(".tabs");
+    const t = `${top && !top.hidden ? Math.round(top.getBoundingClientRect().bottom) : 0}px`;
+    const b = `${tabs ? Math.round(window.innerHeight - tabs.getBoundingClientRect().top) : 0}px`;
+    const was = typeof box.style.getPropertyValue === "function" ? [box.style.getPropertyValue("--map-top"), box.style.getPropertyValue("--map-bottom")] : null;
     // 變了才寫：自訂屬性會繼承到整張地圖，寫一次整棵約 1,600 個元素重算樣式（狀態列每次重畫都叫這裡，Joy 2026-10-17）
-    setVar(box, "--map-top", `${top && !top.hidden ? Math.round(top.getBoundingClientRect().bottom) : 0}px`);
-    setVar(box, "--map-bottom", `${tabs ? Math.round(window.innerHeight - tabs.getBoundingClientRect().top) : 0}px`);
+    setVar(box, "--map-top", t);
+    setVar(box, "--map-bottom", b);
+    return !was || was[0] !== t || was[1] !== b;
   }
   let marksFrame = 0;
   // 這一層此刻的取景：天下圖 S.worldView（worldFit）、區圖 S.regionView（regionFit）；都由 applyMapView 照地圖框現在的大小算
@@ -5914,7 +6001,7 @@
 
   // ── 天下圖（輿圖簡化設計 5.1、3.3、5.6；環形版 dev/map-2 寫的，輿圖第三版第 3 批搬回真實地形）──
   // 打開輿圖第一眼。不另開一張圖：同一張底圖（山水已經烤成點陣）換一個固定的取景（worldFit：取景框整張放進地圖框露出來的那一塊），
-  // 不拖、不縮；記號那一層（#mk、#mkt）畫大區地面——每一區（程式裡叫「州」）的地面照「離哪個地點最近」分給那個地點此刻的控制方
+  // 上面疊一層拖與縮放（企劃者 2026-10-22，「輿圖的拖與縮放」那一段：整張連字一起動，不重畫）；記號那一層（#mk、#mkt）畫大區地面——每一區（程式裡叫「州」）的地面照「離哪個地點最近」分給那個地點此刻的控制方
   // （底圖的 world.cells，照那一區的輪廓裁），一方一色、沒人佔一色（顏色照劇本，sideInk）——、正在翻（攻方的斜紋照進度泛進來）、
   // 剛易手還在冷卻（新主人的淡色、一圈虛線）、
   // 紅線（任兩方的地面相接；真實地形的大區互不相接，前線都在同一區裡）、細墨線（有主與沒人佔相接）、激戰（那一格一圈紅光閃）、
@@ -5943,6 +6030,9 @@
   // 剛易手、還在冷卻（疊層的 places[id].cool：還要幾分鐘；設計 4.1 兩邊都推不動、加成暫停）【開發定】：地面換成新主人那一方的淡色（tint）、
   // 那一格一圈新主人顏色的虛線（還沒站穩），不閃。虛線的長短照螢幕（px）
   const WORLD_COOL_DASH = 4, WORLD_COOL_GAP = 3, WORLD_COOL_LINE = 1.4;
+  // 下了戰書、還沒開集結（疊層的 siege 是 letter）：那一格一圈朱紅虛線框（輿圖第三版第 5 批，企劃者 2026-10-22 挑 A 乙）；比冷卻那一圈粗、
+  // 線段長，顏色是前線那一種朱紅（不是哪一方的顏色），不閃
+  const WORLD_LETTER_DASH = 6, WORLD_LETTER_GAP = 3.5, WORLD_LETTER_LINE = 2.6;
   // 估一段字在螢幕上多寬（px）：中日韓的字一個字寬、數字與英文約六成、空白約三成
   function textW(text, px) {
     let w = 0;
@@ -6045,7 +6135,10 @@
     const cooling = (id) => live && !!ctrl[id] && !!(st.places[id] && st.places[id].cool);
     const ground = (id) => (ctrl[id] ? sideInk(ctrl[id])[cooling(id) ? "tint" : "soft"] : wd.unheld);
     const tugs = live ? wd.cells.map((c) => [c, tugOf(st, c.id, ctrl[c.id] || null)]).filter(([, t]) => t) : [];
-    const melee = live ? wd.cells.filter((c) => st.places[c.id] && st.places[c.id].melee) : [];
+    // 激戰：兩邊都有人在推（melee）；攻城集結・交戰中（siege 是 fight）借同一種紅光（輿圖第三版第 5 批，企劃者 2026-10-22 挑 B 甲）
+    const melee = live ? wd.cells.filter((c) => st.places[c.id] && (st.places[c.id].melee || st.places[c.id].siege === "fight")) : [];
+    // 下了戰書、還沒開集結：那一格一圈朱紅虛線框（企劃者挑 A 乙）
+    const letters = live ? wd.cells.filter((c) => st.places[c.id] && st.places[c.id].siege === "letter") : [];
     const cools = wd.cells.filter((c) => cooling(c.id));
     const patterns = [...new Set(tugs.map(([, t]) => t.side))].map((sd) => tugPattern(sd, k)).join("");
     const out = [`<defs>${wd.regions.map((r) => `<clipPath id="wc-${esc(r.id)}"><path d="${r.d}"/></clipPath>`).join("")}${patterns}</defs>`];
@@ -6076,6 +6169,7 @@
     out.push(`<g class="w-front" fill="none" stroke="${FRONT_RED}" stroke-width="${f1(3 * k)}" stroke-linecap="round" pointer-events="none">${front.join("")}</g>`);
     // 激戰：兩邊都有人正在推的那一格一圈紅光，一閃一閃（style.css 的 .w-melee；減少動態效果的人不閃）
     for (const c of melee) out.push(`<path class="w-melee" data-cell="${esc(c.id)}" d="${c.d}" fill="${FRONT_RED}" fill-opacity=".16" stroke="${FRONT_RED}" stroke-width="${f1(3.2 * k)}" stroke-linejoin="round" clip-path="url(#wc-${esc(c.region)})" pointer-events="none"/>`);
+    for (const c of letters) out.push(`<path class="w-letter" data-cell="${esc(c.id)}" d="${c.d}" fill="none" stroke="${FRONT_RED}" stroke-width="${f1(WORLD_LETTER_LINE * k)}" stroke-dasharray="${f1(WORLD_LETTER_DASH * k)} ${f1(WORLD_LETTER_GAP * k)}" stroke-linejoin="round" clip-path="url(#wc-${esc(c.region)})" pointer-events="none"/>`);
     // 點一區：整區一塊透明的點擊區
     for (const r of wd.regions) out.push(`<path data-act="world-region" data-id="${esc(r.id)}" d="${r.d}" fill="#000000" fill-opacity="0" style="cursor:pointer"><title>${esc(r.name)}</title></path>`);
     // 金點：高級資源地（開季中立的），實心＝此刻有人佔、空心＝沒人佔
@@ -6117,7 +6211,8 @@
   }
 
   // ── 區圖（輿圖簡化設計 5.2、5.5、5.6；輿圖第三版第 4 批）──
-  // 點一區（或「進入此區」、找地點挑一處）：同一張底圖換一個固定的取景（regionFit：這一區地點的外框加邊），不拖不縮。只畫這一區的地點：
+  // 點一區（或「進入此區」、找地點挑一處）：同一張底圖換一個固定的取景（regionFit：這一區地點的外框加邊），上面疊一層拖與縮放
+  // （企劃者 2026-10-22：整張連字一起動，擺法不重算）。只畫這一區的地點：
   // 墨筆小圖（線色＝誰佔著）、名字裝在印章框裡（框色＝誰的，顏色照劇本 sideInk、沒人佔照底圖的 unheld；大城框粗）、框裡的下緣一條細進度條
   // （攻方的顏色；剛易手整條灰、不寫字，FB-648 第二段乙）、朱印「寶」、名字底下最多兩個意境字（最濃的在前）、你的朱圈與旗、通到鄰區的路在取景框邊寫「→ 南陽」
   // （點了換到那一區）、取景框外蓋一層半透明的紙。底圖的州界點劃線收掉、大區名藏起來，路照 CSS 換成一種淡實線（style.css 的
@@ -6133,6 +6228,14 @@
   // 進度條收在印章框裡的下緣（FB-648 第二段，企劃者 2026-10-22 選乙）：高 R_BAR、貼著框線內側（框線一般 R_LINE、大城 R_LINE_BIG），
   // 名字的字腳碰不到（框底的內距 R_PADY 夠放）
   const R_BAR = 2.5, R_LINE = 1, R_LINE_BIG = 1.7, R_INS_GAP = 1, R_SEAL = 15, R_SEAL_GAP = 3, R_EXIT = 11.5;
+  // 攻城戰（輿圖第三版第 5 批，企劃者 2026-10-22 挑 A 乙、B 甲）：「戰」字印紙底朱框朱字（字待 joy 潤），找位置時四周多留 R_LETTER_PAD；
+  // 交戰中名字框外那一圈紅離框多遠、多粗
+  const LETTER_SEAL_WORD = "戰", LETTER_SEAL_PAPER = "#FFF8EC", R_LETTER_PAD = 1, R_FIGHT_OUT = 2, R_FIGHT_LINE = 1.6;
+  // 不同地點的兩列（印章框＋寶那一列、意境字那一列）之間至少隔多少 px（FB-651：南陽官道的意境字貼著南陽郊野的「寶」只隔 1.3px，
+  // 意境字的紙色描邊再往外 1.3px，讀起來像「南陽郊野 寶 風火」）：x、y 兩個方向都不到這麼遠就算貼著。照不相交擺好之後再試著讓開
+  // （regionLabelsAt 的 spaced：名字不准因此離自己的小圖更遠 R_NEAR 以上），讓不開照原本的；擠不下（縮一號）照舊只看相交，不為了留空縮字
+  const R_ROW_GAP = 3;
+  const rowGrow = (r) => [r[0] - R_ROW_GAP, r[1] - R_ROW_GAP, r[2] + R_ROW_GAP, r[3] + R_ROW_GAP];
   // 區圖記號在螢幕上多大（px）：放得大的區（倍率 1 以上）小圖與字大一號；擠的區（潁川汝南在手機上約 0.68 倍）照小的那一號才擺得開
   // （設計第十二章：375 寬互相不壓）。icon 是墨筆小圖照草圖（20px 見方）放大幾倍，hw、hh 是小圖在螢幕上佔的半寬、半高
   function regionSizes(s) {
@@ -6261,9 +6364,13 @@
     const fs = p.big ? z.nameBig : z.name, fw = textW(p.name, fs) + 2 * R_PADX, fh = fs + 2 * R_PADY;
     const tug = tugOf(st, p.id, q.control || null), cool = !!q.control && !!q.cool;
     const ins = (p.insights || []).map((id) => insightInk(base, id)).filter(Boolean).slice(0, 2);
+    // 下了戰書、還沒開集結（疊層的 siege 是 letter）：名字框旁一枚「戰」字印（輿圖第三版第 5 批，企劃者 2026-10-22 挑 A 乙）。字印不算進名字框
+    // （框的大小下不下戰書都一樣，名字不跳：同 FB-648 第二段乙），名字擺好之後才找空位（regionLetterSeals）
+    const letter = q.siege === "letter";
     const w1 = fw + (q.rich ? R_SEAL_GAP + R_SEAL : 0), w2 = ins.length * (z.ins + 2);
     const low = ins.length ? R_INS_GAP + z.ins + 2 : 0;
-    return { fs, fw, fh, w1, w2, low, W: Math.max(w1, w2), H: fh + low, tug, cool, ins, insPx: z.ins, bar: !!(tug || cool), rich: !!q.rich, big: !!p.big };
+    return { fs, fw, fh, w1, w2, low, W: Math.max(w1, w2), H: fh + low, tug, cool, ins, insPx: z.ins, bar: !!(tug || cool), rich: !!q.rich, big: !!p.big,
+      letter, fight: q.siege === "fight" };
   }
   // 名字框可以擺的位置（框左上角離地點中心多遠，px），好的在前：右、左、下、上，再往上下（左右）錯開，再隔一層。
   // 只貼著小圖擺、不拉線（企劃者 2026-10-21 從對比圖選乙：潁川汝南擠的地方不拉細點線回小圖）
@@ -6331,12 +6438,17 @@
       const opts = spots(L, z).map(([dx, dy, rank], j) => {
         const l = X + dx, t = Y + dy, rows = [[l, t, l + L.w1, t + L.fh]];
         if (L.low) rows.push([l, t + L.fh, l + L.w2, t + L.H]);
-        return { l, t, rows, bb: [l, t, l + L.W, t + L.H], cost: against(rows, walls), rank: rank === undefined ? j : rank };
+        const bb = [l, t, l + L.W, t + L.H];
+        // pad、bp：每一列、外框各往外撐 R_ROW_GAP（FB-651：跟別處的列比的時候用，兩列之間不到 R_ROW_GAP 就算壓到）
+        return { l, t, rows, bb, pad: rows.map(rowGrow), bp: rowGrow(bb), cost: against(rows, walls), rank: rank === undefined ? j : rank };
       });
       return { p, i, L, X, Y, opts };
     });
     const meet = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3]; // 兩個框的外框碰不碰得到（先擋掉遠的，省時間）
-    const clash = (a, b) => meet(a.bb, b.bb) && a.rows.some((r) => b.rows.some((q) => inter(r, q) > 0));
+    // 兩處的名字框壓不壓：gapOn 時不同地點的兩列之間不到 R_ROW_GAP 也算（FB-651，spaced 那一下）
+    let gapOn = false;
+    const clash = (a, b) => (gapOn ? meet(a.bp, b.bb) && a.pad.some((r) => b.rows.some((q) => inter(r, q) > 0))
+      : meet(a.bb, b.bb) && a.rows.some((r) => b.rows.some((q) => inter(r, q) > 0)));
     // 再一處一處往前挪——換成更前面（rank 小：離小圖更近）、不壓牆也不壓別人的位置，挪到挪不動為止
     const forward = (items, pick) => {
       for (let round = 0, moved = true; moved && round < 6; round++) {
@@ -6361,7 +6473,7 @@
         for (const o of room[i]) {
           if (--budget < 0) return null;
           const after = room.slice();
-          if (rest.some((j) => meet(o.bb, reach[j]) && !(after[j] = room[j].filter((q) => !clash(o, q))).length)) continue;
+          if (rest.some((j) => meet(gapOn ? o.bp : o.bb, reach[j]) && !(after[j] = room[j].filter((q) => !clash(o, q))).length)) continue;
           const found = search(rest, after);
           if (found) return { ...found, [i]: o };
           if (budget < 0) return null;
@@ -6396,15 +6508,29 @@
     const exits = regionExitAnchors(base, rid, v, vw, vh), room = regionExitRoom(v, vw, vh);
     const exitHit = (items, pick) => regionExits(base, rid, v, vw, vh, items.map((it) => ({ X: it.X, Y: it.Y, rows: pick[it.i].rows })))
       .some((e) => items.some((it) => pick[it.i].rows.some((r) => inter(r, e.box) > 0.5)));
+    // 名字框離自己的小圖多遠（小圖中心到印章框最近那一點）
+    const hugOf = (it, o) => { const f = o.rows[0]; return Math.hypot(Math.max(f[0] - it.X, 0, it.X - f[2]), Math.max(f[1] - it.Y, 0, it.Y - f[3])); };
+    // FB-651：照不相交擺好之後，再找一次「不同地點的兩列都隔得開 R_ROW_GAP」的擺法——每一處只准用離自己的小圖不比剛才遠 R_NEAR 的位置
+    // （留空是寧可：不為了它把名字擺得離小圖更遠、不為了它縮字），找不到照剛才的
+    const spaced = (items, pick, budget) => {
+      gapOn = true;
+      const lim = items.map((it) => ({ ...it, opts: it.opts.filter((o) => hugOf(it, o) <= hugOf(it, pick[it.i]) + R_NEAR) }));
+      const got = solve(lim, budget);
+      gapOn = false;
+      return got && !(exits.length && exitHit(items, got)) ? got : pick;
+    };
+    gapOn = false;
     let items = lay(regionLabelSpots, fixed);
     let pick = solve(items, REGION_SEARCH);
     if (pick && exits.length && exitHit(items, pick)) pick = null;
-    if (!pick) {
+    if (pick) pick = spaced(items, pick, REGION_SEARCH);
+    else {
       // 第二輪：你的朱圈照圓的算（圓外那四個角讓名字框擺得進去），鄰區出口原本的位置也讓開
       items = lay(regionLabelSpotsWide, [...(me ? fixed.slice(0, -1) : fixed), ...ring, ...exits.map((e) => regionExitBox(e, 0, room))]);
       // 先照「離自己的小圖多近」的先後一起找（找得到名字就都在自己的小圖旁邊），找不到再照原本的先後找一次，再找不到才換位置
       const near = items.map((it) => ({ ...it, opts: it.opts.slice().sort((a, b) => a.rank - b.rank) }));
-      pick = solve(near, R_SEARCH_WIDE) || solve(items, R_SEARCH_WIDE) || settle(items, R_SETTLE);
+      pick = solve(near, R_SEARCH_WIDE) || solve(items, R_SEARCH_WIDE);
+      pick = pick ? spaced(near, pick, R_SEARCH_WIDE) : settle(items, R_SETTLE);
     }
     const out = items.map((it) => {
       const o = pick[it.i], others = items.filter((x) => x !== it).map((x) => pick[x.i]);
@@ -6412,7 +6538,44 @@
         cost: against(o.rows, fixed) + others.reduce((n, q) => n + (clash(o, q) ? 1 : 0), 0) };
     });
     const exitBoxes = regionExits(base, rid, v, vw, vh, out).map((e) => e.box);
+    regionLetterSeals(out, fixed.slice(0, pts.length), me ? fixed[pts.length] : null, me ? at[me.id] : null, exitBoxes, bounds);
     return [out, regionCrowded(out, fixed.slice(0, pts.length), me ? fixed[pts.length] : null, me ? at[me.id] : null, exitBoxes, bounds)];
+  }
+  // 「戰」字印擺在哪（輿圖第三版第 5 批，企劃者 2026-10-22 挑 A 乙：名字框旁一枚）：名字都擺好之後才找，不挪任何名字、不讓這一區縮字。
+  // 照先後試：寶（或名字框）的右邊、左邊、框上面靠右、框上面靠左、意境字那一列的右邊、下面，再往上下錯開、四個斜角——第一個不碰任何一處的名字框與意境字、
+  // 小圖、你的旗與朱圈、鄰區出口、別的「戰」字印，也沒出取景框的：先要四周留 R_ROW_GAP（同 FB-651 兩列之間），找不到再只留 R_LETTER_PAD，
+  // 再找不到准碰自己的小圖；而且每一個空位都要離自己的名字框（印章框與意境字）比離任何別處的名字框近（FB-691：不然讀起來像別處下了戰書）。
+  // 都不行才蓋在自己名字框的一角（fit 是假）。寫進那一處的 seal（螢幕上的 [左, 上, 右, 下]）與 sealFit
+  function regionLetterSeals(labels, icons, flag, you, exits, bounds) {
+    const inter = (a, b) => Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0])) * Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1]));
+    const s = R_SEAL, g = R_SEAL_GAP, placed = [];
+    const clean = (b, pad, own = null) => {
+      const p = [b[0] - pad, b[1] - pad, b[2] + pad, b[3] + pad];
+      if (p[0] < bounds[0] || p[1] < bounds[1] || p[2] > bounds[2] || p[3] > bounds[3]) return false;
+      if (you && Math.hypot(Math.max(p[0] - you[0], 0, you[0] - p[2]), Math.max(p[1] - you[1], 0, you[1] - p[3])) < R_YOU) return false;
+      return ![...labels.flatMap((l) => l.rows), ...icons.filter((q) => q !== own), ...(flag ? [flag] : []), ...exits, ...placed].some((q) => inter(p, q) > 0);
+    };
+    const dist = (a, b) => Math.hypot(Math.max(0, b[0] - a[2], a[0] - b[2]), Math.max(0, b[1] - a[3], a[1] - b[3]));
+    const nearest = (b, rows) => rows.reduce((m, r) => Math.min(m, dist(b, r)), Infinity);
+    labels.forEach((l, i) => {
+      if (!l.letter) return;
+      const others = labels.filter((m) => m !== l).flatMap((m) => m.rows);
+      const mine = (b) => nearest(b, l.rows) < nearest(b, others); // FB-691：離自己比離別處近
+      const [a0, a1, a2, a3] = l.rows[0], my = a1 + (l.fh - s) / 2, under = l.rows[1] ? l.rows[1][3] : a3, up = a1 - g - s;
+      const spots = [[a2 + g, my], [a0 - g - s, my], [a2 - s, up], [a0, up], ...(l.rows[1] ? [[l.rows[1][2] + g, l.rows[1][1]]] : []),
+        [a2 - s, under + g], [a0, under + g], [a2 + g, a1 - s / 2], [a2 + g, a3 - s / 2], [a0 - g - s, a1 - s / 2], [a0 - g - s, a3 - s / 2],
+        [(a0 + a2 - s) / 2, up], [(a0 + a2 - s) / 2, under + g], [a2 + g, up], [a0 - g - s, up], [a2 + g, under + g], [a0 - g - s, under + g]];
+      const boxes = spots.map(([x, y]) => [x, y, x + s, y + s]);
+      // 第三輪：可以碰到自己的小圖（字印貼著自己那一處，還是「旁」）
+      const hit = boxes.find((b) => mine(b) && clean(b, R_ROW_GAP)) || boxes.find((b) => mine(b) && clean(b, R_LETTER_PAD))
+        || boxes.find((b) => mine(b) && clean(b, R_LETTER_PAD, icons[i]));
+      // 都不行：蓋在自己名字框的一角（右上、左上、右下、左下），挑第一個離自己比離別處近的（蓋在框上，離自己是 0；別處的框也碰到就換一角）
+      const corners = [[a2 - s * 0.55, a1 - s * 0.55], [a0 - s * 0.45, a1 - s * 0.55], [a2 - s * 0.55, a3 - s * 0.45], [a0 - s * 0.45, a3 - s * 0.45]]
+        .map(([x, y]) => [x, y, x + s, y + s]);
+      l.seal = hit || corners.find(mine) || corners[0];
+      l.sealFit = !!hit;
+      placed.push(l.seal);
+    });
   }
   // 擠不下（FB-648 第二段乙）＝擺好的名字框 labels 還互壓：兩兩相交、壓到別處的小圖 icons（照地點順序）或你的旗 flag、碰到你的朱圈
   // （圓心 you；真的那一圈：圓心到框最近那一點不到外緣 R_YOU）、鄰區出口 exits（照 regionExits 滑好的位置；出口的框四周有留白，
@@ -6488,6 +6651,16 @@
         const sx = x + fw + R_SEAL_GAP * k, sy = y + ((L.fh - R_SEAL) / 2) * k;
         parts.push(`<g class="r-seal"><rect x="${f1(sx)}" y="${f1(sy)}" width="${f1(R_SEAL * k)}" height="${f1(R_SEAL * k)}" rx="${f1(2 * k)}" fill="${RICH_SEAL}"/><text x="${f1(sx + (R_SEAL / 2) * k)}" y="${f1(sy + 11.3 * k)}" font-size="${f1(11 * k)}" text-anchor="middle" fill="#FFFFFF">${RICH_WORD}</text></g>`);
       }
+      if (L.letter && L.seal) { // 戰書下了、還沒開集結：名字框旁一枚「戰」字印——紙底朱框朱字，跟實心的「寶」分得開（企劃者挑 A 乙）；
+        // 位置是 regionLetterSeals 找的空位（多半在寶或名字框的右邊）
+        const [sx, sy] = mp(L.seal[0], L.seal[1]);
+        parts.push(`<g class="r-letter"><rect x="${f1(sx)}" y="${f1(sy)}" width="${f1(R_SEAL * k)}" height="${f1(R_SEAL * k)}" rx="${f1(2 * k)}" fill="${LETTER_SEAL_PAPER}" stroke="${FRONT_RED}" stroke-width="${f1(1.5 * k)}"/><text x="${f1(sx + (R_SEAL / 2) * k)}" y="${f1(sy + 11.3 * k)}" font-size="${f1(11 * k)}" text-anchor="middle" font-weight="700" fill="${FRONT_RED}">${LETTER_SEAL_WORD}</text></g>`);
+      }
+      if (L.fight) { // 攻城集結・交戰中：名字框外一圈紅、一閃一閃（借天下圖激戰的 .w-melee；企劃者挑 B 甲）。畫在印章框底下（框與字照舊清楚），
+        // 圈的外緣離框 R_FIGHT_OUT＋半條線，落在 FB-651 那一圈 R_ROW_GAP 的留白裡
+        const d = R_FIGHT_OUT * k;
+        parts.splice(1, 0, `<rect class="r-fight w-melee" x="${f1(x - d)}" y="${f1(y - d)}" width="${f1(fw + 2 * d)}" height="${f1(fh + 2 * d)}" rx="${f1(2 * k)}" fill="${FRONT_RED}" fill-opacity=".16" stroke="${FRONT_RED}" stroke-width="${f1(R_FIGHT_LINE * k)}"/>`);
+      }
       const base0 = y + fh + (R_INS_GAP + L.insPx * 0.9) * k;
       L.ins.forEach((ins, i) => parts.push(`<text class="r-ins" x="${f1(x + i * (L.insPx + 2) * k)}" y="${f1(base0)}" font-size="${f1(L.insPx * k)}" font-weight="700" fill="${ins.c}" stroke="${MAP_HALO}" stroke-width="${f1(2.6 * k)}" paint-order="stroke">${esc(ins.name)}</text>`));
       out.push(parts.join("") + "</g>");
@@ -6515,20 +6688,20 @@
     setMapDrawer(S.mapDrawer);
   }
   // 從天下圖點一區、「進入此區」、找地點挑了一處、鄰區出口、上面那一排換一區：換到那一區的區圖。focus：挑的那一處（抽屜半開它的卡）；
-  // 沒給而且你就在這一區：開你腳下這一處的卡（設計 5.1：拉開是你腳下這一處的卡）
+  // 沒給而且你就在這一區：開你腳下這一處的卡（設計 5.1：拉開是你腳下這一處的卡）。進區圖回 1 倍（企劃者 2026-10-22）
   function enterRegion(rid, focus = null) {
     stopPlay();
     if (!rid || !S.mapBase || !regionPlaces(S.mapBase, rid).length) return;
     const st = S.mapState, mine = !focus && st && !st.journey && hereRegion() === rid ? st.here : null, sel = focus || mine;
-    Object.assign(S, { mapLayer: "region", mapRegion: rid, mapMode: sel ? "place" : "overview", mapSel: sel, mapWeek: null, mapQuery: "", mapDrawer: sel ? "peek" : "min" });
+    Object.assign(S, { mapLayer: "region", mapRegion: rid, mapMode: sel ? "place" : "overview", mapSel: sel, mapWeek: null, mapQuery: "", mapDrawer: sel ? "peek" : "min", mapPan: null, panFrom: null });
     applyMapView(true);
     remapChrome();
     drawMarks();
   }
-  // 回天下圖（區圖上面那一排的「‹ 天下」、天下圖的「天下」）
+  // 回天下圖（區圖上面那一排的「‹ 天下」、天下圖的「天下」）：回 1 倍（企劃者 2026-10-22）
   function toWorld() {
     stopPlay();
-    Object.assign(S, { mapLayer: "world", mapMode: "overview", mapSel: null, mapWeek: null, mapQuery: "", mapDrawer: "min" });
+    Object.assign(S, { mapLayer: "world", mapMode: "overview", mapSel: null, mapWeek: null, mapQuery: "", mapDrawer: "min", mapPan: null, panFrom: null });
     remapChrome();
     applyMapView();
     drawMarks();
@@ -6625,7 +6798,8 @@
     }
   }
 
-  // ── 輿圖的取景：兩張圖都是固定的（設計第五章：不自由縮放），每次照地圖框現在的大小重算（轉向、拉視窗、版圖變化把框縮到抽屜上面都跟著）──
+  // ── 輿圖的取景：兩張圖的取景是固定的（設計第五章），每次照地圖框現在的大小重算（轉向、拉視窗、版圖變化把框縮到抽屜上面都跟著）；
+  // 取景上面再疊一層拖與縮放（企劃者 2026-10-22，下面「輿圖的拖與縮放」那一段）──
   // 視圖 v = { s 倍率, cx, cy 視窗中心對著的地圖座標 }；地圖照原本的像素大小放在框裡，位移與倍率套在兩張 svg 的外框（.tx-world-map）上
   // （svg 根元素的 transform 一變，Chrome 要照新的倍率重排每一個 <text>）
   let glideTimer = 0;
@@ -6643,8 +6817,10 @@
     const p = id && S.mapBase && S.mapBase.places.find((x) => x.id === id);
     return p ? [p.x, p.y] : null;
   };
-  // 照這一層算取景、套到地圖上；glide：換層、換區時滑一下（≤150ms）。取景或地圖框變了才重畫記號（viewKey）
-  function applyMapView(glide = false, g = mapGeom(document.getElementById("map"))) {
+  // 照這一層算取景、套到地圖上（連同拖縮）；glide：換層、換區時滑一下（≤150ms）。取景或地圖框變了才重畫記號（viewKey）。
+  // 拖縮：同一個取景再套一次（切分頁回來、輿圖頁重畫）照留；同一層、同一區只換了地圖框的高（狀態列變高變矮，FB-710）帶過去
+  // （panCarry：畫面上一個像素不動，照新的可見區夾一次；soft：手勢一開始才發現框換了，只准不再往外、不挪）；換層、換區、換寬回 1 倍
+  function applyMapView(glide = false, g = mapGeom(document.getElementById("map")), soft = false) {
     if (!g || !S.mapBase) return;
     let v = null;
     if (S.mapLayer !== "world" || !S.mapBase.world) {
@@ -6661,8 +6837,223 @@
     clearTimeout(glideTimer);
     g.wrap.classList.toggle("glide", glide);
     if (glide) glideTimer = setTimeout(() => g.wrap.classList.remove("glide"), 200);
-    g.world.style.transform = `translate(${g.vw / 2 - v.cx * v.s}px, ${g.vh / 2 - v.cy * v.s}px) scale(${v.s})`;
-    if (viewKey(v, g) !== S.marksKey) scheduleMarks();
+    const key = viewKey(v, g), was = S.panFrom;
+    if (key !== S.panKey) {
+      const same = !!was && was.layer === S.mapLayer && was.region === S.mapRegion && was.vw === g.vw && was.vh !== g.vh;
+      Object.assign(S, { mapPan: same ? panCarry(panOf(), was, v, g.vw, g.vh, soft) : null, panKey: key });
+    }
+    S.panFrom = { layer: S.mapLayer, region: S.mapRegion, vw: g.vw, vh: g.vh, s: v.s, cx: v.cx, cy: v.cy };
+    g.world.style.transform = mapTransform(v, g.vw, g.vh, panOf());
+    if (key !== S.marksKey) scheduleMarks();
+  }
+
+  // ── 輿圖的拖與縮放（企劃者 2026-10-22「輿圖沒辦法拖曳移動了」「不順手」，選「兩張都能拖、能捏合縮放」；
+  // 推翻設計第五章「不自由縮放」那一半，兩層照舊；計畫 docs/superpowers/plans/2026-10-22-輿圖拖曳縮放.md）──
+  // 取景 v 上面疊一層螢幕座標的仿射 S.mapPan = { z, x, y }：螢幕上的點＝z ×（取景的螢幕座標）＋(x, y)。整張圖連字一起放大、移動：
+  // 記號都畫在地圖座標裡、大小照取景的倍率反算（regionParts、worldParts），所以名字框、印章、進度條、戰字印、你的旗、出口的擺法
+  // 不重算、記號不重畫（viewKey 不含 z）；拖縮中每一幀只換 .tx-world-map 的 transform，那一層掛著 will-change（合成層，不重畫），
+  // 收尾才拿掉（照最後的倍率重畫一次，字是清楚的）。拖的時候不換游標、不在框上加 class（FB-322：游標會一路繼承、整棵重算樣式）。
+  // 手機一指拖、兩指捏合；電腦滑鼠拖、滾輪（ctrl＋滾輪、觸控板捏合同）以游標為中心縮放；按下之後不到 PAN_SLOP 放開是點一下（照舊開卡），
+  // 拖過、捏過放開的那一下 click 吃掉（不誤開卡）。1 倍（現在的取景）到 PAN_MAX，不准更小；夾邊（panBox、panClamp）
+  const PAN_SLOP = 6; // 按下之後移過幾 px 才算拖
+  const PAN_MAX = { world: 4, region: 3 }; // 最多放大幾倍（企劃者 2026-10-22：區圖約 3 倍、天下圖約 4 倍）
+  const PAN_WHEEL = 0.0015; // 滾輪每 1px 的 deltaY 縮放多少（exp；一格約 100px 是 0.86 倍）
+  const PAN_IDLE = 200; // 滾輪停多久算收尾（ms）
+  const PAN_CLICK = 400; // 拖完放開之後，多久內落在地圖上的 click 吃掉（ms；下一次按下就作廢）
+  const PAN_ONE = { z: 1, x: 0, y: 0 };
+  const panOf = () => S.mapPan || PAN_ONE;
+  const panMax = () => (S.mapLayer === "world" && S.mapBase && S.mapBase.world ? PAN_MAX.world : PAN_MAX.region);
+  // 取景加上拖縮，寫成 .tx-world-map 的 transform（1 倍時跟固定取景的寫法一字不差）
+  function mapTransform(v, vw, vh, p = PAN_ONE) {
+    return `translate(${p.z * (vw / 2 - v.cx * v.s) + p.x}px, ${p.z * (vh / 2 - v.cy * v.s) + p.y}px) scale(${p.z * v.s})`;
+  }
+  // 夾邊用的兩個框（取景的螢幕座標 [x0, y0, x1, y1]）：b＝內容框（區圖：取景框 v.frame，這一區的地點與名字框都在裡面；天下圖：底圖的
+  // world.frame），a＝露出來的那一塊（左右整個地圖框，上面讓開那一排，底下讓開抽屜此刻的高度；桌機右欄、版圖變化時地圖框本來就在抽屜外）
+  function panBox(v, vw, vh) {
+    const world = S.mapLayer === "world" && S.mapBase && S.mapBase.world, f = world ? S.mapBase.world.frame : v.frame;
+    if (!f) return null;
+    const [x0, y0, x1, y1] = world ? [f[0], f[1], f[0] + f[2], f[1] + f[3]] : f;
+    const scr = (x, y) => [vw / 2 + (x - v.cx) * v.s, vh / 2 + (y - v.cy) * v.s];
+    const tl = S.mapMode === "timeline", top = world ? (tl ? WORLD_TL_TOP : WORLD_TOP) : REGION_TOP;
+    const bottom = deskMap() || tl ? 0 : mapDrawerPx(S.mapDrawer);
+    return { b: [...scr(x0, y0), ...scr(x1, y1)], a: [0, top, vw, Math.max(top + 1, vh - bottom)] };
+  }
+  // 夾邊（企劃者「圖不能完全拖出框外」）：每一軸，內容框比露出來的那一塊大就要蓋滿它（拖到底，最邊上的地點剛好露在那一排底下、抽屜上面），
+  // 比它小就不能出它——兩種都是位移夾在 a0 − z·b0 與 a1 − z·b1 之間。軟夾：from（上一幀）在它自己的倍率已經超出多少（例：天下圖 1 倍時
+  // 取景框離上面那一排多留 8px，卡拉高之後照規則要貼齊）就照樣准超出多少，不硬跳回來、也不准再往外；縮回 1 倍時照新的倍率夾回框裡
+  function panClamp(p, box, from = p) {
+    if (!box || (p.z === 1 && !p.x && !p.y)) return p; // 1 倍的取景本身一定可以
+    const lim = (t, t0, b0, b1, a0, a1) => {
+      const lo = (z) => Math.min(a0 - z * b0, a1 - z * b1), hi = (z) => Math.max(a0 - z * b0, a1 - z * b1);
+      const under = Math.max(0, lo(from.z) - t0), over = Math.max(0, t0 - hi(from.z));
+      return Math.min(hi(p.z) + over, Math.max(lo(p.z) - under, t));
+    };
+    return { z: p.z, x: lim(p.x, from.x, box.b[0], box.b[2], box.a[0], box.a[2]), y: lim(p.y, from.y, box.b[1], box.b[3], box.a[1], box.a[3]) };
+  }
+  // 縮小時位移照倍率收回去（從 z0 縮到 z：位移乘 (z − 1)／(z0 − 1)），縮到 1 倍剛好回到現在的取景（像看照片：縮回最小就置中）；
+  // 放大不收（手指、游標底下那一點不動）
+  const panShrink = (q, z0) => (q.z < z0 && z0 > 1 ? { z: q.z, x: (q.x * (q.z - 1)) / (z0 - 1), y: (q.y * (q.z - 1)) / (z0 - 1) } : q);
+  // 以地圖框裡 (px, py) 為中心縮放到 z（夾在 1～max）：那一點底下的地圖不動；縮到 1 倍（或更小）就是 1 倍的取景
+  // （panCarry 帶過去的倍率可能比 max 多一點點：放大時不把它往下拉，免得一放大反而縮一下）
+  function panZoom(p, z, px, py, max) {
+    if (z <= 1) return PAN_ONE;
+    const nz = Math.min(Math.max(max, p.z), z), f = nz / p.z;
+    return panShrink({ z: nz, x: px - f * (px - p.x), y: py - f * (py - p.y) }, p.z);
+  }
+  // 地圖框換了高、取景照新的框重算（FB-710：狀態列變高變矮）：把拖縮帶過去——合起來的倍率與位移（畫面上的地圖）照舊，換算成新取景上的
+  // z、x、y；新的取景比畫面上的還大（z 不到 1）就照新的框回 1 倍。再照新的可見區夾一次（soft：只准不再往外）。1 倍的取景本身
+  // （寬度定倍率的區，取景不看框高）換算完還是 1 倍
+  function panCarry(p, was, v, vw, vh, soft = false) {
+    const Z = p.z * was.s, tx = p.z * (was.vw / 2 - was.cx * was.s) + p.x, ty = p.z * (was.vh / 2 - was.cy * was.s) + p.y;
+    const z = Z / v.s;
+    if (z < 1 - 1e-6) return null;
+    let q = { z: Math.max(1, z), x: tx - z * (vw / 2 - v.cx * v.s), y: ty - z * (vh / 2 - v.cy * v.s) };
+    q = panClamp(q, panBox(v, vw, vh), soft ? q : PAN_ONE);
+    return Math.abs(q.z - 1) < 1e-6 && Math.abs(q.x) < 0.01 && Math.abs(q.y) < 0.01 ? null : q;
+  }
+  // 兩指：開始時（start：拖縮、中點、兩指距離）中點底下的那一點，跟著現在的中點走；倍率照兩指距離的比
+  function panPinch(start, mx, my, d, max) {
+    const p = start.p, z = Math.min(Math.max(max, p.z), (p.z * d) / start.d);
+    if (z <= 1) return PAN_ONE;
+    return panShrink({ z, x: mx - (z * (start.mx - p.x)) / p.z, y: my - (z * (start.my - p.y)) / p.z }, p.z);
+  }
+  // 手勢的狀態：按著的指標（id → [clientX, clientY]）、起點、拖過了沒、排好的那一幀、這一次手勢量好的地圖框與夾邊的框、滾輪、吃掉 click 的期限
+  const pan = { pts: new Map(), start: null, moved: false, frame: 0, next: null, g: null, box: null, wheel: false, wheelTimer: 0, eatUntil: 0 };
+  // 量好這一次手勢要用的地圖框（按下、滾輪第一下量一次：每一幀量會逼瀏覽器先排版）
+  function panMeasure() {
+    const g = mapGeom(document.getElementById("map")), f = S.panFrom;
+    // 地圖框換了大小、取景還沒重套（FB-710 的保險：不經 renderTop 的路也一樣）：先照新的框帶過去，這一次手勢不跳、也不挪
+    if (g && f && (f.vw !== g.vw || f.vh !== g.vh)) applyMapView(false, g, true);
+    const v = curView();
+    pan.g = g && v ? g : null;
+    pan.box = g && v ? panBox(v, g.vw, g.vh) : null;
+    return pan.g;
+  }
+  // 指標數變了（按下、放開一指）：從現在的位置與拖縮重新記起點。一指記上一幀的位置；兩指記開始時的拖縮、中點、兩指距離
+  function panBase() {
+    const pts = [...pan.pts.values()], g = pan.g;
+    pan.start = null;
+    if (!g || !pts.length) return;
+    if (pts.length === 1) { pan.start = { at: pts[0] }; return; }
+    const [[ax, ay], [bx, by]] = pts;
+    pan.start = { p: panOf(), mx: (ax + bx) / 2 - g.x0, my: (ay + by) / 2 - g.y0, d: Math.max(1, Math.hypot(bx - ax, by - ay)) };
+  }
+  // 開始動了（拖過 PAN_SLOP、第二指按下、滾輪第一下）：那一層掛 will-change（之後每一幀只動合成層）、換層的滑動停掉；
+  // 拖的指標這時才抓住（按下就抓的話，Chrome 會把 click 送到抓住的地圖框，點一下就點不到地點）
+  function panBegin() {
+    pan.moved = true;
+    const g = pan.g;
+    if (!g) return;
+    for (const id of pan.pts.keys()) { try { g.wrap.setPointerCapture(id); } catch (e) { /* 合成的事件、已經放開的指標抓不住 */ } }
+    clearTimeout(glideTimer);
+    if (g.wrap.classList.contains("glide")) g.wrap.classList.remove("glide");
+    g.world.style.willChange = "transform";
+  }
+  // 收尾：拿掉 will-change（照最後的倍率重畫一次）
+  function panFinish() {
+    if (pan.frame) { cancelAnimationFrame(pan.frame); panFrame(); }
+    if (pan.g) pan.g.world.style.willChange = "";
+    Object.assign(pan, { start: null, g: null, box: null, next: null, wheel: false });
+  }
+  // 一幀套一次（同一幀的多次移動合併）：滾輪給的是算好的拖縮（pan.next），指標照最新的位置算
+  function panFrame() {
+    pan.frame = 0;
+    let p = pan.next;
+    pan.next = null;
+    const pts = [...pan.pts.values()], st = pan.start, cur = panOf();
+    if (!p && st && pan.moved && pan.g) {
+      if (pts.length === 1 && st.at) {
+        p = { z: cur.z, x: cur.x + pts[0][0] - st.at[0], y: cur.y + pts[0][1] - st.at[1] };
+        st.at = pts[0];
+      } else if (pts.length === 2 && st.d) {
+        const [[ax, ay], [bx, by]] = pts;
+        p = panPinch(st, (ax + bx) / 2 - pan.g.x0, (ay + by) / 2 - pan.g.y0, Math.hypot(bx - ax, by - ay), panMax());
+      }
+      if (p) p = panClamp(p, pan.box, cur);
+    }
+    if (p) panSet(p);
+  }
+  const panSoon = () => { if (!pan.frame) pan.frame = requestAnimationFrame(panFrame); };
+  // 套上一個拖縮：只寫 transform（記號、擺字都不動）
+  function panSet(p) {
+    S.mapPan = p.z === 1 && !p.x && !p.y ? null : p;
+    const g = pan.g || mapGeom(document.getElementById("map")), v = curView();
+    if (g && v) g.world.style.transform = mapTransform(v, g.vw, g.vh, panOf());
+  }
+  // 回 1 倍（天下圖已經在總覽時再按「天下」）：滑一下
+  function panReset() {
+    Object.assign(S, { mapPan: null, panFrom: null });
+    applyMapView(true);
+  }
+  function panDown(ev) {
+    if ((ev.pointerType === "mouse" && ev.button !== 0) || !S.mapBase || !curView()) return; // 滑鼠只收左鍵
+    if (pan.pts.has(ev.pointerId)) { pan.pts.clear(); panFinish(); } // 同一個指標又按下：上一次沒收到放開（在視窗外放開），重新來過
+    if (pan.pts.size >= 2) return; // 第三指不管
+    pan.eatUntil = 0; // 新的一次按下：上一次拖完沒送出的 click 不再等
+    if (pan.wheel) { clearTimeout(pan.wheelTimer); panFinish(); }
+    if (!pan.pts.size) { pan.moved = false; panMeasure(); }
+    if (pan.frame) { cancelAnimationFrame(pan.frame); panFrame(); }
+    pan.pts.set(ev.pointerId, [ev.clientX, ev.clientY]);
+    panBase();
+    if (pan.pts.size === 2 && !pan.moved) panBegin(); // 第二指按下就是捏合：不再算點一下
+    else if (pan.pts.size === 2) { try { pan.g && pan.g.wrap.setPointerCapture(ev.pointerId); } catch (e) { /* 抓不住照樣收得到 */ } }
+  }
+  function panMove(ev) {
+    if (!pan.pts.has(ev.pointerId)) return;
+    pan.pts.set(ev.pointerId, [ev.clientX, ev.clientY]);
+    if (!pan.moved) {
+      const at = pan.start && pan.start.at;
+      if (!at || Math.hypot(ev.clientX - at[0], ev.clientY - at[1]) <= PAN_SLOP) return; // 還不到：可能是點一下
+      panBegin();
+    }
+    panSoon();
+  }
+  function panUp(ev) {
+    if (!pan.pts.has(ev.pointerId)) return;
+    if (pan.frame) { cancelAnimationFrame(pan.frame); panFrame(); } // 還沒套的那一幀先套上
+    pan.pts.delete(ev.pointerId);
+    if (pan.pts.size) { panBase(); return; } // 雙指放開一指：剩下那一指接著拖
+    if (pan.moved && ev.type === "pointerup") pan.eatUntil = Date.now() + PAN_CLICK; // 拖過、捏過：放開那一下的 click 不開卡
+    panFinish();
+  }
+  // 滾輪以游標為中心縮放；觸控板雙指捏合在 Chrome／Edge 是帶 ctrlKey 的 wheel，一樣處理（也因此擋掉瀏覽器自己的整頁放大）
+  function panWheel(ev) {
+    if (ev.preventDefault) ev.preventDefault();
+    if (pan.pts.size || !S.mapBase || !curView()) return; // 手指按著時不收
+    if (!pan.wheel) {
+      if (!panMeasure()) return;
+      pan.wheel = true;
+      panBegin();
+    }
+    clearTimeout(pan.wheelTimer);
+    pan.wheelTimer = setTimeout(() => { pan.moved = false; panFinish(); }, PAN_IDLE);
+    const g = pan.g, cur = pan.next || panOf();
+    const dy = ev.deltaY * (ev.deltaMode === 1 ? 16 : ev.deltaMode === 2 ? g.vh : 1);
+    pan.next = panClamp(panZoom(cur, cur.z * Math.exp(-dy * PAN_WHEEL), ev.clientX - g.x0, ev.clientY - g.y0, panMax()), pan.box, cur);
+    panSoon();
+  }
+  // 拖過、捏過放開的那一下 click（捕獲階段、在 document 分派之前）吃掉：不誤開卡、不誤進一區
+  function panEat(ev) {
+    if (!pan.eatUntil) return;
+    const late = Date.now() > pan.eatUntil;
+    pan.eatUntil = 0;
+    if (late) return;
+    ev.stopPropagation();
+    if (ev.preventDefault) ev.preventDefault();
+  }
+  // 地圖框的監聽：掛一次（地圖框常駐 FB-324；底圖換了整層重畫才是新的框）
+  const panWired = new WeakSet();
+  function panWire(wrap) {
+    if (!wrap || !wrap.addEventListener || panWired.has(wrap)) return;
+    panWired.add(wrap);
+    wrap.addEventListener("pointerdown", panDown);
+    wrap.addEventListener("pointermove", panMove);
+    wrap.addEventListener("pointerup", panUp);
+    wrap.addEventListener("pointercancel", panUp);
+    wrap.addEventListener("wheel", panWheel, { passive: false });
+    wrap.addEventListener("click", panEat, true);
+    // 舊版 iOS Safari 的捏合（新的瀏覽器由 touch-action: none 擋）、拖到地圖上的字開始原生拖曳，都擋掉
+    for (const t of ["gesturestart", "gesturechange", "dragstart"]) wrap.addEventListener(t, (ev) => ev.preventDefault());
   }
 
   // 輿圖頁每次畫好（afterPage）：區圖的那一區（江湖頁小地圖點進來的、上次停的）、取景、抽屜、記號
@@ -6678,6 +7069,7 @@
     drawMarks();
     bakeLater();
     drawerGrab();
+    panWire(wrap); // 拖與縮放（企劃者 2026-10-22）
   }
 
   // ── 見聞 ──
@@ -7971,6 +8363,10 @@
       if (op === "switch") S.artOpen = null; // 改練真的送出了：庫裡那一列收起（它已經換到身上那張卡）
       setMain(r.main);
       renderTop();
+      // 自創武學立好、作罷：草稿沒了就在這一次重畫裡直接回修練頁、一下回頂，不先畫一張空的自創頁、
+      // 捲到一半再換一次（Joy 2026-10-22「自創武學完畢那個畫面會閃爍」）
+      const cr = S.main && S.main.status && S.main.status.create;
+      if (S.createOpen && !(cr && cr.draft)) { S.createOpen = false; renderPage(); window.scrollTo(0, 0); return; }
       if (op === "switch" && S.tab === "craft") { // 煉製頁新武學卡上的「改練上身」：留在卡那裡，結果用提示泡泡說
         S.message = ""; S.artNote = null;
         keepPlace(() => renderPage(), ".made-card");
@@ -8007,7 +8403,9 @@
       S.forgePreview = r.preview || null;
       const drawn = JSON.stringify(S.forgePicks);
       S.forgePicks = r.picks || null;
-      if (S.tab === "craft" && JSON.stringify(S.forgePicks) !== drawn) { keepPlace(() => renderPage()); return; } // 清單上「合不了」的標記變了
+      // 清單上「合不了」的標記變了：只換抽屜裡那一張清單（捲到哪留在哪），爐子與頁面不重畫——整頁重畫的話火舌、剛放進去那一格的閃光都從頭來一次
+      const sheet = S.tab === "craft" && JSON.stringify(S.forgePicks) !== drawn && document.querySelector(".craft-sheet");
+      if (sheet) { const top = sheet.scrollTop; sheet.innerHTML = craftSheetInner(S.menxia || {}); sheet.scrollTop = top; applyGlow(); }
       const el = document.getElementById("forge-line");
       if (el) el.innerHTML = forgeLineHtml(S.menxia || {});
       const warn = document.getElementById("kiln-warn");
@@ -8049,9 +8447,8 @@
         S.forgeResult = { html: r.message };
         S.forgeMade = r.made ? r.made_item || null : null; // 合出來的那一樣：結果底下畫它的卡
         made = !!r.made;
-        // 出爐的排場只演一次（一秒半，不擋操作）：之後輪詢重畫不再翻一次
+        // 出爐的排場只演一次（一秒半，不擋操作）：畫完這一次就收，之後輪詢重畫不再翻一次
         S.forgeReveal = made;
-        if (made) setTimeout(() => { S.forgeReveal = false; }, 1600);
         // 合成了：兩格清空，下一爐從頭放（Joy 2026-10-12「爐子合完應該要把上次放上去的東西自動卸下」）；
         // 被拒絕（沒合成、只回一句話）：東西留在爐裡，換一格就能再試——只拿掉已經不在手上的
         // 鎖著的那一樣留在爐裡（Joy 2026-10-19），下一爐只要再放一樣；它自己被合掉了（武學＋武學不會，意境不會用掉）就解開
@@ -8070,8 +8467,9 @@
       } finally { stop(); }
     }, WAIT_LINES.forge);
     // 引導的下一句在頁面最上面（序章師父說的話）：這時才捲上去，不然留在原位、可以馬上接著合下一爐
-    if (guideMoved) { renderPage(); window.scrollTo({ top: 0, behavior: "smooth" }); } else {
+    if (guideMoved) { renderPage(); S.forgeReveal = false; window.scrollTo({ top: 0, behavior: "smooth" }); } else {
       keepPlace(() => renderPage());
+      S.forgeReveal = false;
       if (made) kilnBurst();
       showMadeCard();
     }
@@ -8082,7 +8480,11 @@
   function kilnBurst() {
     document.querySelectorAll(".furnace .w-taichi, .kiln-taichi .w-spin").forEach((g) => {
       g.classList.add("burst");
-      g.addEventListener("animationend", () => g.classList.remove("burst"), { once: true });
+      g.addEventListener("animationend", () => { // 轉完接回平常的慢轉：照同一個鐘起跳（spinAt），不從頭轉、不頓一下
+        g.classList.remove("burst");
+        const secs = parseFloat(getComputedStyle(g).animationDuration) || 28;
+        g.style.animationDelay = `-${((performance.now() / 1000) % secs).toFixed(2)}s`;
+      }, { once: true });
     });
     const card = document.querySelector(".made-card");
     if (card) card.classList.add("emerge");
@@ -8170,9 +8572,13 @@
           await choose(el, el.dataset.id);
           if (S.tab === "map") await loadMap(); // 在輿圖上按的（抽屜裡的喊停）：疊層跟著換
           break;
+        case "map-report": S.news = "reports"; await goTab("news"); break; // 卡上「攻城戰果」那一段的「看戰報」：開見聞的戰報
         case "world-region": enterRegion(el.dataset.id); break; // 天下圖點一州
         case "world-enter": enterRegion(hereRegion()); break; // 天下圖抽屜的「進入此區」：你在的那一州
-        case "map-world": if (S.mapLayer !== "world" || S.mapMode !== "overview") toWorld(); break; // 「‹ 天下」、天下圖的「天下」
+        case "map-world": // 「‹ 天下」、天下圖的「天下」（已經在天下圖、放大了：滑回 1 倍）
+          if (S.mapLayer !== "world" || S.mapMode !== "overview") toWorld();
+          else if (S.mapPan) panReset();
+          break;
         case "region-place": regionPick(el.dataset.id); break; // 區圖點了一處（小圖或名字框）：抽屜半開它的卡，地圖不動
         case "region-blank": regionPick(null); break; // 區圖點空白：收回那一行
         case "region-go": enterRegion(el.dataset.id); break; // 區圖的鄰區出口「→ 南陽」
@@ -8421,6 +8827,11 @@
         case "mall-close": closeMall(); break;
         case "mall-tab": await mallTabTo(el.dataset.tab); break;
         case "mall-pick": mallPick(el.dataset.id); break;
+        case "mall-qty": { // 購買確認那張紙的數量：同一件、同一個編號重畫
+          const now = S.mallAskNow, it = now && S.mallData && S.mallData.items.find((one) => one.id === now.id);
+          if (it) mallAsk(it, S.mallData, Number(el.dataset.n), now.ref);
+          break;
+        }
         case "mall-claim": await mallClaim(); break;
         case "mall-retry": await (S.mallTab === "log" ? loadMallLog() : loadMall()); break;
         case "mall-admin": mallAdminAsk(el.dataset.op, el.dataset.id); break;
@@ -8460,9 +8871,10 @@
         case "ascend-ok": await mx("ascend_dismiss", {}); break;
         case "create-name": {
           const n = document.getElementById("create-name"), m = document.getElementById("create-move");
-          await mx("create_name", { name: n ? n.value.trim() : "", move: m ? m.value.trim() : "" }); createDone(); break;
+          document.activeElement?.blur?.(); // 手機的鍵盤先在這一下收起，不要等換頁那一刻才收、整頁再跳一次
+          await mx("create_name", { name: n ? n.value.trim() : "", move: m ? m.value.trim() : "" }); break; // 立好了 mx 直接回修練頁
         }
-        case "create-cancel": await mx("create_cancel"); createDone(); break;
+        case "create-cancel": await mx("create_cancel"); break;
         case "create-reroll": await mx("create_reroll"); break; // 重悟帖：留在成形那一步，三格換了
         case "create-open": S.createOpen = true; S.message = ""; renderPage(); window.scrollTo(0, 0); break;
         case "create-close": S.createOpen = false; S.message = ""; renderPage(); window.scrollTo(0, 0); break;

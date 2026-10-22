@@ -521,8 +521,14 @@ def generate_turn(client: OllamaClient | None, messages: list[dict[str, str]]) -
         raise DialogueUnavailable("沒有可用的模型")
     try:
         turn = client.chat_structured(
-            messages, CompanionTurn, num_predict=TURN_PREDICT, required_fields=["options"], require_in_schema=True,
+            messages, CompanionTurn, num_predict=TURN_PREDICT,
+            # narrative 也必填（2026-10-22 線上：人物不說話，只出選項）：它在 CompanionTurn 有預設值 ""，
+            # 不寫進 required 的話 schema 允許模型省略，_ensure_required_present 也不會判定缺欄位，
+            # 於是「只回 options」的那一次靜靜通過，對話照開、人物一個字都沒說。
+            required_fields=["narrative", "options"], require_in_schema=True,
         )
+        if not turn.narrative.strip() or not turn.options:  # 不靠 client 自己檢查（測試的假 client、別的實作）：沒話可說就是這一輪生成失敗
+            raise ValueError("模型沒寫人物的話或選項")
         # 模型常夾雜簡體字（提示裡寫了也只部分改善），所以在輸出端確定性地轉成繁體。
         # option_tags 也要轉：好感度查表是精確比對，模型寫成簡體的 tag（實機見過「由衷讚赏」）會落空。
         return turn.model_copy(update={

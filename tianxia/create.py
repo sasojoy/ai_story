@@ -738,6 +738,12 @@ def prune(state: GameState, content: Content) -> None:
         draft.step = "intent"
 
 
+def _reroll_shop(content: Content) -> str | None:
+    from . import mall  # mall 牽著錢包與角色表：用到才 import
+
+    return mall.item_for(content, "create_reroll")
+
+
 def view(state: GameState, content: Content, world: WorldStateStore) -> dict:
     """煉製頁「自創」那一塊要的資料。只讀。"""
     cfg = content.config.arts
@@ -754,6 +760,8 @@ def view(state: GameState, content: Content, world: WorldStateStore) -> dict:
         "step": "form" if draft is None else draft.step, "draft": None,
         "rerolls": state.player.create_rerolls,  # 手上的重悟帖（萬寶閣）
         "reroll_cap": cfg.create_reroll_cap,  # 一門最多重骰幾次
+        # 手上沒有重悟帖時引去萬寶閣（Joy 2026-10-22）：賣重悟帖的那一件商品 id；商城關著、沒賣、手上還有帖是 None
+        "shop": _reroll_shop(content) if state.player.create_rerolls <= 0 else None,
     }
     if draft is None:
         return base

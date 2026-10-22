@@ -963,7 +963,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .melt-filter { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 8px; margin: 0 0 8px; align-items: end; }
 .melt-filter label { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 12px; color: var(--ink-2); }
 .melt-filter label > span { flex: none; }
-.melt-filter select.input { flex: 1; min-width: 0; width: auto; min-height: 36px; height: 36px; padding: 4px 8px; font-size: 13px; }
+.melt-filter select.input { flex: 1; min-width: 0; width: auto; min-height: 36px; height: 36px; padding: 4px 8px; font-size: 16px; } /* 不能低於 16px：iOS 一點就放大整頁 */
 .melt-filter .melt-weak { justify-self: start; min-height: 34px; line-height: 1; padding: 0 12px; font-size: 13px; }
 /* 一列：勾＋品質印＋名字與判斷，右邊心得；最右邊一顆攤開細節。熔不掉的整列淡掉、原因寫在籤那一行 */
 .mlist .mrow { display: flex; align-items: stretch; border-bottom: 1px solid var(--line); }
@@ -1043,7 +1043,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .btn.forging { animation: ember 1.6s ease-in-out infinite; }
 @keyframes ember { 0%, 100% { box-shadow: 0 0 0 rgba(214, 120, 40, 0); } 50% { box-shadow: 0 0 18px rgba(214, 120, 40, 0.75); } }
 
-/* ── 輿圖（輿圖簡化設計第五章：天下圖、區圖兩張不自由縮放的圖＋一張卡；輿圖升級設計第七節的版面）── */
+/* ── 輿圖（輿圖簡化設計第五章：天下圖、區圖兩張固定取景的圖＋一張卡，企劃者 2026-10-22 起兩張都能拖、能捏合縮放；輿圖升級設計第七節的版面）── */
 /* 整頁一層：夾在頂上的狀態列與底部分頁列之間（--map-top、--map-bottom 由 app.js 的 mapFrame 量）。地圖框佔滿整層，
    上面一排浮在地圖上，抽屜從底下拉上來；寬 900 以上抽屜變右邊 360px 一欄 */
 .mapx { position: fixed; left: 0; right: 0; top: var(--map-top, 0px); bottom: var(--map-bottom, 0px); z-index: 5; background: #e9e2cc; overflow: hidden; }
@@ -1054,12 +1054,14 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 #map-host.away * { pointer-events: none !important; }
 #map-host.away .pulse { animation: none; }
 #map-host.away [filter] { filter: none; }
-/* 地圖框：地圖照原本的像素大小放在裡面，靠 transform 套固定的取景（app.js 的 applyMapView：worldFit、regionFit），不拖不縮。
-   框裡不捲頁面、不放大整頁（touch-action: none）；長按不跳選字、不跳 iOS 的選單。
+/* 地圖框：地圖照原本的像素大小放在裡面，靠 transform 套固定的取景（app.js 的 applyMapView：worldFit、regionFit）加上拖與縮放
+   （企劃者 2026-10-22，app.js「輿圖的拖與縮放」：一指、滑鼠拖，兩指捏合、滾輪縮放）。
+   框裡的手勢不捲頁面、不放大整頁（touch-action: none；框外的抽屜照舊自己捲）；長按不跳選字、不跳 iOS 的選單。
+   游標一直是 grab（拖的時候不換：游標會一路繼承，換一次整棵地圖重算樣式，FB-322；地點、名字框照舊是手指）。
    clip 一樣裁切、而且不能被 scrollIntoView 捲走（hidden 的框仍然是捲動容器） */
 .mapx .map-wrap {
   position: absolute; inset: 0; overflow: hidden; overflow: clip; background: #e9e2cc;
-  touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; cursor: default;
+  touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; cursor: grab;
 }
 /* 版圖變化時地圖框縮到抽屜上面（--md-h 是抽屜的高度）：天下圖照那一塊重新取景 */
 .mapx.tl-mode .map-wrap { bottom: var(--md-h, 0px); }
@@ -1080,7 +1082,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 }
 .map-banner[hidden] { display: none; }
 .map-banner { position: absolute; left: 50%; transform: translateX(-50%); top: 46px; background: var(--accent); color: #fff; font-size: 12.5px; padding: 4px 12px; border-radius: 16px; white-space: nowrap; pointer-events: none; }
-/* ── 天下圖（輿圖簡化設計 5.1）：同一張底圖換一個固定的取景（app.js 的 worldFit）。上面一排「天下・找地點・⏱ 版圖」 */
+/* ── 天下圖（輿圖簡化設計 5.1）：同一張底圖換一個固定的取景（app.js 的 worldFit），能拖能縮（企劃者 2026-10-22）。上面一排「天下・找地點・⏱ 版圖」 */
 /* 路照舊在底圖裡（.tx-roads，不烤進點陣），從地面底下淡淡透上來（企劃者 2026-10-20 從對比圖選乙） */
 .w-top { position: absolute; left: 10px; right: 10px; top: 10px; display: none; gap: 8px; align-items: center; pointer-events: none; }
 .mapx.world .w-top { display: flex; }
@@ -1201,7 +1203,8 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .m-h1 .meta span { color: var(--ink-2); letter-spacing: 0; }
 .m-rich { color: var(--gold); font-weight: 700; letter-spacing: 0; }
 .m-line { font-size: 13.5px; font-weight: 600; margin: 4px 0 8px; color: var(--sc, var(--ink-2)); }
-/* 抽屜裡照陣營上色的字（FB-650）：--sc 是劇本的顏色；深色主題換 --sd（app.js 的 sideText：在 --card-2 上對比不到 4.5:1 的往那一方的 soft 調亮） */
+/* 抽屜裡照陣營上色的字：--sc 是淺色那一版、--sd 是深色那一版（app.js 的 sideText：從劇本的顏色起算，在 --card-2 上對比不到 4.5:1 的
+   淺色往墨色調深〔FB-652〕、深色往那一方的 soft 調亮〔FB-650〕） */
 .m-fbar .nm, .m-sc { color: var(--sc); }
 @media (prefers-color-scheme: dark) { .m-line, .m-fbar .nm, .m-sc { color: var(--sd, var(--sc, var(--ink-2))); } }
 .m-flip { margin-top: 2px; margin-bottom: 8px; }
@@ -1214,6 +1217,10 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .m-fbar b { font-size: 13px; }
 .m-fbar small { color: var(--ink-2); font-size: 11px; margin-left: -4px; }
 .m-who { font-size: 12.5px; margin-top: 4px; }
+/* 攻城戰那一段（輿圖第三版第 5 批：戰書／攻城／攻城戰果，app.js 的 siegeSection）：一句話＋一顆鈕；跟「正在翻」一樣貼著第 2 段 */
+.m-siege { margin-top: 2px; margin-bottom: 8px; }
+.m-siege .m-say { font-size: 13px; line-height: 1.55; }
+.m-siege .m-acts { margin-top: 6px; }
 .m-foes { font-size: 13.5px; margin: 0 0 8px; }
 .m-foes > small { display: block; font-size: 11.5px; color: var(--ink-2); letter-spacing: 1px; }
 .m-yield { font-size: 13px; margin: 0 0 8px; color: var(--ink); }
@@ -1321,6 +1328,12 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .ask p { margin: 0 0 14px; font-size: 15px; }
 /* 商城的購買確認（商城第二批，草圖子的「點了十顆」）：同一個小抽屜（紙底，跟著深淺色），多一張花多少、元寶剩多少、丹或月卡變成多少的小表 */
 .mall-ask h4 { margin: 0 0 8px; font: 700 17px var(--serif); }
+/* 購買確認的數量（Joy 2026-10-22 一次買好幾件）：− 數字 ＋ 最多，一排 */
+.mall-qty { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; }
+.mall-qty .btn { min-width: 44px; min-height: 40px; padding: 0 10px; font-size: 18px; }
+.mall-qty .btn.ghost { margin-left: auto; font-size: 14px; }
+.mall-qty b { min-width: 2ch; text-align: center; font-size: 20px; }
+.mall-qty span { color: var(--ink-2); font-size: 14px; }
 .mall-sum { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 0 0 12px; padding: 10px 12px; border-radius: 12px;
   background: var(--card); border: 1px solid var(--line); font-size: 14px; }
 .mall-sum dt { color: var(--ink-2); }
@@ -1578,7 +1591,7 @@ div.here { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; ma
 .chip.no { opacity: 0.5; border-style: dashed; }
 .chip.no .why { font-style: normal; color: var(--ink-2); }
 .craft-filter { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
-.craft-filter select.input { width: auto; flex: 1 1 72px; min-width: 72px; padding: 6px 8px; font-size: 13px; }
+.craft-filter select.input { width: auto; flex: 1 1 88px; min-width: 88px; padding: 6px 6px; font-size: 16px; } /* 不能低於 16px：iOS 一點就放大整頁（Joy 2026-10-22「畫面會縮放一下」） */
 .craft-filter .fchip { flex: 0 0 auto; }
 .forge-result { margin: 0 0 12px; }
 /* 太極爐一直看得到（Joy 2026-10-17）：大爐子捲出狀態列底下時，同一座爐縮成一條固定在狀態列底下（.kiln.compact）——
@@ -1590,6 +1603,7 @@ div.here { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; ma
 .kiln.compact .kiln-big { display: none; }
 .kiln.compact .kiln-mini { display: block; }
 @keyframes kiln-drop { from { transform: translateY(-12px); opacity: 0; } }
+.kiln.compact.still { animation: none; } /* 重畫前就縮著（fixedKiln 的 quiet）：不再掉下來一次 */
 .kiln-hub { flex: none; width: 60px; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
   padding: 0; border: 0; background: none; color: var(--ink-2); font: 600 11px var(--serif); cursor: pointer; }
 .kiln-hub:disabled { cursor: default; }
@@ -1615,9 +1629,10 @@ div.here { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; ma
 /* 開爐成了：太極猛轉一圈，新武學的卡從爐裡冒出來 */
 .w-spin.burst { animation: w-burst 0.9s cubic-bezier(.2, .7, .3, 1) 1 !important; }
 @keyframes w-burst { from { transform: rotate(0); } to { transform: rotate(720deg); } }
-.made-card.emerge { animation: mc-emerge 0.55s cubic-bezier(.2, .8, .3, 1.15); transform-origin: 50% 0; }
-@keyframes mc-emerge { 0% { opacity: 0; transform: translateY(-36px) scale(0.6); box-shadow: 0 0 30px 10px rgba(240, 160, 58, 0.7); }
-  60% { opacity: 1; } 100% { transform: none; } }
+/* 只淡入、往下落一點，不縮放（Joy 2026-10-22「意境合成完畢畫面會縮放一下」）；意境卡自己會翻面（.ins-card.reveal），外框不再疊一次 */
+.made-card.emerge { animation: mc-emerge 0.45s ease-out; }
+.made-card.ins-made.emerge { animation: none; }
+@keyframes mc-emerge { 0% { opacity: 0; transform: translateY(-12px); box-shadow: 0 0 30px 10px rgba(240, 160, 58, 0.7); } 100% { transform: none; } }
 @media (prefers-reduced-motion: reduce) { .w-spin.burst, .made-card.emerge, .kiln.compact, .w-slot.flash rect { animation: none !important; } }
 .kiln-row { display: flex; align-items: stretch; gap: 6px; }
 .kiln-slot { flex: 1 1 0; min-width: 0; position: relative; display: flex; flex-direction: column; justify-content: center; gap: 1px;
@@ -2876,6 +2891,11 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
   padding: 5px 9px; text-align: left; font-size: 13px; cursor: pointer; min-height: 40px; }
 .slot-pick button small { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--ink-2); }
 .slot-pick button.no, .slot-pick button:disabled { opacity: 0.45; cursor: default; }
+/* 同效果第二份起算一半（Joy 2026-10-22）：格子底下、挑意境時、裝進鈕旁邊那一句 */
+.jd small.stk, .stk { font-size: 10.5px; color: var(--accent); white-space: normal; text-align: center; line-height: 1.35; }
+.slot-pick em.stk { display: block; font-style: normal; text-align: left; }
+.ic-fits small.stk { flex-basis: 100%; text-align: left; }
+.stk-rule { flex-basis: 100%; margin: 0 0 2px; font-size: 12px; color: var(--accent); }
 /* 一門武學的圖示：自創時擺的火柴人（沒擺過的照兵器挑一個起手式） */
 svg.fig { flex: none; color: var(--ink); overflow: visible; }
 svg.fig .bone { fill: none; stroke: currentColor; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }

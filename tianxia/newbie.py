@@ -30,7 +30,7 @@ class Goal:
 GOALS = (  # 設計稿第六節的表，照這個順序亮（一次亮最上面三條沒做完的）
     Goal("level5", "升到第 5 級", "pill", "practice0"),
     Goal("merge", "悟第二個意境，在煉製合出一個新的", "pill", "craft"),
-    Goal("field2", "在二級的地方打贏一場練功", "silver", "practice1"),
+    Goal("field2", "到匪寇橫行的地方尋敵，打贏一場", "silver", "practice1"),
     Goal("create", "自創第一門武學", "pill", "practice"),
     Goal("bounty", "揭一張懸賞並交差", "silver", "bounties"),
     Goal("tavern", "在酒肆打聽一件事", "silver", "tavern"),

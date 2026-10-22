@@ -147,3 +147,12 @@ def test_a_missing_model_is_reported_in_the_same_words_at_each_of_the_three_plac
     with pytest.raises(RuntimeError) as raised:
         client.chat_structured([{"role": "user", "content": "取個名字"}], SuccessRateJudgment)
     assert str(raised.value) == "Ollama 回傳 404：模型 'gemma4:26b' 未找到，請先 `ollama pull gemma4:26b`。"
+
+
+def test_a_blank_string_counts_as_truncated():
+    """只有空白的必填字串（人物對話的 narrative 回 "  "）跟空的一樣當截斷，重問一趟（Joy 2026-10-22「Npc不會講話了？」）。"""
+    class Reply(BaseModel):
+        narrative: str = ""
+
+    with pytest.raises(ValueError, match="narrative"):
+        _ensure_required_present({"narrative": " \n "}, Reply, ["narrative"])

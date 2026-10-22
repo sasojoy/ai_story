@@ -932,7 +932,8 @@ class TutorialGoal(_Strict):
         # 新手引導重做（2026-10-22）：城裡操練、城外練功打贏、服回體丹、出店（進了店再出來）、改練（換上功法庫的一門）
         "drill", "field_win", "pill", "leave_shop", "switch",
     ] | None = None
-    # 這幾個行動任一個都算（action 是 None 時才看）：例 序章「比一比，換上或熔掉」寫 ["melt", "switch"]
+    # 這幾個行動任一個都算（action 是 None 時才看）：例 序章「比一比，換上或熔掉」寫 ["melt", "switch"]；
+    # 「leave_town」只在這裡用：走到城外的地點（Game 抵達時記），初入江湖逛鋪子那一步寫 ["leave_shop", "leave_town"]
     any_action: list[str] = Field(default_factory=list)
     wild: bool = False  # 這一下要在城外（不是城鎮的地點）做：初入江湖「在野外探索」
     locations: list[str] = Field(default_factory=list)
@@ -2392,6 +2393,11 @@ class ArtsTuning(_Strict):
     # 槽（招式與絕學稿案第二輪，Joy 2026-10-21 按建議）：學來的（下品）2、自創與合成的 3、絕學 3（另加絕招那一環，arts.ULTIMATE_SLOT）
     slots: dict[str, int] = Field(default_factory=lambda: {"下品": 2, "中品": 3, "上品": 3, "絕學": 3})
     general_weight: float = Field(default=0.05, ge=0)
+    # 同一個功效好幾份（Joy 2026-10-22 決策卡選「第二份算半」，traits.stack_value）：只有一份、或加起來沒超過上限照舊；
+    # 超過時第一份照算，第二份起每份算 stack_share，合起來最多上限的 stack_ceiling 倍。打仗、戰力、評分同一條。
+    # 同一個真意第二份：發動率 ×(1＋stack_share)；本來就每次發動的（鎮岳、金身）多撐一回合；第三份起不再加
+    stack_share: float = Field(default=0.5, ge=0, le=1)
+    stack_ceiling: float = Field(default=1.5, ge=1)
     high_weight: float = Field(default=0.12, ge=0)
     special_weight: float = Field(default=0.10, ge=0)
     signature_weight: float = Field(default=0.15, ge=0)
@@ -2810,7 +2816,7 @@ class ConquestRules(_Strict):
 
 
 class XingshiTuning(_Strict):
-    """〈天下形勢〉（領地爭奪第三批 A；設計 3.10，計畫第五章 Task 16、17；tianxia/xingshi.py）：每天 22:00 結算那一刻開一張單，伺服器鎖外
+    """〈天下形勢〉（領地爭奪第三批 A；設計 3.10，計畫第五章 Task 16、17；tianxia/xingshi.py）：每天 22:00 換天那一刻開一張單，伺服器鎖外
     請模型照那一天的事實寫一篇旁白（三段式，server.write_xingshi），寫不出來照固定段。只在領地爭奪開著（conquest.on）而且這裡開著時有；
     模型只寫文章，不給任何數字、不定任何勝負。enabled 是主機的開關（關掉時不開單、不碰季的形勢欄位）。"""
 
@@ -3461,6 +3467,11 @@ class Config(_Strict):
     legend_item_name: str = "破境丹"
     legend_item_note: str = "衝擊絕學時可以服下，那一次的機會多幾分。"
     legend_item_bonus: int = 15
+    # 服丹衝關失敗會累積（Joy 2026-10-22「破境丹同一門武學成功率應該逐次上升」；PM 佔位）：同一門每沒衝開一次，下一次多
+    # legend_fail_step 個百分點，記在那一門上（PlayerState.legend_fails）；這份可以越過 breakthrough.max_chance，最多到 legend_fail_cap。
+    # 衝開或那一門熔掉就清掉；仗裡的契機（seize）不吃這份
+    legend_fail_step: int = Field(default=10, ge=0)
+    legend_fail_cap: int = Field(default=100, ge=1, le=100)
     # 回體丹（企劃者 2026-10-07「新增物品回體丹可以回體力100點，新手進來都送20顆，現在是內測期間，讓大家初期可以盡情遊玩體驗」）：
     # 狀態列體力條旁邊按「服丹」吃一顆，回 stamina_pill_restore 點體力，夾在體力上限（不溢出；體力是滿的不讓吃）
     stamina_pill_name: str = "回體丹"

@@ -424,3 +424,24 @@ def test_the_free_line_frames_the_players_words_as_speech_not_instructions(conte
         assert tag in last
     plain = companion_agent.build_request(state, content, world, "mate", "talk:0", "閒聊幾句")
     assert "player_tag" not in plain.messages[-1]["content"]
+
+
+def test_a_turn_without_the_figures_words_is_a_failed_turn():
+    """Joy 2026-10-22「Npc不會講話了？」：模型只回選項、沒寫人物那句話，紀錄卡只剩「交談・陶謙」。敘事列為必填（語法強制），
+    假 client 照樣回空的也當這一輪生成失敗（DialogueUnavailable：不扣體力、不記情誼，呼叫端照沒叫到模型處理）。"""
+    client = mock.Mock()
+    client.chat_structured.return_value = companion_agent.CompanionTurn(narrative="  ", options=["甲", "乙", "丙"])
+    with pytest.raises(companion_agent.DialogueUnavailable):
+        companion_agent.generate_turn(client, [])
+    kwargs = client.chat_structured.call_args.kwargs
+    assert set(kwargs["required_fields"]) >= {"narrative", "options"} and kwargs["require_in_schema"] is True
+    client.chat_structured.return_value = companion_agent.CompanionTurn(narrative="他點點頭。", options=[])
+    with pytest.raises(companion_agent.DialogueUnavailable):
+        companion_agent.generate_turn(client, [])
+
+
+def test_the_schema_sent_to_the_model_requires_the_narrative():
+    from tianxia.ollama_client import _require_in_schema
+
+    schema = _require_in_schema(companion_agent.CompanionTurn.model_json_schema(), ["narrative", "options"])
+    assert {"narrative", "options"} <= set(schema["required"])

@@ -75,20 +75,24 @@ def test_practice_spots_are_tiered_by_weakest_foe():
     assert game._practice_tier(c.locations["songshan_foot"]) == 1  # 以前手標危險度一，新人勝率 3%
     assert game._practice_tier(c.locations["huangjin_camp"]) == 2
     label = _ids(game)["explore:practice"].label
-    assert label.startswith("練功（") and "一級" in label
+    assert label.startswith("尋敵（") and "宵小出沒" in label and "一級" not in label  # 不寫幾級（Joy 2026-10-22）
 
 
-def test_move_list_names_the_tier_of_practice_spots():
+def test_move_list_no_longer_names_tiers_and_the_map_card_says_how_fierce():
+    """Joy 2026-10-22：移動清單不寫幾級練功點；輿圖地點卡（與舊地點詳情）只寫一句這一帶多兇。"""
     game = _game()
-    move = _ids(game)["move:yingshui"]
-    assert move.note == "一級練功點"
+    assert not _ids(game)["move:yingshui"].note
+    places = game.map_state()["places"]
+    assert places["yingshui"]["fierce"] == "此地宵小出沒。" and places["songshan_foot"]["fierce"] == "此地匪寇橫行。"
+    assert places["yingchuan"]["fierce"] == ""  # 城鎮不寫
+    assert game.place_detail("yingshui").endswith("此地宵小出沒。")
 
 
 def test_practice_battle_is_labelled_and_higher_tiers_pay_more():
     game = _game(at="songshan_foot", level=30)
     game.choose("explore:practice")
     record = game.state.battles[-1]
-    assert record.label == "練功"
+    assert record.label == "尋敵"
     if record.tier in ("大勝", "險勝"):
         assert "field2" in game.state.player.newbie_marks
 

@@ -1110,7 +1110,7 @@ def yuedan_once(game: Game) -> bool:
         return game.apply_yuedan(note, lines)
 
 
-# 〈天下形勢〉（領地爭奪第三批 A；tianxia/xingshi.py）：每天 22:00 結算那一刻開一張單，這裡在背景請模型照事實寫一篇。
+# 〈天下形勢〉（領地爭奪第三批 A；tianxia/xingshi.py）：每天 22:00 換天那一刻開一張單，這裡在背景請模型照事實寫一篇。
 # 全服同時只有一條在寫（XINGSHI_RUNNING）；佇列開著時當成假人排在真人後面（名號是 XINGSHI_OWNER，不是任何一個角色）。
 XINGSHI_RUNNING: set[str] = set()
 XINGSHI_OWNER = "§史官"
@@ -2189,7 +2189,7 @@ def api_mall_records(request: Request):
 
 @app.post("/api/mall/buy")
 def api_mall_buy(request: Request, body: dict = Body(...)):
-    """買一件（Game.mall_buy）：{item, ref}；回 {message, bought, already, mall, main}。bought 是買成的商品 id（不成是 None：網頁照它換
+    """買東西（Game.mall_buy）：{item, ref, qty}（qty 一次買幾件，不給是 1；Joy 2026-10-22）；回 {message, bought, already, mall, main}。bought 是買成的商品 id（不成是 None：網頁照它換
     掌櫃那一句）、already 是這個編號早就買好的那一件（逾時重送，網頁照成了的樣子講，FB-491；其餘是 None）、main 是江湖畫面
     （狀態列的錠子鈕與丹鈕當場換，商城第二批）。賽季時鐘暫停中照其他動作擋。"""
     _mall_on()
@@ -2198,7 +2198,7 @@ def api_mall_buy(request: Request, body: dict = Body(...)):
     got: dict = {}
 
     def buy(g: Game):
-        out = g.mall_buy(item, ref)
+        out = g.mall_buy(item, ref, max(1, min(mall.MAX_QTY, _int(body.get("qty"), 1))))
         got["bought"], got["already"] = g.mall_bought, g.mall_already  # 在鎖裡讀：出了鎖別的請求可能又動了這一份 Game
         return out
 

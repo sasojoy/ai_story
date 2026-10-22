@@ -1687,9 +1687,8 @@ class Game:
         cost = atlas.route_stamina(self.state, c, route, mode)
         if self.state.player.stamina < cost:
             return Option(id=option_id, label=f"前往 {dest.name}（{atlas.MODES[mode]}・體力不足，要 {cost}）", enabled=False)
-        tier = self._practice_tier(dest)  # 練功分級（Config.training）：目的地練得了功就在底下小字寫幾級
-        note = training.TIER_NOTE.format(tier=training.TIER_WORDS[tier]) if tier is not None else ""
-        return Option(id=option_id, label=f"前往 {dest.name}（{atlas.route_text(self.state, c, route, mode)}）", note=note)
+        # 尋敵分級不寫在移動清單上（Joy 2026-10-22）：兇險程度只在輿圖的地點詳情寫一句（place_detail）
+        return Option(id=option_id, label=f"前往 {dest.name}（{atlas.route_text(self.state, c, route, mode)}）")
 
     def _back_way(self) -> atlas.Route:
         """折返的路：從路上回到身後那一站（路上設計 3.2：折返就是「改去」那一站，見 atlas.way_to）。
@@ -1828,7 +1827,7 @@ class Game:
         if foe is not None:
             note = f"{foe.name}・{self.odds(foe.id)}" if odds else foe.name
             tier = self._practice_tier(loc)
-            if tier is not None:  # 城外練功分級（Config.training）：「練功（體力 6・一級・河灘潑皮・穩勝）」
+            if tier is not None:  # 城外尋敵分級（Config.training）：「尋敵（體力 6・宵小出沒・河灘潑皮・穩勝）」
                 note = f"{training.TIER_WORDS[tier]}・{note}"
             return self._cost_option(oid, name, cost, note=note)
         bosses = duel_rules.here(s, c)
@@ -7491,6 +7490,9 @@ class Game:
         battle, definition = status
         p = battle.participants.get(self.state.player.name)
         side = p.faction if p is not None else self._side()
+        if p is None and battle.siege is not None and not siege.slots(battle.siege, self._conquest_side()):
+            # FB-693：攻城戰裡自己站不進任何一格（另一軍看單方攻中立地：守將借的是那一軍的格），兩邊都不標「我方」、第一方在左
+            side = None
         g = self._gauge_of(battle, definition, side)
         # 這一回合還剩幾秒逾時（同 _round_wait）：網頁每秒自己倒數「最遲 M 分 S 秒後結算」，不等十秒一次的輪詢（Joy 2026-10-13）。
         # 暫停中、集結中是 None（不倒數）
@@ -9536,6 +9538,8 @@ class Game:
         # 糧車到了終點（路過也算）先交糧，再照原本的新手引導與門檻（計畫 T6）；呼叫的先後不能換
         convoy = self._convoy_arrives(loc_id) + bounties.on_arrive(s, c, self.world, loc_id)  # 懸賞榜的護送：走到終點就交差（路過也算）
         guide = self._guide(note_action(s, c, self.world, "move"))  # 出師的盤纏（序章步驟的獎勵）是這一趟路的結果，回在這裡
+        if not explore_modes.is_town(c, c.locations[loc_id]):  # 走到城外（初入江湖逛鋪子那一步：沒進鋪子、直接出城也算過，Joy 2026-10-22）
+            guide += self._guide(note_action(s, c, self.world, "leave_town"))
         thresholds = check_thresholds(s, c, self.world, client, now=self.now)
         t = c.tutorial
         left = [t.leave_text] if t.location is not None and before < t.prologue_steps <= s.player.tutorial_step and t.leave_text else []
@@ -10475,11 +10479,17 @@ class Game:
             return None
         side = self._conquest_side()
         names = {f.id: f.name for f in c.scenario.factions}
+        live = self._siege_live() if any(slot.status == "open" for slot in w.conquest.schedule) else None
         today = [{
             "id": slot.id, "loc": slot.loc, "place": c.locations[slot.loc].name,
             "attackers": [names.get(a, a) for a in slot.attackers], "time": self.stamp(slot.at), "minute": slot.minute,
             "status": slot.status, "status_text": siege_status_text(c, slot),
             "by": {names.get(a, a): conquest_day.BY_WORDS.get(slot.by.get(a, ""), "") for a in slot.attackers},
+            # 輿圖第三版第 5 批（卡上「戰書／攻城／攻城戰果」那一段）：sides 是攻方的陣營 id；you 是看的人站得進哪一格（siege.slots 同一套：
+            # 攻方 attack、被打的那一方 defend、散人與不是兩軍的人 help〔臨時投效或助守〕、另一軍站不進去是空的）；margin 是打完那一場的大勝／險勝
+            "sides": list(slot.attackers), "you": self._siege_you(slot, side), "margin": self._siege_margin(slot),
+            # FB-690：region 是那一塊的大區名（加入要人在那一區）；join 是集結・交戰中那一場看的人此刻加不加得進去（_siege_join）
+            "region": self._region_name(slot.loc), "join": self._siege_join(slot, side, live),
         } for slot in w.conquest.schedule]
         blocks: dict[str, dict] = {}
         for loc in conquest.blocks(c):
@@ -10497,7 +10507,50 @@ class Game:
             ready = [loc for loc in conquest.blocks(c) if conquest.bar(w, loc, side) >= c.config.conquest.letter_at]
             letter = {"used": w.conquest.letter_days.get(side) == self._letter_key(), "at": c.config.conquest.letter_at,
                       "ready": [{"id": loc, "name": c.locations[loc].name, "why": self.letter_problem(loc) or ""} for loc in ready]}
-        return {"today": today, "blocks": blocks, "here": here, "letter": letter}
+        return {"today": today, "blocks": blocks, "here": here, "letter": letter, "muster": c.config.conquest.muster_minutes}
+
+    def _siege_you(self, slot, side: str | None) -> str:
+        """看的人站得進這一場攻城的哪一格（卡上那顆鈕寫什麼；siege.slots 同一套）：攻方 attack、此刻佔著那一塊的那一軍 defend、
+        散人與不是兩軍的人 help（臨時投效攻方或助守）、另一軍站不進去是空字串。打完、作罷的也照算（卡上那時不畫鈕）。"""
+        if side is None:
+            return "help"
+        if side in slot.attackers:
+            return "attack"
+        return "defend" if conquest.holder(self.state.world, self.content, slot.loc) == side else ""
+
+    def _region_name(self, loc_id: str) -> str:
+        region = atlas.region_of(self.content, loc_id) if loc_id in self.content.locations else None
+        return region.name if region is not None else ""
+
+    def _siege_live(self) -> tuple[list[battle_instance.BattleInstance], set[int]]:
+        """此刻集結或開打的全服戰鬥（決戰與攻城）與自己此刻加得進去的那幾場的流水號（_joinable：人在那一區、不在路上、站得進去、
+        還沒在任何一場的名單上）。conquest_view 有集結・交戰中的攻城時才讀一次。"""
+        showdown = self.world.get_battle()
+        live = ([showdown] if showdown is not None and showdown.phase != "ended" else []) + self._sieges()
+        return live, {b.record_id for b in self._joinable()}
+
+    def _siege_join(self, slot, side: str | None, live) -> str:
+        """FB-690：集結・交戰中那一場看的人此刻加不加得進去（卡上那顆鈕照它畫，跟江湖頁的加入鈕同一套 _joinable）：go＝加得進去、
+        in＝已經在這一場、busy＝已經在別的一場、far＝站得進去但人不在那一區（或在路上）、空字串＝站不進去（另一軍）或不是集結・交戰中。"""
+        if slot.status != "open" or live is None or not self._siege_you(slot, side):
+            return ""
+        battles, joinable = live
+        battle = next((b for b in battles if b.siege is not None and slot.record_id is not None and b.record_id == slot.record_id), None)
+        if battle is None:
+            return ""
+        name = self.state.player.name
+        if name in battle.participants:
+            return "in"
+        if any(name in b.participants for b in battles):
+            return "busy"
+        return "go" if battle.record_id in joinable else "far"
+
+    def _siege_margin(self, slot) -> str:
+        """打完那一場的大勝／險勝（收場那一下 siege._note_result 記在 day_log）；還沒打完、作罷、找不到是空字串。"""
+        if slot.status != "done" or self.state.world.conquest is None:
+            return ""
+        return next((n.margin for n in reversed(self.state.world.conquest.day_log)
+                     if n.result and n.key == slot.key and n.loc == slot.loc and n.minute == slot.minute), "")
 
     def pill_now(self) -> float:
         """回體丹換日看的現實時間：sync 給的 now，加上 advance 推過的那一截（advanced_real）。"""
@@ -10545,18 +10598,19 @@ class Game:
                 time=self.state.world.time, title=mall.TITLE, lines=[mall.GRANT_LINE.format(n=amount)], changes=[f"元寶 +{amount}"],
             ))
 
-    def mall_buy(self, item_id: str, ref: str) -> list[str]:
+    def mall_buy(self, item_id: str, ref: str, qty: int = 1) -> list[str]:
         """買一件商品（mall.buy）：ref 是這一次購買的編號（網頁按下確認那一刻產，重送同一個不會買兩次）。成了寫一則「商城」
         江湖紀錄（變化寫元寶與拿到的東西）；不成、或這個編號已經買過了只回一句、不寫紀錄。伺服器在行動鎖裡叫：扣元寶、
         寫購買紀錄、發貨同一筆交易。時間照回體丹那一套（pill_now、_pill_day），不讀時鐘。買成了 self.mall_bought 記那件的 id，
-        不成（含這個編號已經買過了）是 None；這個編號已經買過了 self.mall_already 記那一筆的商品 id（FB-491），其餘是 None。"""
+        不成（含這個編號已經買過了）是 None；這個編號已經買過了 self.mall_already 記那一筆的商品 id（FB-491），其餘是 None。
+        qty 是一次買幾件（Joy 2026-10-22），照 mall.buy 夾在限購剩的件數裡。"""
         self.mall_bought = self.mall_already = None
         wallet = self._wallet()
         if wallet is None:
             return self._log([mall.OFF])
         result = mall.buy(
             self.state, self.content, wallet, item_id, ref,
-            now=self.pill_now(), day=self._pill_day(), season=self.world.get_season_number(),
+            now=self.pill_now(), day=self._pill_day(), season=self.world.get_season_number(), qty=qty,
         )
         if isinstance(result, str):
             done = wallet.purchase_by_ref(mall.buy_ref(self._mall_owner(), ref))
@@ -12052,7 +12106,7 @@ class Game:
             if ready is not None and w.time + seal_acts.EPS < ready:
                 return
             seal_acts.note_use(now, number, w.time)
-            seal.log(r, number, "use", shard=shard_id, holder=me, result=kind, where=what, at=w.time)
+            seal.log_use(r, number, shard=shard_id, holder=me, act=kind, what=what, at=w.time)  # 另記一欄（FB-695）
             left.append(seal_acts.left(now, number, c))
 
         self.world.mutate(_apply)
@@ -12919,9 +12973,18 @@ class Game:
         def mode(loc_id: str) -> str | None:
             return sortie.mode(c, s.world, faction, loc_id, bool(self._sortie_foes(c.locations[loc_id]))) if on else None
 
-        return mapdata.state(
+        out = mapdata.state(
             s, c, odds=self.odds, sortie_mode=mode, sorties_left=self.sorties_left() if on else None, real_minutes=self._real_minutes,
         )
+        for loc_id, info in out["places"].items():  # 地點卡上那一句這一帶多兇（尋敵分級，Joy 2026-10-22：不寫幾級）；沒有是空字串
+            info["fierce"] = self._fierce_line(c.locations[loc_id])
+        return out
+
+    def _fierce_line(self, loc: Location) -> str:
+        """輿圖地點卡與舊地點詳情的那一句（training.PLACE_LINE）：城外尋敵得到的地方照分級寫「此地宵小出沒。」，城鎮、沒有對手、
+        城裡操練關著是空字串。只讀。"""
+        tier = None if training.is_town(self.content, loc) else self._practice_tier(loc)
+        return "" if tier is None else training.PLACE_LINE.format(tier=training.TIER_WORDS[tier])
 
     def world_map_svg(self, layer: str = "situation", selected: str | None = None) -> str:
         odds = self.odds if layer == "enemies" else None
@@ -12941,7 +13004,10 @@ class Game:
         return atlas.place_choices(self.state, self.content)
 
     def place_detail(self, loc_id: str) -> str:
-        return atlas.detail_text(self.state, self.content, loc_id, lambda squad_id: self.odds(squad_id, at=loc_id))  # 照那一處的地利
+        text = atlas.detail_text(self.state, self.content, loc_id, lambda squad_id: self.odds(squad_id, at=loc_id))  # 照那一處的地利
+        loc = self.content.locations.get(loc_id)
+        fierce = self._fierce_line(loc) if loc is not None else ""  # 尋敵分級：一句這一帶多兇（Joy 2026-10-22）
+        return f"{text}\n\n{fierce}" if fierce else text
 
     def travel_options(self, loc_id: str) -> list[atlas.TravelOption] | None:
         return atlas.travel_options(self.state, self.content, loc_id)
@@ -13693,10 +13759,10 @@ class Game:
         }
         if seal_acts.on(c):  # 獨門行動（改版第 2 批）：這一季誰起用了哪一片、什麼時候、指定了什麼（救場用，設計【PM】5）；改版關著不多這一鍵
             out["uses"] = [
-                {"shard": c.seal[e.shard].name if e.shard in c.seal else e.shard or "", "who": e.holder or "",
-                 "act": seal_acts.NAMES.get(e.result or "", e.result or ""), "when": self.stamp(e.at) if e.at is not None else "",
-                 "what": e.where}
-                for e in reg.history if e.kind == "use" and e.season == view.season
+                {"shard": c.seal[e.shard].name if e.shard in c.seal else e.shard, "who": e.holder,
+                 "act": seal_acts.NAMES.get(e.act, e.act), "when": self.stamp(e.at) if e.at is not None else "",
+                 "what": e.what}
+                for e in reg.uses if e.season == view.season  # FB-695：起用另記在 uses（舊資料讀進來時從 history 搬過來）
             ]
         return out
 
