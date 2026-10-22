@@ -932,7 +932,8 @@ class TutorialGoal(_Strict):
         # 新手引導重做（2026-10-22）：城裡操練、城外練功打贏、服回體丹、出店（進了店再出來）、改練（換上功法庫的一門）
         "drill", "field_win", "pill", "leave_shop", "switch",
     ] | None = None
-    # 這幾個行動任一個都算（action 是 None 時才看）：例 序章「比一比，換上或熔掉」寫 ["melt", "switch"]
+    # 這幾個行動任一個都算（action 是 None 時才看）：例 序章「比一比，換上或熔掉」寫 ["melt", "switch"]；
+    # 「leave_town」只在這裡用：走到城外的地點（Game 抵達時記），初入江湖逛鋪子那一步寫 ["leave_shop", "leave_town"]
     any_action: list[str] = Field(default_factory=list)
     wild: bool = False  # 這一下要在城外（不是城鎮的地點）做：初入江湖「在野外探索」
     locations: list[str] = Field(default_factory=list)
