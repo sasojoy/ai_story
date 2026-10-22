@@ -6,7 +6,7 @@ import pytest
 from conftest import real_content
 from conquest_kit import conquest_rules, plain_game
 from tianxia import conquest
-from tianxia.models import BlockDef
+from tianxia.models import BlockDef, ConquestRules
 from tianxia.state import WorldState
 from tianxia.world_state import stamp_season
 
@@ -25,10 +25,13 @@ def test_old_season_json_reads_without_conquest_fields():
     assert w.conquest_on is False and w.conquest is None
 
 
-def test_switch_defaults_off_everywhere():
-    assert real_content().config.conquest.enabled is False
-    assert real_content("season21").config.conquest.enabled is False
-    assert real_content("weekend").config.conquest.enabled is False
+def test_switch_is_on_in_the_real_content_pm_1022():
+    """企劃者 2026-10-22「領地爭奪……要打開」：正式內容的開關打開（content/config.json，三種設定覆寫檔都不寫、照它）。以前這一條鎖
+    「每一份設定都關著」（裁決 15：三批做完、QA 過、PM 說可以再開）。Config 的預設與測試內容照舊關著；哪幾種季開得了見
+    tests/test_conquest_on.py。"""
+    for profile in (None, "weekend", "season21", "week7"):
+        assert real_content(profile).config.conquest.enabled is True, profile
+    assert ConquestRules().enabled is False
 
 
 def test_stamp_needs_switch_season_one_and_blocks():

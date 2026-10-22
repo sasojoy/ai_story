@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 import server
-from conftest import real_content
+from conftest import no_conquest, real_content
 from conquest_kit import conquest_rules
 from test_seal_acts import _do, _give, _person, _uses
 from tianxia import calendar, conquest, seal, seal_acts
@@ -29,6 +29,8 @@ def _world(profile="season21", *, conquest_on=True, on=True):
     c = real_content(profile)
     if conquest_on:
         conquest_rules(c)
+    else:
+        no_conquest(c)  # PM 2026-10-22 起正式內容打開，關著的季要明講
     c.config.auto_open_first_season = True
     c.config.seal.revamp.enabled = on
     c.config.newbie_days, c.config.newbie_real_hours = -1, 0
@@ -308,7 +310,7 @@ def test_mend_rows_only_count_flips():
 @pytest.mark.parametrize("profile", ["weekend", None, "season21"])
 @pytest.mark.parametrize("shard", ["chishou", "jinjiao"])
 def test_without_conquest_the_button_greys_out_and_nothing_happens(profile, shard):
-    """設計第四章：領地爭奪沒開的季（正式內容的三種季都是）鎮地與補缺按不下去、灰鈕寫原因；碎片卡那一行寫原因（idle）。"""
+    """設計第四章：領地爭奪沒開的季（PM 2026-10-22 打開之前正式內容的三種季都是；現在只有 14 天的季與打開之前開的季）鎮地與補缺按不下去、灰鈕寫原因；碎片卡那一行寫原因（idle）。"""
     c, w, g = _holder(shard, conquest_on=False, profile=profile, at="yingchuan")
     act = _act(c, w)
     assert (act["ok"], act["why"], act["idle"], act["targets"], act["sides"]) == (False, seal_acts.NO_CONQUEST, True, [], [])

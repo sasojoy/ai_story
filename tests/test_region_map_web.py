@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 import test_prologue_web
-from conftest import classic_rules, real_content
+from conftest import classic_rules, no_conquest, real_content
 from conquest_kit import conquest_game, conquest_rules
 
 import server
@@ -37,6 +37,8 @@ def _game(content=None, faction="guan", at="yingchuan", conquest_on=True, profil
     c = content or real_content(profile)
     if conquest_on:
         conquest_rules(c)
+    else:
+        no_conquest(c)  # PM 2026-10-22 起正式內容打開，關著的季要明講
     c.config.auto_open_first_season = True
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world())
     game.client = None

@@ -141,8 +141,11 @@ def test_howto_says_orders_come_every_day_on_week7():
 
 @pytest.mark.parametrize("profile", ["weekend"])
 def test_howto_orders_lines_unchanged_elsewhere(profile):
-    """週末本來就是每週一。21 天季的軍令也是每天一道，FB-502 起照「每天」寫（test_fb502_season21_order_words）。"""
-    content = _content(profile)
+    """週末本來就是每週一。21 天季的軍令也是每天一道，FB-502 起照「每天」寫（test_fb502_season21_order_words）。
+    領地爭奪關著（PM 2026-10-22 起正式內容打開；開著的季投靠那一段換成 howto.CONQUEST_JOIN，不比沒給 world 的那一版）。"""
+    from conftest import no_conquest
+
+    content = no_conquest(_content(profile))
     state = _state(content)
     assert "投靠陣營之後每週一有軍令" in "".join(howto.war_help(state, content)["quest"])
     join = "".join(howto.join_lines(content, state.world))

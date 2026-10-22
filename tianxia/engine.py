@@ -13366,6 +13366,34 @@ class Game:
         self._save_season()
         return self._log([text])
 
+    def admin_conquest_choices(self) -> dict | None:
+        """設定頁管理者工具「領地爭奪」那一組的下拉選單（server.admin_choices 的 conquest；打開領地爭奪，PM 2026-10-22）：只在領地爭奪開著、
+        季還沒收的季有，其餘 None（網頁不畫）。blocks 是搶得下來的區塊（字寫此刻歸誰、每一條進度、冷卻、被戰書凍結），sides 是交戰兩軍
+        （admin_conquest_set／progress／letter 只收這兩軍），sieges 是時程表上還沒打完、沒作罷的攻城（admin_conquest_cancel 的 id）。
+        只給管理者看；字待 joy 潤。"""
+        c, w = self.content, self.state.world
+        if not conquest.on(c, w) or w.ended or w.conquest is None:
+            return None
+        names = {f.id: f.name for f in c.scenario.factions}
+        blocks = []
+        for loc in conquest.blocks(c):
+            if not conquest.capturable(c, loc):
+                continue
+            held = conquest.holder(w, c, loc)
+            bits = [names.get(held, held) if held else "沒人佔"]
+            bits += [f"{names.get(s, s)} {conquest._int(v)}" for s, v in sorted(conquest.bars(w, loc).items(), key=lambda kv: (-kv[1], kv[0]))]
+            if conquest.cooling(w, c, loc):
+                bits.append(f"冷卻 {conquest.cooling_minutes(w, c, loc)} 分")
+            if conquest.frozen(w, loc) is not None:
+                bits.append("戰書凍結")
+            blocks.append({"id": loc, "label": f"{c.locations[loc].name}（{'・'.join(bits)}）"})
+        sides = [{"id": s, "label": names.get(s, s)} for s in conquest.SIDES]
+        sieges = [{
+            "id": slot.id,
+            "label": f"{c.locations[slot.loc].name}：{'、'.join(names.get(a, a) for a in slot.attackers)}攻・{siege_status_text(c, slot)}・{self.stamp(slot.at)}",
+        } for slot in w.conquest.schedule if slot.status not in ("done", "void")]
+        return {"blocks": blocks, "sides": sides, "sieges": sieges}
+
     def admin_resolve_event(self, event_id: str, key: str) -> list[str]:
         """定結果：管理者直接定一件大事的結果（不含版本的鍵，例如「成」「guan:險勝」），照時刻表結算（公告、江湖史、
         效果都照內容），人人的江湖紀錄照 FB-038 補上。季末用「立刻收季」；決戰正在打的先取消。"""

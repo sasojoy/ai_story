@@ -85,6 +85,14 @@ def classic_rules(content: Content) -> Content:
     return content
 
 
+def no_conquest(content: Content) -> Content:
+    """領地爭奪（Config.conquest，第 38 項改版；PM 2026-10-22 起正式內容打開）之前的規則：地盤照拔河與割據易手、出陣推戰線、
+    沒有翻地與戰書，回傳同一份內容。測的是舊的地盤、出陣推線、「關著一個字都不變」的舊測試用它；新規則的測試不要叫
+    （見 tests/conquest_kit.py 的 conquest_game）。共用的內容用 monkeypatch.setattr(content.config.conquest, "enabled", False)。"""
+    content.config.conquest.enabled = False
+    return content
+
+
 def closed_map(content: Content) -> Content:
     """全圖開放（企劃者 2026-10-15，Config.open_map）之前的摸清規則：視野、去過、留意地形才算摸清，回傳同一份內容。
     測的是摸清、視野、留意地形、「還沒摸清」那些字本身的舊測試用它；新規則的測試不要叫（見 tests/test_open_map.py）。"""
