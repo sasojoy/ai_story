@@ -3177,7 +3177,7 @@
   function insightCardHtml(i, o = {}) {
     if (!i) return "";
     const fx = (i.effects || []).map((e) => `<li class="${e.grand ? "grand" : e.special ? "sp" : ""}"><b>${esc(e.name)}${e.grand || e.special ? "" : esc(FX_LAYERS[e.layers] || "")}</b>${e.desc ? `<span>${esc(e.desc)}</span>` : ""}</li>`).join("");
-    const fits = o.fits ? (i.fits || []).map((f) => `<button class="btn small" data-act="slot-in" data-id="${esc(f.art)}" data-i="${f.i | 0}" data-ins="${esc(i.id)}">裝進【${esc(f.name)}】第 ${(f.i | 0) + 1} 格</button>`).join("") : "";
+    const fits = o.fits ? (i.fits || []).map((f) => `<button class="btn small" data-act="slot-in" data-id="${esc(f.art)}" data-i="${f.i | 0}" data-ins="${esc(i.id)}">裝進【${esc(f.name)}】第 ${(f.i | 0) + 1} 格</button>${f.stack ? `<small class="stk">${esc(f.stack)}</small>` : ""}`).join("") : "";
     const where = i.slotted ? `裝在【${esc(i.slotted)}】` : o.fits && !fits ? "身上的武學沒有空格收得下它。" : ""; // 待 joy 潤
     const rare = i.look === "珍" || i.look === "神";
     return `<div class="ins-card${o.reveal ? " reveal" : ""}${o.reveal && rare ? " rare" : ""}">
@@ -3272,6 +3272,8 @@
   // 點了在底下攤開手上空著的意境，顏色收得下的點了裝進「這一格」（送 index），收不下的灰掉寫原因。裝、拆都不花東西。
   // 寫死的武學（本命、部下的上品）slots 是空清單，不畫。字待 joy 潤
   // ro：別人的卡（榜單點開的，Joy 2026-10-22）：一樣畫，但格子點不了、不攤意境
+  // 同效果好幾份（Joy 2026-10-22「第二份算半」）：格子上那一份算了幾成（skillview.slot_stack_marks，伺服器寫好的字）
+  const stkHtml = (t) => (t ? `<small class="stk">${esc(t)}</small>` : "");
   function slotsHtml(a, x, ro = false) {
     if (!Array.isArray(a.slots) || !a.slots.length) return "";
     const colors = Array.isArray(a.colors) ? a.colors : [];
@@ -3281,10 +3283,10 @@
     const cells = a.slots.map((s, i) => {
       const c = colors[i] || [];
       if (ro) return s
-        ? `<span class="jd full" title="${esc(`「${s.name}」${s.look || ""}・${fxText(s.fx) || s.skill}${s.desc ? `：${s.desc}` : ""}`)}">${ringHtml(c, `<b>${esc(String(s.name).slice(0, 2))}</b>`)}${lookSeal(s.look)}${fxHtml(s.fx, "col") || `<small>〔${esc(s.skill)}〕</small>${lvHtml(s.strength)}`}</span>`
+        ? `<span class="jd full" title="${esc(`「${s.name}」${s.look || ""}・${fxText(s.fx) || s.skill}${s.desc ? `：${s.desc}` : ""}`)}">${ringHtml(c, `<b>${esc(String(s.name).slice(0, 2))}</b>`)}${lookSeal(s.look)}${fxHtml(s.fx, "col") || `<small>〔${esc(s.skill)}〕</small>${lvHtml(s.strength)}`}${stkHtml(s.stack)}</span>`
         : `<span class="jd empty">${ringHtml(c, "", "vacant")}<small class="dim">空著</small></span>`;
       return s
-        ? `<button type="button" class="jd full" data-act="slot-out" data-id="${esc(a.id)}" data-ins="${esc(s.id)}" title="${esc(`「${s.name}」${s.look || ""}・${fxText(s.fx) || s.skill}${s.desc ? `：${s.desc}` : ""}（點了拆下）`)}">${ringHtml(c, `<b>${esc(String(s.name).slice(0, 2))}</b>`)}${lookSeal(s.look)}${fxHtml(s.fx, "col") || `<small>〔${esc(s.skill)}〕</small>${lvHtml(s.strength)}`}</button>`
+        ? `<button type="button" class="jd full" data-act="slot-out" data-id="${esc(a.id)}" data-ins="${esc(s.id)}" title="${esc(`「${s.name}」${s.look || ""}・${fxText(s.fx) || s.skill}${s.desc ? `：${s.desc}` : ""}（點了拆下）`)}">${ringHtml(c, `<b>${esc(String(s.name).slice(0, 2))}</b>`)}${lookSeal(s.look)}${fxHtml(s.fx, "col") || `<small>〔${esc(s.skill)}〕</small>${lvHtml(s.strength)}`}${stkHtml(s.stack)}</button>`
         : `<button type="button" class="jd empty${pick === i ? " on" : ""}" data-act="slot-pick" data-id="${esc(a.id)}" data-i="${i}"${glowSlot} title="${esc(ringWord(c))}">${ringHtml(c, "<i>＋</i>", "vacant")}<small class="dim">${esc(ringWord(c))}</small></button>`;
     }).join("");
     let picker = "";
@@ -3292,7 +3294,7 @@
       const c = colors[pick] || [];
       const fits = (i) => !c.length || c.includes(i.attribute);
       const free = (x.insights || []).filter((i) => !i.slotted);
-      picker = `<div class="slot-pick">${free.length ? free.map((i) => `<button type="button" class="${fits(i) ? "" : "no"}" data-act="slot-in" data-id="${esc(a.id)}" data-i="${pick}" data-ins="${esc(i.id)}"${glowSlot} ${fits(i) ? "" : "disabled"} title="${esc(fits(i) ? i.skill_desc || "" : `這一格${ringWord(c)}`)}">${ringHtml([i.attribute], "", "jmini")}<span>「${esc(i.name)}」${lookSeal(i.look)}<small>${fxHtml(i.fx) || `〔${esc(i.skill || "")}〕${lvHtml(i.strength)}`}${fits(i) ? "" : "・顏色不合"}</small></span></button>`).join("")
+      picker = `<div class="slot-pick">${a.stack_rule ? `<p class="stk-rule">${esc(a.stack_rule)}</p>` : ""}${free.length ? free.map((i) => `<button type="button" class="${fits(i) ? "" : "no"}" data-act="slot-in" data-id="${esc(a.id)}" data-i="${pick}" data-ins="${esc(i.id)}"${glowSlot} ${fits(i) ? "" : "disabled"} title="${esc(fits(i) ? i.skill_desc || "" : `這一格${ringWord(c)}`)}">${ringHtml([i.attribute], "", "jmini")}<span>「${esc(i.name)}」${lookSeal(i.look)}<small>${fxHtml(i.fx) || `〔${esc(i.skill || "")}〕${lvHtml(i.strength)}`}${fits(i) ? "" : "・顏色不合"}</small>${a.stack && a.stack[i.id] ? `<em class="stk">${esc(a.stack[i.id])}</em>` : ""}</span></button>`).join("")
         : '<span class="muted">手上沒有空著的意境——去探索悟一個，或從別門武學上拆下來。</span>'}</div>`;
     }
     // 第五個玉環（自創的才有，招式與絕學稿案第三節）：破境了亮金色寫絕招，還沒破境是暗的

@@ -379,6 +379,11 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
             "affinity": arts_mod.affinity_text(art),  # 相容屬性（「快、陽、虛」或「兼容並蓄」）
             "slots": slot_rows(state, content, world, art),  # 意境槽：每格裝的那一招（None 是空的）；寫死的武學是空清單
             "colors": arts_mod.slot_colors(state, content, art),  # 每一格收哪幾種屬性（跟 slots 一樣長；[] 是任色）
+            # 攤開空格挑意境時，跟這一門（穿著的照身上兩門）撞到同效果的那幾份寫一句（stack_parts）：{意境 id: 「先手算五成」}；
+            # 有任何一份撞到時 stack_rule 是規則那一句，挑的地方寫一次
+            "stack": (stack := {} if arts_mod.fixed(content, art_id) else {
+                i: "；".join(p) for i in state.player.insights if not arts_mod.where_slotted(state, i) and (p := stack_parts(state, content, world, art, i))}),
+            "stack_rule": STACK_RULE if stack else "",
             "pose": create_mod.icon_pose(content, art, weapon),  # 功法卡上的小火柴人：自創的照自己擺的式，其餘照兵器挑預設架式
             "weapon": weapon,  # 小圖上手裡拿什麼（內功、推不出來的是 None）
             "rating": arts_mod.rating(content, art, level or 1, state, world),  # 戰力：威力 ×（1＋槽裡技能的加成）
@@ -488,10 +493,120 @@ def melt_judge(state: GameState, content: Content, world: WorldStateStore, art: 
     }
 
 
+# ── 同效果好幾份（Joy 2026-10-22 選「第二份算半」；「玩家需要知道這個知識」）────────────
+# 打仗照身上兩門一起算（traits.loadout），所以穿在身上的那一門照兩門一起看；沒穿的照它自己。格子上寫「先手算五成」「流光多一半」，
+# 裝意境之前寫這一份會算幾成、到頂了沒。數字照 traits.stack_value，跟打仗、戰力、評分同一條。字待 joy 潤
+STACK_RULE = "同效果第二份起算一半，最多一倍半"
+HIGH_MORE = "多一半"  # 同一個真意第二份：發動的機會多一半
+HIGH_LONGER = "多撐一回合"  # 本來就每次發動的真意（鎮岳、金身）第二份
+TOPPED = "{name}已到頂，再裝不加"
+
+
+def _stack_scope(state: GameState, content: Content, world: WorldStateStore, art: MartialArt) -> list[MartialArt]:
+    member = state.player.member
+    if art.id not in (member.wugong_id, member.neigong_id):
+        return [art]
+    out = []
+    for art_id in (member.wugong_id, member.neigong_id):
+        a = art if art_id == art.id else team.player_art(state, content, world, art_id)
+        if a is not None:
+            out.append(a)
+    return out
+
+
+def _stack_cells(state: GameState, content: Content, world: WorldStateStore, scope: list[MartialArt]) -> list[tuple[str, int, float, object]]:
+    """範圍裡每一格：(武學 id, 第幾格, 品級倍數, 那一份的效果)；照武學、格子的先後。"""
+    out = []
+    for a in scope:
+        if arts_mod.fixed(content, a.id):
+            continue
+        mult = traits.multiplier(content, a.quality) * (1 + moves.look_bonus(content, a))
+        for i, insight_id in enumerate(arts_mod.slots_of(state, content, a)):
+            ins = insights.resolve(insight_id, content, world, state) if insight_id else None
+            if ins is not None:
+                out.append((a.id, i, mult, insight_fx.record(state, content, world, insight_id, ins)))
+    return out
+
+
+def _high_word(top, n: int) -> str:
+    if n == 2:
+        return HIGH_MORE if (top.tactic.rate or 0) < 1 else HIGH_LONGER
+    return "不加" if n > 2 else ""
+
+
+def slot_stack_marks(state: GameState, content: Content, world: WorldStateStore, art: MartialArt) -> dict[int, str]:
+    """這一門每一格同效果的那一份算了幾成：{第幾格: 「先手算五成・流光多一半」}；照算的格子不寫。"""
+    cfg = content.config.arts
+    cells = _stack_cells(state, content, world, _stack_scope(state, content, world, art))
+    per_key: dict[str, list[tuple[float, tuple[str, int]]]] = {}
+    for art_id, i, mult, fx in cells:
+        for key, n in fx.general.items():
+            t = traits.general(content, key)
+            per_key.setdefault(key, []).append((t.per_layer * min(arts_mod.MAX_STRENGTH, n) * mult, (art_id, i)))
+    marks: dict[tuple[str, int], list[str]] = {}
+    for key, rows in per_key.items():
+        if len(rows) < 2:
+            continue
+        t = traits.general(content, key)
+        for x, (_, at) in zip(traits.stack_shares([v for v, _ in rows], t.cap, cfg.stack_share, cfg.stack_ceiling), rows):
+            if x < 0.95:
+                marks.setdefault(at, []).append(t.name + traits.share_word(x))
+    seen: dict[str, int] = {}
+    for art_id, i, _, fx in cells:
+        top = insight_fx.grand(content, fx.grand) if fx.grand else None
+        if top is None:
+            continue
+        seen[fx.grand] = seen.get(fx.grand, 0) + 1
+        if (word := _high_word(top, seen[fx.grand])):
+            marks.setdefault((art_id, i), []).append(top.name + word)
+    return {i: "・".join(words) for (art_id, i), words in marks.items() if art_id == art.id}
+
+
+def stack_hint(state: GameState, content: Content, world: WorldStateStore, art: MartialArt, insight_id: str) -> str:
+    """把這一份意境裝進這一門之前的一句：身上（或這一門）已經有同一個功效、同一個真意時，寫這一份算幾成、到頂了沒；
+    沒有撞到的是空字串。"""
+    parts = stack_parts(state, content, world, art, insight_id)
+    return f"{STACK_RULE}：{'；'.join(parts)}" if parts else ""
+
+
+def stack_parts(state: GameState, content: Content, world: WorldStateStore, art: MartialArt, insight_id: str) -> list[str]:
+    """stack_hint 冒號後面那幾段（「先手算五成」「先手已到頂，再裝不加」「流光多一半」）。"""
+    ins = insights.resolve(insight_id, content, world, state)
+    if ins is None or arts_mod.fixed(content, art.id):
+        return []
+    cfg = content.config.arts
+    fx = insight_fx.record(state, content, world, insight_id, ins)
+    cells = _stack_cells(state, content, world, _stack_scope(state, content, world, art))
+    mult = traits.multiplier(content, art.quality) * (1 + moves.look_bonus(content, art))
+    parts = []
+    for key, n in fx.general.items():
+        t = traits.general(content, key)
+        had = [t.per_layer * min(arts_mod.MAX_STRENGTH, m) * c_mult for _, _, c_mult, f in cells for k, m in f.general.items() if k == key]
+        if not had:
+            continue
+        mine = t.per_layer * min(arts_mod.MAX_STRENGTH, n) * mult
+        x = traits.stack_shares(had + [mine], t.cap, cfg.stack_share, cfg.stack_ceiling)[-1]
+        if x < 0.05:
+            parts.append(TOPPED.format(name=t.name))
+        elif x < 0.95:
+            topped = traits.stack_value(had + [mine], t.cap, cfg.stack_share, cfg.stack_ceiling) >= t.cap * cfg.stack_ceiling - 1e-9
+            parts.append(f"{t.name}{traits.share_word(x)}" + ("，裝了就到頂" if topped else ""))
+    top = insight_fx.grand(content, fx.grand) if fx.grand else None
+    if top is not None:
+        n = 1 + sum(1 for _, _, _, f in cells if f.grand == fx.grand)
+        if n > 2:
+            parts.append(TOPPED.format(name=top.name))
+        elif (word := _high_word(top, n)):
+            parts.append(top.name + word)
+    return parts
+
+
 def slot_rows(state: GameState, content: Content, world: WorldStateStore, art: MartialArt) -> list[dict | None]:
-    """修練頁一門武學的意境槽：每格 {id, name, attribute, skill, mark, strength} 或 None（空格）。寫死的武學是空清單。"""
+    """修練頁一門武學的意境槽：每格 {id, name, attribute, skill, mark, strength} 或 None（空格）。寫死的武學是空清單。
+    stack 是同效果好幾份時這一份算了幾成（slot_stack_marks；照算的是空字串）。"""
     rows: list[dict | None] = []
-    for insight_id in arts_mod.slots_of(state, content, art):
+    stacks = slot_stack_marks(state, content, world, art) if not arts_mod.fixed(content, art.id) else {}
+    for n_slot, insight_id in enumerate(arts_mod.slots_of(state, content, art)):
         if insight_id is None:
             rows.append(None)
             continue
@@ -506,6 +621,7 @@ def slot_rows(state: GameState, content: Content, world: WorldStateStore, art: M
             "mark": arts_mod.strength_mark(strength), "strength": strength, "desc": arts_mod.skill_desc(content, ins, strength, fx),
             "quality": fx.quality, "fx": fx_traits(content, fx, ins),  # 意境效果池：這一份的品質與每一個效果（大獎 grand）
             "look": insight_fx.look(fx),  # 品相凡佳珍神（玉環上那一枚印；底子 quality 不給玩家看）
+            "stack": stacks.get(n_slot, ""),
         })
     return rows
 
@@ -541,7 +657,8 @@ def _fits(state: GameState, content: Content, world: WorldStateStore, insight_id
         ins = insights.resolve(insight_id, content, world, state)
         slots = arts_mod.slots_of(state, content, art)
         out.append({"art": art_id, "name": art.name,
-                    "i": arts_mod._open_slot(slots, arts_mod.colors_of(art, len(slots)), ins.attribute if ins else "")})
+                    "i": arts_mod._open_slot(slots, arts_mod.colors_of(art, len(slots)), ins.attribute if ins else ""),
+                    "stack": stack_hint(state, content, world, team.player_art(state, content, world, art_id), insight_id)})
     return out
 
 
