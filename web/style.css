@@ -1792,6 +1792,13 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
 .board-book li + li { border-top: 1px solid var(--card-2); }
 .board-book b { font-family: var(--bk-serif); }
 .board-book small { font-size: 13px; color: var(--ink-2); overflow-wrap: anywhere; }
+/* 榜單點得開的列（武學榜、內功榜、神器譜；Joy 2026-10-22）：整列是一顆鈕，排法照原本那一列，列尾一個 › */
+.board-open { display: flex; align-items: baseline; gap: 10px; width: 100%; margin: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.board-book .board-open { display: grid; gap: 1px; }
+.board-go { flex: none; align-self: center; color: var(--ink-2); font-size: 18px; line-height: 1; }
+.bcard-sheet .board-owner { margin: 0 0 8px; font-size: 13px; color: var(--ink-2); }
+.bcard-sheet .acard { margin: 0 0 10px; }
+.bcard-sheet .gear-ro .board-owner { margin: 8px 0 0; }
 .board-mine { margin: 10px 0 0; padding-top: 8px; border-top: 1px dashed var(--line); font-size: 14px; color: var(--ink); }
 
 /* ── 修練頁最上面的人物面板（企劃者 2026-10-12 給的版面）：一幅掛在紙上的水墨人物，身上的光點對上屬性、身上的兩門與裝備。

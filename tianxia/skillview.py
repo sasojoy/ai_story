@@ -415,6 +415,42 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
     return rows
 
 
+def shown_art(state: GameState, content: Content, world: WorldStateStore, kind: str) -> dict | None:
+    """榜單點開的唯讀功法卡（Joy 2026-10-22「上榜的武學其他玩家應該要可以點的開來看卡」）：主人身上那一門內功或武學，
+    跟主人修練頁那張同一份料（品質、品相、成數、評分、意境槽與功效、招、功法卡的字），照主人那一份畫。
+    只放看的東西：修練、熔煉、改練、比身上、換上後戰力這些只有主人自己按得到的都不給。kind 是「內功」或「武學」；那一欄空著是 None。"""
+    member = state.player.member
+    art_id = member.neigong_id if kind == "內功" else member.wugong_id
+    art = team.player_art(state, content, world, art_id) if art_id else None
+    if art is None:
+        return None
+    level = level_of(state, art_id)
+    weapon = weapons.art_weapon(art_id, content, world) if art.kind == "武學" else None
+    return {
+        "id": art_id, "name": art.name, "kind": art.kind, "quality": art.quality, "attribute": art.attribute, "level": level,
+        "card": art_card(art, level, None, parent_names(art, content, world), traits.card_line(content, art), gen_word=gen_word(art, content, world)),
+        "affinity": arts_mod.affinity_text(art),
+        "slots": slot_rows(state, content, world, art), "colors": arts_mod.slot_colors(state, content, art),
+        "pose": create_mod.icon_pose(content, art, weapon), "weapon": weapon,
+        "score": arts_mod.score(state, content, world, art),
+        "tactic": tactic_line(content, art, level), "fifth": fifth_ring(content, art, level),
+        **_look(content, art),
+    }
+
+
+def shown_gear(content: Content, item, live: bool = True) -> dict:
+    """榜單神器譜點開的唯讀裝備卡（同 shown_art）：名字、種類、屬性、階品、淬煉、磨損、特技；item 是 state.Equipment。
+    威力加成看配的是哪一門武學，因人而異，不寫。live 是假的（那一件已經不在主人手上，照譜上記的拼一件）時淬煉、磨損是 None。"""
+    slot = item.slot
+    return {
+        "name": item.name, "slot": slot, "what": weapons.noun(item.kind) if slot == "weapon" else equipment.SLOTS[slot].label,
+        "attribute": item.attribute, "grade": equipment.grade(item), "tempers": item.tempers if live else None,
+        "temper_max": (content.config.weapons if slot == "weapon" else content.config.armor).temper_max,
+        "edge": item.edge if live else None, "wear_word": equipment.WEAR_WORDS.get(slot, ""),
+        "tactic": tactics_mod.item_lines(content, item),
+    }
+
+
 def melt_judge(state: GameState, content: Content, world: WorldStateStore, art: MartialArt, level: int) -> dict:
     """批量熔煉那一列要的判斷資料（企劃者 2026-10-16「分解的時候無法判斷武學或內功意境的好壞」）：只讀、只顯示。
     power 是現在這一成的威力（同功法卡）；worn_diff 是跟身上同一種那門比（第一成對第一成，同 team.compare_with_worn 的數字；

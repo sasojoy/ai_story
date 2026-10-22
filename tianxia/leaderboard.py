@@ -155,6 +155,66 @@ def view(board: dict[str, list], me: str | None = None, top: int = TOP_N) -> lis
     return out
 
 
+# ── 榜單點開看卡（Joy 2026-10-22「上榜的武學其他玩家應該要可以點的開來看卡，才知道有多強，也讓知識流通」）──
+# 只讀：照主人的存檔畫（server.api_board_card，不拿行動鎖）。只開得了榜上看得到的那幾列：武學榜、內功榜的前 TOP_N 名與你自己，
+# 神器譜的每一筆。真人與假人畫法一樣、看不出來。
+
+
+def art_card(
+    content: Content, world: WorldStateStore, board: dict[str, list], kind: str, name: str,
+    me: str | None = None, characters: CharacterStore | None = None, top: int = TOP_N,
+) -> dict | None:
+    """武學榜、內功榜那一列的唯讀功法卡（skillview.shown_art）：board 是整張（compute_boards(top=None)，伺服器的快取）。
+    name 不在那張榜的前 top 名、也不是你自己，或主人換了季、身上那一欄空了，回 None。"""
+    from . import skillview  # skillview 牽動的模組多，world 也 import 這裡：用到才 import，免得繞成圈
+
+    if kind not in ("武學", "內功"):
+        return None
+    rows = board.get(kind, [])
+    if not any(row[0] == name for row in rows[:top]) and not (me is not None and name == me and any(row[0] == me for row in rows)):
+        return None
+    state = (characters or open_characters()).load(name)
+    if state is None or state.player.season_number != world.get_season_number():
+        return None
+    card = skillview.shown_art(state, content, world, kind)
+    return None if card is None else {**card, "owner": state.player.name}
+
+
+def gear_card(
+    content: Content, world: WorldStateStore, season: int, ref: str, characters: CharacterStore | None = None,
+) -> dict | None:
+    """神器譜那一筆的唯讀裝備卡（skillview.shown_gear）：ref 是 Game.divine_book_view 那一筆的 ref。原品還在主人身上、裝備庫或寄放處
+    就照那一件畫（淬煉、磨損照實）；不在了（換季、內容拿掉）照譜上記的種類、屬性、階畫。找不到那一筆回 None。"""
+    from . import forge_secrets, signature_arms, skillview
+    from .state import Equipment
+
+    owner, item, name, live = None, None, "", True
+    if ref.startswith(signature_arms.REF):
+        cid = ref[len(signature_arms.REF):]
+        claim = next((claims[cid] for s, claims in world.signature_records() if s == season and cid in claims), None)
+        arm = next((a for a in content.gear.signature_arms if a.character == cid), None)
+        if claim is None or arm is None:
+            return None
+        owner, name = claim.owner, f"【{arm.name}】"
+        state = (characters or open_characters()).load(owner)
+        item = next((i for i in forge_secrets.owned_gear(state.player) if i.signature == cid), None) if state is not None else None
+        live = item is not None
+        item = item or Equipment(slot="weapon", id="譜", name=arm.name, kind=arm.kind, attribute=arm.attribute, tier=3, quality="上品",
+                                 original=True, signature=cid)
+    else:
+        find = next((f for s, f in world.divine_records() if s == season and f.id == ref), None)
+        if find is None:
+            return None
+        owner = find.master_shown or find.owner
+        name = next((n for s, n, _, r in forge_secrets.divine_entries([(season, find)]) if r == ref), find.name)
+        state = (characters or open_characters()).load(find.owner) if find.owner else None
+        item = next((i for i in forge_secrets.owned_gear(state.player) if i.original and i.secret == find.secret), None) if state is not None else None
+        live = item is not None
+        item = item or Equipment(slot=find.slot, id="譜", name=find.name, kind=find.kind, attribute=find.attribute, tier=find.tier,
+                                 original=True, secret=find.secret)
+    return {**skillview.shown_gear(content, item, live), "name": name, "owner": owner, "season": season}
+
+
 TOP_CONTRIB = 5  # 結算畫面每個陣營列幾名（第一季設計 13.3：各陣營貢獻最高的前幾名）
 
 

@@ -2565,6 +2565,18 @@ def api_boards(request: Request):
     return {"boards": leaderboard.view(boards_now(game), me=game.state.player.name) + [book]}
 
 
+@app.get("/api/board_card")
+def api_board_card(request: Request, board: str, name: str = "", season: int = 0, ref: str = ""):
+    """榜單點開的唯讀卡（Joy 2026-10-22）：武學榜、內功榜那一列給 board＋name（主人的名號），照主人身上那一門畫功法卡；
+    神器譜那一筆給 board=神器＋season＋ref（divine_book_view 那一筆的 ref），照原品畫裝備卡。只讀，不拿行動鎖：武學、內功照
+    快取的整張榜認得是不是榜上看得到的那幾列（leaderboard.art_card），主人的存檔讀一份快照。看不到了回 {"card": null}。"""
+    game = _game(request)
+    if board == "神器":
+        return {"card": leaderboard.gear_card(game.content, game.world, season, ref)}
+    card = leaderboard.art_card(game.content, game.world, boards_now(game), board, name, me=game.state.player.name)
+    return {"card": {**card, "card": md(card["card"])} if card else None}  # 功法卡的字同修練頁（menxia_view 的 owned_arts）轉成 HTML
+
+
 
 @app.get("/api/mingtie")
 def api_mingtie(request: Request):

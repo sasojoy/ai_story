@@ -416,7 +416,7 @@
         <main class="page" id="page"></main>
       </div>
       ${tabsHtml()}
-      ${S.sheet ? sheetHtml() : S.peer ? peerHtml() : ""}
+      ${S.sheet ? sheetHtml() : S.peer ? peerHtml() : S.boardCard ? boardCardHtml() : ""}
       ${S.main && S.main.shop ? shopHtml(S.main.shop) : S.mallOpen ? shopHtml(mallShop()) : ""}
       ${S.book ? bookHtml() : ""}
       ${S.zhuan ? zhuanHtml(S.zhuan) : ""}
@@ -3110,14 +3110,18 @@
   // 意境槽：一門武學一排玉環。裝著的環心寫意境的名字、底下〔技能〕與三節玉，點了拆下；空的環照它的顏色畫、底下寫收什麼，
   // 點了在底下攤開手上空著的意境，顏色收得下的點了裝進「這一格」（送 index），收不下的灰掉寫原因。裝、拆都不花東西。
   // 寫死的武學（本命、部下的上品）slots 是空清單，不畫。字待 joy 潤
-  function slotsHtml(a, x) {
+  // ro：別人的卡（榜單點開的，Joy 2026-10-22）：一樣畫，但格子點不了、不攤意境
+  function slotsHtml(a, x, ro = false) {
     if (!Array.isArray(a.slots) || !a.slots.length) return "";
     const colors = Array.isArray(a.colors) ? a.colors : [];
-    const pick = S.slotPick && S.slotPick.art === a.id ? S.slotPick.i : null;
+    const pick = !ro && S.slotPick && S.slotPick.art === a.id ? S.slotPick.i : null;
     // 序章裝意境那一步（prologue.art_glow 給師父點名的那一門 "slot"）：空格與可裝的意境亮
     const glowSlot = (a.glow || []).includes("slot") ? ' data-glow="slot"' : "";
     const cells = a.slots.map((s, i) => {
       const c = colors[i] || [];
+      if (ro) return s
+        ? `<span class="jd full" title="${esc(`「${s.name}」${s.look || ""}・${fxText(s.fx) || s.skill}${s.desc ? `：${s.desc}` : ""}`)}">${ringHtml(c, `<b>${esc(String(s.name).slice(0, 2))}</b>`)}${lookSeal(s.look)}${fxHtml(s.fx, "col") || `<small>〔${esc(s.skill)}〕</small>${lvHtml(s.strength)}`}</span>`
+        : `<span class="jd empty">${ringHtml(c, "", "vacant")}<small class="dim">空著</small></span>`;
       return s
         ? `<button type="button" class="jd full" data-act="slot-out" data-id="${esc(a.id)}" data-ins="${esc(s.id)}" title="${esc(`「${s.name}」${s.look || ""}・${fxText(s.fx) || s.skill}${s.desc ? `：${s.desc}` : ""}（點了拆下）`)}">${ringHtml(c, `<b>${esc(String(s.name).slice(0, 2))}</b>`)}${lookSeal(s.look)}${fxHtml(s.fx, "col") || `<small>〔${esc(s.skill)}〕</small>${lvHtml(s.strength)}`}</button>`
         : `<button type="button" class="jd empty${pick === i ? " on" : ""}" data-act="slot-pick" data-id="${esc(a.id)}" data-i="${i}"${glowSlot} title="${esc(ringWord(c))}">${ringHtml(c, "<i>＋</i>", "vacant")}<small class="dim">${esc(ringWord(c))}</small></button>`;
@@ -6193,7 +6197,10 @@
     let out = "", season = null;
     for (const r of book) {
       if (r.season !== season) { out += `${season === null ? "" : "</ul>"}<p class="book-season">第 ${Number(r.season)} 季</p><ul class="board-book">`; season = r.season; }
-      out += `<li><b>${esc(r.name)}</b><small>${esc(r.text)}</small></li>`;
+      // 每一筆點得開那一把的唯讀卡（Joy 2026-10-22）；舊伺服器沒給 ref 就照舊只列字
+      out += r.ref
+        ? `<li><button class="board-open" data-act="board-card" data-board="神器" data-season="${Number(r.season)}" data-ref="${esc(r.ref)}"><b>${esc(r.name)}</b><small>${esc(r.text)}</small></button></li>`
+        : `<li><b>${esc(r.name)}</b><small>${esc(r.text)}</small></li>`;
     }
     return out + "</ul>";
   }
@@ -6203,11 +6210,67 @@
     if (!list.length) return '<div class="card"><p class="muted">還沒有榜單。</p></div>';
     const cur = list.find((x) => x.id === S.board) || list[0];
     const tabs = `<div class="board-tabs">${list.map((x) => `<button class="${x.id === cur.id ? "on" : ""}" data-act="board" data-board="${esc(x.id)}">${esc(x.title)}</button>`).join("")}</div>`;
-    const row = (r) => `<li class="board-row${r.rank <= 3 ? " podium" : ""}${r.you ? " you" : ""}"><span class="board-rank">${Number(r.rank)}</span><span class="board-name">${esc(r.name)}</span><span class="board-text">${esc(r.text)}${r.sub ? `<small>${esc(r.sub)}</small>` : ""}</span></li>`;
+    // 武學榜、內功榜的一列點得開主人那一門的唯讀功法卡（Joy 2026-10-22「上榜的武學其他玩家應該要可以點的開來看卡」），列尾一個 ›
+    const open = BOARD_CARDS.includes(cur.id);
+    const cells = (r) => `<span class="board-rank">${Number(r.rank)}</span><span class="board-name">${esc(r.name)}</span><span class="board-text">${esc(r.text)}${r.sub ? `<small>${esc(r.sub)}</small>` : ""}</span>`;
+    const row = (r) => `<li class="board-row${r.rank <= 3 ? " podium" : ""}${r.you ? " you" : ""}">${open
+      ? `<button class="board-open" data-act="board-card" data-board="${esc(cur.id)}" data-name="${esc(r.name)}" aria-label="看${esc(r.name)}的${esc(r.text)}">${cells(r)}<span class="board-go" aria-hidden="true">›</span></button>`
+      : cells(r)}</li>`;
     if (cur.book) return tabs + `<div class="card board"><h3>${esc(cur.title)}</h3><p class="muted board-note">${esc(cur.note)}</p>${bookRows(cur.book)}</div>`;
     const rows = cur.rows.length ? `<ol class="board-list">${cur.rows.map(row).join("")}</ol>` : '<p class="muted">尚無人留名。</p>';
     const mine = cur.mine ? `<p class="board-mine">你：第 ${Number(cur.mine.rank)} 名・${esc(cur.mine.text)}</p>` : "";
     return tabs + `<div class="card board"><h3>${esc(cur.title)}</h3><p class="muted board-note">${esc(cur.note)}</p>${rows}${mine}</div>`;
+  }
+
+  // 榜單點開的唯讀卡（Joy 2026-10-22）：S.boardCard = {loading, card, board}。武學、內功照主人修練頁那一張畫（印記、名字、品相、
+  // 第幾成與評分、屬性與收什麼、意境槽、招、功法卡的字），沒有任何鈕；神器照修練頁裝備那一列的料畫。伺服器 /api/board_card 給料
+  const BOARD_CARDS = ["武學", "內功"];
+  function boardArtHtml(a) {
+    const level = Math.max(0, Math.min(10, a.level | 0));
+    return `<div class="acard ro${a.quality === "絕學" ? " q4" : ""}">
+      <div class="hd">${a.quality === "絕學" ? '<span class="qseal q4 big">絕</span>' : ""}<div><h3>${esc(a.name)}</h3><div class="sub">${[a.kind, a.quality, a.look].filter(Boolean).map(esc).join("・")}</div></div>${a.pose ? figSvg(a.pose, a.weapon, "card-fig") : ""}</div>
+      ${a.tier && a.quality !== "絕學" ? lookLadder(a.tier, ART_LOOK_STEPS) : ""}
+      <div class="train"><div class="tr-meter"><div class="tr-lv"><b>第${level}成</b>${typeof a.score === "number" ? `<span class="score">評 ${a.score}</span>` : ""}</div>
+        <div class="ten">${Array.from({ length: 10 }, (_, k) => `<i${k < level ? ' class="on"' : ""}></i>`).join("")}</div></div></div>
+      <div class="lvline"><span>${esc(a.kind)}${a.attribute ? `・屬${esc(a.attribute)}` : ""}・收${esc(a.affinity || "")}</span></div>
+      ${slotsHtml(a, null, true)}
+      ${a.tactic ? `<p class="art-tactic">${tacticHtml(a.tactic)}</p>` : ""}
+      <div class="art-card">${tenCells(a.card)}</div>
+    </div>`;
+  }
+  function boardGearHtml(g) {
+    const bits = [g.what, `屬${g.attribute}`, g.grade, g.tempers ? `淬煉 ${g.tempers | 0}/${g.temper_max | 0}` : "", g.edge != null && g.wear_word ? `${g.wear_word} ${g.edge | 0}` : ""];
+    return `<div class="acard ro gear-ro">
+      <div class="hd"><div><h3>${esc(g.name)}</h3><div class="sub">${bits.filter(Boolean).map(esc).join("・")}</div></div></div>
+      ${(g.tactic || []).map((t) => `<p class="art-tactic">${tacticHtml(t)}</p>`).join("")}
+      <p class="muted board-owner">第 ${Number(g.season)} 季・原品在${esc(g.owner || "")}手上</p>
+    </div>`;
+  }
+  function boardCardHtml() {
+    const B = S.boardCard;
+    const c = B.card;
+    const body = B.loading ? '<p class="muted">……</p>'
+      : !c ? '<p class="muted">這一張現在看不到了：榜單剛換過，或主人身上換了功夫。</p>'
+      : B.board === "神器" ? boardGearHtml(c)
+      : `<p class="board-owner">${esc(c.owner)}身上的${esc(B.board)}</p>${boardArtHtml(c)}`;
+    return `<div class="sheet-bg" data-act="board-card-close"></div>
+      <div class="sheet bcard-sheet" role="dialog" aria-label="${esc(c ? c.name : "看卡")}"><div class="grip"></div>
+        ${body}
+        <div class="row"><button class="btn ghost" data-act="board-card-close">關閉</button></div>
+      </div>`;
+  }
+  async function openBoardCard(el) {
+    const d = el.dataset;
+    const q = d.board === "神器" ? `board=${encodeURIComponent("神器")}&season=${Number(d.season)}&ref=${encodeURIComponent(d.ref)}`
+      : `board=${encodeURIComponent(d.board)}&name=${encodeURIComponent(d.name)}`;
+    S.boardCard = { loading: true, board: d.board, card: null };
+    render();
+    try {
+      const r = await api(`/api/board_card?${q}`);
+      if (S.boardCard) { S.boardCard = { loading: false, board: d.board, card: r.card || null }; render(); }
+    } catch (e) {
+      if (S.boardCard) { S.boardCard = { loading: false, board: d.board, card: null }; render(); }
+    }
   }
 
   // ── 名帖（Joy 2026-10-19：抱拳改成互贈名帖；一張畫布當自己的標籤，頭銜系統照存檔算、按一下刷新，再留一句自題）──
@@ -6880,7 +6943,7 @@
     S.forgeMade = null;
     S.book = false; // 武學譜是疊在煉製頁上的一本書：換分頁就闔上
     S.zhuan = null; clearTimeout(zhuanTimer); // 傳也一樣
-    S.mtEdit = null; S.mtZoom = null; // 名帖的畫布與放大的那一張也收起
+    S.mtEdit = null; S.mtZoom = null; S.boardCard = null; // 名帖的畫布與放大的那一張、榜單點開的卡也收起
     if (tab !== "map") stopPlay(); // 版圖變化的播放也停
     if (tab === "news") S.unseen = false;
     render();
@@ -8005,6 +8068,8 @@
           if (S.news === "mingtie") await loadMingtie();
           break;
         case "board": S.board = el.dataset.board; renderPage(); break;
+        case "board-card": await openBoardCard(el); break;
+        case "board-card-close": S.boardCard = null; render(); break;
         case "report":
           S.news = "reports";
           S.reportOpen = true;
