@@ -519,7 +519,7 @@ def _force_choice(state: GameState, content: Content, world: WorldStateStore, ar
         "count": count,
         "bonus": odds,
         "label": f"服下{cfg.legend_item_name}強行衝關（剩 {count} 枚）",
-        "note": f"約 {odds}% 衝開・體力 {cfg.cultivate_stamina}",
+        "note": f"約 {odds}% 衝開・體力 {cfg.cultivate_stamina}" + (f"・已衝過 {tried} 次" if (tried := cultivation.fails_of(state, art_id)) else ""),  # 待 joy 潤
     }
 
 

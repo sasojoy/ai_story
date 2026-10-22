@@ -774,6 +774,7 @@ class PlayerState(BaseModel):
     guarded_until_real: float = 0.0  # 雇的保鏢跟到幾時（現實秒）
     xinde_cultivations: int = 0  # 這一季花心得修練了幾次（以心得修練拿掉了，欄位留著讓舊存檔讀得進來）；角色每季重來
     legend_bought: int = 0  # 10-18～10-21 用心得換了幾枚破境丹；換丹拿掉了（Joy 2026-10-21），留著讓舊存檔讀得進來，不再用
+    legend_fails: dict[str, int] = Field(default_factory=dict)  # 每一門服丹衝關沒衝開幾次（下一次的機會照它加，cultivation.force_odds）；衝開或熔掉清掉
     legend_items: int = 0  # 破境丹（Config.legend_item_name）的數量：探索撿到，玩家在修練頁勾了、衝絕學那一次才服一枚；探索撿到、醫館與萬寶閣買到，換季帶著走（同回體丹）
 
     seen_events: set[str] = Field(default_factory=set)
