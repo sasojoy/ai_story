@@ -34,6 +34,8 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 - **隔離工作樹裡 Bash 也擋這幾種**（2026-10-21 玉璽碎片複驗）：`SP=…` 變數加 `git archive` 加 `tar` 串在同一行、`python <<EOF` 的 heredoc、`python -I x.py` 帶中文 scratchpad 路徑的 Bash。做法：`git -C <工作樹> archive -o <絕對路徑>.tar <sha>` 一個指令一次（路徑寫死、不用變數）；解壓與批次修補檔都用 Write 工具寫成 `.py`（解壓用 `tarfile`，讀自己所在資料夾的 `*.tar`）再從 PowerShell `python -I` 跑；要平行跑一排腳本，在 PowerShell 同一個呼叫裡 `Start-Process` 一排再 `Wait-Process`（輸出導到各自的 `.txt/.out/.err`，`.err` 有東西才看）。
 - **子代理的 Bash 連 tar 都擋**（「computed value」，2026-10-21 翻地複驗）：`git archive -o` 之後用 Python `tarfile`（`untar.py`：`extractall` 時排除 `docs/`、`.claude/`）解；PowerShell 的 tar 解 `docs/` 底下的中文檔名會回 `Invalid empty pathname`，code 檔其實也沒解完。
 - **PowerShell 呼叫原生程式時空字串參數會被吞掉**（2026-10-22 長社火攻，`scen.py` 的「翻哪幾塊」空著、後面的參數往前補位）：腳本的選用參數用 `-` 當「沒有」，腳本裡自己轉回空的。
+- **PowerShell 5.1 的 `Get-Date -UFormat %s` 把本地時間當成 UTC 算，快 8 小時**（2026-10-22 上線預演：拿它當「現在」給建存檔的腳本，整份存檔跑到 8 小時之後，只好重來）：現實的 epoch 用 `[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()` 或 python `time.time()`。
+- **`.ps1` 要比對 ⚠ 就寫 `[char]0x26a0`**（2026-10-22 上線預演）：檔裡一出現 ⚠ 這種非 ASCII 字，PowerShell 5.1 當 ANSI 讀壞，回「The string is missing the terminator」、整支沒跑。
 - **清暫存別讓萃取的腳本被一起刪掉**（同上）：`Remove-Item …\cmp_*` 把自己放在同一個資料夾、同樣叫 `cmp_front.py` 的腳本刪了，六個行程開不起來，錯誤只在 `.err`。複製來的腳本改一個不會被通配吃掉的名字。
 - **PowerShell 工具有時把 `taskkill /PID` 的 `/PID` 當成 `Remove-Item` 的路徑擋掉**（回「Remove-Item on system path '/PID' is blocked」，2026-10-22 複驗，同一支腳本前一輪照跑）：同一個呼叫裡清檔用 `Get-ChildItem <資料夾> -Filter … | Remove-Item`、關行程用 `Stop-Process -Id`（自己開的單一行程）。
 - **複驗時對方改了字，先確認自己認句子的正規式也跟著改**（2026-10-22 長社火攻複驗：`play.py` 找「戰局起點照」，新句子變成「起點偏…戰況」，認不到時輸出是 `sentence=n`、看起來像「沒有那一句」）：先拿一個一定有的局面印一次，看認不認得到，再跑整批。
