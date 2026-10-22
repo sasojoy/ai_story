@@ -6199,7 +6199,7 @@
       if (r.season !== season) { out += `${season === null ? "" : "</ul>"}<p class="book-season">第 ${Number(r.season)} 季</p><ul class="board-book">`; season = r.season; }
       // 每一筆點得開那一把的唯讀卡（Joy 2026-10-22）；舊伺服器沒給 ref 就照舊只列字
       out += r.ref
-        ? `<li><button class="board-open" data-act="board-card" data-board="神器" data-season="${Number(r.season)}" data-ref="${esc(r.ref)}"><b>${esc(r.name)}</b><small>${esc(r.text)}</small></button></li>`
+        ? `<li><button class="board-open" data-act="board-card" data-board="神器" data-season="${Number(r.season)}" data-ref="${esc(r.ref)}"><span class="bk-txt"><b>${esc(r.name)}</b><small>${esc(r.text)}</small></span><span class="board-go" aria-hidden="true">›</span></button></li>`
         : `<li><b>${esc(r.name)}</b><small>${esc(r.text)}</small></li>`;
     }
     return out + "</ul>";
@@ -6223,7 +6223,7 @@
   }
 
   // 榜單點開的唯讀卡（Joy 2026-10-22）：S.boardCard = {loading, card, board}。武學、內功照主人修練頁那一張畫（印記、名字、品相、
-  // 第幾成與評分、屬性與收什麼、意境槽、招、功法卡的字），沒有任何鈕；神器照修練頁裝備那一列的料畫。伺服器 /api/board_card 給料
+  // 第幾成與評分、屬性與收什麼、意境槽、功法卡的字〔招寫在裡面，同修練頁點開詳情時〕），沒有任何鈕；神器照修練頁裝備那一列的料畫。伺服器 /api/board_card 給料
   const BOARD_CARDS = ["武學", "內功"];
   function boardArtHtml(a) {
     const level = Math.max(0, Math.min(10, a.level | 0));
@@ -6234,7 +6234,6 @@
         <div class="ten">${Array.from({ length: 10 }, (_, k) => `<i${k < level ? ' class="on"' : ""}></i>`).join("")}</div></div></div>
       <div class="lvline"><span>${esc(a.kind)}${a.attribute ? `・屬${esc(a.attribute)}` : ""}・收${esc(a.affinity || "")}</span></div>
       ${slotsHtml(a, null, true)}
-      ${a.tactic ? `<p class="art-tactic">${tacticHtml(a.tactic)}</p>` : ""}
       <div class="art-card">${tenCells(a.card)}</div>
     </div>`;
   }
@@ -6243,7 +6242,7 @@
     return `<div class="acard ro gear-ro">
       <div class="hd"><div><h3>${esc(g.name)}</h3><div class="sub">${bits.filter(Boolean).map(esc).join("・")}</div></div></div>
       ${(g.tactic || []).map((t) => `<p class="art-tactic">${tacticHtml(t)}</p>`).join("")}
-      <p class="muted board-owner">第 ${Number(g.season)} 季・原品在${esc(g.owner || "")}手上</p>
+      <p class="muted board-owner">第 ${Number(g.season)} 季・在${esc(g.owner || "")}手上</p>
     </div>`;
   }
   function boardCardHtml() {

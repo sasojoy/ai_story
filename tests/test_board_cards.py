@@ -167,6 +167,6 @@ def test_the_card_has_no_buttons_but_the_close():
     gear = {"name": "【斬月】", "what": "劍", "attribute": "剛", "grade": "三階上品・神器", "tempers": None, "edge": None,
             "wear_word": "鋒利度", "tactic": [], "owner": "甲", "season": 1}
     html = _run("return H.boardCardHtml();", {"boardCard": {"loading": False, "board": "神器", "card": gear}})
-    assert "【斬月】" in html and "原品在甲手上" in html and "鋒利度" not in html
+    assert "【斬月】" in html and "在甲手上" in html and "鋒利度" not in html
     html = _run("return H.boardCardHtml();", {"boardCard": {"loading": False, "board": "武學", "card": None}})
     assert "看不到了" in html
