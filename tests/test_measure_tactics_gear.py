@@ -124,8 +124,9 @@ def test_ring_share_without_the_new_arguments_is_unchanged(m, content):
     share = m.ring_share(content, 20)
     assert share([], []) == 0.45454545454545453
     # 武學重構合進來之後 full_kit 換成槽裝滿的那一套、slot_kit 換成 slots_kit：照合併當下（2026-10-21）重抄；
-    # 招式與絕學稿案二～四批合進 main（2026-10-21，純／渾與後勁改了整套的手感）再抄一次
-    assert share(m.full_kit(content, 0), m.self_kit(content, 0)) == 0.7941176470588235
+    # 招式與絕學稿案二～四批合進 main（2026-10-21，純／渾與後勁改了整套的手感）再抄一次；
+    # 2026-10-22 玩家那一套的真意不再算兩次（跟遊戲一樣），又抄一次
+    assert share(m.full_kit(content, 0), m.self_kit(content, 0)) == 0.7948717948717948
     assert share(m.slots_kit(content, 0, "中品", 2), m.self_kit(content, 0)) == 0.4864864864864865
     assert m.ring_share(content, 20, hp_a=1000, hp_b=1000)([], []) == share([], [])
 
@@ -152,3 +153,11 @@ def test_chizhang_row_reads_the_create_odds(m, content):
     Config.arts.create_grade（create.grade_odds 拿掉了），那一行改寫品級固定、意分只推底子（release/1021 合併，FB-640 那一輪）。"""
     line = m._indirect(content, next(r for r in m.gear_rows(content) if r.key == "fuse_points"))
     assert "自創的意分" in line and "底子" in line and content.config.arts.create_grade in line
+
+
+def test_player_kits_count_each_tactic_once(m, content):
+    """量表組的玩家那一套跟遊戲一樣，同名的戰法只有一個（真意曾經加兩次：tactic_defs 已經帶著，又另外加一次）。"""
+    kits = [m.piece_kit(content, 0, "上品", 3, 1.0, 0.5), m.stack_kit(content, 0), m.own_kit(content, 0, ascended=True)]
+    for hs in kits:
+        names = [h.tactic.name for h in hs]
+        assert len(names) == len(set(names)), names

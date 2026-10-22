@@ -355,8 +355,8 @@ def slots_kit(content, seed, quality, strength, special_share=0.5, high_share=0.
                 out.append(tactics.bonded(ult, best.ultimate_bond) if i == 0 else ult)
     settle(content, lo, pooled)
     hs = [tactics.Holder(who="你", key="player", skill=f"ult:{u.name}", tactic=u) for u in out]
+    # tactic_defs 已經帶著真意（lo.highs）；遊戲裡也只算一次（team.own_extras 同名只算一個），不要再另外加
     hs += [tactics.Holder(who="你", key="player", skill=f"trait:{t.name}", tactic=t) for t in traits.tactic_defs(content, lo)]
-    hs += [tactics.Holder(who="你", key="player", skill=f"high:{t.name}", tactic=t) for t in lo.highs]
     return hs
 
 
@@ -406,8 +406,8 @@ def piece_kit(content, seed, quality, strength, grand_share=1.0, special_share=0
                 out.append(tactics.bonded(ult, best.ultimate_bond) if i == 0 else ult)
     settle(content, lo, pooled)
     hs = [tactics.Holder(who="你", key="player", skill=f"ult:{u.name}", tactic=u) for u in out]
+    # tactic_defs 已經帶著真意（lo.highs）；遊戲裡也只算一次（team.own_extras 同名只算一個），不要再另外加
     hs += [tactics.Holder(who="你", key="player", skill=f"trait:{t.name}", tactic=t) for t in traits.tactic_defs(content, lo)]
-    hs += [tactics.Holder(who="你", key="player", skill=f"high:{t.name}", tactic=t) for t in lo.highs]
     return hs
 
 
@@ -438,8 +438,8 @@ def stack_kit(content, seed, attrs=("快", "陽"), strength=3, gear=True):
     settle(content, lo, pooled)
     lo.highs = [traits.high_tactic(content, top.tactic, k) for top, k in tops.values()]
     hs = [tactics.Holder(who="你", key="player", skill=f"ult:{u.name}", tactic=u) for u in out]
+    # tactic_defs 已經帶著真意（lo.highs）；遊戲裡也只算一次（team.own_extras 同名只算一個），不要再另外加
     hs += [tactics.Holder(who="你", key="player", skill=f"trait:{t.name}", tactic=t) for t in traits.tactic_defs(content, lo)]
-    hs += [tactics.Holder(who="你", key="player", skill=f"high:{t.name}", tactic=t) for t in lo.highs]
     hs += own
     if gear:
         arm = rng.choice([r for r in content.forge_secrets.values() if r.tactic is not None and r.slot == "weapon"])
