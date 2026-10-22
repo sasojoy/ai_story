@@ -10597,18 +10597,19 @@ class Game:
                 time=self.state.world.time, title=mall.TITLE, lines=[mall.GRANT_LINE.format(n=amount)], changes=[f"元寶 +{amount}"],
             ))
 
-    def mall_buy(self, item_id: str, ref: str) -> list[str]:
+    def mall_buy(self, item_id: str, ref: str, qty: int = 1) -> list[str]:
         """買一件商品（mall.buy）：ref 是這一次購買的編號（網頁按下確認那一刻產，重送同一個不會買兩次）。成了寫一則「商城」
         江湖紀錄（變化寫元寶與拿到的東西）；不成、或這個編號已經買過了只回一句、不寫紀錄。伺服器在行動鎖裡叫：扣元寶、
         寫購買紀錄、發貨同一筆交易。時間照回體丹那一套（pill_now、_pill_day），不讀時鐘。買成了 self.mall_bought 記那件的 id，
-        不成（含這個編號已經買過了）是 None；這個編號已經買過了 self.mall_already 記那一筆的商品 id（FB-491），其餘是 None。"""
+        不成（含這個編號已經買過了）是 None；這個編號已經買過了 self.mall_already 記那一筆的商品 id（FB-491），其餘是 None。
+        qty 是一次買幾件（Joy 2026-10-22），照 mall.buy 夾在限購剩的件數裡。"""
         self.mall_bought = self.mall_already = None
         wallet = self._wallet()
         if wallet is None:
             return self._log([mall.OFF])
         result = mall.buy(
             self.state, self.content, wallet, item_id, ref,
-            now=self.pill_now(), day=self._pill_day(), season=self.world.get_season_number(),
+            now=self.pill_now(), day=self._pill_day(), season=self.world.get_season_number(), qty=qty,
         )
         if isinstance(result, str):
             done = wallet.purchase_by_ref(mall.buy_ref(self._mall_owner(), ref))

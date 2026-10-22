@@ -505,3 +505,48 @@ def test_the_practice_row_sends_a_player_without_a_pill_to_the_mall(on):
     game.state.player.art_levels["旋風腿"] = 10
     on.config.mall.enabled = False
     assert row()["cultivate"]["shop"] is None  # 商城關著
+
+
+# ── 一次買好幾件（Joy 2026-10-22「商城買東西現在一次只能買一個很不人性化，應該可以一次買多個」）──
+
+
+def test_buying_several_at_once_writes_one_purchase_each(on):
+    on.mall["pills_9"] = MallItem(id="pills_9", name="回體丹一顆", price=10, kind="consumable", effects={"pills": 1})
+    game = _ready(on)
+    pills = game.state.player.stamina_pills
+    msgs = game.mall_buy("pills_9", "many-0001", qty=4)
+    assert game.state.player.stamina_pills == pills + 4 and _wallet(game).balance("沈浪") == 4960
+    refs = sorted(p.ref for p in _wallet(game).purchases("沈浪"))
+    assert refs == ["buy:沈浪:many-0001", "buy:沈浪:many-0001#2", "buy:沈浪:many-0001#3", "buy:沈浪:many-0001#4"]
+    assert "×4" in msgs[0] and "元寶 -40" in msgs[0]
+    entry = game.state.journal[0]
+    assert entry.changes == ["元寶 -40", "回體丹 +4"]
+    assert "已經買好" in game.mall_buy("pills_9", "many-0001", qty=4)[0]  # 重送同一個編號不再買
+    assert game.state.player.stamina_pills == pills + 4
+
+
+def test_quantity_is_clamped_to_what_the_limit_leaves(on):
+    game = _ready(on)
+    game.mall_buy("pills_5", "c1")
+    msgs = game.mall_buy("pills_5", "c2", qty=5)  # 一天限 2 次，已經買了 1 次
+    assert "限購只剩 1 件" in msgs[0] and _wallet(game).balance("沈浪") == 4800
+    assert _wallet(game).count("沈浪", "pills_5", day=DAY0) == 2
+
+
+def test_not_enough_for_all_buys_none(on):
+    on.config.mall.beta_grant = 150
+    game = _ready(on)
+    msgs = game.mall_buy("pills_5", "short-1", qty=2)
+    assert "元寶不夠" in msgs[0] and "×2 要 200" in msgs[0]
+    assert _wallet(game).purchases("沈浪") == [] and _wallet(game).balance("沈浪") == 150
+
+
+def test_view_says_how_many_can_be_bought(on):
+    on.config.mall.beta_grant = 1000
+    game = _ready(on)
+    rows = {row["id"]: row for row in game.mall_view()["items"]}
+    assert rows["pills_5"]["max"] == 2  # 限購一天 2 次
+    assert rows["pills_30"]["max"] == 1  # 限購一季 1 次
+    assert rows["card_1"]["max"] == 1  # 月卡一次一張
+    on.mall["pills_9"] = MallItem(id="pills_9", name="回體丹一顆", price=300, kind="consumable", effects={"pills": 1})
+    assert {row["id"]: row for row in game.mall_view()["items"]}["pills_9"]["max"] == 3  # 元寶只夠三件
