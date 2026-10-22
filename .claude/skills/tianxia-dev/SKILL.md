@@ -95,6 +95,7 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   - **改內容的地理（`locations.json` 的路、描寫）不看任何開關**：加一條路，三種季的輿圖、小地圖、那兩處的「前往」鈕與路程、描寫全都跟著變（輿圖簡化第 2 批的宛城—綠林山寨：開關關著的三種季每一季 85 行不一樣）。對照腳本要多擺人站在路的兩頭、把 `g.options()` 也寫出來才看得到；兩份輸出比對時長的那幾行（svg 十幾萬字）用「去掉共同的頭尾」印差的那一段，`difflib` 會跑好幾分鐘。這種差異是內容的決定，寫進計畫交 PM，不要自己加開關擋。
     要證明「除了那條路一個位元組都不差」：把新版的 `content/locations.json` 抄進舊版解出來的那一份（只換這一個檔），拿它跟新版比雜湊（2026-10-21 develop 合進領地爭奪：四種季、碎片改版關著，新版跟「develop＋那條路」雜湊一樣）。
   - 更完整的一支是 flip-1 QA 留的 `qa_cmp.py`（八個人、兩軍同地出陣、十二輪同步、快轉跨過 22:00、一場決戰、截殺帳、季的 conquest 與 xingshi；PM 這個 session 的 scratchpad `flip1qa/`），用法 `python -I qa_cmp.py <archive 根> <輸出檔>`，兩份平行背景跑各約 5 分鐘。2026-10-21 `b9ee3c9c` 與 dev/flip-1 QA 修正都是 6697 行、12,153,874 位元組。
+  - 輿圖 QA 的 `cmp_off.py`（第 4 批複驗那一份，`main_view`、`map_state`、`map_base`、存檔，三種季各約 50 萬位元組、一支一分鐘內）**不含玩法說明**：動到 `howto` 的批另跑一支只印 `Game.howto_text()`（散人、官軍、黃巾各一份）的對照（輿圖第三版第 5 批，`95096217` 對 HEAD 三種季都一樣）。
 - **一個測試只開一季**：conftest 每個測試給一個 `TIANXIA_DB`，同一個測試裡 `open_world()` 兩次開的是同一份資料庫，第二個 `Game` 讀到第一季的章（7 天季的測試裡 21 天季的 `season_length_days` 變成 7）。要比幾種季就 `parametrize`，一種季一個測試。
 - **「舊季一字不變」用對照證明**（2026-10-20，7 天季 FB-500／501）：
   - 引擎：`git archive <開工那一點> | tar -x` 解到 scratchpad，同一支腳本在舊程式與 HEAD 各跑一次、diff 輸出。腳本開季後一路 `catch_up_season`＋`Game.for_world(...).world_tick`＋`sync` 到收季，印要比的字（狀態列、軍令、懸賞的 `due_short`／`due_text`、傳聞、玩法說明、名聲、`server.admin_choices`）；照 `time.time()` 算的（時刻表的 `at_real`）先抹掉，新加的鍵印之前拿掉。
