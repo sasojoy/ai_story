@@ -46,7 +46,8 @@ def test_arriving_shows_only_the_clinic_under_here(newcomer):
     assert "act:heal" in ids and "act:explore" in ids and any(i.startswith("move:") for i in ids)
     assert not any(i in ids for i in ("act:smith", "act:bounties", "act:arena")) and not any(i.startswith("learn:") for i in ids)
     view = newcomer.onboard_view()
-    assert "tab:news" not in view["reveal"] and "orders" not in view["reveal"] and "tab:map" in view["reveal"]
+    assert "orders" not in view["reveal"] and "tab:map" in view["reveal"]
+    assert "tab:news" in view["reveal"]  # 見聞跟輿圖一起在出師那一步亮（玩家反映「看不到見聞」，Joy 2026-10-22）
     assert newcomer.enlist_glow(ids) == ["act:heal"]
     assert newcomer.prologue_view() is None  # 草廬的規矩（略過序章、師父的框）不跟出來
 
@@ -158,3 +159,16 @@ def test_a_save_stopped_at_the_old_rest_step_gets_pills_for_the_new_one(real):
     p.onboarding, p.tutorial_step, p.stamina_pills = 4, 6, 0  # 停在以前「調息」那一步，身上沒丹
     again = Game(real, game.state, world=game.world)
     assert again.state.player.tutorial_step == 6 and again.state.player.stamina_pills == 3
+
+
+def test_the_shop_step_also_passes_by_walking_out_of_town(newcomer):
+    """逛鋪子那一步（e6）：沒進鋪子、直接出城也算過（Joy 2026-10-22）；走回城裡不算。"""
+    p = newcomer.state.player
+    p.tutorial_step = [s.id for s in newcomer.content.tutorial.steps].index("e6_shops")
+    p.location = "yingshui"
+    newcomer.choose(next(i for i in _ids(newcomer) if i.startswith("move:yingchuan")))
+    newcomer.advance(3600)
+    assert p.location == "yingchuan" and _step(newcomer) == "e6_shops"  # 回到城裡還不算
+    newcomer.choose(next(i for i in _ids(newcomer) if i.startswith("move:yingshui")))
+    newcomer.advance(3600)
+    assert p.location == "yingshui" and _step(newcomer) == "e7_world"

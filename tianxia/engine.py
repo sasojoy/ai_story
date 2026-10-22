@@ -9538,6 +9538,8 @@ class Game:
         # 糧車到了終點（路過也算）先交糧，再照原本的新手引導與門檻（計畫 T6）；呼叫的先後不能換
         convoy = self._convoy_arrives(loc_id) + bounties.on_arrive(s, c, self.world, loc_id)  # 懸賞榜的護送：走到終點就交差（路過也算）
         guide = self._guide(note_action(s, c, self.world, "move"))  # 出師的盤纏（序章步驟的獎勵）是這一趟路的結果，回在這裡
+        if not explore_modes.is_town(c, c.locations[loc_id]):  # 走到城外（初入江湖逛鋪子那一步：沒進鋪子、直接出城也算過，Joy 2026-10-22）
+            guide += self._guide(note_action(s, c, self.world, "leave_town"))
         thresholds = check_thresholds(s, c, self.world, client, now=self.now)
         t = c.tutorial
         left = [t.leave_text] if t.location is not None and before < t.prologue_steps <= s.player.tutorial_step and t.leave_text else []
