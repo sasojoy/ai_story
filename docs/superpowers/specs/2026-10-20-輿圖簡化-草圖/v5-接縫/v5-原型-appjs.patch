@@ -1,0 +1,118 @@
+diff --git a/web/app.js b/web/app.js
+index 90926db9..bbc5e3b2 100644
+--- a/web/app.js
++++ b/web/app.js
+@@ -5271,7 +5271,7 @@
+     if (st.journey) return journeyHtml(st);
+     const here = placeOf(base, st.here), mine = !!here && here.region === S.mapRegion;
+     const text = mine ? `你在 <b>${esc(here.name)}</b>` : esc(REGION_HINT);
+-    return `<div class="m-wline"><button type="button" class="m-mini" data-act="map-open" aria-label="攤開抽屜"><span>${text}</span>${mine ? "<i>▴</i>" : ""}</button></div>`;
++    return `${mockLine()}<div class="m-wline"><button type="button" class="m-mini" data-act="map-open" aria-label="攤開抽屜"><span>${text}</span>${mine ? "<i>▴</i>" : ""}</button></div>`;
+   }
+   // 一根戰線（拔河）：左官軍、右黃巾，斜線是亂局（35～65），黑線是此刻的戰況；繩上的可易手地點是小方印（照誰佔著上色，
+   // 擺在它易手的門檻上）；繩名旁寫比上一週往哪邊推了多少
+@@ -5323,6 +5323,40 @@
+   const LETTER_WORD = "下戰書", LETTER_ASK = "對{place}下戰書？當晚的攻城時段打一場，那一塊的進度凍結到打完；今天一邊只能下一張。";
+   // 這一塊翻地那一份畫面資料（server.main_view 的 conquest.blocks，conquest.block_view：進度、冷卻、戰書、正在推的人、激戰、集火、看的人推不推得動）；
+   // 領地爭奪關著、不是區塊是 null
++
++  // ── 第 5 批對比圖的原型（只在 scratchpad 那一份；網址 ?mock=A甲 這種）──
++  const MOCK = (typeof location !== "undefined" && location.search && new URLSearchParams(location.search).get("mock")) || "";
++  const mockOn = (state, v) => MOCK === state + v;
++  const mockRows = () => (S.main && S.main.conquest && S.main.conquest.today) || [];
++  const mockState = (row) => (row.status === "planned" || row.status === "waiting" ? "A" : row.status === "open" ? "B" : row.status === "done" ? "C" : "");
++  const mockRow = (state) => mockRows().find((r) => mockState(r) === state);
++  const MK_RED = "#A8322A";
++  function mockCard(id) {
++    const row = mockRows().find((r) => r.loc === id), st = row ? mockState(row) : "";
++    if (!st || !MOCK.startsWith(st)) return "";
++    const att = esc((row.attackers || []).join("、"));
++    let head = "", body = "", btn = "";
++    if (st === "A") { head = "戰書"; body = `${att}約戰 <b>${esc(row.time)}</b>；開打前 30 分鐘在這一帶集結，人要在這一區才加得進去。這一塊的進度凍結到打完。`; }
++    if (st === "B") {
++      // 鈕照看的人站哪一邊寫：攻方「去加入攻城」、守方「去守城」、其他人「去助陣」（散人、豪強可以臨時投效或助守）
++      const blk = conquestBlock(id), me = S.mapState && S.mapState.faction, atk = (blk && blk.frozen && blk.frozen.attackers) || [];
++      const join = atk.includes(me) ? "去加入攻城" : blk && blk.holder && blk.holder === me ? "去守城" : "去助陣";
++      head = "攻城"; body = `${att}攻${esc(row.place)}：<b>${esc(row.status_text)}</b>（${esc(row.time)} 開打）。這一區的人加得進去。`;
++      btn = `<button type="button" class="main" data-act="tab" data-tab="jianghu">${join}<small>回江湖頁</small></button>`;
++    }
++    if (st === "C") { head = "攻城戰果"; body = `${esc(row.time)} 那一仗：<b>${esc(row.status_text)}</b>（大勝）。`; btn = '<button type="button" data-act="tab" data-tab="news">看戰報<small>見聞</small></button>'; }
++    return `<div class="m-sec m-flip"><h4>${head}</h4><div style="font-size:13px">${body}</div>${btn ? `<div class="m-acts" style="margin-top:6px">${btn}</div>` : ""}</div>`;
++  }
++  // 抽屜收著那一行的上面多一條（A丙、B丙、C丙）；點了選那一處（同找地點挑了一處）
++  function mockLine() {
++    const st = MOCK.endsWith("丙") ? MOCK[0] : "";
++    const row = st && mockRow(st);
++    if (!row) return "";
++    const att = esc((row.attackers || []).join("、"));
++    const tag = `<b style="display:inline-block;background:${MK_RED};color:#fff;border-radius:5px;padding:0 5px;font-size:11.5px;margin-right:6px;letter-spacing:1px">${{ A: "戰書", B: "攻城", C: "戰果" }[st]}</b>`;
++    const words = st === "A" ? `${esc(row.time)}・${att}攻${esc(row.place)}` : st === "B" ? `${esc(row.place)}・${esc(row.status_text)}` : `${esc(row.place)}：${esc(row.status_text)}`;
++    return `<div class="m-wline"><button type="button" class="m-mini" data-act="map-pick" data-id="${esc(row.loc)}"><span>${tag}${words}</span><i>›</i></button></div>`;
++  }
+   const conquestBlock = (id) => (S.main && S.main.conquest && S.main.conquest.blocks && S.main.conquest.blocks[id]) || null;
+   // 第 2 段那一句：誰的、哪一種（基礎、高級資源領地是領地爭奪的區塊；關著的季照控制方寫）；剛易手接冷卻
+   function placeLine(st, id) {
+@@ -5359,7 +5393,7 @@
+     }).join("、");
+     const focus = Object.entries(blk.focus || {}).filter(([, pct]) => Number(pct) > 0)
+       .map(([sd, pct]) => FOCUS_WORD.replace("{side}", esc(sideInk(sd).name)).replace("{pct}", Number(pct))).join("、");
+-    const frozen = blk.frozen ? FROZEN_WORD.replace("{sides}", (blk.frozen.attackers || []).map((a) => esc(sideInk(a).name)).join("、")).replace("{time}", esc(blk.frozen.time || "")) : "";
++    const frozen = blk.frozen && !MOCK ? FROZEN_WORD.replace("{sides}", (blk.frozen.attackers || []).map((a) => esc(sideInk(a).name)).join("、")).replace("{time}", esc(blk.frozen.time || "")) : "";
+     return `<div class="m-sec m-flip"><h4>${FLIP_TITLE}${blk.clash ? `<span class="m-clash">${CLASH_WORD}</span>` : ""}</h4>${rows}${who ? `<div class="m-who">${who}</div>` : ""}${focus ? `<div class="m-sub">${focus}</div>` : ""}${frozen ? `<div class="m-sub">${frozen}</div>` : ""}</div>`;
+   }
+   // 第 7 段的「下戰書」（設計 4.4）：照伺服器的入口條件（Game.letter_problem；conquest_view 的 letter 只給這一週在任的第 4 階、只列自己那一邊
+@@ -5402,7 +5436,7 @@
+     // 在路上：第一行照舊是往哪裡、還有幾分鐘、喊停（計畫 1.2、設計 5.3；FB-649）。擋路的那一則寫在動作那一排，這裡不重複
+     return `${st.journey ? journeyHtml(st, false) : ""}<div class="m-h1">${ctrlSeal(p.control)}<span class="nm">${esc(b.name)}${here ? "（你）" : ""}</span><span class="meta">${p.rich ? `<b class="m-rich">${CARD_RICH}</b>` : ""}${far ? `<span>${far}</span>` : ""}</span><button type="button" class="m-x" data-act="map-back" aria-label="收起">✕</button></div>
+       <div class="m-line"${lineInk}>${esc(placeLine(st, id))}</div>
+-      ${flipSection(id)}${insightRow(base, b)}
++      ${mockCard(id)}${flipSection(id)}${insightRow(base, b)}
+       <div class="m-foes"><small>此地的對手</small><span>${foes}</span>${p.people.length ? `<div class="m-sub">人物：${p.people.map(esc).join("、")}</div>` : ""}</div>
+       ${p.yield ? `<div class="m-yield">${esc(p.yield)}</div>` : ""}
+       <div class="m-acts">${acts}${letter.button}</div>${letter.why}
+@@ -5601,7 +5635,7 @@
+     const box = document.getElementById("mapx");
+     const avail = (box && box.clientHeight) || 600;
+     // 版圖變化 320 高（企劃者 10/15 從對比圖選乙）：地圖大一截，曲線與處數在一屏，年表往下捲
+-    return { min: 54, peek: peekPx(avail), half: Math.round(avail * 0.6), full: Math.round(avail * 0.94), tl: Math.min(320, Math.round(avail * 0.55)) }[h] || 54;
++    return { min: mockLine() ? 90 : 54, peek: peekPx(avail), half: Math.round(avail * 0.6), full: Math.round(avail * 0.94), tl: Math.min(320, Math.round(avail * 0.55)) }[h] || 54;
+   }
+   // 卡半開多高：區圖照取景框底下還空著多少（卡不蓋到地點，地圖不動；設計 5.2），最矮 REGION_PEEK_MIN、最高六成；沒有區圖的取景照 240
+   function peekPx(avail) {
+@@ -5842,6 +5876,13 @@
+     out.push(`<g class="w-front" fill="none" stroke="${FRONT_RED}" stroke-width="${f1(3 * k)}" stroke-linecap="round" pointer-events="none">${front.join("")}</g>`);
+     // 激戰：兩邊都有人正在推的那一格一圈紅光，一閃一閃（style.css 的 .w-melee；減少動態效果的人不閃）
+     for (const c of melee) out.push(`<path class="w-melee" data-cell="${esc(c.id)}" d="${c.d}" fill="${FRONT_RED}" fill-opacity=".16" stroke="${FRONT_RED}" stroke-width="${f1(3.2 * k)}" stroke-linejoin="round" clip-path="url(#wc-${esc(c.region)})" pointer-events="none"/>`);
++    for (const r of live ? mockRows() : []) {
++      const s = mockState(r), c = wd.cells.find((x) => x.id === r.loc);
++      if (!c) continue;
++      if (s === "A" && mockOn("A", "乙")) out.push(`<path d="${c.d}" fill="none" stroke="${MK_RED}" stroke-width="${f1(2.6 * k)}" stroke-dasharray="${f1(6 * k)} ${f1(3.5 * k)}" stroke-linejoin="round" clip-path="url(#wc-${esc(c.region)})" pointer-events="none"/>`);
++      if (s === "B" && mockOn("B", "甲")) out.push(`<path class="w-melee" d="${c.d}" fill="${FRONT_RED}" fill-opacity=".16" stroke="${FRONT_RED}" stroke-width="${f1(3.2 * k)}" stroke-linejoin="round" clip-path="url(#wc-${esc(c.region)})" pointer-events="none"/>`);
++      if (s === "B" && mockOn("B", "乙")) out.push(`<path d="${c.d}" fill="none" stroke="${MK_RED}" stroke-width="${f1(3.4 * k)}" stroke-linejoin="round" clip-path="url(#wc-${esc(c.region)})" pointer-events="none"/>`);
++    }
+     // 點一區：整區一塊透明的點擊區
+     for (const r of wd.regions) out.push(`<path data-act="world-region" data-id="${esc(r.id)}" d="${r.d}" fill="#000000" fill-opacity="0" style="cursor:pointer"><title>${esc(r.name)}</title></path>`);
+     // 金點：高級資源地（開季中立的），實心＝此刻有人佔、空心＝沒人佔
+@@ -5877,7 +5918,7 @@
+     const region = here && base.regions.find((r) => r.id === here.region);
+     const where = j ? `往 <b>${esc(j.to_name)}</b>・還有 ${Number(j.minutes)} 分鐘` : `你在 <b>${esc(region ? region.name : "")}</b>・${esc(here ? here.name : "")}`;
+     const enter = `<button type="button" class="m-enter" data-act="world-enter">${WORLD_ENTER} ›</button>`;
+-    if (S.mapDrawer === "min" && !deskMap()) return `<div class="m-wline"><button type="button" class="m-mini" data-act="map-open" aria-label="攤開抽屜"><span>${where}</span></button>${enter}</div>`;
++    if (S.mapDrawer === "min" && !deskMap()) return `${mockLine()}<div class="m-wline"><button type="button" class="m-mini" data-act="map-open" aria-label="攤開抽屜"><span>${where}</span></button>${enter}</div>`;
+     if (j) return `${journeyHtml(st)}<div class="m-wline"><span></span>${enter}</div>`;
+     return `<div class="m-wline"><span class="m-where">${where}</span>${enter}</div>${here ? placeCard(base, st, st.here) : ""}`;
+   }
+@@ -6278,6 +6319,13 @@
+         const sx = x + fw + R_SEAL_GAP * k, sy = y + ((L.fh - R_SEAL) / 2) * k;
+         parts.push(`<g class="r-seal"><rect x="${f1(sx)}" y="${f1(sy)}" width="${f1(R_SEAL * k)}" height="${f1(R_SEAL * k)}" rx="${f1(2 * k)}" fill="${RICH_SEAL}"/><text x="${f1(sx + (R_SEAL / 2) * k)}" y="${f1(sy + 11.3 * k)}" font-size="${f1(11 * k)}" text-anchor="middle" fill="#FFFFFF">${RICH_WORD}</text></g>`);
+       }
++      const mk = mockRows().find((r) => r.loc === L.id), ms = mk ? mockState(mk) : "";
++      if (mk && ms && mockOn(ms, "乙")) {
++        const word = ms === "C" ? (/拿下/.test(mk.status_text) ? "克" : "守") : "戰";
++        const sx = x + fw + ((L.rich ? R_SEAL_GAP + R_SEAL : 0) + R_SEAL_GAP) * k, sy = y + ((L.fh - R_SEAL) / 2) * k;
++        parts.push(`<g${ms === "B" ? ' class="w-melee"' : ""}><rect x="${f1(sx)}" y="${f1(sy)}" width="${f1(R_SEAL * k)}" height="${f1(R_SEAL * k)}" rx="${f1(2 * k)}" fill="#FFF8EC" stroke="${MK_RED}" stroke-width="${f1(1.5 * k)}"/><text x="${f1(sx + (R_SEAL / 2) * k)}" y="${f1(sy + 11.3 * k)}" font-size="${f1(11 * k)}" text-anchor="middle" font-weight="700" fill="${MK_RED}">${word}</text></g>`);
++      }
++      if (mk && ms === "B" && mockOn("B", "甲")) parts.push(`<rect class="w-melee" x="${f1(x - 3 * k)}" y="${f1(y - 3 * k)}" width="${f1(fw + 6 * k)}" height="${f1(fh + 6 * k)}" rx="${f1(3 * k)}" fill="${FRONT_RED}" fill-opacity=".12" stroke="${FRONT_RED}" stroke-width="${f1(2.4 * k)}"/>`);
+       const base0 = y + fh + (R_INS_GAP + L.insPx * 0.9) * k;
+       L.ins.forEach((ins, i) => parts.push(`<text class="r-ins" x="${f1(x + i * (L.insPx + 2) * k)}" y="${f1(base0)}" font-size="${f1(L.insPx * k)}" font-weight="700" fill="${ins.c}" stroke="${MAP_HALO}" stroke-width="${f1(2.6 * k)}" paint-order="stroke">${esc(ins.name)}</text>`));
+       out.push(parts.join("") + "</g>");
