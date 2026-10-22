@@ -18,9 +18,10 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 
-from . import calendar, rules, territory
+from . import calendar, rules, seal_acts, territory
+from .battle_instance import CENTER, FrontNote
 from .characters import name_key
-from .models import BlockDef, Content
+from .models import BattleDef, BlockDef, Content
 from .state import (
     Bar, BlockFight, ConquestPayout, ConquestState, DayNote, GameState, PushMark, Rumor, SiegeSlot, TerritoryState, WorldState,
 )
@@ -150,6 +151,8 @@ WHY_LOCKED = "劇情還沒走到這裡"
 WHY_IDLE = "沒有人在推這裡，守了也拉不動"
 WHY_OWN = "這裡是自家的地方"
 WHY_OFF = "這一季沒有翻地"
+# 玉璽碎片改版第 3 批：有人起用『螭首』鎮住了這一塊（seal_acts.held；攻、守、事件、戰書都推不動，那一天也不回）。待 joy 潤
+WHY_HELD = "這一塊被鎮住了，{until} 之前誰都推不動"
 # 戰書（設計 4.4）拒絕的原因。待 joy 潤
 LETTER_LOW = "進度要到 {at} 才能下戰書（此刻 {value}）"
 LETTER_USED = "{side}今天已經下過戰書了，{hour}:00 之後才能再下"
@@ -305,10 +308,18 @@ def _target_problem(world: WorldState, content: Content, side: str, loc_id: str)
     return None
 
 
+def _held_why(world: WorldState | None, content: Content, loc_id: str) -> str | None:
+    """這一塊此刻被碎片鎮住（seal_acts.held：替此刻的主人鎮的、還沒期滿）：WHY_HELD 寫到什麼時候；沒有是 None。"""
+    act = seal_acts.held(world, content, loc_id, holder(world, content, loc_id))
+    if act is None:
+        return None
+    return WHY_HELD.format(until=calendar.stamp_text(seal_acts.ends(act), content, world))
+
+
 def push_problem(world: WorldState | None, content: Content, side: str | None, loc_id: str, how: str | None) -> str | None:
     """side 此刻在這一塊攻（attack）或守（hold）推不推得動進度：推得動是 None，不然回原因（WHY_*，行動列底下那一行、卡上照寫）。
     攻＝這一塊是 side 的目標（_target_problem）；守＝此刻是 side 的、搶得下來、有哪一條 > 0；兩者都要不在冷卻、沒被戰書凍結
-    （凍結的原因照那一場在哪一步：FROZEN_WHY，FB-552）。"""
+    （凍結的原因照那一場在哪一步：FROZEN_WHY，FB-552）、沒被碎片鎮住（WHY_HELD：玉璽碎片改版第 3 批的鎮地，誰都推不動）。"""
     if not on(content, world) or side is None or how not in ("attack", "hold") or loc_id not in blocks(content):
         return WHY_OFF
     if not capturable(content, loc_id):
@@ -318,6 +329,9 @@ def push_problem(world: WorldState | None, content: Content, side: str | None, l
     slot = frozen(world, loc_id)
     if slot is not None:
         return FROZEN_WHY.get(_step(world, slot), WHY_FROZEN)
+    hold = _held_why(world, content, loc_id)
+    if hold is not None:
+        return hold
     if how == "hold":
         if holder(world, content, loc_id) != side:
             return WHY_OUT
@@ -400,7 +414,7 @@ def _little(moved: float) -> bool:
 
 
 def _note_day(world: WorldState, content: Content, loc_id: str, side: str, by: str, reason: str) -> None:
-    """〈天下形勢〉讀的 day_log 記一筆（戰書、推滿易手）：哪一天照最近一次換天（settled_key）、時刻照季曆的那一刻。"""
+    """〈天下形勢〉讀的 day_log 記一筆（推滿易手、補缺退回）：哪一天照最近一次換天（settled_key）、時刻照季曆的那一刻。"""
     state = world.conquest
     at = calendar.point(world.time, content, world)
     state.day_log.append(DayNote(key=state.settled_key, side=side, loc=loc_id, minute=at.hour * 60 + at.minute, by=by, reason=reason))
@@ -433,20 +447,35 @@ def _payout(world: WorldState, content: Content, loc_id: str, side: str, kind: s
 
 def flip(world: WorldState, content: Content, loc_id: str, side: str, note: bool = True) -> list[str]:
     """這一塊易手給 side（推滿那一下、攻城戰打贏；設計 4.1、4.4）：這一輪推過 side 那一條的人照出力分紅、推最多的上江湖史；
-    控制方改成 side（set_control：「落入／收復」天下大事、江湖史、三條線當場重算）；所有條與守城功的帳清掉；冷卻從這一刻起算；
-    day_log 記一筆（by="flip"，〈天下形勢〉寫成「某某率先攻入」）——攻城戰打贏的不記（note=False：siege 自己記那一場的結果，同一件事不寫兩條）。
-    回要寫進紀錄的句子。side 不是劇本的陣營、搶不下來的區塊不動（回空的）。"""
+    控制方改成 side（set_control：「落入／收復」天下大事、江湖史、三條線當場重算）；所有條與守城功的帳清掉；冷卻從這一刻起算、記下這一刻
+    之前歸誰（flipped_from，玉璽碎片改版第 3 批的補缺讀）；day_log 記一筆（by="flip"，〈天下形勢〉寫成「某某率先攻入」）——攻城戰打贏的不記
+    （note=False：siege 自己記那一場的結果，同一件事不寫兩條）。回要寫進紀錄的句子。side 不是劇本的陣營、搶不下來的區塊不動（回空的）。"""
     if not capturable(content, loc_id) or content.scenario.find_faction(side) is None:
         return []
     fight = _fight(world, content, loc_id)
+    before = holder(world, content, loc_id)
     shares = dict(fight.bars[side].pushers) if side in fight.bars else {}
     _payout(world, content, loc_id, side, "take", shares)
     set_control(world, content, loc_id, side)
-    fight.bars, fight.guards, fight.alarm, fight.flipped_at = {}, {}, False, world.time
+    fight.bars, fight.guards, fight.alarm, fight.flipped_at, fight.flipped_from = {}, {}, False, world.time, before
     if note:
         top = min(shares, key=lambda n: (-shares[n], n)) if shares else ""
         _note_day(world, content, loc_id, side, "flip", top)
     return [PAYOUT_NEXT] if shares else []
+
+
+def restore(world: WorldState, content: Content, loc_id: str, side: str) -> None:
+    """玉璽碎片改版第 3 批的補缺：這一塊當場退回 side（原主），照翻地的規則記一次易手——set_control（「落入／收復」天下大事、江湖史、
+    三條線當場重算、替別人鎮著的鎮地結束）、所有條與守城功的帳清掉、冷卻重新起算（加成暫停）、flipped_from 記退回之前歸誰。
+    不分紅（沒有人推滿它）。day_log 記一筆（by="mend"，reason 空的：不記是誰，持有者要藏；〈天下形勢〉照時間順序寫「拿下某地，旋即被補回」，
+    FB-646）。呼叫端（Game.seal_use）先驗過 seal_acts.mend_rows。"""
+    if not capturable(content, loc_id) or content.scenario.find_faction(side) is None:
+        return
+    fight = _fight(world, content, loc_id)
+    before = holder(world, content, loc_id)
+    set_control(world, content, loc_id, side)
+    fight.bars, fight.guards, fight.alarm, fight.flipped_at, fight.flipped_from = {}, {}, False, world.time, before
+    _note_day(world, content, loc_id, side, "mend", "")  # conquest_day.MEND（conquest_day 反過來 import 這裡）
 
 
 def halve(world: WorldState, content: Content, loc_id: str, sides: list[str]) -> None:
@@ -507,7 +536,8 @@ def push(
 
 def decay(world: WorldState, content: Content) -> None:
     """每日回（設計 4.1、第九章第 1 條）：每跨過一個季曆日交界，前一整個季曆日沒人推過的塊，每一條往回 decay_per_day；歸零的那一條拿掉
-    （這一輪的帳一起清），全部歸零時守城的帳與警報也清。被戰書凍結的不回。這一季第一次只記下今天。world.advance_world_state 每一步叫。"""
+    （這一輪的帳一起清），全部歸零時守城的帳與警報也清。被戰書凍結的不回；那一天被碎片鎮過的也不回（玉璽碎片改版第 3 批的鎮地：
+    「對面的進度不漲、也不回」，seal_acts.held_during）。這一季第一次只記下今天。world.advance_world_state 每一步叫。"""
     state = world.conquest
     if state is None or not on(content, world):
         return
@@ -522,6 +552,8 @@ def decay(world: WorldState, content: Content) -> None:
         for loc_id, fight in state.fights.items():
             if not fight.bars or frozen(world, loc_id) is not None:
                 continue
+            if seal_acts.held_during(world, content, loc_id, ended, calendar.day_start(state.decay_day + 1, content, world)):
+                continue
             if fight.last_push is not None and fight.last_push >= ended:
                 continue
             for side, line in list(fight.bars.items()):
@@ -534,7 +566,7 @@ def decay(world: WorldState, content: Content) -> None:
 
 def letter_problem(world: WorldState | None, content: Content, side: str | None, loc_id: str, key: int) -> str | None:
     """side 對這一塊下戰書不成的原因（階由呼叫端看；key 是 conquest_day.day_key 的今天）；成是 None。進度要到 letter_at、這一塊推得動
-    （目標、不冷卻）、這一邊這一天還沒下過；別的攻方已經下了、還沒開集結的那一塊可以併進同一場（不算凍結）。"""
+    （目標、不冷卻、沒被碎片鎮住）、這一邊這一天還沒下過；別的攻方已經下了、還沒開集結的那一塊可以併進同一場（不算凍結）。"""
     if not on(content, world) or side is None:
         return WHY_OFF
     cfg = content.config.conquest
@@ -550,6 +582,9 @@ def letter_problem(world: WorldState | None, content: Content, side: str | None,
         return WHY_OUT
     if cooling(world, content, loc_id):
         return WHY_COOLING.format(n=cooling_minutes(world, content, loc_id))
+    hold = _held_why(world, content, loc_id)
+    if hold is not None:
+        return hold
     problem = _target_problem(world, content, side, loc_id)
     if problem is not None:
         return problem
@@ -769,6 +804,7 @@ def _announce(world: WorldState, content: Content, t: TerritoryState, before: di
             fight = fight_of(world, loc_id)
             if fight is not None:  # 新的主人在自己的地方沒有攻的那一條（管理者、時刻表指定易手時；推滿與攻城戰在 flip 整本清掉）
                 fight.bars.pop(side, None)
+            seal_acts.hold_lapse(world, loc_id, side)  # 替原主鎮著的鎮地（玉璽碎片改版第 3 批）當場結束
     territory._remember(t)
 
 
@@ -783,6 +819,7 @@ def set_control(world: WorldState, content: Content, loc_id: str, side: str | No
     before = dict(t.control)
     if side is None:
         t.control.pop(loc_id, None)
+        seal_acts.hold_lapse(world, loc_id, None)  # 放回中立（管理者）：_announce 不發，鎮地照樣結束
     else:
         t.control[loc_id] = side
     _announce(world, content, t, before)
@@ -844,3 +881,78 @@ def progress_shift(world: WorldState, content: Content, loc_id: str, attackers: 
     side = attackers[0]
     shift = int((bar(world, loc_id, side) - 50) / 10 * cfg.start_shift_per_10)
     return max(-cfg.start_shift_cap, min(cfg.start_shift_cap, shift)) * direction(content, side, loc_id)
+
+
+# ── 時刻表決戰的起點照哪一條戰線（企劃者 2026-10-22 選計畫 2026-10-22-長社火攻主場 第七節第 4 條：不另加主場偏移、補一句說明）──
+# 起點本來就照戰線的戰況算（battle_instance.start_from_front），領地爭奪開著時戰況又照佔領算（reweigh）；天下大事寫偏幾點與那條線上的地盤，
+# 決戰畫面只寫一行偏幾點。數字是開集結那一刻的快照（BattleInstance.front_note），不事後重算。陣營名、線名照劇本讀。待 joy 潤
+# FB-686（PM 2026-10-22）：起點照的是整條線的戰況（開季的態勢＋之後的易手與推動），不是數地盤——偏幾點與地盤分成兩句、不用因果連起來
+# （冀州開季官軍佔 5 處、黃巾軍佔 2 處，起點卻往黃巾軍偏：開季的態勢本來就偏黃巾）
+FRONT_RUMOR = "{battle}開集結：戰局起點照{line}此刻的戰況{lean}（戰況從開季的態勢算起，之後的易手與各路推動都算在裡面）。{line}一帶的地盤此刻{held}。"  # 天下大事
+FRONT_LEAN = "往{side}偏了 {n} 點"
+FRONT_EVEN = "不偏不倚"
+FRONT_HELD = "{side}佔 {n} 處"
+FRONT_OPEN = "{n} 處還沒人佔"
+# FB-685（PM 2026-10-22）：決戰畫面只留一行短句、數字不在句尾（375／360／320 都本來就一行：最長「起點偏黃巾軍 12 點：潁川汝南戰況」
+# 約 15.6 個字寬，320 寬那一段放得下 16.6 個）；佔幾處的明細只寫在天下大事那一則
+FRONT_SCENE = "起點{lean}：{line}戰況"  # 決戰畫面，標題底下
+FRONT_SCENE_LEAN = "偏{side} {n} 點"
+FRONT_SCENE_EVEN = "不偏"
+
+
+def line_holdings(world: WorldState | None, content: Content, line: str) -> tuple[dict[str, int], int]:
+    """這條戰線上的區塊此刻各歸誰：（陣營 id → 幾處，還沒人佔的幾處）。大本營與 fixed（廣宗）也算，跟輿圖上看到的一樣
+    （不算的話開季的冀州寫成「黃巾軍佔 0 處」，張角明明在廣宗）；它們不會易手，只是每一季都一樣多。"""
+    held: dict[str, int] = {}
+    unheld = 0
+    for loc_id, block in blocks(content).items():
+        if block.line != line:
+            continue
+        side = holder(world, content, loc_id)
+        if side is None:
+            unheld += 1
+        else:
+            held[side] = held.get(side, 0) + 1
+    return held, unheld
+
+
+def front_note(world: WorldState | None, content: Content, definition: BattleDef, start: int) -> FrontNote | None:
+    """時刻表決戰開集結那一刻的快照（world._open_claimed 記進 BattleInstance.front_note）：只在領地爭奪開著的季、寫了戰線的決戰
+    （攻城範本不算）；其餘是 None，什麼都不寫。start 是照戰況換算的起點（屯糧、天命之爭偏之前）。交戰兩軍照決戰的順序一定列（0 也列），
+    別的陣營佔著才列（照劇本的順序）。"""
+    if definition.front is None or definition.siege or not on(content, world):
+        return None
+    held, unheld = line_holdings(world, content, definition.front)
+    sides = [f.id for f in definition.factions]
+    order = sides + [f.id for f in content.scenario.factions if f.id not in sides and held.get(f.id)]
+    return FrontNote(line=definition.front, start=start, held={side: held.get(side, 0) for side in order}, open=unheld)
+
+
+def _front_lean(definition: BattleDef, note: FrontNote, lean: str, even: str) -> str:
+    """起點往哪一軍偏幾點（戰局以 factions[0] 為正向，同 start_from_front）；剛好在中線寫 even。"""
+    shift = note.start - CENTER
+    if shift == 0 or len(definition.factions) < 2:
+        return even
+    return lean.format(side=(definition.factions[0] if shift > 0 else definition.factions[1]).name, n=abs(shift))
+
+
+def _line_name(content: Content, note: FrontNote) -> str:
+    return next((t.name for t in content.scenario.trends if t.id == note.line), note.line)
+
+
+def front_rumor(content: Content, definition: BattleDef, note: FrontNote) -> str:
+    """開集結那一則天下大事（照快照）：先寫起點照戰況偏幾點，另一句寫那條線上的地盤（FB-686：兩件分開說）。"""
+    names = {f.id: f.name for f in content.scenario.factions} | {f.id: f.name for f in definition.factions}
+    parts = [FRONT_HELD.format(side=names.get(side, side), n=n) for side, n in note.held.items()]
+    if note.open:
+        parts.append(FRONT_OPEN.format(n=note.open))
+    return FRONT_RUMOR.format(battle=definition.name, line=_line_name(content, note), held="、".join(parts),
+                              lean=_front_lean(definition, note, FRONT_LEAN, FRONT_EVEN))
+
+
+def front_scene(content: Content, definition: BattleDef, note: FrontNote | None) -> str:
+    """決戰畫面標題底下那一行（照開集結那一刻的快照，不重算；FB-685：只寫偏幾點，一行）；沒有快照（舊資料、領地爭奪關著、沒寫戰線）
+    是空字串。"""
+    if note is None:
+        return ""
+    return FRONT_SCENE.format(lean=_front_lean(definition, note, FRONT_SCENE_LEAN, FRONT_SCENE_EVEN), line=_line_name(content, note))

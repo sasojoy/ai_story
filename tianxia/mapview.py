@@ -724,10 +724,13 @@ def render_base(state: GameState, content: Content) -> str:
         text, box = _river_label(label)
         out.append(text)
         taken.append((box, TEXT_WEIGHT))
+    # 路包成一組（輿圖第三版第 4 批）：不烤進點陣那張圖（網頁的 bakeable 略過 .tx-roads），天下圖照這裡的樣子、區圖照 CSS 換成一種淡實線
+    out.append('<g class="tx-roads">')
     for a_id, a in content.locations.items():
         for b_id in a.connections:
             if a_id < b_id and a_id in shown and b_id in shown:
                 out.append(mapart.road(a, content.locations[b_id], a.road_to(b_id), mapart.road_control(content, a_id, b_id)))
+    out.append("</g>")
     out.append(_compass(m, taken))
     out += _terrain_names(m, taken)
     out.append(

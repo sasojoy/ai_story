@@ -73,7 +73,7 @@ description: 《天下大勢》的分支、測試與合併規矩（企劃者 202
     - 整套紅了，到那條線自己的 commit 上單獨重跑紅的那幾條，判斷是「合起來才壞」還是「原本就紅」；
     - 線後來又動了，用 `git merge-tree` 試合新的 HEAD，不動分支；
     - 資料庫升級預演：舊程式（`origin/main`）在暫存資料庫開季、建幾個角色、做幾個動作 → 備份 → 新程式開同一份 → 驗版本、資料都在、發放、對帳 → 舊程式開新版會擋 → 還原備份舊程式打得開；季中那一份另外試（季曆換算會不會錯）。
-  - PM 用 Bash heredoc 跑 Python 改中文路徑時，一般字串裡的 `\a`（例 `專案\ai遊戲`、`worktrees\agent-*`）會變成響鈴字元：路徑一律用 raw string，寫完 `assert '\x07' not in s`。
+  - PM 用 Bash heredoc 跑 Python 改中文路徑時，一般字串裡的 `\a`（例 `專案\ai遊戲`、`worktrees\agent-*`）會變成響鈴字元：路徑一律用 raw string，寫完 `assert '\x07' not in s`。Windows 路徑（`C:\Users\...`）寫在一般字串裡是 `\U` 跳脫，整支腳本直接 SyntaxError——**改檔的腳本與後面的 `git add`／`commit`／`push` 一定用 `&&` 串**（2026-10-21 PM 用 `;` 串，腳本失敗了提交照跑，`main` 上多了一筆只改檔名的提交）；中文多、反斜線多的替換，寫成 scratchpad 裡的 .py 檔（Write 工具）再跑，不要塞進 heredoc。
   - 同時跑很多子代理時，派工單寫 pytest 用 `-n 6`～`-n 8`、不要 `-n auto`，免得互相搶 CPU（六、七個同時跑時用 `-n 4`）。
   - **派工單裡每一行 pytest 都寫 `-m "slow or not slow"`**（2026-10-20 小單 QA：`pyproject.toml` 的 `addopts` 預設擋掉 slow，整個檔都標 slow 的 `test_fb504_*` 一條都沒跑，合併那一刻的整套才會紅）。`scripts/test_for.py` 自己會帶，不必加。
   - **子代理共用 PM 的 scratchpad**（2026-10-20 有一個的 `edit_guide.py` 被另一個蓋掉）：派工單寫明暫存檔放在 scratchpad 底下自己的子資料夾（用分支名，例 `qa-small-1020/`）。
@@ -85,6 +85,8 @@ description: 《天下大勢》的分支、測試與合併規矩（企劃者 202
   - `CLAUDE.md` 一律留瘦身版，對方新加的那一行搬進對應的 `docs/guide/`。
   - 用腳本解衝突時保留檔案原本的換行（`newline=""`），每一處 assert。
 - **合併的順序**：功能分支合進 develop 之前，先把 develop（與 main 的新東西）合進功能分支，在那裡跑整套；合進 develop 時內容跟測過的一樣（`git diff --quiet HEAD <功能分支>`）就不必再跑一次。
+- **git 沒衝突不代表合得起來**（10/21）：develop 與 main 各自都過，合起來正式內容載入就炸（main 給學來的武學掛小戰法、develop 讓同伴拿它們當起始武學；名品撞新招名）。合 main 之後先在不帶設定、`weekend`、`season21`、`week7` 各載一次內容、起一次伺服器，再跑整套。`git merge-tree --write-tree --name-only A B` 可以先看會不會有文字衝突。
+- **上 main 用上線分支**（10/21）：從 develop 開 `release/<日期>`，企劃者說「這一樣不放」就在上線分支 `git revert -m 1 <那個合併>`；合 main 之前每次 `ls-remote origin main`，Joy 又推了就先合進上線分支、整套。合進 main 之後把 main 合回 develop，再在 develop `git revert <那筆 revert>` 把功能還回來，整套、推，接著 develop 合進功能分支。合進 main 的時機跟部署一起排：一進 main，Joy 下一次照常部署就會換上它（資料庫改版回不去、季中換季曆會跳）。部署說明寫在 `docs/superpowers/feedback/`，經企劃者同意、由企劃者轉給 Joy。
 - **跑整套的指令**：`TIANXIA_DB=<scratchpad>/db/x.db PYTHONIOENCODING=utf-8 C:/Ray/專案/天下大勢/.venv/Scripts/python.exe -m pytest -q -n auto -m "slow or not slow" -p no:cacheprovider > log 2>&1; echo EXIT=$? >> log`，背景跑，看最後那一行「N passed」與 EXIT 再推。
 - **設計稿請人審**：寫完設計稿派一個子代理用「拿這份能不能開工」讀一遍，只把「只有企劃者能答」的問題一次問完，其餘 PM 自己定、標【PM】。
 

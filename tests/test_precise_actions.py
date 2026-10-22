@@ -177,7 +177,8 @@ def test_boss_cooldown_and_used_up_grey_the_boss_only_place():
     boss = duel_rules.here(s, c)[0]
     s.player.duel_tally[duel_rules.season_key(s, boss.id)] = c.config.duel.per_boss_season
     option = _ids(game)["explore:practice"]
-    assert not option.enabled and "這一季他不再現身" in option.label
+    # FB-672：次數用完那一句帶頭目的名字（「他」→「頭目某某」，名字是黃巾看到的那一面；tests/test_fb672_boss_away_name.py）
+    assert not option.enabled and "這一季頭目衛重不再現身" in option.label
 
 
 def test_season21_boss_is_twice_a_week():

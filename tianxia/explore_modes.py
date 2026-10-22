@@ -34,26 +34,33 @@ SEEK_EMPTY = "這一帶眼下沒什麼事"  # 待 joy 潤：一類一顆的找�
 PRACTICE_LINE = "你在{place}找上{foe}練手。"  # 待 joy 潤：練功開打那一句
 NO_FOE = "這裡沒有可以練手的對手"  # 待 joy 潤（設計 2.5；鈕上不帶句號）
 NO_FOE_NEAR = "，最近的在{place}"  # 待 joy 潤：接在 NO_FOE 後面
+# 沒有對手而灰著的練功鈕帶的格子小字（Option.note；FB-670：練功是行動列自己一格，五格時小字最多四個字）：城鎮寫「城外才有」，
+# 城外沒有對手的地方（自家大營、營寨、玉洞、草廬）人已經在城外，寫「這裡沒有」（PM 2026-10-22）。待 joy 潤
+NO_FOE_CELL_TOWN = "城外才有"
+NO_FOE_CELL = "這裡沒有"
 BOSS_NOTE = "頭目"  # 待 joy 潤：這裡只有頭目時鈕上那一格
 BOSS_COOLING = "頭目{wait}後才會再現身"  # 待 joy 潤：兩場頭目戰之間的冷卻（wait 是 arena.wait_text 的現實倒數）
-BOSS_GONE_WEEK = "這一週他不再現身"  # 待 joy 潤：21 天季這一週的次數用完
-BOSS_GONE_SEASON = "這一季他不再現身"  # 待 joy 潤：一季的次數用完
-BOSS_BACK_DAY = "，第 {day} 天 00:00 再來"  # 待 joy 潤：7 天濃縮季接在「這一段他不再現身」後面，下一段第一天重算（FB-501）
+# 次數用完那一句要說出「誰」不再現身（FB-672）：行動列底下練功那一行獨立成一行之後，「他」要回頭猜是誰；{name} 是這一隻頭目對你露的那一面
+# （Game._boss_face：照陣營，跟「這裡只有頭目某某」、練功鈕上的名字同一個）
+BOSS_GONE_WEEK = "這一週頭目{name}不再現身"  # 待 joy 潤：21 天季這一週的次數用完
+BOSS_GONE_SEASON = "這一季頭目{name}不再現身"  # 待 joy 潤：一季的次數用完
+BOSS_GONE_TAIL = "頭目{name}不再現身"  # 待 joy 潤：7 天濃縮季接在「這一段」後面（calendar.week_word），再接 BOSS_BACK_DAY
+BOSS_BACK_DAY = "，第 {day} 天 00:00 再來"  # 待 joy 潤：7 天濃縮季接在「這一段頭目某某不再現身」後面，下一段第一天重算（FB-501）
 
 
-def boss_gone(state: GameState, content: Content) -> str:
+def boss_gone(state: GameState, content: Content, name: str) -> str:
     """頭目的次數用完時練功鈕上那一格（FB-501）：per_boss_week 設了照「這一週」（7 天濃縮季「這一段」，calendar.week_word，
-    寫出下一段第一天 00:00 再來；最後一段沒有下一段，寫「這一季」），否則照「這一季」。21 天季一個字都不變。"""
+    寫出下一段第一天 00:00 再來；最後一段沒有下一段，寫「這一季」），否則照「這一季」。name 是頭目的名字（FB-672）。"""
     if not content.config.duel.per_boss_week:
-        return BOSS_GONE_SEASON
+        return BOSS_GONE_SEASON.format(name=name)
     w = state.world
     if not calendar.week7_on(w, content):
-        return BOSS_GONE_WEEK
+        return BOSS_GONE_WEEK.format(name=name)
     week = calendar.point(w.time, content, w).week
     if week >= len(content.config.season_segments):
-        return BOSS_GONE_SEASON
+        return BOSS_GONE_SEASON.format(name=name)
     first, _ = calendar.segment_days(week + 1, content)
-    return f"{calendar.week_word('this_one', content, w)}他不再現身" + BOSS_BACK_DAY.format(day=first)
+    return calendar.week_word("this_one", content, w) + BOSS_GONE_TAIL.format(name=name) + BOSS_BACK_DAY.format(day=first)
 
 # ── 找素材分支（第 32 項；docs/superpowers/plans/2026-10-18-找素材分支.md）──
 # 按「找素材」照地點地形展開幾條路（content/gather_branches.json），每條一定給素材、差在屬性；最後一顆「自己說…」。

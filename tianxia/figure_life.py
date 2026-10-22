@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import random
 
-from . import calendar, figures, push, relations, renown
+from . import calendar, figures, push, relations, renown, seal_acts
 from .calendar import DAY
 from .models import Content
 from .rules import add_rumor, change_trend, season_one, trend_shown, trend_value, world_day
@@ -195,7 +195,8 @@ def _act(state: GameState, content: Content, cid: str, rng: random.Random) -> No
     roll = rng.random()
     timed = season_one(content, state.world)  # 第一季：時刻表搬人，自己不移動
     if roll < move:
-        if not timed and len(ch.haunts) > 1 and now.location in ch.haunts:
+        # 被引將釘著的人不走動（玉璽碎片改版第 2 批：坐鎮一日、期滿回原處）；亂數是每人每輪一份，別人的序列不位移
+        if not timed and len(ch.haunts) > 1 and now.location in ch.haunts and seal_acts.pinned(state.world, fid) is None:
             _move(state, content, cid, fid, rng)
         return
     if roll < move + recruit:
@@ -232,6 +233,8 @@ def _follow(state: GameState, content: Content, cid: str, leader: str) -> None:
         return
     if fid is not None:
         if figures.state_of(state, content, fid).status != "active" or season_one(content, state.world):
+            return
+        if seal_acts.pinned(state.world, fid) is not None:  # 被引將釘著（改版第 2 批）：不跟著走
             return
     _place_at(state, content, cid, fid, dest)
 
@@ -319,6 +322,8 @@ def _rush_to(state: GameState, content: Content, cid: str, region: str | None, s
         return None
     fid = figures.of_character(content, cid)
     if fid is not None and season_one(content, state.world):
+        return None
+    if fid is not None and seal_acts.pinned(state.world, fid) is not None:  # 被引將釘著（改版第 2 批）：不趕往
         return None
     ch = content.characters[cid]
     mine = next((loc for loc in ch.haunts if _region(content, loc) == region), None)

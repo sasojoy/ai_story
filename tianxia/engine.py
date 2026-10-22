@@ -21,7 +21,7 @@ from . import ascend  # 破境卡（招式與絕學稿案第三節）
 from . import (
     allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, checkin, chuangong, clinic, companion_agent, conquest, conquest_day, create, cultivation, defection, divine, economy, encounter, enlist, equipment, event_llm, explore_modes, escorts,
     fight_llm, figure_aid, figure_life, figures, foreshadow, four_tiers, gather_llm, generals, forge_secrets, front_lines, fusion, gender, howto, insight_fx, insights, invites, journal, letters, library, mapdata, martial_arts, feasts,
-    mall, materials, mounts, naming, newbie, rename, server_bots, opportunities, orders, precise, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
+    mall, materials, mounts, naming, newbie, rename, server_bots, opportunities, orders, precise, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_acts, seal_duel, seats, secret_recipes, sensing,
     shopview, siege, signature, signature_arms, silver, skillview, smithing,
     social, sortie, styles, tactics, team, terrain, territory, timetable, traits, treasures, weapons, works, xingshi, zh, yuedan,
 )
@@ -1130,6 +1130,8 @@ class Game:
         if roster.newbie(self.state, self.content, cfg.newbie_stamina_days):
             regen *= cfg.newbie_stamina_multiplier  # 新手期體力回復加快（體力平衡提案第〇節）
         regen *= treasures.amount(self.state, self.content, "stamina_regen")  # 承露（玉璽碎片設計 7.1）：跟新手期疊乘
+        if (dew := seal_acts.dew_factor(self.state, self.content, seconds)) != 1.0:  # 承露降在這一區（改版第 2 批，PM 五之一 4）
+            regen *= dew
         p.stamina = min(cfg.stamina_max, p.stamina + regen)
         rate = seconds / (cfg.neili_regen_hours * HOUR)
         if p.busy_until is not None:
@@ -1833,17 +1835,49 @@ class Game:
         if not bosses:
             route = self._nearest_practice()
             place = explore_modes.NO_FOE_NEAR.format(place=c.locations[route.path[-1]].name) if route is not None else ""
-            return Option(id=oid, label=f"{name}（{explore_modes.NO_FOE}{place}）", enabled=False)
+            # note：行動列練功那一格的小字（FB-670，PM 2026-10-22）：城鎮「城外才有」、城外沒有對手的地方「這裡沒有」——網頁照它寫，不自己判斷
+            cell = explore_modes.NO_FOE_CELL_TOWN if explore_modes.is_town(c, loc) else explore_modes.NO_FOE_CELL
+            return Option(id=oid, label=f"{name}（{explore_modes.NO_FOE}{place}）", enabled=False, note=cell)
         boss = duel_rules.available(s, c)
         if boss is not None:
-            foe_name = boss.foes[duel_rules.foe_index(boss, s.player.faction)].name
-            return self._cost_option(oid, name, cost, note=f"{foe_name}・{explore_modes.BOSS_NOTE}")
+            return self._cost_option(oid, name, cost, note=f"{self._boss_face(boss)}・{explore_modes.BOSS_NOTE}")
+        return Option(id=oid, label=f"{name}（{self._boss_away()}）", enabled=False)
+
+    def _boss_face(self, boss: DuelBoss) -> str:
+        """這一隻頭目對你露的那一面（照你的陣營，duel_rules.foe_index）的名字：練功鈕與行動列底下那一行同一個。"""
+        return boss.foes[duel_rules.foe_index(boss, self.state.player.faction)].name
+
+    def _boss_away(self) -> str:
+        """這裡只有頭目、他此刻遇不上的原因（練功鈕括號裡與行動列底下那一行同一句）：冷卻中寫還要等多久，次數用完寫哪一位頭目不再現身
+        （FB-672：帶名字，名字跟「這裡只有頭目某某」同一個，_boss_face；這裡不只一位時寫次數用完的第一位）。"""
+        s, c = self.state, self.content
         wait = duel_rules.cooldown_left(s, c.config.duel)
         if wait > 0:
-            why = explore_modes.BOSS_COOLING.format(wait=arena.wait_text(wait / c.config.time_scale))
-        else:
-            why = explore_modes.boss_gone(s, c)  # 7 天濃縮季寫「這一段…第 N 天 00:00 再來」（FB-501）
-        return Option(id=oid, label=f"{name}（{why}）", enabled=False)
+            return explore_modes.BOSS_COOLING.format(wait=arena.wait_text(wait / c.config.time_scale))
+        bosses = duel_rules.here(s, c)
+        gone = next((b for b in bosses if duel_rules.used_up(s, c, b.id)), bosses[0])
+        return explore_modes.boss_gone(s, c, self._boss_face(gone))  # 7 天濃縮季寫「這一段…第 N 天 00:00 再來」（FB-501）
+
+    def _practice_line(self, loc: Location) -> str:
+        """行動列底下練功那一行（FB-670，企劃者 2026-10-22 選練功入口「丙」：練功在行動列自己一格）。跟練功鈕（_practice_option）
+        同一個判斷、同一個次序：有對手寫打誰；這裡只有頭目、遇得上寫頭目；頭目不在寫鈕上同一句；都沒有寫最近的在哪、步行多久
+        （_nearest_practice；時間走 atlas.route_text 的步行，跟移動那張卡的「前往」同一個算法）——城鎮開頭寫「城外才有對手」，
+        城外沒有對手的地方（自家的大營、山洞）照鈕上那一句。句子在 howto。只讀，不擲骰。"""
+        s, c = self.state, self.content
+        foe = self._gather_foe(loc)
+        if foe is not None:
+            return howto.PRACTICE_NOTE.format(foe=foe.name)
+        if not duel_rules.here(s, c):
+            head = howto.PRACTICE_TOWN_NOTE if explore_modes.is_town(c, loc) else explore_modes.NO_FOE
+            route = self._nearest_practice()
+            if route is None:
+                return head
+            place = explore_modes.NO_FOE_NEAR.format(place=c.locations[route.path[-1]].name)
+            return f"{head}{place}（{atlas.route_text(s, c, route, 'walk')}）"
+        boss = duel_rules.available(s, c)
+        if boss is not None:
+            return howto.PRACTICE_BOSS_NOTE.format(foe=self._boss_face(boss))
+        return self._boss_away()
 
     def _nearest_practice(self) -> atlas.Route | None:
         """離這裡最近、練得到的地點（有不是自己人的隊伍或此刻遇得上的頭目）：先照摸清的路找，都走不到照所有開放的地點找（同 clinic.nearest）。"""
@@ -2021,7 +2055,7 @@ class Game:
         return f"{who}・{self.odds(hardest.id)}"
 
     def action_notes(self, option_ids: Iterable[str]) -> dict[str, str]:
-        """江湖頁行動列底下那幾行（explain-1）：選單上的探索、遊歷、交友、求見這一下會怎樣，句子在 howto，事實照引擎的規則：
+        """江湖頁行動列底下那幾行（explain-1）：選單上的探索、練功（FB-670，_practice_line）、遊歷、交友、求見這一下會怎樣，句子在 howto，事實照引擎的規則：
         探索的比重是擲骰用的那一份（_explore_weights），遊歷照這裡的對手與操練（_train_line），交友照會不會直接開口談話
         （_socialize_figure）與這裡有沒有交友事件。只給 option_ids 裡有的。序章裡是空的：探索、遊歷照那一步寫好的走（草廬四景、
         斷眉），師父自己會說。只讀，不擲骰。"""
@@ -2040,6 +2074,9 @@ class Game:
             blocked = self._insight_blocked(loc)
             kind, until = day_turn(c, s.world) if blocked else ("at", None)
             notes["act:explore"] = howto.explore_line(self._explore_weights(loc), legend, blocked, until, later=kind == "later")
+        practice = explore_modes.option_id(explore_modes.PRACTICE)
+        if practice in ids:  # 練功在行動列自己一格（FB-670）：灰著的城鎮寫最近的在哪、步行多久
+            notes[practice] = self._practice_line(loc)
         if "act:train" in ids:
             notes["act:train"] = self._sortie_line(loc) if sortie.on(c) and not prologue_rules.active(s, c) else self._train_line(loc)
         if "act:socialize" in ids:
@@ -7487,13 +7524,16 @@ class Game:
         # 只留那一條沒說到的（三方混戰的規矩、沒到場的那一軍，siege.scene_note）
         if battle.siege is not None and (note := siege.scene_note(self.content, battle.siege, battle)):
             header += "\n\n" + note
+        if front := conquest.front_scene(self.content, definition, battle.front_note):  # 起點照哪一條戰線（開集結那一刻的快照）
+            header += "\n\n" + front
         if battle.seal_shard and battle.seal_shard in self.content.seal:  # 璽動（4.3）：參戰的人知道打完可能有單挑
             header += "\n\n" + seal.stir_text(self.content, battle.seal_holder or "", self.content.seal[battle.seal_shard].name, scene=True)
         if seal.on(self.content) and seal.is_mandate_battle(self.content, definition):  # 天命之爭（8.3）：碎片在哪一軍、懷璽的人份量加重
             shift = seal.lean_shift(battle.seal_lean, definition, self.content.config.seal)  # 同集結那一刻的算法（FB-186）
             weight = seal.MANDATE_WEIGHT if seal.holders(self.world.seal_state().registry) else ""  # 全服沒人持有就不寫（FB-189）
             header += "\n\n" + seal.MANDATE_SCENE.format(
-                lean=seal.lean_text(battle.seal_lean, definition), shift=seal.shift_text(shift, battle.seal_lean, definition), weight=weight,
+                lean=seal.lean_text(battle.seal_lean, definition), weight=weight,
+                shift=seal.shift_text(shift, battle.seal_lean, definition, extra=battle.front_note is not None),  # FB-687
             )
         names = battle_instance.side_names(battle, definition)  # 單方攻中立地時守將那一格寫守軍（FB-540）
         if battle.phase == "muster" and battle.commanders:  # 龍頭上陣：集結時就看得到誰親自上陣（三方混戰多一格守軍）
@@ -8341,6 +8381,9 @@ class Game:
         cfg = c.config
         window = cfg.active_window_days * DAY / calendar.cal_scale(c, w)
         scale = cfg.conquest.progress_scale if source == "sortie" else 1.0
+        # 傳檄（玉璽碎片改版第 2 批）：這一塊算進的那條線有照自家算的傳檄，進度同樣放大（人數緩衝之前）；沒有時一個字都不變
+        if (writ := seal_acts.writ_factor(w, c, conquest.line_of(w, c, loc_id), side)) != 1.0:
+            scale *= writ
         amount = push.buffered(nominal * scale, push.active_count(s, side, w.time, window))
         notes = ""
         if source == "sortie":
@@ -9128,6 +9171,10 @@ class Game:
         s, c = self.state, self.content
         w, p = s.world, s.player
         amount, resisted = self._shaped(trend_id, delta, source)
+        # 傳檄（玉璽碎片改版第 2 批）：那一軍的人在那條線上往自家目標推，乘在盡頭阻力與季長倍數之後、人數緩衝與每人每日上限之前（上限照舊）；
+        # 貢獻照收到的 delta（名目量）記、不跟著放大。沒有傳檄時一個字都不變（不乘 1.0：int 會變成 float）
+        if (writ := seal_acts.writ_factor(w, c, trend_id, self._side(), amount)) != 1.0:
+            amount *= writ
         tail = [self._resisted_line()] if resisted else []
         if not calendar.season_one_on(w, c):
             # 規則關著的季，事件的大勢效果照季長縮放（FB-165，PM 2026-10-12：季長是週末的 5.6 倍、門檻不變，每一下照舊推就一定提早
@@ -11960,8 +12007,71 @@ class Game:
             self.stamp(timetable.when(_season_vehicle(c, w), c, e)) for e in timetable.events(w, c)
             if (e.seal or e.mandate_only) and e.id not in w.timeline and e.id not in w.showdowns_opened
         ] if season_one(c, w) else []
-        return {"name": c.seal[shard.id].name, "effect_text": seal.shard_text(c, shard.id), "state": state,
-                "stir": stir, "dates": dates}
+        out = {"name": c.seal[shard.id].name, "effect_text": seal.shard_text(c, shard.id), "state": seal.card_state(c, state),
+               "stir": stir, "dates": dates}
+        if seal_acts.on(c):  # 獨門行動（改版第 2、3 批）：改版關著不多這一鍵（一個字都不變）；這一片沒有行動是 None
+            out["act"] = seal_acts.view(self.state, c, seal.filled(view.registry, c), view.season, **self._seal_act_season())
+        return out
+
+    def _seal_act_season(self) -> dict:
+        """seal_acts.problem／view 要的季況：季在跑（籌備、休季都不是）、賽季時鐘停著、時刻怎麼寫（Game.stamp）。"""
+        return {"running": self.world.season_phase() == "running" and not self.state.world.ended,
+                "paused": self.world.paused_at() is not None, "stamp": self.stamp}
+
+    def seal_use(self, target: str = "", side: str = "") -> list[str]:
+        """起用懷中那一片的獨門行動（玉璽碎片改版第 2、3 批；MAIN_ACTIONS["seal_use"]）：target 是指定的目標（引將的大勢人物、傳檄的戰線、
+        收心的人物、鎮地與補缺的區塊；頒詔、承露不用），side 是散人挑的那一軍（傳檄、鎮地、補缺）。不花體力、不花銀兩（PM 五之一 7）。
+        補缺當場把那一塊退回原主（conquest.restore，照翻地的規則記一次易手）；鎮地只記在季上（conquest.push_problem 讀）。
+        先照 seal_acts.problem／target_problem 驗（按不下去回原因、什麼都不動）；登記那一筆在 world.mutate 裡整個重驗（碎片剛被搶走、
+        次數剛用完就落空），記次數與一筆 use（只給管理者看：有名號）；季上記一筆生效中的（不記是誰）、引將把人物搬過來；天下大事與
+        江湖史各一句（不寫是誰，企劃者）；自己一則江湖紀錄與一則行狀。戰報不寫。假人不叫這裡（設計第四章【PM】）。"""
+        c, s = self.content, self.state
+        if not seal_acts.on(c):
+            return self._log(["（此刻無法這麼做。）"])
+        view = self.world.seal_state()
+        reg = seal.filled(view.registry, c)
+        why = seal_acts.problem(s, c, reg, view.season, **self._seal_act_season())
+        held = seal_acts.mine(s, c, reg)
+        if why is None and held is not None:
+            why = seal_acts.target_problem(s, c, held[1], target, side)
+        if why is not None or held is None:
+            return self._log([f"（{why or seal_acts.NO_SHARD}）"])
+        shard_id, kind = held[0].id, held[1]
+        act = seal_acts.plan(s, c, shard_id, kind, target, side)
+        what = seal_acts.what_text(c, act)
+        me, w = s.player.name, s.world
+        left: list[int] = []
+
+        def _apply(shared) -> None:
+            r = seal.filled(shared.seal, c)
+            now = seal.shard_of(r, me)
+            number = shared.season_number
+            if now is None or now.id != shard_id or seal_acts.left(now, number, c) <= 0:
+                return
+            ready = seal_acts.ready_at(now, number, c, w)
+            if ready is not None and w.time + seal_acts.EPS < ready:
+                return
+            seal_acts.note_use(now, number, w.time)
+            seal.log(r, number, "use", shard=shard_id, holder=me, result=kind, where=what, at=w.time)
+            left.append(seal_acts.left(now, number, c))
+
+        self.world.mutate(_apply)
+        if not left:
+            return self._log(["（此刻無法這麼做。）"])
+        if kind == "yinjiang":
+            seal_acts.pull(s, c, act)
+        w.seal_acts.append(act)
+        public = seal_acts.public_text(c, act)
+        seal.rumor(w, public)  # 天下大事（world 層、不帶地點與人）
+        seal.chronicle(w, public)
+        if kind == "bujue":  # 補缺：當場退回原主（「收復」那一句天下大事與江湖史照易手寫，排在起用那一句之後）
+            conquest.restore(w, c, act.target, act.side)
+        name = c.seal[shard_id].name
+        line = seal_acts.MINE.format(shard=name, what=what, left=left[0])
+        self._write(seal.SEAL_TITLE, [line], tag=f"『{name}』")
+        annals.note(s, c, annals.SEAL, seal_acts.ANNAL.format(shard=name, what=what), 4)  # 酒肆打聽不到這一類（FB-643）
+        self._save_season()
+        return self._log([line])
 
     def seal_duel_card(self) -> dict | None:
         """江湖頁的「奪璽」卡（5.10）：排第一的那一場，全服看得到；沒有是 None。"""
@@ -13543,7 +13653,7 @@ class Game:
             return None
         view = self.world.seal_state()
         reg = seal.filled(view.registry, c)
-        return {
+        out = {
             "shards": [{"id": s, "name": c.seal[s].name, "state": reg.shards[s].state, "holder": reg.shards[s].holder or ""} for s in c.seal],
             "duel": bool(view.duels), "hung": reg.last_showdown is not None and not reg.last_showdown_dueled,
             "where": reg.last_showdown_where, "qa": c.config.seal.qa_tools,
@@ -13552,6 +13662,14 @@ class Game:
             # 領地爭奪的季「強制現世」是「現在藏一片」（網頁換鈕上的字）；只給有沒有，不給藏在哪
             "hide": seal.conquest_season(c, self.state.world),
         }
+        if seal_acts.on(c):  # 獨門行動（改版第 2 批）：這一季誰起用了哪一片、什麼時候、指定了什麼（救場用，設計【PM】5）；改版關著不多這一鍵
+            out["uses"] = [
+                {"shard": c.seal[e.shard].name if e.shard in c.seal else e.shard or "", "who": e.holder or "",
+                 "act": seal_acts.NAMES.get(e.result or "", e.result or ""), "when": self.stamp(e.at) if e.at is not None else "",
+                 "what": e.where}
+                for e in reg.history if e.kind == "use" and e.season == view.season
+            ]
+        return out
 
     def admin_issue_orders(self) -> list[str]:
         """立刻發本週軍令：這一週還沒達成的軍令換成照週一的做法（orders.issue，週一掛鉤用的同一個函式，redraw）此刻重新挑的一批，
@@ -14487,7 +14605,7 @@ class Game:
         cal = {
             "week": at.week, "weekday": at.weekday, "clock": f"{at.hour:02d}:{at.minute:02d}",
             # 畫面第二行直接用這一句，不自己拼（7 天濃縮季寫「第 N 天 HH:MM」）
-            "weeks": c.config.season_weeks, "text": calendar.point_text(at, by_day=calendar.week7_on(w, c)),
+            "weeks": calendar.weeks(c, w), "text": calendar.point_text(at, by_day=calendar.week7_on(w, c)),
         }
         if orders.daily(self.state, c):  # 21 天季的軍令每天一道：軍令卡收起來照季曆第幾天記（網頁 orderKey），隔天重新展開
             cal["day"] = at.cal_day

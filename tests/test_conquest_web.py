@@ -305,6 +305,7 @@ const S = { tab: input.tab, news: input.news, main: input.now };
 const calls = [];
 const H = new Function("S", "calls", [
   "const shopPolled = () => false;",
+  "const sealActPolled = () => {};",  // 玉璽碎片改版第 2 批合進來時補：refreshPage 第一行換獨門行動那一層（沒開著就什麼都不做）
   "const pageKey = (m) => JSON.stringify(m.page || '');",
   "let pointerHeld = false, redrawHeld = false;",
   "const renderPage = () => calls.push('renderPage');",

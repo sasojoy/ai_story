@@ -8,10 +8,10 @@ import hashlib
 from collections.abc import Callable
 
 from . import (
-    atlas, bounties, calendar, conquest, equipment, figures, insights, mapart, mapview, mounts, orders, rules, sensing, terrain,
-    territory, timetable,
+    atlas, bounties, calendar, conquest, equipment, figures, insights, mapart, mapview, materials, mounts, orders, rules, sensing,
+    terrain, territory, timetable, worldgeo,
 )
-from .models import Content, Location
+from .models import Content, FactionDef, Location
 from .state import GameState, TerritoryWeek, WorldState
 
 ODDS_TONE = {"穩勝": "safe", "有把握": "safe", "五五波": "ok", "難分勝負": "ok", "凶險": "risk", "必敗": "risk", "操練": "safe"}
@@ -24,6 +24,11 @@ PRICE_ENEMY = "別人的地盤：療傷、打造、買馬貴 {pct}%"  # 待 joy 
 FIXED_ROW = "只照大事易手"  # 年表最後一組（廣宗）的名字，待 joy 潤
 SUGGEST_MAX = 3
 LOSE_WORD = "必敗"  # 這種勝算的出陣建議照樣列，但排到最後、網頁畫淡（企劃者 10/15 從對比圖選乙）
+# ── 天下圖（輿圖簡化設計 5.1、3.3；環形版 dev/map-2 的畫法，輿圖第三版第 3 批搬回真實地形）──
+WORLD_MARGIN = 70  # 取景框：開放的地點外框往外加多少（地圖單位）
+FALLBACK_INKS = ["#7A4E8C", "#2E7D7A", "#A0522D", "#5C6B2E", "#8C3B5A", "#3B5C8C"]  # 劇本沒寫 ink 的陣營照順序挑（待 joy 對色）
+WORLD_CACHE_KEEP = 8  # 幾何照內容快取最多幾份
+_WORLD_CACHE: dict[str, dict] = {}
 
 
 def rank_suggestions(rows: list[dict]) -> list[dict]:
@@ -76,7 +81,89 @@ def base(state: GameState, content: Content) -> dict:
         "svg": mapview.render_base(state, content), "places": places, "edges": edges, "regions": regions,
         "insight_kinds": {d.id: {"name": d.name, "attribute": d.attribute} for d in content.insights.values() if d.grant is None},
         "insight_layer": content.config.insight_strong.enabled and any(p["strong"] for p in places),
+        "world": world(state, content),
     }
+
+
+def ground_places(state: GameState, content: Content) -> list[str]:
+    """天下圖上分地面的地點：劇本寫了區塊表就只拿區塊（鄉里結社、曹氏莊院、草廬這類不是區塊的不分地面，不然大區裡挖出一個灰洞）；
+    沒寫照全部開放的地點（序章專屬的不算）。只看內容與開放的地點，跟底圖一起快取。"""
+    shown = mapview.open_places(state, content)
+    table = conquest.blocks(content)
+    if table:
+        return [x for x in shown if x in table]
+    return [x for x in shown if not content.locations[x].prologue_only]
+
+
+def side_inks(content: Content) -> list[dict]:
+    """劇本的每一方在輿圖上的樣子（設計 3.3：顏色與幾方從劇本讀）：FactionDef.ink；沒寫的照 FALLBACK_INKS 的順序挑、
+    名字照 FactionDef.name、一個字照名字的第一個字。soft、tint 沒寫照 color 往紙色淡。"""
+    paper = content.map.background
+    spare = iter(FALLBACK_INKS)
+
+    def one(f: FactionDef) -> dict:
+        ink = f.ink
+        color = ink.color if ink is not None else next(spare, FALLBACK_INKS[-1])
+        return {
+            "id": f.id, "name": (ink.label if ink is not None and ink.label else f.name),
+            "short": (ink.short if ink is not None and ink.short else f.name[:1]), "color": color,
+            "soft": (ink.soft if ink is not None and ink.soft else mapart.mix(color, paper, 0.45)),
+            "tint": (ink.tint if ink is not None and ink.tint else mapart.mix(color, paper, 0.8)),
+        }
+
+    return [one(f) for f in content.scenario.factions]
+
+
+def _world_geometry(state: GameState, content: Content) -> dict:
+    """取景框、大區（輪廓、面積、大區名可以擺的幾處）、地面格、相鄰的邊：只看內容與開放的地點，照內容雜湊快取（同一份內容另一局不再算）。"""
+    m = content.map
+    shown = mapview.open_places(state, content)
+    seeds = ground_places(state, content)
+    regions = [(r.id, [(float(x), float(y)) for x, y in r.points]) for r in m.regions]
+    key = hashlib.sha1(repr((
+        m.width, m.height, regions, [(r.id, r.name) for r in m.regions],
+        [(x, content.locations[x].x, content.locations[x].y) for x in shown], seeds,
+    )).encode()).hexdigest()
+    if key in _WORLD_CACHE:
+        return _WORLD_CACHE[key]
+    box = (0.0, 0.0, float(m.width), float(m.height))
+    spots = [(float(content.locations[x].x), float(content.locations[x].y)) for x in shown] or [(m.width / 2, m.height / 2)]
+    x0, y0, x1, y1 = worldgeo.frame(spots, m.width, m.height, WORLD_MARGIN)
+    by_region: dict[str, list[tuple[str, tuple[float, float]]]] = {r.id: [] for r in m.regions}
+    for loc_id in seeds:
+        region = atlas.region_of(content, loc_id)
+        if region is not None:
+            loc = content.locations[loc_id]
+            by_region[region.id].append((loc_id, (float(loc.x), float(loc.y))))
+    cells, edges = [], []
+    for rid, _ in regions:
+        group = by_region[rid]
+        polys = worldgeo.cells([pt for _, pt in group], box)
+        cells += [{"id": loc_id, "region": rid, "d": worldgeo.path([p for p, _ in poly])}
+                  for (loc_id, _), poly in zip(group, polys) if poly]
+        edges += [{"a": group[i][0], "b": group[j][0], "d": worldgeo.path([p, q], closed=False), "clip": rid}
+                  for i, j, p, q in worldgeo.inner_edges(polys)]
+    # 兩個大區相接的那一段（真實地形的五個大區互不相接，這裡是空的；劇本的大區相接時才有）
+    edges += [{"a": a, "b": b, "d": worldgeo.path([p, q], closed=False), "clip": None}
+              for a, b, p, q in worldgeo.cross_edges(regions, by_region, box)]
+    out = {
+        "frame": [round(x0), round(y0), round(x1 - x0), round(y1 - y0)],
+        "regions": [{
+            "id": r.id, "name": r.name, "d": worldgeo.path(pts), "area": round(worldgeo.area(pts)),
+            "spots": [list(p) for p in worldgeo.label_spots(pts, (x0, y0, x1, y1), spots)],  # 大區名可以擺的幾處，好的在前（網頁照字級挑不壓字的）
+        } for r, (_, pts) in zip(m.regions, regions)],
+        "cells": cells, "edges": edges,
+    }
+    if len(_WORLD_CACHE) >= WORLD_CACHE_KEEP:
+        _WORLD_CACHE.clear()
+    _WORLD_CACHE[key] = out
+    return out
+
+
+def world(state: GameState, content: Content) -> dict:
+    """天下圖要的資料（輿圖簡化設計 5.1）：幾何（_world_geometry）加劇本的每一方（side_inks）與沒人佔的顏色。誰佔著在疊層
+    （state 的 places[*].control、rich），網頁照它上色。"""
+    return {**_world_geometry(state, content), "sides": side_inks(content), "unheld": content.map.unheld}
 
 
 def _order_marks(state: GameState, content: Content, faction: str | None) -> dict[str, str]:
@@ -171,6 +258,34 @@ def _price(world: WorldState, content: Content, faction: str | None, loc_id: str
     return ""
 
 
+YIELD_LINE = "今日產出：{items}"  # 輿圖卡的第 6 段（輿圖簡化設計 4.5、5.3）；待 joy 潤
+YIELD_TIER = "{tier}素材"  # 照預設掉落表（照對手的屬性挑、不定哪一樣）
+YIELD_ITEM = "{name} ×{count}"  # 寫了掉落表的素材
+YIELD_MORE = "等"
+YIELD_NAMES = 2  # 同一階最多寫幾樣
+
+
+def yield_line(world: WorldState, content: Content, loc_id: str) -> str:
+    """今日產出那一句（輿圖卡第 6 段）：站在這裡的隊伍（territory.squads_at：開季中立的區塊是中立駐軍）打贏有機會掉的素材裡最高的那一階
+    （materials.possible_drops，跟真的擲骰讀同一份表）——寫了掉落表的寫素材名（同一階最多 YIELD_NAMES 樣），照預設表的寫「靈品素材」；
+    開季中立的區塊剛易手照 conquest.drop_cap 夾（高階回饋暫停，翻地與爭搶）。只讀表、不擲骰、不看誰在看。沒有隊伍或一樣都掉不了是空字串。"""
+    cap = conquest.drop_cap(world, content, loc_id)
+    found: list[tuple[int, str | None, int]] = []
+    for sid in territory.squads_at(world, content, loc_id):
+        if sid in content.squads:
+            found += materials.possible_drops(content.squads[sid], content, max_tier=cap)
+    if not found:
+        return ""
+    top = max(tier for tier, _, _ in found)
+    named = list(dict.fromkeys((mid, count) for tier, mid, count in found if tier == top and mid is not None))
+    items = [YIELD_ITEM.format(name=content.materials[mid].name, count=count) for mid, count in named[:YIELD_NAMES]]
+    if not items:
+        items = [YIELD_TIER.format(tier=materials.TIER_NAMES.get(top, str(top)))]
+    elif len(named) > YIELD_NAMES or any(tier == top and mid is None for tier, mid, _ in found):
+        items[-1] += YIELD_MORE
+    return YIELD_LINE.format(items="、".join(items))
+
+
 def _titles(state: GameState, content: Content, week: int, now_week: int) -> list[str]:
     """第 week 週時刻表的大事（第一季才有）：只列已經到了的。
     「到了沒」照這一件真正的時刻（timetable.happened_at：決戰照排定的時刻、季末照排定的季末，其餘照季曆；FB-504）：時刻表決戰只寫了
@@ -179,7 +294,9 @@ def _titles(state: GameState, content: Content, week: int, now_week: int) -> lis
     除了決戰與季末，其他大事的時刻就是 calendar.event_time，週末列的時刻一個字都不變。
     FB-561：管理者提早開的決戰一開就列，不等排定的時刻，FB-563：照開的那一刻（WorldState.showdown_opened_at）歸週，之後收場、
     過了週界也不換週，開打後被管理者取消、沒有結果的不列（showdowns_cancelled）；FB-562：決戰與季末歸在實際排定的時刻落的那一週
-    （timetable.happened_week；被「避開半夜」或管理者挪到別週的，不照時刻表原本寫的那一週）。now_week 只留著給呼叫端對齊。"""
+    （timetable.happened_week；被「避開半夜」或管理者挪到別週的，不照時刻表原本寫的那一週）。now_week 只留著給呼叫端對齊。
+    FB-654：休季時換了程式的上一季（calendar.weekend_style）一般大事只列這一季真的結算過的（season.timeline），歸週走這一季自己的季曆，
+    不列新程式時刻表上舊季沒發生過的（timetable.happened_at、happened_week）。"""
     w = state.world
     if not rules.season_one(content, w):
         return []
@@ -202,6 +319,10 @@ def _ropes(state: GameState, content: Content, now_week: int) -> list[dict]:
         return {"id": loc_id, "threshold": territory.threshold(spots.index(loc_id) + 1, len(spots)),
                 "control": territory.controller(w, content, loc_id)}
 
+    def ends(line: str) -> dict:  # 繩的兩頭是誰（往 0 推的、往 100 推的；territory.sides 照劇本的 goals）：網頁不寫死官軍、黃巾
+        low, high = territory.sides(content, line)
+        return {"low": low, "high": high}
+
     if rules.season_one(content, w):
         out = []
         for line in fronts:
@@ -209,13 +330,13 @@ def _ropes(state: GameState, content: Content, now_week: int) -> list[dict]:
             before = prev.fronts.get(line, value) if prev is not None else value
             spots = lines.get(line, [])
             out.append({"id": line, "name": names.get(line, line), "value": value, "delta": value - before,
-                        "beads": [bead(x, spots) for x in spots]})
+                        "beads": [bead(x, spots) for x in spots], **ends(line)})
         return out
     trend = rules.resolve_trend(content, w, fronts[0]) or fronts[0]
     value = rules.world_trend_value(w, content, trend)
     before = next(iter(prev.fronts.values()), value) if prev is not None and prev.fronts else value
     beads = [bead(x, spots) for spots in lines.values() for x in spots]
-    return [{"id": trend, "name": names.get(trend, trend), "value": value, "delta": value - before, "beads": beads}]
+    return [{"id": trend, "name": names.get(trend, trend), "value": value, "delta": value - before, "beads": beads, **ends(fronts[0])}]
 
 
 def _rope_values(snap: TerritoryWeek, ropes: list[dict]) -> dict[str, int | None]:
@@ -239,8 +360,11 @@ def _weeks(state: GameState, content: Content, now_week: int, ropes: list[dict])
             out.append({"week": week, "control": None, "ropes": {}, "geju": None, "events": events, "changed": []})
             continue
         control = _held(w, content, snap.control)
+        # 沒人佔↔有人佔也算易手（FB-632：開季中立的地第一次被佔下，同規則那一邊 conquest._announce 發天下大事；from／to 是 None＝沒人佔）。
+        # 舊拔河的季每一處每一週都有控制方，照舊只有換手
         changed = [] if before is None else [
-            {"id": loc, "from": before.get(loc), "to": side} for loc, side in control.items() if before.get(loc) not in (None, side)
+            {"id": loc, "from": before.get(loc), "to": control.get(loc)} for loc in [*control, *(x for x in before if x not in control)]
+            if before.get(loc) != control.get(loc)
         ]
         out.append({"week": week, "control": control, "ropes": _rope_values(snap, ropes), "geju": snap.geju,
                     "events": events, "changed": changed})
@@ -267,18 +391,33 @@ def _start_control(world: WorldState, content: Content) -> dict[str, str] | None
     return _held(world, content, start.control) if start is not None else None
 
 
-def _flips(world: WorldState, loc_id: str, now_week: int) -> list[dict]:
-    """這個地點這一季每一次易手（第幾週、從誰到誰），照每週的快照比；有開季那一刻的就從它比起（第 1 週的易手也算，FB-264）。"""
+def _flips(world: WorldState, content: Content, loc_id: str, now_week: int) -> list[dict]:
+    """這個地點這一季每一次易手（第幾週、從誰到誰），照每週的快照比；有開季那一刻的就從它比起（第 1 週的易手也算，FB-264）。
+    沒人佔↔有人佔也算（FB-632，from／to 是 None）；還沒記到的週（快照是 None）不算。不算誰的地盤的大本營（territory.unheld）沒有易手。"""
+    if territory.unheld(world, content, loc_id):
+        return []
     start = world.territory.weeks.get(territory.START_WEEK) if world.territory is not None else None
-    out, last = [], (start.control.get(loc_id) if start is not None else None)
+    out, known, last = [], start is not None, (start.control.get(loc_id) if start is not None else None)
     for week in range(1, now_week + 1):
         snap = territory.week_at(world, week)
-        side = snap.control.get(loc_id) if snap is not None else None
-        if last is not None and side is not None and side != last:
+        if snap is None:
+            continue
+        side = snap.control.get(loc_id)
+        if known and side != last:
             out.append({"week": week, "from": last, "to": side})
-        if side is not None:
-            last = side
+        known, last = True, side
     return out
+
+
+def flip_marks(world: WorldState, content: Content, loc_id: str) -> dict:
+    """天下圖的「正在翻」「激戰」「冷卻」（輿圖簡化設計 4.1、4.3；計畫 docs/superpowers/plans/2026-10-20-輿圖v3-天下圖.md 1.3、收尾）：
+    不另寫判斷，照翻地那一份畫面資料（conquest.block_view，server 的 main_view["conquest"]["blocks"] 同一個函式、同一個四捨五入）
+    換成天下圖讀的名字——tug＝bars（{攻方: 進度 0～100}，只列寫出來不是 0 的；沒有是 None）、melee＝clash、cool＝cooling
+    （剛易手還要幾分鐘；沒在冷卻是 None）。看的人是誰不影響這三樣（side 給 None，不算攻守推不推得動）。呼叫端只在領地爭奪開著、
+    這一處是區塊時叫。"""
+    row = conquest.block_view(world, content, loc_id, None)
+    tug = {line["side"]: line["value"] for line in row["bars"] if line["value"] > 0}
+    return {"tug": tug or None, "melee": bool(row["clash"]), "cool": row["cooling"] or None}
 
 
 def state(
@@ -292,8 +431,8 @@ def state(
     {"key", "now_week", "weeks_total", "season_one", "territory", "faction", "sides", "here", "stamina", "sorties_left",
      "journey": None | {"to","to_name","minutes","next_name","x","y"}, "travel_block": None | {"reason","to_jianghu"},
      "places": {地點: {"control","kind","odds","sortie","armed","minutes","stamina","order","bounty","goal","news","people","services",
-                       "price","squads","danger","flips"}},
-     "ropes": [{"id","name","value","delta","beads": [{"id","threshold","control"}]}], "geju", "events",
+                       "price","squads","danger","flips","rich","yield"} ＋ 領地爭奪開著時區塊多 "tug","melee","cool"（flip_marks）},
+     "ropes": [{"id","name","value","delta","beads": [{"id","threshold","control"}],"low","high"}], "geju", "geju_side", "events",
      "suggest": [{"id","sortie","why": [[字, 種類]],"minutes","score","lose"}], "chart": [{"name","spots"}],
      "weeks": [{"week","control","ropes","geju","events","changed"}], "start": None | {地點: 開季那一刻的控制方}}"""
     s, c, w, p = state, content, state.world, state.player
@@ -310,7 +449,7 @@ def state(
         return ask
 
     faction, on = rules.side_of(s, c), territory.on(c)  # 豪強分屬兩軍：照依附那一軍算自家、敵方
-    weeks_total = c.config.season_weeks
+    weeks_total = calendar.weeks(c, w)
     now_week = min(calendar.point(w.time, c, w).week, weeks_total)
     shown = mapview.open_places(s, c)
     routes = atlas.routes(s, c) if p.journey is None else {}
@@ -321,6 +460,7 @@ def state(
     base_ids = territory.bases(c) if on else {}
     fixed = c.scenario.territory.fixed if on else {}
     conquest_on = conquest.on(c, w)
+    blocks = conquest.blocks(c) if conquest_on else {}
     places = {}
     for loc_id in shown:
         loc = c.locations[loc_id]
@@ -344,8 +484,13 @@ def state(
             "goal": loc_id in goals, "news": loc_id in news, "people": people.get(loc_id, []),
             "services": _services(c, loc), "price": _price(w, c, faction, loc_id),
             "squads": [{"name": name, "odds": word} for name, word in listed],
-            "danger": loc.danger, "flips": _flips(w, loc_id, now_week) if on else [],
+            "danger": loc.danger, "flips": _flips(w, c, loc_id, now_week) if on else [],
+            # 高級資源地（天下圖的金點，輿圖簡化設計 5.1）：開季中立的區塊，不管此刻誰佔著；領地爭奪關著的季照內容的區塊表
+            "rich": conquest.start_kind(w, c, loc_id) == conquest.NEUTRAL,
+            "yield": yield_line(w, c, loc_id),  # 卡上「今日產出」那一句（輿圖第三版第 4 批）；沒有是空字串
         }
+        if conquest_on and loc_id in blocks:  # 「正在翻」「激戰」「冷卻」：領地爭奪關著的季沒有這三個鍵（網頁就不畫）
+            places[loc_id].update(flip_marks(w, c, loc_id))
     suggest = []
     for loc_id, info in places.items():
         if info["sortie"] is None:
@@ -392,6 +537,7 @@ def state(
         "journey": journey, "travel_block": None if block is None else {"reason": block.reason, "to_jianghu": block.to_jianghu},
         "places": places, "ropes": ropes,
         "geju": rules.world_trend_value(w, c, rules.GEJU) if rules.trend_shown(c, w, rules.GEJU) else None,
+        "geju_side": territory.geju_side(c),  # 割據那一條曲線照誰的顏色（劇本裡推割據的那一方）
         "events": _titles(s, c, now_week, now_week), "suggest": suggest, "chart": chart,
         "start": _start_control(w, c) if on else None,
         "weeks": _weeks(s, c, now_week, ropes),

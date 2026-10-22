@@ -174,7 +174,7 @@ def test_got_and_assigned_lines_name_the_revamp_effects(content, world):
 
 def test_chizhang_adds_ten_to_the_self_made_intent(content, world):
     """合 develop（武學重構）時 PM 2026-10-21 定：合成不再擲品質，赤璋改版開著時改成「自創的意分 +10」（create.seal_points，
-    品級機率與底子照它挪）；子開關關著照 main 的 +5（test_seal.py）。說明句跟著寫自創的意分。"""
+    底子威力的倍數照它推）；子開關關著照 main 的 +5（test_seal.py）。說明句跟著寫自創的意分。"""
     from tianxia import create
 
     revamp(content)

@@ -63,6 +63,13 @@ def explore_modes_line(fight: bool, sense: bool) -> str:
     return EXPLORE_MODES.format(fight=EXPLORE_FIGHT if fight else EXPLORE_CALM, sense="" if sense else EXPLORE_NO_SENSE)
 
 
+# 行動列底下練功那一行（FB-670，企劃者 2026-10-22 選練功入口「丙」：練功在行動列自己一格；Game._practice_line 照練功鈕同一個判斷挑一句）。
+# 灰著的城鎮寫 PRACTICE_TOWN_NOTE＋「，最近的在某地（步行約 N 分鐘）」（explore_modes.NO_FOE_NEAR、atlas.route_text）。都待 joy 潤
+PRACTICE_NOTE = "打這裡的{foe}，不限次數，打贏是經驗的大宗"
+PRACTICE_BOSS_NOTE = "這裡只有頭目{foe}，練功直接對上他；打一場要等他再現身，次數有限"
+PRACTICE_TOWN_NOTE = "城外才有對手"
+
+
 def train_line(foes: bool, gains: Sequence[str], drops: bool, push: bool, drill_gains: Sequence[str], drills: bool) -> str:
     """遊歷打完會拿到什麼。foes：這裡有會打的對手（不是自己陣營的）；gains：打贏給的（銀兩、心得、經驗，照會打的對手有沒有
     這一項）；drops：打贏有機會掉素材；push：打贏或操練會推大勢（Game.train_trend_push 不是空的）；drill_gains：跟自己人操練

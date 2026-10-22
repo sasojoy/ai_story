@@ -249,7 +249,7 @@ def test_xuanniu_adds_a_talk_turn_and_jinjiao_adds_dodge(content, world):
 
 
 def test_chizhang_is_read_and_guixin_grows_companions(content, world):
-    """赤璋：武學重構之後合成不擲品質，改成自創的意分 +5（create.seal_points，品級機率照它挪）；
+    """赤璋：武學重構之後合成不擲品質，改成自創的意分 +5（create.seal_points，底子威力的倍數照它推）；
     歸心：同伴拿到的經驗 ×1.1、取整，本人那一份不變。"""
     from unittest import mock
 

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import random
 
-from . import arts as arts_mod, ascend as ascend_mod, library, naming, silver, team, treasures
+from . import arts as arts_mod, ascend as ascend_mod, library, naming, seal_acts, silver, team, treasures
 from .martial_arts import MAX_LEVEL, next_quality
 from .models import Content
 from .rules import add_chronicle
@@ -36,6 +36,16 @@ def ready(state: GameState, content: Content, world: WorldStateStore, art_id: st
     if level < need:
         return False, NOT_RIPE_LINE.format(name=art.name, level=level)
     return True, None
+
+
+def peak_scale(state: GameState, content: Content) -> float:
+    """衝絕學那一下的倍數（契機 seize 與服丹 force_odds 共用，在悟性之後、名師與上限之前）：寶物「cultivate」（凝神香囊、檀木念珠）
+    × 頒詔（玉璽碎片改版第 2 批，企劃者 2026-10-21：重構之後修練不再擲升品，頒詔的後半句改成「衝絕學的機會 ×1.2」；
+    seal_acts.edict_cultivate 只在這裡叫）。沒有寶物、沒有頒詔是 1。"""
+    scale = treasures.amount(state, content, "cultivate")
+    if (edict := seal_acts.edict_cultivate(state.world, content)) != 1.0:
+        scale *= edict
+    return scale
 
 
 def cultivate_problem(
@@ -104,9 +114,9 @@ def seize(
         if not art_id or not ready(state, content, world, art_id)[0]:
             continue
         art = team.resolve_art(art_id, content, world)
-        # 寶物「cultivate」（凝神香囊、檀木念珠）以前乘修練升品，衝品拿掉之後改乘絕學這一步（契機與服丹都乘）
+        # 寶物「cultivate」（凝神香囊、檀木念珠）以前乘修練升品，衝品拿掉之後改乘絕學這一步（契機與服丹都乘）；頒詔同一個位置（peak_scale）
         odds = rule.chance * ratio / rule.par_ratio * team.stat_factor(content, p.stats.get("wis", team.BASE_STAT))
-        odds *= treasures.amount(state, content, "cultivate")
+        odds *= peak_scale(state, content)
         odds += silver.take_mentor(state, content)  # 名師指點（銀兩出口）：衝品拿掉之後加在絕學這一步，擲一次用掉
         if rng.random() * 100 < max(1.0, min(rule.max_chance, odds)):
             return ascend_mod.ascend(state, content, world, art_id, "seize")  # 破境（招式與絕學稿案第三節）
@@ -118,7 +128,7 @@ def force_odds(state: GameState, content: Content, world: WorldStateStore, art_i
     """不等契機，服一枚破境丹關起門來強行衝關的機會（%）：legend_item_bonus × 悟性，夾在 1～breakthrough.max_chance。"""
     cfg = content.config
     odds = cfg.legend_item_bonus * team.stat_factor(content, state.player.stats.get("wis", team.BASE_STAT))
-    odds *= treasures.amount(state, content, "cultivate")  # 衝絕學的寶物，同 seize
+    odds *= peak_scale(state, content)  # 衝絕學的寶物與頒詔，同 seize
     odds += silver.mentor_bonus(state, content)  # 名師指點（銀兩出口）：在上限之內加，服丹那一次用掉（_force）
     return round(max(1.0, min(cfg.breakthrough.max_chance, odds)))
 

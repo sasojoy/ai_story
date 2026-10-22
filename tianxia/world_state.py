@@ -66,7 +66,8 @@ class SealEvent(BaseModel):
 
     seq: int
     season: int
-    kind: Literal["emerge", "stir", "keep", "take", "sink", "unsettled", "assign", "recall", "scatter", "mandate"]
+    # use：起用獨門行動（玉璽碎片改版第 2 批；holder 是起用的人、result 是哪一種、where 是指定了什麼）——只給管理者看，江湖史七格不讀
+    kind: Literal["emerge", "stir", "keep", "take", "sink", "unsettled", "assign", "recall", "scatter", "mandate", "use"]
     shard: str | None = None
     holder: str | None = None  # 這一筆之後的持有者（take 是挑戰者；sink、收回是 None）
     other: str | None = None  # 對手（take 的失主、keep 的挑戰者）
@@ -93,6 +94,11 @@ class SealShard(BaseModel):
     emerged_round: int | None = None  # 這一輪現世過沒（天命的觸發看它，玉璽二）
     former: str | None = None  # 上一個從這一片被奪走的人（追璽）
     absent: int = 0  # 持有者連續幾季沒上線（換季時數，PM 庚；隱沒看它）
+    # 獨門行動（玉璽碎片改版第 2 批）：次數記在碎片上、跟著碎片走（同一季被搶走，新主人只剩還沒用掉的次數）。
+    # act_season 不是這一季就當這一季還沒用過（換季自然歸零）；act_last 是上一次起用的世界秒（那一季的）
+    act_season: int | None = None
+    act_uses: int = 0
+    act_last: float | None = None
 
 
 class SealCache(BaseModel):

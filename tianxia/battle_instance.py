@@ -24,7 +24,7 @@ import random
 import re
 from typing import Literal, NamedTuple
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_serializer
 
 from . import encounter, gender, tactics, zh
 from .models import (
@@ -410,6 +410,17 @@ def _option_side(definition: BattleDef, faction: str) -> str:
     return definition.factions[0].id if faction == GUARD else faction
 
 
+class FrontNote(BaseModel):
+    """時刻表決戰的起點照哪一條戰線算（start_from_front），開集結那一刻的快照（領地爭奪開著的季才記；conquest.front_note 算、
+    world._open_claimed 記）：那條線上的區塊（大本營、廣宗也算，同輿圖）此刻各歸誰、還沒人佔的幾處、照戰況換算的起點（屯糧、天命之爭偏之前）。
+    開集結那一則天下大事與決戰畫面那一句（conquest.front_rumor／front_scene）照它寫。企劃者 2026-10-22：不另加主場偏移，補一句說明。"""
+
+    line: str  # 戰線 id（BattleDef.front）
+    start: int  # 照戰況換算的起點（偏離 CENTER 往 factions[0] 為正）
+    held: dict[str, int] = Field(default_factory=dict)  # 陣營 id → 佔幾處：交戰兩軍一定有（0 也記），別的陣營佔著才記；照寫的順序
+    open: int = 0  # 還沒人佔的中立地幾處
+
+
 class BattleInstance(BaseModel):
     battle_id: str
     siege: SiegeInfo | None = None  # 攻城戰（領地爭奪第二批）；決戰是 None
@@ -459,6 +470,17 @@ class BattleInstance(BaseModel):
     # 龍頭上陣（GeneralTuning）：開集結那一刻上陣的大勢人物、這一回合每一方喊的那一招；舊資料、開關關著是空的
     commanders: list[Commander] = Field(default_factory=list)
     orders: dict[str, str] = Field(default_factory=dict)
+    # 起點照哪一條戰線（領地爭奪開著的季的時刻表決戰；企劃者 2026-10-22，計畫 2026-10-22-長社火攻主場）：開集結那一刻的快照，
+    # 決戰畫面照它寫、不事後重算；舊資料、領地爭奪關著、沒寫戰線的是 None（存的時候連鍵都不寫，見 _drop_empty_front_note）
+    front_note: FrontNote | None = None
+
+    @model_serializer(mode="wrap")
+    def _drop_empty_front_note(self, handler):
+        """front_note 是 None 時不寫這個鍵：領地爭奪關著的季，決戰那一列的 JSON 跟加這一欄之前一個位元組都一樣。"""
+        data = handler(self)
+        if isinstance(data, dict) and "front_note" in data and data["front_note"] is None:
+            del data["front_note"]
+        return data
 
 
 def start_muster(definition: BattleDef, now: float, trend_start: int | None = None) -> BattleInstance:

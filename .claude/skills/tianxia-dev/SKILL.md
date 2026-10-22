@@ -39,7 +39,10 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 - **這台的 Ollama 沒有 `gemma4:12b`**（只有 26b 等舊模型，2026-10-20 查的）：真模型實測叫不動就照實回報；不要改拿 26b 代跑（17GB、keep_alive 12 小時會一直佔著顯卡）。
 - **開伺服器又不能打到 11434**：模型網址（`Config.ollama_url`）沒有環境變數可改，設定覆寫檔照派工指定的（例 `week7`）就不另寫一份。在 scratchpad 寫一支包裝：`sys.path.insert(0, 工作樹)`、`import server`、`server.CONTENT.config.ollama_url = "http://127.0.0.1:9"`、`server.main(["--port", 埠])`，用 `Start-Process` 跑它（`TIANXIA_DB`、`TIANXIA_PROFILE` 照設在 PowerShell 裡，子行程繼承）。角色在每次建 `Game` 時才照設定建 client，所以先改再 `main` 就全部指到那裡（FB-490～493 這一輪）。
 - **實機要某一步的角色**（例：初入江湖第一步）：`/api/register`＋`/api/character` 建一個（密碼產生後寫進 scratchpad 的檔），再用 `CharacterStore.load`／`save` 改 `tutorial_step`（與 `location`）存回去；伺服器每次進鎖都從資料庫重讀，不必重開。序章那幾步（0～10，含出師那一步）要 `location` 是 `mentor_hut`，不然 `m.prologue` 是 None、看起來像出了草廬。
+- **唯讀的實機量測不必 `git archive` 複本，直接從工作樹開伺服器**（2026-10-22 develop 小單）：`Start-Process python -u server.py --port <埠>`、`-WorkingDirectory` 設成工作樹，`TIANXIA_PROFILE` 給 scratchpad 裡抄來的設定檔（絕對路徑、不寫 `.json`，裡面加 `"ollama_url": "http://127.0.0.1:9"`）。改 `web/` 不必重開（每次請求讀檔），改 `tianxia/` 要 `taskkill /T` 再開。無頭 Chromium 的量測沿用 PM 那一輪 scratchpad 的 `practiceqa/cdp.js`、`place_srv.py`（`start({copy: <工作樹絕對路徑>, …})`：`place_srv` 裡 `os.path.join(HERE, 絕對路徑)` 就是那個絕對路徑；`place({name, loc, faction, set: {玩家欄位: 值}})` 改存檔，`set` 可以直接塞 `duel_tally`、`stamina` 這類欄位），腳本抄一份到自己的 scratchpad 資料夾；`PYTHONIOENCODING=utf-8`，node 是 `C:\Users\ray61\AppData\Local\hermes\node\node.exe`。只有頭目的地點：官軍站長社、黃巾站鉅鹿道壇（反過來站的那一方有尋常對手，練功那一行寫打誰）；頭目名字照陣營看到另一面（官軍在長社遇到段鐵頭、黃巾在鉅鹿道壇遇到衛重）；week7 每個頭目每一段兩場，次數用完 `duel_tally["1:w1:<頭目 id>"] = 2`（`<季數>:w<段>:<id>`）。
+- **「休季換程式」的畫面問題先看載入的內容是不是已經換過了**（FB-654，2026-10-22）：`content.timetable` 載入時就被 `season21_timetable` 換成新程式的週次與日子，舊季那一份（週末式、`event.week` 1～12）已經不在內容裡，沒得「照上一季自己的時刻表」。要列上一季發生過的事，看這一季存的東西：`season.timeline`（結算過的一般大事與結算那一刻）、`season.schedule`（決戰與季末的排定時刻）。測試用舊程式補算再換內容比對：`old = real_content("weekend")`＋`season_days = 7`、`auto_open_first_season`，`Game.new(old, …, world=world).sync(T0)` 開季，`world.catch_up_season(old, T0 + 天數 * DAY / old.config.time_scale, random.Random(0))` 才會一路結算大事（直接 `setattr(season, "time", …)` 不結算，timeline 是空的），`admin.admin_end_season(…)` 收季，再 `Game.for_world(real_content("week7"), world)` 跟舊程式自己的輸出逐週比（`tests/test_fb654_rest_season_map_titles.py`）。修之前用 `git stash push -m <標籤> -- <檔>` 收起來證明測試是紅的。
 - **計畫要對現行程式**：派工給的計畫可能是照 main 或更早的版本寫的；開工先核對，差異寫進計畫，前提不在了就停下來回報 PM。
+- **等背景測試跑完**（2026-10-21 小單，279 個檔 `-n 6` 約 10 分鐘）：`Monitor` 一啟動就回傳，接著的指令不會等它，連開幾個 `sleep` 的 Monitor 只是排通知、不是真的在等。要原地等就用前景 Bash：`until grep -qE " in [0-9.]+s" "$TEMP/xxx.log"; do sleep 5; done; tail -n 15 "$TEMP/xxx.log"`，`timeout` 給 590000（單獨一條 `sleep N` 會被擋，until 迴圈不會）。pytest 跑到 99% 之後常再等好幾分鐘（最後幾條是整季模擬），不是卡住。
 - 背景長跑（量表）用 `run_in_background`。輸出導到檔案時 python 會緩衝，加 `-u` 才看得到進度。等它結束的通知，不要輪詢。
 - **PowerShell 的變數名不分大小寫**（2026-10-21）：迴圈裡 `$O`（腳本資料夾）被後面的 `$o`（雜湊）蓋掉，路徑變成一串雜湊。路徑變數取長一點的名字（`$CMP`、`$SCRIPTS`）。外部程式往 stderr 印字（`2> 檔`）時 5.1 會報 NativeCommandError、整條指令退出碼非 0，但迴圈會接著跑；要看真的有沒有失敗，看輸出檔與 `.err` 的內容。
 - **用 Write 寫的 `.ps1` 在 PowerShell 5.1 讀成系統編碼**（UTF-8 沒有 BOM）：腳本裡的中文路徑（`C:/Ray/專案/天下大勢/.venv/...`）變亂碼、找不到 python（2026-10-21）。迴圈直接寫在 PowerShell 工具那一行裡，不要另存 `.ps1`。
@@ -51,6 +54,8 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   - 管理者的名號在 `/api/character` 取不到（玩家不能取管理者的名號）：用 `scripts/set_password.py <帳號> --character <名號> --db <暫存資料庫> --local-dir <scratchpad>` 建（密碼寫在 scratchpad 的檔），啟動伺服器前設 `TIANXIA_ADMINS=<名號>`。其他測試角色走 `/api/register`、`/api/character`，陣營與所在地可以直接寫進同一個資料庫（`open_characters()` 照 `TIANXIA_DB`），伺服器每次拿鎖都重讀角色。
   - 正式設定的排程是關的（啟動時印「排程：關」）：世界時間只在有人連線時推，集結截止、回合逾時要有人輪詢才會發生——驅動腳本要一直打 `/api/main`。
   - 長的等待：PowerShell 的 `Start-Sleep` 超過一定秒數會被擋；在瀏覽器分頁裡 `javascript_tool` 跑 `await new Promise(r => setTimeout(r, 30000))` 再抓 `/api/main`，或用 Monitor。
+- **Bash 隔離會擋「`diff <(…) <(…)` 加 `git add` 串在一起」的指令**（too complex，2026-10-21）：拆成兩條，一條比檔、一條 git。
+- **PowerShell 把含雙引號的字串傳給外部程式時，雙引號被吃掉**（2026-10-21 變異腳本的「舊字串」引數是 `phase == "preparing"`，到 python 手上變 `phase == preparing`，斷言「舊字串在檔裡 0 處」、什麼都沒跑）：引數用單引號、而且挑一段不含雙引號的獨特片段（例：`season.ended or phase == ` 換成 `season.ended or phase != `）。變異腳本（自己在 scratchpad 寫一支，參數 `<工作樹> <相對檔> <測試檔> <舊> <新>`）：舊字串先斷言剛好一處（換 CRLF 檔先轉 `\n`）、`finally` 寫回原檔 bytes、跑完 `git status` 確認沒留下改壞的檔。
 - **不要寫帶中文路徑的 `.ps1`**：Write 工具寫出的 .ps1 沒有 BOM，Windows PowerShell 5.1 照 ANSI 讀，`C:/Ray/專案/…/python.exe` 變亂碼、每一行都 CommandNotFound（2026-10-20 背景跑對照表踩到，log 只看得到一串錯）。要串好幾個 python 程式，就寫一支 Python 調度腳本，用 `sys.executable` 叫子程式，再從 PowerShell 跑那一支。
 
 ## 測試怎麼挑
@@ -62,6 +67,7 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   - `--list` 先看挑到哪些檔。
   - **合併還沒提交時別拿 `--list` 的清單**（2026-10-21 輿圖簡化第 2 批收尾）：`test_for` 跟 base 的分岔點比，`--no-commit` 合進來的東西都還算「沒提交的改動」，合功能分支的那一下挑到 327 個檔（幾乎整套）；先跑兩批的測試檔、提交合併，再 `--list` 只剩這一批自己的 117 個。
 - 改到 `tianxia/engine.py` 幾乎會挑到大半套（八千多條、約 6～8 分鐘），正常。只動內容或小模組時會少很多。
+- **功能分支在你做的時候往前走了**（2026-10-21 玉璽碎片第 2 批：開工時 `feature/territory-conquest` 是 `f5686765`，做到一半合進了翻地 `90e52e9b`）：`test_for --base origin/feature/<名字>` 照分岔點比，挑到的還是只有自己的改動，照用；「關著一個位元組都不變」照派工寫的那一版比（不是新的頭）。要不要合新的頭照派工，沒說就不合，回報裡寫功能分支到了哪裡、試合（`git merge-tree --write-tree HEAD origin/feature/<名字>`）有沒有衝突。
 - **`test_for.py -- -n 4` 擋不住 `-n auto`**（2026-10-20 領地爭奪第三批 A）：挑到三個檔以上它自己在最後補 `-n auto`，排在 `--` 之後的參數後面，pytest 照最後一個算。派工要 `-n 4`（同時有好幾個子代理在跑）時，在 scratchpad 寫一支小腳本 `import test_for`、拿 `test_for.pick(test_for.changed_files(base))` 的清單自己叫 pytest（`-q -m "slow or not slow" -n 4`，`TIANXIA_DB` 設新的暫存檔），背景跑、輸出導到檔。PowerShell 一行就夠：`$line = (& $py scripts/test_for.py --base <base> --list | Where-Object { $_ -like '要跑：*' }) -replace '^要跑：',''; $files = $line.Trim() -split '\s+'; & $py -u -m pytest @files -q -n 6 -m "slow or not slow" | Out-File $env:TEMP\x.log`（2026-10-21 玉璽碎片改版修正：改 `engine.py`＋`state.py`，挑到 303 個檔）。
 - **兩張單的測試寫在同一個檔、又要一張一個 commit**（2026-10-21 FB-606、607 都在 `test_conquest_clash.py`）：先把第二張的測試從檔尾剪到 scratchpad（照第一個 `def` 的名字找頭、連前面的空行一起剪），提交第一張，再接回去寫第二張的實作。不要裸 `git stash`。
 - 新測試超過一秒（建 `Game`、載真實內容通常就超過）標 `@pytest.mark.slow`。
@@ -75,9 +81,12 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   同一條測試裡把開關關掉再比一次、斷言「關著時看得出差別」（列出哪幾項不一樣），才證明這條測試抓得到漏（玉璽碎片改版第 1 批 `test_two_worlds_that_differ_only_in_the_holder_look_the_same`）。要找名號字串時，名號別跟固定的字撞（拿「懷璽」當持有者的名號，會撞到「懷璽之人」），用「甲客」「持璽客」這種。
 - **差異測試要讓「世界差在祕密、後面的步驟不被結果帶開」**（玉璽碎片改版第 1 批修正，側門）：兩個世界裡誰贏誰輸、誰掉了氣血會不同，之後算威力的步驟（氣血係數 `condition` 也在 `_spar_power` 裡）就跟著差，測試紅了不是漏而是被結果帶開。做法：先把所有「看」的畫面讀完再打；每個人至多打一場有損耗的仗（截殺各挑沒打過的人）；擂台挑了就認輸（`arena:yield`，結果固定是落敗、名次不動）；只比「對手那一格」的數字，不比勝負與氣血。
 - **差異測試抓不抓得到，用「還原漏洞」證明**：當祕密只在子開關開著時存在（關著本來就看不出差別），不能靠「關著看得出差別」那招，改成 `monkeypatch` 把防線拆掉（例：`Game._spar_power` 不理 `seal`、`_arena_bare` 回 None），斷言兩個世界在該有的鍵上真的不一樣（`test_the_side_door_guard_has_teeth`）。另外對實作做變異檢查：一處一處換掉、跑那組測試、看會紅；腳本把原檔 bytes 存在記憶體、`finally` 寫回，比反向替換安全（不會因為換回去的字串不唯一而卡在改壞的狀態）。
+- **差異測試的「旁觀者」要站在看得到的位置**（FB-643，2026-10-21）：第 2 批的不具名守門有比「酒肆查兩人」，可是旁觀客在別處、兩人名望 0，打聽度只到 3，「近來的事」根本不列，漏了也比不出來。照被測的那個門檻擺人：同陣營、同一間酒肆（地頭熟）、名望第一段（打聽度 4 才列近來的事）、份量 4 的舊事湊到差一件就加名氣、舊事的時刻挪到兩天前（近況只看新的那一件），再斷言「看得到的那一行真的有出現」（`tests/test_seal_fb643_tavern.py`）。
+- **要對某些讀者藏起來的資料，先找現成的分類欄位**（FB-643：起用碎片的行狀不給酒肆讀）：`AnnalEntry` 加一個布林欄位會讓每個人每一則行狀的 JSON 都多一個鍵（`model_dump_json` 不省預設值，資料庫對照會整片不一樣）；改用新的 `kind`（`annals.SEAL`），顯示的地方給同一個標籤（`KINDS`）、季末的傳照舊歸段（`GROUPS`），讀者那幾處問 `annals.heard`。資料庫只有那幾則的 `kind` 變。
+- **假瀏覽器的點擊不管 `disabled`**（`test_seal_acts_web.CLICK` 直接呼叫 click 的監聽器）：灰掉的鈕在真的瀏覽器按不到，在測試裡按得到。動作的處理要自己再驗一次（`seal-pick` 只收按得下去、那一列沒灰的），不要只靠 `disabled`。
 - **給別人看的數字（勝算、身手、戰報的「對手威力」）每一處都要走同一個「給別人看的那一份」**：選單、玩家卡、頁面（`shopview`）、戰報兩邊各一份（發的與收的、守的與挑的）、假人讀的勝算清單；寫在存檔裡的快照（擂台分身）要另記一份，欄位加預設 `None`（舊存檔讀得進來、沒碎片時狀態不多一個字）。算這個數字的時機要排在記戰報之前：第一邊的記帳可能升級，第二邊再算就變了（`_spar`、`raid`、`_ambush_fight` 都在算 `ours`／`theirs` 的同一處先算好）。
 - **一包 `**kwargs` 的標記（`Game._battle_marks` 這種）加新鍵**：有舊測試斷言整包一字不差（`test_joining_snapshots_turncoat_and_newbie`）。新鍵只在有值時才放進去，關著的季那一包一個字不變。
-- **「關著一個字不變」的畫面對照，探針只問兩版都有的東西**：問到新版才有的效果鍵，舊版當成加的（中性值 0）、新版當成乘的（中性值 1），雜湊就不一樣，但那不是畫面。改問掛點本身的輸出（扣血、內傷、價錢、回話）。玉璽碎片改版第 1 批的腳本在當時 scratchpad 的 `sealcmp/cmp_seal_off.py`（七片各一個持有者、第一個是假人；三種季各 204 行）。
+- **「關著一個字不變」的畫面對照，探針只問兩版都有的東西**：問到新版才有的效果鍵，舊版當成加的（中性值 0）、新版當成乘的（中性值 1），雜湊就不一樣，但那不是畫面。改問掛點本身的輸出（扣血、內傷、價錢、回話）。玉璽碎片改版第 1 批的腳本在當時 scratchpad 的 `sealcmp/cmp_seal_off.py`（七片各一個持有者、第一個是假人；三種季各 204 行）。第 3 批 QA 的 `seal3qa/cmp3.py`＋`kit3.py`（PM 這個 session 的 scratchpad；`QA_ROOT=<archive 根> python cmp3.py <weekend|none|season21|conquest> <畫面檔> <資料庫檔>`，`PYTHONHASHSEED=0`、不加 `-I`）更完整：兩份 archive × 四種用一支 Python 調度腳本開八個子行程平行跑，約十分鐘（2026-10-21 碎片第 3 批修正：子開關關著跟 `a46ac1dc` 比四種畫面一樣，資料庫只差翻地帳的 `flipped_from`；把 `revamp=False` 換成 True 跟合進來那一版比，畫面一樣、資料庫只差那一則行狀的 `kind`）。
 - **修 bug 先寫會紅的測試**：先確認它在修之前真的失敗、失敗的數字跟 QA 回報的一樣，再修。回報時寫「修前重現了什麼」。
 - **「確認並守住」的測試**（程式沒改、一寫就綠，例：假人不買商城的東西）：要證明它抓得到退步，另寫一個暫時的測試檔 import 它，monkeypatch 一個退步（例 `bot_policy.take_turn` 先叫 `mall_buy`、`social.card` 多塞一個「元寶」），跑一次看它紅，再刪掉那個暫時的檔（不提交）。
 - 用正式內容測舊規則的測試，要在 helper 裡把新開關關掉（例 `c.config.precise_actions = False`、`four_tiers.enabled = False`）。新規則另開一個測試檔，不要改寫舊的斷言去迎合新規則。
@@ -115,6 +124,7 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 
 ## 規則改動的雷
 
+- **一個動作同時寫全服登記與季**（2026-10-21 玉璽碎片第 2 批 `Game.seal_use`）：登記（`SharedWorldState.seal` 這種 world 那一列的東西）在 `self.world.mutate` 裡改、裡面整個重驗；季的東西（`WorldState` 的欄位、人物所在、天下大事）改在 `self.state.world` 上、最後 `self._save_season()`。不要在 mutate 裡改 `shared.season` 之後又拿著同步時讀的 `self.state.world` 繼續做事：之後誰叫 `_save_season()` 都會把 mutate 寫的季整份蓋掉（傳聞與江湖史例外，它們照流水號新增）。
 - **開關與蓋章**：
   - 新規則多半是 `Config` 開關＋開季時蓋在 `WorldState` 的章（例 `precise.on(content, world)` 同時看設定、章、探索三選一）。
   - 判斷開沒開一定走那個 `on()`，要把 world/state 傳進去。只傳 content 時它會回假，悄悄退回舊說法（FB-435 就是這樣：傳聞沒給 world，寫回舊句）。
@@ -151,6 +161,8 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 - 資料庫結構（第 5 版）不改，要改先問 PM。新狀態欄位加在 `PlayerState`／`WorldState`，舊存檔讀得進來。
 - **全服戰鬥不只一場了**（領地爭奪第二批：攻城戰跟時刻表決戰同時打，`SharedWorldState.sieges`）：引擎裡讀「這個人的那一場」用 `Game._battle_now()`（假人程式、bot_policy 用 `game.battle_now()`），改它用 `_mutate_battle_of(battle, fn)`，全部列出來用 `battles_now()`；**不要再寫 `world.get_battle()`／`world.mutate_battle()`**，除非真的只講時刻表決戰（璽動、管理者的決戰工具、`_settle_showdown`）。新的 `SharedWorldState`／`BattleInstance` 欄位照舊要分進 `tests/test_server.py` 的推送指紋表。
 - **存進全服狀態的「現實時間」一律用 `self.now`，不要用 `pill_now()`**（FB-577，2026-10-21）：`pill_now()`＝`now`＋`advanced_real`，管理者快轉推的 `advanced_real` 只活在那一個 `Game` 物件的記憶體裡；拿它寫進共用狀態的時刻（`XingshiTicket.opened_real`、`retry_at`），別的 `Game`（伺服器排程 `world_tick`、別的玩家）拿自己的 `now` 比，會差上快轉的那十幾個小時。換天、回體丹換日這種「快轉跨過了就該算」的判斷才用 `pill_now()`（`conquest_day.day_key` 有「日子只准往前走」擋著）。測試：一個 `Game` 先 `advance` 跨過換天開單，另一個 `Game.for_world` 照現實時鐘 `world_tick`，看單有沒有照寬限收。
+- **「設定裡有、章上沒有」的值（`season_weeks`、`season_segments`）：畫一季的時刻、週數、季曆長度時，函式要收 `season`**（FB-635，2026-10-21）：上一季是舊程式的週末式季曆（章上 `season21` false），新程式的設定已經是照現實天的，直接讀 `content.config.season_weeks` 會把上一季的每個時刻照新季曆寫（休季換程式、開下一季之前才看得到：開了季就蓋新章）。`calendar.weekend_style(season, content)` 判斷（只管休季；還在跑的舊季時刻表與曆時交界仍照新設定走，只換畫面會跟大事對不上，不換）、`calendar.weeks/total_days/cal_scale/point/week_start/calendar_end` 都收 `season`；新寫「按季曆算」的函式照辦，不要再讀 `content.config.season_*`。測試用差異法：同一季（舊內容開的）、同一個世界秒，新內容與舊內容各算一次要一字不差（`tests/test_fb635_rest_season_calendar.py`）；重現要走「舊內容開季→`admin_end_season`→新內容 `Game.for_world` 讀同一份資料庫」整條，單看 `stamp_text` 看不出狀態列的 `weeks` 與輿圖 `weeks_total`。還讀設定沒動的：`rules.decisive_week`、`stance_rule_note`、`checkin.last_day`、`timetable.finale_default`（跑著的舊季本來就不該換程式，PM 定的是休季才換）。
+- **啟動時印的警告（`server.main`、`run_bots.main`）的測試**：`uvicorn.run` monkeypatch 掉、`server.PROFILE`／`server.CONTENT` 換成要試的設定、`server.main([])`；假人用 `monkeypatch.setenv("TIANXIA_PROFILE", …)`＋`run_bots.main(ticks=0)`；`capsys` 看輸出。要試的狀態有四種：全新資料庫（什麼都沒種，`open_world().season_phase()` 是 preparing）、`seed_first_season` 種好沒開、`open_season` 用另一份設定開了、同一份設定開了；警告函式收的是 `season_phase()`，不是從 `WorldState` 猜（全新資料庫讀回來的季是沒蓋章的空殼，章上 `season21` false，會跟任何 season21 的設定對不上；`tests/test_fb636_preparing_warning.py`）。
 - **兩局測試各有一份內容**：`conquest_kit.conquest_game()`（同 `test_territory._game`）每一局各載一份 `real_content` 的複本，同一個資料庫開兩局時，在測試裡往內容加東西（例：借一份戰鬥範本）要兩局都加，不然第二局找不到、畫面靜靜地沒有那一場。
 
 ## 量表怎麼讀
@@ -166,6 +178,9 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 ## 回報 PM
 
 - 一張回饋單一個 commit；commit 訊息一句英文，結尾 `Co-Authored-By:`（照當時 system 給的那一行）。
+  - **幾張單改在同一個檔、甚至同一個函式裡**（2026-10-21 玉璽碎片改版第 3 批：批本身與 FB-627 都改 `seal_acts.view`）：不必把工作樹改回去再改回來。寫一支 scratchpad 腳本：讀工作樹的檔（CRLF→LF）、照「拿掉哪幾處」換掉（每一處 `assert count == 1`）、`git hash-object -w --stdin --path <檔>` 寫成 blob、`git update-index --add --cacheinfo 100644,<blob>,<檔>` 放進索引——工作樹一個位元組不動，`git diff` 剩下的就是下一張單。先提交最大的那一批，再一張一張 `git add`。每一筆提交之後 `git archive HEAD` 解到 scratchpad 跑那幾個測試檔，確認單獨一筆也是綠的。
+  - 同一個檔裡有兩張單的改動：先用 Edit 把第二張的那一段暫時改回去、`git add` 只放第一張的檔、提交，再把那一段改回來提交第二張（備份一份完整檔到 scratchpad，改回來之後 `diff` 對一次）。
+  - 提交完才發現前一張要補（例：測試完決定收窄範圍）：補的檔 `git commit --fixup <那張的 hash>`，其餘沒提交的先提交成一個 docs commit（工作樹不乾淨 rebase 會拒絕），再 `GIT_SEQUENCE_EDITOR=true git rebase -i --autosquash <base>`（沒推出去才這樣做；hash 全變，回饋單的「已修 `<commit>`」等重寫完才填）。
 - 推之前合派工指定的分支（衝突兩邊都留）。推完用 `git merge-base --is-ancestor HEAD origin/<分支>` 確認推到了。
   - `天下大勢` 這份 clone 的 `remote.origin.fetch` 只寫了 main 等三條，**`git fetch origin` 不會更新 `origin/dev/*`、`origin/feature/*`**（2026-10-20：推上去了，`origin/dev/conquest-1` 還停在舊的那一版，上面那一行就判成沒推到）。推完先 `git fetch origin refs/heads/<分支>:refs/remotes/origin/<分支>` 再比，或直接看 `git ls-remote origin refs/heads/<分支>`。拿 `origin/feature/<名字>` 當 `test_for` 的 base 之前也照這樣更新一次。
   - 這份 clone 的 `remote.origin.fetch` 只列 `tianxia`、`feature/sanguo-companions`、`main`：`git fetch origin`（或 `git fetch origin <分支>`）**不會**更新 `origin/dev/*`、`origin/develop`，推完馬上比會假失敗、開工時讀到的也可能是舊的。要比之前先 `git fetch origin +refs/heads/<分支>:refs/remotes/origin/<分支>`，或直接 `git ls-remote origin refs/heads/<分支>` 對 `git rev-parse HEAD`（2026-10-20 商城第二批修正那一次）。
