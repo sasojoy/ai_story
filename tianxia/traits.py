@@ -39,8 +39,66 @@ def general(content: Content, key: str) -> GeneralTrait:
     raise KeyError(f"content/traits.json 沒有一般功效 {key}")
 
 
+def copies_of(art: MartialArt) -> dict[str, list[int]]:
+    """這一門每個一般功效各有幾份、每份幾層（arts.apply 填的 MartialArt.copies）；沒有的（內容寫的武學、舊資料）每個功效當作一份。"""
+    if art.copies:
+        return {k: list(v) for k, v in art.copies.items()}
+    mine = traits_of(art)
+    return {k: [mine.count(k)] for k in dict.fromkeys(mine)}
+
+
+def stack_value(values: list[float], cap: float, share: float, ceiling: float) -> float:
+    """同一個功效好幾份合起來算多少（Joy 2026-10-22 選「第二份算半」）：只有一份、或加起來沒超過上限，照舊相加（夾在 cap）；
+    超過時第一份照算（夾在 cap），第二份起每份先夾在 cap、再算 share，合起來最多 cap × ceiling。values 與 cap 同一種單位
+    （打仗是數字，戰力與評分是重數）。"""
+    if not values:
+        return 0.0
+    each = sorted((min(cap, v) for v in values), reverse=True)
+    return max(min(cap, sum(values)), min(cap * ceiling, each[0] + share * sum(each[1:])))
+
+
+def stack_shares(values: list[float], cap: float, share: float, ceiling: float) -> list[float]:
+    """每一份實際算了幾成（照先後一份一份加上去，多出來的那一截 ÷ 那一份自己的數字；一份自己超過上限的那一截本來就不算，
+    所以除的是夾過上限的數）：卡上「算五成」「不加」那幾個字。"""
+    out, before = [], 0.0
+    for k, v in enumerate(values):
+        after = stack_value(values[:k + 1], cap, share, ceiling)
+        out.append(max(0.0, min(1.0, (after - before) / min(cap, v))) if v > 0 else 1.0)
+        before = after
+    return out
+
+
+def top_of(content: Content, trait: GeneralTrait) -> tuple[float, float]:
+    """一般功效打起來最多到多少（數字、extra）：好幾份疊上去時是上限的 stack_ceiling 倍。"""
+    ceil = content.config.arts.stack_ceiling
+    return trait.cap * ceil, trait.extra_cap * ceil
+
+
+def high_counts(art: MartialArt) -> dict[str, int]:
+    """這一門每個真意各有幾份（同一個真意第二份照樣記在 extra_highs）。"""
+    out: dict[str, int] = {}
+    for h in (art.high, *art.extra_highs):
+        if h:
+            out[h] = out.get(h, 0) + 1
+    return out
+
+
+def high_tactic(content: Content, tactic: TacticDef, copies: int) -> TacticDef:
+    """同一個真意好幾份：第二份起發動率 ×(1＋stack_share)；本來就每次發動的（鎮岳、金身）改成多撐一回合；第三份起不再加。"""
+    if copies < 2:
+        return tactic
+    share = content.config.arts.stack_share
+    if (tactic.rate or 0) < 1:
+        return tactic.model_copy(update={"rate": min(1.0, (tactic.rate or 0) * (1 + share))})
+    if tactic.rounds:
+        return tactic.model_copy(update={"rounds": tactic.rounds + 1})
+    if "turns" in tactic.params:
+        return tactic.model_copy(update={"params": {**tactic.params, "turns": tactic.params["turns"] + 1}})
+    return tactic
+
+
 def highs_of(content: Content, art: MartialArt) -> list:
-    """這一門帶的大獎（高階技能），照槽的先後、同一個只算一次；內容沒有那個 id 的略過。"""
+    """這一門帶的大獎（高階技能），照槽的先後、同一個只列一次（幾份看 high_counts）；內容沒有那個 id 的略過。"""
     out = []
     for hid in dict.fromkeys(h for h in (art.high, *art.extra_highs) if h):
         top = high(content, hid)
@@ -78,15 +136,18 @@ def loadout(state: GameState, content: Content, world: WorldStateStore) -> Loado
     best: dict[str, tuple[float, str]] = {}
     if not content.traits.general:
         return out
+    cfg = content.config.arts
+    pooled: dict[str, list[float]] = {}  # 身上兩門的每一份（層數已乘品質）：同一個功效好幾份照 stack_value 算
+    tops: dict[str, tuple[object, int]] = {}  # 真意：名字 → (那一個, 兩門合起來幾份)
     for skill_id in (state.player.member.wugong_id, state.player.member.neigong_id):
         art = team.player_art(state, content, world, skill_id)  # 自己那一份：槽裡裝的技能已經填上（arts.apply）
         if art is None:
             continue
-        mult, mine = multiplier(content, art.quality) * (1 + moves.look_bonus(content, art)), traits_of(art)
-        for attribute in dict.fromkeys(mine):
-            trait = general(content, attribute)
-            layers = mine.count(attribute) * mult
-            out.layers[trait.hook] = out.layers.get(trait.hook, 0.0) + layers
+        mult = multiplier(content, art.quality) * (1 + moves.look_bonus(content, art))
+        for key, each in copies_of(art).items():
+            trait = general(content, key)
+            pooled.setdefault(trait.hook, []).extend(n * mult for n in each)
+            layers = sum(each) * mult
             if layers > best.get(trait.name, (0.0, ""))[0]:
                 best[trait.name] = (layers, art.name)
         for sid in [art.special, *art.extra_specials]:
@@ -94,10 +155,16 @@ def loadout(state: GameState, content: Content, world: WorldStateStore) -> Loado
             if sp is not None and sp.hook not in out.specials:
                 out.specials[sp.hook] = sp
                 best.setdefault(sp.name, (1.0, art.name))
+        counts = high_counts(art)
         for top in highs_of(content, art):
-            if all(t.name != top.tactic.name for t in out.highs):
-                out.highs.append(top.tactic)
-                best.setdefault(top.tactic.name, (1.0, art.name))
+            had = tops.get(top.tactic.name, (top, 0))[1]
+            tops[top.tactic.name] = (top, had + counts.get(top.id, 1))
+            best.setdefault(top.tactic.name, (1.0, art.name))
+    for trait in content.traits.general:
+        if trait.hook in pooled and trait.per_layer > 0:
+            value = stack_value([trait.per_layer * n for n in pooled[trait.hook]], trait.cap, cfg.stack_share, cfg.stack_ceiling)
+            out.layers[trait.hook] = value / trait.per_layer
+    out.highs = [high_tactic(content, top.tactic, n) for top, n in tops.values()]
     out.source = {name: art_name for name, (_, art_name) in best.items()}
     return out
 
@@ -107,7 +174,7 @@ def amount(content: Content, lo: Loadout, hook: str) -> float:
     trait = next((t for t in content.traits.general if t.hook == hook), None)
     if trait is None:
         return 0.0
-    return min(trait.cap, trait.per_layer * lo.layers.get(hook, 0.0))
+    return min(top_of(content, trait)[0], trait.per_layer * lo.layers.get(hook, 0.0))
 
 
 def tactic_defs(content: Content, lo: Loadout) -> list[TacticDef]:
@@ -118,8 +185,9 @@ def tactic_defs(content: Content, lo: Loadout) -> list[TacticDef]:
         layers = lo.layers.get(trait.hook, 0.0)
         if trait.tactic is None or layers <= 0:
             continue
-        value = min(trait.cap, trait.per_layer * layers)
-        extra = min(trait.extra_cap, trait.extra_per_layer * layers)
+        top, top_extra = top_of(content, trait)  # 層數已經照 stack_value 算好，這裡只夾疊上去的上限
+        value = min(top, trait.per_layer * layers)
+        extra = min(top_extra, trait.extra_per_layer * layers)
 
         def pick(v: float | str) -> float:
             return value if v == "value" else extra if v == "extra" else float(v)
@@ -196,19 +264,22 @@ def card_line(content: Content, art: MartialArt) -> str:
         tail = tactics.card_text(ult, ULTIMATE_TITLE)
     if not content.traits.general:
         return tail
-    mult, mine, parts = multiplier(content, art.quality) * (1 + moves.look_bonus(content, art)), traits_of(art), []
-    for attribute in dict.fromkeys(mine):
-        trait = general(content, attribute)
-        layers = mine.count(attribute) * mult
-        number = min(trait.cap, trait.per_layer * layers)
-        extra = min(trait.extra_cap, trait.extra_per_layer * layers)
-        parts.append(f"〔{trait.name}〕" + trait.desc.replace("{value}", _value(trait.hook, number)).replace("{extra}", _value(trait.hook, extra)))
+    cfg = content.config.arts
+    mult, parts = multiplier(content, art.quality) * (1 + moves.look_bonus(content, art)), []
+    for key, each in copies_of(art).items():
+        trait = general(content, key)
+        values = [trait.per_layer * n * mult for n in each]
+        number = stack_value(values, trait.cap, cfg.stack_share, cfg.stack_ceiling)
+        extra = min(top_of(content, trait)[1], trait.extra_per_layer * number / trait.per_layer) if trait.per_layer else 0.0
+        parts.append(f"〔{trait.name}〕" + trait.desc.replace("{value}", _value(trait.hook, number)).replace("{extra}", _value(trait.hook, extra))
+                     + stack_note(values, trait.cap, cfg.stack_share, cfg.stack_ceiling))
     for sid in [art.special, *art.extra_specials]:
         sp = special(content, sid)
         if sp is not None:
             parts.append(f"〔{sp.name}〕" + sp.desc.replace("{value}", _value(sp.hook, sp.amount)))
+    counts = high_counts(art)
     for top in highs_of(content, art):
-        parts.append(HIGH_MARK.format(name=top.name) + top.desc)
+        parts.append(HIGH_MARK.format(name=top.name) + top.desc + high_note(top.tactic, counts.get(top.id, 1)))
     if not parts:
         return (EMPTY_LINE + (f"\n{tail}" if tail else "")) if not fixed_art(content, art) else tail
     line = "功效：" + "・".join(parts)
@@ -216,6 +287,38 @@ def card_line(content: Content, art: MartialArt) -> str:
 
 
 HIGH_MARK = "〔高階・{name}〕"
+HIGH_TWICE = "（兩份：第二份{word}）"  # 待 joy 潤
+HIGH_MORE_WORD, HIGH_LONGER_WORD = "多一半發動的機會", "多撐一回合"  # 待 joy 潤
+
+
+def high_note(tactic: TacticDef, copies: int) -> str:
+    """功法卡上同一個真意好幾份的小註（照 high_tactic）：兩份「第二份多一半發動的機會」，本來就每次發動的「第二份多撐一回合」；
+    三份起後面再寫第三份不加。"""
+    if copies < 2:
+        return ""
+    note = HIGH_TWICE.format(word=HIGH_MORE_WORD if (tactic.rate or 0) < 1 else HIGH_LONGER_WORD)
+    return note if copies == 2 else note.replace("兩份：", f"{COUNT_WORDS.get(copies, '好幾')}份：").replace("）", "，第三份起不加）")
+
+
+def stack_note(values: list[float], cap: float, share: float, ceiling: float) -> str:
+    """功法卡那一行同一個功效好幾份時的小註：「（兩份：第二份算五成）」「（三份：到頂，第三份不加）」。只有一份是空字串。待 joy 潤"""
+    if len(values) < 2:
+        return ""
+    shares = stack_shares(values, cap, share, ceiling)
+    words = [f"第{'一二三四五六七八'[k]}份{share_word(x)}" for k, x in enumerate(shares) if k and x < 0.95]
+    full = stack_value(values, cap, share, ceiling) >= cap * ceiling - 1e-9
+    return f"（{COUNT_WORDS[len(values)]}份{'：' + '、'.join(words) if words else ''}{'・到頂' if full else ''}）"
+
+
+COUNT_WORDS = {1: "一", 2: "兩", 3: "三", 4: "四", 5: "五", 6: "六", 7: "七", 8: "八"}
+
+
+def share_word(x: float) -> str:
+    """一份算了幾成：算五成、算三成；不到半成寫「不加」。"""
+    n = round(x * 10)
+    return "不加" if n <= 0 else f"算{'零一二三四五六七八九十'[n]}成"
+
+
 EMPTY_LINE = "功效：（意境槽空著，到煉製頁裝意境）"  # 待 joy 潤
 
 

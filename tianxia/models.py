@@ -2392,6 +2392,11 @@ class ArtsTuning(_Strict):
     # 槽（招式與絕學稿案第二輪，Joy 2026-10-21 按建議）：學來的（下品）2、自創與合成的 3、絕學 3（另加絕招那一環，arts.ULTIMATE_SLOT）
     slots: dict[str, int] = Field(default_factory=lambda: {"下品": 2, "中品": 3, "上品": 3, "絕學": 3})
     general_weight: float = Field(default=0.05, ge=0)
+    # 同一個功效好幾份（Joy 2026-10-22 決策卡選「第二份算半」，traits.stack_value）：只有一份、或加起來沒超過上限照舊；
+    # 超過時第一份照算，第二份起每份算 stack_share，合起來最多上限的 stack_ceiling 倍。打仗、戰力、評分同一條。
+    # 同一個真意第二份：發動率 ×(1＋stack_share)；本來就每次發動的（鎮岳、金身）多撐一回合；第三份起不再加
+    stack_share: float = Field(default=0.5, ge=0, le=1)
+    stack_ceiling: float = Field(default=1.5, ge=1)
     high_weight: float = Field(default=0.12, ge=0)
     special_weight: float = Field(default=0.10, ge=0)
     signature_weight: float = Field(default=0.15, ge=0)

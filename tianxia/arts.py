@@ -18,6 +18,7 @@ team.pairing、weapons）照舊讀那幾個欄位，一個字不改。
 from __future__ import annotations
 
 from . import insight_fx, moves
+from . import traits as traits_mod
 from .martial_arts import QUALITIES, MartialArt, Insight, power_at
 from .models import Content, GeneralTrait, HighTrait, SpecialTrait
 from .state import GameState
@@ -108,7 +109,7 @@ def skill_name(content: Content, insight: Insight, fx=None) -> str:
 
 def skill_desc(content: Content, insight: Insight, strength: int, fx=None) -> str:
     """這一招在回合裡做什麼（卡上那一句，數字照強度）。給了 fx 照那一份的每一個效果各寫一句「〔名〕…」。"""
-    from . import traits as traits_mod
+
 
     sp = special_of(content, insight.secret_special) if insight.secret_special else None
     if fx is not None:
@@ -155,7 +156,8 @@ def apply(state: GameState, content: Content, world: WorldStateStore, art: Marti
 
     traits: list[str] = []
     special = None
-    highs: list[str] = []  # 槽裡的大獎（意境效果池）：同一個只算一次，第一個記在 high、其餘在 extra_highs
+    highs: list[str] = []  # 槽裡的大獎（意境效果池）：第一個記在 high、其餘在 extra_highs；同一個真意第二份照樣記（traits.high_counts）
+    copies: dict[str, list[int]] = {}  # 每個一般功效每一份幾層（同一個功效好幾份，traits.stack_value）
     lean = art.lean if art.lean in LEAN_OF else "無"  # 內容寫的正邪（守義劍、剪徑刀…）與自創挑的正邪是底，槽裡帶正邪的意境蓋過它
     lean_strength = 0
     top_attr, top_strength = "", 0  # 兼容並蓄的武學：屬性照強度最高的那一格（一樣高取前面的；定案第二節）
@@ -171,7 +173,8 @@ def apply(state: GameState, content: Content, world: WorldStateStore, art: Marti
         fx = insight_fx.record(state, content, world, insight_id, ins)
         for key, layers in fx.general.items():  # 一般功效：一層一個鍵（第一個功效的鍵就是屬性，舊的下游照讀）
             traits += [key] * max(1, min(MAX_STRENGTH, layers))
-        if fx.grand and fx.grand not in highs and insight_fx.grand(content, fx.grand) is not None:
+            copies.setdefault(key, []).append(max(1, min(MAX_STRENGTH, layers)))
+        if fx.grand and insight_fx.grand(content, fx.grand) is not None:
             highs.append(fx.grand)
         if ins.attribute and strength > top_strength:
             top_attr, top_strength = ins.attribute, strength
@@ -186,7 +189,7 @@ def apply(state: GameState, content: Content, world: WorldStateStore, art: Marti
         if recipe is not None:
             special = secret_recipes.special_for(content, recipe, secret_recipes.tianji_of(world))
     return art.model_copy(update={
-        "traits": traits, "special": special, "high": highs[0] if highs else None, "extra_highs": highs[1:],
+        "traits": traits, "copies": copies, "special": special, "high": highs[0] if highs else None, "extra_highs": highs[1:],
         "extra_specials": [], "dormant": [],
         "attribute": attribute, "lean": lean, "insight": None, "insight_attr": None,
     })
@@ -202,19 +205,24 @@ def effect_bonus(content: Content, view: MartialArt) -> float:
     本命戰法 signature_weight（小戰法半個、自創的招照火候打折）。view 是 apply 過的那一份。"""
     cfg = content.config.arts
     bonus = 0.0
-    counts: dict[str, int] = {}
-    for a in view.traits or ([view.attribute] if view.attribute and fixed(content, view.id) else []):
-        counts[a] = counts.get(a, 0) + 1
-    for a, n in counts.items():
-        bonus += cfg.general_weight * min(MAX_STRENGTH, n)
+    held = traits_mod.copies_of(view) if view.traits or view.copies else (
+        {view.attribute: [1]} if view.attribute and fixed(content, view.id) else {})
+    for each in held.values():  # 同一個功效好幾份：第二份起算一半，最多一倍半（跟打仗同一條，traits.stack_value，單位是重）
+        bonus += cfg.general_weight * traits_mod.stack_value([float(n) for n in each], MAX_STRENGTH, cfg.stack_share, cfg.stack_ceiling)
     if view.special and special_of(content, view.special) is not None:
         bonus += cfg.special_weight
-    bonus += cfg.high_weight * len({h for h in (view.high, *view.extra_highs) if h})
+    bonus += cfg.high_weight * high_points(content, traits_mod.high_counts(view))
     if content.skills.get(view.id) is not None and content.skills[view.id].tactic is not None:
         bonus += cfg.signature_weight * (0.5 if content.skills[view.id].tactic.minor else 1.0)  # 小戰法算半個
     elif moves.is_own(content, view):  # 自創長出來的招：表上的數是本命的八成，再照火候打折
         bonus += cfg.signature_weight * 0.8 * float(cfg.move_fire.get(view.move_fire or moves.DEFAULT_FIRE, 0.8))
     return bonus
+
+
+def high_points(content: Content, counts: dict[str, int]) -> float:
+    """真意算幾個：一個真意一份算一個，第二份多 stack_share 個，第三份起不加（跟打仗的 traits.high_tactic 同一條）。"""
+    share = content.config.arts.stack_share
+    return sum(1 + (share if n > 1 else 0.0) for n in counts.values())
 
 
 def score(state: GameState, content: Content, world: WorldStateStore, art: MartialArt | None) -> int:
@@ -237,13 +245,24 @@ def score(state: GameState, content: Content, world: WorldStateStore, art: Marti
 
     slots, colors = slots_of(state, content, art), slot_colors(state, content, art)
     total, specials = 0.0, 0
+    held: list[tuple[int, Insight, object]] = []
     for i, insight_id in enumerate(slots):
         ins = insights_mod.resolve(insight_id, content, world, state) if insight_id else None
-        if ins is None:
-            continue
-        fx = insight_fx.record(state, content, world, insight_id, ins)
-        pts = sum(cfg.score_per_layer * min(MAX_STRENGTH, n) for n in fx.general.values())
-        pts += cfg.score_grand if fx.grand and insight_fx.grand(content, fx.grand) is not None else 0
+        if ins is not None:
+            held.append((i, ins, insight_fx.record(state, content, world, insight_id, ins)))
+    # 同一個功效好幾份：第二份起算一半，最多一倍半（跟打仗、戰力同一條，traits.stack_value）；每一格照它佔的那一份打折
+    per_key: dict[str, list[float]] = {}
+    for _, _, fx in held:
+        for key, n in fx.general.items():
+            per_key.setdefault(key, []).append(float(min(MAX_STRENGTH, n)))
+    factor = {key: traits_mod.stack_value(ns, MAX_STRENGTH, cfg.stack_share, cfg.stack_ceiling) / sum(ns)
+              for key, ns in per_key.items() if sum(ns) > 0}
+    grand_seen: dict[str, int] = {}
+    for i, ins, fx in held:
+        pts = sum(cfg.score_per_layer * min(MAX_STRENGTH, n) * factor.get(key, 1.0) for key, n in fx.general.items())
+        if fx.grand and insight_fx.grand(content, fx.grand) is not None:  # 同一個真意：第二份算 stack_share，第三份起不加
+            seen = grand_seen[fx.grand] = grand_seen.get(fx.grand, 0) + 1
+            pts += cfg.score_grand * (1.0 if seen == 1 else cfg.stack_share if seen == 2 else 0.0)
         if ins.secret_special and special_of(content, ins.secret_special) is not None:
             pts += cfg.score_special
             specials += 1

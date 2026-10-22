@@ -71,12 +71,15 @@ def main() -> None:
     parser.add_argument("--catch-up", action="store_true", help="只量玩家武學追上本命：十八位本命對滿配絕學＋配招兵器")
     parser.add_argument("--own", action="store_true", help="只量以意成招：十八位本命對自創滿配（兩門自創上品、各一招透的招）")
     parser.add_argument("--own-all", action="store_true", help="--own 另量空手、招熟、舊滿配")
+    parser.add_argument("--pick", help="--own 只量哪幾列（列的名字，逗號隔開；分給好幾個行程平行跑）")
     parser.add_argument("--move-scale", type=float, help="自創的招（content/create_forms.json 的 moves）會長的數全部乘這個數（只量）")
     parser.add_argument("--strength", type=int, default=3, help="--catch-up 滿配裡每個意境的強度（一重～三重）")
     parser.add_argument("--bout-strike", type=float, help="試別的 Config.tactics.bout_strike（只量）")
     parser.add_argument("--war-scale", type=float, help="試別的 Config.tactics.war_scale（只量）")
     parser.add_argument("--might-scale", type=float, help="本命底蘊（TacticDef.might）全部乘這個數（只量）")
     parser.add_argument("--grand-share", type=float, help="--catch-up 滿配每一格第二個效果是大獎的機會（預設 1.0）")
+    parser.add_argument("--stack-share", type=float, help="試別的 Config.arts.stack_share（同效果第二份起算幾成；0 配 --stack-ceiling 1 是改之前；只量）")
+    parser.add_argument("--stack-ceiling", type=float, help="試別的 Config.arts.stack_ceiling（同效果疊上去最多上限的幾倍；只量）")
     parser.add_argument("--might-add", type=float, help="本命底蘊（TacticDef.might）每一門都加這個數（只量；一位人物兩門，合計加兩倍）")
     parser.add_argument("--tweak", nargs="+", default=[], metavar="技能.欄=數",
                         help="試別的本命戰法數字（只量）：zhangfei_wugong.rate=0.3、zhangliang_wugong.per_pct=0.05（params 裡的照鍵名）")
@@ -88,6 +91,10 @@ def main() -> None:
         content.config.tactics.bout_strike = args.bout_strike
     if args.war_scale is not None:
         content.config.tactics.war_scale = args.war_scale
+    if args.stack_share is not None:
+        content.config.arts.stack_share = args.stack_share
+    if args.stack_ceiling is not None:
+        content.config.arts.stack_ceiling = args.stack_ceiling
     for item in args.tweak:
         path, value = item.split("=")
         sid, key = path.split(".")
@@ -120,8 +127,9 @@ def main() -> None:
         catch_up(content, args.runs, args.strength)
         return
     if args.own:
-        global OWN_ALL
+        global OWN_ALL, PICK
         OWN_ALL = args.own_all
+        PICK = None if not args.pick else set(args.pick.split(","))
         if args.move_scale is not None:
             from tianxia import moves
             content.create_forms.moves = [m.model_copy(update=moves.scaled(m, args.move_scale)) for m in content.create_forms.moves]
@@ -311,6 +319,7 @@ def bouts(content, runs):
 
 SELF_KITS = 12  # 隨機自組幾套
 OWN_ALL = False  # --own 時另量空手、招熟、舊滿配（--own-all）
+PICK = None  # --own 只量哪幾列（--pick，列的名字）
 GRAND_SHARE = 1.0  # 滿配每一格的第二個效果是大獎的機會（--grand-share 改；意境效果池之後，第三批）
 ATTRS = ("快", "慢", "剛", "柔", "陽", "陰", "虛", "實")
 
@@ -323,7 +332,7 @@ def slots_kit(content, seed, quality, strength, special_share=0.5, high_share=0.
     rng = random.Random(f"kit|{seed}")
     mult = traits.multiplier(content, quality)
     n = int(content.config.arts.slots.get(quality, 2))
-    lo = traits.Loadout()
+    lo, pooled = traits.Loadout(), {}
     out = []
     for i in range(2):
         cells = [rng.choice(ATTRS) for _ in range(n)]
@@ -338,16 +347,26 @@ def slots_kit(content, seed, quality, strength, special_share=0.5, high_share=0.
             cells = cells[1:]
         for a in cells:
             hook = traits.general(content, a).hook
-            lo.layers[hook] = lo.layers.get(hook, 0.0) + mult * strength
+            pooled.setdefault(hook, []).append(mult * strength)
         if ults and cells:
             best = traits.general(content, max(dict.fromkeys(cells), key=cells.count))
             if best.ultimate is not None:
                 ult = best.ultimate.model_copy(update={"name": f"絕學{i + 1}"})
                 out.append(tactics.bonded(ult, best.ultimate_bond) if i == 0 else ult)
+    settle(content, lo, pooled)
     hs = [tactics.Holder(who="你", key="player", skill=f"ult:{u.name}", tactic=u) for u in out]
     hs += [tactics.Holder(who="你", key="player", skill=f"trait:{t.name}", tactic=t) for t in traits.tactic_defs(content, lo)]
     hs += [tactics.Holder(who="你", key="player", skill=f"high:{t.name}", tactic=t) for t in lo.highs]
     return hs
+
+
+def settle(content, lo, pooled):
+    """身上兩門每一份的層數（已乘品級）照遊戲裡同一條算成 Loadout 的層數：同一個功效第二份起算一半、最多一倍半（traits.stack_value）。"""
+    from tianxia import traits
+    cfg = content.config.arts
+    for t in content.traits.general:
+        if pooled.get(t.hook):
+            lo.layers[t.hook] = traits.stack_value([t.per_layer * c for c in pooled[t.hook]], t.cap, cfg.stack_share, cfg.stack_ceiling) / t.per_layer
 
 
 def piece_kit(content, seed, quality, strength, grand_share=1.0, special_share=0.5, ults=False):
@@ -358,7 +377,7 @@ def piece_kit(content, seed, quality, strength, grand_share=1.0, special_share=0
     rng = random.Random(f"piece|{seed}")
     mult = traits.multiplier(content, quality)
     n = int(content.config.arts.slots.get(quality, 2))
-    lo = traits.Loadout()
+    lo, pooled = traits.Loadout(), {}
     out = []
     for i in range(2):
         cells = rng.sample(ATTRS, n)
@@ -377,7 +396,7 @@ def piece_kit(content, seed, quality, strength, grand_share=1.0, special_share=0
             else:
                 picks += [t for t in pool if t.key != first.key][:1]
             for t in picks:
-                lo.layers[t.hook] = lo.layers.get(t.hook, 0.0) + mult * strength
+                pooled.setdefault(t.hook, []).append(mult * strength)
                 layer_count[t.key] = layer_count.get(t.key, 0) + strength
         if ults and layer_count:
             ultable = {k: v for k, v in layer_count.items() if traits.general(content, k).ultimate is not None}
@@ -385,9 +404,46 @@ def piece_kit(content, seed, quality, strength, grand_share=1.0, special_share=0
                 best = traits.general(content, max(ultable, key=ultable.get))
                 ult = best.ultimate.model_copy(update={"name": f"絕學{i + 1}"})
                 out.append(tactics.bonded(ult, best.ultimate_bond) if i == 0 else ult)
+    settle(content, lo, pooled)
     hs = [tactics.Holder(who="你", key="player", skill=f"ult:{u.name}", tactic=u) for u in out]
     hs += [tactics.Holder(who="你", key="player", skill=f"trait:{t.name}", tactic=t) for t in traits.tactic_defs(content, lo)]
     hs += [tactics.Holder(who="你", key="player", skill=f"high:{t.name}", tactic=t) for t in lo.highs]
+    return hs
+
+
+def stack_kit(content, seed, attrs=("快", "陽"), strength=3, gear=True):
+    """堆疊滿配（同效果第二份算半之後，Joy 2026-10-22）：破境的兩門自創，第一門三格全是 attrs[0]、第二門全是 attrs[1]，
+    每一份那一路第一個一般功效 strength 重＋那一路的真意（同一個真意第二份發動率 ×1.5，第三份起不加，traits.high_tactic），
+    各一招自己的招（升為絕招）＋後勁、一把配招兵器。attrs 兩個一樣就是最極端的堆法（兩門六格全是同一路）。"""
+    from tianxia import insight_fx, moves, traits
+    rng = random.Random(f"stack|{seed}")
+    mult = traits.multiplier(content, "絕學")
+    n = int(content.config.arts.slots.get("絕學", 3))
+    lo, pooled, tops, out, own = traits.Loadout(), {}, {}, [], []
+    level = content.config.arts.move_raw_levels + 1
+    for i, a in enumerate(attrs):
+        first = insight_fx.generals(content, a)[0]
+        pooled.setdefault(first.hook, []).extend([mult * strength] * n)
+        top = insight_fx.grand_of(content, a)
+        if top is not None:
+            tops[top.tactic.name] = (top, tops.get(top.tactic.name, (top, 0))[1] + n)
+        if first.ultimate is not None:
+            ult = first.ultimate.model_copy(update={"name": f"絕學{i + 1}"})
+            out.append(tactics.bonded(ult, first.ultimate_bond) if i == 0 else ult)
+        kind = ("武學", "內功")[i]
+        stance = rng.choice(moves.STANCES)
+        move = moves.build(content, kind, a, stance, "透", level=level)
+        move = moves.ascend(content, moves.cell(content, a, moves.timing_of(kind, stance)), move)
+        own.append(tactics.Holder(who="你", key="player", skill=f"own:{kind}", tactic=move))
+    settle(content, lo, pooled)
+    lo.highs = [traits.high_tactic(content, top.tactic, k) for top, k in tops.values()]
+    hs = [tactics.Holder(who="你", key="player", skill=f"ult:{u.name}", tactic=u) for u in out]
+    hs += [tactics.Holder(who="你", key="player", skill=f"trait:{t.name}", tactic=t) for t in traits.tactic_defs(content, lo)]
+    hs += [tactics.Holder(who="你", key="player", skill=f"high:{t.name}", tactic=t) for t in lo.highs]
+    hs += own
+    if gear:
+        arm = rng.choice([r for r in content.forge_secrets.values() if r.tactic is not None and r.slot == "weapon"])
+        hs.append(gear_holder(arm.tactic))
     return hs
 
 
@@ -453,12 +509,16 @@ def own(content, runs, strength=3):
     for label, kits in (
         ("自創滿配＋配招兵器", [own_kit(content, k, strength) for k in range(SELF_KITS)]),
         ("破境滿配＋配招兵器", [own_kit(content, k, strength, ascended=True) for k in range(SELF_KITS)]),
+        ("破境堆疊（一門全快、一門全陽）", [stack_kit(content, k) for k in range(SELF_KITS)]),
+        ("破境最極端（兩門六格全是快）", [stack_kit(content, k, ("快", "快")) for k in range(SELF_KITS)]),
     ) if not OWN_ALL else (
         ("自創滿配＋配招兵器", [own_kit(content, k, strength) for k in range(SELF_KITS)]),
         ("自創滿配、空手", [own_kit(content, k, strength, gear=False) for k in range(SELF_KITS)]),
         ("自創滿配、招熟", [own_kit(content, k, strength, fire="熟") for k in range(SELF_KITS)]),
         ("破境滿配＋配招兵器", [own_kit(content, k, strength, ascended=True) for k in range(SELF_KITS)]),
     ):
+        if PICK is not None and label not in PICK:
+            continue
         rows = []
         for fid in figures_with(content):
             sig = holders(content, [("你", "player", fid)])

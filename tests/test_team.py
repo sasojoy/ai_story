@@ -784,7 +784,8 @@ class _CountingRandom(random.Random):
 
 
 def test_every_general_trait_stops_at_its_cap_and_nothing_goes_negative(state, content, world):
-    """八個一般功效各疊 18 層：每個數字停在上限，運氣的倍數、門檻、扣氣血的比例都不會變成負的。"""
+    """八個一般功效各疊 18 層：每個數字停在上限（兩門各一份，第二份算半，停在上限的一倍半，Config.arts.stack_ceiling），
+    運氣的倍數、門檻、扣氣血的比例都不會變成負的。"""
     for attribute in ("快", "慢", "剛", "柔", "陽", "陰", "虛", "實"):
         outer = _trait_art(world, f"{attribute}拳", attribute, [attribute] * 3)
         inner = _trait_art(world, f"{attribute}功", attribute, [attribute] * 3, kind="內功")
@@ -792,7 +793,7 @@ def test_every_general_trait_stops_at_its_cap_and_nothing_goes_negative(state, c
         lo = traits.loadout(state, content, world)
         for trait in content.traits.general:
             if trait.key == attribute:  # 那一路第一個功效（第二個寫 id，鍵不是屬性）
-                assert traits.amount(content, lo, trait.hook) == pytest.approx(trait.cap)
+                assert traits.amount(content, lo, trait.hook) == pytest.approx(trait.cap * content.config.arts.stack_ceiling)
         mods = team.trait_mods(content, lo)
         assert mods.luck_scale >= 0 and 0 <= mods.big_win_cut <= 0.2 and 0 <= mods.difficulty_cut <= 0.2
 
