@@ -412,10 +412,14 @@ def flip_marks(world: WorldState, content: Content, loc_id: str) -> dict:
     不另寫判斷，照翻地那一份畫面資料（conquest.block_view，server 的 main_view["conquest"]["blocks"] 同一個函式、同一個四捨五入）
     換成天下圖讀的名字——tug＝bars（{攻方: 進度 0～100}，只列寫出來不是 0 的；沒有是 None）、melee＝clash、cool＝cooling
     （剛易手還要幾分鐘；沒在冷卻是 None）。看的人是誰不影響這三樣（side 給 None，不算攻守推不推得動）。呼叫端只在領地爭奪開著、
-    這一處是區塊時叫。"""
+    這一處是區塊時叫。
+    siege（輿圖第三版第 5 批，企劃者 2026-10-22 挑 A 乙、B 甲）＝frozen 那一場攻城在哪一步：letter（下了戰書、還沒開集結：區圖名字框旁
+    「戰」字印、天下圖那一格朱紅虛線框）、fight（集結・交戰中：天下圖那一格借激戰的紅光、區圖名字框一圈紅）、沒有是 None。"""
     row = conquest.block_view(world, content, loc_id, None)
     tug = {line["side"]: line["value"] for line in row["bars"] if line["value"] > 0}
-    return {"tug": tug or None, "melee": bool(row["clash"]), "cool": row["cooling"] or None}
+    frozen = row["frozen"]
+    siege = None if frozen is None else "fight" if frozen["status"] == "open" else "letter"
+    return {"tug": tug or None, "melee": bool(row["clash"]), "cool": row["cooling"] or None, "siege": siege}
 
 
 def state(
@@ -429,7 +433,7 @@ def state(
     {"key", "now_week", "weeks_total", "season_one", "territory", "faction", "sides", "here", "stamina", "sorties_left",
      "journey": None | {"to","to_name","minutes","next_name","x","y"}, "travel_block": None | {"reason","to_jianghu"},
      "places": {地點: {"control","kind","odds","sortie","armed","minutes","stamina","order","bounty","goal","news","people","services",
-                       "price","squads","danger","flips","rich","yield"} ＋ 領地爭奪開著時區塊多 "tug","melee","cool"（flip_marks）},
+                       "price","squads","danger","flips","rich","yield"} ＋ 領地爭奪開著時區塊多 "tug","melee","cool","siege"（flip_marks）},
      "ropes": [{"id","name","value","delta","beads": [{"id","threshold","control"}],"low","high"}], "geju", "geju_side", "events",
      "suggest": [{"id","sortie","why": [[字, 種類]],"minutes","score","lose"}], "chart": [{"name","spots"}],
      "weeks": [{"week","control","ropes","geju","events","changed"}], "start": None | {地點: 開季那一刻的控制方}}"""

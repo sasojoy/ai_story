@@ -49,11 +49,22 @@ def test_the_kit_places_a_letter_not_a_commanders_pick():
 
 
 def test_the_conquest_howto_speaks_of_the_new_map():
-    """玩法說明「地盤」那一節（領地爭奪的季）：輿圖第三版沒有局勢層了，寫天下圖的地面與區圖的名字框；關著的季一個字不動（照舊寫局勢層，
-    計畫第四節交 PM）。"""
+    """玩法說明「地盤」那一節：輿圖第三版沒有局勢層了，寫天下圖的地面與區圖的名字框。領地爭奪的季第 5 批先改；關著的季原本一個字不動，
+    PM 2026-10-22 定也改（設計 5.6：關著的季也用新畫法；關著的季對照只差這一句與意境那一句）。"""
     game = conquest_game("season21")
     on = "".join(howto.territory_lines(game.content, season=game.state.world))
     assert "局勢層" not in on and "天下圖" in on and "區圖" in on
-    plain = plain_game("season21")
-    off = "".join(howto.territory_lines(plain.content, season=plain.state.world))
-    assert "局勢層" in off
+    for profile in ("weekend", None, "season21"):
+        plain = plain_game(profile)
+        off = "".join(howto.territory_lines(plain.content, season=plain.state.world))
+        assert "局勢層" not in off and "天下圖的地面、區圖名字框的顏色就是此刻誰佔著" in off, profile
+
+
+def test_the_strongest_insight_howto_points_at_the_region_map():
+    """玩法說明「靜心感悟」那一句（STRONG_HOWTO）：輿圖第三版拿掉了意境濾鏡（第 4 批），改寫區圖名字底下的意境字與卡上的「最濃」
+    （PM 2026-10-22，每一種季都改）。"""
+    assert "濾鏡" not in howto.STRONG_HOWTO and "區圖" in howto.STRONG_HOWTO and "最濃" in howto.STRONG_HOWTO
+    for profile in ("weekend", None, "season21"):
+        game = plain_game(profile)
+        text = game.howto_text()
+        assert "濾鏡" not in text and "局勢層" not in text and howto.STRONG_HOWTO in text, profile

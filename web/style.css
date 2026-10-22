@@ -1203,6 +1203,10 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .m-fbar b { font-size: 13px; }
 .m-fbar small { color: var(--ink-2); font-size: 11px; margin-left: -4px; }
 .m-who { font-size: 12.5px; margin-top: 4px; }
+/* 攻城戰那一段（輿圖第三版第 5 批：戰書／攻城／攻城戰果，app.js 的 siegeSection）：一句話＋一顆鈕；跟「正在翻」一樣貼著第 2 段 */
+.m-siege { margin-top: 2px; margin-bottom: 8px; }
+.m-siege .m-say { font-size: 13px; line-height: 1.55; }
+.m-siege .m-acts { margin-top: 6px; }
 .m-foes { font-size: 13.5px; margin: 0 0 8px; }
 .m-foes > small { display: block; font-size: 11.5px; color: var(--ink-2); letter-spacing: 1px; }
 .m-yield { font-size: 13px; margin: 0 0 8px; color: var(--ink); }

@@ -10253,6 +10253,9 @@ class Game:
             "attackers": [names.get(a, a) for a in slot.attackers], "time": self.stamp(slot.at), "minute": slot.minute,
             "status": slot.status, "status_text": siege_status_text(c, slot),
             "by": {names.get(a, a): conquest_day.BY_WORDS.get(slot.by.get(a, ""), "") for a in slot.attackers},
+            # 輿圖第三版第 5 批（卡上「戰書／攻城／攻城戰果」那一段）：sides 是攻方的陣營 id；you 是看的人站得進哪一格（siege.slots 同一套：
+            # 攻方 attack、被打的那一方 defend、散人與不是兩軍的人 help〔臨時投效或助守〕、另一軍站不進去是空的）；margin 是打完那一場的大勝／險勝
+            "sides": list(slot.attackers), "you": self._siege_you(slot, side), "margin": self._siege_margin(slot),
         } for slot in w.conquest.schedule]
         blocks: dict[str, dict] = {}
         for loc in conquest.blocks(c):
@@ -10270,7 +10273,23 @@ class Game:
             ready = [loc for loc in conquest.blocks(c) if conquest.bar(w, loc, side) >= c.config.conquest.letter_at]
             letter = {"used": w.conquest.letter_days.get(side) == self._letter_key(), "at": c.config.conquest.letter_at,
                       "ready": [{"id": loc, "name": c.locations[loc].name, "why": self.letter_problem(loc) or ""} for loc in ready]}
-        return {"today": today, "blocks": blocks, "here": here, "letter": letter}
+        return {"today": today, "blocks": blocks, "here": here, "letter": letter, "muster": c.config.conquest.muster_minutes}
+
+    def _siege_you(self, slot, side: str | None) -> str:
+        """看的人站得進這一場攻城的哪一格（卡上那顆鈕寫什麼；siege.slots 同一套）：攻方 attack、此刻佔著那一塊的那一軍 defend、
+        散人與不是兩軍的人 help（臨時投效攻方或助守）、另一軍站不進去是空字串。打完、作罷的也照算（卡上那時不畫鈕）。"""
+        if side is None:
+            return "help"
+        if side in slot.attackers:
+            return "attack"
+        return "defend" if conquest.holder(self.state.world, self.content, slot.loc) == side else ""
+
+    def _siege_margin(self, slot) -> str:
+        """打完那一場的大勝／險勝（收場那一下 siege._note_result 記在 day_log）；還沒打完、作罷、找不到是空字串。"""
+        if slot.status != "done" or self.state.world.conquest is None:
+            return ""
+        return next((n.margin for n in reversed(self.state.world.conquest.day_log)
+                     if n.result and n.key == slot.key and n.loc == slot.loc and n.minute == slot.minute), "")
 
     def pill_now(self) -> float:
         """回體丹換日看的現實時間：sync 給的 now，加上 advance 推過的那一截（advanced_real）。"""
