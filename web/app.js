@@ -845,15 +845,19 @@
   function renderPage() {
     const page = document.getElementById("page");
     if (!page) return;
+    let kilnWas = false; // 重畫前爐子已經縮成一條：畫完照樣縮著，不再從上面掉下來一次
     if (S.tab === "map" && showMapHost()) page.innerHTML = ""; // 輿圖畫在常駐的那一層（FB-324）
     else {
       hideMapHost();
       const fn = { jianghu: pageJianghu, practice: pagePractice, craft: pageCraft, map: pageMap, news: pageNews }[S.tab];
+      kilnWas = !!document.querySelector(".kiln.compact");
+      const sheetTop = document.querySelector(".craft-sheet")?.scrollTop; // 挑東西的抽屜開著時重畫：清單捲到哪留在哪
       page.innerHTML = fn();
+      if (sheetTop) { const sheet = document.querySelector(".craft-sheet"); if (sheet) sheet.scrollTop = sheetTop; }
     }
     S.guideDrawn = guideSig(); // 這一頁畫的是哪個對話框：修練、煉製頁的輪詢拿它比，框換了才重畫（見 refreshPage）
     afterPage();
-    if (S.tab === "craft") fixedKiln();
+    if (S.tab === "craft") fixedKiln(kilnWas);
     applyGlow();
   }
 
@@ -1542,7 +1546,7 @@
     const r = 54;
     const flames = Array.from({ length: 16 }, (_, k) => {
       const a = k * 22.5, [x0, y0] = wpt(r + 3, a - 7), [x1, y1] = wpt(r + 10, a), [x2, y2] = wpt(r + 3, a + 7);
-      return `<path d="M${x0},${y0} Q${x1},${y1} ${x2},${y2}" style="animation-delay:-${(k % 4) * 0.23}s"/>`;
+      return `<path d="M${x0},${y0} Q${x1},${y1} ${x2},${y2}" style="animation-delay:-${((performance.now() / 1000 + (k % 4) * 0.23) % 1.8).toFixed(2)}s"/>`; // 照同一個鐘起跳（同 spinAt）：重畫時火舌不從頭竄一次
     }).join("");
     const slot = (m, i) => {
       const x = i ? 26 : -26;
@@ -3177,7 +3181,7 @@
   function insightCardHtml(i, o = {}) {
     if (!i) return "";
     const fx = (i.effects || []).map((e) => `<li class="${e.grand ? "grand" : e.special ? "sp" : ""}"><b>${esc(e.name)}${e.grand || e.special ? "" : esc(FX_LAYERS[e.layers] || "")}</b>${e.desc ? `<span>${esc(e.desc)}</span>` : ""}</li>`).join("");
-    const fits = o.fits ? (i.fits || []).map((f) => `<button class="btn small" data-act="slot-in" data-id="${esc(f.art)}" data-i="${f.i | 0}" data-ins="${esc(i.id)}">裝進【${esc(f.name)}】第 ${(f.i | 0) + 1} 格</button>`).join("") : "";
+    const fits = o.fits ? (i.fits || []).map((f) => `<button class="btn small" data-act="slot-in" data-id="${esc(f.art)}" data-i="${f.i | 0}" data-ins="${esc(i.id)}">裝進【${esc(f.name)}】第 ${(f.i | 0) + 1} 格</button>${f.stack ? `<small class="stk">${esc(f.stack)}</small>` : ""}`).join("") : "";
     const where = i.slotted ? `裝在【${esc(i.slotted)}】` : o.fits && !fits ? "身上的武學沒有空格收得下它。" : ""; // 待 joy 潤
     const rare = i.look === "珍" || i.look === "神";
     return `<div class="ins-card${o.reveal ? " reveal" : ""}${o.reveal && rare ? " rare" : ""}">
@@ -3272,6 +3276,8 @@
   // 點了在底下攤開手上空著的意境，顏色收得下的點了裝進「這一格」（送 index），收不下的灰掉寫原因。裝、拆都不花東西。
   // 寫死的武學（本命、部下的上品）slots 是空清單，不畫。字待 joy 潤
   // ro：別人的卡（榜單點開的，Joy 2026-10-22）：一樣畫，但格子點不了、不攤意境
+  // 同效果好幾份（Joy 2026-10-22「第二份算半」）：格子上那一份算了幾成（skillview.slot_stack_marks，伺服器寫好的字）
+  const stkHtml = (t) => (t ? `<small class="stk">${esc(t)}</small>` : "");
   function slotsHtml(a, x, ro = false) {
     if (!Array.isArray(a.slots) || !a.slots.length) return "";
     const colors = Array.isArray(a.colors) ? a.colors : [];
@@ -3281,10 +3287,10 @@
     const cells = a.slots.map((s, i) => {
       const c = colors[i] || [];
       if (ro) return s
-        ? `<span class="jd full" title="${esc(`「${s.name}」${s.look || ""}・${fxText(s.fx) || s.skill}${s.desc ? `：${s.desc}` : ""}`)}">${ringHtml(c, `<b>${esc(String(s.name).slice(0, 2))}</b>`)}${lookSeal(s.look)}${fxHtml(s.fx, "col") || `<small>〔${esc(s.skill)}〕</small>${lvHtml(s.strength)}`}</span>`
+        ? `<span class="jd full" title="${esc(`「${s.name}」${s.look || ""}・${fxText(s.fx) || s.skill}${s.desc ? `：${s.desc}` : ""}`)}">${ringHtml(c, `<b>${esc(String(s.name).slice(0, 2))}</b>`)}${lookSeal(s.look)}${fxHtml(s.fx, "col") || `<small>〔${esc(s.skill)}〕</small>${lvHtml(s.strength)}`}${stkHtml(s.stack)}</span>`
         : `<span class="jd empty">${ringHtml(c, "", "vacant")}<small class="dim">空著</small></span>`;
       return s
-        ? `<button type="button" class="jd full" data-act="slot-out" data-id="${esc(a.id)}" data-ins="${esc(s.id)}" title="${esc(`「${s.name}」${s.look || ""}・${fxText(s.fx) || s.skill}${s.desc ? `：${s.desc}` : ""}（點了拆下）`)}">${ringHtml(c, `<b>${esc(String(s.name).slice(0, 2))}</b>`)}${lookSeal(s.look)}${fxHtml(s.fx, "col") || `<small>〔${esc(s.skill)}〕</small>${lvHtml(s.strength)}`}</button>`
+        ? `<button type="button" class="jd full" data-act="slot-out" data-id="${esc(a.id)}" data-ins="${esc(s.id)}" title="${esc(`「${s.name}」${s.look || ""}・${fxText(s.fx) || s.skill}${s.desc ? `：${s.desc}` : ""}（點了拆下）`)}">${ringHtml(c, `<b>${esc(String(s.name).slice(0, 2))}</b>`)}${lookSeal(s.look)}${fxHtml(s.fx, "col") || `<small>〔${esc(s.skill)}〕</small>${lvHtml(s.strength)}`}${stkHtml(s.stack)}</button>`
         : `<button type="button" class="jd empty${pick === i ? " on" : ""}" data-act="slot-pick" data-id="${esc(a.id)}" data-i="${i}"${glowSlot} title="${esc(ringWord(c))}">${ringHtml(c, "<i>＋</i>", "vacant")}<small class="dim">${esc(ringWord(c))}</small></button>`;
     }).join("");
     let picker = "";
@@ -3292,7 +3298,7 @@
       const c = colors[pick] || [];
       const fits = (i) => !c.length || c.includes(i.attribute);
       const free = (x.insights || []).filter((i) => !i.slotted);
-      picker = `<div class="slot-pick">${free.length ? free.map((i) => `<button type="button" class="${fits(i) ? "" : "no"}" data-act="slot-in" data-id="${esc(a.id)}" data-i="${pick}" data-ins="${esc(i.id)}"${glowSlot} ${fits(i) ? "" : "disabled"} title="${esc(fits(i) ? i.skill_desc || "" : `這一格${ringWord(c)}`)}">${ringHtml([i.attribute], "", "jmini")}<span>「${esc(i.name)}」${lookSeal(i.look)}<small>${fxHtml(i.fx) || `〔${esc(i.skill || "")}〕${lvHtml(i.strength)}`}${fits(i) ? "" : "・顏色不合"}</small></span></button>`).join("")
+      picker = `<div class="slot-pick">${a.stack_rule ? `<p class="stk-rule">${esc(a.stack_rule)}</p>` : ""}${free.length ? free.map((i) => `<button type="button" class="${fits(i) ? "" : "no"}" data-act="slot-in" data-id="${esc(a.id)}" data-i="${pick}" data-ins="${esc(i.id)}"${glowSlot} ${fits(i) ? "" : "disabled"} title="${esc(fits(i) ? i.skill_desc || "" : `這一格${ringWord(c)}`)}">${ringHtml([i.attribute], "", "jmini")}<span>「${esc(i.name)}」${lookSeal(i.look)}<small>${fxHtml(i.fx) || `〔${esc(i.skill || "")}〕${lvHtml(i.strength)}`}${fits(i) ? "" : "・顏色不合"}</small>${a.stack && a.stack[i.id] ? `<em class="stk">${esc(a.stack[i.id])}</em>` : ""}</span></button>`).join("")
         : '<span class="muted">手上沒有空著的意境——去探索悟一個，或從別門武學上拆下來。</span>'}</div>`;
     }
     // 第五個玉環（自創的才有，招式與絕學稿案第三節）：破境了亮金色寫絕招，還沒破境是暗的
@@ -3763,7 +3769,7 @@
       </div></div></div>`;
   }
   // 大爐子捲出狀態列底下時縮成一條、捲回來時放大：捲動時與每次畫完煉製頁都量一次（renderPage 的 afterPage 之後）
-  function fixedKiln() {
+  function fixedKiln(quiet) {
     const wrap = document.getElementById("kiln-wrap"), kiln = document.getElementById("kiln");
     if (!wrap || !kiln || typeof wrap.getBoundingClientRect !== "function" || !kiln.classList) return;
     const head = document.getElementById("top");
@@ -3772,6 +3778,7 @@
     if (compact === kiln.classList.contains("compact")) return;
     if (compact) wrap.style.minHeight = `${wrap.offsetHeight}px`; // 縮起來前先撐住原本的高度，頁面才不往上跳
     kiln.classList.toggle("compact", compact);
+    kiln.classList.toggle("still", compact && !!quiet);
   }
   // 捲動時一幀量一次（只在煉製頁）
   let kilnFrame = 0;
@@ -3854,6 +3861,12 @@
   // 點爐子的空格從底下升起，篩選、武學、意境都在裡面；點一樣就放進去，兩格放滿自動收起、預覽當場更新；放了一樣還缺一樣就留著接著挑。
   // 清單本身（craftChip、篩選、再列、合不了的灰掉）跟以前在頁面上的一模一樣
   function craftSheetHtml(x) {
+    // 抽屜本來就開著（放了一樣、篩選、再列時重畫）：不再從底下升上來一次（Joy 2026-10-22「合成前點第一個素材時畫面也會閃一下」）
+    const still = document.querySelector(".craft-sheet") ? " still" : "";
+    return `<div class="sheet-bg${still}" data-act="pot-close"></div>
+      <div class="sheet craft-sheet${still}" role="dialog" aria-label="挑東西放進爐">${craftSheetInner(x)}</div>`;
+  }
+  function craftSheetInner(x) {
     const v = craftView();
     const keep = (type, thing) => (!v.attr || thing.attribute === v.attr) && (!v.quality || thing.look === v.quality) && (!v.okOnly || !pickMark(type, thing.id));
     const order = (list) => v.sort === "name" ? [...list].sort((a, b) => a.name.localeCompare(b.name, "zh-Hant"))
@@ -3862,8 +3875,7 @@
     const first = S.forgeSel[0];
     const held = first ? x.insights.find((r) => r.id === first.id) : null;
     const title = !first ? "放一個意境進爐" : held ? `爐裡${isLocked(first) ? "鎖著" : "有"}「${esc(held.name)}」，再放一個` : "再放一個";
-    return `<div class="sheet-bg" data-act="pot-close"></div>
-      <div class="sheet craft-sheet" role="dialog" aria-label="挑東西放進爐">
+    return `
         <div class="grip"></div>
         <div class="top-row"><h3 style="flex:1">${title}</h3><button type="button" class="btn small ghost" data-act="pot-close">關閉</button></div>
         ${craftFilterRow(x)}
@@ -3871,8 +3883,7 @@
         ${x.insights.length ? (ins.length ? `<div class="chips">${ins.map((i) => craftChip("ins", i, `${i.look ? `${i.look}品` : ""}・屬${i.attribute}${i.lean !== "無" ? `・${i.lean}` : ""}・${fxText(i.fx) || i.depth || ""}`, i.grand ? 3 : 2,
           (i.glow || []).includes("pick:insight") && !S.forgeSel.some((p) => p.type === "ins" && p.id === i.id) ? ' data-glow="pick:insight"' : "")).join("")}</div>`
           : '<p class="muted">沒有合這些條件的意境。</p>')
-          : '<p class="muted">還沒悟到任何意境。去探索，荒郊野外最容易有所領悟。</p>'}
-      </div>`;
+          : '<p class="muted">還沒悟到任何意境。去探索，荒郊野外最容易有所領悟。</p>'}`;
   }
   function pageCraft() {
     const x = S.menxia;
@@ -4002,11 +4013,6 @@
       <div class="msg" id="mx-msg">${S.message || ""}</div>
       ${createHtml()}
     </div>`;
-  }
-  function createDone() { // 立好或作罷了：回煉製頁，結果那一句留在上面
-    const c = S.main && S.main.status && S.main.status.create;
-    if (!S.createOpen || (c && c.draft)) return;
-    S.createOpen = false; renderPage(); window.scrollTo(0, 0);
   }
   async function createIntent() {
     const box = document.getElementById("create-text");
@@ -8126,6 +8132,10 @@
       if (op === "switch") S.artOpen = null; // 改練真的送出了：庫裡那一列收起（它已經換到身上那張卡）
       setMain(r.main);
       renderTop();
+      // 自創武學立好、作罷：草稿沒了就在這一次重畫裡直接回修練頁、一下回頂，不先畫一張空的自創頁、
+      // 捲到一半再換一次（Joy 2026-10-22「自創武學完畢那個畫面會閃爍」）
+      const cr = S.main && S.main.status && S.main.status.create;
+      if (S.createOpen && !(cr && cr.draft)) { S.createOpen = false; renderPage(); window.scrollTo(0, 0); return; }
       if (op === "switch" && S.tab === "craft") { // 煉製頁新武學卡上的「改練上身」：留在卡那裡，結果用提示泡泡說
         S.message = ""; S.artNote = null;
         keepPlace(() => renderPage(), ".made-card");
@@ -8162,7 +8172,9 @@
       S.forgePreview = r.preview || null;
       const drawn = JSON.stringify(S.forgePicks);
       S.forgePicks = r.picks || null;
-      if (S.tab === "craft" && JSON.stringify(S.forgePicks) !== drawn) { keepPlace(() => renderPage()); return; } // 清單上「合不了」的標記變了
+      // 清單上「合不了」的標記變了：只換抽屜裡那一張清單（捲到哪留在哪），爐子與頁面不重畫——整頁重畫的話火舌、剛放進去那一格的閃光都從頭來一次
+      const sheet = S.tab === "craft" && JSON.stringify(S.forgePicks) !== drawn && document.querySelector(".craft-sheet");
+      if (sheet) { const top = sheet.scrollTop; sheet.innerHTML = craftSheetInner(S.menxia || {}); sheet.scrollTop = top; applyGlow(); }
       const el = document.getElementById("forge-line");
       if (el) el.innerHTML = forgeLineHtml(S.menxia || {});
       const warn = document.getElementById("kiln-warn");
@@ -8204,9 +8216,8 @@
         S.forgeResult = { html: r.message };
         S.forgeMade = r.made ? r.made_item || null : null; // 合出來的那一樣：結果底下畫它的卡
         made = !!r.made;
-        // 出爐的排場只演一次（一秒半，不擋操作）：之後輪詢重畫不再翻一次
+        // 出爐的排場只演一次（一秒半，不擋操作）：畫完這一次就收，之後輪詢重畫不再翻一次
         S.forgeReveal = made;
-        if (made) setTimeout(() => { S.forgeReveal = false; }, 1600);
         // 合成了：兩格清空，下一爐從頭放（Joy 2026-10-12「爐子合完應該要把上次放上去的東西自動卸下」）；
         // 被拒絕（沒合成、只回一句話）：東西留在爐裡，換一格就能再試——只拿掉已經不在手上的
         // 鎖著的那一樣留在爐裡（Joy 2026-10-19），下一爐只要再放一樣；它自己被合掉了（武學＋武學不會，意境不會用掉）就解開
@@ -8225,8 +8236,9 @@
       } finally { stop(); }
     }, WAIT_LINES.forge);
     // 引導的下一句在頁面最上面（序章師父說的話）：這時才捲上去，不然留在原位、可以馬上接著合下一爐
-    if (guideMoved) { renderPage(); window.scrollTo({ top: 0, behavior: "smooth" }); } else {
+    if (guideMoved) { renderPage(); S.forgeReveal = false; window.scrollTo({ top: 0, behavior: "smooth" }); } else {
       keepPlace(() => renderPage());
+      S.forgeReveal = false;
       if (made) kilnBurst();
       showMadeCard();
     }
@@ -8237,7 +8249,11 @@
   function kilnBurst() {
     document.querySelectorAll(".furnace .w-taichi, .kiln-taichi .w-spin").forEach((g) => {
       g.classList.add("burst");
-      g.addEventListener("animationend", () => g.classList.remove("burst"), { once: true });
+      g.addEventListener("animationend", () => { // 轉完接回平常的慢轉：照同一個鐘起跳（spinAt），不從頭轉、不頓一下
+        g.classList.remove("burst");
+        const secs = parseFloat(getComputedStyle(g).animationDuration) || 28;
+        g.style.animationDelay = `-${((performance.now() / 1000) % secs).toFixed(2)}s`;
+      }, { once: true });
     });
     const card = document.querySelector(".made-card");
     if (card) card.classList.add("emerge");
@@ -8621,9 +8637,10 @@
         case "ascend-ok": await mx("ascend_dismiss", {}); break;
         case "create-name": {
           const n = document.getElementById("create-name"), m = document.getElementById("create-move");
-          await mx("create_name", { name: n ? n.value.trim() : "", move: m ? m.value.trim() : "" }); createDone(); break;
+          document.activeElement?.blur?.(); // 手機的鍵盤先在這一下收起，不要等換頁那一刻才收、整頁再跳一次
+          await mx("create_name", { name: n ? n.value.trim() : "", move: m ? m.value.trim() : "" }); break; // 立好了 mx 直接回修練頁
         }
-        case "create-cancel": await mx("create_cancel"); createDone(); break;
+        case "create-cancel": await mx("create_cancel"); break;
         case "create-reroll": await mx("create_reroll"); break; // 重悟帖：留在成形那一步，三格換了
         case "create-open": S.createOpen = true; S.message = ""; renderPage(); window.scrollTo(0, 0); break;
         case "create-close": S.createOpen = false; S.message = ""; renderPage(); window.scrollTo(0, 0); break;

@@ -963,7 +963,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .melt-filter { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 8px; margin: 0 0 8px; align-items: end; }
 .melt-filter label { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 12px; color: var(--ink-2); }
 .melt-filter label > span { flex: none; }
-.melt-filter select.input { flex: 1; min-width: 0; width: auto; min-height: 36px; height: 36px; padding: 4px 8px; font-size: 13px; }
+.melt-filter select.input { flex: 1; min-width: 0; width: auto; min-height: 36px; height: 36px; padding: 4px 8px; font-size: 16px; } /* 不能低於 16px：iOS 一點就放大整頁 */
 .melt-filter .melt-weak { justify-self: start; min-height: 34px; line-height: 1; padding: 0 12px; font-size: 13px; }
 /* 一列：勾＋品質印＋名字與判斷，右邊心得；最右邊一顆攤開細節。熔不掉的整列淡掉、原因寫在籤那一行 */
 .mlist .mrow { display: flex; align-items: stretch; border-bottom: 1px solid var(--line); }
@@ -1589,7 +1589,7 @@ div.here { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; ma
 .chip.no { opacity: 0.5; border-style: dashed; }
 .chip.no .why { font-style: normal; color: var(--ink-2); }
 .craft-filter { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
-.craft-filter select.input { width: auto; flex: 1 1 72px; min-width: 72px; padding: 6px 8px; font-size: 13px; }
+.craft-filter select.input { width: auto; flex: 1 1 88px; min-width: 88px; padding: 6px 6px; font-size: 16px; } /* 不能低於 16px：iOS 一點就放大整頁（Joy 2026-10-22「畫面會縮放一下」） */
 .craft-filter .fchip { flex: 0 0 auto; }
 .forge-result { margin: 0 0 12px; }
 /* 太極爐一直看得到（Joy 2026-10-17）：大爐子捲出狀態列底下時，同一座爐縮成一條固定在狀態列底下（.kiln.compact）——
@@ -1601,6 +1601,7 @@ div.here { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; ma
 .kiln.compact .kiln-big { display: none; }
 .kiln.compact .kiln-mini { display: block; }
 @keyframes kiln-drop { from { transform: translateY(-12px); opacity: 0; } }
+.kiln.compact.still { animation: none; } /* 重畫前就縮著（fixedKiln 的 quiet）：不再掉下來一次 */
 .kiln-hub { flex: none; width: 60px; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
   padding: 0; border: 0; background: none; color: var(--ink-2); font: 600 11px var(--serif); cursor: pointer; }
 .kiln-hub:disabled { cursor: default; }
@@ -1626,9 +1627,10 @@ div.here { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; ma
 /* 開爐成了：太極猛轉一圈，新武學的卡從爐裡冒出來 */
 .w-spin.burst { animation: w-burst 0.9s cubic-bezier(.2, .7, .3, 1) 1 !important; }
 @keyframes w-burst { from { transform: rotate(0); } to { transform: rotate(720deg); } }
-.made-card.emerge { animation: mc-emerge 0.55s cubic-bezier(.2, .8, .3, 1.15); transform-origin: 50% 0; }
-@keyframes mc-emerge { 0% { opacity: 0; transform: translateY(-36px) scale(0.6); box-shadow: 0 0 30px 10px rgba(240, 160, 58, 0.7); }
-  60% { opacity: 1; } 100% { transform: none; } }
+/* 只淡入、往下落一點，不縮放（Joy 2026-10-22「意境合成完畢畫面會縮放一下」）；意境卡自己會翻面（.ins-card.reveal），外框不再疊一次 */
+.made-card.emerge { animation: mc-emerge 0.45s ease-out; }
+.made-card.ins-made.emerge { animation: none; }
+@keyframes mc-emerge { 0% { opacity: 0; transform: translateY(-12px); box-shadow: 0 0 30px 10px rgba(240, 160, 58, 0.7); } 100% { transform: none; } }
 @media (prefers-reduced-motion: reduce) { .w-spin.burst, .made-card.emerge, .kiln.compact, .w-slot.flash rect { animation: none !important; } }
 .kiln-row { display: flex; align-items: stretch; gap: 6px; }
 .kiln-slot { flex: 1 1 0; min-width: 0; position: relative; display: flex; flex-direction: column; justify-content: center; gap: 1px;
@@ -2887,6 +2889,11 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
   padding: 5px 9px; text-align: left; font-size: 13px; cursor: pointer; min-height: 40px; }
 .slot-pick button small { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--ink-2); }
 .slot-pick button.no, .slot-pick button:disabled { opacity: 0.45; cursor: default; }
+/* 同效果第二份起算一半（Joy 2026-10-22）：格子底下、挑意境時、裝進鈕旁邊那一句 */
+.jd small.stk, .stk { font-size: 10.5px; color: var(--accent); white-space: normal; text-align: center; line-height: 1.35; }
+.slot-pick em.stk { display: block; font-style: normal; text-align: left; }
+.ic-fits small.stk { flex-basis: 100%; text-align: left; }
+.stk-rule { flex-basis: 100%; margin: 0 0 2px; font-size: 12px; color: var(--accent); }
 /* 一門武學的圖示：自創時擺的火柴人（沒擺過的照兵器挑一個起手式） */
 svg.fig { flex: none; color: var(--ink); overflow: visible; }
 svg.fig .bone { fill: none; stroke: currentColor; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }

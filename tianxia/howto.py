@@ -1212,6 +1212,12 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
         "- 意境就是技能：裝進武學的意境槽才生效，一個意境同時只能裝在一門上。武學的品級定槽數"
         f"（{'、'.join(f'{q} {n} 格' for q, n in cfg.arts.slots.items())}），也定威力的上限；槽只收那門武學相容的屬性（基礎武學什麼都收）。"
         f"悟到已經會的，化成 {cfg.duplicate_insight_xinde} 心得。",
+        # 同效果好幾份（Joy 2026-10-22 選「第二份算半」；「玩家需要知道這個知識」）。照身上兩門一起算（traits.loadout）。待 joy 潤
+        f"- 身上兩門武學的意境一起算：同一個效果第二份起算{'一半' if cfg.arts.stack_share == 0.5 else _tenth(cfg.arts.stack_share)}，"
+        f"最多到上限的{'一倍半' if cfg.arts.stack_ceiling == 1.5 else f' {cfg.arts.stack_ceiling:g} 倍'}；"
+        "同一個真意第二份多一半發動的機會"
+        + (f"（本來就每次發動的{'、'.join(always)}改成多撐一回合）" if (always := [h.name for h in content.traits.high if (h.tactic.rate or 0) >= 1]) else "")
+        + "，第三份起不再加。修練頁格子上寫著每一份算了幾成。",
         "- 同一個意境放兩次揣摩，強度從 ● 到 ●●●，就是那一招的層數；兩個不同的意境合出複合的意境，是更高階的一招。"
         "兩門武學合出第三門：品級取高的，兩門都練滿、槽都裝滿再升一品（最高上品），槽收的屬性是兩門合起來。",
         "",
