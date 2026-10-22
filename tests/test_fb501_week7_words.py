@@ -19,6 +19,7 @@ pytestmark = pytest.mark.slow  # 每一條都載真實內容、開一季
 HOUR, DAY = 3600, 86400
 MON = 1792339200  # 2026-10-19 週一 00:00（台灣）
 WED14 = 1792549800 + 3.5 * HOUR  # 2026-10-21 週三 14:00（台灣）
+BOSS = "段鐵頭"  # 頭目次數用完那一句的名字（FB-672：explore_modes.boss_gone 多一個 name）
 PROFILES = ("week7", "season21", "weekend", None)
 
 
@@ -75,12 +76,13 @@ def test_other_seasons_keep_their_week_words(profile):
 def test_the_boss_line_names_the_next_segment_day():
     c7 = real_content("week7")
     state = _state(c7)
+    # FB-672：這一句多帶頭目的名字（「這一段他不再現身」→「這一段頭目某某不再現身」）；哪一天再來、哪一種季寫哪個詞這一張沒動
     state.world.time = DAY + HOUR  # 第 2 天：第 1 段，下一段第 3 天
-    assert explore_modes.boss_gone(state, c7) == "這一段他不再現身，第 3 天 00:00 再來"
+    assert explore_modes.boss_gone(state, c7, BOSS) == "這一段頭目段鐵頭不再現身，第 3 天 00:00 再來"
     state.world.time = 3 * DAY + HOUR  # 第 4 天：第 2 段，下一段第 5 天
-    assert explore_modes.boss_gone(state, c7) == "這一段他不再現身，第 5 天 00:00 再來"
+    assert explore_modes.boss_gone(state, c7, BOSS) == "這一段頭目段鐵頭不再現身，第 5 天 00:00 再來"
     state.world.time = 5 * DAY  # 第 6 天：最後一段，季末之前不再重算
-    assert explore_modes.boss_gone(state, c7) == explore_modes.BOSS_GONE_SEASON
+    assert explore_modes.boss_gone(state, c7, BOSS) == explore_modes.BOSS_GONE_SEASON.format(name=BOSS)
 
 
 def test_the_boss_line_reads_the_live_option_on_week7():
@@ -90,14 +92,14 @@ def test_the_boss_line_reads_the_live_option_on_week7():
     boss = next(iter(c7.duels))
     state.player.duel_tally[duel.week_key(state, c7, boss)] = c7.config.duel.per_boss_week
     assert duel.used_up(state, c7, boss)
-    assert explore_modes.boss_gone(state, c7).startswith("這一段他不再現身，第 3 天")
+    assert explore_modes.boss_gone(state, c7, BOSS).startswith("這一段頭目段鐵頭不再現身，第 3 天")
 
 
 @pytest.mark.parametrize("profile,line", [("season21", explore_modes.BOSS_GONE_WEEK), ("weekend", explore_modes.BOSS_GONE_SEASON),
                                           (None, explore_modes.BOSS_GONE_SEASON)])
 def test_other_seasons_keep_the_boss_line(profile, line):
     content = _content(profile)
-    assert explore_modes.boss_gone(_state(content), content) == line
+    assert explore_modes.boss_gone(_state(content), content, BOSS) == line.format(name=BOSS)
 
 
 # ── 5. 名聲：每週通緝、每週海捕文書 ──

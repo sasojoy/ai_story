@@ -179,7 +179,9 @@ def _titles(state: GameState, content: Content, week: int, now_week: int) -> lis
     除了決戰與季末，其他大事的時刻就是 calendar.event_time，週末列的時刻一個字都不變。
     FB-561：管理者提早開的決戰一開就列，不等排定的時刻，FB-563：照開的那一刻（WorldState.showdown_opened_at）歸週，之後收場、
     過了週界也不換週，開打後被管理者取消、沒有結果的不列（showdowns_cancelled）；FB-562：決戰與季末歸在實際排定的時刻落的那一週
-    （timetable.happened_week；被「避開半夜」或管理者挪到別週的，不照時刻表原本寫的那一週）。now_week 只留著給呼叫端對齊。"""
+    （timetable.happened_week；被「避開半夜」或管理者挪到別週的，不照時刻表原本寫的那一週）。now_week 只留著給呼叫端對齊。
+    FB-654：休季時換了程式的上一季（calendar.weekend_style）一般大事只列這一季真的結算過的（season.timeline），歸週走這一季自己的季曆，
+    不列新程式時刻表上舊季沒發生過的（timetable.happened_at、happened_week）。"""
     w = state.world
     if not rules.season_one(content, w):
         return []
