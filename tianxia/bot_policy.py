@@ -828,11 +828,17 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
             return SUMMONS_SCORE
         if arg == "dadian":  # 打點（21 天季的銀兩出口收成的一間店）：假人不進（只是打開一間店，同鐵匠鋪沒事不進）
             return None
+        # 捐軍備：只是打開軍需官那一串，捐由 look_after 的 bot.donate_spare 直接捐。以前落到 ACT_SCORES 的 0.0，隨手挑的那一半會按開、
+        # 那一串的鈕又都不打分，假人就停在大本營的軍需官前面一整季（2026-10-22 量 7 天季時看到：季末十三個假人有七到十個卡在這裡）
+        if arg == "donate":
+            return None
         if arg.startswith("recruit:"):
             return None  # 招募歷史武將（歷史武將同行第七節）：假人不招
         return ACT_SCORES.get(arg, 0.0)
     if kind == "dadian":  # 萬一停在打點那一間店裡：只會離開
         return 0.0
+    if kind == "donate":  # 萬一停在軍需官那一串裡（捐軍備）：只會離開；捐由 look_after 的 bot.donate_spare 直接捐，不按這一串的鈕
+        return 0.0 if arg == "back" else None
     return None
 
 
@@ -995,9 +1001,12 @@ def _summons_hop(game: Game) -> str | None:
 
 def _takeable(game: Game) -> bool:
     """此地的懸賞榜上有揭得下的，或有交得出的求兵（bounties.give_choice）：假人為了交東西也會打開榜（懸賞榜設計 9.3）。
-    假人不為了交東西繞路（bounties.targets 不列求兵）。"""
+    假人不為了交東西繞路（bounties.targets 不列求兵）。
+    手上已經揭了的不算（榜上那一張是「放棄」、沒有「揭下」）：以前算進來，揭著一張還沒交的假人每路過有懸賞榜的城鎮就打開、什麼都揭不了又關上，
+    下一輪又打開（2026-10-22 量 7 天季：前三天十三個假人開了又關上九十到一百四十次，每一次白花兩輪）。"""
     s, c = game.state, game.content
-    if any(bounties.can_take(s, b) and bounties.take_problem(s, c, b) is None for b in bounties.open_bounties(s, c)):
+    held = {b.id for b in bounties.mine(s, c)}
+    if any(b.id not in held and bounties.can_take(s, b) and bounties.take_problem(s, c, b) is None for b in bounties.open_bounties(s, c)):
         return True
     return bounties.give_choice(s, c, game.world) is not None
 
