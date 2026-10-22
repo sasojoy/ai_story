@@ -160,11 +160,38 @@ def test_a_lost_force_still_uses_the_pill_and_says_the_odds(kicker, content, wor
     p = kicker.player
     p.legend_items = 2
     msgs = cultivation.cultivate(kicker, content, world, "旋風腿", LOSE, use_legend=True)
-    assert msgs == [PILL, "【旋風腿】撞在那一層上，又彈了回來（約 15% 的機會）。", "體力 -10"]
+    assert msgs == [PILL, "【旋風腿】撞在那一層上，又彈了回來（約 15% 的機會）。", "那一層鬆動了些：下一次再衝，約 25% 的機會。", "體力 -10"]
     assert p.art_quality["旋風腿"] == "上品" and p.legend_items == 1 and p.stamina == 140 and p.naming is None
     msgs = cultivation.cultivate(kicker, content, world, "旋風腿", LOSE, use_legend=True)  # 沒成火候還在：再服一枚照樣可以衝
     assert msgs[0] == PILL and p.legend_items == 0
     assert cultivation.cultivate_problem(kicker, content, world, "旋風腿", use_legend=True) == cultivation.CHANCE_LINE.format(name="旋風腿", pill="破境丹")  # 丹用完了
+
+
+def test_each_failed_pill_on_the_same_art_raises_the_next_try(kicker, content, world):
+    """Joy 2026-10-22「破境丹同一門武學成功率應該逐次上升」：同一門每沒衝開一次 +legend_fail_step，可以越過 max_chance、
+    到 legend_fail_cap；衝開或熔掉就清掉。"""
+    p = kicker.player
+    p.legend_items = 20
+    odds = []
+    for _ in range(9):
+        odds.append(cultivation.force_odds(kicker, content, world, "旋風腿"))
+        cultivation.cultivate(kicker, content, world, "旋風腿", LOSE, use_legend=True)
+        p.stamina = 150
+    assert odds == [15, 25, 35, 45, 55, 65, 75, 85, 95]  # 第 6 次起越過 max_chance 60
+    assert cultivation.force_odds(kicker, content, world, "旋風腿") == 100 and p.legend_fails == {"旋風腿": 9}
+    p.legend_fails["旋風腿"] = 30
+    assert cultivation.force_odds(kicker, content, world, "旋風腿") == content.config.legend_fail_cap
+    row = next(r for r in skillview.art_rows(kicker, content, world) if r["id"] == "旋風腿")
+    assert "已衝過 30 次" in row["cultivate"]["legend"]["note"]
+    cultivation.cultivate(kicker, content, world, "旋風腿", WIN, use_legend=True)
+    assert p.legend_fails == {} and p.art_quality["旋風腿"] == "絕學"
+
+
+def test_melting_an_art_forgets_its_failed_tries(kicker, content, world):
+    p = kicker.player
+    p.legend_fails["旋風腿"] = 3
+    library.remove_art(kicker, "旋風腿")
+    assert p.legend_fails == {}
 
 
 def test_the_roll_wins_strictly_under_the_odds(kicker, content, world):
@@ -230,7 +257,7 @@ def test_a_roll_says_what_it_cost_in_stamina_right_after_the_result(kicker, cont
     p = kicker.player
     p.legend_items = 2
     lost = cultivation.cultivate(kicker, content, world, "旋風腿", LOSE, use_legend=True)
-    assert len(lost) == 3 and "彈了回來" in lost[1] and lost[2] == "體力 -7"
+    assert len(lost) == 4 and "彈了回來" in lost[1] and "下一次再衝" in lost[2] and lost[3] == "體力 -7"
     peerless = cultivation.cultivate(kicker, content, world, "旋風腿", WIN, use_legend=True)
     assert len(peerless) == 3 and peerless[0] == PILL and "晉為絕學" in peerless[1]
     assert peerless[2] == "體力 -7"  # 體力那一行在最後

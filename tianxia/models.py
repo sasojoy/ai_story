@@ -3461,6 +3461,11 @@ class Config(_Strict):
     legend_item_name: str = "破境丹"
     legend_item_note: str = "衝擊絕學時可以服下，那一次的機會多幾分。"
     legend_item_bonus: int = 15
+    # 服丹衝關失敗會累積（Joy 2026-10-22「破境丹同一門武學成功率應該逐次上升」；PM 佔位）：同一門每沒衝開一次，下一次多
+    # legend_fail_step 個百分點，記在那一門上（PlayerState.legend_fails）；這份可以越過 breakthrough.max_chance，最多到 legend_fail_cap。
+    # 衝開或那一門熔掉就清掉；仗裡的契機（seize）不吃這份
+    legend_fail_step: int = Field(default=10, ge=0)
+    legend_fail_cap: int = Field(default=100, ge=1, le=100)
     # 回體丹（企劃者 2026-10-07「新增物品回體丹可以回體力100點，新手進來都送20顆，現在是內測期間，讓大家初期可以盡情遊玩體驗」）：
     # 狀態列體力條旁邊按「服丹」吃一顆，回 stamina_pill_restore 點體力，夾在體力上限（不溢出；體力是滿的不讓吃）
     stamina_pill_name: str = "回體丹"
