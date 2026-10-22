@@ -117,3 +117,16 @@ def test_the_box_lights_the_stance_and_writes_the_rare_line(real):
     c["rare_line"] = ""
     plain = run(f"return H.stanceBoxHtml({json.dumps(c, ensure_ascii=False)}, '武學', '起勢', '快');", fns=["stanceBoxHtml"])
     assert "稀有" not in plain
+
+
+def test_every_cell_of_the_real_table_has_its_own_rare_move(real):
+    """Joy「那個10%應該是怎麼擺都要有機會吧」：四十格每一格都有稀有路數，跟那一格常見的招名字不同、打法（kind）或數字不同；
+    破境後發動率升到必定，所以出招、心法不放每回合都連環無隙、無隙、打空的那幾種（量過：破境後對常見九成以上）。"""
+    for a in create.ATTRIBUTES:
+        for timing in ("起手", "出招", "乘勢", "應招", "心法"):
+            common, rare = moves.cell(real, a, timing), moves.cell(real, a, timing, rare=True)
+            assert rare is not None and rare.rare and not common.rare, (a, timing)
+            assert rare.name != common.name and (rare.kind, rare.params, rare.rate) != (common.kind, common.params, common.rate)
+            assert not (timing in ("出招", "心法") and rare.rounds == 0 and rare.kind in ("flash", "flawless", "elude")), (a, timing)
+    names = [m.name for m in real.create_forms.moves]
+    assert len(names) == len(set(names))
