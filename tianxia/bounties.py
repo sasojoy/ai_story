@@ -159,8 +159,8 @@ def title(content: Content, b: Bounty) -> str:
 STRIKE_SORTIE = "出陣攻打贏"  # 待 joy 潤（FB-249）：出陣開著時討伐怎麼交差
 STRIKE_GATHER = "找素材撞上的那一場也算"  # 待 joy 潤：探索三選一開著時多的那半句（散人不出陣，討伐靠這裡）
 # 一類一顆生效的季（FB-420）：找素材不打仗，討伐在練功交差（待 joy 潤）
-STRIKE_PRECISE = "到{target}練功或出陣攻打贏一場{enemy}的隊伍"
-STRIKE_PRACTICE = "到{target}練功打贏一場{enemy}的隊伍"
+STRIKE_PRECISE = "到{target}尋敵或出陣攻打贏一場{enemy}的隊伍"
+STRIKE_PRACTICE = "到{target}尋敵打贏一場{enemy}的隊伍"
 
 
 def how(content: Content, b: Bounty, state: GameState | None = None, world: WorldState | None = None) -> str:

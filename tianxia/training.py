@@ -3,8 +3,8 @@
 一類一顆（precise.on）開著、Config.training.enabled 也開著才有：
 - 城鎮裡行動列那一格是「操練」（act:drill）：零風險、一天 drill_per_day 次（同回體丹的現實 00:00 換日，Game._pill_day）、
   主要給心得（基數＋等級），經驗很少（基數＋等級÷5）。不打仗、不扣氣血、不掉東西。
-- 城外那一格是「練功」（explore:practice，Game._practice_option）：照這裡最弱的對手分一、二、三級，打贏的心得與銀兩乘級數的倍數，
-  經驗不加成。
+- 城外那一格是「尋敵」（explore:practice，Game._practice_option；以前叫練功，Joy 2026-10-22 改名）：照這裡最弱的對手分一、二、三級，
+  打贏的心得與銀兩乘級數的倍數，經驗不加成。玩家看不到「幾級」：每一級寫成一句江湖話（TIER_WORDS），寫在那一格與輿圖的地點詳情（PLACE_LINE）。
 這裡放不看引擎的純規則（字、數字、次數），engine.Game 接線。"""
 from __future__ import annotations
 
@@ -15,11 +15,12 @@ from .state import PlayerState, WorldState
 DRILL_ID = "act:drill"
 DRILL = "操練"  # 待 joy 潤
 PRACTICE = explore_modes.NAMES[explore_modes.PRACTICE]
-TIER_WORDS = ("一級", "二級", "三級")
-TIER_NOTE = "{tier}練功點"  # 移動清單上目的地底下的小字。待 joy 潤
+# 一、二、三級的江湖話（Joy 2026-10-22：不寫「幾級練功點」，移動清單也不寫）：尋敵那一格的小字（五格時最多四個字）、鈕上、輿圖的地點詳情。待 joy 潤
+TIER_WORDS = ("宵小出沒", "匪寇橫行", "兇徒盤據")
+PLACE_LINE = "此地{tier}。"  # 輿圖地點詳情最後那一句（Game.place_detail）
 DRILL_LEFT = "今日還能 {n} 次"  # 鈕上：同出陣的「今日還能 N 次」（網頁照同一個樣子切成格子的小字）
 DRILL_FULL = "今日已練滿"  # 鈕上：用完了（網頁格子寫「今日已滿」）
-NEAREST = "，最近的練功點在{place}（{tier}）"  # 接在 DRILL_FULL 後面
+NEAREST = "，最近能尋敵的地方在{place}（{tier}）"  # 接在 DRILL_FULL 後面
 DRILL_LINES = (  # 操練那一句：照今天第幾次輪著說（不擲骰）。待 joy 潤
     "你在校場跟教頭過了幾招，他拿木棍在你肩上點了點：「沉肩，再來。」",
     "校場邊的木樁被你打得砰砰響，一旁看熱鬧的孩子跟著拍手。",

@@ -1687,9 +1687,8 @@ class Game:
         cost = atlas.route_stamina(self.state, c, route, mode)
         if self.state.player.stamina < cost:
             return Option(id=option_id, label=f"前往 {dest.name}（{atlas.MODES[mode]}・體力不足，要 {cost}）", enabled=False)
-        tier = self._practice_tier(dest)  # 練功分級（Config.training）：目的地練得了功就在底下小字寫幾級
-        note = training.TIER_NOTE.format(tier=training.TIER_WORDS[tier]) if tier is not None else ""
-        return Option(id=option_id, label=f"前往 {dest.name}（{atlas.route_text(self.state, c, route, mode)}）", note=note)
+        # 尋敵分級不寫在移動清單上（Joy 2026-10-22）：兇險程度只在輿圖的地點詳情寫一句（place_detail）
+        return Option(id=option_id, label=f"前往 {dest.name}（{atlas.route_text(self.state, c, route, mode)}）")
 
     def _back_way(self) -> atlas.Route:
         """折返的路：從路上回到身後那一站（路上設計 3.2：折返就是「改去」那一站，見 atlas.way_to）。
@@ -1828,7 +1827,7 @@ class Game:
         if foe is not None:
             note = f"{foe.name}・{self.odds(foe.id)}" if odds else foe.name
             tier = self._practice_tier(loc)
-            if tier is not None:  # 城外練功分級（Config.training）：「練功（體力 6・一級・河灘潑皮・穩勝）」
+            if tier is not None:  # 城外尋敵分級（Config.training）：「尋敵（體力 6・宵小出沒・河灘潑皮・穩勝）」
                 note = f"{training.TIER_WORDS[tier]}・{note}"
             return self._cost_option(oid, name, cost, note=note)
         bosses = duel_rules.here(s, c)
@@ -9539,6 +9538,8 @@ class Game:
         # 糧車到了終點（路過也算）先交糧，再照原本的新手引導與門檻（計畫 T6）；呼叫的先後不能換
         convoy = self._convoy_arrives(loc_id) + bounties.on_arrive(s, c, self.world, loc_id)  # 懸賞榜的護送：走到終點就交差（路過也算）
         guide = self._guide(note_action(s, c, self.world, "move"))  # 出師的盤纏（序章步驟的獎勵）是這一趟路的結果，回在這裡
+        if not explore_modes.is_town(c, c.locations[loc_id]):  # 走到城外（初入江湖逛鋪子那一步：沒進鋪子、直接出城也算過，Joy 2026-10-22）
+            guide += self._guide(note_action(s, c, self.world, "leave_town"))
         thresholds = check_thresholds(s, c, self.world, client, now=self.now)
         t = c.tutorial
         left = [t.leave_text] if t.location is not None and before < t.prologue_steps <= s.player.tutorial_step and t.leave_text else []
@@ -12972,9 +12973,18 @@ class Game:
         def mode(loc_id: str) -> str | None:
             return sortie.mode(c, s.world, faction, loc_id, bool(self._sortie_foes(c.locations[loc_id]))) if on else None
 
-        return mapdata.state(
+        out = mapdata.state(
             s, c, odds=self.odds, sortie_mode=mode, sorties_left=self.sorties_left() if on else None, real_minutes=self._real_minutes,
         )
+        for loc_id, info in out["places"].items():  # 地點卡上那一句這一帶多兇（尋敵分級，Joy 2026-10-22：不寫幾級）；沒有是空字串
+            info["fierce"] = self._fierce_line(c.locations[loc_id])
+        return out
+
+    def _fierce_line(self, loc: Location) -> str:
+        """輿圖地點卡與舊地點詳情的那一句（training.PLACE_LINE）：城外尋敵得到的地方照分級寫「此地宵小出沒。」，城鎮、沒有對手、
+        城裡操練關著是空字串。只讀。"""
+        tier = None if training.is_town(self.content, loc) else self._practice_tier(loc)
+        return "" if tier is None else training.PLACE_LINE.format(tier=training.TIER_WORDS[tier])
 
     def world_map_svg(self, layer: str = "situation", selected: str | None = None) -> str:
         odds = self.odds if layer == "enemies" else None
@@ -12994,7 +13004,10 @@ class Game:
         return atlas.place_choices(self.state, self.content)
 
     def place_detail(self, loc_id: str) -> str:
-        return atlas.detail_text(self.state, self.content, loc_id, lambda squad_id: self.odds(squad_id, at=loc_id))  # 照那一處的地利
+        text = atlas.detail_text(self.state, self.content, loc_id, lambda squad_id: self.odds(squad_id, at=loc_id))  # 照那一處的地利
+        loc = self.content.locations.get(loc_id)
+        fierce = self._fierce_line(loc) if loc is not None else ""  # 尋敵分級：一句這一帶多兇（Joy 2026-10-22）
+        return f"{text}\n\n{fierce}" if fierce else text
 
     def travel_options(self, loc_id: str) -> list[atlas.TravelOption] | None:
         return atlas.travel_options(self.state, self.content, loc_id)

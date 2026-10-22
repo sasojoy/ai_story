@@ -30,7 +30,7 @@ def test_trait_tactics_take_their_numbers_from_the_layers():
     assert defs["化勁"].params["toll_pct"] == pytest.approx(0.2) and defs["化勁"].params["chance_pct"] == pytest.approx(0.1)
     assert "{" not in defs["化勁"].desc
     capped = {t.name: t for t in traits.tactic_defs(content, traits.Loadout(layers={"big_win": 99.0}))}
-    assert capped["先手"].rate == pytest.approx(0.5)  # 上限
+    assert capped["先手"].rate == pytest.approx(0.75)  # 上限 0.5 的一倍半（同效果好幾份疊上去最多到這裡，Config.arts.stack_ceiling）
     assert "厚" not in {t.name for t in traits.tactic_defs(content, traits.Loadout(layers={"condition_floor": 3.0}))}
 
 

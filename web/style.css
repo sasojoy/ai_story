@@ -2889,6 +2889,11 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
   padding: 5px 9px; text-align: left; font-size: 13px; cursor: pointer; min-height: 40px; }
 .slot-pick button small { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--ink-2); }
 .slot-pick button.no, .slot-pick button:disabled { opacity: 0.45; cursor: default; }
+/* 同效果第二份起算一半（Joy 2026-10-22）：格子底下、挑意境時、裝進鈕旁邊那一句 */
+.jd small.stk, .stk { font-size: 10.5px; color: var(--accent); white-space: normal; text-align: center; line-height: 1.35; }
+.slot-pick em.stk { display: block; font-style: normal; text-align: left; }
+.ic-fits small.stk { flex-basis: 100%; text-align: left; }
+.stk-rule { flex-basis: 100%; margin: 0 0 2px; font-size: 12px; color: var(--accent); }
 /* 一門武學的圖示：自創時擺的火柴人（沒擺過的照兵器挑一個起手式） */
 svg.fig { flex: none; color: var(--ink); overflow: visible; }
 svg.fig .bone { fill: none; stroke: currentColor; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }

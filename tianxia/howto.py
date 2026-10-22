@@ -67,7 +67,7 @@ def explore_modes_line(fight: bool, sense: bool) -> str:
 # 行動列底下練功那一行（FB-670，企劃者 2026-10-22 選練功入口「丙」：練功在行動列自己一格；Game._practice_line 照練功鈕同一個判斷挑一句）。
 # 灰著的城鎮寫 PRACTICE_TOWN_NOTE＋「，最近的在某地（步行約 N 分鐘）」（explore_modes.NO_FOE_NEAR、atlas.route_text）。都待 joy 潤
 PRACTICE_NOTE = "打這裡的{foe}，不限次數，打贏是經驗的大宗"
-PRACTICE_BOSS_NOTE = "這裡只有頭目{foe}，練功直接對上他；打一場要等他再現身，次數有限"
+PRACTICE_BOSS_NOTE = "這裡只有頭目{foe}，尋敵直接對上他；打一場要等他再現身，次數有限"
 PRACTICE_TOWN_NOTE = "城外才有對手"
 
 
@@ -421,16 +421,16 @@ def precise_explore_lines(content: Content, season: WorldState | None = None) ->
     if not training.on(content, season):
         return [explore,
                 f"- **{names['practice']}**（在探索裡，體力 {cost}）：找這裡的對手打一場，一定開打、不限次數，打贏是經驗的大宗；"
-                "城鎮與沒有對手的地方灰著。有頭目的地方，頭目在練功時碰上。"]
+                "城鎮與沒有對手的地方灰著。有頭目的地方，頭目在尋敵時碰上。"]
     t = cfg.training
     loot = "、".join(f"{w} ×{x:g}" for w, x in zip(training.TIER_WORDS, t.tier_loot))
     return [
         explore,
         f"- **{training.DRILL}**（城裡，行動列那一格，體力 {cost}）：跟校場的教頭過招，不打仗、不受傷，一天 {t.drill_per_day} 次"
-        f"（00:00 換日）；一次給心得 {t.drill_xinde_base}＋等級、經驗一點點。用完了那一格寫著最近的練功點。",
+        f"（00:00 換日）；一次給心得 {t.drill_xinde_base}＋等級、經驗一點點。用完了那一格寫著最近能尋敵的地方。",
         f"- **{names['practice']}**（城外，同一格，體力 {cost}）：找這裡的對手打一場，一定開打、不限次數，打贏是經驗的大宗。"
-        f"練功點照這裡最弱的對手分三級（難度 {t.tier_bounds[0]} 以下一級、{t.tier_bounds[1]} 以下二級、再上去三級），"
-        f"越遠越兇；打贏的心得與銀兩照級數加成（{loot}），經驗不加成。級數寫在格子上與移動的目的地底下。有頭目的地方，頭目在練功時碰上。",
+        f"照這裡最弱的對手分三等（難度 {t.tier_bounds[0]} 以下、{t.tier_bounds[1]} 以下、再上去），"
+        f"越遠越兇；打贏的心得與銀兩照這一帶多兇加成（{loot}），經驗不加成。多兇寫在格子上與輿圖的地點詳情。有頭目的地方，頭目在尋敵時碰上。",
     ]
 
 
@@ -1212,6 +1212,12 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
         "- 意境就是技能：裝進武學的意境槽才生效，一個意境同時只能裝在一門上。武學的品級定槽數"
         f"（{'、'.join(f'{q} {n} 格' for q, n in cfg.arts.slots.items())}），也定威力的上限；槽只收那門武學相容的屬性（基礎武學什麼都收）。"
         f"悟到已經會的，化成 {cfg.duplicate_insight_xinde} 心得。",
+        # 同效果好幾份（Joy 2026-10-22 選「第二份算半」；「玩家需要知道這個知識」）。照身上兩門一起算（traits.loadout）。待 joy 潤
+        f"- 身上兩門武學的意境一起算：同一個效果第二份起算{'一半' if cfg.arts.stack_share == 0.5 else _tenth(cfg.arts.stack_share)}，"
+        f"最多到上限的{'一倍半' if cfg.arts.stack_ceiling == 1.5 else f' {cfg.arts.stack_ceiling:g} 倍'}；"
+        "同一個真意第二份多一半發動的機會"
+        + (f"（本來就每次發動的{'、'.join(always)}改成多撐一回合）" if (always := [h.name for h in content.traits.high if (h.tactic.rate or 0) >= 1]) else "")
+        + "，第三份起不再加。修練頁格子上寫著每一份算了幾成。",
         "- 同一個意境放兩次揣摩，強度從 ● 到 ●●●，就是那一招的層數；兩個不同的意境合出複合的意境，是更高階的一招。"
         "兩門武學合出第三門：品級取高的，兩門都練滿、槽都裝滿再升一品（最高上品），槽收的屬性是兩門合起來。",
         "",

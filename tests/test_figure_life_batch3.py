@@ -277,7 +277,7 @@ def test_an_anxious_figure_calls_his_whole_side(c):
 
 
 def test_a_rally_rumor_says_practice_or_sortie_where_precise_is_on(c):
-    """FB-435：一類一顆的季，求援的陣營傳聞寫「練功或出陣攻打贏」，不寫找素材撞上（那種季找素材不打仗）；沒蓋章的季照舊。"""
+    """FB-435：一類一顆的季，求援的陣營傳聞寫「尋敵或出陣攻打贏」（以前寫練功），不寫找素材撞上（那種季找素材不打仗）；沒蓋章的季照舊。"""
     from tianxia.world_state import stamp_season
 
     c.config.figure_life.rally_chance = 1.0
@@ -291,7 +291,7 @@ def test_a_rally_rumor_says_practice_or_sortie_where_precise_is_on(c):
         assert b.kind == "strike"
         text = next(r.text for r in s.world.rumors if r.layer == "faction" and "求援" in r.text)
         if precise_on:
-            assert "練功或出陣攻打贏" in text and "找素材" not in text
+            assert "尋敵或出陣攻打贏" in text and "找素材" not in text
         else:
             assert "找素材撞上" in text
 
