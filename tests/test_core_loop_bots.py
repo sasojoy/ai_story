@@ -6,7 +6,7 @@ import random
 
 import pytest
 
-from conftest import real_content
+from conftest import no_conquest, real_content
 from tianxia import bot, bot_policy
 from tianxia.engine import Game, Option
 from tianxia.sqlite_world import open_world
@@ -15,7 +15,7 @@ import server
 
 
 def _game(faction=None, at="yingshui"):
-    c = real_content("weekend")
+    c = no_conquest(real_content("weekend"))  # 地盤拔河、出陣推線的舊規則（領地爭奪 PM 2026-10-22 起正式內容打開）
     c.config.auto_open_first_season = True
     c.config.precise_actions = False  # 一類一顆之前的三選一（新規則的假人分數在 tests/test_precise_actions.py，設計 8.4）
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world())

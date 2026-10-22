@@ -1110,7 +1110,7 @@ def yuedan_once(game: Game) -> bool:
         return game.apply_yuedan(note, lines)
 
 
-# 〈天下形勢〉（領地爭奪第三批 A；tianxia/xingshi.py）：每天 22:00 結算那一刻開一張單，這裡在背景請模型照事實寫一篇。
+# 〈天下形勢〉（領地爭奪第三批 A；tianxia/xingshi.py）：每天 22:00 換天那一刻開一張單，這裡在背景請模型照事實寫一篇。
 # 全服同時只有一條在寫（XINGSHI_RUNNING）；佇列開著時當成假人排在真人後面（名號是 XINGSHI_OWNER，不是任何一個角色）。
 XINGSHI_RUNNING: set[str] = set()
 XINGSHI_OWNER = "§史官"
@@ -1726,6 +1726,8 @@ def admin_choices(game: Game) -> dict:
         "fallen": [{"label": CONTENT.figures[fid].name, "id": fid} for fid in game.admin_fallen()],
         "seal": game.admin_seal_choices(),  # 玉璽一組（碎片關著是 None，不畫）
         "xingshi": xingshi.on(CONTENT, world),  # 〈天下形勢〉開著的季：管理者區多一顆「現在就開一篇天下形勢」（領地爭奪第三批 A）
+        # 領地爭奪開著的季：救場一組（定一塊歸誰、定進度、立刻下戰書、取消一場攻城）的下拉選單；關著、季收了是 None（不畫）
+        "conquest": game.admin_conquest_choices(),
         "mingtie": game.admin_mingtie_reports(),  # 被檢舉的名帖（撤下、放回）；沒有是空的
         # 新神器用完了（正式季整合 5.6，FB-400）：主控台啟動時印、換季的回話寫，管理者那一塊也寫一行；沒用完是空字串
         "divine_out": divine.EXHAUSTED if divine.exhausted_now(game.world.divine_state(), game.world.get_season_number()) else "",

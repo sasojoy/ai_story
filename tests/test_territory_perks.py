@@ -5,7 +5,7 @@ import random
 
 import pytest
 
-from conftest import classic_rules, real_content
+from conftest import classic_rules, no_conquest, real_content
 from tianxia import atlas, mapview, mounts, rules, smithing, team
 from tianxia.content import ContentError, validate
 from tianxia.engine import Game
@@ -14,7 +14,7 @@ from tianxia.sqlite_world import open_world
 
 
 def _game(faction, at="wan_city"):
-    c = real_content("weekend")
+    c = no_conquest(real_content("weekend"))  # 地盤拔河的舊規則（領地爭奪 PM 2026-10-22 起正式內容打開；領地加成在 tests/test_conquest_perks.py）
     c.config.auto_open_first_season = True
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world())
     game.client = None

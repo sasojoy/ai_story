@@ -7,7 +7,7 @@ import random
 
 import pytest
 
-from conftest import real_content, third_party_gentry
+from conftest import no_conquest, real_content, third_party_gentry
 from tianxia import allied, rules
 from tianxia.engine import Game
 from tianxia.state import PlayerState, WorldState
@@ -15,7 +15,7 @@ from tianxia.state import PlayerState, WorldState
 
 @pytest.fixture
 def wk():
-    c = real_content("weekend")
+    c = no_conquest(real_content("weekend"))  # 地盤拔河、出陣推線的舊規則（領地爭奪 PM 2026-10-22 起正式內容打開）
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
     return c

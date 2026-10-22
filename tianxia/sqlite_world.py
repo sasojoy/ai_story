@@ -1011,7 +1011,12 @@ class SqliteWorldStore:
         self.mutate(lambda state: setattr(state, "active_battle", None))
 
     def get_sieges(self) -> list[BattleInstance]:
-        return self.read().sieges
+        """跟 read().sieges 同一份（world 那一列記的流水號照順序、一場一列），只是不整份解析共用狀態與季：Game._sieges 每一下選單、
+        每一次 _battle_status 都叫，領地爭奪開著時整份讀佔了假人一個動作的兩成多（打開領地爭奪，計畫 2026-10-22-打開領地爭奪.md 4.4）。"""
+        with self.db.snapshot() as conn:
+            row = conn.execute("SELECT json_extract(data, '$.siege_records') AS ids FROM world WHERE id = 1").fetchone()
+            ids = json.loads(row["ids"]) if row is not None and row["ids"] else []
+            return [self._load_battle(conn, rid) for rid in ids]
 
     def mutate_siege(self, record_id: int, fn: Callable[[BattleInstance], None]) -> BattleInstance | None:
         result: dict[str, BattleInstance | None] = {"battle": None}

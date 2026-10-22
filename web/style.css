@@ -1201,7 +1201,8 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .m-h1 .meta span { color: var(--ink-2); letter-spacing: 0; }
 .m-rich { color: var(--gold); font-weight: 700; letter-spacing: 0; }
 .m-line { font-size: 13.5px; font-weight: 600; margin: 4px 0 8px; color: var(--sc, var(--ink-2)); }
-/* 抽屜裡照陣營上色的字（FB-650）：--sc 是劇本的顏色；深色主題換 --sd（app.js 的 sideText：在 --card-2 上對比不到 4.5:1 的往那一方的 soft 調亮） */
+/* 抽屜裡照陣營上色的字：--sc 是淺色那一版、--sd 是深色那一版（app.js 的 sideText：從劇本的顏色起算，在 --card-2 上對比不到 4.5:1 的
+   淺色往墨色調深〔FB-652〕、深色往那一方的 soft 調亮〔FB-650〕） */
 .m-fbar .nm, .m-sc { color: var(--sc); }
 @media (prefers-color-scheme: dark) { .m-line, .m-fbar .nm, .m-sc { color: var(--sd, var(--sc, var(--ink-2))); } }
 .m-flip { margin-top: 2px; margin-bottom: 8px; }
@@ -1214,6 +1215,10 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .m-fbar b { font-size: 13px; }
 .m-fbar small { color: var(--ink-2); font-size: 11px; margin-left: -4px; }
 .m-who { font-size: 12.5px; margin-top: 4px; }
+/* 攻城戰那一段（輿圖第三版第 5 批：戰書／攻城／攻城戰果，app.js 的 siegeSection）：一句話＋一顆鈕；跟「正在翻」一樣貼著第 2 段 */
+.m-siege { margin-top: 2px; margin-bottom: 8px; }
+.m-siege .m-say { font-size: 13px; line-height: 1.55; }
+.m-siege .m-acts { margin-top: 6px; }
 .m-foes { font-size: 13.5px; margin: 0 0 8px; }
 .m-foes > small { display: block; font-size: 11.5px; color: var(--ink-2); letter-spacing: 1px; }
 .m-yield { font-size: 13px; margin: 0 0 8px; color: var(--ink); }

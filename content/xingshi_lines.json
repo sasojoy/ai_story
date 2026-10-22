@@ -17,8 +17,6 @@
     "void": "{side}原定攻{place}，一個人都沒趕到，這一仗作罷。",
     "fighting": "{place}一仗打到入夜，還沒分出勝負。",
     "fighting_day": "{place}一仗正打著，還沒分出勝負。",
-    "plan_vote": "{side}眾議已定，下一仗攻{place}。",
-    "plan_commander": "{side}由主將定奪，下一仗攻{place}：{reason}",
     "letter": "{who}替{side}下了戰書，約戰{place}。",
     "letter_plain": "{side}下了戰書，約戰{place}。",
     "letter_done": "{who}替{side}下戰書攻{place}。",
