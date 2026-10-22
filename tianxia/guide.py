@@ -1,7 +1,7 @@
 """新手引導、個人目標與任務區塊：讓玩家知道這一季在發生什麼、下一步該做什麼。"""
 from __future__ import annotations
 
-from . import calendar, enlist, library, prologue, ranks
+from . import calendar, enlist, explore_modes, library, prologue, ranks
 from .martial_arts import QUALITIES
 from .models import Content, Ending, TutorialGoal, TutorialStep
 from .rules import apply_effect, check_condition, pending_event_title, season_one, season_one_off
@@ -60,6 +60,10 @@ def goal_met(state: GameState, content: Content, world: WorldStateStore, goal: T
     """這個行動讓一項完成條件成立了嗎（每一項都要符合）：引導的步驟與入伍段的步驟（enlist.note）共用。"""
     if goal.action and goal.action != action:
         return False
+    if not goal.action and goal.any_action and action not in goal.any_action:
+        return False
+    if goal.wild and explore_modes.is_town(content, content.locations[state.player.location]):
+        return False
     if goal.locations and state.player.location not in goal.locations:
         return False
     if goal.healthy and state.player.member.injury >= 1 and action != "heal":
@@ -110,6 +114,10 @@ def note_action(state: GameState, content: Content, world: WorldStateStore, acti
             msgs += prologue.give_art(state, content, world, step.give_art)
         if step.give_piece:
             msgs += prologue.give_piece(state, content, world)
+        if step.give_pills:  # 先送回體丹（序章「服一顆回體丹」那一步，身上沒丹的人也走得下去）
+            state.player.stamina_pills += step.give_pills
+            line = f"{content.config.stamina_pill_name} +{step.give_pills}"
+            msgs.append(HutReward(line) if in_hut else line)
     if completed:  # 引導這一次有完成的步驟（序章的步驟可以沒有任何一行訊息，所以看 completed，不看 msgs）
         if tutorial_active(state, content):
             nxt = todo[state.player.tutorial_step]

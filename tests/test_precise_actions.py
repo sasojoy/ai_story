@@ -111,6 +111,7 @@ def test_practice_always_fights_one_and_is_unlimited():
 
 def test_practice_greys_out_where_there_is_no_one_to_fight():
     game = _game(at="yingchuan")
+    game.content.config.training.enabled = False  # 城裡操練開著時那一格是操練（tests/test_training.py），這裡測練功收在探索裡的舊樣子
     option = _ids(game)["explore:practice"]
     assert not option.enabled and "這裡沒有可以練手的對手" in option.label and "最近的在" in option.label
     stamina = game.state.player.stamina

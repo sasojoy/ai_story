@@ -21,7 +21,7 @@ from . import ascend  # 破境卡（招式與絕學稿案第三節）
 from . import (
     allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, checkin, chuangong, clinic, companion_agent, conquest, conquest_day, create, cultivation, defection, divine, economy, encounter, enlist, equipment, event_llm, explore_modes, escorts,
     fight_llm, figure_aid, figure_life, figures, foreshadow, four_tiers, gather_llm, generals, forge_secrets, front_lines, fusion, gender, howto, insight_fx, insights, invites, journal, letters, library, mapdata, martial_arts, feasts,
-    mall, materials, mounts, naming, rename, server_bots, opportunities, orders, precise, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
+    mall, materials, mounts, naming, newbie, rename, server_bots, opportunities, orders, precise, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_duel, seats, secret_recipes, sensing,
     shopview, siege, signature, signature_arms, silver, skillview, smithing,
     social, sortie, styles, tactics, team, terrain, territory, timetable, traits, treasures, weapons, works, xingshi, zh, yuedan,
 )
@@ -45,6 +45,7 @@ from .characters import CharacterStore, name_key
 from .events import (
     choice_label, event_candidates, free_text_note, has_events_here, pick_event, stamina_note, visible_choices,
 )
+from . import training
 from .guide import HutReward, base_step_count, note_action, pending_line, quest_text, step_text, tutorial_active, tutorial_intro
 from .guide import speaker_of as guide_speaker_of
 from .guide import speakers as guide_speakers
@@ -397,7 +398,9 @@ class FreeTextOutcome(BaseModel):
 
 
 ONBOARD_SEGMENT = 4  # 初入江湖上線的版本章（ONBOARDING_VERSION 升到 4 的那一版）：比它小、已經走出草廬的存檔讀檔時蓋成引導走完
+ONBOARD_SEVEN = 5  # 新手引導重做（老周七步、草廬第 7 步改服丹）的版本章：章是 4 的存檔讀檔時照 prologue.seven_step 換步數
 SHOP_ACTS = frozenset({"smith", "bounties", "market", "arena"})  # 初入江湖「進城裡的鋪子看看」認的幾間（act:<這些>）
+LEAVE_SHOP_IDS = frozenset({"bounty:back", "smith:back", mounts.BACK, arena.BACK_ID, tavern_rules.BACK_ID})  # 出店的那一顆
 
 class Game:
     MAP_LAYERS = atlas.LAYERS  # 大地圖的圖層：id → 名稱
@@ -415,6 +418,7 @@ class Game:
         self._model_budget = ModelBudget()  # 鎖內的模型呼叫這一次拿鎖期間還有沒有額度（見 _quick_client）
         self._preparing_memo: list[bool] | None = None  # 一次畫面建構裡記住的「籌備中嗎」；None＝不在範圍裡（見 phase_memo）
         self._draft: Draft | None = None  # choose() 進行中那次行動的江湖紀錄草稿
+        self._loot_scale = 1.0  # 打贏的心得與銀兩倍數：練功分級（_practice，Config.training）那一場才不是 1
         self._affinity_before: dict[str, int] | None = None  # choose()、隨口應對進行中：這一下之前的情誼（_people_here 認這一下加了誰的情誼）
         # 歷史武將同行：挑好了隨你上陣的那一位、正在照它加入（_escort_step 開著、_escort_carry 讀）
         self._escort_picked = False
@@ -617,12 +621,14 @@ class Game:
             self.forge(None, pair)
         elif goal.action in ("rest", "train", "explore"):
             self.choose(f"act:{goal.action}")
+        elif goal.action == "pill":  # 序章服回體丹（新手引導重做）：假人也真的服一顆（同真人，看不出來）
+            self.take_stamina_pill(pill_only=True)
         elif goal.action == "allocate":
             open_stats = [k for k in team.COMBAT_STATS if p.stats.get(k, 0) < c.config.stat_cap]
             if not open_stats:
                 return False
             self.allocate_stat(self.rng.choice(open_stats))
-        elif goal.action == "melt" and step.melt_only:
+        elif "melt" in (goal.action, *goal.any_action) and step.melt_only:
             self.melt_art(step.melt_only)
         else:
             return False
@@ -708,6 +714,8 @@ class Game:
         fresh.player.pills_topped_to = old.player.pills_topped_to  # 補過的不再補（第二季起建的角色在這裡還沒拿贈送）
         fresh.player.pill_day, fresh.player.pills_today = old.player.pill_day, old.player.pills_today  # 換季不能多吃一輪
         fresh.player.sortie_day, fresh.player.sorties_today = old.player.sortie_day, old.player.sorties_today  # 換季不能多出一輪陣
+        fresh.player.drill_day, fresh.player.drills_today = old.player.drill_day, old.player.drills_today  # 換季不能多操練一輪
+        fresh.player.newbie_marks, fresh.player.newbie_done = old.player.newbie_marks, old.player.newbie_done  # 新手目標只有一輪
         fresh.player.upgrade_day, fresh.player.upgrades_today = old.player.upgrade_day, old.player.upgrades_today  # 換季不能多升一輪三階
         fresh.player.donate_day, fresh.player.donated_today = old.player.donate_day, old.player.donated_today  # 換季不能多捐一輪
         fresh.player.battle_results_seen = old.player.battle_results_seen  # 補送過的決戰不再補一次（FB-027）
@@ -870,6 +878,10 @@ class Game:
         if prologue_rules.has(c) and p.onboarding < ONBOARD_SEGMENT and p.tutorial_step >= c.tutorial.prologue_steps:
             # 初入江湖（新手引導第四段）上線之前就走出草廬的人不回頭走：跳過它（沒有框、不寫話）
             prologue_rules.skip_onboarding(s, c)
+        elif prologue_rules.has(c) and p.onboarding < ONBOARD_SEVEN:
+            p.tutorial_step = prologue_rules.seven_step(p.tutorial_step, c)  # 老周四步改七步：走到一半的接到對應的那一步
+            if prologue_rules.pills_open(s, c) and p.stamina_pills < 1:  # 停在草廬服丹那一步（以前是調息）、身上沒丹：照那一步送的補上
+                p.stamina_pills += max(st.give_pills for st in c.tutorial.steps)
         if prologue_rules.has(c):
             p.onboarding = ONBOARDING_VERSION  # 內容沒有序章時步數還是舊編號，不蓋章（preflight F6）
         p.tutorial_step = min(p.tutorial_step, len(c.tutorial.steps))
@@ -1266,6 +1278,8 @@ class Game:
             opts = [Option(id="act:explore", label="探索", enabled=any(o.enabled for o in modes)), *modes]
         else:
             opts = [self._cost_option("act:explore", "探索", cost["explore"])]
+        if training.on(c, s.world) and not prologue_rules.active(s, c):  # 新手引導重做：城裡操練、城外練功，行動列自成一格
+            opts.append(self._training_option(loc, cost["explore"], odds))
         if prologue_rules.active(s, c) or not sortie.on(c):
             if self._train_squad_ids(loc):
                 # 遊歷：這個地點的敵人，必定開打（見 _train）。sanguo-companions 合併時這個行動被
@@ -1671,7 +1685,9 @@ class Game:
         cost = atlas.route_stamina(self.state, c, route, mode)
         if self.state.player.stamina < cost:
             return Option(id=option_id, label=f"前往 {dest.name}（{atlas.MODES[mode]}・體力不足，要 {cost}）", enabled=False)
-        return Option(id=option_id, label=f"前往 {dest.name}（{atlas.route_text(self.state, c, route, mode)}）")
+        tier = self._practice_tier(dest)  # 練功分級（Config.training）：目的地練得了功就在底下小字寫幾級
+        note = training.TIER_NOTE.format(tier=training.TIER_WORDS[tier]) if tier is not None else ""
+        return Option(id=option_id, label=f"前往 {dest.name}（{atlas.route_text(self.state, c, route, mode)}）", note=note)
 
     def _back_way(self) -> atlas.Route:
         """折返的路：從路上回到身後那一站（路上設計 3.2：折返就是「改去」那一站，見 atlas.way_to）。
@@ -1769,8 +1785,8 @@ class Game:
             opts.append(Option(id=sense, label=f"{name[explore_modes.SENSE]}（{explore_modes.SENSE_LATER}）", enabled=False))
         else:
             opts.append(self._cost_option(sense, name[explore_modes.SENSE], cost))
-        if precise.on(c, self.state.world):
-            opts.append(self._practice_option(loc, cost, odds))
+        if precise.on(c, self.state.world) and not training.on(c, self.state.world):
+            opts.append(self._practice_option(loc, cost, odds))  # 城裡操練開著時練功自成一格（_training_option），不在三選一裡
         branches = self._gather_branch_options(loc, cost)
         if branches:  # 找素材分支（第 32 項）：「找素材」變成入口（不寫體力、按了只回 GATHER_PICK），分支緊接在它後面
             opts[0] = Option(id=opts[0].id, label=name[explore_modes.GATHER], enabled=any(o.enabled for o in branches))
@@ -1809,6 +1825,9 @@ class Game:
         foe = self._gather_foe(loc)
         if foe is not None:
             note = f"{foe.name}・{self.odds(foe.id)}" if odds else foe.name
+            tier = self._practice_tier(loc)
+            if tier is not None:  # 城外練功分級（Config.training）：「練功（體力 6・一級・河灘潑皮・穩勝）」
+                note = f"{training.TIER_WORDS[tier]}・{note}"
             return self._cost_option(oid, name, cost, note=note)
         bosses = duel_rules.here(s, c)
         if not bosses:
@@ -1837,6 +1856,60 @@ class Game:
             if reachable:
                 return min(reachable, key=lambda route: (round(route.minutes, 6), len(route.path), route.path))
         return None
+
+    def _practice_tier(self, loc: Location) -> int | None:
+        """這裡練功是第幾級（0、1、2；Config.training）：照此刻這裡最弱、不是自己人的對手。城裡操練關著、這裡沒有對手是 None。"""
+        if not training.on(self.content, self.state.world):
+            return None
+        foes = self._wild_foes(loc)
+        return training.tier_of(self.content.config.training, min(f.difficulty for f in foes)) if foes else None
+
+    def _training_option(self, loc: Location, cost: int, odds: bool) -> Option:
+        """行動列「練功」那一格（新手引導重做）：城鎮裡是操練（act:drill，今天還剩幾次；用完了灰掉、寫最近的練功點），城外是練功
+        （_practice_option，寫級數與勝算）。"""
+        s, c = self.state, self.content
+        if not training.is_town(c, loc):
+            return self._practice_option(loc, cost, odds)
+        left = training.drills_left(s.player, c.config.training, self._pill_day())
+        if left > 0:
+            return self._cost_option(training.DRILL_ID, training.DRILL, cost, note=training.DRILL_LEFT.format(n=left))
+        route = self._nearest_practice()
+        where = ""
+        if route is not None:
+            place = c.locations[route.path[-1]]
+            tier = self._practice_tier(place)
+            where = training.NEAREST.format(place=place.name, tier=training.TIER_WORDS[tier or 0])
+        return Option(id=training.DRILL_ID, label=f"{training.DRILL}（{training.DRILL_FULL}{where}）", enabled=False)
+
+    def _town_drill(self) -> list[str]:
+        """城裡操練（act:drill，Config.training）：零風險，給心得（基數＋等級）與一點經驗（基數＋等級÷5），一天幾次。
+        不打仗、不扣氣血、不掉東西；經驗本人與帶著的同伴都拿（同出陣守、操練）。"""
+        s, c = self.state, self.content
+        p, cfg = s.player, c.config.training
+        today = self._pill_day()
+        if not training.is_town(c, c.locations[p.location]) or training.drills_left(p, cfg, today) <= 0:
+            return [training.DONE_TODAY]
+        p.stamina -= self._action_costs()["explore"]
+        training.spend(p, today)
+        xinde, exp = training.gains(cfg, p.member.level)
+        msgs = [training.line(p)]
+        self._outcome(training.TAG, msgs[0])
+        p.stats["xinde"] = p.stats.get("xinde", 0) + xinde
+        xinde_line = f"心得 +{xinde}"
+        msgs.append(xinde_line)
+        if self._draft is not None:
+            self._draft.hide(xinde_line)
+            self._draft.changes.append(xinde_line)
+        gained = team.maxed_xinde(s, c, exp)  # 滿級：本人的經驗照 5 換 1 換成心得，同伴照拿經驗
+        if gained:
+            msgs.append(team.MAXED_XINDE.format(n=gained))
+        msgs += team.add_team_exp(s, c, self.world, exp)
+        if self._draft is not None and exp > 0:
+            self._draft.changes.append(f"心得 +{gained}" if team.maxed(c, p.member) else f"經驗 +{exp}（每人）")
+        left = training.drills_left(p, cfg, today)
+        if left == 0:
+            self._hint("h_drill_done")
+        return msgs
 
     def _precise_social_option(self, cost: int) -> Option:
         """一類一顆的交友（正式季整合 2.8）：照 _social_plan。兩位以上見得到的人物時是「交友」打開名單（act:call，不花體力）；
@@ -2224,6 +2297,7 @@ class Game:
         if paid:
             msgs = msgs + [f"銀兩 {-paid:+d}"]
         if paid:  # 真的花了錢（問不到退一半也算）才寫紀錄；被拒、沒收錢的只回一句
+            s.player.newbie_marks.add("tavern")  # 新手目標：在酒肆打聽一件事
             self._write(tavern_rules.sign(s, self.content), msgs, merge=True)
             self._save_season()
         return msgs
@@ -3148,6 +3222,11 @@ class Game:
                     msgs += self._guide(note_action(self.state, self.content, self.world, "shop"))
             if kind == "explore" and not picked_only:  # 探索三選一的三種都算探索過（找素材分支的入口那一下不算）
                 msgs += self._guide(note_action(self.state, self.content, self.world, "explore"))
+                card = next((r for r in self.state.battles if r.id == self.state.battle_card), None)
+                if arg == explore_modes.PRACTICE and card is not None and card.tier in team.WIN_TIERS:  # 城外練功打贏（新手引導重做）
+                    msgs += self._guide(note_action(self.state, self.content, self.world, "field_win"))
+            if option_id in LEAVE_SHOP_IDS:  # 出店（進了店再出來，新手引導重做：出了店下一步才不會被店面蓋住）
+                msgs += self._guide(note_action(self.state, self.content, self.world, "leave_shop"))
             if kind == "call" and arg != "back":
                 msgs += self._guide(note_action(self.state, self.content, self.world, "socialize"))  # 指名求見算一次交友
             # 名將贈禮（裝備四欄 6.4）與本命兵器（打造第三批）：這一下的情誼（對話、事件）到了門檻就送；另起一則「名將贈禮」，
@@ -3517,6 +3596,7 @@ class Game:
             "donate": f"{economy.DONATE_TITLE}・{here}",
             "dadian": f"{silver.SHOP}・{here}",
             "tavern": tavern_rules.sign(s, c),
+            "drill": f"{training.DRILL}・{here}",
         }
         return titles.get(arg, "提前出關")
 
@@ -3681,17 +3761,17 @@ class Game:
         if note is not None and hint_rules.show(self.state, self.content, note):
             self._journal_guide([f"【{note.speaker}】{note.text}"])
 
+    def _drop_stale_hints(self) -> None:
+        """排著還沒上框、條件已經不成立的拿掉（新手引導重做：療好傷才輪到「內傷去醫館」那一條就不說；沒說過，之後再受傷還會說）。"""
+        p = self.state.player
+        p.hint_queue = [n for n in p.hint_queue if n.shown or not (n.id == "h_injury" and p.member.injury < 1)]
+
     def _hint(self, hint_id: str) -> None:
         """碰到某個玩法：排一條提示（序章裡不排，序章本身在教；新手引導計畫三）。說過的、已經排著的、關了提示的、假人都不排；
         輪得到上框就當場上框（_surface_hint）。"""
         if not prologue_rules.active(self.state, self.content):
             hint_rules.queue(self.state, self.content, [hint_id])
             self._surface_hint()
-
-    def _refine_failed(self) -> bool:
-        """h_refine_fail 的條件。武學重構（Joy 2026-10-20）之後品級不靠修練衝、沒有「修練失敗」這件事（art_mastery 不再記失敗），
-        永遠是假；函式留著讓提示的表不改。"""
-        return False
 
     def _hint_triggers(self, only: set[str] | None = None) -> list[str]:
         """此刻成立的碰到才說（設計 5.2）：看的都是角色現在的狀態（修練失敗留下熟練度、戰報裡有一場沒打贏的、路上見聞真的發生過……），
@@ -3711,13 +3791,22 @@ class Game:
             neigong = team.player_art(s, c, self.world, p.member.neigong_id) if p.member.neigong_id else None
             if wugong and neigong and martial_arts.counters(wugong.attribute, neigong.attribute):  # 相剋是一對一對的，兩個方向都一樣
                 on.append("h_clash")
-        if want("h_refine_fail") and self._refine_failed():  # 修練失敗才會累積熟練度，成功就歸零（往絕學添的火候不算）
-            on.append("h_refine_fail")
         # 第一場沒打贏的仗：僵持與落敗都算（以前只算落敗：身法閃成僵持的人師父不開口）；決戰與挑戰本人不在這三種裡
         if want("h_lose") and any(r.tier not in team.WIN_TIERS for r in s.battles if r.kind in ("train", "sortie", "wild", "event")):
             on.append("h_lose")
         if want("h_injury") and p.member.injury > 0:
             on.append("h_injury")
+        # 新手引導重做（2026-10-22）：練功連輸兩場（僵持不算輸）、心得第一次夠自創、第一次到有酒肆的城、點數沒配又升了一級
+        if want("h_field_lose") and sum(1 for r in s.battles if r.label == training.PRACTICE and r.tier not in team.WIN_TIERS
+                                        and r.tier != "僵持") >= 2:
+            on.append("h_field_lose")
+        if want("h_create") and create.on(c) and p.created_count == 0 and create.allowed(s, c) is None \
+                and p.stats.get("xinde", 0) >= create.price(s, c):
+            on.append("h_create")
+        if want("h_tavern") and tavern_rules.on(c) and tavern_rules.here(s, c) and p.location not in prologue_rules.onboard_towns(c):  # 老周在那裡教過酒肆
+            on.append("h_tavern")
+        if want("h_points") and p.stat_points >= 2:
+            on.append("h_points")
         # 「這裡能學新的底」：只算現在學得了的（learn 擋下的——名望、學費、門派、陣營、持有滿了——都不算，不然師父說能學、按下去卻是「學不了」）
         if want("h_basic_art") and any(problem is None for _, problem in library.lessons_here(s, c)):
             on.append("h_basic_art")
@@ -3758,6 +3847,7 @@ class Game:
         排不進去的（散人碰到沒有散人版的陣營提示）不算名額，接著看後面的。不看的時候：假人、關了提示、籌備中與休季（框不畫，
         排進去就算說過會白白丟掉，F7）、序章。"""
         s, c, p = self.state, self.content, self.state.player
+        self._drop_stale_hints()
         if p.bot or p.hints_off or any(n.id in hint_rules.STATE for n in p.hint_queue):
             return
         # 只算書裡有的狀態提示（事件型的不看狀態，留在 waiting 裡也沒東西可算，只會讓下面的提早返回永遠用不上），還沒說過、也還沒排著的（N10）
@@ -3773,8 +3863,63 @@ class Game:
     def _check_hints(self) -> None:
         """每次行動、修練頁與配點的動作、出發、同步做完之後看一遍（新手引導計畫三）：該說的排進佇列，輪到的上框（_surface_hint）。
         呼叫的位置都在記進江湖紀錄之前，說的話才記在這一次行動那一則。"""
+        self._check_newbie()
         self._queue_triggered_hints()
         self._surface_hint()
+
+    # ── 新手目標（新手引導重做；tianxia/newbie.py）──
+
+    def _check_newbie(self) -> None:
+        """做到的新手目標發獎勵，那一句記進這一則江湖紀錄的引導那幾行（不另起一則；假人一樣拿：畫面上看不出誰是假人）。"""
+        got = newbie.grant(self.state, self.content)
+        if got:
+            self._journal_guide([f"{line}{change}" for line, change in got])
+
+    def _nearest_to(self, targets: set[str]) -> str | None:
+        """離這裡最近的那一個地點（先照摸清的路，都走不到照所有開放的地點，同 _nearest_practice）；這裡就是的話回這裡。"""
+        s, c = self.state, self.content
+        if s.player.location in targets:
+            return s.player.location
+        for found in (atlas.routes(s, c), atlas.shortest_routes(s, c)):
+            reachable = [route for loc_id, route in found.items() if loc_id in targets and route.path]
+            if reachable:
+                return min(reachable, key=lambda route: (round(route.minutes, 6), len(route.path), route.path)).path[-1]
+        return None
+
+    def _newbie_go(self, go: str) -> dict:
+        """「去做」：{"tab": 分頁} 或 {"move": 地點 id, "place": 名字}（網頁打開移動清單、把那一個亮起來；人就在那裡是 {"tab": "jianghu"}）。"""
+        c = self.content
+        if go in ("craft", "practice", "map"):
+            return {"tab": go}
+        if go.startswith("practice"):
+            tier = int(go[-1])
+            targets = {loc.id for loc in c.locations.values() if self._practice_tier(loc) == tier}
+        elif go == "tavern":
+            targets = {loc.id for loc in c.locations.values() if tavern_rules.tavern_at(c, loc.id)}
+        else:  # 懸賞榜、擂台都在城鎮類的地點
+            targets = {loc.id for loc in c.locations.values() if training.is_town(c, loc)}
+        where = self._nearest_to(targets)
+        if where is None or where == self.state.player.location:
+            return {"tab": "jianghu"}
+        return {"move": where, "place": c.locations[where].name}
+
+    def newbie_view(self) -> dict | None:
+        """任務卡上「新手目標」那一塊：引導（序章、初入江湖）走完、新手期裡、還有沒做完的才有。一次亮最上面三條。"""
+        s, c = self.state, self.content
+        if not newbie.active(s, c) or prologue_rules.onboard_step(s, c) is not None:
+            return None
+        rows = [{"key": g.key, "text": g.text, "reward": newbie.reward_text(c, g), "go": self._newbie_go(g.go),
+                 "drifter": g.key == "side" and s.player.faction is None} for g in newbie.todo(s)]
+        return {"title": newbie.TITLE, "rows": rows, "done": len(s.player.newbie_done), "total": len(newbie.GOALS)}
+
+    def newbie_drifter(self) -> list[str]:
+        """任務卡「就當散人」：記下這一條（投靠一方或就當散人）。只改自己的記號，獎勵照平常的檢查發。"""
+        p = self.state.player
+        if p.faction is not None or not newbie.active(self.state, self.content):
+            return []
+        p.newbie_marks.add(newbie.DRIFTER)
+        self._check_newbie()
+        return [newbie.DRIFTER_LINE]
 
     # ── 書信與委託（大勢人物擴充第二批；tianxia/letters.py）──
 
@@ -3982,6 +4127,8 @@ class Game:
             return [economy.DONATE_OPEN.format(faction=self.content.scenario.faction_name(self.state.player.faction, ""))]
         if what == "tavern":  # 酒肆（企劃者 2026-10-18）：打開酒肆（見 _tavern_options），不花體力
             return self._tavern_enter()
+        if what == "drill":  # 城裡操練（新手引導重做，Config.training）：體力在裡面扣
+            return self._town_drill()
         if what == "call":
             self.state.player.picking_audience = True  # 打開求見選單（見 _audience_options），不花體力
             return [f"你遞上名帖，準備求見{self.content.locations[self.state.player.location].name}的人物。"]
@@ -4358,7 +4505,19 @@ class Game:
             return self._duel_start(boss)
         if foe is None:
             return [explore_modes.NO_FOE + "。"]
-        return self._gather_fight(loc, rng, line=explore_modes.PRACTICE_LINE, aftermath=False)
+        tier = self._practice_tier(loc)  # 練功分級（Config.training）：心得與銀兩照級數乘，經驗不加成
+        self._loot_scale = training.loot_scale(c.config.training, tier) if tier is not None else 1.0
+        card = s.battle_card
+        try:
+            msgs = self._gather_fight(loc, rng, line=explore_modes.PRACTICE_LINE, aftermath=False)
+        finally:
+            self._loot_scale = 1.0
+        record = next((r for r in s.battles if r.id == s.battle_card), None) if s.battle_card != card else None
+        if record is not None:
+            record.label = training.PRACTICE  # 戰報寫「練功」，不寫「探索遇敵」
+        if tier is not None and tier >= 1 and record is not None and record.tier in team.WIN_TIERS:
+            s.player.newbie_marks.add("field2")  # 新手目標：在二級以上的地方打贏一場練功
+        return msgs
 
     def _gather_foe(self, loc: Location) -> Squad | None:
         """找素材撞上的那一路（設計 3.1）：手上有這裡的討伐懸賞、那一路不是自己人時就是它（散人不能出陣，討伐靠這裡；地點易手之後
@@ -7948,6 +8107,8 @@ class Game:
         judged = None if wild or scripted is not None else self._judged(squad)
         result = self._fight_with(squad, judged, tier=scripted)
         record = battlelog.new_record(s, c, self.world, squad, result, "wild" if wild else "sortie" if as_sortie else "train")
+        if prologue_rules.active(s, c) and sortie.on(c):  # 戰報不寫舊名「遊歷」（新手引導重做）
+            record.label = sortie.PROLOGUE_FIGHT
         if scripted is None:
             record.notes += self._style_note(squad, result) + self._terrain_note()
         self._narrate(record, result, judged)
@@ -9022,14 +9183,16 @@ class Game:
     def _battle_rewards(self, squad: Squad, record, max_tier: int | None = None) -> list[str]:
         p = self.state.player
         msgs = []
-        if squad.reward_silver:
-            p.stats["silver"] += squad.reward_silver
-            record.silver = squad.reward_silver
-            msgs.append(f"銀兩 +{squad.reward_silver}")
+        scale = self._loot_scale  # 練功分級的倍數（_practice 打的那一場才不是 1；Config.training）
+        silver_won = round(squad.reward_silver * scale)
+        if silver_won:
+            p.stats["silver"] += silver_won
+            record.silver = silver_won
+            msgs.append(f"銀兩 +{silver_won}")
         # 寶物「打贏的心得／經驗」（裝備四欄 6.2）；兩種數字不同，拆成兩個倍數。乘勝、悟招以前多給獎勵，本命戰法第三批起改成回合裡的戰法
         more_xinde = 1 + treasures.amount(self.state, self.content, "win_xinde_pct")
         more_exp = 1 + treasures.amount(self.state, self.content, "win_exp_pct")
-        xinde = round(squad.reward_xinde * more_xinde)
+        xinde = round(squad.reward_xinde * more_xinde * scale)
         if xinde:
             p.stats["xinde"] = p.stats.get("xinde", 0) + xinde
             record.xinde = xinde
@@ -9664,10 +9827,13 @@ class Game:
         if refusal is not None:
             return self._log([refusal])
         xinde, stamina = self._xinde(), self.state.player.stamina
+        mixed = insight_fx.base_id(insight_ids[0]) != insight_fx.base_id(insight_ids[1])  # 兩種不同的意境（合成；同一種是揣摩）
         insight, msgs = fusion.merge(self.state, self.content, self.world, self._quick_client(), *insight_ids, proposed=proposed)
         tag = f"合併「{insight.name}」" if insight is not None else None
         if insight is not None:
             self.forged_thing = ("ins", insight.id)
+            if mixed:
+                self.state.player.newbie_marks.add("merge")  # 新手目標：在煉製合出一個新的意境
         out = self._log(msgs)
         self.forged = tag is not None
         if tag is not None:
@@ -9760,7 +9926,8 @@ class Game:
         msgs = self._log(team.switch_art(self.state, self.content, self.world, art_id))
         # 江湖紀錄的標記是「你改練【…】」那一句；換上後內外搭配變了時最後多一句（FB-088），不拿它當標記
         tag = next((m for m in reversed(msgs) if m.startswith("你改練")), msgs[-1] if msgs else "改練")
-        self._menxia_entry(tag, xinde)
+        switched = any(m.startswith("你改練") for m in msgs)  # 真的換上了才算序章「比一比，換上或熔掉」那一步（新手引導重做）
+        self._menxia_entry(tag, xinde, guide=switched, action="switch")
         return msgs
 
     # ── 自創武學（五步：執器、擺式、立意、成形、立名；tianxia/create.py）──────────────────
@@ -9950,12 +10117,13 @@ class Game:
         測試期間 Config.beta_free_refill 打開時，同一個入口改成免費補滿（_refill_stamina），不收丹。pill_only 是給假人與
         整季機器人的：他們照舊只吃丹（bot.take_pill），不吃這份測試期間的免費補滿；開關關著時 pill_only 沒有作用。"""
         p, cfg = self.state.player, self.content.config
-        if cfg.beta_free_refill and not pill_only:
+        hut_pill = prologue_rules.pills_open(self.state, self.content)  # 序章教服丹那一步起（新手引導重做）：照真的服一顆
+        if cfg.beta_free_refill and not pill_only and not hut_pill:
             return self._refill_stamina()
         name = cfg.stamina_pill_name
         if p.stamina_pills <= 0:
             return self._log([f"你身上沒有{name}了。"])
-        if prologue_rules.active(self.state, self.content):
+        if prologue_rules.active(self.state, self.content) and not hut_pill:
             return self._log([f"草廬裡先照師父說的做，{name}留著出了草廬再吃。"])
         if self.pills_left_today() == 0:
             return self._log([PILL_DAY_FULL.format(n=_cn_count(self.pill_cap()))])
@@ -9972,7 +10140,9 @@ class Game:
             time=self.state.world.time, title=f"服下{name}", lines=msgs,
             changes=[f"體力 +{round(p.stamina - before)}", f"{name} -1"],
         ))
-        return self._log(msgs + [f"體力 +{round(p.stamina - before)}（{name}還剩 {p.stamina_pills} 顆）"])
+        p.guide_done = []
+        rewards = self._guide(note_action(self.state, self.content, self.world, "pill"))  # 序章「服一顆回體丹」（新手引導重做）
+        return self._log(msgs + [f"體力 +{round(p.stamina - before)}（{name}還剩 {p.stamina_pills} 顆）"] + rewards)
 
     @_not_while_preparing
     def check_in(self, attribute: str = "") -> list[str]:
@@ -12068,6 +12238,7 @@ class Game:
             return [f"（{problem}。）"]
         arena.spend(s, self._pill_day())
         arena.note_challenge(s.world, p.name, foe)
+        p.newbie_marks.add("arena")  # 新手目標：上一次擂台
         s.world.arena_seq += 1
         fight = ArenaFight(
             id=s.world.arena_seq, foe_key=key, me=self._arena_side(), rounds=cfg.rounds,
@@ -14227,13 +14398,15 @@ class Game:
             # 回體丹（企劃者 2026-10-07）：有丹、而且不在草廬序章裡才給，網頁照它在體力條旁畫「服丹」鈕（體力滿了鈕是灰的）
             # 測試期間一鍵補滿（Config.beta_free_refill）打開時：沒有丹也給（鈕照樣畫），多一個鍵 refill＝鈕上的字，網頁見它就寫
             # 「補滿」不寫「丹 N」；關著時這個鍵不存在，整份跟 joy 的一個字不差
-            "pills": None if (p.stamina_pills <= 0 and not c.config.beta_free_refill) or prologue_rules.active(s, c) else {
+            "pills": None if (p.stamina_pills <= 0 and not c.config.beta_free_refill) or (
+                prologue_rules.active(s, c) and not prologue_rules.pills_open(s, c)) else {
                 "name": c.config.stamina_pill_name, "count": p.stamina_pills, "restore": c.config.stamina_pill_restore,
                 "full": p.stamina >= c.config.stamina_max,
                 # 今天還能服幾顆（一天的上限，台灣時間 00:00 換日，企劃者 2026-10-12）；不限（stamina_pills_per_day 0）時沒有這個鍵
                 **({"today": self.pills_left_today()} if c.config.stamina_pills_per_day > 0 else {}),
-                **({"refill": c.config.beta_free_refill_label} if c.config.beta_free_refill else {}),
+                **({"refill": c.config.beta_free_refill_label} if c.config.beta_free_refill and not prologue_rules.active(s, c) else {}),
             },
+            "newbie": self.newbie_view(),  # 新手目標（新手引導重做；tianxia/newbie.py）：引導走完、新手期裡才有
             "hp": round(now),  # 跟角色卡（skillview.member_card 的 {:.0f}）同一種進位：兩邊寫出來的數字一樣
             "hp_max": round(cap),
             "injury": int(p.member.injury),

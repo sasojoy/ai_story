@@ -625,6 +625,17 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 /* 21 天季多一顆「簽到」（第 7 批）：四顆時內距與間距收一點，375 寬（態勢寫兩個數字）到 360 寬都還是一行 */
 .peek-row:has(> .peek-chip:nth-child(4)) { gap: 4px; }
 .peek-row:has(> .peek-chip:nth-child(4)) > .peek-chip { padding-inline: 6px; }
+.peek-row:has(> .peek-chip:nth-child(5)) > .peek-chip { padding-inline: 4px; font-size: 13px; }
+.peek-row:has(> .peek-chip:nth-child(5)) > .peek-chip::after { content: none; }
+/* 新手目標（新手引導重做）：小標「新手 2/8」，攤開一次三條，每條右邊「去做」 */
+.peek-chip.newbie { border-color: var(--gold); }
+.nb-goals { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.nb-goal { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.nb-goal > div { min-width: 0; display: grid; }
+.nb-goal b { font-weight: 600; }
+.nb-goal small { color: var(--ink-2); font-size: 12px; }
+.nb-btns { display: flex; gap: 4px; flex: none; }
+.act-move .btn.go small.opt-note { display: block; font-size: 12px; color: var(--ink-2); }
 .peek-chip.on { background: var(--card-2); }
 .peek-chip.on::after { transform: none; }
 .peek-name { color: var(--ink-2); }

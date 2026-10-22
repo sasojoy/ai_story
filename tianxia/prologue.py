@@ -34,6 +34,14 @@ def step(state: GameState, content: Content) -> TutorialStep | None:
     return content.tutorial.steps[state.player.tutorial_step] if active(state, content) else None
 
 
+def pills_open(state: GameState, content: Content) -> bool:
+    """草廬裡教到服回體丹了沒（新手引導重做：「體力見底，服一顆回體丹」那一步起狀態列才有「丹」、才服得下去）。不在序章是 False。"""
+    if not active(state, content):
+        return False
+    t = content.tutorial
+    return any(s.done_when.action == "pill" for s in t.steps[: state.player.tutorial_step + 1])
+
+
 def start_stamina(content: Content) -> int:
     """序章開局的體力：探索一次、揣摩一次剛好用完，第 7 步才有「體力見底、調息」（設計 3.2）。
     武學重構（Joy 2026-10-20）：裝意境不花體力，衝品質的修練沒有了，揣摩（意境＋意境）花 Config.merge_stamina。"""
@@ -120,6 +128,23 @@ def migrated_step(player: PlayerState, content: Content) -> int:
     return n + max(0, player.tutorial_step - OLD_BASE_STEPS)
 
 
+# 初入江湖第一版（ONBOARDING_VERSION 4）老周的四步，新手引導重做（5，Joy 2026-10-22）改成七步：走到一半的照這張表接到新的那一步
+OLD_ONBOARD = ("e1_clinic", "e2_explore", "e3_shops", "e4_world")
+OLD_TO_NEW = {"e1_clinic": "e1_clinic", "e2_explore": "e2_drill", "e3_shops": "e6_shops", "e4_world": "e7_world"}
+
+
+def seven_step(step: int, content: Content) -> int:
+    """章是 4 的存檔（老周四步那一版）的引導步數換成七步的編號：草廬裡照舊；老周那幾步照 OLD_TO_NEW；走完的接在新的最後一步之後。
+    內容沒有這幾步（測試內容）照舊。"""
+    n, ids = content.tutorial.prologue_steps, [s.id for s in content.tutorial.steps]
+    if step < n or not all(new in ids for new in OLD_TO_NEW.values()):
+        return step
+    k = step - n
+    if k >= len(OLD_ONBOARD):
+        return step + len(ids) - (n + len(OLD_ONBOARD))
+    return ids.index(OLD_TO_NEW[OLD_ONBOARD[k]])
+
+
 def allowed(options: list[Option], state: GameState, content: Content) -> list[Option]:
     """在草廬閒著的時候選單只留這一步要的（TutorialStep.allow，前綴比對）：新人不會在草廬交友、亂打坐打亂了步驟。"""
     current = step(state, content)
@@ -141,7 +166,16 @@ def can_travel(state: GameState, content: Content) -> bool:
 
 ONBOARD_CORE = (  # 初入江湖時選單上一直留著的：行動列四格與探索三選一、求見、移動、序章外的挑戰本人（都不在「此地還能做」）
     "act:explore", "explore:", "act:train", "act:socialize", "act:summons", "call:", "move:", "act:challenge:",
+    "act:drill",  # 城裡操練（新手引導重做：城外的練功是 explore:practice，前面那一串已經有）
 )
+
+
+def onboard_towns(content: Content) -> set[str]:
+    """初入江湖那幾步在哪裡走（出師那一步要去的地方，正式內容是潁川）：老周在那裡把城裡的鋪子、酒肆都教過了。"""
+    t = content.tutorial
+    if t.location is None or not 1 <= t.prologue_steps <= len(t.steps):
+        return set()
+    return set(t.steps[t.prologue_steps - 1].done_when.locations)
 
 
 def onboard_step(state: GameState, content: Content) -> TutorialStep | None:
@@ -315,8 +349,10 @@ def switch_target(state: GameState, content: Content, world: WorldStateStore) ->
     current = step(state, content)
     if current is None or "switch" not in current.glow:
         return None
-    named = next(iter(slotted_arts(state, content, world)), None)
     member = state.player.member
+    if current.melt_only:  # 「比一比，換上或熔掉」那一步（新手引導重做）：師父點名的那一門
+        return None if current.melt_only in (member.neigong_id, member.wugong_id) else current.melt_only
+    named = next(iter(slotted_arts(state, content, world)), None)
     if named is None or named.id in (member.neigong_id, member.wugong_id):
         return None
     return named.id

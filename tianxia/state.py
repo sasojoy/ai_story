@@ -114,7 +114,7 @@ class HintNote(BaseModel):
     by: str = ""
 
 
-ONBOARDING_VERSION = 4  # 新手引導的版本：2＝有序章的新引導（新手引導計畫一）、3＝再加入伍段（計畫二）、4＝再加初入江湖（第四段）。比 2 小的是舊存檔，讀檔時當作走過序章（設計 7.2）；
+ONBOARDING_VERSION = 5  # 新手引導的版本：2＝有序章的新引導（新手引導計畫一）、3＝再加入伍段（計畫二）、4＝再加初入江湖（第四段）、5＝老周改七步、草廬服丹（新手引導重做）。比 2 小的是舊存檔，讀檔時當作走過序章（設計 7.2）；
 # 比 3 小而且已經有陣營的，是入伍段上線之前就投靠的老手，讀檔時蓋成入伍段走完（enlist.mark_veteran，設計 7.2）
 
 
@@ -731,6 +731,9 @@ class PlayerState(BaseModel):
     # 出陣（出陣探索與地盤設計 2.3）：上次出陣是哪一天（同 pill_day 的換日）與那一天出了幾次；跨季保留（換季不能多出一輪）
     sortie_day: int = -1
     sorties_today: int = 0
+    # 城裡操練（Config.training，新手引導重做 2026-10-22）：上次操練是哪一天（同 pill_day 的換日）與那一天練了幾次；跨季保留
+    drill_day: int = -1
+    drills_today: int = 0
     # 素材與經濟（2026-10-15，tianxia/economy.py）：同 pill_day 的換日；跨季保留（換季不能多換一輪、多捐一輪）
     upgrade_day: int = -1  # 鐵匠鋪升階：上次升階是哪一天
     upgrades_today: dict[int, int] = Field(default_factory=dict)  # 那一天換到幾階 → 換了幾個（只記有每日上限的階，Config.economy.upgrade_per_day）
@@ -812,6 +815,10 @@ class PlayerState(BaseModel):
     # 還沒做完，引薦人照樣說結語、入伍段關起來（enlist.expire）。這一版之前存的角色沒有，None＝下一次檢查才從那一刻算起
     enlist_since: float | None = None
     # ── 碰到才說（新手引導計畫三）──
+    # 新手目標（新手引導重做 2026-10-22，tianxia/newbie.py）：做到過的目標（marks，引擎在那件事發生時記）與領過獎勵的目標（done）；
+    # 新手期（roster.newbie）只有一次，換季保留
+    newbie_marks: set[str] = Field(default_factory=set)
+    newbie_done: set[str] = Field(default_factory=set)
     hints_seen: set[str] = Field(default_factory=set)  # 說過（上過框）的提示 id；換季保留，整個遊戲每一條只說一次
     hint_queue: list[HintNote] = Field(default_factory=list)  # 排著還沒按「知道了」的提示，對話框一次一條；換季不帶
     hints_off: bool = False  # 設定頁的「不再提示」（跟略過新手引導分開，設計 7.3）；換季保留
@@ -1532,6 +1539,7 @@ class BattleRecord(BaseModel):
     location: str  # 地點名稱（決戰是大區名；上一季打的前面加「第 N 季・」）
     kind: Literal["train", "event", "wild", "showdown", "siege", "spar", "raid", "duel", "seal", "arena", "sortie", "ambush", "assassin", "melee"]  # 遊歷／劇情／探索撞上的野怪／全服決戰／跟玩家切磋／截殺（發起或被截殺）／頭目戰／奪璽單挑（玉璽碎片設計 5.9）／出陣（出陣探索與地盤設計；舊戰報的 train 照舊顯示「遊歷」，不遷移）
     event: str = ""  # 劇情戰的事件標題；決戰是決戰的名稱
+    label: str = ""  # 戰報上寫的種類（空的照 battlelog.KIND_WORDS）：序章的「雪恥」、城外的「練功」（新手引導重做）
     opponent: str  # 敵方隊伍名稱；決戰是敵方陣營名
     ours: list[Fighter]  # 我方陣容，第一位是隊長；等級是開打時的等級（決戰不記，是空的）
     tier: str  # 大勝/險勝/僵持/落敗（encounter.EncounterResult.tier）；決戰是結果的標題

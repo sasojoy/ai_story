@@ -31,7 +31,7 @@ def real(real):
     全圖開放也關掉（closed_map）：打擊軍令的卡與輿圖的 ◎ 在這裡測「還沒摸清只寫大區」（FB-072），全圖開放的見 tests/test_open_map.py。"""
     return closed_map(classic_rules(real))
 
-BASE = 15  # 引導的步數（序章十一步＋初入江湖四步；第一季的軍令兩步已經由入伍段取代，新手引導計畫二）：做完它們就是「引導做完」
+BASE = 18  # 引導的步數（序章十一步＋初入江湖七步〔新手引導重做〕；第一季的軍令兩步已經由入伍段取代，新手引導計畫二）：做完它們就是「引導做完」
 
 
 def _game(content, name="甲", faction=None, at=None, world=None):

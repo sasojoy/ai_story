@@ -39,6 +39,7 @@ SEEK_SCORE = 0.9  # 閒著找事件
 SENSE_SCORE = 0.5  # 悟得到的地方偶爾靜心感悟
 # 一類一顆（正式季整合 9.2）：想要經驗按練功，缺素材才按找素材；出陣照舊排在練功前面（出陣的分數另加 PRACTICE_SCORE）
 PRACTICE_SCORE = 1.0
+DRILL_SCORE = 0.9  # 城裡操練（新手引導重做，tianxia/training.py）：零風險、一天幾次，比練功低一點；用完了是灰的，不會被挑
 PRECISE_GATHER_SCORE = 0.4  # 找素材不再打仗、不給經驗：缺素材時再加 NEED_MATERIAL_SCORE
 # 背包裡的一階素材少於 NEED_MATERIAL_BELOW 個：找素材再加這一份。計畫寫 0.5，那樣缺素材的找素材（1.5）會跟挑戰本人（CHALLENGE_SCORE 1.5）
 # 打平，挑戰本人該比探索高（見 CHALLENGE_SCORE 的說明），所以壓在 0.3
@@ -814,6 +815,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
             bonus += BOUNTY_SCORE if _bounty_here(game, "strike") else 0.0
             bonus += PRACTICE_SCORE if precise.on(c, s.world) else 0.0  # 一類一顆：出陣照舊排在練功前面（9.2）
             return TRAIN_SCORE + _train_value(game, profile) + bonus
+        if arg == "drill":  # 城裡操練：真人一樣按（不扣氣血、內傷重的也能練）
+            return DRILL_SCORE
         if arg == "duty":  # 守勢行動（計畫 T6）：替守城記功才值得做
             s = game.state
             return DUTY_SCORE + (ORDER_SCORE if orders.duty_counts(s, game.content, game._side(), s.player.location) else 0.0)
