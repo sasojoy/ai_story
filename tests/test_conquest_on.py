@@ -216,6 +216,28 @@ def test_the_conquest_buttons_ask_then_post_their_bodies(m):
     assert bodies[4]["id"] == "s-1"
 
 
+def test_get_sieges_reads_the_same_as_the_whole_state():
+    """SqliteWorldStore.get_sieges 只讀流水號與那幾列戰鬥（不整份解析共用狀態與季；計畫 4.4 量到整份讀佔假人一個動作的兩成多）：
+    跟 read().sieges 一模一樣——沒有攻城、兩場同時集結、其中一場有人加入之後都一樣。"""
+    from conquest_kit import announce, conquest_game
+    from tianxia import siege
+
+    game = join(go(conquest_game("season21"), "hilltop_wilds"), "guan")
+    same = lambda: [b.model_dump() for b in game.world.get_sieges()] == [b.model_dump() for b in game.world.read().sieges]  # noqa: E731
+    assert game.world.get_sieges() == [] and same()
+    game.now = NOW
+    w = game.state.world
+    for slot in (announce(game, "hilltop_wilds", "guan", minute=20 * 60), announce(game, "runan_wilds", "huang", minute=20 * 60)):
+        slot.muster_at, slot.at, slot.status = w.time, w.time + 1800, "waiting"
+    game._save_season()
+    siege.open_waiting(game.world, game.content, NOW)
+    game.state.world = game.world.get_season()
+    assert [b.siege.loc for b in game.world.get_sieges()] == ["hilltop_wilds", "runan_wilds"] and same()
+    join_id = next(o.id for o in game.options() if o.id.startswith("battle:join:guan"))
+    game.choose(join_id)
+    assert game.state.player.name in game.world.get_sieges()[0].participants and same()
+
+
 def test_the_routes_do_what_the_questions_say():
     """問句說的事跟引擎做的對得上：定歸誰發天下大事、不起冷卻；放回中立不發；定進度到 100 易手、起冷卻；下戰書凍結；取消解凍。"""
     game = _admin_game()
