@@ -73,7 +73,14 @@ class MartialArt(BaseModel):
     # 自創那一步玩家拖出來的姿勢（create.POSE_KEYS 九個角度，度）：功法卡的小圖照它畫；空的照兵器的預設姿勢畫
     pose: dict[str, float] = Field(default_factory=dict)
     # 自創自動配的小戰法（Joy 2026-10-21 決策卡選「自動配」）：照主屬性從學來的武學裡挑一門，借它的小戰法（tactics.of_art）
-    tactic_from: str | None = None
+    tactic_from: str | None = None  # 這一版之前借來的；以意成招之後不再讀（自創的招照 tianxia/moves.py 算）
+    # 以意成招（招式與絕學稿案第二節）：自創的招名（立名時定；None 照表的預設名）、模型照意寫的那一句（空的照表的套句）、
+    # 火候（生／熟／透，照意分；None 是這一版之前自創的，當熟）、稀有路數（成形時擲到）
+    move_name: str | None = None
+    move_say: str = ""
+    move_fire: str | None = None
+    move_rare: bool = False
+    move_stance: str = ""  # 勢（攻勢／守勢／變勢／起勢）：立名時照姿勢讀好存下來；空的照 pose 現讀
     method: str | None = None  # 自創的內功挑的行功之法（吐納、導引、坐忘、閉息）；武學與其他是 None
     # 身上的樣子（arts.apply）：只在玩家自己那一份上填，全服登記的那一份永遠是空的
     extra_specials: list[str] = Field(default_factory=list)  # 空格擲到的中階技能（特別功效 id）

@@ -7,7 +7,7 @@ import random
 import pytest
 from conftest import next_season
 
-from tianxia import mall, roster
+from tianxia import mall, roster, skillview
 from tianxia.characters import name_key, open_characters
 from tianxia.engine import Game
 from tianxia.models import MallItem
@@ -443,3 +443,65 @@ def test_admin_ledger_looks_the_same_for_bots(on):
     assert a["ledger"][0]["reason"] == b["ledger"][0]["reason"] == "封測發放"
     assert "refusal" in real.admin_mall_ledger("某假人")
     assert "refusal" in admin.admin_mall_ledger("查無此人")
+
+
+def test_buying_a_breakthrough_pill_puts_it_in_the_bag_and_a_refund_takes_back_the_unused(on):
+    """萬寶閣的破境丹（Joy 2026-10-21「把破境丹也加入商城」）：legend_items 加上去；退款收回還在行囊裡的，服掉的不追。"""
+    on.mall["legend_1"] = MallItem(id="legend_1", name="破境丹", price=150, kind="consumable", effects={"legend": 2})
+    player = _ready(on)
+    msgs = player.mall_buy("legend_1", "pj1")
+    assert player.state.player.legend_items == 2 and _wallet(player).balance("沈浪") == 4850
+    assert "破境丹 +2" in player.state.journal[0].changes and any("破境丹" in m for m in msgs)
+    assert mall.effects_text(on.mall["legend_1"], on) == "破境丹 2 顆"
+    player.state.player.legend_items = 1  # 服掉一顆
+    open_characters().save(player.state)
+    pid = _wallet(player).purchases("沈浪")[0].id
+    _admin(on).admin_mall_refund("沈浪", pid, "買錯了")
+    assert open_characters().load("沈浪").player.legend_items == 0 and _wallet(player).balance("沈浪") == 5000
+
+
+
+def test_buying_reroll_slips_and_refunding_the_unused(on):
+    """重悟帖（Joy 2026-10-21）：PlayerState.create_rerolls 加上去；退款收回還沒用的。"""
+    on.mall["reroll_1"] = MallItem(id="reroll_1", name="重悟帖", price=50, kind="consumable", effects={"create_reroll": 2})
+    player = _ready(on)
+    player.mall_buy("reroll_1", "rr1")
+    assert player.state.player.create_rerolls == 2 and "重悟帖 +2" in player.state.journal[0].changes
+    assert mall.effects_text(on.mall["reroll_1"], on) == "自創重骰 2 次"
+    player.state.player.create_rerolls = 1  # 用掉一張
+    open_characters().save(player.state)
+    pid = _wallet(player).purchases("沈浪")[0].id
+    msgs = _admin(on).admin_mall_refund("沈浪", pid, "買錯了")
+    assert "重悟帖收回 1 張" in msgs[0]
+    assert open_characters().load("沈浪").player.create_rerolls == 0
+
+
+def test_pills_and_reroll_slips_bought_with_ingots_survive_the_season_change(on):
+    """花元寶買的破境丹、重悟帖換季不能就不見（Joy 2026-10-21「再研究一下有沒有什麼瑕疵」）：同回體丹，剩下的帶著走。"""
+    player = _ready(on)
+    p = player.state.player
+    p.legend_items, p.create_rerolls, p.created_count = 2, 3, 4
+    player._reset_player_for_new_season(p.season_number + 1)
+    p = player.state.player
+    assert (p.legend_items, p.create_rerolls, p.created_count) == (2, 3, 0)
+
+
+def test_the_practice_row_sends_a_player_without_a_pill_to_the_mall(on):
+    """到了極處、手上沒丹：修練頁那一格帶上萬寶閣賣破境丹那一件（Joy 2026-10-21「破境丹沒有可以引導他去商城」）。"""
+    from test_cultivation import equip, kicker_art, ripen
+
+    on.mall["legend_1"] = MallItem(id="legend_1", name="破境丹", price=150, kind="consumable", effects={"legend": 1})
+    game = _ready(on)
+    game.world.claim_skill_name(kicker_art())
+    ripen(equip(game.state))
+    row = lambda: next(r for r in skillview.art_rows(game.state, on, game.world) if r["id"] == "旋風腿")  # noqa: E731
+    game.state.player.legend_items = 0
+    assert row()["cultivate"]["shop"] == "legend_1"
+    game.state.player.legend_items = 1
+    assert row()["cultivate"]["shop"] is None  # 有丹就直接服
+    game.state.player.legend_items = 0
+    game.state.player.art_levels["旋風腿"] = 9
+    assert row()["cultivate"]["shop"] is None  # 還沒到極處，買了也用不上
+    game.state.player.art_levels["旋風腿"] = 10
+    on.config.mall.enabled = False
+    assert row()["cultivate"]["shop"] is None  # 商城關著

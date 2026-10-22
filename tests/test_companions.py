@@ -27,9 +27,12 @@ def real():
     return c
 
 
-def _player(content, store, name, faction, at) -> Game:
+def _player(content, store, name, faction, at, warm=False) -> Game:
+    """warm：十五位的情誼都先補到招募門檻（Config.recruit_min_affinity，Joy 2026-10-21；沒到的不畫招募鈕，見 test_recruit_gate.py）。"""
     game = Game.new(content, name, rng=random.Random(0), world=store)
     p = game.state.player
+    if warm:
+        p.affinities.update({cid: content.config.recruit_min_affinity for cid in FIFTEEN})
     p.faction, p.location = faction, at
     p.tutorial_step = len(content.tutorial.steps)
     p.visited.add(at)
@@ -59,18 +62,18 @@ def test_fifteen_are_recruitable_and_no_figure_is():
 
 
 def test_the_recruit_button_follows_the_side(real, world):
-    guan = _player(real, world, "官甲", "guan", "zhuo_county")
+    guan = _player(real, world, "官甲", "guan", "zhuo_county", warm=True)
     button = _opts(guan)["act:recruit:liubei"]
     assert button.enabled and "成功率約" in button.label
-    huang = _player(real, world, "黃甲", "huang", "zhuo_county")
+    huang = _player(real, world, "黃甲", "huang", "zhuo_county", warm=True)
     button = _opts(huang)["act:recruit:liubei"]
     assert not button.enabled and roster.SIDE_ONLY.format(side="官軍") in button.label
-    drifter = _player(real, world, "散甲", None, "yingchuan_academy")
+    drifter = _player(real, world, "散甲", None, "yingchuan_academy", warm=True)
     assert _opts(drifter)["act:recruit:xunyu"].enabled  # 沒寫 side 的誰都招得到（含散人）
 
 
 def test_a_recruit_lands_him_in_your_name_and_team(real, world):
-    guan = _player(real, world, "官甲", "guan", "zhuo_county")
+    guan = _player(real, world, "官甲", "guan", "zhuo_county", warm=True)
     guan.rng = mock.Mock(random=mock.Mock(return_value=0.0))
     guan.choose("act:recruit:guanyu")
     assert world.get_companion("guanyu").owner == "官甲"
@@ -122,8 +125,8 @@ def test_a_late_recruit_click_says_who_took_him(real, world):
     不扣體力、不寫紀錄。名號照寫（匿名只在地方傳聞，rules.display_name）。"""
     from tianxia import engine
 
-    first = _player(real, world, "韓甲", "guan", "zhuo_county")
-    late = _player(real, world, "趙戊", "guan", "zhuo_county")
+    first = _player(real, world, "韓甲", "guan", "zhuo_county", warm=True)
+    late = _player(real, world, "趙戊", "guan", "zhuo_county", warm=True)
     assert "act:recruit:liubei" in _opts(late)
     assert world.try_recruit("liubei", "韓甲", cap=3)
     stamina, entries = late.state.player.stamina, len(late.state.journal)
@@ -135,7 +138,7 @@ def test_a_late_recruit_click_says_who_took_him(real, world):
 
 
 def test_a_fourth_companion_is_refused(real, world):
-    guan = _player(real, world, "Ray", "guan", "zhuo_county")
+    guan = _player(real, world, "Ray", "guan", "zhuo_county", warm=True)
     for cid in ("caocao", "yuanshao", "taoqian"):
         assert world.try_recruit(cid, "Ray", cap=3)
     button = _opts(guan)["act:recruit:liubei"]
@@ -196,7 +199,7 @@ def test_release_frees_him_for_anyone(real, world):
     msgs = guan.release_companion("guanyu")
     assert world.get_companion("guanyu").owner is None and "guanyu" not in guan.state.player.team
     assert msgs == [roster.RELEASE_DONE.format(name="關羽")]
-    other = _player(real, world, "官乙", "guan", "zhuo_county")
+    other = _player(real, world, "官乙", "guan", "zhuo_county", warm=True)
     assert _opts(other)["act:recruit:guanyu"].enabled
 
 

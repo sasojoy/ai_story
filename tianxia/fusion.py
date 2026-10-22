@@ -357,8 +357,9 @@ def _secret_lines(
 
 DEEPEN_LINE = "你把「{name}」反覆揣摩，體會又深了一層（{mark}）。"  # 同＋同（待 joy 潤）
 MIXED_LINE = "你把兩份「{name}」揉成了一份。"  # 揣摩：兩份的功效不同、層數沒有變深（待 joy 潤）
-PIECE_LINE = "這一份是{quality}：{label}。"  # 待 joy 潤
-GRAND_LINE = "揉到深處，悟出了大獎〔{name}〕！"  # 待 joy 潤
+PIECE_LINE = "這一份是{look}品：{label}。"  # 待 joy 潤（品相凡佳珍神，底子不給玩家看）
+GOD_DEED = "合出一份神品的「{name}」。"  # 待 joy 潤（神品只進自己的事蹟，不進江湖史）
+GRAND_LINE = "揉到深處，悟出了真意〔{name}〕！"  # 待 joy 潤
 DEEPEST = "「{name}」已經體會到極處（{mark}），再揣摩也深不下去了。"
 SAME_PIECE = "揣摩要同一種意境的兩份：再悟一次「{name}」，就有第二份。"  # 待 joy 潤
 PIECE_FULL = "「{name}」你手上已經有 {n} 份了，先揣摩或熔掉一份。"  # 待 joy 潤
@@ -480,7 +481,7 @@ def merge(
     quality = insight_fx.better(insight_fx.quality_of(state, a), insight_fx.quality_of(state, b))
     state.player.insights.append(piece)
     fx = insight_fx.roll(state, content, world, piece, quality=quality, compound=True)
-    head = f"「{ia.name}」與「{ib.name}」在你心中交融，化成「{result.name}」（屬{result.attribute}・{fx.quality}・{arts_mod.skill_name(content, result, fx)}）！"
+    head = f"「{ia.name}」與「{ib.name}」在你心中交融，化成「{result.name}」（屬{result.attribute}・{insight_fx.look(fx)}・{arts_mod.skill_name(content, result, fx)}）！"
     if result.note:
         head += f"\n{result.note}"
     other = None if first else _partner_of(result, state.player.name)
@@ -491,11 +492,18 @@ def merge(
     else:
         head += f"\n這個意境由{shown_creator(result) or '不知名的前人'}首悟。"
     echo(state, content, result, first)
+    _god(state, content, result.name, fx)
     if first:
         annals.note(state, content, annals.DEED, f"江湖上第一個悟出意境「{result.name}」。", 3)
     extra = _secret_lines(state, content, world, secret, f"「{result.name}」", first, result)
     mine = result if piece == result.id else result.model_copy(update={"id": piece})
     return mine, [head] + extra + _charge(state, *_price(content, partner, "merge"))
+
+
+def _god(state: GameState, content: Content, name: str, fx, *before) -> None:
+    """合出（或揣摩成）神品：寫一句進自己的事蹟（招式與絕學稿案第五輪）。本來就是神品的再揉一次不另寫。"""
+    if insight_fx.look(fx) == "神" and all(insight_fx.look(b) != "神" for b in before):
+        annals.note(state, content, annals.DEED, GOD_DEED.format(name=name), 2)
 
 
 def _deepen(state: GameState, content: Content, world: WorldStateStore, ia: Insight, ib: Insight) -> tuple[Insight, list[str]]:
@@ -519,7 +527,8 @@ def _deepen(state: GameState, content: Content, world: WorldStateStore, ia: Insi
     p.own_insights.pop(gone.id, None)
     after = insight_fx.strength(state, keep.id)
     head = DEEPEN_LINE.format(name=keep.name, mark=arts_mod.strength_mark(after)) if after > before else MIXED_LINE.format(name=keep.name)
-    lines = [head, PIECE_LINE.format(quality=merged.quality, label=insight_fx.label(content, merged))]
+    lines = [head, PIECE_LINE.format(look=insight_fx.look(merged), label=insight_fx.label(content, merged))]
+    _god(state, content, keep.name, merged, fa, fb)
     if merged.grand and not fa.grand and not fb.grand:
         g = insight_fx.grand(content, merged.grand)
         lines.append(GRAND_LINE.format(name=g.name if g else merged.grand))
@@ -542,10 +551,11 @@ def _merge_own(
     ))
     quality = insight_fx.better(insight_fx.quality_of(state, ia.id), insight_fx.quality_of(state, ib.id))
     fx = insight_fx.roll(state, content, world, result.id, quality=quality, compound=True)
-    head = f"「{ia.name}」與「{ib.name}」在你心中交融，化成「{result.name}」（屬{result.attribute}・{fx.quality}・{arts_mod.skill_name(content, result, fx)}）！"
+    head = f"「{ia.name}」與「{ib.name}」在你心中交融，化成「{result.name}」（屬{result.attribute}・{insight_fx.look(fx)}・{arts_mod.skill_name(content, result, fx)}）！"
     if result.note:
         head += f"\n{result.note}"
     head += "\n這份領悟是你自己的，江湖上沒有第二份。"
+    _god(state, content, result.name, fx)
     cfg = content.config
     return result, [head] + _charge(state, cfg.merge_xinde, cfg.merge_stamina)
 

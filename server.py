@@ -36,6 +36,7 @@ import argparse
 import contextlib
 import contextvars
 import hashlib
+import json
 import os
 import re
 import secrets
@@ -61,10 +62,10 @@ import server_push
 import zhuan_html
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
-    arena_crowd, battle_instance, biography, calendar, companion_agent, create, divine, duel, event_llm, feasts, fight_llm, foreshadow, gather_llm, gender, glyph, insight_llm, leaderboard, letters, mall, mapdata,
+    arena_crowd, ascend, battle_instance, biography, calendar, companion_agent, create, divine, duel, event_llm, feasts, fight_llm, foreshadow, gather_llm, gender, glyph, insight_llm, leaderboard, letters, mall, mapdata, might,
     naming,
     ollama_client, rules,
-    precise, seal, seal_duel, server_bots, social, sortie, speech, tavern, team, timetable, treasures, xingshi, yuedan,
+    precise, seal, seal_duel, server_bots, social, sortie, speech, tavern, team, timetable, training, treasures, xingshi, yuedan,
 )
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import env_profile, load_content, profile_line
@@ -1368,6 +1369,21 @@ def create_intent(game: Game, body: dict) -> list[str]:
     return act(game, lambda g: g.create_intent(request.text, reading=value))
 
 
+def ascend_line(game: Game) -> list[str]:
+    """破境卡那一句（tianxia/ascend.py），三段同 create_intent：A Game.ascend_request（只讀）→ B 鎖外 ascend.read
+    （預算同隨口應對）→ C Game.ascend_line 存回卡上（卡換了就不存）。叫不動照套句。"""
+    started, request = _open_request(game, game.ascend_request)
+    if request is None:
+        return []
+    total = game.content.config.free_text_budget_seconds
+
+    def writing():
+        return ascend.read(within_budget(game.client, total - (_monotonic() - started)), request)
+
+    value = model_call(game, writing, fallback=ascend.fallback(request), left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT)
+    return act(game, lambda g: g.ascend_line(request, value))
+
+
 def tavern_ask(game: Game, text: str) -> list[str]:
     """問酒家（酒肆，設計第八節），三段：A Game.tavern_ask_request（只讀；問到秘密的單子不叫模型）→ B 鎖外 tavern.ask_write
     （預算 Config.tavern.ask_budget_seconds）→ C Game.tavern_ask 重驗同一間、同一句再收錢；叫不動模型退全額。"""
@@ -1412,6 +1428,41 @@ def seal_text(game: Game, text: str) -> list[str]:
 # ── 畫面資料 ──────────────────────────────────────────
 
 
+PATCH_FILE = ROOT / "content" / "patch_notes.json"
+PATCH_SHOW = 3  # 首頁「改版」那一格列最近幾次
+_patch_cache: dict = {"mtime": None, "notes": []}
+
+
+def patch_notes(path: Path | None = None) -> list[dict]:
+    """登入頁宣傳影片底下的「近期改版」（Joy 2026-10-21「首頁應該有地方顯示近期的更版資訊」）。
+
+    讀 content/patch_notes.json 的 notes（新的在前），最多 PATCH_SHOW 次；檔案改了照修改時間重讀，不必重開伺服器。
+    每一次只留 date、new、tweak、fix 四欄（字串與字串清單），寫壞的那一次跳過、檔案讀不了就是空的（首頁不畫那一格）。"""
+    path = path or PATCH_FILE
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        return []
+    if path == PATCH_FILE and _patch_cache["mtime"] == mtime:
+        return _patch_cache["notes"]
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8")).get("notes", [])
+    except (OSError, ValueError, AttributeError):
+        raw = []
+    notes = []
+    for item in raw if isinstance(raw, list) else []:
+        if not isinstance(item, dict) or not isinstance(item.get("date"), str) or not item["date"].strip():
+            continue
+        lines = {key: [x for x in item.get(key) or [] if isinstance(x, str) and x.strip()] for key in ("new", "tweak", "fix")}
+        if any(lines.values()):
+            notes.append({"date": item["date"].strip(), **lines})
+        if len(notes) >= PATCH_SHOW:
+            break
+    if path == PATCH_FILE:
+        _patch_cache.update(mtime=mtime, notes=notes)
+    return notes
+
+
 def main_view(game: Game) -> dict:
     """江湖畫面與頂上的狀態列；每次動作、每次計時器都回這一份。呼叫端要拿著行動鎖。"""
     with game.phase_memo():  # 這一次建構裡「籌備中嗎」只讀一次共用狀態（見 Game.phase_memo）
@@ -1432,6 +1483,8 @@ def _main_view_body(game: Game) -> dict:
         "sortie": sortie.on(game.content),
         # 一類一顆開著（正式季整合第二章）：應召畫成行動列上面一條金框橫幅（設計 9.1 第 1 組乙），不收在「此地還能做」
         "precise": precise.on(game.content, game.state.world),
+        # 城裡操練與城外練功（新手引導重做，tianxia/training.py）：練功從探索三選一拿出來，在行動列自成一格
+        "training": training.on(game.content, game.state.world),
         # 行動列底下那幾行（explain-1）：探索、遊歷、交友、求見這一下會怎樣（選項 id → 一句；序章裡是空的）
         "action_notes": game.action_notes(o.id for o in options),
         # 有所感選做法那一步（explain-2）：做法鈕上寫的心意（選項 id → 剛柔快慢）與鈕底下兩行小字；不在選做法是 None
@@ -1578,6 +1631,12 @@ def menxia_view(game: Game, person: str | None = None) -> dict:
         # 裝備（裝備四欄設計 2.5）：開著的欄位一段一段（武器、防具、坐騎），每段身上那件、裝備庫裡同一欄的；格數四欄合算。
         # 都關著時 slots 是空的，修練頁那一塊不畫
         "gear": game.gear_rows(),
+        # 全身的戰力（招式與絕學稿案第四輪；tianxia/might.py）：修練頁人形圖氣血旁邊那個數，換上清單的「→ N」跟它比
+        "might": might.now(game.state, game.content, game.world),
+        "legend_items": game.state.player.legend_items,  # 手上的破境丹：服丹衝關有沒有真的擲骰，網頁照它少沒少一枚判斷
+        # 自創武學的入口從煉製搬到修練（第四輪）：開關關著、還在序章裡是 None
+        "create": {"price": create.price(game.state, game.content), "problem": create.allowed(game.state, game.content)}
+        if create.on(game.content) else None,
     }
 
 
@@ -1948,6 +2007,12 @@ def journal_css():
     return Response(JOURNAL_CSS, media_type="text/css", headers=NO_CACHE)
 
 
+@app.get("/api/patch_notes")
+def api_patch_notes() -> dict:
+    """登入頁的近期改版：不用登入、不拿行動鎖，只讀 content/patch_notes.json。"""
+    return {"notes": patch_notes()}
+
+
 @app.get("/api/me")
 def me(request: Request):
     key = SESSIONS.get(request.cookies.get(COOKIE, ""))
@@ -2014,6 +2079,7 @@ MAIN_ACTIONS = {
     "view_tab": lambda g, b: g.view_tab(str(b.get("tab", ""))),  # 序章裡打開修練、煉製頁（新手引導計畫一）
     "guide_ack": lambda g, b: g.guide_ack(),  # 對話框的結語按「知道了」
     "allocate": lambda g, b: g.allocate_stat(str(b.get("stat", ""))),  # 狀態列的配點鈕：升級得到的屬性點加到一項
+    "newbie_drifter": lambda g, b: g.newbie_drifter(),  # 任務卡「新手目標」的「就當散人」（新手引導重做）
     "pill": lambda g, b: g.take_stamina_pill(),  # 狀態列體力條上的「丹」：吃一顆回體丹（企劃者 2026-10-07 內測贈送）
     # 江湖頁「簽到」小標攤開的領取鈕（21 天季，正式季整合 6.2）：四階的日子帶 attribute（剛柔快慢）
     "checkin": lambda g, b: g.check_in(str(b.get("attribute", ""))[:2]),
@@ -2236,6 +2302,8 @@ def api_do(op: str, request: Request, body: dict = Body(default={})):
         msgs = duel_text(game, str(body.get("text", "")))
     elif op == "create_intent":  # 自創武學的形意：意分在行動鎖外評（見 create_intent）
         msgs = create_intent(game, body)
+    elif op == "ascend_line":  # 破境卡那一句：模型在行動鎖外寫（見 ascend_line）
+        msgs = ascend_line(game)
     elif op == "tavern_ask":  # 問酒家：回話在行動鎖外寫（見 tavern_ask）
         msgs = tavern_ask(game, str(body.get("text", ""))[:60])
     elif op == "feast_text":  # 宴席上自己寫的敬酒詞：分數在行動鎖外評（見 feast_text）
@@ -2293,13 +2361,14 @@ MENXIA_ACTIONS = {
     "create_begin": lambda g, b: g.create_begin(str(b.get("kind") or ""), str(b.get("form") or "")),
     "create_pose": lambda g, b: g.create_pose(b.get("pose") if isinstance(b.get("pose"), dict) else {}),
     "create_back": lambda g, b: g.create_back(str(b.get("to") or "")),
-    "create_name": lambda g, b: g.create_name(str(b.get("name") or "")),
+    "create_name": lambda g, b: g.create_name(str(b.get("name") or ""), str(b.get("move") or "")[:create.MOVE_MAX * 2]),
     "create_cancel": lambda g, b: g.create_cancel(),
+    "create_reroll": lambda g, b: g.create_reroll(),  # 重悟帖：成了形直接重骰（萬寶閣，Joy 2026-10-21）
+    "ascend_dismiss": lambda g, b: g.ascend_dismiss(),  # 看過破境卡了
     # 用融的意境修練一次，衝下一品；use_legend 是勾了「服下破境丹」。只認真正的布林 true：字串、數字都不算勾
     "cultivate": lambda g, b: g.cultivate(str(b.get("art") or ""), use_legend=b.get("use_legend") is True),
     "melt": lambda g, b: g.melt_art(str(b.get("art") or "")),  # 功法庫裡的一門熔成心得
     "melt_insight": lambda g, b: g.melt_insight(str(b.get("insight") or "")),
-    "buy_legend": lambda g, b: g.buy_legend(),  # 以心得換一枚破境丹（Joy 2026-10-18，越換越貴）
     # 批量熔煉：勾好的武學（arts）與意境（insights）一次熔完；不是串列的當沒勾
     "melt_many": lambda g, b: g.melt_many(_id_list(b.get("arts")), _id_list(b.get("insights"))),
     "name": lambda g, b: g.name_mastered(str(b.get("name") or "")),  # 第一個練成絕學的人替它取正式名字
@@ -2500,6 +2569,18 @@ def api_boards(request: Request):
     game = _game(request)
     book = {"id": "神器", "title": "神器譜", "note": DIVINE_NOTE, "book": game.divine_book_view()}
     return {"boards": leaderboard.view(boards_now(game), me=game.state.player.name) + [book]}
+
+
+@app.get("/api/board_card")
+def api_board_card(request: Request, board: str, name: str = "", season: int = 0, ref: str = ""):
+    """榜單點開的唯讀卡（Joy 2026-10-22）：武學榜、內功榜那一列給 board＋name（主人的名號），照主人身上那一門畫功法卡；
+    神器譜那一筆給 board=神器＋season＋ref（divine_book_view 那一筆的 ref），照原品畫裝備卡。只讀，不拿行動鎖：武學、內功照
+    快取的整張榜認得是不是榜上看得到的那幾列（leaderboard.art_card），主人的存檔讀一份快照。看不到了回 {"card": null}。"""
+    game = _game(request)
+    if board == "神器":
+        return {"card": leaderboard.gear_card(game.content, game.world, season, ref)}
+    card = leaderboard.art_card(game.content, game.world, boards_now(game), board, name, me=game.state.player.name)
+    return {"card": {**card, "card": md(card["card"])} if card else None}  # 功法卡的字同修練頁（menxia_view 的 owned_arts）轉成 HTML
 
 
 
@@ -2840,7 +2921,7 @@ def main(argv: list[str] | None = None) -> None:
     print(f"資料庫：{default_path().resolve()}", flush=True)  # 跟 run_bots.py 要是同一個檔；TIANXIA_DB 設錯時一眼看得出來
     open_world().mutate(lambda st: seal.ensure_salt(st.seal))  # 玉璽碎片的密鹽（設計 5.13）：正式伺服器啟動時沒有就產生一次；測試與量表腳本不經過這裡，同樣的種子跑出同樣的結果
     print(profile_line(CONTENT, PROFILE), flush=True)  # TIANXIA_PROFILE 也是：兩個程式要用同一份設定
-    warning = calendar.profile_warning(CONTENT, open_world().get_season())  # 這一季蓋了第一季的章、這個程式卻沒開（FB-157）
+    warning = calendar.profile_warning(CONTENT, open_world().get_season(), open_world().season_phase())  # 這一季蓋了第一季的章、這個程式卻沒開（FB-157）；籌備中不印（FB-636）
     if warning:
         print(warning, flush=True)
     if divine.exhausted_now(open_world().divine_state(), open_world().get_season_number()):  # 新神器用完了（正式季整合 5.6）

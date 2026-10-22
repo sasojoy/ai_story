@@ -85,6 +85,8 @@ description: 《天下大勢》的分支、測試與合併規矩（企劃者 202
   - `CLAUDE.md` 一律留瘦身版，對方新加的那一行搬進對應的 `docs/guide/`。
   - 用腳本解衝突時保留檔案原本的換行（`newline=""`），每一處 assert。
 - **合併的順序**：功能分支合進 develop 之前，先把 develop（與 main 的新東西）合進功能分支，在那裡跑整套；合進 develop 時內容跟測過的一樣（`git diff --quiet HEAD <功能分支>`）就不必再跑一次。
+- **git 沒衝突不代表合得起來**（10/21）：develop 與 main 各自都過，合起來正式內容載入就炸（main 給學來的武學掛小戰法、develop 讓同伴拿它們當起始武學；名品撞新招名）。合 main 之後先在不帶設定、`weekend`、`season21`、`week7` 各載一次內容、起一次伺服器，再跑整套。`git merge-tree --write-tree --name-only A B` 可以先看會不會有文字衝突。
+- **上 main 用上線分支**（10/21）：從 develop 開 `release/<日期>`，企劃者說「這一樣不放」就在上線分支 `git revert -m 1 <那個合併>`；合 main 之前每次 `ls-remote origin main`，Joy 又推了就先合進上線分支、整套。合進 main 之後把 main 合回 develop，再在 develop `git revert <那筆 revert>` 把功能還回來，整套、推，接著 develop 合進功能分支。合進 main 的時機跟部署一起排：一進 main，Joy 下一次照常部署就會換上它（資料庫改版回不去、季中換季曆會跳）。部署說明寫在 `docs/superpowers/feedback/`，經企劃者同意、由企劃者轉給 Joy。
 - **跑整套的指令**：`TIANXIA_DB=<scratchpad>/db/x.db PYTHONIOENCODING=utf-8 C:/Ray/專案/天下大勢/.venv/Scripts/python.exe -m pytest -q -n auto -m "slow or not slow" -p no:cacheprovider > log 2>&1; echo EXIT=$? >> log`，背景跑，看最後那一行「N passed」與 EXIT 再推。
 - **設計稿請人審**：寫完設計稿派一個子代理用「拿這份能不能開工」讀一遍，只把「只有企劃者能答」的問題一次問完，其餘 PM 自己定、標【PM】。
 

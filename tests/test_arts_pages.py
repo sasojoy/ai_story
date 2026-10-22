@@ -122,10 +122,10 @@ def test_the_result_goes_into_that_arts_card_and_not_the_top_line():
     out = press("cultivate", {"art": "lake_kick"})
     assert out["note"] == {"id": "lake_kick", "html": "<p>RESULT</p>"} and out["message"] == ""  # 頁首那一行不寫：寫了會把卡片推下去
     html = page("pagePractice", menxia(), artOpen="lake_kick", artNote={"id": "lake_kick", "html": "<p>RESULT</p>"})
-    body = html.split('<div class="art-body')[1]
+    body = html.split('class="sheet pr-sheet"')[1]  # 點開的那一門在底下的抽屜裡（招式與絕學稿案第四輪）
     assert body.index('class="acts"') < body.index('class="msg art-result"><p>RESULT</p>')  # 鈕的底下：結果就在按的那顆旁邊
     other = page("pagePractice", menxia(), artOpen="lake_kick", artNote={"id": "basic_fist", "html": "<p>RESULT</p>"})
-    assert "art-result" not in other.split('<div class="art-body')[1]  # 別門（身上那張卡）的結果不寫在這一門裡
+    assert "art-result" not in other.split('class="sheet pr-sheet"')[1]  # 別門（身上那一門）的結果不寫在這一門裡
 
 
 P6 = {"key": "p6_refine", "text": "師父：到「修練」修練【鎮風手】，衝一衝品質"}
@@ -204,7 +204,7 @@ def test_the_other_blocks_draw_their_result_inside_themselves():
     assert weapon.index('<div class="sub">武器</div>') < weapon.index("GEARNOTE")  # 武器那一段的標題底下
     assert "GEARNOTE" not in html.split('data-slot="weapon"')[0]
     healed = page("pagePractice", menxia(), mxNote={"at": "heal", "html": "<p>HEALNOTE</p>"})
-    assert healed.index('data-op="heal"') < healed.index("HEALNOTE") < healed.index("身上的兩門")
+    assert healed.index('data-op="heal"') < healed.index("HEALNOTE") < healed.index("修練的規矩")  # 療傷閉關搬到頁底（第四輪），結果跟著
 
 
 # ── W10：開爐等結果的那一句不誇大等多久 ─────────────────────────────────
@@ -248,7 +248,7 @@ def test_the_practice_page_has_a_closed_attribute_fold_right_under_the_rules_lin
     fold = re.search(r"<details class=\"attr-note\"( open)?><summary>([^<]*)</summary>(.*?)</details>", html, re.S)
     assert fold and fold.group(1) is None  # 收著：第一屏只多一行字
     assert fold.group(2) == "武學屬性有什麼用" and "ATTRNOTE" in fold.group(3)  # FB-089：標題冠上「武學」，別跟升級配點的屬性混
-    assert html.index('id="seclude"') < html.index("attr-note") < html.index("身上的兩門")  # 療傷閉關那一排底下、第一張卷軸卡之前
+    assert html.index("attr-note") < html.index("功法庫") < html.index('id="seclude"')  # 功法庫之前；療傷閉關搬到頁底（招式與絕學稿案第四輪）
 
 
 def test_the_craft_page_has_the_same_fold_right_under_the_open_furnace_button():

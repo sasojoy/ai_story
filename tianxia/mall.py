@@ -39,6 +39,10 @@ EFFECTS: dict[str, EffectSpec] = {
     "rename": EffectSpec("consumable", "易名帖 {n} 張", 1),  # 易名帖：買了得一張帖，在設定頁改名、當場生效（rename.py）
     # 功法庫擴充：武學與意境合計的持有上限多幾格（PlayerState.holding_bonus），買下當場生效、只這一季（Joy 2026-10-21 一張 15 格、不限張數）
     "holding": EffectSpec("consumable", "功法庫多放 {n} 格（這一季）", 999),
+    # 破境丹（Joy 2026-10-21「把破境丹也加入商城，取消可以用心得衝」）：收進行囊（PlayerState.legend_items），到了極處服下強行衝關
+    "legend": EffectSpec("consumable", "{legend} {n} 顆", 99),
+    # 重悟帖（Joy 2026-10-21「弄個商城道具可以直接重骰，有上限」）：自創成形之後直接重骰一次（PlayerState.create_rerolls，換季帶著走；一門最多 Config.arts.create_reroll_cap 次）
+    "create_reroll": EffectSpec("consumable", "自創重骰 {n} 次", 99),
 }
 KIND_NAMES = {"look": "外觀", "consumable": "消耗品", "card": "月卡", "pass": "通行證"}
 REASONS = {"grant": "封測發放", "buy": "購買", "refund": "退款", "reissue": "補發", "revoke": "扣回", "topup": "儲值"}
@@ -76,6 +80,7 @@ PILLS_BACK = "{pill}收回 {n} 顆。"
 PILLS_USED = "用掉的 {n} 顆不追。"
 HOLDING_UP = "功法庫上限 +{n}（現在 {cap} 格，這一季）"
 HOLDING_BACK = "功法庫上限收回 {n} 格。"
+REROLL_BACK = "重悟帖收回 {n} 張。"
 CARD_BACK = "月卡少 {n} 天。"
 REBATE_BACK = "當場回的 {n} 元寶扣回。"
 # 月卡每日領（定案甲）：待 joy 潤
@@ -102,6 +107,13 @@ class Bought:
 
 def on(content: Content) -> bool:
     return content.config.mall.enabled
+
+
+def item_for(content: Content, effect: str) -> str | None:
+    """賣這一種效果的第一件商品（照 content/mall.json 的順序）；商城關著或沒賣是 None。"""
+    if not on(content):
+        return None
+    return next((item.id for item in content.mall.values() if item.effects.get(effect)), None)
 
 
 def grant_ref(owner: str) -> str:
@@ -150,7 +162,7 @@ def effects_text(item: MallItem, content: Content) -> str:
     ingots, pills = daily_amounts(content)
     daily = DAILY_PART.format(ingots=ingots, pills=pills, pill=cfg.stamina_pill_name) if ingots or pills else ""
     return "、".join(
-        EFFECTS[key].label.format(n=n, pill=cfg.stamina_pill_name, bonus=cfg.mall.card_pill_bonus, daily=daily)
+        EFFECTS[key].label.format(n=n, pill=cfg.stamina_pill_name, bonus=cfg.mall.card_pill_bonus, daily=daily, legend=cfg.legend_item_name)
         for key, n in item.effects.items() if key in EFFECTS
     )
 
@@ -253,6 +265,14 @@ def _deliver(
     if pills:
         state.player.stamina_pills += pills
         changes.append(f"{content.config.stamina_pill_name} +{pills}")
+    legend = item.effects.get("legend", 0)
+    if legend:
+        state.player.legend_items += legend
+        changes.append(f"{content.config.legend_item_name} +{legend}")
+    rerolls = item.effects.get("create_reroll", 0)
+    if rerolls:
+        state.player.create_rerolls += rerolls
+        changes.append(f"重悟帖 +{rerolls}")
     return changes
 
 
@@ -480,6 +500,18 @@ def refund(
             took.append(PILLS_BACK.format(pill=content.config.stamina_pill_name, n=back))
             if back < pills:
                 took.append(PILLS_USED.format(n=pills - back))
+        legend = int(bought.data.get("legend", 0))
+        if legend:  # 破境丹：還在行囊裡的收回，服掉的不追（同回體丹）
+            back = min(legend, state.player.legend_items)
+            state.player.legend_items -= back
+            took.append(PILLS_BACK.format(pill=content.config.legend_item_name, n=back))
+            if back < legend:
+                took.append(PILLS_USED.format(n=legend - back))
+        rerolls = int(bought.data.get("create_reroll", 0))
+        if rerolls:  # 重悟帖換季帶著走（同回體丹）：還在手上的收回，用掉的不追
+            back = min(rerolls, state.player.create_rerolls)
+            state.player.create_rerolls -= back
+            took.append(REROLL_BACK.format(n=back))
         left = wallet.balance(owner)
     known = content.mall.get(bought.item)
     return REFUNDED.format(name=shown, item=known.name if known else bought.item, price=bought.price, left=left, took="".join(took))

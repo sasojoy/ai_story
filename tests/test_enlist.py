@@ -731,7 +731,7 @@ def test_raising_the_version_does_not_convert_the_step_numbers_again(enlisting, 
     game, _ = _veteran(enlisting, world)
     p = game.state.player
     p.tutorial_step = 8
-    assert prologue.PROLOGUE_ONBOARDING == 2 and ONBOARDING_VERSION == 4
+    assert prologue.PROLOGUE_ONBOARDING == 2 and ONBOARDING_VERSION == 5
     assert prologue.migrated_step(p, enlisting) == 8  # 章 2：已經是新編號
     p.onboarding = 1
     assert prologue.migrated_step(p, enlisting) == enlisting.tutorial.prologue_steps + (8 - prologue.OLD_BASE_STEPS)

@@ -37,25 +37,30 @@ def test_the_panel_draws_the_worn_arts_but_no_stats(views):
     assert 'data-key="weapon"' not in panel  # 裝備欄都關著（測試內容）：不畫那幾個點
 
 
-def test_the_default_foot_is_the_inner_art_slot(views):
-    m, x = views  # 測試內容的新角色身上還沒有功法：點暗著、底下那一格說還沒有
+def _drawer(page):
+    return page.split('class="sheet pr-sheet"')[1]
+
+
+def test_nothing_is_open_until_a_node_is_tapped_and_an_empty_slot_says_so(views):
+    m, x = views  # 測試內容的新角色身上還沒有功法：點暗著；點了，抽屜說還沒有（招式與絕學稿案第四輪：底下那一格改成抽屜）
     page = run(m, "return H.pagePractice();", menxia=x)
-    assert 'hero-node on dim r" style' in _panel(page).split('data-key="內功"')[0].rsplit("<button", 1)[1]
-    foot = page.split('id="hero-ft"')[1].split("</section>")[0]
-    assert "你身上還沒有內功。" in foot and "hero-jump" not in foot
+    assert 'hero-node dim l" style' in _panel(page).split('data-key="內功"')[0].rsplit("<button", 1)[1]
+    assert "pr-sheet" not in page and 'id="hero-ft"' not in page
+    tapped = run(m, "return H.pagePractice();", menxia=x, S={"pdrawer": {"t": "worn", "key": "內功"}})
+    assert 'hero-node on dim l" style' in _panel(tapped).split('data-key="內功"')[0].rsplit("<button", 1)[1]
+    assert "還沒有內功" in _drawer(tapped)
 
 
-def test_a_picked_node_stays_picked_and_gear_nodes_follow_the_open_slots(views):
+def test_a_tapped_gear_node_opens_that_slot_in_the_drawer_and_gear_nodes_follow_the_open_slots(views):
     m, x = views
     x["gear"] = _gear(weapon={"worn": _row(name="<i>試刃</i>"), "rack": []}, armor={"worn": None, "rack": []})
-    page = run(m, "return H.pagePractice();", menxia=x, S={"heroNode": "weapon"})
+    page = run(m, "return H.pagePractice();", menxia=x, S={"pdrawer": {"t": "gear", "key": "weapon"}})
     panel = _panel(page)
     assert 'data-key="weapon"' in panel and 'data-key="armor"' in panel and 'data-key="mount"' not in panel
     assert 'hero-node dim r" style' in panel.split('data-key="armor"')[0].rsplit("<button", 1)[1]  # 沒穿防具：點暗著
-    foot = page.split('id="hero-ft"')[1].split("</section>")[0]
-    assert "&lt;i&gt;試刃&lt;/i&gt;" in foot and "<i>試刃</i>" not in foot  # 名字跳脫
-    assert 'data-act="hero-jump" data-to="gear" data-kind="weapon"' in foot
-    assert 'data-slot="weapon"' in page  # 「看這件」捲得到的那一段在
+    assert 'hero-node on r" style' in panel.split('data-key="weapon"')[0].rsplit("<button", 1)[1]
+    assert "&lt;i&gt;試刃&lt;/i&gt;" in panel and "<i>試刃</i>" not in page  # 名字寫在點旁邊，跳脫
+    assert 'data-slot="weapon"' in _drawer(page)  # 抽屜裡是那一欄
 
 
 def test_a_woman_gets_the_female_figure_and_its_own_node_spots(views):

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from tianxia import arts as arts_mod, create, team
+from tianxia import arts as arts_mod, create, moves, tactics, team
 from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.martial_arts import ATTRIBUTES, MartialArt as _MA
@@ -41,22 +41,24 @@ def _walk(game, kind="武學", form="拳腳", pose=None, text="風過林梢，�
 
 def test_five_steps_make_an_art_with_coloured_slots_and_the_pose(content):
     game = _game(content)
+    xinde = game.state.player.stats["xinde"]
+    need = create.price(game.state, content)
     draft = _walk(game, reading=create.IntentReading(score=60, attributes=["快", "虛"], lean="正"))
     assert draft.step == "name" and len(draft.colors) == content.config.arts.create_slots
     assert draft.colors[0] == [max(ATTRIBUTES, key=lambda a: (create.weights(content, draft)[a], -ATTRIBUTES.index(a)))]
     assert draft.colors[0] == ["快"]  # 拳腳偏快＋意讀出快：權重最高的那一路當第一格單色
-    xinde = game.state.player.stats["xinde"]
-    need = create.price(game.state, content)
+    assert game.state.player.stats["xinde"] == xinde - need and draft.paid == need  # 立意那一刻就收（Joy 2026-10-21）
     game.create_name("飄風手")
     p = game.state.player
-    assert p.creating is None and p.stats["xinde"] == xinde - need
+    assert p.creating is None and p.stats["xinde"] == xinde - need  # 立名不再收
     art = team.resolve_art("飄風手", content, game.world)
     assert art.origin == "created" and art.weapon == "拳腳" and art.lean == "正"
     assert art.slot_colors == draft.colors and art.pose == draft.pose
     n = len(arts_mod.slots_of(game.state, content, art))
     assert p.art_quality["飄風手"] == "上品"  # Joy 2026-10-21：自創保底上品
     assert n == arts_mod.slot_count(content, "上品")
-    assert art.affinity == create.affinity_of(draft.colors[:n]) and art.attribute == "快"
+    assert art.attribute == "快" and art.affinity[0] == "快"
+    assert set(art.affinity) == {"快", *create.affinity_of(draft.colors[:n])}
 
 
 def test_begin_checks_the_form_and_the_price_but_charges_nothing(content):
@@ -152,7 +154,7 @@ def test_view_lists_forms_presets_and_the_draft(content):
     assert {p["name"] for p in v["presets"]} == {"起手", "進擊", "守禦", "奇變"}
     _walk(game)
     d = game.create_view()["draft"]
-    assert d["form"] == "拳腳" and len(d["colors"]) == 4 and d["colors_text"][0] in ATTRIBUTES
+    assert d["form"] == "拳腳" and len(d["colors"]) == content.config.arts.create_slots
     assert "odds" not in d and v["grade"] == "上品"  # 不擲品級了
 
 
@@ -165,44 +167,196 @@ def test_the_intent_score_sets_the_base_power(content):
     assert create.power_scale_of(content, 150) == pytest.approx(high)
     game = _game(content)
     _walk(game, reading=create.IntentReading(score=80, attributes=["快"], lean="無"))
-    assert game.create_view()["draft"]["power"].startswith("底子：")
+    d = game.create_view()["draft"]
+    m = d["might"]
+    assert d["power"] == create.MIGHT_LINE.format(now=m["now"], first=m["first"], full=m["full"])
+    assert m["full"] > m["first"] > 0  # 練滿比第一成強
     game.create_name("厚底拳")
     art = team.resolve_art("厚底拳", content, game.world)
     assert power_scale(art) == pytest.approx(create.power_scale_of(content, 80), abs=0.01)
 
 
-# ── 自創自動配小戰法（Joy 2026-10-21 決策卡選「自動配」）──────────────────
+# ── 以意成招（招式與絕學稿案第二節）──────────────────
 
 
-def test_the_pool_prefers_same_kind_and_attribute_and_skips_marshal(real):
-    from tianxia import tactics
+def test_stance_is_read_from_the_pose(content):
+    assert create.stance_of(create.preset(content, "進擊")) == "攻勢"
+    assert create.stance_of(create.preset(content, "守禦")) == "守勢"
+    assert create.stance_of(create.preset(content, "奇變")) == "變勢"
+    assert create.stance_of(create.preset(content, "起手")) == "起勢"
+    assert moves.timing_of("武學", "攻勢") == "出招" and moves.timing_of("內功", "攻勢") == "心法"
+    assert moves.timing_of("內功", "起勢") == "起手"
 
-    assert create.minor_pool(real, "武學", "快") == sorted(["zhuifeng", "ganshan_tui", "jianjing_dao"])
-    assert create.minor_pool(real, "內功", "陽") == ["yanghao_jue"]  # 同袍一心要部下：不配
-    fast = create.minor_pool(real, "內功", "快")  # 內功沒有快的：放寬到同屬性的武學
-    assert fast and all(real.skills[s].attribute == "快" for s in fast)
-    assert all(tactics.of(real, s).minor for s in create.minor_pool(real, "武學", ""))  # 沒有主屬性：同種類的都行
+
+def test_the_table_covers_every_attribute_and_stance(content):
+    for a in ATTRIBUTES:
+        for timing in ("起手", "出招", "乘勢", "應招", "心法"):
+            assert moves.cell(content, a, timing) is not None, (a, timing)
+    assert sum(m.rare for m in content.create_forms.moves) == len(ATTRIBUTES)
+    for m in content.create_forms.moves:  # 每一種招在那個時機都接得上戰鬥的程式；那一句只用得到 {foe}、params 與 {state}
+        assert m.kind in tactics.KINDS and set(m.grow) <= {"rate", *m.params}
+        m.say.format(foe="某", state="定身", **{k: tactics.value_text(k, v) for k, v in m.params.items()})
 
 
-def test_a_created_art_carries_the_minor_tactic_shown_before_naming(real):
-    from tianxia import skillview, tactics
+def test_fire_follows_the_score_and_scales_the_growing_numbers(content):
+    low, high = content.config.arts.move_fire_cuts
+    assert [moves.fire_of(content, s) for s in (low, low + 1, high, high + 1)] == ["生", "熟", "熟", "透"]
+    clear = moves.build(content, "武學", "快", "攻勢", "透")
+    raw = moves.build(content, "武學", "快", "攻勢", "生")
+    row = moves.cell(content, "快", "出招")
+    assert clear.rate == pytest.approx(row.rate) and raw.rate == pytest.approx(row.rate * content.config.arts.move_fire["生"])
+    young = moves.build(content, "武學", "快", "攻勢", "透", level=1)
+    grown = moves.build(content, "武學", "快", "攻勢", "透", level=content.config.arts.move_raw_levels + 1)
+    assert young.rate == pytest.approx(row.rate * content.config.arts.move_raw_scale) and grown.rate == pytest.approx(row.rate)
 
-    game = _game(real)
-    _walk(game, reading=create.IntentReading(score=60, attributes=["快"], lean="無"))
-    draft = game.state.player.creating
-    source = create.minor_for(game.state, real, draft)
-    attribute = create.affinity_of(draft.colors)[0]
-    assert source in create.minor_pool(real, "武學", attribute)
-    shown = game.create_view()["draft"]["tactic"]
-    seal = game.state.player.name[:1]  # 自創的招蓋創的人名號的第一個字（私印，招式與絕學稿案第一節）
-    assert shown == tactics.card_text(tactics.of(real, source), seal) and shown.startswith(seal + "〔")
-    game.create_name("追影拳")
-    art = team.resolve_art("追影拳", real, game.world)
-    assert art.tactic_from == source and tactics.of_art(real, art) is tactics.of(real, source)
-    assert tactics.of_id(real, "追影拳", game.world) is tactics.of(real, source)
+
+def test_a_created_art_grows_its_own_move(content):
+    from tianxia import skillview
+
+    game = _game(content)
+    reading = create.IntentReading(score=80, attributes=["快"], lean="無", move="追風影", say="腳下一錯追了上去")
+    _walk(game, pose=create.preset(content, "進擊"), reading=reading)
+    d = game.create_view()["draft"]
+    seal = game.state.player.name[:1]  # 自創的招蓋創的人名號的第一個字（私印）
+    assert d["stance"] == "攻勢" and d["timing"] == "出招" and d["fire"] == "透" and d["move"] == "追風影"
+    assert d["tactic"].startswith(seal + "〔追風影〕出招")
+    assert "影不留" not in d["tactic"]
+    assert "招還生" not in d["tactic"]
+    game.create_name("追影拳", move="疾影")
+    art = team.resolve_art("追影拳", content, game.world)
+    assert (art.move_name, art.move_fire, art.move_stance, art.move_say) == ("疾影", "透", "攻勢", "腳下一錯追了上去")
+    move = tactics.of_art(content, art)
+    assert move.name == "疾影" and move.timing == "出招" and move.say == "腳下一錯追了上去"
+    assert tactics.title_of(move, art) == seal
     p = game.state.player
-    p.member.wugong_id = "追影拳"
-    names = [h.tactic.name for h in team.tactic_holders(game.state, real, game.world)]
-    assert tactics.of(real, source).name in names  # 打起來會發動
-    row = next(r for r in skillview.art_rows(game.state, real, game.world) if r["id"] == "追影拳")
-    assert row["tactic"] == shown  # 功法卡上寫著
+    p.member.wugong_id, p.member.wugong_level = "追影拳", 1
+    held = next(h for h in team.tactic_holders(game.state, content, game.world) if h.skill == "追影拳")
+    assert held.tactic.rate < move.rate  # 第一成招還生
+    row = next(r for r in skillview.art_rows(game.state, content, game.world) if r["id"] == "追影拳")
+    assert row["tactic"].startswith(seal + "〔疾影〕") and row["tactic"].endswith("（招還生）")
+    p.member.wugong_level = content.config.arts.move_raw_levels + 1
+    held = next(h for h in team.tactic_holders(game.state, content, game.world) if h.skill == "追影拳")
+    assert held.tactic.rate == pytest.approx(move.rate)
+
+
+def test_a_bad_move_name_is_refused_and_nothing_is_charged(content):
+    game = _game(content)
+    _walk(game)
+    xinde = game.state.player.stats["xinde"]
+    assert game.create_name("飄風手", move="一二三四五六") == [create.MOVE_LINE]
+    assert game.state.player.creating is not None and game.state.player.stats["xinde"] == xinde
+    game.create_name("飄風手")  # 沒給招名：照模型起的，再沒有照表的預設名
+    art = team.resolve_art("飄風手", content, game.world)
+    assert art.move_name == moves.cell(content, art.attribute, moves.timing_of("武學", "起勢")).name
+
+
+def test_pure_slots_add_to_the_trait_layers(content):
+    game = _game(content)
+    art = MartialArt(id="純色掌", name="純色掌", kind="武學", quality="上品", attribute="剛", affinity=["剛"],
+                     slot_colors=[["剛"], ["剛"], ["柔"]], origin="created", creator=game.state.player.name)
+    assert moves.look_bonus(content, art) == pytest.approx(content.config.arts.pure_bonus)
+    mixed = art.model_copy(update={"slot_colors": [["剛"], [], ["柔"]]})
+    assert moves.look_bonus(content, mixed) == 0.0
+    whole = art.model_copy(update={"slot_colors": [[], [], []]})
+    assert moves.look_bonus(content, whole) == pytest.approx(content.config.arts.whole_bonus)
+    assert create.look_text(create.marks_of([["剛"], ["剛"], ["柔"]], "透", False)).startswith("珍・")
+
+
+def test_the_first_art_of_the_season_is_cheaper(content):
+    """Joy 2026-10-21「第一次自創武學，降低到只需要100心得，之後一樣500」：這一季第一門 create_first_xinde，之後照 create_xinde。"""
+    content.config.arts.create_first_xinde = 100
+    game = _game(content)
+    p = game.state.player
+    assert create.price(game.state, content) == 100
+    xinde = p.stats["xinde"]
+    _walk(game, reading=create.IntentReading(score=60, attributes=["快", "虛"], lean="正"))
+    game.create_name("飄風手")
+    assert p.stats["xinde"] == xinde - 100 and p.created_count == 1
+    assert create.price(game.state, content) == content.config.arts.create_xinde == 500
+    content.config.arts.create_first_xinde = 0  # 測試內容關著：第一門也照 create_xinde
+    p.created_count = 0
+    assert create.price(game.state, content) == 500
+
+
+def test_going_back_after_paying_does_not_charge_again_and_cancel_keeps_the_xinde(content):
+    game = _game(content)
+    p = game.state.player
+    xinde = p.stats["xinde"]
+    need = create.price(game.state, content)
+    _walk(game, reading=create.IntentReading(score=60, attributes=["快"]))
+    assert p.stats["xinde"] == xinde - need and p.created_count == 1
+    game.create_back("intent")  # 免費重來一次：回去重立意不再收
+    game.create_intent("風過林梢，影不留痕", reading=create.IntentReading(score=70, attributes=["快"]))
+    assert p.stats["xinde"] == xinde - need and p.created_count == 1 and p.creating.step == "name"
+    msgs = game.create_cancel()
+    assert "不退" in msgs[0] and p.stats["xinde"] == xinde - need and p.creating is None
+
+
+def test_paying_the_last_xinde_at_intent_still_lets_you_name_it(content):
+    """立意收光了心得，立名那一步不能再拿「心得不足」擋下來（整季機器人抓到的）。"""
+    game = _game(content)
+    game.state.player.stats["xinde"] = create.price(game.state, content)
+    _walk(game, reading=create.IntentReading(score=60, attributes=["快"]))
+    assert game.state.player.stats["xinde"] == 0
+    art, msgs = create.finish(game.state, content, game.world, "流雲步")
+    assert art is not None and game.state.player.creating is None, msgs
+
+
+def test_a_reroll_slip_rolls_the_form_again(content):
+    """重悟帖（Joy 2026-10-21「弄個商城道具可以直接重骰，有上限」）：成了形直接重擲顏色與變招，不收心得、不用掉免費的重來。"""
+    game = _game(content)
+    p = game.state.player
+    assert create.reroll(game.state, content, game.world) == [create.NO_DRAFT]
+    _walk(game, reading=create.IntentReading(score=60, attributes=["快"]))
+    assert game.create_reroll() == [create.NO_REROLL]
+    p.create_rerolls = 3
+    xinde, redo, rolls = p.stats["xinde"], p.creating.redo, p.creating.rolls
+    seen = {tuple(map(tuple, p.creating.colors))}
+    for _ in range(3):
+        msgs = game.create_reroll()
+        assert "換了個形" in msgs[0]
+        seen.add(tuple(map(tuple, p.creating.colors)))
+    assert p.create_rerolls == 0 and p.creating.rolls == rolls + 3 and p.creating.redo == redo and p.stats["xinde"] == xinde
+    assert len(seen) > 1  # 三次裡總會擲出不一樣的形
+    assert create.view(game.state, content, game.world)["rerolls"] == 0
+
+
+def test_rerolls_are_capped_per_art_not_per_purchase(content):
+    """Joy 2026-10-21「一次創造武學的時候可能最多重骰3或是5，總共要買幾張都可以」：帖子不限，一門最多 create_reroll_cap 次；下一門重新算。"""
+    game = _game(content)
+    p = game.state.player
+    cap = content.config.arts.create_reroll_cap
+    assert cap == 5
+    _walk(game, reading=create.IntentReading(score=60, attributes=["快"]))
+    p.create_rerolls = cap + 3
+    for i in range(cap):
+        assert "換了個形" in game.create_reroll()[0]
+        assert create.view(game.state, content, game.world)["draft"]["reroll_left"] == cap - i - 1
+    assert game.create_reroll() == [create.REROLL_CAPPED.format(cap=cap)]
+    assert p.create_rerolls == 3 and p.creating.rerolled == cap  # 骰不了的那一下不扣帖子
+
+
+
+def test_a_paid_draft_can_still_be_named_when_the_season_cap_is_reached(content):
+    """立意就數進這一季的門數：有每季上限時，付過的那一門照樣立得了名（不能卡在那裡、心得白付）。"""
+    content.config.arts.create_per_season = 1
+    try:
+        game = _game(content)
+        _walk(game, reading=create.IntentReading(score=60, attributes=["快"]))
+        assert game.state.player.created_count == 1
+        art, msgs = create.finish(game.state, content, game.world, "流雲步")
+        assert art is not None, msgs
+        assert create.allowed(game.state, content) == create.CAP_LINE.format(n=1)  # 下一門才擋
+    finally:
+        content.config.arts.create_per_season = 0
+
+
+def test_a_bot_keeps_a_paid_draft_and_names_it_next_time(content):
+    """假人取名都撞名時不丟掉付過心得的單子，下一次接著取。"""
+    from tianxia import bot
+
+    game = _game(content)
+    _walk(game, reading=create.IntentReading(score=60, attributes=["快"]))
+    xinde = game.state.player.stats["xinde"]
+    assert bot.create_art(game, random.Random(1))
+    assert game.state.player.creating is None and game.state.player.stats["xinde"] == xinde

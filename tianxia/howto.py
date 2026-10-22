@@ -13,7 +13,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from . import allied as allied_rules
-from . import calendar, conquest, economy, equipment, explore_modes, figures, four_tiers, mall, precise, renown, rules, seal, sortie, territory, timetable
+from . import calendar, conquest, economy, equipment, explore_modes, figures, four_tiers, mall, precise, renown, rules, seal, sortie, territory, timetable, training
 from .models import Content
 from .rules import STANCE_NAMES  # 態勢卡上三方的叫法（官軍、黃巾、豪強）：說明跟卡上同一個叫法
 from .state import GameState, WorldState
@@ -61,6 +61,13 @@ EXPLORE_NO_SENSE = "（這裡悟不出什麼）"
 def explore_modes_line(fight: bool, sense: bool) -> str:
     """探索三選一開著時行動列底下探索那一行（Game.action_notes）：找素材會不會撞上怪、靜心感悟悟不悟得出。"""
     return EXPLORE_MODES.format(fight=EXPLORE_FIGHT if fight else EXPLORE_CALM, sense="" if sense else EXPLORE_NO_SENSE)
+
+
+# 行動列底下練功那一行（FB-670，企劃者 2026-10-22 選練功入口「丙」：練功在行動列自己一格；Game._practice_line 照練功鈕同一個判斷挑一句）。
+# 灰著的城鎮寫 PRACTICE_TOWN_NOTE＋「，最近的在某地（步行約 N 分鐘）」（explore_modes.NO_FOE_NEAR、atlas.route_text）。都待 joy 潤
+PRACTICE_NOTE = "打這裡的{foe}，不限次數，打贏是經驗的大宗"
+PRACTICE_BOSS_NOTE = "這裡只有頭目{foe}，練功直接對上他；打一場要等他再現身，次數有限"
+PRACTICE_TOWN_NOTE = "城外才有對手"
 
 
 def train_line(foes: bool, gains: Sequence[str], drops: bool, push: bool, drill_gains: Sequence[str], drills: bool) -> str:
@@ -390,7 +397,7 @@ def explore_lines(content: Content, season: WorldState | None = None) -> list[st
     cfg = content.config
     names = explore_modes.NAMES
     if precise.on(content, season):
-        return precise_explore_lines(content) + gather_branch_lines(content, season)
+        return precise_explore_lines(content, season) + gather_branch_lines(content, season)
     legend = f"三種都有機會撿到{cfg.legend_item_name}。" if cfg.explore_legend_chance > 0 else ""
     econ = cfg.economy  # 素材與經濟設計第七節：一階從一定給改成七成
     first = f"（一階約 {econ.gather_first_chance * 10:g} 成撿得到）" if econ.gather_cut else ""
@@ -401,17 +408,28 @@ def explore_lines(content: Content, season: WorldState | None = None) -> list[st
     ]
 
 
-def precise_explore_lines(content: Content) -> list[str]:
-    """一類一顆的探索與練功（FB-422；正式季整合 2.4、2.5；待 joy 潤）。數字讀 Config。"""
+def precise_explore_lines(content: Content, season: WorldState | None = None) -> list[str]:
+    """一類一顆的探索與練功（FB-422；正式季整合 2.4、2.5；待 joy 潤）。數字讀 Config。
+    城裡操練開著時（training.on，新手引導重做）：練功在行動列自成一格，城裡那一格是操練，練功點分三級。"""
     cfg = content.config
     names = explore_modes.NAMES
     cost = cfg.action_cost["explore"]
     legend = f"每一種都有機會撿到{cfg.legend_item_name}。" if cfg.explore_legend_chance > 0 else ""
+    explore = (f"- **探索**（體力 {cost}）：點開來挑一種。{names['gather']}：照這裡的地形一定撿得到素材，不打仗；"
+               f"{names['seek']}：碰上這一帶的事（交友的事也在這裡），偶有奇遇；{names['sense']}：只在悟得到意境的地方。{legend}")
+    if not training.on(content, season):
+        return [explore,
+                f"- **{names['practice']}**（在探索裡，體力 {cost}）：找這裡的對手打一場，一定開打、不限次數，打贏是經驗的大宗；"
+                "城鎮與沒有對手的地方灰著。有頭目的地方，頭目在練功時碰上。"]
+    t = cfg.training
+    loot = "、".join(f"{w} ×{x:g}" for w, x in zip(training.TIER_WORDS, t.tier_loot))
     return [
-        f"- **探索**（體力 {cost}）：點開來挑一種。{names['gather']}：照這裡的地形一定撿得到素材，不打仗；"
-        f"{names['seek']}：碰上這一帶的事（交友的事也在這裡），偶有奇遇；{names['sense']}：只在悟得到意境的地方。{legend}",
-        f"- **{names['practice']}**（在探索裡，體力 {cost}）：找這裡的對手打一場，一定開打、不限次數，打贏是經驗的大宗；"
-        "城鎮與沒有對手的地方灰著。有頭目的地方，頭目在練功時碰上。",
+        explore,
+        f"- **{training.DRILL}**（城裡，行動列那一格，體力 {cost}）：跟校場的教頭過招，不打仗、不受傷，一天 {t.drill_per_day} 次"
+        f"（00:00 換日）；一次給心得 {t.drill_xinde_base}＋等級、經驗一點點。用完了那一格寫著最近的練功點。",
+        f"- **{names['practice']}**（城外，同一格，體力 {cost}）：找這裡的對手打一場，一定開打、不限次數，打贏是經驗的大宗。"
+        f"練功點照這裡最弱的對手分三級（難度 {t.tier_bounds[0]} 以下一級、{t.tier_bounds[1]} 以下二級、再上去三級），"
+        f"越遠越兇；打贏的心得與銀兩照級數加成（{loot}），經驗不加成。級數寫在格子上與移動的目的地底下。有頭目的地方，頭目在練功時碰上。",
     ]
 
 
@@ -964,18 +982,6 @@ def season_page_lines(content: Content, season: WorldState, rule: str = "") -> l
     return lines
 
 
-def legend_buy_lines(content: Content) -> list[str]:
-    """玩法說明「心得」那一節：以心得換破境丹（Joy 2026-10-18）；關著是空的。數字讀 Config。"""
-    cfg = content.config
-    lines = []  # 以心得修練在武學重構時拿掉了（修練只剩絕學那一步），這裡只剩換丹那一句
-    if cfg.legend_xinde_price <= 0:
-        return lines
-    return lines + [
-        f"- 一門武學到了絕學那一步時，可以在修練頁花心得換一枚{cfg.legend_item_name}：這一季第一枚 {cfg.legend_xinde_price}，"
-        f"之後每換一枚多 {cfg.legend_xinde_step}。後期改練一門新功夫，不必只等打仗時的頓悟。",
-    ]
-
-
 MALL_TITLE = "商城"  # 玩法說明那一節的標題（商城第三批）；以下待 joy 潤
 MALL_WHERE = "齒輪旁的元寶鈕、底部的「寶」都打開商城，架上的東西花元寶買；買過的、元寶的進出在「紀錄」那一頁查得到。"
 MALL_COIN = "元寶只能儲值取得，不能拿銀兩換，也換不成銀兩。"
@@ -1011,7 +1017,7 @@ def pages_lines() -> list[str]:
         "底下是裝備（兵器、防具、坐騎、寶物）、同伴與部下（心得夠了可以傳功給他們）。",
         "**煉製**：太極火爐只放意境：兩個不同的意境合出新的意境、同一種的兩份揣摩得更深；放進爐裡的都不會用掉。"
         "武學不拿來合，意境到「修練」去裝進武學的槽。爐子底下的「自創武學」另開一頁，花心得自創一門上品武學"
-        "（執器、擺式、立意、成形、立名五步）。每一門功夫都有自己的一手招，功法卡上招名前面蓋一枚印：學來的蓋「看家」、"
+        "（執器、擺式、立意、成形、立名五步；按下立意就收心得、擱下不退，成了形不滿意可以用萬寶閣的重悟帖重骰）。每一門功夫都有自己的一手招，功法卡上招名前面蓋一枚印：學來的蓋「看家」、"
         "人物的本命蓋「本命」、自創的蓋你名號的第一個字、練成絕學的絕招蓋金色的「絕」。"  # 待 joy 潤
         "最底下是背包。",
     ]
@@ -1145,7 +1151,8 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
         # 片段只給做得了那條鏈的人（foreshadow.capable 要陣營對得上）：散人聽不到（審查 M4，待 joy 潤）
         bond.append("- 情誼夠深，他會跟你聊起一些風聲：機緣的話題，還有你那一邊的伏筆的片段（散人聽不到片段）。")
     if recruitable:
-        bond.append(f"- 想招攬的人，情誼越高成算越高（最多多 {cfg.recruit_affinity_bonus * 100:g} 個百分點）。")
+        gate = f"情誼到 {cfg.recruit_min_affinity} 才開得了口招攬，" if cfg.recruit_min_affinity > 0 else ""
+        bond.append(f"- 想招攬的人，{gate}情誼越高成算越高（最多多 {cfg.recruit_affinity_bonus * 100:g} 個百分點）。")
     bond.append(f"- 換季只帶 {cfg.affinity_carry_ratio * 10:g} 成到下一季。")
     challenge = _challenge_lines(content, season)  # 挑戰大勢人物本人：每季都有（figures.challenge_on），另起一段（FB-190）
     old_train = [  # 出陣關著時的遊歷（出陣開著時換成 sortie_lines）
@@ -1186,7 +1193,6 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
         f"兩個意境合併（{cfg.merge_xinde} 心得、{cfg.merge_stamina} 體力）、自創武學都花它。",
         f"- 打贏、操練、閉關（每小時至少 {cfg.seclusion_xinde_per_hour}，悟性越高越多）、邊走邊想（{cfg.road_think_xinde}）都有心得；"
         "用不上的功法熔掉也能拿回一些。狀態列的 💡 會在你付得起、又真的有事可做時提醒你去哪一頁。",
-        *legend_buy_lines(content),
         "",
         *_section("修練與煉製", pages_lines()),
         *_section("鐵匠鋪與神器", forge_lines(content, season)),
