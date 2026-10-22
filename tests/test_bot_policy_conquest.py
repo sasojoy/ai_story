@@ -12,7 +12,7 @@ import random
 import pytest
 
 from conquest_kit import conquest_game, go, join, plain_game, press
-from tianxia import bot_policy, conquest, orders
+from tianxia import bot_policy, conquest, figures, orders
 from tianxia.engine import Game, Option
 from tianxia.state import BotProfile, Order
 
@@ -101,6 +101,21 @@ def test_a_defend_order_still_leads_the_bot_even_when_it_is_weak(monkeypatch):
                                 quota=99, text="（測試）"))
     assert orders.targets(s, c, "guan") == ["hilltop_wilds"]
     _odds(monkeypatch, "必敗")
+    assert bot_policy._order_hop(game) is not None
+
+
+def test_a_strike_order_still_leads_the_bot_to_a_figure_standing_on_a_block_it_cannot_take(monkeypatch):
+    """打擊軍令是去挑戰人物本人（看的是挑戰的勝算），不是在那一塊出陣：人物站在打不贏駐軍的中立地，照樣往那裡走。"""
+    game = _bot(go(join(conquest_game("week7", name="假官"), "guan"), "changshe"), "guan")
+    s, c = game.state, game.content
+    fid = next(f for f, d in c.figures.items() if d.faction == "huang")
+    s.world.figures[fid] = figures.state_of(s, c, fid).model_copy(update={"location": "runan_wilds", "status": "active"})
+    s.world.orders.clear()
+    s.world.orders.append(Order(id="t:guan:strike", template="strike", faction="guan", week=orders.period_of(s, c), figure=fid,
+                                quota=99, text="（測試）"))
+    assert orders.targets(s, c, "guan") == ["runan_wilds"]
+    _odds(monkeypatch, "必敗")
+    assert bot_policy._outmatched(game, "runan_wilds")
     assert bot_policy._order_hop(game) is not None
 
 
