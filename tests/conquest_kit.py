@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 from unittest import mock
 
-from conftest import no_conquest, real_content
+from conftest import real_content
 from tianxia import conquest, team, territory
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game
@@ -41,6 +41,8 @@ def conquest_game(profile: str = "season21", name: str = "沈浪", world=None, x
 
 def plain_game(profile: str = "weekend", name: str = "沈浪", world=None) -> Game:
     """同上，領地爭奪關著（PM 2026-10-22 打開之前正式內容的預設；現在明講關掉，conftest.no_conquest）。"""
+    from conftest import no_conquest  # 這裡 import：檔頭那幾行 dev/map-5 也改，分開免得合併撞在一起
+
     return _new(no_conquest(real_content(profile)), name, world)
 
 
