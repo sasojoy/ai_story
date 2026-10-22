@@ -19,7 +19,9 @@ def test_the_howto_page_explains_the_new_loop():
     assert "找素材" in page and "靜心感悟" in page and "照地點三選一：悟意境" not in page
     assert "- 靜心感悟時「有所感」" in page
     assert "#### 地盤" in page and "換了人" in page
-    assert "便宜一成" in page and "貴兩成" in page and "底色" in page  # 地盤福利與輿圖上色（計畫 Task 5）
+    # 地盤福利與輿圖上色（計畫 Task 5）。輿圖上色那一句以前寫「輿圖局勢層的底色」；輿圖第三版沒有局勢層了，第 5 批照 PM 2026-10-22 改寫
+    # 天下圖的地面與區圖的名字框（關著領地爭奪的季也改；tests/test_conquest_seam.py 守），這一條照改
+    assert "便宜一成" in page and "貴兩成" in page and "天下圖的地面、區圖名字框的顏色就是此刻誰佔著" in page and "局勢層" not in page
 
 
 def test_the_territory_prices_follow_the_config():

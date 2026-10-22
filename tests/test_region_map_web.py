@@ -481,6 +481,82 @@ return {
                    "exitBig": True, "exitSliver": False, "outside": True}
 
 
+# FB-651：不同地點的兩列（印章框＋朱印寶那一列、意境字那一列）之間至少隔 R_ROW_GAP px——QA：南陽 375×479 南陽官道的意境字「風火」
+# 那一列貼著南陽郊野的朱印「寶」（模型的列只隔 1.4px，畫出來的字形框還交疊 0.35px），讀起來像「南陽郊野 寶 風火」。
+# 量法：兩列在 x、y 兩個方向的間隔取大的（兩列錯開到對角也算隔開；x、y 都不到 R_ROW_GAP 才算貼著）
+ROW_GAPS = """
+const out = [];
+const gap = (a, b) => Math.max(a[0] - b[2], b[0] - a[2], a[1] - b[3], b[1] - a[3]);
+for (const rid of H.S.rids) {
+  const ids = H.S.mapBase.places.filter((p) => p.region === rid).map((p) => p.id);
+  for (const [VW, VH] of H.S.phones) {
+    const v = H.regionFit(H.S.mapBase, rid, VW, VH);
+    for (const here of H.S.heres ? [...ids, "@road"] : [H.S.mapState.here]) {
+      const st = { ...H.S.mapState, journey: here === "@road" ? { x: 0, y: 0 } : null, here: here === "@road" ? H.S.mapState.here : here };
+      const L = H.regionLabels(H.S.mapBase, st, rid, v, VW, VH);
+      for (let i = 0; i < L.length; i++) for (let j = i + 1; j < L.length; j++) {
+        let low = Infinity;
+        for (const a of L[i].rows) for (const b of L[j].rows) low = Math.min(low, gap(a, b));
+        if (low < H.S.need) out.push([rid, VW, VH, here, L[i].id, L[j].id, Math.round(low * 10) / 10]);
+      }
+    }
+  }
+}
+return out;
+"""
+ROW_GAP = float(re.search(r"R_ROW_GAP = ([\d.]+)", APP.read_text(encoding="utf-8")).group(1)) if "R_ROW_GAP = " in APP.read_text(encoding="utf-8") else 3.0
+
+
+def test_fb651_nanyang_road_insights_keep_clear_of_nanyang_wilds_seal():
+    """FB-651 QA 那一處：南陽 375×479（375×667 狀態列兩行），南陽官道的意境字那一列與南陽郊野那一列（印章框＋寶）至少隔 R_ROW_GAP（修前 1.4px）。"""
+    assert ROW_GAP >= 2
+    game = _game(profile="season21")
+    out = run(game, ROW_GAPS, rids=["nanyang"], phones=[(375, 479)], heres=False, need=ROW_GAP, mapRegion="nanyang")
+    assert not [x for x in out if {x[4], x[5]} == {"nanyang_road", "nanyang_wilds"}], out
+    assert out == []
+
+
+# FB-651 照不相交擺好之後再找「隔得開」的擺法，名字不准因此離自己的小圖更遠 R_NEAR 以上、不為了留空縮字：照這個規矩還隔不開的局面
+# （區, 地圖框寬, 高, 你站哪）——2026-10-22 量的，weekend、season21 一樣，修前 238 對、這裡 30 對；多半是你站嵩山深處、南陽 375×624（大一號的字）。
+# 只准變少（交 PM：要不要為了留空縮一號，計畫第四節）
+TIGHT_LEFT = {
+    ("youzhou", 375, 604, "zhuo_militia_hall"),
+    *(("yingru", 375, h, "deep_mountain") for h in (604, 624, 479)),
+    *(("yingru", 360, h, here) for h in (452, 436) for here in ("yingshui", "deep_mountain", "huangjin_camp")),
+    *(("nanyang", 375, 624, here) for here in ("nanyang_huangjin_camp", "yu_river", "lulin_zhai", "@road")),
+}
+
+
+@pytest.mark.parametrize("profile", ["weekend", "season21"])
+def test_fb651_rows_of_different_places_keep_apart(profile):
+    """FB-651：每一區 × 你站每一處與在路上 × 五個手機地圖框（同 FB-648 掃描；名字框的大小不看翻地，沒翻地的這一套就是全部），
+    不同地點的兩列之間都隔 R_ROW_GAP——只有 TIGHT_LEFT 那幾種照這個規矩隔不開（修前 238 對，這裡最多 30 對），QA 那一對（南陽官道、
+    南陽郊野）哪一種都隔得開。"""
+    game = _game(profile=profile)
+    rids = [r["id"] for r in game.map_base()["regions"]]
+    out = run(game, ROW_GAPS, rids=rids, phones=PHONES, heres=True, need=ROW_GAP - 0.05)
+    assert {tuple(x[:4]) for x in out} <= TIGHT_LEFT, sorted({tuple(x[:4]) for x in out} - TIGHT_LEFT)
+    assert len(out) <= 30
+    assert not [x for x in out if {x[4], x[5]} == {"nanyang_road", "nanyang_wilds"}]
+
+
+def test_fb651_keeping_apart_never_moves_a_name_farther_from_its_icon():
+    """FB-651 的代價有上限：為了讓兩列隔開而換的位置，每一處的名字離自己的小圖不比照不相交擺的那一次遠 R_NEAR（8px）以上；
+    掃描裡名字離自己的小圖最遠的那一個跟修前一樣（GAP_LAST 照舊）。"""
+    game = _game(profile="season21")
+    out = run(game, """
+const hug = (l) => { const f = l.rows[0]; return Math.hypot(Math.max(f[0] - l.X, 0, l.X - f[2]), Math.max(f[1] - l.Y, 0, l.Y - f[3])); };
+const out = [];
+for (const r of H.S.mapBase.regions) for (const [VW, VH] of H.S.phones) {
+  const v = H.regionFit(H.S.mapBase, r.id, VW, VH);
+  out.push([r.id, VW, VH, Math.max(...H.regionLabels(H.S.mapBase, H.S.mapState, r.id, v, VW, VH).map(hug))]);
+}
+return out;""", phones=PHONES)
+    last = {rid: dict(zip(PHONES, vals)) for rid, vals in GAP_LAST.items()}
+    for rid, vw, vh, far in out:
+        assert far <= last[rid][(vw, vh)] + 0.5, (rid, vw, vh, far)
+
+
 LAYOUT = """
 const v = H.regionFit(H.S.mapBase, 'RID', VW, VH);
 return H.regionLabels(H.S.mapBase, H.S.mapState, 'RID', v, VW, VH).map((l) => [l.id, l.l, l.t, l.fs, l.insPx]);
@@ -665,8 +741,9 @@ def _contrast(a, b):
 
 
 def test_fb650_side_coloured_card_text_reads_in_dark_mode():
-    """FB-650：深色主題時卡上照陣營上色的字（第 2 段那一句、正在翻的名字、誰在推那一句、戰線的繩上「推進」那一句）對比 ≥ 4.5:1；
-    淺色照劇本的 color 一個字不變。深色那一版照劇本的顏色算（對比不夠的往那一方的 soft 調亮），本來就夠的（黃巾 5.0:1）不動；不寫死哪一方。"""
+    """FB-650：深色主題時卡上照陣營上色的字（第 2 段那一句、正在翻的名字、誰在推那一句、戰線的繩上「推進」那一句）對比 ≥ 4.5:1。
+    深色那一版照劇本的顏色算（對比不夠的往那一方的 soft 調亮），本來就夠的（黃巾 5.0:1）不動；不寫死哪一方。修的時候淺色照劇本的 color
+    一個字不變；FB-652（2026-10-22）淺色那一版也照同一個做法往墨色調深，見下一條。"""
     from test_world_map import flipping
 
     game = flipping(_game())
@@ -677,10 +754,12 @@ def test_fb650_side_coloured_card_text_reads_in_dark_mode():
     assert _contrast(color["guan"], DARK_CARD_2) < 4.5 <= _contrast(color["huang"], DARK_CARD_2)  # 修前：官軍的藍 2.6:1（QA 量的是 #211C17）
     cards = run(game, "return ['runan_wilds', 'yingchuan', 'hilltop_wilds'].map((id) => H.placeCard(H.S.mapBase, H.S.mapState, id)).join('');")
     pairs = set(re.findall(r'--sc:(#[0-9A-F]{6});--sd:(#[0-9A-F]{6})', cards))
-    assert {sc for sc, _ in pairs} == {color["guan"], color["huang"]}
+    # FB-652（2026-10-22）之後淺色那一版（--sc）不一定是劇本的 color（黃巾在淺色調深了，見 test_fb652）：這裡只管深色那一版
+    assert len(pairs) == 2
     for sc, sd in pairs:
         assert _contrast(sd, DARK_CARD_2) >= 4.5, (sc, sd)
-        assert sd == sc if _contrast(sc, DARK_CARD_2) >= 4.5 else sd != sc
+    assert any(sd == color["huang"] for _, sd in pairs)  # 黃巾在深色本來就夠（5.0:1），不動
+    assert not any(sd == color["guan"] for _, sd in pairs)  # 官軍的藍在深色調亮
     assert re.search(r'<div class="m-line" style="--sc:#[0-9A-F]{6};--sd:#[0-9A-F]{6}">官軍的基礎資源領地', cards)
     assert re.search(r'<span class="nm" style="--sc:', cards) and re.search(r'<span class="m-sc" style="--sc:[^"]+">官軍</span> 1 人正在攻', cards)
     assert all(f"color:{x}" not in cards for x in color.values())  # 照陣營上色的字都走 --sc／--sd（勝算的字照舊）
@@ -694,6 +773,35 @@ def test_fb650_side_coloured_card_text_reads_in_dark_mode():
     for text in out:
         sc, sd = re.match(r"--sc:(#[0-9A-F]{6});--sd:(#[0-9A-F]{6})", text).groups()
         assert _contrast(sd, DARK_CARD_2) >= 4.5, text
+
+
+LIGHT_CARD_2 = "#EFE6D5"  # 淺色主題抽屜裡最深的底（style.css 的 --card-2；抽屜本身是 --card #FBF7EF，更亮）
+LIGHT_CARD = "#FBF7EF"
+
+
+def test_fb652_side_coloured_card_text_reads_in_light_mode():
+    """FB-652：淺色主題卡上照陣營上色的字也要 ≥ 4.5:1——QA 量到黃巾 #B9821A 在卡底 #FBF7EF 上只有 3.13:1（第 2 段整句、正在翻的名字、
+    誰在推、戰線的繩、版圖變化）。照 sideText 深色那一版（FB-650）的做法：淺色那一版（--sc）在淺色最深的底（--card-2）上對比不到 4.5:1 的
+    往墨色調深到夠，本來就夠的（官軍 #3D5F8F）不動；照劇本讀、不寫死哪一方（四方劇本每一方都夠）。進度條照舊用劇本的 color。"""
+    from test_world_map import flipping
+
+    game = flipping(_game())
+    w, c = game.state.world, game.content
+    conquest.mark(w, c, "runan_wilds", "映雪", "guan", "attack", 12)
+    conquest.mark(w, c, "runan_wilds", "黃天客", "huang", "attack", 6)
+    color = {s["id"]: s["color"] for s in game.map_base()["world"]["sides"]}
+    assert _contrast(color["huang"], LIGHT_CARD) < 4.5 <= _contrast(color["guan"], LIGHT_CARD_2)  # 修前：黃巾 3.13:1
+    cards = run(game, "return ['runan_wilds', 'yingchuan', 'hilltop_wilds'].map((id) => H.placeCard(H.S.mapBase, H.S.mapState, id)).join('');")
+    light = {sc for sc, _ in re.findall(r'--sc:(#[0-9A-F]{6});--sd:(#[0-9A-F]{6})', cards)}
+    assert light and all(_contrast(sc, LIGHT_CARD_2) >= 4.5 for sc in light), light
+    assert color["guan"] in light and color["huang"] not in light  # 官軍本來就夠、不動；黃巾換深一點的那一版
+    assert f"background:{color['huang']}" in cards  # 進度條照舊是劇本的顏色
+    four, _ = _four_sides()
+    out = run(four, "return ['guan', 'huang', 'wei', 'wu'].map((k) => [H.sideInk(k).color, H.sideText(k)]);")
+    for raw, text in out:
+        sc = re.match(r"--sc:(#[0-9A-F]{6});", text).group(1)
+        assert _contrast(sc, LIGHT_CARD_2) >= 4.5, text
+        assert sc == raw if _contrast(raw, LIGHT_CARD_2) >= 4.5 else sc != raw
 
 
 def test_the_removed_pieces_are_gone():
