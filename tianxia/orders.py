@@ -150,7 +150,7 @@ def siege_places(content: Content, faction: str, front: str, world: WorldState |
 
     if conquest.on(content, world):
         # 領地爭奪（裁決 11；翻地與爭搶 PM 2026-10-20 第 1 條）：這條線上這一邊此刻進度最高、推得動的那一塊（conquest_day.today），而且那裡出陣攻打的對手每一路打贏都記得到
-        # （同 _counts 的 siege_win，FB-531）。打贏那裡的守軍就算，公告了的中立地、被敵方佔下的中立地站的中立駐軍與流寇也算
+        # （同 _counts 的 siege_win，FB-531）。打贏那裡的守軍就算，還沒人佔的中立地、被敵方佔下的中立地站的中立駐軍與流寇也算
         # （裁決 20，PM 2026-10-21）。敵方大本營與廣宗搶不下（conquest.targets 先排掉），推不動、不列（裁決 18）
         return [
             loc_id for loc_id in _today(content, world, faction, "attack")
@@ -407,7 +407,7 @@ SIEGE_GUARD = "siege_guard"
 
 def _today(content: Content, world: WorldState | None, side: str | None, how: str) -> list[str]:
     """領地爭奪：這一邊此刻進度最高、推得動的那一塊（attack），或自家被推得最高、守得動的那一塊（defend）（conquest_day.today；
-    翻地與爭搶 PM 2026-10-20 第 1 條，第二批是今天公告的目標）。"""
+    翻地與爭搶 PM 2026-10-20 第 1 條；第二批是每天公告的目標，投票與公告拿掉了）。"""
     from . import conquest_day  # noqa: PLC0415  conquest_day → conquest → territory → rules：在函式裡 import
 
     return conquest_day.today(world, content, side, how) if world is not None and side is not None else []

@@ -4,7 +4,10 @@ xingshi.facts 把沒有結果的 day_log（戰書）一律當「下一仗打哪�
 照時間順序排，那一場已經打完（收場、作罷、或正在打）的戰書寫成已經發生的事（letter_done：「某某替某軍下戰書攻某地」），排在它的結果前面；
 只有還沒開打的才是「下一仗」、排在三條線後面。
 
-順帶（同一輪 QA）：管理者白天按「現在就開一篇」時，正在打的那一場不寫「一仗打到入夜」（fighting_day）。"""
+順帶（同一輪 QA）：管理者白天按「現在就開一篇」時，正在打的那一場不寫「一仗打到入夜」（fighting_day）。
+
+輿圖第三版第 5 批：原本還有一條「舊季（第二批投票那一版）的眾議、主將定奪照舊是下一仗」，那兩種 day_log 收掉了（領地爭奪從沒合進
+develop／main，沒有那一版的存檔），那一條拿掉；舊資料讀得進來、略過不寫，改在 tests/test_conquest_seam.py 守。"""
 from __future__ import annotations
 
 import calendar as pycal
@@ -116,15 +119,6 @@ def test_a_letter_whose_siege_is_being_fought_is_not_the_next_battle():
     done = words["letter_done"].format(who="官帥", side=guan, place="汝南荒野")
     fighting = words["fighting"].format(place="汝南荒野")
     assert facts.index(done) < facts.index(fighting) < _first_line_fact(c, facts)
-
-
-def test_old_season_plans_are_unchanged():
-    """舊季（第二批投票那一版）的眾議、主將定奪照舊是「下一仗」，排在三條線後面。"""
-    game, w, c = _world()
-    _, huang = _names(c)
-    note = DayNote(key=1, side="huang", loc="nanyang_road", minute=21 * 60, by=conquest_day.VOTE)
-    facts = xingshi.facts(w, c, [note], {})
-    assert facts.index(_words(c)["plan_vote"].format(side=huang, place="南陽官道")) > _first_line_fact(c, facts)
 
 
 def test_fighting_in_daytime_does_not_say_nightfall():

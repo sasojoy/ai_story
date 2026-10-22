@@ -5,7 +5,7 @@ from __future__ import annotations
 import random
 from unittest import mock
 
-from conftest import classic_rules, real_content
+from conftest import classic_rules, no_conquest, real_content
 from tianxia import engine as engine_mod
 from tianxia import explore_modes, rules, sensing, team, treasures
 from tianxia.encounter import EncounterResult
@@ -15,7 +15,7 @@ from tianxia.state import Bounty
 
 
 def _game(faction=None, at="yingshui", **cfg):
-    c = real_content("weekend")
+    c = no_conquest(real_content("weekend"))  # 領地加成（自家領地找素材多一份）另測（tests/test_conquest_perks.py）
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
     c.config.duel.explore_chance = 0.0  # 頭目戰另外測（tests/test_duel.py）：這裡的地點有頭目也不擲中

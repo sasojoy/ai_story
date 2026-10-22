@@ -70,7 +70,7 @@ def _world(shard: str, user: str):
     _person(c, w, VIEWER, "huang", VIEWER_AT)
     for name in ("甲客", "乙客"):
         _do(c, w, name, (lambda g: g.seal_use(CASES[shard])) if name == user else (lambda g: None), now=10.0)
-    assert [e.holder for e in w.seal_state().registry.history if e.kind == "use"] == [user]  # 真的起用了
+    assert [e.holder for e in w.seal_state().registry.uses] == [user]  # 真的起用了
     return _seen(c, w)
 
 

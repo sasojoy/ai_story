@@ -20,7 +20,7 @@ from .battle_instance import BattleInstance
 from .characters import name_key
 from .models import BattleDef, Content, SealTuning, TimetableEvent
 from .state import Equipment, GameState, Rumor, WorldState
-from .world_state import SealCache, SealEvent, SealRegistry, SealShard, SharedWorldState, WorldStateStore
+from .world_state import SealCache, SealEvent, SealRegistry, SealShard, SealUse, SharedWorldState, WorldStateStore
 
 HEIRLOOM_PREFIX = "璽:"  # 抄本的 id（固定，不吃 weapon_serial，重抄幾次都一樣；不會跟「寶:N」撞號）
 HEIRLOOM_LABEL = treasures.HEIRLOOM_LABEL  # 寶物段裡那一列的小標、角色卡那一行的開頭（字在 treasures，treasures 不 import seal）
@@ -78,6 +78,14 @@ def log(reg: SealRegistry, season: int, kind: str, **fields) -> SealEvent:
     event = SealEvent(seq=reg.seq, season=season, kind=kind, round=reg.round, **fields)
     reg.history.append(event)
     return event
+
+
+def log_use(reg: SealRegistry, season: int, *, shard: str, holder: str, act: str, what: str, at: float | None) -> SealUse:
+    """起用獨門行動記一筆（全服流水號 +1，跟 log 同一串）：記在 reg.uses、不放進 history（FB-695：舊程式的 SealEvent.kind 不認得 use）。"""
+    reg.seq += 1
+    used = SealUse(seq=reg.seq, season=season, shard=shard, holder=holder, act=act, what=what, at=at)
+    reg.uses.append(used)
+    return used
 
 
 def effect_text(content: Content, effect: str) -> str:

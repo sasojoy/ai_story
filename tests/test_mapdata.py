@@ -4,14 +4,14 @@ from __future__ import annotations
 import json
 import random
 
-from conftest import classic_rules, real_content, third_party_gentry
+from conftest import classic_rules, no_conquest, real_content, third_party_gentry
 from tianxia import calendar, mapdata, mapview, territory
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 
 
 def _game(faction="guan", at="yingchuan", classic=False, profile="weekend", third_party=False):
-    c = real_content(profile)
+    c = no_conquest(real_content(profile))  # 地盤拔河的舊規則（領地爭奪 PM 2026-10-22 起正式內容打開；翻地的輿圖資料在 tests/test_world_map.py）
     c.config.auto_open_first_season = True
     if classic:
         classic_rules(c)

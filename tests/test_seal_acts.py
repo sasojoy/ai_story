@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 import server
-from conftest import real_content
+from conftest import no_conquest, real_content
 from test_seal import put_shards, seal_problems, sealed  # noqa: F401  sealed 是夾具
 from test_seal_revamp import revamp
 from tianxia import calendar, seal, seal_acts
@@ -182,8 +182,8 @@ def test_the_public_line_names_nobody(sealed):
 
 # ── Task 3～6：正式內容 ──
 
-def _world(profile="season21", *, on=True):
-    c = real_content(profile)
+def _world(profile="season21", *, on=True, conquest_on=True):
+    c = real_content(profile) if conquest_on else no_conquest(real_content(profile))  # 正式內容 PM 2026-10-22 起打開
     c.config.auto_open_first_season = True
     c.config.seal.revamp.enabled = on
     c.config.newbie_days, c.config.newbie_real_hours = -1, 0  # 新手期的體力回復加快不混進承露的帳
@@ -222,8 +222,8 @@ def _do(c, w, name, fn, now=10.0):
     return out
 
 
-def _holder(shard, *, profile="season21", side="huang", at="yingchuan_wilds", on=True, name="懷璽"):
-    c, w = _world(profile, on=on)
+def _holder(shard, *, profile="season21", side="huang", at="yingchuan_wilds", on=True, name="懷璽", conquest_on=True):
+    c, w = _world(profile, on=on, conquest_on=conquest_on)
     _give(c, w, shard, name)
     return c, w, _person(c, w, name, side=side, at=at)
 
@@ -233,7 +233,7 @@ def _use(c, w, name="懷璽", target="", side="", now=10.0):
 
 
 def _uses(w):
-    return [e for e in w.seal_state().registry.history if e.kind == "use"]
+    return w.seal_state().registry.uses  # FB-695：起用另記一欄，不在 history（tests/test_seal_fb695_rollback.py）
 
 
 @pytest.mark.slow
@@ -246,7 +246,7 @@ def test_using_an_act_books_it_on_the_shard_and_the_season():
     season = w.get_season()
     assert (shard.act_season, shard.act_uses) == (w.get_season_number(), 1) and shard.act_last == pytest.approx(season.time)
     [use] = _uses(w)
-    assert (use.holder, use.shard, use.result) == ("懷璽", "yunzhuan", "banzhao")
+    assert (use.holder, use.shard, use.act) == ("懷璽", "yunzhuan", "banzhao")
     [act] = season.seal_acts
     assert (act.kind, act.shard) == ("banzhao", "yunzhuan") and act.until == pytest.approx(act.start + DAY)
     assert "懷璽" not in act.model_dump_json()

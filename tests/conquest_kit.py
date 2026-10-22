@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest import mock
 
 from conftest import real_content
-from tianxia import conquest, team, territory
+from tianxia import conquest, conquest_day, team, territory
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game
 from tianxia.models import Content
@@ -40,8 +40,10 @@ def conquest_game(profile: str = "season21", name: str = "沈浪", world=None, x
 
 
 def plain_game(profile: str = "weekend", name: str = "沈浪", world=None) -> Game:
-    """同上，領地爭奪關著（正式內容的預設）。"""
-    return _new(real_content(profile), name, world)
+    """同上，領地爭奪關著（PM 2026-10-22 打開之前正式內容的預設；現在明講關掉，conftest.no_conquest）。"""
+    from conftest import no_conquest  # 這裡 import：檔頭那幾行 dev/map-5 也改，分開免得合併撞在一起
+
+    return _new(no_conquest(real_content(profile)), name, world)
 
 
 def join(game: Game, side: str | None) -> Game:
@@ -77,13 +79,14 @@ def contribution(game: Game) -> int:
 
 
 def announce(game: Game, loc_id: str, side: str, minute: int = 21 * 60, merged: tuple[str, ...] = ()) -> SiegeSlot:
-    """把一場攻城直接排進今天的時程表（第二批；不等 22:00 結算）：side 攻 loc_id，一小時後開打、半小時後開集結。merged 給兩軍時併成一場。"""
+    """把一場攻城直接排進今天的時程表（同戰書排的那一場，不看階與門檻、不記 day_log）：side 攻 loc_id，一小時後開打、半小時後開集結。
+    merged 給兩軍時併成一場。名字是第二批（每天公告）留下來的；那時寫 by="commander"（主將定奪），輿圖第三版第 5 批收掉之後寫戰書。"""
     w = game.state.world
     attackers = list(merged) or [side]
     slot = SiegeSlot(
         id=f"t-{loc_id}-{len(w.conquest.schedule)}", key=w.conquest.settled_key, loc=loc_id, minute=minute,
         at=w.time + 3600, muster_at=w.time + 1800, attackers=attackers,
-        by={a: "commander" for a in attackers}, reasons={a: "" for a in attackers},
+        by={a: conquest_day.LETTER for a in attackers}, reasons={a: "" for a in attackers},
     )
     w.conquest.schedule.append(slot)
     return slot
