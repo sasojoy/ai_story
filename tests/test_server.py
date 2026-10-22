@@ -1103,7 +1103,7 @@ def test_a_refused_name_keeps_what_the_player_typed_and_the_pill_tick_does_not_o
     submit = js[js.index('form.id === "name-art"'):]
     submit = submit[:submit.index('form.id === "seclude"')]
     assert 'await mx("name"' in submit and "again.value = data.name" in submit  # 被拒（表單還在）把字放回去
-    assert "S.legendTick = {}" in _js_function(js, "async function goTab(")  # 回到修練頁時，破境丹的勾是真的沒勾
+    assert "legendTick" not in js  # 破境丹不再是勾的：服丹、心得各一顆衝關鈕（Joy 2026-10-21），沒有勾要收
 
 
 def test_the_fight_card_shows_the_first_round_until_the_player_opens_the_rest():
@@ -2693,7 +2693,9 @@ def test_a_library_art_without_a_note_leaves_no_blank_line(client):
     assert "<br />\n<br />" not in card and "<br />\n</p>" not in card
     # 來源之後一行功效：武學重構之後功效照槽裡裝的意境寫，槽空著寫一句指路（不是空行）；
     # W6：功法庫裡的功法再多一行跟身上同一種那門的比較，沒有說明句時它是最後一行（本人身上那門自己的卡沒有）
-    assert "來源：自創（沈浪 所創）<br />\n功效：（意境槽空著，到煉製頁裝意境）<br />\n比身上的【基礎拳腳】：威力 " in card
+    # 自創的武學在功效之後多一行自己長出來的招（以意成招，私印是創的人名號的第一個字）
+    assert "來源：自創（沈浪 所創）<br />\n功效：（意境槽空著，到煉製頁裝意境）<br />\n沈〔" in card
+    assert "<br />\n比身上的【基礎拳腳】：威力 " in card
     assert card.rstrip().endswith("（第一成）</p>")
 
 
@@ -5386,6 +5388,7 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
         "feast_text",  # 宴客自己寫的那一句敬酒（大勢人物擴充第三批）：三段同 answer_event
         "gather_text",  # 找素材的「自己說」（第 32 項）：三段同 feast_text
         "create_intent",  # 自創武學的形意那一句（武學重構）：鎖外請模型評分（create.score），結果交給 C 段
+        "ascend_line",  # 破境卡那一句（招式與絕學稿案第三節）：三段同 create_intent
     }
     # 宣告、model_call 讀、main() 建佇列；另外兩個只看不排：/api/queue 問位置、管理者那份資料抄總數（admin_choices 在 look 的鎖裡，
     # 但 snapshot 只碰佇列自己的短鎖、不等任何一件，不算在行動鎖裡排隊）
@@ -6264,6 +6267,7 @@ NOT_IN_THE_FINGERPRINT = {
         "seal_notes": "收場時跟 phase 一起寫入（戰報那一行）",
         "seal_lean": "天命之爭開集結那一刻快照（集結公告另寫天下大事，指紋本來就變了）",
         "supply_lean": "屯糧練兵開集結那一刻快照（集結公告另寫天下大事，指紋本來就變了）",
+        "front_note": "起點照哪一條戰線：開集結那一刻快照（另寫天下大事，指紋本來就變了），之後不再改",
         "commanders": "上陣的大勢人物：開集結那一刻派上來（另寫天下大事），氣血與敗走只在回合結算時改，那一下 round_number 也變了",
         "orders": "主將令：回合結算那一下換，round_number 也變了",
         "siege": "攻城戰打哪一塊、誰攻：開集結那一刻就定了（跟 phase 一起寫入）；收場的易手另寫天下大事（傳聞流水號已在指紋裡）",

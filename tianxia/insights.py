@@ -102,11 +102,11 @@ def learn(
         return lead + [f"你又悟到一次「{insight.name}」，這份體會化成了心得。", f"心得 +{amount}"]
     p.insights.append(insight.id)
     fx = insight_fx.roll(state, content, world, insight.id, strong=strong)
-    return lead + [f"你悟得了「{insight.name}」的意境（屬{insight.attribute}）！", FX_LINE.format(quality=fx.quality, label=insight_fx.label(content, fx))]
+    return lead + [f"你悟得了「{insight.name}」的意境（屬{insight.attribute}）！", FX_LINE.format(look=insight_fx.look(fx), label=insight_fx.label(content, fx))]
 
 
 AGAIN = "你又悟得一份「{name}」（{quality}・{label}）。"  # 待 joy 潤
-FX_LINE = "這一份是{quality}：{label}。"  # 待 joy 潤
+FX_LINE = "這一份是{look}品：{label}。"  # 待 joy 潤（品相凡佳珍神，同 fusion.PIECE_LINE）
 
 
 GRANT_LINES = {"good": "你行俠日久，胸中多了一股{name}之氣。", "evil": "你橫行日久，胸中多了一股{name}之氣。"}  # 名聲 5.1，待 joy 潤

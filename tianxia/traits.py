@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 
 from .martial_arts import MartialArt
 from .models import Content, GeneralTrait, SpecialTrait, TacticDef
-from . import tactics
+from . import moves, tactics
 from .state import GameState
 from .world_state import WorldStateStore
 
@@ -82,7 +82,7 @@ def loadout(state: GameState, content: Content, world: WorldStateStore) -> Loado
         art = team.player_art(state, content, world, skill_id)  # 自己那一份：槽裡裝的技能已經填上（arts.apply）
         if art is None:
             continue
-        mult, mine = multiplier(content, art.quality), traits_of(art)
+        mult, mine = multiplier(content, art.quality) * (1 + moves.look_bonus(content, art)), traits_of(art)
         for attribute in dict.fromkeys(mine):
             trait = general(content, attribute)
             layers = mine.count(attribute) * mult
@@ -137,6 +137,7 @@ def tactic_defs(content: Content, lo: Loadout) -> list[TacticDef]:
 
 
 ULTIMATE_TITLE = tactics.ULTIMATE_SEAL  # 絕招那一行蓋金印「絕」（招式與絕學稿案第一節）
+AFTER_TITLE = "後勁"  # 自創破境之後，八種照屬性配的絕招接在自己的招後面那一下（招式與絕學稿案第三節）
 MASTERED = "絕學"
 
 
@@ -153,11 +154,12 @@ def ultimate_trait(content: Content, art: MartialArt | None) -> GeneralTrait | N
 
 
 def ultimate_of(content: Content, art: MartialArt | None) -> TacticDef | None:
-    """那一門的絕招：功效寫好的那一招，名字換成那門絕學的名字（定過名就是定的名字）。"""
+    """那一門的絕招：功效寫好的那一招，名字換成那門絕學的名字（定過名就是定的名字）。
+    自創的（破境）：它是接在自己絕招後面的後勁，名字照功效（先手、破甲……）。"""
     trait = ultimate_trait(content, art)
     if trait is None or art is None:
         return None
-    return trait.ultimate.model_copy(update={"name": art.name})
+    return trait.ultimate.model_copy(update={"name": trait.name if moves.is_own(content, art) else art.name})
 
 
 def has(lo: Loadout, hook: str) -> bool:
@@ -188,11 +190,13 @@ def card_line(content: Content, art: MartialArt) -> str:
     sig = tactics.of_art(content, art)  # 本命戰法、學來的武學的小戰法、自創借來的小戰法
     tail = tactics.card_text(sig, tactics.title_of(sig, art)) if sig is not None else ""
     ult = ultimate_of(content, art)
-    if ult is not None:  # 絕學立招：「絕〔名〕乘勢・剋中對手後 100%：……」
+    if ult is not None and moves.is_own(content, art):  # 破境：自己的招升為絕招（金印，title_of），後面接一行後勁
+        tail += "\n" + tactics.card_text(ult, AFTER_TITLE)
+    elif ult is not None:  # 合成的絕學立招：「絕〔名〕乘勢・剋中對手後 100%：……」
         tail = tactics.card_text(ult, ULTIMATE_TITLE)
     if not content.traits.general:
         return tail
-    mult, mine, parts = multiplier(content, art.quality), traits_of(art), []
+    mult, mine, parts = multiplier(content, art.quality) * (1 + moves.look_bonus(content, art)), traits_of(art), []
     for attribute in dict.fromkeys(mine):
         trait = general(content, attribute)
         layers = mine.count(attribute) * mult

@@ -114,7 +114,7 @@ class HintNote(BaseModel):
     by: str = ""
 
 
-ONBOARDING_VERSION = 4  # 新手引導的版本：2＝有序章的新引導（新手引導計畫一）、3＝再加入伍段（計畫二）、4＝再加初入江湖（第四段）。比 2 小的是舊存檔，讀檔時當作走過序章（設計 7.2）；
+ONBOARDING_VERSION = 5  # 新手引導的版本：2＝有序章的新引導（新手引導計畫一）、3＝再加入伍段（計畫二）、4＝再加初入江湖（第四段）、5＝老周改七步、草廬服丹（新手引導重做）。比 2 小的是舊存檔，讀檔時當作走過序章（設計 7.2）；
 # 比 3 小而且已經有陣營的，是入伍段上線之前就投靠的老手，讀檔時蓋成入伍段走完（enlist.mark_veteran，設計 7.2）
 
 
@@ -267,9 +267,24 @@ class InsightFx(BaseModel):
     grand: str | None = None
 
 
+class Ascension(BaseModel):
+    """破境卡（tianxia/ascend.py；招式與絕學稿案第三節）：剛破境的那一門，收場後跳出來的那一張。看過（dismiss）就收掉。"""
+
+    art: str  # 功法 id
+    name: str  # 門名（寫卡時的顯示名）
+    via: str = "seize"  # seize（仗裡的契機）／pill（服破境丹閉門衝關）
+    before: str = ""  # 破境前那一招（tactics.card_text，蓋私印）
+    after: str = ""  # 破境後的絕招（蓋金印「絕」）
+    after_tail: str = ""  # 後勁那一行（八種照屬性配的絕招；沒有是空字串）
+    power: list[int] = Field(default_factory=list)  # 戰力：破境前、破境後（arts.rating，第十成）
+    chronicle: str = ""  # 江湖史那一行
+    line: str = ""  # 模型照那一句意寫的一句（三段式；叫不動照套句）
+    intent: str = ""  # 自創時那一句意（給模型當背景）
+
+
 class CreateDraft(BaseModel):
     """自創武學走到哪（tianxia/create.py；Joy 2026-10-20 改成五步）：執器（kind、form）開單 → 擺式（pose）→ 立意（intent，
-    模型讀出 read、lean、score；引擎照兵器＋姿勢＋意擲出 colors）→ 立名（付心得、擲品級、登記）。redo 是還能免費重來幾次。"""
+    模型讀出 read、lean、score；引擎照兵器＋姿勢＋意擲出 colors）→ 立名（付心得、登記；品級不擲，一律 Config.arts.create_grade）。redo 是還能免費重來幾次。"""
 
     kind: str  # 內功／武學
     form: str = ""  # 執器：武學的兵器種類（劍、刀…）或內功的行功之法（吐納、導引…）
@@ -280,7 +295,13 @@ class CreateDraft(BaseModel):
     score: int = 40  # 模型評的意分（0～100，夾 5～85；評不到 40）
     colors: list[list[str]] = Field(default_factory=list)  # 成形擲出的每一格顏色（MartialArt.slot_colors）
     redo: int = 1  # 還能免費重來幾次（回到擺式或立意再擲一次）
+    paid: int = 0  # 立意時付了多少心得（Joy 2026-10-21 改在立意收；0＝還沒付，這一版之前的單子在立名時收）
     rolls: int = 0  # 擲過幾次（成形的亂數種子用）
+    rerolled: int = 0  # 用重悟帖重骰過幾次（一門最多 Config.arts.create_reroll_cap）
+    name_tries: int = 0  # 假人取名取了幾輪（都撞名時留著單子下次接著取，換一批名字；bot._name_draft）
+    move: str = ""  # 以意成招：模型從立意那一句起的招名（2～4 字；空的用 moves 表的預設名）
+    say: str = ""  # 招式出手那一行的一句話（模型寫；空的用 moves 表的）
+    rare: bool = False  # 立意時擲中變招（有變招的那一格才擲）
     step: str = "pose"  # 下一步：pose（擺式）、intent（立意）、name（立名）
     # 舊單子（這一版之前的三步）的欄位，讀得進來就好；讀檔時 create.prune 收掉
     affinity: list[str] = Field(default_factory=list)
@@ -694,8 +715,10 @@ class PlayerState(BaseModel):
     # 意境 id（第二份起「feng~2」）→ 這一份的品質與效果；沒記的照舊存檔的樣子算（insight_fx.record）
     insight_fx: dict[str, InsightFx] = Field(default_factory=dict)
     arts_migrated: bool = False  # 舊存檔的功效轉成槽做過了沒（arts.migrate 只做一次）
-    created_count: int = 0  # 這一季自創了幾門（Config.arts.create_per_season、價錢遞增）；角色每季重來
-    creating: CreateDraft | None = None  # 自創走到一半的單子（tianxia/create.py）；取名那一步才付心得
+    created_count: int = 0  # 這一季自創付了幾次心得（立意那一刻數；Config.arts.create_per_season、價錢遞增、第一門優惠）；角色每季重來
+    create_rerolls: int = 0  # 重悟帖（萬寶閣）：自創成形之後直接重骰一次（一門最多 create_reroll_cap 次）；換季帶著走（同回體丹）
+    creating: CreateDraft | None = None  # 自創走到一半的單子（tianxia/create.py）；立意那一刻付心得（CreateDraft.paid）
+    ascension: Ascension | None = None  # 剛破境、還沒看過的破境卡（tianxia/ascend.py）
     holding_bonus: int = 0  # 功法庫多放幾格（萬寶閣的擴充道具，Joy 2026-10-21「一張多放15格，沒有上限」）：只這一季，換季照新角色歸零（library.cap_of 加上它）
     stamina_pills: int = 0  # 回體丹（Config.stamina_pill_name）的數量：建立角色時的內測贈送；跨季保留（Game._reset_player_for_new_season）
     # 回體丹補到過幾顆（企劃者 2026-10-12 拿掉一鍵補滿、改送合適的數量）：Config.beta_gift_stamina_pills 比它多時，讀檔那一刻手上不到那個數的
@@ -708,6 +731,9 @@ class PlayerState(BaseModel):
     # 出陣（出陣探索與地盤設計 2.3）：上次出陣是哪一天（同 pill_day 的換日）與那一天出了幾次；跨季保留（換季不能多出一輪）
     sortie_day: int = -1
     sorties_today: int = 0
+    # 城裡操練（Config.training，新手引導重做 2026-10-22）：上次操練是哪一天（同 pill_day 的換日）與那一天練了幾次；跨季保留
+    drill_day: int = -1
+    drills_today: int = 0
     # 素材與經濟（2026-10-15，tianxia/economy.py）：同 pill_day 的換日；跨季保留（換季不能多換一輪、多捐一輪）
     upgrade_day: int = -1  # 鐵匠鋪升階：上次升階是哪一天
     upgrades_today: dict[int, int] = Field(default_factory=dict)  # 那一天換到幾階 → 換了幾個（只記有每日上限的階，Config.economy.upgrade_per_day）
@@ -747,8 +773,8 @@ class PlayerState(BaseModel):
     tavern_guard_until: float = 0.0  # 雇的保鏢跟到幾時（現實秒）
     guarded_until_real: float = 0.0  # 雇的保鏢跟到幾時（現實秒）
     xinde_cultivations: int = 0  # 這一季花心得修練了幾次（以心得修練拿掉了，欄位留著讓舊存檔讀得進來）；角色每季重來
-    legend_bought: int = 0  # 這一季用心得換了幾枚破境丹（Config.legend_xinde_price，越換越貴）；角色每季重來
-    legend_items: int = 0  # 破境丹（Config.legend_item_name）的數量：探索撿到，玩家在修練頁勾了、衝絕學那一次才服一枚；角色每季重來
+    legend_bought: int = 0  # 10-18～10-21 用心得換了幾枚破境丹；換丹拿掉了（Joy 2026-10-21），留著讓舊存檔讀得進來，不再用
+    legend_items: int = 0  # 破境丹（Config.legend_item_name）的數量：探索撿到，玩家在修練頁勾了、衝絕學那一次才服一枚；探索撿到、醫館與萬寶閣買到，換季帶著走（同回體丹）
 
     seen_events: set[str] = Field(default_factory=set)
     # （舊的 event_seen 看過次數已拿掉：joy #16 的輪替取代了 FB-058 的 0.5^次數 遞減。舊存檔裡還有這一欄也讀得進來——
@@ -789,6 +815,10 @@ class PlayerState(BaseModel):
     # 還沒做完，引薦人照樣說結語、入伍段關起來（enlist.expire）。這一版之前存的角色沒有，None＝下一次檢查才從那一刻算起
     enlist_since: float | None = None
     # ── 碰到才說（新手引導計畫三）──
+    # 新手目標（新手引導重做 2026-10-22，tianxia/newbie.py）：做到過的目標（marks，引擎在那件事發生時記）與領過獎勵的目標（done）；
+    # 新手期（roster.newbie）只有一次，換季保留
+    newbie_marks: set[str] = Field(default_factory=set)
+    newbie_done: set[str] = Field(default_factory=set)
     hints_seen: set[str] = Field(default_factory=set)  # 說過（上過框）的提示 id；換季保留，整個遊戲每一條只說一次
     hint_queue: list[HintNote] = Field(default_factory=list)  # 排著還沒按「知道了」的提示，對話框一次一條；換季不帶
     hints_off: bool = False  # 設定頁的「不再提示」（跟略過新手引導分開，設計 7.3）；換季保留
@@ -1530,6 +1560,7 @@ class BattleRecord(BaseModel):
     location: str  # 地點名稱（決戰是大區名；上一季打的前面加「第 N 季・」）
     kind: Literal["train", "event", "wild", "showdown", "siege", "spar", "raid", "duel", "seal", "arena", "sortie", "ambush", "assassin", "melee"]  # 遊歷／劇情／探索撞上的野怪／全服決戰／跟玩家切磋／截殺（發起或被截殺）／頭目戰／奪璽單挑（玉璽碎片設計 5.9）／出陣（出陣探索與地盤設計；舊戰報的 train 照舊顯示「遊歷」，不遷移）
     event: str = ""  # 劇情戰的事件標題；決戰是決戰的名稱
+    label: str = ""  # 戰報上寫的種類（空的照 battlelog.KIND_WORDS）：序章的「雪恥」、城外的「練功」（新手引導重做）
     opponent: str  # 敵方隊伍名稱；決戰是敵方陣營名
     ours: list[Fighter]  # 我方陣容，第一位是隊長；等級是開打時的等級（決戰不記，是空的）
     tier: str  # 大勝/險勝/僵持/落敗（encounter.EncounterResult.tier）；決戰是結果的標題

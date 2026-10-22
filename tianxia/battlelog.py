@@ -129,7 +129,7 @@ def _title(record: BattleRecord) -> str:
 
 
 def _when(record: BattleRecord, when: Callable[[float], str]) -> str:
-    kind = KIND_WORDS[record.kind] + (f"：{record.event}" if record.event else "")
+    kind = (record.label or KIND_WORDS[record.kind]) + (f"：{record.event}" if record.event else "")
     return f"{when(record.time)}　{kind}"
 
 

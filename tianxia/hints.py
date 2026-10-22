@@ -17,15 +17,17 @@ from .state import GameState, HintNote
 # 設計 5.2 的十八條（第 7 條 h_snubbed 與第 18 條 h_mandate 不看狀態，由事件自己叫 Game._hint），加上 explain-1 的 h_bond（第一次交友、
 # 第一次跟人物談話：情誼有什麼用）；content/hints.json 的 id 只能是這些。觸發條件在 Game._hint_triggers（計畫三 Task 2）
 KNOWN = frozenset({
-    "h_merge", "h_clash", "h_refine_fail", "h_lose", "h_injury", "h_basic_art", "h_snubbed", "h_recruit", "h_free_text",
+    "h_merge", "h_clash", "h_lose", "h_injury", "h_basic_art", "h_snubbed", "h_recruit", "h_free_text",
     "h_road", "h_cap", "h_spectator", "h_foreshadow", "h_event_reveal", "h_promotion", "h_showdown", "h_figure", "h_mandate",
     "h_bond",
+    # 新手引導重做（2026-10-22）：今天的操練練完了（事件型）、練功連輸兩場、心得第一次夠自創、第一次到有酒肆的城、點數沒配又升一級
+    "h_drill_done", "h_field_lose", "h_create", "h_tavern", "h_points",
 })
 
 
 # 不看狀態、由事件發生時自己叫 Game._hint 的三條（被名將打發、玉璽碎片的秘密揭開、第一次交友或談話）；其餘都是狀態提示（Game._hint_triggers 看角色此刻的狀態）。
 # 排隊的限速只管狀態提示：同一時間最多一條在框上或排著（Game._queue_triggered_hints）；事件型的當場排，不吃限速
-EVENT_ONLY = frozenset({"h_snubbed", "h_mandate", "h_bond"})
+EVENT_ONLY = frozenset({"h_snubbed", "h_mandate", "h_bond", "h_drill_done"})
 STATE = KNOWN - EVENT_ONLY
 
 # 提示裡可以寫的數字（explain-1）：句子裡寫 {名字}，上框時換成設定裡的值，句子不寫死數字（設定改了，話跟著改）
@@ -34,7 +36,7 @@ PLACEHOLDER = re.compile(r"\{(\w+)\}")
 
 def values(content: Content) -> dict[str, str]:
     """{名字} → 設定裡的值。"""
-    return {"signature": str(content.config.signature_affinity)}
+    return {"signature": str(content.config.signature_affinity), "create_first": str(content.config.arts.create_first_xinde or content.config.arts.create_xinde)}
 
 
 def unknown(content: Content, text: str) -> list[str]:

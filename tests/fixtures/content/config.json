@@ -1,4 +1,5 @@
 {
+  "recruit_min_affinity": 0,
   "season_days": 2,
   "ollama_url": "http://127.0.0.1:1",
   "ollama_timeout": 3,

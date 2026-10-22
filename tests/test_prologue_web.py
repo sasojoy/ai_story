@@ -258,7 +258,7 @@ def test_the_chips_come_back_at_the_farewell_step(newcomer):
 
 def test_the_chips_are_all_there_outside_the_prologue(content):
     plain = season_one_view(server.main_view(Game.new(content, "路人", rng=random.Random(0))))
-    assert chip_ids(run(plain, "return H.peekBlock(m);")) == ["stance", "board", "quest"]
+    assert chip_ids(run(plain, "return H.peekBlock(m);")) == ["stance", "board", "quest"]  # 測試內容的引導還沒走完：沒有新手目標那一顆
 
 
 # ── 江湖頁其他的塊 ───────────────────────────────────
@@ -473,12 +473,12 @@ def test_the_practice_page_points_at_the_buttons_of_the_step(hut):
 
 
 def test_the_practice_button_is_greyed_with_the_masters_reason(hut):
-    m, x = pages_at(hut, 1)  # 看修練頁那一步：沒叫你練功
-    page = run(m, "return H.pagePractice();", menxia=x)
+    m, x = pages_at(hut, 1)  # 看修練頁那一步：沒叫你練功（點了身上那一門的光點，抽屜裡的練成鈕灰著）
+    page = run(m, "return H.pagePractice();", menxia=x, S={"pdrawer": {"t": "worn", "key": "武學"}})
     assert re.search(r'data-op="practice" data-glow="practice" data-kind="\w+" aria-label="師父這一步沒叫你練功。"[^>]*disabled>', page)
     assert '<p class="train-why">師父這一步沒叫你練功。</p>' in page  # 原因寫在朱印底下那一行
     m, x = pages_at(hut, 4)  # 練到第三成那一步：裝了意境的基礎拳腳就在身上（武學重構：不必先換上），武學那一欄練得下去
-    page = run(m, "return H.pagePractice();", menxia=x)
+    page = run(m, "return H.pagePractice();", menxia=x)  # 師父叫你練：沒點過光點，抽屜也先攤開練得下去的那一門
     assert re.search(r'data-op="practice" data-glow="practice" data-kind="武學" aria-label="練成第\d+成（心得 \d+）"[^>]*><b>練</b><small>心得', page)
 
 
@@ -868,10 +868,12 @@ def _scroll_page(content, *, arts=0, S=None):
 
 
 def test_the_two_worn_arts_are_scroll_cards_with_their_own_buttons(prologue_content):
-    page = _scroll_page(prologue_content)
-    assert page.count('class="acard ') == 2 and page.count('<span class="worn">身上</span>') == 2
-    assert page.count('data-op="practice"') == 2  # 兩張卡各一顆練成鈕，各帶自己那一欄
-    assert 'data-kind="武學"' in page and 'data-kind="內功"' in page
+    page = _scroll_page(prologue_content)  # 招式與絕學稿案第四輪：身上兩門是人形圖上的兩個光點，點了才從底下升起那一張卡
+    assert "pr-sheet" not in page and 'data-act="hero-node" data-kind="art" data-key="武學"' in page and 'data-key="內功"' in page
+    for kind in ("武學", "內功"):
+        sheet = _scroll_page(prologue_content, S={"pdrawer": {"t": "worn", "key": kind}}).split('class="sheet pr-sheet"')[1]
+        assert sheet.count('class="acard') == 1 and '<span class="worn">身上</span>' in sheet
+        assert sheet.count('data-op="practice"') == 1 and f'data-op="practice" data-glow="practice" data-kind="{kind}"' in sheet  # 一顆練成鈕，帶自己那一欄
     assert "lib-filter" not in page and "再列" not in page  # 功法庫少的時候不出篩選
 
 
@@ -887,7 +889,7 @@ def test_a_big_library_can_be_filtered_and_shows_a_page_at_a_time(prologue_conte
     every = _scroll_page(prologue_content, arts=30, S={"libAll": True})
     assert "再列" not in every and every.count('class="art libr') >= 30
     inner = _scroll_page(prologue_content, arts=30, S={"libFilter": "內功", "libAll": True})
-    assert all("內功・" in row for row in re.findall(r'class="art libr[^>]*>.*?</button>', inner))
+    assert 'lib-kind">內功' in inner and 'lib-kind">武學' not in inner  # 照種類分段（招式與絕學稿案第四輪）：只剩內功那一段
 
 
 def test_the_cards_draw_the_ten_levels_as_cells_not_circles(prologue_content):

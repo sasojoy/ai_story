@@ -10,13 +10,13 @@
 4. 成形（roll_colors，立意之後馬上擲）：照權重擲四格顏色——第一格一定是權重最高那一路的單色（玩家引導的方向），
    其餘每格照 create_slot_odds 擲單色、雙色、任色。意讀出「不偏」時任色的機會加倍（create_neutral_any_scale）。
    不滿意可以回頭重擺或重寫一次（create_redo，免費）；亂數是「自創｜天機｜名號｜第幾門｜第幾擲」，不碰 Game.rng。
-5. 立名（finish）：自己取名；這一步才付心得。自創的一律是 Config.arts.create_grade（上品，Joy 2026-10-21「自創武學應該保底
+5. 立名（finish）：自己取名（心得在立意那一刻收，Joy 2026-10-21；這一版之前成形、還沒付的單子在這裡收）。自創的一律是 Config.arts.create_grade（上品，Joy 2026-10-21「自創武學應該保底
    都是上品」；多付心得加分拿掉了，「多付心得很莫名其妙」），四格全開；意分＋赤璋只定底子（power_scale_of）；
    威力從第一成起練；注解就是那一句意。
-   同時自動配一個小戰法（Joy 2026-10-21 決策卡選「自動配」，minor_for）：照開著的格子的主屬性，從學來的武學裡挑一門同種類、
-   同屬性的借它的小戰法；成形之後頁面上就看得到，立名時照樣定下來（亂數只看名號、第幾門、種類）。
+   這一門自己長出一招（以意成招，tianxia/moves.py）：擺式定勢（stance_of）、主屬性定路數、意分定火候（生熟透），
+   模型照意起的招名玩家可改；成形時有稀有路數那一格照 move_rare_odds 擲。開著的格子全單色是純、全任色是渾（打起來功效多一截）。
 
-價錢：Config.arts.create_xinde × create_step^（這一季已自創幾門），一季最多 create_per_season 門。
+價錢：Config.arts.create_xinde × create_step^（這一季已自創幾門）；這一季第一門是 create_first_xinde（有寫的話）；create_per_season 0 是不限門數。
 只改狀態與回傳訊息；數字全由這裡算，模型只給一個分數與兩個屬性字。
 """
 from __future__ import annotations
@@ -28,11 +28,10 @@ from dataclasses import dataclass
 
 from pydantic import BaseModel, Field
 
-from . import annals, arts as arts_mod, library, naming, tactics, team, treasures
+from . import annals, arts as arts_mod, library, might, moves, naming, tactics, team, treasures
 from .martial_arts import ATTRIBUTES, QUALITY_BASE_POWER, QUALITY_TOP_POWER, MartialArt, scaled
-from .models import Content
+from .models import Content, TacticDef
 from .ollama_client import OllamaClient
-from .rules import add_chronicle
 from .state import CreateDraft, GameState
 from .world_state import WorldStateStore
 
@@ -66,15 +65,23 @@ BUSY_LINE = "你手上已經有一門還沒成形的功夫，先把它立好或�
 KIND_LINE = "要立的是內功還是武學？"
 FORM_LINE = "{kind}要挑一種：{forms}。"
 INTENT_LINE = f"「意」要 {INTENT_MIN}～{INTENT_MAX} 個字，一句話說這門功夫的神。"
+MOVE_MIN, MOVE_MAX = 2, 4  # 招名幾個字
+SAY_MIN, SAY_MAX = 4, 24  # 模型寫的那一句幾個字
+MOVE_LINE = f"招名要 {MOVE_MIN}～{MOVE_MAX} 個中文字。"  # 待 joy 潤
 NO_REDO = "已經重來過了，這一回就照這個形立名吧（或擱下重起）。"  # 待 joy 潤
 NAME_TAKEN = "這個名字已經有人用了，換一個。"
 BEGUN_LINE = "你握起{form}，想立一門自己的{kind}。先擺個架式。"  # 待 joy 潤
 POSED_LINE = "你擺定了這一式：{read}。"  # 待 joy 潤
 FORMED_LINE = "你閉目良久，「{intent}」——這門功夫有了形：{colors}。"  # 待 joy 潤
 BACK_LINE = "你散了架式，重新來過。"  # 待 joy 潤
-CREATED_LINE = "你開宗立派，自創了一門{kind}【{name}】（{grade}）！"  # 待 joy 潤
-CHRONICLE_LINE = "{who}自創了一門{kind}【{name}】。"
+CREATED_LINE = "你自創了一門{kind}【{name}】。"  # 待 joy 潤
+MOVE_SHOWN = "招：{card}"  # 待 joy 潤
 CANCELLED = "你把這門還沒成形的功夫擱下了。"
+CANCELLED_PAID = "你把這門功夫擱下了。立意時付的 {paid} 心得不退。"  # 待 joy 潤
+REROLLED = "你又把「{intent}」推演了一遍——這門功夫換了個形：{colors}。"  # 待 joy 潤
+NO_REROLL = "手上沒有重悟帖：萬寶閣買得到。"  # 待 joy 潤
+REROLL_CAPPED = "這一門已經重骰 {cap} 次，不能再骰了：留下這個形，或回頭重來。"  # 待 joy 潤
+REROLL_STEP = "要先立了意、成了形，才能重骰。"  # 待 joy 潤
 FLAT_LINE = "此式平正，不偏一路"  # 待 joy 潤
 LEAN_TEXT = {"正": "，帶一股正氣", "邪": "，帶一股邪氣", "無": ""}  # 待 joy 潤
 
@@ -83,11 +90,13 @@ LEAN_TEXT = {"正": "，帶一股正氣", "邪": "，帶一股邪氣", "無": ""
 
 
 def on(content: Content) -> bool:
-    return content.config.arts.create_xinde > 0 and content.config.arts.create_per_season > 0
+    return content.config.arts.create_xinde > 0  # create_per_season 0＝不限門數（招式與絕學稿案第二輪）
 
 
 def price(state: GameState, content: Content) -> int:
     cfg = content.config.arts
+    if cfg.create_first_xinde and state.player.created_count == 0:
+        return cfg.create_first_xinde  # 這一季第一門（Joy 2026-10-21）
     return int(round(cfg.create_xinde * (cfg.create_step ** state.player.created_count)))
 
 
@@ -102,7 +111,8 @@ def allowed(state: GameState, content: Content) -> str | None:
         return IN_PROLOGUE
     if state.player.naming is not None:
         return NAMING_FIRST
-    if state.player.created_count >= cfg.create_per_season:
+    paid = state.player.creating is not None and state.player.creating.paid  # 立意付過了：這一門已經數進去，照樣走完
+    if cfg.create_per_season and not paid and state.player.created_count >= cfg.create_per_season:
         return CAP_LINE.format(n=state.player.created_count)
     if library.full(state, content):
         return FULL_LINE
@@ -219,8 +229,8 @@ def joints(pose: dict[str, float]) -> dict[str, tuple[float, float]]:
     }
 
 
-def pose_scores(pose: dict[str, float]) -> dict[str, float]:
-    """姿勢讀出來的偏向（只有剛柔快慢虛實；陰陽靠兵器與意）。"""
+def _features(pose: dict[str, float]) -> tuple[float, float, bool, float, bool, float]:
+    """（手伸多遠, 手抬多高, 雙手收胸, 馬步多寬, 提腿, 前後傾）——偏向與勢都照它讀（跟網頁 poseRead 同一套幾何）。"""
     j = joints(pose)
     lh, rh, lf, rf = j["lHa"], j["rHa"], j["lFt"], j["rFt"]
     reach = max(abs(rh[0] - CX), abs(lh[0] - CX)) / (UA + FA)
@@ -228,7 +238,24 @@ def pose_scores(pose: dict[str, float]) -> dict[str, float]:
     tucked = math.hypot(rh[0] - CX, rh[1] - (SY + 20)) < 30 and math.hypot(lh[0] - CX, lh[1] - (SY + 20)) < 30
     spread = abs(lf[0] - rf[0]) / (TH + SH)
     lift = min(lf[1], rf[1]) < HIPY + TH * 1.3
-    lean = pose.get("t", 0.0)
+    return reach, high, tucked, spread, lift, pose.get("t", 0.0)
+
+
+def stance_of(pose: dict[str, float]) -> str:
+    """以意成招的「勢」（moves.STANCE_TIMING）：提腿是變勢；雙手收胸、或馬步寬而手不出是守勢；手伸得遠或身子前傾是攻勢；其餘起勢。"""
+    reach, _high, tucked, spread, lift, lean = _features(pose)
+    if lift:
+        return "變勢"
+    if tucked or (spread > 1.1 and reach < 0.95):
+        return "守勢"
+    if reach >= 1.0 or lean <= -10:
+        return "攻勢"
+    return "起勢"
+
+
+def pose_scores(pose: dict[str, float]) -> dict[str, float]:
+    """姿勢讀出來的偏向（只有剛柔快慢虛實；陰陽靠兵器與意）。"""
+    reach, high, tucked, spread, lift, lean = _features(pose)
     s = {a: 0.0 for a in ("剛", "柔", "快", "慢", "實", "虛")}
     s["剛"] += max(0.0, reach - 0.95) * 8 + max(0.0, high - 0.15) * 2
     if tucked:
@@ -291,7 +318,7 @@ def intent_problem(state: GameState, content: Content, text: str) -> str | None:
     if not (INTENT_MIN <= len(clean_intent(text)) <= INTENT_MAX):
         return INTENT_LINE
     need = price(state, content)
-    if _xinde(state) < need:
+    if not draft.paid and _xinde(state) < need:  # 付過了（成形之後回頭重立意）不再收
         return XINDE_LINE.format(price=need, have=_xinde(state))
     return None
 
@@ -311,15 +338,19 @@ class IntentReading(BaseModel):
     score: int = DEFAULT_SCORE
     attributes: list[str] = Field(default_factory=list)
     lean: str = "無"
+    move: str = ""  # 以意成招：模型照這一句意替招取的名字（二到四字；立名時玩家可改）
+    say: str = ""  # 招發動時那一句（名字後面接的話，十到二十字）
 
 
-READ_PREDICT = 120
+READ_PREDICT = 200
 SYSTEM_PROMPT = (
     "你是武俠小說裡評判武功立意的宗師。玩家要自創一門功夫，已經挑好兵器、擺好架式，最後寫下一句「意」。\n"
     "1. score：這一句意寫得好不好，0～100 的整數。有神、有象、合乎武理給高分；空洞、灌水、亂寫、跟功夫無關給低分。\n"
     "2. attributes：這一句意的神韻偏向哪幾路，從「陰、陽、剛、柔、快、慢、虛、實」裡挑零到兩個字，最像的放前面；"
     "看不出偏向就給空清單。陰是陰柔詭譎、陽是光明熾烈、剛是剛猛、柔是綿柔借力、快是迅捷、慢是沉穩後發、虛是虛實變幻、實是紮實厚重。\n"
     "3. lean：這一句意是正派、邪派還是不分，只回「正」「邪」「無」其中一個。\n"
+    "4. move：照這一句意替這門功夫的殺招取一個名字，二到四個中文字，不要用現成武俠小說裡的招名。\n"
+    "5. say：這一招使出來時的一句描寫，十到二十字，主詞省略（例：「腳下一錯追了上去」），不寫數字、不寫對手的名字。\n"
     "只回 JSON。"
 )
 
@@ -344,7 +375,11 @@ def clean_reading(reading: IntentReading | None) -> IntentReading:
         return IntentReading()
     attrs = [a for a in dict.fromkeys(str(x).strip() for x in (reading.attributes or [])) if a in ATTRIBUTES][:READ_MAX]
     lean = reading.lean if reading.lean in LEANS else "無"
-    return IntentReading(score=clamp_score(reading.score), attributes=attrs, lean=lean)
+    move = naming.clean_name(reading.move or "")
+    move = move if MOVE_MIN <= len(move) <= MOVE_MAX and all("\u4e00" <= ch <= "\u9fff" for ch in move) else ""
+    say = " ".join(str(reading.say or "").split())
+    say = say if SAY_MIN <= len(say) <= SAY_MAX and not any(ch.isdigit() for ch in say) and "{" not in say else ""
+    return IntentReading(score=clamp_score(reading.score), attributes=attrs, lean=lean, move=move, say=say)
 
 
 def fallback_read(content: Content, text: str) -> IntentReading:
@@ -414,16 +449,23 @@ def seed_of(state: GameState, world: WorldStateStore, draft: CreateDraft) -> str
     return f"自創|{secret_recipes.tianji_of(world)}|{state.player.name}|{state.player.created_count}|{draft.rolls}"
 
 
+def top_of(content: Content, draft: CreateDraft) -> str:
+    """主屬性：權重最高的那一路（武學的屬性、招的路數都照它）。"""
+    w = weights(content, draft)
+    return max(ATTRIBUTES, key=lambda a: (w[a], -ATTRIBUTES.index(a)))
+
+
 def roll_colors(content: Content, draft: CreateDraft, rng: random.Random) -> list[list[str]]:
-    """四格的顏色：第一格是權重最高那一路的單色；其餘照 create_slot_odds 擲單、雙、任（意不偏時任色加倍）。"""
+    """每一格的顏色，照 create_slot_odds 擲單、雙、任（意不偏時任色加倍）。第一格單色、雙色都以主屬性打頭（定向）；
+    第一格也擲，所以三格全單色（純）約 0.55³、三格全任色（渾）約 0.1³（招式與絕學稿案「稀有」）。"""
     cfg = content.config.arts
     w = weights(content, draft)
-    top = max(ATTRIBUTES, key=lambda a: (w[a], -ATTRIBUTES.index(a)))
+    top = top_of(content, draft)
     odds = {k: float(v) for k, v in cfg.create_slot_odds.items()}
     if not draft.read:
         odds["全"] = odds.get("全", 0.0) * cfg.create_neutral_any_scale
-    out: list[list[str]] = [[top]]
-    for _ in range(max(0, cfg.create_slots - 1)):
+    out: list[list[str]] = []
+    for i in range(max(1, cfg.create_slots)):
         roll = rng.random() * sum(odds.values())
         shape = "全"
         acc = 0.0
@@ -433,13 +475,45 @@ def roll_colors(content: Content, draft: CreateDraft, rng: random.Random) -> lis
                 shape = k
                 break
         if shape == "單":
-            out.append([_pick(rng, w)])
+            out.append([top] if i == 0 else [_pick(rng, w)])
         elif shape == "雙":
-            first = _pick(rng, w)
+            first = top if i == 0 else _pick(rng, w)
             out.append([first, _pick(rng, w, skip=first)])
         else:
             out.append([])
     return out
+
+
+# ── 撞出來的稀有（招式與絕學稿案「強不強、稀有不稀有」）────────────────
+
+
+PURE, WHOLE = moves.PURE, moves.WHOLE
+CLEAR, RARE = "透", "奇"  # 待 joy 潤
+MARK_TEXT = {PURE: "三格全單色", WHOLE: "三格全任色", CLEAR: "招已透", RARE: "稀有路數"}  # 待 joy 潤
+TIER_TEXT = {0: "凡", 1: "佳", 2: "珍", 3: "神"}  # 跟意境的品相同一條梯子（Joy 2026-10-21「那武學呢 有分？」）
+
+
+purity = moves.purity
+
+
+def marks_of(colors: list[list[str]], fire: str | None, rare: bool) -> list[str]:
+    """撞到的稀有：純或渾、招透、稀有路數。"""
+    out = [m for m in (purity(colors),) if m]
+    if fire == "透":
+        out.append(CLEAR)
+    if rare:
+        out.append(RARE)
+    return out
+
+
+def tier_of(marks: list[str]) -> str | None:
+    """品相：一樣都沒撞到「凡」、一樣「佳」、兩樣「珍」、三樣「神」。"""
+    return TIER_TEXT[min(len(marks), 3)]
+
+
+def look_text(marks: list[str]) -> str:
+    """卡上那一行品相：「珍・三格全單色、招已透」；什麼都沒撞到是「凡」。"""
+    return "・".join([tier_of(marks)] + (["、".join(MARK_TEXT[m] for m in marks)] if marks else []))
 
 
 def colors_text(colors: list[list[str]]) -> str:
@@ -449,7 +523,9 @@ def colors_text(colors: list[list[str]]) -> str:
 def set_intent(
     state: GameState, content: Content, world: WorldStateStore, text: str, reading: IntentReading | None = None,
 ) -> list[str]:
-    """C 段（或直接呼叫）：記下意與讀出來的東西，馬上成形（擲四格顏色）。reading 沒給照關鍵字表讀。只改單子、不收錢。"""
+    """C 段（或直接呼叫）：記下意與讀出來的東西，馬上成形（擲四格顏色）。reading 沒給照關鍵字表讀。
+    心得在這一刻收（Joy 2026-10-21「應該立意按下去就要收吧，因為那時候就算是骰出來武學的品質了」）：一張單子只收一次
+    （draft.paid；成形之後回頭重立意不再收），這一季自創的門數也在這裡數（price 的第一門優惠照它）；之後擱下不退。"""
     problem = intent_problem(state, content, text)
     if problem is not None:
         return [problem]
@@ -459,10 +535,53 @@ def set_intent(
     draft.read = list(reading.attributes)
     draft.lean = reading.lean
     draft.score = reading.score
-    draft.colors = roll_colors(content, draft, random.Random(seed_of(state, world, draft)))
+    draft.move = reading.move
+    draft.say = reading.say
+    _form(state, content, world, draft)
+    msgs = [FORMED_LINE.format(intent=draft.intent, colors=colors_text(draft.colors))]
+    move = draft_move(state, content, draft)
+    if move is not None:
+        msgs.append(MOVE_SHOWN.format(card=tactics.card_text(move, state.player.name[:1] or tactics.MINOR_TITLE)))
+    if not draft.paid:
+        p = state.player
+        need = price(state, content)
+        p.stats["xinde"] = _xinde(state) - need
+        p.created_count += 1
+        draft.paid = need
+        msgs.append(f"心得 -{need}")
+    return msgs
+
+
+def _form(state: GameState, content: Content, world: WorldStateStore, draft: CreateDraft) -> None:
+    """成形：照兵器、姿勢、意擲每一格的顏色與變招（種子含 draft.rolls，每擲一次換一個）。"""
+    rng = random.Random(seed_of(state, world, draft))
+    draft.colors = roll_colors(content, draft, rng)
+    timing = moves.timing_of(draft.kind, stance_of(draft.pose))
+    draft.rare = moves.has_rare(content, top_of(content, draft), timing) and rng.random() < content.config.arts.move_rare_odds
     draft.rolls += 1
     draft.step = "name"
-    return [FORMED_LINE.format(intent=draft.intent, colors=colors_text(draft.colors))]
+
+
+def reroll(state: GameState, content: Content, world: WorldStateStore) -> list[str]:
+    """重悟帖（萬寶閣，Joy 2026-10-21「弄個商城道具可以直接重骰，有上限」）：成了形還沒立名，用掉一張，同一個架式與意
+    直接再擲一次顏色與變招（火候照意分，不變）；不收心得、不用掉免費的重來。帖子買幾張都行，一門最多重骰
+    Config.arts.create_reroll_cap 次（Joy「一次創造武學的時候可能最多重骰3或是5」）。"""
+    draft = state.player.creating
+    if draft is None:
+        return [NO_DRAFT]
+    if draft.step != "name" or not draft.colors:
+        return [REROLL_STEP]
+    p = state.player
+    cap = content.config.arts.create_reroll_cap
+    if draft.rerolled >= cap:
+        return [REROLL_CAPPED.format(cap=cap)]
+    if p.create_rerolls <= 0:
+        return [NO_REROLL]
+    p.create_rerolls -= 1
+    draft.rerolled += 1
+    _form(state, content, world, draft)
+    return [REROLLED.format(intent=draft.intent, colors=colors_text(draft.colors)),
+            f"重悟帖 -1（剩 {p.create_rerolls} 張；這一門還能重骰 {cap - draft.rerolled} 次）"]
 
 
 def back(state: GameState, content: Content, to: str) -> list[str]:
@@ -477,19 +596,22 @@ def back(state: GameState, content: Content, to: str) -> list[str]:
             return [NO_REDO]
         draft.redo -= 1
         draft.colors = []
+        draft.rare = False
     draft.step = to
     return [BACK_LINE]
 
 
-# ── 第五步：立名、擲品級、登記 ───────────────────────────
+# ── 第五步：立名、登記 ───────────────────────────
 
 
 def seal_points(state: GameState, content: Content) -> int:
-    """玉璽赤璋（fuse_points）：加在自創的意分上（夾之前加，品級機率照它挪）。"""
+    """玉璽赤璋（fuse_points）：加在自創的意分上（夾 0～100 之前加），底子威力的倍數（power_scale_of）跟著往上推。
+    品級不擲，自創的一律是 create_grade（武學重構之後合成不擲品質，PM 2026-10-21 合 develop 時定：改版 +10、子開關關著照舊 +5）。"""
     return int(treasures.amount(state, content, "fuse_points"))
 
 
-POWER_LINE = "底子：同品級威力的 {pct}%（意寫得越好越厚）。"  # 待 joy 潤
+MIGHT_LINE = "換上這一門：戰力 {now} → {first}，練滿 {full}。"  # 待 joy 潤
+DRAFT_ID = "（成形中）"  # 算戰力時那一門還沒登記的暫名（不給玩家看）
 
 
 def power_scale_of(content: Content, points: int) -> float:
@@ -509,7 +631,7 @@ def name_problem(state: GameState, content: Content, world: WorldStateStore, nam
     if problem is not None:
         return problem
     need = price(state, content)
-    if _xinde(state) < need:
+    if not draft.paid and _xinde(state) < need:  # 立意時付過了，立名不再看心得
         return XINDE_LINE.format(price=need, have=_xinde(state))
     return None
 
@@ -519,65 +641,76 @@ def affinity_of(colors: list[list[str]]) -> list[str]:
     return list(dict.fromkeys(a for c in colors for a in c))
 
 
-NO_MINOR_KINDS = ("marshal",)  # 同袍一心要有部下才有用：自動配不配它
+def fire_of_draft(state: GameState, content: Content, draft: CreateDraft) -> str:
+    """火候：意分加赤璋（夾之前）照 move_fire_cuts 分生、熟、透。"""
+    return moves.fire_of(content, draft.score + seal_points(state, content))
 
 
-def minor_pool(content: Content, kind: str, attribute: str) -> list[str]:
-    """自動配挑得到的那幾門（帶小戰法的內容武學 id）：同種類同屬性的先；沒有就放寬到同屬性、再到同種類。"""
-    rows = [(sid, s) for sid, s in content.skills.items()
-            if s.tactic is not None and s.tactic.minor and s.tactic.kind not in NO_MINOR_KINDS]
-    for ok in (lambda s: s.kind == kind and s.attribute == attribute, lambda s: s.attribute == attribute,
-               lambda s: s.kind == kind):
-        pool = sorted(sid for sid, s in rows if ok(s))
-        if pool:
-            return pool
-    return sorted(sid for sid, _ in rows)
-
-
-def minor_for(state: GameState, content: Content, draft: CreateDraft) -> str | None:
-    """這一份草稿會配到哪一門的小戰法（成形之後才有；沒成形是 None）。主屬性＝開著的格子裡第一個出現的屬性。"""
+def draft_move(state: GameState, content: Content, draft: CreateDraft, name: str | None = None) -> TacticDef | None:
+    """這一份草稿會長出哪一招（成形之後才有；沒成形是 None）：路數＝主屬性、勢照姿勢、火候照意分。
+    招名照 name（立名時玩家給的）、模型起的、表上的預設名的順序；照練開之後的數算（前幾成招還生，戰鬥時才打折）。"""
     if not draft.colors:
         return None
-    affinity = affinity_of(draft.colors[: arts_mod.slot_count(content, content.config.arts.create_grade)])
-    pool = minor_pool(content, draft.kind, affinity[0] if affinity else "")
-    if not pool:
-        return None
-    seed = f"{state.player.name}|{state.player.created_count}|{draft.kind}"
-    return pool[zlib.crc32(seed.encode("utf-8")) % len(pool)]
+    return moves.build(
+        content, draft.kind, top_of(content, draft), stance_of(draft.pose), fire_of_draft(state, content, draft),
+        draft.rare, name or draft.move or None, draft.say,
+    )
 
 
-def finish(
-    state: GameState, content: Content, world: WorldStateStore, name: str,
-) -> tuple[MartialArt | None, list[str]]:
-    """取名、登記、付錢；名字被人用了回 (None, [NAME_TAKEN])，什麼都不收。品級一律 create_grade。"""
-    problem = name_problem(state, content, world, name)
-    if problem is not None:
-        return None, [problem]
-    draft = state.player.creating
-    clean = naming.clean_name(name)
-    points = draft.score + seal_points(state, content)
+def draft_art(state: GameState, content: Content, draft: CreateDraft, name: str, move: str | None = None) -> MartialArt:
+    """這一份成形的單子立名之後是哪一門武學（還沒登記）：finish 照它登記，成形那一步拿它算換上後的戰力（might.with_new）。"""
     grade = content.config.arts.create_grade
-    affinity = affinity_of(draft.colors[: arts_mod.slot_count(content, grade)])
+    attribute = top_of(content, draft)
+    affinity = list(dict.fromkeys([attribute, *affinity_of(draft.colors[: arts_mod.slot_count(content, grade)])]))
+    card = draft_move(state, content, draft, move)
     art = MartialArt(
-        id=clean, name=clean, kind=draft.kind, quality="下品", attribute=affinity[0] if affinity else "",
+        id=name, name=name, kind=draft.kind, quality="下品", attribute=attribute,
         base_power=QUALITY_BASE_POWER["下品"], top_power=QUALITY_TOP_POWER["下品"], origin="created",
         creator=state.player.name, creator_shown=state.player.name, note=draft.intent, lean=draft.lean,
         affinity=affinity, slot_colors=[list(c) for c in draft.colors], pose=dict(draft.pose),
         weapon=draft.form if draft.kind == "武學" else None, method=draft.form if draft.kind == "內功" else None,
-        tactic_from=minor_for(state, content, draft),
+        move_name=card.name if card is not None else None, move_say=draft.say, move_fire=fire_of_draft(state, content, draft),
+        move_rare=draft.rare, move_stance=stance_of(draft.pose),
     )
-    art = scaled(art, power_scale_of(content, points))
+    return scaled(art, power_scale_of(content, draft.score + seal_points(state, content)))
+
+
+def move_problem(content: Content, world: WorldStateStore, name: str) -> str | None:
+    """招名過不過得了：二到四個中文字，過一般的名字過濾（禁用名單、人物、內容武學……）。招名不必全服獨一。"""
+    if not (MOVE_MIN <= len(name) <= MOVE_MAX):
+        return MOVE_LINE
+    return naming.name_problem(name, content, person=world.is_character_name)
+
+
+def finish(
+    state: GameState, content: Content, world: WorldStateStore, name: str, move: str | None = None,
+) -> tuple[MartialArt | None, list[str]]:
+    """取名、登記、付錢；名字被人用了回 (None, [NAME_TAKEN])，什麼都不收。品級一律 create_grade。
+    move 是招名（空的照模型起的、再沒有照表的預設名）。"""
+    problem = name_problem(state, content, world, name)
+    if problem is not None:
+        return None, [problem]
+    move_name = naming.clean_name(move or "")
+    if move_name and (problem := move_problem(content, world, move_name)) is not None:
+        return None, [problem]
+    draft = state.player.creating
+    grade = content.config.arts.create_grade
+    art = draft_art(state, content, draft, naming.clean_name(name), move_name or None)
+    card = draft_move(state, content, draft, move_name or None)
     if not world.claim_skill_name(art):
         return None, [NAME_TAKEN]
     p = state.player
-    need = price(state, content)
-    p.stats["xinde"] = _xinde(state) - need
-    p.created_count += 1
+    need = 0 if draft.paid else price(state, content)  # 立意時收過了；這一版之前成形、還沒付的單子在這裡收
+    if need:
+        p.stats["xinde"] = _xinde(state) - need
+        p.created_count += 1
     p.creating = None
-    msgs = [CREATED_LINE.format(kind=art.kind, name=art.name, grade=grade), art.note]
+    msgs = [CREATED_LINE.format(kind=art.kind, name=art.name), art.note]
+    if card is not None:
+        msgs.append(MOVE_SHOWN.format(card=tactics.card_text(card, tactics.title_of(card, art))))
     msgs += library.store_art(state, art, grade)
-    msgs.append(f"心得 -{need}")
-    add_chronicle(state, CHRONICLE_LINE.format(who=p.name, kind=art.kind, name=art.name))
+    if need:
+        msgs.append(f"心得 -{need}")
     annals.note(state, content, annals.DEED, f"自創了一門{art.kind}【{art.name}】。", 3)
     if art.id in p.arts:
         note = team.compare_with_worn(state, content, world, art)
@@ -586,10 +719,11 @@ def finish(
 
 
 def cancel(state: GameState) -> list[str]:
-    if state.player.creating is None:
+    draft = state.player.creating
+    if draft is None:
         return [NO_DRAFT]
     state.player.creating = None
-    return [CANCELLED]
+    return [CANCELLED_PAID.format(paid=draft.paid) if draft.paid else CANCELLED]
 
 
 def prune(state: GameState, content: Content) -> None:
@@ -610,12 +744,16 @@ def view(state: GameState, content: Content, world: WorldStateStore) -> dict:
     draft = state.player.creating
     base = {
         "on": on(content), "problem": allowed(state, content), "price": price(state, content), "xinde": _xinde(state),
-        "left": max(0, cfg.create_per_season - state.player.created_count), "kinds": list(KINDS),
+        # 一季還能立幾門：create_per_season 0 是不限（None）
+        "left": max(0, cfg.create_per_season - state.player.created_count) if cfg.create_per_season else None,
+        "kinds": list(KINDS),
         "forms": {k: [{"key": f.key, "blurb": f.blurb, "bias": dict(f.bias)} for f in forms_of(content, k)] for k in KINDS},
         "presets": [{"name": p.name, "angles": {k: float(p.angles.get(k, 0.0)) for k in POSE_KEYS}} for p in content.create_forms.presets],
         "intent_max": INTENT_MAX, "grade": cfg.create_grade,
         "slots": {q: arts_mod.slot_count(content, q) for q in ("下品", "中品", "上品")},
         "step": "form" if draft is None else draft.step, "draft": None,
+        "rerolls": state.player.create_rerolls,  # 手上的重悟帖（萬寶閣）
+        "reroll_cap": cfg.create_reroll_cap,  # 一門最多重骰幾次
     }
     if draft is None:
         return base
@@ -625,7 +763,26 @@ def view(state: GameState, content: Content, world: WorldStateStore) -> dict:
         "read_text": ("意偏" + "、".join(draft.read) if draft.read else "意不偏一路") + LEAN_TEXT.get(draft.lean, ""),
         "colors": [list(c) for c in draft.colors], "colors_text": [arts_mod.color_text(c) for c in draft.colors],
         "redo": draft.redo,
-        "power": POWER_LINE.format(pct=round(power_scale_of(content, draft.score + seal_points(state, content)) * 100)),
-        "tactic": tactics.card_text(t, state.player.name[:1] or tactics.MINOR_TITLE) if (t := tactics.of(content, minor_for(state, content, draft))) is not None else "",
+        "paid": draft.paid,  # 立意時付了多少心得（0＝還沒付）
+        "reroll_left": max(0, content.config.arts.create_reroll_cap - draft.rerolled),  # 這一門還能重骰幾次
+        "power": "",
     }
+    if draft.colors:  # 成形了：換上這一門的戰力（招式與絕學稿案第二輪：付心得之前就知道值不值）
+        mine = might.now(state, content, world)
+        first, full = might.with_new(state, content, world, draft_art(state, content, draft, DRAFT_ID), cfg.create_grade)
+        base["draft"]["power"] = MIGHT_LINE.format(now=mine, first=first, full=full)
+        base["draft"]["might"] = {"now": mine, "first": first, "full": full}
+    stance = stance_of(draft.pose)
+    base["draft"]["stance"] = stance  # 擺式讀出的勢（攻勢／守勢／變勢／起勢）
+    base["draft"]["timing"] = moves.timing_of(draft.kind, stance)
+    move = draft_move(state, content, draft)
+    fire = fire_of_draft(state, content, draft) if draft.colors else None
+    marks = marks_of(draft.colors, fire, draft.rare) if draft.colors else []
+    base["draft"].update({
+        # 成形之後長出來的招：蓋自己名號第一個字的私印，照練開之後的數算
+        "tactic": tactics.card_text(move, state.player.name[:1] or tactics.MINOR_TITLE) if move is not None else "",
+        "move": move.name if move is not None else "", "say": move.say if move is not None else "",
+        "fire": fire, "look": look_text(marks) if draft.colors else "", "tier": tier_of(marks) if draft.colors else None, "marks": marks,
+        "seal": state.player.name[:1],
+    })
     return base

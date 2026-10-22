@@ -1,0 +1,21 @@
+diff --git a/web/app.js b/web/app.js
+index dfefd406..7cdc2430 100644
+--- a/web/app.js
++++ b/web/app.js
+@@ -1846,8 +1846,15 @@
+           <button class="${S.moveMode === x.id ? "on" : ""}" data-act="move-mode" data-mode="${x.id}" aria-pressed="${S.moveMode === x.id}">${x.name}</button>`).join("")}</div>
+         <div class="options">${moves.map((o) => `<button class="btn go" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}>
+           <span class="k">→</span><span>${esc(o.label)}</span></button>`).join("")}</div></div>`;
++    // 【草圖甲】城裡練功灰著（「…最近的在某地」）時，換成一顆亮著的「往某地練功（步行約 N 分鐘）」：按了就是那一條「前往」（待 joy 潤）
++    const practiceGo = (o) => {
++      const near = o.id === "explore:practice" && !o.enabled ? /最近的在(.+?)）$/.exec(o.label) : null;
++      const go = near && moves.find((x) => x.enabled && x.label.startsWith(`前往 ${near[1]}（`));
++      return go ? `
++          <button class="btn go practice-go" data-act="choose" data-id="${esc(go.id)}"><span class="k">→</span><span>往${esc(near[1])}練功（${esc(optParts(go)[1])}）</span></button>` : "";
++    };
+     const exploreCard = !exploreOpen ? "" : `<div class="card act-explore"><div class="options">${modes.map((o) => o.id === GATHER_ID && branches.length
+-      ? gatherWheel(o, branches) : `
++      ? gatherWheel(o, branches) : practiceGo(o) || `
+           <button class="btn" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}><span>${esc(o.label)}</span></button>`).join("")}</div></div>`;
+     // 其他只在此地才有的行動（招募、投靠、多出來的求見）收在摺疊裡，不佔行動列的高度。
+     // 入伍段要你按的那一顆收在這裡（巡哨、傳道、保境安民、接糧車……，伺服器在框上帶的 guide.glow，FB-093）：那一步在這一處開頭摺疊先打開

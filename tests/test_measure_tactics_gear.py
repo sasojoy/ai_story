@@ -123,9 +123,10 @@ def test_ring_share_without_the_new_arguments_is_unchanged(m, content):
     """ring_share 多了 hp_a、hp_b（螭首用），不帶時跟加之前一模一樣（改之前照同一份內容量下的三個數）。"""
     share = m.ring_share(content, 20)
     assert share([], []) == 0.45454545454545453
-    # 武學重構合進來之後 full_kit 換成槽裝滿的那一套、slot_kit 換成 slots_kit：照合併當下（2026-10-21）重抄
-    assert share(m.full_kit(content, 0), m.self_kit(content, 0)) == 0.8333333333333334
-    assert share(m.slots_kit(content, 0, "中品", 2), m.self_kit(content, 0)) == 0.5454545454545454
+    # 武學重構合進來之後 full_kit 換成槽裝滿的那一套、slot_kit 換成 slots_kit：照合併當下（2026-10-21）重抄；
+    # 招式與絕學稿案二～四批合進 main（2026-10-21，純／渾與後勁改了整套的手感）再抄一次
+    assert share(m.full_kit(content, 0), m.self_kit(content, 0)) == 0.7941176470588235
+    assert share(m.slots_kit(content, 0, "中品", 2), m.self_kit(content, 0)) == 0.4864864864864865
     assert m.ring_share(content, 20, hp_a=1000, hp_b=1000)([], []) == share([], [])
 
 

@@ -103,10 +103,13 @@ def annal_line(content: Content, item: Equipment, via: str) -> str:
 ENTRY_TEXT = "{noun}・屬{attribute}・{general}的本命兵器，{how}，在{owner}手上"
 
 
-def book_entries(content: Content, records: list[tuple[int, dict[str, SignatureClaim]]]) -> list[tuple[int, str, str]]:
-    """同 book_rows，拆成（季數, 名字, 其餘）給榜單畫。"""
+REF = "本命|"  # 榜單神器譜裡本命兵器那一筆的鍵：「本命|人物 id」（leaderboard.gear_card 照它找）
+
+
+def book_entries(content: Content, records: list[tuple[int, dict[str, SignatureClaim]]]) -> list[tuple[int, str, str, str]]:
+    """同 book_rows，拆成（季數, 名字, 其餘, 鍵）給榜單畫；鍵是 REF＋人物 id。"""
     table = {arm.character: arm for arm in content.gear.signature_arms}
-    out: list[tuple[int, str, str]] = []
+    out: list[tuple[int, str, str, str]] = []
     for season, claims in records:
         for cid, claim in claims.items():
             arm = table.get(cid)
@@ -115,7 +118,7 @@ def book_entries(content: Content, records: list[tuple[int, dict[str, SignatureC
             general = content.characters[cid].name if cid in content.characters else cid
             out.append((season, f"【{arm.name}】", ENTRY_TEXT.format(
                 noun=weapons.NOUNS.get(arm.kind, arm.kind), attribute=arm.attribute, general=general, how=HOW[claim.via], owner=claim.owner,
-            )))
+            ), REF + cid))
     return out
 
 

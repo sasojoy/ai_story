@@ -562,8 +562,8 @@ def _cultivate_row(state, content, world):
 
 
 def _ripe(world, state, content, quality="上品"):
-    """上品、第十成、槽（4 格）裝滿：到了衝絕學的門檻（cultivation.ready）。"""
-    _wind_kick(world, state, quality, content, level=10, filled=4)
+    """上品、第十成、槽（3 格）裝滿：到了衝絕學的門檻（cultivation.ready）。"""
+    _wind_kick(world, state, quality, content, level=10, filled=3)
     for insight_id, fx in STRONG.items():  # 評分（第三批）：每一份三重加一重，四格 128 過一百
         state.player.insight_fx[insight_id] = InsightFx(quality="上品", general=dict(fx))
 

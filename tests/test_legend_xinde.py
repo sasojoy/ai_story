@@ -1,5 +1,5 @@
-"""以心得換破境丹（Joy 2026-10-18「大量心得可以換一次破境機會，讓玩家後期更好轉功法」）。
-以心得修練那一半在武學重構（Joy 2026-10-20）時跟著「品級不靠修練」一起拿掉了：換丹只在上品到了極處（cultivation.ready）才有。"""
+"""心得不能換破境丹、也不能拿來衝關（Joy 2026-10-21「把破境丹也加入商城，取消可以用心得衝」；10-18 起先是以心得換丹）。
+到了極處只剩服丹衝關（丹從探索、醫館與萬寶閣來）；機器人有丹才衝、沒丹等契機。"""
 from __future__ import annotations
 
 import random
@@ -19,8 +19,6 @@ from test_practice_hardening import harden
 @pytest.fixture
 def game(tmp_path):
     content = harden(load_content(FIXTURE))
-    content.config.legend_xinde_price = 300
-    content.config.legend_xinde_step = 100
     world = open_world(tmp_path / "w.db")
     g = Game.new(content, "試丹", rng=random.Random(1), world=world, graduated=True)
     return g
@@ -37,70 +35,42 @@ def _ready_for_jue(g):
     return art_id
 
 
-def test_buying_costs_more_each_time(game):
+def test_no_xinde_way_to_break_through(game):
+    """心得換丹、心得衝關都拿掉了：設定、規則、引擎、伺服器都沒有那一條；修練頁那一列的 xinde 一律是 None。"""
+    art_id = _ready_for_jue(game)
     p = game.state.player
-    p.stats["xinde"] = 1000
-    assert cultivation.legend_price(game.state, game.content) == 300
-    msgs = game.buy_legend()
-    assert p.legend_items == 1 and p.stats["xinde"] == 700 and p.legend_bought == 1
-    assert "心得 -300" in msgs[0]
-    assert cultivation.legend_price(game.state, game.content) == 400
-    game.buy_legend()
-    assert p.legend_items == 2 and p.stats["xinde"] == 300
-    refused = game.buy_legend()  # 第三枚要 500
-    assert p.legend_items == 2 and p.stats["xinde"] == 300
-    assert "心得不足" in refused[0] and "500" in refused[0]
+    p.stats["xinde"], p.stamina = 5000, 200
+    assert not hasattr(game.content.config, "legend_xinde_price") and not hasattr(game.content.config, "legend_xinde_step")
+    assert not hasattr(cultivation, "legend_price") and not hasattr(cultivation, "buy_legend")
+    assert not hasattr(game, "buy_legend") and not hasattr(bot, "buy_pill") and not hasattr(howto, "legend_buy_lines")
+    with pytest.raises(TypeError):
+        game.cultivate(art_id, use_xinde=True)
+    row = next(r for r in skillview.art_rows(game.state, game.content, game.world) if r["id"] == art_id)
+    assert row["cultivate"]["xinde"] is None and row["cultivate"]["legend"] is None and not row["cultivate"]["ok"]
+    assert "破境丹" in row["cultivate"]["note"]  # 沒丹：等契機或服丹那一句
+    assert game.cultivate(art_id) == [cultivation.CHANCE_LINE.format(name="旋風腿", pill="破境丹")]
+    assert p.stats["xinde"] == 5000
 
 
-def test_off_by_default_in_test_content(tmp_path):
-    content = load_content(FIXTURE)
-    g = Game.new(content, "試丹", rng=random.Random(1), world=open_world(tmp_path / "w.db"), graduated=True)
-    g.state.player.stats["xinde"] = 5000
-    g.buy_legend()
-    assert g.state.player.legend_items == 0 and g.state.player.stats["xinde"] == 5000
-    assert howto.legend_buy_lines(content) == []
-
-
-def test_the_howto_line_only_talks_about_the_pill(game):
-    """玩法說明：以心得修練那一句拿掉了，只剩換丹那一句（數字讀 Config）。"""
-    lines = howto.legend_buy_lines(game.content)
-    assert len(lines) == 1 and "300" in lines[0] and "100" in lines[0] and "改付心得" not in lines[0]
-
-
-def test_button_shows_only_on_the_last_step(game):
-    p = game.state.player
-    p.stats["xinde"] = 1000
-    row = lambda: next(r for r in skillview.art_rows(game.state, game.content, game.world) if r["id"] == p.member.wugong_id)
-    assert all(r["cultivate"]["buy"] is None for r in skillview.art_rows(game.state, game.content, game.world))  # 還沒有到極處的
-    _ready_for_jue(game)
-    buy = row()["cultivate"]["buy"]
-    assert buy["ok"] and buy["price"] == 300
-    p.stats["xinde"] = 100
-    buy = row()["cultivate"]["buy"]
-    assert not buy["ok"] and "心得不足" in buy["why"]
-    p.member.wugong_level = 9  # 還沒第十成：還沒到極處，換丹那一顆不畫（評分不是門檻，Joy 2026-10-20）
-    assert row()["cultivate"]["buy"] is None
-
-
-def test_bought_pill_forces_the_breakthrough(game):
+def test_the_pill_button_shows_only_with_a_pill_in_hand(game):
     p = game.state.player
     art_id = _ready_for_jue(game)
-    p.stats["xinde"] = 1000
-    game.buy_legend()
-    game.state.player.stamina = 200
-    game.cultivate(art_id, use_legend=True)
-    assert p.legend_items == 0  # 服下去了（成不成看機會）
+    row = lambda: next(r for r in skillview.art_rows(game.state, game.content, game.world) if r["id"] == art_id)
+    assert row()["cultivate"]["legend"] is None
+    p.legend_items = 2
+    lg = row()["cultivate"]["legend"]
+    assert row()["cultivate"]["ok"] and lg["count"] == 2 and lg["bonus"] == cultivation.force_odds(game.state, game.content, game.world, art_id)
 
 
-def test_bot_buys_when_waiting_for_a_chance(game):
+def test_bot_breaks_through_only_with_a_pill(game):
     p = game.state.player
-    assert not bot.buy_pill(game)  # 還沒有到極處的：不換
-    _ready_for_jue(game)
-    p.stats["xinde"] = 1000
-    assert bot.awaits_chance(game)
-    assert bot.buy_pill(game)
-    assert p.legend_items == 1
-    assert not bot.buy_pill(game)  # 手上有丹就不再換
+    art_id = _ready_for_jue(game)
+    p.stats["xinde"] = 5000
+    assert bot.break_way(game, art_id) == {}  # 沒丹：等契機，不花心得
+    p.legend_items = 1
+    assert bot.break_way(game, art_id) == {"use_legend": True}
+    p.art_levels[art_id] = p.member.wugong_level = 9
+    assert bot.break_way(game, art_id) == {}  # 還沒第十成
 
 
 def test_bot_takes_the_pill_only_at_the_last_step(game):
@@ -112,13 +82,3 @@ def test_bot_takes_the_pill_only_at_the_last_step(game):
     assert bot.takes_the_pill(game, art_id)
     p.art_levels[art_id] = p.member.wugong_level = 9
     assert not bot.takes_the_pill(game, art_id)  # 還沒第十成
-
-
-def test_no_xinde_cultivation_any_more(game):
-    """武學重構：修練不能改付心得了（Game.cultivate 沒有 by_xinde），修練頁那一列的 xinde 一律是 None。"""
-    art_id = _ready_for_jue(game)
-    assert not hasattr(game.content.config, "cultivate_xinde_price")  # 舊設定也拿掉了
-    assert all(r["cultivate"]["xinde"] is None for r in skillview.art_rows(game.state, game.content, game.world))
-    with pytest.raises(TypeError):
-        game.cultivate(art_id, by_xinde=True)
-    assert not hasattr(cultivation, "xinde_price") and not hasattr(bot, "cultivate_by_xinde")

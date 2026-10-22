@@ -436,6 +436,11 @@ LEAN_NONE = "玉璽碎片不在交戰的任何一方手上"  # 待 joy 潤
 LEAN_SHIFT = "戰局起點往{side}偏了 {n} 點"  # 待 joy 潤（FB-186）
 LEAN_EVEN = "兩軍持璽相當，戰局起點不偏"  # 待 joy 潤：兩軍各有碎片、片數一樣
 LEAN_STILL = "戰局起點不偏"  # 待 joy 潤：兩軍手上都沒有碎片
+# FB-687（PM 2026-10-22）：領地爭奪開著的季，開集結那一刻先寫了「起點照戰況偏幾點」（conquest.front_rumor／front_scene），這裡講的是碎片
+# 另外加的那一份，寫成「再」「不再另偏」，不跟前一句讀成矛盾。決戰那一列有 front_note 才換；關著的季照上面三句。待 joy 潤
+LEAN_SHIFT_EXTRA = "起點再往{side}偏 {n} 點"
+LEAN_EVEN_EXTRA = "兩軍持璽相當，起點不再另偏"
+LEAN_STILL_EXTRA = "起點不再另偏"
 
 
 def mandate_lean(world: WorldStateStore, content: Content, definition: BattleDef) -> dict[str, int]:
@@ -465,13 +470,15 @@ def lean_text(lean: dict[str, int], definition: BattleDef) -> str:
     return "、".join(parts) or LEAN_NONE
 
 
-def shift_text(shift: int, lean: dict[str, int], definition: BattleDef) -> str:
+def shift_text(shift: int, lean: dict[str, int], definition: BattleDef, extra: bool = False) -> str:
     """起點偏了幾點、往哪一軍偏（FB-186：以前只寫各握幾片，看不出戰局條動了沒）：正的往第一軍、負的往第二軍（同 lean_shift）。
-    偏 0 時兩軍各有碎片寫 LEAN_EVEN，都沒有寫 LEAN_STILL；不寫「從正中開打」——偏移之前的起點照戰況，不一定在正中。"""
+    偏 0 時兩軍各有碎片寫 LEAN_EVEN，都沒有寫 LEAN_STILL；不寫「從正中開打」——偏移之前的起點照戰況，不一定在正中。
+    extra：前面已經寫了「起點照戰況偏幾點」（決戰那一列有 front_note，領地爭奪開著的季），改寫成碎片「再」偏的那一份（FB-687）。"""
     first, second = definition.factions[0], definition.factions[1]
+    moved, even, still = (LEAN_SHIFT_EXTRA, LEAN_EVEN_EXTRA, LEAN_STILL_EXTRA) if extra else (LEAN_SHIFT, LEAN_EVEN, LEAN_STILL)
     if shift:
-        return LEAN_SHIFT.format(side=(first if shift > 0 else second).name, n=abs(shift))
-    return LEAN_EVEN if lean.get(first.id) or lean.get(second.id) else LEAN_STILL
+        return moved.format(side=(first if shift > 0 else second).name, n=abs(shift))
+    return even if lean.get(first.id) or lean.get(second.id) else still
 
 
 def _mandate_muster(world: WorldStateStore, content: Content, definition: BattleDef) -> list[str]:
@@ -479,7 +486,10 @@ def _mandate_muster(world: WorldStateStore, content: Content, definition: Battle
     天命之爭本身不璽動、不現世（8.3）。"""
     lean = mandate_lean(world, content, definition)
     shift = lean_shift(lean, definition, content.config.seal)
-    text = MANDATE_MUSTER.format(battle=definition.name, lean=lean_text(lean, definition), shift=shift_text(shift, lean, definition))
+    battle = world.get_battle()  # 開集結那一刻先記了起點照戰況偏幾點（world._front_muster）：這一句改講碎片另加的那一份（FB-687）
+    extra = battle is not None and battle.battle_id == definition.id and battle.front_note is not None
+    text = MANDATE_MUSTER.format(battle=definition.name, lean=lean_text(lean, definition),
+                                 shift=shift_text(shift, lean, definition, extra=extra))
     world.mutate(lambda shared: rumor(shared.season, text))
 
     def _snap(b) -> None:

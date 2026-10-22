@@ -345,8 +345,14 @@ def happened_at(season: WorldState, content: Content, event: TimetableEvent) -> 
     開了那一刻就算發生了：取排定的時刻與開的那一刻較早的，之後收場了、過了週界也照開的那一刻歸週，不跟著收場或此刻換週。
     開打後被管理者取消、沒有結果的（showdowns_cancelled）沒有發生，回 NEVER（之後管理者「定結果」了，照有結果的寫法：取排定的時刻
     與定結果那一刻較早的）。舊存檔沒記開的那一刻的：收場了取排定的時刻與收場那一刻較早的，開了還沒收場取排定的時刻與此刻較早的。
-    其他大事（含季末、時間到了才結算的）一律是排定的時刻，跟 when_in 逐刻一樣。"""
+    其他大事（含季末、時間到了才結算的）一律是排定的時刻，跟 when_in 逐刻一樣。
+    FB-654：休季時換了程式的上一季（calendar.weekend_style）一般大事的時刻不能照新程式的時刻表（週次與日子是新程式那一份）：
+    只算這一季真的結算過的（season.timeline），時刻就是結算那一刻，沒結算過的是 NEVER、不列。決戰與季末的排定時刻本來就存在這一季的
+    schedule 裡，照舊。"""
     at = when_in(season, content, event)
+    if event.kind not in NOT_BY_SEASON_HOUR and calendar.weekend_style(season, content):
+        done = season.timeline.get(event.id)
+        return NEVER if done is None else done.time
     if event.kind != "showdown":
         return at
     done = season.timeline.get(event.id)
@@ -366,8 +372,9 @@ def happened_at(season: WorldState, content: Content, event: TimetableEvent) -> 
 def happened_week(season: WorldState, content: Content, event: TimetableEvent) -> int:
     """輿圖把這件大事歸在第幾週（7 天季是第幾段）：決戰與季末照實際排定的時刻落在季曆的哪一週（FB-562：被「避開半夜」或管理者挪到
     別週的，不再照時刻表原本寫的那一週），提早開的決戰照開的那一刻（FB-563）；其他大事照時刻表寫的週次。沒有發生的（取消的）
-    不列，歸哪一週都一樣，回時刻表寫的週次。"""
-    if event.kind not in NOT_BY_SEASON_HOUR:
+    不列，歸哪一週都一樣，回時刻表寫的週次。休季時換了程式的上一季（FB-654，calendar.weekend_style）一般大事也照結算那一刻落在
+    這一季自己的季曆的哪一週，不照新程式的時刻表寫的週次。"""
+    if event.kind not in NOT_BY_SEASON_HOUR and not calendar.weekend_style(season, content):
         return event.week
     at = happened_at(season, content, event)
     return event.week if at == NEVER else calendar.point(at, content, season).week

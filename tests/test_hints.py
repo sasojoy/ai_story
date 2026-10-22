@@ -79,8 +79,10 @@ def test_every_known_hint_id_is_one_of_the_eighteen():
     from tianxia import hints
 
     # 設計 5.2 的十八條，加上 explain-1 的 h_bond（第一次交友或談話：情誼有什麼用；事件型，不看狀態）
-    assert len(hints.KNOWN) == 19 and {"h_snubbed", "h_mandate", "h_merge", "h_figure", "h_bond"} <= hints.KNOWN
-    assert hints.EVENT_ONLY == {"h_snubbed", "h_mandate", "h_bond"}
+    # 新手引導重做（2026-10-22）：拿掉 h_refine_fail，多五條（h_drill_done 是事件型）
+    assert len(hints.KNOWN) == 23 and {"h_snubbed", "h_mandate", "h_merge", "h_figure", "h_bond", "h_tavern"} <= hints.KNOWN
+    assert "h_refine_fail" not in hints.KNOWN
+    assert hints.EVENT_ONLY == {"h_snubbed", "h_mandate", "h_bond", "h_drill_done"}
 
 
 # ── 排隊與對話框 ───────────────────────────────────────
@@ -833,6 +835,7 @@ def _figure_game(content, at):
     content.hints.hints.append(HintDef(id="h_figure", by="mentor", text="那位是大人物。"))
     game = _real_game(content, at=at)
     game.state.player.tutorial_step = len(guide.steps(game.state, content))  # 引導走完（真內容的序章與引導不擋在前面）
+    game.state.player.hints_seen.add("h_tavern")  # 有酒肆的城（新手引導重做）不搶在前面
     return game
 
 

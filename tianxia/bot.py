@@ -127,21 +127,7 @@ def spend_xinde(game: Game, rng: random.Random) -> None:
     for kind in ("內功", "武學"):
         if can_practise(game, kind):
             game.practice(kind)
-    buy_pill(game)
     teach(game)
-
-
-def buy_pill(game: Game) -> bool:
-    """以心得換破境丹（Joy 2026-10-18）：身上有一門上品到了極處在等契機、手上沒有丹、換完還留 TEACH_RESERVE，就換一枚。
-    整季機器人與假人共用；只走 Game.buy_legend。"""
-    state, content = game.state, game.content
-    price = cultivation.legend_price(state, content)
-    if price is None or state.player.legend_items > 0 or not awaits_chance(game):
-        return False
-    if state.player.stats.get("xinde", 0) - price < TEACH_RESERVE:
-        return False
-    game.buy_legend()
-    return True
 
 
 TEACH_RESERVE = 30  # 傳功之後至少留幾點心得：合成一爐 5、練成下一成 2×N，留著不至於為了傳功把自己的路堵死
@@ -201,9 +187,9 @@ def forge_and_cultivate(game: Game, rng: random.Random) -> None:
     slot_insights(game)  # 武學重構：悟到的意境裝進身上兩門的空槽
     if p.stamina >= CULTIVATE_RESERVE:
         for art_id in worn_first(game):
-            pill = takes_the_pill(game, art_id)
-            if cultivation.cultivate_problem(state, content, world, art_id, use_legend=pill) is None:
-                game.cultivate(art_id, use_legend=pill)
+            way = break_way(game, art_id)
+            if way and cultivation.cultivate_problem(state, content, world, art_id, **way) is None:
+                game.cultivate(art_id, **way)
                 break
 
 
@@ -224,6 +210,12 @@ def awaits_chance(game: Game) -> bool:
     return any(
         art_id and cultivation.ready(state, content, world, art_id)[0] for art_id in (member.wugong_id, member.neigong_id)
     )
+
+
+def break_way(game: Game, art_id: str) -> dict:
+    """這一門到了極處要怎麼強行衝關（cultivate 的關鍵字）：手上有丹就服（use_legend）；沒丹是空的，等契機
+    （Joy 2026-10-21 拿掉心得衝關；萬寶閣的破境丹假人不買）。整季機器人與假人共用。"""
+    return {"use_legend": True} if takes_the_pill(game, art_id) else {}
 
 
 def takes_the_pill(game: Game, art_id: str) -> bool:
@@ -286,6 +278,8 @@ def create_art(game: Game, rng: random.Random) -> bool:
     照關鍵字表讀（假人不叫模型）；名字走退路字表（看得出來是假人：之後要補模型取名）。伺服器假人與整季機器人共用。"""
     state, content, world = game.state, game.content, game.world
     p = state.player
+    if p.creating is not None and p.creating.paid and p.creating.step == "name":
+        return _name_draft(game)  # 立意時付過心得的單子（上一次取名取不到）：接著取名，不丟掉
     if create.allowed(state, content) is not None or p.stats.get("xinde", 0) - create.price(state, content) < CREATE_RESERVE:
         return False
     if p.creating is not None:
@@ -307,12 +301,21 @@ def create_art(game: Game, rng: random.Random) -> bool:
     if p.creating is None or p.creating.step != "name":
         game.create_cancel()
         return False
+    return _name_draft(game)
+
+
+def _name_draft(game: Game) -> bool:
+    """替成了形的單子取名（退路字表）。都撞名就留著單子（心得立意時付過了），下一次接著取：第一次用原本那一批，
+    之後照這一刻的時辰換一批（不然每次都撞同幾個名字）。"""
+    p = game.state.player
+    draft = p.creating
+    seed = f"自創|{p.name}|{p.created_count}" + (f"|{int((game.now or 0) // 3600)}" if draft.name_tries else "")
+    draft.name_tries += 1
     for salt in range(naming.CLAIM_ATTEMPTS):
-        name = naming.fallback_name(content, f"自創|{p.name}|{p.created_count}", kind, salt=salt)
+        name = naming.fallback_name(game.content, seed, draft.kind, salt=salt)
         game.create_name(name)
         if p.creating is None:
             return True
-    game.create_cancel()
     return False
 
 

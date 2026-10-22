@@ -1,16 +1,17 @@
 """修練（武學重構，Joy 2026-10-20）：品級不再靠修練衝——合成（fusion.blend_grade）與自創才長品級。
 修練頁的「修練」只剩最後一步：上品練到第十成，就等契機晉為絕學（seize：打贏一場硬仗、在決戰裡出手滿幾回合，
 擲一次頓悟），或服一枚破境丹關起門來強行衝關（cultivate(use_legend=True)，force_odds）。
+心得換丹、心得衝關都拿掉了（Joy 2026-10-21「把破境丹也加入商城，取消可以用心得衝」）：丹從探索、打點、銀兩與萬寶閣來。
 品質是每個人各練各的（PlayerState.art_quality）；升品時「成」不變。
-第一個把某門武學修到絕學的人替全服取正式名字：功法 id 不變，只改顯示的名字（world.rename_skill）——
-所以這裡凡是「認東西」的都用 id（art_id），凡是寫給玩家看的都用 resolve_art 回來的 art.name（改名之後兩者不一樣）。
+練成絕學走 tianxia/ascend.py（破境：招升為絕招、破境卡、江湖史、傳聞）。「第一個練成的人替全服定名」退掉了（招式與絕學稿案
+第二輪）；這一版之前還等著定名的（PlayerState.naming）照舊定得了名（master_request、name_mastered）。
 只改狀態與回傳訊息；要不要寫江湖紀錄由 engine 決定（只有真的擲了骰、或真的定了名才寫）。
 """
 from __future__ import annotations
 
 import random
 
-from . import arts as arts_mod, library, naming, seal_acts, silver, team, treasures
+from . import arts as arts_mod, ascend as ascend_mod, library, naming, seal_acts, silver, team, treasures
 from .martial_arts import MAX_LEVEL, next_quality
 from .models import Content
 from .rules import add_chronicle
@@ -74,6 +75,15 @@ def cultivate_problem(
     return None
 
 
+def needs_pill(state: GameState, content: Content, world: WorldStateStore, art_id: str) -> bool:
+    """到了極處、只差一枚破境丹（手上沒有）：修練頁那一格引去萬寶閣（Joy 2026-10-21「破境丹沒有可以引導他去商城」）。"""
+    if state.player.legend_items > 0:
+        return False
+    art = team.resolve_art(art_id, content, world)
+    return art is not None and cultivate_problem(state, content, world, art_id, use_legend=True) == CHANCE_LINE.format(
+        name=art.name, pill=content.config.legend_item_name)
+
+
 def cultivate(
     state: GameState, content: Content, world: WorldStateStore, art_id: str, rng: random.Random,
     use_legend: bool = False, gate: bool = True,
@@ -109,9 +119,7 @@ def seize(
         odds *= peak_scale(state, content)
         odds += silver.take_mentor(state, content)  # 名師指點（銀兩出口）：衝品拿掉之後加在絕學這一步，擲一次用掉
         if rng.random() * 100 < max(1.0, min(rule.max_chance, odds)):
-            p.art_quality[art_id] = "絕學"
-            p.art_mastery.pop(art_id, None)
-            return [f"這一戰打到最後，【{art.name}】忽然通了——從上品晉為絕學！"] + _mastered(state, world, art_id)
+            return ascend_mod.ascend(state, content, world, art_id, "seize")  # 破境（招式與絕學稿案第三節）
         return [f"打到緊處，【{art.name}】似乎摸到了什麼，轉眼又滑走了。"]
     return []
 
@@ -134,22 +142,8 @@ def _force(state: GameState, content: Content, world: WorldStateStore, art_id: s
     p.legend_items -= 1
     msgs = [f"你服下一枚【{cfg.legend_item_name}】，關起門來強行衝關。"]
     if rng.random() * 100 < odds:
-        p.art_quality[art_id] = "絕學"
-        p.art_mastery.pop(art_id, None)
-        return msgs + [f"【{art.name}】衝開了最後那一層，從上品晉為絕學！"] + _mastered(state, world, art_id)
+        return msgs + ascend_mod.ascend(state, content, world, art_id, "pill")  # 破境（招式與絕學稿案第三節）
     return msgs + [f"【{art.name}】撞在那一層上，又彈了回來（約 {odds}% 的機會）。"]
-
-
-def _mastered(state: GameState, world: WorldStateStore, art_id: str) -> list[str]:
-    """練成絕學的那一刻：全服第一個的人拿到取名的權利（claim_master 是原子的，同時練成的兩個人只有先登記的算數）。
-    登記的是名號，後到的人看到的、換季的江湖史寫的也是名號（傳聞分層第七節：江湖史一律具名；這一版之前匿名記下的
-    master_shown 照舊）。"""
-    if world.claim_master(art_id, state.player.name):
-        state.player.naming = art_id
-        return ["你是江湖上第一個把這門武學練成絕學的人——到「修練」頁替它取一個正式的名字吧。"]
-    art = world.get_skill(art_id)
-    first = (art.master_shown if art is not None else None) or world.master_of(art_id)  # 舊資料沒記，照名號
-    return [f"這門武學已由{first}率先練成絕學。"]
 
 
 def master_request(state: GameState, content: Content, world: WorldStateStore) -> naming.NamingRequest | None:
@@ -194,38 +188,3 @@ def name_mastered(state: GameState, content: Content, world: WorldStateStore, na
         state.player.renames_told.append(art_id)
     add_chronicle(state, f"{state.player.name}把【{old.name}】練成絕學，為之定名【{name}】。")  # 江湖史一律寫名號（傳聞分層第七節）
     return [f"從今以後，江湖上這門武學就叫【{name}】。"]
-
-
-def legend_price(state: GameState, content: Content) -> int | None:
-    """以心得換破境丹（Joy 2026-10-18）：這一季下一枚要多少心得；關著（legend_xinde_price 是 0）是 None。"""
-    cfg = content.config
-    if cfg.legend_xinde_price <= 0:
-        return None
-    return cfg.legend_xinde_price + state.player.legend_bought * cfg.legend_xinde_step
-
-
-def buy_legend_problem(state: GameState, content: Content) -> str | None:
-    """換不了的原因（修練頁那一顆鈕灰掉時寫的、按下去回的是同一句）；換得了是 None。"""
-    price = legend_price(state, content)
-    if price is None:
-        return f"{content.config.legend_item_name}換不到。"
-    have = state.player.stats.get("xinde", 0)
-    if have < price:
-        return f"心得不足：換一枚{content.config.legend_item_name}要 {price}，你有 {have}。"
-    return None
-
-
-def buy_legend(state: GameState, content: Content) -> list[str]:
-    """花心得換一枚破境丹（越換越貴）。被拒絕只回原因、什麼都不扣。"""
-    problem = buy_legend_problem(state, content)
-    if problem is not None:
-        return [problem]
-    p, cfg = state.player, content.config
-    price = legend_price(state, content)
-    p.stats["xinde"] = p.stats.get("xinde", 0) - price
-    p.legend_bought += 1
-    p.legend_items += 1
-    return [
-        f"你把積下的心得一一參透，凝成一枚【{cfg.legend_item_name}】（心得 -{price}）。",
-        f"下一枚要 {legend_price(state, content)} 心得。",
-    ]
