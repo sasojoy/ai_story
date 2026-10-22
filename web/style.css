@@ -2987,6 +2987,21 @@ svg.fig .blade.bow { stroke-width: 3; }
 .cr-left { margin: 4px 0 8px; }
 /* 以意成招（招式與絕學稿案第二節）：勢、火候、撞出來的品相 */
 .cr-stance { margin: .4em 0 .1em; }
+/* 擺式：四個勢怎麼擺、對應哪個時機，現在擺的那一個亮；底下稀有路數那八格（Joy 2026-10-22） */
+.cr-stance-box { display: grid; gap: 6px; margin: 10px 0 4px; padding: 10px 12px; border-radius: 12px; background: var(--card-2); }
+.cr-now { margin: 0; font-size: 14px; }
+.cr-now b { color: var(--accent); font-family: var(--serif); }
+.cr-stances { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
+.cr-stances li { display: flex; flex-wrap: wrap; gap: 2px 8px; align-items: baseline; padding: 4px 8px; border-radius: 8px; font-size: 13px; color: var(--ink-2); }
+.cr-stances li b { color: var(--ink); font-family: var(--serif); }
+.cr-stances li small { font-size: 12px; }
+.cr-stances li.on { background: color-mix(in srgb, var(--accent) 12%, var(--card)); color: var(--ink); }
+.cr-stances li.on b { color: var(--accent); }
+.cr-stance-box p.muted.small { margin: 2px 0 0; }
+.cr-rps { display: flex; flex-wrap: wrap; gap: 4px 6px; }
+.cr-rp { display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px 2px 3px; border: 1px solid var(--line); border-radius: 999px; font-size: 12px; color: var(--ink-2); background: var(--card); }
+.cr-rp.on { border-color: var(--gold); color: var(--ink); box-shadow: 0 0 0 2px color-mix(in srgb, var(--gold) 35%, transparent); }
+.cr-rare-here { margin: 0; font-size: 13px; font-weight: 700; color: var(--gold); }
 .cr-stance .fire-生 { color: var(--ink-2); }
 .cr-stance .fire-熟 { color: var(--accent); }
 .cr-stance .fire-透 { color: var(--gold); }

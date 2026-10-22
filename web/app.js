@@ -3251,7 +3251,9 @@
     const why = [];
     if (reach > 0.95) why.push("手伸得遠"); if (high > 0.15) why.push("手抬得高"); if (tucked) why.push("雙手收在胸前");
     if (spread > 0.9) why.push("馬步寬"); if (lift) why.push("單腳提起"); if (lean < -12) why.push("身子前傾"); if (lean > 10) why.push("身子後仰");
-    return { attrs, why };
+    // 勢（create.stance_of 的同一套：提腿先看，再看收手或寬馬步，再看手伸遠或前傾）
+    const stance = lift ? "變勢" : tucked || (spread > 1.1 && reach < 0.95) ? "守勢" : reach >= 1.0 || lean <= -10 ? "攻勢" : "起勢";
+    return { attrs, why, stance };
   }
   const poseReadText = (attrs) => (attrs.length ? `此式偏${attrs[0]}${attrs[1] ? `、兼${attrs[1]}` : ""}` : "此式平正，不偏一路"); // 待 joy 潤
   // 骨頭與兵器（拖曳的大圖與功法卡的小圖共用）；joints 為真時多畫可拖的關節點
@@ -3925,6 +3927,26 @@
   // /api/do/create_intent 請模型讀）→ 成形（伺服器擲好四格顏色，這裡畫成玉環）→ 立名（menxia create_name；重來 create_back、作罷 create_cancel）。
   // 資料全是伺服器給的 status.create（create.view）；擺式時讀出的偏向網頁先照同一套規則算給人看，擺定那一下以伺服器為準。字待 joy 潤
   const CREATE_STEPS = [["form", "執器"], ["pose", "擺式"], ["intent", "立意"], ["name", "成形・立名"]];
+  // 擺式時即時算主屬性（create.top_of 的同一套）：伺服器給不含姿勢的權重，這裡加上姿勢讀出的兩路，取最高（同分照屬性的先後）
+  function createMain(c, draft, attrs) {
+    const w = { ...(draft.base_weights || {}) };
+    attrs.forEach((a, i) => { w[a] = (w[a] || 0) + (Number((c.pose_weights || [])[i]) || 0); });
+    const order = c.attributes || [];
+    return order.reduce((best, a) => (best === null || (w[a] || 0) > (w[best] || 0) ? a : best), null);
+  }
+  // 勢與稀有路數（Joy 2026-10-22「要加」）：四個勢怎麼擺、對應哪個時機，現在擺的那一個亮；底下八格稀有路數（只說在哪格、不說招名），
+  // 現在的主屬性＋時機落在有稀有的那一格時亮、多寫一句。擺式時拖一下就重畫（rigRedraw），立意那一步照伺服器讀的。字待 joy 潤
+  function stanceBoxHtml(c, kind, stance, main) {
+    const rows = ((c.stances || {})[kind] || []);
+    const now = rows.find((r) => r.stance === stance) || {};
+    const list = rows.map((r) => `<li class="${r.stance === stance ? "on" : ""}"><span><b>${esc(r.stance)}</b>・${esc(r.timing)}</span><small>${esc(r.how)}</small></li>`).join("");
+    const here = (c.rare_paths || []).some((r) => r.attribute === main && r.timing === now.timing);
+    const rare = (c.rare_paths || []).map((r) => `<span class="cr-rp${r.attribute === main && r.timing === now.timing ? " on" : ""}">${ringHtml([r.attribute], esc(r.attribute), "jchip")}${esc(r.timing)}</span>`).join("");
+    return `<p class="cr-now">此式是<b>${esc(stance || "")}</b>・${esc(now.timing || "")}${main ? `<span class="muted small">（連兵器、意一起算，主屬性現在偏${esc(main)}）</span>` : ""}</p>
+      <ul class="cr-stances">${list}</ul>
+      <p class="muted small">${esc(c.rare_line || "")}</p><div class="cr-rps">${rare}</div>
+      ${here ? `<p class="cr-rare-here">${esc(c.rare_here || "")}</p>` : ""}`;
+  }
   const biasHtml = (bias) => Object.entries(bias || {}).sort((p, q) => q[1] - p[1]).map(([k]) => ringHtml([k], esc(k), "jchip")).join("");
   function createHtml() {
     const c = S.main && S.main.status && S.main.status.create;
@@ -3964,12 +3986,14 @@
             <div class="fchips wrap">${presets}</div>
             <p class="cr-read" id="create-read">${esc(poseReadText(read.attrs))}</p>
             <p class="muted small" id="create-why">${esc(read.why.length ? `看的是：${read.why.join("、")}。` : "手伸出去、馬步放寬、提腿或前傾，都會讓它偏向一路。")}</p></div></div>
+        <div class="cr-stance-box" id="create-stance">${stanceBoxHtml(c, draft.kind, read.stance, createMain(c, draft, read.attrs))}</div>
         <div class="acts"><button class="btn primary" data-act="create-pose">擺定<small>下一步：立意</small></button>${quit}</div>
       </div>`;
     }
     if (step === "intent") {
       return `${head}<div class="card create">${steps}${sum}
         <div class="cr-mini">${figSvg(draft.pose, weapon, "cr-fig")}<p>${esc(draft.pose_read)}</p></div>
+        <div class="cr-stance-box">${stanceBoxHtml(c, draft.kind, draft.stance, draft.main)}</div>
         <div class="crow"><span>意</span><input class="input" id="create-text" maxlength="${c.intent_max | 0}" placeholder="一句話說這門功夫的神，2～${c.intent_max | 0} 字" value="${esc(S.createText || "")}"></div>
         <p class="muted small">寫得有神有象，底子越厚；意裡帶出的神韻也會讓它偏向那一路。${draft.paid ? "" : `立意那一刻就成形、收心得 ${c.price | 0}，之後擱下不退。`}</p>
         <div class="acts"><button class="btn primary" data-act="create-intent">立意<small>${draft.paid ? "已付過心得" : `心得 ${c.price | 0}`}・下一步：成形</small></button><button class="btn ghost" data-act="create-back" data-to="pose">重擺架式</button>${quit}</div>
@@ -4042,6 +4066,8 @@
     const read = poseRead(P), out = document.getElementById("create-read"), why = document.getElementById("create-why");
     if (out) out.textContent = poseReadText(read.attrs);
     if (why) why.textContent = read.why.length ? `看的是：${read.why.join("、")}。` : "手伸出去、馬步放寬、提腿或前傾，都會讓它偏向一路。";
+    const box = document.getElementById("create-stance"), c = S.main && S.main.status && S.main.status.create;
+    if (box && c && c.draft) box.innerHTML = stanceBoxHtml(c, c.draft.kind, read.stance, createMain(c, c.draft, read.attrs));
   }
   function rigMove(ev) {
     if (!rigDrag || !S.createPose) return;

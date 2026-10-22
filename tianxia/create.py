@@ -84,6 +84,12 @@ REROLL_CAPPED = "這一門已經重骰 {cap} 次，不能再骰了：留下這�
 REROLL_STEP = "要先立了意、成了形，才能重骰。"  # 待 joy 潤
 FLAT_LINE = "此式平正，不偏一路"  # 待 joy 潤
 LEAN_TEXT = {"正": "，帶一股正氣", "邪": "，帶一股邪氣", "無": ""}  # 待 joy 潤
+# 擺式那一步讓人知道怎麼擺是哪個勢、對應哪個時機（Joy 2026-10-22「要加」）：照 stance_of 認的先後排（提腿先看）。待 joy 潤
+STANCE_ORDER = ("變勢", "守勢", "攻勢", "起勢")
+STANCE_HOW = {"變勢": "提起一條腿", "守勢": "雙手收在胸前，或馬步放寬、手不伸出去", "攻勢": "手伸得遠，或身子前傾", "起勢": "其餘的架式"}
+# 稀有路數（content/create_forms.json 的 moves 標 rare 的那幾格）：只說哪幾格有、不說招名（留驚喜）。待 joy 潤
+RARE_LINE = "這幾格有稀有路數，成形時約{odds}會撞到："
+RARE_HERE = "這一格有稀有路數，成形時有機會撞到"
 
 
 # ── 價錢與門檻 ──────────────────────────────────────────
@@ -416,15 +422,16 @@ def read(client: OllamaClient | None, req: IntentRequest, content: Content) -> I
 # ── 第四步：成形（擲每一格的顏色）────────────────────────
 
 
-def weights(content: Content, draft: CreateDraft) -> dict[str, float]:
-    """每一路屬性的權重：底＋兵器或行功之法的偏向＋姿勢讀出的兩路＋意讀出的兩路。"""
+def weights(content: Content, draft: CreateDraft, pose: bool = True) -> dict[str, float]:
+    """每一路屬性的權重：底＋兵器或行功之法的偏向＋姿勢讀出的兩路＋意讀出的兩路。pose 是 False 時不加姿勢那兩路
+    （擺式那一步網頁照拖到一半的姿勢自己加，view 的 base_weights）。"""
     cfg = content.config.arts
     w = {a: float(cfg.create_base_weight) for a in ATTRIBUTES}
     f = form_def(content, draft.kind, draft.form)
     for a, n in (f.bias.items() if f is not None else []):
         if a in w:
             w[a] += float(n)
-    for a, n in zip(pose_read(draft.pose), cfg.create_pose_weights):
+    for a, n in zip(pose_read(draft.pose) if pose else [], cfg.create_pose_weights):
         w[a] += float(n)
     for a, n in zip(draft.read, cfg.create_intent_weights):
         if a in w:
@@ -744,6 +751,14 @@ def _reroll_shop(content: Content) -> str | None:
     return mall.item_for(content, "create_reroll")
 
 
+def _odds_word(x: float) -> str:
+    """機會寫成「一成」「兩成」；不到一成寫百分比。"""
+    tenths = round(x * 10, 6)
+    if tenths >= 1 and tenths == int(tenths):
+        return f"{'一兩三四五六七八九十'[int(tenths) - 1]}成"
+    return f"{x * 100:g}%"
+
+
 def view(state: GameState, content: Content, world: WorldStateStore) -> dict:
     """煉製頁「自創」那一塊要的資料。只讀。"""
     cfg = content.config.arts
@@ -762,6 +777,12 @@ def view(state: GameState, content: Content, world: WorldStateStore) -> dict:
         "reroll_cap": cfg.create_reroll_cap,  # 一門最多重骰幾次
         # 手上沒有重悟帖時引去萬寶閣（Joy 2026-10-22）：賣重悟帖的那一件商品 id；商城關著、沒賣、手上還有帖是 None
         "shop": _reroll_shop(content) if state.player.create_rerolls <= 0 else None,
+        # 擺式：怎麼擺是哪個勢、對應哪個時機（照 stance_of 認的先後）；網頁照同一套幾何即時讀出現在是哪一個（poseRead）
+        "stances": {k: [{"stance": st, "timing": moves.timing_of(k, st), "how": STANCE_HOW[st]} for st in STANCE_ORDER] for k in KINDS},
+        # 稀有路數在哪幾格（主屬性＋時機），不給招名
+        "rare_paths": [{"attribute": m.attribute, "timing": m.timing} for m in content.create_forms.moves if m.rare],
+        "rare_line": RARE_LINE.format(odds=_odds_word(cfg.move_rare_odds)), "rare_here": RARE_HERE,
+        "pose_weights": list(cfg.create_pose_weights), "attributes": list(ATTRIBUTES),  # 網頁擺式時即時算主屬性（top_of 的同一套）
     }
     if draft is None:
         return base
@@ -774,6 +795,8 @@ def view(state: GameState, content: Content, world: WorldStateStore) -> dict:
         "paid": draft.paid,  # 立意時付了多少心得（0＝還沒付）
         "reroll_left": max(0, content.config.arts.create_reroll_cap - draft.rerolled),  # 這一門還能重骰幾次
         "power": "",
+        # 主屬性要的權重，不含姿勢那兩路（擺式時網頁照拖到一半的姿勢加上 pose_weights，取最高的那一路＝top_of）
+        "base_weights": weights(content, draft, pose=False),
     }
     if draft.colors:  # 成形了：換上這一門的戰力（招式與絕學稿案第二輪：付心得之前就知道值不值）
         mine = might.now(state, content, world)
@@ -783,6 +806,8 @@ def view(state: GameState, content: Content, world: WorldStateStore) -> dict:
     stance = stance_of(draft.pose)
     base["draft"]["stance"] = stance  # 擺式讀出的勢（攻勢／守勢／變勢／起勢）
     base["draft"]["timing"] = moves.timing_of(draft.kind, stance)
+    base["draft"]["main"] = top_of(content, draft)  # 照擺定的姿勢與意，現在的主屬性
+    base["draft"]["rare_cell"] = moves.has_rare(content, base["draft"]["main"], base["draft"]["timing"])  # 那一格有沒有稀有路數
     move = draft_move(state, content, draft)
     fire = fire_of_draft(state, content, draft) if draft.colors else None
     marks = marks_of(draft.colors, fire, draft.rare) if draft.colors else []
