@@ -82,8 +82,16 @@ REROLLED = "你又把「{intent}」推演了一遍——這門功夫換了個形
 NO_REROLL = "手上沒有重悟帖：萬寶閣買得到。"  # 待 joy 潤
 REROLL_CAPPED = "這一門已經重骰 {cap} 次，不能再骰了：留下這個形，或回頭重來。"  # 待 joy 潤
 REROLL_STEP = "要先立了意、成了形，才能重骰。"  # 待 joy 潤
+# 重悟帖的第二個用法「重讀這句意」（Joy 2026-10-22「立意那邊好像也要可以重骰」，PM 定的做法）。待 joy 潤
+REREAD_LINE = "你把「{intent}」重新體會了一遍，意分與屬性重讀過——這門功夫換了個形：{colors}。"
+REREAD_FAILED = "這一句意這會兒沒讀成，重悟帖沒有用掉，稍後再試。"
 FLAT_LINE = "此式平正，不偏一路"  # 待 joy 潤
 LEAN_TEXT = {"正": "，帶一股正氣", "邪": "，帶一股邪氣", "無": ""}  # 待 joy 潤
+# 擺式那一步讓人知道怎麼擺是哪個勢、對應哪個時機（Joy 2026-10-22「要加」）：照 stance_of 認的先後排（提腿先看）。待 joy 潤
+STANCE_ORDER = ("變勢", "守勢", "攻勢", "起勢")
+STANCE_HOW = {"變勢": "提起一條腿", "守勢": "雙手收在胸前，或馬步放寬、手不伸出去", "攻勢": "手伸得遠，或身子前傾", "起勢": "其餘的架式"}
+# 稀有路數（content/create_forms.json 的 moves 標 rare 的那幾格）：只說哪幾格有、不說招名（留驚喜）。待 joy 潤
+RARE_LINE = "每一格都有機會撞到稀有路數（成形時約{odds}）"  # 待 joy 潤
 
 
 # ── 價錢與門檻 ──────────────────────────────────────────
@@ -395,6 +403,24 @@ def fallback_read(content: Content, text: str) -> IntentReading:
     return IntentReading(score=DEFAULT_SCORE, attributes=ranked, lean=lean)
 
 
+def read_or_none(client: OllamaClient | None, req: IntentRequest) -> IntentReading | None:
+    """B 段（重讀這句意）：模型讀這一句意；叫不動是 None（重讀不照關鍵字表讀：讀不成就不扣帖、什麼都不改）。"""
+    if client is None:
+        return None
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": f"要立的：一門{req.kind}（{req.form}）；架式：{req.pose}\n這一句意：「{req.text}」"},
+    ]
+    try:
+        result = client.chat_structured(
+            messages, IntentReading, temperature=0.3, num_predict=READ_PREDICT,
+            required_fields=["score", "lean"], require_in_schema=True,
+        )
+    except Exception:
+        return None
+    return clean_reading(result)
+
+
 def read(client: OllamaClient | None, req: IntentRequest, content: Content) -> IntentReading:
     """B 段：模型讀這一句意；叫不動照關鍵字表。結果 C 段再過 clean_reading。"""
     if client is None:
@@ -416,15 +442,16 @@ def read(client: OllamaClient | None, req: IntentRequest, content: Content) -> I
 # ── 第四步：成形（擲每一格的顏色）────────────────────────
 
 
-def weights(content: Content, draft: CreateDraft) -> dict[str, float]:
-    """每一路屬性的權重：底＋兵器或行功之法的偏向＋姿勢讀出的兩路＋意讀出的兩路。"""
+def weights(content: Content, draft: CreateDraft, pose: bool = True) -> dict[str, float]:
+    """每一路屬性的權重：底＋兵器或行功之法的偏向＋姿勢讀出的兩路＋意讀出的兩路。pose 是 False 時不加姿勢那兩路
+    （擺式那一步網頁照拖到一半的姿勢自己加，view 的 base_weights）。"""
     cfg = content.config.arts
     w = {a: float(cfg.create_base_weight) for a in ATTRIBUTES}
     f = form_def(content, draft.kind, draft.form)
     for a, n in (f.bias.items() if f is not None else []):
         if a in w:
             w[a] += float(n)
-    for a, n in zip(pose_read(draft.pose), cfg.create_pose_weights):
+    for a, n in zip(pose_read(draft.pose) if pose else [], cfg.create_pose_weights):
         w[a] += float(n)
     for a, n in zip(draft.read, cfg.create_intent_weights):
         if a in w:
@@ -566,22 +593,71 @@ def reroll(state: GameState, content: Content, world: WorldStateStore) -> list[s
     """重悟帖（萬寶閣，Joy 2026-10-21「弄個商城道具可以直接重骰，有上限」）：成了形還沒立名，用掉一張，同一個架式與意
     直接再擲一次顏色與變招（火候照意分，不變）；不收心得、不用掉免費的重來。帖子買幾張都行，一門最多重骰
     Config.arts.create_reroll_cap 次（Joy「一次創造武學的時候可能最多重骰3或是5」）。"""
-    draft = state.player.creating
-    if draft is None:
-        return [NO_DRAFT]
-    if draft.step != "name" or not draft.colors:
-        return [REROLL_STEP]
-    p = state.player
+    problem = reroll_problem(state, content)
+    if problem is not None:
+        return [problem]
+    p, draft = state.player, state.player.creating
     cap = content.config.arts.create_reroll_cap
-    if draft.rerolled >= cap:
-        return [REROLL_CAPPED.format(cap=cap)]
-    if p.create_rerolls <= 0:
-        return [NO_REROLL]
     p.create_rerolls -= 1
     draft.rerolled += 1
     _form(state, content, world, draft)
     return [REROLLED.format(intent=draft.intent, colors=colors_text(draft.colors)),
             f"重悟帖 -1（剩 {p.create_rerolls} 張；這一門還能重骰 {cap - draft.rerolled} 次）"]
+
+
+def reroll_problem(state: GameState, content: Content) -> str | None:
+    """重悟帖兩個用法（重骰形、重讀這句意）共用的門檻：成了形還沒立名、這一門還沒骰滿、手上有帖。"""
+    draft = state.player.creating
+    if draft is None:
+        return NO_DRAFT
+    if draft.step != "name" or not draft.colors:
+        return REROLL_STEP
+    cap = content.config.arts.create_reroll_cap
+    if draft.rerolled >= cap:
+        return REROLL_CAPPED.format(cap=cap)
+    if state.player.create_rerolls <= 0:
+        return NO_REROLL
+    return None
+
+
+def reread_problem(state: GameState, content: Content, text: str) -> str | None:
+    """重讀這句意之前（A 段與 C 段都問）：自創還開著、重悟帖用得了、那一句意（可以改寫）長短合格。"""
+    problem = allowed(state, content) or reroll_problem(state, content)
+    if problem is not None:
+        return problem
+    if not (INTENT_MIN <= len(clean_intent(text)) <= INTENT_MAX):
+        return INTENT_LINE
+    return None
+
+
+def reread(
+    state: GameState, content: Content, world: WorldStateStore, text: str, reading: IntentReading | None,
+) -> list[str]:
+    """重悟帖的第二個用法：重讀這句意（Joy 2026-10-22「立意那邊好像也要可以重骰」）。同一句意（或改寫過的）請模型再讀一次，
+    換掉意分、火候、屬性與正邪，照新的讀法重擲成形；跟重骰形共用 create_reroll_cap、各用掉一張帖，不另收心得。
+    reading 是 None（模型叫不動）就什麼都不改、不扣帖。"""
+    problem = reread_problem(state, content, text)
+    if problem is not None:
+        return [problem]
+    if reading is None:
+        return [REREAD_FAILED]
+    p, draft = state.player, state.player.creating
+    reading = clean_reading(reading)
+    draft.intent = clean_intent(text)
+    draft.read = list(reading.attributes)
+    draft.lean = reading.lean
+    draft.score = reading.score
+    draft.move = reading.move
+    draft.say = reading.say
+    p.create_rerolls -= 1
+    draft.rerolled += 1
+    _form(state, content, world, draft)
+    cap = content.config.arts.create_reroll_cap
+    msgs = [REREAD_LINE.format(intent=draft.intent, colors=colors_text(draft.colors))]
+    move = draft_move(state, content, draft)
+    if move is not None:
+        msgs.append(MOVE_SHOWN.format(card=tactics.card_text(move, p.name[:1] or tactics.MINOR_TITLE)))
+    return msgs + [f"重悟帖 -1（剩 {p.create_rerolls} 張；這一門還能重骰 {cap - draft.rerolled} 次）"]
 
 
 def back(state: GameState, content: Content, to: str) -> list[str]:
@@ -744,6 +820,19 @@ def _reroll_shop(content: Content) -> str | None:
     return mall.item_for(content, "create_reroll")
 
 
+def _every_cell_rare(content: Content) -> bool:
+    rows = content.create_forms.moves
+    return all(moves.has_rare(content, m.attribute, m.timing) for m in rows)
+
+
+def _odds_word(x: float) -> str:
+    """機會寫成「一成」「兩成」；不到一成寫百分比。"""
+    tenths = round(x * 10, 6)
+    if tenths >= 1 and tenths == int(tenths):
+        return f"{'一兩三四五六七八九十'[int(tenths) - 1]}成"
+    return f"{x * 100:g}%"
+
+
 def view(state: GameState, content: Content, world: WorldStateStore) -> dict:
     """煉製頁「自創」那一塊要的資料。只讀。"""
     cfg = content.config.arts
@@ -762,6 +851,11 @@ def view(state: GameState, content: Content, world: WorldStateStore) -> dict:
         "reroll_cap": cfg.create_reroll_cap,  # 一門最多重骰幾次
         # 手上沒有重悟帖時引去萬寶閣（Joy 2026-10-22）：賣重悟帖的那一件商品 id；商城關著、沒賣、手上還有帖是 None
         "shop": _reroll_shop(content) if state.player.create_rerolls <= 0 else None,
+        # 擺式：怎麼擺是哪個勢、對應哪個時機（照 stance_of 認的先後）；網頁照同一套幾何即時讀出現在是哪一個（poseRead）
+        "stances": {k: [{"stance": st, "timing": moves.timing_of(k, st), "how": STANCE_HOW[st]} for st in STANCE_ORDER] for k in KINDS},
+        # 稀有路數一行（Joy 2026-10-22「怎麼擺都要有機會」）：表上每一格都有稀有的版本才寫，不列哪幾格、不給招名
+        "rare_line": RARE_LINE.format(odds=_odds_word(cfg.move_rare_odds)) if _every_cell_rare(content) else "",
+        "pose_weights": list(cfg.create_pose_weights), "attributes": list(ATTRIBUTES),  # 網頁擺式時即時算主屬性（top_of 的同一套）
     }
     if draft is None:
         return base
@@ -774,6 +868,8 @@ def view(state: GameState, content: Content, world: WorldStateStore) -> dict:
         "paid": draft.paid,  # 立意時付了多少心得（0＝還沒付）
         "reroll_left": max(0, content.config.arts.create_reroll_cap - draft.rerolled),  # 這一門還能重骰幾次
         "power": "",
+        # 主屬性要的權重，不含姿勢那兩路（擺式時網頁照拖到一半的姿勢加上 pose_weights，取最高的那一路＝top_of）
+        "base_weights": weights(content, draft, pose=False),
     }
     if draft.colors:  # 成形了：換上這一門的戰力（招式與絕學稿案第二輪：付心得之前就知道值不值）
         mine = might.now(state, content, world)
@@ -783,6 +879,7 @@ def view(state: GameState, content: Content, world: WorldStateStore) -> dict:
     stance = stance_of(draft.pose)
     base["draft"]["stance"] = stance  # 擺式讀出的勢（攻勢／守勢／變勢／起勢）
     base["draft"]["timing"] = moves.timing_of(draft.kind, stance)
+    base["draft"]["main"] = top_of(content, draft)  # 照擺定的姿勢與意，現在的主屬性
     move = draft_move(state, content, draft)
     fire = fire_of_draft(state, content, draft) if draft.colors else None
     marks = marks_of(draft.colors, fire, draft.rare) if draft.colors else []

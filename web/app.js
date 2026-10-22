@@ -3251,7 +3251,9 @@
     const why = [];
     if (reach > 0.95) why.push("手伸得遠"); if (high > 0.15) why.push("手抬得高"); if (tucked) why.push("雙手收在胸前");
     if (spread > 0.9) why.push("馬步寬"); if (lift) why.push("單腳提起"); if (lean < -12) why.push("身子前傾"); if (lean > 10) why.push("身子後仰");
-    return { attrs, why };
+    // 勢（create.stance_of 的同一套：提腿先看，再看收手或寬馬步，再看手伸遠或前傾）
+    const stance = lift ? "變勢" : tucked || (spread > 1.1 && reach < 0.95) ? "守勢" : reach >= 1.0 || lean <= -10 ? "攻勢" : "起勢";
+    return { attrs, why, stance };
   }
   const poseReadText = (attrs) => (attrs.length ? `此式偏${attrs[0]}${attrs[1] ? `、兼${attrs[1]}` : ""}` : "此式平正，不偏一路"); // 待 joy 潤
   // 骨頭與兵器（拖曳的大圖與功法卡的小圖共用）；joints 為真時多畫可拖的關節點
@@ -3925,6 +3927,23 @@
   // /api/do/create_intent 請模型讀）→ 成形（伺服器擲好四格顏色，這裡畫成玉環）→ 立名（menxia create_name；重來 create_back、作罷 create_cancel）。
   // 資料全是伺服器給的 status.create（create.view）；擺式時讀出的偏向網頁先照同一套規則算給人看，擺定那一下以伺服器為準。字待 joy 潤
   const CREATE_STEPS = [["form", "執器"], ["pose", "擺式"], ["intent", "立意"], ["name", "成形・立名"]];
+  // 擺式時即時算主屬性（create.top_of 的同一套）：伺服器給不含姿勢的權重，這裡加上姿勢讀出的兩路，取最高（同分照屬性的先後）
+  function createMain(c, draft, attrs) {
+    const w = { ...(draft.base_weights || {}) };
+    attrs.forEach((a, i) => { w[a] = (w[a] || 0) + (Number((c.pose_weights || [])[i]) || 0); });
+    const order = c.attributes || [];
+    return order.reduce((best, a) => (best === null || (w[a] || 0) > (w[best] || 0) ? a : best), null);
+  }
+  // 勢與稀有路數（Joy 2026-10-22「要加」）：四個勢怎麼擺、對應哪個時機，現在擺的那一個亮；底下一行「每一格都有機會撞到稀有路數」
+  // （表上每一格都有稀有的才寫，伺服器給 rare_line）。擺式時拖一下就重畫（rigRedraw），立意那一步照伺服器讀的。字待 joy 潤
+  function stanceBoxHtml(c, kind, stance, main) {
+    const rows = ((c.stances || {})[kind] || []);
+    const now = rows.find((r) => r.stance === stance) || {};
+    const list = rows.map((r) => `<li class="${r.stance === stance ? "on" : ""}"><span><b>${esc(r.stance)}</b>・${esc(r.timing)}</span><small>${esc(r.how)}</small></li>`).join("");
+    return `<p class="cr-now">此式是<b>${esc(stance || "")}</b>・${esc(now.timing || "")}${main ? `<span class="muted small">（連兵器、意一起算，主屬性現在偏${esc(main)}）</span>` : ""}</p>
+      <ul class="cr-stances">${list}</ul>
+      ${c.rare_line ? `<p class="muted small">${esc(c.rare_line)}</p>` : ""}`;
+  }
   const biasHtml = (bias) => Object.entries(bias || {}).sort((p, q) => q[1] - p[1]).map(([k]) => ringHtml([k], esc(k), "jchip")).join("");
   function createHtml() {
     const c = S.main && S.main.status && S.main.status.create;
@@ -3934,6 +3953,7 @@
     const steps = `<ol class="cr-steps">${CREATE_STEPS.map(([k, w], i) => `<li class="${i === at ? "on" : i < at ? "done" : ""}">${w}</li>`).join("")}</ol>`;
     const draft = c.draft;
     if (step !== "pose") S.createPose = null;
+    if (step !== "name") S.createReread = null; // 重讀這句意那一格打到一半的字只留在這一門的成形那一步
     if (!draft) {
       if (c.problem) return `${head}<div class="card create"><p class="muted">${esc(c.problem)}</p></div>`;
       const f = S.createPick || (S.createPick = { kind: c.kinds.includes("武學") ? "武學" : c.kinds[0], form: "" });
@@ -3964,12 +3984,14 @@
             <div class="fchips wrap">${presets}</div>
             <p class="cr-read" id="create-read">${esc(poseReadText(read.attrs))}</p>
             <p class="muted small" id="create-why">${esc(read.why.length ? `看的是：${read.why.join("、")}。` : "手伸出去、馬步放寬、提腿或前傾，都會讓它偏向一路。")}</p></div></div>
+        <div class="cr-stance-box" id="create-stance">${stanceBoxHtml(c, draft.kind, read.stance, createMain(c, draft, read.attrs))}</div>
         <div class="acts"><button class="btn primary" data-act="create-pose">擺定<small>下一步：立意</small></button>${quit}</div>
       </div>`;
     }
     if (step === "intent") {
       return `${head}<div class="card create">${steps}${sum}
         <div class="cr-mini">${figSvg(draft.pose, weapon, "cr-fig")}<p>${esc(draft.pose_read)}</p></div>
+        <div class="cr-stance-box">${stanceBoxHtml(c, draft.kind, draft.stance, draft.main)}</div>
         <div class="crow"><span>意</span><input class="input" id="create-text" maxlength="${c.intent_max | 0}" placeholder="一句話說這門功夫的神，2～${c.intent_max | 0} 字" value="${esc(S.createText || "")}"></div>
         <p class="muted small">寫得有神有象，底子越厚；意裡帶出的神韻也會讓它偏向那一路。${draft.paid ? "" : `立意那一刻就成形、收心得 ${c.price | 0}，之後擱下不退。`}</p>
         <div class="acts"><button class="btn primary" data-act="create-intent">立意<small>${draft.paid ? "已付過心得" : `心得 ${c.price | 0}`}・下一步：成形</small></button><button class="btn ghost" data-act="create-back" data-to="pose">重擺架式</button>${quit}</div>
@@ -3996,6 +4018,10 @@
         // 手上沒帖：引去萬寶閣，停在重悟帖那一件（Joy 2026-10-22「沒有重悟丹不會自動提示玩家去商城購買」；同修練頁沒丹時的破境丹）
         : c.shop ? `<button class="btn" data-act="mall-goto" data-id="${esc(c.shop)}">去萬寶閣<small>買重悟帖</small></button><span class="muted small">重悟帖可以直接重骰這個形，不必重來（一門最多 ${draft.reroll_left | 0} 次）。</span>`
         : `<span class="muted small">萬寶閣的重悟帖可以直接重骰這個形，不必重來（一門最多 ${draft.reroll_left | 0} 次）。</span>`}</div>
+      ${(draft.reroll_left | 0) > 0 && c.rerolls > 0 ? `<div class="cr-reread">
+        <div class="crow"><span>意</span><input class="input" id="create-reread" maxlength="${c.intent_max | 0}" value="${esc(S.createReread != null ? S.createReread : draft.intent || "")}"></div>
+        <div class="cr-reroll"><button class="btn" data-act="create-reread">重讀這句意<small>重悟帖 剩 ${c.rerolls | 0} 張</small></button><span class="muted small">同一句意（也可以改寫）再讀一次：意分、火候、屬性重來，形也跟著重擲。跟重骰共用這一門的次數；沒讀成不扣帖。</span></div>
+      </div>` : ""}
       <div class="crow"><span>名字</span><input class="input" id="create-name" maxlength="6" placeholder="2～6 個字，全服不能重名"></div>
       <div class="crow"><span>招名</span><input class="input" id="create-move" maxlength="4" value="${esc(draft.move || "")}" placeholder="2～4 個字"></div>
       <div class="acts"><button class="btn primary" data-act="create-name">立名<small>${draft.paid ? "心得已在立意時付了" : `心得 ${c.price | 0}`}</small></button>${redo}${quit}</div>
@@ -4031,6 +4057,19 @@
       if (r.main && r.main.status && r.main.status.create && r.main.status.create.step === "name") S.createText = "";
     }, WAIT_LINES.forge || SENT_WAITING);
   }
+  // 重悟帖：重讀這句意（Joy 2026-10-22「立意那邊好像也要可以重骰」）：同 createIntent 走三段式，模型在鎖外重讀；讀成了留在成形那一步
+  async function createReread() {
+    const box = document.getElementById("create-reread");
+    if (box) S.createReread = box.value;
+    await busy(async () => {
+      const r = await api("/api/do/create_reread", { text: S.createReread != null ? S.createReread : "" });
+      applyMain(r.main);
+      const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      if (text) toast(text);
+      const c = r.main && r.main.status && r.main.status.create;
+      if (!c || !c.draft || c.step !== "name") S.createReread = null;
+    }, WAIT_LINES.forge || SENT_WAITING);
+  }
   // 擺式的拖曳：按在關節上開始，指頭移到哪、那一節就轉向哪裡。只重畫那張圖與讀出來的那兩句，不重畫整頁
   const RIG_DRAG = { head: null, lEl: ["lSh", "lS", []], lHa: ["lEl", "lE", ["lS"]], rEl: ["rSh", "rS", []], rHa: ["rEl", "rE", ["rS"]],
     lKn: ["lHip", "lH", null], lFt: ["lKn", "lK", ["lH"]], rKn: ["rHip", "rH", null], rFt: ["rKn", "rK", ["rH"]] };
@@ -4042,6 +4081,8 @@
     const read = poseRead(P), out = document.getElementById("create-read"), why = document.getElementById("create-why");
     if (out) out.textContent = poseReadText(read.attrs);
     if (why) why.textContent = read.why.length ? `看的是：${read.why.join("、")}。` : "手伸出去、馬步放寬、提腿或前傾，都會讓它偏向一路。";
+    const box = document.getElementById("create-stance"), c = S.main && S.main.status && S.main.status.create;
+    if (box && c && c.draft) box.innerHTML = stanceBoxHtml(c, c.draft.kind, read.stance, createMain(c, c.draft, read.attrs));
   }
   function rigMove(ev) {
     if (!rigDrag || !S.createPose) return;
@@ -8876,6 +8917,7 @@
         }
         case "create-cancel": await mx("create_cancel"); break;
         case "create-reroll": await mx("create_reroll"); break; // 重悟帖：留在成形那一步，三格換了
+        case "create-reread": await createReread(); break; // 重悟帖的第二個用法：重讀這句意（Joy 2026-10-22）
         case "create-open": S.createOpen = true; S.message = ""; renderPage(); window.scrollTo(0, 0); break;
         case "create-close": S.createOpen = false; S.message = ""; renderPage(); window.scrollTo(0, 0); break;
         case "slot-out": await mx("unslot", { art: el.dataset.id, insight: el.dataset.ins }); break;
@@ -9377,7 +9419,12 @@
       const trimmed = trimForgeSel();
       if (S.artOpen && !x.owned_arts.some((a) => a.id === S.artOpen)) { S.artOpen = null; S.artNote = null; } // 那一門已經不在了（熔掉）
       if (!S.forgeSel.length) { S.forgeLine = ""; S.forgePreview = null; } // 爐是空的：用伺服器剛給的那一行（心得是新的）
-      const shown = (m) => JSON.stringify(MENXIA_SHOWN[tab].map((k) => m[k]));
+      // 卡上的「氣血 520/639」每分鐘都在回：拿它比的話修練頁每一輪輪詢都判定「變了」而整頁重畫——
+      // 畫面閃一下、捲軸彈回最上面（Joy 2026-10-22 在選意境那頁停久了遇到；上面那段註解自己就寫了
+      // 「本人卡上的氣血一直在回」，卻還是把 player_card 留在清單裡）。比的時候把氣血的數字抹掉，
+      // 等級、武學、內功真的變了照樣重畫；氣血的即時顯示本來就靠狀態列（renderTop 另外畫）。
+      const steady = (v) => (typeof v === "string" ? v.replace(/氣血 [\d.]+\/[\d.]+/g, "氣血") : v);
+      const shown = (m) => JSON.stringify(MENXIA_SHOWN[tab].map((k) => steady(m[k])));
       const changed = trimmed || shown(x) !== shown(was)
         || (tab === "practice" && old.status.injury !== S.main.status.injury) // 療傷鈕看的是內傷
         || (tab === "practice" && JSON.stringify((old.status.seal && old.status.seal.act) || null) !== JSON.stringify(sealActNow())) // 傳承那一列的鈕（獨門行動）
