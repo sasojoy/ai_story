@@ -233,7 +233,7 @@ def _use(c, w, name="懷璽", target="", side="", now=10.0):
 
 
 def _uses(w):
-    return [e for e in w.seal_state().registry.history if e.kind == "use"]
+    return w.seal_state().registry.uses  # FB-695：起用另記一欄，不在 history（tests/test_seal_fb695_rollback.py）
 
 
 @pytest.mark.slow
@@ -246,7 +246,7 @@ def test_using_an_act_books_it_on_the_shard_and_the_season():
     season = w.get_season()
     assert (shard.act_season, shard.act_uses) == (w.get_season_number(), 1) and shard.act_last == pytest.approx(season.time)
     [use] = _uses(w)
-    assert (use.holder, use.shard, use.result) == ("懷璽", "yunzhuan", "banzhao")
+    assert (use.holder, use.shard, use.act) == ("懷璽", "yunzhuan", "banzhao")
     [act] = season.seal_acts
     assert (act.kind, act.shard) == ("banzhao", "yunzhuan") and act.until == pytest.approx(act.start + DAY)
     assert "懷璽" not in act.model_dump_json()

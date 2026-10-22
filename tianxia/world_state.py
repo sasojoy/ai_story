@@ -19,7 +19,7 @@ from collections.abc import Callable, Collection
 from contextlib import AbstractContextManager
 from typing import Literal, NamedTuple, Protocol
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_serializer, model_validator
 
 from .battle_instance import BattleInstance, BattleRoundRecord, SiegeInfo
 from .martial_arts import Insight, MartialArt
@@ -66,8 +66,9 @@ class SealEvent(BaseModel):
 
     seq: int
     season: int
-    # use：起用獨門行動（玉璽碎片改版第 2 批；holder 是起用的人、result 是哪一種、where 是指定了什麼）——只給管理者看，江湖史七格不讀
-    kind: Literal["emerge", "stir", "keep", "take", "sink", "unsettled", "assign", "recall", "scatter", "mandate", "use"]
+    # 不要往這裡加新的種類（FB-695）：舊程式的 kind 也是這一串 Literal，多一種，退回舊程式時整列 world 讀不進來（伺服器與假人程式都
+    # 起不來）。新的紀錄另開一欄、空的時候不寫（例 SealRegistry.uses）；tests/test_seal_fb695_rollback.py 守這一串跟舊程式一樣
+    kind: Literal["emerge", "stir", "keep", "take", "sink", "unsettled", "assign", "recall", "scatter", "mandate"]
     shard: str | None = None
     holder: str | None = None  # 這一筆之後的持有者（take 是挑戰者；sink、收回是 None）
     other: str | None = None  # 對手（take 的失主、keep 的挑戰者）
@@ -83,6 +84,43 @@ class SealEvent(BaseModel):
     round: int | None = None  # 這一筆是第幾輪的（seal.log 寫；舊資料沒有＝第 1 輪）：江湖史七格只列這一輪
     holders: dict[str, str] = Field(default_factory=dict)  # mandate：天命之爭定下來那一刻每一片在誰手上（合璽之人）
     text: str = ""  # 江湖史那一句（沒有是空的）
+
+
+class SealUse(BaseModel):
+    """起用獨門行動的一筆（玉璽碎片改版第 2、3 批，Game.seal_use）：有名號，只給管理者看（設定頁玉璽那一組的 uses），江湖史七格與
+    補送都不讀。FB-695 起記在 SealRegistry.uses，不放進 history（舊程式的 SealEvent.kind 不認得 "use"）。"""
+
+    seq: int  # 全服流水號（跟 history 共用一串；舊資料搬過來照原號）
+    season: int
+    shard: str
+    holder: str  # 起用的人
+    act: str  # 哪一種（models.SealActKind；寫成 str：以後多一種行動，退回這一版也讀得進來）
+    what: str = ""  # 指定了什麼（seal_acts.what_text；頒詔、承露是空的）
+    at: float | None = None  # 起用那一刻（這一季的世界秒）
+
+
+def _uses_out_of_history(data: object) -> object:
+    """FB-695 以前的新程式把起用記在 history（kind "use"：holder 是起用的人、result 是哪一種、where 是指定了什麼）：讀進來時搬到
+    uses（同一號只留一筆，照流水號排），history 不留 use。沒有這種舊紀錄的原樣回傳（一個位元組都不動）。"""
+    if not isinstance(data, dict):
+        return data
+    history = data.get("history")
+    if not isinstance(history, list) or not any(isinstance(e, dict) and e.get("kind") == "use" for e in history):
+        return data
+    old = [e for e in history if isinstance(e, dict) and e.get("kind") == "use"]
+    have = list(data.get("uses") or [])
+
+    def seq_of(u) -> int:
+        return u["seq"] if isinstance(u, dict) else u.seq
+
+    seqs = {seq_of(u) for u in have}
+    moved = [
+        {"seq": e["seq"], "season": e["season"], "shard": e.get("shard") or "", "holder": e.get("holder") or "",
+         "act": e.get("result") or "", "what": e.get("where") or "", "at": e.get("at")}
+        for e in old if e.get("seq") not in seqs
+    ]
+    return {**data, "history": [e for e in history if not (isinstance(e, dict) and e.get("kind") == "use")],
+            "uses": sorted([*have, *moved], key=seq_of)}
 
 
 class SealShard(BaseModel):
@@ -128,6 +166,23 @@ class SealRegistry(BaseModel):
     mandate_pending: bool = False  # 下一個能打天命之爭的季要蓋章（上一次延後、或管理者「下一季」）
     cache: SealCache | None = None  # 領地爭奪的季，這一季藏著的那一片（不公開；舊資料沒有＝None）
     history: list[SealEvent] = Field(default_factory=list)
+    # 起用獨門行動的帳（FB-695；seal.log_use 寫）：另記一欄，舊程式的登記模型不認得、讀的時候略過（pydantic 預設），退回舊程式開得起來
+    # （舊程式寫回時這一欄會丟掉）。空的時候不寫進 JSON（_drop_empty_uses）：沒人起用過的存檔跟以前一個位元組都不差
+    uses: list[SealUse] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _move_uses(cls, data: object) -> object:
+        return _uses_out_of_history(data)
+
+    @model_serializer(mode="wrap")
+    def _drop_empty_uses(self, handler):
+        """uses 是空的時候不寫這個鍵（同 BattleInstance._drop_empty_front_note）。不用 Field(exclude_if=…)：那是 Pydantic 2.11 才有的，
+        requirements.txt 寫 pydantic>=2.6，舊版會把它當多餘的參數略過，`"uses":[]` 照樣寫出來、存檔就跟以前不一樣。"""
+        data = handler(self)
+        if isinstance(data, dict) and "uses" in data and not data["uses"]:
+            del data["uses"]
+        return data
 
 
 class DivineRegistry(BaseModel):

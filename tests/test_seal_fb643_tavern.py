@@ -89,7 +89,7 @@ def _world(shard: str, user: str, side: str | None):
         _do(c, w, VIEWER, lambda g: conquest.push(g.state.world, c, "runan_academy", "guan", "官甲", 100, "attack"), now=5.0)
     for name in ("甲客", "乙客"):
         _do(c, w, name, (lambda g: g.seal_use(TARGETS[shard], "huang")) if name == user else (lambda g: None), now=10.0)
-    assert [e.holder for e in w.seal_state().registry.history if e.kind == "use"] == [user]  # 真的起用了
+    assert [e.holder for e in w.seal_state().registry.uses] == [user]  # 真的起用了
     store = CharacterStore(w.db)
 
     def look(viewer: Game) -> dict:
