@@ -520,15 +520,17 @@ def generate_turn(client: OllamaClient | None, messages: list[dict[str, str]]) -
     if client is None:
         raise DialogueUnavailable("沒有可用的模型")
     try:
-        # 敘事也是必填（Joy 2026-10-22「Npc不會講話了？」）：只列 options 時語法允許模型只回選項、人物那句話是空的，
-        # 紀錄卡就只剩「交談・某某」與情誼的變化。缺了或只有空白，chat_structured 當成截斷重問一趟
         turn = client.chat_structured(
-            messages, CompanionTurn, num_predict=TURN_PREDICT, required_fields=["narrative", "options"], require_in_schema=True,
+            messages, CompanionTurn, num_predict=TURN_PREDICT,
+            # narrative 也必填（2026-10-22 線上：人物不說話，只出選項）：它在 CompanionTurn 有預設值 ""，
+            # 不寫進 required 的話 schema 允許模型省略，_ensure_required_present 也不會判定缺欄位，
+            # 於是「只回 options」的那一次靜靜通過，對話照開、人物一個字都沒說。
+            required_fields=["narrative", "options"], require_in_schema=True,
         )
-        # 模型常夾雜簡體字（提示裡寫了也只部分改善），所以在輸出端確定性地轉成繁體。
-        # option_tags 也要轉：好感度查表是精確比對，模型寫成簡體的 tag（實機見過「由衷讚赏」）會落空。
         if not turn.narrative.strip() or not turn.options:  # 不靠 client 自己檢查（測試的假 client、別的實作）：沒話可說就是這一輪生成失敗
             raise ValueError("模型沒寫人物的話或選項")
+        # 模型常夾雜簡體字（提示裡寫了也只部分改善），所以在輸出端確定性地轉成繁體。
+        # option_tags 也要轉：好感度查表是精確比對，模型寫成簡體的 tag（實機見過「由衷讚赏」）會落空。
         return turn.model_copy(update={
             "narrative": zh.to_traditional(turn.narrative),
             "options": [zh.to_traditional(o) for o in turn.options],
