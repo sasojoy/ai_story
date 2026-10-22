@@ -128,6 +128,7 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
   - `clickSel` 拿的是第一個符合的元素：先確認它的框不是 0×0（藏起來的那一層在前，見上面 `.r-top`），不然點到別的東西、什麼都沒發生。
   - 提示泡泡（`#toast`，3.2 秒）與離線橫幅會蓋在確認框上；要看底下的字就等它消失，或用 JS 讀 DOM。
   - 每跑一次 node 就是新的瀏覽器，登入的 cookie 留不下來：用 `set_password.py` 建的帳號，node 自己讀 `local/<帳號>_password.txt` 打 `/api/login`（密碼不進對話）。在瀏覽器裡用隨機密碼註冊的帳號，下一輪就登不進去了。
+  - **平行開好幾個無頭 Chromium 時，偵錯埠照帳號寫死、不要隨機挑**（2026-10-22 輿圖第 5 批 QA）：七支腳本各挑 `9200＋亂數` 撞到同一個埠，第二支連到第一支的瀏覽器、共用 cookie，量到的其實是另一個帳號（看起來像「名字挪了」）。寫死之後重跑就沒了；量到怪的先看那一份的「你」在哪。
   - 逐像素比修前修後，同一版也要跑兩次：煉製的太極爐、輿圖的紅旗、修練的人物面板是動畫，跑兩次就不一樣。只有新對新、舊對舊都一樣，新對舊才不一樣的，才算改動造成的。
   - **改版面的修前修後：兩份複本、同埠輪流起、同一個資料庫**（2026-10-21 FB-663／664）：`git archive -o <檔>.tar <sha> tianxia content web server.py server_push.py zhuan_html.py llm_queue.py console.py scripts run_bots.py`（只要這幾樣；解 `docs/`、`.claude/` 的中文檔名會壞），修前、修後各一份，`content/config.json` 只在複本裡加 `ollama_url`；用 Python `tarfile` 解、用 `filecmp` 逐檔比（只該差 `web/app.js`、`web/style.css`：伺服器端一個位元組都一樣，兩邊的 `/api/main` 就一樣，差的只會是網頁怎麼畫）。解出來的檔是 CRLF（autocrlf），拿它的 hash 去對 `git show <sha>:<檔>` 要先 `tr -d '\r'`。
   - **一個 node 迴圈掃全部地點**：`node:sqlite`（node 22.23 不必加旗標，要 `node --no-warnings`）`new DatabaseSync(<db>)`、`PRAGMA busy_timeout=30000`，`UPDATE characters SET data = json_set(data, '$.player.location', ?, '$.player.journey', json('null'), '$.player.stamina', 250) WHERE name = ?`，改完 `page.goto` 重載、抓 `.act-bar` 的 `outerHTML` 與 `.act-notes` 的 `innerHTML`、每一格小字的 Range 矩形對格子矩形；43 個地點約 2.5 分鐘。修前一份、修後一份，Python 逐地點比 HTML：不一樣的地點應該只差要改的那一格（這次是 21 處交友灰格，其餘 22 處逐字一樣）。陣營改 `characters.faction` 與 `$.player.faction` 兩處。

@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest import mock
 
 from conftest import real_content
-from tianxia import conquest, team, territory
+from tianxia import conquest, conquest_day, team, territory
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game
 from tianxia.models import Content
@@ -77,13 +77,14 @@ def contribution(game: Game) -> int:
 
 
 def announce(game: Game, loc_id: str, side: str, minute: int = 21 * 60, merged: tuple[str, ...] = ()) -> SiegeSlot:
-    """把一場攻城直接排進今天的時程表（第二批；不等 22:00 結算）：side 攻 loc_id，一小時後開打、半小時後開集結。merged 給兩軍時併成一場。"""
+    """把一場攻城直接排進今天的時程表（同戰書排的那一場，不看階與門檻、不記 day_log）：side 攻 loc_id，一小時後開打、半小時後開集結。
+    merged 給兩軍時併成一場。名字是第二批（每天公告）留下來的；那時寫 by="commander"（主將定奪），輿圖第三版第 5 批收掉之後寫戰書。"""
     w = game.state.world
     attackers = list(merged) or [side]
     slot = SiegeSlot(
         id=f"t-{loc_id}-{len(w.conquest.schedule)}", key=w.conquest.settled_key, loc=loc_id, minute=minute,
         at=w.time + 3600, muster_at=w.time + 1800, attackers=attackers,
-        by={a: "commander" for a in attackers}, reasons={a: "" for a in attackers},
+        by={a: conquest_day.LETTER for a in attackers}, reasons={a: "" for a in attackers},
     )
     w.conquest.schedule.append(slot)
     return slot
