@@ -192,6 +192,23 @@ return { z1, z2, there, top, bottom, prevented: ev.prevented, c, mk: mkWrites };
     assert out["mk"] == 0  # 記號一次都沒重畫
 
 
+def test_zooming_out_walks_back_to_the_fixed_framing():
+    """縮小時位移照倍率收回去（像看照片：縮回最小就置中）——縮到 1 倍剛好是現在的取景；放大不收（游標底下那一點不動）。
+    捏合縮回 1 倍也一樣（mapPan 是 null，transform 跟固定取景一字不差）。"""
+    out = run(_game(), READY + """
+const a = H.panZoom({ z: 3, x: -600, y: -400 }, 2, 100, 100, 3), b = H.panZoom({ z: 2, x: -100, y: -50 }, 3, 100, 100, 3);
+const c = H.panZoom({ z: 2, x: -100, y: -50 }, 0.8, 100, 100, 3);
+zoomTo(2);
+down(1, 120, 300); down(2, 260, 300); move(1, 150, 300); move(2, 230, 300); flush(); move(1, 180, 300); move(2, 200, 300); flush(); up(1, 180, 300); up(2, 200, 300); flush();
+return [a, b, c, H.S.mapPan, world.style.transform === H.mapTransform(H.curView(), VW, VH)];
+""")
+    a, b, c, after, same = out
+    assert a["z"] == 2 and a["x"] == pytest.approx((100 - 2 / 3 * 700) / 2) and a["y"] == pytest.approx((100 - 2 / 3 * 500) / 2)
+    assert b == {"z": 3, "x": -200, "y": -125}
+    assert c == {"z": 1, "x": 0, "y": 0}
+    assert after is None and same is True
+
+
 def test_the_world_map_zooms_up_to_four():
     out = run(_game(), READY + """
 for (let i = 0; i < 80; i++) { wheel(VW / 2, 300, -100); flush(); }
