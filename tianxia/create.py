@@ -91,8 +91,7 @@ LEAN_TEXT = {"正": "，帶一股正氣", "邪": "，帶一股邪氣", "無": ""
 STANCE_ORDER = ("變勢", "守勢", "攻勢", "起勢")
 STANCE_HOW = {"變勢": "提起一條腿", "守勢": "雙手收在胸前，或馬步放寬、手不伸出去", "攻勢": "手伸得遠，或身子前傾", "起勢": "其餘的架式"}
 # 稀有路數（content/create_forms.json 的 moves 標 rare 的那幾格）：只說哪幾格有、不說招名（留驚喜）。待 joy 潤
-RARE_LINE = "這幾格有稀有路數，成形時約{odds}會撞到："
-RARE_HERE = "這一格有稀有路數，成形時有機會撞到"
+RARE_LINE = "每一格都有機會撞到稀有路數（成形時約{odds}）"  # 待 joy 潤
 
 
 # ── 價錢與門檻 ──────────────────────────────────────────
@@ -821,6 +820,11 @@ def _reroll_shop(content: Content) -> str | None:
     return mall.item_for(content, "create_reroll")
 
 
+def _every_cell_rare(content: Content) -> bool:
+    rows = content.create_forms.moves
+    return all(moves.has_rare(content, m.attribute, m.timing) for m in rows)
+
+
 def _odds_word(x: float) -> str:
     """機會寫成「一成」「兩成」；不到一成寫百分比。"""
     tenths = round(x * 10, 6)
@@ -849,9 +853,8 @@ def view(state: GameState, content: Content, world: WorldStateStore) -> dict:
         "shop": _reroll_shop(content) if state.player.create_rerolls <= 0 else None,
         # 擺式：怎麼擺是哪個勢、對應哪個時機（照 stance_of 認的先後）；網頁照同一套幾何即時讀出現在是哪一個（poseRead）
         "stances": {k: [{"stance": st, "timing": moves.timing_of(k, st), "how": STANCE_HOW[st]} for st in STANCE_ORDER] for k in KINDS},
-        # 稀有路數在哪幾格（主屬性＋時機），不給招名
-        "rare_paths": [{"attribute": m.attribute, "timing": m.timing} for m in content.create_forms.moves if m.rare],
-        "rare_line": RARE_LINE.format(odds=_odds_word(cfg.move_rare_odds)), "rare_here": RARE_HERE,
+        # 稀有路數一行（Joy 2026-10-22「怎麼擺都要有機會」）：表上每一格都有稀有的版本才寫，不列哪幾格、不給招名
+        "rare_line": RARE_LINE.format(odds=_odds_word(cfg.move_rare_odds)) if _every_cell_rare(content) else "",
         "pose_weights": list(cfg.create_pose_weights), "attributes": list(ATTRIBUTES),  # 網頁擺式時即時算主屬性（top_of 的同一套）
     }
     if draft is None:
@@ -877,7 +880,6 @@ def view(state: GameState, content: Content, world: WorldStateStore) -> dict:
     base["draft"]["stance"] = stance  # 擺式讀出的勢（攻勢／守勢／變勢／起勢）
     base["draft"]["timing"] = moves.timing_of(draft.kind, stance)
     base["draft"]["main"] = top_of(content, draft)  # 照擺定的姿勢與意，現在的主屬性
-    base["draft"]["rare_cell"] = moves.has_rare(content, base["draft"]["main"], base["draft"]["timing"])  # 那一格有沒有稀有路數
     move = draft_move(state, content, draft)
     fire = fire_of_draft(state, content, draft) if draft.colors else None
     marks = marks_of(draft.colors, fire, draft.rare) if draft.colors else []

@@ -3934,18 +3934,15 @@
     const order = c.attributes || [];
     return order.reduce((best, a) => (best === null || (w[a] || 0) > (w[best] || 0) ? a : best), null);
   }
-  // 勢與稀有路數（Joy 2026-10-22「要加」）：四個勢怎麼擺、對應哪個時機，現在擺的那一個亮；底下八格稀有路數（只說在哪格、不說招名），
-  // 現在的主屬性＋時機落在有稀有的那一格時亮、多寫一句。擺式時拖一下就重畫（rigRedraw），立意那一步照伺服器讀的。字待 joy 潤
+  // 勢與稀有路數（Joy 2026-10-22「要加」）：四個勢怎麼擺、對應哪個時機，現在擺的那一個亮；底下一行「每一格都有機會撞到稀有路數」
+  // （表上每一格都有稀有的才寫，伺服器給 rare_line）。擺式時拖一下就重畫（rigRedraw），立意那一步照伺服器讀的。字待 joy 潤
   function stanceBoxHtml(c, kind, stance, main) {
     const rows = ((c.stances || {})[kind] || []);
     const now = rows.find((r) => r.stance === stance) || {};
     const list = rows.map((r) => `<li class="${r.stance === stance ? "on" : ""}"><span><b>${esc(r.stance)}</b>・${esc(r.timing)}</span><small>${esc(r.how)}</small></li>`).join("");
-    const here = (c.rare_paths || []).some((r) => r.attribute === main && r.timing === now.timing);
-    const rare = (c.rare_paths || []).map((r) => `<span class="cr-rp${r.attribute === main && r.timing === now.timing ? " on" : ""}">${ringHtml([r.attribute], esc(r.attribute), "jchip")}${esc(r.timing)}</span>`).join("");
     return `<p class="cr-now">此式是<b>${esc(stance || "")}</b>・${esc(now.timing || "")}${main ? `<span class="muted small">（連兵器、意一起算，主屬性現在偏${esc(main)}）</span>` : ""}</p>
       <ul class="cr-stances">${list}</ul>
-      <p class="muted small">${esc(c.rare_line || "")}</p><div class="cr-rps">${rare}</div>
-      ${here ? `<p class="cr-rare-here">${esc(c.rare_here || "")}</p>` : ""}`;
+      ${c.rare_line ? `<p class="muted small">${esc(c.rare_line)}</p>` : ""}`;
   }
   const biasHtml = (bias) => Object.entries(bias || {}).sort((p, q) => q[1] - p[1]).map(([k]) => ringHtml([k], esc(k), "jchip")).join("");
   function createHtml() {
