@@ -360,3 +360,17 @@ def test_a_bot_keeps_a_paid_draft_and_names_it_next_time(content):
     xinde = game.state.player.stats["xinde"]
     assert bot.create_art(game, random.Random(1))
     assert game.state.player.creating is None and game.state.player.stats["xinde"] == xinde
+
+
+def test_no_slip_points_to_the_mall(content):
+    """Joy 2026-10-22「沒有重悟丹不會自動提示玩家去商城購買」：手上沒帖、萬寶閣賣重悟帖時 view 給那一件的 id（網頁畫「去萬寶閣」）；
+    商城關著、沒賣、手上還有帖都是 None。"""
+    from tianxia.models import MallItem
+
+    game = _game(content)
+    assert create.view(game.state, content, game.world)["shop"] is None  # 商城關著
+    content.config.mall.enabled = True
+    content.mall = {"reroll_1": MallItem(id="reroll_1", name="重悟帖", price=50, kind="consumable", effects={"create_reroll": 1})}
+    assert create.view(game.state, content, game.world)["shop"] == "reroll_1"
+    game.state.player.create_rerolls = 1
+    assert create.view(game.state, content, game.world)["shop"] is None

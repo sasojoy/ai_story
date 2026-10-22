@@ -617,3 +617,31 @@ def test_the_mall_layer_follows_the_640_column_on_desktop():
     head = wide[wide.index("@media (min-width: 641px) {"):]
     assert ".shop-layer.shop-mall" in head[:head.index("{", head.index(".shop-layer.shop-smith"))]
     assert ".mall-btn" in css and ".shop-layer.shop-mall" in css
+
+
+# ── 一次買好幾件（Joy 2026-10-22）──
+
+
+def _many_view():
+    view = _view()
+    view["items"][0]["max"] = 5  # 伺服器算的：限購剩的、元寶買得起的
+    return view
+
+
+def test_the_ask_has_a_quantity_and_sends_it(m_on):
+    out = run(m_on, _async(_click('{ act: "mall-open" }') + _click('{ act: "mall-pick", id: "pills_5" }')
+                           + _click('{ act: "mall-qty", n: "3" }') + _click('{ act: "ask-yes" }') + """
+      return { calls: T.calls, asks: T.bodyHtml };"""),
+              responses={"/api/mall/buy": {"message": "", "bought": "pills_5", "mall": _many_view()}, "/api/mall": _many_view()})
+    first, three = out["asks"][-2], out["asks"][-1]
+    assert 'data-act="mall-qty"' in first and "最多 5" in first and "買下（100）" in first
+    assert "買下【回體丹五顆】×3？" in three and "300 元寶" in three and "4700" in three and "43 顆" in three and "買下（300）" in three
+    post = [c for c in out["calls"] if c[0] == "/api/mall/buy"]
+    assert len(post) == 1 and post[0][1]["qty"] == 3
+    picks = [c for c in out["calls"] if c[0] == "/api/mall/buy"]
+    assert REF.match(picks[0][1]["ref"])
+
+
+def test_one_left_means_no_quantity_row(m_on):
+    out = _layer(m_on, _click('{ act: "mall-pick", id: "pills_5" }'))
+    assert 'data-act="mall-qty"' not in out["asks"][-1]
