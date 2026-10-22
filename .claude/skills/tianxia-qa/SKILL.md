@@ -30,6 +30,11 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 - **Git Bash 的 tar 把 `C:/…` 當成遠端主機**（回「Cannot connect to C: resolve failed」，2026-10-21 輿圖第三版第 2 批）：先 `git -C <工作樹> archive -o <scratchpad>/x.tar <sha>`，再 `tar --force-local -x -f <tar> -C <資料夾>`。
 - **隔離工作樹裡 Bash 也擋這幾種**（2026-10-21 玉璽碎片複驗）：`SP=…` 變數加 `git archive` 加 `tar` 串在同一行、`python <<EOF` 的 heredoc、`python -I x.py` 帶中文 scratchpad 路徑的 Bash。做法：`git -C <工作樹> archive -o <絕對路徑>.tar <sha>` 一個指令一次（路徑寫死、不用變數）；解壓與批次修補檔都用 Write 工具寫成 `.py`（解壓用 `tarfile`，讀自己所在資料夾的 `*.tar`）再從 PowerShell `python -I` 跑；要平行跑一排腳本，在 PowerShell 同一個呼叫裡 `Start-Process` 一排再 `Wait-Process`（輸出導到各自的 `.txt/.out/.err`，`.err` 有東西才看）。
 - **子代理的 Bash 連 tar 都擋**（「computed value」，2026-10-21 翻地複驗）：`git archive -o` 之後用 Python `tarfile`（`untar.py`：`extractall` 時排除 `docs/`、`.claude/`）解；PowerShell 的 tar 解 `docs/` 底下的中文檔名會回 `Invalid empty pathname`，code 檔其實也沒解完。
+- **PowerShell 呼叫原生程式時空字串參數會被吞掉**（2026-10-22 長社火攻，`scen.py` 的「翻哪幾塊」空著、後面的參數往前補位）：腳本的選用參數用 `-` 當「沒有」，腳本裡自己轉回空的。
+- **清暫存別讓萃取的腳本被一起刪掉**（同上）：`Remove-Item …\cmp_*` 把自己放在同一個資料夾、同樣叫 `cmp_front.py` 的腳本刪了，六個行程開不起來，錯誤只在 `.err`。複製來的腳本改一個不會被通配吃掉的名字。
+- **PowerShell 工具有時把 `taskkill /PID` 的 `/PID` 當成 `Remove-Item` 的路徑擋掉**（回「Remove-Item on system path '/PID' is blocked」，2026-10-22 複驗，同一支腳本前一輪照跑）：同一個呼叫裡清檔用 `Get-ChildItem <資料夾> -Filter … | Remove-Item`、關行程用 `Stop-Process -Id`（自己開的單一行程）。
+- **複驗時對方改了字，先確認自己認句子的正規式也跟著改**（2026-10-22 長社火攻複驗：`play.py` 找「戰局起點照」，新句子變成「起點偏…戰況」，認不到時輸出是 `sentence=n`、看起來像「沒有那一句」）：先拿一個一定有的局面印一次，看認不認得到，再跑整批。
+- **`python -I` 連 `PYTHONHASHSEED` 一起忽略**（`-I` 含 `-E`）：要靠 `PYTHONHASHSEED=0` 逐位元組比的腳本（開發的 `cmp_front.py`）不要加 `-I`，加了集合的排列每個行程都不一樣。
 - **`Start-Process -ArgumentList` 的陣列元素有空格要自己加引號**：`-m "slow or not slow"` 寫成 `'"slow or not slow"'`；沒加就被拆成四個參數，pytest 回「no tests ran in 3s」、一個測試都沒跑（2026-10-21）。
 - **平行驗收**（2026-10-20）：PM 會給你一段 FB 號段、一個埠和一個 `<名字>.localhost`，只用給你的；瀏覽器窗格是共用的，**每一個動作都帶自己的 tabId**（10/20 有 QA 沒帶，動到別的子代理的分頁）。驗完把視窗設回 desktop、配色淺色、關掉自己的分頁、`taskkill /T` 關伺服器。
 - 開關的「一個字都不變」最好的驗法：同一支腳本，在功能分支開出來的那一點（`git archive` 解出來）和這一版各跑一次，比輸出。
@@ -75,6 +80,7 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
   - 軍令卡在 `main["orders"]`。
   - 按了 `act:bounties` 之後，懸賞榜在 `main["shop"]`（`notes` 每張有 `short`、`due`）。
   - 管理者頁（時刻表每一列、排定的現實時間 `at_real`）要 `GET /api/admin`；`main["admin"]` 只是布林。
+- **時刻表決戰的開法**（2026-10-22 長社火攻）：每一場一季只開得了一次，取消了也不能再開（`showdowns_opened`）——同一季要看第二種佔領就用新的資料庫，或 `end_season`＋`next_season`；`start_showdown` 的 id 是時刻表那一列（`changshe_fire`、`wancheng`、`guangzong`、`tianming`），宛城要第 3 週那件已結算；`tianming` 先 `seal_mandate when=now`（回「蓋上天命之季的章」）否則回「時刻表上沒有這一場決戰」。要驗「時間到了自己開」：`schedule {id, at}` 只會對齊到季曆整點，之後 `fast_forward hours=1` 推過去。排在後面的攻城戰書不會被 `cancel_battle` 一起取消，取消一場後下一場馬上開，連按到「沒有進行中的決戰」。
 - **`/api/do/<op>` 先查 `ADMIN_ACTIONS`**：玩家動作跟管理者動作同名時，玩家打到的是管理者那一個（回「只有管理者能這麼做。」）。一批加了新動作，先看一次 `set(server.MAIN_ACTIONS) & set(server.ADMIN_ACTIONS)`，再用玩家帳號真的打一次那個路由（2026-10-21 翻地 QA，FB-609：單元測試只看兩張表各有那個鍵）。
 - **實機對照「一個字都不變」**：腳本用 `subprocess.Popen` 在同一個埠輪流起兩份複本的伺服器，各用新的暫存資料庫，只打 API、印要比的欄位；把現實時刻的 `HH:MM` 換掉再 diff，結束時 `taskkill /T`。
 - `status` 裡沒有的鍵就是畫面不畫。要確認某個東西在某種季、某種狀態下不出現，直接看 `status` 有沒有那個鍵，再補打一次那個動作，確認什麼都沒動。
@@ -110,6 +116,8 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
   - **名字框互壓用開發自己的量法重現最快**：`import test_region_map_web as T`（`sys.path` 加 `tests/`），`T._game(profile=…, at=…)` 之後照要的局面 `conquest.push(...)`，再 `T.run(game, T.OVERLAP.replace("VW", …).replace("VH", …))`；`textW` 是估的、node 與瀏覽器擺出來一樣，幾秒一組，比開瀏覽器量快，修的人也能直接寫成測試。
   - **實機量區圖的互壓，照畫出來的量**（2026-10-22 複驗，FB-651）：開發的 `OVERLAP` 用模型的列（意境字那一列從框的左緣起、高度照字級估），別處的「寶」緊貼意境字這種它量不到；實機讀每一個 `rect.r-frame`、`.r-seal rect`、`text.r-ins` 的 `getBoundingClientRect` 自己算，朱圈照真的圓（`#mkt circle.r-you`：半徑 17×倍率＋線寬一半）量框到圓心最近那一點。翻地前後比位置：同一個帳號、同一個地圖框，先量沒人推、再用引擎 `conquest.push` 推、再量，逐框比 `getBoundingClientRect`。
   - **湊指定的地圖框**（開發的 `PHONES` 是 `#map` 的大小，不是視窗）：讀 `#map` 的 clientWidth／Height，差多少就把視窗高度加減多少再載入一次；狀態列的行數照帳號不同（多一行提示、下一件），同一個 375×812 視窗地圖框有 604／624／651。
+- **新加一段字會不會把第一屏擠爆**（2026-10-22 長社火攻，FB-685）：同一份程式、開關關著當對照，量 `#page > .act-bar`（閒著）或 `#page > .options > :last-child`（決戰回合）的下緣對 `.tabs` 的頂；`fitFirstScreen` 的 `fitClip` 對「句尾是數字」的句子不收（`fitDigitsShown`），所以尾巴是數字的長句永遠佔滿行數。截兩張同一視窗的 viewport 並排最看得出哪顆鈕被蓋住。
+  - JS 範本字串（反引號）裡的 `\b` 是退格字元、不是字界：在 `Runtime.evaluate` 的字串裡找英文字用 `(^|[^a-z])bot([^a-z]|$)`。
 - **共用窗格太擠、或要包 `fetch`、要換樣式表時，自己開 headless chromium**（寫法看 `tianxia-dev/網頁.md` 的「要真實截圖 PNG 的草圖」：playwright 的 chromium-1208、node 22、CDP；一個 node 腳本開一個瀏覽器、跑完 `taskkill /T` 自己的那個）。截圖用 `Page.captureScreenshot` 存 PNG，再用 Read 看。窗格那幾條（`el.click()`、單獨 reload、量 `scrollWidth`）照樣適用。好用的幾招：
   - **回應沒收到**：在頁面裡包 `window.fetch`，對指定的網址等真的回應回來再丟 `TypeError`（伺服器做了、頁面沒收到），或送出前就丟（根本沒到伺服器）；要「馬上再點、輪詢還沒插進來」就讓 `/api/main`、貨架那幾個 GET 先掛著（等一個 promise），點完才放。要「等一次輪詢再點」就不掛、記下輪詢何時打過。
   - **修前修後比版面**：同一個登入、同一頁，把 `git show <舊 sha>:web/style.css` 整份換進頁面（`link[href*="style.css"]` 換成 `<style>`），量同一批元素的 `getComputedStyle`（字級、字重、行高）與 `getBoundingClientRect`，再比兩張截圖的 sha256；不必起兩台伺服器。寬度要跨媒體查詢的邊界各量一次（640、641）。

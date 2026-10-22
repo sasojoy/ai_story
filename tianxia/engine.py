@@ -7324,13 +7324,16 @@ class Game:
         # 只留那一條沒說到的（三方混戰的規矩、沒到場的那一軍，siege.scene_note）
         if battle.siege is not None and (note := siege.scene_note(self.content, battle.siege, battle)):
             header += "\n\n" + note
+        if front := conquest.front_scene(self.content, definition, battle.front_note):  # 起點照哪一條戰線（開集結那一刻的快照）
+            header += "\n\n" + front
         if battle.seal_shard and battle.seal_shard in self.content.seal:  # 璽動（4.3）：參戰的人知道打完可能有單挑
             header += "\n\n" + seal.stir_text(self.content, battle.seal_holder or "", self.content.seal[battle.seal_shard].name, scene=True)
         if seal.on(self.content) and seal.is_mandate_battle(self.content, definition):  # 天命之爭（8.3）：碎片在哪一軍、懷璽的人份量加重
             shift = seal.lean_shift(battle.seal_lean, definition, self.content.config.seal)  # 同集結那一刻的算法（FB-186）
             weight = seal.MANDATE_WEIGHT if seal.holders(self.world.seal_state().registry) else ""  # 全服沒人持有就不寫（FB-189）
             header += "\n\n" + seal.MANDATE_SCENE.format(
-                lean=seal.lean_text(battle.seal_lean, definition), shift=seal.shift_text(shift, battle.seal_lean, definition), weight=weight,
+                lean=seal.lean_text(battle.seal_lean, definition), weight=weight,
+                shift=seal.shift_text(shift, battle.seal_lean, definition, extra=battle.front_note is not None),  # FB-687
             )
         names = battle_instance.side_names(battle, definition)  # 單方攻中立地時守將那一格寫守軍（FB-540）
         if battle.phase == "muster" and battle.commanders:  # 龍頭上陣：集結時就看得到誰親自上陣（三方混戰多一格守軍）
