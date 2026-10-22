@@ -7491,6 +7491,9 @@ class Game:
         battle, definition = status
         p = battle.participants.get(self.state.player.name)
         side = p.faction if p is not None else self._side()
+        if p is None and battle.siege is not None and not siege.slots(battle.siege, self._conquest_side()):
+            # FB-693：攻城戰裡自己站不進任何一格（另一軍看單方攻中立地：守將借的是那一軍的格），兩邊都不標「我方」、第一方在左
+            side = None
         g = self._gauge_of(battle, definition, side)
         # 這一回合還剩幾秒逾時（同 _round_wait）：網頁每秒自己倒數「最遲 M 分 S 秒後結算」，不等十秒一次的輪詢（Joy 2026-10-13）。
         # 暫停中、集結中是 None（不倒數）
@@ -10475,6 +10478,7 @@ class Game:
             return None
         side = self._conquest_side()
         names = {f.id: f.name for f in c.scenario.factions}
+        live = self._siege_live() if any(slot.status == "open" for slot in w.conquest.schedule) else None
         today = [{
             "id": slot.id, "loc": slot.loc, "place": c.locations[slot.loc].name,
             "attackers": [names.get(a, a) for a in slot.attackers], "time": self.stamp(slot.at), "minute": slot.minute,
@@ -10483,6 +10487,8 @@ class Game:
             # 輿圖第三版第 5 批（卡上「戰書／攻城／攻城戰果」那一段）：sides 是攻方的陣營 id；you 是看的人站得進哪一格（siege.slots 同一套：
             # 攻方 attack、被打的那一方 defend、散人與不是兩軍的人 help〔臨時投效或助守〕、另一軍站不進去是空的）；margin 是打完那一場的大勝／險勝
             "sides": list(slot.attackers), "you": self._siege_you(slot, side), "margin": self._siege_margin(slot),
+            # FB-690：region 是那一塊的大區名（加入要人在那一區）；join 是集結・交戰中那一場看的人此刻加不加得進去（_siege_join）
+            "region": self._region_name(slot.loc), "join": self._siege_join(slot, side, live),
         } for slot in w.conquest.schedule]
         blocks: dict[str, dict] = {}
         for loc in conquest.blocks(c):
@@ -10510,6 +10516,33 @@ class Game:
         if side in slot.attackers:
             return "attack"
         return "defend" if conquest.holder(self.state.world, self.content, slot.loc) == side else ""
+
+    def _region_name(self, loc_id: str) -> str:
+        region = atlas.region_of(self.content, loc_id) if loc_id in self.content.locations else None
+        return region.name if region is not None else ""
+
+    def _siege_live(self) -> tuple[list[battle_instance.BattleInstance], set[int]]:
+        """此刻集結或開打的全服戰鬥（決戰與攻城）與自己此刻加得進去的那幾場的流水號（_joinable：人在那一區、不在路上、站得進去、
+        還沒在任何一場的名單上）。conquest_view 有集結・交戰中的攻城時才讀一次。"""
+        showdown = self.world.get_battle()
+        live = ([showdown] if showdown is not None and showdown.phase != "ended" else []) + self._sieges()
+        return live, {b.record_id for b in self._joinable()}
+
+    def _siege_join(self, slot, side: str | None, live) -> str:
+        """FB-690：集結・交戰中那一場看的人此刻加不加得進去（卡上那顆鈕照它畫，跟江湖頁的加入鈕同一套 _joinable）：go＝加得進去、
+        in＝已經在這一場、busy＝已經在別的一場、far＝站得進去但人不在那一區（或在路上）、空字串＝站不進去（另一軍）或不是集結・交戰中。"""
+        if slot.status != "open" or live is None or not self._siege_you(slot, side):
+            return ""
+        battles, joinable = live
+        battle = next((b for b in battles if b.siege is not None and slot.record_id is not None and b.record_id == slot.record_id), None)
+        if battle is None:
+            return ""
+        name = self.state.player.name
+        if name in battle.participants:
+            return "in"
+        if any(name in b.participants for b in battles):
+            return "busy"
+        return "go" if battle.record_id in joinable else "far"
 
     def _siege_margin(self, slot) -> str:
         """打完那一場的大勝／險勝（收場那一下 siege._note_result 記在 day_log）；還沒打完、作罷、找不到是空字串。"""

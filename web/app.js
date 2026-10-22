@@ -5567,8 +5567,13 @@
   const SIEGE_JOIN = { attack: "去加入攻城", defend: "去守城", help: "去助陣" }, SIEGE_REPORT = "看戰報";
   const SIEGE_LETTER_LINE = "{who}約戰 <b>{time}</b>；開打前 {muster} 分鐘在這一帶集結，{join}這一塊的進度凍結到打完。";
   const SIEGE_FIGHT_LINE = "{who}攻{place}：<b>{status}</b>（{time} 開打）。{join}", SIEGE_DONE_LINE = "{time} 那一仗：<b>{status}</b>{margin}。";
-  // 看的人站不站得進這一場（you 是空的＝另一軍，siege.slots）：戰書那一句寫「人要在這一區才加得進去」、攻城那一句寫「這一區的人加得進去」
-  const SIEGE_IN_LETTER = "人要在這一區才加得進去。", SIEGE_IN = "這一區的人加得進去。", SIEGE_OUT = "這一場你這一邊站不進去。";
+  // 看的人站不站得進這一場（you 是空的＝另一軍，siege.slots）：戰書那一句寫「人要在某區才加得進去」；集結・交戰中照伺服器的 join
+  // （FB-690：同江湖頁的加入鈕 Game._joinable——人在那一區、不在路上、還沒在任何一場的名單上才加得進去）：go 才畫「去…」那一顆，
+  // in 畫「看戰況」，far 寫要到哪一區、走到這裡幾分（步行、疾行的鈕在卡的動作那一排），busy 寫已經在別的一場
+  const SIEGE_IN_LETTER = "人要在{region}才加得進去。", SIEGE_OUT = "這一場你這一邊站不進去。", SIEGE_WALK = "（走到這裡步行 {n} 分）";
+  const SIEGE_JOIN_WORD = { go: "你在{region}，加得進去。", in: "你已經在這一場的名單上。", busy: "你已經在另一場的名單上，加不進這一場。",
+    far: "人要在{region}才加得進去{walk}。" };
+  const SIEGE_WATCH = "看戰況";
   const LETTER_WORD = "下戰書", LETTER_ASK = "對{place}下戰書？當晚的攻城時段打一場，那一塊的進度凍結到打完；今天一邊只能下一張。";
   // 這一塊翻地那一份畫面資料（server.main_view 的 conquest.blocks，conquest.block_view：進度、冷卻、戰書、正在推的人、激戰、集火、看的人推不推得動）；
   // 領地爭奪關著、不是區塊是 null
@@ -5619,22 +5624,27 @@
     const done = rows.filter((r) => r.status === "done").pop();
     return done ? [done, "done"] : [null, ""];
   }
-  // 卡上第 2 段底下那一段（三種時刻；字待 joy 潤）：戰書（誰約戰、幾點、開打前幾分鐘集結、凍結）、攻城（狀態字、幾點開打，鈕照看的人站哪一格：
-  // 攻方「去加入攻城」、被打的那一方「去守城」、散人與不是兩軍的人「去助陣」，回江湖頁按；另一軍站不進去不畫鈕）、攻城戰果（那一仗誰拿下或守住、
-  // 大勝險勝，「看戰報」開見聞的戰報）
+  // 卡上第 2 段底下那一段（三種時刻；字待 joy 潤）：戰書（誰約戰、幾點、開打前幾分鐘集結、要在哪一區、凍結）、攻城（狀態字、幾點開打；
+  // 此刻加得進去〔join 是 go〕才畫一顆鈕回江湖頁按，字照看的人站哪一格：攻方「去加入攻城」、被打的那一方「去守城」、散人與不是兩軍的人「去助陣」；
+  // 已經在這一場畫「看戰況」；人不在那一區寫要到哪一區、走到這裡幾分，已經在別的一場、另一軍站不進去都只寫一句，FB-690）、
+  // 攻城戰果（那一仗誰拿下或守住、大勝險勝，「看戰報」開見聞的戰報）
   function siegeSection(id) {
     const [row, kind] = siegeOf(id);
     if (!row) return "";
-    const who = esc((row.attackers || []).join("、")), time = esc(row.time || ""), you = row.you || "";
+    const who = esc((row.attackers || []).join("、")), time = esc(row.time || ""), you = row.you || "", join = row.join || "";
+    const region = esc(row.region || "這一區"), q = (S.mapState && S.mapState.places && S.mapState.places[id]) || {};
     let say = "", btn = "";
     if (kind === "letter") {
       say = SIEGE_LETTER_LINE.replace("{who}", who).replace("{time}", time).replace("{muster}", Number(S.main.conquest.muster) || 0)
-        .replace("{join}", you ? SIEGE_IN_LETTER : SIEGE_OUT);
+        .replace("{join}", you ? SIEGE_IN_LETTER.replace("{region}", region) : SIEGE_OUT);
     }
     if (kind === "fight") {
+      const walk = typeof q.minutes === "number" && q.minutes > 0 ? SIEGE_WALK.replace("{n}", Number(q.minutes)) : "";
+      const word = !you ? SIEGE_OUT : (SIEGE_JOIN_WORD[join] || SIEGE_JOIN_WORD.far).replace("{region}", region).replace("{walk}", join === "far" ? walk : "");
       say = SIEGE_FIGHT_LINE.replace("{who}", who).replace("{place}", esc(row.place)).replace("{status}", esc(row.status_text)).replace("{time}", time)
-        .replace("{join}", you ? SIEGE_IN : SIEGE_OUT);
-      if (SIEGE_JOIN[you]) btn = `<button type="button" class="main" data-act="tab" data-tab="jianghu">${SIEGE_JOIN[you]}<small>回江湖頁</small></button>`;
+        .replace("{join}", word);
+      if (join === "go" && SIEGE_JOIN[you]) btn = `<button type="button" class="main" data-act="tab" data-tab="jianghu">${SIEGE_JOIN[you]}<small>回江湖頁</small></button>`;
+      if (join === "in") btn = `<button type="button" class="main" data-act="tab" data-tab="jianghu">${SIEGE_WATCH}<small>回江湖頁</small></button>`;
     }
     if (kind === "done") {
       say = SIEGE_DONE_LINE.replace("{time}", time).replace("{status}", esc(row.status_text)).replace("{margin}", row.margin ? `（${esc(row.margin)}）` : "");
@@ -6502,7 +6512,8 @@
   // 「戰」字印擺在哪（輿圖第三版第 5 批，企劃者 2026-10-22 挑 A 乙：名字框旁一枚）：名字都擺好之後才找，不挪任何名字、不讓這一區縮字。
   // 照先後試：寶（或名字框）的右邊、左邊、框上面靠右、框上面靠左、意境字那一列的右邊、下面，再往上下錯開、四個斜角——第一個不碰任何一處的名字框與意境字、
   // 小圖、你的旗與朱圈、鄰區出口、別的「戰」字印，也沒出取景框的：先要四周留 R_ROW_GAP（同 FB-651 兩列之間），找不到再只留 R_LETTER_PAD，
-  // 再找不到准碰自己的小圖；都碰到才蓋在自己名字框的右上角（fit 是假）。寫進那一處的 seal（螢幕上的 [左, 上, 右, 下]）與 sealFit
+  // 再找不到准碰自己的小圖；而且每一個空位都要離自己的名字框（印章框與意境字）比離任何別處的名字框近（FB-691：不然讀起來像別處下了戰書）。
+  // 都不行才蓋在自己名字框的一角（fit 是假）。寫進那一處的 seal（螢幕上的 [左, 上, 右, 下]）與 sealFit
   function regionLetterSeals(labels, icons, flag, you, exits, bounds) {
     const inter = (a, b) => Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0])) * Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1]));
     const s = R_SEAL, g = R_SEAL_GAP, placed = [];
@@ -6512,16 +6523,24 @@
       if (you && Math.hypot(Math.max(p[0] - you[0], 0, you[0] - p[2]), Math.max(p[1] - you[1], 0, you[1] - p[3])) < R_YOU) return false;
       return ![...labels.flatMap((l) => l.rows), ...icons.filter((q) => q !== own), ...(flag ? [flag] : []), ...exits, ...placed].some((q) => inter(p, q) > 0);
     };
+    const dist = (a, b) => Math.hypot(Math.max(0, b[0] - a[2], a[0] - b[2]), Math.max(0, b[1] - a[3], a[1] - b[3]));
+    const nearest = (b, rows) => rows.reduce((m, r) => Math.min(m, dist(b, r)), Infinity);
     labels.forEach((l, i) => {
       if (!l.letter) return;
+      const others = labels.filter((m) => m !== l).flatMap((m) => m.rows);
+      const mine = (b) => nearest(b, l.rows) < nearest(b, others); // FB-691：離自己比離別處近
       const [a0, a1, a2, a3] = l.rows[0], my = a1 + (l.fh - s) / 2, under = l.rows[1] ? l.rows[1][3] : a3, up = a1 - g - s;
       const spots = [[a2 + g, my], [a0 - g - s, my], [a2 - s, up], [a0, up], ...(l.rows[1] ? [[l.rows[1][2] + g, l.rows[1][1]]] : []),
         [a2 - s, under + g], [a0, under + g], [a2 + g, a1 - s / 2], [a2 + g, a3 - s / 2], [a0 - g - s, a1 - s / 2], [a0 - g - s, a3 - s / 2],
         [(a0 + a2 - s) / 2, up], [(a0 + a2 - s) / 2, under + g], [a2 + g, up], [a0 - g - s, up], [a2 + g, under + g], [a0 - g - s, under + g]];
       const boxes = spots.map(([x, y]) => [x, y, x + s, y + s]);
       // 第三輪：可以碰到自己的小圖（字印貼著自己那一處，還是「旁」）
-      const hit = boxes.find((b) => clean(b, R_ROW_GAP)) || boxes.find((b) => clean(b, R_LETTER_PAD)) || boxes.find((b) => clean(b, R_LETTER_PAD, icons[i]));
-      l.seal = hit || [a2 - s * 0.55, a1 - s * 0.55, a2 + s * 0.45, a1 + s * 0.45];
+      const hit = boxes.find((b) => mine(b) && clean(b, R_ROW_GAP)) || boxes.find((b) => mine(b) && clean(b, R_LETTER_PAD))
+        || boxes.find((b) => mine(b) && clean(b, R_LETTER_PAD, icons[i]));
+      // 都不行：蓋在自己名字框的一角（右上、左上、右下、左下），挑第一個離自己比離別處近的（蓋在框上，離自己是 0；別處的框也碰到就換一角）
+      const corners = [[a2 - s * 0.55, a1 - s * 0.55], [a0 - s * 0.45, a1 - s * 0.55], [a2 - s * 0.55, a3 - s * 0.45], [a0 - s * 0.45, a3 - s * 0.45]]
+        .map(([x, y]) => [x, y, x + s, y + s]);
+      l.seal = hit || corners.find(mine) || corners[0];
       l.sealFit = !!hit;
       placed.push(l.seal);
     });

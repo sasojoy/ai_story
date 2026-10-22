@@ -18,22 +18,25 @@ from conquest_kit import announce
 
 import server
 import webharness
-from tianxia import conquest, conquest_day
+from tianxia import conquest, conquest_day, siege
 from tianxia.state import DayNote, SiegeSlot
 
 pytestmark = [pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過"), pytest.mark.slow]
+NOW = 1_792_000_000.0
 CARD = 'return Object.fromEntries(["runan_wilds", "yingchuan_wilds", "hilltop_wilds", "changshe"].map((id) => [id, H.placeCard(H.S.mapBase, H.S.mapState, id)]));'
 
 
 def _moments(game):
-    """三種時刻各擺一處（同對比圖）：A 汝南荒野（中立）官軍推 65 下了戰書；B 潁川郊野（官軍的）黃巾推 62、集結・交戰中；
-    C 荒丘（中立）官軍的攻城戰打贏（大勝）、剛易手。回三場（時程表那一筆）。"""
+    """三種時刻各擺一處（同對比圖）：A 汝南荒野（中立）官軍推 65 下了戰書；B 潁川郊野（官軍的）黃巾推 62、集結・交戰中（真的開一場集結：
+    siege.open_waiting；FB-690 的 join 照江湖頁的加入判斷，要有那一場）；
+    C 荒丘（中立）官軍的攻城戰打贏（大勝）、剛易手。回三場（時程表那一筆，存檔重讀之後的）。"""
+    game.now = game.now or NOW
     w, c = game.state.world, game.content
     conquest.push(w, c, "runan_wilds", "guan", "映雪", 65, "attack")
-    a = announce(game, "runan_wilds", "guan")
+    announce(game, "runan_wilds", "guan")
     conquest.push(w, c, "yingchuan_wilds", "huang", "黃天客", 62, "attack")
     b = announce(game, "yingchuan_wilds", "huang", minute=20 * 60)
-    b.status = "open"
+    b.muster_at, b.at, b.status = w.time, w.time + 1800, "waiting"
     key = w.conquest.settled_key
     d = SiegeSlot(id="done-hilltop", key=key, loc="hilltop_wilds", minute=12 * 60, at=w.time - 600, muster_at=w.time - 2400,
                   attackers=["guan"], by={"guan": conquest_day.LETTER}, reasons={"guan": "官帥"}, status="done", winner="guan")
@@ -41,7 +44,12 @@ def _moments(game):
     conquest.flip(w, c, "hilltop_wilds", "guan", note=False)
     w.conquest.day_log.append(DayNote(key=key, side="guan", loc="hilltop_wilds", minute=12 * 60, by=conquest_day.LETTER, reason="官帥",
                                       result="taken", taken="guan", margin="大勝", keeper="guard", attackers=["guan"]))
-    return a, b, d
+    game._save_season()
+    siege.open_waiting(game.world, c, game.now)
+    game.state.world = game.world.get_season()
+    slots = {s.loc: s for s in game.state.world.conquest.schedule}
+    assert slots["yingchuan_wilds"].status == "open" and slots["yingchuan_wilds"].record_id is not None
+    return slots["runan_wilds"], slots["yingchuan_wilds"], slots["hilltop_wilds"]
 
 
 # ── 伺服器給的資料 ──
@@ -88,9 +96,9 @@ def test_the_card_has_a_section_for_each_siege_moment():
     cards = R.run(game, CARD)
     letter, fight, done = cards["runan_wilds"], cards["yingchuan_wilds"], cards["hilltop_wilds"]
     assert 'data-siege="letter"' in letter and "<h4>戰書</h4>" in letter
-    assert f"官軍約戰 <b>{game.stamp(a.at)}</b>；開打前 30 分鐘在這一帶集結，人要在這一區才加得進去。這一塊的進度凍結到打完。" in letter
+    assert f"官軍約戰 <b>{game.stamp(a.at)}</b>；開打前 30 分鐘在這一帶集結，人要在潁川汝南才加得進去。這一塊的進度凍結到打完。" in letter
     assert 'data-siege="fight"' in fight and "<h4>攻城</h4>" in fight
-    assert f"黃巾軍攻潁川郊野：<b>集結・交戰中</b>（{game.stamp(b.at)} 開打）。這一區的人加得進去。" in fight
+    assert f"黃巾軍攻潁川郊野：<b>集結・交戰中</b>（{game.stamp(b.at)} 開打）。你在潁川汝南，加得進去。" in fight
     assert re.search(r'<button type="button" class="main" data-act="tab" data-tab="jianghu">去守城<small>回江湖頁</small></button>', fight)
     assert 'data-siege="done"' in done and "<h4>攻城戰果</h4>" in done and "那一仗：<b>官軍拿下</b>（大勝）。" in done
     assert 'data-act="map-report">看戰報' in done
@@ -102,15 +110,66 @@ def test_the_card_has_a_section_for_each_siege_moment():
 
 
 def test_the_fight_button_follows_where_the_viewer_stands():
-    """攻城那一顆鈕：攻方「去加入攻城」、散人「去助陣」；另一軍站不進去（官軍單方攻中立地時的黃巾）不畫鈕、寫站不進去。"""
+    """攻城那一顆鈕：攻方「去加入攻城」；另一軍站不進去（官軍單方攻中立地時的黃巾）不畫鈕、寫站不進去。（一個測試只開一季：散人另一條）"""
     huang = R._game(profile="season21", faction="huang")
     _moments(huang)
     cards = R.run(huang, CARD)
     assert ">去加入攻城<small>" in cards["yingchuan_wilds"]
-    assert "這一場你這一邊站不進去。" in cards["runan_wilds"] and "人要在這一區才加得進去" not in cards["runan_wilds"]
+    assert "這一場你這一邊站不進去。" in cards["runan_wilds"] and "才加得進去" not in cards["runan_wilds"]
+
+
+def test_a_loner_lends_a_hand():
+    """散人「去助陣」（臨時投效或助守）。"""
     loner = R._game(profile="season21", faction=None)
     _moments(loner)
     assert ">去助陣<small>" in R.run(loner, CARD)["yingchuan_wilds"]
+
+
+def test_fb690_join_follows_whether_you_can_join_from_where_you_are():
+    """FB-690：集結・交戰中那一場，卡上那顆「去…」只給此刻加得進去的人（跟江湖頁的加入鈕同一套 Game._joinable：人在那一區、不在路上、
+    還沒在任何一場的名單上）。人在別區（QA：黃巾的人站汝南看涿郡那一場）：不畫那一顆，寫要到哪一區、走到那裡幾分；已經在這一場：
+    「看戰況」；資料 join 是 go／far／in。"""
+    from conquest_kit import go, join
+
+    game = join(R._game(profile="season21", at="wan_city"), "guan")  # 官軍站宛城（南陽）；一個測試只開一季，同一局搬人
+    _moments(game)
+    row = next(r for r in game.conquest_view()["today"] if r["loc"] == "yingchuan_wilds")
+    assert (row["you"], row["join"], row["region"]) == ("defend", "far", "潁川汝南")
+    minutes = game.map_state()["places"]["yingchuan_wilds"]["minutes"]
+    card = R.run(game, CARD)["yingchuan_wilds"]
+    assert f"人要在潁川汝南才加得進去（走到這裡步行 {minutes} 分）。" in card
+    assert "去守城" not in card and "去加入攻城" not in card and "去助陣" not in card  # 修前照樣寫「去守城」、按了回江湖頁插不上手
+    assert 'data-act="map-travel" data-mode="walk"' in card  # 走過去的鈕在卡的動作那一排
+    near = go(game, "yingchuan")  # 走到潁川郡（潁川汝南）：加得進去
+    assert next(r for r in near.conquest_view()["today"] if r["loc"] == "yingchuan_wilds")["join"] == "go"
+    assert ">去守城<small>" in R.run(near, CARD)["yingchuan_wilds"]
+    # 已經在這一場：照江湖頁的加入鈕加入，卡上換成「看戰況」
+    opt = next(o for o in near.options() if o.id.startswith("battle:join:") and o.enabled)
+    near.choose(opt.id)
+    near.state.world = near.world.get_season()
+    assert next(r for r in near.conquest_view()["today"] if r["loc"] == "yingchuan_wilds")["join"] == "in"
+    card = R.run(near, CARD)["yingchuan_wilds"]
+    assert "你已經在這一場的名單上。" in card and ">看戰況<small>回江湖頁</small>" in card and "去守城" not in card
+
+
+@pytest.mark.parametrize("faction,mine", [("huang", []), ("guan", ["guan"])])
+def test_fb693_the_other_army_is_not_marked_as_us_on_the_siege_gauge(faction, mine):
+    """FB-693（第二批就有）：官軍單方攻中立地，守將借的是黃巾那一格；黃巾的人（站不進這一場）看江湖頁的戰局條，兩邊都不標「我方」
+    （修前守軍那一邊標「我方」）；官軍的人照舊是官軍那一邊「我方」。"""
+    from conquest_kit import join
+
+    game = join(R._game(profile="season21", faction=faction), faction)  # 站潁川郡：汝南荒野那一場在同一區
+    game.now = NOW
+    w, c = game.state.world, game.content
+    conquest.push(w, c, "runan_wilds", "guan", "映雪", 65, "attack")
+    slot = announce(game, "runan_wilds", "guan")
+    slot.muster_at, slot.at, slot.status = w.time, w.time + 1800, "waiting"
+    game._save_season()
+    siege.open_waiting(game.world, c, game.now)
+    game.state.world = game.world.get_season()
+    g = game.battle_gauge()
+    assert g is not None and g["name"].startswith("攻城")
+    assert [x["id"] for x in (g["left"], g["right"]) if x["mine"]] == mine
 
 
 def test_a_void_siege_has_no_section():
@@ -234,18 +293,19 @@ def test_the_siege_sweep_script_is_built():
 
 # 「戰」字印不算進名字框（框的大小下不下戰書都一樣，同 FB-648 第二段乙）：名字擺好之後才找空位。2026-10-22 量的（weekend、season21 一樣，
 # 計畫第五節）：每一區五個手機地圖框、你站每一處與在路上 × 那幾種配法，字印一共 2807／487／517／163／421 枚（潁川汝南／南陽／洛陽／冀州／幽州），
-# 找不到空位、只好蓋在自己名字框右上角的（unfit）12／0／6／0／0 枚，找得到空位但離別處的名字框不到 R_ROW_GAP 的（tight）40／2／3／0／3 枚——只准變少。
+# 找不到空位、只好蓋在自己名字框一角的（unfit）12／0／6／0／0 枚，找得到空位但離別處的名字框不到 R_ROW_GAP 的（tight）40／2／3／0／3 枚——只准變少。
+# FB-691（空位要離自己比離別處近）之後重量：unfit 21／0／8／0／0（多的那幾枚是原本擺得離別處比離自己近、現在改蓋自己的框角），tight 照舊。
 # 第一版把字印算進名字框（框寬一格）：潁川汝南 360 寬、南陽 375×624、洛陽 375 寬互壓（量到 15＋22＋4 種局面），名字跳開的幾百種，所以改成這樣
-SEAL_LEFT = {"yingru": (12, 40), "nanyang": (0, 2), "luoyang": (6, 3), "jizhou": (0, 0), "youzhou": (0, 3)}
+SEAL_LEFT = {"yingru": (21, 40), "nanyang": (0, 2), "luoyang": (8, 3), "jizhou": (0, 0), "youzhou": (0, 3)}
 
 
-def _sweep(game, rid, phones, timeout=300):
-    """SIEGE_SWEEP 跑一區（潁川汝南 320 寬一次跑超過一分鐘，照自己的逾時跑）。"""
+def _sweep(game, rid, phones, timeout=300, script=None):
+    """SIEGE_SWEEP（或給的 script）跑一區（潁川汝南 320 寬一次跑超過一分鐘，照自己的逾時跑）。"""
     import json
 
     mine = {p["id"] for p in game.map_base()["places"] if p["region"] == rid}
     capt = [k for k, b in server.main_view(game)["conquest"]["blocks"].items() if b["capturable"] and k in mine]
-    payload = {"m": server.main_view(game), "script": SIEGE_SWEEP, "menxia": None, "stored": {}, "responses": {},
+    payload = {"m": server.main_view(game), "script": script or SIEGE_SWEEP, "menxia": None, "stored": {}, "responses": {},
                "S": {"mapBase": game.map_base(), "mapState": game.map_state(), "mapLayer": "region", "mapRegion": rid,
                      "rid": rid, "capt": capt, "phones": phones, "need": R.ROW_GAP - 0.05}}
     done = webharness.node(webharness.PRELUDE + R.DRIVER, json.dumps({"app": str(webharness.APP), **payload}), timeout)
@@ -270,9 +330,51 @@ def test_letter_seals_never_move_or_squeeze_the_names(profile, rid):
 @pytest.mark.parametrize("rid", ["yingru", "nanyang", "luoyang", "jizhou", "youzhou"])
 def test_letter_seals_on_the_narrowest_phone(rid):
     """320 寬（地圖框 320×344）：潁川汝南本來就擺不開（PM 2026-10-21 先這樣），下了戰書也不更擠——名字一個都不挪；別的四區 0 對互壓。
-    字印找不到空位的（蓋在自己名字框右上角）2026-10-22 量到 潁川汝南 123／574、南陽 2／95、洛陽 1／100，冀州、幽州 0（只准變少）。"""
+    字印找不到空位的（蓋在自己名字框一角）2026-10-22 量到 潁川汝南 123／574、南陽 2／95、洛陽 1／100，冀州、幽州 0；FB-691 之後
+    潁川汝南 164、南陽 2、洛陽 4（只准變少）。"""
     out = _sweep(R._game(profile="season21"), rid, [(320, 344)], timeout=600)
     assert out["moved"] == [], out["moved"][:5]
     if rid != "yingru":
         assert out["fails"] == [], out["fails"][:5]
-    assert len(out["unfit"]) <= {"yingru": 123, "nanyang": 2, "luoyang": 1, "jizhou": 0, "youzhou": 0}[rid]
+    assert len(out["unfit"]) <= {"yingru": 164, "nanyang": 2, "luoyang": 4, "jizhou": 0, "youzhou": 0}[rid]
+
+
+# FB-691（QA 2026-10-22）：「戰」字印要讀得出是誰的——QA 的量法：一次只下一張（每一塊單獨一張）× 你站每一處與在路上 × 五個手機地圖框＋320×344，
+# 量「字印離別處的名字框（印章框或意境字）不比離自己的近」的枚數（修前五個手機框 32 枚、320 寬另外 44 枚）
+SINGLE_SWEEP = """
+const base = H.S.mapBase, st0 = H.S.mapState, rid = H.S.rid, capt = H.S.capt, sides = base.world.sides.map((s) => s.id);
+const dist = (a, b) => Math.hypot(Math.max(0, b[0] - a[2], a[0] - b[2]), Math.max(0, b[1] - a[3], a[1] - b[3]));
+const nearest = (b, rows) => rows.reduce((m, r) => Math.min(m, dist(b, r)), Infinity);
+const ids = base.places.filter((p) => p.region === rid).map((p) => p.id), heres = [...ids, "@road"];
+let seals = 0;
+const unfit = [], near = [];
+for (const [VW, VH] of H.S.phones) {
+  const v = H.regionFit(base, rid, VW, VH);
+  for (const here of heres) for (const id of capt) {
+    const st = JSON.parse(JSON.stringify(st0)), q = st.places[id];
+    q.tug = { [sides.find((s) => s !== q.control)]: 62 }; q.cool = null; q.siege = "letter";
+    if (here === "@road") st.journey = { x: 0, y: 0 }; else { st.journey = null; st.here = here; }
+    const L = H.regionLabels(base, st, rid, v, VW, VH), l = L.find((x) => x.id === id);
+    seals += 1;
+    if (!l.sealFit) unfit.push([VW, VH, here, id]);
+    const others = L.filter((m) => m !== l).flatMap((m) => m.rows);
+    if (!(nearest(l.seal, l.rows) < nearest(l.seal, others))) near.push([VW, VH, here, id]);
+  }
+}
+return { seals, unfit, near };
+"""
+# 修了 FB-691 之後量的（2026-10-22；只准變少）：找不到空位、只好蓋在自己名字框一角的（五個手機框＋320）潁川汝南 8＋66、南陽 0＋1、洛陽 3＋1、
+# 冀州、幽州 0（一共 1404／240／252／84／210 枚）；離別處不比離自己遠的只剩潁川汝南 320 寬 1 枚（那裡名字框本來就互壓，四個框角都碰到別處）
+SINGLE_UNFIT = {"yingru": 74, "nanyang": 1, "luoyang": 4, "jizhou": 0, "youzhou": 0}
+
+
+@pytest.mark.parametrize("rid", ["yingru", "nanyang", "luoyang", "jizhou", "youzhou"])
+def test_fb691_one_letter_at_a_time_the_seal_reads_as_its_own(rid):
+    """FB-691：每一枚「戰」字印都離自己的名字框比離任何別處的名字框近（找不到這樣的空位就蓋在自己名字框的右上角，那也算自己的）；
+    蓋框角的照 SINGLE_UNFIT 只准變少。"""
+    out = _sweep(R._game(profile="season21"), rid, R.PHONES + [(320, 344)], timeout=900, script=SINGLE_SWEEP)
+    assert out["seals"] > 0
+    near_phones = [x for x in out["near"] if x[0] != 320]
+    assert near_phones == [], (len(near_phones), near_phones[:5])
+    assert len(out["near"]) <= (1 if rid == "yingru" else 0), out["near"]
+    assert len(out["unfit"]) <= SINGLE_UNFIT[rid], (out["seals"], len(out["unfit"]), out["unfit"][:5])

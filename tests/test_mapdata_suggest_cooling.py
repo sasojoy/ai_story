@@ -38,3 +38,21 @@ def test_your_own_cooling_block_is_not_suggested_to_hold_either():
     assert "hilltop_wilds" not in _suggested(game)
     w.conquest.fights["hilltop_wilds"].flipped_at = w.time - 10**8  # 冷卻過了：照舊列
     assert "hilltop_wilds" in _suggested(game)
+
+
+def test_fb692_a_block_frozen_by_a_letter_is_not_suggested_until_the_siege_is_over():
+    """FB-692：被戰書凍結的塊（設計 4.4：下了戰書到那一場攻城打完，兩邊都推不動）跟冷卻一樣不列；那一場打完（守住、作罷）照舊列。"""
+    from conquest_kit import announce
+
+    game = go(join(conquest_game("season21"), "guan"), "yingchuan")
+    w, c = game.state.world, game.content
+    conquest.flip(w, c, "yingshui", "huang")
+    w.conquest.fights["yingshui"].flipped_at = w.time - 10**8  # 冷卻過了：排第一（同上一條）
+    assert _suggested(game)[0] == "yingshui"
+    slot = announce(game, "yingshui", "guan")  # 官軍對潁水河畔下了戰書
+    assert conquest.frozen(w, "yingshui") is slot
+    assert "yingshui" not in _suggested(game)  # 修前照樣排第一
+    slot.status = "open"  # 集結・交戰中也一樣
+    assert "yingshui" not in _suggested(game)
+    slot.status = "done"  # 打完（守住了）：不凍結了
+    assert conquest.frozen(w, "yingshui") is None and _suggested(game)[0] == "yingshui"
