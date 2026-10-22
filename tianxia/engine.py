@@ -7324,6 +7324,8 @@ class Game:
         # 只留那一條沒說到的（三方混戰的規矩、沒到場的那一軍，siege.scene_note）
         if battle.siege is not None and (note := siege.scene_note(self.content, battle.siege, battle)):
             header += "\n\n" + note
+        if front := conquest.front_scene(self.content, definition, battle.front_note):  # 起點照哪一條戰線（開集結那一刻的快照）
+            header += "\n\n" + front
         if battle.seal_shard and battle.seal_shard in self.content.seal:  # 璽動（4.3）：參戰的人知道打完可能有單挑
             header += "\n\n" + seal.stir_text(self.content, battle.seal_holder or "", self.content.seal[battle.seal_shard].name, scene=True)
         if seal.on(self.content) and seal.is_mandate_battle(self.content, definition):  # 天命之爭（8.3）：碎片在哪一軍、懷璽的人份量加重

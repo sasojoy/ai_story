@@ -13,7 +13,7 @@ from .rules import (
     add_chronicle, add_rumor, add_world_flags, change_trend, check_condition, geju_tick, recompute_trends,
     decisive_week, ends_early, resolve_trends, season_one, season_one_off, stance_sides, stances, trend_shown, trend_value,
 )
-from .state import GameState, PlayerState, TimelineResult, WorldState
+from .state import GameState, PlayerState, Rumor, TimelineResult, WorldState
 from .world_state import WorldStateStore, season_length_days
 
 HOUR = 3600
@@ -585,12 +585,32 @@ def _open_claimed(
 
         from . import works  # noqa: PLC0415  同上
 
+        msgs += _front_muster(world, content, definition, start)  # 起點照哪一條戰線（領地爭奪開著的季；排在屯糧、天命之爭的偏移之前）
         msgs += works.on_muster(world, content, definition)  # 屯糧練兵：兩軍屯的量換成起點的偏移（排在天命之爭的偏移之前，兩者疊加）
         msgs += seal.on_muster(world, content, definition, now)
         from . import generals  # noqa: PLC0415  同上
 
         msgs += generals.on_muster(world, content, definition)  # 龍頭上陣：派那條戰線上的大勢人物上陣
     return msgs
+
+
+def _front_muster(world: WorldStateStore, content: Content, definition: BattleDef, start: int) -> list[str]:
+    """時刻表決戰剛開集結（_open_claimed，不在任何 mutate 裡）：領地爭奪開著、寫了戰線時，把起點照的那條線上誰佔幾處快照進這一場
+    （BattleInstance.front_note）、天下大事一句（企劃者 2026-10-22：不另加主場偏移，補一句說明）。其餘什麼都不寫（只讀一次季）。"""
+    from . import conquest  # noqa: PLC0415  同 advance_world_state 的延後 import
+
+    note = conquest.front_note(world.get_season(), content, definition, start)
+    if note is None:
+        return []
+
+    def _snap(b: battle_instance.BattleInstance) -> None:
+        if b.battle_id == definition.id and b.phase == "muster":
+            b.front_note = note
+
+    world.mutate_battle(_snap)
+    line = conquest.front_rumor(content, definition, note)
+    world.mutate_season(lambda s: s.rumors.append(Rumor(time=s.time, text=line, layer="world")))
+    return [f"🗺️ 【天下大事】{line}"]
 
 
 def season_hour(state: GameState, content: Content, rng: random.Random, players: int | None = None) -> list[str]:
