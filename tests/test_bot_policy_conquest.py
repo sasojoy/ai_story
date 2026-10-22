@@ -13,6 +13,8 @@ import pytest
 
 from conquest_kit import conquest_game, go, join, plain_game, press
 from tianxia import bot_policy, conquest, figures, orders
+from tianxia.bot_runner import BotRunner
+from tianxia.characters import open_characters
 from tianxia.engine import Game, Option
 from tianxia.state import BotProfile, Order
 
@@ -156,6 +158,30 @@ def test_a_bot_heads_for_the_block_its_side_has_pushed_furthest(monkeypatch):
     other = next(o for o in game.options(odds=False) if o.id.startswith("move:") and o.id != move.id)
     profile = game.state.player.bot
     assert bot_policy.score(game, move, profile) >= bot_policy.score(game, other, profile) + bot_policy.FOCUS_MOVE_SCORE - 1
+
+
+def test_the_focus_skips_a_higher_block_the_bot_cannot_win(monkeypatch):
+    """條最高的那一塊打不贏，就去打得贏的裡面條最高的（勝算照「條高的先、近的先」一塊一塊問，問到打得贏的為止）。"""
+    game = _bot(go(join(conquest_game("week7", name="假官"), "guan"), "wan_city"), "guan")
+    press(game, "lulin_zhai", "guan", 30, name="先鋒")
+    press(game, "nanyang_wilds", "guan", 10, name="先鋒")
+    asked = []
+
+    def odds(self, squad_id, at=None):
+        asked.append(at)
+        return "必敗" if at == "lulin_zhai" else "穩勝"
+
+    monkeypatch.setattr(Game, "odds", odds)
+    assert bot_policy._focus_hop(game) == "nanyang_wilds"
+    assert set(asked) == {"lulin_zhai", "nanyang_wilds"}  # 條是 0 的那幾塊不必問
+
+
+def test_bot_games_share_one_odds_memo():
+    """假人程式每一下重建 Game：勝算的記憶掛在 BotRunner 上一份，一輪一輪共用（同 server.ODDS_MEMO）。"""
+    game = conquest_game("week7", name="假官")
+    runner = BotRunner(game.content, game.world, open_characters(game.world.db.path), random.Random(1), clock=lambda: 0.0)
+    first, second = runner._bot_game(game.state), runner._bot_game(game.state)
+    assert first is not second and first.odds_memo is second.odds_memo is runner.odds_memo is not None
 
 
 def test_no_focus_when_the_sorties_are_spent_or_the_bot_cannot_win(monkeypatch):

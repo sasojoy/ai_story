@@ -92,7 +92,10 @@ def test_event_at_block_pushes_progress_once():
     pytest.skip("找不到單純的事件選項")
 
 
-def test_bot_train_value_follows_progress():
+def test_bot_train_value_follows_progress(monkeypatch):
+    # 2026-10-22（7 天季領地爭奪調整）之後假人出陣也看勝算（bot_policy._outmatched，測試在 test_bot_policy_conquest.py）：剛建的人打不贏
+    # 南陽官道的駐軍；這一條只鎖「推不推得動」，勝算一律當成穩勝
+    monkeypatch.setattr(bot_policy, "_sortie_win", lambda game, loc_id: 1.0)
     game = go(join(conquest_game("season21"), "huang"), "nanyang_huangjin_camp")
     profile = BotProfile(personality="普通", seed=1, faction="huang", season_number=1)
     assert bot_policy._train_value(game, profile, "nanyang_road") > 0  # 碰得到的中立地：推得動

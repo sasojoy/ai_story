@@ -1166,13 +1166,23 @@ def _focus_hop(game: Game) -> str | None:
         return None
 
     def compute() -> str | None:
+        # 勝算貴（每一路模擬四十場）：照「條高的先、近的先」一塊一塊問，問到第一塊打得贏的就是它——同「打得贏的裡面條最高、一樣高挑最近」
+        # （近照 next_hop 的排法：路程、站數、路），不必每一塊都算勝算
+        here = s.player.location
+        routes = atlas.shortest_routes(s, c)
         ready = [
             loc for loc in conquest.blocks(c)
-            if conquest.push_problem(s.world, c, side, loc, "attack") is None and not _outmatched(game, loc)
+            if (loc == here or (loc in routes and routes[loc].path)) and conquest.push_problem(s.world, c, side, loc, "attack") is None
         ]
-        if not ready:
-            return None
-        top = max(conquest.bar(s.world, loc, side) for loc in ready)
-        return next_hop(game, [loc for loc in ready if conquest.bar(s.world, loc, side) == top])
+
+        def order(loc: str) -> tuple:
+            route = routes.get(loc)
+            near = (0.0, 0, []) if loc == here or route is None else (round(route.minutes, 6), len(route.path), route.path)
+            return (-conquest.bar(s.world, loc, side), *near)
+
+        for loc in sorted(ready, key=order):
+            if not _outmatched(game, loc):
+                return next_hop(game, [loc])  # 已經在那裡是 None
+        return None
 
     return _turn_cached(("focus_hop",), compute)
