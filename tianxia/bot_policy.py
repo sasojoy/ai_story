@@ -662,12 +662,29 @@ def apply_job(game: Game, job: ForgeJob | MasterJob | SenseJob | DiscussJob, pro
     return []
 
 
+_TURN: dict | None = None  # 這一次 pick 打分時記住的查詢（每個前往鈕都要問一次的軍令地點、出陣勝算）；pick 以外是 None，照舊每次算
+
+
+def _turn_cached(key: tuple, compute):
+    """pick 打分那一輪裡同一個查詢只算一次（同一輪的選單、同一個時刻，答案不會變）；不在 pick 裡（測試直接叫 score）照舊每次算。"""
+    if _TURN is None:
+        return compute()
+    if key not in _TURN:
+        _TURN[key] = compute()
+    return _TURN[key]
+
+
 def pick(game: Game, options: list[Option], profile: BotProfile, rng: random.Random) -> str | None:
     """以強度旋鈕的機率挑最高分的選項（同分隨機），否則從假人會選的選項裡隨便挑。選邊鈕（豪強分屬兩軍）照 allied.pick_side、不打分數。"""
+    global _TURN
     side = allied.pick_side(game.state.player.name, [o.id for o in options if o.enabled], game.world.roll_counts())
     if side is not None:
         return side
-    scored = [(score(game, o, profile), o.id) for o in options]
+    _TURN = {}
+    try:
+        scored = [(score(game, o, profile), o.id) for o in options]
+    finally:
+        _TURN = None
     scored = [(value, option_id) for value, option_id in scored if value is not None]
     if not scored:
         return None
@@ -769,7 +786,9 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
         summons_hop = SUMMONS_MOVE_SCORE if arg.partition(":")[0] == _summons_hop(game) else 0.0  # 往召見的地點（計畫 T5）
         bounty_hop = BOUNTY_MOVE_SCORE if arg.partition(":")[0] == _bounty_hop(game) else 0.0  # 往懸賞要去的地方
         clinic_hop = _clinic_score(game) if arg.partition(":")[0] == bot.clinic_hop(game) else 0.0  # 內傷重了往醫館
-        return base + order_hop + summons_hop + bounty_hop + clinic_hop + (TRAIN_MOVE_SCORE if _train_value(game, profile, arg) > 0 else 0.0)
+        focus_hop = FOCUS_MOVE_SCORE if arg.partition(":")[0] == _focus_hop(game) else 0.0  # 領地爭奪：往這一邊最該推的那一塊
+        return base + order_hop + summons_hop + bounty_hop + clinic_hop + focus_hop \
+            + (TRAIN_MOVE_SCORE if _train_value(game, profile, arg) > 0 else 0.0)
     if kind == "act":
         if arg == "tavern":
             return None  # 酒肆：不交給打分數（只是打開酒肆），打聽由 take_turn 另外做
@@ -808,6 +827,8 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
             if sortie.on(c) and game.sortie_mode() == "stir":
                 return STIR_SCORE if game.sortie_push() else None  # 線在 50：攪局什麼都不推
             if _cannot_push(game, s.player.location):  # 領地爭奪：推不動的地方不出陣（翻地 QA 順帶：真人看得出有人一直在推不動的地方出陣）
+                return None
+            if _outmatched(game, s.player.location):  # 領地爭奪：贏面太低的地方不攻（打輸不推，只扣血掉銀兩）；去練功、去贏得了的地方
                 return None
             bonus = ORDER_SCORE if orders.win_counts(s, c, game._side(), s.player.location) else 0.0
             if sortie.on(c) and game.sortie_mode() == "hold" and orders.duty_counts(s, c, game._side(), s.player.location):
@@ -856,7 +877,9 @@ def _train_value(game: Game, profile: BotProfile, loc_id: str | None = None) -> 
     不再往戰線地點拉（出陣探索與地盤設計第七節：次數用完就去探索找素材練功）。"""
     goals = _goals(game, profile)
     if conquest.on(game.content, game.state.world):  # 領地爭奪：出陣推進度、不推線——照推得動的名目量（大本營、不是區塊是 0）
-        return TREND_WEIGHT * game.sortie_progress(loc_id) if game.sorties_left() > 0 else 0.0
+        if game.sorties_left() <= 0 or _outmatched(game, loc_id or game.state.player.location):  # 贏面太低的地方攻了也推不動
+            return 0.0
+        return TREND_WEIGHT * game.sortie_progress(loc_id)
     if sortie.on(game.content):
         pushes = game.sortie_push(loc_id) if game.sorties_left() > 0 else {}
     else:
@@ -1069,12 +1092,20 @@ def _bounty_hop(game: Game) -> str | None:
 def _order_hop(game: Game) -> str | None:
     """往這週軍令要去的地方，路程最近的那一站；已經在、沒有軍令、走不到時是 None（計畫 T6）。
     領地爭奪：只為了截糧才去、去了出陣推不動的地方不去（翻地 QA 順帶：開季的截糧軍令把假人拉到碰不到的中立地，一直在那裡出陣、連輸中立駐軍）；
-    攻城、守城的地方照 orders.targets（自家被戰書凍結的那一塊推不動，但要去加入攻城站守方，FB-605）。"""
+    攻城、守城的地方照 orders.targets（自家被戰書凍結的那一塊推不動，但要去加入攻城站守方，FB-605）；攻城、截糧的地方贏面太低的不去
+    （_outmatched，2026-10-22 7 天季）。"""
+    return _turn_cached(("order_hop",), lambda: _order_hop_now(game))
+
+
+def _order_hop_now(game: Game) -> str | None:
     s, c, side = game.state, game.content, game._side()
     places = orders.targets(s, c, side)
     if places and conquest.on(c, s.world):
         others = set(orders.targets(s, c, side, skip=frozenset({"intercept"})))
         places = [loc for loc in places if loc in others or not _cannot_push(game, loc)]
+        # 攻城的地方要出陣攻打贏才記得到：贏面太低的不去（守城、護糧、打擊人物不靠出陣攻打，照走）
+        keep = set(orders.targets(s, c, side, skip=frozenset({"intercept", "siege"})))
+        places = [loc for loc in places if loc in keep or not _outmatched(game, loc)]
     return next_hop(game, places) if places else None
 
 
@@ -1086,3 +1117,62 @@ def _cannot_push(game: Game, loc_id: str | None) -> bool:
         return False
     how = "hold" if conquest.holder(s.world, c, loc_id) == side else "attack"
     return conquest.push_problem(s.world, c, side, loc_id, how) is not None
+
+
+# 領地爭奪：出陣攻打只有打贏才推進度，打輸扣氣血、掉銀兩、往醫館跑（2026-10-22 量 7 天季：十級以下的假人對上中立駐軍〔難度 58～82〕
+# 幾乎全輸，被軍令帶去一直輸、一直療傷，練功的次數少一大截）。真人看得到鈕上的勝算，假人也照勝算挑：那裡出陣會打的幾路平均起來
+# 贏面不到 SORTIE_WIN_FLOOR 的地方不去攻（不出陣、不往那裡走），去練功、去贏得了的地方。勝算的字換成機會照 team.ODDS 的門檻取中間。
+SORTIE_WIN = {"穩勝": 0.95, "有把握": 0.75, "五五波": 0.5, "難分勝負": 0.25, "凶險": 0.2, "必敗": 0.03}
+SORTIE_WIN_FLOOR = 0.4
+
+
+def _sortie_win(game: Game, loc_id: str) -> float:
+    """在這一塊出陣攻打贏的機會（領地爭奪）：那裡出陣會打的每一路（Game._sortie_foes，出陣照 Game.rng 挑一路）照勝算的字（Game.odds，
+    照那一處的地利）換成機會再平均。沒有對手是 0。"""
+    def compute() -> float:
+        loc = game.content.locations[loc_id]
+        foes = game._sortie_foes(loc)
+        if not foes:
+            return 0.0
+        at = None if loc_id == game.state.player.location else loc_id
+        return sum(SORTIE_WIN.get(game.odds(sid, at=at), 0.0) for sid in foes) / len(foes)
+
+    return _turn_cached(("sortie_win", loc_id), compute)
+
+
+def _outmatched(game: Game, loc_id: str | None) -> bool:
+    """領地爭奪的季，這一塊要出陣攻打（不是自家的、搶得下來的區塊）而且贏面不到 SORTIE_WIN_FLOOR。開關關著、不是區塊、自家的（守不必打）、
+    散人都是假（照舊）。"""
+    s, c = game.state, game.content
+    side = game._side()
+    if loc_id is None or side is None or not conquest.on(c, s.world) or loc_id not in conquest.blocks(c):
+        return False
+    if conquest.holder(s.world, c, loc_id) == side or not conquest.capturable(c, loc_id):
+        return False
+    return _sortie_win(game, loc_id) < SORTIE_WIN_FLOOR
+
+
+# 領地爭奪：今天還有出陣次數時往這一邊最該推的那一塊走（推得動、打得贏的目標裡，這一邊的條最高的那幾塊；全是 0 時是最近的那一塊）。
+# 一塊要推到 100 才易手，各推各的推不滿（2026-10-22 量 7 天季：一邊一季推的量散在五、六塊上，每一塊都停在一二十）；
+# 真人看得到卡上誰推到幾成，會往同一塊湊。跟往懸賞走一樣急，比往軍令走低（軍令的攻城本來就照最高的那一塊）。
+FOCUS_MOVE_SCORE = 6.0
+
+
+def _focus_hop(game: Game) -> str | None:
+    """往這一邊最該推的那一塊路程最近的那一站（領地爭奪）：推得動（conquest.push_problem 是 None）、打得贏（不是 _outmatched）的目標裡，
+    這一邊的條最高的那幾塊（並列都算）。今天的出陣次數用完、已經在那裡、開關關著、散人都是 None。"""
+    s, c, side = game.state, game.content, game._side()
+    if side is None or not conquest.on(c, s.world) or game.sorties_left() <= 0:
+        return None
+
+    def compute() -> str | None:
+        ready = [
+            loc for loc in conquest.blocks(c)
+            if conquest.push_problem(s.world, c, side, loc, "attack") is None and not _outmatched(game, loc)
+        ]
+        if not ready:
+            return None
+        top = max(conquest.bar(s.world, loc, side) for loc in ready)
+        return next_hop(game, [loc for loc in ready if conquest.bar(s.world, loc, side) == top])
+
+    return _turn_cached(("focus_hop",), compute)
