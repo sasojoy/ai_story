@@ -32,6 +32,8 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 - **子代理的 Bash 連 tar 都擋**（「computed value」，2026-10-21 翻地複驗）：`git archive -o` 之後用 Python `tarfile`（`untar.py`：`extractall` 時排除 `docs/`、`.claude/`）解；PowerShell 的 tar 解 `docs/` 底下的中文檔名會回 `Invalid empty pathname`，code 檔其實也沒解完。
 - **PowerShell 呼叫原生程式時空字串參數會被吞掉**（2026-10-22 長社火攻，`scen.py` 的「翻哪幾塊」空著、後面的參數往前補位）：腳本的選用參數用 `-` 當「沒有」，腳本裡自己轉回空的。
 - **清暫存別讓萃取的腳本被一起刪掉**（同上）：`Remove-Item …\cmp_*` 把自己放在同一個資料夾、同樣叫 `cmp_front.py` 的腳本刪了，六個行程開不起來，錯誤只在 `.err`。複製來的腳本改一個不會被通配吃掉的名字。
+- **PowerShell 工具有時把 `taskkill /PID` 的 `/PID` 當成 `Remove-Item` 的路徑擋掉**（回「Remove-Item on system path '/PID' is blocked」，2026-10-22 複驗，同一支腳本前一輪照跑）：同一個呼叫裡清檔用 `Get-ChildItem <資料夾> -Filter … | Remove-Item`、關行程用 `Stop-Process -Id`（自己開的單一行程）。
+- **複驗時對方改了字，先確認自己認句子的正規式也跟著改**（2026-10-22 長社火攻複驗：`play.py` 找「戰局起點照」，新句子變成「起點偏…戰況」，認不到時輸出是 `sentence=n`、看起來像「沒有那一句」）：先拿一個一定有的局面印一次，看認不認得到，再跑整批。
 - **`python -I` 連 `PYTHONHASHSEED` 一起忽略**（`-I` 含 `-E`）：要靠 `PYTHONHASHSEED=0` 逐位元組比的腳本（開發的 `cmp_front.py`）不要加 `-I`，加了集合的排列每個行程都不一樣。
 - **`Start-Process -ArgumentList` 的陣列元素有空格要自己加引號**：`-m "slow or not slow"` 寫成 `'"slow or not slow"'`；沒加就被拆成四個參數，pytest 回「no tests ran in 3s」、一個測試都沒跑（2026-10-21）。
 - **平行驗收**（2026-10-20）：PM 會給你一段 FB 號段、一個埠和一個 `<名字>.localhost`，只用給你的；瀏覽器窗格是共用的，**每一個動作都帶自己的 tabId**（10/20 有 QA 沒帶，動到別的子代理的分頁）。驗完把視窗設回 desktop、配色淺色、關掉自己的分頁、`taskkill /T` 關伺服器。
