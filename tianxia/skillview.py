@@ -20,7 +20,7 @@ STAT_USES = {
     "str": "武學威力",
     "agi": "打完一場少損氣血・落敗有機會閃成平手",
     "con": "內功威力・氣血上限・少受內傷",
-    "wis": "修練機率・探索悟得意境・閉關心得",
+    "wis": "探索悟得意境・閉關心得・衝關",
     "lore": "武學與意境的持有上限",
 }
 # 事件檢定、隨口應對讀得到五項（設計 6.1、6.3），但正式內容還沒有任何事件檢定博聞，所以先寫「前四項」（PM 2026-10-05）。
@@ -413,6 +413,42 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
     # 修練頁與煉製頁畫的是同一份，所以兩頁的順序一樣
     rows.sort(key=lambda r: (not r["worn"], -QUALITIES.index(r["quality"]), -(r["level"] or 0), r["name"]))
     return rows
+
+
+def shown_art(state: GameState, content: Content, world: WorldStateStore, kind: str) -> dict | None:
+    """榜單點開的唯讀功法卡（Joy 2026-10-22「上榜的武學其他玩家應該要可以點的開來看卡」）：主人身上那一門內功或武學，
+    跟主人修練頁那張同一份料（品質、品相、成數、評分、意境槽與功效、招、功法卡的字），照主人那一份畫。
+    只放看的東西：修練、熔煉、改練、比身上、換上後戰力這些只有主人自己按得到的都不給。kind 是「內功」或「武學」；那一欄空著是 None。"""
+    member = state.player.member
+    art_id = member.neigong_id if kind == "內功" else member.wugong_id
+    art = team.player_art(state, content, world, art_id) if art_id else None
+    if art is None:
+        return None
+    level = level_of(state, art_id)
+    weapon = weapons.art_weapon(art_id, content, world) if art.kind == "武學" else None
+    return {
+        "id": art_id, "name": art.name, "kind": art.kind, "quality": art.quality, "attribute": art.attribute, "level": level,
+        "card": art_card(art, level, None, parent_names(art, content, world), traits.card_line(content, art), gen_word=gen_word(art, content, world)),
+        "affinity": arts_mod.affinity_text(art),
+        "slots": slot_rows(state, content, world, art), "colors": arts_mod.slot_colors(state, content, art),
+        "pose": create_mod.icon_pose(content, art, weapon), "weapon": weapon,
+        "score": arts_mod.score(state, content, world, art),
+        "tactic": tactic_line(content, art, level), "fifth": fifth_ring(content, art, level),
+        **_look(content, art),
+    }
+
+
+def shown_gear(content: Content, item, live: bool = True) -> dict:
+    """榜單神器譜點開的唯讀裝備卡（同 shown_art）：名字、種類、屬性、階品、淬煉、磨損、特技；item 是 state.Equipment。
+    威力加成看配的是哪一門武學，因人而異，不寫。live 是假的（那一件已經不在主人手上，照譜上記的拼一件）時淬煉、磨損是 None。"""
+    slot = item.slot
+    return {
+        "name": item.name, "slot": slot, "what": weapons.noun(item.kind) if slot == "weapon" else equipment.SLOTS[slot].label,
+        "attribute": item.attribute, "grade": equipment.grade(item), "tempers": item.tempers if live else None,
+        "temper_max": (content.config.weapons if slot == "weapon" else content.config.armor).temper_max,
+        "edge": item.edge if live else None, "wear_word": equipment.WEAR_WORDS.get(slot, ""),
+        "tactic": tactics_mod.item_lines(content, item),
+    }
 
 
 def melt_judge(state: GameState, content: Content, world: WorldStateStore, art: MartialArt, level: int) -> dict:

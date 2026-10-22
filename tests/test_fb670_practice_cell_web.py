@@ -30,8 +30,17 @@ NOW = MON + 10 * HOUR
 PRACTICE = "explore:practice"
 
 
-def _game(at, faction=None, profile="week7", classic=False):
+# 城裡操練（新手引導重做，Config.training）開著時城裡那一格是操練、城外練功寫級數（tests/test_training.py）；
+# 這一份測的是練功一格本身（操練關著），內容一律把它關掉
+
+def _content(profile):
     c = real_content(profile)
+    c.config.training.enabled = False
+    return c
+
+
+def _game(at, faction=None, profile="week7", classic=False):
+    c = _content(profile)
     if classic:
         classic_rules(c)
     store = open_world()
@@ -236,7 +245,7 @@ def test_practice_is_a_reveal_key_of_its_own():
 def test_the_tutorial_only_draws_the_cell_from_a_step_that_reveals_it():
     """序章（草廬）與初入江湖（出了草廬那四步）照教學內容的 reveal：寫了 act:practice 的那一步起才畫，沒寫就不畫，
     也不掉進「此地還能做」。初入江湖走完（onboard 是 None）才全亮。照正式內容的每一步算，教學改了也抓得到。"""
-    c = real_content("week7")
+    c = _content("week7")
     store = open_world()
     store.seed_first_season(c)
     store.open_season(c, NOW)
@@ -262,7 +271,7 @@ def test_the_tutorial_only_draws_the_cell_from_a_step_that_reveals_it():
 
 def test_the_hut_never_has_a_practice_option():
     """草廬裡（序章）探索不展開、也沒有練功（_explore_mode_options 在序章是空的）：格子不會在序章冒出來。"""
-    c = real_content("week7")
+    c = _content("week7")
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world(), prologue=True)
     game.client = None
     m = server.main_view(game)

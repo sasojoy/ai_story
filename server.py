@@ -65,7 +65,7 @@ from tianxia import (
     arena_crowd, ascend, battle_instance, biography, calendar, companion_agent, create, divine, duel, event_llm, feasts, fight_llm, foreshadow, gather_llm, gender, glyph, insight_llm, leaderboard, letters, mall, mapdata, might,
     naming,
     ollama_client, rules,
-    precise, seal, seal_duel, server_bots, social, sortie, speech, tavern, team, timetable, treasures, xingshi, yuedan,
+    precise, seal, seal_duel, server_bots, social, sortie, speech, tavern, team, timetable, training, treasures, xingshi, yuedan,
 )
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import env_profile, load_content, profile_line
@@ -1483,6 +1483,8 @@ def _main_view_body(game: Game) -> dict:
         "sortie": sortie.on(game.content),
         # 一類一顆開著（正式季整合第二章）：應召畫成行動列上面一條金框橫幅（設計 9.1 第 1 組乙），不收在「此地還能做」
         "precise": precise.on(game.content, game.state.world),
+        # 城裡操練與城外練功（新手引導重做，tianxia/training.py）：練功從探索三選一拿出來，在行動列自成一格
+        "training": training.on(game.content, game.state.world),
         # 行動列底下那幾行（explain-1）：探索、遊歷、交友、求見這一下會怎樣（選項 id → 一句；序章裡是空的）
         "action_notes": game.action_notes(o.id for o in options),
         # 有所感選做法那一步（explain-2）：做法鈕上寫的心意（選項 id → 剛柔快慢）與鈕底下兩行小字；不在選做法是 None
@@ -2077,6 +2079,7 @@ MAIN_ACTIONS = {
     "view_tab": lambda g, b: g.view_tab(str(b.get("tab", ""))),  # 序章裡打開修練、煉製頁（新手引導計畫一）
     "guide_ack": lambda g, b: g.guide_ack(),  # 對話框的結語按「知道了」
     "allocate": lambda g, b: g.allocate_stat(str(b.get("stat", ""))),  # 狀態列的配點鈕：升級得到的屬性點加到一項
+    "newbie_drifter": lambda g, b: g.newbie_drifter(),  # 任務卡「新手目標」的「就當散人」（新手引導重做）
     "pill": lambda g, b: g.take_stamina_pill(),  # 狀態列體力條上的「丹」：吃一顆回體丹（企劃者 2026-10-07 內測贈送）
     # 江湖頁「簽到」小標攤開的領取鈕（21 天季，正式季整合 6.2）：四階的日子帶 attribute（剛柔快慢）
     "checkin": lambda g, b: g.check_in(str(b.get("attribute", ""))[:2]),
@@ -2563,6 +2566,18 @@ def api_boards(request: Request):
     game = _game(request)
     book = {"id": "神器", "title": "神器譜", "note": DIVINE_NOTE, "book": game.divine_book_view()}
     return {"boards": leaderboard.view(boards_now(game), me=game.state.player.name) + [book]}
+
+
+@app.get("/api/board_card")
+def api_board_card(request: Request, board: str, name: str = "", season: int = 0, ref: str = ""):
+    """榜單點開的唯讀卡（Joy 2026-10-22）：武學榜、內功榜那一列給 board＋name（主人的名號），照主人身上那一門畫功法卡；
+    神器譜那一筆給 board=神器＋season＋ref（divine_book_view 那一筆的 ref），照原品畫裝備卡。只讀，不拿行動鎖：武學、內功照
+    快取的整張榜認得是不是榜上看得到的那幾列（leaderboard.art_card），主人的存檔讀一份快照。看不到了回 {"card": null}。"""
+    game = _game(request)
+    if board == "神器":
+        return {"card": leaderboard.gear_card(game.content, game.world, season, ref)}
+    card = leaderboard.art_card(game.content, game.world, boards_now(game), board, name, me=game.state.player.name)
+    return {"card": {**card, "card": md(card["card"])} if card else None}  # 功法卡的字同修練頁（menxia_view 的 owned_arts）轉成 HTML
 
 
 

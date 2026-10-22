@@ -416,7 +416,7 @@
         <main class="page" id="page"></main>
       </div>
       ${tabsHtml()}
-      ${S.sheet ? sheetHtml() : S.peer ? peerHtml() : ""}
+      ${S.sheet ? sheetHtml() : S.peer ? peerHtml() : S.boardCard ? boardCardHtml() : ""}
       ${S.main && S.main.shop ? shopHtml(S.main.shop) : S.mallOpen ? shopHtml(mallShop()) : ""}
       ${S.book ? bookHtml() : ""}
       ${S.zhuan ? zhuanHtml(S.zhuan) : ""}
@@ -599,7 +599,7 @@
       // 點體力條（丹／補滿那顆鈕以外的地方）在底下攤開體力怎麼回（explain-1；s.stamina_help 是伺服器照設定寫好的幾行）
       shown("stamina") ? `<div class="bar stam" title="體力" data-glow="stamina"${s.stamina_help && s.stamina_help.length
         ? ` data-act="stam-help" role="button" tabindex="0" aria-expanded="${!!S.stamOpen}" aria-controls="stam-help"` : ""}><i style="width:${pct(s.stamina, s.stamina_max)}%"></i><span><em class="lbl">體力 </em>${s.stamina}/${s.stamina_max}</span>${s.pills
-        ? `<button class="pill-btn" data-act="pill" ${s.pills.full || (!s.pills.refill && s.pills.today === 0) ? "disabled" : ""} aria-label="${s.pills.refill
+        ? `<button class="pill-btn" data-act="pill" data-glow="pill" ${s.pills.full || (!s.pills.refill && s.pills.today === 0) ? "disabled" : ""} aria-label="${s.pills.refill
           // 測試期間一鍵補滿（伺服器給 pills.refill＝鈕上的字，沒有丹也給）：鈕寫「補滿」不寫丹數；關著時沒有這個鍵，照 joy 的寫法
           ? `${esc(s.pills.refill)}體力（測試期間免費，不花${esc(s.pills.name)}）`
           : `服下${esc(s.pills.name)}（剩 ${s.pills.count} 顆，回 ${s.pills.restore} 點體力${s.pills.today == null ? "" : s.pills.today
@@ -1550,8 +1550,9 @@
   const ACT_CELLS = [
     { key: "explore", ids: ["act:explore"], name: "探索", none: "不能探索", icon: '<circle cx="12" cy="12" r="9"/><path d="M12 3v3m0 12v3M3 12h3m12 0h3M15 9l-4 2-2 4 4-2z"/>' },
     // 練功（FB-670，企劃者 2026-10-22 選練功入口「丙」）：以前是探索卡上的第四顆，現在行動列自己一格、排在探索右邊（五格）。
-    // 選項 id 照舊 explore:practice（假人、整季機器人不受影響）；一類一顆沒開、選單上沒有練功時不畫（同調息），序章照 act:practice 的鍵亮
-    { key: "practice", ids: ["explore:practice"], name: "練功", none: "", icon: '<path d="M14.5 17.5L3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2M9.5 14.5L21 3h-3L6.5 14.5M11 19l-6-6M8 16l-4 4M3 19l2 2"/>' },
+    // 選項 id 照舊 explore:practice（假人、整季機器人不受影響）；一類一顆沒開、選單上沒有練功時不畫（同調息），序章照 act:practice 的鍵亮。
+    // 城裡操練開著時（新手引導重做，Config.training；m.training）城裡這一格是「操練」（act:drill），城外照舊是練功
+    { key: "practice", ids: ["act:drill", "explore:practice"], name: "練功", none: "", icon: '<path d="M14.5 17.5L3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2M9.5 14.5L21 3h-3L6.5 14.5M11 19l-6-6M8 16l-4 4M3 19l2 2"/>' },
     { key: "train", ids: ["act:train"], name: "遊歷", none: "沒有對手", icon: '<path d="M14.5 4h-5L7 7h10zM12 7v13M8 12h8"/>' },
     // 打坐 2026-10-12 拿掉了（企劃者）：這一格只在序章教體力那一步有選項（調息），沒有選項就不畫（平常是四顆）
     { key: "rest", ids: ["act:rest"], name: "調息", none: "", icon: '<circle cx="12" cy="7" r="2.5"/><path d="M8 20c0-3 3-4 4-4s4 1 4 4M5 15l3-2m11 2l-3-2"/>' },
@@ -1582,6 +1583,8 @@
   const SORTIE_FULL_SUB = "今日已滿"; // 用完了：整句（什麼時候再來）在行動列底下那一行（待 joy 潤）
   const EXPLORE_PREFIX = "explore:"; // 探索三選一（出陣探索與地盤設計第三節）：探索那一格點了展開這三顆
   const EXPLORE_SUB = "三選一"; // 探索那一格是展開鈕時的小字（待 joy 潤）
+  const TIER_WORDS = ["一級", "二級", "三級"]; // training.TIER_WORDS：練功那一格的小字寫幾級
+  const DRILL_FULL = "今日已練滿", DRILL_FULL_SUB = "今日已滿"; // training.DRILL_FULL：用完了，格子寫短的、整句在底下那一行，點了打開移動
   // 找素材分支（第 32 項，計畫 2.1 甲）：選單上有 explore:gather:<分支> 時「找素材」是展開鈕，點了在它底下再攤一排分支（S.gatherOpen）；
   // 最後一顆「自己說…」點了出 20 字的輸入框（S.gatherSaying），送 /api/do/gather_text（同事件的隨口應對那一個輸入框）
   const GATHER_ID = "explore:gather"; // engine：explore_modes.option_id(GATHER)
@@ -1823,7 +1826,8 @@
       const name = lone ? "求見" : label;  // 格子窄：名字寫「求見」，人物的名字放在下面一行
       // 灰著、原因太長的交友（一類一顆開著時單人地點的交友是 act:socialize，不是 call:）：格子寫短的，整句帶句號放底下那一行（FB-664）。
       // 名望還差幾點（FB-670：五格時四個字以上會被切）同樣。單人的求見（lone）伺服器自己寫了同一句（action_notes），不動
-      const longWhy = !o.enabled && !lone && (detail === SOCIAL_NO_ONE || detail.startsWith(TALKED_OUT) || FAME_GAP.test(detail));
+      const drillFull = !o.enabled && detail.startsWith(DRILL_FULL); // 操練用完了：點了打開移動（最近的練功點在底下那一行）
+      const longWhy = !o.enabled && !lone && (detail === SOCIAL_NO_ONE || detail.startsWith(TALKED_OUT) || FAME_GAP.test(detail) || drillFull);
       noted.push(longWhy ? [name, o.id, `${detail}。`] : [name, o.id]);
       // 按不下去的原因：標籤括號裡寫的是體力就是「體力不夠」，寫別的就照寫；整句太長、格子裝不下（約 60 px、不換行）時只留
       // 最後一小句（例：挑戰本人打贏之後「剛吃了敗仗，閉門不見」只寫「閉門不見」，T4）
@@ -1833,12 +1837,16 @@
       const left = SORTIE_LEFT.exec(detail);
       // 探索三選一開著：探索那一格是展開鈕（同移動），點了在下面就地展開三顆；入口灰著（三顆都按不下去）時照一般的灰格子
       const wheel = d.key === "explore" && modes.length > 0 && o.enabled;
-      // 練功（FB-670）：亮著「不限次數」（只有頭目時「對上頭目」）；灰著沒有對手照鈕的 note（城外才有／這裡沒有）、頭目不在「頭目不在」，體力不夠照別格
-      const practice = d.key === "practice" && (o.enabled || !detail.startsWith("體力"))
+      // 練功（FB-670）：亮著「不限次數」（只有頭目時「對上頭目」）；灰著沒有對手照鈕的 note（城外才有／這裡沒有）、頭目不在「頭目不在」，體力不夠照別格。
+      // 城外練功分級（Config.training）：亮著寫級數（一級／二級／三級）；城裡的操練照出陣寫「今日 N 次」，用完了「今日已滿」
+      const practice = d.key === "practice" && o.id === PRACTICE_ID && (o.enabled || !detail.startsWith("體力"))
         ? (o.enabled ? (detail.split("・").includes(PRACTICE_BOSS) ? PRACTICE_BOSS_SUB : PRACTICE_SUB)
           : detail.startsWith(PRACTICE_NO_FOE) ? (o.note || PRACTICE_OUT) : PRACTICE_AWAY.test(detail) ? PRACTICE_AWAY_SUB : "")
         : "";
+      const tier = d.key === "practice" && o.enabled ? detail.split("・").find((x) => TIER_WORDS.includes(x)) : "";
       const sub = wheel ? EXPLORE_SUB
+        : tier ? tier
+        : drillFull ? DRILL_FULL_SUB
         : practice ? practice
         : o.enabled ? (lone ? label.replace(/^求見/, "") : left ? `今日 ${left[1]} 次` : (SHORT_SUB[o.id] || detail.replace(/^體力 (\d+).*$/, "體力 $1")))
         : detail === SOCIAL_NO_ONE ? SOCIAL_NO_ONE_SUB
@@ -1852,6 +1860,7 @@
       const parts = detail.split("・");
       const note = o.enabled && !wheel && /^體力 \d+/.test(parts[0]) ? (parts.find((x) => x in ODDS_TONE) || "") : "";
       const attrs = wheel ? `data-act="wheel" data-key="explore" aria-expanded="${exploreOpen}"`
+        : drillFull ? `data-act="drill-full" aria-expanded="${S.wheelSel === "move"}"` // 格子自己的 data-key 是 practice，不能再寫一個
         : o.enabled ? `data-act="choose" data-id="${esc(o.id)}"` : "disabled";
       return inkCell(d.key, name, sub, d.icon, attrs, (o.enabled ? "" : " off") + (wheel && exploreOpen ? " on" : ""), note);
     });
@@ -1879,7 +1888,7 @@
     const moveCard = !open || !shown("act:move") ? "" : `<div class="card act-move"><div class="seg move-mode" role="group" aria-label="走法">${MOVE_MODES.map((x) => `
           <button class="${S.moveMode === x.id ? "on" : ""}" data-act="move-mode" data-mode="${x.id}" aria-pressed="${S.moveMode === x.id}">${x.name}</button>`).join("")}</div>
         <div class="options">${moves.map((o) => `<button class="btn go" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}>
-          <span class="k">→</span><span>${esc(o.label)}</span></button>`).join("")}</div></div>`;
+          <span class="k">→</span><span>${esc(o.label)}${o.note ? `<small class="opt-note">${esc(o.note)}</small>` : ""}</span></button>`).join("")}</div></div>`;
     const exploreCard = !exploreOpen ? "" : `<div class="card act-explore"><div class="options">${modes.map((o) => o.id === GATHER_ID && branches.length
       ? gatherWheel(o, branches) : `
           <button class="btn" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}><span>${esc(o.label)}</span></button>`).join("")}</div></div>`;
@@ -1938,7 +1947,8 @@
     const notes = m.action_notes || {};
     // full（可有可無）：格子裡寫了短說法的灰格自己帶整句（FB-664），蓋過伺服器那一句——伺服器的「結識這裡的人」說的是按得下去的時候。
     // 伺服器沒給這一格的說明（舊版、序章裡是空的）就照舊不畫：有沒有這一行由伺服器說了算，這裡只換句子
-    const rows = noted.filter(([, id]) => notes[id]).map(([name, id, full]) => `<p><b>${esc(name)}</b>${esc(full || notes[id])}</p>`);
+    // 操練用完了（新手引導重做）：伺服器沒給操練說明，整句（最近的練功點）照鈕上的寫
+    const rows = noted.filter(([, id, full]) => notes[id] || (full && id === "act:drill")).map(([name, id, full]) => `<p><b>${esc(name)}</b>${esc(full || notes[id])}</p>`);
     if (m.status && m.status.howto_entry) rows.push(m.status.renown ? HOWTO_ENTRY.replace("名望怎麼來", "名聲怎麼來") : HOWTO_ENTRY);  // 名聲開著時那一節叫「名聲」
     return rows.length ? `<div class="act-notes">${rows.join("")}</div>` : "";
   }
@@ -2163,7 +2173,37 @@
     };
   }
 
-  const peekParts = (m) => [shown("stances") ? stancePeek(m) : null, shown("board") ? boardPeek(m, peekWeek(m)) : null, shown("quest") ? questPeek(m) : null, checkinPeek(m)];
+  // 新手目標（新手引導重做；tianxia/newbie.py，status.newbie）：引導走完、新手期裡收進這一排小標，攤開一次三條、每一條有「去做」。
+  // 「去做」：go.tab 切到那一頁；go.move 是最近的那一處，移動清單上有那一條就展開移動、讓它發光，沒有就打開輿圖。字待 joy 潤
+  const NEWBIE_GO = "去做", NEWBIE_DRIFTER = "就當散人";
+  function newbiePeek(m) {
+    const n = m.status && m.status.newbie;
+    if (!n || !n.rows.length) return null;
+    const rows = n.rows.map((r, i) => `<li class="nb-goal"><div><b>${esc(r.text)}</b><small>${esc(r.reward)}${r.go.place ? `・最近在${esc(r.go.place)}` : ""}</small></div>`
+      + `<span class="nb-btns"><button class="btn small" data-act="newbie-go" data-i="${i}">${NEWBIE_GO}</button>`
+      + `${r.drifter ? `<button class="btn small" data-act="newbie-drifter">${NEWBIE_DRIFTER}</button>` : ""}</span></li>`).join("");
+    return {
+      id: "newbie",
+      label: `${n.title}：做到 ${n.done}／${n.total}`,
+      chip: `<span class="peek-name">新手</span><span class="peek-nums">${n.done}/${n.total}</span>`,
+      flag: true,
+      dotNote: "",
+      panel: `<ol class="nb-goals">${rows}</ol>`,
+    };
+  }
+  function newbieGo(i) {
+    const r = S.main && S.main.status && S.main.status.newbie && S.main.status.newbie.rows[i];
+    if (!r) return;
+    if (r.go.tab) { if (r.go.tab !== S.tab) goTab(r.go.tab); else window.scrollTo({ top: 0, behavior: "smooth" }); return; }
+    const id = `move:${r.go.move}`, hit = (x) => x === id || x.startsWith(`${id}:`); // 疾行的 id 後面多接走法
+    if (!S.main.options.some((o) => hit(o.id))) { goTab("map"); return; }
+    S.wheelSel = "move";
+    renderPage();
+    revealMoveCard();
+    document.querySelectorAll("#page .act-move [data-id]").forEach((el) => { if (hit(el.dataset.id)) el.classList.add("glow"); });
+  }
+
+  const peekParts = (m) => [newbiePeek(m), shown("stances") ? stancePeek(m) : null, shown("board") ? boardPeek(m, peekWeek(m)) : null, shown("quest") ? questPeek(m) : null, checkinPeek(m)];
 
   function peekHtml(parts, week) {
     const list = parts.filter(Boolean);
@@ -3138,14 +3178,18 @@
   // 意境槽：一門武學一排玉環。裝著的環心寫意境的名字、底下〔技能〕與三節玉，點了拆下；空的環照它的顏色畫、底下寫收什麼，
   // 點了在底下攤開手上空著的意境，顏色收得下的點了裝進「這一格」（送 index），收不下的灰掉寫原因。裝、拆都不花東西。
   // 寫死的武學（本命、部下的上品）slots 是空清單，不畫。字待 joy 潤
-  function slotsHtml(a, x) {
+  // ro：別人的卡（榜單點開的，Joy 2026-10-22）：一樣畫，但格子點不了、不攤意境
+  function slotsHtml(a, x, ro = false) {
     if (!Array.isArray(a.slots) || !a.slots.length) return "";
     const colors = Array.isArray(a.colors) ? a.colors : [];
-    const pick = S.slotPick && S.slotPick.art === a.id ? S.slotPick.i : null;
+    const pick = !ro && S.slotPick && S.slotPick.art === a.id ? S.slotPick.i : null;
     // 序章裝意境那一步（prologue.art_glow 給師父點名的那一門 "slot"）：空格與可裝的意境亮
     const glowSlot = (a.glow || []).includes("slot") ? ' data-glow="slot"' : "";
     const cells = a.slots.map((s, i) => {
       const c = colors[i] || [];
+      if (ro) return s
+        ? `<span class="jd full" title="${esc(`「${s.name}」${s.look || ""}・${fxText(s.fx) || s.skill}${s.desc ? `：${s.desc}` : ""}`)}">${ringHtml(c, `<b>${esc(String(s.name).slice(0, 2))}</b>`)}${lookSeal(s.look)}${fxHtml(s.fx, "col") || `<small>〔${esc(s.skill)}〕</small>${lvHtml(s.strength)}`}</span>`
+        : `<span class="jd empty">${ringHtml(c, "", "vacant")}<small class="dim">空著</small></span>`;
       return s
         ? `<button type="button" class="jd full" data-act="slot-out" data-id="${esc(a.id)}" data-ins="${esc(s.id)}" title="${esc(`「${s.name}」${s.look || ""}・${fxText(s.fx) || s.skill}${s.desc ? `：${s.desc}` : ""}（點了拆下）`)}">${ringHtml(c, `<b>${esc(String(s.name).slice(0, 2))}</b>`)}${lookSeal(s.look)}${fxHtml(s.fx, "col") || `<small>〔${esc(s.skill)}〕</small>${lvHtml(s.strength)}`}</button>`
         : `<button type="button" class="jd empty${pick === i ? " on" : ""}" data-act="slot-pick" data-id="${esc(a.id)}" data-i="${i}"${glowSlot} title="${esc(ringWord(c))}">${ringHtml(c, "<i>＋</i>", "vacant")}<small class="dim">${esc(ringWord(c))}</small></button>`;
@@ -3558,13 +3602,13 @@
     if (pro()) return "";
     const v = craftView();
     const attrs = [...new Set(x.insights.map((i) => i.attribute))].sort();
-    const quals = [...new Set(x.insights.map((i) => i.quality).filter(Boolean))].sort((a, b) => (QUALITY_RANK[a] || 1) - (QUALITY_RANK[b] || 1));
+    const quals = [...new Set(x.insights.map((i) => i.look).filter(Boolean))].sort((a, b) => "凡佳珍神".indexOf(a) - "凡佳珍神".indexOf(b));  // 意境的品相（凡佳珍神，新手引導重做：不再寫底子的中品）
     const sel = (key, label, opts) => `<select class="input" data-act="craft-view" data-key="${key}" aria-label="${label}">${opts.map(([val, text]) =>
       `<option value="${esc(val)}"${v[key] === val ? " selected" : ""}>${esc(text)}</option>`).join("")}</select>`;
     const pot = S.forgeSel.length === 1 && S.forgePicks;
     return `<div class="craft-filter">
       ${sel("attr", "屬性", [["", "屬性"], ...attrs.map((a) => [a, `屬${a}`])])}
-      ${sel("quality", "品質", [["", "品質"], ...quals.map((q) => [q, q])])}
+      ${sel("quality", "品相", [["", "品相"], ...quals.map((q) => [q, `${q}品`])])}
       ${sel("sort", "排序", CRAFT_SORTS)}
       ${pot ? `<button type="button" class="fchip${v.okOnly ? " on" : ""}" data-act="craft-ok" aria-pressed="${v.okOnly}">只看合得了的</button>` : ""}
     </div>`;
@@ -3717,7 +3761,7 @@
   // 清單本身（craftChip、篩選、再列、合不了的灰掉）跟以前在頁面上的一模一樣
   function craftSheetHtml(x) {
     const v = craftView();
-    const keep = (type, thing) => (!v.attr || thing.attribute === v.attr) && (!v.quality || thing.quality === v.quality) && (!v.okOnly || !pickMark(type, thing.id));
+    const keep = (type, thing) => (!v.attr || thing.attribute === v.attr) && (!v.quality || thing.look === v.quality) && (!v.okOnly || !pickMark(type, thing.id));
     const order = (list) => v.sort === "name" ? [...list].sort((a, b) => a.name.localeCompare(b.name, "zh-Hant"))
       : v.sort === "attr" ? [...list].sort((a, b) => a.attribute.localeCompare(b.attribute, "zh-Hant")) : list; // 照品質＝伺服器的順序
     const ins = order(x.insights.filter((i) => keep("ins", i)));
@@ -3730,7 +3774,7 @@
         <div class="top-row"><h3 style="flex:1">${title}</h3><button type="button" class="btn small ghost" data-act="pot-close">關閉</button></div>
         ${craftFilterRow(x)}
         <div class="label">意境 <small class="muted">不同的合出新的意境，同一種的兩份是揣摩</small></div>
-        ${x.insights.length ? (ins.length ? `<div class="chips">${ins.map((i) => craftChip("ins", i, `${i.quality || ""}・屬${i.attribute}${i.lean !== "無" ? `・${i.lean}` : ""}・${fxText(i.fx) || i.depth || ""}`, i.grand ? 3 : 2,
+        ${x.insights.length ? (ins.length ? `<div class="chips">${ins.map((i) => craftChip("ins", i, `${i.look ? `${i.look}品` : ""}・屬${i.attribute}${i.lean !== "無" ? `・${i.lean}` : ""}・${fxText(i.fx) || i.depth || ""}`, i.grand ? 3 : 2,
           (i.glow || []).includes("pick:insight") && !S.forgeSel.some((p) => p.type === "ins" && p.id === i.id) ? ' data-glow="pick:insight"' : "")).join("")}</div>`
           : '<p class="muted">沒有合這些條件的意境。</p>')
           : '<p class="muted">還沒悟到任何意境。去探索，荒郊野外最容易有所領悟。</p>'}
@@ -6221,7 +6265,10 @@
     let out = "", season = null;
     for (const r of book) {
       if (r.season !== season) { out += `${season === null ? "" : "</ul>"}<p class="book-season">第 ${Number(r.season)} 季</p><ul class="board-book">`; season = r.season; }
-      out += `<li><b>${esc(r.name)}</b><small>${esc(r.text)}</small></li>`;
+      // 每一筆點得開那一把的唯讀卡（Joy 2026-10-22）；舊伺服器沒給 ref 就照舊只列字
+      out += r.ref
+        ? `<li><button class="board-open" data-act="board-card" data-board="神器" data-season="${Number(r.season)}" data-ref="${esc(r.ref)}"><span class="bk-txt"><b>${esc(r.name)}</b><small>${esc(r.text)}</small></span><span class="board-go" aria-hidden="true">›</span></button></li>`
+        : `<li><b>${esc(r.name)}</b><small>${esc(r.text)}</small></li>`;
     }
     return out + "</ul>";
   }
@@ -6231,11 +6278,66 @@
     if (!list.length) return '<div class="card"><p class="muted">還沒有榜單。</p></div>';
     const cur = list.find((x) => x.id === S.board) || list[0];
     const tabs = `<div class="board-tabs">${list.map((x) => `<button class="${x.id === cur.id ? "on" : ""}" data-act="board" data-board="${esc(x.id)}">${esc(x.title)}</button>`).join("")}</div>`;
-    const row = (r) => `<li class="board-row${r.rank <= 3 ? " podium" : ""}${r.you ? " you" : ""}"><span class="board-rank">${Number(r.rank)}</span><span class="board-name">${esc(r.name)}</span><span class="board-text">${esc(r.text)}${r.sub ? `<small>${esc(r.sub)}</small>` : ""}</span></li>`;
+    // 武學榜、內功榜的一列點得開主人那一門的唯讀功法卡（Joy 2026-10-22「上榜的武學其他玩家應該要可以點的開來看卡」），列尾一個 ›
+    const open = BOARD_CARDS.includes(cur.id);
+    const cells = (r) => `<span class="board-rank">${Number(r.rank)}</span><span class="board-name">${esc(r.name)}</span><span class="board-text">${esc(r.text)}${r.sub ? `<small>${esc(r.sub)}</small>` : ""}</span>`;
+    const row = (r) => `<li class="board-row${r.rank <= 3 ? " podium" : ""}${r.you ? " you" : ""}">${open
+      ? `<button class="board-open" data-act="board-card" data-board="${esc(cur.id)}" data-name="${esc(r.name)}" aria-label="看${esc(r.name)}的${esc(r.text)}">${cells(r)}<span class="board-go" aria-hidden="true">›</span></button>`
+      : cells(r)}</li>`;
     if (cur.book) return tabs + `<div class="card board"><h3>${esc(cur.title)}</h3><p class="muted board-note">${esc(cur.note)}</p>${bookRows(cur.book)}</div>`;
     const rows = cur.rows.length ? `<ol class="board-list">${cur.rows.map(row).join("")}</ol>` : '<p class="muted">尚無人留名。</p>';
     const mine = cur.mine ? `<p class="board-mine">你：第 ${Number(cur.mine.rank)} 名・${esc(cur.mine.text)}</p>` : "";
     return tabs + `<div class="card board"><h3>${esc(cur.title)}</h3><p class="muted board-note">${esc(cur.note)}</p>${rows}${mine}</div>`;
+  }
+
+  // 榜單點開的唯讀卡（Joy 2026-10-22）：S.boardCard = {loading, card, board}。武學、內功照主人修練頁那一張畫（印記、名字、品相、
+  // 第幾成與評分、屬性與收什麼、意境槽、功法卡的字〔招寫在裡面，同修練頁點開詳情時〕），沒有任何鈕；神器照修練頁裝備那一列的料畫。伺服器 /api/board_card 給料
+  const BOARD_CARDS = ["武學", "內功"];
+  function boardArtHtml(a) {
+    const level = Math.max(0, Math.min(10, a.level | 0));
+    return `<div class="acard ro${a.quality === "絕學" ? " q4" : ""}">
+      <div class="hd">${a.quality === "絕學" ? '<span class="qseal q4 big">絕</span>' : ""}<div><h3>${esc(a.name)}</h3><div class="sub">${[a.kind, a.quality, a.look].filter(Boolean).map(esc).join("・")}</div></div>${a.pose ? figSvg(a.pose, a.weapon, "card-fig") : ""}</div>
+      ${a.tier && a.quality !== "絕學" ? lookLadder(a.tier, ART_LOOK_STEPS) : ""}
+      <div class="train"><div class="tr-meter"><div class="tr-lv"><b>第${level}成</b>${typeof a.score === "number" ? `<span class="score">評 ${a.score}</span>` : ""}</div>
+        <div class="ten">${Array.from({ length: 10 }, (_, k) => `<i${k < level ? ' class="on"' : ""}></i>`).join("")}</div></div></div>
+      <div class="lvline"><span>${esc(a.kind)}${a.attribute ? `・屬${esc(a.attribute)}` : ""}・收${esc(a.affinity || "")}</span></div>
+      ${slotsHtml(a, null, true)}
+      <div class="art-card">${tenCells(a.card)}</div>
+    </div>`;
+  }
+  function boardGearHtml(g) {
+    const bits = [g.what, `屬${g.attribute}`, g.grade, g.tempers ? `淬煉 ${g.tempers | 0}/${g.temper_max | 0}` : "", g.edge != null && g.wear_word ? `${g.wear_word} ${g.edge | 0}` : ""];
+    return `<div class="acard ro gear-ro">
+      <div class="hd"><div><h3>${esc(g.name)}</h3><div class="sub">${bits.filter(Boolean).map(esc).join("・")}</div></div></div>
+      ${(g.tactic || []).map((t) => `<p class="art-tactic">${tacticHtml(t)}</p>`).join("")}
+      <p class="muted board-owner">第 ${Number(g.season)} 季・在${esc(g.owner || "")}手上</p>
+    </div>`;
+  }
+  function boardCardHtml() {
+    const B = S.boardCard;
+    const c = B.card;
+    const body = B.loading ? '<p class="muted">……</p>'
+      : !c ? '<p class="muted">這一張現在看不到了：榜單剛換過，或主人身上換了功夫。</p>'
+      : B.board === "神器" ? boardGearHtml(c)
+      : `<p class="board-owner">${esc(c.owner)}身上的${esc(B.board)}</p>${boardArtHtml(c)}`;
+    return `<div class="sheet-bg" data-act="board-card-close"></div>
+      <div class="sheet bcard-sheet" role="dialog" aria-label="${esc(c ? c.name : "看卡")}"><div class="grip"></div>
+        ${body}
+        <div class="row"><button class="btn ghost" data-act="board-card-close">關閉</button></div>
+      </div>`;
+  }
+  async function openBoardCard(el) {
+    const d = el.dataset;
+    const q = d.board === "神器" ? `board=${encodeURIComponent("神器")}&season=${Number(d.season)}&ref=${encodeURIComponent(d.ref)}`
+      : `board=${encodeURIComponent(d.board)}&name=${encodeURIComponent(d.name)}`;
+    S.boardCard = { loading: true, board: d.board, card: null };
+    render();
+    try {
+      const r = await api(`/api/board_card?${q}`);
+      if (S.boardCard) { S.boardCard = { loading: false, board: d.board, card: r.card || null }; render(); }
+    } catch (e) {
+      if (S.boardCard) { S.boardCard = { loading: false, board: d.board, card: null }; render(); }
+    }
   }
 
   // ── 名帖（Joy 2026-10-19：抱拳改成互贈名帖；一張畫布當自己的標籤，頭銜系統照存檔算、按一下刷新，再留一句自題）──
@@ -6908,7 +7010,7 @@
     S.forgeMade = null;
     S.book = false; // 武學譜是疊在煉製頁上的一本書：換分頁就闔上
     S.zhuan = null; clearTimeout(zhuanTimer); // 傳也一樣
-    S.mtEdit = null; S.mtZoom = null; // 名帖的畫布與放大的那一張也收起
+    S.mtEdit = null; S.mtZoom = null; S.boardCard = null; // 名帖的畫布與放大的那一張、榜單點開的卡也收起
     if (tab !== "map") stopPlay(); // 版圖變化的播放也停
     if (tab === "news") S.unseen = false;
     render();
@@ -7733,6 +7835,8 @@
         case "guide-more": S.guideFull = S.guideFull === (S.main.guide && S.main.guide.text) ? null : S.main.guide && S.main.guide.text; renderPage(); break;
         case "scene-more": S.sceneOpen = !S.sceneOpen; renderPage(); break;
         case "peek": peekTap(el.dataset.id); break; // 江湖頁最上面那一排小標：只換那一塊，「剛剛」不會重播
+        case "newbie-go": newbieGo(Number(el.dataset.i)); break; // 新手目標的「去做」
+        case "newbie-drifter": await doMain("newbie_drifter"); break; // 新手目標的「就當散人」
         case "hear-more": hearToggle(el); break; // 戰鬥卡片底下聽來的那一句：原地展開／收起，不重畫
         case "line-more": lineToggle(el); break; // FB-107 收成一行的補充（對手的描述）：原地展開／收起，不重畫
         case "own-more": ownOpen(); break; // FB-107：決戰時收成一行的所在地描述，原地攤開
@@ -7979,6 +8083,11 @@
           renderPage();
           if (S.wheelSel) revealMoveCard(); // 收起（再點一次）不捲
           break;
+        case "drill-full": // 操練用完了：點了展開移動（最近的練功點寫在行動列底下那一行）
+          S.wheelSel = S.wheelSel === "move" ? null : "move";
+          renderPage();
+          if (S.wheelSel) revealMoveCard();
+          break;
         case "gather-wheel": // 找素材分支（第 32 項）：「找素材」點了在它底下攤開（再點一次收起）；輸入框跟著收
           S.gatherOpen = !S.gatherOpen;
           S.gatherSaying = false;
@@ -8033,6 +8142,8 @@
           if (S.news === "mingtie") await loadMingtie();
           break;
         case "board": S.board = el.dataset.board; renderPage(); break;
+        case "board-card": await openBoardCard(el); break;
+        case "board-card-close": S.boardCard = null; render(); break;
         case "report":
           S.news = "reports";
           S.reportOpen = true;

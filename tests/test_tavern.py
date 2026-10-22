@@ -203,6 +203,7 @@ def test_cannot_act_outside_the_tavern():
 def test_a_bot_drops_in_asks_one_thing_and_leaves():
     from tianxia import bot_policy
     game = _game(silver=500)
+    game.state.player.newbie_done.add("tavern")  # 新手目標「在酒肆打聽一件事」的 20 兩另外驗（tests/test_training.py）
     rng = random.Random(1)
     old = bot_policy.TAVERN_CHANCE
     bot_policy.TAVERN_CHANCE = 1.0

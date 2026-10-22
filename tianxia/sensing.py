@@ -380,7 +380,7 @@ def finish(
         place=loc.name, glyph=req.points,
     ))
     fx = insight_fx.roll(state, content, world, own.id)  # 意境效果池：自己悟的也擲品質與效果
-    msgs = lead + [f"你悟得了「{own.name}」的意境（屬{own.attribute}）！", insights.FX_LINE.format(quality=fx.quality, label=insight_fx.label(content, fx))]
+    msgs = lead + [f"你悟得了「{own.name}」的意境（屬{own.attribute}）！", insights.FX_LINE.format(look=insight_fx.look(fx), label=insight_fx.label(content, fx))]
     if own.note:
         msgs.append(own.note)
     msgs.append("這份領悟是你自己的，江湖上沒有第二份。")

@@ -23,8 +23,17 @@ NOW = MON + 10 * HOUR
 PRACTICE = "explore:practice"
 
 
-def _game(at, faction=None, profile="week7"):
+# 城裡操練（新手引導重做，Config.training）開著時城裡那一格是操練、城外練功寫級數（tests/test_training.py）；
+# 這一份測的是練功一格本身（操練關著），內容一律把它關掉
+
+def _content(profile):
     c = real_content(profile)
+    c.config.training.enabled = False
+    return c
+
+
+def _game(at, faction=None, profile="week7"):
+    c = _content(profile)
     store = open_world()
     store.seed_first_season(c)
     store.open_season(c, NOW)
