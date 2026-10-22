@@ -23,7 +23,7 @@ from tianxia.sqlite_world import open_world
 
 pytestmark = [pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過"), pytest.mark.slow]
 NAMES = ["S", "applyMapView", "mapReady", "mapTransform", "panClamp", "panZoom", "panBox", "panWire", "enterRegion", "toWorld",
-         "mapTimeline", "mapWeekTo", "regionPick", "curView", "PAN_MAX", "PAN_SLOP"]
+         "mapTimeline", "mapWeekTo", "regionPick", "curView", "PAN_MAX", "PAN_SLOP", "renderTop", "mapFrame"]
 DRIVER = re.sub(r"wholeApp\(\[.*?\]\)", "wholeApp(" + repr(NAMES).replace("'", '"') + ")", test_prologue_web.DRIVER, count=1, flags=re.S)
 APP = Path(server.WEB) / "app.js"
 CSS = Path(server.WEB) / "style.css"
@@ -61,9 +61,14 @@ const mk = {{}};
 Object.defineProperty(mk, 'innerHTML', {{ get: () => mkHtml, set: (v) => {{ mkWrites += 1; mkHtml = v; }} }});
 const dcls = new Set();
 const drawer = {{ style: {{}}, offsetHeight: 0, classList: {{ contains: (c) => dcls.has(c), toggle: (c, on) => (on ? dcls.add(c) : dcls.delete(c)) }} }};
+const props = {{}};
+let topBottom = 60;
 const els = {{ map: wrap, mk, mkt: {{ innerHTML: '' }}, msel: {{ innerHTML: '', firstChild: null }}, mbody: {{ innerHTML: '' }}, mdrawer: drawer,
-  mapx: {{ clientHeight: VH, className: '', children: [], style: {{ setProperty() {{}}, getPropertyValue: () => '' }}, insertAdjacentHTML() {{}} }},
-  top: {{ hidden: false, getBoundingClientRect: () => ({{ bottom: 60 }}) }} }};
+  mapx: {{ clientHeight: VH, className: '', children: [], style: {{ setProperty: (k, v) => {{ props[k] = v; }}, getPropertyValue: (k) => props[k] || '' }}, insertAdjacentHTML() {{}} }},
+  top: {{ hidden: false, innerHTML: '', offsetHeight: 60, getBoundingClientRect: () => ({{ bottom: topBottom }}), querySelector: () => null, querySelectorAll: () => [],
+    classList: {{ add() {{}}, remove() {{}}, toggle() {{}}, contains: () => false }} }} }};
+// 狀態列變高（dh > 0）或變矮：地圖框跟著換高（框的上緣是狀態列的下緣），只改大小、不叫 applyMapView（FB-710 的情形）
+const frameTo = (h) => {{ topBottom = 60 + (VH - h); wrap.clientHeight = h; els.mapx.clientHeight = h; }};
 const orig = T.ctx.document.getElementById;
 T.ctx.document.getElementById = (id) => els[id] || orig(id);
 let rafN = 0;
@@ -303,12 +308,99 @@ zoom(); H.mapTimeline(true); res.push(['timeline open', H.S.mapPan]);
 zoom(); H.mapWeekTo(1); res.push(['timeline week', !!H.S.mapPan, mkWrites > 0]);
 H.mapTimeline(false); res.push(['timeline closed', H.S.mapPan]);
 zoom(); click('map-world', '', false); res.push(['world button', H.S.mapPan]);
-els.map.clientHeight = VH - 40; zoom(); H.applyMapView(false); res.push(['frame resized', !!H.S.mapPan]); // 地圖框換大小（轉向）：取景換了
+frameTo(VH - 40); zoom(); H.applyMapView(false); res.push(['frame height', !!H.S.mapPan]); // 只換框高（狀態列變高變矮）：帶過去（FB-710）
+wrap.clientWidth = VW - 40; H.applyMapView(false); res.push(['frame width', H.S.mapPan]); // 換寬（轉向、拉視窗）：取景換了，回 1 倍
 return res;
 """)
     assert out == [["same view", True], ["mapReady", True], ["other region", None, True], ["same region again", None], ["world", None],
                    ["timeline open", None], ["timeline week", True, True], ["timeline closed", None], ["world button", None],
-                   ["frame resized", False]]
+                   ["frame height", True], ["frame width", None]]
+
+
+# ── FB-710（QA 2026-10-22）：狀態列變高變矮（卡上按「步行」、點體力條攤開說明、輪詢多一行少一行）之後，renderTop 只叫了 mapFrame、
+# 沒重套取景，下一次拖縮拿新的框高配舊的取景，地圖先跳 z×框高差÷2（2 倍按步行：往下拖 20 卻往上走 23）。PM 定：同一層、同一區只換框高時，
+# 把目前的倍率與位置帶過去、照新的可見區重夾一次（不清回 1 倍、不跳）；層或區換了才回 1 倍。修法：renderTop 在 mapFrame 真的改了兩條邊時
+# 叫 applyMapView（panCarry 帶過去、夾一次）；手勢一開始發現框換了大小也先帶過去（不經 renderTop 的路，這一次不挪）
+FB710 = """
+if (Z > 1) zoomTo(Z);
+const before = content(), s0 = tf().s;
+frameTo(H2);
+if (VIA_TOP) { H.S.tab = 'map'; H.renderTop(); }
+const after = content(), s1 = tf().s, a1 = H2 - 54, pan1 = H.S.mapPan;
+down(1, 150, 300); move(1, 150, 310); move(1, 150, 320); flush(); up(1, 150, 320); flush();
+const dragged = content();
+return { before, after, dragged, s0, s1, a1, pan1 };
+"""
+
+
+@pytest.mark.parametrize("via_top", [True, False], ids=["renderTop", "first-gesture"])
+@pytest.mark.parametrize("z,h2", [(1, 561), (1, 490), (1, 647), (2, 561), (2, 490), (2, 647)])
+def test_fb710_the_first_drag_after_the_frame_changes_height_follows_the_finger(z, h2, via_top):
+    """1、2 倍下讓地圖框變矮（狀態列多兩行 43px、攤開體力說明 114px）與變高（少一行）：倍率不清、畫面上的地圖不跳，
+    下一次往下拖 20px，內容就往下 20px（修之前 2 倍框矮 43px 時往上走 23）。經 renderTop（狀態列重畫）與「手勢一開始才發現框換了」兩條路都一樣。"""
+    out = run(_game(), READY + f"const Z = {z}, H2 = {h2}, VIA_TOP = {str(via_top).lower()};\n" + FB710)
+    b, a, d = out["before"], out["after"], out["dragged"]
+    assert out["s1"] == pytest.approx(out["s0"], rel=1e-9)  # 畫面上的倍率帶過去（不清回 1 倍）
+    if via_top:  # 潁川汝南的取景照寬度定倍率、不看框高：1 倍帶過去還是 1 倍（null），2 倍照留
+        assert (out["pan1"] is None) == (z == 1)
+    assert a == pytest.approx(b)  # 框換高的那一下，地圖在框裡一個像素不動
+    # 往下拖 20 就往下走 20（不跳）；只有夾邊擋住的那一截例外：內容框比可見區矮（1 倍）時下緣不能過可見區的下緣，
+    # 比可見區高時上緣不能過那一排底下（58）。修之前是反方向（往上）走
+    fits = a[3] - a[1] <= out["a1"] - 58
+    room = out["a1"] - a[3] if fits else 58 - a[1]
+    dy = d[1] - a[1]
+    assert dy > 0 and dy == pytest.approx(min(20, room)), (dy, room)
+    assert [d[0] - a[0], d[2] - a[2], d[3] - a[3]] == pytest.approx([0, 0, dy])
+
+
+def test_fb710_render_top_reapplies_the_view_only_when_the_frame_moved():
+    """renderTop 每一次輪詢都叫：兩條邊沒變（mapFrame 回 false）就不重套取景；變了才 applyMapView。"""
+    out = run(_game(), READY + """
+H.S.tab = 'map'; H.renderTop();
+const writes = [];
+let tr = world.style.transform;
+Object.defineProperty(world.style, 'transform', { get: () => tr, set: (v) => { writes.push(v); tr = v; } });
+H.renderTop(); H.renderTop();
+const same = writes.length;
+frameTo(VH - 30); H.renderTop();
+return [same, writes.length, H.mapFrame()];
+""")
+    assert out == [0, 1, False]
+
+
+def test_fb710_the_frame_growing_reclamps_once_through_the_status_bar():
+    """框變高（狀態列少一行）時照新的可見區夾一次（PM 定「重夾一次」）：2 倍拖到下緣貼著可見區下緣（550），狀態列少 43px，
+    經 renderTop 時內容的下緣跟著到新的下緣（593），上緣照舊在那一排上面；手勢一開始才發現框換了的那一條路不挪（只准不再往外）。"""
+    out = run(_game(), READY + """
+const go = (viaTop) => {
+  frameTo(VH); H.S.tab = 'map'; H.renderTop(); H.enterRegion('yingru'); H.regionPick(null);
+  zoomTo(2);
+  down(1, 150, 400); move(1, 150, 200); flush(); move(1, 150, -600); flush(); up(1, 150, -600); flush(); // 往上拖到底：下緣貼著 550
+  const pinned = content();
+  frameTo(VH + 43);
+  if (viaTop) H.renderTop(); else { down(1, 150, 300); up(1, 150, 300); flush(); }
+  return { pinned, after: content() };
+};
+return { top: go(true), gesture: go(false) };
+""")
+    t, g = out["top"], out["gesture"]
+    assert t["pinned"][3] == pytest.approx(550) and g["pinned"][3] == pytest.approx(550)
+    assert t["after"][3] == pytest.approx(604 + 43 - 54) and t["after"][1] < 58  # 重夾：下緣到新的可見區下緣
+    assert g["after"] == pytest.approx(g["pinned"])  # 手勢一開始才發現：不挪
+
+
+def test_fb710_the_world_map_carries_its_zoom_too():
+    """天下圖的取景照框高定倍率（框矮了，取景的倍率跟著變小）：帶過去的是畫面上的倍率（z × 取景的倍率），z 的數字可以變。"""
+    out = run(_game(), READY + """
+zoomTo(2);
+const before = content(), s0 = tf().s;
+frameTo(VH - 43); H.S.tab = 'map'; H.renderTop();
+const after = content(), s1 = tf().s;
+down(1, 150, 300); move(1, 150, 320); flush(); up(1, 150, 320); flush();
+return { before, after, dragged: content(), s0, s1 };
+""", layer="world")
+    assert out["s1"] == pytest.approx(out["s0"]) and out["after"] == pytest.approx(out["before"])
+    assert out["dragged"][1] - out["after"][1] == pytest.approx(20)
 
 
 def test_a_gesture_never_redraws_the_marks_and_only_writes_the_transform():

@@ -174,7 +174,8 @@
     regionView: null, // 區圖此刻的取景（applyMapView 照 regionFit 算：{ s, cx, cy, frame, bottom }）
     marksKey: "", // 記號照哪一個取景畫的（viewKey）：一樣就不必重畫
     mapPan: null, // 取景上面的拖與縮放 { z 倍率 1～PAN_MAX, x, y 螢幕上的位移 }；null＝1 倍（企劃者 2026-10-22）
-    panKey: "", // 拖縮是照哪一個取景（viewKey）疊上去的：取景換了（換區、換層、地圖框換大小）回 1 倍
+    panKey: "", // 拖縮是照哪一個取景（viewKey）疊上去的：取景換了（換區、換層、地圖框換寬）回 1 倍；同一層同一區只換框高帶過去（FB-710）
+    panFrom: null, // 上一次套上去的取景與地圖框 { layer, region, vw, vh, s, cx, cy }（panCarry 照它換算）；明講回 1 倍時清掉
     news: "reports",
     reports: null,
     reportOpen: false,
@@ -619,7 +620,9 @@
     fitBars();
     applyGlow();
     fitTopMoved(before);
-    if (S.tab === "map") mapFrame(); // 狀態列變高變矮：輿圖那一層跟著夾
+    // 狀態列變高變矮：輿圖那一層跟著夾，地圖框換了高就重套取景（FB-710：不重套的話下一次拖縮拿新的框高配舊的取景，先跳 z×框高差÷2；
+    // 同一層、同一區只換框高時拖縮帶過去，applyMapView 的 panCarry）
+    if (S.tab === "map" && mapFrame()) applyMapView();
   }
 
   // 狀態列體力條、氣血條上的「體力」「氣血」兩個字（FB-135、FB-198，PM 2026-10-14「數字放得下就寫全，放不下才讓開」）：
@@ -5502,7 +5505,7 @@
     stopPlay();
     Object.assign(S, {
       mapBase: null, mapState: null, mapStateAt: 0, mapSel: null, mapMode: "overview", mapDrawer: "min",
-      mapWeek: null, mapQuery: "", mapLayer: "world", mapRegion: null, worldView: null, regionView: null, marksKey: "", mapPan: null, panKey: "",
+      mapWeek: null, mapQuery: "", mapLayer: "world", mapRegion: null, worldView: null, regionView: null, marksKey: "", mapPan: null, panKey: "", panFrom: null,
     });
     hideMapHost(true);
   }
@@ -5829,8 +5832,8 @@
   function mapTimeline(open) {
     stopPlay();
     if (!document.getElementById("mapx")) return;
-    if (open) Object.assign(S, { mapLayer: "world", mapMode: "timeline", mapSel: null, mapWeek: S.mapState.now_week, mapDrawer: "tl", mapPan: null });
-    else Object.assign(S, { mapMode: "overview", mapSel: null, mapWeek: null, mapDrawer: "min", mapPan: null });
+    if (open) Object.assign(S, { mapLayer: "world", mapMode: "timeline", mapSel: null, mapWeek: S.mapState.now_week, mapDrawer: "tl", mapPan: null, panFrom: null });
+    else Object.assign(S, { mapMode: "overview", mapSel: null, mapWeek: null, mapDrawer: "min", mapPan: null, panFrom: null });
     remapChrome();
     applyMapView(true);
     drawMarks();
@@ -5942,14 +5945,18 @@
     // 寫它會逼整棵地圖重算樣式（FB-322）
     if (S.mapMode === "timeline") box.style.setProperty("--md-h", `${px}px`);
   }
-  // 整頁那一層夾在狀態列與分頁列之間：狀態列展開收起、視窗換大小時重量
+  // 整頁那一層夾在狀態列與分頁列之間：狀態列展開收起、視窗換大小時重量。回傳兩條邊有沒有變（變了地圖框就換了高，取景要重套：FB-710）
   function mapFrame() {
     const box = document.getElementById("mapx");
-    if (!box) return;
+    if (!box) return false;
     const top = document.getElementById("top"), tabs = document.querySelector(".tabs");
+    const t = `${top && !top.hidden ? Math.round(top.getBoundingClientRect().bottom) : 0}px`;
+    const b = `${tabs ? Math.round(window.innerHeight - tabs.getBoundingClientRect().top) : 0}px`;
+    const was = typeof box.style.getPropertyValue === "function" ? [box.style.getPropertyValue("--map-top"), box.style.getPropertyValue("--map-bottom")] : null;
     // 變了才寫：自訂屬性會繼承到整張地圖，寫一次整棵約 1,600 個元素重算樣式（狀態列每次重畫都叫這裡，Joy 2026-10-17）
-    setVar(box, "--map-top", `${top && !top.hidden ? Math.round(top.getBoundingClientRect().bottom) : 0}px`);
-    setVar(box, "--map-bottom", `${tabs ? Math.round(window.innerHeight - tabs.getBoundingClientRect().top) : 0}px`);
+    setVar(box, "--map-top", t);
+    setVar(box, "--map-bottom", b);
+    return !was || was[0] !== t || was[1] !== b;
   }
   let marksFrame = 0;
   // 這一層此刻的取景：天下圖 S.worldView（worldFit）、區圖 S.regionView（regionFit）；都由 applyMapView 照地圖框現在的大小算
@@ -6686,7 +6693,7 @@
     stopPlay();
     if (!rid || !S.mapBase || !regionPlaces(S.mapBase, rid).length) return;
     const st = S.mapState, mine = !focus && st && !st.journey && hereRegion() === rid ? st.here : null, sel = focus || mine;
-    Object.assign(S, { mapLayer: "region", mapRegion: rid, mapMode: sel ? "place" : "overview", mapSel: sel, mapWeek: null, mapQuery: "", mapDrawer: sel ? "peek" : "min", mapPan: null });
+    Object.assign(S, { mapLayer: "region", mapRegion: rid, mapMode: sel ? "place" : "overview", mapSel: sel, mapWeek: null, mapQuery: "", mapDrawer: sel ? "peek" : "min", mapPan: null, panFrom: null });
     applyMapView(true);
     remapChrome();
     drawMarks();
@@ -6694,7 +6701,7 @@
   // 回天下圖（區圖上面那一排的「‹ 天下」、天下圖的「天下」）：回 1 倍（企劃者 2026-10-22）
   function toWorld() {
     stopPlay();
-    Object.assign(S, { mapLayer: "world", mapMode: "overview", mapSel: null, mapWeek: null, mapQuery: "", mapDrawer: "min", mapPan: null });
+    Object.assign(S, { mapLayer: "world", mapMode: "overview", mapSel: null, mapWeek: null, mapQuery: "", mapDrawer: "min", mapPan: null, panFrom: null });
     remapChrome();
     applyMapView();
     drawMarks();
@@ -6810,9 +6817,10 @@
     const p = id && S.mapBase && S.mapBase.places.find((x) => x.id === id);
     return p ? [p.x, p.y] : null;
   };
-  // 照這一層算取景、套到地圖上（連同拖縮）；glide：換層、換區時滑一下（≤150ms）。取景或地圖框變了才重畫記號（viewKey），
-  // 也才回 1 倍（panKey）：同一個取景再套一次（切分頁回來、輿圖頁重畫）拖縮照留
-  function applyMapView(glide = false, g = mapGeom(document.getElementById("map"))) {
+  // 照這一層算取景、套到地圖上（連同拖縮）；glide：換層、換區時滑一下（≤150ms）。取景或地圖框變了才重畫記號（viewKey）。
+  // 拖縮：同一個取景再套一次（切分頁回來、輿圖頁重畫）照留；同一層、同一區只換了地圖框的高（狀態列變高變矮，FB-710）帶過去
+  // （panCarry：畫面上一個像素不動，照新的可見區夾一次；soft：手勢一開始才發現框換了，只准不再往外、不挪）；換層、換區、換寬回 1 倍
+  function applyMapView(glide = false, g = mapGeom(document.getElementById("map")), soft = false) {
     if (!g || !S.mapBase) return;
     let v = null;
     if (S.mapLayer !== "world" || !S.mapBase.world) {
@@ -6829,8 +6837,12 @@
     clearTimeout(glideTimer);
     g.wrap.classList.toggle("glide", glide);
     if (glide) glideTimer = setTimeout(() => g.wrap.classList.remove("glide"), 200);
-    const key = viewKey(v, g);
-    if (key !== S.panKey) Object.assign(S, { mapPan: null, panKey: key });
+    const key = viewKey(v, g), was = S.panFrom;
+    if (key !== S.panKey) {
+      const same = !!was && was.layer === S.mapLayer && was.region === S.mapRegion && was.vw === g.vw && was.vh !== g.vh;
+      Object.assign(S, { mapPan: same ? panCarry(panOf(), was, v, g.vw, g.vh, soft) : null, panKey: key });
+    }
+    S.panFrom = { layer: S.mapLayer, region: S.mapRegion, vw: g.vw, vh: g.vh, s: v.s, cx: v.cx, cy: v.cy };
     g.world.style.transform = mapTransform(v, g.vw, g.vh, panOf());
     if (key !== S.marksKey) scheduleMarks();
   }
@@ -6882,14 +6894,26 @@
   // 放大不收（手指、游標底下那一點不動）
   const panShrink = (q, z0) => (q.z < z0 && z0 > 1 ? { z: q.z, x: (q.x * (q.z - 1)) / (z0 - 1), y: (q.y * (q.z - 1)) / (z0 - 1) } : q);
   // 以地圖框裡 (px, py) 為中心縮放到 z（夾在 1～max）：那一點底下的地圖不動；縮到 1 倍（或更小）就是 1 倍的取景
+  // （panCarry 帶過去的倍率可能比 max 多一點點：放大時不把它往下拉，免得一放大反而縮一下）
   function panZoom(p, z, px, py, max) {
     if (z <= 1) return PAN_ONE;
-    const nz = Math.min(max, z), f = nz / p.z;
+    const nz = Math.min(Math.max(max, p.z), z), f = nz / p.z;
     return panShrink({ z: nz, x: px - f * (px - p.x), y: py - f * (py - p.y) }, p.z);
+  }
+  // 地圖框換了高、取景照新的框重算（FB-710：狀態列變高變矮）：把拖縮帶過去——合起來的倍率與位移（畫面上的地圖）照舊，換算成新取景上的
+  // z、x、y；新的取景比畫面上的還大（z 不到 1）就照新的框回 1 倍。再照新的可見區夾一次（soft：只准不再往外）。1 倍的取景本身
+  // （寬度定倍率的區，取景不看框高）換算完還是 1 倍
+  function panCarry(p, was, v, vw, vh, soft = false) {
+    const Z = p.z * was.s, tx = p.z * (was.vw / 2 - was.cx * was.s) + p.x, ty = p.z * (was.vh / 2 - was.cy * was.s) + p.y;
+    const z = Z / v.s;
+    if (z < 1 - 1e-6) return null;
+    let q = { z: Math.max(1, z), x: tx - z * (vw / 2 - v.cx * v.s), y: ty - z * (vh / 2 - v.cy * v.s) };
+    q = panClamp(q, panBox(v, vw, vh), soft ? q : PAN_ONE);
+    return Math.abs(q.z - 1) < 1e-6 && Math.abs(q.x) < 0.01 && Math.abs(q.y) < 0.01 ? null : q;
   }
   // 兩指：開始時（start：拖縮、中點、兩指距離）中點底下的那一點，跟著現在的中點走；倍率照兩指距離的比
   function panPinch(start, mx, my, d, max) {
-    const p = start.p, z = Math.min(max, (p.z * d) / start.d);
+    const p = start.p, z = Math.min(Math.max(max, p.z), (p.z * d) / start.d);
     if (z <= 1) return PAN_ONE;
     return panShrink({ z, x: mx - (z * (start.mx - p.x)) / p.z, y: my - (z * (start.my - p.y)) / p.z }, p.z);
   }
@@ -6897,7 +6921,10 @@
   const pan = { pts: new Map(), start: null, moved: false, frame: 0, next: null, g: null, box: null, wheel: false, wheelTimer: 0, eatUntil: 0 };
   // 量好這一次手勢要用的地圖框（按下、滾輪第一下量一次：每一幀量會逼瀏覽器先排版）
   function panMeasure() {
-    const g = mapGeom(document.getElementById("map")), v = curView();
+    const g = mapGeom(document.getElementById("map")), f = S.panFrom;
+    // 地圖框換了大小、取景還沒重套（FB-710 的保險：不經 renderTop 的路也一樣）：先照新的框帶過去，這一次手勢不跳、也不挪
+    if (g && f && (f.vw !== g.vw || f.vh !== g.vh)) applyMapView(false, g, true);
+    const v = curView();
     pan.g = g && v ? g : null;
     pan.box = g && v ? panBox(v, g.vw, g.vh) : null;
     return pan.g;
@@ -6955,7 +6982,7 @@
   }
   // 回 1 倍（天下圖已經在總覽時再按「天下」）：滑一下
   function panReset() {
-    S.mapPan = null;
+    Object.assign(S, { mapPan: null, panFrom: null });
     applyMapView(true);
   }
   function panDown(ev) {
