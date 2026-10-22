@@ -112,7 +112,8 @@ def test_games_on_the_server_carry_the_memory_and_plain_games_do_not(monkeypatch
 
 
 # ── 網頁（node 跑整支 app.js，同 tests/test_map_web.py）──
-# 輿圖第三版第 4 批：兩張圖都是固定取景、手勢整套拿掉了（FB-322 的游標那一條跟著拿掉），區圖的記號是 regionParts、天下圖是 worldParts；
+# 輿圖第三版第 4 批：兩張圖都是固定取景、手勢整套拿掉了（FB-322 的游標那一條跟著拿掉；企劃者 2026-10-22 手勢改回來，游標照舊不換），
+# 區圖的記號是 regionParts、天下圖是 worldParts；
 # 其餘幾條照新的函式守同一件事（記號分兩張、常駐那一層、藏起來不收點擊、登出清乾淨）
 NAMES = ["S", "pageMap", "regionParts", "regionFit", "worldParts", "drawMarks", "mapReady", "setMapDrawer", "renderPage", "forgetMap", "enter"]
 DRIVER = re.sub(r"wholeApp\(\[.*?\]\)", "wholeApp(" + repr(NAMES).replace("'", '"') + ")", test_prologue_web.DRIVER, count=1, flags=re.S)
@@ -142,11 +143,12 @@ def _map_game():
     return game
 
 
-def test_fb322_no_gesture_code_is_left():
-    """輿圖第三版第 4 批（設計第五章：兩張不自由縮放的圖）：手勢、拖著的手形游標（FB-322：cursor 會一路繼承、換一次整棵重算樣式）整套拿掉了。"""
+def test_fb322_dragging_never_swaps_the_cursor():
+    """輿圖第三版第 4 批拿掉了手勢；企劃者 2026-10-22 改回兩張都能拖、能捏合縮放（tests/test_map_pan_web.py）。FB-322 照舊守：
+    拖的時候不換游標（cursor 會一路繼承、換一次整棵約 1,550 個元素重算樣式）——游標寫死 grab，沒有 grabbing 那一套。"""
     src = (Path(server.WEB) / "app.js").read_text(encoding="utf-8")
     css = (Path(server.WEB) / "style.css").read_text(encoding="utf-8")
-    assert "function gripDown(" not in src and '"grabbing"' not in src and ".map-wrap.grabbing" not in css
+    assert "function panDown(" in src and '"grabbing"' not in src and ".map-wrap.grabbing" not in css
 
 
 @needs_node
