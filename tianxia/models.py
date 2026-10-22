@@ -2762,7 +2762,9 @@ class ConquestRules(_Strict):
     每個攻方一條進度，推滿當場易手、冷卻一小時；兩邊推到同一塊撞上就打（混戰）；一起推有集火；攻下與守住都分紅；第 4 階的人進度過門檻
     可以下戰書，時間到了開攻城戰（siege.py，決戰的縮小版，跟決戰同時打），攻方贏了就易手。數字全是【預設】，等 21 天的季試玩再調。"""
 
-    enabled: bool = False  # 【預設】正式內容先關；三批都做完、QA 過、PM 說可以，再在 season21.json 打開（裁決 15）
+    # 預設關（測試內容照它）；正式內容在 content/config.json 打開（企劃者 2026-10-22「要打開」，三種設定覆寫檔都不寫、照它）：週末、21 天、
+    # 7 天新開的季蓋得上章，14 天沒有第一季規則的章；正在跑的季照它開季時的章（裁決 15 原本寫只開 season21.json）
+    enabled: bool = False
     share: float = Field(default=35.0, ge=0)  # 【預設】佔領的份量：中立地全被一方拿下，基準偏到 50±share（分母只算中立時，設計 4.7）
     neutral_weight: float = Field(default=1.0, ge=0)  # 【預設】中立區塊的權重（設計 4.7）
     faction_weight: float = Field(default=2.0, ge=0)  # 【預設】陣營區塊的權重：打進敵方陣營影響比較大（設計 4.7、3.2）

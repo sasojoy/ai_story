@@ -2,7 +2,7 @@
 這一份先放出陣、推力、地盤那幾塊（PM 2026-10-14：探索三選一與地盤福利另外平行做，合進來之後再補那兩段）。"""
 from __future__ import annotations
 
-from conftest import classic_rules, real_content, third_party_gentry
+from conftest import classic_rules, no_conquest, real_content, third_party_gentry
 from tianxia import howto
 
 
@@ -13,7 +13,7 @@ def _page(content):
 
 
 def test_the_howto_page_explains_the_new_loop():
-    c = real_content("weekend")
+    c = no_conquest(real_content("weekend"))  # 地盤拔河那一版；領地爭奪的「地盤」一節在 tests/test_conquest_progress.py
     page = _page(c)
     assert "**出陣**" in page and "每天 5 次" in page and "**遊歷**" not in page
     assert "找素材" in page and "靜心感悟" in page and "照地點三選一：悟意境" not in page

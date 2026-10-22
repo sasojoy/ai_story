@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 import server
-from conftest import real_content
+from conftest import no_conquest, real_content
 from test_seal import put_shards, seal_problems, sealed  # noqa: F401  sealed 是夾具
 from test_seal_revamp import revamp
 from tianxia import calendar, seal, seal_acts
@@ -182,8 +182,8 @@ def test_the_public_line_names_nobody(sealed):
 
 # ── Task 3～6：正式內容 ──
 
-def _world(profile="season21", *, on=True):
-    c = real_content(profile)
+def _world(profile="season21", *, on=True, conquest_on=True):
+    c = real_content(profile) if conquest_on else no_conquest(real_content(profile))  # 正式內容 PM 2026-10-22 起打開
     c.config.auto_open_first_season = True
     c.config.seal.revamp.enabled = on
     c.config.newbie_days, c.config.newbie_real_hours = -1, 0  # 新手期的體力回復加快不混進承露的帳
@@ -222,8 +222,8 @@ def _do(c, w, name, fn, now=10.0):
     return out
 
 
-def _holder(shard, *, profile="season21", side="huang", at="yingchuan_wilds", on=True, name="懷璽"):
-    c, w = _world(profile, on=on)
+def _holder(shard, *, profile="season21", side="huang", at="yingchuan_wilds", on=True, name="懷璽", conquest_on=True):
+    c, w = _world(profile, on=on, conquest_on=conquest_on)
     _give(c, w, shard, name)
     return c, w, _person(c, w, name, side=side, at=at)
 

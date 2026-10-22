@@ -113,7 +113,7 @@
   "ambush": {"enabled": false},
   "fortify": {"enabled": false},
   "stockpile": {"enabled": false},
-  "conquest": {"enabled": false},
+  "conquest": {"enabled": true},
   "renown": {
     "titles": true, "scale": true, "deed_fame": true, "discount": true, "prize_gate": true, "affinity": true, "duel": true,
     "news": true, "faction_wanted": true, "arena_reach": true, "virtue_insight": true, "lessons": true, "prompt": true,

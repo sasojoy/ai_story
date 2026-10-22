@@ -7272,6 +7272,7 @@
               ${a.locks.length ? `<div class="row ad-row"><span class="ad-tag">鎖定</span><select class="input" id="ad-lock" aria-label="清鎖定">${opts(a.locks)}</select><button class="btn small" data-act="admin" data-op="clear_lock">清鎖定</button></div>` : ""}
               ${a.fallen && a.fallen.length ? `<div class="row ad-row"><span class="ad-tag">人物</span><select class="input" id="ad-fallen" aria-label="叫回人物">${opts(a.fallen)}</select><button class="btn small" data-act="admin" data-op="revive_figure">叫他回來</button></div>` : ""}
               <div class="row"><button class="btn warn" data-act="admin" data-op="cancel_battle">⚠ 取消決戰</button></div>
+              ${a.conquest ? conquestAdminHtml(a.conquest) : ""}
               ${a.seal ? sealAdminHtml(a.seal) : ""}
               ${a.mingtie && a.mingtie.length ? mingtieAdminHtml(a.mingtie) : ""}
               <p class="muted">重設密碼（朋友忘記密碼時用；臨時密碼私下告訴他）</p>
@@ -7358,6 +7359,17 @@
     return `<p class="muted">名帖檢舉</p><div class="mt-admin">${rows.map((x) => `<div class="mt-admin-row">${mtCardHtml(x.card, x.name, "thumb")}
       <div><b>${esc(x.name)}</b><p class="muted">第 ${x.version} 版・${x.count} 人檢舉</p>
       <div class="row wrap"><button class="btn warn small" data-act="admin" data-op="mingtie_remove" data-name="${esc(x.name)}" data-version="${x.version}">撤下</button><button class="btn small" data-act="admin" data-op="mingtie_restore" data-name="${esc(x.name)}" data-version="${x.version}">放回</button></div></div></div>`).join("")}</div>`;
+  }
+
+  // 管理者「領地爭奪」一組（打開領地爭奪，PM 2026-10-22；admin_choices.conquest，領地爭奪關著、季收了是 null，不畫）：一塊定給哪一軍或放回中立、
+  // 定一軍在那一塊的進度（到 100 照推滿當場易手）、立刻替一軍下戰書、取消一場攻城。照 Game.admin_conquest_* 實際做的事；按了照舊先問一次。字待 joy 潤
+  function conquestAdminHtml(q) {
+    const opts = (list) => list.map((x) => `<option value="${esc(x.id)}">${esc(x.label)}</option>`).join("");
+    return `<p class="muted">領地爭奪（救場；易手的天下大事照自然發生寫，不寫管理者）</p>
+      <div class="row ad-row"><span class="ad-tag">區塊</span><select class="input" id="ad-cq-block" aria-label="區塊">${opts(q.blocks)}</select></div>
+      <div class="row ad-row"><span class="ad-tag">陣營</span><select class="input" id="ad-cq-side" aria-label="陣營">${opts(q.sides)}</select><button class="btn small" data-act="admin" data-op="conquest_set">定歸這一邊</button><button class="btn small" data-act="admin" data-op="conquest_set" data-neutral="1">放回中立</button></div>
+      <div class="row ad-row"><span class="ad-tag">進度</span><input class="input" id="ad-cq-value" type="number" value="60" min="0" max="100" aria-label="進度" style="max-width:76px"><button class="btn small" data-act="admin" data-op="conquest_progress">定進度</button><button class="btn small" data-act="admin" data-op="admin_conquest_letter">立刻下戰書</button></div>
+      ${q.sieges.length ? `<div class="row ad-row"><span class="ad-tag">攻城</span><select class="input" id="ad-cq-siege" aria-label="攻城">${opts(q.sieges)}</select><button class="btn warn small" data-act="admin" data-op="conquest_cancel">⚠ 取消這一場</button></div>` : ""}`;
   }
 
   function sealAdminHtml(s) {
@@ -7473,6 +7485,13 @@
       // 照 Game.admin_xingshi_now 實際做的事寫（領地爭奪第三批 A；待 joy 潤）
       xingshi_now: ["現在就開一篇〈天下形勢〉：照上一篇以來的事開一張單，伺服器在背景請模型寫（寫不出來照固定段），收下那一刻發一則天下大事、記一筆江湖史；還在等的那一篇先照固定段收。每天 22:00 照常再開，確定？", "確定開一篇"],
       start_showdown: [`立刻開「${body.title}」：照時刻表開集結（起點照此刻的戰況），這一場算開過了，排定的時間到了不會再開，確定？`, "確定開戰"],
+      // 領地爭奪救場（打開領地爭奪，PM 2026-10-22；照 Game.admin_conquest_set／progress／letter／cancel 實際做的事寫，待 joy 潤）
+      conquest_set: body.side
+        ? [`把「${body.place}」定給${body.sideName}：天下大事照易手寫一句（落入／收復）、記一筆江湖史，三條戰線當場重算；不分紅、不起冷卻，${body.sideName}在那裡的進度拿掉、別一邊的照留，確定？`, "確定定歸"]
+        : [`把「${body.place}」放回中立（沒人佔）：不發天下大事，三條戰線當場重算，進度照留，確定？`, "確定放回中立"],
+      conquest_progress: [`把「${body.place}」${body.sideName}那一條進度定成 ${body.value}：到 100 照推滿當場易手（這一輪推過的人分紅、冷卻起算、天下大事一句），定成 0 就拿掉那一條；不看推不推得動、不記是誰推的，確定？`, "確定定進度"],
+      admin_conquest_letter: [`替${body.sideName}立刻對「${body.place}」下一張戰書：不看第 4 階、門檻與一天一張，集結馬上開、集結完就開打，那一塊凍結到打完或作罷；天下大事照戰書寫、不寫管理者，確定？`, "確定下戰書"],
+      conquest_cancel: [`取消「${picked("ad-cq-siege")}」這一場攻城：照作罷處理，那一塊解凍、進度照留，天下大事一句（不寫管理者）；已經開了集結的照決戰的取消收兵（不算勝負、不發軍餉、不易手），確定？`, "確定取消"],
       summon: [`立刻替 ${body.name} 發召見（${(S.adPlayer && S.adPlayer.summons && S.adPlayer.summons.note) || "下一階"}；不看貢獻與機緣的門檻，其餘照自然發召見的做法），確定？`, "確定發召見"],
       // 情誼型多一句（伺服器算好的 note：情誼補到幾、招募成算、其他話題、換季帶幾成，審查 M-5）
       give_opportunity: [`給 ${body.name} 機緣「${picked("ad-opp")}」：放到這個機緣自然送上門之後的樣子，下一步他就做得了。${
@@ -8503,6 +8522,17 @@
             body.hide = el.dataset.hide === "1"; // 領地爭奪的季「強制現世」是「現在藏一片」（問句不同；送出去的欄位一樣）
           }
           if (op.startsWith("mingtie_")) { body.name = el.dataset.name || ""; body.version = Number(el.dataset.version || 0); }
+          if (op === "conquest_set" || op === "conquest_progress" || op === "admin_conquest_letter") { // 領地爭奪一組：區塊、陣營、進度照欄位讀
+            const pick = (id) => document.getElementById(id) || {};
+            const block = pick("ad-cq-block"), side = pick("ad-cq-side");
+            body.id = block.value || "";
+            // 問句寫地名：照伺服器給的 name（選單的字後面接了括號，地名自己也可能有括號，不從字切）
+            body.place = ((((S.admin && S.admin.conquest) || {}).blocks || []).find((b) => b.id === body.id) || {}).name || body.id;
+            body.side = op === "conquest_set" && el.dataset.neutral === "1" ? "" : side.value || "";
+            body.sideName = (side.options && side.options[side.selectedIndex]) ? side.options[side.selectedIndex].text : body.side;
+            if (op === "conquest_progress") body.value = Math.max(0, Math.min(100, Number(pick("ad-cq-value").value || 0)));
+          }
+          if (op === "conquest_cancel") body.id = (document.getElementById("ad-cq-siege") || {}).value || "";
           if (op === "summon" || op === "give_opportunity" || op === "give_fragment") {
             body.name = (S.adPlayer && S.adPlayer.name) || "";
             if (op === "give_opportunity") {

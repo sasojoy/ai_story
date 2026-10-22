@@ -5,7 +5,7 @@ from __future__ import annotations
 import random
 
 import pytest
-from conftest import classic_rules, real_content
+from conftest import classic_rules, no_conquest, real_content
 from conquest_kit import conquest_game
 from pydantic import ValidationError
 
@@ -24,7 +24,7 @@ INKS = {  # 跟網頁原本寫死的那一張表一樣（MAP_SIDES）：搬進�
 
 
 def _game(profile="weekend", faction="guan", at="yingchuan", content=None):
-    c = content or real_content(profile)
+    c = content or no_conquest(real_content(profile))  # 領地爭奪關著的季（PM 2026-10-22 起正式內容打開；開著的用 conquest_game）
     c.config.auto_open_first_season = True
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world())
     game.client = None

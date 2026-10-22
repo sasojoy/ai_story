@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import random
 
-from conftest import real_content
+from conftest import no_conquest, real_content
 from tianxia import atlas, calendar, mapdata, orders, territory
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
@@ -12,7 +12,7 @@ from tianxia.state import Order
 
 
 def _game(faction="guan", at="yingchuan"):
-    c = real_content("weekend")
+    c = no_conquest(real_content("weekend"))  # 地盤拔河的舊規則（領地爭奪 PM 2026-10-22 起正式內容打開）
     c.config.auto_open_first_season = True
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world())
     game.client = None
