@@ -12052,7 +12052,7 @@ class Game:
             if ready is not None and w.time + seal_acts.EPS < ready:
                 return
             seal_acts.note_use(now, number, w.time)
-            seal.log(r, number, "use", shard=shard_id, holder=me, result=kind, where=what, at=w.time)
+            seal.log_use(r, number, shard=shard_id, holder=me, act=kind, what=what, at=w.time)  # 另記一欄（FB-695）
             left.append(seal_acts.left(now, number, c))
 
         self.world.mutate(_apply)
@@ -13664,10 +13664,10 @@ class Game:
         }
         if seal_acts.on(c):  # 獨門行動（改版第 2 批）：這一季誰起用了哪一片、什麼時候、指定了什麼（救場用，設計【PM】5）；改版關著不多這一鍵
             out["uses"] = [
-                {"shard": c.seal[e.shard].name if e.shard in c.seal else e.shard or "", "who": e.holder or "",
-                 "act": seal_acts.NAMES.get(e.result or "", e.result or ""), "when": self.stamp(e.at) if e.at is not None else "",
-                 "what": e.where}
-                for e in reg.history if e.kind == "use" and e.season == view.season
+                {"shard": c.seal[e.shard].name if e.shard in c.seal else e.shard, "who": e.holder,
+                 "act": seal_acts.NAMES.get(e.act, e.act), "when": self.stamp(e.at) if e.at is not None else "",
+                 "what": e.what}
+                for e in reg.uses if e.season == view.season  # FB-695：起用另記在 uses（舊資料讀進來時從 history 搬過來）
             ]
         return out
 

@@ -113,7 +113,7 @@ def test_zhendi_books_a_half_day_hold_and_names_nobody():
     public = [r.text for r in season.rumors if "螭首" in r.text]
     assert public == ["有人起用了『螭首』：汝南被鎮住了，半日之內誰都推不動那裡的進度。"] and "懷璽" not in public[0]
     [use] = _uses(w)
-    assert (use.holder, use.result) == ("懷璽", "zhendi")
+    assert (use.holder, use.act) == ("懷璽", "zhendi")
     card = _act(c, w, now=20.0)
     assert card["left"] == 1 and card["live"].startswith("生效中：汝南被鎮住了")
 
@@ -387,7 +387,7 @@ def test_two_worlds_that_differ_only_in_who_used_it_look_the_same():
             _season(c, w, lambda wd: conquest.push(wd, c, "runan", "guan", "官甲", 100, "attack"), now=5.0, name="旁觀客")
         for name in ("甲客", "乙客"):
             _do(c, w, name, (lambda g: g.seal_use("runan")) if name == user else (lambda g: None), now=10.0)
-        assert [e.holder for e in w.seal_state().registry.history if e.kind == "use"] == [user]
+        assert [e.holder for e in w.seal_state().registry.uses] == [user]
         store = CharacterStore(w.db)
 
         def look(viewer):
