@@ -6645,7 +6645,7 @@ def test_the_status_says_what_each_stat_does(game):
     assert "武學" in uses[names["str"]]  # 臂力：武學（外功）的威力
     assert all(word in uses["輕功"] for word in ("氣血", "落敗", "平手"))  # 身法：打完一場少掉一點氣血，落敗有機會閃成平手（14.4；點數收不回來）
     assert all(word in uses[names["con"]] for word in ("內功", "氣血上限", "內傷"))  # 根骨：內功、氣血上限、少受內傷
-    assert all(word in uses[names["wis"]] for word in ("修練", "意境", "閉關"))  # 悟性：修練升品、探索悟意境、閉關心得
+    assert all(word in uses[names["wis"]] for word in ("意境", "閉關", "衝關"))  # 悟性：探索悟意境、閉關心得、衝絕學（修練不再擲機率）
     assert "持有" in uses[names["lore"]]  # 博聞：武學與意境的持有上限（設計 6.3）
     assert data["stat_uses_note"] == "事件的檢定看前四項。"  # 還沒有事件檢定博聞（PM 2026-10-05），見下一個測試
 
