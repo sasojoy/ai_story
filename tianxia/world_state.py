@@ -19,7 +19,7 @@ from collections.abc import Callable, Collection
 from contextlib import AbstractContextManager
 from typing import Literal, NamedTuple, Protocol
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_serializer, model_validator
 
 from .battle_instance import BattleInstance, BattleRoundRecord, SiegeInfo
 from .martial_arts import Insight, MartialArt
@@ -167,13 +167,22 @@ class SealRegistry(BaseModel):
     cache: SealCache | None = None  # 領地爭奪的季，這一季藏著的那一片（不公開；舊資料沒有＝None）
     history: list[SealEvent] = Field(default_factory=list)
     # 起用獨門行動的帳（FB-695；seal.log_use 寫）：另記一欄，舊程式的登記模型不認得、讀的時候略過（pydantic 預設），退回舊程式開得起來
-    # （舊程式寫回時這一欄會丟掉）。空的時候不寫進 JSON：沒人起用過的存檔跟以前一個位元組都不差
-    uses: list[SealUse] = Field(default_factory=list, exclude_if=lambda v: not v)
+    # （舊程式寫回時這一欄會丟掉）。空的時候不寫進 JSON（_drop_empty_uses）：沒人起用過的存檔跟以前一個位元組都不差
+    uses: list[SealUse] = Field(default_factory=list)
 
     @model_validator(mode="before")
     @classmethod
     def _move_uses(cls, data: object) -> object:
         return _uses_out_of_history(data)
+
+    @model_serializer(mode="wrap")
+    def _drop_empty_uses(self, handler):
+        """uses 是空的時候不寫這個鍵（同 BattleInstance._drop_empty_front_note）。不用 Field(exclude_if=…)：那是 Pydantic 2.11 才有的，
+        requirements.txt 寫 pydantic>=2.6，舊版會把它當多餘的參數略過，`"uses":[]` 照樣寫出來、存檔就跟以前不一樣。"""
+        data = handler(self)
+        if isinstance(data, dict) and "uses" in data and not data["uses"]:
+            del data["uses"]
+        return data
 
 
 class DivineRegistry(BaseModel):

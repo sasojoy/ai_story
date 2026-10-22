@@ -110,6 +110,31 @@ def test_no_uses_writes_the_same_bytes_as_before():
     assert SealRegistry().model_dump_json() == OldSealRegistry().model_dump_json()
 
 
+def test_empty_uses_leave_no_key_on_any_pydantic_2():
+    """uses 空的時候不寫這個鍵，不靠 Pydantic 的版本：Field(exclude_if=…) 是 2.11 才有的，requirements.txt 寫 pydantic>=2.6，舊版把它當多餘的
+    參數略過、`"uses":[]` 照寫，存檔就跟以前不一樣。所以靠的是 SealRegistry 自己的 wrap serializer（_drop_empty_uses，同
+    BattleInstance._drop_empty_front_note）：這一欄沒掛 exclude_if、tianxia 裡沒有任何呼叫帶 exclude_if，JSON 與 Python 兩種寫法、
+    包在 SharedWorldState 裡（world 那一列的寫法）都沒有 uses；有一筆才寫。"""
+    import ast
+    from pathlib import Path
+
+    from tianxia.world_state import SharedWorldState
+
+    assert getattr(SealRegistry.model_fields["uses"], "exclude_if", None) is None
+    used = []
+    for path in sorted(Path(seal.__file__).resolve().parent.glob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.Call) and any(k.arg == "exclude_if" for k in node.keywords):
+                used.append(f"{path.name}:{node.lineno}")
+    assert used == []
+    reg = SealRegistry(seq=1, history=[SealEvent(seq=1, season=1, kind="emerge", shard="yunzhuan")])
+    assert "uses" not in json.loads(reg.model_dump_json()) and "uses" not in reg.model_dump()
+    row = json.loads(SharedWorldState(seal=reg).model_dump_json(exclude={"season", "active_battle", "sieges"}))
+    assert "uses" not in row["seal"] and "uses" not in SharedWorldState(seal=reg).model_dump()["seal"]
+    seal.log_use(reg, 1, shard="yunzhuan", holder="甲", act="banzhao", what="", at=5.0)
+    assert [u["holder"] for u in json.loads(reg.model_dump_json())["uses"]] == ["甲"] and len(reg.model_dump()["uses"]) == 1
+
+
 def test_a_use_goes_to_its_own_list_that_the_old_model_skips():
     reg = SealRegistry(seq=1, history=[SealEvent(seq=1, season=1, kind="emerge", shard="yunzhuan", holder="甲")])
     used = seal.log_use(reg, 1, shard="yunzhuan", holder="甲", act="banzhao", what="", at=50.0)
