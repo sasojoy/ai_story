@@ -884,14 +884,20 @@ def progress_shift(world: WorldState, content: Content, loc_id: str, attackers: 
 
 
 # ── 時刻表決戰的起點照哪一條戰線（企劃者 2026-10-22 選計畫 2026-10-22-長社火攻主場 第七節第 4 條：不另加主場偏移、補一句說明）──
-# 起點本來就照戰線的戰況算（battle_instance.start_from_front），領地爭奪開著時戰況又照佔領算（reweigh）；這兩句把那條線上誰佔幾處寫出來。
-# 數字是開集結那一刻的快照（BattleInstance.front_note），不事後重算。陣營名、線名照劇本讀。待 joy 潤
-FRONT_RUMOR = "{battle}開集結：{line}一帶{held}，戰局起點照這一帶的戰況{lean}。"  # 天下大事
-FRONT_SCENE = "戰局起點照{line}的戰況{lean}（開集結那一刻{line}一帶{held}）。"  # 決戰畫面，標題底下
+# 起點本來就照戰線的戰況算（battle_instance.start_from_front），領地爭奪開著時戰況又照佔領算（reweigh）；天下大事寫偏幾點與那條線上的地盤，
+# 決戰畫面只寫一行偏幾點。數字是開集結那一刻的快照（BattleInstance.front_note），不事後重算。陣營名、線名照劇本讀。待 joy 潤
+# FB-686（PM 2026-10-22）：起點照的是整條線的戰況（開季的態勢＋之後的易手與推動），不是數地盤——偏幾點與地盤分成兩句、不用因果連起來
+# （冀州開季官軍佔 5 處、黃巾軍佔 2 處，起點卻往黃巾軍偏：開季的態勢本來就偏黃巾）
+FRONT_RUMOR = "{battle}開集結：戰局起點照{line}此刻的戰況{lean}（戰況從開季的態勢算起，之後的易手與各路推動都算在裡面）。{line}一帶的地盤此刻{held}。"  # 天下大事
 FRONT_LEAN = "往{side}偏了 {n} 點"
 FRONT_EVEN = "不偏不倚"
 FRONT_HELD = "{side}佔 {n} 處"
 FRONT_OPEN = "{n} 處還沒人佔"
+# FB-685（PM 2026-10-22）：決戰畫面只留一行短句、數字不在句尾（375／360／320 都本來就一行：最長「起點偏黃巾軍 12 點：潁川汝南戰況」
+# 約 15.6 個字寬，320 寬那一段放得下 16.6 個）；佔幾處的明細只寫在天下大事那一則
+FRONT_SCENE = "起點{lean}：{line}戰況"  # 決戰畫面，標題底下
+FRONT_SCENE_LEAN = "偏{side} {n} 點"
+FRONT_SCENE_EVEN = "不偏"
 
 
 def line_holdings(world: WorldState | None, content: Content, line: str) -> tuple[dict[str, int], int]:
@@ -922,25 +928,31 @@ def front_note(world: WorldState | None, content: Content, definition: BattleDef
     return FrontNote(line=definition.front, start=start, held={side: held.get(side, 0) for side in order}, open=unheld)
 
 
-def _front_words(content: Content, definition: BattleDef, note: FrontNote) -> dict[str, str]:
+def _front_lean(definition: BattleDef, note: FrontNote, lean: str, even: str) -> str:
+    """起點往哪一軍偏幾點（戰局以 factions[0] 為正向，同 start_from_front）；剛好在中線寫 even。"""
+    shift = note.start - CENTER
+    if shift == 0 or len(definition.factions) < 2:
+        return even
+    return lean.format(side=(definition.factions[0] if shift > 0 else definition.factions[1]).name, n=abs(shift))
+
+
+def _line_name(content: Content, note: FrontNote) -> str:
+    return next((t.name for t in content.scenario.trends if t.id == note.line), note.line)
+
+
+def front_rumor(content: Content, definition: BattleDef, note: FrontNote) -> str:
+    """開集結那一則天下大事（照快照）：先寫起點照戰況偏幾點，另一句寫那條線上的地盤（FB-686：兩件分開說）。"""
     names = {f.id: f.name for f in content.scenario.factions} | {f.id: f.name for f in definition.factions}
     parts = [FRONT_HELD.format(side=names.get(side, side), n=n) for side, n in note.held.items()]
     if note.open:
         parts.append(FRONT_OPEN.format(n=note.open))
-    shift = note.start - CENTER
-    if shift == 0 or len(definition.factions) < 2:
-        lean = FRONT_EVEN
-    else:  # 戰局以 factions[0] 為正向（同 start_from_front）
-        lean = FRONT_LEAN.format(side=(definition.factions[0] if shift > 0 else definition.factions[1]).name, n=abs(shift))
-    line = next((t.name for t in content.scenario.trends if t.id == note.line), note.line)
-    return {"battle": definition.name, "line": line, "held": "、".join(parts), "lean": lean}
-
-
-def front_rumor(content: Content, definition: BattleDef, note: FrontNote) -> str:
-    """開集結那一則天下大事（照快照）。"""
-    return FRONT_RUMOR.format(**_front_words(content, definition, note))
+    return FRONT_RUMOR.format(battle=definition.name, line=_line_name(content, note), held="、".join(parts),
+                              lean=_front_lean(definition, note, FRONT_LEAN, FRONT_EVEN))
 
 
 def front_scene(content: Content, definition: BattleDef, note: FrontNote | None) -> str:
-    """決戰畫面標題底下那一句（照開集結那一刻的快照，不重算）；沒有快照（舊資料、領地爭奪關著、沒寫戰線）是空字串。"""
-    return "" if note is None else FRONT_SCENE.format(**_front_words(content, definition, note))
+    """決戰畫面標題底下那一行（照開集結那一刻的快照，不重算；FB-685：只寫偏幾點，一行）；沒有快照（舊資料、領地爭奪關著、沒寫戰線）
+    是空字串。"""
+    if note is None:
+        return ""
+    return FRONT_SCENE.format(lean=_front_lean(definition, note, FRONT_SCENE_LEAN, FRONT_SCENE_EVEN), line=_line_name(content, note))
