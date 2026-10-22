@@ -17,7 +17,7 @@ import re
 
 from pydantic import BaseModel
 
-from . import figure_life, gender
+from . import figure_life, gender, seal_acts
 from .models import Content
 from .rules import add_rumor
 from .state import Feast, GameState, Toast
@@ -210,7 +210,8 @@ def toast(state: GameState, content: Content, f: Feast, text: str, score: int, f
     f.toasts.append(Toast(name=p.name, text=text, score=score, at=state.world.time, fixed=fixed))
     p.feasting = None
     before = p.affinities.get(f.host, 0)
-    p.affinities[f.host] = min(100, before + affinity_of(content, score))
+    # 收心（玉璽碎片改版第 2 批）：一日之內敬酒的情誼漲幅 ×2
+    p.affinities[f.host] = min(100, before + seal_acts.warmer(state.world, content, f.host, affinity_of(content, score)))
     moved = p.affinities[f.host] - before
     msgs = [TOASTED.format(text=text, reaction=reaction(content, f, score))]
     if moved:

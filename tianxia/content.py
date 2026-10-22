@@ -2489,8 +2489,12 @@ def validate(c: Content) -> None:
              f"陣營 {faction.id}：allies 只能寫劇本裡別的陣營（{faction.allies}）")
         need(not any(c.scenario.find_faction(a) is not None and c.scenario.find_faction(a).allies for a in faction.allies),
              f"陣營 {faction.id}：allies 寫的陣營自己不能再有 allies")
+    # 輿圖上的一個字（輿圖第三版第 3 批，FactionInk.short）：天下圖大區名底下「官 N・巾 N」照它認是哪一方，兩方同一個字就分不出來
+    shorts = [f.ink.short for f in c.scenario.factions if f.ink is not None and f.ink.short]
+    need(len(shorts) == len(set(shorts)), f"劇本：陣營在輿圖上的一個字（ink.short）重複了：{'、'.join(shorts)}")
+    need(all(len(s) == 1 for s in shorts), f"劇本：陣營在輿圖上的一個字（ink.short）只能是一個字：{'、'.join(shorts)}")
 
-    showdown_events = {e.id: e for e in [*c.timetable, *c.mandate_timetable] if e.kind == "showdown"}  # 含天命之爭（玉璽二）
+    showdown_events ={e.id: e for e in [*c.timetable, *c.mandate_timetable] if e.kind == "showdown"}  # 含天命之爭（玉璽二）
     showdown_battles: dict[tuple[str, str | None], str] = {}  # （時刻表決戰, 版本）→ 第一筆寫它的戰鬥
 
     def check_showdown_battle(battle: BattleDef, where: str) -> None:
@@ -3049,6 +3053,8 @@ def _validate_seal(c: Content, need) -> None:
             need(key in cfg.revamp.effects, f"content/seal.json：{shard.id} 的改版效果 {key} 不在 Config.seal.revamp.effects")
         problem = name_problem(shard.name, c)
         need(problem in (None, SEAL_CLASH), f"content/seal.json：{shard.id} 的名字「{shard.name}」{problem}")
+    acts = [shard.act for shard in c.seal.values() if shard.act is not None]  # 獨門行動（改版第 2 批）：一種只給一片
+    need(len(acts) == len(set(acts)), f"content/seal.json：同一種獨門行動只能給一片（{acts}）")
     mandates = c.mandate_timetable  # 天命之爭（玉璽二；8.3、8.5）
     need(len(mandates) <= 1, "時刻表：標 mandate_only 的天命之爭最多一件")
     endings = {e.id: e for e in c.scenario.endings}

@@ -67,6 +67,7 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   - `--list` 先看挑到哪些檔。
   - **合併還沒提交時別拿 `--list` 的清單**（2026-10-21 輿圖簡化第 2 批收尾）：`test_for` 跟 base 的分岔點比，`--no-commit` 合進來的東西都還算「沒提交的改動」，合功能分支的那一下挑到 327 個檔（幾乎整套）；先跑兩批的測試檔、提交合併，再 `--list` 只剩這一批自己的 117 個。
 - 改到 `tianxia/engine.py` 幾乎會挑到大半套（八千多條、約 6～8 分鐘），正常。只動內容或小模組時會少很多。
+- **功能分支在你做的時候往前走了**（2026-10-21 玉璽碎片第 2 批：開工時 `feature/territory-conquest` 是 `f5686765`，做到一半合進了翻地 `90e52e9b`）：`test_for --base origin/feature/<名字>` 照分岔點比，挑到的還是只有自己的改動，照用；「關著一個位元組都不變」照派工寫的那一版比（不是新的頭）。要不要合新的頭照派工，沒說就不合，回報裡寫功能分支到了哪裡、試合（`git merge-tree --write-tree HEAD origin/feature/<名字>`）有沒有衝突。
 - **`test_for.py -- -n 4` 擋不住 `-n auto`**（2026-10-20 領地爭奪第三批 A）：挑到三個檔以上它自己在最後補 `-n auto`，排在 `--` 之後的參數後面，pytest 照最後一個算。派工要 `-n 4`（同時有好幾個子代理在跑）時，在 scratchpad 寫一支小腳本 `import test_for`、拿 `test_for.pick(test_for.changed_files(base))` 的清單自己叫 pytest（`-q -m "slow or not slow" -n 4`，`TIANXIA_DB` 設新的暫存檔），背景跑、輸出導到檔。PowerShell 一行就夠：`$line = (& $py scripts/test_for.py --base <base> --list | Where-Object { $_ -like '要跑：*' }) -replace '^要跑：',''; $files = $line.Trim() -split '\s+'; & $py -u -m pytest @files -q -n 6 -m "slow or not slow" | Out-File $env:TEMP\x.log`（2026-10-21 玉璽碎片改版修正：改 `engine.py`＋`state.py`，挑到 303 個檔）。
 - **兩張單的測試寫在同一個檔、又要一張一個 commit**（2026-10-21 FB-606、607 都在 `test_conquest_clash.py`）：先把第二張的測試從檔尾剪到 scratchpad（照第一個 `def` 的名字找頭、連前面的空行一起剪），提交第一張，再接回去寫第二張的實作。不要裸 `git stash`。
 - 新測試超過一秒（建 `Game`、載真實內容通常就超過）標 `@pytest.mark.slow`。
@@ -80,9 +81,12 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   同一條測試裡把開關關掉再比一次、斷言「關著時看得出差別」（列出哪幾項不一樣），才證明這條測試抓得到漏（玉璽碎片改版第 1 批 `test_two_worlds_that_differ_only_in_the_holder_look_the_same`）。要找名號字串時，名號別跟固定的字撞（拿「懷璽」當持有者的名號，會撞到「懷璽之人」），用「甲客」「持璽客」這種。
 - **差異測試要讓「世界差在祕密、後面的步驟不被結果帶開」**（玉璽碎片改版第 1 批修正，側門）：兩個世界裡誰贏誰輸、誰掉了氣血會不同，之後算威力的步驟（氣血係數 `condition` 也在 `_spar_power` 裡）就跟著差，測試紅了不是漏而是被結果帶開。做法：先把所有「看」的畫面讀完再打；每個人至多打一場有損耗的仗（截殺各挑沒打過的人）；擂台挑了就認輸（`arena:yield`，結果固定是落敗、名次不動）；只比「對手那一格」的數字，不比勝負與氣血。
 - **差異測試抓不抓得到，用「還原漏洞」證明**：當祕密只在子開關開著時存在（關著本來就看不出差別），不能靠「關著看得出差別」那招，改成 `monkeypatch` 把防線拆掉（例：`Game._spar_power` 不理 `seal`、`_arena_bare` 回 None），斷言兩個世界在該有的鍵上真的不一樣（`test_the_side_door_guard_has_teeth`）。另外對實作做變異檢查：一處一處換掉、跑那組測試、看會紅；腳本把原檔 bytes 存在記憶體、`finally` 寫回，比反向替換安全（不會因為換回去的字串不唯一而卡在改壞的狀態）。
+- **差異測試的「旁觀者」要站在看得到的位置**（FB-643，2026-10-21）：第 2 批的不具名守門有比「酒肆查兩人」，可是旁觀客在別處、兩人名望 0，打聽度只到 3，「近來的事」根本不列，漏了也比不出來。照被測的那個門檻擺人：同陣營、同一間酒肆（地頭熟）、名望第一段（打聽度 4 才列近來的事）、份量 4 的舊事湊到差一件就加名氣、舊事的時刻挪到兩天前（近況只看新的那一件），再斷言「看得到的那一行真的有出現」（`tests/test_seal_fb643_tavern.py`）。
+- **要對某些讀者藏起來的資料，先找現成的分類欄位**（FB-643：起用碎片的行狀不給酒肆讀）：`AnnalEntry` 加一個布林欄位會讓每個人每一則行狀的 JSON 都多一個鍵（`model_dump_json` 不省預設值，資料庫對照會整片不一樣）；改用新的 `kind`（`annals.SEAL`），顯示的地方給同一個標籤（`KINDS`）、季末的傳照舊歸段（`GROUPS`），讀者那幾處問 `annals.heard`。資料庫只有那幾則的 `kind` 變。
+- **假瀏覽器的點擊不管 `disabled`**（`test_seal_acts_web.CLICK` 直接呼叫 click 的監聽器）：灰掉的鈕在真的瀏覽器按不到，在測試裡按得到。動作的處理要自己再驗一次（`seal-pick` 只收按得下去、那一列沒灰的），不要只靠 `disabled`。
 - **給別人看的數字（勝算、身手、戰報的「對手威力」）每一處都要走同一個「給別人看的那一份」**：選單、玩家卡、頁面（`shopview`）、戰報兩邊各一份（發的與收的、守的與挑的）、假人讀的勝算清單；寫在存檔裡的快照（擂台分身）要另記一份，欄位加預設 `None`（舊存檔讀得進來、沒碎片時狀態不多一個字）。算這個數字的時機要排在記戰報之前：第一邊的記帳可能升級，第二邊再算就變了（`_spar`、`raid`、`_ambush_fight` 都在算 `ours`／`theirs` 的同一處先算好）。
 - **一包 `**kwargs` 的標記（`Game._battle_marks` 這種）加新鍵**：有舊測試斷言整包一字不差（`test_joining_snapshots_turncoat_and_newbie`）。新鍵只在有值時才放進去，關著的季那一包一個字不變。
-- **「關著一個字不變」的畫面對照，探針只問兩版都有的東西**：問到新版才有的效果鍵，舊版當成加的（中性值 0）、新版當成乘的（中性值 1），雜湊就不一樣，但那不是畫面。改問掛點本身的輸出（扣血、內傷、價錢、回話）。玉璽碎片改版第 1 批的腳本在當時 scratchpad 的 `sealcmp/cmp_seal_off.py`（七片各一個持有者、第一個是假人；三種季各 204 行）。
+- **「關著一個字不變」的畫面對照，探針只問兩版都有的東西**：問到新版才有的效果鍵，舊版當成加的（中性值 0）、新版當成乘的（中性值 1），雜湊就不一樣，但那不是畫面。改問掛點本身的輸出（扣血、內傷、價錢、回話）。玉璽碎片改版第 1 批的腳本在當時 scratchpad 的 `sealcmp/cmp_seal_off.py`（七片各一個持有者、第一個是假人；三種季各 204 行）。第 3 批 QA 的 `seal3qa/cmp3.py`＋`kit3.py`（PM 這個 session 的 scratchpad；`QA_ROOT=<archive 根> python cmp3.py <weekend|none|season21|conquest> <畫面檔> <資料庫檔>`，`PYTHONHASHSEED=0`、不加 `-I`）更完整：兩份 archive × 四種用一支 Python 調度腳本開八個子行程平行跑，約十分鐘（2026-10-21 碎片第 3 批修正：子開關關著跟 `a46ac1dc` 比四種畫面一樣，資料庫只差翻地帳的 `flipped_from`；把 `revamp=False` 換成 True 跟合進來那一版比，畫面一樣、資料庫只差那一則行狀的 `kind`）。
 - **修 bug 先寫會紅的測試**：先確認它在修之前真的失敗、失敗的數字跟 QA 回報的一樣，再修。回報時寫「修前重現了什麼」。
 - **「確認並守住」的測試**（程式沒改、一寫就綠，例：假人不買商城的東西）：要證明它抓得到退步，另寫一個暫時的測試檔 import 它，monkeypatch 一個退步（例 `bot_policy.take_turn` 先叫 `mall_buy`、`social.card` 多塞一個「元寶」），跑一次看它紅，再刪掉那個暫時的檔（不提交）。
 - 用正式內容測舊規則的測試，要在 helper 裡把新開關關掉（例 `c.config.precise_actions = False`、`four_tiers.enabled = False`）。新規則另開一個測試檔，不要改寫舊的斷言去迎合新規則。
@@ -120,6 +124,7 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 
 ## 規則改動的雷
 
+- **一個動作同時寫全服登記與季**（2026-10-21 玉璽碎片第 2 批 `Game.seal_use`）：登記（`SharedWorldState.seal` 這種 world 那一列的東西）在 `self.world.mutate` 裡改、裡面整個重驗；季的東西（`WorldState` 的欄位、人物所在、天下大事）改在 `self.state.world` 上、最後 `self._save_season()`。不要在 mutate 裡改 `shared.season` 之後又拿著同步時讀的 `self.state.world` 繼續做事：之後誰叫 `_save_season()` 都會把 mutate 寫的季整份蓋掉（傳聞與江湖史例外，它們照流水號新增）。
 - **開關與蓋章**：
   - 新規則多半是 `Config` 開關＋開季時蓋在 `WorldState` 的章（例 `precise.on(content, world)` 同時看設定、章、探索三選一）。
   - 判斷開沒開一定走那個 `on()`，要把 world/state 傳進去。只傳 content 時它會回假，悄悄退回舊說法（FB-435 就是這樣：傳聞沒給 world，寫回舊句）。
@@ -173,6 +178,7 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 ## 回報 PM
 
 - 一張回饋單一個 commit；commit 訊息一句英文，結尾 `Co-Authored-By:`（照當時 system 給的那一行）。
+  - **幾張單改在同一個檔、甚至同一個函式裡**（2026-10-21 玉璽碎片改版第 3 批：批本身與 FB-627 都改 `seal_acts.view`）：不必把工作樹改回去再改回來。寫一支 scratchpad 腳本：讀工作樹的檔（CRLF→LF）、照「拿掉哪幾處」換掉（每一處 `assert count == 1`）、`git hash-object -w --stdin --path <檔>` 寫成 blob、`git update-index --add --cacheinfo 100644,<blob>,<檔>` 放進索引——工作樹一個位元組不動，`git diff` 剩下的就是下一張單。先提交最大的那一批，再一張一張 `git add`。每一筆提交之後 `git archive HEAD` 解到 scratchpad 跑那幾個測試檔，確認單獨一筆也是綠的。
   - 同一個檔裡有兩張單的改動：先用 Edit 把第二張的那一段暫時改回去、`git add` 只放第一張的檔、提交，再把那一段改回來提交第二張（備份一份完整檔到 scratchpad，改回來之後 `diff` 對一次）。
   - 提交完才發現前一張要補（例：測試完決定收窄範圍）：補的檔 `git commit --fixup <那張的 hash>`，其餘沒提交的先提交成一個 docs commit（工作樹不乾淨 rebase 會拒絕），再 `GIT_SEQUENCE_EDITOR=true git rebase -i --autosquash <base>`（沒推出去才這樣做；hash 全變，回饋單的「已修 `<commit>`」等重寫完才填）。
 - 推之前合派工指定的分支（衝突兩邊都留）。推完用 `git merge-base --is-ancestor HEAD origin/<分支>` 確認推到了。

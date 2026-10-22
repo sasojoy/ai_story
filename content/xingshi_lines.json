@@ -25,6 +25,8 @@
     "letter_done_plain": "{side}下戰書攻{place}。",
     "flip": "{who}替{side}率先攻入{place}，{place}當場易手。",
     "flip_plain": "{side}一路推進，{place}當場易手。",
+    "mended": "{place}旋即又退回{side}手中。",
+    "mended_late": "{place}退回{side}手中。",
     "line": "{line}一帶，{lean}{move}。"
   },
   "lean": {
@@ -39,6 +41,8 @@
   },
   "summary": {
     "taken": "{side}拿下{place}",
+    "taken_mended": "{side}拿下{place}，旋即被補回",
+    "mended": "{side}補回{place}",
     "held": "{keeper}守住{place}",
     "stalemate": "{place}相持不下",
     "void": "{place}一仗作罷",

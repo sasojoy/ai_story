@@ -1,0 +1,15 @@
+--- a/web/app.js
++++ b/web/app.js
+@@ -6194,7 +6194,12 @@
+         + `<rect x="-14" y="-14" width="28" height="28" fill="#000000" fill-opacity="0"/>${inkIcon(p.glyph, inkOf(p.id).color, MAP_HALO)}</g>`);
+     }
+     // 名字框：印章框（框色＝誰的）、朱印寶、進度條（冷卻灰掉）、意境字
++    const kept = [], hit = (a, b) => Math.min(a[2], b[2]) - Math.max(a[0], b[0]) > 0.5 && Math.min(a[3], b[3]) - Math.max(a[1], b[1]) > 0.5;
++    const iconBox = (q) => [q.X - z.hw, q.Y - z.hh, q.X + z.hw, q.Y + z.hh];
++    const rank = labels.slice().sort((a, b) => (b.id === st.here) - (a.id === st.here) || (b.big ? 1 : 0) - (a.big ? 1 : 0) || a.cost - b.cost);
++    for (const L of rank) if (!kept.some((q) => q.rows.some((r) => L.rows.some((x) => hit(r, x)))) && !labels.some((q) => q !== L && L.rows.some((x) => hit(x, iconBox(q)))) && !exits.some((e) => L.rows.some((x) => hit(x, e.box)))) kept.push(L);
+     for (const L of labels) {
++      if (!kept.includes(L)) continue;
+       const p = pos[L.id], ink = inkOf(L.id), [x, y] = mp(L.l, L.t), fw = L.fw * k, fh = L.fh * k;
+       const parts = [`<g class="r-label" data-act="region-place" data-id="${esc(L.id)}" style="cursor:pointer;font-family:serif">`,
+         `<rect class="r-frame" x="${f1(x)}" y="${f1(y)}" width="${f1(fw)}" height="${f1(fh)}" fill="${ink.tint}" fill-opacity=".95" stroke="${ink.color}" stroke-width="${f2((L.big ? 1.7 : 1) * k)}"/>`,

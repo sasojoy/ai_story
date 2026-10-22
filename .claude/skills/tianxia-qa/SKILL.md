@@ -23,6 +23,7 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
   - Write 寫的 `.ps1` 是沒有 BOM 的 UTF-8，PowerShell 5.1 當 ANSI 讀、中文整個壞掉：寫完用 `[IO.File]::WriteAllText(檔, 內容, (New-Object Text.UTF8Encoding($true)))` 補 BOM。
   - 長跑的 node／python 不要接 `| Select-Object -First N`：拿到 N 行 PowerShell 就收掉行程（exit 255），`finally` 裡關 chromium 那一段不會跑。輸出導進檔案再讀。
 - **PowerShell 腳本檔（`.ps1`）不要寫中文路徑**（2026-10-20 領地爭奪複驗，一整輪空跑）：Write 工具寫的檔沒有 BOM，PowerShell 5.1 當 ANSI 讀，`$PY` 變成亂碼、回「The term … is not recognized」，錯誤落在工作輸出、不在導向的 log 裡，檔案一個都沒生出來。python 指令直接寫在 PowerShell 工具的呼叫裡（路徑照常寫中文），`.ps1` 只放 ASCII 路徑；要跑好幾次就在同一個呼叫裡寫 `foreach`。
+- **PowerShell 5.1 叫原生程式的參數**（2026-10-22 輿圖第 4 批複驗）：空字串參數會被吞掉（profile 要空字串就傳 `default`，腳本裡再換成 `""`）、JSON 的引號被吃掉（傳 `str:值` 讓腳本自己解）；輸出檔名用 ASCII，中文檔名經 PowerShell 傳給 python 會變亂碼；`Remove-Item <scratchpad>\資料夾\*` 帶萬用字元會被擋（protected path），要換一批資料就開新的資料夾或檔名。
 - **git 一個指令一個指令跑**：`W=…; git -C "$W" … | …; git -C "$W" …` 這種變數加管線加好幾個 git 串在同一行，會被擋（too complex）。拆成單一的 `git -C <絕對路徑> …`；要 grep 輸出就先 `> scratchpad 的檔`，再另一個指令 grep。
 - **兩份複本對照要平行跑**：PowerShell `Start-Process -FilePath <python> -ArgumentList '-u','-I',<腳本> -RedirectStandardOutput <檔> -RedirectStandardError <檔> -WindowStyle Hidden -PassThru`，各設自己的 `QA_ROOT`；不加 `-u` 的話輸出要等跑完才寫進檔，看不到進度。
 - **scratchpad 跟同一個 PM 派出的其他子代理共用**（2026-10-20 在 `shots/` 看到別人的檔）：自己的複本、資料庫、截圖，都放在用這次驗收命名的子資料夾。
@@ -32,9 +33,17 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 - **Git Bash 的 tar 把 `C:/…` 當成遠端主機**（回「Cannot connect to C: resolve failed」，2026-10-21 輿圖第三版第 2 批）：先 `git -C <工作樹> archive -o <scratchpad>/x.tar <sha>`，再 `tar --force-local -x -f <tar> -C <資料夾>`。
 - **隔離工作樹裡 Bash 也擋這幾種**（2026-10-21 玉璽碎片複驗）：`SP=…` 變數加 `git archive` 加 `tar` 串在同一行、`python <<EOF` 的 heredoc、`python -I x.py` 帶中文 scratchpad 路徑的 Bash。做法：`git -C <工作樹> archive -o <絕對路徑>.tar <sha>` 一個指令一次（路徑寫死、不用變數）；解壓與批次修補檔都用 Write 工具寫成 `.py`（解壓用 `tarfile`，讀自己所在資料夾的 `*.tar`）再從 PowerShell `python -I` 跑；要平行跑一排腳本，在 PowerShell 同一個呼叫裡 `Start-Process` 一排再 `Wait-Process`（輸出導到各自的 `.txt/.out/.err`，`.err` 有東西才看）。
 - **子代理的 Bash 連 tar 都擋**（「computed value」，2026-10-21 翻地複驗）：`git archive -o` 之後用 Python `tarfile`（`untar.py`：`extractall` 時排除 `docs/`、`.claude/`）解；PowerShell 的 tar 解 `docs/` 底下的中文檔名會回 `Invalid empty pathname`，code 檔其實也沒解完。
+- **PowerShell 呼叫原生程式時空字串參數會被吞掉**（2026-10-22 長社火攻，`scen.py` 的「翻哪幾塊」空著、後面的參數往前補位）：腳本的選用參數用 `-` 當「沒有」，腳本裡自己轉回空的。
+- **清暫存別讓萃取的腳本被一起刪掉**（同上）：`Remove-Item …\cmp_*` 把自己放在同一個資料夾、同樣叫 `cmp_front.py` 的腳本刪了，六個行程開不起來，錯誤只在 `.err`。複製來的腳本改一個不會被通配吃掉的名字。
+- **PowerShell 工具有時把 `taskkill /PID` 的 `/PID` 當成 `Remove-Item` 的路徑擋掉**（回「Remove-Item on system path '/PID' is blocked」，2026-10-22 複驗，同一支腳本前一輪照跑）：同一個呼叫裡清檔用 `Get-ChildItem <資料夾> -Filter … | Remove-Item`、關行程用 `Stop-Process -Id`（自己開的單一行程）。
+- **複驗時對方改了字，先確認自己認句子的正規式也跟著改**（2026-10-22 長社火攻複驗：`play.py` 找「戰局起點照」，新句子變成「起點偏…戰況」，認不到時輸出是 `sentence=n`、看起來像「沒有那一句」）：先拿一個一定有的局面印一次，看認不認得到，再跑整批。
+- **`python -I` 連 `PYTHONHASHSEED` 一起忽略**（`-I` 含 `-E`）：要靠 `PYTHONHASHSEED=0` 逐位元組比的腳本（開發的 `cmp_front.py`）不要加 `-I`，加了集合的排列每個行程都不一樣。
 - **`Start-Process -ArgumentList` 的陣列元素有空格要自己加引號**：`-m "slow or not slow"` 寫成 `'"slow or not slow"'`；沒加就被拆成四個參數，pytest 回「no tests ran in 3s」、一個測試都沒跑（2026-10-21）。
 - **平行驗收**（2026-10-20）：PM 會給你一段 FB 號段、一個埠和一個 `<名字>.localhost`，只用給你的；瀏覽器窗格是共用的，**每一個動作都帶自己的 tabId**（10/20 有 QA 沒帶，動到別的子代理的分頁）。驗完把視窗設回 desktop、配色淺色、關掉自己的分頁、`taskkill /T` 關伺服器。
 - 開關的「一個字都不變」最好的驗法：同一支腳本，在功能分支開出來的那一點（`git archive` 解出來）和這一版各跑一次，比輸出。
+  - **`python -I` 會連 `PYTHONHASHSEED` 一起不讀**（-I 不看任何 `PYTHON*` 環境變數）：存檔裡的 set（`visited`、`revealed`、`seen_events`）每次順序不同，兩版比起來像有差。比對腳本不加 `-I` 跑（腳本放在只有自己腳本的 scratchpad 子資料夾），再把 `time.time` 換成固定值（2026-10-21 第 4 批 QA）。
+  - **`python -I` 會忽略 `PYTHONHASHSEED`**（2026-10-21 玉璽碎片第 3 批）：資料庫轉成文字逐位元組比的時候，集合欄位（`visited`、`revealed`）的順序每跑一次都不同，看起來像兩版不一樣。要逐位元組比就不加 `-I`、設 `PYTHONHASHSEED=0`（腳本自己把複本的根目錄插在 `sys.path` 最前面）；畫面那一份（`main_view` 等）不受影響。
+  - 子代理的 PowerShell 刪 scratchpad 裡的檔（`Remove-Item …\*`）會被擋（protected path）：重跑就寫進新的子資料夾。
 
 ## 開伺服器與登入
 - **複本**：在 scratchpad 用 bash `git -C <qa 工作樹> archive HEAD | tar -x -C <scratchpad>/on` 解一份來跑。PowerShell 的 tar 碰到中文路徑會壞。先 `git archive -o <檔>.tar` 再解的話，Git Bash 的 tar 要加 `--force-local`（`tar --force-local -xf C:/…/x.tar -C …`），不然把 `C:` 當成遠端主機、回「Cannot connect to C: resolve failed」。不要在 repo 裡跑伺服器，也不要改 repo 的設定與 `.local/`。
@@ -74,6 +83,7 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
   - 軍令卡在 `main["orders"]`。
   - 按了 `act:bounties` 之後，懸賞榜在 `main["shop"]`（`notes` 每張有 `short`、`due`）。
   - 管理者頁（時刻表每一列、排定的現實時間 `at_real`）要 `GET /api/admin`；`main["admin"]` 只是布林。
+- **時刻表決戰的開法**（2026-10-22 長社火攻）：每一場一季只開得了一次，取消了也不能再開（`showdowns_opened`）——同一季要看第二種佔領就用新的資料庫，或 `end_season`＋`next_season`；`start_showdown` 的 id 是時刻表那一列（`changshe_fire`、`wancheng`、`guangzong`、`tianming`），宛城要第 3 週那件已結算；`tianming` 先 `seal_mandate when=now`（回「蓋上天命之季的章」）否則回「時刻表上沒有這一場決戰」。要驗「時間到了自己開」：`schedule {id, at}` 只會對齊到季曆整點，之後 `fast_forward hours=1` 推過去。排在後面的攻城戰書不會被 `cancel_battle` 一起取消，取消一場後下一場馬上開，連按到「沒有進行中的決戰」。
 - **`/api/do/<op>` 先查 `ADMIN_ACTIONS`**：玩家動作跟管理者動作同名時，玩家打到的是管理者那一個（回「只有管理者能這麼做。」）。一批加了新動作，先看一次 `set(server.MAIN_ACTIONS) & set(server.ADMIN_ACTIONS)`，再用玩家帳號真的打一次那個路由（2026-10-21 翻地 QA，FB-609：單元測試只看兩張表各有那個鍵）。
 - **實機對照「一個字都不變」**：腳本用 `subprocess.Popen` 在同一個埠輪流起兩份複本的伺服器，各用新的暫存資料庫，只打 API、印要比的欄位；把現實時刻的 `HH:MM` 換掉再 diff，結束時 `taskkill /T`。
 - `status` 裡沒有的鍵就是畫面不畫。要確認某個東西在某種季、某種狀態下不出現，直接看 `status` 有沒有那個鍵，再補打一次那個動作，確認什麼都沒動。
@@ -84,6 +94,7 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 - 頁面每 10 秒打一次 `/api/main`。用 API 改了狀態之後，等 11 秒或 reload 再看。
 - **按鈕用 JS 的 `el.click()`**，座標點擊常常沒反應。
 - **換帳號**：同一個分頁重打 `/api/login` 就換掉 cookie，再單獨一次 reload。兩個帳號要同時登著才需要換 host。
+  - 分頁用的 `tx_session` 是 `requests` 登入拿的：之後腳本**再登入同一個帳號**（`session(acct)` 打管理者動作、看卡），分頁裡那一個會失效、頁面掉回登入（2026-10-21）。腳本動過那個帳號就重拿一次 token、重寫 cookie、單獨 reload。
 - **不把密碼貼進對話**：用 python `requests` 登入、只印 `tx_session`（`s.cookies.get("tx_session")`），再在分頁裡 `document.cookie = "tx_session=<值>; path=/"`、另起一次呼叫 `location.reload()`。換帳號就再取一個值、再寫一次 cookie；這個 token 只在你自己的暫存伺服器上有效。
 - **截圖檔**：存在 `~/.claude/projects/<session>/tool-results/`，檔名是 `mcp-Claude_Browser-blob-*-<尾碼>.jpg`，截圖結果那一行寫著。回報要附路徑時，照尾碼複製到自己的子資料夾、改成看得懂的名字。
 - **量版面用 JS**：
@@ -103,9 +114,18 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
   - 輿圖 ⚔（`g.armed`）不在 `g[data-loc]` 裡面，它前面最近的 `g[data-loc]` 兄弟才是那個地點（往 `previousElementSibling` 找）；點了輿圖分頁要等約 3 秒才畫好，頭一次數到 0 不是沒有。
   - **天下圖的路畫在底圖裡**：`.tx-world-map image` 是一張點陣化的 PNG（blob），DOM 找不到路的 `path`；要看某一條路只能截圖：「放大」按到最大（375 寬 ×1.5、320 寬 ×2，按鈕變 disabled）、點「收起」把「今天去哪裡出陣」收下去、再拖地圖。小地圖（`div.mini svg`）的路在 DOM 裡，`path` 的 `d` 是「M甲x,甲y Q… 乙x,乙y」（id 字母小的那頭在前）。
   - **區塊的歸屬顏色**：`g[data-loc]` 裡第三個 `circle` 的 `stroke`：官軍 #3D5F8F、黃巾 #B9821A、中立 #8F8B82（第二個圓多一個虛線 `stroke-dasharray`），不是區塊的 #7A6A55；第一個圓是點擊範圍（透明）。
+  - **輿圖第三版第 4 批起**（區圖與卡）上面幾條的 ⚔、小牌子、放大縮小、圓盤 `g[data-loc]` 都拿掉了，路也不再烤進點陣（`#map .tx-roads path`）。區圖：名字框 `#mk g.r-label[data-id]`（`rect.r-frame` 的 fill／stroke＝框色、第一個 `text`＝名字、`.r-seal` 寶、`rect.r-bar`／`.r-bar-fill[data-side]` 進度、`text.r-ins` 悟字、`text.r-cool`），小圖 `g.r-icon`，鄰區出口 `g.r-exit[data-id=大區]`，換區是 `select.r-pick` 設 value 再 `dispatchEvent(new Event("change", {bubbles: true}))`，塗層 `.r-wash`，選了的那一圈在 `#msel`；卡在 `#mbody`（`.m-h1`、`.m-line`、`.m-flip`、`.m-yield`、`.m-acts button`）。**天下圖的 `.w-top` 與區圖的 `.r-top` 都在 DOM 裡、藏的那一層在前**：`querySelector('.mapx.region [data-act="map-world"]')` 拿到的是藏起來的那一顆（0×0），要寫 `.r-top [data-act="map-world"]`、`.r-top .w-tl`。
+  - **自動點區圖上的地點之前先看 `elementFromPoint`**（2026-10-21 第 4 批 QA 踩到）：半開的卡會蓋住區圖下緣，照名字框的座標點下去點到的是卡上的「疾行」，角色當場被送走、體力扣掉；點之前確認拿到的是 `[data-act="region-place"]`，不是就先按卡的 ✕ 收起來再點。
+  - **名字框互壓用開發自己的量法重現最快**：`import test_region_map_web as T`（`sys.path` 加 `tests/`），`T._game(profile=…, at=…)` 之後照要的局面 `conquest.push(...)`，再 `T.run(game, T.OVERLAP.replace("VW", …).replace("VH", …))`；`textW` 是估的、node 與瀏覽器擺出來一樣，幾秒一組，比開瀏覽器量快，修的人也能直接寫成測試。
+  - **實機量區圖的互壓，照畫出來的量**（2026-10-22 複驗，FB-651）：開發的 `OVERLAP` 用模型的列（意境字那一列從框的左緣起、高度照字級估），別處的「寶」緊貼意境字這種它量不到；實機讀每一個 `rect.r-frame`、`.r-seal rect`、`text.r-ins` 的 `getBoundingClientRect` 自己算，朱圈照真的圓（`#mkt circle.r-you`：半徑 17×倍率＋線寬一半）量框到圓心最近那一點。翻地前後比位置：同一個帳號、同一個地圖框，先量沒人推、再用引擎 `conquest.push` 推、再量，逐框比 `getBoundingClientRect`。
+  - **湊指定的地圖框**（開發的 `PHONES` 是 `#map` 的大小，不是視窗）：讀 `#map` 的 clientWidth／Height，差多少就把視窗高度加減多少再載入一次；狀態列的行數照帳號不同（多一行提示、下一件），同一個 375×812 視窗地圖框有 604／624／651。
+- **新加一段字會不會把第一屏擠爆**（2026-10-22 長社火攻，FB-685）：同一份程式、開關關著當對照，量 `#page > .act-bar`（閒著）或 `#page > .options > :last-child`（決戰回合）的下緣對 `.tabs` 的頂；`fitFirstScreen` 的 `fitClip` 對「句尾是數字」的句子不收（`fitDigitsShown`），所以尾巴是數字的長句永遠佔滿行數。截兩張同一視窗的 viewport 並排最看得出哪顆鈕被蓋住。
+  - JS 範本字串（反引號）裡的 `\b` 是退格字元、不是字界：在 `Runtime.evaluate` 的字串裡找英文字用 `(^|[^a-z])bot([^a-z]|$)`。
 - **共用窗格太擠、或要包 `fetch`、要換樣式表時，自己開 headless chromium**（寫法看 `tianxia-dev/網頁.md` 的「要真實截圖 PNG 的草圖」：playwright 的 chromium-1208、node 22、CDP；一個 node 腳本開一個瀏覽器、跑完 `taskkill /T` 自己的那個）。截圖用 `Page.captureScreenshot` 存 PNG，再用 Read 看。窗格那幾條（`el.click()`、單獨 reload、量 `scrollWidth`）照樣適用。好用的幾招：
   - **回應沒收到**：在頁面裡包 `window.fetch`，對指定的網址等真的回應回來再丟 `TypeError`（伺服器做了、頁面沒收到），或送出前就丟（根本沒到伺服器）；要「馬上再點、輪詢還沒插進來」就讓 `/api/main`、貨架那幾個 GET 先掛著（等一個 promise），點完才放。要「等一次輪詢再點」就不掛、記下輪詢何時打過。
   - **修前修後比版面**：同一個登入、同一頁，把 `git show <舊 sha>:web/style.css` 整份換進頁面（`link[href*="style.css"]` 換成 `<style>`），量同一批元素的 `getComputedStyle`（字級、字重、行高）與 `getBoundingClientRect`，再比兩張截圖的 sha256；不必起兩台伺服器。寬度要跨媒體查詢的邊界各量一次（640、641）。
+  - **換整份 `app.js` 看舊版的畫法**：CDP `Fetch.enable({patterns: [{urlPattern: "*/app.js*", requestStage: "Request"}]})`，收到 `Fetch.requestPaused` 就 `Fetch.fulfillRequest`（200、`application/javascript`、body 是舊版檔案的 base64），同一台伺服器、同一個登入就能比修前修後的區圖（2026-10-22 用來確認 FB-651 第 4 批就有）。
+  - `clickSel` 拿的是第一個符合的元素：先確認它的框不是 0×0（藏起來的那一層在前，見上面 `.r-top`），不然點到別的東西、什麼都沒發生。
   - 提示泡泡（`#toast`，3.2 秒）與離線橫幅會蓋在確認框上；要看底下的字就等它消失，或用 JS 讀 DOM。
   - 每跑一次 node 就是新的瀏覽器，登入的 cookie 留不下來：用 `set_password.py` 建的帳號，node 自己讀 `local/<帳號>_password.txt` 打 `/api/login`（密碼不進對話）。在瀏覽器裡用隨機密碼註冊的帳號，下一輪就登不進去了。
   - 逐像素比修前修後，同一版也要跑兩次：煉製的太極爐、輿圖的紅旗、修練的人物面板是動畫，跑兩次就不一樣。只有新對新、舊對舊都一樣，新對舊才不一樣的，才算改動造成的。
@@ -122,9 +142,13 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 
 ## 存檔、資料庫與假人
 - 換季之後、玩家第一次同步之前改的存檔，會被換季重設洗掉。要等他同步完再改。
+- **在路上做「擋路」（`travel_block`）**：`player.picking_*` 旗標同步時會被收掉；改 `GameState.pending_event = <任何事件 id>`（`state` 那一層，不是 player）就會擋，畫面寫「先回江湖頁處理「事件名」」，驗完設回 None（2026-10-22，FB-649 複驗）。
 - **改存檔不驗型別**：list 欄位寫成 None（例 `duel_last = None`），`CharacterStore.save` 照樣存進去，讀的時候才炸：伺服器 `_reload` 回 500，網頁掉回登入頁。清空一律用欄位的預設值（`[]`、`{}`）；已經壞了，就直接改 `characters` 那一列的 JSON。
 - **讀資料庫只開唯讀**：`sqlite3.connect("file:<db>?mode=ro", uri=True)`。`characters` 有 `is_bot` 和 `data`（JSON，`player`、`journal`），江湖紀錄只留最近 30 則。
 - **伺服器開著也能改存檔與掛軍令**（伺服器每次動作都重讀資料庫）：角色用 `CharacterStore(open_database(db))` 的 `load`／`save`；軍令用 `open_world(db)`、`with w.db.transaction(): w.mutate_season(fn)`（`s.orders` 加一筆 `Order`）。21 天季的軍令 `Order.week` 是季曆第幾天，不是週：`calendar.point(season.time, c, season).cal_day`。改完讓角色的頁面 reload 一次就看得到。
+- **籌備中管理者動作都不能用**（`seal_assign` 回「賽季沒有在進行，無法觸發」，2026-10-21）：要驗籌備中的碎片卡，登記上直接給：`open_world(db)`、`w.mutate(lambda st: …)`，`s = seal.filled(st.seal, c).shards[片 id]; s.state, s.holder, s.since_season = "held", 名號, 0`（伺服器開著也能改）。
+- **在預覽行程裡打開領地爭奪**（不改複本的檔）：包一支 `serve.py`，`import server` 之後 `server.CONTENT.config.ollama_url = "http://127.0.0.1:9"`、`server.CONTENT.config.conquest.enabled = True` 再 `server.main(["--port", …])`；同一個埠先後開兩台（開著與關著，各自的資料庫與 `local/` 資料夾）驗兩種季。`Start-Process` 回的 PID 是 venv 的 launcher，底下還有子行程，`taskkill /PID <回傳的> /T /F` 一次關乾淨，再用 `netstat` 確認埠沒人聽。
+- **湊「每一塊都灰」**：鎮地要全部冷卻——對每一塊搶得下來的區塊 `conquest._fight(s, c, loc).flipped_at = s.time`（`w.mutate_season`，31 塊；伺服器開著也能改）；補缺要「這一季補過一次、隔 3 天、又被翻走」——管理者 `conquest_progress` 定到 100 翻、`seal_use` 補、`fast_forward 73` 小時、再定到 100 翻；再翻一塊並 `admin_conquest_letter` 讓它進集結，就是兩列各寫一種原因。快轉 73 小時會碰到長社火攻，不礙事。
 - **複製資料庫**用 sqlite 的 `backup()`，不要只複製 `.db`，WAL 裡的資料會漏掉。
 - **商城的帳**：資料表 `mall_purchases`、`mall_ledger`、`mall_entitlements`，`owner` 是名號不是帳號。`scripts/mall_ledger.py --db <db> --out <csv>` 對帳（只讀，印錢包數與餘額合計，沒有負的餘額、exit 0）。
 - `battles` 是最新的在前（`battles[0]`）。腳本移動角色之前先略過序章（`skip_tutorial` 會重設地點）。自動選事件的迴圈要排除 `choice:free`（那一顆要打字）。
@@ -143,6 +167,10 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 - 沒有設定檔可切的開關：例如素材四階關掉。
 - **機率**：一種跑幾千次，報次數與百分比；也要跑「不該發生」的那幾種，確認是 0。
 - 滿級換心得、頭目戰、切磋、決戰軍餉、求援傳聞。
+- **不具名（「兩個只差誰做的世界」）要連酒肆一起比**（FB-643）：`tavern_do("ties", 名號)` 打聽交情在打聽度 4 以上會列那個人份量 3 以上的最近三件行狀，`tavern.fresh`（24 小時內有份量 4 的行狀）打聽度 +1、`seek` 的回話跟著變。名望 0 的陣營中人碰不到門檻：把兩人的 `stats["fame"]` 拉到「小有名氣」、看客同陣營站同一間酒肆（`picking_tavern = True`、銀兩給夠），另跑一份兩人是散人（沒有「投靠」那一筆行狀蓋過 `fresh`）。
+  - **旁觀客只站同一間酒肆是不夠的，沒有牙**（2026-10-21 FB-643 複驗：同一間酒肆查人本來就問得確切，託酒家留意根本沒託成，修前修後都過）：另放旁觀客在別的城（`yingchuan`、`market_town`、`wan_city`、`zhuo_county`，打聽度落在 2～3 的邊上），修前一版 32 組全敗、修後全過。名望要掃 0／小有名氣／名動一方三段（`renown.fame_bars(c, world)[tier - 1]`），份量 4 的舊事各兩件挪到兩天前（再多算一件就多一點名氣）。
+  - **反查**要換成「甲或乙去打聽看客、看客再 `tavern_do("trace")`」：反查讀的是**打聽的人**的名氣（`person_fame(asker)`），所以旁觀客站的位置不重要，要讓打聽的人名望 0（風聲不具名）、打聽度剛好在 2／3 的界線上。
+  - **買兇找人整條路**：兩個敵陣營的人各 `tavern_do("seek", 目標)` 再 `tavern_do("hit", 目標, "0")` 雇（散人沒有仇、雇不成，兩個世界回同一句拒絕），目標走到城外（`location = "runan_wilds"`），每隔 600 秒叫一次 `g._tavern_hit_check()`，比每一次擲「找到／沒找到」的序列；**不要比找到之後的戰報字**：持有者本人的威力含碎片（戰力 ×1.1），同一組亂數也會打出不同的結果，那是設計，旁人看不到。
 - **用自己亂數的掉落**（名號＋戰報流水號）：先照種子挑出擲得中的名號建角色，再實打。
 - **注意**：
   - 腳本用暫存的 `TIANXIA_DB`；設定檔要用 `load_content(Path("content"), profile)` 傳進去，環境變數讀不到。

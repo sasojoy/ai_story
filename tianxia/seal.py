@@ -153,13 +153,16 @@ def conquest_season(content: Content, season: WorldState | None) -> bool:
 
 def hide_spots(content: Content, world: WorldState | None) -> list[tuple[str, float]]:
     """可以藏碎片的地方（地點 id、權重）：所有開季中立的區塊（conquest.start_kind），權重 1；落在 core_regions 這些大區的（核心）權重
-    core_weight（企劃者：核心的機率最高）。照區塊表的順序；一塊都沒有是空的。藏在哪裡一律讀區塊表，不寫死地點 id。"""
+    core_weight（企劃者：核心的機率最高）。照區塊表的順序；一塊都沒有是空的。藏在哪裡一律讀區塊表，不寫死地點 id。
+    劇情還沒開放的跳過（FB-642：例如沒立「綠林開寨」的綠林山寨，去不了也撿不到；同「能不能當成目標」的 conquest._opened）。"""
     from . import atlas, conquest  # noqa: PLC0415  延後 import（見模組說明）
 
     cfg = content.config.seal.cache
     spots: list[tuple[str, float]] = []
     for loc_id in conquest.blocks(content):
         if conquest.start_kind(world, content, loc_id) != conquest.NEUTRAL:
+            continue
+        if world is not None and not conquest._opened(world, content, loc_id):  # noqa: SLF001  同一個套件
             continue
         region = atlas.region_of(content, loc_id) if loc_id in content.locations else None
         spots.append((loc_id, cfg.core_weight if region is not None and region.id in cfg.core_regions else 1.0))
@@ -323,6 +326,7 @@ def scatter(reg: SealRegistry, season: int) -> list[str]:
             log(reg, season, "scatter", shard=shard.id, other=shard.holder)
         shard.state, shard.holder, shard.since_season, shard.stirred_season = "hidden", None, None, None
         shard.emerged_round, shard.former, shard.absent = None, None, 0
+        shard.act_season, shard.act_uses, shard.act_last = None, 0, None  # 獨門行動的次數（改版第 2 批）：七片重來
     reg.round += 1
     reg.emerge_season, reg.force_emerge, reg.force_stir, reg.mandate_pending = None, None, None, False
     reg.cache = None  # 領地爭奪的季藏著的那一片：七片重來，開季時照 hide_chance 重藏（stamp_cache）
@@ -432,6 +436,11 @@ LEAN_NONE = "玉璽碎片不在交戰的任何一方手上"  # 待 joy 潤
 LEAN_SHIFT = "戰局起點往{side}偏了 {n} 點"  # 待 joy 潤（FB-186）
 LEAN_EVEN = "兩軍持璽相當，戰局起點不偏"  # 待 joy 潤：兩軍各有碎片、片數一樣
 LEAN_STILL = "戰局起點不偏"  # 待 joy 潤：兩軍手上都沒有碎片
+# FB-687（PM 2026-10-22）：領地爭奪開著的季，開集結那一刻先寫了「起點照戰況偏幾點」（conquest.front_rumor／front_scene），這裡講的是碎片
+# 另外加的那一份，寫成「再」「不再另偏」，不跟前一句讀成矛盾。決戰那一列有 front_note 才換；關著的季照上面三句。待 joy 潤
+LEAN_SHIFT_EXTRA = "起點再往{side}偏 {n} 點"
+LEAN_EVEN_EXTRA = "兩軍持璽相當，起點不再另偏"
+LEAN_STILL_EXTRA = "起點不再另偏"
 
 
 def mandate_lean(world: WorldStateStore, content: Content, definition: BattleDef) -> dict[str, int]:
@@ -461,13 +470,15 @@ def lean_text(lean: dict[str, int], definition: BattleDef) -> str:
     return "、".join(parts) or LEAN_NONE
 
 
-def shift_text(shift: int, lean: dict[str, int], definition: BattleDef) -> str:
+def shift_text(shift: int, lean: dict[str, int], definition: BattleDef, extra: bool = False) -> str:
     """起點偏了幾點、往哪一軍偏（FB-186：以前只寫各握幾片，看不出戰局條動了沒）：正的往第一軍、負的往第二軍（同 lean_shift）。
-    偏 0 時兩軍各有碎片寫 LEAN_EVEN，都沒有寫 LEAN_STILL；不寫「從正中開打」——偏移之前的起點照戰況，不一定在正中。"""
+    偏 0 時兩軍各有碎片寫 LEAN_EVEN，都沒有寫 LEAN_STILL；不寫「從正中開打」——偏移之前的起點照戰況，不一定在正中。
+    extra：前面已經寫了「起點照戰況偏幾點」（決戰那一列有 front_note，領地爭奪開著的季），改寫成碎片「再」偏的那一份（FB-687）。"""
     first, second = definition.factions[0], definition.factions[1]
+    moved, even, still = (LEAN_SHIFT_EXTRA, LEAN_EVEN_EXTRA, LEAN_STILL_EXTRA) if extra else (LEAN_SHIFT, LEAN_EVEN, LEAN_STILL)
     if shift:
-        return LEAN_SHIFT.format(side=(first if shift > 0 else second).name, n=abs(shift))
-    return LEAN_EVEN if lean.get(first.id) or lean.get(second.id) else LEAN_STILL
+        return moved.format(side=(first if shift > 0 else second).name, n=abs(shift))
+    return even if lean.get(first.id) or lean.get(second.id) else still
 
 
 def _mandate_muster(world: WorldStateStore, content: Content, definition: BattleDef) -> list[str]:
@@ -475,7 +486,10 @@ def _mandate_muster(world: WorldStateStore, content: Content, definition: Battle
     天命之爭本身不璽動、不現世（8.3）。"""
     lean = mandate_lean(world, content, definition)
     shift = lean_shift(lean, definition, content.config.seal)
-    text = MANDATE_MUSTER.format(battle=definition.name, lean=lean_text(lean, definition), shift=shift_text(shift, lean, definition))
+    battle = world.get_battle()  # 開集結那一刻先記了起點照戰況偏幾點（world._front_muster）：這一句改講碎片另加的那一份（FB-687）
+    extra = battle is not None and battle.battle_id == definition.id and battle.front_note is not None
+    text = MANDATE_MUSTER.format(battle=definition.name, lean=lean_text(lean, definition),
+                                 shift=shift_text(shift, lean, definition, extra=extra))
     world.mutate(lambda shared: rumor(shared.season, text))
 
     def _snap(b) -> None:
@@ -603,6 +617,18 @@ MANDATE_UNSETTLED_TITLE = "天命未定"  # 待 joy 潤：戰報標題
 MANDATE_MINE = "天命之爭那一刻，『{shard}』在你懷中：你以合璽之人留名。"  # 待 joy 潤：補送的紀錄
 MANDATE_FAME = "天命之爭：得天命的那一軍出陣的人 +{fame}。"  # 待 joy 潤：玩法說明「名望」那一節（howto）
 CARD_NEW, CARD_STIRRED, CARD_CALM = "新得之季，此季不動", "此季已動過", "此季可能被牽動"
+# FB-626：改版開著時碎片卡底下多一行獨門行動（「這一季還能起用 N 次」），「此季不動」「此季已動過」緊挨著讀起來像碎片用不了——
+# 改版開著時這三句寫明說的是璽動（card_state）；關著照舊。待 joy 潤
+CARD_REVAMP = {
+    CARD_NEW: "新得之季：這一季不會被璽動牽動",
+    CARD_STIRRED: "這一季已經被璽動牽動過",
+    CARD_CALM: "這一季可能被璽動牽動",
+}
+
+
+def card_state(content: Content, text: str) -> str:
+    """碎片卡那一句狀態（Game.seal_view）：改版開著換成寫明璽動的那一句（CARD_REVAMP，FB-626）；關著、天命之季那一句照舊。"""
+    return CARD_REVAMP.get(text, text) if revamp_on(content) else text
 
 
 def sink(reg: SealRegistry, season: int, seen: dict[str, float | None], now: float, cfg: SealTuning) -> list[tuple[SealShard, str]]:

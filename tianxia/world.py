@@ -6,14 +6,14 @@ import random
 import re
 from collections.abc import Callable
 
-from . import arena, battle_instance, bounties, calendar, feasts, figure_life, figures, flavor, leaderboard, orders, ranks, renown, seats, territory, timetable, yuedan
+from . import arena, battle_instance, bounties, calendar, feasts, figure_life, figures, flavor, leaderboard, orders, ranks, renown, seal_acts, seats, territory, timetable, yuedan
 from .models import Act, BattleDef, Content, Ending, SimPlayer, SimRumor, Storyline, TimetableEvent
 from .ollama_client import OllamaClient
 from .rules import (
     add_chronicle, add_rumor, add_world_flags, change_trend, check_condition, geju_tick, recompute_trends,
     decisive_week, ends_early, resolve_trends, season_one, season_one_off, stance_sides, stances, trend_shown, trend_value,
 )
-from .state import GameState, PlayerState, TimelineResult, WorldState
+from .state import GameState, PlayerState, Rumor, TimelineResult, WorldState
 from .world_state import WorldStateStore, season_length_days
 
 HOUR = 3600
@@ -585,12 +585,32 @@ def _open_claimed(
 
         from . import works  # noqa: PLC0415  同上
 
+        msgs += _front_muster(world, content, definition, start)  # 起點照哪一條戰線（領地爭奪開著的季；排在屯糧、天命之爭的偏移之前）
         msgs += works.on_muster(world, content, definition)  # 屯糧練兵：兩軍屯的量換成起點的偏移（排在天命之爭的偏移之前，兩者疊加）
         msgs += seal.on_muster(world, content, definition, now)
         from . import generals  # noqa: PLC0415  同上
 
         msgs += generals.on_muster(world, content, definition)  # 龍頭上陣：派那條戰線上的大勢人物上陣
     return msgs
+
+
+def _front_muster(world: WorldStateStore, content: Content, definition: BattleDef, start: int) -> list[str]:
+    """時刻表決戰剛開集結（_open_claimed，不在任何 mutate 裡）：領地爭奪開著、寫了戰線時，把起點照的那條線上誰佔幾處快照進這一場
+    （BattleInstance.front_note）、天下大事一句（企劃者 2026-10-22：不另加主場偏移，補一句說明）。其餘什麼都不寫（只讀一次季）。"""
+    from . import conquest  # noqa: PLC0415  同 advance_world_state 的延後 import
+
+    note = conquest.front_note(world.get_season(), content, definition, start)
+    if note is None:
+        return []
+
+    def _snap(b: battle_instance.BattleInstance) -> None:
+        if b.battle_id == definition.id and b.phase == "muster":
+            b.front_note = note
+
+    world.mutate_battle(_snap)
+    line = conquest.front_rumor(content, definition, note)
+    world.mutate_season(lambda s: s.rumors.append(Rumor(time=s.time, text=line, layer="world")))
+    return [f"🗺️ 【天下大事】{line}"]
 
 
 def season_hour(state: GameState, content: Content, rng: random.Random, players: int | None = None) -> list[str]:
@@ -668,6 +688,9 @@ def advance_world_state(
                  and world.seal_duel_open())
     while remaining > 0 and not season.ended:
         step = min(remaining, HOUR)
+        # 玉璽碎片改版第 2 批：引將期滿那一刻另切一段，剛好在那一刻回原處（沒有還沒期滿的引將時一步都不變）
+        if (pull_end := seal_acts.next_end(season)) is not None and season.time + calendar.EPS_SECONDS < pull_end < season.time + step:
+            step = pull_end - season.time
         crossed = False
         # 曆時交界照季曆的整點（21 天季在 10:30 開季時，第一個交界在 11:00，calendar.next_hour_mark）
         if cal_hour is not None and (to_mark := calendar.next_hour_mark(season.time, content, season)) <= step + calendar.EPS_SECONDS:
@@ -686,6 +709,7 @@ def advance_world_state(
             # 週末的第一季。以前只在上面那一支（第一季規則關著）叫，21 天季永遠走不到（FB-350）
             figures.recover(vehicle, content, step * calendar.cal_scale(content, season) / HOUR)
             msgs += figures.revive(vehicle, content)  # 被挑戰打退的人物過幾個季曆天回來（PM 2026-10-16，兩種季都有）
+            msgs += seal_acts.tick(vehicle, content)  # 引將期滿回原處（玉璽碎片改版第 2 批）：排在人物走動之前（期滿的那一輪他就能走）
             figure_life.tick(vehicle, content)  # 人物的每日行事（大勢人物擴充第一批）：走動、募兵、襲擾，只寫傳聞
             feasts.settle(vehicle, content)  # 時間到了的宴散席（第三批）：席間最佳那一句上天下大事
             yuedan.tick(vehicle, content, world)  # 月旦評（第三批）：跨進新的一週評六個人；給了 store 才評（要掃角色）

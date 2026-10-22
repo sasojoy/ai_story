@@ -1073,17 +1073,16 @@ def test_the_furnace_page_sends_only_insights():
 
 
 def test_the_new_map_has_no_legend_box_and_the_chips_carry_the_colors():
-    """輿圖升級（設計第一節）：圖例拿掉，濾鏡本身就是圖例（每顆前面一個色點）；地圖框是夾在狀態列與分頁列之間的整頁一層，
-    寬 900 以上抽屜變右欄。網頁的版面與樣式對得上，就靠這一條。"""
+    """輿圖升級（設計第一節）：圖例拿掉；地圖框是夾在狀態列與分頁列之間的整頁一層，寬 900 以上抽屜變右欄。輿圖第三版第 4 批起濾鏡那一排
+    也拿掉了（輿圖簡化設計 5.4：誰的領地看區圖的印章框，其他收進卡）。網頁的版面與樣式對得上，就靠這一條。"""
     js = (server.WEB / "app.js").read_text(encoding="utf-8")
     css = re.sub(r"/\*.*?\*/", "", (server.WEB / "style.css").read_text(encoding="utf-8"), flags=re.S)
     assert "function legendHtml(" not in js and ".map-legend" not in css and "legend-toggle" not in js
-    chips = _js_function(js, "function chipsHtml(")
-    assert "MAP_CHIPS" in chips and "<i style=" in chips and "aria-pressed" in chips
+    # 輿圖第三版第 4 批（輿圖簡化設計 5.4）：濾鏡那一排、右上角那一欄（我在哪、放大、縮小）、手勢都拿掉了，兩張圖都是固定取景
+    assert "MAP_CHIPS" not in js and "function chipsHtml(" not in js and "map-ctl" not in js and ".map-ctl" not in css and "function gripDown(" not in js
     assert re.search(r"\n\.mapx \{[^}]*position: fixed", css) and "var(--map-top, 0px)" in css and "var(--map-bottom, 0px)" in css
     assert "@media (min-width: 900px)" in css and "grid-template-columns: 1fr 360px" in css
-    assert re.search(r"\n\.map-ctl button \{[^}]*width: 44px; height: 44px;", css)  # 觸控目標 44px
-    assert 'closest(".map-ctl")' in _js_function(js, "function gripDown(")  # 在角落的鈕上按下去不是拖地圖
+    assert re.search(r"\n\.w-here, \.w-tl, \.w-back \{[^}]*height: 40px;", css)  # 上面那一排的鈕：觸控目標 40px
     assert "overflow: clip" in css  # 地圖框不能被 scrollIntoView 捲走（overflow: hidden 的框可以）
 
 
@@ -6235,6 +6234,7 @@ NOT_IN_THE_FINGERPRINT = {
         "xingshi": "〈天下形勢〉收下的文章：收下那一刻另寫天下大事與江湖史（都在指紋裡）；見聞「形勢」頁自己去讀，不叫醒全服",
         "xingshi_ticket": "還在等模型寫的那一張單，誰都看不到",
         "xingshi_mark": "上一篇讀到哪裡的記號，玩家看不到",
+        "seal_acts": "玉璽碎片的獨門行動（改版第 2 批）：起用那一下另寫天下大事與江湖史（都在指紋裡）；引將期滿回原處改的是 figures（算進指紋）",
     },
     "BattleInstance": {
         "muster_deadline_real": "現實時間的期限，畫面上的倒數靠輪詢（推送計畫 F4）",
@@ -6267,6 +6267,7 @@ NOT_IN_THE_FINGERPRINT = {
         "seal_notes": "收場時跟 phase 一起寫入（戰報那一行）",
         "seal_lean": "天命之爭開集結那一刻快照（集結公告另寫天下大事，指紋本來就變了）",
         "supply_lean": "屯糧練兵開集結那一刻快照（集結公告另寫天下大事，指紋本來就變了）",
+        "front_note": "起點照哪一條戰線：開集結那一刻快照（另寫天下大事，指紋本來就變了），之後不再改",
         "commanders": "上陣的大勢人物：開集結那一刻派上來（另寫天下大事），氣血與敗走只在回合結算時改，那一下 round_number 也變了",
         "orders": "主將令：回合結算那一下換，round_number 也變了",
         "siege": "攻城戰打哪一塊、誰攻：開集結那一刻就定了（跟 phase 一起寫入）；收場的易手另寫天下大事（傳聞流水號已在指紋裡）",

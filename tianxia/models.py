@@ -867,6 +867,7 @@ class MapLayout(_Strict):
     width: int = 680
     height: int = 420
     background: str = Field(default="#E9E2CC", pattern=HEX_COLOR)  # 紙色（輿圖美術設計 2.1）
+    unheld: str = Field(default="#D2CBBC", pattern=HEX_COLOR)  # 天下圖上沒人佔的地面（輿圖簡化設計 3.3：顏色跟著劇本、不寫死）
     regions: list[MapRegion] = Field(default_factory=list)
     rivers: list[MapRiver] = Field(default_factory=list)
     terrain: list[Terrain] = Field(default_factory=list)
@@ -1202,6 +1203,18 @@ class Hints(_Strict):
     season_return: str = ""  # 第二季起開季時師父的一句（設計 7.1）；空的就沒有
 
 
+class FactionInk(_Strict):
+    """一方在輿圖上的樣子（輿圖簡化設計 3.3：幾方、每一方的顏色都從劇本讀，程式不寫死；環形版 dev/map-2 搬過來）。
+    color 是印、紅線兩邊、年表、勢力條；soft 是天下圖的地面；tint 是大區的淡底色（soft、tint 沒寫照 color 往紙色淡）。
+    short 是一個字（天下圖大區名底下「官 N」那種）；label 是輿圖上寫的名字（沒寫照 FactionDef.name）。"""
+
+    color: str = Field(pattern=HEX_COLOR)
+    soft: str | None = Field(default=None, pattern=HEX_COLOR)
+    tint: str | None = Field(default=None, pattern=HEX_COLOR)
+    short: str = ""
+    label: str = ""
+
+
 class FactionDef(_Strict):
     """一季的玩家陣營（第一季設計第五節）：在 join_at 的地點可以投靠；拜入 sects 裡的門派也算投靠這個陣營。
     goals 是這個陣營想把各條大勢線往哪推（伺服器假人照它打分數）。"""
@@ -1215,6 +1228,7 @@ class FactionDef(_Strict):
     # 豪強分屬兩軍（企劃者 2026-10-15）：這個陣營在依附的季（allied.on）要依附其中一軍；寫的是可以依附的陣營 id（暫名）。
     # 空的＝這個陣營本身就是一軍
     allies: list[str] = Field(default_factory=list)
+    ink: FactionInk | None = None  # 輿圖上的顏色與字（輿圖第三版第 3 批）；沒寫的照 mapdata.FALLBACK_INKS 的順序挑
 
 
 class SeasonOneOff(_Strict):
@@ -2048,6 +2062,10 @@ class TreasureRules(_Strict):
     dup_silver: int = Field(default=50, ge=0)  # 掉落池都有了、奇遇給的那一件已經有了，改給這麼多銀兩（6.5）
 
 
+# 引將、頒詔、承露、傳檄、收心（第 2 批）；鎮地、補缺（第 3 批，建在翻地與爭搶上）
+SealActKind = Literal["yinjiang", "banzhao", "chenglu", "chuanxi", "shouxin", "zhendi", "bujue"]
+
+
 class ShardDef(_Strict):
     """一片傳國玉璽的碎片（content/seal.json，玉璽碎片設計 7.1）：名字與一句說明交 joy 潤，數字在 Config.seal.effects。"""
 
@@ -2059,6 +2077,8 @@ class ShardDef(_Strict):
     # 改版（Config.seal.revamp 開著）的常駐成長或生活效果：Config.seal.revamp.effects 的鍵，一片可以好幾個（玄紐、歸心）；
     # 戰力 ×revamp.power 每片都有、不寫在這裡（docs/superpowers/specs/2026-10-21-玉璽碎片改版-design.md 第三章）
     effects: list[str] = Field(default_factory=list)
+    # 改版第 2、3 批：這一片的獨門行動（tianxia/seal_acts.py；設計第三章）；載入時一種只給一片
+    act: SealActKind | None = None
 
 
 class MandateTuning(_Strict):
@@ -2092,6 +2112,30 @@ class SealCacheTuning(_Strict):
     core_weight: float = Field(default=3.0, ge=1)
 
 
+class SealActsTuning(_Strict):
+    """玉璽碎片改版第 2 批：獨門行動（設計第三章最右欄、五之一；計畫 docs/superpowers/plans/2026-10-21-玉璽碎片改版-2.md）。
+    全部是【預設】，等 21 天的季試玩再調。「天」在有季曆的季（第一季的章：週末、7 天、21 天）是季曆天，14 天的季是世界天（seal_acts.day_seconds）。
+    - uses、gap_days：每一片一季幾次、兩次之間隔幾天（次數記在全服的碎片上，換手跟著碎片走）；days：每個行動生效幾天。
+    - sense_points、cultivate：頒詔——靜心感悟擲中的機會多幾個百分點（夾在 sense_rate_range 的上限）、衝絕學的機會倍數
+      （契機與服丹都乘，cultivation.peak_scale；企劃者 2026-10-21：武學重構之後修練不再擲升品）。
+    - stamina：承露——那一區體力回復的倍數（醫館療傷不收錢，沒有數字）。
+    - push：傳檄——那一軍在那條線上推的量的倍數（盡頭阻力與每人每日上限照舊）。
+    - affinity：收心——跟他說話、宴客敬酒的情誼漲幅倍數（求見不看門檻，沒有數字）。
+    - hold_hours：鎮地（第 3 批）——那一塊誰都推不動幾個季曆小時（「一日」的 hold_hours/24；設計第三章 12 個季曆小時）。
+    - mend_days：補缺（第 3 批）——幾日之內被翻走的地補得回來（PM 五之一 5「1 個季曆天」；冷卻比它長的季照冷卻算）。"""
+
+    uses: int = Field(default=2, ge=0)
+    gap_days: float = Field(default=3, ge=0)
+    days: float = Field(default=1, gt=0)
+    sense_points: int = Field(default=10, ge=0)
+    cultivate: float = Field(default=1.2, ge=1)
+    stamina: float = Field(default=1.5, ge=1)
+    push: float = Field(default=1.25, ge=1)
+    affinity: float = Field(default=2.0, ge=1)
+    hold_hours: float = Field(default=12, gt=0)
+    mend_days: float = Field(default=1, gt=0)
+
+
 class SealRevampTuning(_Strict):
     """玉璽碎片改版（docs/superpowers/specs/2026-10-21-玉璽碎片改版-design.md；計畫 docs/superpowers/plans/2026-10-21-玉璽碎片改版-1.md）
     第 1 批：常駐效果與持有者平時藏起來。子開關（PM 五之一 6：預設開、部署在休季換程式，不蓋章）；關著時舊的七個效果
@@ -2111,6 +2155,7 @@ class SealRevampTuning(_Strict):
         "injury": 0.5, "talk_turns": 2, "audience": 5, "practice": 0.75, "keep_silver": 1,
         "stamina_regen": 1.25, "fuse_points": 10, "mate_exp": 1.25, "chuangong": 0.9,
     })
+    acts: SealActsTuning = Field(default_factory=SealActsTuning)  # 第 2 批：獨門行動（同一個子開關）
 
 
 class SealTuning(_Strict):
