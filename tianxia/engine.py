@@ -13386,7 +13386,8 @@ class Game:
                 bits.append(f"冷卻 {conquest.cooling_minutes(w, c, loc)} 分")
             if conquest.frozen(w, loc) is not None:
                 bits.append("戰書凍結")
-            blocks.append({"id": loc, "label": f"{c.locations[loc].name}（{'・'.join(bits)}）"})
+            name = c.locations[loc].name  # 問句寫地名（label 後面的括號不能拿來切：潁川郡（陽翟）自己就有括號）
+            blocks.append({"id": loc, "name": name, "label": f"{name}（{'・'.join(bits)}）"})
         sides = [{"id": s, "label": names.get(s, s)} for s in conquest.SIDES]
         sieges = [{
             "id": slot.id,

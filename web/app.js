@@ -8384,7 +8384,8 @@
             const pick = (id) => document.getElementById(id) || {};
             const block = pick("ad-cq-block"), side = pick("ad-cq-side");
             body.id = block.value || "";
-            body.place = ((block.options && block.options[block.selectedIndex]) ? block.options[block.selectedIndex].text : body.id).replace(/（.*$/, "");
+            // 問句寫地名：照伺服器給的 name（選單的字後面接了括號，地名自己也可能有括號，不從字切）
+            body.place = ((((S.admin && S.admin.conquest) || {}).blocks || []).find((b) => b.id === body.id) || {}).name || body.id;
             body.side = op === "conquest_set" && el.dataset.neutral === "1" ? "" : side.value || "";
             body.sideName = (side.options && side.options[side.selectedIndex]) ? side.options[side.selectedIndex].text : body.side;
             if (op === "conquest_progress") body.value = Math.max(0, Math.min(100, Number(pick("ad-cq-value").value || 0)));

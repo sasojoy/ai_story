@@ -88,6 +88,7 @@ def test_admin_choices_list_capturable_blocks_two_sides_and_open_sieges():
     assert [s["id"] for s in q["sides"]] == ["guan", "huang"] and q["sieges"] == []
     label = next(b["label"] for b in q["blocks"] if b["id"] == "hilltop_wilds")
     assert label == "荒丘（沒人佔）"
+    assert {b["id"]: b["name"] for b in q["blocks"]}["yingchuan"] == "潁川郡（陽翟）"  # 問句寫的地名另給（label 不能拿來切）
     game.admin_conquest_progress("hilltop_wilds", "guan", 46)
     assert next(b["label"] for b in game.admin_conquest_choices()["blocks"] if b["id"] == "hilltop_wilds") == "荒丘（沒人佔・官軍 46）"
     game.admin_conquest_progress("hilltop_wilds", "guan", 100)  # 推滿易手：冷卻
@@ -140,7 +141,8 @@ def _admin_view(q):
 
 def _q():
     return {
-        "blocks": [{"id": "hilltop_wilds", "label": "荒丘（沒人佔・官軍 46）"}, {"id": "runan_wilds", "label": "汝南荒野（沒人佔）"}],
+        "blocks": [{"id": "hilltop_wilds", "name": "荒丘", "label": "荒丘（沒人佔・官軍 46）"},
+                   {"id": "yingchuan", "name": "潁川郡（陽翟）", "label": "潁川郡（陽翟）（官軍）"}],
         "sides": [{"id": "guan", "label": "官軍"}, {"id": "huang", "label": "黃巾軍"}],
         "sieges": [{"id": "s-1", "label": "汝南荒野：官軍攻・集結・交戰中・第 1 天 16:30"}],
     }
@@ -161,6 +163,7 @@ def _sheet(m, admin):
 def test_the_admin_sheet_draws_the_conquest_group_only_when_on(m):
     sheet = _sheet(m, _admin_view(_q()))
     assert "領地爭奪（救場" in sheet and "荒丘（沒人佔・官軍 46）" in sheet and "汝南荒野：官軍攻" in sheet
+    assert "潁川郡（陽翟）（官軍）" in sheet
     for op in ("conquest_set", "conquest_progress", "admin_conquest_letter", "conquest_cancel"):
         assert f'data-op="{op}"' in sheet, op
     assert 'data-op="conquest_set" data-neutral="1"' in sheet
@@ -174,7 +177,7 @@ def test_the_admin_sheet_draws_the_conquest_group_only_when_on(m):
 FIELDS = """
   const sel = (opts, i) => ({ value: opts[i][0], selectedIndex: i, options: opts.map(([value, text]) => ({ value, text })) });
   const fields = {
-    "ad-cq-block": sel([["hilltop_wilds", "荒丘（沒人佔・官軍 46）"], ["runan_wilds", "汝南荒野（沒人佔）"]], input.block),
+    "ad-cq-block": sel([["hilltop_wilds", "荒丘（沒人佔・官軍 46）"], ["yingchuan", "潁川郡（陽翟）（官軍）"]], input.block),
     "ad-cq-side": sel([["guan", "官軍"], ["huang", "黃巾軍"]], input.side),
     "ad-cq-value": { value: input.value },
     "ad-cq-siege": sel([["s-1", "汝南荒野：官軍攻・集結・交戰中・第 1 天 16:30"]], 0),
@@ -196,19 +199,20 @@ def test_the_conquest_buttons_ask_then_post_their_bodies(m):
                                   "menxia": None, "stored": {}, "responses": {"/api/do/": {"main": m, "message": "好了"}},
                                   "block": 1, "side": 1, "value": "130"})
     asked = out["asked"]
-    assert "把「汝南荒野」定給黃巾軍" in asked[0] and "不分紅、不起冷卻" in asked[0]
-    assert "把「汝南荒野」放回中立" in asked[1]
+    # 地名照伺服器給的 name（潁川郡（陽翟）自己有括號，不從選單的字切）
+    assert "把「潁川郡（陽翟）」定給黃巾軍" in asked[0] and "不分紅、不起冷卻" in asked[0]
+    assert "把「潁川郡（陽翟）」放回中立" in asked[1]
     assert "黃巾軍那一條進度定成 100" in asked[2] and "推滿當場易手" in asked[2]  # 欄位寫 130：夾在 100
-    assert "替黃巾軍立刻對「汝南荒野」下一張戰書" in asked[3]
+    assert "替黃巾軍立刻對「潁川郡（陽翟）」下一張戰書" in asked[3]
     assert "取消「汝南荒野：官軍攻・集結・交戰中・第 1 天 16:30」這一場攻城" in asked[4]
     posts = [(c[0], c[1]) for c in out["calls"] if c[0].startswith("/api/do/")]
     assert [p[0] for p in posts] == ["/api/do/conquest_set", "/api/do/conquest_set", "/api/do/conquest_progress",
                                      "/api/do/admin_conquest_letter", "/api/do/conquest_cancel"]
     bodies = [p[1] for p in posts]
-    assert (bodies[0]["id"], bodies[0]["side"]) == ("runan_wilds", "huang")
-    assert (bodies[1]["id"], bodies[1]["side"]) == ("runan_wilds", "")
-    assert (bodies[2]["id"], bodies[2]["side"], bodies[2]["value"]) == ("runan_wilds", "huang", 100)
-    assert (bodies[3]["id"], bodies[3]["side"]) == ("runan_wilds", "huang")
+    assert (bodies[0]["id"], bodies[0]["side"]) == ("yingchuan", "huang")
+    assert (bodies[1]["id"], bodies[1]["side"]) == ("yingchuan", "")
+    assert (bodies[2]["id"], bodies[2]["side"], bodies[2]["value"]) == ("yingchuan", "huang", 100)
+    assert (bodies[3]["id"], bodies[3]["side"]) == ("yingchuan", "huang")
     assert bodies[4]["id"] == "s-1"
 
 
