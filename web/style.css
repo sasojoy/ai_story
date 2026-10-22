@@ -1043,7 +1043,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .btn.forging { animation: ember 1.6s ease-in-out infinite; }
 @keyframes ember { 0%, 100% { box-shadow: 0 0 0 rgba(214, 120, 40, 0); } 50% { box-shadow: 0 0 18px rgba(214, 120, 40, 0.75); } }
 
-/* ── 輿圖（輿圖簡化設計第五章：天下圖、區圖兩張不自由縮放的圖＋一張卡；輿圖升級設計第七節的版面）── */
+/* ── 輿圖（輿圖簡化設計第五章：天下圖、區圖兩張固定取景的圖＋一張卡，企劃者 2026-10-22 起兩張都能拖、能捏合縮放；輿圖升級設計第七節的版面）── */
 /* 整頁一層：夾在頂上的狀態列與底部分頁列之間（--map-top、--map-bottom 由 app.js 的 mapFrame 量）。地圖框佔滿整層，
    上面一排浮在地圖上，抽屜從底下拉上來；寬 900 以上抽屜變右邊 360px 一欄 */
 .mapx { position: fixed; left: 0; right: 0; top: var(--map-top, 0px); bottom: var(--map-bottom, 0px); z-index: 5; background: #e9e2cc; overflow: hidden; }
@@ -1054,12 +1054,14 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 #map-host.away * { pointer-events: none !important; }
 #map-host.away .pulse { animation: none; }
 #map-host.away [filter] { filter: none; }
-/* 地圖框：地圖照原本的像素大小放在裡面，靠 transform 套固定的取景（app.js 的 applyMapView：worldFit、regionFit），不拖不縮。
-   框裡不捲頁面、不放大整頁（touch-action: none）；長按不跳選字、不跳 iOS 的選單。
+/* 地圖框：地圖照原本的像素大小放在裡面，靠 transform 套固定的取景（app.js 的 applyMapView：worldFit、regionFit）加上拖與縮放
+   （企劃者 2026-10-22，app.js「輿圖的拖與縮放」：一指、滑鼠拖，兩指捏合、滾輪縮放）。
+   框裡的手勢不捲頁面、不放大整頁（touch-action: none；框外的抽屜照舊自己捲）；長按不跳選字、不跳 iOS 的選單。
+   游標一直是 grab（拖的時候不換：游標會一路繼承，換一次整棵地圖重算樣式，FB-322；地點、名字框照舊是手指）。
    clip 一樣裁切、而且不能被 scrollIntoView 捲走（hidden 的框仍然是捲動容器） */
 .mapx .map-wrap {
   position: absolute; inset: 0; overflow: hidden; overflow: clip; background: #e9e2cc;
-  touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; cursor: default;
+  touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; cursor: grab;
 }
 /* 版圖變化時地圖框縮到抽屜上面（--md-h 是抽屜的高度）：天下圖照那一塊重新取景 */
 .mapx.tl-mode .map-wrap { bottom: var(--md-h, 0px); }
@@ -1080,7 +1082,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 }
 .map-banner[hidden] { display: none; }
 .map-banner { position: absolute; left: 50%; transform: translateX(-50%); top: 46px; background: var(--accent); color: #fff; font-size: 12.5px; padding: 4px 12px; border-radius: 16px; white-space: nowrap; pointer-events: none; }
-/* ── 天下圖（輿圖簡化設計 5.1）：同一張底圖換一個固定的取景（app.js 的 worldFit）。上面一排「天下・找地點・⏱ 版圖」 */
+/* ── 天下圖（輿圖簡化設計 5.1）：同一張底圖換一個固定的取景（app.js 的 worldFit），能拖能縮（企劃者 2026-10-22）。上面一排「天下・找地點・⏱ 版圖」 */
 /* 路照舊在底圖裡（.tx-roads，不烤進點陣），從地面底下淡淡透上來（企劃者 2026-10-20 從對比圖選乙） */
 .w-top { position: absolute; left: 10px; right: 10px; top: 10px; display: none; gap: 8px; align-items: center; pointer-events: none; }
 .mapx.world .w-top { display: flex; }

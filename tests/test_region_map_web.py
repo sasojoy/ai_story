@@ -807,10 +807,12 @@ def test_fb652_side_coloured_card_text_reads_in_light_mode():
 
 
 def test_the_removed_pieces_are_gone():
-    """設計 5.4 那一表：濾鏡、意境鈕與意境濾鏡、小牌子、⚔、前線鋸齒、中立地虛線圈、圓盤裡一個字、自由縮放、看大局、「天下」那一條——真的刪了。"""
+    """設計 5.4 那一表：濾鏡、意境鈕與意境濾鏡、小牌子、⚔、前線鋸齒、中立地虛線圈、圓盤裡一個字、看大局、「天下」那一條——真的刪了。
+    「自由縮放」那一項企劃者 2026-10-22 改回來了（兩張都能拖、能捏合縮放，tests/test_map_pan_web.py）：清單拿掉舊的手勢函式名，
+    縮放鈕、回到所在地、看大局那幾樣照舊不准有。"""
     src = APP.read_text(encoding="utf-8")
     for name in ("MAP_CHIPS", "function chipsHtml", "function insightButton", "INSIGHT_DOT", "function mapBadges", "NEUTRAL_INK", "MAP_FAR",
-                 "function hudHtml", "function marksParts", "function marksSvg", "function regionTint", "function gripDown", "function mapWheel",
+                 "function hudHtml", "function marksParts", "function marksSvg", "function regionTint",
                  "function mapZoom", "function mapHome", "function toggleLayer", "function clampView", "function firstScale", "class=\"armed\"",
                  "<path class=\"front\"", "map-hud", "map-ctl", "S.mapLayers"):
         assert name not in src, name

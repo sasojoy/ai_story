@@ -1078,8 +1078,9 @@ def test_the_new_map_has_no_legend_box_and_the_chips_carry_the_colors():
     js = (server.WEB / "app.js").read_text(encoding="utf-8")
     css = re.sub(r"/\*.*?\*/", "", (server.WEB / "style.css").read_text(encoding="utf-8"), flags=re.S)
     assert "function legendHtml(" not in js and ".map-legend" not in css and "legend-toggle" not in js
-    # 輿圖第三版第 4 批（輿圖簡化設計 5.4）：濾鏡那一排、右上角那一欄（我在哪、放大、縮小）、手勢都拿掉了，兩張圖都是固定取景
-    assert "MAP_CHIPS" not in js and "function chipsHtml(" not in js and "map-ctl" not in js and ".map-ctl" not in css and "function gripDown(" not in js
+    # 輿圖第三版第 4 批（輿圖簡化設計 5.4）：濾鏡那一排、右上角那一欄（我在哪、放大、縮小）都拿掉了，兩張圖都是固定取景；
+    # 手勢（拖、捏合、滾輪）企劃者 2026-10-22 改回來了（tests/test_map_pan_web.py），右上角那一欄照舊沒有
+    assert "MAP_CHIPS" not in js and "function chipsHtml(" not in js and "map-ctl" not in js and ".map-ctl" not in css
     assert re.search(r"\n\.mapx \{[^}]*position: fixed", css) and "var(--map-top, 0px)" in css and "var(--map-bottom, 0px)" in css
     assert "@media (min-width: 900px)" in css and "grid-template-columns: 1fr 360px" in css
     assert re.search(r"\n\.w-here, \.w-tl, \.w-back \{[^}]*height: 40px;", css)  # 上面那一排的鈕：觸控目標 40px

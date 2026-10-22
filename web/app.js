@@ -166,12 +166,15 @@
     mapDrawer: "min", // 抽屜的高度："min"（收著那一行）、"peek"（卡半開）、"half"、"full"、"tl"（版圖變化）
     mapWeek: null, // 版圖變化看的週次；null＝現在
     mapQuery: "", // 找地點的字
-    // 輿圖的哪一層（輿圖第三版）："world" 天下圖（打開輿圖第一眼）、"region" 區圖（第 4 批）；兩張都是固定取景，不拖不縮
+    // 輿圖的哪一層（輿圖第三版）："world" 天下圖（打開輿圖第一眼）、"region" 區圖（第 4 批）；兩張都是固定取景，
+    // 上面再疊一層拖與縮放（企劃者 2026-10-22，mapPan）
     mapLayer: "world",
     mapRegion: null, // 區圖畫哪一區（大區 id）
     worldView: null, // 天下圖此刻的取景（applyMapView 照 worldFit 算）
     regionView: null, // 區圖此刻的取景（applyMapView 照 regionFit 算：{ s, cx, cy, frame, bottom }）
     marksKey: "", // 記號照哪一個取景畫的（viewKey）：一樣就不必重畫
+    mapPan: null, // 取景上面的拖與縮放 { z 倍率 1～PAN_MAX, x, y 螢幕上的位移 }；null＝1 倍（企劃者 2026-10-22）
+    panKey: "", // 拖縮是照哪一個取景（viewKey）疊上去的：取景換了（換區、換層、地圖框換大小）回 1 倍
     news: "reports",
     reports: null,
     reportOpen: false,
@@ -5331,7 +5334,7 @@
   }
 
   // ── 輿圖 ──
-  // 輿圖第三版（輿圖簡化設計第五章）：兩張不自由縮放的圖——天下圖（打開輿圖第一眼，S.mapLayer "world"）與區圖（點一區，"region"）——
+  // 輿圖第三版（輿圖簡化設計第五章）：兩張固定取景、能拖能捏合縮放（企劃者 2026-10-22）的圖——天下圖（打開輿圖第一眼，S.mapLayer "world"）與區圖（點一區，"region"）——
   // 加一張卡（抽屜，設計 5.3）。底圖（/api/map/base：紙、大區、山河、路的 SVG）一次載入只抓一次，疊層的 key 換了（劇情開放了新地點）才重抓；
   // 疊層（/api/map/state：誰佔著、勝算、分鐘……）打開輿圖、輪詢（MAP_STATE_EVERY）、做了動作之後重抓。記號照疊層畫在底圖的 <g id="mk">
   // 與疊在上面的 #mkt（drawMarks）；兩張圖都是固定取景（worldFit、regionFit），字與記號照倍率反算、螢幕上大小固定。
@@ -5499,7 +5502,7 @@
     stopPlay();
     Object.assign(S, {
       mapBase: null, mapState: null, mapStateAt: 0, mapSel: null, mapMode: "overview", mapDrawer: "min",
-      mapWeek: null, mapQuery: "", mapLayer: "world", mapRegion: null, worldView: null, regionView: null, marksKey: "",
+      mapWeek: null, mapQuery: "", mapLayer: "world", mapRegion: null, worldView: null, regionView: null, marksKey: "", mapPan: null, panKey: "",
     });
     hideMapHost(true);
   }
@@ -5821,12 +5824,13 @@
       banner.textContent = `正在看${wkName(S.mapWeek, `第 ${S.mapWeek} 週`)}`;
     }
   }
-  // 打開、收起版圖變化（設計 5.1：在天下圖上播）：打開時換到天下圖（地圖框縮到抽屜上面，天下圖照那一塊重新取景）；收起時留在天下圖
+  // 打開、收起版圖變化（設計 5.1：在天下圖上播）：打開時換到天下圖（地圖框縮到抽屜上面，天下圖照那一塊重新取景）；收起時留在天下圖。
+  // 開、收都回 1 倍（地圖框換了大小）；看的時候與播放中照樣能拖縮（播放只換記號，企劃者 2026-10-22 的拖縮計畫 3.1）
   function mapTimeline(open) {
     stopPlay();
     if (!document.getElementById("mapx")) return;
-    if (open) Object.assign(S, { mapLayer: "world", mapMode: "timeline", mapSel: null, mapWeek: S.mapState.now_week, mapDrawer: "tl" });
-    else Object.assign(S, { mapMode: "overview", mapSel: null, mapWeek: null, mapDrawer: "min" });
+    if (open) Object.assign(S, { mapLayer: "world", mapMode: "timeline", mapSel: null, mapWeek: S.mapState.now_week, mapDrawer: "tl", mapPan: null });
+    else Object.assign(S, { mapMode: "overview", mapSel: null, mapWeek: null, mapDrawer: "min", mapPan: null });
     remapChrome();
     applyMapView(true);
     drawMarks();
@@ -5990,7 +5994,7 @@
 
   // ── 天下圖（輿圖簡化設計 5.1、3.3、5.6；環形版 dev/map-2 寫的，輿圖第三版第 3 批搬回真實地形）──
   // 打開輿圖第一眼。不另開一張圖：同一張底圖（山水已經烤成點陣）換一個固定的取景（worldFit：取景框整張放進地圖框露出來的那一塊），
-  // 不拖、不縮；記號那一層（#mk、#mkt）畫大區地面——每一區（程式裡叫「州」）的地面照「離哪個地點最近」分給那個地點此刻的控制方
+  // 上面疊一層拖與縮放（企劃者 2026-10-22，「輿圖的拖與縮放」那一段：整張連字一起動，不重畫）；記號那一層（#mk、#mkt）畫大區地面——每一區（程式裡叫「州」）的地面照「離哪個地點最近」分給那個地點此刻的控制方
   // （底圖的 world.cells，照那一區的輪廓裁），一方一色、沒人佔一色（顏色照劇本，sideInk）——、正在翻（攻方的斜紋照進度泛進來）、
   // 剛易手還在冷卻（新主人的淡色、一圈虛線）、
   // 紅線（任兩方的地面相接；真實地形的大區互不相接，前線都在同一區裡）、細墨線（有主與沒人佔相接）、激戰（那一格一圈紅光閃）、
@@ -6200,7 +6204,8 @@
   }
 
   // ── 區圖（輿圖簡化設計 5.2、5.5、5.6；輿圖第三版第 4 批）──
-  // 點一區（或「進入此區」、找地點挑一處）：同一張底圖換一個固定的取景（regionFit：這一區地點的外框加邊），不拖不縮。只畫這一區的地點：
+  // 點一區（或「進入此區」、找地點挑一處）：同一張底圖換一個固定的取景（regionFit：這一區地點的外框加邊），上面疊一層拖與縮放
+  // （企劃者 2026-10-22：整張連字一起動，擺法不重算）。只畫這一區的地點：
   // 墨筆小圖（線色＝誰佔著）、名字裝在印章框裡（框色＝誰的，顏色照劇本 sideInk、沒人佔照底圖的 unheld；大城框粗）、框裡的下緣一條細進度條
   // （攻方的顏色；剛易手整條灰、不寫字，FB-648 第二段乙）、朱印「寶」、名字底下最多兩個意境字（最濃的在前）、你的朱圈與旗、通到鄰區的路在取景框邊寫「→ 南陽」
   // （點了換到那一區）、取景框外蓋一層半透明的紙。底圖的州界點劃線收掉、大區名藏起來，路照 CSS 換成一種淡實線（style.css 的
@@ -6676,20 +6681,20 @@
     setMapDrawer(S.mapDrawer);
   }
   // 從天下圖點一區、「進入此區」、找地點挑了一處、鄰區出口、上面那一排換一區：換到那一區的區圖。focus：挑的那一處（抽屜半開它的卡）；
-  // 沒給而且你就在這一區：開你腳下這一處的卡（設計 5.1：拉開是你腳下這一處的卡）
+  // 沒給而且你就在這一區：開你腳下這一處的卡（設計 5.1：拉開是你腳下這一處的卡）。進區圖回 1 倍（企劃者 2026-10-22）
   function enterRegion(rid, focus = null) {
     stopPlay();
     if (!rid || !S.mapBase || !regionPlaces(S.mapBase, rid).length) return;
     const st = S.mapState, mine = !focus && st && !st.journey && hereRegion() === rid ? st.here : null, sel = focus || mine;
-    Object.assign(S, { mapLayer: "region", mapRegion: rid, mapMode: sel ? "place" : "overview", mapSel: sel, mapWeek: null, mapQuery: "", mapDrawer: sel ? "peek" : "min" });
+    Object.assign(S, { mapLayer: "region", mapRegion: rid, mapMode: sel ? "place" : "overview", mapSel: sel, mapWeek: null, mapQuery: "", mapDrawer: sel ? "peek" : "min", mapPan: null });
     applyMapView(true);
     remapChrome();
     drawMarks();
   }
-  // 回天下圖（區圖上面那一排的「‹ 天下」、天下圖的「天下」）
+  // 回天下圖（區圖上面那一排的「‹ 天下」、天下圖的「天下」）：回 1 倍（企劃者 2026-10-22）
   function toWorld() {
     stopPlay();
-    Object.assign(S, { mapLayer: "world", mapMode: "overview", mapSel: null, mapWeek: null, mapQuery: "", mapDrawer: "min" });
+    Object.assign(S, { mapLayer: "world", mapMode: "overview", mapSel: null, mapWeek: null, mapQuery: "", mapDrawer: "min", mapPan: null });
     remapChrome();
     applyMapView();
     drawMarks();
@@ -6786,7 +6791,8 @@
     }
   }
 
-  // ── 輿圖的取景：兩張圖都是固定的（設計第五章：不自由縮放），每次照地圖框現在的大小重算（轉向、拉視窗、版圖變化把框縮到抽屜上面都跟著）──
+  // ── 輿圖的取景：兩張圖的取景是固定的（設計第五章），每次照地圖框現在的大小重算（轉向、拉視窗、版圖變化把框縮到抽屜上面都跟著）；
+  // 取景上面再疊一層拖與縮放（企劃者 2026-10-22，下面「輿圖的拖與縮放」那一段）──
   // 視圖 v = { s 倍率, cx, cy 視窗中心對著的地圖座標 }；地圖照原本的像素大小放在框裡，位移與倍率套在兩張 svg 的外框（.tx-world-map）上
   // （svg 根元素的 transform 一變，Chrome 要照新的倍率重排每一個 <text>）
   let glideTimer = 0;
@@ -6804,7 +6810,8 @@
     const p = id && S.mapBase && S.mapBase.places.find((x) => x.id === id);
     return p ? [p.x, p.y] : null;
   };
-  // 照這一層算取景、套到地圖上；glide：換層、換區時滑一下（≤150ms）。取景或地圖框變了才重畫記號（viewKey）
+  // 照這一層算取景、套到地圖上（連同拖縮）；glide：換層、換區時滑一下（≤150ms）。取景或地圖框變了才重畫記號（viewKey），
+  // 也才回 1 倍（panKey）：同一個取景再套一次（切分頁回來、輿圖頁重畫）拖縮照留
   function applyMapView(glide = false, g = mapGeom(document.getElementById("map"))) {
     if (!g || !S.mapBase) return;
     let v = null;
@@ -6822,8 +6829,204 @@
     clearTimeout(glideTimer);
     g.wrap.classList.toggle("glide", glide);
     if (glide) glideTimer = setTimeout(() => g.wrap.classList.remove("glide"), 200);
-    g.world.style.transform = `translate(${g.vw / 2 - v.cx * v.s}px, ${g.vh / 2 - v.cy * v.s}px) scale(${v.s})`;
-    if (viewKey(v, g) !== S.marksKey) scheduleMarks();
+    const key = viewKey(v, g);
+    if (key !== S.panKey) Object.assign(S, { mapPan: null, panKey: key });
+    g.world.style.transform = mapTransform(v, g.vw, g.vh, panOf());
+    if (key !== S.marksKey) scheduleMarks();
+  }
+
+  // ── 輿圖的拖與縮放（企劃者 2026-10-22「輿圖沒辦法拖曳移動了」「不順手」，選「兩張都能拖、能捏合縮放」；
+  // 推翻設計第五章「不自由縮放」那一半，兩層照舊；計畫 docs/superpowers/plans/2026-10-22-輿圖拖曳縮放.md）──
+  // 取景 v 上面疊一層螢幕座標的仿射 S.mapPan = { z, x, y }：螢幕上的點＝z ×（取景的螢幕座標）＋(x, y)。整張圖連字一起放大、移動：
+  // 記號都畫在地圖座標裡、大小照取景的倍率反算（regionParts、worldParts），所以名字框、印章、進度條、戰字印、你的旗、出口的擺法
+  // 不重算、記號不重畫（viewKey 不含 z）；拖縮中每一幀只換 .tx-world-map 的 transform，那一層掛著 will-change（合成層，不重畫），
+  // 收尾才拿掉（照最後的倍率重畫一次，字是清楚的）。拖的時候不換游標、不在框上加 class（FB-322：游標會一路繼承、整棵重算樣式）。
+  // 手機一指拖、兩指捏合；電腦滑鼠拖、滾輪（ctrl＋滾輪、觸控板捏合同）以游標為中心縮放；按下之後不到 PAN_SLOP 放開是點一下（照舊開卡），
+  // 拖過、捏過放開的那一下 click 吃掉（不誤開卡）。1 倍（現在的取景）到 PAN_MAX，不准更小；夾邊（panBox、panClamp）
+  const PAN_SLOP = 6; // 按下之後移過幾 px 才算拖
+  const PAN_MAX = { world: 4, region: 3 }; // 最多放大幾倍（企劃者 2026-10-22：區圖約 3 倍、天下圖約 4 倍）
+  const PAN_WHEEL = 0.0015; // 滾輪每 1px 的 deltaY 縮放多少（exp；一格約 100px 是 0.86 倍）
+  const PAN_IDLE = 200; // 滾輪停多久算收尾（ms）
+  const PAN_CLICK = 400; // 拖完放開之後，多久內落在地圖上的 click 吃掉（ms；下一次按下就作廢）
+  const PAN_ONE = { z: 1, x: 0, y: 0 };
+  const panOf = () => S.mapPan || PAN_ONE;
+  const panMax = () => (S.mapLayer === "world" && S.mapBase && S.mapBase.world ? PAN_MAX.world : PAN_MAX.region);
+  // 取景加上拖縮，寫成 .tx-world-map 的 transform（1 倍時跟固定取景的寫法一字不差）
+  function mapTransform(v, vw, vh, p = PAN_ONE) {
+    return `translate(${p.z * (vw / 2 - v.cx * v.s) + p.x}px, ${p.z * (vh / 2 - v.cy * v.s) + p.y}px) scale(${p.z * v.s})`;
+  }
+  // 夾邊用的兩個框（取景的螢幕座標 [x0, y0, x1, y1]）：b＝內容框（區圖：取景框 v.frame，這一區的地點與名字框都在裡面；天下圖：底圖的
+  // world.frame），a＝露出來的那一塊（左右整個地圖框，上面讓開那一排，底下讓開抽屜此刻的高度；桌機右欄、版圖變化時地圖框本來就在抽屜外）
+  function panBox(v, vw, vh) {
+    const world = S.mapLayer === "world" && S.mapBase && S.mapBase.world, f = world ? S.mapBase.world.frame : v.frame;
+    if (!f) return null;
+    const [x0, y0, x1, y1] = world ? [f[0], f[1], f[0] + f[2], f[1] + f[3]] : f;
+    const scr = (x, y) => [vw / 2 + (x - v.cx) * v.s, vh / 2 + (y - v.cy) * v.s];
+    const tl = S.mapMode === "timeline", top = world ? (tl ? WORLD_TL_TOP : WORLD_TOP) : REGION_TOP;
+    const bottom = deskMap() || tl ? 0 : mapDrawerPx(S.mapDrawer);
+    return { b: [...scr(x0, y0), ...scr(x1, y1)], a: [0, top, vw, Math.max(top + 1, vh - bottom)] };
+  }
+  // 夾邊（企劃者「圖不能完全拖出框外」）：每一軸，內容框比露出來的那一塊大就要蓋滿它（拖到底，最邊上的地點剛好露在那一排底下、抽屜上面），
+  // 比它小就不能出它——兩種都是位移夾在 a0 − z·b0 與 a1 − z·b1 之間。軟夾：from（上一幀）在它自己的倍率已經超出多少（例：天下圖 1 倍時
+  // 取景框離上面那一排多留 8px，卡拉高之後照規則要貼齊）就照樣准超出多少，不硬跳回來、也不准再往外；縮回 1 倍時照新的倍率夾回框裡
+  function panClamp(p, box, from = p) {
+    if (!box || (p.z === 1 && !p.x && !p.y)) return p; // 1 倍的取景本身一定可以
+    const lim = (t, t0, b0, b1, a0, a1) => {
+      const lo = (z) => Math.min(a0 - z * b0, a1 - z * b1), hi = (z) => Math.max(a0 - z * b0, a1 - z * b1);
+      const under = Math.max(0, lo(from.z) - t0), over = Math.max(0, t0 - hi(from.z));
+      return Math.min(hi(p.z) + over, Math.max(lo(p.z) - under, t));
+    };
+    return { z: p.z, x: lim(p.x, from.x, box.b[0], box.b[2], box.a[0], box.a[2]), y: lim(p.y, from.y, box.b[1], box.b[3], box.a[1], box.a[3]) };
+  }
+  // 縮小時位移照倍率收回去（從 z0 縮到 z：位移乘 (z − 1)／(z0 − 1)），縮到 1 倍剛好回到現在的取景（像看照片：縮回最小就置中）；
+  // 放大不收（手指、游標底下那一點不動）
+  const panShrink = (q, z0) => (q.z < z0 && z0 > 1 ? { z: q.z, x: (q.x * (q.z - 1)) / (z0 - 1), y: (q.y * (q.z - 1)) / (z0 - 1) } : q);
+  // 以地圖框裡 (px, py) 為中心縮放到 z（夾在 1～max）：那一點底下的地圖不動；縮到 1 倍（或更小）就是 1 倍的取景
+  function panZoom(p, z, px, py, max) {
+    if (z <= 1) return PAN_ONE;
+    const nz = Math.min(max, z), f = nz / p.z;
+    return panShrink({ z: nz, x: px - f * (px - p.x), y: py - f * (py - p.y) }, p.z);
+  }
+  // 兩指：開始時（start：拖縮、中點、兩指距離）中點底下的那一點，跟著現在的中點走；倍率照兩指距離的比
+  function panPinch(start, mx, my, d, max) {
+    const p = start.p, z = Math.min(max, (p.z * d) / start.d);
+    if (z <= 1) return PAN_ONE;
+    return panShrink({ z, x: mx - (z * (start.mx - p.x)) / p.z, y: my - (z * (start.my - p.y)) / p.z }, p.z);
+  }
+  // 手勢的狀態：按著的指標（id → [clientX, clientY]）、起點、拖過了沒、排好的那一幀、這一次手勢量好的地圖框與夾邊的框、滾輪、吃掉 click 的期限
+  const pan = { pts: new Map(), start: null, moved: false, frame: 0, next: null, g: null, box: null, wheel: false, wheelTimer: 0, eatUntil: 0 };
+  // 量好這一次手勢要用的地圖框（按下、滾輪第一下量一次：每一幀量會逼瀏覽器先排版）
+  function panMeasure() {
+    const g = mapGeom(document.getElementById("map")), v = curView();
+    pan.g = g && v ? g : null;
+    pan.box = g && v ? panBox(v, g.vw, g.vh) : null;
+    return pan.g;
+  }
+  // 指標數變了（按下、放開一指）：從現在的位置與拖縮重新記起點。一指記上一幀的位置；兩指記開始時的拖縮、中點、兩指距離
+  function panBase() {
+    const pts = [...pan.pts.values()], g = pan.g;
+    pan.start = null;
+    if (!g || !pts.length) return;
+    if (pts.length === 1) { pan.start = { at: pts[0] }; return; }
+    const [[ax, ay], [bx, by]] = pts;
+    pan.start = { p: panOf(), mx: (ax + bx) / 2 - g.x0, my: (ay + by) / 2 - g.y0, d: Math.max(1, Math.hypot(bx - ax, by - ay)) };
+  }
+  // 開始動了（拖過 PAN_SLOP、第二指按下、滾輪第一下）：那一層掛 will-change（之後每一幀只動合成層）、換層的滑動停掉；
+  // 拖的指標這時才抓住（按下就抓的話，Chrome 會把 click 送到抓住的地圖框，點一下就點不到地點）
+  function panBegin() {
+    pan.moved = true;
+    const g = pan.g;
+    if (!g) return;
+    for (const id of pan.pts.keys()) { try { g.wrap.setPointerCapture(id); } catch (e) { /* 合成的事件、已經放開的指標抓不住 */ } }
+    clearTimeout(glideTimer);
+    if (g.wrap.classList.contains("glide")) g.wrap.classList.remove("glide");
+    g.world.style.willChange = "transform";
+  }
+  // 收尾：拿掉 will-change（照最後的倍率重畫一次）
+  function panFinish() {
+    if (pan.frame) { cancelAnimationFrame(pan.frame); panFrame(); }
+    if (pan.g) pan.g.world.style.willChange = "";
+    Object.assign(pan, { start: null, g: null, box: null, next: null, wheel: false });
+  }
+  // 一幀套一次（同一幀的多次移動合併）：滾輪給的是算好的拖縮（pan.next），指標照最新的位置算
+  function panFrame() {
+    pan.frame = 0;
+    let p = pan.next;
+    pan.next = null;
+    const pts = [...pan.pts.values()], st = pan.start, cur = panOf();
+    if (!p && st && pan.moved && pan.g) {
+      if (pts.length === 1 && st.at) {
+        p = { z: cur.z, x: cur.x + pts[0][0] - st.at[0], y: cur.y + pts[0][1] - st.at[1] };
+        st.at = pts[0];
+      } else if (pts.length === 2 && st.d) {
+        const [[ax, ay], [bx, by]] = pts;
+        p = panPinch(st, (ax + bx) / 2 - pan.g.x0, (ay + by) / 2 - pan.g.y0, Math.hypot(bx - ax, by - ay), panMax());
+      }
+      if (p) p = panClamp(p, pan.box, cur);
+    }
+    if (p) panSet(p);
+  }
+  const panSoon = () => { if (!pan.frame) pan.frame = requestAnimationFrame(panFrame); };
+  // 套上一個拖縮：只寫 transform（記號、擺字都不動）
+  function panSet(p) {
+    S.mapPan = p.z === 1 && !p.x && !p.y ? null : p;
+    const g = pan.g || mapGeom(document.getElementById("map")), v = curView();
+    if (g && v) g.world.style.transform = mapTransform(v, g.vw, g.vh, panOf());
+  }
+  // 回 1 倍（天下圖已經在總覽時再按「天下」）：滑一下
+  function panReset() {
+    S.mapPan = null;
+    applyMapView(true);
+  }
+  function panDown(ev) {
+    if ((ev.pointerType === "mouse" && ev.button !== 0) || !S.mapBase || !curView()) return; // 滑鼠只收左鍵
+    if (pan.pts.has(ev.pointerId)) { pan.pts.clear(); panFinish(); } // 同一個指標又按下：上一次沒收到放開（在視窗外放開），重新來過
+    if (pan.pts.size >= 2) return; // 第三指不管
+    pan.eatUntil = 0; // 新的一次按下：上一次拖完沒送出的 click 不再等
+    if (pan.wheel) { clearTimeout(pan.wheelTimer); panFinish(); }
+    if (!pan.pts.size) { pan.moved = false; panMeasure(); }
+    if (pan.frame) { cancelAnimationFrame(pan.frame); panFrame(); }
+    pan.pts.set(ev.pointerId, [ev.clientX, ev.clientY]);
+    panBase();
+    if (pan.pts.size === 2 && !pan.moved) panBegin(); // 第二指按下就是捏合：不再算點一下
+    else if (pan.pts.size === 2) { try { pan.g && pan.g.wrap.setPointerCapture(ev.pointerId); } catch (e) { /* 抓不住照樣收得到 */ } }
+  }
+  function panMove(ev) {
+    if (!pan.pts.has(ev.pointerId)) return;
+    pan.pts.set(ev.pointerId, [ev.clientX, ev.clientY]);
+    if (!pan.moved) {
+      const at = pan.start && pan.start.at;
+      if (!at || Math.hypot(ev.clientX - at[0], ev.clientY - at[1]) <= PAN_SLOP) return; // 還不到：可能是點一下
+      panBegin();
+    }
+    panSoon();
+  }
+  function panUp(ev) {
+    if (!pan.pts.has(ev.pointerId)) return;
+    if (pan.frame) { cancelAnimationFrame(pan.frame); panFrame(); } // 還沒套的那一幀先套上
+    pan.pts.delete(ev.pointerId);
+    if (pan.pts.size) { panBase(); return; } // 雙指放開一指：剩下那一指接著拖
+    if (pan.moved && ev.type === "pointerup") pan.eatUntil = Date.now() + PAN_CLICK; // 拖過、捏過：放開那一下的 click 不開卡
+    panFinish();
+  }
+  // 滾輪以游標為中心縮放；觸控板雙指捏合在 Chrome／Edge 是帶 ctrlKey 的 wheel，一樣處理（也因此擋掉瀏覽器自己的整頁放大）
+  function panWheel(ev) {
+    if (ev.preventDefault) ev.preventDefault();
+    if (pan.pts.size || !S.mapBase || !curView()) return; // 手指按著時不收
+    if (!pan.wheel) {
+      if (!panMeasure()) return;
+      pan.wheel = true;
+      panBegin();
+    }
+    clearTimeout(pan.wheelTimer);
+    pan.wheelTimer = setTimeout(() => { pan.moved = false; panFinish(); }, PAN_IDLE);
+    const g = pan.g, cur = pan.next || panOf();
+    const dy = ev.deltaY * (ev.deltaMode === 1 ? 16 : ev.deltaMode === 2 ? g.vh : 1);
+    pan.next = panClamp(panZoom(cur, cur.z * Math.exp(-dy * PAN_WHEEL), ev.clientX - g.x0, ev.clientY - g.y0, panMax()), pan.box, cur);
+    panSoon();
+  }
+  // 拖過、捏過放開的那一下 click（捕獲階段、在 document 分派之前）吃掉：不誤開卡、不誤進一區
+  function panEat(ev) {
+    if (!pan.eatUntil) return;
+    const late = Date.now() > pan.eatUntil;
+    pan.eatUntil = 0;
+    if (late) return;
+    ev.stopPropagation();
+    if (ev.preventDefault) ev.preventDefault();
+  }
+  // 地圖框的監聽：掛一次（地圖框常駐 FB-324；底圖換了整層重畫才是新的框）
+  const panWired = new WeakSet();
+  function panWire(wrap) {
+    if (!wrap || !wrap.addEventListener || panWired.has(wrap)) return;
+    panWired.add(wrap);
+    wrap.addEventListener("pointerdown", panDown);
+    wrap.addEventListener("pointermove", panMove);
+    wrap.addEventListener("pointerup", panUp);
+    wrap.addEventListener("pointercancel", panUp);
+    wrap.addEventListener("wheel", panWheel, { passive: false });
+    wrap.addEventListener("click", panEat, true);
+    // 舊版 iOS Safari 的捏合（新的瀏覽器由 touch-action: none 擋）、拖到地圖上的字開始原生拖曳，都擋掉
+    for (const t of ["gesturestart", "gesturechange", "dragstart"]) wrap.addEventListener(t, (ev) => ev.preventDefault());
   }
 
   // 輿圖頁每次畫好（afterPage）：區圖的那一區（江湖頁小地圖點進來的、上次停的）、取景、抽屜、記號
@@ -6839,6 +7042,7 @@
     drawMarks();
     bakeLater();
     drawerGrab();
+    panWire(wrap); // 拖與縮放（企劃者 2026-10-22）
   }
 
   // ── 見聞 ──
@@ -8344,7 +8548,10 @@
         case "map-report": S.news = "reports"; await goTab("news"); break; // 卡上「攻城戰果」那一段的「看戰報」：開見聞的戰報
         case "world-region": enterRegion(el.dataset.id); break; // 天下圖點一州
         case "world-enter": enterRegion(hereRegion()); break; // 天下圖抽屜的「進入此區」：你在的那一州
-        case "map-world": if (S.mapLayer !== "world" || S.mapMode !== "overview") toWorld(); break; // 「‹ 天下」、天下圖的「天下」
+        case "map-world": // 「‹ 天下」、天下圖的「天下」（已經在天下圖、放大了：滑回 1 倍）
+          if (S.mapLayer !== "world" || S.mapMode !== "overview") toWorld();
+          else if (S.mapPan) panReset();
+          break;
         case "region-place": regionPick(el.dataset.id); break; // 區圖點了一處（小圖或名字框）：抽屜半開它的卡，地圖不動
         case "region-blank": regionPick(null); break; // 區圖點空白：收回那一行
         case "region-go": enterRegion(el.dataset.id); break; // 區圖的鄰區出口「→ 南陽」
