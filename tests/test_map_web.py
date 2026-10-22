@@ -1,5 +1,6 @@
 """輿圖的網頁（輿圖升級設計第一～八節的版面）：整頁一層、抽屜（一處的卡、找地點、收著那一行）、天下怎麼變（曲線、年表、處數）。
-輿圖第三版起地圖本身是天下圖與區圖兩張固定取景的圖（tests/test_world_map_web.py、tests/test_region_map_web.py）；第 4 批拿掉了可以拖縮的
+輿圖第三版起地圖本身是天下圖與區圖兩張固定取景的圖（tests/test_world_map_web.py、tests/test_region_map_web.py；企劃者 2026-10-22 起兩張都
+能拖、能捏合縮放，tests/test_map_pan_web.py）；第 4 批拿掉了可以拖縮的
 那一張、濾鏡、名字底下的小牌子、⚔、看大局、「天下」那一條（輿圖簡化設計 5.4），這一檔照新的畫面改寫：測那些東西本身的條目拿掉了
 （資訊搬去哪裡見 tests/test_region_map_web.py 的 test_the_card_carries_everything_the_chips_used_to），抽屜與版圖變化的照舊。
 在 node 裡跑整支 app.js（tests/webharness.py），餵伺服器真的會給的底圖與疊層；沒有 node 就略過。"""

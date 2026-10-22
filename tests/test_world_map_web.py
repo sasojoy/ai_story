@@ -1,5 +1,5 @@
 """輿圖第三版第 3 批：天下圖的網頁（輿圖簡化設計 5.1、3.3、5.6；第九章第 5、8 條）。環形版 dev/map-2 的畫法搬回真實地形。
-打開輿圖第一眼是天下圖：同一張底圖換一個固定的取景（worldFit）、不拖不縮；#mk 畫大區地面（一方一色、沒人佔一色，顏色照劇本）、
+打開輿圖第一眼是天下圖：同一張底圖換一個固定的取景（worldFit）、上面疊一層拖與縮放（企劃者 2026-10-22，tests/test_map_pan_web.py）；#mk 畫大區地面（一方一色、沒人佔一色，顏色照劇本）、
 紅線（任兩方相接）、細墨線（有主與沒人佔相接）、金點、大區名與各方幾處、你；「正在翻」「激戰」疊層有資料才畫（dev/flip-1 補資料）。
 點一區換到區圖那一層（第 4 批之前是現在那張可縮放的地圖）。在 node 裡跑整支 app.js（tests/webharness.py），餵伺服器真的會給的
 底圖與疊層；沒有 node 就略過。"""
@@ -458,11 +458,13 @@ def test_the_roads_show_faintly_through_the_world_ground():
     assert ground and 0.5 <= float(ground.group(1)) < 1
 
 
-def test_neither_layer_drags_or_zooms():
-    """設計第五章：兩張圖都不自由縮放（手勢、滾輪、縮放鈕整套拿掉，第 4 批）。"""
+def test_both_layers_drag_and_zoom():
+    """企劃者 2026-10-22 改：兩張圖都能拖、能捏合縮放（推翻設計第五章「不自由縮放」那一半；第 4 批到這一天以前這一條守的是手勢、滾輪、
+    縮放鈕整套拿掉）。兩層照舊；縮放鈕照舊沒有。手勢本身的行為在 tests/test_map_pan_web.py。"""
     src = APP.read_text(encoding="utf-8")
-    for name in ("function gripDown(", "function mapWheel(", "function mapZoom(", 'addEventListener("wheel", mapWheel'):
-        assert name not in src, name
+    for name in ("function panDown(", "function panWheel(", 'addEventListener("wheel", panWheel, { passive: false })', "PAN_MAX = { world: 4, region: 3 }"):
+        assert name in src, name
+    assert "function mapZoom(" not in src and "map-ctl" not in src  # 縮放鈕（右上角那一欄）照舊拿掉
 
 
 def test_no_two_sides_or_side_names_are_hardcoded_in_the_world_map_code():

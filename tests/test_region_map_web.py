@@ -2,7 +2,9 @@
 點一區進的是區圖：同一張底圖換一個固定的取景（regionFit），只畫這一區的地點——墨筆小圖、印章框（框色＝誰的，顏色照劇本）、框裡下緣的進度條
 （攻方的顏色；剛易手整條灰、不寫字：FB-648 第二段乙）、朱印「寶」、名字底下的意境字、你的朱圈與旗、鄰區出口；「塗層」開了多一層淡彩；
 擠不下時這一區的名字縮一號。點一處抽屜半開那一處的卡。
-在 node 裡跑整支 app.js（tests/webharness.py），餵伺服器真的會給的底圖、疊層與 main_view（翻地那一份）；沒有 node 就略過。"""
+在 node 裡跑整支 app.js（tests/webharness.py），餵伺服器真的會給的底圖、疊層與 main_view（翻地那一份）；沒有 node 就略過。
+FB-711（QA 2026-10-22）：FB-648 的掃描那一條（test_fb648_no_name_frame_overlaps_or_moves_while_blocks_flip）一組單跑最久約 41 秒，
+webharness 預設 60 秒逾時在有負載的機器上會紅：那一條的逾時給 FLIP_TIMEOUT（240 秒），掃描本身不拆、不改。"""
 from __future__ import annotations
 
 import math
@@ -47,11 +49,11 @@ def _game(content=None, faction="guan", at="yingchuan", conquest_on=True, profil
     return game
 
 
-def run(game, script, st=None, m=None, **S):
+def run(game, script, st=None, m=None, timeout=60, **S):
     payload = {"m": m or server.main_view(game), "script": script,
                "S": {"mapBase": game.map_base(), "mapState": st or game.map_state(), "mapLayer": "region", "mapRegion": "yingru", **S},
                "menxia": None, "stored": {}, "responses": {}}
-    return webharness.run(DRIVER, payload)
+    return webharness.run(DRIVER, payload, timeout=timeout)
 
 
 def parts(game, rid="yingru", vw=375, vh=604, wash=False, st=None, m=None):
@@ -443,6 +445,7 @@ return { fails, moved, gaps };
 # 名字離自己的小圖最遠的那一個（px），照 PHONES 的順序：上一輪（第一段那一版 f46d237a）沒翻地、你站每一處與在路上量到的最遠
 GAP_LAST = {"yingru": (55.7, 55.7, 55.7, 55.7, 55.7), "nanyang": (31.4, 60.9, 31.4, 31.4, 31.4), "luoyang": (55.7, 56.9, 31.4, 31.4, 31.4),
             "jizhou": (39.3, 39.3, 39.3, 39.3, 39.3), "youzhou": (61.9, 60.9, 51, 51, 51)}
+FLIP_TIMEOUT = 240  # 秒：FB-711，單跑最久約 41 秒（weekend-yingru），留六倍給有負載的機器
 
 
 @pytest.mark.parametrize("rid", ["yingru", "nanyang", "luoyang", "jizhou", "youzhou"])
@@ -453,7 +456,9 @@ def test_fb648_no_name_frame_overlaps_or_moves_while_blocks_flip(profile, rid):
     mine = {p["id"] for p in game.map_base()["places"] if p["region"] == rid}
     capt = [k for k, b in server.main_view(game)["conquest"]["blocks"].items() if b["capturable"] and k in mine]
     assert capt
-    out = run(game, FLIP_SWEEP, rid=rid, capt=capt, phones=PHONES, mapRegion=rid)
+    # FB-711（QA 2026-10-22）：潁川汝南那一組單跑約 40 秒（node 的 vm 裡一種局面約 7ms × 幾千種），webharness 預設 60 秒逾時，
+    # 機器同時有別的工作（-n 4、別的子代理）就紅。掃描整組留著不拆（拆了要另外證明每一塊加起來是同一套），逾時給到 FLIP_TIMEOUT
+    out = run(game, FLIP_SWEEP, rid=rid, capt=capt, phones=PHONES, mapRegion=rid, timeout=FLIP_TIMEOUT)
     assert out["fails"] == [] and out["moved"] == []
     assert all(g <= last + 0.5 for g, last in zip(out["gaps"], GAP_LAST[rid])), (out["gaps"], GAP_LAST[rid])
 
@@ -807,10 +812,12 @@ def test_fb652_side_coloured_card_text_reads_in_light_mode():
 
 
 def test_the_removed_pieces_are_gone():
-    """設計 5.4 那一表：濾鏡、意境鈕與意境濾鏡、小牌子、⚔、前線鋸齒、中立地虛線圈、圓盤裡一個字、自由縮放、看大局、「天下」那一條——真的刪了。"""
+    """設計 5.4 那一表：濾鏡、意境鈕與意境濾鏡、小牌子、⚔、前線鋸齒、中立地虛線圈、圓盤裡一個字、看大局、「天下」那一條——真的刪了。
+    「自由縮放」那一項企劃者 2026-10-22 改回來了（兩張都能拖、能捏合縮放，tests/test_map_pan_web.py）：清單拿掉舊的手勢函式名，
+    縮放鈕、回到所在地、看大局那幾樣照舊不准有。"""
     src = APP.read_text(encoding="utf-8")
     for name in ("MAP_CHIPS", "function chipsHtml", "function insightButton", "INSIGHT_DOT", "function mapBadges", "NEUTRAL_INK", "MAP_FAR",
-                 "function hudHtml", "function marksParts", "function marksSvg", "function regionTint", "function gripDown", "function mapWheel",
+                 "function hudHtml", "function marksParts", "function marksSvg", "function regionTint",
                  "function mapZoom", "function mapHome", "function toggleLayer", "function clampView", "function firstScale", "class=\"armed\"",
                  "<path class=\"front\"", "map-hud", "map-ctl", "S.mapLayers"):
         assert name not in src, name
