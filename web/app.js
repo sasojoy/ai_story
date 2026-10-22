@@ -3956,6 +3956,7 @@
     const steps = `<ol class="cr-steps">${CREATE_STEPS.map(([k, w], i) => `<li class="${i === at ? "on" : i < at ? "done" : ""}">${w}</li>`).join("")}</ol>`;
     const draft = c.draft;
     if (step !== "pose") S.createPose = null;
+    if (step !== "name") S.createReread = null; // 重讀這句意那一格打到一半的字只留在這一門的成形那一步
     if (!draft) {
       if (c.problem) return `${head}<div class="card create"><p class="muted">${esc(c.problem)}</p></div>`;
       const f = S.createPick || (S.createPick = { kind: c.kinds.includes("武學") ? "武學" : c.kinds[0], form: "" });
@@ -4020,6 +4021,10 @@
         // 手上沒帖：引去萬寶閣，停在重悟帖那一件（Joy 2026-10-22「沒有重悟丹不會自動提示玩家去商城購買」；同修練頁沒丹時的破境丹）
         : c.shop ? `<button class="btn" data-act="mall-goto" data-id="${esc(c.shop)}">去萬寶閣<small>買重悟帖</small></button><span class="muted small">重悟帖可以直接重骰這個形，不必重來（一門最多 ${draft.reroll_left | 0} 次）。</span>`
         : `<span class="muted small">萬寶閣的重悟帖可以直接重骰這個形，不必重來（一門最多 ${draft.reroll_left | 0} 次）。</span>`}</div>
+      ${(draft.reroll_left | 0) > 0 && c.rerolls > 0 ? `<div class="cr-reread">
+        <div class="crow"><span>意</span><input class="input" id="create-reread" maxlength="${c.intent_max | 0}" value="${esc(S.createReread != null ? S.createReread : draft.intent || "")}"></div>
+        <div class="cr-reroll"><button class="btn" data-act="create-reread">重讀這句意<small>重悟帖 剩 ${c.rerolls | 0} 張</small></button><span class="muted small">同一句意（也可以改寫）再讀一次：意分、火候、屬性重來，形也跟著重擲。跟重骰共用這一門的次數；沒讀成不扣帖。</span></div>
+      </div>` : ""}
       <div class="crow"><span>名字</span><input class="input" id="create-name" maxlength="6" placeholder="2～6 個字，全服不能重名"></div>
       <div class="crow"><span>招名</span><input class="input" id="create-move" maxlength="4" value="${esc(draft.move || "")}" placeholder="2～4 個字"></div>
       <div class="acts"><button class="btn primary" data-act="create-name">立名<small>${draft.paid ? "心得已在立意時付了" : `心得 ${c.price | 0}`}</small></button>${redo}${quit}</div>
@@ -4053,6 +4058,19 @@
       const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
       if (text) toast(text);
       if (r.main && r.main.status && r.main.status.create && r.main.status.create.step === "name") S.createText = "";
+    }, WAIT_LINES.forge || SENT_WAITING);
+  }
+  // 重悟帖：重讀這句意（Joy 2026-10-22「立意那邊好像也要可以重骰」）：同 createIntent 走三段式，模型在鎖外重讀；讀成了留在成形那一步
+  async function createReread() {
+    const box = document.getElementById("create-reread");
+    if (box) S.createReread = box.value;
+    await busy(async () => {
+      const r = await api("/api/do/create_reread", { text: S.createReread != null ? S.createReread : "" });
+      applyMain(r.main);
+      const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      if (text) toast(text);
+      const c = r.main && r.main.status && r.main.status.create;
+      if (!c || !c.draft || c.step !== "name") S.createReread = null;
     }, WAIT_LINES.forge || SENT_WAITING);
   }
   // 擺式的拖曳：按在關節上開始，指頭移到哪、那一節就轉向哪裡。只重畫那張圖與讀出來的那兩句，不重畫整頁
@@ -8902,6 +8920,7 @@
         }
         case "create-cancel": await mx("create_cancel"); break;
         case "create-reroll": await mx("create_reroll"); break; // 重悟帖：留在成形那一步，三格換了
+        case "create-reread": await createReread(); break; // 重悟帖的第二個用法：重讀這句意（Joy 2026-10-22）
         case "create-open": S.createOpen = true; S.message = ""; renderPage(); window.scrollTo(0, 0); break;
         case "create-close": S.createOpen = false; S.message = ""; renderPage(); window.scrollTo(0, 0); break;
         case "slot-out": await mx("unslot", { art: el.dataset.id, insight: el.dataset.ins }); break;

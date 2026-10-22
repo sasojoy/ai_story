@@ -3166,3 +3166,4 @@ svg.fig .blade.bow { stroke-width: 3; }
 .pk-btns .btn small { display: block; font-size: .78em; opacity: .85; }
 .cr-reroll { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: .4em 0; }
 .cr-reroll .btn small { display: block; font-size: .78em; opacity: .85; }
+.cr-reread { display: grid; gap: 4px; margin: .2em 0 .6em; padding-top: .5em; border-top: 1px dashed var(--line); }

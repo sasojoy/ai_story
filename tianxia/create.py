@@ -82,6 +82,9 @@ REROLLED = "你又把「{intent}」推演了一遍——這門功夫換了個形
 NO_REROLL = "手上沒有重悟帖：萬寶閣買得到。"  # 待 joy 潤
 REROLL_CAPPED = "這一門已經重骰 {cap} 次，不能再骰了：留下這個形，或回頭重來。"  # 待 joy 潤
 REROLL_STEP = "要先立了意、成了形，才能重骰。"  # 待 joy 潤
+# 重悟帖的第二個用法「重讀這句意」（Joy 2026-10-22「立意那邊好像也要可以重骰」，PM 定的做法）。待 joy 潤
+REREAD_LINE = "你把「{intent}」重新體會了一遍，意分與屬性重讀過——這門功夫換了個形：{colors}。"
+REREAD_FAILED = "這一句意這會兒沒讀成，重悟帖沒有用掉，稍後再試。"
 FLAT_LINE = "此式平正，不偏一路"  # 待 joy 潤
 LEAN_TEXT = {"正": "，帶一股正氣", "邪": "，帶一股邪氣", "無": ""}  # 待 joy 潤
 # 擺式那一步讓人知道怎麼擺是哪個勢、對應哪個時機（Joy 2026-10-22「要加」）：照 stance_of 認的先後排（提腿先看）。待 joy 潤
@@ -401,6 +404,24 @@ def fallback_read(content: Content, text: str) -> IntentReading:
     return IntentReading(score=DEFAULT_SCORE, attributes=ranked, lean=lean)
 
 
+def read_or_none(client: OllamaClient | None, req: IntentRequest) -> IntentReading | None:
+    """B 段（重讀這句意）：模型讀這一句意；叫不動是 None（重讀不照關鍵字表讀：讀不成就不扣帖、什麼都不改）。"""
+    if client is None:
+        return None
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": f"要立的：一門{req.kind}（{req.form}）；架式：{req.pose}\n這一句意：「{req.text}」"},
+    ]
+    try:
+        result = client.chat_structured(
+            messages, IntentReading, temperature=0.3, num_predict=READ_PREDICT,
+            required_fields=["score", "lean"], require_in_schema=True,
+        )
+    except Exception:
+        return None
+    return clean_reading(result)
+
+
 def read(client: OllamaClient | None, req: IntentRequest, content: Content) -> IntentReading:
     """B 段：模型讀這一句意；叫不動照關鍵字表。結果 C 段再過 clean_reading。"""
     if client is None:
@@ -573,22 +594,71 @@ def reroll(state: GameState, content: Content, world: WorldStateStore) -> list[s
     """重悟帖（萬寶閣，Joy 2026-10-21「弄個商城道具可以直接重骰，有上限」）：成了形還沒立名，用掉一張，同一個架式與意
     直接再擲一次顏色與變招（火候照意分，不變）；不收心得、不用掉免費的重來。帖子買幾張都行，一門最多重骰
     Config.arts.create_reroll_cap 次（Joy「一次創造武學的時候可能最多重骰3或是5」）。"""
-    draft = state.player.creating
-    if draft is None:
-        return [NO_DRAFT]
-    if draft.step != "name" or not draft.colors:
-        return [REROLL_STEP]
-    p = state.player
+    problem = reroll_problem(state, content)
+    if problem is not None:
+        return [problem]
+    p, draft = state.player, state.player.creating
     cap = content.config.arts.create_reroll_cap
-    if draft.rerolled >= cap:
-        return [REROLL_CAPPED.format(cap=cap)]
-    if p.create_rerolls <= 0:
-        return [NO_REROLL]
     p.create_rerolls -= 1
     draft.rerolled += 1
     _form(state, content, world, draft)
     return [REROLLED.format(intent=draft.intent, colors=colors_text(draft.colors)),
             f"重悟帖 -1（剩 {p.create_rerolls} 張；這一門還能重骰 {cap - draft.rerolled} 次）"]
+
+
+def reroll_problem(state: GameState, content: Content) -> str | None:
+    """重悟帖兩個用法（重骰形、重讀這句意）共用的門檻：成了形還沒立名、這一門還沒骰滿、手上有帖。"""
+    draft = state.player.creating
+    if draft is None:
+        return NO_DRAFT
+    if draft.step != "name" or not draft.colors:
+        return REROLL_STEP
+    cap = content.config.arts.create_reroll_cap
+    if draft.rerolled >= cap:
+        return REROLL_CAPPED.format(cap=cap)
+    if state.player.create_rerolls <= 0:
+        return NO_REROLL
+    return None
+
+
+def reread_problem(state: GameState, content: Content, text: str) -> str | None:
+    """重讀這句意之前（A 段與 C 段都問）：自創還開著、重悟帖用得了、那一句意（可以改寫）長短合格。"""
+    problem = allowed(state, content) or reroll_problem(state, content)
+    if problem is not None:
+        return problem
+    if not (INTENT_MIN <= len(clean_intent(text)) <= INTENT_MAX):
+        return INTENT_LINE
+    return None
+
+
+def reread(
+    state: GameState, content: Content, world: WorldStateStore, text: str, reading: IntentReading | None,
+) -> list[str]:
+    """重悟帖的第二個用法：重讀這句意（Joy 2026-10-22「立意那邊好像也要可以重骰」）。同一句意（或改寫過的）請模型再讀一次，
+    換掉意分、火候、屬性與正邪，照新的讀法重擲成形；跟重骰形共用 create_reroll_cap、各用掉一張帖，不另收心得。
+    reading 是 None（模型叫不動）就什麼都不改、不扣帖。"""
+    problem = reread_problem(state, content, text)
+    if problem is not None:
+        return [problem]
+    if reading is None:
+        return [REREAD_FAILED]
+    p, draft = state.player, state.player.creating
+    reading = clean_reading(reading)
+    draft.intent = clean_intent(text)
+    draft.read = list(reading.attributes)
+    draft.lean = reading.lean
+    draft.score = reading.score
+    draft.move = reading.move
+    draft.say = reading.say
+    p.create_rerolls -= 1
+    draft.rerolled += 1
+    _form(state, content, world, draft)
+    cap = content.config.arts.create_reroll_cap
+    msgs = [REREAD_LINE.format(intent=draft.intent, colors=colors_text(draft.colors))]
+    move = draft_move(state, content, draft)
+    if move is not None:
+        msgs.append(MOVE_SHOWN.format(card=tactics.card_text(move, p.name[:1] or tactics.MINOR_TITLE)))
+    return msgs + [f"重悟帖 -1（剩 {p.create_rerolls} 張；這一門還能重骰 {cap - draft.rerolled} 次）"]
 
 
 def back(state: GameState, content: Content, to: str) -> list[str]:
