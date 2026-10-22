@@ -9419,7 +9419,12 @@
       const trimmed = trimForgeSel();
       if (S.artOpen && !x.owned_arts.some((a) => a.id === S.artOpen)) { S.artOpen = null; S.artNote = null; } // 那一門已經不在了（熔掉）
       if (!S.forgeSel.length) { S.forgeLine = ""; S.forgePreview = null; } // 爐是空的：用伺服器剛給的那一行（心得是新的）
-      const shown = (m) => JSON.stringify(MENXIA_SHOWN[tab].map((k) => m[k]));
+      // 卡上的「氣血 520/639」每分鐘都在回：拿它比的話修練頁每一輪輪詢都判定「變了」而整頁重畫——
+      // 畫面閃一下、捲軸彈回最上面（Joy 2026-10-22 在選意境那頁停久了遇到；上面那段註解自己就寫了
+      // 「本人卡上的氣血一直在回」，卻還是把 player_card 留在清單裡）。比的時候把氣血的數字抹掉，
+      // 等級、武學、內功真的變了照樣重畫；氣血的即時顯示本來就靠狀態列（renderTop 另外畫）。
+      const steady = (v) => (typeof v === "string" ? v.replace(/氣血 [\d.]+\/[\d.]+/g, "氣血") : v);
+      const shown = (m) => JSON.stringify(MENXIA_SHOWN[tab].map((k) => steady(m[k])));
       const changed = trimmed || shown(x) !== shown(was)
         || (tab === "practice" && old.status.injury !== S.main.status.injury) // 療傷鈕看的是內傷
         || (tab === "practice" && JSON.stringify((old.status.seal && old.status.seal.act) || null) !== JSON.stringify(sealActNow())) // 傳承那一列的鈕（獨門行動）

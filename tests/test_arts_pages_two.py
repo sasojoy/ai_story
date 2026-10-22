@@ -988,3 +988,26 @@ def test_each_library_row_carries_what_batch_melting_needs_to_judge_it(real):
     game.state.player.insights = ["feng"]
     ins = skillview.insight_rows(game.state, real, game.world)[0]
     assert ins["rank"] == 1 and ins["mood"] is None and ins["melt"] == real.config.melt_insight_xinde
+
+
+def test_the_practice_poll_ignores_the_hit_points_ticking_up_on_the_card():
+    """修練頁輪詢只在 MENXIA_SHOWN 列的欄位變了才重畫，而 player_card／person_card 上寫著
+    「氣血 520/639」——氣血每分鐘都在回，照原樣比的話每一輪都重畫：畫面閃一下、捲軸彈回最上面
+    （Joy 2026-10-22 在選意境那頁停久了遇到）。比之前要先把氣血的數字抹掉；等級、武學真的變了照樣重畫。
+    氣血的即時顯示靠狀態列（renderTop 另外畫），不靠這一頁重畫。"""
+    card = "### 司馬\n第 16 級\u3000氣血 {hp}/639\n內功　混元"
+    out = webharness.run(r"""
+      const m = src.match(/^\s+const steady = .*$/m);
+      if (!m) throw new Error("refreshPage 少了抹掉氣血數字的 steady()");
+      const steady = eval("(" + m[0].trim().replace(/^const steady = /, "").replace(/;\s*$/, "") + ")");
+      console.log(JSON.stringify([
+        steady(input.hurt) === steady(input.whole),   // 只有氣血不同：不該算「變了」
+        steady(input.hurt) === steady(input.levelled), // 等級不同：該算「變了」
+        steady(7) === 7, steady(null) === null,
+      ]));
+    """, {"hurt": card.format(hp=520), "whole": card.format(hp=639),
+          "levelled": card.format(hp=520).replace("16 級", "17 級")})
+    same_hp, same_level, keeps_number, keeps_null = out
+    assert same_hp, "氣血回了一點就判定成「變了」：修練頁每一輪都會整頁重畫"
+    assert not same_level, "等級變了卻判定成「沒變」：真的該重畫的時候不重畫了"
+    assert keeps_number and keeps_null, "不是字串的欄位不能被動到"
