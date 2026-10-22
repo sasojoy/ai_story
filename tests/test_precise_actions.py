@@ -101,7 +101,7 @@ def test_practice_always_fights_one_and_is_unlimited():
     game = _game(at="changshe")
     p = game.state.player
     option = _ids(game)["explore:practice"]
-    assert option.enabled and option.label.startswith("練功（體力 6") and "經驗" not in option.label  # 鈕上不寫給多少（設計 9.1）
+    assert option.enabled and option.label.startswith("尋敵（體力 6") and "經驗" not in option.label  # 鈕上不寫給多少（設計 9.1）
     for n in range(1, 6):
         p.stamina = 250.0
         game.choose("explore:practice")
@@ -445,7 +445,7 @@ def test_a_strike_bounty_says_practice_where_precise_is_on():
     game = _game()
     b = _strike(game)
     line = bounties.how(game.content, b, game.state)
-    assert "練功" in line and "找素材" not in line
+    assert "尋敵" in line and "找素材" not in line
     rows = bounties.status(game.state, game.content, game.world)
     assert any(r["id"] == "b1" and r["how"] == line for r in rows)
     game.state.world.precise_actions = False  # 沒蓋章的季照舊
@@ -493,9 +493,9 @@ def test_a_ranger_reads_only_practice_on_a_strike_bounty():
     game = _game()
     b = _strike(game)
     assert game.state.player.faction is None
-    assert bounties.how(game.content, b, game.state).startswith("到長社練功打贏")
+    assert bounties.how(game.content, b, game.state).startswith("到長社尋敵打贏")
     game.state.player.faction = "guan"
-    assert "練功或出陣攻打贏" in bounties.how(game.content, b, game.state)
+    assert "尋敵或出陣攻打贏" in bounties.how(game.content, b, game.state)
 
 
 def test_the_howto_follows_precise_actions_and_old_seasons_keep_every_word():

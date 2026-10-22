@@ -1649,7 +1649,7 @@
     // 練功（FB-670，企劃者 2026-10-22 選練功入口「丙」）：以前是探索卡上的第四顆，現在行動列自己一格、排在探索右邊（五格）。
     // 選項 id 照舊 explore:practice（選單、模擬腳本都不受影響）；一類一顆沒開、選單上沒有練功時不畫（同調息），序章照 act:practice 的鍵亮。
     // 城裡操練開著時（新手引導重做，Config.training；m.training）城裡這一格是「操練」（act:drill），城外照舊是練功
-    { key: "practice", ids: ["act:drill", "explore:practice"], name: "練功", none: "", icon: '<path d="M14.5 17.5L3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2M9.5 14.5L21 3h-3L6.5 14.5M11 19l-6-6M8 16l-4 4M3 19l2 2"/>' },
+    { key: "practice", ids: ["act:drill", "explore:practice"], name: "尋敵", none: "", icon: '<path d="M14.5 17.5L3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2M9.5 14.5L21 3h-3L6.5 14.5M11 19l-6-6M8 16l-4 4M3 19l2 2"/>' },
     { key: "train", ids: ["act:train"], name: "遊歷", none: "沒有對手", icon: '<path d="M14.5 4h-5L7 7h10zM12 7v13M8 12h8"/>' },
     // 打坐 2026-10-12 拿掉了（企劃者）：這一格只在序章教體力那一步有選項（調息），沒有選項就不畫（平常是四顆）
     { key: "rest", ids: ["act:rest"], name: "調息", none: "", icon: '<circle cx="12" cy="7" r="2.5"/><path d="M8 20c0-3 3-4 4-4s4 1 4 4M5 15l3-2m11 2l-3-2"/>' },
@@ -1680,7 +1680,7 @@
   const SORTIE_FULL_SUB = "今日已滿"; // 用完了：整句（什麼時候再來）在行動列底下那一行（待 joy 潤）
   const EXPLORE_PREFIX = "explore:"; // 探索三選一（出陣探索與地盤設計第三節）：探索那一格點了展開這三顆
   const EXPLORE_SUB = "三選一"; // 探索那一格是展開鈕時的小字（待 joy 潤）
-  const TIER_WORDS = ["一級", "二級", "三級"]; // training.TIER_WORDS：練功那一格的小字寫幾級
+  const TIER_WORDS = ["宵小出沒", "匪寇橫行", "兇徒盤據"]; // training.TIER_WORDS：尋敵那一格的小字寫這一帶多兇（不寫幾級，Joy 2026-10-22）
   const DRILL_FULL = "今日已練滿", DRILL_FULL_SUB = "今日已滿"; // training.DRILL_FULL：用完了，格子寫短的、整句在底下那一行，點了打開移動
   // 找素材分支（第 32 項，計畫 2.1 甲）：選單上有 explore:gather:<分支> 時「找素材」是展開鈕，點了在它底下再攤一排分支（S.gatherOpen）；
   // 最後一顆「自己說…」點了出 20 字的輸入框（S.gatherSaying），送 /api/do/gather_text（同事件的隨口應對那一個輸入框）
@@ -5713,7 +5713,7 @@
     return `${st.journey ? journeyHtml(st, false) : ""}<div class="m-h1">${ctrlSeal(p.control)}<span class="nm">${esc(b.name)}${here ? "（你）" : ""}</span><span class="meta">${p.rich ? `<b class="m-rich">${CARD_RICH}</b>` : ""}${far ? `<span>${far}</span>` : ""}</span><button type="button" class="m-x" data-act="map-back" aria-label="收起">✕</button></div>
       <div class="m-line"${lineInk}>${esc(placeLine(st, id))}</div>
       ${siegeSection(id)}${flipSection(id)}${insightRow(base, b)}
-      <div class="m-foes"><small>此地的對手</small><span>${foes}</span>${p.people.length ? `<div class="m-sub">人物：${p.people.map(esc).join("、")}</div>` : ""}</div>
+      <div class="m-foes"><small>此地的對手</small><span>${foes}</span>${p.fierce ? `<div class="m-sub">${esc(p.fierce)}</div>` : ""}${p.people.length ? `<div class="m-sub">人物：${p.people.map(esc).join("、")}</div>` : ""}</div>
       ${p.yield ? `<div class="m-yield">${esc(p.yield)}</div>` : ""}
       <div class="m-acts">${acts}${letter.button}</div>${letter.why}
       ${p.order || p.bounty ? `<div class="m-sec"><h4>軍令與懸賞</h4>${p.order ? `軍令「${esc(p.order)}」在這裡記功` : ""}${p.order && p.bounty ? "；" : ""}${p.bounty ? `懸賞「${esc(p.bounty)}」在這裡交差` : ""}</div>` : ""}

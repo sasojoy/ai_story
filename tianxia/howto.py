@@ -67,7 +67,7 @@ def explore_modes_line(fight: bool, sense: bool) -> str:
 # 行動列底下練功那一行（FB-670，企劃者 2026-10-22 選練功入口「丙」：練功在行動列自己一格；Game._practice_line 照練功鈕同一個判斷挑一句）。
 # 灰著的城鎮寫 PRACTICE_TOWN_NOTE＋「，最近的在某地（步行約 N 分鐘）」（explore_modes.NO_FOE_NEAR、atlas.route_text）。都待 joy 潤
 PRACTICE_NOTE = "打這裡的{foe}，不限次數，打贏是經驗的大宗"
-PRACTICE_BOSS_NOTE = "這裡只有頭目{foe}，練功直接對上他；打一場要等他再現身，次數有限"
+PRACTICE_BOSS_NOTE = "這裡只有頭目{foe}，尋敵直接對上他；打一場要等他再現身，次數有限"
 PRACTICE_TOWN_NOTE = "城外才有對手"
 
 
@@ -421,16 +421,16 @@ def precise_explore_lines(content: Content, season: WorldState | None = None) ->
     if not training.on(content, season):
         return [explore,
                 f"- **{names['practice']}**（在探索裡，體力 {cost}）：找這裡的對手打一場，一定開打、不限次數，打贏是經驗的大宗；"
-                "城鎮與沒有對手的地方灰著。有頭目的地方，頭目在練功時碰上。"]
+                "城鎮與沒有對手的地方灰著。有頭目的地方，頭目在尋敵時碰上。"]
     t = cfg.training
     loot = "、".join(f"{w} ×{x:g}" for w, x in zip(training.TIER_WORDS, t.tier_loot))
     return [
         explore,
         f"- **{training.DRILL}**（城裡，行動列那一格，體力 {cost}）：跟校場的教頭過招，不打仗、不受傷，一天 {t.drill_per_day} 次"
-        f"（00:00 換日）；一次給心得 {t.drill_xinde_base}＋等級、經驗一點點。用完了那一格寫著最近的練功點。",
+        f"（00:00 換日）；一次給心得 {t.drill_xinde_base}＋等級、經驗一點點。用完了那一格寫著最近能尋敵的地方。",
         f"- **{names['practice']}**（城外，同一格，體力 {cost}）：找這裡的對手打一場，一定開打、不限次數，打贏是經驗的大宗。"
-        f"練功點照這裡最弱的對手分三級（難度 {t.tier_bounds[0]} 以下一級、{t.tier_bounds[1]} 以下二級、再上去三級），"
-        f"越遠越兇；打贏的心得與銀兩照級數加成（{loot}），經驗不加成。級數寫在格子上與移動的目的地底下。有頭目的地方，頭目在練功時碰上。",
+        f"照這裡最弱的對手分三等（難度 {t.tier_bounds[0]} 以下、{t.tier_bounds[1]} 以下、再上去），"
+        f"越遠越兇；打贏的心得與銀兩照這一帶多兇加成（{loot}），經驗不加成。多兇寫在格子上與輿圖的地點詳情。有頭目的地方，頭目在尋敵時碰上。",
     ]
 
 

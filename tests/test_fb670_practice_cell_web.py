@@ -92,17 +92,17 @@ def test_the_wild_shows_five_cells_with_practice_lit_beside_explore():
     assert 'class="act-bar" role="group" aria-label="行動" style="--cells:5"' in bar
     cell = _cell(bar, "practice")
     assert 'data-act="choose" data-id="explore:practice"' in cell and " off" not in cell
-    assert '<b>練功</b><small>不限次數</small><small class="ink-note good">穩勝</small>' in cell
+    assert '<b>尋敵</b><small>不限次數</small><small class="ink-note good">穩勝</small>' in cell
     rows = _rows(bar)
-    assert ("練功", m["action_notes"][PRACTICE]) in rows  # 底下那一行是伺服器那一句
-    assert [name for name, _ in rows][:2] == ["探索", "練功"]  # 照格子的順序
+    assert ("尋敵", m["action_notes"][PRACTICE]) in rows  # 底下那一行是伺服器那一句
+    assert [name for name, _ in rows][:2] == ["探索", "尋敵"]  # 照格子的順序
 
 
 def test_the_explore_card_is_back_to_three():
     bar = _bar(server.main_view(_game("yingshui")), wheelSel="explore")
     card = re.search(r'<div class="card act-explore">.*?</div></div>', bar, re.S).group(0)
     assert all(f'data-id="explore:{mode}"' in card for mode in ("gather", "seek", "sense"))
-    assert PRACTICE not in card and "練功" not in card
+    assert PRACTICE not in card and "尋敵" not in card
     assert bar.count(f'data-id="{PRACTICE}"') == 1  # 只有行動列那一格
     assert "此地還能做" not in bar or PRACTICE not in bar[bar.index("此地還能做"):]
 
@@ -116,8 +116,8 @@ def test_in_town_the_cell_is_grey_and_the_row_below_says_where_and_how_far():
     assert _keys(bar) == ["explore", "practice", "train", "social", "move"]  # 出陣那一格在城裡照舊灰著寫「不在戰線」
     cell = _cell(bar, "practice")
     assert '<button class="act-ink off" data-key="practice"' in cell and " disabled>" in cell and "data-id" not in cell  # 不帶路
-    assert "<b>練功</b><small>城外才有</small>" in cell and "ink-note" not in cell
-    assert ("練功", note) in _rows(bar)
+    assert "<b>尋敵</b><small>城外才有</small>" in cell and "ink-note" not in cell
+    assert ("尋敵", note) in _rows(bar)
 
 
 @pytest.mark.parametrize("faction, at, word", [
@@ -132,7 +132,7 @@ def test_a_grey_cell_says_outside_the_walls_only_in_town(faction, at, word):
     m = server.main_view(_game(at, faction))
     option = next(o for o in m["options"] if o["id"] == PRACTICE)
     assert not option["enabled"] and option["note"] == word
-    assert f"<b>練功</b><small>{word}</small>" in _cell(_bar(m), "practice")
+    assert f"<b>尋敵</b><small>{word}</small>" in _cell(_bar(m), "practice")
 
 
 def test_the_grey_cells_word_is_the_servers():
@@ -140,19 +140,19 @@ def test_the_grey_cells_word_is_the_servers():
     m = server.main_view(_game("guan_camp", "guan"))
     option = next(o for o in m["options"] if o["id"] == PRACTICE)
     option["note"] = "伺服器"
-    assert "<b>練功</b><small>伺服器</small>" in _cell(_bar(m), "practice")
+    assert "<b>尋敵</b><small>伺服器</small>" in _cell(_bar(m), "practice")
     option["note"] = ""
-    assert "<b>練功</b><small>城外才有</small>" in _cell(_bar(m), "practice")
+    assert "<b>尋敵</b><small>城外才有</small>" in _cell(_bar(m), "practice")
 
 
 def test_the_row_below_is_only_ever_the_servers_sentence():
     """網頁不另寫判斷：伺服器那一句換了，底下就照換；伺服器沒給（舊版）就不畫那一行，格子照畫。"""
     m = server.main_view(_game("yingchuan"))
     m["action_notes"][PRACTICE] = "伺服器換了一句"
-    assert ("練功", "伺服器換了一句") in _rows(_bar(m))
+    assert ("尋敵", "伺服器換了一句") in _rows(_bar(m))
     m["action_notes"].pop(PRACTICE)
     bar = _bar(m)
-    assert "練功" not in [name for name, _ in _rows(bar)] and "<b>練功</b><small>城外才有</small>" in _cell(bar, "practice")
+    assert "尋敵" not in [name for name, _ in _rows(bar)] and "<b>尋敵</b><small>城外才有</small>" in _cell(bar, "practice")
 
 
 def test_a_boss_only_place_lights_the_cell_for_the_boss_and_greys_it_while_he_is_away():
@@ -160,24 +160,24 @@ def test_a_boss_only_place_lights_the_cell_for_the_boss_and_greys_it_while_he_is
     s, c = game.state, game.content
     bar = _bar(server.main_view(game))
     cell = _cell(bar, "practice")
-    assert "<b>練功</b><small>對上頭目</small>" in cell and "ink-note" not in cell and " off" not in cell
+    assert "<b>尋敵</b><small>對上頭目</small>" in cell and "ink-note" not in cell and " off" not in cell
     s.player.duel_last = [float(s.player.season_number), s.world.time]  # 冷卻中
     m = server.main_view(game)
     bar = _bar(m)
-    assert "<b>練功</b><small>頭目不在</small>" in _cell(bar, "practice")
-    assert ("練功", m["action_notes"][PRACTICE]) in _rows(bar) and "後才會再現身" in m["action_notes"][PRACTICE]
+    assert "<b>尋敵</b><small>頭目不在</small>" in _cell(bar, "practice")
+    assert ("尋敵", m["action_notes"][PRACTICE]) in _rows(bar) and "後才會再現身" in m["action_notes"][PRACTICE]
     s.player.duel_last = []
     boss = duel_rules.here(s, c)[0]
     s.player.duel_tally[duel_rules.week_key(s, c, boss.id)] = c.config.duel.per_boss_week
     m = server.main_view(game)
     bar = _bar(m)
-    assert "<b>練功</b><small>頭目不在</small>" in _cell(bar, "practice") and "不再現身" in m["action_notes"][PRACTICE]
+    assert "<b>尋敵</b><small>頭目不在</small>" in _cell(bar, "practice") and "不再現身" in m["action_notes"][PRACTICE]
 
 
 def test_a_tired_player_sees_practice_greyed_for_stamina():
     game = _game("yingshui")
     game.state.player.stamina = 0.0
-    assert "<b>練功</b><small>體力不夠</small>" in _cell(_bar(server.main_view(game)), "practice")
+    assert "<b>尋敵</b><small>體力不夠</small>" in _cell(_bar(server.main_view(game)), "practice")
 
 
 # ── 五格時每一格的小字都放得下 ─────────────────────────────
@@ -220,7 +220,7 @@ def test_a_sortie_name_breaks_only_after_the_dot():
     """「出陣・守」「出陣・攪局」：五格時一行放不下，換行只換在「・」後面，不斷在「攪／局」中間。"""
     bar = _bar(server.main_view(_game("huangjin_camp", "huang")))
     assert '<b><span class="nb">出陣・</span><span class="nb">守</span></b>' in _cell(bar, "train")
-    assert "<b>練功</b>" in _cell(bar, "practice") and "<b>探索</b>" in _cell(bar, "explore")  # 沒有「・」的照舊
+    assert "<b>尋敵</b>" in _cell(bar, "practice") and "<b>探索</b>" in _cell(bar, "explore")  # 沒有「・」的照舊
 
 
 # ── 舊季、序章與初入江湖 ─────────────────────────────
