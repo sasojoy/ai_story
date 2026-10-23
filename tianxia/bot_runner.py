@@ -22,7 +22,7 @@ import traceback
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from . import battle_instance, bot_policy, gender, insight_llm, naming, seal, server_bots
+from . import battle_instance, bot_policy, gender, insight_llm, naming, seal, server_bots, team
 from .characters import CharacterStore, open_characters
 from .engine import Game
 from .models import Content
@@ -76,6 +76,9 @@ class BotRunner:
         self.client = client
         self.last_naming: float | None = None  # 上一次請模型取名的現實時間
         self.seal_season: int | None = None  # 持碎片的退隱假人這一季擲過回不回來了（玉璽碎片設計 7.6）
+        # 勝算的記憶（同 server.ODDS_MEMO，FB-321）：假人每一下都重建 Game，不共用的話每一個勝算都重跑四十場模擬；領地爭奪的季
+        # 假人挑出陣地點要問好幾處的勝算（bot_policy._outmatched，7 天季調整），沒有這一份一個假人動作的時間多一倍。輸入一樣才拿記住的字，結果不變
+        self.odds_memo = team.OddsMemo()
 
     def tick(self) -> TickReport:
         report = TickReport()
@@ -203,6 +206,7 @@ class BotRunner:
         game = Game(self.content, state, self.rng, self.world)
         game.client = None
         game.reset_model_budget()
+        game.odds_memo = self.odds_memo
         return game
 
     def _take_turn(self, name: str, now: float, slot: bot_policy.NamingSlot | None = None) -> bool:
