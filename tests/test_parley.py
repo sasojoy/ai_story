@@ -88,7 +88,7 @@ def test_the_prompt_lists_what_he_can_do_and_the_say_box_is_longer(talking):
     prompt = talking._parley_prompt("mate")
     assert "escort:lake" in prompt and "spar" in prompt and "silver" in prompt and "生疏" in prompt
     assert talking.say_max() == talking.content.config.parley.say_max
-    assert "0" not in prompt.split("【你們的交情】")[1].split("。")[0]  # 情誼只給一個詞
+    assert "0" not in prompt.split("【你們的情誼】")[1].split("。")[0]  # 情誼只給一個詞
 
 
 def test_a_granted_spar_gives_xinde_once_a_day(talking):
