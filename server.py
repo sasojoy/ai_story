@@ -1369,6 +1369,22 @@ def create_intent(game: Game, body: dict) -> list[str]:
     return act(game, lambda g: g.create_intent(request.text, reading=value))
 
 
+def create_reread(game: Game, body: dict) -> list[str]:
+    """重悟帖的第二個用法：重讀這句意（可以改寫），三段同 create_intent：A Game.create_reread_request → B 鎖外 create.read_or_none
+    → C Game.create_reread(reading=)。叫不動（None）就什麼都不改、不扣帖（不照關鍵字表讀）。"""
+    text = str(body.get("text") or "")[:create.INTENT_MAX * 2]
+    started, request = _open_request(game, lambda: game.create_reread_request(text))
+    if isinstance(request, list):
+        return request
+    total = game.content.config.free_text_budget_seconds
+
+    def reading():
+        return create.read_or_none(within_budget(game.client, total - (_monotonic() - started)), request)
+
+    value = model_call(game, reading, fallback=None, left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT)
+    return act(game, lambda g: g.create_reread(request.text, value))
+
+
 def ascend_line(game: Game) -> list[str]:
     """破境卡那一句（tianxia/ascend.py），三段同 create_intent：A Game.ascend_request（只讀）→ B 鎖外 ascend.read
     （預算同隨口應對）→ C Game.ascend_line 存回卡上（卡換了就不存）。叫不動照套句。"""
@@ -2304,6 +2320,8 @@ def api_do(op: str, request: Request, body: dict = Body(default={})):
         msgs = duel_text(game, str(body.get("text", "")))
     elif op == "create_intent":  # 自創武學的形意：意分在行動鎖外評（見 create_intent）
         msgs = create_intent(game, body)
+    elif op == "create_reread":  # 重悟帖：重讀這句意，意分在行動鎖外評（見 create_reread）
+        msgs = create_reread(game, body)
     elif op == "ascend_line":  # 破境卡那一句：模型在行動鎖外寫（見 ascend_line）
         msgs = ascend_line(game)
     elif op == "tavern_ask":  # 問酒家：回話在行動鎖外寫（見 tavern_ask）

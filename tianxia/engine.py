@@ -10012,6 +10012,20 @@ class Game:
             self._menxia_entry(msgs[0], xinde, title=journal.CRAFT, action="forge")
         return msgs
 
+    def create_reread_request(self, text: str) -> create.IntentRequest | list[str]:
+        """重讀這句意的 A 段（鎖內、只讀）：送得出去回傳要在鎖外請模型讀的單子，不行回傳那一句話。"""
+        if self._preparing():
+            return [PREPARING_REFUSAL]
+        problem = create.reread_problem(self.state, self.content, text)
+        if problem is not None:
+            return [problem]
+        return create.request(self.state, text)
+
+    @_not_while_preparing
+    def create_reread(self, text: str, reading: create.IntentReading | None) -> list[str]:
+        """重悟帖：重讀這句意（C 段，create.reread）。reading 是 None（模型叫不動）什麼都不改、不扣帖。"""
+        return self._log(create.reread(self.state, self.content, self.world, text, reading))
+
     @_not_while_preparing
     def create_reroll(self) -> list[str]:
         """重悟帖：成了形直接重骰（create.reroll）。只改單子與帖數。"""
