@@ -70,7 +70,7 @@ from .rules import (
 from .sqlite_world import open_world
 from .wallet import Wallet
 from .state import (
-    ONBOARDING_VERSION, PLAYER, ArenaEntry, ArenaFight, ArenaReport, ArenaResult, ArenaSide, BattleRecord, Convoy, CrowdNote, DuelState, Equipment, Feast, GameState, HintNote, JournalEntry, Journey, Mingtie, Rumor, Tagalong, TavernHit, TavernWatch, TimelineResult,
+    ONBOARDING_VERSION, PLAYER, ArenaEntry, ArenaFight, ArenaReport, ArenaResult, ArenaSide, BattleRecord, Convoy, CrowdNote, DuelState, Equipment, Feast, FrontReport, GameState, HintNote, JournalEntry, Journey, Mingtie, Rumor, Tagalong, TavernHit, TavernWatch, TimelineResult,
     Whisper, WorldState, XingshiEssay, XingshiMark, XingshiTicket,
     new_game_state,
 )
@@ -430,6 +430,8 @@ class Game:
         # 翻地與爭搶（領地爭奪）：這一下出陣撞上對面、打贏了（_push_progress 乘 clash_scale）；這一下出陣記過一筆了沒（_sortie 補記 0 的那一筆）
         self._clash_won = False
         self._sortie_marked = False
+        self._sortie_moved = 0.0  # 這一下出陣自己推（拉）動了多少（_push_progress 加；出陣回報讀）
+        self._sortie_flipped = False  # 這一下出陣推滿、當場易手
         # choose() 進行中那次行動、鎖外先判讀好的大場面（重驗過的，見 _checked_fight）；打那一場時用掉（_judged）
         self._fight: fight_llm.PreparedFight | None = None
         self._road_gain: tuple | None = None  # 這一件路上小事的收穫（_road 填、_share_road 分給結伴同行的人）
@@ -8397,9 +8399,12 @@ class Game:
                 amount *= cfg.conquest.clash_scale
                 notes += conquest.CLASH_NOTE
         done = conquest.push(w, c, loc_id, side, p.name, amount, how, notes)
+        conquest.tally(w, c, self._pill_day(), side, p.name, done.moved)  # 今天推了多少（出陣回報的小籤）
         if source == "sortie":
             conquest.mark(w, c, loc_id, p.name, side, how, done.moved)
             self._sortie_marked = True
+            self._sortie_moved += done.moved
+            self._sortie_flipped = self._sortie_flipped or done.flipped
             if calendar.season_one_on(w, c):
                 gained = push.contribution(nominal, 1.0, 1.0, cfg.contrib_per_push, cfg.over_cap_contrib_ratio)
                 push.add_contribution(p, calendar.point(w.time, c, w).week, gained)
@@ -8530,9 +8535,12 @@ class Game:
         on = conquest.on(c, s.world) and how in ("attack", "hold")
         # 領地爭奪（翻地與爭搶）：推得動的地方出陣，先看撞不撞得上對面正在推的人（混戰，輿圖簡化設計 4.3）；輸了這一下白跑
         side = self._side()
-        pushable = on and conquest.push_problem(s.world, c, side, loc.id, how) is None
+        why = conquest.push_problem(s.world, c, side, loc.id, how) if on else None
+        pushable = on and why is None
+        before = conquest.bars(s.world, loc.id) if on else {}
         clash, outcome = self._clash(loc.id, how) if pushable else ([], None)
         self._clash_won, self._sortie_marked = outcome == "won", False
+        self._sortie_moved, self._sortie_flipped = 0.0, False
         try:
             if outcome == "lost":
                 msgs = list(clash)
@@ -8544,9 +8552,28 @@ class Game:
                 msgs = clash + self._sortie_hold(loc, how)
             if pushable and not self._sortie_marked:  # 打輸守軍、混戰輸了：人確實在這裡推，記一筆 0（正在推的人、集火、混戰讀它）
                 conquest.mark(s.world, c, loc.id, s.player.name, side, how, 0.0)
+            if on and self._draft is not None:  # 出陣回報：「剛剛」卡片底下那一塊（企劃者 2026-10-23）
+                self._draft.front = self._front_report(loc, how, before, why)
         finally:
             self._clash_won, self._sortie_marked = False, False
+            self._sortie_moved, self._sortie_flipped = 0.0, False
         return msgs + self._guide(note_action(s, c, self.world, "order"))
+
+    def _front_report(self, loc: Location, how: str, before: dict[str, float], why: str | None) -> FrontReport:
+        """出陣回報（sortie.report）：這一下之後那一塊的進度、今天自己與全軍推了多少、這條戰線上攻（攻城）或守（守城）那一道軍令的進度。"""
+        s, c = self.state, self.content
+        w, side, day = s.world, self._side(), self._pill_day()
+        line = conquest.line_of(w, c, loc.id)
+        kinds = ("siege",) if how == "attack" else ("defend",)
+        found = [
+            (orders.KIND_NAMES[o.template], min(sum(o.progress.values()), o.quota), o.quota, o.done)
+            for o in orders.current(s, c, side) if o.template in kinds and o.front == line
+        ]
+        return sortie.report(
+            c, w, loc.id, side, how, before=before, moved=self._sortie_moved, flipped=self._sortie_flipped, why=why,
+            used=c.config.sortie.per_day - self.sorties_left(), mine_today=conquest.today_moved(w, day, side, s.player.name),
+            side_today=conquest.today_moved(w, day, side), orders=found,
+        )
 
     def _sortie_rewards(self, squad: Squad, record) -> list[str]:
         """出陣攻打贏給自己的。一類一顆開著（正式季整合 2.6，第 4 批）：經驗、心得是對手的 reward_scale（兩倍，寶物與遊俠名號照乘，
@@ -10328,6 +10355,8 @@ class Game:
         state.payouts = [pay for pay in state.payouts if name_key(pay.name) != me]
         p = s.player
         names = {f.id: f.name for f in c.scenario.factions}
+        # 出陣回報：最新一則就是推滿（拉回歸零）那一下出陣的話，分紅那一則接著畫同一塊——不然一同步「剛剛」就換成分紅、看不到易手那一條
+        last = s.journal[0].front if s.journal else None
         for pay in mine:
             place = c.locations[pay.loc].name if pay.loc in c.locations else pay.loc
             side = names.get(pay.side, pay.side)
@@ -10355,6 +10384,8 @@ class Game:
                 text = (CONQUEST_TOP_ANNAL if pay.kind == "take" else CONQUEST_TOP_GUARD_ANNAL).format(place=place)
                 annals.note(s, c, annals.CONQUER, text, 4, place=place, time=pay.time)
             self._write((CONQUEST_PAY_TITLE if pay.kind == "take" else CONQUEST_GUARD_TITLE).format(place=place), lines)
+            if last is not None and last.loc == pay.loc:
+                s.journal[0].front = last
         self._save_season()
     # ── 〈天下形勢〉（領地爭奪第三批 A；tianxia/xingshi.py，計畫第五章 Task 16、17）──
 
@@ -15093,6 +15124,12 @@ class Game:
         hut = prologue_rules.active(self.state, self.content)
         if hut and (self.state.pending_event is not None or self.state.player.sensing is not None):
             return ""  # 草廬的事件或草廬四景的有所感（做法、畫下來）在眼前：整張卡不放
+        entry = self._now_entry()
+        return journal.card_html(entry, self.stamp, self._chip) if entry is not None else ""
+
+    def _now_entry(self) -> JournalEntry | None:
+        """「剛剛」那一則（now_entry_html 的挑法，不看籌備中與草廬的事件）。"""
+        hut = prologue_rules.active(self.state, self.content)
         shown = self._news_on_cards()
 
         def repeated(entry: JournalEntry) -> bool:
@@ -15102,8 +15139,18 @@ class Game:
             )
 
         fresh = [e for e in self.state.journal if not repeated(e) and not (hut and journal.is_world_entry(e))]
-        entry = next((e for e in fresh if e.title != journal.ALLOCATE), fresh[0] if fresh else None)
-        return journal.card_html(entry, self.stamp, self._chip) if entry is not None else ""
+        return next((e for e in fresh if e.title != journal.ALLOCATE), fresh[0] if fresh else None)
+
+    def now_front(self) -> dict | None:
+        """「剛剛」那一則是出陣、有出陣回報（JournalEntry.front，sortie.report）時給畫面的資料；不是 None。戰鬥卡片照 shows_battle_card 看
+        同一則，不是戰鬥卡片照 now_entry_html 的挑法（那裡不放卡時這裡也不給）。"""
+        if self.shows_battle_card():
+            entry = self.state.journal[self._now_start()]
+        elif self.now_entry_html():
+            entry = self._now_entry()
+        else:
+            return None
+        return entry.front.model_dump() if entry is not None and entry.front is not None else None
 
     def journal_html(self, start: int = 1, limit: int = 5, heading: str = "", empty: str = "") -> str:
         return journal.rows_html(self.state.journal[start:start + limit], heading, empty, self.stamp, self._chip)

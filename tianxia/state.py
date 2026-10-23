@@ -1314,6 +1314,15 @@ class BlockFight(BaseModel):
     marks: list[PushMark] = Field(default_factory=list)  # 最近的出陣（留 presence_seconds／集火／混戰裡最長的那一段）
 
 
+class PushTally(BaseModel):
+    """領地爭奪：今天（出陣次數同一套換日，Game._pill_day）每一邊、每個人推（拉）動了多少進度（出陣回報的小籤讀它；ConquestState.tally）。
+    換了一天第一次記時整本清掉重記。"""
+
+    day: int = -1  # Game._pill_day；-1 是還沒記過
+    sides: dict[str, float] = Field(default_factory=dict)  # 陣營 → 今天推（拉）動的合計（出陣與事件都算）
+    people: dict[str, float] = Field(default_factory=dict)  # name_key(名號) → 今天推（拉）動的合計
+
+
 class ConquestPayout(BaseModel):
     """一筆分紅（輿圖簡化設計 4.5；conquest.flip、守城功記，Game._deliver_conquest 在那個人自己同步時補）。"""
 
@@ -1344,6 +1353,7 @@ class ConquestState(BaseModel):
     settled_key: int = -1  # 換天換到哪一天（day_key）；只准往前走（同 arena.roll_day 的教訓），-1 是還沒記過
     schedule: list[SiegeSlot] = Field(default_factory=list)  # 戰書排的攻城（還沒打、在打、今天打完或作罷的），照開打的先後
     day_log: list[DayNote] = Field(default_factory=list)  # 戰書、推滿易手、作罷記的那幾筆（〈天下形勢〉讀）
+    tally: PushTally = Field(default_factory=PushTally)  # 今天每一邊、每個人推了多少（出陣回報的小籤）
 
 
 class GuardPost(BaseModel):
@@ -1591,6 +1601,35 @@ class BattleRecord(BaseModel):
     battle_ref: int | None = None  # 決戰是資料庫裡那一場的流水號（BattleInstance.record_id）：戰報頁照它重讀完整戰況、補回被洗掉的戰報認它；其他是 None
 
 
+class FrontRow(BaseModel):
+    """出陣回報裡的一條進度（一個攻方，0～100，到 100 易手）：這一下之前與之後的值。"""
+
+    side: str
+    name: str  # 陣營名
+    value: int
+    before: int
+    mine: bool = False  # 看的人自己那一邊
+
+
+class FrontChip(BaseModel):
+    text: str
+    kind: str = ""  # "flip"：這一下推滿易手（深色那一顆）；其餘一般
+
+
+class FrontReport(BaseModel):
+    """出陣回報（企劃者 2026-10-23 選「寫數字」；sortie.report 建）：出陣那一下的快照，畫在「剛剛」卡片底下——
+    進度條（每個攻方一條）、一句話、幾顆小籤（今天自己推了多少、全軍今天推了多少、軍令進度）。"""
+
+    loc: str  # 那一塊（地點 id）：推滿、守住的分紅那一則接著畫同一塊（Game._deliver_conquest）
+    title: str  # 「汝南荒野・進度」
+    count: str  # 「你今日出陣 2/5」
+    holder: str | None = None  # 此刻歸誰（陣營 id；中立沒人佔是 None）
+    side: str  # 看的人那一邊
+    rows: list[FrontRow] = Field(default_factory=list)
+    text: str
+    chips: list[FrontChip] = Field(default_factory=list)
+
+
 class JournalEntry(BaseModel):
     """江湖紀錄的一則：玩家的一次行動，整理成給畫面看的樣子（原始訊息仍照舊寫在 GameState.log）。"""
 
@@ -1604,6 +1643,7 @@ class JournalEntry(BaseModel):
     # 說書人的話改在行動列上方的對話框（引導重做設計 8.1）
     guide: list[str] = Field(default_factory=list)
     glyph: list[list[int]] = Field(default_factory=list)  # 有所感畫的那一筆（0～100 的點位）：紀錄裡畫一張小縮圖；舊紀錄沒有
+    front: FrontReport | None = None  # 出陣回報（領地爭奪開著時的出陣）：「剛剛」卡片底下那一塊；其他行動沒有
 
 
 class GameState(BaseModel):

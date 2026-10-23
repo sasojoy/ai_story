@@ -378,6 +378,38 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
    只套卡片自己那幾段（直接子元素），底下接的「剛剛」那幾行不動 */
 .battle-card > p > strong { white-space: nowrap; }
 .battle-card .tx-extra { margin: 3px 0 0; padding: 0 10px; line-height: 1.45; }
+/* 出陣回報（企劃者 2026-10-23；app.js 的 frontReportHtml）：「剛剛」底下一條虛線隔開，標題＋今日出陣幾次、每個攻方一條進度（0～100）、
+   一句話、小籤。條上深的是這一下之前就有的、淡的是這一下推上去的、斜紋虛的是這一下被拉回的那一截 */
+.sfront { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); line-height: 1.5; }
+.sf-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 4px; }
+.sf-head b { font-size: 15px; }
+.sf-head span { font-size: 12px; color: var(--ink-2); white-space: nowrap; }
+.sf-row { --c: var(--ink-2); display: grid; grid-template-columns: 3.4em minmax(0, 1fr) 2.2em; align-items: center; column-gap: 6px; margin: 4px 0; font-size: 12px; }
+.sf-row.side-guan, .sf-chip.side-guan { --c: var(--kuai); }
+.sf-row.side-huang, .sf-chip.side-huang { --c: var(--gold); }
+.sf-row.side-haoqiang, .sf-chip.side-haoqiang { --c: var(--rou); }
+.sf-name { color: var(--c); font-weight: 700; white-space: nowrap; }
+.sf-bar { position: relative; height: 10px; border-radius: 5px; background: var(--card-2); box-shadow: inset 0 0 0 1px var(--line); overflow: hidden; }
+.sf-bar > i { position: absolute; top: 0; bottom: 0; left: 0; }
+.sf-fill { background: var(--c); }
+.sf-gain { background: var(--c); opacity: 0.45; }
+.sf-lost { background: repeating-linear-gradient(135deg, var(--c) 0 3px, transparent 3px 6px); opacity: 0.55; }
+.sf-num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 400; }
+.sf-row.mine .sf-num { font-weight: 700; }
+.sf-text { margin: 6px 0 4px; font-size: 14px; }
+.sf-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.sf-chip { font-size: 12px; line-height: 1.6; padding: 1px 9px; border-radius: 999px; background: var(--card-2); color: var(--ink); white-space: nowrap; }
+.sf-chip.flip { background: var(--c); color: #fff; font-weight: 700; }
+/* 第一屏放不下（app.js FIT_STEPS 的 front）：那一句收掉、小籤收成一行（放不下淡出），點了攤開 */
+.sfront.fit-tight { cursor: pointer; }
+.sfront.fit-tight .sf-text { display: none; }
+.sfront.fit-tight .sf-chips { flex-wrap: nowrap; overflow: hidden; margin-top: 4px;
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 2em), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 2em), transparent); }
+.sfront.fit-tight .sf-head span::after { content: " ▾"; }
+.sfront.fit-min .sf-head, .sfront.fit-min .sf-row ~ .sf-row { display: none; }
+.sfront.fit-min { margin-top: 6px; padding-top: 4px; }
+.sfront.fit-min .sf-row { margin-top: 0; }
+.sf-chip.flip.side-huang { color: #2a241d; } /* 金底配白字太淡：兩種模式都用深墨（同戰局條） */
 /* 戰鬥卡片底下聽來的那一句「你聽到一件事：…」（FB-074；伺服器標 tx-hearsay，app.js 的 decorateHearsay 讓它能點）：
    常有兩三行高、多撐 46～66px，收成一行、放不下加「…」，點了看全文。點擊範圍上下各多 7px、用負的 margin 吃回去，不多撐那一行。
    只寫上下的 padding，不用簡寫：Reduce Motion 時 journal 的 .tx-new 靠 padding-left 8px 讓字離左邊那條金條遠一點，

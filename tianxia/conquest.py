@@ -534,6 +534,31 @@ def push(
     return out
 
 
+def tally(world: WorldState, content: Content, day: int, side: str, name: str, moved: float) -> None:
+    """記今天這一邊、這個人推（拉）動了多少（ConquestState.tally；出陣回報的小籤讀 today_moved）。day 是 Game._pill_day（同出陣次數換日），
+    換了一天第一次記時整本清掉重記。沒推動（moved 0）不記。"""
+    if moved <= 0:
+        return
+    if world.conquest is None:
+        update(world, content)
+    book = world.conquest.tally
+    if book.day != day:
+        book.day, book.sides, book.people = day, {}, {}
+    book.sides[side] = book.sides.get(side, 0.0) + moved
+    key = name_key(name)
+    book.people[key] = book.people.get(key, 0.0) + moved
+
+
+def today_moved(world: WorldState | None, day: int, side: str | None, name: str | None = None) -> float:
+    """今天（day 同 tally）這一邊（給了 name 是這個人）推（拉）動的合計；不是今天的帳是 0。"""
+    book = world.conquest.tally if world is not None and world.conquest is not None else None
+    if book is None or book.day != day:
+        return 0.0
+    if name is not None:
+        return book.people.get(name_key(name), 0.0)
+    return book.sides.get(side, 0.0) if side is not None else 0.0
+
+
 def decay(world: WorldState, content: Content) -> None:
     """每日回（設計 4.1、第九章第 1 條）：每跨過一個季曆日交界，前一整個季曆日沒人推過的塊，每一條往回 decay_per_day；歸零的那一條拿掉
     （這一輪的帳一起清），全部歸零時守城的帳與警報也清。被戰書凍結的不回；那一天被碎片鎮過的也不回（玉璽碎片改版第 3 批的鎮地：
