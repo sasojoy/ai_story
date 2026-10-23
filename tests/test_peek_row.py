@@ -46,7 +46,7 @@ const parts = [
   // 戰場收成一行（FB-120）；gaugeHtml、withGauge：決戰的戰局條；pageJianghu 用它們排場景卡與選項
   // calWords、wkWord、wkName：7 天濃縮季的「週」換成段（FB-501；boardPeek 的「本週江湖大事」走 wkWord）
   ...["calWords", "wkWord", "wkName", "stanceBars", "boardSeen", "markBoardSeen", "boardUnseen", "warHelp", "stancePeek", "boardPeek", "questPeek", "ckGift", "checkinPeek", "newbiePeek",
-    "peekHtml", "peekTap", "musterJoins", "musterScene", "battleWatch", "battleScene", "roundBlocks", "trailMoves", "gaugeHtml", "meritHtml", "withGauge",
+    "peekHtml", "peekTap", "musterJoins", "musterScene", "battleWatch", "battleScene", "roundBlocks", "trailMoves", "gaugeHtml", "frontReportHtml", "meritHtml", "withGauge",
     "siegeStrip", "armsLine", "pageJianghu"].map(fn),
   // 不相干的畫法換成一行的假貨：要驗的是排在哪裡，不是它們自己長什麼樣
   `const splitChips = (html) => [html, ""], nowMore = () => "展開全文", followsMode = (id) => id.startsWith("move:");
