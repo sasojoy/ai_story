@@ -106,6 +106,13 @@ class CompanionTurn(BaseModel):
     player_tag: str | None = None
     # 人物記得上次談了什麼（Joy 2026-10-23）：這一次見面到此刻談了什麼，一句；引擎夾到 MEMO_CHARS 存進 PlayerState.talk_memos
     talk_memo: str | None = None
+    # 開口求人（parley.py，Config.parley 開著的「自己說」才要）：模型挑的那一件事、意願、條件，與開條件、婉拒的兩版回話。
+    # narrative 是答應（或只是閒聊）的那一版；數字引擎再夾一次（parley.decide）
+    ask: str | None = None
+    willing: int | None = None
+    condition: str | None = None
+    narrative_terms: str | None = None
+    narrative_no: str | None = None
 
 
 @dataclass(frozen=True)
@@ -326,13 +333,13 @@ def free_tag(turn: CompanionTurn) -> str:
 
 def _build_messages(
     character: CharacterDef, state: GameState, content: Content, world: WorldStateStore, companion_id: str,
-    player_action: str, free: bool = False,
+    player_action: str, free: bool = False, extra: str = "",
 ) -> list[dict[str, str]]:
     system_prompt = build_system_prompt(character, state, content, world, companion_id)
     history = _this_season_history(state, companion_id)[-4:]  # 只看這一季的（正式版辛）
     messages = [{"role": "system", "content": system_prompt}] + list(history)
     if free:
-        messages.append({"role": "user", "content": free_line(character, player_action)})
+        messages.append({"role": "user", "content": free_line(character, player_action) + extra})
     else:
         messages.append({"role": "user", "content": f"玩家的行動：「{player_action}」\n請描寫{character.name}的反應，並提供 3 個新選項。"})
     return messages
@@ -340,13 +347,14 @@ def _build_messages(
 
 def build_request(
     state: GameState, content: Content, world: WorldStateStore, companion_id: str, option_id: str, player_action: str,
-    free: bool = False,
+    free: bool = False, extra: str = "",
 ) -> DialogueRequest:
-    """階段 A：把這一輪要送給模型的 messages 組好（只讀狀態，不改任何東西）。free 是「自己說」：player_action 是玩家原話。"""
+    """階段 A：把這一輪要送給模型的 messages 組好（只讀狀態，不改任何東西）。free 是「自己說」：player_action 是玩家原話；
+    extra 接在「自己說」那一句後面（開口求人的兩份清單，parley.prompt_block）。"""
     character = content.characters[companion_id]
     return DialogueRequest(
         option_id, companion_id, player_action,
-        _build_messages(character, state, content, world, companion_id, player_action, free),
+        _build_messages(character, state, content, world, companion_id, player_action, free, extra),
     )
 
 
@@ -456,15 +464,17 @@ def continue_dialogue(
 
 def say_dialogue(
     client: OllamaClient | None, state: GameState, content: Content, world: WorldStateStore, companion_id: str,
-    said: str, turn: CompanionTurn | None = None,
+    said: str, turn: CompanionTurn | None = None, extra: str = "", decide=None,
 ) -> list[str]:
     """「自己說」：玩家不挑上一輪的選項，自己打一句話（1～20 字，呼叫端驗過、轉過繁體）。模型把那句話歸類（player_tag），
     好感度照那一類查表（清單外的當尋常寒暄）；之後跟 continue_dialogue 一樣記交友 tag、記對話、給本命武學、整理記憶。
     生成不出來時丟 DialogueUnavailable，這輪當作沒發生。turn 是鎖外先生成好的一輪；沒給才在這裡生成。"""
     character = content.characters[companion_id]
     if turn is None:
-        messages = _build_messages(character, state, content, world, companion_id, said, free=True)
+        messages = _build_messages(character, state, content, world, companion_id, said, free=True, extra=extra)
         turn = generate_turn(client, messages)
+    if decide is not None:  # 開口求人：引擎擲完骰、換上那一版回話（Game._parley_decide）
+        turn = decide(turn)
     tag = free_tag(turn)
     world.record_companion_tag(companion_id, tag)
     msgs = _apply_turn(state, character, companion_id, said, turn, tag, content=content)
@@ -597,6 +607,8 @@ def generate_turn(client: OllamaClient | None, messages: list[dict[str, str]]) -
             "relationship_note_update": zh.to_traditional(turn.relationship_note_update) if turn.relationship_note_update else turn.relationship_note_update,
             "player_tag": zh.to_traditional(turn.player_tag) if turn.player_tag else turn.player_tag,
             "talk_memo": zh.to_traditional(turn.talk_memo) if turn.talk_memo else turn.talk_memo,
+            "narrative_terms": zh.to_traditional(turn.narrative_terms) if turn.narrative_terms else turn.narrative_terms,
+            "narrative_no": zh.to_traditional(turn.narrative_no) if turn.narrative_no else turn.narrative_no,
         })
     except Exception as e:
         logger.warning(f"companion_agent 生成失敗: {e}，這輪對話取消")

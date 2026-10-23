@@ -747,6 +747,11 @@ def _complete_commission(state: GameState, content: Content, b: Bounty) -> list[
     msgs = [COMMISSION_DONE.format(who=issuer(content, b), title=title(content, b))]
     if b.silver:
         msgs.append(f"銀兩 +{b.silver}")
+    if b.parley_ask:  # 開口求人的條件（parley.py）：辦成了，下回見面他兌現答應你的那一件
+        from . import parley  # noqa: PLC0415  parley → bounties：延後載入
+
+        p.parley_owed[b.figure] = b.parley_ask
+        msgs.append(parley.COMMISSION_OWED.format(name=issuer(content, b)))
     return msgs + _figure_thanks(state, content, b, content.config.figure_life.commission_affinity)
 
 
@@ -1226,6 +1231,10 @@ def commission_reward(state: GameState, content: Content, b: Bounty) -> str:
     amount = content.config.figure_life.commission_affinity
     if amount and b.figure in content.characters:
         parts.append(f"{content.characters[b.figure].name}情誼 +{amount}")
+    if b.parley_ask:  # 開口求人的條件：辦成了他兌現你求的那一件
+        from . import parley  # noqa: PLC0415  parley → bounties：延後載入
+
+        parts.append(f"他兌現：{parley.ask_label(content, b.parley_ask)}")
     return "・".join(parts)
 
 
