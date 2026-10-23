@@ -1,6 +1,6 @@
 """破境（招式與絕學稿案第三節，Joy 2026-10-21 按建議）：自創的武學練成絕學的那一刻。
 
-- 招升為絕招：自己的招發動率升到必定、會長的數再乘 Config.arts.ascend_scale（moves.ascend）；八種照屬性配的絕招不丟，
+- 招升為絕招：會長的數再乘 Config.arts.ascend_scale，每回合會發的招發動率乘同一個數、最多 ascend_rate_cap，起手的照舊（moves.ascend）；八種照屬性配的絕招不丟，
   接在後面當「後勁」（traits.ultimate_of）。卡上私印換成金印「絕」，第五個玉環亮起來。
 - 破境有過程：契機在仗裡（cultivation.seize 那一句寫「你的〔招〕忽然通了」），或服丹閉門衝關（cultivation._force）；
   收場後跳出破境卡（PlayerState.ascension）：左邊破境前的招、右邊絕招、中間模型照那一句意寫的一句、底下江湖史那一行。

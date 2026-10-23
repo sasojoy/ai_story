@@ -958,7 +958,8 @@ def _after(f: _Fight, won: bool) -> None:
                 f.stacks[h.tactic.name + "|說"] = 1
                 f.say(h, "越打越順，推力一回合比一回合重")
         if h.tactic.kind == "streak" and _usable(f, h):  # 乘勝的絕招：連贏幾回合，下一回合無隙
-            n = f.stacks.get(h.tactic.name, 0) + 1 if won else 0
+            # 無隙那一回合贏的不算連贏（Joy 2026-10-23「甲 加一半」的共同修正）：不然開打無隙一贏就接著無隙，一路鎖死
+            n = (f.stacks.get(h.tactic.name, 0) + (0 if f.flawless else 1)) if won else 0
             if n >= int(h.tactic.params.get("wins", 2)):
                 f.put(f.us, "無隙", int(h.tactic.params.get("turns", 1)), now=False)
                 f.say(h, f"連贏 {n} 回合，下一回合無隙")
