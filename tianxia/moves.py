@@ -20,6 +20,8 @@ STANCES = tuple(STANCE_TIMING)
 FIRES = ("生", "熟", "透")
 DEFAULT_FIRE = "熟"  # 這一版之前自創的（沒記火候）：當熟的
 RAW_WORD = "招還生"  # 待 joy 潤
+# 撞到稀有路數的招：卡上招那一行後面補這兩個字的小章（Joy 2026-10-23「玩家要怎樣才知道自己的是」）；網頁 tacticHtml 認同一串
+RARE_WORD = "稀有路數"  # 待 joy 潤
 
 
 def is_own(content: Content, art) -> bool:

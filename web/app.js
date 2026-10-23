@@ -3207,9 +3207,12 @@
   // 開頭那幾個字畫成一枚印——看家墨印、本命朱印、絕金印、其餘是私印；後面照字寫
   const TSEAL = { 看家: "ink", 本命: "red", 絕: "gold", 後勁: "gold" };
   const tsealHtml = (word) => `<b class="tseal ${TSEAL[word] || "own"}">${esc(word)}</b>`;
+  // 自創撞到稀有路數的招，伺服器在招那一行後面補「（稀有路數）」（moves.RARE_WORD）：畫成一枚小章（Joy 2026-10-23「玩家要怎樣才知道自己的是」）
   function tacticHtml(text) {
+    const RARE_MARK = "（稀有路數）";
     const m = /^([^〔]{1,2})〔/.exec(String(text || ""));
-    return m ? `${tsealHtml(m[1])}${esc(String(text).slice(m[1].length))}` : esc(text || "");
+    const body = (s) => esc(s).split(esc(RARE_MARK)).join(`<span class="rare-tag">${esc(RARE_MARK.slice(1, -1))}</span>`);
+    return m ? `${tsealHtml(m[1])}${body(String(text).slice(m[1].length))}` : body(text || "");
   }
   // 純文字版（清單的小字、title）：「掠影二重・流光」
   const fxText = (fx) => (Array.isArray(fx) ? fx.map((e) => (e.grand || e.special ? e.name : `${e.name}${FX_LAYERS[e.layers] || ""}`)).join("・") : "");
@@ -4009,6 +4012,7 @@
       ${look}
       ${draft.power ? `<p class="muted small">${esc(draft.power)}</p>` : ""}
       ${stance}
+      ${draft.rare_hit ? `<p class="cr-rare">${esc(draft.rare_hit)}</p>` : ""}
       ${draft.tactic ? `<p class="art-tactic cr-move">${tacticHtml(draft.tactic)}</p>` : ""}
       ${draft.say ? `<p class="muted small">出手時：「${esc(draft.say)}」</p>` : ""}
       <p class="muted small">招剛創時還生，練到第四成才使得順。</p>
