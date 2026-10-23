@@ -2622,6 +2622,18 @@ class ParleyTuning(_Strict):
     # 條件：交銀的價錢照份量；交素材是三份一階；打探、討伐是委託（同書信的委託，辦成了下次見面他兌現）
     silver_terms: list[int] = Field(default_factory=lambda: [20, 50, 100])
     material_terms: int = Field(default=3, ge=1)
+    # 第二批：先做後付與食言、人物主動開口、同行中的自由文字
+    broken_cut: int = Field(default=10, ge=0)  # 每一筆還沒抵掉的食言（自己的、聽說的）讓意願天花板減多少
+    owe_limit: int = Field(default=3, ge=1)  # 同時最多欠幾位人物（欠滿了他不再先做後付，改成先付後做）
+    owe_broken: int = Field(default=15, ge=0)  # 先做後付的食言：情誼減多少（你白拿了東西）
+    plea_broken: int = Field(default=8, ge=0)  # 接了他的請託沒做到：情誼減多少
+    heard_broken: int = Field(default=3, ge=0)  # 他的盟友聽說你食言：情誼減多少
+    heavy_days: int = Field(default=1, ge=0)  # 份量 3 的條件期限多幾個遊戲日
+    plea_moods: list[str] = Field(default_factory=lambda: ["焦慮", "悲憤"])  # 心事是這幾種時，你求見他，他會先開口求你
+    plea_wants: int = Field(default=3, ge=1)  # 他想請你做的事列幾件給模型挑
+    plan_floor: int = Field(default=5, ge=0, le=100)  # 跟他商量打法：成功率夾在這兩個數之間（放手一搏同一個上限）
+    plan_cap: int = Field(default=85, ge=0, le=100)
+    escort_pace: float = Field(default=0.5, gt=0)  # 他帶路：步行的時間乘這個數（他熟路、腳程快），一分體力不花
 
 
 class RiseTuning(_Strict):

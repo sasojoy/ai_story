@@ -18,7 +18,7 @@ from typing import ClassVar
 
 from pydantic import BaseModel, Field
 
-from . import figure_life, gender, renown, seal_acts, zh
+from . import figure_life, gender, parley, renown, seal_acts, zh
 from .models import CharacterDef, Content
 from .ollama_client import OllamaClient
 from .state import GameState, TalkMemo
@@ -113,6 +113,9 @@ class CompanionTurn(BaseModel):
     condition: str | None = None
     narrative_terms: str | None = None
     narrative_no: str | None = None
+    # 第二批：人物主動開口（求見的開場）時他想請你做的那一件與他的回報（parley.plea_pick 驗）
+    want: str | None = None
+    reward: str | None = None
 
 
 @dataclass(frozen=True)
@@ -228,6 +231,7 @@ def build_system_prompt(
         f"{_habit(character, state, content, world, companion_id, affinity)}"
         f"{_secret_line(character, state, content, world, companion_id)}"
         f"{figure_life.prompt_lines(state, content, companion_id)}"
+        f"{parley.prompt_lines(state, content, companion_id)}"  # 開口求人第二批：守約紀錄（答應幾件、做到幾件、食言、聽說的）
         f"{era_str}"
         f"【此刻】{content.scenario.name}・{act_title}，第 {day} 天。\n"
         f"{past_str}"
@@ -420,14 +424,16 @@ def _apply_turn(
 
 def start_dialogue(
     client: OllamaClient | None, state: GameState, content: Content, world: WorldStateStore, companion_id: str,
-    rng: Random, turn: CompanionTurn | None = None,
+    rng: Random, turn: CompanionTurn | None = None, extra: str = "", decide=None,
 ) -> list[str]:
     """交友觸發深度對話的第一回合：用一句通用的「上前攀談」當隱含的玩家行動。
     先生成、成功了才開始對話；生成不出來（DialogueUnavailable）時不留下任何狀態。
     turn 是鎖外先生成好的一輪（見 prepare_turn）：給了就不再生成，沒給才在這裡生成。"""
     character = content.characters[companion_id]
     if turn is None:
-        turn = _generate(client, character, state, content, world, companion_id, GENERIC_OPENING)
+        turn = _generate(client, character, state, content, world, companion_id, GENERIC_OPENING, extra=extra)
+    if decide is not None:  # 開口求人第二批：他主動開口求你（Game._parley_plea 驗、記下來）
+        turn = decide(turn)
     p = state.player
     prev = p.talk_memos.get(companion_id)  # 這一次開口之前的那一份：談話畫面的「上回」照它寫（這一輪之後 talk_memos 換成這一次的）
     if prev is None:
@@ -576,10 +582,10 @@ def leave_dialogue(state: GameState) -> list[str]:
 
 def _generate(
     client: OllamaClient | None, character: CharacterDef, state: GameState, content: Content, world: WorldStateStore,
-    companion_id: str, player_action: str,
+    companion_id: str, player_action: str, extra: str = "",
 ) -> CompanionTurn:
     """組 messages 再生成一輪（鎖內的老路徑）；鎖外的路徑是 build_request ＋ prepare_turn，兩邊共用 generate_turn。"""
-    messages = _build_messages(character, state, content, world, companion_id, player_action)
+    messages = _build_messages(character, state, content, world, companion_id, player_action, extra=extra)
     return generate_turn(client, messages)
 
 

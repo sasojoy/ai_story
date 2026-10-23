@@ -6,9 +6,14 @@
     .venv/Scripts/python.exe scripts/figure_ask_trial.py  # 預設：跟盧植說三句、每句 10 次，共 30 次
     .venv/Scripts/python.exe scripts/figure_ask_trial.py --runs 30  # 每句 30 次
     .venv/Scripts/python.exe scripts/figure_ask_trial.py --figure luzhi --affinity 60 "盧公可否陪我出陣"
+    .venv/Scripts/python.exe scripts/figure_ask_trial.py --part plea  # 第二批：他心事焦慮，求見時先開口求你（10 次）
+    .venv/Scripts/python.exe scripts/figure_ask_trial.py --part plan  # 第二批：答應陪你出陣之後商量打法（三句各 10 次）
+    .venv/Scripts/python.exe scripts/figure_ask_trial.py --part all   # 三樣都跑（約 70 次）
 
 預期：求指點挑 spar、求帶路去廣宗挑 escort:guangzong（份量大、情誼淺時多半開條件）、借兵這種清單外的事填 refuse；
 條件 id 都在清單上（清單外的會印「清單外」，引擎當沒開）。最後印每句的統計：挑了什麼、意願平均、開條件幾成、結果分布。
+第二批：擲中又開了條件是「先做後付」（腳本當作還能欠他）；plea 看他開口求你挑的 want／reward 合不合清單（回報份量不能比請託大）；
+plan 看模型給的成功率（引擎夾在 plan_floor～plan_cap）合不合打法的險與穩。
 """
 from __future__ import annotations
 
@@ -27,10 +32,13 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 os.environ.setdefault("TIANXIA_DB", str(Path(tempfile.mkdtemp()) / "figure_ask_trial.db"))  # 開世界之前：不碰這份 clone 的 saves/
 
+from unittest import mock  # noqa: E402
+
 from tianxia import companion_agent, figure_life, parley  # noqa: E402
 from tianxia.content import load_content  # noqa: E402
-from tianxia.engine import Game, say_text  # noqa: E402
+from tianxia.engine import PLAN_OPTION, Game, say_text  # noqa: E402
 from tianxia.ollama_client import OllamaClient  # noqa: E402
+from tianxia.state import ParleyBacking  # noqa: E402
 
 DEFAULT_LINES = [
     "盧公，可否指點我一招槍法？",  # 該挑 spar
@@ -38,7 +46,12 @@ DEFAULT_LINES = [
     "把你的兵借我三千。",  # 清單外：該填 refuse
 ]
 WHERE = {"luzhi": "luzhi_camp"}  # 人物 → 站在哪裡跟他說（沒寫的照他此刻在哪）
-OUTCOME = {"do": "答應", "terms": "開條件", "no": "婉拒", None: "不是在求事"}
+OUTCOME = {"do": "答應", "owe": "先做後付", "terms": "開條件", "no": "婉拒", None: "不是在求事"}
+PLAN_LINES = [
+    "將軍從左翼包抄，我正面纏住",  # 穩：該給中高的機會
+    "我們兩個直接衝他中軍斬將",  # 險：該給低的機會
+    "等夜裡放火燒他的糧車",  # 看人物性格
+]
 
 
 def main() -> None:
@@ -53,6 +66,9 @@ def main() -> None:
     parser.add_argument("--model", help="換一個模型試（預設用 content/config.json 的 ollama_model）")
     parser.add_argument("--warmup-timeout", type=int, default=600, help="第一次載入模型最多等幾秒")
     parser.add_argument("--quiet", action="store_true", help="不印每一次的回話，只印統計")
+    parser.add_argument("--part", choices=["ask", "plea", "plan", "all"], default="ask",
+                        help="ask 你求他（第一批，預設）、plea 他主動開口求你、plan 出陣前商量打法、all 三樣都跑")
+    parser.add_argument("--mood", default="焦慮", help="plea 用：把他此刻的心事當成這一種（焦慮、悲憤才會開口）")
     args = parser.parse_args()
 
     content = load_content(ROOT / "content")
@@ -96,6 +112,12 @@ def main() -> None:
     extra = game._parley_prompt(cid)
     ask_ids, cond_ids = {a.id for a in asks}, {c.id for c in conditions}
     dice = random.Random(0)
+    if args.part in ("plea", "all"):
+        _plea(game, content, client, cid, args)
+    if args.part in ("plan", "all"):
+        _plan(game, content, client, cid, args)
+    if args.part not in ("ask", "all"):
+        return
 
     for line in args.lines:
         said = say_text(line, game.say_max())
@@ -115,7 +137,8 @@ def main() -> None:
                 continue
             ask = (turn.ask or "").strip()
             cond = (turn.condition or "").strip()
-            decision = parley.decide(content, asks, conditions, ask, turn.willing, cond, args.affinity, hostile, dice.randint(1, 100))
+            decision = parley.decide(content, asks, conditions, ask, turn.willing, cond, args.affinity, hostile, dice.randint(1, 100),
+                                     can_owe=True)
             picked[ask if ask in ask_ids or ask in ("", parley.REFUSE) else f"{ask}（清單外）"] += 1
             outcomes[OUTCOME[decision.kind]] += 1
             conds += bool(cond)
@@ -135,6 +158,74 @@ def main() -> None:
         done = args.runs - fails
         print(f"  ── 統計（{done} 次{f'，{fails} 次失敗' if fails else ''}）：挑了 {dict(picked)}；意願平均 {avg}；"
               f"開條件 {conds}/{done}；結果 {dict(outcomes)}\n")
+
+
+def _generate(client, request):
+    start = time.monotonic()
+    try:
+        return companion_agent.generate_turn(client, request.messages), time.monotonic() - start
+    except companion_agent.DialogueUnavailable as e:
+        print(f"  模型叫不動（遊戲裡這輪會取消、不扣體力）：{e}")
+        return None, 0.0
+
+
+def _plea(game, content, client, cid, args) -> None:
+    """他主動開口：把他的心事當成 args.mood，看開場那一輪挑的 want／reward 與他開口的話。"""
+    name = content.characters[cid].name
+    with mock.patch.object(figure_life, "mood_any", return_value=args.mood):
+        extra = game._parley_plea_prompt(cid)
+        wanted, rewards = game._parley_plea_lists(cid)
+    if not extra:
+        print(f"══ {name}主動開口：他此刻不會開口（心事不是 {'、'.join(content.config.parley.plea_moods)}，或兩份清單是空的），跳過\n")
+        return
+    print(f"══ {name}主動開口（心事當成{args.mood}）")
+    print("  他想請你做的事：" + "、".join(f"{w.id}（份量 {w.weight}）" for w in wanted))
+    print("  他可以回報的事：" + "、".join(f"{r.id}（份量 {r.weight}）" for r in rewards))
+    picked, ok = Counter(), 0
+    for n in range(1, args.runs + 1):
+        request = companion_agent.build_request(game.state, content, game.world, cid, "act:socialize",
+                                                companion_agent.GENERIC_OPENING, extra=extra)
+        turn, spent = _generate(client, request)
+        if turn is None:
+            continue
+        found = parley.plea_pick(wanted, rewards, turn.want, turn.reward)
+        ok += found is not None
+        picked[f"{turn.want or '空'}→{turn.reward or '空'}{'' if found else '（不成立）'}"] += 1
+        if not args.quiet:
+            print(f"  #{n} want={turn.want or '空'} reward={turn.reward or '空'} → {'成立' if found else '不成立，當他沒開口'}　{spent:.0f} 秒")
+            print(f"     {turn.narrative}")
+    print(f"  ── 統計：{dict(picked)}；成立 {ok}/{args.runs}\n")
+
+
+def _plan(game, content, client, cid, args) -> None:
+    """出陣前商量打法：他答應陪你出陣了（parley_backing），看模型給每一種打法的成功率與成敗兩版。"""
+    name = content.characters[cid].name
+    p = game.state.player
+    p.parley_backing = ParleyBacking(figure=cid, region=parley.region_of(game.state, content, cid),
+                                     day=parley.game_day(content, game.state.world))
+    extra = game._parley_plan_prompt(cid)
+    cfg = content.config.parley
+    dice = random.Random(1)
+    for line in PLAN_LINES:
+        said = say_text(line, game.say_max())
+        rates, hits = [], 0
+        print(f"══ 跟{name}商量打法：「{said}」")
+        for n in range(1, args.runs + 1):
+            request = companion_agent.build_request(game.state, content, game.world, cid, PLAN_OPTION, said, free=True, extra=extra)
+            turn, spent = _generate(client, request)
+            if turn is None:
+                continue
+            chance = max(cfg.plan_floor, min(cfg.plan_cap, int(turn.willing or 0)))
+            hit = dice.randint(1, 100) <= chance
+            hits += hit
+            rates.append(turn.willing or 0)
+            if not args.quiet:
+                print(f"  #{n} willing={turn.willing} → 夾到 {chance}，{'成' if hit else '不成'}　{spent:.0f} 秒")
+                print(f"     成：{turn.narrative}")
+                print(f"     不成：{turn.narrative_no or '（沒寫）'}")
+        avg = f"{sum(rates) / len(rates):.0f}" if rates else "—"
+        print(f"  ── 統計：成功率平均 {avg}（最低 {min(rates, default=0)}、最高 {max(rates, default=0)}）；擲成 {hits}/{len(rates)}\n")
+    p.parley_backing = None
 
 
 if __name__ == "__main__":

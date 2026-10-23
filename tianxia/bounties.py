@@ -747,11 +747,14 @@ def _complete_commission(state: GameState, content: Content, b: Bounty) -> list[
     msgs = [COMMISSION_DONE.format(who=issuer(content, b), title=title(content, b))]
     if b.silver:
         msgs.append(f"銀兩 +{b.silver}")
-    if b.parley_ask:  # 開口求人的條件（parley.py）：辦成了，下回見面他兌現答應你的那一件
-        from . import parley  # noqa: PLC0415  parley → bounties：延後載入
+    from . import parley  # noqa: PLC0415  parley → bounties：延後載入
 
+    settled = parley.settle_task(state, content, b.id, b.figure)  # 第二批：欠他的那一件（先做後付、接了他的請託）做到了，守約 +1
+    if b.parley_ask:  # 開口求人的條件（parley.py）：辦成了，下回見面他兌現答應你的那一件
         p.parley_owed[b.figure] = b.parley_ask
         msgs.append(parley.COMMISSION_OWED.format(name=issuer(content, b)))
+        if not settled:  # 你求他、他開的條件：做到了也記一筆守約
+            parley.keep(state, content, b.figure, title(content, b))
     return msgs + _figure_thanks(state, content, b, content.config.figure_life.commission_affinity)
 
 

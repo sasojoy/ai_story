@@ -14,7 +14,7 @@ from typing import NamedTuple
 
 from . import arts as arts_mod, allied, armor, bounties, checkin, chuangong, clinic, create, cultivation, economy, equipment, explore_modes, forge_secrets, four_tiers, fusion, glyph, insights, library, mounts, naming, sensing, smithing, team, traits, treasures, weapons
 from . import prologue as prologue_rules
-from .engine import ARENA_YIELD, DUEL_FLEE, FREE_TEXT_OPTION, SAY_OPTION, Game, Option
+from .engine import ARENA_YIELD, DUEL_FLEE, FREE_TEXT_OPTION, TEXT_TALKS, Game, Option
 from .martial_arts import MartialArt, next_quality
 from .models import Content
 from .state import PLAYER
@@ -423,7 +423,7 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
         enlist = enlist_pick(game, [o.id for o in options])
         if enlist is not None:
             return enlist
-    options = [o for o in options if o.id not in (FREE_TEXT_OPTION, SAY_OPTION)]  # 隨口應對、對話的「自己說」要寫一句話，機器人寫不出有意義的做法（同決戰的 free_text）
+    options = [o for o in options if o.id != FREE_TEXT_OPTION and o.id not in TEXT_TALKS]  # 隨口應對、對話的「自己說」要寫一句話，機器人寫不出有意義的做法（同決戰的 free_text）
     # 伏筆的最後一步與對話的片段選項、機緣的選項與話題：這一版假人不做伏筆（計畫 T7）也不做機緣，同隨口應對一樣排除
     options = [o for o in options if not o.id.startswith(FORESHADOW_OPTIONS)]
     if any(o.id.startswith(explore_modes.PREFIX) for o in options):

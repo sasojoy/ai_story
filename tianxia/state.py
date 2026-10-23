@@ -639,6 +639,10 @@ class PlayerState(BaseModel):
     parley_terms: dict[str, ParleyTerms] = Field(default_factory=dict)
     parley_owed: dict[str, str] = Field(default_factory=dict)
     parley_backing: ParleyBacking | None = None
+    parley_debts: dict[str, ParleyDebt] = Field(default_factory=dict)  # 第二批：你欠人物的事（先做後付、接了他的請託）
+    parley_records: dict[str, ParleyRecord] = Field(default_factory=dict)  # 第二批：守約紀錄
+    parley_escort: str | None = None  # 第二批：這一趟是誰帶你走的（路上可以跟他說一句）；出發時清掉，帶路時才寫
+    parley_road_leg: int = -1  # 這一趟在第幾站跟他說過了（Journey.reached；每到一站一次）
     # 上一季的交情（第一季設計第十四節；正式版辛）：人物 id → 最近一次有聊過的那一季的關係筆記。換季時把
     # relationship_notes 搬過來（這一季的從頭寫），沒聊過的人物保留更早的那一句。只給模型當背景，畫面不顯示
     past_notes: dict[str, str] = Field(default_factory=dict)
@@ -1093,6 +1097,7 @@ class ParleyDay(BaseModel):
     asks: int = 0  # 求了幾件（模型挑到清單上的一件才算）
     refused: list[str] = Field(default_factory=list)  # 今天婉拒過的事（ask id）：同一件今天不能再求
     spar: bool = False  # 今天指點過了
+    plea: bool = False  # 今天他主動開口求過你了（不管你接不接，一天一次）
 
 
 class ParleyTerms(BaseModel):
@@ -1102,6 +1107,30 @@ class ParleyTerms(BaseModel):
     condition: str
     text: str = ""
     at: float = 0.0
+    plea: bool = False  # 這是他主動開口求你（第二批）：condition 是他要你做的、ask 是他的回報；接了不做到期是食言
+
+
+class ParleyDebt(BaseModel):
+    """你答應了他、還沒做到的一件事（parley.py 第二批）。kind：owe 先做後付（他已經替你做了，食言 −15）、plea 他主動開口求你
+    （你接了，食言 −8）。condition 是條件 id；交銀、交素材的 task 是 None（見面按「還他」），打探、討伐的 task 是那件委託的 id。
+    due 是世界秒，過了還沒做到就是食言（parley.lapse）。一位人物最多一件。"""
+
+    kind: str
+    condition: str
+    weight: int = 1
+    due: float
+    task: str | None = None
+
+
+class ParleyRecord(BaseModel):
+    """你跟一位人物的守約紀錄（parley.py 第二批）：答應幾件、做到幾件、食言幾件；owing 是還沒抵掉的食言、heard 是他聽說你對誰食言
+    （人物 id），兩樣每一筆讓他那邊的意願天花板減 Config.parley.broken_cut。做到一件事先抵自己的、再抵聽說的。這一季的，換季清掉。"""
+
+    promised: int = 0
+    kept: int = 0
+    broken: int = 0
+    owing: int = 0
+    heard: list[str] = Field(default_factory=list)
 
 
 class ParleyBacking(BaseModel):
@@ -1110,6 +1139,7 @@ class ParleyBacking(BaseModel):
     figure: str
     region: str | None
     day: int
+    plan: bool | None = None  # 出陣前跟他商量的打法（第二批）：None 沒商量、True 成了（這一仗威力加倍）、False 沒成（他這一仗打空）
 
 
 class TalkMemo(BaseModel):

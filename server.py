@@ -71,7 +71,7 @@ from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, Account
 from tianxia.content import env_profile, load_content, profile_line
 from tianxia.characters import open_characters
 from tianxia.database import default_path, open_database
-from tianxia.engine import FIGHT_GONE_LINES, FREE_TEXT_OPTION, PAUSED_TEXT, SAY_OPTION, Game, Refused
+from tianxia.engine import FIGHT_GONE_LINES, FREE_TEXT_OPTION, PAUSED_TEXT, SAY_OPTION, TEXT_TALKS, Game, Refused
 from tianxia.models import FREE_TEXT_MAX
 from tianxia.journal import CSS as JOURNAL_CSS
 from tianxia.sqlite_world import open_world
@@ -672,15 +672,17 @@ def prepare_dialogue(game: Game, option_id: str, text: str | None = None) -> com
     return model_call(game, generate, fallback=cancelled, left=total - (_monotonic() - started), busy=BUSY_DIALOGUE)
 
 
-def say(game: Game, text: str) -> list[str] | None:
+def say(game: Game, text: str, option: str = SAY_OPTION) -> list[str] | None:
     """跟人物對話時的「自己說」（企劃者 2026-10-08）：玩家打的那一句跟按選項走同一條三段式（prepare_dialogue）——
     A 鎖內驗這句話能不能送（還在對話裡、按得下去、1～Game.say_max() 字）並開單，B 鎖外請模型歸類那句話、寫回應與下一輪選項，
     C 鎖內 Game.choose(SAY_OPTION, prepared=…, text=…) 整個重驗再套用（好感度照模型挑的類別查表）。
     送不出去（不在對話裡、字數不對）丟 GameError，什麼都不動。"""
-    prepared = prepare_dialogue(game, SAY_OPTION, text)
+    if option not in TEXT_TALKS:  # 開口求人第二批：商量打法（talk:plan）、帶路的路上（parley:road）也走這一條
+        option = SAY_OPTION
+    prepared = prepare_dialogue(game, option, text)
     if prepared is None:
         raise GameError(f"寫一句 1～{game.say_max()} 字的話；交談已經結束的話，就不必再說了。")
-    return act(game, lambda g: g.choose(SAY_OPTION, prepared=prepared, text=text))
+    return act(game, lambda g: g.choose(option, prepared=prepared, text=text))
 
 
 def may_generate_dialogue(option_id: str) -> bool:
@@ -2297,7 +2299,7 @@ def api_answer(request: Request, body: dict = Body(...)):
 @app.post("/api/say")
 def api_say(request: Request, body: dict = Body(...)):
     game = _game(request)
-    say(game, str(body.get("text", "")))
+    say(game, str(body.get("text", "")), str(body.get("option") or SAY_OPTION))
     _tell_tabs(game)
     return {"main": look(game, main_view)}
 

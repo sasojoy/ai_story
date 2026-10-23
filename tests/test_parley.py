@@ -51,8 +51,11 @@ def test_the_ceiling_follows_affinity_weight_and_enmity(content):
 def test_decide_clamps_the_models_willingness_and_rolls_with_the_engines_dice(content):
     asks = [parley.Item("spar", "指點一招", 1)]
     conds = [parley.Item("silver", "交一筆銀兩")]
-    d = parley.decide(content, asks, conds, "spar", 100, "silver", 0, False, 50)
+    d = parley.decide(content, asks, conds, "spar", 100, "", 0, False, 50)
     assert (d.kind, d.chance) == ("do", 50)  # 模型說 100，生疏那一檔的天花板 50
+    d = parley.decide(content, asks, conds, "spar", 100, "silver", 0, False, 50, can_owe=True)
+    assert (d.kind, d.condition.id) == ("owe", "silver")  # 擲中又開了條件：先做後付（第二批）
+    assert parley.decide(content, asks, conds, "spar", 100, "silver", 0, False, 50).kind == "terms"  # 不能再欠他：先付後做
     d = parley.decide(content, asks, conds, "spar", 100, "silver", 0, False, 51)
     assert (d.kind, d.condition.id) == ("terms", "silver")
     assert parley.decide(content, asks, conds, "spar", 100, "", 0, False, 51).kind == "no"
@@ -103,7 +106,7 @@ def test_escort_moves_the_player_for_free(talking):
     msgs = _say(talking, _ask("escort:lake"), text="帶我去湖邊")
     assert any("親自帶你抄近路往湖邊" in m for m in msgs)
     assert p.pending_companion is None
-    assert p.journey is not None and p.journey.dest == "lake" or p.location == "lake"
+    assert p.journey is not None and p.journey.path[-1] == "lake" and p.parley_escort == "mate"  # 照他的腳程走，路上能跟他說話
     assert p.stamina == before - talking.content.config.talk_stamina  # 只扣了這一輪對話的體力
 
 
