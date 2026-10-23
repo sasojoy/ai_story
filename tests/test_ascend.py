@@ -50,14 +50,15 @@ def test_the_own_move_ascends_and_the_card_is_written(content):
     assert "〔追風影〕忽然通了" in msgs[0]
     after = team.player_art(s, content, w, "疾風掌")
     now = moves.move_of(content, after)
-    assert now.rate == 1.0 and now.name == "追風影" and was.rate < 1.0
+    # 每回合會發的招破境後發動率 ×ascend_scale、最多 ascend_rate_cap（Joy 2026-10-23「甲 加一半」；以前一律升到必定）
+    assert now.rate == min(content.config.arts.ascend_rate_cap, round(was.rate * 1.5, 3)) > was.rate and now.name == "追風影"
     assert tactics.title_of(now, after) == tactics.ULTIMATE_SEAL
     card = p.ascension
     assert card.after.startswith("絕〔追風影〕") and card.before.startswith(p.name[:1] + "〔追風影〕")
     assert card.power[1] > card.power[0]
     assert any("練到了絕處" in r.text for r in s.world.rumors)
     held = [h for h in team.tactic_holders(s, content, w) if h.skill == "疾風掌"]
-    assert held and held[0].tactic.rate == 1.0
+    assert held and held[0].tactic.rate == now.rate
 
 
 def test_the_card_line_is_rechecked_and_dismissed(content):
@@ -113,3 +114,34 @@ def test_the_after_blow_follows_the_slots():
     assert s.player.ascension.after_tail.startswith(traits.AFTER_TITLE + "〔")
     names = [h.tactic.name for h in team.tactic_holders(s, content, w)]
     assert "追風影" in names and tail.name in names
+
+
+def test_ascending_raises_every_round_moves_to_a_cap_and_keeps_openers(content):
+    """破境的發動率（Joy 2026-10-23「甲 加一半」）：每回合會發的乘 1.5、最多五成，本來就超過的照舊；起手的照原本的。"""
+    from tianxia.models import CreateMove, TacticDef
+    row = CreateMove(attribute="剛", timing="出招", name="甲", kind="heavy_blow", desc="", rate=0.2, grow=["rate", "mult"], params={"mult": 2.0})
+    def made(rate, rounds=0):
+        return TacticDef(name="甲", timing="出招" if not rounds else "起手", kind="heavy_blow", desc="", rate=rate, rounds=rounds, params={"mult": 2.0})
+    assert moves.ascend(content, row, made(0.2)).rate == 0.3
+    assert moves.ascend(content, row, made(0.4)).rate == 0.5  # 0.6 夾到五成
+    assert moves.ascend(content, row, made(0.6)).rate == 0.6  # 本來就比五成高：照舊
+    assert moves.ascend(content, row, made(1.0)).rate == 1.0
+    assert moves.ascend(content, row, made(0.45, rounds=1)).rate == 0.45  # 起手的不升
+    assert moves.ascend(content, row, made(0.2)).params["mult"] == 2.5  # 會長的數照舊乘 1.5
+
+
+def test_wins_while_flawless_do_not_count_toward_the_streak(content):
+    """乘勝的後勁（連贏 → 下一回合無隙）：無隙那一回合贏的不算連贏（Joy 2026-10-23「甲 加一半」的共同修正），不然一路鎖死。"""
+    import random
+    from tianxia.models import TacticDef
+    t = TacticDef(name="後勁", timing="心法", kind="streak", desc="", rate=1.0, params={"wins": 2, "turns": 1})
+    f = tactics._Fight([tactics.Holder(who="你", key="player", skill="x", tactic=t)], tactics.Ctx(foe="乙"), content.config.tactics, random.Random(1))
+    tactics._after(f, True)
+    tactics._after(f, True)
+    assert f.us.later.get("無隙") == 1 and f.stacks["後勁"] == 0
+    f.flawless = True  # 下一回合無隙，贏了
+    tactics._after(f, True)
+    assert f.stacks["後勁"] == 0
+    f.flawless = False
+    tactics._after(f, True)
+    assert f.stacks["後勁"] == 1

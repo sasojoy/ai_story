@@ -98,14 +98,18 @@ MASTERED = "絕學"
 
 
 def ascend(content: Content, move: CreateMove, tactic: TacticDef) -> TacticDef:
-    """破境：招升為絕招——發動率升到必定，會長的數（rate 以外）再乘 Config.arts.ascend_scale（本來就必定的靠這一截變強）。"""
-    k = content.config.arts.ascend_scale
+    """破境：招升為絕招——會長的數（rate 以外）再乘 Config.arts.ascend_scale；發動率：每回合會發的招乘 ascend_scale、
+    最多 ascend_rate_cap（本來就比它高的照舊），起手的招（前幾回合）照原本的（Joy 2026-10-23「甲 加一半」：以前一律升到必定，
+    出招每回合多推一擊、起手開場兩三回合無隙，最會配的玩家打本命剩 1%）。"""
+    arts = content.config.arts
+    k = arts.ascend_scale
     params = dict(tactic.params)
     for key in move.grow:
         if key == "rate" or key not in params:
             continue
         params[key] = round(1 + (params[key] - 1) * k, 3) if key == "mult" else round(params[key] * k, 4)
-    return tactic.model_copy(update={"rate": 1.0, "params": params})
+    rate = tactic.rate if tactic.rounds else max(tactic.rate, min(arts.ascend_rate_cap, round(tactic.rate * k, 3)))
+    return tactic.model_copy(update={"rate": rate, "params": params})
 
 
 def ascended(art) -> bool:

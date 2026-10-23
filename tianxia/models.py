@@ -523,7 +523,7 @@ class TacticDef(_Strict):
     say: str = ""
     # 本命底蘊（玩家武學追上本命，Joy 2026-10-15「本命還是強一點點」）：本人身上練著這一門時，擂台、奪璽單挑（玩家對玩家，Bout.pvp）每一回合推力多這麼多
     # （跟發動率無關、一直在；一般的仗、頭目戰、決戰、同伴練的、大勢人物本人當對手時都不算）。每一位照擂台量表對滿配絕學的贏面各調，內外兩門各一半
-    might: float = Field(default=0.0, ge=0, le=2)
+    might: float = Field(default=0.0, ge=0, le=3)
     # 小戰法（Joy 2026-10-21 決策卡「小戰法」：學來的武學要有特色、不然沒有學的必要）：寫在各地教的、事件給的下品內容武學上，
     # 跟本命戰法同一套做法、數字約本命的五到六成；不算本命（不乘本命的威力、不從第七成起、熔得掉、卡上寫「小戰法」，signature.of 不認）
     minor: bool = False
@@ -2432,8 +2432,11 @@ class ArtsTuning(_Strict):
     # 撞出來的稀有（招式與絕學稿案「強不強、稀有不稀有」）：三格全單色「純」、三格全任色「渾」，槽裡意境的一般功效打架時再乘 1＋這個數
     pure_bonus: float = Field(default=0.10, ge=0)
     whole_bonus: float = Field(default=0.15, ge=0)
-    # 破境（招式與絕學稿案第三節）：自創的練成絕學，自己的招升為絕招——發動率升到必定，會長的數再乘 ascend_scale
+    # 破境（招式與絕學稿案第三節）：自創的練成絕學，自己的招升為絕招——會長的數再乘 ascend_scale。
+    # 發動率（Joy 2026-10-23 決策卡「甲 加一半」，方案頁 https://claude.ai/artifact/1bVYzrqyMjsqEdaEKaxEvz）：每回合會發的招（rounds 0）
+    # 乘 ascend_scale、最多 ascend_rate_cap（本來就超過的照舊）；起手的招（前幾回合）照原本的發動率。以前一律升到必定，最會配的玩家打本命剩 1%
     ascend_scale: float = Field(default=1.5, ge=1)
+    ascend_rate_cap: float = Field(default=0.5, ge=0, le=1)
     # 基本威力（Joy 2026-10-21「基本威力你先自己用一版」）：同一品級的威力區間再乘一個倍數，夾在 power_scale_range。
     # 自創照「意」分＋加分＋赤璋（夾 0～100）從下限線性推到上限；武學＋武學合出來的照兩門來源的倍數平均再加 blend_power_step。
     # 以前是名字雜湊的 ±10%；已經登記的武學照舊、不重算
