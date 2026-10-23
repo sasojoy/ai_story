@@ -282,7 +282,8 @@ def test_silver_outlets_and_season_caps_are_a_third():
     state = _player(c7)
     cfg = c7.config
     assert silver.on(c7, state.world) and silver.legend_left(state, c7) == 1
-    assert [ranks.threshold(c7, r) for r in (2, 3, 4)] == [130, 430, 870]
+    # 第 4 階 870 → 600：企劃者 2026-10-22 選甲（開著領地爭奪的季貢獻累得比關著慢，戰書要季中就下得了；計畫 2026-10-22-7天季領地爭奪調整.md 第七節）
+    assert [ranks.threshold(c7, r) for r in (2, 3, 4)] == [130, 430, 600]
     assert cfg.figure_treasure_cap == 1 and cfg.figure_treasure_weekly == 1 and cfg.sortie.treasure_cap == 1
     assert cfg.late_exp_step == 0.03 and cfg.duel.per_boss_week == 2 and cfg.haoqiang_allied
     assert figures.upkept(c7, state.world)
