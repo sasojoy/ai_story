@@ -208,7 +208,8 @@ def condition_items(state: GameState, content: Content, cid: str, rng: random.Ra
         return region is None or figure_life._region(content, loc_id) == region
 
     scouts = [loc_id for loc_id, loc in content.locations.items()
-              if loc.danger >= 2 and not bounties.is_town(content, loc_id) and bounties._opened(loc, w) and near(loc_id)]
+              if loc.danger >= 2 and not bounties.is_town(content, loc_id) and bounties._opened(loc, w) and near(loc_id)
+              and loc_id != state.player.location]  # 叫你打探你正站著的地方沒有意思
     if scouts:
         loc = rng.choice(sorted(scouts))
         items.append(Item(f"scout:{loc}", f"替他打探{_place(content, loc)}", detail=f"玩家先去{_place(content, loc)}探索一回"))
