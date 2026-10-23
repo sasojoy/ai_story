@@ -167,6 +167,11 @@ const where = {
   "#page > .options > .btn.off .opt-note": () => notes,
   ".peek.fit-hide, .opt-note.fit-hide": () => [peek, ...notes].filter((x) => x && has(x, "fit-hide")),
   ".now.fit-title": () => all.filter((x) => has(x, "now", "fit-title")),
+  // 出陣回報（frontReportHtml）：假頁面沒有這一塊
+  "#page .sfront": () => [],
+  "#page .sfront.fit-tight": () => [],
+  ".sfront.fit-min": () => [],
+  '.sfront[data-act="front-more"]': () => [],
 };
 const q = (sel) => { if (!where[sel]) throw new Error("假頁面不認得的選擇器：" + sel); return where[sel](); };
 globalThis.document = { getElementById: (id) => (id === "page" && L.page !== false ? page : id === "top" ? topEl : null),
@@ -682,6 +687,8 @@ def test_each_step_only_touches_what_it_names():
         # 第 10 步（choices）：「剛剛」的敘事（展開 .open 就回來）、灰掉的鈕底下那一行原因（在鈕的 title，點了說整句）、態勢那一排
         ".now.fit-title:not(.open) .tx-now > .tx-line, .now.fit-title:not(.open) .tx-now > .tx-heading, .now.fit-title:not(.open) .tx-now > .tx-glyph",
         ".options > .btn.off .opt-note.fit-hide", ".page > .peek.fit-hide",
+        # 第 6a 步（front、front2）：出陣回報那一句、標題與其餘的條（點那一塊整塊攤開，frontOpen）
+        ".sfront.fit-min .sf-head, .sfront.fit-min .sf-row ~ .sf-row", ".sfront.fit-tight .sf-text",
     ]
     title = _rules(css, "fit-title")[".now.fit-title:not(.open) .tx-now"]
     assert "max-height: none" in title and "mask-image: none" in title  # 只剩標題：不淡出

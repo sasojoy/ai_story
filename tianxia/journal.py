@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 
 from . import front_lines
 from .battlelog import clock_text, split_changes
-from .state import GameState, JournalEntry
+from .state import FrontReport, GameState, JournalEntry
 
 LOG_BREAK = "\x1e"  # GameState.log 中每次行動結束的分隔標記（不顯示）
 MAX_ENTRIES = 30  # 存檔保留最近幾則
@@ -145,6 +145,7 @@ class Draft:
     guide: list[str] = field(default_factory=list)  # 這次行動順便完成的新手引導（記進 JournalEntry.guide，不進敘事）
     glyph: list[list[int]] = field(default_factory=list)  # 有所感畫的那一筆（JournalEntry.glyph，紀錄裡畫縮圖）
     notes: list[str] = field(default_factory=list)  # 訊息裡沒有、另外補進敘事的話（兵器鈍了的提醒）；訊息已經有的不重複
+    front: FrontReport | None = None  # 出陣回報（sortie.report；JournalEntry.front）
 
     def hide(self, msg: str) -> None:
         self.rewrites.append((msg, None))
@@ -177,7 +178,7 @@ class Draft:
         lines += [n for n in self.notes if n not in lines]
         return JournalEntry(
             time=time, title=self.title, tag=self.tag, lines=lines, changes=combine_changes(self.changes + changes),
-            battle_id=self.battle_id, guide=list(self.guide), glyph=list(self.glyph),
+            battle_id=self.battle_id, guide=list(self.guide), glyph=list(self.glyph), front=self.front,
         )
 
 

@@ -10,7 +10,7 @@ from typing import Literal
 
 from . import rules, territory
 from .models import Content
-from .state import PlayerState, WorldState
+from .state import FrontChip, FrontReport, FrontRow, PlayerState, WorldState
 
 Mode = Literal["attack", "hold", "stir"]
 NAME = "出陣"  # 待 joy 潤
@@ -141,3 +141,75 @@ def pushes(content: Content, world: WorldState, faction: str, loc_id: str, how: 
         if amount:
             out[target] = out.get(target, 0.0) + amount
     return out
+
+
+# ── 出陣回報（企劃者 2026-10-23 在草稿上選「寫數字」）：領地爭奪開著時，出陣那一下在「剛剛」卡片底下多一塊——那一塊的進度條、一句話、
+# 幾顆小籤（今天自己推了多少、全軍今天推了多少、軍令進度）。Game._sortie 打完叫 report，存在那一則江湖紀錄（JournalEntry.front）。待 joy 潤
+REPORT_TITLE = "{place}・進度"
+REPORT_COUNT = "你今日出陣 {n}/{cap}"
+REPORT_FLIP = "{place}被你這一下推滿，落入{side}之手。"
+REPORT_ATTACK = "{place}{holder}。{side}的進度 {value}／100，再推 {left} 就{take}。"
+REPORT_HELD_BY = "歸{side}"
+REPORT_OPEN = "還沒有人佔"
+REPORT_TAKE = "易手"
+REPORT_TAKE_OPEN = "佔下"
+REPORT_STALLED = "這一下沒推動。"  # 打輸守軍、混戰輸了
+REPORT_HOLD = "{place}{side}守著。{rival}的進度被拉到 {value}／100，推到 100 才奪得走。"
+REPORT_HOLD_CLEAR = "{place}{side}守著，對面的進度都已歸零。"
+REPORT_BLOCKED = "{place}此刻推不動進度：{why}。"
+CHIP_FLIP = "易手・這一下是你推滿的"
+CHIP_MINE = "今天你替{side}推了 {n}"
+CHIP_ALL = "全軍今天 {n}"
+CHIP_ORDER = "軍令「{kind}」{done}/{quota}"
+CHIP_ORDER_DONE = "軍令「{kind}」{done}/{quota} 已達成"
+
+
+def amount_text(x: float) -> str:
+    """小籤上的量：四捨五入成整數（同 conquest.PUSH_LINE）；推動了卻不到半點寫「不到 1」，沒推是 0。"""
+    n = int(x + 0.5)
+    return str(n) if n > 0 or x <= 0 else "不到 1"
+
+
+def report(
+    content: Content, world: WorldState, loc_id: str, side: str, how: str, *, before: dict[str, float], moved: float, flipped: bool,
+    why: str | None, used: int, mine_today: float, side_today: float, orders: list[tuple[str, int, int, bool]],
+) -> FrontReport:
+    """出陣回報（FrontReport）：before 是這一下之前每一條進度（攻方 → 值），world 是這一下之後；moved 是這一下自己推（拉）動了多少；
+    why 是這一下之前推不推得動（conquest.push_problem）；used 是今天已出陣幾次（含這一下）；orders 是（軍令種類名, 陣營完成次數, 額度, 達成了沒）。"""
+    from . import conquest  # noqa: PLC0415  conquest → territory → rules：在函式裡 import
+
+    place = content.locations[loc_id].name
+    name = lambda f: content.scenario.faction_name(f, f)  # noqa: E731
+    held = conquest.holder(world, content, loc_id)
+    after = conquest.bars(world, loc_id)
+    rows = [
+        FrontRow(side=f, name=name(f), value=int(after.get(f, 0.0) + 0.5), before=int(before.get(f, 0.0) + 0.5), mine=f == side)
+        for f in sorted(set(after) | set(before), key=lambda f: (f != side, -after.get(f, 0.0), f))
+        if not (flipped and f == side)  # 推滿那一下所有條都清掉：自己那一條另外畫成滿的
+    ]
+    if flipped:
+        rows.insert(0, FrontRow(side=side, name=name(side), value=100, before=int(before.get(side, 0.0) + 0.5), mine=True))
+    elif how == "attack" and why is None and not any(r.mine for r in rows):  # 推得動、還沒推上來（打輸了）：自己那一條照樣畫一條空的
+        rows.insert(0, FrontRow(side=side, name=name(side), value=0, before=0, mine=True))
+    if flipped:
+        text = REPORT_FLIP.format(place=place, side=name(side))
+    elif why is not None and why != conquest.WHY_IDLE:
+        text = REPORT_BLOCKED.format(place=place, why=why)
+    elif how == "attack":
+        value = int(after.get(side, 0.0) + 0.5)
+        text = (REPORT_STALLED if moved <= 0 else "") + REPORT_ATTACK.format(
+            place=place, holder=REPORT_HELD_BY.format(side=name(held)) if held else REPORT_OPEN, side=name(side), value=value,
+            left=100 - value, take=REPORT_TAKE if held else REPORT_TAKE_OPEN)
+    else:
+        rivals = sorted(((v, f) for f, v in after.items() if f != side), reverse=True)
+        text = (REPORT_HOLD.format(place=place, side=name(side), rival=name(rivals[0][1]), value=int(rivals[0][0] + 0.5)) if rivals
+                else REPORT_HOLD_CLEAR.format(place=place, side=name(side)))
+    chips = [FrontChip(text=CHIP_FLIP, kind="flip")] if flipped else []
+    chips += [FrontChip(text=CHIP_MINE.format(side=name(side), n=amount_text(mine_today))),
+              FrontChip(text=CHIP_ALL.format(side=name(side), n=amount_text(side_today)))]
+    chips += [FrontChip(text=(CHIP_ORDER_DONE if done else CHIP_ORDER).format(kind=kind, done=n, quota=quota))
+              for kind, n, quota, done in orders]
+    return FrontReport(
+        loc=loc_id, title=REPORT_TITLE.format(place=place), count=REPORT_COUNT.format(n=used, cap=content.config.sortie.per_day),
+        holder=held, side=side, rows=rows, text=text, chips=chips,
+    )

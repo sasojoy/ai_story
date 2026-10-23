@@ -61,6 +61,7 @@
     main: null,
     mainKey: "",
     tab: "jianghu",
+    frontOpen: "", // 江湖頁「剛剛」底下那塊出陣回報，第一屏放不下收起來之後玩家點開的那一則（frontKey）：重畫時不再收
     nowOpen: null, // 江湖頁「剛剛」展開的那一則（記內容本身）；換成新的一則就收回（A4）
     letterOpen: null, // 江湖頁書信小卡攤開的那一封（id）
     roundsOpen: null, // 江湖頁戰鬥卡片「過程」展開的那一場（戰報流水號）；換成新的一場就收回（計畫三 G6）
@@ -1068,6 +1069,24 @@
       if (body.scrollHeight <= body.clientHeight + 1) now.classList.replace("clamp", "fits"); // 三行就放得下：不要淡出與「展開全文」
       return true;
     } },
+    // 6a. 出陣回報（frontReportHtml）：那一句收掉、小籤收成一行（放不下淡出），進度條照留；點了整塊攤開（S.frontOpen 記這一則，重畫時不再收）
+    { key: "front", run: () => {
+      const el = document.querySelector("#page .sfront");
+      if (!el || S.frontOpen === frontKey(S.main.front)) return false;
+      el.classList.add("fit-tight");
+      el.setAttribute("data-act", "front-more");
+      el.setAttribute("role", "button");
+      el.setAttribute("tabindex", "0");
+      el.setAttribute("aria-expanded", "false");
+      return true;
+    } },
+    // 6a'. 還放不下：出陣回報標題那一行與其餘的條也收掉，只留第一條（自己那一條；守是對面最高的那一條）與一行小籤
+    { key: "front2", run: () => {
+      const el = document.querySelector("#page .sfront.fit-tight");
+      if (!el) return false;
+      el.classList.add("fit-min");
+      return true;
+    } },
     // 6b. 場景底下別人遞來的邀請（FB-117：最多畫兩份，socialHtml）：還放不下就從最後一份往前收，收到放得下為止，
     //     收掉的併進「還有 N 份邀請 ▾」那一行（沒有那一行就補一行），點了全部攤開（callsOpened：玩家點開過、還是點開那時的那幾份，就不再收）
     { key: "calls", run: () => {
@@ -1175,6 +1194,10 @@
     });
     fitUnclip(page);
     page.querySelectorAll(".fit-tight").forEach((el) => el.classList.remove("fit-tight"));
+    page.querySelectorAll(".sfront.fit-min").forEach((el) => el.classList.remove("fit-min"));
+    page.querySelectorAll('.sfront[data-act="front-more"]').forEach((el) => {
+      ["data-act", "role", "tabindex", "aria-expanded"].forEach((a) => el.removeAttribute(a));
+    });
   }
   // 場景卡裡收成一行的段落（第 7、8 步）：一行、放不下加「…」（style.css 的 p.fit-clip），點了整張場景卡攤開（ownOpen）。
   // 收了之後數字（倒數、戰局）會藏到「…」後面的那一段不收
@@ -1529,6 +1552,30 @@
     }
     first.querySelector(":scope > .r-short").textContent = short;
     list.classList.add("tight");
+  }
+
+  // 出陣回報（企劃者 2026-10-23 選「寫數字」；sortie.report）：「剛剛」那一則是領地爭奪的出陣時，卡片底下多一塊——那一塊每個攻方一條進度
+  // （0～100，到 100 易手；深的是推完的、淡的是這一下推上去的，被拉回的那一截畫成虛的）、一句話、幾顆小籤（今天自己推了多少、全軍、軍令）
+  const frontKey = (f) => (f ? `${f.title}|${f.count}|${f.text}` : "");
+  // 收著的出陣回報（FIT_STEPS 的 front）：點了原地攤開，記在 S.frontOpen（這一則），重畫時不再收
+  function frontOpen(el) {
+    S.frontOpen = frontKey(S.main && S.main.front);
+    el.classList.remove("fit-tight", "fit-min");
+    ["data-act", "role", "tabindex", "aria-expanded"].forEach((a) => el.removeAttribute(a));
+  }
+  function frontReportHtml(f) {
+    if (!f) return "";
+    const pct = (v) => Math.max(0, Math.min(100, v | 0));
+    const rows = f.rows.map((r) => {
+      const lo = pct(Math.min(r.value, r.before)), hi = pct(Math.max(r.value, r.before));
+      const moved = hi > lo ? `<i class="${r.value >= r.before ? "sf-gain" : "sf-lost"}" style="left:${lo}%;width:${hi - lo}%"></i>` : "";
+      const tip = r.value === r.before ? `${r.name}進度 ${r.value}／100` : `${r.name}進度 ${r.before} → ${r.value}／100`;
+      return `<div class="sf-row side-${esc(r.side)}${r.mine ? " mine" : ""}" role="img" aria-label="${esc(tip)}"><span class="sf-name">${esc(r.name)}</span>`
+        + `<span class="sf-bar"><i class="sf-fill" style="width:${lo}%"></i>${moved}</span><b class="sf-num">${r.value | 0}</b></div>`;
+    }).join("");
+    const chips = f.chips.map((c) => `<span class="sf-chip${c.kind === "flip" ? ` flip side-${esc(f.side)}` : ""}">${esc(c.text)}</span>`).join("");
+    return `<div class="sfront"><div class="sf-head"><b>${esc(f.title)}</b><span>${esc(f.count)}</span></div>${rows}`
+      + `<p class="sf-text">${esc(f.text)}</p>${chips ? `<div class="sf-chips">${chips}</div>` : ""}</div>`;
   }
 
   // 「剛剛」那一則拆成敘事與數值變化（氣血 -96、黃巾聲勢 -2…，journal.card_html 放在 .tx-now 最後）：
@@ -2471,8 +2518,8 @@
     const expanded = S.nowOpen === m.now;
     const [text, chips] = !m.card && m.now ? splitChips(m.now) : ["", ""];
     const now = m.card
-      ? `<div class="card battle-card">${fightCard(m.card, m.card_id)}${gaugeHtml(m.card_gauge)}${m.now || ""}</div>`
-      : m.now ? `<div class="now ${expanded ? "open" : "clamp"}${m.on_road ? " road" : ""}"><div class="now-text">${text}<button class="linkish now-more" data-act="now-more" aria-expanded="${expanded}">${nowMore(expanded)}</button></div>${chips}</div>` : "";
+      ? `<div class="card battle-card">${fightCard(m.card, m.card_id)}${gaugeHtml(m.card_gauge)}${m.now || ""}${frontReportHtml(m.front)}</div>`
+      : m.now ? `<div class="now ${expanded ? "open" : "clamp"}${m.on_road ? " road" : ""}"><div class="now-text">${text}<button class="linkish now-more" data-act="now-more" aria-expanded="${expanded}">${nowMore(expanded)}</button></div>${chips}${frontReportHtml(m.front)}</div>` : "";
     const free = m.free_text != null
       ? `<form class="free" id="free-form" data-op="${esc(m.free_op || "battle_text")}"><input class="input" name="text" maxlength="20" placeholder="${esc(m.free_text || "輸入你想做的事（20字內）")}"><button class="btn primary small" type="submit">送出</button></form>${m.free_text_note ? `<p class="free-note">${esc(m.free_text_note)}</p>` : ""}`
       : "";
@@ -8767,6 +8814,7 @@
         case "newbie-go": newbieGo(Number(el.dataset.i)); break; // 新手目標的「去做」
         case "newbie-drifter": await doMain("newbie_drifter"); break; // 新手目標的「就當散人」
         case "hear-more": hearToggle(el); break; // 戰鬥卡片底下聽來的那一句：原地展開／收起，不重畫
+        case "front-more": frontOpen(el); break; // 收著的出陣回報：原地攤開，不重畫
         case "line-more": lineToggle(el); break; // FB-107 收成一行的補充（對手的描述）：原地展開／收起，不重畫
         case "own-more": ownOpen(); break; // FB-107：決戰時收成一行的所在地描述，原地攤開
         case "battle-open": battleOpen(); break; // FB-120：只能觀戰的人收成一行的開打中的戰場，攤開（記戰場的名字）
@@ -9163,6 +9211,10 @@
     if ((ev.key === "Enter" || ev.key === " ") && ev.target instanceof Element && ev.target.matches('.tx-tight[data-act="line-more"]')) {
       ev.preventDefault();
       lineToggle(ev.target);
+    }
+    if ((ev.key === "Enter" || ev.key === " ") && ev.target instanceof Element && ev.target.matches('.sfront[data-act="front-more"]')) {
+      ev.preventDefault();
+      frontOpen(ev.target);
     }
     if ((ev.key === "Enter" || ev.key === " ") && ev.target instanceof Element && ev.target.matches('[data-act="own-more"]')) {
       ev.preventDefault();
