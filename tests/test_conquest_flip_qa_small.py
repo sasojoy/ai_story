@@ -91,8 +91,11 @@ def _intercept(game, side, loc, front):
     return order
 
 
-def test_bots_do_not_sortie_where_they_cannot_push():
-    """QA：開季的截糧軍令把官軍的假人拉到下曲陽（官軍開季碰不到、推不動），在那裡一直出陣、連輸中立駐軍。"""
+def test_bots_do_not_sortie_where_they_cannot_push(monkeypatch):
+    """QA：開季的截糧軍令把官軍的假人拉到下曲陽（官軍開季碰不到、推不動），在那裡一直出陣、連輸中立駐軍。
+    2026-10-22（7 天季領地爭奪調整）之後假人出陣也看勝算（bot_policy._outmatched，測試在 test_bot_policy_conquest.py）：剛建的假人在荒丘
+    攻打的贏面不到門檻；這一條只鎖「推不推得動」，勝算一律當成穩勝。"""
+    monkeypatch.setattr(bot_policy, "_sortie_win", lambda game, loc_id: 1.0)
     game = _bot(go(join(conquest_game("season21", name="假官"), "guan"), "xiaquyang"), "guan")
     w, c = game.state.world, game.content
     _intercept(game, "guan", "xiaquyang", "jizhou")
