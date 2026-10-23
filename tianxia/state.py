@@ -623,6 +623,10 @@ class PlayerState(BaseModel):
     relationship_notes: dict[str, str] = Field(default_factory=dict)  # 人物 id -> 一句話關係現況
     # 風聞（figure_life.spread）：人物 id → 他聽說的你做過的事（一句一條，最新的在後，最多 hearsay_keep 條）；這一季的，換季清掉
     hearsay: dict[str, list[str]] = Field(default_factory=dict)
+    # 人物記得上次談了什麼（companion_agent）：talk_memos 是人物 id → 最近一次見面（談話中就是這一次）到此刻談了什麼；
+    # talk_prev 是這一次開口之前的那一份（求見那一下從 talk_memos 抄過來），談話畫面的「上回」與這一次的提示照它寫
+    talk_memos: dict[str, TalkMemo] = Field(default_factory=dict)
+    talk_prev: dict[str, TalkMemo] = Field(default_factory=dict)
     hearsay_keys: list[str] = Field(default_factory=list)  # 已經傳開過的事（「種類|對象」）：同一件事一位人物只算一次
     # 書信（大勢人物擴充第二批；tianxia/letters.py）：人物派人送來的信，最新的在後、最多 letters_keep 封；這一季的，換季清掉
     letters: list[Letter] = Field(default_factory=list)
@@ -1073,6 +1077,15 @@ class Bounty(BaseModel):
     # 或「委託」（求援書信附的那一件，只在收信的人身上：PlayerState.letters）。標題與掛單人照它寫，交差時那位人物情誼另加
     figure: str | None = None
     motive: Literal["復仇", "追剿", "委託", "求援"] | None = None
+
+
+class TalkMemo(BaseModel):
+    """跟一位人物上一回見面談了什麼（人物記得上次談了什麼，Joy 2026-10-23）：模型每一輪寫一句 talk_memo（companion_agent），
+    引擎夾長度存下來；at 是那一輪的世界秒、place 是地點 id。下次求見時放進對話提示，談話畫面寫「上回」。這一季的，換季清掉。"""
+
+    text: str
+    at: float
+    place: str = ""
 
 
 class Letter(BaseModel):

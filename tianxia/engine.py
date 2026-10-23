@@ -5555,6 +5555,15 @@ class Game:
             c, self.state.world, recruitable=any(ch.kind == "recruitable" for ch in c.characters.values()), rule=rule,
         )
 
+    def _last_talk_line(self, companion_id: str) -> str:
+        """談話畫面名字底下的「上回」那一行（人物記得上次談了什麼，Joy 2026-10-23）：時刻、地點、談了什麼；第一次見面是空的。待 joy 潤"""
+        memo = companion_agent.last_talk(self.state, companion_id)
+        if memo is None:
+            return ""
+        loc = self.content.locations.get(memo.place)
+        where = f"・{loc.name}" if loc is not None else ""
+        return f"*上回（{self.stamp(memo.at)}{where}）：{memo.text}*\n\n"
+
     def affinity_text(self, companion_id: str) -> str:
         """「情誼 N」：你跟這位人物的情誼（PlayerState.affinities，0～100）。談話畫面、求見名單、輿圖的人物都寫這個詞（explain-1：
         玩家看得到的只叫「情誼」，程式裡照舊叫 affinity）。"""
@@ -14582,8 +14591,8 @@ class Game:
             character = c.characters[s.player.pending_companion]
             history = s.player.dialogue_history.get(s.player.pending_companion, [])
             last = next((m["content"] for m in reversed(history) if m.get("role") == "assistant"), "")
-            # 談話時名字旁寫著你們的情誼（explain-1：以前哪裡都看不到這個數）
-            return f"**{character.name}**（{self.affinity_text(s.player.pending_companion)}）\n\n{last}"
+            # 談話時名字旁寫著你們的情誼（explain-1：以前哪裡都看不到這個數）；上回見面談過的事多一行（Joy 2026-10-23）
+            return f"**{character.name}**（{self.affinity_text(s.player.pending_companion)}）\n\n{self._last_talk_line(s.player.pending_companion)}{last}"
         if allied.needs_ally(s, c):  # 拜入要依附的門派之後還沒挑一邊（豪強分屬兩軍）
             return f"**依附哪一邊**\n\n{allied.ALLY_AFTER_SECT.format(counts=self.faction_counts_text())}"
         if s.player.pending_faction:
