@@ -3005,6 +3005,9 @@ svg.fig .blade.bow { stroke-width: 3; }
 .cr-look.tier-珍 { color: #8a5cc2; }
 .cr-look.tier-神 { color: var(--gold); }
 .cr-move { font-size: 1.05em; }
+/* 撞到稀有路數（Joy 2026-10-23）：成形那一句、招那一行後面的小章 */
+.cr-rare { margin: .4em 0 .2em; font-weight: 600; color: var(--gold); }
+.rare-tag { display: inline-block; margin-left: .35em; padding: 0 .45em; border: 1px solid var(--gold); border-radius: .3em; color: var(--gold); font-size: .82em; line-height: 1.45; vertical-align: .08em; white-space: nowrap; }
 /* 破境卡（tianxia/ascend.py）：蓋在畫面上，收下才收掉 */
 .asc-wrap { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center;
   padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));

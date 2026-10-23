@@ -130,3 +130,59 @@ def test_every_cell_of_the_real_table_has_its_own_rare_move(real):
             assert not (timing in ("出招", "心法") and rare.rounds == 0 and rare.kind in ("flash", "flawless", "elude")), (a, timing)
     names = [m.name for m in real.create_forms.moves]
     assert len(names) == len(set(names))
+
+
+# ── 撞到稀有路數看得出來（Joy 2026-10-23「我還是不懂稀有招式是什麼，玩家要怎樣才知道自己的是」）──
+
+
+def _formed(real, rare):
+    game = _game(real)
+    game.create_begin("武學", "拳腳")
+    game.create_pose(create.preset(real, "奇變"))
+    game.create_intent("一拳既出，山河皆震", create.IntentReading(score=80, attributes=["剛"]))
+    game.state.player.creating.rare = rare
+    return game
+
+
+def test_forming_a_rare_move_says_so_and_names_the_common_one(real):
+    game = _formed(real, True)
+    d = create.view(game.state, real, game.world)["draft"]
+    common = moves.cell(real, d["main"], d["timing"])
+    assert d["rare_hit"] == create.RARE_HIT.format(common=common.name)
+    assert d["tactic"].endswith(f"（{moves.RARE_WORD}）")
+    assert d["move"] == moves.cell(real, d["main"], d["timing"], True).name != common.name
+    plain = create.view(_formed(real, False).state, real, game.world)["draft"]
+    assert plain["rare_hit"] == "" and moves.RARE_WORD not in plain["tactic"]
+
+
+def test_the_art_card_marks_a_rare_move(real):
+    from tianxia import skillview
+    game = _formed(real, True)
+    game.create_name("震山拳")
+    from tianxia import team
+    art = team.player_art(game.state, real, game.world, game.forged_thing[1])
+    assert art.move_rare
+    assert skillview.tactic_line(real, art, 5).count(f"（{moves.RARE_WORD}）") == 1
+    assert moves.RARE_WORD not in skillview.tactic_line(real, art.model_copy(update={"move_rare": False}), 5)
+
+
+@needs_node
+def test_the_page_draws_the_rare_mark_as_a_tag():
+    from test_arts_pages_two import run
+
+    html = run('return H.tacticHtml("立〔以靜制動〕起手・80%：前 3 回合無隙。（稀有路數）");', fns=["tacticHtml"])
+    assert '<span class="rare-tag">稀有路數</span>' in html and "（稀有路數）" not in html
+
+
+def test_the_forming_message_says_a_rare_move_was_hit(real):
+    game = _game(real)
+    game.create_begin("武學", "拳腳")
+    game.create_pose(create.preset(real, "奇變"))
+    game.state.player.creating.intent = "一拳既出，山河皆震"
+    game.state.player.creating.rare = True
+    game.state.player.creating.colors = [["剛"], ["剛"], ["剛"]]
+    lines = create.move_lines(game.state, real, game.state.player.creating)
+    d = create.view(game.state, real, game.world)["draft"]
+    assert lines[0].endswith(f"（{moves.RARE_WORD}）") and lines[1] == d["rare_hit"]
+    game.state.player.creating.rare = False
+    assert len(create.move_lines(game.state, real, game.state.player.creating)) == 1

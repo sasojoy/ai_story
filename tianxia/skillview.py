@@ -36,6 +36,8 @@ def tactic_line(content: Content, art: MartialArt, level: int | None) -> str:
     if sig is None:
         return ""
     text = tactics_mod.card_text(sig, tactics_mod.title_of(sig, art))
+    if moves.is_own(content, art) and art.move_rare:  # 撞到稀有路數的招：後面補小章（網頁畫成「稀有路數」那一枚）
+        text += f"（{moves.RARE_WORD}）"
     if level is not None and moves.is_own(content, art) and not moves.ascended(art):
         if moves.raw(content, level):
             text += f"（{moves.RAW_WORD}）"

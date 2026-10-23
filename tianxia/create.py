@@ -92,6 +92,8 @@ STANCE_ORDER = ("變勢", "守勢", "攻勢", "起勢")
 STANCE_HOW = {"變勢": "提起一條腿", "守勢": "雙手收在胸前，或馬步放寬、手不伸出去", "攻勢": "手伸得遠，或身子前傾", "起勢": "其餘的架式"}
 # 稀有路數（content/create_forms.json 的 moves 標 rare 的那幾格）：只說哪幾格有、不說招名（留驚喜）。待 joy 潤
 RARE_LINE = "每一格都有機會撞到稀有路數（成形時約{odds}）"  # 待 joy 潤
+# 成形撞到稀有路數時招上面那一句：一併寫出這一格常見的是哪一招，玩家才知道撞到的跟平常的不一樣（Joy 2026-10-23）
+RARE_HIT = "撞到稀有路數！這一格常見的是〔{common}〕，你成形的是另一招。"  # 待 joy 潤
 
 
 # ── 價錢與門檻 ──────────────────────────────────────────
@@ -516,7 +518,7 @@ def roll_colors(content: Content, draft: CreateDraft, rng: random.Random) -> lis
 
 PURE, WHOLE = moves.PURE, moves.WHOLE
 CLEAR, RARE = "透", "奇"  # 待 joy 潤
-MARK_TEXT = {PURE: "三格全單色", WHOLE: "三格全任色", CLEAR: "招已透", RARE: "稀有路數"}  # 待 joy 潤
+MARK_TEXT = {PURE: "三格全單色", WHOLE: "三格全任色", CLEAR: "招已透", RARE: moves.RARE_WORD}  # 待 joy 潤
 TIER_TEXT = {0: "凡", 1: "佳", 2: "珍", 3: "神"}  # 跟意境的品相同一條梯子（Joy 2026-10-21「那武學呢 有分？」）
 
 
@@ -566,9 +568,7 @@ def set_intent(
     draft.say = reading.say
     _form(state, content, world, draft)
     msgs = [FORMED_LINE.format(intent=draft.intent, colors=colors_text(draft.colors))]
-    move = draft_move(state, content, draft)
-    if move is not None:
-        msgs.append(MOVE_SHOWN.format(card=tactics.card_text(move, state.player.name[:1] or tactics.MINOR_TITLE)))
+    msgs += move_lines(state, content, draft)
     if not draft.paid:
         p = state.player
         need = price(state, content)
@@ -577,6 +577,18 @@ def set_intent(
         draft.paid = need
         msgs.append(f"心得 -{need}")
     return msgs
+
+
+def move_lines(state: GameState, content: Content, draft: CreateDraft) -> list[str]:
+    """成形、重骰、重讀之後寫的那一兩句：長出來的招（撞到稀有路數的後面補小章），撞到的另寫一句這一格常見的是哪一招。"""
+    move = draft_move(state, content, draft)
+    if move is None:
+        return []
+    out = [MOVE_SHOWN.format(card=tactics.card_text(move, state.player.name[:1] or tactics.MINOR_TITLE) + (f"（{moves.RARE_WORD}）" if draft.rare else ""))]
+    if draft.rare:
+        common = moves.cell(content, top_of(content, draft), moves.timing_of(draft.kind, stance_of(draft.pose)))
+        out.append(RARE_HIT.format(common=common.name))
+    return out
 
 
 def _form(state: GameState, content: Content, world: WorldStateStore, draft: CreateDraft) -> None:
@@ -601,7 +613,7 @@ def reroll(state: GameState, content: Content, world: WorldStateStore) -> list[s
     p.create_rerolls -= 1
     draft.rerolled += 1
     _form(state, content, world, draft)
-    return [REROLLED.format(intent=draft.intent, colors=colors_text(draft.colors)),
+    return [REROLLED.format(intent=draft.intent, colors=colors_text(draft.colors)), *move_lines(state, content, draft),
             f"重悟帖 -1（剩 {p.create_rerolls} 張；這一門還能重骰 {cap - draft.rerolled} 次）"]
 
 
@@ -653,10 +665,7 @@ def reread(
     draft.rerolled += 1
     _form(state, content, world, draft)
     cap = content.config.arts.create_reroll_cap
-    msgs = [REREAD_LINE.format(intent=draft.intent, colors=colors_text(draft.colors))]
-    move = draft_move(state, content, draft)
-    if move is not None:
-        msgs.append(MOVE_SHOWN.format(card=tactics.card_text(move, p.name[:1] or tactics.MINOR_TITLE)))
+    msgs = [REREAD_LINE.format(intent=draft.intent, colors=colors_text(draft.colors))] + move_lines(state, content, draft)
     return msgs + [f"重悟帖 -1（剩 {p.create_rerolls} 張；這一門還能重骰 {cap - draft.rerolled} 次）"]
 
 
@@ -783,7 +792,7 @@ def finish(
     p.creating = None
     msgs = [CREATED_LINE.format(kind=art.kind, name=art.name), art.note]
     if card is not None:
-        msgs.append(MOVE_SHOWN.format(card=tactics.card_text(card, tactics.title_of(card, art))))
+        msgs.append(MOVE_SHOWN.format(card=tactics.card_text(card, tactics.title_of(card, art)) + (f"（{moves.RARE_WORD}）" if art.move_rare else "")))
     msgs += library.store_art(state, art, grade)
     if need:
         msgs.append(f"心得 -{need}")
@@ -883,9 +892,11 @@ def view(state: GameState, content: Content, world: WorldStateStore) -> dict:
     move = draft_move(state, content, draft)
     fire = fire_of_draft(state, content, draft) if draft.colors else None
     marks = marks_of(draft.colors, fire, draft.rare) if draft.colors else []
+    common = moves.cell(content, base["draft"]["main"], base["draft"]["timing"]) if draft.rare and move is not None else None
     base["draft"].update({
-        # 成形之後長出來的招：蓋自己名號第一個字的私印，照練開之後的數算
-        "tactic": tactics.card_text(move, state.player.name[:1] or tactics.MINOR_TITLE) if move is not None else "",
+        # 成形之後長出來的招：蓋自己名號第一個字的私印，照練開之後的數算；撞到稀有路數的後面補小章
+        "tactic": (tactics.card_text(move, state.player.name[:1] or tactics.MINOR_TITLE) + (f"（{moves.RARE_WORD}）" if draft.rare else "")) if move is not None else "",
+        "rare_hit": RARE_HIT.format(common=common.name) if common is not None else "",
         "move": move.name if move is not None else "", "say": move.say if move is not None else "",
         "fire": fire, "look": look_text(marks) if draft.colors else "", "tier": tier_of(marks) if draft.colors else None, "marks": marks,
         "seal": state.player.name[:1],
