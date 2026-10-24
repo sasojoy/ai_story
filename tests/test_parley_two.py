@@ -153,6 +153,12 @@ def test_a_worried_figure_asks_first_and_the_ask_becomes_a_commission(on, game):
     assert p.parley_owed["mate"] == "spar" and "mate" not in p.parley_debts and p.parley_records["mate"].kept == 1
 
 
+def test_the_plea_block_reaches_the_opening_request(on, game):
+    with mock.patch.object(figure_life, "mood_any", return_value="焦慮"):
+        request = game.dialogue_request("act:socialize")
+    assert "【韓鐵有求於玩家】" in request.messages[-1]["content"] and "scout:lake" in request.messages[-1]["content"]
+
+
 def test_a_plea_comes_once_a_day_and_only_with_something_on_his_mind(on, game):
     plea = _turn(want="scout:lake", reward="spar")
     _, gen = _plea_open(game, plea, mood="平靜")

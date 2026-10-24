@@ -3572,6 +3572,8 @@ class Game:
         if kind == "talk":
             character = c.characters[s.player.pending_companion]
             return f"交談・{character.name}"
+        if kind == "parley" and s.player.parley_escort in c.characters:  # 開口求人第二批：帶路的路上跟他說一句
+            return f"同行・{c.characters[s.player.parley_escort].name}"
         if kind == "call":
             return "收回名帖" if arg == "back" else f"求見・{c.characters[arg].name}"
         if kind == "sense":
@@ -6009,6 +6011,7 @@ class Game:
         s.player.parley_backing.plan = hit
         name = c.characters[cid].name
         text = turn.narrative if hit else ((turn.narrative_no or "").strip() or f"{name}搖了搖頭，沒有照你說的布置。")
+        companion_agent._record_turn(s, cid, said, turn.model_copy(update={"narrative": text}))  # 談話畫面寫他這一句、下一輪記得談過打法
         return [f"你：「{said}」", text, (parley.PLAN_HIT if hit else parley.PLAN_MISS).format(name=name)]
 
     def _parley_road_option(self, j: Journey) -> Option | None:

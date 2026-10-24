@@ -345,7 +345,7 @@ def _build_messages(
     if free:
         messages.append({"role": "user", "content": free_line(character, player_action) + extra})
     else:
-        messages.append({"role": "user", "content": f"玩家的行動：「{player_action}」\n請描寫{character.name}的反應，並提供 3 個新選項。"})
+        messages.append({"role": "user", "content": f"玩家的行動：「{player_action}」\n請描寫{character.name}的反應，並提供 3 個新選項。{extra}"})
     return messages
 
 
@@ -354,7 +354,7 @@ def build_request(
     free: bool = False, extra: str = "",
 ) -> DialogueRequest:
     """階段 A：把這一輪要送給模型的 messages 組好（只讀狀態，不改任何東西）。free 是「自己說」：player_action 是玩家原話；
-    extra 接在「自己說」那一句後面（開口求人的兩份清單，parley.prompt_block）。"""
+    extra 接在玩家這一步後面：「自己說」是開口求人的兩份清單（parley.prompt_block），求見的開場是他主動開口的那一段（parley.plea_prompt）。"""
     character = content.characters[companion_id]
     return DialogueRequest(
         option_id, companion_id, player_action,
