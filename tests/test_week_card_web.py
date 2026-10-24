@@ -69,7 +69,9 @@ def test_why_opens_the_sides_table_the_next_event_and_the_howto_entry():
 
 def test_a_loner_gets_the_sides_card_first_and_a_member_does_not():
     loner = run(_main(), "return H.pageJianghu();")
-    assert 'class="card sides-first"' in loner and loner.index("sides-first") < loner.index("wk-card")
+    assert '<details class="card sides-first">' in loner and loner.index("sides-first") < loner.index("wk-card")  # 收著：不把行動列推出第一屏
+    assert "官軍在長社" in loner
+    assert '<details class="card sides-first" open>' in run(_main(), "return H.pageJianghu();", S={"sidesOpen": True})
     member = run(_main(faction="guan"), "return H.pageJianghu();")
     assert "sides-first" not in member and "wk-card" in member
 

@@ -490,7 +490,9 @@
       // 灰著的格子寫短的（FB-664、FB-670），整句原因點了才說（toast，同灰掉的俠寇鈕 opt-why）：伺服器那一行（action_notes：散人不能出陣、
       // 談滿了幾時再來、最近的練功點……）優先，沒有就是標籤括號裡那一整句。以前整句排在行動列底下（explain-1），減法季批 1 拿掉了那幾行
       const drillFull = !o.enabled && detail.startsWith(DRILL_FULL); // 操練用完了：點了打開移動（最近的練功點寫在點了說的那一句）
-      const why = (m.action_notes || {})[o.id] || (detail ? `${detail}。` : "");
+      // 交友沒有人、談滿了、名望還差幾點、操練用完了：伺服器那一行寫的是按得下去時的說明（FB-665），這幾種照標籤括號裡那一整句
+      const longWhy = !lone && (detail === SOCIAL_NO_ONE || detail.startsWith(TALKED_OUT) || FAME_GAP.test(detail) || drillFull);
+      const why = longWhy ? `${detail}。` : (m.action_notes || {})[o.id] || (detail ? `${detail}。` : "");
       // 按不下去的原因：標籤括號裡寫的是體力就是「體力不夠」，寫別的就照寫；整句太長、格子裝不下（約 60 px、不換行）時只留
       // 最後一小句（例：挑戰本人打贏之後「剛吃了敗仗，閉門不見」只寫「閉門不見」，T4）
       // 談滿了的求見（「已經談滿 3 輪，第 1 週・週日 00:00 之後再來」）：最後一小句是換日的那一刻，格子裝不下會被切成碎片，
@@ -828,12 +830,15 @@
     return `<div class="sides">${sc.cols.map((c) => `<div class="side side-${esc(c.id)}${c.mine ? " mine" : ""}"><h4>${esc(c.name)}${c.mine ? "<small>你在這一方</small>" : ""}</h4>`
       + `<dl>${SIDES_ROWS.filter(([k]) => c[k] && c[k].length).map(([k, name]) => `<dt>${name}</dt><dd>${esc(Array.isArray(c[k]) ? c[k].join("、") : c[k])}</dd>`).join("")}</dl></div>`).join("")}</div>`;
   }
-  // 還沒投靠的人：江湖頁最上面就是三方卡，加一句「先投一方」（整合設計 3.4）。收起來記在 S.sidesShut（這一頁有效）
+  // 還沒投靠的人：江湖頁最上面就是三方卡，加一句「先投一方」（整合設計 3.4）。平常收成一行（兩方投靠在哪），點了攤開三欄；
+  // 攤開整張會把行動列推出第一屏，所以預設收著。攤開記在 S.sidesOpen（輪詢重畫照它畫）
   const SIDES_FIRST = "先投一方", SIDES_FIRST_NOTE = "到那一方的地點按「投靠」。誰都不投也行，當個散人，接懸賞一樣闖得出名號。"; // 待 joy 潤
   function sidesFirstHtml(m) {
     const sc = m.sides_card;
     if (!sc || sc.joined || !shown("quest")) return "";
-    return `<details class="card sides-first" ${S.sidesShut ? "" : "open"}><summary>${SIDES_FIRST}</summary><p class="sides-note">${SIDES_FIRST_NOTE}</p>${sidesTableHtml(sc)}</details>`;
+    const where = sc.cols.filter((c) => c.where.length).map((c) => `${esc(c.name)}在${esc(c.where[0])}`).join("、");
+    return `<details class="card sides-first"${S.sidesOpen ? " open" : ""}><summary data-act="sides-first">${SIDES_FIRST}<small>${where}</small></summary>`
+      + `<p class="sides-note">${SIDES_FIRST_NOTE}</p>${sidesTableHtml(sc)}</details>`;
   }
   // 點「為什麼」「今日簽到」：原地換掉本週卡（不重畫整頁，「剛剛」不重播），焦點還給同一顆
   function wkTap(id) {

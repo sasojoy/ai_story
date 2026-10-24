@@ -5629,6 +5629,7 @@
         case "sense-send": await senseSend(); break;
         case "move-mode": await setMoveMode(el.dataset.mode); break;
         case "toggle-more": toggleMore(); break;
+        case "sides-first": S.sidesOpen = !el.parentElement.open; break; // 摺疊照瀏覽器自己開合；記下來，輪詢重畫時照舊
         case "now-more": nowToggle(el); break; // 原地展開／收起，不重畫整頁（重畫會讓「剛剛」再播一次浮現動畫）
         case "rounds-more": {
           // 同上，原地展開／收起；展開時其餘回合照 style.css 的延遲一回合一回合浮現

@@ -699,6 +699,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .side dd { margin: 0; }
 .sides-first { border-color: var(--gold); padding: 10px 14px; }
 .sides-first > summary { font: 600 16px var(--serif); color: var(--accent); cursor: pointer; }
+.sides-first > summary small { display: block; margin-top: 2px; font: 13px/1.5 var(--sans); color: var(--ink-2); }
 .sides-note { margin: 6px 0 8px; font-size: 13px; color: var(--ink-2); }
 /* 新手目標：本週卡「為什麼」裡一次三條，每條右邊「去做」 */
 .nb-goals { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }

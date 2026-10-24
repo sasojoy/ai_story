@@ -18,7 +18,7 @@ from tianxia.sqlite_world import open_world
 pytestmark = [pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過"), pytest.mark.slow]
 # 輿圖第三版第 4 批：總覽（overviewHtml）挪到卡底下（cardExtras）、地點的卡換成 placeCard、「天下」那一條（hudHtml）拿掉了，
 # 比第幾段改看版圖變化那一格（timelineHtml 的處數底下）
-NAMES = ["S", "ordersHtml", "boardPeek", "resultHtml", "timelineHtml", "cardExtras", "placeCard", "mapChrome",
+NAMES = ["S", "ordersHtml", "trendsTopHtml", "resultHtml", "timelineHtml", "cardExtras", "placeCard", "mapChrome",
          "sheetHtml", "adminAsk"]
 DRIVER = re.sub(r"wholeApp\(\[.*?\]\)", "wholeApp(" + repr(NAMES).replace("'", '"') + ")", test_prologue_web.DRIVER, count=1, flags=re.S)
 HOUR, DAY = 3600, 86400
@@ -65,7 +65,7 @@ def _render(game, monkeypatch, app=None):
       H.S.mapMode = "timeline"; H.S.mapWeek = 1;
       return {
         orders: H.ordersHtml(fb.orders, 1, null),
-        board: H.boardPeek(m, 1).label,
+        board: (/<h3>(.*?)<\/h3>/.exec(H.trendsTopHtml(m)) || [])[1],  // 本週江湖大事（減法季批 1 搬到見聞・大事・大勢最上面）
         result: H.resultHtml(fb.result),
         timeline: H.timelineHtml(base, st, 1),
         overview: H.cardExtras(base, st),
@@ -91,7 +91,7 @@ def _render(game, monkeypatch, app=None):
 def test_week7_pages_say_segments_and_today(monkeypatch):
     out = _render(_game("week7"), monkeypatch)
     assert "📜 今日軍令（1）" in out["orders"]
-    assert out["board"] == "這一段江湖大事 1 則"
+    assert out["board"] == "這一段江湖大事"
     assert "<b>第 1 段（第 1～2 天）・三十六方起義</b>" in out["result"] and "<b>第 3 段（第 5～7 天）・廣宗決戰</b>" in out["result"]
     assert "<small>第 1 段末（第 2 天）</small>" in out["timeline"] and "<h4>第 1 段（第 1～2 天）</h4>" in out["timeline"]
     assert "<h4>這一段大事</h4>" in out["overview"]
@@ -116,7 +116,7 @@ def test_the_timeline_head_keeps_the_segment_end_on_one_line():
 @pytest.mark.parametrize("profile", ["season21", "weekend"])
 def test_other_seasons_keep_the_week_words(profile, monkeypatch):
     out = _render(_game(profile), monkeypatch)
-    assert out["board"] == "本週江湖大事 1 則"
+    assert out["board"] == "本週江湖大事"
     assert "<b>第 1 週・三十六方起義</b>" in out["result"]
     assert "<small>第 1 週週末</small>" in out["timeline"] and "<h4>第 1 週</h4>" in out["timeline"]
     assert "<h4>本週大事</h4>" in out["overview"] and "易手：第 1 週 " in out["place"]
