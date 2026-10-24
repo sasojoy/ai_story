@@ -362,7 +362,12 @@ def free_text_rate(llm_rate: int, choice, state: GameState, content: Content, wo
 def stat_rate(llm_rate: int, stat: str, state: GameState, content: Content, world: WorldStateStore) -> int:
     """LLM 評的 0～100 加上本人 stat 這項屬性的修正（每比 5 多一點 +FREE_TEXT_PER_POINT），夾在 5～85。隨口應對（照事件寫的屬性）
     與找素材的「自己說」（固定悟性，第 32 項）共用。"""
-    value = team.check_value(state, content, world, PLAYER, stat)
+    return value_rate(llm_rate, team.check_value(state, content, world, PLAYER, stat))
+
+
+def value_rate(llm_rate: int, value: float) -> int:
+    """stat_rate 的算法：LLM 評的分數加上（屬性值 − 5）× FREE_TEXT_PER_POINT，夾在 5～85。隨口應對分岔的檢定（outcomes.rate，
+    屬性值是 check_stat_value：best_of 取最高）也走它。"""
     rate = round(llm_rate + (value - 5) * FREE_TEXT_PER_POINT)
     return max(FREE_TEXT_MIN_RATE, min(FREE_TEXT_MAX_RATE, rate))
 
