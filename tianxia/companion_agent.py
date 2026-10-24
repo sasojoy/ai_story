@@ -88,7 +88,9 @@ class DialogueUnavailable(Exception):
 # 輸出長度的上限：**模型會寫超過提示詞講的字數**，所以照「允許的字數 × 3 ＋ JSON 的框」給足餘裕。
 # num_predict 只是上限，沒生成就不花時間；給不夠的代價是最後一個欄位被截斷、client 重問一次
 # （2026-10-19 線上抓到：fight_llm 的 losing 兩次、letters 的 letter 一次）。
-TURN_PREDICT = 1400  # 一輪對話：敘事一段＋三個選項＋標籤＋關係備註
+# 一輪對話：敘事一段＋三個選項＋標籤＋關係備註；開口求人那一輪多兩段敘事（開條件、婉拒）與幾個短欄位，
+# 1400 是照一段抓的（2026-10-24 主機實測 narrative_no 缺 4/30），只加不減
+TURN_PREDICT = 2400
 
 
 class CompanionTurn(BaseModel):
@@ -128,6 +130,7 @@ class DialogueRequest:
     companion_id: str
     player_action: str
     messages: list[dict[str, str]]
+    required: tuple[str, ...] = ()  # 這一輪模型一定要寫出來的欄位（開口求人：parley.ASK_FIELDS 等），見 generate_turn
 
 
 @dataclass(frozen=True)
@@ -351,14 +354,14 @@ def _build_messages(
 
 def build_request(
     state: GameState, content: Content, world: WorldStateStore, companion_id: str, option_id: str, player_action: str,
-    free: bool = False, extra: str = "",
+    free: bool = False, extra: str = "", required: tuple[str, ...] = (),
 ) -> DialogueRequest:
     """階段 A：把這一輪要送給模型的 messages 組好（只讀狀態，不改任何東西）。free 是「自己說」：player_action 是玩家原話；
     extra 接在玩家這一步後面：「自己說」是開口求人的兩份清單（parley.prompt_block），求見的開場是他主動開口的那一段（parley.plea_prompt）。"""
     character = content.characters[companion_id]
     return DialogueRequest(
         option_id, companion_id, player_action,
-        _build_messages(character, state, content, world, companion_id, player_action, free, extra),
+        _build_messages(character, state, content, world, companion_id, player_action, free, extra), required,
     )
 
 
@@ -366,7 +369,7 @@ def prepare_turn(client: OllamaClient | None, request: DialogueRequest) -> Prepa
     """階段 B：在行動鎖外呼叫模型生成這一輪（約 10 秒，不能讓別的玩家一起等）。
     生成不出來時 turn=None，由階段 C 當成 DialogueUnavailable 處理，這裡不拋例外。"""
     try:
-        turn = generate_turn(client, request.messages)
+        turn = generate_turn(client, request.messages, request.required)
     except DialogueUnavailable as e:
         logger.warning(f"companion_agent 鎖外生成失敗 ({request.companion_id}): {e}，這輪對話取消")
         turn = None
@@ -424,14 +427,14 @@ def _apply_turn(
 
 def start_dialogue(
     client: OllamaClient | None, state: GameState, content: Content, world: WorldStateStore, companion_id: str,
-    rng: Random, turn: CompanionTurn | None = None, extra: str = "", decide=None,
+    rng: Random, turn: CompanionTurn | None = None, extra: str = "", decide=None, required: tuple[str, ...] = (),
 ) -> list[str]:
     """交友觸發深度對話的第一回合：用一句通用的「上前攀談」當隱含的玩家行動。
     先生成、成功了才開始對話；生成不出來（DialogueUnavailable）時不留下任何狀態。
     turn 是鎖外先生成好的一輪（見 prepare_turn）：給了就不再生成，沒給才在這裡生成。"""
     character = content.characters[companion_id]
     if turn is None:
-        turn = _generate(client, character, state, content, world, companion_id, GENERIC_OPENING, extra=extra)
+        turn = _generate(client, character, state, content, world, companion_id, GENERIC_OPENING, extra=extra, required=required)
     if decide is not None:  # 開口求人第二批：他主動開口求你（Game._parley_plea 驗、記下來）
         turn = decide(turn)
     p = state.player
@@ -470,7 +473,7 @@ def continue_dialogue(
 
 def say_dialogue(
     client: OllamaClient | None, state: GameState, content: Content, world: WorldStateStore, companion_id: str,
-    said: str, turn: CompanionTurn | None = None, extra: str = "", decide=None,
+    said: str, turn: CompanionTurn | None = None, extra: str = "", decide=None, required: tuple[str, ...] = (),
 ) -> list[str]:
     """「自己說」：玩家不挑上一輪的選項，自己打一句話（1～20 字，呼叫端驗過、轉過繁體）。模型把那句話歸類（player_tag），
     好感度照那一類查表（清單外的當尋常寒暄）；之後跟 continue_dialogue 一樣記交友 tag、記對話、給本命武學、整理記憶。
@@ -478,7 +481,7 @@ def say_dialogue(
     character = content.characters[companion_id]
     if turn is None:
         messages = _build_messages(character, state, content, world, companion_id, said, free=True, extra=extra)
-        turn = generate_turn(client, messages)
+        turn = generate_turn(client, messages, required)
     if decide is not None:  # 開口求人：引擎擲完骰、換上那一版回話（Game._parley_decide）
         turn = decide(turn)
     tag = free_tag(turn)
@@ -582,16 +585,19 @@ def leave_dialogue(state: GameState) -> list[str]:
 
 def _generate(
     client: OllamaClient | None, character: CharacterDef, state: GameState, content: Content, world: WorldStateStore,
-    companion_id: str, player_action: str, extra: str = "",
+    companion_id: str, player_action: str, extra: str = "", required: tuple[str, ...] = (),
 ) -> CompanionTurn:
     """組 messages 再生成一輪（鎖內的老路徑）；鎖外的路徑是 build_request ＋ prepare_turn，兩邊共用 generate_turn。"""
     messages = _build_messages(character, state, content, world, companion_id, player_action, extra=extra)
-    return generate_turn(client, messages)
+    return generate_turn(client, messages, required)
 
 
-def generate_turn(client: OllamaClient | None, messages: list[dict[str, str]]) -> CompanionTurn:
+def generate_turn(client: OllamaClient | None, messages: list[dict[str, str]], required: tuple[str, ...] = ()) -> CompanionTurn:
     """呼叫模型生成一輪對話並轉成繁體；任何失敗（沒有模型、連不上、解析失敗）都丟 DialogueUnavailable。
-    只吃 messages、不碰遊戲狀態，所以可以放心在行動鎖外呼叫。"""
+    只吃 messages、不碰遊戲狀態，所以可以放心在行動鎖外呼叫。
+    required 是這一輪多要模型一定寫出來的欄位（開口求人的 ask、willing……）：寫進送出去的 schema 的 required，
+    空字串照樣算答了（ask 空字串＝只是閒聊）。CompanionTurn 這些欄位都有預設值 None，不寫進 schema 的話
+    結構化輸出允許模型整個略過（2026-10-24 主機實測：ask 空白 14/30，連 condition 都填了就是不填 ask）。"""
     if client is None:
         raise DialogueUnavailable("沒有可用的模型")
     try:
@@ -601,6 +607,7 @@ def generate_turn(client: OllamaClient | None, messages: list[dict[str, str]]) -
             # 不寫進 required 的話 schema 允許模型省略，_ensure_required_present 也不會判定缺欄位，
             # 於是「只回 options」的那一次靜靜通過，對話照開、人物一個字都沒說。
             required_fields=["narrative", "options"], require_in_schema=True,
+            **({"schema_required": list(required)} if required else {}),  # 沒有就不傳：測試的假 client 不一定認得這個參數
         )
         if not turn.narrative.strip() or not turn.options:  # 不靠 client 自己檢查（測試的假 client、別的實作）：沒話可說就是這一輪生成失敗
             raise ValueError("模型沒寫人物的話或選項")

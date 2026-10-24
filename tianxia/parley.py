@@ -308,6 +308,14 @@ def decide(
     return Decision(ask, None, raw, chance, "no")
 
 
+# 這三種輪次模型一定要寫出來的欄位（寫進送出去的 schema 的 required，空字串照樣算答了；companion_agent.generate_turn）。
+# CompanionTurn 的這些欄位都有預設值 None，不寫進 schema 的話模型可以整個略過（2026-10-24 主機實測：ask 空白 14/30、
+# 商量打法 willing 沒填 4/30）。只有那一輪帶了對應的提示才要，平常的閒聊不要
+ASK_FIELDS = ("ask", "willing", "condition", "narrative_terms", "narrative_no")
+PLAN_FIELDS = ("willing", "narrative_no")
+PLEA_FIELDS = ("want", "reward")
+
+
 def prompt_block(content: Content, cid: str, asks: list[Item], conditions: list[Item], affinity: int, hostile: bool) -> str:
     """接在「自己說」那一輪 user 訊息後面的一段：兩份清單、怎麼挑、多填哪幾個欄位。情誼只給一個詞，不給數字。"""
     name = _name(content, cid)
@@ -316,16 +324,19 @@ def prompt_block(content: Content, cid: str, asks: list[Item], conditions: list[
     cond_lines = "\n".join(f"- {c.id}：{c.detail}" for c in conditions)
     side = "；你們分屬敵對的兩方，你對他天生戒備" if hostile else ""
     return (
-        f"\n【開口求人】玩家這句話如果是在求{name}做一件事，從下面「{name}此刻做得到的事」挑最貼近的一件填 ask；"
-        f"只是閒聊、寒暄、請教道理，ask 留空字串。求的事不在清單上，ask 填 \"{REFUSE}\"。\n"
+        f"\n【開口求人】先判斷玩家這句話是不是在求{name}做一件事，結果一定要填在 ask：是在求事，就從下面「{name}此刻做得到的事」"
+        f"挑最貼近的一件，把它的 id 原樣填進 ask（例：要他帶路去某地，就填那個地方的 escort id）；"
+        f"只是閒聊、寒暄、請教道理，ask 填空字串；求的事不在清單上，ask 填 \"{REFUSE}\"。"
+        f"ask 只管玩家求的是什麼，跟{name}要不要開條件無關：就算他要先開條件，ask 也照樣填玩家求的那件事。\n"
         f"【{name}此刻做得到的事】\n{ask_lines}\n"
         f"【{name}可以開的條件】\n{cond_lines}\n"
         f"【你們的情誼】{word}{side}。\n"
         f"willing 填 0～100：照{name}的性格、此刻的處境與心事、你們的情誼、玩家說話的方式，他「不要任何條件就答應」的意願。"
-        "condition 填上面條件清單的一個 id，或留空字串：他想先要玩家做點什麼才肯答應，就開條件。份量大的事、情誼淺的人，多半要開條件。\n"
+        f"condition 填上面「{name}可以開的條件」的一個 id，或空字串：他想先要玩家做點什麼才肯答應，就開條件。份量大的事、情誼淺的人，多半要開條件。"
+        f"condition 只能是條件清單上的 id 或空字串，不能填 \"{REFUSE}\"（婉拒是系統照 willing 擲骰決定的）。\n"
         "narrative 寫他答應時的反應；narrative_terms 寫他開條件時說的話（要說出條件）；narrative_no 寫他婉拒時的反應。"
         "三段都用第三人稱、兩三句；只寫他的反應，不寫結果的數字。系統照你給的意願擲骰，選一段給玩家看。\n"
-        "JSON 多這幾個欄位：\"ask\": \"...\", \"willing\": 0, \"condition\": \"...\", \"narrative_terms\": \"...\", \"narrative_no\": \"...\""
+        "JSON 一定要多這五個欄位，一個都不能省：\"ask\": \"...\", \"willing\": 0, \"condition\": \"...\", \"narrative_terms\": \"...\", \"narrative_no\": \"...\""
     )
 
 
@@ -549,7 +560,7 @@ def plea_prompt(content: Content, cid: str, mood: str, wanted: list[Item], rewar
         f"narrative 就寫他開口請託的話（說出要玩家做什麼、事成之後怎麼回報），不寫數字。他不想求人，want 留空字串，照平常開場。\n"
         f"【{name}想請玩家做的事】\n{want_lines}\n"
         f"【{name}可以回報的事】\n{reward_lines}\n"
-        "JSON 多這兩個欄位：\"want\": \"...\", \"reward\": \"...\""
+        "JSON 一定要多這兩個欄位（不求人就都填空字串）：\"want\": \"...\", \"reward\": \"...\""
     )
 
 
@@ -575,7 +586,7 @@ def plan_prompt(content: Content, cid: str, region: str | None) -> str:
         f"照{name}的性格、用兵的眼光與這一帶的情勢，判斷這個打法成功的機會，填 willing（0～100）。"
         f"narrative 寫打法成了、{name}怎麼配合（兩三句）；narrative_no 寫打法不成、{name}怎麼否決或怎麼落空（兩三句）。"
         "ask 留空字串。系統照你給的機會擲骰，選一段給玩家看。"
-        "JSON 多這幾個欄位：\"willing\": 0, \"narrative_no\": \"...\""
+        "JSON 一定要多這兩個欄位：\"willing\": 0, \"narrative_no\": \"...\""
     )
 
 

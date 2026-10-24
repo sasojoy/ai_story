@@ -413,13 +413,15 @@ class OllamaClient:
     def chat_structured(
         self, messages: list[dict[str, str]], response_model: Type[T], temperature: float = 0.8,
         schema_fields: list[str] | None = None, required_fields: list[str] | None = None,
-        num_predict: int = 1024, require_in_schema: bool = False,
+        num_predict: int = 1024, require_in_schema: bool = False, schema_required: list[str] | None = None,
     ) -> T:
         schema = response_model.model_json_schema()
         if schema_fields:
             schema = _trim_schema_properties(schema, schema_fields)
         if require_in_schema:  # 要語法強制必填的呼叫自己開（opt-in；預設不動，見 _require_in_schema 的說明）
             schema = _require_in_schema(schema, required_fields or [])
+        if schema_required:  # 只要模型一定寫出這個鍵、空字串也算答了（開口求人的 ask「只是閒聊」就是空字串）：只進 schema，不進缺欄位的檢查
+            schema = _require_in_schema(schema, schema_required)
         payload = self._build_payload(messages, temperature, num_predict=num_predict, json_schema=schema)
         url = f"{self.base_url}/api/chat"
         required = required_fields or []
