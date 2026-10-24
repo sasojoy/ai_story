@@ -25,7 +25,9 @@ def _start_server(monkeypatch, capsys, profile: str) -> str:
 
     monkeypatch.setattr(uvicorn, "run", lambda *args, **kwargs: None)
     monkeypatch.setattr(server, "PROFILE", profile)
-    monkeypatch.setattr(server, "CONTENT", real_content(profile))
+    content = real_content(profile)
+    monkeypatch.setattr(content.config, "world_tick_seconds", 0)  # 只看啟動印的字，不開排程執行緒（正式內容開著）
+    monkeypatch.setattr(server, "CONTENT", content)
     server.main([])
     return capsys.readouterr().out
 

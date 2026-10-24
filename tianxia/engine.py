@@ -989,7 +989,7 @@ class Game:
         self._deliver_conquest()  # 領地爭奪：翻地的分紅、守城功（下線時易手的回來補）
         self._deliver_arena()  # 擂台：被挑了的戰報、季末前三名的獎勵；季收了還沒打完的那一場作廢
         mail = parley.lapse(self.state, self.content)  # 開口求人第二批：欠人物的事過了期限是食言（附的委託先作罷，書信不再補一句）
-        mail += letters.deliver(self.state, self.content)  # 書信（大勢人物擴充第二批）：人物來信、過期的委託作罷
+        mail += letters.deliver(self.state, self.content, now)  # 書信（大勢人物擴充第二批）：人物來信、過期的委託作罷
         if mail:
             self._write(letters.TITLE, mail)
         cheered = feasts.deliver(self.state, self.content)  # 宴客（第三批）：散席時我那一句是席間最佳，補名望
@@ -4001,6 +4001,23 @@ class Game:
             self._write(letters.TITLE, msgs)
         return msgs
 
+    def morning_mail(self, now: float) -> bool:
+        """減法季「09:00 來信」（整合設計第十章，批 9）：伺服器的看守替開了推播的人送今天的信，不必等他上線（送了手機才跳得出
+        「某某來信」）。只做同步裡書信那一格（letters.deliver），不補算體力、不算上線、不動「此地還有」；他下次同步照常，同一個
+        送信日不會再送第二封。角色還停在上一季（換季後還沒上線過）、或這一季沒開 morning_mail 時什麼都不做。
+        呼叫端拿著行動鎖、事後存角色；送了一封回 True。"""
+        self.now = now
+        if self.state.player.season_number < self.world.get_season_number():
+            return False
+        self.state.world = self.world.get_season()
+        if letters.mail_day(self.content, self.state.world, now) is None:
+            return False
+        seq = self.state.player.letter_seq
+        mail = letters.deliver(self.state, self.content, now)
+        if mail:
+            self._write(letters.TITLE, mail)
+        return self.state.player.letter_seq != seq
+
     def letter_request(self) -> letters.LetterNote | None:
         """還等著模型照他的口氣重寫的那一封（server 鎖外寫；A 段，只讀）。"""
         return letters.request(self.state, self.content)
@@ -6010,8 +6027,10 @@ class Game:
                 turn = companion_agent.generate_turn(self._quick_client(), request.messages, request.required)
         except companion_agent.DialogueUnavailable:
             return [f"{c.characters[cid].name}沉吟不語。"]
+        if turn.willing is None:  # 模型沒評（schema 已經不准，以防萬一）：當這一輪沒談成、打法照舊可以再商量，不默默夾到 plan_floor
+            return [f"{c.characters[cid].name}沉吟不語。"]
         cfg = c.config.parley
-        chance = max(cfg.plan_floor, min(cfg.plan_cap, int(turn.willing or 0)))
+        chance = max(cfg.plan_floor, min(cfg.plan_cap, int(turn.willing)))
         hit = parley.plan_roll(s, cid) <= chance
         s.player.parley_backing.plan = hit
         name = c.characters[cid].name

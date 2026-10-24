@@ -1,9 +1,10 @@
 """小太極（煉製頁縮起來的開爐鈕）只畫圓：鈕與太極的 svg 都不能有長方形的光暈（Joy 2026-10-18 iPhone 上的方底）。"""
 import re
 from pathlib import Path
+import webharness
 
 CSS = Path(__file__).resolve().parents[1].joinpath("web", "style.css").read_text(encoding="utf-8")
-JS = Path(__file__).resolve().parents[1].joinpath("web", "app.js").read_text(encoding="utf-8")
+JS = webharness.app_source()
 
 
 def rules():

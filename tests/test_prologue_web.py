@@ -649,7 +649,7 @@ def test_step_five_points_at_a_row_under_the_arts_library_title(hut):
 
 def test_the_click_handlers_for_the_two_new_box_buttons_are_wired():
     """「下一段 ▸」與「在下面 ↓」是事件代理的 data-act：少接一個，鈕就按不動。"""
-    source = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    source = webharness.app_source()
     assert 'case "guide-next": nextGuidePage(S.main.guide); renderPage(); break;' in source
     assert 'case "guide-below": scrollToGuideTarget(); break;' in source
 

@@ -2,6 +2,7 @@ import ast
 import contextlib
 import hashlib
 import io
+import json
 import random
 import re
 import sqlite3
@@ -44,6 +45,13 @@ def save_dir(tmp_path):
 def season_already_open(monkeypatch):
     """server.CONTENT 是正式內容（預設要管理者開季）；這裡的測試要的是一季已經開打的畫面。"""
     monkeypatch.setattr(server.CONTENT.config, "auto_open_first_season", True)
+
+
+@pytest.fixture(autouse=True)
+def scheduler_off(monkeypatch):
+    """server.CONTENT 是正式內容，伺服器排程開著（減法季批 0 起 world_tick_seconds 10）：這裡的測試叫 server.main 時不要真的開執行緒；
+    測排程本身的測試自己再打開。"""
+    monkeypatch.setattr(server.CONTENT.config, "world_tick_seconds", 0)
 
 
 def _stop_scheduler() -> None:
@@ -756,6 +764,39 @@ def test_an_option_that_is_not_on_the_menu_does_nothing(client):
     assert out["main"]["status"]["stamina"] == before
 
 
+def _play_rows():
+    with database.open_database().snapshot() as conn:
+        days = [dict(r) for r in conn.execute("SELECT owner, season, day, buttons FROM action_counts")]
+        firsts = [dict(r) for r in conn.execute("SELECT owner, kind FROM action_firsts")]
+    return days, firsts
+
+
+def test_the_play_log_counts_what_a_real_player_pressed_and_nothing_else(client, monkeypatch):
+    """真人量表（減法季批 0）：自己的請求記「這一天上線了」，做成的選項記一次（照 playlog.button_of 歸類），
+    不在選單上的不記；交友、求見、對話記第一次跟人物說話。畫面上一個字都沒有（不露給玩家）。"""
+    monkeypatch.setattr(server.CONTENT.config.explore_modes, "enabled", False)  # 舊探索當手段（同上一個測試）
+    _player(client)
+    out = client.post("/api/choose", json={"id": "act:explore"}).json()
+    client.post("/api/choose", json={"id": "act:nonsense"})
+    days, firsts = _play_rows()
+    assert [(d["owner"], json.loads(d["buttons"])) for d in days] == [("沈青衫", {"act:explore": 1})]
+    assert days[0]["season"] >= 1 and firsts == []
+    assert not {"action_counts", "buttons", "figure_talk"} & set(out["main"])
+    monkeypatch.setattr(server, "choose", lambda game, option_id: ["（你走上前去。）"])
+    client.post("/api/choose", json={"id": "talk:2"})
+    days, firsts = _play_rows()
+    assert json.loads(days[0]["buttons"]) == {"act:explore": 1, "talk": 1}
+    assert firsts == [{"owner": "沈青衫", "kind": "figure_talk"}]
+
+
+def test_the_play_log_skips_characters_marked_as_bots(game):
+    """假人不經過伺服器；萬一經過了（測試、管理工具），量表也不記。"""
+    game.state.player.bot = BotProfile(personality="普通", seed=1, faction="guan", season_number=1)
+    server._play_seen(game)
+    server._play_did(game, "act:train", "free_text")
+    assert _play_rows() == ([], [])
+
+
 def test_seclude_and_anonymous(client):
     _player(client)
     out = client.post("/api/do/anonymous", json={"value": True}).json()
@@ -808,7 +849,7 @@ def test_self_creating_an_art_is_gone_for_good(client):
     assert (member.neigong_id, member.wugong_id) == ("jichu_tuna", "jichu_quanjiao")
     options = client.get("/api/main").json()["options"]
     assert not any("create" in o["id"] for o in options)
-    assert "create-skill" not in (server.ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    assert "create-skill" not in webharness.app_source()
 
 
 def test_roster_pick_and_team_toggle_ignore_people_you_do_not_have(client):
@@ -904,7 +945,7 @@ def test_a_refused_allocation_through_the_server_only_says_why(client):
 
 def test_the_allocate_buttons_call_what_the_server_has():
     """網頁沒有測試框架：配點鈕（web/app.js）叫的動作與送的欄位要在伺服器的 MAIN_ACTIONS 與狀態資料裡。"""
-    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    js = webharness.app_source()
     assert 'doMain("allocate", { stat:' in js
     assert "allocate" in server.MAIN_ACTIONS
     data = Game.new(server.CONTENT, "測試").status_data()
@@ -915,7 +956,7 @@ def test_the_allocate_buttons_call_what_the_server_has():
 def test_the_points_hint_stays_out_of_the_ellipsized_name_span():
     """收起來的狀態列，名號那一行是單行、超出就「…」：「可配 N 點」寫在那個 <span> 裡（尤其是最後面）會先被長長的「門派・陣營」
     擠掉，玩家看不到有點可配（＋鈕要展開才有）。所以它自己一個不縮的元素（flex: none），放在那個 <span> 外面。"""
-    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    js = webharness.app_source()
     css = (server.WEB / "style.css").read_text(encoding="utf-8")
     start = js.index('<div class="who-name">')
     line = js[start:js.index("\n", start)]
@@ -942,7 +983,7 @@ def _who_name_helper(js: str) -> tuple[str, str]:
 def test_the_expanded_title_is_one_nowrap_span_per_segment():
     """FB-071：展開時頭銜（門派・陣營・頭銜、匿名、第 N 級）是第二行；每一段各自一個不折行的 <span>，「地方豪強」不會從中間折斷，
     只在段與段之間換行。段以「・」切開、再用「・」接回去。"""
-    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    js = webharness.app_source()
     css = (server.WEB / "style.css").read_text(encoding="utf-8")
     _, expanded = _who_name_helper(js)
     assert 's.affiliation.split("・")' in expanded and '<span class="who-seg">' in expanded and '.join("・")' in expanded
@@ -956,7 +997,7 @@ def test_the_title_segment_class_is_not_shared_with_any_site_wide_style():
     """FB-071 的瀏覽器驗收抓到：頭銜的每一段原本叫 seg，而 .seg 早就是全站的分段選單（display: flex、下方留 12px），
     每一段都變成整列、一段一行。段落的 class 要獨一無二：style.css 裡凡是提到它的規則都掛在 .who-title 底下，
     沒有任何一條規則是單獨選它的名字（之後加全站樣式也不會撞上）；而且別的地方不會用這個 class。"""
-    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    js = webharness.app_source()
     css = re.sub(r"/\*.*?\*/", "", (server.WEB / "style.css").read_text(encoding="utf-8"), flags=re.S)
     _, expanded = _who_name_helper(js)
     seg_class = re.search(r'<span class="([\w-]+)">\$\{esc\(t\)\}</span>', expanded).group(1)
@@ -970,7 +1011,7 @@ def test_the_title_segment_class_is_not_shared_with_any_site_wide_style():
 def test_the_expanded_name_line_is_the_name_alone_and_the_points_label_sits_above_the_buttons():
     """FB-071：展開時第一行只有名號與 ▴，「可配 N 點」不再擠在名號那一行，改放在＋鈕上面當那一排的標題（跟＋鈕同一個條件：
     有點才出現）。收起來的那一行照舊帶著 class="pts"（計畫二 T5：放在會「…」的 <span> 外面，不會被擠掉）。"""
-    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    js = webharness.app_source()
     collapsed, expanded = _who_name_helper(js)
     assert 'class="pts"' in collapsed and "可配" in collapsed and "▾" in collapsed
     assert "▴" in expanded and "s.name" in expanded
@@ -986,7 +1027,7 @@ def test_the_expanded_name_line_is_the_name_alone_and_the_points_label_sits_abov
 def test_the_five_stat_buttons_share_one_row_and_keep_their_labels_on_one_line():
     """FB-071：五顆＋鈕要在 375 與 360 寬的一排裡放得下（排寬 343／328，五顆加四個 4px 的縫，每顆約 65／62px，
     標籤「＋博聞」是三個全形字 14px ≈ 42px）。只改這一排（.alloc），不動全站的 .btn。"""
-    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    js = webharness.app_source()
     css = (server.WEB / "style.css").read_text(encoding="utf-8")
     assert 'class="row alloc"' in js
     row = re.search(r"\.more-stats \.alloc \{([^}]*)\}", css)
@@ -1008,7 +1049,7 @@ def test_no_stale_four_stat_wording_is_left_around_the_status_bar():
 def test_the_allocate_buttons_say_what_each_stat_does():
     """M2：＋鈕底下那一行（五項各管什麼）跟＋鈕畫在同一個條件裡——有點可配才出現；用的是伺服器送的 stat_uses 與
     stat_uses_note，網頁不寫死屬性的用途。"""
-    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    js = webharness.app_source()
     start = js.index('data-act="allocate"')
     line = js[js.rindex("\n", 0, start):js.index("\n", start)]
     assert line.strip().startswith("${s.stat_points ?") and "statUsesHtml(s)" in line
@@ -1024,7 +1065,7 @@ def test_the_news_dot_lights_only_for_a_new_fight_card():
     """配點之後「剛剛」照舊是升級那一場的卡片（計畫二最終審查 M1）：看過那一場的戰報再配點，見聞的紅點不能再亮一次——
     比的是卡片是不是新的一場（card_id），不是「有沒有卡片」。比在 setMain：動作回來的與輪詢拿到的都走它，
     決戰收場的卡片常常是輪詢（sync）補送的，那一場也要亮。"""
-    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    js = webharness.app_source()
     set_main = js[js.index("function setMain"):js.index("// ── 整體 ──")]
     assert "main.card_id" in set_main and "S.unseen = true" in set_main
     apply_main = js[js.index("function applyMain"):js.index("async function choose")]
@@ -1039,7 +1080,7 @@ def test_the_news_dot_lights_only_for_a_new_fight_card():
 def test_the_practice_and_furnace_pages_only_read_and_call_what_the_server_has(game):
     """Task 12：修練頁、煉製頁（web/app.js）讀的欄位都要在 menxia_view 裡、叫的動作都要在 MENXIA_ACTIONS 裡；
     舊煉製的端點、欄位、說法不再出現。網頁沒有測試框架，這條擋住「改了伺服器忘了改網頁」。"""
-    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    js = webharness.app_source()
     pages = js[js.index("function pagePractice"):js.index("// ── 輿圖 ──")]
     keys = set(server.look(game, server.menxia_view))
     assert {"owned_arts", "insights", "holdings", "naming", "slot_cards", "forge_line", "bag"} <= keys
@@ -1062,7 +1103,7 @@ def _js_function(js: str, header: str) -> str:
 
 def test_the_furnace_page_sends_only_insights():
     """爐裡只合意境（Joy 2026-10-21）：網頁沒有測試框架，這裡擋住「伺服器只收意境、網頁卻還送武學」。"""
-    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    js = webharness.app_source()
     body = _js_function(js, "function forgeBody(")
     assert "insights:" in body and "other_art" not in body and "art:" not in body.replace("insights:", "")
     ready = _js_function(js, "function forgeReady(")
@@ -1075,7 +1116,7 @@ def test_the_furnace_page_sends_only_insights():
 def test_the_new_map_has_no_legend_box_and_the_chips_carry_the_colors():
     """輿圖升級（設計第一節）：圖例拿掉；地圖框是夾在狀態列與分頁列之間的整頁一層，寬 900 以上抽屜變右欄。輿圖第三版第 4 批起濾鏡那一排
     也拿掉了（輿圖簡化設計 5.4：誰的領地看區圖的印章框，其他收進卡）。網頁的版面與樣式對得上，就靠這一條。"""
-    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    js = webharness.app_source()
     css = re.sub(r"/\*.*?\*/", "", (server.WEB / "style.css").read_text(encoding="utf-8"), flags=re.S)
     assert "function legendHtml(" not in js and ".map-legend" not in css and "legend-toggle" not in js
     # 輿圖第三版第 4 批（輿圖簡化設計 5.4）：濾鏡那一排、右上角那一欄（我在哪、放大、縮小）都拿掉了，兩張圖都是固定取景；
@@ -1090,7 +1131,7 @@ def test_the_new_map_has_no_legend_box_and_the_chips_carry_the_colors():
 def test_the_pages_trim_the_furnace_whenever_the_menxia_data_is_replaced():
     """修練頁熔掉爐裡放著的東西、再回煉製頁：S.forgeSel 還留著那個 id，爐子看起來是空的、開爐卻亮著（forgeReady 照 id 數）。
     只有輪詢的 refreshPage 會補，所以每個換掉 S.menxia 的地方都要自己修剪（mx、loadMenxia）。網頁沒有測試框架，這裡擋住漏改。"""
-    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    js = webharness.app_source()
     for header in ("async function mx(", "async function loadMenxia("):
         body = _js_function(js, header)
         assert "S.menxia = " in body and "trimPot()" in body, header
@@ -1100,7 +1141,7 @@ def test_the_pages_trim_the_furnace_whenever_the_menxia_data_is_replaced():
 
 
 def test_a_refused_name_keeps_what_the_player_typed_and_the_pill_tick_does_not_outlive_the_tab():
-    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    js = webharness.app_source()
     submit = js[js.index('form.id === "name-art"'):]
     submit = submit[:submit.index('form.id === "seclude"')]
     assert 'await mx("name"' in submit and "again.value = data.name" in submit  # 被拒（表單還在）把字放回去
@@ -1119,7 +1160,7 @@ def test_the_fight_card_shows_the_first_round_until_the_player_opens_the_rest():
         our_power=50, difficulty=10, rounds=["第1回合　甲。", "第2回合　乙。", "第3回合　丙。"],
     )
     html = server.md(battlelog.card_text(record))
-    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    js = webharness.app_source()
     css = (server.WEB / "style.css").read_text(encoding="utf-8")
     mark = re.search(r'const ROUNDS_MARK = "([^"]*)";', js)
     assert mark is not None and mark.group(1).replace("\\n", "\n") in html and html.count("<ul>") == 1
@@ -1176,7 +1217,7 @@ def test_the_report_link_sits_in_the_process_head_row_of_the_fight_card():
     from tianxia import battlelog
     from tianxia.state import BattleRecord, Fighter
 
-    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    js = webharness.app_source()
     css = (server.WEB / "style.css").read_text(encoding="utf-8")
     for narration in ("", "波才刀勢沉猛，你左支右絀。"):
         record = BattleRecord(
@@ -1211,7 +1252,7 @@ def test_fight_card_puts_the_report_link_in_the_head_row_or_ends_the_last_paragr
     from tianxia import battlelog
     from tianxia.state import BattleRecord, Fighter
 
-    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    js = webharness.app_source()
     base = dict(
         id=7, time=0, location="湖邊", kind="event", opponent="水寇", ours=[Fighter(name="沈浪", level=1)], tier="大勝",
         our_power=50, difficulty=10, notes=["你贏了。"], changes=["銀兩 +5"],
@@ -1254,7 +1295,7 @@ def test_the_folded_first_round_is_two_lines_or_a_numbers_only_line():
     網頁沒有測試框架：樣式與量法用標記擋住，數字行怎麼拼在 node 裡真的跑（沒裝 node 就略過那一段）。"""
     import json
 
-    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    js = webharness.app_source()
     css = (server.WEB / "style.css").read_text(encoding="utf-8")
     fit = _js_function(js, "function fitFirstRound(")
     assert 'querySelector(".battle-card ul.rounds")' in fit and "first.offsetHeight <= 2.5 * lineHeight" in fit  # 兩行加幾 px（拉丁數字混漢字量出來會高一兩 px）不算三行
@@ -1296,7 +1337,7 @@ def test_the_numbers_only_line_keeps_every_number_the_round_wrote(content):
 
     from tianxia import battlelog, rounds
 
-    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    js = webharness.app_source()
     foe = rounds.Foe(name="山賊", attribute="剛", agility=9.0)
     lines = []
     for ours, theirs in ((0, 0), (0, 24), (18, 0), (7, None), (0, None)):  # 沒打中的兩種寫法，play 很少剛好擲出 0，手排幾回合
@@ -1327,7 +1368,7 @@ def test_the_fight_card_spacing_is_tight_and_only_for_the_fight_card():
     （.battle-card 只用在它身上，別張卡片與狀態列、行動列一個字不動），字級不縮到比 .order-text 的 13px 還小。
     行高第二輪（PM 2026-10-05）：內文與過程、補充一律 1.45，標題以外沒有低於 1.4 的。"""
     css = (server.WEB / "style.css").read_text(encoding="utf-8")
-    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    js = webharness.app_source()
     assert re.findall(r'class="[^"]*battle-card[^"]*"', js) == ['class="card battle-card"']  # 只有「剛剛」那張戰鬥卡片用這個 class
 
     def rule(selector: str) -> str:
@@ -1362,7 +1403,7 @@ def test_the_big_fight_account_is_folded_behind_the_same_button():
         tier="落敗", our_power=50, difficulty=150, rounds=["第1回合　甲。"], narration="波才刀勢沉猛，你左支右絀。" * 8,
     )
     html = server.md(battlelog.card_text(record))
-    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    js = webharness.app_source()
     css = (server.WEB / "style.css").read_text(encoding="utf-8")
     mark = re.search(r'const TALE_MARK = "([^"]*)";', js)
     assert mark is not None and mark.group(1).replace("\\n", "\n") in html and "<ul>" not in html
@@ -1383,7 +1424,7 @@ def test_a_hostile_big_fight_account_renders_as_one_plain_paragraph_on_the_card(
     from tianxia import battlelog, fight_llm
     from tianxia.state import BattleRecord, Fighter
 
-    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    js = webharness.app_source()
     mark = re.search(r'const TALE_MARK = "([^"]*)";', js).group(1).replace("\\n", "\n")
     hostile = [
         "```\n你一拳打出，對方連退三步。", "![圖](http://example.com/a.png)你出手如電。", "> 你退了一步，咬牙再上。",
@@ -1410,7 +1451,7 @@ def test_a_trait_line_can_lead_the_folded_process_and_the_page_still_recognizes_
     from tianxia import battlelog
     from tianxia.state import BattleRecord, Fighter
 
-    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    js = webharness.app_source()
     rounds_mark = re.search(r'const ROUNDS_MARK = "([^"]*)";', js).group(1).replace("\\n", "\n")
     tale_mark = re.search(r'const TALE_MARK = "([^"]*)";', js).group(1).replace("\\n", "\n")
     base = dict(
@@ -1433,7 +1474,7 @@ def test_a_trait_line_never_looks_like_a_round_to_the_numbers_only_fold():
     S1 的句子本來就不寫數字（content.check_traits 擋），所以也不會被當成「還剩數字」的回合。"""
     import json
 
-    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    js = webharness.app_source()
     lines = []
     for name, pool in server.CONTENT.trait_lines.items():  # 伺服器載的是正式內容
         for text in pool:
@@ -1486,7 +1527,7 @@ console.log(JSON.stringify(out));
 def _fold_view(cards: dict[str, str]) -> dict:
     import json
 
-    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    js = webharness.app_source()
     return json.loads(_app_functions_in_node(js, FOLD_VIEW_SCRIPT.replace("__CARDS__", json.dumps(cards, ensure_ascii=False))))
 
 
@@ -1545,7 +1586,7 @@ def test_the_trait_lead_mark_is_the_one_the_engine_writes():
     """網頁認功效句靠〔這個開頭（TRAIT_LEAD）：引擎的 battlelog.trait_line 一律以它開頭、回合句型一律不是。"""
     from tianxia import battlelog
 
-    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    js = webharness.app_source()
     lead = re.search(r'const TRAIT_LEAD = "([^"]*)";', js).group(1)
     assert lead == battlelog.TRAIT_LEAD == "〔"
     for name, pool in server.CONTENT.trait_lines.items():
@@ -1561,7 +1602,7 @@ def test_the_folded_fight_card_css_hides_the_trait_lines_and_keeps_one_round():
     大場面那一段話收著時藏 .trait 的 span；fitFirstRound 量的是第一個非功效的 li（不是 firstElementChild）；
     展開、戰報頁不受影響（規則都掛在 :not(.open) 與 .battle-card 底下，戰報頁沒有這張卡片）。"""
     css = (server.WEB / "style.css").read_text(encoding="utf-8")
-    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    js = webharness.app_source()
     hide_trait = re.search(r"(?m)^\.battle-card ul\.rounds:not\(\.open\) > li\.trait \{([^}]*)\}", css)
     one_round = re.search(r"(?m)^\.battle-card ul\.rounds:not\(\.open\) > li:not\(\.trait\) ~ li:not\(\.trait\) \{([^}]*)\}", css)
     tale = re.search(r"(?m)^\.battle-card p\.rounds-tale:not\(\.open\) \.trait \{([^}]*)\}", css)
@@ -2382,7 +2423,7 @@ def test_a_second_tab_that_spends_the_xinde_while_naming_leaves_the_first_forge_
 def test_the_furnace_button_stays_disabled_with_the_wait_line_while_naming():
     """企劃者 2026-10-05：等取名的時候「開爐」鈕關著、寫著爐火正旺，同一個分頁按不了第二下（busy）；
     重新整理之後頁面重畫、按鈕照常能按——伺服器不留任何等待中的狀態，重複扣由 C 段的重驗擋（見上面幾條）。"""
-    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    js = webharness.app_source()
     body = _js_function(js, "async function forge(")
     assert "await busy(" in body and "btn.disabled = true" in body and 'lab.textContent = "爐火正旺…"' in body  # 寫在小太極底下那兩個字上（煉製頁太極爐合一，2026-10-17）
     assert "S.forgeResult = { html: esc(FORGE_WAIT) };" in body and "要等它取名，請稍候" in js  # 等的時候寫的字（W10：不誇大成「一分鐘」），寫在開爐旁邊
@@ -2392,7 +2433,7 @@ def test_the_furnace_button_stays_disabled_with_the_wait_line_while_naming():
 def test_the_page_never_polls_twice_at_once():
     """最終審查 Critical 1：取名要等的時候伺服器的執行緒還在跑；輪詢若不等上一次回來就再打一次 /api/main，
     卡住的請求會越疊越多、把執行緒池用光。poll() 有一個「還在等」的旗子，上一次沒回來就不打。"""
-    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    js = webharness.app_source()
     body = _js_function(js, "async function poll(")
     assert "pollInFlight" in body and "finally" in body and "pollInFlight = false" in body
     assert body.index("pollInFlight") < body.index('api("/api/main")')
@@ -3574,7 +3615,7 @@ def test_an_ordinary_fight_takes_the_lock_once_and_never_asks_the_model(game, lo
 
 
 def test_the_page_shows_the_wait_words_while_a_big_fight_is_judged():
-    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    js = webharness.app_source()
     body = _js_function(js, "async function choose(")
     assert "opt.wait" in body and body.index("opt.wait") < body.index('api("/api/choose"')
 
@@ -5632,7 +5673,7 @@ def test_admin_has_no_queue_numbers_while_the_switch_is_off(client, monkeypatch)
 def test_the_page_polls_the_queue_only_while_waiting_on_the_model():
     """網頁沒有測試框架：標記擋住「伺服器有 /api/queue、網頁卻沒人問」。等模型的幾個地方（對話、大場面、對話「自己說」、隨口應對、開爐、有所感）各開一個
     watchQueue、在 finally 裡收掉；管理者區只在伺服器給了數字時多一行。"""
-    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    js = webharness.app_source()
     assert js.count("function watchQueue(") == 1 and '"/api/queue"' in _js_function(js, "function watchQueue(")
     choose = _js_function(js, "async function choose(")
     assert "watchQueue(" in choose and "talking || (opt && opt.wait)" in choose and "finally { stop(); }" in choose
@@ -5659,7 +5700,7 @@ def test_watch_queue_shows_the_count_ahead_only_while_someone_is_ahead():
 
     if webharness.NODE is None:
         pytest.skip("沒有裝 node")
-    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    js = webharness.app_source()
     watch = _js_function(js, "function watchQueue(") + "\n  }"
     script = f"""
     {watch}
@@ -5712,7 +5753,7 @@ def test_a_refused_forge_does_not_leave_the_waiting_message_on_the_craft_page():
 
     if webharness.NODE is None:
         pytest.skip("沒有裝 node")
-    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    js = webharness.app_source()
     parts = [
         re.search(r"(?m)^  const esc = .*;$", js).group(0),
         re.search(r"(?m)^  const FORGE_WAIT = .*;$", js).group(0),
@@ -5764,15 +5805,34 @@ def test_a_refused_forge_does_not_leave_the_waiting_message_on_the_craft_page():
 
 
 def test_app_js_parses():
-    """node --check web/app.js（沒裝 node 就略過）。"""
+    """node --check 網頁的三個檔（main.js、map.js、app.js；沒裝 node 就略過）。"""
     import shutil
     import subprocess
 
     node = shutil.which("node")
     if node is None:
         pytest.skip("沒有裝 node")
-    done = subprocess.run([node, "--check", str(server.WEB / "app.js")], capture_output=True, timeout=60)
-    assert done.returncode == 0, done.stderr.decode("utf-8", "replace")
+    for name in webharness.APP_FILES:
+        done = subprocess.run([node, "--check", str(server.WEB / name)], capture_output=True, timeout=60)
+        assert done.returncode == 0, (name, done.stderr.decode("utf-8", "replace"))
+
+
+def test_the_page_loads_the_three_scripts_in_order_and_app_js_last():
+    """網頁切成三個檔（減法季批 0）：index.html 照 main.js、map.js、app.js 的順序載入（app.js 最後一行才啟動）。
+    三個檔都是一般的 script、頂層的名字同在一個全域裡，所以不能重名，也不能再包 IIFE。"""
+    import re as _re
+
+    html = (server.WEB / "index.html").read_text(encoding="utf-8")
+    assert _re.findall(r'<script src="/static/([^"]+)"></script>', html) == list(webharness.APP_FILES)
+    names: dict[str, str] = {}
+    for name in webharness.APP_FILES:
+        js = (server.WEB / name).read_text(encoding="utf-8").replace("\r\n", "\n")
+        assert '"use strict";' in js.split("\n", 3)[1] + js[:4000], name
+        assert "\n(() => {" not in js and not js.rstrip().endswith("})();"), name
+        for top in _re.findall(r"^  (?:async function|function|const|let|var|class) ([A-Za-z_$][\w$]*)", js, _re.M):
+            assert top not in names, (top, names.get(top), name)
+            names[top] = name
+    assert webharness.app_source().rstrip().endswith('api("/api/me").then(enter).catch(() => { S.stage = "gate"; render(); });\n})();')
 
 
 # ── 伺服器推送（線上架構推送計畫）──────────────────────────────────────
@@ -6163,6 +6223,7 @@ NOT_IN_THE_FINGERPRINT = {
         "final_rankings": "同上（結算卡的資料）",
         "act_reached": "隊伍數與統御上限的內部計數，不畫在共用畫面上",
         "marks": "地方痕跡只畫成模糊人數，改了讓每個分頁多刷新一次會洩漏有人做了看不見的事（推送計畫 F4）",
+        "marks_fired": "痕跡過門檻那一刻同時寫一則地方傳聞與江湖史（傳聞流水號、江湖史則數都在指紋裡）",
         "pending_battle": "背景推進記下要開的戰鬥，開成集結之後 active_battle 的指紋就變了",
         "season_one": "開季時蓋的章，開季之後不變",
         "haoqiang_allied": "開季時蓋的章（豪強分屬兩軍），開季之後不變",
@@ -6232,6 +6293,7 @@ NOT_IN_THE_FINGERPRINT = {
         "mandate_result": "天命之爭定下來時跟時間軸、天下大事一起寫入",
         "territory": "地盤的控制方只跟著戰線、割據（trends）與大事（timeline）改；易手的那一下另寫天下大事（傳聞流水號已在指紋裡），第一次算不發也不必叫醒誰",
         "conquest_on": "開季時蓋的章（領地爭奪），開季之後不變",
+        "jianfa_on": "開季時蓋的章（減法季），開季之後不變",
         "conquest": "領地爭奪的開季種類、偏移與進度：易手另寫天下大事（傳聞流水號已在指紋裡），偏移跟著 trends 一起改；"
                     "進度不露數字、只回推的人自己那一句話",
         "xingshi": "〈天下形勢〉收下的文章：收下那一刻另寫天下大事與江湖史（都在指紋裡）；見聞「形勢」頁自己去讀，不叫醒全服",
@@ -6550,7 +6612,7 @@ def test_players_cannot_pause_the_season(client):
 
 def test_the_pause_buttons_call_what_the_server_has():
     """網頁沒有測試框架：設定頁的「暫停／繼續」叫的動作要在 ADMIN_ACTIONS 裡、有確認問句，讀的欄位要在 main_view 裡。"""
-    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    js = webharness.app_source()
     for op in ("pause_clock", "resume_clock"):
         assert f'data-op="{op}"' in js and f"{op}: [" in js and op in server.ADMIN_ACTIONS
     assert "S.main.paused" in js
@@ -6560,7 +6622,7 @@ def test_the_pause_buttons_call_what_the_server_has():
 def test_the_resume_confirmation_does_not_promise_that_every_pause_is_taken_off():
     """「▶ 繼續」的確認問句照 world.resume_skip_text 說：整個季曆鐘頭才扣，停不到一個季曆鐘頭的話什麼都不扣、季末不動
     （B12）——不能一律說「不算進賽季、季末往後延一樣長」。"""
-    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    js = webharness.app_source()
     line = next(row for row in js.splitlines() if row.strip().startswith("resume_clock: ["))
     assert "整個季曆鐘頭" in line and "不到一個季曆鐘頭" in line and "季末不動" in line
     assert "停的這一段不算進賽季，季末往後延一樣長" not in line
@@ -6806,7 +6868,7 @@ def test_boards_lists_six_boards_and_caches_the_scan(client, monkeypatch):
 def test_boards_tab_is_in_the_news_page():
     from pathlib import Path
 
-    src = (Path(__file__).parent.parent / "web" / "app.js").read_text(encoding="utf-8")
+    src = webharness.app_source()
     assert '{ id: "boards", name: "榜單" }' in src and 'api("/api/boards")' in src
 
 def test_the_first_request_after_a_restart_posts_the_wanted_notice(client):

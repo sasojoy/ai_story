@@ -25,7 +25,7 @@ pytestmark = [pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，
 NAMES = ["S", "applyMapView", "mapReady", "mapTransform", "panClamp", "panZoom", "panBox", "panWire", "enterRegion", "toWorld",
          "mapTimeline", "mapWeekTo", "regionPick", "curView", "PAN_MAX", "PAN_SLOP", "renderTop", "mapFrame"]
 DRIVER = re.sub(r"wholeApp\(\[.*?\]\)", "wholeApp(" + repr(NAMES).replace("'", '"') + ")", test_prologue_web.DRIVER, count=1, flags=re.S)
-APP = Path(server.WEB) / "app.js"
+APP = webharness.APP  # 三個檔（main.js、map.js、app.js）接起來的那一份
 CSS = Path(server.WEB) / "style.css"
 
 

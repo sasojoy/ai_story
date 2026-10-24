@@ -5,9 +5,10 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+import webharness
 
 WEB = Path(__file__).resolve().parent.parent / "web"
-APP = (WEB / "app.js").read_text(encoding="utf-8")
+APP = webharness.app_source()
 CSS = (WEB / "style.css").read_text(encoding="utf-8")
 
 

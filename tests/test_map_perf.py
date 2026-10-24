@@ -146,7 +146,7 @@ def _map_game():
 def test_fb322_dragging_never_swaps_the_cursor():
     """輿圖第三版第 4 批拿掉了手勢；企劃者 2026-10-22 改回兩張都能拖、能捏合縮放（tests/test_map_pan_web.py）。FB-322 照舊守：
     拖的時候不換游標（cursor 會一路繼承、換一次整棵約 1,550 個元素重算樣式）——游標寫死 grab，沒有 grabbing 那一套。"""
-    src = (Path(server.WEB) / "app.js").read_text(encoding="utf-8")
+    src = webharness.app_source()
     css = (Path(server.WEB) / "style.css").read_text(encoding="utf-8")
     assert "function panDown(" in src and '"grabbing"' not in src and ".map-wrap.grabbing" not in css
 
@@ -254,7 +254,7 @@ def test_fb329_logging_out_or_in_forgets_the_last_players_map():
   await new Promise((r) => setTimeout(r, 30));
   return { after, sel: H.S.mapSel, asked: T.calls.map((c) => c[0]), here: H.S.mapState && H.S.mapState.here };
 })();"""})
-    assert out["after"] == {"base": None, "state": None, "layer": "world", "region": None, "view": None, "sel": None, "mode": "overview",
+    assert out["after"] == {"base": None, "state": None, "layer": "near", "region": None, "view": None, "sel": None, "mode": "overview",
                             "drawer": "min", "week": None, "query": "", "at": 0, "host": "", "away": True}
     assert out["sel"] is None and "/api/map/state" in out["asked"] and out["here"] == st["here"]
 

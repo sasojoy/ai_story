@@ -96,7 +96,7 @@ def test_the_folded_line_leaves_the_left_padding_to_the_reduced_motion_bar():
 
 
 def test_the_page_wires_the_tap_and_the_keyboard():
-    js = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    js = webharness.app_source()
     assert 'case "hear-more": hearToggle(el); break;' in js
     assert "decorateHearsay();" in js[js.index("function afterPage()"):js.index("// ── 登入與取名號")]
     keydown = js[js.index('document.addEventListener("keydown"'):]
