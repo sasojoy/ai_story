@@ -766,8 +766,8 @@ def test_an_option_that_is_not_on_the_menu_does_nothing(client):
 
 def _play_rows():
     with database.open_database().snapshot() as conn:
-        days = [dict(r) for r in conn.execute("SELECT owner, season, day, buttons FROM play_days")]
-        firsts = [dict(r) for r in conn.execute("SELECT owner, kind FROM play_firsts")]
+        days = [dict(r) for r in conn.execute("SELECT owner, season, day, buttons FROM action_counts")]
+        firsts = [dict(r) for r in conn.execute("SELECT owner, kind FROM action_firsts")]
     return days, firsts
 
 
@@ -781,7 +781,7 @@ def test_the_play_log_counts_what_a_real_player_pressed_and_nothing_else(client,
     days, firsts = _play_rows()
     assert [(d["owner"], json.loads(d["buttons"])) for d in days] == [("沈青衫", {"act:explore": 1})]
     assert days[0]["season"] >= 1 and firsts == []
-    assert not {"play_days", "buttons", "figure_talk"} & set(out["main"])
+    assert not {"action_counts", "buttons", "figure_talk"} & set(out["main"])
     monkeypatch.setattr(server, "choose", lambda game, option_id: ["（你走上前去。）"])
     client.post("/api/choose", json={"id": "talk:2"})
     days, firsts = _play_rows()

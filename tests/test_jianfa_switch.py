@@ -34,3 +34,19 @@ def test_a_running_season_keeps_its_stamp_and_the_host_switch_wins(content):
     content.config.jianfa.enabled = False
     assert season.jianfa_on is True and rules.jianfa(content, season) is False  # 主機的緊急開關
     assert rules.jianfa(content, None) is False
+
+
+def test_each_batch_has_its_own_sub_switch(content):
+    """子開關（整合設計第十二章）：總開關開著、有章時各批再看自己的；總開關關著時一律不算。寫錯名字直接丟 AttributeError。"""
+    content.config.jianfa.enabled = True
+    season = fresh_season(content)
+    parts = ["explore_one", "drill_gates", "sortie_duel", "four_wins", "free_text_outcomes", "marks_visible", "stances", "errands",
+             "week_unlock", "rewrite_narration"]
+    assert all(rules.jianfa(content, season, part) for part in parts)
+    content.config.jianfa.sortie_duel = False
+    assert not rules.jianfa(content, season, "sortie_duel") and rules.jianfa(content, season, "four_wins")
+    assert rules.jianfa(content, season)
+    with pytest.raises(AttributeError):
+        rules.jianfa(content, season, "no_such_part")
+    content.config.jianfa.enabled = False
+    assert not any(rules.jianfa(content, season, part) for part in parts)

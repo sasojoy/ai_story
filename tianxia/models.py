@@ -2807,6 +2807,18 @@ class JianfaRules(_Strict):
     週末設定不再維護、不打開，關著一個字都不變。畫面的改動不掛這個開關。欄位名是兩邊（畫面與引擎）共用的，各批的數字之後加在這一節。"""
 
     enabled: bool = False  # 預設關（測試內容與不帶設定的正式內容照它）；season21.json、week7.json 打開
+    # 子開關（整合設計第十二章）：總開關開著、這一季有章時，各批的規則再看自己的那一個（rules.jianfa(content, world, "explore_one")）；
+    # 預設全開，哪一批出了事主機可以單獨關掉那一批。總開關關著時子開關一律不算。
+    explore_one: bool = True  # 4.1 探索一顆照地點抽（批 2）
+    drill_gates: bool = True  # 4.2 三道閘、45 級後只收仗的經驗（批 2）
+    sortie_duel: bool = True  # 4.3 出陣改約戰（批 3b）
+    four_wins: bool = True  # 第三章 三陣營四勝利、豪強兩本帳（批 3c）
+    free_text_outcomes: bool = True  # 第五章 隨口應對分岔（批 4）
+    marks_visible: bool = True  # 第五章 痕跡看得見（批 4）
+    stances: bool = True  # 第五章 人物心意（批 6）
+    errands: bool = True  # 第五章 託付與來信（批 6）
+    week_unlock: bool = True  # 6.6 功能照週解鎖（批 5）
+    rewrite_narration: bool = True  # 第十章 事件旁白每週改寫（批 10）
 
 
 class ConquestRules(_Strict):

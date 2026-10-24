@@ -25,7 +25,7 @@ V3_TABLES = {"insight_firsts"}
 V4_TABLES = {"gear_recipes"}
 V5_TABLES = {"biographies"}  # 玩家傳（2026-10-12）
 V6_TABLES = {"mall_purchases", "mall_ledger", "mall_entitlements"}  # 商城（2026-10-20）
-V7_TABLES = {"play_days", "play_firsts"}  # 真人量表（減法季批 0，2026-10-24）
+V7_TABLES = {"action_counts", "action_firsts"}  # 真人量表（減法季批 0，2026-10-24）
 TABLES = V1_TABLES | V2_TABLES | V3_TABLES | V4_TABLES | V5_TABLES | V6_TABLES | V7_TABLES
 
 

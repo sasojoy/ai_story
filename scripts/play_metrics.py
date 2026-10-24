@@ -1,7 +1,7 @@
 """主機端：真人量表的總數（減法季批 0，設計稿第十章；tianxia/playlog.py、資料庫第 7 版）。只讀不改。
 
 印一季的：幾個帳號、第 3 天與第 7 天的留存（判準【預設】五成、四成）、第幾天不再上線的分布、每顆鈕佔每天行動的幾成、
-第一次寫隨口應對與第一次跟人物說話是第幾天（中位數與還沒做過的人數）。只印總數、不印名號：表上只有真人，
+第一次寫隨口應對、跟人物說話、看全區是第幾天（中位數與還沒做過的人數）、第 2 天以前寫過隨口應對的幾成（判準五成）。只印總數、不印名號：表上只有真人，
 列出名號等於從缺席看出誰是假人。
 執行：.venv/Scripts/python.exe scripts/play_metrics.py [--season N] [--start 2026-10-25]（沒給 --db 就照 TIANXIA_DB 或 saves/tianxia.db）
 --start 是季的第 1 天（台灣日期）；沒給就用這一季最早有人上線的那一天。
@@ -25,12 +25,13 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from tianxia.database import default_path  # noqa: E402
-from tianxia.playlog import FIGURE_TALK, FIRSTS, FREE_TEXT, PlayLog, last_days, retention  # noqa: E402
+from tianxia.playlog import FIGURE_TALK, FIRSTS, FREE_TEXT, WHOLE_AREA, PlayLog, last_days, retention  # noqa: E402
 
 PLAY_SCHEMA = 7  # 量表的兩張表是第 7 版加的（database.SCHEMA_V7_TABLES）
 TARGETS = {3: 0.5, 7: 0.4}  # 判準【預設】：第 3 天留存五成、第 7 天四成
 ENCOUNTER_MAX = 0.4  # 判準【預設】：遭遇佔每日行動不超過四成（遭遇算哪幾顆鈕，等批 2 的探索一顆定了再接）
-FIRST_NAMES = {FREE_TEXT: "第一次寫隨口應對", FIGURE_TALK: "第一次跟人物說話"}
+FIRST_NAMES = {FREE_TEXT: "第一次寫隨口應對", FIGURE_TALK: "第一次跟人物說話", WHOLE_AREA: "第一次看全區"}
+FREE_TEXT_BY = (2, 0.5)  # 判準【預設】：一半的人在第 2 天（含）以前寫過一次隨口應對
 TAIWAN = 8  # Config.pill_day_utc_offset_hours 的預設：回體丹換日的時區
 
 
@@ -55,7 +56,7 @@ def day_number(text: str, offset_hours: float = TAIWAN) -> int:
 
 def report(db: ReadOnly, season: int | None, start: int | None) -> list[str]:
     if season is None:
-        row = db.conn.execute("SELECT MAX(season) FROM play_days").fetchone()
+        row = db.conn.execute("SELECT MAX(season) FROM action_counts").fetchone()
         season = row[0]
         if season is None:
             return ["量表還是空的：還沒有真人上線過。"]
@@ -81,6 +82,9 @@ def report(db: ReadOnly, season: int | None, start: int | None) -> list[str]:
         got = [a.firsts[kind] for a in accounts if kind in a.firsts]
         mid = f"中位數第 {statistics.median(got):g} 天" if got else "沒有人"
         lines.append(f"{FIRST_NAMES[kind]}：{len(got)} 人，{mid}；還沒做過 {len(accounts) - len(got)} 人")
+    by, share = FREE_TEXT_BY
+    early = sum(1 for a in accounts if a.firsts.get(FREE_TEXT, by + 1) <= by) / len(accounts)
+    lines.append(f"第 {by} 天以前寫過隨口應對：{early:.0%}（判準 {share:.0%}，{'過' if early >= share else '未過'}）")
     return lines
 
 

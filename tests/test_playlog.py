@@ -41,7 +41,7 @@ def test_a_day_counts_each_button_and_seen_alone_is_an_empty_day(log):
     assert a.days == {1, 3}
     assert a.buttons == {"act:train": 2, "explore:gather": 1}
     with log.db.snapshot() as conn:
-        rows = conn.execute("SELECT day, buttons FROM play_days WHERE owner = '沈浪' ORDER BY day").fetchall()
+        rows = conn.execute("SELECT day, buttons FROM action_counts WHERE owner = '沈浪' ORDER BY day").fetchall()
     assert [(r["day"], r["buttons"]) for r in rows] == [(100, '{"act:train": 2, "explore:gather": 1}'), (102, "{}")]
 
 
@@ -79,8 +79,8 @@ def test_a_version_6_file_upgrades_to_7_with_the_two_empty_tables(tmp_path):
     db = Database(path)
     with db.snapshot() as c:
         assert c.execute("PRAGMA user_version").fetchone()[0] == database.SCHEMA_VERSION == 7
-        assert c.execute("SELECT COUNT(*) FROM play_days").fetchone()[0] == 0
-        assert c.execute("SELECT COUNT(*) FROM play_firsts").fetchone()[0] == 0
+        assert c.execute("SELECT COUNT(*) FROM action_counts").fetchone()[0] == 0
+        assert c.execute("SELECT COUNT(*) FROM action_firsts").fetchone()[0] == 0
         assert c.execute("SELECT name FROM characters").fetchone()[0] == "沈浪"
     db.close()
 
@@ -103,6 +103,7 @@ def test_the_host_report_prints_totals_without_names(tmp_path, capsys):
     assert "第 2 季：2 個帳號上線過" in out
     assert "第 3 天留存：50%（判準 50%，過）" in out and "第 7 天留存：50%（判準 40%，過）" in out
     assert "第一次寫隨口應對：1 人，中位數第 3 天；還沒做過 1 人" in out
+    assert "第一次看全區：0 人，沒有人；還沒做過 2 人" in out and "第 2 天以前寫過隨口應對：0%（判準 50%，未過）" in out
     assert "沈浪" not in out and "白飛" not in out  # 不印名號
     old = tmp_path / "v6.db"
     conn = sqlite3.connect(old)

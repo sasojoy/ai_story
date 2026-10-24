@@ -1,12 +1,13 @@
-"""真人量表（減法季批 0，設計稿第十章）：每個帳號每天按了哪幾顆、哪幾天上線、第一次寫隨口應對與第一次跟人物說話是哪一天。
+"""真人量表（減法季批 0，設計稿第十章；整合設計 11.4）：每個帳號每天按了哪幾顆、哪幾天上線、第一次寫隨口應對、
+第一次跟人物說話、第一次看「全區」是哪一天。
 
 - 只有伺服器寫（server.py：真人自己的請求）。假人程式不經過伺服器，不記；記了也只是總數，不寫任何名號到畫面或主控台。
 - 不露給玩家：沒有 API、不進 main_view；主機端用 scripts/play_metrics.py 看總數（不列名號：只列真人會讓人從缺席看出誰是假人）。
-- 資料庫第 7 版的兩張表（play_days、play_firsts）。owner 是角色名號的 casefold（characters.name_key；一個帳號一個角色，
+- 資料庫第 7 版的兩張表（action_counts、action_firsts）。owner 是角色名號的 casefold（characters.name_key；一個帳號一個角色，
   同商城的 owner）。day 是回體丹換日的那一天（台灣 00:00，Game._pill_day），season 是那時的季數。
 - 每個寫的方法自己開 db.transaction()：呼叫端已經開著（伺服器的行動鎖）就併進那一筆，出錯整筆撤回。
 
-判準【預設】（設計稿第十章）：遭遇佔每日行動不超過四成、第 3 天留存五成、第 7 天四成。這裡只記與算，判準寫在報表上。
+判準【預設】（整合設計 11.4）：遭遇佔每日行動不超過四成、第 3 天留存五成、第 7 天四成、一半的人在第 2 天前寫過一次隨口應對。這裡只記與算，判準寫在報表上。
 只碰資料庫，不碰遊戲規則、不讀時鐘（時間由呼叫端傳進來）。
 """
 from __future__ import annotations
@@ -19,7 +20,8 @@ from .database import Database
 
 FREE_TEXT = "free_text"  # 第一次寫隨口應對（/api/answer）
 FIGURE_TALK = "figure_talk"  # 第一次跟人物說話（交友、求見、對話選項、自己說）
-FIRSTS = (FREE_TEXT, FIGURE_TALK)
+WHOLE_AREA = "whole_area"  # 第一次看輿圖的「全區」（輿圖四層那一批接上；表先留好，不必再升版）
+FIRSTS = (FREE_TEXT, FIGURE_TALK, WHOLE_AREA)
 # 照前兩段歸類的前綴：行動列的格子（act:train 出陣、act:explore 探索……）與探索三選一（explore:gather……）分得開；
 # 其他照第一段（choice、talk、call、battle、move……），選項 id 後面帶的地點、人物、編號不記
 TWO_PART = ("act:", "explore:")
@@ -49,7 +51,7 @@ class PlayLog:
     def seen(self, owner: str, season: int, day: int) -> None:
         """這一天上線了（自己的請求）：沒有那一列就開一列。"""
         with self.db.transaction() as conn:
-            conn.execute("INSERT OR IGNORE INTO play_days (owner, season, day) VALUES (?, ?, ?)", (owner, season, day))
+            conn.execute("INSERT OR IGNORE INTO action_counts (owner, season, day) VALUES (?, ?, ?)", (owner, season, day))
 
     def press(self, owner: str, season: int, day: int, button: str) -> None:
         """這一天按了一次 button（button_of 歸過類的）。"""
@@ -57,12 +59,12 @@ class PlayLog:
             return
         with self.db.transaction() as conn:
             row = conn.execute(
-                "SELECT buttons FROM play_days WHERE owner = ? AND season = ? AND day = ?", (owner, season, day),
+                "SELECT buttons FROM action_counts WHERE owner = ? AND season = ? AND day = ?", (owner, season, day),
             ).fetchone()
             counts = json.loads(row["buttons"]) if row else {}
             counts[button] = counts.get(button, 0) + 1
             conn.execute(
-                "INSERT INTO play_days (owner, season, day, buttons) VALUES (?, ?, ?, ?) "
+                "INSERT INTO action_counts (owner, season, day, buttons) VALUES (?, ?, ?, ?) "
                 "ON CONFLICT (owner, season, day) DO UPDATE SET buttons = excluded.buttons",
                 (owner, season, day, json.dumps(counts, ensure_ascii=False, sort_keys=True)),
             )
@@ -73,7 +75,7 @@ class PlayLog:
             raise ValueError(f"不認得的第一次：{kind}")
         with self.db.transaction() as conn:
             done = conn.execute(
-                "INSERT OR IGNORE INTO play_firsts (owner, season, kind, day, time) VALUES (?, ?, ?, ?, ?)",
+                "INSERT OR IGNORE INTO action_firsts (owner, season, kind, day, time) VALUES (?, ?, ?, ?, ?)",
                 (owner, season, kind, day, time),
             )
             return done.rowcount > 0
@@ -81,8 +83,8 @@ class PlayLog:
     def accounts(self, season: int, start_day: int | None = None) -> list[Account]:
         """這一季每個帳號一份（照 owner 排、不帶名號）。start_day 是季的第 1 天（回體丹換日的那一天）；不給就用這一季最早有人上線的那一天。"""
         with self.db.snapshot() as conn:
-            days = conn.execute("SELECT owner, day, buttons FROM play_days WHERE season = ? ORDER BY owner, day", (season,)).fetchall()
-            firsts = conn.execute("SELECT owner, kind, day FROM play_firsts WHERE season = ?", (season,)).fetchall()
+            days = conn.execute("SELECT owner, day, buttons FROM action_counts WHERE season = ? ORDER BY owner, day", (season,)).fetchall()
+            firsts = conn.execute("SELECT owner, kind, day FROM action_firsts WHERE season = ?", (season,)).fetchall()
         if start_day is None:
             start_day = min((r["day"] for r in days), default=0)
         out: dict[str, Account] = {}
