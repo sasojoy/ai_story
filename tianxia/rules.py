@@ -12,7 +12,7 @@ from .allied import hidden_trends as allied_hidden
 from .allied import on as haoqiang_allied  # noqa: F401  豪強分屬兩軍：設計寫 rules.haoqiang_allied、rules.side_of，其他模組照這兩個名字讀
 from .allied import side_of  # noqa: F401
 from .martial_arts import content_art
-from .models import DEFAULT_SEASON_DAYS, FRONT_KEY, Check, Condition, Content, Effect, Ending, FactionDef, Trend
+from .models import BEST_OF, DEFAULT_SEASON_DAYS, FRONT_KEY, Check, Condition, Content, Effect, Ending, FactionDef, Trend
 from .state import PLAYER, GameState, Rumor, RumorLayer, WorldState
 from .world_state import JADE_SEAL_FRAGMENT_COUNT, WorldStateStore, length_factor, season_length_days  # noqa: F401
 # length_factor：季長倍數（名聲設計 2.4、決戰道具 2.2 共用），定義在 world_state（stamp_season 要用），從這裡轉出去叫 rules.length_factor
@@ -311,10 +311,18 @@ def check_outlook(check: Check, state: GameState, content: Content, world: World
     本人的熟練加成（Check.practice，joy #15）照舊加上。差值每 +1，成功率 +10%；範圍 5%～95%。
     擲骰（roll_check）與選項括號裡的數值、心裡話那一檔（events.choice_label）都出自這一個函式的同一個差值，
     所以標籤講的和實際擲出來的不會對不起來。江湖水漲（rise.event_bump）：本人等級高了，難度在這裡多加幾點，內容寫的不動。"""
-    stat_value = team.check_value(state, content, world, PLAYER, check.stat)
+    stat_value = check_stat_value(check, state, content, world)
     bonus = team.practice_bonus(state, content, check)
     gap = stat_value + bonus - check.difficulty - rise.event_bump(state, content)  # 江湖水漲：等級高了檢定加深（Config.rise）
     return CheckOutlook(stat_value, bonus, gap, min(0.95, max(0.05, 0.5 + gap * 0.1)))
+
+
+def check_stat_value(check: Check, state: GameState, content: Content, world: WorldStateStore) -> float:
+    """檢定看的本人那一項屬性（含等級成長）：一般是 check.stat；stat 是 BEST_OF 時取 check.stats 裡最高的那一項
+    （減法季整合設計 5.9：「出力」那一種後果，臂力與悟性誰高看誰）。"""
+    if check.stat == BEST_OF:
+        return max(team.check_value(state, content, world, PLAYER, stat) for stat in check.stats)
+    return team.check_value(state, content, world, PLAYER, check.stat)
 
 
 def check_gap(check: Check, state: GameState, content: Content, world: WorldStateStore) -> float:
