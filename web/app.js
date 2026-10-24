@@ -185,7 +185,7 @@
     mapQuery: "", // 找地點的字
     // 輿圖的哪一層（輿圖第三版）："world" 天下圖（打開輿圖第一眼）、"region" 區圖（第 4 批）；兩張都是固定取景，
     // 上面再疊一層拖與縮放（企劃者 2026-10-22，mapPan）
-    mapLayer: "world",
+    mapLayer: "near", // 輿圖哪一層：near 第一、二層（以你為中心）、region 全區、world 天下（減法季整合設計第七章）
     mapRegion: null, // 區圖畫哪一區（大區 id）
     worldView: null, // 天下圖此刻的取景（applyMapView 照 worldFit 算）
     regionView: null, // 區圖此刻的取景（applyMapView 照 regionFit 算：{ s, cx, cy, frame, bottom }）
@@ -4848,6 +4848,9 @@
     S.zhuan = null; clearTimeout(zhuanTimer); // 傳也一樣
     S.mtEdit = null; S.mtZoom = null; S.boardCard = null; // 名帖的畫布與放大的那一張、榜單點開的卡也收起
     if (tab !== "map") stopPlay(); // 版圖變化的播放也停
+    // 每一次打開輿圖都從第一層開始（減法季整合設計第七章：「全區」按過只這一次有效）；江湖頁的小地圖點了某一處另外挑好了（S.mapKeep）
+    if (tab === "map" && !S.mapKeep) mapFirst();
+    S.mapKeep = false;
     if (tab === "news") S.unseen = false;
     render();
     window.scrollTo(0, 0);
@@ -4860,6 +4863,7 @@
       }
       if (tab === "practice" || tab === "craft") await loadMenxia();
       if (tab === "map") {
+        // 每一次打開輿圖都從第一層開始（減法季整合設計第七章：「全區」按過只這一次有效）；江湖頁的小地圖點了某一處另外挑好了（S.mapKeep）
         // 打開輿圖本身可能完成新手引導的一步，所以先當一個動作做
         const r = await api("/api/do/view_map", {});
         setMain(r.main);
@@ -5540,7 +5544,7 @@
           S.craftPick = false; // 換分頁：煉製頁的抽屜收起
           const loc = el.classList.contains("mini") && ev.target.closest && ev.target.closest("[data-loc]");
           // 江湖頁的小地圖點了某一處（設計第八節）：輿圖開在那一處所在的區圖、抽屜半開它的卡（那一區照它算：mapReady）
-          if (loc) { S.mapSel = loc.getAttribute("data-loc"); S.mapMode = "place"; S.mapDrawer = "peek"; S.mapLayer = "region"; S.mapRegion = regionOfPlace(S.mapSel); }
+          if (loc) { mapFirst(loc.getAttribute("data-loc")); S.mapKeep = true; }
           await goTab(el.dataset.tab);
           break;
         }
@@ -5551,7 +5555,13 @@
           break;
         case "map-report": S.news = "reports"; await goTab("news"); break; // 卡上「攻城戰果」那一段的「看戰報」：開見聞的戰報
         case "world-region": enterRegion(el.dataset.id); break; // 天下圖點一州
-        case "world-enter": enterRegion(hereRegion()); break; // 天下圖抽屜的「進入此區」：你在的那一州
+        case "world-enter": toNear(); break; // 天下圖抽屜的「進入此區」：回第一層（你在的那一區、以你為中心）
+        case "map-full": // 「全區」：第三層（點了的那一處照舊開著）；再按一次回第一層
+          if (S.mapLayer === "region") toNear();
+          else enterRegion(S.mapRegion || hereRegion(), S.mapMode === "place" ? S.mapSel : null, false);
+          break; // 「全區」：第三層；再按一次回第一層
+        case "map-home": toNear(); break; // 拖遠了的「回到我這」
+        case "map-more": setMapDrawer("half"); break; // 卡上「往上拉：能悟、對手……」
         case "map-world": // 「‹ 天下」、天下圖的「天下」（已經在天下圖、放大了：滑回 1 倍）
           if (S.mapLayer !== "world" || S.mapMode !== "overview") toWorld();
           else if (S.mapPan) panReset();
@@ -5605,10 +5615,16 @@
           }, PLAY_MS);
           break;
         }
-        case "map-jianghu": // 就在這裡：出陣、探索回江湖頁按（探索三選一開著時直接攤開那三種）
-          S.wheelSel = el.dataset.key === "explore" ? "explore" : null;
+        case "map-jianghu": { // 就在這裡：出陣、探索真的做（減法季整合設計第七章【PM】），回江湖頁看結果；探索三選一開著時回江湖頁攤開那三種
+          const key = el.dataset.key, opts = (S.main && S.main.options) || [];
+          const modes = opts.some((o) => o.id.startsWith(EXPLORE_PREFIX) && !o.id.startsWith(GATHER_BRANCH) && o.id !== PRACTICE_ID);
+          const id = key === "sortie" ? "act:train" : key === "explore" && !modes ? "act:explore" : null;
+          const ready = id && opts.some((o) => o.id === id && o.enabled !== false);
+          S.wheelSel = key === "explore" && !ready ? "explore" : null;
           await goTab("jianghu");
+          if (ready) await choose(document.querySelector(`[data-id="${id}"]`) || el, id);
           break;
+        }
         case "sense-clear": S.sensePts = []; S.senseNote = ""; renderPage(); break;
         case "sense-send": await senseSend(); break;
         case "move-mode": await setMoveMode(el.dataset.mode); break;

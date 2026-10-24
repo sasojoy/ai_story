@@ -254,7 +254,7 @@ def test_fb329_logging_out_or_in_forgets_the_last_players_map():
   await new Promise((r) => setTimeout(r, 30));
   return { after, sel: H.S.mapSel, asked: T.calls.map((c) => c[0]), here: H.S.mapState && H.S.mapState.here };
 })();"""})
-    assert out["after"] == {"base": None, "state": None, "layer": "world", "region": None, "view": None, "sel": None, "mode": "overview",
+    assert out["after"] == {"base": None, "state": None, "layer": "near", "region": None, "view": None, "sel": None, "mode": "overview",
                             "drawer": "min", "week": None, "query": "", "at": 0, "host": "", "away": True}
     assert out["sel"] is None and "/api/map/state" in out["asked"] and out["here"] == st["here"]
 
