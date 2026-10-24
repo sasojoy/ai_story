@@ -2933,6 +2933,20 @@ class JianfaRules(_Strict):
     errands: bool = True  # 第五章 託付與來信（批 6）
     week_unlock: bool = True  # 6.6 功能照週解鎖（批 5）
     rewrite_narration: bool = True  # 第十章 事件旁白每週改寫（批 10）
+    morning_mail: bool = True  # 第十章 回來的理由：人物的信每天 mail_hour 點送到（批 9；letters.mail_day）
+    mail_hour: int = Field(default=9, ge=0, le=23)  # 當地幾點送信（時區照 pill_day_utc_offset_hours）
+
+
+class WebPushRules(_Strict):
+    """網頁推送（減法季整合設計第十章「回來的理由」，批 9）：分頁關著、手機鎖著也跳一則通知，五種事——來信、約戰、決戰集結、
+    被截殺、被〈天下形勢〉提到（tianxia/notices.py 認，server.py 的看守送）。玩家在設定頁自己打開（預設關、第一次來信時問一次）；
+    enabled 是主機的開關，關著設定頁不畫那一顆、看守不開。畫面的改動，不掛 Config.jianfa。"""
+
+    enabled: bool = False  # 測試內容照它關著；content/config.json 打開
+    watch_seconds: float = Field(default=30, gt=0)  # 看守每幾秒看一次開了推播的人有沒有新的事
+    quiet_seconds: float = Field(default=120, ge=0)  # 這麼久之內同步過（分頁開著、正在玩）就不跳通知：畫面上已經看得到
+    per_round: int = Field(default=3, ge=1)  # 同一個人一輪最多跳幾則（離線一陣子回來不會被一串通知淹掉）
+    max_devices: int = Field(default=5, ge=1)  # 一個帳號最多記幾台裝置
 
 
 class ConquestRules(_Strict):
@@ -3423,6 +3437,7 @@ class Config(_Strict):
     push_events: bool = False
     push_watch_seconds: float = Field(default=5, gt=0)
     push_world_min_seconds: float = Field(default=10, ge=0)
+    web_push: WebPushRules = Field(default_factory=WebPushRules)  # 手機跳通知（減法季第十章，批 9；server_push.WebPush）
 
     season_days: float = DEFAULT_SEASON_DAYS
     # 第一季濃縮版的規則（預設關，beta 那一季照舊）：季曆、時刻表、三條戰線都掛在這個開關後面。

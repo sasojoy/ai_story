@@ -72,6 +72,8 @@
     frontOpen: "", // 江湖頁「剛剛」底下那塊出陣回報，第一屏放不下收起來之後玩家點開的那一則（frontKey）：重畫時不再收
     nowOpen: null, // 江湖頁「剛剛」展開的那一則（記內容本身）；換成新的一則就收回（A4）
     letterOpen: null, // 江湖頁書信小卡攤開的那一封（id）
+    pushOn: false, // 手機通知：這台裝置訂著沒有（打開設定時問瀏覽器，pushRefresh）
+    pushBusy: false, // 正在開、關手機通知（那一顆先灰掉）
     roundsOpen: null, // 江湖頁戰鬥卡片「過程」展開的那一場（戰報流水號）；換成新的一場就收回（計畫三 G6）
     peekOpen: null, // 江湖頁那一排小標（態勢｜大事｜主線）展開著的那一塊：{ id, week }；點同一個收起，換週就不再對得上（FB-039、正式版辛）
     hearOpen: null, // 戰鬥卡片底下聽來的那一句展開著的那一場（卡片的戰報流水號）；換成下一場就收回（FB-074）
@@ -177,7 +179,7 @@
     mapQuery: "", // 找地點的字
     // 輿圖的哪一層（輿圖第三版）："world" 天下圖（打開輿圖第一眼）、"region" 區圖（第 4 批）；兩張都是固定取景，
     // 上面再疊一層拖與縮放（企劃者 2026-10-22，mapPan）
-    mapLayer: "world",
+    mapLayer: "near", // 輿圖哪一層：near 第一、二層（以你為中心）、region 全區、world 天下（減法季整合設計第七章）
     mapRegion: null, // 區圖畫哪一區（大區 id）
     worldView: null, // 天下圖此刻的取景（applyMapView 照 worldFit 算）
     regionView: null, // 區圖此刻的取景（applyMapView 照 regionFit 算：{ s, cx, cy, frame, bottom }）
@@ -4376,6 +4378,88 @@
     });
   }
 
+  // ── 手機通知（減法季批 9：回來的理由）──
+  // 設定頁一顆「手機通知」，預設關；第一次來信時在信的小卡底下問一次（pushAskHtml，問過記在這個瀏覽器）。
+  // 開了：向瀏覽器要通知權限 → 註冊 /sw.js → 拿伺服器的公鑰（/api/push）訂閱 → 交給 /api/push/subscribe（伺服器當場送一則「開了」）。
+  // 伺服器關著（main.web_push 是 false）什麼都不畫。iPhone 要先「加入主畫面」、從主畫面打開才收得到（iOS 16.4 起）。字待 joy 潤
+  const PUSH_ASKED_KEY = "tianxia-push-asked";
+  const PUSH_KINDS = "來信、約戰、決戰集結、被截殺、被〈天下形勢〉提到";
+  function pushSupported() {
+    return !!(S.main && S.main.web_push) && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+  }
+  function pushNeedsHome() { // iPhone、iPad 的 Safari：沒從主畫面打開就沒有 PushManager
+    return !!(S.main && S.main.web_push) && /iP(hone|ad|od)/.test(navigator.userAgent || "")
+      && !(navigator.standalone || (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches));
+  }
+  function pushAsked() { try { return localStorage.getItem(PUSH_ASKED_KEY) === "1"; } catch (e) { return true; } }
+  function pushMarkAsked() { try { localStorage.setItem(PUSH_ASKED_KEY, "1"); } catch (e) { /* 存不了就只在這一頁不再問 */ } }
+  function pushKey(text) { // base64url → Uint8Array（applicationServerKey）
+    const raw = atob(text.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((text.length + 3) % 4));
+    return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+  }
+  async function pushReg() { return navigator.serviceWorker.register("/sw.js"); }
+
+  async function pushRefresh() { // 打開設定時：這台裝置有沒有訂著；訂著就再交一次給伺服器（伺服器那份丟了也補得回來，不再送「開了」）
+    if (!pushSupported()) return;
+    try {
+      const sub = await (await pushReg()).pushManager.getSubscription();
+      S.pushOn = !!sub && Notification.permission === "granted";
+      if (S.pushOn) await api("/api/push/subscribe", { ...sub.toJSON(), quiet: true });
+    } catch (e) { S.pushOn = false; }
+    if (S.sheet) render();
+  }
+
+  async function pushEnable() {
+    pushMarkAsked();
+    if (!pushSupported()) return;
+    S.pushBusy = true;
+    render();
+    try {
+      const perm = await Notification.requestPermission();
+      if (perm !== "granted") { S.pushOn = false; toast("沒有拿到通知的權限：要到瀏覽器的網站設定裡打開。"); return; }
+      const reg = await pushReg();
+      const { key } = await api("/api/push");
+      const sub = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: pushKey(key) });
+      await api("/api/push/subscribe", sub.toJSON());
+      S.pushOn = true;
+      toast("手機通知開了，馬上會跳一則試試。");
+    } catch (e) {
+      S.pushOn = false;
+      if (!e || !e.message) toast("這個瀏覽器開不了通知。");
+    } finally { S.pushBusy = false; render(); }
+  }
+
+  async function pushDisable() {
+    S.pushBusy = true;
+    render();
+    try {
+      const sub = await (await pushReg()).pushManager.getSubscription();
+      if (sub) {
+        await api("/api/push/unsubscribe", { endpoint: sub.endpoint }).catch(() => {});
+        await sub.unsubscribe();
+      }
+      S.pushOn = false;
+    } catch (e) { /* 關不掉就照實留著勾 */ }
+    finally { S.pushBusy = false; render(); }
+  }
+
+  function pushRow() { // 設定頁那一顆
+    if (!(S.main && S.main.web_push)) return "";
+    let note = "";
+    if (pushNeedsHome()) note = "iPhone 要先在 Safari 按「分享 → 加入主畫面」，從主畫面打開遊戲，這裡才打得開。";
+    else if (!pushSupported()) note = "這個瀏覽器收不到通知。";
+    else if (Notification.permission === "denied") note = "通知被這個瀏覽器擋了：到瀏覽器的網站設定裡打開。";
+    const off = !!note || S.pushBusy;
+    return `<label class="toggle"><input type="checkbox" id="push-on" ${S.pushOn && !note ? "checked" : ""} ${off ? "disabled" : ""}> 手機通知</label>
+      <p class="muted push-note">${note || `${PUSH_KINDS}時跳出來，遊戲關著也會。`}</p>`;
+  }
+
+  function pushAskHtml(m) { // 江湖頁信的小卡底下：第一次來信時問一次
+    if (!m.letter || S.pushOn || pushAsked() || !pushSupported() || Notification.permission !== "default") return "";
+    return `<section class="card push-ask"><p>以後有人來信、約戰、決戰集結時，要不要讓手機跳通知告訴你？</p>
+      <div class="row"><button class="btn small primary" data-act="push-yes">開啟通知</button><button class="btn small ghost" data-act="push-no">不用</button></div></section>`;
+  }
+
   // 管理者「每週的事」那一行在 7 天濃縮季的寫法（軍令每天、第 4 階席次每段；FB-501，待 joy 潤）
   const ADMIN_DAILY_WEEK7 = "每天、每段的事（照 00:00 的做法立刻再做一次；之後照常）";
   // 21 天季：軍令每天、第 4 階席次照舊每週一（FB-502，待 joy 潤）
@@ -4392,6 +4476,7 @@
         <div class="top-row"><h3 style="flex:1">設定</h3>${S.main.admin ? `<button class="btn small ghost" data-act="to-admin">管理者工具 ↓</button>` : ""}<button class="btn small ghost" data-act="sheet-close">關閉</button></div>
         ${genderRow(s)}
         ${renameRow()}
+        ${pushRow()}
         <label class="toggle"><input type="checkbox" id="anon" ${s.anonymous ? "checked" : ""}> 匿名行走（只在地方傳聞裡不寫名號；天下大事、軍情、江湖史、排行照寫）</label>
         <div class="stack">
           <button class="btn" data-act="howto" aria-expanded="${!!S.howtoOpen}" aria-controls="howto">玩法說明</button>
@@ -4798,6 +4883,9 @@
     S.zhuan = null; clearTimeout(zhuanTimer); // 傳也一樣
     S.mtEdit = null; S.mtZoom = null; S.boardCard = null; // 名帖的畫布與放大的那一張、榜單點開的卡也收起
     if (tab !== "map") stopPlay(); // 版圖變化的播放也停
+    // 每一次打開輿圖都從第一層開始（減法季整合設計第七章：「全區」按過只這一次有效）；江湖頁的小地圖點了某一處另外挑好了（S.mapKeep）
+    if (tab === "map" && !S.mapKeep) mapFirst();
+    S.mapKeep = false;
     if (tab === "news") S.unseen = false;
     render();
     window.scrollTo(0, 0);
@@ -4810,6 +4898,7 @@
       }
       if (tab === "practice" || tab === "craft") await loadMenxia();
       if (tab === "map") {
+        // 每一次打開輿圖都從第一層開始（減法季整合設計第七章：「全區」按過只這一次有效）；江湖頁的小地圖點了某一處另外挑好了（S.mapKeep）
         // 打開輿圖本身可能完成新手引導的一步，所以先當一個動作做
         const r = await api("/api/do/view_map", {});
         setMain(r.main);
@@ -5490,7 +5579,7 @@
           S.craftPick = false; // 換分頁：煉製頁的抽屜收起
           const loc = el.classList.contains("mini") && ev.target.closest && ev.target.closest("[data-loc]");
           // 江湖頁的小地圖點了某一處（設計第八節）：輿圖開在那一處所在的區圖、抽屜半開它的卡（那一區照它算：mapReady）
-          if (loc) { S.mapSel = loc.getAttribute("data-loc"); S.mapMode = "place"; S.mapDrawer = "peek"; S.mapLayer = "region"; S.mapRegion = regionOfPlace(S.mapSel); }
+          if (loc) { mapFirst(loc.getAttribute("data-loc")); S.mapKeep = true; }
           await goTab(el.dataset.tab);
           break;
         }
@@ -5501,7 +5590,13 @@
           break;
         case "map-report": S.news = "reports"; await goTab("news"); break; // 卡上「攻城戰果」那一段的「看戰報」：開見聞的戰報
         case "world-region": enterRegion(el.dataset.id); break; // 天下圖點一州
-        case "world-enter": enterRegion(hereRegion()); break; // 天下圖抽屜的「進入此區」：你在的那一州
+        case "world-enter": toNear(); break; // 天下圖抽屜的「進入此區」：回第一層（你在的那一區、以你為中心）
+        case "map-full": // 「全區」：第三層（點了的那一處照舊開著）；再按一次回第一層
+          if (S.mapLayer === "region") toNear();
+          else enterRegion(S.mapRegion || hereRegion(), S.mapMode === "place" ? S.mapSel : null, false);
+          break; // 「全區」：第三層；再按一次回第一層
+        case "map-home": toNear(); break; // 拖遠了的「回到我這」
+        case "map-more": setMapDrawer("half"); break; // 卡上「往上拉：能悟、對手……」
         case "map-world": // 「‹ 天下」、天下圖的「天下」（已經在天下圖、放大了：滑回 1 倍）
           if (S.mapLayer !== "world" || S.mapMode !== "overview") toWorld();
           else if (S.mapPan) panReset();
@@ -5555,10 +5650,16 @@
           }, PLAY_MS);
           break;
         }
-        case "map-jianghu": // 就在這裡：出陣、探索回江湖頁按（探索三選一開著時直接攤開那三種）
-          S.wheelSel = el.dataset.key === "explore" ? "explore" : null;
+        case "map-jianghu": { // 就在這裡：出陣、探索真的做（減法季整合設計第七章【PM】），回江湖頁看結果；探索三選一開著時回江湖頁攤開那三種
+          const key = el.dataset.key, opts = (S.main && S.main.options) || [];
+          const modes = opts.some((o) => o.id.startsWith(EXPLORE_PREFIX) && !o.id.startsWith(GATHER_BRANCH) && o.id !== PRACTICE_ID);
+          const id = key === "sortie" ? "act:train" : key === "explore" && !modes ? "act:explore" : null;
+          const ready = id && opts.some((o) => o.id === id && o.enabled !== false);
+          S.wheelSel = key === "explore" && !ready ? "explore" : null;
           await goTab("jianghu");
+          if (ready) await choose(document.querySelector(`[data-id="${id}"]`) || el, id);
           break;
+        }
         case "sense-clear": S.sensePts = []; S.senseNote = ""; renderPage(); break;
         case "sense-send": await senseSend(); break;
         case "move-mode": await setMoveMode(el.dataset.mode); break;
@@ -5587,6 +5688,7 @@
         case "sheet":
           S.sheet = true;
           render();
+          pushRefresh(); // 手機通知：這台裝置訂著沒有（不等它）
           loadRecap(); // 有序章的內容才有「重看序章」鈕；同一次載入只問一次
           if (S.main.admin) { // 每次打開都重抓：時刻表與可以定的結果會變；查過的玩家也重查（給過的機緣、片段就不再列）
             S.admin = await api("/api/admin");
@@ -5676,6 +5778,8 @@
         case "letter-open": S.letterOpen = S.letterOpen === Number(el.dataset.id) ? null : Number(el.dataset.id); renderPage(); break;
         case "letter-read": S.letterOpen = null; await doMain("letter_read", { id: Number(el.dataset.id) }); break;
         case "letter-decline": await doMain("letter_decline", { id: Number(el.dataset.id) }); break;
+        case "push-yes": await pushEnable(); break; // 第一次來信時問的那一張（手機通知，減法季批 9）
+        case "push-no": pushMarkAsked(); renderPage(); break;
         case "gender-pick": S.genderPick = el.dataset.value || null; render(); break;
         case "rename-ask": { const v = (document.getElementById("rename-name") || {}).value || ""; if (v.trim()) { S.renameAsk = v.trim(); render(); } break; }
         case "rename-back": S.renameAsk = null; render(); break;
@@ -6003,6 +6107,7 @@
 
   document.addEventListener("change", async (ev) => {
     if (ev.target.id === "anon") await doMain("anonymous", { value: ev.target.checked });
+    if (ev.target.id === "push-on") await (ev.target.checked ? pushEnable() : pushDisable()); // 手機通知（減法季批 9）
     if (ev.target.id === "hints-off") await doMain("hints_off", { value: ev.target.checked }); // 碰到才說的小提醒（新手引導計畫三）；打開時排著的清掉
     if (ev.target.dataset && ev.target.dataset.act === "region-pick") enterRegion(ev.target.value); // 區圖上面那一排換一區
     if (ev.target.id === "mt-preset" && S.mtEdit && ev.target.value) { // 名帖：換成一張現成的畫（之後照樣能再畫幾筆）
