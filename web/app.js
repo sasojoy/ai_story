@@ -14,15 +14,16 @@
  */
 "use strict";
 
-  // 底部分頁 6 改 4（減法季批 1，整合設計 6.5）：江湖、自己、輿圖、見聞；商城從右上角的錠子鈕進。「自己」是修練頁（practice）加上
-  // 從它底下進去的煉製頁（craft）——兩頁的 id 照舊（序章的 tab:practice、tab:craft，看過:practice 的旗標、測試都認它），分頁列上只有一格
+  // 底部分頁 6 改 4（減法季批 1，整合設計 6.5）：江湖、俠客、輿圖、見聞；商城從右上角的錠子鈕進。「俠客」（Joy 2026-10-24：「俠客」太直白）@@KEEP@@
+  // 是修練頁（practice）加上從它底下進去的煉製頁（craft）——兩頁的 id 照舊（序章的 tab:practice、tab:craft，看過:practice 的旗標、測試都認它），
+  // 分頁列上只有一格
   const TABS = [
     { id: "jianghu", ico: "江", name: "江湖" },
-    { id: "practice", ico: "己", name: "自己", also: ["craft"] },
+    { id: "practice", ico: "俠", name: "俠客", also: ["craft"] },
     { id: "map", ico: "圖", name: "輿圖" },
     { id: "news", ico: "聞", name: "見聞" },
   ];
-  // 見聞 9 籤改 4（6.5）：大事（戰報＋大勢＋形勢，段落裡再分）、傳聞、江湖史、紀錄。行狀、榜單、名帖匣搬到「自己」頁底下（SELF_NEWS），
+  // 見聞 9 籤改 4（6.5）：大事（戰報＋大勢＋形勢，段落裡再分）、傳聞、江湖史、紀錄。行狀、榜單、名帖匣搬到「俠客」頁底下（SELF_NEWS），
   // 頁面照舊是見聞那一頁的同一段（S.news 認得它們），只是籤不排在見聞上
   const NEWS = [
     { id: "reports", name: "大事", parts: ["reports", "trends", "xingshi"] },
@@ -36,7 +37,7 @@
     { id: "trends", name: "大勢" },
     { id: "xingshi", name: "形勢" }, // 領地爭奪第三批 A：每天一篇〈天下形勢〉（/api/xingshi）
   ];
-  // 從「自己」頁進去的三段（以前是見聞的籤）：行狀（玩家傳第一批，/api/annals）、榜單（企劃者 2026-10-14，/api/boards）、名帖匣（Joy 2026-10-19，/api/mingtie）
+  // 從「俠客」頁進去的三段（以前是見聞的籤）：行狀（玩家傳第一批，/api/annals）、榜單（企劃者 2026-10-14，/api/boards）、名帖匣（Joy 2026-10-19，/api/mingtie）
   const SELF_NEWS = [
     { id: "annals", name: "行狀" },
     { id: "boards", name: "榜單" },
@@ -172,6 +173,7 @@
     forgeLine: "",
     craftPick: false, // 煉製頁挑東西的抽屜開著沒（點爐子的空格打開；兩格放滿、關掉、換分頁就收）
     pdrawer: null, // 修練頁的抽屜開著哪一個光點（{t: "worn"|"gear", key}；false 是剛關上，序章不再自己攤開）
+    selfOpen: {}, // 俠客頁底下的摺疊（功法庫、裝備、門下、規矩）哪幾個攤著（{lib: true, …}）：玩家開關的記下來，輪詢重畫照它補回
     insFilter: "all", // 修練頁意境列的篩選：all／free（沒裝的）／used（裝著的）
     forgeReveal: false, // 剛出爐：意境卡演一次排場
     forgePreview: null, // 兩格都放好時的預覽卡（/api/forge_line 的 preview，合成即設計）；只放一樣、空爐是 null，畫 forgeLine 那一行
@@ -473,10 +475,10 @@
     const list = TABS.filter((t) => [t.id, ...(t.also || [])].some((id) => shown(`tab:${id}`)));
     if (!list.length) return "";
     const mall = mallShown();
-    // 「自己」那一格：在修練或煉製頁都亮著；序章要你去煉製（glow 有 tab:craft）而你不在「自己」時，這一格也替煉製發光（data-glow 兩個鍵），
+    // 「俠客」那一格：在修練或煉製頁都亮著；序章要你去煉製（glow 有 tab:craft）而你不在「俠客」時，這一格也替煉製發光（data-glow 兩個鍵），
     // 人已經在修練頁時改由頁底「煉製」那一顆發光
     const on = (t) => S.tab === t.id || (t.also || []).includes(S.tab) ? !(S.tab === "news" && selfNews(S.news))
-      : t.id === "practice" && S.tab === "news" && !!selfNews(S.news); // 從「自己」進去的行狀、榜單、名帖匣：亮「自己」
+      : t.id === "practice" && S.tab === "news" && !!selfNews(S.news); // 從「俠客」進去的行狀、榜單、名帖匣：亮「俠客」
     const glow = (t) => [t.id, ...(on(t) ? [] : t.also || [])].map((id) => `tab:${id}`).join(" ");
     return `<nav class="tabs"><div class="tabs-inner" style="grid-template-columns:repeat(${list.length + (mall ? 1 : 0)}, 1fr)">${list.map((t) => `
         <button class="tab ${on(t) ? "on" : ""}" data-act="tab" data-tab="${t.id}" data-glow="${glow(t)}">
@@ -725,7 +727,7 @@
         ? `<b style="width:${pct(s.injury, s.hp_max)}%"></b>` : ""}<span><em class="lbl">氣血 </em>${s.hp}/${s.hp_max}</span>${s.injury >= 1
         ? `<span class="inj">傷 ${s.injury}</span>` : ""}</div>` : "",
       shown("silver") ? `<div class="num" data-glow="silver"><em>銀</em>${s.silver}</div>` : "",
-      // 心得、名望、善惡、五項屬性搬到「自己」頁（整合設計 6.2）；序章裡心得亮了、銀兩還沒亮時照舊寫在這裡（序章的話要你看它）
+      // 心得、名望、善惡、五項屬性搬到「俠客」頁（整合設計 6.2）；序章裡心得亮了、銀兩還沒亮時照舊寫在這裡（序章的話要你看它）
       shown("xinde") && !shown("silver") ? `<div class="num" data-glow="xinde"><em>心得</em>${s.xinde}</div>` : "",
     ].join("");
     // 點名號展開屬性：序章裡「屬性」那一步才點得開（data-glow="stats" 指路）；沒亮就不是按鈕
@@ -1702,7 +1704,7 @@
   const practiceOk = (x, kind) => { const c = (x.slot_cards || []).find((sl) => sl.kind === kind); return !!c && c.learned !== false && !c.blocked && !c.maxed; };
   function heroPanel(x, s) {
     const fig = heroFigure(s);
-    // 「自己」頁（減法季批 1，圖解版第 33 頁）：四欄裝備畫在人像的四個角（selfCorners），身上只留兩門的光點
+    // 「俠客」頁（減法季批 1，圖解版第 33 頁）：四欄裝備畫在人像的四個角（selfCorners），身上只留兩門的光點
     const nodes = fig.nodes.filter((n) => n.kind === "art").map((n) => [n, heroInfo(n, x, s)]).filter(([, info]) => info);
     const corners = selfCorners(x, s);
     if (!nodes.length && !corners) return "";
@@ -1723,7 +1725,7 @@
       </div>
     </section>`;
   }
-  // ── 「自己」頁（減法季批 1，整合設計 6.5；圖解版第 33、34 頁）：修練頁的上半換成人像四角的四欄裝備、身上兩門的成數條（絕學金框、朱印「絕」）、
+  // ── 「俠客」頁（減法季批 1，整合設計 6.5；圖解版第 33、34 頁）：修練頁的上半換成人像四角的四欄裝備、身上兩門的成數條（絕學金框、朱印「絕」）、
   // 心得名望善惡與五項屬性（以前在狀態列，6.2 搬來）、底下三個入口（煉製、自創武學、榜單；行狀、名帖匣是一行小字）。規則一個字都沒改：
   // 點什麼都是原本那一格（抽屜、煉製頁、自創頁、見聞那一段）。字待 joy 潤
   const SELF_CORNERS = [["weapon", "tl"], ["mount", "tr"], ["armor", "bl"], ["treasure", "br"]];
@@ -1745,36 +1747,46 @@
     return cells ? `<div class="self-gears">${cells}</div>` : "";
   }
   const CN_TENTHS = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九", "十"];
-  // 身上兩門的成數條：點了開那一門的抽屜（同人像上的光點）。絕學金框、左邊一枚朱印「絕」，底下一句破境那一行的話
+  // 「武學」那一段（俠客頁重排，Joy 2026-10-24）：小標題右邊一顆「功法庫 N/M・意境 K ›」（攤開底下的功法庫摺疊、捲過去），
+  // 底下身上兩門的成數條：點了開那一門的抽屜（同人像上的光點）。絕學金框、左邊一枚朱印「絕」，底下一句破境那一行的話
   function selfArtsHtml(x) {
     const worn = KINDS.map((k) => x.owned_arts.find((a) => a.worn && a.kind === k)).filter(Boolean);
-    if (!worn.length) return "";
-    return `<div class="self-arts">${worn.map((a) => {
+    const lib = x.holdings ? `<button class="linkish" data-act="self-sec" data-sec="lib">功法庫 ${x.holdings.count | 0}/${x.holdings.cap | 0}・意境 ${(x.insights || []).length} ›</button>` : "";
+    const head = `<div class="self-hd"><h3>武學</h3>${lib}</div>`;
+    if (!worn.length) return `<section class="self-sec" aria-label="武學">${head}<p class="muted">你身上還沒有武學。</p></section>`;
+    return `<section class="self-sec" aria-label="武學">${head}<div class="self-arts">${worn.map((a) => {
       const lv = Math.max(0, Math.min(10, a.level | 0)), top = a.quality === "絕學";
       const note = top ? (a.cultivate && (a.cultivate.legend ? a.cultivate.legend.note : a.cultivate.note)) || "" : "";
       return `<button class="self-art${top ? " q4" : ""}" data-act="hero-node" data-kind="art" data-key="${esc(a.kind)}">${top ? '<span class="qseal q4 big">絕</span>' : ""}`
         + `<span class="sa-body"><span class="sa-hd"><b>${esc(a.name)}</b><small>${top ? "絕學" : esc(a.kind)}・第${CN_TENTHS[lv]}成</small></span>`
         + `${note ? `<small class="sa-note">${esc(note)}</small>` : ""}<i class="sa-bar" role="meter" aria-valuemin="0" aria-valuemax="10" aria-valuenow="${lv}" aria-label="${esc(a.name)}第${lv}成"><i style="width:${lv * 10}%"></i></i></span></button>`;
-    }).join("")}</div>`;
+    }).join("")}</div></section>`;
   }
-  // 心得、名望、善惡、五項屬性（以前在狀態列與點名號攤開的那一塊，整合設計 6.2）。可配點時一排「＋臂力」（同狀態列那一排，序章照舊點名號配）
+  // 「屬性」那一段（以前在狀態列與點名號攤開的那一塊，整合設計 6.2）：五項一格一欄（名字、數字），有點可配時每格底下一顆「＋」、
+  // 小標題右邊寫「可配 N 點」、格子底下一行五項各管什麼（statUsesHtml）；再一行名望、善名、惡名；心得一行在最底下（序章照舊點名號配）
   function selfStatsHtml(s) {
-    if (!s || !s.attrs) return "";
+    if (!s || !s.attrs || (!shown("stats") && !shown("xinde"))) return "";
+    const pts = s.stat_points | 0;
+    const cols = s.attrs.map(([k, v, key]) => `<div class="attr"><em>${esc(k)}</em><b>${v}</b>${pts
+      ? `<button class="btn small alloc" data-act="allocate" data-stat="${esc(key)}" aria-label="${esc(k)}加一點" ${v >= s.stat_cap ? "disabled" : ""}>＋</button>` : ""}</div>`).join("");
     const minor = (s.minor || []).map(([k, v]) => `<span><em>${esc(k)}</em>${v}</span>`).join("");
-    const attrs = s.attrs.map(([k, v]) => `<span><em>${esc(k)}</em>${v}</span>`).join("");
-    const alloc = s.stat_points ? `<div class="pts-label"><b class="pts">可配 ${s.stat_points} 點</b></div><div class="row alloc">${s.attrs.map(([k, v, key]) => `<button class="btn small" data-act="allocate" data-stat="${esc(key)}" ${v >= s.stat_cap ? "disabled" : ""}>＋${esc(k)}</button>`).join("")}</div>${statUsesHtml(s)}` : "";
-    return `<section class="self-stats" aria-label="心得與屬性">${shown("xinde") ? `<p class="self-xinde"><em>心得</em><b>${s.xinde | 0}</b>${s.hint ? `<small>${esc(s.hint)}</small>` : ""}</p>` : ""}`
-      + `${shown("stats") ? `<div class="self-nums">${minor}</div><div class="self-nums attrs">${attrs}</div>${alloc}` : ""}</section>`;
+    const stats = shown("stats") ? `<div class="self-hd"><h3>屬性</h3>${pts ? `<b class="pts">可配 ${pts} 點</b>` : ""}</div><div class="self-attrs">${cols}</div>${pts ? statUsesHtml(s) : ""}${minor ? `<div class="self-nums">${minor}</div>` : ""}` : "";
+    const xinde = shown("xinde") ? `<p class="self-xinde"><em>心得</em><b>${s.xinde | 0}</b>${s.hint ? `<small>${esc(s.hint)}</small>` : ""}</p>` : "";
+    return `<section class="self-stats self-sec" aria-label="心得與屬性">${stats}${xinde}</section>`;
   }
-  // 底下三個入口：煉製（煉製頁）、自創武學（自創頁）、榜單（見聞那一段）；行狀、名帖匣一行小字
-  function selfEntriesHtml() {
+  // 「去做」那一段：四格兩欄——煉製（煉製頁）、自創武學（自創頁）、療傷、閉關（鈕底下選幾小時；表單 id 照舊 seclude）。
+  // 鈕按不按得下去、第二行的字都照原本那幾顆（healButton、seclude_blocked）；行狀、榜單、名帖匣在底下的「記錄」清單
+  function selfEntriesHtml(x, s) {
     const c = S.main && S.main.status && S.main.status.create;
+    const craft = shown("tab:craft") ? '<button class="btn self-go" data-act="tab" data-tab="craft" data-glow="tab:craft">煉製<small>意境合成、看爐</small></button>' : "";
     const create = c && c.on ? `<button class="btn self-go" data-act="create-open">${c.draft ? "接著自創" : "自創武學"}<small>${createSub(c)}</small></button>` : "";
-    const craft = shown("tab:craft") ? '<button class="btn self-go" data-act="tab" data-tab="craft" data-glow="tab:craft">煉製</button>' : "";
-    const more = shown("tab:news") ? SELF_NEWS.map((n) => `<button class="linkish" data-act="news" data-news="${n.id}">${n.name} ›</button>`).join("") : "";
-    return `<div class="self-goes">${craft}${create}${shown("tab:news") ? '<button class="btn self-go" data-act="news" data-news="boards">榜單</button>' : ""}</div>`
-      + (more ? `<p class="self-more">${more}</p>` : "");
+    const heal = healButton(x, s.injury).replace('class="btn"', 'class="btn self-go"');
+    const seclude = `<form id="seclude" class="seclude"><button class="btn self-go" type="submit" ${x.seclude_blocked ? "disabled" : ""}>閉關<small>得心得，氣血回復加倍</small></button>
+        <select class="input" name="hours" aria-label="閉關幾小時">${[1, 2, 4, 6, 8, 12].map((h) => `<option value="${h}" ${h === 8 ? "selected" : ""}>${h} 小時</option>`).join("")}</select></form>`;
+    return `<section class="self-sec" aria-label="去做"><div class="self-hd"><h3>去做</h3></div><div class="self-goes">${craft}${create}${heal}${seclude}</div></section>`;
   }
+  // 「記錄」清單：行狀、榜單、名帖匣（見聞那一頁的三段，SELF_NEWS）
+  const selfRecordsHtml = () => (shown("tab:news") && SELF_NEWS.length ? `<div class="list self-list" aria-label="記錄">${SELF_NEWS.map((n) => `<button data-act="news" data-news="${n.id}">${n.name}</button>`).join("")}</div>` : "");
 
   // 點光點（招式與絕學稿案第四輪）：從底下升起那一樣的抽屜——武學、內功是那一門的卡（練、槽、改練），裝備是那一欄的裝備庫
   function heroTap(el) {
@@ -2227,12 +2239,13 @@
     // FB-138：開著的欄位都空著、也沒有寄放的（新角色）也畫一塊精簡的：每欄一行，欄名、空著的那一句、哪裡買得到（where，伺服器照內容的地點標籤給；
     // 內容裡沒有那種地點時是空字串，只寫空著的那一句）。沒有按鈕、沒有格數。這一版畫不出的欄位略過；四欄都關著（slots 空）整塊不畫。待 joy 潤
     const emptyLines = gear && !hasGear ? gear.slots.filter((g) => GEAR_ROWS[g.slot]).map((g) => `<p data-empty="${esc(g.slot)}"><b>${esc(g.label)}</b>　${esc(g.empty)}${g.where ? esc(g.where) : ""}</p>`) : [];
-    const gearBlock = hasGear ? `<div class="gear"><div class="label">裝備 <small class="muted">裝備庫 ${gear.used | 0}/${gear.cap | 0}</small></div>
+    // 俠客頁重排之後整塊收在「裝備」摺疊裡（self-fold；標題列上寫格數），四欄的小段照舊
+    const gearBlock = hasGear ? `<details class="fold self-fold" data-sec="gear"${S.selfOpen && S.selfOpen.gear ? " open" : ""}><summary>裝備 <small class="muted">裝備庫 ${gear.used | 0}/${gear.cap | 0}</small></summary><div class="fold-body gear">
         ${gear.slots.map(slotBlock).join("")}
         ${heldLine}
-      </div>` : emptyLines.length ? `<div class="gear gear-empty"><div class="label">裝備 <small class="muted">身上還沒有任何裝備</small></div>
+      </div></details>` : emptyLines.length ? `<details class="fold self-fold" data-sec="gear"${S.selfOpen && S.selfOpen.gear ? " open" : ""}><summary>裝備 <small class="muted">身上還沒有任何裝備</small></summary><div class="fold-body gear gear-empty">
         ${emptyLines.join("")}
-      </div>` : "";
+      </div></details>` : "";
     // 抽屜（招式與絕學稿案第四輪：點什麼，內容就從底下升起；整頁只用這一個）：庫裡的一門、意境、身上的一門、一欄裝備。
     // S.pdrawer 是點了哪個光點（false 是剛關上）；序章裡師父點名要按的鈕在身上那一門時，沒點過也先攤開那一門
     const stepGlow = (S.main && S.main.prologue && S.main.prologue.glow) || [];
@@ -2259,17 +2272,11 @@
       <div class="sheet pr-sheet" role="dialog" aria-label="${esc(drawerTitle)}"><div class="grip"></div>
         <div class="top-row"><h3 style="flex:1">${esc(drawerTitle)}</h3><button type="button" class="btn small ghost" data-act="drawer-close">關閉</button></div>
         ${drawerBody}</div>` : "";
-    return `
-      ${proGuide()}
-      ${heroPanel(x, s)}
-      ${selfArtsHtml(x)}
-      ${selfEntriesHtml()}
-      ${selfStatsHtml(s)}
-      <div class="msg" id="mx-msg">${S.message}</div>
-      ${naming}
-      ${attrNoteHtml(x)}
-      <div class="label">功法庫 <small class="muted">武學與意境 ${x.holdings.count}/${x.holdings.cap}</small>${meltSwitch}</div>
-      ${S.meltNote ? `<div class="msg melt-result">${S.meltNote}</div>` : ""}
+    // 俠客頁的排法（Joy 2026-10-24「這頁既然都要重做了，為什麼不整體重新規劃」；草圖 https://claude.ai/artifact/DcuRiGjo9CtcBJoY87wu9m）：
+    // 人像與四欄裝備 → 武學（身上兩門；功法庫、意境是右上那一顆）→ 屬性五格 → 去做四格 → 記錄清單（行狀、榜單、名帖匣）→
+    // 四個收著的摺疊：功法庫（武學、意境、批量熔煉）、裝備、門下、修練的規矩。開合記在 S.selfOpen（toggle 事件）；勾著批量熔煉時功法庫一定攤開
+    const fold = (sec, title, body) => `<details class="fold self-fold" data-sec="${sec}"${(S.selfOpen && S.selfOpen[sec]) || (sec === "lib" && meltOn) ? " open" : ""}><summary>${title}</summary><div class="fold-body">${body}</div></details>`;
+    const libBody = `${meltSwitch}${S.meltNote ? `<div class="msg melt-result">${S.meltNote}</div>` : ""}
       ${meltOn ? `<p class="muted melt-hint">點一列勾起來，再按底下的「熔掉」；點右邊的 › 看細節。身上正在練的與本命武學熔不掉。</p>
       ${meltTools}
       ${meltList}` : `${chips}
@@ -2278,27 +2285,32 @@
       ${showAll ? "" : `<button class="btn ghost lib-more" data-act="lib-all">再列 ${picked.length - LIB_PAGE} 門</button>`}`}
       ${meltOn ? "" : `<div class="label">意境</div>
       ${x.insights.length ? `${insFilterRow}${insList.length ? `<div class="lib insl">${insList.map(insRow).join("")}</div>` : '<p class="muted">這一類沒有意境。</p>'}`
-        : '<p class="muted">還沒悟到任何意境。去探索，荒郊野外最容易有所領悟。</p>'}`}
-      ${gearBlock}
-      <div class="label">門下</div>
-      <details class="fold" open><summary>本人</summary><div class="fold-body">${tenCells(x.player_card)}</div></details>
+        : '<p class="muted">還沒悟到任何意境。去探索，荒郊野外最容易有所領悟。</p>'}`}`;
+    const rosterBody = `<details class="fold" open><summary>本人</summary><div class="fold-body">${tenCells(x.player_card)}</div></details>
       ${mates ? `<div class="list">${x.roster.map((r) => `<button class="${x.person === r.key ? "on" : ""}" data-act="person" data-key="${esc(r.key)}">${esc(r.label)}</button>`).join("")}</div>` : ""}
       ${mates && x.person ? `<div class="card person-card">${tenCells(x.person_card)}${noteAt("person")}
         ${x.person === "player" ? '<p class="muted">本人一直都在隊伍裡。</p>' // 本人不能加入、移出（引擎也會擋）
           : x.person.startsWith("follower:") ? "" // 部下（計畫 T5）也不能加入、移出；角色卡已經寫了
           : `<button class="btn ${x.on_team ? "" : "primary"}" data-act="mx" data-op="${x.on_team ? "leave" : "join"}">${x.on_team ? "移出隊伍" : "加入隊伍"}</button>`}
         ${x.release ? `<button class="btn ghost" data-act="release-mate" data-confirm="${esc(x.release.confirm)}">放他回江湖</button>` : ""}
-        ${lessonsHtml(x.lessons)}</div>` : ""}
-      <div class="tune">
-        ${healButton(x, s.injury)}
-        <form id="seclude" class="seclude">
-          <button class="btn" type="submit" ${x.seclude_blocked ? "disabled" : ""}>閉關<small>得心得，氣血回復加倍</small></button>
-          <select class="input" name="hours" aria-label="閉關幾小時">${[1, 2, 4, 6, 8, 12].map((h) => `<option value="${h}" ${h === 8 ? "selected" : ""}>${h} 小時</option>`).join("")}</select>
-        </form>
-      </div>
+        ${lessonsHtml(x.lessons)}</div>` : ""}`;
+    return `
+      ${proGuide()}
+      ${heroPanel(x, s)}
+      ${selfArtsHtml(x)}
+      ${selfStatsHtml(s)}
+      ${selfEntriesHtml(x, s)}
       ${noteAt("heal")}
       ${x.seclude_blocked ? `<p class="muted">${esc(x.seclude_blocked)}</p>` : ""}
-      <details class="fold"><summary>修練的規矩</summary><div class="fold-body">${x.rules}</div></details>
+      <div class="msg" id="mx-msg">${S.message}</div>
+      ${naming}
+      ${attrNoteHtml(x)}
+      <div class="label">記錄</div>
+      ${selfRecordsHtml()}
+      ${fold("lib", `功法庫 <small class="muted">武學與意境 ${x.holdings.count}/${x.holdings.cap}</small>`, libBody)}
+      ${gearBlock}
+      ${fold("roster", `門下${mates ? ` <small class="muted">${x.roster.length} 人</small>` : ""}`, rosterBody)}
+      ${fold("rules", "修練的規矩", x.rules)}
       ${meltGo}
       ${meltOn ? "" : drawerHtml}`;
   }
@@ -2562,9 +2574,9 @@
     const result = S.forgeResult ? `${madeCardHtml(x, S.forgeMade)}<div class="msg forge-result">${S.forgeResult.html}</div>` : "";
     // 爐子、預覽卡（或說明那一行）、結果都在第一屏；挑東西在抽屜裡（craftSheetHtml），頁面本身不長。
     // 爐裡還沒放滿時預覽那一行底下一顆「挑東西放進爐」（點爐子的空格也行）
-    // 煉製頁是從「自己」頁進來的（減法季批 1：分頁列上沒有它自己一格）：最上面一行「‹ 自己」回去
+    // 煉製頁是從「俠客」頁進來的（減法季批 1：分頁列上沒有它自己一格）：最上面一行「‹ 俠客」回去
     return `
-      <div class="self-sub"><button class="linkish back" data-act="tab" data-tab="practice">‹ 自己</button><h3>煉製</h3></div>
+      <div class="self-sub"><button class="linkish back" data-act="tab" data-tab="practice">‹ 俠客</button><h3>煉製</h3></div>
       ${proGuide()}
       <div class="msg" id="mx-msg">${S.message}</div>
       ${kilnHtml([slotOf(S.forgeSel[0]), slotOf(S.forgeSel[1])], ready)}
@@ -2685,10 +2697,10 @@
       <div class="acts"><button class="btn primary" data-act="create-name">立名<small>${draft.paid ? "心得已在立意時付了" : `心得 ${c.price | 0}`}</small></button>${redo}${quit}</div>
     </div>`;
   }
-  // 自創單獨一頁（Joy 2026-10-21「創造武學不要卡在煉成的中間」）：入口在「自己」頁底下那三顆的中間（減法季批 1；以前在修練頁功法庫的頂上），
+  // 自創單獨一頁（Joy 2026-10-21「創造武學不要卡在煉成的中間」）：入口在「俠客」頁底下那三顆的中間（減法季批 1；以前在修練頁功法庫的頂上），
   // 點了整頁換成自創（S.createOpen），左上「返回自己」。立好或作罷就回修練頁、結果寫在上面。字待 joy 潤
   const CREATE_STEP_WORD = Object.fromEntries(CREATE_STEPS);
-  // 「自己」頁底下「自創武學」那一顆的小字：起了意的寫停在哪一步，沒起意寫價錢（或這一季還能創幾門、做不了的原因）
+  // 「俠客」頁底下「自創武學」那一顆的小字：起了意的寫停在哪一步，沒起意寫價錢（或這一季還能創幾門、做不了的原因）
   function createSub(c) {
     const d = c.draft;
     return d ? `${esc(d.kind)}・${esc(d.form)}，停在「${esc(CREATE_STEP_WORD[c.step] || "")}」`
@@ -4319,7 +4331,7 @@
   }
 
   // 見聞的籤（NEWS，減法季批 1 起四顆）：大事（戰報、大勢、形勢在它底下再分一排小的）、傳聞、江湖史、紀錄。
-  // 「形勢」只有〈天下形勢〉開著的季（main.xingshi）才畫。行狀、榜單、名帖匣是從「自己」頁進來的（SELF_NEWS）：
+  // 「形勢」只有〈天下形勢〉開著的季（main.xingshi）才畫。行狀、榜單、名帖匣是從「俠客」頁進來的（SELF_NEWS）：
   // 那三段最上面不畫見聞的籤，畫一行「‹ 自己」回去
   const newsPart = (id) => NEWS.find((n) => (n.parts || [n.id]).includes(id));
   const selfNews = (id) => SELF_NEWS.find((n) => n.id === id);
@@ -5726,6 +5738,13 @@
         case "checkin": await doMain("checkin", el.dataset.attr ? { attribute: el.dataset.attr } : {}); break; // 「簽到」小標攤開的領取鈕（四階的日子帶屬性）
         case "pill": await doMain("pill"); break; // 體力條上的「丹 N」：服一顆回體丹（測試期間一鍵補滿打開時同一顆鈕寫「補滿」，同一條路由）
         case "hero-node": heroTap(el); break; // 修練頁人物面板的光點：開那一樣的抽屜
+        case "self-sec": { // 俠客頁「功法庫・意境 ›」那一顆：攤開底下那個摺疊、捲到它
+          (S.selfOpen || (S.selfOpen = {}))[el.dataset.sec] = true;
+          renderPage();
+          const box = document.querySelector(`details.self-fold[data-sec="${CSS.escape(el.dataset.sec)}"]`);
+          if (box && box.scrollIntoView) box.scrollIntoView({ behavior: "smooth", block: "start" });
+          break;
+        }
         case "drawer-close": S.pdrawer = false; S.artOpen = null; S.insOpen = null; S.slotPick = null; renderPage(); break;
         case "ins-filter": S.insFilter = el.dataset.filter; renderPage(); break;
         case "allocate": await doMain("allocate", { stat: el.dataset.stat }); break; // 升級的屬性點加到一項（狀態列展開後的「＋臂力」）
@@ -6575,6 +6594,8 @@
     else if (box instanceof Element && box.matches("details.orders")) S.ordersShut = box.open ? null : Number(box.dataset.week);
     // 「此地還能做」：記玩家（或自動打開）之後的開合與地點（hereFold），重畫、輪詢、擋下來都照它補回（FB-087）
     else if (box instanceof Element && box.matches("details.here")) S.here = { at: (S.main && S.main.status && S.main.status.location) || "", open: box.open };
+    // 俠客頁底下的摺疊（功法庫、裝備、門下、規矩）：記開合，輪詢重畫照樣
+    else if (box instanceof Element && box.matches("details.self-fold")) (S.selfOpen || (S.selfOpen = {}))[box.dataset.sec] = box.open;
     // 決戰攤開、收起舊的回合（roundBlocks）：只記下來，下一次輪詢重畫照樣
     else if (box instanceof Element && box.matches("details.b-round")) {
       const open = S.roundsOpen || (S.roundsOpen = new Set());

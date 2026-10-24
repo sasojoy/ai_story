@@ -88,7 +88,8 @@ def test_a_player_with_no_gear_still_gets_a_compact_gear_block_saying_where_to_g
     m, x = views
     x["gear"] = _where_gear()
     page = run(m, "return H.pagePractice();", menxia=x)
-    block = page.split('class="gear gear-empty"')[1].split('<div class="label">門下')[0]  # 這一塊後面接的是「門下」那一段（招式與絕學稿案第四輪：裝備排在功法庫、意境之後）
+    block = page.split('data-sec="gear"')[1].split("</details>")[0]  # 俠客頁重排（Joy 2026-10-24）：裝備收在自己的摺疊裡（標題在 summary 上）
+    assert 'class="fold-body gear gear-empty"' in block
     assert "裝備" in block
     for slot, label, empty in (("weapon", "武器", "手上沒有兵器。"), ("armor", "防具", "身上沒有防具。"), ("mount", "坐騎", "身上沒有坐騎。"), ("treasure", "寶物", "身上沒有寶物。")):
         line = block.split(f'data-empty="{slot}"')[1].split("</p>")[0]
@@ -118,7 +119,7 @@ def test_the_full_gear_block_comes_back_once_anything_is_worn_or_held(views):
     x["gear"] = _where_gear()
     x["gear"]["slots"][0]["worn"] = _row()
     full = run(m, "return H.pagePractice();", menxia=x)
-    assert 'class="gear"' in full and "gear-empty" not in full and 'data-slot="weapon"' in full and "【試刃】" in full
+    assert 'class="fold-body gear"' in full and "gear-empty" not in full and 'data-slot="weapon"' in full and "【試刃】" in full
     x["gear"] = _where_gear()
     x["gear"]["slots"][1]["rack"] = [_armor_row()]
     assert "gear-empty" not in run(m, "return H.pagePractice();", menxia=x)

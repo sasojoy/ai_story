@@ -711,7 +711,7 @@ def _heal_button(x, injury, **kw):
         f"S.menxia = {json.dumps(x)}; S.main.status.injury = {injury}; return H.pagePractice();",
         S={"main": {"status": {"injury": injury}}}, fns=["pagePractice"], stubs=PRACTICE_STUBS,
     )
-    return re.search(r'<button class="btn" data-act="mx" data-op="heal"[^>]*>.*?</button>', html, re.S).group(0)
+    return re.search(r'<button class="btn self-go" data-act="mx" data-op="heal"[^>]*>.*?</button>', html, re.S).group(0)
 
 
 @needs_node
@@ -787,16 +787,17 @@ def test_a_greyed_melt_says_why_in_the_card_where_a_phone_player_can_read_it():
 def test_the_hut_greys_out_seclusion_and_the_insight_melt_with_the_servers_reason():
     html = _practice([_art("w1", "武學", "甲拳", worn=True)], "S.insOpen = 'feng';",
                      seclude_blocked="草廬裡不能閉關。", insights=[{**_insight("feng", "風"), "blocked": "師父沒叫你熔意境。"}])
-    assert re.search(r'<button class="btn" type="submit" disabled>閉關', html) and "草廬裡不能閉關。" in html
+    assert re.search(r'<button class="btn self-go" type="submit" disabled>閉關', html) and "草廬裡不能閉關。" in html
     assert re.search(r'data-act="melt-insight"[^>]*disabled>化成心得 10</button><small class="muted">師父沒叫你熔意境。</small>', html)
 
 
 @needs_node
 def test_the_library_keeps_its_title_and_the_chips_sit_under_it():
     html = _practice(_library_of_ten())
+    # 俠客頁重排（Joy 2026-10-24）：功法庫是一個摺疊，批量熔煉那一顆在摺疊的第一行、篩選緊接在它底下
     assert re.search(
-        r'<div class="label">功法庫 <small class="muted">武學與意境 0/50</small>'
-        r'<button class="linkish melt-mode" data-act="melt-mode">批量熔煉</button></div>\s*<div class="lib-filter">', html,
+        r'<summary>功法庫 <small class="muted">武學與意境 0/50</small></summary><div class="fold-body">'
+        r'<button class="linkish melt-mode" data-act="melt-mode">批量熔煉</button>\s*<div class="lib-filter">', html,
     )
 
 

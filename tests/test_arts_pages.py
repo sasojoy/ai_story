@@ -235,9 +235,10 @@ def test_the_melt_button_carries_the_servers_confirm_question_escaped():
 
 def test_the_practice_pages_list_of_arts_is_titled_the_art_library_with_its_count():
     html = page("pagePractice", menxia(holdings={"count": 7, "cap": 56}))
-    assert re.search(r'<div class="label">功法庫 <small class="muted">武學與意境 7/56</small></div>', html)
+    # 俠客頁重排（Joy 2026-10-24）：功法庫收在一個摺疊裡，標題在 summary 上
+    assert re.search(r'<summary>功法庫 <small class="muted">武學與意境 7/56</small></summary>', html)
     assert '<div class="label">武學 <small' not in html  # 舊的標題（跟煉製頁的「武學」挑選區同名）不在了
-    assert "湖邊腿法" in html.split("功法庫")[1]  # 清單就在這個標題底下
+    assert "湖邊腿法" in html.split("<summary>功法庫")[1]  # 清單就在這個標題底下（「武學」段右上那一顆也寫功法庫，從摺疊的標題切）
 
 
 # ── W2：屬性有什麼用，收在一個摺起來的說明裡 ───────────────────────────
@@ -248,7 +249,7 @@ def test_the_practice_page_has_a_closed_attribute_fold_right_under_the_rules_lin
     fold = re.search(r"<details class=\"attr-note\"( open)?><summary>([^<]*)</summary>(.*?)</details>", html, re.S)
     assert fold and fold.group(1) is None  # 收著：第一屏只多一行字
     assert fold.group(2) == "武學屬性有什麼用" and "ATTRNOTE" in fold.group(3)  # FB-089：標題冠上「武學」，別跟升級配點的屬性混
-    assert html.index("attr-note") < html.index("功法庫") < html.index('id="seclude"')  # 功法庫之前；療傷閉關搬到頁底（招式與絕學稿案第四輪）
+    assert html.index('id="seclude"') < html.index("attr-note") < html.index("<summary>功法庫")  # 功法庫摺疊之前；療傷閉關在「去做」四格（俠客頁重排，Joy 2026-10-24）
 
 
 def test_the_craft_page_has_the_same_fold_right_under_the_open_furnace_button():

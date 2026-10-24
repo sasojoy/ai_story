@@ -1980,14 +1980,31 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
 .sa-bar { display: block; height: 6px; border-radius: 3px; background: var(--card-2); overflow: hidden; }
 .sa-bar > i { display: block; height: 100%; background: var(--gold); border-radius: 3px; }
 .self-art.q4 .sa-bar > i { background: var(--accent); }
-/* 底下三個入口（煉製、自創武學、榜單）與一行小字（行狀、名帖匣） */
-.self-goes { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 8px; margin: 0 0 6px; }
-.self-go { min-height: 48px; display: grid; justify-items: center; align-content: center; font: 600 15px var(--serif); }
+/* 俠客頁的分段（Joy 2026-10-24 整頁重排）：每段一個小標題列（.self-hd：左邊段名、右邊一顆入口或「可配 N 點」），
+   段與段之間 12px；底下記錄清單（.self-list）與四個摺疊（.self-fold，標題列上帶小字的格數） */
+.self-sec { margin: 0 0 12px; }
+.self-hd { display: flex; align-items: baseline; gap: 8px; margin: 0 2px 6px; }
+.self-hd h3 { margin: 0; font: 600 15px var(--serif); }
+.self-hd .linkish { margin: 0 0 0 auto; font-size: 13px; min-height: 32px; }
+.self-hd .pts { margin-left: auto; font: 600 13px var(--sans); color: var(--accent); }
+/* 去做四格（煉製、自創武學、療傷、閉關）兩欄；閉關那一格是表單，鈕底下一排選幾小時 */
+.self-goes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.self-go { min-height: 56px; display: grid; justify-items: center; align-content: center; font: 600 15px var(--serif); }
 .self-go small { font: 11px var(--sans); color: var(--ink-2); font-weight: 400; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.self-more { display: flex; gap: 18px; margin: 0 0 12px; font-size: 14px; }
-/* 心得、名望、善惡與五項屬性（以前在狀態列，整合設計 6.2） */
-.self-stats { margin: 0 0 12px; padding: 10px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); }
-.self-xinde { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+.self-goes .seclude { display: grid; gap: 4px; align-content: start; }
+.self-list button { font: 600 15px var(--serif); }
+.self-fold > summary small { font: 400 12px var(--sans); color: var(--ink-2); }
+.self-fold > .fold-body.gear { padding-top: 0; }
+/* 屬性五格（名字、數字、有點可配時一顆「＋」）；名望、善名、惡名一行小字；心得一行（以前在狀態列，整合設計 6.2） */
+.self-stats { padding: 10px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); }
+.self-stats .self-hd { margin-top: 0; }
+.self-attrs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.self-attrs .attr { display: grid; justify-items: center; gap: 2px; padding: 6px 0; border-radius: 10px; background: var(--card-2); font-variant-numeric: tabular-nums; }
+.self-attrs .attr em { font-style: normal; font-size: 12px; color: var(--ink-2); }
+.self-attrs .attr b { font: 600 20px/1.1 var(--serif); }
+.self-attrs .attr .alloc { min-width: 0; width: 32px; min-height: 32px; padding: 0; border-radius: 50%; margin-top: 2px; }
+.self-stats .stat-uses { margin-top: 6px; }
+.self-xinde { margin: 8px 0 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
 .self-xinde b { font: 600 18px var(--serif); }
 .self-xinde small { flex-basis: 100%; color: var(--ink-2); font-size: 12px; }
 .self-nums { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 6px; font-size: 14px; }

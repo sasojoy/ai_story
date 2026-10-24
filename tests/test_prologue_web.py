@@ -669,7 +669,7 @@ def test_the_seclusion_form_and_the_insight_melt_are_greyed_in_the_hut(hut):
     assert x["seclude_blocked"] and x["insights"][0]["blocked"]
     # 卷軸卡版：意境是一顆一顆的籤，點開才有「化成心得」鈕（S.insOpen），閉關鈕是兩行
     page = run(m, "return H.pagePractice();", S={"insOpen": x["insights"][0]["id"]}, menxia=x)
-    assert re.search(r'<button class="btn" type="submit" disabled>閉關<small>', page) and x["seclude_blocked"] in page
+    assert re.search(r'<button class="btn self-go" type="submit" disabled>閉關<small>', page) and x["seclude_blocked"] in page
     assert re.search(r'data-act="melt-insight"[^>]*disabled', page) and x["insights"][0]["blocked"] in page
     out = Game.new(hut.content, "路人", rng=random.Random(0), world=hut.world)
     out.state.player.insights.append("feng")
