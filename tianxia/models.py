@@ -814,6 +814,8 @@ class Ending(_Strict):
     stance_max: dict[StanceSide, int] = Field(default_factory=dict)  # 態勢至多（同上）
     stance_top: StanceSide | None = None  # 季末比態勢：這一方最高（平手時照清單順序，排前面的先成立）
     mandate: bool = False  # 天命結局（玉璽二）：只在天命之爭有一方得天命時由 world.evaluate_ending 照時刻表的 mandate_endings 挑，不進一般的清單與保底
+    # 三陣營四勝利（減法季整合設計 3.1、3.3；wins.winner_of／settle）：這個結局是哪一軍贏；None 是和局（豪強的兩種結局）或 beta 的結局
+    winner: Literal["guan", "huang"] | None = None
 
 
 class MapLabel(_Strict):
@@ -4523,7 +4525,7 @@ TIER_TITLES = {
 
 class TierRules(_Strict):
     """季末四階（設計 3.3；wins.settle）。名次只在過了門檻的人裡排，人數照比例無條件捨去；第一、二階至少 1 人，
-    第三階的名額不少於第一（二）階；同分同階（計畫 5.0 第 13 條）。20 人與 2,000 人同一條規則。"""
+    第三階的「前 40%」是累計的（含第一、二階）；同分同階（計畫 5.0 第 13 條）。20 人與 2,000 人同一條規則。"""
 
     tier1_share: float = Field(default=0.10, ge=0, le=1)  # 第一階：贏的那一軍裡前 10%（至少 1 人）【定】
     tier2_share: float = Field(default=0.10, ge=0, le=1)  # 第二階：豪強「替贏的那一軍」那一本前 10%（至少 1 人）；兩軍拿不到【定】

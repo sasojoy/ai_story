@@ -8,9 +8,16 @@
 接線時 credit 的第一行補開關（關著照舊 push.add_contribution），rules_of 改讀 content.config.jianfa。"""
 from __future__ import annotations
 
+import bisect
+import math
+
 from . import allied, push
-from .models import Content, WinsRules
-from .state import PlayerState, WorldState
+from .models import Content, FactionDef, WinsRules
+from .state import PlayerState, TierResult, WorldState
+
+BOTH = "both"  # 和局時豪強照兩本合計排（TierResult.ledger_used）
+_TOP, _MID, _REST = "top", "mid", "rest"  # 一池切成三段：前 tier1／tier2_share、前 tier3_share 的其餘、其餘過門檻的
+_EPS = 10**-9  # 比例乘人數的浮點誤差：0.57 × 100 算出 56.999… 也要是 57（預設的 0.1、0.4 在 5,000 人以內碰不到）
 
 # 改幫另一軍按不下去的原因（lean_problem；待 joy 潤）
 LEAN_NOT_GENTRY = "只有地方豪強能改幫另一軍。"
@@ -83,6 +90,106 @@ def ledger_view(p: PlayerState, content: Content) -> dict[str, int] | None:
     if not is_gentry(p, content):
         return None
     return {side: p.ledgers.get(side, 0) for side in _allies(p, content)}
+
+
+def winner_of(world: WorldState, content: Content) -> str | None:
+    """這一季是哪一軍贏（收季時記下的結局的 Ending.winner）；和局、還沒收季、結局對不上劇本是 None。"""
+    ending = next((e for e in content.scenario.endings if e.id == world.ending_id), None)
+    return ending.winner if ending is not None else None
+
+
+def title_of(rules: WinsRules, tier: int, faction: str) -> str:
+    """第 tier 階、faction 那一方的稱號（「階:陣營 id」，找不到再看只寫階的鍵）；沒有階、沒寫是空字串。"""
+    if not tier:
+        return ""
+    titles = rules.tiers.titles
+    return titles.get(f"{tier}:{faction}") or titles.get(str(tier), "")
+
+
+def start_grant(rules: WinsRules, tier: int) -> tuple[int, int]:
+    """第 tier 階下一季開局的起手資源（銀兩, 心得）：滿額乘那一階的成數、四捨五入；沒有階是 (0, 0)。"""
+    t = rules.tiers
+    share = t.start_shares.get(tier, 0.0)
+    return round(t.start_silver * share), round(t.start_xinde * share)
+
+
+def _share(share: float, n: int) -> int:
+    return math.floor(share * n + _EPS)
+
+
+def _cut(pool: list[tuple[str, int]], top_share: float | None, mid_share: float) -> dict[str, tuple[str, int, int]]:
+    """一池過了門檻的人（名號, 分數）照名次切三段：前 top_share（無條件捨去、至少 1 人；None 是這一池沒有最上面那一段）、
+    前 mid_share（累計，捨去）的其餘、其餘。同分同名次（比他高的人數＋1）、同一段。回 名號 →（段, 名次, 池子人數）。"""
+    n = len(pool)
+    n_top = max(1, _share(top_share, n)) if top_share is not None and n else 0
+    n_mid = _share(mid_share, n)  # 比 n_top 少時（3 人的 40% 是 1）前面那一段先拿，這一段就沒有人
+    ascending = sorted(points for _, points in pool)
+    out: dict[str, tuple[str, int, int]] = {}
+    for name, points in pool:
+        rank = 1 + n - bisect.bisect_right(ascending, points)
+        out[name] = (_TOP if rank <= n_top else _MID if rank <= n_mid else _REST, rank, n)
+    return out
+
+
+def _results(
+    members: list[PlayerState], scores: dict[str, int], books: dict[str, str], top_share: float | None,
+    tiers: dict[str, int], faction: str, rules: WinsRules,
+) -> dict[str, TierResult]:
+    """一池的結果：members 裡分數（scores）過門檻的照 _cut 切、照 tiers 換成第幾階，帳記 books；不過門檻的不在回傳裡。"""
+    floor = rules.tiers.min_contribution
+    cut = _cut([(p.name, scores[p.name]) for p in members if scores[p.name] >= floor], top_share, rules.tiers.tier3_share)
+    out = {}
+    for name, (band, rank, of) in cut.items():
+        tier = tiers[band]
+        out[name] = TierResult(
+            tier=tier, title=title_of(rules, tier, faction), ledger_used=books[name], points=scores[name], rank=rank, of=of,
+        )
+    return out
+
+
+def _army(members: list[PlayerState], faction: FactionDef, winner: str | None, rules: WinsRules) -> dict[str, TierResult]:
+    """兩軍之一：照 contrib 排；贏的那一軍 一 → 三 → 四，輸的（和局時兩軍都是）三 → 四。"""
+    won = winner == faction.id
+    scores = {p.name: p.contrib for p in members}
+    books = {p.name: faction.id for p in members}
+    tiers = {_TOP: 1, _MID: 3, _REST: 4}
+    got = _results(members, scores, books, rules.tiers.tier1_share if won else None, tiers, faction.id, rules)
+    return {p.name: got.get(p.name) or TierResult(points=scores[p.name]) for p in members}
+
+
+def _gentry(members: list[PlayerState], faction: FactionDef, winner: str | None, rules: WinsRules) -> dict[str, TierResult]:
+    """豪強：替贏的那一軍那一本過門檻的照它排（二 → 三 → 四）；那一本不到才看另一本（三 → 四；能幫的不只兩軍時取最多的那一本）。
+    和局（或贏的那一軍不是它能幫的）照兩本合計排（三 → 四，帳記 BOTH）。"""
+    floor = rules.tiers.min_contribution
+    later = {_MID: 3, _REST: 4}
+    if winner is None or winner not in faction.allies:
+        totals = {p.name: sum(p.ledgers.get(side, 0) for side in faction.allies) for p in members}
+        got = _results(members, totals, {p.name: BOTH for p in members}, None, later, faction.id, rules)
+        return {p.name: got.get(p.name) or TierResult(points=totals[p.name]) for p in members}
+    on_winner = {p.name: p.ledgers.get(winner, 0) for p in members}
+    got = _results(members, on_winner, {p.name: winner for p in members}, rules.tiers.tier2_share,
+                   {_TOP: 2, **later}, faction.id, rules)
+    others = [side for side in faction.allies if side != winner]
+    rest = [p for p in members if on_winner[p.name] < floor] if others else []
+    books = {p.name: max(others, key=lambda side, p=p: p.ledgers.get(side, 0)) for p in rest}
+    got |= _results(rest, {p.name: p.ledgers.get(books[p.name], 0) for p in rest}, books, None, later, faction.id, rules)
+    return {p.name: got.get(p.name) or TierResult(points=on_winner[p.name]) for p in members}
+
+
+def settle(
+    world: WorldState, content: Content, players: list[PlayerState], rules: WinsRules | None = None,
+) -> dict[str, TierResult]:
+    """季末四階（設計 3.3；企劃者 2026-10-24 第 3、4 件）：投靠了劇本裡的陣營的人每人一筆（名號 → TierResult；沒到門檻是第 0 階），
+    散人與劇本沒有的陣營不列。贏的那一軍看收季時的結局（winner_of）；和局兩軍都照輸的切、豪強照兩本合計。
+    名次只在過了門檻的人裡排，人數照比例（20 人與 2,000 人同一條規則；細節見 _cut 與計畫 5.0 第 13 條）。"""
+    r = rules or rules_of(content)
+    winner = winner_of(world, content)
+    out: dict[str, TierResult] = {}
+    for faction in content.scenario.factions:
+        members = [p for p in players if p.faction == faction.id]
+        if members:
+            out |= (_gentry if faction.allies else _army)(members, faction, winner, r)
+    return out
 
 
 def check(content: Content, rules: WinsRules) -> list[str]:

@@ -978,6 +978,18 @@ class PlayerState(BaseModel):
 QUIET_DEFAULTS = ("ledgers", "lean_changed")
 
 
+class TierResult(BaseModel):
+    """季末四階的一筆（減法季整合設計 3.3；wins.settle 算，接線後存 WorldState.final_tiers、結局卡讀）。"""
+
+    tier: int = 0  # 1～4；0 是沒有（貢獻不到門檻）
+    title: str = ""  # 稱號（TierRules.titles）；沒有是空字串
+    # 照哪一本帳排：兩軍是自己的陣營；豪強是替哪一軍那一本（guan／huang），和局是兩本合計（wins.BOTH）；沒有是 None
+    ledger_used: str | None = None
+    points: int = 0  # 排名次用的那個數（沒有階的人：兩軍是 contrib，豪強是替贏的那一軍那一本，和局是兩本合計）
+    rank: int = 0  # 在那一池（過了門檻的人）裡第幾名，同分同名次；沒有階是 0
+    of: int = 0  # 那一池幾個人；沒有階是 0
+
+
 RumorLayer = Literal["world", "faction", "local", "personal"]  # 天下大事／陣營軍情／地方傳聞／個人線索（傳聞分層設計第二節）
 
 
