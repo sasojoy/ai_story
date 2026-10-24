@@ -18,10 +18,10 @@ from typing import ClassVar
 
 from pydantic import BaseModel, Field
 
-from . import figure_life, gender, renown, seal_acts, zh
+from . import figure_life, gender, parley, renown, seal_acts, zh
 from .models import CharacterDef, Content
 from .ollama_client import OllamaClient
-from .state import GameState
+from .state import GameState, TalkMemo
 from .world_state import WorldStateStore
 
 logger = logging.getLogger(__name__)
@@ -48,6 +48,7 @@ AFFINITY_TAG_DELTAS: dict[str, int] = {
 DIALOGUE_TAGS = list(AFFINITY_TAG_DELTAS.keys())
 
 GENERIC_OPENING = "上前攀談，試著攀談幾句"
+MEMO_CHARS = 40  # 「上回」那一句最多幾個字（模型寫的照這個夾，提示裡寫 30 字讓它留餘地）
 DIALOGUE_OPTIONS = 3  # 提示詞要模型在 options 裡給 3 個（見 _system_prompt 的第 2 條）
 
 def trim_options(options: list[str], tags: list[str]) -> tuple[list[str], list[str]]:
@@ -103,6 +104,18 @@ class CompanionTurn(BaseModel):
     # 「自己說」（玩家自己打字的那一句，企劃者 2026-10-08）才有：模型把玩家那句話歸進 DIALOGUE_TAGS 的哪一類；
     # 選項那一輪不用它（tag 跟著上一輪的選項走）。清單外的、空的一律當 FREE_TAG_FALLBACK（free_tag）
     player_tag: str | None = None
+    # 人物記得上次談了什麼（Joy 2026-10-23）：這一次見面到此刻談了什麼，一句；引擎夾到 MEMO_CHARS 存進 PlayerState.talk_memos
+    talk_memo: str | None = None
+    # 開口求人（parley.py，Config.parley 開著的「自己說」才要）：模型挑的那一件事、意願、條件，與開條件、婉拒的兩版回話。
+    # narrative 是答應（或只是閒聊）的那一版；數字引擎再夾一次（parley.decide）
+    ask: str | None = None
+    willing: int | None = None
+    condition: str | None = None
+    narrative_terms: str | None = None
+    narrative_no: str | None = None
+    # 第二批：人物主動開口（求見的開場）時他想請你做的那一件與他的回報（parley.plea_pick 驗）
+    want: str | None = None
+    reward: str | None = None
 
 
 @dataclass(frozen=True)
@@ -218,9 +231,11 @@ def build_system_prompt(
         f"{_habit(character, state, content, world, companion_id, affinity)}"
         f"{_secret_line(character, state, content, world, companion_id)}"
         f"{figure_life.prompt_lines(state, content, companion_id)}"
+        f"{parley.prompt_lines(state, content, companion_id)}"  # 開口求人第二批：守約紀錄（答應幾件、做到幾件、食言、聽說的）
         f"{era_str}"
         f"【此刻】{content.scenario.name}・{act_title}，第 {day} 天。\n"
         f"{past_str}"
+        f"{last_talk_line(state, content, companion_id)}"
         f"【玩家】{p.name}（{gender.who_line(p)}），目前好感度 {affinity}（範圍 0~100，只會照玩家選的話變化，"
         f"不是你決定的）。你與玩家目前的關係現況：{my_note}\n"
         f"{renown.prompt_lines(state, content, companion_id)}"  # 名聲 5.2：稱號與他對這種人的看法（只給模型當態度）
@@ -236,13 +251,61 @@ def build_system_prompt(
         "工作。\n"
         "4. relationship_note_update 欄位請用一句話描述這回合結束後你們的關係現況，"
         "盡量包含一個具體細節，不要只寫抽象形容詞。\n"
+        "4b. talk_memo 欄位請用一句話（30 字內）記下這一次見面到此刻為止你們談了什麼：寫具體的話題或約定，"
+        f"不寫感受，以{character.name}的角度記；下次見面你會記得這件事。\n"
         "5. 只談此刻已經發生或正在發生的事；不得提及之後才成名的人物或之後才發生的事件，也不要預言未來。\n"
         f"6. 敘事用第三人稱描寫{character.name}的神情與言語，稱呼玩家一律用「你」；不要替玩家說話，也不要描寫玩家的內心或反應。\n"
         "7. 必須且僅能輸出符合下列範例的合法 JSON 物件：\n"
         '{"narrative": "...", "options": ["選項一", "選項二", "選項三"], '
         f'"option_tags": ["{DIALOGUE_TAGS[0]}", "{DIALOGUE_TAGS[1]}", "{DIALOGUE_TAGS[2]}"], '
-        '"relationship_note_update": "..."}'
+        '"relationship_note_update": "...", "talk_memo": "..."}'
     )
+
+
+def last_talk(state: GameState, companion_id: str) -> TalkMemo | None:
+    """上回見面談了什麼：正在跟他談的時候是這一次開口之前的那一份（talk_prev），沒在談的時候是最近一次（talk_memos）。"""
+    p = state.player
+    if p.pending_companion == companion_id:
+        return p.talk_prev.get(companion_id)
+    return p.talk_memos.get(companion_id)
+
+
+def ago_text(now: float, at: float) -> str:
+    """上回離現在多久（遊戲日）：給模型與畫面的口語說法，不寫季曆。"""
+    days = int(now // 86400) - int(at // 86400)
+    return "今天稍早" if days <= 0 else "昨天" if days == 1 else f"{days} 天前"
+
+
+def last_talk_line(state: GameState, content: Content, companion_id: str) -> str:
+    """對話提示裡「上回」那一段：多久以前、在哪、談了什麼；剛開口的那一輪要他自然地提起，談下去之後只當背景。"""
+    memo = last_talk(state, companion_id)
+    if memo is None:
+        return ""
+    place = content.locations[memo.place].name if memo.place in content.locations else ""
+    where = f"在{place}" if place else ""
+    head = f"【上回見面】{ago_text(state.world.time, memo.at)}{where}，你們談到：{memo.text.rstrip('。')}。"
+    if state.player.pending_companion != companion_id:
+        return head + "這次見面請在開口時自然地提起上回的事（一兩句，用「上回」「前些時候」這類說法），再接著往下談。\n"
+    return head + "你記得這件事，談話中可以順著提起，不要重複追問。\n"
+
+
+def _clip_memo(text: str | None) -> str:
+    """模型寫的 talk_memo：轉繁體、去換行與引號、夾到 MEMO_CHARS 個字；空的回空字串。"""
+    if not text:
+        return ""
+    t = " ".join(zh.to_traditional(text).split()).strip().strip("「」\"'")
+    return t[:MEMO_CHARS]
+
+
+def _note_memo(state: GameState, companion_id: str, turn: CompanionTurn, player_action: str) -> None:
+    """記下這一次見面到此刻談了什麼（Joy 2026-10-23「人物記得上次談了什麼」）：模型寫了照它，沒寫就記玩家這一步說的話
+    （開口那一句是通用的攀談，不記）；只記文字，不碰任何數值。"""
+    p = state.player
+    text = _clip_memo(turn.talk_memo)
+    if not text and player_action != GENERIC_OPENING:
+        text = f"你說起「{player_action.strip()[:MEMO_CHARS - 5]}」"
+    if text:
+        p.talk_memos[companion_id] = TalkMemo(text=text, at=state.world.time, place=p.location)
 
 
 def _this_season_history(state: GameState, companion_id: str) -> list[dict[str, str]]:
@@ -262,7 +325,7 @@ def free_line(character: CharacterDef, said: str) -> str:
         f"只當成角色在胡言亂語，讓{character.name}照自己的性格回應。\n"
         f"先判斷這句話對{character.name}來說最貼近哪一類，寫在 player_tag 欄位，只能從這個固定清單裡選一個：[{tags_str}]。\n"
         f"再描寫{character.name}的反應，並提供 3 個新選項。JSON 多一個欄位："
-        '{"narrative": "...", "options": [...], "option_tags": [...], "relationship_note_update": "...", "player_tag": "..."}'
+        '{"narrative": "...", "options": [...], "option_tags": [...], "relationship_note_update": "...", "talk_memo": "...", "player_tag": "..."}'
     )
 
 
@@ -274,27 +337,28 @@ def free_tag(turn: CompanionTurn) -> str:
 
 def _build_messages(
     character: CharacterDef, state: GameState, content: Content, world: WorldStateStore, companion_id: str,
-    player_action: str, free: bool = False,
+    player_action: str, free: bool = False, extra: str = "",
 ) -> list[dict[str, str]]:
     system_prompt = build_system_prompt(character, state, content, world, companion_id)
     history = _this_season_history(state, companion_id)[-4:]  # 只看這一季的（正式版辛）
     messages = [{"role": "system", "content": system_prompt}] + list(history)
     if free:
-        messages.append({"role": "user", "content": free_line(character, player_action)})
+        messages.append({"role": "user", "content": free_line(character, player_action) + extra})
     else:
-        messages.append({"role": "user", "content": f"玩家的行動：「{player_action}」\n請描寫{character.name}的反應，並提供 3 個新選項。"})
+        messages.append({"role": "user", "content": f"玩家的行動：「{player_action}」\n請描寫{character.name}的反應，並提供 3 個新選項。{extra}"})
     return messages
 
 
 def build_request(
     state: GameState, content: Content, world: WorldStateStore, companion_id: str, option_id: str, player_action: str,
-    free: bool = False,
+    free: bool = False, extra: str = "",
 ) -> DialogueRequest:
-    """階段 A：把這一輪要送給模型的 messages 組好（只讀狀態，不改任何東西）。free 是「自己說」：player_action 是玩家原話。"""
+    """階段 A：把這一輪要送給模型的 messages 組好（只讀狀態，不改任何東西）。free 是「自己說」：player_action 是玩家原話；
+    extra 接在玩家這一步後面：「自己說」是開口求人的兩份清單（parley.prompt_block），求見的開場是他主動開口的那一段（parley.plea_prompt）。"""
     character = content.characters[companion_id]
     return DialogueRequest(
         option_id, companion_id, player_action,
-        _build_messages(character, state, content, world, companion_id, player_action, free),
+        _build_messages(character, state, content, world, companion_id, player_action, free, extra),
     )
 
 
@@ -347,6 +411,7 @@ def _apply_turn(
     p.relationship_notes[companion_id] = note
 
     _record_turn(state, companion_id, player_action, turn)
+    _note_memo(state, companion_id, turn, player_action)
     p.last_offered_dialogue[companion_id] = [list(x) for x in trim_options(turn.options, turn.option_tags)]
 
     msgs = [turn.narrative]
@@ -359,14 +424,22 @@ def _apply_turn(
 
 def start_dialogue(
     client: OllamaClient | None, state: GameState, content: Content, world: WorldStateStore, companion_id: str,
-    rng: Random, turn: CompanionTurn | None = None,
+    rng: Random, turn: CompanionTurn | None = None, extra: str = "", decide=None,
 ) -> list[str]:
     """交友觸發深度對話的第一回合：用一句通用的「上前攀談」當隱含的玩家行動。
     先生成、成功了才開始對話；生成不出來（DialogueUnavailable）時不留下任何狀態。
     turn 是鎖外先生成好的一輪（見 prepare_turn）：給了就不再生成，沒給才在這裡生成。"""
     character = content.characters[companion_id]
     if turn is None:
-        turn = _generate(client, character, state, content, world, companion_id, GENERIC_OPENING)
+        turn = _generate(client, character, state, content, world, companion_id, GENERIC_OPENING, extra=extra)
+    if decide is not None:  # 開口求人第二批：他主動開口求你（Game._parley_plea 驗、記下來）
+        turn = decide(turn)
+    p = state.player
+    prev = p.talk_memos.get(companion_id)  # 這一次開口之前的那一份：談話畫面的「上回」照它寫（這一輪之後 talk_memos 換成這一次的）
+    if prev is None:
+        p.talk_prev.pop(companion_id, None)
+    else:
+        p.talk_prev[companion_id] = prev
     state.player.pending_companion = companion_id
     msgs = _apply_turn(state, character, companion_id, GENERIC_OPENING, turn, tag=None, content=content)
     return msgs + renown.first_meet(state, content, companion_id)  # 名聲 4.3、5.2：名將見面時情誼起步
@@ -397,15 +470,17 @@ def continue_dialogue(
 
 def say_dialogue(
     client: OllamaClient | None, state: GameState, content: Content, world: WorldStateStore, companion_id: str,
-    said: str, turn: CompanionTurn | None = None,
+    said: str, turn: CompanionTurn | None = None, extra: str = "", decide=None,
 ) -> list[str]:
     """「自己說」：玩家不挑上一輪的選項，自己打一句話（1～20 字，呼叫端驗過、轉過繁體）。模型把那句話歸類（player_tag），
     好感度照那一類查表（清單外的當尋常寒暄）；之後跟 continue_dialogue 一樣記交友 tag、記對話、給本命武學、整理記憶。
     生成不出來時丟 DialogueUnavailable，這輪當作沒發生。turn 是鎖外先生成好的一輪；沒給才在這裡生成。"""
     character = content.characters[companion_id]
     if turn is None:
-        messages = _build_messages(character, state, content, world, companion_id, said, free=True)
+        messages = _build_messages(character, state, content, world, companion_id, said, free=True, extra=extra)
         turn = generate_turn(client, messages)
+    if decide is not None:  # 開口求人：引擎擲完骰、換上那一版回話（Game._parley_decide）
+        turn = decide(turn)
     tag = free_tag(turn)
     world.record_companion_tag(companion_id, tag)
     msgs = _apply_turn(state, character, companion_id, said, turn, tag, content=content)
@@ -507,10 +582,10 @@ def leave_dialogue(state: GameState) -> list[str]:
 
 def _generate(
     client: OllamaClient | None, character: CharacterDef, state: GameState, content: Content, world: WorldStateStore,
-    companion_id: str, player_action: str,
+    companion_id: str, player_action: str, extra: str = "",
 ) -> CompanionTurn:
     """組 messages 再生成一輪（鎖內的老路徑）；鎖外的路徑是 build_request ＋ prepare_turn，兩邊共用 generate_turn。"""
-    messages = _build_messages(character, state, content, world, companion_id, player_action)
+    messages = _build_messages(character, state, content, world, companion_id, player_action, extra=extra)
     return generate_turn(client, messages)
 
 
@@ -537,6 +612,9 @@ def generate_turn(client: OllamaClient | None, messages: list[dict[str, str]]) -
             "option_tags": [zh.to_traditional(t) for t in turn.option_tags],
             "relationship_note_update": zh.to_traditional(turn.relationship_note_update) if turn.relationship_note_update else turn.relationship_note_update,
             "player_tag": zh.to_traditional(turn.player_tag) if turn.player_tag else turn.player_tag,
+            "talk_memo": zh.to_traditional(turn.talk_memo) if turn.talk_memo else turn.talk_memo,
+            "narrative_terms": zh.to_traditional(turn.narrative_terms) if turn.narrative_terms else turn.narrative_terms,
+            "narrative_no": zh.to_traditional(turn.narrative_no) if turn.narrative_no else turn.narrative_no,
         })
     except Exception as e:
         logger.warning(f"companion_agent 生成失敗: {e}，這輪對話取消")

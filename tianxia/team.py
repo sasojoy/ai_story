@@ -12,6 +12,8 @@ import math
 import random
 import threading
 from collections import OrderedDict
+from contextlib import contextmanager
+from contextvars import ContextVar
 from collections.abc import Callable
 
 from . import armor, calendar, encounter, equipment, mounts, rounds, seal_acts, signature, styles, tactics, traits, treasures, weapons
@@ -851,6 +853,19 @@ def resonance(state: GameState, content: Content, art: MartialArt | None) -> flo
     return 1 + min(cfg.resonance_cap, max(0.0, state.player.stats.get(stat, 0) * cfg.resonance_per_point))
 
 
+_BACKED: ContextVar[float] = ContextVar("backed", default=1.0)
+
+
+@contextmanager
+def backed(factor: float):
+    """開口求人的並肩出陣（parley.py）：這一仗之內本人的威力乘 factor（Game._act 的出陣包著它；1 是一個位元都不動）。"""
+    token = _BACKED.set(factor)
+    try:
+        yield
+    finally:
+        _BACKED.reset(token)
+
+
 def player_boost(state: GameState, content: Content, world: WorldStateStore, *, seal: bool = True) -> encounter.Boost:
     """玩家本人的加成：臂力管外功、根骨管內功（武學與成長設計 6.1）；整個人再乘上內外搭配與兩門各自的
     正邪共鳴（5.1、7.4）。搭配至少是 BOOST_FLOOR、共鳴至少是 1，所以乘出來的 factor 不會低於下限。
@@ -864,6 +879,8 @@ def player_boost(state: GameState, content: Content, world: WorldStateStore, *, 
     scale = treasures.power_scale(state, content) if seal else 1.0
     if scale != 1.0:  # 沒碎片時一個位元也不動（不多乘一次 1.0 之外的東西）
         factor *= scale
+    if _BACKED.get() != 1.0:  # 並肩出陣：同上，沒有人陪的仗一個位元也不動
+        factor *= _BACKED.get()
     return encounter.Boost(
         outer=stat_bonus(content, stats.get("str", BASE_STAT)),
         inner=stat_bonus(content, con_of(state, content, world, PLAYER)),

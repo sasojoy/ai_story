@@ -3282,10 +3282,11 @@ def test_a_bad_line_is_refused_before_anything_happens(game):
     _talking(game)
     before = game.state.player.stamina
     with mock.patch.object(companion_agent, "generate_turn", side_effect=AssertionError("不該叫模型")):
-        for text in ("", "   ", "一" * 21):
-            with pytest.raises(server.GameError, match="20 字"):
+        limit = game.say_max()  # 開口求人開著時放寬（Config.parley.say_max）
+        for text in ("", "   ", "一" * (limit + 1)):
+            with pytest.raises(server.GameError, match=f"{limit} 字"):
                 server.say(game, text)
-        assert game.choose("talk:say") == ["（寫下你想說的話，20 字以內。）"]  # 只叫出輸入框
+        assert game.choose("talk:say") == [f"（寫下你想說的話，{limit} 字以內。）"]  # 只叫出輸入框
         assert game.state.player.stamina == pytest.approx(before, abs=0.5) and game.state.player.pending_companion == "luzhi"
         server.choose(game, "talk:leave")
         with pytest.raises(server.GameError):
