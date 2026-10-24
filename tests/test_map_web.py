@@ -74,9 +74,10 @@ def test_the_extras_without_sortie_skip_the_suggestions():
 
 
 def test_a_card_reads_top_down_then_the_actions():
-    """卡由上往下（設計 5.3）：印與名字、一句話、此地的對手、動作；不在這裡是步行與疾行。"""
+    """卡由上往下（設計 5.3）：印與名字、一句話、動作、此地的對手（減法季第七章：動作在前）；不在這裡是步行與疾行。"""
     out = run(_game(), 'return H.placeCard(H.S.mapBase, H.S.mapState, "runan_wilds");')
-    assert out.index("汝南荒野") < out.index('class="m-line"') < out.index("此地的對手") < out.index('data-act="map-travel"')
+    # 減法季整合設計第七章第 2 條：卡只佔三分之一，名字、誰的、步行與疾行在前，往上拉才有對手
+    assert out.index("汝南荒野") < out.index('class="m-line"') < out.index('data-act="map-travel"') < out.index("此地的對手")
     assert 'data-mode="walk"' in out and 'data-mode="dash"' in out and "步行" in out[: out.index('class="m-line"')]  # 距離寫在名字那一行
 
 
@@ -255,18 +256,19 @@ def test_fb262_standing_there_still_shows_the_odds():
     p = game.map_state()["places"]["runan_wilds"]
     assert p["sortie"] == "attack" and p["odds"]
     out = run(game, 'return H.placeCard(H.S.mapBase, H.S.mapState, "runan_wilds");')
-    foes = out[out.index("此地的對手"):out.index('class="m-acts"')]
+    foes = out[out.index("此地的對手"):out.index('class="m-foes"') + 400]
     assert p["odds"]["word"] in foes
     sortie = out[out.index('data-key="sortie"'):]
     assert p["odds"]["word"] in sortie[: sortie.index("</button>")]
     calm = run(_game(faction="guan", at="yingchuan"), 'return H.placeCard(H.S.mapBase, H.S.mapState, "yingchuan");')
-    assert "沒有對手" in calm[calm.index("此地的對手"):calm.index('class="m-acts"')]
+    assert "沒有對手" in calm[calm.index("此地的對手"):calm.index("此地的對手") + 200]
 
 
 def test_the_card_says_what_you_can_sense_with_the_strongest_filled():
     out = run(_game(), 'return H.placeCard(H.S.mapBase, H.S.mapState, "changshe");')
     assert "此地能悟" in out and 'class="ig strong"' in out and "最濃" in out
-    assert out.index('class="m-line"') < out.index("此地能悟") < out.index("此地的對手") < out.index('class="m-acts"')
+    # 減法季整合設計第七章第 2 條：卡只佔三分之一，動作在前、往上拉才有能悟、對手
+    assert out.index('class="m-line"') < out.index('class="m-acts"') < out.index("此地能悟") < out.index("此地的對手")
 
 
 def test_the_card_line_stays_with_the_switch_off_but_nothing_is_strongest():
