@@ -1759,7 +1759,7 @@
       const note = top ? (a.cultivate && (a.cultivate.legend ? a.cultivate.legend.note : a.cultivate.note)) || "" : "";
       return `<button class="self-art${top ? " q4" : ""}" data-act="hero-node" data-kind="art" data-key="${esc(a.kind)}">${top ? '<span class="qseal q4 big">絕</span>' : ""}`
         + `<span class="sa-body"><span class="sa-hd"><b>${esc(a.name)}</b><small>${top ? "絕學" : esc(a.kind)}・第${CN_TENTHS[lv]}成</small></span>`
-        + `${note ? `<small class="sa-note">${esc(note)}</small>` : ""}<i class="sa-bar" role="meter" aria-valuemin="0" aria-valuemax="10" aria-valuenow="${lv}" aria-label="${esc(a.name)}第${lv}成"><i style="width:${lv * 10}%"></i></i></span></button>`;
+        + `${note ? `<small class="sa-note">${esc(note)}</small>` : ""}<i class="sa-ten" role="meter" aria-valuemin="0" aria-valuemax="10" aria-valuenow="${lv}" aria-label="${esc(a.name)}第${lv}成">${Array.from({ length: 10 }, (_, k) => `<i${k < lv ? ' class="on"' : ""}></i>`).join("")}</i></span></button>`;
     }).join("")}</div></section>`;
   }
   // 「屬性」那一段（以前在狀態列與點名號攤開的那一塊，整合設計 6.2）：五項一格一欄（名字、數字），有點可配時每格底下一顆「＋」、
@@ -2305,7 +2305,7 @@
       <div class="msg" id="mx-msg">${S.message}</div>
       ${naming}
       ${attrNoteHtml(x)}
-      <div class="label">記錄</div>
+      <div class="self-hd"><h3>記錄</h3></div>
       ${selfRecordsHtml()}
       ${fold("lib", `功法庫 <small class="muted">武學與意境 ${x.holdings.count}/${x.holdings.cap}</small>`, libBody)}
       ${gearBlock}

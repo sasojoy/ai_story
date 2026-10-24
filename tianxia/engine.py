@@ -998,6 +998,7 @@ class Game:
         if self.state.player.feasting is not None and self._feast_seat() is None:
             self.state.player.feasting = None  # 宴散了、人走了：收起敬酒的選單
         self._deliver_held_gear()  # 寄放的重賞、贈禮：裝備庫有空位就補（裝備四欄 6.5）
+        self._auto_checkin()  # 每日簽到自動領（Joy 2026-10-24 挑江湖頁乙案：簽到不放鈕）；要挑四階的日子留給玩家挑
         self._settle_partings()  # 歷史武將同行：從你身邊回江湖的人，情誼減半（9.6；補戰報時已經算過的不再算）
         refunds = bounties.deliver_refunds(self.state, self.content)  # 掛的通緝沒人揭成：押金退回
         if refunds:
@@ -10683,6 +10684,22 @@ class Game:
         lines, changes = result
         journal.add_entry(s, JournalEntry(time=s.world.time, title=checkin.TITLE, lines=lines, changes=changes))
         return self._log(lines + changes)
+
+    def _auto_checkin(self) -> None:
+        """每日簽到自動領（減法季批 1；Joy 2026-10-24 挑了江湖頁乙案：簽到不放鈕）：每天第一次同步時，今天的份不必挑的就直接領、
+        寫一則「簽到」江湖紀錄（同 check_in，「剛剛」那一行會寫出來）；要挑四階的日子不動，江湖頁冒一張挑屬性的小卡（status.checkin.pick），
+        挑了才領（check_in）。草廬序章裡不簽（同 check_in）。假人照舊在 bot.check_in 自己簽，先同步到的這裡順手領了也只是同一份。"""
+        s, c = self.state, self.content
+        if prologue_rules.active(s, c):
+            return
+        day = checkin.due(s, c, s.world)
+        if day is None or checkin.needs_pick(c, day):
+            return
+        result = checkin.claim(s, c, s.world)
+        if isinstance(result, str):
+            return
+        lines, changes = result
+        journal.add_entry(s, JournalEntry(time=s.world.time, title=checkin.TITLE, lines=lines, changes=changes))
 
     def checkin_view(self) -> dict | None:
         """江湖頁「簽到」小標的資料（checkin.view）：簽到關著、草廬序章裡、過了這一季最後一天（管理者把季末往後排）是 None。"""

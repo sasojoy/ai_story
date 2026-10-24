@@ -1,9 +1,10 @@
-"""正式季整合第 7 批：每日簽到（設計 9.1 第 4 組丙）。減法季批 1 起它是本週卡底下的「今日簽到」（以前是江湖頁最上面那一排小標的一顆）：
-還沒簽亮紅點，簽了寫「簽到 ✔」；攤開是這一週七格、今天的份與領的鈕，四階的日子是四顆挑屬性的鈕。
-把 app.js 的 checkinPeek 與 weekCardHtml 切出來交給 node 跑；沒有 node 就略過。"""
+"""正式季整合第 7 批：每日簽到（設計 9.1 第 4 組丙）。減法季批 1 乙案（Joy 2026-10-24）起簽到不放鈕：每天第一次同步引擎自動領，
+本週卡上沒有簽到的字；要挑四階的日子本週卡底下冒一張小卡、四顆挑屬性的鈕。這一週七格（每天給什麼）收在「為什麼」裡（checkinPeek 的 panel）。
+把 main.js 的 checkinPeek、checkinPickHtml 與 weekCardHtml 切出來交給 node 跑；沒有 node 就略過。"""
 from __future__ import annotations
 
 import random
+import re
 from pathlib import Path
 
 import pytest
@@ -17,16 +18,16 @@ pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，�
 ROOT = Path(__file__).parent.parent
 
 DRIVER = r"""
-const S = { wkOpen: input.open ? { key: "本週第 1 週", id: "checkin" } : null };
+const S = { wkOpen: null };
 const H = new Function("S", [
-  ...["esc", "CK_ATTR", "CK_LAST", "WK_STEP", "wkKey"].map(konst),
+  ...["esc", "CK_ATTR", "CK_LAST", "WK_STEP", "WK_WHY", "WK_NEXT", "WK_GO", "WK_MAP", "WK_IDLE", "CK_PICK_TITLE", "CK_PICK_NOTE", "wkKey"].map(konst),
   "const shown = () => true, STANCE_NAMES = [], whyHtml = () => '';",
-  ...["ckGift", "checkinPeek", "wkStepOf", "wkSidesHtml", "weekCardHtml"].map(fn),
+  ...["ckGift", "checkinPeek", "wkStepOf", "wkSidesHtml", "wkSplit", "checkinPickHtml", "weekCardHtml"].map(fn),
   "return { checkinPeek, weekCardHtml };",
 ].join("\n"))(S);
 const part = H.checkinPeek(input.m);
 const m = { ...input.m, week_card: { label: "本週", when: "第 1 週", theme: "", sides: null, steps: [], next: null } };
-finish({ part, html: part ? H.weekCardHtml(m) : "" });
+finish({ part, html: H.weekCardHtml(m) });
 """
 
 HOUR, DAY = 3600, 86400
@@ -51,46 +52,46 @@ def _m(**checkin):
     return {"status": {"checkin": card}}
 
 
-def test_chip_has_a_dot_until_claimed():
-    out = run(_m(), open_=False)
-    assert "peek-dot" in out["html"] and "簽到" in out["html"] and "✔" not in out["html"]
-    assert 'aria-label="還沒簽"' in out["html"]
-    out = run(_m(done=True, step="今天的份領過了：回體丹 2 顆。"), open_=False)
-    assert "peek-dot" not in out["html"] and "簽到 ✔" in out["html"]
+def test_the_week_card_has_no_sign_in_button_on_an_ordinary_day():
+    """乙案：不必挑的日子引擎自動領，本週卡上一個簽到的字、一顆鈕都沒有（還沒領到、領過了都一樣）。"""
+    for m in (_m(), _m(done=True, step="今天的份領過了：回體丹 2 顆。")):
+        html = run(m, open_=False)["html"]
+        assert "簽到" not in html and 'data-act="checkin"' not in html and "ck-card" not in html
 
 
-def test_panel_lists_the_week_and_claim_button():
-    html = run(_m())["html"]
-    assert "第 3 天" in html and "下一份：明日 30 兩" in html
-    assert html.count('class="ck-day') == 7
-    assert 'ck-day miss' in html and 'ck-day got got' in html and 'ck-day today' in html
-    assert html.count('data-act="checkin"') == 1 and "data-attr" not in html
+def test_the_why_panel_part_lists_the_week():
+    """這一週七格（每天給什麼）收在「為什麼」裡（whyHtml 接 checkinPeek 的 panel）。"""
+    panel = run(_m())["part"]["panel"]
+    assert "第 3 天" in panel and "下一份：明日 30 兩" in panel
+    assert panel.count('class="ck-day') == 7
+    assert 'ck-day miss' in panel and 'ck-day got got' in panel and 'ck-day today' in panel
 
 
 def test_done_has_no_button():
-    html = run(_m(done=True, step="今天的份領過了：回體丹 2 顆。"))["html"]
-    assert 'data-act="checkin"' not in html and "今天的份領過了" in html
+    panel = run(_m(done=True, step="今天的份領過了：回體丹 2 顆。"))["part"]["panel"]
+    assert 'data-act="checkin"' not in panel and "今天的份領過了" in panel
 
 
 def test_tier4_day_shows_four_picks():
     pick = [{"attribute": a, "id": i, "name": n, "held": h} for a, i, n, h in
             (("剛", "gang_4", "熔星髓", 1), ("柔", "rou_4", "天池露", 0), ("快", "kuai_4", "奔雷角", 2), ("慢", "man_4", "歸墟壤", 0))]
     html = run(_m(day=6, week=_week(6), pick=pick, step="回體丹 2 顆，再挑一種四階料（點一種就領）："))["html"]
-    assert html.count('data-act="checkin"') == 4
+    card = re.search(r'<section data-wk class="card ck-card".*?</section>', html, re.S).group(0)  # 本週卡底下那一張小卡
+    assert "簽到第 6 天" in card and card.count('data-act="checkin"') == 4
     for attr in "剛柔快慢":
-        assert f'data-attr="{attr}"' in html
-    assert "熔星髓" in html and "有 2" in html and "ck-go" not in html
+        assert f'data-attr="{attr}"' in card
+    assert "熔星髓" in card and "有 2" in card and "ck-go" not in html
 
 
 def test_short_last_week_and_no_next():
-    html = run(_m(day=19, week=_week(19, last=19, first=15), next=None))["html"]
-    assert html.count('class="ck-day') == 5 and "下一份" not in html and "這一季最後一天" in html
+    panel = run(_m(day=19, week=_week(19, last=19, first=15), next=None))["part"]["panel"]
+    assert panel.count('class="ck-day') == 5 and "下一份" not in panel and "這一季最後一天" in panel
 
 
 def test_two_gift_label_splits_into_two_lines():
     """FB-436：第 6 天「丹2＋四階」字寬 48px、375／360 寬的格子只有 37／35px，被切成「丹2＋四」：兩樣的短字拆兩行（「丹2」／「＋四階」），
     一樣的照舊一行。"""
-    html = run(_m(day=6, week=_week(6)))["html"]
+    html = run(_m(day=6, week=_week(6)))["part"]["panel"]
     assert '<span class="g"><span class="gl">丹2</span><span class="gl">＋四階</span></span>' in html
     assert '<span class="g">30 兩</span>' in html and '<span class="g">丹 2</span>' in html
     css = (ROOT / "web" / "style.css").read_text(encoding="utf-8")

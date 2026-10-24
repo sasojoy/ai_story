@@ -659,25 +659,30 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .front-bar.side-guan > i { background: var(--kuai); }
 .front-bar.side-huang > i { background: var(--gold); }
 .front-bar.side-haoqiang > i { background: var(--rou); }
-/* 本週卡（減法季批 1，整合設計 6.1；圖解版第 21 頁）：金框，三行——「本週 第 N 週」與右邊兩軍的態勢、這一週的主題、你這一步；
-   底下一排小字（為什麼、換一件事、今日簽到），點了在卡裡攤開（.wk-panel）。三方卡（.sides）在「為什麼」裡、也在還沒投靠的人最上面 */
-.wk-card { border-color: var(--gold); padding: 12px 14px; }
-.wk-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.wk-head > b { font: 600 16px var(--serif); color: var(--accent); white-space: nowrap; }
-.wk-label { margin-right: 10px; }
-.wk-now { border: 0; background: none; padding: 4px 0; margin: -4px 0; font: inherit; font-size: 14px; color: var(--ink-2); cursor: pointer; white-space: nowrap; }
+/* 本週卡（減法季批 1，整合設計 6.1；Joy 2026-10-24 挑了乙案）：卡上面一條灰線（.wk-strip：第 N 週、主題一句、兩軍態勢，整條是鈕，
+   點了底下攤開「為什麼」），卡本身（.wk-card，金框）只剩「你這一步」——小字標籤、標題、說明、底下一顆去輿圖與「換一件」；
+   簽到要挑四階的日子多一張小卡（.ck-card）。三方卡（.sides）在「為什麼」裡、也在還沒投靠的人最上面 */
+.wk-strip { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 36px; padding: 4px 4px; margin: 0 0 6px; border: 0; background: none; color: var(--ink-2);
+  font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.wk-strip .wk-seg { flex: none; font: 700 14px/1 var(--serif); color: var(--accent); white-space: nowrap; }
+.wk-strip .wk-th { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wk-strip .wk-sides { flex: none; white-space: nowrap; }
 .wk-sides b { font-weight: 700; font-variant-numeric: tabular-nums; margin-left: 2px; }
 .wk-sides .side-guan { color: var(--kuai); }
 .wk-sides .side-huang { color: var(--gold); }
 .wk-sides .side-haoqiang { color: var(--rou); }
-.wk-theme { margin: 6px 0 0; line-height: 1.6; }
-.wk-step { margin: 6px 0 0; line-height: 1.6; }
-.wk-step > b { font-weight: 700; }
-.wk-go { margin-left: 6px; white-space: nowrap; }
-.wk-links { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 6px; }
-.wk-links .linkish { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 0; font-size: 14px; }
-.wk-links .linkish.on { text-decoration: underline; }
-.wk-panel { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); max-height: 60vh; overflow: auto; font-size: 14px; }
+.wk-chev { flex: none; width: 8px; height: 8px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: translateY(-2px) rotate(45deg); transition: transform 0.2s; }
+.wk-strip.on .wk-chev { transform: translateY(2px) rotate(-135deg); }
+.wk-card { border-color: var(--gold); padding: 12px 14px; }
+.wk-lab { margin: 0 0 4px; font: 700 12px/1 var(--sans); color: var(--gold); letter-spacing: 0.08em; }
+.wk-title { margin: 0; font: 700 19px/1.45 var(--serif); }
+.wk-detail { margin: 4px 0 0; font-size: 14px; line-height: 1.6; color: var(--ink-2); }
+.wk-foot { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.wk-foot .wk-go { flex: 0 1 auto; width: auto; min-height: 40px; padding: 0 18px; border-radius: 999px; font: 700 15px var(--serif); }
+.wk-foot .wk-next { flex: none; margin-left: auto; min-height: 40px; padding: 0 6px; font-size: 14px; color: var(--ink-2); white-space: nowrap; }
+.ck-card h3 { margin: 0 0 8px; font: 700 15px/1.3 var(--serif); display: flex; align-items: baseline; gap: 8px; }
+.ck-card h3 small { font: 400 13px var(--sans); color: var(--ink-2); }
+.wk-panel { margin: 0 0 8px; max-height: 60vh; overflow: auto; font-size: 14px; } /* 乙案：自己一張卡，夾在灰線與「你這一步」之間 */
 .wk-panel > :last-child { margin-bottom: 0; }
 .wk-panel > .war-help { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--line); }
 .wk-sub { margin: 10px 0 6px; font: 600 14px var(--serif); }
@@ -1969,7 +1974,7 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
 .self-gear.bl { left: 8px; bottom: 12px; } .self-gear.br { right: 8px; bottom: 12px; }
 /* 身上兩門的成數條：一門一張，名字左、「內功・第三成」右，底下一條金色的進度；絕學金框、左邊朱印「絕」 */
 .self-arts { display: grid; gap: 8px; margin: 0 0 12px; }
-.self-art { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 14px; border: 1px solid var(--line); border-radius: var(--radius);
+.self-art { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 14px; border: 1px solid var(--line); border-left: 4px solid var(--gold); border-radius: var(--radius);
   background: var(--card); color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
 .self-art.q4 { border: 2px solid var(--gold); background: color-mix(in srgb, var(--gold) 8%, var(--card)); }
 .sa-body { flex: 1; min-width: 0; display: grid; gap: 4px; }
@@ -1977,33 +1982,49 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
 .sa-hd b { font: 600 16px var(--serif); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sa-hd small { color: var(--ink-2); font-size: 13px; white-space: nowrap; }
 .sa-note { color: var(--ink-2); font-size: 12px; }
-.sa-bar { display: block; height: 6px; border-radius: 3px; background: var(--card-2); overflow: hidden; }
-.sa-bar > i { display: block; height: 100%; background: var(--gold); border-radius: 3px; }
-.self-art.q4 .sa-bar > i { background: var(--accent); }
+/* 十成畫成十點墨（同抽屜裡的 .ten）：練到第幾成亮到第幾點，絕學的點是朱色 */
+.sa-ten { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; }
+.sa-ten > i { display: block; height: 7px; border-radius: 2px; background: var(--card-2); }
+.sa-ten > i.on { background: var(--gold); }
+.self-art.q4 .sa-ten > i.on { background: var(--accent); }
 /* 俠客頁的分段（Joy 2026-10-24 整頁重排）：每段一個小標題列（.self-hd：左邊段名、右邊一顆入口或「可配 N 點」），
    段與段之間 12px；底下記錄清單（.self-list）與四個摺疊（.self-fold，標題列上帶小字的格數） */
-.self-sec { margin: 0 0 12px; }
-.self-hd { display: flex; align-items: baseline; gap: 8px; margin: 0 2px 6px; }
-.self-hd h3 { margin: 0; font: 600 15px var(--serif); }
+.self-sec { margin: 0 0 14px; }
+/* 段名：宋體、前面一道朱色短槓（Joy 2026-10-24：不要像設定頁的清單，要有水墨名帖的味道） */
+.self-hd { display: flex; align-items: baseline; gap: 8px; margin: 0 2px 8px; }
+.self-hd h3 { margin: 0; font: 700 16px var(--serif); letter-spacing: 0.1em; display: flex; align-items: center; gap: 8px; }
+.self-hd h3::before { content: ""; width: 4px; height: 16px; background: var(--accent); border-radius: 1px; }
 .self-hd .linkish { margin: 0 0 0 auto; font-size: 13px; min-height: 32px; }
 .self-hd .pts { margin-left: auto; font: 600 13px var(--sans); color: var(--accent); }
-/* 去做四格（煉製、自創武學、療傷、閉關）兩欄；閉關那一格是表單，鈕底下一排選幾小時 */
+/* 去做四格（煉製、自創武學、療傷、閉關）兩欄，跟江湖頁的行動列同一種墨底的格子；閉關那一格是表單，鈕底下一排選幾小時 */
 .self-goes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.self-go { min-height: 56px; display: grid; justify-items: center; align-content: center; font: 600 15px var(--serif); }
-.self-go small { font: 11px var(--sans); color: var(--ink-2); font-weight: 400; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.self-go, .self-go.btn { min-height: 64px; display: grid; justify-items: center; align-content: center; gap: 2px; background: var(--disk); color: #ede2d3;
+  border: 1px solid color-mix(in srgb, var(--gold) 25%, transparent); border-radius: 10px; font: 700 16px var(--serif); letter-spacing: 0.08em; box-shadow: none; }
+.self-go small { font: 11px var(--sans); color: #b9ab98; font-weight: 400; letter-spacing: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.self-go:disabled, .self-go.btn:disabled { opacity: 0.5; }
 .self-goes .seclude { display: grid; gap: 4px; align-content: start; }
-.self-list button { font: 600 15px var(--serif); }
-.self-fold > summary small { font: 400 12px var(--sans); color: var(--ink-2); }
-.self-fold > .fold-body.gear { padding-top: 0; }
-/* 屬性五格（名字、數字、有點可配時一顆「＋」）；名望、善名、惡名一行小字；心得一行（以前在狀態列，整合設計 6.2） */
-.self-stats { padding: 10px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); }
-.self-stats .self-hd { margin-top: 0; }
+/* 記錄：三張書籤並排（頂上一道朱色），不是一列列的清單 */
+.self-list { display: flex; gap: 8px; border: 0; background: none; overflow: visible; border-radius: 0; }
+.self-list button { flex: 1; justify-content: center; min-height: 48px; padding: 10px 4px; border: 1px solid var(--line); border-top: 3px solid var(--accent); border-radius: 0 0 10px 10px;
+  background: var(--card); font: 600 15px var(--serif); letter-spacing: 0.08em; box-shadow: var(--shadow); }
+.self-list button::after { content: none; }
+/* 四個摺疊（功法庫、裝備、門下、規矩）：標題一行宋體、底下一道細線，不圍框 */
+details.self-fold { margin-bottom: 4px; }
+details.self-fold > summary { border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: none; padding: 10px 2px; font: 700 16px var(--serif); letter-spacing: 0.1em; }
+details.self-fold[open] > summary { border-radius: 0; }
+details.self-fold > summary small { font: 400 12px var(--sans); color: var(--ink-2); letter-spacing: 0; }
+details.self-fold > .fold-body { border: 0; border-radius: 0; background: none; padding: 6px 0 10px; }
+details.self-fold > .fold-body.gear { padding-top: 0; }
+/* 屬性五塊木牌（頂上金邊，名字、數字，有點可配時底下一枚朱色的「＋」）；名望、善名、惡名一行小字；心得一行（以前在狀態列，整合設計 6.2） */
+.self-stats { padding: 0; border: 0; background: none; }
 .self-attrs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
-.self-attrs .attr { display: grid; justify-items: center; gap: 2px; padding: 6px 0; border-radius: 10px; background: var(--card-2); font-variant-numeric: tabular-nums; }
-.self-attrs .attr em { font-style: normal; font-size: 12px; color: var(--ink-2); }
-.self-attrs .attr b { font: 600 20px/1.1 var(--serif); }
-.self-attrs .attr .alloc { min-width: 0; width: 32px; min-height: 32px; padding: 0; border-radius: 50%; margin-top: 2px; }
-.self-stats .stat-uses { margin-top: 6px; }
+.self-attrs .attr { display: grid; justify-items: center; gap: 2px; padding: 8px 0 6px; border-radius: 4px 4px 10px 10px; border: 1px solid var(--line); border-top: 3px solid var(--gold);
+  background: linear-gradient(var(--card), var(--card-2)); box-shadow: var(--shadow); font-variant-numeric: tabular-nums; }
+.self-attrs .attr em { font-style: normal; font: 600 13px var(--serif); color: var(--ink-2); letter-spacing: 0.1em; }
+.self-attrs .attr b { font: 700 22px/1.1 var(--serif); }
+.self-attrs .attr .alloc { min-width: 0; width: 30px; min-height: 30px; padding: 0; border-radius: 50%; margin-top: 4px; background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.self-attrs .attr .alloc:disabled { background: none; color: var(--ink-2); border-color: var(--line); }
+.self-stats .stat-uses { margin-top: 8px; }
 .self-xinde { margin: 8px 0 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
 .self-xinde b { font: 600 18px var(--serif); }
 .self-xinde small { flex-basis: 100%; color: var(--ink-2); font-size: 12px; }

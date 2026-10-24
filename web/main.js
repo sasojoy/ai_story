@@ -775,53 +775,73 @@
     document.querySelectorAll("#page .act-move [data-id]").forEach((el) => { if (hit(el.dataset.id)) el.classList.add("glow"); });
   }
 
-  // ── 本週卡與三方卡（減法季批 1，整合設計 6.1、3.4）──
-  // 本週卡吃掉以前那一排小標（新手、態勢、主線、簽到）、狀態列的「下一件」與黃底提示句：三行——第 N 週＋兩軍態勢（點了開「為什麼」）、
-  // 這一週的主題一句、你這一步（伺服器照順序排好的 steps：託付→軍令→懸賞→伏筆→新手目標→去投靠，「換一件事」挑下一個，S.wkStep 記第幾個、
-  // 換週歸零）。底下一排小字：為什麼（三方卡、主線、收季規則、下一件、新手目標）、換一件事、今日簽到（還沒簽亮紅點；攤開是原本簽到的那一格）。
-  // 攤開哪一個記在 S.wkOpen（"why"／"checkin"／null，同以前的 S.peekOpen 帶週次）。來信到了本週卡換成來信（pageJianghu）。
+  // ── 本週卡與三方卡（減法季批 1，整合設計 6.1、3.4；Joy 2026-10-24 挑了乙案）──
+  // 本週卡吃掉以前那一排小標（新手、態勢、主線、簽到）、狀態列的「下一件」與黃底提示句。乙案：卡上面一條灰線寫第 N 週、主題一句、兩軍態勢
+  // （整條是一顆鈕，點了在它底下攤開「為什麼」：三方卡、主線、收季規則、下一件、新手目標、簽到這一週七格）；卡本身只剩「你這一步」——
+  // 標題（文字冒號前那一截）、說明、底下一顆去輿圖（新手目標是「去做」）與一顆「換一件」（伺服器照順序排好的 steps：託付→軍令→懸賞→伏筆→
+  // 新手目標→去投靠，S.wkStep 記第幾個、換週歸零）。簽到不放鈕：每天第一次同步引擎自動領（Game._auto_checkin，「剛剛」那一行寫出來），
+  // 要挑四階的日子卡底下冒一張挑屬性的小卡（status.checkin.pick）。攤開記在 S.wkOpen（"why"／null，帶週次）。來信到了本週卡換成來信（pageJianghu）。
   // 序章裡、休季伺服器不給 week_card：不畫。字待 joy 潤
-  const WK_STEP = "你這一步", WK_WHY = "為什麼", WK_NEXT = "換一件事", WK_CHECKIN = "今日簽到", WK_GO = "去做", WK_MAP = "輿圖";
+  // （一行一個 const：測試的 konst 照「const 名字」切）
+  const WK_STEP = "你這一步";
+  const WK_WHY = "為什麼";
+  const WK_NEXT = "換一件";
+  const WK_GO = "去做";
+  const WK_MAP = "去輿圖";
+  const WK_IDLE = "這一週沒有特別要做的事，四處走走、接幾個懸賞。";
+  const CK_PICK_TITLE = "簽到第 {day} 天";
+  const CK_PICK_NOTE = "今天的份要挑一樣";
   const wkKey = (w) => `${w.label}${w.when}`;
   function wkStepOf(w) {
     if (!w.steps.length) return null;
     if (!S.wkStep || S.wkStep.key !== wkKey(w)) S.wkStep = { key: wkKey(w), i: 0 };
     return w.steps[S.wkStep.i % w.steps.length];
   }
+  // 「態勢」那幾個字：灰線上寫短的（官 58・黃 42），攤開的三方卡裡才是全名
   function wkSidesHtml(sides) {
     if (!sides) return "";
-    return `<span class="wk-sides">${STANCE_NAMES.filter(([k]) => k in sides).map(([k, name]) => `${name} <b class="side-${k}">${sides[k] | 0}</b>`).join("・")}</span>`;
+    return `<span class="wk-sides">${STANCE_NAMES.filter(([k]) => k in sides).map(([k, name]) => `${name.slice(0, 1)} <b class="side-${k}">${sides[k] | 0}</b>`).join("・")}</span>`;
+  }
+  // 「你這一步」拆成標題與說明：文字第一個全形冒號前是標題（軍令、懸賞、託付都是「標題：怎麼做」），沒有冒號整句當標題
+  function wkSplit(text) {
+    const at = String(text || "").indexOf("：");
+    return at > 0 ? [text.slice(0, at), text.slice(at + 1)] : [text, ""];
   }
   function weekCardHtml(m) {
     const w = m.week_card;
     if (!w || !shown("quest")) return "";
     const open = S.wkOpen && S.wkOpen.key === wkKey(w) ? S.wkOpen.id : null;
     const step = wkStepOf(w);
-    const go = step && step.kind === "newbie" ? `<button class="linkish wk-go" data-act="newbie-go" data-i="${step.i | 0}">${WK_GO} ›</button>` : "";
-    const ck = m.status && m.status.checkin;
-    const links = [
-      `<button class="linkish${open === "why" ? " on" : ""}" data-act="wk" data-id="why" aria-expanded="${open === "why"}">${WK_WHY}</button>`,
-      w.steps.length > 1 ? `<button class="linkish" data-act="wk-next">${WK_NEXT}</button>` : "",
-      // 本週要去的那一處畫在輿圖第一層（批 3：/api/map/state 的 week，金路、紅旗、「本週」朱印）：這裡不另算，只給一個去輿圖看的入口
-      shown("tab:map") ? `<button class="linkish" data-act="tab" data-tab="map">${WK_MAP} ›</button>` : "",
-      ck ? `<button class="linkish${open === "checkin" ? " on" : ""}" data-act="wk" data-id="checkin" aria-expanded="${open === "checkin"}">${WK_CHECKIN}${ck.done ? " ✔" : '<i class="peek-dot" aria-label="還沒簽"></i>'}</button>` : "",
-    ].filter(Boolean).join("");
-    const panel = open === "why" ? `<div class="wk-panel why">${whyHtml(m)}</div>`
-      : open === "checkin" && ck ? `<div class="wk-panel checkin">${checkinPeek(m).panel}</div>` : "";
-    return `<section class="card wk-card" id="week" aria-label="${esc(w.label)}">
-      <div class="wk-head"><b><span class="wk-label">${esc(w.label)}</span>${esc(w.when)}</b>${w.sides ? `<button class="wk-now" data-act="wk" data-id="why" aria-label="態勢，點了看三方">${wkSidesHtml(w.sides)}</button>` : ""}</div>
-      ${w.theme ? `<p class="wk-theme">${esc(w.theme)}</p>` : ""}
-      ${step ? `<p class="wk-step"><b>${WK_STEP}：</b>${esc(step.text)}${go}</p>` : ""}
-      <div class="wk-links">${links}</div>${panel}</section>`;
+    const [title, detail] = wkSplit(step ? step.text : "");
+    // 本週要去的那一處畫在輿圖第一層（批 3：/api/map/state 的 week，金路、紅旗、「本週」朱印）：這裡不另算，只給一顆去輿圖看的
+    const go = step && step.kind === "newbie" ? `<button class="btn primary wk-go" data-act="newbie-go" data-i="${step.i | 0}">${WK_GO} ›</button>`
+      : step && shown("tab:map") ? `<button class="btn primary wk-go" data-act="tab" data-tab="map">${WK_MAP} ›</button>` : "";
+    const strip = `<button id="week" class="wk-strip${open === "why" ? " on" : ""}" data-act="wk" data-id="why" aria-expanded="${open === "why"}" aria-label="${esc(w.label)}${esc(w.when)}，點了看為什麼">`
+      + `<b class="wk-seg">${esc(w.when)}</b>${w.theme ? `<span class="wk-th">${esc(w.theme)}</span>` : '<span class="wk-th"></span>'}${w.sides ? wkSidesHtml(w.sides) : ""}<i class="wk-chev" aria-hidden="true"></i></button>`;
+    const panel = open === "why" ? `<div class="card wk-panel why">${whyHtml(m)}</div>` : "";
+    const card = `<section class="card wk-card" aria-label="${WK_STEP}">
+      <p class="wk-lab">${WK_STEP}</p>
+      ${step ? `<h2 class="wk-title">${esc(title)}</h2>${detail ? `<p class="wk-detail">${esc(detail)}</p>` : ""}` : `<p class="wk-detail">${WK_IDLE}</p>`}
+      ${go || w.steps.length > 1 ? `<div class="wk-foot">${go}${w.steps.length > 1 ? `<button class="linkish wk-next" data-act="wk-next">↻ ${WK_NEXT}</button>` : ""}</div>` : ""}</section>`;
+    // 四塊是江湖頁的兄弟元素、不包一層（fitFirstScreen 認 #page > .wk-card 收它）：每塊帶 data-wk，wkRepaint 一起換掉
+    return [strip, panel, card, checkinPickHtml(m)].filter(Boolean).map((h) => h.replace(/^<(\w+) /, '<$1 data-wk ')).join("\n      ");
+  }
+  // 簽到要挑四階的日子（還沒挑）：本週卡底下一張小卡，四顆挑屬性的鈕（點一種就領，同以前簽到格裡的那四顆）
+  function checkinPickHtml(m) {
+    const k = m.status && m.status.checkin;
+    if (!k || k.done || !k.pick) return "";
+    return `<section class="card ck-card" aria-label="簽到"><h3>${CK_PICK_TITLE.replace("{day}", k.day)}<small>${CK_PICK_NOTE}</small></h3>
+      <div class="ck-pick">${k.pick.map((x) => `<button class="ck-p4 ${CK_ATTR[x.attribute] || ""}" data-act="checkin" data-attr="${esc(x.attribute)}"><b>${esc(x.attribute)}</b>${esc(x.name)}<small>有 ${x.held}</small></button>`).join("")}</div></section>`;
   }
   const WK_HOWTO = '<p class="wk-howto"><button class="linkish" data-act="howto-open" aria-haspopup="dialog">玩法說明 ›</button>這一季在打什麼、名望怎麼來、投靠與軍令</p>';
-  // 「為什麼」攤開的那一塊：三方卡、收季規則、下一件、主線（以前主線小標的內容）、新手目標（以前新手小標的內容）
+  // 「為什麼」攤開的那一塊：三方卡、收季規則、下一件、主線（以前主線小標的內容）、新手目標（以前新手小標的內容）、簽到這一週七格（每天給什麼）
   function whyHtml(m) {
     const s = m.status || {};
-    const nb = newbiePeek(m);
+    const nb = newbiePeek(m), ck = checkinPeek(m);
     const next = m.week_card && m.week_card.next ? `<p class="wk-nextev"><b>下一件</b>${esc(m.week_card.next)}</p>` : "";
     return `${m.sides_card ? sidesTableHtml(m.sides_card) : ""}${s.stance_rule ? `<p class="stance-rule">${esc(s.stance_rule)}</p>` : ""}${next}${warHelp(m, "stance")}`
       + `${nb ? `<h4 class="wk-sub">${esc(s.newbie.title)}</h4>${nb.panel}` : ""}${m.quest && m.quest.trim() && shown("quest") ? `<div class="wk-quest">${m.quest}${warHelp(m, "quest")}</div>` : ""}`
+      + `${ck ? `<h4 class="wk-sub">簽到</h4>${ck.panel}` : ""}`
       + (s.renown ? WK_HOWTO.replace("名望怎麼來", "名聲怎麼來") : WK_HOWTO); // 以前在行動列底下（explain-2）；名聲開著時那一節叫「名聲」
   }
   // 三方卡（整合設計 3.4）：每一方一欄（手機上一欄一塊、上下排），要做到／現在／贏了給／投靠在哪。自己那一方框起來
@@ -854,10 +874,13 @@
     S.wkStep.i = (S.wkStep.i + 1) % w.steps.length;
     wkRepaint('[data-act="wk-next"]');
   }
+  // 只換本週卡那幾塊（灰線、為什麼、你這一步、簽到小卡都帶 data-wk）：新的插在第一塊的位置、舊的拿掉；整頁不重畫，「剛剛」不重播
   function wkRepaint(focus) {
-    const box = document.getElementById("week");
-    if (box) box.outerHTML = weekCardHtml(S.main);
-    document.querySelector(`#week ${focus}`)?.focus();
+    const old = [...document.querySelectorAll("#page [data-wk]")];
+    if (!old.length) return;
+    old[0].insertAdjacentHTML("beforebegin", weekCardHtml(S.main));
+    old.forEach((el) => el.remove());
+    document.querySelector(`#page [data-wk]${focus}, #page [data-wk] ${focus}`)?.focus();
   }
 
   // 第一季的結算卡（休季才有，計畫 T9）：結局與季末公告、最終態勢與三條戰況；十二件大事與各陣營出力前五收在摺疊裡

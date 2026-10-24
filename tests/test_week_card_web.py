@@ -1,5 +1,5 @@
-"""江湖頁減法（減法季批 1，整合設計第六章）的網頁部分：本週卡、還沒投靠的人的三方卡、「剛剛」收成一行、事件選項前的小圖示、
-灰掉的主鈕點了浮出為什麼。照 tests/test_prologue_web.py 的做法把整支網頁放進 node 的假瀏覽器，餵它真的引擎給的 /api/main；
+"""江湖頁減法（減法季批 1，整合設計第六章；本週卡照 Joy 2026-10-24 挑的乙案）的網頁部分：本週卡（灰線＋只剩「你這一步」的卡）、
+還沒投靠的人的三方卡、「剛剛」收成一行、事件選項前的小圖示、灰掉的主鈕點了浮出為什麼。照 tests/test_prologue_web.py 的做法把整支網頁放進 node 的假瀏覽器，餵它真的引擎給的 /api/main；
 沒有 node 就略過。（以前那一排小標的測試 test_peek_row.py 跟著小標一起拿掉了）"""
 from __future__ import annotations
 
@@ -34,15 +34,26 @@ def _why(m):
     return {"wkOpen": {"key": m["week_card"]["label"] + m["week_card"]["when"], "id": "why"}}
 
 
-def test_the_week_card_has_three_lines_and_its_links():
+def _title(step):
+    return step["text"].split("：", 1)[0]
+
+
+def test_the_week_card_is_a_strip_and_a_step_card():
+    """乙案：上面一條灰線（第幾段、主題、兩軍態勢，整條是「為什麼」的鈕），卡本身只剩「你這一步」——標題、說明、去輿圖、換一件；
+    沒有那一排字的連結、沒有簽到。四塊是江湖頁的兄弟（都帶 data-wk），不包一層。"""
     m = _main()
     w = m["week_card"]
     html = run(m, "return H.weekCardHtml(H.S.main);")
-    assert 'class="card wk-card"' in html and w["when"] in html and w["theme"] in html
-    assert "你這一步：" in html and w["steps"][0]["text"] in html
-    for word in ("為什麼", "換一件事", "輿圖 ›"):
-        assert word in html
-    assert "官軍" in html and "黃巾" in html and "豪強" not in re.search(r'<button class="wk-now".*?</button>', html, re.S).group(0)
+    strip = re.search(r'<button data-wk id="week" class="wk-strip"[^>]*>.*?</button>', html, re.S).group(0)
+    assert 'data-act="wk" data-id="why"' in strip and w["when"] in strip and w["theme"] in strip
+    assert "官 " in strip and "黃 " in strip and "豪強" not in strip
+    card = re.search(r'<section data-wk class="card wk-card".*?</section>', html, re.S).group(0)
+    assert '<p class="wk-lab">你這一步</p>' in card and f'<h2 class="wk-title">{_title(w["steps"][0])}</h2>' in card
+    go = 'data-act="newbie-go"' if w["steps"][0]["kind"] == "newbie" else 'data-act="tab" data-tab="map"'  # 新手目標是「去做」，其餘「去輿圖」
+    assert go in card and 'data-act="wk-next"' in card
+    for word in ("為什麼</button>", "換一件事", "輿圖 ›</button>", "簽到", "wk-links"):
+        assert word not in html
+    assert "wk-panel" not in html
 
 
 def test_another_thing_steps_through_the_candidates():
@@ -51,9 +62,9 @@ def test_another_thing_steps_through_the_candidates():
     assert len(steps) > 1
     key = m["week_card"]["label"] + m["week_card"]["when"]
     second = run(m, "return H.weekCardHtml(H.S.main);", S={"wkStep": {"key": key, "i": 1}})
-    assert steps[1]["text"] in second and steps[0]["text"] not in second
+    assert _title(steps[1]) in second and _title(steps[0]) not in second
     stale = run(m, "return H.weekCardHtml(H.S.main);", S={"wkStep": {"key": "上一週", "i": 1}})  # 換了一週：從第一件重來
-    assert steps[0]["text"] in stale
+    assert _title(steps[0]) in stale
 
 
 def test_why_opens_the_sides_table_the_next_event_and_the_howto_entry():
@@ -61,7 +72,7 @@ def test_why_opens_the_sides_table_the_next_event_and_the_howto_entry():
     closed = run(m, "return H.weekCardHtml(H.S.main);")
     assert "wk-panel" not in closed
     panel = run(m, "return H.weekCardHtml(H.S.main);", S=_why(m))
-    assert 'class="wk-panel why"' in panel and 'class="sides"' in panel
+    assert 'class="card wk-panel why"' in panel and 'class="sides"' in panel and 'class="wk-strip on"' in panel
     for col in m["sides_card"]["cols"]:
         assert col["name"] in panel and col["where"][0] in panel
     assert 'data-act="howto-open"' in panel
