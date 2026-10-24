@@ -146,7 +146,7 @@ def _map_game():
 def test_fb322_dragging_never_swaps_the_cursor():
     """輿圖第三版第 4 批拿掉了手勢；企劃者 2026-10-22 改回兩張都能拖、能捏合縮放（tests/test_map_pan_web.py）。FB-322 照舊守：
     拖的時候不換游標（cursor 會一路繼承、換一次整棵約 1,550 個元素重算樣式）——游標寫死 grab，沒有 grabbing 那一套。"""
-    src = (Path(server.WEB) / "app.js").read_text(encoding="utf-8")
+    src = webharness.app_source()
     css = (Path(server.WEB) / "style.css").read_text(encoding="utf-8")
     assert "function panDown(" in src and '"grabbing"' not in src and ".map-wrap.grabbing" not in css
 

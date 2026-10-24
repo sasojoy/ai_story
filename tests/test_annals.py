@@ -207,7 +207,7 @@ def test_the_annals_page_lists_newest_first_and_escapes_everything():
 def test_the_news_tabs_include_the_annals_and_the_server_serves_them():
     from pathlib import Path
 
-    src = (Path(__file__).parent.parent / "web" / "app.js").read_text(encoding="utf-8")
+    src = webharness.app_source()
     assert '{ id: "annals", name: "行狀" }' in src and 'api("/api/annals")' in src
     server = (Path(__file__).parent.parent / "server.py").read_text(encoding="utf-8")
     assert '@app.get("/api/annals")' in server

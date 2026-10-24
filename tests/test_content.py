@@ -12,6 +12,7 @@ from tianxia.models import (
     MOVES, BattleAct, BattleDef, BattleFaction, BattleOption, BattleOutcome, Condition, Config, FactionDef,
     SpecialTrait, Threshold, Trend,
 )
+import webharness
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -2070,7 +2071,7 @@ def test_every_glow_key_the_page_draws_is_one_the_content_may_name():
 
     from tianxia import models
 
-    source = (Path(models.__file__).parent.parent / "web" / "app.js").read_text(encoding="utf-8")
+    source = webharness.app_source()
     literal = set(re.findall(r'data-glow="([a-z:_]+)"', source))
     assert literal and literal <= models.GLOW_KEYS, sorted(literal - models.GLOW_KEYS)
     assert {"pick:insight", "slot", "switch", "cultivate", "melt"} <= literal  # 煉製頁挑選清單與修練頁各列的鍵（伺服器說哪一列）也認得到

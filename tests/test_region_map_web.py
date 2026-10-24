@@ -29,7 +29,7 @@ pytestmark = [pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，
 NAMES = ["S", "pageMap", "regionFit", "regionLabels", "regionExits", "regionParts", "regionTopHtml", "placeCard", "placeLine",
          "flipSection", "drawerHtml", "worldDrawerHtml", "sideInk", "sideText", "regionCrowded"]
 DRIVER = re.sub(r"wholeApp\(\[.*?\]\)", "wholeApp(" + repr(NAMES).replace("'", '"') + ")", test_prologue_web.DRIVER, count=1, flags=re.S)
-APP = Path(server.WEB) / "app.js"
+APP = webharness.APP  # 三個檔（main.js、map.js、app.js）接起來的那一份
 # 地圖框（寬 × 高）：實機量的。375×812 → 375×604（2026-10-21 map4.localhost，狀態列多一行心得提示、商城開著）、375×624（第 3 批量的）、
 # 375×667 → 375×479、360×640 → 360×452／360×436
 PHONES = [(375, 604), (375, 624), (375, 479), (360, 452), (360, 436)]

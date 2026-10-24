@@ -9,6 +9,7 @@ import random
 from conftest import real_content
 from tianxia import calendar, timetable
 from tianxia.world_state import fresh_season
+import webharness
 
 DAY, HOUR = 86400, 3600
 BASE = 20_000 * DAY  # 隨便一天的當地 00:00（照時區換過的 epoch 秒）
@@ -246,7 +247,7 @@ def test_fb265_the_confirm_box_does_not_promise_the_move():
     """FB-265：確認框不寫成一定挪得開。"""
     from pathlib import Path
 
-    js = (Path(__file__).resolve().parents[1] / "web" / "app.js").read_text(encoding="utf-8")
+    js = webharness.app_source()
     box = js[js.index("這一季立刻蓋上天命之季的章："):]
     box = box[: box.index("確定？")]
     assert "現實時間落在半夜就挪開" not in box and "挪不開" in box

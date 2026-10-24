@@ -23,7 +23,7 @@ pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，�
 NAMES = ["S", "pageMap", "controlAt", "drawerHtml", "placeCard", "cardExtras", "searchHtml", "timelineHtml", "graphSvg", "chartHtml",
          "mapDrawerPx", "setMapDrawer", "insightRow", "redrawDrawer", "regionLineHtml", "worldParts", "worldLabels", "journeyHtml", "regionPick"]
 DRIVER = re.sub(r"wholeApp\(\[.*?\]\)", "wholeApp(" + repr(NAMES).replace("'", '"') + ")", test_prologue_web.DRIVER, count=1, flags=re.S)
-APP = Path(server.WEB) / "app.js"
+APP = webharness.APP  # 三個檔（main.js、map.js、app.js）接起來的那一份
 
 
 def _game(faction="guan", at="yingchuan", classic=False, third_party=False):

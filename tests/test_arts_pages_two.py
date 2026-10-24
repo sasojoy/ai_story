@@ -96,7 +96,7 @@ def test_a_melted_starter_art_is_offered_again_in_every_town_and_learning_it_put
 def test_the_lesson_lands_in_the_collapsed_here_fold_not_in_the_action_bar():
     """網頁怎麼擺：行動列只認探索、遊歷、打坐、交友、移動；「學…」不在裡面，掉進「此地還能做 N 件事」摺疊。
     （QA 沒找到它的原因之一：摺疊預設是收著的。）"""
-    src = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    src = webharness.app_source()
     cells = re.search(r"const ACT_CELLS = \[(.*?)\n  \];", src, re.S).group(1)
     assert "learn:" not in cells
     assert "此地還能做 ${extras.length} 件事" in src and "const extras = m.options.filter((o) => !used.has(o.id))" in src
@@ -695,7 +695,7 @@ def test_the_craft_choice_is_remembered_in_the_browser_too():
 def test_the_practice_poll_redraws_when_the_heal_button_changes():
     """療傷鈕能不能按、寫什麼，看內傷與銀兩：輪詢只在 MENXIA_SHOWN 列的欄位變了才重畫，heal 不在裡面的話，
     銀兩夠不夠變了鈕還是舊的（review-ap2 的小毛病）。煉製頁沒畫療傷鈕，不必。"""
-    src = (ROOT / "web" / "app.js").read_text(encoding="utf-8").replace("\r\n", "\n")
+    src = webharness.app_source().replace("\r\n", "\n")
     shown = {
         page: re.findall(r'"([a-z_]+)"', fields)
         for page, fields in re.findall(r"^\s+(practice|craft): \[(.*?)\],?(?:\s*//.*)?$", src[src.index("const MENXIA_SHOWN"):], re.M)
@@ -928,12 +928,12 @@ def test_melting_an_insight_asks_the_same_way():
 
 
 def test_the_page_no_longer_uses_the_browsers_confirm_box():
-    src = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    src = webharness.app_source()
     assert not re.search(r"\bconfirm\(", src) and "window.confirm" not in src
 
 
 def test_the_melt_buttons_go_through_the_pages_own_layer():
-    src = (ROOT / "web" / "app.js").read_text(encoding="utf-8").replace("\r\n", "\n")
+    src = webharness.app_source().replace("\r\n", "\n")
     assert 'case "melt": askMelt(el); break;' in src and 'case "melt-insight": askMeltInsight(el); break;' in src
     assert 'case "art-filter":' in src
 
