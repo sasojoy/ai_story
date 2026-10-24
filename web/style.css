@@ -2003,11 +2003,8 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
 .self-go small { font: 11px var(--sans); color: #b9ab98; font-weight: 400; letter-spacing: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .self-go:disabled, .self-go.btn:disabled { opacity: 0.5; }
 .self-goes .seclude { display: grid; gap: 4px; align-content: start; }
-/* 記錄：三張書籤並排（頂上一道朱色），不是一列列的清單 */
-.self-list { display: flex; gap: 8px; border: 0; background: none; overflow: visible; border-radius: 0; }
-.self-list button { flex: 1; justify-content: center; min-height: 48px; padding: 10px 4px; border: 1px solid var(--line); border-top: 3px solid var(--accent); border-radius: 0 0 10px 10px;
-  background: var(--card); font: 600 15px var(--serif); letter-spacing: 0.08em; box-shadow: var(--shadow); }
-.self-list button::after { content: none; }
+/* 行狀：人像那張卡右上角一顆小字（Joy 2026-10-24：榜單、名帖匣回見聞，行狀留在俠客頁） */
+.hero-sub .hero-annals { display: inline-flex; min-height: 28px; margin: 2px 0 0; padding: 0; font-size: 12px; }
 /* 四個摺疊（功法庫、裝備、門下、規矩）：標題一行宋體、底下一道細線，不圍框 */
 details.self-fold { margin-bottom: 4px; }
 details.self-fold > summary { border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: none; padding: 10px 2px; font: 700 16px var(--serif); letter-spacing: 0.1em; }

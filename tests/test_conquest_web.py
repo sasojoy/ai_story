@@ -266,14 +266,17 @@ def test_empty_and_pending_and_off():
 
 
 def test_tab_only_when_on_and_two_rows_for_nine():
-    """減法季批 1：見聞四顆籤（大事、傳聞、江湖史、紀錄），大事底下一排小的：戰報、大勢，形勢只有開著的季才有、排在大勢後面。"""
+    """減法季批 1：見聞五顆籤（大事、傳聞、榜單、江湖史、紀錄；Joy 2026-10-24 榜單回見聞），大事底下一排小的：戰報、大勢，形勢只有開著的季才有、
+    排在大勢後面；紀錄底下分紀錄、名帖匣。"""
     off = page(m={})["seg"]
     assert 'data-news="xingshi"' not in off
     on = page(m={"xingshi": True})["seg"]
     assert 'data-news="xingshi"' in on and 'class="seg news-sub"' in on
     names = re.findall(r'data-news="(\w+)"', on)
-    assert names == ["reports", "rumors", "chronicle", "journal", "reports", "trends", "xingshi"]
+    assert names == ["reports", "rumors", "boards", "chronicle", "journal", "reports", "trends", "xingshi"]
     assert 'data-news="xingshi"' not in page(m={"xingshi": True}, news="rumors")["seg"]  # 別的籤底下沒有那一排
+    journal = re.findall(r'data-news="(\w+)"', page(m={"xingshi": True}, news="mingtie")["seg"])
+    assert journal == ["reports", "rumors", "boards", "chronicle", "journal", "journal", "mingtie"]
 
 
 @pytest.mark.slow

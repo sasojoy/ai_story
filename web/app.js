@@ -23,25 +23,27 @@
     { id: "map", ico: "圖", name: "輿圖" },
     { id: "news", ico: "聞", name: "見聞" },
   ];
-  // 見聞 9 籤改 4（6.5）：大事（戰報＋大勢＋形勢，段落裡再分）、傳聞、江湖史、紀錄。行狀、榜單、名帖匣搬到「俠客」頁底下（SELF_NEWS），
-  // 頁面照舊是見聞那一頁的同一段（S.news 認得它們），只是籤不排在見聞上
+  // 見聞 9 籤改 5（6.5 寫四籤；Joy 2026-10-24「榜單放俠客頁很奇怪」）：大事（戰報＋大勢＋形勢，底下再分）、傳聞、榜單、江湖史、
+  // 紀錄（自己的紀錄＋名帖匣，底下再分）。行狀是自己的傳，從「俠客」頁人像那張卡進（SELF_NEWS），頁面照舊是見聞那一頁的同一段
+  // （S.news 認得它），只是籤不排在見聞上
   const NEWS = [
     { id: "reports", name: "大事", parts: ["reports", "trends", "xingshi"] },
     { id: "rumors", name: "傳聞" },
+    { id: "boards", name: "榜單" }, // 企劃者 2026-10-14，/api/boards
     { id: "chronicle", name: "江湖史" },
-    { id: "journal", name: "紀錄" },
+    { id: "journal", name: "紀錄", parts: ["journal", "mingtie"] },
   ];
-  // 大事那一籤底下的三段（戰報、大勢、形勢）：形勢只有開著的季（main.xingshi）才畫（newsSegHtml）
+  // 籤底下再分的一排小的（newsSegHtml）：大事分戰報、大勢、形勢（形勢只有開著的季〔main.xingshi〕才畫）；紀錄分紀錄、名帖匣（Joy 2026-10-19，/api/mingtie）
   const NEWS_PARTS = [
     { id: "reports", name: "戰報" },
     { id: "trends", name: "大勢" },
     { id: "xingshi", name: "形勢" }, // 領地爭奪第三批 A：每天一篇〈天下形勢〉（/api/xingshi）
+    { id: "journal", name: "紀錄" },
+    { id: "mingtie", name: "名帖匣" },
   ];
-  // 從「俠客」頁進去的三段（以前是見聞的籤）：行狀（玩家傳第一批，/api/annals）、榜單（企劃者 2026-10-14，/api/boards）、名帖匣（Joy 2026-10-19，/api/mingtie）
+  // 從「俠客」頁進去的那一段（以前是見聞的籤）：行狀（玩家傳第一批，/api/annals）
   const SELF_NEWS = [
     { id: "annals", name: "行狀" },
-    { id: "boards", name: "榜單" },
-    { id: "mingtie", name: "名帖匣" },
   ];
   const POLL_MS = 10000;
   const KINDS = ["武學", "內功"];
@@ -1713,7 +1715,7 @@
     return `<section class="hero" aria-label="人物">
       <div class="hero-hd">
         <div><div class="hero-name">${esc(s.name)}</div><div class="hero-tag">${esc(s.affiliation)}</div></div>
-        <div class="hero-sub"><div>第 ${s.level | 0} 級</div><div>氣血 ${s.hp | 0}／${s.hp_max | 0}</div>${typeof x.might === "number" ? `<div class="hero-might">戰力 <b>${x.might | 0}</b></div>` : ""}</div>
+        <div class="hero-sub"><div>第 ${s.level | 0} 級</div><div>氣血 ${s.hp | 0}／${s.hp_max | 0}</div>${typeof x.might === "number" ? `<div class="hero-might">戰力 <b>${x.might | 0}</b></div>` : ""}${heroAnnalsHtml()}</div>
       </div>
       <div class="hero-stage">
         <div class="hero-halo" aria-hidden="true"></div>
@@ -1785,8 +1787,8 @@
         <select class="input" name="hours" aria-label="閉關幾小時">${[1, 2, 4, 6, 8, 12].map((h) => `<option value="${h}" ${h === 8 ? "selected" : ""}>${h} 小時</option>`).join("")}</select></form>`;
     return `<section class="self-sec" aria-label="去做"><div class="self-hd"><h3>去做</h3></div><div class="self-goes">${craft}${create}${heal}${seclude}</div></section>`;
   }
-  // 「記錄」清單：行狀、榜單、名帖匣（見聞那一頁的三段，SELF_NEWS）
-  const selfRecordsHtml = () => (shown("tab:news") && SELF_NEWS.length ? `<div class="list self-list" aria-label="記錄">${SELF_NEWS.map((n) => `<button data-act="news" data-news="${n.id}">${n.name}</button>`).join("")}</div>` : "");
+  // 行狀（自己的傳，見聞那一頁的一段，SELF_NEWS）：人像那張卡右上角一顆「行狀 ›」（Joy 2026-10-24：榜單、名帖匣回見聞；榜單是籤、名帖匣在紀錄底下）
+  const heroAnnalsHtml = () => (shown("tab:news") ? SELF_NEWS.map((n) => `<button class="linkish hero-annals" data-act="news" data-news="${n.id}">${n.name} ›</button>`).join("") : "");
 
   // 點光點（招式與絕學稿案第四輪）：從底下升起那一樣的抽屜——武學、內功是那一門的卡（練、槽、改練），裝備是那一欄的裝備庫
   function heroTap(el) {
@@ -2305,8 +2307,6 @@
       <div class="msg" id="mx-msg">${S.message}</div>
       ${naming}
       ${attrNoteHtml(x)}
-      <div class="self-hd"><h3>記錄</h3></div>
-      ${selfRecordsHtml()}
       ${fold("lib", `功法庫 <small class="muted">武學與意境 ${x.holdings.count}/${x.holdings.cap}</small>`, libBody)}
       ${gearBlock}
       ${fold("roster", `門下${mates ? ` <small class="muted">${x.roster.length} 人</small>` : ""}`, rosterBody)}
@@ -4330,18 +4330,17 @@
     });
   }
 
-  // 見聞的籤（NEWS，減法季批 1 起四顆）：大事（戰報、大勢、形勢在它底下再分一排小的）、傳聞、江湖史、紀錄。
-  // 「形勢」只有〈天下形勢〉開著的季（main.xingshi）才畫。行狀、榜單、名帖匣是從「俠客」頁進來的（SELF_NEWS）：
-  // 那三段最上面不畫見聞的籤，畫一行「‹ 自己」回去
+  // 見聞的籤（NEWS，減法季批 1 起五顆）：大事（戰報、大勢、形勢在它底下再分一排小的）、傳聞、榜單、江湖史、紀錄（紀錄、名帖匣再分）。
+  // 「形勢」只有〈天下形勢〉開著的季（main.xingshi）才畫。行狀是從「俠客」頁進來的（SELF_NEWS）：那一段最上面不畫見聞的籤，畫一行「‹ 俠客」回去
   const newsPart = (id) => NEWS.find((n) => (n.parts || [n.id]).includes(id));
   const selfNews = (id) => SELF_NEWS.find((n) => n.id === id);
   function newsSegHtml(m) {
     const self = selfNews(S.news);
-    if (self) return `<div class="self-sub"><button class="linkish back" data-act="tab" data-tab="practice">‹ 自己</button><h3>${esc(self.name)}</h3></div>`;
+    if (self) return `<div class="self-sub"><button class="linkish back" data-act="tab" data-tab="practice">‹ 俠客</button><h3>${esc(self.name)}</h3></div>`;
     const at = newsPart(S.news);
     const top = `<div class="seg news-seg">${NEWS.map((n) => `<button class="${at === n ? "on" : ""}" data-act="news" data-news="${n.id}">${n.name}</button>`).join("")}</div>`;
     if (!at || !at.parts) return top;
-    const parts = NEWS_PARTS.filter((n) => n.id !== "xingshi" || (m && m.xingshi));
+    const parts = NEWS_PARTS.filter((n) => at.parts.includes(n.id) && (n.id !== "xingshi" || (m && m.xingshi)));
     return top + `<div class="seg news-sub">${parts.map((n) => `<button class="${S.news === n.id ? "on" : ""}" data-act="news" data-news="${n.id}">${n.name}</button>`).join("")}</div>`;
   }
 
