@@ -29,7 +29,8 @@ stderr／exit／exitCode、console、計時器與其他 node 的全域；結束�
 標準輸入送進去的 \n 會變成 \r\n、stdout 照通用換行讀回來（以前 test_server 是位元組進出；JS 會把樣板字串裡的 CRLF 統一成
 \n，目前的結果一樣）。
 
-驅動程式寫在各個測試檔裡（假 DOM 各檔不同）；開頭共用的幾樣在 PRELUDE：input（這個請求的 JSON）、src（app.js，換行統一成 \\n）、
+驅動程式寫在各個測試檔裡（假 DOM 各檔不同）；開頭共用的幾樣在 PRELUDE：input（這個請求的 JSON）、src（app.js，換行統一成 \\n；
+網頁切成三個檔之後是 app_source() 接起來的那一份）、
 slice、fn、konst（切 app.js）、wholeApp（整支 app.js 交出要測的名字）、finish（印結果）。"""
 from __future__ import annotations
 
@@ -44,7 +45,27 @@ import threading
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
-APP = ROOT / "web" / "app.js"
+WEB = ROOT / "web"
+# 網頁分三個檔（減法季批 0）：index.html 照這個順序載入，頂層的名字同在一個全域裡
+APP_FILES = ("main.js", "map.js", "app.js")
+
+
+def app_source() -> str:
+    """三個檔照載入順序接起來、包回以前那一個 IIFE（「整支 app.js」）：切函式、wholeApp、掃字都照這一份。換行統一成 \n。"""
+    parts = [(WEB / name).read_text(encoding="utf-8").replace("\r\n", "\n") for name in APP_FILES]
+    return "(() => {\n" + "".join(parts) + "})();\n"
+
+
+def _combined() -> Path:
+    """app_source() 寫成一個暫存檔：驅動程式照路徑讀（input.app），測試檔也照舊 APP.read_text()。"""
+    folder = Path(tempfile.mkdtemp(prefix="tianxia-web-"))
+    atexit.register(shutil.rmtree, folder, True)
+    path = folder / "app.js"
+    path.write_text(app_source(), encoding="utf-8")
+    return path
+
+
+APP = _combined()  # 不是 web/app.js 本身：是三個檔接起來的那一份
 NODE = shutil.which("node")
 MODE_ENV = "TIANXIA_WEB_HARNESS"  # "process"：每個請求各開一個 node
 

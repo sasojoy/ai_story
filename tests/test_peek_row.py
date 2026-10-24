@@ -483,7 +483,7 @@ def test_the_media_block_walker_reads_nested_rules_to_the_matching_brace():
 
 
 def test_the_old_folds_and_their_helpers_are_gone():
-    js = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    js = webharness.app_source()
     css = (ROOT / "web" / "style.css").read_text(encoding="utf-8")
     for dead in ("stanceBelowMenu", "stanceCardHtml", "S.boardOpen", "S.stanceOpen", "details.bulletin", "details.stances",
                  'class="fold bulletin"', 'class="fold quest"', "lowCard", "topCard", "peek-titles", "bulletinTitle"):

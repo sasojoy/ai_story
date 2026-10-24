@@ -12,7 +12,7 @@ from .allied import hidden_trends as allied_hidden
 from .allied import on as haoqiang_allied  # noqa: F401  豪強分屬兩軍：設計寫 rules.haoqiang_allied、rules.side_of，其他模組照這兩個名字讀
 from .allied import side_of  # noqa: F401
 from .martial_arts import content_art
-from .models import DEFAULT_SEASON_DAYS, FRONT_KEY, Check, Condition, Content, Effect, Ending, FactionDef, Trend
+from .models import BEST_OF, DEFAULT_SEASON_DAYS, FRONT_KEY, Check, Condition, Content, Effect, Ending, FactionDef, Trend
 from .state import PLAYER, GameState, Rumor, RumorLayer, WorldState
 from .world_state import JADE_SEAL_FRAGMENT_COUNT, WorldStateStore, length_factor, season_length_days  # noqa: F401
 # length_factor：季長倍數（名聲設計 2.4、決戰道具 2.2 共用），定義在 world_state（stamp_season 要用），從這裡轉出去叫 rules.length_factor
@@ -311,10 +311,18 @@ def check_outlook(check: Check, state: GameState, content: Content, world: World
     本人的熟練加成（Check.practice，joy #15）照舊加上。差值每 +1，成功率 +10%；範圍 5%～95%。
     擲骰（roll_check）與選項括號裡的數值、心裡話那一檔（events.choice_label）都出自這一個函式的同一個差值，
     所以標籤講的和實際擲出來的不會對不起來。江湖水漲（rise.event_bump）：本人等級高了，難度在這裡多加幾點，內容寫的不動。"""
-    stat_value = team.check_value(state, content, world, PLAYER, check.stat)
+    stat_value = check_stat_value(check, state, content, world)
     bonus = team.practice_bonus(state, content, check)
     gap = stat_value + bonus - check.difficulty - rise.event_bump(state, content)  # 江湖水漲：等級高了檢定加深（Config.rise）
     return CheckOutlook(stat_value, bonus, gap, min(0.95, max(0.05, 0.5 + gap * 0.1)))
+
+
+def check_stat_value(check: Check, state: GameState, content: Content, world: WorldStateStore) -> float:
+    """檢定看的本人那一項屬性（含等級成長）：一般是 check.stat；stat 是 BEST_OF 時取 check.stats 裡最高的那一項
+    （減法季整合設計 5.9：「出力」那一種後果，臂力與悟性誰高看誰）。"""
+    if check.stat == BEST_OF:
+        return max(team.check_value(state, content, world, PLAYER, stat) for stat in check.stats)
+    return team.check_value(state, content, world, PLAYER, check.stat)
 
 
 def check_gap(check: Check, state: GameState, content: Content, world: WorldStateStore) -> float:
@@ -354,7 +362,12 @@ def free_text_rate(llm_rate: int, choice, state: GameState, content: Content, wo
 def stat_rate(llm_rate: int, stat: str, state: GameState, content: Content, world: WorldStateStore) -> int:
     """LLM 評的 0～100 加上本人 stat 這項屬性的修正（每比 5 多一點 +FREE_TEXT_PER_POINT），夾在 5～85。隨口應對（照事件寫的屬性）
     與找素材的「自己說」（固定悟性，第 32 項）共用。"""
-    value = team.check_value(state, content, world, PLAYER, stat)
+    return value_rate(llm_rate, team.check_value(state, content, world, PLAYER, stat))
+
+
+def value_rate(llm_rate: int, value: float) -> int:
+    """stat_rate 的算法：LLM 評的分數加上（屬性值 − 5）× FREE_TEXT_PER_POINT，夾在 5～85。隨口應對分岔的檢定（outcomes.rate，
+    屬性值是 check_stat_value：best_of 取最高）也走它。"""
     rate = round(llm_rate + (value - 5) * FREE_TEXT_PER_POINT)
     return max(FREE_TEXT_MIN_RATE, min(FREE_TEXT_MAX_RATE, rate))
 
@@ -554,6 +567,17 @@ def season_one(content: Content, world: WorldState) -> bool:
     """第一季濃縮版的規則在這一季開了沒：開關開著，而且這一季開季時也蓋了「開」的章（T2 的 calendar.season_one_on）。
     開關打開時還在跑的 beta 那一季照舊用 beta 的規則，新規則從開關打開後開的下一季起算（PM 2026-10-04）。"""
     return calendar.season_one_on(world, content)
+
+
+def jianfa(content: Content, world: WorldState | None, part: str | None = None) -> bool:
+    """減法季的規則在這一季開了沒（Config.jianfa，企劃者 2026-10-24）：主機的開關開著，而且這一季開季時也蓋了章
+    （WorldState.jianfa_on，world_state.stamp_season）。正在跑的季照它自己的章；開關關掉時一律照關著（主機的緊急開關）。
+    part 給了再看那一個子開關（JianfaRules 的欄位，例："explore_one"；整合設計第十二章）。
+    減法季的規則改動一律先問這一個（畫面的改動不掛開關）；world 是 None 一律是假。"""
+    cfg = content.config.jianfa
+    if world is None or not cfg.enabled or not world.jianfa_on:
+        return False
+    return part is None or bool(getattr(cfg, part))
 
 
 OffKind = Literal["thresholds", "storylines", "battles", "events", "milestones", "world_events", "unlocks"]

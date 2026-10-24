@@ -521,7 +521,7 @@ def test_a_page_with_neither_row_nor_menu_is_left_alone():
 
 def test_every_draw_and_every_resize_refits():
     """江湖頁每畫一次（afterPage，排在第一回合、聽來的那一句之後），轉向、拉視窗之後，都重量一次。"""
-    js = (ROOT / "web" / "app.js").read_text(encoding="utf-8").replace("\r\n", "\n")
+    js = webharness.app_source().replace("\r\n", "\n")
     after = js[js.index("\n  function afterPage()"):js.index("\n  }\n", js.index("\n  function afterPage()"))]
     jianghu = after[after.index('if (S.tab === "jianghu")'):]
     calls = re.findall(r"(?m)^\s*(\w+)\(\);", jianghu)  # 真的呼叫（行首、不在註解裡）
@@ -757,5 +757,5 @@ def test_the_players_here_row_does_not_style_the_here_fold():
     assert not re.search(r"(?m)^\.here \{", css)
     here = re.search(r"(?m)^div\.here \{([^}]*)\}", css).group(1)
     assert "border-top: 1px dashed" in here and "display: flex" in here
-    js = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    js = webharness.app_source()
     assert '<div class="here">' in js and '<details class="fold here"' in js

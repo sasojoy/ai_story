@@ -199,6 +199,24 @@ def no_tale_threads(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def no_leftover_web_push(monkeypatch, tmp_path):
+    """server.main() 照正式內容（web_push 開著）會建 WEB_PUSH、開通知的看守、在 repo 的 .local/ 產生 VAPID 金鑰：金鑰改寫到這個測試的
+    暫存目錄；結束時停掉看守、WEB_PUSH 放回 None，同一個 worker 裡下一個測試從關著開始（減法季批 9）。"""
+    import server
+
+    monkeypatch.setattr(server, "VAPID_FILE", tmp_path / "webpush_vapid.pem")
+    yield
+    server.NOTICE_STOP.set()
+    if server.NOTICE_THREAD is not None:
+        server.NOTICE_THREAD.join(5.0)
+    server.NOTICE_THREAD = None
+    server.NOTICE_STOP.clear()
+    server.WEB_PUSH = None
+    server.NOTICE_SENT.clear()
+    server.MAIL_DONE.clear()
+
+
+@pytest.fixture(autouse=True)
 def isolated_database(tmp_path, monkeypatch):
     """每個測試用自己的暫存資料庫，不會讀寫到真正的 saves/tianxia.db，測試之間也不會互相汙染；
     測試結束時關掉所有連線（Windows 才刪得掉暫存檔）。"""

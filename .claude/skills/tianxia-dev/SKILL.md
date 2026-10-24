@@ -77,6 +77,8 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   跑之前先 `git diff --stat` 記一下，跑完再看一次；
   (2) 拿掉一個條件測試沒紅，先看是不是「兩層保護」（例：`Game._seal_find` 的藏處檢查在擲骰前、寫入重驗各一次，拿掉一層本來就不紅），是的話改拿掉兩層、或確認這兩層是故意重複；
   (3) 測試裡用的「不該發生」的前提要真的分得開兩個原因（例：天命之季不藏的測試，七片全隱沒時「沒東西可藏」也會是空的，要留一片未現世才測得到「因為天命之季」）。
+- **變異清單寫成 .py 檔**（2026-10-24 減法季批 2）：`MUTATIONS = [(舊, 新), …]`，變異腳本用 `runpy.run_path` 讀、一處換一次跑 `pytest <檔> -x`、`finally` 寫回原 bytes——舊字串裡的雙引號、換行都不必經過 PowerShell 的引數。純規則檔一個變異約 2 秒（腳本在 PM scratchpad 的 `jianfa-2/mutate.py`）。綠的那一條先看是不是被別的參數蓋住（`growth.capped_exp` 的「到 45 級全換」被測試裡一律 `room=0` 蓋住），補一條只差那個條件的斷言再跑一次。
+- **`--durations` 第一個測試的 setup 一秒多**是整個工作階段的 fixture（內容母本、序章母本），不是那個測試慢；工作樹第一次跑 pytest 四十幾秒是在編 pyc，第二次兩三秒。要不要標 slow 看 call 那一欄（2026-10-24）。
 - **證明「祕密沒漏出去」用差異測試**：建兩個只差那個祕密的世界（例：碎片藏在 A 或藏在 B），比畫面、API、江湖史、傳聞、管理者的回話與玩家的存檔是不是一個字不差；不要在輸出裡找祕密字串（地名到處都有，找不到也不代表沒漏）。
   同一條測試裡把開關關掉再比一次、斷言「關著時看得出差別」（列出哪幾項不一樣），才證明這條測試抓得到漏（玉璽碎片改版第 1 批 `test_two_worlds_that_differ_only_in_the_holder_look_the_same`）。要找名號字串時，名號別跟固定的字撞（拿「懷璽」當持有者的名號，會撞到「懷璽之人」），用「甲客」「持璽客」這種。
 - **差異測試要讓「世界差在祕密、後面的步驟不被結果帶開」**（玉璽碎片改版第 1 批修正，側門）：兩個世界裡誰贏誰輸、誰掉了氣血會不同，之後算威力的步驟（氣血係數 `condition` 也在 `_spar_power` 裡）就跟著差，測試紅了不是漏而是被結果帶開。做法：先把所有「看」的畫面讀完再打；每個人至多打一場有損耗的仗（截殺各挑沒打過的人）；擂台挑了就認輸（`arena:yield`，結果固定是落敗、名次不動）；只比「對手那一格」的數字，不比勝負與氣血。
@@ -123,10 +125,14 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 - 改了 `content/forge_secrets.json`、`per_season` 這類「池子大小」，會有測試與量表腳本寫死數量（配方總數、每季條數、`/13（` 這種字）。用 grep 找出來一起改。
 - 新寫給玩家看的字一律標「待 joy 潤」，數字標【預設】或【暫】。不要改 joy 寫好的事件文字；真的非動不可先問 PM。
 - 內容裡要照季換的字用插槽（`content/orders.json` 的 `{本週}`、`content/tutorial.json` 引薦人的 `{本週}`／`{每週}`，FB-502），填字的函式一個、載入時驗插槽；週末填完要跟原句一字不差。加了插槽，`test_real_content` 這類照原文寫死的斷言要一起改。
+- **草稿 JSON 別留在 `content/` 底下**（2026-10-24 減法季批 4）：`tests/test_explain.py`、`test_explain2.py` 用 `content/` 的 `rglob("*.json")` 掃每一份內容檔（名望只准 `events/` 底下給、舊詞），設計分支帶來的草稿（`content/events_outcomes.json`）一放進來 `test_only_events_and_the_first_echo_give_fame_in_the_code` 就紅；併完就刪，還沒併的放計畫文件。
+- **用腳本改 `content/events/*.json`**：這幾份是 `json.dumps(indent=2, ensure_ascii=False)`＋結尾換行（CRLF 轉 LF 之後一個位元組不差），讀成 dict 改完照原樣寫回是安全的；先驗「寫得回原樣」再寫（`scripts/merge_outcomes.py::_read`），`git diff` 看刪掉的行只該是被接上逗號的那一行。`locations.json` 不是這個寫法，別這樣改。
+- **`zh.to_traditional` 退回手寫表時把「台」換成「臺」**：拿它驗「有沒有簡體」會把原事件的「灶台」誤判成簡體；比之前兩邊都把臺換回台。
 
 ## 規則改動的雷
 
 - **一個動作同時寫全服登記與季**（2026-10-21 玉璽碎片第 2 批 `Game.seal_use`）：登記（`SharedWorldState.seal` 這種 world 那一列的東西）在 `self.world.mutate` 裡改、裡面整個重驗；季的東西（`WorldState` 的欄位、人物所在、天下大事）改在 `self.state.world` 上、最後 `self._save_season()`。不要在 mutate 裡改 `shared.season` 之後又拿著同步時讀的 `self.state.world` 繼續做事：之後誰叫 `_save_season()` 都會把 mutate 寫的季整份蓋掉（傳聞與江湖史例外，它們照流水號新增）。
+- **開關還沒到就先做純規則**（2026-10-24 減法季批 2：批 0 的 `Config.jianfa` 在雲端側手上，兩邊各建一份一定撞）：數字放一個獨立的 pydantic 模型（新模組 `tianxia/jianfa_numbers.py`，自己的 `_Strict`、**不 import `models`**，之後 `models.py` 繼承或掛它才不會循環），純函式 duck-typed 收 cfg，測試直接建模型；不碰 `Config`、`content/config.json`、設定檔、`engine.py`。欄位名照計畫；計畫裡同一個名字既是子開關又是數字（`stat_milestones`、`explore_one`）的，數字那一邊改名，寫進計畫的 x.0。純規則要讀遊戲本身的升級表時（`team.level_cost`）在函式裡延後 import：team 之後會反過來 import 它。
 - **開關與蓋章**：
   - 新規則多半是 `Config` 開關＋開季時蓋在 `WorldState` 的章（例 `precise.on(content, world)` 同時看設定、章、探索三選一）。
   - 判斷開沒開一定走那個 `on()`，要把 world/state 傳進去。只傳 content 時它會回假，悄悄退回舊說法（FB-435 就是這樣：傳聞沒給 world，寫回舊句）。
@@ -167,6 +173,9 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 - **存進全服狀態的「現實時間」一律用 `self.now`，不要用 `pill_now()`**（FB-577，2026-10-21）：`pill_now()`＝`now`＋`advanced_real`，管理者快轉推的 `advanced_real` 只活在那一個 `Game` 物件的記憶體裡；拿它寫進共用狀態的時刻（`XingshiTicket.opened_real`、`retry_at`），別的 `Game`（伺服器排程 `world_tick`、別的玩家）拿自己的 `now` 比，會差上快轉的那十幾個小時。換天、回體丹換日這種「快轉跨過了就該算」的判斷才用 `pill_now()`（`conquest_day.day_key` 有「日子只准往前走」擋著）。測試：一個 `Game` 先 `advance` 跨過換天開單，另一個 `Game.for_world` 照現實時鐘 `world_tick`，看單有沒有照寬限收。
 - **「設定裡有、章上沒有」的值（`season_weeks`、`season_segments`）：畫一季的時刻、週數、季曆長度時，函式要收 `season`**（FB-635，2026-10-21）：上一季是舊程式的週末式季曆（章上 `season21` false），新程式的設定已經是照現實天的，直接讀 `content.config.season_weeks` 會把上一季的每個時刻照新季曆寫（休季換程式、開下一季之前才看得到：開了季就蓋新章）。`calendar.weekend_style(season, content)` 判斷（只管休季；還在跑的舊季時刻表與曆時交界仍照新設定走，只換畫面會跟大事對不上，不換）、`calendar.weeks/total_days/cal_scale/point/week_start/calendar_end` 都收 `season`；新寫「按季曆算」的函式照辦，不要再讀 `content.config.season_*`。測試用差異法：同一季（舊內容開的）、同一個世界秒，新內容與舊內容各算一次要一字不差（`tests/test_fb635_rest_season_calendar.py`）；重現要走「舊內容開季→`admin_end_season`→新內容 `Game.for_world` 讀同一份資料庫」整條，單看 `stamp_text` 看不出狀態列的 `weeks` 與輿圖 `weeks_total`。還讀設定沒動的：`rules.decisive_week`、`stance_rule_note`、`checkin.last_day`、`timetable.finale_default`（跑著的舊季本來就不該換程式，PM 定的是休季才換）。
 - **啟動時印的警告（`server.main`、`run_bots.main`）的測試**：`uvicorn.run` monkeypatch 掉、`server.PROFILE`／`server.CONTENT` 換成要試的設定、`server.main([])`；假人用 `monkeypatch.setenv("TIANXIA_PROFILE", …)`＋`run_bots.main(ticks=0)`；`capsys` 看輸出。要試的狀態有四種：全新資料庫（什麼都沒種，`open_world().season_phase()` 是 preparing）、`seed_first_season` 種好沒開、`open_season` 用另一份設定開了、同一份設定開了；警告函式收的是 `season_phase()`，不是從 `WorldState` 猜（全新資料庫讀回來的季是沒蓋章的空殼，章上 `season21` false，會跟任何 season21 的設定對不上；`tests/test_fb636_preparing_warning.py`）。
+- **加 `WorldState` 的欄位也要分進 `tests/test_server.py` 的 `FINGERPRINTED`／`NOT_IN_THE_FINGERPRINT`**（2026-10-24 減法季批 4 `marks_fired`；不只 SharedWorldState、BattleInstance，`test_every_shared_world_field_is_classified_for_the_push_fingerprint` 三個模型都守）。空的時候不寫進 JSON 用 wrap serializer（`WorldState._drop_empty_marks_fired`）；內容模型的新欄位同理（`models._drop_unset`：`Effect.contribution`、`Check.stats`、`FreeTextChoice.outcomes`、`Location.desc_marks`、`Content.mark_rules`）。
+- **新的模型呼叫要「怪值一趟就收」，用 `schema_required=`、不用 `required_fields=`**（減法季批 4 `event_llm.classify_outcome`）：`chat_structured` 的 `required_fields` 把 `null` 當成被截斷、會重問一趟（假的 `requests.post` 量到兩趟）；`schema_required` 只寫進送出去的 schema、不進缺欄位檢查。要模型只填清單上的 id：`create_model("X", __base__=X, outcome=(str, Field(default="", json_schema_extra={"enum": ids})))`（`event_llm._judgment_for`），讀回來照舊再認一次清單（`outcome_of`）。
+- **變異檢查別寫等價的變異**：整數的 `a < b` 換成 `a <= b - 1` 是同一件事，測試當然不紅；換邊界就寫 `<` → `<=`。
 - **兩局測試各有一份內容**：`conquest_kit.conquest_game()`（同 `test_territory._game`）每一局各載一份 `real_content` 的複本，同一個資料庫開兩局時，在測試裡往內容加東西（例：借一份戰鬥範本）要兩局都加，不然第二局找不到、畫面靜靜地沒有那一場。
 
 ## 量表怎麼讀

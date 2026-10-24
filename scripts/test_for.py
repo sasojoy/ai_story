@@ -12,7 +12,7 @@
 - tests/ 裡的測試檔：跑它自己；tests/conftest.py、tests/fixtures/、pyproject.toml、requirements.txt：整套。
 - tianxia/<模組>.py、server.py、run_bots.py、scripts/<腳本>.py：直接 import 它的測試檔，加上檔名是 test_<模組>…的。
 - content/：test_content.py、test_real_content.py，加上寫到那個檔名的測試檔。
-- web/：寫到那個檔名的測試檔（app.js、style.css、index.html），加上 test_server.py。
+- web/：寫到那個檔名的測試檔（app.js、style.css、index.html），加上 test_server.py；main.js、map.js 照 app.js 挑。
 - docs/、CLAUDE.md 這類文件：不跑。
 挑到的檔連 slow 一起跑（改內容就會跑到真實內容的整季機器人）。裝了 pytest-xdist 而且挑到三個檔以上時自動平行（-n auto）。"""
 from __future__ import annotations
@@ -29,6 +29,7 @@ ROOT = Path(__file__).resolve().parent.parent
 TESTS = ROOT / "tests"
 EVERYTHING = {"tests/conftest.py", "pyproject.toml", "requirements.txt"}
 PARALLEL_FROM = 3  # 挑到這麼多個檔以上才開 xdist（開工作行程本身要幾秒）
+WEB_SCRIPTS = {"app.js", "main.js", "map.js"}  # 網頁的三個檔（tests/webharness.APP_FILES），index.html 照 main、map、app 的順序載入
 # 跟哪一條分支比（企劃者 2026-10-18 起功能在功能分支上做：批的工作樹要跟功能分支比，不然越做越多）
 DEFAULT_BASE = os.environ.get("TIANXIA_TEST_BASE", "origin/main")
 
@@ -89,7 +90,9 @@ def pick(files: list[str]) -> list[Path] | None:
             continue
         if f.startswith("web/"):
             chosen.add(TESTS / "test_server.py")
-            chosen.update(t for t in tests if path.name in texts[t])
+            # 江湖頁（main.js）、輿圖（map.js）是從 app.js 切出來的（減法季批 0）：測試照舊寫「app.js」，也算寫到它們
+            names = {path.name, "app.js"} if path.name in WEB_SCRIPTS else {path.name}
+            chosen.update(t for t in tests if any(n in texts[t] for n in names))
     return sorted(chosen)
 
 
