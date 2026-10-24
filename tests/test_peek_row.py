@@ -51,7 +51,7 @@ const parts = [
   // 不相干的畫法換成一行的假貨：要驗的是排在哪裡，不是它們自己長什麼樣
   `const splitChips = (html) => [html, ""], nowMore = () => "展開全文", followsMode = (id) => id.startsWith("move:");
    const fightCard = () => '<div class="fight-card"></div>', actionBar = () => '<div class="actbar"></div>';
-   const MOVE_MODES = [], ROAD_LINKS = [], ROAD_TASKS = /^road:task/, FREE_TEXT_OPTION = "choice:free", SAY_OPTION = "talk:say";
+   const MOVE_MODES = [], ROAD_LINKS = [], ROAD_TASKS = /^road:task/, FREE_TEXT_OPTION = "choice:free", SAY_OPTION = "talk:say", SAY_OPTIONS = [SAY_OPTION], SAY_HINTS = {};
    const guideHtml = () => "", frontsBlock = () => '<div class="fronts-block"></div>', ordersHtml = () => "", resultHtml = () => '<section class="result"></section>';
    const letterHtml = () => "", dailyCardHtml = () => "";`,
   "return { pageJianghu, peekBlock, peekTap, peekParts, peekHtml, gaugeHtml };",

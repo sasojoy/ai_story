@@ -38,7 +38,7 @@
   // 同一個輸入框的另外兩顆（開口求人第二批，engine.TEXT_TALKS）：跟答應陪你出陣的人商量打法、他帶路的路上跟他說一句。
   // S.saying 記著是哪一顆（true 是舊的寫法＝自己說），送出時連 option 一起給 /api/say
   const SAY_OPTIONS = [SAY_OPTION, "talk:plan", "parley:road"];
-  const SAY_HINTS = { "talk:plan": "跟他說你想好的打法", "parley:road": "路上想跟他說的話，也可以開口求他" }; // 待 joy 潤
+  const SAY_HINTS = { "talk:plan": "跟他說你想好的打法", "parley:road": "路上想跟他說的話，也可以開口求他" };
   const sayingId = () => (S.saying === true ? SAY_OPTION : S.saying);
   const SENSE_DRAW = "sense:draw"; // 有所感進了感悟狀態：「把心中的形畫下來」叫出畫布（sensing.DRAW），畫好送 /api/sense
   const MOVE_MODES = [
