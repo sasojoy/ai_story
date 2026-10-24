@@ -2,6 +2,7 @@ import ast
 import contextlib
 import hashlib
 import io
+import json
 import random
 import re
 import sqlite3
@@ -754,6 +755,39 @@ def test_an_option_that_is_not_on_the_menu_does_nothing(client):
     before = client.get("/api/main").json()["status"]["stamina"]
     out = client.post("/api/choose", json={"id": "act:nonsense"}).json()
     assert out["main"]["status"]["stamina"] == before
+
+
+def _play_rows():
+    with database.open_database().snapshot() as conn:
+        days = [dict(r) for r in conn.execute("SELECT owner, season, day, buttons FROM play_days")]
+        firsts = [dict(r) for r in conn.execute("SELECT owner, kind FROM play_firsts")]
+    return days, firsts
+
+
+def test_the_play_log_counts_what_a_real_player_pressed_and_nothing_else(client, monkeypatch):
+    """真人量表（減法季批 0）：自己的請求記「這一天上線了」，做成的選項記一次（照 playlog.button_of 歸類），
+    不在選單上的不記；交友、求見、對話記第一次跟人物說話。畫面上一個字都沒有（不露給玩家）。"""
+    monkeypatch.setattr(server.CONTENT.config.explore_modes, "enabled", False)  # 舊探索當手段（同上一個測試）
+    _player(client)
+    out = client.post("/api/choose", json={"id": "act:explore"}).json()
+    client.post("/api/choose", json={"id": "act:nonsense"})
+    days, firsts = _play_rows()
+    assert [(d["owner"], json.loads(d["buttons"])) for d in days] == [("沈青衫", {"act:explore": 1})]
+    assert days[0]["season"] >= 1 and firsts == []
+    assert not {"play_days", "buttons", "figure_talk"} & set(out["main"])
+    monkeypatch.setattr(server, "choose", lambda game, option_id: ["（你走上前去。）"])
+    client.post("/api/choose", json={"id": "talk:2"})
+    days, firsts = _play_rows()
+    assert json.loads(days[0]["buttons"]) == {"act:explore": 1, "talk": 1}
+    assert firsts == [{"owner": "沈青衫", "kind": "figure_talk"}]
+
+
+def test_the_play_log_skips_characters_marked_as_bots(game):
+    """假人不經過伺服器；萬一經過了（測試、管理工具），量表也不記。"""
+    game.state.player.bot = BotProfile(personality="普通", seed=1, faction="guan", season_number=1)
+    server._play_seen(game)
+    server._play_did(game, "act:train", "free_text")
+    assert _play_rows() == ([], [])
 
 
 def test_seclude_and_anonymous(client):

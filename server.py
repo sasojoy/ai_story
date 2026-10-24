@@ -69,13 +69,14 @@ from tianxia import (
 )
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import env_profile, load_content, profile_line
-from tianxia.characters import open_characters
+from tianxia.characters import name_key, open_characters
 from tianxia.database import default_path, open_database
 from tianxia.engine import FIGHT_GONE_LINES, FREE_TEXT_OPTION, PAUSED_TEXT, SAY_OPTION, TEXT_TALKS, Game, Refused
 from tianxia.models import FREE_TEXT_MAX
 from tianxia.journal import CSS as JOURNAL_CSS
 from tianxia.sqlite_world import open_world
 from tianxia.ollama_client import OllamaClient
+from tianxia.playlog import FIGURE_TALK, FREE_TEXT, PlayLog, button_of
 from tianxia.world_state import season_length_days
 
 ROOT = Path(__file__).parent
@@ -263,6 +264,37 @@ def _refuse_while_paused(game: Game) -> None:
         raise GameError(f"{PAUSED_TEXT}。")
 
 
+NOT_ON_MENU = "（此刻無法這麼做。）"  # Game.choose 對不在選單上的選項回的那一句（真人量表不算按了）
+
+
+def _play_where(game: Game) -> tuple[str, int, int] | None:
+    """真人量表（tianxia/playlog.py）記在哪裡：(帳號的鍵, 季數, 那一天)；假人不記（假人程式不經過伺服器，這裡多擋一次）。"""
+    p = game.state.player
+    if p.bot is not None:
+        return None
+    return name_key(p.name), p.season_number, game._pill_day()
+
+
+def _play_seen(game: Game) -> None:
+    """自己的請求進鎖、同步過之後：這一天上線了（真人量表）。在 act／act_look 的那一筆交易裡。"""
+    where = _play_where(game)
+    if where is not None:
+        PlayLog(game.world.db).seen(*where)
+
+
+def _play_did(game: Game, button: str, first: str | None = None) -> None:
+    """一個動作做成了（沒丟例外、沒被擋）之後：記一次 button，first 給了就記第一次（真人量表）。
+    動作那一把鎖已經放了：自己另開一筆小交易，只寫量表那兩張表，不碰角色與世界。"""
+    where = _play_where(game)
+    if where is None:
+        return
+    owner, season, day = where
+    log = PlayLog(game.world.db)
+    log.press(owner, season, day, button)
+    if first is not None:
+        log.first(owner, season, first, day, game.now)
+
+
 def act(game: Game, action, *, paused_ok: bool = False) -> list[str] | None:
     """同步時間 → 執行動作 → 存檔。開一筆寫入交易（假人程式寫同一個資料庫），計時器、按鈕與假人就一個一個來。
     進鎖先從資料庫重讀角色（見 _reload）：動作丟例外時整筆撤回，下一個動作不會把失敗的改動存回去。
@@ -272,6 +304,7 @@ def act(game: Game, action, *, paused_ok: bool = False) -> list[str] | None:
         now = time.time()
         game.sync(now)
         game.mark_seen(now)  # 這是他自己的請求（玉璽碎片設計 5.3、5.5）
+        _play_seen(game)
         if not paused_ok:
             _refuse_while_paused(game)
         msgs = action(game)
@@ -325,6 +358,7 @@ def act_look(game: Game, action, view) -> tuple[list[str] | None, object]:
         now = time.time()
         game.sync(now)
         game.mark_seen(now)  # 這是他自己的請求（玉璽碎片設計 5.3、5.5）
+        _play_seen(game)
         msgs = action(game)
         open_characters().save(game.state)
         try:
@@ -2277,6 +2311,8 @@ def api_choose(request: Request, body: dict = Body(...)):
     game = _game(request)
     option_id = str(body.get("id", ""))
     msgs = choose(game, option_id)
+    if not isinstance(msgs, Refused) and NOT_ON_MENU not in (msgs or []):  # 被擋下來、不在選單上的不算按了
+        _play_did(game, button_of(option_id), FIGURE_TALK if may_generate_dialogue(option_id) else None)
     _tell_tabs(game)
     out = {"main": look(game, main_view)}
     if option_id.startswith("battle:") or (msgs and msgs[0] in FIGHT_GONE_LINES) or isinstance(msgs, Refused):
@@ -2292,6 +2328,7 @@ def api_choose(request: Request, body: dict = Body(...)):
 def api_answer(request: Request, body: dict = Body(...)):
     game = _game(request)
     answer_event(game, str(body.get("text", "")))
+    _play_did(game, "answer", FREE_TEXT)
     _tell_tabs(game)
     return {"main": look(game, main_view)}
 
@@ -2300,6 +2337,7 @@ def api_answer(request: Request, body: dict = Body(...)):
 def api_say(request: Request, body: dict = Body(...)):
     game = _game(request)
     say(game, str(body.get("text", "")), str(body.get("option") or SAY_OPTION))
+    _play_did(game, "say", FIGURE_TALK)
     _tell_tabs(game)
     return {"main": look(game, main_view)}
 
@@ -2802,6 +2840,7 @@ def api_travel(request: Request, body: dict = Body(...)):
 
     act(game, go)
     if not refused:  # 走不成的什麼都沒變（同步而已），其他分頁不必刷新
+        _play_did(game, "travel")
         _tell_tabs(game)
     out = {"main": look(game, main_view), "arrived": not refused}
     if refused:

@@ -1599,6 +1599,7 @@ class WorldState(BaseModel):
     renown_scale: float | None = None  # 名聲的門檻乘幾倍（開季時蓋章，world_state.stamp_season）；None＝沒有章，倍數 1
     territory: TerritoryState | None = None  # 地盤易手（出陣探索與地盤設計第四節）；None＝還沒算過
     conquest_on: bool = False  # 這一季開季時領地爭奪是不是開著（Config.conquest；conquest.on 還要設定也開著）；舊季讀檔是 False
+    jianfa_on: bool = False  # 這一季開季時減法季的規則是不是開著（Config.jianfa；rules.jianfa 還要設定也開著）；舊季讀檔是 False
     conquest: ConquestState | None = None  # 領地爭奪（tianxia/conquest.py）；None＝這一季還沒算過
     # 〈天下形勢〉（領地爭奪第三批 A，tianxia/xingshi.py）：這一季收下的每一篇（照先後，最多 Config.xingshi.keep 篇）、還在等模型的那一張單、
     # 上一篇讀到哪裡（None＝這一季還沒記過起點）

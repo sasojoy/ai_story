@@ -1276,9 +1276,10 @@ def test_no_profile_overrides_the_time_scale_or_the_season_weeks():
         assert not banned & set(overridden), path.name
 
 
-# 可以打開伺服器排程的設定：只有壓測用的（壓測計畫 Task 4 的 content/profiles/loadtest.json 寫 10）。其他設定（試玩的
-# weekend 等）一律關著，直到 PM 驗收之後決定在哪一份打開——到時改 test_world_tick_is_off_by_default，寫明是哪一份、為什麼
+# 伺服器排程（Config.world_tick_seconds）：減法季批 0（設計稿第十章「伺服器排程打開」，企劃者 2026-10-24）起 content/config.json
+# 打開，每 10 秒推一次全服的事，每一份設定都照它；壓測用的（content/profiles/loadtest.json）本來就開著。設定檔裡要關的話寫 0。
 LOAD_TEST_PROFILES = frozenset({"loadtest"})
+SCHEDULE_SECONDS = 10
 
 
 def _schedule_switched_on(root: Path) -> list[str]:
@@ -1289,12 +1290,13 @@ def _schedule_switched_on(root: Path) -> list[str]:
     ]
 
 
-def test_world_tick_is_off_by_default():
-    """伺服器排程預設關（線上架構排程計畫）：0＝不開執行緒，世界時間照舊等有人連線才推。
-    content/config.json 與玩家用的設定（weekend 等）都還沒打開；只有 LOAD_TEST_PROFILES 列的壓測設定（loadtest）可以打開
-    （最終審查 M1）。要在哪一份玩家用的設定打開，由 PM 驗收之後決定，到時改這個測試、寫明是哪一份。"""
-    assert load_content(CONTENT_DIR).config.world_tick_seconds == 0
-    assert _schedule_switched_on(CONTENT_DIR) == []
+def test_world_tick_is_on_in_the_real_content():
+    """伺服器排程在正式內容打開（減法季批 0）：不帶設定與每一份設定（weekend、season21、week7……）都每 10 秒推一次，
+    世界時間、時刻表、決戰逾時、季末不再等有人連線。測試內容照 Config 的預設關著（伺服器的測試自己開）。"""
+    assert load_content(CONTENT_DIR).config.world_tick_seconds == SCHEDULE_SECONDS
+    for path in sorted((CONTENT_DIR / "profiles").glob("*.json")):
+        assert load_content(CONTENT_DIR, profile=path.stem).config.world_tick_seconds == SCHEDULE_SECONDS, path.stem
+    assert load_content(FIXTURE).config.world_tick_seconds == 0
 
 
 def test_only_the_load_test_profiles_may_switch_the_schedule_on(tmp_path):

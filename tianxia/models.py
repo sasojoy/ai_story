@@ -2800,6 +2800,15 @@ class TerritoryRules(_Strict):
     enemy_price: float = Field(default=1.2, gt=0)  # 在別的陣營控制的地方
 
 
+class JianfaRules(_Strict):
+    """減法季（減法季整合設計，企劃者 2026-10-24；設計稿第十章）：把遊戲從「打怪、練等、拚戰力」拉回「文字互動改變世界」。
+    規則的改動全掛在這裡加上開季時蓋的章（WorldState.jianfa_on，world_state.stamp_season；讀的時候一律走 rules.jianfa）：
+    正在跑的季照它開季時的章，換了設定也不變。季只分 7 天與 21 天兩種，兩種都開（content/profiles 的 season21、week7 打開）；
+    週末設定不再維護、不打開，關著一個字都不變。畫面的改動不掛這個開關。欄位名是兩邊（畫面與引擎）共用的，各批的數字之後加在這一節。"""
+
+    enabled: bool = False  # 預設關（測試內容與不帶設定的正式內容照它）；season21.json、week7.json 打開
+
+
 class ConquestRules(_Strict):
     """領地爭奪（第 38 項改版，docs/superpowers/specs/2026-10-20-領地爭奪-design.md；計畫 docs/superpowers/plans/2026-10-20-領地爭奪.md；
     tianxia/conquest.py）。開季時蓋章（WorldState.conquest_on，要第一季規則開著、劇本有官軍與黃巾、寫了 territory.blocks、豪強分屬兩軍），
@@ -3195,6 +3204,7 @@ class Config(_Strict):
     terrain_arts: TerrainArts = Field(default_factory=TerrainArts)  # 地利：武學跟此地最濃的意境同一路或被剋（見 TerrainArts）
     territory: TerritoryRules = Field(default_factory=TerritoryRules)  # 地盤易手（見 TerritoryRules）
     conquest: ConquestRules = Field(default_factory=ConquestRules)  # 領地爭奪（見 ConquestRules）
+    jianfa: JianfaRules = Field(default_factory=JianfaRules)  # 減法季（見 JianfaRules；暫名）
     xingshi: XingshiTuning = Field(default_factory=XingshiTuning)  # 〈天下形勢〉：領地爭奪每天一篇的旁白（見 XingshiTuning）
     ambush: AmbushRules = Field(default_factory=AmbushRules)  # 設伏劫道（見 AmbushRules）
     fortify: FortifyRules = Field(default_factory=FortifyRules)  # 修築工事（見 FortifyRules）

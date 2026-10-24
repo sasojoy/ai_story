@@ -74,12 +74,12 @@ Start-Process "C:\Users\User\AppData\Local\Programs\Ollama\ollama app.exe"
 - 接著**暖機**：帶 `num_ctx` 8192（跟遊戲一樣，不然遊戲第一次呼叫會整個重載）。`ollama ps` 要列出模型、`PROCESSOR` 寫 `100% GPU`。
 - **改 `OLLAMA_*` 環境變數之後要另開一次 PowerShell 再重啟 Ollama**：`SetEnvironmentVariable(...,"User")` 不會改到當下這個 PowerShell 自己的環境區塊，同一次呼叫裡 `Start-Process` 起來的 Ollama 繼承的還是舊值。
 
-## 伺服器自己的排程（預設關）
+## 伺服器自己的排程（2026-10-24 起打開）
 
 打開之後，伺服器每隔幾秒自己推一次全服的事：世界時間、時刻表的大事、時間到了開決戰、決戰的集結與回合逾時、季末。沒有人開著網頁時也照樣跑。關著的時候跟以前一樣，要有人連線（或假人程式在跑）世界才會動。
 
-- **現在是關的**：開關是 `world_tick_seconds`，預設 0（關）。玩家用的設定（`content/config.json`、`content/profiles/weekend.json`）都還沒打開；只有壓測用的設定（壓測計畫的 `loadtest`）會打開。要在哪一份玩家用的設定打開，等驗收過了由 PM 決定。
-- 怎麼打開：在用的設定檔加上 `"world_tick_seconds": 10`。例如週末設定是 `content/profiles/weekend.json`；用的是預設設定，就加在 `content/config.json`。數字是 0（關）或至少 1 秒，寫 0.5 之類的伺服器會開不起來。
+- **現在是開的**（減法季批 0，設計稿第十章「伺服器排程打開」）：開關是 `world_tick_seconds`，`content/config.json` 寫 10，每一份設定（weekend、season21、week7）都照它。程式本身的預設還是 0（關），測試內容照那個。
+- 要關：在用的設定檔加上 `"world_tick_seconds": 0`（例如 `content/profiles/week7.json`），重開伺服器。數字是 0（關）或至少 1 秒，寫 0.5 之類的伺服器會開不起來。
 - 重開伺服器之後，啟動訊息在「設定：…」下面會多一行 `排程：每 10 秒推一次全服的事…`；關著時是 `排程：關（世界時間等有人連線才推）`。
 - 假人程式照舊另外開，兩個可以同時開。
 - **打開之後，有決戰的時候本機 AI（Ollama）要開著**：沒有人在線時，決戰的回合也由伺服器自己結算，結算時會請模型寫一段戰況。Ollama 沒開的話不影響勝負（戰況改用固定的文字），但決戰期間每隔幾分鐘會印一對「鎖內的模型呼叫失敗或逾時…」「…暫停滿 180 秒，下一次再試模型。」。
