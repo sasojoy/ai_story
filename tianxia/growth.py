@@ -1,12 +1,15 @@
 """成長的純規則（減法季整合設計 4.2、4.5；主機側實作計畫 Task 2-4、2-5）：遭遇的三道閘——疲勞（`fatigue_factor`、`nth_fight`）、
-對手要配得上你（`outlevel_factor`）、45 級以後只認打出來的經驗（`exp_source`、`capped_exp`、`room_to_cap`）。
+對手要配得上你（`outlevel_factor`）、45 級以後只認打出來的經驗（`exp_source`、`capped_exp`、`room_to_cap`）；屬性五段加點
+（`reached`、`milestone_points`）與假人照路配點（`stat_path`、`plan_points`）。
 
 cfg 是 `jianfa_numbers.JianfaNumbers`（批 0 之後是 `Config.jianfa`）。不 import engine、不改狀態：開關、`PlayerState.fights_today`、
-十一處給經驗的地方標來源、`team.add_exp` 收來源，都在引擎接線（批 0 之後）。
+十一處給經驗的地方標來源、`team.add_exp` 收來源、`team.points_between` 走里程碑、`bot.allocate_points` 照路配，都在引擎接線（批 0 之後）。
 """
 
 from __future__ import annotations
 
+import hashlib
+from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
@@ -110,3 +113,37 @@ def room_to_cap(cfg: JianfaNumbers, config: Config, member) -> int:
     if member.level >= cfg.drill_level_cap:
         return 0
     return sum(team.level_cost(config, lv) for lv in range(member.level, cfg.drill_level_cap)) - int(member.exp)
+
+
+# ── 屬性五段加點（設計 4.5）──
+
+STATS = ("str", "agi", "con", "wis", "lore")  # 五條路：力、巧、韌、悟、博（同 team.COMBAT_STATS 的順序；這裡不 import team）
+
+
+def reached(cfg: JianfaNumbers, before: int, after: int) -> list[int]:
+    """從第 before 級升到第 after 級，跨過哪幾個境界（milestone_levels）。接線時最後一個記進 PlayerState.milestone_due（境界卡）。"""
+    return [lv for lv in cfg.milestone_levels if before < lv <= after]
+
+
+def milestone_points(cfg: JianfaNumbers, before: int, after: int) -> int:
+    """從第 before 級升到第 after 級拿幾點屬性：每跨過一個境界 stat_points_per_milestone（5）點；升級本身不再給點。
+    開著時 team.points_between 走它（升級給點的五處都走 points_between）；同伴的每級成長照舊（growth_steps 的另一半不動）。"""
+    return len(reached(cfg, before, after)) * cfg.stat_points_per_milestone
+
+
+def stat_path(name: str) -> tuple[str, ...]:
+    """假人照名號挑的一條路：五項屬性照「配點|名號|屬性」的雜湊排，第一項先配滿、再第二項……（設計 4.5「配滿一項是一條路」）。
+    只看名號：同一個假人每一季走同一條路。不碰亂數。"""
+    return tuple(sorted(STATS, key=lambda k: hashlib.sha256(f"配點|{name}|{k}".encode()).digest()))
+
+
+def plan_points(stats: Mapping[str, float], points: int, cap: int, path: Sequence[str]) -> list[str]:
+    """照路配 points 點，回要按的屬性（一點一個，依序走 Game.allocate_stat）：path 的第一項配到 cap，再下一項；全到頂就停，
+    剩下的點留著。沒寫的屬性當 0（同 bot.allocate_points）。"""
+    have = {k: stats.get(k, 0) for k in path}
+    out: list[str] = []
+    for k in path:
+        while len(out) < points and have[k] < cap:
+            have[k] += 1
+            out.append(k)
+    return out

@@ -4,7 +4,9 @@
 純規則（`explore_one`、`growth`）吃它（duck-typed 的 cfg），測試直接建它。批 0 到了之後把這些欄位併進 `JianfaRules`
 （`class JianfaRules(JianfaNumbers)`，或照抄欄位與驗證），純規則改傳 `content.config.jianfa`，函式本身不必改。
 
-欄位名照計畫 Task 2-1，跟子開關撞名的改了名：六張表叫 `explore_tables`（子開關叫 `explore_one`；計畫寫 `Config.explore_one`）。
+欄位名照計畫 Task 2-1，兩個跟子開關撞名的改了名：六張表叫 `explore_tables`（子開關叫 `explore_one`；計畫寫 `Config.explore_one`）、
+境界的等級叫 `milestone_levels`（計畫的數字與子開關都叫 `stat_milestones`）。`stat_rates` 的四個鍵照計畫，做成 `StatRates`（JSON 的寫法一樣，
+多寫一個鍵會擋）。
 數字都是【預設】，出處寫在每一欄旁邊。這裡不 import `models`：`models.py` 之後要引用這裡（`JianfaRules` 繼承或掛它），反過來會循環。
 """
 
@@ -60,6 +62,16 @@ def _default_tables() -> list[ExploreOneTable]:
     ]
 
 
+class StatRates(_Strict):
+    """每一點屬性的效果（設計 4.5「每點加倍」【預設】：先這樣跑一季再調）。開著時取代 Config 的同名四個數字（括號裡是現在的值）；
+    接線時 team.stat_bonus／dodge_chance、悟性的修練與感悟、博聞的持有都改讀這裡（計畫 Task 2-5）。"""
+
+    bonus_per_point: float = Field(default=0.06, ge=0)  # Config.stat_bonus_per_point（0.03）
+    dodge_per_point: float = Field(default=0.04, ge=0, le=1)  # Config.dodge_per_point（0.02）
+    sense_rate_per_wis: int = Field(default=6, ge=0)  # Config.sense_rate_per_wis（3）
+    holding_per_lore_point: int = Field(default=4, ge=0)  # Config.holding_per_lore_point（2）
+
+
 class JianfaNumbers(_Strict):
     """減法季批 2 的數字（批 0 之後併進 `JianfaRules`；開關與蓋章在那裡，這裡只有數字）。"""
 
@@ -78,6 +90,18 @@ class JianfaNumbers(_Strict):
     drill_outlevel_steps: tuple[float, ...] = Field(default=(0.5, 0.1), min_length=1)  # 對手低一檔、兩檔（以上）的倍數【定】
     drill_outlevel_band: int = Field(default=10, ge=1)  # 一檔多寬（等級與對手難度都照它切）【待量】
     drill_level_cap: int = Field(default=45, ge=1)  # 這一級以後只認打出來的經驗，其餘換心得【定】
+    # ── 屬性五段加點、每點加倍（設計 4.5；企劃者 2026-10-24「先這樣改」「15 點有點少，改成 5 點」）──
+    milestone_levels: list[int] = Field(default_factory=lambda: [10, 20, 30, 40, 50])  # 到這幾級各一次境界【定】（計畫寫 stat_milestones，跟子開關同名）
+    stat_points_per_milestone: int = Field(default=5, ge=0)  # 每次幾點【定】
+    stat_rates: StatRates = Field(default_factory=StatRates)  # 每點的效果【預設】
+    event_bump_scale: float = Field(default=0.5, ge=0, le=1)  # 江湖水漲的事件加難（rise.event_bump）乘這個【待量】
+
+    @field_validator("milestone_levels")
+    @classmethod
+    def _milestones_climb(cls, levels: list[int]) -> list[int]:
+        if any(lv < 1 for lv in levels) or any(b <= a for a, b in zip(levels, levels[1:])):
+            raise ValueError(f"境界的等級要從 1 起、一級比一級高：{levels}")
+        return levels
 
     @field_validator("explore_tables")
     @classmethod
