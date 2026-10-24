@@ -426,7 +426,8 @@ def test_melee_blinks_but_not_for_reduced_motion():
 
 
 def test_page_map_opens_on_the_world_with_its_top_row():
-    page, layer = run(_game(), "return [H.pageMap(), H.S.mapLayer];")
+    # 減法季整合設計第七章起打開輿圖第一眼是第一層（S.mapLayer "near"，tests/test_map_layers_web.py）；天下圖是第四層，按「天下」才到
+    page, layer = run(_game(), "return [H.pageMap(), H.S.mapLayer];", mapLayer="world")
     assert layer == "world" and 'class="mapx world' in page
     top = page[page.index('class="w-top"'):]
     top = top[: top.index("</div>")]

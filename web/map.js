@@ -118,7 +118,7 @@
       <div class="map-wrap" id="map"><div class="tx-world-map">${svg}${top}</div></div>${mapChrome()}
     </div>`;
   }
-  function mapxClass() { return `mapx ${S.mapLayer === "world" ? "world" : "region"}${S.mapMode === "timeline" ? " tl-mode" : ""}`; }
+  function mapxClass() { return `mapx ${S.mapLayer === "world" ? "world" : S.mapLayer === "near" ? "region near" : "region"}${S.mapMode === "timeline" ? " tl-mode" : ""}`; }
   // 地圖框以外的那幾樣：天下圖上面那一排（天下・找地點・版圖）、區圖上面那一排（regionTopHtml）、「正在看第幾週」、抽屜。
   // 兩層的都畫，照 .mapx.world／.mapx.region 藏另一層的（style.css）
   function mapChrome() {
@@ -127,7 +127,7 @@
     const tl = S.mapMode === "timeline";
     const wtop = `<div class="w-top"><button type="button" class="w-here" data-act="map-world" aria-current="page">${WORLD_WORD}</button><button type="button" class="map-search" data-act="map-search">🔍 找地點、找人物</button><button type="button" class="w-tl${tl ? " on" : ""}" data-act="map-timeline" aria-pressed="${tl}">⏱ 版圖</button></div>`;
     return `
-      ${wtop}${regionTopHtml()}${banner}
+      ${wtop}${regionTopHtml()}${banner}<button type="button" class="map-home" id="map-home" data-act="map-home" hidden>${NEAR_WORDS.home}</button>
       <section class="mdrawer${S.mapDrawer === "min" && !deskMap() ? " min" : ""}" id="mdrawer" aria-label="輿圖抽屜"><div class="mgrab" id="mgrab" role="button" aria-label="拉高拉低"><i></i></div><div class="mbody" id="mbody">${drawerHtml()}</div></section>`;
   }
   // ── 輿圖那一層常駐（FB-324）：切到別的分頁、整頁重畫（render 換掉 #app 的 innerHTML）時，地圖不拆掉，只在 #map-host 藏起來
@@ -170,7 +170,7 @@
     stopPlay();
     Object.assign(S, {
       mapBase: null, mapState: null, mapStateAt: 0, mapSel: null, mapMode: "overview", mapDrawer: "min",
-      mapWeek: null, mapQuery: "", mapLayer: "world", mapRegion: null, worldView: null, regionView: null, marksKey: "", mapPan: null, panKey: "", panFrom: null,
+      mapWeek: null, mapQuery: "", mapLayer: "near", mapRegion: null, worldView: null, regionView: null, nearView: null, marksKey: "", mapPan: null, panKey: "", panFrom: null,
     });
     hideMapHost(true);
   }
@@ -185,7 +185,7 @@
     if (S.mapMode === "timeline") return timelineHtml(base, st, mapWeek());
     if (S.mapLayer === "world" && base.world) return worldDrawerHtml(base, st);
     if (S.mapMode === "place" && S.mapSel && st.places[S.mapSel]) return placeCard(base, st, S.mapSel);
-    return regionLineHtml(base, st);
+    return S.mapLayer === "near" ? nearLineHtml(base, st) : regionLineHtml(base, st);
   }
   // 抽屜第一行：在路上寫往哪裡、還有幾分鐘、喊停（喊停就是江湖頁那一顆，選單上有才畫）；有事擋著路時寫是哪一則、給「回江湖」
   // （withBlock 是 false 時不寫擋路那一行：卡的動作那一排自己會寫）
@@ -380,13 +380,18 @@
     const far = here ? "" : p.minutes !== null && p.minutes !== undefined ? `步行 ${Number(p.minutes)} 分` : "";
     // 第 2 段照控制方上色（--sc／--sd，FB-650 深色換夠亮的那一版）；沒人佔照 style.css 的 --ink-2
     const lineInk = p.control ? ` style="${sideText(p.control)}"` : "";
+    // 本週要去的那一處（疊層的 week，減法季整合設計第七章）：名字後面一個字條
+    const week = st.week && st.week.id === id ? `<b class="m-week">${NEAR_WORDS.weekGo}</b>` : "";
+    // 由上往下（減法季整合設計第七章第 2 條：卡只佔三分之一）：名字、誰的、幾分、步行與疾行（動作）在第一屏；往上拉才有能悟、對手、人物、
+    // 今日產出、出陣的那一份資料（攻城、正在翻、軍令懸賞……）。
     // 在路上：第一行照舊是往哪裡、還有幾分鐘、喊停（計畫 1.2、設計 5.3；FB-649）。擋路的那一則寫在動作那一排，這裡不重複
-    return `${st.journey ? journeyHtml(st, false) : ""}<div class="m-h1">${ctrlSeal(p.control)}<span class="nm">${esc(b.name)}${here ? "（你）" : ""}</span><span class="meta">${p.rich ? `<b class="m-rich">${CARD_RICH}</b>` : ""}${far ? `<span>${far}</span>` : ""}</span><button type="button" class="m-x" data-act="map-back" aria-label="收起">✕</button></div>
+    return `${st.journey ? journeyHtml(st, false) : ""}<div class="m-h1">${ctrlSeal(p.control)}<span class="nm">${esc(b.name)}${here ? "（你）" : ""}</span>${week}<span class="meta">${p.rich ? `<b class="m-rich">${CARD_RICH}</b>` : ""}${far ? `<span>${far}</span>` : ""}</span><button type="button" class="m-x" data-act="map-back" aria-label="收起">✕</button></div>
       <div class="m-line"${lineInk}>${esc(placeLine(st, id))}</div>
+      <div class="m-acts">${acts}${letter.button}</div>${letter.why}
+      ${deskMap() ? "" : `<button type="button" class="m-pull" data-act="map-more">${NEAR_PULL}</button>`}
       ${siegeSection(id)}${flipSection(id)}${insightRow(base, b)}
       <div class="m-foes"><small>此地的對手</small><span>${foes}</span>${p.fierce ? `<div class="m-sub">${esc(p.fierce)}</div>` : ""}${p.people.length ? `<div class="m-sub">人物：${p.people.map(esc).join("、")}</div>` : ""}</div>
       ${p.yield ? `<div class="m-yield">${esc(p.yield)}</div>` : ""}
-      <div class="m-acts">${acts}${letter.button}</div>${letter.why}
       ${p.order || p.bounty ? `<div class="m-sec"><h4>軍令與懸賞</h4>${p.order ? `軍令「${esc(p.order)}」在這裡記功` : ""}${p.order && p.bounty ? "；" : ""}${p.bounty ? `懸賞「${esc(p.bounty)}」在這裡交差` : ""}</div>` : ""}
       ${held}${terrainArtsRow(b)}
       ${p.services.length ? `<div class="m-sec"><h4>此地</h4>${p.services.map(esc).join("・")}</div>` : ""}
@@ -557,7 +562,7 @@
     if (S.mapMode === "place") return ["peek", "half", "full"];
     if (S.mapMode === "timeline") return ["tl", "half", "full"];
     if (S.mapMode === "search") return ["half", "full"];
-    return S.mapLayer === "world" ? ["min", "half", "full"] : ["min"];
+    return S.mapLayer === "world" ? ["min", "half", "full"] : ["min"]; // 第一層、全區沒點地點：只有收著那一行
   }
   // 收著那一行點了（或區圖點了把手）：天下圖拉開你腳下這一處的卡；區圖你在這一區時開你腳下這一處的卡
   function mapOpen() {
@@ -568,7 +573,8 @@
     S.mapMode = "place";
     setMapDrawer("peek");
     redrawDrawer();
-    drawSel();
+    if (S.mapLayer === "near") drawMarks(); // 第二層：其餘退成四成
+    else drawSel();
   }
 
   function redrawDrawer() {
@@ -587,6 +593,7 @@
   }
   // 卡半開多高：區圖照取景框底下還空著多少（卡不蓋到地點，地圖不動；設計 5.2），最矮 REGION_PEEK_MIN、最高六成；沒有區圖的取景照 240
   function peekPx(avail) {
+    if (S.mapLayer === "near") return Math.max(NEAR_PEEK_MIN, Math.round(avail / 3)); // 第二層：卡只佔三分之一（減法季整合設計第七章）
     const v = S.mapLayer !== "world" ? S.regionView : null;
     const room = v && v.bottom ? Math.round(avail - v.bottom - 4) : 240;
     return Math.max(REGION_PEEK_MIN, Math.min(Math.round(avail * 0.6), room));
@@ -625,7 +632,7 @@
   }
   let marksFrame = 0;
   // 這一層此刻的取景：天下圖 S.worldView（worldFit）、區圖 S.regionView（regionFit）；都由 applyMapView 照地圖框現在的大小算
-  const curView = () => (S.mapLayer === "world" && S.mapBase && S.mapBase.world ? S.worldView : S.regionView);
+  const curView = () => (S.mapLayer === "world" && S.mapBase && S.mapBase.world ? S.worldView : S.mapLayer === "near" ? S.nearView : S.regionView);
   // 記號照哪一個取景畫的（層、區、倍率、地圖框大小）：一樣就不必重畫
   const viewKey = (v, g) => (v && g ? `${S.mapLayer}|${S.mapRegion}|${f2(v.s)}|${g.vw}x${g.vh}` : "");
   // 照現在的取景、週次重畫記號（天下圖 worldParts、區圖 regionParts），底圖的州界與大區名照這一層收
@@ -647,6 +654,7 @@
       if (world) el.style.fill = "none"; else el.style.removeProperty("fill");
     });
     const [low, high] = world ? worldParts(S.mapBase, S.mapState, { k: 1 / v.s, week: mapWeek(), tl: S.mapMode === "timeline", sel: null, area: v.area || null })
+      : S.mapLayer === "near" ? nearParts(S.mapBase, S.mapState, { v, vw: geo ? geo.vw : 375, vh: geo ? geo.vh : 600, sel: S.mapMode === "place" ? S.mapSel : null })
       : regionParts(S.mapBase, S.mapState, { v, vw: geo ? geo.vw : 375, vh: geo ? geo.vh : 600, rid: S.mapRegion, wash: washOn() });
     g.innerHTML = low;
     const top = document.getElementById("mkt"); // 會跳的圈、你、旗子（FB-323）
@@ -660,7 +668,10 @@
     const p = S.mapSel && placeXY(S.mapSel);
     if (!p) { if (box.firstChild) box.innerHTML = ""; return; }
     const k = 1 / v.s, world = S.mapLayer === "world";
-    box.innerHTML = `<circle cx="${p[0]}" cy="${p[1]}" r="${f1((world ? 11 : 21) * k)}" fill="none" stroke="${MAP_INK}" stroke-width="${f1((world ? 2.5 : 2.8) * k)}"/>`;
+    // 第二層、全區點了一處：從你到那一處的路變金（減法季整合設計第七章第 2、3 條：點遠處看路線與幾分）
+    const d = !world && S.mapMode === "place" && S.mapState ? routeD(S.mapBase, S.mapState, S.mapSel) : "";
+    const gold = d ? `<path class="m-route" d="${d}" fill="none" stroke="${NEAR_GOLD}" stroke-width="${f1(4 * k)}" stroke-linecap="round" stroke-opacity=".95"/>` : "";
+    box.innerHTML = `${gold}<circle cx="${p[0]}" cy="${p[1]}" r="${f1((world ? 11 : S.mapLayer === "near" ? NEAR_RING : 21) * k)}" fill="none" stroke="${MAP_INK}" stroke-width="${f1((world ? 2.5 : 2.8) * k)}"/>`;
   }
   const scheduleMarks = () => { if (!marksFrame) marksFrame = requestAnimationFrame(drawMarks); };
 
@@ -938,15 +949,17 @@
       + `<polygon points="${pts.join(" ")}" fill="${MAP_INK}" opacity=".75"/><path d="M22 15L25.5 30H18.5Z" fill="${FRONT_RED}"/>`
       + `<text x="22" y="9" font-size="9" text-anchor="middle" fill="${FRONT_RED}" style="font-family:serif">北</text></svg>`;
   }
-  // 區圖上面那一排：‹ 天下、大區名下拉（換一區）、塗層、⏱ 版圖（塗層排在這一排：浮在圖上會蓋到右上角的名字框）；左下角羅盤
+  // 第一層與全區上面那一排（減法季整合設計第七章：只剩大區名、「全區」、「天下」）：大區名（下拉，換一區就是那一區的全區）、
+  // 全區（按著＝第三層；再按一次回第一層）、天下；塗層只在全區那一排（照歸屬融成一片的淡彩是全區的畫法【開發定】），⏱ 版圖在天下圖那一排。左下角羅盤
   function regionTopHtml() {
     const base = S.mapBase, regions = base ? base.regions : [];
-    const opts = regions.map((r) => `<option value="${esc(r.id)}"${r.id === S.mapRegion ? " selected" : ""}>${esc(r.name)}</option>`).join("");
-    const tl = S.mapMode === "timeline", wash = washOn();
-    return `<div class="r-top"><button type="button" class="w-back" data-act="map-world">‹ ${WORLD_WORD}</button>`
-      + `<label class="r-pick-box"><select class="r-pick" data-act="region-pick" aria-label="換一區">${opts}</select></label>`
-      + `<button type="button" class="r-wash${wash ? " on" : ""}" data-act="map-wash" aria-pressed="${wash}">${WASH_WORD}</button>`
-      + `<button type="button" class="w-tl${tl ? " on" : ""}" data-act="map-timeline" aria-pressed="${tl}">⏱ 版圖</button></div>`
+    const rid = S.mapRegion || hereRegion();
+    const opts = regions.map((r) => `<option value="${esc(r.id)}"${r.id === rid ? " selected" : ""}>${esc(r.name)}</option>`).join("");
+    const full = S.mapLayer === "region", wash = washOn();
+    return `<div class="r-top"><label class="r-pick-box"><select class="r-pick" data-act="region-pick" aria-label="換一區">${opts}</select></label>`
+      + (full ? `<button type="button" class="r-wash${wash ? " on" : ""}" data-act="map-wash" aria-pressed="${wash}">${WASH_WORD}</button>` : "")
+      + `<button type="button" class="r-full${full ? " on" : ""}" data-act="map-full" aria-pressed="${full}">${NEAR_WORDS.full}</button>`
+      + `<button type="button" class="w-back" data-act="map-world">${WORLD_WORD}</button></div>`
       + `<div class="r-compass">${compassSvg()}</div>`;
   }
   const regionPlaces = (base, rid) => base.places.filter((p) => p.region === rid);
@@ -1342,6 +1355,270 @@
     return [out.join(""), high.join("")];
   }
 
+  // ── 輿圖第一層、第二層（減法季整合設計第七章，企劃者 2026-10-24「滿意」；S.mapLayer "near"）──
+  // 打開輿圖第一眼：落在你所在的區、以你為中心（nearFit）。同一張底圖（設色山水照舊），記號只畫你（朱圈＋墨筆小圖）、走得到的地方
+  // （跟你腳下這一處有路相連的：墨筆小圖＋地名＋分鐘數＋「多半」兩字，接了討伐懸賞寫「有賞」）、到它們的路、本週要去的那一處（金路、紅旗、
+  // 「本週」朱印、一句為什麼：疊層的 week，mapdata._week_place）、有約戰的塊一面小旗；其餘地點只剩淡淡的墨筆小圖（點得到），
+  // 不寫名、不畫框、悟字、寶印、鄰區箭頭、戰線、歸屬色。上面一排只剩大區名、「全區」、「天下」（regionTopHtml）。
+  // 點一處（第二層）：那一處放大、路變金（drawSel）、其餘退成四成，卡只佔三分之一（peekPx），地圖輕推一下讓那一處露在卡上方（nearNudge）。
+  // 「全區」是舊的區圖（"region"，第三層），「天下」是天下圖（"world"，第四層）；每一次打開輿圖都從這一層開始（goTab）。拖與縮放照舊疊在取景上
+  const NEAR_EDGE = { x: 84, t: 44, b: 34 }; // 取景：走得到的地方離地圖框左右、上（旗）、下（字）至少多少（px）
+  const NEAR_MAX = 2.4, NEAR_MIN = 0.6; // 第一層的倍率夾在這中間（相連的地點很近時不放到太大、很遠時不縮到看不清）
+  const NEAR_FRAME = 60; // 拖的範圍：這一區的地點與走得到的地方的外框往外多少（地圖單位）
+  const NEAR_NAME = 15, NEAR_SUB = 12, NEAR_GAP = 3; // 名字、底下那一行（分鐘・多半）的字級、兩行之間（px）
+  const NEAR_FAINT = 0.34, NEAR_DIM = 0.4, NEAR_PICK = 1.35; // 其餘地點多淡；點了一處時其餘退成幾成；點的那一處放大幾倍
+  const NEAR_RING = 22; // 點了的那一處 drawSel 那一圈的半徑（px）
+  const NEAR_ROAD = "#8B6B43", NEAR_GOLD = "#C8961E", NEAR_GOLD_TEXT = "#9A6E12", NEAR_SUB_INK = "#5E4E3A";
+  const NEAR_HOME_PX = 80; // 第一層拖得離原本的位置多遠（px）才出「回到我這」
+  const NEAR_PEEK_MIN = 170; // 卡只佔三分之一（第二層），最矮多高
+  const NEAR_WORDS = { you: "你", week: "本週", weekGo: "本週要去", bounty: "有賞", more: "其餘地點按「全區」", none: "這裡沒有路通出去。", home: "回到我這", full: "全區" }; // 待 joy 潤
+  const NEAR_PULL = "往上拉：能悟、對手、人物、今日產出"; // 待 joy 潤
+  const ZH_NUM = ["零", "一", "兩", "三", "四", "五", "六", "七", "八", "九", "十"];
+  function nearRoadsLine(n) {
+    return n <= 10 ? `${ZH_NUM[n]}條路，點一處出發。` : `${n} 條路，點一處出發。`; // 待 joy 潤
+  }
+  // 你此刻在哪（在路上是路上那一點）
+  function youXY(base, st) {
+    if (st.journey) return [st.journey.x, st.journey.y];
+    const h = placeOf(base, st.here);
+    return h ? [h.x, h.y] : null;
+  }
+  // 走得到的地方：跟你腳下這一處有路相連的（底圖的 edges，都是開放的）；在路上再加上要去的那一站
+  function nearIds(base, st) {
+    const out = [];
+    for (const [a, b] of base.edges || []) {
+      if (a === st.here && st.places[b]) out.push(b);
+      else if (b === st.here && st.places[a]) out.push(a);
+    }
+    if (st.journey && st.journey.to !== st.here && !out.includes(st.journey.to) && st.places[st.journey.to]) out.push(st.journey.to);
+    return out;
+  }
+  // 本週要去的那一處（疊層的 week；那一處不在疊層裡就不畫）
+  function nearWeek(st) {
+    return st.week && st.places[st.week.id] ? st.week : null;
+  }
+  // 第一層的取景：以你為中心（露出來的那一塊的正中），倍率讓走得到的地方都在框裡（左右留 NEAR_EDGE.x 給名字）；拖的範圍是這一區的地點、
+  // 走得到的地方與你的外框加 NEAR_FRAME。回 { s, cx, cy, frame, bottom }（同 regionFit）
+  function nearFit(base, st, vw, vh, top = REGION_TOP, pad = REGION_PAD) {
+    const me = youXY(base, st);
+    if (!me) return null;
+    const ids = nearIds(base, st), y0s = top + NEAR_EDGE.t, y1s = Math.max(y0s + 40, vh - pad - NEAR_EDGE.b);
+    const midY = (y0s + y1s) / 2, halfW = Math.max(40, vw / 2 - NEAR_EDGE.x), halfH = Math.max(30, (y1s - y0s) / 2);
+    let s = NEAR_MAX;
+    const pts = [];
+    for (const id of ids) {
+      const p = placeOf(base, id);
+      if (!p) continue;
+      pts.push(p);
+      const dx = Math.abs(p.x - me[0]), dy = Math.abs(p.y - me[1]);
+      if (dx > 0.5) s = Math.min(s, halfW / dx);
+      if (dy > 0.5) s = Math.min(s, halfH / dy);
+    }
+    s = Math.max(NEAR_MIN, s);
+    const area = [...pts, ...regionPlaces(base, hereRegion() || S.mapRegion)];
+    const xs = [me[0], ...area.map((p) => p.x)], ys = [me[1], ...area.map((p) => p.y)];
+    const frame = [Math.min(...xs) - NEAR_FRAME, Math.min(...ys) - NEAR_FRAME, Math.max(...xs) + NEAR_FRAME, Math.max(...ys) + NEAR_FRAME];
+    return { s, cx: me[0], cy: me[1] + (vh / 2 - midY) / s, frame, bottom: y1s };
+  }
+  // 一條路畫成哪一條曲線（底圖的 roads：跟底圖同一條二次曲線）；沒有那一份（舊的底圖）照直線
+  const roadMemo = new WeakMap();
+  function roadBend(base, a, b) {
+    let m = roadMemo.get(base);
+    if (!m) {
+      m = {};
+      for (const [x, y, qx, qy] of base.roads || []) m[`${x}|${y}`] = [qx, qy];
+      roadMemo.set(base, m);
+    }
+    return m[a < b ? `${a}|${b}` : `${b}|${a}`] || null;
+  }
+  // 從你走到 id 那一處的路（疊層的 path：依序經過的站）：SVG 的 d；就在這裡、走不到是空字串
+  function routeD(base, st, id) {
+    const q = st.places[id], me = youXY(base, st);
+    if (!q || !me || !q.path || !q.path.length) return "";
+    let d = `M${f1(me[0])},${f1(me[1])}`, from = st.journey ? null : st.here;
+    for (const step of q.path) {
+      const p = placeOf(base, step);
+      if (!p) return "";
+      const c = from ? roadBend(base, from, step) : null;
+      d += c ? `Q${c[0]},${c[1]} ${p.x},${p.y}` : `L${p.x},${p.y}`;
+      from = step;
+    }
+    return d;
+  }
+  // 名字旁那一行：分鐘數＋多半（城多事、野多敵……；接了討伐懸賞寫「有賞」）；本週那一處寫分鐘數＋一句為什麼
+  function nearSub(base, st, id, week) {
+    const q = st.places[id], b = placeOf(base, id);
+    const far = q.minutes !== null && q.minutes !== undefined ? `${Number(q.minutes)} 分` : "";
+    if (week && week.id === id) return [far, week.why].filter(Boolean).join("・");
+    const tag = q.bounty && q.bounty.includes("討伐") ? NEAR_WORDS.bounty : b.mostly || "";
+    return [far, tag].filter(Boolean).join("・");
+  }
+  // 第一層的記號（純函式）：o = { v: nearFit 的取景, vw, vh, sel: 點了哪一處 }。回 [底下那一張, 上面那一張]
+  function nearParts(base, st, o) {
+    const v = o.v, k = 1 / v.s, z = regionSizes(v.s), me = youXY(base, st), sel = o.sel || null;
+    const W = base.w || 900, H = base.h || 1340;
+    const scr = (x, y) => [o.vw / 2 + (x - v.cx) * v.s, o.vh / 2 + (y - v.cy) * v.s], mp = (X, Y) => [v.cx + (X - o.vw / 2) * k, v.cy + (Y - o.vh / 2) * k];
+    const week = nearWeek(st), ids = nearIds(base, st), here = st.journey ? null : st.here;
+    const shown = [...ids];
+    if (week && week.id !== here && !shown.includes(week.id)) shown.push(week.id);
+    const dim = (id) => (sel && id !== sel ? ` opacity="${NEAR_DIM}"` : "");
+    const out = [`<rect data-act="region-blank" x="${-W}" y="${-H}" width="${3 * W}" height="${3 * H}" fill="#000000" fill-opacity="0"/>`];
+    // 其餘地點：淡淡的墨筆小圖（點得到：第二層照樣開它的卡）
+    for (const p of base.places) {
+      if (p.id === here || shown.includes(p.id) || !st.places[p.id]) continue;
+      out.push(`<g class="n-faint" data-act="region-place" data-id="${esc(p.id)}" transform="translate(${p.x},${p.y}) scale(${f2(z.icon * k)})" opacity="${NEAR_FAINT}" style="cursor:pointer">`
+        + `<rect x="-14" y="-14" width="28" height="28" fill="#000000" fill-opacity="0"/>${inkIcon(p.glyph, MAP_INK, MAP_HALO)}</g>`);
+    }
+    // 到走得到的地方的路（照底圖那一條曲線描深一點）
+    if (!st.journey) {
+      for (const id of ids) {
+        const c = roadBend(base, here, id), a = placeOf(base, here), b = placeOf(base, id);
+        if (!a || !b) continue;
+        out.push(`<path class="n-road" d="M${a.x},${a.y}${c ? `Q${c[0]},${c[1]} ` : "L"}${b.x},${b.y}" fill="none" stroke="${NEAR_ROAD}" stroke-width="${f2(2.6 * k)}" stroke-linecap="round" pointer-events="none"${dim(id)}/>`);
+      }
+    }
+    // 本週那一處：金路、一圈淡金
+    if (week && week.id !== here) {
+      const d = routeD(base, st, week.id), w = placeOf(base, week.id);
+      if (d) out.push(`<path class="n-gold" d="${d}" fill="none" stroke="${NEAR_GOLD}" stroke-width="${f2(4 * k)}" stroke-linecap="round" stroke-opacity=".9" pointer-events="none"${dim(week.id)}/>`);
+      out.push(`<circle class="n-week-halo" cx="${w.x}" cy="${w.y}" r="${f1(19 * k)}" fill="${NEAR_GOLD}" fill-opacity=".22" pointer-events="none"${dim(week.id)}/>`);
+    }
+    // 走得到的地方與本週那一處：墨筆小圖（墨色，不畫歸屬色）
+    const boxes = [];
+    const ring = me ? scr(me[0], me[1]) : null;
+    if (ring) boxes.push([ring[0] - 20, ring[1] - 20, ring[0] + 20, ring[1] + 34 + NEAR_SUB]);
+    for (const id of shown) {
+      const p = placeOf(base, id), f = id === sel ? NEAR_PICK : 1;
+      out.push(`<g class="n-icon" data-act="region-place" data-id="${esc(id)}" transform="translate(${p.x},${p.y}) scale(${f2(z.icon * f * k)})" style="cursor:pointer"${dim(id)}>`
+        + `<rect x="-14" y="-14" width="28" height="28" fill="#000000" fill-opacity="0"/>${inkIcon(p.glyph, MAP_INK, MAP_HALO)}</g>`);
+      const [X, Y] = scr(p.x, p.y);
+      const rx = id === sel ? NEAR_RING : z.hw, ry = id === sel ? NEAR_RING : z.hh;
+      boxes.push([X - rx, Y - ry, X + rx, Y + ry]);
+      if (week && week.id === id) boxes.push([X + 6, Y - 40, X + 30, Y - 8]); // 紅旗
+    }
+    // 名字：每一處先試離你遠的那一邊，再試另一邊、下面、上面；挑第一個不壓別的名字、小圖、你的朱圈的（都壓就照第一個）
+    const inter = (a, b) => Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0])) * Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1]));
+    const sealW = textW(NEAR_WORDS.week, 11) + 8;
+    for (const id of shown) {
+      const p = placeOf(base, id), [X, Y] = scr(p.x, p.y), f = id === sel ? NEAR_PICK : 1, isWeek = !!week && week.id === id;
+      const sub = nearSub(base, st, id, week), nameW = textW(p.name, NEAR_NAME) + (isWeek ? sealW + 4 : 0);
+      // 點了的那一處：名字讓開 drawSel 那一圈（半徑 NEAR_RING）
+      const Wd = Math.max(nameW, textW(sub, NEAR_SUB)), Hd = NEAR_NAME + NEAR_GAP + NEAR_SUB;
+      const hw = id === sel ? NEAR_RING + 3 : z.hw + 4, hh = id === sel ? NEAR_RING + 2 : z.hh + 3;
+      const right = !me || p.x >= me[0];
+      const spots = [right ? [hw, -Hd / 2] : [-hw - Wd, -Hd / 2], right ? [-hw - Wd, -Hd / 2] : [hw, -Hd / 2], [-Wd / 2, hh], [-Wd / 2, -hh - Hd]];
+      let at = spots[0];
+      for (const sp of spots) {
+        const bb = [X + sp[0], Y + sp[1], X + sp[0] + Wd, Y + sp[1] + Hd];
+        const inside = bb[0] >= 2 && bb[2] <= o.vw - 2 && bb[1] >= REGION_TOP + 2;
+        if (inside && !boxes.some((b) => inter(bb, b) > 0.5)) { at = sp; break; }
+      }
+      const L = X + at[0], T = Y + at[1];
+      boxes.push([L, T, L + Wd, T + Hd]);
+      const [x, y] = mp(L, T), ty = y + NEAR_NAME * 0.88 * k, sy = y + (NEAR_NAME + NEAR_GAP + NEAR_SUB * 0.88) * k;
+      const halo = `stroke="${MAP_HALO}" stroke-width="${f1(3 * k)}" paint-order="stroke"`;
+      const parts = [`<g class="n-label" data-act="region-place" data-id="${esc(id)}" style="cursor:pointer;font-family:serif"${dim(id)}>`,
+        `<rect x="${f1(x)}" y="${f1(y)}" width="${f1(Wd * k)}" height="${f1(Hd * k)}" fill="#000000" fill-opacity="0"/>`,
+        `<text x="${f1(x)}" y="${f1(ty)}" font-size="${f1(NEAR_NAME * k)}" font-weight="700" fill="${MAP_INK}" ${halo}>${esc(p.name)}</text>`];
+      if (isWeek) { // 「本週」朱印：名字後面
+        const sx = x + (textW(p.name, NEAR_NAME) + 4) * k, sh = 15;
+        parts.push(`<g class="n-week"><rect x="${f1(sx)}" y="${f1(y + ((NEAR_NAME - sh) / 2 + 0.5) * k)}" width="${f1(sealW * k)}" height="${f1(sh * k)}" rx="${f1(2.5 * k)}" fill="${FRONT_RED}"/>`
+          + `<text x="${f1(sx + (sealW / 2) * k)}" y="${f1(y + ((NEAR_NAME - sh) / 2 + 12) * k)}" font-size="${f1(11 * k)}" text-anchor="middle" fill="#FFFFFF">${NEAR_WORDS.week}</text></g>`);
+      }
+      if (sub) parts.push(`<text class="n-sub" x="${f1(x)}" y="${f1(sy)}" font-size="${f1(NEAR_SUB * k)}" font-weight="${isWeek ? 700 : 500}" fill="${isWeek ? NEAR_GOLD_TEXT : NEAR_SUB_INK}" ${halo}>${esc(sub)}</text>`);
+      out.push(parts.join("") + "</g>");
+    }
+    // 上面那一張：有約戰的塊一面小旗、本週那一處的紅旗、你（朱圈＋墨筆小圖＋「你・地名」；在路上是路上那一點）
+    const high = [];
+    for (const p of base.places) {
+      const q = st.places[p.id];
+      if (!q || !(q.siege || q.duel)) continue;
+      const s2 = (p.id === sel ? NEAR_PICK : 1) * z.icon;
+      high.push(`<path class="n-duel" d="M${f1(p.x - 12 * s2 * k)} ${f1(p.y - 8 * s2 * k)}V${f1(p.y - 24 * s2 * k)}L${f1(p.x - 3 * s2 * k)} ${f1(p.y - 20.5 * s2 * k)}L${f1(p.x - 12 * s2 * k)} ${f1(p.y - 17 * s2 * k)}" fill="#4A4038" stroke="#4A4038" stroke-width="${f1(1 * k)}" pointer-events="none"${p.id === here || shown.includes(p.id) ? dim(p.id) : ` opacity="${NEAR_FAINT + 0.3}"`}/>`);
+    }
+    if (week && week.id !== here) {
+      const w = placeOf(base, week.id), fx = w.x + 8 * k, fy = w.y - 8 * k;
+      high.push(`<path class="n-flag" d="M${f1(fx)} ${f1(fy)}V${f1(fy - 30 * k)}L${f1(fx + 20 * k)} ${f1(fy - 23 * k)}L${f1(fx)} ${f1(fy - 16 * k)}" fill="${FRONT_RED}" stroke="#7A1F18" stroke-width="${f1(1.2 * k)}" pointer-events="none"${dim(week.id)}/>`);
+    }
+    if (me) {
+      const [hx, hy] = me, hp = here && placeOf(base, here);
+      high.push(`<circle class="pulse" cx="${hx}" cy="${hy}" r="${f1(14 * k)}" fill="none" stroke="${FRONT_RED}" stroke-width="${f1(2.2 * k)}" pointer-events="none"/>`);
+      if (hp) {
+        high.push(`<circle class="r-you" cx="${hx}" cy="${hy}" r="${f1(17 * k)}" fill="${MAP_HALO}" fill-opacity=".9" stroke="${FRONT_RED}" stroke-width="${f1(2.4 * k)}"/>`);
+        high.push(`<g class="n-you" data-act="region-place" data-id="${esc(here)}" transform="translate(${hx},${hy}) scale(${f2(0.95 * k)})" style="cursor:pointer">${inkIcon(hp.glyph, FRONT_RED, MAP_HALO)}</g>`);
+      } else high.push(`<circle class="r-you" cx="${hx}" cy="${hy}" r="${f1(6 * k)}" fill="${FRONT_RED}" stroke="#FFFFFF" stroke-width="${f1(1.6 * k)}" pointer-events="none"/>`);
+      const tag = hp ? `${NEAR_WORDS.you}・${hp.name}` : NEAR_WORDS.you, fs = NEAR_SUB + 1, ty = hy + (20 + fs) * k;
+      // 本週要去的就是腳下這一處：「本週」朱印接在「你・地名」後面
+      const seal = week && week.id === here ? sealW : 0, tx = hx - (seal ? (seal + 4) / 2 : 0) * k;
+      high.push(`<text class="n-you-name" x="${f1(tx)}" y="${f1(ty)}" font-size="${f1(fs * k)}" font-weight="700" text-anchor="middle" fill="${FRONT_RED}" stroke="${MAP_HALO}" stroke-width="${f1(3 * k)}" paint-order="stroke" style="font-family:serif" pointer-events="none">${esc(tag)}</text>`);
+      if (seal) {
+        const sx = tx + (textW(tag, fs) / 2 + 4) * k;
+        high.push(`<g class="n-week" pointer-events="none"><rect x="${f1(sx)}" y="${f1(ty - 12.5 * k)}" width="${f1(seal * k)}" height="${f1(15 * k)}" rx="${f1(2.5 * k)}" fill="${FRONT_RED}"/>`
+          + `<text x="${f1(sx + (seal / 2) * k)}" y="${f1(ty - 1 * k)}" font-size="${f1(11 * k)}" text-anchor="middle" fill="#FFFFFF" style="font-family:serif">${NEAR_WORDS.week}</text></g>`);
+      }
+    }
+    return [out.join(""), high.join("")];
+  }
+  // 第一層沒點地點時抽屜收著的那一行：在路上照 journeyHtml；不然「四條路，點一處出發。」（點了攤開你腳下這一處的卡）＋「其餘地點按「全區」」
+  function nearLineHtml(base, st) {
+    if (st.journey) return journeyHtml(st);
+    const n = nearIds(base, st).length;
+    return `<div class="m-wline"><button type="button" class="m-mini" data-act="map-open" aria-label="攤開你腳下這一處"><span>${esc(n ? nearRoadsLine(n) : NEAR_WORDS.none)}</span></button><small class="m-more">${esc(NEAR_WORDS.more)}</small></div>`;
+  }
+  // 第二層：點的那一處要露在卡的上方（企劃者 2026-10-24 圖解版第七章【PM】：地圖輕推一下）。卡此刻多高照 peekPx；已經露著就不動
+  function nearNudge() {
+    if (S.mapLayer !== "near" || !S.mapSel) return;
+    const g = mapGeom(document.getElementById("map")), v = S.nearView, p = placeXY(S.mapSel);
+    if (!g || !v || !p) return;
+    const q = panOf(), sx = q.z * (g.vw / 2 + (p[0] - v.cx) * v.s) + q.x, sy = q.z * (g.vh / 2 + (p[1] - v.cy) * v.s) + q.y;
+    const top = REGION_TOP + 46, bottom = g.vh - mapDrawerPx(S.mapDrawer) - 40;
+    let dx = 0, dy = 0;
+    if (sy > bottom) dy = Math.max(top, bottom - 20) - sy;
+    else if (sy < top) dy = top - sy;
+    if (sx < 30) dx = 30 - sx;
+    else if (sx > g.vw - 30) dx = g.vw - 30 - sx;
+    if (!dx && !dy) return;
+    clearTimeout(glideTimer);
+    g.wrap.classList.add("glide");
+    glideTimer = setTimeout(() => g.wrap.classList.remove("glide"), 200);
+    panSet({ z: q.z, x: q.x + dx, y: q.y + dy });
+  }
+  // 「回到我這」那一顆（企劃者 2026-10-24「輿圖都要可以拖」，拖遠了才出來【PM】）：第一層拖得離原本的位置超過 NEAR_HOME_PX、
+  // 全區與天下把你拖出了框才出；點了回第一層、以你為中心（homeFar 只看此刻的取景與拖縮，不量排版）
+  function homeFar() {
+    const v = curView(), f = S.panFrom, me = S.mapBase && S.mapState && youXY(S.mapBase, S.mapState);
+    if (!v || !f || !me) return false;
+    if (S.mapLayer !== "near" && S.mapLayer !== "world" && S.mapRegion !== hereRegion()) return true;
+    const q = panOf(), x1 = f.vw / 2 + (me[0] - v.cx) * v.s, y1 = f.vh / 2 + (me[1] - v.cy) * v.s;
+    const x = q.z * x1 + q.x, y = q.z * y1 + q.y;
+    if (S.mapLayer === "near") return Math.hypot(x - x1, y - y1) > NEAR_HOME_PX;
+    return x < 0 || x > f.vw || y < REGION_TOP || y > f.vh - 54;
+  }
+  function homeCheck() {
+    const btn = document.getElementById("map-home");
+    if (!btn) return;
+    const show = S.mapMode !== "timeline" && homeFar();
+    if (btn.hidden === show) btn.hidden = !show;
+  }
+  // 回第一層（打開輿圖、「回到我這」、第三層再按一次「全區」、天下圖的「進入此區」）：你在的那一區、以你為中心、1 倍；sel 給了開那一處的卡
+  function toNear(sel = null) {
+    stopPlay();
+    Object.assign(S, { mapLayer: "near", mapRegion: hereRegion() || S.mapRegion, mapMode: sel ? "place" : "overview", mapSel: sel, mapWeek: null, mapQuery: "",
+      mapDrawer: sel ? "peek" : "min", mapPan: null, panFrom: null });
+    applyMapView(true);
+    remapChrome();
+    drawMarks();
+    nearNudge();
+  }
+  // 每一次打開輿圖（goTab）：回第一層（「全區」按過只這一次有效，企劃者 2026-10-24【PM 預設】）。江湖頁的小地圖點了某一處：
+  // 那一處是你腳下或走得到的，第一層開它的卡；不然開它所在那一區的全區
+  function mapFirst(sel = null) {
+    const st = S.mapState, base = S.mapBase;
+    const near = !sel || !base || !st || sel === st.here || nearIds(base, st).includes(sel) || (nearWeek(st) && nearWeek(st).id === sel);
+    Object.assign(S, { mapLayer: near ? "near" : "region", mapRegion: near ? hereRegion() : regionOfPlace(sel), mapMode: sel ? "place" : "overview", mapSel: sel,
+      mapDrawer: sel ? "peek" : "min", mapWeek: null, mapQuery: "", mapPan: null, panFrom: null });
+  }
+
   // 換層：天下圖 ↔ 區圖。外圍的鈕與抽屜整個換掉（同 showMapHost 的做法），地圖本身留著
   function remapChrome() {
     const box = document.getElementById("mapx");
@@ -1354,10 +1631,11 @@
   }
   // 從天下圖點一區、「進入此區」、找地點挑了一處、鄰區出口、上面那一排換一區：換到那一區的區圖。focus：挑的那一處（抽屜半開它的卡）；
   // 沒給而且你就在這一區：開你腳下這一處的卡（設計 5.1：拉開是你腳下這一處的卡）。進區圖回 1 倍（企劃者 2026-10-22）
-  function enterRegion(rid, focus = null) {
+  // 第一層按「全區」（mine 假）：點了的那一處照舊開著，沒點就不開卡（點遠處看路線與幾分）
+  function enterRegion(rid, focus = null, mine0 = true) {
     stopPlay();
     if (!rid || !S.mapBase || !regionPlaces(S.mapBase, rid).length) return;
-    const st = S.mapState, mine = !focus && st && !st.journey && hereRegion() === rid ? st.here : null, sel = focus || mine;
+    const st = S.mapState, mine = mine0 && !focus && st && !st.journey && hereRegion() === rid ? st.here : null, sel = focus || mine;
     Object.assign(S, { mapLayer: "region", mapRegion: rid, mapMode: sel ? "place" : "overview", mapSel: sel, mapWeek: null, mapQuery: "", mapDrawer: sel ? "peek" : "min", mapPan: null, panFrom: null });
     applyMapView(true);
     remapChrome();
@@ -1382,7 +1660,8 @@
       if (S.mapDrawer === "min" || S.mapDrawer === "tl") setMapDrawer("peek");
     }
     redrawDrawer();
-    drawSel();
+    if (S.mapLayer === "near") { drawMarks(); nearNudge(); } // 第二層：那一處放大、其餘退成四成，地圖輕推一下讓它露在卡上方
+    else drawSel();
   }
   const hereRegion = () => {
     const p = S.mapBase && S.mapState && placeOf(S.mapBase, S.mapState.here);
@@ -1488,7 +1767,12 @@
   function applyMapView(glide = false, g = mapGeom(document.getElementById("map")), soft = false) {
     if (!g || !S.mapBase) return;
     let v = null;
-    if (S.mapLayer !== "world" || !S.mapBase.world) {
+    if (S.mapLayer === "near" && S.mapState) { // 第一層：你在的那一區、以你為中心（nearFit）
+      S.mapRegion = hereRegion() || S.mapRegion;
+      v = S.nearView = nearFit(S.mapBase, S.mapState, g.vw, g.vh, REGION_TOP, deskMap() ? 0 : REGION_PAD);
+    }
+    if (!v && S.mapLayer === "near") S.mapLayer = "region"; // 還沒有疊層、找不到你：照全區
+    if (!v && (S.mapLayer !== "world" || !S.mapBase.world)) {
       if (!S.mapRegion || !regionPlaces(S.mapBase, S.mapRegion).length) S.mapRegion = hereRegion() || ((S.mapBase.regions || [])[0] || {}).id || null;
       const desk = deskMap();
       v = S.regionView = S.mapRegion ? regionFit(S.mapBase, S.mapRegion, g.vw, g.vh, REGION_TOP, desk ? 0 : REGION_PAD, desk ? 0 : REGION_CARD) : null;
@@ -1510,6 +1794,7 @@
     S.panFrom = { layer: S.mapLayer, region: S.mapRegion, vw: g.vw, vh: g.vh, s: v.s, cx: v.cx, cy: v.cy };
     g.world.style.transform = mapTransform(v, g.vw, g.vh, panOf());
     if (key !== S.marksKey) scheduleMarks();
+    homeCheck();
   }
 
   // ── 輿圖的拖與縮放（企劃者 2026-10-22「輿圖沒辦法拖曳移動了」「不順手」，選「兩張都能拖、能捏合縮放」；
@@ -1644,6 +1929,7 @@
     S.mapPan = p.z === 1 && !p.x && !p.y ? null : p;
     const g = pan.g || mapGeom(document.getElementById("map")), v = curView();
     if (g && v) g.world.style.transform = mapTransform(v, g.vw, g.vh, panOf());
+    homeCheck();
   }
   // 回 1 倍（天下圖已經在總覽時再按「天下」）：滑一下
   function panReset() {
@@ -1728,10 +2014,11 @@
     mapFrame();
     // 天下圖的總覽只有收著那一行與拉開的卡
     if (S.mapLayer === "world" && S.mapMode === "overview" && !["min", "half", "full"].includes(S.mapDrawer)) S.mapDrawer = "min";
-    if (S.mapLayer !== "world" && S.mapSel && regionOfPlace(S.mapSel)) S.mapRegion = regionOfPlace(S.mapSel); // 江湖頁的小地圖點了某一處（設計第八節）
+    if (S.mapLayer === "region" && S.mapSel && regionOfPlace(S.mapSel)) S.mapRegion = regionOfPlace(S.mapSel); // 江湖頁的小地圖點了某一處（設計第八節）
     applyMapView(false); // 先算區圖的取景：卡半開多高照它（peekPx）
     setMapDrawer(S.mapDrawer);
     drawMarks();
+    nearNudge();
     bakeLater();
     drawerGrab();
     panWire(wrap); // 拖與縮放（企劃者 2026-10-22）

@@ -12,7 +12,7 @@ from . import (
     terrain, territory, timetable, worldgeo,
 )
 from .models import Content, FactionDef, Location
-from .state import GameState, TerritoryWeek, WorldState
+from .state import GameState, Order, TerritoryWeek, WorldState
 
 ODDS_TONE = {"穩勝": "safe", "有把握": "safe", "五五波": "ok", "難分勝負": "ok", "凶險": "risk", "必敗": "risk", "操練": "safe"}
 ODDS_SCORE = {"穩勝": 30, "有把握": 20, "五五波": 10}  # 今天去哪裡出陣的排法（設計第五節）：軍令 100、懸賞 50、勝算、減路上分鐘
@@ -28,6 +28,12 @@ LOSE_WORD = "必敗"  # 這種勝算的出陣建議照樣列，但排到最後�
 WORLD_MARGIN = 70  # 取景框：開放的地點外框往外加多少（地圖單位）
 FALLBACK_INKS = ["#7A4E8C", "#2E7D7A", "#A0522D", "#5C6B2E", "#8C3B5A", "#3B5C8C"]  # 劇本沒寫 ink 的陣營照順序挑（待 joy 對色）
 WORLD_CACHE_KEEP = 8  # 幾何照內容快取最多幾份
+# 輿圖第一層（減法季整合設計第七章）：走得到的地方名字旁的「多半」兩字，照地點的小圖（城、營、寺、渡、山、野）；內容的事實，放底圖。待 joy 潤
+MOSTLY = {"城": "多事", "野": "多敵", "山": "多料", "渡": "參半", "營": "多敵", "寺": "多悟"}
+# 本週要去的那一處那一句為什麼（減法季整合設計第七章第 1 條；來源照本週卡：軍令、懸賞、主線）。待 joy 潤
+WEEK_ORDER = "軍令・{title}"
+WEEK_BOUNTY = "懸賞・{kind}"
+WEEK_GOAL = "主線的目標"
 _WORLD_CACHE: dict[str, dict] = {}
 
 
@@ -64,21 +70,24 @@ def base(state: GameState, content: Content) -> dict:
     for loc_id in shown:
         loc = content.locations[loc_id]
         region = atlas.region_of(content, loc_id)
+        glyph = mapview.GLYPHS[mapart.icon_kind(loc)]
         places.append({
-            "id": loc_id, "name": loc.name, "x": loc.x, "y": loc.y, "glyph": mapview.GLYPHS[mapart.icon_kind(loc)],
+            "id": loc_id, "name": loc.name, "x": loc.x, "y": loc.y, "glyph": glyph, "mostly": MOSTLY.get(glyph, ""),
             "big": loc.important, "region": region.id if region is not None else None,
             "insights": insight_pool(loc, content), "strong": None if loc.prologue_only else insights.strong_of(loc, content),
             "terrain": next(iter(sensing.terrain_tags(loc)), ""),
             "terrain_arts": terrain.place_line(content, loc_id),  # 地利那一行（武學隨地理環境）；沒有地利是空字串
         })
     edges = [[a, z] for a in shown for z in content.locations[a].connections if a < z and z in keep]
+    # 每一條路畫成哪一條二次曲線（mapart.road_control，跟底圖同一條）：第一層描「到它們的路」、本週那一處的金路照它描
+    roads = [[a, z, *(round(v, 1) for v in mapart.road_control(content, a, z))] for a, z in edges]
     regions = [{
         "id": r.id, "name": r.name,
         "cx": round(sum(p[0] for p in r.points) / len(r.points)), "cy": round(sum(p[1] for p in r.points) / len(r.points)),
     } for r in content.map.regions]
     return {
         "key": base_key(state, content), "w": content.map.width, "h": content.map.height,
-        "svg": mapview.render_base(state, content), "places": places, "edges": edges, "regions": regions,
+        "svg": mapview.render_base(state, content), "places": places, "edges": edges, "roads": roads, "regions": regions,
         "insight_kinds": {d.id: {"name": d.name, "attribute": d.attribute} for d in content.insights.values() if d.grant is None},
         "insight_layer": content.config.insight_strong.enabled and any(p["strong"] for p in places),
         "world": world(state, content),
@@ -169,9 +178,18 @@ def world(state: GameState, content: Content) -> dict:
 def _order_marks(state: GameState, content: Content, faction: str | None) -> dict[str, str]:
     """你這一週還沒達成的軍令在哪裡記功（地點 → 軍令名）；守城只標自家地盤上的戰線地點（不然整條戰線都掛牌）。領地爭奪開著時守城只標
     自家被對面推得最高、守得動的那幾塊（orders.defend_places，跟記功、卡上寫的同一個判斷；裁決 24、FB-565，翻地與爭搶），沒有就不標。"""
+    marks: dict[str, str] = {}
+    for o, spots in _order_spots(state, content, faction):
+        for loc in spots:
+            marks.setdefault(loc, ORDER_WORDS.get(o.template, o.template))
+    return marks
+
+
+def _order_spots(state: GameState, content: Content, faction: str | None) -> list[tuple[Order, list[str]]]:
+    """你這一週還沒達成的每一道軍令與它在哪裡記功（_order_marks、本週那一處 _week_place 共用）。"""
     if faction is None or not orders.active(state, content):
-        return {}
-    w, marks = state.world, {}
+        return []
+    w, out = state.world, []
     for o in orders.current(state, content, faction):
         if o.done:
             continue
@@ -190,9 +208,41 @@ def _order_marks(state: GameState, content: Content, faction: str | None) -> dic
         elif o.template == "strike" and o.figure is not None:
             fs = figures.state_of(state, content, o.figure)
             spots = [fs.location] if fs.status == "active" and fs.location else []
-        for loc in spots:
-            marks.setdefault(loc, ORDER_WORDS.get(o.template, o.template))
-    return marks
+        out.append((o, spots))
+    return out
+
+
+def _week_place(state: GameState, content: Content, faction: str | None, places: dict[str, dict]) -> dict | None:
+    """本週要去的那一處（減法季整合設計第七章第 1 條：輿圖第一層的金路、紅旗、「本週」朱印與一句為什麼）。來源照本週卡的先後：
+    還沒達成的軍令記功的地點、揭著的懸賞交差的地點、這一幕主線的目標；同一種裡挑走得到、最近的那一處（就在這裡算 0 分）。
+    都沒有（或都走不到）是 None。{"id", "why", "minutes"}"""
+    def reach(loc_id: str) -> float | None:
+        info = places.get(loc_id)
+        if info is None:
+            return None
+        return 0 if info["here"] else info["minutes"]
+
+    w = state.world
+
+    def order_spots(o: Order, spots: list[str]) -> list[str]:
+        # 守城這一週還沒有被推的塊（領地爭奪開著時 defend_places 是空的）：那條戰線上自家的地點都算，挑腳下以外最近的去守
+        if spots or o.template != "defend" or o.front is None:
+            return spots
+        return [loc for loc in places if not places[loc]["here"] and rules.front_of(content, loc) == o.front
+                and territory.controller(w, content, loc) == faction]
+
+    groups: list[list[tuple[str, str]]] = [
+        [(loc, WEEK_ORDER.format(title=orders.title(content, o))) for o, spots in _order_spots(state, content, faction)
+         for loc in order_spots(o, spots)],
+        [(loc, WEEK_BOUNTY.format(kind=kind)) for loc, kind in _bounty_marks(state, content).items()],
+        [(loc, WEEK_GOAL) for loc in atlas.goal_places(state, content)],
+    ]
+    for group in groups:
+        near = [(reach(loc), loc, why) for loc, why in group if reach(loc) is not None]
+        if near:
+            minutes, loc, why = min(near, key=lambda r: (r[0], r[1]))
+            return {"id": loc, "why": why, "minutes": minutes}
+    return None
 
 
 def _foes(state: GameState, content: Content, loc: Location, odds: atlas.Odds, faction: str | None) -> list[tuple[str, str]]:
@@ -483,6 +533,8 @@ def state(
             "sortie": sortie_mode(loc_id),
             "armed": (loc_id in armed) if armed is not None else bool(loc.enemies),
             "minutes": None if route is None else atlas.whole_minutes(route.minutes * atlas.TIME_SHARE["walk"] * pace),
+            # 走過去依序經過哪幾站（最後一個是這一處；就在這裡、走不到是空的）：第二層點一處、本週那一處的金路照它描（減法季第七章）
+            "path": [] if route is None else list(route.path), "here": here,
             "stamina": None if route is None else atlas.route_stamina(s, c, route, "dash"),
             "order": order_at.get(loc_id), "bounty": bounty_at.get(loc_id),
             "goal": loc_id in goals, "news": loc_id in news, "people": people.get(loc_id, []),
@@ -549,5 +601,6 @@ def state(
         "geju_side": territory.geju_side(c),  # 割據那一條曲線照誰的顏色（劇本裡推割據的那一方）
         "events": _titles(s, c, now_week, now_week), "suggest": suggest, "chart": chart,
         "start": _start_control(w, c) if on else None,
+        "week": _week_place(s, c, faction, places),  # 本週要去的那一處（輿圖第一層，減法季整合設計第七章）
         "weeks": _weeks(s, c, now_week, ropes),
     }
