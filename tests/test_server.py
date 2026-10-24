@@ -47,6 +47,13 @@ def season_already_open(monkeypatch):
     monkeypatch.setattr(server.CONTENT.config, "auto_open_first_season", True)
 
 
+@pytest.fixture(autouse=True)
+def scheduler_off(monkeypatch):
+    """server.CONTENT 是正式內容，伺服器排程開著（減法季批 0 起 world_tick_seconds 10）：這裡的測試叫 server.main 時不要真的開執行緒；
+    測排程本身的測試自己再打開。"""
+    monkeypatch.setattr(server.CONTENT.config, "world_tick_seconds", 0)
+
+
 def _stop_scheduler() -> None:
     """排程執行緒也是 server 的模組狀態：測試留下來的那一條先停掉、等它真的結束，再把停止的旗子放下，
     免得它在後面測試的暫存資料庫上推世界。"""
@@ -6285,6 +6292,7 @@ NOT_IN_THE_FINGERPRINT = {
         "mandate_result": "天命之爭定下來時跟時間軸、天下大事一起寫入",
         "territory": "地盤的控制方只跟著戰線、割據（trends）與大事（timeline）改；易手的那一下另寫天下大事（傳聞流水號已在指紋裡），第一次算不發也不必叫醒誰",
         "conquest_on": "開季時蓋的章（領地爭奪），開季之後不變",
+        "jianfa_on": "開季時蓋的章（減法季），開季之後不變",
         "conquest": "領地爭奪的開季種類、偏移與進度：易手另寫天下大事（傳聞流水號已在指紋裡），偏移跟著 trends 一起改；"
                     "進度不露數字、只回推的人自己那一句話",
         "xingshi": "〈天下形勢〉收下的文章：收下那一刻另寫天下大事與江湖史（都在指紋裡）；見聞「形勢」頁自己去讀，不叫醒全服",
