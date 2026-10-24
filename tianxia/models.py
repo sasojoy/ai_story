@@ -4503,3 +4503,49 @@ class Content(_Strict):
     hints: Hints = Field(default_factory=Hints)  # 碰到才說（content/hints.json，新手引導計畫三）；沒有這個檔就是沒有提示
     check_voice: CheckVoice = Field(default_factory=CheckVoice)  # 檢定選項括號裡的那一句（content/check_voice.json，載入時必備）
     create_forms: CreateForms = Field(default_factory=CreateForms)  # 自創武學的兵器偏向、起點架式、關鍵字表（content/create_forms.json）
+
+
+# ── 三陣營四勝利（減法季整合設計第三章；計畫第五節，批 3c）──
+# 批 0 的 JianfaRules（Config.jianfa）還沒來，這一塊先獨立放、不掛 Config：批 0 到了在 JianfaRules 加 tiers、lean_default_by_join
+# 兩個欄位（同名、同預設），wins.rules_of 改讀 content.config.jianfa（計畫 5.0 第 7 條）。
+
+# 豪強開季的「此刻幫誰」照投靠點預設（企劃者 2026-10-24，計畫第十一節第 6 件）：鄉里結社、曹氏莊院幫官軍，豪族塢堡幫黃巾
+LEAN_DEFAULT_BY_JOIN = {"zhuo_militia_hall": "guan", "cao_manor": "guan", "haozu_fort": "huang"}
+# 四階的稱號（設計 3.3；鍵是「階:陣營 id」，wins.title_of 照它找、找不到再看只寫階的鍵）：第一階分官軍、黃巾，第三、四階分兩軍與豪強。
+# 字待 joy 潤（企劃者 2026-10-24 第 4 件：先用這組）
+TIER_TITLES = {
+    "1:guan": "漢室忠良", "1:huang": "黃天功臣",
+    "2:haoqiang": "一方之雄",
+    "3:guan": "有功之臣", "3:huang": "有功之臣", "3:haoqiang": "鄉里之望",
+    "4:guan": "隨軍", "4:huang": "隨軍", "4:haoqiang": "附從",
+}
+
+
+class TierRules(_Strict):
+    """季末四階（設計 3.3；wins.settle）。名次只在過了門檻的人裡排，人數照比例無條件捨去；第一、二階至少 1 人，
+    第三階的名額不少於第一（二）階；同分同階（計畫 5.0 第 13 條）。20 人與 2,000 人同一條規則。"""
+
+    tier1_share: float = Field(default=0.10, ge=0, le=1)  # 第一階：贏的那一軍裡前 10%（至少 1 人）【定】
+    tier2_share: float = Field(default=0.10, ge=0, le=1)  # 第二階：豪強「替贏的那一軍」那一本前 10%（至少 1 人）；兩軍拿不到【定】
+    tier3_share: float = Field(default=0.40, ge=0, le=1)  # 第三階：各自前 40% 的其餘人（贏的、輸的、豪強都有）【定】
+    min_contribution: int = Field(default=60, ge=0)  # 每一階都要先過的門檻（絕對數，約「一季認真玩三天」）【待量】
+    start_shares: dict[int, float] = Field(default_factory=lambda: {1: 1.0, 2: 0.8, 3: 0.5, 4: 0.3})  # 下一季起手資源的成數【預設】
+    start_silver: int = Field(default=300, ge=0)  # 起手資源滿額：銀兩【預設】
+    start_xinde: int = Field(default=200, ge=0)  # 起手資源滿額：心得【預設】
+    titles: dict[str, str] = Field(default_factory=lambda: dict(TIER_TITLES))  # 「階:陣營 id」→ 稱號（待 joy 潤）
+
+    @model_validator(mode="after")
+    def _shares_in_order(self) -> "TierRules":
+        if self.tier1_share > self.tier3_share or self.tier2_share > self.tier3_share:
+            raise ValueError("第一、二階的比例不能大於第三階（第三階是累計的前幾成）")
+        if set(self.start_shares) - {1, 2, 3, 4}:
+            raise ValueError("start_shares 只有第 1～4 階")
+        return self
+
+
+class WinsRules(_Strict):
+    """三陣營四勝利的數字（批 0 之前的獨立一塊；欄位名照計畫第五節，到時候搬進 JianfaRules）。"""
+
+    tiers: TierRules = Field(default_factory=TierRules)
+    # 豪強的投靠點 → 開季（投靠那一下）預設幫哪一軍（wins.lean_default；wins.check 驗每個投靠點都有、都是它能幫的那一軍）
+    lean_default_by_join: dict[str, str] = Field(default_factory=lambda: dict(LEAN_DEFAULT_BY_JOIN))
