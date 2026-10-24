@@ -236,13 +236,14 @@ def test_the_wash_toggle_only_adds_one_layer():
 
 
 def test_the_region_top_row():
-    """上面一排（設計 5.2）：‹ 天下、大區名下拉（每一區一個、這一區選著）、塗層、⏱ 版圖；搜尋不在這一排（天下圖才有）。"""
+    """全區上面一排（減法季整合設計第七章：大區名、全區、天下）：大區名下拉（每一區一個、這一區選著）、塗層（只在全區）、全區（按著）、天下；
+    搜尋與 ⏱ 版圖在天下圖那一排。"""
     game = _game()
     out = run(game, "return H.regionTopHtml();")
-    assert 'data-act="map-world"' in out and "‹ 天下" in out and 'data-act="map-timeline"' in out and 'data-act="map-wash"' in out
+    assert 'data-act="map-world"' in out and 'data-act="map-full"' in out and 'data-act="map-wash"' in out and "map-timeline" not in out
     options = re.findall(r'<option value="([a-z]+)"( selected)?>', out)
     assert [x for x, _ in options] == [r.id for r in game.content.map.regions] and [x for x, s in options if s] == ["yingru"]
-    assert "map-search" not in out and out.index("map-world") < out.index("region-pick") < out.index("map-wash") < out.index("map-timeline")
+    assert "map-search" not in out and out.index("region-pick") < out.index("map-wash") < out.index("map-full") < out.index("map-world")
 
 
 def _four_sides():
@@ -683,7 +684,8 @@ def test_the_card_says_today_s_yield():
     st = game.map_state()
     assert st["places"]["runan_wilds"]["yield"].startswith("今日產出：")
     card = run(game, 'return H.placeCard(H.S.mapBase, H.S.mapState, "runan_wilds");')
-    assert st["places"]["runan_wilds"]["yield"] in card and card.index("此地的對手") < card.index("今日產出") < card.index('class="m-acts"')
+    # 減法季整合設計第七章第 2 條：動作在前，往上拉才有對手、今日產出
+    assert st["places"]["runan_wilds"]["yield"] in card and card.index('class="m-acts"') < card.index("此地的對手") < card.index('class="m-yield"')
 
 
 def test_the_letter_button_follows_the_server():
