@@ -47,8 +47,8 @@ def test_new_file_is_version_6(tmp_path):
     path = tmp_path / "new.db"
     db = Database(path)
     db.close()
-    assert database.SCHEMA_VERSION == 6
-    assert _version(path) == 6
+    assert database.SCHEMA_VERSION >= 6  # 商城是第 6 版；之後再升版（第 7 版真人量表）商城的表照樣在
+    assert _version(path) == database.SCHEMA_VERSION
     assert MALL_TABLES <= _tables(path)
 
 
@@ -64,7 +64,7 @@ def test_version_5_file_upgrades_in_place(tmp_path):
             assert conn.execute("SELECT COUNT(*) FROM mall_ledger").fetchone()[0] == 0
     finally:
         db.close()
-    assert _version(path) == 6
+    assert _version(path) == database.SCHEMA_VERSION  # 一路升到現在這一版
     assert MALL_TABLES <= _tables(path)
 
 

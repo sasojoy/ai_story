@@ -887,6 +887,11 @@ class PlayerState(BaseModel):
     bounty_pick: str | None = None
     contrib: int = 0  # 本季替目前陣營推大勢記下的貢獻（散人不記）
     contrib_weeks: dict[int, int] = Field(default_factory=dict)  # 季曆第幾週 → 那一週記的貢獻
+    # 三陣營四勝利（減法季整合設計 3.2；wins.credit）：豪強替哪一軍出的力各記一本（「guan」「huang」→ 貢獻），contrib 照樣加總數。
+    # 「此刻幫誰」就是 ally（wins.lean_of）；換邊不清帳。lean_changed 是這一季換了幾次邊（wins.set_lean；投靠那一下的預設不算）。
+    # 兩個都是空的、0 的時候不寫進存檔（_drop_quiet_defaults）：兩軍的人、關著的季 JSON 一個鍵都不多
+    ledgers: dict[str, int] = Field(default_factory=dict)
+    lean_changed: int = 0
     pushed: dict[str, float] = Field(default_factory=dict)  # 「曆日:大勢線 id」→ 當天這條線推得動多少（人數緩衝之後）；只留今天與昨天
 
     # ── 捐獻紀錄（計畫 T6，軍備文件 4.1）：「據點 id:糧草」→ 累積的份量。T7 的伏筆只讀它；寫入是 T6 護糧的事 ──
@@ -956,6 +961,33 @@ class PlayerState(BaseModel):
     title_book: list[str] = Field(default_factory=list)  # 過去幾季掙到的頭銜（「第N季 某某」），換季時記下、名帖照樣能印
     gift_day: int = 0  # 贈物記在哪一天（同 pill_day）
     gifts_today: int = 0  # 那一天送了幾次（Config.gift_per_day，不分送給誰）
+
+    @model_serializer(mode="wrap")
+    def _drop_quiet_defaults(self, handler):
+        """QUIET_DEFAULTS 裡的欄位是空的、0 的時候不寫這個鍵（同 SealRegistry._drop_empty_uses；不用 Field(exclude_if=…)：
+        Pydantic 2.11 才有，requirements.txt 寫 pydantic>=2.6）。讀檔沒有這個鍵就是預設值，舊存檔照樣讀得進來。"""
+        data = handler(self)
+        if isinstance(data, dict):
+            for key in QUIET_DEFAULTS:
+                if key in data and not data[key]:
+                    del data[key]
+        return data
+
+
+# PlayerState 裡「沒用到就不寫進存檔」的欄位（_drop_quiet_defaults）：新規則掛開關、關著的季存檔一個鍵都不多的，加在這裡
+QUIET_DEFAULTS = ("ledgers", "lean_changed")
+
+
+class TierResult(BaseModel):
+    """季末四階的一筆（減法季整合設計 3.3；wins.settle 算，接線後存 WorldState.final_tiers、結局卡讀）。"""
+
+    tier: int = 0  # 1～4；0 是沒有（貢獻不到門檻）
+    title: str = ""  # 稱號（TierRules.titles）；沒有是空字串
+    # 照哪一本帳排：兩軍是自己的陣營；豪強是替哪一軍那一本（guan／huang），和局是兩本合計（wins.BOTH）；沒有是 None
+    ledger_used: str | None = None
+    points: int = 0  # 排名次用的那個數（沒有階的人：兩軍是 contrib，豪強是替贏的那一軍那一本，和局是兩本合計）
+    rank: int = 0  # 在那一池（過了門檻的人）裡第幾名，同分同名次；沒有階是 0
+    of: int = 0  # 那一池幾個人；沒有階是 0
 
 
 RumorLayer = Literal["world", "faction", "local", "personal"]  # 天下大事／陣營軍情／地方傳聞／個人線索（傳聞分層設計第二節）
@@ -1610,6 +1642,7 @@ class WorldState(BaseModel):
     renown_scale: float | None = None  # 名聲的門檻乘幾倍（開季時蓋章，world_state.stamp_season）；None＝沒有章，倍數 1
     territory: TerritoryState | None = None  # 地盤易手（出陣探索與地盤設計第四節）；None＝還沒算過
     conquest_on: bool = False  # 這一季開季時領地爭奪是不是開著（Config.conquest；conquest.on 還要設定也開著）；舊季讀檔是 False
+    jianfa_on: bool = False  # 這一季開季時減法季的規則是不是開著（Config.jianfa；rules.jianfa 還要設定也開著）；舊季讀檔是 False
     conquest: ConquestState | None = None  # 領地爭奪（tianxia/conquest.py）；None＝這一季還沒算過
     # 〈天下形勢〉（領地爭奪第三批 A，tianxia/xingshi.py）：這一季收下的每一篇（照先後，最多 Config.xingshi.keep 篇）、還在等模型的那一張單、
     # 上一篇讀到哪裡（None＝這一季還沒記過起點）

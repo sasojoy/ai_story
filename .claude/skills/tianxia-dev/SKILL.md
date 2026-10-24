@@ -66,7 +66,7 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   - 你自己合了別的分支進來時，base 用合完那一個 commit，只量你這一輪的改動，不然會把別人的東西全挑進來。
   - `--list` 先看挑到哪些檔。
   - **合併還沒提交時別拿 `--list` 的清單**（2026-10-21 輿圖簡化第 2 批收尾）：`test_for` 跟 base 的分岔點比，`--no-commit` 合進來的東西都還算「沒提交的改動」，合功能分支的那一下挑到 327 個檔（幾乎整套）；先跑兩批的測試檔、提交合併，再 `--list` 只剩這一批自己的 117 個。
-- 改到 `tianxia/engine.py` 幾乎會挑到大半套（八千多條、約 6～8 分鐘），正常。只動內容或小模組時會少很多。
+- 改到 `tianxia/engine.py` 幾乎會挑到大半套（八千多條、約 6～8 分鐘），正常。只動內容或小模組時會少很多。改 `state.py`、`models.py`（就算只是在檔尾加一個獨立的模型）也一樣：減法季批 3c 純規則挑到 251 個檔。
 - **功能分支在你做的時候往前走了**（2026-10-21 玉璽碎片第 2 批：開工時 `feature/territory-conquest` 是 `f5686765`，做到一半合進了翻地 `90e52e9b`）：`test_for --base origin/feature/<名字>` 照分岔點比，挑到的還是只有自己的改動，照用；「關著一個位元組都不變」照派工寫的那一版比（不是新的頭）。要不要合新的頭照派工，沒說就不合，回報裡寫功能分支到了哪裡、試合（`git merge-tree --write-tree HEAD origin/feature/<名字>`）有沒有衝突。
 - **`test_for.py -- -n 4` 擋不住 `-n auto`**（2026-10-20 領地爭奪第三批 A）：挑到三個檔以上它自己在最後補 `-n auto`，排在 `--` 之後的參數後面，pytest 照最後一個算。派工要 `-n 4`（同時有好幾個子代理在跑）時，在 scratchpad 寫一支小腳本 `import test_for`、拿 `test_for.pick(test_for.changed_files(base))` 的清單自己叫 pytest（`-q -m "slow or not slow" -n 4`，`TIANXIA_DB` 設新的暫存檔），背景跑、輸出導到檔。PowerShell 一行就夠：`$line = (& $py scripts/test_for.py --base <base> --list | Where-Object { $_ -like '要跑：*' }) -replace '^要跑：',''; $files = $line.Trim() -split '\s+'; & $py -u -m pytest @files -q -n 6 -m "slow or not slow" | Out-File $env:TEMP\x.log`（2026-10-21 玉璽碎片改版修正：改 `engine.py`＋`state.py`，挑到 303 個檔）。
 - **兩張單的測試寫在同一個檔、又要一張一個 commit**（2026-10-21 FB-606、607 都在 `test_conquest_clash.py`）：先把第二張的測試從檔尾剪到 scratchpad（照第一個 `def` 的名字找頭、連前面的空行一起剪），提交第一張，再接回去寫第二張的實作。不要裸 `git stash`。
@@ -77,6 +77,8 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   跑之前先 `git diff --stat` 記一下，跑完再看一次；
   (2) 拿掉一個條件測試沒紅，先看是不是「兩層保護」（例：`Game._seal_find` 的藏處檢查在擲骰前、寫入重驗各一次，拿掉一層本來就不紅），是的話改拿掉兩層、或確認這兩層是故意重複；
   (3) 測試裡用的「不該發生」的前提要真的分得開兩個原因（例：天命之季不藏的測試，七片全隱沒時「沒東西可藏」也會是空的，要留一片未現世才測得到「因為天命之季」）。
+- **變異清單寫成 .py 檔**（2026-10-24 減法季批 2）：`MUTATIONS = [(舊, 新), …]`，變異腳本用 `runpy.run_path` 讀、一處換一次跑 `pytest <檔> -x`、`finally` 寫回原 bytes——舊字串裡的雙引號、換行都不必經過 PowerShell 的引數。純規則檔一個變異約 2 秒（腳本在 PM scratchpad 的 `jianfa-2/mutate.py`）。綠的那一條先看是不是被別的參數蓋住（`growth.capped_exp` 的「到 45 級全換」被測試裡一律 `room=0` 蓋住），補一條只差那個條件的斷言再跑一次。
+- **`--durations` 第一個測試的 setup 一秒多**是整個工作階段的 fixture（內容母本、序章母本），不是那個測試慢；工作樹第一次跑 pytest 四十幾秒是在編 pyc，第二次兩三秒。要不要標 slow 看 call 那一欄（2026-10-24）。
 - **證明「祕密沒漏出去」用差異測試**：建兩個只差那個祕密的世界（例：碎片藏在 A 或藏在 B），比畫面、API、江湖史、傳聞、管理者的回話與玩家的存檔是不是一個字不差；不要在輸出裡找祕密字串（地名到處都有，找不到也不代表沒漏）。
   同一條測試裡把開關關掉再比一次、斷言「關著時看得出差別」（列出哪幾項不一樣），才證明這條測試抓得到漏（玉璽碎片改版第 1 批 `test_two_worlds_that_differ_only_in_the_holder_look_the_same`）。要找名號字串時，名號別跟固定的字撞（拿「懷璽」當持有者的名號，會撞到「懷璽之人」），用「甲客」「持璽客」這種。
 - **差異測試要讓「世界差在祕密、後面的步驟不被結果帶開」**（玉璽碎片改版第 1 批修正，側門）：兩個世界裡誰贏誰輸、誰掉了氣血會不同，之後算威力的步驟（氣血係數 `condition` 也在 `_spar_power` 裡）就跟著差，測試紅了不是漏而是被結果帶開。做法：先把所有「看」的畫面讀完再打；每個人至多打一場有損耗的仗（截殺各挑沒打過的人）；擂台挑了就認輸（`arena:yield`，結果固定是落敗、名次不動）；只比「對手那一格」的數字，不比勝負與氣血。
@@ -130,6 +132,7 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 ## 規則改動的雷
 
 - **一個動作同時寫全服登記與季**（2026-10-21 玉璽碎片第 2 批 `Game.seal_use`）：登記（`SharedWorldState.seal` 這種 world 那一列的東西）在 `self.world.mutate` 裡改、裡面整個重驗；季的東西（`WorldState` 的欄位、人物所在、天下大事）改在 `self.state.world` 上、最後 `self._save_season()`。不要在 mutate 裡改 `shared.season` 之後又拿著同步時讀的 `self.state.world` 繼續做事：之後誰叫 `_save_season()` 都會把 mutate 寫的季整份蓋掉（傳聞與江湖史例外，它們照流水號新增）。
+- **開關還沒到就先做純規則**（2026-10-24 減法季批 2：批 0 的 `Config.jianfa` 在雲端側手上，兩邊各建一份一定撞）：數字放一個獨立的 pydantic 模型（新模組 `tianxia/jianfa_numbers.py`，自己的 `_Strict`、**不 import `models`**，之後 `models.py` 繼承或掛它才不會循環），純函式 duck-typed 收 cfg，測試直接建模型；不碰 `Config`、`content/config.json`、設定檔、`engine.py`。欄位名照計畫；計畫裡同一個名字既是子開關又是數字（`stat_milestones`、`explore_one`）的，數字那一邊改名，寫進計畫的 x.0。純規則要讀遊戲本身的升級表時（`team.level_cost`）在函式裡延後 import：team 之後會反過來 import 它。
 - **開關與蓋章**：
   - 新規則多半是 `Config` 開關＋開季時蓋在 `WorldState` 的章（例 `precise.on(content, world)` 同時看設定、章、探索三選一）。
   - 判斷開沒開一定走那個 `on()`，要把 world/state 傳進去。只傳 content 時它會回假，悄悄退回舊說法（FB-435 就是這樣：傳聞沒給 world，寫回舊句）。
@@ -164,6 +167,7 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 - **動作中間要改全服狀態**（例：探索撿到碎片，`Game._seal_find`）：用一次 `self.world.mutate(...)`，寫入時整個重驗；只想補天下大事或江湖史就寫在 mutate 裡的 `shared.season`（傳聞與江湖史只增不減，動作結束的 `_save_season` 不會蓋掉）。**不要**在動作中間把 `self.state.world = self.world.get_season()` 換掉：這個動作前面對 `self.state.world` 的就地修改還沒存，會一起丟掉（決戰收場那幾處這樣換是因為前面沒有未存的修改）。
 - **新的全服登記欄位（`SealRegistry` 這類）在開季才寫**：寫的地方有三個進入點——`seed_first_season`（自動開季）、`open_season`、`next_season`；沒蓋章的季連登記都不要碰（`filled(...)` 也會改登記），舊的季才一個字不變。
 - 資料庫結構（第 5 版）不改，要改先問 PM。新狀態欄位加在 `PlayerState`／`WorldState`，舊存檔讀得進來。
+- **`PlayerState` 新欄位要「關著的季存檔一個鍵都不多」**（減法季批 3c，2026-10-24）：`CharacterStore.save` 是 `state.model_dump_json()`，每個欄位都寫，加一個有預設值的欄位，每個角色的 JSON 就多一個鍵。`PlayerState` 有一個 wrap serializer（`_drop_quiet_defaults`），把欄位名加進 `state.QUIET_DEFAULTS`，空的、0、None 的時候就不寫那個鍵（讀檔沒有這個鍵就是預設值）。測試照 `tests/test_gentry_ledgers.py::test_new_fields_add_no_keys_until_used`：預設時 JSON 的鍵＝`model_fields` 減掉這幾個與 `exclude=True` 的、有值時寫得出來讀得回去、拿掉鍵的舊存檔讀得進來；拿掉 serializer 裡那一行跑一次看會紅。
 - **也要讓舊程式讀得進新存檔**（FB-695，2026-10-22：上線之後出事要退回上一版）：加欄位沒事（模型沒設 `extra`，舊程式略過、寫回時丟掉），**往舊程式也有的 `Literal` 加值不行**（碎片登記 `SealEvent.kind` 加 `use`，舊程式讀 world 那一列就 `ValidationError`，伺服器、假人程式都起不來）。新的種類另開一欄、空的時候用 wrap serializer 把鍵拿掉（**不用 `Field(exclude_if=…)`**：Pydantic 2.11 才有，`requirements.txt` 是 `pydantic>=2.6`，舊版略過它、空的照寫）、讀檔時 before 驗證器搬舊資料（見 `docs/guide/核心與存檔.md`）。查有沒有這種改動：`git grep -n "Literal\[" <舊版> -- tianxia/` 與 HEAD 各存一份、去掉行號 diff。實測退回：`git archive <舊版>` 解到 scratchpad，包一支 `serve.py`（`sys.path.insert`、`os.chdir` 到那一份、`server.CONTENT.config.ollama_url` 指死埠、`server.main(["--port", 埠])`）與 `bots.py`（`run_bots._wait` 換成不等、`run_bots.main(ticks=N)`），新程式寫的資料庫抄一份給舊程式開；**抄之前先 `PRAGMA wal_checkpoint(TRUNCATE)`**（`taskkill` 掉的伺服器留著 `-wal`，只抄 `.db` 會少掉最近寫的）。假人程式要另外拿一份「舊伺服器還沒碰過的」抄本先開（舊伺服器一啟動就把 world 那一列寫回去了，之後才開的假人程式讀到的已經是舊程式的樣子）。腳本在 PM 那個 session 的 scratchpad `fb695/`（`setup_roll.py`、`serve.py`、`bots.py`、`probe.py`、`inspect_db.py`）。
 - **全服戰鬥不只一場了**（領地爭奪第二批：攻城戰跟時刻表決戰同時打，`SharedWorldState.sieges`）：引擎裡讀「這個人的那一場」用 `Game._battle_now()`（假人程式、bot_policy 用 `game.battle_now()`），改它用 `_mutate_battle_of(battle, fn)`，全部列出來用 `battles_now()`；**不要再寫 `world.get_battle()`／`world.mutate_battle()`**，除非真的只講時刻表決戰（璽動、管理者的決戰工具、`_settle_showdown`）。新的 `SharedWorldState`／`BattleInstance` 欄位照舊要分進 `tests/test_server.py` 的推送指紋表。
 - **存進全服狀態的「現實時間」一律用 `self.now`，不要用 `pill_now()`**（FB-577，2026-10-21）：`pill_now()`＝`now`＋`advanced_real`，管理者快轉推的 `advanced_real` 只活在那一個 `Game` 物件的記憶體裡；拿它寫進共用狀態的時刻（`XingshiTicket.opened_real`、`retry_at`），別的 `Game`（伺服器排程 `world_tick`、別的玩家）拿自己的 `now` 比，會差上快轉的那十幾個小時。換天、回體丹換日這種「快轉跨過了就該算」的判斷才用 `pill_now()`（`conquest_day.day_key` 有「日子只准往前走」擋著）。測試：一個 `Game` 先 `advance` 跨過換天開單，另一個 `Game.for_world` 照現實時鐘 `world_tick`，看單有沒有照寬限收。

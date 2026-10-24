@@ -926,6 +926,8 @@ class Ending(_Strict):
     stance_max: dict[StanceSide, int] = Field(default_factory=dict)  # 態勢至多（同上）
     stance_top: StanceSide | None = None  # 季末比態勢：這一方最高（平手時照清單順序，排前面的先成立）
     mandate: bool = False  # 天命結局（玉璽二）：只在天命之爭有一方得天命時由 world.evaluate_ending 照時刻表的 mandate_endings 挑，不進一般的清單與保底
+    # 三陣營四勝利（減法季整合設計 3.1、3.3；wins.winner_of／settle）：這個結局是哪一軍贏；None 是和局（豪強的兩種結局）或 beta 的結局
+    winner: Literal["guan", "huang"] | None = None
 
 
 class MapLabel(_Strict):
@@ -2912,6 +2914,41 @@ class TerritoryRules(_Strict):
     enemy_price: float = Field(default=1.2, gt=0)  # 在別的陣營控制的地方
 
 
+class JianfaRules(_Strict):
+    """減法季（減法季整合設計，企劃者 2026-10-24；設計稿第十章）：把遊戲從「打怪、練等、拚戰力」拉回「文字互動改變世界」。
+    規則的改動全掛在這裡加上開季時蓋的章（WorldState.jianfa_on，world_state.stamp_season；讀的時候一律走 rules.jianfa）：
+    正在跑的季照它開季時的章，換了設定也不變。季只分 7 天與 21 天兩種，兩種都開（content/profiles 的 season21、week7 打開）；
+    週末設定不再維護、不打開，關著一個字都不變。畫面的改動不掛這個開關。欄位名是兩邊（畫面與引擎）共用的，各批的數字之後加在這一節。"""
+
+    enabled: bool = False  # 預設關（測試內容與不帶設定的正式內容照它）；season21.json、week7.json 打開
+    # 子開關（整合設計第十二章）：總開關開著、這一季有章時，各批的規則再看自己的那一個（rules.jianfa(content, world, "explore_one")）；
+    # 預設全開，哪一批出了事主機可以單獨關掉那一批。總開關關著時子開關一律不算。
+    explore_one: bool = True  # 4.1 探索一顆照地點抽（批 2）
+    drill_gates: bool = True  # 4.2 三道閘、45 級後只收仗的經驗（批 2）
+    sortie_duel: bool = True  # 4.3 出陣改約戰（批 3b）
+    four_wins: bool = True  # 第三章 三陣營四勝利、豪強兩本帳（批 3c）
+    free_text_outcomes: bool = True  # 第五章 隨口應對分岔（批 4）
+    marks_visible: bool = True  # 第五章 痕跡看得見（批 4）
+    stances: bool = True  # 第五章 人物心意（批 6）
+    errands: bool = True  # 第五章 託付與來信（批 6）
+    week_unlock: bool = True  # 6.6 功能照週解鎖（批 5）
+    rewrite_narration: bool = True  # 第十章 事件旁白每週改寫（批 10）
+    morning_mail: bool = True  # 第十章 回來的理由：人物的信每天 mail_hour 點送到（批 9；letters.mail_day）
+    mail_hour: int = Field(default=9, ge=0, le=23)  # 當地幾點送信（時區照 pill_day_utc_offset_hours）
+
+
+class WebPushRules(_Strict):
+    """網頁推送（減法季整合設計第十章「回來的理由」，批 9）：分頁關著、手機鎖著也跳一則通知，五種事——來信、約戰、決戰集結、
+    被截殺、被〈天下形勢〉提到（tianxia/notices.py 認，server.py 的看守送）。玩家在設定頁自己打開（預設關、第一次來信時問一次）；
+    enabled 是主機的開關，關著設定頁不畫那一顆、看守不開。畫面的改動，不掛 Config.jianfa。"""
+
+    enabled: bool = False  # 測試內容照它關著；content/config.json 打開
+    watch_seconds: float = Field(default=30, gt=0)  # 看守每幾秒看一次開了推播的人有沒有新的事
+    quiet_seconds: float = Field(default=120, ge=0)  # 這麼久之內同步過（分頁開著、正在玩）就不跳通知：畫面上已經看得到
+    per_round: int = Field(default=3, ge=1)  # 同一個人一輪最多跳幾則（離線一陣子回來不會被一串通知淹掉）
+    max_devices: int = Field(default=5, ge=1)  # 一個帳號最多記幾台裝置
+
+
 class ConquestRules(_Strict):
     """領地爭奪（第 38 項改版，docs/superpowers/specs/2026-10-20-領地爭奪-design.md；計畫 docs/superpowers/plans/2026-10-20-領地爭奪.md；
     tianxia/conquest.py）。開季時蓋章（WorldState.conquest_on，要第一季規則開著、劇本有官軍與黃巾、寫了 territory.blocks、豪強分屬兩軍），
@@ -3307,6 +3344,7 @@ class Config(_Strict):
     terrain_arts: TerrainArts = Field(default_factory=TerrainArts)  # 地利：武學跟此地最濃的意境同一路或被剋（見 TerrainArts）
     territory: TerritoryRules = Field(default_factory=TerritoryRules)  # 地盤易手（見 TerritoryRules）
     conquest: ConquestRules = Field(default_factory=ConquestRules)  # 領地爭奪（見 ConquestRules）
+    jianfa: JianfaRules = Field(default_factory=JianfaRules)  # 減法季（見 JianfaRules；暫名）
     xingshi: XingshiTuning = Field(default_factory=XingshiTuning)  # 〈天下形勢〉：領地爭奪每天一篇的旁白（見 XingshiTuning）
     ambush: AmbushRules = Field(default_factory=AmbushRules)  # 設伏劫道（見 AmbushRules）
     fortify: FortifyRules = Field(default_factory=FortifyRules)  # 修築工事（見 FortifyRules）
@@ -3399,6 +3437,7 @@ class Config(_Strict):
     push_events: bool = False
     push_watch_seconds: float = Field(default=5, gt=0)
     push_world_min_seconds: float = Field(default=10, ge=0)
+    web_push: WebPushRules = Field(default_factory=WebPushRules)  # 手機跳通知（減法季第十章，批 9；server_push.WebPush）
 
     season_days: float = DEFAULT_SEASON_DAYS
     # 第一季濃縮版的規則（預設關，beta 那一季照舊）：季曆、時刻表、三條戰線都掛在這個開關後面。
@@ -4620,3 +4659,49 @@ class Content(_Strict):
     @model_serializer(mode="wrap")
     def _drop_new_defaults(self, handler):
         return _drop_unset(handler(self), ("mark_rules",))  # 沒有痕跡規則的內容（測試內容）序列化一個鍵都不多
+
+
+# ── 三陣營四勝利（減法季整合設計第三章；計畫第五節，批 3c）──
+# 批 0 的 JianfaRules（Config.jianfa）還沒來，這一塊先獨立放、不掛 Config：批 0 到了在 JianfaRules 加 tiers、lean_default_by_join
+# 兩個欄位（同名、同預設），wins.rules_of 改讀 content.config.jianfa（計畫 5.0 第 7 條）。
+
+# 豪強開季的「此刻幫誰」照投靠點預設（企劃者 2026-10-24，計畫第十一節第 6 件）：鄉里結社、曹氏莊院幫官軍，豪族塢堡幫黃巾
+LEAN_DEFAULT_BY_JOIN = {"zhuo_militia_hall": "guan", "cao_manor": "guan", "haozu_fort": "huang"}
+# 四階的稱號（設計 3.3；鍵是「階:陣營 id」，wins.title_of 照它找、找不到再看只寫階的鍵）：第一階分官軍、黃巾，第三、四階分兩軍與豪強。
+# 字待 joy 潤（企劃者 2026-10-24 第 4 件：先用這組）
+TIER_TITLES = {
+    "1:guan": "漢室忠良", "1:huang": "黃天功臣",
+    "2:haoqiang": "一方之雄",
+    "3:guan": "有功之臣", "3:huang": "有功之臣", "3:haoqiang": "鄉里之望",
+    "4:guan": "隨軍", "4:huang": "隨軍", "4:haoqiang": "附從",
+}
+
+
+class TierRules(_Strict):
+    """季末四階（設計 3.3；wins.settle）。名次只在過了門檻的人裡排，人數照比例無條件捨去；第一、二階至少 1 人，
+    第三階的「前 40%」是累計的（含第一、二階）；同分同階（計畫 5.0 第 13 條）。20 人與 2,000 人同一條規則。"""
+
+    tier1_share: float = Field(default=0.10, ge=0, le=1)  # 第一階：贏的那一軍裡前 10%（至少 1 人）【定】
+    tier2_share: float = Field(default=0.10, ge=0, le=1)  # 第二階：豪強「替贏的那一軍」那一本前 10%（至少 1 人）；兩軍拿不到【定】
+    tier3_share: float = Field(default=0.40, ge=0, le=1)  # 第三階：各自前 40% 的其餘人（贏的、輸的、豪強都有）【定】
+    min_contribution: int = Field(default=60, ge=0)  # 每一階都要先過的門檻（絕對數，約「一季認真玩三天」）【待量】
+    start_shares: dict[int, float] = Field(default_factory=lambda: {1: 1.0, 2: 0.8, 3: 0.5, 4: 0.3})  # 下一季起手資源的成數【預設】
+    start_silver: int = Field(default=300, ge=0)  # 起手資源滿額：銀兩【預設】
+    start_xinde: int = Field(default=200, ge=0)  # 起手資源滿額：心得【預設】
+    titles: dict[str, str] = Field(default_factory=lambda: dict(TIER_TITLES))  # 「階:陣營 id」→ 稱號（待 joy 潤）
+
+    @model_validator(mode="after")
+    def _shares_in_order(self) -> "TierRules":
+        if self.tier1_share > self.tier3_share or self.tier2_share > self.tier3_share:
+            raise ValueError("第一、二階的比例不能大於第三階（第三階是累計的前幾成）")
+        if set(self.start_shares) - {1, 2, 3, 4}:
+            raise ValueError("start_shares 只有第 1～4 階")
+        return self
+
+
+class WinsRules(_Strict):
+    """三陣營四勝利的數字（批 0 之前的獨立一塊；欄位名照計畫第五節，到時候搬進 JianfaRules）。"""
+
+    tiers: TierRules = Field(default_factory=TierRules)
+    # 豪強的投靠點 → 開季（投靠那一下）預設幫哪一軍（wins.lean_default；wins.check 驗每個投靠點都有、都是它能幫的那一軍）
+    lean_default_by_join: dict[str, str] = Field(default_factory=lambda: dict(LEAN_DEFAULT_BY_JOIN))

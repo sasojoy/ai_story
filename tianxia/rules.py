@@ -569,6 +569,17 @@ def season_one(content: Content, world: WorldState) -> bool:
     return calendar.season_one_on(world, content)
 
 
+def jianfa(content: Content, world: WorldState | None, part: str | None = None) -> bool:
+    """減法季的規則在這一季開了沒（Config.jianfa，企劃者 2026-10-24）：主機的開關開著，而且這一季開季時也蓋了章
+    （WorldState.jianfa_on，world_state.stamp_season）。正在跑的季照它自己的章；開關關掉時一律照關著（主機的緊急開關）。
+    part 給了再看那一個子開關（JianfaRules 的欄位，例："explore_one"；整合設計第十二章）。
+    減法季的規則改動一律先問這一個（畫面的改動不掛開關）；world 是 None 一律是假。"""
+    cfg = content.config.jianfa
+    if world is None or not cfg.enabled or not world.jianfa_on:
+        return False
+    return part is None or bool(getattr(cfg, part))
+
+
 OffKind = Literal["thresholds", "storylines", "battles", "events", "milestones", "world_events", "unlocks"]
 
 

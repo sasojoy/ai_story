@@ -1148,9 +1148,28 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
   background: color-mix(in srgb, var(--card) 96%, transparent); color: var(--ink-2); font: inherit; font-size: 14px; cursor: pointer; white-space: nowrap;
 }
 .r-wash.on { background: var(--ink); border-color: var(--ink); color: var(--paper); }
-@media (max-width: 349px) { .r-top { gap: 6px; } .r-top .w-back, .r-top .w-tl, .r-wash { padding: 0 9px; } .r-pick { letter-spacing: 0; padding: 0 26px 0 12px; } }
+/* 輿圖四層（減法季整合設計第七章）：上面一排「大區名・全區・天下」；全區按著是墨底；拖遠了右上角一顆「回到我這」（app.js 的 homeCheck） */
+.r-full {
+  flex: none; height: 40px; padding: 0 14px; border-radius: 20px; border: 1px solid var(--line); box-shadow: var(--shadow); cursor: pointer;
+  background: color-mix(in srgb, var(--card) 96%, transparent); color: var(--ink); font: inherit; font-size: 14px; white-space: nowrap;
+}
+.r-full.on { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+.map-home {
+  position: absolute; right: 10px; top: 58px; z-index: 1; height: 34px; padding: 0 14px; border-radius: 17px; border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--card) 96%, transparent); color: var(--accent); font: inherit; font-size: 13px; font-weight: 700; box-shadow: var(--shadow); cursor: pointer;
+}
+.map-home[hidden] { display: none; }
+.mapx.tl-mode .map-home { display: none; }
+.m-wline .m-more { flex: none; color: var(--ink-2); font-size: 12px; white-space: nowrap; }
+.m-week { flex: none; color: var(--gold); font-size: 13px; font-weight: 700; white-space: nowrap; }
+.m-pull {
+  display: block; width: 100%; margin: 8px 0 2px; padding: 4px 0; border: 0; border-bottom: 1px dashed var(--line); background: none;
+  color: var(--ink-2); font: inherit; font-size: 12px; text-align: center; cursor: pointer;
+}
+@media (max-width: 349px) { .r-top { gap: 6px; } .r-top .w-back, .r-top .w-tl, .r-wash, .r-full { padding: 0 9px; } .r-pick { letter-spacing: 0; padding: 0 26px 0 12px; } }
 .r-compass { position: absolute; left: 10px; bottom: 62px; display: none; pointer-events: none; opacity: 0.9; }
 .mapx.region .r-compass { display: block; }
+.mapx.region.near .r-compass { display: none; } /* 第一層不畫羅盤（減法季整合設計第七章的對照圖；左下角會壓到走得到的地方的名字） */
 .mapx.region .tx-roads path { stroke: #c9b996; stroke-width: 2.2px; stroke-dasharray: none; stroke-opacity: 0.85; }
 .mapx.region .tx-roads .rd-core { display: none; }
 /* 天下圖抽屜那一行：你在哪＋「進入此區 ›」 */
@@ -1195,6 +1214,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
   .mapx .mgrab { display: none; }
   .mapx .mbody { padding-top: 14px; }
   .w-top, .r-top { right: 370px; }
+  .map-home { right: 370px; }
   .r-compass { bottom: 12px; }
   .map-banner { left: calc((100% - 360px) / 2); }
 }
