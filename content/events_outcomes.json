@@ -299,8 +299,7 @@
      "effect": {
       "text": "頭馬舔了你手裡的鹽，乖乖讓你牽著，其餘的馬也跟了過來。",
       "stats": {
-       "silver": 10,
-       "xinde": 4
+       "silver": 10
       },
       "marks": {
        "yanshan_foot:馴頭馬": 1
@@ -412,8 +411,7 @@
      "effect": {
       "text": "你撞翻了一籠雞，差役追著滿街亂跑的雞轉了半天，鹽販早挑著擔子出了鎮。",
       "stats": {
-       "good": 1,
-       "xinde": 4
+       "good": 1
       },
       "marks": {
        "market_town:亂市": 1
@@ -650,8 +648,7 @@
      "effect": {
       "text": "你把斷梁一點點撬開，地窖口透進天光。老漢爬出來，說這條命是你給的。",
       "stats": {
-       "good": 2,
-       "fame": 1
+       "good": 2
       },
       "marks": {
        "xiaquyang:開窖": 1
@@ -754,8 +751,8 @@
      "effect": {
       "text": "你站上船頭報出名號，快船上的人面面相覷，竟真的收了撓鉤。船主硬塞給你一包錢。",
       "stats": {
-       "good": 2,
-       "fame": 2,
+       "good": 1,
+       "fame": 1,
        "silver": 10
       },
       "marks": {
@@ -900,9 +897,6 @@
      },
      "effect": {
       "text": "你在悶熱的草棚裡坐了一整夜，天亮亭長一看你的面相，揮手放行。同棚的行商佩服你沉得住氣。",
-      "stats": {
-       "xinde": 4
-      },
       "marks": {
        "luoyang_road:守棚": 1
       },
@@ -975,8 +969,7 @@
      "effect": {
       "text": "你攀上高架，三兩下把繩結打成死扣。工匠說你身子比猴還靈，工錢外多塞了幾個錢。",
       "stats": {
-       "silver": 10,
-       "xinde": 4
+       "silver": 10
       },
       "marks": {
        "baima_temple:繫梁": 1
@@ -1085,8 +1078,7 @@
      "effect": {
       "text": "你跪在泥裡用木板一點點刮開濕土，直到孩子的手伸了出來。老卒說這一帶往後誰都認得你。",
       "stats": {
-       "good": 2,
-       "xinde": 4
+       "good": 2
       },
       "marks": {
        "beimang_hill:刨土": 1
@@ -2300,9 +2292,6 @@
      },
      "effect": {
       "text": "你說船上只有幾條魚，頭目看你不像有錢人，收了幾個錢就放行了。",
-      "stats": {
-       "xinde": 4
-      },
       "marks": {
        "yu_river:講價": 1
       },

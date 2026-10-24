@@ -5,6 +5,9 @@
 判法三選一（check／combat／cost）、難度在這則固定選項的帶子裡、combat 是這則已有的隊伍、
 stats 只有允許的鍵（博聞一律不給）、marks 的地點是這則的第一個地點、痕跡名 2～4 個中文字且同一則不重複、
 貢獻 1～4、文字沒有簡體、沒有「假人」那幾個詞、敘事裡不寫阿拉伯數字。
+作惡的後果（企劃者 2026-10-24 第 8 件 a：effect 的 good 為負）：原事件有作惡固定選項（stats.evil 為正）才准有、一則最多一種、
+不算在 2～4 種裡、不是最後一種；不記貢獻；給的不准比原事件的作惡選項多（俠寇選項也算）。
+其他後果給的不准比這則「有檢定或打仗的開放選項」多（俠寇選項不算）。
 用法：python scripts/check_outcomes.py [檔案路徑]
 """
 from __future__ import annotations
@@ -61,13 +64,19 @@ def _region_of(loc: dict) -> str | None:
     return None
 
 
+def _is_evil(outcome: dict) -> bool:
+    """作惡的後果（企劃者 2026-10-24 第 8 件 a）：effect 的 good 為負。"""
+    return (outcome.get("effect") or {}).get("stats", {}).get("good", 0) < 0
+
+
 def _simplified(text: str) -> bool:
     try:
         from tianxia import zh
     except Exception:  # noqa: BLE001 — 退而求其次用一份常見簡體字表
         common = "这说话军发国会对时们么没见间开关门问长东车马书学语产业内历后头里气动电队战过还进运远"
         return any(ch in text for ch in common)
-    return zh.to_traditional(text) != text
+    same = str.maketrans("臺", "台")  # 原事件也寫「灶台」：台、臺兩種寫法都是正字，不算簡體（退回手寫表時會把台換成臺）
+    return zh.to_traditional(text).translate(same) != text.translate(same)
 
 
 def main(path: Path) -> int:
@@ -125,8 +134,16 @@ def main(path: Path) -> int:
         band = (min(diffs), max(diffs)) if diffs else (3, 8)
         squads = {c["combat"] for c in event.get("choices", []) if c.get("combat")}
         outcomes = entry.get("outcomes") or []
-        if not 2 <= len(outcomes) <= 4:
-            problems.append(f"{where}：後果要 2～4 種，有 {len(outcomes)}")
+        evil_ones = [o for o in outcomes if _is_evil(o)]
+        if not 2 <= len(outcomes) - len(evil_ones) <= 4:
+            problems.append(f"{where}：後果要 2～4 種（作惡那一種另算），有 {len(outcomes) - len(evil_ones)}")
+        if len(evil_ones) > 1:
+            problems.append(f"{where}：作惡的後果最多一種，有 {len(evil_ones)}")
+        evil_choices = [c for c in event.get("choices", []) if c.get("effect", {}).get("stats", {}).get("evil", 0) > 0]
+        if evil_ones and not evil_choices:
+            problems.append(f"{where}：原事件沒有作惡的固定選項，不能有作惡的後果")
+        open_choices = [c for c in event.get("choices", []) if not c.get("needs")]
+        graded = [c for c in open_choices if c.get("check") or c.get("combat")] or open_choices
         marks_seen: set[str] = set()
         ids_seen: set[str] = set()
         for i, o in enumerate(outcomes):
@@ -172,6 +189,13 @@ def main(path: Path) -> int:
             bad = set(stats) - ALLOWED_STATS
             if bad:
                 problems.append(f"{ow}：stats 有不准的鍵 {sorted(bad)}")
+            evil = _is_evil(o)
+            rivals = evil_choices if evil else graded
+            for key, value in stats.items():
+                best = max((c.get("effect", {}).get("stats", {}).get(key, 0) for c in rivals), default=0)
+                if value > 0 and value > best:
+                    kind = "原事件的作惡選項" if evil else "有檢定或打仗的開放選項"
+                    problems.append(f"{ow}：{key} +{value} 比{kind}最多的 +{best} 還多")
             for key in eff.get("marks", {}):
                 loc_id, _, name = key.partition(":")
                 if loc_id != first:
@@ -184,7 +208,10 @@ def main(path: Path) -> int:
             if "marks" not in eff:
                 problems.append(f"{ow}：沒有痕跡")
             c = eff.get("contribution")
-            if not isinstance(c, int) or not 1 <= c <= 4:
+            if evil:  # 作惡不能是最後一種：最後一種照上面 fallback 的規矩，不准有 stats
+                if c:
+                    problems.append(f"{ow}：作惡的後果不記貢獻（contribution {c}）")
+            elif not isinstance(c, int) or not 1 <= c <= 4:
                 problems.append(f"{ow}：contribution {c} 要在 1～4")
             fe = o.get("fail_effect")
             if "cost" not in o:
