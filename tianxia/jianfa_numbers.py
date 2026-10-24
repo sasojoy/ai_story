@@ -71,6 +71,13 @@ class JianfaNumbers(_Strict):
     beat_cap: int = Field(default=80, ge=1)
     bounty_encounter_bonus: int = Field(default=30, ge=0)  # 接了這裡的討伐懸賞：遭遇那一欄 +N，夾在 beat_cap【定】
     explore_tables: list[ExploreOneTable] = Field(default_factory=_default_tables, min_length=1)  # 六張表，照順序比對
+    # ── 遭遇的三道閘（設計 4.2；企劃者 2026-10-24「15 次開始下降，最低 0.3」「45 之後只有交戰的情況給的經驗可以繼續升級」）──
+    drill_full_per_day: int = Field(default=15, ge=0)  # 一天前幾場全額【定】
+    drill_decay: float = Field(default=0.8, gt=0, le=1)  # 之後每場再乘這個（疊加）【預設】
+    drill_floor: float = Field(default=0.3, ge=0, le=1)  # 最低到這裡【定】
+    drill_outlevel_steps: tuple[float, ...] = Field(default=(0.5, 0.1), min_length=1)  # 對手低一檔、兩檔（以上）的倍數【定】
+    drill_outlevel_band: int = Field(default=10, ge=1)  # 一檔多寬（等級與對手難度都照它切）【待量】
+    drill_level_cap: int = Field(default=45, ge=1)  # 這一級以後只認打出來的經驗，其餘換心得【定】
 
     @field_validator("explore_tables")
     @classmethod
