@@ -2599,6 +2599,43 @@ class FigureLifeTuning(_Strict):
     rally_cal_days: float = Field(default=3.0, gt=0)
 
 
+class ParleyTuning(_Strict):
+    """開口求人（Joy 2026-10-23「先做看看」；設計稿 https://claude.ai/artifact/KtRz62jWShogpaXEzv2sbt；tianxia/parley.py）：
+    對話裡「自己說」那一句也可以是求他做事。模型當談判者，從引擎列的清單挑一件、評一個意願、要不要開條件；引擎照情誼與份量夾住意願、
+    自己擲骰、做事。第一批：當場做、先付後做、婉拒；帶路、並肩出陣、指點、給情報、贈物五件事。數字全在這裡，模型不碰。"""
+
+    enabled: bool = False  # 關著時「自己說」一個字都不變（20 字、不列清單、不擲骰）
+    say_max: int = Field(default=40, ge=1)  # 開著時「自己說」最多幾個字（開口求人要講得清楚一點）
+    asks_per_day: int = Field(default=2, ge=1)  # 同一位人物一個遊戲日最多被求幾件事（算在一天三輪對話裡）
+    # 意願的天花板：情誼到第幾檔（[門檻, 上限]，由低到高）；份量 1、2、3 各減多少；敵對陣營再減；最低 floor
+    bands: list[list[int]] = Field(default_factory=lambda: [[0, 50], [20, 65], [40, 80], [60, 90]])
+    band_words: list[str] = Field(default_factory=lambda: ["生疏", "認得", "信得過", "託付"])
+    weight_cut: list[int] = Field(default_factory=lambda: [0, 10, 25])
+    enemy_cut: int = Field(default=30, ge=0)
+    floor: int = Field(default=5, ge=0, le=100)
+    # 五件事的份量與給多少
+    escort_places: int = Field(default=6, ge=1)  # 帶路最多列幾個目的地（近的先）
+    backing_share: float = Field(default=0.3, ge=0)  # 並肩出陣：今天在他那一區出陣一次，這一仗本人的威力多幾成
+    spar_xinde: int = Field(default=15, ge=0)  # 指點一招：心得（同一位一天一次）
+    gift_silver: int = Field(default=20, ge=0)  # 贈物：他手頭沒有素材時給的銀兩
+    intel_count: int = Field(default=3, ge=1)  # 給情報：講幾件事
+    # 條件：交銀的價錢照份量；交素材是三份一階；打探、討伐是委託（同書信的委託，辦成了下次見面他兌現）
+    silver_terms: list[int] = Field(default_factory=lambda: [20, 50, 100])
+    material_terms: int = Field(default=3, ge=1)
+    # 第二批：先做後付與食言、人物主動開口、同行中的自由文字
+    broken_cut: int = Field(default=10, ge=0)  # 每一筆還沒抵掉的食言（自己的、聽說的）讓意願天花板減多少
+    owe_limit: int = Field(default=3, ge=1)  # 同時最多欠幾位人物（欠滿了他不再先做後付，改成先付後做）
+    owe_broken: int = Field(default=15, ge=0)  # 先做後付的食言：情誼減多少（你白拿了東西）
+    plea_broken: int = Field(default=8, ge=0)  # 接了他的請託沒做到：情誼減多少
+    heard_broken: int = Field(default=3, ge=0)  # 他的盟友聽說你食言：情誼減多少
+    heavy_days: int = Field(default=1, ge=0)  # 份量 3 的條件期限多幾個遊戲日
+    plea_moods: list[str] = Field(default_factory=lambda: ["焦慮", "悲憤"])  # 心事是這幾種時，你求見他，他會先開口求你
+    plea_wants: int = Field(default=3, ge=1)  # 他想請你做的事列幾件給模型挑
+    plan_floor: int = Field(default=5, ge=0, le=100)  # 跟他商量打法：成功率夾在這兩個數之間（放手一搏同一個上限）
+    plan_cap: int = Field(default=85, ge=0, le=100)
+    escort_pace: float = Field(default=0.5, gt=0)  # 他帶路：步行的時間乘這個數（他熟路、腳程快），一分體力不花
+
+
 class RiseTuning(_Strict):
     """江湖水漲（企劃者 2026-10-14「玩家變強後好像也沒有更高的挑戰，10 幾級都能把所有歷史武將跟所有事件打敗，根本不會輸」；
     tianxia/rise.py）。量到的原因（scripts/measure_difficulty.py，週末、2026-10-14）：大勢人物本人最難 160、劇情戰的大場面最難 150，
@@ -3178,6 +3215,7 @@ class Config(_Strict):
     signature_arts: SignatureArtTuning = Field(default_factory=SignatureArtTuning)  # 本命武學的威力與學到時的成數（見 SignatureArtTuning）
     tactics: TacticTuning = Field(default_factory=TacticTuning)  # 一般的仗的回合與本命戰法（見 TacticTuning）
     figure_life: FigureLifeTuning = Field(default_factory=FigureLifeTuning)  # 人物活起來：每日行事、心事、風聞（見 FigureLifeTuning）
+    parley: ParleyTuning = Field(default_factory=ParleyTuning)  # 開口求人：模型談判、引擎做事（見 ParleyTuning）
     companions: CompanionsTuning = Field(default_factory=CompanionsTuning)  # 歷史武將同行：招募、名下三位、決戰助陣（見 CompanionsTuning）
     # 情誼放慢（歷史武將同行第三節、9.4）：每一筆加的情誼乘這個倍數（renown.warmed：四捨五入，原本加 1 以上的至少加 1；扣的不乘）。
     # 1 是不放慢；正式 0.7、週末設定 0.85。對話、事件、名聲起步、風聞都走它；名將贈禮、本命、招募的門檻不動，所以跟著晚一點拿到

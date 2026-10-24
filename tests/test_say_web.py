@@ -33,7 +33,7 @@ def test_the_say_button_turns_into_a_box_only_when_pressed(talking):
     plain = run(talking, "return H.pageJianghu();")
     assert 'data-id="talk:say"' in plain and "自己說…" in plain and 'id="say-form"' not in plain
     opened = run(talking, "return H.pageJianghu();", S={"saying": True})
-    assert 'id="say-form"' in opened and 'maxlength="20"' in opened and 'data-id="talk:say"' not in opened
+    assert 'id="say-form"' in opened and f'maxlength="{talking["say_max"]}"' in opened and 'data-id="talk:say"' not in opened
 
 
 def test_sending_a_line_posts_it_and_closes_the_box(talking):

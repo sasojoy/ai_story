@@ -633,6 +633,16 @@ class PlayerState(BaseModel):
     letter_day: int = -1  # 上一封信是第幾個遊戲日收到的（一天最多一封）
     letter_seq: int = 0  # 書信與委託的流水號
     cheers: list[str] = Field(default_factory=list)  # 等著寫道賀信的「人物 id|你做的事」（figure_life.spread 情誼往上動的那幾位）
+    # 開口求人（tianxia/parley.py；Joy 2026-10-23「先做看看」）：人物 id → 今天求過他幾件、婉拒過哪幾件、指點過沒；
+    # 還沒答覆的條件（他開了條件、你還沒接）；辦成委託之後他欠你的那一件；今天答應陪你出陣的人。這一季的，換季清掉
+    parley_days: dict[str, ParleyDay] = Field(default_factory=dict)
+    parley_terms: dict[str, ParleyTerms] = Field(default_factory=dict)
+    parley_owed: dict[str, str] = Field(default_factory=dict)
+    parley_backing: ParleyBacking | None = None
+    parley_debts: dict[str, ParleyDebt] = Field(default_factory=dict)  # 第二批：你欠人物的事（先做後付、接了他的請託）
+    parley_records: dict[str, ParleyRecord] = Field(default_factory=dict)  # 第二批：守約紀錄
+    parley_escort: str | None = None  # 第二批：這一趟是誰帶你走的（路上可以跟他說一句）；出發時清掉，帶路時才寫
+    parley_road_leg: int = -1  # 這一趟在第幾站跟他說過了（Journey.reached；每到一站一次）
     # 上一季的交情（第一季設計第十四節；正式版辛）：人物 id → 最近一次有聊過的那一季的關係筆記。換季時把
     # relationship_notes 搬過來（這一季的從頭寫），沒聊過的人物保留更早的那一句。只給模型當背景，畫面不顯示
     past_notes: dict[str, str] = Field(default_factory=dict)
@@ -1077,6 +1087,59 @@ class Bounty(BaseModel):
     # 或「委託」（求援書信附的那一件，只在收信的人身上：PlayerState.letters）。標題與掛單人照它寫，交差時那位人物情誼另加
     figure: str | None = None
     motive: Literal["復仇", "追剿", "委託", "求援"] | None = None
+    parley_ask: str | None = None  # 開口求人的條件（parley.py）：辦成了，下回見面他兌現這一件
+
+
+class ParleyDay(BaseModel):
+    """一位人物一個遊戲日的開口紀錄（parley.py）：day 是 rules.game_day；換日就整份重來。"""
+
+    day: int
+    asks: int = 0  # 求了幾件（模型挑到清單上的一件才算）
+    refused: list[str] = Field(default_factory=list)  # 今天婉拒過的事（ask id）：同一件今天不能再求
+    spar: bool = False  # 今天指點過了
+    plea: bool = False  # 今天他主動開口求過你了（不管你接不接，一天一次）
+
+
+class ParleyTerms(BaseModel):
+    """他開了條件、你還沒接（parley.py）：ask 是你求的那件事，condition 是他要的（清單上的 id），text 是他開條件的那一句。"""
+
+    ask: str
+    condition: str
+    text: str = ""
+    at: float = 0.0
+    plea: bool = False  # 這是他主動開口求你（第二批）：condition 是他要你做的、ask 是他的回報；接了不做到期是食言
+
+
+class ParleyDebt(BaseModel):
+    """你答應了他、還沒做到的一件事（parley.py 第二批）。kind：owe 先做後付（他已經替你做了，食言 −15）、plea 他主動開口求你
+    （你接了，食言 −8）。condition 是條件 id；交銀、交素材的 task 是 None（見面按「還他」），打探、討伐的 task 是那件委託的 id。
+    due 是世界秒，過了還沒做到就是食言（parley.lapse）。一位人物最多一件。"""
+
+    kind: str
+    condition: str
+    weight: int = 1
+    due: float
+    task: str | None = None
+
+
+class ParleyRecord(BaseModel):
+    """你跟一位人物的守約紀錄（parley.py 第二批）：答應幾件、做到幾件、食言幾件；owing 是還沒抵掉的食言、heard 是他聽說你對誰食言
+    （人物 id），兩樣每一筆讓他那邊的意願天花板減 Config.parley.broken_cut。做到一件事先抵自己的、再抵聽說的。這一季的，換季清掉。"""
+
+    promised: int = 0
+    kept: int = 0
+    broken: int = 0
+    owing: int = 0
+    heard: list[str] = Field(default_factory=list)
+
+
+class ParleyBacking(BaseModel):
+    """答應陪你出陣（parley.py 的並肩出陣）：今天（day）在他那一區（region）出陣一次，本人威力多 Config.parley.backing_share。"""
+
+    figure: str
+    region: str | None
+    day: int
+    plan: bool | None = None  # 出陣前跟他商量的打法（第二批）：None 沒商量、True 成了（這一仗威力加倍）、False 沒成（他這一仗打空）
 
 
 class TalkMemo(BaseModel):
@@ -1094,7 +1157,7 @@ class Letter(BaseModel):
     寫不出來照固定句）。"""
 
     id: int
-    kind: Literal["求援", "道賀", "邀宴", "道謝"]  # 邀宴、道謝是第三批（宴客、求援委託辦成了）
+    kind: Literal["求援", "道賀", "邀宴", "道謝", "條件"]  # 邀宴、道謝是第三批（宴客、求援委託辦成了）；條件是開口求人（parley.py）
     sender: str  # 對話人物 id
     at: float  # 收到的那一刻（世界秒）
     mood: str = ""  # 寫信時他的心事（求援：焦慮、悲憤）

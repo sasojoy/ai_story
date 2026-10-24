@@ -35,6 +35,11 @@
   // 重新整理頁面就回到步行；每個請求都帶著它（見 api()），伺服器照它排選單上的「前往」
   const FREE_TEXT_OPTION = "choice:free"; // 事件的隨口應對（engine.FREE_TEXT_OPTION）
   const SAY_OPTION = "talk:say"; // 跟人物對話時的「自己說」（engine.SAY_OPTION）：按了叫出輸入框，送出走 /api/say
+  // 同一個輸入框的另外兩顆（開口求人第二批，engine.TEXT_TALKS）：跟答應陪你出陣的人商量打法、他帶路的路上跟他說一句。
+  // S.saying 記著是哪一顆（true 是舊的寫法＝自己說），送出時連 option 一起給 /api/say
+  const SAY_OPTIONS = [SAY_OPTION, "talk:plan", "parley:road"];
+  const SAY_HINTS = { "talk:plan": "跟他說你想好的打法", "parley:road": "路上想跟他說的話，也可以開口求他" };
+  const sayingId = () => (S.saying === true ? SAY_OPTION : S.saying);
   const SENSE_DRAW = "sense:draw"; // 有所感進了感悟狀態：「把心中的形畫下來」叫出畫布（sensing.DRAW），畫好送 /api/sense
   const MOVE_MODES = [
     { id: "walk", name: "步行" },
@@ -361,7 +366,7 @@
     // 破境卡：動作回來的與輪詢拿到的都走這裡（S.main 換好之後才畫）。測試只抽 setMain 出來跑，沒有 ascendCard 就不畫
     if (typeof ascendCard === "function") setTimeout(ascendCard, 0);
     if (main.event_free_text == null) S.answering = false; // 事件過去了，輸入框跟著收起
-    if (!(main.options || []).some((o) => o.id === SAY_OPTION)) S.saying = false; // 交談結束了，「自己說」的輸入框跟著收起
+    if (!(main.options || []).some((o) => o.id === sayingId())) S.saying = false; // 交談結束了（或那一顆沒了），輸入框跟著收起
     if (S.sensing && !(main.options || []).some((o) => o.id === SENSE_DRAW)) closeSense(); // 感悟狀態過去了（悟成、作廢），畫布跟著收起
     // 見聞的紅點只為新的一場亮（比 card_id）：配點之後「剛剛」照舊是升級那一場的卡片，看過戰報再配點不再亮一次（計畫二最終審查 M1）；
     // 放在這裡是因為動作回來的與輪詢拿到的都走 setMain——決戰收場的卡片常常是輪詢（sync）補送的。登入那一份不亮（S.main 還沒有）
@@ -2570,8 +2575,8 @@
     // 審查 I1 起伺服器預設不給（sensing.SHOW_KINDS）：鈕上照舊 1～4；企劃者要恢復時伺服器那邊改一行，這裡照畫
     const senseTag = (o) => (m.sense_help && m.sense_help.tags && m.sense_help.tags[o.id]) || "";
     const menu = idleMenu(m) ? actionBar(m) : `<div class="options">${opts.map((o, i) => S.sensing && o.id === SENSE_DRAW ? sensePadHtml() : o.id === FREE_TEXT_OPTION && S.answering && o.enabled ? `
-        <form class="free answer" id="answer-form"><input class="input" name="text" maxlength="20" placeholder="${esc(o.label)}（20字內）" aria-label="${esc(o.label)}"><button class="btn primary small" type="submit">說出口</button></form>` : o.id === SAY_OPTION && S.saying && o.enabled ? `
-        <form class="free answer" id="say-form"><input class="input" name="text" maxlength="20" placeholder="想對他說的話（20字內）" aria-label="自己說"><button class="btn primary small" type="submit">說出口</button></form>` : isTask(o) ? `${i === firstTask ? '<div class="road-tasks">' : ""}${taskButton(o)}${i === lastTask ? "</div>" : ""}` : paired && isWay(o) ? `${i === firstWay ? '<div class="road-tasks road-ways">' : ""}${wayButton(o)}${i === lastWay ? "</div>" : ""}` : `${i === firstMove && !modesLast ? modes : ""}
+        <form class="free answer" id="answer-form"><input class="input" name="text" maxlength="20" placeholder="${esc(o.label)}（20字內）" aria-label="${esc(o.label)}"><button class="btn primary small" type="submit">說出口</button></form>` : SAY_OPTIONS.includes(o.id) && S.saying && o.id === sayingId() && o.enabled ? `
+        <form class="free answer" id="say-form"><input class="input" name="text" maxlength="${m.say_max || 20}" placeholder="${SAY_HINTS[o.id] ? `${SAY_HINTS[o.id]}（${m.say_max || 20}字內）` : (m.say_max || 20) > 20 ? `想對他說的話，也可以開口求他做事（${m.say_max}字內）` : "想對他說的話（20字內）"}" aria-label="${esc(o.label)}"><button class="btn primary small" type="submit">說出口</button></form>` : isTask(o) ? `${i === firstTask ? '<div class="road-tasks">' : ""}${taskButton(o)}${i === lastTask ? "</div>" : ""}` : paired && isWay(o) ? `${i === firstWay ? '<div class="road-tasks road-ways">' : ""}${wayButton(o)}${i === lastWay ? "</div>" : ""}` : `${i === firstMove && !modesLast ? modes : ""}
         <button class="btn ${followsMode(o.id) ? "go" : ""}${!o.enabled && o.note ? " off" : ""}" data-act="${!o.enabled && o.note ? "opt-why" : "choose"}" data-id="${esc(o.id)}" ${!o.enabled && o.note ? `data-why="${esc(o.note)}" title="${esc(o.note)}" aria-disabled="true"` : o.enabled ? "" : "disabled"}>
           ${senseTag(o) ? `<span class="k sense">${esc(senseTag(o))}</span>` : o.tag ? `<span class="k rn-tag ${rnPathClass(o.tag)}">${esc(o.tag)}</span>` : `<span class="k">${o.id.startsWith("move:") ? "→" : o.id.startsWith("road:back") ? "↩" : i + 1}</span>`}${optLabelHtml(o)}
         </button>`).join("")}${modesLast ? modes : ""}
@@ -8263,8 +8268,8 @@
       if (input) input.focus();
       return;
     }
-    if (id === SAY_OPTION) { // 自己說：先叫出輸入框，寫好再送（見 sayLine）
-      S.saying = true;
+    if (SAY_OPTIONS.includes(id)) { // 自己說（與商量打法、路上跟他說）：先叫出輸入框，寫好再送（見 sayLine）
+      S.saying = id;
       renderPage();
       const input = document.querySelector("#say-form .input");
       if (input) input.focus();
@@ -8321,7 +8326,7 @@
       submitBtn.textContent = "對方沉吟中…";
       const stop = watchQueue(submitBtn, "對方沉吟中…");
       try {
-        const r = await api("/api/say", { text });
+        const r = await api("/api/say", { text, option: sayingId() });
         S.saying = false;
         applyMain(r.main);
         window.scrollTo({ top: 0, behavior: "smooth" });
