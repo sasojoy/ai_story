@@ -131,3 +131,23 @@ def test_parley_off_requires_nothing_extra(content, game):
 def test_the_prompt_keeps_refuse_out_of_condition(on, talking):
     prompt = talking._parley_prompt("mate")
     assert f"不能填 \"{parley.REFUSE}\"" in prompt and "ask 也照樣填玩家求的那件事" in prompt
+
+
+def test_willing_cannot_be_null_on_the_wire(wire):
+    """主機複驗：商量打法 willing 漏填 5/30——鍵已經強制要寫，模型寫成 null。型別裡的 null 也要拿掉。"""
+    wire["replies"] = [_reply(willing=70, narrative_no="不成。")]
+    companion_agent.generate_turn(OllamaClient(), [{"role": "user", "content": "談"}], parley.PLAN_FIELDS)
+    assert wire["schemas"][0]["properties"]["willing"]["type"] == "integer"
+
+
+def test_a_plan_without_a_rate_is_not_silently_floored(talking):
+    s = talking.state
+    s.player.parley_backing = ParleyBacking(figure="mate", region=None, day=parley.game_day(talking.content, s.world))
+    with mock.patch.object(companion_agent, "generate_turn", return_value=OPEN):  # willing 是 None
+        msgs = talking.choose(PLAN_OPTION, text="從左翼包抄")
+    assert msgs == ["韓鐵沉吟不語。"] and s.player.parley_backing.plan is None  # 沒談成，還可以再商量
+    assert PLAN_OPTION in {o.id for o in talking.options(odds=False)}
+
+
+def test_the_prompt_keeps_condition_ids_out_of_ask(on, talking):
+    assert "只能填在 condition，不能填在 ask" in talking._parley_prompt("mate")
