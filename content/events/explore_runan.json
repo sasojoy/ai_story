@@ -558,7 +558,100 @@
       "fail_effect": {
         "text": "你的法子沒成，折騰了大半天，他的傷反倒更重了。",
         "stamina": -10
-      }
+      },
+      "outcomes": [
+        {
+          "id": "heal",
+          "tag": "療傷：拔箭、敷藥",
+          "check": {
+            "stat": "wis",
+            "difficulty": 4
+          },
+          "effect": {
+            "text": "你按住傷口，一下把箭頭剜了出來，又嚼了草藥敷上。他緩過氣來，拉著你的手說來世做牛做馬。",
+            "stats": {
+              "good": 2
+            },
+            "marks": {
+              "hilltop_wilds:拔箭": 1
+            },
+            "contribution": 2
+          },
+          "fail_effect": {
+            "text": "你手一抖，傷口血流不止，他痛得昏了過去。你守了他半夜，他才醒轉。",
+            "stamina": -10
+          }
+        },
+        {
+          "id": "carry",
+          "tag": "背人：背他到鄉亭",
+          "check": {
+            "stat": "con",
+            "difficulty": 5
+          },
+          "effect": {
+            "text": "你背著他走了二十里，鄉亭的亭長認得他，答應替他說情。",
+            "stats": {
+              "good": 2,
+              "fame": 1
+            },
+            "marks": {
+              "hilltop_wilds:送卒": 1
+            },
+            "contribution": 2
+          },
+          "fail_effect": {
+            "text": "走到一半你實在背不動了，只能把他放在路邊的茅棚裡，自己回頭找人。",
+            "stamina": -15
+          }
+        },
+        {
+          "id": "supply",
+          "tag": "留水糧：給他水、乾糧和幾個錢",
+          "cost": {
+            "silver": 5
+          },
+          "effect": {
+            "text": "你把水囊和乾糧留給他，又塞了幾個錢，讓他傷好了去汝南找鄉亭。他啞著嗓子說記住你了。",
+            "stats": {
+              "good": 1
+            },
+            "marks": {
+              "hilltop_wilds:留糧": 1
+            },
+            "contribution": 1
+          }
+        },
+        {
+          "id": "rob",
+          "tag": "趁危：翻他的行囊、摸走他的錢",
+          "check": {
+            "stat": "agi",
+            "difficulty": 4
+          },
+          "effect": {
+            "text": "你假意替他找水，手往他的行囊裡一探，摸走了幾串錢。他看見了，沒力氣說話，只是把臉轉向壕壁。",
+            "stats": {
+              "silver": 10,
+              "good": -2
+            },
+            "marks": {
+              "hilltop_wilds:劫卒": 1
+            }
+          },
+          "fail_effect": {
+            "text": "你的手才伸進行囊，他猛地攥住你的手腕不放，你掙了半天才脫身，掌心被指甲劃出幾道血痕。",
+            "stamina": -10
+          }
+        },
+        {
+          "id": "leave",
+          "tag": "走開：不管、看著、對不上的",
+          "effect": {
+            "text": "你餵他喝了一口水，順著壕溝走遠了。"
+          }
+        }
+      ]
     }
   },
   {
@@ -662,7 +755,80 @@
         "stats": {
           "fame": -1
         }
-      }
+      },
+      "outcomes": [
+        {
+          "id": "expose",
+          "tag": "揭穿：驗斗、量米、當眾拆穿",
+          "check": {
+            "stat": "wis",
+            "difficulty": 5
+          },
+          "effect": {
+            "text": "你抓起那隻斗往秤上一放，足足少了兩成。圍觀的人一陣譁然，米商只好照舊價開倉。",
+            "stats": {
+              "good": 2,
+              "fame": 1
+            },
+            "marks": {
+              "runan_market:平糶": 1
+            },
+            "contribution": 3
+          },
+          "fail_effect": {
+            "text": "米商叫夥計把你推出人群，說你是來攪局的，有幾個人對你指指點點。",
+            "stats": {
+              "fame": -1
+            }
+          }
+        },
+        {
+          "id": "shield",
+          "tag": "護人：擠進去護住被推倒的人",
+          "check": {
+            "stat": "str",
+            "difficulty": 3
+          },
+          "effect": {
+            "text": "你用肩膀頂開人潮，把老婦扶到牆邊。她的米袋破了，你幫她一把把捧回去。",
+            "stats": {
+              "good": 1
+            },
+            "marks": {
+              "runan_market:護弱": 1
+            },
+            "contribution": 1
+          },
+          "fail_effect": {
+            "text": "人潮太猛，你也被擠倒，身上被踩了好幾腳。",
+            "stamina": -10
+          }
+        },
+        {
+          "id": "buy",
+          "tag": "買米：掏錢買、替人墊",
+          "cost": {
+            "silver": 10
+          },
+          "effect": {
+            "text": "你咬牙付了錢，扛著一斗米走出人群，分了一半給門邊那個空著手的老婦。",
+            "stats": {
+              "good": 1
+            },
+            "marks": {
+              "runan_market:分米": 1
+            },
+            "contribution": 1
+          }
+        },
+        {
+          "id": "leave",
+          "tag": "走開：不管、看著、對不上的",
+          "effect": {
+            "text": "你擠出人群，米鋪前的叫罵聲還在身後響著。"
+          }
+        }
+      ]
     }
   },
   {
@@ -896,7 +1062,61 @@
       "fail_effect": {
         "text": "浪頭太急，你嗆了好幾口水，最後是下游的漁船把孩子撈起來的。",
         "stamina": -12
-      }
+      },
+      "outcomes": [
+        {
+          "id": "dive",
+          "tag": "下水：跳下去撈人",
+          "check": {
+            "stat": "con",
+            "difficulty": 5
+          },
+          "effect": {
+            "text": "河水冰涼刺骨，你憋著氣潛下去，抓住孩子的衣領把他拖上了岸。他吐了幾口水，哇地哭出聲來。",
+            "stats": {
+              "good": 2,
+              "fame": 1
+            },
+            "marks": {
+              "qiao_county:撈童": 1
+            },
+            "contribution": 2
+          },
+          "fail_effect": {
+            "text": "你被暗流捲出十幾丈遠，嗆了好幾口水才爬上岸。孩子被下游的漁夫撈起了。",
+            "stamina": -20
+          }
+        },
+        {
+          "id": "rope",
+          "tag": "拋繩：沿岸追、拋繩或竹竿",
+          "check": {
+            "stat": "agi",
+            "difficulty": 3
+          },
+          "effect": {
+            "text": "你追著竹竿跑了一段，看準時機把繩子拋過去，孩子死死抓住，被你拉了回來。",
+            "stats": {
+              "good": 1
+            },
+            "marks": {
+              "qiao_county:拋繩": 1
+            },
+            "contribution": 2
+          },
+          "fail_effect": {
+            "text": "繩子拋了幾次都落空，等你回頭，孩子已經被漁夫救起了。",
+            "stamina": -5
+          }
+        },
+        {
+          "id": "leave",
+          "tag": "走開：不管、看著、對不上的",
+          "effect": {
+            "text": "你大聲喊人，渡口的船夫划著小船趕來，把孩子撈了上去。"
+          }
+        }
+      ]
     }
   },
   {
@@ -1351,7 +1571,85 @@
         "stats": {
           "silver": -5
         }
-      }
+      },
+      "outcomes": [
+        {
+          "id": "carry",
+          "tag": "搬運：把受傷的背出來、送到汝南",
+          "check": {
+            "stat": "con",
+            "difficulty": 6
+          },
+          "effect": {
+            "text": "你來回背了好幾趟，雙腿像灌了鉛。汝南城外的鄉亭收留了他們。",
+            "stats": {
+              "good": 2
+            },
+            "marks": {
+              "runan_wilds:安置": 1
+            },
+            "contribution": 3
+          },
+          "fail_effect": {
+            "text": "背到第三個人你就撐不住了，只好讓他們先在原地等著。",
+            "stamina": -15
+          }
+        },
+        {
+          "id": "soothe",
+          "tag": "安撫：好言相勸、問清散部去向",
+          "check": {
+            "stat": "wis",
+            "difficulty": 5
+          },
+          "effect": {
+            "text": "一個老婦告訴你，那夥人往北邊的河灣去了，帶著搶來的牛。你把消息報給了巡路的鄉勇。",
+            "stats": {
+              "good": 1
+            },
+            "marks": {
+              "runan_wilds:報信": 1
+            },
+            "contribution": 2
+          },
+          "fail_effect": {
+            "text": "他們嚇得一句話也不肯說，你只好留下一點乾糧和幾個錢離開。",
+            "stats": {
+              "silver": -5
+            }
+          }
+        },
+        {
+          "id": "chase",
+          "tag": "追賊：追上那夥嘍囉",
+          "combat": "louluo",
+          "effect": {
+            "text": "你在河灣追上那夥嘍囉，把搶走的牛趕了回來。村人哭著向你叩頭。",
+            "stats": {
+              "good": 2,
+              "fame": 1
+            },
+            "marks": {
+              "runan_wilds:奪牛": 1
+            },
+            "contribution": 3
+          },
+          "fail_effect": {
+            "text": "嘍囉人多，你被打得退回村子，身上掛了彩，錢袋也被搶了去。",
+            "stamina": -15,
+            "stats": {
+              "silver": -10
+            }
+          }
+        },
+        {
+          "id": "leave",
+          "tag": "走開：不管、看著、對不上的",
+          "effect": {
+            "text": "你把草蓆蓋回原處，退出了塌屋，地窖裡又靜了下來。"
+          }
+        }
+      ]
     }
   },
   {
@@ -1669,7 +1967,83 @@
       "fail_effect": {
         "text": "巡夜的兵卒發現了你，你在霧裡狂奔了半夜才甩掉追兵。",
         "stamina": -15
-      }
+      },
+      "outcomes": [
+        {
+          "id": "sneak",
+          "tag": "潛入：翻柵欄、摸進營裡",
+          "check": {
+            "stat": "agi",
+            "difficulty": 8
+          },
+          "effect": {
+            "text": "你摸進營裡，數清了糧倉和馬廄的位置，天亮前翻了出來，把這些畫在一塊木片上交給了斥候。",
+            "stats": {
+              "fame": 1,
+              "xinde": 4
+            },
+            "marks": {
+              "huangjin_camp:探營": 1
+            },
+            "contribution": 4
+          },
+          "fail_effect": {
+            "text": "你剛翻上柵頂，望樓上就喊了起來，只好跳下去拚命逃，摔得一身傷。",
+            "stamina": -20
+          }
+        },
+        {
+          "id": "watch",
+          "tag": "守望：趴在溝裡數哨、看換班",
+          "check": {
+            "stat": "con",
+            "difficulty": 6
+          },
+          "effect": {
+            "text": "你在冰冷的泥溝裡趴了半夜，把巡哨的班次記得清清楚楚。",
+            "stats": {
+              "xinde": 6
+            },
+            "marks": {
+              "huangjin_camp:記哨": 1
+            },
+            "contribution": 2
+          },
+          "fail_effect": {
+            "text": "溝裡的水越積越深，你凍得渾身發抖，什麼也沒數清就退了回去。",
+            "stamina": -15
+          }
+        },
+        {
+          "id": "raid",
+          "tag": "強攻：砍開柵門",
+          "combat": "shuikou",
+          "effect": {
+            "text": "你砍翻了守門的兵卒，營裡大亂，你趁亂撤走。黃巾連夜加固了營門，好幾天不敢出營劫掠。",
+            "stats": {
+              "fame": 2
+            },
+            "marks": {
+              "huangjin_camp:破柵": 1
+            },
+            "contribution": 4
+          },
+          "fail_effect": {
+            "text": "營裡湧出一隊人，你被逼回霧裡，身上多了幾道口子，錢袋也被一刀割了去。",
+            "stamina": -20,
+            "stats": {
+              "silver": -15
+            }
+          }
+        },
+        {
+          "id": "leave",
+          "tag": "走開：不管、看著、對不上的",
+          "effect": {
+            "text": "你在霧裡站了一會兒，望樓上的火把一明一滅，你轉身走了。"
+          }
+        }
+      ]
     }
   },
   {

@@ -194,7 +194,85 @@
         "stats": {
           "silver": -10
         }
-      }
+      },
+      "outcomes": [
+        {
+          "id": "tame",
+          "tag": "馴馬：上馬、拉韁、想法子制住烈馬",
+          "check": {
+            "stat": "agi",
+            "difficulty": 5
+          },
+          "effect": {
+            "text": "烈馬在長街上顛跳了半晌，終於垂頭喘氣。馬販服了你，把賣馬的錢分了你一份，圍觀的人替你叫好。",
+            "stats": {
+              "silver": 15,
+              "fame": 1
+            },
+            "marks": {
+              "zhuo_county:馴馬": 1
+            },
+            "contribution": 2
+          },
+          "fail_effect": {
+            "text": "烈馬一個後蹄把你踢翻在塵土裡，馬販嚷著要你賠被撞翻的草料。",
+            "stamina": -10,
+            "stats": {
+              "silver": -10
+            }
+          }
+        },
+        {
+          "id": "appraise",
+          "tag": "相馬：看牙口、看蹄子、替買主挑出病馬",
+          "check": {
+            "stat": "wis",
+            "difficulty": 4
+          },
+          "effect": {
+            "text": "你扳開幾匹馬的嘴，一眼看出被銼過牙的老馬。買主們感激地塞錢給你，馬販臉色鐵青。",
+            "stats": {
+              "silver": 10,
+              "good": 1
+            },
+            "marks": {
+              "zhuo_county:識馬": 1
+            },
+            "contribution": 2
+          },
+          "fail_effect": {
+            "text": "你看走了眼，把一匹病馬說成良駒，買主回頭來找你算帳。",
+            "stats": {
+              "silver": -10,
+              "fame": -1
+            }
+          }
+        },
+        {
+          "id": "buy",
+          "tag": "買馬：掏錢把烈馬買下來",
+          "cost": {
+            "silver": 15
+          },
+          "effect": {
+            "text": "你照減半的價錢把烈馬牽走了。牠一路還在尥蹶子，馬販說這是涿郡難得的腳力。",
+            "stats": {
+              "fame": 1
+            },
+            "marks": {
+              "zhuo_county:買烈馬": 1
+            },
+            "contribution": 1
+          }
+        },
+        {
+          "id": "leave",
+          "tag": "走開：不管、看著、對不上的",
+          "effect": {
+            "text": "你站在人群外聽馬販吆喝了一陣，轉身走了。"
+          }
+        }
+      ]
     }
   },
   {
@@ -666,7 +744,90 @@
         "stats": {
           "fame": -1
         }
-      }
+      },
+      "outcomes": [
+        {
+          "id": "show",
+          "tag": "獻藝：射箭、耍一套拳、露一手給他們看",
+          "check": {
+            "stat": "best_of",
+            "stats": [
+              "agi",
+              "str"
+            ],
+            "difficulty": 5
+          },
+          "effect": {
+            "text": "你在箭靶前露了一手，義勇們面面相覷，為首的漢子哈哈一笑，當場拍你的肩引為兄弟。",
+            "stats": {
+              "fame": 1
+            },
+            "marks": {
+              "zhuo_militia_hall:服眾": 1
+            },
+            "contribution": 2
+          },
+          "fail_effect": {
+            "text": "這一手露得不漂亮，義勇們笑得前仰後合，你在校場上丟了面子。",
+            "stamina": -10,
+            "stats": {
+              "fame": -1
+            }
+          }
+        },
+        {
+          "id": "endure",
+          "tag": "硬扛：站著讓他們打、比氣力",
+          "check": {
+            "stat": "con",
+            "difficulty": 5
+          },
+          "effect": {
+            "text": "三拳打在胸口，你晃也沒晃。為首的收了手，說你是塊硬骨頭，往後結社裡有他一口飯就有你一口。",
+            "stats": {
+              "fame": 1,
+              "good": 1
+            },
+            "marks": {
+              "zhuo_militia_hall:硬骨": 1
+            },
+            "contribution": 2
+          },
+          "fail_effect": {
+            "text": "第二拳就打得你彎下腰，義勇們哄笑著散開。",
+            "stamina": -15
+          }
+        },
+        {
+          "id": "fight",
+          "tag": "動手：把他們撂倒",
+          "combat": "yiyong",
+          "effect": {
+            "text": "你把幾個義勇撂倒在校場上，圍觀的人一片叫好，為首的爬起來反倒服了你。",
+            "stats": {
+              "fame": 2
+            },
+            "marks": {
+              "zhuo_militia_hall:校場威": 1
+            },
+            "contribution": 3
+          },
+          "fail_effect": {
+            "text": "你寡不敵眾，被按在地上好一陣才爬起來。",
+            "stamina": -15,
+            "stats": {
+              "fame": -1
+            }
+          }
+        },
+        {
+          "id": "leave",
+          "tag": "走開：不管、看著、對不上的",
+          "effect": {
+            "text": "你笑著打了個哈哈，從人縫裡走了出去，身後的哄笑聲漸漸遠了。"
+          }
+        }
+      ]
     }
   },
   {
@@ -789,7 +950,110 @@
         "stats": {
           "silver": -10
         }
-      }
+      },
+      "outcomes": [
+        {
+          "id": "sneak",
+          "tag": "偷渡：撐筏、走蘆葦、繞過去",
+          "check": {
+            "stat": "agi",
+            "difficulty": 6
+          },
+          "effect": {
+            "text": "你撐著竹筏貼著蘆葦滑過去，幾個掏不出錢的百姓跟在後頭，一起到了對岸。",
+            "stats": {
+              "good": 1
+            },
+            "marks": {
+              "juma_river:蘆葦渡": 1
+            },
+            "contribution": 2
+          },
+          "fail_effect": {
+            "text": "竹筏撞上暗石翻了，你在冰冷的河水裡撲騰半天才爬上岸。",
+            "stamina": -15
+          }
+        },
+        {
+          "id": "bargain",
+          "tag": "講價：跟水寇頭子談、勸他少收",
+          "check": {
+            "stat": "wis",
+            "difficulty": 5
+          },
+          "effect": {
+            "text": "你說冀州今年亂，收得太狠過路的人就絕了。頭子想了想，把錢減了一半，岸邊的百姓鬆了口氣。",
+            "stats": {
+              "good": 1,
+              "fame": 1
+            },
+            "marks": {
+              "juma_river:減卡錢": 1
+            },
+            "contribution": 2
+          },
+          "fail_effect": {
+            "text": "頭子嫌你多嘴，加倍收了你的錢。",
+            "stats": {
+              "silver": -15
+            }
+          }
+        },
+        {
+          "id": "fight",
+          "tag": "動手：砍纜繩、趕走水寇",
+          "combat": "he_shuikou",
+          "effect": {
+            "text": "你一刀砍斷纜繩，水寇被你打得跳河逃走，渡口的百姓歡呼著湧上渡船。",
+            "stats": {
+              "good": 2,
+              "fame": 1
+            },
+            "marks": {
+              "juma_river:斷纜": 1
+            },
+            "contribution": 3
+          },
+          "fail_effect": {
+            "text": "水寇人多，把你逼進河灘的爛泥裡，荷包也被摸走了。",
+            "stamina": -15,
+            "stats": {
+              "silver": -15
+            }
+          }
+        },
+        {
+          "id": "collude",
+          "tag": "勾結：跟水寇分帳、幫著收過河錢",
+          "check": {
+            "stat": "wis",
+            "difficulty": 5
+          },
+          "effect": {
+            "text": "你跟水寇頭子咬了半天耳朵，談好了分成，站到纜繩邊替他們吆喝收錢。掏不出錢的百姓蹲在岸邊，看你的眼神像看另一個水寇。",
+            "stats": {
+              "silver": 10,
+              "good": -2
+            },
+            "marks": {
+              "juma_river:分過河錢": 1
+            }
+          },
+          "fail_effect": {
+            "text": "頭子收了你的好處卻翻臉不認帳，嫌你多事，把你身上的錢也搜了去。",
+            "stats": {
+              "silver": -10
+            }
+          }
+        },
+        {
+          "id": "leave",
+          "tag": "走開：不管、看著、對不上的",
+          "effect": {
+            "text": "你在岸邊看了一陣，轉身沿著河往上游走了。"
+          }
+        }
+      ]
     }
   },
   {
@@ -1043,7 +1307,86 @@
         "stats": {
           "silver": -5
         }
-      }
+      },
+      "outcomes": [
+        {
+          "id": "herd",
+          "tag": "攏馬：追、趕進谷裡、送到亭舍",
+          "check": {
+            "stat": "agi",
+            "difficulty": 6
+          },
+          "effect": {
+            "text": "你繞到坡上把馬群趕進一條死谷，牽到山下的亭舍，亭長按規矩給了賞錢。",
+            "stats": {
+              "silver": 20
+            },
+            "marks": {
+              "yanshan_foot:歸馬": 1
+            },
+            "contribution": 2
+          },
+          "fail_effect": {
+            "text": "馬群受驚四散，你追了半座山，一匹也沒攏住。",
+            "stamina": -15
+          }
+        },
+        {
+          "id": "lure",
+          "tag": "誘馬：用鹽、用草料，慢慢靠近頭馬",
+          "check": {
+            "stat": "wis",
+            "difficulty": 4
+          },
+          "effect": {
+            "text": "頭馬舔了你手裡的鹽，乖乖讓你牽著，其餘的馬也跟了過來。",
+            "stats": {
+              "silver": 10
+            },
+            "marks": {
+              "yanshan_foot:馴頭馬": 1
+            },
+            "contribution": 1
+          },
+          "fail_effect": {
+            "text": "頭馬不吃這套，一蹄子踢翻了你的鹽袋。",
+            "stamina": -5,
+            "stats": {
+              "silver": -5
+            }
+          }
+        },
+        {
+          "id": "ambush",
+          "tag": "等賊：守在坡上等馬賊回來",
+          "combat": "yan_mazei",
+          "effect": {
+            "text": "馬賊果然回來尋馬，你把他們打退，連人帶馬的消息一起報給了亭長。",
+            "stats": {
+              "fame": 2,
+              "good": 1
+            },
+            "marks": {
+              "yanshan_foot:退馬賊": 1
+            },
+            "contribution": 3
+          },
+          "fail_effect": {
+            "text": "馬賊人多馬快，追得你滿山跑，隨身的錢也丟了。",
+            "stamina": -15,
+            "stats": {
+              "silver": -15
+            }
+          }
+        },
+        {
+          "id": "leave",
+          "tag": "走開：不管、看著、對不上的",
+          "effect": {
+            "text": "你看了一會兒馬群，順著獵戶指的山路下山去了。"
+          }
+        }
+      ]
     }
   }
 ]
