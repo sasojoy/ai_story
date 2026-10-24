@@ -1,0 +1,202 @@
+"""探索一顆（減法季整合設計 4.1；主機側實作計畫 Task 2-1 的六張表、Task 2-2 的抽三拍）的純規則。
+
+批 0 的 `Config.jianfa` 還沒到：數字吃 `tianxia/jianfa_numbers.py` 的 `JianfaNumbers`（批 0 到了之後併進 `JianfaRules`），
+這裡直接建它。開關、接線（選單只剩一顆探索、逐拍結算）在批 0 之後的 Task 2-3。"""
+import ast
+import random
+from collections import Counter
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+from pydantic import ValidationError
+
+from conftest import real_content
+from tianxia import explore_one
+from tianxia.explore_one import CHOICE, ENCOUNTER, EVENT, INSIGHT, MATERIAL
+from tianxia.jianfa_numbers import ExploreOneTable, JianfaNumbers
+
+CFG = JianfaNumbers()
+TABLES = {t.kind: t for t in CFG.explore_tables}
+
+
+def _place(*tags: str, danger: int = 1) -> SimpleNamespace:
+    """kind_of／weights 只讀 tags 與 danger。"""
+    return SimpleNamespace(tags=list(tags), danger=danger)
+
+
+def _row(t: ExploreOneTable) -> dict[str, int]:
+    return {EVENT: t.event, ENCOUNTER: t.encounter, MATERIAL: t.material, INSIGHT: t.insight}
+
+
+# ── 六張表（Task 2-1）──────────────────────────────────────────
+
+
+def test_six_tables_as_the_design_wrote_them():
+    """設計 4.1 的表：城 60/15/15/10、寺 50/5/15/30、渡 30/30/30/10、野 15/55/20/10、山 10/30/40/20、營 15/60/15/10（事件／遭遇／素材／感悟）。"""
+    assert {k: tuple(_row(t).values()) for k, t in TABLES.items()} == {
+        "town": (60, 15, 15, 10), "temple": (50, 5, 15, 30), "ford": (30, 30, 30, 10),
+        "wild": (15, 55, 20, 10), "hill": (10, 30, 40, 20), "camp": (15, 60, 15, 10),
+    }
+    assert all(sum(_row(t).values()) == 100 for t in CFG.explore_tables)
+
+
+def test_a_table_that_does_not_add_up_to_100_is_rejected():
+    with pytest.raises(ValidationError, match="100"):
+        ExploreOneTable(kind="town", tags=["城鎮"], event=60, encounter=15, material=15, insight=15)
+
+
+def test_each_tag_falls_in_one_table_only():
+    seen = Counter(tag for t in CFG.explore_tables for tag in t.tags)
+    assert seen and max(seen.values()) == 1
+    clash = [t.model_copy(update={"tags": t.tags + ["城鎮"]}) if t.kind == "temple" else t for t in CFG.explore_tables]
+    with pytest.raises(ValidationError, match="城鎮"):
+        JianfaNumbers(explore_tables=clash)
+
+
+def test_a_kind_appears_once():
+    twice = [*CFG.explore_tables, ExploreOneTable(kind="town", tags=["新標籤"], event=25, encounter=25, material=25, insight=25)]
+    with pytest.raises(ValidationError, match="town"):
+        JianfaNumbers(explore_tables=twice)
+
+
+def test_every_real_location_falls_in_a_table_by_its_own_tags():
+    """正式內容每一處都靠自己的標籤歸得到一張（不是掉到「其餘」）；兩張都對得上的照順序，營排第一。"""
+    locs = real_content().locations
+    assert locs
+    unmatched = [loc.id for loc in locs.values() if explore_one.match(CFG, loc.tags) is None]
+    assert unmatched == []
+    kinds = {loc_id: explore_one.kind_of(CFG, loc).kind for loc_id, loc in locs.items()}
+    assert {k: kinds[k] for k in (
+        "yingchuan", "haozu_fort", "guangzong", "julu_altar", "baima_temple", "mentor_hut", "yingshui",
+        "mengjin_ford", "yingchuan_wilds", "changshe", "nanyang_road", "songshan_foot", "lulin_zhai", "guan_camp",
+    )} == {
+        "yingchuan": "town", "haozu_fort": "town",  # 塢堡算城（設計 4.1；現行 explore_mix 是營）
+        "guangzong": "camp", "julu_altar": "camp",  # 「城池、營寨」「祭壇、營寨」：營排第一（設計「營（營寨、道壇）」）
+        "baima_temple": "temple", "mentor_hut": "temple", "yingshui": "ford", "mengjin_ford": "ford",
+        "yingchuan_wilds": "wild", "changshe": "wild", "nanyang_road": "wild",
+        "songshan_foot": "hill", "lulin_zhai": "hill", "guan_camp": "camp",
+    }
+
+
+def test_tags_no_table_names_fall_to_the_last_table():
+    assert explore_one.match(CFG, ["酒肆", "醫館"]) is None
+    assert explore_one.kind_of(CFG, _place("酒肆")) is CFG.explore_tables[-1]
+    assert CFG.explore_tables[-1].kind == "wild"
+
+
+# ── 這一處每一拍的比重 ──────────────────────────────────────────
+
+
+@pytest.mark.parametrize("kind", sorted(TABLES))
+def test_one_star_places_draw_by_the_table_as_written(kind):
+    t = TABLES[kind]
+    assert explore_one.weights(CFG, _place(t.tags[0]), has_foes=True) == _row(t)
+
+
+def test_each_star_past_the_first_moves_ten_from_event_to_encounter_within_5_to_80():
+    w = explore_one.weights
+    assert w(CFG, _place("城鎮", danger=2), has_foes=True) == {EVENT: 50, ENCOUNTER: 25, MATERIAL: 15, INSIGHT: 10}
+    assert w(CFG, _place("野外", danger=2), has_foes=True) == {EVENT: 5, ENCOUNTER: 65, MATERIAL: 20, INSIGHT: 10}
+    assert w(CFG, _place("野外", danger=3), has_foes=True) == {EVENT: 5, ENCOUNTER: 75, MATERIAL: 20, INSIGHT: 10}  # 事件夾在 5
+    assert w(CFG, _place("營寨", danger=3), has_foes=True) == {EVENT: 5, ENCOUNTER: 80, MATERIAL: 15, INSIGHT: 10}  # 遭遇夾在 80
+
+
+def test_no_foe_here_gives_the_encounter_share_to_the_other_three():
+    got = explore_one.weights(CFG, _place("城鎮"), has_foes=False)
+    assert got == {EVENT: 60, ENCOUNTER: 0, MATERIAL: 15, INSIGHT: 10}
+
+
+def test_a_bounty_here_adds_30_to_encounter_capped_at_80():
+    w = explore_one.weights
+    assert w(CFG, _place("寺院"), has_foes=True, bounty_here=True)[ENCOUNTER] == 35
+    assert w(CFG, _place("野外"), has_foes=True, bounty_here=True)[ENCOUNTER] == 80
+    assert w(CFG, _place("營寨", danger=3), has_foes=True, bounty_here=True)[ENCOUNTER] == 80
+    assert w(CFG, _place("城鎮"), has_foes=False, bounty_here=True)[ENCOUNTER] == 45  # 懸賞那一路易手了也找得到
+
+
+# ── 抽一拍、出門一趟 ──────────────────────────────────────────
+
+
+@pytest.mark.parametrize("kind", sorted(TABLES))
+def test_single_beats_follow_each_table_within_5_points(kind):
+    row = _row(TABLES[kind])
+    rng = random.Random(f"單拍|{kind}")
+    got = Counter(explore_one.roll(rng, row) for _ in range(1000))
+    for k, share in row.items():
+        assert abs(got[k] / 10 - share) <= 5, (kind, k, got)
+
+
+def _outings(row, n=600, **kw):
+    return [explore_one.draw(CFG, random.Random(f"出門|{i}"), row, **kw) for i in range(n)]
+
+
+@pytest.mark.parametrize("kind", sorted(TABLES))
+def test_an_outing_is_three_beats_at_most_two_alike_and_one_choice_placed_last(kind):
+    for beats in _outings(_row(TABLES[kind])):
+        assert len(beats) == CFG.beats == 3
+        assert max(Counter(beats).values()) <= 2
+        picks = [i for i, b in enumerate(beats) if b in CHOICE]
+        assert len(picks) <= 1
+        assert picks in ([], [len(beats) - 1])
+
+
+def test_town_outings_mostly_bring_an_event():
+    """城裡多事：一趟最多一個要選的拍，城裡八成上下的出門都帶一則事件（一拍一拍算的比例不會是 60%）。"""
+    outings = _outings(_row(TABLES["town"]), n=1000)
+    share = sum(EVENT in beats for beats in outings) / len(outings)
+    assert 0.75 <= share <= 0.9
+
+
+def test_a_bounty_here_puts_an_encounter_in_every_outing():
+    for kind in ("temple", "town", "wild"):
+        row = explore_one.weights(CFG, _place(TABLES[kind].tags[0]), has_foes=kind != "town", bounty_here=True)
+        assert all(ENCOUNTER in beats for beats in _outings(row, bounty_here=True)), kind
+
+
+def test_a_place_with_no_foe_never_draws_an_encounter():
+    row = explore_one.weights(CFG, _place("營寨", danger=3), has_foes=False)
+    assert not any(ENCOUNTER in beats for beats in _outings(row))
+
+
+def test_sensing_here_twice_in_a_row_is_not_drawn_but_events_are_left_to_the_rotation():
+    """同一處連兩趟要選的拍不同一則：上一趟在這裡是感悟，這一趟不抽感悟；事件的不重照舊交給 events.rotation_pool。"""
+    row = _row(TABLES["temple"])
+    assert not any(INSIGHT in beats for beats in _outings(row, last_choice=INSIGHT))
+    assert any(EVENT in beats for beats in _outings(row, last_choice=EVENT))
+    assert any(INSIGHT in beats for beats in _outings(row, last_choice=EVENT))
+
+
+def test_when_nothing_can_be_drawn_the_beat_is_a_material():
+    empty = {EVENT: 0, ENCOUNTER: 0, MATERIAL: 0, INSIGHT: 0}
+    assert explore_one.draw(CFG, random.Random(1), empty) == [MATERIAL, MATERIAL, MATERIAL]
+    only_event = {EVENT: 100, ENCOUNTER: 0, MATERIAL: 0, INSIGHT: 0}
+    assert explore_one.draw(CFG, random.Random(1), only_event) == [MATERIAL, MATERIAL, EVENT]
+
+
+# ── 亂數 ─────────────────────────────────────────────────────
+
+
+def test_the_same_seed_draws_the_same_outing():
+    row = _row(TABLES["ford"])
+    one = [explore_one.draw(CFG, explore_one.rng_for(1, "沈浪", n, "抽拍"), row) for n in range(50)]
+    two = [explore_one.draw(CFG, explore_one.rng_for(1, "沈浪", n, "抽拍"), row) for n in range(50)]
+    assert one == two
+    assert len({tuple(b) for b in one}) > 1  # 第幾趟不同，抽出來的不一樣
+
+
+def test_drawing_never_touches_the_shared_random():
+    row = _row(TABLES["hill"])
+    random.seed(7)
+    expected = random.random()
+    random.seed(7)
+    explore_one.draw(CFG, explore_one.rng_for(1, "沈浪", 3, "抽拍"), explore_one.weights(CFG, _place("山林"), has_foes=True))
+    explore_one.roll(random.Random(2), row)
+    assert random.random() == expected
+
+
+def test_explore_one_does_not_import_the_engine():
+    tree = ast.parse(Path(explore_one.__file__).read_text(encoding="utf-8"))
+    names = {a.name for n in ast.walk(tree) if isinstance(n, ast.ImportFrom | ast.Import) for a in n.names}
+    names |= {n.module or "" for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)}
+    assert not any("engine" in name for name in names)
