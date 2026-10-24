@@ -1169,6 +1169,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 @media (max-width: 349px) { .r-top { gap: 6px; } .r-top .w-back, .r-top .w-tl, .r-wash, .r-full { padding: 0 9px; } .r-pick { letter-spacing: 0; padding: 0 26px 0 12px; } }
 .r-compass { position: absolute; left: 10px; bottom: 62px; display: none; pointer-events: none; opacity: 0.9; }
 .mapx.region .r-compass { display: block; }
+.mapx.region.near .r-compass { display: none; } /* 第一層不畫羅盤（減法季整合設計第七章的對照圖；左下角會壓到走得到的地方的名字） */
 .mapx.region .tx-roads path { stroke: #c9b996; stroke-width: 2.2px; stroke-dasharray: none; stroke-opacity: 0.85; }
 .mapx.region .tx-roads .rd-core { display: none; }
 /* 天下圖抽屜那一行：你在哪＋「進入此區 ›」 */
