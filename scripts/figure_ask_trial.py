@@ -125,6 +125,7 @@ def main() -> None:
             print(f"「{line}」 字數不對（1～{game.say_max()} 字），跳過\n")
             continue
         picked, outcomes, conds, willing, fails = Counter(), Counter(), 0, [], 0
+        no_willing = no_no = 0  # 漏填另外數，不混進平均（漏填的意願引擎當 0、夾到下限，混進去會讓人以為模型判斷壞了）
         print(f"══ 你：「{said}」")
         for n in range(1, args.runs + 1):
             request = companion_agent.build_request(game.state, content, game.world, cid, "talk:say", said, free=True, extra=extra,
@@ -145,6 +146,9 @@ def main() -> None:
             conds += bool(cond)
             if turn.willing is not None:
                 willing.append(turn.willing)
+            else:
+                no_willing += 1
+            no_no += not (turn.narrative_no or "").strip()
             if args.quiet:
                 continue
             cond_note = "" if not cond or cond in cond_ids else "（清單外，當沒開）"
@@ -157,8 +161,9 @@ def main() -> None:
                 print(f"     婉拒：{turn.narrative_no}")
         avg = f"{sum(willing) / len(willing):.0f}" if willing else "—"
         done = args.runs - fails
-        print(f"  ── 統計（{done} 次{f'，{fails} 次失敗' if fails else ''}）：挑了 {dict(picked)}；意願平均 {avg}；"
-              f"開條件 {conds}/{done}；結果 {dict(outcomes)}\n")
+        print(f"  ── 統計（{done} 次{f'，{fails} 次失敗' if fails else ''}）：挑了 {dict(picked)}；意願平均 {avg}（{len(willing)} 筆有填）；"
+              f"開條件 {conds}/{done}；結果 {dict(outcomes)}")
+        print(f"     漏填：ask 空白（當閒聊） {picked['']}/{done}、willing {no_willing}/{done}、婉拒那一版（narrative_no）{no_no}/{done}\n")
 
 
 def _generate(client, request):
@@ -209,7 +214,7 @@ def _plan(game, content, client, cid, args) -> None:
     dice = random.Random(1)
     for line in PLAN_LINES:
         said = say_text(line, game.say_max())
-        rates, hits = [], 0
+        rates, hits, missing, no_no, done = [], 0, 0, 0, 0
         print(f"══ 跟{name}商量打法：「{said}」")
         for n in range(1, args.runs + 1):
             request = companion_agent.build_request(game.state, content, game.world, cid, PLAN_OPTION, said, free=True, extra=extra,
@@ -217,16 +222,24 @@ def _plan(game, content, client, cid, args) -> None:
             turn, spent = _generate(client, request)
             if turn is None:
                 continue
-            chance = max(cfg.plan_floor, min(cfg.plan_cap, int(turn.willing or 0)))
+            done += 1
+            no_no += not (turn.narrative_no or "").strip()
+            if turn.willing is None:  # 遊戲裡這一輪當沒談成（Game._parley_plan），不擲、不算進平均
+                missing += 1
+                if not args.quiet:
+                    print(f"  #{n} willing 漏填 → 遊戲裡當沒談成、可以再商量　{spent:.0f} 秒")
+                continue
+            chance = max(cfg.plan_floor, min(cfg.plan_cap, int(turn.willing)))
             hit = dice.randint(1, 100) <= chance
             hits += hit
-            rates.append(turn.willing or 0)
+            rates.append(turn.willing)
             if not args.quiet:
                 print(f"  #{n} willing={turn.willing} → 夾到 {chance}，{'成' if hit else '不成'}　{spent:.0f} 秒")
                 print(f"     成：{turn.narrative}")
                 print(f"     不成：{turn.narrative_no or '（沒寫）'}")
         avg = f"{sum(rates) / len(rates):.0f}" if rates else "—"
-        print(f"  ── 統計：成功率平均 {avg}（最低 {min(rates, default=0)}、最高 {max(rates, default=0)}）；擲成 {hits}/{len(rates)}\n")
+        print(f"  ── 統計：成功率平均 {avg}（{len(rates)} 筆有填，最低 {min(rates, default=0)}、最高 {max(rates, default=0)}）；擲成 {hits}/{len(rates)}")
+        print(f"     漏填（不算進平均）：willing {missing}/{done}、不成那一版（narrative_no）{no_no}/{done}\n")
     p.parley_backing = None
 
 

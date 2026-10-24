@@ -6010,8 +6010,10 @@ class Game:
                 turn = companion_agent.generate_turn(self._quick_client(), request.messages, request.required)
         except companion_agent.DialogueUnavailable:
             return [f"{c.characters[cid].name}沉吟不語。"]
+        if turn.willing is None:  # 模型沒評（schema 已經不准，以防萬一）：當這一輪沒談成、打法照舊可以再商量，不默默夾到 plan_floor
+            return [f"{c.characters[cid].name}沉吟不語。"]
         cfg = c.config.parley
-        chance = max(cfg.plan_floor, min(cfg.plan_cap, int(turn.willing or 0)))
+        chance = max(cfg.plan_floor, min(cfg.plan_cap, int(turn.willing)))
         hit = parley.plan_roll(s, cid) <= chance
         s.player.parley_backing.plan = hit
         name = c.characters[cid].name
