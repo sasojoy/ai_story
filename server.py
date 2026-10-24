@@ -73,6 +73,7 @@ from tianxia.characters import name_key, open_characters
 from tianxia.database import default_path, open_database
 from tianxia.engine import FIGHT_GONE_LINES, FREE_TEXT_OPTION, PAUSED_TEXT, SAY_OPTION, TEXT_TALKS, Game, Refused
 from tianxia.models import FREE_TEXT_MAX
+from tianxia.notices import current as current_notices
 from tianxia.journal import CSS as JOURNAL_CSS
 from tianxia.sqlite_world import open_world
 from tianxia.ollama_client import OllamaClient
@@ -561,6 +562,102 @@ def start_push(config) -> server_push.PushHub | None:
     )
     PUSH_THREAD.start()
     return HUB
+
+
+# ── 網頁推送（減法季整合設計第十章「回來的理由」，批 9；server_push.WebPush、tianxia/notices.py）──
+# 開關是 Config.web_push.enabled（content/config.json 打開；測試內容關著）＋主機裝了 cryptography：關著 WEB_PUSH 是 None、
+# 設定頁不畫「手機通知」、/api/push* 回 404。玩家在設定頁自己打開（預設關），訂閱記在資料庫旁邊的小檔（PushStore）。
+# 看守（notice_round）每 watch_seconds 秒把開了通知的人看一遍：到了 09:00 先替他送今天的信（Game.morning_mail），再比五種事
+# （notices.current）有沒有新的，新的才跳。哪幾件跳過了記在記憶體（NOTICE_SENT）：伺服器重開後第一輪只記下、不跳，
+# 停機那段時間發生的事不補跳（畫面上照樣看得到）。
+WEB_PUSH: server_push.WebPush | None = None
+NOTICE_STOP = threading.Event()  # 讓通知的看守停下來（測試用）
+NOTICE_THREAD: threading.Thread | None = None
+NOTICE_SENT: dict[str, set[str]] = {}  # 帳號 → 上一輪看到的事（已跳過、或正在玩不必跳的）
+MAIL_DONE: dict[str, int] = {}  # 帳號 → 已經替他送過信的送信日（letters.mail_day），同一天不再進鎖試
+NOTICE_TITLE = "天下大勢"
+PUSH_WELCOME = "手機通知開了：來信、約戰、決戰集結、被截殺、被〈天下形勢〉提到時，會在這裡告訴你。"  # 待 joy 潤
+VAPID_FILE = ROOT / ".local" / "webpush_vapid.pem"  # 這台主機的 VAPID 金鑰：第一次開時產生；換了它，所有人要重開一次通知
+
+
+def push_store_path() -> Path:
+    """訂閱的小檔：遊戲資料庫旁邊、同名多「-push.sqlite」（TIANXIA_DB 換了檔，它跟著換）。"""
+    db = default_path()
+    return db.with_name(f"{db.stem}-push.sqlite")
+
+
+def web_push_line(config) -> str:
+    if not config.web_push.enabled:
+        return "手機通知：關"
+    if not server_push.AVAILABLE:
+        return "手機通知：關（這台主機沒裝 cryptography：pip install -r requirements.txt）"
+    return f"手機通知：開（每 {config.web_push.watch_seconds:g} 秒看一次開了通知的人；金鑰 {VAPID_FILE}）"
+
+
+def start_web_push(config, post=None) -> server_push.WebPush | None:
+    """開關開著、cryptography 在：建 WEB_PUSH、開看守執行緒（daemon）；不然什麼都不做、回 None。只有 main() 與測試呼叫。
+    簽名的 sub 照 TIANXIA_PUBLIC_URL（固定網域），沒設就寫固定網域本身（推送服務只認 https 或 mailto）。"""
+    global WEB_PUSH, NOTICE_THREAD
+    if not config.web_push.enabled or not server_push.AVAILABLE:
+        return None
+    subject = os.environ.get("TIANXIA_PUBLIC_URL") or "https://tianxiadashi.com"
+    WEB_PUSH = server_push.WebPush(server_push.PushStore(push_store_path()), server_push.Vapid(VAPID_FILE, subject), post=post)
+    failures = _StepFailures(time.monotonic, "通知的看守")
+
+    def loop() -> None:
+        while not NOTICE_STOP.wait(config.web_push.watch_seconds):
+            try:
+                notice_round()
+            except Exception as e:  # noqa: BLE001  看守不能因為一輪出錯就停
+                failures.failed(e)
+            failures.tick()
+
+    NOTICE_THREAD = threading.Thread(target=loop, daemon=True, name="notice-watch")
+    NOTICE_THREAD.start()
+    return WEB_PUSH
+
+
+def _notice_keys(game: Game, account_key: str, now: float) -> tuple[list, bool]:
+    """行動鎖內：到了送信的時刻先替他送今天的信（送了就存角色、叫他開著的分頁刷新），回傳（五種事, 正在玩）。
+    正在玩：quiet_seconds 之內同步過（分頁開著），畫面上已經看得到，不必再跳。"""
+    day = letters.mail_day(game.content, game.state.world, now)
+    if day is not None and MAIL_DONE.get(account_key) != day:
+        if game.morning_mail(now):
+            open_characters().save(game.state)
+            if HUB is not None:
+                HUB.notify(game.state.player.name.casefold())
+        MAIL_DONE[account_key] = day
+    last = game.state.last_real
+    busy = last is not None and now - last < game.content.config.web_push.quiet_seconds
+    return current_notices(game.state, game.content, game.world.get_battle()), busy
+
+
+def notice_round(clock: Callable[[], float] = time.time) -> int:
+    """看守的一輪：開了通知的每一個帳號進一次鎖（_notice_keys），鎖外比上一輪、新的才跳（一人一輪最多 per_round 則，
+    多的下一輪再跳）。第一次看到這個帳號只記下、不跳。回傳跳了幾則（測試用）。"""
+    push = WEB_PUSH
+    if push is None:
+        return 0
+    cfg = CONTENT.config.web_push
+    sent_total = 0
+    for account_key in push.store.accounts():
+        account = account_store().get(account_key)
+        if account is None or account.character is None:
+            continue
+        game = game_for(account.character)
+        with _locked(game):
+            now = clock()
+            notes, busy = _notice_keys(game, account_key, now)
+        keys = {n.key for n in notes}
+        seen = NOTICE_SENT.get(account_key)
+        if seen is None or busy:
+            NOTICE_SENT[account_key] = keys
+            continue
+        fresh = [n for n in notes if n.key not in seen]
+        for n in fresh[:cfg.per_round]:
+            sent_total += bool(push.send(account_key, NOTICE_TITLE, n.text, tag=n.kind, now=now))
+        NOTICE_SENT[account_key] = (keys & seen) | {n.key for n in fresh[:cfg.per_round]}
+    return sent_total
 
 
 def _tell_tabs(game: Game, also: str = "") -> None:
@@ -1589,6 +1686,7 @@ def _main_view_body(game: Game) -> dict:
         # push_spread 是收到「世界變了」之後各分頁重抓畫面要攤開的秒數（預檢 F3：全服同時重抓會在同一把行動鎖上排隊）
         "push": HUB is not None,
         "push_spread": game.content.config.push_world_min_seconds,
+        "web_push": WEB_PUSH is not None,  # 手機通知（減法季批 9）：設定頁畫不畫那一顆、第一次來信問不問
     }
     shop = game.shop_view([o.id for o in options])  # 店面（店面獨立介面設計 6.1）：開關開著、店開著、鐵匠鋪那一串是眼前的選單才有
     if shop is not None:
@@ -2879,6 +2977,62 @@ async def api_events(request: Request):
     )
 
 
+def _web_push() -> server_push.WebPush:
+    push = WEB_PUSH
+    if push is None:
+        raise HTTPException(404)
+    return push
+
+
+@app.get("/api/push")
+def api_push(request: Request):
+    """手機通知（減法季批 9）：瀏覽器訂閱要的那一串公鑰。開關關著 404。"""
+    _account(request)
+    return {"key": _web_push().vapid.public}
+
+
+@app.post("/api/push/subscribe")
+def api_push_subscribe(request: Request, body: dict = Body(...)):
+    """這台裝置開通知：{endpoint, keys: {p256dh, auth}, quiet}（瀏覽器 PushSubscription 的 JSON，多一個 quiet）。
+    位址不是認得的推送服務就不收。開了先把他身上現有的事記成看過（不會一開就跳一串舊信）；不是 quiet 就送一則「開了」的通知，
+    手機上當場看得到通不通（主機驗收也看這一則）。"""
+    push = _web_push()
+    account_key = _account(request)
+    endpoint = str(body.get("endpoint", ""))
+    keys = body.get("keys") if isinstance(body.get("keys"), dict) else {}
+    p256dh, auth = str(keys.get("p256dh", "")), str(keys.get("auth", ""))
+    if len(endpoint) > 1024 or not server_push.push_host_ok(endpoint) or not (40 <= len(p256dh) <= 200 and 8 <= len(auth) <= 64):
+        raise GameError("這個瀏覽器給的通知位址不對，換一個瀏覽器試試。")  # 待 joy 潤
+    push.store.add(account_key, endpoint, p256dh, auth, time.time(), CONTENT.config.web_push.max_devices)
+    game = _game(request)
+    with _locked(game):
+        notes = current_notices(game.state, game.content, game.world.get_battle())
+    NOTICE_SENT[account_key] = {n.key for n in notes}
+    if not body.get("quiet"):
+        threading.Thread(target=push.send, args=(account_key, NOTICE_TITLE, PUSH_WELCOME), kwargs={"tag": "welcome"}, daemon=True).start()
+    return {"on": True}
+
+
+@app.post("/api/push/unsubscribe")
+def api_push_unsubscribe(request: Request, body: dict = Body(...)):
+    """這台裝置關通知：{endpoint}。只刪得掉自己帳號的。"""
+    push = _web_push()
+    push.store.remove(str(body.get("endpoint", "")), _account(request))
+    return {"on": False}
+
+
+@app.get("/sw.js")
+def service_worker():
+    """手機通知的 service worker：放在根目錄，管得到整個網站（/static 底下的管不到 /）。"""
+    return Response((WEB / "sw.js").read_bytes(), media_type="text/javascript", headers=NO_CACHE)
+
+
+@app.get("/manifest.webmanifest")
+def manifest():
+    """加到主畫面用的說明檔（iPhone 要先加到主畫面才收得到通知）。"""
+    return Response((WEB / "manifest.webmanifest").read_bytes(), media_type="application/manifest+json", headers=NO_CACHE)
+
+
 @app.get("/api/admin")
 def api_admin(request: Request):
     game = _game(request)
@@ -2998,6 +3152,8 @@ def main(argv: list[str] | None = None) -> None:
     start_scheduler(interval)
     print(push_line(CONTENT.config), flush=True)
     start_push(CONTENT.config)  # 開關關著什麼都不做：HUB 是 None、/api/events 是 404
+    print(web_push_line(CONTENT.config), flush=True)
+    start_web_push(CONTENT.config)  # 開關關著、沒裝 cryptography 什麼都不做：WEB_PUSH 是 None
     if args.lan:
         print("已開放區網連線：同一個網路裡的裝置都連得到。", flush=True)
     # timeout_graceful_shutdown：uvicorn 關機時會等進行中的回應收完，而 SSE 串流永遠不會自己收完，Ctrl+C 一下就卡住
