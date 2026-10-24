@@ -55,6 +55,26 @@ def _require_in_schema(schema: dict[str, Any], fields: list[str]) -> dict[str, A
     return out
 
 
+def _non_null(schema: dict[str, Any], fields: list[str]) -> dict[str, Any]:
+    """把這幾個欄位的型別裡的 null 拿掉：`willing: int | None` 的 schema 是 anyOf [integer, null]，
+    光寫進 required 的話模型照樣可以回 `"willing": null`（2026-10-24 主機複驗：商量打法 willing 漏填 5/30，
+    鍵已經強制要寫了還是漏，就是寫成 null）。只動 anyOf 裡有 null 的那幾個，其他照舊。"""
+    props = dict(schema.get("properties", {}))
+    for name in fields:
+        prop = props.get(name)
+        if not prop or "anyOf" not in prop:
+            continue
+        kept = [t for t in prop["anyOf"] if t.get("type") != "null"]
+        if len(kept) == len(prop["anyOf"]):
+            continue
+        fixed = {k: v for k, v in prop.items() if k not in ("anyOf", "default")}
+        fixed.update(kept[0] if len(kept) == 1 else {"anyOf": kept})
+        props[name] = fixed
+    out = dict(schema)
+    out["properties"] = props
+    return out
+
+
 def clean_json_text(text: str) -> str:
     text = text.strip()
     if text.startswith("```"):
@@ -421,7 +441,7 @@ class OllamaClient:
         if require_in_schema:  # 要語法強制必填的呼叫自己開（opt-in；預設不動，見 _require_in_schema 的說明）
             schema = _require_in_schema(schema, required_fields or [])
         if schema_required:  # 只要模型一定寫出這個鍵、空字串也算答了（開口求人的 ask「只是閒聊」就是空字串）：只進 schema，不進缺欄位的檢查
-            schema = _require_in_schema(schema, schema_required)
+            schema = _non_null(_require_in_schema(schema, schema_required), schema_required)  # 也不准寫 null（見 _non_null）
         payload = self._build_payload(messages, temperature, num_predict=num_predict, json_schema=schema)
         url = f"{self.base_url}/api/chat"
         required = required_fields or []
