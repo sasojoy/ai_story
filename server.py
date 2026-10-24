@@ -618,14 +618,13 @@ def start_web_push(config, post=None) -> server_push.WebPush | None:
 
 
 def _notice_keys(game: Game, account_key: str, now: float) -> tuple[list, bool]:
-    """行動鎖內：到了送信的時刻先替他送今天的信（送了就存角色、叫他開著的分頁刷新），回傳（五種事, 正在玩）。
+    """行動鎖內：到了送信的時刻先替他送今天的信（送了就存角色；開著的分頁照常輪詢就看得到，不叫 HUB：只有動作的端點叫，
+    見 _tell_tabs），回傳（五種事, 正在玩）。
     正在玩：quiet_seconds 之內同步過（分頁開著），畫面上已經看得到，不必再跳。"""
     day = letters.mail_day(game.content, game.state.world, now)
     if day is not None and MAIL_DONE.get(account_key) != day:
         if game.morning_mail(now):
             open_characters().save(game.state)
-            if HUB is not None:
-                HUB.notify(game.state.player.name.casefold())
         MAIL_DONE[account_key] = day
     last = game.state.last_real
     busy = last is not None and now - last < game.content.config.web_push.quiet_seconds
@@ -2122,14 +2121,14 @@ def content_version(content: bytes) -> str:
 
 
 def asset_version(url_path: str) -> str:
-    """頁面引用的網址（/journal.css 或 /static/<檔名>）對應的版本；檔案不存在就丟 FileNotFoundError。"""
+    """頁面引用的網址（/journal.css、/manifest.webmanifest 或 /static/<檔名>）對應的版本；檔案不存在就丟 FileNotFoundError。"""
     if url_path == "/journal.css":
         return content_version(JOURNAL_CSS.encode("utf-8"))
-    return content_version((WEB / url_path.removeprefix("/static/")).read_bytes())
+    return content_version((WEB / url_path.removeprefix("/static/").lstrip("/")).read_bytes())
 
 
 # 頁面裡指向我們自己檔案的網址；不碰 data:、外部網址，也不碰已經帶了 ? 的
-OWN_ASSET = re.compile(r"""(src|href)=(["'])(/static/[^"'?#]+|/journal\.css)\2""")
+OWN_ASSET = re.compile(r"""(src|href)=(["'])(/static/[^"'?#]+|/journal\.css|/manifest\.webmanifest)\2""")
 
 
 def versioned_page(html: str, version_of: Callable[[str], str]) -> str:
