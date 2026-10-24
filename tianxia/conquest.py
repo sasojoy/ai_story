@@ -534,6 +534,34 @@ def push(
     return out
 
 
+def _still(world: WorldState, content: Content, loc_id: str) -> bool:
+    """這一塊此刻誰都推不動（push_problem 的那三種）：剛易手的冷卻、被戰書凍結、被碎片鎮住。"""
+    return cooling(world, content, loc_id) or frozen(world, loc_id) is not None or _held_why(world, content, loc_id) is not None
+
+
+def pull(world: WorldState, content: Content, loc_id: str, side: str, amount: float) -> Pushed:
+    """把這一塊上 side（攻方）那一條往下拉 amount、夾 0（減法季出陣約戰：守方贏了拉攻方那一條，企劃者 2026-10-24 第 1 件；
+    計畫第四節 4.0 之二）。別的攻方的條不動；冷卻、戰書凍結、碎片鎮住（_still，同 push_problem 的「誰都推不動」）與關著的季什麼都不動。
+    拉到 0 的那一條拿掉（這一輪的帳一起清），全部歸零時守城的帳與警報清掉；guarded 是「拉之前有警報、拉完全部歸零」——要不要照設計 4.5
+    分守城功由呼叫端定，這裡不分紅、不記 guards、不寫句子。value 是 side 那一條拉完剩多少。"""
+    out = Pushed(value=bar(world, loc_id, side))
+    fight = fight_of(world, loc_id)
+    if not on(content, world) or fight is None or side not in fight.bars or amount <= 0 or _still(world, content, loc_id):
+        return out
+    line = fight.bars[side]
+    out.moved = min(line.value, amount)
+    line.value -= out.moved
+    out.value = line.value
+    fight.last_push = world.time
+    if line.value <= 1e-9:
+        del fight.bars[side]
+        out.value = 0.0
+    if not fight.bars:
+        out.guarded = fight.alarm
+        fight.guards, fight.alarm = {}, False
+    return out
+
+
 def tally(world: WorldState, content: Content, day: int, side: str, name: str, moved: float) -> None:
     """記今天這一邊、這個人推（拉）動了多少（ConquestState.tally；出陣回報的小籤讀 today_moved）。day 是 Game._pill_day（同出陣次數換日），
     換了一天第一次記時整本清掉重記。沒推動（moved 0）不記。"""
