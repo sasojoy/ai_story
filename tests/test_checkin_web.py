@@ -1,5 +1,6 @@
-"""正式季整合第 7 批：江湖頁最上面那一排小標多一個「簽到」（設計 9.1 第 4 組丙）。還沒簽亮紅點，簽了寫「簽到 ✔」；攤開是這一週
-七格、今天的份與領的鈕，四階的日子是四顆挑屬性的鈕。把 app.js 的 checkinPeek 與 peekHtml 切出來交給 node 跑；沒有 node 就略過。"""
+"""正式季整合第 7 批：每日簽到（設計 9.1 第 4 組丙）。減法季批 1 起它是本週卡底下的「今日簽到」（以前是江湖頁最上面那一排小標的一顆）：
+還沒簽亮紅點，簽了寫「簽到 ✔」；攤開是這一週七格、今天的份與領的鈕，四階的日子是四顆挑屬性的鈕。
+把 app.js 的 checkinPeek 與 weekCardHtml 切出來交給 node 跑；沒有 node 就略過。"""
 from __future__ import annotations
 
 import random
@@ -16,14 +17,16 @@ pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，�
 ROOT = Path(__file__).parent.parent
 
 DRIVER = r"""
-const S = { peekOpen: input.open ? { id: "checkin", week: 1 } : null };
+const S = { wkOpen: input.open ? { key: "本週第 1 週", id: "checkin" } : null };
 const H = new Function("S", [
-  ...["esc", "CK_ATTR", "CK_LAST"].map(konst),
-  ...["ckGift", "checkinPeek", "peekHtml"].map(fn),
-  "return { checkinPeek, peekHtml };",
+  ...["esc", "CK_ATTR", "CK_LAST", "WK_STEP", "wkKey"].map(konst),
+  "const shown = () => true, STANCE_NAMES = [], whyHtml = () => '';",
+  ...["ckGift", "checkinPeek", "wkStepOf", "wkSidesHtml", "weekCardHtml"].map(fn),
+  "return { checkinPeek, weekCardHtml };",
 ].join("\n"))(S);
 const part = H.checkinPeek(input.m);
-finish({ part, html: part ? H.peekHtml([part], 1) : "" });
+const m = { ...input.m, week_card: { label: "本週", when: "第 1 週", theme: "", sides: null, steps: [], next: null } };
+finish({ part, html: part ? H.weekCardHtml(m) : "" });
 """
 
 HOUR, DAY = 3600, 86400
@@ -51,7 +54,7 @@ def _m(**checkin):
 def test_chip_has_a_dot_until_claimed():
     out = run(_m(), open_=False)
     assert "peek-dot" in out["html"] and "簽到" in out["html"] and "✔" not in out["html"]
-    assert 'aria-label="簽到：第 3 天還沒簽"' in out["html"]  # 亮點不另加「有還沒看過的」
+    assert 'aria-label="還沒簽"' in out["html"]
     out = run(_m(done=True, step="今天的份領過了：回體丹 2 顆。"), open_=False)
     assert "peek-dot" not in out["html"] and "簽到 ✔" in out["html"]
 

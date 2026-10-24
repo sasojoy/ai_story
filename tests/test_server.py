@@ -1030,13 +1030,13 @@ def test_the_five_stat_buttons_share_one_row_and_keep_their_labels_on_one_line()
     js = webharness.app_source()
     css = (server.WEB / "style.css").read_text(encoding="utf-8")
     assert 'class="row alloc"' in js
-    row = re.search(r"\.more-stats \.alloc \{([^}]*)\}", css)
+    row = re.search(r"\.more-stats \.alloc(?:, \.self-stats \.alloc)? \{([^}]*)\}", css)  # 「自己」頁的心得與屬性那一塊（減法季批 1）同一排
     assert row is not None and "gap: 4px" in row.group(1)
-    button = re.search(r"\.more-stats \.alloc \.btn \{([^}]*)\}", css)
+    button = re.search(r"\.more-stats \.alloc \.btn(?:, \.self-stats \.alloc \.btn)? \{([^}]*)\}", css)
     assert button is not None and "white-space: nowrap" in button.group(1) and "padding: 6px 2px" in button.group(1)
     site = re.search(r"\n\.btn\.small \{([^}]*)\}", css)
     assert site is not None and "padding: 6px 12px" in site.group(1)  # 全站的小按鈕照舊
-    label = re.search(r"\.more-stats \.pts-label \.pts \{([^}]*)\}", css)  # 跟收起來時那一句同樣的金色粗體 12px
+    label = re.search(r"\.more-stats \.pts-label \.pts(?:, \.self-stats \.pts-label \.pts)? \{([^}]*)\}", css)  # 跟收起來時那一句同樣的金色粗體 12px
     assert label is not None and "var(--gold)" in label.group(1) and "600 12px" in label.group(1)
 
 

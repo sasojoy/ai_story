@@ -106,16 +106,16 @@ def test_the_hint_showing_up_pushes_the_row_down_and_refits():
 
 
 @node
-def test_folding_the_hint_inside_a_fit_does_not_start_another_fit():
-    """fitFirstScreen 收 💡（S.hintTight、重畫狀態列）時狀態列自己變矮，還原時又變高：那是收合本身，不再重量（不然會一直重量）。
+def test_folding_the_titles_inside_a_fit_does_not_start_another_fit():
+    """fitFirstScreen 收名號底下那一行稱號（S.renownTight、重畫狀態列；以前是 💡，減法季批 1 收進本週卡）時狀態列自己變矮，還原時又變高：那是收合本身，不再重量（不然會一直重量）。
     renderTop 照真的那樣先量、重畫、再交給 fitTopMoved。"""
-    layout = {"bottom": 790, "actbar": True, "scene": True, "hint": True, "card": True, "lines": [False], "rounds": True}
+    layout = {"bottom": 790, "actbar": True, "scene": True, "renown": True, "card": True, "lines": [False], "rounds": True}
     script = """
       H.fitFirstScreen(); const tight = snap();
       L.bottom = 700; H.fitFirstScreen(); const roomy = snap();
       return { tight, roomy, fitting: !!S.fitting };"""
     out = run(layout, script, realTop=True, topSaves=20)
-    assert out["tight"]["fitted"] == ["space", "hint"] and out["tight"]["tops"] == 1
+    assert out["tight"]["fitted"] == ["space", "renown"] and out["tight"]["tops"] == 1
     assert out["roomy"]["fitted"] == [] and out["roomy"]["tops"] == 2 and out["fitting"] is False
 
 

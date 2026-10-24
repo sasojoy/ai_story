@@ -1,5 +1,5 @@
 """第一季豪強分屬兩軍的畫面（docs/superpowers/specs/2026-10-15-第一季豪強分屬兩軍-design.md 第十四節）：態勢只有官軍、黃巾兩方，
-輿圖的「天下」那一列與「天下怎麼變」只算兩方。借 test_peek_row、test_map_web 的 node 驅動。沒有 node 就略過。"""
+輿圖的「天下」那一列與「天下怎麼變」只算兩方。借 test_map_web 的 node 驅動。沒有 node 就略過。"""
 from __future__ import annotations
 
 import random
@@ -19,16 +19,6 @@ def _allied_status():
     game = Game.new(c, "甲", rng=random.Random(0))
     game.state.player.faction, game.state.player.ally = "haoqiang", "guan"
     return game.status_data()
-
-
-def test_stance_chip_shows_two_sides():
-    from test_peek_row import chips, run, view
-
-    status = _allied_status()
-    chip = next(x for x in chips(run(view(status))) if x["id"] == "stance")
-    assert "豪強" not in chip["label"] and "undefined" not in chip["html"]
-    assert chip["label"].startswith("兩軍態勢：")  # 不寫「三方」
-    assert chip["text"].count("·") == 1
 
 
 STANCES_DRIVER = r"""

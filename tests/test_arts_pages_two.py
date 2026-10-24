@@ -487,7 +487,7 @@ def test_the_same_order_reaches_the_page_data(real):
     assert page[:2] == ["jichu_tuna", "jichu_quanjiao"] and len(page) == 5  # 身上兩門同品質同成，照名字（吐 < 拳）
 
 
-PRACTICE_STUBS = 'const guideHtml = () => "", proGuide = () => "", createEntry = () => "";'  # 自創的入口（修練頁功法庫頂上）這裡不看
+PRACTICE_STUBS = 'const guideHtml = () => "", proGuide = () => "", createSub = () => "", shown = () => true, SELF_NEWS = [];'  # 自己頁底下的入口（自創、行狀）這裡不看
 CRAFT_STUBS = PRACTICE_STUBS + 'const furnaceSvg = () => "<svg></svg>", toast = () => {}, spinAt = () => "";'  # 自創那一頁的入口（自創單獨一頁）這裡不看
 CRAFT_FNS = ["pageCraft", "forgeBody", "forgeReady", "artFilter", "setArtFilter", "filterChips", "showArts",
              "pickMark", "craftView", "craftFilterRow", "craftChip", "kilnWarn", "kilnHtml", "madeCardHtml", "previewCardHtml", "forgeLineHtml", "craftSheetHtml", "craftSheetInner", "potGlow", "kilnPeek", "manualRows", "manualEntry", "bookIcon"]

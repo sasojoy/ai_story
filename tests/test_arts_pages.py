@@ -29,8 +29,8 @@ const parts = [
   // artFilter…：煉製頁挑東西那一排的篩選（arts-polish-2 FB-085），pageCraft 畫的時候要用
   ...["forgeBody", "forgeReady", "pagePractice", "pageCraft", "artFilter", "setArtFilter", "showArts", "filterChips",
     "pickMark", "craftView", "craftFilterRow", "craftChip", "kilnWarn", "kilnHtml", "madeCardHtml", "previewCardHtml", "forgeLineHtml", "craftSheetHtml", "craftSheetInner", "potGlow", "kilnPeek", "manualRows", "manualEntry", "bookIcon", ...input.fns].map(fn),
-  // createEntry：煉製頁通往自創那一頁的入口（自創單獨一頁，Joy 2026-10-21），這裡不看
-  `const guideHtml = () => "", furnaceSvg = () => '<div class="furnace"></div>', proGuide = () => "", spinAt = () => "", createEntry = () => "";`,
+  // createSub、SELF_NEWS：自己頁底下通往自創、行狀的入口（減法季批 1），這裡不看；shown：序章一塊一塊亮起來，這裡全亮
+  `const guideHtml = () => "", furnaceSvg = () => '<div class="furnace"></div>', proGuide = () => "", spinAt = () => "", createSub = () => "", shown = () => true, SELF_NEWS = [];`,
   input.stubs || "",
   "return { " + ["pagePractice", "pageCraft", ...input.fns, ...input.consts].join(", ") + " };",
 ];

@@ -222,7 +222,7 @@
   const TALKED_OUT = "已經談滿", TALKED_OUT_SUB = "已談滿";  // 談滿了的求見（Game._talked_out_note 的開頭）在行動列格子裡的短說法（待 joy 潤）
   // 灰格小字最多四個字（FB-670：練功多一格、五格之後每格約 62 px，320 寬約 51 px，扣掉內距與框約 45 px、10 px 的字不換行；四格時是六個字）。
   // 原因比這長的：格子寫短的，整句放行動列底下那一行（伺服器那一行本來就寫了整句的，例：散人不能出陣、不在爭奪之列；沒寫的帶在
-  // actionBar 的 noted 第三項 → actNotesHtml）。FB-664：交友灰著、這裡沒有人時（engine.SOCIAL_NO_ONE），10 個字的整句在 375 寬兩頭被切掉
+  // 點了灰格子說的那一句，見 actionBar 的 why）。FB-664：交友灰著、這裡沒有人時（engine.SOCIAL_NO_ONE），10 個字的整句在 375 寬兩頭被切掉
   const SOCIAL_NO_ONE = "這裡沒有能說上話的人", SOCIAL_NO_ONE_SUB = "沒有人";  // 待 joy 潤
   const FAME_GAP = /^名望還差 \d+$/, FAME_GAP_SUB = "名望不夠";  // 交友見不到人（engine._why_not_talk）：還差多少寫在底下那一行（FB-670；待 joy 潤）
   // 出陣灰著的兩種長原因（sortie.RANGER_NOTE、sortie.OUT_NOTE，六個字）：格子寫短的；整句是伺服器寫的出陣那一行（RANGER_LINE、OUT_LINE）（FB-670；待 joy 潤）
@@ -463,7 +463,6 @@
     // （只會花體力換同一句打發，Game._brush_off），選單上只剩直接列的「求見某某」（設計 9.1）：社交那一格改放它。
     // 交友或求見名單（兩位以上）在選單上時照舊，這顆收在摺疊裡
     const loneCall = m.options.find((o) => o.id.startsWith("call:") && o.id !== "call:back");
-    const noted = []; // 畫出來、伺服器又寫了說明的格子：[格子上的名字, 選項 id（, 整句）]（行動列底下那幾行，見 actNotesHtml）
     // 探索三選一（出陣探索與地盤設計第三節）：三顆畫在探索那一格點開的卡上，不掉進「此地還能做」
     // 找素材分支（第 32 項）畫在「找素材」底下那一排，不算進三選一的那幾顆；練功（explore:practice）在行動列自己一格（FB-670），不在卡上
     const modes = m.options.filter((o) => o.id.startsWith(EXPLORE_PREFIX) && !o.id.startsWith(GATHER_BRANCH) && o.id !== PRACTICE_ID);
@@ -474,20 +473,24 @@
     const exploreOpen = S.wheelSel === "explore" && modes.length > 0 && !!(byId["act:explore"] && byId["act:explore"].enabled);
     // 序章（新手引導計畫一）：還沒亮的格子不畫（act:explore、act:practice、act:train、act:rest、act:social、act:move）；
     // 不畫的格子對到的選項照樣記成用過，不會掉進「此地還能做」那個摺疊裡。練功的鍵教學內容還沒寫：草廬與初入江湖那四步都不畫（FB-670）
+    // 四格（減法季批 1，整合設計 6.3）：探索、出陣、交友、移動。尋敵、操練那一格只在新手引導（序章、初入江湖）時還在——引導的話叫你按它
+    // （content/tutorial.json）；平常收進「此地還能做」（不加進 used），批 2 的探索一顆接手之前照樣按得到
+    const guiding = !!(pro() || onb());
     const cells = ACT_CELLS.map((d0) => {
       const d = d0.key === "train" && m.sortie ? { ...d0, ...SORTIE_CELL } : d0;
+      if (d.key === "practice" && !guiding) return "";
       const o = d.ids.map((id) => byId[id]).find(Boolean) || (d.key === "social" ? loneCall : undefined);
       if (o) used.add(o.id);
       if (!shown(`act:${d.key}`) || ((d.key === "rest" || d.key === "practice") && !o)) return "";
       if (!o) return inkCell(d.key, d.name, d.none, d.icon, "disabled", " off");
       const lone = o.id.startsWith("call:");
       const [label, detail] = optParts(o);
-      const name = lone ? "求見" : label;  // 格子窄：名字寫「求見」，人物的名字放在下面一行
-      // 灰著、原因太長的交友（一類一顆開著時單人地點的交友是 act:socialize，不是 call:）：格子寫短的，整句帶句號放底下那一行（FB-664）。
-      // 名望還差幾點（FB-670：五格時四個字以上會被切）同樣。單人的求見（lone）伺服器自己寫了同一句（action_notes），不動
-      const drillFull = !o.enabled && detail.startsWith(DRILL_FULL); // 操練用完了：點了打開移動（最近的練功點在底下那一行）
-      const longWhy = !o.enabled && !lone && (detail === SOCIAL_NO_ONE || detail.startsWith(TALKED_OUT) || FAME_GAP.test(detail) || drillFull);
-      noted.push(longWhy ? [name, o.id, `${detail}。`] : [name, o.id]);
+      // 格子窄：名字寫「求見」，人物的名字放在下面一行。鈕名只留動詞（6.3）：「出陣・攻」寫「出陣」，攻守照小字與點開之後的卡
+      const name = lone ? "求見" : label.split("・")[0];
+      // 灰著的格子寫短的（FB-664、FB-670），整句原因點了才說（toast，同灰掉的俠寇鈕 opt-why）：伺服器那一行（action_notes：散人不能出陣、
+      // 談滿了幾時再來、最近的練功點……）優先，沒有就是標籤括號裡那一整句。以前整句排在行動列底下（explain-1），減法季批 1 拿掉了那幾行
+      const drillFull = !o.enabled && detail.startsWith(DRILL_FULL); // 操練用完了：點了打開移動（最近的練功點寫在點了說的那一句）
+      const why = (m.action_notes || {})[o.id] || (detail ? `${detail}。` : "");
       // 按不下去的原因：標籤括號裡寫的是體力就是「體力不夠」，寫別的就照寫；整句太長、格子裝不下（約 60 px、不換行）時只留
       // 最後一小句（例：挑戰本人打贏之後「剛吃了敗仗，閉門不見」只寫「閉門不見」，T4）
       // 談滿了的求見（「已經談滿 3 輪，第 1 週・週日 00:00 之後再來」）：最後一小句是換日的那一刻，格子裝不下會被切成碎片，
@@ -520,7 +523,8 @@
       const note = o.enabled && !wheel && /^體力 \d+/.test(parts[0]) ? (parts.find((x) => x in ODDS_TONE) || "") : "";
       const attrs = wheel ? `data-act="wheel" data-key="explore" aria-expanded="${exploreOpen}"`
         : drillFull ? `data-act="drill-full" aria-expanded="${S.wheelSel === "move"}"` // 格子自己的 data-key 是 practice，不能再寫一個
-        : o.enabled ? `data-act="choose" data-id="${esc(o.id)}"` : "disabled";
+        : o.enabled ? `data-act="choose" data-id="${esc(o.id)}"`
+        : why ? `data-act="opt-why" data-why="${esc(why)}" aria-disabled="true"` : "disabled";
       return inkCell(d.key, name, sub, d.icon, attrs, (o.enabled ? "" : " off") + (wheel && exploreOpen ? " on" : ""), note);
     });
     const moves = m.options.filter((o) => followsMode(o.id));
@@ -562,11 +566,8 @@
         <button class="btn" data-act="peer-answer" data-name="${esc(peers[o.id])}"><span>${esc(o.label)}</span></button>` : `
         <button class="btn" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}><span>${dealHtml(o.label)}</span></button>`).join("")}</div></details>` : "";
     const drawn = cells.filter(Boolean); // 序章裡沒亮的格子是空字串；一格都沒有、也沒有「此地還能做」時整條不畫
-    // 行動列底下那幾行（explain-1）排在行動列之後：不推動「剛剛」、場景與整排行動（375×812 第一屏）。展開移動時讓位（走法與目的地那張卡
-    // 緊貼在行動列底下），入伍段要按的鈕在「此地還能做」裡時也讓位（不把發光的那一顆往下推）
-    // 展開探索三選一時同樣讓位（三顆緊貼在行動列底下）
-    const notes = open || exploreOpen || hotHere ? "" : actNotesHtml(m, noted);
-    return `${sealRow}${summonsRow}${drawn.length ? `<div class="act-bar" role="group" aria-label="行動" style="--cells:${Math.max(4, drawn.length)}">${drawn.join("")}</div>` : ""}${notes}${moveCard}${exploreCard}${here}`;
+    // 以前行動列底下還有每一格的說明三行與「玩法說明 ›」（explain-1、2）：減法季批 1 拿掉了（整合設計 6.3；說明在本週卡的「為什麼」與設定裡）
+    return `${sealRow}${summonsRow}${drawn.length ? `<div class="act-bar" role="group" aria-label="行動" style="--cells:${Math.max(4, drawn.length)}">${drawn.join("")}</div>` : ""}${moveCard}${exploreCard}${here}`;
   }
 
   // 找素材分支（第 32 項，計畫 2.1 甲）：「找素材」那一顆是展開鈕（再點一次收起；入口灰著〔分支都按不下去〕時不展開），
@@ -593,23 +594,6 @@
     }).join("");
     const form = saying ? `<form class="free answer gather-say" id="gather-say-form"><input class="input" name="text" maxlength="20" placeholder="${esc(GATHER_SAY_HINT)}" aria-label="${esc(say.label)}"><button class="btn primary small" type="submit">${esc(GATHER_SAY_GO)}</button></form>` : "";
     return `${head}<div class="gather-branches" role="group" aria-label="找素材">${cells}${form}</div>`;
-  }
-
-  // 行動列底下那幾行（explain-1，試玩回饋：按下去之前不知道會怎樣）：探索、遊歷、交友（或求見）這一下會遇上什麼、打贏拿什麼。
-  // 句子是伺服器照規則寫好的（m.action_notes：選項 id → 一句；序章裡是空的），這裡只照格子的順序排、前面冠格子上的名字。
-  // 只寫畫出來的格子；打坐、移動的格子本身就寫著（回體力、幾條路），沒有說明
-  // 新手期（伺服器給 status.howto_entry：加入起跟體力回復加快同一段，序章裡沒有）最後多一行「玩法說明」的入口（explain-2，FB-100：
-  // 說明藏在齒輪裡，主畫面沒有一句指向它）。排在這一塊的最後：剛剛、場景、整排行動一個 px 都不動；點了打開設定抽屜、攤開玩法說明。
-  // 過了新手期這一行就不畫，抽屜裡那一顆照舊
-  const HOWTO_ENTRY = '<p class="howto-entry"><button class="linkish" data-act="howto-open" aria-haspopup="dialog">玩法說明 ›</button>這一季在打什麼、名望怎麼來、投靠與軍令</p>';
-  function actNotesHtml(m, noted) {
-    const notes = m.action_notes || {};
-    // full（可有可無）：格子裡寫了短說法的灰格自己帶整句（FB-664），蓋過伺服器那一句——伺服器的「結識這裡的人」說的是按得下去的時候。
-    // 伺服器沒給這一格的說明（舊版、序章裡是空的）就照舊不畫：有沒有這一行由伺服器說了算，這裡只換句子
-    // 操練用完了（新手引導重做）：伺服器沒給操練說明，整句（最近的練功點）照鈕上的寫
-    const rows = noted.filter(([, id, full]) => notes[id] || (full && id === "act:drill")).map(([name, id, full]) => `<p><b>${esc(name)}</b>${esc(full || notes[id])}</p>`);
-    if (m.status && m.status.howto_entry) rows.push(m.status.renown ? HOWTO_ENTRY.replace("名望怎麼來", "名聲怎麼來") : HOWTO_ENTRY);  // 名聲開著時那一節叫「名聲」
-    return rows.length ? `<div class="act-notes">${rows.join("")}</div>` : "";
   }
 
   // 「此地還能做」摺疊畫成開著還是收著（FB-087）。摺疊裡的鈕（例：求見盧植）被擋下來、或輪詢帶來新畫面，整頁重畫、摺疊是新畫的 DOM，
@@ -720,47 +704,8 @@
         <div class="front-bar stance side-${esc(x.side)}" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${x.value}" aria-label="${esc(x.name)}"><i style="width:${pct(x.value, 100)}%"></i></div></div>`).join("")}</div>`;
   }
 
-  // ── 江湖頁最上面的一排小標：態勢｜大事｜主線（正式版辛，PM 2026-10-06）──
-  // 以前是三張各 44px 的摺疊卡疊在「剛剛」上面（連縫約 170px），打完一仗整排行動就被擠出第一屏。現在是一排 44px 的小標：
-  // 點哪一個，它的內容就在這一排正下面攤開；同一時間只開一個，再點一次收起，點別的就換過去。內容跟以前摺疊卡裡的一樣
-  // （態勢：三條、收季規則、怎麼算的；大事：本週的公告，標題與內文都在面板裡；主線：主線與目標）。
-  // 每個小標都可以沒有：沒有態勢（開關關著，或休季由結算卡取代）、沒有大事、主線是空的就不畫那一個，三個都沒有整排不畫。
-  // 序章（新手引導計畫一）把三塊一個一個藏起來（shown("stances")／shown("board")／shown("quest")，態勢跟大事一起亮）：
-  // peekParts 回傳的清單裡把那一塊換成 null，peekHtml 會略過 null，三塊都藏著整排不畫。
-  // 展開哪一個記在 S.peekOpen（{ id, week }，帶著週次：換週就收回；輪詢重畫整頁也不會把開著的關掉）。
-  // 「大事」小標上有一個點：這一週有還沒打開看過的大事。看過的記在 S.boardSeen（名號、季、週次、則數），另存一份在 localStorage
-  // 當這個瀏覽器的方便（讀寫都包 try/catch，存不了就只記在這一頁）；換週沒有人看過，點又亮起來。週次每一季都從 1 起，
-  // 所以記的要帶季：上一季第 1 週看過的，下一季第 1 週的大事照樣亮點（status.season，見 Game.status_data）。
-  // 小標裡只有「大事 N」加這個點，不寫標題：428～440px 的手機一行放不下，整排會折成兩行（輪三審查）
-  const PEEK_SEEN_KEY = "tx-board-seen";
+  // 這一週是第幾週（軍令卡收起來照週記、本週卡）
   const peekWeek = (m) => (m.status && m.status.calendar ? m.status.calendar.week : 0);
-  const peekSeason = (m) => (m.status && m.status.season) || 0;
-
-  // 這個名號看過的大事：先看記憶體，沒有（或是別的名號留下的）再讀 localStorage（「季:週:則數」）；讀不到、格式不對（含舊的
-  // 沒有季的格式）都當沒看過
-  function boardSeen(m) {
-    const owner = m.status && m.status.name ? m.status.name : "";
-    if (S.boardSeen && S.boardSeen.owner === owner) return S.boardSeen;
-    let seen = { owner, season: -1, week: -1, count: 0 };
-    try {
-      const got = String(localStorage.getItem(`${PEEK_SEEN_KEY}:${owner}`) || "").match(/^(\d+):(\d+):(\d+)$/);
-      if (got) seen = { owner, season: Number(got[1]), week: Number(got[2]), count: Number(got[3]) };
-    } catch (e) { /* 讀不到就當沒看過 */ }
-    S.boardSeen = seen;
-    return seen;
-  }
-
-  function markBoardSeen(m) {
-    const owner = m.status && m.status.name ? m.status.name : "";
-    const seen = { owner, season: peekSeason(m), week: peekWeek(m), count: (m.bulletin || []).length };
-    S.boardSeen = seen;
-    try { localStorage.setItem(`${PEEK_SEEN_KEY}:${owner}`, `${seen.season}:${seen.week}:${seen.count}`); } catch (e) { /* 存不了就只在這一頁有效 */ }
-  }
-
-  function boardUnseen(m, week) {
-    const seen = boardSeen(m);
-    return seen.season !== peekSeason(m) || seen.week !== week || seen.count < m.bulletin.length;
-  }
 
   // 點開說明的那幾行（explain-2：戰況圖卡、態勢、大事、主線各一小段；伺服器照規則寫好的 status.war_help[鍵]，一行一段，跳脫）。
   // 伺服器沒給（開關關著、舊版）就是空字串
@@ -768,40 +713,6 @@
     const lines = m.status && m.status.war_help && m.status.war_help[key];
     return lines && lines.length
       ? `<div class="war-help ${key}-help"${id ? ` id="${id}"` : ""}>${lines.map((t) => `<p>${esc(t)}</p>`).join("")}</div>` : "";
-  }
-
-  // 三塊的小標與面板：{ id, label（給讀的人聽的整句）, chip（小標裡的字）, flag（要不要亮點）, panel（點開的內容） }；沒有就是 null。
-  // 面板最後接一小段說明（explain-2）：小標點開才畫，所以第一屏照舊只有那一排 44px
-  function stancePeek(m) {
-    const s = m.status;
-    if (m.season_result || !s || !s.stances) return null; // 休季：結算卡上有最終態勢；開關關著：status 沒有 stances
-    // 豪強分屬兩軍的季 status.stances 只有官軍、黃巾：沒有的那一方不畫
-    const rows = STANCE_NAMES.filter(([side]) => side in s.stances).map(([side, name]) => ({ side, name, value: s.stances[side] }));
-    const title = rows.length > 2 ? "三方態勢" : "兩軍態勢";
-    const n = s.stance_notes || {};
-    const how = [n.sum ? `官軍、黃巾：${esc(n.sum)}` : "", n.haoqiang ? `豪強：${esc(n.haoqiang)}` : ""].filter(Boolean).join("；");
-    return {
-      id: "stance",
-      label: `${title}：${rows.map((x) => `${x.name} ${x.value}`).join("、")}`,
-      chip: `<span class="peek-name">態勢</span><span class="peek-nums">${rows.map((x) => `<b class="side-${esc(x.side)}">${x.value}</b>`).join("·")}</span>`,
-      panel: `${stanceBars(rows, title)}${s.stance_rule ? `<p class="stance-rule">${esc(s.stance_rule)}</p>` : ""}${how ? `<p class="stance-how">${how}</p>` : ""}${warHelp(m, "stance")}`,
-    };
-  }
-
-  function boardPeek(m, week) {
-    if (!m.bulletin || !m.bulletin.length) return null;
-    return {
-      id: "board",
-      label: `${wkWord("this", "本週")}江湖大事 ${m.bulletin.length} 則`,
-      chip: `<span class="peek-name">大事</span><b class="peek-count">${m.bulletin.length}</b>`,
-      flag: boardUnseen(m, week),
-      panel: m.bulletin.map((b) => `<div class="bulletin-item">${b}</div>`).join("") + warHelp(m, "board"),
-    };
-  }
-
-  // 第一季把 beta 的主線關掉、其他也都沒有東西時，quest 是空的：這一塊不畫（計畫 T8）
-  function questPeek(m) {
-    return m.quest && m.quest.trim() ? { id: "quest", label: "主線與目標", chip: '<span class="peek-name">主線</span>', panel: m.quest + warHelp(m, "quest") } : null;
   }
 
   // 每日簽到（21 天季，正式季整合 6.2；畫面照 9.1 第 4 組丙）：收進這一排小標，還沒簽亮紅點、簽了寫「簽到 ✔」。攤開是這一週七格
@@ -862,32 +773,86 @@
     document.querySelectorAll("#page .act-move [data-id]").forEach((el) => { if (hit(el.dataset.id)) el.classList.add("glow"); });
   }
 
-  const peekParts = (m) => [newbiePeek(m), shown("stances") ? stancePeek(m) : null, shown("board") ? boardPeek(m, peekWeek(m)) : null, shown("quest") ? questPeek(m) : null, checkinPeek(m)];
-
-  function peekHtml(parts, week) {
-    const list = parts.filter(Boolean);
-    if (!list.length) return "";
-    const open = S.peekOpen && S.peekOpen.week === week ? list.find((p) => p.id === S.peekOpen.id) : null;
-    const row = list.map((p) => {
-      const on = p === open, dot = p.flag && !on; // 開著的時候就是正在看，不亮點
-      // dotNote：亮點時讀給人聽的那一句（簽到的 label 已經寫「還沒簽」，給空字串）
-      return `<button class="peek-chip ${p.id}${on ? " on" : ""}" data-act="peek" data-id="${p.id}" aria-expanded="${on}" aria-label="${esc(p.label)}${dot ? (p.dotNote ?? "，有還沒看過的") : ""}">${p.chip}${dot ? '<i class="peek-dot" aria-hidden="true"></i>' : ""}</button>`;
-    }).join("");
-    return `<div class="peek" id="peek"><div class="peek-row" role="group" aria-label="態勢、大事與主線">${row}</div>${open ? `<div class="peek-panel ${open.id}">${open.panel}</div>` : ""}</div>`;
+  // ── 本週卡與三方卡（減法季批 1，整合設計 6.1、3.4）──
+  // 本週卡吃掉以前那一排小標（新手、態勢、主線、簽到）、狀態列的「下一件」與黃底提示句：三行——第 N 週＋兩軍態勢（點了開「為什麼」）、
+  // 這一週的主題一句、你這一步（伺服器照順序排好的 steps：託付→軍令→懸賞→伏筆→新手目標→去投靠，「換一件事」挑下一個，S.wkStep 記第幾個、
+  // 換週歸零）。底下一排小字：為什麼（三方卡、主線、收季規則、下一件、新手目標）、換一件事、今日簽到（還沒簽亮紅點；攤開是原本簽到的那一格）。
+  // 攤開哪一個記在 S.wkOpen（"why"／"checkin"／null，同以前的 S.peekOpen 帶週次）。來信到了本週卡換成來信（pageJianghu）。
+  // 序章裡、休季伺服器不給 week_card：不畫。字待 joy 潤
+  const WK_STEP = "你這一步", WK_WHY = "為什麼", WK_NEXT = "換一件事", WK_CHECKIN = "今日簽到", WK_GO = "去做", WK_MAP = "輿圖";
+  const wkKey = (w) => `${w.label}${w.when}`;
+  function wkStepOf(w) {
+    if (!w.steps.length) return null;
+    if (!S.wkStep || S.wkStep.key !== wkKey(w)) S.wkStep = { key: wkKey(w), i: 0 };
+    return w.steps[S.wkStep.i % w.steps.length];
   }
-
-  const peekBlock = (m) => peekHtml(peekParts(m), peekWeek(m));
-
-  // 點小標：原地換掉這一塊（不重畫整頁：重畫會讓「剛剛」再播一次浮現動畫），焦點還給同一顆小標
-  function peekTap(id) {
-    const m = S.main, week = peekWeek(m);
-    const was = S.peekOpen && S.peekOpen.week === week ? S.peekOpen.id : null;
-    S.peekOpen = was === id ? null : { id, week };
-    if (was === "board" || id === "board") markBoardSeen(m); // 打開或離開「大事」都算看過：開著的時候又來的新事，離開時一併算
-    const box = document.getElementById("peek");
-    if (box) box.outerHTML = peekBlock(m);
-    const chip = document.querySelector(`.peek-chip[data-id="${id}"]`);
-    if (chip) chip.focus();
+  function wkSidesHtml(sides) {
+    if (!sides) return "";
+    return `<span class="wk-sides">${STANCE_NAMES.filter(([k]) => k in sides).map(([k, name]) => `${name} <b class="side-${k}">${sides[k] | 0}</b>`).join("・")}</span>`;
+  }
+  function weekCardHtml(m) {
+    const w = m.week_card;
+    if (!w || !shown("quest")) return "";
+    const open = S.wkOpen && S.wkOpen.key === wkKey(w) ? S.wkOpen.id : null;
+    const step = wkStepOf(w);
+    const go = step && step.kind === "newbie" ? `<button class="linkish wk-go" data-act="newbie-go" data-i="${step.i | 0}">${WK_GO} ›</button>` : "";
+    const ck = m.status && m.status.checkin;
+    const links = [
+      `<button class="linkish${open === "why" ? " on" : ""}" data-act="wk" data-id="why" aria-expanded="${open === "why"}">${WK_WHY}</button>`,
+      w.steps.length > 1 ? `<button class="linkish" data-act="wk-next">${WK_NEXT}</button>` : "",
+      // 本週要去的那一處畫在輿圖第一層（批 3：/api/map/state 的 week，金路、紅旗、「本週」朱印）：這裡不另算，只給一個去輿圖看的入口
+      shown("tab:map") ? `<button class="linkish" data-act="tab" data-tab="map">${WK_MAP} ›</button>` : "",
+      ck ? `<button class="linkish${open === "checkin" ? " on" : ""}" data-act="wk" data-id="checkin" aria-expanded="${open === "checkin"}">${WK_CHECKIN}${ck.done ? " ✔" : '<i class="peek-dot" aria-label="還沒簽"></i>'}</button>` : "",
+    ].filter(Boolean).join("");
+    const panel = open === "why" ? `<div class="wk-panel why">${whyHtml(m)}</div>`
+      : open === "checkin" && ck ? `<div class="wk-panel checkin">${checkinPeek(m).panel}</div>` : "";
+    return `<section class="card wk-card" id="week" aria-label="${esc(w.label)}">
+      <div class="wk-head"><b><span class="wk-label">${esc(w.label)}</span>${esc(w.when)}</b>${w.sides ? `<button class="wk-now" data-act="wk" data-id="why" aria-label="態勢，點了看三方">${wkSidesHtml(w.sides)}</button>` : ""}</div>
+      ${w.theme ? `<p class="wk-theme">${esc(w.theme)}</p>` : ""}
+      ${step ? `<p class="wk-step"><b>${WK_STEP}：</b>${esc(step.text)}${go}</p>` : ""}
+      <div class="wk-links">${links}</div>${panel}</section>`;
+  }
+  const WK_HOWTO = '<p class="wk-howto"><button class="linkish" data-act="howto-open" aria-haspopup="dialog">玩法說明 ›</button>這一季在打什麼、名望怎麼來、投靠與軍令</p>';
+  // 「為什麼」攤開的那一塊：三方卡、收季規則、下一件、主線（以前主線小標的內容）、新手目標（以前新手小標的內容）
+  function whyHtml(m) {
+    const s = m.status || {};
+    const nb = newbiePeek(m);
+    const next = m.week_card && m.week_card.next ? `<p class="wk-nextev"><b>下一件</b>${esc(m.week_card.next)}</p>` : "";
+    return `${m.sides_card ? sidesTableHtml(m.sides_card) : ""}${s.stance_rule ? `<p class="stance-rule">${esc(s.stance_rule)}</p>` : ""}${next}${warHelp(m, "stance")}`
+      + `${nb ? `<h4 class="wk-sub">${esc(s.newbie.title)}</h4>${nb.panel}` : ""}${m.quest && m.quest.trim() && shown("quest") ? `<div class="wk-quest">${m.quest}${warHelp(m, "quest")}</div>` : ""}`
+      + (s.renown ? WK_HOWTO.replace("名望怎麼來", "名聲怎麼來") : WK_HOWTO); // 以前在行動列底下（explain-2）；名聲開著時那一節叫「名聲」
+  }
+  // 三方卡（整合設計 3.4）：每一方一欄（手機上一欄一塊、上下排），要做到／現在／贏了給／投靠在哪。自己那一方框起來
+  const SIDES_ROWS = [["goal", "要做到"], ["now", "現在"], ["gives", "贏了給"], ["where", "投靠在哪"]];
+  function sidesTableHtml(sc) {
+    return `<div class="sides">${sc.cols.map((c) => `<div class="side side-${esc(c.id)}${c.mine ? " mine" : ""}"><h4>${esc(c.name)}${c.mine ? "<small>你在這一方</small>" : ""}</h4>`
+      + `<dl>${SIDES_ROWS.filter(([k]) => c[k] && c[k].length).map(([k, name]) => `<dt>${name}</dt><dd>${esc(Array.isArray(c[k]) ? c[k].join("、") : c[k])}</dd>`).join("")}</dl></div>`).join("")}</div>`;
+  }
+  // 還沒投靠的人：江湖頁最上面就是三方卡，加一句「先投一方」（整合設計 3.4）。收起來記在 S.sidesShut（這一頁有效）
+  const SIDES_FIRST = "先投一方", SIDES_FIRST_NOTE = "到那一方的地點按「投靠」。誰都不投也行，當個散人，接懸賞一樣闖得出名號。"; // 待 joy 潤
+  function sidesFirstHtml(m) {
+    const sc = m.sides_card;
+    if (!sc || sc.joined || !shown("quest")) return "";
+    return `<details class="card sides-first" ${S.sidesShut ? "" : "open"}><summary>${SIDES_FIRST}</summary><p class="sides-note">${SIDES_FIRST_NOTE}</p>${sidesTableHtml(sc)}</details>`;
+  }
+  // 點「為什麼」「今日簽到」：原地換掉本週卡（不重畫整頁，「剛剛」不重播），焦點還給同一顆
+  function wkTap(id) {
+    const w = S.main.week_card;
+    if (!w) return;
+    S.wkOpen = S.wkOpen && S.wkOpen.key === wkKey(w) && S.wkOpen.id === id ? null : { key: wkKey(w), id };
+    wkRepaint(`[data-act="wk"][data-id="${id}"]`);
+  }
+  function wkNext() {
+    const w = S.main.week_card;
+    if (!w || !w.steps.length) return;
+    wkStepOf(w);
+    S.wkStep.i = (S.wkStep.i + 1) % w.steps.length;
+    wkRepaint('[data-act="wk-next"]');
+  }
+  function wkRepaint(focus) {
+    const box = document.getElementById("week");
+    if (box) box.outerHTML = weekCardHtml(S.main);
+    document.querySelector(`#week ${focus}`)?.focus();
   }
 
   // 第一季的結算卡（休季才有，計畫 T9）：結局與季末公告、最終態勢與三條戰況；十二件大事與各陣營出力前五收在摺疊裡
@@ -1019,16 +984,65 @@
     return `<section class="card guide" aria-label="${esc(g.speaker)}的話"><div class="guide-head"><b>${esc(g.speaker)}</b>${btn}</div>${done}${scene}<p class="guide-text${full ? "" : " clamp"}" data-act="guide-more" role="button" tabindex="0" aria-expanded="${full}">${esc(pages[page])}</p>${next}</section>`;
   }
 
+  // 事件選項（減法季批 1，整合設計 6.4）：鈕上只留動作（伺服器給的 event_opts[id].act），心裡話只在沒把握（「難說」以下）時寫在底下一行小字，
+  // 失手的代價不寫在鈕上（選單上的標籤一個字不改，照舊給別處讀）。鈕前的小圖示照這一下看哪一樣：力、身、骨、悟、博、戰（動手），
+  // 不擲骰的「行」，隨口應對「言」。隨口應對的標籤是伺服器的字，只拿掉後面體力的那個括號
+  const EV_ICON = { str: "力", agi: "身", con: "骨", wis: "悟", lore: "博", fight: "戰", "": "行", say: "言" };
+  const EV_COST = /（(?:體力 -\d+，?)?(?:(?:失手|輸了)多耗體力 \d+)?）$/;
+  function evOf(m, o) {
+    if (o.id === FREE_TEXT_OPTION && m.event_opts) return { act: o.label.replace(EV_COST, ""), kind: "say", worry: "" };
+    return (m.event_opts || {})[o.id] || null;
+  }
+  const evIconHtml = (ev) => `<span class="k ev ev-${ev.kind || "plain"}" aria-hidden="true">${EV_ICON[ev.kind] || EV_ICON[""]}</span>`;
+  const evLabelHtml = (o, ev) => `<span>${esc(ev.act)}${ev.worry ? `<small class="opt-note ev-worry">${esc(ev.worry)}</small>` : ""}${o.note ? `<small class="opt-note">${esc(o.note)}</small>` : ""}</span>`;
+
+  // 「剛剛」收著時一行（整合設計 6.3）：時間一小行，底下標題接第一句，放不下加「…」；點了攤開全文（S.nowOpen，同以前的「展開全文」）。
+  // 在路上照舊三行（FB-060 的排法沒動）
+  // 只拿字（不靠 DOM）：時刻那一格（.tx-when）另外拿出來，其餘的標籤換成空白、實體還原，連成一行
+  const NOW_WHEN = /<div class="tx-when">([\s\S]*?)<\/div>/;
+  const plainText = (html) => String(html).replace(/<(br|\/(div|p|li|h\d))\b[^>]*>/gi, "　").replace(/<[^>]*>/g, "")
+    .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&")
+    .replace(/[\s　]+/g, (w) => (w.includes("　") ? "　" : " ")).replace(/^[\s　]+|[\s　]+$/g, "");
+  function nowOneHtml(html) {
+    const hit = NOW_WHEN.exec(html);
+    const when = hit ? plainText(hit[1]) : "";
+    const rest = plainText(hit ? html.replace(hit[0], "") : html);
+    return `<button class="now-one" data-act="now-more" aria-expanded="false">${when ? `<span class="tx-when">${esc(when)}</span>` : ""}<span class="now-line">${esc(rest)}</span></button>`;
+  }
+
+  // 「剛剛」那一張（不是戰鬥卡片的那種）：收著是一行（nowOneHtml，整合設計 6.3），點開整則攤開、底下「收起 ▴」；在路上照舊收成三行（FB-060）
+  function nowBlock(m) {
+    if (!m.now) return "";
+    const expanded = S.nowOpen === m.now;
+    const [text, chips] = splitChips(m.now);
+    return expanded || m.on_road
+      ? `<div class="now ${expanded ? "open" : "clamp"}${m.on_road ? " road" : ""}"><div class="now-text">${text}<button class="linkish now-more" data-act="now-more" aria-expanded="${expanded}">${nowMore(expanded)}</button></div>${chips}${frontReportHtml(m.front)}</div>`
+      : `<div class="now one">${nowOneHtml(text)}${chips}${frontReportHtml(m.front)}</div>`;
+  }
+  // 點「剛剛」：在路上原地換 class（同以前，不重播浮現動畫）；平常一行與整則之間原地換掉那一張
+  function nowToggle(el) {
+    const box = el.closest(".now");
+    const open = !box.classList.contains("open");
+    S.nowOpen = open ? S.main.now : null;
+    if (S.main.on_road) {
+      box.classList.toggle("open", open);
+      box.classList.toggle("clamp", !open);
+      el.textContent = nowMore(open);
+      el.setAttribute("aria-expanded", String(open));
+      return;
+    }
+    box.outerHTML = nowBlock(S.main);
+    document.querySelector("#page > .now [data-act=\"now-more\"]")?.focus();
+  }
+
   function pageJianghu() {
     const m = S.main;
     // 「剛剛」（A4）：預設只露出開頭幾行，太長的（例如新角色的開場故事）收著、點「展開全文」看完，不在卡片裡捲。
     // 展開記在 S.nowOpen（記的是那一則本身），換成新的一則就自動收回；其實放得下的話 afterPage() 會拿掉收合。
     // 畫的是 m.now：最新一則只是本週大事（小標點開的面板）上已經有全文的大事時，伺服器改給再前面那一則（FB-046）；江湖紀錄頁照舊用 m.latest
-    const expanded = S.nowOpen === m.now;
-    const [text, chips] = !m.card && m.now ? splitChips(m.now) : ["", ""];
     const now = m.card
       ? `<div class="card battle-card">${fightCard(m.card, m.card_id)}${gaugeHtml(m.card_gauge)}${m.now || ""}${frontReportHtml(m.front)}</div>`
-      : m.now ? `<div class="now ${expanded ? "open" : "clamp"}${m.on_road ? " road" : ""}"><div class="now-text">${text}<button class="linkish now-more" data-act="now-more" aria-expanded="${expanded}">${nowMore(expanded)}</button></div>${chips}${frontReportHtml(m.front)}</div>` : "";
+      : nowBlock(m);
     const free = m.free_text != null
       ? `<form class="free" id="free-form" data-op="${esc(m.free_op || "battle_text")}"><input class="input" name="text" maxlength="20" placeholder="${esc(m.free_text || "輸入你想做的事（20字內）")}"><button class="btn primary small" type="submit">送出</button></form>${m.free_text_note ? `<p class="free-note">${esc(m.free_text_note)}</p>` : ""}`
       : "";
@@ -1082,7 +1096,7 @@
         <form class="free answer" id="answer-form"><input class="input" name="text" maxlength="20" placeholder="${esc(o.label)}（20字內）" aria-label="${esc(o.label)}"><button class="btn primary small" type="submit">說出口</button></form>` : SAY_OPTIONS.includes(o.id) && S.saying && o.id === sayingId() && o.enabled ? `
         <form class="free answer" id="say-form"><input class="input" name="text" maxlength="${m.say_max || 20}" placeholder="${SAY_HINTS[o.id] ? `${SAY_HINTS[o.id]}（${m.say_max || 20}字內）` : (m.say_max || 20) > 20 ? `想對他說的話，也可以開口求他做事（${m.say_max}字內）` : "想對他說的話（20字內）"}" aria-label="${esc(o.label)}"><button class="btn primary small" type="submit">說出口</button></form>` : isTask(o) ? `${i === firstTask ? '<div class="road-tasks">' : ""}${taskButton(o)}${i === lastTask ? "</div>" : ""}` : paired && isWay(o) ? `${i === firstWay ? '<div class="road-tasks road-ways">' : ""}${wayButton(o)}${i === lastWay ? "</div>" : ""}` : `${i === firstMove && !modesLast ? modes : ""}
         <button class="btn ${followsMode(o.id) ? "go" : ""}${!o.enabled && o.note ? " off" : ""}" data-act="${!o.enabled && o.note ? "opt-why" : "choose"}" data-id="${esc(o.id)}" ${!o.enabled && o.note ? `data-why="${esc(o.note)}" title="${esc(o.note)}" aria-disabled="true"` : o.enabled ? "" : "disabled"}>
-          ${senseTag(o) ? `<span class="k sense">${esc(senseTag(o))}</span>` : o.tag ? `<span class="k rn-tag ${rnPathClass(o.tag)}">${esc(o.tag)}</span>` : `<span class="k">${o.id.startsWith("move:") ? "→" : o.id.startsWith("road:back") ? "↩" : i + 1}</span>`}${optLabelHtml(o)}
+          ${senseTag(o) ? `<span class="k sense">${esc(senseTag(o))}</span>` : o.tag ? `<span class="k rn-tag ${rnPathClass(o.tag)}">${esc(o.tag)}</span>` : evOf(m, o) ? evIconHtml(evOf(m, o)) : `<span class="k">${o.id.startsWith("move:") ? "→" : o.id.startsWith("road:back") ? "↩" : i + 1}</span>`}${evOf(m, o) ? evLabelHtml(o, evOf(m, o)) : optLabelHtml(o)}
         </button>`).join("")}${modesLast ? modes : ""}
       </div>`;
     // 有所感選做法（explain-2）：鈕底下兩行小字（做法跟此地的關係、意境拿來做什麼），排在做法後面，不把做法往下推
@@ -1102,19 +1116,14 @@
         ? `<section class="card scene road${S.sceneOpen ? "" : " clamp"}" data-act="scene-more" role="button" tabindex="0" aria-expanded="${!!S.sceneOpen}">${m.scene}</section>`
         : `<section class="card scene">${siegeStrip(withGauge(musterScene(m, roundBlocks(battleScene(m), m.battle_gauge)), m.battle_gauge), m.siege)}${myTurn ? "" : people}</section>`;
     const peopleAfter = myTurn && people && !masterTalks && !m.on_road ? `<section class="card people-after">${people}</section>` : "";
-    // 序章：小地圖與江湖紀錄的連結要等「輿圖、見聞」亮了才畫（shown("minimap")）
-    const tail = shown("minimap") ? `<div class="mini" data-act="tab" data-tab="map" role="button" aria-label="展開輿圖">${m.minimap}</div>
-      <button class="linkish" data-act="news" data-news="journal">看江湖紀錄 ›</button>` : "";
-    // 態勢｜大事｜主線 收成一排小標（正式版辛）：排在最上面、「剛剛」之前，不管是哪一種選單；在路上才排到選項底下（FB-055）。
-    // 三張摺疊卡疊起來有 170px，打完一仗整排行動就被擠出第一屏；一排只有 44px。公告的展開、已看過都是小標自己記（見 peekHtml）
     const week = peekWeek(m);
-    const peek = peekBlock(m);
-    // 三條戰況排在行動列下面、小地圖上面，不擠掉第一屏的「剛剛」、場景與行動列
-    // 點圖卡在底下攤開說明（explain-2，frontsBlock）
-    const fronts = (m.fronts && shown("fronts") ? frontsBlock(m) : "") + armsLine(m);
+    // 本週卡（減法季批 1，整合設計 6.1）排在最上面、「剛剛」之前（在路上排到選項底下，FB-055）：吃掉以前那一排小標。來信到了換成來信（回了信或收起來才換回本週卡）；
+    // 還沒投靠的人最上面先是三方卡（sidesFirstHtml）。戰況圖卡、軍備與小地圖從江湖頁拿掉（6.3），戰況與軍備在見聞・大事
+    const letterCard = letterHtml(m.letter);
+    const peek = sidesFirstHtml(m) + (letterCard || weekCardHtml(m));
     // 休季的結算卡排在最上面（計畫 T9）；季收了、有行狀時緊接一張「讀你的傳」（玩家傳第二批，m.zhuan）
     const resultCard = (m.season_result ? resultHtml(m.season_result) : "") + (m.zhuan ? zhuanEntry(m.zhuan, "這一季收了，史官替你立傳", "讀你的傳") : "");
-    const letter = dailyCardHtml(m) + letterHtml(m.letter); // 書信小卡排在「剛剛」上面（大勢人物擴充第二批）；月卡今天的份還沒領時更上面一張
+    const letter = dailyCardHtml(m); // 月卡今天的份還沒領時「剛剛」上面一張（書信小卡在本週卡的位置，見上面）
     // 本週軍令排在行動列（與路上捷徑）下面、三條戰況上面：不擠掉第一屏的「剛剛」、場景與行動列（計畫 T6）
     // 收起來照週記；21 天季的軍令每天一道，照季曆第幾天記（status.calendar.day），隔天的新軍令重新展開
     const orderKey = (m.status && m.status.calendar && m.status.calendar.day) || week;
@@ -1131,13 +1140,13 @@
     const guide = guideHtml(m.guide, m.on_road);
     // 在路上（FB-055）：路上的五個選項要全在第一屏（375×812），所以那一排小標與說書人的框都排在選項底下——
     // 不是這一刻要按的；捷徑還是緊接在場景底下（FB-048）
-    if (m.on_road) return `${resultCard}${letter}${now}${scene}${links}${free}${menu}${guide}${peek}${orderCard}${bountyCard}${sealMine}${sealCard}${fronts}${tail}`;
+    if (m.on_road) return `${resultCard}${letter}${letterCard}${now}${scene}${links}${free}${menu}${guide}${sidesFirstHtml(m)}${weekCardHtml(m)}${orderCard}${bountyCard}${sealMine}${sealCard}`;
     // 決戰輪到你出招的回合（FB-136）：三招緊接在場景底下，放手一搏的輸入框與說書人的框排在三招後面（同在路上，這一刻要按的排前面）。
     // 開打那一刻場景多了戰局條、這一幕的開場、騎兵那一句，框與輸入框再排在上面的話三招整排落到分頁列底下（14 天、騎著馬、框還在：855～999）
     if (myTurn) {
-      return `${resultCard}${peek}${letter}${now}${scene}${links}${menu}${peopleAfter}${free}${guide}${senseNotes}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}${fronts}${tail}`;
+      return `${resultCard}${peek}${letter}${now}${scene}${links}${menu}${peopleAfter}${free}${guide}${senseNotes}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}`;
     }
-    return `${resultCard}${peek}${letter}${now}${scene}${links}${guide}${free}${menu}${senseNotes}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}${fronts}${tail}`;
+    return `${resultCard}${peek}${letter}${now}${scene}${links}${guide}${free}${menu}${senseNotes}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}`;
   }
 
   // 此地還有誰（玩家之間的互動第一層，企劃者 2026-10-08）：場景卡底下一行，名字點了打開玩家卡（peerHtml）。

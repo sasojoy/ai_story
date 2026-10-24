@@ -1,4 +1,5 @@
 """玩法說明二（explain-2）的網頁部分：點戰況圖卡、態勢、大事、主線看的說明。
+減法季批 1 起戰況圖卡在見聞・大事・大勢的最上面（trendsTopHtml）、態勢與主線的說明在本週卡「為什麼」裡、大事的說明接在本週江湖大事後面。
 照 tests/test_explain_web.py 的做法把整支 app.js 放進 node 的假瀏覽器，餵它真的引擎給的 /api/main；沒有 node 就略過。"""
 from __future__ import annotations
 
@@ -39,9 +40,9 @@ def test_tapping_the_front_cards_opens_their_explanation_below_them():
     m = _season_one()
     lines = m["status"]["war_help"]["fronts"]
     out = run(m, f"""return (async () => {{
-      const closed = H.pageJianghu();
+      const closed = H.trendsTopHtml(H.S.main);
       {_click("fronts-help")}
-      const opened = H.pageJianghu();
+      const opened = H.trendsTopHtml(H.S.main);
       const first = H.S.frontsOpen;
       {_click("fronts-help")}
       return {{ closed, opened, first, second: H.S.frontsOpen }};
@@ -54,7 +55,7 @@ def test_tapping_the_front_cards_opens_their_explanation_below_them():
     block = re.search(r'<div class="war-help fronts-help" id="fronts-help">(.*?)</div>', opened).group(1)
     assert re.findall(r"<p>(.*?)</p>", block) == lines  # 伺服器寫好的幾行，一行一段
     assert opened.index('id="fronts-help"') > opened.index('class="fronts"')  # 排在圖卡底下
-    # 攤開只動到圖卡底下：圖卡以前的整頁一個字都沒變（「剛剛」、場景、行動列、軍令卡）
+    # 攤開只動到圖卡底下：圖卡以前的一個字都沒變
     assert opened[:opened.index('<div class="war"')] == closed[:closed.index('<div class="war"')]
 
 
@@ -70,7 +71,7 @@ def test_enter_or_space_on_the_front_cards_opens_their_explanation():
       const press = (key, target) => T.docListeners.keydown.forEach((fn) => fn({ key, target, preventDefault: () => { prevented += 1; } }));
       press("Enter", cards);
       const afterEnter = H.S.frontsOpen;
-      const opened = H.pageJianghu();
+      const opened = H.trendsTopHtml(H.S.main);
       press(" ", cards);
       const afterSpace = H.S.frontsOpen;
       press("a", cards);
@@ -85,14 +86,14 @@ def test_the_front_cards_button_names_the_three_values():
     """審查 Minor 4：圖卡變成 role="button" 之後，裡面的 meter 不再念得出來；鈕的名字自己帶三條戰線的值（同一份資料），畫面不變。"""
     m = _season_one()
     m["fronts"][0]["chaos"] = True
-    page = run(m, "return H.pageJianghu();")
+    page = run(m, "return H.trendsTopHtml(H.S.main);")
     cards = re.search(r'<div class="fronts"[^>]*>', page).group(0)
     label = re.search(r'aria-label="([^"]*)"', cards).group(1)
     for f in m["fronts"]:
         assert f"{f['name']} {f['value']}" in label
     assert f"{m['fronts'][0]['name']} {m['fronts'][0]['value']}（亂局）" in label and label.endswith("點開看說明）")
     m["status"].pop("war_help")  # 沒有說明時：照舊是一組，meter 自己念得出來
-    plain = re.search(r'<div class="fronts"[^>]*>', run(m, "return H.pageJianghu();")).group(0)
+    plain = re.search(r'<div class="fronts"[^>]*>', run(m, "return H.trendsTopHtml(H.S.main);")).group(0)
     assert 'role="group"' in plain and "點開看說明" not in plain
 
 
@@ -100,7 +101,7 @@ def test_the_front_cards_are_not_a_button_without_the_server_explanation():
     """伺服器沒給說明（舊版）：照舊只是一排圖卡，不能點。"""
     m = _season_one()
     m["status"].pop("war_help")
-    page = run(m, "return H.pageJianghu();", S={"frontsOpen": True})
+    page = run(m, "return H.trendsTopHtml(H.S.main);", S={"frontsOpen": True})
     cards = re.search(r'<div class="fronts"[^>]*>', page).group(0)
     assert 'data-act' not in cards and 'role="group"' in cards and "war-help" not in page
 
@@ -108,42 +109,43 @@ def test_the_front_cards_are_not_a_button_without_the_server_explanation():
 def test_the_explanation_lines_are_escaped():
     m = _season_one()
     m["status"]["war_help"]["fronts"] = ["<b>粗</b>"]
-    page = run(m, "return H.pageJianghu();", S={"frontsOpen": True})
+    page = run(m, "return H.trendsTopHtml(H.S.main);", S={"frontsOpen": True})
     assert "&lt;b&gt;粗&lt;/b&gt;" in page and "<b>粗</b>" not in page
 
 
 # ── 一、態勢、大事、主線：小標點開的面板最後接一小段說明 ─────────────────
 
 
-@pytest.mark.parametrize("chip", ["stance", "board", "quest"])
-def test_each_peek_panel_ends_with_its_explanation(chip):
-    m = _season_one(bulletin=["<p><strong>三十六方起義</strong></p>"])
-    week = m["status"]["calendar"]["week"]
-    closed = run(m, "return H.peekBlock(H.S.main);")
-    assert f'data-id="{chip}"' in closed and "war-help" not in closed  # 小標在、說明要點開才有
-    panel = run(m, "return H.peekBlock(H.S.main);", S={"peekOpen": {"id": chip, "week": week}})
+@pytest.mark.parametrize("chip", ["stance", "quest"])
+def test_the_why_panel_carries_the_stance_and_quest_explanations(chip):
+    m = _season_one()
+    key = m["week_card"]["label"] + m["week_card"]["when"]
+    closed = run(m, "return H.weekCardHtml(H.S.main);")
+    assert 'data-id="why"' in closed and "war-help" not in closed  # 要點開「為什麼」才有
+    panel = run(m, "return H.weekCardHtml(H.S.main);", S={"wkOpen": {"key": key, "id": "why"}})
     block = re.search(rf'<div class="war-help {chip}-help">(.*?)</div>', panel).group(1)
     assert re.findall(r"<p>(.*?)</p>", block) == m["status"]["war_help"][chip]
-    assert panel.rindex("war-help") > panel.index('class="peek-panel')  # 接在面板最後
+
+
+def test_the_board_explanation_follows_the_weeks_news():
+    m = _season_one(bulletin=["<p><strong>三十六方起義</strong></p>"])
+    page = run(m, "return H.trendsTopHtml(H.S.main);")
+    block = re.search(r'<div class="war-help board-help">(.*?)</div>', page).group(1)
+    assert re.findall(r"<p>(.*?)</p>", block) == m["status"]["war_help"]["board"]
+    assert page.index("board-help") > page.index("三十六方起義")
 
 
 # ── 二、新手期江湖頁的「玩法說明」入口 ─────────────────────────────
 
 
-def test_the_newbie_entry_is_the_last_line_under_the_action_row():
+def test_the_newbie_entry_is_the_last_line_of_the_why_panel():
+    """減法季批 1：「玩法說明」入口從行動列底下搬到本週卡「為什麼」攤開的最後一行；江湖頁平常不多一行。"""
     m = _season_one()
-    assert m["status"]["howto_entry"] is True
-    page = run(m, "return H.pageJianghu();")
-    block = re.search(r'<div class="act-notes">(.*?)</div>', page).group(1)
-    rows = re.findall(r"<p[^>]*>.*?</p>", block)
-    assert 'data-act="howto-open"' in rows[-1] and "玩法說明" in rows[-1]  # 最後一行
-    assert sum('data-act="howto-open"' in r for r in rows) == 1
-    # 第一屏不動：入口以前的整頁（剛剛、場景、整排行動、說明那幾行）跟沒有入口時一個字都不差
-    m["status"]["howto_entry"] = False
-    without = run(m, "return H.pageJianghu();")
-    assert 'data-act="howto-open"' not in without
-    cut = page.index('<p class="howto-entry">')
-    assert page[:cut] == without[:cut]
+    key = m["week_card"]["label"] + m["week_card"]["when"]
+    assert 'data-act="howto-open"' not in run(m, "return H.pageJianghu();")
+    panel = run(m, "return H.weekCardHtml(H.S.main);", S={"wkOpen": {"key": key, "id": "why"}})
+    assert panel.count('data-act="howto-open"') == 1
+    assert panel.index('data-act="howto-open"') > panel.rindex("war-help")
 
 
 def test_the_newbie_entry_gives_way_with_the_notes():
@@ -209,82 +211,13 @@ def test_without_the_server_help_the_methods_keep_their_numbers():
     assert re.search(r'<span class="k">1</span>', page)
 
 
-def test_the_xinde_hint_steps_aside_while_a_choice_card_is_up():
-    """心得一付得起就提示（explain-2）：新人幾乎一直有那一行。事件、有所感這類一次一組的選項在眼前時不畫，不把最後一個選項擠下去；
-    平常閒著（行動列）照畫，在路上照舊收成一行。"""
+def test_the_xinde_hint_left_the_status_bar():
+    """減法季批 1（整合設計 6.2）：狀態列剩三行，心得那一句提示搬到「自己」頁（心得底下）；閒著、選項、在路上都不在狀態列。"""
     hint = "💡 你已攢下 20 點心得。去「修練」練成內功、武學。"
-    idle = _season_one()
-    idle["status"]["hint"] = hint
-    assert hint in run(idle, "return H.topHtml();")
-    feeling = _feeling_view()
-    feeling["status"]["hint"] = hint
-    assert hint not in run(feeling, "return H.topHtml();")
-    road = _season_one()
-    road["status"].update(hint=hint, journey="往潁川郊野，還要 3 分鐘")
-    road["options"] = [{"id": "act:on_road", "label": "趕路中", "enabled": False}]
-    assert "road-hint" in run(road, "return H.topHtml();")
-
-
-def test_the_xinde_hint_shows_while_in_seclusion():
-    """審查 I2：閉關（只剩「提前出關」）是最長的空檔，修練、煉製照樣做得了，也沒有選項會被擠下去：提示照畫（打坐 2026-10-12 拿掉了）。"""
-    secluded = _season_one()
-    secluded["status"]["hint"] = "💡 你已攢下 20 點心得。去「修練」練成內功、武學。"
-    secluded["options"] = [{"id": "act:break", "label": "提前出關", "enabled": True}]
-    assert secluded["status"]["hint"] in run(secluded, "return H.topHtml();")
-
-
-def _hinted_game():
-    """週末設定的新角色、付得起下一成（狀態列有 💡），師父「碰到才說」的內傷那一條排上框（打完一場常見的那一條）。"""
-    content = real_content("weekend")
-    content.config.auto_open_first_season = True
-    game = Game.new(content, "沈浪", rng=random.Random(0))
-    game.client = None
-    game.state.player.stats["xinde"] = 20
-    game._hint("h_injury")
-    game._surface_hint()
-    return game
-
-
-def test_one_piece_of_guidance_at_a_time_the_box_before_the_hint():
-    """審查 M6：碰到才說的框在江湖頁上時不畫 💡（兩樣一起，打完一場之後行動列會被推到分頁列底下）；框是比較專門的那一句，提示等它。
-    沒有框的閒著畫面照畫。"""
-    game = _hinted_game()
-    m = server.main_view(game)
-    assert m["guide"] and m["guide"].get("hint") and m["status"]["hint"]
-    assert any(o["id"] == "act:explore" for o in m["options"])  # 平常閒著的行動列
-    assert m["status"]["hint"] not in run(m, "return H.topHtml();")
-    m["guide"] = None
-    assert m["status"]["hint"] in run(m, "return H.topHtml();")
-
-
-def test_the_hint_comes_back_once_the_box_is_dismissed():
-    game = _hinted_game()
-    m = server.main_view(game)
-    hint = m["status"]["hint"]
-    game.guide_ack()
-    after = server.main_view(game)
-    assert after["guide"] is None and after["status"]["hint"] == hint
-    out = run(m, """return (async () => {
-      const before = H.topHtml();
-      const el = { dataset: { act: "guide-ack" }, classList: { contains: () => false } };
-      await T.docListeners.click[0]({ target: { closest: () => el } });
-      return { before, after: H.topHtml(), calls: T.calls.map((c) => c[0]) };
-    })();""", responses={"/api/do/guide_ack": {"main": after}})
-    assert "/api/do/guide_ack" in out["calls"]
-    assert hint not in out["before"] and hint in out["after"]
-
-
-def test_the_drill_row_reads_drill_once():
-    """FB-101：投靠黃巾、在黃巾別部營寨，行動列底下那一行以前是「操練　操練不冒險：…」。操練是舊遊歷的，所以關掉出陣。"""
-    content = classic_rules(real_content("weekend"))
-    content.config.auto_open_first_season = True
-    game = Game.new(content, "沈浪", rng=random.Random(0))
-    game.client = None
-    game.state.player.faction = "huang"
-    game.state.player.location = "huangjin_camp"
-    page = run(server.main_view(game), "return H.pageJianghu();")
-    row = next(r for r in re.findall(r"<p><b>(.*?)</b>(.*?)</p>", page) if r[0] == "操練")
-    assert (row[0] + row[1]).count("操練") == 1 and row[1].startswith("不冒險：")
+    for over in ({}, {"journey": "往潁川郊野，還要 3 分鐘"}):
+        m = _season_one()
+        m["status"].update(hint=hint, **over)
+        assert hint not in run(m, "return H.topHtml();")
 
 
 def test_the_newbie_entry_refreshes_the_admin_view_like_the_gear():
@@ -296,14 +229,3 @@ def test_the_newbie_entry_refreshes_the_admin_view_like_the_gear():
     }})();""", S={"adPlayerName": "沈青衫"}, responses={"/api/howto": {"text": "<p>x</p>"}, "/api/admin/player": {"name": "沈青衫"},
                                                     "/api/admin": {}})
     assert "/api/admin" in out and "/api/admin/player" in out
-
-
-def test_the_entry_line_keeps_the_notes_line_height():
-    """版面釘子：入口那顆鈕跟說明同一個字級，按的範圍用內距撐大、再用同樣大小的負外距收回，所以那一行跟其他行一樣高（12px×1.5）。"""
-    css = (webharness.ROOT / "web" / "style.css").read_text(encoding="utf-8")
-    notes = re.search(r"^\.act-notes \{([^}]*)\}", css, re.M).group(1)
-    entry = re.search(r"^\.act-notes \.howto-entry button \{([^}]*)\}", css, re.M).group(1)
-    assert "font-size: 12px" in notes and "font-size: 12px" in entry and "line-height: inherit" in entry
-    pad = re.search(r"padding: (\d+)px", entry).group(1)
-    top, _, bottom, _ = re.search(r"margin: ([^;]+);", entry).group(1).split()
-    assert top == bottom == f"-{pad}px"  # 上下的內距＝上下的負外距

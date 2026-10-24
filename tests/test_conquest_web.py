@@ -31,10 +31,10 @@ finish(H.siegeStrip(input.html, input.s));
 """
 
 PAGE = r"""
-const S = { main: input.m || {}, xingshiOpen: input.open ? new Map(input.open) : null };
-const NEWS = src.match(/\n  const NEWS = \[[\s\S]*?\n  \];/)[0]; // 多行的 const：konst 抓不到，照原文切
+const S = { main: input.m || {}, news: input.news || "reports", xingshiOpen: input.open ? new Map(input.open) : null };
+const many = (name) => src.match(new RegExp(`\\n  const ${name} = \\[[\\s\\S]*?\\n  \\];`))[0]; // 多行的 const：konst 抓不到，照原文切
 const H = new Function("S", [
-  konst("esc"), NEWS, konst("XS_EMPTY"), konst("XS_PENDING"),
+  konst("esc"), many("NEWS"), many("NEWS_PARTS"), many("SELF_NEWS"), konst("newsPart"), konst("selfNews"), konst("XS_EMPTY"), konst("XS_PENDING"),
   fn("xingshiParas"), fn("xingshiHtml"), fn("newsSegHtml"),
   "return { xingshiHtml, newsSegHtml };",
 ].join("\n"))(S);
@@ -46,8 +46,8 @@ def strip(html: str, s):
     return webharness.run(STRIP, {"html": html, "s": s})
 
 
-def page(x=None, m=None, open_=None):
-    payload = {"m": m or {}, "open": open_}
+def page(x=None, m=None, open_=None, news=None):
+    payload = {"m": m or {}, "open": open_, "news": news}
     if x is not None:
         payload["x"] = x
     return webharness.run(PAGE, payload)
@@ -266,16 +266,14 @@ def test_empty_and_pending_and_off():
 
 
 def test_tab_only_when_on_and_two_rows_for_nine():
+    """減法季批 1：見聞四顆籤（大事、傳聞、江湖史、紀錄），大事底下一排小的：戰報、大勢，形勢只有開著的季才有、排在大勢後面。"""
     off = page(m={})["seg"]
-    assert 'data-news="xingshi"' not in off and "wrap" not in off  # 關著的季：照舊一排八顆
+    assert 'data-news="xingshi"' not in off
     on = page(m={"xingshi": True})["seg"]
-    assert 'data-news="xingshi"' in on and 'class="seg news-seg wrap"' in on
+    assert 'data-news="xingshi"' in on and 'class="seg news-sub"' in on
     names = re.findall(r'data-news="(\w+)"', on)
-    assert names[:3] == ["reports", "trends", "xingshi"] and len(names) == 9  # 排在「大勢」後面
-    css = (ROOT / "web" / "style.css").read_text(encoding="utf-8")
-    phone = css.split("@media (min-width: 641px)")[0]
-    assert ".news-seg.wrap { flex-wrap: wrap;" in phone  # 手機：兩排、不橫捲
-    assert ".news-seg.wrap button { flex: 1 0 calc(20% - 3px);" in phone
+    assert names == ["reports", "rumors", "chronicle", "journal", "reports", "trends", "xingshi"]
+    assert 'data-news="xingshi"' not in page(m={"xingshi": True}, news="rumors")["seg"]  # 別的籤底下沒有那一排
 
 
 @pytest.mark.slow

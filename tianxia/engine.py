@@ -60,7 +60,7 @@ from .models import (
 from .ollama_client import ModelBudget, OllamaClient, quick_client
 from .rules import (
     GEJU, HUANGJIN, add_chronicle, add_marks, add_rumor, add_world_flags, display_name, apply_effect, audible, audience_bar, audience_hint, can_meet, change_trend,
-    check_result_line,
+    check_gap, check_result_line,
     day_turn, ears_of, evil_success, failed, fill_marks, free_text_rate, game_day, geju_resisted, here_regions,
     can_draw_side_change, chaos_fronts, chaos_note, front_chip, front_ids, front_of, front_text, humanize, in_chaos,
     is_revealed, learn_skill, pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check,
@@ -2183,6 +2183,30 @@ class Game:
         else:
             label = choice_label(choice, self.state, self.content, self.world)
         return label + bounties.join_note(self.state, self.content, choice)
+
+    def event_option_view(self) -> dict[str, dict] | None:
+        """江湖頁事件選項的樣子（減法季批 1，整合設計 6.4）：鈕上只留動作，心裡話只在「難說」以下才寫在底下一行小字，失手的代價不寫在鈕上。
+        眼前沒有事件是 None；有的話每一顆 choice:N 一筆 {"act": 動作（拜入門派會作廢懸賞的那一句照樣接在後面）, "kind": 檢定的屬性鍵／
+        "fight"／""（網頁照它畫鈕前的小圖示）, "worry": 心裡話或對手與勝算（沒把握才有，有把握是空字串）}。選單上的標籤一個字不改（假人與模擬照舊讀它）。
+        只讀：勝算照 odds 的備忘，不擲骰。"""
+        s, c = self.state, self.content
+        if not s.pending_event or s.pending_event not in c.events:
+            return None
+        out: dict[str, dict] = {}
+        for i, ch in visible_choices(c.events[s.pending_event], s, c):
+            act = ch.text + bounties.join_note(s, c, ch)
+            if ch.combat:
+                squad = self._story_squad(c.squads[ch.combat])
+                odds = team.estimate(s, c, self.world, squad.id, difficulty=squad.difficulty, memo=self.odds_memo)
+                worry = "" if odds in ("穩勝", "有把握") else f"對手：{squad.name}・{odds}"
+                out[f"choice:{i}"] = {"act": act, "kind": "fight", "worry": worry}
+            elif ch.check:
+                gap = check_gap(ch.check, s, c, self.world)
+                worry = event_rules.check_note(ch.check, s, c, self.world).split("：", 1)[-1] if gap < 0 else ""
+                out[f"choice:{i}"] = {"act": act, "kind": ch.check.stat, "worry": worry}
+            else:
+                out[f"choice:{i}"] = {"act": act, "kind": "", "worry": ""}
+        return out
 
     def odds(self, squad_id: str, at: str | None = None) -> str:
         """勝算的字。at：照哪一處的地利算（輿圖替每一處算，武學隨地理環境計畫第六節）；不給是此刻腳下（在路上沒有）。"""
