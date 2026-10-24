@@ -1,6 +1,8 @@
 pydantic>=2.6
 # 呼叫 Ollama（tianxia/ollama_client.py）
 requests>=2.31
+# 網頁推送（server_push.py 的 Web Push：VAPID 簽名與 RFC 8291 加密）；沒裝時手機通知整段關著，伺服器照常跑
+cryptography>=42
 # 網頁伺服器（server.py）：FastAPI 給資料、uvicorn 跑起來、markdown-it-py 把引擎的 Markdown 轉成 HTML
 fastapi>=0.110
 uvicorn>=0.29

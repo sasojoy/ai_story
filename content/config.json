@@ -62,6 +62,7 @@
   "bot_strength": 0.6,
   "bot_tick_seconds": 20,
   "world_tick_seconds": 10,
+  "web_push": {"enabled": true},
   "bot_fill_seconds": 3600,
   "battle": {"push_max": 20},
   "fuse_quality": {

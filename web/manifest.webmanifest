@@ -1,0 +1,10 @@
+{
+  "name": "天下大勢",
+  "short_name": "天下大勢",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f4ede0",
+  "theme_color": "#a8322a",
+  "icons": [{"src": "/static/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"}]
+}
