@@ -507,6 +507,30 @@ class LocationText(_Strict):
     text: str
 
 
+class MarkText(_Strict):
+    """地點描寫照痕跡多接的一段（減法季整合設計 5.2；marks.describe）：這個地點的痕跡 mark 全服累計到 min，描寫後面接 text。
+    同一個痕跡可以寫好幾段（門檻不同）；跟痕跡規則（MarkRule.describe）一起比，挑門檻最高的那一段。min 照 Config.mark_threshold_scale 換算。"""
+
+    mark: str  # 「地點 id:痕跡名」，地點要是寫它的那個地點
+    min: int = Field(ge=1)
+    text: str
+
+
+class MarkRule(_Strict):
+    """地方痕跡過門檻（減法季整合設計 5.2；主機側計畫 Task 4-3，content/mark_rules.json）：全服累計到 threshold 那一刻
+    （marks.fire_due）發一則地方傳聞（不列名字）、記一筆江湖史，有寫 trend 的照原本的量推一次線（企劃者 2026-10-24 第 8 件 b：只有「趕走散兵」
+    那一類）；之後地點描寫多接 describe 那一段（marks.describe），〈天下形勢〉照 xingshi 寫一句（marks.xingshi_facts）。只發一次
+    （WorldState.marks_fired）。threshold 照 Config.mark_threshold_scale 換算（同條件的 marks_min）。字都待 joy 潤。"""
+
+    mark: str  # 「地點 id:痕跡名」
+    threshold: int = Field(default=20, ge=1)  # 【預設】全服累計幾筆過門檻
+    describe: str  # 過了門檻之後接在地點描寫後面的一段
+    rumor: str  # 過門檻那一刻的地方傳聞
+    xingshi: str = ""  # 〈天下形勢〉的一句；空的照 rumor
+    chronicle: str = ""  # 江湖史；空的照 rumor
+    trend: dict[str, int] = Field(default_factory=dict)  # 過門檻那一刻推的線（front＝這個地點所在大區的戰線）；空的不推
+
+
 class Location(_Strict):
     id: str
     name: str
@@ -527,6 +551,12 @@ class Location(_Strict):
     # 序章（新手引導計畫一）的草廬：只有站在這裡的人看得到、到得了（atlas.is_unlocked）；序章走完離開後誰都回不去。
     # 一份內容最多一個，而且就是 Tutorial.location（content.validate）
     prologue_only: bool = False
+    # 照痕跡多接的一段（減法季整合設計 5.2；marks.describe 讀，接線之前沒人讀）：空的時候不寫進序列化
+    desc_marks: list[MarkText] = Field(default_factory=list)
+
+    @model_serializer(mode="wrap")
+    def _drop_new_defaults(self, handler):
+        return _drop_unset(handler(self), ("desc_marks",))
 
     def describe(self, world_flags: set[str]) -> str:
         """此刻的描寫：desc_when 裡第一個旗標成立的那一版，都不成立時是 description。"""
@@ -4580,8 +4610,13 @@ class Content(_Strict):
     mall: dict[str, MallItem] = Field(default_factory=dict)  # 商城的商品（content/mall.json，照 id、照檔案的順序）；沒有這個檔就是空的
     relations: list[RelationDef] = Field(default_factory=list)  # 人物之間的關係（content/relations.json，大勢人物擴充第二批）；沒有這個檔就是沒有
     gather_branches: dict[str, GatherBranch] = Field(default_factory=dict)  # 找素材分支（content/gather_branches.json，照內容的順序）；沒有這個檔就是空的（分支關著）
+    mark_rules: list[MarkRule] = Field(default_factory=list)  # 地方痕跡過門檻（content/mark_rules.json，減法季批 4）；沒有這個檔就是空的
     map: MapLayout
     tutorial: Tutorial
     hints: Hints = Field(default_factory=Hints)  # 碰到才說（content/hints.json，新手引導計畫三）；沒有這個檔就是沒有提示
     check_voice: CheckVoice = Field(default_factory=CheckVoice)  # 檢定選項括號裡的那一句（content/check_voice.json，載入時必備）
     create_forms: CreateForms = Field(default_factory=CreateForms)  # 自創武學的兵器偏向、起點架式、關鍵字表（content/create_forms.json）
+
+    @model_serializer(mode="wrap")
+    def _drop_new_defaults(self, handler):
+        return _drop_unset(handler(self), ("mark_rules",))  # 沒有痕跡規則的內容（測試內容）序列化一個鍵都不多

@@ -6163,6 +6163,7 @@ NOT_IN_THE_FINGERPRINT = {
         "final_rankings": "同上（結算卡的資料）",
         "act_reached": "隊伍數與統御上限的內部計數，不畫在共用畫面上",
         "marks": "地方痕跡只畫成模糊人數，改了讓每個分頁多刷新一次會洩漏有人做了看不見的事（推送計畫 F4）",
+        "marks_fired": "痕跡過門檻那一刻同時寫一則地方傳聞與江湖史（傳聞流水號、江湖史則數都在指紋裡）",
         "pending_battle": "背景推進記下要開的戰鬥，開成集結之後 active_battle 的指紋就變了",
         "season_one": "開季時蓋的章，開季之後不變",
         "haoqiang_allied": "開季時蓋的章（豪強分屬兩軍），開季之後不變",

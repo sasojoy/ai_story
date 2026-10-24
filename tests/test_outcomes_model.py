@@ -6,7 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from tianxia.content import ContentError, validate
-from tianxia.models import BEST_OF, Check, Effect, FreeTextChoice, Outcome
+from tianxia.models import BEST_OF, Check, Effect, FreeTextChoice, MarkRule, Outcome
 from tianxia.rules import check_chance, check_outlook
 
 TALK = {
@@ -36,8 +36,11 @@ LEAVE = {"id": "leave", "tag": "走開：不管、看著、對不上的", "effec
 
 
 def _outcomes(content, *outcomes, event="drunk"):
+    """這則事件換上這幾種後果；後果寫的痕跡各配一條痕跡規則（Task 4-3：分岔寫的痕跡要有規則讀它）。"""
     ev = content.events[event]
     ev.free_text = FreeTextChoice(prompt="自己想辦法……", stat="str", outcomes=[Outcome(**o) for o in outcomes])
+    keys = dict.fromkeys(key for o in ev.free_text.outcomes for key in o.effect.marks)
+    content.mark_rules = [MarkRule(mark=key, describe="這一帶起了些變化。", rumor="這一帶的人說起了那件事。") for key in keys]
     return content
 
 

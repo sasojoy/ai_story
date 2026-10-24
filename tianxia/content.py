@@ -28,7 +28,7 @@ from .materials import DEFAULT_DROPS, TIER_NAMES
 from .models import (
     BEST_OF, FRONT_KEY, GLOW_KEYS, GOOD_HORSE, MOVES, RECRUITER_ALLIED_FIELDS, REVEAL_KEYS, ROADS, STATS, TREASURE_EFFECTS, WEAPON_KINDS, Attribute, BattleDef, CharacterDef, CheckVoice,
     CombatLines, Condition, Config, Content, CraftNames, CreateForms, DuelBoss, Effect, Event, FigureDef, FollowerDef, ForgeSecret, Foreshadows, FrontLines, GatherBranch, GearBook,
-    GiftDef, Hints, MingtieContent, InsightDef, Location, MallItem, OppDef,
+    GiftDef, Hints, MingtieContent, InsightDef, Location, MallItem, MarkRule, MarkText, OppDef,
     InsightScene, OrdersContent, PresetRecipe, PromotionDef, RealDay, RealSlot, RelationDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, ShardDef,
     SimRumor, SkillDef,
     SignatureArmDef, SteedDef, Squad, Tier4Named, TimetableEvent, TraitBook, TreasureDef, Tutorial, allow_known,
@@ -129,6 +129,7 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         mall=_index(MallItem, _read(root / "mall.json")) if (root / "mall.json").exists() else {},  # 商城的商品（joy 寫）
         relations=[_build(RelationDef, raw) for raw in _read(root / "relations.json")] if (root / "relations.json").exists() else [],
         gather_branches=_index(GatherBranch, _read(root / "gather_branches.json")) if (root / "gather_branches.json").exists() else {},
+        mark_rules=[_build(MarkRule, raw) for raw in _read(root / "mark_rules.json")] if (root / "mark_rules.json").exists() else [],
         figures=_index(FigureDef, _read(root / "figures.json")) if (root / "figures.json").exists() else {},
         duels=_index(DuelBoss, _read(root / "duels.json")) if (root / "duels.json").exists() else {},
         gear=_gear(root / "gear.json"),
@@ -221,6 +222,10 @@ def _scale_marks(obj, scale: float) -> None:
         for limits in (obj.marks_min, obj.marks_max):
             for key, value in limits.items():
                 limits[key] = math.ceil(value * scale)
+    if isinstance(obj, MarkRule):  # 痕跡過門檻（減法季批 4）同一個換算
+        obj.threshold = math.ceil(obj.threshold * scale)
+    if isinstance(obj, MarkText):
+        obj.min = math.ceil(obj.min * scale)
     if isinstance(obj, BaseModel):
         for name in type(obj).model_fields:
             _scale_marks(getattr(obj, name), scale)
@@ -2943,9 +2948,36 @@ def validate(c: Content) -> None:
     check_conquest_blocks(c, need, known, front_ids)
     check_siege_templates(c, need)
 
+    # 地方痕跡過門檻（減法季整合設計 5.2；主機側計畫 Task 4-3，content/mark_rules.json）：一個痕跡一條規則，算「有人讀」；
+    # 過門檻那一刻的傳聞、之後地點描寫多接的那一段都要寫（〈天下形勢〉與江湖史沒寫就照傳聞那一句）；推的線同事件效果的規矩
+    rule_marks: dict[str, str] = {}
+    for rule in c.mark_rules:
+        rw = f"痕跡規則 {rule.mark}"
+        check_mark_key(rw, rule.mark)
+        need(rule.mark not in rule_marks, f"{rw}：重複（一個痕跡只寫一條規則）")
+        rule_marks.setdefault(rule.mark, rw)
+        marks_read.setdefault(rule.mark, rw)
+        for name in ("describe", "rumor"):
+            need(bool(getattr(rule, name).strip()), f"{rw}：{name} 要寫（過門檻那一刻的地方傳聞、之後地點描寫多接的那一段）")
+        for name in ("describe", "rumor", "xingshi", "chronicle"):
+            need(not OUTCOME_DIGITS.search(getattr(rule, name)), f"{rw}：{name} 不寫阿拉伯數字（數字只能是引擎的）")
+        known(rw, rule.trend, trend_ids | {FRONT_KEY}, "大勢線")
+        front_needs_total(rw, rule.trend)
+        not_derived(rw, rule.trend)
+        need(all(rule.trend.values()), f"{rw}：trend 的量不能是 0")
+    for key, where in sorted(outcome_marks.items()):
+        need(key in rule_marks,
+             f"{where}：痕跡 {key} 是分岔的後果寫的，要有一條痕跡規則讀它（content/mark_rules.json：過門檻換地點描寫、發傳聞）")
+    for loc in c.locations.values():
+        for text in loc.desc_marks:
+            lw = f"地點 {loc.id} 的 desc_marks"
+            check_mark_key(lw, text.mark)
+            need(text.mark.partition(":")[0] == loc.id, f"{lw}：痕跡 {text.mark} 要是這個地點（{loc.id}）的")
+            need(bool(text.text.strip()) and not OUTCOME_DIGITS.search(text.text), f"{lw}：{text.mark} 那一段是空的或寫了阿拉伯數字")
+            marks_read.setdefault(text.mark, lw)
+
     for key, where in sorted(marks_written.items()):
-        # 分岔的後果寫的痕跡（減法季批 4）：讀它的是痕跡規則（過門檻換地點描寫、發傳聞；Task 4-3），條件或文字不必讀
-        need(key in marks_read or key in outcome_marks, f"{where}：痕跡 {key} 寫了卻沒有任何條件或文字讀它")
+        need(key in marks_read, f"{where}：痕跡 {key} 寫了卻沒有任何條件或文字讀它")
     for key, where in sorted(marks_read.items()):
         need(key in marks_written, f"{where}：痕跡 {key} 沒有任何效果寫它，條件永遠不會成立")
 

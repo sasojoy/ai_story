@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_serializer
 
 from .martial_arts import Insight
 from .models import Content, TravelMode
@@ -1481,6 +1481,9 @@ class WorldState(BaseModel):
     act: int = 0  # 目前第幾幕（從 0 起算）
     act_reached: int = 0  # 本季到過的最遠一幕；主線改寫會把 act 歸零，隊伍數與統御上限看這個（見 roster.stage）
     marks: dict[str, int] = Field(default_factory=dict)  # 地方痕跡：「地點 id:痕跡名」→ 累積次數（全服共用，換季整個重來）
+    # 地方痕跡過門檻（減法季批 4，marks.fire_due）：「地點 id:痕跡名」→ 過門檻那一刻的世界秒（只發一次；〈天下形勢〉照它挑上一篇以後的）。
+    # 空的時候不寫進 JSON（_drop_empty_marks_fired）：沒有痕跡過門檻的季存檔一個鍵都不多
+    marks_fired: dict[str, float] = Field(default_factory=dict)
     pending_battle: str | None = None  # 背景推進跨過開戰門檻時記下要開的戰鬥 id；那時人在 mutate_season 的
     # callback 裡，不能再 mutate 開戰（巢狀的 mutate 內層寫的會被蓋掉，會丟錯），callback 結束後由
     # world.start_pending_battle 開戰並清掉
@@ -1538,6 +1541,14 @@ class WorldState(BaseModel):
         """求藝（kind "art"）企劃者 2026-10-21 拿掉（「懸賞榜直接把武學拿掉」）：那之前開的季，榜上可能還掛著求藝，讀進來就丟掉，
         引擎與畫面再也碰不到這一種（沒人揭過，交過的賞早就發了，丟了不欠誰）。玩家的 bounty_pick 指著它的，選單當它不存在（Game._bounty_options）。"""
         return [b for b in value if b.kind not in RETIRED_BOUNTY_KINDS]
+
+    @model_serializer(mode="wrap")
+    def _drop_empty_marks_fired(self, handler):
+        """marks_fired 是空的時候不寫這個鍵（同 world_state.SealRegistry._drop_empty_uses；不用 Field(exclude_if=…)：Pydantic 2.11 才有）。"""
+        data = handler(self)
+        if isinstance(data, dict) and "marks_fired" in data and not data["marks_fired"]:
+            del data["marks_fired"]
+        return data
 
     bounty_seq: int = 0  # 懸賞的流水號
     # 大勢人物擴充第三批（tianxia/feasts.py、yuedan.py、bounties 的求援委託）：這一季的宴席、月旦評、人物對整個陣營發的求援委託
