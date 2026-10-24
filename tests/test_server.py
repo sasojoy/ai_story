@@ -6203,6 +6203,8 @@ NOT_IN_THE_FINGERPRINT = {
         "mingtie_cleared": "管理者放回的名帖，同上",
         "divine": "神器輪替的全服登記：開季換季時才挑；原品與仿品數在打造、定名那一下改，傳聞與江湖史已在指紋裡",
         "siege_records": "攻城戰的流水號（存檔時照 sieges 寫）；sieges 本身算進指紋",
+        # 3b-2 接線時要搬到 FINGERPRINTED（約戰卡開、應戰、結算兩邊都看得到；要動 server.current_fingerprint 與 server_push）
+        "sorties": "出陣約戰（減法季批 3b-1）：只有純規則、還沒接線，沒有任何畫面讀它",
     },
     "WorldState": {
         "time": "時鐘一直在走，靠慢速輪詢更新（排程每 10 秒推一次，算進去會一直叫醒全服）",

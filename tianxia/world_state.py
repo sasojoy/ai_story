@@ -17,7 +17,7 @@ from __future__ import annotations
 import random
 from collections.abc import Callable, Collection
 from contextlib import AbstractContextManager
-from typing import Literal, NamedTuple, Protocol
+from typing import Any, Literal, NamedTuple, Protocol
 
 from pydantic import BaseModel, Field, model_serializer, model_validator
 
@@ -241,6 +241,66 @@ class SealDuel(BaseModel):
     bout: Bout | None = None  # 兩邊的本命戰法（tactics.Bout，a 是挑戰者）；兩邊都沒有是 None
 
 
+class SortieSide(BaseModel):
+    """出陣約戰的一方（減法季整合設計 4.3；tianxia/sortie_duel.py）：封招那一刻的快照，結算時不回頭讀存檔。"""
+
+    name: str
+    side: str  # 替哪一軍打（allied.side_of：豪強是依附的那一軍）
+    power: float = 0.0  # 封招那一刻的威力（呼叫端照 Game._spar_power 算好）
+    moves: list[str] = Field(default_factory=list)  # 封好的三招（Config.sortie.moves）
+    sealed_at: float = 0.0  # 現實秒：封招那一刻（補位的人是窗內隨機的一刻；卡與戰報都不寫）
+    region: str | None = None  # 封招那一刻站在哪一個大區（atlas.region_of 的 id）
+    allies: list[str] = Field(default_factory=list)  # 攻方才有：同去的同袍（集火由接線那一批照 conquest.focus_bonus 算）
+    garrison: bool = False  # 守軍迎戰（這一邊連補位的人都沒有）
+
+
+class SortieRound(BaseModel):
+    """約戰的一回合（sortie_duel.resolve）：兩邊的招、相剋、攻方乘過相剋的威力、單次判定的結果（攻方的角度）、誰贏、兩邊扣的比例。"""
+
+    attacker_move: str
+    defender_move: str
+    beat: int = 0  # tactics.counter（攻方剋守方 +1、被剋 −1；有人撤退是 0）
+    power: float = 0.0
+    tier: str = ""  # encounter.resolve_encounter 擲出來的（有人撤退的回合也擲，記下來但不用）
+    winner: Literal["attacker", "defender", "draw"] = "draw"
+    attacker_toll: float = 0.0  # 這一回合扣氣血上限的幾成
+    defender_toll: float = 0.0
+
+
+class SortieResult(BaseModel):
+    """一場約戰的總帳（計畫寫的 DuelResult）：攻方贏、輸、僵持幾回合，結果（big／win／draw／lose，攻方的角度；守方那一份 defender_tier），
+    三回合合計扣氣血上限的幾成。推（拉）多少、內傷、冷卻、戰報由接線那一批照它算。"""
+
+    wins: int = 0
+    losses: int = 0
+    draws: int = 0
+    tier: Literal["big", "win", "draw", "lose"] = "draw"
+    defender_tier: Literal["big", "win", "draw", "lose"] = "draw"
+    rounds: list[SortieRound] = Field(default_factory=list)
+    attacker_toll: float = 0.0
+    defender_toll: float = 0.0
+
+
+class SortieDuel(BaseModel):
+    """一張出陣約戰（減法季整合設計 4.3）：存在 SharedWorldState.sorties（全服；換季清掉）。時刻一律是現實秒（Game.now）。
+    open（貼了、等人應戰）→ answered（對面有人應了）→ 窗滿 settled（結算了）；到時連守軍都沒有、或季已經結束是 void（沒打成）。"""
+
+    id: str
+    block: str  # 哪一塊（地點 id）
+    region: str | None = None  # 那一塊在哪一個大區（限同一區才應得了戰）；地圖沒有大區是 None（不限）
+    place: str = ""  # 地點的名字（卡上寫；貼的那一刻抄下來）
+    region_name: str = ""  # 大區的名字（「在潁川汝南才應得了戰」）
+    attacker: SortieSide
+    defender: SortieSide | None = None
+    garrison: SortieSide | None = None  # 貼的那一刻抄好的這一塊的駐軍：到時沒人應戰、補位也沒人時迎戰
+    opened_at: float
+    expires_at: float
+    status: Literal["open", "answered", "settled", "void"] = "open"
+    settled_at: float | None = None
+    result: SortieResult | None = None
+    report: dict[str, Any] = Field(default_factory=dict)  # 接線那一批放戰報流水號、送達了沒這類
+
+
 class SealView(NamedTuple):
     """seal_state() 讀回來的一份（只讀 world 那一列的 JSON，不讀季）。"""
 
@@ -291,6 +351,17 @@ class SharedWorldState(BaseModel):
     # 流水號（siege_records，存檔時照 sieges 寫）；資料庫結構不動。收場、季終收兵之後拿掉（ended_battles 照樣讀得到那一列）
     sieges: list[BattleInstance] = Field(default_factory=list)
     siege_records: list[int] = Field(default_factory=list)
+    # 出陣約戰（減法季批 3b，tianxia/sortie_duel.py）：id → 那一張；還沒結算的與結算完還留著的（keep_hours）。全服、換季清掉（next_season）。
+    # 空的時候 world 那一列的 JSON 不寫這個鍵（_drop_empty_sorties）：關著的季、沒人約過戰的存檔跟以前一個位元組都不差
+    sorties: dict[str, SortieDuel] = Field(default_factory=dict)
+
+    @model_serializer(mode="wrap")
+    def _drop_empty_sorties(self, handler):
+        """sorties 是空的時候不寫這個鍵（同 SealRegistry._drop_empty_uses；不用 Field(exclude_if=…)：Pydantic 2.11 才有）。"""
+        data = handler(self)
+        if isinstance(data, dict) and "sorties" in data and not data["sorties"]:
+            del data["sorties"]
+        return data
 
     def season_phase(self) -> SeasonPhase:
         if not self.season.storyline or not self.season_opened:
@@ -684,6 +755,10 @@ class WorldStateStore(Protocol):
 
     def seal_duel_open(self) -> bool:
         """有沒有還沒收場的奪璽單挑（提前收季要等它，5.11）。在 mutate 裡也查得到（同 faction_counts）。"""
+        ...
+
+    def sortie_duels(self) -> dict[str, SortieDuel]:
+        """出陣約戰（減法季批 3b）：只讀 world 那一列的 sorties，不讀季，每次輪詢都讀得起。"""
         ...
 
     def divine_state(self) -> DivineRegistry:

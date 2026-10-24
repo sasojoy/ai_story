@@ -2684,6 +2684,37 @@ class SortieRules(_Strict):
     rare_horse: float = Field(default=0.02, ge=0, le=1)  # 良駒
     treasure_cap: int = Field(default=2, ge=0)  # 出陣掉的寶物一人一季最多幾件（不讀 figure_treasure_cap；season21 寫 3【PM】）
     horse_cap: int = Field(default=1, ge=0)  # 出陣掉的良駒一人一季最多幾匹
+    # ── 批 3b：減法季的出陣約戰（整合設計 4.3；計畫第四節，tianxia/sortie_duel.py）──
+    # 只在 rules.jianfa(content, world, "sortie_duel") 開著的季讀；關著的季沒有任何地方讀這一段。時間都是現實分鐘（Game.now）。全部【預設】
+    jianfa_per_day: int = Field(default=2, ge=1)  # 一天貼幾次約戰（取代 per_day；同 pill_day 的換日）
+    jianfa_stamina: int = Field(default=12, ge=0)  # 貼一次約戰的體力（取代 action_cost["train"]）
+    cooldown_minutes: float = Field(default=60.0, ge=0)  # 兩次約戰之間（從貼的那一刻起算）
+    window_minutes: float = Field(default=10.0, gt=0)  # 貼出去之後幾分鐘內可以應戰；窗滿才結算
+    answer_per_day: int = Field(default=3, ge=0)  # 一天應戰幾次（跟出陣分開算，企劃者 2026-10-24）；應戰沒有冷卻
+    answer_stamina: int = Field(default=12, ge=0)  # 應戰一次的體力
+    lose_injury: float = Field(default=10.0, ge=0)  # 輸的一方另加的內傷（三回合扣的氣血照留；不碰銀兩）
+    lose_cooldown_minutes: float = Field(default=30.0, ge=0)  # 輸的一方下一次出陣或應戰的冷卻多這麼久（sortie_duel.cooldown_after）
+    # 推多少：名目量 × 這一場的結果倍率（攻方贏推攻方那一條；守方贏照守方的結果拉攻方那一條，企劃者 2026-10-24 第 1 件）
+    result_scale: dict[str, float] = Field(default_factory=lambda: {"big": 1.5, "win": 1.0, "draw": 0.4, "lose": 0.0})
+    # 封三招能挑的招：現有的三招（tactics.counter 的相剋照用；設計寫的「以巧破力」就是奇襲）加撤退；不放「放手一搏」（企劃者 2026-10-24）
+    moves: list[str] = Field(default_factory=lambda: ["強攻", "固守", "奇襲", "撤退"])
+    counter_swing: float = Field(default=0.3, ge=0, lt=1)  # 一回合剋中，攻方威力 ×(1＋這個)；被剋 ×(1−這個)
+    retreat_toll: float = Field(default=0.3, ge=0, le=1)  # 撤退的那一回合算輸，扣的氣血打這個折（兩邊都撤退算僵持，各打這個折）
+    # 一回合扣氣血上限的幾成（照那一邊這一回合贏、僵持、輸）：三回合全輸 30%＝遊歷落敗（encounter_neili_loss 的落敗）
+    round_toll: dict[str, float] = Field(default_factory=lambda: {"win": 0.03, "draw": 0.06, "lose": 0.10})
+    keep_hours: float = Field(default=24.0, ge=0)  # 結算完（或作廢）的約戰留多久（卡上看得到、各自同步時補送）
+    duty_contribution: int = Field(default=1, ge=0)  # 巡哨、傳道、保境安民收進此地：不推線、不佔出陣次數，記這麼多貢獻（企劃者 2026-10-24 第 2 件）
+    duty_per_day: int = Field(default=1, ge=0)  # 上面那一點貢獻一天記幾次
+
+    @model_validator(mode="after")
+    def _duel_tables(self) -> SortieRules:
+        if set(self.result_scale) != {"big", "win", "draw", "lose"}:
+            raise ValueError("sortie.result_scale 要寫 big、win、draw、lose 四種結果的倍率")
+        if set(self.round_toll) != {"win", "draw", "lose"}:
+            raise ValueError("sortie.round_toll 要寫 win、draw、lose 三種回合的損耗")
+        if not self.moves or not set(self.moves) <= {*MOVES, "撤退"}:
+            raise ValueError(f"sortie.moves 只能挑 {'、'.join(MOVES)}、撤退")
+        return self
 
 
 class ExploreModes(_Strict):
