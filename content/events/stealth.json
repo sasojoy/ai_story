@@ -72,7 +72,113 @@
         "stats": {
           "silver": -10
         }
-      }
+      },
+      "outcomes": [
+        {
+          "id": "carry",
+          "tag": "扛擔：替他把鹽擔弄出鎮去",
+          "check": {
+            "stat": "con",
+            "difficulty": 5
+          },
+          "effect": {
+            "text": "一擔鹽死沉，你咬牙走了半里泥路，總算避開差役。漢子把一半的鹽錢塞給你。",
+            "stats": {
+              "silver": 15
+            },
+            "marks": {
+              "market_town:走私鹽": 1
+            },
+            "contribution": 1
+          },
+          "fail_effect": {
+            "text": "走到半路肩頭吃不住，鹽袋掉進泥裡，差役順著腳印追了上來。",
+            "stamina": -12,
+            "stats": {
+              "silver": -10
+            }
+          }
+        },
+        {
+          "id": "plead",
+          "tag": "說情：攔住市吏替他講話",
+          "check": {
+            "stat": "wis",
+            "difficulty": 3
+          },
+          "effect": {
+            "text": "你說今年鹽貴，鄉民吃不起鹽。市吏想了想，只沒收了一半，放漢子走了。",
+            "stats": {
+              "good": 1
+            },
+            "marks": {
+              "market_town:鹽情": 1
+            },
+            "contribution": 2
+          },
+          "fail_effect": {
+            "text": "市吏不吃這套，連你也記了名字，罰了錢才脫身。",
+            "stats": {
+              "silver": -15
+            }
+          }
+        },
+        {
+          "id": "distract",
+          "tag": "引開：弄出動靜、把差役引到別處",
+          "check": {
+            "stat": "agi",
+            "difficulty": 4
+          },
+          "effect": {
+            "text": "你撞翻了一籠雞，差役追著滿街亂跑的雞轉了半天，鹽販早挑著擔子出了鎮。",
+            "stats": {
+              "good": 1
+            },
+            "marks": {
+              "market_town:亂市": 1
+            },
+            "contribution": 1
+          },
+          "fail_effect": {
+            "text": "差役沒上當，反把你當成同夥扣了一陣，罰了幾個錢。",
+            "stats": {
+              "silver": -10
+            }
+          }
+        },
+        {
+          "id": "inform",
+          "tag": "告發：把鹽販指給差役、討幾個賞錢",
+          "check": {
+            "stat": "wis",
+            "difficulty": 3
+          },
+          "effect": {
+            "text": "你朝差役努了努嘴，指給他們看泥巷的方向。市吏賞了你幾個錢，鹽販被扭住時回頭看了你一眼。",
+            "stats": {
+              "silver": 5,
+              "good": -2
+            },
+            "marks": {
+              "market_town:告發": 1
+            }
+          },
+          "fail_effect": {
+            "text": "差役撲了個空，市吏嫌你謊報，反倒罰了你幾個錢，鹽販的同鄉在人群裡記住了你的臉。",
+            "stats": {
+              "silver": -5
+            }
+          }
+        },
+        {
+          "id": "leave",
+          "tag": "走開：不管、看著、對不上的",
+          "effect": {
+            "text": "你擠出人群，身後的叫罵聲越來越遠。"
+          }
+        }
+      ]
     }
   },
   {
