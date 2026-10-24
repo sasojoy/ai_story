@@ -2215,14 +2215,16 @@ class Game:
             if companion_id is None or said is None:
                 return None
             extra = self._parley_prompt(companion_id) if option_id == SAY_OPTION else self._parley_plan_prompt(companion_id)
+            fields = parley.ASK_FIELDS if option_id == SAY_OPTION else parley.PLAN_FIELDS
             return companion_agent.build_request(self.state, self.content, self.world, companion_id, option_id, said, free=True,
-                                                 extra=extra)
+                                                 extra=extra, required=fields if extra else ())
         if option_id == ROAD_SAY:  # 開口求人第二批：他帶路的路上跟他說一句（可以是閒談，也可以求他沿路做得到的事）
             companion_id, said = self.state.player.parley_escort, say_text(text, self.say_max())
             if companion_id is None or said is None:
                 return None
+            extra = self._parley_prompt(companion_id, road=True)
             return companion_agent.build_request(self.state, self.content, self.world, companion_id, option_id, said, free=True,
-                                                 extra=self._parley_prompt(companion_id, road=True))
+                                                 extra=extra, required=parley.ASK_FIELDS if extra else ())
         if kind == "talk":
             companion_id = self.state.player.pending_companion
             if companion_id is None or not arg.isdecimal():
@@ -2249,9 +2251,10 @@ class Game:
             companion_id, player_action = arg, companion_agent.GENERIC_OPENING
         else:
             return None
+        extra = self._parley_plea_prompt(companion_id) if player_action == companion_agent.GENERIC_OPENING else ""
         return companion_agent.build_request(
             self.state, self.content, self.world, companion_id, option_id, player_action,
-            extra=self._parley_plea_prompt(companion_id) if player_action == companion_agent.GENERIC_OPENING else "",
+            extra=extra, required=parley.PLEA_FIELDS if extra else (),
         )
 
     def _checked_prepared(
@@ -4306,11 +4309,12 @@ class Game:
 
     def _open_dialogue(self, companion_id: str, prepared: companion_agent.PreparedTurn | None) -> list[str]:
         """跟一位大勢人物開口對話（呼叫端已經扣了交友的體力）：生成不出對話時退回那份體力，對話不開始。"""
+        extra = self._parley_plea_prompt(companion_id)
         try:
             msgs = companion_agent.start_dialogue(
                 self._quick_client(), self.state, self.content, self.world, companion_id, self.rng,
-                turn=self._prepared_turn(prepared), extra=self._parley_plea_prompt(companion_id),
-                decide=lambda turn: self._parley_plea(companion_id, turn),
+                turn=self._prepared_turn(prepared), extra=extra,
+                decide=lambda turn: self._parley_plea(companion_id, turn), required=parley.PLEA_FIELDS if extra else (),
             )
         except companion_agent.DialogueUnavailable:
             self.state.player.stamina += self.content.config.action_cost["socialize"]  # 生成不出對話：這次不花體力
@@ -5665,9 +5669,10 @@ class Game:
         self._parley_decision = None
         try:
             if arg == "say":  # 自己說：said 是 choose 驗過、轉過繁體的那一句；江湖紀錄先寫你說了什麼（同隨口應對的「你：「…」」）
+                extra = self._parley_prompt(companion_id)
                 msgs = [f"你：「{said}」"] + companion_agent.say_dialogue(
                     self._quick_client(), self.state, self.content, self.world, companion_id, said,
-                    turn=self._prepared_turn(prepared), extra=self._parley_prompt(companion_id),
+                    turn=self._prepared_turn(prepared), extra=extra, required=parley.ASK_FIELDS if extra else (),
                     decide=lambda turn: self._parley_decide(companion_id, turn),
                 )
             else:
@@ -6001,8 +6006,8 @@ class Game:
             turn = self._prepared_turn(prepared)
             if turn is None:
                 request = companion_agent.build_request(s, c, self.world, cid, PLAN_OPTION, said, free=True,
-                                                        extra=self._parley_plan_prompt(cid))
-                turn = companion_agent.generate_turn(self._quick_client(), request.messages)
+                                                        extra=self._parley_plan_prompt(cid), required=parley.PLAN_FIELDS)
+                turn = companion_agent.generate_turn(self._quick_client(), request.messages, request.required)
         except companion_agent.DialogueUnavailable:
             return [f"{c.characters[cid].name}沉吟不語。"]
         cfg = c.config.parley
@@ -6030,10 +6035,12 @@ class Game:
             return ["（此刻無法這麼做。）"]
         affinity = s.player.affinities.get(cid, 0)
         self._parley_decision = None
+        extra = self._parley_prompt(cid, road=True)
         try:
             msgs = [f"你：「{said}」"] + companion_agent.say_dialogue(
                 self._quick_client(), s, c, self.world, cid, said, turn=self._prepared_turn(prepared),
-                extra=self._parley_prompt(cid, road=True), decide=lambda turn: self._parley_decide(cid, turn, road=True),
+                extra=extra, decide=lambda turn: self._parley_decide(cid, turn, road=True),
+                required=parley.ASK_FIELDS if extra else (),
             )
         except companion_agent.DialogueUnavailable:
             return [f"{c.characters[cid].name}沉吟不語。"]

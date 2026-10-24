@@ -127,10 +127,11 @@ def main() -> None:
         picked, outcomes, conds, willing, fails = Counter(), Counter(), 0, [], 0
         print(f"══ 你：「{said}」")
         for n in range(1, args.runs + 1):
-            request = companion_agent.build_request(game.state, content, game.world, cid, "talk:say", said, free=True, extra=extra)
+            request = companion_agent.build_request(game.state, content, game.world, cid, "talk:say", said, free=True, extra=extra,
+                                                    required=parley.ASK_FIELDS)  # 跟遊戲裡同一份必填（Game.dialogue_request）
             start = time.monotonic()
             try:
-                turn = companion_agent.generate_turn(client, request.messages)
+                turn = companion_agent.generate_turn(client, request.messages, request.required)
             except companion_agent.DialogueUnavailable as e:
                 fails += 1
                 print(f"  #{n} 模型叫不動（遊戲裡這輪會取消、不扣體力）：{e}")
@@ -163,7 +164,7 @@ def main() -> None:
 def _generate(client, request):
     start = time.monotonic()
     try:
-        return companion_agent.generate_turn(client, request.messages), time.monotonic() - start
+        return companion_agent.generate_turn(client, request.messages, request.required), time.monotonic() - start
     except companion_agent.DialogueUnavailable as e:
         print(f"  模型叫不動（遊戲裡這輪會取消、不扣體力）：{e}")
         return None, 0.0
@@ -184,7 +185,7 @@ def _plea(game, content, client, cid, args) -> None:
     picked, ok = Counter(), 0
     for n in range(1, args.runs + 1):
         request = companion_agent.build_request(game.state, content, game.world, cid, "act:socialize",
-                                                companion_agent.GENERIC_OPENING, extra=extra)
+                                                companion_agent.GENERIC_OPENING, extra=extra, required=parley.PLEA_FIELDS)
         turn, spent = _generate(client, request)
         if turn is None:
             continue
@@ -211,7 +212,8 @@ def _plan(game, content, client, cid, args) -> None:
         rates, hits = [], 0
         print(f"══ 跟{name}商量打法：「{said}」")
         for n in range(1, args.runs + 1):
-            request = companion_agent.build_request(game.state, content, game.world, cid, PLAN_OPTION, said, free=True, extra=extra)
+            request = companion_agent.build_request(game.state, content, game.world, cid, PLAN_OPTION, said, free=True, extra=extra,
+                                                    required=parley.PLAN_FIELDS)
             turn, spent = _generate(client, request)
             if turn is None:
                 continue

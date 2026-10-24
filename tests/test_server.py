@@ -3172,7 +3172,7 @@ def lock_events(monkeypatch):
 def test_a_dialogue_option_generates_outside_the_action_lock(game, lock_events):
     _stand_by_a_figure(game)
 
-    def generate(client, messages):
+    def generate(client, messages, required=()):
         lock_events.append("generate")
         assert not game.world.db.writing()  # 這個執行緒沒拿著寫入交易
         probe = sqlite3.connect(game.world.db.path, timeout=0)
@@ -3197,7 +3197,7 @@ def test_the_dialogue_prepared_outside_the_lock_gets_its_budget_not_the_in_lock_
     _stand_by_a_figure(game)
     seen = []
 
-    def generate(client, messages):
+    def generate(client, messages, required=()):
         seen.append(client)
         return DIALOGUE_TURN
 
@@ -3247,7 +3247,7 @@ def test_saying_your_own_line_goes_through_the_three_stages(game, lock_events):
     liking = game.state.player.affinities.get("luzhi", 0)
     sent = []
 
-    def generate(client, messages):
+    def generate(client, messages, required=()):
         lock_events.append("generate")
         sent.append(messages[-1]["content"])
         return DIALOGUE_TURN.model_copy(update={"player_tag": "真誠請教"})
@@ -3321,7 +3321,7 @@ def test_a_failed_generation_ends_the_talk_for_free(game, lock_events):
     _stand_by_a_figure(game)
     before = game.state.player.stamina
 
-    def generate(client, messages):
+    def generate(client, messages, required=()):
         lock_events.append("generate")
         raise companion_agent.DialogueUnavailable("連不上")
 
@@ -3339,7 +3339,7 @@ def test_a_changed_option_list_while_generating_falls_back_to_generating_in_the_
     with mock.patch.object(companion_agent, "generate_turn", return_value=DIALOGUE_TURN):
         server.choose(game, "act:socialize")
 
-    def generate(client, messages):
+    def generate(client, messages, required=()):
         # 資料庫是唯一的真實來源（進鎖先重讀）：生成的那十秒裡另一個請求（連點兩下、第二個分頁）存了新的選單
         other = open_characters().load("測試")
         other.player.last_offered_dialogue["luzhi"] = [["換了一句話", "告辭"], ["尋常寒暄", "尋常寒暄"]]
@@ -3382,7 +3382,7 @@ def test_calling_on_a_figure_generates_outside_the_action_lock(game, lock_events
     server.choose(game, "act:call")
     lock_events.clear()
 
-    def generate(client, messages):
+    def generate(client, messages, required=()):
         lock_events.append("generate")
         assert not game.world.db.writing()  # 這個執行緒沒拿著寫入交易
         return DIALOGUE_TURN
@@ -4815,7 +4815,7 @@ def test_two_connections_asking_the_same_person_at_once_the_second_is_refused_an
     stamina = game.state.player.stamina
     started, release, asked, first = threading.Event(), threading.Event(), [], {}
 
-    def generate(client, messages):
+    def generate(client, messages, required=()):
         asked.append(1)
         started.set()
         release.wait(5)
@@ -4906,7 +4906,7 @@ def test_the_dialogue_budget_counts_the_time_spent_in_the_queue(game, monkeypatc
     _slow_queue(monkeypatch, breaker_clock, 45)
     seen = []
 
-    def generate(client, messages):
+    def generate(client, messages, required=()):
         seen.append(client)
         return DIALOGUE_TURN
 
@@ -4971,7 +4971,7 @@ def _ready(site, monkeypatch):
         game = Game.new(server.CONTENT, "測試")
         _stand_by_a_figure(game)
 
-        def generate(client, messages):
+        def generate(client, messages, required=()):
             seen.append({"kind": "dialogue", "client": client})
             return DIALOGUE_TURN
 
