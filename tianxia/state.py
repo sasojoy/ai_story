@@ -903,6 +903,12 @@ class PlayerState(BaseModel):
     # 空的時候不寫進存檔（QUIET_DEFAULTS）：關著的季 JSON 一個鍵都不多
     stance_notes: dict[str, StanceNote] = Field(default_factory=dict)
     errands: list[ErrandState] = Field(default_factory=list)
+    # 上一季論功拿到的稱號（減法季設計 3.3；wins.settle 存在上一季的 WorldState.final_tiers，換季時 _reset_player_for_new_season 掛上）：
+    # social.affiliation 接在後面；沒有是空字串（不寫進存檔）
+    season_title: str = ""
+    # 本週卡「你這一步」（減法季批 3c，step.py）：「換一件事」記在哪一天（同 pill_day）、那一天換了幾次；都是 0 時不寫進存檔
+    step_day: int = 0
+    step_skip: int = 0
     pushed: dict[str, float] = Field(default_factory=dict)  # 「曆日:大勢線 id」→ 當天這條線推得動多少（人數緩衝之後）；只留今天與昨天
 
     # ── 捐獻紀錄（計畫 T6，軍備文件 4.1）：「據點 id:糧草」→ 累積的份量。T7 的伏筆只讀它；寫入是 T6 護糧的事 ──
@@ -986,7 +992,7 @@ class PlayerState(BaseModel):
 
 
 # PlayerState 裡「沒用到就不寫進存檔」的欄位（_drop_quiet_defaults）：新規則掛開關、關著的季存檔一個鍵都不多的，加在這裡
-QUIET_DEFAULTS = ("ledgers", "lean_changed", "deed_day", "deed_today", "stance_notes", "errands")
+QUIET_DEFAULTS = ("ledgers", "lean_changed", "season_title", "step_day", "step_skip", "deed_day", "deed_today", "stance_notes", "errands")
 
 
 class TierResult(BaseModel):
@@ -1567,6 +1573,9 @@ class WorldState(BaseModel):
     # 第一季的結算畫面（計畫 T9）：收季那一刻的戰況（顯示中的每條線）與各陣營出力前五（名號, 貢獻；排行榜不能匿名）
     final_trends: dict[str, int] = Field(default_factory=dict)
     final_rankings: dict[str, list[tuple[str, int]]] = Field(default_factory=dict)
+    # 三陣營四勝利（減法季設計 3.3；wins.settle）：收季那一刻每個投靠了陣營的人的階（名號 → TierResult；沒到門檻是第 0 階）。
+    # 結局卡、下一季的起手資源與稱號讀它；四勝利關著的季是空的、不寫進 JSON（_drop_empty_marks_fired）
+    final_tiers: dict[str, TierResult] = Field(default_factory=dict)
     storyline: str = ""  # 目前主線 id
     act: int = 0  # 目前第幾幕（從 0 起算）
     act_reached: int = 0  # 本季到過的最遠一幕；主線改寫會把 act 歸零，隊伍數與統御上限看這個（見 roster.stage）
@@ -1642,11 +1651,11 @@ class WorldState(BaseModel):
 
     @model_serializer(mode="wrap")
     def _drop_empty_marks_fired(self, handler):
-        """marks_fired、mark_helpers（批 4）與心意那三欄（批 6）是空的、0 的時候不寫這個鍵（同 world_state.SealRegistry._drop_empty_uses；
-        不用 Field(exclude_if=…)：Pydantic 2.11 才有）。"""
+        """marks_fired、mark_helpers（批 4）、final_tiers（批 3c）與心意那三欄（批 6）是空的、0 的時候不寫這個鍵
+        （同 world_state.SealRegistry._drop_empty_uses；不用 Field(exclude_if=…)：Pydantic 2.11 才有）。"""
         data = handler(self)
         if isinstance(data, dict):
-            for key in ("marks_fired", "mark_helpers", "stance_counts", "stance_week", "stance_active"):
+            for key in ("marks_fired", "mark_helpers", "final_tiers", "stance_counts", "stance_week", "stance_active"):
                 if key in data and not data[key]:
                     del data[key]
         return data
