@@ -807,6 +807,11 @@ class PlayerState(BaseModel):
     event_rounds: dict[str, list[str]] = Field(default_factory=dict)
     mark_days: dict[str, int] = Field(default_factory=dict)  # 地方痕跡：這個人上次替這個痕跡算進一次是第幾個遊戲日（rules.game_day；一個遊戲日只算一次；角色每季重來，跟著清空）
     explore_seq: int = 0  # 這一季第幾次探索三選一（explore_modes.rng_for 的種子；角色每季重來）
+    # 減法季批 2（Config.jianfa；整合設計 4.1、4.2、4.5）。四個都是 0／空的時候不寫進存檔（QUIET_DEFAULTS）：關著的季 JSON 一個鍵都不多
+    fights_today: int = 0  # 遭遇的疲勞（drill_gates，growth.nth_fight）：fight_day 那一天打了幾場遭遇（含城裡的地痞、自家營寨的比劃）
+    fight_day: int = 0  # fights_today 記在哪一天（Game._pill_day，台灣 00:00 換日）；不是今天就從頭算
+    milestone_due: int = 0  # 升到境界那一級、還沒配完點時記那一級（stat_milestones；境界卡 main.milestone）；配完清成 0
+    outing_last: str = ""  # 探索一顆（explore_one）上一趟要選的那一拍：「地點 id:類」（感悟不連兩趟，explore_one.draw 的 last_choice）
     anonymous: bool = False
     # 性別（PM 2026-10-12，企劃者「創建角色時可以選擇性別」）：「男」／「女」，不影響任何數值；稱呼換字一律走 tianxia/gender.py。
     # 舊角色沒這欄是男、gender_chosen 是 False：設定頁給一次改的機會（Game.set_gender，改完記 True）；建角色時選過的直接是 True
@@ -997,7 +1002,8 @@ class PlayerState(BaseModel):
 
 # PlayerState 裡「沒用到就不寫進存檔」的欄位（_drop_quiet_defaults）：新規則掛開關、關著的季存檔一個鍵都不多的，加在這裡
 QUIET_DEFAULTS = (
-    "ledgers", "lean_changed", "season_title", "step_day", "step_skip", "deed_day", "deed_today",
+    "ledgers", "lean_changed", "season_title", "step_day", "step_skip", "deed_day", "deed_today",  # 批 3c、批 4
+    "fights_today", "fight_day", "milestone_due", "outing_last",  # 批 2
     # 出陣約戰（減法季批 3b）
     "answer_day", "answers_today", "sortie_cooldown_until", "answer_cooldown_until", "duty_day", "duties_today",
 )

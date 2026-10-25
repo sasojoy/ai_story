@@ -1822,6 +1822,9 @@ def _main_view_body(game: Game) -> dict:
     shop = game.shop_view([o.id for o in options])  # 店面（店面獨立介面設計 6.1）：開關開著、店開著、鐵匠鋪那一串是眼前的選單才有
     if shop is not None:
         view["shop"] = shop
+    milestone = game.milestone_card()  # 減法季屬性五段的境界卡（主機側計畫欄位表 main.milestone）：到了境界、點還沒配完才有這個鍵
+    if milestone is not None:
+        view["milestone"] = milestone
     entry = game.mall_entry()  # 商城的入口（商城第二批：齒輪旁的錠子鈕＋餘額、底部第六格）；商城關著沒有這個鍵
     if entry is not None:
         view["mall"] = entry
@@ -1836,7 +1839,8 @@ def _main_view_body(game: Game) -> dict:
     week = weekcard.week_card(game, status, orders)
     if week is not None:
         view["week_card"] = week
-    mostly = mapdata.mostly_here(game.state, game.content)  # 四格探索那一格的小字「城裡多事」（整合設計 6.3，批 5）；在路上沒有這個鍵
+    # 四格探索那一格的小字「城裡多事」（整合設計 6.3，批 5）；在路上沒有這個鍵。減法季探索一顆開著時照出門一趟那一張表（批 2，Game.mostly_here）
+    mostly = game.mostly_here()
     if mostly:
         view["mostly"] = mostly
     sides = weekcard.sides_card(game)

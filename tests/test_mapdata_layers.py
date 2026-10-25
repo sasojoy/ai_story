@@ -11,9 +11,10 @@ from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 
 
-def _game(at="yingchuan_wilds", faction="guan"):
+def _game(at="yingchuan_wilds", faction="guan", jianfa=True):
     c = real_content("season21")
     c.config.auto_open_first_season = True
+    c.config.jianfa.enabled = jianfa
     game = Game.new(c, "陸乙", rng=random.Random(0), world=open_world())
     game.client = None
     game.state.player.faction, game.state.player.location = faction, at
@@ -21,7 +22,8 @@ def _game(at="yingchuan_wilds", faction="guan"):
 
 
 def test_every_place_says_what_it_mostly_holds_by_its_icon():
-    base = _game().map_base()
+    # 照小圖的是減法季探索一顆關著的季；開著時照出門一趟的表（三處跟小圖不同），見 tests/test_explore_one.py
+    base = _game(jianfa=False).map_base()
     assert all(p["mostly"] == mapdata.MOSTLY[p["glyph"]] for p in base["places"])
     assert set(mapdata.MOSTLY) == {"城", "營", "寺", "渡", "山", "野"}
 

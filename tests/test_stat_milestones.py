@@ -72,7 +72,7 @@ def test_stat_rates_reject_unknown_keys():
 
 
 def test_the_rise_bump_on_events_is_halved_by_default():
-    assert CFG.event_bump_scale == 0.5
+    assert CFG.event_bump_scale == 0.0  # 量過（主機側計畫 Task 2-6）：減法季事件不再加難
     with pytest.raises(ValidationError):
         JianfaNumbers(event_bump_scale=-0.1)
 
