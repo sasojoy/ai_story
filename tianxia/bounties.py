@@ -450,6 +450,9 @@ def reward_bits(state: GameState, content: Content, b: Bounty) -> RewardBits:
     xinde = cfg.xinde.get(b.kind, 0)
     if exp and team.maxed(content, state.player.member):  # 滿級：經驗換成心得（3.5，第 8 批起每一種季都是）
         xinde, exp = xinde + team.as_xinde(content, exp), 0
+    elif exp:  # 減法季三道閘：45 級以後（跨過 45 的那一截）不是仗的經驗換心得，同交差（team.player_exp）；關著原數
+        keep, over = team.player_exp(state, content, exp, "bounty")
+        xinde, exp = xinde + (team.as_xinde(content, over) if over else 0), keep
     if b.kind == "arms":
         low, high = (_silver(state, content, b, base=price * cfg.arms_tier["1"])
                      for price in (min(cfg.arms_silver.values()), max(cfg.arms_silver.values())))
@@ -608,13 +611,18 @@ def _complete(state: GameState, content: Content, world: WorldStateStore, b: Bou
     msgs = [f"【懸賞】「{title(content, b)}」交差了，{issuer(content, b)}的賞銀送到。", f"銀兩 +{silver}"]
     exp = _exp(state, content, b)
     if exp and team.maxed(content, p.member):  # 滿級：本人的經驗照 5 換 1 換成心得（3.5，team.maxed_xinde），同伴照拿經驗
-        gained = team.maxed_xinde(state, content, exp)
+        gained = team.maxed_xinde(state, content, exp, "bounty")
         if gained:
             msgs += [team.MAXED_XINDE.format(n=gained), f"心得 +{gained}"]  # 跟其他來源同一句（FB-452）
-        msgs += team.add_team_exp(state, content, world, exp)
-    elif exp:
-        msgs.append(f"經驗 +{exp}")
-        msgs += team.add_team_exp(state, content, world, exp)
+        msgs += team.add_team_exp(state, content, world, exp, "bounty")
+    elif exp:  # 懸賞交付不是仗（減法季三道閘：45 級以後、跨過 45 的那一截換心得，team.player_exp）
+        keep = team.player_exp(state, content, exp, "bounty")[0]
+        gained = team.maxed_xinde(state, content, exp, "bounty")
+        if gained:
+            msgs += [team.CAPPED_XINDE.format(n=gained), f"心得 +{gained}"]
+        if keep:
+            msgs.append(f"經驗 +{keep}")
+        msgs += team.add_team_exp(state, content, world, exp, "bounty")
     msgs += _attached(state, content, world, b)
     msgs[2:2] = ranger.add_deeds(state, content, b.deeds)  # 散人的功績（名聲開著時記成善名或惡名）
     if b.kind != "wanted":  # 通緝照押金給，沒有加成（_silver）

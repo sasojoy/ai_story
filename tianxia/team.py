@@ -17,6 +17,7 @@ from contextvars import ContextVar
 from collections.abc import Callable
 
 from . import armor, calendar, encounter, equipment, mounts, rounds, seal_acts, signature, styles, tactics, traits, treasures, weapons
+from . import growth  # 減法季三道閘、屬性五段的純規則（growth 只在函式裡反過來 import team）
 from . import terrain as terrain_mod  # 地利（_styled_fighters 的參數 terrain 是開關，模組另取名字）
 from .martial_arts import MAX_LEVEL, MartialArt, content_art, counters, power_at, with_quality
 from .models import Content, FollowerDef, InsightDef, Squad, TacticBond, TacticDef
@@ -679,19 +680,52 @@ def as_xinde(content: Content, exp: int) -> int:
     return max(0, exp) // content.config.maxed_exp_per_xinde
 
 
-def maxed_xinde(state: GameState, content: Content, exp: int) -> int:
-    """本人這一筆經驗在滿級時換成心得（3.5，第 8 批通用）：已經滿級才換、記進心得、回換了幾點；沒滿級回 0（經驗照舊走 add_exp）。
-    升到滿級那一下剩下的經驗不換（照舊丟掉）。同伴不換，照拿經驗（grant_team_exp）。"""
+CAPPED_XINDE = "境界已到，再往上只能打出來，經驗化作心得 +{n}。"  # 待 joy 潤：45 級以後不是仗的經驗換成心得那一句（減法季整合設計 4.2）
+
+
+def _jianfa(state: GameState, content: Content, part: str) -> bool:
+    """減法季的子開關在這一季開了沒（rules.jianfa；rules 反過來 import 這裡，延後 import）。"""
+    from . import rules  # noqa: PLC0415
+
+    return rules.jianfa(content, state.world, part)
+
+
+def player_exp(state: GameState, content: Content, amount: int, source: str = "battle") -> tuple[int, int]:
+    """本人這一筆經驗拆成（算經驗的, 換心得的）（減法季三道閘的第三道，整合設計 4.2）：source 是這一筆從哪裡來（growth.exp_source 認得的
+    那幾種；不認得的當場炸，接線寫錯一看就知道）。三道閘開著（Config.jianfa 的 drill_gates）、不是仗的經驗到 drill_level_cap（45）為止，
+    跨過去的那一截與 45 級以後的整筆換心得（growth.capped_exp）；仗的經驗、關著的季、已經滿級（照舊交給 maxed_xinde）原數回去。只算、不給。"""
+    kind = growth.exp_source(source)
+    member = state.player.member
+    if kind == growth.BATTLE or amount <= 0 or maxed(content, member) or not _jianfa(state, content, "drill_gates"):
+        return amount, 0
+    cfg = content.config.jianfa
+    return growth.capped_exp(cfg, member.level, amount, kind, room=growth.room_to_cap(cfg, content.config, member))
+
+
+def maxed_xinde(state: GameState, content: Content, exp: int, source: str = "battle") -> int:
+    """本人這一筆經驗換成心得的那一份（3.5，第 8 批通用）：已經滿級整筆照 5 換 1；減法季三道閘開著、不是仗的經驗過了 45 級的那一截也照換
+    （player_exp）。記進心得、回換了幾點；都不換回 0（經驗照舊走 add_exp）。升到滿級那一下剩下的經驗不換（照舊丟掉）。
+    同伴不換，照拿經驗（grant_team_exp）。"""
     p = state.player
     if not maxed(content, p.member):
-        return 0
-    gained = as_xinde(content, exp)
+        over = player_exp(state, content, exp, source)[1]
+        gained = as_xinde(content, over) if over else 0
+    else:
+        gained = as_xinde(content, exp)
     if gained:
         p.stats["xinde"] = p.stats.get("xinde", 0) + gained
     return gained
 
 
-def add_exp(content: Content, member, amount: int, name: str) -> list[str]:
+def xinde_line(content: Content, member, n: int) -> str:
+    """經驗換成心得那一句：滿級寫 MAXED_XINDE，還沒滿級（45 級的閘換的）寫 CAPPED_XINDE。"""
+    return (MAXED_XINDE if maxed(content, member) else CAPPED_XINDE).format(n=n)
+
+
+def add_exp(content: Content, member, amount: int, name: str, source: str = "battle") -> list[str]:
+    """這個人（本人的 Member 或同伴的 CompanionProgress）加 amount 經驗，照升級表升級，回升級的那幾句。source 是這一筆從哪裡來
+    （growth.exp_source；只驗認不認得——本人不是仗的經驗過 45 級的那一截，呼叫端先用 player_exp 拆掉）。"""
+    growth.exp_source(source)
     cfg = content.config
     msgs: list[str] = []
     if member.level >= cfg.max_level or amount <= 0:
@@ -705,7 +739,7 @@ def add_exp(content: Content, member, amount: int, name: str) -> list[str]:
 
 
 def grant_team_exp(
-    state: GameState, content: Content, world: WorldStateStore, amount: int,
+    state: GameState, content: Content, world: WorldStateStore, amount: int, source: str = "battle",
 ) -> tuple[list[str], LevelUps | None]:
     """本隊每個人（本人與帶著出戰的同伴）各得 amount 經驗，照同一套 add_exp 規則升級；回傳（升級訊息, 誰升到第幾級）。
     訊息本人在前、同伴照隊伍順序（試玩回饋 FB-002：戰報一直寫「經驗 +N（每人）」，以前只有本人真的拿到）。
@@ -715,11 +749,13 @@ def grant_team_exp(
     同伴的等級與經驗存在全服共用的 CompanionProgress（world.update_companion 當場寫回共用世界，
     跟著那一筆交易存檔），所以換頁、重新登入都還在；換季時跟其他同伴進度一起清空。氣血上限
     （neili_cap：基礎＋每級加成，本人再乘上根骨）由等級算出來，升級就跟著變高（氣血設計 A1：等級只買氣血上限）；
-    目前氣血不變，不順便回血。"""
+    目前氣血不變，不順便回血。
+    source 是這一筆從哪裡來（growth.exp_source）：減法季三道閘開著時本人不是仗的經驗只加到 45 級（player_exp；換心得的那一截由呼叫端
+    先叫 maxed_xinde 記），同伴照拿全額。"""
     p = state.player
     ups = LevelUps()
     before = p.member.level
-    msgs = add_exp(content, p.member, amount, p.name)
+    msgs = add_exp(content, p.member, player_exp(state, content, amount, source)[0], p.name, source)
     gained = p.member.level - before
     if gained > 0:  # 升級給屬性點（武學與成長設計 6.2）：一次升好幾級就給好幾點，只給本人
         points = points_between(content.config, before, p.member.level)  # 30 級以後兩級一點：升了一級可能沒有點
@@ -734,7 +770,7 @@ def grant_team_exp(
 
         def gain(progress, name=name, levels=levels) -> None:
             was = progress.level
-            levels.extend(add_exp(content, progress, round(amount * mate), name))
+            levels.extend(add_exp(content, progress, round(amount * mate), name, source))
             if progress.level > was:
                 ups.mates.append((name, progress.level))
 
@@ -744,9 +780,9 @@ def grant_team_exp(
     return msgs, (ups if msgs else None)
 
 
-def add_team_exp(state: GameState, content: Content, world: WorldStateStore, amount: int) -> list[str]:
+def add_team_exp(state: GameState, content: Content, world: WorldStateStore, amount: int, source: str = "battle") -> list[str]:
     """同 grant_team_exp，只回升級訊息（操練等不畫戰鬥卡片的地方用）。"""
-    return grant_team_exp(state, content, world, amount)[0]
+    return grant_team_exp(state, content, world, amount, source)[0]
 
 
 def regen_neili(content: Content, member, fraction: float, con: float = BASE_STAT, plain: bool = False) -> None:

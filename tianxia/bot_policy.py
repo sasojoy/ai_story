@@ -871,13 +871,16 @@ OUTING_CRIPPLED_SHARE = 0.5  # 內傷重又付不起醫館（_crippled）時，�
 
 
 def _outing_score(game: Game, plan) -> float | None:
-    """探索一顆的分數（Game.outing_plan 那一份比重）：底分 OUTING_SCORE；接了這裡的討伐懸賞、這裡有打探懸賞各加 BOUNTY_SCORE；缺素材而這裡
-    素材的比重不比遭遇低再加 NEED_MATERIAL_SCORE。內傷重、付不起醫館的不去多半遇敵的地方（去城裡、寺裡攢錢）。"""
+    """探索一顆的分數（Game.outing_plan 那一份比重）：底分 OUTING_SCORE，遭遇佔一拍的那一份乘下一場的疲勞（Game.fatigue_next：減法季三道閘，
+    今天打得多了遭遇的收穫少，出門的意願跟著降；三道閘關著是 1）；接了這裡的討伐懸賞、這裡有打探懸賞各加 BOUNTY_SCORE；缺素材而這裡素材的比重
+    不比遭遇低再加 NEED_MATERIAL_SCORE。內傷重、付不起醫館的不去多半遇敵的地方（去城裡、寺裡攢錢）。"""
     w = plan.weights
     total = sum(w.values()) or 1
-    if w.get("encounter", 0) / total >= OUTING_CRIPPLED_SHARE and _crippled(game):
+    fight = w.get("encounter", 0) / total
+    if fight >= OUTING_CRIPPLED_SHARE and _crippled(game):
         return None
-    value = OUTING_SCORE
+    tired = game.fatigue_next()
+    value = OUTING_SCORE if tired >= 1 else OUTING_SCORE * (1 - fight * (1 - tired))
     value += BOUNTY_SCORE if plan.how == "bounty" else 0.0
     value += BOUNTY_SCORE if _bounty_here(game, "scout") else 0.0
     if _short_of_materials(game) and w.get("material", 0) >= w.get("encounter", 0):

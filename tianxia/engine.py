@@ -445,6 +445,8 @@ class Game:
         self._loot_scale = 1.0  # 打贏的心得與銀兩倍數：練功分級（_practice，Config.training）那一場才不是 1
         # 減法季探索一顆（批 2）：遭遇拍那一場掉的素材打幾成（城裡的地痞 town_loot_scale、三道閘的倍數）；其餘的仗都是 1，一個字不變
         self._drop_scale = 1.0
+        self._gate_scale = 1.0  # 減法季三道閘（批 2）：遭遇拍那一場的經驗、心得、銀兩乘疲勞與對手兩道閘（_fight_gate）；其餘是 1
+        self._outing_close: set[str] = set()  # 這一趟出門打了折的那幾道閘（_fight_gate 記、_explore_one 寫段落結尾那一句）
         self._affinity_before: dict[str, int] | None = None  # choose()、隨口應對進行中：這一下之前的情誼（_people_here 認這一下加了誰的情誼）
         # 歷史武將同行：挑好了隨你上陣的那一位、正在照它加入（_escort_step 開著、_escort_carry 讀）
         self._escort_picked = False
@@ -1969,12 +1971,13 @@ class Game:
         if self._draft is not None:
             self._draft.hide(xinde_line)
             self._draft.changes.append(xinde_line)
-        gained = team.maxed_xinde(s, c, exp)  # 滿級：本人的經驗照 5 換 1 換成心得，同伴照拿經驗
+        keep = team.player_exp(s, c, exp, "drill")[0]  # 減法季三道閘：城裡操練不是仗，45 級以後換心得
+        gained = team.maxed_xinde(s, c, exp, "drill")  # 滿級：本人的經驗照 5 換 1 換成心得，同伴照拿經驗
         if gained:
-            msgs.append(team.MAXED_XINDE.format(n=gained))
-        msgs += team.add_team_exp(s, c, self.world, exp)
+            msgs.append(team.xinde_line(c, p.member, gained))
+        msgs += team.add_team_exp(s, c, self.world, exp, "drill")
         if self._draft is not None and exp > 0:
-            self._draft.changes.append(f"心得 +{gained}" if team.maxed(c, p.member) else f"經驗 +{exp}（每人）")
+            self._draft.changes += self._exp_changes(exp, keep, gained)
         left = training.drills_left(p, cfg, today)
         if left == 0:
             self._hint("h_drill_done")
@@ -4775,6 +4778,7 @@ class Game:
         before = len(self._draft.changes) if self._draft is not None else 0
         out: list[str] = []
         got_any, home_done, boss, choice = False, False, None, ""
+        self._outing_close = set()
         for i, beat in enumerate(beats, 1):
             rng = roll(f"第{i}拍")
             if beat == explore_one.MATERIAL:  # 素材拍：找素材一定給的那一套（不展開分支；屬性照這裡的素材）
@@ -4819,6 +4823,11 @@ class Game:
                 story.append(explore_one.line(lines, "close", "empty", say, place=loc.name,
                                               item=explore_one.items_of([granted], materials.GRANT_PREFIX)))
                 out.append(granted)
+        if any(line.startswith(team.CAPPED_XINDE.partition("，")[0]) for line in out):
+            self._outing_close.add("capped")
+        for key in explore_one.LINE_KEYS["close"]:  # 段落結尾：疲勞打了折、對手配不上你、境界已到（三道閘，設計 4.2）
+            if key in self._outing_close:
+                story.append(explore_one.line(lines, "close", key, say, place=loc.name))
         p.outing_last = f"{loc.id}:{choice}" if choice else ""
         extras = self._pill_find(roll("回體丹")) + self._scrap_find() + self._legend_find(roll("破境丹"))
         extras += bounties.on_explore(s, c, self.world, loc.id) + self._seal_find(loc.id)  # 打探懸賞：出門一趟就算
@@ -4831,16 +4840,18 @@ class Game:
         「出門一趟・遭遇」；城裡的地痞戰利（銀兩、心得、掉的素材）乘 town_loot_scale、不算討伐；其餘打贏算討伐懸賞的交差。"""
         s, c = self.state, self.content
         cfg, foe = c.config.jianfa, plan.foe
+        gate = self._fight_gate(foe)  # 三道閘的前兩道（疲勞、對手配不配得上你）：這一場的經驗、心得、銀兩、掉的素材一起乘
         if plan.how == "spar":
-            return self._drill_gains(foe, 1.0), "spar", True
+            return self._drill_gains(foe, gate, "camp_spar"), "spar", True
         town = plan.how == "town"
-        if town:
-            self._loot_scale = self._drop_scale = cfg.town_loot_scale
+        self._loot_scale = cfg.town_loot_scale if town else 1.0
+        self._gate_scale = gate
+        self._drop_scale = gate * self._loot_scale
         card = s.battle_card
         try:
             msgs = self._squad_encounter(foe.id, wild=True)
         finally:
-            self._loot_scale = self._drop_scale = 1.0
+            self._loot_scale = self._drop_scale = self._gate_scale = 1.0
         record = next((r for r in s.battles if r.id == s.battle_card), None) if s.battle_card != card else None
         won = record is not None and record.tier in team.WIN_TIERS
         if record is not None:
@@ -4855,6 +4866,35 @@ class Game:
         if town:
             return msgs, "town_win" if won else "town_lose", won
         return msgs, "win" if won else "draw" if tier == "僵持" else "lose", won
+
+    def _fight_gate(self, foe: Squad) -> float:
+        """遭遇拍這一場的倍數（減法季三道閘的前兩道，整合設計 4.2；Config.jianfa 的 drill_gates）：今天第幾場（PlayerState.fights_today，
+        台灣 00:00 換日、照 _pill_day）的疲勞（growth.fatigue_factor：前 drill_full_per_day 場 1，之後每場 ×drill_decay，最低 drill_floor）
+        乘對手的檔（growth.outlevel_factor：對手難度的檔比自己等級的檔低一檔 0.5、兩檔 0.1）。關著是 1、也不記場數（存檔一個鍵都不多）。
+        打了折的那一道記進 _outing_close（段落結尾那一句：tired、outlevel）。"""
+        s, c = self.state, self.content
+        if not jianfa(c, s.world, "drill_gates"):
+            return 1.0
+        cfg, p = c.config.jianfa, s.player
+        today = self._pill_day()
+        n = growth.nth_fight(fight_day=p.fight_day, fights_today=p.fights_today, today=today)
+        p.fight_day, p.fights_today = today, n
+        tired = growth.fatigue_factor(cfg, n)
+        matched = growth.outlevel_factor(cfg, p.member.level, foe.difficulty)
+        if tired < 1:
+            self._outing_close.add("tired")
+        if matched < 1:
+            self._outing_close.add("outlevel")
+        return tired * matched
+
+    def fatigue_next(self) -> float:
+        """下一場遭遇的疲勞倍數（同 _fight_gate 的第一道，只讀、不記場數）：假人打探索的分數、量表讀；三道閘關著是 1。"""
+        s, c = self.state, self.content
+        if not jianfa(c, s.world, "drill_gates"):
+            return 1.0
+        p = s.player
+        n = growth.nth_fight(fight_day=p.fight_day, fights_today=p.fights_today, today=self._pill_day())
+        return growth.fatigue_factor(c.config.jianfa, n)
 
     def _outing_event(self, loc: Location, kind: str, rng: random.Random) -> list[str]:
         """事件拍（設計 4.1）：一次性奇遇先擲 rare_explore_chance（可重複的一則都沒有時直接是它）；沒中照防重複輪替抽這裡可重複的事件，
@@ -7932,13 +7972,13 @@ class Game:
             p.stats["silver"] = p.stats.get("silver", 0) + silver
             changes.append(f"銀兩 +{silver}")
         if exp and team.maxed(c, p.member):  # 滿級：經驗照 5 換 1 換成心得（3.5）
-            gained = team.maxed_xinde(s, c, exp)
+            gained = team.maxed_xinde(s, c, exp, "showdown")
             if gained:
                 lines.append(team.MAXED_XINDE.format(n=gained))  # 跟其他來源同一句（FB-452）
                 changes.append(f"心得 +{gained}")
-        elif exp:  # 同伴不進決戰（人物資質設計 14.5）：只給本人；升級給屬性點同切磋
+        elif exp:  # 同伴不進決戰（人物資質設計 14.5）：只給本人；升級給屬性點同切磋。決戰是仗（減法季 45 級以後照算）
             before = p.member.level
-            lines += team.add_exp(c, p.member, exp, p.name)
+            lines += team.add_exp(c, p.member, exp, p.name, "showdown")
             if p.member.level > before:
                 points = team.points_between(c.config, before, p.member.level)
                 p.stat_points += points
@@ -8937,9 +8977,10 @@ class Game:
             msgs += self._drill_push(trend_id, delta)
         return msgs
 
-    def _drill_gains(self, squad: Squad, share: float | None = None) -> list[str]:
+    def _drill_gains(self, squad: Squad, share: float | None = None, source: str = "hold") -> list[str]:
         """跟這一路一起操練拿的：對手心得與經驗的 share（預設 drill_reward_share；不給銀兩、素材）；經驗本人與帶著的同伴都拿（FB-002）。
-        操練（_drill）與出陣的守、攪局（_sortie_hold）、守勢行動（_duty）共用；一類一顆開著時守、攪局、守勢行動給全額（_hold_share）。"""
+        操練（_drill）與出陣的守、攪局（_sortie_hold）、守勢行動（_duty）共用；一類一顆開著時守、攪局、守勢行動給全額（_hold_share）。
+        source（growth.exp_source）：這幾樣都不打仗（hold，PM 2026-10-25 第 5 件）；減法季自家營寨跟同袍比劃算仗（camp_spar）。"""
         s, c = self.state, self.content
         p = s.player
         share = c.config.drill_reward_share if share is None else share
@@ -8952,13 +8993,23 @@ class Game:
             if self._draft is not None:
                 self._draft.hide(xinde_line)
                 self._draft.changes.append(xinde_line)
-        gained = team.maxed_xinde(s, c, exp)  # 滿級：本人的經驗照 5 換 1 換成心得（3.5），同伴照拿經驗
+        keep = team.player_exp(s, c, exp, source)[0]  # 減法季三道閘：不是仗的 45 級以後換心得
+        gained = team.maxed_xinde(s, c, exp, source)  # 滿級：本人的經驗照 5 換 1 換成心得（3.5），同伴照拿經驗
         if gained:
-            msgs.append(team.MAXED_XINDE.format(n=gained))
-        msgs += team.add_team_exp(s, c, self.world, exp)
+            msgs.append(team.xinde_line(c, p.member, gained))
+        msgs += team.add_team_exp(s, c, self.world, exp, source)
         if self._draft is not None and exp > 0:
-            self._draft.changes.append(f"心得 +{gained}" if team.maxed(c, p.member) else f"經驗 +{exp}（每人）")
+            self._draft.changes += self._exp_changes(exp, keep, gained)
         return msgs
+
+    def _exp_changes(self, exp: int, keep: int, gained: int) -> list[str]:
+        """操練這一類（不畫戰報的）經驗寫進江湖紀錄得失的那幾筆：滿級寫「心得 +N」、照常寫「經驗 +N（每人）」（同以前）；
+        減法季 45 級的閘換了一截心得時，寫換到的心得與本人真的加的經驗（同伴照拿全額，不寫「每人」）。"""
+        if team.maxed(self.content, self.state.player.member):
+            return [f"心得 +{gained}"]
+        if keep == exp:
+            return [f"經驗 +{exp}（每人）"]
+        return ([f"心得 +{gained}"] if gained else []) + ([f"經驗 +{keep}"] if keep else [])
 
     # ── 出陣（出陣探索與地盤設計第二節）──────────────────────────
 
@@ -9272,8 +9323,8 @@ class Game:
             msgs.append(f"心得 +{xinde}")
         factor = ranger.exp_factor(s, c)
         exp = round(squad.exp * cfg.reward_scale * (1 + treasures.amount(s, c, "win_exp_pct")) * factor)
-        msgs += self._record_exp(record, exp)
-        levels, record.levelups = team.grant_team_exp(s, c, self.world, exp)
+        msgs += self._record_exp(record, exp, "sortie")
+        levels, record.levelups = team.grant_team_exp(s, c, self.world, exp, "sortie")
         record.notes += levels
         return msgs + levels
 
@@ -9312,8 +9363,8 @@ class Game:
             record.xinde = xinde
             msgs.append(f"心得 +{xinde}")
         exp = drill_share(squad.exp, share)
-        msgs += self._record_exp(record, exp)
-        levels, record.levelups = team.grant_team_exp(self.state, self.content, self.world, exp)
+        msgs += self._record_exp(record, exp, "sortie")
+        levels, record.levelups = team.grant_team_exp(self.state, self.content, self.world, exp, "sortie")
         record.notes += levels
         return msgs + levels
 
@@ -9372,13 +9423,18 @@ class Game:
         mine = side is not None and loc is not None and territory.controller(self.state.world, self.content, loc) == side
         return push.STEADY_LINE if mine else push.RESISTED_LINE
 
-    def _record_exp(self, record, exp: int) -> list[str]:
+    def _record_exp(self, record, exp: int, source: str = "battle") -> list[str]:
         """這一場本人的經驗寫進戰報（record.exp）：已經滿級時照 5 換 1 換成心得（team.maxed_xinde，3.5），戰報的得失寫心得、
-        不寫經驗，回江湖紀錄那一句；沒滿級照舊寫經驗、回空的。經驗本身照舊交給 grant_team_exp／add_exp（滿級的本人不加，同伴照拿）。"""
-        gained = team.maxed_xinde(self.state, self.content, exp)
+        不寫經驗，回江湖紀錄那一句；沒滿級照舊寫經驗、回空的。經驗本身照舊交給 grant_team_exp／add_exp（滿級的本人不加，同伴照拿）。
+        source（growth.exp_source）：減法季三道閘開著時不是仗的經驗過了 45 級那一截也換心得（戰報寫真的加的經驗，回 CAPPED_XINDE 那一句）；
+        仗的經驗照舊。"""
+        gained = team.maxed_xinde(self.state, self.content, exp, source)
         if not team.maxed(self.content, self.state.player.member):
-            record.exp = exp
-            return []
+            record.exp = team.player_exp(self.state, self.content, exp, source)[0]
+            if not gained:
+                return []
+            record.xinde = (record.xinde or 0) + gained
+            return [team.CAPPED_XINDE.format(n=gained), f"心得 +{gained}"]
         record.exp = 0
         record.xinde = (record.xinde or 0) + gained
         # 那一句之外另回「心得 +N」：江湖紀錄那一則的心得跟戰報得失對得上，「剛剛」卡片底下不多一顆「心得 -N」（FB-451）
@@ -9658,8 +9714,8 @@ class Game:
             p.stats["xinde"] = p.stats.get("xinde", 0) + xinde
             record.xinde = xinde
             msgs.append(f"心得 +{xinde}")
-        msgs += self._record_exp(record, exp)
-        levels, record.levelups = team.grant_team_exp(self.state, self.content, self.world, exp)
+        msgs += self._record_exp(record, exp, "challenge")
+        levels, record.levelups = team.grant_team_exp(self.state, self.content, self.world, exp, "challenge")
         record.notes += levels
         return msgs + levels
 
@@ -9906,7 +9962,8 @@ class Game:
         p = self.state.player
         msgs = []
         scale = self._loot_scale  # 練功分級的倍數（_practice 打的那一場才不是 1；Config.training）
-        silver_won = round(squad.reward_silver * scale)
+        gate = self._gate_scale  # 減法季三道閘（遭遇拍那一場才不是 1）：經驗、心得、銀兩一起乘（乘 1 一個位元都不動）
+        silver_won = round(squad.reward_silver * scale * gate)
         if silver_won:
             p.stats["silver"] += silver_won
             record.silver = silver_won
@@ -9914,7 +9971,7 @@ class Game:
         # 寶物「打贏的心得／經驗」（裝備四欄 6.2）；兩種數字不同，拆成兩個倍數。乘勝、悟招以前多給獎勵，本命戰法第三批起改成回合裡的戰法
         more_xinde = 1 + treasures.amount(self.state, self.content, "win_xinde_pct")
         more_exp = 1 + treasures.amount(self.state, self.content, "win_exp_pct")
-        xinde = round(squad.reward_xinde * more_xinde * scale)
+        xinde = round(squad.reward_xinde * more_xinde * scale * gate)
         if xinde:
             p.stats["xinde"] = p.stats.get("xinde", 0) + xinde
             record.xinde = xinde
@@ -9950,9 +10007,10 @@ class Game:
                     msgs += dropped_lines
         # 經驗本來就是每人拿一樣多（FB-002），乘勝與寶物整隊一起乘；散人的遊俠名號每一階再多一成（ranger.exp_factor，陣營的人是 1）
         factor = ranger.exp_factor(self.state, self.content)
-        exp = round(squad.exp * more_exp * factor)
-        msgs += self._record_exp(record, exp)
-        levels, record.levelups = team.grant_team_exp(self.state, self.content, self.world, exp)  # 每人都拿（FB-002）
+        exp = round(squad.exp * more_exp * factor * gate)
+        exp_from = "encounter" if record.kind == "wild" else "battle"  # 都是仗（growth.BATTLE_KINDS）：減法季 45 級以後照算
+        msgs += self._record_exp(record, exp, exp_from)
+        levels, record.levelups = team.grant_team_exp(self.state, self.content, self.world, exp, exp_from)  # 每人都拿（FB-002）
         record.notes += levels  # 完整的句子留著（戰報頁、江湖紀錄）；戰鬥卡片畫 levelups 那一行簡短的（FB-074）
         why = renown.ranger_exp_note(self.state, self.content, factor)  # 名聲 6.3：散人的經驗加成說出原因
         record.notes += why
@@ -11027,13 +11085,13 @@ class Game:
                 p.stats["silver"] = p.stats.get("silver", 0) + pay.silver
                 lines.append(f"銀兩 +{pay.silver}")
             if pay.exp and team.maxed(c, p.member):
-                gained = team.maxed_xinde(s, c, pay.exp)
+                gained = team.maxed_xinde(s, c, pay.exp, "dividend")
                 if gained:
                     lines += [team.MAXED_XINDE.format(n=gained), f"心得 +{gained}"]
-            elif pay.exp:
+            elif pay.exp:  # 翻地分紅算仗（地是打下來的，growth.BATTLE_KINDS）
                 before = p.member.level
                 lines.append(f"經驗 +{pay.exp}")
-                lines += team.add_exp(c, p.member, pay.exp, p.name)
+                lines += team.add_exp(c, p.member, pay.exp, p.name, "dividend")
                 if p.member.level > before:
                     points = team.points_between(c.config, before, p.member.level)
                     p.stat_points += points
@@ -11979,8 +12037,8 @@ class Game:
         p.stats["xinde"] = p.stats.get("xinde", 0) + xinde
         record.xinde = xinde
         before = p.member.level
-        maxed_note = self._record_exp(record, cfg.exp)  # 先換（滿級才換）；升到滿級那一下剩下的不換
-        ups = team.add_exp(c, p.member, cfg.exp, p.name)
+        maxed_note = self._record_exp(record, cfg.exp, "spar")  # 先換（滿級才換）；升到滿級那一下剩下的不換
+        ups = team.add_exp(c, p.member, cfg.exp, p.name, "spar")  # 切磋是仗（減法季 45 級以後照算）
         if p.member.level > before:
             points = team.points_between(c.config, before, p.member.level)
             p.stat_points += points
@@ -12966,8 +13024,8 @@ class Game:
             before = p.member.level
             # 滿級換心得（先換，升到滿級那一下剩下的不換）：extra 會進戰報敘事、紀錄另接得失（已含換來的那一份），所以只留那一句，
             # 「心得 +N」不接（同切磋；FB-453：以前紀錄寫心得 +39、實際 +27）
-            extra += [n for n in self._record_exp(record, exp) if not n.startswith("心得 +")]
-            extra += team.add_exp(c, p.member, exp, p.name)
+            extra += [n for n in self._record_exp(record, exp, "boss") if not n.startswith("心得 +")]
+            extra += team.add_exp(c, p.member, exp, p.name, "boss")  # 頭目戰是仗（減法季 45 級以後照算）
             if p.member.level > before:
                 points = team.points_between(c.config, before, p.member.level)
                 p.stat_points += points
