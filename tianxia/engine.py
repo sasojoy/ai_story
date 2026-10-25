@@ -3708,15 +3708,19 @@ class Game:
         走 wins.credit：兩軍照舊加 contrib 與那一週的帳，豪強另記此刻幫的那一軍那一本。"""
         self._deed_points(outcome.effect.contribution if success and not outcome.evil else 0)
 
-    def _deed_points(self, points: int) -> int:
+    def _deed_points(self, points: int, *, capped: bool = True) -> int:
         """記 points 點陣營貢獻進「文字的事」那一本（整合設計 5.3：分岔的後果、心意一筆、託付辦成了；減法季批 4、6）：有那一邊才記
         （散人不記，同推線），一天（季曆日）最多 Config.jianfa.deed_contribution_cap，超過的不記（PlayerState.deed_day／deed_today）。
+        capped=False（託付辦成了，PM 2026-10-26：一週才一件，共用的話分岔記滿那一天託付就記不到）：照數全記，也不佔那一天的額度。
         走 wins.credit：兩軍照舊加 contrib 與那一週的帳，豪強另記此刻幫的那一軍那一本。回實際記了幾點。"""
         s, c = self.state, self.content
         if not points or self._side() is None:
             return 0
         w, p = s.world, s.player
         at = calendar.point(w.time, c, w)
+        if not capped:
+            wins_rules.credit(p, c, w, at.week, points)
+            return points
         if p.deed_day != at.cal_day:
             p.deed_day, p.deed_today = at.cal_day, 0
         room = outcome_rules.contribution_room(points, p.deed_today, c.config.jianfa.deed_contribution_cap)
@@ -3809,8 +3813,8 @@ class Game:
         return self._errand_persuade(e)
 
     def _errand_reward(self, e) -> list[str]:
-        """辦成了（整合設計 5.5）：他的情誼 +affinity（照事件效果的寫法與放慢）、貢獻 +contribution（跟分岔、心意同一本每日上限）、
-        他的那個心意 +1、行狀一則（annals.ERRAND）。回紀錄的句子。"""
+        """辦成了（整合設計 5.5）：他的情誼 +affinity（照事件效果的寫法與放慢）、貢獻 +contribution（不吃每天的貢獻上限、也不佔那一本，
+        PM 2026-10-26）、他的那個心意 +1、行狀一則（annals.ERRAND）。回紀錄的句子。"""
         s, c = self.state, self.content
         d = errand_rules.find_def(c, e.figure, e.errand)
         errand_rules.done(s, e)
@@ -3818,7 +3822,7 @@ class Game:
         msgs = [errand_rules.DONE.format(who=errand_rules.who(c, e))]
         if d is not None:
             msgs += self._apply(Effect(affinity={cid: d.affinity}))
-            self._deed_points(d.contribution)
+            self._deed_points(d.contribution, capped=False)
             stance_rules.bump(s, c, e.figure, d.stance)
         annals.note(s, c, annals.ERRAND, f"替{errand_rules.who(c, e)}{errand_rules.task_text(c, e)}，辦成了。", 3, figure=cid)
         return msgs

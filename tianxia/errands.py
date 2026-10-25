@@ -9,7 +9,7 @@
 - 勸降（persuade）：走到 target，「此地」多一顆「勸降」，按了叫出輸入框；寫一句，三段式（Game.persuade_request → 鎖外
   event_llm.rate_persuasion 評那一句 → Game.persuade）：引擎加情誼與名望的修正、夾在 persuade_floor～persuade_cap、自己擲骰；
   成了立痕跡、推線（照事件的推法），敗了打一場遭遇；模型叫不動就什麼都不發生（最保守，照批 4 的慣例），那一件照舊在。
-辦成了：他的情誼 +affinity、陣營貢獻 +contribution（跟分岔、心意同一本每日上限）、他的那個心意 +1（ErrandDef.stance）、行狀一則
+辦成了：他的情誼 +affinity、陣營貢獻 +contribution（不吃分岔、心意那一本的每日上限、也不佔它，PM 2026-10-26）、他的那個心意 +1（ErrandDef.stance）、行狀一則
 （annals.ERRAND）。過期作罷情誼 −errand_lapse_affinity；婉拒不扣。一人同時最多一件。假人不收託付、不回信（企劃者 2026-10-24）。
 信的開頭那段話照 letters.write 的三段式請模型照他的口氣重寫（寫不出來照固定句）。
 
