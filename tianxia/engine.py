@@ -177,7 +177,7 @@ FREE_TEXT_OPTION = "choice:free"  # 事件的「隨口應對」：按下去只�
 EVIL_ANNAL = "，行了一件惡事，成了。"  # 行狀：隨口應對判成惡行而且成了（FB-223），接在「遇上【某事】，隨口應對」後面。待 joy 潤
 # 跟人物對話時的「自己說」（企劃者 2026-10-08）：按下去只是叫出輸入框，真正送出帶著那句話走 choose(SAY_OPTION, text=…)（server.say）
 SAY_OPTION = "talk:say"
-# 開口求人第二批（parley.py）：同「自己說」要打一句話的兩顆——對話裡跟答應陪你出陣的人商量打法、他帶路的路上跟他說一句
+# NPC 智能 2.1（parley.py）：同「自己說」要打一句話的兩顆——對話裡跟答應陪你出陣的人商量打法、他帶路的路上跟他說一句
 PLAN_OPTION = "talk:plan"
 ROAD_SAY = "parley:road"
 TEXT_TALKS = (SAY_OPTION, PLAN_OPTION, ROAD_SAY)
@@ -188,7 +188,7 @@ SAY_MAX = 20  # 「自己說」最多幾個字（跟隨口應對一樣）
 
 def say_text(text: str | None, limit: int = SAY_MAX) -> str | None:
     """「自己說」那句話能不能送：先去頭尾空白、中間連著的空白併成一個，1～limit 字才算數，再轉繁體（zh.to_traditional）；
-    不行就是 None。長度在轉繁體之前量（轉換不改字數，量的是玩家打的）。limit 平常是 SAY_MAX，開口求人開著時照 Game.say_max。"""
+    不行就是 None。長度在轉繁體之前量（轉換不改字數，量的是玩家打的）。limit 平常是 SAY_MAX，NPC 智能 2.0開著時照 Game.say_max。"""
     if text is None:
         return None
     text = " ".join(text.split())
@@ -992,7 +992,7 @@ class Game:
         self._conquest_tick()  # 領地爭奪：換天（22:00）的掛鉤（前一天沒開成的攻城作罷；第一個看到新的一天的人觸發）
         self._deliver_conquest()  # 領地爭奪：翻地的分紅、守城功（下線時易手的回來補）
         self._deliver_arena()  # 擂台：被挑了的戰報、季末前三名的獎勵；季收了還沒打完的那一場作廢
-        mail = parley.lapse(self.state, self.content)  # 開口求人第二批：欠人物的事過了期限是食言（附的委託先作罷，書信不再補一句）
+        mail = parley.lapse(self.state, self.content)  # NPC 智能 2.1：欠人物的事過了期限是食言（附的委託先作罷，書信不再補一句）
         mail += letters.deliver(self.state, self.content, now)  # 書信（大勢人物擴充第二批）：人物來信、過期的委託作罷
         if mail:
             self._write(letters.TITLE, mail)
@@ -1236,7 +1236,7 @@ class Game:
                 opts.append(self._cost_option(SAY_OPTION, "自己說…", talk_cost))
             opts += foreshadow.talk_options(s, c, s.player.pending_companion)  # 伏筆的片段：固定文字、不花體力（計畫 T7）
             opts += opportunities.talk_options(s, c, s.player.pending_companion)  # 機緣的話題（正式版乙一）：不花體力
-            opts += self._parley_options(s.player.pending_companion)  # 開口求人：他開的條件、欠你的那一件（不花體力）
+            opts += self._parley_options(s.player.pending_companion)  # NPC 智能 2.0：他開的條件、欠你的那一件（不花體力）
             opts.append(Option(id="talk:leave", label="告辭"))
             return opts
         if allied.needs_ally(s, c):  # 拜入要依附的門派之後還沒挑一邊（豪強分屬兩軍）：只剩選邊
@@ -1284,7 +1284,7 @@ class Game:
                 return opts + self._road_task_options(j) + self._arena_entry()
             opts.append(self._back_option())  # 折返（路上設計 3.2）；改去別處在大地圖上安排
             road = self._parley_road_option(j)
-            if road is not None:  # 開口求人第二批：他帶你走的這一趟，每到一站跟他說一句
+            if road is not None:  # NPC 智能 2.1：他帶你走的這一趟，每到一站跟他說一句
                 opts.append(road)
             if j.stop_at is None and j.reached < j.last:
                 opts.append(Option(id="act:halt", label=f"喊停（到{c.locations[j.path[j.reached]].name}就停下）"))
@@ -2247,7 +2247,7 @@ class Game:
             fields = parley.ASK_FIELDS if option_id == SAY_OPTION else parley.PLAN_FIELDS
             return companion_agent.build_request(self.state, self.content, self.world, companion_id, option_id, said, free=True,
                                                  extra=extra, required=fields if extra else ())
-        if option_id == ROAD_SAY:  # 開口求人第二批：他帶路的路上跟他說一句（可以是閒談，也可以求他沿路做得到的事）
+        if option_id == ROAD_SAY:  # NPC 智能 2.1：他帶路的路上跟他說一句（可以是閒談，也可以求他沿路做得到的事）
             companion_id, said = self.state.player.parley_escort, say_text(text, self.say_max())
             if companion_id is None or said is None:
                 return None
@@ -3607,7 +3607,7 @@ class Game:
         if kind == "talk":
             character = c.characters[s.player.pending_companion]
             return f"交談・{character.name}"
-        if kind == "parley" and s.player.parley_escort in c.characters:  # 開口求人第二批：帶路的路上跟他說一句
+        if kind == "parley" and s.player.parley_escort in c.characters:  # NPC 智能 2.1：帶路的路上跟他說一句
             return f"同行・{c.characters[s.player.parley_escort].name}"
         if kind == "call":
             return "收回名帖" if arg == "back" else f"求見・{c.characters[arg].name}"
@@ -4256,7 +4256,7 @@ class Game:
         if what == "explore":
             return self._explore()
         if what == "train":  # 出陣（出陣探索與地盤設計第二節）；序章的雪恥照舊是遊歷
-            backing = self._parley_backing_here()  # 開口求人的並肩出陣：今天答應陪你的人在這一帶，這一仗本人威力多幾成
+            backing = self._parley_backing_here()  # NPC 智能 2.0的並肩出陣：今天答應陪你的人在這一帶，這一仗本人威力多幾成
             share = self.content.config.parley.backing_share
             plan = self.state.player.parley_backing.plan if backing else None  # 第二批：商量過打法，成了加倍、沒成打空
             share = share * 2 if plan else 0.0 if plan is False else share
@@ -5710,9 +5710,9 @@ class Game:
         if arg.startswith("opp:"):  # 機緣的話題：固定文字，不經模型、不扣體力、不算對話輪數（正式版乙一）
             heard = opportunities.hear_topic(self.state, self.content, companion_id, arg.removeprefix("opp:"))
             return heard or ["（此刻無法這麼做。）"]
-        if arg in ("terms:yes", "terms:no", "owed", "repay"):  # 開口求人：接不接他的條件、請他兌現、還他（固定文字，不經模型、不扣體力、不算輪數）
+        if arg in ("terms:yes", "terms:no", "owed", "repay"):  # NPC 智能 2.0：接不接他的條件、請他兌現、還他（固定文字，不經模型、不扣體力、不算輪數）
             return self._parley_answer(companion_id, arg)
-        if arg == "plan":  # 開口求人第二批：出陣前跟他商量打法（模型評成功率，不扣體力、不算輪數）
+        if arg == "plan":  # NPC 智能 2.1：出陣前跟他商量打法（模型評成功率，不扣體力、不算輪數）
             return self._parley_plan(companion_id, prepared, said)
         affinity = self.state.player.affinities.get(companion_id, 0)
         self._parley_decision = None
@@ -5739,7 +5739,7 @@ class Game:
         return msgs + self._parley_finish(companion_id, decision)
 
     def _parley_finish(self, cid: str, decision: parley.Decision | None) -> list[str]:
-        """開口求人那一輪的收尾：結果那一句，答應了就當場做（帶路會在這裡動身）；先做後付另外記下你欠他的那一件。"""
+        """NPC 智能 2.0那一輪的收尾：結果那一句，答應了就當場做（帶路會在這裡動身）；先做後付另外記下你欠他的那一件。"""
         if decision is None or decision.kind is None:
             return []
         if decision.kind != "owe":
@@ -5788,12 +5788,12 @@ class Game:
             annals.note(self.state, c, annals.FIGURE, f"跟{name}{how}{mood}。", 2,
                         figure=companion_id, quote=asked, reply=annals.first_sentence(reply))
 
-    # ── 開口求人（parley.py；Joy 2026-10-23「先做看看」）────────────
+    # ── NPC 智能 2.0（parley.py；Joy 2026-10-23「先做看看」）────────────
 
     _parley_decision: parley.Decision | None = None  # 這一輪「自己說」擲出來的結果（_parley_decide 記、_talk 收尾時拿去做事）
 
     def say_max(self) -> int:
-        """「自己說」最多幾個字：開口求人開著時照 Config.parley.say_max（要講得清楚一點），關著照舊 SAY_MAX。"""
+        """「自己說」最多幾個字：NPC 智能 2.0開著時照 Config.parley.say_max（要講得清楚一點），關著照舊 SAY_MAX。"""
         return self.content.config.parley.say_max if parley.on(self.content) else SAY_MAX
 
     def _parley_lists(self, cid: str, road: bool = False) -> tuple[list[parley.Item], list[parley.Item]]:
@@ -5805,7 +5805,7 @@ class Game:
         return (parley.road_items(asks) if road else asks), parley.condition_items(s, c, cid, rng)
 
     def _parley_prompt(self, cid: str, road: bool = False) -> str:
-        """「自己說」那一輪接在玩家原話後面的一段（開口求人）：關著、今天求滿了是空的，模型就只是談話。"""
+        """「自己說」那一輪接在玩家原話後面的一段（NPC 智能 2.0）：關著、今天求滿了是空的，模型就只是談話。"""
         s, c = self.state, self.content
         if not parley.on(c) or parley.asks_left(s, c, cid) <= 0:
             return ""
@@ -5887,7 +5887,7 @@ class Game:
         return []
 
     def _parley_options(self, cid: str) -> list[Option]:
-        """對話選單上開口求人的鈕：他開了條件、還沒答覆（接、不接）；辦成委託之後他欠你的那一件（請他兌現）。"""
+        """對話選單上NPC 智能 2.0的鈕：他開了條件、還沒答覆（接、不接）；辦成委託之後他欠你的那一件（請他兌現）。"""
         s, c = self.state, self.content
         if not parley.on(c):
             return []
@@ -6208,7 +6208,7 @@ class Game:
                     self._draft.title = "叛投不成"
                 return [f"（{reason}）"]
             return (defection.defect(self.state, self.content, target, ally) + self._leave_behind(target.id)
-                    + parley.forsake_all(self.state, self.content))  # 開口求人第二批：接了又叛投，欠著的都算食言
+                    + parley.forsake_all(self.state, self.content))  # NPC 智能 2.1：接了又叛投，欠著的都算食言
         fid, _, ally = arg.partition(":")
         target = self.content.scenario.faction(fid)
         p.pending_defect, p.pending_ally = target.id, ally or None
@@ -9917,7 +9917,7 @@ class Game:
         騎著馬的體力與步調照出發這一刻的坐騎（裝備四欄 5.3）。"""
         s, c = self.state, self.content
         bounties.close_board(s.player)  # 動身了：城鎮的第二層選單（懸賞榜、鐵匠鋪）收起來，不留在路上
-        s.player.parley_escort = None  # 開口求人第二批：自己動身就不是誰帶的路了（帶路那一支出發之後再寫回去）
+        s.player.parley_escort = None  # NPC 智能 2.1：自己動身就不是誰帶的路了（帶路那一支出發之後再寫回去）
         equipment.close_smith(s.player)  # 鐵匠鋪連同打造到一半的單子、停在哪一頁一起收
         mounts.close_market(s.player)  # 馬市也收起來（裝備四欄 5.5）
         if s.player.picking_donate:

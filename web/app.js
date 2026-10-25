@@ -51,7 +51,7 @@
   // 重新整理頁面就回到步行；每個請求都帶著它（見 api()），伺服器照它排選單上的「前往」
   const FREE_TEXT_OPTION = "choice:free"; // 事件的隨口應對（engine.FREE_TEXT_OPTION）
   const SAY_OPTION = "talk:say"; // 跟人物對話時的「自己說」（engine.SAY_OPTION）：按了叫出輸入框，送出走 /api/say
-  // 同一個輸入框的另外兩顆（開口求人第二批，engine.TEXT_TALKS）：跟答應陪你出陣的人商量打法、他帶路的路上跟他說一句。
+  // 同一個輸入框的另外兩顆（NPC 智能 2.1，engine.TEXT_TALKS）：跟答應陪你出陣的人商量打法、他帶路的路上跟他說一句。
   // S.saying 記著是哪一顆（true 是舊的寫法＝自己說），送出時連 option 一起給 /api/say
   const SAY_OPTIONS = [SAY_OPTION, "talk:plan", "parley:road"];
   const SAY_HINTS = { "talk:plan": "跟他說你想好的打法", "parley:road": "路上想跟他說的話，也可以開口求他" };
