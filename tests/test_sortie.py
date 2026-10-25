@@ -20,6 +20,7 @@ TW_MIDNIGHT = 16 * 3600  # UTC 16:00＝台灣 00:00（1970-01-02）
 
 def _game(faction="huang", at="huangjin_camp", profile="week7", name="沈浪", third_party=False):
     c = no_conquest(real_content(profile))  # 出陣推線的舊規則；領地爭奪（PM 2026-10-22 起正式內容打開）的出陣在 tests/test_conquest_*.py
+    c.config.jianfa.four_wins = False  # 三陣營四勝利之前的規則（挑邊、改依附算叛投、攪局；測試整理批 1 把這個檔從週末搬到 7 天季，減法季開著）；新規則在 tests/test_four_wins_wiring.py
     c.config.auto_open_first_season = True
     if third_party:
         third_party_gentry(c)  # 豪強是第三方、出陣攪局的規則（豪強分屬兩軍之前）

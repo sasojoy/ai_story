@@ -1119,7 +1119,7 @@ def apply_effect(
         p.patron = effect.patron
     if (effect.donate_grain or effect.fs_fragments or effect.runic) and season_one(content, state.world):  # 黃巾的第 3、4 階奇遇（正式版丙二）：開關關著什麼都不做
         from . import foreshadow  # noqa: PLC0415  foreshadow → rules：在函式裡 import，避免循環
-        from .push import add_contribution  # noqa: PLC0415  只引這個函式：不能 import push 整個模組，apply_effect 的參數就叫 push
+        from .wins import credit  # noqa: PLC0415  只引這個函式（同 push：apply_effect 的參數就叫 push）；wins → rules 延後 import
 
         for loc_id, base in effect.donate_grain.items():  # 捐糧：同護糧送到（Game._convoy_arrives）——記捐獻、記一次推動的貢獻；糧不夠、換算出 0 份就什麼都不記
             amount = foreshadow.need(content, base)
@@ -1129,7 +1129,7 @@ def apply_effect(
                 key = f"{loc_id}:糧草"
                 p.donations[key] = p.donations.get(key, 0) + amount
                 week = calendar.point(state.world.time, content, state.world).week
-                add_contribution(p, week, content.config.contrib_per_push)
+                credit(p, content, state.world, week, content.config.contrib_per_push)
         for ref in effect.fs_fragments:  # 直接給片段：「鏈 id:片段序號」；不發傳聞
             chain_id, _, index = ref.rpartition(":")
             if index.isdecimal():

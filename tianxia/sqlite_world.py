@@ -701,6 +701,11 @@ class SqliteWorldStore:
             seasons.setdefault(row["season"], []).append(_chronicle_entry(row))
         return list(seasons.items())
 
+    def past_season(self, number: int) -> WorldState | None:
+        with self.db.snapshot() as conn:
+            row = conn.execute("SELECT data FROM seasons WHERE number = ?", (number,)).fetchone()
+        return None if row is None else WorldState.model_validate_json(row["data"])
+
     def get_season_number(self) -> int:
         return self.read().season_number
 

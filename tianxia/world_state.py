@@ -674,6 +674,10 @@ class WorldStateStore(Protocol):
         """season_number 以前每一季的江湖史，新的一季在前（線上架構設計 3.2：江湖史跨季保留）。"""
         ...
 
+    def past_season(self, number: int) -> WorldState | None:
+        """第 number 季那一列（不含傳聞與江湖史）；沒有那一季是 None。換季時讀上一季收季那一刻存的四階（減法季批 3c，final_tiers）。"""
+        ...
+
     def get_season_number(self) -> int: ...
 
     def mutate_season(self, fn: Callable[[WorldState], None]) -> WorldState:
