@@ -3282,7 +3282,7 @@ def test_a_bad_line_is_refused_before_anything_happens(game):
     _talking(game)
     before = game.state.player.stamina
     with mock.patch.object(companion_agent, "generate_turn", side_effect=AssertionError("不該叫模型")):
-        limit = game.say_max()  # 開口求人開著時放寬（Config.parley.say_max）
+        limit = game.say_max()  # NPC 智能 2.0開著時放寬（Config.parley.say_max）
         for text in ("", "   ", "一" * (limit + 1)):
             with pytest.raises(server.GameError, match=f"{limit} 字"):
                 server.say(game, text)

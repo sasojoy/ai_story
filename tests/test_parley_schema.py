@@ -1,6 +1,6 @@
-"""開口求人的必填欄位要寫進送出去的 schema（2026-10-24 主機實測：gemma ask 空白 14/30、「帶我去廣宗」0/10、
+"""NPC 智能 2.0的必填欄位要寫進送出去的 schema（2026-10-24 主機實測：gemma ask 空白 14/30、「帶我去廣宗」0/10、
 商量打法 willing 沒填 4/30）。CompanionTurn 的 ask、willing……都有預設值 None，呼叫只宣告 narrative、options 必填的話，
-結構化輸出的語法允許模型整個略過；10/22 narrative 踩過同一個坑。這裡釘住：帶了開口求人提示的那一輪，
+結構化輸出的語法允許模型整個略過；10/22 narrative 踩過同一個坑。這裡釘住：帶了NPC 智能 2.0提示的那一輪，
 這些欄位一定進 schema 的 required（空字串照樣算答了），平常閒聊不加。"""
 
 import json
