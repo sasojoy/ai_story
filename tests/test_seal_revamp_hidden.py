@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 import server
-from conftest import real_content
+from conftest import no_week_unlock, real_content
 from test_seal import _ended, _registry, sealed  # noqa: F401  sealed 是夾具
 from test_seal_revamp import revamp
 from tianxia import battle_instance, battlelog, leaderboard, seal, seal_duel, social, tavern
@@ -172,6 +172,7 @@ def _side_world(holder: str, *, on: bool = True):
     c.config.seal.revamp.enabled = on
     c.config.newbie_days, c.config.newbie_real_hours = -1, 0  # 不等新手期（截殺要兩邊都過了）
     c.config.arena.enabled = True
+    no_week_unlock(c)  # 開季第一天就要上擂台（減法季第 2 週才開）
     w = open_world(Path(tempfile.mkdtemp(prefix="seal1s-")) / "t.db")
 
     def _give(st):
