@@ -1148,10 +1148,11 @@
     // 本週卡（減法季批 1，整合設計 6.1）排在最上面、「剛剛」之前（在路上排到選項底下，FB-055）：吃掉以前那一排小標。來信到了換成來信（回了信或收起來才換回本週卡）；
     // 還沒投靠的人最上面先是三方卡（sidesFirstHtml）。戰況圖卡、軍備與小地圖從江湖頁拿掉（6.3），戰況與軍備在見聞・大事
     const letterCard = letterHtml(m.letter);
-    const peek = sidesFirstHtml(m) + (letterCard || weekCardHtml(m));
+    const pushAsk = letterCard && typeof pushAskHtml === "function" ? pushAskHtml(m) : ""; // 第一次來信時信的小卡底下問一次手機通知（批 9；pushAskHtml 在 app.js，只切 main.js 的網頁測試沒有它）
+    const peek = sidesFirstHtml(m) + (letterCard ? letterCard + pushAsk : weekCardHtml(m));
     // 休季的結算卡排在最上面（計畫 T9）；季收了、有行狀時緊接一張「讀你的傳」（玩家傳第二批，m.zhuan）
     const resultCard = (m.season_result ? resultHtml(m.season_result) : "") + (m.zhuan ? zhuanEntry(m.zhuan, "這一季收了，史官替你立傳", "讀你的傳") : "");
-    const letter = dailyCardHtml(m) + (typeof pushAskHtml === "function" ? pushAskHtml(m) : ""); // 月卡今天的份還沒領時「剛剛」上面一張（書信小卡在本週卡的位置，見上面）；第一次來信時底下問一次手機通知（批 9；pushAskHtml 在 app.js，只切 main.js 的網頁測試沒有它）
+    const letter = dailyCardHtml(m); // 月卡今天的份還沒領時「剛剛」上面一張（書信小卡在本週卡的位置，見上面）
     // 本週軍令排在行動列（與路上捷徑）下面、三條戰況上面：不擠掉第一屏的「剛剛」、場景與行動列（計畫 T6）
     // 收起來照週記；21 天季的軍令每天一道，照季曆第幾天記（status.calendar.day），隔天的新軍令重新展開
     const orderKey = (m.status && m.status.calendar && m.status.calendar.day) || week;
@@ -1168,7 +1169,7 @@
     const guide = guideHtml(m.guide, m.on_road);
     // 在路上（FB-055）：路上的五個選項要全在第一屏（375×812），所以那一排小標與說書人的框都排在選項底下——
     // 不是這一刻要按的；捷徑還是緊接在場景底下（FB-048）
-    if (m.on_road) return `${resultCard}${letter}${letterCard}${now}${scene}${links}${free}${menu}${guide}${sidesFirstHtml(m)}${weekCardHtml(m)}${orderCard}${bountyCard}${sealMine}${sealCard}`;
+    if (m.on_road) return `${resultCard}${letter}${letterCard}${pushAsk}${now}${scene}${links}${free}${menu}${guide}${sidesFirstHtml(m)}${weekCardHtml(m)}${orderCard}${bountyCard}${sealMine}${sealCard}`;
     // 決戰輪到你出招的回合（FB-136）：三招緊接在場景底下，放手一搏的輸入框與說書人的框排在三招後面（同在路上，這一刻要按的排前面）。
     // 開打那一刻場景多了戰局條、這一幕的開場、騎兵那一句，框與輸入框再排在上面的話三招整排落到分頁列底下（14 天、騎著馬、框還在：855～999）
     if (myTurn) {
