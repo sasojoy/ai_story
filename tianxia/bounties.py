@@ -71,6 +71,7 @@ LAPSED_FULL = "【懸賞】「{title}」名額被別人交滿了，你手上這�
 LAPSED_DUE = "【懸賞】「{title}」過了期限，你手上這一張作廢。"  # 待 joy 潤
 LAPSED_SEASON = "【懸賞】這一季收了，你手上「{title}」作廢。"  # 待 joy 潤（FB-152、FB-153：寫「到季末」的單撐到季真的收了；收季那一刻手上揭著的都補這一句，第 11、12 週掛的一樣）
 LAPSED_SIDE = "【懸賞】你改投{faction}，手上「{title}」是別的陣營掛的，這一張作廢。"  # 待 joy 潤（FB-151：投靠、叛投那一下；換版前就換了陣營的存檔由 deliver_lapses 補同一句）
+LAPSED_LEAN = "【懸賞】你改幫{faction}，手上「{title}」是{poster}掛的，這一張作廢。"  # 待 joy 潤（FB-811：三陣營四勝利開著、豪強改幫另一軍那一下；不能用 LAPSED_SIDE 的「改投」，上一行才說改幫不算叛投）
 STRANDED_JOIN = "投靠之後，手上 {n} 張別的陣營掛的懸賞會作廢。"  # 待 joy 潤（FB-151：投靠的確認畫面）
 STRANDED_LOST = "手上 {n} 張{faction}掛的懸賞作廢"  # 待 joy 潤（FB-151：叛投確認畫面「會失去」清單裡的一項，faction 是舊陣營）
 WANTED_NEWBIE = "你初入江湖，還在新手期，截殺不了人，這張通緝先別揭。"  # 待 joy 潤（FB-154：揭的人自己還在截殺的新手期；跟 post_problem 的「…初入江湖，還在新手期，通緝不了他。」同一個口氣）
@@ -374,15 +375,19 @@ def join_note(state: GameState, content: Content, choice: Choice) -> str:
     return ""
 
 
-def drop_stranded(state: GameState, content: Content, faction_id: str | None) -> list[str]:
+def drop_stranded(state: GameState, content: Content, faction_id: str | None, *, lean: bool = False) -> list[str]:
     """投靠或叛投 faction_id 的那一下（Game.choose、defection.defect）：手上新陣營接不了的單拿掉名字，每張回一句原因（FB-151）。
+    lean：豪強改幫另一軍（Game._lean_step，三陣營四勝利）不是換陣營，那一句寫「改幫…是某某掛的」（LAPSED_LEAN，FB-811），不寫「改投」。
     改的是共用的季（takers），呼叫端的動作結束時存季（choose 的結尾統一存）。要在 p.faction 改之前或之後呼叫都行：只看名字與 faction_id。"""
     me = name_key(state.player.name)
     faction = content.scenario.faction_name(faction_id, "別的陣營")
     msgs: list[str] = []
     for b in stranded(state, content, faction_id):
         b.takers = [t for t in b.takers if name_key(t) != me]
-        msgs.append(LAPSED_SIDE.format(faction=faction, title=title(content, b)))
+        if lean:
+            msgs.append(LAPSED_LEAN.format(faction=faction, poster=content.scenario.faction_name(b.faction, "別的陣營"), title=title(content, b)))
+        else:
+            msgs.append(LAPSED_SIDE.format(faction=faction, title=title(content, b)))
     return msgs
 
 
