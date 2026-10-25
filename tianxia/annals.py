@@ -24,9 +24,14 @@ CONQUER = "conquer"  # 翻地與爭搶（輿圖簡化設計 4.5）：推最多�
 SEAL = "seal"
 # 地方痕跡過了門檻、你出過力（減法季批 4，Game._mark_credits）：公開的只有痕跡、不列名字，所以酒肆打聽不到（UNHEARD）；季末的傳照行事寫
 MARK = "mark"
-KINDS = {SHOWDOWN: "大戰", FIGURE: "人物", FIGHT: "交手", DEED: "行事", CONQUER: "攻守", SEAL: "行事", MARK: "行事"}  # 行狀頁的小標（待 joy 潤）
-GROUPS = {SEAL: DEED, MARK: DEED}  # 季末的傳（biography._group）照哪一段寫：沒列的照自己的種類
-UNHEARD = frozenset({SEAL, MARK})  # 酒肆打聽不到的種類
+# 人物心意到了門檻、你這一週也勸過（減法季批 6，Game._stance_annals）：公開的只有他改做什麼、不列誰勸的，酒肆打聽不到；季末的傳照人物那一段
+STANCE = "stance"
+# 人物託付的事辦成了（減法季批 6，errands.py；整合設計 5.5「寫進列傳」）：季末的傳照人物那一段
+ERRAND = "errand"
+KINDS = {SHOWDOWN: "大戰", FIGURE: "人物", FIGHT: "交手", DEED: "行事", CONQUER: "攻守", SEAL: "行事", MARK: "行事",
+         STANCE: "人物", ERRAND: "人物"}  # 行狀頁的小標（待 joy 潤）
+GROUPS = {SEAL: DEED, MARK: DEED, STANCE: FIGURE, ERRAND: FIGURE}  # 季末的傳（biography._group）照哪一段寫：沒列的照自己的種類
+UNHEARD = frozenset({SEAL, MARK, STANCE})  # 酒肆打聽不到的種類
 TEXT_MAX, QUOTE_MAX, REPLY_MAX = 80, 40, 80
 MASTERED = "絕學"  # martial_arts.QUALITIES 的最後一品
 

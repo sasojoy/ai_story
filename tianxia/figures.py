@@ -242,6 +242,9 @@ def tick(state: GameState, content: Content, cal_hours: float) -> None:
         value = trend_value(state, content, front)
         losing = (50 - value) * goal >= cfg.figure_reaction_lean
         rate = fig.actions_per_day * (cfg.figure_reaction_mult if losing else 1.0)
+        scale = _stance_push(state, content, fid)  # 人物心意（減法季批 6）：速戰加倍、持重與恤民不推；關著是 1、一個字都不變
+        if scale != 1.0:
+            rate *= scale
         if cfg.push_resistance.enabled:  # 盡頭阻力（出陣探索與地盤設計 5.1）：往對方老巢推得慢，累積照推之前的戰線打折
             rate *= push.resistance_share(value, goal, push.tuning_for(w, content))
         key = f"fig:{fid}"
@@ -254,6 +257,13 @@ def tick(state: GameState, content: Content, cal_hours: float) -> None:
             w.trend_accum.pop(key, None)
         if whole:
             change_trend(state, content, front, whole * fig.push * goal, reveal=False)
+
+
+def _stance_push(state: GameState, content: Content, fid: str) -> float:
+    """人物心意照著做的那一個要他推線乘幾倍（stances.push_scale）。stances → calendar、rules：延後 import。"""
+    from . import stances  # noqa: PLC0415
+
+    return stances.push_scale(state, content, fid)
 
 
 # ── 時刻表的人物結局 ─────────────────────────────────────

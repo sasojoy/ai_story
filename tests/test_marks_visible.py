@@ -187,8 +187,10 @@ STRAGGLERS = {"yingchuan_wilds:拆卡", "nanyang_road:護車", "runan_wilds:奪�
 def test_real_content_has_one_rule_per_outcome_mark_and_only_the_stragglers_push():
     content = real_content()
     written = {key for ev in content.events.values() if ev.free_text is not None for o in ev.free_text.outcomes for key in o.effect.marks}
+    # 勸降成了的 band_turned 三條（減法季批 6 修正輪，FB-827：三件勸降各一個地點）
+    written |= {key for fig in content.figures.values() for d in fig.errands if d.persuade for key in d.persuade.marks}
     rules = {r.mark: r for r in content.mark_rules}
-    assert set(rules) == written and len(rules) == 96  # 29 則的 93 個，加上人拉犁的 3 個（PM 2026-10-25 第 7 件）
+    assert set(rules) == written and len(rules) == 99  # 29 則的 93 個，加上人拉犁的 3 個（PM 2026-10-25 第 7 件）、勸降的 3 個
     assert {mark for mark, rule in rules.items() if rule.trend} == STRAGGLERS
     assert all(rules[mark].trend == {"front": -1} for mark in STRAGGLERS)  # 地方安定：戰線往官軍那邊一點
     assert {rule.threshold for rule in rules.values()} == {20}

@@ -10,7 +10,7 @@ import hashlib
 import random
 from dataclasses import dataclass
 
-from . import allied, arena, atlas, battle_instance, bot, bounties, conquest, cultivation, duel, explore_modes, forge_secrets, invites, leaderboard, library, mingtie, naming, orders, precise, rules, sensing, server_bots, social, sortie, team
+from . import allied, arena, atlas, battle_instance, bot, bounties, conquest, cultivation, duel, explore_modes, forge_secrets, invites, leaderboard, library, mingtie, naming, orders, precise, rules, sensing, server_bots, social, sortie, stances, team
 from . import sortie_duel  # 出陣約戰（減法季批 3b）
 from .bot import allocate_points, can_practise, wants_heal
 from .engine import FREE_TEXT_OPTION, Game, Option
@@ -204,7 +204,7 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random, slot: NamingS
     options = [  # road: 開頭的是路上的選項：假人不改道、不做路上小事（路上設計 3.5）
         o for o in game.options(odds=False, tick=False)
         if o.enabled and o.id not in ("act:rest", "act:halt", FREE_TEXT_OPTION)
-        and not o.id.startswith(("road:", "defect:", "invite:", "faction:lean:"))  # 叛投：假人不換陣營（計畫甲）；豪強改幫另一軍也不換
+        and not o.id.startswith(("road:", "defect:", "invite:", "errand:", "faction:lean:"))  # 叛投：假人不換陣營（計畫甲）；託付：假人不收（減法季批 6）；豪強改幫另一軍也不換
         # 邀請由上面的 _answer_invite 答，不交給打分數亂按
     ]
     enlist = [o for o in options if o.id.startswith("battle:enlist:")]
@@ -537,6 +537,15 @@ def look_after(game: Game, rng: random.Random) -> None:
     bot.teach(game, TEACH_PER_TICK)  # 傳功門下：心得多出來就傳給同伴、部下（不擲亂數）
     bot.trade_at_smith(game)  # 素材與經濟（計畫 B5）：人在鐵匠鋪就升階、賣多的（不擲亂數；不為了它進鐵匠鋪）
     bot.donate_spare(game)  # 人在自家大本營就捐多的素材（不擲亂數；不為了它繞路）
+    voice_stance(game)  # 人物心意（減法季批 6）：每天照名號雜湊的機會直接記一筆（不擲 rng；關著什麼都不做）
+
+
+def voice_stance(game: Game) -> bool:
+    """假人挑心意（減法季整合設計 5.4、5.7；企劃者 2026-10-24 第 5 件）：每天 Config.jianfa.bot_stance_chance 的機會（照名號＋今天的雜湊，
+    stances.bot_pick），直接記一筆（Game.voice_stance：一人一天一筆、到門檻、貢獻都跟真人說話那一輪同一條），不說話、不寫字、不寫紀錄。
+    人物挑自己這一邊的，心意照名號＋人物的雜湊（同一個假人一直勸同一種）。同一天每一輪都擲到同一個結果，記過就不再記。回有沒有記。"""
+    pick = stances.bot_pick(game.state, game.content)
+    return pick is not None and game.voice_stance(*pick)
 
 
 def tend_arts(game: Game, rng: random.Random, slot: NamingSlot | None = None) -> list[str]:

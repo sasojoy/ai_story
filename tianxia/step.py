@@ -90,12 +90,13 @@ def skipped(game: Game) -> int:
 
 
 def finish(game: Game, items: list[dict]) -> list[dict]:
-    """weekcard._steps 排好的那一串：每一件拿掉 _ref；四勝利開著時補 target（沒有地點是 null）與 id，再照今天換了幾次從那一件排起。"""
+    """weekcard._steps 排好的那一串：每一件拿掉 _ref；四勝利開著時補 target（沒有地點是 null）與 id，再照今天換了幾次從那一件排起。
+    已經帶了 target 的那一件照留（人物的託付：errands.step_items 自己寫好 id 與 target、沒有 _ref，減法季批 6）。"""
     live = on(game)
     out = []
     for item in items:
         ref = item.pop(REF, None)
-        if live:
+        if live and "target" not in item:
             ident, target = _target(game, ref) if ref else (None, None)
             item["target"] = target
             if ident is not None:
