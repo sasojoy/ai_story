@@ -219,6 +219,9 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 - **商城的 `MallItem.draft` 只是給作者的備註，不擋上架**（同批）：要某一種季才賣，用 `MallWindow.rule`（子開關名）＋`phases`／`from_week`，引擎照 `Game._mall_moment()` 傳 `mall.Moment`；不加 `mall_entitlements` 的種類（CHECK 只有 card／pass／look，加了就是改結構），票就是購買那一列，用了記在那一列的 `data`（`Wallet.mark_used(pid, t, **extra)`）。
 - **「有沒用的票」＋「這一季用過了」兩層擋的變異會存活**（同批）：一季限購 1，測試只買一張，用完票就沒了，拿掉「這一季用過了」那一層沒有測試會紅；用 `Wallet.add_purchase` 直接塞一列「上一季剩下的票」再看鈕有沒有出來。
 - **內容模型加欄位**（`FactionDef.verdict_by`、`Content.verdicts`）：照 `models._drop_unset` 的 wrap serializer 把空的拿掉（`Content._drop_new_defaults` 的鍵表加一個），測試內容序列化一個鍵都不多。
+- **接手一批被停掉的半成品，先找上一位的暫存資料夾**（減法季批 7b 收尾，2026-10-26）：交接寫的「停在哪」是 PM 從上一位最後一則訊息摘的，可能已經過時（7b 寫「停在列傳請求的接線」，其實那一段已經提交，上一位停在跑 `test_for`）。`ls -d /c/Users/ray61/AppData/Local/Temp/claude/*/*/scratchpad/<派工寫的暫存名>` 找得到它（不一定在 PM 這個 session 底下），裡面的 `picked.txt`、跑到一半的 log、`head.tar` 的時間對 `git log` 的提交時間，就看得出做到哪一步；對照腳本照抄來用。核對還是照派工的每一條 Task 對程式一條一條看。
+- **事後夾的上限（`Game._log` 裡才夾的情誼這種）會在「一過門檻當下就給東西」的地方漏**（同批：深交上限）：動作中途就看門檻給獎勵的（對話裡 70 教本命武學 `companion_agent._maybe_grant_signature_skill`、80 送名將本命兵器 `Game._signature_arms`），在 `_log` 之前就給了，之後才被夾回去。加這種上限時 grep 那個門檻的每個讀者（`signature_affinity`、`weapons.signature_affinity`），在讀之前先夾一次（`Game._deep_cap_now`，句子留到 `_log` 才說）；共用函式加的回呼照「舊的呼叫一個字不動」那一條，只在新規則的呼叫點傳。測試照真的路走（`choose("talk:0", prepared=PreparedTurn(...))`、動作前把情誼直接寫過門檻再 `choose`），修前要紅。
+- **`test_explain` 連交給模型的字串也掃**（同批）：「好感」「交情」在 `tianxia/`、`server.py` 的任何字串常數都不准（說明字串與 `companion_agent.build_system_prompt` 例外），`content/` 只准名單上那兩處；新寫的模型提示、商城說明一律寫「情誼」。`test_for` 挑得到它（改了 `tianxia/` 就挑），挑到了才知道。
 
 ## 量表怎麼讀
 
