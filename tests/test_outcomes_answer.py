@@ -209,7 +209,47 @@ def test_the_annal_keeps_the_outcome_but_never_the_players_words(content, world)
     deeds = [a for a in g.state.player.annals if "隨口應對" in a.text]
     assert len(deeds) == 1 and deeds[0].quote == ""
     assert "扭送" in deeds[0].text and SAID not in deeds[0].text
+    assert deeds[0].text == "遇上【醉漢】，隨口應對：扭送，成了。"  # 前三種照舊寫短名（不寫「：把他押去見官」）
     assert all(SAID not in a.text and SAID not in a.quote for a in g.state.player.annals)
+
+
+def _deeds(game):
+    return [a.text for a in game.state.player.annals if a.kind == annals.DEED and "隨口應對" in a.text]  # 投靠陣營也記一則 DEED，不算
+
+
+@pytest.mark.parametrize("moral, journal_done, annal", [
+    ("惡", rules.EVIL_DONE, "遇上【醉漢】，隨口應對，行了一件惡事，成了。"),
+    ("善", LEAVE.effect.text, "遇上【醉漢】，隨口應對。"),
+    ("中", LEAVE.effect.text, "遇上【醉漢】，隨口應對。"),
+    (None, LEAVE.effect.text, "遇上【醉漢】，隨口應對。"),
+])
+def test_the_fallback_names_no_kind_in_the_journal_or_the_annal(content, world, moral, journal_done, annal):
+    """FB-800（PM 2026-10-25）：歸到最後一種時紀錄與行狀不寫類名「走開」，照舊路的寫法——善惡判「惡」時是「隨口應對，行了一件惡事，成了。」，
+    不是「隨口應對：走開，行了一件惡事，成了。」；判「善」「中」也不寫。前三種的類名照寫。"""
+    g = branch_game(content, world)
+    answer(g, "我一刀把老漢砍了", "leave", moral=moral)
+    entry = g.state.journal[0]
+    assert entry.lines[0] == "你：「我一刀把老漢砍了」"  # 沒有括號、沒有「走開」
+    assert journal_done in entry.lines
+    assert all("走開" not in line for line in entry.lines)
+    assert _deeds(g) == [annal]
+    assert "走開" not in g.last_gamble.model_dump_json() and g.last_gamble.outcome == "leave"  # 結果裡沒有 tag 的字，只有 id
+
+
+def test_an_unlisted_outcome_reads_like_the_fallback(content, world):
+    """模型回清單外的 id、叫不動（最後一種、40）：紀錄與行狀也不寫「走開」。"""
+    g = branch_game(content, world)
+    answer(g, "跟他聊聊天氣", "fly")
+    assert g.state.journal[0].lines[0] == "你：「跟他聊聊天氣」" and _deeds(g) == ["遇上【醉漢】，隨口應對。"]
+
+
+def test_the_other_kinds_name_themselves_in_the_journal_by_their_short_name(content, world):
+    """掏錢、檢定、打仗：括號裡只寫短名，不寫冒號後面給模型看的說明。"""
+    g = branch_game(content, world, silver=30)
+    answer(g, "給他十兩去喝醒酒湯", "give")
+    assert g.state.journal[0].lines[0] == "你：「給他十兩去喝醒酒湯」（周濟）"
+    assert _deeds(g) == ["遇上【醉漢】，隨口應對：周濟，成了。"]
+    assert all("給他幾個錢醒酒" not in line for line in g.state.journal[0].lines)
 
 
 # ── 選單、欄位表、單子 ─────────────────────────────────────────

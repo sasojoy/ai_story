@@ -3555,7 +3555,9 @@ class Game:
             return self._log([problem])
         fallback = plan.way == "fallback"
         moral = event_llm.moral_of(moral) if fallback else event_llm.MORAL_NEUTRAL
-        name = outcome_rules.kind_name(chosen)
+        # 類名（短名）寫進紀錄的括號與行狀；歸到最後一種（走開）不寫類名，照關著時的寫法（FB-800，PM 2026-10-25：紀錄與行狀
+        # 「隨口應對，行了一件惡事，成了。」不寫成「隨口應對：走開，…」；判善、判中也不寫）
+        name = "" if fallback else outcome_rules.kind_name(chosen)
         s.battle_card = None
         faction_before = s.player.faction
         self._draft = Draft(f"{event.title}・隨口應對")
@@ -3579,11 +3581,11 @@ class Game:
                 success = True
                 evil = fallback and moral == event_llm.MORAL_EVIL
                 effect = evil_success(chosen.effect) if evil else outcome_rules.paid(chosen)
-                msgs = [f"你：「{request.text}」（{name}）"]
+                msgs = [f"你：「{request.text}」" + (f"（{name}）" if name else "")]
                 msgs += self._apply(effect, once=event.once)
             self._deed_credit(chosen, success)
             done = EVIL_ANNAL if evil else "。" if fallback else "，成了。" if success else "，沒成。"
-            annals.note(s, c, annals.DEED, f"遇上{'奇遇' if event.qiyu else ''}【{event.title}】，隨口應對：{name}{done}",
+            annals.note(s, c, annals.DEED, f"遇上{'奇遇' if event.qiyu else ''}【{event.title}】，隨口應對{'：' + name if name else ''}{done}",
                         3 if event.once or event.qiyu else 1)  # 不存玩家的句子（quote 空著）
             msgs += self._event_progress()  # 領地爭奪：隨口應對了結也推一次進度（開關關著是空的）
             self._begin_enlistment(faction_before)
