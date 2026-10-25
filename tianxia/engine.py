@@ -5141,7 +5141,7 @@ class Game:
         cfg, foe = c.config.jianfa, plan.foe
         gate = self._fight_gate(foe)  # 三道閘的前兩道（疲勞、對手配不配得上你）：這一場的經驗、心得、銀兩、掉的素材一起乘
         if plan.how == "spar":  # 對手那一路心得、經驗的 camp_spar_share（三成）乘三道閘的倍數（PM 2026-10-26：以前全額）
-            return self._drill_gains(foe, cfg.camp_spar_share * gate, "camp_spar"), "spar", True
+            return self._drill_gains(foe, cfg.camp_spar_share * gate, "camp_spar", echo=False), "spar", True  # 心得只由草稿記（FB-830）
         town = plan.how == "town"
         self._loot_scale = cfg.town_loot_scale if town else 1.0
         self._gate_scale = gate
@@ -9361,10 +9361,13 @@ class Game:
             msgs += self._drill_push(trend_id, delta)
         return msgs
 
-    def _drill_gains(self, squad: Squad, share: float | None = None, source: str = "hold") -> list[str]:
+    def _drill_gains(self, squad: Squad, share: float | None = None, source: str = "hold", echo: bool = True) -> list[str]:
         """跟這一路一起操練拿的：對手心得與經驗的 share（預設 drill_reward_share；不給銀兩、素材）；經驗本人與帶著的同伴都拿（FB-002）。
         操練（_drill）與出陣的守、攪局（_sortie_hold）、守勢行動（_duty）共用；一類一顆開著時守、攪局、守勢行動給全額（_hold_share）。
-        source（growth.exp_source）：這幾樣都不打仗（hold，PM 2026-10-25 第 5 件）；減法季自家營寨跟同袍比劃算仗（camp_spar）。"""
+        source（growth.exp_source）：這幾樣都不打仗（hold，PM 2026-10-25 第 5 件）；減法季自家營寨跟同袍比劃算仗（camp_spar）。
+        echo：「心得 +N」那一行要不要也放進回傳的訊息。江湖紀錄的標籤本來就由草稿（_draft.changes）記一顆、訊息那一行在敘事裡收掉；
+        出門一趟的比劃（_outing_fight）自己有「得：」那一行，兩邊都有就被 _outing_ledger 加成兩倍、後面還多一則單獨的訊息
+        （FB-830），所以它傳 False：只由草稿記。沒有草稿時（直接叫的）照樣放進訊息，帳才不會漏掉這一筆。"""
         s, c = self.state, self.content
         p = s.player
         share = c.config.drill_reward_share if share is None else share
@@ -9373,9 +9376,11 @@ class Game:
         if xinde:
             p.stats["xinde"] = p.stats.get("xinde", 0) + xinde
             xinde_line = f"心得 +{xinde}"
-            msgs.append(xinde_line)
+            if echo or self._draft is None:
+                msgs.append(xinde_line)
             if self._draft is not None:
-                self._draft.hide(xinde_line)
+                if echo:
+                    self._draft.hide(xinde_line)
                 self._draft.changes.append(xinde_line)
         keep = team.player_exp(s, c, exp, source)[0]  # 減法季三道閘：不是仗的 45 級以後換心得
         gained = team.maxed_xinde(s, c, exp, source)  # 滿級：本人的經驗照 5 換 1 換成心得（3.5），同伴照拿經驗
