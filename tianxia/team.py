@@ -858,7 +858,7 @@ _BACKED: ContextVar[float] = ContextVar("backed", default=1.0)
 
 @contextmanager
 def backed(factor: float):
-    """開口求人的並肩出陣（parley.py）：這一仗之內本人的威力乘 factor（Game._act 的出陣包著它；1 是一個位元都不動）。"""
+    """NPC 智能 2.0的並肩出陣（parley.py）：這一仗之內本人的威力乘 factor（Game._act 的出陣包著它；1 是一個位元都不動）。"""
     token = _BACKED.set(factor)
     try:
         yield
