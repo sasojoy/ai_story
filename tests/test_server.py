@@ -5277,6 +5277,7 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
         "create_intent",  # 自創武學的形意那一句（武學重構）：鎖外請模型評分（create.score），結果交給 C 段
         "create_reread",  # 重悟帖重讀這句意：三段同 create_intent
         "ascend_line",  # 破境卡那一句（招式與絕學稿案第三節）：三段同 create_intent
+        "persuade_text",  # 託付的勸降（減法季批 6）：三段同 gather_text，模型只評那一句
     }
     # 宣告、model_call 讀、main() 建佇列；另外兩個只看不排：/api/queue 問位置、管理者那份資料抄總數（admin_choices 在 look 的鎖裡，
     # 但 snapshot 只碰佇列自己的短鎖、不等任何一件，不算在行動鎖裡排隊）
@@ -6071,6 +6072,9 @@ NOT_IN_THE_FINGERPRINT = {
         "marks": "地方痕跡只畫成模糊人數，改了讓每個分頁多刷新一次會洩漏有人做了看不見的事（推送計畫 F4）",
         "marks_fired": "痕跡過門檻那一刻寫一則地方傳聞（傳聞流水號在指紋裡；世界層那一句 2026-10-25 拿掉）；江湖史在季末",
         "mark_helpers": "誰替痕跡出過力只用來記本人的行狀，不畫在共用畫面上（改了讓每個分頁刷新會洩漏有人做了看不見的事，同 marks）",
+        "stance_counts": "人物心意的全服計數（減法季批 6）：只畫在跟他談的人自己的人物頁（自己的動作走 self 通知）；算進去會洩漏有人跟他說了話（同 marks）",
+        "stance_week": "心意計數是哪一週的記號，玩家看不到",
+        "stance_active": "人物此刻照哪一個心意做事：換的那一刻另寫天下大事（傳聞流水號已在指紋裡）；週初歸零跟著週初的掛鉤",
         "pending_battle": "背景推進記下要開的戰鬥，開成集結之後 active_battle 的指紋就變了",
         "season_one": "開季時蓋的章，開季之後不變",
         "haoqiang_allied": "開季時蓋的章（豪強分屬兩軍），開季之後不變",

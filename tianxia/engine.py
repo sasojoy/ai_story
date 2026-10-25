@@ -46,6 +46,8 @@ from . import rumor_view  # 傳聞分層的畫面：見聞頁的四層、你不�
 # 減法季批 4：隨口應對分岔、痕跡看得見、貢獻（三陣營四勝利的 wins.credit）；別名避開這個檔裡叫 marks、outcomes 的區域變數
 from . import marks as marks_rules
 from . import outcomes as outcome_rules
+from . import stances as stance_rules  # 人物心意（減法季批 6）；叫 stance_rules：rules.stances 是陣營的態勢
+from . import errands as errand_rules  # 託付與來信（減法季批 6）
 from . import wins as wins_rules
 from .models import FreeTextChoice, Outcome
 from .rules import jianfa
@@ -1064,6 +1066,7 @@ class Game:
         self._deliver_conquest()  # 領地爭奪：翻地的分紅、守城功（下線時易手的回來補）
         self._deliver_arena()  # 擂台：被挑了的戰報、季末前三名的獎勵；季收了還沒打完的那一場作廢
         self._marks_tick()  # 減法季批 4：痕跡過門檻的防漏、替自己記出過力的行狀（關著什麼都不做）
+        self._stance_annals()  # 減法季批 6：這一週勸過的心意到了門檻，記一則行狀（關著什麼都不做）
         mail = parley.lapse(self.state, self.content)  # NPC 智能 2.1：欠人物的事過了期限是食言（附的委託先作罷，書信不再補一句）
         mail += letters.deliver(self.state, self.content, now)  # 書信（大勢人物擴充第二批）：人物來信、過期的委託作罷
         if mail:
@@ -1489,6 +1492,7 @@ class Game:
         opts += self._rank_action_options(loc)  # 第 3、4 階的行動（正式版戊一）
         opts += opportunities.place_options(s, c, loc.id)  # 機緣：交東西、天時地利（正式版乙一）
         opts += foreshadow.final_options(s, c, loc.id)  # 伏筆的最後一步（計畫 T7）：做得了的人在那個地點才有
+        opts += self._errand_options()  # 託付（減法季批 6）：人在託付的地點才有那一顆；關著是空的
         opts += self._invite_options()  # 玩家之間的邀請（切磋）：別人發給你的、你發出去還在等的
         shown = bounties.visible(s, c) if bounties.board_here(s, c) else []
         if shown:  # 懸賞榜：城鎮類的地點、有看得到的單才有（FB-121：張數只算看得到的，0 張不畫）；只是打開第二層選單，不花體力
@@ -3337,7 +3341,11 @@ class Game:
             return step_rules.skip(self)  # 不花體力、不寫江湖紀錄；關著的季照舊當成不在選單上
         option = {o.id: o for o in self.options(odds=False)}.get(option_id)
         if option is None and option_id.startswith(wins.LEAN_PREFIX):
-            option = self._lean_anytime(option_id)  # 「改幫…」隨時都能換（設計 3.2）：在路上、事件待選、決戰的大區選單上沒有它，照樣收
+            option = self._lean_anytime(option_id)  # 「改幫…」隨時都能換（設計 3.2）：在路上、決戰的大區選單上沒有它，照樣收
+            if option is not None and self.state.pending_event is not None:
+                # 唯一的例外：有事件待選時不收（FB-820，PM 2026-10-26）——不然同一則事件裡依陣營出現的選項兩邊都挑得到。
+                # 回一句（Refused：伺服器傳去網頁跳提示），什麼都不動、不寫江湖紀錄
+                return Refused(self._log([wins.LEAN_EVENT_PENDING]))
         if option is None and option_id.startswith("bounty:"):
             # FB-162：懸賞選項已經不在選單上（兩個分頁搶同一張，慢的那一頁）：回這一步為什麼不成的那一句，不寫江湖紀錄；
             # 回傳值是 Refused，伺服器照它把同一句傳去網頁跳提示（server.api_choose）
@@ -3379,6 +3387,8 @@ class Game:
             return self._log(self._arena_act(arg))
         if option_id == FREE_TEXT_OPTION:
             return self._log([f"（寫下你的做法，{FREE_TEXT_MAX} 字以內。）"])  # 選項本身只叫出輸入框，不消耗事件
+        if kind == "errand" and arg.startswith("persuade:") and self._persuade_said is None:
+            return self._log([errand_rules.PERSUADE_ASK])  # 勸降（減法季批 6）：選項本身只叫出輸入框，送出走 persuade_request／persuade
         if option_id == sensing.DRAW:
             return self._log(["（在畫布上一筆畫下心中的形。）"])  # 只叫出畫布；畫完送出走 sense_request／sense_draw
         if option_id == explore_modes.SAY_ID and self._gather_said is None:
@@ -3446,6 +3456,8 @@ class Game:
                 msgs = self._aid_act(arg)
             elif kind == "feast":
                 msgs = self._feast_act(arg)
+            elif kind == "errand":
+                msgs = self._errand_act(arg)
             else:
                 msgs = self._choose(int(arg))
             # 三選一開著時按「探索」本身（_act 只回 PICK）：不算探索過、不寫紀錄。要在後面接上大勢門檻、召見那些訊息之前記
@@ -3732,18 +3744,193 @@ class Game:
         """分岔的後果記貢獻（整合設計 5.3）：成了、不是作惡那一種（PM 2026-10-25 第 6 件）、有那一邊（散人照留痕跡、不記貢獻，同推線）。
         一天（季曆日，同推線的上限）最多 Config.jianfa.deed_contribution_cap，超過的不記（PlayerState.deed_day／deed_today）。
         走 wins.credit：兩軍照舊加 contrib 與那一週的帳，豪強另記此刻幫的那一軍那一本。"""
+        self._deed_points(outcome.effect.contribution if success and not outcome.evil else 0)
+
+    def _deed_points(self, points: int, *, capped: bool = True) -> int:
+        """記 points 點陣營貢獻進「文字的事」那一本（整合設計 5.3：分岔的後果、心意一筆、託付辦成了；減法季批 4、6）：有那一邊才記
+        （散人不記，同推線），一天（季曆日）最多 Config.jianfa.deed_contribution_cap，超過的不記（PlayerState.deed_day／deed_today）。
+        capped=False（託付辦成了，PM 2026-10-26：一週才一件，共用的話分岔記滿那一天託付就記不到）：照數全記，也不佔那一天的額度。
+        走 wins.credit：兩軍照舊加 contrib 與那一週的帳，豪強另記此刻幫的那一軍那一本。回實際記了幾點。"""
         s, c = self.state, self.content
-        points = outcome.effect.contribution if success and not outcome.evil else 0
         if not points or self._side() is None:
-            return
+            return 0
         w, p = s.world, s.player
         at = calendar.point(w.time, c, w)
+        if not capped:
+            wins_rules.credit(p, c, w, at.week, points)
+            return points
         if p.deed_day != at.cal_day:
             p.deed_day, p.deed_today = at.cal_day, 0
         room = outcome_rules.contribution_room(points, p.deed_today, c.config.jianfa.deed_contribution_cap)
         if room:
             p.deed_today += room
             wins_rules.credit(p, c, w, at.week, room)
+        return room
+
+    # ── 人物心意（減法季批 6；tianxia/stances.py）────────────
+
+    def _stance_before(self, cid: str) -> str | None:
+        """這一輪對話之前，你今天跟這位人物記過的那一筆（沒有心意、關著是 None）：跟之後比，看這一輪有沒有記到。"""
+        fid = stance_rules.figure_of(self.content, cid)
+        return stance_rules.heard_today(self.state, self.content, fid) if fid is not None else None
+
+    def _stance_credit(self, cid: str, before: str | None) -> None:
+        """這一輪對話記到一筆心意（之前今天沒記過、之後有了）：記 Config.jianfa.stance_contribution 點貢獻（整合設計 5.3，跟分岔同一本上限）。"""
+        fid = stance_rules.figure_of(self.content, cid)
+        if fid is not None and before is None and stance_rules.heard_today(self.state, self.content, fid) is not None:
+            self._deed_points(self.content.config.jianfa.stance_contribution)
+
+    def voice_stance(self, fid: str, sid: str) -> bool:
+        """不說話、直接記一筆心意（只有伺服器假人叫：bot_policy 照 stances.bot_pick，企劃者 2026-10-24 第 5 件）：一人一天一筆的規則、
+        到門檻、貢獻都跟真人說話那一輪一樣，只是沒有那一輪對話、不寫江湖紀錄。記到了存季，回有沒有記。"""
+        if self.world.paused_at() is not None or self.state.world.ended:
+            return False
+        if not stance_rules.record(self.state, self.content, fid, sid):
+            return False
+        self._deed_points(self.content.config.jianfa.stance_contribution)
+        self._save_season()
+        return True
+
+    def figure_view(self, cid: str) -> dict | None:
+        """人物頁的資料（主機側計畫 1.3 的 figure.stances、figure.errands）：{"id", "name", "stances", "my_stance_today", "errands"}；
+        心意關著（或他沒有心意）沒有前兩個鍵、託付關著（或他沒有託付池）沒有 errands。兩樣都沒有是 None。"""
+        s, c = self.state, self.content
+        fid = figures.of_character(c, cid)
+        if fid is None:
+            return None
+        mind = stance_rules.view(s, c, fid)
+        jobs = errand_rules.view(s, c, fid=fid) if errand_rules.on(c, s.world) and c.figures[fid].errands else None
+        if mind is None and jobs is None:
+            return None
+        out: dict = {"id": cid, "name": c.figures[fid].name, **(mind or {})}
+        if jobs is not None:
+            out["errands"] = jobs
+        return out
+
+    # ── 託付與來信（減法季批 6；tianxia/errands.py）────────────
+
+    _persuade_said: tuple[errand_rules.PersuadeRequest, int] | None = None  # 勸降的 C 段（persuade）交給 choose 的單子與模型的分數
+
+    def errands_view(self) -> list[dict] | None:
+        """江湖畫面的 main.errands（主機側計畫 1.3）：這一季人物託你的事；託付關著是 None（畫面沒有這個鍵）。"""
+        s, c = self.state, self.content
+        return errand_rules.view(s, c) if errand_rules.on(c, s.world) else None
+
+    def _errand_options(self) -> list[Option]:
+        """人在託付的地點：交信（不花體力）、探營、勸降（花 errand_stamina）。勸降按下去只叫出輸入框（choose 的早退）。"""
+        s, c = self.state, self.content
+        opts = []
+        for e in errand_rules.here(s, c):
+            option_id = f"errand:{errand_rules.VERBS[e.kind]}:{e.id}"
+            label = f"{errand_rules.LABELS[e.kind]}（替{errand_rules.who(c, e)}{errand_rules.task_text(c, e)}）"
+            if e.kind == "letter":
+                opts.append(Option(id=option_id, label=label))
+            else:
+                opts.append(self._cost_option(option_id, label, c.config.jianfa.errand_stamina))
+        return opts
+
+    def _errand_act(self, arg: str) -> list[str]:
+        """交信（errand:deliver:<id>）、探營（errand:scout:<id>）、勸降（errand:persuade:<id>，只從 persuade 的 C 段進來）：重驗那一件
+        還在辦、人在那裡、是那一種，照種類做完、給獎勵。"""
+        s, c = self.state, self.content
+        verb, _, eid = arg.partition(":")
+        e = errand_rules.find(s, eid)
+        if e is None or e not in errand_rules.here(s, c) or errand_rules.VERBS[e.kind] != verb:
+            return [errand_rules.NOT_HERE]
+        if e.kind == "letter":
+            d = errand_rules.find_def(c, e.figure, e.errand)
+            msgs = [errand_rules.DELIVERED.format(to=d.to or errand_rules.place(c, e.target))]
+            msgs += self._errand_reward(e)
+            errand_rules.thank(s, c, e)
+            return msgs
+        s.player.stamina -= c.config.jianfa.errand_stamina
+        if e.kind == "scout":
+            lines = errand_rules.scout_lines(s, c, e)
+            errand_rules.note_scout(s, c, e, lines)
+            return [errand_rules.SCOUT_TITLE.format(place=errand_rules.place(c, e.target)), *lines, *self._errand_reward(e)]
+        return self._errand_persuade(e)
+
+    def _errand_reward(self, e) -> list[str]:
+        """辦成了（整合設計 5.5）：他的情誼 +affinity（照寫的數字給、不照 affinity_gain_scale 放慢，夾在 0～100；PM 2026-10-26）、
+        貢獻 +contribution（不吃每天的貢獻上限、也不佔那一本，PM 2026-10-26）、他的那個心意 +1、行狀一則（annals.ERRAND）。回紀錄的句子。"""
+        s, c = self.state, self.content
+        d = errand_rules.find_def(c, e.figure, e.errand)
+        errand_rules.done(s, e)
+        cid = errand_rules.cid_of(c, e)
+        msgs = [errand_rules.DONE.format(who=errand_rules.who(c, e))]
+        if d is not None:
+            msgs += errand_rules.warm(s, c, cid, d.affinity)
+            self._deed_points(d.contribution, capped=False)
+            stance_rules.bump(s, c, e.figure, d.stance)
+        annals.note(s, c, annals.ERRAND, f"替{errand_rules.who(c, e)}{errand_rules.task_text(c, e)}，辦成了。", 3, figure=cid)
+        return msgs
+
+    def _errand_persuade(self, e) -> list[str]:
+        """勸降的結果（choose 的這一下，_persuade_said 是單子與模型的分數）：引擎加情誼名望的修正、夾、自己擲骰；成了立痕跡 band_turned
+        （Effect.marks 走 _apply：一人一天一筆、恤民這類心意的倍數照算）、推那一條線（errands.turn_band：一次性的推法，照寫的量、不打事件五折、
+        不另記推線的貢獻；FB-827）、給獎勵；敗了打一場遭遇（_squad_encounter，同探索撞上的野怪），那一件沒談成。"""
+        s, c = self.state, self.content
+        request, rate = self._persuade_said
+        d = errand_rules.find_def(c, e.figure, e.errand)
+        who = d.persuade.who if d is not None and d.persuade is not None else ""
+        final = errand_rules.persuade_rate(s, c, e, rate)
+        msgs = [f"你：「{request.text}」（{rate_words(final)}）"]
+        if errand_rules.persuade_roll(s, e) < final:
+            msgs.append(errand_rules.PERSUADE_WON.format(who=who))
+            if d is not None and d.persuade is not None:
+                msgs += self._apply(Effect(marks=dict(d.persuade.marks)))
+                msgs += errand_rules.turn_band(s, c, d, e.target)
+            return msgs + self._errand_reward(e)
+        msgs.append(errand_rules.PERSUADE_LOST.format(who=who))
+        errand_rules.done(s, e, "failed")
+        if d is not None and d.persuade is not None and d.persuade.foe in c.squads:
+            msgs += self._squad_encounter(d.persuade.foe, wild=True)
+        return msgs
+
+    def persuade_request(self, errand_id: str, text: str) -> errand_rules.PersuadeRequest | list[str]:
+        """勸降的 A 段（server.persuade_text 在行動鎖內、很快地呼叫；只讀）：那一件按得下去（勸降、人在那裡、體力夠）、字是 1～20 字，
+        就開單；不行回拒絕的話。"""
+        if self.world.paused_at() is not None:
+            return [f"（{PAUSED_TEXT}。）"]
+        s, c = self.state, self.content
+        problem = errand_rules.persuade_problem(s, c, errand_id)
+        if problem is not None:
+            return [problem]
+        said = errand_rules.clean_text(text)
+        option = {o.id: o for o in self.options(odds=False, tick=False)}.get(f"errand:persuade:{errand_id}")
+        if said is None or option is None or not option.enabled:
+            return [errand_rules.PERSUADE_ASK]
+        e = errand_rules.find(s, errand_id)
+        d = errand_rules.find_def(c, e.figure, e.errand)
+        return errand_rules.PersuadeRequest(
+            errand=errand_id, figure=errand_rules.who(c, e), who=d.persuade.who if d is not None and d.persuade else "",
+            place=errand_rules.place(c, e.target), text=zh.to_traditional(said),
+        )
+
+    def persuade(self, request: errand_rules.PersuadeRequest, rate: int | None = None) -> list[str]:
+        """勸降的 C 段（鎖內）：重驗同一件、同一句還按得下去才扣體力擲骰（choose 的 errand:persuade，紀錄、行狀照一般動作寫）。
+        rate 是鎖外評好的 0～100；None＝模型叫不動：照批 4 的慣例落到最保守的結果——什麼都不發生（不扣體力、不打、那一件照舊在），
+        回 PERSUADE_SILENT，不寫紀錄。"""
+        now = self.persuade_request(request.errand, request.text)
+        if isinstance(now, list):
+            return self._log(now)
+        if (now.errand, now.text) != (request.errand, request.text):
+            return self._log([errand_rules.NOT_HERE])
+        if rate is None:
+            return self._log([errand_rules.PERSUADE_SILENT])
+        self._persuade_said = (now, max(0, min(100, int(rate))))
+        try:
+            return self.choose(f"errand:persuade:{request.errand}")
+        finally:
+            self._persuade_said = None
+
+    def _stance_annals(self) -> None:
+        """同步時：這一週你勸過的心意到了門檻，記一則行狀（annals.STANCE：只寫他改做什麼，不列名字、不寫你說的話）。"""
+        s, c = self.state, self.content
+        for fid, d in stance_rules.annals_due(s, c):
+            cid = c.figures[fid].character or fid
+            annals.note(s, c, annals.STANCE, stance_rules.ANNAL.format(name=c.figures[fid].name, stance=d.name, rumor=d.rumor), 2,
+                        figure=cid, time=s.world.stance_active[fid].at)
 
     def add_gamble_narration(self, outcome: FreeTextOutcome, narration: str) -> None:
         """隨口應對的潤色（鎖外生成）插回那一則江湖紀錄：接在「你：「…」」那一行後面、結果文字前面。
@@ -3924,6 +4111,9 @@ class Game:
         if kind == "works":
             name = works.FORT_TITLE if arg == "fortify" else works.STOCK_TITLE
             return f"{name}・{c.locations[s.player.location].name}"
+        if kind == "errand":  # 託付（減法季批 6）：「交信・盧植」
+            e = errand_rules.find(s, arg.partition(":")[2])
+            return f"{errand_rules.LABELS[e.kind]}・{errand_rules.who(c, e)}" if e is not None else "託付"
         if kind == "arena":
             foe = arena.entry_of(s.world, arg.partition(":")[2]) if arg.startswith("fight:") else None
             return f"{arena.ARENA}・{foe.name}" if foe is not None else arena.ARENA
@@ -6244,6 +6434,7 @@ class Game:
         if arg == "plan":  # NPC 智能 2.1：出陣前跟他商量打法（模型評成功率，不扣體力、不算輪數）
             return self._parley_plan(companion_id, prepared, said)
         affinity = self.state.player.affinities.get(companion_id, 0)
+        heard = self._stance_before(companion_id)
         self._parley_decision = None
         try:
             if arg == "say":  # 自己說：said 是 choose 驗過、轉過繁體的那一句；江湖紀錄先寫你說了什麼（同隨口應對的「你：「…」」）
@@ -6260,6 +6451,7 @@ class Game:
                 )
         except companion_agent.DialogueUnavailable:
             return self._dialogue_unavailable(companion_id)
+        self._stance_credit(companion_id, heard)
         self._annal_talk(companion_id, self.state.player.affinities.get(companion_id, 0) - affinity, said)
         msgs += self._overhear(companion_id, msgs)
         self.state.player.stamina -= self.content.config.talk_stamina  # 每一輪對話都要花體力（伺服器假人設計第八節第 4 項）；生成不出來的那輪不算
@@ -6614,6 +6806,7 @@ class Game:
         if cid is None or j is None or said is None or s.player.parley_road_leg == j.reached:
             return ["（此刻無法這麼做。）"]
         affinity = s.player.affinities.get(cid, 0)
+        heard = self._stance_before(cid)
         self._parley_decision = None
         extra = self._parley_prompt(cid, road=True)
         try:
@@ -6624,6 +6817,7 @@ class Game:
             )
         except companion_agent.DialogueUnavailable:
             return [f"{c.characters[cid].name}沉吟不語。"]
+        self._stance_credit(cid, heard)
         s.player.parley_road_leg = j.reached
         self._annal_talk(cid, s.player.affinities.get(cid, 0) - affinity, said)
         decision, self._parley_decision = self._parley_decision, None
@@ -6718,8 +6912,8 @@ class Game:
         return opts
 
     def _lean_anytime(self, option_id: str) -> Option | None:
-        """「改幫…」不看此地的選單（設計 3.2「隨時換」，FB-812）：選單上沒有它的時候（在路上、有事件待選、人站在正在打決戰的大區，
-        選單只剩那些事）照樣收，條件跟選單上的那一顆一樣（_lean_options：豪強、四勝利開著，按不下去的原因照 wins.lean_problem）。
+        """「改幫…」不看此地的選單（設計 3.2「隨時換」，FB-812）：選單上沒有它的時候（在路上、人站在正在打決戰的大區，
+        選單只剩那些事）照樣收（有事件待選是例外，choose 擋：FB-820），條件跟選單上的那一顆一樣（_lean_options：豪強、四勝利開著，按不下去的原因照 wins.lean_problem）。
         只有賽季不在跑（籌備中、休季、時鐘暫停，這幾種選單本來就只剩一顆灰的）才不收；開關關著、不是豪強、本來就幫它、
         不是它能幫的那一軍，都找不到那一顆，照舊「此刻無法這麼做」。決戰那一場的戰功照舊記參戰那一軍，開打了這一場照舊站原來那一邊
         （_lean_step 的 _ally_follows_battle）。"""
@@ -9190,6 +9384,7 @@ class Game:
         寫出來卻只進 GameState.log（事件文字在紀錄裡是藏起來的、場景照內容原文畫），畫面上從來看不到。"""
         if action is not None:
             event_rules.note_round(self.state, self.content, event, action)
+            stance_rules.met(self.state, self.content, event.id)  # 人物心意開的那一則：每人每天一則（減法季批 6 修正輪）
         self.state.pending_event = event.id
         self.state.player.seen_events.add(event.id)
         head = f"✦ 奇遇：{event.title}" if event.qiyu else f"【{event.title}】"

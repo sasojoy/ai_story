@@ -1252,6 +1252,8 @@ def check_figures(c: Content, need, known, front_ids: list[str]) -> None:
             f"{where}：active_from_day7（{fig.active_from_day7:g}）超出 7 天" if fig.active_from_day7 is not None else "",
         )
         need(to_traditional(fig.name) == fig.name, f"{where}：名字只能用繁體中文（{fig.name}）")
+        check_stances(c, need, where, fig)
+        check_errands(c, need, where, fig)
         if fig.out_flag is not None:  # 丙 (c)：退場時記的世界旗標要有人讀（劇本或事件的條件），打錯字才抓得到
             need(fig.out_flag in _condition_flags(c), f"{where}：out_flag {fig.out_flag} 沒有任何劇本或事件的條件讀它")
         meet = c.characters.get(fig.character) if fig.character is not None else None
@@ -1269,6 +1271,64 @@ def check_figures(c: Content, need, known, front_ids: list[str]) -> None:
             chain.append(nxt)
             nxt = c.figures[nxt].successor
         need(nxt not in chain, f"{where}：接位鏈繞回來了（{'→'.join(chain)}→{nxt}）")
+
+
+STANCE_MAX = 3  # 一位人物最多幾個心意（整合設計 5.4「2～3 個」）
+
+
+def check_stances(c: Content, need, where: str, fig) -> None:
+    """人物心意（減法季批 6，整合設計 5.4）：要有對話人物（歸類在對話裡）、最多 STANCE_MAX 個、id 不重複、id 不是 stances.NONE；
+    字只用繁體；改做的事裡痕跡的鍵是「地點 id:痕跡名」、地點存在、倍數至少 1。"""
+    if not fig.stances:
+        return
+    need(fig.character is not None, f"{where}：有心意的人物要有對話人物（心意在跟他說話時歸類）")
+    need(len(fig.stances) <= STANCE_MAX, f"{where}：心意最多 {STANCE_MAX} 個（現在 {len(fig.stances)} 個）")
+    ids = [x.id for x in fig.stances]
+    need(len(set(ids)) == len(ids), f"{where}：心意的 id 重複了（{ids}）")
+    for x in fig.stances:
+        at = f"{where} 的心意 {x.id}"
+        need(x.id != "none", f"{at}：id 不能是 none（模型歸不進任何一種時填的）")
+        for text in (x.name, x.hint, x.rumor, x.chronicle):
+            need(to_traditional(text) == text, f"{at}：字只能用繁體中文（{text}）")
+        for key, times in x.action.marks.items():
+            loc, sep, name = key.partition(":")
+            need(bool(sep and name) and loc in c.locations, f"{at}：痕跡要寫成「地點 id:痕跡名」、地點存在（{key}）")
+            need(times >= 1, f"{at}：痕跡 {key} 的倍數至少 1")
+        if x.action.event_daily is not None:  # 生效時開的人物事件（批 6 修正輪）：從探索的池子抽、可重複（每人每天一則由 stances 管）
+            ev = c.events.get(x.action.event_daily)
+            need(ev is not None, f"{at}：event_daily 的事件 {x.action.event_daily} 不存在")
+            if ev is not None:
+                need("explore" in ev.actions and not ev.once and not ev.qiyu and not ev.fortune and ev.free_text is None,
+                     f"{at}：event_daily 的事件 {ev.id} 要是探索抽得到、可重複、沒有隨口應對的事件")
+
+
+ERRAND_SLOTS = ("{place}", "{hero}")  # 託付的字認得的插槽（errands.give、task_text 填）
+
+
+def check_errands(c: Content, need, where: str, fig) -> None:
+    """託付的池子（減法季批 6，整合設計 5.5、5.9）：要有對話人物（信是他寫的）、id 不重複、地點存在；勸降要寫 persuade（勸不成打的隊伍存在、
+    痕跡是「地點 id:痕跡名」、推的線是 front 或戰線 id），其他兩種不寫；寫了 stance 要是他自己的心意；字只用繁體、只用認得的插槽。"""
+    if not fig.errands:
+        return
+    need(fig.character is not None, f"{where}：有託付的人物要有對話人物（託付以他的信送到）")
+    ids = [d.id for d in fig.errands]
+    need(len(set(ids)) == len(ids), f"{where}：託付的 id 重複了（{ids}）")
+    stance_ids = {x.id for x in fig.stances}
+    lines = {t.id for t in c.scenario.trends} | {"front"}
+    for d in fig.errands:
+        at = f"{where} 的託付 {d.id}"
+        need(d.target in c.locations, f"{at}：地點 {d.target} 不存在")
+        need(d.stance is None or d.stance in stance_ids, f"{at}：心意 {d.stance} 不是他的心意（{sorted(stance_ids)}）")
+        need((d.kind == "persuade") == (d.persuade is not None), f"{at}：勸降才寫 persuade、勸降一定要寫")
+        for text in (d.task, d.text, d.to):
+            need(to_traditional(text) == text, f"{at}：字只能用繁體中文（{text}）")
+            need(not [s for s in re.findall(r"\{[^}]*\}", text) if s not in ERRAND_SLOTS], f"{at}：只認得 {ERRAND_SLOTS}（{text}）")
+        if d.persuade is not None:
+            need(d.persuade.foe in c.squads, f"{at}：勸不成打的隊伍 {d.persuade.foe} 不存在")
+            for key in d.persuade.marks:
+                loc, sep, name = key.partition(":")
+                need(bool(sep and name) and loc in c.locations, f"{at}：痕跡要寫成「地點 id:痕跡名」、地點存在（{key}）")
+            need(set(d.persuade.trend) <= lines, f"{at}：推的線只能是 front 或戰線 id（{sorted(d.persuade.trend)}）")
 
 
 ORDER_SLOTS = ("{戰線}", "{地點}", "{起點}", "{終點}", "{主將}", "{人物}", "{號令}", "{本週}", "{這週}")  # 後兩個照季換字（FB-501）
@@ -3045,6 +3105,15 @@ def validate(c: Content) -> None:
     front_ids = sorted(region_fronts)  # 戰線 id 照 T1 的大區 front，不另寫一份清單
     check_timetable(c, need, known, front_ids, trend_ids)
     check_figures(c, need, known, front_ids)
+    stance_events: dict[str, str] = {}  # 人物心意開的事件 → 開它的心意（一則事件只掛一個心意）
+    for fid, fig in c.figures.items():  # 勸降成了立的痕跡（減法季批 6，FB-827）也算「有效果寫它」：痕跡規則讀它
+        for d in fig.errands:
+            for key in (d.persuade.marks if d.persuade is not None else {}):
+                marks_written.setdefault(key, f"大勢人物 {fid} 的託付 {d.id}")
+        for x in fig.stances:
+            if x.action.event_daily is not None:
+                first = stance_events.setdefault(x.action.event_daily, f"{fid}:{x.id}")
+                need(first == f"{fid}:{x.id}", f"大勢人物 {fid} 的心意 {x.id}：事件 {x.action.event_daily} 已經掛在 {first}")
     check_relations(c, need, known)
     check_companions(c, need)
     check_foreshadows(c, need, known, region_ids, front_ids, counters_written)

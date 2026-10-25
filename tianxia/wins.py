@@ -30,7 +30,8 @@ LEAN_DONE = "你改幫{side}了：之後出陣、軍令、決戰都照{side}算�
 LEAN_NOT_GENTRY = "只有地方豪強能改幫另一軍。"
 LEAN_BAD = "豪強只能幫官軍或黃巾其中一邊。"
 LEAN_SAME = "你此刻就在幫{side}。"
-LEAN_NOT_DEFECT = "地方豪強換一軍幫不算叛投，按「改幫…」就好。"  # defection.refusal：同一個陣營換一軍（四勝利開著的季）
+LEAN_EVENT_PENDING = "先把眼前這件事了結，再說改幫的事。"  # 待 joy 潤：有事件待選時不收改幫（FB-820，PM 2026-10-26；Game.choose）
+LEAN_NOT_DEFECT ="地方豪強換一軍幫不算叛投，按「改幫…」就好。"  # defection.refusal：同一個陣營換一軍（四勝利開著的季）
 
 # 三方卡（欄位表 main.sides_card，設計 3.4；待 joy 潤）
 GOAL_ARMY = "季末{side}的態勢高過{other}；{side}的態勢到 {bar} 就是「{ending}」。"

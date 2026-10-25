@@ -16,7 +16,7 @@ import re
 
 from pydantic import BaseModel
 
-from . import bounties, calendar, figure_life, gender, prologue, rules, zh
+from . import bounties, calendar, errands, figure_life, gender, prologue, rules, zh
 from .calendar import DAY
 from .models import Content
 from .state import Bounty, GameState, Letter
@@ -75,12 +75,20 @@ def deliver(state: GameState, content: Content, real_now: float | None = None) -
         if t is not None and not letter.lapsed and not t.done_by and t.expires <= w.time:
             letter.lapsed = True
             msgs.append(LAPSED.format(who=_name(content, letter.sender)))
+    msgs += errands.lapse(state, content)  # 減法季批 6：託付過了期限作罷、情誼扣（沒有託付的季是空的）
     day = mail_day(content, w, real_now)
     if day is None:
         day = int(w.time // DAY)
     if w.ended or p.letter_day == day or prologue.active(state, content) or not content.characters:
         return msgs
-    letter = _cheer_letter(state, content) or _feast_letter(state, content) or _help_letter(state, content, random.Random(f"書信|{w.tianji}|{p.name}|{day}"))
+    rng = random.Random(f"書信|{w.tianji}|{p.name}|{day}")
+    # 託付 → 道賀 → 邀宴 → 求援（減法季批 6）；託付照它自己的情誼門檻 errand_affinity（PM 2026-10-26），其餘三種照 letter_affinity
+    floor = content.config.jianfa.errand_affinity
+    errand = errands.offer(state, content, rng, lambda cid: _reachable(state, content, cid, floor))
+    if errand is not None:  # 託付的信 errands.give 已經放進信箱
+        p.letter_day = day
+        return msgs + [errands.ARRIVED.format(who=_name(content, errand.sender))]
+    letter = _cheer_letter(state, content) or _feast_letter(state, content) or _help_letter(state, content, rng)
     if letter is None:
         return msgs
     p.letter_day = day
@@ -94,10 +102,12 @@ def _name(content: Content, cid: str) -> str:
     return ch.name if ch is not None else cid
 
 
-def _reachable(state: GameState, content: Content, cid: str) -> bool:
+def _reachable(state: GameState, content: Content, cid: str, floor: int | None = None) -> bool:
+    """聯絡得上：能深度對話、情誼到 floor（沒給照 figure_life.letter_affinity；託付另給 Config.jianfa.errand_affinity）、人在場。"""
     ch = content.characters.get(cid)
+    need = content.config.figure_life.letter_affinity if floor is None else floor
     return (ch is not None and ch.deep_interaction
-            and state.player.affinities.get(cid, 0) >= content.config.figure_life.letter_affinity
+            and state.player.affinities.get(cid, 0) >= need
             and figure_life.where(state, content, cid) is not None)
 
 
@@ -232,6 +242,9 @@ def view(state: GameState, content: Content) -> dict | None:
                        "reward": bounties.commission_reward(state, content, t),
                        "due": f"期限 {bounties.due_text(t, content, state.world)}", "live": live,
                        "state": "辦成了" if t.done_by else "作罷了" if letter.lapsed or not live else ""}
+    errand = errands.letter_card(state, content, letter) if letter.kind == "託付" else None
+    if errand is not None:  # 減法季批 6：託付的信附那一件（主機側計畫 1.3 的 main.errands 同一筆）；不是託付的信沒有這個鍵
+        out["errand"] = errand
     return out
 
 
@@ -246,6 +259,10 @@ def read(state: GameState, letter_id: int) -> list[str]:
 def decline(state: GameState, content: Content, letter_id: int) -> list[str]:
     """婉拒這封信附的委託（不扣情誼：託人辦事，答不答應是你的事）。"""
     letter = find(state, letter_id)
+    if letter is not None and letter.task is None and letter.kind == "託付":
+        declined = errands.decline(state, content, letter_id)  # 減法季批 6：託付的信，婉拒那一件（不扣情誼）
+        if declined is not None:
+            return declined or [NO_LETTER]
     if letter is None or letter.task is None or letter.lapsed or letter.task.done_by:
         return [NO_LETTER]
     letter.lapsed = letter.read = True
@@ -269,6 +286,7 @@ class LetterNote(BaseModel):
     hero: str
     player: str
     fixed: str
+    errand: bool = False  # 減法季批 6：這封「託付」是人物每週託的那一件（errands.py），不是開局第一分鐘那一封；task 是那一件做什麼
 
 
 LETTER_MAX = 100  # 提示詞要他寫一百字以內
@@ -288,10 +306,12 @@ def request(state: GameState, content: Content) -> LetterNote | None:
         return None
     ch = content.characters.get(letter.sender)
     persona = "；".join(x for x in ((ch.personality if ch else ""), (ch.situation if ch else "")) if x)
+    errand = errands.by_letter(state, letter.id) if letter.kind == "託付" and letter.task is None else None
+    task = bounties.how(content, letter.task, state) if letter.task else errands.task_text(content, errand) if errand else ""
     return LetterNote(
         id=letter.id, kind=letter.kind, sender=letter.sender, sender_name=_name(content, letter.sender), persona=persona[:200],
-        mood=letter.mood, about=letter.about, task=bounties.how(content, letter.task, state) if letter.task else "",
-        hero=gender.hero(state.player), player=state.player.name, fixed=letter.text,
+        mood=letter.mood, about=letter.about, task=task,
+        hero=gender.hero(state.player), player=state.player.name, fixed=letter.text, errand=errand is not None,
     )
 
 
@@ -301,6 +321,9 @@ def write(client, note: LetterNote) -> str:
         return ""
     if note.kind == "求援":
         what = f"他此刻{note.mood}，寫信向{note.hero}求援，託的事是：{note.task}（事情要寫進信裡，可以換成他的說法）"
+    elif note.kind == "託付" and note.errand:  # 減法季批 6：人物每週託的那一件（errands.py）
+        what = (f"他照眼下的處境寫信託{note.hero}一件事：{note.task}（事情與地點要寫進信裡，可以換成他的說法；"
+                "順口說一句為什麼託給對方、這件事對眼下的戰局有什麼用）")
     elif note.kind == "託付":  # 開局第一分鐘（opening.py）：初到江湖的人，他在城門口開口託第一件事
         what = (f"{note.hero}剛到潁川、還沒投靠任何一方，他看中了這個生面孔，開口託{note.hero}一件事：{note.task}"
                 "（事情要寫進信裡，可以換成他的說法；順口說一句為什麼託給一個生面孔）")
