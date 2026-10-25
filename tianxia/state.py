@@ -1203,13 +1203,15 @@ class TalkMemo(BaseModel):
 class StanceNote(BaseModel):
     """你這一週跟一位大勢人物記過的心意（減法季批 6，tianxia/stances.py；PlayerState.stance_notes）：一人一天一筆（day 是 rules.game_day），
     週一歸零（week 對不上就是上一週的，當作沒記過）；told 是這一週已經記過行狀的心意（到門檻那一刻你也勸過，下一次同步記一則）。
-    said 是這一週說過與替他辦成託付的（行狀兩樣都認）；spoke 是 day 那一天說話記的那一個（人物頁的「你今天勸的」只看它，FB-825）。"""
+    said 是這一週說過與替他辦成託付的（行狀兩樣都認）；spoke 是 day 那一天說話記的那一個（人物頁的「你今天勸的」只看它，FB-825）；
+    event_day 是你哪一天碰過他的心意開的那一則人物事件（StanceAction.event_daily，每人每天一則；0 是還沒碰過）。"""
 
     week: int = 0
     day: int = 0
     said: list[str] = Field(default_factory=list)
     told: list[str] = Field(default_factory=list)
     spoke: str | None = None
+    event_day: int = 0
 
 
 class ErrandState(BaseModel):

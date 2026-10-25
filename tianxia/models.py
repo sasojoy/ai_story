@@ -4037,6 +4037,9 @@ class StanceAction(_Strict):
     # 每天 00:00（world.DAY_HOOKS）把他那一條線上自家佔著的塊、每個攻方的進度各拉下幾點（持重的「守勢」；領地爭奪開著才有）
     guard: float = Field(default=0.0, ge=0)
     marks: dict[str, int] = Field(default_factory=dict)  # 「地點 id:痕跡名」→ 倍數：這幾條痕跡記一筆算幾筆（恤民的「算雙倍」）
+    # 這個心意生效時開的人物事件（content/events 的事件 id；地點照那一則事件自己寫的）：只有這時候抽得到、每人每天一則
+    # （stances.closed_events；速戰的「盧植急攻」、恤民的「收容流民」，PM 2026-10-26）。沒寫是 None
+    event_daily: str | None = None
 
 
 class StanceDef(_Strict):

@@ -1,13 +1,16 @@
 """人物心意的修正輪（減法季批 6 修正輪；PM 2026-10-26 定，交接第四節之十四）：
 - FB-825：「你今天勸的」（my_stance_today）只看說話記的那一筆；辦成託付的心意 +1 不改它（行狀照舊兩樣都認）。
 - FB-826：心意過門檻那一刻先生效；之後換手只在每天 00:00 重算；同一位人物的江湖史一週只記一次（天下大事照換手發）。
+- 兩則人物事件（交接第四節之十二第 3 條）：「盧植急攻」（速戰生效時開）、「收容流民」（恤民生效時冀州各地開），
+  接在 StanceAction.event_daily；每人每天一則；關著的季抽不到。
 正式內容的 season21；模型一律是假的。"""
 from __future__ import annotations
 
 import pytest
 
 from stances_kit import DAY, HOUR, LUZHI, MON, at, real_game, week_start_real
-from tianxia import errands, stances
+from tianxia import errands, events, stances
+from tianxia.state import StanceOn
 
 pytestmark = pytest.mark.slow  # 載正式內容、照伺服器開季
 
@@ -89,6 +92,78 @@ def test_a_new_week_tells_the_chronicle_again():
     assert stances.record(s, c, LUZHI, "chizhong")
     g._save_season()
     assert _told(g) == (2, 2)
+
+
+ASSAULT, REFUGEES = "stance_luzhi_assault", "stance_luzhi_refugees"
+JIZHOU = ("luzhi_camp", "xiaquyang", "haozu_fort", "baima_ford")
+
+
+def _here(g, loc) -> set[str]:
+    g.state.player.location = loc
+    return {e.id for e in events.event_candidates(g.state, g.content, "explore")}
+
+
+def test_real_content_wires_the_two_figure_events():
+    """「盧植急攻」掛在速戰、「收容流民」掛在恤民（StanceAction.event_daily）；盧植急攻在盧植營，收容流民在冀州各地。"""
+    c = real_game().content
+    acts = {x.id: x.action.event_daily for x in c.figures[LUZHI].stances}
+    assert acts == {"suzhan": ASSAULT, "chizhong": None, "xumin": REFUGEES}
+    assert c.events[ASSAULT].locations == ["luzhi_camp"] and c.events[ASSAULT].title == "盧植急攻"
+    assert c.events[REFUGEES].locations == list(JIZHOU) and c.events[REFUGEES].title == "收容流民"
+
+
+def test_the_assault_opens_only_while_he_rushes_and_once_a_day():
+    """盧植急攻：速戰生效時才抽得到，每人每天一則（端到眼前那一下記）；隔天又開。"""
+    g = real_game()
+    at(g, g.now + HOUR)
+    s, c = g.state, g.content
+    assert ASSAULT not in _here(g, "luzhi_camp")
+    _on_now(g, "chizhong")
+    assert ASSAULT not in _here(g, "luzhi_camp")
+    _on_now(g, "suzhan")
+    assert ASSAULT in _here(g, "luzhi_camp") and REFUGEES not in _here(g, "luzhi_camp")
+    g._present(c.events[ASSAULT], "explore")  # noqa: SLF001
+    assert ASSAULT not in _here(g, "luzhi_camp")  # 今天碰過了
+    g.state.pending_event = None
+    g._save_season()  # noqa: SLF001
+    at(g, MON + DAY + HOUR)  # 隔天（同一週）
+    assert g.state.world.stance_active[LUZHI].stance == "suzhan"
+    assert ASSAULT in _here(g, "luzhi_camp")
+
+
+def test_refugees_open_across_jizhou_while_he_shows_mercy():
+    """收容流民：恤民生效時冀州各地抽得到、別處沒有；端到眼前之後今天在冀州別處也不再抽到（每人每天一則）。選得下去、照常結束。"""
+    g = real_game()
+    at(g, g.now + HOUR)
+    s, c = g.state, g.content
+    _on_now(g, "xumin")
+    assert all(REFUGEES in _here(g, loc) for loc in JIZHOU)
+    assert REFUGEES not in _here(g, "changshe")
+    s.player.location = "xiaquyang"
+    g._present(c.events[REFUGEES], "explore")  # noqa: SLF001
+    assert not any(REFUGEES in _here(g, loc) for loc in JIZHOU)
+    s.player.location = "xiaquyang"
+    good = s.player.stats.get("good", 0)
+    s.player.stats["con"] = 15
+    g.choose("choice:0")
+    assert g.state.pending_event is None and s.player.stats.get("good", 0) > good
+
+
+@pytest.mark.parametrize("profile", [None, "season21-off"])
+def test_closed_seasons_never_draw_the_figure_events(profile):
+    g = real_game(setup=lambda c: setattr(c.config.jianfa, "stances", False)) if profile else real_game(None)
+    s = g.state
+    s.world.stance_week = 1
+    s.world.stance_active = {LUZHI: StanceOn(stance="suzhan", at=0.0, week=1)}  # 就算季上留著（換了設定）
+    assert ASSAULT not in _here(g, "luzhi_camp")
+    s.world.stance_active = {LUZHI: StanceOn(stance="xumin", at=0.0, week=1)}
+    assert not {ASSAULT, REFUGEES} & set().union(*(_here(g, loc) for loc in JIZHOU))
+
+
+def _on_now(g, sid):
+    w = g.state.world
+    w.stance_week = stances.week_of(g.content, w)
+    w.stance_active = {LUZHI: StanceOn(stance=sid, at=w.time, week=w.stance_week)}
 
 
 def test_an_errand_alone_is_not_what_you_said_and_you_can_still_speak():

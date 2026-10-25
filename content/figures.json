@@ -31,9 +31,9 @@
   {"id": "zhujun", "character": "zhujun", "name": "朱儁", "faction": "guan", "front": "yingru", "location": "changshe", "destiny": false, "start_prestige": 60, "actions_per_day": 0.5, "push": 1, "successor": null, "squad": "figure_zhujun", "active_from_week": 2, "active_from_day": 1.5, "active_from_day7": 0.5, "start_status": "active"},
   {"id": "luzhi", "character": "luzhi", "name": "盧植", "faction": "guan", "front": "jizhou", "location": "luzhi_camp", "destiny": false, "start_prestige": 70, "actions_per_day": 1, "push": 1, "successor": "dongzhuo", "squad": "figure_luzhi", "active_from_week": 2, "active_from_day": 1.5, "active_from_day7": 0.5, "start_status": "active",
    "stances": [
-    {"id": "suzhan", "name": "速戰", "hint": "勸他趁黃巾未穩、速攻廣宗，別再拖延", "action": {"push": 2}, "rumor": "盧植聽了眾人之勸，決意速攻廣宗。"},
+    {"id": "suzhan", "name": "速戰", "hint": "勸他趁黃巾未穩、速攻廣宗，別再拖延", "action": {"push": 2, "event_daily": "stance_luzhi_assault"}, "rumor": "盧植聽了眾人之勸，決意速攻廣宗。"},
     {"id": "chizhong", "name": "持重", "hint": "勸他固守待援、深溝高壘，小心中了埋伏", "action": {"push": 0, "guard": 5}, "rumor": "盧植按兵不動，廣宗城外深溝高壘。"},
-    {"id": "xumin", "name": "恤民", "hint": "勸他先安頓流民、開倉放糧，別向百姓徵糧", "action": {"push": 0, "marks": {"xiaquyang:留糧": 2, "julu_altar:扶病": 2}}, "rumor": "盧植下令放糧，冀州流民有了去處。"}
+    {"id": "xumin", "name": "恤民", "hint": "勸他先安頓流民、開倉放糧，別向百姓徵糧", "action": {"push": 0, "marks": {"xiaquyang:留糧": 2, "julu_altar:扶病": 2}, "event_daily": "stance_luzhi_refugees"}, "rumor": "盧植下令放糧，冀州流民有了去處。"}
   ],
    "errands": [
     {"id": "luzhi_letter", "kind": "letter", "target": "changshe", "to": "皇甫嵩", "stance": "chizhong", "task": "把一封軍書送到{place}，親手交給皇甫嵩", "text": "{hero}見字如面：廣宗城堅，賊勢未衰。煩{hero}替我把這封軍書送到{place}，親手交給皇甫中郎將。"},

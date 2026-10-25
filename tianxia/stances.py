@@ -5,7 +5,7 @@
 - 一人一天一筆（PlayerState.stance_notes，天是 rules.game_day），全服這一週的計數在 WorldState.stance_counts；
 - 這一週有心意到門檻（StanceDef.threshold，沒寫照 Config.jianfa.stance_threshold 30【預設】），他照最多的那一個改做事
   （WorldState.stance_active）：推線乘倍（figures.tick 讀 push_scale）、每天 00:00 拉下他那一條線上自家塊的對面進度（daily）、
-  幾條痕跡記一筆算幾筆（rules.add_marks 讀 mark_scale）；過門檻那一刻先生效，之後換手只在每天 00:00 重算（FB-826）；生效、換手
+  幾條痕跡記一筆算幾筆（rules.add_marks 讀 mark_scale）、開他自己的人物事件（event_daily：closed_events／met，每人每天一則）；過門檻那一刻先生效，之後換手只在每天 00:00 重算（FB-826）；生效、換手
   各發一則天下大事（不列名字），江湖史同一位人物一週只記一筆（生效那一刻），這一週勸過那一個心意的人
   各在下一次同步記一則行狀（annals.STANCE，酒肆打聽不到）；
 - 每週一 00:00（world.WEEK_HOOKS；7 天的季照段）歸零重算：計數與他此刻照哪一個做事一起清掉。
@@ -201,6 +201,34 @@ def daily(state: GameState, content: Content) -> list[str]:
             if not fight.bars:
                 fight.guards, fight.alarm = {}, False
     return []
+
+
+def closed_events(state: GameState, content: Content) -> set[str]:
+    """人物心意開的事件（StanceAction.event_daily：速戰的「盧植急攻」、恤民的「收容流民」）此刻抽不到的那幾則（events.event_candidates
+    當成藏起來的）：心意關著是全部（關著的季一個字都不變）；開著時，他此刻沒照那個心意做事、或你今天碰過了（met，每人每天一則）的。"""
+    live, w = on(content, state.world), state.world
+    out: set[str] = set()
+    for fid, fig in content.figures.items():
+        for d in fig.stances:
+            if d.action.event_daily is None:
+                continue
+            now = w.stance_active.get(fid) if live else None
+            note = state.player.stance_notes.get(fid)
+            met_today = (note is not None and note.week == week_of(content, w)
+                         and note.event_day == rules.game_day(content, w)) if live else False
+            if now is None or now.stance != d.id or met_today:
+                out.add(d.action.event_daily)
+    return out
+
+
+def met(state: GameState, content: Content, event_id: str) -> None:
+    """人物心意開的那一則端到你眼前（Game._present，從池子抽的那一下）：記今天碰過了，今天不再抽到。不是這種事件、關著什麼都不做。"""
+    w = state.world
+    if not on(content, w):
+        return
+    for fid, fig in content.figures.items():
+        if any(d.action.event_daily == event_id for d in fig.stances):
+            _note(state, fid, week_of(content, w)).event_day = rules.game_day(content, w)
 
 
 def weekly_reset(state: GameState, content: Content, week: int) -> list[str]:

@@ -1234,6 +1234,12 @@ def check_stances(c: Content, need, where: str, fig) -> None:
             loc, sep, name = key.partition(":")
             need(bool(sep and name) and loc in c.locations, f"{at}：痕跡要寫成「地點 id:痕跡名」、地點存在（{key}）")
             need(times >= 1, f"{at}：痕跡 {key} 的倍數至少 1")
+        if x.action.event_daily is not None:  # 生效時開的人物事件（批 6 修正輪）：從探索的池子抽、可重複（每人每天一則由 stances 管）
+            ev = c.events.get(x.action.event_daily)
+            need(ev is not None, f"{at}：event_daily 的事件 {x.action.event_daily} 不存在")
+            if ev is not None:
+                need("explore" in ev.actions and not ev.once and not ev.qiyu and not ev.fortune and ev.free_text is None,
+                     f"{at}：event_daily 的事件 {ev.id} 要是探索抽得到、可重複、沒有隨口應對的事件")
 
 
 ERRAND_SLOTS = ("{place}", "{hero}")  # 託付的字認得的插槽（errands.give、task_text 填）
@@ -3039,10 +3045,15 @@ def validate(c: Content) -> None:
     front_ids = sorted(region_fronts)  # 戰線 id 照 T1 的大區 front，不另寫一份清單
     check_timetable(c, need, known, front_ids, trend_ids)
     check_figures(c, need, known, front_ids)
+    stance_events: dict[str, str] = {}  # 人物心意開的事件 → 開它的心意（一則事件只掛一個心意）
     for fid, fig in c.figures.items():  # 勸降成了立的痕跡（減法季批 6，FB-827）也算「有效果寫它」：痕跡規則讀它
         for d in fig.errands:
             for key in (d.persuade.marks if d.persuade is not None else {}):
                 marks_written.setdefault(key, f"大勢人物 {fid} 的託付 {d.id}")
+        for x in fig.stances:
+            if x.action.event_daily is not None:
+                first = stance_events.setdefault(x.action.event_daily, f"{fid}:{x.id}")
+                need(first == f"{fid}:{x.id}", f"大勢人物 {fid} 的心意 {x.id}：事件 {x.action.event_daily} 已經掛在 {first}")
     check_relations(c, need, known)
     check_companions(c, need)
     check_foreshadows(c, need, known, region_ids, front_ids, counters_written)
