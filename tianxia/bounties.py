@@ -164,6 +164,9 @@ STRIKE_GATHER = "找素材撞上的那一場也算"  # 待 joy 潤：探索三�
 # 一類一顆生效的季（FB-420）：找素材不打仗，討伐在練功交差（待 joy 潤）
 STRIKE_PRECISE = "到{target}尋敵或出陣攻打贏一場{enemy}的隊伍"
 STRIKE_PRACTICE = "到{target}尋敵打贏一場{enemy}的隊伍"
+# 減法季探索一顆開著的季（Config.jianfa 的 explore_one）：沒有「尋敵」這顆鈕了，討伐在出門一趟的遭遇拍交差（FB-817；待 joy 潤）
+STRIKE_OUTING = "到{target}出門探索或出陣攻打贏一場{enemy}的隊伍"
+STRIKE_OUTING_RANGER = "到{target}出門探索打贏一場{enemy}的隊伍"
 
 
 def how(content: Content, b: Bounty, state: GameState | None = None, world: WorldState | None = None) -> str:
@@ -175,11 +178,15 @@ def how(content: Content, b: Bounty, state: GameState | None = None, world: Worl
         return how(content, b.model_copy(update={"motive": None}), state, world) + RALLY_AID.format(who=issuer(content, b))
     if b.kind == "strike":
         from . import explore_modes, precise, sortie  # 延後 import 只是保險
+        from .rules import jianfa
 
         target = _loc_name(content, b.location)
         if precise.on(content, world):
             ranger = state is not None and state.player.faction is None  # 散人不出陣
-            line = STRIKE_PRECISE if sortie.on(content) and not ranger else STRIKE_PRACTICE
+            if jianfa(content, world, "explore_one"):  # 減法季探索一顆：出門一趟的遭遇拍（FB-817）
+                line = STRIKE_OUTING if sortie.on(content) and not ranger else STRIKE_OUTING_RANGER
+            else:
+                line = STRIKE_PRECISE if sortie.on(content) and not ranger else STRIKE_PRACTICE
             return line.format(target=target, enemy=_enemy_name(content, b))
         if sortie.on(content):
             ways = f"{STRIKE_SORTIE}，{STRIKE_GATHER}" if explore_modes.on(content) else STRIKE_SORTIE

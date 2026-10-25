@@ -178,3 +178,32 @@ def test_the_field_goal_card_talks_about_the_outing_and_the_old_season_keeps_its
     assert next(r for r in off.newbie_view()["rows"] if r["key"] == "field2")["text"] == "到匪寇橫行的地方尋敵，打贏一場"
 
 
+# ── 4. 不再寫「尋敵」的兩處 ──
+
+
+def _strike() -> Bounty:
+    return Bounty(id="b1", kind="strike", faction="guan", week=1, expires=1e12, silver=20, deeds=1, location="yanshan_foot", squad="louluo")
+
+
+def test_the_strike_bounty_names_the_outing_when_explore_one_is_on():
+    on = ready(jianfa_game(), side="guan", loc="yingshui")
+    line = bounties.how(on.content, _strike(), on.state)
+    assert line == "到燕山腳出門探索或出陣攻打贏一場黃巾軍的隊伍" and "尋敵" not in line
+    on.state.player.faction = None  # 散人不出陣
+    assert bounties.how(on.content, _strike(), on.state) == "到燕山腳出門探索打贏一場黃巾軍的隊伍"
+    assert bounties.how(on.content, _strike(), world=on.state.world) == "到燕山腳出門探索或出陣攻打贏一場黃巾軍的隊伍"  # 陣營傳聞沒有看的人
+    off = ready(jianfa_game(explore_one=False), side="guan", loc="yingshui")
+    assert bounties.how(off.content, _strike(), off.state) == "到燕山腳尋敵或出陣攻打贏一場黃巾軍的隊伍"
+    off.state.player.faction = None
+    assert bounties.how(off.content, _strike(), off.state) == "到燕山腳尋敵打贏一場黃巾軍的隊伍"
+
+
+def test_the_ranger_line_names_the_outing_when_explore_one_is_on():
+    on = ready(jianfa_game(), loc="runan_wilds")  # 散人站在戰線地點
+    notes = on.action_notes([o.id for o in on.options(odds=False)])
+    assert notes["act:train"] == sortie.RANGER_LINE_OUTING and "尋敵" not in sortie.RANGER_LINE_OUTING
+    assert "出門探索" in sortie.RANGER_LINE_OUTING
+    off = ready(jianfa_game(explore_one=False), loc="runan_wilds")
+    assert off.action_notes([o.id for o in off.options(odds=False)])["act:train"] == sortie.RANGER_LINE_PRECISE
+
+

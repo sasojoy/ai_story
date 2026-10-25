@@ -2243,6 +2243,8 @@ class Game:
                 return sortie.OUT_LINE  # 領地爭奪：別人的大本營、廣宗不給攻（裁決 18）
             if not sortie.ranger_here(self.content, self._side(), loc.id, self.state.world):
                 return ""
+            if self._outing_on():  # 減法季探索一顆：沒有尋敵了，散人的仗靠出門一趟的遭遇拍（FB-817）
+                return sortie.RANGER_LINE_OUTING
             return sortie.RANGER_LINE_PRECISE if precise.on(self.content, self.state.world) else sortie.RANGER_LINE
         left = self.sorties_left()
         if left <= 0:
