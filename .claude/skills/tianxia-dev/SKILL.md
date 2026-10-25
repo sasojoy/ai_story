@@ -179,6 +179,10 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 - **給三段式加一條新路（`server.py`）**（2026-10-25 減法季批 4 接線）：`tests/test_server.py::test_only_the_out_of_lock_steps_enter_the_model_queue` 靜態檢查**只准名單上那十幾個函式**叫 `model_call`，抽一個 `_answer_branch` 輔助函式就紅——新的 B 段寫在原本那個函式裡（`if request.outcomes: … else: …`）。同一個檔有好幾條測試把 `Game.answer_event` 換成固定三個參數的 lambda：C 段**只在新路上**多傳參數，舊的那一行呼叫一個字不動（也順便讓「關著不變」不必另證）。
 - **「關著不變」的對照腳本要證明抓得到**（同批 4 接線）：同一支探針把開關打開跑一次，確認跟 base 差得出來（這一輪關著三種季各 594～607 行一個位元組不差、打開 season21 差 608 行），不然雜湊一樣只代表探針沒走到改的地方。探針只印兩版都有的欄位（新加的 `FreeTextOutcome.outcome` 不印、`FreeTextRequest` 只印 `event_id`、`text`），內容的新痕跡（人拉犁那三條）不放進季上，不然季的 JSON 一定不同。腳本在 PM 這個 session 的 scratchpad `jianfa-4-wire/cmp_off.py`＋`cmp_run.py`（`python cmp_run.py [none weekend season21-off season21]`，兩份 archive × 每種季平行跑，約三分鐘）。
 - **兩層保護的變異會存活**（同批 4 接線）：善惡只在歸到最後一種時看——`moral` 先換成「中」、`evil = fallback and moral == 惡` 再擋一次，拿掉後一層測試不紅；確認是故意的兩層就寫進回報，不必硬補測試。
+- **「上一篇以來」的事用「讀到第幾條」記起點，不要用世界秒**（減法季批 4 修正輪，〈天下形勢〉的痕跡那一類）：拿 `at >= 上一篇的世界秒` 切，同一個世界秒發生的兩件事（開單與過門檻、測試的固定時鐘）邊界上不是重複就是漏；起點記成「那時清單有幾條」（`XingshiMark.fired`，同 `log`、`rumors`），切 `list(marks_fired)[起點:]`。拿掉一條「補漏」的路（世界層傳聞）時，先想清楚它原本補的是哪一段（開單到收下之間），改起點到「開單那一刻」。新欄位 0 的時候用 wrap serializer 不寫鍵（嵌在 `xingshi_mark` 裡的小模型也行）。鎖測試要同時跑「世界秒不動」與「世界秒往前」兩種；每一條要斷言「出現在所有篇裡的總次數剛好 1」。**一天的事實超過 `facts_max`（30）時尾巴會被切掉、起點照樣往前**：這一類跟其他類一樣沒有補送，要補得另外記「實際寫進去幾條」。
+- **一件事拆成幾個 commit，檔案卻有幾件共用時，不要動工作樹**：寫一支 scratchpad 腳本，每個 commit 從「工作樹的最終版」把別件的幾處換回舊字（每處 `assert count == 1`）、`git hash-object -w --stdin --path` ＋ `git update-index --add --cacheinfo` 放進索引，commit 後工作樹照舊；提交前 `git write-tree` 取出索引的 tree，`git archive` 解到 scratchpad 跑那幾個測試檔，確認單獨一筆也是綠的（2026-10-25 批 4 修正輪，`engine.py`、`models.py`、導覽、`test_outcomes_answer.py` 都三件共用）。
+- **`branch_game(faction="guan")` 之類的測試會多一則 `annals.DEED`「投靠官軍。」**：斷言行狀的字要先篩「隨口應對」，不然 `== [..]` 多一筆。
+- **QA 的 `qcmp.py` 比的是行號**：上游少了幾十行（例：拿掉 93 則傳聞）後面的表（chronicle、seasons）整片位移、全算差；先看差的行數是不是剛好等於少掉的行數，再用 tag 與內容確認，不要把位移當成真的差異。
 - **兩局測試各有一份內容**：`conquest_kit.conquest_game()`（同 `test_territory._game`）每一局各載一份 `real_content` 的複本，同一個資料庫開兩局時，在測試裡往內容加東西（例：借一份戰鬥範本）要兩局都加，不然第二局找不到、畫面靜靜地沒有那一場。
 
 ## 量表怎麼讀
