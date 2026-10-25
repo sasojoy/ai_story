@@ -182,9 +182,30 @@ def test_a_combat_outcome_fights_like_a_fixed_choice():
     assert (choice.combat, choice.effect, choice.fail_effect) == ("dipi", CHASE.effect, CHASE.fail_effect)
 
 
-def test_the_options_show_only_ids_and_tags():
-    """欄位表 1.3 的 options[].outcomes：給畫面寫「可能的走向」，不給後果的數字。"""
-    assert outcomes.tags(ALL) == [{"id": o.id, "tag": o.tag} for o in ALL]
+def test_the_options_show_only_ids_and_short_names():
+    """欄位表 1.3 的 options[].outcomes：給畫面寫「可能的走向」，不給後果的數字。tag 寫的是「短名：給模型看的說明」，
+    給玩家看的只有冒號前的短名（FB-800，PM 2026-10-25：「對不上的」是寫給模型的話）；key 還是 tag。"""
+    assert outcomes.tags(ALL) == [
+        {"id": "labor", "tag": "出力"}, {"id": "chase", "tag": "討牛"}, {"id": "give", "tag": "周濟"}, {"id": "leave", "tag": "走開"},
+    ]
+    assert all(set(item) == {"id", "tag"} and "：" not in item["tag"] for item in outcomes.tags(ALL))
+    assert [outcomes.kind_name(o) for o in ALL] == ["出力", "討牛", "周濟", "走開"]
+
+
+def test_a_tag_without_a_colon_is_shown_whole():
+    bare = Outcome(id="bare", tag="走開", effect=Effect(text="你走了。"))
+    assert outcomes.short_name("走開") == outcomes.kind_name(bare) == "走開"
+    assert outcomes.tags([bare]) == [{"id": "bare", "tag": "走開"}]
+    assert outcomes.short_name("出力：替他拉犁：想省力的法子") == "出力"  # 只切第一個冒號
+    assert outcomes.short_name("： 只有說明") == "： 只有說明"  # 冒號前沒有字：照整句（content.check_outcomes 本來就不准）
+
+
+def test_the_model_still_reads_the_whole_tag():
+    """給模型的提示照舊用整句：短名只是給玩家看的。"""
+    client = _client()
+    event_llm.classify_outcome(client, PLOW, ALL, "跟他聊聊天氣")
+    user = client.chat_structured.call_args.args[0][1]["content"]
+    assert "leave：走開：不管、看著、對不上的" in user and "labor：出力：替他拉犁、修犁、想省力的法子" in user
 
 
 @pytest.mark.parametrize("points, used, credited", [(4, 0, 4), (4, 10, 2), (4, 12, 0), (0, 3, 0), (6, 13, 0)])

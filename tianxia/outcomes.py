@@ -81,17 +81,25 @@ def paid(outcome: Outcome) -> Effect:
 
 def as_choice(outcome: Outcome) -> Choice:
     """打仗的那一種寫成一個固定選項，交給 Game._event_battle：贏套 effect、輸套 fail_effect（跟固定選項同一條路）。"""
-    return Choice(text=outcome.tag, combat=outcome.combat, effect=outcome.effect, fail_effect=outcome.fail_effect)
+    return Choice(text=short_name(outcome.tag), combat=outcome.combat, effect=outcome.effect, fail_effect=outcome.fail_effect)
+
+
+def short_name(tag: str) -> str:
+    """tag 寫成「短名：給模型看的說明」（例「出力：替他拉犁、修犁、想省力的法子」）：給玩家看的地方一律只用冒號前的短名（FB-800，
+    PM 2026-10-25）；給模型的提示（event_llm.classify_outcome）照舊用整句。沒有冒號（或冒號前沒有字）的照整句。"""
+    head, colon, _ = tag.partition("：")
+    return head.strip() if colon and head.strip() else tag.strip()
 
 
 def tags(outcomes: list[Outcome]) -> list[dict[str, str]]:
-    """事件選項 options[].outcomes（主機側計畫 1.3 欄位表）：畫面寫「可能的走向」用，只有 id 與 tag，不給後果的數字。"""
-    return [{"id": o.id, "tag": o.tag} for o in outcomes]
+    """事件選項 options[].outcomes（主機側計畫 1.3 欄位表）：畫面寫「可能的走向」用，只有 id 與 tag（內容是短名，short_name），
+    不給後果的數字。"""
+    return [{"id": o.id, "tag": short_name(o.tag)} for o in outcomes]
 
 
 def kind_name(outcome: Outcome) -> str:
-    """那一種後果的類名（tag「類名：怎麼做」的前半，例「討牛」）：江湖紀錄的括號、行狀只寫它，不寫玩家的句子。"""
-    return outcome.tag.partition("：")[0].strip()
+    """那一種後果的類名（短名，例「討牛」）：江湖紀錄的括號、行狀只寫它，不寫玩家的句子。"""
+    return short_name(outcome.tag)
 
 
 def contribution_room(points: int, used_today: int, cap: int) -> int:

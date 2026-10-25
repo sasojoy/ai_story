@@ -377,7 +377,7 @@ class Outcome(_Strict):
     effect.stats 的 good 為負的是作惡的那一種（第 8 件 a）。其餘規矩在 content.check_outcomes。"""
 
     id: str
-    tag: str  # 「類名：怎麼做」——給模型歸類、給畫面寫「可能的走向」；永遠不寫數字
+    tag: str  # 「短名：給模型看的說明」——模型歸類看整句；給玩家看的（欄位表、江湖紀錄、行狀）只用冒號前的短名（outcomes.short_name，FB-800）；永遠不寫數字
     check: Check | None = None
     combat: str | None = None  # 敵方隊伍 id：這則事件固定選項裡打的那一路
     cost: dict[str, int] | None = None  # 只能是 {"silver": 正數}

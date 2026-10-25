@@ -218,7 +218,11 @@ def test_the_annal_keeps_the_outcome_but_never_the_players_words(content, world)
 def test_the_free_text_button_lists_the_outcome_tags_when_on(content, world):
     g = branch_game(content, world)
     button = next(o for o in g.options() if o.id == FREE_TEXT_OPTION)
-    assert button.outcomes == [{"id": o.id, "tag": o.tag} for o in content.events["drunk"].free_text.outcomes]
+    # 給玩家看的只有冒號前的短名（FB-800）：「走開：不管、對不上的」的後半是寫給模型的話
+    assert button.outcomes == [
+        {"id": "talk", "tag": "勸說"}, {"id": "chase", "tag": "扭送"}, {"id": "give", "tag": "周濟"},
+        {"id": "rob", "tag": "搜身"}, {"id": "leave", "tag": "走開"},
+    ]
     assert button.model_dump()["outcomes"] == button.outcomes  # 欄位表 1.3：main.options[].outcomes
     assert button.label == PROMPT + events.WRITE_NOTE
     request = g.free_text_request(SAID)
