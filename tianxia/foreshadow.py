@@ -454,18 +454,28 @@ def _trip_here(state: GameState, c: FsChain, loc_id: str) -> tuple[int, FsStep] 
     return None
 
 
-def next_step(state: GameState, content: Content) -> str | None:
-    """江湖頁本週卡「你這一步」的伏筆那一個（減法季批 1，整合設計 6.1）：做得了的鏈裡、聽過片段、時間窗開著的那一條，
-    還沒做的第一趟寫「到{地點}：{選單上的字}」。沒有是 None。只讀。待 joy 潤。"""
+def next_trip(state: GameState, content: Content) -> tuple[FsChain, FsStep] | None:
+    """本週卡「你這一步」的伏筆那一趟（減法季批 1；批 3c 拿它的地點算目標與分鐘）：做得了的鏈裡、聽過片段、時間窗開著的那一條，
+    還沒做的第一趟。沒有是 None。只讀。"""
     for c in _capable_chains(state, content):
         if not state.player.fragments.get(c.id) or not _window_open(state, content, c, state.world.time):
             continue
         for i, trip in enumerate(trips(c.final)):
             if trip.location is None or (c.final.steps and f"{c.id}:{i}" in state.player.fs_done):
                 continue
-            loc = content.locations.get(trip.location)
-            return f"到{loc.name if loc is not None else trip.location}：{trip.label}"
+            return c, trip
     return None
+
+
+def next_step(state: GameState, content: Content) -> str | None:
+    """江湖頁本週卡「你這一步」的伏筆那一個（減法季批 1，整合設計 6.1）：next_trip 那一趟寫「到{地點}：{選單上的字}」。沒有是 None。
+    只讀。待 joy 潤。"""
+    found = next_trip(state, content)
+    if found is None:
+        return None
+    trip = found[1]
+    loc = content.locations.get(trip.location)
+    return f"到{loc.name if loc is not None else trip.location}：{trip.label}"
 
 
 def blocked(state: GameState, content: Content, c: FsChain, trip: FsStep, now: float) -> str | None:
@@ -481,22 +491,6 @@ def blocked(state: GameState, content: Content, c: FsChain, trip: FsStep, now: f
     if not _requires_ok(state, content, c, trip):
         return trip.unready or c.final.unready or UNREADY
     return None
-
-
-def next_trips(state: GameState, content: Content, now: float) -> list[tuple[FsChain, FsStep]]:
-    """本週卡「你這一步」的伏筆那一種（減法季批 3c，step.py）：做得了的鏈裡、聽過至少一段片段的（沒聽過的不洩漏有這條線），
-    還沒做完、此刻做得了（blocked 是 None）的第一趟（一條鏈至多一趟）；照劇本的鏈順序。"""
-    out = []
-    for c in _capable_chains(state, content):
-        if not state.player.fragments.get(c.id):
-            continue
-        for i, trip in enumerate(trips(c.final)):
-            if c.final.steps and f"{c.id}:{i}" in state.player.fs_done:
-                continue
-            if blocked(state, content, c, trip, now) is None:
-                out.append((c, trip))
-                break
-    return out
 
 
 def final_options(state: GameState, content: Content, loc_id: str) -> list:

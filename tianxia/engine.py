@@ -15493,7 +15493,7 @@ class Game:
             out["ending"] = ending
         return out
 
-    # ── 三陣營四勝利（減法季整合設計第三章；計畫 Task 3c-2、3c-3：欄位表 main.ending、main.sides、main.sides_card、main.step）──
+    # ── 三陣營四勝利（減法季整合設計第三章；計畫 Task 3c-2、3c-3：欄位表 main.ending；三方卡與「你這一步」補在批 1 的 weekcard 裡）──
 
     def ending_card(self) -> dict | None:
         """結局卡（欄位表 main.ending；設計 3.4）：收季之後、四勝利開著的季才有。winner 是贏的那一軍（和局 None），condition 是你算在
@@ -15520,21 +15520,13 @@ class Game:
         winner = evaluate_ending(_season_vehicle(c, s.world), c).winner
         return wins.outlook(c, [*others, me], me.name, winner)
 
-    def sides(self) -> dict | None:
-        """欄位表 main.sides（設計 3.4、6.1 本週卡第一行）：兩軍此刻的態勢（guan、huang）、自己是哪一方（mine，散人 None）；豪強另有
-        此刻幫誰（lean）與兩本帳（ledger）；投靠了的人有 tier_hint（此刻就收季拿第幾階・離上一階還差多少）。四勝利關著、休季沒有。"""
+    def tier_hint(self) -> str | None:
+        """三方卡的 tier_hint（weekcard.sides_card，批 3c）：此刻就收季拿第幾階・離上一階還差多少（「第三階・還差 40」「第一階」
+        「未入階・還差 20」，wins.tier_hint）。四勝利開著、季還沒收、投靠了劇本裡的陣營才有；其餘是 None。"""
         s, c = self.state, self.content
-        if not self._four_wins() or s.world.ended:
+        if not self._four_wins() or s.world.ended or c.scenario.find_faction(s.player.faction) is None:
             return None
-        p = s.player
-        standing = stances(s, c)
-        out: dict = {"guan": standing.get("guan", 0), "huang": standing.get("huang", 0), "mine": p.faction}
-        if wins.is_gentry(p, c):
-            out["lean"] = p.ally
-            out["ledger"] = wins.ledger_view(p, c)
-        if c.scenario.find_faction(p.faction) is not None:
-            out["tier_hint"] = wins.tier_hint(*self._tier_outlook())
-        return out
+        return wins.tier_hint(*self._tier_outlook())
 
     def place_minutes(self, loc_id: str) -> int | None:
         """從此刻的位置走到 loc_id（步行；騎著馬照馬的步調）要現實幾分鐘（同狀態列的「現實約 N 分鐘後抵達」）；就在這裡是 0、走不到是 None。
@@ -15581,10 +15573,6 @@ class Game:
                 "now": now,
             }
         return out
-
-    def step_view(self) -> dict | None:
-        """欄位表 main.step（設計 6.1 本週卡第三行「你這一步」；step.next_step）：四勝利開著（step.on）、季還沒收才有。"""
-        return step_rules.next_step(self)
 
     def annals_view(self) -> dict:
         """見聞的「行狀」頁（玩家傳第一批）：這一季至今記下的事，照時間先後；開關關著時 on 是 False、rows 是空的。
