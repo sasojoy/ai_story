@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 import server
-from conftest import real_content
+from conftest import no_week_unlock, real_content
 from test_seal import _ended, _registry, sealed  # noqa: F401  sealed 是夾具
 from test_seal_revamp import revamp
 from tianxia import battle_instance, battlelog, leaderboard, seal, seal_duel, social, tavern
@@ -35,7 +35,7 @@ SHARD = "螭首"
 def _world(holder: str, *, on: bool = True):
     """正式內容（21 天季）、一個資料庫：兩個伺服器假人甲客（官軍）、乙客（黃巾）與一個真人旁觀客（黃巾，在別處）；holder 懷著螭首。
     長社火攻開集結、必定牽動螭首（管理者的強制璽動）。回（內容, 資料庫, 旁觀客的 Game）。"""
-    c = real_content("season21")
+    c = no_week_unlock(real_content("season21"))  # 開季第一天就上擂台：功能照週解鎖（減法季 6.6）關掉
     c.config.auto_open_first_season = True
     c.config.seal.revamp.enabled = on
     w = open_world(Path(tempfile.mkdtemp(prefix="seal1-")) / "t.db")
@@ -167,7 +167,7 @@ SIDE_CAST = (  # 名號、陣營、武學等級、臂力；強度挑在含碎片
 def _side_world(holder: str, *, on: bool = True):
     """正式內容（21 天季）：官軍兩個伺服器假人甲客、乙客（一模一樣）與黃巾兩個真人旁觀客都在同一處（不是城鎮），holder 懷著螭首。
     回（內容, 資料庫）。"""
-    c = real_content("season21")
+    c = no_week_unlock(real_content("season21"))  # 開季第一天就上擂台：功能照週解鎖（減法季 6.6）關掉
     c.config.auto_open_first_season = True
     c.config.seal.revamp.enabled = on
     c.config.newbie_days, c.config.newbie_real_hours = -1, 0  # 不等新手期（截殺要兩邊都過了）
