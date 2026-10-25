@@ -15,6 +15,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from . import calendar, foreshadow, rules
+from . import opening as opening_rules
 from . import prologue as prologue_rules
 from .rules import STANCE_NAMES
 
@@ -68,7 +69,7 @@ def sides_card(game: Game) -> dict | None:
     """三方卡（整合設計 3.4）：劇本沒有陣營、序章裡、休季是 None。欄位：
     {"cols": [{"id", "name", "goal", "now", "gives", "where": [地名], "mine"}], "joined": bool, "lean": None}。"""
     s, c = game.state, game.content
-    if not c.scenario.factions or s.world.ended or prologue_rules.active(s, c):
+    if not c.scenario.factions or s.world.ended or prologue_rules.active(s, c) or opening_rules.pending(s, c):  # 開局三選一還沒選：先不畫（批 7）
         return None
     four = rules.jianfa(c, s.world, "four_wins")
     standing = rules.stances(s, c) if rules.season_one(c, s.world) else None
@@ -121,7 +122,7 @@ def week_card(game: Game, status: dict, orders: list[dict]) -> dict | None:
     {"label": "本週"／"今日", "when": "第 N 週"／"第 N 天", "theme": 主題一句（沒寫是空字串）,
      "sides": {"guan": 55, "huang": 45} 或 None, "steps": [{kind, text, (i)}], "next": 下一件（給「為什麼」）或 None}。"""
     s, c = game.state, game.content
-    if s.world.ended or prologue_rules.active(s, c):
+    if s.world.ended or prologue_rules.active(s, c) or opening_rules.pending(s, c):  # 開局三選一還沒選：本週卡在信收起來之後才出現（批 7）
         return None
     cal = status.get("calendar")
     if cal is None:  # 規則關著的季（beta）沒有季曆：寫第幾天

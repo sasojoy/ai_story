@@ -85,6 +85,7 @@
     frontOpen: "", // 江湖頁「剛剛」底下那塊出陣回報，第一屏放不下收起來之後玩家點開的那一則（frontKey）：重畫時不再收
     nowOpen: null, // 江湖頁「剛剛」展開的那一則（記內容本身）；換成新的一則就收回（A4）
     letterOpen: null, // 江湖頁書信小卡攤開的那一封（id）
+    letterShut: null, // 伺服器說一到就攤開的那一封（開局的託付，letter.open）被玩家收攏了（id）：下一次重畫不再自己攤開
     pushOn: false, // 手機通知：這台裝置訂著沒有（打開設定時問瀏覽器，pushRefresh）
     pushBusy: false, // 正在開、關手機通知（那一顆先灰掉）
     roundsOpen: null, // 江湖頁戰鬥卡片「過程」展開的那一場（戰報流水號）；換成新的一場就收回（計畫三 G6）
@@ -5820,7 +5821,13 @@
         case "ins-filter": S.insFilter = el.dataset.filter; renderPage(); break;
         case "allocate": await doMain("allocate", { stat: el.dataset.stat }); break; // 升級的屬性點加到一項（狀態列展開後的「＋臂力」）
         case "do": S.sheet = false; await doMain(el.dataset.op); break;
-        case "letter-open": S.letterOpen = S.letterOpen === Number(el.dataset.id) ? null : Number(el.dataset.id); renderPage(); break;
+        case "letter-open": {
+          const id = Number(el.dataset.id), wasOpen = el.getAttribute("aria-expanded") === "true";
+          S.letterOpen = wasOpen ? null : id;
+          S.letterShut = wasOpen ? id : null; // 一到就攤開的那一封（開局的託付）收攏了就記著，重畫不再自己攤開
+          renderPage();
+          break;
+        }
         case "letter-read": S.letterOpen = null; await doMain("letter_read", { id: Number(el.dataset.id) }); break;
         case "letter-decline": await doMain("letter_decline", { id: Number(el.dataset.id) }); break;
         case "push-yes": await pushEnable(); break; // 第一次來信時問的那一張（手機通知，減法季批 9）

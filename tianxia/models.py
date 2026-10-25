@@ -1282,6 +1282,25 @@ class Enlist(_Strict):
     drifter_line: str = ""  # 「主線與目標」裡散人那一行：三邊各在哪裡收人（設計 6.3）
 
 
+class OpeningSender(_Strict):
+    """開局三選一的一個選項對到的那位人物（content/opening.json）：選了帶 flag 的那一顆，就是他在城門口開口、託你送信。"""
+
+    flag: str  # 事件那一顆選項 flags_add 裡的旗標（例「開局:投軍」）
+    figure: str  # 對話人物 id（content/characters.json；要是大勢人物，信才寫得出他在哪）
+    text: str  # 信的固定句（模型寫不出來時照它；{hero} 換成少俠／女俠，{end} 換成送到的地名）
+
+
+class Opening(_Strict):
+    """開局第一分鐘（減法季整合設計 6.7，批 7 前半；tianxia/opening.py）：減法季的新角色不進草廬，站在起點看一段旁白、
+    三選一定起手的屬性，接著照選的那一顆由一位人物開口託付第一件事（把一封信送到 end），本週卡才出現。沒有這個檔就沒有這一段。"""
+
+    event: str  # 開局那一則事件（旁白＋三選一；每一顆選項 flags_add 要帶 senders 其中一個 flag）
+    end: str  # 第一個託付：把信送到這個地點（護送委託，到了就算）
+    senders: list[OpeningSender] = Field(min_length=1)
+    days: float = Field(default=3.0, gt=0)  # 第一件託付幾個遊戲日內要送到（書信委託平常是 figure_life.commission_days 1 天；新人多給幾天）【預設】
+    arrived: str = "{who}在城門口叫住你，託你把一封信送到{end}。"  # 江湖紀錄那一句（待 joy 潤）
+
+
 class Tutorial(_Strict):
     speaker: str = "老說書人"
     steps: list[TutorialStep] = Field(default_factory=list)
@@ -2936,6 +2955,7 @@ class JianfaRules(_Strict):
     week_unlock: bool = True  # 6.6 功能照週解鎖（批 5）
     rewrite_narration: bool = True  # 第十章 事件旁白每週改寫（批 10）
     morning_mail: bool = True  # 第十章 回來的理由：人物的信每天 mail_hour 點送到（批 9；letters.mail_day）
+    opening: bool = True  # 6.7 開局第一分鐘（批 7 前半，tianxia/opening.py）：不進草廬，旁白→三選一→人物開口託付→本週卡；關著照舊走草廬序章
     mail_hour: int = Field(default=9, ge=0, le=23)  # 當地幾點送信（時區照 pill_day_utc_offset_hours）
 
 
@@ -4654,6 +4674,7 @@ class Content(_Strict):
     mark_rules: list[MarkRule] = Field(default_factory=list)  # 地方痕跡過門檻（content/mark_rules.json，減法季批 4）；沒有這個檔就是空的
     map: MapLayout
     tutorial: Tutorial
+    opening: Opening | None = None  # 開局第一分鐘（content/opening.json，減法季批 7）；沒有這個檔就沒有（測試內容、舊內容照走草廬）
     hints: Hints = Field(default_factory=Hints)  # 碰到才說（content/hints.json，新手引導計畫三）；沒有這個檔就是沒有提示
     check_voice: CheckVoice = Field(default_factory=CheckVoice)  # 檢定選項括號裡的那一句（content/check_voice.json，載入時必備）
     create_forms: CreateForms = Field(default_factory=CreateForms)  # 自創武學的兵器偏向、起點架式、關鍵字表（content/create_forms.json）

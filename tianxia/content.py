@@ -29,7 +29,7 @@ from .models import (
     BEST_OF, FRONT_KEY, GLOW_KEYS, GOOD_HORSE, MOVES, RECRUITER_ALLIED_FIELDS, REVEAL_KEYS, ROADS, STATS, TREASURE_EFFECTS, WEAPON_KINDS, Attribute, BattleDef, CharacterDef, CheckVoice,
     CombatLines, Condition, Config, Content, CraftNames, CreateForms, DuelBoss, Effect, Event, FigureDef, FollowerDef, ForgeSecret, Foreshadows, FrontLines, GatherBranch, GearBook,
     GiftDef, Hints, MingtieContent, InsightDef, Location, MallItem, MarkRule, MarkText, OppDef,
-    InsightScene, OrdersContent, PresetRecipe, PromotionDef, RealDay, RealSlot, RelationDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, ShardDef,
+    InsightScene, Opening, OrdersContent, PresetRecipe, PromotionDef, RealDay, RealSlot, RelationDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, ShardDef,
     SimRumor, SkillDef,
     SignatureArmDef, SteedDef, Squad, Tier4Named, TimetableEvent, TraitBook, TreasureDef, Tutorial, allow_known,
 )
@@ -138,6 +138,7 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         events=events,
         map=MapLayout(**_read(root / "map.json")),
         tutorial=Tutorial(**_read(root / "tutorial.json")),
+        opening=Opening(**_read(root / "opening.json")) if (root / "opening.json").exists() else None,  # 開局第一分鐘（減法季批 7）
         hints=Hints(**_read(root / "hints.json")) if (root / "hints.json").exists() else Hints(),
     )
     content.config.admins = _with_local_admins(content.config.admins)
@@ -2736,6 +2737,24 @@ def validate(c: Content) -> None:
         for line in (hint.text, hint.drifter, hint.season_one, *hint.texts.values(), *hint.allied.values()):
             bad = hint_rules.unknown(c, line)
             need(not bad, f"{where}：不認得的 {{{'}、{'.join(bad)}}}（只認 {sorted(hint_rules.values(c))}）")
+
+    # ── 開局第一分鐘（減法季批 7，content/opening.json；tianxia/opening.py）──
+    o = c.opening
+    if o is not None:
+        need(o.event in c.events, f"opening.json：事件 {o.event} 不存在")
+        need(o.end in c.locations, f"opening.json：送信的終點 {o.end} 不存在")
+        flags = {x.flag for x in o.senders}
+        need(len(flags) == len(o.senders), "opening.json：senders 的 flag 不能重複")
+        for x in o.senders:
+            ch = c.characters.get(x.figure)
+            need(ch is not None and ch.deep_interaction, f"opening.json：{x.figure} 要是 characters.json 裡能深交的人物")
+            need(any(fig.character == x.figure for fig in c.figures.values()), f"opening.json：{x.figure} 要是大勢人物（信才寫得出他在哪）")
+        if o.event in c.events:
+            ev = c.events[o.event]
+            need(bool(ev.choices), f"opening.json：事件 {o.event} 要有選項")
+            for ch in ev.choices:
+                need(any(f in flags for f in ch.effect.flags_add), f"opening.json：事件 {o.event} 的選項「{ch.text}」要帶 senders 其中一個 flag")
+                need(ch.effect.next_event is None, f"opening.json：事件 {o.event} 的選項「{ch.text}」不能接 next_event（人物開口是信）")
 
     # ── 序章（新手引導計畫一）──
     t = c.tutorial
