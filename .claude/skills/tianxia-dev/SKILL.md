@@ -205,6 +205,10 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 - **有一個「另外擲的」對手（頭目）不要算進「這裡有沒有對手」**（減法季批 2 修正輪 FB-815，2026-10-26）：`_outing_plan` 把頭目也算 `has_foes`，只有頭目的地點遭遇那一格就留著、遭遇拍一定撞上他（長社官軍 400 趟 387 趟）。唯讀的計畫（比重、鈕上的小字、假人打分數）只看一般對手；頭目在做動作時另擲一次（亂數用「頭目」這個新用途，不動別的序列），擲中才把遭遇拍放進這一趟（`explore_one.draw(bounty_here=True)` 的「第一拍就是遭遇」，比重改回 `has_foes=True` 那一份）。測試兩條：一趟的機會約 5%（`_duel_start` 換成只記一筆、連出 400 趟、斷言落在一個帶子裡），以及把倍數拉到一定擲中（`renown.duel_chance` 回 20）斷言**每一趟**都有頭目——只有後一條抓得到「擲中了卻沒有遭遇拍」的變異。
 - **新規則改了一句話，用正式內容 week7／season21 斷言舊句子的舊測試會紅**（同批 `test_core_loop_fb.py::test_fb250`）：`test_for` 挑得到、grep 舊常數名（`RANGER_LINE_PRECISE`）也找得到；在那一條測試開頭叫 `jianfa_kit.classic_explore(game.content)` 鎖舊句子，新句子的斷言放在新規則自己的測試檔，不改舊斷言。
 - **兩局測試各有一份內容**：`conquest_kit.conquest_game()`（同 `test_territory._game`）每一局各載一份 `real_content` 的複本，同一個資料庫開兩局時，在測試裡往內容加東西（例：借一份戰鬥範本）要兩局都加，不然第二局找不到、畫面靜靜地沒有那一場。
+- **測伺服器的背景執行緒（`server.write_zhuan` 這種三段式）**（減法季批 7b，2026-10-26）：A、C 段進 `server._locked` 會照 `open_characters()`（`TIANXIA_DB`）重讀角色，測試裡同步記下的東西（季末論功那一則行狀）沒先 `CharacterStore(...).save` 就丟了，`biography_request` 回 None、執行緒安靜結束、沒有 traceback。`jianfa_kit.jianfa_game` 開的是自己的暫存資料庫（不是 `TIANXIA_DB`），走伺服器那一條的測試改用 `wins_kit`（世界照 conftest 的 `TIANXIA_DB`）。新的背景模型呼叫要當假人排（`QUEUE.run(..., bot=True)`）時，`tests/test_server.py::test_only_the_out_of_lock_steps_enter_the_model_queue` 鎖著誰碰 `QUEUE`，函式名要加進那一張表。
+- **商城的 `MallItem.draft` 只是給作者的備註，不擋上架**（同批）：要某一種季才賣，用 `MallWindow.rule`（子開關名）＋`phases`／`from_week`，引擎照 `Game._mall_moment()` 傳 `mall.Moment`；不加 `mall_entitlements` 的種類（CHECK 只有 card／pass／look，加了就是改結構），票就是購買那一列，用了記在那一列的 `data`（`Wallet.mark_used(pid, t, **extra)`）。
+- **「有沒用的票」＋「這一季用過了」兩層擋的變異會存活**（同批）：一季限購 1，測試只買一張，用完票就沒了，拿掉「這一季用過了」那一層沒有測試會紅；用 `Wallet.add_purchase` 直接塞一列「上一季剩下的票」再看鈕有沒有出來。
+- **內容模型加欄位**（`FactionDef.verdict_by`、`Content.verdicts`）：照 `models._drop_unset` 的 wrap serializer 把空的拿掉（`Content._drop_new_defaults` 的鍵表加一個），測試內容序列化一個鍵都不多。
 
 ## 量表怎麼讀
 
