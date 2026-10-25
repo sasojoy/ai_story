@@ -103,7 +103,7 @@ def test_persuade_goes_through_three_stages(monkeypatch):
     with mock.patch.object(server.event_llm, "rate_persuasion", side_effect=rate):
         server.persuade_text(game, eid, "放下刀槍回家種田")
     assert asked == [(eid, "放下刀槍回家種田", "下曲陽的黃巾小頭目")]
-    assert errands.find(game.state, eid).status == "done" and game.state.world.marks["xiaquyang:歸降"] == 1
+    assert errands.find(game.state, eid).status == "done" and game.state.world.marks["xiaquyang:band_turned"] == 1
 
 
 def test_persuade_without_the_model_changes_nothing(monkeypatch):

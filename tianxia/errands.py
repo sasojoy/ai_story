@@ -331,6 +331,18 @@ def persuade_rate(state: GameState, content: Content, e: ErrandState, rate: int)
     return max(cfg.persuade_floor, min(cfg.persuade_cap, int(rate) + bonus))
 
 
+def turn_band(state: GameState, content: Content, d: ErrandDef, place: str) -> list[str]:
+    """勸降成了推那一條線（整合設計 5.9「推那一條線 2 點」，FB-827）：一次性的推法，同痕跡過門檻（marks.fire_due）——照寫的量直接
+    change_trend（front 是那個地點的戰線），不經 Game.push_trend：不打事件五折、不吃每人每日上限、不照季長縮放、不另記推線的貢獻
+    （貢獻只記託付的 contribution）。回推動那一句（第一季開著時是機器可讀的戰況變化，畫面上換成一句話）。"""
+    if d.persuade is None:
+        return []
+    out: list[str] = []
+    for trend_id, delta in rules.resolve_trends(content, state.world, d.persuade.trend, place).items():
+        out += rules.change_trend(state, content, trend_id, delta)
+    return out
+
+
 def persuade_roll(state: GameState, e: ErrandState) -> float:
     """勸降擲的那一顆（自己的亂數：用途、天機、名號、這一件；不碰 Game.rng）。0～100。"""
     return random.Random(f"勸降|{state.world.tianji}|{state.player.name}|{e.id}").random() * 100

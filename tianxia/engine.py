@@ -3828,8 +3828,9 @@ class Game:
         return msgs
 
     def _errand_persuade(self, e) -> list[str]:
-        """勸降的結果（choose 的這一下，_persuade_said 是單子與模型的分數）：引擎加情誼名望的修正、夾、自己擲骰；成了立痕跡、推線
-        （照事件的推法：Effect.marks、Effect.trend 走 _apply）、給獎勵；敗了打一場遭遇（_squad_encounter，同探索撞上的野怪），那一件沒談成。"""
+        """勸降的結果（choose 的這一下，_persuade_said 是單子與模型的分數）：引擎加情誼名望的修正、夾、自己擲骰；成了立痕跡 band_turned
+        （Effect.marks 走 _apply：一人一天一筆、恤民這類心意的倍數照算）、推那一條線（errands.turn_band：一次性的推法，照寫的量、不打事件五折、
+        不另記推線的貢獻；FB-827）、給獎勵；敗了打一場遭遇（_squad_encounter，同探索撞上的野怪），那一件沒談成。"""
         s, c = self.state, self.content
         request, rate = self._persuade_said
         d = errand_rules.find_def(c, e.figure, e.errand)
@@ -3839,7 +3840,8 @@ class Game:
         if errand_rules.persuade_roll(s, e) < final:
             msgs.append(errand_rules.PERSUADE_WON.format(who=who))
             if d is not None and d.persuade is not None:
-                msgs += self._apply(Effect(marks=dict(d.persuade.marks), trend=dict(d.persuade.trend)))
+                msgs += self._apply(Effect(marks=dict(d.persuade.marks)))
+                msgs += errand_rules.turn_band(s, c, d, e.target)
             return msgs + self._errand_reward(e)
         msgs.append(errand_rules.PERSUADE_LOST.format(who=who))
         errand_rules.done(s, e, "failed")

@@ -145,10 +145,10 @@ def test_persuading_succeeds_or_ends_in_a_fight(floor_cap, status):
     g.persuade(request, 60)
     assert e.status == status
     if status == "done":
-        assert s.world.marks["xiaquyang:歸降"] == 1 and rules.trend_value(s, c, "jizhou") < before
+        assert s.world.marks["xiaquyang:band_turned"] == 1 and rules.trend_value(s, c, "jizhou") < before
         assert len(s.battles) == battles
     else:
-        assert len(s.battles) == battles + 1 and "xiaquyang:歸降" not in s.world.marks
+        assert len(s.battles) == battles + 1 and "xiaquyang:band_turned" not in s.world.marks
 
 
 def test_persuading_without_the_model_changes_nothing():

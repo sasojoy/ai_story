@@ -3039,6 +3039,10 @@ def validate(c: Content) -> None:
     front_ids = sorted(region_fronts)  # 戰線 id 照 T1 的大區 front，不另寫一份清單
     check_timetable(c, need, known, front_ids, trend_ids)
     check_figures(c, need, known, front_ids)
+    for fid, fig in c.figures.items():  # 勸降成了立的痕跡（減法季批 6，FB-827）也算「有效果寫它」：痕跡規則讀它
+        for d in fig.errands:
+            for key in (d.persuade.marks if d.persuade is not None else {}):
+                marks_written.setdefault(key, f"大勢人物 {fid} 的託付 {d.id}")
     check_relations(c, need, known)
     check_companions(c, need)
     check_foreshadows(c, need, known, region_ids, front_ids, counters_written)

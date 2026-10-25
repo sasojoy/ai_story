@@ -3,13 +3,14 @@
 - 託付辦成了的情誼照寫的數字給（不照 affinity_gain_scale 放慢）。
 - 收到託付的情誼門檻另開一個數 errand_affinity（20【預設】）；figure_life.letter_affinity（40）照舊給書信與勸降的情誼加成。
 - FB-828：投靠了的人只收自己這一邊人物的託付（豪強看此刻幫的那一軍）；散人都收得到。
+- FB-827：勸降成了推那一條線 2 點（一次性，不被事件五折），貢獻只記託付的 6；痕跡是 band_turned、有痕跡規則。
 正式內容的 season21；模型一律是假的。"""
 from __future__ import annotations
 
 import pytest
 
 from stances_kit import BOCAI, LUZHI, at, real_game
-from tianxia import calendar, errands, letters, renown
+from tianxia import calendar, errands, letters, renown, rules
 
 pytestmark = pytest.mark.slow  # 載正式內容、照伺服器開季
 
@@ -107,6 +108,43 @@ def test_only_your_own_side_figures_send_errands(faction, ally, gets):
     _friend(g, BOCAI)
     at(g, g.now + 60)
     assert [e.figure for e in s.player.errands] == ([BOCAI] if gets else [])
+
+
+@pytest.mark.parametrize("fid, eid, faction, line, place", [
+    (LUZHI, "luzhi_persuade", "guan", "jizhou", "xiaquyang"),
+    (BOCAI, "bocai_persuade", "huang", "yingru", "yingchuan_wilds"),
+])
+def test_a_won_persuasion_pushes_two_whole_points_and_pays_only_the_errand(fid, eid, faction, line, place):
+    """FB-827（設計 5.9）：勸降成了推那一條線 2 點（一次性的推法，同痕跡過門檻：不打事件五折、不吃每人每日上限），貢獻只記託付的 6
+    （不另疊推線的貢獻）；留下的痕跡是 band_turned。"""
+    def setup(c):
+        c.config.jianfa.persuade_floor = c.config.jianfa.persuade_cap = 100
+    g = real_game(setup=setup, faction=faction)
+    s, c = g.state, g.content
+    _friend(g, fid)
+    e = _give(g, fid, eid)
+    s.player.location = e.target
+    assert e.target == place
+    before, contrib = rules.trend_value(s, c, line), s.player.contrib
+    _press(g, f"errand:persuade:{e.id}")
+    g.persuade(g.persuade_request(e.id, "放下刀槍，回家種田吧"), 60)
+    assert e.status == "done"
+    toward = 1 if faction == "huang" else -1  # 往黃巾為正
+    assert rules.trend_value(s, c, line) - before == 2 * toward
+    assert s.player.contrib == contrib + 6
+    assert s.world.marks == {f"{place}:band_turned": 1}
+
+
+def test_every_persuasion_mark_is_band_turned_with_a_rule():
+    """三件勸降的痕跡都是「地點:band_turned」，每一條都有痕跡規則（地點描寫、傳聞；字待 joy 潤），過了門檻看得見。"""
+    g = real_game()
+    c = g.content
+    rules_by_mark = {r.mark: r for r in c.mark_rules}
+    marks = [key for fig in c.figures.values() for d in fig.errands if d.persuade for key in d.persuade.marks]
+    assert len(marks) == 3
+    for key in marks:
+        assert key.endswith(":band_turned") and key in rules_by_mark
+        assert rules_by_mark[key].describe and rules_by_mark[key].rumor
 
 
 def test_a_stance_point_still_shares_the_daily_cap():
