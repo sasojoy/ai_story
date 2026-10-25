@@ -3307,7 +3307,11 @@ class Game:
             return step_rules.skip(self)  # 不花體力、不寫江湖紀錄；關著的季照舊當成不在選單上
         option = {o.id: o for o in self.options(odds=False)}.get(option_id)
         if option is None and option_id.startswith(wins.LEAN_PREFIX):
-            option = self._lean_anytime(option_id)  # 「改幫…」隨時都能換（設計 3.2）：在路上、事件待選、決戰的大區選單上沒有它，照樣收
+            option = self._lean_anytime(option_id)  # 「改幫…」隨時都能換（設計 3.2）：在路上、決戰的大區選單上沒有它，照樣收
+            if option is not None and self.state.pending_event is not None:
+                # 唯一的例外：有事件待選時不收（FB-820，PM 2026-10-26）——不然同一則事件裡依陣營出現的選項兩邊都挑得到。
+                # 回一句（Refused：伺服器傳去網頁跳提示），什麼都不動、不寫江湖紀錄
+                return Refused(self._log([wins.LEAN_EVENT_PENDING]))
         if option is None and option_id.startswith("bounty:"):
             # FB-162：懸賞選項已經不在選單上（兩個分頁搶同一張，慢的那一頁）：回這一步為什麼不成的那一句，不寫江湖紀錄；
             # 回傳值是 Refused，伺服器照它把同一句傳去網頁跳提示（server.api_choose）
@@ -6618,8 +6622,8 @@ class Game:
         return opts
 
     def _lean_anytime(self, option_id: str) -> Option | None:
-        """「改幫…」不看此地的選單（設計 3.2「隨時換」，FB-812）：選單上沒有它的時候（在路上、有事件待選、人站在正在打決戰的大區，
-        選單只剩那些事）照樣收，條件跟選單上的那一顆一樣（_lean_options：豪強、四勝利開著，按不下去的原因照 wins.lean_problem）。
+        """「改幫…」不看此地的選單（設計 3.2「隨時換」，FB-812）：選單上沒有它的時候（在路上、人站在正在打決戰的大區，
+        選單只剩那些事）照樣收（有事件待選是例外，choose 擋：FB-820），條件跟選單上的那一顆一樣（_lean_options：豪強、四勝利開著，按不下去的原因照 wins.lean_problem）。
         只有賽季不在跑（籌備中、休季、時鐘暫停，這幾種選單本來就只剩一顆灰的）才不收；開關關著、不是豪強、本來就幫它、
         不是它能幫的那一軍，都找不到那一顆，照舊「此刻無法這麼做」。決戰那一場的戰功照舊記參戰那一軍，開打了這一場照舊站原來那一邊
         （_lean_step 的 _ally_follows_battle）。"""

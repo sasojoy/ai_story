@@ -2,7 +2,8 @@
 
 批 3c 把 faction:lean:<side> 放在「此地還能做」的選單上，結果在路上、有事件待選、人站在正在打決戰的大區時按不到（選單只剩那些）。
 引擎改成接受它不看選單：豪強、四勝利開著、賽季在跑就收；帳照舊不清、不發傳聞、不扣體力；決戰那一場的戰功照舊記參戰那一軍，
-開打了照決戰的規則這一場照舊站原來那一邊（ALLY_STAYS）。「此地還能做」那顆鈕照留。正式內容、建 Game，整個檔標 slow。"""
+開打了照決戰的規則這一場照舊站原來那一邊（ALLY_STAYS）。「此地還能做」那顆鈕照留。
+唯一的例外是有事件待選（FB-820，PM 2026-10-26）：不收，回 wins.LEAN_EVENT_PENDING。正式內容、建 Game，整個檔標 slow。"""
 from __future__ import annotations
 
 import pytest
@@ -65,15 +66,22 @@ def test_lean_switch_works_on_the_road():
 # ── 有事件待選 ─────────────────────────────
 
 
-def test_lean_switch_works_with_an_event_pending():
+def test_lean_switch_is_refused_with_an_event_pending():
+    """FB-820（PM 2026-10-26，設計 3.2「隨時換」的唯一例外）：有事件待選時不收改幫，回一句、什麼都不動——不然同一則事件裡
+    依陣營出現的選項（factions_none）兩邊都挑得到。事件了結之後照常換得了。"""
     game = _gentry()
     event_id = next(iter(game.content.events))
     game.state.pending_event = event_id
     assert _lean_ids(game) == []  # 選單只剩事件的選項
-    rumors, stamina = len(game.state.world.rumors), game.state.player.stamina
-    msgs = game.choose("faction:lean:huang")
-    _assert_switched(game, msgs, rumors, stamina)
-    assert game.state.pending_event == event_id  # 事件還在等你選
+    choices = [o.id for o in game.options(odds=False)]
+    p = game.state.player
+    before = (len(game.state.journal), p.ally, p.lean_changed, p.stamina, game.world.roll_of(p.name))
+    assert game.choose("faction:lean:huang") == [wins.LEAN_EVENT_PENDING]
+    assert before == (len(game.state.journal), p.ally, p.lean_changed, p.stamina, game.world.roll_of(p.name))
+    assert game.state.pending_event == event_id and [o.id for o in game.options(odds=False)] == choices  # 事件與它的選項照舊
+    game.state.pending_event = None
+    rumors, stamina = len(game.state.world.rumors), p.stamina
+    _assert_switched(game, game.choose("faction:lean:huang"), rumors, stamina)  # 了結之後照常換
 
 
 # ── 決戰 ─────────────────────────────
