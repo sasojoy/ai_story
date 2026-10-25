@@ -352,6 +352,8 @@ DEFEND_SORTIE = "在{front}一帶自家的地盤出陣守一回，或按「{duty
 # 卡上照它寫，輿圖也只標那幾處；沒有就直說此刻沒有可守的（記不到）。投票與 22:00 公告拿掉了，不再寫「被公告要攻」（dev/flip-1 收尾）。待 joy 潤
 DEFEND_ACT_SORTIE = "出陣守一回，或按「{duty}」（收在「此地還能做」裡）"
 DEFEND_ACT_PLAIN = "按「{duty}」（收在「此地還能做」裡）"
+# 約戰開著（減法季批 3b）：守城是應戰守住（巡哨、傳道、保境安民不再算守城）。待 joy 潤
+DEFEND_ACT_DUEL = "，對面在那裡約戰時去應戰、守住"
 DEFEND_AT_CONQUEST = "到{where}{act}，做一次記一次。"  # 對面推得最高的自家地方只有一兩處（SIEGE_NAMED_MAX）時寫出地名
 DEFEND_AREA_CONQUEST = "到{front}一帶對面推得最高的幾處自家地方{act}，做一次記一次。"  # 並列最高的多過 SIEGE_NAMED_MAX
 DEFEND_NONE_CONQUEST = "{front}一帶此刻沒有對面在推、守得動的自家地方（剛易手的也守不動），沒有可守的，守了也記不到。"
@@ -414,7 +416,12 @@ def order_how(state: GameState, content: Content, order: Order) -> str:
             places = [loc_id for loc_id in listed if loc_id not in sieged]
             parts: list[str] = []
             if places:
-                act = (DEFEND_ACT_SORTIE if sortie.on(content) else DEFEND_ACT_PLAIN).format(duty=name)
+                from . import sortie_duel  # noqa: PLC0415  sortie_duel → conquest → …：延後 import
+
+                if sortie_duel.on(content, state.world):  # 約戰開著：守城記的是應戰守住（Game._duel_result 的 duty）
+                    act = DEFEND_ACT_DUEL
+                else:
+                    act = (DEFEND_ACT_SORTIE if sortie.on(content) else DEFEND_ACT_PLAIN).format(duty=name)
                 if len(places) > SIEGE_NAMED_MAX:
                     parts.append(DEFEND_AREA_CONQUEST.format(front=front, act=act))
                 else:

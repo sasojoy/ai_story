@@ -216,6 +216,31 @@ def test_defender_wins_pulls_the_attackers_bar(monkeypatch):
     assert b.player.sortie_cooldown_until is None
 
 
+def test_holding_by_answering_counts_for_the_defend_order_and_the_card_says_so(monkeypatch):
+    """約戰開著時守城是應戰守住（巡哨、傳道不再算）：守方贏了照拉之前的清單記守城，軍令卡寫「去應戰、守住」。"""
+    from tianxia import atlas, orders
+    from tianxia.state import Order
+
+    c, world = _pair()
+    seat(c, world, "甲", "guan", "zhuo_county")  # 涿郡：官軍的，黃巾開季就碰得到
+    seat(c, world, "乙", "huang", "zhuo_county")
+    g = game_of(c, world, "甲")
+    w = g.state.world
+    order = Order(id="t:guan:defend", template="defend", faction="guan", week=orders.period_of(g.state, c),
+                  front=conquest.line_of(w, c, "zhuo_county"), quota=99, text="（測試）")
+    w.orders = [order]
+    conquest.push(w, c, "zhuo_county", "huang", "黃巾兵", 20.0, "attack")
+    g._save_season()
+    assert orders.defend_places(c, w, order) == ["zhuo_county"]
+    assert "去應戰、守住" in atlas.order_how(g.state, c, order)
+    _go(c, world, "乙")
+    _answer(c, world, "甲", _only(world).id)
+    rounds_go(monkeypatch, "落敗")
+    tick(c, world, NOW + WINDOW + 1)
+    done = next(o for o in world.get_season().orders if o.id == order.id)
+    assert done.progress.get("甲") == 1
+
+
 def test_a_draw_pushes_a_little(monkeypatch):
     c, world = _pair()
     _go(c, world)
