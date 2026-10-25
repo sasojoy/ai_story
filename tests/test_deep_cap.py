@@ -72,6 +72,51 @@ def test_the_cap_holds_through_actions_and_sync_and_the_figure_page_says_so():
     assert p.affinities["caocao"] == 74 and game.affinity_text("caocao") == "情誼 74"
 
 
+def _talk(game: Game, cid: str) -> list[str]:
+    """跟 cid 談一輪（鎖外先生成好的那一輪，選「雪中送炭」那一類：情誼 +8 再照 affinity_gain_scale 打折）。"""
+    from tianxia import companion_agent
+
+    p = game.state.player
+    p.pending_companion = cid
+    p.last_offered_dialogue[cid] = [["送上一車糧草"], ["雪中送炭"]]
+    turn = companion_agent.CompanionTurn(narrative="他點了點頭。", options=["再聊聊"], option_tags=["尋常寒暄"])
+    return game.choose("talk:0", prepared=companion_agent.PreparedTurn("talk:0", cid, "送上一車糧草", turn))
+
+
+@pytest.mark.slow
+def test_the_fourth_figure_cannot_teach_the_signature_art_past_the_cap():
+    """深交名單滿了，第四位人物在一輪對話裡越過 70：先夾回 69 才看本命武學（companion_agent._maybe_grant_signature_skill），
+    不教、不記旗標；買了深交名額，同一句話他就教。名將本命兵器（80）、贈禮在同一個動作裡照夾過的情誼判。"""
+    game = _game()
+    p = game.state.player
+    _set(game, {"huangfusong": 72, "luzhi": 70, "zhujun": 80})
+    game.sync(game.now)
+    assert p.deep_order == ["zhujun", "huangfusong", "luzhi"]
+    p.affinities["caocao"] = 69
+    arts = set(p.arts)
+    msgs = _talk(game, "caocao")
+    assert p.affinities["caocao"] == 69 and "你已深交三位人物，曹操的情誼停在 69。" in msgs
+    assert "學會本命:caocao" not in p.flags and set(p.arts) == arts and not any("傾囊相授" in m for m in msgs)
+    wallet = Wallet(game.world.db)
+    wallet.post(name_key(p.name), 1000, "grant", "test:deep3", time=game.now)
+    assert game.mall_buy("deep_slot", "deep-3")[0].startswith("買下")
+    msgs = _talk(game, "caocao")
+    assert p.affinities["caocao"] >= 70 and "學會本命:caocao" in p.flags and any("傾囊相授" in m for m in msgs)
+    assert p.deep_order[-1] == "caocao"
+
+
+@pytest.mark.slow
+def test_a_signature_arm_waits_for_the_capped_affinity():
+    """名將本命兵器在動作中途看情誼（Game._signature_arms，80）：這一下名單外的第四位情誼衝過 80，引擎先夾回 69 才送，送不出去。"""
+    game = _game()
+    p = game.state.player
+    _set(game, {"huangfusong": 72, "luzhi": 70, "zhujun": 80})
+    game.sync(game.now)
+    p.affinities["caocao"] = 85  # 這一下的某個效果把他推過 80（直接寫，等同動作裡改的情誼）
+    game.choose("act:explore")
+    assert p.affinities["caocao"] == 69 and "caocao" not in game.state.world.signature_arms
+
+
 @pytest.mark.slow
 def test_the_slot_counts_only_this_season():
     from tianxia import mall

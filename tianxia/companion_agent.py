@@ -450,11 +450,12 @@ def start_dialogue(
 
 def continue_dialogue(
     client: OllamaClient | None, state: GameState, content: Content, world: WorldStateStore, companion_id: str,
-    choice_index: int, rng: Random, turn: CompanionTurn | None = None,
+    choice_index: int, rng: Random, turn: CompanionTurn | None = None, cap=None,
 ) -> list[str]:
     """玩家選了上一回合的第 choice_index 個選項：查表套用好感度、繼續生成下一回合。
     先生成、成功了才記交友 tag 與好感度；生成不出來（DialogueUnavailable）時這輪當作沒發生。
-    turn 是鎖外先生成好的一輪（見 prepare_turn）：給了就不再生成，沒給才在這裡生成。"""
+    turn 是鎖外先生成好的一輪（見 prepare_turn）：給了就不再生成，沒給才在這裡生成。
+    cap（減法季批 7b 的深交上限，Game._deep_cap_now）：情誼改完、看本命武學之前叫一次，名單外的第四位在這裡就夾回 69；沒給照舊。"""
     character = content.characters[companion_id]
     options, tags = offered(state, companion_id)
     if not (0 <= choice_index < len(options)):
@@ -465,6 +466,8 @@ def continue_dialogue(
         turn = _generate(client, character, state, content, world, companion_id, player_action)
     world.record_companion_tag(companion_id, tag or "尋常寒暄")
     msgs = _apply_turn(state, character, companion_id, player_action, turn, tag, content=content)
+    if cap is not None:
+        cap()
     msgs += _maybe_grant_signature_skill(state, content, character, companion_id)
     msgs += _maybe_consolidate_memory(client, state, character, companion_id)
     _maybe_synthesize_drift(client, character, companion_id, world)
@@ -473,11 +476,11 @@ def continue_dialogue(
 
 def say_dialogue(
     client: OllamaClient | None, state: GameState, content: Content, world: WorldStateStore, companion_id: str,
-    said: str, turn: CompanionTurn | None = None, extra: str = "", decide=None, required: tuple[str, ...] = (),
+    said: str, turn: CompanionTurn | None = None, extra: str = "", decide=None, required: tuple[str, ...] = (), cap=None,
 ) -> list[str]:
     """「自己說」：玩家不挑上一輪的選項，自己打一句話（1～20 字，呼叫端驗過、轉過繁體）。模型把那句話歸類（player_tag），
     好感度照那一類查表（清單外的當尋常寒暄）；之後跟 continue_dialogue 一樣記交友 tag、記對話、給本命武學、整理記憶。
-    生成不出來時丟 DialogueUnavailable，這輪當作沒發生。turn 是鎖外先生成好的一輪；沒給才在這裡生成。"""
+    生成不出來時丟 DialogueUnavailable，這輪當作沒發生。turn 是鎖外先生成好的一輪；沒給才在這裡生成。cap 同 continue_dialogue。"""
     character = content.characters[companion_id]
     if turn is None:
         messages = _build_messages(character, state, content, world, companion_id, said, free=True, extra=extra)
@@ -487,6 +490,8 @@ def say_dialogue(
     tag = free_tag(turn)
     world.record_companion_tag(companion_id, tag)
     msgs = _apply_turn(state, character, companion_id, said, turn, tag, content=content)
+    if cap is not None:
+        cap()
     msgs += _maybe_grant_signature_skill(state, content, character, companion_id)
     msgs += _maybe_consolidate_memory(client, state, character, companion_id)
     _maybe_synthesize_drift(client, character, companion_id, world)

@@ -473,6 +473,7 @@ class Game:
         self._gate_scale = 1.0  # 減法季三道閘（批 2）：遭遇拍那一場的經驗、心得、銀兩乘疲勞與對手兩道閘（_fight_gate）；其餘是 1
         self._outing_close: set[str] = set()  # 這一趟出門打了折的那幾道閘（_fight_gate 記、_explore_one 寫段落結尾那一句）
         self._affinity_before: dict[str, int] | None = None  # choose()、隨口應對進行中：這一下之前的情誼（_people_here 認這一下加了誰的情誼）
+        self._deep_said: list[str] = []  # 深交上限（減法季批 7b）這一下提早夾過時的那幾句（_deep_cap_now 記、_log 接在訊息後面）
         # 歷史武將同行：挑好了隨你上陣的那一位、正在照它加入（_escort_step 開著、_escort_carry 讀）
         self._escort_picked = False
         self._escort_now: battle_instance.Escort | None = None
@@ -3508,6 +3509,7 @@ class Game:
                 msgs += self._guide(note_action(self.state, self.content, self.world, "socialize"))  # 指名求見算一次交友
             # 名將贈禮（裝備四欄 6.4）與本命兵器（打造第三批）：這一下的情誼（對話、事件）到了門檻就送；另起一則「名將贈禮」，
             # 不接在當下這個動作的紀錄裡（FB-139、FB-149：名將多半不在場，也跟那件事無關），排在這一則之後（「剛剛」看得到）
+            self._deep_cap_now()  # 深交上限（減法季批 7b）：贈禮與本命兵器照夾過的情誼判（關著什麼都不做）
             gifts = self._general_gifts() + self._signature_arms()
             msgs += check_thresholds(self.state, self.content, self.world, self._quick_client(), now=self.now)
             msgs += self._settle_plots()  # 參與過的密謀收場了：各自結算一次（正式版乙二）
@@ -3663,6 +3665,7 @@ class Game:
             msgs += self._event_progress()  # 領地爭奪：隨口應對了結也推一次進度（開關關著是空的）
             self._begin_enlistment(faction_before)  # 隨口應對的結果也可能拜入門派
             self._greet_rejoin(faction_before)  # 同樣：入伍段早就走完的人拜入門派，引薦人打個招呼（新手引導計畫三）
+            self._deep_cap_now()  # 深交上限（減法季批 7b）：同 choose
             gifts = self._general_gifts() + self._signature_arms()  # 隨口應對的效果也可能加情誼（同 choose：另起一則）
             msgs += check_thresholds(s, c, self.world, self._quick_client(), now=self.now)
             msgs += self._report_seat()  # 隨口應對的效果也可能推大勢、記貢獻：第四階席次的帳在這裡也抄（正式版丁）
@@ -3740,6 +3743,7 @@ class Game:
             msgs += self._event_progress()  # 領地爭奪：隨口應對了結也推一次進度（開關關著是空的）
             self._begin_enlistment(faction_before)
             self._greet_rejoin(faction_before)
+            self._deep_cap_now()  # 深交上限（減法季批 7b）：同 choose
             gifts = self._general_gifts() + self._signature_arms()
             msgs += check_thresholds(s, c, self.world, self._quick_client(), now=self.now)
             msgs += self._report_seat()
@@ -6288,12 +6292,12 @@ class Game:
                 msgs = [f"你：「{said}」"] + companion_agent.say_dialogue(
                     self._quick_client(), self.state, self.content, self.world, companion_id, said,
                     turn=self._prepared_turn(prepared), extra=extra, required=parley.ASK_FIELDS if extra else (),
-                    decide=lambda turn: self._parley_decide(companion_id, turn),
+                    decide=lambda turn: self._parley_decide(companion_id, turn), cap=self._deep_cap_now,
                 )
             else:
                 msgs = companion_agent.continue_dialogue(
                     self._quick_client(), self.state, self.content, self.world, companion_id, int(arg), self.rng,
-                    turn=self._prepared_turn(prepared),
+                    turn=self._prepared_turn(prepared), cap=self._deep_cap_now,
                 )
         except companion_agent.DialogueUnavailable:
             return self._dialogue_unavailable(companion_id)
@@ -6657,7 +6661,7 @@ class Game:
             msgs = [f"你：「{said}」"] + companion_agent.say_dialogue(
                 self._quick_client(), s, c, self.world, cid, said, turn=self._prepared_turn(prepared),
                 extra=extra, decide=lambda turn: self._parley_decide(cid, turn, road=True),
-                required=parley.ASK_FIELDS if extra else (),
+                required=parley.ASK_FIELDS if extra else (), cap=self._deep_cap_now,
             )
         except companion_agent.DialogueUnavailable:
             return [f"{c.characters[cid].name}沉吟不語。"]
@@ -16681,11 +16685,18 @@ class Game:
             journal.add_entry(s, JournalEntry(time=s.world.time, title=zhuan_end.DEEP_TITLE, lines=lines))
         return lines
 
+    def _deep_cap_now(self) -> None:
+        """深交上限提早夾一次（減法季批 7b）：情誼一過 70 就有東西給的地方（對話裡的本命武學 companion_agent._maybe_grant_signature_skill、
+        名將本命兵器 signature_arms 的 80）在給之前先夾，名單外的第四位停在 69 就拿不到；夾到的那幾句留到 _log 接在訊息後面（只說一次）。
+        關著什麼都不做。"""
+        self._deep_said += self._deep_cap()
+
     def _log(self, msgs: list[str]) -> list[str]:
         """回給呼叫端、也存進 GameState.log 的訊息。戰況變化（機器可讀的寫法）在這裡換成一句話——這些話玩家（管理者工具列的
         提示）看得到，數字不外露（FB-064）；江湖紀錄那邊在畫的時候換（見 _chip），兩邊用同一個 seed（現在的時間），是同一句。"""
         self._renown_after()  # 名聲：這一下的名望、善名、惡名接差距，比跨段（設計 3.3、6.4）
-        msgs = msgs + self._deep_cap()  # 深交上限（減法季批 7b）：情誼沒有單一寫入口，在這裡事後夾；排在行狀之前，夾掉的不記成跨格
+        said, self._deep_said = self._deep_said, []
+        msgs = msgs + said + self._deep_cap()  # 深交上限（減法季批 7b）：情誼沒有單一寫入口，在這裡事後夾；排在行狀之前，夾掉的不記成跨格
         annals.watch(self.state, self.content, art_name=self._art_name)  # 行狀：這一下改了什麼（投靠、晉升、情誼……）記一筆
         msgs = humanize(self.content, msgs, str(self.state.world.time))
         if not msgs:
