@@ -2,6 +2,7 @@
   {
     "id": "rn_yuedan",
     "title": "月旦品評",
+    "image": "academy",
     "locations": [
       "runan"
     ],
@@ -60,6 +61,7 @@
   {
     "id": "rn_yuan_slips",
     "title": "袁府簡牘",
+    "image": "town",
     "locations": [
       "runan"
     ],
@@ -117,6 +119,7 @@
   {
     "id": "rn_stele_quarrel",
     "title": "碑前爭地",
+    "image": "field",
     "locations": [
       "runan"
     ],
@@ -190,6 +193,7 @@
   {
     "id": "rn_ac_qingyi",
     "title": "黨錮初解",
+    "image": "academy",
     "locations": [
       "runan_academy"
     ],
@@ -249,6 +253,7 @@
   {
     "id": "rn_ac_leak",
     "title": "藏書漏雨",
+    "image": "academy",
     "locations": [
       "runan_academy"
     ],
@@ -322,6 +327,7 @@
   {
     "id": "rn_hill_diggers",
     "title": "舊壘掘土",
+    "image": "field",
     "locations": [
       "hilltop_wilds"
     ],
@@ -406,6 +412,7 @@
   {
     "id": "rn_hill_beacon",
     "title": "烽燧殘臺",
+    "image": "field",
     "locations": [
       "hilltop_wilds"
     ],
@@ -492,6 +499,7 @@
   {
     "id": "rn_hill_deserter",
     "title": "壕中逃卒",
+    "image": "field",
     "locations": [
       "hilltop_wilds"
     ],
@@ -657,6 +665,7 @@
   {
     "id": "rn_mkt_rice",
     "title": "米價一日三漲",
+    "image": "market",
     "locations": [
       "runan_market"
     ],
@@ -834,6 +843,7 @@
   {
     "id": "rn_mkt_silk",
     "title": "絹布裝車",
+    "image": "market",
     "locations": [
       "runan_market"
     ],
@@ -891,6 +901,7 @@
   {
     "id": "rn_mkt_jiaodi",
     "title": "市中角抵",
+    "image": "fight",
     "locations": [
       "runan_market"
     ],
@@ -947,6 +958,7 @@
   {
     "id": "rn_qiao_archery",
     "title": "門客較射",
+    "image": "fight",
     "locations": [
       "qiao_county"
     ],
@@ -1000,6 +1012,7 @@
   {
     "id": "rn_qiao_guoshui",
     "title": "渦水救童",
+    "image": "river",
     "locations": [
       "qiao_county"
     ],
@@ -1122,6 +1135,7 @@
   {
     "id": "rn_qiao_post",
     "title": "驛馬倒斃",
+    "image": "road",
     "locations": [
       "qiao_county"
     ],
@@ -1175,6 +1189,7 @@
   {
     "id": "rn_cao_drill",
     "title": "部曲考校",
+    "image": "fort",
     "locations": [
       "cao_manor"
     ],
@@ -1229,6 +1244,7 @@
   {
     "id": "rn_cao_night",
     "title": "夜巡莊牆",
+    "image": "night",
     "locations": [
       "cao_manor"
     ],
@@ -1313,6 +1329,7 @@
   {
     "id": "rn_cao_feast",
     "title": "莊上鬥酒",
+    "image": "tavern",
     "locations": [
       "cao_manor"
     ],
@@ -1370,6 +1387,7 @@
   {
     "id": "rn_cao_rent",
     "title": "秋後收租",
+    "image": "fort",
     "locations": [
       "cao_manor"
     ],
@@ -1451,6 +1469,7 @@
   {
     "id": "rn_wild_cellar",
     "title": "地窖裡的人",
+    "image": "village",
     "locations": [
       "runan_wilds"
     ],
@@ -1655,6 +1674,7 @@
   {
     "id": "rn_wild_signs",
     "title": "黃巾暗記",
+    "image": "field",
     "locations": [
       "runan_wilds"
     ],
@@ -1775,6 +1795,7 @@
   {
     "id": "rn_camp_fushui",
     "title": "營外符水",
+    "image": "altar",
     "locations": [
       "huangjin_camp"
     ],
@@ -1837,6 +1858,7 @@
   {
     "id": "rn_camp_palisade",
     "title": "夜探營柵",
+    "image": "night",
     "locations": [
       "huangjin_camp"
     ],
@@ -2049,6 +2071,7 @@
   {
     "id": "rn_camp_drill",
     "title": "谷中操兵",
+    "image": "camp",
     "locations": [
       "huangjin_camp"
     ],

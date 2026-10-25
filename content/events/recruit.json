@@ -2,6 +2,7 @@
   {
     "id": "meet_caocao",
     "title": "譙縣少年",
+    "image": "fort",
     "actions": [
       "socialize"
     ],
@@ -35,6 +36,7 @@
   {
     "id": "meet_liu_guan_zhang",
     "title": "涿郡結義兄弟",
+    "image": "market",
     "actions": [
       "socialize"
     ],
@@ -68,6 +70,7 @@
   {
     "id": "meet_guanyu",
     "title": "丹鳳眼的漢子",
+    "image": "market",
     "actions": [
       "socialize"
     ],
@@ -101,6 +104,7 @@
   {
     "id": "meet_zhangfei",
     "title": "屠豬賣酒的大漢",
+    "image": "tavern",
     "actions": [
       "socialize"
     ],
@@ -134,6 +138,7 @@
   {
     "id": "meet_sunjian",
     "title": "宛城少年將領",
+    "image": "fight",
     "actions": [
       "socialize"
     ],
@@ -167,6 +172,7 @@
   {
     "id": "meet_yuanshao",
     "title": "大將軍府的賓客",
+    "image": "office",
     "actions": [
       "socialize"
     ],
@@ -200,6 +206,7 @@
   {
     "id": "meet_taoqian",
     "title": "折節讀書的能吏",
+    "image": "market",
     "actions": [
       "socialize"
     ],

@@ -26,6 +26,7 @@ from .encounter import FALLBACK_TIER, TIER_RATIOS
 from .front_lines import BAND_KEYS, GEJU_KEYS
 from .materials import DEFAULT_DROPS, TIER_NAMES
 from .models import (
+    ArtBook,
     BEST_OF, FRONT_KEY, GLOW_KEYS, GOOD_HORSE, MOVES, RECRUITER_ALLIED_FIELDS, REVEAL_KEYS, ROADS, STATS, TREASURE_EFFECTS, WEAPON_KINDS, Attribute, BattleDef, CharacterDef, CheckVoice,
     CombatLines, Condition, Config, Content, CraftNames, CreateForms, DuelBoss, Effect, Event, FigureDef, FollowerDef, ForgeSecret, Foreshadows, FrontLines, GatherBranch, GearBook,
     GiftDef, Hints, MingtieContent, InsightDef, Location, MallItem, MarkRule, MarkText, OppDef,
@@ -140,6 +141,7 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         tutorial=Tutorial(**_read(root / "tutorial.json")),
         opening=Opening(**_read(root / "opening.json")) if (root / "opening.json").exists() else None,  # 開局第一分鐘（減法季批 7）
         hints=Hints(**_read(root / "hints.json")) if (root / "hints.json").exists() else Hints(),
+        art=ArtBook(**_read(root / "art.json")) if (root / "art.json").exists() else ArtBook(),  # 圖的分類表（減法季批 8）
     )
     content.config.admins = _with_local_admins(content.config.admins)
     validate(content)
@@ -718,6 +720,26 @@ def check_xingshi_lines(c: Content, need) -> None:
         for key, text in table.items():
             need(key in keys, f"xingshi_lines.{group}：不認得的鍵 {key}")
             check(f"{group}.{key}", text)
+
+
+ART_PATH = re.compile(r"^(places|figures|events)/[a-z0-9_]+$")  # web/img/ 底下的路徑：子資料夾／鍵，不含副檔名
+
+
+def check_art(c: Content, need) -> None:
+    """圖的分類表與 image 欄位（減法季批 8 圖像版）：事件的 image 只能是 art.json 的 events 有的類型鍵；地點與人物的 image 是
+    web/img/ 底下的路徑（places/…、figures/…）。圖檔在不在這裡不管（伺服器看，沒檔案就不給圖）。"""
+    for key, name in c.art.events.items():
+        need(bool(re.fullmatch(r"[a-z0-9_]+", key)), f"art.events 的類型鍵「{key}」只能是小寫英數與底線（圖檔名）")
+        need(bool(name.strip()), f"art.events.{key} 的名字是空的")
+    for ev in c.events.values():
+        if ev.image is not None:
+            need(ev.image in c.art.events, f"事件 {ev.id} 的 image「{ev.image}」不在 art.json 的 events 類型表裡")
+    for loc in c.locations.values():
+        if loc.image is not None:
+            need(bool(ART_PATH.match(loc.image)), f"地點 {loc.id} 的 image「{loc.image}」要寫成 places/<鍵> 這種路徑（不含副檔名）")
+    for ch in c.characters.values():
+        if ch.image is not None:
+            need(bool(ART_PATH.match(ch.image)), f"人物 {ch.id} 的 image「{ch.image}」要寫成 figures/<鍵> 這種路徑（不含副檔名）")
 
 
 def check_mall(c: Content, need) -> None:
@@ -2339,6 +2361,7 @@ def validate(c: Content) -> None:
     check_combat_lines(c, need)
     check_shop_lines(c, need)
     check_mall(c, need)
+    check_art(c, need)
     check_arena_crowd(c, need)
     check_xingshi_lines(c, need)
     check_traits(c, need)

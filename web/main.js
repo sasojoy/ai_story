@@ -1064,6 +1064,17 @@
     document.querySelector("#page > .now [data-act=\"now-more\"]")?.focus();
   }
 
+  // 場景卡上面那張圖（減法季批 8 圖像版）：伺服器真的有圖檔才給 m.art（事件插圖、人物像、地點的圖，server.scene_art）。圖佔卡片上方約三分之一，
+  // 地名／危險／時刻（事件標題；人名與情誼）疊在圖的下緣，所以場景文字裡原本寫那一行的第一段（m.art.head）拿掉、不寫兩次。沒圖（null）一字不變。
+  function sceneArtHtml(a) {
+    const sub = a.sub ? `<span class="sub">${esc(a.sub)}</span>` : "";
+    const time = a.time ? `<span class="time">${esc(a.time)}</span>` : "";
+    return `<figure class="scene-art ${esc(a.kind)}"><img src="${esc(a.src)}" alt="" decoding="async"><figcaption><b>${esc(a.title)}</b>${sub}${time}</figcaption></figure>`;
+  }
+  function sceneUnderArt(m) {
+    if (!m.art || !m.art.head || !(m.scene || "").startsWith(m.art.head)) return m;
+    return { ...m, scene: m.scene.slice(m.art.head.length).replace(/^\n/, "") };
+  }
   function pageJianghu() {
     const m = S.main;
     // 「剛剛」（A4）：預設只露出開頭幾行，太長的（例如新角色的開場故事）收著、點「展開全文」看完，不在卡片裡捲。
@@ -1143,7 +1154,7 @@
     const scene = masterTalks ? ""
       : m.on_road
         ? `<section class="card scene road${S.sceneOpen ? "" : " clamp"}" data-act="scene-more" role="button" tabindex="0" aria-expanded="${!!S.sceneOpen}">${m.scene}</section>`
-        : `<section class="card scene">${siegeStrip(withGauge(musterScene(m, roundBlocks(battleScene(m), m.battle_gauge)), m.battle_gauge), m.siege)}${myTurn ? "" : people}</section>`;
+        : `<section class="card scene${m.art ? " has-art" : ""}">${m.art ? sceneArtHtml(m.art) : ""}${siegeStrip(withGauge(musterScene(m, roundBlocks(battleScene(sceneUnderArt(m)), m.battle_gauge)), m.battle_gauge), m.siege)}${myTurn ? "" : people}</section>`;
     const peopleAfter = myTurn && people && !masterTalks && !m.on_road ? `<section class="card people-after">${people}</section>` : "";
     const week = peekWeek(m);
     // 本週卡（減法季批 1，整合設計 6.1）排在最上面、「剛剛」之前（在路上排到選項底下，FB-055）：吃掉以前那一排小標。來信到了換成來信（回了信或收起來才換回本週卡）；

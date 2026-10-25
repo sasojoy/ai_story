@@ -1,0 +1,24 @@
+{
+  "events": {
+    "town": "城鎮街市",
+    "road": "官道驛路",
+    "forest": "山林",
+    "field": "荒野田埂",
+    "river": "渡口河灘",
+    "temple": "寺院道觀",
+    "village": "村落",
+    "camp": "營寨",
+    "fight": "比武校場",
+    "clinic": "醫館傷棚",
+    "tavern": "酒肆宴席",
+    "academy": "書院學宮",
+    "office": "官署宮門",
+    "market": "集市",
+    "night": "夜色",
+    "treasure": "寶物密匣",
+    "refugees": "流民",
+    "altar": "道壇符水",
+    "fort": "塢堡莊院",
+    "tale": "說書傳聞"
+  }
+}

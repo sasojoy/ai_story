@@ -2,6 +2,7 @@
   {
     "id": "jizhou_altar_oath",
     "title": "壇前立誓",
+    "image": "altar",
     "locations": [
       "julu_altar"
     ],
@@ -52,6 +53,7 @@
   {
     "id": "jizhou_altar_sermon",
     "title": "夜半講經",
+    "image": "altar",
     "locations": [
       "julu_altar"
     ],
@@ -121,6 +123,7 @@
   {
     "id": "jizhou_guangzong_moat",
     "title": "壕溝之外",
+    "image": "camp",
     "locations": [
       "guangzong"
     ],
@@ -218,6 +221,7 @@
   {
     "id": "jizhou_luzhi_enlist",
     "title": "轅門投軍",
+    "image": "camp",
     "locations": [
       "luzhi_camp"
     ],
@@ -271,6 +275,7 @@
   {
     "id": "jizhou_camp_archery",
     "title": "營中較射",
+    "image": "camp",
     "locations": [
       "luzhi_camp"
     ],
@@ -322,6 +327,7 @@
   {
     "id": "jizhou_seed_grain",
     "title": "徵糧車隊",
+    "image": "road",
     "locations": [
       "xiaquyang"
     ],
@@ -386,6 +392,7 @@
   {
     "id": "jizhou_wubao_gate",
     "title": "塢堡收人",
+    "image": "fort",
     "locations": [
       "haozu_fort"
     ],
@@ -449,6 +456,7 @@
   {
     "id": "jizhou_baima_crossing",
     "title": "白馬津爭渡",
+    "image": "river",
     "locations": [
       "baima_ford"
     ],

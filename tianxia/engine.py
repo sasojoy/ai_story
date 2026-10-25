@@ -15017,6 +15017,40 @@ class Game:
         loc = self.content.locations[self.state.player.location]
         return f"【{loc.name}】危險 {'★' * loc.danger}\n\n{loc.describe(self.state.world.flags)}"  # 宛城的描寫隨版本換
 
+    def scene_art(self) -> dict | None:
+        """江湖頁場景卡上面那張圖（減法季批 8 圖像版；減法季整合設計第八章、第一批圖提示單）。回 {kind, path, title, sub, head}：
+        path 是 web/img/ 底下不含副檔名的路徑；head 是場景 Markdown 的第一行（地名那一行、事件標題、人名），有圖時網頁把它疊在圖上、
+        不在卡片裡寫第二次。事件開著（pending_event）→ 事件的類型圖 events/<Event.image>；跟人物談話 → 他的像（CharacterDef.image）；
+        平常站在地點 → Location.image，沒寫就是所屬大區的 places/<大區 id>（atlas.region_of），沒有大區是 places/world。
+        其餘的畫面一律 None、一字不變：全服戰鬥蓋著場景、季收了、單挑、擂台、宴席、有所感、投靠與叛投、求見名單、伏筆問話、在路上，
+        還有事件沒寫 image、人物沒有像。圖檔在不在是伺服器的事（server.scene_art）。"""
+        s, c = self.state, self.content
+        p = s.player
+        if s.world.ended or self._battle_for_me(tick=False) is not None:
+            return None
+        if s.pending_event:
+            event = c.events[s.pending_event]
+            if not event.image:
+                return None
+            return {"kind": "event", "path": f"events/{event.image}", "title": event.title, "sub": "", "head": f"**{event.title}**"}
+        if p.duel is not None or p.arena is not None or p.feasting is not None or p.sensing is not None:
+            return None
+        if p.pending_companion:
+            character = c.characters[p.pending_companion]
+            if not character.image:
+                return None
+            sub = self.affinity_text(p.pending_companion)
+            return {"kind": "figure", "path": character.image, "title": character.name, "sub": sub, "head": f"**{character.name}**（{sub}）"}
+        if self._own_scene_text() != self.location_text():  # 投靠、叛投、求見、伏筆問話、在路上……都不是地點的描寫
+            return None
+        loc = c.locations[p.location]
+        if loc.image:
+            path = loc.image
+        else:
+            region = atlas.region_of(c, loc.id)
+            path = f"places/{region.id}" if region is not None else "places/world"
+        return {"kind": "place", "path": path, "title": loc.name, "sub": f"危險 {'★' * loc.danger}", "head": f"【{loc.name}】危險 {'★' * loc.danger}"}
+
     def method_help(self, option_ids: Iterable[str]) -> dict | None:
         """有所感選做法那一步，網頁畫在做法鈕底下的兩行小字（explain-2，sensing.method_help；鈕上的心意審查 I1 起預設不給）；
         選單上沒有做法（不在選做法、戰場蓋過了畫面）是 None。不讀這一處悟得到什麼：哪一個做法是對的看不出來。"""
