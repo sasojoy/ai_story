@@ -9,7 +9,7 @@ import pytest
 
 from tests.conftest import real_content
 from tianxia import wins
-from tianxia.models import TierRules, WinsRules
+from tianxia.models import JianfaRules, TierRules
 from tianxia.state import PlayerState, WorldState
 
 pytestmark = pytest.mark.slow
@@ -34,7 +34,7 @@ def _army(faction: str, n: int, base: int = 1000) -> list[PlayerState]:
     return [_p(f"{faction}{i:04d}", faction, base + n - i) for i in range(n)]
 
 
-def _settle(content, ending: str, players: list[PlayerState], rules: WinsRules | None = None):
+def _settle(content, ending: str, players: list[PlayerState], rules: JianfaRules | None = None):
     return wins.settle(WorldState(ending_id=ending), content, players, rules)
 
 
@@ -98,12 +98,26 @@ def test_threshold_comes_first_and_only_the_qualified_are_ranked(content):
 
 
 def test_at_least_one_on_top_and_small_pools(content):
-    """第一階前 10% 至少 1 人；第三階名額照比例捨去、不少於第一階：贏的 3 人是一、四、四；輸的 3 人是三、四、四。"""
+    """第一階前 10% 至少 1 人；扣掉第一、二階那一池還有人時第三階也至少 1 人（PM 2026-10-25 第 1 件）：
+    贏的 3 人是一、三、四；輸的 3 人是三、四、四；輸的那一軍只有 1 人是第三階。"""
     result = _settle(content, GUAN_WINS, _army("guan", 3) + _army("huang", 3))
-    assert [result[f"guan{i:04d}"].tier for i in range(3)] == [1, 4, 4]
+    assert [result[f"guan{i:04d}"].tier for i in range(3)] == [1, 3, 4]
     assert [result[f"huang{i:04d}"].tier for i in range(3)] == [3, 4, 4]
     alone = _settle(content, GUAN_WINS, [_p("solo", "guan", 100), _p("enemy", "huang", 100)])
-    assert (alone["solo"].tier, alone["enemy"].tier) == (1, 4)  # 輸的那一軍只有一人：40% 捨去是 0，第四階
+    assert (alone["solo"].tier, alone["enemy"].tier) == (1, 3)  # 40% 捨去是 0，第三階至少 1 人
+    two = _settle(content, GUAN_WINS, _army("guan", 2))
+    assert [two[f"guan{i:04d}"].tier for i in range(2)] == [1, 3]
+
+
+def test_third_tier_minimum_skips_a_tie_on_top(content):
+    """第一階同分多拿了人：第三階的那一個名次接在他們後面（扣掉最上面那一段還有人才給）。"""
+    players = _army("guan", 3)
+    players[1].contrib = players[0].contrib  # 前兩名同分：都是第一階
+    result = _settle(content, GUAN_WINS, players)
+    assert [result[p.name].tier for p in players] == [1, 1, 3]
+    tied = _army("guan", 2)
+    tied[1].contrib = tied[0].contrib  # 兩人同分都在第一階：池子裡沒有別人，第三階沒有人
+    assert [_settle(content, GUAN_WINS, tied)[p.name].tier for p in tied] == [1, 1]
 
 
 def test_ties_share_a_rank_and_a_tier(content):
@@ -139,8 +153,8 @@ def test_gentry_book_follows_whichever_side_won(content):
               _p("for_huang", "haoqiang", ledgers={"huang": 400}, ally="huang")]
     by_guan = _settle(content, GUAN_WINS, gentry)
     by_huang = _settle(content, HUANG_WINS, gentry)
-    assert (by_guan["for_guan"].tier, by_guan["for_huang"].tier) == (2, 4)  # 替黃巾那一本的池只有 1 人：40% 捨去是 0
-    assert (by_huang["for_guan"].tier, by_huang["for_huang"].tier) == (4, 2)
+    assert (by_guan["for_guan"].tier, by_guan["for_huang"].tier) == (2, 3)  # 替黃巾那一本的池只有 1 人：第三階至少 1 人
+    assert (by_huang["for_guan"].tier, by_huang["for_huang"].tier) == (3, 2)
     assert (by_guan["for_huang"].ledger_used, by_huang["for_guan"].ledger_used) == ("huang", "guan")
 
 
@@ -178,7 +192,7 @@ def test_drifters_and_unknown_factions_have_no_tier(content):
 
 
 def test_rules_are_read_from_the_argument(content):
-    rules = WinsRules(tiers=TierRules(min_contribution=200, tier1_share=0.2, tier3_share=0.5))
+    rules = JianfaRules(tiers=TierRules(min_contribution=200, tier1_share=0.2, tier3_share=0.5))
     players = _army("guan", 10, base=195)  # 貢獻 205～196：只有前 6 人過 200
     result = _settle(content, GUAN_WINS, players, rules)
     assert [result[p.name].tier for p in players] == [1, 3, 3, 4, 4, 4, 0, 0, 0, 0]  # 6 人：20% 捨去 1、50% 是 3
