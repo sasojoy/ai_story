@@ -1,5 +1,5 @@
 """減法季批 4 接線（主機側計畫 Task 4-3、6.5 的勾選清單；整合設計 5.2；PM 2026-10-25 交接第四節之四第 4 件）：痕跡看得見——
-動作存季之前、同步、排程的一下都看有沒有痕跡過門檻（marks.fire_due，只發一次）：那一刻發地方傳聞、世界層一句（〈天下形勢〉照它多一句）、
+動作存季之前、同步、排程的一下都看有沒有痕跡過門檻（marks.fire_due，只發一次）：那一刻發地方傳聞（世界層那一句 PM 2026-10-25 修正輪拿掉；〈天下形勢〉照過門檻的先後多一句）、
 地點描寫換段；**江湖史在季末**（每個地點挑最高的那一條寫一句）；跨過門檻那一刻出過力的人（WorldState.mark_helpers）各記一則行狀。
 用 tests/outcomes_kit.py 的「醉漢」（town）與它的四條痕跡規則；關著（總開關或子開關 marks_visible）一個字都不變。"""
 from __future__ import annotations
@@ -34,9 +34,9 @@ def test_crossing_the_threshold_in_an_action_fires_once(content, world):
     answer(g, "我好言勸他回家", "talk")
     season = g.world.get_season()
     assert season.marks[TALK_MARK] == 20 and TALK_MARK in season.marks_fired
-    local, wide = season.rumors[-2:]
+    local = season.rumors[-1]
     assert (local.text, local.layer, local.location, local.named) == (RULE.rumor, "local", "town", False)  # 不列名字
-    assert (wide.text, wide.layer, wide.named) == (RULE.rumor, "world", False)  # 世界層一句（xingshi 沒寫照傳聞那一句）
+    assert [r.layer for r in season.rumors if r.text == RULE.rumor] == ["local"]  # 世界層那一句拿掉了（PM 2026-10-25 修正輪）
     assert len(season.chronicle) == chronicle  # 江湖史在季末才寫（PM 第 4 件）
     rumors = len(season.rumors)
     h = branch_game(content, world, name="丙", rng=FixedRandom(0.0))
@@ -151,12 +151,13 @@ def test_the_xingshi_gets_a_fact_for_each_mark_fired_since_the_last_essay(conten
     g._save_season()
     w = g.state.world
     skip = len(w.rumors)  # 只看痕跡那一類（傳聞那一類照 rumors_from 讀，這裡全部跳過）
-    facts = xingshi.facts(w, content, [], {}, skip, marks_since=0.0)
+    facts = xingshi.facts(w, content, [], {}, skip, marks_from=0)
     assert RULE.rumor in facts
-    assert RULE.rumor not in xingshi.facts(w, content, [], {}, skip, marks_since=600.0)  # 上一篇之後才過門檻的才寫
-    assert xingshi.facts(w, content, [], {}, 0, marks_since=0.0).count(RULE.rumor) == 1  # 世界層那一句與痕跡那一類不寫兩次
+    assert RULE.rumor not in xingshi.facts(w, content, [], {}, skip, marks_from=1)  # 上一篇已經讀過的不再寫
+    # 世界層的傳聞拿掉了（PM 2026-10-25 修正輪）：〈天下形勢〉的痕跡只靠這一類，連傳聞從頭讀（rumors_from=0）也只寫一次
+    assert xingshi.facts(w, content, [], {}, 0, marks_from=0).count(RULE.rumor) == 1
     off = branch_game(content, world, name="乙", on=True, parts={"marks_visible": False})
-    assert RULE.rumor not in xingshi.facts(off.state.world, content, [], {}, len(off.state.world.rumors), marks_since=0.0)
+    assert RULE.rumor not in xingshi.facts(off.state.world, content, [], {}, len(off.state.world.rumors), marks_from=0)
 
 
 def test_mark_helpers_add_no_key_until_used():

@@ -1392,6 +1392,17 @@ class XingshiMark(BaseModel):
     log: int = 0  # ConquestState.day_log 讀到第幾筆
     rumors: int = 0  # WorldState.rumors 讀到第幾則（傳聞只加不刪，照位置記）
     lines: dict[str, int] = Field(default_factory=dict)  # 三條戰線那一刻的值（「比前一篇往哪一邊動」）
+    # 痕跡過門檻（減法季批 4）：WorldState.marks_fired 讀到第幾條（上一篇開單那一刻已經有幾條；marks.xingshi_facts 從這之後讀）。
+    # 0 的時候不寫進 JSON（_drop_unread_marks）：沒有痕跡過門檻（或關著）的季存檔一個鍵都不多
+    fired: int = 0
+
+    @model_serializer(mode="wrap")
+    def _drop_unread_marks(self, handler):
+        """fired 是 0 的時候不寫這個鍵（同 WorldState._drop_empty_marks_fired；不用 Field(exclude_if=…)：Pydantic 2.11 才有）。"""
+        data = handler(self)
+        if isinstance(data, dict) and not data.get("fired", 1):
+            del data["fired"]
+        return data
 
 
 class PushMark(BaseModel):

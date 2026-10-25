@@ -46,14 +46,15 @@ def test_the_twentieth_mark_fires_once(town, state):
     state.world.time = 1234.0
     assert [r.mark for r in marks.fire_due(state, town)] == [KEY]
     assert state.world.marks_fired == {KEY: 1234.0}
-    local, wide = state.world.rumors[-2:]
+    (local,) = state.world.rumors[-1:]
     assert (local.text, local.location, local.layer, local.named) == (RULE.rumor, "town", "local", False)  # 不列名字
-    assert (wide.text, wide.layer, wide.named) == (RULE.rumor, "world", False)  # 世界層一句：xingshi 沒寫照傳聞那一句
+    # 過門檻那一刻只發地方傳聞：世界層那一句拿掉了（PM 2026-10-25 修正輪；〈天下形勢〉的事實與地點描寫換段照舊）
+    assert len(state.world.rumors) == before_rumors + 1 and not [r for r in state.world.rumors if r.layer == "world"]
     # 江湖史在季末才寫（PM 2026-10-25 第 4 件照整合設計 5.2；上一輪照計畫 4-3 寫在過門檻那一刻）：見 marks.season_lines
-    assert len(state.world.rumors) == before_rumors + 2 and len(state.world.chronicle) == before_chronicle
+    assert len(state.world.chronicle) == before_chronicle
     _twenty(state, town, 5)
     assert marks.fire_due(state, town) == []  # 只發一次
-    assert len(state.world.rumors) == before_rumors + 2
+    assert len(state.world.rumors) == before_rumors + 1
     assert marks.season_lines(state.world, town) == [RULE.rumor]  # 江湖史沒另寫就照傳聞那一句
 
 
@@ -81,14 +82,27 @@ def test_the_highest_threshold_segment_wins(town, state):
 
 
 def test_the_xingshi_gets_a_line_after_it_fires(town, state):
-    assert marks.xingshi_facts(state.world, town, since=0.0) == []
+    assert marks.xingshi_facts(state.world, town, 0) == []
     _twenty(state, town)
     state.world.time = 500.0
     marks.fire_due(state, town)
-    assert marks.xingshi_facts(state.world, town, since=0.0) == [RULE.rumor]  # 沒寫 xingshi 就照傳聞那一句
-    assert marks.xingshi_facts(state.world, town, since=600.0) == []  # 上一篇以後才過門檻的才寫
+    assert marks.xingshi_facts(state.world, town, 0) == [RULE.rumor]  # 沒寫 xingshi 就照傳聞那一句
+    assert marks.xingshi_facts(state.world, town, 1) == []  # 上一篇已經讀到第一條之後的才寫
     town.mark_rules[0] = RULE.model_copy(update={"xingshi": "小鎮的街頭清靜了。"})
-    assert marks.xingshi_facts(state.world, town, since=0.0) == ["小鎮的街頭清靜了。"]
+    assert marks.xingshi_facts(state.world, town, 0) == ["小鎮的街頭清靜了。"]
+
+
+def test_the_xingshi_reads_the_fired_marks_in_the_order_they_fired(town, state):
+    """起點是「marks_fired 已經讀到第幾條」（上一篇開單那一刻有幾條）：按過門檻的先後切，不看世界秒——同一個世界秒過門檻的兩條
+    也分得開（以前拿世界秒比，邊界上不是重複就是漏）。"""
+    second = MarkRule(mark="town:扭送", describe="衙門口的木枷上常鎖著鬧事的醉漢。", rumor="小鎮鬧事的醉漢被人一個個押去見官。")
+    town.mark_rules.append(second)
+    state.world.time = 500.0
+    state.world.marks.update({"town:扭送": 20, KEY: 20})  # 扭送先記、勸醒後記，但規則表裡勸醒在前
+    state.world.marks_fired.update({"town:扭送": 500.0, KEY: 500.0})  # 同一個世界秒
+    assert marks.xingshi_facts(state.world, town, 0) == [second.rumor, RULE.rumor]
+    assert marks.xingshi_facts(state.world, town, 1) == [RULE.rumor]
+    assert marks.xingshi_facts(state.world, town, 2) == [] and marks.xingshi_facts(state.world, town, 99) == []
 
 
 def test_only_a_rule_with_a_trend_pushes_the_line_once(town, state):

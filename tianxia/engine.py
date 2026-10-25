@@ -11018,10 +11018,11 @@ class Game:
         w.xingshi_ticket = XingshiTicket(
             n=n, key=key, opened_real=self.now,  # 現實時鐘（FB-577）
             facts=xingshi.facts(w, c, notes, mark.lines, mark.rumors, night=xingshi.is_night(self.pill_now(), c),  # 白天開的不寫「打到入夜」
-                                marks_since=max((e.time for e in w.xingshi), default=0.0)),  # 減法季批 4：上一篇以後過門檻的痕跡
+                                marks_from=mark.fired),  # 減法季批 4：上一篇開單以後過門檻的痕跡（PM 2026-10-25 修正輪：不再靠世界層傳聞補）
             line=xingshi.summary_line(notes, c),
         )
-        w.xingshi_mark = XingshiMark(log=len(w.conquest.day_log), rumors=len(w.rumors), lines=xingshi.line_values(w, c))
+        w.xingshi_mark = XingshiMark(log=len(w.conquest.day_log), rumors=len(w.rumors), lines=xingshi.line_values(w, c),
+                                     fired=len(w.marks_fired))  # 這一篇開單那一刻讀到哪裡：開單到收下之間過門檻的，下一篇寫
 
     def _xingshi_finish(self, essay: str | None) -> XingshiEssay:
         """收下還在等的那一張：模型寫的過得了 xingshi.clean 就用，不然照固定段（by_rule，畫面上看不出差別）；天下大事一則、江湖史一筆，

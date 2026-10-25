@@ -520,8 +520,8 @@ class MarkText(_Strict):
 
 class MarkRule(_Strict):
     """地方痕跡過門檻（減法季整合設計 5.2；主機側計畫 Task 4-3，content/mark_rules.json）：全服累計到 threshold 那一刻
-    （marks.fire_due）發一則地方傳聞（不列名字）、記一筆江湖史，有寫 trend 的照原本的量推一次線（企劃者 2026-10-24 第 8 件 b：只有「趕走散兵」
-    那一類）；之後地點描寫多接 describe 那一段（marks.describe），〈天下形勢〉照 xingshi 寫一句（marks.xingshi_facts）。只發一次
+    （marks.fire_due）發一則地方傳聞（不列名字；世界層那一句 PM 2026-10-25 修正輪拿掉，江湖史在季末寫，marks.close_season），有寫 trend 的
+    照原本的量推一次線（企劃者 2026-10-24 第 8 件 b：只有「趕走散兵」那一類）；之後地點描寫多接 describe 那一段（marks.describe），〈天下形勢〉照 xingshi 寫一句（marks.xingshi_facts）。只發一次
     （WorldState.marks_fired）。threshold 照 Config.mark_threshold_scale 換算（同條件的 marks_min）。字都待 joy 潤。"""
 
     mark: str  # 「地點 id:痕跡名」
