@@ -11,6 +11,7 @@ import random
 from dataclasses import dataclass
 
 from . import allied, arena, atlas, battle_instance, bot, bounties, conquest, cultivation, duel, explore_modes, forge_secrets, invites, leaderboard, library, mingtie, naming, orders, precise, rules, sensing, server_bots, social, sortie, team
+from . import sortie_duel  # 出陣約戰（減法季批 3b）
 from .bot import allocate_points, can_practise, wants_heal
 from .engine import FREE_TEXT_OPTION, IDLE_MARK, Game, Option
 from .models import MOVES, Content, Effect, SkillDef
@@ -197,6 +198,9 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random, slot: NamingS
         msgs = msgs + staged
         if s.player.arena is not None:  # 開打了：這一輪就是這一場；只報名、更新分身不花體力，照常做別的
             return msgs
+    dueled = duel_play(game, profile, rng)  # 出陣約戰（減法季批 3b）：應對面的約戰、同袍的同去
+    if dueled is not None:
+        return msgs + dueled
     options = [  # road: 開頭的是路上的選項：假人不改道、不做路上小事（路上設計 3.5）
         o for o in game.options(odds=False, tick=False)
         if o.enabled and o.id not in ("act:rest", "act:halt", FREE_TEXT_OPTION)
@@ -228,7 +232,53 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random, slot: NamingS
         if step is not None:
             return msgs + game.choose(step)
     choice = pick(game, options, profile, rng)
-    return msgs + game.choose(choice) if choice else msgs
+    # 約戰開著（減法季批 3b）：挑到出陣那一格（只是打開出陣前那張卡）換成真的貼一張、封好三招（bot.duel_go）
+    return msgs + game.choose(bot.duel_go(game, choice, rng)) if choice else msgs
+
+
+# ── 出陣約戰（減法季批 3b-3；整合設計 4.3、5.7「假人可以應約戰、封招，不可以寫字」）──
+ANSWER_AFTER = 0.5  # 窗開過這麼多才應（前一半留給同一邊的真人先應；到時沒人應另有補位）【預設】
+ANSWER_POWER_FLOOR = 0.7  # 應戰：自己的威力至少是攻方的這麼多才應（「威力不被壓太多」）【預設】
+JOIN_CHANCE = 1 / 3  # 同袍的約戰去同去的機會（每個假人每一場擲一次，同一場永遠一樣）【預設】
+
+
+def duel_play(game: Game, profile: BotProfile, rng: random.Random) -> list[str] | None:
+    """約戰卡上的事（Game.sortie_cards）：對面貼的、同一區、窗開過一半、還有應戰次數與體力（卡上的 can_answer）、自己的威力不被壓太多的就應
+    （封招 bot.duel_moves）；同袍貼的約三分之一同去（卡上的 can_join：同一區、還有出陣次數）。不會應自己陣營的（那一張是同去）。都沒有是 None。"""
+    if not game.duel_on():
+        return None
+    cards = game.sortie_cards() or []
+    if not cards:
+        return None
+    duels = game.world.sortie_duels()
+    power: float | None = None
+    for card in cards:
+        duel = duels.get(card["id"])
+        if duel is None or duel.status not in ("open", "answered"):
+            continue
+        if card["role"] == "answer" and card["can_answer"]:
+            if game.now - duel.opened_at < ANSWER_AFTER * (duel.expires_at - duel.opened_at):
+                continue
+            power = game._duel_power() if power is None else power
+            if power < duel.attacker.power * ANSWER_POWER_FLOOR:
+                continue
+            return game.choose(f"{sortie_duel.PREFIX}answer:{duel.id}:{','.join(bot.duel_moves(rng))}")
+        if card["role"] == "join" and card["can_join"]:
+            if random.Random(f"{profile.seed}|同去|{duel.id}").random() >= JOIN_CHANCE:
+                continue
+            return game.choose(f"{sortie_duel.PREFIX}join:{duel.id}")
+    return None
+
+
+def _duel_value(game: Game, loc_id: str) -> float:
+    """約戰開著的季在這一塊貼約戰對自己陣營的分（同 effect_score 的一點抵十分）：推得動（conquest.push_problem 的攻）、打得贏守軍（不是 _outmatched）、
+    今天還有出陣次數才有，量照名目量。"""
+    s, c, side = game.state, game.content, game._conquest_side()
+    if side is None or loc_id not in conquest.blocks(c) or game.sorties_left() <= 0:
+        return 0.0
+    if conquest.push_problem(s.world, c, side, loc_id, "attack") is not None or _outmatched(game, loc_id):
+        return 0.0
+    return TREND_WEIGHT * conquest.sortie_nominal(c, loc_id, "attack")
 
 
 ORDER_FOLLOW = 0.6  # 決戰有將令時照令出招的機會（真人也不見得都聽）
@@ -824,9 +874,10 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
             if _crippled(game):
                 return None
             s, c = game.state, game.content
-            if sortie.on(c) and game.sortie_mode() == "stir":
+            convoy = game.duel_on() and game.duel_convoy_here()  # 約戰開著：運糧隊經過時出陣是截糧（自家的地方也打）
+            if sortie.on(c) and not game.duel_on() and game.sortie_mode() == "stir":
                 return STIR_SCORE if game.sortie_push() else None  # 線在 50：攪局什麼都不推
-            if _cannot_push(game, s.player.location):  # 領地爭奪：推不動的地方不出陣（翻地 QA 順帶：真人看得出有人一直在推不動的地方出陣）
+            if not convoy and _cannot_push(game, s.player.location):  # 領地爭奪：推不動的地方不出陣（翻地 QA 順帶：真人看得出有人一直在推不動的地方出陣）
                 return None
             if _outmatched(game, s.player.location):  # 領地爭奪：贏面太低的地方不攻（打輸不推，只扣血掉銀兩）；去練功、去贏得了的地方
                 return None
@@ -838,9 +889,10 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
             return TRAIN_SCORE + _train_value(game, profile) + bonus
         if arg == "drill":  # 城裡操練：真人一樣按（不扣氣血、內傷重的也能練）
             return DRILL_SCORE
-        if arg == "duty":  # 守勢行動（計畫 T6）：替守城記功才值得做
+        if arg == "duty":  # 守勢行動（計畫 T6）：替守城記功才值得做；約戰開著時不算守城（減法季批 3b：守是應戰）
             s = game.state
-            return DUTY_SCORE + (ORDER_SCORE if orders.duty_counts(s, game.content, game._side(), s.player.location) else 0.0)
+            counts = not game.duel_on() and orders.duty_counts(s, game.content, game._side(), s.player.location)
+            return DUTY_SCORE + (ORDER_SCORE if counts else 0.0)
         if arg == "rank2":  # 第 2 階行動（正式版乙一）：跟守勢行動一樣的底分；替軍令記功的加分是計畫戊的事
             return DUTY_SCORE
         if arg == "convoy":  # 接下糧車：只在有護糧軍令的起點出現
@@ -876,6 +928,8 @@ def _train_value(game: Game, profile: BotProfile, loc_id: str | None = None) -> 
     """在這個地點（預設所在地）出陣（關著時遊歷）對自己陣營的大勢分（同 effect_score 的一點抵十分）。出陣今天用完了就是 0：
     不再往戰線地點拉（出陣探索與地盤設計第七節：次數用完就去探索找素材練功）。"""
     goals = _goals(game, profile)
+    if game.duel_on():  # 約戰開著（減法季批 3b）：只有貼約戰推得動（沒有守）
+        return _duel_value(game, loc_id or game.state.player.location)
     if conquest.on(game.content, game.state.world):  # 領地爭奪：出陣推進度、不推線——照推得動的名目量（大本營、不是區塊是 0）
         if game.sorties_left() <= 0 or _outmatched(game, loc_id or game.state.player.location):  # 贏面太低的地方攻了也推不動
             return 0.0
@@ -1115,7 +1169,8 @@ def _cannot_push(game: Game, loc_id: str | None) -> bool:
     side = game._side()
     if loc_id is None or side is None or not conquest.on(c, s.world) or loc_id not in conquest.blocks(c):
         return False
-    how = "hold" if conquest.holder(s.world, c, loc_id) == side else "attack"
+    # 約戰開著（減法季批 3b）：出陣只有貼約戰（攻），自家的地方等對面來約、推不動
+    how = "hold" if conquest.holder(s.world, c, loc_id) == side and not game.duel_on() else "attack"
     return conquest.push_problem(s.world, c, side, loc_id, how) is not None
 
 
