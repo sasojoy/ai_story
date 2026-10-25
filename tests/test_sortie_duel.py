@@ -241,6 +241,28 @@ def test_holding_by_answering_counts_for_the_defend_order_and_the_card_says_so(m
     assert done.progress.get("甲") == 1
 
 
+@pytest.mark.parametrize(("tier", "winner"), [("大勝", "甲"), ("落敗", "乙")])
+def test_duel_exp_is_battle_exp_past_level_45(monkeypatch, tier, winner):
+    """約戰（攻方 sortie）與應戰（answer）的經驗都是仗（growth.exp_source → battle，批 2 的第三道閘）：45 級以後照樣算經驗、不換心得。"""
+    from tianxia import growth
+    from tianxia.rules import jianfa
+
+    c, world = _pair()
+    cap = c.config.jianfa.drill_level_cap
+    for name in ("甲", "乙"):
+        state = load(world, name)
+        state.player.member.level, state.player.member.exp = cap, 0
+        CharacterStore(world.db).save(state)
+    assert jianfa(c, world.get_season(), "drill_gates")
+    assert growth.exp_source("sortie") == growth.exp_source("answer") == growth.BATTLE
+    _go(c, world)
+    _answer(c, world, "乙", _only(world).id)
+    rounds_go(monkeypatch, tier)
+    tick(c, world, NOW + WINDOW + 1)
+    won = load(world, winner)
+    assert won.battles[0].exp > 0 and won.player.member.exp == won.battles[0].exp
+
+
 def test_a_draw_pushes_a_little(monkeypatch):
     c, world = _pair()
     _go(c, world)

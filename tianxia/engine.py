@@ -10471,8 +10471,8 @@ class Game:
             p.stats["xinde"] = p.stats.get("xinde", 0) + xinde
             record.xinde = (record.xinde or 0) + xinde
             msgs.append(f"心得 +{xinde}")
-        msgs += self._record_exp(record, exp)
-        levels, record.levelups = team.grant_team_exp(s, c, self.world, exp)
+        msgs += self._record_exp(record, exp, "answer")  # 應戰是仗（growth.exp_source；45 級以後照樣升，不乘遭遇拍的兩道閘）
+        levels, record.levelups = team.grant_team_exp(s, c, self.world, exp, "answer")
         record.notes += levels
         return msgs + levels
 
