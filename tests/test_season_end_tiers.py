@@ -57,7 +57,7 @@ def test_season_end_settles_tiers_and_the_next_season_pays():
     tiers = {name: (r.tier, r.title, r.ledger_used) for name, r in season.final_tiers.items()}
     assert tiers["官甲"] == (1, "漢室忠良", "guan")
     assert tiers["官乙"] == (3, "有功之臣", "guan")  # 第三階至少 1 人（PM 2026-10-25 第 1 件）
-    assert tiers["官丙"][0] == 0  # 不到門檻 60
+    assert tiers["官丙"][0] == 0  # 不到門檻 40
     assert tiers["巾甲"] == (3, "有功之臣", "huang") and tiers["巾乙"] == (4, "隨軍", "huang")
     assert tiers["豪甲"] == (2, "一方之雄", "guan")  # 替官軍那一本（引擎那一推也記在這一本）
     assert tiers["豪乙"] == (3, "鄉里之望", "huang")  # 替官軍那一本是 0：照替黃巾那一本

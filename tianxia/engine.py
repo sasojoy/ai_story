@@ -3313,6 +3313,8 @@ class Game:
         if option_id.startswith(sortie_duel.PREFIX) and self.duel_on():  # 出陣約戰（減法季批 3b）：貼、應戰、同去不在選單上（封招的組合放不進選單），
             return self._duel_choice(option_id)  # 各自在 world.mutate 裡重驗；關著的季照舊當成不在選單上
         option = {o.id: o for o in self.options(odds=False)}.get(option_id)
+        if option is None and option_id.startswith(wins.LEAN_PREFIX):
+            option = self._lean_anytime(option_id)  # 「改幫…」隨時都能換（設計 3.2）：在路上、事件待選、決戰的大區選單上沒有它，照樣收
         if option is None and option_id.startswith("bounty:"):
             # FB-162：懸賞選項已經不在選單上（兩個分頁搶同一張，慢的那一頁）：回這一步為什麼不成的那一句，不寫江湖紀錄；
             # 回傳值是 Refused，伺服器照它把同一句傳去網頁跳提示（server.api_choose）
@@ -6419,7 +6421,7 @@ class Game:
             if p.location not in faction.join_at:
                 return ["（你已經不在投靠的地方了。）"]
             p.faction = faction.id
-            p.ally = ally if allied.on(self.content, self.state.world) else None
+            p.ally = self._bot_lean(faction.id, ally) if allied.on(self.content, self.state.world) else None
             # 投靠這一刻就推一次新手引導：第一季「投靠、看一眼本週軍令」那一步只看陣營（計畫 T6）；beta 照舊等下一個行動
             msgs = [f"你投靠了{allied.label(self.content, p.faction, p.ally)}。"]
             if p.ally is not None:
@@ -6435,6 +6437,14 @@ class Game:
         self._hide(prompt)  # 場景已經寫著這一問（_own_scene_text），江湖紀錄那一則只留標題（FB-046）
         return [prompt]
 
+    def _bot_lean(self, faction_id: str, picked: str | None) -> str | None:
+        """三陣營四勝利開著的季，伺服器假人投靠豪強那一下的傾向（FB-810）：依附豪強人數少的那一軍（wins.bot_lean，確認這一下才數），
+        不看投靠點；真人、兩軍的人、開關關著（還有選邊鈕）都照 picked。假人投靠之後不按「改幫」，所以這一下就是它這一季幫誰。"""
+        if self.state.player.bot is None or not self._four_wins():
+            return picked
+        season = self.world.get_season_number()
+        return wins.bot_lean(self.state.player.name, season, self.content, faction_id, self.world.roll_counts()) or picked
+
     def _lean_options(self) -> list[Option]:
         """本週卡「改幫…」（三陣營四勝利，設計 3.2）：豪強能幫、此刻沒在幫的那幾軍各一顆，不花體力、隨時換、不算叛投。
         按不下去（wins.lean_problem）灰著寫原因。開關關著、不是豪強是空的。"""
@@ -6447,6 +6457,16 @@ class Game:
             problem = wins.lean_problem(s.player, c, side)
             opts.append(Option(id=f"{wins.LEAN_PREFIX}{side}", label=f"{label}（{problem}）" if problem else label, enabled=not problem))
         return opts
+
+    def _lean_anytime(self, option_id: str) -> Option | None:
+        """「改幫…」不看此地的選單（設計 3.2「隨時換」，FB-812）：選單上沒有它的時候（在路上、有事件待選、人站在正在打決戰的大區，
+        選單只剩那些事）照樣收，條件跟選單上的那一顆一樣（_lean_options：豪強、四勝利開著，按不下去的原因照 wins.lean_problem）。
+        只有賽季不在跑（籌備中、休季、時鐘暫停，這幾種選單本來就只剩一顆灰的）才不收；開關關著、不是豪強、本來就幫它、
+        不是它能幫的那一軍，都找不到那一顆，照舊「此刻無法這麼做」。決戰那一場的戰功照舊記參戰那一軍，開打了這一場照舊站原來那一邊
+        （_lean_step 的 _ally_follows_battle）。"""
+        if self.world.paused_at() is not None or self._preparing() or self.state.world.ended:
+            return None
+        return next((o for o in self._lean_options() if o.id == option_id), None)
 
     def _lean_step(self, side: str) -> list[str]:
         """豪強改幫 side（wins.set_lean：寫 ally、換邊次數 +1，不算叛投、帳不清）。跟著換的：活躍名單搬到新的那一邊（人數緩衝照新的
@@ -6465,7 +6485,7 @@ class Game:
                 del w.active_pushers[old]
         new_name = c.scenario.faction_name(side, side)
         msgs = [wins.LEAN_DONE.format(side=new_name, old=c.scenario.faction_name(old, old) if old else new_name)]
-        return msgs + bounties.drop_stranded(s, c, side) + self._ally_follows_battle()
+        return msgs + bounties.drop_stranded(s, c, side, lean=True) + self._ally_follows_battle()  # 作廢那一句寫「改幫」，不是投靠、叛投的「改投」（FB-811）
 
     def _join_lean(self) -> list[str]:
         """三陣營四勝利開著的季，拜入要依附一軍的門派而投靠（曹氏莊院）的那一下：照門派所在地直接給傾向（PM 2026-10-25 第 5 件），

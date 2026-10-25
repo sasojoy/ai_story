@@ -3001,7 +3001,7 @@ class TierRules(_Strict):
     tier1_share: float = Field(default=0.10, ge=0, le=1)  # 第一階：贏的那一軍裡前 10%（至少 1 人）【定】
     tier2_share: float = Field(default=0.10, ge=0, le=1)  # 第二階：豪強「替贏的那一軍」那一本前 10%（至少 1 人）；兩軍拿不到【定】
     tier3_share: float = Field(default=0.40, ge=0, le=1)  # 第三階：各自前 40% 的其餘人（贏的、輸的、豪強都有）【定】
-    min_contribution: int = Field(default=60, ge=0)  # 每一階都要先過的門檻（絕對數，約「一季認真玩三天」）【待量】
+    min_contribution: int = Field(default=40, ge=0)  # 每一階都要先過的門檻（絕對數，約「一季認真玩三天」）【定】企劃者 2026-10-26 定 40（原本 60【待量】）
     start_shares: dict[int, float] = Field(default_factory=lambda: {1: 1.0, 2: 0.8, 3: 0.5, 4: 0.3})  # 下一季起手資源的成數【預設】
     start_silver: int = Field(default=300, ge=0)  # 起手資源滿額：銀兩【預設】
     start_xinde: int = Field(default=200, ge=0)  # 起手資源滿額：心得【預設】
