@@ -99,7 +99,7 @@ PLACES = [  # (陣營, 地點)：城裡、野外、戰線、自家大營、頭�
 ]
 
 
-@pytest.mark.parametrize("profile", ["week7", "season21", "weekend"])
+@pytest.mark.parametrize("profile", ["week7", "season21"])
 def test_every_grey_cell_says_at_most_four_characters(profile):
     seen = set()
     for faction, at in PLACES:

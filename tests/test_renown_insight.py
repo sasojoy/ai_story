@@ -44,7 +44,7 @@ def test_switch_off_keeps_the_old_rule():
 
 def test_gains_outside_events_are_caught_at_the_end_of_the_action():
     """善名從懸賞、截殺來的（不走 rules.apply_effect）：那一下的紀錄結束時也悟得到。"""
-    c = real_content("weekend")
+    c = real_content("week7")
     c.config.auto_open_first_season = True
     g = Game.new(c, "甲", rng=random.Random(0))
     g.client = None

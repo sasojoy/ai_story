@@ -8,7 +8,7 @@ from tianxia.engine import HOUR
 
 
 def test_real_content_newbie_rules():
-    for content in (real_content(), real_content("weekend")):
+    for content in (real_content(), real_content("week7")):
         cfg = content.config
         assert cfg.newbie_real_hours == 48 and cfg.newbie_stamina_multiplier == 1 and not cfg.newbie_hp_double
 

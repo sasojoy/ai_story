@@ -55,7 +55,7 @@ def test_the_real_content_gives_each_shard_its_revamp_effects():
     assert cfg.enabled and cfg.power == pytest.approx(1.10)
     assert cfg.effects == pytest.approx(NUMBERS)
     assert seal.revamp_on(c) and treasures.revamp_on(c)
-    for profile in ("weekend", "season21"):
+    for profile in ("week7", "season21"):
         assert seal.revamp_on(real_content(profile))
 
 

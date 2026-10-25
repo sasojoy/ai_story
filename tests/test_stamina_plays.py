@@ -232,7 +232,7 @@ def test_no_fortify_on_the_enemys_spot(real, world):
 
 
 def test_lean_formula():
-    c = real_content("weekend")
+    c = real_content("week7")
     d = next(b for b in c.battles.values() if b.timetable_event)
     f0, f1 = d.factions[0].id, d.factions[1].id
     assert works.lean({}, d, c) == 0
@@ -244,7 +244,7 @@ def test_lean_formula():
 def test_stockpile_shifts_the_next_timetable_battle(world):
     from tianxia import world as world_mod
 
-    c = _plays_on(real_content("weekend"))
+    c = _plays_on(real_content("week7"))
     c.config.auto_open_first_season = True
     world.open_season(c, 0.0)
     d = next(b for b in c.battles.values() if b.timetable_event)
@@ -258,7 +258,7 @@ def test_stockpile_shifts_the_next_timetable_battle(world):
 
 
 def test_stockpile_button_only_for_the_two_armies_in_season_one(world):
-    c = _plays_on(real_content("weekend"))
+    c = _plays_on(real_content("week7"))
     c.config.auto_open_first_season = True
     g = _player(c, world, "官甲", "guan", "changshe")
     assert "works:stockpile" in {o.id for o in g.options() if o.enabled}

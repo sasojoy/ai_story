@@ -1,7 +1,7 @@
 """求見與拜師的門檻（名聲設計 2.4、6.3）、熟練那一句、散人加成的原因。"""
 import random
 
-from conftest import real_content
+from conftest import real_content, renown_unscaled
 
 from tianxia import library, rules
 from tianxia.engine import Game
@@ -21,7 +21,7 @@ def test_audience_bar_scales_with_the_season():
 
 
 def test_brush_off_names_each_discount():
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     s = new_game_state(c, "甲")
     s.player.stats.update({"fame": 12, "good": 6})
     parts = rules.audience_parts(s, c, WHO)
@@ -31,7 +31,7 @@ def test_brush_off_names_each_discount():
 
 
 def test_brush_off_without_explain_keeps_the_short_hint():
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     c.config.renown.explain = False
     s = new_game_state(c, "甲")
     s.player.stats.update({"fame": 12, "good": 6})
@@ -39,7 +39,7 @@ def test_brush_off_without_explain_keeps_the_short_hint():
 
 
 def test_brush_off_line_from_the_game():
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     c.config.auto_open_first_season = True
     g = Game.new(c, "甲", rng=random.Random(0))
     g.client = None
@@ -59,7 +59,7 @@ def test_lesson_fame_scales_too():
 
 
 def test_practice_line_explains_when_on():
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     cfg = c.config.practice_bonus["evil"]
     assert cfg.line_explained and cfg.line_explained != cfg.line
 
@@ -67,7 +67,7 @@ def test_practice_line_explains_when_on():
 def test_ranger_bonuses_say_why():
     from tianxia import renown
 
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     s = new_game_state(c, "甲")
     s.player.stats["good"] = 15
     assert renown.ranger_exp_note(s, c, 1.10) == ["（一方豪俠：打贏的經驗多 10%）"]

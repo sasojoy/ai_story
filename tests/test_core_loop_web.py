@@ -17,7 +17,7 @@ pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，�
 
 
 def _game(faction, at, classic=False):
-    c = no_conquest(real_content("weekend"))  # 出陣推線的舊規則（領地爭奪 PM 2026-10-22 起正式內容打開）
+    c = no_conquest(real_content("week7"))  # 出陣推線的舊規則（領地爭奪 PM 2026-10-22 起正式內容打開）
     c.config.auto_open_first_season = True
     if classic:
         classic_rules(c)

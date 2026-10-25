@@ -50,7 +50,7 @@ def test_crossed_swords_on_every_block_you_can_attack():
 
 
 def test_switch_off_map_unchanged():
-    game = go(join(plain_game("weekend"), "guan"), "yingchuan")
+    game = go(join(plain_game("week7"), "guan"), "yingchuan")
     places = game.map_state()["places"]
     assert all(p["kind"] != "neutral" for p in places.values())
     assert mapview.LEGEND_NEUTRAL not in mapview.legend_data(game.state, game.content, "situation")["layer"]
@@ -60,7 +60,7 @@ def test_ropes_hang_no_beads_without_tug_of_war():
     """領地爭奪沒有拔河：輿圖總覽的三條戰線照舊寫值，繩上不掛照門檻擺的地點；關著照舊掛。"""
     ropes = _game().map_state()["ropes"]
     assert len(ropes) == 3 and all(r["beads"] == [] for r in ropes)
-    plain = go(join(plain_game("weekend"), "guan"), "yingchuan")
+    plain = go(join(plain_game("week7"), "guan"), "yingchuan")
     assert any(r["beads"] for r in plain.map_state()["ropes"])
 
 

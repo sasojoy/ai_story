@@ -13,7 +13,7 @@ from test_prologue_web import run
 
 import server
 import webharness
-from conftest import real_content
+from conftest import real_content, renown_unscaled
 from tianxia import rules
 from tianxia.engine import SOCIAL_NO_ONE, Game
 
@@ -21,7 +21,7 @@ pytestmark = [pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，
 
 
 def _game(at, faction=None):
-    content = real_content("weekend")  # 一類一顆開著（開季蓋章）
+    content = renown_unscaled(real_content("week7"))  # 一類一顆開著（開季蓋章）；求見門檻照原數（名望 15）
     content.config.auto_open_first_season = True
     game = Game.new(content, "沈浪", rng=random.Random(0))
     game.client = None

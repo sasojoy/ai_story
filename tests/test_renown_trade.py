@@ -1,12 +1,12 @@
 """俠的醫館折扣與寇的黑市（名聲設計 5.2）。"""
-from conftest import real_content
+from conftest import real_content, renown_unscaled
 
 from tianxia import economy, renown, skillview, team
 from tianxia.state import new_game_state
 
 
 def test_clinic_discount_for_heroes_from_the_second_tier():
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     s = new_game_state(c, "甲")
     s.player.member.injury = 20
     s.player.stats["good"] = 15
@@ -20,7 +20,7 @@ def test_clinic_discount_for_heroes_from_the_second_tier():
 
 
 def test_the_heal_button_says_why():
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     s = new_game_state(c, "甲")
     s.player.member.injury = 20
     s.player.stats.update({"good": 15, "silver": 100})
@@ -32,7 +32,7 @@ def test_the_heal_button_says_why():
 def test_both_reasons_share_one_bracket():
     """FB-294：名望的店家折扣與俠的醫館折扣都有時，原因寫在同一個括號、同一種寫法（設計 4.1 的「（名動一方・九四折）」），
     不再是「16 兩（威震州郡九折）（州郡大俠・八五折）」。"""
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     s = new_game_state(c, "甲")
     s.player.member.injury = 40
     s.player.stats.update({"fame": 50, "good": 30, "silver": 100})
@@ -41,7 +41,7 @@ def test_both_reasons_share_one_bracket():
 
 
 def test_black_market_for_rogues():
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     s = new_game_state(c, "甲")
     assert economy.sell_price_for(s, c, 1) == economy.sell_price(c, 1) == 2
     s.player.stats["evil"] = 5
@@ -56,7 +56,7 @@ def test_the_store_says_black_market_and_the_smith_says_so_too():
     from tianxia import shopview
     from tianxia.engine import Game
 
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     c.config.auto_open_first_season = True
     g = Game.new(c, "甲", rng=random.Random(0))
     g.client = None
@@ -75,7 +75,7 @@ def test_the_store_says_black_market_and_the_smith_says_so_too():
 
 
 def test_the_virtue_perks_name_the_clinic_and_the_market():
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     assert "醫館療傷八五折" in renown.virtue_perks(c, "俠", 2)
     assert "鐵匠鋪收購一階 3 兩、二階 8 兩、三階 24 兩" in renown.virtue_perks(c, "寇", 1)
     c.config.four_tiers.enabled = False  # 素材四階關著：照舊不收三階

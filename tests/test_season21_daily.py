@@ -80,16 +80,6 @@ def test_a_wednesday_opening_and_a_long_catch_up_issue_only_today():
     assert not any(o.week in (4, 5, 6) for o in v.world.orders)
 
 
-def test_weekend_orders_are_weekly():
-    """Review Focus 5：週末的季照舊每週一發、一週最多 orders_per_week 道，寫「本週軍令：」。"""
-    c = real_content("weekend")
-    v = _vehicle(c)
-    assert {o.week for o in v.world.orders} == {1}
-    assert all(len(_live(v, f)) <= c.config.orders_per_week for f in ("guan", "huang"))
-    assert any(r.text.startswith(orders.ISSUED) for r in v.world.rumors if r.layer == "faction")
-    assert not any(r.text.startswith(orders.ISSUED_DAY) for r in v.world.rumors)
-
-
 def _game(profile="season21", opened=MON):
     from tianxia.engine import Game
     from tianxia.sqlite_world import open_world
@@ -121,7 +111,6 @@ def test_the_orders_card_reopens_each_day():
     m = with_reveal(server.main_view(game), ["all"])
     reopened = run(m, "return H.pageJianghu();", S={"ordersShut": 1})
     assert 'class="fold orders" data-week="2" open>' in reopened  # 隔天的新軍令展開
-    assert "day" not in _game("weekend").status_data()["calendar"]
 
 
 # ── Task 2：每天一批懸賞 ──
@@ -194,16 +183,6 @@ def test_daily_prizes_hang_on_strike_and_on_the_second_bill():
     c.config.season21_daily.prize_treasure_chance = 0.0
     c.config.season21_daily.prize_horse_chance = 0.0
     assert bounties.prize_rolls_day(0, 1, "guan", c) == (False, False)
-
-
-def test_weekend_bounties_are_weekly():
-    """Review Focus 5：週末照舊每週一批、掛 auto_weeks 週，沒有 day。"""
-    c = real_content("weekend")
-    v = _vehicle(c)
-    assert v.world.bounties and all(b.day == 0 and b.week == 1 for b in v.world.bounties)
-    assert all(b.expires == calendar.week_start(1 + c.config.bounties.auto_weeks, c, v.world)
-               for b in v.world.bounties if b.kind != "wanted")
-    assert v.world.bounty_day == 0
 
 
 # ── Task 3：懸賞獎勵照等級長、附一樣東西 ──
@@ -313,23 +292,6 @@ def test_arms_add_the_level_silver():
     assert bounties._silver(s, c, arms, base=base) == base + 10 * 5  # 第 1 天的求藝（照等級每級 5 兩）Joy 2026-10-21 拿掉
 
 
-def test_weekend_rewards_unchanged():
-    """Review Focus 5：週末照舊固定的數字、不附東西。"""
-    from tianxia import bounties
-
-    game = _game("weekend")
-    s, c = game.state, game.content
-    s.player.faction = None
-    s.player.member.level = 20
-    b = _first(s, "strike")
-    assert bounties._silver(s, c, b) == c.config.bounties.silver["strike"]
-    assert bounties._exp(s, c, b) == c.config.bounties.exp["strike"]
-    assert bounties.reward_text(s, c, b).startswith(f"賞銀 {c.config.bounties.silver['strike']}・經驗 {c.config.bounties.exp['strike']}")
-    pills, before = s.player.stamina_pills, dict(s.player.materials)
-    bounties._complete(s, c, game.world, _first(s, "scout"))
-    assert s.player.stamina_pills == pills and s.player.materials == before
-
-
 # ── Task 4：推大勢的速度 ──
 
 
@@ -382,21 +344,6 @@ def test_season21_cap_and_resistance_use_their_own_numbers():
     assert line in rules.front_ids(c)  # 第一季規則：會動的線就是三條戰線本身
     moved, _ = orders.front_push(game.state, c, line, 10)
     assert moved == 1  # 軍令湊滿推的量照同一組阻力：10 × 0.1
-
-
-def test_weekend_push_unchanged():
-    """Review Focus 5：週末的上限、阻力、出陣與事件一個字都不變（改 Season21Daily 也不受影響）。"""
-    game = _game("weekend")
-    c = game.content
-    cap = game.daily_push_cap()
-    line, d = _back_to_middle(game)
-    sortie, event = game._shaped(line, d, "sortie"), game._shaped(line, d, "event")
-    s21 = c.config.season21_daily
-    s21.push_speed, s21.push_daily_cap, s21.push_mid_share, s21.push_far_share = 0.1, 1, 0.1, 0.1
-    assert game.daily_push_cap() == cap == c.config.daily_push_cap * game.season_scale()
-    assert game._shaped(line, d, "sortie") == sortie == (d * game.season_scale(), False)
-    assert game._shaped(line, d, "event") == event
-    assert push.tuning_for(game.state.world, c) is c.config.push_resistance
 
 
 def test_the_away_summary_keeps_only_today_s_orders():

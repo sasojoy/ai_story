@@ -18,7 +18,7 @@ pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，�
 
 
 def _main(*, faction=None, event=None, **over):
-    content = real_content("weekend")
+    content = real_content("week7")
     content.config.auto_open_first_season = True
     game = Game.new(content, "沈浪", rng=random.Random(0))
     game.client = None

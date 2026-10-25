@@ -10,7 +10,7 @@ from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 
 
-def _game(profile="weekend"):
+def _game(profile="week7"):
     c = real_content(profile)
     c.config.auto_open_first_season = True
     return Game.new(c, "沈浪", rng=random.Random(0), world=open_world())

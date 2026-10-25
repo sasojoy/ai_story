@@ -15,7 +15,7 @@ pytestmark = pytest.mark.slow  # 載三份正式內容
 CONTENT = Path(__file__).resolve().parent.parent / "content"
 
 
-@pytest.mark.parametrize(("profile", "on"), [("season21", True), ("week7", True), ("weekend", False), (None, False)])
+@pytest.mark.parametrize(("profile", "on"), [("season21", True), ("week7", True), (None, False)])
 def test_which_settings_stamp_the_season(profile, on):
     content = load_content(CONTENT, profile=profile)
     season = fresh_season(content, now=1_800_000_000.0)

@@ -13,7 +13,7 @@ from tianxia.world_state import fresh_season
 DAY = 20000  # 回體丹的換日算出來的「第幾天」，測試直接給
 
 
-def _state(faction="guan", at="changshe", silver=500, bag=None, profile="weekend", same=None, third_party=False):
+def _state(faction="guan", at="changshe", silver=500, bag=None, profile="week7", same=None, third_party=False):
     c = real_content(profile)
     c.config.auto_open_first_season = True
     c.config.four_tiers.enabled = False  # 素材四階之前的規則（三階不收、二換三一天一個）；四階的規則在 test_four_tiers
