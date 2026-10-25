@@ -201,10 +201,12 @@ def _minutes(state: GameState, content: Content, loc: str) -> int:
 
 def card(state: GameState, content: Content, e: ErrandState) -> dict:
     """主機側計畫 1.3 的 main.errands／figure.errands 的一筆：{"id", "figure"（對話人物 id）, "who"（名字）, "kind", "text"（做什麼）,
-    "target": {"location", "name", "minutes"（從你這裡步行幾分鐘；在那裡是 0）}, "deadline"（照 calendar.stamp_text）, "status"}。"""
+    "target": {"location", "name", "minutes"（從你這裡步行幾分鐘；在那裡是 0；辦完、作罷的是 None：每一次輪詢都畫，只替還在辦的那一件找路）},
+    "deadline"（照 calendar.stamp_text）, "status"}。"""
+    minutes = _minutes(state, content, e.target) if e.status == "open" else None
     return {
         "id": e.id, "figure": cid_of(content, e), "who": who(content, e), "kind": e.kind, "text": task_text(content, e),
-        "target": {"location": e.target, "name": place(content, e.target), "minutes": _minutes(state, content, e.target)},
+        "target": {"location": e.target, "name": place(content, e.target), "minutes": minutes},
         "deadline": calendar.stamp_text(e.expires, content, state.world), "status": e.status,
     }
 

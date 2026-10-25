@@ -632,16 +632,21 @@ def generate_turn(
     schema_required；空的照舊用 CompanionTurn、不多送一個字。"""
     if client is None:
         raise DialogueUnavailable("沒有可用的模型")
-    schema_required = [*required, *(["stance"] if stances else [])]
     try:
-        turn = client.chat_structured(
-            messages, turn_model(stances) if stances else CompanionTurn, num_predict=TURN_PREDICT,
-            # narrative 也必填（2026-10-22 線上：人物不說話，只出選項）：它在 CompanionTurn 有預設值 ""，
-            # 不寫進 required 的話 schema 允許模型省略，_ensure_required_present 也不會判定缺欄位，
-            # 於是「只回 options」的那一次靜靜通過，對話照開、人物一個字都沒說。
-            required_fields=["narrative", "options"], require_in_schema=True,
-            **({"schema_required": schema_required} if schema_required else {}),  # 沒有就不傳：測試的假 client 不一定認得這個參數
-        )
+        if stances:  # 人物心意開著（減法季批 6）：另一個呼叫點，關著的那一個一個字都不動（tests/test_schema_required.py 照字掃呼叫點）
+            turn = client.chat_structured(
+                messages, turn_model(stances), num_predict=TURN_PREDICT,
+                required_fields=["narrative", "options"], require_in_schema=True, schema_required=[*required, "stance"],
+            )
+        else:
+            turn = client.chat_structured(
+                messages, CompanionTurn, num_predict=TURN_PREDICT,
+                # narrative 也必填（2026-10-22 線上：人物不說話，只出選項）：它在 CompanionTurn 有預設值 ""，
+                # 不寫進 required 的話 schema 允許模型省略，_ensure_required_present 也不會判定缺欄位，
+                # 於是「只回 options」的那一次靜靜通過，對話照開、人物一個字都沒說。
+                required_fields=["narrative", "options"], require_in_schema=True,
+                **({"schema_required": list(required)} if required else {}),  # 沒有就不傳：測試的假 client 不一定認得這個參數
+            )
         if not turn.narrative.strip() or not turn.options:  # 不靠 client 自己檢查（測試的假 client、別的實作）：沒話可說就是這一輪生成失敗
             raise ValueError("模型沒寫人物的話或選項")
         # 模型常夾雜簡體字（提示裡寫了也只部分改善），所以在輸出端確定性地轉成繁體。

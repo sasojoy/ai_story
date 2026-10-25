@@ -269,8 +269,11 @@ def bot_pick(state: GameState, content: Content) -> tuple[str, str] | None:
     rng = random.Random(f"心意|{w.tianji}|{p.name}|{day}")
     if rng.random() >= content.config.jianfa.bot_stance_chance:
         return None
+    from . import figures  # noqa: PLC0415  figures → stances（figures.tick 延後 import 這裡）
+
     side = p.ally if p.ally is not None else p.faction
-    pool = [fid for fid, fig in content.figures.items() if fig.stances and (side not in ("guan", "huang") or fig.faction == side)]
+    pool = [fid for fid, fig in content.figures.items() if fig.stances and (side not in ("guan", "huang") or fig.faction == side)
+            and figures.state_of(state, content, fid).status == "active"]  # 下獄、退場、還沒出場的人物不勸
     if not pool:
         return None
     fid = rng.choice(sorted(pool))
