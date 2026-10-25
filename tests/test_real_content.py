@@ -658,6 +658,8 @@ PLACEHOLDER_LINES |= {("h_bond", "text"), ("h_bond", "season_one")}
 # 新手引導重做（2026-10-22）新寫、改寫的六句，待 joy 潤：h_basic_art 改寫（拿掉「融進不同的底」的舊規則）、操練練完、練功連輸、夠自創、酒肆、點數沒配
 PLACEHOLDER_LINES |= {("h_basic_art", "text"), ("h_drill_done", "text"), ("h_field_lose", "text"), ("h_create", "text"),
                       ("h_tavern", "text"), ("h_points", "text")}
+# 減法季探索一顆開著時操練練完那一句換成出門探索的說法（HintDef.explore_one，2026-10-26 批 2 小修），待 joy 潤；事實由 tests/test_explore_one_polish.py 管
+PLACEHOLDER_LINES |= {("h_drill_done", "explore_one")}
 RECRUITER_HINTS = ["h_foreshadow", "h_event_reveal", "h_promotion", "h_showdown", "h_figure"]  # 第 13～17 條
 DRIFTER_HINTS = {"h_foreshadow", "h_event_reveal", "h_figure"}  # 散人也聽得到的三條（師父講，第 13、14、17 條）
 
@@ -742,6 +744,8 @@ def _hint_cells(content):
             cells[(hint.id, "drifter")] = hint.drifter
         if hint.season_one:  # 第一季才說的那一句（explain-1 的 h_bond）
             cells[(hint.id, "season_one")] = hint.season_one
+        if hint.explore_one:  # 減法季探索一顆開著時說的那一句（h_drill_done）
+            cells[(hint.id, "explore_one")] = hint.explore_one
     return cells
 
 
@@ -780,7 +784,7 @@ def test_every_hint_line_taken_from_the_design_keeps_its_pinned_sentence(content
     """提示書的三十三句：二十七句是設計 10.5 的原文（各釘一段），六句是待 joy 潤的（PLACEHOLDER_LINES：四句改成現在的事實、兩句是
     explain-1 新寫的 h_bond）；兩邊合起來正好是書裡的每一句，以後多寫一句沒釘也沒標待潤的，這裡會叫。開季那一句（10.6）整句釘。"""
     cells = _hint_cells(content)
-    assert len(cells) == 37 and not set(HINT_PINS) & PLACEHOLDER_LINES  # 新手引導重做：拿掉 h_refine_fail、多五條
+    assert len(cells) == 38 and not set(HINT_PINS) & PLACEHOLDER_LINES  # 新手引導重做：拿掉 h_refine_fail、多五條；批 2 小修：h_drill_done 多一句
     assert set(cells) == set(HINT_PINS) | PLACEHOLDER_LINES
     for key, sentence in HINT_PINS.items():
         assert sentence in cells[key], key
