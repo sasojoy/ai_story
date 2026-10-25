@@ -16,6 +16,7 @@ from tianxia.state import PlayerState, WorldState
 @pytest.fixture
 def wk():
     c = no_conquest(real_content("week7"))  # 地盤拔河、出陣推線的舊規則（領地爭奪 PM 2026-10-22 起正式內容打開）
+    c.config.jianfa.four_wins = False  # 三陣營四勝利之前的規則（挑邊、改依附算叛投、攪局；測試整理批 1 把這個檔從週末搬到 7 天季，減法季開著）；新規則在 tests/test_four_wins_wiring.py
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
     return c
@@ -32,6 +33,7 @@ def _game(content, name="甲", faction=None, ally=None, at=None):
 
 def _old_rules():
     c = third_party_gentry(real_content("week7"))
+    c.config.jianfa.four_wins = False  # 三陣營四勝利之前的規則（挑邊、改依附算叛投、攪局；測試整理批 1 把這個檔從週末搬到 7 天季，減法季開著）；新規則在 tests/test_four_wins_wiring.py
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
     return c
