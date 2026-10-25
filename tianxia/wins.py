@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import bisect
+import hashlib
 import math
 import re
 
@@ -100,6 +101,22 @@ def join_lean(content: Content, faction_id: str | None, location: str, rules: Ji
         return None
     side = lean_default(content, location, rules)
     return side if side in sides else sides[0]
+
+
+def bot_lean(name: str, season: int, content: Content, faction_id: str | None, rolls: dict[str, int]) -> str | None:
+    """伺服器假人投靠豪強那一下的傾向（FB-810，PM 2026-10-26）：依附這個陣營（豪強）的人數少的那一軍，不看投靠點——不然新角色都從
+    潁川出發、最近的豪強投靠點是曹氏莊院，假人全部幫官軍，而假人又不按「改幫」。數的是名冊裡依附這個陣營的人（rolls 是
+    world.roll_counts()：「陣營@那一軍」），不是那一軍全部的人；一樣多照名號＋季的雜湊挑（同 bot.enlist_pick，不碰亂數）。
+    真人照投靠點（join_lean）。不是要依附一軍的陣營、沒有陣營是 None。"""
+    sides = [f.id for f in allied.allies_of(content, faction_id)]
+    if not sides:
+        return None
+    counts = dict.fromkeys(sides, 0)
+    for key, n in rolls.items():
+        faction, ally = allied.split_key(key)
+        if faction == faction_id and ally in counts:
+            counts[ally] += n
+    return min(sides, key=lambda side: (counts[side], hashlib.sha256(f"{name}|{season}|{side}".encode()).hexdigest()))
 
 
 def lean_sides(p: PlayerState, content: Content) -> list[str]:

@@ -6388,7 +6388,7 @@ class Game:
             if p.location not in faction.join_at:
                 return ["（你已經不在投靠的地方了。）"]
             p.faction = faction.id
-            p.ally = ally if allied.on(self.content, self.state.world) else None
+            p.ally = self._bot_lean(faction.id, ally) if allied.on(self.content, self.state.world) else None
             # 投靠這一刻就推一次新手引導：第一季「投靠、看一眼本週軍令」那一步只看陣營（計畫 T6）；beta 照舊等下一個行動
             msgs = [f"你投靠了{allied.label(self.content, p.faction, p.ally)}。"]
             if p.ally is not None:
@@ -6403,6 +6403,14 @@ class Game:
         prompt = self._faction_prompt(faction)
         self._hide(prompt)  # 場景已經寫著這一問（_own_scene_text），江湖紀錄那一則只留標題（FB-046）
         return [prompt]
+
+    def _bot_lean(self, faction_id: str, picked: str | None) -> str | None:
+        """三陣營四勝利開著的季，伺服器假人投靠豪強那一下的傾向（FB-810）：依附豪強人數少的那一軍（wins.bot_lean，確認這一下才數），
+        不看投靠點；真人、兩軍的人、開關關著（還有選邊鈕）都照 picked。假人投靠之後不按「改幫」，所以這一下就是它這一季幫誰。"""
+        if self.state.player.bot is None or not self._four_wins():
+            return picked
+        season = self.world.get_season_number()
+        return wins.bot_lean(self.state.player.name, season, self.content, faction_id, self.world.roll_counts()) or picked
 
     def _lean_options(self) -> list[Option]:
         """本週卡「改幫…」（三陣營四勝利，設計 3.2）：豪強能幫、此刻沒在幫的那幾軍各一顆，不花體力、隨時換、不算叛投。
