@@ -12062,7 +12062,8 @@ class Game:
 
     def _mall_moment(self) -> mall.Moment:
         """上架看的「此刻」（減法季批 7b：MallWindow 的 rule、phases、from_week）：休季或季中、開打的季是季曆第幾週、這一季（開季的章）
-        開著哪幾個商品寫到的子開關。沒寫這三樣的商品不看它，一個字都不變。"""
+        開著哪幾個商品寫到的子開關；segments 是這一季的季曆照不照段（7 天濃縮季），商品說明的上架時機（{上架}）照它寫（FB-849）。
+        沒寫這三樣的商品不看它，一個字都不變。"""
         c, w = self.content, self.state.world
         phase = self.world.season_phase()
         rules_named = {item.on_sale.rule for item in c.mall.values() if item.on_sale.rule}
@@ -12070,6 +12071,7 @@ class Game:
             phase="resting" if phase == "resting" else "season",
             week=calendar.point(w.time, c, w).week if phase == "running" and not w.ended else None,
             rules=frozenset(part for part in rules_named if jianfa(c, w, part)),
+            segments=calendar.week7_on(w, c),
         )
 
     def mall_entry(self) -> dict | None:

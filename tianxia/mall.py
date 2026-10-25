@@ -15,7 +15,7 @@ import re
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 
-from . import library, naming
+from . import calendar, library, naming
 from .characters import name_key
 from .models import Content, MallItem
 from .state import GameState
@@ -183,14 +183,32 @@ def effects_text(item: MallItem, content: Content) -> str:
 class Moment:
     """上架看的「此刻」（減法季批 7b 的 MallWindow.rule、phases、from_week 用）：phase 是 season（籌備中、開打的季）或 resting（休季），
     week 是季曆第幾週（開打的季才有；籌備中、休季是 None），rules 是這一季（開季的章）開著的子開關名。呼叫端（Game._mall_moment）給；
-    沒給（MOMENT）就是季中、不知道第幾週、子開關都不算：只有沒寫這三樣的商品照舊上架。"""
+    沒給（MOMENT）就是季中、不知道第幾週、子開關都不算：只有沒寫這三樣的商品照舊上架。
+    segments：這一季的季曆照段（7 天濃縮季，calendar.week7_on）：說明裡的上架時機（{上架}）寫「第 5 天」不寫「第三週」（FB-849）。"""
 
     phase: str = "season"
     week: int | None = None
     rules: frozenset[str] = frozenset()
+    segments: bool = False
 
 
 MOMENT = Moment()
+SLOTS = ("{上架}",)  # 商品說明（content/mall.json 的 note）裡照季換字的插槽：上架時機，note_text 填，item_problems 驗
+_NUMERALS = "〇一二三四五六七八九十"
+
+
+def _week_cn(n: int) -> str:
+    return _NUMERALS[n] if 0 <= n <= 10 else "十" + _NUMERALS[n - 10] if 11 <= n < 20 else str(n)
+
+
+def note_text(item: MallItem, content: Content, moment: Moment = MOMENT) -> str:
+    """商品說明（FB-849）：{上架} 換成上架時機，讀 MallWindow.from_week、照這一季的季曆寫——7 天濃縮季的「週」是段，畫面上沒有第三週，
+    寫這一段的第一天（calendar.segment_days，「第 5 天」）；其他季照舊「第三週」。沒有插槽的說明原樣不動。待 joy 潤。"""
+    if "{上架}" not in item.note or item.on_sale.from_week is None:
+        return item.note
+    week = item.on_sale.from_week
+    when = f"第 {calendar.segment_days(week, content)[0]} 天" if moment.segments else f"第{_week_cn(week)}週"
+    return item.note.replace("{上架}", when)
 
 
 def on_sale(item: MallItem, day: int, season: int, moment: Moment = MOMENT) -> bool:
@@ -485,7 +503,7 @@ def view(content: Content, wallet: Wallet, owner: str, day: int, season: int, mo
         # 一次最多買幾件（網頁的數量框，Joy 2026-10-22）：限購剩的、元寶買得起的、MAX_QTY 取最少；月卡一次一張（確認那一行寫用到哪一天）
         most = 0 if why else 1 if days else min(MAX_QTY, balance // max(1, item.price), MAX_QTY if room is None else room)
         items.append({
-            "id": item.id, "name": item.name, "note": item.note, "price": item.price, "kind": item.kind,
+            "id": item.id, "name": item.name, "note": note_text(item, content, moment), "price": item.price, "kind": item.kind,
             "kind_name": KIND_NAMES[item.kind], "effects": effects_text(item, content),
             "limit": limit_text(item, wallet, owner, day, season), "can": why is None, "why": why, "after": balance - item.price + item.effects.get("card_rebate", 0),
             "gives": {key: n for key, n in item.effects.items() if key in EFFECTS},
@@ -648,4 +666,9 @@ def item_problems(item: MallItem, content: Content) -> list[str]:
         out.append(f"{where}：上架的季要是正整數（寫了 {window.seasons}）")
     if window.rule is not None and not isinstance(getattr(content.config.jianfa, window.rule, None), bool):
         out.append(f"{where}：上架的子開關 {window.rule} 不是 Config.jianfa 的子開關")
+    for slot in re.findall(r"\{[^{}]*\}", item.note):  # 說明裡照季換字的插槽（FB-849）
+        if slot not in SLOTS:
+            out.append(f"{where}：說明裡不認得的插槽 {slot}（認得 {'、'.join(SLOTS)}）")
+    if "{上架}" in item.note and window.from_week is None:
+        out.append(f"{where}：說明寫了 {{上架}}，上架時段要寫 from_week")
     return out
