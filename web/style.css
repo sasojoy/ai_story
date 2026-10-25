@@ -683,6 +683,9 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .wk-sides .side-haoqiang { color: var(--rou); }
 .wk-chev { flex: none; width: 8px; height: 8px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: translateY(-2px) rotate(45deg); transition: transform 0.2s; }
 .wk-strip.on .wk-chev { transform: translateY(2px) rotate(-135deg); }
+.wk-note { margin: -4px 4px 8px; font-size: 13px; line-height: 1.5; color: var(--ink-2); } /* 灰線底下那一行（第 3 週離贏還差多少、功能開了、45 級；批 5） */
+.wk-locked { margin: 6px 0 0; font-size: 12px; line-height: 1.5; color: var(--ink-2); } /* 「為什麼」裡：哪幾樣第 2 週才開 */
+.m-gap { margin: 2px 0 6px; font-size: 12px; line-height: 1.5; color: var(--ink-2); } /* 天下層抽屜：第 3 週離贏還差多少 */
 .wk-card { border-color: var(--gold); padding: 12px 14px; }
 .wk-lab { margin: 0 0 4px; font: 700 12px/1 var(--sans); color: var(--gold); letter-spacing: 0.08em; }
 .wk-title { margin: 0; font: 700 19px/1.45 var(--serif); }

@@ -6,7 +6,7 @@ from __future__ import annotations
 import random
 from unittest import mock
 
-from conftest import real_content
+from conftest import no_week_unlock, real_content
 
 from tianxia import economy, equipment, forge_secrets, four_tiers, howto, materials, renown, shopview, skillview
 
@@ -52,7 +52,7 @@ def _econ_game(bag=None, silver=1000, on=True):
     from tianxia.engine import Game
     from tianxia.sqlite_world import open_world
 
-    c = real_content("week7")
+    c = no_week_unlock(real_content("week7"))
     c.config.four_tiers.enabled = on
     c.config.auto_open_first_season = True  # 不然停在籌備中，鐵匠鋪進不去
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world())
@@ -184,7 +184,7 @@ def test_tier4_counts_as_reachable_through_the_upgrade():
 
 
 def test_captions_and_howto_say_tier3_sells():
-    c = real_content("week7")
+    c = no_week_unlock(real_content("week7"))
     caps = shopview._trade_captions(c)
     assert "三階 18 兩" in caps["sell_cap"] and "四階不收，留著打神器" in caps["sell_cap"]
     text = "".join(howto.economy_lines(c))
@@ -201,7 +201,7 @@ def _pair():
     from tianxia.engine import Game
     from tianxia.sqlite_world import open_world
 
-    c = real_content("week7")
+    c = no_week_unlock(real_content("week7"))
     world = open_world()
     a = Game.new(c, "甲", rng=random.Random(0), world=world)
     b = Game.new(c, "乙", rng=random.Random(1), world=world)

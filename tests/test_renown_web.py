@@ -4,7 +4,7 @@ import random
 import re
 
 import pytest
-from conftest import real_content
+from conftest import no_week_unlock, real_content
 from test_prologue_web import DRIVER as BASE_DRIVER
 
 import server
@@ -25,7 +25,7 @@ def run(m, script, *, S=None):
 @pytest.fixture(scope="module")
 def base():
     """正式內容、週末設定的一個新角色（名聲開著）：名望 27、善名 18、惡名 3。"""
-    c = real_content("week7")
+    c = no_week_unlock(real_content("week7"))
     c.config.auto_open_first_season = True
     g = Game.new(c, "甲", rng=random.Random(0))
     g.client = None

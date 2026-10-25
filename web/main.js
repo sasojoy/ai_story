@@ -508,7 +508,10 @@
           : detail.startsWith(PRACTICE_NO_FOE) ? (o.note || PRACTICE_OUT) : PRACTICE_AWAY.test(detail) ? PRACTICE_AWAY_SUB : "")
         : "";
       const tier = d.key === "practice" && o.enabled ? detail.split("・").find((x) => TIER_WORDS.includes(x)) : "";
-      const sub = wheel ? EXPLORE_SUB
+      // 探索那一格亮著時小字寫這裡多半給什麼（「城裡多事」「野外多敵」，整合設計 6.3；伺服器的 m.mostly，在路上沒有）
+      const mostly = d.key === "explore" && o.enabled && m.mostly ? m.mostly : "";
+      const sub = mostly ? mostly
+        : wheel ? EXPLORE_SUB
         : tier ? tier
         : drillFull ? DRILL_FULL_SUB
         : practice ? practice
@@ -820,12 +823,15 @@
     const strip = `<button id="week" class="wk-strip${open === "why" ? " on" : ""}" data-act="wk" data-id="why" aria-expanded="${open === "why"}" aria-label="${esc(w.label)}${esc(w.when)}，點了看為什麼">`
       + `<b class="wk-seg">${esc(w.when)}</b>${w.theme ? `<span class="wk-th">${esc(w.theme)}</span>` : '<span class="wk-th"></span>'}${w.sides ? wkSidesHtml(w.sides) : ""}<i class="wk-chev" aria-hidden="true"></i></button>`;
     const panel = open === "why" ? `<div class="card wk-panel why">${whyHtml(m)}</div>` : "";
+    // 灰線底下一行小字（批 5，整合設計 6.8）：第 3 週「離贏還差多少」、第 2 週的功能剛開了那一句、45 級之後那一句；都沒有不畫
+    const notes = [w.gap, w.unlock, w.cap].filter(Boolean);
+    const note = notes.length ? `<p class="wk-note">${notes.map(esc).join(" ")}</p>` : "";
     const card = `<section class="card wk-card" aria-label="${WK_STEP}">
       <p class="wk-lab">${WK_STEP}</p>
       ${step ? `<h2 class="wk-title">${esc(title)}</h2>${detail ? `<p class="wk-detail">${esc(detail)}</p>` : ""}` : `<p class="wk-detail">${WK_IDLE}</p>`}
       ${go || w.steps.length > 1 ? `<div class="wk-foot">${go}${w.steps.length > 1 ? `<button class="linkish wk-next" data-act="wk-next">↻ ${WK_NEXT}</button>` : ""}</div>` : ""}</section>`;
     // 四塊是江湖頁的兄弟元素、不包一層（fitFirstScreen 認 #page > .wk-card 收它）：每塊帶 data-wk，wkRepaint 一起換掉
-    return [strip, panel, card, checkinPickHtml(m)].filter(Boolean).map((h) => h.replace(/^<(\w+) /, '<$1 data-wk ')).join("\n      ");
+    return [strip, note, panel, card, checkinPickHtml(m)].filter(Boolean).map((h) => h.replace(/^<(\w+) /, '<$1 data-wk ')).join("\n      ");
   }
   // 簽到要挑四階的日子（還沒挑）：本週卡底下一張小卡，四顆挑屬性的鈕（點一種就領，同以前簽到格裡的那四顆）
   function checkinPickHtml(m) {
@@ -840,7 +846,8 @@
     const s = m.status || {};
     const nb = newbiePeek(m), ck = checkinPeek(m);
     const next = m.week_card && m.week_card.next ? `<p class="wk-nextev"><b>下一件</b>${esc(m.week_card.next)}</p>` : "";
-    return `${m.sides_card ? sidesTableHtml(m.sides_card) : ""}${s.stance_rule ? `<p class="stance-rule">${esc(s.stance_rule)}</p>` : ""}${next}${warHelp(m, "stance")}`
+    const locked = m.week_card && m.week_card.locked ? `<p class="wk-locked">${esc(m.week_card.locked)}</p>` : ""; // 第 2 週才開的功能（6.6，批 5）
+    return `${m.sides_card ? sidesTableHtml(m.sides_card) : ""}${s.stance_rule ? `<p class="stance-rule">${esc(s.stance_rule)}</p>` : ""}${locked}${next}${warHelp(m, "stance")}`
       + `${nb ? `<h4 class="wk-sub">${esc(s.newbie.title)}</h4>${nb.panel}` : ""}${m.quest && m.quest.trim() && shown("quest") ? `<div class="wk-quest">${m.quest}${warHelp(m, "quest")}</div>` : ""}`
       + `${ck ? `<h4 class="wk-sub">簽到</h4>${ck.panel}` : ""}`
       + (s.renown ? WK_HOWTO.replace("名望怎麼來", "名聲怎麼來") : WK_HOWTO); // 以前在行動列底下（explain-2）；名聲開著時那一節叫「名聲」

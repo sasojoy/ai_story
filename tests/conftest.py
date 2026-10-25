@@ -85,6 +85,13 @@ def classic_rules(content: Content) -> Content:
     return content
 
 
+def no_week_unlock(content: Content) -> Content:
+    """功能照週解鎖（減法季 6.6，Config.jianfa.week_unlock）關掉，回傳同一份內容：用 week7／season21 的正式內容、開季第一天就要進鐵匠鋪、
+    擂台、自創、懸賞榜的舊測試叫它（那幾樣在減法季第 2 週才開）；解鎖本身的測試在 tests/test_week_unlock.py。"""
+    content.config.jianfa.week_unlock = False
+    return content
+
+
 def no_conquest(content: Content) -> Content:
     """領地爭奪（Config.conquest，第 38 項改版；PM 2026-10-22 起正式內容打開）之前的規則：地盤照拔河與割據易手、出陣推戰線、
     沒有翻地與戰書，回傳同一份內容。測的是舊的地盤、出陣推線、「關著一個字都不變」的舊測試用它；新規則的測試不要叫
