@@ -109,22 +109,47 @@ def rng_for(season: int, name: str, serial: int, what: str) -> random.Random:
 # ── 鈕上的小字與段落（Task 2-3；字都待 joy 潤）──
 
 # 這一處「多半給什麼」（設計 4.1「地點決定多半給什麼」）：照這一處的表。字跟雲端批 5 的 mapdata.MOSTLY／MOSTLY_HERE 同一套（那兩張照地點的小圖，
-# 探索一顆開著時改照這裡的表）；待 joy 潤。MOSTLY 是輿圖第一層名字旁的兩個字，HINTS 是四格探索那一格的小字（/api/main 的 mostly）與
-# 鈕上括號最後那一段（「探索（體力 18・城裡多事）」）
+# 探索一顆開著時改照這裡的表）；待 joy 潤。MOSTLY 是輿圖第一層名字旁的兩個字（地點種類，不看誰站在那裡）、HINTS 是同一套字加上地點的字
+# （玩法說明列六張表的樣子、小字沒有比重可看時的退路）。鈕上括號最後那一段（「探索（體力 18・城裡多事）」）與四格探索那一格的小字
+# （/api/main 的 mostly）以 HINTS 為主，只有這一種的招牌類在這一處此刻的比重是 0 時才改寫（hint_of 的 weights，FB-832，PM 2026-10-26）
 MOSTLY = {TOWN: "多事", TEMPLE: "多悟", FORD: "參半", WILD: "多敵", HILL: "多料", CAMP: "多敵"}
 PLACE_WORDS = {TOWN: "城裡", TEMPLE: "寺裡", FORD: "渡口", WILD: "野外", HILL: "山裡", CAMP: "營裡"}
 HINTS = {kind: PLACE_WORDS[kind] + MOSTLY[kind] for kind in MOSTLY}
+BEAT_MOSTLY = {EVENT: "多事", ENCOUNTER: "多敵", MATERIAL: "多料", INSIGHT: "多悟"}  # 比重最高的那一類寫成哪兩個字
+BALANCED = "參半"  # 最高的有兩類以上並列
+# 每一種地點的招牌類（MOSTLY 的字說的是哪一類）：城多事、寺多悟、野與營多敵、山多料；渡口「參半」說的是事件、遭遇、素材三樣差不多
+SIGNATURE = {TOWN: (EVENT,), TEMPLE: (INSIGHT,), FORD: (EVENT, ENCOUNTER, MATERIAL), WILD: (ENCOUNTER,), HILL: (MATERIAL,), CAMP: (ENCOUNTER,)}
 BOUNTY_WORD = "有賞"  # 接了這裡的討伐懸賞：「多半」那兩個字換成「有賞」（設計 4.1）：「野外有賞」
 SPAR_HINT = "同袍比劃"  # 自家營寨：遭遇是跟同袍比劃
 
 
-def hint_of(kind: str, how: str | None) -> str:
-    """鈕上與四格那一格的小字：接了這裡的討伐懸賞「野外有賞」、自家營寨「同袍比劃」，其餘照表（HINTS）。"""
+def mostly_of(weights: Mapping[str, float]) -> str:
+    """「多半」那兩個字照比重寫：四類裡比重最高的那一類（BEAT_MOSTLY），並列最高寫「參半」；全是 0 的那一拍補素材（FILL）所以寫「多料」。"""
+    top = max((weights.get(kind, 0) for kind in KINDS), default=0)
+    if top <= 0:
+        return BEAT_MOSTLY[FILL]
+    best = [kind for kind in KINDS if weights.get(kind, 0) == top]
+    return BALANCED if len(best) > 1 else BEAT_MOSTLY[best[0]]
+
+
+def signature_holds(kind: str, weights: Mapping[str, float]) -> bool:
+    """這一種地點的招牌類在這一處此刻還抽得到（比重不是 0）。渡口的「參半」要事件、遭遇、素材三樣裡至少兩樣抽得到才成立。"""
+    live = sum(1 for beat in SIGNATURE[kind] if weights.get(beat, 0) > 0)
+    return live >= min(2, len(SIGNATURE[kind]))
+
+
+def hint_of(kind: str, how: str | None, weights: Mapping[str, float] | None = None) -> str:
+    """鈕上與四格那一格的小字：接了這裡的討伐懸賞「野外有賞」、自家營寨「同袍比劃」，其餘以地點種類的字為主（HINTS，跟輿圖名字旁的
+    MOSTLY、玩法說明一致）；只有這一種的招牌類在這一處此刻的比重是 0（weights：`weights()` 再扣掉做不到的——沒有對手遭遇是 0、抽不到事件、
+    悟不出感悟）時，才改寫比重最高的那一類（`mostly_of`）：長社的官軍遭遇是 0，就不再寫「野外多敵」（FB-832，PM 2026-10-26）。
+    weights 沒給照地點種類。"""
     if how == "bounty":
         return PLACE_WORDS[kind] + BOUNTY_WORD
     if how == "spar":
         return SPAR_HINT
-    return HINTS[kind]
+    if weights is None or signature_holds(kind, weights):
+        return HINTS[kind]
+    return PLACE_WORDS[kind] + mostly_of(weights)
 BEAT_WORDS = {EVENT: "遇事", ENCOUNTER: "遇敵", MATERIAL: "得料", INSIGHT: "有悟"}  # 一拍的那一類寫成兩個字（紀錄的結果標記、行動列底下那一行）
 TRAVELER = "旅人"  # 野類地點的事件拍偏這個標籤的事件（救助旅人那一類；content.check_explore_one 驗至少三則、都在野類地點）
 
@@ -138,6 +163,13 @@ def items_of(lines: list[str], prefix: str) -> str:
     """素材那幾句「獲得 精鐵砂 ×1」去掉開頭（materials.GRANT_PREFIX）、同一種的數量加起來、用頓號接起來：「精鐵砂 ×2、獸皮 ×1」；
     一句都沒有是空字串。不是「名字 ×數量」寫法的照原樣列。"""
     return "、".join(merge_items(line.removeprefix(prefix) for line in lines if line.startswith(prefix)))
+
+
+def is_item(text: str) -> bool:
+    """「精鐵砂 ×1」「驚羽 ×1（拾遺囊）」這種一樣東西的寫法（materials.item_text，後面可以接來源）。「獲得」開頭的敘事裡，
+    破境丹、回體丹那一句（「【破境丹】一枚——衝擊絕學時可以服下…」）是說明，不是一樣東西：得失那一行只列它後面的「破境丹 +1」（FB-831）。"""
+    name, sep, count = text.partition(" ×")
+    return bool(name) and bool(sep) and count[:1].isdigit()
 
 
 def merge_items(items: Iterable[str]) -> list[str]:
