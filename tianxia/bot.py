@@ -17,6 +17,7 @@ from . import prologue as prologue_rules
 from .engine import ARENA_YIELD, DUEL_FLEE, FREE_TEXT_OPTION, TEXT_TALKS, Game, Option
 from .martial_arts import MartialArt, next_quality
 from .models import Content
+from .models import Outcome  # 減法季批 4：pick_outcome 的位子
 from .state import PLAYER
 from .sqlite_world import open_world
 from .world_state import WorldStateStore
@@ -395,6 +396,14 @@ def explore_choice(ids, want: str = "material") -> str | None:
     if branch is not None:
         return branch
     return gather if gather in ids else "act:explore" if "act:explore" in ids else None
+
+
+def pick_outcome(game: Game, outcomes: list[Outcome], rng: random.Random) -> str | None:
+    """假人挑隨口應對分岔的後果（減法季整合設計 5.1、5.7「假人可以挑後果、挑心意、應約戰、封招，不可以寫字」）：**這一版不做**
+    （企劃者 2026-10-24 第 5 件：歸類要句子，假人不寫字），一律回 None——pick 照舊把隨口應對（choice:free）排除，伺服器假人
+    （bot_policy.take_turn）也照舊不按。留著位子：之後要做就照個性挑一種的 id，直接交給 Game.answer_event 的 outcome
+    （不經模型、不寫字；江湖紀錄與行狀照真人一樣只寫類名，看不出是假人）。"""
+    return None
 
 
 def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:

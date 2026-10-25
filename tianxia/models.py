@@ -377,7 +377,7 @@ class Outcome(_Strict):
     effect.stats 的 good 為負的是作惡的那一種（第 8 件 a）。其餘規矩在 content.check_outcomes。"""
 
     id: str
-    tag: str  # 「類名：怎麼做」——給模型歸類、給畫面寫「可能的走向」；永遠不寫數字
+    tag: str  # 「短名：給模型看的說明」——模型歸類看整句；給玩家看的（欄位表、江湖紀錄、行狀）只用冒號前的短名（outcomes.short_name，FB-800）；永遠不寫數字
     check: Check | None = None
     combat: str | None = None  # 敵方隊伍 id：這則事件固定選項裡打的那一路
     cost: dict[str, int] | None = None  # 只能是 {"silver": 正數}
@@ -419,10 +419,12 @@ class FreeTextChoice(_Strict):
     effect: Effect = Field(default_factory=Effect)
     fail_effect: Effect = Field(default_factory=Effect)
     outcomes: list[Outcome] = Field(default_factory=list)  # 空的時候不寫進序列化
+    # 只在分岔開著的季才有這一顆（PM 2026-10-25 第 7 件：人拉犁原本沒有隨口應對，關著的季不多一顆鈕）；要寫 outcomes。False 時不寫進序列化
+    outcomes_only: bool = False
 
     @model_serializer(mode="wrap")
     def _drop_new_defaults(self, handler):
-        return _drop_unset(handler(self), ("outcomes",))
+        return _drop_unset(handler(self), ("outcomes", "outcomes_only"))
 
 
 class Event(_Strict):
@@ -521,8 +523,8 @@ class MarkText(_Strict):
 
 class MarkRule(_Strict):
     """地方痕跡過門檻（減法季整合設計 5.2；主機側計畫 Task 4-3，content/mark_rules.json）：全服累計到 threshold 那一刻
-    （marks.fire_due）發一則地方傳聞（不列名字）、記一筆江湖史，有寫 trend 的照原本的量推一次線（企劃者 2026-10-24 第 8 件 b：只有「趕走散兵」
-    那一類）；之後地點描寫多接 describe 那一段（marks.describe），〈天下形勢〉照 xingshi 寫一句（marks.xingshi_facts）。只發一次
+    （marks.fire_due）發一則地方傳聞（不列名字；世界層那一句 PM 2026-10-25 修正輪拿掉，江湖史在季末寫，marks.close_season），有寫 trend 的
+    照原本的量推一次線（企劃者 2026-10-24 第 8 件 b：只有「趕走散兵」那一類）；之後地點描寫多接 describe 那一段（marks.describe），〈天下形勢〉照 xingshi 寫一句（marks.xingshi_facts）。只發一次
     （WorldState.marks_fired）。threshold 照 Config.mark_threshold_scale 換算（同條件的 marks_min）。字都待 joy 潤。"""
 
     mark: str  # 「地點 id:痕跡名」
@@ -2417,6 +2419,10 @@ class Secrets(_Strict):
     scrap_frame: str = "你在亂石堆裡翻出一頁殘譜，字跡斑駁，只認得出一句：「{clue}」"
     overheard: str = "（這句話你記進了武學譜。）"
     hit_line: str = "爐中忽地一變——這一爐竟暗合了江湖上流傳的一句口訣。"
+    # 這一季第一次參透一條（玩家回報 2026-10-25「武學譜很空」）：結果多一句進度，另寫一則標題「武學譜」的江湖紀錄、跳一個視窗。
+    # {n} 這一季參透了幾條、{total} 這一季全服共有幾條。待 joy 潤
+    solved_note: str = "武學譜上多了一方朱印——這一季的秘方，你已參透 {n}／{total}。"
+    solved_title: str = "參透口訣・{n}／{total}"
     rumor: str = "江湖上傳開了：{who}參透了一句口訣，合出了{thing}。"
     chronicle: str = "{who}參透口訣，首創{thing}。"
 
@@ -3004,6 +3010,9 @@ class JianfaRules(_Strict):
     morning_mail: bool = True  # 第十章 回來的理由：人物的信每天 mail_hour 點送到（批 9；letters.mail_day）
     opening: bool = True  # 6.7 開局第一分鐘（批 7 前半，tianxia/opening.py）：不進草廬，旁白→三選一→人物開口託付→本週卡；關著照舊走草廬序章
     mail_hour: int = Field(default=9, ge=0, le=23)  # 當地幾點送信（時區照 pill_day_utc_offset_hours）
+    # ── 批 4：隨口應對分岔與痕跡（主機側計畫第六節；子開關 free_text_outcomes、marks_visible）──
+    # 【預設】一天（季曆日，同推線的 daily_push_cap）從分岔的後果（之後連心意、託付）記進陣營帳的貢獻上限；同出陣推線的量級（整合設計 5.3）
+    deed_contribution_cap: int = Field(default=12, ge=0)
     # ── 批 3c 三陣營四勝利（整合設計第三章；wins.py 讀，wins.rules_of）──
     tiers: TierRules = Field(default_factory=TierRules)  # 季末四階的切法、門檻、起手資源與稱號（wins.settle）
     # 豪強的投靠點 → 投靠那一下預設幫哪一軍（wins.lean_default；content.validate 叫 wins.check 驗每個投靠點都有、都是它能幫的那一軍）

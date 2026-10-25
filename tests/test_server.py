@@ -5616,7 +5616,7 @@ def test_a_refused_forge_does_not_leave_the_waiting_message_on_the_craft_page():
     const window = { scrollTo() { scrolled += 1; } };
     const forgeBody = () => ({});
     const renderPage = () => seen.push(S.forgeResult && S.forgeResult.html);
-    const guideKey = () => null, updateForgeLine = () => {}, keepPlace = (draw) => draw(), showMadeCard = () => {}, kilnBurst = () => {};
+    const guideKey = () => null, updateForgeLine = () => {}, keepPlace = (draw) => draw(), showMadeCard = () => {}, kilnBurst = () => {}, secretPop = () => {};
     const renderTop = () => {};
     const setMain = () => {};
     const run = async (answer) => {
@@ -6069,7 +6069,8 @@ NOT_IN_THE_FINGERPRINT = {
         "final_tiers": "同上（結局卡的資料：收季那一刻跟 ended 一起寫，減法季批 3c）",
         "act_reached": "隊伍數與統御上限的內部計數，不畫在共用畫面上",
         "marks": "地方痕跡只畫成模糊人數，改了讓每個分頁多刷新一次會洩漏有人做了看不見的事（推送計畫 F4）",
-        "marks_fired": "痕跡過門檻那一刻同時寫一則地方傳聞與江湖史（傳聞流水號、江湖史則數都在指紋裡）",
+        "marks_fired": "痕跡過門檻那一刻寫一則地方傳聞（傳聞流水號在指紋裡；世界層那一句 2026-10-25 拿掉）；江湖史在季末",
+        "mark_helpers": "誰替痕跡出過力只用來記本人的行狀，不畫在共用畫面上（改了讓每個分頁刷新會洩漏有人做了看不見的事，同 marks）",
         "pending_battle": "背景推進記下要開的戰鬥，開成集結之後 active_battle 的指紋就變了",
         "season_one": "開季時蓋的章，開季之後不變",
         "haoqiang_allied": "開季時蓋的章（豪強分屬兩軍），開季之後不變",

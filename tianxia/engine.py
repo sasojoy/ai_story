@@ -15,6 +15,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
 from pydantic import BaseModel
+from pydantic import model_serializer  # Option 的 outcomes 空著不寫（減法季批 4）
 
 from . import arts as arts_mod
 from . import ascend  # 破境卡（招式與絕學稿案第三節）
@@ -41,6 +42,12 @@ from . import hints as hint_rules  # 碰到才說（新手引導計畫三）；�
 from . import tavern as tavern_rules  # 酒肆（企劃者 2026-10-18）；叫 tavern_rules：跟其他 *_rules 一樣避開區域變數
 from . import prologue as prologue_rules  # Game.new 有個參數也叫 prologue，所以模組在這裡一律叫 prologue_rules
 from . import rumor_view  # 傳聞分層的畫面：見聞頁的四層、你不在的時候（計畫 2026-10-06 傳聞分層一）
+# 減法季批 4：隨口應對分岔、痕跡看得見、貢獻（三陣營四勝利的 wins.credit）；別名避開這個檔裡叫 marks、outcomes 的區域變數
+from . import marks as marks_rules
+from . import outcomes as outcome_rules
+from . import wins as wins_rules
+from .models import FreeTextChoice, Outcome
+from .rules import jianfa
 from . import step as step_rules  # 本週卡「你這一步」（減法季批 3c）；叫 step_rules：這個檔裡有區域變數叫 step
 from . import wins  # 三陣營四勝利（減法季批 3c）：豪強兩本帳、傾向、季末四階
 from .accounts import AccountStore
@@ -146,6 +153,16 @@ class Option(BaseModel):
     confirm_yes: str = ""  # 確認層上「做」那一顆寫什麼；空的照舊寫「照打」（FB-125：拆解寫「拆掉」）
     tag: str = ""  # 名聲 5B：俠寇選項的「俠」「寇」（網頁畫在編號那一格）；空的照舊寫編號
     note: str = ""  # 名聲 5B：標籤底下第二行小字（俠寇選項寫為什麼合你的路數）；空的不畫
+    # 減法季批 4（主機側計畫 1.3 欄位表 options[].outcomes）：分岔開著時「隨口應對」那一顆的可能走向 [{id, tag}]（outcomes.tags，不給數字）；
+    # 其餘是 None，不寫進 model_dump（關著的季選單一個鍵都不多）
+    outcomes: list[dict[str, str]] | None = None
+
+    @model_serializer(mode="wrap")
+    def _drop_no_outcomes(self, handler):
+        data = handler(self)
+        if isinstance(data, dict) and data.get("outcomes") is None:
+            data.pop("outcomes", None)
+        return data
 
 
 @dataclass(frozen=True)
@@ -353,6 +370,8 @@ class FreeTextRequest(BaseModel):
     """隨口應對鎖外評估的單子（server.py 的 A 段拿到、B 段送模型、C 段交回 answer_event 重驗）。"""
     event_id: str
     text: str
+    # 減法季批 4：分岔開著、這則事件寫了後果時是可能的走向（outcomes.tags；B 段照它改叫 event_llm.judge_outcome）；其餘是空的
+    outcomes: list[dict[str, str]] = []
 
 
 class BattleTextRequest(BaseModel):
@@ -403,6 +422,7 @@ class FreeTextOutcome(BaseModel):
     time: float  # 那一則紀錄的遊戲時間與標題，插潤色前用來認是不是同一則
     title: str
     evil: bool = False  # 判成惡行而且成了（FB-223）：effect_text 是 rules.EVIL_DONE，潤色照惡行寫、寫成了換掉那一句
+    outcome: str = ""  # 減法季批 4：分岔開著時走的是哪一種後果（id）；關著是空的
 
 
 ONBOARD_SEGMENT = 4  # 初入江湖上線的版本章（ONBOARDING_VERSION 升到 4 的那一版）：比它小、已經走出草廬的存檔讀檔時蓋成引導走完
@@ -456,6 +476,7 @@ class Game:
         self.peer_brief: str | None = None
         self.forged = False  # 上一次 forge() 真的合成了（被拒絕的是 False）：煉製頁拿它決定爐子要不要清空（server.api_menxia_do）
         self.forged_thing: tuple[str, str] | None = None  # 上一次 forge() 合出來的那一樣（"art"／"ins", id）：煉製頁在結果底下畫它的卡
+        self.secret_solved: dict | None = None  # 上一次開爐或裝意境這一季第一次參透一條秘方：跳的那個視窗（secret_recipes.solved_card）
         # 勝算的記憶（team.OddsMemo，FB-321）：伺服器上的 Game 共用一份（server.game_for 掛上），輿圖疊層與按鈕上的勝算輸入一樣就不再模擬；
         # 直接建的 Game（測試、腳本、假人程式）是 None，照舊每次算
         self.odds_memo: team.OddsMemo | None = None
@@ -954,6 +975,9 @@ class Game:
         self._reconcile_season()
         msgs = list(self.world.catch_up_season(self.content, now, self.rng))
         self.state.world = self.world.get_season()
+        # 減法季批 4：痕跡過門檻的防漏（只發，不替任何人記行狀：排程那一份 Game 沒有自己的人；直接寫回、不經 _save_season）
+        if jianfa(self.content, self.state.world, "marks_visible") and marks_rules.fire_due(self.state, self.content):
+            self.world.save_season(self.state.world)
         msgs += self._conquest_tick()  # 領地爭奪：22:00 沒人在線也照時換天
         self._battle_status(tick=True)
         self._seal_tick()
@@ -1015,6 +1039,7 @@ class Game:
         self._conquest_tick()  # 領地爭奪：換天（22:00）的掛鉤（前一天沒開成的攻城作罷；第一個看到新的一天的人觸發）
         self._deliver_conquest()  # 領地爭奪：翻地的分紅、守城功（下線時易手的回來補）
         self._deliver_arena()  # 擂台：被挑了的戰報、季末前三名的獎勵；季收了還沒打完的那一場作廢
+        self._marks_tick()  # 減法季批 4：痕跡過門檻的防漏、替自己記出過力的行狀（關著什麼都不做）
         mail = parley.lapse(self.state, self.content)  # NPC 智能 2.1：欠人物的事過了期限是食言（附的委託先作罷，書信不再補一句）
         mail += letters.deliver(self.state, self.content, now)  # 書信（大勢人物擴充第二批）：人物來信、過期的委託作罷
         if mail:
@@ -1253,8 +1278,13 @@ class Game:
                     opt.enabled, opt.tag = ok, ch.needs.path
                     opt.note = "" if ok else renown.needs_line(s, ch.needs.path, ch.needs.tier)
                 opts.append(opt)
-            if event.free_text is not None:
-                opts.append(Option(id=FREE_TEXT_OPTION, label=event.free_text.prompt + free_text_note(event.free_text, c)))
+            free = self._free_text_of(event)
+            if free is not None:
+                branches = self._branches(event)
+                opts.append(Option(
+                    id=FREE_TEXT_OPTION, label=free.prompt + free_text_note(free, c, branching=bool(branches)),
+                    outcomes=outcome_rules.tags(branches) if branches else None,
+                ))
             return opts
         if s.player.duel is not None:  # 單人頭目戰：三招與抽身；放手一搏走輸入框（duel_free_text_prompt），選單上沒有
             held = tactics.locks(s.player.duel.bout).no_moves  # 本命戰法：卸勁出不了強攻、只攻不守出不了固守
@@ -2267,8 +2297,45 @@ class Game:
     def _save_season(self) -> None:
         """choose()/travel() 直接在 self.state.world 上就地修改（check_thresholds、
         apply_effect 的 trend 變動等既有程式碼都是這樣寫的，沒有、也不需要特別改寫成
-        認得共用儲存的樣子），行動結束後這裡統一寫回共用賽季一次。"""
+        認得共用儲存的樣子），行動結束後這裡統一寫回共用賽季一次。
+        痕跡看得見（減法季批 4）：寫回之前先看有沒有痕跡過了門檻（痕跡只在有人記的那一下漲，記的那一下存季時發就夠；_marks_tick 防漏）。"""
+        if jianfa(self.content, self.state.world, "marks_visible"):
+            marks_rules.fire_due(self.state, self.content)
         self.world.save_season(self.state.world)
+
+    MARK_ANNAL = "{rumor}這裡頭有你出的一分力。"  # 待 joy 潤：行狀（annals.MARK）——痕跡過了門檻、你在那之前出過力
+
+    def _marks_tick(self) -> None:
+        """痕跡看得見（減法季批 4）：同步時補發過了門檻還沒發的（防漏），再替自己記出過力的那幾則行狀（_mark_credits）；
+        有改到季（發了、名號拿掉了）才存季。關著什麼都不做。"""
+        if not jianfa(self.content, self.state.world, "marks_visible"):
+            return
+        fired = marks_rules.fire_due(self.state, self.content)
+        if self._mark_credits() or fired:
+            self._save_season()
+
+    def _mark_credits(self) -> bool:
+        """跨過門檻那一刻出過力的人（WorldState.mark_helpers）裡有自己的，各記一則行狀（annals.MARK：只寫那一句傳聞，不列名字、
+        不寫玩家的句子），名號從名單拿掉（名單空了鍵也拿掉）。只在自己的同步裡叫：排程與替別人寫東西的那一份 Game 不記。
+        回有沒有記到。"""
+        s, c = self.state, self.content
+        w, name = s.world, s.player.name
+        mine = [mark for mark, names in w.mark_helpers.items() if mark in w.marks_fired and name in names]
+        if not mine:
+            return False
+        by_mark = {r.mark: r for r in c.mark_rules}
+        for mark in mine:
+            names = w.mark_helpers[mark]
+            names.remove(name)
+            if not names:
+                del w.mark_helpers[mark]
+            rule = by_mark.get(mark)
+            if rule is None:
+                continue
+            loc = c.locations.get(marks_rules.place_of(mark))
+            annals.note(s, c, annals.MARK, self.MARK_ANNAL.format(rumor=rule.rumor), 2,
+                        place=loc.name if loc is not None else "", time=w.marks_fired[mark])
+        return True
 
     def dialogue_request(self, option_id: str, text: str | None = None) -> companion_agent.DialogueRequest | None:
         """鎖外生成的階段 A（server.py 在行動鎖內、很快地呼叫）：現在選這個選項，會不會生成一輪對話？
@@ -3460,22 +3527,45 @@ class Game:
             return None
         if FREE_TEXT_OPTION not in {o.id for o in self.options(odds=False, tick=False) if o.enabled}:
             return None
-        return FreeTextRequest(event_id=event_id, text=text)
+        branches = self._branches(self.content.events[event_id])
+        return FreeTextRequest(event_id=event_id, text=text, outcomes=outcome_rules.tags(branches) if branches else [])
 
-    def answer_event(self, request: FreeTextRequest, llm_rate: int | None = None, moral: str | None = None) -> list[str]:
+    def _free_text_of(self, event: Event) -> FreeTextChoice | None:
+        """這則事件此刻有沒有「隨口應對」那一顆：寫了 free_text，而且不是只在分岔開著時才有的那一種（outcomes_only，人拉犁；PM 2026-10-25
+        第 7 件）——那一種在關著的季沒有這一顆，選單、輸入框的提示語、新手提示都照沒有。"""
+        free = event.free_text
+        if free is None or (free.outcomes_only and not jianfa(self.content, self.state.world, "free_text_outcomes")):
+            return None
+        return free
+
+    def _branches(self, event: Event) -> list[Outcome]:
+        """這一則的隨口應對此刻照分岔走嗎（減法季批 4，整合設計 5.1）：子開關 free_text_outcomes 開著（加上這一季的章）、事件寫了後果，
+        是那幾種後果（最後一種是 fallback）；其餘是空的，照舊用 stat、effect、fail_effect。"""
+        free = self._free_text_of(event)
+        if free is None or not free.outcomes or not jianfa(self.content, self.state.world, "free_text_outcomes"):
+            return []
+        return free.outcomes
+
+    def answer_event(
+        self, request: FreeTextRequest, llm_rate: int | None = None, moral: str | None = None, outcome: str | None = None,
+    ) -> list[str]:
         """隨口應對的階段 C（鎖內）：重驗還停在同一則事件、寫的是同一句話，才算成功率、擲骰、套用效果。
         llm_rate 是鎖外評好的 0～100、moral 是同一次評出來的善惡（event_llm.MORALS）；llm_rate 沒給（直接呼叫的測試、腳本）
         就在這裡評（行動鎖內，用 _quick_client 的短逾時複本），評不到一樣退回 40、善惡當「中」。
         成功率＝LLM 評分加屬性修正、夾在 5～85（rules.free_text_rate）；擲骰用引擎自己的 rng。
         善惡再驗一次（event_llm.moral_of：不是那三個字當「中」）。判成「惡」而且擲中了（FB-223）：成功效果換成惡行的版本
         （rules.evil_success：善名換惡名、扣惡名與加情誼拿掉、結果句換成 rules.EVIL_DONE），潤色照惡行寫（FreeTextOutcome.evil）；
-        「善」「中」、或「惡」沒擲中，一個字都不變。"""
+        「善」「中」、或「惡」沒擲中，一個字都不變。
+        分岔開著、這則事件寫了後果（_branches）時改走 _answer_branch（outcome 是 B 段歸好的那一種的 id）；關著的季 outcome 不理。"""
         s, c = self.state, self.content
         self.last_gamble = None
         current = self.free_text_request(request.text)
         if current is None or current.event_id != request.event_id:
             return self._log(["（事情已經過去了，這句話沒派上用場。）"])
         event = c.events[request.event_id]
+        branches = self._branches(event)
+        if branches:
+            return self._answer_branch(event, request, branches, llm_rate, moral, outcome)
         choice = event.free_text
         if llm_rate is None:
             # 判善惡那一次照 _quick_client 的額度：評分失敗用掉了額度就不叫、當「中」
@@ -3524,6 +3614,100 @@ class Game:
         self._record_faction()
         self._save_season()
         return self._log(msgs)
+
+    def _answer_branch(
+        self, event: Event, request: FreeTextRequest, branches: list[Outcome], llm_rate: int | None, moral: str | None,
+        outcome: str | None,
+    ) -> list[str]:
+        """隨口應對分岔的 C 段（減法季批 4；整合設計 5.1、5.9，主機側計畫 Task 4-2）：照 outcomes.plan 分四條走——
+        check 照那一種的檢定擲骰（self.rng；成功率比的是那一種的難度，outcomes.rate）、成套 effect 敗套 fail_effect；combat 照固定選項開打
+        （_event_battle），贏套 effect、輸套 fail_effect；cost 掏銀兩、必成（不夠就回 NOT_ENOUGH_SILVER、不做、不扣次數，事件還停著）；
+        最後一種（fallback）只套那一句。outcome 是 B 段歸好的 id（不在清單一律最後一種）；llm_rate 沒給（直接呼叫的測試、腳本）就在鎖內
+        自己歸類（event_llm.judge_outcome，_quick_client 的額度）。
+        善惡（FB-223）只在歸到最後一種時照舊看模型的評分（判「惡」就是惡行成了：rules.evil_success）；選中別的後果時只看那一種自己的效果
+        （作惡那一種本來就扣善名），同一句話不加兩次（PM 2026-10-25 第 8 件）。成了的後果記貢獻（_deed_credit）。
+        行狀只寫後果的類名，不存玩家寫的句子（公開的只有後果與痕跡）；江湖紀錄是自己的，照舊寫那一句，括號裡多寫類名。"""
+        s, c = self.state, self.content
+        if llm_rate is None:
+            verdict = event_llm.judge_outcome(self._quick_client(), event, branches, request.text, moral_client=self._quick_client)
+            llm_rate, outcome = verdict.rate, verdict.outcome
+            moral = verdict.moral if moral is None else moral
+        plan = outcome_rules.plan(branches, outcome, llm_rate, s, c, self.world)
+        chosen = plan.outcome
+        problem = outcome_rules.cost_problem(chosen, s) if plan.way == "cost" else ""
+        if problem:
+            return self._log([problem])
+        fallback = plan.way == "fallback"
+        moral = event_llm.moral_of(moral) if fallback else event_llm.MORAL_NEUTRAL
+        # 類名（短名）寫進紀錄的括號與行狀；歸到最後一種（走開）不寫類名，照關著時的寫法（FB-800，PM 2026-10-25：紀錄與行狀
+        # 「隨口應對，行了一件惡事，成了。」不寫成「隨口應對：走開，…」；判善、判中也不寫）
+        name = "" if fallback else outcome_rules.kind_name(chosen)
+        s.battle_card = None
+        faction_before = s.player.faction
+        self._draft = Draft(f"{event.title}・隨口應對")
+        self._affinity_before = dict(s.player.affinities)
+        try:
+            s.pending_event = None
+            evil = False
+            if plan.way == "check":
+                success = self.rng.random() * 100 < plan.rate
+                tag, line = check_result_line(success)  # 一律是本人：不寫誰出手
+                msgs = [f"你：「{request.text}」（{name}・{rate_words(plan.rate)}）", line]
+                self._outcome(tag, line)
+                effect = chosen.effect if success else failed(chosen.fail_effect, c)
+                msgs += self._apply(effect, once=event.once)
+            elif plan.way == "combat":
+                msgs = [f"你：「{request.text}」（{name}）"]
+                msgs += self._event_battle(event, outcome_rules.as_choice(chosen))  # 效果在打完那一刻照勝負套
+                success = s.battles[0].tier in team.WIN_TIERS
+                effect = chosen.effect if success else failed(chosen.fail_effect, c)
+            else:  # 掏錢的、最後一種：不擲骰、必成
+                success = True
+                evil = fallback and moral == event_llm.MORAL_EVIL
+                effect = evil_success(chosen.effect) if evil else outcome_rules.paid(chosen)
+                msgs = [f"你：「{request.text}」" + (f"（{name}）" if name else "")]
+                msgs += self._apply(effect, once=event.once)
+            self._deed_credit(chosen, success)
+            done = EVIL_ANNAL if evil else "。" if fallback else "，成了。" if success else "，沒成。"
+            annals.note(s, c, annals.DEED, f"遇上{'奇遇' if event.qiyu else ''}【{event.title}】，隨口應對{'：' + name if name else ''}{done}",
+                        3 if event.once or event.qiyu else 1)  # 不存玩家的句子（quote 空著）
+            msgs += self._event_progress()  # 領地爭奪：隨口應對了結也推一次進度（開關關著是空的）
+            self._begin_enlistment(faction_before)
+            self._greet_rejoin(faction_before)
+            gifts = self._general_gifts() + self._signature_arms()
+            msgs += check_thresholds(s, c, self.world, self._quick_client(), now=self.now)
+            msgs += self._report_seat()
+            self._check_hints()
+            journal.add_entry(s, self._draft.entry(s.world.time, msgs))
+            self._gift_entry(gifts)
+            msgs += gifts
+            self.last_gamble = FreeTextOutcome(
+                event_id=event.id, text=request.text, success=success, effect_text=fill_marks(effect.text, s),
+                time=s.world.time, title=self._draft.title, evil=evil, outcome=chosen.id,
+            )
+        finally:
+            self._draft = None
+            self._affinity_before = None
+        self._record_faction()
+        self._save_season()
+        return self._log(msgs)
+
+    def _deed_credit(self, outcome: Outcome, success: bool) -> None:
+        """分岔的後果記貢獻（整合設計 5.3）：成了、不是作惡那一種（PM 2026-10-25 第 6 件）、有那一邊（散人照留痕跡、不記貢獻，同推線）。
+        一天（季曆日，同推線的上限）最多 Config.jianfa.deed_contribution_cap，超過的不記（PlayerState.deed_day／deed_today）。
+        走 wins.credit：兩軍照舊加 contrib 與那一週的帳，豪強另記此刻幫的那一軍那一本。"""
+        s, c = self.state, self.content
+        points = outcome.effect.contribution if success and not outcome.evil else 0
+        if not points or self._side() is None:
+            return
+        w, p = s.world, s.player
+        at = calendar.point(w.time, c, w)
+        if p.deed_day != at.cal_day:
+            p.deed_day, p.deed_today = at.cal_day, 0
+        room = outcome_rules.contribution_room(points, p.deed_today, c.config.jianfa.deed_contribution_cap)
+        if room:
+            p.deed_today += room
+            wins_rules.credit(p, c, w, at.week, room)
 
     def add_gamble_narration(self, outcome: FreeTextOutcome, narration: str) -> None:
         """隨口應對的潤色（鎖外生成）插回那一則江湖紀錄：接在「你：「…」」那一行後面、結果文字前面。
@@ -3962,7 +4146,7 @@ class Game:
             on.append("h_recruit")
         if want("h_free_text") and s.pending_event:
             event = c.events.get(s.pending_event)
-            if event is not None and event.free_text is not None:
+            if event is not None and self._free_text_of(event) is not None:
                 on.append("h_free_text")
         if want("h_road") and p.recent_sights:  # 路上見聞真的發生過才會記
             on.append("h_road")
@@ -8333,9 +8517,8 @@ class Game:
     def event_free_text_prompt(self) -> str | None:
         """眼前的事件可以隨口應對時回傳提示語（選單上那一顆的標籤），否則 None；server.py 用它決定輸入框。"""
         event_id = self.state.pending_event
-        if event_id is None or self.content.events[event_id].free_text is None:
-            return None
-        return self.content.events[event_id].free_text.prompt
+        free = None if event_id is None else self._free_text_of(self.content.events[event_id])
+        return None if free is None else free.prompt
 
     def battle_free_text_prompt(self) -> str | None:
         """這回合是否有自訂行動的輸入框可以用，有的話回傳提示語（見 BattleOption.free_text
@@ -10479,12 +10662,14 @@ class Game:
         合成花心得與體力（設計 12.1）：花了的體力跟心得一起寫在這一則的數值變化上。"""
         self.forged = False
         self.forged_thing = None
+        self.secret_solved = None
         if art_id or len(insight_ids) != 2:
             return self._log([fusion.ART_IN_FURNACE if art_id else fusion.TWO_INSIGHTS])
         refusal = prologue_rules.fuse_problem(self.state, self.content, insight_ids)  # 序章只准照劇本合成
         if refusal is not None:
             return self._log([refusal])
         xinde, stamina = self._xinde(), self.state.player.stamina
+        solved = self._solved_secrets()
         mixed = insight_fx.base_id(insight_ids[0]) != insight_fx.base_id(insight_ids[1])  # 兩種不同的意境（合成；同一種是揣摩）
         insight, msgs = fusion.merge(self.state, self.content, self.world, self._quick_client(), *insight_ids, proposed=proposed)
         tag = f"合併「{insight.name}」" if insight is not None else None
@@ -10501,7 +10686,26 @@ class Game:
                 tag, xinde, guide=True, title=journal.CRAFT, extra=[f"體力 -{spent}"] if spent > 0 else None,
                 lines=out[:1],
             )
+            self._note_solved(solved)
         return out
+
+    def _solved_secrets(self) -> list[str]:
+        """這一季已經參透的秘方（開爐、裝意境之前記一份，做完跟 _note_solved 比）。"""
+        return list(secret_recipes.manual(self.state, secret_recipes.tianji_of(self.world)).solved)
+
+    def _note_solved(self, before: list[str]) -> None:
+        """這一下動作參透了新的秘方：另寫一則標題「武學譜」的江湖紀錄（煉製那一則只收結果第一句，參透那句會被丟掉；
+        玩家回報 2026-10-25），記下要跳的視窗（secret_solved）。"""
+        fresh = [r for r in secret_recipes.manual(self.state, secret_recipes.tianji_of(self.world)).solved if r not in before]
+        recipe = next((r for r in secret_recipes.active(self.content, secret_recipes.tianji_of(self.world)) if r.id in fresh), None)
+        if recipe is None:
+            return
+        card = secret_recipes.solved_card(self.state, self.content, self.world, recipe)
+        self.secret_solved = card
+        journal.add_entry(self.state, JournalEntry(
+            time=self.state.world.time, title=journal.MANUAL, tag=f"參透「{card['name']}」",
+            lines=[card["note"]] if card["note"] else [],
+        ))
 
     def forge_line(self, insight_ids: list[str]) -> str:
         return skillview.forge_line(self.state, self.content, self.world, insight_ids)
@@ -10680,15 +10884,18 @@ class Game:
         """把一個意境裝進一門武學的意境槽（武學重構；修練頁與煉製頁都走這裡，MENXIA_ACTIONS["slot"]）：不花心得體力，
         裝成了寫一則「裝意境」江湖紀錄，被拒絕只回一句。"""
         xinde = self._xinde()
+        self.secret_solved = None
         problem = prologue_rules.slot_problem(self.state, self.content, art_id) or arts_mod.slot_problem(
             self.state, self.content, self.world, art_id, insight_id, index)
         if problem is not None:
             self.forged = False
             return self._log([problem])
+        solved = self._solved_secrets()
         msgs = self._log(arts_mod.slot(self.state, self.content, self.world, art_id, insight_id, index))
         self.forged = True
         self.forged_thing = None
         self._menxia_entry(msgs[0], xinde, guide=True, action="slot")
+        self._note_solved(solved)
         return msgs
 
     @_not_while_preparing
@@ -11008,10 +11215,12 @@ class Game:
         n = max([e.n for e in w.xingshi], default=0) + 1
         w.xingshi_ticket = XingshiTicket(
             n=n, key=key, opened_real=self.now,  # 現實時鐘（FB-577）
-            facts=xingshi.facts(w, c, notes, mark.lines, mark.rumors, night=xingshi.is_night(self.pill_now(), c)),  # 白天開的不寫「打到入夜」
+            facts=xingshi.facts(w, c, notes, mark.lines, mark.rumors, night=xingshi.is_night(self.pill_now(), c),  # 白天開的不寫「打到入夜」
+                                marks_from=mark.fired),  # 減法季批 4：上一篇開單以後過門檻的痕跡（PM 2026-10-25 修正輪：不再靠世界層傳聞補）
             line=xingshi.summary_line(notes, c),
         )
-        w.xingshi_mark = XingshiMark(log=len(w.conquest.day_log), rumors=len(w.rumors), lines=xingshi.line_values(w, c))
+        w.xingshi_mark = XingshiMark(log=len(w.conquest.day_log), rumors=len(w.rumors), lines=xingshi.line_values(w, c),
+                                     fired=len(w.marks_fired))  # 這一篇開單那一刻讀到哪裡：開單到收下之間過門檻的，下一篇寫
 
     def _xingshi_finish(self, essay: str | None) -> XingshiEssay:
         """收下還在等的那一張：模型寫的過得了 xingshi.clean 就用，不然照固定段（by_rule，畫面上看不出差別）；天下大事一則、江湖史一筆，
@@ -15136,6 +15345,8 @@ class Game:
 
     def location_text(self) -> str:
         loc = self.content.locations[self.state.player.location]
+        if jianfa(self.content, self.state.world, "marks_visible"):  # 減法季批 4：痕跡過了門檻，描寫多接一段（marks.describe）
+            return f"【{loc.name}】危險 {'★' * loc.danger}\n\n{marks_rules.describe(loc, self.state.world, self.content)}"
         return f"【{loc.name}】危險 {'★' * loc.danger}\n\n{loc.describe(self.state.world.flags)}"  # 宛城的描寫隨版本換
 
     def scene_art(self) -> dict | None:
@@ -15264,6 +15475,7 @@ class Game:
             "bounties": bounties.status(s, c, self.world),
             # 武學譜（口訣與秘方）：這一季聽過口訣或合中過的秘方，一條一筆 {"clues": [聽過的口訣], "solved": 名號或 None}
             "manual": secret_recipes.view(s, c, self.world),
+            "manual_total": secret_recipes.progress(s, c, self.world)[1],  # 武學譜入口的分母：這一季全服共有幾條（不是「你聽過的」）
             "seal_duel": self.seal_duel_card(),  # 奪璽卡（玉璽碎片設計 5.10）：全服看得到；沒有單挑是 None
             "seal": self.seal_view(),  # 持有者的碎片卡（玉璽碎片設計第十節）
             "seal_watch": self.seal_watch(),  # 為真時網頁在背景也輪詢、輪到出招改分頁標題（5.5）

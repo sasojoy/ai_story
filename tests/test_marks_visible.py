@@ -46,13 +46,16 @@ def test_the_twentieth_mark_fires_once(town, state):
     state.world.time = 1234.0
     assert [r.mark for r in marks.fire_due(state, town)] == [KEY]
     assert state.world.marks_fired == {KEY: 1234.0}
-    rumor = state.world.rumors[-1]
-    assert (rumor.text, rumor.location, rumor.layer, rumor.named) == (RULE.rumor, "town", "local", False)  # 不列名字
-    assert state.world.chronicle[-1].text == RULE.rumor  # 江湖史沒另寫就照傳聞那一句
-    assert len(state.world.rumors) == before_rumors + 1 and len(state.world.chronicle) == before_chronicle + 1
+    (local,) = state.world.rumors[-1:]
+    assert (local.text, local.location, local.layer, local.named) == (RULE.rumor, "town", "local", False)  # 不列名字
+    # 過門檻那一刻只發地方傳聞：世界層那一句拿掉了（PM 2026-10-25 修正輪；〈天下形勢〉的事實與地點描寫換段照舊）
+    assert len(state.world.rumors) == before_rumors + 1 and not [r for r in state.world.rumors if r.layer == "world"]
+    # 江湖史在季末才寫（PM 2026-10-25 第 4 件照整合設計 5.2；上一輪照計畫 4-3 寫在過門檻那一刻）：見 marks.season_lines
+    assert len(state.world.chronicle) == before_chronicle
     _twenty(state, town, 5)
     assert marks.fire_due(state, town) == []  # 只發一次
     assert len(state.world.rumors) == before_rumors + 1
+    assert marks.season_lines(state.world, town) == [RULE.rumor]  # 江湖史沒另寫就照傳聞那一句
 
 
 def test_the_place_reads_differently_past_the_threshold(town, state):
@@ -79,14 +82,27 @@ def test_the_highest_threshold_segment_wins(town, state):
 
 
 def test_the_xingshi_gets_a_line_after_it_fires(town, state):
-    assert marks.xingshi_facts(state.world, town, since=0.0) == []
+    assert marks.xingshi_facts(state.world, town, 0) == []
     _twenty(state, town)
     state.world.time = 500.0
     marks.fire_due(state, town)
-    assert marks.xingshi_facts(state.world, town, since=0.0) == [RULE.rumor]  # 沒寫 xingshi 就照傳聞那一句
-    assert marks.xingshi_facts(state.world, town, since=600.0) == []  # 上一篇以後才過門檻的才寫
+    assert marks.xingshi_facts(state.world, town, 0) == [RULE.rumor]  # 沒寫 xingshi 就照傳聞那一句
+    assert marks.xingshi_facts(state.world, town, 1) == []  # 上一篇已經讀到第一條之後的才寫
     town.mark_rules[0] = RULE.model_copy(update={"xingshi": "小鎮的街頭清靜了。"})
-    assert marks.xingshi_facts(state.world, town, since=0.0) == ["小鎮的街頭清靜了。"]
+    assert marks.xingshi_facts(state.world, town, 0) == ["小鎮的街頭清靜了。"]
+
+
+def test_the_xingshi_reads_the_fired_marks_in_the_order_they_fired(town, state):
+    """起點是「marks_fired 已經讀到第幾條」（上一篇開單那一刻有幾條）：按過門檻的先後切，不看世界秒——同一個世界秒過門檻的兩條
+    也分得開（以前拿世界秒比，邊界上不是重複就是漏）。"""
+    second = MarkRule(mark="town:扭送", describe="衙門口的木枷上常鎖著鬧事的醉漢。", rumor="小鎮鬧事的醉漢被人一個個押去見官。")
+    town.mark_rules.append(second)
+    state.world.time = 500.0
+    state.world.marks.update({"town:扭送": 20, KEY: 20})  # 扭送先記、勸醒後記，但規則表裡勸醒在前
+    state.world.marks_fired.update({"town:扭送": 500.0, KEY: 500.0})  # 同一個世界秒
+    assert marks.xingshi_facts(state.world, town, 0) == [second.rumor, RULE.rumor]
+    assert marks.xingshi_facts(state.world, town, 1) == [RULE.rumor]
+    assert marks.xingshi_facts(state.world, town, 2) == [] and marks.xingshi_facts(state.world, town, 99) == []
 
 
 def test_only_a_rule_with_a_trend_pushes_the_line_once(town, state):
@@ -163,7 +179,8 @@ def test_a_rule_is_written_once(town):
         validate(town)
 
 
-STRAGGLERS = {"yingchuan_wilds:拆卡", "nanyang_road:護車", "runan_wilds:奪牛"}  # 趕走散兵那一類（人拉犁的「散兵退了」跟那一則一起等接線）
+# 趕走散兵那一類（企劃者 2026-10-24 第 8 件 b；PM 2026-10-25 第 5 件的三條，加上接線那一批跟人拉犁一起併進來的「散兵退了」）
+STRAGGLERS = {"yingchuan_wilds:拆卡", "nanyang_road:護車", "runan_wilds:奪牛", "yingchuan_wilds:散兵退了"}
 
 
 @pytest.mark.slow
@@ -171,7 +188,7 @@ def test_real_content_has_one_rule_per_outcome_mark_and_only_the_stragglers_push
     content = real_content()
     written = {key for ev in content.events.values() if ev.free_text is not None for o in ev.free_text.outcomes for key in o.effect.marks}
     rules = {r.mark: r for r in content.mark_rules}
-    assert set(rules) == written and len(rules) == 93
+    assert set(rules) == written and len(rules) == 96  # 29 則的 93 個，加上人拉犁的 3 個（PM 2026-10-25 第 7 件）
     assert {mark for mark, rule in rules.items() if rule.trend} == STRAGGLERS
     assert all(rules[mark].trend == {"front": -1} for mark in STRAGGLERS)  # 地方安定：戰線往官軍那邊一點
     assert {rule.threshold for rule in rules.values()} == {20}

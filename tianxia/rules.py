@@ -365,10 +365,10 @@ def stat_rate(llm_rate: int, stat: str, state: GameState, content: Content, worl
     return value_rate(llm_rate, team.check_value(state, content, world, PLAYER, stat))
 
 
-def value_rate(llm_rate: int, value: float) -> int:
-    """stat_rate 的算法：LLM 評的分數加上（屬性值 − 5）× FREE_TEXT_PER_POINT，夾在 5～85。隨口應對分岔的檢定（outcomes.rate，
-    屬性值是 check_stat_value：best_of 取最高）也走它。"""
-    rate = round(llm_rate + (value - 5) * FREE_TEXT_PER_POINT)
+def value_rate(llm_rate: int, value: float, base: float = 5) -> int:
+    """stat_rate 的算法：LLM 評的分數加上（屬性值 − base）× FREE_TEXT_PER_POINT，夾在 5～85。隨口應對分岔的檢定（outcomes.rate，
+    屬性值是 check_stat_value：best_of 取最高）也走它，base 換成那一種後果的難度（PM 2026-10-25 第 3 件）；其餘照舊是 5。"""
+    rate = round(llm_rate + (value - base) * FREE_TEXT_PER_POINT)
     return max(FREE_TEXT_MIN_RATE, min(FREE_TEXT_MAX_RATE, rate))
 
 
@@ -415,6 +415,18 @@ def add_marks(marks: dict[str, int], state: GameState, content: Content) -> None
             continue
         state.player.mark_days[key] = day
         state.world.marks[key] = state.world.marks.get(key, 0) + n
+        _note_mark_helper(key, state, content)
+
+
+def _note_mark_helper(key: str, state: GameState, content: Content) -> None:
+    """痕跡看得見開著時（減法季批 4）記下替有痕跡規則的痕跡出過力的人（WorldState.mark_helpers）：跨過門檻那一刻他們各記一則行狀
+    （Game._mark_credits）。過了門檻之後出的力不記；沒有痕跡規則的痕跡（事件條件讀的那些）不記；關著一個字都不寫。"""
+    w = state.world
+    if key in w.marks_fired or not jianfa(content, w, "marks_visible") or not any(r.mark == key for r in content.mark_rules):
+        return
+    names = w.mark_helpers.setdefault(key, [])
+    if state.player.name not in names:
+        names.append(state.player.name)
 
 
 def fail_stamina(amount: int, content: Content) -> int:

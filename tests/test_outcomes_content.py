@@ -1,6 +1,7 @@
 """減法季批 4（主機側計畫 Task 4-1）：正式內容的隨口應對分岔——草稿（content/events_outcomes.json，PM 2026-10-24 初版、待 joy 潤）
 併進 content/events/*.json 之後，四種設定都載得起來、每則最後一種是 fallback、作惡的那一種只在原事件有作惡選項的那八則。
-yc_wilds_plow（人拉犁）本來沒有隨口應對，補了會讓關著的季多一顆鈕，留到接線那一批跟開關一起補（計畫 6.0 第 9 條、6.5）。"""
+yc_wilds_plow（人拉犁）本來沒有隨口應對：接線那一批跟開關一起補（PM 2026-10-25 第 7 件），寫成 outcomes_only——只在分岔開著的季
+才畫那一顆，關著的季不多一顆鈕（tests/test_outcomes_answer.py 測選單）。"""
 from collections import Counter
 from pathlib import Path
 
@@ -19,6 +20,7 @@ MERGED = {
     "yc_city_petition", "yc_river_overboard", "yc_wilds_toll", "yc_cs_grain_cart", "yc_sf_herbwife",
     "rn_mkt_rice", "rn_qiao_guoshui", "rn_wild_cellar", "rn_camp_palisade", "rn_hill_deserter",
     "ny_wan_gatecheck", "ny_road_brokencart", "ny_yu_ropetoll", "ny_xinye_wallgap", "ny_wilds_runaways",
+    "yc_wilds_plow",  # 人拉犁：接線那一批併進來（outcomes_only）
 }
 EVIL = {  # 企劃者 2026-10-24 第 8 件 a：原事件有作惡固定選項的八則，各一種作惡後果（掘壕圍城的「動手」就是原本那一支）
     "yz_juma_toll": "collude", "yz_market_salt": "inform", "jz_lz_siegework": "fight", "ly_mengjin_grain": "loot",
@@ -59,14 +61,19 @@ def test_the_evil_outcome_sits_right_before_the_fallback_in_exactly_the_eight():
 def test_the_rest_carry_a_mark_and_a_contribution():
     content = real_content()
     plain = [o for event_id in MERGED for o in content.events[event_id].free_text.outcomes[:-1] if not o.evil]
-    assert len(plain) == 89 - 3 - 1  # 草稿 89 種有痕跡的後果，減掉人拉犁的三種、掘壕圍城的「動手」改成作惡
+    assert len(plain) == 89 - 1  # 草稿 89 種有痕跡的後果（人拉犁的三種在接線那一批併進來），掘壕圍城的「動手」改成作惡
     assert all(o.effect.marks and 1 <= o.effect.contribution <= 6 for o in plain)
     assert sorted(o.id for event_id in MERGED for o in content.events[event_id].free_text.outcomes
-                  if o.check is not None and o.check.stat == "best_of") == ["dig", "show"]
+                  if o.check is not None and o.check.stat == "best_of") == ["dig", "labor", "show"]
 
 
-def test_the_plow_waits_for_the_switch():
-    assert real_content().events["yc_wilds_plow"].free_text is None
+def test_only_the_plow_waits_for_the_switch():
+    """人拉犁的那一顆只在分岔開著時才有（outcomes_only，沒有關著時套的 effect）；其餘 29 則關著照舊用 stat、effect、fail_effect。"""
+    content = real_content()
+    only = {e.id for e in content.events.values() if e.free_text is not None and e.free_text.outcomes_only}
+    assert only == {"yc_wilds_plow"}
+    plow = content.events["yc_wilds_plow"].free_text
+    assert plow.stat == "str" and [o.id for o in plow.outcomes] == ["labor", "chase", "give", "leave"]
 
 
 def test_the_draft_and_its_checker_are_gone():

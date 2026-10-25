@@ -338,6 +338,7 @@ def end_season(
     w.ended = True
     w.ending_id = ending.id
     w.ending_title = ending.title
+    _close_marks(state, content)  # 減法季批 4：每個地點挑最高的那一條痕跡寫一句江湖史（開關關著什麼都不做）
     if season_one(content, w):
         # 第一季（計畫 T9）：季末公告寫進時間軸（_finale；季中收季的開頭是「戰事提前收束。」），江湖史是季末大事的那一行，
         # 記下最終戰況與各陣營出力前五，給休季的結算畫面讀
@@ -390,6 +391,13 @@ def _settle_tiers(state: GameState, content: Content, world: WorldStateStore | N
     w.final_tiers = wins.settle(w, content, store.books(world.get_season_number()))
     for line in wins.chronicle_lines(content, w.final_tiers):
         add_chronicle(state, line)
+
+
+def _close_marks(state: GameState, content: Content) -> None:
+    """季末的痕跡江湖史（減法季批 4，marks.close_season；PM 2026-10-25 第 4 件照整合設計 5.2）。在函式裡 import：marks → rules。"""
+    from . import marks  # noqa: PLC0415
+
+    marks.close_season(state, content)
 
 
 def season_end_time(season: WorldState, content: Content) -> float:
