@@ -88,7 +88,7 @@ class DialogueUnavailable(Exception):
 # 輸出長度的上限：**模型會寫超過提示詞講的字數**，所以照「允許的字數 × 3 ＋ JSON 的框」給足餘裕。
 # num_predict 只是上限，沒生成就不花時間；給不夠的代價是最後一個欄位被截斷、client 重問一次
 # （2026-10-19 線上抓到：fight_llm 的 losing 兩次、letters 的 letter 一次）。
-# 一輪對話：敘事一段＋三個選項＋標籤＋關係備註；開口求人那一輪多兩段敘事（開條件、婉拒）與幾個短欄位，
+# 一輪對話：敘事一段＋三個選項＋標籤＋關係備註；NPC 智能 2.0那一輪多兩段敘事（開條件、婉拒）與幾個短欄位，
 # 1400 是照一段抓的（2026-10-24 主機實測 narrative_no 缺 4/30），只加不減
 TURN_PREDICT = 2400
 
@@ -108,7 +108,7 @@ class CompanionTurn(BaseModel):
     player_tag: str | None = None
     # 人物記得上次談了什麼（Joy 2026-10-23）：這一次見面到此刻談了什麼，一句；引擎夾到 MEMO_CHARS 存進 PlayerState.talk_memos
     talk_memo: str | None = None
-    # 開口求人（parley.py，Config.parley 開著的「自己說」才要）：模型挑的那一件事、意願、條件，與開條件、婉拒的兩版回話。
+    # NPC 智能 2.0（parley.py，Config.parley 開著的「自己說」才要）：模型挑的那一件事、意願、條件，與開條件、婉拒的兩版回話。
     # narrative 是答應（或只是閒聊）的那一版；數字引擎再夾一次（parley.decide）
     ask: str | None = None
     willing: int | None = None
@@ -130,7 +130,7 @@ class DialogueRequest:
     companion_id: str
     player_action: str
     messages: list[dict[str, str]]
-    required: tuple[str, ...] = ()  # 這一輪模型一定要寫出來的欄位（開口求人：parley.ASK_FIELDS 等），見 generate_turn
+    required: tuple[str, ...] = ()  # 這一輪模型一定要寫出來的欄位（NPC 智能 2.0：parley.ASK_FIELDS 等），見 generate_turn
 
 
 @dataclass(frozen=True)
@@ -234,7 +234,7 @@ def build_system_prompt(
         f"{_habit(character, state, content, world, companion_id, affinity)}"
         f"{_secret_line(character, state, content, world, companion_id)}"
         f"{figure_life.prompt_lines(state, content, companion_id)}"
-        f"{parley.prompt_lines(state, content, companion_id)}"  # 開口求人第二批：守約紀錄（答應幾件、做到幾件、食言、聽說的）
+        f"{parley.prompt_lines(state, content, companion_id)}"  # NPC 智能 2.1：守約紀錄（答應幾件、做到幾件、食言、聽說的）
         f"{era_str}"
         f"【此刻】{content.scenario.name}・{act_title}，第 {day} 天。\n"
         f"{past_str}"
@@ -357,7 +357,7 @@ def build_request(
     free: bool = False, extra: str = "", required: tuple[str, ...] = (),
 ) -> DialogueRequest:
     """階段 A：把這一輪要送給模型的 messages 組好（只讀狀態，不改任何東西）。free 是「自己說」：player_action 是玩家原話；
-    extra 接在玩家這一步後面：「自己說」是開口求人的兩份清單（parley.prompt_block），求見的開場是他主動開口的那一段（parley.plea_prompt）。"""
+    extra 接在玩家這一步後面：「自己說」是NPC 智能 2.0的兩份清單（parley.prompt_block），求見的開場是他主動開口的那一段（parley.plea_prompt）。"""
     character = content.characters[companion_id]
     return DialogueRequest(
         option_id, companion_id, player_action,
@@ -435,7 +435,7 @@ def start_dialogue(
     character = content.characters[companion_id]
     if turn is None:
         turn = _generate(client, character, state, content, world, companion_id, GENERIC_OPENING, extra=extra, required=required)
-    if decide is not None:  # 開口求人第二批：他主動開口求你（Game._parley_plea 驗、記下來）
+    if decide is not None:  # NPC 智能 2.1：他主動開口求你（Game._parley_plea 驗、記下來）
         turn = decide(turn)
     p = state.player
     prev = p.talk_memos.get(companion_id)  # 這一次開口之前的那一份：談話畫面的「上回」照它寫（這一輪之後 talk_memos 換成這一次的）
@@ -482,7 +482,7 @@ def say_dialogue(
     if turn is None:
         messages = _build_messages(character, state, content, world, companion_id, said, free=True, extra=extra)
         turn = generate_turn(client, messages, required)
-    if decide is not None:  # 開口求人：引擎擲完骰、換上那一版回話（Game._parley_decide）
+    if decide is not None:  # NPC 智能 2.0：引擎擲完骰、換上那一版回話（Game._parley_decide）
         turn = decide(turn)
     tag = free_tag(turn)
     world.record_companion_tag(companion_id, tag)
@@ -595,7 +595,7 @@ def _generate(
 def generate_turn(client: OllamaClient | None, messages: list[dict[str, str]], required: tuple[str, ...] = ()) -> CompanionTurn:
     """呼叫模型生成一輪對話並轉成繁體；任何失敗（沒有模型、連不上、解析失敗）都丟 DialogueUnavailable。
     只吃 messages、不碰遊戲狀態，所以可以放心在行動鎖外呼叫。
-    required 是這一輪多要模型一定寫出來的欄位（開口求人的 ask、willing……）：寫進送出去的 schema 的 required，
+    required 是這一輪多要模型一定寫出來的欄位（NPC 智能 2.0的 ask、willing……）：寫進送出去的 schema 的 required，
     空字串照樣算答了（ask 空字串＝只是閒聊）。CompanionTurn 這些欄位都有預設值 None，不寫進 schema 的話
     結構化輸出允許模型整個略過（2026-10-24 主機實測：ask 空白 14/30，連 condition 都填了就是不填 ask）。"""
     if client is None:
