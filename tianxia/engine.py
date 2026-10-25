@@ -16449,17 +16449,19 @@ class Game:
 
     def _zhuan_extra(self, season: int) -> dict:
         """列傳多畫的那幾樣（zhuan_end.extras：季末論功、插畫的圖庫鍵、紀念印的字）；那一季沒開列傳為終點是空的（一個鍵都不多）。
-        這一季的身家照角色身上的，以前的季照存起來的那一份。"""
+        這一季的身家照角色身上的，以前的季照存起來的那一份。評曰的名單照寫成的那一篇傳列（FB-847，zhuan_end.extras 的 text）：
+        還沒寫成是 None（預告要寫的人）。"""
         p = self.state.player
         world = self._zhuan_season(season)
         if world is None or not zhuan_end.on(self.content, world):
             return {}
+        row = self.world.biography(season, p.name)
         if season == p.season_number:
             profile = annals.profile(self.state, self.content, season=world)
         else:
-            row = self.world.biography(season, p.name)
             profile = row["profile"] if row is not None else {}
-        return zhuan_end.extras(self.content, season, profile, zhuan_end.season_tickets(self._zhuan_purchases(), season))
+        text = row["text"] if row is not None else None
+        return zhuan_end.extras(self.content, season, profile, zhuan_end.season_tickets(self._zhuan_purchases(), season), text)
 
     def _zhuan_options(self) -> list[Option]:
         """休季用列傳的票（減法季批 7b；設計第九章）：列傳為終點開著、季收了，手上有沒用的票才有那一顆。插畫：投靠了劇本裡的陣營、

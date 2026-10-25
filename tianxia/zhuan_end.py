@@ -118,20 +118,27 @@ def unused(purchases, effect: str) -> list:
     return [b for b in reversed(purchases) if b.refunded is None and b.data.get(effect) and not b.data.get("used")]
 
 
-def extras(content: Content, season_number: int, profile: dict, tickets: dict) -> dict:
+def extras(content: Content, season_number: int, profile: dict, tickets: dict, text: str | None = None) -> dict:
     """列傳多畫的那幾樣（休季的 biography_entry、讀傳的 biography_view、公開頁都照它）：tier 季末論功（{tier, title, rank, of, side}；
     沒有階是 None）、illustration 插畫的圖庫鍵（第一階白送，或這一季用了插畫票；沒有是 None）、seal 紀念印的字（這一季蓋了才有）、
-    verdicts 這一季替你寫評曰的人物（[{figure, name, reason}]：身家裡白送的那幾位，接買了親筆評曰請的）。"""
+    verdicts 這一季替你寫評曰的人物（[{figure, name, reason}]）。
+    verdicts 照寫成的那一篇傳列（FB-847）：text 是傳的全文（寫成了才有），名單就是正文裡真的有「評曰：某某云：「…」」的那幾位，照正文的次序——
+    傳寫成之後才請的人不列（等重修寫進去才列）、管理者退了用過的那一張也不因此拿掉（正文還有他）；text 是 None（還沒寫成）列的是「要寫的人」：
+    身家裡白送的那幾位，接買了親筆評曰請的（照請的先後）。身家裡白送的理由（affinity、tier）照身家寫，其餘都是 bought。"""
     tier = profile.get("tier") or 0
     art = profile.get("illustration") or None
-    free = [Writer(w["fid"], w["reason"]) for w in profile.get("verdicts", [])]
+    reasons = {w["fid"]: w["reason"] for w in profile.get("verdicts", [])}
+    if text is None:
+        writers_ = with_bought([Writer(fid, reason) for fid, reason in reasons.items()], tickets.get("quotes", []), content)
+    else:
+        writers_ = written_writers(text, content, reasons)
     return {
         "tier": {"tier": tier, "title": profile.get("tier_title", ""), "rank": profile.get("final_rank", 0),
                  "of": profile.get("final_of", 0), "side": profile.get("tier_side", "")} if tier else None,
         "illustration": art if art and (tier == 1 or tickets.get("art")) else None,
         "seal": seal_text(content, season_number, profile) if tickets.get("seal") else None,
         "verdicts": [{"figure": w.fid, "name": content.characters[w.fid].name, "reason": w.reason}
-                     for w in with_bought(free, tickets.get("quotes", []), content) if w.fid in content.characters],
+                     for w in writers_ if w.fid in content.characters],
     }
 
 
@@ -192,7 +199,8 @@ def deep_note(state: GameState, content: Content, cid: str, slots: int = 0) -> s
 
 AFFINITY, TIER, BOUGHT = "affinity", "tier", "bought"  # 誰替你寫：情誼 70 以上的、第一二階的主將或家主、買了親筆評曰請的
 REASONS = (AFFINITY, TIER, BOUGHT)
-VERDICT_PARA = "評曰：{name}云：「{text}」"  # 接在正文後面的一段（網頁與公開頁照段首「評曰」認，待 joy 潤）
+VERDICT_HEAD = "評曰：{name}云：「"  # 人物評曰那一段的開頭（written_writers 照它認寫成的傳裡有誰）
+VERDICT_PARA = VERDICT_HEAD + "{text}」"  # 接在正文後面的一段（網頁與公開頁照段首「評曰」認，待 joy 潤）
 DEFAULT_VERDICTS = {  # 內容沒有 verdicts.json（測試內容）時的固定句
     AFFINITY: ["{name}與吾相交一季，可謂知己。"],
     TIER: ["{name}此季之功，吾親書以表之。"],
@@ -247,6 +255,23 @@ def with_bought(free: list[Writer], bought: list[str], content: Content) -> list
         if cid in content.characters and cid not in seen:
             out.append(Writer(cid, BOUGHT))
             seen.add(cid)
+    return out
+
+
+def written_writers(text: str, content: Content, reasons: dict[str, str]) -> list[Writer]:
+    """寫成的傳裡真的有評曰的人物（FB-847）：照正文的段首「評曰：某某云：「」認（某某是 content.characters 裡的名字；史官自己的「評曰：」
+    後面不接這個開頭），同一位只算第一段，照正文的次序。理由：reasons（身家裡白送的 fid → affinity／tier）有的照它，其餘（請來的）是 bought。"""
+    names = {ch.name: cid for cid, ch in content.characters.items()}
+    out: list[Writer] = []
+    seen: set[str] = set()
+    for para in (text or "").split("\n\n"):
+        if not para.endswith("」"):
+            continue
+        for name, cid in names.items():
+            if cid not in seen and para.startswith(VERDICT_HEAD.format(name=name)):
+                seen.add(cid)
+                out.append(Writer(cid, reasons.get(cid, BOUGHT)))
+                break
     return out
 
 

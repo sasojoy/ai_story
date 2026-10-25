@@ -3139,7 +3139,7 @@ def zhuan_extras(store, row: dict) -> dict:
     from tianxia.wallet import Wallet  # noqa: PLC0415
 
     purchases = Wallet(store.db).purchases(name_key(row["name"])) if mall.on(CONTENT) else []
-    got = zhuan_end.extras(CONTENT, number, row["profile"], zhuan_end.season_tickets(purchases, number))
+    got = zhuan_end.extras(CONTENT, number, row["profile"], zhuan_end.season_tickets(purchases, number), row["text"])
     out = {}
     art = zhuan_art_src(got["illustration"])
     if art:
