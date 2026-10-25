@@ -16,7 +16,7 @@ NOW = MON + 10 * HOUR
 
 
 def _game(at="yingchuan", level=None, name="沈浪"):
-    c = real_content("weekend")
+    c = real_content("week7")
     c.config.train_event_chance = 0.0
     store = open_world()
     store.seed_first_season(c)

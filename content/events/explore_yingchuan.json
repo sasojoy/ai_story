@@ -2,6 +2,7 @@
   {
     "id": "yc_city_courier",
     "title": "驛卒墜馬",
+    "image": "town",
     "locations": [
       "yingchuan"
     ],
@@ -65,6 +66,7 @@
   {
     "id": "yc_city_axle",
     "title": "輜車斷軸",
+    "image": "town",
     "locations": [
       "yingchuan"
     ],
@@ -151,6 +153,7 @@
   {
     "id": "yc_city_petition",
     "title": "署前投牒",
+    "image": "office",
     "locations": [
       "yingchuan"
     ],
@@ -312,6 +315,7 @@
   {
     "id": "yc_river_overboard",
     "title": "渡船落水",
+    "image": "river",
     "locations": [
       "yingshui"
     ],
@@ -455,6 +459,7 @@
   {
     "id": "yc_river_teashed",
     "title": "茶棚暗語",
+    "image": "tavern",
     "locations": [
       "yingshui"
     ],
@@ -520,6 +525,7 @@
   {
     "id": "yc_river_shacks",
     "title": "棚屋起火",
+    "image": "refugees",
     "locations": [
       "yingshui"
     ],
@@ -608,6 +614,7 @@
   {
     "id": "yc_wilds_plow",
     "title": "人拉犁",
+    "image": "field",
     "locations": [
       "yingchuan_wilds"
     ],
@@ -674,11 +681,93 @@
           "text": "你走出很遠，回頭還看得見老漢彎著腰的身影。"
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "另想法子幫老漢下種",
+      "stat": "str",
+      "outcomes_only": true,
+      "outcomes": [
+        {
+          "id": "labor",
+          "tag": "出力：替他拉犁、修犁、想省力的法子",
+          "check": {
+            "stat": "best_of",
+            "stats": [
+              "str",
+              "wis"
+            ],
+            "difficulty": 4
+          },
+          "effect": {
+            "text": "你拉著犁走完一整壟，泥土翻出新的顏色。老漢硬塞給你兩個麥餅，說這田總算下得了種。",
+            "stats": {
+              "good": 2,
+              "xinde": 5
+            },
+            "marks": {
+              "yingchuan_wilds:田有人耕": 1
+            },
+            "contribution": 2
+          },
+          "fail_effect": {
+            "text": "犁頭卡進石縫，你使勁一扯，腰閃了一下，半天直不起來。",
+            "stamina": -15
+          }
+        },
+        {
+          "id": "chase",
+          "tag": "討牛：去追那夥散兵",
+          "combat": "dipi",
+          "effect": {
+            "text": "你在破廟後頭追上那夥流寇，把牛奪了回來。老漢牽著牛，眼淚都流下來了。",
+            "stats": {
+              "good": 2,
+              "fame": 1
+            },
+            "marks": {
+              "yingchuan_wilds:散兵退了": 1
+            },
+            "contribution": 4
+          },
+          "fail_effect": {
+            "text": "流寇人多，你被打得退回田邊，錢袋也被搶了去，老漢反過來安慰你。",
+            "stamina": -15,
+            "stats": {
+              "silver": -10
+            }
+          }
+        },
+        {
+          "id": "give",
+          "tag": "周濟：給他錢或糧",
+          "cost": {
+            "silver": 10
+          },
+          "effect": {
+            "text": "你把幾個錢塞進老漢手裡，說去鄰村租頭牛。他攥著錢，半天說不出話。",
+            "stats": {
+              "good": 1
+            },
+            "marks": {
+              "yingchuan_wilds:鄉里得濟": 1
+            },
+            "contribution": 1
+          }
+        },
+        {
+          "id": "leave",
+          "tag": "走開：不管、看著、對不上的",
+          "effect": {
+            "text": "你走出很遠，回頭還看得見老漢彎著腰的身影。"
+          }
+        }
+      ]
+    }
   },
   {
     "id": "yc_wilds_toll",
     "title": "田埂設卡",
+    "image": "field",
     "locations": [
       "yingchuan_wilds"
     ],
@@ -882,6 +971,7 @@
   {
     "id": "yc_wilds_horse",
     "title": "無主戰馬",
+    "image": "field",
     "locations": [
       "yingchuan_wilds"
     ],
@@ -991,6 +1081,7 @@
   {
     "id": "yc_cs_nightwatch",
     "title": "營外守夜",
+    "image": "camp",
     "locations": [
       "changshe"
     ],
@@ -1081,6 +1172,7 @@
   {
     "id": "yc_cs_old_rampart",
     "title": "舊壘鏽鐵",
+    "image": "field",
     "locations": [
       "changshe"
     ],
@@ -1163,6 +1255,7 @@
   {
     "id": "yc_cs_grain_cart",
     "title": "截糧牛車",
+    "image": "road",
     "locations": [
       "changshe"
     ],
@@ -1373,6 +1466,7 @@
   {
     "id": "yc_ac_debate",
     "title": "講堂論難",
+    "image": "academy",
     "locations": [
       "yingchuan_academy"
     ],
@@ -1431,6 +1525,7 @@
   {
     "id": "yc_ac_copying",
     "title": "藏書樓抄書",
+    "image": "academy",
     "locations": [
       "yingchuan_academy"
     ],
@@ -1489,6 +1584,7 @@
   {
     "id": "yc_ac_well",
     "title": "井中玉佩",
+    "image": "academy",
     "locations": [
       "yingchuan_academy"
     ],
@@ -1564,6 +1660,7 @@
   {
     "id": "yc_ac_archery",
     "title": "射圃鄉射",
+    "image": "academy",
     "locations": [
       "yingchuan_academy"
     ],
@@ -1622,6 +1719,7 @@
   {
     "id": "yc_sf_caravan",
     "title": "商旅結伴",
+    "image": "road",
     "locations": [
       "songshan_foot"
     ],
@@ -1697,6 +1795,7 @@
   {
     "id": "yc_sf_herbwife",
     "title": "採藥婦人",
+    "image": "forest",
     "locations": [
       "songshan_foot"
     ],
@@ -1845,6 +1944,7 @@
   {
     "id": "yc_sf_stele",
     "title": "林中殘碑",
+    "image": "forest",
     "locations": [
       "songshan_foot"
     ],
@@ -1896,6 +1996,7 @@
   {
     "id": "yc_dm_coldpool",
     "title": "寒潭一夜",
+    "image": "forest",
     "locations": [
       "deep_mountain"
     ],
@@ -1948,6 +2049,7 @@
   {
     "id": "yc_dm_stockade",
     "title": "木寨擄人",
+    "image": "fort",
     "locations": [
       "deep_mountain"
     ],
@@ -2063,6 +2165,7 @@
   {
     "id": "yc_dm_cypress",
     "title": "古柏樹洞",
+    "image": "forest",
     "locations": [
       "deep_mountain"
     ],
@@ -2120,6 +2223,7 @@
   {
     "id": "yc_jc_pilgrim",
     "title": "遠道香客",
+    "image": "temple",
     "locations": [
       "jade_cave"
     ],
@@ -2183,6 +2287,7 @@
   {
     "id": "yc_jc_scrolls",
     "title": "梁上道書",
+    "image": "treasure",
     "locations": [
       "jade_cave"
     ],
@@ -2235,6 +2340,7 @@
   {
     "id": "yc_jc_bell",
     "title": "半塌鐘樓",
+    "image": "temple",
     "locations": [
       "jade_cave"
     ],
@@ -2302,6 +2408,7 @@
   {
     "id": "yc_jc_rain",
     "title": "夜雨借宿",
+    "image": "temple",
     "locations": [
       "jade_cave"
     ],
@@ -2358,6 +2465,7 @@
   {
     "id": "yc_guancamp_drill",
     "title": "校場比刀",
+    "image": "fight",
     "locations": [
       "guan_camp"
     ],
@@ -2409,6 +2517,7 @@
   {
     "id": "yc_guancamp_gate",
     "title": "轅門盤查",
+    "image": "camp",
     "locations": [
       "guan_camp"
     ],
@@ -2494,6 +2603,7 @@
   {
     "id": "yc_guancamp_wounded",
     "title": "傷兵草棚",
+    "image": "clinic",
     "locations": [
       "guan_camp"
     ],
@@ -2545,6 +2655,7 @@
   {
     "id": "yc_guancamp_scouts",
     "title": "巡騎出營",
+    "image": "camp",
     "locations": [
       "guan_camp"
     ],

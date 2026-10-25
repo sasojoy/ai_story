@@ -7,7 +7,7 @@ import random
 import re
 
 import pytest
-from conftest import real_content
+from conftest import no_week_unlock, real_content
 from test_prologue_web import DRIVER as PROLOGUE_DRIVER
 
 import server
@@ -33,7 +33,7 @@ def _click(dataset: str) -> str:
 
 
 def _game(at="yingchuan", faction="guan", bag=None, silver=500, **econ):
-    c = real_content("weekend")
+    c = no_week_unlock(real_content("week7"))
     c.config.auto_open_first_season = True
     for key, value in econ.items():
         setattr(c.config.economy, key, value)
@@ -213,16 +213,18 @@ def test_the_server_reads_the_items_list_and_skips_bad_ones():
 # ── C1：江湖頁戰況卡底下一行 ──
 
 
-def test_the_jianghu_page_has_one_line_of_stores_under_the_fronts():
+def test_the_trends_page_has_one_line_of_stores_under_the_fronts():
+    """減法季批 1：戰況圖卡與軍備那一行從江湖頁搬到見聞・大事・大勢的最上面。"""
     game = _game(at="changshe", bag={"man_1": 3})
     game.donate("man_1", 3)
     m = server.main_view(game)
-    html = run(m, 'H.S.tab = "jianghu"; H.render(); return T.els.page.innerHTML;')
+    html = run(m, 'H.S.tab = "news"; H.S.news = "trends"; H.render(); return T.els.page.innerHTML;')
     line = re.search(r'<p class="arms-line">.*?</p>', html)
     assert line and "官軍軍備" in line.group(0) and "糧秣 <b>3</b>" in line.group(0) and "戰馬 <b>0</b>" in line.group(0)
     assert html.index('class="war"') < html.index('class="arms-line"')  # 排在戰況圖卡底下
+    assert "arms-line" not in run(m, 'H.S.tab = "jianghu"; H.render(); return T.els.page.innerHTML;')
     ranger = _game(faction=None)
-    assert "arms-line" not in run(server.main_view(ranger), 'H.S.tab = "jianghu"; H.render(); return T.els.page.innerHTML;')
+    assert "arms-line" not in run(server.main_view(ranger), 'H.S.tab = "news"; H.S.news = "trends"; H.render(); return T.els.page.innerHTML;')
 
 
 # ── 375 寬：不撐開、不折行（CSS 照原字查）──

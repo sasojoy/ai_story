@@ -20,7 +20,7 @@ STAT_USES = {
     "str": "武學威力",
     "agi": "打完一場少損氣血・落敗有機會閃成平手",
     "con": "內功威力・氣血上限・少受內傷",
-    "wis": "探索悟得意境・閉關心得・衝關",
+    "wis": "探索悟得意境・衝關",  # 閉關 Joy 2026-10-25 拿掉了（畫面上沒有入口），不再寫
     "lore": "武學與意境的持有上限",
 }
 # 事件檢定、隨口應對讀得到五項（設計 6.1、6.3），但正式內容還沒有任何事件檢定博聞，所以先寫「前四項」（PM 2026-10-05）。
@@ -172,7 +172,7 @@ def practice_hint(state: GameState, content: Content) -> str | None:
 
     心得的去處（武學與成長設計第四節）：練成（身上這一門還沒第十成、付得起下一成）與合成（手上有意境、
     持有沒滿、付得起一次，見 fusion.can_forge）。兩樣都做不了就閉嘴，免得變成嘮叨。休季時什麼都不能做，也不提示（FB-047）。
-    去處照底部分頁的名字寫「修練」「煉製」（舊的門下頁已經拆成這兩頁，FB-047）。
+    去處照畫面寫：練成的鈕就在俠客頁身上那一門的卡上（分頁 2026-10-24 從「修練」改成「俠客」，這句就寫在那一頁上，不寫「去修練」）、煉製照底部分頁的名字（FB-047）。
     """
     xinde = state.player.stats.get("xinde", 0)
     if xinde < content.config.xinde_hint_threshold or state.world.ended:
@@ -180,7 +180,7 @@ def practice_hint(state: GameState, content: Content) -> str | None:
     todo = [kind for kind in ("內功", "武學") if team.can_practise(state, content, kind)]
     parts = []
     if todo:
-        parts.append(f"去「修練」練成{'、'.join(todo)}")
+        parts.append(f"點上面身上的武學練成{'、'.join(todo)}")
     if fusion.can_forge(state, content):  # 手上有意境、持有沒滿、付得起一次合成或合併才提；光有意境不算
         parts.append("去「煉製」把兩個意境合成新的")  # 待 joy 潤
     if not parts:

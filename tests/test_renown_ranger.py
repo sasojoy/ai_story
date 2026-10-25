@@ -14,7 +14,7 @@ def _sanren(c, good=0, evil=0):
 
 
 def test_sanren_perks_read_the_virtue_tier():
-    c = real_content("weekend")
+    c = real_content("week7")
     s = _sanren(c, good=18)
     assert ranger.tier(s, c) == renown.virtue_tier(s, c) == 2
     assert ranger.audience_discount(s, c) == 6 and ranger.exp_factor(s, c) == 1.10
@@ -24,14 +24,14 @@ def test_sanren_perks_read_the_virtue_tier():
 
 
 def test_old_ranger_books_are_ignored_when_merged():
-    c = real_content("weekend")
+    c = real_content("week7")
     s = _sanren(c)
     s.player.ranger_good, s.player.ranger_deeds = 40, 30  # 上線前記的帳：不讀、不補
     assert ranger.tier(s, c) == 0 and ranger.status(s, c) is None
 
 
 def test_affiliation_no_longer_carries_the_ranger_title():
-    c = real_content("weekend")
+    c = real_content("week7")
     s = _sanren(c, good=18)
     assert social.affiliation(s, c) == "散人"
     c.config.renown.titles = False
@@ -40,7 +40,7 @@ def test_affiliation_no_longer_carries_the_ranger_title():
 
 
 def test_ranger_conditions_read_the_new_tiers():
-    c = real_content("weekend")
+    c = real_content("week7")
     cond = Condition(ranger_min=3, ranger_path="寇")
     assert not rules.check_condition(cond, _sanren(c, evil=29), c)
     assert rules.check_condition(cond, _sanren(c, evil=30), c)
@@ -48,14 +48,14 @@ def test_ranger_conditions_read_the_new_tiers():
 
 
 def test_good_and_evil_gains_no_longer_feed_the_old_books():
-    c = real_content("weekend")
+    c = real_content("week7")
     s = _sanren(c)
     ranger.note_gain(s, c, "good", 5)
     assert s.player.ranger_good == 0
 
 
 def test_bounty_deeds_become_good_or_ill_name_by_the_path():
-    c = real_content("weekend")
+    c = real_content("week7")
     b = Bounty(id="b1", kind="scout", faction="guan", week=1, expires=1e9, silver=10, deeds=3)
     s = _sanren(c, evil=8)
     assert "惡名 +3" in bounties.reward_text(s, c, b)
@@ -67,7 +67,7 @@ def test_bounty_deeds_become_good_or_ill_name_by_the_path():
 
 
 def test_switch_off_keeps_the_old_ranger_book():
-    c = real_content("weekend")
+    c = real_content("week7")
     c.config.renown.titles = False
     s = _sanren(c)
     assert ranger.add_deeds(s, c, 3) == ["俠名 +3"] and s.player.ranger_deeds == 3 and s.player.stats.get("good", 0) == 0

@@ -2,6 +2,7 @@
   {
     "id": "yingchuan_join",
     "title": "書院收徒",
+    "image": "academy",
     "actions": [
       "socialize"
     ],
@@ -37,6 +38,7 @@
   {
     "id": "cao_manor_join",
     "title": "曹氏試煉",
+    "image": "fort",
     "actions": [
       "socialize"
     ],
@@ -74,6 +76,7 @@
   {
     "id": "yingchuan_rule",
     "title": "清理門戶",
+    "image": "road",
     "weight": 5,
     "condition": {
       "sects": [

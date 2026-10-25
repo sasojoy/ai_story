@@ -408,9 +408,9 @@ def test_the_xinde_hint_shows_once_the_next_level_is_affordable(on):
     assert game.status_data()["hint"] is None
     s.player.stats["xinde"] = price
     hint = game.status_data()["hint"]
-    assert hint and "去「修練」練成" in hint and f"你已攢下 {price} 點心得" in hint
+    assert hint and "點上面身上的武學練成" in hint and f"你已攢下 {price} 點心得" in hint
     s.player.stats["xinde"] = 34  # QA 那一輪的心得
-    assert "去「修練」" in game.status_data()["hint"]
+    assert "練成" in game.status_data()["hint"]
 
 
 def test_no_xinde_hint_while_the_season_is_being_prepared(content, world):
@@ -564,7 +564,7 @@ def _graduate(content, seed):
     return game
 
 
-@pytest.mark.parametrize("profile", ["weekend", None])
+@pytest.mark.parametrize("profile", [None])
 def test_a_fresh_character_can_win_by_the_yingshui(profile):
     """FB-100：剛出師的人在潁川一帶找不到打得贏的仗（長社、黃巾別部營寨都是必敗，潁川郊野難分勝負）。
     潁水河畔的兩路對手：略過序章與走完序章的新角色，勝算都是有把握以上，遊歷鈕上寫的也是。

@@ -1,6 +1,6 @@
 """第一季豪強分屬兩軍（docs/superpowers/specs/2026-10-15-第一季豪強分屬兩軍-design.md）。
 
-用真實內容的週末設定（第一季規則與豪強分屬兩軍都開著）；舊規則的對照另外關掉開關。"""
+用真實內容的 7 天季（第一季規則與豪強分屬兩軍都開著）；舊規則的對照另外關掉開關。"""
 from __future__ import annotations
 
 import random
@@ -8,14 +8,14 @@ import random
 import pytest
 
 from conftest import no_conquest, real_content, third_party_gentry
-from tianxia import allied, rules
+from tianxia import allied, calendar, rules
 from tianxia.engine import Game
 from tianxia.state import PlayerState, WorldState
 
 
 @pytest.fixture
 def wk():
-    c = no_conquest(real_content("weekend"))  # 地盤拔河、出陣推線的舊規則（領地爭奪 PM 2026-10-22 起正式內容打開）
+    c = no_conquest(real_content("week7"))  # 地盤拔河、出陣推線的舊規則（領地爭奪 PM 2026-10-22 起正式內容打開）
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
     return c
@@ -31,7 +31,7 @@ def _game(content, name="甲", faction=None, ally=None, at=None):
 
 
 def _old_rules():
-    c = third_party_gentry(real_content("weekend"))
+    c = third_party_gentry(real_content("week7"))
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
     return c
@@ -40,7 +40,7 @@ def _old_rules():
 # ── Task 1：開關、蓋章、敵我與名冊鍵 ─────────────────────────────
 
 
-def test_weekend_profile_turns_it_on(wk):
+def test_the_week7_profile_turns_it_on(wk):
     assert wk.config.haoqiang_allied is True
     assert real_content().config.haoqiang_allied is False
     assert [f.allies for f in wk.scenario.factions if f.id == "haoqiang"] == [["guan", "huang"]]
@@ -413,6 +413,8 @@ def test_give_bounties_skip_the_gentry(wk):
     from tianxia import bounties
 
     game = _settled(_game(wk))
+    game.state.world.time = calendar.day_start(2, wk, game.state.world)  # 7 天季的求兵在雙數天 00:00 掛（bounties.issue_day）
+    bounties.issue_day(game.state, wk, 2)
     gives = [b.faction for b in game.state.world.bounties if b.kind in bounties.GIVE_KINDS]
     assert gives and "haoqiang" not in gives
 
@@ -422,6 +424,8 @@ def test_old_rules_still_issue_gentry_give_bounties():
 
     off = _old_rules()
     game = _settled(_game(off, name="乙"))
+    game.state.world.time = calendar.day_start(2, off, game.state.world)
+    bounties.issue_day(game.state, off, 2)
     assert "haoqiang" in [b.faction for b in game.state.world.bounties if b.kind in bounties.GIVE_KINDS]
 
 

@@ -53,7 +53,7 @@ def _player(content, now=MON):
 def test_the_week7_profile_turns_on_the_real_day_frame_in_three_segments():
     cfg = real_content("week7").config
     assert cfg.season21 and cfg.season_days == 7 and cfg.season_weeks == 3 and cfg.season_segments == [2, 2, 3]
-    assert real_content("season21").config.season_segments == [] and real_content("weekend").config.season_segments == []
+    assert real_content("season21").config.season_segments == []
     assert real_content().config.season_segments == []
 
 
@@ -93,11 +93,6 @@ def test_season21_and_weekend_calendars_unchanged():
     assert calendar.stamp_text(0, c21, s21) == "第 1 週・週三 10:30"
     assert calendar.week_start(2, c21, s21) == WEEK - WED_OFFSET and calendar.total_days(c21) == 21
     assert calendar.week_seconds(c21, s21) == WEEK
-    wk = real_content("weekend")
-    swk = _season(wk)
-    assert calendar.stamp_text(0, wk, swk) == "第 1 週・週一 00:00" and calendar.total_days(wk) == 84
-    assert calendar.week_seconds(wk, swk) == WEEK / calendar.cal_scale(wk, swk)
-    assert calendar.point_text(calendar.point(5 * HOUR, wk, swk)) == calendar.stamp_text(5 * HOUR, wk, swk)
 
 
 def test_a_season21_program_warns_on_a_week7_season():
@@ -250,7 +245,6 @@ def test_day_less_bounties_hung_in_the_last_segment_say_season_end_on_week7():
 
 @pytest.mark.parametrize("profile, want", [
     ("season21", ["到第 1 週・剩 1", "期限 第 2 週・剩 1", "期限 第 2 週・剩 1", "期限 第 2 週・剩 1"]),  # 21 天季：週就是週，不動
-    ("weekend", ["到第 8 週・剩 1", "到第 8 週・剩 1", "期限 第 9 週・剩 1", "期限 第 9 週・剩 1", "期限 第 9 週・剩 1"]),
     (None, ["期限 第3天・剩 1"] * 5),  # 14 天的季只寫第幾天
 ])
 def test_day_less_bounty_notices_are_unchanged_outside_week7_fb506(profile, want):
@@ -293,11 +287,11 @@ def test_silver_outlets_and_season_caps_are_a_third():
 def test_week7_shortens_the_calendar_day_spans_pm_ruling_5():
     """PM 裁決第 5 條（2026-10-20，照「佔一季幾成」縮）：人物被打退後 1 天回來、復仇／追剿懸賞 2 天、求援 1 天；新手期不動。
     設定覆寫檔是淺層合併（content._config）：figure_life 只寫兩個鍵，其餘照預設——跟 21 天季的 figure_life 只差這兩個。"""
-    c7, c21, wk, c14 = real_content("week7"), real_content("season21"), real_content("weekend"), real_content()
+    c7, c21, c14 = real_content("week7"), real_content("season21"), real_content()
     cfg = c7.config
     assert cfg.figure_return_days == 1
     assert (cfg.figure_life.revenge_cal_days, cfg.figure_life.rally_cal_days) == (2, 1)
-    for other in (c21, wk, c14):  # 21 天季、週末、14 天照舊：3 天、7 天、3 天
+    for other in (c21, c14):  # 21 天季、14 天照舊：3 天、7 天、3 天
         o = other.config
         assert (o.figure_return_days, o.figure_life.revenge_cal_days, o.figure_life.rally_cal_days) == (3, 7, 3)
     assert cfg.figure_life.model_copy(update={"revenge_cal_days": 7.0, "rally_cal_days": 3.0}) == c21.config.figure_life

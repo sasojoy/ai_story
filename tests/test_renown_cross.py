@@ -1,7 +1,7 @@
 """跨段那一刻（名聲設計 3.3、十一之二第 6 條）與得失後面的差距（6.4）。"""
 import random
 
-from conftest import real_content
+from conftest import real_content, renown_unscaled
 
 from tianxia import journal, renown
 from tianxia.engine import Game
@@ -10,7 +10,7 @@ from tianxia.state import new_game_state
 
 
 def test_annotate_merges_and_appends_the_gap():
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     s = new_game_state(c, "甲")
     s.player.stats.update({"fame": 25, "good": 18, "evil": 3})
     out = renown.annotate(["名望 +1", "銀兩 +5", "名望 +1", "善名 +2", "惡名 +1"], s, c)
@@ -27,7 +27,7 @@ def test_annotate_merges_and_appends_the_gap():
 
 
 def test_first_look_only_records_then_up_writes_once():
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     s = new_game_state(c, "甲")
     s.player.stats["fame"] = 24
     first = renown.watch(s, c, day=1)
@@ -50,7 +50,7 @@ def test_first_look_only_records_then_up_writes_once():
 
 
 def test_switching_path_is_said():
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     s = new_game_state(c, "甲")
     s.player.stats.update({"good": 6, "evil": 0})
     renown.watch(s, c, day=1)
@@ -60,7 +60,7 @@ def test_switching_path_is_said():
 
 
 def test_virtue_up_is_said():
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     s = new_game_state(c, "甲")
     s.player.stats["good"] = 3
     renown.watch(s, c, day=1)
@@ -76,7 +76,7 @@ def _game(c):
 
 
 def test_an_action_appends_the_crossing_and_the_gold_tag():
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     g = _game(c)
     g.state.player.stats["fame"] = 24
     g._log(["（看一眼）"])  # 第一次看（新角色在建立時就看過了）：只記段、寫一則說明，開場那一則照舊在最上面
@@ -95,7 +95,7 @@ def test_an_action_appends_the_crossing_and_the_gold_tag():
 
 
 def test_a_crossing_found_while_syncing_gets_its_own_entry():
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     g = _game(c)
     g._log(["（看一眼）"])
     g.state.player.stats["fame"] = 30
@@ -107,7 +107,7 @@ def test_a_crossing_found_while_syncing_gets_its_own_entry():
 def test_entries_written_while_syncing_merge_their_fame_and_show_the_gap(monkeypatch):
     """FB-292：同步時補進來的那一則（決戰收場後回來補的「長社火攻・官軍大勝」：時間是收場那一刻、比此刻早；軍餉那一份名望與立功
     那一份名望各一行），也合成一行、接差距，跟同一場的戰報一樣；跨段那一則「名聲」照舊另起。同步之前就在的那幾則不動。"""
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     g = _game(c)
     g.state.player.stats["fame"] = 46
     g._log(["（看一眼）"])
@@ -131,7 +131,7 @@ def test_entries_written_while_syncing_merge_their_fame_and_show_the_gap(monkeyp
 
 
 def test_told_once_across_seasons():
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     g = _game(c)
     g._log(["（看一眼）"])
     g.state.player.renown_seen = None  # 換季：角色重來、段清掉，說明過了照記
@@ -140,7 +140,7 @@ def test_told_once_across_seasons():
 
 
 def test_switch_off_writes_nothing():
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     c.config.renown.titles = False
     s = new_game_state(c, "甲")
     s.player.stats["fame"] = 99

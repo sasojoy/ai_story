@@ -63,7 +63,7 @@ def test_the_map_overlay_says_which_siege_moment_each_block_is_in():
     assert "siege" not in places["cao_manor"]
 
 
-@pytest.mark.parametrize("profile", ["weekend", None, "season21"])
+@pytest.mark.parametrize("profile", ["week7", None, "season21"])
 def test_no_siege_mark_when_conquest_is_off(profile):
     game = R._game(content=classic_rules(real_content(profile)), conquest_on=False)
     assert not any("siege" in p for p in game.map_state()["places"].values())
@@ -314,7 +314,7 @@ def _sweep(game, rid, phones, timeout=300, script=None):
 
 
 @pytest.mark.parametrize("rid", ["yingru", "nanyang", "luoyang", "jizhou", "youzhou"])
-@pytest.mark.parametrize("profile", ["weekend", "season21"])
+@pytest.mark.parametrize("profile", ["week7", "season21"])
 def test_letter_seals_never_move_or_squeeze_the_names(profile, rid):
     """每一區、你站每一處與在路上、五個手機地圖框（375×604／624／479、360×452／436）× 沒人推／每一塊一塊一塊下了戰書或交戰中／
     全部下了戰書／隨機配（戰書、進度條、冷卻）：名字框 0 對互壓（不壓別處的小圖、鄰區出口、不出畫面）、名字一個都不挪（擺的位置與字級

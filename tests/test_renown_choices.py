@@ -1,7 +1,7 @@
 """俠寇選項（名聲設計 5.3、十一之二 5B）與俠寇的條件（virtue_path／virtue_min）。"""
 import random
 
-from conftest import real_content
+from conftest import real_content, renown_unscaled
 
 from tianxia import renown, rules
 from tianxia.engine import Game
@@ -10,7 +10,7 @@ from tianxia.state import new_game_state
 
 
 def _game():
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     c.config.auto_open_first_season = True
     g = Game.new(c, "甲", rng=random.Random(0))
     g.client = None
@@ -48,7 +48,7 @@ def test_switch_off_hides_it():
 
 
 def test_virtue_conditions():
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     s = new_game_state(c, "甲")
     s.player.stats["good"] = 15
     assert rules.check_condition(Condition(virtue_path="俠", virtue_min=2), s, c)
@@ -60,7 +60,7 @@ def test_virtue_conditions():
 
 
 def test_the_virtue_perks_name_the_choices_only_when_content_has_them():
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     for ev in c.events.values():
         ev.choices = [ch for ch in ev.choices if ch.needs is None]
     assert "事件裡多出俠的做法" not in renown.virtue_perks(c, "俠", 1)

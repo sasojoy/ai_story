@@ -266,27 +266,6 @@ def test_the_season_after_the_mandate_scatters_all_seven(mandated, world):
 # ── Task 4：天命之季的規則 ──────────────────────────────
 
 
-def test_the_mandate_season_never_ends_early():
-    """8.2：天命之季的提前收季從第 13 週起算（等於不提前收）；一般季照 decisive_from_week。態勢卡那一句換成天命之季的寫法。"""
-    from tianxia import calendar, rules
-    from tianxia import world as world_rules
-    from tianxia.state import WorldState
-    from tianxia.world_state import stamp_season
-
-    c = real_content("weekend")
-    season = WorldState(storyline=c.scenario.storylines[0].id)
-    stamp_season(season, c)
-    for front in rules.front_ids(c):  # 提前收季只看戰線（FB-254）：用黃巾聲勢 95
-        season.trends[front] = 95
-    season.time = calendar.week_start(12, c, season) + 1
-    assert world_rules.decisive_ending(world_rules._season_vehicle(c, season), c) is not None  # 一般季：第 12 週黃巾 95，當場收季
-    season.mandate = True
-    vehicle = world_rules._season_vehicle(c, season)
-    assert rules.decisive_week(season, c) == 13 > c.config.season_weeks
-    assert world_rules.decisive_ending(vehicle, c) is None
-    assert rules.stance_rule_note(vehicle, c) == rules.MANDATE_RULE
-
-
 def test_the_mandate_season_stirs_one_shard_every_marked_battle(sealed):
     """8.2（PM 丙）：天命之季每場標了 seal 的決戰必定牽動一片——不擲 7%、沒有新主保護、沒有全服兩次的上限；每片每季照舊最多一次；
     亂數 seal-mandate|event_id。"""

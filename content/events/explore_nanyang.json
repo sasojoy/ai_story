@@ -2,6 +2,7 @@
   {
     "id": "ny_wan_stonelock",
     "title": "校場石鎖",
+    "image": "fight",
     "locations": [
       "wan_city"
     ],
@@ -83,6 +84,7 @@
   {
     "id": "ny_wan_gatecheck",
     "title": "城門盤查",
+    "image": "town",
     "locations": [
       "wan_city"
     ],
@@ -252,6 +254,7 @@
   {
     "id": "ny_road_well",
     "title": "井中母子",
+    "image": "village",
     "locations": [
       "nanyang_road"
     ],
@@ -314,6 +317,7 @@
   {
     "id": "ny_road_brokencart",
     "title": "斷軸牛車",
+    "image": "refugees",
     "locations": [
       "nanyang_road"
     ],
@@ -534,6 +538,7 @@
   {
     "id": "ny_road_postbooth",
     "title": "郵亭遺簡",
+    "image": "road",
     "locations": [
       "nanyang_road"
     ],
@@ -628,6 +633,7 @@
   {
     "id": "ny_camp_wrestle",
     "title": "營中角力",
+    "image": "camp",
     "locations": [
       "nanyang_huangjin_camp"
     ],
@@ -689,6 +695,7 @@
   {
     "id": "ny_camp_talisman",
     "title": "符水驅疫",
+    "image": "altar",
     "locations": [
       "nanyang_huangjin_camp"
     ],
@@ -775,6 +782,7 @@
   {
     "id": "ny_yu_nightferry",
     "title": "夜渡淯水",
+    "image": "river",
     "locations": [
       "yu_river"
     ],
@@ -850,6 +858,7 @@
   {
     "id": "ny_yu_net",
     "title": "網底油包",
+    "image": "river",
     "locations": [
       "yu_river"
     ],
@@ -942,6 +951,7 @@
   {
     "id": "ny_yu_ropetoll",
     "title": "河灣攔繩",
+    "image": "river",
     "locations": [
       "yu_river"
     ],
@@ -1202,6 +1212,7 @@
   {
     "id": "ny_xinye_wallgap",
     "title": "連夜補牆",
+    "image": "town",
     "locations": [
       "xinye"
     ],
@@ -1370,6 +1381,7 @@
   {
     "id": "ny_wilds_runaways",
     "title": "石洞逃丁",
+    "image": "forest",
     "locations": [
       "nanyang_wilds"
     ],
@@ -1574,6 +1586,7 @@
   {
     "id": "ny_wilds_herbcliff",
     "title": "崖上採藥",
+    "image": "forest",
     "locations": [
       "nanyang_wilds"
     ],
@@ -1638,6 +1651,7 @@
   {
     "id": "lulin_gate",
     "title": "寨門盤問",
+    "image": "fort",
     "locations": [
       "lulin_zhai"
     ],
@@ -1710,6 +1724,7 @@
   {
     "id": "lulin_drill",
     "title": "寨前比刀",
+    "image": "fight",
     "locations": [
       "lulin_zhai"
     ],
@@ -1769,6 +1784,7 @@
   {
     "id": "lulin_snare",
     "title": "山道絆索",
+    "image": "forest",
     "locations": [
       "lulin_zhai"
     ],

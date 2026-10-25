@@ -18,7 +18,7 @@ from tianxia.state import Order
 TW_MIDNIGHT = 16 * 3600  # UTC 16:00＝台灣 00:00（1970-01-02）
 
 
-def _game(faction="huang", at="huangjin_camp", profile="weekend", name="沈浪", third_party=False):
+def _game(faction="huang", at="huangjin_camp", profile="week7", name="沈浪", third_party=False):
     c = no_conquest(real_content(profile))  # 出陣推線的舊規則；領地爭奪（PM 2026-10-22 起正式內容打開）的出陣在 tests/test_conquest_*.py
     c.config.auto_open_first_season = True
     if third_party:

@@ -54,7 +54,7 @@ def test_the_conquest_howto_speaks_of_the_new_map():
     game = conquest_game("season21")
     on = "".join(howto.territory_lines(game.content, season=game.state.world))
     assert "局勢層" not in on and "天下圖" in on and "區圖" in on
-    for profile in ("weekend", None, "season21"):
+    for profile in ("week7", None, "season21"):
         plain = plain_game(profile)
         off = "".join(howto.territory_lines(plain.content, season=plain.state.world))
         assert "局勢層" not in off and "天下圖的地面、區圖名字框的顏色就是此刻誰佔著" in off, profile
@@ -64,7 +64,7 @@ def test_the_strongest_insight_howto_points_at_the_region_map():
     """玩法說明「靜心感悟」那一句（STRONG_HOWTO）：輿圖第三版拿掉了意境濾鏡（第 4 批），改寫區圖名字底下的意境字與卡上的「最濃」
     （PM 2026-10-22，每一種季都改）。"""
     assert "濾鏡" not in howto.STRONG_HOWTO and "區圖" in howto.STRONG_HOWTO and "最濃" in howto.STRONG_HOWTO
-    for profile in ("weekend", None, "season21"):
+    for profile in ("week7", None, "season21"):
         game = plain_game(profile)
         text = game.howto_text()
         assert "濾鏡" not in text and "局勢層" not in text and howto.STRONG_HOWTO in text, profile

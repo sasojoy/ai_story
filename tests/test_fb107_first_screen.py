@@ -62,7 +62,7 @@ const renownLine = L.renown ? el("renown", ["who-renown-line"]) : null;
 const meritSmalls = Array.from({ length: L.merit || 0 }, () => el("msmall", []));
 // 一組選項還放不下（第 10 步 choices，企劃者 2026-10-16 選 (c)）：態勢那一排（L.peekOpen 是攤開了一格）、灰掉的俠寇鈕底下那一行原因（L.notes 行）
 const peek = L.peek ? el("peek", ["peek"]) : null;
-if (peek) peek.querySelector = (s) => (s === ".peek-panel" && L.peekOpen ? {} : null);
+if (peek) peek.querySelector = (s) => (s === ".wk-panel" && L.peekOpen ? {} : null);
 const notes = Array.from({ length: L.notes || 0 }, () => el("note", ["opt-note"]));
 // 狀態列（#top）的高度（FB-123）：input.topHeight；input.realTop 時 renderTop 照真的那樣先量高度、重畫（💡 收成一行時矮 input.topSaves）、
 // 再交給 fitTopMoved
@@ -72,7 +72,7 @@ const renderTop = () => {
   tops += 1;
   if (!input.realTop) return;
   const before = topEl.offsetHeight;
-  topEl.offsetHeight = (input.topHeight || 120) - (S.hintTight && !S.hintOpen ? input.topSaves || 20 : 0);
+  topEl.offsetHeight = (input.topHeight || 120) - (S.renownTight ? input.topSaves || 20 : 0);
   HH.fitTopMoved(before);
 };
 // 場景卡：加入的鈕在名字那一行時（L.join 不是 false）名字包在 muster-head 裡；沒有鈕時名字是場景卡第一個 <p>
@@ -163,9 +163,9 @@ const where = {
   "#page > .card.scene .calls": () => (callsBox ? [callsBox] : []),
   ".call.fit-hide": () => callRows.filter((x) => has(x, "fit-hide")),
   ".calls-more": () => (callsMore ? [callsMore] : []),
-  "#page > .peek": () => (peek ? [peek] : []),
+  "#page > .wk-card": () => (peek ? [peek] : []),
   "#page > .options > .btn.off .opt-note": () => notes,
-  ".peek.fit-hide, .opt-note.fit-hide": () => [peek, ...notes].filter((x) => x && has(x, "fit-hide")),
+  ".wk-card.fit-hide, .opt-note.fit-hide": () => [peek, ...notes].filter((x) => x && has(x, "fit-hide")),
   ".now.fit-title": () => all.filter((x) => has(x, "now", "fit-title")),
   // 出陣回報（frontReportHtml）：假頁面沒有這一塊
   "#page .sfront": () => [],
@@ -271,28 +271,16 @@ def test_the_box_is_tightened_before_anything_is_folded():
 
 
 @node
-def test_a_two_line_hint_folds_to_one_line_and_comes_back_when_there_is_room():
-    """💡 在狀態列（另外畫，renderTop）：要收時記 S.hintTight、重畫狀態列；之後有空間了重量時還原、再重畫一次。"""
-    layout = {"bottom": 790, "actbar": True, "scene": True, "hint": True, "card": True, "lines": [False], "rounds": True}
+def test_the_titles_line_folds_after_the_spacing_and_comes_back():
+    """名聲 1B：名號底下那一行稱號排在留白之後收（記 S.renownTight、重畫狀態列，善惡稱號接到頭銜後面）；有空間了重量時還原。
+    （狀態列的 💡 那一步拿掉了：提示句收進本週卡，減法季批 1）"""
+    layout = {"bottom": 780, "actbar": True, "scene": True, "renown": True}
     script = """
       H.fitFirstScreen(); const tight = snap();
       L.bottom = 700; H.fitFirstScreen(); const roomy = snap();
       return { tight, roomy };"""
     out = run(layout, script)
-    assert out["tight"]["fitted"] == ["space", "hint"] and out["tight"]["hintTight"] is True and out["tight"]["tops"] == 1
-    assert out["roomy"]["fitted"] == [] and out["roomy"]["hintTight"] is False and out["roomy"]["tops"] == 2
-
-
-@node
-def test_the_titles_line_folds_after_the_hint_and_comes_back():
-    """名聲 1B：名號底下那一行稱號排在 💡 之後收（記 S.renownTight、重畫狀態列，善惡稱號接到頭銜後面）；有空間了重量時還原。"""
-    layout = {"bottom": 800, "actbar": True, "scene": True, "hint": True, "renown": True}
-    script = """
-      H.fitFirstScreen(); const tight = snap();
-      L.bottom = 700; H.fitFirstScreen(); const roomy = snap();
-      return { tight, roomy };"""
-    out = run(layout, script)
-    assert out["tight"]["fitted"] == ["space", "hint", "renown"] and out["tight"]["renownTight"] is True
+    assert out["tight"]["fitted"] == ["space", "renown"] and out["tight"]["renownTight"] is True
     assert out["tight"]["bottom"] <= 740
     assert out["roomy"]["fitted"] == [] and out["roomy"]["renownTight"] is False
 
@@ -304,12 +292,6 @@ def test_the_battle_board_titles_fold_before_the_moves_are_squeezed():
     assert out["fitted"] == ["space", "merit"] and out["merit"] == [True, True, True] and out["bottom"] <= 740
     again = run({"bottom": 785, "options": True, "merit": 3}, "H.fitFirstScreen(); L.bottom = 700; H.fitFirstScreen(); return snap();")
     assert again["fitted"] == [] and again["merit"] == [False, False, False]
-
-
-@node
-def test_a_hint_the_player_opened_stays_open():
-    out = run({"bottom": 790, "actbar": True, "scene": True, "hint": True}, S={"hintTight": True, "hintOpen": True})
-    assert "hint" not in out["fitted"] and out["hintTight"] is True and out["tops"] == 0
 
 
 @node
@@ -603,39 +585,6 @@ def test_an_opened_step_box_stays_open_while_the_countdown_ticks_and_folds_when_
     assert _guide(script, MUSTER_SCENE.format("12 分 5")) == ["line", "card", "card", "card", "line", "line"]
 
 
-HINT_DRIVER = r"""
-const S = Object.assign({ hintOpen: false, hintTight: false, tab: "jianghu", main: { guide: null, options: [{ id: "act:explore" }] } }, input.S);
-const H = new Function("S", [konst("esc"), konst("WAITING"), konst("waitingMenu"), "const idleMenu = () => true;", fn("hintHtml"),
-  "return { hintHtml };"].join("\n"))(S);
-finish({ html: H.hintHtml({ hint: "💡 你已攢下 45 點心得。", journey: null }), open: S.hintOpen });
-"""
-
-
-@node
-@pytest.mark.parametrize("state, folded", [
-    ({"hintTight": True}, True), ({"hintTight": False}, False), ({"hintTight": True, "tab": "practice"}, False),
-])
-def test_the_hint_is_drawn_folded_only_when_the_fit_asked_and_only_on_the_jianghu_page(state, folded):
-    out = webharness.run(HINT_DRIVER, {"S": state})
-    assert ('class="hint road-hint clamp"' in out["html"] and 'data-act="hint-more"' in out["html"]) is folded
-    assert ('<span class="hint">' in out["html"]) is not folded
-
-
-@node
-def test_a_folded_hint_the_player_opened_stays_open_on_redraw():
-    out = webharness.run(HINT_DRIVER, {"S": {"hintTight": True, "hintOpen": True}})
-    assert out["open"] is True and 'class="hint road-hint"' in out["html"] and "clamp" not in out["html"]
-
-
-@node
-def test_an_opened_hint_stays_open_after_a_look_at_another_tab():
-    """審查 M9：收成一行的 💡 點開了，去修練頁看一眼（那裡照整段畫），回來照舊攤開；不收了（hintTight 拿掉）才清掉。"""
-    away = webharness.run(HINT_DRIVER, {"S": {"hintTight": True, "hintOpen": True, "tab": "practice"}})
-    assert away["open"] is True and '<span class="hint">' in away["html"]
-    done = webharness.run(HINT_DRIVER, {"S": {"hintTight": False, "hintOpen": True}})
-    assert done["open"] is False
-
-
 # ── 真的卡片：收起來的那幾樣不含得失與結果 ─────────────────────────
 
 
@@ -686,7 +635,7 @@ def test_each_step_only_touches_what_it_names():
         ".g-mcol li .rn-two small.fit-hide",  # 名聲 4B：本場戰功名字底下那一行稱號（名字照舊）
         # 第 10 步（choices）：「剛剛」的敘事（展開 .open 就回來）、灰掉的鈕底下那一行原因（在鈕的 title，點了說整句）、態勢那一排
         ".now.fit-title:not(.open) .tx-now > .tx-line, .now.fit-title:not(.open) .tx-now > .tx-heading, .now.fit-title:not(.open) .tx-now > .tx-glyph",
-        ".options > .btn.off .opt-note.fit-hide", ".page > .peek.fit-hide",
+        ".options > .btn.off .opt-note.fit-hide", ".page > .wk-card.fit-hide",
         # 第 6a 步（front、front2）：出陣回報那一句、標題與其餘的條（點那一塊整塊攤開，frontOpen）
         ".sfront.fit-min .sf-head, .sfront.fit-min .sf-row ~ .sf-row", ".sfront.fit-tight .sf-text",
     ]
@@ -707,7 +656,7 @@ def test_the_spacing_step_only_shrinks_gaps_and_paddings():
     css = _css()
     rules = _rules(css, "fit-space")
     assert rules and all(re.fullmatch(r"\s*((margin|padding)(-top|-bottom)?: \d+px;\s*)+", body) for body in rules.values()), rules
-    gaps = rules[".page.fit-space > .peek, .page.fit-space > .now, .page.fit-space > .card, .page.fit-space > .guide-line"]
+    gaps = rules[".page.fit-space > .wk-card, .page.fit-space > .now, .page.fit-space > .card, .page.fit-space > .guide-line"]
     assert "margin-bottom: 8px" in gaps
 
 

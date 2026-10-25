@@ -22,7 +22,7 @@ NOW = 16 * 3600 + 3600
 
 
 def _content():
-    c = real_content("weekend")
+    c = real_content("week7")
     c.config.auto_open_first_season = True
     return c
 

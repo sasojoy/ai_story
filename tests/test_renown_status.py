@@ -1,7 +1,7 @@
 """狀態列與玩家卡的名聲資料、個人目標（名聲設計 2.5、6.1、第九節 guide）。"""
 import random
 
-from conftest import real_content
+from conftest import real_content, renown_unscaled
 
 from tianxia import howto, renown, rules, social
 from tianxia.engine import Game
@@ -10,7 +10,7 @@ from tianxia.state import new_game_state
 
 
 def test_status_has_both_ladders_and_the_gap():
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     s = new_game_state(c, "甲")
     s.player.stats.update({"fame": 27, "good": 18, "evil": 3})
     st = renown.status(s, c)
@@ -39,14 +39,14 @@ def test_top_tier_has_no_next_and_long_seasons_say_the_scale():
 
 
 def test_status_and_card_are_none_when_off():
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     c.config.renown.titles = False
     s = new_game_state(c, "甲")
     assert renown.status(s, c) is None and renown.card(s, c) is None
 
 
 def test_card_shows_titles_only():
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     s = new_game_state(c, "甲")
     s.player.stats.update({"fame": 12, "good": 4, "evil": 22})
     assert renown.card(s, c) == {"titles": ["小有名氣", "江湖巨寇"], "path": "寇"}
@@ -55,7 +55,7 @@ def test_card_shows_titles_only():
 
 
 def test_status_data_and_the_player_card_carry_it():
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     c.config.auto_open_first_season = True
     a = Game.new(c, "甲", rng=random.Random(0))
     b = Game.new(c, "乙", rng=random.Random(0))
@@ -67,7 +67,7 @@ def test_status_data_and_the_player_card_carry_it():
 
 
 def test_fame_tier_condition_reads_this_seasons_bar():
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     s = new_game_state(c, "甲")
     s.player.stats["fame"] = 10
     assert rules.check_condition(Condition(fame_tier=1), s, c)
@@ -80,7 +80,7 @@ def test_fame_tier_condition_reads_this_seasons_bar():
 
 
 def test_the_fame_goal_reads_the_tier():
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     goal = next(m for m in c.scenario.milestones if m.id == "fame_10")
     assert goal.condition.fame_tier == 1 and "小有名氣" in goal.text
 

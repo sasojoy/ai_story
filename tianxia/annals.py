@@ -22,9 +22,11 @@ CONQUER = "conquer"  # 翻地與爭搶（輿圖簡化設計 4.5）：推最多�
 # 起用玉璽碎片的獨門行動（Game.seal_use）：持有者平時藏起來（碎片改版設計第二、三章「行狀只記在用的人自己的行狀裡」），酒肆與買兇找人
 # 不讀這一類（heard；FB-643）。本人的行狀頁照「行事」寫、季末的傳歸在出身與行事那一段（GROUPS），跟一般的事一樣
 SEAL = "seal"
-KINDS = {SHOWDOWN: "大戰", FIGURE: "人物", FIGHT: "交手", DEED: "行事", CONQUER: "攻守", SEAL: "行事"}  # 行狀頁的小標（待 joy 潤）
-GROUPS = {SEAL: DEED}  # 季末的傳（biography._group）照哪一段寫：沒列的照自己的種類
-UNHEARD = frozenset({SEAL})  # 酒肆打聽不到的種類
+# 地方痕跡過了門檻、你出過力（減法季批 4，Game._mark_credits）：公開的只有痕跡、不列名字，所以酒肆打聽不到（UNHEARD）；季末的傳照行事寫
+MARK = "mark"
+KINDS = {SHOWDOWN: "大戰", FIGURE: "人物", FIGHT: "交手", DEED: "行事", CONQUER: "攻守", SEAL: "行事", MARK: "行事"}  # 行狀頁的小標（待 joy 潤）
+GROUPS = {SEAL: DEED, MARK: DEED}  # 季末的傳（biography._group）照哪一段寫：沒列的照自己的種類
+UNHEARD = frozenset({SEAL, MARK})  # 酒肆打聽不到的種類
 TEXT_MAX, QUOTE_MAX, REPLY_MAX = 80, 40, 80
 MASTERED = "絕學"  # martial_arts.QUALITIES 的最後一品
 

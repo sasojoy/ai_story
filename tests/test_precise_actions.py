@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import random
 
-from conftest import real_content
+from conftest import real_content, renown_unscaled
 
 from tianxia import precise
 from tianxia.engine import Game
@@ -16,8 +16,8 @@ MON = 1792339200  # 2026-10-19 週一 00:00（台灣）
 NOW = MON + 10 * HOUR
 
 
-def _game(profile="weekend", at="yingchuan", faction=None, stamina=250.0, opened=True):
-    c = real_content(profile)
+def _game(profile="week7", at="yingchuan", faction=None, stamina=250.0, opened=True):
+    c = renown_unscaled(real_content(profile))  # 求見門檻照原數（名望 15）
     c.config.train_event_chance = 0.0
     store = open_world()
     store.seed_first_season(c)
@@ -40,14 +40,14 @@ def _ids(game):
 
 
 def test_a_stamped_season_turns_precise_on():
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     season = fresh_season(c)
     stamp_season(season, c)
     assert season.precise_actions and precise.on(c, season)
 
 
 def test_unstamped_season_keeps_the_old_rules():
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     season = fresh_season(c)
     stamp_season(season, c)
     season.precise_actions = False  # 設定打開之前就開的季
@@ -175,10 +175,10 @@ def test_boss_cooldown_and_used_up_grey_the_boss_only_place():
     assert not option.enabled and "後才會再現身" in option.label
     s.player.duel_last = []
     boss = duel_rules.here(s, c)[0]
-    s.player.duel_tally[duel_rules.season_key(s, boss.id)] = c.config.duel.per_boss_season
+    s.player.duel_tally[duel_rules.week_key(s, c, boss.id)] = c.config.duel.per_boss_week  # 7 天季：每段 per_boss_week 次
     option = _ids(game)["explore:practice"]
     # FB-672：次數用完那一句帶頭目的名字（「他」→「頭目某某」，名字是黃巾看到的那一面；tests/test_fb672_boss_away_name.py）
-    assert not option.enabled and "這一季頭目衛重不再現身" in option.label
+    assert not option.enabled and "這一段頭目衛重不再現身" in option.label
 
 
 def test_season21_boss_is_twice_a_week():
@@ -318,7 +318,7 @@ def test_after_fight_events_join_seeking_only_in_the_field_with_foes():
 
 
 def test_no_after_fight_event_needs_a_fight_any_more():
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     for eid in ("train_fallen_foe", "train_bettors", "train_sore_loser", "train_dropped_letter", "train_old_boxer",
                 "train_runaway_cart", "train_campfire", "train_insight", "train_onlooker"):
         assert not c.events[eid].condition.fight_tiers, eid
@@ -381,7 +381,7 @@ def test_fixture_and_switched_off_content_are_off(content):
     season = fresh_season(content)
     stamp_season(season, content)
     assert not precise.on(content, season)
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     c.config.precise_actions = False
     season = fresh_season(c)
     stamp_season(season, c)
@@ -503,7 +503,7 @@ def test_the_howto_follows_precise_actions_and_old_seasons_keep_every_word():
     from tianxia import explore_modes, howto
     from tianxia.world_state import fresh_season
 
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     season = fresh_season(c)
     stamp_season(season, c)
     text = howto.page(c, season, recruitable=False)

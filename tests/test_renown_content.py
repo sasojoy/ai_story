@@ -13,7 +13,7 @@ APPENDIX_A = {
 
 
 def test_each_listed_event_has_one_needs_choice():
-    c = real_content("weekend")
+    c = real_content("week7")
     for event_id, (way, tier) in APPENDIX_A.items():
         needs = [ch.needs for ch in c.events[event_id].choices if ch.needs is not None]
         assert [(n.path, n.tier) for n in needs] == [(way, tier)], event_id
@@ -22,7 +22,7 @@ def test_each_listed_event_has_one_needs_choice():
 
 
 def test_the_rogue_ways_pay_more_and_half_use_evil_practice():
-    c = real_content("weekend")
+    c = real_content("week7")
     practiced = 0
     for event_id, (way, _) in APPENDIX_A.items():
         ev = c.events[event_id]
@@ -39,7 +39,7 @@ def test_the_rogue_ways_pay_more_and_half_use_evil_practice():
 
 
 def test_new_events_exist_with_their_conditions():
-    c = real_content("weekend")
+    c = real_content("week7")
     assert {"xia_grain", "xia_tipoff", "lulin_gate", "lulin_spoils", "lulin_drill", "lulin_snare"} <= set(c.events)
     for event_id in ("xia_grain", "xia_tipoff"):
         ev = c.events[event_id]
@@ -48,6 +48,6 @@ def test_new_events_exist_with_their_conditions():
 
 
 def test_the_fort_gate_has_both_ways():
-    c = real_content("weekend")
+    c = real_content("week7")
     needs = [(ch.needs.path, ch.needs.tier) for ch in c.events["lulin_gate"].choices if ch.needs is not None]
     assert needs == [("俠", 2), ("寇", 1)]

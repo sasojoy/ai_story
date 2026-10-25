@@ -50,7 +50,7 @@ def test_a_fresh_database_still_in_preparation_prints_no_mismatch(monkeypatch, c
 @pytest.mark.parametrize("profile", ["week7", "season21"])
 def test_a_seeded_but_unopened_season_prints_nothing_either(monkeypatch, capsys, profile):
     """種好了、管理者還沒開季（以前沒帶設定種的，章是 false）：開季時才重新蓋章，這時候什麼都沒換，一樣不印。"""
-    old = real_content("weekend")
+    old = real_content()  # 以前沒帶設定種的：章上 season21 是 false
     open_world().seed_first_season(old)
     assert open_world().season_phase() == "preparing" and not open_world().get_season().season21
     assert MARK not in _start_server(monkeypatch, capsys, profile)
@@ -60,7 +60,7 @@ def test_a_seeded_but_unopened_season_prints_nothing_either(monkeypatch, capsys,
 @pytest.mark.parametrize("profile", ["week7", "season21"])
 def test_a_running_season_opened_with_another_calendar_still_prints_the_fb520_warning(monkeypatch, capsys, profile):
     """FB-520 的警告沒有被弄丟：週末式的季已經開了（章上 season21 是 false），換上照現實天的程式，兩支程式都印。"""
-    old = real_content("weekend")
+    old = real_content()  # 沒帶設定的程式開的季：章上 season21 是 false
     world = open_world()
     world.seed_first_season(old)
     assert world.open_season(old, NOW)

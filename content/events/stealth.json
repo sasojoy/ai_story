@@ -2,6 +2,7 @@
   {
     "id": "yz_market_salt",
     "title": "私鹽擔子",
+    "image": "market",
     "locations": [
       "market_town"
     ],
@@ -184,6 +185,7 @@
   {
     "id": "yc_cs_deserter",
     "title": "桑林逃卒",
+    "image": "forest",
     "locations": [
       "changshe"
     ],
@@ -243,6 +245,7 @@
   {
     "id": "caught_purse",
     "title": "被撞見了",
+    "image": "tavern",
     "actions": [],
     "text": "失主一腳踩住錢袋，揪住你的衣襟大喊：「好啊，趁火打劫！」打架的人都停了手，滿堂的眼睛全轉過來看你。",
     "choices": [
@@ -282,6 +285,7 @@
   {
     "id": "caught_token",
     "title": "被撞見了",
+    "image": "tavern",
     "actions": [],
     "text": "醉漢死死扣住你的手腕：「小賊！」四周的人都朝你看過來，有人已經挽起了袖子。",
     "choices": [
@@ -323,6 +327,7 @@
   {
     "id": "caught_salt",
     "title": "被撞見了",
+    "image": "town",
     "locations": [
       "market_town"
     ],
@@ -366,6 +371,7 @@
   {
     "id": "caught_deserter",
     "title": "被撞見了",
+    "image": "night",
     "locations": [
       "changshe"
     ],

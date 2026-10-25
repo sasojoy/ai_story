@@ -1,5 +1,5 @@
 """減法季批 4（主機側計畫 Task 4-2 的純規則那一半；整合設計 5.1、5.9）：模型把玩家那句話歸到一種後果（event_llm.classify_outcome），
-引擎照那一種的判法走（outcomes.plan）。三段式的接線（answer_event、server）等批 0 的開關，見 tests/test_outcomes_answer.py（之後）。
+引擎照那一種的判法走（outcomes.plan）。三段式的接線（answer_event、server）見 tests/test_outcomes_answer.py。
 模型一律是假的（mock.Mock().chat_structured.return_value）：不打 11434。"""
 import json
 from unittest import mock
@@ -9,7 +9,7 @@ import requests
 
 from tianxia import event_llm, outcomes
 from tianxia.battle_instance import DEFAULT_FREE_TEXT_SUCCESS_RATE
-from tianxia.models import Choice, Effect, Event, Outcome
+from tianxia.models import Choice, Effect, Event, JianfaRules, Outcome
 from tianxia.ollama_client import OllamaClient
 from tianxia.rules import FREE_TEXT_MAX_RATE, FREE_TEXT_MIN_RATE, FREE_TEXT_PER_POINT
 
@@ -138,11 +138,14 @@ def test_outcome_of_reads_strictly():
 
 
 def test_a_check_outcome_rolls_at_the_free_text_rate_on_its_best_stat(state, content, world):
+    """PM 2026-10-25 第 3 件：（屬性 − 那一種後果的難度）× 4，原本寫死的 5 換成難度（LABOR 的難度是 4）。"""
     state.player.stats.update(str=8, wis=3)
     got = outcomes.plan(ALL, "labor", 40, state, content, world)
-    assert (got.outcome, got.way, got.rate) == (LABOR, "check", 40 + (8 - 5) * FREE_TEXT_PER_POINT)
+    assert (got.outcome, got.way, got.rate) == (LABOR, "check", 40 + (8 - 4) * FREE_TEXT_PER_POINT)
     state.player.stats.update(str=3, wis=9)
-    assert outcomes.plan(ALL, "labor", 40, state, content, world).rate == 40 + (9 - 5) * FREE_TEXT_PER_POINT
+    assert outcomes.plan(ALL, "labor", 40, state, content, world).rate == 40 + (9 - 4) * FREE_TEXT_PER_POINT
+    harder = LABOR.model_copy(update={"check": LABOR.check.model_copy(update={"difficulty": 7})})
+    assert outcomes.rate(harder, 40, state, content, world) == 40 + (9 - 7) * FREE_TEXT_PER_POINT  # 難度高了成算跟著低
     assert outcomes.plan(ALL, "labor", 100, state, content, world).rate == FREE_TEXT_MAX_RATE
     state.player.stats.update(str=0, wis=0)
     assert outcomes.plan(ALL, "labor", 0, state, content, world).rate == FREE_TEXT_MIN_RATE
@@ -179,12 +182,34 @@ def test_a_combat_outcome_fights_like_a_fixed_choice():
     assert (choice.combat, choice.effect, choice.fail_effect) == ("dipi", CHASE.effect, CHASE.fail_effect)
 
 
-def test_the_options_show_only_ids_and_tags():
-    """欄位表 1.3 的 options[].outcomes：給畫面寫「可能的走向」，不給後果的數字。"""
-    assert outcomes.tags(ALL) == [{"id": o.id, "tag": o.tag} for o in ALL]
+def test_the_options_show_only_ids_and_short_names():
+    """欄位表 1.3 的 options[].outcomes：給畫面寫「可能的走向」，不給後果的數字。tag 寫的是「短名：給模型看的說明」，
+    給玩家看的只有冒號前的短名（FB-800，PM 2026-10-25：「對不上的」是寫給模型的話）；key 還是 tag。"""
+    assert outcomes.tags(ALL) == [
+        {"id": "labor", "tag": "出力"}, {"id": "chase", "tag": "討牛"}, {"id": "give", "tag": "周濟"}, {"id": "leave", "tag": "走開"},
+    ]
+    assert all(set(item) == {"id", "tag"} and "：" not in item["tag"] for item in outcomes.tags(ALL))
+    assert [outcomes.kind_name(o) for o in ALL] == ["出力", "討牛", "周濟", "走開"]
+
+
+def test_a_tag_without_a_colon_is_shown_whole():
+    bare = Outcome(id="bare", tag="走開", effect=Effect(text="你走了。"))
+    assert outcomes.short_name("走開") == outcomes.kind_name(bare) == "走開"
+    assert outcomes.tags([bare]) == [{"id": "bare", "tag": "走開"}]
+    assert outcomes.short_name("出力：替他拉犁：想省力的法子") == "出力"  # 只切第一個冒號
+    assert outcomes.short_name("： 只有說明") == "： 只有說明"  # 冒號前沒有字：照整句（content.check_outcomes 本來就不准）
+
+
+def test_the_model_still_reads_the_whole_tag():
+    """給模型的提示照舊用整句：短名只是給玩家看的。"""
+    client = _client()
+    event_llm.classify_outcome(client, PLOW, ALL, "跟他聊聊天氣")
+    user = client.chat_structured.call_args.args[0][1]["content"]
+    assert "leave：走開：不管、看著、對不上的" in user and "labor：出力：替他拉犁、修犁、想省力的法子" in user
 
 
 @pytest.mark.parametrize("points, used, credited", [(4, 0, 4), (4, 10, 2), (4, 12, 0), (0, 3, 0), (6, 13, 0)])
 def test_the_daily_contribution_cap(points, used, credited):
-    assert outcomes.contribution_room(points, used) == credited
-    assert outcomes.DEED_CONTRIBUTION_CAP == 12
+    cap = JianfaRules().deed_contribution_cap
+    assert outcomes.contribution_room(points, used, cap) == credited
+    assert cap == 12  # 【預設】（企劃者 2026-10-24；批 4 接線搬進 Config.jianfa）

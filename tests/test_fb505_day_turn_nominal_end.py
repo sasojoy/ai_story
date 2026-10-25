@@ -54,7 +54,7 @@ def test_season21_last_day_turn_is_later_when_the_admin_pushed_the_finale():
     assert rules.day_turn(c21, season) == ("at", "第 3 週・週日 00:00")
 
 
-@pytest.mark.parametrize("profile", ["weekend", None])
+@pytest.mark.parametrize("profile", [None])
 def test_weekend_and_fourteen_day_compare_with_the_season_length_as_before(profile):
     """週末、14 天的季沒有偏移：季末往後排一天，最後幾天每一刻跟改之前（季長 × DAY）同一個答案。"""
     content = real_content(profile) if profile else real_content()
@@ -75,4 +75,4 @@ def test_weekend_and_fourteen_day_compare_with_the_season_length_as_before(profi
             "later" if end >= length - calendar.EPS_SECONDS else "at")
         assert kind == old, k
         kinds.add(kind)
-    assert kinds >= ({"at", "later"} if profile == "weekend" else {"at", "season"})  # 兩種季的交界都量到了
+    assert kinds >= ({"at", "later"} if profile == "week7" else {"at", "season"})  # 兩種季的交界都量到了

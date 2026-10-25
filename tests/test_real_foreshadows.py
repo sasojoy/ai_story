@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import FixedRandom
+from conftest import FixedRandom, renown_unscaled
 from tianxia import calendar, foreshadow, rules, team, timetable
 from tianxia.content import load_content
 from tianxia.encounter import EncounterResult
@@ -100,7 +100,7 @@ ALL_EVENTS: dict = {}  # meet 會把 content.events 換成只剩一則（測完�
 
 @pytest.fixture(scope="module")
 def fs_content():
-    c = load_content(CONTENT_DIR, profile="weekend")
+    c = renown_unscaled(load_content(CONTENT_DIR, profile="week7"))  # 求見門檻照原數（名望 15／20／25）
     c.config.server_max_players = 2  # 下面的表照係數 0.2 抄的（見檔頭）；線上的人數上限由 test_content.py 驗
     c.config.auto_open_first_season = True  # 這一組測的是開打後的內容
     c.config.haoqiang_allied = False  # 豪強的三條第三方鏈照豪強是第三方的規則驗（豪強分屬兩軍時不出現，見 test_gentry_allied.py）
@@ -248,7 +248,7 @@ def test_front_must_be_a_front_not_just_a_region(where):
     from tianxia.content import ContentError, validate
     from tianxia.models import FigureChange
 
-    c = load_content(CONTENT_DIR, profile="weekend")
+    c = renown_unscaled(load_content(CONTENT_DIR, profile="week7"))  # 求見門檻照原數（名望 15／20／25）
     c.config.server_max_players = 2  # 下面的表照係數 0.2 抄的（見檔頭）；線上的人數上限由 test_content.py 驗
     validate(c)  # 原樣是對的
     if where == "chain":
@@ -637,21 +637,23 @@ def test_two_buyers_second_trip_adds_the_joint_line(fs_content, world, first, se
 
 
 def test_two_buyers_event_only_the_last_choice_opens_the_chain(fs_content, world, monkeypatch):
-    """汝南集市的「兩路買家」：第 4～6 週只對豪強出現；四個選項只有「兩邊都賣」寫 two_buyers。"""
+    """汝南集市的「兩路買家」：第 4～6 週（7 天季第 2～4 天）只對豪強出現；四個選項只有「兩邊都賣」寫 two_buyers。"""
     c = fs_content
     event = c.events["fs_ev_two_buyers"]
     assert event.choices[-1].text == "兩邊都賣，誰也別讓誰知道" and len(event.choices) == 4
     assert [bool(ch.effect.fs_counters) for ch in event.choices] == [False, False, False, True]
     assert event.choices[-1].effect.fs_counters == {"two_buyers": 1}
-    assert (event.condition.week_min, event.condition.week_max) == (4, 6)
+    assert (event.condition.week_min, event.condition.week_max) == (4, 6)  # 12 週的週曆
+    assert (event.condition.cal_day_min7, event.condition.cal_day_max7) == (2, 4)  # 7 天季：第 2～4 天
+    day = lambda d: (d - 1) * 86400 / calendar.cal_scale(c)  # 7 天季第 d 天 00:00 的世界秒
     for i in range(4):
-        game = fs_game(c, world, f"豪{i}", "haoqiang", "runan_market", time=cal(c, 5))
+        game = fs_game(c, world, f"豪{i}", "haoqiang", "runan_market", time=day(3))
         meet(c, game, "fs_ev_two_buyers", monkeypatch)
         game.choose(f"choice:{i}")
         assert game.state.player.fs_counters == ({"two_buyers": 1} if i == 3 else {})
-    assert event not in candidates(c, fs_game(c, world, "豪早", "haoqiang", "runan_market", time=cal(c, 3)))  # 第 3 週還不出現
-    assert event not in candidates(c, fs_game(c, world, "豪晚", "haoqiang", "runan_market", time=cal(c, 7)))
-    assert event not in candidates(c, fs_game(c, world, "官", "guan", "runan_market", time=cal(c, 5)))
+    assert event not in candidates(c, fs_game(c, world, "豪早", "haoqiang", "runan_market", time=day(1)))  # 第 1 天還不出現
+    assert event not in candidates(c, fs_game(c, world, "豪晚", "haoqiang", "runan_market", time=day(5)))
+    assert event not in candidates(c, fs_game(c, world, "官", "guan", "runan_market", time=day(3)))
 
 
 # ── 答錯的代價 ───────────────────────────────────────────
@@ -691,13 +693,15 @@ def test_wrong_answers_cost_what_the_table_says(fs_content, world):
     game, msgs = attempt("fs_luzhi_huang", ["3"])
     assert msgs[1] == "他嚇得跑了，一個遊戲日內不會再出現。"
     assert fs_option(game, "fs:fs_luzhi_huang").label == "黃圈（時候未到）"
-    game_day = rules.day_seconds(c, game.state.world)  # 一個遊戲日（fix-1008 項目七）：第一季是六個曆日
+    game_day = rules.day_seconds(c, game.state.world)  # 一個遊戲日（fix-1008 項目七）：7 天季是一個曆日
     event_at = timetable.when(game.state, c, next(e for e in c.timetable if e.id == "luzhi_jailed"))
-    assert game.state.world.time + game_day > event_at  # 大事前三個曆日答錯：等不到大事揭曉，這一季這條鏈就沒了
+    game = fs_ready(c, world, "fs_luzhi_huang")
+    game.state.world.time = event_at - game_day / 2  # 大事前半個遊戲日答錯：等不到大事揭曉，這一季這條鏈就沒了
+    fs_run(world, game, "fs_luzhi_huang", ["3"])
     game.state.world.time = event_at - 60
     assert fs_option(game, "fs:fs_luzhi_huang").label == "黃圈（時候未到）"
     game = fs_ready(c, world, "fs_luzhi_huang")
-    game.state.world.time = event_at - 7 * 86400 / calendar.cal_scale(c) + 60  # 時間窗剛開就答錯：等一個遊戲日還來得及
+    game.state.world.time = event_at - 2 * game_day  # 大事前兩天答錯（時間窗從開季就開著）：等一個遊戲日還來得及
     fs_run(world, game, "fs_luzhi_huang", ["3"])
     wrong_at = game.state.world.time
     game.state.world.time = wrong_at + game_day - 1
@@ -927,7 +931,7 @@ def test_end_to_end_one_chain(world):
     """真實內容、週末設定：官軍、黃巾、管理者各一個角色。管理者快轉到長社決戰前一週的夜裡；官軍備齊長社的條件、答對風向，
     黃巾也答對他那條 → 官軍鎖定、黃巾搶輸，鎖定那一刻不發傳聞。管理者再快轉到決戰排定的時間，第 6 週長社決戰收場（官軍大勝）：
     公告寫出官軍的名字與黃巾搶輸的一筆，江湖史有一筆「（名號改寫）」，之後每個人同步都收到那則公告。"""
-    c = load_content(CONTENT_DIR, profile="weekend")
+    c = renown_unscaled(load_content(CONTENT_DIR, profile="week7"))  # 求見門檻照原數（名望 15／20／25）
     c.config.server_max_players = 2  # 下面的表照係數 0.2 抄的（見檔頭）；線上的人數上限由 test_content.py 驗
     c.config.auto_open_first_season = True
     c.config.geju_chaos_per_day = 0.0  # 割據不漲：沒人玩時三條戰線一直在亂局，割據第 5 週就過 85，第 10 週（decisive_from_week）起會以「群雄並起」提前收季，廣宗與季末就輪不到；這裡測的不是它

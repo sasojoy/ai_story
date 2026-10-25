@@ -10,7 +10,7 @@ from tianxia import allied, battle_instance
 
 
 def _wk():
-    c = real_content("weekend")
+    c = real_content("week7")
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
     return c

@@ -17,7 +17,7 @@ from tianxia.engine import Game
 
 @pytest.fixture
 def real():
-    c = real_content("weekend")
+    c = real_content("week7")
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
     c.config.snub_hours = 0

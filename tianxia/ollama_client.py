@@ -440,7 +440,7 @@ class OllamaClient:
             schema = _trim_schema_properties(schema, schema_fields)
         if require_in_schema:  # 要語法強制必填的呼叫自己開（opt-in；預設不動，見 _require_in_schema 的說明）
             schema = _require_in_schema(schema, required_fields or [])
-        if schema_required:  # 只要模型一定寫出這個鍵、空字串也算答了（開口求人的 ask「只是閒聊」就是空字串）：只進 schema，不進缺欄位的檢查
+        if schema_required:  # 只要模型一定寫出這個鍵、空字串也算答了（NPC 智能 2.0的 ask「只是閒聊」就是空字串）：只進 schema，不進缺欄位的檢查
             schema = _non_null(_require_in_schema(schema, schema_required), schema_required)  # 也不准寫 null（見 _non_null）
         payload = self._build_payload(messages, temperature, num_predict=num_predict, json_schema=schema)
         url = f"{self.base_url}/api/chat"
