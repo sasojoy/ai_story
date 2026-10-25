@@ -342,8 +342,10 @@ def _secret_lines(
     if secret is None:
         return []
     cfg = content.config.secrets
-    secret_recipes.solve(state, secret_recipes.tianji_of(world), secret)
+    fresh = secret_recipes.solve(state, secret_recipes.tianji_of(world), secret)
     lines = [cfg.hit_line] if cfg.hit_line else []
+    if fresh:
+        lines += secret_recipes.solved_lines(state, content, world)
     if first:
         who = _makers_shown(state, made) if made is not None else state.player.name
         rumor = cfg.rumor.format(who=who, thing=thing)
