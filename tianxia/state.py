@@ -879,6 +879,9 @@ class PlayerState(BaseModel):
     # 上一次看過的幾樣狀態（陣營、門派、階、等級、名號、同伴、寶物、情誼……，annals.watch）：每個動作結束時拿現在的跟它比，變了的記一筆。
     # None＝還沒看過（新角色、這一版之前的存檔）：第一次只記下來、不補記以前的事
     annals_mark: dict | None = None
+    # 列傳為終點（減法季批 7b，annals.xingshi_notes）：〈天下形勢〉看到第幾篇了（之後收下、寫到你名號的那幾篇各記一則行狀）。
+    # 0 的時候不寫進存檔（QUIET_DEFAULTS）；角色每季重來
+    xingshi_seen: int = 0
 
     # ── 推力與貢獻帳（計畫 T3、第一季設計第七節）；角色每季重來，跟著新角色清空 ──
     # 遊俠名號（ranger.py；散人的成長階梯）：散人時攢的善名、惡名（只算加的）與懸賞的功績；投靠了陣營就不再記（凍結）
@@ -996,6 +999,7 @@ class PlayerState(BaseModel):
 QUIET_DEFAULTS = (
     "ledgers", "lean_changed", "season_title", "step_day", "step_skip", "deed_day", "deed_today",  # 批 3c、批 4
     "fights_today", "fight_day", "milestone_due", "outing_last",  # 批 2
+    "xingshi_seen",  # 批 7b
 )
 
 

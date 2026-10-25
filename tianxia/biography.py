@@ -14,7 +14,7 @@ import re
 from dataclasses import dataclass, field
 
 from . import gender, zh
-from .annals import GROUPS
+from .annals import GROUPS, MARK, TIER, XINGSHI
 
 MODEL, RULE = "model", "rule"
 TITLE = "{name}傳"
@@ -78,12 +78,29 @@ def outline(req: BiographyRequest) -> str:
     who.append(f"季終等級：{p.get('level', 1)}；名望：{p.get('fame', 0)}；善名：{p.get('good', 0)}；惡名：{p.get('evil', 0)}")
     if p.get("showdowns"):
         who.append(f"參加全服大戰 {p['showdowns']} 場，其中首功 {p.get('top_merits', 0)} 次")
+    if "tier" in p:  # 列傳為終點（減法季批 7b）：季末論功（annals.standing）；關著的季身家沒有這個鍵
+        who.append(standing_line(p))
     groups = _group(req.annals)
     parts = [f"【時代】{req.scenario}。{req.era_note}".strip(), "【這一季的大事】\n" + ("\n".join(req.era) or "（無）"), "【身家】\n" + "\n".join(who)]
     for label, key in (("出身與行事", "deed"), ("大戰", "showdown"), ("與英雄交往", "figure"), ("單打獨鬥", "fight")):
         rows = groups.get(key, [])
         parts.append(f"【{label}】\n" + ("\n".join(_fact(e) for e in rows) or "（無）"))
+    if groups.get(TIER):  # 季末論功的那一則（annals.TIER）自己一段，排在最後（SYSTEM 多 TIER_RULE：寫在結局那一段的最後）
+        parts.append("【季末論功】\n" + "\n".join(_fact(e) for e in groups[TIER]))
     return "\n\n".join(parts)
+
+
+def standing_line(p: dict) -> str:
+    """身家裡季末論功那一行（給模型；數字照寫，提示詞要它換成中文）：有階寫照哪一本、第幾階、稱號、貢獻、名次，沒有階寫貢獻與未入階。"""
+    if not p.get("tier"):
+        return f"季末論功：貢獻 {p.get('contrib', 0)}，未入階"
+    return (f"季末論功：{p.get('tier_side', '')}第{_cn(p['tier'])}階「{p.get('tier_title', '')}」，貢獻 {p.get('contrib', 0)}，"
+            f"在 {p.get('final_of', 0)} 人中排第 {p.get('final_rank', 0)}")
+
+
+def _tiered(req: BiographyRequest) -> bool:
+    """這一篇有季末論功（身家有 tier，或行狀有 TIER）：系統提示多一條 TIER_RULE。關著的季兩樣都沒有。"""
+    return "tier" in req.profile or any(e.get("kind") == TIER for e in req.annals)
 
 
 SYSTEM = (
@@ -96,13 +113,16 @@ SYSTEM = (
     "5. {him}說過的話可以照原句引用，寫成「{name}曰：「……」」；人物回的話也可以引。\n"
     "6. 字數視事實多寡，四百到一千五百字。不寫標題、不用任何標記符號、不分點列。只用繁體中文。"
 )
+# 列傳為終點（減法季批 7b）：有季末論功的那一篇多這一條（_tiered）；關著的季系統提示一個字不變
+TIER_RULE = "\n7. 季末論功的名次與第幾階，寫在結局那一段的最後。"
 
 
 def messages(req: BiographyRequest) -> list[dict[str, str]]:
     ask = f"請替「{req.name}」寫列傳。以下是事實清單：\n\n{outline(req)}"
     if req.rewrite:
         ask += "\n\n（這是重寫：換一種起筆與剪裁。）"
-    return [{"role": "system", "content": SYSTEM.format(name=req.name, him=gender.pronoun(req.sex), word=gender.word(req.sex))}, {"role": "user", "content": ask}]
+    system = SYSTEM.format(name=req.name, him=gender.pronoun(req.sex), word=gender.word(req.sex)) + (TIER_RULE if _tiered(req) else "")
+    return [{"role": "system", "content": system}, {"role": "user", "content": ask}]
 
 
 def clean(raw: str | None, req: BiographyRequest) -> str | None:
@@ -176,6 +196,9 @@ def rule_text(req: BiographyRequest) -> str:
     deeds = "".join(f"{_when(e.get('when', '')) + '，' if _when(e.get('when', '')) else ''}{_strip(e['text'], name)}。" for e in joined)
     if not deeds and p.get("faction"):
         deeds = f"後投{p['faction']}。"
+    # 減法季：痕跡（MARK，份量 2，上面挑不到）與〈天下形勢〉寫到名號（XINGSHI）接在行事後面，最多三則；關著的季沒有這兩種
+    heard = [e for e in groups["deed"] if e.get("kind") in (MARK, XINGSHI) and e not in joined][:3]
+    deeds += "".join(f"{_strip(e['text'], name)}。" for e in heard)
     paras = [head + deeds]
     battles = groups["showdown"]
     if battles:
@@ -208,7 +231,8 @@ def rule_text(req: BiographyRequest) -> str:
         tail += f"，江湖稱「{p['ranger']}」"
     elif p.get("faction"):
         tail += f"，仍在{p['faction']}麾下"
-    paras.append(end + tail + "。")
+    tier = "".join(f"{_strip(e['text'], name)}。" for e in groups.get(TIER, [])[:1])  # 季末論功寫在結局那一段的最後（減法季批 7b）
+    paras.append(end + tail + "。" + tier)
     paras.append("評曰：" + _verdict(name, p, bool(battles), bool(figures)))
     return "\n\n".join(paras)
 

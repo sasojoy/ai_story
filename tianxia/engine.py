@@ -723,10 +723,11 @@ class Game:
         world 欄位這裡不用管，呼叫端（_reconcile_season）緊接著就會把它指向共用賽季。
         之後新增的 PlayerState 欄位預設就跟著新角色重來；要跨季保留的才加進下面這份清單。"""
         old = self.state
+        past = self._zhuan_past(old)  # 列傳為終點（減法季批 7b）：收季之後沒回來過的人，存之前補季末論功與〈天下形勢〉
         if old.player.annals:  # 行狀跟著角色重來：先把上一季的存起來，季末的傳照它寫（玩家傳）
             self.world.save_annals(
                 old.player.season_number, old.player.name, [e.model_dump() for e in old.player.annals],
-                annals.profile(old, self.content),
+                annals.profile(old, self.content, season=past),
             )
         fresh = new_game_state(self.content, old.player.name)
         fresh.last_real = old.last_real
@@ -808,6 +809,21 @@ class Game:
             self.content.scenario.name, [self.content.scenario.intro], tag=journal.SEASON_START, guide=tutorial_intro(self.content),
         )
         self._season_grant(old)
+
+    def _zhuan_past(self, old: GameState) -> WorldState | None:
+        """換季那一刻（_reset_player_for_new_season）：上一季開著列傳為終點（zhuan_end）就回那一季（WorldStateStore.past_season），
+        先替這個人補上收季之後還沒記的季末論功與〈天下形勢〉（同步時記的那兩種，annals.tier_note、xingshi_notes），身家照它多論功的那幾樣；
+        關著（設定沒開就不讀資料庫）是 None，一個字都不變。old 是上一季的存檔，馬上就丟：old.world 換成上一季那一份才記得到正確的時刻。"""
+        cfg = self.content.config.jianfa
+        if not (cfg.enabled and cfg.zhuan_end):
+            return None
+        past = self.world.past_season(old.player.season_number)
+        if past is None or not jianfa(self.content, past, "zhuan_end"):
+            return None
+        old.world = past
+        annals.xingshi_notes(old, self.content, past)
+        annals.tier_note(old, self.content, past)
+        return past
 
     def _season_grant(self, old: GameState) -> None:
         """三陣營四勝利（減法季設計 3.3）：上一季收季時論了功的人（那一季的 WorldState.final_tiers），新的一季開局照那一階發起手資源
@@ -1064,6 +1080,7 @@ class Game:
         self._deliver_conquest()  # 領地爭奪：翻地的分紅、守城功（下線時易手的回來補）
         self._deliver_arena()  # 擂台：被挑了的戰報、季末前三名的獎勵；季收了還沒打完的那一場作廢
         self._marks_tick()  # 減法季批 4：痕跡過門檻的防漏、替自己記出過力的行狀（關著什麼都不做）
+        self._zhuan_tick()  # 減法季批 7b：〈天下形勢〉寫到名號、季末論功各記一則行狀（關著什麼都不做）
         mail = parley.lapse(self.state, self.content)  # NPC 智能 2.1：欠人物的事過了期限是食言（附的委託先作罷，書信不再補一句）
         mail += letters.deliver(self.state, self.content, now)  # 書信（大勢人物擴充第二批）：人物來信、過期的委託作罷
         if mail:
@@ -2347,6 +2364,16 @@ class Game:
         fired = marks_rules.fire_due(self.state, self.content)
         if self._mark_credits() or fired:
             self._save_season()
+
+    def _zhuan_tick(self) -> None:
+        """列傳為終點（減法季批 7b-1）：同步時替自己記行狀——〈天下形勢〉上一次看到之後寫到名號的那幾篇（annals.xingshi_notes），
+        季收了之後的季末論功（annals.tier_note）。只改自己的存檔，不存季。關著（zhuan_end）什麼都不做。"""
+        s, c = self.state, self.content
+        if not jianfa(c, s.world, "zhuan_end"):
+            return
+        annals.xingshi_notes(s, c, s.world)
+        if s.world.ended:
+            annals.tier_note(s, c, s.world)
 
     def _mark_credits(self) -> bool:
         """跨過門檻那一刻出過力的人（WorldState.mark_helpers）裡有自己的，各記一則行狀（annals.MARK：只寫那一句傳聞，不列名字、
@@ -16205,7 +16232,7 @@ class Game:
             if rewrite or season != p.season_number or not self._season_closed() or not p.annals:
                 return None
             entries = tuple(e.model_dump() for e in sorted(p.annals, key=lambda e: e.time))
-            profile = annals.profile(self.state, c)
+            profile = annals.profile(self.state, c, season=self.state.world)
         else:
             if season == p.season_number and not self._season_closed():
                 return None
@@ -16213,7 +16240,7 @@ class Game:
             profile = row["profile"]
             if season == p.season_number and p.annals and row["text"] is None:  # 這一季還沒寫成：照角色身上最新的
                 entries = tuple(e.model_dump() for e in sorted(p.annals, key=lambda e: e.time))
-                profile = annals.profile(self.state, c)
+                profile = annals.profile(self.state, c, season=self.state.world)
             written = row["text"] is not None
             if written != rewrite or (rewrite and row["rewrites"] >= self._rewrites_allowed()):
                 return None
