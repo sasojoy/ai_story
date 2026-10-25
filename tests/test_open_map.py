@@ -101,7 +101,7 @@ def test_fame_no_longer_widens_the_map():
 
 
 def test_order_cards_never_say_a_place_is_unexplored():
-    game = _game(faction="huang", profile="weekend")  # 軍令只在第一季規則開著時有
+    game = _game(faction="huang", profile="week7")  # 軍令只在第一季規則開著時有
     s, c = game.state, game.content
     week = 1
     front = figures.state_of(s, c, "luzhi").front

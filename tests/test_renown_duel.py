@@ -6,7 +6,7 @@ from tianxia.state import new_game_state
 
 
 def test_chance_and_reward_follow_the_fame_tier():
-    c = real_content("weekend")
+    c = real_content("week7")
     s = new_game_state(c, "甲")
     assert renown.duel_chance(s, c) == 1.0 and renown.duel_reward(s, c) == 1.0
     s.player.stats["fame"] = 10
@@ -18,7 +18,7 @@ def test_chance_and_reward_follow_the_fame_tier():
 
 
 def test_meet_and_paid_lines():
-    c = real_content("weekend")
+    c = real_content("week7")
     s = new_game_state(c, "甲")
     assert renown.duel_meet_line(s, c) == ""
     s.player.stats["fame"] = 25

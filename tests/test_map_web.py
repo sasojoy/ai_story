@@ -27,7 +27,7 @@ APP = webharness.APP  # 三個檔（main.js、map.js、app.js）接起來的那�
 
 
 def _game(faction="guan", at="yingchuan", classic=False, third_party=False):
-    c = real_content("weekend")
+    c = real_content("week7")
     c.config.auto_open_first_season = True
     if classic:
         classic_rules(c)
@@ -164,8 +164,8 @@ def test_the_chart_draws_unknown_weeks_as_blank():
 
     game = _game()
     w, c = game.state.world, game.content
-    w.time = calendar.week_start(3, c, w) + 60
-    territory.update(w, c)  # 第一次算在第 3 週：前兩週沒記
+    w.time = calendar.week_start(2, c, w) + 60
+    territory.update(w, c)  # 第一次算在第 2 段：第 1 段沒記（7 天季的年表三段）
     out = run(game, "return H.chartHtml(H.S.mapBase, H.S.mapState, H.S.mapState.now_week);")
     assert 'class="cell blank' in out and 'class="cell future' in out
 
@@ -176,7 +176,7 @@ def test_fb632_a_neutral_block_taken_shows_in_the_timeline_and_the_chart():
 
     from tianxia import calendar, conquest, territory
 
-    game = conquest_game("weekend")
+    game = conquest_game("week7")
     w, c = game.state.world, game.content
     spots = [x for g in game.map_state()["chart"] for x in g["spots"]]
     spot = next(x for x in spots if conquest.start_kind(w, c, x) == conquest.NEUTRAL)  # 年表上的一塊中立地
@@ -184,7 +184,7 @@ def test_fb632_a_neutral_block_taken_shows_in_the_timeline_and_the_chart():
     w.time = calendar.week_start(2, c, w) + 60
     territory.update(w, c)
     tl, chart = run(game, "return [H.timelineHtml(H.S.mapBase, H.S.mapState, 1), H.chartHtml(H.S.mapBase, H.S.mapState, 1)];")
-    week1 = tl[tl.index("第 1 週</h4>"):]
+    week1 = tl[tl.index("第 1 段（"):]  # 7 天季的年表寫「第 1 段（第 1～2 天）」
     assert f"{c.locations[spot].name}：" in week1 and ">中立</span> → " in week1 and "沒有地點易手" not in week1
     row = chart[chart.index(f'data-id="{spot}"'):]
     assert row[row.index("<span class=\"cell"):].startswith('<span class="cell now flip"')  # 那一格（第 1 週）打白點
@@ -205,17 +205,17 @@ def test_the_tally_compares_with_the_season_start():
 
 
 def test_the_tally_without_a_season_start_compares_with_the_first_recorded_week():
-    """中途上線（第一次算在第 3 週）：沒有開季的基準，比第一筆記到的那一週、照實寫第幾週；看的就是那一週時不比。"""
+    """中途上線（第一次算在第 2 段）：沒有開季的基準，比第一筆記到的那一段、照實寫第幾段；看的就是那一段時不比。"""
     from tianxia import calendar, territory
 
     game = _game()
     w, c = game.state.world, game.content
+    w.time = calendar.week_start(2, c, w) + 60
+    territory.update(w, c)
     w.time = calendar.week_start(3, c, w) + 60
     territory.update(w, c)
-    w.time = calendar.week_start(4, c, w) + 60
-    territory.update(w, c)
-    out = run(game, "return [H.timelineHtml(H.S.mapBase, H.S.mapState, 4), H.timelineHtml(H.S.mapBase, H.S.mapState, 3)];")
-    assert "比第 3 週" in out[0] and "開季" not in out[0]
+    out = run(game, "return [H.timelineHtml(H.S.mapBase, H.S.mapState, 3), H.timelineHtml(H.S.mapBase, H.S.mapState, 2)];")
+    assert "比第 2 段" in out[0] and "開季" not in out[0]
     assert "比第" not in out[1] and "開季" not in out[1]
 
 
@@ -232,7 +232,7 @@ def test_fb264_week_one_flips_show_in_the_chart_and_flash_on_the_map():
     _, high = world_parts(game, week=1, tl="true")
     assert high.count('class="pulse"') == 2  # 汝南荒野，加上你的那一圈
     tl = run(game, "return H.timelineHtml(H.S.mapBase, H.S.mapState, 1);")
-    assert "汝南荒野" in tl[tl.index("第 1 週</h4>"):]
+    assert "汝南荒野" in tl[tl.index("第 1 段（"):]
 
 
 def test_the_timeline_drawer_is_320_high_on_a_phone():

@@ -132,7 +132,7 @@ def _season(content) -> GameState:
 
 
 def test_pick_takes_the_figures_on_that_front_in_rank_order():
-    c = real_content("weekend")
+    c = real_content("week7")
     s = _season(c)
     rows = generals.pick(s, c, c.battles["changshe_fire"])
     # 黃巾的副將照那條線上還有誰（「大勢人物擴充」合進來之後，沒有戰線的人物照大區補上）
@@ -143,7 +143,7 @@ def test_pick_takes_the_figures_on_that_front_in_rank_order():
 
 
 def test_after_battle_dents_prestige_once(world):
-    c = real_content("weekend")
+    c = real_content("week7")
     c.config.auto_open_first_season = True
     world.seed_first_season(c)
     if world.season_phase() == "preparing":
@@ -165,7 +165,7 @@ def test_the_showdown_scene_shows_the_lineup_and_the_order(world):
     """長社火攻：開集結派皇甫嵩、朱儁、波才上陣；開打之後畫面寫兩邊的陣容與主將令，照令的那一顆按鈕接「・主將令」。"""
     from test_gentry_allied import _game, _showdown
 
-    c = real_content("weekend")
+    c = real_content("week7")
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
     game = _game(c, faction="guan")

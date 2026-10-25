@@ -17,8 +17,8 @@ SPAN = 1800 + 3 * 180  # 正式內容的決戰：集結 30 分鐘、打一幕（
 
 
 def _setup(event_id, hh, mm=0, content=None):
-    """週末設定的一季，挑 now 讓 event_id 照季曆排的集結開始落在當地 hh:mm（BASE 那一天）。"""
-    c = content or real_content("weekend")
+    """7 天季的一季，挑 now 讓 event_id 照季曆排的集結開始落在當地 hh:mm（BASE 那一天）。"""
+    c = content or real_content("week7")
     season = fresh_season(c)
     at = season.schedule[event_id]
     now = BASE + hh * HOUR + mm * 60 - at / c.config.time_scale - c.config.pill_day_utc_offset_hours * HOUR
@@ -34,7 +34,7 @@ def _cal_hour_real(c, season):
 
 
 def test_the_window_is_the_muster_and_the_first_act():
-    c = real_content("weekend")
+    c = real_content("week7")
     assert timetable.showdown_span(c, timetable.find(c, "changshe_fire")) == SPAN
     assert c.config.battle_quiet_hours.enabled and (c.config.battle_quiet_hours.start, c.config.battle_quiet_hours.end) == (0, 8)
 
@@ -68,32 +68,9 @@ def test_awake_times_are_left_alone():
         assert season.schedule["changshe_fire"] == before, (hh, mm)  # 別場落在半夜的照挪，這一場不動
 
 
-def test_it_does_not_jump_over_the_next_event():
-    """宛城第 9 週週四、張角病逝第 10 週週一 00:00：週末季兩件只隔現實約 2 小時 16 分。05:30 往後挪到 08:00 會跑到張角病逝之後，
-    改往前挪到前一天晚上。"""
-    c, season, event, now = _setup("wancheng", 5, 30)
-    following = timetable.when_in(season, c, timetable.find(c, "zhangjiao_dies"))
-    assert _local(c, season, now, following) < BASE + 8 * HOUR  # 前提：往後挪會越過它
-    assert timetable.avoid_quiet_hours(season, c, now) == []
-    at = season.schedule["wancheng"]
-    assert at < following and _local(c, season, now, at) <= BASE - SPAN
-
-
-def test_it_does_not_crowd_the_battle_before():
-    """一次只打一場：廣宗排在 01:30，宛城（管理者挪過）排在兩小時前的 23:30、往前挪到 23:15。廣宗往前挪到 23:15 會撞上宛城的
-    集結與第一幕（排隊、拖過 00:00 才開），改往後挪到 08:00（季末還在後面）。"""
-    c, season, event, now = _setup("guangzong", 1, 30)
-    season.schedule["wancheng"] = season.schedule["guangzong"] - 2 * HOUR * c.config.time_scale
-    assert timetable.avoid_quiet_hours(season, c, now) == []
-    assert _local(c, season, now, season.schedule["wancheng"]) <= BASE - SPAN
-    guangzong = _local(c, season, now, season.schedule["guangzong"])
-    assert BASE + 8 * HOUR <= guangzong <= BASE + 8 * HOUR + _cal_hour_real(c, season)
-    assert season.schedule["guangzong"] < season.schedule["finale"]
-
-
 def test_both_ways_blocked_keeps_the_time_and_says_so():
     """往前會排到此刻之前、往後會越過下一場決戰：照原時間，回報這一件，管理者那一行寫出來。"""
-    c = real_content("weekend")
+    c = real_content("week7")
     season = fresh_season(c)
     at = season.schedule["changshe_fire"]
     scale = c.config.time_scale
@@ -109,7 +86,7 @@ def test_both_ways_blocked_keeps_the_time_and_says_so():
 def test_the_last_week_of_a_weekend_season_can_be_too_tight():
     """週末季第 12 週：天命之爭（週一 20:00）前面的廣宗只差現實約 2.9 小時、後面的季末約 4.4 小時。落在 03:00 時往前會越過廣宗、
     往後會越過季末，照原時間（管理者那一行說）。"""
-    c = real_content("weekend")
+    c = real_content("week7")
     season = fresh_season(c)
     season.mandate = True
     season.schedule["tianming"] = timetable.default_time(timetable.find(c, "tianming"), c, season)
@@ -128,7 +105,7 @@ def test_the_finale_is_never_pushed():
 
 
 def test_the_mandate_battle_is_moved_too():
-    c = real_content("weekend")
+    c = real_content("week7")
     season = fresh_season(c)
     event = timetable.find(c, "tianming")
     season.mandate = True
@@ -140,11 +117,10 @@ def test_the_mandate_battle_is_moved_too():
 
 
 def test_any_opening_hour_leaves_no_battle_at_night():
-    """開季時刻掃一天（每 20 分鐘）：週末與 7 天的一般季，三場決戰都挪得開、挪過之後集結加一幕都不碰半夜、時刻表先後不亂、
+    """開季時刻掃一天（每 20 分鐘）：7 天的一般季，三場決戰都挪得開、挪過之後集結加一幕都不碰半夜、時刻表先後不亂、
     季末不動。"""
-    for days in (2.5, 7.0):
-        c = real_content("weekend")
-        c.config.season_days = days
+    for days in (7.0,):
+        c = real_content("week7")
         for minute in range(0, 24 * 60, 20):
             season = fresh_season(c)
             finale = season.schedule["finale"]
@@ -168,7 +144,7 @@ def test_switch_off_changes_nothing():
 def test_opening_the_season_at_the_right_hour_moves_the_night_battle(tmp_path):
     from tianxia.sqlite_world import open_world
 
-    c = real_content("weekend")
+    c = real_content("week7")
     c.config.auto_open_first_season = False
     store = open_world(tmp_path / "tianxia.db")
     store.seed_first_season(c)
@@ -184,7 +160,7 @@ def test_opening_the_season_at_the_right_hour_moves_the_night_battle(tmp_path):
 def test_the_next_season_is_scheduled_the_same_way(tmp_path):
     from tianxia.sqlite_world import open_world
 
-    c = real_content("weekend")
+    c = real_content("week7")
     c.config.auto_open_first_season = False
     store = open_world(tmp_path / "tianxia.db")
     store.seed_first_season(c)
@@ -195,7 +171,7 @@ def test_the_next_season_is_scheduled_the_same_way(tmp_path):
     assert store.next_season(c, now)
     season = store.get_season()
     local = _local(c, season, now, season.schedule["changshe_fire"])
-    assert BASE + 8 * HOUR <= local <= BASE + 8 * HOUR + _cal_hour_real(c, season)
+    assert local + SPAN <= BASE or local >= BASE + 8 * HOUR  # 挪出了半夜（往前收在 00:00 以前、或往後到 08:00）
 
 
 def test_an_admin_night_time_is_kept(tmp_path):
@@ -203,7 +179,7 @@ def test_an_admin_night_time_is_kept(tmp_path):
     from tianxia.engine import Game
     from tianxia.sqlite_world import open_world
 
-    c = real_content("weekend")
+    c = real_content("week7")
     c.config.auto_open_first_season = False
     c.config.admins = ["管"]
     store = open_world(tmp_path / "tianxia.db")
@@ -218,29 +194,6 @@ def test_an_admin_night_time_is_kept(tmp_path):
     season = store.get_season()
     local = _local(c, season, now, season.schedule["changshe_fire"]) % DAY
     assert 3 * HOUR <= local <= 3 * HOUR + _cal_hour_real(c, season)
-
-
-def test_fb265_stamping_the_mandate_now_says_when_it_cannot_move(tmp_path):
-    """FB-265：管理者「這一季立刻蓋上天命之季的章」時，天命之爭落在半夜又兩邊都挪不開（週末季第 12 週太擠），照原時間；
-    回的訊息跟開季、開啟下一季一樣多那一行「挪不開、照原時間」。"""
-    from tianxia.engine import Game
-    from tianxia.sqlite_world import open_world
-
-    c = real_content("weekend")
-    c.config.auto_open_first_season = False
-    c.config.admins = ["管"]
-    store = open_world(tmp_path / "tianxia.db")
-    store.seed_first_season(c)
-    probe = fresh_season(c)
-    probe.mandate = True
-    at = timetable.default_time(timetable.find(c, "tianming"), c, probe)
-    now = BASE + 3 * HOUR - at / c.config.time_scale - c.config.pill_day_utc_offset_hours * HOUR  # 天命之爭落在 03:00
-    assert store.open_season(c, now)
-    game = Game.new(c, "管", rng=random.Random(1), world=store)
-    game.sync(now)
-    out = game.admin_seal_mandate("now")
-    assert any("蓋上天命之季" in line for line in out), out
-    assert any("天命之爭" in line and "照原時間" in line and "03:00" in line for line in out), out
 
 
 def test_fb265_the_confirm_box_does_not_promise_the_move():

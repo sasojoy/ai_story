@@ -66,7 +66,7 @@ def test_season21_lists_the_saturday_battle_only_on_saturday_night():
 
 
 def _weekend():
-    cw = real_content("weekend")
+    cw = real_content("week7")
     return cw, fb501._state(cw)
 
 

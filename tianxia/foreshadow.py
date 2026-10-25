@@ -454,6 +454,20 @@ def _trip_here(state: GameState, c: FsChain, loc_id: str) -> tuple[int, FsStep] 
     return None
 
 
+def next_step(state: GameState, content: Content) -> str | None:
+    """江湖頁本週卡「你這一步」的伏筆那一個（減法季批 1，整合設計 6.1）：做得了的鏈裡、聽過片段、時間窗開著的那一條，
+    還沒做的第一趟寫「到{地點}：{選單上的字}」。沒有是 None。只讀。待 joy 潤。"""
+    for c in _capable_chains(state, content):
+        if not state.player.fragments.get(c.id) or not _window_open(state, content, c, state.world.time):
+            continue
+        for i, trip in enumerate(trips(c.final)):
+            if trip.location is None or (c.final.steps and f"{c.id}:{i}" in state.player.fs_done):
+                continue
+            loc = content.locations.get(trip.location)
+            return f"到{loc.name if loc is not None else trip.location}：{trip.label}"
+    return None
+
+
 def blocked(state: GameState, content: Content, c: FsChain, trip: FsStep, now: float) -> str | None:
     """做不了的原因（選單上按不下去時寫的那句）；做得了是 None。只說做不了，不說為什麼會改變什麼。"""
     if not _window_open(state, content, c, now):

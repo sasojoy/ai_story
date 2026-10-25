@@ -14,7 +14,7 @@ from tianxia.sqlite_world import open_world
 TW_MIDNIGHT = 16 * 3600  # UTC 16:00＝台灣 00:00（1970-01-02）
 
 
-def _game(faction="guan", at="changshe", bag=None, profile="weekend", third_party=False, **econ):
+def _game(faction="guan", at="changshe", bag=None, profile="week7", third_party=False, **econ):
     c = real_content(profile)
     c.config.auto_open_first_season = True
     if third_party:

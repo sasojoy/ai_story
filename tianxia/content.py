@@ -26,10 +26,11 @@ from .encounter import FALLBACK_TIER, TIER_RATIOS
 from .front_lines import BAND_KEYS, GEJU_KEYS
 from .materials import DEFAULT_DROPS, TIER_NAMES
 from .models import (
+    ArtBook,
     BEST_OF, FRONT_KEY, GLOW_KEYS, GOOD_HORSE, MOVES, RECRUITER_ALLIED_FIELDS, REVEAL_KEYS, ROADS, STATS, TREASURE_EFFECTS, WEAPON_KINDS, Attribute, BattleDef, CharacterDef, CheckVoice,
     CombatLines, Condition, Config, Content, CraftNames, CreateForms, DuelBoss, Effect, Event, FigureDef, FollowerDef, ForgeSecret, Foreshadows, FrontLines, GatherBranch, GearBook,
     GiftDef, Hints, MingtieContent, InsightDef, Location, MallItem, MarkRule, MarkText, OppDef,
-    InsightScene, OrdersContent, PresetRecipe, PromotionDef, RealDay, RealSlot, RelationDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, ShardDef,
+    InsightScene, Opening, OrdersContent, PresetRecipe, PromotionDef, RealDay, RealSlot, RelationDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, ShardDef,
     SimRumor, SkillDef,
     SignatureArmDef, SteedDef, Squad, Tier4Named, TimetableEvent, TraitBook, TreasureDef, Tutorial, allow_known,
 )
@@ -138,7 +139,9 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         events=events,
         map=MapLayout(**_read(root / "map.json")),
         tutorial=Tutorial(**_read(root / "tutorial.json")),
+        opening=Opening(**_read(root / "opening.json")) if (root / "opening.json").exists() else None,  # 開局第一分鐘（減法季批 7）
         hints=Hints(**_read(root / "hints.json")) if (root / "hints.json").exists() else Hints(),
+        art=ArtBook(**_read(root / "art.json")) if (root / "art.json").exists() else ArtBook(),  # 圖的分類表（減法季批 8）
     )
     content.config.admins = _with_local_admins(content.config.admins)
     validate(content)
@@ -717,6 +720,26 @@ def check_xingshi_lines(c: Content, need) -> None:
         for key, text in table.items():
             need(key in keys, f"xingshi_lines.{group}：不認得的鍵 {key}")
             check(f"{group}.{key}", text)
+
+
+ART_PATH = re.compile(r"^(places|figures|events)/[a-z0-9_]+$")  # web/img/ 底下的路徑：子資料夾／鍵，不含副檔名
+
+
+def check_art(c: Content, need) -> None:
+    """圖的分類表與 image 欄位（減法季批 8 圖像版）：事件的 image 只能是 art.json 的 events 有的類型鍵；地點與人物的 image 是
+    web/img/ 底下的路徑（places/…、figures/…）。圖檔在不在這裡不管（伺服器看，沒檔案就不給圖）。"""
+    for key, name in c.art.events.items():
+        need(bool(re.fullmatch(r"[a-z0-9_]+", key)), f"art.events 的類型鍵「{key}」只能是小寫英數與底線（圖檔名）")
+        need(bool(name.strip()), f"art.events.{key} 的名字是空的")
+    for ev in c.events.values():
+        if ev.image is not None:
+            need(ev.image in c.art.events, f"事件 {ev.id} 的 image「{ev.image}」不在 art.json 的 events 類型表裡")
+    for loc in c.locations.values():
+        if loc.image is not None:
+            need(bool(ART_PATH.match(loc.image)), f"地點 {loc.id} 的 image「{loc.image}」要寫成 places/<鍵> 這種路徑（不含副檔名）")
+    for ch in c.characters.values():
+        if ch.image is not None:
+            need(bool(ART_PATH.match(ch.image)), f"人物 {ch.id} 的 image「{ch.image}」要寫成 figures/<鍵> 這種路徑（不含副檔名）")
 
 
 def check_mall(c: Content, need) -> None:
@@ -2338,6 +2361,7 @@ def validate(c: Content) -> None:
     check_combat_lines(c, need)
     check_shop_lines(c, need)
     check_mall(c, need)
+    check_art(c, need)
     check_arena_crowd(c, need)
     check_xingshi_lines(c, need)
     check_traits(c, need)
@@ -2743,6 +2767,24 @@ def validate(c: Content) -> None:
         for line in (hint.text, hint.drifter, hint.season_one, *hint.texts.values(), *hint.allied.values()):
             bad = hint_rules.unknown(c, line)
             need(not bad, f"{where}：不認得的 {{{'}、{'.join(bad)}}}（只認 {sorted(hint_rules.values(c))}）")
+
+    # ── 開局第一分鐘（減法季批 7，content/opening.json；tianxia/opening.py）──
+    o = c.opening
+    if o is not None:
+        need(o.event in c.events, f"opening.json：事件 {o.event} 不存在")
+        need(o.end in c.locations, f"opening.json：送信的終點 {o.end} 不存在")
+        flags = {x.flag for x in o.senders}
+        need(len(flags) == len(o.senders), "opening.json：senders 的 flag 不能重複")
+        for x in o.senders:
+            ch = c.characters.get(x.figure)
+            need(ch is not None and ch.deep_interaction, f"opening.json：{x.figure} 要是 characters.json 裡能深交的人物")
+            need(any(fig.character == x.figure for fig in c.figures.values()), f"opening.json：{x.figure} 要是大勢人物（信才寫得出他在哪）")
+        if o.event in c.events:
+            ev = c.events[o.event]
+            need(bool(ev.choices), f"opening.json：事件 {o.event} 要有選項")
+            for ch in ev.choices:
+                need(any(f in flags for f in ch.effect.flags_add), f"opening.json：事件 {o.event} 的選項「{ch.text}」要帶 senders 其中一個 flag")
+                need(ch.effect.next_event is None, f"opening.json：事件 {o.event} 的選項「{ch.text}」不能接 next_event（人物開口是信）")
 
     # ── 序章（新手引導計畫一）──
     t = c.tutorial

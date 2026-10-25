@@ -73,7 +73,7 @@ def cached_content(root, profile=None) -> Content:
 
 
 def real_content(profile=None) -> Content:
-    """正式內容（content/）的複本；profile 是設定覆寫檔（例如 "weekend"）。"""
+    """正式內容（content/）的複本；profile 是設定覆寫檔（例如 "week7"）。"""
     return cached_content(REAL_CONTENT, profile)
 
 
@@ -82,6 +82,13 @@ def classic_rules(content: Content) -> Content:
     測的是舊規則本身、或只是拿遊歷／探索／推大勢當手段的舊測試用它；新規則的測試不要叫。"""
     cfg = content.config
     cfg.sortie.enabled = cfg.explore_modes.enabled = cfg.territory.enabled = cfg.push_resistance.enabled = False
+    return content
+
+
+def no_week_unlock(content: Content) -> Content:
+    """功能照週解鎖（減法季 6.6，Config.jianfa.week_unlock）關掉，回傳同一份內容：用 week7／season21 的正式內容、開季第一天就要進鐵匠鋪、
+    擂台、自創、懸賞榜的舊測試叫它（那幾樣在減法季第 2 週才開）；解鎖本身的測試在 tests/test_week_unlock.py。"""
+    content.config.jianfa.week_unlock = False
     return content
 
 
@@ -110,6 +117,13 @@ def renown_on(content: Content) -> Content:
     """名聲（2026-10-15，Config.renown）的開關全部打開，回傳同一份內容：測試內容全關著，名聲的新測試叫它。"""
     for key in RENOWN_SWITCHES:
         setattr(content.config.renown, key, True)
+    return content
+
+
+def renown_unscaled(content: Content) -> Content:
+    """名聲門檻不乘季長倍數（Config.renown.scale 關掉，開季不蓋 renown_scale 的章），回傳同一份內容：名聲的測試寫的是門檻的原數
+    （名望 10／25／50／90），以前靠 2.5 天週末季的倍數剛好是 1；週末季封存後（2026-10-25）改叫它。倍數本身在 tests/test_renown.py 測。"""
+    content.config.renown.scale = False
     return content
 
 

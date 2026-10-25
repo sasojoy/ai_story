@@ -613,14 +613,6 @@ def test_rest_refills_at_once(fresh):
     assert fresh.state.player.tutorial_step == 7
 
 
-def test_there_is_no_rest_outside_the_prologue(prologue_content):
-    """打坐 2026-10-12 拿掉了：序章外沒有調息那一顆，按了也只是被拒絕，體力不動。"""
-    outside = Game.new(prologue_content, "路人", rng=random.Random(0))
-    outside.state.player.stamina = 0
-    assert "act:rest" not in [o.id for o in outside.options()]
-    assert outside.choose("act:rest") == ["（此刻無法這麼做。）"]
-    assert outside.state.player.resting_since is None and outside.state.player.stamina == 0
-
 
 def test_revenge_is_a_narrow_win_with_nothing_extra(fresh, monkeypatch):
     from tianxia import foreshadow

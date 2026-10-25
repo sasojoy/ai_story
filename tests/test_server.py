@@ -1030,13 +1030,13 @@ def test_the_five_stat_buttons_share_one_row_and_keep_their_labels_on_one_line()
     js = webharness.app_source()
     css = (server.WEB / "style.css").read_text(encoding="utf-8")
     assert 'class="row alloc"' in js
-    row = re.search(r"\.more-stats \.alloc \{([^}]*)\}", css)
+    row = re.search(r"\.more-stats \.alloc(?:, \.self-stats \.alloc)? \{([^}]*)\}", css)  # 「自己」頁的心得與屬性那一塊（減法季批 1）同一排
     assert row is not None and "gap: 4px" in row.group(1)
-    button = re.search(r"\.more-stats \.alloc \.btn \{([^}]*)\}", css)
+    button = re.search(r"\.more-stats \.alloc \.btn(?:, \.self-stats \.alloc \.btn)? \{([^}]*)\}", css)
     assert button is not None and "white-space: nowrap" in button.group(1) and "padding: 6px 2px" in button.group(1)
     site = re.search(r"\n\.btn\.small \{([^}]*)\}", css)
     assert site is not None and "padding: 6px 12px" in site.group(1)  # 全站的小按鈕照舊
-    label = re.search(r"\.more-stats \.pts-label \.pts \{([^}]*)\}", css)  # 跟收起來時那一句同樣的金色粗體 12px
+    label = re.search(r"\.more-stats \.pts-label \.pts(?:, \.self-stats \.pts-label \.pts)? \{([^}]*)\}", css)  # 跟收起來時那一句同樣的金色粗體 12px
     assert label is not None and "var(--gold)" in label.group(1) and "600 12px" in label.group(1)
 
 
@@ -1089,7 +1089,7 @@ def test_the_practice_and_furnace_pages_only_read_and_call_what_the_server_has(g
     shown = shown[:shown.index("};")]
     assert set(re.findall(r'"(\w+)"', shown)) - {"practice", "craft"} <= keys  # 輪詢比對的欄位也都送得到
     called = set(re.findall(r'\bmx\("(\w+)"', js)) | set(re.findall(r"/api/menxia/(\w+)", js)) | set(re.findall(r'data-act="mx" data-op="(\w+)"', js))
-    assert {"practice", "heal", "forge", "switch", "cultivate", "melt", "melt_insight", "name"} <= called
+    assert {"practice", "forge", "switch", "cultivate", "melt", "melt_insight", "name"} <= called  # heal：療傷鈕 2026-10-25 從俠客頁拿掉（入口是江湖頁 act:heal）
     assert called <= set(server.MENXIA_ACTIONS), called - set(server.MENXIA_ACTIONS)
     for gone in ("/api/craft_line", "/api/menxia/craft", "per_craft", "x.materials", "x.arts", "craftSel", "放入素材", "素材說明"):
         assert gone not in js, gone
@@ -1143,7 +1143,7 @@ def test_the_pages_trim_the_furnace_whenever_the_menxia_data_is_replaced():
 def test_a_refused_name_keeps_what_the_player_typed_and_the_pill_tick_does_not_outlive_the_tab():
     js = webharness.app_source()
     submit = js[js.index('form.id === "name-art"'):]
-    submit = submit[:submit.index('form.id === "seclude"')]
+    submit = submit[:submit.index('form.id === "ad-mall-form"')]  # 名字表單那一段到下一個表單（閉關的表單 2026-10-25 拿掉了）
     assert 'await mx("name"' in submit and "again.value = data.name" in submit  # 被拒（表單還在）把字放回去
     assert "legendTick" not in js  # 破境丹不再是勾的：服丹、心得各一顆衝關鈕（Joy 2026-10-21），沒有勾要收
 
@@ -1648,11 +1648,11 @@ def test_the_expanded_rounds_fade_in_in_order_however_many_lines_there_are():
 
 def test_the_scroll_card_buttons_sit_two_to_a_row_at_phone_width():
     """卷軸卡（2026-10-06）：卡上兩顆大鈕（練成／改練、修練）各佔一半，字寫兩行（上面動作、下面價錢或機率），
-    375px 手機上不用擠成一排三顆；只管卡裡這一排（.acts）與療傷、閉關那兩格（.tune），不動全站的 .btn。"""
+    375px 手機上不用擠成一排三顆；只管卡裡這一排（.acts），不動全站的 .btn。（療傷、閉關那兩格 .tune 2026-10-25 拿掉了）"""
     css = (server.WEB / "style.css").read_text(encoding="utf-8")
     acts = re.search(r"\.acts \{([^}]*)\}", css)
     assert acts is not None and "grid-template-columns: 1fr 1fr" in acts.group(1)
-    two_lines = re.search(r"\.tune \.btn, \.acts \.btn \{([^}]*)\}", css)
+    two_lines = re.search(r"\.acts \.btn \{([^}]*)\}", css)
     assert two_lines is not None and "flex-direction: column" in two_lines.group(1)
 
 
@@ -3323,7 +3323,7 @@ def test_a_bad_line_is_refused_before_anything_happens(game):
     _talking(game)
     before = game.state.player.stamina
     with mock.patch.object(companion_agent, "generate_turn", side_effect=AssertionError("不該叫模型")):
-        limit = game.say_max()  # 開口求人開著時放寬（Config.parley.say_max）
+        limit = game.say_max()  # NPC 智能 2.0開著時放寬（Config.parley.say_max）
         for text in ("", "   ", "一" * (limit + 1)):
             with pytest.raises(server.GameError, match=f"{limit} 字"):
                 server.say(game, text)
@@ -3727,10 +3727,10 @@ def test_server_prints_the_profile_at_startup(capsys, monkeypatch):
     server.main([])
     out = capsys.readouterr().out
     assert "設定：預設" in out and str(database.default_path().resolve()) in out
-    monkeypatch.setattr(server, "PROFILE", "weekend")
-    monkeypatch.setattr(server, "CONTENT", load_content(server.ROOT / "content", profile="weekend"))
+    monkeypatch.setattr(server, "PROFILE", "week7")
+    monkeypatch.setattr(server, "CONTENT", load_content(server.ROOT / "content", profile="week7"))
     server.main([])
-    assert "設定：weekend（第一季濃縮版規則開啟、季長 2.5 天、人數上限 20）" in capsys.readouterr().out
+    assert "設定：week7（第一季濃縮版規則開啟、季長 7 天、人數上限 20）" in capsys.readouterr().out
 
 
 def _host_passed_to_uvicorn(monkeypatch, argv):
@@ -3758,164 +3758,8 @@ def test_the_lan_flag_opens_every_network_card_and_says_so(capsys, monkeypatch):
     assert str(database.default_path().resolve()) in out
 
 
-# ── --share：把 cloudflared 的輸出讀完、只從有網址的那一行取網址（FB-020）──────────
-# cloudflared 第一行是「Requesting new quick Tunnel on trycloudflare.com...」：有網域、沒有 https://。
-# 舊的 relay 在那一行 IndexError 就死了，三秒後真正的網址那行沒人讀。
-
-TUNNEL_URL = "https://abc-def-123.trycloudflare.com"
-URL_ANNOUNCEMENT = f"公開網址：{TUNNEL_URL}（給手機用；有網址的人都進得來，不要外流）"
-NO_URL_NOTICE = "cloudflared 已結束，沒有拿到公開網址。它最後的輸出："
-NO_OUTPUT_NOTICE = "cloudflared 沒有任何輸出就結束了。"
-
-CLOUDFLARED_OUTPUT = [
-    "2026-10-03T12:00:00Z INF Thank you for trying Cloudflare Tunnel. Doing so, without a Cloudflare account, is a quick way to experiment and try it out.\n",
-    "2026-10-03T12:00:00Z INF Requesting new quick Tunnel on trycloudflare.com...\n",
-    "2026-10-03T12:00:03Z INF +--------------------------------------------------------------------------------------------+\n",
-    "2026-10-03T12:00:03Z INF |  Your quick Tunnel has been created! Visit it at (it may take some time to be reachable):  |\n",
-    f"2026-10-03T12:00:03Z INF |  {TUNNEL_URL}                                                  |\n",
-    "2026-10-03T12:00:03Z INF +--------------------------------------------------------------------------------------------+\n",
-    "2026-10-03T12:00:03Z INF Version 2025.9.0\n",
-    "2026-10-03T12:00:04Z INF Registered tunnel connection connIndex=0 location=tpe01 protocol=quic\n",
-    "2026-10-03T12:00:05Z INF Registered tunnel connection connIndex=1 location=tpe02 protocol=quic\n",
-]
-
-
-class _CountingLines:
-    """像 proc.stdout 一樣一行一行吐；記下總共被讀了幾行（用來證明網址之後的行也被讀完）。"""
-
-    def __init__(self, lines):
-        self.lines = list(lines)
-        self.read = 0
-
-    def __iter__(self):
-        for line in self.lines:
-            self.read += 1
-            yield line
-
-
-def test_the_tunnel_url_is_printed_once_from_the_line_that_has_it():
-    printed = []
-    server.relay_tunnel_output(CLOUDFLARED_OUTPUT, emit=printed.append)
-    assert printed == [URL_ANNOUNCEMENT]  # 「Requesting …on trycloudflare.com」那行不是網址；cloudflared 其他輸出照舊安靜
-
-
-def test_the_relay_keeps_reading_after_the_url_until_the_pipe_ends():
-    """網址印出後還要把管線讀乾淨：沒人讀的話緩衝寫滿時 cloudflared 會卡住，隧道跟著停。"""
-    lines = _CountingLines(CLOUDFLARED_OUTPUT)
-    printed = []
-    server.relay_tunnel_output(lines, emit=printed.append)
-    assert lines.read == len(CLOUDFLARED_OUTPUT)
-    assert printed == [URL_ANNOUNCEMENT]  # 讀完了也沒有再多說一句「沒拿到網址」
-
-
-def test_a_url_that_cloudflared_prints_again_is_announced_only_once():
-    printed = []
-    server.relay_tunnel_output(CLOUDFLARED_OUTPUT + CLOUDFLARED_OUTPUT[4:5] * 2, emit=printed.append)
-    assert printed == [URL_ANNOUNCEMENT]
-
-
-def test_an_odd_line_is_skipped_instead_of_killing_the_relay():
-    printed = []
-    odd = [
-        "\n",
-        "INF see https:// trycloudflare.com for details\n",  # 有網域、有 https://，但不是一個網址
-        "INF https://.trycloudflare.com\n",
-        "\ufffd\ufffd INF �\n",
-        "INF trycloudflare.com\n",
-    ]
-    server.relay_tunnel_output(odd + CLOUDFLARED_OUTPUT, emit=printed.append)
-    assert printed == [URL_ANNOUNCEMENT]
-
-
-def test_cloudflared_failing_to_request_a_tunnel_is_not_mistaken_for_the_public_url():
-    """要不到隧道時 cloudflared 的錯誤訊息會帶 https://api.trycloudflare.com：那是它自己的服務、不是給手機用的網址。"""
-    printed = []
-    failed = [
-        "2026-10-03T12:00:00Z INF Requesting new quick Tunnel on trycloudflare.com...\n",
-        'failed to request quick Tunnel: Post "https://api.trycloudflare.com/tunnel": dial tcp: lookup api.trycloudflare.com: no such host\n',
-    ]
-    server.relay_tunnel_output(failed, emit=printed.append)
-    assert printed == [NO_URL_NOTICE] + [line.rstrip("\n") for line in failed]  # 錯誤訊息本身就是主機端要看的原因
-
-
-def test_output_that_ends_without_any_url_says_so_instead_of_staying_silent():
-    printed = []
-    no_url = CLOUDFLARED_OUTPUT[:2] + CLOUDFLARED_OUTPUT[6:7]  # 沒有網址那行
-    lines = _CountingLines(no_url)
-    server.relay_tunnel_output(lines, emit=printed.append)
-    assert lines.read == 3
-    assert printed == [NO_URL_NOTICE] + [line.rstrip("\n") for line in no_url]  # 不到 20 行就全印，去掉行尾換行
-
-
-# 拿不到網址時，「看上面 cloudflared 的輸出」上面其實什麼都沒有（輸出都被吞了）：
-# 所以改成記住最後 20 行，結束時還沒有網址就印出來，原因就在眼前；成功時照樣安靜。
-
-def _numbered_output(count):
-    return [f"2026-10-03T12:00:{n:02d}Z ERR line {n}\n" for n in range(1, count + 1)]
-
-
-def test_without_a_url_the_last_twenty_lines_are_printed_after_the_notice():
-    assert server.TUNNEL_TAIL_LINES == 20
-    output = _numbered_output(25)
-    output[-1] = "2026-10-03T12:00:25Z ERR Failed to dial a quic connection: timeout: no recent network activity\n"
-    printed = []
-    server.relay_tunnel_output(output, emit=printed.append)  # 不丟例外
-    assert printed == [NO_URL_NOTICE] + [line.rstrip("\n") for line in output[5:]]  # 第 6～25 行
-    assert not any(line.endswith(("ERR line 1", "ERR line 5")) for line in printed)  # 前 5 行不在內
-
-
-def test_without_a_url_the_tail_skips_blank_lines_and_trailing_newlines():
-    printed = []
-    server.relay_tunnel_output(["ERR first\r\n", "\n", "   \n", "ERR second\n", "ERR third"], emit=printed.append)
-    assert printed == [NO_URL_NOTICE, "ERR first", "ERR second", "ERR third"]
-
-
-def test_without_a_url_and_without_any_output_it_says_there_was_no_output():
-    printed = []
-    server.relay_tunnel_output([], emit=printed.append)
-    assert printed == [NO_OUTPUT_NOTICE]
-    printed.clear()
-    server.relay_tunnel_output(["\n", "  \n"], emit=printed.append)  # 只有空行也等於沒有輸出
-    assert printed == [NO_OUTPUT_NOTICE]
-
-
-def test_with_a_url_the_tail_is_not_printed_even_when_the_output_is_long():
-    printed = []
-    server.relay_tunnel_output(_numbered_output(25) + CLOUDFLARED_OUTPUT + _numbered_output(25), emit=printed.append)
-    assert printed == [URL_ANNOUNCEMENT]  # 成功路徑跟以前一樣：只印網址那一句
-
-
-class _FakeProcess:
-    def __init__(self, stdout):
-        self.stdout = stdout
-
-
-def test_start_tunnel_prints_the_url_and_hands_back_the_relay_thread(capsys, monkeypatch):
-    import io
-    import subprocess
-
-    launched = []
-
-    def fake_popen(command, **kwargs):
-        launched.append(command)
-        return _FakeProcess(io.StringIO("".join(CLOUDFLARED_OUTPUT)))
-
-    monkeypatch.setattr(server.shutil, "which", lambda name: "C:/fake/cloudflared.exe")
-    monkeypatch.setattr(subprocess, "Popen", fake_popen)
-    thread = server.start_tunnel(7890)
-    thread.join(timeout=5)
-    assert not thread.is_alive()  # 讀到 EOF 就正常結束，不是死在某一行上
-    assert launched == [["C:/fake/cloudflared.exe", "tunnel", "--url", "http://127.0.0.1:7890"]]
-    assert capsys.readouterr().out.splitlines() == [URL_ANNOUNCEMENT]
-
-
-def test_start_tunnel_without_cloudflared_says_so_and_starts_nothing(capsys, monkeypatch):
-    import subprocess
-
-    monkeypatch.setattr(server.shutil, "which", lambda name: None)
-    monkeypatch.setattr(subprocess, "Popen", lambda *args, **kwargs: pytest.fail("沒有 cloudflared 不該開子程序"))
-    assert server.start_tunnel(7890) is None
-    assert "找不到 cloudflared" in capsys.readouterr().out
+# （--share／cloudflared 臨時網址的測試 2026-10-25 拿掉：2026-10-13 起固定網域走具名 Tunnel，伺服器不再加 --share；
+#   server.start_tunnel 那段碼留給主機端，見 docs/superpowers/feedback/beta-主機端操作.md。）
 
 
 # ── 主畫面的走法切換（步行／疾行）──────────────────────
@@ -4480,7 +4324,7 @@ def test_the_real_prologue_recap_reads_the_whole_prologue(client):
     """正式內容的序章回顧：遇險、拜師、師父十一步的話照順序排成一頁，沒有沒換掉的佔位字。"""
     _player(client, "shen_04", "沈青衫", prologue=True)
     text = client.get("/api/prologue").json()["text"]
-    assert text.index("潁川城外") < text.index("草廬") < text.index("去，按底下的「修練」") < text.index("這是盤纏")
+    assert text.index("潁川城外") < text.index("草廬") < text.index("去，按底下的「俠客」") < text.index("這是盤纏")
     assert "{武學}" not in text and "山腰上的草廬不見了" in text
 
 

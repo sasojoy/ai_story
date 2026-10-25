@@ -223,7 +223,8 @@ def view(state: GameState, content: Content) -> dict | None:
     letter = unread(state)
     if letter is None or not on(content):
         return None
-    out = {"id": letter.id, "kind": letter.kind, "sender": _name(content, letter.sender), "text": letter.text, "task": None}
+    out = {"id": letter.id, "kind": letter.kind, "sender": _name(content, letter.sender), "text": letter.text, "task": None,
+           "open": letter.kind == "託付"}  # 開局那一封（opening.py）一到就攤開：人物開口的話要看得到，不是只露一行
     t = letter.task
     if t is not None:
         live = not letter.lapsed and not t.done_by and t.expires > state.world.time
@@ -300,6 +301,9 @@ def write(client, note: LetterNote) -> str:
         return ""
     if note.kind == "求援":
         what = f"他此刻{note.mood}，寫信向{note.hero}求援，託的事是：{note.task}（事情要寫進信裡，可以換成他的說法）"
+    elif note.kind == "託付":  # 開局第一分鐘（opening.py）：初到江湖的人，他在城門口開口託第一件事
+        what = (f"{note.hero}剛到潁川、還沒投靠任何一方，他看中了這個生面孔，開口託{note.hero}一件事：{note.task}"
+                "（事情要寫進信裡，可以換成他的說法；順口說一句為什麼託給一個生面孔）")
     elif note.kind == "邀宴":
         what = f"他在{note.about}設宴，寫信邀{note.hero}來赴宴（地點要寫進信裡）"
     elif note.kind == "道謝":

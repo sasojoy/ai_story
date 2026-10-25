@@ -2,6 +2,7 @@
   {
     "id": "yz_zhuo_recruit_wine",
     "title": "縣門募勇",
+    "image": "town",
     "locations": [
       "zhuo_county"
     ],
@@ -57,6 +58,7 @@
   {
     "id": "yz_zhuo_letters",
     "title": "代寫家書",
+    "image": "town",
     "locations": [
       "zhuo_county"
     ],
@@ -122,6 +124,7 @@
   {
     "id": "yz_zhuo_wild_horse",
     "title": "中山馬販",
+    "image": "market",
     "locations": [
       "zhuo_county"
     ],
@@ -278,6 +281,7 @@
   {
     "id": "yz_market_wrist",
     "title": "酒肆比力",
+    "image": "tavern",
     "locations": [
       "market_town"
     ],
@@ -344,6 +348,7 @@
   {
     "id": "yz_market_fushui",
     "title": "符水攤子",
+    "image": "altar",
     "locations": [
       "market_town"
     ],
@@ -422,6 +427,7 @@
   {
     "id": "yz_lou_broken_branch",
     "title": "桑枝折斷",
+    "image": "village",
     "locations": [
       "loushang_village"
     ],
@@ -490,6 +496,7 @@
   {
     "id": "yz_lou_sandals",
     "title": "趕織草鞋",
+    "image": "village",
     "locations": [
       "loushang_village"
     ],
@@ -552,6 +559,7 @@
   {
     "id": "yz_hall_grain_cart",
     "title": "連夜卸糧",
+    "image": "fort",
     "locations": [
       "zhuo_militia_hall"
     ],
@@ -607,6 +615,7 @@
   {
     "id": "yz_hall_feast",
     "title": "豪族夜宴",
+    "image": "tavern",
     "locations": [
       "zhuo_militia_hall"
     ],
@@ -667,6 +676,7 @@
   {
     "id": "yz_hall_yard_test",
     "title": "校場刁難",
+    "image": "fight",
     "locations": [
       "zhuo_militia_hall"
     ],
@@ -833,6 +843,7 @@
   {
     "id": "yz_juma_toll",
     "title": "河口私卡",
+    "image": "river",
     "locations": [
       "juma_river"
     ],
@@ -1059,6 +1070,7 @@
   {
     "id": "yz_juma_ironsand",
     "title": "河灘黑砂",
+    "image": "river",
     "locations": [
       "juma_river"
     ],
@@ -1124,6 +1136,7 @@
   {
     "id": "yz_yan_cold_night",
     "title": "山坳寒夜",
+    "image": "refugees",
     "locations": [
       "yanshan_foot"
     ],
@@ -1229,6 +1242,7 @@
   {
     "id": "yz_yan_loose_horses",
     "title": "走散的馬群",
+    "image": "forest",
     "locations": [
       "yanshan_foot"
     ],

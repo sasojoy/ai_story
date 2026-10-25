@@ -65,7 +65,7 @@ from tianxia import (
     arena_crowd, ascend, battle_instance, biography, calendar, companion_agent, create, divine, duel, event_llm, feasts, fight_llm, foreshadow, gather_llm, gender, glyph, insight_llm, leaderboard, letters, mall, mapdata, might,
     naming,
     ollama_client, rules,
-    precise, seal, seal_duel, server_bots, social, sortie, speech, tavern, team, timetable, training, treasures, xingshi, yuedan,
+    precise, seal, seal_duel, server_bots, social, sortie, speech, tavern, team, timetable, training, treasures, weekcard, xingshi, yuedan,
 )
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import env_profile, load_content, profile_line
@@ -82,6 +82,21 @@ from tianxia.world_state import season_length_days
 
 ROOT = Path(__file__).parent
 WEB = ROOT / "web"
+
+
+def scene_art(game: Game, status: dict) -> dict | None:
+    """江湖頁場景卡上面那張圖（減法季批 8 圖像版）：引擎挑圖（Game.scene_art），這裡只看 web/img/<路徑>.webp 真的在不在——
+    沒檔案就不給（None），網頁一字不變（同 horse_art：正式圖到了放進資料夾就上，程式不用改）。head 是場景 Markdown 的第一段轉好的
+    HTML，網頁有圖時把那一段拿掉、把地名／危險／時刻（事件標題；人名與情誼）疊在圖的下緣。"""
+    got = game.scene_art()
+    if got is None or not (WEB / "img" / f"{got['path']}.webp").is_file():
+        return None
+    cal = status.get("calendar")
+    when = cal["text"] if cal and cal.get("text") else f"第{status['day']}天 {status['clock']}"
+    return {
+        "kind": got["kind"], "src": f"/static/img/{got['path']}.webp", "title": got["title"], "sub": got["sub"],
+        "time": when if got["kind"] == "place" else "", "head": md(got["head"]),
+    }
 
 
 def horse_art() -> list[str]:
@@ -807,7 +822,7 @@ def say(game: Game, text: str, option: str = SAY_OPTION) -> list[str] | None:
     A 鎖內驗這句話能不能送（還在對話裡、按得下去、1～Game.say_max() 字）並開單，B 鎖外請模型歸類那句話、寫回應與下一輪選項，
     C 鎖內 Game.choose(SAY_OPTION, prepared=…, text=…) 整個重驗再套用（好感度照模型挑的類別查表）。
     送不出去（不在對話裡、字數不對）丟 GameError，什麼都不動。"""
-    if option not in TEXT_TALKS:  # 開口求人第二批：商量打法（talk:plan）、帶路的路上（parley:road）也走這一條
+    if option not in TEXT_TALKS:  # NPC 智能 2.1：商量打法（talk:plan）、帶路的路上（parley:road）也走這一條
         option = SAY_OPTION
     prepared = prepare_dialogue(game, option, text)
     if prepared is None:
@@ -1626,8 +1641,9 @@ def _main_view_body(game: Game) -> dict:
         "status": status,
         "quest": quest,
         "scene": scene,
+        "art": scene_art(game, status),  # 場景卡上面那張圖（減法季批 8）：事件插圖、人物像或地點的圖；沒有圖檔是 None、網頁一字不變
         "options": [o.model_dump() for o in options],
-        "say_max": game.say_max(),  # 「自己說」最多幾個字（開口求人開著時比較長，網頁的輸入框照它）
+        "say_max": game.say_max(),  # 「自己說」最多幾個字（NPC 智能 2.0開著時比較長，網頁的輸入框照它）
         # 出陣開著（出陣探索與地盤設計第二節）：行動列那一格叫「出陣」、等候的話換一句；關著時照舊「遊歷」
         "sortie": sortie.on(game.content),
         # 一類一顆開著（正式季整合第二章）：應召畫成行動列上面一條金框橫幅（設計 9.1 第 1 組乙），不收在「此地還能做」
@@ -1700,6 +1716,19 @@ def _main_view_body(game: Game) -> dict:
     orders = game.orders_view()  # 第一季：自己陣營的本週軍令（計畫 T6；散人、別陣營、開關關著時都沒有這個鍵）
     if orders:
         view["orders"] = orders
+    # 減法季批 1（整合設計 6.1、3.4）：江湖頁最上面的本週卡（主題、你這一步）與三方卡；序章裡、休季沒有這兩個鍵
+    week = weekcard.week_card(game, status, orders)
+    if week is not None:
+        view["week_card"] = week
+    mostly = mapdata.mostly_here(game.state, game.content)  # 四格探索那一格的小字「城裡多事」（整合設計 6.3，批 5）；在路上沒有這個鍵
+    if mostly:
+        view["mostly"] = mostly
+    sides = weekcard.sides_card(game)
+    if sides is not None:
+        view["sides_card"] = sides
+    event_opts = game.event_option_view()  # 事件選項只留動作（整合設計 6.4）：選項 id → 動作、圖示、沒把握時的心裡話；沒有事件沒有這個鍵
+    if event_opts is not None:
+        view["event_opts"] = event_opts
     layers = game.rumor_layers()  # 第一季：見聞頁的傳聞分四層（開關關著時不送，頁面照舊畫 rumors 那一條清單）
     if layers is not None:
         view["rumor_layers"] = [{**layer, "body": md(layer["body"])} for layer in layers]

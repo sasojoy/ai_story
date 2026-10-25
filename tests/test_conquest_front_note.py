@@ -72,7 +72,7 @@ def test_yellow_turbans_took_the_two_neutral_blocks():
 
 def test_han_army_took_runan_wilds_on_the_weekend():
     """開著的季，佔領二（週末）：官軍拿下汝南荒野。"""
-    game = conquest_game("weekend")
+    game = conquest_game("week7")
     d, msgs, battle, season = _muster(game, given={"runan_wilds": "guan"})
     assert battle.front_note == bi.FrontNote(line="yingru", start=64, held={"guan": 9, "huang": 5}, open=1)
     assert (f"🗺️ 【天下大事】長社火攻開集結：戰局起點照潁川汝南此刻的戰況往官軍偏了 14 點{WHY}。"
@@ -170,7 +170,7 @@ def test_fb687_the_mandate_line_says_the_shards_add_nothing_more():
     assert seal.shift_text(0, {}, d, extra=True) == "起點不再另偏"
 
 
-@pytest.mark.parametrize("profile", ["weekend", "season21"])
+@pytest.mark.parametrize("profile", ["week7", "season21"])
 def test_fb687_conquest_off_the_mandate_line_is_unchanged(profile):
     """領地爭奪關著（沒有起點照戰況那一句）：天命之爭碎片那一句照舊「戰局起點不偏」，畫面上也沒有新的那一行。"""
     game = plain_game(profile)
@@ -181,7 +181,7 @@ def test_fb687_conquest_off_the_mandate_line_is_unchanged(profile):
     assert "天命之爭集結：玉璽碎片不在交戰的任何一方手上，戰局起點不偏。" in [r.text for r in season.rumors]
 
 
-@pytest.mark.parametrize("profile", ["weekend", None, "season21"])
+@pytest.mark.parametrize("profile", ["week7", None, "season21"])
 def test_conquest_off_not_a_byte_changes(profile, monkeypatch):
     """領地爭奪關著（正式內容的預設）：開集結的訊息、決戰那一列的 JSON、季（含天下大事）、決戰畫面，跟拿掉這個掛點時一模一樣，
     決戰那一列連 front_note 這個鍵都沒有。"""

@@ -34,7 +34,7 @@ CSS = Path(server.WEB) / "style.css"
 def _game(content=None, faction="guan", at="yingchuan", conquest=True):
     from conquest_kit import conquest_rules
 
-    c = content or real_content("weekend")
+    c = content or real_content("week7")
     if conquest:
         conquest_rules(c)
     else:
@@ -153,7 +153,7 @@ def test_region_labels_show_name_and_counts_from_the_sides():
 
 def test_a_region_with_nothing_to_count_has_no_second_line():
     """全是 0 那一行就不畫（企劃者 2026-10-20）：地盤關著（整張沒人佔）時沒有高級資源地的大區只寫名字，框也矮一截。"""
-    game = _game(content=classic_rules(real_content("weekend")), conquest=False)
+    game = _game(content=classic_rules(real_content("week7")), conquest=False)
     by = {x["id"]: x for x in run(game, LABELS)}
     want = _lines(game)
     bare = [k for k, v in want.items() if not v]
@@ -326,7 +326,7 @@ def test_the_timeline_repaints_the_ground_for_that_week():
 
 def _four_sides():
     """四方的測試劇本（設計 3.3、第十二章）：官軍、黃巾之外加兩方（各自的顏色）；潁川汝南照方位切成四塊、一方一塊，其餘四區各一方。"""
-    c = real_content("weekend")
+    c = real_content("week7")
     c.scenario.factions = [f for f in c.scenario.factions if f.id != "haoqiang"] + [
         FactionDef(id="wei", name="魏", ink=FactionInk(color="#6A3D7A", soft="#C3A6CC", short="魏", label="魏")),
         FactionDef(id="wu", name="吳", ink=FactionInk(color="#2E7D5B", soft="#9FD1B8", short="吳", label="吳")),

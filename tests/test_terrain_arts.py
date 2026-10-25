@@ -141,7 +141,7 @@ def test_companions_take_it_one_by_one(content, world):
 
 @pytest.mark.slow
 def test_followers_do_not_take_it():
-    c = real_content("weekend")
+    c = real_content("week7")
     c.config.auto_open_first_season = True
     fid, follower = next(iter(c.followers.items()))
     attribute = c.skills[follower.wugong].attribute
@@ -190,7 +190,7 @@ def test_the_rise_floats_without_the_terrain(content, world, monkeypatch):
 
 @pytest.mark.slow
 def test_the_figure_rise_floats_without_the_terrain(monkeypatch):
-    c = real_content("weekend")
+    c = real_content("week7")
     c.config.auto_open_first_season = True
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world())
     asked: list[dict] = []
@@ -291,7 +291,7 @@ def test_the_detail_panel_odds_follow_the_place(content, world, monkeypatch):
 
 @pytest.mark.slow
 def test_the_map_lists_the_terrain_line_per_place():
-    c = real_content("weekend")
+    c = real_content("week7")
     c.config.auto_open_first_season = True
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world())
     places = {p["id"]: p for p in game.map_base()["places"]}
@@ -305,7 +305,7 @@ def test_the_map_lists_the_terrain_line_per_place():
 
 @pytest.mark.slow
 def test_the_map_odds_follow_each_place_and_ask_once_per_terrain(monkeypatch):
-    c = real_content("weekend")
+    c = real_content("week7")
     c.config.auto_open_first_season = True
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world())
     game.state.player.faction = "guan"

@@ -23,10 +23,11 @@ from . import (
     fight_llm, figure_aid, figure_life, figures, foreshadow, four_tiers, gather_llm, generals, forge_secrets, front_lines, fusion, gender, howto, insight_fx, insights, invites, journal, letters, library, mapdata, martial_arts, feasts,
     mall, materials, mounts, naming, newbie, rename, server_bots, opportunities, orders, parley, precise, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_acts, seal_duel, seats, secret_recipes, sensing,
     shopview, siege, signature, signature_arms, silver, skillview, smithing,
-    social, sortie, styles, tactics, team, terrain, territory, timetable, traits, treasures, weapons, works, xingshi, zh, yuedan,
+    social, sortie, styles, tactics, team, terrain, territory, timetable, traits, treasures, weapons, week_unlock, works, xingshi, zh, yuedan,
 )
 from . import ambush as ambush_rules  # 設伏劫道（後期體力玩法第一批）；叫 ambush_rules：這個檔裡有區域變數叫 ambush
 from . import duel as duel_rules  # 單人頭目戰（Joy 2026-10-10）
+from . import opening as opening_rules  # 開局第一分鐘（減法季批 7；叫 opening_rules：避免跟戰法的 opening 混）
 from . import discuss as _discuss_card  # noqa: F401  論武登記進玩家卡的動作表（social.ACTIONS）
 from . import raid as _raid_card  # noqa: F401  截殺登記進玩家卡的動作表（social.ACTIONS）
 from . import wanted as _wanted_card  # noqa: F401  通緝登記進玩家卡的動作表（social.ACTIONS）
@@ -62,7 +63,7 @@ from .models import (
 from .ollama_client import ModelBudget, OllamaClient, quick_client
 from .rules import (
     GEJU, HUANGJIN, add_chronicle, add_marks, add_rumor, add_world_flags, display_name, apply_effect, audible, audience_bar, audience_hint, can_meet, change_trend,
-    check_result_line,
+    check_gap, check_result_line,
     day_turn, ears_of, evil_success, failed, fill_marks, free_text_rate, game_day, geju_resisted, here_regions,
     can_draw_side_change, chaos_fronts, chaos_note, front_chip, front_ids, front_of, front_text, humanize, in_chaos,
     is_revealed, learn_skill, pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check,
@@ -178,7 +179,7 @@ FREE_TEXT_OPTION = "choice:free"  # 事件的「隨口應對」：按下去只�
 EVIL_ANNAL = "，行了一件惡事，成了。"  # 行狀：隨口應對判成惡行而且成了（FB-223），接在「遇上【某事】，隨口應對」後面。待 joy 潤
 # 跟人物對話時的「自己說」（企劃者 2026-10-08）：按下去只是叫出輸入框，真正送出帶著那句話走 choose(SAY_OPTION, text=…)（server.say）
 SAY_OPTION = "talk:say"
-# 開口求人第二批（parley.py）：同「自己說」要打一句話的兩顆——對話裡跟答應陪你出陣的人商量打法、他帶路的路上跟他說一句
+# NPC 智能 2.1（parley.py）：同「自己說」要打一句話的兩顆——對話裡跟答應陪你出陣的人商量打法、他帶路的路上跟他說一句
 PLAN_OPTION = "talk:plan"
 ROAD_SAY = "parley:road"
 TEXT_TALKS = (SAY_OPTION, PLAN_OPTION, ROAD_SAY)
@@ -189,7 +190,7 @@ SAY_MAX = 20  # 「自己說」最多幾個字（跟隨口應對一樣）
 
 def say_text(text: str | None, limit: int = SAY_MAX) -> str | None:
     """「自己說」那句話能不能送：先去頭尾空白、中間連著的空白併成一個，1～limit 字才算數，再轉繁體（zh.to_traditional）；
-    不行就是 None。長度在轉繁體之前量（轉換不改字數，量的是玩家打的）。limit 平常是 SAY_MAX，開口求人開著時照 Game.say_max。"""
+    不行就是 None。長度在轉繁體之前量（轉換不改字數，量的是玩家打的）。limit 平常是 SAY_MAX，NPC 智能 2.0開著時照 Game.say_max。"""
     if text is None:
         return None
     text = " ".join(text.split())
@@ -506,7 +507,10 @@ class Game:
         game = cls(content, state, rng, world)
         if sex in gender.GENDERS:
             game.state.player.gender, game.state.player.gender_chosen = sex, True
-        if prologue:
+        if (prologue or graduated) and opening_rules.on(content, game.state.world):
+            # 減法季的開局第一分鐘（整合設計 6.7）：真人與假人都不進草廬，站在起點看旁白、三選一；人物的信在選完那一下送到（choose）
+            opening_rules.begin(game.state, content)
+        elif prologue:
             prologue_rules.begin(game.state, content)
         elif graduated and prologue_rules.has(content):
             game._graduate()
@@ -965,6 +969,7 @@ class Game:
         msgs = list(self.world.catch_up_season(self.content, now, self.rng))
         self.state.world = self.world.get_season()  # 剛才的追趕可能進一步推進了賽季，拉回最新的一份
         self._stamp_join()  # 新角色、換季重來的角色：補算完賽季才記下加入的那一刻
+        self._week_unlock_tick()  # 減法季 6.6：第 2 週的功能對這個人開了的那一刻，寫一則紀錄
         self._record_faction()
         self._copy_heirloom()  # 排在 _advance_player_local 之前：承露照整段離線時間算體力回復（7.4）
         if self.state.last_real is None:
@@ -1007,7 +1012,7 @@ class Game:
         self._conquest_tick()  # 領地爭奪：換天（22:00）的掛鉤（前一天沒開成的攻城作罷；第一個看到新的一天的人觸發）
         self._deliver_conquest()  # 領地爭奪：翻地的分紅、守城功（下線時易手的回來補）
         self._deliver_arena()  # 擂台：被挑了的戰報、季末前三名的獎勵；季收了還沒打完的那一場作廢
-        mail = parley.lapse(self.state, self.content)  # 開口求人第二批：欠人物的事過了期限是食言（附的委託先作罷，書信不再補一句）
+        mail = parley.lapse(self.state, self.content)  # NPC 智能 2.1：欠人物的事過了期限是食言（附的委託先作罷，書信不再補一句）
         mail += letters.deliver(self.state, self.content, now)  # 書信（大勢人物擴充第二批）：人物來信、過期的委託作罷
         if mail:
             self._write(letters.TITLE, mail)
@@ -1017,6 +1022,7 @@ class Game:
         if self.state.player.feasting is not None and self._feast_seat() is None:
             self.state.player.feasting = None  # 宴散了、人走了：收起敬酒的選單
         self._deliver_held_gear()  # 寄放的重賞、贈禮：裝備庫有空位就補（裝備四欄 6.5）
+        self._auto_checkin()  # 每日簽到自動領（Joy 2026-10-24 挑江湖頁乙案：簽到不放鈕）；要挑四階的日子留給玩家挑
         self._settle_partings()  # 歷史武將同行：從你身邊回江湖的人，情誼減半（9.6；補戰報時已經算過的不再算）
         refunds = bounties.deliver_refunds(self.state, self.content)  # 掛的通緝沒人揭成：押金退回
         if refunds:
@@ -1092,6 +1098,7 @@ class Game:
         if self.world.paused_at() is not None:  # 管理者的快轉：時鐘停著時不推，先按「繼續」
             return self._log(["（賽季時鐘暫停中，不能快轉；先按「繼續」。）"])  # 待 S1／joy 潤
         self._stamp_join()  # 同 sync：推進之前先記下加入的那一刻（沒同步過就直接快轉的測試與整季機器人）
+        self._week_unlock_tick()
         msgs: list[str] = []
         if self.world.season_phase() == "running":
             msgs += advance_world_state(self.state.world, self.content, seconds, self.rng, self.world)
@@ -1103,6 +1110,7 @@ class Game:
         self._save_season()
         msgs += start_pending_battle(self.world, self.content, self.now)
         self.state.world = self.world.get_season()
+        self._week_unlock_tick()  # 推完了再看一次：快轉跨過第 2 週（整季機器人、測試）那一下就寫
         news = journal.news_entry(self.state.world.time, self._without_timetable(msgs))
         if news is not None:
             journal.add_entry(self.state, news, merge=True)
@@ -1116,6 +1124,27 @@ class Game:
         p = self.state.player
         if p.joined_at is None:
             p.joined_at = self.state.world.time
+
+    def week_unlock_names(self) -> list[str]:
+        """第 2 週才開的功能裡這一季真的有的（減法季 6.6；week_unlock.WEEK2 的順序）：鐵匠鋪（武器或防具開著）、擂台、自創、懸賞榜。
+        紀錄那一行、本週卡那一句照它列；一樣都沒有是空的。"""
+        s, c = self.state, self.content
+        have = {
+            "smith": any(equipment.on(c, slot) for slot in equipment.SMITH_PAGES), "arena": arena.on(c), "create": create.on(c),
+            "bounties": bounties.active(s, c),
+        }
+        return [name for key, name in week_unlock.WEEK2.items() if have.get(key)]
+
+    def _week_unlock_tick(self) -> None:
+        """第 2 週的功能對這個人開了的那一刻（減法季 6.6「開了的那一刻江湖紀錄一行、本週卡一句」）：蓋 PlayerState.week_unlocked_at、
+        寫一則紀錄。規則關著不蓋、不寫；蓋過就不再動；季收了不寫。sync 與 advance 都叫（補算完賽季、記下加入那一刻之後）。"""
+        p = self.state.player
+        if p.week_unlocked_at is not None or self.state.world.ended or not week_unlock.unlocked_now(self.state, self.content):
+            return
+        p.week_unlocked_at = self.state.world.time
+        names = self.week_unlock_names()
+        if names:
+            self._write(week_unlock.TITLE, [week_unlock.journal_line(names, self.content, self.state.world)])
 
     def mark_seen(self, now: float) -> None:
         """這是那個人自己的請求（伺服器的 act／act_look、假人程式自己那一輪寫 seen_real 另見 bot_runner）：記他自己上線的現實時間
@@ -1250,7 +1279,7 @@ class Game:
                 opts.append(self._cost_option(SAY_OPTION, "自己說…", talk_cost))
             opts += foreshadow.talk_options(s, c, s.player.pending_companion)  # 伏筆的片段：固定文字、不花體力（計畫 T7）
             opts += opportunities.talk_options(s, c, s.player.pending_companion)  # 機緣的話題（正式版乙一）：不花體力
-            opts += self._parley_options(s.player.pending_companion)  # 開口求人：他開的條件、欠你的那一件（不花體力）
+            opts += self._parley_options(s.player.pending_companion)  # NPC 智能 2.0：他開的條件、欠你的那一件（不花體力）
             opts.append(Option(id="talk:leave", label="告辭"))
             return opts
         if allied.needs_ally(s, c):  # 拜入要依附的門派之後還沒挑一邊（豪強分屬兩軍）：只剩選邊
@@ -1298,7 +1327,7 @@ class Game:
                 return opts + self._road_task_options(j) + self._arena_entry()
             opts.append(self._back_option())  # 折返（路上設計 3.2）；改去別處在大地圖上安排
             road = self._parley_road_option(j)
-            if road is not None:  # 開口求人第二批：他帶你走的這一趟，每到一站跟他說一句
+            if road is not None:  # NPC 智能 2.1：他帶你走的這一趟，每到一站跟他說一句
                 opts.append(road)
             if j.stop_at is None and j.reached < j.last:
                 opts.append(Option(id="act:halt", label=f"喊停（到{c.locations[j.path[j.reached]].name}就停下）"))
@@ -2204,6 +2233,30 @@ class Game:
             label = choice_label(choice, self.state, self.content, self.world)
         return label + bounties.join_note(self.state, self.content, choice)
 
+    def event_option_view(self) -> dict[str, dict] | None:
+        """江湖頁事件選項的樣子（減法季批 1，整合設計 6.4）：鈕上只留動作，心裡話只在「難說」以下才寫在底下一行小字，失手的代價不寫在鈕上。
+        眼前沒有事件是 None；有的話每一顆 choice:N 一筆 {"act": 動作（拜入門派會作廢懸賞的那一句照樣接在後面）, "kind": 檢定的屬性鍵／
+        "fight"／""（網頁照它畫鈕前的小圖示）, "worry": 心裡話或對手與勝算（沒把握才有，有把握是空字串）}。選單上的標籤一個字不改（假人與模擬照舊讀它）。
+        只讀：勝算照 odds 的備忘，不擲骰。"""
+        s, c = self.state, self.content
+        if not s.pending_event or s.pending_event not in c.events:
+            return None
+        out: dict[str, dict] = {}
+        for i, ch in visible_choices(c.events[s.pending_event], s, c):
+            act = ch.text + bounties.join_note(s, c, ch)
+            if ch.combat:
+                squad = self._story_squad(c.squads[ch.combat])
+                odds = team.estimate(s, c, self.world, squad.id, difficulty=squad.difficulty, memo=self.odds_memo)
+                worry = "" if odds in ("穩勝", "有把握") else f"對手：{squad.name}・{odds}"
+                out[f"choice:{i}"] = {"act": act, "kind": "fight", "worry": worry}
+            elif ch.check:
+                gap = check_gap(ch.check, s, c, self.world)
+                worry = event_rules.check_note(ch.check, s, c, self.world).split("：", 1)[-1] if gap < 0 else ""
+                out[f"choice:{i}"] = {"act": act, "kind": ch.check.stat, "worry": worry}
+            else:
+                out[f"choice:{i}"] = {"act": act, "kind": "", "worry": ""}
+        return out
+
     def odds(self, squad_id: str, at: str | None = None) -> str:
         """勝算的字。at：照哪一處的地利算（輿圖替每一處算，武學隨地理環境計畫第六節）；不給是此刻腳下（在路上沒有）。"""
         return team.estimate(self.state, self.content, self.world, squad_id, memo=self.odds_memo, at=at)
@@ -2238,7 +2291,7 @@ class Game:
             fields = parley.ASK_FIELDS if option_id == SAY_OPTION else parley.PLAN_FIELDS
             return companion_agent.build_request(self.state, self.content, self.world, companion_id, option_id, said, free=True,
                                                  extra=extra, required=fields if extra else ())
-        if option_id == ROAD_SAY:  # 開口求人第二批：他帶路的路上跟他說一句（可以是閒談，也可以求他沿路做得到的事）
+        if option_id == ROAD_SAY:  # NPC 智能 2.1：他帶路的路上跟他說一句（可以是閒談，也可以求他沿路做得到的事）
             companion_id, said = self.state.player.parley_escort, say_text(text, self.say_max())
             if companion_id is None or said is None:
                 return None
@@ -3229,6 +3282,7 @@ class Game:
             return self._log([f"（寫下你想說的話，{self.say_max()} 字以內。）"])  # 選項本身只叫出輸入框
         prepared = self._checked_prepared(option_id, prepared, text) if kind in ("act", "talk", "call", "parley") else None
         self._fight = self._checked_fight(option_id, fight)
+        was_opening = kind == "choice" and opening_rules.pending(self.state, self.content)  # 開局三選一（減法季批 7）：選完人物的信到
         self._draft = Draft(self._action_title(kind, arg))
         self._affinity_before = dict(self.state.player.affinities)
         stamina = self.state.player.stamina
@@ -3301,6 +3355,8 @@ class Game:
             msgs += self._hear_after_stamina(stamina)
             if kind == "choice":  # 選了事件的選項：序章的遇險、拜師、四景（新手引導計畫一）
                 msgs += self._guide(note_action(self.state, self.content, self.world, "choice"))
+            if was_opening and not opening_rules.pending(self.state, self.content):  # 開局第一分鐘：那位人物開口、託付第一件事（信附委託）
+                msgs += opening_rules.deliver(self.state, self.content)
             if kind == "act" and arg != "break" and not picked_only:
                 msgs += self._guide(note_action(self.state, self.content, self.world, arg))
                 if arg in SHOP_ACTS:  # 初入江湖「進城裡的鋪子看看」：進哪一間都算（新手引導第四段）
@@ -3601,7 +3657,7 @@ class Game:
         if kind == "talk":
             character = c.characters[s.player.pending_companion]
             return f"交談・{character.name}"
-        if kind == "parley" and s.player.parley_escort in c.characters:  # 開口求人第二批：帶路的路上跟他說一句
+        if kind == "parley" and s.player.parley_escort in c.characters:  # NPC 智能 2.1：帶路的路上跟他說一句
             return f"同行・{c.characters[s.player.parley_escort].name}"
         if kind == "call":
             return "收回名帖" if arg == "back" else f"求見・{c.characters[arg].name}"
@@ -4250,7 +4306,7 @@ class Game:
         if what == "explore":
             return self._explore()
         if what == "train":  # 出陣（出陣探索與地盤設計第二節）；序章的雪恥照舊是遊歷
-            backing = self._parley_backing_here()  # 開口求人的並肩出陣：今天答應陪你的人在這一帶，這一仗本人威力多幾成
+            backing = self._parley_backing_here()  # NPC 智能 2.0的並肩出陣：今天答應陪你的人在這一帶，這一仗本人威力多幾成
             share = self.content.config.parley.backing_share
             plan = self.state.player.parley_backing.plan if backing else None  # 第二批：商量過打法，成了加倍、沒成打空
             share = share * 2 if plan else 0.0 if plan is False else share
@@ -5704,9 +5760,9 @@ class Game:
         if arg.startswith("opp:"):  # 機緣的話題：固定文字，不經模型、不扣體力、不算對話輪數（正式版乙一）
             heard = opportunities.hear_topic(self.state, self.content, companion_id, arg.removeprefix("opp:"))
             return heard or ["（此刻無法這麼做。）"]
-        if arg in ("terms:yes", "terms:no", "owed", "repay"):  # 開口求人：接不接他的條件、請他兌現、還他（固定文字，不經模型、不扣體力、不算輪數）
+        if arg in ("terms:yes", "terms:no", "owed", "repay"):  # NPC 智能 2.0：接不接他的條件、請他兌現、還他（固定文字，不經模型、不扣體力、不算輪數）
             return self._parley_answer(companion_id, arg)
-        if arg == "plan":  # 開口求人第二批：出陣前跟他商量打法（模型評成功率，不扣體力、不算輪數）
+        if arg == "plan":  # NPC 智能 2.1：出陣前跟他商量打法（模型評成功率，不扣體力、不算輪數）
             return self._parley_plan(companion_id, prepared, said)
         affinity = self.state.player.affinities.get(companion_id, 0)
         self._parley_decision = None
@@ -5733,7 +5789,7 @@ class Game:
         return msgs + self._parley_finish(companion_id, decision)
 
     def _parley_finish(self, cid: str, decision: parley.Decision | None) -> list[str]:
-        """開口求人那一輪的收尾：結果那一句，答應了就當場做（帶路會在這裡動身）；先做後付另外記下你欠他的那一件。"""
+        """NPC 智能 2.0那一輪的收尾：結果那一句，答應了就當場做（帶路會在這裡動身）；先做後付另外記下你欠他的那一件。"""
         if decision is None or decision.kind is None:
             return []
         if decision.kind != "owe":
@@ -5782,12 +5838,12 @@ class Game:
             annals.note(self.state, c, annals.FIGURE, f"跟{name}{how}{mood}。", 2,
                         figure=companion_id, quote=asked, reply=annals.first_sentence(reply))
 
-    # ── 開口求人（parley.py；Joy 2026-10-23「先做看看」）────────────
+    # ── NPC 智能 2.0（parley.py；Joy 2026-10-23「先做看看」）────────────
 
     _parley_decision: parley.Decision | None = None  # 這一輪「自己說」擲出來的結果（_parley_decide 記、_talk 收尾時拿去做事）
 
     def say_max(self) -> int:
-        """「自己說」最多幾個字：開口求人開著時照 Config.parley.say_max（要講得清楚一點），關著照舊 SAY_MAX。"""
+        """「自己說」最多幾個字：NPC 智能 2.0開著時照 Config.parley.say_max（要講得清楚一點），關著照舊 SAY_MAX。"""
         return self.content.config.parley.say_max if parley.on(self.content) else SAY_MAX
 
     def _parley_lists(self, cid: str, road: bool = False) -> tuple[list[parley.Item], list[parley.Item]]:
@@ -5799,7 +5855,7 @@ class Game:
         return (parley.road_items(asks) if road else asks), parley.condition_items(s, c, cid, rng)
 
     def _parley_prompt(self, cid: str, road: bool = False) -> str:
-        """「自己說」那一輪接在玩家原話後面的一段（開口求人）：關著、今天求滿了是空的，模型就只是談話。"""
+        """「自己說」那一輪接在玩家原話後面的一段（NPC 智能 2.0）：關著、今天求滿了是空的，模型就只是談話。"""
         s, c = self.state, self.content
         if not parley.on(c) or parley.asks_left(s, c, cid) <= 0:
             return ""
@@ -5881,7 +5937,7 @@ class Game:
         return []
 
     def _parley_options(self, cid: str) -> list[Option]:
-        """對話選單上開口求人的鈕：他開了條件、還沒答覆（接、不接）；辦成委託之後他欠你的那一件（請他兌現）。"""
+        """對話選單上NPC 智能 2.0的鈕：他開了條件、還沒答覆（接、不接）；辦成委託之後他欠你的那一件（請他兌現）。"""
         s, c = self.state, self.content
         if not parley.on(c):
             return []
@@ -6249,7 +6305,7 @@ class Game:
                     self._draft.title = "叛投不成"
                 return [f"（{reason}）"]
             return (defection.defect(self.state, self.content, target, ally) + self._leave_behind(target.id)
-                    + parley.forsake_all(self.state, self.content))  # 開口求人第二批：接了又叛投，欠著的都算食言
+                    + parley.forsake_all(self.state, self.content))  # NPC 智能 2.1：接了又叛投，欠著的都算食言
         fid, _, ally = arg.partition(":")
         target = self.content.scenario.faction(fid)
         p.pending_defect, p.pending_ally = target.id, ally or None
@@ -9975,7 +10031,7 @@ class Game:
         騎著馬的體力與步調照出發這一刻的坐騎（裝備四欄 5.3）。"""
         s, c = self.state, self.content
         bounties.close_board(s.player)  # 動身了：城鎮的第二層選單（懸賞榜、鐵匠鋪）收起來，不留在路上
-        s.player.parley_escort = None  # 開口求人第二批：自己動身就不是誰帶的路了（帶路那一支出發之後再寫回去）
+        s.player.parley_escort = None  # NPC 智能 2.1：自己動身就不是誰帶的路了（帶路那一支出發之後再寫回去）
         equipment.close_smith(s.player)  # 鐵匠鋪連同打造到一半的單子、停在哪一頁一起收
         mounts.close_market(s.player)  # 馬市也收起來（裝備四欄 5.5）
         if s.player.picking_donate:
@@ -10758,6 +10814,8 @@ class Game:
         """每日簽到（21 天季，正式季整合 6.2；tianxia/checkin.py）：領今天的份，四階的日子帶 attribute（剛柔快慢）。草廬序章裡不簽
         （同回體丹）；關著、簽過了、沒挑或挑錯四階都只回一句、什麼都不動。成了寫一則「簽到」江湖紀錄（數值變化寫丹、銀兩、素材）。"""
         s, c = self.state, self.content
+        if checkin.on(c, s.world) and opening_rules.pending(s, c):  # 開局第一分鐘：三選一還沒選，福利之後寫進紀錄、不當第一張卡
+            return self._log([opening_rules.GATE])
         if checkin.on(c, s.world) and prologue_rules.active(s, c):
             return self._log([checkin.HUT])
         result = checkin.claim(s, c, s.world, attribute)
@@ -10767,10 +10825,26 @@ class Game:
         journal.add_entry(s, JournalEntry(time=s.world.time, title=checkin.TITLE, lines=lines, changes=changes))
         return self._log(lines + changes)
 
+    def _auto_checkin(self) -> None:
+        """每日簽到自動領（減法季批 1；Joy 2026-10-24 挑了江湖頁乙案：簽到不放鈕）：每天第一次同步時，今天的份不必挑的就直接領、
+        寫一則「簽到」江湖紀錄（同 check_in，「剛剛」那一行會寫出來）；要挑四階的日子不動，江湖頁冒一張挑屬性的小卡（status.checkin.pick），
+        挑了才領（check_in）。草廬序章裡不簽（同 check_in）。假人照舊在 bot.check_in 自己簽，先同步到的這裡順手領了也只是同一份。"""
+        s, c = self.state, self.content
+        if prologue_rules.active(s, c) or opening_rules.pending(s, c):
+            return
+        day = checkin.due(s, c, s.world)
+        if day is None or checkin.needs_pick(c, day):
+            return
+        result = checkin.claim(s, c, s.world)
+        if isinstance(result, str):
+            return
+        lines, changes = result
+        journal.add_entry(s, JournalEntry(time=s.world.time, title=checkin.TITLE, lines=lines, changes=changes))
+
     def checkin_view(self) -> dict | None:
         """江湖頁「簽到」小標的資料（checkin.view）：簽到關著、草廬序章裡、過了這一季最後一天（管理者把季末往後排）是 None。"""
         s, c = self.state, self.content
-        if not checkin.on(c, s.world) or not checkin.in_season(c, s.world) or prologue_rules.active(s, c):
+        if not checkin.on(c, s.world) or not checkin.in_season(c, s.world) or prologue_rules.active(s, c) or opening_rules.pending(s, c):
             return None
         return checkin.view(s, c, s.world)
 
@@ -15057,6 +15131,40 @@ class Game:
         loc = self.content.locations[self.state.player.location]
         return f"【{loc.name}】危險 {'★' * loc.danger}\n\n{loc.describe(self.state.world.flags)}"  # 宛城的描寫隨版本換
 
+    def scene_art(self) -> dict | None:
+        """江湖頁場景卡上面那張圖（減法季批 8 圖像版；減法季整合設計第八章、第一批圖提示單）。回 {kind, path, title, sub, head}：
+        path 是 web/img/ 底下不含副檔名的路徑；head 是場景 Markdown 的第一行（地名那一行、事件標題、人名），有圖時網頁把它疊在圖上、
+        不在卡片裡寫第二次。事件開著（pending_event）→ 事件的類型圖 events/<Event.image>；跟人物談話 → 他的像（CharacterDef.image）；
+        平常站在地點 → Location.image，沒寫就是所屬大區的 places/<大區 id>（atlas.region_of），沒有大區是 places/world。
+        其餘的畫面一律 None、一字不變：全服戰鬥蓋著場景、季收了、單挑、擂台、宴席、有所感、投靠與叛投、求見名單、伏筆問話、在路上，
+        還有事件沒寫 image、人物沒有像。圖檔在不在是伺服器的事（server.scene_art）。"""
+        s, c = self.state, self.content
+        p = s.player
+        if s.world.ended or self._battle_for_me(tick=False) is not None:
+            return None
+        if s.pending_event:
+            event = c.events[s.pending_event]
+            if not event.image:
+                return None
+            return {"kind": "event", "path": f"events/{event.image}", "title": event.title, "sub": "", "head": f"**{event.title}**"}
+        if p.duel is not None or p.arena is not None or p.feasting is not None or p.sensing is not None:
+            return None
+        if p.pending_companion:
+            character = c.characters[p.pending_companion]
+            if not character.image:
+                return None
+            sub = self.affinity_text(p.pending_companion)
+            return {"kind": "figure", "path": character.image, "title": character.name, "sub": sub, "head": f"**{character.name}**（{sub}）"}
+        if self._own_scene_text() != self.location_text():  # 投靠、叛投、求見、伏筆問話、在路上……都不是地點的描寫
+            return None
+        loc = c.locations[p.location]
+        if loc.image:
+            path = loc.image
+        else:
+            region = atlas.region_of(c, loc.id)
+            path = f"places/{region.id}" if region is not None else "places/world"
+        return {"kind": "place", "path": path, "title": loc.name, "sub": f"危險 {'★' * loc.danger}", "head": f"【{loc.name}】危險 {'★' * loc.danger}"}
+
     def method_help(self, option_ids: Iterable[str]) -> dict | None:
         """有所感選做法那一步，網頁畫在做法鈕底下的兩行小字（explain-2，sensing.method_help；鈕上的心意審查 I1 起預設不給）；
         選單上沒有做法（不在選做法、戰場蓋過了畫面）是 None。不讀這一處悟得到什麼：哪一個做法是對的看不出來。"""
@@ -15745,6 +15853,8 @@ class Game:
         hut = prologue_rules.active(self.state, self.content)
         if hut and (self.state.pending_event is not None or self.state.player.sensing is not None):
             return ""  # 草廬的事件或草廬四景的有所感（做法、畫下來）在眼前：整張卡不放
+        if opening_rules.pending(self.state, self.content):
+            return ""  # 開局第一分鐘（減法季批 7）：旁白與三選一就是第一張卡，開場那一則（含丹的福利）留在紀錄裡（整合設計 6.7）
         entry = self._now_entry()
         return journal.card_html(entry, self.stamp, self._chip) if entry is not None else ""
 

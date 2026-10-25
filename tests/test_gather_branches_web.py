@@ -24,7 +24,7 @@ def run(m, script, *, S=None, responses=None):
 
 
 def _main(at="deep_mountain", stamina=250.0):
-    c = real_content("weekend")
+    c = real_content("week7")
     c.config.auto_open_first_season = True
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world())
     game.client = None

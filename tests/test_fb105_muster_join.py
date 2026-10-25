@@ -183,6 +183,7 @@ def test_someone_who_cannot_join_sees_no_change(on):
     for game in (elsewhere,):
         m = server.main_view(game)
         assert not any(o["id"].startswith("battle:") for o in m["options"])
+        m["art"] = None  # 站在地點時場景卡上面有圖、地名那一段疊到圖上（減法季批 8，test_scene_art.py）：這裡比的是沒圖那一份文字
         page = _page(m)
         assert "muster-" not in page and _scene(page) == m["scene"]
 

@@ -1,4 +1,4 @@
-"""開口求人第二批的網頁那一半：商量打法（talk:plan）與帶路路上（parley:road）跟「自己說」共用同一個輸入框，
+"""NPC 智能 2.1的網頁那一半：商量打法（talk:plan）與帶路路上（parley:road）跟「自己說」共用同一個輸入框，
 提示換成那一顆的說法，送出時 /api/say 帶著是哪一顆。餵真的引擎給的 /api/main（tests/test_prologue_web.py 的假瀏覽器）。沒有 node 就略過。"""
 from __future__ import annotations
 

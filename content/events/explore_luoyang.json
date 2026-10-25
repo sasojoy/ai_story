@@ -2,6 +2,7 @@
   {
     "id": "ly_road_checkpoint",
     "title": "哨卡盤查",
+    "image": "road",
     "locations": [
       "luoyang_road"
     ],
@@ -148,6 +149,7 @@
   {
     "id": "ly_road_courier",
     "title": "驛卒落馬",
+    "image": "road",
     "locations": [
       "luoyang_road"
     ],
@@ -284,6 +286,7 @@
   {
     "id": "ly_baima_sutra",
     "title": "胡僧譯經",
+    "image": "temple",
     "locations": [
       "baima_temple"
     ],
@@ -342,6 +345,7 @@
   {
     "id": "ly_baima_qingtan",
     "title": "廊下清談",
+    "image": "temple",
     "locations": [
       "baima_temple"
     ],
@@ -398,6 +402,7 @@
   {
     "id": "ly_baima_beam",
     "title": "大殿上梁",
+    "image": "temple",
     "locations": [
       "baima_temple"
     ],
@@ -559,6 +564,7 @@
   {
     "id": "ly_palace_carriage",
     "title": "黃門車駕",
+    "image": "office",
     "locations": [
       "luoyang_palace"
     ],
@@ -636,6 +642,7 @@
   {
     "id": "ly_palace_nightwatch",
     "title": "頂班值夜",
+    "image": "night",
     "locations": [
       "luoyang_palace"
     ],
@@ -695,6 +702,7 @@
   {
     "id": "ly_fu_trial",
     "title": "府前試力",
+    "image": "office",
     "locations": [
       "dajiangjun_fu"
     ],
@@ -752,6 +760,7 @@
   {
     "id": "ly_fu_dispatches",
     "title": "軍報如山",
+    "image": "office",
     "locations": [
       "dajiangjun_fu"
     ],
@@ -811,6 +820,7 @@
   {
     "id": "ly_fu_banquet",
     "title": "門客夜宴",
+    "image": "tavern",
     "locations": [
       "dajiangjun_fu"
     ],
@@ -890,6 +900,7 @@
   {
     "id": "ly_beimang_collapse",
     "title": "墓道塌方",
+    "image": "forest",
     "locations": [
       "beimang_hill"
     ],
@@ -1040,6 +1051,7 @@
   {
     "id": "ly_mengjin_capsize",
     "title": "渡船翻覆",
+    "image": "river",
     "locations": [
       "mengjin_ford"
     ],
@@ -1123,6 +1135,7 @@
   {
     "id": "ly_mengjin_pirates",
     "title": "夜泊遇寇",
+    "image": "river",
     "locations": [
       "mengjin_ford"
     ],
@@ -1192,6 +1205,7 @@
   {
     "id": "ly_mengjin_grain",
     "title": "扣船徵糧",
+    "image": "river",
     "locations": [
       "mengjin_ford"
     ],

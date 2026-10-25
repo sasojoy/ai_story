@@ -11,7 +11,7 @@ from tianxia.state import Order
 
 
 def _game(faction=None, at="yingshui", name="沈浪", content=None):
-    c = content or no_conquest(real_content("weekend"))  # 地盤拔河的舊規則（領地爭奪 PM 2026-10-22 起正式內容打開）
+    c = content or no_conquest(real_content("week7"))  # 地盤拔河的舊規則（領地爭奪 PM 2026-10-22 起正式內容打開）
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
     game = Game.new(c, name, rng=random.Random(0), world=open_world())
@@ -75,13 +75,13 @@ def _strike_bounty():
 def test_fb249_the_strike_bounty_says_sortie_or_gathering():
     from tianxia import bounties
 
-    c = real_content("weekend")
+    c = real_content("week7")
     line = bounties.how(c, _strike_bounty())
     assert "遊歷" not in line and "燕山腳" in line and "黃巾" in line
     assert bounties.STRIKE_SORTIE in line and bounties.STRIKE_GATHER in line
     c.config.explore_modes.enabled = False
     assert bounties.STRIKE_GATHER not in bounties.how(c, _strike_bounty())
-    old = classic_rules(real_content("weekend"))
+    old = classic_rules(real_content("week7"))
     assert bounties.how(old, _strike_bounty()) == "到燕山腳遊歷，打贏一場黃巾軍的隊伍"
 
 
@@ -117,7 +117,7 @@ def test_fb251_the_crossed_swords_mark_where_you_can_attack():
     assert "⚔" not in _map(_game(None, "changshe", name="散人甲"))
     legend = mapview.legend_data(guan.state, guan.content)
     assert legend["ring"] == mapview.LEGEND_RING_SORTIE and "遊歷" not in legend["ring"]
-    old = _game("guan", "changshe", name="舊規則", content=classic_rules(real_content("weekend")))
+    old = _game("guan", "changshe", name="舊規則", content=classic_rules(real_content("week7")))
     assert "長社 ⚔" in _map(old) and mapview.legend_data(old.state, old.content)["ring"] == mapview.LEGEND_RING
 
 
@@ -125,10 +125,10 @@ def test_fb251_the_challenge_line_says_the_same_stamina_as_a_sortie():
     from tianxia import howto
     from tianxia.world_state import fresh_season
 
-    c = real_content("weekend")
+    c = real_content("week7")
     page = howto.page(c, fresh_season(c), recruitable=False)
     assert "體力同出陣" in page and "體力同遊歷" not in page
-    old = classic_rules(real_content("weekend"))
+    old = classic_rules(real_content("week7"))
     assert "體力同遊歷" in howto.page(old, fresh_season(old), recruitable=False)
 
 
@@ -158,7 +158,7 @@ def test_fb253_a_stir_on_a_line_at_fifty_is_greyed_and_costs_nothing():
     """戰線正好 50：攪局推不動，鈕灰著寫原因、底下那一行說等戰局偏了再來；按了不花次數、不花體力。線一偏就又按得下去。"""
     from tianxia import sortie
 
-    game = _game("haoqiang", "runan_wilds", content=third_party_gentry(real_content("weekend")))  # 攪局是豪強第三方的規則
+    game = _game("haoqiang", "runan_wilds", content=third_party_gentry(real_content("week7")))  # 攪局是豪強第三方的規則
     w, p = game.state.world, game.state.player
     w.trends["yingru"] = 50
     option = _sortie(game)
@@ -188,7 +188,7 @@ def test_fb254_the_natural_rise_is_resisted():
     """三條戰線都在亂局：割據 90 時一個曆日只漲平常的兩成；60 時照平常。"""
     from tianxia import rules
 
-    game = _game("haoqiang", "runan_wilds", content=third_party_gentry(real_content("weekend")))  # 割據是豪強第三方的規則
+    game = _game("haoqiang", "runan_wilds", content=third_party_gentry(real_content("week7")))  # 割據是豪強第三方的規則
     s, c, w = game.state, game.content, game.state.world
     for front in rules.front_ids(c):
         w.trends[front] = 50
@@ -206,7 +206,7 @@ def test_fb254_a_gentry_push_near_the_top_is_resisted():
     """豪強在亂局的戰線上保境安民推割據 1 點：割據 90 時只推兩成（零頭記著），60 時推滿一點。"""
     from tianxia import rules
 
-    game = _game("haoqiang", "runan_wilds", content=third_party_gentry(real_content("weekend")))  # 豪強是第三方的規則
+    game = _game("haoqiang", "runan_wilds", content=third_party_gentry(real_content("week7")))  # 豪強是第三方的規則
     w = game.state.world
     w.trends["yingru"] = 50
     w.trends[rules.GEJU], w.trend_accum[rules.GEJU] = 90, 0.0
@@ -221,7 +221,7 @@ def test_fb254_an_opportunity_push_on_separatism_is_resisted_too():
     """機緣交付推割據（豪強的收容流民，推 1 點）：割據 90 時打兩成、四捨五入成 0；60 時推滿。"""
     from tianxia import opportunities, rules
 
-    game = _game("haoqiang", "runan_wilds", content=third_party_gentry(real_content("weekend")))  # 割據是豪強第三方的規則
+    game = _game("haoqiang", "runan_wilds", content=third_party_gentry(real_content("week7")))  # 割據是豪強第三方的規則
     opp = next(o for o in game.content.opportunities if o.id == "hao_refugees")
     w = game.state.world
     w.trends[rules.GEJU] = 90
@@ -246,40 +246,14 @@ def _late_season(c, week, geju, fronts=50):
     return season, world_rules._season_vehicle(c, season)
 
 
-def test_fb254_separatism_at_85_no_longer_ends_the_season_early():
-    """企劃者 2026-10-15「提前收季只看戰線」：割據 95 到了第 12 週也不提前收季；黃巾聲勢 ≥85 或 ≤15 照舊第 10 週起當場收。"""
-    from tianxia import world as world_rules
-
-    c = real_content("weekend")
-    _, vehicle = _late_season(c, 12, geju=95)
-    assert world_rules.decisive_ending(vehicle, c) is None
-    for fronts, ending in ((90, "s1_huangtian"), (10, "s1_pacified")):
-        _, vehicle = _late_season(c, 10, geju=95, fronts=fronts)
-        assert world_rules.decisive_ending(vehicle, c).id == ending, fronts
-
-
 def test_fb254_separatism_at_85_is_the_warlords_ending_at_the_finale():
     """季末結算照 evaluate_ending 的先後：割據 ≥85 是群雄並起，黃巾聲勢的門檻排在它前面；割據 84 照態勢比高低（豪強最高是豪強坐大）。"""
     from tianxia import world as world_rules
 
-    c = third_party_gentry(real_content("weekend"))  # 群雄並起、豪強坐大是豪強第三方的規則（豪強分屬兩軍見 test_gentry_allied.py）
+    c = third_party_gentry(real_content("week7"))  # 群雄並起、豪強坐大是豪強第三方的規則（豪強分屬兩軍見 test_gentry_allied.py）
     for geju, fronts, ending in ((90, 50, "s1_warlords"), (84, 50, "s1_gentry"), (90, 88, "s1_huangtian")):
         _, vehicle = _late_season(c, 12, geju=geju, fronts=fronts)
         assert world_rules.evaluate_ending(vehicle, c).id == ending, (geju, fronts)
-
-
-def test_fb254_the_stance_card_says_separatism_waits_for_the_finale():
-    """態勢卡（玩法說明「收季：」同一句）：提前收季只寫官軍、黃巾；割據寫季末才判；結局提示不再說豪強「當場收場」。"""
-    from tianxia import guide, rules
-
-    c = third_party_gentry(real_content("weekend"))  # 割據那一句是豪強第三方的規則
-    season, vehicle = _late_season(c, 3, geju=40)
-    note = rules.stance_rule_note(vehicle, c)
-    assert note == ("第 10 週起，官軍或黃巾的態勢一到 85，這一季當場收場；"
-                    "否則到季末，豪強的態勢在 85 以上是群雄並起，不然比高低。")
-    hints = {e.id: e.hint for e in c.scenario.endings}
-    assert "當場收場" not in hints["s1_warlords"] and "季末" in hints["s1_warlords"]
-    assert "- 群雄並起：到了季末" in guide.quest_text(vehicle, c)
 
 
 def test_fb255_attacking_a_convoy_on_your_own_ground_does_not_say_it_is_theirs():
@@ -307,18 +281,18 @@ def test_fb257_the_fame_line_does_not_mention_training_when_sorties_are_on():
     from tianxia import howto
     from tianxia.world_state import fresh_season
 
-    c = real_content("weekend")
+    c = real_content("week7")
     season = fresh_season(c)
     line = " ".join(howto.fame_lines(c, season))
     assert "遊歷" not in line and "找事件" in line  # 一類一顆：事件都在找事件（FB-420 同一批）
     season.precise_actions = False  # 沒蓋章的季：出陣開著，戰後事件接在找素材撞上的那一場之後
     line = " ".join(howto.fame_lines(c, season))
     assert "遊歷" not in line and "找素材" in line
-    old = classic_rules(real_content("weekend"))
+    old = classic_rules(real_content("week7"))
     assert "遊歷之後" in " ".join(howto.fame_lines(old, fresh_season(old)))
 
 
 def test_fb248_with_the_sortie_off_the_neighbours_still_meet_the_convoy():
-    game = _game("guan", "changshe", content=classic_rules(real_content("weekend")))
+    game = _game("guan", "changshe", content=classic_rules(real_content("week7")))
     _intercept(game, "guan", "runan_wilds")
     assert orders.extra_enemies(game.state, game.content, "changshe", "guan") == [game.content.orders.convoy_squads["huang"]]
