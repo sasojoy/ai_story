@@ -102,3 +102,52 @@ def test_the_other_drills_still_report_the_xinde_line_and_hide_it_from_the_journ
     assert len(xinde) == 1 and game._draft.changes[0] == xinde[0] and (xinde[0], None) in game._draft.rewrites
     assert not [line for line in game._draft.entry(0.0, msgs).lines if line.startswith("心得 ")]
     game._draft = None
+
+
+# ── 2. FB-831：破境丹、回體丹 ──
+
+
+def test_a_legend_pill_find_lists_only_the_count_in_the_ledger():
+    game = ready(jianfa_game(), side="guan", loc="yingshui")
+    game.content.config.explore_legend_chance = 1.0  # 一定撿到
+    name, note = game.content.config.legend_item_name, game.content.config.legend_item_note
+    with _beats("material", "material", "material"):
+        msgs = game.choose("act:explore")
+    gains, _ = _ledger_parts(msgs)
+    assert f"{name} +1" in gains
+    assert not [g for g in gains if note in g or "一枚" in g or g.startswith("【")], gains  # 整句說明不當成一樣東西列
+    assert any(" ×" in g for g in gains)  # 素材照舊列
+    assert any(m.startswith("獲得 【") and note in m for m in msgs)  # 說明那一句照舊在訊息裡
+    assert any(note in line for line in game.state.journal[0].lines)  # 也在江湖紀錄的敘事裡
+
+
+def test_a_stamina_pill_find_lists_only_the_count_in_the_ledger():
+    game = ready(jianfa_game(), side="guan", loc="yingshui")
+    game.content.config.checkin.pill_drop = 1.0
+    game.content.config.training.goals = False
+    name = game.content.config.stamina_pill_name
+    with _beats("material", "material", "material"):
+        msgs = game.choose("act:explore")
+    gains, _ = _ledger_parts(msgs)
+    assert gains.count(f"{name} +1") == 1
+    assert not [g for g in gains if "一顆" in g or g.startswith("【")], gains
+    assert any(m.startswith("獲得 【") and "一顆" in m for m in msgs)
+
+
+def test_both_pills_in_one_outing_each_show_once():
+    game = ready(jianfa_game(), side="guan", loc="yingshui")
+    cfg = game.content.config
+    cfg.explore_legend_chance = 1.0
+    cfg.checkin.pill_drop = 1.0
+    cfg.training.goals = False
+    with _beats("material", "material", "material"):
+        msgs = game.choose("act:explore")
+    gains, _ = _ledger_parts(msgs)
+    assert gains.count(f"{cfg.legend_item_name} +1") == 1 and gains.count(f"{cfg.stamina_pill_name} +1") == 1
+    assert not [g for g in gains if not NUMERIC.match(g) and " ×" not in g], gains  # 帳上不是「名 +N」的只有「名 ×N」
+
+
+def test_is_item_tells_a_material_from_a_description():
+    assert explore_one.is_item("精鐵砂 ×2") and explore_one.is_item("驚羽 ×1（拾遺囊）")
+    assert not explore_one.is_item("【破境丹】一枚——衝擊絕學時可以服下，那一次的機會多幾分。")
+    assert not explore_one.is_item("【回體丹】一顆——不知誰落下的，正好收著。") and not explore_one.is_item("")

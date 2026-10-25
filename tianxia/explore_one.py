@@ -140,6 +140,13 @@ def items_of(lines: list[str], prefix: str) -> str:
     return "、".join(merge_items(line.removeprefix(prefix) for line in lines if line.startswith(prefix)))
 
 
+def is_item(text: str) -> bool:
+    """「精鐵砂 ×1」「驚羽 ×1（拾遺囊）」這種一樣東西的寫法（materials.item_text，後面可以接來源）。「獲得」開頭的敘事裡，
+    破境丹、回體丹那一句（「【破境丹】一枚——衝擊絕學時可以服下…」）是說明，不是一樣東西：得失那一行只列它後面的「破境丹 +1」（FB-831）。"""
+    name, sep, count = text.partition(" ×")
+    return bool(name) and bool(sep) and count[:1].isdigit()
+
+
 def merge_items(items: Iterable[str]) -> list[str]:
     """「精鐵砂 ×1」這種同一種的加總（照第一次出現的順序）；不是這種寫法的照原樣留著。"""
     counts: dict[str, int] = {}

@@ -5210,12 +5210,14 @@ class Game:
         return self._present(event, "explore") if event is not None else []
 
     def _outing_ledger(self, msgs: list[str], since: int) -> str:
-        """出門一趟最後那一行「得：…　失：…」：這一趟的訊息裡撿到的東西（「獲得 …」）與數值變化，加上草稿裡另外補的（仗的經驗，
-        since 之後那幾筆）；同一個標籤加總，增加的寫在「得」、減少的（與內傷）寫在「失」。"""
+        """出門一趟最後那一行「得：…　失：…」：這一趟的訊息裡撿到的東西（「獲得 精鐵砂 ×1」，只列這種「名 ×數量」的；破境丹、回體丹
+        那一句說明不是一樣東西，帳上只列它後面的「破境丹 +1」，FB-831）與數值變化，加上草稿裡另外補的（仗的經驗，since 之後那幾筆）；
+        同一個標籤加總，增加的寫在「得」、減少的（與內傷）寫在「失」。"""
         extra = self._draft.changes[since:] if self._draft is not None else []
         changes, notes = battlelog.split_changes(msgs)
         totals = journal.combine_changes(changes + extra)
-        items = explore_one.merge_items(note.removeprefix(materials.GRANT_PREFIX) for note in notes if note.startswith(materials.GRANT_PREFIX))
+        grants = (note.removeprefix(materials.GRANT_PREFIX) for note in notes if note.startswith(materials.GRANT_PREFIX))
+        items = explore_one.merge_items(item for item in grants if explore_one.is_item(item))
         gains = items + [ch for ch in totals if journal.change_class(ch) == "tx-up"]
         losses = [ch for ch in totals if journal.change_class(ch) == "tx-down"]
         return explore_one.ledger(gains, losses)
