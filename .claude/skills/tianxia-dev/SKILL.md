@@ -205,6 +205,10 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 - **有一個「另外擲的」對手（頭目）不要算進「這裡有沒有對手」**（減法季批 2 修正輪 FB-815，2026-10-26）：`_outing_plan` 把頭目也算 `has_foes`，只有頭目的地點遭遇那一格就留著、遭遇拍一定撞上他（長社官軍 400 趟 387 趟）。唯讀的計畫（比重、鈕上的小字、假人打分數）只看一般對手；頭目在做動作時另擲一次（亂數用「頭目」這個新用途，不動別的序列），擲中才把遭遇拍放進這一趟（`explore_one.draw(bounty_here=True)` 的「第一拍就是遭遇」，比重改回 `has_foes=True` 那一份）。測試兩條：一趟的機會約 5%（`_duel_start` 換成只記一筆、連出 400 趟、斷言落在一個帶子裡），以及把倍數拉到一定擲中（`renown.duel_chance` 回 20）斷言**每一趟**都有頭目——只有後一條抓得到「擲中了卻沒有遭遇拍」的變異。
 - **新規則改了一句話，用正式內容 week7／season21 斷言舊句子的舊測試會紅**（同批 `test_core_loop_fb.py::test_fb250`）：`test_for` 挑得到、grep 舊常數名（`RANGER_LINE_PRECISE`）也找得到；在那一條測試開頭叫 `jianfa_kit.classic_explore(game.content)` 鎖舊句子，新句子的斷言放在新規則自己的測試檔，不改舊斷言。
 - **兩局測試各有一份內容**：`conquest_kit.conquest_game()`（同 `test_territory._game`）每一局各載一份 `real_content` 的複本，同一個資料庫開兩局時，在測試裡往內容加東西（例：借一份戰鬥範本）要兩局都加，不然第二局找不到、畫面靜靜地沒有那一場。
+- **同一筆數值同時放進回傳訊息與 `Draft.changes` 的 helper，呼叫端又兩邊加總就會兩倍**（減法季批 2 小修 FB-830，2026-10-26）：`_drill_gains`／`_town_drill` 慣例是「訊息放『心得 +N』、`_draft.hide(那一行)`、`_draft.changes.append(那一行)`」（江湖紀錄的標籤由草稿記、敘事裡收掉那一行），`_outing_ledger` 卻把 `msgs` 與 `_draft.changes[since:]` 都加進去，比劃那一趟「得：」寫 +22（實際 +11）。修法是給 helper 一個 `echo` 旗標（出門一趟的比劃傳 False：只由草稿記；沒有草稿時照樣放進訊息，直接叫的人才不漏帳），別的呼叫端不動。**網頁不畫回傳的訊息清單（`web/` 沒有讀 `log`），玩家看到的是江湖紀錄**：QA 說「多一則單獨的訊息」是看回傳清單看到的；測試要同時斷言訊息清單、帳那一行、`journal[0].changes` 三處，並加一條通則「帳上的數值＝紀錄標籤」跑每一種拍（`tests/test_explore_one_polish.py::test_the_ledger_numbers_are_the_numbers_the_journal_chips_show`）。
+- **「獲得 …」開頭的訊息不全是東西**（FB-831）：素材、拾遺囊、伏筆物品是「獲得 名 ×N」，破境丹與回體丹是「獲得 【名】一枚／一顆——說明」加一行「名 +1」；帳上只列「名 ×N」的（`explore_one.is_item`），其餘用「名 +1」那一行。新加一種稀有掉落照這兩行的寫法，帳不必改。
+- **把畫面上的字改成照規則的實際比重寫，會連帶改到別的地點**（FB-832）：`plan.weights` 已經夾過危險度，照「最重的一類」寫之後，不只 QA 抓到的兩處（長社官軍、洛陽官道黃巾）變，寺類（事件 50 > 感悟 30）、危險度高的山與渡口也變。改之前用一支「每一處 × 四種身分」的前後對照腳本（scratchpad `jianfa-2c/s/hints_all.py`，base 與 HEAD 各解一份）列出所有變動的組合，再回報 PM；有照地點種類寫的另一份字（輿圖名字旁的 `MOSTLY`、玩法說明的 `HINTS`）要講清楚留不留。
+- **`HintDef` 加一種變體句**（例 `explore_one`）：`hints.note_for` 取 `rules.jianfa` 要在函式裡延後 import（`rules` 很大，`content` 也 import `hints`）；`content.validate` 的 `{名字}` 檢查那一串與「引薦人的條不寫」要一起加；`tests/test_real_content.py` 的 `_hint_cells`、`PLACEHOLDER_LINES`、句數（37→38）要一起改。
 
 ## 量表怎麼讀
 
