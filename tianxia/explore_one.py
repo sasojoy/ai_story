@@ -4,8 +4,9 @@
 按一下「探索」＝出門一趟：連抽 `beats`（3）拍，每一拍照這一處的表抽一類——事件、遭遇、素材、感悟。素材與遭遇自動結算；
 事件與感悟要玩家選（`CHOICE`），一趟最多一個、排最後。同一類一趟最多兩拍。
 
-cfg 是 `jianfa_numbers.JianfaNumbers`（批 0 之後是 `Config.jianfa`）；地點只讀 `tags` 與 `danger`。不 import engine、不碰 Game.rng：
-開關、選單、逐拍結算、段落與「剛剛」那一則都在引擎接線（Task 2-3，批 0 之後）。
+cfg 是 `Config.jianfa`（`models.JianfaRules`，繼承 `jianfa_numbers.JianfaNumbers`；純規則的測試直接建後者）；地點只讀 `tags`、
+`danger` 與 `explore_mix`。不 import engine、不碰 Game.rng：開關、選單、逐拍結算在引擎（`Game._explore_one`，Task 2-3）；
+這裡另放鈕上的小字（`HINTS`）與段落的寫法（`paragraph`：照 content/outing_lines.json 每一拍抽一句、接成一段，結尾「得：…　失：…」）。
 """
 
 from __future__ import annotations
@@ -103,3 +104,81 @@ def rng_for(season: int, name: str, serial: int, what: str) -> random.Random:
     """出門這一趟、這一個用途自己的亂數：季數｜名號｜第幾次探索（PlayerState.explore_seq）｜用途。決定性，不動 Game.rng；
     跟 `explore_modes.rng_for`（「探索|…」）分開，拍裡叫的舊結算照舊用它自己的。"""
     return random.Random(f"出門|{season}|{name}|{serial}|{what}")
+
+
+# ── 鈕上的小字與段落（Task 2-3；字都待 joy 潤）──
+
+# 「探索（體力 18・多半有事）」括號裡最後那一段（網頁拿它當行動列格子的小字，最多六個字）：照這一處的表；設計 4.1「地點決定多半給什麼」
+HINTS = {TOWN: "多半有事", TEMPLE: "多半有悟", FORD: "各樣參半", WILD: "多半遇敵", HILL: "多半有料", CAMP: "多半遇敵"}
+BOUNTY_HINT = "有賞"  # 接了這裡的討伐懸賞：「多半」兩字換成「有賞」（設計 4.1）
+SPAR_HINT = "同袍比劃"  # 自家營寨：遭遇是跟同袍比劃
+BEAT_WORDS = {EVENT: "遇事", ENCOUNTER: "遇敵", MATERIAL: "得料", INSIGHT: "有悟"}  # 一拍的那一類寫成兩個字（紀錄的結果標記、行動列底下那一行）
+TRAVELER = "旅人"  # 野類地點的事件拍偏這個標籤的事件（救助旅人那一類；content.check_explore_one 驗至少三則、都在野類地點）
+
+
+def tag_of(beats: list[str]) -> str:
+    """這一趟江湖紀錄的結果標記：抽到的幾類照順序、不重複，「得料・遇敵・遇事」。"""
+    return "・".join(dict.fromkeys(BEAT_WORDS[b] for b in beats))
+
+
+def items_of(lines: list[str], prefix: str) -> str:
+    """素材那幾句「獲得 精鐵砂 ×1」去掉開頭（materials.GRANT_PREFIX）、同一種的數量加起來、用頓號接起來：「精鐵砂 ×2、獸皮 ×1」；
+    一句都沒有是空字串。不是「名字 ×數量」寫法的照原樣列。"""
+    return "、".join(merge_items(line.removeprefix(prefix) for line in lines if line.startswith(prefix)))
+
+
+def merge_items(items: Iterable[str]) -> list[str]:
+    """「精鐵砂 ×1」這種同一種的加總（照第一次出現的順序）；不是這種寫法的照原樣留著。"""
+    counts: dict[str, int] = {}
+    order: list[str] = []
+    for item in items:
+        name, sep, count = item.rpartition(" ×")
+        if sep and count.isdigit():
+            if name not in counts:
+                order.append(name)
+            counts[name] = counts.get(name, 0) + int(count)
+        else:
+            order.append(item)
+    return [f"{key} ×{counts[key]}" if key in counts else key for key in order]
+
+# content/outing_lines.json 的組與鍵（content.check_outing_lines 驗）；句子裡可以寫 {place} 地點、{foe} 對手、{item} 素材
+LINE_KEYS: dict[str, tuple[str, ...]] = {
+    "open": (TOWN, TEMPLE, FORD, WILD, HILL, CAMP),  # 出門那一句，照這一處是哪一種地點
+    "material": ("found",),  # 素材拍撿到東西（item 是「精鐵砂 ×1」這種）
+    # 遭遇拍：打贏、僵持、落敗；城裡的地痞（town_*）；自家營寨跟同袍比劃（spar）；頭目擋路（boss，接著就是頭目戰）
+    "encounter": ("win", "draw", "lose", "town_win", "town_lose", "spar", "boss"),
+    "event": ("lead",),  # 事件拍：接在事件卡前面那一句
+    "insight": ("lead",),  # 感悟拍：接在有所感前面那一句
+    # 結尾：疲勞打了折（tired）、對手配不上你（outlevel）、境界已到經驗換心得（capped）、三拍都沒收穫補一個一階（empty）
+    "close": ("tired", "outlevel", "capped", "empty"),
+}
+SAMPLE = {"place": "潁水河畔", "foe": "河灘潑皮", "item": "精鐵砂 ×1"}  # 驗句子填不填得進去用的（content.check_outing_lines）
+# 內容沒有 outing_lines.json 時的退路（測試內容）：每一個鍵一句
+FALLBACK: dict[str, dict[str, list[str]]] = {
+    "open": {k: ["你出了門，往{place}一帶走了一趟。"] for k in LINE_KEYS["open"]},
+    "material": {"found": ["路上撿了{item}。"]},
+    "encounter": {
+        "win": ["半路撞上{foe}，你佔了上風。"], "draw": ["半路撞上{foe}，相持不下。"], "lose": ["半路撞上{foe}，你吃了虧。"],
+        "town_win": ["街角的{foe}找碴，被你打發了。"], "town_lose": ["街角的{foe}找碴，你吃了點虧。"],
+        "spar": ["營裡的{foe}拉你比劃了幾手。"], "boss": ["前頭有人擋住去路，是{foe}。"],
+    },
+    "event": {"lead": ["走著走著，碰上一樁事。"]},
+    "insight": {"lead": ["走著走著，忽然心有所感。"]},
+    "close": {
+        "tired": ["今天練得多了，收穫漸少。"], "outlevel": ["這一帶的對手已經配不上你，所得有限。"],
+        "capped": ["境界已到，再往上只能打出來。"], "empty": ["一路沒什麼收穫，只在路邊拾了{item}。"],
+    },
+}
+
+
+def line(lines: Mapping[str, Mapping[str, list[str]]], group: str, key: str, rng: random.Random, **slots: str) -> str:
+    """段落的一句：outing_lines（Content.outing_lines）那一組那一個鍵挑一句（沒寫照 FALLBACK），填上 slots（沒給的填空字串）。擲一次 rng。"""
+    pool = (lines.get(group) or {}).get(key) or FALLBACK[group][key]
+    filled = {name: "" for name in SAMPLE} | slots
+    return rng.choice(pool).format(**filled)
+
+
+def ledger(gains: list[str], losses: list[str]) -> str:
+    """段落最後那一行「得：精鐵砂 ×1、銀兩 +5　失：氣血 -12」：兩樣都沒有是空字串，只有一樣只寫那一樣。"""
+    parts = ([f"得：{'、'.join(gains)}"] if gains else []) + ([f"失：{'、'.join(losses)}"] if losses else [])
+    return "　".join(parts)

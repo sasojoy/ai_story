@@ -5,6 +5,7 @@ from __future__ import annotations
 import random
 
 from conftest import real_content
+from jianfa_kit import no_jianfa
 
 from tianxia import checkin
 from tianxia.content import _material_sources
@@ -239,7 +240,9 @@ def _explore(game, mode):
 
 
 def _sure_drop(c):
+    """一定掉丹；測的是探索三選一的找素材、練功、找事件（減法季探索一顆開著時選單上沒有這幾顆），減法季關掉（jianfa_kit.no_jianfa）。"""
     c.config.checkin.pill_drop = 1.0
+    no_jianfa(c)
 
 
 def test_gather_and_practice_drop_a_pill():
@@ -270,7 +273,7 @@ def test_no_pill_drop_outside_season21():
 def test_pill_drop_uses_its_own_dice():
     found = []
     for chance in (0.0, 1.0):
-        game = _game(setup=lambda c, chance=chance: setattr(c.config.checkin, "pill_drop", chance))
+        game = _game(setup=lambda c, chance=chance: (setattr(c.config.checkin, "pill_drop", chance), no_jianfa(c)))  # 找素材：同 _sure_drop
         bag = dict(game.state.player.materials)
         _explore(game, "gather")
         found.append({k: v - bag.get(k, 0) for k, v in game.state.player.materials.items() if v != bag.get(k, 0)})

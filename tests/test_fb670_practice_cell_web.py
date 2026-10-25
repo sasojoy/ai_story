@@ -12,6 +12,7 @@ import re
 
 import pytest
 from conftest import classic_rules, real_content
+from jianfa_kit import no_jianfa
 from test_prologue_web import run, with_reveal
 
 import server
@@ -36,6 +37,7 @@ PRACTICE = "explore:practice"
 def _content(profile):
     c = real_content(profile)
     c.config.training.enabled = False
+    no_jianfa(c)  # 減法季探索一顆開著時沒有練功這一格（tests/test_explore_one.py）：這一份測的是舊的練功格
     return c
 
 

@@ -14,6 +14,7 @@ from collections.abc import Sequence
 
 from . import allied as allied_rules
 from . import calendar, conquest, economy, equipment, explore_modes, figures, four_tiers, mall, precise, renown, rules, seal, sortie, territory, timetable, training
+from . import explore_one  # 減法季探索一顆（批 2）：行動列底下那一行用同一份兩個字的叫法
 from .models import Content
 from .rules import STANCE_NAMES  # 態勢卡上三方的叫法（官軍、黃巾、豪強）：說明跟卡上同一個叫法
 from .state import GameState, WorldState
@@ -57,6 +58,30 @@ TERRAIN_HOWTO = ("- 各地的氣象不同：身上的武學、內功跟此地最
 EXPLORE_FIGHT = "（這裡可能撞上怪，打贏是經驗的大宗）"
 EXPLORE_CALM = "（這裡不會撞上怪）"
 EXPLORE_NO_SENSE = "（這裡悟不出什麼）"
+
+
+# 減法季探索一顆（整合設計 4.1，批 2）：行動列底下探索那一行。照擲骰用的那一份比重（Game._outing_weights）排，不寫百分比；都待 joy 潤
+OUTING_WORDS = explore_one.BEAT_WORDS
+OUTING_HEAD = "出門一趟走{beats}拍"
+OUTING_TAIL = "；要選的事件、感悟一趟最多一回，放在最後"
+OUTING_FOE = {"town": "；城裡遇敵是街上的地痞，給得少", "spar": "；自家營寨遇敵是跟同袍比劃，不掉東西",
+              "bounty": "；接了這裡的討伐，至少一拍撞上懸賞那一路"}
+
+
+def outing_line(weights: dict[str, float], beats: int, foe: str | None = None) -> str:
+    """探索一顆開著時行動列底下探索那一行（Game.action_notes）：weights 是這一處每一拍的比重（做不了的已經是 0）；比重最大的寫「多半」、
+    其他照大小寫「也可能」，並列最大一起寫「可能」，只剩一類寫「會」（同 explore_line 的寫法）。foe：城裡的地痞（"town"）、自家營寨的比劃
+    （"spar"）、接了這裡的討伐（"bounty"）各補一句，其餘 None。"""
+    ranked = sorted(((k, w) for k, w in weights.items() if w > 0), key=lambda pair: -pair[1])
+    words = [OUTING_WORDS[k] for k, _ in ranked]
+    if len(words) == 1:
+        body = f"，會{words[0]}"
+    elif ranked and ranked[0][1] > ranked[1][1]:
+        body = f"，多半{words[0]}，也可能{'、'.join(words[1:])}"
+    else:
+        body = f"，可能{'、'.join(words)}" if words else ""
+    count = "一兩三四五六".__getitem__(beats - 1) if 1 <= beats <= 6 else str(beats)
+    return OUTING_HEAD.format(beats=count) + body + OUTING_FOE.get(foe or "", "") + OUTING_TAIL
 
 
 def explore_modes_line(fight: bool, sense: bool) -> str:

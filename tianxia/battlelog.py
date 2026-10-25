@@ -28,6 +28,7 @@ FULL_LOG_HEAD = "**完整戰況**"  # 決戰戰報最後一段（BattleRecord.lo
 TIER_WORDS = {"大勝": "大勝", "險勝": "險勝", "僵持": "平手", "落敗": "落敗"}
 KIND_WORDS = {"train": "遊歷", "event": "劇情", "wild": "探索遇敵", "showdown": "決戰", "siege": "攻城", "spar": "切磋", "raid": "截殺", "duel": "頭目戰", "seal": "奪璽", "arena": "擂台", "sortie": "出陣", "ambush": "設伏", "assassin": "殺手", "melee": "混戰"}
 NO_RECORD = "（還沒有戰報。）"
+OUTING_LABEL = "出門一趟・遭遇"  # 減法季探索一顆（批 2）遭遇拍那一場的戰報標題（BattleRecord.label，取代「探索遇敵」）；待 joy 潤
 DODGE_NOTE = "身法一閃，躲過了這一敗。"  # 落敗被閃成僵持時，戰報與場景的戰鬥卡片多這一句（人物資質設計 14.4）
 DAY = 86400
 HOUR = 3600
