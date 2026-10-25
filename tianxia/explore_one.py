@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .jianfa_numbers import ExploreOneTable, JianfaNumbers
 
+TOWN, TEMPLE, FORD, WILD, HILL, CAMP = "town", "temple", "ford", "wild", "hill", "camp"  # 六種地點（jianfa_numbers.ExploreKind）
 EVENT, ENCOUNTER, MATERIAL, INSIGHT = "event", "encounter", "material", "insight"
 KINDS = (EVENT, ENCOUNTER, MATERIAL, INSIGHT)  # 一拍的四類（比重的鍵照這個順序）
 CHOICE = (EVENT, INSIGHT)  # 要玩家選的拍：一趟最多一個、排最後
@@ -43,8 +44,9 @@ def weights(cfg: JianfaNumbers, loc, *, has_foes: bool, bounty_here: bool = Fals
     """這一處每一拍四類的比重（設計 4.1）：
     - 照表；危險度每多一星（一星就是表上的數字），遭遇 +`danger_shift`、事件 −`danger_shift`，這兩欄夾在 `beat_floor`～`beat_cap`；
     - 接了這裡的討伐懸賞（bounty_here）：遭遇 +`bounty_encounter_bonus`、夾在 `beat_cap`（懸賞那一路易手了也找得到，所以不看 has_foes）；
-    - 沒接懸賞、這裡沒有對手（has_foes：引擎照此刻站的、不是自家的隊伍判）：遭遇是 0，那一份照比重分給其餘三類。"""
-    t = kind_of(cfg, loc)
+    - 沒接懸賞、這裡沒有對手（has_foes：引擎照此刻站的、不是自家的隊伍判）：遭遇是 0，那一份照比重分給其餘三類。
+    地點自己寫了四欄（`Location.explore_mix`，設計 4.1 的覆寫）就照它，不照表的四欄。"""
+    t = getattr(loc, "explore_mix", None) or kind_of(cfg, loc)
     got = {EVENT: t.event, ENCOUNTER: t.encounter, MATERIAL: t.material, INSIGHT: t.insight}
     shift = cfg.danger_shift * (loc.danger - 1)
     if shift:
