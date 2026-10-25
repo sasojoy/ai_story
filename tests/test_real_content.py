@@ -287,12 +287,12 @@ def test_the_real_steps_say_the_craft_tab_by_its_name_and_the_farewell_is_paged(
     p11 分三頁（三邊收人、使命、盤纏與輿圖），最後一頁帶著要做的事，只有 p11 分頁。"""
     steps = {step.id: step for step in content.tutorial.steps}
     # 武學重構：p4 是在修練頁把意境裝進槽（不花心得體力），花 5 點心得的是 p6 在煉製頁的揣摩（爐裡只合意境，Joy 2026-10-21）
-    assert "『煉製』" not in steps["p4_fuse"].text and "到「修練」那裡" in steps["p4_fuse"].text and "合成」那裡" not in steps["p4_fuse"].text
+    assert "『煉製』" not in steps["p4_fuse"].text and "到「俠客」那裡" in steps["p4_fuse"].text and "合成」那裡" not in steps["p4_fuse"].text
     assert "不花心得也不花體力" in steps["p4_fuse"].text and "花你 5 點心得" in steps["p6_deepen"].text
-    assert steps["p4_fuse"].line == "到「修練」把意境裝進基礎拳腳的槽"
-    assert "『煉製』" not in steps["p6_deepen"].text and "到「煉製」" in steps["p6_deepen"].line
-    # 武學重構：p5 練的是身上的基礎拳腳、不在功法庫，那一句只指到「修練」；熔煉那一步才講功法庫
-    assert "「修練」" in steps["p5_level"].text and "功法庫" in steps["p10_melt"].line  # 修練頁的列表標題叫「功法庫」（arts-polish-1）
+    assert steps["p4_fuse"].line == "到「俠客」把意境裝進基礎拳腳的槽"
+    assert "『煉製』" not in steps["p6_deepen"].text and "到「俠客」頁的「煉製」" in steps["p6_deepen"].line
+    # 武學重構：p5 練的是身上的基礎拳腳、不在功法庫，那一句只指到「俠客」（分頁 2026-10-25 起叫俠客，煉製是俠客頁裡的鈕，減法季批 8）；熔煉那一步才講功法庫
+    assert "「俠客」" in steps["p5_level"].text and "「修練」" not in steps["p5_level"].text and "功法庫" in steps["p10_melt"].line  # 修練頁的列表標題叫「功法庫」（arts-polish-1）
     p11 = steps["p11_farewell"]
     pages = p11.text.split("\n\n")
     assert p11.paged and len(pages) == 3 and "輿圖" in pages[-1] and "天命裂了一道縫" in pages[1]

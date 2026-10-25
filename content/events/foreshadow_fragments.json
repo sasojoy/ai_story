@@ -2,6 +2,7 @@
   {
     "id": "fs_ev_boatman",
     "title": "老船夫",
+    "image": "river",
     "tags": ["待joy寫"],
     "locations": ["yingshui"],
     "text": "潁水邊的老船夫在補船，一邊補一邊跟你聊起天氣。",
@@ -12,6 +13,7 @@
   {
     "id": "fs_ev_xinye_doctor",
     "title": "新野老醫",
+    "image": "clinic",
     "tags": ["待joy寫"],
     "locations": ["xinye"],
     "condition": {"factions": ["huang"]},
@@ -23,6 +25,7 @@
   {
     "id": "fs_ev_xinye_clerk",
     "title": "新野老縣吏",
+    "image": "office",
     "tags": ["待joy寫"],
     "locations": ["xinye"],
     "condition": {"factions": ["haoqiang"]},
@@ -34,6 +37,7 @@
   {
     "id": "fs_ev_two_buyers",
     "title": "兩路買家",
+    "image": "market",
     "tags": ["待joy寫"],
     "locations": ["runan_market"],
     "condition": {"factions": ["haoqiang"], "week_min": 4, "week_max": 6, "cal_day_min": 6, "cal_day_max": 11, "cal_day_min7": 2, "cal_day_max7": 4},

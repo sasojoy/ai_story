@@ -429,6 +429,9 @@ class Event(_Strict):
     id: str
     title: str
     text: str
+    # 事件卡的插圖（減法季批 8 圖像版）：20 類場景的類型鍵（content/art.json 的 events；圖檔是 web/img/events/<鍵>.webp）。
+    # 沒寫就沒圖、卡片一字不變；伺服器另看圖檔在不在（server.scene_art）
+    image: str | None = None
     actions: list[ActionKind] = Field(default_factory=lambda: ["explore"])  # 空清單＝只能由 next_event 串接
     locations: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
@@ -542,6 +545,9 @@ class Location(_Strict):
     tags: list[str] = Field(default_factory=list)
     danger: int = Field(default=1, ge=1, le=3)
     important: bool = False
+    # 江湖頁站在這裡時場景卡上面的圖（減法季批 8）：web/img/ 底下不含副檔名的路徑（例 places/yingru）；
+    # 沒寫就退回所屬大區的 places/<大區 id>（atlas.region_of），沒有大區是 places/world
+    image: str | None = None
     enemies: list[str] = Field(default_factory=list)
     train_trend: dict[str, int] = Field(default_factory=dict)  # 遊歷打贏／操練推大勢的量；正負是散人的方向，有陣營目標的人照自己的目標推（Game._train_push）
     materials: list[str] = Field(default_factory=list)  # 路邊採集（兩頭的地點）出什麼屬性的素材：採到的是那些屬性的一階；探索不再撿素材（探索改悟意境，見 insights）
@@ -824,6 +830,7 @@ class CharacterDef(_Strict):
     deep_interaction: bool = False  # 是否走 companion_agent.py 的即時 LLM 對話（見設計文件四.3）
     recruit_at: str | None = None  # 可招募的同伴在哪個地點找得到他（龍頭人物不填，用 talk_at）
     talk_at: str | None = None  # kind=locked 的龍頭人物在哪個地點可以深度對話（不可招募，見上一輪「還要改進」5）
+    image: str | None = None  # 跟他談話時場景卡上面的人物像（減法季批 8）：web/img/ 底下不含副檔名的路徑（例 figures/luzhi）；沒寫就沒圖
     affinity_tag_deltas: dict[str, int] | None = None  # 覆寫 companion_agent.AFFINITY_TAG_DELTAS 的個別項目；None／缺的 tag 用預設值
     audience_fame: int = 0  # 求見門檻：名望要到多少才見得到他（透過他的「結識」劇情事件認識的人不受限制）
     brush_off: list[str] = Field(default_factory=list)  # 名望不夠時打發人的話（他自己的口吻，最多三句，武學與成長設計 9.1）
@@ -4626,6 +4633,13 @@ class CreateForms(_Strict):
     moves: list[CreateMove] = Field(default_factory=list)
 
 
+class ArtBook(_Strict):
+    """圖的分類表（content/art.json，減法季批 8 圖像版；第一批圖提示單）：events 是事件插圖的 20 類，類型鍵 → 名字
+    （圖檔 web/img/events/<鍵>.webp）。事件的 image 只能寫這裡有的鍵，分類表在內容檔、不寫死在程式。"""
+
+    events: dict[str, str] = Field(default_factory=dict)
+
+
 class Content(_Strict):
     config: Config
     scenario: Scenario
@@ -4674,6 +4688,7 @@ class Content(_Strict):
     mark_rules: list[MarkRule] = Field(default_factory=list)  # 地方痕跡過門檻（content/mark_rules.json，減法季批 4）；沒有這個檔就是空的
     map: MapLayout
     tutorial: Tutorial
+    art: ArtBook = Field(default_factory=ArtBook)  # 圖的分類表（content/art.json，減法季批 8）；沒有這個檔就是空的（事件不准寫 image）
     opening: Opening | None = None  # 開局第一分鐘（content/opening.json，減法季批 7）；沒有這個檔就沒有（測試內容、舊內容照走草廬）
     hints: Hints = Field(default_factory=Hints)  # 碰到才說（content/hints.json，新手引導計畫三）；沒有這個檔就是沒有提示
     check_voice: CheckVoice = Field(default_factory=CheckVoice)  # 檢定選項括號裡的那一句（content/check_voice.json，載入時必備）

@@ -2,6 +2,7 @@
   {
     "id": "fs_prep_reeds",
     "title": "河灘蘆葦",
+    "image": "river",
     "tags": ["待joy寫"],
     "locations": ["yingshui", "yingchuan_wilds"],
     "condition": {"factions": ["guan"]},
@@ -14,6 +15,7 @@
   {
     "id": "fs_prep_oil",
     "title": "油坊",
+    "image": "market",
     "tags": ["待joy寫"],
     "locations": ["runan_market"],
     "condition": {"factions": ["guan"]},
@@ -27,6 +29,7 @@
   {
     "id": "fs_prep_dry_reeds",
     "title": "城頭的乾葦",
+    "image": "town",
     "tags": ["待joy寫"],
     "locations": ["changshe"],
     "condition": {"factions": ["huang"]},
@@ -41,6 +44,7 @@
   {
     "id": "fs_prep_blood_letter",
     "title": "塢堡裡的前任郡丞",
+    "image": "fort",
     "tags": ["待joy寫"],
     "locations": ["haozu_fort"],
     "condition": {"factions": ["guan"]},
@@ -55,6 +59,7 @@
   {
     "id": "fs_prep_ledger",
     "title": "渡口的帳房",
+    "image": "river",
     "tags": ["待joy寫"],
     "locations": ["mengjin_ford"],
     "condition": {"factions": ["guan"], "night": true},
@@ -69,6 +74,7 @@
   {
     "id": "fs_prep_witness",
     "title": "不合的小黃門",
+    "image": "office",
     "tags": ["待joy寫"],
     "locations": ["luoyang_palace"],
     "condition": {"factions": ["guan"]},
@@ -82,6 +88,7 @@
   {
     "id": "fs_prep_herb",
     "title": "背陰崖下的草",
+    "image": "forest",
     "tags": ["待joy寫"],
     "locations": ["deep_mountain"],
     "condition": {"factions": ["huang"]},
@@ -94,6 +101,7 @@
   {
     "id": "fs_prep_ash",
     "title": "南華觀的老道",
+    "image": "temple",
     "tags": ["待joy寫"],
     "locations": ["jade_cave"],
     "condition": {"factions": ["huang"]},
@@ -108,6 +116,7 @@
   {
     "id": "fs_prep_fungus",
     "title": "老樹根下",
+    "image": "forest",
     "tags": ["待joy寫"],
     "locations": ["yu_river"],
     "condition": {"factions": ["huang"]},

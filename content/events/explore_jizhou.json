@@ -2,6 +2,7 @@
   {
     "id": "jz_altar_talisman",
     "title": "符水療病",
+    "image": "altar",
     "locations": [
       "julu_altar"
     ],
@@ -159,6 +160,7 @@
   {
     "id": "jz_altar_roster",
     "title": "道籍名冊",
+    "image": "altar",
     "locations": [
       "julu_altar"
     ],
@@ -270,6 +272,7 @@
   {
     "id": "jz_gz_deserter",
     "title": "夜渡深壕",
+    "image": "night",
     "locations": [
       "guangzong"
     ],
@@ -382,6 +385,7 @@
   {
     "id": "jz_gz_drumsignal",
     "title": "營壘鼓號",
+    "image": "camp",
     "locations": [
       "guangzong"
     ],
@@ -481,6 +485,7 @@
   {
     "id": "jz_gz_forge",
     "title": "犁頭鑄矛",
+    "image": "town",
     "locations": [
       "guangzong"
     ],
@@ -542,6 +547,7 @@
   {
     "id": "jz_lz_bamboo",
     "title": "軍書謄抄",
+    "image": "camp",
     "locations": [
       "luzhi_camp"
     ],
@@ -598,6 +604,7 @@
   {
     "id": "jz_lz_siegework",
     "title": "掘壕圍城",
+    "image": "camp",
     "locations": [
       "luzhi_camp"
     ],
@@ -810,6 +817,7 @@
   {
     "id": "jz_xqy_cellar",
     "title": "空村地窖",
+    "image": "village",
     "locations": [
       "xiaquyang"
     ],
@@ -950,6 +958,7 @@
   {
     "id": "jz_xqy_wallhaul",
     "title": "城下徵夫",
+    "image": "town",
     "locations": [
       "xiaquyang"
     ],
@@ -1062,6 +1071,7 @@
   {
     "id": "jz_hz_tower",
     "title": "箭樓守夜",
+    "image": "fort",
     "locations": [
       "haozu_fort"
     ],
@@ -1123,6 +1133,7 @@
   {
     "id": "jz_hz_rentdebt",
     "title": "佃戶欠租",
+    "image": "fort",
     "locations": [
       "haozu_fort"
     ],
@@ -1311,6 +1322,7 @@
   {
     "id": "jz_hz_stonelock",
     "title": "部曲試力",
+    "image": "fort",
     "locations": [
       "haozu_fort"
     ],
@@ -1366,6 +1378,7 @@
   {
     "id": "jz_bm_goatraft",
     "title": "羊皮筏子",
+    "image": "river",
     "locations": [
       "baima_ford"
     ],
@@ -1422,6 +1435,7 @@
   {
     "id": "jz_bm_pirates",
     "title": "水寇攔舟",
+    "image": "river",
     "locations": [
       "baima_ford"
     ],
@@ -1598,6 +1612,7 @@
   {
     "id": "jz_bm_passcheck",
     "title": "渡口驗傳",
+    "image": "river",
     "locations": [
       "baima_ford"
     ],

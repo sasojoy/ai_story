@@ -84,6 +84,21 @@ ROOT = Path(__file__).parent
 WEB = ROOT / "web"
 
 
+def scene_art(game: Game, status: dict) -> dict | None:
+    """江湖頁場景卡上面那張圖（減法季批 8 圖像版）：引擎挑圖（Game.scene_art），這裡只看 web/img/<路徑>.webp 真的在不在——
+    沒檔案就不給（None），網頁一字不變（同 horse_art：正式圖到了放進資料夾就上，程式不用改）。head 是場景 Markdown 的第一段轉好的
+    HTML，網頁有圖時把那一段拿掉、把地名／危險／時刻（事件標題；人名與情誼）疊在圖的下緣。"""
+    got = game.scene_art()
+    if got is None or not (WEB / "img" / f"{got['path']}.webp").is_file():
+        return None
+    cal = status.get("calendar")
+    when = cal["text"] if cal and cal.get("text") else f"第{status['day']}天 {status['clock']}"
+    return {
+        "kind": got["kind"], "src": f"/static/img/{got['path']}.webp", "title": got["title"], "sub": got["sub"],
+        "time": when if got["kind"] == "place" else "", "head": md(got["head"]),
+    }
+
+
 def horse_art() -> list[str]:
     """web/ 裡真的有的馬圖（web/horse-<鍵>.webp，鍵見 mounts.COAT_ART、STEED_ART）：網頁只對這些鍵放圖，其餘照舊畫色塊。"""
     return sorted(path.stem.removeprefix("horse-") for path in WEB.glob("horse-*.webp"))
@@ -1626,6 +1641,7 @@ def _main_view_body(game: Game) -> dict:
         "status": status,
         "quest": quest,
         "scene": scene,
+        "art": scene_art(game, status),  # 場景卡上面那張圖（減法季批 8）：事件插圖、人物像或地點的圖；沒有圖檔是 None、網頁一字不變
         "options": [o.model_dump() for o in options],
         "say_max": game.say_max(),  # 「自己說」最多幾個字（NPC 智能 2.0開著時比較長，網頁的輸入框照它）
         # 出陣開著（出陣探索與地盤設計第二節）：行動列那一格叫「出陣」、等候的話換一句；關著時照舊「遊歷」

@@ -4324,7 +4324,7 @@ def test_the_real_prologue_recap_reads_the_whole_prologue(client):
     """正式內容的序章回顧：遇險、拜師、師父十一步的話照順序排成一頁，沒有沒換掉的佔位字。"""
     _player(client, "shen_04", "沈青衫", prologue=True)
     text = client.get("/api/prologue").json()["text"]
-    assert text.index("潁川城外") < text.index("草廬") < text.index("去，按底下的「修練」") < text.index("這是盤纏")
+    assert text.index("潁川城外") < text.index("草廬") < text.index("去，按底下的「俠客」") < text.index("這是盤纏")
     assert "{武學}" not in text and "山腰上的草廬不見了" in text
 
 
