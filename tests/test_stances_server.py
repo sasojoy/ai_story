@@ -3,11 +3,13 @@ GET /api/figure、託付的 main.errands 與勸降的三段式（/api/do/persuad
 from __future__ import annotations
 
 import random
+from unittest import mock
 
 import pytest
 from fastapi.testclient import TestClient
 
 import server
+from tianxia import errands
 from tianxia.characters import open_characters
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
@@ -63,6 +65,61 @@ def test_main_view_has_his_page_only_while_talking_to_him(monkeypatch):
 def test_closed_seasons_have_no_figure_key(monkeypatch):
     game = _talking(monkeypatch, on=False)
     assert "figure" not in server.main_view(game)
+
+
+def test_main_view_lists_the_errands_only_when_on(monkeypatch):
+    game = _talking(monkeypatch)
+    game.state.player.affinities[LUZHI] = 50
+    errands.give(game.state, game.content, LUZHI, "luzhi_scout")
+    e = game.state.player.errands[-1]
+    view = server.main_view(game)
+    assert [r["id"] for r in view["errands"]] == [e.id] and view["errands"][0]["kind"] == "scout"
+    assert view["figure"]["errands"][0]["id"] == e.id  # 人物頁也列他託的
+    assert "errands" not in server.main_view(_talking(monkeypatch, on=False, name="測試二"))
+
+
+def _persuading(monkeypatch, floor_cap=100):
+    game = _talking(monkeypatch)
+    monkeypatch.setattr(server.CONTENT.config.jianfa, "persuade_floor", floor_cap)
+    monkeypatch.setattr(server.CONTENT.config.jianfa, "persuade_cap", floor_cap)
+    p = game.state.player
+    p.pending_companion, p.affinities[LUZHI] = None, 50
+    errands.give(game.state, game.content, LUZHI, "luzhi_persuade")
+    e = p.errands[-1]
+    p.location = e.target
+    open_characters().save(game.state)
+    return game, e.id
+
+
+def test_persuade_goes_through_three_stages(monkeypatch):
+    """A 開單（只讀）→ B 鎖外評那一句（event_llm.rate_persuasion，假的）→ C 進鎖重驗、擲骰、立痕跡、獎勵。"""
+    game, eid = _persuading(monkeypatch)
+    asked = []
+
+    def rate(client, request):
+        asked.append((request.errand, request.text, request.who))
+        return 70
+
+    with mock.patch.object(server.event_llm, "rate_persuasion", side_effect=rate):
+        server.persuade_text(game, eid, "放下刀槍回家種田")
+    assert asked == [(eid, "放下刀槍回家種田", "下曲陽的黃巾小頭目")]
+    assert errands.find(game.state, eid).status == "done" and game.state.world.marks["xiaquyang:歸降"] == 1
+
+
+def test_persuade_without_the_model_changes_nothing(monkeypatch):
+    game, eid = _persuading(monkeypatch)
+    stamina = game.state.player.stamina
+    with mock.patch.object(server.event_llm, "rate_persuasion", return_value=None):
+        msgs = server.persuade_text(game, eid, "放下刀槍回家種田")
+    assert msgs == [errands.PERSUADE_SILENT]
+    assert errands.find(game.state, eid).status == "open" and game.state.player.stamina == stamina
+
+
+def test_persuade_refusals_never_call_the_model(monkeypatch):
+    game, eid = _persuading(monkeypatch)
+    with mock.patch.object(server.event_llm, "rate_persuasion", side_effect=AssertionError("A 段就擋下來，不叫模型")):
+        assert server.persuade_text(game, eid, "") == [errands.PERSUADE_ASK]
+        assert server.persuade_text(game, "e999", "放下刀槍") == [errands.NOT_HERE]
 
 
 def test_get_api_figure_reads_his_page(monkeypatch):

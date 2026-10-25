@@ -1471,6 +1471,23 @@ def gather_text(game: Game, text: str) -> list[str]:
     return act(game, lambda g: g.gather_say(request, rate, attribute))
 
 
+def persuade_text(game: Game, errand_id: str, text: str) -> list[str]:
+    """勸降（減法季批 6，整合設計 5.9），三段同 gather_text：A Game.persuade_request（只讀：那一件還在辦、人在那裡、字是 1～20 字）→
+    B 鎖外請模型評那一句（event_llm.rate_persuasion，預算同隨口應對 free_text_budget_seconds）→ C Game.persuade 重驗同一件、同一句才
+    扣體力擲骰。模型叫不動（評不到、逾時、沒有模型）是 None：照批 4 的慣例落到最保守的結果，什麼都不發生、那一件照舊在。
+    排隊被擋丟 GameError（BUSY_FREE_TEXT、BUSY_QUEUE_TIMEOUT），不扣體力。"""
+    started, request = _open_request(game, lambda: game.persuade_request(errand_id, text))
+    if isinstance(request, list):
+        return request
+    total = game.content.config.free_text_budget_seconds
+
+    def ask() -> int | None:
+        return event_llm.rate_persuasion(within_budget(game.client, total - (_monotonic() - started)), request)
+
+    rate = model_call(game, ask, fallback=None, left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT)
+    return act(game, lambda g: g.persuade(request, rate))
+
+
 CROWD_RUNNING: set[str] = set()  # 正在背景重寫場邊那一句的角色（一人一條；名號鍵）
 
 
@@ -1846,6 +1863,9 @@ def _main_view_body(game: Game) -> dict:
     figure = game.figure_view(talking) if talking else None
     if figure is not None:
         view["figure"] = figure
+    errands_now = game.errands_view()  # 託付清單（減法季批 6，主機側計畫 1.3 的 main.errands）；託付關著沒有這個鍵
+    if errands_now is not None:
+        view["errands"] = errands_now
     event_opts = game.event_option_view()  # 事件選項只留動作（整合設計 6.4）：選項 id → 動作、圖示、沒把握時的心裡話；沒有事件沒有這個鍵
     if event_opts is not None:
         view["event_opts"] = event_opts
@@ -2619,6 +2639,8 @@ def api_do(op: str, request: Request, body: dict = Body(default={})):
         msgs = feast_text(game, str(body.get("text", "")))
     elif op == "gather_text":  # 找素材的「自己說」：成算在行動鎖外評（見 gather_text）
         msgs = gather_text(game, str(body.get("text", "")))
+    elif op == "persuade_text":  # 託付的勸降（減法季批 6）：那一句在行動鎖外評（見 persuade_text）；id 是那一件託付
+        msgs = persuade_text(game, str(body.get("id", ""))[:20], str(body.get("text", ""))[:60])
     elif op in MAIN_ACTIONS:
         msgs = act(game, lambda g: MAIN_ACTIONS[op](g, body), paused_ok=op in PAUSE_OK_ACTIONS)
     else:

@@ -11,7 +11,7 @@ import pytest
 from conftest import real_content
 from stances_kit import BOCAI, DAY, HOUR, HUANGFU, LUZHI, MON, at, real_game, stance_turn, talking, week_start_real
 from tianxia import annals, companion_agent, conquest, figures, rules, stances
-from tianxia.state import GameState, QUIET_DEFAULTS, StanceNote, StanceOn, WorldState, new_game_state
+from tianxia.state import GameState, PlayerState, QUIET_DEFAULTS, StanceNote, StanceOn, WorldState, new_game_state
 
 pytestmark = pytest.mark.slow  # 載正式內容、照伺服器開季
 
@@ -268,8 +268,8 @@ def test_new_fields_add_no_keys_until_used(content):
     """存檔 JSON：心意、託付的欄位空的時候不多一個鍵（PlayerState 的 QUIET_DEFAULTS、WorldState 的 serializer）；寫了讀得回來；舊檔讀得進來。"""
     state = new_game_state(content, "甲客")
     data = json.loads(state.model_dump_json())
-    assert "stance_notes" not in data["player"]
-    assert "stance_notes" in QUIET_DEFAULTS
+    assert not {"stance_notes", "errands"} & set(data["player"])
+    assert {"stance_notes", "errands"} <= set(QUIET_DEFAULTS)
     assert not {"stance_counts", "stance_week", "stance_active"} & set(json.loads(WorldState().model_dump_json()))
     state.player.stance_notes[LUZHI] = StanceNote(week=1, day=2, said=["suzhan"])
     back = GameState.model_validate_json(state.model_dump_json())
@@ -280,3 +280,4 @@ def test_new_fields_add_no_keys_until_used(content):
     old = json.loads(new_game_state(content, "乙客").model_dump_json())
     loaded = GameState.model_validate(old)
     assert loaded.player.stance_notes == {} and WorldState.model_validate({}).stance_active == {}
+    assert PlayerState.model_fields["errands"].default_factory() == []

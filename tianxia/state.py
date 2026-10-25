@@ -902,6 +902,7 @@ class PlayerState(BaseModel):
     # 減法季批 6（整合設計 5.4、5.5）：這一週跟哪幾位大勢人物記過心意（人物表 id → StanceNote，stances.py）、人物託你的事（errands.py）。
     # 空的時候不寫進存檔（QUIET_DEFAULTS）：關著的季 JSON 一個鍵都不多
     stance_notes: dict[str, StanceNote] = Field(default_factory=dict)
+    errands: list[ErrandState] = Field(default_factory=list)
     pushed: dict[str, float] = Field(default_factory=dict)  # 「曆日:大勢線 id」→ 當天這條線推得動多少（人數緩衝之後）；只留今天與昨天
 
     # ── 捐獻紀錄（計畫 T6，軍備文件 4.1）：「據點 id:糧草」→ 累積的份量。T7 的伏筆只讀它；寫入是 T6 護糧的事 ──
@@ -985,7 +986,7 @@ class PlayerState(BaseModel):
 
 
 # PlayerState 裡「沒用到就不寫進存檔」的欄位（_drop_quiet_defaults）：新規則掛開關、關著的季存檔一個鍵都不多的，加在這裡
-QUIET_DEFAULTS = ("ledgers", "lean_changed", "deed_day", "deed_today", "stance_notes")
+QUIET_DEFAULTS = ("ledgers", "lean_changed", "deed_day", "deed_today", "stance_notes", "errands")
 
 
 class TierResult(BaseModel):
@@ -1201,6 +1202,24 @@ class StanceNote(BaseModel):
     day: int = 0
     said: list[str] = Field(default_factory=list)
     told: list[str] = Field(default_factory=list)
+
+
+class ErrandState(BaseModel):
+    """一位大勢人物託你的一件事（減法季批 6，tianxia/errands.py；PlayerState.errands）：照 FigureDef.errands 的那一件（errand）開的，
+    以一封「託付」信送到（letter 是那封信的 id；id 是 e＋信的 id）。status：open 還在辦、done 辦成了、lapsed 過了期限、declined 婉拒了、
+    failed 勸降沒談成（打了一場）。新的種類加在這裡（這是新的模型，舊程式讀檔整欄略過）。"""
+
+    id: str
+    figure: str  # 人物表的 id（大勢人物）
+    errand: str  # ErrandDef 的 id
+    kind: Literal["letter", "scout", "persuade"]
+    target: str  # 地點 id
+    week: int  # 哪一週託的（季曆週；7 天的季是段）：每位人物一週一件
+    at: float  # 託的那一刻（世界秒）
+    expires: float  # 期限（世界秒）
+    letter: int
+    status: Literal["open", "done", "lapsed", "declined", "failed"] = "open"
+    done_at: float | None = None  # 辦成、作罷、婉拒、沒談成的那一刻
 
 
 class Letter(BaseModel):

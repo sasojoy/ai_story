@@ -1193,6 +1193,7 @@ def check_figures(c: Content, need, known, front_ids: list[str]) -> None:
         )
         need(to_traditional(fig.name) == fig.name, f"{where}：名字只能用繁體中文（{fig.name}）")
         check_stances(c, need, where, fig)
+        check_errands(c, need, where, fig)
         if fig.out_flag is not None:  # 丙 (c)：退場時記的世界旗標要有人讀（劇本或事件的條件），打錯字才抓得到
             need(fig.out_flag in _condition_flags(c), f"{where}：out_flag {fig.out_flag} 沒有任何劇本或事件的條件讀它")
         meet = c.characters.get(fig.character) if fig.character is not None else None
@@ -1233,6 +1234,35 @@ def check_stances(c: Content, need, where: str, fig) -> None:
             loc, sep, name = key.partition(":")
             need(bool(sep and name) and loc in c.locations, f"{at}：痕跡要寫成「地點 id:痕跡名」、地點存在（{key}）")
             need(times >= 1, f"{at}：痕跡 {key} 的倍數至少 1")
+
+
+ERRAND_SLOTS = ("{place}", "{hero}")  # 託付的字認得的插槽（errands.give、task_text 填）
+
+
+def check_errands(c: Content, need, where: str, fig) -> None:
+    """託付的池子（減法季批 6，整合設計 5.5、5.9）：要有對話人物（信是他寫的）、id 不重複、地點存在；勸降要寫 persuade（勸不成打的隊伍存在、
+    痕跡是「地點 id:痕跡名」、推的線是 front 或戰線 id），其他兩種不寫；寫了 stance 要是他自己的心意；字只用繁體、只用認得的插槽。"""
+    if not fig.errands:
+        return
+    need(fig.character is not None, f"{where}：有託付的人物要有對話人物（託付以他的信送到）")
+    ids = [d.id for d in fig.errands]
+    need(len(set(ids)) == len(ids), f"{where}：託付的 id 重複了（{ids}）")
+    stance_ids = {x.id for x in fig.stances}
+    lines = {t.id for t in c.scenario.trends} | {"front"}
+    for d in fig.errands:
+        at = f"{where} 的託付 {d.id}"
+        need(d.target in c.locations, f"{at}：地點 {d.target} 不存在")
+        need(d.stance is None or d.stance in stance_ids, f"{at}：心意 {d.stance} 不是他的心意（{sorted(stance_ids)}）")
+        need((d.kind == "persuade") == (d.persuade is not None), f"{at}：勸降才寫 persuade、勸降一定要寫")
+        for text in (d.task, d.text, d.to):
+            need(to_traditional(text) == text, f"{at}：字只能用繁體中文（{text}）")
+            need(not [s for s in re.findall(r"\{[^}]*\}", text) if s not in ERRAND_SLOTS], f"{at}：只認得 {ERRAND_SLOTS}（{text}）")
+        if d.persuade is not None:
+            need(d.persuade.foe in c.squads, f"{at}：勸不成打的隊伍 {d.persuade.foe} 不存在")
+            for key in d.persuade.marks:
+                loc, sep, name = key.partition(":")
+                need(bool(sep and name) and loc in c.locations, f"{at}：痕跡要寫成「地點 id:痕跡名」、地點存在（{key}）")
+            need(set(d.persuade.trend) <= lines, f"{at}：推的線只能是 front 或戰線 id（{sorted(d.persuade.trend)}）")
 
 
 ORDER_SLOTS = ("{戰線}", "{地點}", "{起點}", "{終點}", "{主將}", "{人物}", "{號令}", "{本週}", "{這週}")  # 後兩個照季換字（FB-501）
