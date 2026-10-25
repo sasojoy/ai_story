@@ -42,6 +42,11 @@ def _sub(cell):
     return re.search(r"</b><small>(.*?)</small>", cell).group(1)
 
 
+def _face(cell):
+    """格子上看得到的那一截（開頭標籤裡 data-why 那一句不算）。"""
+    return cell[cell.index(">") + 1:]
+
+
 def _width(text):
     """格子小字的寬（以一個漢字為 1）：英數與空白算半個。一行約 60 px、10 px 的字，放得下六個漢字（sortie.OUT_NOTE 的註解）。"""
     return sum(1 if ord(ch) > 0x2E80 else 0.5 for ch in text)
@@ -53,8 +58,8 @@ def test_the_social_cell_greyed_for_nobody_here_says_it_briefly_and_the_note_row
     assert not social.enabled and social.label == f"交友（{SOCIAL_NO_ONE}）"  # 前提：真的是這一句
     bar = _bar(game)
     cell = _cell(bar, "social")
-    assert "<b>交友</b><small>沒有人</small>" in cell and SOCIAL_NO_ONE not in cell
-    assert f"<p><b>交友</b>{SOCIAL_NO_ONE}。</p>" in bar  # 整句在行動列底下那一行，不是伺服器寫的那一句「結識這裡的人」
+    assert "<b>交友</b><small>沒有人</small>" in cell and SOCIAL_NO_ONE not in _face(cell)
+    assert f'data-why="{SOCIAL_NO_ONE}。"' in cell  # 整句在點了浮出的那一句（減法季批 1 拿掉了底下那一行），不是伺服器寫的那一句「結識這裡的人」
     assert "結識這裡的人" not in bar
 
 
@@ -79,8 +84,8 @@ def test_a_talked_out_single_figure_social_cell_says_so_briefly_too():
     note = game._talked_out_note()
     assert not option.enabled and option.label == f"交友（{note}）"
     bar = _bar(game)
-    assert "<b>交友</b><small>已談滿</small>" in _cell(bar, "social") and "00:00" not in _cell(bar, "social")
-    assert f"<p><b>交友</b>{note}。</p>" in bar
+    assert "<b>交友</b><small>已談滿</small>" in _cell(bar, "social") and "00:00" not in _face(_cell(bar, "social"))
+    assert f'data-why="{note}。"' in _cell(bar, "social")
 
 
 def test_without_server_notes_the_grey_cell_still_draws_no_note_row():
@@ -99,5 +104,5 @@ def test_the_other_grey_reasons_keep_their_cells_and_notes():
     新規則的其他灰格在 tests/test_fb670_practice_cell_web.py。"""
     game = _game("changshe")
     bar = _bar(game)
-    assert "<b>交友</b><small>名望不夠</small>" in _cell(bar, "social") and "名望還差 15" not in _cell(bar, "social")
-    assert "<p><b>交友</b>名望還差 15。</p>" in bar
+    assert "<b>交友</b><small>名望不夠</small>" in _cell(bar, "social") and "名望還差 15" not in _face(_cell(bar, "social"))
+    assert 'data-why="名望還差 15。"' in _cell(bar, "social")

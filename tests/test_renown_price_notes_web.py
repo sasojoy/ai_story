@@ -91,18 +91,6 @@ def test_a_choice_menu_label_keeps_each_reason_whole():
     assert '<span class="nb">（自家地盤・九折，</span><span class="nb">威震州郡・九折，</span><span class="nb">一方豪俠・八五折））</span>' in page
 
 
-def test_the_practice_heal_button_keeps_each_reason_whole():
-    game = _clinic_game()
-    m = server.main_view(game)
-    view = server.menxia_view(game)
-    out = webharness.run(r"""
-const H = new Function(["esc", "DEAL_RE", "dealHtml"].map(konst).join("\n") + fn("healButton") + "\nreturn { healButton };")();
-finish(H.healButton(input.x, input.injury));
-""", {"x": view, "injury": 40})
-    assert '<span class="nb">（威震州郡・九折，</span><span class="nb">州郡大俠・八五折）</span>' in out
-    assert view["heal"]["note"] in _text(out)
-
-
 def test_the_forge_go_button_keeps_the_reason_whole():
     """店面打造的開爐鈕（旁邊有「鑄譜」，比較窄；FB-297 第二行只剩「折）」）。"""
     game = econ_game(faction=None, bag={"gang_1": 3, "kuai_1": 3})

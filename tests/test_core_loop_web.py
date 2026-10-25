@@ -34,7 +34,7 @@ def _bar(game, **S):
 
 def test_the_sortie_cell_says_how_many_are_left():
     bar = _bar(_game("huang", "huangjin_camp"))
-    assert "<b>出陣・守</b>" in bar and "今日 5 次" in bar and "零風險" in bar
+    assert "<b>出陣</b>" in bar and "今日 5 次" in bar and "零風險" in bar  # 格子只寫「出陣」（減法季批 1：四顆主鈕），攻守在出陣那一張卡上
 
 
 def test_a_used_up_sortie_greys_out():

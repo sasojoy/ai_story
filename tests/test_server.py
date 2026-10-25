@@ -1030,13 +1030,13 @@ def test_the_five_stat_buttons_share_one_row_and_keep_their_labels_on_one_line()
     js = webharness.app_source()
     css = (server.WEB / "style.css").read_text(encoding="utf-8")
     assert 'class="row alloc"' in js
-    row = re.search(r"\.more-stats \.alloc \{([^}]*)\}", css)
+    row = re.search(r"\.more-stats \.alloc(?:, \.self-stats \.alloc)? \{([^}]*)\}", css)  # 「自己」頁的心得與屬性那一塊（減法季批 1）同一排
     assert row is not None and "gap: 4px" in row.group(1)
-    button = re.search(r"\.more-stats \.alloc \.btn \{([^}]*)\}", css)
+    button = re.search(r"\.more-stats \.alloc \.btn(?:, \.self-stats \.alloc \.btn)? \{([^}]*)\}", css)
     assert button is not None and "white-space: nowrap" in button.group(1) and "padding: 6px 2px" in button.group(1)
     site = re.search(r"\n\.btn\.small \{([^}]*)\}", css)
     assert site is not None and "padding: 6px 12px" in site.group(1)  # 全站的小按鈕照舊
-    label = re.search(r"\.more-stats \.pts-label \.pts \{([^}]*)\}", css)  # 跟收起來時那一句同樣的金色粗體 12px
+    label = re.search(r"\.more-stats \.pts-label \.pts(?:, \.self-stats \.pts-label \.pts)? \{([^}]*)\}", css)  # 跟收起來時那一句同樣的金色粗體 12px
     assert label is not None and "var(--gold)" in label.group(1) and "600 12px" in label.group(1)
 
 
@@ -1089,7 +1089,7 @@ def test_the_practice_and_furnace_pages_only_read_and_call_what_the_server_has(g
     shown = shown[:shown.index("};")]
     assert set(re.findall(r'"(\w+)"', shown)) - {"practice", "craft"} <= keys  # 輪詢比對的欄位也都送得到
     called = set(re.findall(r'\bmx\("(\w+)"', js)) | set(re.findall(r"/api/menxia/(\w+)", js)) | set(re.findall(r'data-act="mx" data-op="(\w+)"', js))
-    assert {"practice", "heal", "forge", "switch", "cultivate", "melt", "melt_insight", "name"} <= called
+    assert {"practice", "forge", "switch", "cultivate", "melt", "melt_insight", "name"} <= called  # heal：療傷鈕 2026-10-25 從俠客頁拿掉（入口是江湖頁 act:heal）
     assert called <= set(server.MENXIA_ACTIONS), called - set(server.MENXIA_ACTIONS)
     for gone in ("/api/craft_line", "/api/menxia/craft", "per_craft", "x.materials", "x.arts", "craftSel", "放入素材", "素材說明"):
         assert gone not in js, gone
@@ -1143,7 +1143,7 @@ def test_the_pages_trim_the_furnace_whenever_the_menxia_data_is_replaced():
 def test_a_refused_name_keeps_what_the_player_typed_and_the_pill_tick_does_not_outlive_the_tab():
     js = webharness.app_source()
     submit = js[js.index('form.id === "name-art"'):]
-    submit = submit[:submit.index('form.id === "seclude"')]
+    submit = submit[:submit.index('form.id === "ad-mall-form"')]  # 名字表單那一段到下一個表單（閉關的表單 2026-10-25 拿掉了）
     assert 'await mx("name"' in submit and "again.value = data.name" in submit  # 被拒（表單還在）把字放回去
     assert "legendTick" not in js  # 破境丹不再是勾的：服丹、心得各一顆衝關鈕（Joy 2026-10-21），沒有勾要收
 
@@ -1648,11 +1648,11 @@ def test_the_expanded_rounds_fade_in_in_order_however_many_lines_there_are():
 
 def test_the_scroll_card_buttons_sit_two_to_a_row_at_phone_width():
     """卷軸卡（2026-10-06）：卡上兩顆大鈕（練成／改練、修練）各佔一半，字寫兩行（上面動作、下面價錢或機率），
-    375px 手機上不用擠成一排三顆；只管卡裡這一排（.acts）與療傷、閉關那兩格（.tune），不動全站的 .btn。"""
+    375px 手機上不用擠成一排三顆；只管卡裡這一排（.acts），不動全站的 .btn。（療傷、閉關那兩格 .tune 2026-10-25 拿掉了）"""
     css = (server.WEB / "style.css").read_text(encoding="utf-8")
     acts = re.search(r"\.acts \{([^}]*)\}", css)
     assert acts is not None and "grid-template-columns: 1fr 1fr" in acts.group(1)
-    two_lines = re.search(r"\.tune \.btn, \.acts \.btn \{([^}]*)\}", css)
+    two_lines = re.search(r"\.acts \.btn \{([^}]*)\}", css)
     assert two_lines is not None and "flex-direction: column" in two_lines.group(1)
 
 

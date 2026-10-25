@@ -408,9 +408,9 @@ def test_the_xinde_hint_shows_once_the_next_level_is_affordable(on):
     assert game.status_data()["hint"] is None
     s.player.stats["xinde"] = price
     hint = game.status_data()["hint"]
-    assert hint and "去「修練」練成" in hint and f"你已攢下 {price} 點心得" in hint
+    assert hint and "點上面身上的武學練成" in hint and f"你已攢下 {price} 點心得" in hint
     s.player.stats["xinde"] = 34  # QA 那一輪的心得
-    assert "去「修練」" in game.status_data()["hint"]
+    assert "練成" in game.status_data()["hint"]
 
 
 def test_no_xinde_hint_while_the_season_is_being_prepared(content, world):

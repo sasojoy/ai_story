@@ -65,7 +65,7 @@ from tianxia import (
     arena_crowd, ascend, battle_instance, biography, calendar, companion_agent, create, divine, duel, event_llm, feasts, fight_llm, foreshadow, gather_llm, gender, glyph, insight_llm, leaderboard, letters, mall, mapdata, might,
     naming,
     ollama_client, rules,
-    precise, seal, seal_duel, server_bots, social, sortie, speech, tavern, team, timetable, training, treasures, xingshi, yuedan,
+    precise, seal, seal_duel, server_bots, social, sortie, speech, tavern, team, timetable, training, treasures, weekcard, xingshi, yuedan,
 )
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import env_profile, load_content, profile_line
@@ -1700,6 +1700,16 @@ def _main_view_body(game: Game) -> dict:
     orders = game.orders_view()  # 第一季：自己陣營的本週軍令（計畫 T6；散人、別陣營、開關關著時都沒有這個鍵）
     if orders:
         view["orders"] = orders
+    # 減法季批 1（整合設計 6.1、3.4）：江湖頁最上面的本週卡（主題、你這一步）與三方卡；序章裡、休季沒有這兩個鍵
+    week = weekcard.week_card(game, status, orders)
+    if week is not None:
+        view["week_card"] = week
+    sides = weekcard.sides_card(game)
+    if sides is not None:
+        view["sides_card"] = sides
+    event_opts = game.event_option_view()  # 事件選項只留動作（整合設計 6.4）：選項 id → 動作、圖示、沒把握時的心裡話；沒有事件沒有這個鍵
+    if event_opts is not None:
+        view["event_opts"] = event_opts
     layers = game.rumor_layers()  # 第一季：見聞頁的傳聞分四層（開關關著時不送，頁面照舊畫 rumors 那一條清單）
     if layers is not None:
         view["rumor_layers"] = [{**layer, "body": md(layer["body"])} for layer in layers]

@@ -1404,6 +1404,8 @@ class Scenario(_Strict):
     jade_seal_flag: str | None = None  # 這個世界旗標代表玩家親手取得了這一季的玉璽碎片（設計文件九），記進跨季持久紀錄
     season_one_off: SeasonOneOff = Field(default_factory=SeasonOneOff)  # 第一季不觸發的 beta 門檻、主線、決戰、事件
     territory: TerritoryDef | None = None  # 地盤易手（出陣探索與地盤設計第四節）；不寫＝這個劇本沒有地盤
+    # 江湖頁本週卡第二行（減法季整合設計 6.8）：一季前、中、後三段各一句（21 天季是三週，7 天的季是三段）；不寫就不畫那一行
+    week_themes: list[str] = Field(default_factory=list, max_length=3)
 
     def faction(self, faction_id: str | None) -> FactionDef:
         """id 對得上的那個陣營（factions 裡的第一個）；劇本裡沒有就丟 LookupError。給一定要有這個陣營的地方用（選單上的

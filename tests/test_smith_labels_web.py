@@ -106,7 +106,7 @@ def test_the_dismantle_label_keeps_the_space_after_the_arrow(menu):
 def test_chunks_are_escaped_and_a_chunk_that_is_too_long_stays_breakable(menu):
     page = menu(("smith:forge-main:x", '主料：<b>驚雷</b>＋"x"&（剛・一階）'),
                 ("smith:forge-aux:y", "輔料：" + "很長的名字" * 5 + "（剛・一階）"))
-    assert "<b>" not in page and "&lt;b&gt;驚雷&lt;/b&gt;＋" in page and "&quot;x&quot;&amp;" in page
+    assert "<b>驚雷</b>" not in page and "&lt;b&gt;驚雷&lt;/b&gt;＋" in page and "&quot;x&quot;&amp;" in page
     chunks, text = _chunks(page, "smith:forge-main:x")
     assert "".join(_pieces(page, "smith:forge-main:x")) == text.strip() == '主料：<b>驚雷</b>＋"x"&（剛・一階）'
     chunks, _ = _chunks(page, "smith:forge-aux:y")

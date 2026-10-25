@@ -135,7 +135,8 @@ def test_the_gold_tag_opens_the_renown_card(m):
 
 
 def test_howto_entry_says_renown(m):
-    m["status"]["howto_entry"] = True
-    assert "名聲怎麼來" in run(m, "return H.pageJianghu();")
+    """「玩法說明」入口在本週卡「為什麼」攤開的最後一行（減法季批 1）。"""
+    why = {"wkOpen": {"key": m["week_card"]["label"] + m["week_card"]["when"], "id": "why"}}
+    assert "名聲怎麼來" in run(m, "return H.weekCardHtml(H.S.main);", S=why)
     m["status"]["renown"] = None
-    assert "名望怎麼來" in run(m, "return H.pageJianghu();")
+    assert "名望怎麼來" in run(m, "return H.weekCardHtml(H.S.main);", S=why)

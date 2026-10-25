@@ -29,8 +29,8 @@ const parts = [
   // artFilter…：煉製頁挑東西那一排的篩選（arts-polish-2 FB-085），pageCraft 畫的時候要用
   ...["forgeBody", "forgeReady", "pagePractice", "pageCraft", "artFilter", "setArtFilter", "showArts", "filterChips",
     "pickMark", "craftView", "craftFilterRow", "craftChip", "kilnWarn", "kilnHtml", "madeCardHtml", "previewCardHtml", "forgeLineHtml", "craftSheetHtml", "craftSheetInner", "potGlow", "kilnPeek", "manualRows", "manualEntry", "bookIcon", ...input.fns].map(fn),
-  // createEntry：煉製頁通往自創那一頁的入口（自創單獨一頁，Joy 2026-10-21），這裡不看
-  `const guideHtml = () => "", furnaceSvg = () => '<div class="furnace"></div>', proGuide = () => "", spinAt = () => "", createEntry = () => "";`,
+  // createSub、SELF_NEWS：自己頁底下通往自創、行狀的入口（減法季批 1），這裡不看；shown：序章一塊一塊亮起來，這裡全亮
+  `const guideHtml = () => "", furnaceSvg = () => '<div class="furnace"></div>', proGuide = () => "", spinAt = () => "", createSub = () => "", shown = () => true, SELF_NEWS = [];`,
   input.stubs || "",
   "return { " + ["pagePractice", "pageCraft", ...input.fns, ...input.consts].join(", ") + " };",
 ];
@@ -169,7 +169,8 @@ def test_a_new_mastery_that_needs_a_name_scrolls_up_to_the_naming_form():
 
 
 def test_every_practice_button_stays_put_and_writes_its_result_where_it_was_pressed():
-    """Joy 2026-10-18「武學升級的時候為什麼要點一次升級又把畫面跳到置頂？」：練成、改練、療傷也跟修練一樣留在原地，補重畫的高度差。"""
+    """Joy 2026-10-18「武學升級的時候為什麼要點一次升級又把畫面跳到置頂？」：練成、改練也跟修練一樣留在原地，補重畫的高度差。
+    （療傷鈕 Joy 2026-10-25 從俠客頁拿掉了，不在這裡了）"""
     for op, extra, note in (("practice", {}, {"id": "basic_fist", "html": "<p>RESULT</p>"}),  # 練成：身上那一門的卡
                             ("switch", {"art": "lake_kick"}, {"id": "lake_kick", "html": "<p>RESULT</p>"})):
         out = press(op, extra, moved_by=60)
@@ -177,9 +178,6 @@ def test_every_practice_button_stays_put_and_writes_its_result_where_it_was_pres
         assert out["note"] == note and out["message"] == "", op
     switched = press("switch", {"art": "lake_kick"})
     assert switched["artOpen"] is None and switched["rendered"] == 1  # 庫裡那一列收起，只畫一次
-    heal = press("heal", {}, moved_by=60)
-    assert heal["scrolls"] == [["by", {"top": 60, "left": 0, "behavior": "instant"}]]
-    assert heal["mxNote"] == {"at": "heal", "html": "<p>RESULT</p>"} and heal["note"] is None
 
 
 def test_melting_one_art_writes_under_the_library_title_instead_of_scrolling_to_the_top():
@@ -203,8 +201,7 @@ def test_the_other_blocks_draw_their_result_inside_themselves():
     weapon = html.split('data-slot="weapon"')[1]
     assert weapon.index('<div class="sub">武器</div>') < weapon.index("GEARNOTE")  # 武器那一段的標題底下
     assert "GEARNOTE" not in html.split('data-slot="weapon"')[0]
-    healed = page("pagePractice", menxia(), mxNote={"at": "heal", "html": "<p>HEALNOTE</p>"})
-    assert healed.index('data-op="heal"') < healed.index("HEALNOTE") < healed.index("修練的規矩")  # 療傷閉關搬到頁底（第四輪），結果跟著
+    assert 'data-op="heal"' not in html and 'id="seclude"' not in html  # 療傷、閉關 Joy 2026-10-25 從俠客頁拿掉（療傷只在醫館，入口在江湖頁）
 
 
 # ── W10：開爐等結果的那一句不誇大等多久 ─────────────────────────────────
@@ -235,9 +232,10 @@ def test_the_melt_button_carries_the_servers_confirm_question_escaped():
 
 def test_the_practice_pages_list_of_arts_is_titled_the_art_library_with_its_count():
     html = page("pagePractice", menxia(holdings={"count": 7, "cap": 56}))
-    assert re.search(r'<div class="label">功法庫 <small class="muted">武學與意境 7/56</small></div>', html)
+    # 俠客頁重排（Joy 2026-10-24）：功法庫收在一個摺疊裡，標題在 summary 上
+    assert re.search(r'<summary>功法庫 <small class="muted">武學與意境 7/56</small></summary>', html)
     assert '<div class="label">武學 <small' not in html  # 舊的標題（跟煉製頁的「武學」挑選區同名）不在了
-    assert "湖邊腿法" in html.split("功法庫")[1]  # 清單就在這個標題底下
+    assert "湖邊腿法" in html.split("<summary>功法庫")[1]  # 清單就在這個標題底下（「武學」段右上那一顆也寫功法庫，從摺疊的標題切）
 
 
 # ── W2：屬性有什麼用，收在一個摺起來的說明裡 ───────────────────────────
@@ -248,7 +246,7 @@ def test_the_practice_page_has_a_closed_attribute_fold_right_under_the_rules_lin
     fold = re.search(r"<details class=\"attr-note\"( open)?><summary>([^<]*)</summary>(.*?)</details>", html, re.S)
     assert fold and fold.group(1) is None  # 收著：第一屏只多一行字
     assert fold.group(2) == "武學屬性有什麼用" and "ATTRNOTE" in fold.group(3)  # FB-089：標題冠上「武學」，別跟升級配點的屬性混
-    assert html.index("attr-note") < html.index("功法庫") < html.index('id="seclude"')  # 功法庫之前；療傷閉關搬到頁底（招式與絕學稿案第四輪）
+    assert html.index('aria-label="去做"') < html.index("attr-note") < html.index("<summary>功法庫")  # 「去做」之後、功法庫摺疊之前（俠客頁重排，Joy 2026-10-24）
 
 
 def test_the_craft_page_has_the_same_fold_right_under_the_open_furnace_button():
