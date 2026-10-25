@@ -46,13 +46,15 @@ def test_the_twentieth_mark_fires_once(town, state):
     state.world.time = 1234.0
     assert [r.mark for r in marks.fire_due(state, town)] == [KEY]
     assert state.world.marks_fired == {KEY: 1234.0}
-    rumor = state.world.rumors[-1]
-    assert (rumor.text, rumor.location, rumor.layer, rumor.named) == (RULE.rumor, "town", "local", False)  # 不列名字
-    assert state.world.chronicle[-1].text == RULE.rumor  # 江湖史沒另寫就照傳聞那一句
-    assert len(state.world.rumors) == before_rumors + 1 and len(state.world.chronicle) == before_chronicle + 1
+    local, wide = state.world.rumors[-2:]
+    assert (local.text, local.location, local.layer, local.named) == (RULE.rumor, "town", "local", False)  # 不列名字
+    assert (wide.text, wide.layer, wide.named) == (RULE.rumor, "world", False)  # 世界層一句：xingshi 沒寫照傳聞那一句
+    # 江湖史在季末才寫（PM 2026-10-25 第 4 件照整合設計 5.2；上一輪照計畫 4-3 寫在過門檻那一刻）：見 marks.season_lines
+    assert len(state.world.rumors) == before_rumors + 2 and len(state.world.chronicle) == before_chronicle
     _twenty(state, town, 5)
     assert marks.fire_due(state, town) == []  # 只發一次
-    assert len(state.world.rumors) == before_rumors + 1
+    assert len(state.world.rumors) == before_rumors + 2
+    assert marks.season_lines(state.world, town) == [RULE.rumor]  # 江湖史沒另寫就照傳聞那一句
 
 
 def test_the_place_reads_differently_past_the_threshold(town, state):

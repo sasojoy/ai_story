@@ -149,11 +149,13 @@ def line_values(world: WorldState, content: Content) -> dict[str, int]:
 
 
 def facts(world: WorldState, content: Content, notes: list[DayNote], lines_then: dict[str, int], rumors_from: int = 0,
-          night: bool = True) -> list[str]:
+          night: bool = True, marks_since: float | None = None) -> list[str]:
     """這一篇的事實（新的一張單；照順序、最多 Config.xingshi.facts_max 條）：已經發生的事照時間順序（day_log 的順序：收場、作罷、推滿易手、
     補缺退回〔不寫是誰，FB-646〕，與那一場已經打完、作罷或正在打的戰書〔寫成「某某下戰書攻某地」，FB-610〕）→ 還沒打完的那幾場（night 是假〔白天開的單〕不寫「打到入夜」）
     → 三條戰線各一句（偏向、比上一篇往哪一邊動）→ 下一仗打哪裡（還沒開打的戰書）→ 上一篇以來的
-    天下大事（rumors_from 之後，新的在前；帶數字的〔公告的時刻〕與〈天下形勢〉自己那一句不收）。每一條都不帶阿拉伯數字。"""
+    天下大事（rumors_from 之後，新的在前；帶數字的〔公告的時刻〕與〈天下形勢〉自己那一句不收）。每一條都不帶阿拉伯數字。
+    痕跡看得見開著的季（減法季批 4）：天下大事之前多一類「痕跡過門檻」——世界秒 marks_since 以後過門檻的痕跡各一句（marks.xingshi_facts；
+    跟世界層那一句同一句，天下大事那一類就不再寫）；marks_since 沒給或關著時一個字都不變。"""
     out: list[str] = []
     over = {i for i, n in enumerate(notes) if _letter_over(world, notes, i) or _mend_after(notes, i)}
     done = [(n, i in over) for i, n in enumerate(notes) if _happened(n) or i in over]
@@ -170,6 +172,10 @@ def facts(world: WorldState, content: Content, notes: list[DayNote], lines_then:
                                     move=move_text(content, line, value, lines_then.get(line))))
     for note in plans:
         out.append(note_fact(content, note))
+    if marks_since is not None and rules.jianfa(content, world, "marks_visible"):
+        from . import marks  # noqa: PLC0415  只有這一類用得到，延後 import
+
+        out += [line for line in marks.xingshi_facts(world, content, marks_since) if line not in out]
     seen = set(out)
     for note, _ in done:  # 易手那一刻 territory 另發的「落入／收復」：跟收場（推滿易手、補缺退回）那一條是同一件事
         if _taken(note) or note.by == conquest_day.MEND:

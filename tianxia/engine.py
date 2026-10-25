@@ -948,6 +948,9 @@ class Game:
         self._reconcile_season()
         msgs = list(self.world.catch_up_season(self.content, now, self.rng))
         self.state.world = self.world.get_season()
+        # 減法季批 4：痕跡過門檻的防漏（只發，不替任何人記行狀：排程那一份 Game 沒有自己的人；直接寫回、不經 _save_season）
+        if jianfa(self.content, self.state.world, "marks_visible") and marks_rules.fire_due(self.state, self.content):
+            self.world.save_season(self.state.world)
         msgs += self._conquest_tick()  # 領地爭奪：22:00 沒人在線也照時換天
         self._battle_status(tick=True)
         self._seal_tick()
@@ -1008,6 +1011,7 @@ class Game:
         self._conquest_tick()  # 領地爭奪：換天（22:00）的掛鉤（前一天沒開成的攻城作罷；第一個看到新的一天的人觸發）
         self._deliver_conquest()  # 領地爭奪：翻地的分紅、守城功（下線時易手的回來補）
         self._deliver_arena()  # 擂台：被挑了的戰報、季末前三名的獎勵；季收了還沒打完的那一場作廢
+        self._marks_tick()  # 減法季批 4：痕跡過門檻的防漏、替自己記出過力的行狀（關著什麼都不做）
         mail = parley.lapse(self.state, self.content)  # 開口求人第二批：欠人物的事過了期限是食言（附的委託先作罷，書信不再補一句）
         mail += letters.deliver(self.state, self.content, now)  # 書信（大勢人物擴充第二批）：人物來信、過期的委託作罷
         if mail:
@@ -2216,8 +2220,45 @@ class Game:
     def _save_season(self) -> None:
         """choose()/travel() 直接在 self.state.world 上就地修改（check_thresholds、
         apply_effect 的 trend 變動等既有程式碼都是這樣寫的，沒有、也不需要特別改寫成
-        認得共用儲存的樣子），行動結束後這裡統一寫回共用賽季一次。"""
+        認得共用儲存的樣子），行動結束後這裡統一寫回共用賽季一次。
+        痕跡看得見（減法季批 4）：寫回之前先看有沒有痕跡過了門檻（痕跡只在有人記的那一下漲，記的那一下存季時發就夠；_marks_tick 防漏）。"""
+        if jianfa(self.content, self.state.world, "marks_visible"):
+            marks_rules.fire_due(self.state, self.content)
         self.world.save_season(self.state.world)
+
+    MARK_ANNAL = "{rumor}這裡頭有你出的一分力。"  # 待 joy 潤：行狀（annals.MARK）——痕跡過了門檻、你在那之前出過力
+
+    def _marks_tick(self) -> None:
+        """痕跡看得見（減法季批 4）：同步時補發過了門檻還沒發的（防漏），再替自己記出過力的那幾則行狀（_mark_credits）；
+        有改到季（發了、名號拿掉了）才存季。關著什麼都不做。"""
+        if not jianfa(self.content, self.state.world, "marks_visible"):
+            return
+        fired = marks_rules.fire_due(self.state, self.content)
+        if self._mark_credits() or fired:
+            self._save_season()
+
+    def _mark_credits(self) -> bool:
+        """跨過門檻那一刻出過力的人（WorldState.mark_helpers）裡有自己的，各記一則行狀（annals.MARK：只寫那一句傳聞，不列名字、
+        不寫玩家的句子），名號從名單拿掉（名單空了鍵也拿掉）。只在自己的同步裡叫：排程與替別人寫東西的那一份 Game 不記。
+        回有沒有記到。"""
+        s, c = self.state, self.content
+        w, name = s.world, s.player.name
+        mine = [mark for mark, names in w.mark_helpers.items() if mark in w.marks_fired and name in names]
+        if not mine:
+            return False
+        by_mark = {r.mark: r for r in c.mark_rules}
+        for mark in mine:
+            names = w.mark_helpers[mark]
+            names.remove(name)
+            if not names:
+                del w.mark_helpers[mark]
+            rule = by_mark.get(mark)
+            if rule is None:
+                continue
+            loc = c.locations.get(marks_rules.place_of(mark))
+            annals.note(s, c, annals.MARK, self.MARK_ANNAL.format(rumor=rule.rumor), 2,
+                        place=loc.name if loc is not None else "", time=w.marks_fired[mark])
+        return True
 
     def dialogue_request(self, option_id: str, text: str | None = None) -> companion_agent.DialogueRequest | None:
         """鎖外生成的階段 A（server.py 在行動鎖內、很快地呼叫）：現在選這個選項，會不會生成一輪對話？
@@ -10976,7 +11017,8 @@ class Game:
         n = max([e.n for e in w.xingshi], default=0) + 1
         w.xingshi_ticket = XingshiTicket(
             n=n, key=key, opened_real=self.now,  # 現實時鐘（FB-577）
-            facts=xingshi.facts(w, c, notes, mark.lines, mark.rumors, night=xingshi.is_night(self.pill_now(), c)),  # 白天開的不寫「打到入夜」
+            facts=xingshi.facts(w, c, notes, mark.lines, mark.rumors, night=xingshi.is_night(self.pill_now(), c),  # 白天開的不寫「打到入夜」
+                                marks_since=max((e.time for e in w.xingshi), default=0.0)),  # 減法季批 4：上一篇以後過門檻的痕跡
             line=xingshi.summary_line(notes, c),
         )
         w.xingshi_mark = XingshiMark(log=len(w.conquest.day_log), rumors=len(w.rumors), lines=xingshi.line_values(w, c))
@@ -15104,6 +15146,8 @@ class Game:
 
     def location_text(self) -> str:
         loc = self.content.locations[self.state.player.location]
+        if jianfa(self.content, self.state.world, "marks_visible"):  # 減法季批 4：痕跡過了門檻，描寫多接一段（marks.describe）
+            return f"【{loc.name}】危險 {'★' * loc.danger}\n\n{marks_rules.describe(loc, self.state.world, self.content)}"
         return f"【{loc.name}】危險 {'★' * loc.danger}\n\n{loc.describe(self.state.world.flags)}"  # 宛城的描寫隨版本換
 
     def method_help(self, option_ids: Iterable[str]) -> dict | None:

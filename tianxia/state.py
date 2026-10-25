@@ -1520,6 +1520,9 @@ class WorldState(BaseModel):
     # 地方痕跡過門檻（減法季批 4，marks.fire_due）：「地點 id:痕跡名」→ 過門檻那一刻的世界秒（只發一次；〈天下形勢〉照它挑上一篇以後的）。
     # 空的時候不寫進 JSON（_drop_empty_marks_fired）：沒有痕跡過門檻的季存檔一個鍵都不多
     marks_fired: dict[str, float] = Field(default_factory=dict)
+    # 替有痕跡規則的痕跡出過力的人（減法季批 4，rules.add_marks 在痕跡看得見開著時記；過了門檻就不再記）：「地點 id:痕跡名」→ 名號。
+    # 過了門檻之後每個人下一次同步記一則行狀（Game._mark_credits）、把自己的名號拿掉；空的時候不寫進 JSON（同 marks_fired）
+    mark_helpers: dict[str, list[str]] = Field(default_factory=dict)
     pending_battle: str | None = None  # 背景推進跨過開戰門檻時記下要開的戰鬥 id；那時人在 mutate_season 的
     # callback 裡，不能再 mutate 開戰（巢狀的 mutate 內層寫的會被蓋掉，會丟錯），callback 結束後由
     # world.start_pending_battle 開戰並清掉
@@ -1580,10 +1583,12 @@ class WorldState(BaseModel):
 
     @model_serializer(mode="wrap")
     def _drop_empty_marks_fired(self, handler):
-        """marks_fired 是空的時候不寫這個鍵（同 world_state.SealRegistry._drop_empty_uses；不用 Field(exclude_if=…)：Pydantic 2.11 才有）。"""
+        """marks_fired、mark_helpers 是空的時候不寫這個鍵（同 world_state.SealRegistry._drop_empty_uses；不用 Field(exclude_if=…)：Pydantic 2.11 才有）。"""
         data = handler(self)
-        if isinstance(data, dict) and "marks_fired" in data and not data["marks_fired"]:
-            del data["marks_fired"]
+        if isinstance(data, dict):
+            for key in ("marks_fired", "mark_helpers"):
+                if key in data and not data[key]:
+                    del data[key]
         return data
 
     bounty_seq: int = 0  # 懸賞的流水號

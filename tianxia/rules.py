@@ -415,6 +415,18 @@ def add_marks(marks: dict[str, int], state: GameState, content: Content) -> None
             continue
         state.player.mark_days[key] = day
         state.world.marks[key] = state.world.marks.get(key, 0) + n
+        _note_mark_helper(key, state, content)
+
+
+def _note_mark_helper(key: str, state: GameState, content: Content) -> None:
+    """痕跡看得見開著時（減法季批 4）記下替有痕跡規則的痕跡出過力的人（WorldState.mark_helpers）：跨過門檻那一刻他們各記一則行狀
+    （Game._mark_credits）。過了門檻之後出的力不記；沒有痕跡規則的痕跡（事件條件讀的那些）不記；關著一個字都不寫。"""
+    w = state.world
+    if key in w.marks_fired or not jianfa(content, w, "marks_visible") or not any(r.mark == key for r in content.mark_rules):
+        return
+    names = w.mark_helpers.setdefault(key, [])
+    if state.player.name not in names:
+        names.append(state.player.name)
 
 
 def fail_stamina(amount: int, content: Content) -> int:
