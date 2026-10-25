@@ -35,6 +35,7 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   - 要用就 `git stash push -m <獨一無二的標籤> -- <檔>`，`git stash list --format='%H %gd %gs'` 找到自己那一筆，`git stash apply <sha>`，再照標籤找 `stash@{n}` 去 drop。
   - 想證明測試「修之前是紅的」，最簡單的就是這樣把改動暫時收起來跑一次。
 - **用 `python -I` 跑腳本時 `PYTHONIOENCODING` 不生效**（`-I` 忽略所有 PYTHON 開頭的環境變數）：在腳本裡 `sys.stdout.reconfigure(encoding="utf-8")`。
+  **`PYTHONHASHSEED` 也一樣不生效**（2026-10-25 減法季批 2 的關著對照）：加了 `-I` 的兩份輸出差在存檔裡集合欄位的順序（`seen_events`、`visited`、`revealed`），不是程式的差。要固定雜湊就不加 `-I`，腳本開頭 `sys.path.insert(0, 根目錄)`、`os.chdir(根目錄)` 擋掉別份；同一份程式跑兩次先確認一模一樣。
 - **實機看畫面**：PM 會給你一個埠與 `<名字>.localhost`（別的子代理同時在跑伺服器，cookie 照主機名分開）；瀏覽器窗格是共用的，**每一個動作都帶自己的 tabId**，看完把視窗設回 desktop、關掉自己的分頁、`taskkill /T` 關伺服器。窗格在背後時截圖可能拍到動畫中途，數字用 `javascript_tool` 量。
 - **這台的 Ollama 沒有 `gemma4:12b`**（只有 26b 等舊模型，2026-10-20 查的）：真模型實測叫不動就照實回報；不要改拿 26b 代跑（17GB、keep_alive 12 小時會一直佔著顯卡）。
 - **開伺服器又不能打到 11434**：模型網址（`Config.ollama_url`）沒有環境變數可改，設定覆寫檔照派工指定的（例 `week7`）就不另寫一份。在 scratchpad 寫一支包裝：`sys.path.insert(0, 工作樹)`、`import server`、`server.CONTENT.config.ollama_url = "http://127.0.0.1:9"`、`server.main(["--port", 埠])`，用 `Start-Process` 跑它（`TIANXIA_DB`、`TIANXIA_PROFILE` 照設在 PowerShell 裡，子行程繼承）。角色在每次建 `Game` 時才照設定建 client，所以先改再 `main` 就全部指到那裡（FB-490～493 這一輪）。
@@ -164,6 +165,9 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   - 戰報欄位用加的（`record.xinde = (record.xinde or 0) + x`），不要覆蓋，前面可能已經加了別的（FB-450）。
 - 會不會先升級再轉換這類順序問題（例：滿級換心得要在 `add_exp` 之前判），寫一條「剛好升到頂的那一下」的測試。
 - 擲骰一律用自己的亂數（`random.Random("用途|季數|名號|戰報流水號")`），不碰 `Game.rng`：整季測試與量表的序列才不會位移。
+- **改一個會被 monkeypatch 的函式的參數**（2026-10-25 減法季批 2：`team.add_exp` 多一個 `source`）：`tests/test_seal.py` 用四個參數的 lambda 換掉它、`scripts/measure_exp_pace.py` 的 Ledger 包著它，`grant_team_exp` 一傳五個參數兩邊都炸（只在跑到那幾條時才紅）。新參數放在有預設值的尾巴、內部呼叫照舊用舊的個數（來源先在別處驗），改之前 grep `mock.patch.object(<模組>, "<函式>"` 與 scripts 裡 `<模組>.<函式> =`，包裝的函式一律收 `*args, **kw`。
+- **每季不同的數字要穿過一串不收 state 的函式**（減法季每點加倍：`team.neili_cap`、`_cap_of`、`neili_ceiling`、`member_neili`、`regen_neili`、`_apply_toll`）：加 `season=None`（`state.world`），沒給照舊；每一個呼叫端都要給，漏一個在新規則的季就是「狀態列寫的上限跟打起來的不一樣」。寫一條測試把狀態列、角色卡、決戰的池子、本人氣血幾個數比在一起（`tests/test_stat_milestones_engine.py::test_hp_cap_is_one_number_everywhere`），再拿新開關關著的整份畫面對照證明舊季一個位元組不變。
+- **`PlayerState` 加進 `QUIET_DEFAULTS` 的欄位**：`tests/test_gentry_ledgers.py::test_new_fields_add_no_keys_until_used` 現在照整個 `QUIET_DEFAULTS` 減（以前寫死只少兩個鍵），之後加欄位不必再改它；自己那一批另寫一條「預設不寫、有值寫得回來、舊存檔讀得進來」。
 - **動作中間要改全服狀態**（例：探索撿到碎片，`Game._seal_find`）：用一次 `self.world.mutate(...)`，寫入時整個重驗；只想補天下大事或江湖史就寫在 mutate 裡的 `shared.season`（傳聞與江湖史只增不減，動作結束的 `_save_season` 不會蓋掉）。**不要**在動作中間把 `self.state.world = self.world.get_season()` 換掉：這個動作前面對 `self.state.world` 的就地修改還沒存，會一起丟掉（決戰收場那幾處這樣換是因為前面沒有未存的修改）。
 - **新的全服登記欄位（`SealRegistry` 這類）在開季才寫**：寫的地方有三個進入點——`seed_first_season`（自動開季）、`open_season`、`next_season`；沒蓋章的季連登記都不要碰（`filled(...)` 也會改登記），舊的季才一個字不變。
 - 資料庫結構（第 5 版）不改，要改先問 PM。新狀態欄位加在 `PlayerState`／`WorldState`，舊存檔讀得進來。
@@ -187,6 +191,9 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   - 看結果要連它印的每天威力一起看。要比練功點，另外照威力 60／90／120／160 算「對手經驗 × 勝率」。
   - 回報時兩種讀法都寫，讓 PM 定。
 - 一次跑很多組要很久（21 天 × 四方約 25 分鐘），背景跑。跑的時候不要改它會讀的內容檔（每一組重新載內容）。
+- **量表跑之前擋模型**：scratchpad 寫一支包裝（把 `socket.socket.connect`／`socket.create_connection` 對 11434 的連線改成拒絕、`OllamaClient.from_config` 換成回 None，再 `runpy.run_path` 那支量表），量表的 `print` 包在 TextIOWrapper 裡，導到檔案時跑完才看得到（減法季批 2 的 `run_blocked.py`）。
+- **新規則多了一種「要選」的狀態，量表的迴圈要跟著了結**（減法季批 2：出門一趟的感悟拍會進有所感的「畫一筆」）：`measure_exp_pace._settle` 以前按選單第一顆，碰到 `sensing.DRAW` 只回「在畫布上畫」、迴圈空轉到上限，一天只出門兩趟；改成照整季機器人 `bot.sense_pick`／`bot.sense_draw`。先跑一天看一眼數字合不合理再背景跑整季。
+- `measure_difficulty` 的練功走法在減法季可能卡死：銀兩花光、內傷疊到氣血不到一半就不出門、付不起醫館，整季停在第 6 級（2026-10-25 season21 solo 種子 1，季在第 17.7 天收了，一個停點都沒量到）。照實報那一組，不要為了好看換種子不說。
 
 ## 回報 PM
 
