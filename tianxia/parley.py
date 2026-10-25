@@ -558,7 +558,12 @@ def plea_prompt(content: Content, cid: str, mood: str, wanted: list[Item], rewar
     return (
         f"\n【{name}有求於玩家】{name}此刻{mood}，玩家剛好來見他。如果照他的性格與處境，他會開口請玩家幫忙，"
         f"就從「{name}想請玩家做的事」挑一件填 want，再從「{name}可以回報的事」挑一件填 reward（份量不能比 want 大）；"
-        f"narrative 就寫他開口請託的話（說出要玩家做什麼、事成之後怎麼回報），不寫數字。他不想求人，want 留空字串，照平常開場。\n"
+        f"narrative 就寫他開口請託的話（說出要玩家做什麼、事成之後怎麼回報），不寫數字。\n"
+        f"【narrative 與 want 必須是同一件事】narrative 裡只要出現請託——要玩家去做什麼、事成怎麼回報——"
+        f"want 就一定要填清單上對應的那一件、reward 填回報的那一件，兩邊不能各說各話。"
+        f"他這一刻真的不想求人，就兩件都不要做：want 與 reward 都填空字串，而且 narrative 只寫寒暄、一個字都不提請託。\n"
+        f"【實機看過的錯誤寫法，不要這樣寫】narrative 寫「可否幫我查探那一處的動向？事成之後我親自護送你」，"
+        f"want 卻留空字串——玩家看到他開口相求，系統卻判定他沒開口，什麼也不會發生。\n"
         f"【{name}想請玩家做的事】\n{want_lines}\n"
         f"【{name}可以回報的事】\n{reward_lines}\n"
         "JSON 一定要多這兩個欄位（不求人就都填空字串）：\"want\": \"...\", \"reward\": \"...\""
