@@ -121,6 +121,12 @@ def on(content: Content, world: WorldState | None) -> bool:
     return rules.jianfa(content, world, "sortie_duel") and sortie.on(content) and conquest.on(content, world)
 
 
+def progress_scale(content: Content) -> float:
+    """約戰推（拉）進度的倍數：Config.sortie.duel_progress_scale，沒設照 Config.conquest.progress_scale。"""
+    own = content.config.sortie.duel_progress_scale
+    return content.config.conquest.progress_scale if own is None else own
+
+
 def parse_moves(moves) -> list[str]:
     """網頁、選項 id 送來的三招：清單，或「強攻,固守,奇襲」（逗號、頓號、空白都算分隔）。不認得的字照留（moves_problem 擋）。"""
     if isinstance(moves, (list, tuple)):

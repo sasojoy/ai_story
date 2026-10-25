@@ -2856,6 +2856,9 @@ class SortieRules(_Strict):
     # 一回合扣氣血上限的幾成（照那一邊這一回合贏、僵持、輸）：三回合全輸 30%＝遊歷落敗（encounter_neili_loss 的落敗）
     round_toll: dict[str, float] = Field(default_factory=lambda: {"win": 0.03, "draw": 0.06, "lose": 0.10})
     keep_hours: float = Field(default=24.0, ge=0)  # 結算完（或作廢）的約戰留多久（卡上看得到、各自同步時補送）
+    # 約戰推（拉）進度的倍數（取代 Config.conquest.progress_scale；None＝照 progress_scale）：量表 scripts/measure_conquest.py 照「20 人一季易手 7～8 次」
+    # 調（計畫第四節 4.0 之四）。另開一個數、不改 progress_scale：約戰關著的季（舊出陣）一個字都不變
+    duel_progress_scale: float | None = Field(default=None, ge=0)
     duty_contribution: int = Field(default=1, ge=0)  # 巡哨、傳道、保境安民收進此地：不推線、不佔出陣次數，記這麼多貢獻（企劃者 2026-10-24 第 2 件）
     duty_per_day: int = Field(default=1, ge=0)  # 上面那一點貢獻一天記幾次
 

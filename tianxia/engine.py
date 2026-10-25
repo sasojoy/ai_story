@@ -10176,7 +10176,7 @@ class Game:
         ×（1＋集火：side 一小時內在這一塊出陣過的別人，含同去的）。回（量, 集火）。"""
         s, c = self.state, self.content
         w, cfg = s.world, c.config
-        amount = base * cfg.conquest.progress_scale
+        amount = base * sortie_duel.progress_scale(c)
         if (writ := seal_acts.writ_factor(w, c, conquest.line_of(w, c, loc_id), side)) != 1.0:
             amount *= writ
         window = cfg.active_window_days * DAY / calendar.cal_scale(c, w)

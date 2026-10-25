@@ -169,7 +169,7 @@ def test_attacker_wins_the_tick_settles_pushes_and_both_get_a_report(monkeypatch
     duel = _only(world)
     assert duel.status == "settled" and duel.result.tier == "big" and duel.result.wins == 3
     season = world.get_season()
-    expect = conquest.sortie_nominal(c, LOC, "attack") * 1.5 * c.config.conquest.progress_scale
+    expect = conquest.sortie_nominal(c, LOC, "attack") * 1.5 * sortie_duel.progress_scale(c)
     assert conquest.bar(season, LOC, "guan") == pytest.approx(expect)
     a, b = load(world, "甲"), load(world, "乙")
     assert a.battles[0].label == "約戰" and a.battles[0].kind == "sortie" and a.battles[0].tier == "大勝"
@@ -208,7 +208,7 @@ def test_defender_wins_pulls_the_attackers_bar(monkeypatch):
     tick(c, world, NOW + WINDOW + 1)
     duel = _only(world)
     assert duel.result.tier == "lose" and duel.result.defender_tier == "big"
-    pulled = conquest.sortie_nominal(c, LOC, "attack") * 1.5 * c.config.conquest.progress_scale
+    pulled = conquest.sortie_nominal(c, LOC, "attack") * 1.5 * sortie_duel.progress_scale(c)
     assert conquest.bar(world.get_season(), LOC, "guan") == pytest.approx(30.0 - pulled)
     a, b = load(world, "甲"), load(world, "乙")
     assert b.player.contrib > 0 and a.battles[0].tier == "落敗" and b.battles[0].tier == "大勝"
@@ -263,13 +263,27 @@ def test_duel_exp_is_battle_exp_past_level_45(monkeypatch, tier, winner):
     assert won.battles[0].exp > 0 and won.player.member.exp == won.battles[0].exp
 
 
+def test_the_duel_scale_replaces_progress_scale_only_for_duels(monkeypatch):
+    """約戰自己的倍數（Config.sortie.duel_progress_scale）：設了照它、沒設照 progress_scale；舊出陣讀的 progress_scale 不動。"""
+    c, world = _pair()
+    c.config.sortie.duel_progress_scale = 7.0
+    assert sortie_duel.progress_scale(c) == 7.0
+    _go(c, world)
+    _answer(c, world, "乙", _only(world).id)
+    rounds_go(monkeypatch, "大勝")
+    tick(c, world, NOW + WINDOW + 1)
+    assert conquest.bar(world.get_season(), LOC, "guan") == pytest.approx(conquest.sortie_nominal(c, LOC, "attack") * 1.5 * 7.0)
+    c.config.sortie.duel_progress_scale = None
+    assert sortie_duel.progress_scale(c) == c.config.conquest.progress_scale
+
+
 def test_a_draw_pushes_a_little(monkeypatch):
     c, world = _pair()
     _go(c, world)
     _answer(c, world, "乙", _only(world).id)
     rounds_go(monkeypatch, "僵持")
     tick(c, world, NOW + WINDOW + 1)
-    expect = conquest.sortie_nominal(c, LOC, "attack") * 0.4 * c.config.conquest.progress_scale
+    expect = conquest.sortie_nominal(c, LOC, "attack") * 0.4 * sortie_duel.progress_scale(c)
     assert conquest.bar(world.get_season(), LOC, "guan") == pytest.approx(expect)
 
 
@@ -328,7 +342,7 @@ def test_an_ally_who_joined_adds_focus_and_gets_the_credit(monkeypatch):
     rounds_go(monkeypatch, "大勝")
     tick(c, world, NOW + WINDOW + 1)
     cfg = c.config.conquest
-    base = conquest.sortie_nominal(c, LOC, "attack") * 1.5 * cfg.progress_scale
+    base = conquest.sortie_nominal(c, LOC, "attack") * 1.5 * sortie_duel.progress_scale(c)
     assert conquest.bar(world.get_season(), LOC, "guan") == pytest.approx(base * (1 + cfg.focus_step))
     ally = load(world, "丙")
     assert ally.player.contrib > 0 and ally.battles[0].label == "約戰"

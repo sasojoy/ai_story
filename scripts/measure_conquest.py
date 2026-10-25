@@ -58,6 +58,7 @@ def main(argv: list[str] | None = None) -> dict:
     ap.add_argument("--profile", default="week7")
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--progress-scale", type=float, default=None)
+    ap.add_argument("--duel-scale", type=float, default=None)  # Config.sortie.duel_progress_scale（約戰自己的倍數）
     ap.add_argument("--days", type=float, default=None)
     ap.add_argument("--step", type=float, default=300.0)
     ap.add_argument("--acts", type=int, default=3)
@@ -70,6 +71,8 @@ def main(argv: list[str] | None = None) -> dict:
     content.config.bot_naming = False
     if args.progress_scale is not None:
         content.config.conquest.progress_scale = args.progress_scale
+    if args.duel_scale is not None:
+        content.config.sortie.duel_progress_scale = args.duel_scale
     world = open_world(Path(os.environ["TIANXIA_DB"]))
     world.seed_first_season(content)
     world.open_season(content, now=T0)
@@ -171,7 +174,8 @@ def main(argv: list[str] | None = None) -> dict:
     kinds = Counter(d["kind"] for d in duels)
     fought = [d for d in duels if d["tier"] is not None]
     report = {
-        "profile": args.profile, "seed": args.seed, "progress_scale": content.config.conquest.progress_scale, "days": days,
+        "profile": args.profile, "seed": args.seed, "progress_scale": content.config.conquest.progress_scale,
+        "duel_scale": sortie_duel.progress_scale(content), "days": days,
         "turns": turns, "wall_seconds": round(time.time() - started),
         "flips": len(flips), "flips_by_side": dict(Counter(side for _, _, side, _ in flips)),
         "flips_by_letter": sum(1 for *_, note in flips if not note),
