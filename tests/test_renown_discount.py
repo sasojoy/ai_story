@@ -12,7 +12,7 @@ def _s(c, fame):
 
 
 def test_prices_take_the_fame_discount():
-    c = real_content("weekend")
+    c = real_content("week7")
     s = _s(c, 25)  # 名動一方：九四折；散人、地盤原價
     assert smithing.price(c, 2, "weapon", s) == int(c.config.weapons.forge_silver["2"] * 0.94 + 0.5)
     assert mounts.price(s, c) == int(c.config.mounts.shop_price * 0.94 + 0.5)
@@ -26,7 +26,7 @@ def test_prices_take_the_fame_discount():
 
 
 def test_the_heal_button_names_the_discount():
-    c = real_content("weekend")
+    c = real_content("week7")
     s = _s(c, 25)
     s.player.member.injury = 40
     s.player.stats["silver"] = 100
@@ -34,7 +34,7 @@ def test_the_heal_button_names_the_discount():
 
 
 def test_no_discount_no_note():
-    c = real_content("weekend")
+    c = real_content("week7")
     s = _s(c, 0)
     assert territory.price_note(s, c) == "" and territory.price_here(s, c) == 1.0
     c.config.renown.discount = False

@@ -111,7 +111,7 @@ def test_the_status_bar_says_how_many_are_left_today(capped):
 
 def test_the_real_content_caps_at_two_a_day_and_five_while_new():
     # 企劃者 2026-10-13「一天最多可以吃五顆」；Joy 2026-10-17「回體丹可以吃到五顆，平常兩顆」：新手期五顆、之後兩顆
-    for content in (real_content(), real_content("weekend")):
+    for content in (real_content(), real_content("week7")):
         assert content.config.stamina_pills_per_day == 2 and content.config.newbie_pills_per_day == 5
 
 
@@ -143,7 +143,7 @@ def _button(today, full=False):
 
 
 def _web_game():
-    content = real_content("weekend")
+    content = real_content("week7")
     content.config.auto_open_first_season = True
     game = Game.new(content, "沈浪", rng=random.Random(0))
     game.client = None

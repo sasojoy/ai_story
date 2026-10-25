@@ -20,7 +20,7 @@ HOUR, DAY = 3600, 86400
 MON = 1792339200  # 2026-10-19 週一 00:00（台灣）
 WED14 = 1792549800 + 3.5 * HOUR  # 2026-10-21 週三 14:00（台灣）
 BOSS = "段鐵頭"  # 頭目次數用完那一句的名字（FB-672：explore_modes.boss_gone 多一個 name）
-PROFILES = ("week7", "season21", "weekend", None)
+PROFILES = ("week7", "season21", None)
 
 
 def _content(profile):
@@ -57,7 +57,7 @@ def test_week7_names_segments_with_their_days():
     assert words["this"] == "這一段" and words["names"][2] == "第 3 段（第 5～7 天）" and words["ends"][0] == "第 1 段末（第 2 天）"
 
 
-@pytest.mark.parametrize("profile", ["season21", "weekend", None])
+@pytest.mark.parametrize("profile", ["season21", None])
 def test_other_seasons_keep_their_week_words(profile):
     content = _content(profile)
     season = _season(content)
@@ -95,8 +95,7 @@ def test_the_boss_line_reads_the_live_option_on_week7():
     assert explore_modes.boss_gone(state, c7, BOSS).startswith("這一段頭目段鐵頭不再現身，第 3 天")
 
 
-@pytest.mark.parametrize("profile,line", [("season21", explore_modes.BOSS_GONE_WEEK), ("weekend", explore_modes.BOSS_GONE_SEASON),
-                                          (None, explore_modes.BOSS_GONE_SEASON)])
+@pytest.mark.parametrize("profile,line", [("season21", explore_modes.BOSS_GONE_WEEK), (None, explore_modes.BOSS_GONE_SEASON)])
 def test_other_seasons_keep_the_boss_line(profile, line):
     content = _content(profile)
     assert explore_modes.boss_gone(_state(content), content, BOSS) == line.format(name=BOSS)
@@ -116,7 +115,7 @@ def test_renown_perks_say_each_segment_on_week7():
     assert "每段通緝你" in howto_text and "官府每段貼你" in howto_text
 
 
-@pytest.mark.parametrize("profile", ["season21", "weekend", None])
+@pytest.mark.parametrize("profile", ["season21", None])
 def test_renown_perks_keep_each_week_elsewhere(profile):
     content = _content(profile)
     season = _season(content)
@@ -139,21 +138,6 @@ def test_howto_says_orders_come_every_day_on_week7():
     assert "每週一" not in join and "本週" not in join
 
 
-@pytest.mark.parametrize("profile", ["weekend"])
-def test_howto_orders_lines_unchanged_elsewhere(profile):
-    """週末本來就是每週一。21 天季的軍令也是每天一道，FB-502 起照「每天」寫（test_fb502_season21_order_words）。
-    領地爭奪關著（PM 2026-10-22 起正式內容打開；開著的季投靠那一段換成 howto.CONQUEST_JOIN，不比沒給 world 的那一版）。"""
-    from conftest import no_conquest
-
-    content = no_conquest(_content(profile))
-    state = _state(content)
-    assert "投靠陣營之後每週一有軍令" in "".join(howto.war_help(state, content)["quest"])
-    join = "".join(howto.join_lines(content, state.world))
-    assert "**軍令**：每週一發令" in join and "本週的軍令卡在江湖頁行動列底下" in join
-    assert howto.quest_help(content, rules.haoqiang_allied(content, state.world), state.world) == howto.quest_help(
-        content, rules.haoqiang_allied(content, state.world))
-
-
 # ── 11. 軍令的字（content/orders.json 的 {本週}{這週}）──
 
 
@@ -163,16 +147,15 @@ def _order(world_state):
 
 def test_order_text_slots_follow_the_season():
     """21 天季（軍令也每天一道）見 test_fb502_season21_order_words（FB-502）。"""
-    c7, cw = real_content("week7"), real_content("weekend")
-    s7, sw = _state(c7), _state(cw)
+    c7 = real_content("week7")
+    s7 = _state(c7)
     raw = "{地點}，{本週}截斷它；{人物}{這週}連敗幾陣。"
     assert orders.fill(s7, c7, _order(s7), raw).endswith("，今日截斷它；今天連敗幾陣。")
-    assert orders.fill(sw, cw, _order(sw), raw).endswith("，本週截斷它；這週連敗幾陣。")
 
 
 def test_issued_orders_read_today_on_week7_only():
-    c7, cw = real_content("week7"), real_content("weekend")
-    for content, want, never in ((c7, "今日", "本週"), (cw, "本週", "今日截斷")):
+    c7 = real_content("week7")
+    for content, want, never in ((c7, "今日", "本週"),):
         season = _season(content)
         world.settle_season_start(season, content, random.Random(0))
         texts = [o.text for o in season.orders]
@@ -198,7 +181,7 @@ def test_yuedan_head_names_the_segment_on_week7():
 
 
 def test_seat_rotation_rumor_says_this_segment_on_week7():
-    for profile, head in (("week7", "這一段在任的"), ("season21", "本週在任的"), ("weekend", "本週在任的")):
+    for profile, head in (("week7", "這一段在任的"), ("season21", "本週在任的")):
         content = _content(profile)
         state = _state(content)
         state.world.seat_ledger = {"guan": {"乙": {1: 5}}}
@@ -211,8 +194,7 @@ def test_seat_rotation_rumor_says_this_segment_on_week7():
 
 def test_default_dates_follow_the_week7_timetable():
     assert timetable.default_dates_note(real_content("week7")) == "預設在第 2、4、7 天 20:00、季末第 7 天過完"
-    for profile in ("weekend", None):
-        assert timetable.default_dates_note(_content(profile)) is None
+    assert timetable.default_dates_note(_content(None)) is None
 
 
 def test_default_dates_follow_the_season21_timetable():
@@ -256,7 +238,7 @@ def _game(profile, opened=MON):
     return game
 
 
-@pytest.mark.parametrize("profile", ["week7", "season21", "weekend"])
+@pytest.mark.parametrize("profile", ["week7", "season21"])
 def test_status_sends_the_words_only_on_week7(profile):
     cal = _game(profile).status_data()["calendar"]
     if profile == "week7":
@@ -272,7 +254,6 @@ ADMIN = {  # 管理者時刻表第一列與最後一列的開頭、暫停那一�
               "預設在第 2、4、7 天 20:00、季末第 7 天過完"),
     "season21": ("第1週　三十六方起義", "第3週　", {"days": "21", "unit": "星期"},
                  "預設在第 1、2、3 週週六 20:00、季末第 3 週週日過完"),
-    "weekend": ("第1週　三十六方起義", "第12週　", None, None),
 }
 
 

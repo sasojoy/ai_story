@@ -28,7 +28,7 @@ def _world():
     return open_world(Path(tempfile.mkdtemp(prefix="conqon-")) / "t.db")
 
 
-@pytest.mark.parametrize(("profile", "stamped"), [("weekend", True), ("season21", True), ("week7", True), (None, False)])
+@pytest.mark.parametrize(("profile", "stamped"), [("week7", True), ("season21", True), ("week7", True), (None, False)])
 def test_a_newly_opened_season_is_stamped_on_for_three_kinds(profile, stamped):
     """週末、21 天、7 天（線上那一種）新開的季蓋上章；14 天（不帶設定）沒有第一季規則的章，蓋不上。籌備中種季、管理者開季兩步都走 stamp_season。"""
     c = real_content(profile)

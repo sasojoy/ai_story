@@ -101,7 +101,7 @@ def test_sense_rate_plus_five_at_home():
 
 
 def test_switch_off_perks_unchanged():
-    game = plain_game("weekend")
+    game = plain_game("week7")
     s, c = game.state, game.content
     _at(game, "deep_mountain", None)
     assert not conquest.home(s, c)

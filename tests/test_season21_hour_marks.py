@@ -84,7 +84,7 @@ def test_jumping_to_a_scheduled_showdown_opens_the_muster_at_once():
 
 
 def test_weekend_and_fourteen_day_marks_are_unchanged():
-    for profile in ("weekend", None):
+    for profile in (None,):
         c = real_content(profile)
         from tianxia.world_state import fresh_season, stamp_season
 

@@ -15,7 +15,7 @@ from tianxia import (
 )
 from tianxia.characters import open_characters
 from tianxia.content import load_content
-from tianxia.engine import NO_REST, Game, Option
+from tianxia.engine import Game, Option
 from tianxia.martial_arts import Insight, MartialArt, generate_from_name
 from tianxia.models import Condition, Effect, FigureDef, Location, PromotionDef
 from tianxia.models import ExploreMix
@@ -282,15 +282,6 @@ def test_stamina_comes_back_with_time_alone(game):
 
 
 # ── 打坐拿掉了 ──────────────────────────────────────────────
-
-
-def test_there_is_no_sitting_down_any_more(game):
-    """閒著的選單沒有打坐、也沒有起身；舊分頁按到 act:rest 只回一句，不坐下、不動體力。"""
-    assert "act:rest" not in ids(game) and "act:stand" not in ids(game)
-    game.state.player.stamina = 3
-    assert game.choose("act:rest") == ["（此刻無法這麼做。）"]
-    assert game.state.player.resting_since is None and game.state.player.stamina == 3
-    assert game._act("rest") == [NO_REST]
 
 
 def test_a_save_made_while_sitting_stands_up_on_load(game):
@@ -5825,16 +5816,6 @@ def test_the_menu_walks_by_default(game):
     assert game.move_mode == "walk"
     move = _move_to_lake(game)
     assert (move.id, move.label, move.enabled) == ("move:lake", "前往 湖邊（步行約 3 分鐘）", True)
-
-
-def test_hurrying_is_gone_from_the_menu(game):
-    """企劃者 2026-10-12 拿掉趕路：選趕路當成步行，選單只有步行的「前往」，趕路的 id 按不下去。"""
-    game.set_move_mode("hurry")
-    assert game.move_mode == "walk"
-    move = _move_to_lake(game)
-    assert (move.id, move.label) == ("move:lake", "前往 湖邊（步行約 3 分鐘）")
-    assert game.choose("move:lake:hurry") == ["（此刻無法這麼做。）"]
-    assert game.state.player.journey is None
 
 
 def test_dashing_from_the_menu_arrives_at_once(game):

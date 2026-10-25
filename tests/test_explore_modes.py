@@ -15,7 +15,7 @@ from tianxia.state import Bounty
 
 
 def _game(faction=None, at="yingshui", **cfg):
-    c = no_conquest(real_content("weekend"))  # 領地加成（自家領地找素材多一份）另測（tests/test_conquest_perks.py）
+    c = no_conquest(real_content("week7"))  # 領地加成（自家領地找素材多一份）另測（tests/test_conquest_perks.py）
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
     c.config.duel.explore_chance = 0.0  # 頭目戰另外測（tests/test_duel.py）：這裡的地點有頭目也不擲中

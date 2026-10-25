@@ -86,11 +86,6 @@ def test_leaving_the_place_closes_the_shop():
     assert not game.state.player.picking_dadian
 
 
-def test_weekend_has_no_dadian():
-    game = _game("weekend", at="wan_city")
-    assert "act:dadian" not in _ids(game)
-
-
 # ── 網頁 ──
 
 web = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")

@@ -188,10 +188,7 @@ def test_short_last_week_after_a_wednesday_opening():
     assert view["next"] is None
 
 
-def test_off_in_weekend_and_after_season():
-    game = _game("weekend")
-    assert "checkin" not in game.status_data()
-    assert game.check_in() == [checkin.OFF]
+def test_off_after_the_season_ends():
     game = _game()
     game.admin_end_season(MON + 11 * HOUR)
     _at(game, MON + 12 * HOUR)
@@ -273,7 +270,7 @@ def test_seek_does_not_drop():
 
 
 def test_no_pill_drop_outside_season21():
-    game = _game("weekend", setup=_sure_drop)
+    game = _game(None, setup=_sure_drop)  # 14 天的季：沒有簽到
     pills = game.state.player.stamina_pills
     _explore(game, "gather")
     assert game.state.player.stamina_pills == pills

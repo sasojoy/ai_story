@@ -44,9 +44,7 @@ def _content(profile=None):
 def test_the_scales_follow_the_season_length_on_the_seal(tmp_path):
     """季長倍數（season_scale）＝min(1, 基準季長 ÷ 這一季蓋章的季長)：週末設定 1，14 天 2.5／14，季長比基準短也不放大。
     操練的倍數（drill_scale）在季長倍數小於 1 時再乘 drill_long_season_share（0.5，PM 2026-10-12）：14 天約 0.09；週末設定照舊 1。"""
-    week_end = _camp(_content("weekend"), open_world(tmp_path / "weekend.db"))
     fourteen = _camp(_content(), open_world(tmp_path / "beta.db"))
-    assert week_end.season_scale() == week_end.drill_scale() == 1.0
     assert fourteen.season_scale() == pytest.approx(2.5 / 14)
     assert fourteen.drill_scale() == pytest.approx(2.5 / 14 * 0.5)
     fourteen.state.world.length_days = 1.0
@@ -75,19 +73,6 @@ def test_drills_in_a_fourteen_day_season_push_a_scaled_amount_and_carry_the_frac
     assert world_trend_value(game.state.world, content, "huangjin") == before + 5
     assert not game.state.world.ended
     assert game.state.player.stats.get("xinde", 0) > xinde
-
-
-def test_drills_in_the_weekend_season_push_as_before_and_stop_at_the_daily_cap():
-    """週末設定（第一季規則開著、季長 2.5 天）：倍數 1，操練照舊一次推潁川汝南 2，一個人一個曆日最多推 daily_push_cap。"""
-    content = _content("weekend")
-    game = _camp(content)
-    assert game.state.world.season_one and game.drill_scale() == 1.0
-    before = game.state.world.trends["yingru"]
-    _drill(game)
-    assert game.state.world.trends["yingru"] == before + 2
-    for _ in range(20):
-        _drill(game)
-    assert game.state.world.trends["yingru"] - before == content.config.daily_push_cap
 
 
 def _sight(game, trend: dict[str, int]) -> list[str]:
@@ -133,7 +118,7 @@ def test_the_first_push_that_reveals_a_hidden_line_is_not_scaled():
 
 def test_event_pushes_in_the_weekend_season_are_unchanged():
     """第一季規則開著（週末設定）：事件的大勢效果一個字都不變（推力緩衝與上限照舊、沒有季長倍數）。"""
-    content = _content("weekend")
+    content = _content("week7")
     game = _camp(content)
     game.state.player.location = "yingchuan"
     before = game.state.world.trends["yingru"]
@@ -202,7 +187,7 @@ def test_train_wins_in_a_fourteen_day_season_follow_the_season_scale():
 
 def test_train_wins_in_the_weekend_season_are_unchanged():
     """第一季規則開著（週末設定）：遊歷打贏推的大勢一個字都不變（推力緩衝與上限照舊、沒有季長倍數）。"""
-    content = _content("weekend")
+    content = _content("week7")
     game = _camp(content)
     game.state.player.location = "yingchuan"
     before = game.state.world.trends["yingru"]

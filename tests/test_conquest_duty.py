@@ -143,7 +143,7 @@ def test_howto_says_duty_stays_on_own_ground():
     assert "守勢行動" not in " ".join(howto.territory_lines(off.content, True, off.state.world))  # 關著：拔河那一版，一個字不變
 
 
-@pytest.mark.parametrize("profile", ["weekend", None, "season21"])  # 週末、14 天（不帶設定檔）、21 天；一個測試只開一季
+@pytest.mark.parametrize("profile", ["week7", None, "season21"])  # 週末、14 天（不帶設定檔）、21 天；一個測試只開一季
 def test_switch_off_the_duty_button_is_unchanged(profile):
     """領地爭奪關著（正式內容的預設，週末、14 天、21 天都一樣）：每一個地點都沒有灰掉的原因；別人的地方、中立地照舊按得下去、
     照舊那一個標籤。14 天的季沒有第一季規則、沒有軍令，守勢行動本來就不在選單上（修前修後都一樣）。"""

@@ -164,7 +164,7 @@ def test_affinity_gains_are_scaled_and_rounded():
     from tianxia import renown
 
     c = real_content()
-    assert c.config.affinity_gain_scale == 0.7 and real_content("weekend").config.affinity_gain_scale == 0.85
+    assert c.config.affinity_gain_scale == 0.7
     assert [renown.warmed(c, d) for d in (1, 2, 5, 8, -5, 0)] == [1, 1, 4, 6, -5, 0]  # 9.4：四捨五入、至少 1、扣的不乘
     c.config.affinity_gain_scale = 1.0
     assert renown.warmed(c, 7) == 7

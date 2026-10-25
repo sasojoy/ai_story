@@ -13,7 +13,7 @@ def _page(content):
 
 
 def test_the_howto_page_explains_the_new_loop():
-    c = no_conquest(real_content("weekend"))  # 地盤拔河那一版；領地爭奪的「地盤」一節在 tests/test_conquest_progress.py
+    c = no_conquest(real_content("week7"))  # 地盤拔河那一版；領地爭奪的「地盤」一節在 tests/test_conquest_progress.py
     page = _page(c)
     assert "**出陣**" in page and "每天 5 次" in page and "**遊歷**" not in page
     assert "找素材" in page and "靜心感悟" in page and "照地點三選一：悟意境" not in page
@@ -25,14 +25,14 @@ def test_the_howto_page_explains_the_new_loop():
 
 
 def test_the_territory_prices_follow_the_config():
-    c = real_content("weekend")
+    c = real_content("week7")
     c.config.territory.own_price, c.config.territory.enemy_price = 0.85, 1.5
     line = " ".join(howto.territory_lines(c))
     assert "便宜15%" in line and "貴五成" in line
 
 
 def test_the_howto_page_is_unchanged_with_the_switches_off():
-    c = classic_rules(real_content("weekend"))
+    c = classic_rules(real_content("week7"))
     page = _page(c)
     assert "**遊歷**" in page and "**出陣**" not in page and "#### 地盤" not in page
     assert "照地點三選一：悟意境" in page and "找素材" not in page and "- 探索落在悟意境時「有所感」" in page
@@ -42,14 +42,14 @@ def test_the_fronts_and_joining_explain_the_sortie():
     from tianxia.state import GameState, PlayerState
     from tianxia.world_state import fresh_season
 
-    c = third_party_gentry(real_content("weekend"))  # 豪強攪局那一句是豪強第三方的規則（豪強分屬兩軍見 test_gentry_allied.py）
+    c = third_party_gentry(real_content("week7"))  # 豪強攪局那一句是豪強第三方的規則（豪強分屬兩軍見 test_gentry_allied.py）
     season = fresh_season(c)
     state = GameState(player=PlayerState(name="甲", location=c.scenario.start_location, stats={}, stamina=0), world=season)
     fronts = " ".join(howto.fronts_help(state, c))
     assert howto.SORTIE_PLACES in fronts and howto.SORTIE_RANGER in fronts and howto.SORTIE_GEJU in fronts
     assert howto.SORTIE_JOIN in " ".join(howto.join_lines(c, season))
     assert howto.SORTIE_PLACES in " ".join(howto.quest_help(c))
-    old = classic_rules(real_content("weekend"))
+    old = classic_rules(real_content("week7"))
     assert howto.SOME_PLACES in " ".join(howto.fronts_help(state, old))
 
 

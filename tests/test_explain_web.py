@@ -292,10 +292,10 @@ def test_the_reason_on_a_greyed_cell_is_escaped():
 def test_a_talked_out_lone_audience_cell_says_so_briefly_and_the_tap_names_the_moment():
     """day-scale 審查 I1：這裡唯一那位人物談滿了、又沒有交友的事時，行動列的交友格放的是灰掉的「求見某某」。格子約 60 px、不換行，
     放不下「第 1 週・週日 00:00 之後再來」（會被切成「週・週日 00:0」這種碎片）：格子寫「已談滿」，整句連同換日的那一刻寫在底下那一行。
-    孟津渡是正式內容裡真的會這樣的地方（週末設定）。"""
+    孟津渡是正式內容裡真的會這樣的地方（7 天季）。"""
     from tianxia import rules
 
-    content = real_content("weekend")
+    content = real_content("week7")
     content.config.auto_open_first_season = True
     content.config.precise_actions = False  # 一類一顆之前的交友、求見（新規則在 tests/test_precise_actions.py，設計 8.4）
     game = Game.new(content, "沈浪", rng=random.Random(0))
@@ -314,5 +314,5 @@ def test_a_talked_out_lone_audience_cell_says_so_briefly_and_the_tap_names_the_m
     face = cell[cell.index(">") + 1:]  # 格子上看得到的字（標籤裡 data-why 那一句不算）
     assert "<b>求見</b><small>已談滿</small>" in face and "00:00" not in face
     note = game._talked_out_note()
-    assert note.startswith(f"已經談滿 {content.config.talk_turns_per_day} 輪，第 1 週・週") and note.endswith(" 之後再來")
+    assert note.startswith(f"已經談滿 {content.config.talk_turns_per_day} 輪，第 2 天 ") and note.endswith(" 之後再來")
     assert f'data-why="{note}"' in cell  # 整句在點了浮出的那一句（減法季批 1 拿掉了行動列底下那一行）

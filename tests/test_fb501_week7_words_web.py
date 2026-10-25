@@ -113,7 +113,7 @@ def test_the_timeline_head_keeps_the_segment_end_on_one_line():
     assert rule and "white-space: nowrap" in rule.group(1)
 
 
-@pytest.mark.parametrize("profile", ["season21", "weekend"])
+@pytest.mark.parametrize("profile", ["season21"])
 def test_other_seasons_keep_the_week_words(profile, monkeypatch):
     out = _render(_game(profile), monkeypatch)
     assert out["board"] == "本週江湖大事"
@@ -125,10 +125,6 @@ def test_other_seasons_keep_the_week_words(profile, monkeypatch):
     default_dates = "（預設在第 1、2、3 週週六 20:00、季末第 3 週週日過完）" if profile == "season21" else "（預設在第 6、9、11 週中、第 12 週末）"
     assert default_dates in out["open"]
     assert "照上一週的貢獻" in out["rotate"]
-    if profile == "weekend":  # 21 天季的軍令每天一道：軍令卡、管理者那幾句照「今日」寫（FB-502，test_fb502_season21_order_words）
-        assert "📜 本週軍令（1）" in out["orders"]
-        assert "每週的事（照週一的做法立刻再做一次；下週一照常）" in out["sheet"] and "立刻發本週軍令" in out["sheet"]
-        assert out["issue"].startswith("立刻發本週軍令：這一週還沒達成的軍令照週一的做法重挑")
     if profile == "season21":
         assert "21 天的季：繼續時季曆會對回現實的星期" in out["pause"] and "21 天的季的季曆對回現實的星期" in out["resume"]
     else:

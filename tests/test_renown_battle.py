@@ -1,7 +1,7 @@
 """決戰名單標稱號（名聲設計 2.5、4.5）：加入時快照；善惡第 1 段起、名望名動一方起。"""
 import random
 
-from conftest import real_content
+from conftest import real_content, renown_unscaled
 
 from tianxia import battle_instance as bi
 from tianxia.engine import Game
@@ -18,7 +18,7 @@ def test_board_rows_carry_the_snapshot():
 
 
 def test_latecomers_carry_it_too():
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     b = bi.BattleInstance(battle_id="t", phase="active")
     definition = next(iter(c.battles.values()))
     bi.auto_assign_latecomer(b, definition, "乙", 100, random.Random(0), faction=definition.factions[0].id, renown=["天下聞名"])
@@ -26,7 +26,7 @@ def test_latecomers_carry_it_too():
 
 
 def test_marks_start_at_the_second_fame_tier():
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     c.config.auto_open_first_season = True
     g = Game.new(c, "甲", rng=random.Random(0))
     g.client = None

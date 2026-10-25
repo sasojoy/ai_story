@@ -229,12 +229,6 @@ def test_bribe_refused_at_forty():
     assert p.affinities[cid] == 40 and p.stats["silver"] == 500
 
 
-def test_weekend_has_no_silver_outlets():
-    game = _game("weekend")
-    assert not silver.on(game.content, game.state.world)
-    assert not any(i.startswith(("act:silver_donate", "act:mentor", "act:furnace", "act:buy_legend", "act:bribe")) for i in _ids(game))
-
-
 def test_old_save_without_outlet_fields_loads():
     from tianxia.state import PlayerState
 

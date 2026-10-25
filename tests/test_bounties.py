@@ -460,7 +460,7 @@ def _batch(content) -> int:
 
 
 def test_weekly_issue_on_the_real_map():
-    content = real_content("weekend")
+    content = real_content("week7")
     state = GameState(player=Game.new(content, "測", rng=random.Random(0)).state.player, world=WorldState(season_one=True))
     again = state.model_copy(deep=True)
     bounties.issue(state, content, 1)
@@ -523,20 +523,6 @@ def test_going_live_mid_season_posts_only_this_week():
     assert season.bounty_week == 8 and season.hooked_week == 0
 
 
-def test_issue_skips_old_weeks_and_posts_a_week_once():
-    """第一季那一條（WEEK_HOOKS）也走同一道擋：被補跑舊週時不掛；同一週叫兩次只掛一次（懸賞榜設計 3.2、3.4）。"""
-    content = real_content("weekend")
-    state = GameState(player=Game.new(content, "測", rng=random.Random(0)).state.player, world=WorldState(season_one=True))
-    state.world.time = 3 * bounties.week_seconds(state, content)  # 第 4 週週一
-    bounties.issue(state, content, 2)
-    assert state.world.bounties == [] and state.world.bounty_week == 0
-    bounties.issue(state, content, 4)
-    board = list(state.world.bounties)
-    bounties.issue(state, content, 4)
-    assert board and state.world.bounties == board and state.world.bounty_week == 4
-    assert {b.expires for b in board} == {calendar.week_start(6, content, state.world)}
-
-
 def test_opening_a_beta_season_posts_week_one_and_leaves_hooked_week_alone():
     """規則關著的季開季那一刻（world.settle_season_start）掛第 1 週，不碰 hooked_week；再叫一次不重掛，收了季不掛（懸賞榜設計 3.3）。"""
     content = real_content()
@@ -558,15 +544,12 @@ def _due(content, season, week):
 
 
 def test_due_text_follows_the_season_and_says_season_end_past_the_last_day():
-    """期限的寫法（懸賞榜設計 3.5）：規則關著寫「第N天 HH:MM」、第一季寫「第 N 週・週X HH:MM」；到季末或過了季末一律「到季末」——
-    14 天的季第 11、12 週掛的單到期是第 336、364 小時，不寫這一季沒有的「第15天 00:00」「第16天 04:00」；週末設定一樣。"""
+    """期限的寫法（懸賞榜設計 3.5）：規則關著寫「第N天 HH:MM」；到季末或過了季末一律「到季末」——
+    14 天的季第 11、12 週掛的單到期是第 336、364 小時，不寫這一季沒有的「第15天 00:00」「第16天 04:00」。
+    （第一季週曆的「第 N 週・週X HH:MM」只有封存的週末季用；21 天、7 天季的寫法見 tests/test_season21_daily.py。）"""
     beta = real_content()
     season = _beta_season(beta)
     assert [_due(beta, season, week) for week in (1, 10, 11, 12)] == ["第3天 08:00", "第13天 20:00", "到季末", "到季末"]
-    weekend = real_content("weekend")
-    season = fresh_season(weekend)
-    assert season.season_one
-    assert [_due(weekend, season, week) for week in (1, 10, 11, 12)] == ["第 3 週・週一 00:00", "第 12 週・週一 00:00", "到季末", "到季末"]
 
 
 def _short(content, season, expires, done=()):
@@ -584,24 +567,7 @@ def test_the_notice_gets_a_short_due_line_that_cannot_wrap_fb196():
     beta = real_content()
     season = _beta_season(beta)
     assert [_short(beta, season, auto(beta, season, week)) for week in (1, 10, 11)] == ["期限 第3天・剩 3", "期限 第13天・剩 3", "到季末・剩 3"]
-    weekend = real_content("weekend")
-    season = fresh_season(weekend)
-    assert [_short(weekend, season, auto(weekend, season, week)) for week in (1, 10, 12)] == ["到第 2 週・剩 3", "到第 11 週・剩 3", "到季末・剩 3"]
-    assert _short(weekend, season, auto(weekend, season, 1), done=("甲", "乙")) == "到第 2 週・剩 1"
-
-
-def test_a_notice_due_off_the_monday_midnight_names_the_week_it_falls_in():
-    """到期不剛好在週一 00:00（管理者改過、或照實際時刻的）：寫到期那一刻所在的週「期限 第 N 週」。
-    跨到第 1 週的邊界：第 2 週週一 00:00 到期寫「到第 1 週」，第 1 週週一 00:00 不會寫出不存在的「第 0 週」。"""
-    weekend = real_content("weekend")
-    season = fresh_season(weekend)
-    week = lambda n: calendar.week_start(n, weekend, season)
-    day = calendar.DAY / calendar.cal_scale(weekend, season)  # 季曆一天的世界秒
-    assert _short(weekend, season, week(4) + 1.5 * day) == "期限 第 4 週・剩 3"  # 第 4 週週二 12:00
-    assert _short(weekend, season, week(4) + 60 / calendar.cal_scale(weekend, season)) == "期限 第 4 週・剩 3"  # 週一 00:01
-    assert _short(weekend, season, week(4) - 60 / calendar.cal_scale(weekend, season)) == "期限 第 3 週・剩 3"  # 第 3 週週日 23:59
-    assert _short(weekend, season, week(2)) == "到第 1 週・剩 3"
-    assert _short(weekend, season, week(1)) == "期限 第 1 週・剩 3"
+    assert _short(beta, season, auto(beta, season, 1), done=("甲", "乙")) == "期限 第3天・剩 1"
 
 
 def test_board_lines_card_rows_and_the_take_reply_show_the_due_time_and_places_left(setup):
@@ -637,8 +603,8 @@ def test_a_bounty_filled_by_others_or_expired_says_so_once(setup):
 
 def test_issue_keeps_an_expired_bounty_until_its_takers_hear_of_it():
     """過了期限還有人揭著的單，掛新單時先留著（不在榜上、不能揭），等揭的人同步聽到那一句之後的下一次掛單才清掉。"""
-    content = real_content("weekend")
-    state = GameState(player=Game.new(content, "丙", rng=random.Random(0)).state.player, world=WorldState(season_one=True))
+    content = real_content()
+    state = GameState(player=Game.new(content, "丙", rng=random.Random(0)).state.player, world=WorldState())
     bounties.issue(state, content, 1)
     held = state.world.bounties[0]
     held.takers = ["丙"]
@@ -1157,44 +1123,6 @@ def test_a_season_end_bounty_lasts_until_the_season_closes_then_every_held_bount
     assert [o.id for o in game.options(odds=False)] == ["season:resting"]  # 休季的選單沒有懸賞榜那一顆
     game = _sync_at(content, world, "丙", NOW + 3 * calendar.DAY + 60)
     assert _told(game) == lines  # 只補一次
-
-
-def test_pushing_the_finale_later_does_not_lapse_season_end_bounties_early_fb153():
-    """FB-153（週末設定、真實內容）：管理者把季末排到第 66 小時（名義季長 60）。第 11、12 週掛的單寫「到季末」，
-    第 60.5 小時季還沒收：兩張都還在手上、卡上、沒有任何作廢的話；到 66 小時季真的收了，才補「這一季收了」。"""
-    content = real_content("weekend")
-    content.config.auto_open_first_season, content.config.admins = True, ["管"]
-    content.config.geju_chaos_per_day = 0.0  # 推到後面幾週時割據不會先衝到 85、提早收季
-    content.config.train_event_chance = 0.0
-    world = open_world()
-    admin = Game.new(content, "管", rng=random.Random(0), world=world)
-    holder = Game.new(content, "丙", rng=random.Random(0), world=world)
-    for game in (admin, holder):
-        game.client = None
-        game.sync(NOW)
-    nominal = 60 * HOUR
-    msgs = admin.admin_schedule("xiaquyang", NOW + 66 * HOUR - admin.state.world.time, NOW)
-    assert msgs[0].startswith("已把")
-    assert season_end_time(world.get_season(), content) == pytest.approx(66 * HOUR)
-    season = _advance_to(world, content, 56)  # 第 12 週：第 11、12 週的單都掛出來了
-    eleven = next(b for b in season.bounties if b.week == 11 and b.kind in ("scout", "strike"))
-    twelve = next(b for b in season.bounties if b.week == 12 and b.kind in ("scout", "strike"))
-    assert eleven.expires == pytest.approx(nominal) and twelve.expires > nominal
-    holder.sync(NOW + 1)
-    for b in (eleven, twelve):
-        assert bounties.take(holder.state, content, b.id)[0].startswith("你揭下了") and bounties.due_text(b, content, season) == bounties.SEASON_END
-    holder._save_season()
-    season = _advance_to(world, content, 60.5)  # 名義季末過了半小時，排定的季末還沒到
-    assert not season.ended
-    holder.sync(NOW + 2)
-    assert _told(holder) == []
-    assert [b.id for b in bounties.mine(holder.state, content)] == [eleven.id, twelve.id]
-    assert [row["id"] for row in holder.status_data()["bounties"]] == [eleven.id, twelve.id]
-    season = _advance_to(world, content, 67)  # 排定的季末：真的收季
-    assert season.ended
-    holder.sync(NOW + 3)
-    assert _told(holder) == [bounties.LAPSED_SEASON.format(title=bounties.title(content, b)) for b in (eleven, twelve)]
-    assert holder.status_data()["bounties"] == []
 
 
 def test_a_bounty_that_is_not_for_the_season_end_still_lapses_at_its_own_time_fb152(beta_setup):

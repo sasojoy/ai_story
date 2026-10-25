@@ -14,7 +14,7 @@ pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，�
 
 
 def _allied_status():
-    c = real_content("weekend")
+    c = real_content("week7")
     c.config.auto_open_first_season = True
     game = Game.new(c, "甲", rng=random.Random(0))
     game.state.player.faction, game.state.player.ally = "haoqiang", "guan"

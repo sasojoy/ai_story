@@ -564,7 +564,7 @@ def _graduate(content, seed):
     return game
 
 
-@pytest.mark.parametrize("profile", ["weekend", None])
+@pytest.mark.parametrize("profile", [None])
 def test_a_fresh_character_can_win_by_the_yingshui(profile):
     """FB-100：剛出師的人在潁川一帶找不到打得贏的仗（長社、黃巾別部營寨都是必敗，潁川郊野難分勝負）。
     潁水河畔的兩路對手：略過序章與走完序章的新角色，勝算都是有把握以上，遊歷鈕上寫的也是。

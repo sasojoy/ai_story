@@ -30,7 +30,7 @@ CSS = Path(server.WEB) / "style.css"
 
 
 def _game(at="yingchuan"):
-    c = real_content("weekend")
+    c = real_content("week7")
     conquest_rules(c)
     c.config.auto_open_first_season = True
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world())

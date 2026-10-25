@@ -11,7 +11,7 @@ from tianxia.state import TerritoryState
 
 
 def _world(classic=False):
-    c = third_party_gentry(real_content("weekend"))  # 快照記割據：豪強是第三方的規則（豪強分屬兩軍見 test_gentry_allied.py）
+    c = third_party_gentry(real_content("week7"))  # 快照記割據：豪強是第三方的規則（豪強分屬兩軍見 test_gentry_allied.py）
     c.config.auto_open_first_season = True
     if classic:
         classic_rules(c)

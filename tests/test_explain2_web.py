@@ -19,7 +19,7 @@ pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，�
 
 def _season_one(**over):
     """週末設定（第一季濃縮版）的新角色、略過序章的樣子：伺服器給的 /api/main。"""
-    content = real_content("weekend")
+    content = real_content("week7")
     content.config.auto_open_first_season = True
     game = Game.new(content, "沈浪", rng=random.Random(0))
     game.client = None
@@ -169,7 +169,7 @@ def _feeling_view():
     """週末設定的新角色在潁川探索落在有所感、選做法那一步：伺服器給的 /api/main。"""
     from tianxia import insights, sensing
 
-    content = real_content("weekend")
+    content = real_content("week7")
     content.config.auto_open_first_season = True
     game = Game.new(content, "沈浪", rng=random.Random(0))
     game.client = None

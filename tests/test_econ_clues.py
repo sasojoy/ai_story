@@ -21,14 +21,14 @@ def _divine(c, season):
 
 
 def test_every_piece_is_known_by_some_smith():
-    c = real_content("weekend")
+    c = real_content("week7")
     season = fresh_season(c)
     known = {item for town in forge_secrets.towns(c) for item in forge_secrets.smith_items(c, season, season.tianji, town)}
     assert {(r.id, p) for r in _divine(c, season) for p in forge_secrets.PIECES} <= known
 
 
 def test_a_smith_never_repeats_until_it_has_told_everything():
-    c = real_content("weekend")
+    c = real_content("week7")
     g = _game(c)
     town = forge_secrets.towns(c)[0]
     g.state.player.location = town
@@ -40,7 +40,7 @@ def test_a_smith_never_repeats_until_it_has_told_everything():
 
 
 def test_walking_the_towns_completes_every_divine_recipe():
-    c = real_content("weekend")
+    c = real_content("week7")
     g = _game(c)
     tianji = g.state.world.tianji
     for town in forge_secrets.towns(c):
@@ -53,7 +53,7 @@ def test_walking_the_towns_completes_every_divine_recipe():
 
 
 def test_three_pieces_make_the_book_line_complete():
-    c = real_content("weekend")
+    c = real_content("week7")
     g = _game(c)
     sword = next(r for r in _divine(c, g.state.world) if r.kind == "劍")
     # 神器配方改用四階（正式季整合 5.5）：鑄譜那一行寫「快四」
@@ -76,7 +76,7 @@ def test_the_alias_does_not_give_away_the_kind():
 
 def test_fb269_a_framed_piece_quotes_the_alias_inside_with_double_corners():
     """FB-269：鐵匠、說書、殘譜的框是「{clue}」，片子裡配方的號用『』（引號裡再引用），畫面上不會疊成「「。"""
-    c = real_content("weekend")
+    c = real_content("week7")
     rule = c.config.forge_secrets
     for r in c.forge_secrets.values():
         if r.divine:
@@ -87,7 +87,7 @@ def test_fb269_a_framed_piece_quotes_the_alias_inside_with_double_corners():
 
 
 def test_tales_and_scraps_carry_pieces_too():
-    c = real_content("weekend")
+    c = real_content("week7")
     g = _game(c)
     tianji = g.state.world.tianji
     texts = {forge_secrets.hear(g.state, c, tianji, forge_secrets.SCRAP, f"seed{i}") for i in range(60)}
@@ -97,7 +97,7 @@ def test_tales_and_scraps_carry_pieces_too():
 
 
 def test_divine_verses_are_not_used_once_split():
-    c = real_content("weekend")
+    c = real_content("week7")
     g = _game(c)
     tianji = g.state.world.tianji
     divine = {r.id for r in _divine(c, g.state.world)}
@@ -111,7 +111,7 @@ def _explorer(scrap_every_mode=True):
     """潁水河畔（野外、悟得到水）的人，兩種殘譜都一定撿到（scrap_chance 1）。"""
     from tianxia.sqlite_world import open_world
 
-    c = real_content("weekend")
+    c = real_content("week7")
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
     c.config.duel.explore_chance = 0.0
@@ -147,7 +147,7 @@ def test_with_the_switch_off_only_seeking_finds_scraps():
 
 
 def test_an_unstamped_season_keeps_the_verses():
-    c = real_content("weekend")
+    c = real_content("week7")
     g = _game(c)
     g.state.world.forge_split_clues = False
     town = forge_secrets.towns(c)[0]

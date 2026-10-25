@@ -58,6 +58,6 @@ def test_validate_rejects_bad_neutral_garrison(change):
 
 
 def test_switch_off_squads_unchanged():
-    game = plain_game("weekend")
+    game = plain_game("week7")
     assert _squads(game, "nanyang_wilds") == ["jun_bing"]  # 地盤易手：官軍控制的那一組
     assert "nz_shuifei" not in _squads(game, "yu_river")

@@ -39,7 +39,7 @@ def counted(monkeypatch):
 
 
 def _game(name="沈浪", faction="guan", at="changshe"):
-    c = real_content("weekend")
+    c = real_content("week7")
     c.config.auto_open_first_season = True
     game = Game.new(c, name, rng=random.Random(0), world=open_world())
     game.client = None
@@ -106,7 +106,7 @@ def test_the_memory_keeps_only_the_latest_questions():
 
 def test_games_on_the_server_carry_the_memory_and_plain_games_do_not(monkeypatch):
     monkeypatch.setattr(server, "GAMES", {})
-    monkeypatch.setattr(server, "open_game", lambda name: Game.new(real_content("weekend"), name, rng=random.Random(0), world=open_world()))
+    monkeypatch.setattr(server, "open_game", lambda name: Game.new(real_content("week7"), name, rng=random.Random(0), world=open_world()))
     assert server.game_for("沈浪").odds_memo is server.ODDS_MEMO
     assert _game().odds_memo is None
 
