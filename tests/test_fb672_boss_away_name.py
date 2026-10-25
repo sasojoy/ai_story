@@ -100,7 +100,7 @@ def test_season21_says_this_week():
     assert _note(game) == _reason(_option(game)) == f"這一週頭目{face}不再現身"
 
 
-@pytest.mark.parametrize("profile", ["weekend", None])
+@pytest.mark.parametrize("profile", [None])
 def test_the_other_seasons_say_this_season(profile):
     game = _game("changshe", "guan", profile)
     face = _face_before(game)

@@ -41,17 +41,6 @@ def test_a_prize_gets_its_own_red_tag():
     assert bounties.reward_tags(s, c, b)[-1] == {"v": "重賞：寶物一件", "kind": "prize"}
 
 
-def test_weekend_has_no_tags_and_the_same_line():
-    game = _ranger("weekend")
-    s, c = game.state, game.content
-    b = _first(s, "strike")
-    assert bounties.reward_tags(s, c, b) is None
-    row = bounties._row(s, c, b)
-    assert "tags" not in row and "level" not in row
-    cfg = c.config.bounties
-    assert row["reward"].startswith(f"賞銀 {cfg.silver['strike']}・經驗 {cfg.exp['strike']}")
-
-
 def test_the_board_notes_carry_the_corner_and_tags():
     game = _ranger()
     game.choose("act:bounties")
@@ -78,21 +67,6 @@ def test_the_card_draws_one_tag_per_reward():
     html = run(m, "return H.pageJianghu();")
     assert 'class="rtags"' in html and '<span class="rtag"><em>銀</em>120</span>' in html
     assert 'class="rtag gift"' in html and "賞照你第 20 級" in html
-
-
-@web
-def test_the_weekend_card_keeps_the_line():
-    from test_prologue_web import run, with_reveal
-
-    game = _ranger("weekend")
-    b = _first(game.state, "strike")
-    game.choose("act:bounties")
-    game.choose(f"bounty:take:{b.id}")
-    game.choose("bounty:back")
-    m = with_reveal(server.main_view(game), ["all"])
-    html = run(m, "return H.pageJianghu();")
-    row = next(r for r in m["status"]["bounties"] if r["id"] == b.id)
-    assert "rtag" not in html and f'<div class="order-meta">{row["reward"]}</div>' in html
 
 
 @web
@@ -125,9 +99,6 @@ def test_the_notice_face_carries_a_short_gift_and_the_prize():
     assert note["gift"] == "＋二階" and note["prize_chip"] == "重賞"
     scout = next(n for n in view["notes"] if n["kind"] == "scout")
     assert scout["gift"] == f"＋{game.content.config.stamina_pill_name}" and scout["prize_chip"] == ""
-    weekend = _ranger("weekend")
-    weekend.choose("act:bounties")
-    assert all("gift" not in n for n in shopview.board_view(weekend.state, weekend.content, weekend.world)["notes"])
 
 
 @web

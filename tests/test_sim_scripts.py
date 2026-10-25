@@ -105,16 +105,17 @@ def test_the_server_bot_simulation_counts_its_forging_in_a_short_season(tmp_path
     assert "art" not in posted and posted.get("arms", 0) >= 3 and result["bounties"]["每週最多幾批"] == 1
 
 
-def test_a_weekend_server_bot_season_splits_the_gentry_between_the_armies(tmp_path, monkeypatch):
-    """第一季豪強分屬兩軍（週末設定預設開）：假人整季跑一段，投靠豪強的假人都挑了依附哪一軍、名冊沒有不帶依附的豪強，
-    大勢沒有割據那條線，名冊照那一方數只剩官軍、黃巾。"""
+def test_a_week7_server_bot_season_splits_the_gentry_between_the_armies(tmp_path, monkeypatch):
+    """第一季豪強分屬兩軍（7 天季預設開）：假人整季跑一段，投靠豪強的假人都挑了依附哪一軍、名冊沒有不帶依附的豪強，
+    大勢沒有割據那條線，名冊照那一方數只剩官軍、黃巾。只跑 0.4 個現實日（×6 約 2.4 個世界日，跟以前跑完 2.5 天的週末季一樣長；
+    依附在投靠那一刻就挑好）。"""
     from tianxia import database
     from tianxia.characters import open_characters
     from tianxia.content import load_content
 
     sim = _load("sim_server_bots")
-    monkeypatch.setattr(sim, "MAX_REAL_DAYS", 1)
-    content = load_content(ROOT / "content", profile="weekend")
+    monkeypatch.setattr(sim, "MAX_REAL_DAYS", 0.4)
+    content = load_content(ROOT / "content", profile="week7")
     assert content.config.haoqiang_allied
     content.config.time_scale, content.config.bot_tick_seconds = 6.0, 60.0
     try:
@@ -174,7 +175,7 @@ def test_the_exp_pace_measure_prints_one_line_per_side_and_rule(capsys, monkeypa
     """經驗節奏量表（正式季整合 8.2）：短短跑一段，每一方、每一種規則各印一行等級與經驗來源（只量不改，不驗數字）。"""
     monkeypatch.setenv("TIANXIA_DB", str(tmp_path / "pace.db"))
     measure = _load("measure_exp_pace")
-    measure.main(["--profile", "weekend", "--rules", "old", "new", "--sides", "官軍", "散人", "--days", "0.2", "--step", "120"])
+    measure.main(["--profile", "week7", "--rules", "old", "new", "--sides", "官軍", "散人", "--days", "0.2", "--step", "120"])
     out = capsys.readouterr().out
     assert out.count("[舊規則") == 2 and out.count("[新規則") == 2 and out.count("經驗來源") == 4
     assert "練功" in out  # 新規則照練功拿經驗
@@ -183,7 +184,7 @@ def test_the_exp_pace_measure_prints_one_line_per_side_and_rule(capsys, monkeypa
 def test_the_weapons_measure_script_prints_one_line_with_and_one_without_weapons(capsys, monkeypatch):
     """兵器量表：--seeds 1 跑一次，兵器開、兵器關各印一行（只量不改，不驗數字）。"""
     measure = _load("measure_weapons")
-    monkeypatch.setattr(sys, "argv", ["measure_weapons.py", "--seeds", "1", "--profile", "weekend"])
+    monkeypatch.setattr(sys, "argv", ["measure_weapons.py", "--seeds", "1", "--profile", "week7"])
     measure.main()
     out = capsys.readouterr().out
     assert "種子 1 兵器開：" in out and "種子 1 兵器關：" in out
@@ -196,7 +197,7 @@ def test_the_weapons_measure_script_prints_one_line_with_and_one_without_weapons
 def test_the_gear_measure_script_prints_one_line_with_and_one_without_armor(capsys, monkeypatch):
     """裝備量表（防具那一項，裝備四欄設計第十節）：--seeds 1 跑一次週末設定、照手上的事走，防具開、關各印一行（只量不改，不驗數字）。"""
     measure = _load("measure_gear")
-    monkeypatch.setattr(sys, "argv", ["measure_gear.py", "--seeds", "1", "--profile", "weekend", "--steer"])
+    monkeypatch.setattr(sys, "argv", ["measure_gear.py", "--seeds", "1", "--profile", "week7", "--steer"])
     measure.main()
     out = capsys.readouterr().out
     assert "種子 1 防具開：" in out and "種子 1 防具關：" in out and out.count("對照（") == 1
@@ -210,7 +211,7 @@ def test_the_gear_measure_script_prints_one_line_with_and_one_without_armor(caps
 def test_the_mounts_measure_script_prints_one_line_with_and_one_without_mounts(capsys, monkeypatch):
     """坐騎量表（裝備四欄設計第十節第 2 項）：--seeds 1 跑一次週末設定、照手上的事走、走法混著用，坐騎開、關各印一行（只量不改，不驗數字）。"""
     measure = _load("measure_mounts")
-    monkeypatch.setattr(sys, "argv", ["measure_mounts.py", "--seeds", "1", "--profile", "weekend", "--steer", "--gait", "mix"])
+    monkeypatch.setattr(sys, "argv", ["measure_mounts.py", "--seeds", "1", "--profile", "week7", "--steer", "--gait", "mix"])
     measure.main()
     out = capsys.readouterr().out
     assert "種子 1 坐騎開：" in out and "種子 1 坐騎關：" in out
@@ -222,7 +223,7 @@ def test_the_mounts_measure_script_prints_one_line_with_and_one_without_mounts(c
 def test_the_treasures_measure_script_prints_one_line_with_and_one_without_treasures(capsys, monkeypatch):
     """寶物量表（裝備四欄設計第十節第 3 項）：--seeds 1 跑一次週末設定、照手上的事走，寶物開、關各印一行（只量不改，不驗數字）。"""
     measure = _load("measure_treasures")
-    monkeypatch.setattr(sys, "argv", ["measure_treasures.py", "--seeds", "1", "--profile", "weekend", "--steer"])
+    monkeypatch.setattr(sys, "argv", ["measure_treasures.py", "--seeds", "1", "--profile", "week7", "--steer"])
     measure.main()
     out = capsys.readouterr().out
     assert "種子 1 寶物開：" in out and "種子 1 寶物關：" in out

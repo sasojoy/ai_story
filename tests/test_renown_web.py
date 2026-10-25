@@ -4,7 +4,7 @@ import random
 import re
 
 import pytest
-from conftest import real_content
+from conftest import no_week_unlock, real_content
 from test_prologue_web import DRIVER as BASE_DRIVER
 
 import server
@@ -25,7 +25,7 @@ def run(m, script, *, S=None):
 @pytest.fixture(scope="module")
 def base():
     """正式內容、週末設定的一個新角色（名聲開著）：名望 27、善名 18、惡名 3。"""
-    c = real_content("weekend")
+    c = no_week_unlock(real_content("week7"))
     c.config.auto_open_first_season = True
     g = Game.new(c, "甲", rng=random.Random(0))
     g.client = None
@@ -135,7 +135,8 @@ def test_the_gold_tag_opens_the_renown_card(m):
 
 
 def test_howto_entry_says_renown(m):
-    m["status"]["howto_entry"] = True
-    assert "名聲怎麼來" in run(m, "return H.pageJianghu();")
+    """「玩法說明」入口在本週卡「為什麼」攤開的最後一行（減法季批 1）。"""
+    why = {"wkOpen": {"key": m["week_card"]["label"] + m["week_card"]["when"], "id": "why"}}
+    assert "名聲怎麼來" in run(m, "return H.weekCardHtml(H.S.main);", S=why)
     m["status"]["renown"] = None
-    assert "名望怎麼來" in run(m, "return H.pageJianghu();")
+    assert "名望怎麼來" in run(m, "return H.weekCardHtml(H.S.main);", S=why)

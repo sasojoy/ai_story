@@ -13,7 +13,7 @@ from tianxia.sqlite_world import open_world
 
 
 def _game(faction="guan", at="huangjin_camp", level=50):
-    c = no_conquest(real_content("weekend"))  # 出陣攻敵方大本營（領地爭奪的季不給攻，PM 2026-10-22 起正式內容打開）
+    c = no_conquest(real_content("week7"))  # 出陣攻敵方大本營（領地爭奪的季不給攻，PM 2026-10-22 起正式內容打開）
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world())

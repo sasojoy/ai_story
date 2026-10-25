@@ -13,7 +13,7 @@ from test_companions import _opts, _player
 
 def test_the_gate_is_forty_in_the_real_config():
     assert real_content().config.recruit_min_affinity == 40
-    assert real_content("weekend").config.recruit_min_affinity == 40
+    assert real_content("week7").config.recruit_min_affinity == 40
 
 
 def test_no_button_and_no_hint_below_the_gate(world):

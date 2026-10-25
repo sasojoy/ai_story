@@ -151,7 +151,7 @@ def test_the_card_never_talks_about_announcements():
         front=atlas.trend_name(game.content, "yingru"), act=atlas.DEFEND_ACT_SORTIE.format(duty="巡哨"))
 
 
-@pytest.mark.parametrize("profile", ["weekend", None, "season21"])  # 一個測試只開一季
+@pytest.mark.parametrize("profile", ["week7", None, "season21"])  # 一個測試只開一季
 def test_switch_off_the_defend_card_is_the_old_sentence(profile):
     """領地爭奪關著：卡上照舊那一句、輿圖照舊標自家控制的戰線地點（舊規則整條線都記，不問哪一塊被公告）。"""
     game = join(plain_game(profile), "guan")

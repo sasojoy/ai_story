@@ -633,7 +633,7 @@ class PlayerState(BaseModel):
     letter_day: int = -1  # 上一封信是第幾個遊戲日收到的（一天最多一封）
     letter_seq: int = 0  # 書信與委託的流水號
     cheers: list[str] = Field(default_factory=list)  # 等著寫道賀信的「人物 id|你做的事」（figure_life.spread 情誼往上動的那幾位）
-    # 開口求人（tianxia/parley.py；Joy 2026-10-23「先做看看」）：人物 id → 今天求過他幾件、婉拒過哪幾件、指點過沒；
+    # NPC 智能 2.0（tianxia/parley.py；Joy 2026-10-23「先做看看」）：人物 id → 今天求過他幾件、婉拒過哪幾件、指點過沒；
     # 還沒答覆的條件（他開了條件、你還沒接）；辦成委託之後他欠你的那一件；今天答應陪你出陣的人。這一季的，換季清掉
     parley_days: dict[str, ParleyDay] = Field(default_factory=dict)
     parley_terms: dict[str, ParleyTerms] = Field(default_factory=dict)
@@ -845,6 +845,9 @@ class PlayerState(BaseModel):
     # 新手福利只在第一季的規則開著時從這裡算（roster.since_join；beta 從季初算）；截殺與通緝的新手期每季都從這裡算
     # （roster.raid_newbie，懸賞榜設計 14.1 丁）
     joined_at: float | None = 0.0
+    # 第 2 週的功能（打造、擂台、自創、懸賞榜，減法季 6.6）對這個角色開了的那一刻（世界秒；Game._week_unlock_tick 蓋，寫一則紀錄，
+    # 本週卡一個季曆天內寫那一句）。沒開過、規則關著的季是 None；換季不帶（新的一季從頭鎖）
+    week_unlocked_at: float | None = None
 
     # ── 共享賽季（跨玩家，見 world_state.py::SharedWorldState.season）────
     season_number: int = 1  # 這個玩家的角色屬於第幾季；跟共用賽季的編號對不上時，
@@ -1123,7 +1126,7 @@ class Bounty(BaseModel):
     # 或「委託」（求援書信附的那一件，只在收信的人身上：PlayerState.letters）。標題與掛單人照它寫，交差時那位人物情誼另加
     figure: str | None = None
     motive: Literal["復仇", "追剿", "委託", "求援"] | None = None
-    parley_ask: str | None = None  # 開口求人的條件（parley.py）：辦成了，下回見面他兌現這一件
+    parley_ask: str | None = None  # NPC 智能 2.0的條件（parley.py）：辦成了，下回見面他兌現這一件
 
 
 class ParleyDay(BaseModel):
@@ -1193,7 +1196,7 @@ class Letter(BaseModel):
     寫不出來照固定句）。"""
 
     id: int
-    kind: Literal["求援", "道賀", "邀宴", "道謝", "條件"]  # 邀宴、道謝是第三批（宴客、求援委託辦成了）；條件是開口求人（parley.py）
+    kind: Literal["求援", "道賀", "邀宴", "道謝", "條件", "託付"]  # 邀宴、道謝是第三批（宴客、求援委託辦成了）；條件是NPC 智能 2.0（parley.py）；託付是開局第一分鐘的那一封（opening.py）
     sender: str  # 對話人物 id
     at: float  # 收到的那一刻（世界秒）
     mood: str = ""  # 寫信時他的心事（求援：焦慮、悲憤）

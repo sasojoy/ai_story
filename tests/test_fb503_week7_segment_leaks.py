@@ -31,7 +31,7 @@ def _rank_option(profile):
     return next(o for o in game.options(odds=False) if o.id == "act:rank:incite")
 
 
-@pytest.mark.parametrize("profile,word", [("week7", "這一段"), ("season21", "這週"), ("weekend", "這週")])
+@pytest.mark.parametrize("profile,word", [("week7", "這一段"), ("season21", "這週")])
 def test_the_rank_action_cap_names_the_segment_on_week7(profile, word):
     option = _rank_option(profile)
     assert not option.enabled and option.label == f"在一地煽動起事（{word}已經做滿 3 次）"
@@ -55,7 +55,7 @@ def test_a_filled_seat_lasts_until_the_next_segment_on_week7():
     assert _seat_line("week7", 5 * DAY + HOUR) == ["你補上了校尉的缺，到季末為止。"]  # 最後一段沒有下一段
 
 
-@pytest.mark.parametrize("profile", ["season21", "weekend"])
+@pytest.mark.parametrize("profile", ["season21"])
 def test_a_filled_seat_lasts_until_next_monday_elsewhere(profile):
     assert _seat_line(profile, DAY + HOUR) == ["你補上了校尉的缺，到下週一為止。"]
 
@@ -83,7 +83,7 @@ def test_admin_rotation_reply_in_the_last_segment():
     assert msg.startswith("已照第 2 段（第 3～4 天）的貢獻輪替第 4 階席次（這是最後一段，季末之前不再排）——"), msg
 
 
-@pytest.mark.parametrize("profile", ["season21", "weekend"])
+@pytest.mark.parametrize("profile", ["season21"])
 def test_admin_rotation_reply_unchanged_elsewhere(profile):
     assert _rotate(profile, HOUR) == "（第 1 週沒有上一週的貢獻可排；空缺照常由有資格的人補上。）"
 
@@ -94,9 +94,8 @@ def test_admin_rotation_reply_unchanged_elsewhere(profile):
 def test_mandate_note_reads_the_week7_timetable():
     c7 = real_content("week7")
     assert timetable.mandate_note(c7, fb501._season(c7)) == "第 7 天 22:00"
-    for profile in ("weekend", None):
-        content = fb501._content(profile)
-        assert timetable.mandate_note(content, fb501._season(content)) is None
+    content = fb501._content(None)
+    assert timetable.mandate_note(content, fb501._season(content)) is None
 
 
 def test_mandate_note_reads_the_season21_timetable():
@@ -105,7 +104,7 @@ def test_mandate_note_reads_the_season21_timetable():
     assert timetable.mandate_note(c21, fb501._season(c21)) == "第 3 週週日 20:00"
 
 
-@pytest.mark.parametrize("profile", ["week7", "season21", "weekend"])
+@pytest.mark.parametrize("profile", ["week7", "season21"])
 def test_the_mandate_ask_names_the_time_the_stamp_really_schedules(profile):
     """問句寫的就是「這一季立刻蓋章」真正會排的時刻（timetable.default_time 排進 schedule）：蓋完看排進去的世界秒換成季曆的時刻。
     問句括號裡另寫了「現實時間落在半夜會盡量挪開」，所以週末（一週只有現實 5 小時，預設時刻常落在半夜）比的是挪之前的預設時刻；
@@ -114,22 +113,21 @@ def test_the_mandate_ask_names_the_time_the_stamp_really_schedules(profile):
     c = game.content
     game.admin_seal_mandate("now")
     at = timetable.default_time(seal.mandate_event(c), c, game.state.world)
-    if profile != "weekend":
-        assert game.state.world.schedule["tianming"] == at
+    assert game.state.world.schedule["tianming"] == at
     p = calendar.point(at, c, game.state.world)
     if profile == "week7":
         really = f"第 {p.cal_day} 天 {p.hour:02d}:{p.minute:02d}"
     else:
         really = f"第 {p.week} 週週{calendar.WEEKDAYS[p.weekday]} {p.hour:02d}:{p.minute:02d}"
-    assert (timetable.mandate_note(c, game.state.world) or "第 12 週週一 20:00") == really
+    assert timetable.mandate_note(c, game.state.world) == really
 
 
-@pytest.mark.parametrize("profile,when", [("week7", "第 7 天 22:00"), ("season21", "第 3 週週日 20:00"), ("weekend", "第 12 週週一 20:00")])
+@pytest.mark.parametrize("profile,when", [("week7", "第 7 天 22:00"), ("season21", "第 3 週週日 20:00")])
 def test_the_admin_mandate_ask_names_the_week7_time(profile, when, monkeypatch):
     game = fb501._game(profile)
     monkeypatch.setattr(server, "CONTENT", game.content)
     admin = server.admin_choices(game)
-    assert admin["mandate_at"] == (None if profile == "weekend" else when)
+    assert admin["mandate_at"] == when
     payload = {"m": {**server.main_view(game), "admin": True}, "menxia": None, "stored": {}, "responses": {},
                "script": 'return H.adminAsk("seal_mandate", {when: "now"})[0];', "S": {"admin": admin}}
     asked = webharness.run(fb501web.DRIVER, payload)

@@ -313,7 +313,7 @@ def test_cutover_sequence(real):
     chars.save(admin.state)
     assert admin.world.season_phase() == "resting"
 
-    on = load_content(CONTENT_DIR)  # 3. 設 TIANXIA_PROFILE=weekend、重開
+    on = load_content(CONTENT_DIR)  # 3. 設 TIANXIA_PROFILE=week7、重開
     on.config.auto_open_first_season, on.config.admins = True, ["管"]
     on.config.season_one, on.config.season_days, on.config.server_max_players = True, 2.5, 2
     admin, player = _restart(on, "管", "乙")

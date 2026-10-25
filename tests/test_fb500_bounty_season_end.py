@@ -94,7 +94,7 @@ def test_an_admin_pushed_finale_keeps_both_batches_until_the_real_close():
     assert not any(bounties.past_due(b, c7, season) for b in hung)
 
 
-@pytest.mark.parametrize("profile", ["weekend", None])
+@pytest.mark.parametrize("profile", [None])
 def test_weekend_and_fourteen_day_seasons_compare_with_the_season_length_as_before(profile):
     """週末、14 天的季沒有偏移：照舊比季長 × DAY，一個字都不變（剛好在季長、差一秒、多一秒三種都跟以前同一個答案）。"""
     content = real_content(profile) if profile else real_content()

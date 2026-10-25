@@ -596,7 +596,7 @@ def test_each_season_carries_its_tianji_for_the_weekly_dice(content, world):
 def test_issue_hangs_prizes_on_the_first_two_strikes_of_each_side_without_moving_the_board():
     from tianxia import bounties
     from tianxia.state import WorldState
-    content = real_content("weekend")
+    content = real_content("week7")
 
     def posted(treasure, horse):
         content.config.treasures.bounty_treasure_chance, content.config.treasures.bounty_horse_chance = treasure, horse
@@ -683,7 +683,7 @@ def test_the_weekly_board_changes_with_tianji_but_not_at_zero():
     """週初掛單原本的兩份亂數（懸賞榜第一批 bounty|…、第二批 bounty-give|…）天機不是 0 時才帶天機：測試與量表（天機 0）的基準不位移。"""
     from tianxia import bounties
     from tianxia.state import WorldState
-    content = real_content("weekend")
+    content = real_content("week7")
 
     def posted(tianji):
         state = GameState(player=Game.new(content, "測", rng=random.Random(0)).state.player, world=WorldState(season_one=True, tianji=tianji))
@@ -698,7 +698,7 @@ def test_the_weekly_seeds_are_byte_identical_at_tianji_zero_and_carry_it_after()
     """天機是 0 時兩份週初亂數的種子一字不差（基準不位移）；不是 0 時兩份都在最後接「|天機」。"""
     from tianxia import bounties
     from tianxia.state import WorldState
-    content = real_content("weekend")
+    content = real_content("week7")
 
     def seeds(tianji):
         state = GameState(player=Game.new(content, "測", rng=random.Random(0)).state.player, world=WorldState(season_one=True, tianji=tianji))

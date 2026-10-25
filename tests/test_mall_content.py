@@ -36,8 +36,7 @@ def test_real_content_has_placeholder_items():
     kinds = sorted(item.kind for item in c.mall.values())
     assert "card" in kinds and kinds.count("consumable") >= 1
     assert all("待 joy" in item.draft for item in c.mall.values())  # PM 佔位，名字與價錢等 joy
-    for profile in ("weekend", "season21"):
-        assert real_content(profile).config.mall.beta_grant == 0
+    assert real_content("season21").config.mall.beta_grant == 0
     week7 = real_content("week7").config.mall
     assert week7.enabled is True and week7.beta_grant == 5000
 

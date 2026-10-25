@@ -21,7 +21,7 @@ MINOR = {"tactic": {"name": "湖畔試腿", "timing": "起手", "kind": "vanguar
                     "desc": "搶先一腿：這一回合連環，推兩次。", "minor": True}}
 
 
-@pytest.mark.parametrize("profile", [None, "weekend", "season21", "week7"])
+@pytest.mark.parametrize("profile", [None, "season21", "week7"])
 def test_real_content_loads_with_both_sides_kept(profile):
     """正式內容在不帶設定（14 天）、週末、21 天、7 天都載得起來，而且合併的兩邊都在：九位同伴有起始武學，其中下品的帶小戰法。"""
     c = real_content(profile)

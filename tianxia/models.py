@@ -431,6 +431,9 @@ class Event(_Strict):
     id: str
     title: str
     text: str
+    # 事件卡的插圖（減法季批 8 圖像版）：20 類場景的類型鍵（content/art.json 的 events；圖檔是 web/img/events/<鍵>.webp）。
+    # 沒寫就沒圖、卡片一字不變；伺服器另看圖檔在不在（server.scene_art）
+    image: str | None = None
     actions: list[ActionKind] = Field(default_factory=lambda: ["explore"])  # 空清單＝只能由 next_event 串接
     locations: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
@@ -544,6 +547,9 @@ class Location(_Strict):
     tags: list[str] = Field(default_factory=list)
     danger: int = Field(default=1, ge=1, le=3)
     important: bool = False
+    # 江湖頁站在這裡時場景卡上面的圖（減法季批 8）：web/img/ 底下不含副檔名的路徑（例 places/yingru）；
+    # 沒寫就退回所屬大區的 places/<大區 id>（atlas.region_of），沒有大區是 places/world
+    image: str | None = None
     enemies: list[str] = Field(default_factory=list)
     train_trend: dict[str, int] = Field(default_factory=dict)  # 遊歷打贏／操練推大勢的量；正負是散人的方向，有陣營目標的人照自己的目標推（Game._train_push）
     materials: list[str] = Field(default_factory=list)  # 路邊採集（兩頭的地點）出什麼屬性的素材：採到的是那些屬性的一階；探索不再撿素材（探索改悟意境，見 insights）
@@ -826,6 +832,7 @@ class CharacterDef(_Strict):
     deep_interaction: bool = False  # 是否走 companion_agent.py 的即時 LLM 對話（見設計文件四.3）
     recruit_at: str | None = None  # 可招募的同伴在哪個地點找得到他（龍頭人物不填，用 talk_at）
     talk_at: str | None = None  # kind=locked 的龍頭人物在哪個地點可以深度對話（不可招募，見上一輪「還要改進」5）
+    image: str | None = None  # 跟他談話時場景卡上面的人物像（減法季批 8）：web/img/ 底下不含副檔名的路徑（例 figures/luzhi）；沒寫就沒圖
     affinity_tag_deltas: dict[str, int] | None = None  # 覆寫 companion_agent.AFFINITY_TAG_DELTAS 的個別項目；None／缺的 tag 用預設值
     audience_fame: int = 0  # 求見門檻：名望要到多少才見得到他（透過他的「結識」劇情事件認識的人不受限制）
     brush_off: list[str] = Field(default_factory=list)  # 名望不夠時打發人的話（他自己的口吻，最多三句，武學與成長設計 9.1）
@@ -1284,6 +1291,25 @@ class Enlist(_Strict):
     drifter_line: str = ""  # 「主線與目標」裡散人那一行：三邊各在哪裡收人（設計 6.3）
 
 
+class OpeningSender(_Strict):
+    """開局三選一的一個選項對到的那位人物（content/opening.json）：選了帶 flag 的那一顆，就是他在城門口開口、託你送信。"""
+
+    flag: str  # 事件那一顆選項 flags_add 裡的旗標（例「開局:投軍」）
+    figure: str  # 對話人物 id（content/characters.json；要是大勢人物，信才寫得出他在哪）
+    text: str  # 信的固定句（模型寫不出來時照它；{hero} 換成少俠／女俠，{end} 換成送到的地名）
+
+
+class Opening(_Strict):
+    """開局第一分鐘（減法季整合設計 6.7，批 7 前半；tianxia/opening.py）：減法季的新角色不進草廬，站在起點看一段旁白、
+    三選一定起手的屬性，接著照選的那一顆由一位人物開口託付第一件事（把一封信送到 end），本週卡才出現。沒有這個檔就沒有這一段。"""
+
+    event: str  # 開局那一則事件（旁白＋三選一；每一顆選項 flags_add 要帶 senders 其中一個 flag）
+    end: str  # 第一個託付：把信送到這個地點（護送委託，到了就算）
+    senders: list[OpeningSender] = Field(min_length=1)
+    days: float = Field(default=3.0, gt=0)  # 第一件託付幾個遊戲日內要送到（書信委託平常是 figure_life.commission_days 1 天；新人多給幾天）【預設】
+    arrived: str = "{who}在城門口叫住你，託你把一封信送到{end}。"  # 江湖紀錄那一句（待 joy 潤）
+
+
 class Tutorial(_Strict):
     speaker: str = "老說書人"
     steps: list[TutorialStep] = Field(default_factory=list)
@@ -1406,6 +1432,8 @@ class Scenario(_Strict):
     jade_seal_flag: str | None = None  # 這個世界旗標代表玩家親手取得了這一季的玉璽碎片（設計文件九），記進跨季持久紀錄
     season_one_off: SeasonOneOff = Field(default_factory=SeasonOneOff)  # 第一季不觸發的 beta 門檻、主線、決戰、事件
     territory: TerritoryDef | None = None  # 地盤易手（出陣探索與地盤設計第四節）；不寫＝這個劇本沒有地盤
+    # 江湖頁本週卡第二行（減法季整合設計 6.8）：一季前、中、後三段各一句（21 天季是三週，7 天的季是三段）；不寫就不畫那一行
+    week_themes: list[str] = Field(default_factory=list, max_length=3)
 
     def faction(self, faction_id: str | None) -> FactionDef:
         """id 對得上的那個陣營（factions 裡的第一個）；劇本裡沒有就丟 LookupError。給一定要有這個陣營的地方用（選單上的
@@ -2716,12 +2744,12 @@ class FigureLifeTuning(_Strict):
 
 
 class ParleyTuning(_Strict):
-    """開口求人（Joy 2026-10-23「先做看看」；設計稿 https://claude.ai/artifact/KtRz62jWShogpaXEzv2sbt；tianxia/parley.py）：
+    """NPC 智能 2.0（Joy 2026-10-23「先做看看」；設計稿 https://claude.ai/artifact/KtRz62jWShogpaXEzv2sbt；tianxia/parley.py）：
     對話裡「自己說」那一句也可以是求他做事。模型當談判者，從引擎列的清單挑一件、評一個意願、要不要開條件；引擎照情誼與份量夾住意願、
     自己擲骰、做事。第一批：當場做、先付後做、婉拒；帶路、並肩出陣、指點、給情報、贈物五件事。數字全在這裡，模型不碰。"""
 
     enabled: bool = False  # 關著時「自己說」一個字都不變（20 字、不列清單、不擲骰）
-    say_max: int = Field(default=40, ge=1)  # 開著時「自己說」最多幾個字（開口求人要講得清楚一點）
+    say_max: int = Field(default=40, ge=1)  # 開著時「自己說」最多幾個字（NPC 智能 2.0要講得清楚一點）
     asks_per_day: int = Field(default=2, ge=1)  # 同一位人物一個遊戲日最多被求幾件事（算在一天三輪對話裡）
     # 意願的天花板：情誼到第幾檔（[門檻, 上限]，由低到高）；份量 1、2、3 各減多少；敵對陣營再減；最低 floor
     bands: list[list[int]] = Field(default_factory=lambda: [[0, 50], [20, 65], [40, 80], [60, 90]])
@@ -2935,7 +2963,11 @@ class JianfaRules(_Strict):
     errands: bool = True  # 第五章 託付與來信（批 6）
     week_unlock: bool = True  # 6.6 功能照週解鎖（批 5）
     rewrite_narration: bool = True  # 第十章 事件旁白每週改寫（批 10）
+    rewrite_round_seconds: float = Field(default=20, gt=0)  # 伺服器的背景執行緒幾秒改寫一則（一週約兩百六十則，一個多小時寫完）
+    rewrite_budget_seconds: float = Field(default=40, gt=0)  # 一則最多等模型幾秒（含排隊）
+    rewrite_tries: int = Field(default=2, ge=1)  # 同一則同一週寫壞幾次就這一週照原文
     morning_mail: bool = True  # 第十章 回來的理由：人物的信每天 mail_hour 點送到（批 9；letters.mail_day）
+    opening: bool = True  # 6.7 開局第一分鐘（批 7 前半，tianxia/opening.py）：不進草廬，旁白→三選一→人物開口託付→本週卡；關著照舊走草廬序章
     mail_hour: int = Field(default=9, ge=0, le=23)  # 當地幾點送信（時區照 pill_day_utc_offset_hours）
     # ── 批 4：隨口應對分岔與痕跡（主機側計畫第六節；子開關 free_text_outcomes、marks_visible）──
     # 【預設】一天（季曆日，同推線的 daily_push_cap）從分岔的後果（之後連心意、託付）記進陣營帳的貢獻上限；同出陣推線的量級（整合設計 5.3）
@@ -3370,7 +3402,7 @@ class Config(_Strict):
     signature_arts: SignatureArtTuning = Field(default_factory=SignatureArtTuning)  # 本命武學的威力與學到時的成數（見 SignatureArtTuning）
     tactics: TacticTuning = Field(default_factory=TacticTuning)  # 一般的仗的回合與本命戰法（見 TacticTuning）
     figure_life: FigureLifeTuning = Field(default_factory=FigureLifeTuning)  # 人物活起來：每日行事、心事、風聞（見 FigureLifeTuning）
-    parley: ParleyTuning = Field(default_factory=ParleyTuning)  # 開口求人：模型談判、引擎做事（見 ParleyTuning）
+    parley: ParleyTuning = Field(default_factory=ParleyTuning)  # NPC 智能 2.0：模型談判、引擎做事（見 ParleyTuning）
     companions: CompanionsTuning = Field(default_factory=CompanionsTuning)  # 歷史武將同行：招募、名下三位、決戰助陣（見 CompanionsTuning）
     # 情誼放慢（歷史武將同行第三節、9.4）：每一筆加的情誼乘這個倍數（renown.warmed：四捨五入，原本加 1 以上的至少加 1；扣的不乘）。
     # 1 是不放慢；正式 0.7、週末設定 0.85。對話、事件、名聲起步、風聞都走它；名將贈禮、本命、招募的門檻不動，所以跟著晚一點拿到
@@ -4609,6 +4641,13 @@ class CreateForms(_Strict):
     moves: list[CreateMove] = Field(default_factory=list)
 
 
+class ArtBook(_Strict):
+    """圖的分類表（content/art.json，減法季批 8 圖像版；第一批圖提示單）：events 是事件插圖的 20 類，類型鍵 → 名字
+    （圖檔 web/img/events/<鍵>.webp）。事件的 image 只能寫這裡有的鍵，分類表在內容檔、不寫死在程式。"""
+
+    events: dict[str, str] = Field(default_factory=dict)
+
+
 class Content(_Strict):
     config: Config
     scenario: Scenario
@@ -4657,6 +4696,8 @@ class Content(_Strict):
     mark_rules: list[MarkRule] = Field(default_factory=list)  # 地方痕跡過門檻（content/mark_rules.json，減法季批 4）；沒有這個檔就是空的
     map: MapLayout
     tutorial: Tutorial
+    art: ArtBook = Field(default_factory=ArtBook)  # 圖的分類表（content/art.json，減法季批 8）；沒有這個檔就是空的（事件不准寫 image）
+    opening: Opening | None = None  # 開局第一分鐘（content/opening.json，減法季批 7）；沒有這個檔就沒有（測試內容、舊內容照走草廬）
     hints: Hints = Field(default_factory=Hints)  # 碰到才說（content/hints.json，新手引導計畫三）；沒有這個檔就是沒有提示
     check_voice: CheckVoice = Field(default_factory=CheckVoice)  # 檢定選項括號裡的那一句（content/check_voice.json，載入時必備）
     create_forms: CreateForms = Field(default_factory=CreateForms)  # 自創武學的兵器偏向、起點架式、關鍵字表（content/create_forms.json）

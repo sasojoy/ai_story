@@ -287,12 +287,12 @@ def test_the_real_steps_say_the_craft_tab_by_its_name_and_the_farewell_is_paged(
     p11 分三頁（三邊收人、使命、盤纏與輿圖），最後一頁帶著要做的事，只有 p11 分頁。"""
     steps = {step.id: step for step in content.tutorial.steps}
     # 武學重構：p4 是在修練頁把意境裝進槽（不花心得體力），花 5 點心得的是 p6 在煉製頁的揣摩（爐裡只合意境，Joy 2026-10-21）
-    assert "『煉製』" not in steps["p4_fuse"].text and "到「修練」那裡" in steps["p4_fuse"].text and "合成」那裡" not in steps["p4_fuse"].text
+    assert "『煉製』" not in steps["p4_fuse"].text and "到「俠客」那裡" in steps["p4_fuse"].text and "合成」那裡" not in steps["p4_fuse"].text
     assert "不花心得也不花體力" in steps["p4_fuse"].text and "花你 5 點心得" in steps["p6_deepen"].text
-    assert steps["p4_fuse"].line == "到「修練」把意境裝進基礎拳腳的槽"
-    assert "『煉製』" not in steps["p6_deepen"].text and "到「煉製」" in steps["p6_deepen"].line
-    # 武學重構：p5 練的是身上的基礎拳腳、不在功法庫，那一句只指到「修練」；熔煉那一步才講功法庫
-    assert "「修練」" in steps["p5_level"].text and "功法庫" in steps["p10_melt"].line  # 修練頁的列表標題叫「功法庫」（arts-polish-1）
+    assert steps["p4_fuse"].line == "到「俠客」把意境裝進基礎拳腳的槽"
+    assert "『煉製』" not in steps["p6_deepen"].text and "到「俠客」頁的「煉製」" in steps["p6_deepen"].line
+    # 武學重構：p5 練的是身上的基礎拳腳、不在功法庫，那一句只指到「俠客」（分頁 2026-10-25 起叫俠客，煉製是俠客頁裡的鈕，減法季批 8）；熔煉那一步才講功法庫
+    assert "「俠客」" in steps["p5_level"].text and "「修練」" not in steps["p5_level"].text and "功法庫" in steps["p10_melt"].line  # 修練頁的列表標題叫「功法庫」（arts-polish-1）
     p11 = steps["p11_farewell"]
     pages = p11.text.split("\n\n")
     assert p11.paged and len(pages) == 3 and "輿圖" in pages[-1] and "天命裂了一道縫" in pages[1]
@@ -1405,8 +1405,9 @@ def test_figure_dialogue_runs_on_gemma4_without_thinking_or_repetition_penalties
 
 
 def test_real_timetable_matches_settlement_doc():
-    """12 件大事照結算文件第五節的週次；固定 3 件、決戰 3 件、最後是季末。用週末設定載入（開關與季長都開著）。"""
-    c = load_content(CONTENT_DIR, profile="weekend")
+    """12 件大事照結算文件第五節的週次；固定 3 件、決戰 3 件、最後是季末。照原本的 12 週週次載入（預設設定；7 天、21 天季
+    另外照 real7／real 欄換算到季曆的天，見 tests/test_week7_season.py、test_season21_frame.py）。"""
+    c = load_content(CONTENT_DIR)
     events = {e.id: e for e in c.timetable}
     assert len(c.timetable) == 12
     assert [(e.week, e.kind) for e in c.timetable] == [
@@ -1483,7 +1484,7 @@ def test_wancheng_after_a_government_win_reads_that_the_turbans_withdrew(content
 
 
 def test_real_timetable_runs_a_whole_condensed_season():
-    """週末設定下把真實內容的一季從頭推到尾：除了季末（T9），每件大事都結算一次、照週次。這裡沒有 store，三場決戰開不了
+    """7 天季把真實內容的一季從頭推到尾：除了季末（T9），每件大事都結算一次、照先後。這裡沒有 store，三場決戰開不了
     集結：長社、宛城在之後那件大事結算之前照起點結算（T8 fix round 1），廣宗之後沒有大事、等到收季前才結算（fix round 0）。"""
     import random as _random
 
@@ -1491,12 +1492,12 @@ def test_real_timetable_runs_a_whole_condensed_season():
     from tianxia.world import advance_world_state
     from tianxia.world_state import fresh_season
 
-    c = load_content(CONTENT_DIR, profile="weekend")
+    c = load_content(CONTENT_DIR, profile="week7")
     c.scenario.sim_players, c.scenario.thresholds, c.scenario.world_events = [], [], []  # 只看時刻表：舊聲勢門檻收季另外測
     c.config.geju_chaos_per_day = 0.0  # 割據不漲：沒人玩時三條戰線一直在亂局，割據第 5 週就過 85，第 10 週（decisive_from_week）起會以「群雄並起」提前收季，廣宗與季末就輪不到；這裡測的不是它
     state = GameState(player=PlayerState(name="", location=c.scenario.start_location, stats={}, stamina=0),
                       world=fresh_season(c))
-    msgs = advance_world_state(state.world, c, 2.5 * 86400, _random.Random(0))
+    msgs = advance_world_state(state.world, c, c.config.season_days * 86400, _random.Random(0))
     expected = [e.id for e in c.timetable]  # timetable.json 照週次排；季末那件（下曲陽）收季時由 T9 寫在最後
     assert list(state.world.timeline) == expected and state.world.showdowns_waiting == []
     assert state.world.timeline["xiaquyang"].key == state.world.ending_id
@@ -1549,7 +1550,7 @@ def _announce(event_id, key, *, version="", lock=None, losers=(), third=(), comm
     from tianxia.state import GameState, Lock, PlayerState
     from tianxia.world_state import fresh_season
 
-    c = load_content(CONTENT_DIR, profile="weekend")
+    c = load_content(CONTENT_DIR, profile="week7")
     state = GameState(player=PlayerState(name="", location=c.scenario.start_location, stats={}, stamina=0),
                       world=fresh_season(c))
     if version:  # 宛城的版本看「張曼成攻殺南陽太守」那件的結果
@@ -1569,7 +1570,7 @@ def _announce(event_id, key, *, version="", lock=None, losers=(), third=(), comm
 
 def test_every_locked_showdown_cell_is_the_named_part_plus_that_tiers_result_sentence():
     """長社四格、宛城八格：locked_text ＝ 具名的一段＋這一檔的結果句，只有贏家那一方有；搶輸的一筆照表，乙版沒有。"""
-    c = load_content(CONTENT_DIR, profile="weekend")
+    c = load_content(CONTENT_DIR, profile="week7")
     events = {e.id: e for e in c.timetable}
     assert len(SHOWDOWN_CELLS) == 12
     for eid, ver, side, tier in SHOWDOWN_CELLS:
@@ -1581,7 +1582,7 @@ def test_every_locked_showdown_cell_is_the_named_part_plus_that_tiers_result_sen
 
 def test_no_locked_announcement_is_left_with_an_ellipsis():
     """S1 節錄時的「……」不是定稿；真實內容所有具名公告與搶輸的一筆都寫完整。"""
-    c = load_content(CONTENT_DIR, profile="weekend")
+    c = load_content(CONTENT_DIR, profile="week7")
     for e in c.timetable:
         for key, o in e.outcomes.items():
             for text in [*o.locked_text.values(), *o.loser_text.values(), o.text, o.note]:
@@ -1828,7 +1829,7 @@ def _real_s1():
     from tianxia.state import GameState, PlayerState
     from tianxia.world_state import fresh_season
 
-    c = real_content("weekend")
+    c = real_content("week7")
     state = GameState(player=PlayerState(name="", location=c.scenario.start_location, stats={}, stamina=0),
                       world=fresh_season(c))
     return c, state
@@ -2010,7 +2011,7 @@ def test_season_one_off_blocks_thresholds_storyline_and_beta_battle(tmp_path):
     from tianxia.guide import quest_text
     from tianxia.world import check_thresholds
 
-    c = load_content(CONTENT_DIR, profile="weekend")
+    c = load_content(CONTENT_DIR, profile="week7")
     off = c.scenario.season_one_off
     # 玉璽一把舊玉璽鏈的門檻與支線也關掉（玉璽碎片設計 11.2 第 1 條；整份清單在 test_seal 鎖）
     assert (off.thresholds[:4], off.storylines[0], off.battles) == (
@@ -2211,7 +2212,7 @@ def test_a_real_weekend_season_opens_and_settles_the_three_showdowns(tmp_path):
     from tianxia.rules import trend_value
     from tianxia.sqlite_world import open_world
 
-    c = load_content(CONTENT_DIR, profile="weekend")
+    c = load_content(CONTENT_DIR, profile="week7")
     c.config.auto_open_first_season = True
     c.config.geju_chaos_per_day = 0.0  # 割據不漲：沒人玩時三條戰線一直在亂局，割據第 5 週就過 85，第 10 週（decisive_from_week）起會以「群雄並起」提前收季，廣宗與季末就輪不到；這裡測的不是它
     world = open_world(tmp_path / "weekend.db")
@@ -2241,7 +2242,7 @@ def test_real_showdowns_start_from_the_opening_fronts():
     from tianxia.world import showdown_battle, showdown_start
     from tianxia.world_state import fresh_season
 
-    c = load_content(CONTENT_DIR, profile="weekend")
+    c = load_content(CONTENT_DIR, profile="week7")
     state = GameState(player=PlayerState(name="", location=c.scenario.start_location, stats={}, stamina=0), world=fresh_season(c))
     starts = {
         e.id: showdown_start(state, c, showdown_battle(state, c, e)) for e in c.timetable if e.kind == "showdown"

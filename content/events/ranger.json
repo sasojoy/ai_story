@@ -2,6 +2,7 @@
   {
     "id": "ranger_xia_injustice",
     "title": "路見不平",
+    "image": "road",
     "tags": [
       "官道"
     ],
@@ -56,6 +57,7 @@
   {
     "id": "ranger_kou_invitation",
     "title": "綠林拜帖",
+    "image": "forest",
     "tags": [
       "野外"
     ],

@@ -2,6 +2,7 @@
   {
     "id": "sc_zhuo_mortar",
     "title": "募兵石臼",
+    "image": "town",
     "actions": [
       "socialize"
     ],
@@ -60,6 +61,7 @@
   {
     "id": "sc_zhuo_wedding",
     "title": "出征前婚",
+    "image": "town",
     "actions": [
       "socialize"
     ],
@@ -143,6 +145,7 @@
   {
     "id": "sc_zhuo_horse",
     "title": "馬市試騎",
+    "image": "market",
     "actions": [
       "socialize"
     ],
@@ -203,6 +206,7 @@
   {
     "id": "sc_mt_debate",
     "title": "酒肆論兵",
+    "image": "tavern",
     "actions": [
       "socialize"
     ],
@@ -266,6 +270,7 @@
   {
     "id": "sc_mt_touhu",
     "title": "投壺賭酒",
+    "image": "tavern",
     "actions": [
       "socialize"
     ],
@@ -342,6 +347,7 @@
   {
     "id": "sc_mt_salt",
     "title": "鹽商雇腳",
+    "image": "market",
     "actions": [
       "socialize"
     ],
@@ -433,6 +439,7 @@
   {
     "id": "sc_xqy_porridge",
     "title": "城中粥棚",
+    "image": "refugees",
     "actions": [
       "socialize"
     ],
@@ -495,6 +502,7 @@
   {
     "id": "sc_xqy_question",
     "title": "道徒問難",
+    "image": "altar",
     "actions": [
       "socialize"
     ],
@@ -587,6 +595,7 @@
   {
     "id": "sc_xqy_granary",
     "title": "搬糧進城",
+    "image": "town",
     "actions": [
       "socialize"
     ],

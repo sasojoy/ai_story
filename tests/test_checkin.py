@@ -6,7 +6,7 @@ import random
 
 from conftest import real_content
 
-from tianxia import checkin
+from tianxia import checkin, opening
 from tianxia.content import _material_sources
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
@@ -57,26 +57,26 @@ def test_reward_table():
 
 
 def test_claim_pills_day():
+    """每天第一次同步自動領（Joy 2026-10-24 挑江湖頁乙案：簽到不放鈕，Game._auto_checkin）：第 3 天的丹不必按，同步到就進袋、
+    寫一則「簽到」江湖紀錄；再按「簽到」只回領過了。開季那一天建角色的第一次同步就領了第 1 天的份。"""
     game = _game()
     p = game.state.player
-    _day(game, 3)
     before = p.stamina_pills
-    msgs = game.check_in()
+    _day(game, 3)
     assert p.stamina_pills == before + 2
-    assert p.checkin_days == [3]
-    assert game.state.journal[0].title == "簽到"
-    assert any("回體丹 +2" in m for m in msgs)
+    assert p.checkin_days == [1, 3]
+    entry = next(e for e in game.state.journal if e.title == "簽到")
+    assert any("回體丹 +2" in c for c in entry.changes)
+    assert game.check_in() == [checkin.TODAY_DONE]
 
 
 def test_claim_silver_and_material_days():
-    game = _game()
+    game = _game()  # 開季那一天建角色、第一次同步：第 1 天的 30 兩自動領了
     p = game.state.player
-    silver = p.stats["silver"]
-    game.check_in()  # 第 1 天
-    assert p.stats["silver"] == silver + 30
-    _day(game, 2)
+    assert p.checkin_days == [1]
+    assert any("銀兩 +30" in c for e in game.state.journal if e.title == "簽到" for c in e.changes)
     bag = dict(p.materials)
-    game.check_in()
+    _day(game, 2)  # 第 2 天：一階素材，同步到就領
     gained = {k: v - bag.get(k, 0) for k, v in p.materials.items() if v != bag.get(k, 0)}
     assert len(gained) == 1 and list(gained.values()) == [1]
     assert game.content.materials[next(iter(gained))].tier == 1
@@ -90,9 +90,9 @@ def test_tier4_day_needs_a_known_attribute():
     pills = p.stamina_pills
     for bad in ("", "陰", "胡說"):
         msgs = game.check_in(bad)
-        assert msgs and p.stamina_pills == pills and "gang_4" not in p.materials and p.checkin_days == []
+        assert msgs and p.stamina_pills == pills and "gang_4" not in p.materials and p.checkin_days == [1]  # 要挑的日子不自動領
     game.check_in("剛")
-    assert p.stamina_pills == pills + 2 and p.materials.get("gang_4") == 1 and p.checkin_days == [6]
+    assert p.stamina_pills == pills + 2 and p.materials.get("gang_4") == 1 and p.checkin_days == [1, 6]
 
 
 def test_tier4_only_days():
@@ -107,24 +107,23 @@ def test_tier4_only_days():
 def test_second_claim_same_day_is_refused():
     game = _game()
     p = game.state.player
-    _day(game, 3)
-    game.check_in()
+    _day(game, 3)  # 同步時自動領了
     pills = p.stamina_pills
     msgs = game.check_in()
     assert msgs == [checkin.TODAY_DONE]
-    assert p.stamina_pills == pills and p.checkin_days == [3]
+    _day(game, 3)  # 同一天再同步一次：不會再領
+    assert p.stamina_pills == pills and p.checkin_days == [1, 3]
 
 
 def test_missed_day_is_lost():
     game = _game()
-    _day(game, 2)
-    game.check_in()
+    _day(game, 3)  # 第 2 天沒上線：那一份沒了
     week = game.status_data()["checkin"]["week"]
     assert [d["day"] for d in week] == [1, 2, 3, 4, 5, 6, 7]
-    assert week[0]["state"] == "miss" and week[1]["state"] == "today" and week[2]["state"] == "future"
-    _day(game, 3)
+    assert week[0]["state"] == "got" and week[1]["state"] == "miss" and week[2]["state"] == "today" and week[3]["state"] == "future"
+    _day(game, 4)
     week = game.status_data()["checkin"]["week"]
-    assert week[1]["state"] == "got" and week[2]["state"] == "today"
+    assert week[1]["state"] == "miss" and week[2]["state"] == "got" and week[3]["state"] == "today"
 
 
 def test_day_counts_from_the_opening_day():
@@ -189,10 +188,7 @@ def test_short_last_week_after_a_wednesday_opening():
     assert view["next"] is None
 
 
-def test_off_in_weekend_and_after_season():
-    game = _game("weekend")
-    assert "checkin" not in game.status_data()
-    assert game.check_in() == [checkin.OFF]
+def test_off_after_the_season_ends():
     game = _game()
     game.admin_end_season(MON + 11 * HOUR)
     _at(game, MON + 12 * HOUR)
@@ -211,22 +207,35 @@ def test_no_card_past_the_last_day():
 
 
 def test_prologue_cannot_check_in():
-    game = _game(prologue=True)
+    game = _game(prologue=True, setup=lambda c: setattr(c.config.jianfa, "enabled", False))  # 減法季關著：草廬序章
     pills = game.state.player.stamina_pills
     assert "checkin" not in game.status_data()
     assert game.check_in() == [checkin.HUT]
     assert game.state.player.stamina_pills == pills and game.state.player.checkin_days == []
 
 
+def test_the_opening_gate_holds_the_check_in_until_the_choice_is_made():
+    """開局第一分鐘（批 7 前半）：站在城門口三選一還沒選，簽到不畫、按了只回一句；選完下一次同步自動領、寫進紀錄（不當第一張卡）。"""
+    game = _game(prologue=True)
+    p = game.state.player
+    assert opening.pending(game.state, game.content)
+    pills, silver = p.stamina_pills, p.stats["silver"]
+    assert "checkin" not in game.status_data()
+    assert game.check_in() == [opening.GATE]
+    assert p.stamina_pills == pills and p.stats["silver"] == silver and p.checkin_days == []
+    game.choose("choice:0")
+    game.sync(game.now + 60)
+    assert p.checkin_days == [1] and p.stats["silver"] > silver  # 第 1 天的 30 兩不必挑：選完同步到就領了、寫進紀錄
+    assert game.status_data()["checkin"] is not None
+
+
 def test_four_tiers_off():
     game = _game(setup=lambda c: setattr(c.config.four_tiers, "enabled", False))
     p = game.state.player
-    _day(game, 6)
     pills, silver = p.stamina_pills, p.stats["silver"]
-    game.check_in()
+    _day(game, 6)  # 四階關著：第 6 天只有丹、不必挑，同步到就領
     assert p.stamina_pills == pills + 2 and p.stats["silver"] == silver
     _day(game, 13)
-    game.check_in()
     assert p.stats["silver"] == silver + 30 and not any(k.endswith("_4") for k in p.materials)
 
 
@@ -261,7 +270,7 @@ def test_seek_does_not_drop():
 
 
 def test_no_pill_drop_outside_season21():
-    game = _game("weekend", setup=_sure_drop)
+    game = _game(None, setup=_sure_drop)  # 14 天的季：沒有簽到
     pills = game.state.player.stamina_pills
     _explore(game, "gather")
     assert game.state.player.stamina_pills == pills
@@ -287,10 +296,10 @@ def test_bot_checks_in_and_picks_by_seed():
     bot.check_in(game)
     attribute = checkin.bot_attribute(game.content, p.name, p.season_number)
     mid = next(m.id for m in game.content.materials.values() if m.tier == 4 and m.attribute == attribute)
-    assert p.checkin_days == [6] and p.materials.get(mid) == 1
+    assert p.checkin_days == [1, 6] and p.materials.get(mid) == 1
     pills = p.stamina_pills
     bot.check_in(game)  # 同一天再叫一次：什麼都不動
-    assert p.checkin_days == [6] and p.stamina_pills == pills
+    assert p.checkin_days == [1, 6] and p.stamina_pills == pills
 
 
 def test_look_after_checks_in():
@@ -300,7 +309,7 @@ def test_look_after_checks_in():
     game.state.player.bot = True
     _day(game, 3)
     bot_policy.look_after(game, random.Random(0))
-    assert game.state.player.checkin_days == [3]
+    assert game.state.player.checkin_days == [1, 3]
 
 
 def test_tier4_reachable_through_checkin():

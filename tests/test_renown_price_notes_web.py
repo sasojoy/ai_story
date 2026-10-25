@@ -10,8 +10,8 @@ import re
 from pathlib import Path
 
 import pytest
-from conftest import real_content
-from test_econ_web import _game as econ_game
+from conftest import no_week_unlock, real_content, renown_unscaled
+from test_econ_web import _game as _econ_web_game
 from test_econ_web import run as econ_run
 from test_prologue_web import run as page_run
 
@@ -57,9 +57,16 @@ def test_the_reasons_are_escaped_before_they_are_wrapped():
     assert "<b>" not in out and _text(out) == '<b>x</b>・九折&"'
 
 
+def econ_game(**kw):
+    """test_econ_web 的店面角色，名聲門檻照原數（名望 50 是威震州郡・九折）：7 天季開季蓋的倍數 2.8 這裡不要。"""
+    game = _econ_web_game(**kw)
+    game.state.world.renown_scale = None
+    return game
+
+
 def _clinic_game():
     """正式內容、週末設定：潁川郡（醫館）、散人，名望 50（威震州郡・九折）、善名 30（州郡大俠・八五折）、內傷 40。"""
-    c = real_content("weekend")
+    c = renown_unscaled(no_week_unlock(real_content("week7")))
     c.config.auto_open_first_season = True
     game = Game.new(c, "沈浪", rng=random.Random(0))
     game.client = None
@@ -89,18 +96,6 @@ def test_a_choice_menu_label_keeps_each_reason_whole():
     m["options"] = [{"id": "act:heal", "label": HEAL, "enabled": True, "wait": "", "confirm": "", "confirm_yes": "", "tag": "", "note": ""}]
     page = page_run(m, "return H.pageJianghu();")
     assert '<span class="nb">（自家地盤・九折，</span><span class="nb">威震州郡・九折，</span><span class="nb">一方豪俠・八五折））</span>' in page
-
-
-def test_the_practice_heal_button_keeps_each_reason_whole():
-    game = _clinic_game()
-    m = server.main_view(game)
-    view = server.menxia_view(game)
-    out = webharness.run(r"""
-const H = new Function(["esc", "DEAL_RE", "dealHtml"].map(konst).join("\n") + fn("healButton") + "\nreturn { healButton };")();
-finish(H.healButton(input.x, input.injury));
-""", {"x": view, "injury": 40})
-    assert '<span class="nb">（威震州郡・九折，</span><span class="nb">州郡大俠・八五折）</span>' in out
-    assert view["heal"]["note"] in _text(out)
 
 
 def test_the_forge_go_button_keeps_the_reason_whole():

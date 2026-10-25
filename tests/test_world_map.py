@@ -23,7 +23,7 @@ INKS = {  # 跟網頁原本寫死的那一張表一樣（MAP_SIDES）：搬進�
 }
 
 
-def _game(profile="weekend", faction="guan", at="yingchuan", content=None):
+def _game(profile="week7", faction="guan", at="yingchuan", content=None):
     c = content or no_conquest(real_content(profile))  # 領地爭奪關著的季（PM 2026-10-22 起正式內容打開；開著的用 conquest_game）
     c.config.auto_open_first_season = True
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world())
@@ -33,7 +33,7 @@ def _game(profile="weekend", faction="guan", at="yingchuan", content=None):
 
 
 def test_the_scenario_carries_side_colours_and_unheld():
-    c = real_content("weekend")
+    c = real_content("week7")
     for f in c.scenario.factions:
         ink = f.ink
         assert ink is not None, f.id
@@ -42,7 +42,7 @@ def test_the_scenario_carries_side_colours_and_unheld():
 
 
 def test_two_sides_with_the_same_short_word_are_refused():
-    c = real_content("weekend")
+    c = real_content("week7")
     c.scenario.factions[1].ink = FactionInk(color="#123456", short="官")
     with pytest.raises(content_mod.ContentError, match="一個字"):
         content_mod.validate(c)
@@ -112,7 +112,7 @@ def test_world_sides_come_from_the_scenario_in_its_order():
 
 
 def test_a_side_without_ink_gets_a_fallback_colour():
-    c = real_content("weekend")
+    c = real_content("week7")
     c.scenario.factions[1].ink = None
     side = next(s for s in _game(content=c).map_base()["world"]["sides"] if s["id"] == "huang")
     assert side["color"] in mapdata.FALLBACK_INKS and side["name"] == "黃巾軍" and side["short"] == "黃"
@@ -133,14 +133,14 @@ def test_old_tug_of_war_leaves_most_ground_unheld():
     st = _game().map_state()
     assert st["places"]["changshe"]["control"] == "guan" and st["places"]["julu_altar"]["control"] == "huang"
     assert st["places"]["luoyang_road"]["control"] is None and st["places"]["runan"]["control"] is None
-    off = _game(content=classic_rules(real_content("weekend")))
+    off = _game(content=classic_rules(real_content("week7")))
     assert all(p["control"] is None for p in off.map_state()["places"].values())
     assert off.map_base()["world"]["cells"]  # 格子照畫（灰）
 
 
 def test_conquest_paints_every_block():
     """領地爭奪開著：陣營區塊開季就是自家的地面、中立地沒人佔。"""
-    game = conquest_game("weekend")
+    game = conquest_game("week7")
     st, world, c = game.map_state(), game.map_base()["world"], game.content
     for cell in world["cells"]:
         kind = conquest.blocks(c)[cell["id"]].kind
@@ -177,7 +177,7 @@ def flipping(game):
 def test_flip_marks_are_the_conquest_card_under_the_map_names():
     """收尾（計畫 1.3、收尾）：天下圖的 tug／melee／cool 不另寫判斷，照翻地那一份畫面資料（conquest.block_view，main_view 的
     conquest.blocks）換名字——tug＝bars 寫出來不是 0 的、melee＝clash、cool＝cooling（沒在冷卻是 None）。每一塊都一樣。"""
-    game = flipping(conquest_game("weekend"))
+    game = flipping(conquest_game("week7"))
     st, blocks = game.map_state(), game.conquest_view()["blocks"]
     shown = [x for x in blocks if x in st["places"]]
     assert shown
@@ -195,13 +195,13 @@ def test_flip_marks_are_the_conquest_card_under_the_map_names():
 
 
 def test_flip_marks_cool_off_when_the_cooldown_ends():
-    game = flipping(conquest_game("weekend"))
+    game = flipping(conquest_game("week7"))
     w, c = game.state.world, game.content
     w.time += conquest.cooling_left(w, c, "hilltop_wilds") + 1
     assert game.map_state()["places"]["hilltop_wilds"]["cool"] is None
 
 
-@pytest.mark.parametrize("profile", ["weekend", None, "season21"])
+@pytest.mark.parametrize("profile", ["week7", None, "season21"])
 def test_no_flip_marks_when_conquest_is_off(profile):
     """領地爭奪關著的季（週末、14 天、21 天）：疊層沒有 tug／melee／cool 這三個鍵（網頁就不畫；疊層跟 90e52e9b 一樣）。"""
     game = _game(profile=profile)
@@ -214,7 +214,7 @@ def test_fb632_a_neutral_block_taken_for_the_first_time_counts_as_a_flip():
     changed 列得出來（from 是 None：網頁寫「中立 → 官軍」、天下圖閃一圈）、那一處的易手（卡上「這一季誰佔過」）也記得到；換手照舊。"""
     from tianxia import calendar, territory
 
-    game = conquest_game("weekend")
+    game = conquest_game("week7")
     w, c = game.state.world, game.content
     conquest.assign(w, c, {"nanyang_wilds": "guan", "yingchuan_wilds": "huang"})  # 第 1 週：中立地被官軍佔下、官軍的地被黃巾拿走
     w.time = calendar.week_start(2, c, w) + 60
@@ -250,7 +250,7 @@ def test_yield_line_reads_the_drop_tables_without_rolling():
     照預設表的寫幾品素材；剛易手的中立地照 conquest.drop_cap 只算一階；沒有隊伍是空字串。跟真的擲骰讀同一份表（materials.possible_drops）。"""
     from tianxia import materials
 
-    game = conquest_game("weekend")
+    game = conquest_game("week7")
     w, c = game.state.world, game.content
     st = game.map_state()
     assert all("yield" in p for p in st["places"].values())
@@ -276,7 +276,7 @@ def territory_squads(w, c, loc):
 
 def test_a_scenario_without_blocks_seeds_every_open_place():
     """劇本沒寫區塊表：開放的地點全部分地面（序章專屬的不算）。"""
-    c = real_content("weekend")
+    c = real_content("week7")
     c.scenario.territory.blocks = {}
     game = _game(content=c)
     ids = {cell["id"] for cell in game.map_base()["world"]["cells"]}

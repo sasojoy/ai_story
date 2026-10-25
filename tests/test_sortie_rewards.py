@@ -12,7 +12,7 @@ from tianxia.engine import Game, drill_share
 from tianxia.sqlite_world import open_world
 
 
-def _game(faction="guan", at="huangjin_camp", profile="weekend", precise=True, tiers=True):
+def _game(faction="guan", at="huangjin_camp", profile="week7", precise=True, tiers=True):
     c = no_conquest(real_content(profile))  # 出陣攻敵方大本營（領地爭奪的季不給攻，PM 2026-10-22 起正式內容打開）
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
@@ -107,7 +107,6 @@ def test_a_full_treasure_pool_pays_silver_into_the_report(monkeypatch):
 
 def test_season21_allows_three_sortie_treasures():
     assert real_content("season21").config.sortie.treasure_cap == 3
-    assert real_content("weekend").config.sortie.treasure_cap == 2
 
 
 # ── Task 3：守、攪局、守勢行動 ──
@@ -221,7 +220,7 @@ def test_the_mandate_battle_gives_no_tier_four():
 
 
 def test_a_season_picks_two_weapon_and_one_armor_tier_three_recipes():
-    c = real_content("weekend")
+    c = real_content("week7")
     picked = forge_secrets.active(c, 1)
     groups = [forge_secrets.group_of(r) for r in picked]
     assert groups.count("weapon:3") == 2 and groups.count("armor:3") == 1

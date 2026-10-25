@@ -9,7 +9,7 @@ from collections.abc import Callable
 
 from . import (
     atlas, bounties, calendar, conquest, equipment, figures, insights, mapart, mapview, materials, mounts, orders, rules, sensing,
-    terrain, territory, timetable, worldgeo,
+    terrain, territory, timetable, week_unlock, worldgeo,
 )
 from .models import Content, FactionDef, Location
 from .state import GameState, Order, TerritoryWeek, WorldState
@@ -30,6 +30,8 @@ FALLBACK_INKS = ["#7A4E8C", "#2E7D7A", "#A0522D", "#5C6B2E", "#8C3B5A", "#3B5C8C
 WORLD_CACHE_KEEP = 8  # 幾何照內容快取最多幾份
 # 輿圖第一層（減法季整合設計第七章）：走得到的地方名字旁的「多半」兩字，照地點的小圖（城、營、寺、渡、山、野）；內容的事實，放底圖。待 joy 潤
 MOSTLY = {"城": "多事", "野": "多敵", "山": "多料", "渡": "參半", "營": "多敵", "寺": "多悟"}
+# 四格探索那一格的小字（減法季整合設計 6.3「這裡多半給什麼」；批 5）：腳下這一處照小圖寫一句，同一張表加地點的字。待 joy 潤
+MOSTLY_HERE = {"城": "城裡多事", "野": "野外多敵", "山": "山裡多料", "渡": "渡口參半", "營": "營裡多敵", "寺": "寺裡多悟"}
 # 本週要去的那一處那一句為什麼（減法季整合設計第七章第 1 條；來源照本週卡：軍令、懸賞、主線）。待 joy 潤
 WEEK_ORDER = "軍令・{title}"
 WEEK_BOUNTY = "懸賞・{kind}"
@@ -44,6 +46,14 @@ def rank_suggestions(rows: list[dict]) -> list[dict]:
     win = [g for g in ordered if not g["lose"]][:SUGGEST_MAX]
     lose = [g for g in ordered if g["lose"]]
     return win + lose[: max(1, SUGGEST_MAX - len(win))]
+
+
+def mostly_here(state: GameState, content: Content) -> str:
+    """腳下這一處「多半給什麼」那一句（MOSTLY_HERE；四格探索的小字，整合設計 6.3）：在路上、地點不在表上是空字串。"""
+    loc = content.locations.get(state.player.location)
+    if loc is None or state.player.journey is not None:
+        return ""
+    return MOSTLY_HERE.get(mapview.GLYPHS[mapart.icon_kind(loc)], "")
 
 
 def base_key(state: GameState, content: Content) -> str:
@@ -602,5 +612,6 @@ def state(
         "events": _titles(s, c, now_week, now_week), "suggest": suggest, "chart": chart,
         "start": _start_control(w, c) if on else None,
         "week": _week_place(s, c, faction, places),  # 本週要去的那一處（輿圖第一層，減法季整合設計第七章）
+        "gap": week_unlock.win_gap(s, c),  # 第 3 週「離贏還差多少」，天下層戰線那裡寫（6.8；批 3c 的數字接上之前是結局門檻那一句）
         "weeks": _weeks(s, c, now_week, ropes),
     }

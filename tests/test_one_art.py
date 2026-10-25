@@ -183,7 +183,7 @@ def test_the_big_fight_judge_hears_the_road_in_plain_words(on):
 
 
 def test_a_figure_lets_slip_a_habit_only_to_a_friend():
-    c = real_content("weekend")
+    c = real_content("week7")
     state, world = new_game_state(c, "沈浪"), open_world()
     state.world.season_one = True
     character = c.characters["bocai"]

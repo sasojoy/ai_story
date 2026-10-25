@@ -345,8 +345,9 @@ def test_the_routes_answer_the_forge_page(monkeypatch):
     from tianxia import accounts
     from tianxia.characters import open_characters
 
-    content = real_content("weekend")
+    content = real_content("week7")
     content.config.auto_open_first_season = True
+    content.config.jianfa.enabled = False  # 減法季的開局第一分鐘擋在鐵匠鋪前面；這裡測的是打造的路由
     monkeypatch.setattr(server, "CONTENT", content)
     monkeypatch.setattr(accounts, "SCRYPT_PARAMS", {"n": 2, "r": 1, "p": 1, "dklen": 32})
     monkeypatch.setattr(server, "_breaker_until", None, raising=False)
@@ -363,11 +364,12 @@ def test_the_routes_answer_the_forge_page(monkeypatch):
         p.location, p.stats["silver"], p.materials = "yingchuan", 300, {"gang_1": 3, "kuai_1": 2}
         equipment.open_smith(p, content)
         open_characters().save(game.state)
-        assert client.get("/api/main").json()["shop"]["shop"] == "smith"
+        shop = client.get("/api/main").json()["shop"]
+        assert shop["shop"] == "smith"
         line = client.post("/api/smith_line", json={"kind": "劍", "main": "gang_1", "aux": "kuai_1"}).json()
         assert line["ready"] and line["problem"] is None
         out = client.post("/api/do/smith_forge", json={"kind": "劍", "main": "gang_1", "aux": "kuai_1"}).json()
-        assert out["forged"]["slot"] == "weapon" and out["main"]["shop"]["silver"] == 280
+        assert out["forged"]["slot"] == "weapon" and out["main"]["shop"]["silver"] == shop["silver"] - 20  # 一爐 20 兩
         refused = client.post("/api/do/smith_forge", json={"kind": "劍", "main": "gang_1", "aux": "nope"}).json()
         assert refused["forged"] is None and "沒有這種素材" in refused["message"]
     finally:

@@ -883,7 +883,9 @@
     const enter = `<button type="button" class="m-enter" data-act="world-enter">${WORLD_ENTER} ›</button>`;
     if (S.mapDrawer === "min" && !deskMap()) return `<div class="m-wline"><button type="button" class="m-mini" data-act="map-open" aria-label="攤開抽屜"><span>${where}</span></button>${enter}</div>`;
     if (j) return `${journeyHtml(st)}<div class="m-wline"><span></span>${enter}</div>`;
-    return `<div class="m-wline"><span class="m-where">${where}</span>${enter}</div>${here ? placeCard(base, st, st.here) : ""}`;
+    // 第 3 週「離贏還差多少」（減法季整合設計 6.8：天下層的戰線上也寫同一句；批 5。批 3c 的數字接上之前是結局門檻那一句）
+    const gap = st.gap ? `<p class="m-gap">${esc(st.gap)}</p>` : "";
+    return `<div class="m-wline"><span class="m-where">${where}</span>${enter}</div>${gap}${here ? placeCard(base, st, st.here) : ""}`;
   }
 
   // ── 區圖（輿圖簡化設計 5.2、5.5、5.6；輿圖第三版第 4 批）──

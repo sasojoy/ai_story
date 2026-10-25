@@ -1,7 +1,7 @@
 """天下聞名的人守擂，排在他後面 famous_reach 名內的人都挑得到他（名聲設計 4.7）。"""
 import random
 
-from conftest import real_content
+from conftest import no_week_unlock, real_content, renown_unscaled
 
 from tianxia import arena
 from tianxia.engine import Game
@@ -16,7 +16,7 @@ def _ladder(n):
 
 
 def test_famous_reach_lets_five_below_challenge():
-    c = real_content("weekend")
+    c = renown_unscaled(no_week_unlock(real_content("week7")))
     w = _ladder(8)
     me = "p6"
     assert arena.challenge_problem(w, me, w.arena["p1"], c.config.arena, 10) is not None
@@ -27,7 +27,7 @@ def test_famous_reach_lets_five_below_challenge():
 
 
 def test_the_flag_follows_the_fame_tier_and_the_switch():
-    c = real_content("weekend")
+    c = renown_unscaled(no_week_unlock(real_content("week7")))
     c.config.auto_open_first_season = True
     g = Game.new(c, "甲", rng=random.Random(0))
     g.client = None
@@ -45,7 +45,7 @@ def test_the_flag_follows_the_fame_tier_and_the_switch():
 
 
 def test_the_arena_page_says_why_a_far_name_is_in_reach():
-    c = real_content("weekend")
+    c = renown_unscaled(no_week_unlock(real_content("week7")))
     c.config.auto_open_first_season = True
     g = Game.new(c, "p6", rng=random.Random(0))
     g.client = None

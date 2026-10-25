@@ -10,7 +10,7 @@ from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 
 
-def _game(faction="guan", at="yingchuan", classic=False, profile="weekend", third_party=False):
+def _game(faction="guan", at="yingchuan", classic=False, profile="week7", third_party=False):
     c = no_conquest(real_content(profile))  # 地盤拔河的舊規則（領地爭奪 PM 2026-10-22 起正式內容打開；翻地的輿圖資料在 tests/test_world_map.py）
     c.config.auto_open_first_season = True
     if classic:
@@ -176,6 +176,6 @@ def test_the_base_has_no_strongest_with_the_switch_off():
 
 
 def test_the_prologue_hut_lists_nothing_to_sense():  # Review Focus 4
-    c = real_content("weekend")
+    c = real_content("week7")
     assert mapdata.insight_pool(c.locations["mentor_hut"], c) == []
     assert mapdata.insight_pool(c.locations["changshe"], c) == ["huo", "feng"]

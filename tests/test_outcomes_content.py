@@ -29,7 +29,7 @@ EVIL = {  # 企劃者 2026-10-24 第 8 件 a：原事件有作惡固定選項的
 REGIONS = {"youzhou", "jizhou", "luoyang", "yingru", "nanyang"}
 
 
-@pytest.mark.parametrize("profile", [None, "weekend", "season21", "week7"])
+@pytest.mark.parametrize("profile", [None, "season21", "week7"])
 def test_the_branching_outcomes_load_under_every_profile(profile):
     content = real_content(profile)
     assert {e.id for e in content.events.values() if e.free_text is not None and e.free_text.outcomes} == MERGED

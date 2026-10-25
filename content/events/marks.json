@@ -2,6 +2,7 @@
   {
     "id": "mk_yingshui_newvillage",
     "title": "河灘新村",
+    "image": "refugees",
     "locations": [
       "yingshui"
     ],
@@ -68,6 +69,7 @@
   {
     "id": "mk_yingshui_bareshore",
     "title": "空灘",
+    "image": "river",
     "locations": [
       "yingshui"
     ],
@@ -138,6 +140,7 @@
   {
     "id": "mk_academy_wallwords",
     "title": "講堂壁書",
+    "image": "academy",
     "locations": [
       "yingchuan_academy"
     ],
@@ -209,6 +212,7 @@
   {
     "id": "mk_academy_search",
     "title": "郡吏查院",
+    "image": "academy",
     "locations": [
       "yingchuan_academy"
     ],
@@ -278,6 +282,7 @@
   {
     "id": "mk_mengjin_ferrymen",
     "title": "船家留座",
+    "image": "river",
     "locations": [
       "mengjin_ford"
     ],
@@ -350,6 +355,7 @@
   {
     "id": "mk_mengjin_reprisal",
     "title": "涼州兵的脾氣",
+    "image": "camp",
     "locations": [
       "mengjin_ford"
     ],
@@ -432,6 +438,7 @@
   {
     "id": "mk_yu_fishmarket",
     "title": "河灣魚市",
+    "image": "river",
     "locations": [
       "yu_river"
     ],
@@ -515,6 +522,7 @@
   {
     "id": "mk_yu_tollhut",
     "title": "河灣稅亭",
+    "image": "river",
     "locations": [
       "yu_river"
     ],
@@ -650,6 +658,7 @@
   {
     "id": "mk_nyroad_convoy",
     "title": "結伴上路",
+    "image": "refugees",
     "locations": [
       "nanyang_road"
     ],
@@ -729,6 +738,7 @@
   {
     "id": "mk_nyroad_ambush",
     "title": "攔路倒樹",
+    "image": "road",
     "locations": [
       "nanyang_road"
     ],
@@ -858,6 +868,7 @@
   {
     "id": "mk_zhuo_lettertable",
     "title": "驛舍書案",
+    "image": "town",
     "locations": [
       "zhuo_county"
     ],
@@ -921,6 +932,7 @@
   {
     "id": "mk_zhuo_scribestalls",
     "title": "代筆行情",
+    "image": "market",
     "locations": [
       "zhuo_county"
     ],
@@ -989,6 +1001,7 @@
   {
     "id": "mk_haozu_newtenants",
     "title": "堡內新戶",
+    "image": "fort",
     "locations": [
       "haozu_fort"
     ],
@@ -1054,6 +1067,7 @@
   {
     "id": "mk_haozu_outlaws",
     "title": "牆外流寇",
+    "image": "fort",
     "locations": [
       "haozu_fort"
     ],
@@ -1130,6 +1144,7 @@
   {
     "id": "mk_baima_strictcheck",
     "title": "津口連坐",
+    "image": "river",
     "locations": [
       "baima_ford"
     ],
@@ -1202,6 +1217,7 @@
   {
     "id": "mk_baima_nightcrossing",
     "title": "夜渡暗口",
+    "image": "night",
     "locations": [
       "baima_ford"
     ],

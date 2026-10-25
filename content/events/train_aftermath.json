@@ -2,6 +2,7 @@
   {
     "id": "train_fallen_foe",
     "title": "倒地的漢子",
+    "image": "road",
     "actions": [
       "train"
     ],
@@ -38,6 +39,7 @@
   {
     "id": "train_bettors",
     "title": "閒漢的賭局",
+    "image": "road",
     "actions": [
       "train"
     ],
@@ -88,6 +90,7 @@
   {
     "id": "train_sore_loser",
     "title": "愛比試的漢子",
+    "image": "fight",
     "actions": [
       "train"
     ],
@@ -146,6 +149,7 @@
   {
     "id": "train_dropped_letter",
     "title": "掉落的書信",
+    "image": "road",
     "actions": [
       "train"
     ],
@@ -189,6 +193,7 @@
   {
     "id": "train_old_boxer",
     "title": "路過的老拳師",
+    "image": "road",
     "actions": [
       "train"
     ],
@@ -247,6 +252,7 @@
   {
     "id": "train_runaway_cart",
     "title": "受驚的車馬",
+    "image": "road",
     "actions": [
       "train"
     ],
@@ -304,6 +310,7 @@
   {
     "id": "train_runaway_cart_caught",
     "title": "被撞見了",
+    "image": "road",
     "actions": [],
     "text": "夥計指著你大喊：「放下！那是我們東家的貨！」路上幾個行人都停了腳步，朝你看過來。",
     "choices": [
@@ -343,6 +350,7 @@
   {
     "id": "train_campfire",
     "title": "路邊的篝火",
+    "image": "night",
     "actions": [
       "train"
     ],

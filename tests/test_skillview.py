@@ -232,10 +232,10 @@ def test_practice_hint_calls_the_pages_by_their_tab_names(state, content):
     """FB-047：門下頁拆成「修練」「煉製」兩個分頁之後，提示照分頁的名字寫，不再寫「門下」。"""
     state.player.member.wugong_id = "basic_fist"
     state.player.stats["xinde"] = 60
-    assert skillview.practice_hint(state, content) == "💡 你已攢下 60 點心得。去「修練」練成武學。"
+    assert skillview.practice_hint(state, content) == "💡 你已攢下 60 點心得。點上面身上的武學練成武學。"
     state.player.insights = ["feng", "huo"]  # 合併要兩個意境
     assert skillview.practice_hint(state, content) == (
-        "💡 你已攢下 60 點心得。去「修練」練成武學，或去「煉製」把兩個意境合成新的。"
+        "💡 你已攢下 60 點心得。點上面身上的武學練成武學，或去「煉製」把兩個意境合成新的。"
     )
 
 

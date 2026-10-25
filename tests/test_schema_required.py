@@ -1,7 +1,7 @@
 """必填欄位要寫進送出去的 schema（通則；2026-10-24 主機複驗的建議）。
 
 pydantic 欄位有預設值時 `model_json_schema()` 不會把它列進 `required`，結構化輸出的語法於是允許模型整個略過那一欄：
-10/19 書信每一封白跑第一趟、10/22 人物不說話（`narrative`）、10/24 開口求人 `ask` 漏填 14/30，三次同一個坑。
+10/19 書信每一封白跑第一趟、10/22 人物不說話（`narrative`）、10/24 NPC 智能 2.0 `ask` 漏填 14/30，三次同一個坑。
 這裡掃 `tianxia/` 每一個 `chat_structured(...)` 呼叫點：`required_fields` 裡有 schema 沒列 required 的欄位，
 就要開 `require_in_schema=True`。
 
@@ -79,7 +79,7 @@ def test_required_fields_are_written_into_the_schema_or_known():
     assert not set(KNOWN) - loose, f"這幾處已經開了或改掉了，從 KNOWN 拿掉：{sorted(set(KNOWN) - loose)}"
 
 
-# ── 開口求人那幾輪：鍵要寫、也不准寫 null ────────────
+# ── NPC 智能 2.0那幾輪：鍵要寫、也不准寫 null ────────────
 
 
 @pytest.mark.parametrize("fields", [parley.ASK_FIELDS, parley.PLAN_FIELDS, parley.PLEA_FIELDS])

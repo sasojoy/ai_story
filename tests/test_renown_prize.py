@@ -12,7 +12,7 @@ def _prize(c):
 
 
 def test_prize_strikes_need_the_tier():
-    c = real_content("weekend")
+    c = real_content("week7")
     s = new_game_state(c, "甲")
     b = _prize(c)
     assert bounties.take_problem(s, c, b) == bounties.PRIZE_GATE
@@ -24,7 +24,7 @@ def test_prize_strikes_need_the_tier():
 
 
 def test_switch_off_lets_anyone_take_it():
-    c = real_content("weekend")
+    c = real_content("week7")
     c.config.renown.prize_gate = False
     s = new_game_state(c, "甲")
     assert bounties.take_problem(s, c, _prize(c)) != bounties.PRIZE_GATE

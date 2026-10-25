@@ -342,9 +342,9 @@ def test_run_bots_reads_the_profile_from_the_environment(monkeypatch, capsys):
     monkeypatch.delenv("TIANXIA_PROFILE", raising=False)
     run_bots.main(ticks=1)
     assert "設定：預設" in capsys.readouterr().out
-    monkeypatch.setenv("TIANXIA_PROFILE", "weekend")
+    monkeypatch.setenv("TIANXIA_PROFILE", "week7")
     run_bots.main(ticks=1)
-    assert "設定：weekend（第一季濃縮版規則開啟、季長 2.5 天、人數上限 20）" in capsys.readouterr().out
+    assert "設定：week7（第一季濃縮版規則開啟、季長 7 天、人數上限 20）" in capsys.readouterr().out
 
 
 def _identity_free(name: str, capsys, caplog) -> bool:
