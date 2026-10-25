@@ -26,20 +26,25 @@ CONQUER = "conquer"  # 翻地與爭搶（輿圖簡化設計 4.5）：推最多�
 SEAL = "seal"
 # 地方痕跡過了門檻、你出過力（減法季批 4，Game._mark_credits）：公開的只有痕跡、不列名字，所以酒肆打聽不到（UNHEARD）；季末的傳照行事寫
 MARK = "mark"
+# 人物心意到了門檻、你這一週也勸過（減法季批 6，Game._stance_annals）：公開的只有他改做什麼、不列誰勸的，酒肆打聽不到；季末的傳照人物那一段
+STANCE = "stance"
+# 人物託付的事辦成了（減法季批 6，errands.py；整合設計 5.5「寫進列傳」）：季末的傳照人物那一段
+ERRAND = "errand"
 # 減法季批 7b（列傳為終點，整合設計第九章；子開關 zhuan_end）：〈天下形勢〉寫到你的名號（xingshi_notes，自己同步那一下記，同 MARK）、
 # 季末論功的名次與第幾階（tier_note，收季之後自己同步那一下記；換季時沒同步過的人在 _reset_player_for_new_season 補）。
 # 〈天下形勢〉的照行事寫；論功自己一段（biography 的【季末論功】，傳寫在最後一段）
 XINGSHI = "xingshi"
 TIER = "tier"
 KINDS = {SHOWDOWN: "大戰", FIGURE: "人物", FIGHT: "交手", DEED: "行事", CONQUER: "攻守", SEAL: "行事", MARK: "行事",
-         XINGSHI: "行事", TIER: "論功"}  # 行狀頁的小標（待 joy 潤）
-GROUPS = {SEAL: DEED, MARK: DEED, XINGSHI: DEED}  # 季末的傳（biography._group）照哪一段寫：沒列的照自己的種類（TIER 自己一段）
+         STANCE: "人物", ERRAND: "人物", XINGSHI: "行事", TIER: "論功"}  # 行狀頁的小標（待 joy 潤）
+# 季末的傳（biography._group）照哪一段寫：沒列的照自己的種類（TIER 自己一段）
+GROUPS = {SEAL: DEED, MARK: DEED, STANCE: FIGURE, ERRAND: FIGURE, XINGSHI: DEED}
 TIER_LINE = "季末論功，{who}出力排第 {rank}（共 {of} 人），得{tier}「{title}」。"  # 待 joy 潤
 TIER_GENTRY = "替{side}"  # 豪強照哪一本排：替哪一軍（和局兩本合計寫 TIER_BOTH）
 TIER_BOTH = "替兩軍"
 XINGSHI_LINE = "名號上了〈天下形勢〉第 {n} 篇：「{said}」"  # 待 joy 潤：said 是文章裡寫到名號的那一句
 XINGSHI_SAID_MAX = 50
-UNHEARD = frozenset({SEAL, MARK})  # 酒肆打聽不到的種類
+UNHEARD = frozenset({SEAL, MARK, STANCE})  # 酒肆打聽不到的種類
 TEXT_MAX, QUOTE_MAX, REPLY_MAX = 80, 40, 80
 MASTERED = "絕學"  # martial_arts.QUALITIES 的最後一品
 

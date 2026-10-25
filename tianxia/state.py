@@ -910,6 +910,10 @@ class PlayerState(BaseModel):
     # 預設值時不寫進存檔（QUIET_DEFAULTS）：關著的季 JSON 一個鍵都不多。季曆日從 1 起，0 是還沒記過
     deed_day: int = 0
     deed_today: int = 0
+    # 減法季批 6（整合設計 5.4、5.5）：這一週跟哪幾位大勢人物記過心意（人物表 id → StanceNote，stances.py）、人物託你的事（errands.py）。
+    # 空的時候不寫進存檔（QUIET_DEFAULTS）：關著的季 JSON 一個鍵都不多
+    stance_notes: dict[str, StanceNote] = Field(default_factory=dict)
+    errands: list[ErrandState] = Field(default_factory=list)
     # 上一季論功拿到的稱號（減法季設計 3.3；wins.settle 存在上一季的 WorldState.final_tiers，換季時 _reset_player_for_new_season 掛上）：
     # social.affiliation 接在後面；沒有是空字串（不寫進存檔）
     season_title: str = ""
@@ -1002,6 +1006,7 @@ class PlayerState(BaseModel):
 QUIET_DEFAULTS = (
     "ledgers", "lean_changed", "season_title", "step_day", "step_skip", "deed_day", "deed_today",  # 批 3c、批 4
     "fights_today", "fight_day", "milestone_due", "outing_last",  # 批 2
+    "stance_notes", "errands",  # 批 6
     "xingshi_seen", "deep_order",  # 批 7b
 )
 
@@ -1209,6 +1214,38 @@ class TalkMemo(BaseModel):
     text: str
     at: float
     place: str = ""
+
+
+class StanceNote(BaseModel):
+    """你這一週跟一位大勢人物記過的心意（減法季批 6，tianxia/stances.py；PlayerState.stance_notes）：一人一天一筆（day 是 rules.game_day），
+    週一歸零（week 對不上就是上一週的，當作沒記過）；told 是這一週已經記過行狀的心意（到門檻那一刻你也勸過，下一次同步記一則）。
+    said 是這一週說過與替他辦成託付的（行狀兩樣都認）；spoke 是 day 那一天說話記的那一個（人物頁的「你今天勸的」只看它，FB-825）；
+    event_day 是你哪一天碰過他的心意開的那一則人物事件（StanceAction.event_daily，每人每天一則；0 是還沒碰過）。"""
+
+    week: int = 0
+    day: int = 0
+    said: list[str] = Field(default_factory=list)
+    told: list[str] = Field(default_factory=list)
+    spoke: str | None = None
+    event_day: int = 0
+
+
+class ErrandState(BaseModel):
+    """一位大勢人物託你的一件事（減法季批 6，tianxia/errands.py；PlayerState.errands）：照 FigureDef.errands 的那一件（errand）開的，
+    以一封「託付」信送到（letter 是那封信的 id；id 是 e＋信的 id）。status：open 還在辦、done 辦成了、lapsed 過了期限、declined 婉拒了、
+    failed 勸降沒談成（打了一場）。新的種類加在這裡（這是新的模型，舊程式讀檔整欄略過）。"""
+
+    id: str
+    figure: str  # 人物表的 id（大勢人物）
+    errand: str  # ErrandDef 的 id
+    kind: Literal["letter", "scout", "persuade"]
+    target: str  # 地點 id
+    week: int  # 哪一週託的（季曆週；7 天的季是段）：每位人物一週一件
+    at: float  # 託的那一刻（世界秒）
+    expires: float  # 期限（世界秒）
+    letter: int
+    status: Literal["open", "done", "lapsed", "declined", "failed"] = "open"
+    done_at: float | None = None  # 辦成、作罷、婉拒、沒談成的那一刻
 
 
 class Letter(BaseModel):
@@ -1531,6 +1568,14 @@ class SealAct(BaseModel):
     side: str = ""  # 傳檄：這一次照哪一軍算；鎮地：替哪一軍鎮；補缺：退回給哪一軍
 
 
+class StanceOn(BaseModel):
+    """一位大勢人物此刻照哪一個心意做事（WorldState.stance_active；stances.check 在到門檻那一刻寫）：哪一個、哪一刻、哪一週。"""
+
+    stance: str
+    at: float
+    week: int
+
+
 class WorldState(BaseModel):
     time: float = 0.0  # 賽季開始後經過的遊戲秒數
     trends: dict[str, int] = Field(default_factory=dict)
@@ -1561,6 +1606,11 @@ class WorldState(BaseModel):
     # 替有痕跡規則的痕跡出過力的人（減法季批 4，rules.add_marks 在痕跡看得見開著時記；過了門檻就不再記）：「地點 id:痕跡名」→ 名號。
     # 過了門檻之後每個人下一次同步記一則行狀（Game._mark_credits）、把自己的名號拿掉；空的時候不寫進 JSON（同 marks_fired）
     mark_helpers: dict[str, list[str]] = Field(default_factory=dict)
+    # 人物心意（減法季批 6，tianxia/stances.py；整合設計 5.4）：這一週全服記了幾筆（人物表 id → 心意 id → 筆數）、記的是哪一週（季曆週，
+    # 7 天的季是段；週初掛鉤歸零）、此刻照哪一個心意做事（人物表 id → StanceOn，到門檻那一刻起到週初）。空的、0 的時候不寫進 JSON
+    stance_counts: dict[str, dict[str, int]] = Field(default_factory=dict)
+    stance_week: int = 0
+    stance_active: dict[str, StanceOn] = Field(default_factory=dict)
     pending_battle: str | None = None  # 背景推進跨過開戰門檻時記下要開的戰鬥 id；那時人在 mutate_season 的
     # callback 裡，不能再 mutate 開戰（巢狀的 mutate 內層寫的會被蓋掉，會丟錯），callback 結束後由
     # world.start_pending_battle 開戰並清掉
@@ -1621,11 +1671,11 @@ class WorldState(BaseModel):
 
     @model_serializer(mode="wrap")
     def _drop_empty_marks_fired(self, handler):
-        """marks_fired、mark_helpers 是空的時候不寫這個鍵（同 world_state.SealRegistry._drop_empty_uses；不用 Field(exclude_if=…)：Pydantic 2.11 才有）。
-        final_tiers（減法季批 3c）同理。"""
+        """marks_fired、mark_helpers（批 4）、final_tiers（批 3c）與心意那三欄（批 6）是空的、0 的時候不寫這個鍵
+        （同 world_state.SealRegistry._drop_empty_uses；不用 Field(exclude_if=…)：Pydantic 2.11 才有）。"""
         data = handler(self)
         if isinstance(data, dict):
-            for key in ("marks_fired", "mark_helpers", "final_tiers"):
+            for key in ("marks_fired", "mark_helpers", "final_tiers", "stance_counts", "stance_week", "stance_active"):
                 if key in data and not data[key]:
                     del data[key]
         return data
