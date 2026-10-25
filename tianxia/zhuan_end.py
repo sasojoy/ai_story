@@ -97,9 +97,11 @@ def seal_text(content: Content, season_number: int, profile: dict) -> str:
 
 
 def season_tickets(purchases, season: int) -> dict:
-    """這一季用掉、沒退的票（Wallet.purchases 的那幾筆）：{"art": 用了插畫票, "seal": 用了紀念印, "quotes": [請了哪幾位人物]}。"""
+    """這一季用掉、沒退的票（Wallet.purchases 的那幾筆）：{"art": 用了插畫票, "seal": 用了紀念印, "quotes": [請了哪幾位人物]}。
+    quotes 照請的先後（FB-846）：每一次請都用最舊的一張票（Game._zhuan_act 拿 mall.tokens 的第一張），所以票的編號由小到大就是請的先後；
+    Wallet.purchases 是新的在前，這裡先倒過來排（不看用掉的時刻：快轉只活在一個 Game 的記憶體裡，時刻可能倒退）。"""
     out = {"art": False, "seal": False, "quotes": []}
-    for b in purchases:
+    for b in sorted(purchases, key=lambda b: b.id):
         if b.refunded is not None or not b.data.get("used") or b.data.get("season") != season:
             continue
         if b.data.get(ART):
