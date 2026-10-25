@@ -25,12 +25,13 @@ class Goal:
     text: str
     reward: str  # "pill" 回體丹、"silver" 銀兩（數量在 Config.training.goal_pill／goal_silver）
     go: str  # 「去做」帶去哪：practice0／practice1 最近的一級／二級練功點、craft／practice 分頁、bounties／tavern／arena 最近有的城、map 輿圖
+    outing_text: str = ""  # 減法季探索一顆開著時換的字（那一季沒有「尋敵」這顆鈕了，FB-816）；沒寫就是 text。待 joy 潤
 
 
 GOALS = (  # 設計稿第六節的表，照這個順序亮（一次亮最上面三條沒做完的）
     Goal("level5", "升到第 5 級", "pill", "practice0"),
     Goal("merge", "悟第二個意境，在煉製合出一個新的", "pill", "craft"),
-    Goal("field2", "到匪寇橫行的地方尋敵，打贏一場", "silver", "practice1"),
+    Goal("field2", "到匪寇橫行的地方尋敵，打贏一場", "silver", "practice1", "到匪寇橫行的地方出門探索，打贏一場"),
     Goal("create", "自創第一門武學", "pill", "practice"),
     Goal("bounty", "揭一張懸賞並交差", "silver", "bounties"),
     Goal("tavern", "在酒肆打聽一件事", "silver", "tavern"),
@@ -42,6 +43,13 @@ SHOWN = 3
 
 def on(content: Content) -> bool:
     return content.config.training.goals
+
+
+def text_of(state: GameState, content: Content, goal: Goal) -> str:
+    """這一條現在寫什麼字：減法季探索一顆開著時（rules.jianfa 的 explore_one）用 outing_text，其餘照舊。任務卡、本週卡、做到了的那一句都走它。"""
+    from .rules import jianfa  # noqa: PLC0415  rules 很大，這裡只在畫字時才用
+
+    return goal.outing_text if goal.outing_text and jianfa(content, state.world, "explore_one") else goal.text
 
 
 def met(state: GameState, goal: Goal) -> bool:
@@ -87,7 +95,7 @@ def grant(state: GameState, content: Content) -> list[tuple[str, str]]:
             p.stamina_pills += cfg.goal_pill
         else:
             p.stats["silver"] = p.stats.get("silver", 0) + cfg.goal_silver
-        out.append((DONE_LINE.format(text=goal.text), reward_text(content, goal)))
+        out.append((DONE_LINE.format(text=text_of(state, content, goal)), reward_text(content, goal)))
     return out
 
 

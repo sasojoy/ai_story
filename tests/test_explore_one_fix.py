@@ -136,3 +136,45 @@ def test_the_tag_does_not_name_the_beat_the_boss_ate():
     assert game.state.journal[0].tag == "得料・遇敵"
 
 
+# ── 3. 新手目標 field2 ──
+
+
+def test_a_won_encounter_at_a_tier_one_place_ticks_the_field_goal():
+    game = ready(jianfa_game(), side="guan", loc="songshan_foot")  # 嵩山腳：匪寇橫行（二級）
+    assert game._practice_tier(game.content.locations["songshan_foot"]) == 1
+    with _beats("encounter", "material", "material"), _fight("大勝"):
+        game.choose("act:explore")
+    assert "field2" in game.state.player.newbie_marks
+
+
+def test_a_lost_draw_or_low_tier_encounter_does_not_tick_the_field_goal():
+    game = ready(jianfa_game(), side="guan", loc="songshan_foot")
+    with _beats("encounter", "material", "material"), _fight("落敗"):
+        game.choose("act:explore")
+    assert "field2" not in game.state.player.newbie_marks
+    _reset(game)
+    with _beats("encounter", "material", "material"), _fight("僵持"):
+        game.choose("act:explore")
+    assert "field2" not in game.state.player.newbie_marks
+    low = ready(jianfa_game(), side="guan", loc="yingshui")  # 宵小出沒（一級）
+    assert low._practice_tier(low.content.locations["yingshui"]) == 0
+    with _beats("encounter", "material", "material"), _fight("大勝"):
+        low.choose("act:explore")
+    assert "field2" not in low.state.player.newbie_marks
+    town = ready(jianfa_game(), side="guan", loc="yingchuan")  # 城裡的地痞不算
+    with _beats("encounter", "material", "material"), _fight("大勝"):
+        town.choose("act:explore")
+    assert "field2" not in town.state.player.newbie_marks
+
+
+def test_the_field_goal_card_talks_about_the_outing_and_the_old_season_keeps_its_words():
+    on = ready(jianfa_game(), side="guan", loc="songshan_foot")
+    row = next(r for r in on.newbie_view()["rows"] if r["key"] == "field2")
+    assert row["text"] == "到匪寇橫行的地方出門探索，打贏一場" and "尋敵" not in row["text"]
+    with _beats("encounter", "material", "material"), _fight("大勝"):
+        on.choose("act:explore")
+    assert any("到匪寇橫行的地方出門探索，打贏一場" in g for entry in on.state.journal for g in entry.guide)  # 發獎勵那一句
+    off = ready(jianfa_game(explore_one=False), side="guan", loc="songshan_foot")
+    assert next(r for r in off.newbie_view()["rows"] if r["key"] == "field2")["text"] == "到匪寇橫行的地方尋敵，打贏一場"
+
+

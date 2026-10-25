@@ -4246,7 +4246,7 @@ class Game:
         s, c = self.state, self.content
         if not newbie.active(s, c) or prologue_rules.onboard_step(s, c) is not None:
             return None
-        rows = [{"key": g.key, "text": g.text, "reward": newbie.reward_text(c, g), "go": self._newbie_go(g.go),
+        rows = [{"key": g.key, "text": newbie.text_of(s, c, g), "reward": newbie.reward_text(c, g), "go": self._newbie_go(g.go),
                  "drifter": g.key == "side" and s.player.faction is None} for g in newbie.todo(s)]
         return {"title": newbie.TITLE, "rows": rows, "done": len(s.player.newbie_done), "total": len(newbie.GOALS)}
 
@@ -5130,6 +5130,8 @@ class Game:
             record.changes += changes
             record.notes += notes
             msgs += done
+        if won and not town and (self._practice_tier(loc) or 0) >= 1:
+            s.player.newbie_marks.add("field2")  # 新手目標：在二級以上的地方打贏一場（這一季沒有尋敵，遭遇拍打贏也算，FB-816）
         tier = record.tier if record is not None else "落敗"
         if town:
             return msgs, "town_win" if won else "town_lose", won
