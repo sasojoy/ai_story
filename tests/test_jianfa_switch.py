@@ -41,7 +41,7 @@ def test_each_batch_has_its_own_sub_switch(content):
     content.config.jianfa.enabled = True
     season = fresh_season(content)
     parts = ["explore_one", "drill_gates", "sortie_duel", "four_wins", "free_text_outcomes", "marks_visible", "stances", "errands",
-             "week_unlock", "rewrite_narration", "stat_milestones"]
+             "week_unlock", "rewrite_narration", "stat_milestones", "zhuan_end"]
     assert all(rules.jianfa(content, season, part) for part in parts)
     content.config.jianfa.sortie_duel = False
     assert not rules.jianfa(content, season, "sortie_duel") and rules.jianfa(content, season, "four_wins")
