@@ -29,7 +29,7 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   - 用 `;`、`&` 串起來的、`cat > 檔 <<EOF` 寫檔的，也常被當成「太複雜」拒絕：寫檔用 Write 工具，指令一條一條下。
 - **在 scratchpad 解一份複本跑伺服器**（2026-10-20）：`git archive HEAD -o <scratchpad>/<名字>/src.tar`，再 `tar --force-local -x -f <tar> -C <目錄>`。不加 `--force-local` 時 Git Bash 的 tar 把 `C:/…` 的 `C:` 當成遠端主機（「Cannot connect to C: resolve failed」）。
 - **中文輸出**：Python 印中文前包 UTF-8（`PYTHONIOENCODING=utf-8` 或 `sys.stdout = io.TextIOWrapper(...)`），不然 cp950 會炸（連 `print` 一個 `−` 都會）。
-- **TIANXIA_DB**：每次跑測試、跑腳本都設到 repo 外一個新的暫存檔（`$env:TEMP\tx_xxx.db`）。舊的資料庫會讓測試假失敗。
+- **TIANXIA_DB**：每次跑測試、跑腳本都設到 repo 外一個新的暫存檔（`$env:TEMP\tx_xxx.db`）。舊的資料庫會讓測試假失敗。**每一輪都換新檔，不要沿用上一輪的**：模組範圍的 fixture 在 conftest 換成每個測試自己的檔之前就開世界（例 `tests/test_renown_web.py` 的 `base`，`Game.new` 沒給 world），讀到外面那個檔裡上一輪留下的季，4 條假紅、base 一樣紅，很像「別人留下的老毛病」（批 2 接線碰過，2026-10-26）。
 - **git stash 是所有工作樹共用的**，別的 session 也在用。
   - 不要裸 `git stash` / `pop`。
   - 要用就 `git stash push -m <獨一無二的標籤> -- <檔>`，`git stash list --format='%H %gd %gs'` 找到自己那一筆，`git stash apply <sha>`，再照標籤找 `stash@{n}` 去 drop。
