@@ -142,16 +142,19 @@ def test_a_late_joiner_waits_out_the_newbie_period_on_their_own_clock(profile):
 
 @pytest.mark.parametrize("profile", ["week7", "season21"])
 def test_stage_three_writes_the_win_gap_on_the_card_and_the_world_map(profile):
-    """第 3 段：本週卡多一句「離贏還差多少」（批 3c 的數字接上之前是結局門檻那一句，rules.stance_rule_note），輿圖天下層同一句；
-    前兩段沒有。"""
+    """第 3 段：本週卡多一句「離贏還差多少」，輿圖天下層同一句；前兩段沒有。批 3c 接上之後（四勝利開著，這兩種季都開）寫兩軍各自離
+    勝利條件還差多少（wins.gap_line）；以前這裡是留位、鎖的是結局門檻那一句（rules.stance_rule_note），四勝利關著的季照舊是它
+    （tests/test_sides_card.py::test_last_week_says_how_far_from_winning）。"""
     g = _game(profile)
     assert _card(g)["gap"] is None and g.map_state()["gap"] is None
     _at(g, _stage(g, 2))
     assert _card(g)["gap"] is None
     _at(g, _stage(g, 3))
     s, c = g.state, g.content
-    note = rules.stance_rule_note(s, c)
-    assert note
+    from tianxia import wins
+
+    note = wins.gap_line(c, rules.stances(s, c))
+    assert note and "還差" in note
     card = _card(g)
     assert card["theme"] == c.scenario.week_themes[2] and card["gap"] == note
     assert g.map_state()["gap"] == note

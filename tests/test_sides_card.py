@@ -1,4 +1,6 @@
 """本週卡第一行與三方卡（減法季整合設計 3.4、6.1、6.8；計畫 Task 3c-3，欄位表 main.sides、main.sides_card）。
+三方卡的畫面是批 1 的 weekcard.sides_card（main.sides_card，`cols`），批 3c 的資料（Game.sides_card）補在它裡面：豪強那一格的「現在」、
+每一方的「贏了給」、投靠點的分鐘（join_at）、`lean`；最後一週「離贏還差多少」在 week_unlock.win_gap（本週卡的 gap、輿圖天下層）。
 
 main.sides：兩軍此刻的態勢、自己是哪一方；豪強另有此刻幫誰與兩本帳；投靠了的人有 tier_hint（此刻就收季拿第幾階・離上一階還差多少，
 名次讀全服的帳）。main.sides_card：三方各自的要做到、贏了給（稱號與比例照 Config.jianfa.tiers）、投靠在哪（現實幾分鐘）、現在
@@ -9,18 +11,22 @@ import pytest
 
 import server
 from wins_kit import save, wins_content, wins_game
-from tianxia import calendar, wins
+from tianxia import calendar, week_unlock, weekcard, wins
 
 pytestmark = pytest.mark.slow
 
-KEYS = {"step", "sides", "sides_card", "ending"}
+KEYS = {"step", "sides", "ending"}  # main.sides_card 是批 1 的，每一種季都有
 
 
 def test_off_sends_none_of_the_keys():
     """four_wins 關著：本週卡「你這一步」、第一行、三方卡、結局卡都沒有；總開關關著也一樣。"""
     game = wins_game(wins_content(off=True), faction="guan", at="changshe")
     assert game.sides() is None and game.sides_card() is None and game.ending_card() is None and game.step_view() is None
-    assert not KEYS & set(server.main_view(game))
+    view = server.main_view(game)
+    assert not KEYS & set(view)
+    card = view["sides_card"]  # 批 1 的三方卡照舊：兩軍、贏了給是舊的那一句、沒有 lean、沒有分鐘
+    assert card["lean"] is None and [col["id"] for col in card["cols"]] == ["guan", "huang"]
+    assert {col["gives"] for col in card["cols"]} == {weekcard.WIN_GIVES_OLD} and not any("join_at" in col for col in card["cols"])
     content = wins_content()
     content.config.jianfa.enabled = False
     plain = wins_game(content, name="乙客", faction="guan", at="changshe")
@@ -31,7 +37,14 @@ def test_on_sends_the_keys():
     game = wins_game(faction="guan", at="changshe")
     view = server.main_view(game)
     assert {"sides", "sides_card"} <= set(view) and "ending" not in view
-    assert view["sides"] == game.sides() and view["sides_card"] == game.sides_card()
+    assert view["sides"] == game.sides()
+    mine = game.sides_card()
+    cols = {col["id"]: col for col in view["sides_card"]["cols"]}
+    assert set(cols) == {"guan", "huang", "haoqiang"} and view["sides_card"]["lean"] is None  # 兩軍的人沒有「此刻幫誰」
+    for side, col in cols.items():  # 贏了給照四階、投靠點帶分鐘（批 3c 補進批 1 的卡）
+        assert col["gives"] == mine[side]["reward"] and col["join_at"] == mine[side]["join_at"]
+    assert cols["haoqiang"]["now"] == mine["haoqiang"]["now"] != weekcard.HAOQIANG_NOW_PENDING
+    assert cols["guan"]["now"] == f"態勢 {view['sides']['guan']}"  # 兩軍的「現在」照批 1
 
 
 def test_sides_for_an_army_a_gentry_and_a_drifter():
@@ -102,16 +115,29 @@ def test_sides_card_gentry_now_shows_own_books():
     game = wins_game(faction="haoqiang", ally="guan", at="zhuo_militia_hall")
     game.state.player.ledgers = {"guan": 120, "huang": 40}
     assert game.sides_card()["haoqiang"]["now"] == "你此刻幫官軍・替官軍 120、替黃巾軍 40"
+    card = weekcard.sides_card(game)
+    assert card["lean"] == "guan"
+    assert next(col for col in card["cols"] if col["id"] == "haoqiang")["now"] == "你此刻幫官軍・替官軍 120、替黃巾軍 40"
 
 
 def test_last_week_says_how_far_from_winning():
+    """最後一週（7 天的季最後一段）：批 5 留的位子 week_unlock.win_gap 換成兩軍各自離勝利條件還差多少（本週卡的 gap、輿圖天下層同一句）；
+    前面幾週沒有。four_wins 關著照舊是結局門檻那一句（rules.stance_rule_note）。"""
     game = wins_game(faction="guan", at="changshe")
-    assert "還差" not in game.sides_card()["guan"]["now"]
+    assert week_unlock.win_gap(game.state, game.content) is None
     w = game.state.world
     w.time = calendar.week_start(calendar.weeks(game.content, w), game.content, w) + 3600
     value = game.sides()["guan"]
-    assert game.sides_card()["guan"]["now"] == f"態勢 {value}・" + wins.NOW_GAP.format(ending="黃巾平定", gap=85 - value)
-    assert game.sides_card()["huang"]["now"].endswith(wins.NOW_GAP.format(ending="黃天當立", gap=85 - (100 - value)))
+    expected = (wins.GAP_PART.format(side="官軍", ending="黃巾平定", gap=85 - value) + "，"
+                + wins.GAP_PART.format(side="黃巾", ending="黃天當立", gap=85 - (100 - value)))
+    assert week_unlock.win_gap(game.state, game.content) == expected
+    assert game.map_state()["gap"] == expected
+    off = wins_game(wins_content(off=True), name="乙客", faction="guan", at="changshe")
+    ow = off.state.world
+    ow.time = calendar.week_start(calendar.weeks(off.content, ow), off.content, ow) + 3600
+    from tianxia import rules
+
+    assert week_unlock.win_gap(off.state, off.content) == rules.stance_rule_note(off.state, off.content)
 
 
 def test_rest_season_has_no_sides():

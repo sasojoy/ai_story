@@ -15556,25 +15556,18 @@ class Game:
         return "、".join(wins.NOW_GENTRY_ROLL.format(side=name(side), n=rolls.get(side, 0)) for side in faction.allies)
 
     def sides_card(self) -> dict | None:
-        """欄位表 main.sides_card（設計 3.4 三方卡）：劇本的每一方（陣營 id →）{name, goal 要做到, reward 贏了給, join_at 投靠在哪
-        [{location, name, minutes}], now 現在}。稱號與比例照 Config.jianfa.tiers；兩軍的「現在」是態勢，季曆最後一週（7 天的季是最後一段）
-        另接「離「黃巾平定」還差 N」（6.8）。四勝利關著、休季沒有。"""
+        """三方卡的批 3c 資料（設計 3.4）：劇本的每一方（陣營 id →）{name, goal 要做到, reward 贏了給, join_at 投靠在哪
+        [{location, name, minutes}], now 現在}，稱號與比例照 Config.jianfa.tiers。畫面的三方卡是批 1 的 weekcard.sides_card
+        （欄位表 main.sides_card），它拿這一份補豪強那一格的「現在」、每一方的「贏了給」與投靠點的分鐘；最後一週「離贏還差多少」
+        在 week_unlock.win_gap（wins.gap_line）。四勝利關著、休季沒有。"""
         s, c = self.state, self.content
         w = s.world
         if not self._four_wins() or w.ended:
             return None
         standing = stances(s, c)
-        last_week = calendar.point(w.time, c, w).week >= calendar.weeks(c, w)
-        bars = wins.bars(c)
         out = {}
         for f in c.scenario.factions:
-            if f.allies:
-                now = self._gentry_now(f)
-            else:
-                value = standing.get(f.id, 0)
-                now = wins.NOW_ARMY.format(value=value)
-                if last_week and f.id in bars:
-                    now += "・" + wins.NOW_GAP.format(ending=bars[f.id][1], gap=max(0, bars[f.id][0] - value))
+            now = self._gentry_now(f) if f.allies else wins.NOW_ARMY.format(value=standing.get(f.id, 0))
             out[f.id] = {
                 "name": f.name, "goal": wins.goal_text(c, f), "reward": wins.reward_card(c, f),
                 "join_at": [{"location": loc, "name": c.locations[loc].name, "minutes": self.place_minutes(loc)} for loc in f.join_at],

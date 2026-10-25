@@ -7,14 +7,15 @@
   還沒投靠的人江湖頁最上面就是它。
 
 畫面的改動不掛開關（整合設計第十二章）：每一種季都是這張卡；規則關著的季三方卡只寫兩軍。
-豪強的「此刻幫誰」與兩本帳是批 3c 的欄位（PlayerState.lean、兩本帳），還沒有時那一格寫 HAOQIANG_NOW_PENDING。
+豪強的「此刻幫誰」與兩本帳是批 3c 的欄位：四勝利開著的季照 Game.sides_card 補（`lean` 是此刻幫的那一軍 id，豪強那一格「現在」寫兩本帳，
+「贏了給」照 Config.jianfa.tiers，多 `join_at` 投靠點的分鐘）；拿不到那一份時那一格照舊寫 HAOQIANG_NOW_PENDING。
 字待 joy 潤。
 """
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from . import calendar, foreshadow, rules, week_unlock
+from . import calendar, foreshadow, rules, week_unlock, wins
 from . import opening as opening_rules
 from . import prologue as prologue_rules
 from .rules import STANCE_NAMES
@@ -70,6 +71,7 @@ def sides_card(game: Game) -> dict | None:
     four = rules.jianfa(c, s.world, "four_wins")
     standing = rules.stances(s, c) if rules.season_one(c, s.world) else None
     mine = s.player.faction
+    extra = game.sides_card() if four else None  # 批 3c（Game.sides_card）：豪強那一格的「現在」、贏了給（照 Config.jianfa.tiers）、投靠點的分鐘
     cols = []
     for f in c.scenario.factions:
         if f.id in ("guan", "huang"):
@@ -83,7 +85,15 @@ def sides_card(game: Game) -> dict | None:
         elif standing is not None and "haoqiang" in standing:  # 規則關著、割據那一條線還在的季：照舊三方
             cols.append({"id": f.id, "name": STANCE_NAMES["haoqiang"], "goal": HAOQIANG_GOAL_OLD, "now": f"態勢 {standing['haoqiang']}",
                          "gives": WIN_GIVES_OLD, "where": _places(game, f), "mine": mine == f.id})
-    return {"cols": cols, "joined": mine is not None, "lean": None}
+    # 批 3c 接上了：贏了給照四階的稱號與比例寫、多一份投靠點的分鐘（join_at），豪強那一格「現在」寫兩本帳（看的人是豪強）或兩邊各幾人
+    for col in cols:
+        got = extra.get(col["id"]) if extra else None
+        if got is not None:
+            col["gives"], col["join_at"] = got["reward"], got["join_at"]
+            if c.scenario.faction(col["id"]).allies:
+                col["now"] = got["now"]
+    lean = wins.lean_of(s.player, c) if four else None  # 「你此刻幫誰」（批 3c）：豪強此刻幫的那一軍 id；其他人、關著是 None
+    return {"cols": cols, "joined": mine is not None, "lean": lean}
 
 
 def _steps(game: Game, status: dict, orders: list[dict]) -> list[dict]:

@@ -35,13 +35,14 @@ LEAN_NOT_DEFECT = "地方豪強換一軍幫不算叛投，按「改幫…」就�
 GOAL_ARMY = "季末{side}的態勢高過{other}；{side}的態勢到 {bar} 就是「{ending}」。"
 GOAL_ARMY_PLAIN = "季末{side}的態勢高過{other}。"
 GOAL_GENTRY = "挑一軍幫：幫{a}、{a}贏，或幫{b}、{b}贏，都算你贏；季末只算你替贏的那一軍出的力；換邊隨時換，不算叛逃。"
+GOAL_GENTRY_PLAIN = "挑一軍幫：幫的那一軍贏了就算你贏；季末只算你替贏的那一軍出的力；換邊隨時換，不算叛逃。"
+GAP_PART = "{side}離「{ending}」還差 {gap}"  # 最後一週「離贏還差多少」的一方（gap_line 用「，」接兩軍）
 REWARD_ARMY = ("貢獻前 {p1}%（至少一人）拿{t1}「{n1}」，其餘前 {p3}% {t3}「{n3}」，其餘到 {floor} 的{t4}「{n4}」；"
                "輸的那一軍照樣有{t3}、{t4}。")
 REWARD_GENTRY = ("替贏的那一軍出力前 {p2}%（至少一人）拿{t2}「{n2}」，其餘前 {p3}% {t3}「{n3}」，其餘到 {floor} 的{t4}「{n4}」；"
                  "那一本不到 {floor}，照另一本排{t3}、{t4}。")
 REWARD_TIER = "下一季開局銀兩 {silver}、心得 {xinde}"
 NOW_ARMY = "態勢 {value}"
-NOW_GAP = "離「{ending}」還差 {gap}"  # 最後一週（6.8：第 3 週寫離贏還差多少）
 NOW_GENTRY_MINE = "你此刻幫{side}・{books}"
 NOW_GENTRY_BOOK = "替{side} {n}"
 NOW_GENTRY_ROLL = "依附{side} {n} 人"
@@ -350,11 +351,26 @@ def _pct(share: float) -> int:
     return round(share * 100)
 
 
+def gap_line(content: Content, standing: dict[str, int]) -> str:
+    """最後一週「離贏還差多少」（設計 6.8；week_unlock.win_gap 的批 3c 那一句，本週卡與輿圖天下層寫同一句）：兩軍照劇本的順序，
+    「官軍離「黃巾平定」還差 12，黃巾離「黃天當立」還差 28」；寫不出門檻的一方不寫，都寫不出是空字串。"""
+    from .rules import STANCE_NAMES  # noqa: PLC0415  rules → wins：在函式裡 import，避免循環
+
+    b = bars(content)
+    parts = [
+        GAP_PART.format(side=STANCE_NAMES.get(f.id, f.name), ending=b[f.id][1], gap=max(0, b[f.id][0] - standing.get(f.id, 0)))
+        for f in content.scenario.factions if f.id in b
+    ]
+    return "，".join(parts)
+
+
 def goal_text(content: Content, faction: FactionDef) -> str:
     """三方卡「要做到」（設計 3.4）：兩軍是態勢高過對面、到門檻就贏；豪強是挑一軍幫。"""
-    if faction.allies:
+    if len(faction.allies) >= 2:
         a, b = (content.scenario.faction_name(side, side) for side in faction.allies[:2])
         return GOAL_GENTRY.format(a=a, b=b)
+    if faction.allies:
+        return GOAL_GENTRY_PLAIN
     other = next((f for f in content.scenario.factions if not f.allies and f.id != faction.id), None)
     other_name = other.name if other is not None else ""
     bar = bars(content).get(faction.id)
