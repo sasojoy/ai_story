@@ -14,7 +14,9 @@ from typing import NamedTuple
 
 from . import arts as arts_mod, allied, armor, bounties, checkin, chuangong, clinic, create, cultivation, economy, equipment, explore_modes, forge_secrets, four_tiers, fusion, glyph, insights, library, mounts, naming, sensing, smithing, team, traits, treasures, weapons
 from . import prologue as prologue_rules
+from . import growth  # 減法季屬性五段：假人照路配點（stat_path、plan_points）
 from .engine import ARENA_YIELD, DUEL_FLEE, FREE_TEXT_OPTION, TEXT_TALKS, Game, Option
+from .rules import jianfa
 from .martial_arts import MartialArt, next_quality
 from .models import Content
 from .state import PLAYER
@@ -62,7 +64,7 @@ def can_pay_clinic(game: Game) -> bool:
 def injury_share(game: Game) -> float:
     """本人的內傷佔氣血上限的幾成（醫館的兩道門檻 CLINIC_AT、CLINIC_URGENT 都跟它比）。"""
     s, c = game.state, game.content
-    _, cap = team.member_neili(c, s.player.member, team.con_of(s, c, game.world, PLAYER))
+    _, cap = team.member_neili(c, s.player.member, team.con_of(s, c, game.world, PLAYER), season=s.world)
     return s.player.member.injury / cap if cap > 0 else 0.0
 
 
@@ -109,6 +111,15 @@ def allocate_points(game: Game, rng: random.Random) -> None:
     迴圈有界：它在全服寫入鎖裡跑，空轉會凍住伺服器。最多試「手上有幾點」次；全到頂、或 allocate_stat
     拒絕了（賽季籌備中等，點數沒少）就停，剩下的點留著。"""
     p, cap = game.state.player, game.content.config.stat_cap
+    if jianfa(game.content, game.state.world, "stat_milestones"):
+        # 減法季屬性五段（設計 4.5「配滿一項是一條路」）：照名號挑一條路（growth.stat_path：力、巧、韌、悟、博排個先後），第一項配滿再第二項；
+        # 不擲骰。整季機器人與伺服器假人同一個（bot_policy.look_after 叫這裡）
+        for stat in growth.plan_points(p.stats, p.stat_points, cap, growth.stat_path(p.name)):
+            before = p.stat_points
+            game.allocate_stat(stat)
+            if p.stat_points >= before:  # 被拒絕：再試也一樣
+                return
+        return
     for _ in range(p.stat_points):
         open_stats = [k for k in team.COMBAT_STATS if p.stats.get(k, 0) < cap]
         if not open_stats:

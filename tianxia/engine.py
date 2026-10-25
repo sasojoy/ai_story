@@ -1169,10 +1169,11 @@ class Game:
             rate *= 2
         if cfg.newbie_hp_double and roster.newbie(self.state, self.content):  # 第一季從自己加入那天起算（roster.since_join），beta 照舊從季初
             rate *= 2
-        team.regen_neili(self.content, p.member, rate, team.con_of(self.state, self.content, self.world, PLAYER))
+        season = self.state.world  # 減法季每點加倍：氣血上限照這一季（team.neili_cap 的 season）
+        team.regen_neili(self.content, p.member, rate, team.con_of(self.state, self.content, self.world, PLAYER), season=season)
         for cid in p.team:
             con = team.con_of(self.state, self.content, self.world, cid)  # 同伴回到他自己的上限（人物資質設計 14.3）
-            self.world.update_companion(cid, lambda progress, con=con: team.regen_neili(self.content, progress, rate, con))
+            self.world.update_companion(cid, lambda progress, con=con: team.regen_neili(self.content, progress, rate, con, season=season))
         msgs: list[str] = []
         if p.busy_until is not None and w.time >= p.busy_until:
             msgs += self._finish_seclusion(p.busy_until)
@@ -2853,7 +2854,7 @@ class Game:
             con = team.con_of(s, c, self.world, PLAYER)
             cut = team.armor_cut(s, c, self.world)
             hp, _ = team._apply_toll(c, me.member, cfg.hit_hp_loss * (1 - cut), agi=me.stats.get("agi", team.BASE_STAT), con=con,
-                                     injury=treasures.amount(s, c, "injury"))  # 螭首（玉璽碎片改版）：變成內傷的減半
+                                     injury=treasures.amount(s, c, "injury"), season=s.world)  # 螭首（玉璽碎片改版）：變成內傷的減半
             hp_lost = round(hp)
             if hp_lost > 0:
                 record.changes.append(f"氣血 -{hp_lost}")
@@ -4493,7 +4494,7 @@ class Game:
         探索真的擲骰（_explore_outcome）與行動列底下那一行（action_notes，explain-1）讀同一份：說的跟擲的不會走樣。"""
         s, c = self.state, self.content
         mix = c.config.explore_mix_of(loc.tags).weights
-        wis = team.stat_factor(c, s.player.stats.get("wis", team.BASE_STAT))
+        wis = team.stat_factor(c, s.player.stats.get("wis", team.BASE_STAT), s.world)
         sharp = wis * treasures.amount(s, c, "insight")  # 寶物「探索悟意境」跟悟性疊乘（裝備四欄 6.2）
         return [
             (b, mix[b] * (sharp if b == "insight" else 1))
@@ -6715,6 +6716,7 @@ class Game:
         """決戰的氣血池上限：決戰的池子不吃螭首（玉璽碎片設計 7.1：決戰一個字都不改）。"""
         _, cap = team.member_neili(
             self.content, self.state.player.member, team.con_of(self.state, self.content, self.world, PLAYER), plain=True,
+            season=self.state.world,
         )
         return cap
 
@@ -7980,7 +7982,7 @@ class Game:
             before = p.member.level
             lines += team.add_exp(c, p.member, exp, p.name, "showdown")
             if p.member.level > before:
-                points = team.points_between(c.config, before, p.member.level)
+                points = team.level_points(self.state, c, before, p.member.level)
                 p.stat_points += points
                 if points:
                     lines.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
@@ -9468,7 +9470,7 @@ class Game:
     def _player_hp_and_cap(self) -> tuple[float, float]:
         """本人此刻的氣血與上限（上限吃根骨：con_of 認 key，所以傳 PLAYER，不傳 Member）。"""
         return team.member_neili(
-            self.content, self.state.player.member, team.con_of(self.state, self.content, self.world, PLAYER),
+            self.content, self.state.player.member, team.con_of(self.state, self.content, self.world, PLAYER), season=self.state.world,
         )
 
     def _player_hp(self) -> float:
@@ -11093,7 +11095,7 @@ class Game:
                 lines.append(f"經驗 +{pay.exp}")
                 lines += team.add_exp(c, p.member, pay.exp, p.name, "dividend")
                 if p.member.level > before:
-                    points = team.points_between(c.config, before, p.member.level)
+                    points = team.level_points(self.state, c, before, p.member.level)
                     p.stat_points += points
                     if points:
                         lines.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
@@ -11595,16 +11597,41 @@ class Game:
             return self._log(["沒有可以分配的屬性點，升級才會有。"])
         if p.stats.get(stat, 0) >= cfg.stat_cap:
             return self._log([f"{name}已經到頂（{cfg.stat_cap}）。"])
+        seen = jianfa(self.content, self.state.world, "stat_milestones")  # 減法季屬性五段：配點那一刻寫實際變了多少（設計 4.5「看得見」）
+        was = p.stats.get(stat, 0)
+        power = team.fresh_power(self.state, self.content, self.world) if seen else 0.0
         p.stat_points -= 1
         p.stats[stat] = p.stats.get(stat, 0) + 1
+        said = self._allocate_line(stat, was, power) if seen else ""
+        if seen and p.stat_points <= 0:
+            p.milestone_due = 0  # 境界卡（main.milestone）：配完就收
         journal.add_entry(
-            self.state, JournalEntry(time=self.state.world.time, title=journal.ALLOCATE, changes=[f"{name} +1"]),
+            self.state, JournalEntry(time=self.state.world.time, title=journal.ALLOCATE, changes=[f"{name} +1"],
+                                     lines=[said] if said else []),
             merge=True,
         )
         left = f"（還有 {p.stat_points} 點可以分配）" if p.stat_points else ""  # 最後一點不寫「還有 0 點」
         self._guide(note_action(self.state, self.content, self.world, "allocate"))  # 序章第 9 步（新手引導計畫一）
         self._check_hints()  # 博聞加了持有上限會變（h_cap 的條件）：配成了之後看一遍（新手引導計畫三）
-        return self._log([f"{name} +1{left}"])
+        return self._log([f"{said or f'{name} +1'}{left}"])
+
+    def _allocate_line(self, stat: str, was: float, power: float) -> str:
+        """配點那一句（減法季屬性五段，設計 4.5）：「臂力 8 → 9：武學威力 +6%，此刻全隊 182 → 193」——前後威力用 team.fresh_power
+        （滿血、不看對手）各算一次，沒變（身法、悟性、博聞）就不寫全隊那一段。待 joy 潤。"""
+        s, c = self.state, self.content
+        name = c.config.stat_names.get(stat, stat)
+        after = team.fresh_power(s, c, self.world)
+        tail = f"，此刻全隊 {power:.0f} → {after:.0f}" if round(after) != round(power) else ""
+        return f"{name} {was:.0f} → {was + 1:.0f}：{skillview.stat_step(s, c, stat, was)}{tail}"
+
+    def milestone_card(self) -> dict | None:
+        """境界卡（減法季屬性五段，設計 4.5；欄位表 main.milestone）：升到境界那一級、手上還有點沒配時是
+        {"level": 20, "points": 5, "title": "筋骨大成"}；配完了、關著的季是 None。名字照 growth.MILESTONE_TITLES（待 joy 潤）。"""
+        s, c = self.state, self.content
+        p = s.player
+        if not p.milestone_due or p.stat_points <= 0 or not jianfa(c, s.world, "stat_milestones"):
+            return None
+        return {"level": p.milestone_due, "points": p.stat_points, "title": growth.milestone_title(p.milestone_due)}
 
     # ── 玩家之間的邀請與切磋（玩家互動第二層，企劃者 2026-10-08「互動的兩層也可以派下去做了」）──────────
     # 切磋掛在玩家卡上（spar.py 登記進 social.ACTIONS）：發邀請、答應、婉拒、收回都是按的那個人自己的動作，在他自己那一把行動鎖裡做；
@@ -12040,7 +12067,7 @@ class Game:
         maxed_note = self._record_exp(record, cfg.exp, "spar")  # 先換（滿級才換）；升到滿級那一下剩下的不換
         ups = team.add_exp(c, p.member, cfg.exp, p.name, "spar")  # 切磋是仗（減法季 45 級以後照算）
         if p.member.level > before:
-            points = team.points_between(c.config, before, p.member.level)
+            points = team.level_points(self.state, c, before, p.member.level)
             p.stat_points += points
             if points:
                 ups.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
@@ -12216,7 +12243,8 @@ class Game:
         wp.stats["silver"] = wp.stats.get("silver", 0) + taken
         con = team.con_of(loser.state, c, loser.world, PLAYER)
         cut = team.armor_cut(loser.state, c, loser.world)  # 截殺輸的一方只吃防具（裝備四欄 4.4）：不吃化勁，也就不必夾合計上限
-        hp, _ = team._apply_toll(c, lp.member, cfg.hp_loss * (1 - cut), agi=lp.stats.get("agi", team.BASE_STAT), con=con, injury=0.0)
+        hp, _ = team._apply_toll(c, lp.member, cfg.hp_loss * (1 - cut), agi=lp.stats.get("agi", team.BASE_STAT), con=con, injury=0.0,
+                                 season=loser.state.world)
         # 散人（揭了通緝）不記貢獻；第一季規則關著的季沒有晉升，也不記（懸賞榜設計 2.2 第 4 點，寫法同軍餉 _showdown_pay）
         contrib = c.config.contrib_per_push * cfg.win_contrib_push if wp.faction is not None and season_one(c, self.state.world) else 0
         if contrib:
@@ -12547,7 +12575,8 @@ class Game:
             left -= got
         con = team.con_of(loser.state, c, loser.world, PLAYER)
         cut = team.armor_cut(loser.state, c, loser.world)
-        hp, _ = team._apply_toll(c, lp.member, cfg.hp_loss * (1 - cut), agi=lp.stats.get("agi", team.BASE_STAT), con=con, injury=0.0)
+        hp, _ = team._apply_toll(c, lp.member, cfg.hp_loss * (1 - cut), agi=lp.stats.get("agi", team.BASE_STAT), con=con, injury=0.0,
+                                 season=loser.state.world)
         contrib = c.config.contrib_per_push * cfg.win_contrib_push if wp.faction is not None and season_one(c, self.state.world) else 0
         if contrib:
             push.add_contribution(wp, calendar.point(self.state.world.time, c, self.state.world).week, contrib)
@@ -12998,7 +13027,7 @@ class Game:
         if lost > 0:
             con = team.con_of(s, c, self.world, PLAYER)
             injury = treasures.amount(s, c, "injury")  # 螭首（玉璽碎片改版）：變成內傷的減半；沒帶是 1
-            p.member.injury += lost * c.config.injury_share * max(0.0, 1 - team.stat_bonus(c, con)) * injury
+            p.member.injury += lost * c.config.injury_share * max(0.0, 1 - team.stat_bonus(c, con, s.world)) * injury
             p.member.neili = max(0.0, now - lost)
         title = f"頭目戰・{foe.name}"
         if tier is None:
@@ -13027,7 +13056,7 @@ class Game:
             extra += [n for n in self._record_exp(record, exp, "boss") if not n.startswith("心得 +")]
             extra += team.add_exp(c, p.member, exp, p.name, "boss")  # 頭目戰是仗（減法季 45 級以後照算）
             if p.member.level > before:
-                points = team.points_between(c.config, before, p.member.level)
+                points = team.level_points(self.state, c, before, p.member.level)
                 p.stat_points += points
                 if points:
                     extra.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
@@ -15335,11 +15364,11 @@ class Game:
         s, c = self.state, self.content
         p, w = s.player, s.world
         names = c.config.stat_names
-        now, cap = team.member_neili(c, p.member, team.con_of(s, c, self.world, PLAYER))
+        now, cap = team.member_neili(c, p.member, team.con_of(s, c, self.world, PLAYER), season=w)
         mates = []
         for cid in p.team:
             progress = self.world.get_companion(cid)
-            mate_now, mate_cap = team.member_neili(c, progress, team.con_of(s, c, self.world, cid))
+            mate_now, mate_cap = team.member_neili(c, progress, team.con_of(s, c, self.world, cid), season=w)
             mates.append({"name": c.characters[cid].name, "level": progress.level,
                           "hp": round(mate_now), "hp_max": round(mate_cap)})
         data = {
@@ -15394,7 +15423,7 @@ class Game:
             "stat_points": p.stat_points,
             "stat_cap": c.config.stat_cap,
             # ＋鈕底下那一行：五項各管什麼、事件檢定也看它們（計畫二最終審查 M2）；網頁只在有點可配時畫
-            "stat_uses": skillview.stat_uses(c),
+            "stat_uses": skillview.stat_uses(c, s),  # 減法季屬性五段開著時寫「現在給你什麼」的數字（設計 4.5）
             "stat_uses_note": skillview.STAT_CHECK_NOTE,
             # 心得付得起、又真的有事可做時才有；籌備中練成、合成都被擋，不提示（explain-2 審查 Minor 1）
             "hint": None if self._preparing() else skillview.practice_hint(s, c),

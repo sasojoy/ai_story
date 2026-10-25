@@ -1690,6 +1690,9 @@ def _main_view_body(game: Game) -> dict:
     shop = game.shop_view([o.id for o in options])  # 店面（店面獨立介面設計 6.1）：開關開著、店開著、鐵匠鋪那一串是眼前的選單才有
     if shop is not None:
         view["shop"] = shop
+    milestone = game.milestone_card()  # 減法季屬性五段的境界卡（主機側計畫欄位表 main.milestone）：到了境界、點還沒配完才有這個鍵
+    if milestone is not None:
+        view["milestone"] = milestone
     entry = game.mall_entry()  # 商城的入口（商城第二批：齒輪旁的錠子鈕＋餘額、底部第六格）；商城關著沒有這個鍵
     if entry is not None:
         view["mall"] = entry

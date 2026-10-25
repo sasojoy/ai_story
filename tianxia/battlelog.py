@@ -76,9 +76,29 @@ def new_record(
         tier=result.tier,
         our_power=result.our_power,
         difficulty=result.difficulty,
-        notes=([DODGE_NOTE] if result.dodged else []) + ([aid] if aid else []),
+        notes=([DODGE_NOTE] if result.dodged else []) + stat_notes(state, content, kind) + ([aid] if aid else []),
         guarded=result.guarded,  # 護命的那一句演出由 Game._play_rounds 補進 notes 最前面（跟閃避的那一句同一個位置）
     )
+
+
+# 減法季屬性五段（設計 4.5「看得見」）：臂力、根骨的加成佔本人威力三成以上時，戰報結果那一段多一句（身法閃過那一句照舊）。待 joy 潤
+STAT_NOTES = {"str": "臂力沉，這一擊多了{n}成。", "con": "根骨厚，內勁多了{n}成。"}
+STAT_NOTE_SHARE = 0.3  # 加成佔本人威力的幾成以上才寫（b ÷（1＋b））【預設】
+
+
+def stat_notes(state: GameState, content: Content, kind: str) -> list[str]:
+    """戰報結果那一段屬性起了作用的那一句（減法季屬性五段開著才有；部下上陣的那幾種仗，AID_KINDS）：臂力（外功）、根骨（內功）的加成
+    b 佔本人威力 b ÷（1＋b）到 STAT_NOTE_SHARE 以上，寫「臂力沉，這一擊多了六成」（成數是 b 的十分之幾）。關著是空的。"""
+    from .rules import jianfa  # noqa: PLC0415  rules → team → battlelog 不會回頭 import 這裡；照用的時候才 import
+
+    if kind not in AID_KINDS or not jianfa(content, state.world, "stat_milestones"):
+        return []
+    out = []
+    for key, line in STAT_NOTES.items():
+        bonus = team.stat_bonus(content, state.player.stats.get(key, team.BASE_STAT), state.world)
+        if bonus > 0 and bonus / (1 + bonus) >= STAT_NOTE_SHARE:
+            out.append(line.format(n=team.CN_DIGITS[min(10, round(bonus * 10))]))
+    return out
 
 
 def add_record(state: GameState, record: BattleRecord) -> None:

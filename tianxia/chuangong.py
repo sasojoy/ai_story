@@ -113,7 +113,8 @@ def mate_lessons(state: GameState, content: Content, world: WorldStateStore, key
             out.append(Lesson(key, stat, f"傳{label}（已滿）", "", None, STAT_FULL.format(stat=label, cap=rule.mate_stat_max)))
             continue
         price = price_of(state, content, rule.mate_stat_xinde * (taught + 1))
-        effect = f"{name}的{label} {stats[stat]:.0f}→{stats[stat] + 1:.0f}：" + STAT_EFFECT[stat].format(pct=_pct(cfg.stat_bonus_per_point))
+        per = team.per_point(content, state.world, "bonus_per_point")  # 減法季每點加倍（6%）；關著照 Config（3%）
+        effect = f"{name}的{label} {stats[stat]:.0f}→{stats[stat] + 1:.0f}：" + STAT_EFFECT[stat].format(pct=_pct(per))
         out.append(Lesson(key, stat, f"傳{label}・{price} 心得", effect, price, _short(state, price)))
     return out
 
@@ -140,7 +141,8 @@ def follower_lessons(state: GameState, content: Content, key: str) -> list[Lesso
     else:
         price = price_of(state, content, rule.follower_str_xinde * (drill.arm + 1))
         out.append(Lesson(key, "str", f"傳{label}・{price} 心得",
-                          f"{label} {strength}→{strength + 1}：" + STAT_EFFECT["str"].format(pct=_pct(cfg.stat_bonus_per_point)),
+                          f"{label} {strength}→{strength + 1}："
+                          + STAT_EFFECT["str"].format(pct=_pct(team.per_point(content, state.world, "bonus_per_point"))),
                           price, _short(state, price)))
     return out
 

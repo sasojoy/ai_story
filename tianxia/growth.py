@@ -127,6 +127,15 @@ def reached(cfg: JianfaNumbers, before: int, after: int) -> list[int]:
     return [lv for lv in cfg.milestone_levels if before < lv <= after]
 
 
+# 五個境界的名字（境界卡 main.milestone 的 title；設計 4.5 的例子是第 20 級「筋骨大成」）：佔位，待 joy 潤。milestone_levels 改了多出來的等級寫「第 N 級」
+MILESTONE_TITLES = {10: "初窺門徑", 20: "筋骨大成", 30: "登堂入室", 40: "爐火純青", 50: "返璞歸真"}
+
+
+def milestone_title(level: int) -> str:
+    """境界卡上那一級的名字（MILESTONE_TITLES；沒寫的寫「第 N 級」）。"""
+    return MILESTONE_TITLES.get(level, f"第 {level} 級")
+
+
 def milestone_points(cfg: JianfaNumbers, before: int, after: int) -> int:
     """從第 before 級升到第 after 級拿幾點屬性：每跨過一個境界 stat_points_per_milestone（5）點；升級本身不再給點。
     開著時 team.points_between 走它（升級給點的五處都走 points_between）；同伴的每級成長照舊（growth_steps 的另一半不動）。"""

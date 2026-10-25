@@ -38,16 +38,42 @@ LORE = "lore"
 BASE_STAT = 5  # 屬性的基準：開局都是 5，比它多才有加成（武學與成長設計 6.1、6.3）
 
 
-def stat_bonus(content: Content, value: float) -> float:
+RATE_KEYS = {  # 每一點屬性的效果：減法季（Config.jianfa.stat_rates）的鍵 → 舊的 Config 欄位（設計 4.5「每點加倍」）
+    "bonus_per_point": "stat_bonus_per_point",
+    "dodge_per_point": "dodge_per_point",
+    "sense_rate_per_wis": "sense_rate_per_wis",
+    "holding_per_lore_point": "holding_per_lore_point",
+}
+
+
+def per_point(content: Content, season, key: str) -> float:
+    """每一點屬性的效果（key 是 RATE_KEYS 的鍵）：這一季（season＝WorldState）蓋了減法季的章、屬性五段開著（Config.jianfa 的
+    stat_milestones）讀 Config.jianfa.stat_rates（每點加倍），其餘照 Config 的舊數字。season 是 None 一律舊數字（純函式、量表）。
+    本人、同伴、部下同一個數字（傳功給同伴與部下的那一點也照它，chuangong）。"""
+    if season is not None and _season_rates(content, season):
+        return getattr(content.config.jianfa.stat_rates, key)
+    return getattr(content.config, RATE_KEYS[key])
+
+
+def _season_rates(content: Content, season) -> bool:
+    from . import rules  # noqa: PLC0415  rules 反過來 import 這裡
+
+    return rules.jianfa(content, season, "stat_milestones")
+
+
+def stat_bonus(content: Content, value: float, season=None) -> float:
     """屬性比基準每多一點加 stat_bonus_per_point（預設 3%）；比基準少是負的。要乘上去的倍數用 stat_factor；
-    要減掉的（身法減損耗、根骨減內傷）由呼叫端寫成 1 − 加成，夾在 0 以上。"""
-    return content.config.stat_bonus_per_point * (value - BASE_STAT)
+    要減掉的（身法減損耗、根骨減內傷）由呼叫端寫成 1 − 加成，夾在 0 以上。season（這一季的 WorldState）給了照 per_point
+    （減法季每點加倍）；沒給照舊。"""
+    if season is None:
+        return content.config.stat_bonus_per_point * (value - BASE_STAT)
+    return per_point(content, season, "bonus_per_point") * (value - BASE_STAT)
 
 
-def stat_factor(content: Content, value: float) -> float:
+def stat_factor(content: Content, value: float, season=None) -> float:
     """屬性乘上去的倍數：1＋加成，再低也夾在 encounter.BOOST_FLOOR（0.1），不會讓任何量變成負的或 0。
-    氣血上限（根骨）、修練機率（悟性）、探索悟意境的比重（悟性）都用這一個。"""
-    return max(encounter.BOOST_FLOOR, 1 + stat_bonus(content, value))
+    氣血上限（根骨）、修練機率（悟性）、探索悟意境的比重（悟性）都用這一個。season 同 stat_bonus。"""
+    return max(encounter.BOOST_FLOOR, 1 + stat_bonus(content, value, season))
 
 
 def con_of(state: GameState, content: Content, world: WorldStateStore, key: str) -> float:
@@ -199,7 +225,7 @@ def follower_power(
     """一名部下此刻的威力（不看對手：沒有相剋、沒有路數；角色卡寫它）。key 是名冊上的 key（算傳功），不給當沒傳過功。"""
     unit = Member(wugong_id=follower.wugong, wugong_level=follower_level(state, content, follower, key))
     return encounter.member_power(
-        unit, team_arts(state, content, world), None, 1.0, follower_boost(content, follower, drill_of(state, key)))
+        unit, team_arts(state, content, world), None, 1.0, follower_boost(content, follower, drill_of(state, key), state.world))
 
 
 CN_DIGITS = "零一兩三四五六七八九十"
@@ -215,7 +241,7 @@ def mate_power(state: GameState, content: Content, world: WorldStateStore, key: 
 
 def mate_pool(state: GameState, content: Content, world: WorldStateStore, key: str) -> float:
     """一位同伴的氣血池（決戰加入時快照）：他的氣血上限，照他自己的等級與根骨（member_neili，不乘螭首）。"""
-    _, cap = member_neili(content, world.get_companion(key), con_of(state, content, world, key), plain=True)
+    _, cap = member_neili(content, world.get_companion(key), con_of(state, content, world, key), plain=True, season=state.world)
     return cap
 
 
@@ -508,47 +534,49 @@ def practice(
     setattr(member, level_slot, level + 1)
     msgs = [f"【{name}】精進至第{level + 1}成。", f"心得 -{price}"]
     if not safe and rng.random() < cfg.practice_injury_chance:
-        now, _cap = member_neili(content, member, con_of(state, content, world, PLAYER))
+        now, _cap = member_neili(content, member, con_of(state, content, world, PLAYER), season=state.world)
         member.injury += cfg.practice_injury_amount
         member.neili = max(0.0, now - cfg.practice_injury_amount)
         msgs.append(f"這一番苦練傷了氣血，氣血 -{cfg.practice_injury_amount:.0f}（累積內傷，需要療傷才能回到滿血）。")
     return msgs
 
 
-def neili_cap(content: Content, level: int, con: float = BASE_STAT, scale: float = 1.0) -> float:
+def neili_cap(content: Content, level: int, con: float = BASE_STAT, scale: float = 1.0, season=None) -> float:
     """氣血上限：基礎＋每級加成，再乘上根骨的加成（武學與成長設計 6.1：上限 ×（1＋3%×（根骨−5））），
     四捨五入成整數——每個呼叫端拿到的、狀態列與角色卡寫出來的都是同一個數（根骨 6：329.6 → 330）。
     con 是根骨，從 con_of 讀（本人照存檔、同伴照他自己的，人物資質設計 14.3）；不傳就是基準。
-    scale 是本人帶螭首時的倍數（Member.cap_scale，玉璽碎片設計 7.1），在四捨五入之前乘。"""
+    scale 是本人帶螭首時的倍數（Member.cap_scale，玉璽碎片設計 7.1），在四捨五入之前乘。
+    season（這一季的 WorldState）：減法季每點加倍（per_point）；氣血的這一串（_cap_of、neili_ceiling、member_neili、regen_neili、
+    _apply_toll）都照它往下傳，呼叫端一律給 state.world，狀態列、角色卡、打起來才是同一個數。"""
     cfg = content.config
-    return float(round((cfg.neili_base + level * cfg.neili_per_level) * stat_factor(content, con) * scale))
+    return float(round((cfg.neili_base + level * cfg.neili_per_level) * stat_factor(content, con, season) * scale))
 
 
-def _cap_of(content: Content, member, con: float, plain: bool) -> float:
+def _cap_of(content: Content, member, con: float, plain: bool, season=None) -> float:
     """這個人的氣血上限：本人帶螭首時乘 Member.cap_scale（同伴是 CompanionProgress，沒有這一欄、不吃）；plain 時不乘（決戰的池子）。"""
-    return neili_cap(content, member.level, con, 1.0 if plain else getattr(member, "cap_scale", 1.0))
+    return neili_cap(content, member.level, con, 1.0 if plain else getattr(member, "cap_scale", 1.0), season)
 
 
 MIN_CEILING_RATIO = 0.1  # 內傷再重，能回到的氣血上蓋也不低於上限的一成（氣血設計 §1.3：再低也照樣能出戰）
 
 
-def neili_ceiling(content: Content, member, con: float = BASE_STAT, plain: bool = False) -> float:
+def neili_ceiling(content: Content, member, con: float = BASE_STAT, plain: bool = False, season=None) -> float:
     """內傷之後氣血自己能回到哪裡（上限 − 內傷，但不低於上限的一成）。con 是根骨，從 con_of 讀。
-    本人帶螭首時上限乘 Member.cap_scale（同伴不吃）；plain 不乘。"""
-    cap = _cap_of(content, member, con, plain)
+    本人帶螭首時上限乘 Member.cap_scale（同伴不吃）；plain 不乘。season 見 neili_cap。"""
+    cap = _cap_of(content, member, con, plain, season)
     return max(cap * MIN_CEILING_RATIO, cap - getattr(member, "injury", 0.0))
 
 
-def member_neili(content: Content, member, con: float = BASE_STAT, plain: bool = False) -> tuple[float, float]:
+def member_neili(content: Content, member, con: float = BASE_STAT, plain: bool = False, season=None) -> tuple[float, float]:
     """回傳（目前氣血, 上限）。member 可以是玩家的 Member 或同伴的 CompanionProgress。
     con 是根骨，從 con_of 讀。本人帶螭首時上限乘 Member.cap_scale（同伴是 CompanionProgress，沒有這一欄、不吃）；
-    plain 不乘（決戰的池子，Game._battle_neili_cap）。
+    plain 不乘（決戰的池子，Game._battle_neili_cap）。season 見 neili_cap。
 
     `neili is None` 代表「回滿了」——有內傷時的「滿」是上蓋（上限 − 內傷），不是上限本身。
     所以根骨變高時：沒滿血的人目前氣血不變、上限變大；本來就滿的人照舊是滿的（跟升級一樣）。
     """
-    cap = _cap_of(content, member, con, plain)
-    ceiling = neili_ceiling(content, member, con, plain)
+    cap = _cap_of(content, member, con, plain, season)
+    ceiling = neili_ceiling(content, member, con, plain, season)
     now = ceiling if member.neili is None else min(member.neili, ceiling)
     return now, cap
 
@@ -655,8 +683,21 @@ def growth_steps(cfg, level: int) -> int:
 
 
 def points_between(cfg, before: int, after: int) -> int:
-    """從第 before 級升到第 after 級，本人拿到幾點屬性（升級的每一個地方都走這一個）。"""
+    """從第 before 級升到第 after 級，本人拿到幾點屬性（舊規則；升級的每一個地方都走 level_points，它關著時叫這一個）。"""
     return (growth_steps(cfg, after) - growth_steps(cfg, before)) * cfg.stat_points_per_level
+
+
+def level_points(state: GameState, content: Content, before: int, after: int) -> int:
+    """本人從第 before 級升到第 after 級拿到幾點屬性（升級的五個地方都走這一個：grant_team_exp、決戰軍餉、翻地分紅、切磋、頭目戰）。
+    減法季屬性五段（Config.jianfa 的 stat_milestones）開著：升級不給點，跨過一個境界（milestone_levels）給 stat_points_per_milestone，
+    跨過的最後那一級記進 PlayerState.milestone_due（境界卡，Game.milestone_card；配完點清掉）；關著照 points_between。"""
+    if not _jianfa(state, content, "stat_milestones"):
+        return points_between(content.config, before, after)
+    cfg = content.config.jianfa
+    hit = growth.reached(cfg, before, after)
+    if hit:
+        state.player.milestone_due = hit[-1]
+    return growth.milestone_points(cfg, before, after)
 
 
 def exp_view(content: Content, member) -> dict | None:
@@ -755,10 +796,10 @@ def grant_team_exp(
     p = state.player
     ups = LevelUps()
     before = p.member.level
-    msgs = add_exp(content, p.member, player_exp(state, content, amount, source)[0], p.name, source)
+    msgs = add_exp(content, p.member, player_exp(state, content, amount, source)[0], p.name)  # source 在 player_exp 驗過
     gained = p.member.level - before
     if gained > 0:  # 升級給屬性點（武學與成長設計 6.2）：一次升好幾級就給好幾點，只給本人
-        points = points_between(content.config, before, p.member.level)  # 30 級以後兩級一點：升了一級可能沒有點
+        points = level_points(state, content, before, p.member.level)  # 30 級以後兩級一點（減法季：只有境界那一級給）：升了一級可能沒有點
         p.stat_points += points
         if points:
             msgs.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
@@ -770,7 +811,7 @@ def grant_team_exp(
 
         def gain(progress, name=name, levels=levels) -> None:
             was = progress.level
-            levels.extend(add_exp(content, progress, round(amount * mate), name, source))
+            levels.extend(add_exp(content, progress, round(amount * mate), name))
             if progress.level > was:
                 ups.mates.append((name, progress.level))
 
@@ -785,13 +826,13 @@ def add_team_exp(state: GameState, content: Content, world: WorldStateStore, amo
     return grant_team_exp(state, content, world, amount, source)[0]
 
 
-def regen_neili(content: Content, member, fraction: float, con: float = BASE_STAT, plain: bool = False) -> None:
+def regen_neili(content: Content, member, fraction: float, con: float = BASE_STAT, plain: bool = False, season=None) -> None:
     """氣血隨時間回復——只回到上蓋（上限 − 內傷），內傷那部分要療傷才清得掉。con 是根骨，從 con_of 讀。
-    本人帶螭首時上限乘 Member.cap_scale（同伴不吃）。"""
+    本人帶螭首時上限乘 Member.cap_scale（同伴不吃）。season 見 neili_cap。"""
     if member.neili is None:
         return
-    cap = _cap_of(content, member, con, plain)
-    ceiling = neili_ceiling(content, member, con, plain)
+    cap = _cap_of(content, member, con, plain, season)
+    ceiling = neili_ceiling(content, member, con, plain, season)
     member.neili += cap * fraction  # 回復速度照上限算，所以內傷不會讓回復變慢
     if member.neili >= ceiling:
         member.neili = None
@@ -803,8 +844,8 @@ def heal_fraction(state: GameState, content: Content, world: WorldStateStore, fr
     回傳「氣血 +N」，回不到 1 點不寫（氣血照樣回了）。"""
     member = state.player.member
     con = con_of(state, content, world, PLAYER)
-    now, cap = member_neili(content, member, con)
-    ceiling = neili_ceiling(content, member, con)
+    now, cap = member_neili(content, member, con, season=state.world)
+    ceiling = neili_ceiling(content, member, con, season=state.world)
     after = min(ceiling, now + cap * fraction)
     member.neili = None if after >= ceiling else after
     gained = after - now
@@ -820,10 +861,12 @@ def shift_hp(state: GameState, content: Content, world: WorldStateStore, key: st
         return heal_fraction(state, content, world, fraction)
     con = con_of(state, content, world, key)
 
+    season = state.world
+
     def move(member) -> float:
-        now, cap = member_neili(content, member, con)
-        after = min(neili_ceiling(content, member, con), max(0.0, now + cap * fraction))
-        member.neili = None if after >= neili_ceiling(content, member, con) else after
+        now, cap = member_neili(content, member, con, season=season)
+        after = min(neili_ceiling(content, member, con, season=season), max(0.0, now + cap * fraction))
+        member.neili = None if after >= neili_ceiling(content, member, con, season=season) else after
         return after - now
 
     if key == PLAYER:
@@ -842,7 +885,7 @@ def team_conditions(state: GameState, content: Content, world: WorldStateStore) 
     floor = encounter.CONDITION_FLOOR + traits.amount(content, traits.loadout(state, content, world), "condition_floor")
     return [
         encounter.condition_of(
-            *member_neili(content, member, con_of(state, content, world, key)),
+            *member_neili(content, member, con_of(state, content, world, key), season=state.world),
             floor=floor if key == PLAYER else encounter.CONDITION_FLOOR,
         )
         for key, member in zip(team_keys(state), team_participants(state, world), strict=True)
@@ -917,9 +960,9 @@ def player_boost(state: GameState, content: Content, world: WorldStateStore, *, 
         factor *= scale
     if _BACKED.get() != 1.0:  # 並肩出陣：同上，沒有人陪的仗一個位元也不動
         factor *= _BACKED.get()
-    return encounter.Boost(
-        outer=stat_bonus(content, stats.get("str", BASE_STAT)),
-        inner=stat_bonus(content, con_of(state, content, world, PLAYER)),
+    return encounter.Boost(  # 每一點的效果照這一季（stat_bonus 的 season：減法季每點加倍）
+        outer=stat_bonus(content, stats.get("str", BASE_STAT), state.world),
+        inner=stat_bonus(content, con_of(state, content, world, PLAYER), state.world),
         factor=factor,
     )
 
@@ -931,8 +974,8 @@ def mate_boost(state: GameState, content: Content, world: WorldStateStore, key: 
     wugong = resolve_art(progress.wugong_id, content, world)
     neigong = resolve_art(progress.neigong_id, content, world)
     return encounter.Boost(
-        outer=stat_bonus(content, member_stats(state, content, world, key)["str"]),
-        inner=stat_bonus(content, con_of(state, content, world, key)),  # 根骨只從 con_of 讀
+        outer=stat_bonus(content, member_stats(state, content, world, key)["str"], state.world),
+        inner=stat_bonus(content, con_of(state, content, world, key), state.world),  # 根骨只從 con_of 讀
         factor=pairing(content, wugong, neigong),
     )
 
@@ -942,9 +985,10 @@ def follower_strength(content: Content, follower: FollowerDef, drill: FollowerDr
     return min(content.config.stat_cap, follower.stats.get("str", BASE_STAT) + (drill.arm if drill else 0))
 
 
-def follower_boost(content: Content, follower: FollowerDef, drill: FollowerDrill | None = None) -> encounter.Boost:
-    """部下的加成（人物資質設計 14.3）：只有一門武學，吃模板的臂力（加傳功傳的）；沒有內功、不算搭配與共鳴。部下以前完全沒有加成。"""
-    return encounter.Boost(outer=stat_bonus(content, follower_strength(content, follower, drill)))
+def follower_boost(content: Content, follower: FollowerDef, drill: FollowerDrill | None = None, season=None) -> encounter.Boost:
+    """部下的加成（人物資質設計 14.3）：只有一門武學，吃模板的臂力（加傳功傳的）；沒有內功、不算搭配與共鳴。部下以前完全沒有加成。
+    season 見 stat_bonus（減法季每點加倍）。"""
+    return encounter.Boost(outer=stat_bonus(content, follower_strength(content, follower, drill), season))
 
 
 def team_boosts(state: GameState, content: Content, world: WorldStateStore, *, seal: bool = True) -> list[encounter.Boost]:
@@ -954,15 +998,16 @@ def team_boosts(state: GameState, content: Content, world: WorldStateStore, *, s
     return (
         [player_boost(state, content, world, seal=seal)]
         + [mate_boost(state, content, world, key) for key in state.player.team]
-        + [follower_boost(content, follower, drill_of(state, key)) for key, follower in follower_rows(state, content)]
+        + [follower_boost(content, follower, drill_of(state, key), state.world) for key, follower in follower_rows(state, content)]
     )
 
 
 def dodge_chance(state: GameState, content: Content) -> float:
     """本人的身法讓落敗有機會閃成僵持（人物資質設計 14.4）：比 5 每多一點 dodge_per_point，夾在 0～1；同伴不另外算。
-    金角 +3 個百分點（玉璽碎片設計 7.1）。"""
+    金角 +3 個百分點（玉璽碎片設計 7.1）。每一點照這一季（per_point：減法季每點加倍）。"""
     agi = float(state.player.stats.get("agi", BASE_STAT))
-    return min(1.0, max(0.0, (agi - BASE_STAT) * content.config.dodge_per_point + treasures.amount(state, content, "dodge")))
+    rate = per_point(content, getattr(state, "world", None), "dodge_per_point")
+    return min(1.0, max(0.0, (agi - BASE_STAT) * rate + treasures.amount(state, content, "dodge")))
 
 
 def armor_cut(state: GameState, content: Content, world: WorldStateStore) -> float:
@@ -1004,6 +1049,7 @@ def take_encounter_toll(
                 content, state.player.member, fraction * (1 - cut),
                 agi=stats.get("agi", BASE_STAT), con=con_of(state, content, world, PLAYER),
                 injury=treasures.amount(state, content, "injury"),  # 螭首（玉璽碎片改版）：變成內傷的減半；沒帶是 1
+                season=state.world,
             )
             if round(lost) > 0:  # 本來就見底、一滴都沒得扣時不寫「氣血 -0」（零的變化是雜訊）；內傷照樣寫
                 msgs.append(f"氣血 -{lost:.0f}")  # 照既有慣例寫變化量（跟「銀兩 -5」「心得 +12」同一串）
@@ -1013,7 +1059,7 @@ def take_encounter_toll(
             agi = member_stats(state, content, world, key)["agi"]
             con = con_of(state, content, world, key)  # 根骨只從 con_of 讀
             world.update_companion(
-                key, lambda progress, agi=agi, con=con: _apply_toll(content, progress, fraction, agi=agi, con=con),
+                key, lambda progress, agi=agi, con=con: _apply_toll(content, progress, fraction, agi=agi, con=con, season=state.world),
             )
     return msgs
 
@@ -1039,7 +1085,7 @@ def toll_saved(
 
     def toll(cut_: float, injury: float) -> tuple[float, float]:
         return _apply_toll(
-            content, state.player.member.model_copy(), fraction * (1 - cut_), agi=agi, con=con, injury=injury,
+            content, state.player.member.model_copy(), fraction * (1 - cut_), agi=agi, con=con, injury=injury, season=state.world,
         )
 
     real_lost, real_hurt = toll(total, 0.0 if still else 1.0)
@@ -1050,16 +1096,17 @@ def toll_saved(
 
 def _apply_toll(
     content: Content, member, fraction: float, agi: float = BASE_STAT, con: float = BASE_STAT, injury: float = 1.0,
+    season=None,
 ) -> tuple[float, float]:
     """扣一場的氣血，回傳（實際掉了多少氣血, 其中變成內傷的量）。身法減一場的損耗、根骨減其中變成內傷的
     比例，各 ×（1−3%×（屬性−5）），夾在 0 以上；氣血上限也照根骨算。同伴傳他自己的（人物資質設計 14.3）。
-    injury 是變成內傷的倍數（預設 1；本人帶【不動】時是 0，扣的氣血全算輕傷，武學與成長設計 13.4）。"""
-    now, cap = member_neili(content, member, con)
-    loss = cap * fraction * max(0.0, 1 - stat_bonus(content, agi))
-    hurt = loss * content.config.injury_share * max(0.0, 1 - stat_bonus(content, con)) * injury
+    injury 是變成內傷的倍數（預設 1；本人帶【不動】時是 0，扣的氣血全算輕傷，武學與成長設計 13.4）。season 見 neili_cap。"""
+    now, cap = member_neili(content, member, con, season=season)
+    loss = cap * fraction * max(0.0, 1 - stat_bonus(content, agi, season))
+    hurt = loss * content.config.injury_share * max(0.0, 1 - stat_bonus(content, con, season)) * injury
     member.injury += hurt
     member.neili = max(0.0, now - loss)
-    after, _ = member_neili(content, member, con)
+    after, _ = member_neili(content, member, con, season=season)
     return now - after, hurt
 
 
@@ -1246,7 +1293,7 @@ def tactic_ctx(state: GameState, content: Content, world: WorldStateStore, squad
     from . import territory  # territory → rules → team：照用的時候才 import
 
     p = state.player
-    now, cap = member_neili(content, p.member, con_of(state, content, world, PLAYER))
+    now, cap = member_neili(content, p.member, con_of(state, content, world, PLAYER), season=state.world)
     mount = p.mount if mounts.on(content) else None
     owner = territory.controller(state.world, content, p.location) if p.faction else None
     return tactics.Ctx(
@@ -1368,6 +1415,13 @@ def estimate(
     if memo is None:
         return odds_word(power, squad, mods=mods, plan=plan, foe=foe)
     return memo.get(odds_key(power, squad, mods, plan, foe), lambda: odds_word(power, squad, mods=mods, plan=plan, foe=foe))
+
+
+def fresh_power(state: GameState, content: Content, world: WorldStateStore) -> float:
+    """全隊此刻滿血、不看對手（沒有相剋、路數、地利）的威力：配點那一刻前後各算一次寫給玩家看（減法季屬性五段，Game.allocate_stat）。"""
+    arts = team_arts(state, content, world)
+    members, conditions, boosts = _fighters(state, content, world)
+    return encounter.team_power(members, arts, None, [1.0] * len(conditions), boosts)
 
 
 def power_vs(
