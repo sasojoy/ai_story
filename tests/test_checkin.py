@@ -6,7 +6,7 @@ import random
 
 from conftest import real_content
 
-from tianxia import checkin
+from tianxia import checkin, opening
 from tianxia.content import _material_sources
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
@@ -210,11 +210,26 @@ def test_no_card_past_the_last_day():
 
 
 def test_prologue_cannot_check_in():
-    game = _game(prologue=True)
+    game = _game(prologue=True, setup=lambda c: setattr(c.config.jianfa, "enabled", False))  # 減法季關著：草廬序章
     pills = game.state.player.stamina_pills
     assert "checkin" not in game.status_data()
     assert game.check_in() == [checkin.HUT]
     assert game.state.player.stamina_pills == pills and game.state.player.checkin_days == []
+
+
+def test_the_opening_gate_holds_the_check_in_until_the_choice_is_made():
+    """開局第一分鐘（批 7 前半）：站在城門口三選一還沒選，簽到不畫、按了只回一句；選完下一次同步自動領、寫進紀錄（不當第一張卡）。"""
+    game = _game(prologue=True)
+    p = game.state.player
+    assert opening.pending(game.state, game.content)
+    pills, silver = p.stamina_pills, p.stats["silver"]
+    assert "checkin" not in game.status_data()
+    assert game.check_in() == [opening.GATE]
+    assert p.stamina_pills == pills and p.stats["silver"] == silver and p.checkin_days == []
+    game.choose("choice:0")
+    game.sync(game.now + 60)
+    assert p.checkin_days == [1] and p.stats["silver"] > silver  # 第 1 天的 30 兩不必挑：選完同步到就領了、寫進紀錄
+    assert game.status_data()["checkin"] is not None
 
 
 def test_four_tiers_off():

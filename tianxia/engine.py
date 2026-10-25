@@ -10700,6 +10700,8 @@ class Game:
         """每日簽到（21 天季，正式季整合 6.2；tianxia/checkin.py）：領今天的份，四階的日子帶 attribute（剛柔快慢）。草廬序章裡不簽
         （同回體丹）；關著、簽過了、沒挑或挑錯四階都只回一句、什麼都不動。成了寫一則「簽到」江湖紀錄（數值變化寫丹、銀兩、素材）。"""
         s, c = self.state, self.content
+        if checkin.on(c, s.world) and opening_rules.pending(s, c):  # 開局第一分鐘：三選一還沒選，福利之後寫進紀錄、不當第一張卡
+            return self._log([opening_rules.GATE])
         if checkin.on(c, s.world) and prologue_rules.active(s, c):
             return self._log([checkin.HUT])
         result = checkin.claim(s, c, s.world, attribute)
@@ -10714,7 +10716,7 @@ class Game:
         寫一則「簽到」江湖紀錄（同 check_in，「剛剛」那一行會寫出來）；要挑四階的日子不動，江湖頁冒一張挑屬性的小卡（status.checkin.pick），
         挑了才領（check_in）。草廬序章裡不簽（同 check_in）。假人照舊在 bot.check_in 自己簽，先同步到的這裡順手領了也只是同一份。"""
         s, c = self.state, self.content
-        if prologue_rules.active(s, c):
+        if prologue_rules.active(s, c) or opening_rules.pending(s, c):
             return
         day = checkin.due(s, c, s.world)
         if day is None or checkin.needs_pick(c, day):
@@ -10728,7 +10730,7 @@ class Game:
     def checkin_view(self) -> dict | None:
         """江湖頁「簽到」小標的資料（checkin.view）：簽到關著、草廬序章裡、過了這一季最後一天（管理者把季末往後排）是 None。"""
         s, c = self.state, self.content
-        if not checkin.on(c, s.world) or not checkin.in_season(c, s.world) or prologue_rules.active(s, c):
+        if not checkin.on(c, s.world) or not checkin.in_season(c, s.world) or prologue_rules.active(s, c) or opening_rules.pending(s, c):
             return None
         return checkin.view(s, c, s.world)
 

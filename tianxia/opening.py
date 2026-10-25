@@ -18,6 +18,7 @@ from .models import Content, OpeningSender
 from .state import Bounty, GameState, Letter
 
 KIND = "託付"  # 開局那一封信的種類（Letter.kind；信卡左上的小籤）
+GATE = "先聽完城門口這一段、挑了路，再領今天的份。"  # 三選一還沒選就按簽到（同草廬的 checkin.HUT）
 
 
 def on(content: Content, world) -> bool:

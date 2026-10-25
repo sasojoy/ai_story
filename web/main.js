@@ -1150,7 +1150,7 @@
     // 還沒投靠的人最上面先是三方卡（sidesFirstHtml）。戰況圖卡、軍備與小地圖從江湖頁拿掉（6.3），戰況與軍備在見聞・大事
     const letterCard = letterHtml(m.letter);
     const pushAsk = letterCard && typeof pushAskHtml === "function" ? pushAskHtml(m) : ""; // 第一次來信時信的小卡底下問一次手機通知（批 9；pushAskHtml 在 app.js，只切 main.js 的網頁測試沒有它）
-    // 開局第一分鐘（整合設計 6.7，批 7）：人物開口的那一封（letter.open）排在三方卡前面——先聽人說話，再看三方；其餘時候三方卡照舊在最上面
+    // 開局頭一刻（整合設計 6.7，批 7）：人物開口的那一封（letter.open）排在三方卡前面——先聽人說話，再看三方；其餘時候三方卡照舊在最上面
     const peek = letterCard && m.letter.open ? letterCard + pushAsk + sidesFirstHtml(m) : sidesFirstHtml(m) + (letterCard ? letterCard + pushAsk : weekCardHtml(m));
     // 休季的結算卡排在最上面（計畫 T9）；季收了、有行狀時緊接一張「讀你的傳」（玩家傳第二批，m.zhuan）
     const resultCard = (m.season_result ? resultHtml(m.season_result) : "") + (m.zhuan ? zhuanEntry(m.zhuan, "這一季收了，史官替你立傳", "讀你的傳") : "");
