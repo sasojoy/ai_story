@@ -233,3 +233,31 @@ def test_the_capped_close_for_a_real_scout_bounty():
     assert msgs[0].count("境界已到，再往上只能打出來。") == 1  # 段落結尾也寫了
 
 
+# ── 6. 城裡平手 ──
+
+
+def test_a_town_brawl_ending_in_a_draw_reads_as_a_draw_not_a_loss():
+    game = ready(jianfa_game(), side="guan", loc="yingchuan")
+    assert "town_draw" in explore_one.LINE_KEYS["encounter"] and game.content.outing_lines["encounter"]["town_draw"]
+    foe = game.content.squads["dipi"].name
+    draws = {line.format(foe=foe, place="", item="") for line in game.content.outing_lines["encounter"]["town_draw"]}
+    loses = {line.format(foe=foe, place="", item="") for line in game.content.outing_lines["encounter"]["town_lose"]}
+    with _beats("encounter", "material", "material"), _fight("僵持"):
+        story = game.choose("act:explore")[0]
+    assert any(line in story for line in draws) and not any(line in story for line in loses)
+    _reset(game)
+    with _beats("encounter", "material", "material"), _fight("落敗"):
+        story = game.choose("act:explore")[0]
+    assert any(line in story for line in loses) and not any(line in story for line in draws)
+
+
+def test_the_town_draw_lines_are_checked_when_loaded():
+    from tianxia.content import ContentError, validate
+
+    c = jianfa_rules(real_content("season21"))
+    del c.outing_lines["encounter"]["town_draw"]
+    with pytest.raises(ContentError, match="town_draw"):
+        validate(c)
+    c.outing_lines["encounter"]["town_draw"] = ["街角的{foe}纏了你3回合。"]  # 不准寫數字
+    with pytest.raises(ContentError, match="outing_lines.encounter.town_draw"):
+        validate(c)

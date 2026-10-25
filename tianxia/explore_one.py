@@ -158,8 +158,8 @@ def merge_items(items: Iterable[str]) -> list[str]:
 LINE_KEYS: dict[str, tuple[str, ...]] = {
     "open": (TOWN, TEMPLE, FORD, WILD, HILL, CAMP),  # 出門那一句，照這一處是哪一種地點
     "material": ("found",),  # 素材拍撿到東西（item 是「精鐵砂 ×1」這種）
-    # 遭遇拍：打贏、僵持、落敗；城裡的地痞（town_*）；自家營寨跟同袍比劃（spar）；頭目擋路（boss，接著就是頭目戰）
-    "encounter": ("win", "draw", "lose", "town_win", "town_lose", "spar", "boss"),
+    # 遭遇拍：打贏、僵持、落敗；城裡的地痞（town_*，也有贏、平手、落敗，FB-819）；自家營寨跟同袍比劃（spar）；頭目擋路（boss，接著就是頭目戰）
+    "encounter": ("win", "draw", "lose", "town_win", "town_draw", "town_lose", "spar", "boss"),
     "event": ("lead",),  # 事件拍：接在事件卡前面那一句
     "insight": ("lead",),  # 感悟拍：接在有所感前面那一句
     # 結尾：疲勞打了折（tired）、對手配不上你（outlevel）、境界已到經驗換心得（capped）、三拍都沒收穫補一個一階（empty）
@@ -172,7 +172,8 @@ FALLBACK: dict[str, dict[str, list[str]]] = {
     "material": {"found": ["路上撿了{item}。"]},
     "encounter": {
         "win": ["半路撞上{foe}，你佔了上風。"], "draw": ["半路撞上{foe}，相持不下。"], "lose": ["半路撞上{foe}，你吃了虧。"],
-        "town_win": ["街角的{foe}找碴，被你打發了。"], "town_lose": ["街角的{foe}找碴，你吃了點虧。"],
+        "town_win": ["街角的{foe}找碴，被你打發了。"], "town_draw": ["街角的{foe}纏著你，推搡了一陣，誰也沒占到便宜。"],
+        "town_lose": ["街角的{foe}找碴，你吃了點虧。"],
         "spar": ["營裡的{foe}拉你比劃了幾手。"], "boss": ["前頭有人擋住去路，是{foe}。"],
     },
     "event": {"lead": ["走著走著，碰上一樁事。"]},

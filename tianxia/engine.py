@@ -5137,7 +5137,7 @@ class Game:
             s.player.newbie_marks.add("field2")  # 新手目標：在二級以上的地方打贏一場（這一季沒有尋敵，遭遇拍打贏也算，FB-816）
         tier = record.tier if record is not None else "落敗"
         if town:
-            return msgs, "town_win" if won else "town_lose", won
+            return msgs, "town_win" if won else "town_draw" if tier == "僵持" else "town_lose", won  # 平手有自己的句子（FB-819）
         return msgs, "win" if won else "draw" if tier == "僵持" else "lose", won
 
     def _fight_gate(self, foe: Squad) -> float:
