@@ -82,7 +82,9 @@ def deliver(state: GameState, content: Content, real_now: float | None = None) -
     if w.ended or p.letter_day == day or prologue.active(state, content) or not content.characters:
         return msgs
     rng = random.Random(f"書信|{w.tianji}|{p.name}|{day}")
-    errand = errands.offer(state, content, rng, lambda cid: _reachable(state, content, cid))  # 託付 → 道賀 → 邀宴 → 求援（減法季批 6）
+    # 託付 → 道賀 → 邀宴 → 求援（減法季批 6）；託付照它自己的情誼門檻 errand_affinity（PM 2026-10-26），其餘三種照 letter_affinity
+    floor = content.config.jianfa.errand_affinity
+    errand = errands.offer(state, content, rng, lambda cid: _reachable(state, content, cid, floor))
     if errand is not None:  # 託付的信 errands.give 已經放進信箱
         p.letter_day = day
         return msgs + [errands.ARRIVED.format(who=_name(content, errand.sender))]
@@ -100,10 +102,12 @@ def _name(content: Content, cid: str) -> str:
     return ch.name if ch is not None else cid
 
 
-def _reachable(state: GameState, content: Content, cid: str) -> bool:
+def _reachable(state: GameState, content: Content, cid: str, floor: int | None = None) -> bool:
+    """聯絡得上：能深度對話、情誼到 floor（沒給照 figure_life.letter_affinity；託付另給 Config.jianfa.errand_affinity）、人在場。"""
     ch = content.characters.get(cid)
+    need = content.config.figure_life.letter_affinity if floor is None else floor
     return (ch is not None and ch.deep_interaction
-            and state.player.affinities.get(cid, 0) >= content.config.figure_life.letter_affinity
+            and state.player.affinities.get(cid, 0) >= need
             and figure_life.where(state, content, cid) is not None)
 
 

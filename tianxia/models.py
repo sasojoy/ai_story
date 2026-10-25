@@ -3018,6 +3018,9 @@ class JianfaRules(_Strict):
     stance_contribution: int = Field(default=1, ge=0)  # 【預設】記一筆心意記幾點貢獻（整合設計 5.3；跟分岔同一本每日上限 deed_contribution_cap）
     bot_stance_chance: float = Field(default=0.3, ge=0, le=1)  # 【預設】假人每天直接記一筆心意的機會（企劃者 2026-10-24 第 5 件；不說話、不寫字）
     errand_lapse_affinity: int = Field(default=2, ge=0)  # 【預設】託付過了期限作罷，他的情誼扣幾點（婉拒不扣）
+    # 【預設】情誼到幾點人物才託你事（PM 2026-10-26：40 的話新手第一週幾乎拿不到；另開一個數，不動 figure_life.letter_affinity——
+    # 道賀、邀宴、求援的信與勸降的情誼加成照舊讀那一個）
+    errand_affinity: int = Field(default=20, ge=0, le=100)
     errand_stamina: int = Field(default=10, ge=0)  # 【預設】探營、勸降各花幾點體力（交信不花：走到就是那一趟）
     errands_keep: int = Field(default=12, ge=1)  # 身上留幾件託付的帳（辦完、作罷的照留到滿了才丟舊的；一季三位人物各三週）
     # 勸降的成功率（整合設計 5.9「照情誼、名望、說的話；引擎再夾」）：模型只評那一句（0～100），引擎加情誼與名望的修正、夾在 floor～cap

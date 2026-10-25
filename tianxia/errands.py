@@ -1,6 +1,7 @@
 """託付與來信（減法季整合設計 5.5、5.9，主機側計畫 Task 6-2；企劃者 2026-10-24 定）。
 
-能深度對話、寫了託付池（FigureDef.errands）的大勢人物，情誼到 Config.figure_life.letter_affinity（40）時，每週（7 天的季是每段）
+能深度對話、寫了託付池（FigureDef.errands）的大勢人物，情誼到 Config.jianfa.errand_affinity（20【預設】，PM 2026-10-26；另開的數，
+不是書信的 figure_life.letter_affinity 40）時，每週（7 天的季是每段）
 託你一件事，以一封「託付」信送到（letters.deliver 的第一順位：託付 → 道賀 → 邀宴 → 求援，一個送信日一封；減法季照早上 9 點的送信日）。
 三種，事情本身是規則定的：
 - 送信（letter）：走到 target，「此地」多一顆「交信」，按了就成；他回一封道謝信（不佔一天一封）。
