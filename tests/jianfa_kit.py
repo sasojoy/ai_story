@@ -34,6 +34,15 @@ def no_jianfa(content: Content) -> Content:
     return content
 
 
+def classic_explore(content: Content) -> Content:
+    """減法季批 2 之前的探索、經驗與配點（探索三選一、尋敵、城裡操練、每級給點、每點 3%），減法季別的批照開：
+    批 2 的三個子開關（explore_one、drill_gates、stat_milestones）關掉，回傳同一份內容。測舊探索三選一、練功格、操練、找素材分支的
+    舊測試（week7、season21 的正式內容）在 helper 裡叫它；只想整個減法季都關的用 no_jianfa。"""
+    cfg = content.config.jianfa
+    cfg.explore_one = cfg.drill_gates = cfg.stat_milestones = False
+    return content
+
+
 def _new(content: Content, name: str, world=None) -> Game:
     """world 沒給：每一局自己一個資料庫檔（同一條測試建兩局時，第二局不會讀到第一局種下、蓋了別的章的季）。"""
     content.config.auto_open_first_season = True

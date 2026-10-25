@@ -6,6 +6,7 @@ import random
 
 import pytest
 from conftest import real_content
+from jianfa_kit import classic_explore
 from test_prologue_web import DRIVER as BASE_DRIVER
 
 import server
@@ -24,7 +25,7 @@ def run(m, script, *, S=None, responses=None):
 
 
 def _main(at="deep_mountain", stamina=250.0):
-    c = real_content("week7")
+    c = classic_explore(real_content("week7"))  # 找素材分支是探索三選一的（減法季探索一顆開著時沒有）
     c.config.auto_open_first_season = True
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world())
     game.client = None
