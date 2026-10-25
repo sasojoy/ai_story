@@ -174,6 +174,7 @@ def test_the_tutorial_only_draws_the_cell_from_a_step_that_reveals_it():
 def test_the_hut_never_has_a_practice_option():
     """草廬裡（序章）探索不展開、也沒有練功（_explore_mode_options 在序章是空的）：格子不會在序章冒出來。"""
     c = _content("week7")
+    c.config.jianfa.enabled = False  # 減法季的新角色不進草廬（開局第一分鐘）：這一條測的是草廬本身
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world(), prologue=True)
     game.client = None
     m = server.main_view(game)

@@ -27,6 +27,7 @@ from . import (
 )
 from . import ambush as ambush_rules  # 設伏劫道（後期體力玩法第一批）；叫 ambush_rules：這個檔裡有區域變數叫 ambush
 from . import duel as duel_rules  # 單人頭目戰（Joy 2026-10-10）
+from . import opening as opening_rules  # 開局第一分鐘（減法季批 7；叫 opening_rules：避免跟戰法的 opening 混）
 from . import discuss as _discuss_card  # noqa: F401  論武登記進玩家卡的動作表（social.ACTIONS）
 from . import raid as _raid_card  # noqa: F401  截殺登記進玩家卡的動作表（social.ACTIONS）
 from . import wanted as _wanted_card  # noqa: F401  通緝登記進玩家卡的動作表（social.ACTIONS）
@@ -504,7 +505,10 @@ class Game:
         game = cls(content, state, rng, world)
         if sex in gender.GENDERS:
             game.state.player.gender, game.state.player.gender_chosen = sex, True
-        if prologue:
+        if (prologue or graduated) and opening_rules.on(content, game.state.world):
+            # 減法季的開局第一分鐘（整合設計 6.7）：真人與假人都不進草廬，站在起點看旁白、三選一；人物的信在選完那一下送到（choose）
+            opening_rules.begin(game.state, content)
+        elif prologue:
             prologue_rules.begin(game.state, content)
         elif graduated and prologue_rules.has(content):
             game._graduate()
@@ -3232,6 +3236,7 @@ class Game:
             return self._log([f"（寫下你想說的話，{self.say_max()} 字以內。）"])  # 選項本身只叫出輸入框
         prepared = self._checked_prepared(option_id, prepared, text) if kind in ("act", "talk", "call", "parley") else None
         self._fight = self._checked_fight(option_id, fight)
+        was_opening = kind == "choice" and opening_rules.pending(self.state, self.content)  # 開局三選一（減法季批 7）：選完人物的信到
         self._draft = Draft(self._action_title(kind, arg))
         self._affinity_before = dict(self.state.player.affinities)
         stamina = self.state.player.stamina
@@ -3302,6 +3307,8 @@ class Game:
             msgs += self._hear_after_stamina(stamina)
             if kind == "choice":  # 選了事件的選項：序章的遇險、拜師、四景（新手引導計畫一）
                 msgs += self._guide(note_action(self.state, self.content, self.world, "choice"))
+            if was_opening and not opening_rules.pending(self.state, self.content):  # 開局第一分鐘：那位人物開口、託付第一件事（信附委託）
+                msgs += opening_rules.deliver(self.state, self.content)
             if kind == "act" and arg != "break" and not picked_only:
                 msgs += self._guide(note_action(self.state, self.content, self.world, arg))
                 if arg in SHOP_ACTS:  # 初入江湖「進城裡的鋪子看看」：進哪一間都算（新手引導第四段）
@@ -10693,6 +10700,8 @@ class Game:
         """每日簽到（21 天季，正式季整合 6.2；tianxia/checkin.py）：領今天的份，四階的日子帶 attribute（剛柔快慢）。草廬序章裡不簽
         （同回體丹）；關著、簽過了、沒挑或挑錯四階都只回一句、什麼都不動。成了寫一則「簽到」江湖紀錄（數值變化寫丹、銀兩、素材）。"""
         s, c = self.state, self.content
+        if checkin.on(c, s.world) and opening_rules.pending(s, c):  # 開局第一分鐘：三選一還沒選，福利之後寫進紀錄、不當第一張卡
+            return self._log([opening_rules.GATE])
         if checkin.on(c, s.world) and prologue_rules.active(s, c):
             return self._log([checkin.HUT])
         result = checkin.claim(s, c, s.world, attribute)
@@ -10707,7 +10716,7 @@ class Game:
         寫一則「簽到」江湖紀錄（同 check_in，「剛剛」那一行會寫出來）；要挑四階的日子不動，江湖頁冒一張挑屬性的小卡（status.checkin.pick），
         挑了才領（check_in）。草廬序章裡不簽（同 check_in）。假人照舊在 bot.check_in 自己簽，先同步到的這裡順手領了也只是同一份。"""
         s, c = self.state, self.content
-        if prologue_rules.active(s, c):
+        if prologue_rules.active(s, c) or opening_rules.pending(s, c):
             return
         day = checkin.due(s, c, s.world)
         if day is None or checkin.needs_pick(c, day):
@@ -10721,7 +10730,7 @@ class Game:
     def checkin_view(self) -> dict | None:
         """江湖頁「簽到」小標的資料（checkin.view）：簽到關著、草廬序章裡、過了這一季最後一天（管理者把季末往後排）是 None。"""
         s, c = self.state, self.content
-        if not checkin.on(c, s.world) or not checkin.in_season(c, s.world) or prologue_rules.active(s, c):
+        if not checkin.on(c, s.world) or not checkin.in_season(c, s.world) or prologue_rules.active(s, c) or opening_rules.pending(s, c):
             return None
         return checkin.view(s, c, s.world)
 
@@ -15592,6 +15601,8 @@ class Game:
         hut = prologue_rules.active(self.state, self.content)
         if hut and (self.state.pending_event is not None or self.state.player.sensing is not None):
             return ""  # 草廬的事件或草廬四景的有所感（做法、畫下來）在眼前：整張卡不放
+        if opening_rules.pending(self.state, self.content):
+            return ""  # 開局第一分鐘（減法季批 7）：旁白與三選一就是第一張卡，開場那一則（含丹的福利）留在紀錄裡（整合設計 6.7）
         entry = self._now_entry()
         return journal.card_html(entry, self.stamp, self._chip) if entry is not None else ""
 

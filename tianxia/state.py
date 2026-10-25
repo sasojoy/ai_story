@@ -1189,7 +1189,7 @@ class Letter(BaseModel):
     寫不出來照固定句）。"""
 
     id: int
-    kind: Literal["求援", "道賀", "邀宴", "道謝", "條件"]  # 邀宴、道謝是第三批（宴客、求援委託辦成了）；條件是開口求人（parley.py）
+    kind: Literal["求援", "道賀", "邀宴", "道謝", "條件", "託付"]  # 邀宴、道謝是第三批（宴客、求援委託辦成了）；條件是開口求人（parley.py）；託付是開局第一分鐘的那一封（opening.py）
     sender: str  # 對話人物 id
     at: float  # 收到的那一刻（世界秒）
     mood: str = ""  # 寫信時他的心事（求援：焦慮、悲憤）
