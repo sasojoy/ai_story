@@ -895,6 +895,9 @@ class PlayerState(BaseModel):
     # 上一季論功拿到的稱號（減法季設計 3.3；wins.settle 存在上一季的 WorldState.final_tiers，換季時 _reset_player_for_new_season 掛上）：
     # social.affiliation 接在後面；沒有是空字串（不寫進存檔）
     season_title: str = ""
+    # 本週卡「你這一步」（減法季批 3c，step.py）：「換一件事」記在哪一天（同 pill_day）、那一天換了幾次；都是 0 時不寫進存檔
+    step_day: int = 0
+    step_skip: int = 0
     pushed: dict[str, float] = Field(default_factory=dict)  # 「曆日:大勢線 id」→ 當天這條線推得動多少（人數緩衝之後）；只留今天與昨天
 
     # ── 捐獻紀錄（計畫 T6，軍備文件 4.1）：「據點 id:糧草」→ 累積的份量。T7 的伏筆只讀它；寫入是 T6 護糧的事 ──
@@ -978,7 +981,7 @@ class PlayerState(BaseModel):
 
 
 # PlayerState 裡「沒用到就不寫進存檔」的欄位（_drop_quiet_defaults）：新規則掛開關、關著的季存檔一個鍵都不多的，加在這裡
-QUIET_DEFAULTS = ("ledgers", "lean_changed", "season_title")
+QUIET_DEFAULTS = ("ledgers", "lean_changed", "season_title", "step_day", "step_skip")
 
 
 class TierResult(BaseModel):

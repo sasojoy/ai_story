@@ -1727,9 +1727,11 @@ def _main_view_body(game: Game) -> dict:
             **{key: value for key, value in result.items() if key != "ending"}, "text": md(result["text"]),
             "timeline": [{**row, "text": md(row["text"])} for row in result["timeline"]],
         }
-    ending = game.ending_card()  # 三陣營四勝利的結局卡（減法季批 3c；計畫 1.3 欄位表的 main.ending）：關著的季沒有這個鍵
-    if ending is not None:
-        view["ending"] = ending
+    # 三陣營四勝利與本週卡（減法季批 3c；計畫 1.3 欄位表的 main.step、main.sides、main.sides_card、main.ending）：關著的季沒有這幾個鍵
+    for key, value in (("step", game.step_view()), ("sides", game.sides()), ("sides_card", game.sides_card()),
+                       ("ending", game.ending_card())):
+        if value is not None:
+            view[key] = value
     return view
 
 

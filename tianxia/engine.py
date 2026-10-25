@@ -39,6 +39,7 @@ from . import hints as hint_rules  # 碰到才說（新手引導計畫三）；�
 from . import tavern as tavern_rules  # 酒肆（企劃者 2026-10-18）；叫 tavern_rules：跟其他 *_rules 一樣避開區域變數
 from . import prologue as prologue_rules  # Game.new 有個參數也叫 prologue，所以模組在這裡一律叫 prologue_rules
 from . import rumor_view  # 傳聞分層的畫面：見聞頁的四層、你不在的時候（計畫 2026-10-06 傳聞分層一）
+from . import step as step_rules  # 本週卡「你這一步」（減法季批 3c）；叫 step_rules：這個檔裡有區域變數叫 step
 from . import wins  # 三陣營四勝利（減法季批 3c）：豪強兩本帳、傾向、季末四階
 from .accounts import AccountStore
 from .accounts import NAME_TAKEN as NAME_IN_USE  # 易名帖撞名：跟建角色同一句（不洩漏誰是假人）
@@ -72,11 +73,11 @@ from .sqlite_world import open_world
 from .wallet import Wallet
 from .state import (
     ONBOARDING_VERSION, PLAYER, ArenaEntry, ArenaFight, ArenaReport, ArenaResult, ArenaSide, BattleRecord, Convoy, CrowdNote, DuelState, Equipment, Feast, FrontReport, GameState, HintNote, JournalEntry, Journey, Letter, Mingtie, ParleyBacking, ParleyDebt, ParleyTerms, Rumor, Tagalong, TavernHit, TavernWatch, TimelineResult,
-    Whisper, WorldState, XingshiEssay, XingshiMark, XingshiTicket,
+    TierResult, Whisper, WorldState, XingshiEssay, XingshiMark, XingshiTicket,
     new_game_state,
 )
 from .world import (
-    _season_vehicle, advance_world_state, check_thresholds, end_season, fire_by_id, open_showdown, open_waiting_showdown,
+    _season_vehicle, advance_world_state, check_thresholds, end_season, evaluate_ending, fire_by_id, open_showdown, open_waiting_showdown,
     resume_season_clock, settle_season_start, showdown_battle, showdown_key, start_pending_battle,
 )
 from .world_state import SealDuel, SealSide, WorldStateStore, season_length_days
@@ -3175,6 +3176,8 @@ class Game:
         驗不過就忽略、照平常打（優勢 0）。假人、整季機器人不帶，大場面也是優勢 0、照平常演出（武學與成長設計 8.3）。
         不過等判讀的時候這個選項已經不在選單上了（人被帶走、事件被了結）就不打：回一句話說這一仗沒打成（_fight_gone），
         不寫戰報也不寫江湖紀錄（跟其他的拒絕一樣）。"""
+        if option_id == step_rules.NEXT and step_rules.on(self):  # 本週卡「換一件事」（減法季批 3c）：不在選單上（假人碰不到）、
+            return step_rules.skip(self)  # 不花體力、不寫江湖紀錄；關著的季照舊當成不在選單上
         option = {o.id: o for o in self.options(odds=False)}.get(option_id)
         if option is None and option_id.startswith("bounty:"):
             # FB-162：懸賞選項已經不在選單上（兩個分頁搶同一張，慢的那一頁）：回這一步為什麼不成的那一句，不寫江湖紀錄；
@@ -15392,6 +15395,88 @@ class Game:
             "title": result.title if result is not None else "", "reward": wins.reward_text(wins.rules_of(c), tier),
             "ledger_used": result.ledger_used if result is not None else None,
         }
+
+    def _tier_outlook(self) -> tuple[TierResult, int | None]:
+        """此刻就收季（結局照此刻會成立的那一種，world.evaluate_ending）自己拿第幾階、離上一階還差多少（wins.outlook）。名次要讀
+        這一季每個人的帳（CharacterStore.books，只挑那幾欄）；自己照記憶體裡的這一份（這一下剛記的貢獻可能還沒存）。"""
+        s, c = self.state, self.content
+        me = s.player
+        others = [q for q in CharacterStore(self.world.db).books(me.season_number) if name_key(q.name) != name_key(me.name)]
+        winner = evaluate_ending(_season_vehicle(c, s.world), c).winner
+        return wins.outlook(c, [*others, me], me.name, winner)
+
+    def sides(self) -> dict | None:
+        """欄位表 main.sides（設計 3.4、6.1 本週卡第一行）：兩軍此刻的態勢（guan、huang）、自己是哪一方（mine，散人 None）；豪強另有
+        此刻幫誰（lean）與兩本帳（ledger）；投靠了的人有 tier_hint（此刻就收季拿第幾階・離上一階還差多少）。四勝利關著、休季沒有。"""
+        s, c = self.state, self.content
+        if not self._four_wins() or s.world.ended:
+            return None
+        p = s.player
+        standing = stances(s, c)
+        out: dict = {"guan": standing.get("guan", 0), "huang": standing.get("huang", 0), "mine": p.faction}
+        if wins.is_gentry(p, c):
+            out["lean"] = p.ally
+            out["ledger"] = wins.ledger_view(p, c)
+        if c.scenario.find_faction(p.faction) is not None:
+            out["tier_hint"] = wins.tier_hint(*self._tier_outlook())
+        return out
+
+    def place_minutes(self, loc_id: str) -> int | None:
+        """從此刻的位置走到 loc_id（步行；騎著馬照馬的步調）要現實幾分鐘（同狀態列的「現實約 N 分鐘後抵達」）；就在這裡是 0、走不到是 None。
+        先照摸清的路（atlas.way_to），走不到再照所有開放的地點（投靠點是公開的，三方卡照樣寫得出分鐘）。三方卡、本週卡的目標用。"""
+        s, c = self.state, self.content
+        if s.player.journey is None and s.player.location == loc_id:
+            return 0
+        route = atlas.way_to(s, c, loc_id)
+        if route is None and s.player.journey is None:
+            route = atlas.shortest_routes(s, c).get(loc_id)
+        if route is None or not route.path:
+            return None
+        return self._real_minutes(atlas.travel_seconds(route.minutes, "walk", pace=mounts.pace(s, c)))
+
+    def _gentry_now(self, faction: FactionDef) -> str:
+        """三方卡豪強那一欄的「現在」：看的人是豪強寫此刻幫誰與兩本帳（設計 3.4），其他人寫此刻依附兩軍各幾人（投靠名冊）。"""
+        s, c = self.state, self.content
+
+        def name(side: str) -> str:
+            return c.scenario.faction_name(side, side)
+
+        if s.player.faction == faction.id:
+            books = "、".join(wins.NOW_GENTRY_BOOK.format(side=name(side), n=n) for side, n in (wins.ledger_view(s.player, c) or {}).items())
+            return wins.NOW_GENTRY_MINE.format(side=name(s.player.ally) if s.player.ally else "", books=books)
+        rolls = allied.gentry_totals(self.world.roll_counts())
+        return "、".join(wins.NOW_GENTRY_ROLL.format(side=name(side), n=rolls.get(side, 0)) for side in faction.allies)
+
+    def sides_card(self) -> dict | None:
+        """欄位表 main.sides_card（設計 3.4 三方卡）：劇本的每一方（陣營 id →）{name, goal 要做到, reward 贏了給, join_at 投靠在哪
+        [{location, name, minutes}], now 現在}。稱號與比例照 Config.jianfa.tiers；兩軍的「現在」是態勢，季曆最後一週（7 天的季是最後一段）
+        另接「離「黃巾平定」還差 N」（6.8）。四勝利關著、休季沒有。"""
+        s, c = self.state, self.content
+        w = s.world
+        if not self._four_wins() or w.ended:
+            return None
+        standing = stances(s, c)
+        last_week = calendar.point(w.time, c, w).week >= calendar.weeks(c, w)
+        bars = wins.bars(c)
+        out = {}
+        for f in c.scenario.factions:
+            if f.allies:
+                now = self._gentry_now(f)
+            else:
+                value = standing.get(f.id, 0)
+                now = wins.NOW_ARMY.format(value=value)
+                if last_week and f.id in bars:
+                    now += "・" + wins.NOW_GAP.format(ending=bars[f.id][1], gap=max(0, bars[f.id][0] - value))
+            out[f.id] = {
+                "name": f.name, "goal": wins.goal_text(c, f), "reward": wins.reward_card(c, f),
+                "join_at": [{"location": loc, "name": c.locations[loc].name, "minutes": self.place_minutes(loc)} for loc in f.join_at],
+                "now": now,
+            }
+        return out
+
+    def step_view(self) -> dict | None:
+        """欄位表 main.step（設計 6.1 本週卡第三行「你這一步」；step.next_step）：四勝利開著（step.on）、季還沒收才有。"""
+        return step_rules.next_step(self)
 
     def annals_view(self) -> dict:
         """見聞的「行狀」頁（玩家傳第一批）：這一季至今記下的事，照時間先後；開關關著時 on 是 False、rows 是空的。

@@ -469,6 +469,22 @@ def blocked(state: GameState, content: Content, c: FsChain, trip: FsStep, now: f
     return None
 
 
+def next_trips(state: GameState, content: Content, now: float) -> list[tuple[FsChain, FsStep]]:
+    """本週卡「你這一步」的伏筆那一種（減法季批 3c，step.py）：做得了的鏈裡、聽過至少一段片段的（沒聽過的不洩漏有這條線），
+    還沒做完、此刻做得了（blocked 是 None）的第一趟（一條鏈至多一趟）；照劇本的鏈順序。"""
+    out = []
+    for c in _capable_chains(state, content):
+        if not state.player.fragments.get(c.id):
+            continue
+        for i, trip in enumerate(trips(c.final)):
+            if c.final.steps and f"{c.id}:{i}" in state.player.fs_done:
+                continue
+            if blocked(state, content, c, trip, now) is None:
+                out.append((c, trip))
+                break
+    return out
+
+
 def final_options(state: GameState, content: Content, loc_id: str) -> list:
     """這個地點的最後一步：只在做得了的人、在那個地點、那件大事還沒發生時出現 fs:<鏈>；
     時間窗、夜裡、戰況、冷卻、條件不合時按不下去，括號裡寫原因。"""
