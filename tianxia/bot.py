@@ -458,8 +458,9 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
         if o.id not in ("act:rest", "act:halt", "act:bounties", "act:smith", "act:market", "act:heal", "act:arena", "act:donate", "act:dadian",
                         "act:tavern", DUEL_FLEE, ARENA_YIELD)
         and not o.id.startswith(("road:", "defect:", "invite:", "smith:page:", "donate:", "dadian:", "ambush:", "works:", "aid:", "feast:", "tavern:",
-                                 "act:recruit:"))
+                                 "act:recruit:", "faction:lean:"))
     ]  # 招募歷史武將（act:recruit:<id>，歷史武將同行第七節）：整季機器人不招。頭目戰的抽身退走（DUEL_FLEE）：打到一半一直按得下去，機器人照出招打完
+    # 豪強改幫另一軍（faction:lean:，三陣營四勝利）：隨時按得下去、不花體力，同叛投排除（機器人不換邊）
     # 會被打發的求見（名望不夠）永遠按得下去，不排除的話「沒事可做就推進時間」的訊號會失效（同 act:rest）
     options = [
         o for o in options

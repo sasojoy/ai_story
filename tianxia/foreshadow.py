@@ -17,7 +17,7 @@ import math
 import random
 from collections.abc import Iterator
 
-from . import calendar, figures, materials, push, renown, timetable
+from . import calendar, figures, materials, renown, timetable, wins
 from .journal import fragment_line
 from .models import (
     Check, Content, FsAsk, FsChain, FsFinal, FsFragment, FsItem, FsRequires, FsStep, FsWrong, Squad,
@@ -683,7 +683,7 @@ def _complete(state: GameState, content: Content, c: FsChain, now: float) -> Non
     這一版之前匿名記下的照舊（timetable.shown 讀得到）。"""
     p, w = state.player, state.world
     p.fs_done.append(c.id)
-    push.add_contribution(p, calendar.point(now, content, w).week, content.config.foreshadow_contrib)
+    wins.credit(p, content, w, calendar.point(now, content, w).week, content.config.foreshadow_contrib)
     if c.side in LOCK_SIDES:
         lock = Lock(side=c.side, name=p.name, time=now)
         if c.event not in w.locks:

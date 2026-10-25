@@ -39,6 +39,7 @@ from . import hints as hint_rules  # 碰到才說（新手引導計畫三）；�
 from . import tavern as tavern_rules  # 酒肆（企劃者 2026-10-18）；叫 tavern_rules：跟其他 *_rules 一樣避開區域變數
 from . import prologue as prologue_rules  # Game.new 有個參數也叫 prologue，所以模組在這裡一律叫 prologue_rules
 from . import rumor_view  # 傳聞分層的畫面：見聞頁的四層、你不在的時候（計畫 2026-10-06 傳聞分層一）
+from . import wins  # 三陣營四勝利（減法季批 3c）：豪強兩本帳、傾向、季末四階
 from .accounts import AccountStore
 from .accounts import NAME_TAKEN as NAME_IN_USE  # 易名帖撞名：跟建角色同一句（不洩漏誰是假人）
 from .characters import CharacterStore, name_key
@@ -1374,6 +1375,7 @@ class Game:
         for target, ally in self._defect_targets():  # 叛投（計畫甲）：別的陣營的投靠點、一季一次、不在沒打完的決戰的參戰名單上
             option_id = f"defect:{target.id}" + (f":{ally}" if ally else "")  # 豪強分屬兩軍：豪強的投靠點每一軍一顆
             opts.append(Option(id=option_id, label=defection.slot_label(s, c, target, ally)))
+        opts += self._lean_options()  # 三陣營四勝利：豪強改幫另一軍（隨時換、不算叛投；開關關著沒有）
         opts += self._order_options(loc)  # 軍令（計畫 T6）：守勢行動、接糧車；開關關著、散人沒有
         opts += self._rank2_options(loc)  # 第 2 階行動（正式版乙一）
         opts += self._rank_action_options(loc)  # 第 3、4 階的行動（正式版戊一）
@@ -1555,7 +1557,7 @@ class Game:
                 msgs.append(f"{armament} +{points}")
         total = sum(by_attribute.values())
         if season_one(c, w):  # 晉升只在第一季的規則下有：規則關著的季只記軍備
-            push.add_contribution(p, calendar.point(w.time, c, w).week, total)
+            wins.credit(p, c, w, calendar.point(w.time, c, w).week, total)  # 豪強另記此刻幫的那一軍那一本（減法季批 3c）
             msgs.append(f"貢獻 +{total}")
         target = economy.donate_target(c, w, side, p.location)
         if target is not None:
@@ -3270,6 +3272,8 @@ class Game:
             # 找素材分支的入口（第 32 項）也一樣：按「找素材」本身只回 GATHER_PICK、展開分支
             picked_only = (kind == "act" and arg == "explore" and msgs == [explore_modes.PICK]) or (
                 kind == "explore" and msgs == [explore_modes.GATHER_PICK])
+            if faction_before is None and self.state.player.faction is not None:
+                msgs += self._join_lean()  # 三陣營四勝利：拜入曹氏莊院而投靠的那一下照門派所在地給傾向（關著什麼都不做）
             self._begin_enlistment(faction_before)  # 投靠（或拜入陣營名下的門派）那一下：入伍段開始，同一下不算完成任何一步
             self._greet_rejoin(faction_before)  # 入伍段早就走完的人再投靠：引薦人打個招呼（新手引導計畫三）
             if faction_before is None and self.state.player.faction is not None:  # 這一下才投靠（確認，或拜入陣營名下的門派）：手上新陣營接不了的懸賞作廢、說一聲（FB-151）；叛投在 defection.defect 裡做
@@ -3559,6 +3563,8 @@ class Game:
                 return "再想想"
             if arg.startswith("ally:"):  # 豪強分屬兩軍：挑依附哪一軍
                 return f"依附{c.scenario.faction_name(arg[5:], arg[5:])}"
+            if arg.startswith("lean:"):  # 三陣營四勝利：豪強改幫另一軍
+                return wins.LEAN_BUTTON.format(side=c.scenario.faction_name(arg[5:], arg[5:]))
             return f"考慮投靠{self.content.scenario.faction(arg).name}"
         if kind == "defect":
             if arg == "confirm":
@@ -4916,7 +4922,7 @@ class Game:
         key = f"{loc_id}:糧草"
         p.donations[key] = p.donations.get(key, 0) + convoy.grain
         # 護糧沒有推動，另記一次第 1 階推動的貢獻（總計畫 T6）
-        push.add_contribution(p, orders.week_of(s, c), c.config.contrib_per_push)
+        wins.credit(p, c, s.world, orders.week_of(s, c), c.config.contrib_per_push)
         msgs.append(f"糧車送進了{c.locations[loc_id].name}，一粒不少。")
         return msgs + self._order_credit(kind="convoy", location=loc_id, front=front_of(c, loc_id), order=convoy.order)
 
@@ -6102,6 +6108,8 @@ class Game:
             p.pending_faction = p.pending_ally = None
             return ["你決定再想想。"]
         kind, _, ally_id = arg.partition(":")
+        if kind == "lean":  # 三陣營四勝利：豪強改幫另一軍（本週卡「改幫黃巾」；選單只在 _lean_options 給）
+            return self._lean_step(ally_id)
         if kind == "ally":
             ally = self.content.scenario.faction(ally_id)
             if p.pending_faction is None:  # 拜入門派之後挑一邊（選單只在 needs_ally 時給這兩顆）
@@ -6126,10 +6134,55 @@ class Game:
                 msgs += self._guide(note_action(self.state, self.content, self.world, "join"))  # 走對話框（畫面批次審查 I2）
             return msgs
         faction = self.content.scenario.faction(arg)
-        p.pending_faction, p.pending_ally = faction.id, None
+        # 三陣營四勝利開著的季，投靠豪強照投靠點直接給傾向、不出選邊鈕（企劃者 2026-10-24 第 6 件；之後隨時改幫）
+        lean = wins.join_lean(self.content, faction.id, p.location) if self._four_wins() and allied.on(self.content, self.state.world) else None
+        p.pending_faction, p.pending_ally = faction.id, lean
         prompt = self._faction_prompt(faction)
         self._hide(prompt)  # 場景已經寫著這一問（_own_scene_text），江湖紀錄那一則只留標題（FB-046）
         return [prompt]
+
+    def _lean_options(self) -> list[Option]:
+        """本週卡「改幫…」（三陣營四勝利，設計 3.2）：豪強能幫、此刻沒在幫的那幾軍各一顆，不花體力、隨時換、不算叛投。
+        按不下去（wins.lean_problem）灰著寫原因。開關關著、不是豪強是空的。"""
+        s, c = self.state, self.content
+        if not self._four_wins() or not wins.is_gentry(s.player, c):
+            return []
+        opts = []
+        for side in wins.lean_sides(s.player, c):
+            label = wins.LEAN_BUTTON.format(side=c.scenario.faction_name(side, side))
+            problem = wins.lean_problem(s.player, c, side)
+            opts.append(Option(id=f"{wins.LEAN_PREFIX}{side}", label=f"{label}（{problem}）" if problem else label, enabled=not problem))
+        return opts
+
+    def _lean_step(self, side: str) -> list[str]:
+        """豪強改幫 side（wins.set_lean：寫 ally、換邊次數 +1，不算叛投、帳不清）。跟著換的：活躍名單搬到新的那一邊（人數緩衝照新的
+        那一邊算），決戰集結中參戰名單跟著換、開打了這一場照舊（_ally_follows_battle，FB-273），手上揭著、新的那一邊接不了的
+        懸賞作廢、每張一句（不扣東西，PM 2026-10-25 第 4 件）。投靠名冊由 choose() 結尾的 _record_faction 改記。不發傳聞；
+        江湖紀錄就是這一下的那一則（choose 寫）。"""
+        s, c = self.state, self.content
+        p, w = s.player, s.world
+        old = p.ally
+        if not self._four_wins() or not wins.set_lean(p, c, side):
+            return ["（此刻無法這麼做。）"]
+        names = w.active_pushers.get(old or "")
+        if names is not None and p.name in names:
+            w.active_pushers.setdefault(side, {})[p.name] = names.pop(p.name)
+            if not names:
+                del w.active_pushers[old]
+        new_name = c.scenario.faction_name(side, side)
+        msgs = [wins.LEAN_DONE.format(side=new_name, old=c.scenario.faction_name(old, old) if old else new_name)]
+        return msgs + bounties.drop_stranded(s, c, side) + self._ally_follows_battle()
+
+    def _join_lean(self) -> list[str]:
+        """三陣營四勝利開著的季，拜入要依附一軍的門派而投靠（曹氏莊院）的那一下：照門派所在地直接給傾向（PM 2026-10-25 第 5 件），
+        不出選邊鈕；先臨時投效了另一邊的照 _ally_follows_battle 換過去。其他時候什麼都不做（照舊 allied.needs_ally 出選邊鈕）。"""
+        s, c = self.state, self.content
+        p = s.player
+        if not self._four_wins() or not allied.needs_ally(s, c):
+            return []
+        sect = c.sects.get(p.sect) if p.sect else None
+        p.ally = wins.join_lean(c, p.faction, sect.location if sect is not None else p.location)
+        return [allied.ALLY_DONE.format(ally=c.scenario.faction_name(p.ally, p.ally))] + self._ally_follows_battle()
 
     def _ally_follows_battle(self) -> list[str]:
         """選邊的那一刻（豪強分屬兩軍），人已經在這一場決戰的參戰名單上、站的是另一邊（先臨時投效了，FB-273）：集結時照新選的
@@ -7732,15 +7785,29 @@ class Game:
         if me.acted_rounds >= 1:  # 名聲 3.1：自己出手至少 1 回合（同首功）；掛機被代為固守的回合不算
             rout = self._deed_fame("showdown_rout") if won and battle.outcome_margin == "大勝" else []
             changes += journal.combine_changes(self._deed_fame("showdown") + rout)
-        if self._side() is not None and me.faction == self._side():  # 替自己這一方出戰才記（豪強分屬兩軍：依附那一軍）；臨時投效的不記
+        if self._showdown_credits(me):  # 替自己這一方出戰才記（豪強分屬兩軍：依附那一軍）；臨時投效的不記
             push_points = pay.contrib_push + (pay.win_contrib_push.get(battle.outcome_margin, 0) if won else 0)
             contrib = round(c.config.contrib_per_push * push_points * share * half)
             if contrib and season_one(c, s.world):
-                push.add_contribution(p, calendar.point(s.world.time, c, s.world).week, contrib)
+                # 豪強記參戰那一刻那一邊那一本（計畫 5.0 第 12 條：中途改幫另一軍，這一場照舊記原來那一軍）
+                wins.credit(p, c, s.world, calendar.point(s.world.time, c, s.world).week, contrib, side=me.faction)
                 changes.append(f"貢獻 +{contrib}")
         if changes:
             lines.append(f"{'得勝的' if won else ''}軍餉發下來了。")
         return changes + self._showdown_tier4(battle, me, lines)
+
+    def _showdown_credits(self, me: battle_instance.BattleParticipant) -> bool:
+        """這一場的戰功記不記貢獻：站的是自己這一方（豪強分屬兩軍：依附那一軍）才記，臨時投效的不記。三陣營四勝利開著的季，
+        豪強站的是它能幫的那一軍就記（記參戰那一刻那一邊那一本，_showdown_pay），不看此刻幫誰——中途改幫另一軍，這一場照舊算。"""
+        side = self._side()
+        if side is not None and me.faction == side:
+            return True
+        p = self.state.player
+        return self._four_wins() and me.faction in wins.allies(p, self.content)
+
+    def _four_wins(self) -> bool:
+        """這一季三陣營四勝利開著嗎（wins.on：Config.jianfa 的 four_wins＋開季的章）。"""
+        return wins.on(self.content, self.state.world)
 
     def _watching_battle(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> bool:
         """這個人此刻打不了這場仗、只能在一旁看（options() 照常給平常的選項，場景上仍看得到戰場）：
@@ -8763,7 +8830,9 @@ class Game:
         return ids + [sid for sid in extra if sid not in ids]
 
     def _sortie_mode(self, loc: Location) -> str | None:
-        return sortie.mode(self.content, self.state.world, self._side(), loc.id, bool(self._sortie_foes(loc)))
+        mode = sortie.mode(self.content, self.state.world, self._side(), loc.id, bool(self._sortie_foes(loc)))
+        # 三陣營四勝利開著的季拿掉攪局（設計 3.2）：豪強分屬兩軍時本來就碰不到，開關後面的保險（豪強照依附那一軍攻守）
+        return None if mode == "stir" and self._four_wins() else mode
 
     def sortie_mode(self) -> str | None:
         """所在地此刻出陣是哪一種（假人照它挑，bot_policy）；在路上是 None。"""
@@ -8833,7 +8902,7 @@ class Game:
             self._sortie_flipped = self._sortie_flipped or done.flipped
             if calendar.season_one_on(w, c):
                 gained = push.contribution(nominal, 1.0, 1.0, cfg.contrib_per_push, cfg.over_cap_contrib_ratio)
-                push.add_contribution(p, calendar.point(w.time, c, w).week, gained)
+                wins.credit(p, c, w, calendar.point(w.time, c, w).week, gained)
         w.active_pushers.setdefault(side, {})[p.name] = w.time
         w.active_pushers = push.drop_stale(w.active_pushers, w.time, window)
         return done.lines
@@ -9476,7 +9545,7 @@ class Game:
             text=f"在{c.locations[p.location].name}打退了{fig.name}")
         p.snubbed_until[fid] = self.now + cfg.snub_hours * HOUR
         if season_one(c, w):
-            push.add_contribution(p, calendar.point(w.time, c, w).week, cfg.figure_defeat_prestige * cfg.contrib_per_push)
+            wins.credit(p, c, w, calendar.point(w.time, c, w).week, cfg.figure_defeat_prestige * cfg.contrib_per_push)
         msgs += self._order_credit(  # 「打擊大勢人物」軍令（計畫 T6）：只算目標本人
             kind="challenge", location=p.location, front=figures.state_of(s, c, fid).front, figure=fid,
         )
@@ -9673,11 +9742,12 @@ class Game:
             goal = faction.goals.get(trend_id, 0) if faction is not None else 0
             # 出陣的攪局（sortie.mode：陣營在這條線上沒有目標，只有豪強）把線往 50 拉，就是替豪強做事：照推的量記（PM 2026-10-14，
             # 同攻守的帳：名目量，超過上限的部分照記兩成）
-            stir = source == "sortie" and not goal
+            # 三陣營四勝利開著的季沒有攪局（設計 3.2：幫不到任何一本帳；_sortie_mode 也不給）
+            stir = source == "sortie" and not goal and not self._four_wins()
             # 捐軍備（source="donate"）的貢獻照捐的份量在 _donate 記，推力不另記（PM 2026-10-15）
             if source != "donate" and (stir or (goal and (goal > 0) == (amount > 0))):  # 替自己陣營的目標方向推；逆著推、這條線沒有目標（攪局以外）都不記
                 gained = push.contribution(abs(delta), pushed, moved, cfg.contrib_per_push, cfg.over_cap_contrib_ratio)
-                push.add_contribution(p, at.week, gained)
+                wins.credit(p, c, w, at.week, gained)
             w.active_pushers.setdefault(side, {})[p.name] = now
         w.active_pushers = push.drop_stale(w.active_pushers, now, window)  # 順手清掉超過時窗的人，名單不會一直長
         return msgs + tail
@@ -11928,7 +11998,7 @@ class Game:
         # 散人（揭了通緝）不記貢獻；第一季規則關著的季沒有晉升，也不記（懸賞榜設計 2.2 第 4 點，寫法同軍餉 _showdown_pay）
         contrib = c.config.contrib_per_push * cfg.win_contrib_push if wp.faction is not None and season_one(c, self.state.world) else 0
         if contrib:
-            push.add_contribution(wp, calendar.point(self.state.world.time, c, self.state.world).week, contrib)
+            wins.credit(wp, c, self.state.world, calendar.point(self.state.world.time, c, self.state.world).week, contrib)
         cut = min(evil, lp.stats.get("evil", 0))
         if cut > 0:
             lp.stats["evil"] = lp.stats.get("evil", 0) - cut
@@ -12096,7 +12166,7 @@ class Game:
             self._draft.changes += changes
         if season_one(c, s.world) and cfg.contrib_push:
             contrib = c.config.contrib_per_push * cfg.contrib_push
-            push.add_contribution(p, calendar.point(s.world.time, c, s.world).week, contrib)
+            wins.credit(p, c, s.world, calendar.point(s.world.time, c, s.world).week, contrib)
             msgs.append(f"貢獻 +{contrib}")
         return msgs
 
@@ -12258,7 +12328,7 @@ class Game:
         hp, _ = team._apply_toll(c, lp.member, cfg.hp_loss * (1 - cut), agi=lp.stats.get("agi", team.BASE_STAT), con=con, injury=0.0)
         contrib = c.config.contrib_per_push * cfg.win_contrib_push if wp.faction is not None and season_one(c, self.state.world) else 0
         if contrib:
-            push.add_contribution(wp, calendar.point(self.state.world.time, c, self.state.world).week, contrib)
+            wins.credit(wp, c, self.state.world, calendar.point(self.state.world.time, c, self.state.world).week, contrib)
         return RaidSpoils(winner=wp.name, lost=lost, taken=taken, hp=round(hp), contrib=contrib, goods=tuple(goods))
 
     def _ambush_record(
@@ -12332,7 +12402,7 @@ class Game:
             self._draft.changes.append(f"體力 -{cost}")
         if p.faction is not None and season_one(c, s.world):
             contrib = c.config.contrib_per_push
-            push.add_contribution(p, calendar.point(s.world.time, c, s.world).week, contrib)
+            wins.credit(p, c, s.world, calendar.point(s.world.time, c, s.world).week, contrib)
             msgs.append(f"貢獻 +{contrib}")
         return msgs
 
