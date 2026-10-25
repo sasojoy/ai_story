@@ -1192,6 +1192,7 @@ def check_figures(c: Content, need, known, front_ids: list[str]) -> None:
             f"{where}：active_from_day7（{fig.active_from_day7:g}）超出 7 天" if fig.active_from_day7 is not None else "",
         )
         need(to_traditional(fig.name) == fig.name, f"{where}：名字只能用繁體中文（{fig.name}）")
+        check_stances(c, need, where, fig)
         if fig.out_flag is not None:  # 丙 (c)：退場時記的世界旗標要有人讀（劇本或事件的條件），打錯字才抓得到
             need(fig.out_flag in _condition_flags(c), f"{where}：out_flag {fig.out_flag} 沒有任何劇本或事件的條件讀它")
         meet = c.characters.get(fig.character) if fig.character is not None else None
@@ -1209,6 +1210,29 @@ def check_figures(c: Content, need, known, front_ids: list[str]) -> None:
             chain.append(nxt)
             nxt = c.figures[nxt].successor
         need(nxt not in chain, f"{where}：接位鏈繞回來了（{'→'.join(chain)}→{nxt}）")
+
+
+STANCE_MAX = 3  # 一位人物最多幾個心意（整合設計 5.4「2～3 個」）
+
+
+def check_stances(c: Content, need, where: str, fig) -> None:
+    """人物心意（減法季批 6，整合設計 5.4）：要有對話人物（歸類在對話裡）、最多 STANCE_MAX 個、id 不重複、id 不是 stances.NONE；
+    字只用繁體；改做的事裡痕跡的鍵是「地點 id:痕跡名」、地點存在、倍數至少 1。"""
+    if not fig.stances:
+        return
+    need(fig.character is not None, f"{where}：有心意的人物要有對話人物（心意在跟他說話時歸類）")
+    need(len(fig.stances) <= STANCE_MAX, f"{where}：心意最多 {STANCE_MAX} 個（現在 {len(fig.stances)} 個）")
+    ids = [x.id for x in fig.stances]
+    need(len(set(ids)) == len(ids), f"{where}：心意的 id 重複了（{ids}）")
+    for x in fig.stances:
+        at = f"{where} 的心意 {x.id}"
+        need(x.id != "none", f"{at}：id 不能是 none（模型歸不進任何一種時填的）")
+        for text in (x.name, x.hint, x.rumor, x.chronicle):
+            need(to_traditional(text) == text, f"{at}：字只能用繁體中文（{text}）")
+        for key, times in x.action.marks.items():
+            loc, sep, name = key.partition(":")
+            need(bool(sep and name) and loc in c.locations, f"{at}：痕跡要寫成「地點 id:痕跡名」、地點存在（{key}）")
+            need(times >= 1, f"{at}：痕跡 {key} 的倍數至少 1")
 
 
 ORDER_SLOTS = ("{戰線}", "{地點}", "{起點}", "{終點}", "{主將}", "{人物}", "{號令}", "{本週}", "{這週}")  # 後兩個照季換字（FB-501）

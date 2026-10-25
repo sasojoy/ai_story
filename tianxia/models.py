@@ -2972,6 +2972,10 @@ class JianfaRules(_Strict):
     # ── 批 4：隨口應對分岔與痕跡（主機側計畫第六節；子開關 free_text_outcomes、marks_visible）──
     # 【預設】一天（季曆日，同推線的 daily_push_cap）從分岔的後果（之後連心意、託付）記進陣營帳的貢獻上限；同出陣推線的量級（整合設計 5.3）
     deed_contribution_cap: int = Field(default=12, ge=0)
+    # ── 批 6：人物心意與託付（主機側計畫第七節；整合設計 5.3～5.5、5.9；子開關 stances、errands）──
+    stance_threshold: int = Field(default=30, ge=1)  # 【預設】全服這一週記到幾筆，人物照那個心意改做事（StanceDef.threshold 沒寫照這個）
+    stance_contribution: int = Field(default=1, ge=0)  # 【預設】記一筆心意記幾點貢獻（整合設計 5.3；跟分岔同一本每日上限 deed_contribution_cap）
+    bot_stance_chance: float = Field(default=0.3, ge=0, le=1)  # 【預設】假人每天直接記一筆心意的機會（企劃者 2026-10-24 第 5 件；不說話、不寫字）
 
 
 class WebPushRules(_Strict):
@@ -3969,6 +3973,29 @@ class FigureChange(_Strict):
     note: str = ""  # 這筆真的套用時接在公告後面的一句（例：朱儁到任南陽）
 
 
+class StanceAction(_Strict):
+    """心意過了門檻，這位人物改做什麼（減法季整合設計 5.4、5.9；tianxia/stances.py 讀）。三樣可以一起寫。"""
+
+    push: float = Field(default=1.0, ge=0)  # 他每天推線（figures.tick）乘幾倍：2＝加倍（速戰），0＝不推（持重、恤民）
+    # 每天 00:00（world.DAY_HOOKS）把他那一條線上自家佔著的塊、每個攻方的進度各拉下幾點（持重的「守勢」；領地爭奪開著才有）
+    guard: float = Field(default=0.0, ge=0)
+    marks: dict[str, int] = Field(default_factory=dict)  # 「地點 id:痕跡名」→ 倍數：這幾條痕跡記一筆算幾筆（恤民的「算雙倍」）
+
+
+class StanceDef(_Strict):
+    """大勢人物的一個心意（減法季整合設計 5.4、5.9；FigureDef.stances）：跟他說話時模型除了照舊回話，多歸一次「玩家在勸他哪一種」，
+    一人一天一筆、全服計數（WorldState.stance_counts）；這一週到門檻的照最多的那一個改做事、發天下大事、記江湖史，每週一歸零。
+    字待 joy 潤。"""
+
+    id: str
+    name: str  # 心意的名字（速戰、持重、恤民）：心意條、傳聞、紀錄那一句
+    hint: str  # 給模型：玩家說什麼會歸進來
+    threshold: int | None = Field(default=None, ge=1)  # 全服這一週幾筆到門檻；None 照 Config.jianfa.stance_threshold
+    action: StanceAction = Field(default_factory=StanceAction)
+    rumor: str  # 到門檻那一刻的天下大事（不列名字）
+    chronicle: str = ""  # 江湖史那一句；空的照 rumor
+
+
 class FigureDef(_Strict):
     """一位大勢人物（content/figures.json，計畫 T4、濃縮版內容表 1.1）：開季時照這裡種進 WorldState.figures。"""
 
@@ -3995,6 +4022,13 @@ class FigureDef(_Strict):
     challenge_off_front: bool = False  # 沒有戰線也能挑戰（何進）；其他人戰線空著時不受挑戰（PM 2026-10-05 定）
     # 丙 (c)，企劃者 2026-10-13：沒有時刻表的季這位人物被打到退場時記下的世界旗標（波才寫 bocai_defeated：等於「擊敗波才」）；第一季不記
     out_flag: str | None = None
+    # 減法季批 6（整合設計 5.4、5.5、5.9）：心意（最多 3 個）與託付的池子。只在 Config.jianfa 的 stances、errands 開著的季讀；
+    # 空的時候不寫進序列化（內容的鍵一個都不多）
+    stances: list[StanceDef] = Field(default_factory=list)
+
+    @model_serializer(mode="wrap")
+    def _drop_new_defaults(self, handler):
+        return _drop_unset(handler(self), ("stances",))
 
 
 class TimetableOutcome(_Strict):

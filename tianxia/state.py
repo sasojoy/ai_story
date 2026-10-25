@@ -899,6 +899,9 @@ class PlayerState(BaseModel):
     # 預設值時不寫進存檔（QUIET_DEFAULTS）：關著的季 JSON 一個鍵都不多。季曆日從 1 起，0 是還沒記過
     deed_day: int = 0
     deed_today: int = 0
+    # 減法季批 6（整合設計 5.4、5.5）：這一週跟哪幾位大勢人物記過心意（人物表 id → StanceNote，stances.py）、人物託你的事（errands.py）。
+    # 空的時候不寫進存檔（QUIET_DEFAULTS）：關著的季 JSON 一個鍵都不多
+    stance_notes: dict[str, StanceNote] = Field(default_factory=dict)
     pushed: dict[str, float] = Field(default_factory=dict)  # 「曆日:大勢線 id」→ 當天這條線推得動多少（人數緩衝之後）；只留今天與昨天
 
     # ── 捐獻紀錄（計畫 T6，軍備文件 4.1）：「據點 id:糧草」→ 累積的份量。T7 的伏筆只讀它；寫入是 T6 護糧的事 ──
@@ -982,7 +985,7 @@ class PlayerState(BaseModel):
 
 
 # PlayerState 裡「沒用到就不寫進存檔」的欄位（_drop_quiet_defaults）：新規則掛開關、關著的季存檔一個鍵都不多的，加在這裡
-QUIET_DEFAULTS = ("ledgers", "lean_changed", "deed_day", "deed_today")
+QUIET_DEFAULTS = ("ledgers", "lean_changed", "deed_day", "deed_today", "stance_notes")
 
 
 class TierResult(BaseModel):
@@ -1188,6 +1191,16 @@ class TalkMemo(BaseModel):
     text: str
     at: float
     place: str = ""
+
+
+class StanceNote(BaseModel):
+    """你這一週跟一位大勢人物記過的心意（減法季批 6，tianxia/stances.py；PlayerState.stance_notes）：一人一天一筆（day 是 rules.game_day），
+    週一歸零（week 對不上就是上一週的，當作沒記過）；told 是這一週已經記過行狀的心意（到門檻那一刻你也勸過，下一次同步記一則）。"""
+
+    week: int = 0
+    day: int = 0
+    said: list[str] = Field(default_factory=list)
+    told: list[str] = Field(default_factory=list)
 
 
 class Letter(BaseModel):
@@ -1510,6 +1523,14 @@ class SealAct(BaseModel):
     side: str = ""  # 傳檄：這一次照哪一軍算；鎮地：替哪一軍鎮；補缺：退回給哪一軍
 
 
+class StanceOn(BaseModel):
+    """一位大勢人物此刻照哪一個心意做事（WorldState.stance_active；stances.check 在到門檻那一刻寫）：哪一個、哪一刻、哪一週。"""
+
+    stance: str
+    at: float
+    week: int
+
+
 class WorldState(BaseModel):
     time: float = 0.0  # 賽季開始後經過的遊戲秒數
     trends: dict[str, int] = Field(default_factory=dict)
@@ -1537,6 +1558,11 @@ class WorldState(BaseModel):
     # 替有痕跡規則的痕跡出過力的人（減法季批 4，rules.add_marks 在痕跡看得見開著時記；過了門檻就不再記）：「地點 id:痕跡名」→ 名號。
     # 過了門檻之後每個人下一次同步記一則行狀（Game._mark_credits）、把自己的名號拿掉；空的時候不寫進 JSON（同 marks_fired）
     mark_helpers: dict[str, list[str]] = Field(default_factory=dict)
+    # 人物心意（減法季批 6，tianxia/stances.py；整合設計 5.4）：這一週全服記了幾筆（人物表 id → 心意 id → 筆數）、記的是哪一週（季曆週，
+    # 7 天的季是段；週初掛鉤歸零）、此刻照哪一個心意做事（人物表 id → StanceOn，到門檻那一刻起到週初）。空的、0 的時候不寫進 JSON
+    stance_counts: dict[str, dict[str, int]] = Field(default_factory=dict)
+    stance_week: int = 0
+    stance_active: dict[str, StanceOn] = Field(default_factory=dict)
     pending_battle: str | None = None  # 背景推進跨過開戰門檻時記下要開的戰鬥 id；那時人在 mutate_season 的
     # callback 裡，不能再 mutate 開戰（巢狀的 mutate 內層寫的會被蓋掉，會丟錯），callback 結束後由
     # world.start_pending_battle 開戰並清掉
@@ -1597,10 +1623,11 @@ class WorldState(BaseModel):
 
     @model_serializer(mode="wrap")
     def _drop_empty_marks_fired(self, handler):
-        """marks_fired、mark_helpers 是空的時候不寫這個鍵（同 world_state.SealRegistry._drop_empty_uses；不用 Field(exclude_if=…)：Pydantic 2.11 才有）。"""
+        """marks_fired、mark_helpers（批 4）與心意那三欄（批 6）是空的、0 的時候不寫這個鍵（同 world_state.SealRegistry._drop_empty_uses；
+        不用 Field(exclude_if=…)：Pydantic 2.11 才有）。"""
         data = handler(self)
         if isinstance(data, dict):
-            for key in ("marks_fired", "mark_helpers"):
+            for key in ("marks_fired", "mark_helpers", "stance_counts", "stance_week", "stance_active"):
                 if key in data and not data[key]:
                     del data[key]
         return data

@@ -1842,6 +1842,10 @@ def _main_view_body(game: Game) -> dict:
     sides = weekcard.sides_card(game)
     if sides is not None:
         view["sides_card"] = sides
+    talking = game.state.player.pending_companion  # 人物頁（減法季批 6）：正在跟他談的那一位的心意條；關著、他沒有心意沒有這個鍵
+    figure = game.figure_view(talking) if talking else None
+    if figure is not None:
+        view["figure"] = figure
     event_opts = game.event_option_view()  # 事件選項只留動作（整合設計 6.4）：選項 id → 動作、圖示、沒把握時的心裡話；沒有事件沒有這個鍵
     if event_opts is not None:
         view["event_opts"] = event_opts
@@ -2696,6 +2700,14 @@ def api_peer(request: Request, name: str = ""):
     """玩家卡（social.card）：他不在這裡了 card 是 None，網頁照 gone 那一句說。只讀。"""
     game = _game(request)
     return {"card": look(game, lambda g: g.peer_card(name)), "gone": social.GONE}
+
+
+@app.get("/api/figure")
+def api_figure(request: Request, id: str = ""):
+    """人物頁（減法季批 6，主機側計畫 1.3 的 figure.stances、figure.errands）：這位人物（對話人物 id）的心意條、你今天記的那一筆、
+    他託你的事（Game.figure_view）。關著、他什麼都沒有是 None。只讀。"""
+    game = _game(request)
+    return {"figure": look(game, lambda g: g.figure_view(str(id)[:40]))}
 
 
 @app.post("/api/peer/act")

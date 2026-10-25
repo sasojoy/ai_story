@@ -45,6 +45,7 @@ from . import rumor_view  # 傳聞分層的畫面：見聞頁的四層、你不�
 # 減法季批 4：隨口應對分岔、痕跡看得見、貢獻（三陣營四勝利的 wins.credit）；別名避開這個檔裡叫 marks、outcomes 的區域變數
 from . import marks as marks_rules
 from . import outcomes as outcome_rules
+from . import stances as stance_rules  # 人物心意（減法季批 6）；叫 stance_rules：rules.stances 是陣營的態勢
 from . import wins as wins_rules
 from .models import FreeTextChoice, Outcome
 from .rules import jianfa
@@ -1020,6 +1021,7 @@ class Game:
         self._deliver_conquest()  # 領地爭奪：翻地的分紅、守城功（下線時易手的回來補）
         self._deliver_arena()  # 擂台：被挑了的戰報、季末前三名的獎勵；季收了還沒打完的那一場作廢
         self._marks_tick()  # 減法季批 4：痕跡過門檻的防漏、替自己記出過力的行狀（關著什麼都不做）
+        self._stance_annals()  # 減法季批 6：這一週勸過的心意到了門檻，記一則行狀（關著什麼都不做）
         mail = parley.lapse(self.state, self.content)  # NPC 智能 2.1：欠人物的事過了期限是食言（附的委託先作罷，書信不再補一句）
         mail += letters.deliver(self.state, self.content, now)  # 書信（大勢人物擴充第二批）：人物來信、過期的委託作罷
         if mail:
@@ -3671,10 +3673,15 @@ class Game:
         """分岔的後果記貢獻（整合設計 5.3）：成了、不是作惡那一種（PM 2026-10-25 第 6 件）、有那一邊（散人照留痕跡、不記貢獻，同推線）。
         一天（季曆日，同推線的上限）最多 Config.jianfa.deed_contribution_cap，超過的不記（PlayerState.deed_day／deed_today）。
         走 wins.credit：兩軍照舊加 contrib 與那一週的帳，豪強另記此刻幫的那一軍那一本。"""
+        self._deed_points(outcome.effect.contribution if success and not outcome.evil else 0)
+
+    def _deed_points(self, points: int) -> int:
+        """記 points 點陣營貢獻進「文字的事」那一本（整合設計 5.3：分岔的後果、心意一筆、託付辦成了；減法季批 4、6）：有那一邊才記
+        （散人不記，同推線），一天（季曆日）最多 Config.jianfa.deed_contribution_cap，超過的不記（PlayerState.deed_day／deed_today）。
+        走 wins.credit：兩軍照舊加 contrib 與那一週的帳，豪強另記此刻幫的那一軍那一本。回實際記了幾點。"""
         s, c = self.state, self.content
-        points = outcome.effect.contribution if success and not outcome.evil else 0
         if not points or self._side() is None:
-            return
+            return 0
         w, p = s.world, s.player
         at = calendar.point(w.time, c, w)
         if p.deed_day != at.cal_day:
@@ -3683,6 +3690,48 @@ class Game:
         if room:
             p.deed_today += room
             wins_rules.credit(p, c, w, at.week, room)
+        return room
+
+    # ── 人物心意（減法季批 6；tianxia/stances.py）────────────
+
+    def _stance_before(self, cid: str) -> str | None:
+        """這一輪對話之前，你今天跟這位人物記過的那一筆（沒有心意、關著是 None）：跟之後比，看這一輪有沒有記到。"""
+        fid = stance_rules.figure_of(self.content, cid)
+        return stance_rules.heard_today(self.state, self.content, fid) if fid is not None else None
+
+    def _stance_credit(self, cid: str, before: str | None) -> None:
+        """這一輪對話記到一筆心意（之前今天沒記過、之後有了）：記 Config.jianfa.stance_contribution 點貢獻（整合設計 5.3，跟分岔同一本上限）。"""
+        fid = stance_rules.figure_of(self.content, cid)
+        if fid is not None and before is None and stance_rules.heard_today(self.state, self.content, fid) is not None:
+            self._deed_points(self.content.config.jianfa.stance_contribution)
+
+    def voice_stance(self, fid: str, sid: str) -> bool:
+        """不說話、直接記一筆心意（只有伺服器假人叫：bot_policy 照 stances.bot_pick，企劃者 2026-10-24 第 5 件）：一人一天一筆的規則、
+        到門檻、貢獻都跟真人說話那一輪一樣，只是沒有那一輪對話、不寫江湖紀錄。記到了存季，回有沒有記。"""
+        if self.world.paused_at() is not None or self.state.world.ended:
+            return False
+        if not stance_rules.record(self.state, self.content, fid, sid):
+            return False
+        self._deed_points(self.content.config.jianfa.stance_contribution)
+        self._save_season()
+        return True
+
+    def figure_view(self, cid: str) -> dict | None:
+        """人物頁的資料（主機側計畫 1.3 的 figure.stances）：{"id", "name", "stances", "my_stance_today"}。關著、他沒有心意是 None。"""
+        s, c = self.state, self.content
+        fid = figures.of_character(c, cid)
+        mind = stance_rules.view(s, c, fid) if fid is not None else None
+        if mind is None:
+            return None
+        return {"id": cid, "name": c.figures[fid].name, **mind}
+
+    def _stance_annals(self) -> None:
+        """同步時：這一週你勸過的心意到了門檻，記一則行狀（annals.STANCE：只寫他改做什麼，不列名字、不寫你說的話）。"""
+        s, c = self.state, self.content
+        for fid, d in stance_rules.annals_due(s, c):
+            cid = c.figures[fid].character or fid
+            annals.note(s, c, annals.STANCE, stance_rules.ANNAL.format(name=c.figures[fid].name, stance=d.name, rumor=d.rumor), 2,
+                        figure=cid, time=s.world.stance_active[fid].at)
 
     def add_gamble_narration(self, outcome: FreeTextOutcome, narration: str) -> None:
         """隨口應對的潤色（鎖外生成）插回那一則江湖紀錄：接在「你：「…」」那一行後面、結果文字前面。
@@ -5925,6 +5974,7 @@ class Game:
         if arg == "plan":  # NPC 智能 2.1：出陣前跟他商量打法（模型評成功率，不扣體力、不算輪數）
             return self._parley_plan(companion_id, prepared, said)
         affinity = self.state.player.affinities.get(companion_id, 0)
+        heard = self._stance_before(companion_id)
         self._parley_decision = None
         try:
             if arg == "say":  # 自己說：said 是 choose 驗過、轉過繁體的那一句；江湖紀錄先寫你說了什麼（同隨口應對的「你：「…」」）
@@ -5941,6 +5991,7 @@ class Game:
                 )
         except companion_agent.DialogueUnavailable:
             return self._dialogue_unavailable(companion_id)
+        self._stance_credit(companion_id, heard)
         self._annal_talk(companion_id, self.state.player.affinities.get(companion_id, 0) - affinity, said)
         msgs += self._overhear(companion_id, msgs)
         self.state.player.stamina -= self.content.config.talk_stamina  # 每一輪對話都要花體力（伺服器假人設計第八節第 4 項）；生成不出來的那輪不算
@@ -6295,6 +6346,7 @@ class Game:
         if cid is None or j is None or said is None or s.player.parley_road_leg == j.reached:
             return ["（此刻無法這麼做。）"]
         affinity = s.player.affinities.get(cid, 0)
+        heard = self._stance_before(cid)
         self._parley_decision = None
         extra = self._parley_prompt(cid, road=True)
         try:
@@ -6305,6 +6357,7 @@ class Game:
             )
         except companion_agent.DialogueUnavailable:
             return [f"{c.characters[cid].name}沉吟不語。"]
+        self._stance_credit(cid, heard)
         s.player.parley_road_leg = j.reached
         self._annal_talk(cid, s.player.affinities.get(cid, 0) - affinity, said)
         decision, self._parley_decision = self._parley_decision, None

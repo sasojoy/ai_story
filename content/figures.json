@@ -1,5 +1,10 @@
 [
-  {"id": "bocai", "character": "bocai", "name": "波才", "faction": "huang", "front": "yingru", "location": "huangjin_camp", "destiny": false, "start_prestige": 60, "actions_per_day": 1, "push": 1, "successor": "pengtuo", "squad": "figure_bocai", "active_from_week": 1, "start_status": "active", "out_flag": "bocai_defeated"},
+  {"id": "bocai", "character": "bocai", "name": "波才", "faction": "huang", "front": "yingru", "location": "huangjin_camp", "destiny": false, "start_prestige": 60, "actions_per_day": 1, "push": 1, "successor": "pengtuo", "squad": "figure_bocai", "active_from_week": 1, "start_status": "active", "out_flag": "bocai_defeated",
+   "stances": [
+    {"id": "mengong", "name": "猛攻", "hint": "勸他趁官軍未到，一鼓作氣打下長社", "action": {"push": 2}, "rumor": "波才聽了弟兄們的話，催兵急攻長社。"},
+    {"id": "jieying", "name": "結營", "hint": "勸他穩住營寨、廣佈哨探，不要冒進", "action": {"push": 0, "guard": 5}, "rumor": "波才傳令依草結營，四面廣佈哨探。"},
+    {"id": "fuzhong", "name": "撫眾", "hint": "勸他約束部眾、別再劫掠鄉里，先收攏人心", "action": {"push": 0, "marks": {"yingchuan_wilds:鄉里得濟": 2, "yingchuan_wilds:田有人耕": 2, "runan_wilds:安置": 2}}, "rumor": "波才約束部眾不得劫掠，潁川鄉里稍得喘息。"}
+  ]},
   {"id": "pengtuo", "character": null, "name": "彭脫", "faction": "huang", "front": null, "location": "huangjin_camp", "destiny": false, "start_prestige": 40, "actions_per_day": 1, "push": 1, "successor": null, "squad": "figure_pengtuo", "active_from_week": 1, "start_status": "away"},
   {"id": "zhangmancheng", "character": "zhangmancheng", "name": "張曼成", "faction": "huang", "front": "nanyang", "location": "nanyang_huangjin_camp", "destiny": false, "start_prestige": 50, "actions_per_day": 1, "push": 1, "successor": "zhaohong", "squad": "figure_zhangmancheng", "active_from_week": 1, "start_status": "active"},
   {"id": "zhaohong", "character": "zhaohong", "name": "趙弘", "faction": "huang", "front": null, "location": "nanyang_huangjin_camp", "destiny": false, "start_prestige": 50, "actions_per_day": 1, "push": 1, "successor": "hanzhong", "squad": "figure_zhaohong", "active_from_week": 1, "start_status": "active"},
@@ -7,9 +12,19 @@
   {"id": "zhangjiao", "character": "zhangjiao", "name": "張角", "faction": "huang", "front": "jizhou", "location": "guangzong", "destiny": false, "start_prestige": 80, "actions_per_day": 0.5, "push": 1, "successor": null, "squad": "figure_zhangjiao", "active_from_week": 1, "start_status": "active"},
   {"id": "zhangbao", "character": "zhangbao", "name": "張寶", "faction": "huang", "front": "jizhou", "location": "xiaquyang", "destiny": false, "start_prestige": 60, "actions_per_day": 0.5, "push": 1, "successor": null, "squad": "figure_zhangbao", "active_from_week": 1, "start_status": "active"},
   {"id": "zhangliang", "character": "zhangliang", "name": "張梁", "faction": "huang", "front": "jizhou", "location": "guangzong", "destiny": false, "start_prestige": 60, "actions_per_day": 0.5, "push": 1, "successor": null, "squad": "figure_zhangliang", "active_from_week": 1, "start_status": "active"},
-  {"id": "huangfusong", "character": "huangfusong", "name": "皇甫嵩", "faction": "guan", "front": "yingru", "location": "changshe", "destiny": false, "start_prestige": 70, "actions_per_day": 1, "push": 1, "successor": "zhujun", "squad": "figure_huangfusong", "active_from_week": 2, "active_from_day": 1.5, "active_from_day7": 0.5, "start_status": "active"},
+  {"id": "huangfusong", "character": "huangfusong", "name": "皇甫嵩", "faction": "guan", "front": "yingru", "location": "changshe", "destiny": false, "start_prestige": 70, "actions_per_day": 1, "push": 1, "successor": "zhujun", "squad": "figure_huangfusong", "active_from_week": 2, "active_from_day": 1.5, "active_from_day7": 0.5, "start_status": "active",
+   "stances": [
+    {"id": "chuqi", "name": "出奇", "hint": "勸他主動出擊、出奇制勝，趁風縱火", "action": {"push": 2}, "rumor": "皇甫嵩採納眾議，整軍出擊，潁川一帶戰事吃緊。"},
+    {"id": "jianshou", "name": "堅守", "hint": "勸他堅守長社、等待援軍，不可輕出", "action": {"push": 0, "guard": 5}, "rumor": "皇甫嵩閉營堅守長社，營壘連夜加高。"},
+    {"id": "anmin", "name": "安民", "hint": "勸他整肅軍紀、秋毫無犯，先安撫潁川百姓", "action": {"push": 0, "marks": {"changshe:救車夫": 2, "songshan_foot:裹傷": 2, "yingchuan:慰書生": 2}}, "rumor": "皇甫嵩嚴申軍紀，潁川百姓爭相送糧。"}
+  ]},
   {"id": "zhujun", "character": "zhujun", "name": "朱儁", "faction": "guan", "front": "yingru", "location": "changshe", "destiny": false, "start_prestige": 60, "actions_per_day": 0.5, "push": 1, "successor": null, "squad": "figure_zhujun", "active_from_week": 2, "active_from_day": 1.5, "active_from_day7": 0.5, "start_status": "active"},
-  {"id": "luzhi", "character": "luzhi", "name": "盧植", "faction": "guan", "front": "jizhou", "location": "luzhi_camp", "destiny": false, "start_prestige": 70, "actions_per_day": 1, "push": 1, "successor": "dongzhuo", "squad": "figure_luzhi", "active_from_week": 2, "active_from_day": 1.5, "active_from_day7": 0.5, "start_status": "active"},
+  {"id": "luzhi", "character": "luzhi", "name": "盧植", "faction": "guan", "front": "jizhou", "location": "luzhi_camp", "destiny": false, "start_prestige": 70, "actions_per_day": 1, "push": 1, "successor": "dongzhuo", "squad": "figure_luzhi", "active_from_week": 2, "active_from_day": 1.5, "active_from_day7": 0.5, "start_status": "active",
+   "stances": [
+    {"id": "suzhan", "name": "速戰", "hint": "勸他趁黃巾未穩、速攻廣宗，別再拖延", "action": {"push": 2}, "rumor": "盧植聽了眾人之勸，決意速攻廣宗。"},
+    {"id": "chizhong", "name": "持重", "hint": "勸他固守待援、深溝高壘，小心中了埋伏", "action": {"push": 0, "guard": 5}, "rumor": "盧植按兵不動，廣宗城外深溝高壘。"},
+    {"id": "xumin", "name": "恤民", "hint": "勸他先安頓流民、開倉放糧，別向百姓徵糧", "action": {"push": 0, "marks": {"xiaquyang:留糧": 2, "julu_altar:扶病": 2}}, "rumor": "盧植下令放糧，冀州流民有了去處。"}
+  ]},
   {"id": "sunjian", "character": "sunjian", "name": "孫堅", "faction": "guan", "front": "nanyang", "location": "wan_city", "destiny": true, "start_prestige": 60, "actions_per_day": 1, "push": 1, "successor": null, "squad": "figure_sunjian", "active_from_week": 2, "active_from_day": 1.5, "active_from_day7": 0.5, "start_status": "active"},
   {"id": "hejin", "character": "hejin", "name": "何進", "faction": "guan", "front": null, "location": "dajiangjun_fu", "destiny": true, "start_prestige": 70, "actions_per_day": 0, "push": 0, "successor": null, "squad": "figure_hejin", "active_from_week": 1, "start_status": "active", "challenge_off_front": true},
   {"id": "dongzhuo", "character": "dongzhuo", "name": "董卓", "faction": "guan", "front": null, "location": "mengjin_ford", "destiny": true, "start_prestige": 60, "actions_per_day": 1, "push": 1, "successor": null, "squad": "figure_dongzhuo", "active_from_week": 1, "start_status": "active"},

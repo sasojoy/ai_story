@@ -16,9 +16,9 @@ from dataclasses import dataclass
 from random import Random
 from typing import ClassVar
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, create_model
 
-from . import figure_life, gender, parley, renown, seal_acts, zh
+from . import figure_life, gender, parley, renown, seal_acts, stances, zh
 from .models import CharacterDef, Content
 from .ollama_client import OllamaClient
 from .state import GameState, TalkMemo
@@ -120,6 +120,21 @@ class CompanionTurn(BaseModel):
     reward: str | None = None
 
 
+_TURN_MODELS: dict[tuple[str, ...], type[CompanionTurn]] = {}
+
+
+def turn_model(stance_ids: tuple[str, ...]) -> type[CompanionTurn]:
+    """人物心意開著（減法季批 6，stances.ids_for 不是空的）時一輪對話的回答格式：CompanionTurn 多一個 stance（只能是這幾個 id 或
+    stances.NONE，schema 上是 enum）。關著照舊用 CompanionTurn 本身：送出去的 schema 一個字都不多。同一組 id 只建一次。"""
+    key = tuple(stance_ids)
+    if key not in _TURN_MODELS:
+        _TURN_MODELS[key] = create_model(
+            "CompanionTurn", __base__=CompanionTurn,
+            stance=(str, Field(default=stances.NONE, json_schema_extra={"enum": [*key, stances.NONE]})),
+        )
+    return _TURN_MODELS[key]
+
+
 @dataclass(frozen=True)
 class DialogueRequest:
     """階段 A（在行動鎖內、很快）：這次按下去會生成一輪對話時留下的單子——哪個選項、跟誰談、
@@ -131,6 +146,7 @@ class DialogueRequest:
     player_action: str
     messages: list[dict[str, str]]
     required: tuple[str, ...] = ()  # 這一輪模型一定要寫出來的欄位（NPC 智能 2.0：parley.ASK_FIELDS 等），見 generate_turn
+    stances: tuple[str, ...] = ()  # 人物心意（減法季批 6）：這一輪要模型多歸的心意 id（stances.ids_for）；空的照舊
 
 
 @dataclass(frozen=True)
@@ -235,6 +251,7 @@ def build_system_prompt(
         f"{_secret_line(character, state, content, world, companion_id)}"
         f"{figure_life.prompt_lines(state, content, companion_id)}"
         f"{parley.prompt_lines(state, content, companion_id)}"  # NPC 智能 2.1：守約紀錄（答應幾件、做到幾件、食言、聽說的）
+        f"{stances.prompt_lines(state, content, companion_id)}"  # 人物心意（減法季批 6）：他在拿的主意與要模型多填的 stance；關著是空的
         f"{era_str}"
         f"【此刻】{content.scenario.name}・{act_title}，第 {day} 天。\n"
         f"{past_str}"
@@ -362,6 +379,7 @@ def build_request(
     return DialogueRequest(
         option_id, companion_id, player_action,
         _build_messages(character, state, content, world, companion_id, player_action, free, extra), required,
+        stances.ids_for(state, content, companion_id),
     )
 
 
@@ -369,7 +387,9 @@ def prepare_turn(client: OllamaClient | None, request: DialogueRequest) -> Prepa
     """階段 B：在行動鎖外呼叫模型生成這一輪（約 10 秒，不能讓別的玩家一起等）。
     生成不出來時 turn=None，由階段 C 當成 DialogueUnavailable 處理，這裡不拋例外。"""
     try:
-        turn = generate_turn(client, request.messages, request.required)
+        # 心意開著才多傳 stances：關著時那一行呼叫一個字不動（測試的假 generate_turn 只認舊的三個參數）
+        turn = (generate_turn(client, request.messages, request.required, stances=request.stances) if request.stances
+                else generate_turn(client, request.messages, request.required))
     except DialogueUnavailable as e:
         logger.warning(f"companion_agent 鎖外生成失敗 ({request.companion_id}): {e}，這輪對話取消")
         turn = None
@@ -393,10 +413,11 @@ def _record_turn(state: GameState, companion_id: str, player_action: str, turn: 
 
 def _apply_turn(
     state: GameState, character: CharacterDef, companion_id: str, player_action: str, turn: CompanionTurn,
-    tag: str | None, content: Content | None = None,
+    tag: str | None, content: Content | None = None, hear: bool = False,
 ) -> list[str]:
     """回合收尾共用邏輯：查表覆寫好感度、記錄對話、更新關係現況，回傳要顯示的訊息。
-    content 給了才算名聲的冷淡（5.2：敬俠的人遇上寇，加的情誼打折，renown.cold），那一輪多一句原因。"""
+    content 給了才算名聲的冷淡（5.2：敬俠的人遇上寇，加的情誼打折，renown.cold），那一輪多一句原因。
+    hear：這一輪是玩家說的話（選選項、自己說；開口那一輪不是）——人物心意開著時模型歸的 stance 記一筆（stances.hear）、多一句。"""
     p = state.player
     delta = resolve_tag_delta(tag, character)
     cooled = renown.cold(state, content, companion_id, delta) if content is not None else delta
@@ -422,6 +443,8 @@ def _apply_turn(
         msgs.append(renown.COLD_LINE.format(name=character.name))
     if delta:
         msgs.append(f"（情誼 {'+' if delta >= 0 else ''}{delta}）")  # 玩家看到的一律叫「情誼」（explain-1）；程式裡照舊叫 affinity／好感度
+    if hear and content is not None:
+        msgs += stances.hear(state, content, companion_id, getattr(turn, "stance", None))
     return msgs
 
 
@@ -464,7 +487,7 @@ def continue_dialogue(
     if turn is None:
         turn = _generate(client, character, state, content, world, companion_id, player_action)
     world.record_companion_tag(companion_id, tag or "尋常寒暄")
-    msgs = _apply_turn(state, character, companion_id, player_action, turn, tag, content=content)
+    msgs = _apply_turn(state, character, companion_id, player_action, turn, tag, content=content, hear=True)
     msgs += _maybe_grant_signature_skill(state, content, character, companion_id)
     msgs += _maybe_consolidate_memory(client, state, character, companion_id)
     _maybe_synthesize_drift(client, character, companion_id, world)
@@ -481,12 +504,12 @@ def say_dialogue(
     character = content.characters[companion_id]
     if turn is None:
         messages = _build_messages(character, state, content, world, companion_id, said, free=True, extra=extra)
-        turn = generate_turn(client, messages, required)
+        turn = _generate_with(client, messages, required, stances.ids_for(state, content, companion_id))
     if decide is not None:  # NPC 智能 2.0：引擎擲完骰、換上那一版回話（Game._parley_decide）
         turn = decide(turn)
     tag = free_tag(turn)
     world.record_companion_tag(companion_id, tag)
-    msgs = _apply_turn(state, character, companion_id, said, turn, tag, content=content)
+    msgs = _apply_turn(state, character, companion_id, said, turn, tag, content=content, hear=True)
     msgs += _maybe_grant_signature_skill(state, content, character, companion_id)
     msgs += _maybe_consolidate_memory(client, state, character, companion_id)
     _maybe_synthesize_drift(client, character, companion_id, world)
@@ -589,25 +612,35 @@ def _generate(
 ) -> CompanionTurn:
     """組 messages 再生成一輪（鎖內的老路徑）；鎖外的路徑是 build_request ＋ prepare_turn，兩邊共用 generate_turn。"""
     messages = _build_messages(character, state, content, world, companion_id, player_action, extra=extra)
-    return generate_turn(client, messages, required)
+    return _generate_with(client, messages, required, stances.ids_for(state, content, companion_id))
 
 
-def generate_turn(client: OllamaClient | None, messages: list[dict[str, str]], required: tuple[str, ...] = ()) -> CompanionTurn:
+def _generate_with(client: OllamaClient | None, messages: list[dict[str, str]], required: tuple[str, ...], ids: tuple[str, ...]) -> CompanionTurn:
+    """鎖內生成的那兩條路（_generate、say_dialogue 沒給 turn）：心意開著才多傳 stances，關著照舊三個參數。"""
+    return generate_turn(client, messages, required, stances=ids) if ids else generate_turn(client, messages, required)
+
+
+def generate_turn(
+    client: OllamaClient | None, messages: list[dict[str, str]], required: tuple[str, ...] = (), stances: tuple[str, ...] = (),
+) -> CompanionTurn:
     """呼叫模型生成一輪對話並轉成繁體；任何失敗（沒有模型、連不上、解析失敗）都丟 DialogueUnavailable。
     只吃 messages、不碰遊戲狀態，所以可以放心在行動鎖外呼叫。
     required 是這一輪多要模型一定寫出來的欄位（NPC 智能 2.0的 ask、willing……）：寫進送出去的 schema 的 required，
     空字串照樣算答了（ask 空字串＝只是閒聊）。CompanionTurn 這些欄位都有預設值 None，不寫進 schema 的話
-    結構化輸出允許模型整個略過（2026-10-24 主機實測：ask 空白 14/30，連 condition 都填了就是不填 ask）。"""
+    結構化輸出允許模型整個略過（2026-10-24 主機實測：ask 空白 14/30，連 condition 都填了就是不填 ask）。
+    stances 是人物心意開著時要模型多歸的心意 id（減法季批 6）：回答格式換成 turn_model（多一個 enum 的 stance），stance 也列進
+    schema_required；空的照舊用 CompanionTurn、不多送一個字。"""
     if client is None:
         raise DialogueUnavailable("沒有可用的模型")
+    schema_required = [*required, *(["stance"] if stances else [])]
     try:
         turn = client.chat_structured(
-            messages, CompanionTurn, num_predict=TURN_PREDICT,
+            messages, turn_model(stances) if stances else CompanionTurn, num_predict=TURN_PREDICT,
             # narrative 也必填（2026-10-22 線上：人物不說話，只出選項）：它在 CompanionTurn 有預設值 ""，
             # 不寫進 required 的話 schema 允許模型省略，_ensure_required_present 也不會判定缺欄位，
             # 於是「只回 options」的那一次靜靜通過，對話照開、人物一個字都沒說。
             required_fields=["narrative", "options"], require_in_schema=True,
-            **({"schema_required": list(required)} if required else {}),  # 沒有就不傳：測試的假 client 不一定認得這個參數
+            **({"schema_required": schema_required} if schema_required else {}),  # 沒有就不傳：測試的假 client 不一定認得這個參數
         )
         if not turn.narrative.strip() or not turn.options:  # 不靠 client 自己檢查（測試的假 client、別的實作）：沒話可說就是這一輪生成失敗
             raise ValueError("模型沒寫人物的話或選項")

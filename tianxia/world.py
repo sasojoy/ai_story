@@ -7,6 +7,7 @@ import re
 from collections.abc import Callable
 
 from . import arena, battle_instance, bounties, calendar, feasts, figure_life, figures, flavor, leaderboard, orders, ranks, renown, seal_acts, seats, territory, timetable, yuedan
+from . import stances as stance_rules  # 人物心意（減法季批 6）；rules.stances（陣營的態勢）在這個檔裡也叫 stances
 from .models import Act, BattleDef, Content, Ending, SimPlayer, SimRumor, Storyline, TimetableEvent
 from .ollama_client import OllamaClient
 from .rules import (
@@ -28,6 +29,7 @@ WEEK_HOOKS: list[Callable[[GameState, Content, random.Random], list[str]]] = [
     lambda state, content, rng: seats.rotate(state, content, state.world.hooked_week),  # 第四階輪替（正式版丁）：排在發令之前
     lambda state, content, rng: orders.issue(state, content, state.world.hooked_week, rng),
     lambda state, content, rng: bounties.issue(state, content, state.world.hooked_week, rng),  # 懸賞榜：兩個陣營各掛討伐、打探、護送
+    lambda state, content, rng: stance_rules.weekly_reset(state, content, state.world.hooked_week),  # 人物心意（減法季批 6）：每週歸零；關著不碰季
 ]
 
 # 21 天季每天 00:00 的掛鉤（正式季整合設計 7.1、7.2）：季曆每跨進新的一天各跑一次，排在週初掛鉤之後、那一刻的大事之前
@@ -35,6 +37,7 @@ WEEK_HOOKS: list[Callable[[GameState, Content, random.Random], list[str]]] = [
 DAY_HOOKS: list[Callable[[GameState, Content, random.Random], list[str]]] = [
     lambda state, content, rng: orders.issue_day(state, content, state.world.hooked_day, rng),
     lambda state, content, rng: bounties.issue_day(state, content, state.world.hooked_day, rng),  # 懸賞榜：每天一批（7.2）
+    lambda state, content, rng: stance_rules.daily(state, content),  # 人物心意（減法季批 6）：持重的每天拉下對面的進度；關著什麼都不做
 ]
 
 
