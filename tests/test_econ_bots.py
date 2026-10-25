@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import random
 
-from conftest import real_content
+from conftest import no_week_unlock, real_content
 from tianxia import bot, bot_policy
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
@@ -13,7 +13,7 @@ TW_MIDNIGHT = 16 * 3600
 
 
 def _game(at="yingchuan", faction="guan", bag=None, silver=500, same=None):
-    c = real_content("week7")
+    c = no_week_unlock(real_content("week7"))
     c.config.auto_open_first_season = True
     c.config.four_tiers.enabled = False  # 素材四階之前的規則；四階的機器人在 test_four_tiers
     if same is not None:

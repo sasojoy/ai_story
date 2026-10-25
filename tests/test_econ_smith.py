@@ -5,7 +5,7 @@ from __future__ import annotations
 import random
 from unittest import mock
 
-from conftest import real_content
+from conftest import no_week_unlock, real_content
 from tianxia import economy, shopview
 from tianxia import engine as engine_mod
 from tianxia.engine import Game
@@ -16,7 +16,7 @@ TW_MIDNIGHT = 16 * 3600  # UTC 16:00＝台灣 00:00（1970-01-02）
 
 
 def _game(bag=None, silver=500, at="yingchuan", **econ):
-    c = real_content("week7")
+    c = no_week_unlock(real_content("week7"))
     c.config.auto_open_first_season = True
     c.config.four_tiers.enabled = False  # 素材四階之前的規則（三階不收、二換三一天一個）；四階的規則在 test_four_tiers
     for key, value in econ.items():

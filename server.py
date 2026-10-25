@@ -1720,6 +1720,9 @@ def _main_view_body(game: Game) -> dict:
     week = weekcard.week_card(game, status, orders)
     if week is not None:
         view["week_card"] = week
+    mostly = mapdata.mostly_here(game.state, game.content)  # 四格探索那一格的小字「城裡多事」（整合設計 6.3，批 5）；在路上沒有這個鍵
+    if mostly:
+        view["mostly"] = mostly
     sides = weekcard.sides_card(game)
     if sides is not None:
         view["sides_card"] = sides

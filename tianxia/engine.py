@@ -23,7 +23,7 @@ from . import (
     fight_llm, figure_aid, figure_life, figures, foreshadow, four_tiers, gather_llm, generals, forge_secrets, front_lines, fusion, gender, howto, insight_fx, insights, invites, journal, letters, library, mapdata, martial_arts, feasts,
     mall, materials, mounts, naming, newbie, rename, server_bots, opportunities, orders, parley, precise, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_acts, seal_duel, seats, secret_recipes, sensing,
     shopview, siege, signature, signature_arms, silver, skillview, smithing,
-    social, sortie, styles, tactics, team, terrain, territory, timetable, traits, treasures, weapons, works, xingshi, zh, yuedan,
+    social, sortie, styles, tactics, team, terrain, territory, timetable, traits, treasures, weapons, week_unlock, works, xingshi, zh, yuedan,
 )
 from . import ambush as ambush_rules  # 設伏劫道（後期體力玩法第一批）；叫 ambush_rules：這個檔裡有區域變數叫 ambush
 from . import duel as duel_rules  # 單人頭目戰（Joy 2026-10-10）
@@ -950,6 +950,7 @@ class Game:
         msgs = list(self.world.catch_up_season(self.content, now, self.rng))
         self.state.world = self.world.get_season()  # 剛才的追趕可能進一步推進了賽季，拉回最新的一份
         self._stamp_join()  # 新角色、換季重來的角色：補算完賽季才記下加入的那一刻
+        self._week_unlock_tick()  # 減法季 6.6：第 2 週的功能對這個人開了的那一刻，寫一則紀錄
         self._record_faction()
         self._copy_heirloom()  # 排在 _advance_player_local 之前：承露照整段離線時間算體力回復（7.4）
         if self.state.last_real is None:
@@ -1078,6 +1079,7 @@ class Game:
         if self.world.paused_at() is not None:  # 管理者的快轉：時鐘停著時不推，先按「繼續」
             return self._log(["（賽季時鐘暫停中，不能快轉；先按「繼續」。）"])  # 待 S1／joy 潤
         self._stamp_join()  # 同 sync：推進之前先記下加入的那一刻（沒同步過就直接快轉的測試與整季機器人）
+        self._week_unlock_tick()
         msgs: list[str] = []
         if self.world.season_phase() == "running":
             msgs += advance_world_state(self.state.world, self.content, seconds, self.rng, self.world)
@@ -1089,6 +1091,7 @@ class Game:
         self._save_season()
         msgs += start_pending_battle(self.world, self.content, self.now)
         self.state.world = self.world.get_season()
+        self._week_unlock_tick()  # 推完了再看一次：快轉跨過第 2 週（整季機器人、測試）那一下就寫
         news = journal.news_entry(self.state.world.time, self._without_timetable(msgs))
         if news is not None:
             journal.add_entry(self.state, news, merge=True)
@@ -1102,6 +1105,27 @@ class Game:
         p = self.state.player
         if p.joined_at is None:
             p.joined_at = self.state.world.time
+
+    def week_unlock_names(self) -> list[str]:
+        """第 2 週才開的功能裡這一季真的有的（減法季 6.6；week_unlock.WEEK2 的順序）：鐵匠鋪（武器或防具開著）、擂台、自創、懸賞榜。
+        紀錄那一行、本週卡那一句照它列；一樣都沒有是空的。"""
+        s, c = self.state, self.content
+        have = {
+            "smith": any(equipment.on(c, slot) for slot in equipment.SMITH_PAGES), "arena": arena.on(c), "create": create.on(c),
+            "bounties": bounties.active(s, c),
+        }
+        return [name for key, name in week_unlock.WEEK2.items() if have.get(key)]
+
+    def _week_unlock_tick(self) -> None:
+        """第 2 週的功能對這個人開了的那一刻（減法季 6.6「開了的那一刻江湖紀錄一行、本週卡一句」）：蓋 PlayerState.week_unlocked_at、
+        寫一則紀錄。規則關著不蓋、不寫；蓋過就不再動；季收了不寫。sync 與 advance 都叫（補算完賽季、記下加入那一刻之後）。"""
+        p = self.state.player
+        if p.week_unlocked_at is not None or self.state.world.ended or not week_unlock.unlocked_now(self.state, self.content):
+            return
+        p.week_unlocked_at = self.state.world.time
+        names = self.week_unlock_names()
+        if names:
+            self._write(week_unlock.TITLE, [week_unlock.journal_line(names, self.content, self.state.world)])
 
     def mark_seen(self, now: float) -> None:
         """這是那個人自己的請求（伺服器的 act／act_look、假人程式自己那一輪寫 seen_real 另見 bot_runner）：記他自己上線的現實時間

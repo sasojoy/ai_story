@@ -89,8 +89,11 @@ def on(content: Content) -> bool:
 
 
 def here(state: GameState, content: Content) -> bool:
-    """此刻打得開擂台：開關開著、季在跑、不在序章。哪裡都行（路上、閉關中也行；PM 轉述 Joy 2026-10-14「不一定要鎖死在城鎮」）。"""
-    return on(content) and not state.world.ended and not prologue_rules.active(state, content)
+    """此刻打得開擂台：開關開著、季在跑、不在序章、這一季走到開擂台的那一週（減法季 6.6 第 2 週，week_unlock.open；規則關著一律開）。
+    哪裡都行（路上、閉關中也行；PM 轉述 Joy 2026-10-14「不一定要鎖死在城鎮」）。"""
+    from . import week_unlock  # week_unlock → rules → … 繞回來，呼叫時才取
+
+    return on(content) and not state.world.ended and not prologue_rules.active(state, content) and week_unlock.open(state, content, "arena")
 
 
 def entry_of(world: WorldState, name: str) -> ArenaEntry | None:
