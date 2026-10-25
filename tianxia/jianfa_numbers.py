@@ -107,6 +107,9 @@ class JianfaNumbers(_Strict):
     # 不推線、不算討伐、戰利（銀兩、心得、掉的素材）乘 town_loot_scale【PM】
     town_foes: list[str] = Field(default_factory=lambda: ["dipi"], min_length=1)
     town_loot_scale: float = Field(default=0.5, ge=0, le=1)
+    # 自家營寨的遭遇是跟同袍比劃（不打、不掉東西）：給 _sortie_host 那一路心得、經驗的幾成（再乘三道閘的倍數）【暫】
+    # （PM 2026-10-26：全額太多；同跟自己人操練的 Config.drill_reward_share 的量級）。仍算仗（growth 的 camp_spar）：45 級以後照樣升得上去
+    camp_spar_share: float = Field(default=0.3, ge=0, le=1)
     # ── 遭遇的三道閘（設計 4.2；企劃者 2026-10-24「15 次開始下降，最低 0.3」「45 之後只有交戰的情況給的經驗可以繼續升級」）──
     drill_full_per_day: int = Field(default=15, ge=0)  # 一天前幾場全額【定】
     drill_decay: float = Field(default=0.8, gt=0, le=1)  # 之後每場再乘這個（疊加）【預設】

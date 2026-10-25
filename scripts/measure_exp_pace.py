@@ -86,7 +86,7 @@ def _outing_value(game: Game) -> float:
         return -1.0
     share = plan.weights.get("encounter", 0) / (sum(plan.weights.values()) or 1)
     jf, level = game.content.config.jianfa, game.state.player.member.level
-    win = 1.0 if plan.how == "spar" else _win_rate(game, plan.foe)
+    win = jf.camp_spar_share if plan.how == "spar" else _win_rate(game, plan.foe)  # 比劃不必打贏，只拿同袍那一路的 camp_spar_share（三成）
     return share * game.content.config.jianfa.beats * plan.foe.exp * win * growth.outlevel_factor(jf, level, plan.foe.difficulty)
 
 

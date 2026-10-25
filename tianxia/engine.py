@@ -5088,13 +5088,13 @@ class Game:
 
     def _outing_fight(self, loc: Location, plan: OutingPlan) -> tuple[list[str], str, bool]:
         """遭遇拍打的那一場：回（訊息, outing_lines 的 encounter 鍵, 打贏了沒）。自家營寨跟同袍比劃：不打、不掉東西，照 _sortie_host 那一路
-        的全額心得經驗（_drill_gains）。其餘照探索的野怪打（_squad_encounter(wild=True)：扣氣血減半、不問模型、不推大勢），戰報標
+        的心得經驗 camp_spar_share（三成，_drill_gains；算仗）。其餘照探索的野怪打（_squad_encounter(wild=True)：扣氣血減半、不問模型、不推大勢），戰報標
         「出門一趟・遭遇」；城裡的地痞戰利（銀兩、心得、掉的素材）乘 town_loot_scale、不算討伐；其餘打贏算討伐懸賞的交差。"""
         s, c = self.state, self.content
         cfg, foe = c.config.jianfa, plan.foe
         gate = self._fight_gate(foe)  # 三道閘的前兩道（疲勞、對手配不配得上你）：這一場的經驗、心得、銀兩、掉的素材一起乘
-        if plan.how == "spar":
-            return self._drill_gains(foe, gate, "camp_spar"), "spar", True
+        if plan.how == "spar":  # 對手那一路心得、經驗的 camp_spar_share（三成）乘三道閘的倍數（PM 2026-10-26：以前全額）
+            return self._drill_gains(foe, cfg.camp_spar_share * gate, "camp_spar"), "spar", True
         town = plan.how == "town"
         self._loot_scale = cfg.town_loot_scale if town else 1.0
         self._gate_scale = gate

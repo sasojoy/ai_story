@@ -64,6 +64,7 @@ def test_batch2_numbers_ride_on_config_jianfa():
     assert (cfg.explore_stamina, cfg.beats, cfg.drill_full_per_day, cfg.drill_floor, cfg.drill_level_cap) == (18, 3, 15, 0.3, 45)
     assert cfg.milestone_levels == [10, 20, 30, 40, 50] and cfg.stat_points_per_milestone == 5
     assert cfg.stat_rates.bonus_per_point == 0.06 and cfg.town_foes == ["dipi"] and cfg.town_loot_scale == 0.5
+    assert cfg.camp_spar_share == 0.3  # 修正輪（PM 2026-10-26）：自家營寨比劃給對手那一路的三成
     assert cfg.stat_milestones is True
 
 
