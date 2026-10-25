@@ -183,6 +183,12 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 - **一件事拆成幾個 commit，檔案卻有幾件共用時，不要動工作樹**：寫一支 scratchpad 腳本，每個 commit 從「工作樹的最終版」把別件的幾處換回舊字（每處 `assert count == 1`）、`git hash-object -w --stdin --path` ＋ `git update-index --add --cacheinfo` 放進索引，commit 後工作樹照舊；提交前 `git write-tree` 取出索引的 tree，`git archive` 解到 scratchpad 跑那幾個測試檔，確認單獨一筆也是綠的（2026-10-25 批 4 修正輪，`engine.py`、`models.py`、導覽、`test_outcomes_answer.py` 都三件共用）。
 - **`branch_game(faction="guan")` 之類的測試會多一則 `annals.DEED`「投靠官軍。」**：斷言行狀的字要先篩「隨口應對」，不然 `== [..]` 多一筆。
 - **QA 的 `qcmp.py` 比的是行號**：上游少了幾十行（例：拿掉 93 則傳聞）後面的表（chronicle、seasons）整片位移、全算差；先看差的行數是不是剛好等於少掉的行數，再用 tag 與內容確認，不要把位移當成真的差異。
+- **新模組的名字撞到 `from .rules import` 的函式，模組會被靜靜蓋掉**（2026-10-26 減法季批 6）：`engine.py`、`world.py` 都 `from .rules import (…, stances, …)`（陣營的態勢），新模組 `tianxia/stances.py` 用 `from . import stances` 匯進來，排在後面的 rules 那一行把它換成函式，`stances.figure_of` 就是 AttributeError。這兩個檔裡新模組一律取別名（`from . import stances as stance_rules`），加之前 `grep -n "\b<名字>\b"` 看一次。
+- **給共用函式加參數，舊的呼叫一個字不動**（同批 6，跟批 4 接線的 `answer_event` 同一個坑）：`tests/test_server.py` 好幾條把 `companion_agent.generate_turn` 換成只收三個參數的假函式，`prepare_turn` 一律多傳 `stances=` 就紅 11 條。新參數只在有值時才傳（`generate_turn(..., stances=ids) if ids else generate_turn(...)`）。`chat_structured` 的呼叫點也一樣：`tests/test_schema_required.py` 照原始碼的字掃每一個呼叫點（第二個引數要寫得出類別名），把 `CompanionTurn` 改成 `X if … else CompanionTurn` 就紅——新的回答格式另開一個呼叫點（`if stances: … else: <原本那一個>`）。
+- **測試開季之後先推一個小時再擺季上的東西**（同批 6）：`open_season` 那一刻世界秒是 0、`hooked_week`／`hooked_day` 都是 0，第一次補算才跑第 1 週與第 1 天的掛鉤——在那之前寫進季的東西會被第 1 週的歸零清掉（要連「這是哪一週」的記號一起寫），每天的掛鉤也會多跑一次（量到拉了兩次）。測掛鉤的效果前先 `at(g, g.now + HOUR)`，斷言 `hooked_day == 1`。
+- **`GameState` 的 JSON 不含季**（同批 6）：季另存（`world.save_season`），`GameState.model_validate_json(state.model_dump_json()).world` 是空殼；季的新欄位拿 `WorldState` 自己序列化、讀回來驗。
+- **給玩家的情誼走 `_apply(Effect(affinity=…))` 會照 `affinity_gain_scale` 放慢**（同批 6：託付寫 +5、實得 +4）：要跟事件給的同一條就照用，測試寫 `renown.warmed(c, 5)`；要給整數就另寫，回報寫明。
+- **「關著不變」連送給模型的東西一起比**（同批 6，`scratchpad/jianfa-6/cmp6.py`＋`run6.py`）：探針裡放一個假 client，`prepare_turn` 時記下 `model.model_json_schema()` 與 kwargs 印出來——提示詞一樣不代表 schema 一樣（加一個有預設值的欄位，schema 就多一個 property）。新欄位只在開著時用 `create_model(__base__=…)` 的子類別加（`companion_agent.turn_model`），關著送出去的一個位元組都不多。批 6：不帶設定 923 行、season21 關兩個子開關 508 行逐位元組一樣，全開差 511 行。
 - **兩局測試各有一份內容**：`conquest_kit.conquest_game()`（同 `test_territory._game`）每一局各載一份 `real_content` 的複本，同一個資料庫開兩局時，在測試裡往內容加東西（例：借一份戰鬥範本）要兩局都加，不然第二局找不到、畫面靜靜地沒有那一場。
 
 ## 量表怎麼讀
