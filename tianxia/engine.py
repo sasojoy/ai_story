@@ -188,7 +188,7 @@ class OutingPlan:
     how: str | None  # 遭遇拍打誰：bounty 討伐懸賞那一路、spar 自家營寨跟同袍比劃、foe 這裡最弱的對手、town 城裡的地痞；都沒有是 None
     foe: Squad | None  # 那一路
     boss: DuelBoss | None  # 遭遇拍有機會撞上的頭目（接了這裡的討伐懸賞不擲）
-    hint: str  # 鈕上括號裡最後那一段小字（explore_one.HINTS、有賞、同袍比劃）
+    hint: str  # 鈕上括號裡最後那一段小字，也是四格探索那一格的小字（/api/main 的 mostly；explore_one.hint_of：照表、有賞、同袍比劃）
 
     @property
     def foe_note(self) -> str | None:
@@ -4983,8 +4983,16 @@ class Game:
             weights[explore_one.EVENT] = 0
         if not insights.explore_gives(loc, c) or sensing.missed_today(s, c, loc):
             weights[explore_one.INSIGHT] = 0
-        hint = explore_one.BOUNTY_HINT if how == "bounty" else explore_one.SPAR_HINT if how == "spar" else explore_one.HINTS[kind]
-        return OutingPlan(kind=kind, weights=weights, how=how, foe=foe, boss=boss, hint=hint)
+        return OutingPlan(kind=kind, weights=weights, how=how, foe=foe, boss=boss, hint=explore_one.hint_of(kind, how))
+
+    def mostly_here(self) -> str:
+        """四格探索那一格的小字（/api/main 的 mostly；雲端批 5 的欄位，網頁 m.mostly）：探索一顆開著時是出門一趟的那一份
+        （_outing_plan 的 hint：照這一處的表、接了討伐懸賞「…有賞」、自家營寨「同袍比劃」，跟鈕上括號那一段同一個字）；
+        關著照雲端的 mapdata.mostly_here（照地點的小圖）。在路上是空字串。"""
+        plan = self.outing_plan()
+        if plan is not None:
+            return plan.hint
+        return mapdata.mostly_here(self.state, self.content)
 
     def outing_plan(self) -> OutingPlan | None:
         """探索一顆開著時，這裡此刻出門一趟怎麼抽（假人打分數、量表讀；同 _outing_plan）；關著、序章裡、在路上是 None。"""
@@ -4994,7 +5002,7 @@ class Game:
         return self._outing_plan(self.content.locations[p.location])
 
     def _outing_option(self, loc: Location) -> Option:
-        """探索一顆的鈕：「探索（體力 18・多半有事）」，括號裡最後那一段是這一處多半給什麼（網頁拿它當行動列格子的小字）。"""
+        """探索一顆的鈕：「探索（體力 18・城裡多事）」，括號裡最後那一段是這一處多半給什麼（同 /api/main 的 mostly，mostly_here）。"""
         return self._cost_option("act:explore", "探索", self.content.config.jianfa.explore_stamina, note=self._outing_plan(loc).hint)
 
     def _explore_one(self) -> list[str]:

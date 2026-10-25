@@ -108,10 +108,23 @@ def rng_for(season: int, name: str, serial: int, what: str) -> random.Random:
 
 # ── 鈕上的小字與段落（Task 2-3；字都待 joy 潤）──
 
-# 「探索（體力 18・多半有事）」括號裡最後那一段（網頁拿它當行動列格子的小字，最多六個字）：照這一處的表；設計 4.1「地點決定多半給什麼」
-HINTS = {TOWN: "多半有事", TEMPLE: "多半有悟", FORD: "各樣參半", WILD: "多半遇敵", HILL: "多半有料", CAMP: "多半遇敵"}
-BOUNTY_HINT = "有賞"  # 接了這裡的討伐懸賞：「多半」兩字換成「有賞」（設計 4.1）
+# 這一處「多半給什麼」（設計 4.1「地點決定多半給什麼」）：照這一處的表。字跟雲端批 5 的 mapdata.MOSTLY／MOSTLY_HERE 同一套（那兩張照地點的小圖，
+# 探索一顆開著時改照這裡的表）；待 joy 潤。MOSTLY 是輿圖第一層名字旁的兩個字，HINTS 是四格探索那一格的小字（/api/main 的 mostly）與
+# 鈕上括號最後那一段（「探索（體力 18・城裡多事）」）
+MOSTLY = {TOWN: "多事", TEMPLE: "多悟", FORD: "參半", WILD: "多敵", HILL: "多料", CAMP: "多敵"}
+PLACE_WORDS = {TOWN: "城裡", TEMPLE: "寺裡", FORD: "渡口", WILD: "野外", HILL: "山裡", CAMP: "營裡"}
+HINTS = {kind: PLACE_WORDS[kind] + MOSTLY[kind] for kind in MOSTLY}
+BOUNTY_WORD = "有賞"  # 接了這裡的討伐懸賞：「多半」那兩個字換成「有賞」（設計 4.1）：「野外有賞」
 SPAR_HINT = "同袍比劃"  # 自家營寨：遭遇是跟同袍比劃
+
+
+def hint_of(kind: str, how: str | None) -> str:
+    """鈕上與四格那一格的小字：接了這裡的討伐懸賞「野外有賞」、自家營寨「同袍比劃」，其餘照表（HINTS）。"""
+    if how == "bounty":
+        return PLACE_WORDS[kind] + BOUNTY_WORD
+    if how == "spar":
+        return SPAR_HINT
+    return HINTS[kind]
 BEAT_WORDS = {EVENT: "遇事", ENCOUNTER: "遇敵", MATERIAL: "得料", INSIGHT: "有悟"}  # 一拍的那一類寫成兩個字（紀錄的結果標記、行動列底下那一行）
 TRAVELER = "旅人"  # 野類地點的事件拍偏這個標籤的事件（救助旅人那一類；content.check_explore_one 驗至少三則、都在野類地點）
 

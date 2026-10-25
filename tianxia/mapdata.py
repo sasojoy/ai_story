@@ -11,6 +11,7 @@ from . import (
     atlas, bounties, calendar, conquest, equipment, figures, insights, mapart, mapview, materials, mounts, orders, rules, sensing,
     terrain, territory, timetable, week_unlock, worldgeo,
 )
+from . import explore_one  # 減法季探索一顆（批 2）：「多半」照出門一趟的表
 from .models import Content, FactionDef, Location
 from .state import GameState, Order, TerritoryWeek, WorldState
 
@@ -49,16 +50,34 @@ def rank_suggestions(rows: list[dict]) -> list[dict]:
 
 
 def mostly_here(state: GameState, content: Content) -> str:
-    """腳下這一處「多半給什麼」那一句（MOSTLY_HERE；四格探索的小字，整合設計 6.3）：在路上、地點不在表上是空字串。"""
+    """腳下這一處「多半給什麼」那一句（MOSTLY_HERE；四格探索的小字，整合設計 6.3）：在路上、地點不在表上是空字串。
+    減法季探索一顆開著（批 2）照出門一趟抽的那一張表（explore_one.HINTS；伺服器另用 Game.mostly_here 補上「有賞」「同袍比劃」）。"""
     loc = content.locations.get(state.player.location)
     if loc is None or state.player.journey is not None:
         return ""
+    if _outing_tables(state.world, content):
+        return explore_one.HINTS[explore_one.kind_of(content.config.jianfa, loc).kind]
     return MOSTLY_HERE.get(mapview.GLYPHS[mapart.icon_kind(loc)], "")
 
 
+def _outing_tables(world: WorldState, content: Content) -> bool:
+    """這一季的探索照出門一趟的表抽（減法季 explore_one）：「多半」照表、不照地點的小圖。"""
+    return rules.jianfa(content, world, "explore_one")
+
+
+def place_mostly(world: WorldState, content: Content, loc: Location, glyph: str) -> str:
+    """輿圖第一層名字旁的兩個字（MOSTLY，照小圖）；減法季探索一顆開著照出門一趟的表（explore_one.MOSTLY，三處跟小圖不一樣：
+    樓桑里、廣宗、草廬）。"""
+    if _outing_tables(world, content):
+        return explore_one.MOSTLY[explore_one.kind_of(content.config.jianfa, loc).kind]
+    return MOSTLY.get(glyph, "")
+
+
 def base_key(state: GameState, content: Content) -> str:
-    """底圖的快取鍵：開放的地點（劇情開放了新地點才換）。"""
-    return hashlib.sha1(",".join(mapview.open_places(state, content)).encode()).hexdigest()[:12]
+    """底圖的快取鍵：開放的地點（劇情開放了新地點才換）。減法季探索一顆開著的季，名字旁的「多半」照表（place_mostly），鍵多一段
+    「|出門」，跟關著的季的底圖分開快取（關著的鍵一個字不變）。"""
+    places = ",".join(mapview.open_places(state, content)) + ("|出門" if _outing_tables(state.world, content) else "")
+    return hashlib.sha1(places.encode()).hexdigest()[:12]
 
 
 def insight_pool(loc: Location, content: Content) -> list[str]:
@@ -82,7 +101,7 @@ def base(state: GameState, content: Content) -> dict:
         region = atlas.region_of(content, loc_id)
         glyph = mapview.GLYPHS[mapart.icon_kind(loc)]
         places.append({
-            "id": loc_id, "name": loc.name, "x": loc.x, "y": loc.y, "glyph": glyph, "mostly": MOSTLY.get(glyph, ""),
+            "id": loc_id, "name": loc.name, "x": loc.x, "y": loc.y, "glyph": glyph, "mostly": place_mostly(state.world, content, loc, glyph),
             "big": loc.important, "region": region.id if region is not None else None,
             "insights": insight_pool(loc, content), "strong": None if loc.prologue_only else insights.strong_of(loc, content),
             "terrain": next(iter(sensing.terrain_tags(loc)), ""),

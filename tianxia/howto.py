@@ -443,8 +443,7 @@ def _pct(share: float) -> str:
 def outing_lines(content: Content, season: WorldState | None = None) -> list[str]:
     """減法季探索一顆（整合設計 4.1，批 2；待 joy 潤）的玩法說明：一顆、出門一趟幾拍、地點決定多半給什麼、地痞與比劃、懸賞。數字讀 Config.jianfa。"""
     jf = content.config.jianfa
-    kinds = {"town": "城裡", "temple": "寺院書院", "ford": "渡口河畔", "wild": "野外官道", "hill": "山林洞窟", "camp": "營寨"}
-    tables = "，".join(f"{kinds.get(t.kind, t.kind)}{explore_one.HINTS.get(t.kind, '')}" for t in jf.explore_tables)
+    tables = "，".join(explore_one.HINTS.get(t.kind, "") for t in jf.explore_tables)
     legend = f"偶爾撿到{content.config.legend_item_name}。" if content.config.explore_legend_chance > 0 else ""
     return [
         f"- **探索**（體力 {jf.explore_stamina}）：只有一顆，按一下是出門一趟，走{'一兩三四五六'[jf.beats - 1] if 1 <= jf.beats <= 6 else jf.beats}拍，"

@@ -37,7 +37,7 @@ def test_the_menu_has_one_explore_button_and_no_modes_drill_or_practice():
     assert ids.count("act:explore") == 1
     assert not [i for i in ids if i.startswith("explore:")] and "act:drill" not in ids
     option = next(o for o in game.options(odds=False) if o.id == "act:explore")
-    assert option.label == "探索（體力 18・多半有事）" and option.enabled
+    assert option.label == "探索（體力 18・城裡多事）" and option.enabled
     ready(game, loc="yingshui")  # 城外：以前有練功（尋敵）
     ids = _ids(game)
     assert "explore:practice" not in ids and not [i for i in ids if i.startswith("explore:")]
@@ -148,7 +148,8 @@ def test_a_strike_bounty_here_makes_the_first_beat_that_bounty():
     bounty = mock.Mock(kind="strike", location="yingshui", squad=foe.id)
     with mock.patch("tianxia.bounties.mine", return_value=[bounty]):
         plan = game.outing_plan()
-        assert plan.how == "bounty" and plan.foe.id == foe.id and plan.hint == explore_one.BOUNTY_HINT and plan.boss is None
+        assert plan.how == "bounty" and plan.foe.id == foe.id and plan.hint == "渡口有賞" and plan.boss is None
+        assert game.mostly_here() == "渡口有賞"  # 四格那一格的小字跟鈕同一個字（/api/main 的 mostly）
         rng = explore_one.rng_for(1, "沈浪", 1, "拍")
         beats = explore_one.draw(game.content.config.jianfa, rng, plan.weights, bounty_here=True)
     assert beats[0] == explore_one.ENCOUNTER
@@ -218,6 +219,30 @@ def test_outing_lines_are_checked_when_loaded():
     del c.outing_lines["close"]["tired"]
     with pytest.raises(ContentError, match="tired"):
         validate(c)
+
+
+def test_the_explore_cell_reads_the_same_hint_as_the_button():
+    """雲端批 5 的 /api/main 的 mostly（四格探索那一格的小字，網頁 m.mostly）：探索一顆開著時照出門一趟那一張表，跟鈕上括號那一段同一個字；
+    自家營寨寫「同袍比劃」。輿圖第一層名字旁的兩個字也照表（樓桑里照小圖是野、照表是城）；關著照小圖（雲端原本的）。"""
+    import server
+
+    from tianxia import mapdata
+
+    game = ready(jianfa_game(), side="guan", loc="yingchuan")
+    view = server.main_view(game)
+    label = next(o for o in game.options(odds=False) if o.id == "act:explore").label
+    assert view["mostly"] == "城裡多事" and label.endswith("・城裡多事）")
+    ready(game, loc="guan_camp")
+    assert server.main_view(game)["mostly"] == "同袍比劃"
+    ready(game, loc="guangzong")
+    assert mapdata.mostly_here(game.state, game.content) == "營裡多敵"  # 小圖是城，表是營（兩張都對得上的營優先）
+    places = {p["id"]: p["mostly"] for p in game.map_base()["places"]}
+    assert places["loushang_village"] == "多事" and places["guangzong"] == "多敵"
+    off = ready(plain_game(), side="guan", loc="guangzong")
+    assert mapdata.mostly_here(off.state, off.content) == "城裡多事"
+    off_places = {p["id"]: p["mostly"] for p in off.map_base()["places"]}
+    assert off_places["loushang_village"] == "多敵"
+    assert mapdata.base_key(off.state, off.content) != mapdata.base_key(game.state, game.content)
 
 
 def test_the_howto_explains_the_outing_the_gates_and_the_milestones():
