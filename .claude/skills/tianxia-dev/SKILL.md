@@ -133,6 +133,8 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 - 內容裡要照季換的字用插槽（`content/orders.json` 的 `{本週}`、`content/tutorial.json` 引薦人的 `{本週}`／`{每週}`，FB-502），填字的函式一個、載入時驗插槽；週末填完要跟原句一字不差。加了插槽，`test_real_content` 這類照原文寫死的斷言要一起改。
 - **草稿 JSON 別留在 `content/` 底下**（2026-10-24 減法季批 4）：`tests/test_explain.py`、`test_explain2.py` 用 `content/` 的 `rglob("*.json")` 掃每一份內容檔（名望只准 `events/` 底下給、舊詞），設計分支帶來的草稿（`content/events_outcomes.json`）一放進來 `test_only_events_and_the_first_echo_give_fame_in_the_code` 就紅；併完就刪，還沒併的放計畫文件。
 - **用腳本改 `content/events/*.json`**：這幾份是 `json.dumps(indent=2, ensure_ascii=False)`＋結尾換行（CRLF 轉 LF 之後一個位元組不差），讀成 dict 改完照原樣寫回是安全的；先驗「寫得回原樣」再寫（`scripts/merge_outcomes.py::_read`），`git diff` 看刪掉的行只該是被接上逗號的那一行。`locations.json` 不是這個寫法，別這樣改。
+- **加新事件先看那個檔的結構測試**（2026-10-26 批 6 修正輪）：`explore_*.json` 一則只准一個地點、不准寫 condition（`test_explore_variety`）；`<大區>.json` 每個地點 1～2 則、整檔有事件數上下限、選項 2～3 顆（`test_events_new_regions`）；每個地點恰好一則有隨口應對的探索事件（加 `free_text` 就多一則）。要多地點、又不想動這幾條的新事件另開一個檔（`content/events/stances.json`），檔名補進 `tests/test_silver_gates.py` 開頭的清單（`test_this_file_names_every_event_file`）。
+- **一般選項（choices 的 effect）寫的痕跡要有說書段子轉述**（`test_socialize_variety::test_storytellers_retell_every_location_trace`：每一個都要在某則交友事件的 `any_of[].marks_min` 裡）；分岔後果（`free_text.outcomes`）寫的不算。沒有段子就別在一般選項寫痕跡，或另補一則交友段子。不經 `check_effect` 寫的痕跡（勸降的 `PersuadeDef.marks`）`content.validate` 不知道有人寫它，補痕跡規則時要自己登記進 `marks_written`（不然「沒有任何效果寫它」）；`test_marks_visible` 的「規則＝分岔痕跡、96 條」也要跟著算。
 - **`zh.to_traditional` 退回手寫表時把「台」換成「臺」**：拿它驗「有沒有簡體」會把原事件的「灶台」誤判成簡體；比之前兩邊都把臺換回台。
 
 ## 規則改動的雷
@@ -201,6 +203,8 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 - **`GameState` 的 JSON 不含季**（同批 6）：季另存（`world.save_season`），`GameState.model_validate_json(state.model_dump_json()).world` 是空殼；季的新欄位拿 `WorldState` 自己序列化、讀回來驗。
 - **給玩家的情誼走 `_apply(Effect(affinity=…))` 會照 `affinity_gain_scale` 放慢**（同批 6：託付寫 +5、實得 +4）：要跟事件給的同一條就照用，測試寫 `renown.warmed(c, 5)`；要給整數就另寫，回報寫明。
 - **「關著不變」連送給模型的東西一起比**（同批 6，`scratchpad/jianfa-6/cmp6.py`＋`run6.py`）：探針裡放一個假 client，`prepare_turn` 時記下 `model.model_json_schema()` 與 kwargs 印出來——提示詞一樣不代表 schema 一樣（加一個有預設值的欄位，schema 就多一個 property）。新欄位只在開著時用 `create_model(__base__=…)` 的子類別加（`companion_agent.turn_model`），關著送出去的一個位元組都不多。批 6：不帶設定 923 行、season21 關兩個子開關 508 行逐位元組一樣，全開差 511 行。
+- **合功能分支的語意撞點：一邊的「收尾」函式改寫另一邊塞進來的東西**（2026-10-26 批 6 修正輪合批 3c）：3c 的 `step.finish` 照每一件的 `_ref` 補 `target`、沒有 `_ref` 的寫 null，批 6 的託付那一件自己帶了 `target`、沒掛 `_ref`，四勝利開著就被洗成 null。文字沒撞、自動合併，只有跑兩邊的測試才紅（`test_errands_weekcard`）。合之前把兩邊各自往同一份輸出加東西的地方（本週卡 steps、`main_view` 的鍵）列出來對一次。
+- **「關著不變」要分清楚每一件修正掛在哪個開關**（同一輪）：FB-820 掛在 `four_wins`，不在 `stances`／`errands` 後面，所以「season21 關這兩個子開關」那一份照樣差那幾行（探針放了「豪強事件待選時改幫」）；再跑一次連 `four_wins` 也關，證明差的只有它。探針要另放一段專打那一處，不然雜湊一樣只代表沒走到。
 - **兩局測試各有一份內容**：`conquest_kit.conquest_game()`（同 `test_territory._game`）每一局各載一份 `real_content` 的複本，同一個資料庫開兩局時，在測試裡往內容加東西（例：借一份戰鬥範本）要兩局都加，不然第二局找不到、畫面靜靜地沒有那一場。
 
 ## 量表怎麼讀
