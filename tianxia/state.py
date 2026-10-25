@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_serializer
 
 from .martial_arts import Insight
 from .models import Content, TravelMode
@@ -887,6 +887,11 @@ class PlayerState(BaseModel):
     bounty_pick: str | None = None
     contrib: int = 0  # 本季替目前陣營推大勢記下的貢獻（散人不記）
     contrib_weeks: dict[int, int] = Field(default_factory=dict)  # 季曆第幾週 → 那一週記的貢獻
+    # 三陣營四勝利（減法季整合設計 3.2；wins.credit）：豪強替哪一軍出的力各記一本（「guan」「huang」→ 貢獻），contrib 照樣加總數。
+    # 「此刻幫誰」就是 ally（wins.lean_of）；換邊不清帳。lean_changed 是這一季換了幾次邊（wins.set_lean；投靠那一下的預設不算）。
+    # 兩個都是空的、0 的時候不寫進存檔（_drop_quiet_defaults）：兩軍的人、關著的季 JSON 一個鍵都不多
+    ledgers: dict[str, int] = Field(default_factory=dict)
+    lean_changed: int = 0
     pushed: dict[str, float] = Field(default_factory=dict)  # 「曆日:大勢線 id」→ 當天這條線推得動多少（人數緩衝之後）；只留今天與昨天
 
     # ── 捐獻紀錄（計畫 T6，軍備文件 4.1）：「據點 id:糧草」→ 累積的份量。T7 的伏筆只讀它；寫入是 T6 護糧的事 ──
@@ -956,6 +961,33 @@ class PlayerState(BaseModel):
     title_book: list[str] = Field(default_factory=list)  # 過去幾季掙到的頭銜（「第N季 某某」），換季時記下、名帖照樣能印
     gift_day: int = 0  # 贈物記在哪一天（同 pill_day）
     gifts_today: int = 0  # 那一天送了幾次（Config.gift_per_day，不分送給誰）
+
+    @model_serializer(mode="wrap")
+    def _drop_quiet_defaults(self, handler):
+        """QUIET_DEFAULTS 裡的欄位是空的、0 的時候不寫這個鍵（同 SealRegistry._drop_empty_uses；不用 Field(exclude_if=…)：
+        Pydantic 2.11 才有，requirements.txt 寫 pydantic>=2.6）。讀檔沒有這個鍵就是預設值，舊存檔照樣讀得進來。"""
+        data = handler(self)
+        if isinstance(data, dict):
+            for key in QUIET_DEFAULTS:
+                if key in data and not data[key]:
+                    del data[key]
+        return data
+
+
+# PlayerState 裡「沒用到就不寫進存檔」的欄位（_drop_quiet_defaults）：新規則掛開關、關著的季存檔一個鍵都不多的，加在這裡
+QUIET_DEFAULTS = ("ledgers", "lean_changed")
+
+
+class TierResult(BaseModel):
+    """季末四階的一筆（減法季整合設計 3.3；wins.settle 算，接線後存 WorldState.final_tiers、結局卡讀）。"""
+
+    tier: int = 0  # 1～4；0 是沒有（貢獻不到門檻）
+    title: str = ""  # 稱號（TierRules.titles）；沒有是空字串
+    # 照哪一本帳排：兩軍是自己的陣營；豪強是替哪一軍那一本（guan／huang），和局是兩本合計（wins.BOTH）；沒有是 None
+    ledger_used: str | None = None
+    points: int = 0  # 排名次用的那個數（沒有階的人：兩軍是 contrib，豪強是替贏的那一軍那一本，和局是兩本合計）
+    rank: int = 0  # 在那一池（過了門檻的人）裡第幾名，同分同名次；沒有階是 0
+    of: int = 0  # 那一池幾個人；沒有階是 0
 
 
 RumorLayer = Literal["world", "faction", "local", "personal"]  # 天下大事／陣營軍情／地方傳聞／個人線索（傳聞分層設計第二節）
@@ -1481,6 +1513,9 @@ class WorldState(BaseModel):
     act: int = 0  # 目前第幾幕（從 0 起算）
     act_reached: int = 0  # 本季到過的最遠一幕；主線改寫會把 act 歸零，隊伍數與統御上限看這個（見 roster.stage）
     marks: dict[str, int] = Field(default_factory=dict)  # 地方痕跡：「地點 id:痕跡名」→ 累積次數（全服共用，換季整個重來）
+    # 地方痕跡過門檻（減法季批 4，marks.fire_due）：「地點 id:痕跡名」→ 過門檻那一刻的世界秒（只發一次；〈天下形勢〉照它挑上一篇以後的）。
+    # 空的時候不寫進 JSON（_drop_empty_marks_fired）：沒有痕跡過門檻的季存檔一個鍵都不多
+    marks_fired: dict[str, float] = Field(default_factory=dict)
     pending_battle: str | None = None  # 背景推進跨過開戰門檻時記下要開的戰鬥 id；那時人在 mutate_season 的
     # callback 裡，不能再 mutate 開戰（巢狀的 mutate 內層寫的會被蓋掉，會丟錯），callback 結束後由
     # world.start_pending_battle 開戰並清掉
@@ -1538,6 +1573,14 @@ class WorldState(BaseModel):
         """求藝（kind "art"）企劃者 2026-10-21 拿掉（「懸賞榜直接把武學拿掉」）：那之前開的季，榜上可能還掛著求藝，讀進來就丟掉，
         引擎與畫面再也碰不到這一種（沒人揭過，交過的賞早就發了，丟了不欠誰）。玩家的 bounty_pick 指著它的，選單當它不存在（Game._bounty_options）。"""
         return [b for b in value if b.kind not in RETIRED_BOUNTY_KINDS]
+
+    @model_serializer(mode="wrap")
+    def _drop_empty_marks_fired(self, handler):
+        """marks_fired 是空的時候不寫這個鍵（同 world_state.SealRegistry._drop_empty_uses；不用 Field(exclude_if=…)：Pydantic 2.11 才有）。"""
+        data = handler(self)
+        if isinstance(data, dict) and "marks_fired" in data and not data["marks_fired"]:
+            del data["marks_fired"]
+        return data
 
     bounty_seq: int = 0  # 懸賞的流水號
     # 大勢人物擴充第三批（tianxia/feasts.py、yuedan.py、bounties 的求援委託）：這一季的宴席、月旦評、人物對整個陣營發的求援委託

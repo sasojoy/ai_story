@@ -1151,7 +1151,7 @@
     const peek = sidesFirstHtml(m) + (letterCard || weekCardHtml(m));
     // 休季的結算卡排在最上面（計畫 T9）；季收了、有行狀時緊接一張「讀你的傳」（玩家傳第二批，m.zhuan）
     const resultCard = (m.season_result ? resultHtml(m.season_result) : "") + (m.zhuan ? zhuanEntry(m.zhuan, "這一季收了，史官替你立傳", "讀你的傳") : "");
-    const letter = dailyCardHtml(m); // 月卡今天的份還沒領時「剛剛」上面一張（書信小卡在本週卡的位置，見上面）
+    const letter = dailyCardHtml(m) + (typeof pushAskHtml === "function" ? pushAskHtml(m) : ""); // 月卡今天的份還沒領時「剛剛」上面一張（書信小卡在本週卡的位置，見上面）；第一次來信時底下問一次手機通知（批 9；pushAskHtml 在 app.js，只切 main.js 的網頁測試沒有它）
     // 本週軍令排在行動列（與路上捷徑）下面、三條戰況上面：不擠掉第一屏的「剛剛」、場景與行動列（計畫 T6）
     // 收起來照週記；21 天季的軍令每天一道，照季曆第幾天記（status.calendar.day），隔天的新軍令重新展開
     const orderKey = (m.status && m.status.calendar && m.status.calendar.day) || week;

@@ -74,7 +74,86 @@
       "fail_effect": {
         "text": "法子沒能奏效，老漢咳得更凶，你忙前忙後折騰了大半天。",
         "stamina": -10
-      }
+      },
+      "outcomes": [
+        {
+          "id": "drink",
+          "tag": "喝符水：喝下、叩首、照道人說的做",
+          "check": {
+            "stat": "con",
+            "difficulty": 6
+          },
+          "effect": {
+            "text": "符灰嗆喉，你硬是嚥下去，跪足一炷香。信眾看你的眼神親近了許多，有人塞給你兩個麥餅。",
+            "stats": {
+              "xinde": 6
+            },
+            "marks": {
+              "julu_altar:信眾": 1
+            },
+            "contribution": 2
+          },
+          "fail_effect": {
+            "text": "缸裡的水不知擱了幾天，你喝下去不久腹中絞痛，蹲在壇後吐了半天。",
+            "stamina": -10
+          }
+        },
+        {
+          "id": "herb",
+          "tag": "看藥：看出符水裡的藥、指點老漢去抓藥",
+          "check": {
+            "stat": "wis",
+            "difficulty": 7
+          },
+          "effect": {
+            "text": "你看出道人往缸裡撒了甘草與黃芩末，真正治咳的是藥。你悄悄告訴老漢去鄉里藥鋪照方抓，老漢千恩萬謝。",
+            "stats": {
+              "good": 2,
+              "wis": 1
+            },
+            "marks": {
+              "julu_altar:識方": 1
+            },
+            "contribution": 2
+          },
+          "fail_effect": {
+            "text": "你盯著缸子看得太久，執杖的力士過來問你是不是官府的探子，你只得陪笑走開。",
+            "stats": {
+              "fame": -1
+            }
+          }
+        },
+        {
+          "id": "tend",
+          "tag": "照顧：扶老漢、拍背、陪他排到前頭",
+          "check": {
+            "stat": "wis",
+            "difficulty": 6
+          },
+          "effect": {
+            "text": "你扶著老漢排到前頭，替他拍背順氣。他咳得輕了些，也不知是符水靈驗，還是心裡寬了。",
+            "stats": {
+              "good": 1,
+              "xinde": 4
+            },
+            "marks": {
+              "julu_altar:扶病": 1
+            },
+            "contribution": 1
+          },
+          "fail_effect": {
+            "text": "老漢咳得更凶，道人說你擾了壇前的清淨，把你們都趕到了後頭。",
+            "stamina": -10
+          }
+        },
+        {
+          "id": "leave",
+          "tag": "走開：不管、看著、對不上的",
+          "effect": {
+            "text": "你推說自己沒病，繞過大陶缸走開了。"
+          }
+        }
+      ]
     }
   },
   {
@@ -641,7 +720,91 @@
         "stats": {
           "fame": -1
         }
-      }
+      },
+      "outcomes": [
+        {
+          "id": "dig",
+          "tag": "出力：挖壕、扛木樁、築柵",
+          "check": {
+            "stat": "best_of",
+            "stats": [
+              "con",
+              "str"
+            ],
+            "difficulty": 6
+          },
+          "effect": {
+            "text": "你挖到手上起了血泡，那一段壕溝比旁邊深了半尺。軍侯走過時多看你一眼，賞你一份口糧錢。",
+            "stats": {
+              "silver": 10,
+              "xinde": 6
+            },
+            "marks": {
+              "luzhi_camp:深壕": 1
+            },
+            "contribution": 3
+          },
+          "fail_effect": {
+            "text": "半夜壕壁塌了一角，你被土埋到腰，幾個民夫把你拉出來，渾身是泥。",
+            "stamina": -15
+          }
+        },
+        {
+          "id": "plan",
+          "tag": "想法子：改挖法、排班，讓工快些",
+          "check": {
+            "stat": "wis",
+            "difficulty": 5
+          },
+          "effect": {
+            "text": "你讓民夫分成兩班輪著挖，土筐沿壕傳遞。這一夜的工比往常快了不少，軍侯破天荒沒揮鞭子。",
+            "stats": {
+              "silver": 10,
+              "xinde": 4
+            },
+            "marks": {
+              "luzhi_camp:巧工": 1
+            },
+            "contribution": 2
+          },
+          "fail_effect": {
+            "text": "白忙一場，工沒快多少，軍侯還嫌你多事，當著民夫的面罵了你一頓。",
+            "stamina": -10,
+            "stats": {
+              "fame": -1
+            }
+          }
+        },
+        {
+          "id": "fight",
+          "tag": "動手：跟疑你是細作的巡騎打",
+          "combat": "guan_patrol",
+          "effect": {
+            "text": "你把幾個巡騎打下馬，軍侯趕來問清緣由，反倒笑說營裡正缺這樣的身手。",
+            "stats": {
+              "fame": 2,
+              "good": -1
+            },
+            "marks": {
+              "luzhi_camp:打巡騎": 1
+            }
+          },
+          "fail_effect": {
+            "text": "巡騎把你按倒捆了，押了半日，搜走身上的錢才放人。",
+            "stamina": -10,
+            "stats": {
+              "silver": -15
+            }
+          }
+        },
+        {
+          "id": "leave",
+          "tag": "走開：不管、看著、對不上的",
+          "effect": {
+            "text": "你站在壕邊看了一陣，在鞭子聲裡慢慢走開了。"
+          }
+        }
+      ]
     }
   },
   {
@@ -710,7 +873,78 @@
       "fail_effect": {
         "text": "窖裡的人嚇得再不出聲，你在廢屋邊守了許久，只得悻悻離開。",
         "stamina": -10
-      }
+      },
+      "outcomes": [
+        {
+          "id": "talk",
+          "tag": "勸出：隔著灶台說話、讓他們信你",
+          "check": {
+            "stat": "wis",
+            "difficulty": 5
+          },
+          "effect": {
+            "text": "躲在地窖裡的是一家四口，怕被拉去城裡做苦役。你指給他們一條往南的小路，婦人把僅有的一塊碎銀硬塞給你。",
+            "stats": {
+              "good": 2,
+              "silver": 5
+            },
+            "marks": {
+              "xiaquyang:指路": 1
+            },
+            "contribution": 2
+          },
+          "fail_effect": {
+            "text": "地窖裡的人只當你是來抓人的，死也不肯出聲，你在屋外守到天黑也沒等到人。",
+            "stamina": -10
+          }
+        },
+        {
+          "id": "lift",
+          "tag": "搬梁：撬開斷梁、挖開窖口",
+          "check": {
+            "stat": "str",
+            "difficulty": 7
+          },
+          "effect": {
+            "text": "你把斷梁一點點撬開，地窖口透進天光。老漢爬出來，說這條命是你給的。",
+            "stats": {
+              "good": 2
+            },
+            "marks": {
+              "xiaquyang:開窖": 1
+            },
+            "contribution": 2
+          },
+          "fail_effect": {
+            "text": "斷梁一滑壓住你的手，好半天才抽出來，地窖裡的人嚇得再也不敢應聲。",
+            "stamina": -15
+          }
+        },
+        {
+          "id": "feed",
+          "tag": "留糧：放下乾糧和錢就走",
+          "cost": {
+            "silver": 10
+          },
+          "effect": {
+            "text": "你把乾糧和幾個錢放在灶台邊，退到屋外。過了很久，一隻手伸出來把東西收了進去。",
+            "stats": {
+              "good": 1
+            },
+            "marks": {
+              "xiaquyang:留糧": 1
+            },
+            "contribution": 1
+          }
+        },
+        {
+          "id": "leave",
+          "tag": "走開：不管、看著、對不上的",
+          "effect": {
+            "text": "哭聲在你身後停了。這一帶，裝作沒聽見才是活命的法子。"
+          }
+        }
+      ]
     }
   },
   {
@@ -997,7 +1231,81 @@
         "stats": {
           "fame": -1
         }
-      }
+      },
+      "outcomes": [
+        {
+          "id": "audit",
+          "tag": "算帳：翻租簿、挑管事的錯",
+          "check": {
+            "stat": "wis",
+            "difficulty": 5
+          },
+          "effect": {
+            "text": "你一筆筆算下來，發現管事把去年遭兵災該免的兩成也算了進去。管事臉上掛不住，只好讓佃戶來年再補。",
+            "stats": {
+              "good": 2,
+              "fame": 1
+            },
+            "marks": {
+              "haozu_fort:清帳": 1
+            },
+            "contribution": 2
+          },
+          "fail_effect": {
+            "text": "管事的帳做得滴水不漏，你挑不出毛病，反被他當眾嘲笑多管閒事。",
+            "stats": {
+              "fame": -1
+            }
+          }
+        },
+        {
+          "id": "pay",
+          "tag": "墊錢：替佃戶墊租",
+          "cost": {
+            "silver": 15
+          },
+          "effect": {
+            "text": "你把錢拍在租簿上。管事數了數，冷笑一聲收起繩索，佃戶一家跪在地上謝你。",
+            "stats": {
+              "good": 2
+            },
+            "marks": {
+              "haozu_fort:代租": 1
+            },
+            "contribution": 1
+          }
+        },
+        {
+          "id": "fight",
+          "tag": "動手：擋在女孩身前、打退部曲",
+          "combat": "wubao_buqu",
+          "effect": {
+            "text": "你打退上前拉人的部曲，堡裡的佃農都圍過來看。管事不敢再逼，悻悻收起租簿。",
+            "stats": {
+              "good": 2,
+              "fame": 2
+            },
+            "marks": {
+              "haozu_fort:護佃": 1
+            },
+            "contribution": 3
+          },
+          "fail_effect": {
+            "text": "部曲把你架出堡門，丟在壕溝邊。管事在牆上喊，這塢堡往後不歡迎你。",
+            "stamina": -15,
+            "stats": {
+              "fame": -1
+            }
+          }
+        },
+        {
+          "id": "leave",
+          "tag": "走開：不管、看著、對不上的",
+          "effect": {
+            "text": "你別過臉去，身後的哭聲隔著堡牆傳出來，很久沒停。"
+          }
+        }
+      ]
     }
   },
   {
@@ -1199,7 +1507,92 @@
         "stats": {
           "silver": -5
         }
-      }
+      },
+      "outcomes": [
+        {
+          "id": "board",
+          "tag": "跳船：踩撓鉤跳上快船、踢舵手",
+          "check": {
+            "stat": "agi",
+            "difficulty": 6
+          },
+          "effect": {
+            "text": "你從貨船躍上快船，一腳把舵手踢下水，水寇見勢不妙，割斷撓鉤溜了。商人捧出一包錢道謝。",
+            "stats": {
+              "silver": 20,
+              "fame": 1
+            },
+            "marks": {
+              "baima_ford:退水寇": 1
+            },
+            "contribution": 3
+          },
+          "fail_effect": {
+            "text": "你一腳踩空掉進河裡，爬上岸時快船早已載著貨走遠，錢袋也沉了。",
+            "stamina": -15,
+            "stats": {
+              "silver": -5
+            }
+          }
+        },
+        {
+          "id": "row",
+          "tag": "划船：搶槳往岸邊划、扯脫撓鉤",
+          "check": {
+            "stat": "str",
+            "difficulty": 5
+          },
+          "effect": {
+            "text": "你一個人划得貨船直往岸邊衝，撓鉤被扯脫兩支，水寇只好放棄。商人送你一捆上好的絲綿。",
+            "stats": {
+              "good": 1,
+              "silver": 10
+            },
+            "marks": {
+              "baima_ford:護貨": 1
+            },
+            "contribution": 2
+          },
+          "fail_effect": {
+            "text": "船槳啪地斷了，貨船被拖走半里，你只能跳水逃回岸上。",
+            "stamina": -15
+          }
+        },
+        {
+          "id": "shout",
+          "tag": "喝令：報名號、喊話，嚇退水寇",
+          "check": {
+            "stat": "wis",
+            "difficulty": 6
+          },
+          "effect": {
+            "text": "你站上船頭報出名號，快船上的人面面相覷，竟真的收了撓鉤。船主硬塞給你一包錢。",
+            "stats": {
+              "good": 1,
+              "fame": 1,
+              "silver": 10
+            },
+            "marks": {
+              "baima_ford:喝退": 1
+            },
+            "contribution": 2
+          },
+          "fail_effect": {
+            "text": "水寇沒被唬住，撓鉤反把你拖進水裡，你狼狽地爬上岸，錢袋也輕了。",
+            "stamina": -10,
+            "stats": {
+              "silver": -5
+            }
+          }
+        },
+        {
+          "id": "leave",
+          "tag": "走開：不管、看著、對不上的",
+          "effect": {
+            "text": "你站在岸上看著快船載走兩箱貨，商人坐在船頭罵官兵比水寇還靠不住。"
+          }
+        }
+      ]
     }
   },
   {
