@@ -845,6 +845,9 @@ class PlayerState(BaseModel):
     # 新手福利只在第一季的規則開著時從這裡算（roster.since_join；beta 從季初算）；截殺與通緝的新手期每季都從這裡算
     # （roster.raid_newbie，懸賞榜設計 14.1 丁）
     joined_at: float | None = 0.0
+    # 第 2 週的功能（打造、擂台、自創、懸賞榜，減法季 6.6）對這個角色開了的那一刻（世界秒；Game._week_unlock_tick 蓋，寫一則紀錄，
+    # 本週卡一個季曆天內寫那一句）。沒開過、規則關著的季是 None；換季不帶（新的一季從頭鎖）
+    week_unlocked_at: float | None = None
 
     # ── 共享賽季（跨玩家，見 world_state.py::SharedWorldState.season）────
     season_number: int = 1  # 這個玩家的角色屬於第幾季；跟共用賽季的編號對不上時，

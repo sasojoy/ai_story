@@ -7,7 +7,7 @@ import random
 import re
 
 import pytest
-from conftest import real_content
+from conftest import no_week_unlock, real_content
 from test_prologue_web import DRIVER as PROLOGUE_DRIVER
 
 import server
@@ -33,7 +33,7 @@ def _click(dataset: str) -> str:
 
 
 def _game(at="yingchuan", faction="guan", bag=None, silver=500, **econ):
-    c = real_content("week7")
+    c = no_week_unlock(real_content("week7"))
     c.config.auto_open_first_season = True
     for key, value in econ.items():
         setattr(c.config.economy, key, value)

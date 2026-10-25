@@ -14,10 +14,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from . import calendar, foreshadow, rules
+from . import calendar, foreshadow, rules, week_unlock
 from . import opening as opening_rules
 from . import prologue as prologue_rules
 from .rules import STANCE_NAMES
+from .week_unlock import phase  # noqa: F401  前、中、後段：批 5 搬到 week_unlock（功能解鎖也照它），舊名照舊從這裡讀得到
 
 if TYPE_CHECKING:
     from .engine import Game
@@ -33,11 +34,6 @@ WIN_GIVES = {
 WIN_GIVES_OLD = "季末照陣營輸贏與你出的力論功行賞"  # 待 joy 潤：規則關著的季
 HAOQIANG_GOAL = "挑一軍幫：幫的那一軍贏了就算你贏；季末只算你替贏的那一軍出的力；換邊隨時換，不算叛逃"
 HAOQIANG_GOAL_OLD = "季末割據的態勢夠高是群雄並起"  # 規則關著、有割據那一條線的季
-
-
-def phase(week: int, weeks: int) -> int:
-    """這一季走到前、中、後哪一段（0、1、2）：21 天季是第幾週，7 天的季是第幾段（季曆本來就分三段），週末式的十二週照比例切。"""
-    return max(0, min(2, (week - 1) * 3 // max(1, weeks)))
 
 
 def _bar(content, side: str) -> tuple[int, str] | None:
@@ -120,7 +116,9 @@ def _steps(game: Game, status: dict, orders: list[dict]) -> list[dict]:
 def week_card(game: Game, status: dict, orders: list[dict]) -> dict | None:
     """本週卡（整合設計 6.1）：序章裡、休季是 None（休季是結算卡）。欄位：
     {"label": "本週"／"今日", "when": "第 N 週"／"第 N 天", "theme": 主題一句（沒寫是空字串）,
-     "sides": {"guan": 55, "huang": 45} 或 None, "steps": [{kind, text, (i)}], "next": 下一件（給「為什麼」）或 None}。"""
+     "sides": {"guan": 55, "huang": 45} 或 None, "steps": [{kind, text, (i)}], "next": 下一件（給「為什麼」）或 None,
+     "unlock": 第 2 週的功能剛開了那一句或 None, "locked": 還沒開的那一句（給「為什麼」）或 None,
+     "cap": 45 級之後那一句或 None, "gap": 第 3 週「離贏還差多少」或 None（批 5；week_unlock）}。"""
     s, c = game.state, game.content
     if s.world.ended or prologue_rules.active(s, c) or opening_rules.pending(s, c):  # 開局三選一還沒選：本週卡在信收起來之後才出現（批 7）
         return None
@@ -137,5 +135,8 @@ def week_card(game: Game, status: dict, orders: list[dict]) -> dict | None:
     stances = status.get("stances")
     sides = {k: stances[k] for k in ("guan", "huang") if k in stances} if stances else None
     nxt = status.get("next_event")
+    names = game.week_unlock_names()  # 這一季真的開著的第 2 週功能（減法季 6.6）
     return {"label": label, "when": when, "theme": theme, "sides": sides, "steps": _steps(game, status, orders),
-            "next": None if nxt is None else f"{nxt['title']}・{nxt['at']}" if nxt.get("at") else nxt["title"]}
+            "next": None if nxt is None else f"{nxt['title']}・{nxt['at']}" if nxt.get("at") else nxt["title"],
+            "unlock": week_unlock.card_line(s, c, names), "locked": week_unlock.locked_line(s, c, names),
+            "cap": week_unlock.cap_note(s, c), "gap": week_unlock.win_gap(s, c)}

@@ -10,7 +10,7 @@ import re
 from pathlib import Path
 
 import pytest
-from conftest import real_content, renown_unscaled
+from conftest import no_week_unlock, real_content, renown_unscaled
 from test_econ_web import _game as _econ_web_game
 from test_econ_web import run as econ_run
 from test_prologue_web import run as page_run
@@ -66,7 +66,7 @@ def econ_game(**kw):
 
 def _clinic_game():
     """正式內容、週末設定：潁川郡（醫館）、散人，名望 50（威震州郡・九折）、善名 30（州郡大俠・八五折）、內傷 40。"""
-    c = renown_unscaled(real_content("week7"))
+    c = renown_unscaled(no_week_unlock(real_content("week7")))
     c.config.auto_open_first_season = True
     game = Game.new(c, "沈浪", rng=random.Random(0))
     game.client = None
