@@ -677,7 +677,7 @@ def say(game: Game, text: str, option: str = SAY_OPTION) -> list[str] | None:
     A 鎖內驗這句話能不能送（還在對話裡、按得下去、1～Game.say_max() 字）並開單，B 鎖外請模型歸類那句話、寫回應與下一輪選項，
     C 鎖內 Game.choose(SAY_OPTION, prepared=…, text=…) 整個重驗再套用（好感度照模型挑的類別查表）。
     送不出去（不在對話裡、字數不對）丟 GameError，什麼都不動。"""
-    if option not in TEXT_TALKS:  # 開口求人第二批：商量打法（talk:plan）、帶路的路上（parley:road）也走這一條
+    if option not in TEXT_TALKS:  # NPC 智能 2.1：商量打法（talk:plan）、帶路的路上（parley:road）也走這一條
         option = SAY_OPTION
     prepared = prepare_dialogue(game, option, text)
     if prepared is None:
@@ -1497,7 +1497,7 @@ def _main_view_body(game: Game) -> dict:
         "quest": quest,
         "scene": scene,
         "options": [o.model_dump() for o in options],
-        "say_max": game.say_max(),  # 「自己說」最多幾個字（開口求人開著時比較長，網頁的輸入框照它）
+        "say_max": game.say_max(),  # 「自己說」最多幾個字（NPC 智能 2.0開著時比較長，網頁的輸入框照它）
         # 出陣開著（出陣探索與地盤設計第二節）：行動列那一格叫「出陣」、等候的話換一句；關著時照舊「遊歷」
         "sortie": sortie.on(game.content),
         # 一類一顆開著（正式季整合第二章）：應召畫成行動列上面一條金框橫幅（設計 9.1 第 1 組乙），不收在「此地還能做」

@@ -2600,12 +2600,12 @@ class FigureLifeTuning(_Strict):
 
 
 class ParleyTuning(_Strict):
-    """開口求人（Joy 2026-10-23「先做看看」；設計稿 https://claude.ai/artifact/KtRz62jWShogpaXEzv2sbt；tianxia/parley.py）：
+    """NPC 智能 2.0（Joy 2026-10-23「先做看看」；設計稿 https://claude.ai/artifact/KtRz62jWShogpaXEzv2sbt；tianxia/parley.py）：
     對話裡「自己說」那一句也可以是求他做事。模型當談判者，從引擎列的清單挑一件、評一個意願、要不要開條件；引擎照情誼與份量夾住意願、
     自己擲骰、做事。第一批：當場做、先付後做、婉拒；帶路、並肩出陣、指點、給情報、贈物五件事。數字全在這裡，模型不碰。"""
 
     enabled: bool = False  # 關著時「自己說」一個字都不變（20 字、不列清單、不擲骰）
-    say_max: int = Field(default=40, ge=1)  # 開著時「自己說」最多幾個字（開口求人要講得清楚一點）
+    say_max: int = Field(default=40, ge=1)  # 開著時「自己說」最多幾個字（NPC 智能 2.0要講得清楚一點）
     asks_per_day: int = Field(default=2, ge=1)  # 同一位人物一個遊戲日最多被求幾件事（算在一天三輪對話裡）
     # 意願的天花板：情誼到第幾檔（[門檻, 上限]，由低到高）；份量 1、2、3 各減多少；敵對陣營再減；最低 floor
     bands: list[list[int]] = Field(default_factory=lambda: [[0, 50], [20, 65], [40, 80], [60, 90]])
@@ -3215,7 +3215,7 @@ class Config(_Strict):
     signature_arts: SignatureArtTuning = Field(default_factory=SignatureArtTuning)  # 本命武學的威力與學到時的成數（見 SignatureArtTuning）
     tactics: TacticTuning = Field(default_factory=TacticTuning)  # 一般的仗的回合與本命戰法（見 TacticTuning）
     figure_life: FigureLifeTuning = Field(default_factory=FigureLifeTuning)  # 人物活起來：每日行事、心事、風聞（見 FigureLifeTuning）
-    parley: ParleyTuning = Field(default_factory=ParleyTuning)  # 開口求人：模型談判、引擎做事（見 ParleyTuning）
+    parley: ParleyTuning = Field(default_factory=ParleyTuning)  # NPC 智能 2.0：模型談判、引擎做事（見 ParleyTuning）
     companions: CompanionsTuning = Field(default_factory=CompanionsTuning)  # 歷史武將同行：招募、名下三位、決戰助陣（見 CompanionsTuning）
     # 情誼放慢（歷史武將同行第三節、9.4）：每一筆加的情誼乘這個倍數（renown.warmed：四捨五入，原本加 1 以上的至少加 1；扣的不乘）。
     # 1 是不放慢；正式 0.7、週末設定 0.85。對話、事件、名聲起步、風聞都走它；名將贈禮、本命、招募的門檻不動，所以跟著晚一點拿到

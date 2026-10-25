@@ -1,4 +1,4 @@
-"""開口求人（Joy 2026-10-23「先做看看」；tianxia/parley.py、Game._parley_*；Config.parley）：
+"""NPC 智能 2.0（Joy 2026-10-23「先做看看」；tianxia/parley.py、Game._parley_*；Config.parley）：
 「自己說」那一句可以是求人做事。模型挑清單上的一件、給意願、要不要開條件；引擎驗清單、照情誼與份量夾意願、自己擲骰，
 中了當場做、沒中有條件就讓玩家接不接、沒中沒條件就婉拒。開關關著一個字都不變。"""
 
@@ -21,7 +21,7 @@ def _ask(ask, willing=100, condition="", narrative="他答應了。", terms="你
 
 @pytest.fixture
 def talking(content, game):
-    """開口求人開著、韓鐵常去湖邊（帶路有地方去）、已經跟他談上了。"""
+    """NPC 智能 2.0開著、韓鐵常去湖邊（帶路有地方去）、已經跟他談上了。"""
     content.config.parley.enabled = True
     content.characters["mate"].deep_interaction = True
     content.characters["mate"].haunts = ["lake"]
