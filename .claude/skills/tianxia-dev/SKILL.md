@@ -57,6 +57,9 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   - 長的等待：PowerShell 的 `Start-Sleep` 超過一定秒數會被擋；在瀏覽器分頁裡 `javascript_tool` 跑 `await new Promise(r => setTimeout(r, 30000))` 再抓 `/api/main`，或用 Monitor。
 - **Bash 隔離會擋「`diff <(…) <(…)` 加 `git add` 串在一起」的指令**（too complex，2026-10-21）：拆成兩條，一條比檔、一條 git。
 - **PowerShell 把含雙引號的字串傳給外部程式時，雙引號被吃掉**（2026-10-21 變異腳本的「舊字串」引數是 `phase == "preparing"`，到 python 手上變 `phase == preparing`，斷言「舊字串在檔裡 0 處」、什麼都沒跑）：引數用單引號、而且挑一段不含雙引號的獨特片段（例：`season.ended or phase == ` 換成 `season.ended or phase != `）。變異腳本（自己在 scratchpad 寫一支，參數 `<工作樹> <相對檔> <測試檔> <舊> <新>`）：舊字串先斷言剛好一處（換 CRLF 檔先轉 `\n`）、`finally` 寫回原檔 bytes、跑完 `git status` 確認沒留下改壞的檔。
+- **「關著不變」的 base 自己 `git archive <commit>` 解一份，別借 scratchpad 裡別人開的 `fjbase` 之類的工作樹**（2026-10-26 修正輪）：那種工作樹的 HEAD 會被別的 session 挪走，名字還叫 base、內容已是更新的功能分支，關著三種季比出 90 行差（本週卡、三方卡多了雲端後來的欄位）。比之前先 `Get-Content <工作樹>/.git`＋`HEAD` 檔看它現在是哪一版，或乾脆自己解（`git archive f329d059 -o X.tar`、`tar --force-local -x -f X.tar -C 目錄`）。
+- **`Start-Process -ArgumentList` 的陣列裡有空白的引數要自己加引號**：`-m "slow or not slow"` 寫成 `'"slow or not slow"'`，不然 pytest 把 `or`、`not`、`slow` 當成檔名，印「no tests ran」、結束碼 5（2026-10-26）。
+- **一件事一個 commit、但共用同一個測試檔**：測試檔照 `# ── N. 標題` 的段落標記切（標頭＋第 1..k 段），引擎的 hunk 退回去用 `(最終, 修之前)` 字串對照；一支 `split_commits.py <k>` 把第 k 件放進索引、工作樹不動（本輪六件，scratchpad `jianfa-2-fix/split_commits.py`），提交完用 `git archive <commit>` 解出來各跑一次相關測試檔確認單獨一筆是綠的（`verify_each.py`）。
 - **不要寫帶中文路徑的 `.ps1`**：Write 工具寫出的 .ps1 沒有 BOM，Windows PowerShell 5.1 照 ANSI 讀，`C:/Ray/專案/…/python.exe` 變亂碼、每一行都 CommandNotFound（2026-10-20 背景跑對照表踩到，log 只看得到一串錯）。要串好幾個 python 程式，就寫一支 Python 調度腳本，用 `sys.executable` 叫子程式，再從 PowerShell 跑那一支。
 
 ## 測試怎麼挑
@@ -191,6 +194,8 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 - **一件事拆成幾個 commit，檔案卻有幾件共用時，不要動工作樹**：寫一支 scratchpad 腳本，每個 commit 從「工作樹的最終版」把別件的幾處換回舊字（每處 `assert count == 1`）、`git hash-object -w --stdin --path` ＋ `git update-index --add --cacheinfo` 放進索引，commit 後工作樹照舊；提交前 `git write-tree` 取出索引的 tree，`git archive` 解到 scratchpad 跑那幾個測試檔，確認單獨一筆也是綠的（2026-10-25 批 4 修正輪，`engine.py`、`models.py`、導覽、`test_outcomes_answer.py` 都三件共用）。
 - **`branch_game(faction="guan")` 之類的測試會多一則 `annals.DEED`「投靠官軍。」**：斷言行狀的字要先篩「隨口應對」，不然 `== [..]` 多一筆。
 - **QA 的 `qcmp.py` 比的是行號**：上游少了幾十行（例：拿掉 93 則傳聞）後面的表（chronicle、seasons）整片位移、全算差；先看差的行數是不是剛好等於少掉的行數，再用 tag 與內容確認，不要把位移當成真的差異。
+- **有一個「另外擲的」對手（頭目）不要算進「這裡有沒有對手」**（減法季批 2 修正輪 FB-815，2026-10-26）：`_outing_plan` 把頭目也算 `has_foes`，只有頭目的地點遭遇那一格就留著、遭遇拍一定撞上他（長社官軍 400 趟 387 趟）。唯讀的計畫（比重、鈕上的小字、假人打分數）只看一般對手；頭目在做動作時另擲一次（亂數用「頭目」這個新用途，不動別的序列），擲中才把遭遇拍放進這一趟（`explore_one.draw(bounty_here=True)` 的「第一拍就是遭遇」，比重改回 `has_foes=True` 那一份）。測試兩條：一趟的機會約 5%（`_duel_start` 換成只記一筆、連出 400 趟、斷言落在一個帶子裡），以及把倍數拉到一定擲中（`renown.duel_chance` 回 20）斷言**每一趟**都有頭目——只有後一條抓得到「擲中了卻沒有遭遇拍」的變異。
+- **新規則改了一句話，用正式內容 week7／season21 斷言舊句子的舊測試會紅**（同批 `test_core_loop_fb.py::test_fb250`）：`test_for` 挑得到、grep 舊常數名（`RANGER_LINE_PRECISE`）也找得到；在那一條測試開頭叫 `jianfa_kit.classic_explore(game.content)` 鎖舊句子，新句子的斷言放在新規則自己的測試檔，不改舊斷言。
 - **兩局測試各有一份內容**：`conquest_kit.conquest_game()`（同 `test_territory._game`）每一局各載一份 `real_content` 的複本，同一個資料庫開兩局時，在測試裡往內容加東西（例：借一份戰鬥範本）要兩局都加，不然第二局找不到、畫面靜靜地沒有那一場。
 
 ## 量表怎麼讀
