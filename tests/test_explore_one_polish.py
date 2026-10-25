@@ -151,3 +151,81 @@ def test_is_item_tells_a_material_from_a_description():
     assert explore_one.is_item("精鐵砂 ×2") and explore_one.is_item("驚羽 ×1（拾遺囊）")
     assert not explore_one.is_item("【破境丹】一枚——衝擊絕學時可以服下，那一次的機會多幾分。")
     assert not explore_one.is_item("【回體丹】一顆——不知誰落下的，正好收著。") and not explore_one.is_item("")
+
+
+# ── 3. FB-832：小字照此刻實際的比重 ──
+
+WORDS = {explore_one.EVENT: "多事", explore_one.ENCOUNTER: "多敵", explore_one.MATERIAL: "多料", explore_one.INSIGHT: "多悟"}
+
+
+def _w(event: int, encounter: int, material: int, insight: int) -> dict[str, int]:
+    return {explore_one.EVENT: event, explore_one.ENCOUNTER: encounter, explore_one.MATERIAL: material, explore_one.INSIGHT: insight}
+
+
+def test_the_hint_names_the_heaviest_beat():
+    assert explore_one.hint_of(explore_one.WILD, None, _w(15, 0, 20, 10)) == "野外多料"  # 遭遇是 0 的野外（長社官軍）：不再寫「多敵」
+    assert explore_one.hint_of(explore_one.WILD, "foe", _w(15, 55, 20, 10)) == "野外多敵"
+    assert explore_one.hint_of(explore_one.TOWN, "town", _w(60, 15, 15, 10)) == "城裡多事"
+    assert explore_one.hint_of(explore_one.HILL, "foe", _w(10, 30, 40, 20)) == "山裡多料"
+    assert explore_one.hint_of(explore_one.TEMPLE, None, _w(0, 0, 15, 30)) == "寺裡多悟"  # 事件拍抽不到時，寺裡最重的是感悟
+    assert explore_one.hint_of(explore_one.FORD, "foe", _w(30, 30, 30, 10)) == "渡口參半"
+    assert explore_one.hint_of(explore_one.FORD, None, _w(30, 0, 30, 10)) == "渡口參半"  # 兩樣並列最高
+    assert explore_one.hint_of(explore_one.WILD, None, _w(0, 0, 0, 0)) == "野外多料"  # 全是 0：補的是素材
+
+
+def test_a_bounty_and_the_camp_keep_their_own_words():
+    w = _w(15, 0, 20, 10)
+    assert explore_one.hint_of(explore_one.WILD, "bounty", w) == "野外有賞" and explore_one.hint_of(explore_one.CAMP, "spar", w) == "同袍比劃"
+
+
+@pytest.mark.parametrize("side, loc", [("guan", "changshe"), ("huang", "luoyang_road")])
+def test_a_place_with_only_a_boss_no_longer_says_many_enemies(side, loc):
+    """官軍在長社、黃巾在洛陽官道：遭遇的比重是 0（頭目另外擲、不算一般對手），鈕與四格那一格寫別的字，兩處一樣。"""
+    import server
+
+    game = ready(jianfa_game(), side=side, loc=loc)
+    plan = game.outing_plan()
+    assert plan.weights[explore_one.ENCOUNTER] == 0 and "多敵" not in plan.hint
+    assert plan.hint == explore_one.hint_of(plan.kind, plan.how, plan.weights)
+    label = next(o for o in game.options(odds=False) if o.id == "act:explore").label
+    assert label.endswith(f"・{plan.hint}）") and server.main_view(game)["mostly"] == plan.hint and game.mostly_here() == plan.hint
+
+
+@pytest.mark.parametrize("side", ["guan", "huang", "haoqiang", None])
+def test_the_hint_follows_the_weights_at_every_place(side):
+    """每一處、每一種身分：鈕上的字＝四格那一格的字＝照此刻比重算出的字（有賞、同袍比劃除外）；說「多敵」的地方遭遇真的是最重的。"""
+    import server
+
+    game = ready(jianfa_game(), side=side, loc="yingshui")
+    if side == "haoqiang":  # 地方豪強先挑依附哪一軍，選單才是平常的樣子
+        game.choose("faction:ally:guan")
+    checked = 0
+    for loc_id, loc in game.content.locations.items():
+        if loc.prologue_only:
+            continue
+        ready(game, loc=loc_id)
+        _reset(game)
+        options = {o.id: o for o in game.options(odds=False)}
+        if "act:explore" not in options:
+            continue
+        plan = game.outing_plan()
+        assert plan is not None
+        assert options["act:explore"].label.endswith(f"・{plan.hint}）"), (loc_id, plan.hint)
+        assert server.main_view(game)["mostly"] == plan.hint, loc_id
+        if plan.how in ("bounty", "spar"):
+            continue
+        top = max(plan.weights.values())
+        heavy = [k for k, v in plan.weights.items() if v == top]
+        assert plan.hint.endswith("參半" if len(heavy) > 1 else WORDS[heavy[0]]), (loc_id, plan.hint, plan.weights)
+        if plan.hint.endswith("多敵"):
+            assert plan.weights[explore_one.ENCOUNTER] == top, (loc_id, plan.weights)
+        checked += 1
+    assert checked > 20
+
+
+def test_the_map_names_keep_the_place_kind_words():
+    """輿圖名字旁的兩個字照地點種類（表，是地點自己的事、不看誰站在那裡）：這一格不隨此刻的比重變。"""
+    game = ready(jianfa_game(), side="guan", loc="changshe")
+    places = {p["id"]: p["mostly"] for p in game.map_base()["places"]}
+    kind = explore_one.kind_of(game.content.config.jianfa, game.content.locations["changshe"]).kind
+    assert places["changshe"] == explore_one.MOSTLY[kind]
