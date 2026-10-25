@@ -1,13 +1,13 @@
 """減法季批 2（探索一顆、三道閘、屬性五段）的數字（減法季整合設計 4.1、4.2、4.5；主機側實作計畫第三節 Task 2-1）。
 
-批 0（雲端側）的 `Config.jianfa`（`JianfaRules`）與開季的章還沒到，這一批先把純規則做起來：數字放在這個獨立的模型裡，
-純規則（`explore_one`、`growth`）吃它（duck-typed 的 cfg），測試直接建它。批 0 到了之後把這些欄位併進 `JianfaRules`
-（`class JianfaRules(JianfaNumbers)`，或照抄欄位與驗證），純規則改傳 `content.config.jianfa`，函式本身不必改。
+批 0（雲端側）的 `Config.jianfa`（`models.JianfaRules`）繼承這個模型（`class JianfaRules(JianfaNumbers)`，接線那一批）：
+設定檔照舊寫在 `"jianfa": {...}` 底下，純規則（`explore_one`、`growth`）收 `content.config.jianfa`（duck-typed 的 cfg），
+純規則的測試照舊直接建這個模型。開關與子開關在 `JianfaRules`，判斷一律走 `rules.jianfa(content, world, "<子開關>")`。
 
 欄位名照計畫 Task 2-1，兩個跟子開關撞名的改了名：六張表叫 `explore_tables`（子開關叫 `explore_one`；計畫寫 `Config.explore_one`）、
 境界的等級叫 `milestone_levels`（計畫的數字與子開關都叫 `stat_milestones`）。`stat_rates` 的四個鍵照計畫，做成 `StatRates`（JSON 的寫法一樣，
 多寫一個鍵會擋）。
-數字都是【預設】，出處寫在每一欄旁邊。這裡不 import `models`：`models.py` 之後要引用這裡（`JianfaRules` 繼承或掛它），反過來會循環。
+數字都是【預設】，出處寫在每一欄旁邊。這裡不 import `models`：`models.py` 引用這裡（`JianfaRules` 繼承它、`Location.explore_mix`），反過來會循環。
 """
 
 from __future__ import annotations
@@ -21,6 +21,12 @@ ExploreKind = Literal["town", "temple", "ford", "wild", "hill", "camp"]
 
 class _Strict(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+
+def _check_100(table, what: str) -> None:
+    total = table.event + table.encounter + table.material + table.insight
+    if total != 100:
+        raise ValueError(f"{what}四欄加起來要是 100（現在 {total}）")
 
 
 class ExploreOneTable(_Strict):
@@ -38,9 +44,23 @@ class ExploreOneTable(_Strict):
 
     @model_validator(mode="after")
     def _adds_up_to_100(self) -> ExploreOneTable:
-        total = self.event + self.encounter + self.material + self.insight
-        if total != 100:
-            raise ValueError(f"探索表 {self.kind} 四欄加起來要是 100（現在 {total}）")
+        _check_100(self, f"探索表 {self.kind} ")
+        return self
+
+
+class ExploreMix(_Strict):
+    """一個地點自己的四欄（設計 4.1「`locations.json` 可用 `explore_mix` 覆寫」；`Location.explore_mix`）：寫了就照它抽，
+    不照標籤對到的那一張表的四欄；這一處算哪一種地點（城裡的地痞、自家營寨的比劃）照舊看標籤（`explore_one.kind_of`）。
+    危險度與懸賞照樣往上加減。四欄加起來 100。"""
+
+    event: int = Field(ge=0)
+    encounter: int = Field(ge=0)
+    material: int = Field(ge=0)
+    insight: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def _adds_up_to_100(self) -> ExploreMix:
+        _check_100(self, "地點的 explore_mix ")
         return self
 
 
@@ -83,6 +103,13 @@ class JianfaNumbers(_Strict):
     beat_cap: int = Field(default=80, ge=1)
     bounty_encounter_bonus: int = Field(default=30, ge=0)  # 接了這裡的討伐懸賞：遭遇那一欄 +N，夾在 beat_cap【定】
     explore_tables: list[ExploreOneTable] = Field(default_factory=_default_tables, min_length=1)  # 六張表，照順序比對
+    # 城類地點自己沒有對手（此刻站的、不是自家的隊伍）時，遭遇那一拍換成這幾路（第一路；PM 2026-10-25 第 3 件：自己有隊伍的城照原本的隊伍）：
+    # 不推線、不算討伐、戰利（銀兩、心得、掉的素材）乘 town_loot_scale【PM】
+    town_foes: list[str] = Field(default_factory=lambda: ["dipi"], min_length=1)
+    town_loot_scale: float = Field(default=0.5, ge=0, le=1)
+    # 自家營寨的遭遇是跟同袍比劃（不打、不掉東西）：給 _sortie_host 那一路心得、經驗的幾成（再乘三道閘的倍數）【暫】
+    # （PM 2026-10-26：全額太多；同跟自己人操練的 Config.drill_reward_share 的量級）。仍算仗（growth 的 camp_spar）：45 級以後照樣升得上去
+    camp_spar_share: float = Field(default=0.3, ge=0, le=1)
     # ── 遭遇的三道閘（設計 4.2；企劃者 2026-10-24「15 次開始下降，最低 0.3」「45 之後只有交戰的情況給的經驗可以繼續升級」）──
     drill_full_per_day: int = Field(default=15, ge=0)  # 一天前幾場全額【定】
     drill_decay: float = Field(default=0.8, gt=0, le=1)  # 之後每場再乘這個（疊加）【預設】
@@ -94,7 +121,9 @@ class JianfaNumbers(_Strict):
     milestone_levels: list[int] = Field(default_factory=lambda: [10, 20, 30, 40, 50])  # 到這幾級各一次境界【定】（計畫寫 stat_milestones，跟子開關同名）
     stat_points_per_milestone: int = Field(default=5, ge=0)  # 每次幾點【定】
     stat_rates: StatRates = Field(default_factory=StatRates)  # 每點的效果【預設】
-    event_bump_scale: float = Field(default=0.5, ge=0, le=1)  # 江湖水漲的事件加難（rise.event_bump）乘這個【待量】
+    # 江湖水漲的事件加難（rise.event_bump）乘這個【量過：0】：2026-10-25 measure_difficulty --tiers（season21，種子 1、2，solo 與 team，
+    # 主機側計畫第三節 Task 2-6 的量表）第 30 級事件檢定平均 ×1 42～54%、×0.5 53～64%、×0 64～73%；判準「第 30 級不低於 70%」只有 0 摸得到
+    event_bump_scale: float = Field(default=0.0, ge=0, le=1)
 
     @field_validator("milestone_levels")
     @classmethod

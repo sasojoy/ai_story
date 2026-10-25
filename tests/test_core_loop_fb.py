@@ -12,6 +12,7 @@ from tianxia.state import Order
 
 def _game(faction=None, at="yingshui", name="沈浪", content=None):
     c = content or no_conquest(real_content("week7"))  # 地盤拔河的舊規則（領地爭奪 PM 2026-10-22 起正式內容打開）
+    c.config.jianfa.four_wins = False  # 三陣營四勝利之前的規則（挑邊、改依附算叛投、攪局；測試整理批 1 把這個檔從週末搬到 7 天季，減法季開著）；新規則在 tests/test_four_wins_wiring.py
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
     game = Game.new(c, name, rng=random.Random(0), world=open_world())
@@ -87,9 +88,12 @@ def test_fb249_the_strike_bounty_says_sortie_or_gathering():
 
 def test_fb250_a_ranger_on_a_front_sees_why_there_is_no_sortie():
     """散人站在戰線地點（汝南荒野）：出陣那一顆灰著寫真正的原因、底下那一行說投靠之後才有；不在戰線的地方（潁水河畔）照舊沒有那一顆。"""
+    from jianfa_kit import classic_explore
+
     from tianxia import sortie
 
     game = _game(None, "runan_wilds")
+    classic_explore(game.content)  # 探索一顆開著時底下那一行不寫「尋敵」（RANGER_LINE_OUTING，tests/test_explore_one_fix.py）；這裡鎖一類一顆的舊句子
     option = _sortie(game)
     assert option is not None and not option.enabled and option.label == f"{sortie.NAME}（{sortie.RANGER_NOTE}）"
     # 一類一顆（正式內容開著）：找素材不打仗，那一行寫練功（FB-420 同一批）；沒蓋章的季照舊寫找素材撞上的仗

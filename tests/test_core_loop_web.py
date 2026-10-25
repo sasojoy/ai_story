@@ -10,6 +10,7 @@ from test_prologue_web import run
 import server
 import webharness
 from conftest import classic_rules, no_conquest, real_content
+from jianfa_kit import classic_explore
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 
@@ -18,6 +19,7 @@ pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，�
 
 def _game(faction, at, classic=False):
     c = no_conquest(real_content("week7"))  # 出陣推線的舊規則（領地爭奪 PM 2026-10-22 起正式內容打開）
+    classic_explore(c)  # 探索三選一（減法季探索一顆開著時只剩一顆）
     c.config.auto_open_first_season = True
     if classic:
         classic_rules(c)

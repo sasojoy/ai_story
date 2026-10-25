@@ -72,6 +72,8 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 - 打 API 的腳本從 **bash** 跑，PowerShell 會把 JSON 參數弄壞。用 `requests.Session()`，先 `POST /api/login {login,password}`。
 - 被引擎擋的動作（非管理者打管理者的 op）回 400，body 是 `{"error": "只有管理者能這麼做。"}`；找不到的 op 才是 404 `{"detail": "Not Found"}`——檢查字樣讀 `error`，不是 `detail`（2026-10-21，FB-609 複驗）。
 - **玩家**：`GET /api/main` 會同步並回 `status`／`options`／`latest`；按選項是 `POST /api/choose {id}`；其他動作走 `POST /api/do/<op>`。回傳的 `message` 是 HTML，`main` 是畫面。
+  - 移動是 `POST /api/travel {"place": <地點 id>, "mode": "dash"|"walk"}`，鍵是 `place`（寫成 `to` 回 200 但原地不動、體力不扣；看回傳的 `arrived`）。配點是 `POST /api/do/allocate {"stat": "str"}`。
+  - PowerShell 工具的 `Set-Location` 會留到下一次呼叫（跑 `set_password.py` 時 cd 進複本，之後的 `git` 就在複本裡跑）：用完 cd 回自己的工作樹，或 python 一律寫絕對路徑、不 cd。
 - **管理者**也走 `POST /api/do/<op>`，不是 `/api/admin`。常用的：
   - `open_season`、`end_season`、`next_season`
   - `fast_forward {hours}`

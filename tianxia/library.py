@@ -39,18 +39,19 @@ def held_count(state: GameState) -> int:
     return len(owned_arts(state)) + len(state.player.insights)
 
 
-def holding_cap(content: Content, level: int, lore: float) -> int:
+def holding_cap(content: Content, level: int, lore: float, season=None) -> int:
     """武學與意境合計最多幾個（設計 4.5、6.3）：基本 50，每升 5 級多 3 格，博聞比基準（5）每多一點多 2 格；
-    博聞少於基準不扣格（被事件扣了也不會比基本加等級的少）。"""
+    博聞少於基準不扣格（被事件扣了也不會比基本加等級的少）。season（這一季）給了每點照 team.per_point（減法季每點加倍：多 4 格）。"""
     cfg = content.config
-    from_lore = max(0, int(lore) - team.BASE_STAT) * cfg.holding_per_lore_point
+    per = cfg.holding_per_lore_point if season is None else team.per_point(content, season, "holding_per_lore_point")
+    from_lore = max(0, int(lore) - team.BASE_STAT) * per
     return cfg.holding_cap_base + (level // cfg.holding_cap_levels) * cfg.holding_cap_step + from_lore
 
 
 def cap_of(state: GameState, content: Content) -> int:
     """這個人現在的持有上限：照自己的等級與博聞，加上萬寶閣買的擴充（PlayerState.holding_bonus，只這一季）。"""
     p = state.player
-    return holding_cap(content, p.member.level, p.stats.get(team.LORE, team.BASE_STAT)) + p.holding_bonus
+    return holding_cap(content, p.member.level, p.stats.get(team.LORE, team.BASE_STAT), state.world) + p.holding_bonus
 
 
 def full(state: GameState, content: Content) -> bool:

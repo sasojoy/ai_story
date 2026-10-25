@@ -799,6 +799,11 @@ class PlayerState(BaseModel):
     event_rounds: dict[str, list[str]] = Field(default_factory=dict)
     mark_days: dict[str, int] = Field(default_factory=dict)  # 地方痕跡：這個人上次替這個痕跡算進一次是第幾個遊戲日（rules.game_day；一個遊戲日只算一次；角色每季重來，跟著清空）
     explore_seq: int = 0  # 這一季第幾次探索三選一（explore_modes.rng_for 的種子；角色每季重來）
+    # 減法季批 2（Config.jianfa；整合設計 4.1、4.2、4.5）。四個都是 0／空的時候不寫進存檔（QUIET_DEFAULTS）：關著的季 JSON 一個鍵都不多
+    fights_today: int = 0  # 遭遇的疲勞（drill_gates，growth.nth_fight）：fight_day 那一天打了幾場遭遇（含城裡的地痞、自家營寨的比劃）
+    fight_day: int = 0  # fights_today 記在哪一天（Game._pill_day，台灣 00:00 換日）；不是今天就從頭算
+    milestone_due: int = 0  # 升到境界那一級、還沒配完點時記那一級（stat_milestones；境界卡 main.milestone）；配完清成 0
+    outing_last: str = ""  # 探索一顆（explore_one）上一趟要選的那一拍：「地點 id:類」（感悟不連兩趟，explore_one.draw 的 last_choice）
     anonymous: bool = False
     # 性別（PM 2026-10-12，企劃者「創建角色時可以選擇性別」）：「男」／「女」，不影響任何數值；稱呼換字一律走 tianxia/gender.py。
     # 舊角色沒這欄是男、gender_chosen 是 False：設定頁給一次改的機會（Game.set_gender，改完記 True）；建角色時選過的直接是 True
@@ -899,6 +904,12 @@ class PlayerState(BaseModel):
     # 預設值時不寫進存檔（QUIET_DEFAULTS）：關著的季 JSON 一個鍵都不多。季曆日從 1 起，0 是還沒記過
     deed_day: int = 0
     deed_today: int = 0
+    # 上一季論功拿到的稱號（減法季設計 3.3；wins.settle 存在上一季的 WorldState.final_tiers，換季時 _reset_player_for_new_season 掛上）：
+    # social.affiliation 接在後面；沒有是空字串（不寫進存檔）
+    season_title: str = ""
+    # 本週卡「你這一步」（減法季批 3c，step.py）：「換一件事」記在哪一天（同 pill_day）、那一天換了幾次；都是 0 時不寫進存檔
+    step_day: int = 0
+    step_skip: int = 0
     pushed: dict[str, float] = Field(default_factory=dict)  # 「曆日:大勢線 id」→ 當天這條線推得動多少（人數緩衝之後）；只留今天與昨天
 
     # ── 捐獻紀錄（計畫 T6，軍備文件 4.1）：「據點 id:糧草」→ 累積的份量。T7 的伏筆只讀它；寫入是 T6 護糧的事 ──
@@ -982,7 +993,10 @@ class PlayerState(BaseModel):
 
 
 # PlayerState 裡「沒用到就不寫進存檔」的欄位（_drop_quiet_defaults）：新規則掛開關、關著的季存檔一個鍵都不多的，加在這裡
-QUIET_DEFAULTS = ("ledgers", "lean_changed", "deed_day", "deed_today")
+QUIET_DEFAULTS = (
+    "ledgers", "lean_changed", "season_title", "step_day", "step_skip", "deed_day", "deed_today",  # 批 3c、批 4
+    "fights_today", "fight_day", "milestone_due", "outing_last",  # 批 2
+)
 
 
 class TierResult(BaseModel):
@@ -1527,6 +1541,9 @@ class WorldState(BaseModel):
     # 第一季的結算畫面（計畫 T9）：收季那一刻的戰況（顯示中的每條線）與各陣營出力前五（名號, 貢獻；排行榜不能匿名）
     final_trends: dict[str, int] = Field(default_factory=dict)
     final_rankings: dict[str, list[tuple[str, int]]] = Field(default_factory=dict)
+    # 三陣營四勝利（減法季設計 3.3；wins.settle）：收季那一刻每個投靠了陣營的人的階（名號 → TierResult；沒到門檻是第 0 階）。
+    # 結局卡、下一季的起手資源與稱號讀它；四勝利關著的季是空的、不寫進 JSON（_drop_empty_marks_fired）
+    final_tiers: dict[str, TierResult] = Field(default_factory=dict)
     storyline: str = ""  # 目前主線 id
     act: int = 0  # 目前第幾幕（從 0 起算）
     act_reached: int = 0  # 本季到過的最遠一幕；主線改寫會把 act 歸零，隊伍數與統御上限看這個（見 roster.stage）
@@ -1597,10 +1614,11 @@ class WorldState(BaseModel):
 
     @model_serializer(mode="wrap")
     def _drop_empty_marks_fired(self, handler):
-        """marks_fired、mark_helpers 是空的時候不寫這個鍵（同 world_state.SealRegistry._drop_empty_uses；不用 Field(exclude_if=…)：Pydantic 2.11 才有）。"""
+        """marks_fired、mark_helpers 是空的時候不寫這個鍵（同 world_state.SealRegistry._drop_empty_uses；不用 Field(exclude_if=…)：Pydantic 2.11 才有）。
+        final_tiers（減法季批 3c）同理。"""
         data = handler(self)
         if isinstance(data, dict):
-            for key in ("marks_fired", "mark_helpers"):
+            for key in ("marks_fired", "mark_helpers", "final_tiers"):
                 if key in data and not data[key]:
                     del data[key]
         return data

@@ -202,6 +202,7 @@ def meet(c, game: Game, event_id: str, monkeypatch) -> None:
     monkeypatch.setattr(c.config, "rare_explore_chance", 0.0)
     monkeypatch.setattr(c, "duels", {})  # 長社、鉅鹿道壇有頭目：FixedRandom(0.0) 一定擲中
     monkeypatch.setattr(c.config.explore_modes, "enabled", False)  # 照比例自動抽的舊探索（出陣探索與地盤之前，同 classic_rules）
+    monkeypatch.setattr(c.config.jianfa, "explore_one", False)  # 減法季探索一顆之前的那一套（出門一趟不一定抽到事件拍）
     for mix in c.config.explore_mix:
         monkeypatch.setattr(mix, "weights", {"event": 1})
     game.state.player.stamina = 150

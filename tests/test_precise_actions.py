@@ -5,6 +5,7 @@ from __future__ import annotations
 import random
 
 from conftest import real_content, renown_unscaled
+from jianfa_kit import classic_explore
 
 from tianxia import precise
 from tianxia.engine import Game
@@ -17,7 +18,7 @@ NOW = MON + 10 * HOUR
 
 
 def _game(profile="week7", at="yingchuan", faction=None, stamina=250.0, opened=True):
-    c = renown_unscaled(real_content(profile))  # 求見門檻照原數（名望 15）
+    c = classic_explore(renown_unscaled(real_content(profile)))  # 求見門檻照原數（名望 15）；一類一顆的探索與練功（減法季探索一顆之前）
     c.config.train_event_chance = 0.0
     store = open_world()
     store.seed_first_season(c)
@@ -40,14 +41,14 @@ def _ids(game):
 
 
 def test_a_stamped_season_turns_precise_on():
-    c = renown_unscaled(real_content("week7"))
+    c = classic_explore(renown_unscaled(real_content("week7")))
     season = fresh_season(c)
     stamp_season(season, c)
     assert season.precise_actions and precise.on(c, season)
 
 
 def test_unstamped_season_keeps_the_old_rules():
-    c = renown_unscaled(real_content("week7"))
+    c = classic_explore(renown_unscaled(real_content("week7")))
     season = fresh_season(c)
     stamp_season(season, c)
     season.precise_actions = False  # 設定打開之前就開的季
@@ -318,7 +319,7 @@ def test_after_fight_events_join_seeking_only_in_the_field_with_foes():
 
 
 def test_no_after_fight_event_needs_a_fight_any_more():
-    c = renown_unscaled(real_content("week7"))
+    c = classic_explore(renown_unscaled(real_content("week7")))
     for eid in ("train_fallen_foe", "train_bettors", "train_sore_loser", "train_dropped_letter", "train_old_boxer",
                 "train_runaway_cart", "train_campfire", "train_insight", "train_onlooker"):
         assert not c.events[eid].condition.fight_tiers, eid
@@ -381,7 +382,7 @@ def test_fixture_and_switched_off_content_are_off(content):
     season = fresh_season(content)
     stamp_season(season, content)
     assert not precise.on(content, season)
-    c = renown_unscaled(real_content("week7"))
+    c = classic_explore(renown_unscaled(real_content("week7")))
     c.config.precise_actions = False
     season = fresh_season(c)
     stamp_season(season, c)
@@ -503,7 +504,7 @@ def test_the_howto_follows_precise_actions_and_old_seasons_keep_every_word():
     from tianxia import explore_modes, howto
     from tianxia.world_state import fresh_season
 
-    c = renown_unscaled(real_content("week7"))
+    c = classic_explore(renown_unscaled(real_content("week7")))
     season = fresh_season(c)
     stamp_season(season, c)
     text = howto.page(c, season, recruitable=False)

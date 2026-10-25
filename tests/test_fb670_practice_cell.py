@@ -9,6 +9,7 @@ import random
 
 import pytest
 from conftest import real_content
+from jianfa_kit import no_jianfa
 
 from tianxia import atlas, bot, explore_modes, howto
 from tianxia import duel as duel_rules
@@ -29,6 +30,7 @@ PRACTICE = "explore:practice"
 def _content(profile):
     c = real_content(profile)
     c.config.training.enabled = False
+    no_jianfa(c)  # 減法季探索一顆開著時沒有練功這一格（行動列只剩一顆「探索」，tests/test_explore_one.py）：這一份測的是舊的練功格
     return c
 
 

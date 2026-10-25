@@ -6,12 +6,13 @@ Game 每次建構、每次 sync 都會把 state.world 指向共用賽季）。
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from pydantic import ValidationError
 
 from .database import Database, open_database
-from .state import GameState
+from .state import GameState, PlayerState
 
 
 def name_key(name: str) -> str:
@@ -83,6 +84,26 @@ class CharacterStore:
             except ValidationError:
                 continue
         return states
+
+    def books(self, season_number: int) -> list[PlayerState]:
+        """這一季投靠了陣營的每個角色的帳（三陣營四勝利排名次用：名號、陣營、此刻幫誰、貢獻、豪強兩本帳），照名號排序。
+        只在 SQL 裡挑這幾個欄位、不讀整份存檔（季末論功與每次畫面的 tier_hint 都讀它）；回的 PlayerState 只有這幾欄是真的。
+        真人與假人一起、看不出來（伺服器假人設計第五節）。"""
+        sql = (
+            "SELECT name, faction, json_extract(data, '$.player.ally') AS ally, json_extract(data, '$.player.contrib') AS contrib, "
+            "json_extract(data, '$.player.ledgers') AS ledgers FROM characters "
+            "WHERE faction IS NOT NULL AND json_extract(data, '$.player.season_number') = ? ORDER BY name"
+        )
+        with self.db.snapshot() as conn:
+            rows = conn.execute(sql, (season_number,)).fetchall()
+        out = []
+        for row in rows:
+            ledgers = json.loads(row["ledgers"]) if row["ledgers"] else {}
+            out.append(PlayerState(
+                name=row["name"], location="", stats={}, stamina=0, faction=row["faction"], ally=row["ally"],
+                contrib=int(row["contrib"] or 0), ledgers={str(k): int(v) for k, v in ledgers.items()},
+            ))
+        return out
 
     def all(self, bots_only: bool = False) -> list[GameState]:
         """照名號排序；讀不懂的存檔跳過（不讓一份壞檔拖垮榜單或假人程式）。"""

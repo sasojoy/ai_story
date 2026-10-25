@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 from . import allied, arena, atlas, battle_instance, bot, bounties, conquest, cultivation, duel, explore_modes, forge_secrets, invites, leaderboard, library, mingtie, naming, orders, precise, rules, sensing, server_bots, social, sortie, team
 from .bot import allocate_points, can_practise, wants_heal
-from .engine import FREE_TEXT_OPTION, IDLE_MARK, Game, Option
+from .engine import FREE_TEXT_OPTION, Game, Option
 from .models import MOVES, Content, Effect, SkillDef
 from .state import BotProfile, Invite
 
@@ -200,7 +200,7 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random, slot: NamingS
     options = [  # road: 開頭的是路上的選項：假人不改道、不做路上小事（路上設計 3.5）
         o for o in game.options(odds=False, tick=False)
         if o.enabled and o.id not in ("act:rest", "act:halt", FREE_TEXT_OPTION)
-        and not o.id.startswith(("road:", "defect:", "invite:"))  # 叛投：假人不換陣營（計畫甲）
+        and not o.id.startswith(("road:", "defect:", "invite:", "faction:lean:"))  # 叛投：假人不換陣營（計畫甲）；豪強改幫另一軍也不換
         # 邀請由上面的 _answer_invite 答，不交給打分數亂按
     ]
     enlist = [o for o in options if o.id.startswith("battle:enlist:")]
@@ -444,7 +444,7 @@ def _answer_discuss(game: Game, rng: random.Random, slot: NamingSlot | None) -> 
     這一輪沒有取名的名額就先放著（邀請還在，下一輪再答）、照常做別的事（回 None）。沒有論武邀請也是 None。"""
     p = game.state.player
     pending = [i for i in invites.incoming(game.state.world, p.name) if i.kind == "discuss" and i.location == p.location]
-    if not pending or IDLE_MARK not in {o.id for o in game.options(odds=False, tick=False)}:
+    if not pending or not game.is_idle():
         return None
     inv = pending[0]
     # 照玩家卡上答應的那幾顆挑（跟真人看到的同一張卡）：按得下去的就是兩邊都合得成的（discuss._answer_buttons，FB-117）
@@ -792,6 +792,9 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
     if kind == "act":
         if arg == "tavern":
             return None  # 酒肆：不交給打分數（只是打開酒肆），打聽由 take_turn 另外做
+        plan = game.outing_plan() if arg == "explore" else None
+        if plan is not None:  # 減法季探索一顆：「探索」就是出門一趟（有體力才按得下去）
+            return _outing_score(game, plan)
         if arg == "explore" and explore_modes.on(game.content):
             return None  # 三選一開著：「探索」只是展開的入口，按了不做事
         if arg.startswith("challenge:") and _crippled(game):
@@ -861,6 +864,28 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
     if kind == "donate":  # 萬一停在軍需官那一串裡（捐軍備）：只會離開；捐由 look_after 的 bot.donate_spare 直接捐，不按這一串的鈕
         return 0.0 if arg == "back" else None
     return None
+
+
+OUTING_SCORE = PRACTICE_SCORE  # 減法季探索一顆（整合設計 4.1）：出門一趟是經驗與素材的大宗，同以前的練功；出陣照舊排在它前面（出陣另加 PRACTICE_SCORE）
+OUTING_CRIPPLED_SHARE = 0.5  # 內傷重又付不起醫館（_crippled）時，遭遇佔一拍比重這麼多以上的地方不出門（同不去練功）
+
+
+def _outing_score(game: Game, plan) -> float | None:
+    """探索一顆的分數（Game.outing_plan 那一份比重）：底分 OUTING_SCORE，遭遇佔一拍的那一份乘下一場的疲勞（Game.fatigue_next：減法季三道閘，
+    今天打得多了遭遇的收穫少，出門的意願跟著降；三道閘關著是 1）；接了這裡的討伐懸賞、這裡有打探懸賞各加 BOUNTY_SCORE；缺素材而這裡素材的比重
+    不比遭遇低再加 NEED_MATERIAL_SCORE。內傷重、付不起醫館的不去多半遇敵的地方（去城裡、寺裡攢錢）。"""
+    w = plan.weights
+    total = sum(w.values()) or 1
+    fight = w.get("encounter", 0) / total
+    if fight >= OUTING_CRIPPLED_SHARE and _crippled(game):
+        return None
+    tired = game.fatigue_next()
+    value = OUTING_SCORE if tired >= 1 else OUTING_SCORE * (1 - fight * (1 - tired))
+    value += BOUNTY_SCORE if plan.how == "bounty" else 0.0
+    value += BOUNTY_SCORE if _bounty_here(game, "scout") else 0.0
+    if _short_of_materials(game) and w.get("material", 0) >= w.get("encounter", 0):
+        value += NEED_MATERIAL_SCORE
+    return value
 
 
 def effect_score(effect: Effect, goals: dict[str, int], trend: dict[str, int] | None = None) -> float:

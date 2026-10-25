@@ -1822,6 +1822,9 @@ def _main_view_body(game: Game) -> dict:
     shop = game.shop_view([o.id for o in options])  # 店面（店面獨立介面設計 6.1）：開關開著、店開著、鐵匠鋪那一串是眼前的選單才有
     if shop is not None:
         view["shop"] = shop
+    milestone = game.milestone_card()  # 減法季屬性五段的境界卡（主機側計畫欄位表 main.milestone）：到了境界、點還沒配完才有這個鍵
+    if milestone is not None:
+        view["milestone"] = milestone
     entry = game.mall_entry()  # 商城的入口（商城第二批：齒輪旁的錠子鈕＋餘額、底部第六格）；商城關著沒有這個鍵
     if entry is not None:
         view["mall"] = entry
@@ -1836,7 +1839,8 @@ def _main_view_body(game: Game) -> dict:
     week = weekcard.week_card(game, status, orders)
     if week is not None:
         view["week_card"] = week
-    mostly = mapdata.mostly_here(game.state, game.content)  # 四格探索那一格的小字「城裡多事」（整合設計 6.3，批 5）；在路上沒有這個鍵
+    # 四格探索那一格的小字「城裡多事」（整合設計 6.3，批 5）；在路上沒有這個鍵。減法季探索一顆開著時照出門一趟那一張表（批 2，Game.mostly_here）
+    mostly = game.mostly_here()
     if mostly:
         view["mostly"] = mostly
     sides = weekcard.sides_card(game)
@@ -1869,9 +1873,14 @@ def _main_view_body(game: Game) -> dict:
     result = game.season_result()  # 第一季休季：江湖頁最上面的結算卡（計畫 T9；開關關著、進行中都不送）
     if result is not None:
         view["season_result"] = {
-            **result, "text": md(result["text"]),
+            **{key: value for key, value in result.items() if key != "ending"}, "text": md(result["text"]),
             "timeline": [{**row, "text": md(row["text"])} for row in result["timeline"]],
         }
+    # 三陣營四勝利的結局卡（減法季批 3c；計畫 1.3 欄位表的 main.ending）：關著的季沒有這個鍵。本週卡「你這一步」與三方卡是批 1 的
+    # week_card、sides_card（上面），批 3c 的資料補在那裡面（step.finish、Game.sides_card、Game.tier_hint），這裡不另送一份
+    ending = game.ending_card()
+    if ending is not None:
+        view["ending"] = ending
     return view
 
 
