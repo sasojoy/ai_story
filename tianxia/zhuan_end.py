@@ -282,8 +282,8 @@ class VerdictText(BaseModel):
 def messages(job: VerdictJob, limit: int) -> list[dict[str, str]]:
     why = {
         TIER: f"這一季{job.hero}在你麾下立了大功，論功行賞，由你親筆替{job.hero}的列傳寫一句評語。",
-        AFFINITY: f"你跟{job.hero}交情深厚，季末替{job.hero}的列傳寫一句評語。",
-        BOUGHT: f"{job.hero}跟你有些交情，請你替{job.hero}的列傳寫一句評語。",
+        AFFINITY: f"你跟{job.hero}情誼深厚，季末替{job.hero}的列傳寫一句評語。",  # 玩家看得到的一律叫「情誼」（test_explain 也掃模型的字串）
+        BOUGHT: f"{job.hero}跟你略有情誼，請你替{job.hero}的列傳寫一句評語。",
     }[job.reason]
     return [
         {"role": "system", "content": (
