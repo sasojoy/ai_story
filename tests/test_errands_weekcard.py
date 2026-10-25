@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from stances_kit import LUZHI, real_game
-from tianxia import errands, weekcard
+from tianxia import errands, step, weekcard
 
 pytestmark = pytest.mark.slow  # 載正式內容、照伺服器開季
 
@@ -29,6 +29,28 @@ def test_an_open_errand_leads_your_next_step():
     assert steps[1:] == before  # 其餘照舊排在後面
     e.status = "done"
     assert _steps(g) == before
+
+
+def test_four_wins_keeps_the_errand_target_and_step_next_order():
+    """批 3c 合進來之後（step.finish 替每一件補 target、id）：四勝利開著時，託付那一件（errands.step_items 自己帶了 id 與 target、
+    沒有 _ref）的 target 不被洗成 null；「換一件事」（step:next）照舊從下一件排起、轉一圈回來。"""
+    g = real_game()
+    s, c = g.state, g.content
+    assert step.on(g)  # season21：四勝利開著
+    s.player.affinities[LUZHI] = 50
+    errands.give(s, c, LUZHI, "luzhi_letter")
+    e = s.player.errands[-1]
+    steps = _steps(g)
+    assert len(steps) >= 2 and "_ref" not in steps[0]
+    assert steps[0]["kind"] == "errand" and steps[0]["id"] == e.id
+    assert steps[0]["target"] == errands.card(s, c, e)["target"] and steps[0]["target"]["location"] == e.target
+    assert g.choose(step.NEXT) == []
+    rotated = _steps(g)
+    assert rotated == steps[1:] + steps[:1]  # 從下一件排起
+    assert rotated[-1]["target"]["location"] == e.target
+    for _ in range(len(steps) - 1):
+        g.choose(step.NEXT)
+    assert _steps(g) == steps  # 轉一圈回來
 
 
 def test_closed_seasons_keep_the_old_steps():
