@@ -137,14 +137,18 @@ def standing(state: GameState, content: Content, season: WorldState) -> dict:
     """季末論功的那幾樣（減法季批 7b；profile 開著時接在後面）：contrib 這一季的貢獻；有論功（投靠了劇本裡的陣營、四勝利開著）時多
     ledger_used 照哪一本排、tier_side 那一本寫給人看的（「官軍」「替官軍」「替兩軍」）、final_rank 第幾名、final_of 那一池幾人、
     tier 第幾階（0 是沒到門檻）、tier_title 稱號（WorldState.final_tiers）。投靠了劇本裡的陣營、季收了的多 illustration：列傳插畫的
-    圖庫鍵（zhuan_end.illustration_for；第一階白送、買了插畫票的休季用掉才畫）。"""
-    from .zhuan_end import illustration_for  # noqa: PLC0415
+    圖庫鍵（zhuan_end.illustration_for；第一階白送、買了插畫票的休季用掉才畫）。有人替你寫評曰的多 verdicts（zhuan_end.writers：
+    [{fid, reason}]，批 7b-2）。"""
+    from .zhuan_end import illustration_for, writers  # noqa: PLC0415
 
     p = state.player
     out: dict = {"contrib": p.contrib}
     art = illustration_for(state, content, season)
     if art:
         out["illustration"] = art
+    free = writers(state, content, season)  # 季末替你寫評曰的人物（批 7b-2；買了請的照票，不在這裡）：以前的季照這一份開單
+    if free:
+        out["verdicts"] = [{"fid": w.fid, "reason": w.reason} for w in free]
     result = season.final_tiers.get(p.name)
     if result is not None:
         out.update(ledger_used=result.ledger_used, tier_side=_tier_side(state, content, result.ledger_used), final_rank=result.rank,

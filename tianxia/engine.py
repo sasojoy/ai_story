@@ -16279,8 +16279,8 @@ class Game:
         return out
 
     def _verdict_taken(self, standing: dict) -> list[str]:
-        """這一季已經白送評曰的人物（親筆評曰不再列他們）。批 7b-2 接上評曰的寫手之前沒有。"""
-        return []
+        """這一季已經白送評曰的人物（annals.standing 的 verdicts：第一二階的主將或家主、情誼 70 以上的；親筆評曰不再列他們）。"""
+        return [w["fid"] for w in standing.get("verdicts", [])]
 
     def _zhuan_act(self, option_id: str) -> list[str]:
         """用掉一張列傳的票（_zhuan_options 驗過有票、按得下去）：那一列購買記 used、season（親筆評曰另記 fid），寫一則「列傳」紀錄。"""
@@ -16345,12 +16345,27 @@ class Game:
         era = [r.text for r in chronicle][: biography.ERA_MAX]
         return biography.BiographyRequest(
             season=season, name=p.name, scenario=c.scenario.name, era_note=c.scenario.era_note, profile=profile,
-            annals=entries, era=tuple(era), rewrite=rewrite, sex=gender.of(p),
+            annals=entries, era=tuple(era), rewrite=rewrite, sex=gender.of(p), verdicts=self._verdict_jobs(season, entries, profile),
         )
 
-    def write_biography(self, request: biography.BiographyRequest, text: str | None, now: float) -> bool:
+    def _verdict_jobs(self, season: int, entries: tuple[dict, ...], profile: dict) -> tuple:
+        """人物評曰的單子（減法季批 7b-2，zhuan_end.verdict_request）：身家裡白送的寫手（第一二階的主將或家主、情誼 70 以上的），
+        接這一季用了親筆評曰請的那幾位。那一季沒開列傳為終點是空的。"""
+        c, p = self.content, self.state.player
+        world = self._zhuan_season(season)
+        if world is None or not zhuan_end.on(c, world):
+            return ()
+        free = [zhuan_end.Writer(w["fid"], w["reason"]) for w in profile.get("verdicts", [])]
+        bought = zhuan_end.season_tickets(self._zhuan_purchases(), season)["quotes"]
+        return tuple(zhuan_end.verdict_request(c, w, p.name, gender.of(p), entries, profile, season)
+                     for w in zhuan_end.with_bought(free, bought, c))
+
+    def write_biography(
+        self, request: biography.BiographyRequest, text: str | None, now: float, verdicts: dict[str, str] | None = None,
+    ) -> bool:
         """C 段（鎖內）：重驗單子（同一季、同一份行狀、還寫得了），存進 biographies。text 是 B 段模型寫好、清過的全文；None 就照規則拼。
-        這一季的先把行狀與身家存起來（換季時存的是同一份；之後再來的決戰照 add_saved_annal 補）。存了回 True。"""
+        這一季的先把行狀與身家存起來（換季時存的是同一份；之後再來的決戰照 add_saved_annal 補）。存了回 True。
+        列傳為終點（減法季批 7b-2）：單子上的每一位評曰寫手接一段「評曰：」（verdicts 是 B 段寫好的，人物 id → 一句；沒寫成照固定句）。"""
         current = self.biography_request(request.season, request.rewrite)
         if current is None or current.annals != request.annals:
             return False
@@ -16359,9 +16374,10 @@ class Game:
             self.world.save_annals(request.season, p.name, list(request.annals), dict(request.profile))
         by = biography.MODEL if text else biography.RULE
         row = self.world.biography(request.season, p.name) if request.rewrite else None
-        stored = self.world.store_biography(
-            request.season, p.name, text or biography.rule_text(request), by, now, request.rewrite,
-        )
+        body = text or biography.rule_text(request)
+        for job in request.verdicts:  # 人物評曰（批 7b-2）：一位一段，接在正文（含史官的評曰）後面
+            body += "\n\n" + zhuan_end.apply_verdict(job, (verdicts or {}).get(job.fid, ""))
+        stored = self.world.store_biography(request.season, p.name, body, by, now, request.rewrite)
         if stored and row is not None and row["rewrites"] >= self.content.config.biography.rewrites:
             self._use_rewrite_token(now)  # 白送的重寫用完了，這一次是萬寶閣買的「重修列傳」
         return stored

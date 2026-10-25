@@ -5288,7 +5288,8 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
     assert _users_in_server("QUEUE") == {None, "model_call", "main", "api_queue", "admin_choices", "narrate_once", "crowd_once",
                                          "letter_once", "yuedan_once", "chatter_once",  # chatter_once：酒肆鄰桌閒談，同 crowd_once 當假人排
                                          "xingshi_once",
-                                         "narration_round"}  # 事件旁白每週改寫（減法季批 10）：背景一則一則，當假人排，名號 NARRATION_KEY
+                                         "narration_round",  # 事件旁白每週改寫（減法季批 10）：背景一則一則，當假人排，名號 NARRATION_KEY
+                                         "verdict_text"}  # 人物評曰（減法季批 7b-2）：zhuan_job 寫完正文後在鎖外逐條叫，當假人排在真人後面
     importers = [
         p.name for p in (server.ROOT / "tianxia").glob("*.py")
         if re.search(r"^\s*(import|from)\s+llm_queue\b", p.read_text(encoding="utf-8"), re.M)

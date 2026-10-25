@@ -35,6 +35,8 @@ class BiographyRequest:
     era: tuple[str, ...] = ()  # 那一季的大事（時刻表的公告，沒有就江湖史），最多 ERA_MAX 件
     rewrite: bool = False  # 已經寫過、這是重寫
     sex: str = "男"  # 性別（gender）：傳裡稱他還是她（PM 2026-10-12）
+    # 列傳為終點（減法季批 7b-2）：人物評曰的單子（zhuan_end.VerdictJob），C 段每一條接一段「評曰：」；關著的季是空的
+    verdicts: tuple = ()
 
 
 ERA_MAX = 6

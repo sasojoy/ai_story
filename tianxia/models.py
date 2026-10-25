@@ -1377,6 +1377,13 @@ class FactionDef(_Strict):
     # 空的＝這個陣營本身就是一軍
     allies: list[str] = Field(default_factory=list)
     ink: FactionInk | None = None  # 輿圖上的顏色與字（輿圖第三版第 3 批）；沒寫的照 mapdata.FALLBACK_INKS 的順序挑
+    # 列傳為終點（減法季批 7b-2，整合設計 3.3、第九章）：季末論功拿到第一、二階的人，列傳的評曰由這一方的哪幾位人物寫（characters 的 id；
+    # 跟他情誼最高的那一位寫，一樣高照寫的順序）。官軍皇甫嵩、盧植，黃巾張角、波才，豪強曹操；空的是沒有（不寫進序列化）
+    verdict_by: list[str] = Field(default_factory=list)
+
+    @model_serializer(mode="wrap")
+    def _drop_new_defaults(self, handler):
+        return _drop_unset(handler(self), ("verdict_by",))
 
 
 class SeasonOneOff(_Strict):
@@ -4762,6 +4769,9 @@ class Content(_Strict):
     # 探索一顆出門一趟的段落句子（content/outing_lines.json，減法季批 2；explore_one.paragraph 讀、content.check_outing_lines 驗）：
     # 拍的類 → 結果 → 句子；沒有這個檔就是空的（照 explore_one.FALLBACK 寫）
     outing_lines: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
+    # 人物評曰的固定句（content/verdicts.json，減法季批 7b-2；模型叫不動時照它，待 joy 潤）：寫的理由（affinity／tier／bought）→ 句子，
+    # {name} 換成名號；沒有這個檔就是空的（照 zhuan_end.DEFAULT_VERDICTS）
+    verdicts: dict[str, list[str]] = Field(default_factory=dict)
     map: MapLayout
     tutorial: Tutorial
     art: ArtBook = Field(default_factory=ArtBook)  # 圖的分類表（content/art.json，減法季批 8）；沒有這個檔就是空的（事件不准寫 image）
@@ -4772,4 +4782,4 @@ class Content(_Strict):
 
     @model_serializer(mode="wrap")
     def _drop_new_defaults(self, handler):
-        return _drop_unset(handler(self), ("mark_rules", "outing_lines"))  # 沒有痕跡規則、段落句子的內容（測試內容）序列化一個鍵都不多
+        return _drop_unset(handler(self), ("mark_rules", "outing_lines", "verdicts"))  # 沒有痕跡規則、段落句子、評曰固定句的內容（測試內容）序列化一個鍵都不多

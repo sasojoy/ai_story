@@ -2988,8 +2988,13 @@ def write_zhuan(game: Game, season: int, rewrite: bool) -> bool:
                 return biography.write(game.client, request, budget - (time.monotonic() - started))
 
             text = model_call(game, ask, fallback=None, left=budget)
+            if not request.verdicts:  # 關著的季、沒有人替你寫評曰：跟以前一模一樣
+                with _locked(game):
+                    game.write_biography(request, text, time.time())
+                return
+            verdicts = {job.fid: verdict_text(game, job) for job in request.verdicts}  # 寫完正文再逐條寫評曰（減法季批 7b-2）
             with _locked(game):
-                game.write_biography(request, text, time.time())
+                game.write_biography(request, text, time.time(), verdicts=verdicts)
         except Exception:  # noqa: BLE001 — 背景執行緒：印出來就好，網頁問的時候照「還沒寫」
             traceback.print_exc()
         finally:
@@ -2998,6 +3003,26 @@ def write_zhuan(game: Game, season: int, rewrite: bool) -> bool:
 
     threading.Thread(target=zhuan_job, name=f"zhuan-{season}", daemon=True).start()
     return True
+
+
+VERDICT_OWNER = "#評曰"  # 人物評曰在佇列裡的名號尾巴：跟這個人自己的請求分開排，當假人排在真人後面
+
+
+def verdict_text(game: Game, job) -> str:
+    """一條人物評曰（減法季批 7b-2；zhuan_job 在鎖外叫）：請模型照他的口氣寫一句（zhuan_end.write_verdict），預算
+    Config.jianfa.verdict_budget_seconds（含排隊）；佇列開著時當假人排、排在真人後面（同書信 letter_once）。寫不出來是空字串（照固定句）。"""
+    jf = game.content.config.jianfa
+    started = _monotonic()
+
+    def ask() -> str:
+        return zhuan_end.write_verdict(within_budget(game.client, jf.verdict_budget_seconds - (_monotonic() - started)), job, jf.verdict_chars)
+
+    if QUEUE is None:
+        return ask()
+    try:
+        return QUEUE.run(game.state.player.name.casefold() + VERDICT_OWNER, ask, fallback="", bot=True, wait=jf.verdict_budget_seconds)
+    except (Busy, QueueTimeout):
+        return ""
 
 
 def public_base(request: Request) -> str:
