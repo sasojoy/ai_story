@@ -275,16 +275,40 @@ def written_writers(text: str, content: Content, reasons: dict[str, str]) -> lis
     return out
 
 
+def _pool(content: Content, reason: str) -> list[str]:
+    return list(content.verdicts.get(reason) or DEFAULT_VERDICTS[reason])
+
+
+def fixed_verdicts(content: Content, writers: list[Writer], player: str, season_number: int) -> dict[str, str]:
+    """同一篇傳裡每位寫手的固定句（FB-848：模型叫不動時，兩位寫手不能一字不差）：整篇一起挑，人物 id → 一句（{name} 換好了）。
+    同一個理由的寫手照順序輪著挑（起點照「季|名號|理由」的雜湊，第 k 位往後數 k 句，不碰任何亂數）；整篇用過的句子不再挑；
+    自己那一組的句子不夠了，往別組借沒用過的（content.check_verdicts 擋各組之間重複的句子）；全部用過了才重複。"""
+    pools = {reason: _pool(content, reason) for reason in REASONS}
+    used: set[str] = set()
+    nth: dict[str, int] = {}
+    out: dict[str, str] = {}
+    for w in writers:
+        k = nth.get(w.reason, 0)
+        nth[w.reason] = k + 1
+        pool = pools[w.reason]
+        start = (int(hashlib.sha1(f"{season_number}|{player}|{w.reason}".encode()).hexdigest(), 16) + k) % len(pool)
+        own = pool[start:] + pool[:start]
+        borrowed = [line for reason in REASONS if reason != w.reason for line in pools[reason]]
+        pick = next((line for line in own + borrowed if line not in used), own[0])
+        used.add(pick)
+        out[w.fid] = pick.replace("{name}", player)
+    return out
+
+
 def fixed_verdict(content: Content, writer: Writer, player: str, season_number: int) -> str:
-    """固定句：照理由的那一組、照「季|名號|人物」的雜湊挑一句（不碰任何亂數）。"""
-    pool = content.verdicts.get(writer.reason) or DEFAULT_VERDICTS[writer.reason]
-    pick = int(hashlib.sha1(f"{season_number}|{player}|{writer.fid}".encode()).hexdigest(), 16) % len(pool)
-    return pool[pick].replace("{name}", player)
+    """一位寫手的固定句（整篇只有他一位時；Game 開單走 fixed_verdicts，整篇一起挑才不撞句）。"""
+    return fixed_verdicts(content, [writer], player, season_number)[writer.fid]
 
 
 def verdict_request(content: Content, writer: Writer, player: str, sex: str, annals: tuple[dict, ...], profile: dict,
-                    season_number: int) -> VerdictJob:
-    """A 段：照傳的單子（名號、行狀、身家）開一張評曰的單子。只讀這幾樣，不讀角色：以前的季照存起來的那一份也開得出來。"""
+                    season_number: int, fixed: str | None = None) -> VerdictJob:
+    """A 段：照傳的單子（名號、行狀、身家）開一張評曰的單子。只讀這幾樣，不讀角色：以前的季照存起來的那一份也開得出來。
+    fixed 是這一篇整篇挑好的固定句（fixed_verdicts）；沒給就只照這一位挑。"""
     ch = content.characters[writer.fid]
     persona = "；".join(x for x in (ch.personality, ch.situation) if x)[:200]
     mine = [e for e in annals if e.get("figure") == writer.fid]
@@ -298,7 +322,8 @@ def verdict_request(content: Content, writer: Writer, player: str, sex: str, ann
 
     return VerdictJob(
         fid=writer.fid, reason=writer.reason, name=ch.name, persona=persona, hero=gender.hero(sex), player=player,
-        about="；".join(f for f in facts if f), fixed=fixed_verdict(content, writer, player, season_number),
+        about="；".join(f for f in facts if f),
+        fixed=fixed if fixed is not None else fixed_verdict(content, writer, player, season_number),
     )
 
 
@@ -353,9 +378,10 @@ def apply_verdict(job: VerdictJob, text: str) -> str:
 
 def check_verdicts(content: Content) -> list[str]:
     """content/verdicts.json 寫錯的地方（content.validate 叫）：理由只能是三種、每一組至少一句、拿掉 {name} 之後在 verdict_chars 以內、
-    沒有阿拉伯數字。沒有這個檔是空的。"""
+    沒有阿拉伯數字、各組之間與組裡面的句子不重複（同一篇傳不撞句，fixed_verdicts 往別組借時才借得到不同的）。沒有這個檔是空的。"""
     out: list[str] = []
     limit = content.config.jianfa.verdict_chars
+    seen: set[str] = set()
     for reason, lines in content.verdicts.items():
         if reason not in REASONS:
             out.append(f"理由 {reason} 不是 {'、'.join(REASONS)} 其中之一")
@@ -364,4 +390,7 @@ def check_verdicts(content: Content) -> list[str]:
         for line in lines:
             if len(line.replace("{name}", "")) > limit or _DIGIT.search(line):
                 out.append(f"{reason}「{line}」要在 {limit} 字以內、不寫數字")
+            if line in seen:
+                out.append(f"{reason}「{line}」跟別的句子重複了")
+            seen.add(line)
     return out

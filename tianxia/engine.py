@@ -16565,8 +16565,10 @@ class Game:
             return ()
         free = [zhuan_end.Writer(w["fid"], w["reason"]) for w in profile.get("verdicts", [])]
         bought = zhuan_end.season_tickets(self._zhuan_purchases(), season)["quotes"]
-        return tuple(zhuan_end.verdict_request(c, w, p.name, gender.of(p), entries, profile, season)
-                     for w in zhuan_end.with_bought(free, bought, c))
+        writers = zhuan_end.with_bought(free, bought, c)
+        fixed = zhuan_end.fixed_verdicts(c, writers, p.name, season)  # 整篇一起挑固定句：模型叫不動時兩位寫手也不會一字不差（FB-848）
+        return tuple(zhuan_end.verdict_request(c, w, p.name, gender.of(p), entries, profile, season, fixed=fixed[w.fid])
+                     for w in writers)
 
     def write_biography(
         self, request: biography.BiographyRequest, text: str | None, now: float, verdicts: dict[str, str] | None = None,
