@@ -178,6 +178,56 @@ def test_the_public_page_prints_the_seal_and_the_art_only_when_given():
     assert "黃巾之亂・第 1 季・官軍第 3 名" in full and 'class="zh-mark"' in full
 
 
+def test_the_server_gives_the_art_url_only_when_the_file_is_there(monkeypatch, tmp_path):
+    """伺服器（server.zhuan_art_src）：江湖頁的 main.zhuan、讀傳那一層（/api/zhuan 的 zhuan_view）、公開頁（zhuan_extras）都是
+    web/img/zhuan/<鍵>.webp 真的在才給網址；雲端批 8 還沒放圖時是 None，公開頁不多插畫那一段。紀念印照票。"""
+    import server
+
+    game = _game()
+    _to_week(game, 3)
+    game.mall_buy("zhuan_art", "art")
+    _close(game)
+    game.mall_buy("zhuan_seal", "seal")
+    game.choose(zhuan_end.PICK_ART)
+    game.choose(zhuan_end.SEAL)
+    key = game.biography_entry()["illustration"]
+    monkeypatch.setattr(server, "CONTENT", game.content)
+    monkeypatch.setattr(server, "WEB", tmp_path)
+    assert server.main_view(game)["zhuan"]["illustration_src"] is None  # 圖還沒放
+    assert server.zhuan_view(game, 1, None)["illustration_src"] is None
+    (tmp_path / "img" / "zhuan").mkdir(parents=True)
+    (tmp_path / "img" / "zhuan" / f"{key}.webp").write_bytes(b"RIFF")
+    src = f"/static/img/zhuan/{key}.webp"
+    assert server.main_view(game)["zhuan"]["illustration_src"] == src
+    assert server.zhuan_view(game, 1, None)["illustration_src"] == src
+    req = game.biography_request(1)
+    assert game.write_biography(req, None, game.now + 40)
+    code = game.share_biography(1, True, "artcode")
+    row = game.world.biography_by_code(code)
+    extras = server.zhuan_extras(game.world, row)
+    assert extras["art"] == src and extras["seal"].startswith("黃巾之亂・第 1 季")
+
+
+def test_off_the_server_adds_no_art_keys(monkeypatch, tmp_path):
+    """關著的季：main.zhuan 與 zhuan_view 一個鍵都不多（沒有 illustration 就不寫 illustration_src），公開頁的 extras 是空的。"""
+    import server
+    from tianxia import annals
+
+    game = _game(zhuan_end=False)
+    game.state.player.contrib = 120  # 開著的話是第一階、插畫白送
+    annals.note(game.state, game.content, annals.DEED, "在長社城下守了一夜。", 3)
+    CharacterStore(game.world.db).save(game.state)
+    _close(game)
+    monkeypatch.setattr(server, "CONTENT", game.content)
+    monkeypatch.setattr(server, "WEB", tmp_path)
+    entry = server.main_view(game)["zhuan"]
+    assert set(entry) == {"season", "title"}
+    game.write_biography(game.biography_request(1), None, game.now + 40)
+    assert not {"illustration", "illustration_src", "seal", "tier", "verdicts"} & set(server.zhuan_view(game, 1, None))
+    code = game.share_biography(1, True, "offcode")
+    assert server.zhuan_extras(game.world, game.world.biography_by_code(code)) == {}
+
+
 def test_the_schema_does_not_move_and_bad_windows_are_caught():
     assert database.SCHEMA_VERSION == 7
     game = jianfa_game()

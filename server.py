@@ -3039,6 +3039,8 @@ def zhuan_view(game: Game, season: int, request: Request) -> dict:
     if view is None:
         raise GameError("這一季沒有你的傳。")
     view["writing"] = _zhuan_key(game, season) in ZHUAN_JOBS
+    if view.get("illustration"):  # 列傳插畫（減法季批 7b）：讀傳那一層開頭那一幅，同江湖頁的 main.zhuan；圖檔在才給網址，沒有是 None
+        view["illustration_src"] = zhuan_art_src(view["illustration"])
     if view.get("code"):
         view["url"] = f"{public_base(request)}/zhuan/{view['code']}"
     return view
