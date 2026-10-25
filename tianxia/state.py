@@ -633,7 +633,7 @@ class PlayerState(BaseModel):
     letter_day: int = -1  # 上一封信是第幾個遊戲日收到的（一天最多一封）
     letter_seq: int = 0  # 書信與委託的流水號
     cheers: list[str] = Field(default_factory=list)  # 等著寫道賀信的「人物 id|你做的事」（figure_life.spread 情誼往上動的那幾位）
-    # 開口求人（tianxia/parley.py；Joy 2026-10-23「先做看看」）：人物 id → 今天求過他幾件、婉拒過哪幾件、指點過沒；
+    # NPC 智能 2.0（tianxia/parley.py；Joy 2026-10-23「先做看看」）：人物 id → 今天求過他幾件、婉拒過哪幾件、指點過沒；
     # 還沒答覆的條件（他開了條件、你還沒接）；辦成委託之後他欠你的那一件；今天答應陪你出陣的人。這一季的，換季清掉
     parley_days: dict[str, ParleyDay] = Field(default_factory=dict)
     parley_terms: dict[str, ParleyTerms] = Field(default_factory=dict)
@@ -1087,7 +1087,7 @@ class Bounty(BaseModel):
     # 或「委託」（求援書信附的那一件，只在收信的人身上：PlayerState.letters）。標題與掛單人照它寫，交差時那位人物情誼另加
     figure: str | None = None
     motive: Literal["復仇", "追剿", "委託", "求援"] | None = None
-    parley_ask: str | None = None  # 開口求人的條件（parley.py）：辦成了，下回見面他兌現這一件
+    parley_ask: str | None = None  # NPC 智能 2.0的條件（parley.py）：辦成了，下回見面他兌現這一件
 
 
 class ParleyDay(BaseModel):
@@ -1157,7 +1157,7 @@ class Letter(BaseModel):
     寫不出來照固定句）。"""
 
     id: int
-    kind: Literal["求援", "道賀", "邀宴", "道謝", "條件"]  # 邀宴、道謝是第三批（宴客、求援委託辦成了）；條件是開口求人（parley.py）
+    kind: Literal["求援", "道賀", "邀宴", "道謝", "條件"]  # 邀宴、道謝是第三批（宴客、求援委託辦成了）；條件是NPC 智能 2.0（parley.py）
     sender: str  # 對話人物 id
     at: float  # 收到的那一刻（世界秒）
     mood: str = ""  # 寫信時他的心事（求援：焦慮、悲憤）
