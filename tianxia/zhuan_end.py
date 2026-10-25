@@ -39,6 +39,8 @@ ART_DONE = "列傳開頭配上了一幅水墨。"
 SEAL_DONE = "列傳末尾蓋上一方朱印：{seal}。"
 QUOTE_DONE = "你請{name}替你的列傳寫一句評曰。"
 QUOTE_LATER = "你的列傳已經寫成，下一次重修時這一句才會寫進去。"
+ART_NO_SIDE = "沒投靠一方的人，列傳配不了插畫。"  # 插畫票不賣的原因（FB-845）
+ART_FREE = "你的列傳得了第一階，插畫白送，不必買。"
 DEEP_FULL = "你已深交{n}位人物，{name}的情誼停在 {cap}。"
 DEEP_NOTE = "已深交{n}位"
 DEEP_TITLE = "深交"
@@ -79,6 +81,17 @@ def illustration_for(state: GameState, content: Content, season: WorldState) -> 
     return f"{faction.id}_{'win' if won else 'lose'}"
 
 
+def art_problem(state: GameState, content: Content, season: WorldState) -> str | None:
+    """列傳插畫票這一季用不用得上（FB-845）：用不上就不賣，回商城那一列灰掉要寫的原因；用得上是 None。
+    沒投靠劇本裡的陣營的人（散人）列傳配不了插畫；休季時已經得第一階的人插畫白送（Game._zhuan_options 也是這兩條），
+    季中看不出會是第幾階，照舊賣。"""
+    p = state.player
+    if content.scenario.find_faction(p.faction) is None:
+        return ART_NO_SIDE
+    result = season.final_tiers.get(p.name) if season.ended else None
+    return ART_FREE if result is not None and result.tier == 1 else None
+
+
 def art_path(key: str) -> str:
     """圖庫鍵 → web/img 底下的路徑（不含副檔名）；伺服器照 scene_art 的做法看檔案在不在。"""
     return f"{ART_DIR}/{key}"
@@ -113,9 +126,11 @@ def season_tickets(purchases, season: int) -> dict:
     return out
 
 
-def unused(purchases, effect: str) -> list:
-    """帶著 effect、沒退、還沒用掉的那幾筆（舊的在前；同 mall.tokens，只是拿已經讀好的那一份，不再讀資料庫）。"""
-    return [b for b in reversed(purchases) if b.refunded is None and b.data.get(effect) and not b.data.get("used")]
+def unused(purchases, effect: str, season: int | None = None) -> list:
+    """帶著 effect、沒退、還沒用掉的那幾筆（舊的在前；同 mall.tokens，只是拿已經讀好的那一份，不再讀資料庫）。
+    season 給了只算那一季買的（FB-845：列傳的票綁買的那一季，之後的季不再冒出用票的鈕）。"""
+    return [b for b in reversed(purchases) if b.refunded is None and b.data.get(effect) and not b.data.get("used")
+            and (season is None or b.season == season)]
 
 
 def extras(content: Content, season_number: int, profile: dict, tickets: dict, text: str | None = None) -> dict:

@@ -12,7 +12,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 
 from . import calendar, library, naming
@@ -184,12 +184,15 @@ class Moment:
     """上架看的「此刻」（減法季批 7b 的 MallWindow.rule、phases、from_week 用）：phase 是 season（籌備中、開打的季）或 resting（休季），
     week 是季曆第幾週（開打的季才有；籌備中、休季是 None），rules 是這一季（開季的章）開著的子開關名。呼叫端（Game._mall_moment）給；
     沒給（MOMENT）就是季中、不知道第幾週、子開關都不算：只有沒寫這三樣的商品照舊上架。
-    segments：這一季的季曆照段（7 天濃縮季，calendar.week7_on）：說明裡的上架時機（{上架}）寫「第 5 天」不寫「第三週」（FB-849）。"""
+    segments：這一季的季曆照段（7 天濃縮季，calendar.week7_on）：說明裡的上架時機（{上架}）寫「第 5 天」不寫「第三週」（FB-849）。
+    blocked：商品 id → 這個人這一季用不上的那一句（FB-845，例：沒投靠一方的人買不了列傳插畫）：貨架上那一列灰掉寫這一句、
+    買也買不了（buy_problem）；沒有這個商品的鍵就是買得了。"""
 
     phase: str = "season"
     week: int | None = None
     rules: frozenset[str] = frozenset()
     segments: bool = False
+    blocked: dict[str, str] = field(default_factory=dict)
 
 
 MOMENT = Moment()
@@ -252,11 +255,15 @@ def limit_left(item: MallItem, wallet: Wallet, owner: str, day: int, season: int
     return max(0, min(left)) if left else None
 
 
-def buy_problem(item: MallItem, wallet: Wallet, owner: str, day: int, season: int) -> str | None:
-    """買不了的那一句（限購、元寶不夠）；買得了是 None。上架由呼叫端先看（on_sale）。"""
+def buy_problem(item: MallItem, wallet: Wallet, owner: str, day: int, season: int, moment: Moment = MOMENT) -> str | None:
+    """買不了的那一句（限購、這個人這一季用不上、元寶不夠）；買得了是 None。上架由呼叫端先看（on_sale）。
+    限購排在「用不上」前面（FB-845：季中買了一張、休季才知道用不上，再按說的是限購）。"""
     problem = limit_problem(item, wallet, owner, day, season)
     if problem:
         return problem
+    unfit = moment.blocked.get(item.id)
+    if unfit:
+        return unfit
     balance = wallet.balance(owner)
     return SHORT.format(name=item.name, price=item.price, balance=balance) if balance < item.price else None
 
@@ -285,7 +292,7 @@ def buy(
         item = content.mall.get(item_id)
         if item is None or not on_sale(item, day, season, moment):
             return NO_ITEM
-        problem = buy_problem(item, wallet, owner, day, season)
+        problem = buy_problem(item, wallet, owner, day, season, moment)
         if problem:
             return problem
         want = max(1, min(MAX_QTY, int(qty)))
@@ -497,7 +504,7 @@ def view(content: Content, wallet: Wallet, owner: str, day: int, season: int, mo
     for item in content.mall.values():
         if not on_sale(item, day, season, moment):
             continue
-        why = buy_problem(item, wallet, owner, day, season)
+        why = buy_problem(item, wallet, owner, day, season, moment)
         days = item.effects.get("card_days", 0)
         room = limit_left(item, wallet, owner, day, season)
         # 一次最多買幾件（網頁的數量框，Joy 2026-10-22）：限購剩的、元寶買得起的、MAX_QTY 取最少；月卡一次一張（確認那一行寫用到哪一天）

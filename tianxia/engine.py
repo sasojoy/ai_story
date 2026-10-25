@@ -12062,16 +12062,20 @@ class Game:
 
     def _mall_moment(self) -> mall.Moment:
         """上架看的「此刻」（減法季批 7b：MallWindow 的 rule、phases、from_week）：休季或季中、開打的季是季曆第幾週、這一季（開季的章）
-        開著哪幾個商品寫到的子開關；segments 是這一季的季曆照不照段（7 天濃縮季），商品說明的上架時機（{上架}）照它寫（FB-849）。
+        開著哪幾個商品寫到的子開關；segments 是這一季的季曆照不照段（7 天濃縮季），商品說明的上架時機（{上架}）照它寫（FB-849）；
+        blocked 是這個人這一季用不上的商品 → 原因（現在只有列傳插畫票，zhuan_end.art_problem；FB-845）：貨架灰掉、買不了。
         沒寫這三樣的商品不看它，一個字都不變。"""
         c, w = self.content, self.state.world
         phase = self.world.season_phase()
         rules_named = {item.on_sale.rule for item in c.mall.values() if item.on_sale.rule}
+        rules = frozenset(part for part in rules_named if jianfa(c, w, part))
+        blocked: dict[str, str] = {}
+        if "zhuan_end" in rules and (unfit := zhuan_end.art_problem(self.state, c, w)):  # 這一季用不上的插畫票不賣（FB-845）
+            blocked.update({item.id: unfit for item in c.mall.values() if item.effects.get(zhuan_end.ART)})
         return mall.Moment(
             phase="resting" if phase == "resting" else "season",
             week=calendar.point(w.time, c, w).week if phase == "running" and not w.ended else None,
-            rules=frozenset(part for part in rules_named if jianfa(c, w, part)),
-            segments=calendar.week7_on(w, c),
+            rules=rules, segments=calendar.week7_on(w, c), blocked=blocked,
         )
 
     def mall_entry(self) -> dict | None:
@@ -16478,11 +16482,12 @@ class Game:
         used = zhuan_end.season_tickets(purchases, n)
         standing = annals.standing(s, c, s.world)
         out = []
-        if zhuan_end.unused(purchases, zhuan_end.ART) and standing.get("illustration") and not used["art"] and standing.get("tier") != 1:
+        # 票綁買的那一季（FB-845）：只數這一季買的，之前的季沒用掉的不再冒出用票的鈕
+        if zhuan_end.unused(purchases, zhuan_end.ART, n) and standing.get("illustration") and not used["art"] and standing.get("tier") != 1:
             out.append(Option(id=zhuan_end.PICK_ART, label=zhuan_end.ART_BUTTON))
-        if zhuan_end.unused(purchases, zhuan_end.SEAL_TICKET) and not used["seal"]:
+        if zhuan_end.unused(purchases, zhuan_end.SEAL_TICKET, n) and not used["seal"]:
             out.append(Option(id=zhuan_end.SEAL, label=zhuan_end.SEAL_BUTTON.format(seal=zhuan_end.seal_text(c, n, standing))))
-        if zhuan_end.unused(purchases, zhuan_end.QUOTE_TICKET):
+        if zhuan_end.unused(purchases, zhuan_end.QUOTE_TICKET, n):
             taken = set(used["quotes"]) | set(self._verdict_taken(standing))
             out += [Option(id=f"{zhuan_end.QUOTE}{cid}", label=zhuan_end.QUOTE_BUTTON.format(name=c.characters[cid].name, value=value))
                     for cid, value in zhuan_end.quote_figures(s, c, taken)]
@@ -16498,14 +16503,14 @@ class Game:
         wallet, owner, n = self._wallet(), self._mall_owner(), s.player.season_number
         now = self.pill_now()
         if option_id == zhuan_end.PICK_ART:
-            wallet.mark_used(mall.tokens(wallet, owner, zhuan_end.ART)[0], now, season=n, art=zhuan_end.illustration_for(s, c, s.world))
+            wallet.mark_used(mall.tokens(wallet, owner, zhuan_end.ART, season=n)[0], now, season=n, art=zhuan_end.illustration_for(s, c, s.world))
             lines = [zhuan_end.ART_DONE]
         elif option_id == zhuan_end.SEAL:
-            wallet.mark_used(mall.tokens(wallet, owner, zhuan_end.SEAL_TICKET)[0], now, season=n)
+            wallet.mark_used(mall.tokens(wallet, owner, zhuan_end.SEAL_TICKET, season=n)[0], now, season=n)
             lines = [zhuan_end.SEAL_DONE.format(seal=zhuan_end.seal_text(c, n, annals.standing(s, c, s.world)))]
         else:
             cid = option_id.removeprefix(zhuan_end.QUOTE)
-            wallet.mark_used(mall.tokens(wallet, owner, zhuan_end.QUOTE_TICKET)[0], now, season=n, fid=cid)
+            wallet.mark_used(mall.tokens(wallet, owner, zhuan_end.QUOTE_TICKET, season=n)[0], now, season=n, fid=cid)
             lines = [zhuan_end.QUOTE_DONE.format(name=c.characters[cid].name)]
             row = self.world.biography(n, s.player.name)
             if row is not None and row["text"] is not None:
