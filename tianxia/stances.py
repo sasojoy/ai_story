@@ -5,7 +5,8 @@
 - 一人一天一筆（PlayerState.stance_notes，天是 rules.game_day），全服這一週的計數在 WorldState.stance_counts；
 - 這一週有心意到門檻（StanceDef.threshold，沒寫照 Config.jianfa.stance_threshold 30【預設】），他照最多的那一個改做事
   （WorldState.stance_active）：推線乘倍（figures.tick 讀 push_scale）、每天 00:00 拉下他那一條線上自家塊的對面進度（daily）、
-  幾條痕跡記一筆算幾筆（rules.add_marks 讀 mark_scale）；那一刻發一則天下大事（不列名字）、記一筆江湖史，這一週勸過那一個心意的人
+  幾條痕跡記一筆算幾筆（rules.add_marks 讀 mark_scale）；過門檻那一刻先生效，之後換手只在每天 00:00 重算（FB-826）；生效、換手
+  各發一則天下大事（不列名字），江湖史同一位人物一週只記一筆（生效那一刻），這一週勸過那一個心意的人
   各在下一次同步記一則行狀（annals.STANCE，酒肆打聽不到）；
 - 每週一 00:00（world.WEEK_HOOKS；7 天的季照段）歸零重算：計數與他此刻照哪一個做事一起清掉。
 心意不是情誼：情誼是他喜不喜歡你，心意是他聽了大家的話之後做什麼。記一筆另記陣營貢獻（Config.jianfa.stance_contribution，
@@ -115,21 +116,26 @@ def bump(state: GameState, content: Content, fid: str, sid: str | None) -> None:
     check(state, content, fid)
 
 
-def check(state: GameState, content: Content, fid: str) -> StanceDef | None:
-    """這一週到門檻的心意裡照最多的那一個（同數照內容的順序）；跟他此刻照著做的不一樣才換、發天下大事（不列名字）、記江湖史。
-    都沒到是 None（此刻照著做的照留：歸零只在週初）。"""
+def _best(content: Content, world: WorldState, fid: str) -> StanceDef | None:
+    """這一週到門檻的心意裡最多的那一個（同數照內容的順序）；都沒到是 None。"""
+    book = world.stance_counts.get(fid, {})
+    reached = [(book.get(d.id, 0), -i, d) for i, d in enumerate(defs(content, fid)) if book.get(d.id, 0) >= threshold(content, d)]
+    return max(reached, key=lambda x: (x[0], x[1]))[2] if reached else None
+
+
+def check(state: GameState, content: Content, fid: str, *, midnight: bool = False) -> StanceDef | None:
+    """到門檻的心意裡照最多的那一個（_best）。他這一週還沒照哪一個做事：過門檻那一刻就生效，發天下大事（不列名字）、記江湖史。
+    已經照某一個做事了：換手只在每天 00:00 重算（midnight，daily 叫；FB-826，PM 2026-10-26——不然兩個都過門檻之後一筆換一次），
+    換了照發天下大事；江湖史同一位人物一週只記一次（就是生效的那一刻；週初歸零之後重來）。
+    回他此刻照著做的那一個；都沒到、還沒生效是 None（此刻照著做的照留：歸零只在週初）。"""
     w = state.world
-    book = w.stance_counts.get(fid, {})
-    rows = defs(content, fid)
-    reached = [(book.get(d.id, 0), -i, d) for i, d in enumerate(rows) if book.get(d.id, 0) >= threshold(content, d)]
-    if not reached:
-        return None
-    best = max(reached, key=lambda x: (x[0], x[1]))[2]
-    now = w.stance_active.get(fid)
-    if now is None or now.stance != best.id:
-        w.stance_active[fid] = StanceOn(stance=best.id, at=w.time, week=w.stance_week or week_of(content, w))
-        loc = content.figures[fid].location
-        rules.add_rumor(state, best.rumor, loc, content=content, layer="world", named=False)
+    best, now = _best(content, w, fid), w.stance_active.get(fid)
+    if best is None or (now is not None and (now.stance == best.id or not midnight)):
+        return find(content, fid, now.stance) if now is not None else None
+    w.stance_active[fid] = StanceOn(stance=best.id, at=w.time, week=w.stance_week or week_of(content, w))
+    loc = content.figures[fid].location
+    rules.add_rumor(state, best.rumor, loc, content=content, layer="world", named=False)
+    if now is None:
         rules.add_chronicle(state, best.chronicle or best.rumor)
     return best
 
@@ -161,13 +167,19 @@ def mark_scale(state: GameState, content: Content, key: str) -> int:
 
 
 def daily(state: GameState, content: Content) -> list[str]:
-    """每天 00:00 的掛鉤（world.DAY_HOOKS，21 天季與 7 天的季）：照著做的心意寫了 guard 的人物，他那一條線上自家佔著的塊，
-    每個攻方的進度各拉下 guard 點（領地爭奪的條；同 conquest.decay 直接改條、被戰書凍結的不動，不經 conquest.push：不記守城帳、
-    不分紅）。關著、領地爭奪關著什麼都不做。不回訊息（背景的事）。"""
+    """每天 00:00 的掛鉤（world.DAY_HOOKS，21 天季與 7 天的季）：先重算換手（已經照某一個做事的人物，最多的那一個不一樣了才換，
+    check(midnight=True)；FB-826），再替照著做的心意寫了 guard 的人物，把他那一條線上自家佔著的塊、每個攻方的進度各拉下 guard 點
+    （領地爭奪的條；同 conquest.decay 直接改條、被戰書凍結的不動，不經 conquest.push：不記守城帳、不分紅；領地爭奪關著不拉）。
+    關著什麼都不做。不回訊息（背景的事）。"""
     from . import conquest, figures  # noqa: PLC0415  conquest → territory → rules
 
     w = state.world
-    if not on(content, w) or not conquest.on(content, w):
+    if not on(content, w):
+        return []
+    if w.stance_week == week_of(content, w):  # 計數是上一週的（週初的掛鉤還沒跑）就不重算：歸零之後重來
+        for fid in sorted(w.stance_active):
+            check(state, content, fid, midnight=True)
+    if not conquest.on(content, w):
         return []
     for fid in list(w.stance_active):
         d = active(state, content, fid)

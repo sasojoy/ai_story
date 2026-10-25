@@ -83,7 +83,9 @@ def test_when_two_reach_it_the_most_wins_and_it_is_told_once():
     told = len(w.rumors)
     assert stances.check(s, c, LUZHI).id == "suzhan" and len(w.rumors) == told  # 沒換：不再發
     w.stance_counts[LUZHI]["chizhong"] = 32
-    assert stances.check(s, c, LUZHI).id == "chizhong" and w.stance_active[LUZHI].stance == "chizhong"
+    # 換手只在每天 00:00 重算（FB-826，PM 2026-10-26 推翻「一筆就換」；新規則的測試在 test_stances_fix6.py）：白天照舊、00:00 才換
+    assert stances.check(s, c, LUZHI).id == "suzhan" and len(w.rumors) == told
+    assert stances.check(s, c, LUZHI, midnight=True).id == "chizhong" and w.stance_active[LUZHI].stance == "chizhong"
     assert w.rumors[-1].text == _def(c, LUZHI, "chizhong").rumor and len(w.rumors) == told + 1
 
 
