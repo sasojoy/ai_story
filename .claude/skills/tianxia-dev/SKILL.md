@@ -196,6 +196,12 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 - **兩局測試各有一份內容**：`conquest_kit.conquest_game()`（同 `test_territory._game`）每一局各載一份 `real_content` 的複本，同一個資料庫開兩局時，在測試裡往內容加東西（例：借一份戰鬥範本）要兩局都加，不然第二局找不到、畫面靜靜地沒有那一場。
 - **`SharedWorldState` 加欄位**（2026-10-25 減法季 3b-1 的 `sorties`）：world 那一列是 `model_dump_json(exclude={"season", "active_battle", "sieges"})` 整份寫，加欄位不必改 `sqlite_world._load`／`_save`；「空的時候不寫鍵」在 `SharedWorldState._drop_empty_sorties`（wrap serializer）多判一個鍵就好。另外三件一起想：換季要不要清（`next_season`）、暫停繼續要不要把現實時刻往後挪（`resume_clock`，同 `seal_duels`）、輪詢要不要只讀那一格（`json_extract`，同 `seal_state`）。`tests/test_server.py` 的 `NOT_IN_THE_FINGERPRINT` 裡 `SharedWorldState` 那一組到 `siege_records` 就結束，緊接著是 `WorldState` 那一組（`seal_acts`、`xingshi_*` 是季的）——加在 `seal_acts` 後面會進錯組，分類測試報「沒分類」。
 - **招名是中文**：`tactics.counter`／`best_against`、`models.MOVES`／`BEATS` 認的是強攻、固守、奇襲（選項 id 也是 `duel:強攻`）；設計稿寫的「以巧破力」就是奇襲。撤退不在 `BEATS`，`tactics.counter("撤退", …)` 會 `KeyError`，有撤退的回合要自己判 0。
+- **欄位表上的鍵先 grep 畫面在讀什麼**（2026-10-26 減法季 3b 接線）：計畫寫「出陣前那張卡放 `main.sortie`」，可是 `main_view` 早就有 `"sortie": sortie.on(content)`（布林，`web/main.js` 拿 `m.sortie` 把行動列那一格叫「出陣」）。換成 dict 雖然還是真值，型別就變了——卡改放新鍵 `main.sortie_card`，欄位表那一列改成實際的鍵、回報寫給雲端。行動列那一格的選項 id 也一樣：網頁 `ACT_CELLS` 認 `act:train`，新規則沿用它（按了只回一句、不花體力，同探索的入口），不另開 `sortie:card`。
+- **從 `CharacterStore` 讀出來的別人沒有季**（`GameState.world` 是 `exclude=True`，讀回來是空的 `WorldState`）：拿別人的存檔問跟季有關的規則（`allied.side_of` 判豪強依附哪一軍、`team._fighters` 算威力）之前先 `state.world = self.state.world`（`_kin` 就是這樣做的）。3b 接線第一版漏了，豪強的假人一個都補不上約戰（`allied.on` 讀到空季回假，side 變成 `haoqiang`）；`tests/test_sortie_duel.py::test_a_gentry_bot_leaning_on_the_other_army_fills_in` 守。
+- **`BattleRecord.kind` 是 Literal，新的一種戰報不要加值**（FB-695：舊程式讀不進新存檔）：照舊用現成的 kind（例 `sortie`），種類的字寫在 `BattleRecord.label`（戰報上寫的種類，空的照 `battlelog.KIND_WORDS`）。
+- **照現實秒走的規則，整季機器人推不動**（`Game.advance` 只加 `advanced_real`、不動 `now`）：約戰的窗、冷卻照 `self.now`（FB-577：存進全服的時刻不用 `pill_now`），`bot.play_season` 裡永遠不到時，貼了就等季末作廢。量表與測試照伺服器的做法一步一步 `sync(now)`（`scripts/measure_conquest.py`）。
+- **參數放不進選單的玩家動作**（約戰封三招有 64 種組合，2026-10-26）：同 `step:next`，在 `Game.choose` 最前面接走（先問那條規則的 `on()`，關著照舊「此刻無法這麼做」），各自在 `world.mutate` 裡重驗；伺服器另開 `MAIN_ACTIONS` 走同一組 `Game` 方法。整季機器人與假人挑到的是選單上那一格（`act:train`），在 `bot.pick`／`bot_policy.take_turn` 最後換成帶參數的 id（`bot.duel_go`），不然按了那一格什麼都不做、每一步都白按。
+- **結算時替好幾個人寫紀錄**（約戰的攻方、同去、應戰的人）：每個人一份 `Draft` 掛在他那一份 Game 上（`_order_credit` 的引導、`_file_battle` 的結果標記都寫進它），做完 `journal.add_entry(g.state, g._draft.entry(...))`、`finally` 還原；自己就是其中一方時用自己（不要另讀一份，不然存檔會被蓋掉），別人 `_load_kin` 改完 `_save_kin`。掉落用這一場自己的亂數：暫時把那一份 Game 的 `rng` 換掉、`finally` 換回。
 
 ## 量表怎麼讀
 
