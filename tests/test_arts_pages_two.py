@@ -36,7 +36,7 @@ const parts = [
   src.slice(src.indexOf("\n  // ── 修練 ──"), src.indexOf("\n  function pagePractice(")),
   ...input.fns.map(fn),
   input.stubs || "",
-  "return { " + [...input.fns, ...input.consts, "libFilter", "setLibFilter", "healButton", "meltView", "meltShown", "meltPickShown"].join(", ") + " };",  // 後面這幾個在上面那一段裡
+  "return { " + [...input.fns, ...input.consts, "libFilter", "setLibFilter", "meltView", "meltShown", "meltPickShown"].join(", ") + " };",  // 後面這幾個在上面那一段裡
 ];
 const H = new Function("S", "calls", parts.join("\n"))(S, calls);
 H.S = S; H.calls = calls; H.store = store;
@@ -692,43 +692,29 @@ def test_the_craft_choice_is_remembered_in_the_browser_too():
     assert out == ["意境", {"tx-arts-filter-craft": "意境"}]
 
 
-def test_the_practice_poll_redraws_when_the_heal_button_changes():
-    """療傷鈕能不能按、寫什麼，看內傷與銀兩：輪詢只在 MENXIA_SHOWN 列的欄位變了才重畫，heal 不在裡面的話，
-    銀兩夠不夠變了鈕還是舊的（review-ap2 的小毛病）。煉製頁沒畫療傷鈕，不必。"""
+def test_the_practice_poll_no_longer_watches_the_heal_fields():
+    """療傷鈕 Joy 2026-10-25 從俠客頁拿掉了（療傷只在醫館，入口是江湖頁的「醫館療傷」）：輪詢重畫的欄位表（MENXIA_SHOWN）
+    不再看 heal、heal_cost——內傷或銀兩變了不必重畫俠客頁。"""
     src = webharness.app_source().replace("\r\n", "\n")
     shown = {
         page: re.findall(r'"([a-z_]+)"', fields)
         for page, fields in re.findall(r"^\s+(practice|craft): \[(.*?)\],?(?:\s*//.*)?$", src[src.index("const MENXIA_SHOWN"):], re.M)
     }
-    assert "heal" in shown["practice"] and "heal_cost" in shown["practice"] and "heal" not in shown["craft"]
+    assert "heal" not in shown["practice"] and "heal_cost" not in shown["practice"] and "heal" not in shown["craft"]
 
 
-# ── 卷軸卡上的療傷鈕：joy 的兩行（內傷與價錢）為底，加上伺服器說的「按不下去」──
+# ── 俠客頁沒有療傷鈕、沒有閉關（Joy 2026-10-25）──
 
 
-def _heal_button(x, injury, **kw):
+@needs_node
+def test_the_self_page_has_no_heal_button_and_no_seclusion_form():
+    """療傷只在醫館做得了，入口是江湖頁「此地還能做」的「醫館療傷」（act:heal）；閉關現在的玩法用不到。「去做」只剩煉製與自創。"""
     html = run(
-        f"S.menxia = {json.dumps(x)}; S.main.status.injury = {injury}; return H.pagePractice();",
-        S={"main": {"status": {"injury": injury}}}, fns=["pagePractice"], stubs=PRACTICE_STUBS,
+        f"S.menxia = {json.dumps(_menxia(heal_cost=12))}; S.main.status.injury = 23; return H.pagePractice();",
+        S={"main": {"status": {"injury": 23}}}, fns=["pagePractice"], stubs=PRACTICE_STUBS,
     )
-    return re.search(r'<button class="btn self-go" data-act="mx" data-op="heal"[^>]*>.*?</button>', html, re.S).group(0)
-
-
-@needs_node
-def test_the_heal_button_says_the_wound_and_the_price_and_is_greyed_out_when_it_cannot_be_pressed():
-    ok = _heal_button(_menxia(heal_cost=12), 23)
-    assert ">療傷<small>內傷 23・銀 12</small>" in ok and "disabled" not in ok
-    none = _heal_button(_menxia(heal_cost=0, heal={"ok": False, "why": "氣血無恙，不用療傷。"}), 0)
-    assert ">療傷<small>沒有內傷</small>" in none and "disabled" in none
-    poor = _heal_button(_menxia(heal_cost=12, heal={"ok": False, "why": "銀兩不足：療傷需要 12 兩。"}), 23)
-    assert "內傷 23・銀 12 不夠" in poor and "disabled" in poor and 'title="銀兩不足：療傷需要 12 兩。"' in poor
-
-
-@needs_node
-def test_an_old_server_without_the_heal_field_still_gets_the_wound_based_button():
-    old = _menxia(heal_cost=12)
-    del old["heal"]
-    assert "disabled" not in _heal_button(old, 23) and "disabled" in _heal_button(old, 0)
+    assert 'data-op="heal"' not in html and 'id="seclude"' not in html and "閉關" not in html
+    assert re.search(r'<section class="self-sec" aria-label="去做">.*?data-tab="craft".*?</section>', html, re.S)
 
 
 # ── 卷軸卡裡 W6、序章指路、閉關與意境的拒絕 ──
@@ -784,10 +770,11 @@ def test_a_greyed_melt_says_why_in_the_card_where_a_phone_player_can_read_it():
 
 
 @needs_node
-def test_the_hut_greys_out_seclusion_and_the_insight_melt_with_the_servers_reason():
+def test_the_hut_greys_out_the_insight_melt_with_the_servers_reason():
+    """閉關鈕 2026-10-25 拿掉了：伺服器還送 seclude_blocked，俠客頁不畫它。"""
     html = _practice([_art("w1", "武學", "甲拳", worn=True)], "S.insOpen = 'feng';",
                      seclude_blocked="草廬裡不能閉關。", insights=[{**_insight("feng", "風"), "blocked": "師父沒叫你熔意境。"}])
-    assert re.search(r'<button class="btn self-go" type="submit" disabled>閉關', html) and "草廬裡不能閉關。" in html
+    assert "閉關" not in html
     assert re.search(r'data-act="melt-insight"[^>]*disabled>化成心得 10</button><small class="muted">師父沒叫你熔意境。</small>', html)
 
 

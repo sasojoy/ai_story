@@ -663,20 +663,21 @@ def test_the_four_sights_screen_has_no_now_card_and_its_choices_fit(hut):
     assert 'class="now' not in page and 'class="card guide' not in page and page.count('data-act="choose"') == 4
 
 
-def test_the_seclusion_form_and_the_insight_melt_are_greyed_in_the_hut(hut):
-    """T6 review M4、M7：草廬裡不閉關、不熔意境。按鈕灰掉、寫師父的原因（跟練成鈕同一個做法），不是亮著按了才被擋。"""
+def test_the_insight_melt_is_greyed_in_the_hut(hut):
+    """T6 review M4、M7：草廬裡不熔意境。按鈕灰掉、寫師父的原因（跟練成鈕同一個做法），不是亮著按了才被擋。
+    閉關鈕 Joy 2026-10-25 從俠客頁拿掉了：引擎照舊回 seclude_blocked，頁面上不畫閉關。"""
     m, x = pages_at(hut, 3)
     assert x["seclude_blocked"] and x["insights"][0]["blocked"]
-    # 卷軸卡版：意境是一顆一顆的籤，點開才有「化成心得」鈕（S.insOpen），閉關鈕是兩行
+    # 卷軸卡版：意境是一顆一顆的籤，點開才有「化成心得」鈕（S.insOpen）
     page = run(m, "return H.pagePractice();", S={"insOpen": x["insights"][0]["id"]}, menxia=x)
-    assert re.search(r'<button class="btn self-go" type="submit" disabled>閉關<small>', page) and x["seclude_blocked"] in page
+    assert "閉關" not in page
     assert re.search(r'data-act="melt-insight"[^>]*disabled', page) and x["insights"][0]["blocked"] in page
     out = Game.new(hut.content, "路人", rng=random.Random(0), world=hut.world)
     out.state.player.insights.append("feng")
     x = server.menxia_view(out)
     page = run(server.main_view(out), "return H.pagePractice();", S={"insOpen": "feng"}, menxia=x)
     assert 'data-act="melt-insight"' in page  # 開著的那個意境的鈕在，只是沒灰
-    assert x["seclude_blocked"] is None and 'type="submit" disabled' not in page
+    assert x["seclude_blocked"] is None and "閉關" not in page
     assert not re.search(r'data-act="melt-insight"[^>]*disabled', page)
 
 

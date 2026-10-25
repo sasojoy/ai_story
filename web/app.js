@@ -1,7 +1,7 @@
 /* 天下大勢的網頁前端：沒有建置步驟、不靠外部函式庫。
  *
  * 畫面只有三種：登入、取名號、遊戲。遊戲畫面 = 頂上的狀態列 + 一頁內容 + 底部五個分頁：
- *   江湖（場景與選項）、修練（練成、閉關、武學與意境、修練與熔煉、名冊）、煉製（太極火爐：武學＋意境、武學＋武學合成，意境＋意境合併）、
+ *   江湖（場景與選項）、俠客（人像與裝備、武學、屬性、煉製與自創的入口、功法庫與門下）、煉製（太極火爐：意境＋意境）、
  *   輿圖、見聞（戰報、大勢、傳聞、江湖史、紀錄）。商城開著時多第六格「商城」與齒輪旁的錠子鈕，都打開商城那一層（不是一頁）。
  * 設定與管理者工具收在右上角的抽屜裡。
  *
@@ -699,7 +699,8 @@
     // 名號、所在底下的小字行（下一件、閉關、路程）：排在整列底下、整個寬度都能用，不跟右上角的設定鈕擠一邊。
     // 兩種時間的寫法固定（FB-062）：下一件是「季曆時刻（現實倒數）」，路程只寫現實倒數。這兩行比原本長，擠在一邊會折成四行，
     // 在路上時把路上最底下的「走法」擠到分頁列底下（FB-060）
-    // 「下一件」減法季批 1 搬進本週卡的「為什麼」（整合設計 6.2：表頭三行）；閉關、路程是這一刻的狀態，照舊
+    // 「下一件」減法季批 1 搬進本週卡的「為什麼」（整合設計 6.2：表頭三行）；路程是這一刻的狀態，照舊。
+    // 閉關的鈕 2026-10-25 拿掉了（Joy）：這一行只給拿掉之前就閉著關的人看到出關
     const subs = [
       s.busy_hours != null ? `🧘 閉關中，現實約 ${s.busy_hours} 小時後出關` : "",
       s.journey != null ? `🐎 ${esc(s.journey)}` : "",
@@ -1497,16 +1498,6 @@
   const tenCells = (html) => String(html || "").replace(/[●○]{10}/g, (run) =>
     `<span class="ten mini" role="img" aria-label="第${[...run].filter((c) => c === "●").length}成">${[...run].map((c) => `<i${c === "●" ? ' class="on"' : ""}></i>`).join("")}</span>`);
 
-  // 療傷鈕（FB-082，卷軸卡的兩行版）：「療傷」加一行內傷與價錢。按不按得下去由伺服器說（x.heal：沒有內傷、銀兩不夠都灰掉，原因放在
-  // title 與 aria-label）；價錢是 x.heal_cost（team.heal_cost），網頁不自己算。伺服器沒給 heal（舊版）就照內傷數畫
-  function healButton(x, injury) {
-    const h = x.heal, hurt = injury >= 1, cost = x.heal_cost || 0;
-    // 不在醫館（企劃者 2026-10-12）：鈕灰掉，第二行寫伺服器給的那一句（「這裡沒有醫館，最近的在…」）
-    // note：按得下去時伺服器寫好的價錢（銀兩只夠治一部分時是「治 N 點・M 兩（還剩 K 點）」，skillview.heal_note）
-    const sub = !hurt ? "沒有內傷" : h && h.clinic ? h.clinic : h && h.note ? h.note : `內傷 ${Math.round(injury)}・銀 ${cost}${h && !h.ok ? " 不夠" : ""}`;
-    const why = h && h.why ? ` title="${esc(h.why)}" aria-label="療傷：${esc(h.why)}"` : "";
-    return `<button class="btn" data-act="mx" data-op="heal" ${(h ? h.ok : hurt) ? "" : "disabled"}${why}>療傷<small>${dealHtml(sub)}</small></button>`;
-  }
 
   // 庫的篩選記在這個瀏覽器的 localStorage（FB-085）：重新整理、換頁回來還是上次選的；存不了就只在這一頁有效，讀不到就當沒選過
   const LIB_FILTER_KEY = "tx-arts-filter-practice";
@@ -1776,16 +1767,14 @@
     const xinde = shown("xinde") ? `<p class="self-xinde"><em>心得</em><b>${s.xinde | 0}</b>${s.hint ? `<small>${esc(s.hint)}</small>` : ""}</p>` : "";
     return `<section class="self-stats self-sec" aria-label="心得與屬性">${stats}${xinde}</section>`;
   }
-  // 「去做」那一段：四格兩欄——煉製（煉製頁）、自創武學（自創頁）、療傷、閉關（鈕底下選幾小時；表單 id 照舊 seclude）。
-  // 鈕按不按得下去、第二行的字都照原本那幾顆（healButton、seclude_blocked）；行狀、榜單、名帖匣在底下的「記錄」清單
-  function selfEntriesHtml(x, s) {
+  // 「去做」那一段：兩格——煉製（煉製頁）、自創武學（自創頁）。療傷與閉關 Joy 2026-10-25 拿掉：療傷只在醫館做得了，
+  // 入口就是江湖頁「此地還能做」的「醫館療傷」（act:heal），這裡再放一顆多半是灰的；閉關現在的玩法用不到。兩個都沒有時整段不畫
+  function selfEntriesHtml(x) {
     const c = S.main && S.main.status && S.main.status.create;
     const craft = shown("tab:craft") ? '<button class="btn self-go" data-act="tab" data-tab="craft" data-glow="tab:craft">煉製<small>意境合成、看爐</small></button>' : "";
     const create = c && c.on ? `<button class="btn self-go" data-act="create-open">${c.draft ? "接著自創" : "自創武學"}<small>${createSub(c)}</small></button>` : "";
-    const heal = healButton(x, s.injury).replace('class="btn"', 'class="btn self-go"');
-    const seclude = `<form id="seclude" class="seclude"><button class="btn self-go" type="submit" ${x.seclude_blocked ? "disabled" : ""}>閉關<small>得心得，氣血回復加倍</small></button>
-        <select class="input" name="hours" aria-label="閉關幾小時">${[1, 2, 4, 6, 8, 12].map((h) => `<option value="${h}" ${h === 8 ? "selected" : ""}>${h} 小時</option>`).join("")}</select></form>`;
-    return `<section class="self-sec" aria-label="去做"><div class="self-hd"><h3>去做</h3></div><div class="self-goes">${craft}${create}${heal}${seclude}</div></section>`;
+    if (!craft && !create) return "";
+    return `<section class="self-sec" aria-label="去做"><div class="self-hd"><h3>去做</h3></div><div class="self-goes">${craft}${create}</div></section>`;
   }
   // 行狀（自己的傳，見聞那一頁的一段，SELF_NEWS）：人像那張卡右上角一顆「行狀 ›」（Joy 2026-10-24：榜單、名帖匣回見聞；榜單是籤、名帖匣在紀錄底下）
   const heroAnnalsHtml = () => (shown("tab:news") ? SELF_NEWS.map((n) => `<button class="linkish hero-annals" data-act="news" data-news="${n.id}">${n.name} ›</button>`).join("") : "");
@@ -2301,9 +2290,7 @@
       ${heroPanel(x, s)}
       ${selfArtsHtml(x)}
       ${selfStatsHtml(s)}
-      ${selfEntriesHtml(x, s)}
-      ${noteAt("heal")}
-      ${x.seclude_blocked ? `<p class="muted">${esc(x.seclude_blocked)}</p>` : ""}
+      ${selfEntriesHtml(x)}
       <div class="msg" id="mx-msg">${S.message}</div>
       ${naming}
       ${attrNoteHtml(x)}
@@ -5322,7 +5309,6 @@
       case "wield": case "dismantle": case "name_divine": case "bind_art": return gear((slot(extra.weapon) || {}).slot);
       case "feed": return gear("mount");
       case "chuangong": case "join": case "leave": return { from: [".person-card", null], to: [".person-card", null], note: "person" };
-      case "heal": return { from: ['[data-op="heal"]', null], to: ['[data-op="heal"]', null], note: "heal" };
       default: return null;
     }
   }
@@ -6234,40 +6220,6 @@
         if (document.getElementById("shop-name-divine-" + form.dataset.id)) { S.divineWhy[form.dataset.id] = said; renderShop(); } // 被拒的原因留在表單裡（FB-193）
         const again = document.getElementById("shop-name-divine-" + form.dataset.id)?.querySelector('input[name="name"]');
         if (again) again.value = data.name;
-      } else if (form.id === "seclude") {
-        // 閉關（QA L9）：真的進了閉關（busy_hours 有值）才回江湖頁。引擎不讓閉關（在路上、打坐、事件進行中）
-        // 也是 200 加一句原因，請求本身失敗也一樣：留在修練頁、原因寫在頁面上方。
-        // 等回應時玩家換到別的分頁（#mx-msg 煉製頁也有），原因就只用提示泡泡講，不寫到別頁上
-        const tab = S.tab;
-        await busy(async () => {
-          let r;
-          try {
-            r = await api("/api/do/seclude", { hours: Number(data.hours) });
-          } catch (e) {
-            if (S.stage === "game" && S.tab === tab) {
-              S.message = esc(failText(e));
-              const el = document.getElementById("mx-msg");
-              if (el) { el.innerHTML = S.message; el.classList.remove("still"); } // 新的一句，照常浮現
-              window.scrollTo({ top: 0, behavior: "smooth" });
-            }
-            return;
-          }
-          const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-          if (r.main.status.busy_hours != null) {
-            S.tab = "jianghu";
-            applyMain(r.main);
-            window.scrollTo(0, 0);
-            if (text) toast(text);
-          } else if (S.tab === tab) {
-            S.message = r.message || "";
-            setMain(r.main);
-            renderTop();
-            redrawPage(); // 選好的時數、填到一半的功法名字照舊，改好原因再按一次就行
-            window.scrollTo({ top: 0, behavior: "smooth" });
-          } else if (text) {
-            toast(text); // S.main 不動，換過去的那一頁交給下一輪輪詢照它自己的方式補上
-          }
-        });
       } else if (form.id === "ad-mall-form") {
         // 管理者查一個人的元寶帳（商城第二批）：查到了畫在表單底下，查不到的原因寫在表單那一行。抽屜不關
         const name = (data.name || "").trim();
@@ -6316,7 +6268,7 @@
       }
     } catch (e) {
       if (submit) submit.disabled = false;
-      formMsg(form, failText(e)); // 沒有訊息行的表單（閉關…）不受影響
+      formMsg(form, failText(e)); // 沒有訊息行的表單不受影響
     }
   });
 
@@ -6418,11 +6370,11 @@
   // 修練、煉製兩頁各自畫了 menxia 的哪幾欄（照 pagePractice／pageCraft）：輪詢只在這幾欄變了才重畫。
   // 不比整份，是因為本人卡上的氣血一直在回，整份 menxia 幾乎每分鐘都不一樣，煉製頁根本沒畫那張卡
   const MENXIA_SHOWN = {
-    practice: ["rules", "heal_cost", "slot_cards", "owned_arts", "insights", "holdings", "naming", "player_card", "roster", "person", "person_card", "on_team", "lessons", "heal", "gear"],  // heal：療傷鈕能不能按（銀兩夠不夠、內傷）變了就要重畫
+    practice: ["rules", "slot_cards", "owned_arts", "insights", "holdings", "naming", "player_card", "roster", "person", "person_card", "on_team", "lessons", "gear"],  // 療傷鈕 2026-10-25 拿掉了（Joy）：heal、heal_cost 不再看
     craft: ["owned_arts", "insights", "holdings", "clue_items", "bag", "forge_line", "xinde"],
   };
 
-  // 重畫這一頁但保留玩家正在做的事（輪詢、閉關被拒時用）：填到一半的欄位（閉關時數）、
+  // 重畫這一頁但保留玩家正在做的事（輪詢時用）：填到一半的欄位（表單裡的字）、
   // 摺疊區的開合（輿圖的取景每次照地圖框重算，重畫照舊套用）。
   // quiet：輪詢的重畫，頁面上方那一行訊息沒有變，不要再播一次浮現動畫
   function redrawPage(quiet = false) {

@@ -873,13 +873,9 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .naming .input { flex: 1 1 auto; min-width: 0; }
 .naming .btn { flex: none; }
 .naming.divine { margin-top: 6px; } /* 神器原品定名：接在裝備庫那一列底下 */
-/* 療傷、閉關兩格：閉關那一格是表單，底下一個時數選單 */
-.tune { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 4px; }
-.tune .btn, .acts .btn { flex-direction: column; gap: 0; min-height: 50px; padding: 6px 8px; }
-.tune .btn small, .acts .btn small { font-size: 11px; font-weight: 400; opacity: 0.85; line-height: 1.3; }
-.seclude { display: grid; gap: 4px; }
-.seclude .btn { min-height: 44px; }
-.seclude .input { min-height: 34px; padding: 2px 8px; font-size: 14px; }
+/* 兩行的鈕（名字＋底下一行小字） */
+.acts .btn { flex-direction: column; gap: 0; min-height: 50px; padding: 6px 8px; }
+.acts .btn small { font-size: 11px; font-weight: 400; opacity: 0.85; line-height: 1.3; }
 .acard { background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--q, var(--line)); border-radius: 16px;
   padding: 12px; margin-bottom: 10px; box-shadow: var(--shadow); overflow-wrap: anywhere; }
 .acard.empty { color: var(--ink-2); }
@@ -1996,13 +1992,12 @@ ul.board-book { list-style: none; margin: 0; padding: 0; }
 .self-hd h3::before { content: ""; width: 4px; height: 16px; background: var(--accent); border-radius: 1px; }
 .self-hd .linkish { margin: 0 0 0 auto; font-size: 13px; min-height: 32px; }
 .self-hd .pts { margin-left: auto; font: 600 13px var(--sans); color: var(--accent); }
-/* 去做四格（煉製、自創武學、療傷、閉關）兩欄，跟江湖頁的行動列同一種墨底的格子；閉關那一格是表單，鈕底下一排選幾小時 */
+/* 去做兩格（煉製、自創武學）兩欄，跟江湖頁的行動列同一種墨底的格子（療傷、閉關 Joy 2026-10-25 拿掉） */
 .self-goes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .self-go, .self-go.btn { min-height: 64px; display: grid; justify-items: center; align-content: center; gap: 2px; background: var(--disk); color: #ede2d3;
   border: 1px solid color-mix(in srgb, var(--gold) 25%, transparent); border-radius: 10px; font: 700 16px var(--serif); letter-spacing: 0.08em; box-shadow: none; }
 .self-go small { font: 11px var(--sans); color: #b9ab98; font-weight: 400; letter-spacing: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .self-go:disabled, .self-go.btn:disabled { opacity: 0.5; }
-.self-goes .seclude { display: grid; gap: 4px; align-content: start; }
 /* 行狀：人像那張卡右上角一顆小字（Joy 2026-10-24：榜單、名帖匣回見聞，行狀留在俠客頁） */
 .hero-sub .hero-annals { display: inline-flex; min-height: 28px; margin: 2px 0 0; padding: 0; font-size: 12px; }
 /* 四個摺疊（功法庫、裝備、門下、規矩）：標題一行宋體、底下一道細線，不圍框 */
