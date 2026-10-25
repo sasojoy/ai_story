@@ -47,7 +47,7 @@ def test_on_fills_the_batch_one_card():
     card = view["sides_card"]
     cols = {col["id"]: col for col in card["cols"]}
     assert set(cols) == {"guan", "huang", "haoqiang"} and card["lean"] is None  # 兩軍的人沒有「此刻幫誰」
-    assert card["tier_hint"] == game.tier_hint() == "未入階・還差 60" and "ledger" not in card
+    assert card["tier_hint"] == game.tier_hint() == "未入階・還差 40" and "ledger" not in card
     for side, col in cols.items():  # 贏了給照四階、投靠點帶分鐘（批 3c 補進批 1 的卡）
         assert col["gives"] == mine[side]["reward"] and col["join_at"] == mine[side]["join_at"]
     assert cols["haoqiang"]["now"] == mine["haoqiang"]["now"] != weekcard.HAOQIANG_NOW_PENDING
@@ -66,7 +66,7 @@ def test_lean_ledger_and_hint_for_an_army_a_gentry_and_a_drifter():
 
 
 def test_tier_hint_ranks_against_everyone_saved():
-    """官軍此刻領先（結局照此刻：官軍贏）：甲 100 第一階；丙 80 第三階、追平甲就進第一階（還差 20）；乙 50 還差 10 到門檻。"""
+    """官軍此刻領先（結局照此刻：官軍贏）：甲 100 第一階；丙 80 第三階、追平甲就進第一階（還差 20）；乙 30 還差 10 到門檻。"""
     first = save(wins_game(name="甲客", faction="guan", at="changshe"))
     first.state.player.contrib = 100
     save(first)
@@ -74,7 +74,7 @@ def test_tier_hint_ranks_against_everyone_saved():
     third.state.player.contrib = 80
     save(third)
     low = wins_game(name="乙客", faction="guan", at="changshe", world=first.world)
-    low.state.player.contrib = 50
+    low.state.player.contrib = 30
     assert first.tier_hint() == "第一階"
     assert third.tier_hint() == "第三階・還差 20"
     assert low.tier_hint() == "未入階・還差 10"
