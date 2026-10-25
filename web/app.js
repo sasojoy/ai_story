@@ -3371,7 +3371,7 @@
       : `<span class="jd fifth" title="${esc(f.note)}">${ringHtml([], "<i>絕</i>", "vacant")}<small class="dim">${esc(f.note)}</small></span>`;
     // 每一格裝的那一招寫出來（Joy 2026-10-25「武學裡面槽裡面擺的，他效果好像不會顯示」）：玉環上只放得下兩個字與效果名，
     // 做什麼原本只在 title（手機上看不到）；底下一格一行：第幾格、意境、效果、這一招做什麼。字待 joy 潤
-    const notes = a.slots.map((s, i) => (s ? `<li><b>${cnNum(i + 1)}・「${esc(s.name)}」</b>${lookSeal(s.look)}<span class="jdn-fx">${esc(fxText(s.fx) || s.skill || "")}</span>${s.desc ? `<span class="jdn-desc">${esc(String(s.desc).replace(/^〔[^〕]*〕/, ""))}</span>` : ""}${stkHtml(s.stack)}</li>` : "")).join("");
+    const notes = a.slots.map((s, i) => (s ? `<li><b>第 ${i + 1} 格「${esc(s.name)}」</b>${lookSeal(s.look)}<span class="jdn-fx">${esc(fxText(s.fx) || s.skill || "")}</span>${s.desc ? `<span class="jdn-desc">${esc(String(s.desc).replace(/^〔[^〕]*〕/, ""))}</span>` : ""}${stkHtml(s.stack)}</li>` : "")).join("");
     return `<div class="jade">${cells}${fifth}</div>${notes ? `<ul class="jd-notes">${notes}</ul>` : ""}${picker}`;
   }
 
