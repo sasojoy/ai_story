@@ -66,6 +66,7 @@ from tianxia import (
     naming, narration,
     ollama_client, power_save, rules,
     precise, seal, seal_duel, server_bots, social, sortie, speech, tavern, team, timetable, training, treasures, weekcard, xingshi, yuedan,
+    zhuan_end,
 )
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import env_profile, load_content, profile_line
@@ -97,6 +98,14 @@ def scene_art(game: Game, status: dict) -> dict | None:
         "kind": got["kind"], "src": f"/static/img/{got['path']}.webp", "title": got["title"], "sub": got["sub"],
         "time": when if got["kind"] == "place" else "", "head": md(got["head"]),
     }
+
+
+def zhuan_art_src(key: str | None) -> str | None:
+    """列傳插畫（減法季批 7b，zhuan_end.illustration_for 的圖庫鍵）的網址：web/img/zhuan/<鍵>.webp 真的在才給（雲端批 8 放圖；同 scene_art）。"""
+    if not key:
+        return None
+    path = zhuan_end.art_path(key)
+    return f"/static/img/{path}.webp" if (WEB / "img" / f"{path}.webp").is_file() else None
 
 
 def horse_art() -> list[str]:
@@ -1869,6 +1878,8 @@ def _main_view_body(game: Game) -> dict:
         view["letter"] = letter
     zhuan = game.biography_entry()  # 休季：江湖頁最上面的「讀你的傳」（玩家傳第二批）；季還在跑、沒有行狀是 None
     if zhuan is not None:
+        if zhuan.get("illustration"):  # 列傳插畫（減法季批 7b）：圖檔在才給網址，沒有是 None
+            zhuan["illustration_src"] = zhuan_art_src(zhuan["illustration"])
         view["zhuan"] = zhuan
     result = game.season_result()  # 第一季休季：江湖頁最上面的結算卡（計畫 T9；開關關著、進行中都不送）
     if result is not None:
@@ -3048,11 +3059,33 @@ def api_zhuan_share(request: Request, body: dict = Body(default={})):
 def zhuan_page(code: str, request: Request):
     """公開的傳（不用登入、唯讀）：只認公開中的分享代碼，其餘一律 404（不說是沒有、還是收回了）。
     帶 Open Graph，LINE、FB 貼上去有預覽（題簽圖是 web/zhuan-og.png，所有的傳共用一張）。"""
-    row = open_world().biography_by_code(code)
+    store = open_world()
+    row = store.biography_by_code(code)
     if row is None:
         return HTMLResponse(zhuan_html.missing(), status_code=404)
     base = public_base(request)
-    return HTMLResponse(zhuan_html.page(row, CONTENT.scenario.name, f"{base}/zhuan/{code}", f"{base}/static/zhuan-og.png"))
+    return HTMLResponse(zhuan_html.page(row, CONTENT.scenario.name, f"{base}/zhuan/{code}", f"{base}/static/zhuan-og.png",
+                                        extras=zhuan_extras(store, row)))
+
+
+def zhuan_extras(store, row: dict) -> dict:
+    """公開頁多畫的（減法季批 7b）：那一季開著列傳為終點時，紀念印上的字（蓋了才有）與插畫的網址（第一階或用了插畫票、圖檔在才有）；
+    其餘是空的（頁面一個位元組都不變）。票照那一位的錢包讀（商城關著當沒有）。"""
+    number = row["season"]
+    season = store.get_season() if number == store.get_season_number() else store.past_season(number)
+    if season is None or not zhuan_end.on(CONTENT, season):
+        return {}
+    from tianxia.wallet import Wallet  # noqa: PLC0415
+
+    purchases = Wallet(store.db).purchases(name_key(row["name"])) if mall.on(CONTENT) else []
+    got = zhuan_end.extras(CONTENT, number, row["profile"], zhuan_end.season_tickets(purchases, number))
+    out = {}
+    art = zhuan_art_src(got["illustration"])
+    if art:
+        out["art"] = art
+    if got["seal"]:
+        out["seal"] = got["seal"]
+    return out
 
 
 @app.get("/api/map")

@@ -3341,11 +3341,17 @@ class MallLimit(_Strict):
 
 
 class MallWindow(_Strict):
-    """一件商品的上架期間（4.3）：哪幾季（空的是每一季）、哪一段日子（台灣日期 YYYY-MM-DD，含頭尾；不寫是不限）。"""
+    """一件商品的上架期間（4.3）：哪幾季（空的是每一季）、哪一段日子（台灣日期 YYYY-MM-DD，含頭尾；不寫是不限）。
+    減法季批 7b（列傳為終點的四件商品，整合設計第九章）多三樣，都不寫就跟以前一樣：rule 是 Config.jianfa 的子開關名，這一季
+    （開季的章）開著才上架；phases 是賣在季中（season：籌備中與開打的季）還是休季（resting），空的是都賣；from_week 是季中從季曆
+    第幾週起賣（休季不看）。"""
 
     seasons: list[int] = Field(default_factory=list)
     start: str | None = None
     end: str | None = None
+    rule: str | None = None
+    phases: list[Literal["season", "resting"]] = Field(default_factory=list)
+    from_week: int | None = Field(default=None, ge=1)
 
 
 class MallItem(_Strict):

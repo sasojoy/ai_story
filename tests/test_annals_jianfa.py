@@ -137,7 +137,8 @@ def test_season_end_notes_the_tier_once_and_the_profile_carries_it():
     top.sync(NOW + 20)
     assert len(_tiers(top)) == 1  # 只記一次
     profile = annals.profile(top.state, content, season=top.state.world)
-    assert set(profile) == BASE_PROFILE_KEYS | {"contrib", "ledger_used", "tier_side", "final_rank", "final_of", "tier", "tier_title"}
+    assert set(profile) == BASE_PROFILE_KEYS | {"contrib", "ledger_used", "tier_side", "final_rank", "final_of", "tier", "tier_title",
+                                                "illustration"}  # 列傳插畫的圖庫鍵（批 7b-3）
     assert (profile["contrib"], profile["tier"], profile["final_rank"], profile["ledger_used"], profile["tier_title"]) == (
         200, 1, 1, "guan", "漢室忠良")
     req = top.biography_request(1)
