@@ -1004,29 +1004,45 @@ def answer_event(game: Game, text: str) -> list[str] | None:
       D、E 擲骰之後在鎖外請模型潤色一兩句（model_call：同一個人這時沒有別件在排，照常再排一次），再進鎖插回那一則江湖紀錄
         （Game.add_gamble_narration）。潤色跟評分共用同一份 free_text_budget_seconds（控制者 2026-10-06）：從 A 段算起，
         扣掉評分、等鎖與排隊花掉的，剩下的給潤色（同一個 within_budget）；不夠一趟就不叫、不插句子，跟模型叫不動時一樣。
-        整個請求因此在 free_text_budget_seconds 加兩次進鎖之內結束，不會超過 trycloudflare 約 100 秒的切斷。"""
+        整個請求因此在 free_text_budget_seconds 加兩次進鎖之內結束，不會超過 trycloudflare 約 100 秒的切斷。
+    減法季的分岔（批 4）：A 段的單子帶了可能的走向（request.outcomes，分岔開著、這則事件寫了後果）時，B 段改請模型把這句話歸到其中一種
+    （event_llm.judge_outcome：歸到最後一種才另外判善惡），C 段多交那一種的 id；D／E 照舊潤色，結果文字就是那一種後果的那一句。"""
     started, request = _open_request(game, lambda: game.free_text_request(text))
     if request is None:
         raise GameError(f"寫一句 1～{FREE_TEXT_MAX} 字的做法；眼前的事已經過去的話，就不必再寫了。")
     event = CONTENT.events[request.event_id]
     total = game.content.config.free_text_budget_seconds
+    if request.outcomes:  # 減法季的分岔（批 4）：B 段歸類、評分，歸到最後一種才另外判善惡（善惡那一次用歸類剩下的預算再切一份）
+        branches = event.free_text.outcomes
+        fallback = event_llm.OutcomeVerdict(branches[-1].id, event_llm.DEFAULT_FREE_TEXT_SUCCESS_RATE)
 
-    fallback = event_llm.EventVerdict(event_llm.DEFAULT_FREE_TEXT_SUCCESS_RATE)
+        def score():
+            client = within_budget(game.client, total - (_monotonic() - started))
+            if client is None and game.client is not None:
+                return fallback  # 等鎖、排隊把整份預算用完了：不叫模型，最後一種、保底值、善惡當「中」
+            return event_llm.judge_outcome(
+                client, event, branches, request.text, moral_client=lambda: within_budget(game.client, total - (_monotonic() - started)),
+            )
 
-    def score():
-        client = within_budget(game.client, total - (_monotonic() - started))
-        if client is None and game.client is not None:
-            return fallback  # 等鎖、排隊把整份預算用完了：不叫模型，保底值（善惡當「中」）
-        # 評分之後另外很短地判善惡（FB-223）：用評分剩下來的預算再切一份；不夠一趟就不叫、當「中」，成功率照用
-        return event_llm.judge_event_gamble(
-            client, event, request.text, moral_client=lambda: within_budget(game.client, total - (_monotonic() - started)),
-        )
+        verdict = model_call(game, score, fallback=fallback, left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT)
+        msgs = act(game, lambda g: g.answer_event(request, verdict.rate, verdict.moral, verdict.outcome))
+    else:
+        fallback = event_llm.EventVerdict(event_llm.DEFAULT_FREE_TEXT_SUCCESS_RATE)
 
-    verdict = model_call(game, score, fallback=fallback, left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT)
-    msgs = act(game, lambda g: g.answer_event(request, verdict.rate, verdict.moral))  # 善惡在 C 段再驗一次（FB-223）
+        def score():
+            client = within_budget(game.client, total - (_monotonic() - started))
+            if client is None and game.client is not None:
+                return fallback  # 等鎖、排隊把整份預算用完了：不叫模型，保底值（善惡當「中」）
+            # 評分之後另外很短地判善惡（FB-223）：用評分剩下來的預算再切一份；不夠一趟就不叫、當「中」，成功率照用
+            return event_llm.judge_event_gamble(
+                client, event, request.text, moral_client=lambda: within_budget(game.client, total - (_monotonic() - started)),
+            )
+
+        verdict = model_call(game, score, fallback=fallback, left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT)
+        msgs = act(game, lambda g: g.answer_event(request, verdict.rate, verdict.moral))  # 善惡在 C 段再驗一次（FB-223）
     outcome = game.last_gamble
     if outcome is not None:  # D（鎖外）擲骰之後請模型潤色一兩句，E（鎖內）插回那一則紀錄；失敗、預算用完就只留結果文字
-        def narrate():
+        def narrate():  # 結果文字是 C 段實際套的那一句（分岔開著時是走的那一種後果的那一句）
             client = within_budget(game.client, total - (_monotonic() - started))  # 評分剩下來的預算，不是重新算一份
             if client is None and game.client is not None:
                 return None  # 評分、等鎖、排隊把整份預算用完了：不叫模型，不插句子

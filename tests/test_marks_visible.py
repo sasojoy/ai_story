@@ -163,7 +163,8 @@ def test_a_rule_is_written_once(town):
         validate(town)
 
 
-STRAGGLERS = {"yingchuan_wilds:拆卡", "nanyang_road:護車", "runan_wilds:奪牛"}  # 趕走散兵那一類（人拉犁的「散兵退了」跟那一則一起等接線）
+# 趕走散兵那一類（企劃者 2026-10-24 第 8 件 b；PM 2026-10-25 第 5 件的三條，加上接線那一批跟人拉犁一起併進來的「散兵退了」）
+STRAGGLERS = {"yingchuan_wilds:拆卡", "nanyang_road:護車", "runan_wilds:奪牛", "yingchuan_wilds:散兵退了"}
 
 
 @pytest.mark.slow
@@ -171,7 +172,7 @@ def test_real_content_has_one_rule_per_outcome_mark_and_only_the_stragglers_push
     content = real_content()
     written = {key for ev in content.events.values() if ev.free_text is not None for o in ev.free_text.outcomes for key in o.effect.marks}
     rules = {r.mark: r for r in content.mark_rules}
-    assert set(rules) == written and len(rules) == 93
+    assert set(rules) == written and len(rules) == 96  # 29 則的 93 個，加上人拉犁的 3 個（PM 2026-10-25 第 7 件）
     assert {mark for mark, rule in rules.items() if rule.trend} == STRAGGLERS
     assert all(rules[mark].trend == {"front": -1} for mark in STRAGGLERS)  # 地方安定：戰線往官軍那邊一點
     assert {rule.threshold for rule in rules.values()} == {20}

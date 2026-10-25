@@ -892,6 +892,10 @@ class PlayerState(BaseModel):
     # 兩個都是空的、0 的時候不寫進存檔（_drop_quiet_defaults）：兩軍的人、關著的季 JSON 一個鍵都不多
     ledgers: dict[str, int] = Field(default_factory=dict)
     lean_changed: int = 0
+    # 減法季批 4（整合設計 5.3）：分岔的後果記進陣營帳的貢獻，一天（季曆日）最多 Config.jianfa.deed_contribution_cap；記在哪一天、那一天記了多少。
+    # 預設值時不寫進存檔（QUIET_DEFAULTS）：關著的季 JSON 一個鍵都不多。季曆日從 1 起，0 是還沒記過
+    deed_day: int = 0
+    deed_today: int = 0
     pushed: dict[str, float] = Field(default_factory=dict)  # 「曆日:大勢線 id」→ 當天這條線推得動多少（人數緩衝之後）；只留今天與昨天
 
     # ── 捐獻紀錄（計畫 T6，軍備文件 4.1）：「據點 id:糧草」→ 累積的份量。T7 的伏筆只讀它；寫入是 T6 護糧的事 ──
@@ -975,7 +979,7 @@ class PlayerState(BaseModel):
 
 
 # PlayerState 裡「沒用到就不寫進存檔」的欄位（_drop_quiet_defaults）：新規則掛開關、關著的季存檔一個鍵都不多的，加在這裡
-QUIET_DEFAULTS = ("ledgers", "lean_changed")
+QUIET_DEFAULTS = ("ledgers", "lean_changed", "deed_day", "deed_today")
 
 
 class TierResult(BaseModel):

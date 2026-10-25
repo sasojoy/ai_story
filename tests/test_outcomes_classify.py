@@ -1,5 +1,5 @@
 """減法季批 4（主機側計畫 Task 4-2 的純規則那一半；整合設計 5.1、5.9）：模型把玩家那句話歸到一種後果（event_llm.classify_outcome），
-引擎照那一種的判法走（outcomes.plan）。三段式的接線（answer_event、server）等批 0 的開關，見 tests/test_outcomes_answer.py（之後）。
+引擎照那一種的判法走（outcomes.plan）。三段式的接線（answer_event、server）見 tests/test_outcomes_answer.py。
 模型一律是假的（mock.Mock().chat_structured.return_value）：不打 11434。"""
 import json
 from unittest import mock
@@ -9,7 +9,7 @@ import requests
 
 from tianxia import event_llm, outcomes
 from tianxia.battle_instance import DEFAULT_FREE_TEXT_SUCCESS_RATE
-from tianxia.models import Choice, Effect, Event, Outcome
+from tianxia.models import Choice, Effect, Event, JianfaRules, Outcome
 from tianxia.ollama_client import OllamaClient
 from tianxia.rules import FREE_TEXT_MAX_RATE, FREE_TEXT_MIN_RATE, FREE_TEXT_PER_POINT
 
@@ -138,11 +138,14 @@ def test_outcome_of_reads_strictly():
 
 
 def test_a_check_outcome_rolls_at_the_free_text_rate_on_its_best_stat(state, content, world):
+    """PM 2026-10-25 第 3 件：（屬性 − 那一種後果的難度）× 4，原本寫死的 5 換成難度（LABOR 的難度是 4）。"""
     state.player.stats.update(str=8, wis=3)
     got = outcomes.plan(ALL, "labor", 40, state, content, world)
-    assert (got.outcome, got.way, got.rate) == (LABOR, "check", 40 + (8 - 5) * FREE_TEXT_PER_POINT)
+    assert (got.outcome, got.way, got.rate) == (LABOR, "check", 40 + (8 - 4) * FREE_TEXT_PER_POINT)
     state.player.stats.update(str=3, wis=9)
-    assert outcomes.plan(ALL, "labor", 40, state, content, world).rate == 40 + (9 - 5) * FREE_TEXT_PER_POINT
+    assert outcomes.plan(ALL, "labor", 40, state, content, world).rate == 40 + (9 - 4) * FREE_TEXT_PER_POINT
+    harder = LABOR.model_copy(update={"check": LABOR.check.model_copy(update={"difficulty": 7})})
+    assert outcomes.rate(harder, 40, state, content, world) == 40 + (9 - 7) * FREE_TEXT_PER_POINT  # 難度高了成算跟著低
     assert outcomes.plan(ALL, "labor", 100, state, content, world).rate == FREE_TEXT_MAX_RATE
     state.player.stats.update(str=0, wis=0)
     assert outcomes.plan(ALL, "labor", 0, state, content, world).rate == FREE_TEXT_MIN_RATE
@@ -186,5 +189,6 @@ def test_the_options_show_only_ids_and_tags():
 
 @pytest.mark.parametrize("points, used, credited", [(4, 0, 4), (4, 10, 2), (4, 12, 0), (0, 3, 0), (6, 13, 0)])
 def test_the_daily_contribution_cap(points, used, credited):
-    assert outcomes.contribution_room(points, used) == credited
-    assert outcomes.DEED_CONTRIBUTION_CAP == 12
+    cap = JianfaRules().deed_contribution_cap
+    assert outcomes.contribution_room(points, used, cap) == credited
+    assert cap == 12  # 【預設】（企劃者 2026-10-24；批 4 接線搬進 Config.jianfa）

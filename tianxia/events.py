@@ -194,8 +194,14 @@ def stamina_note(choice: Choice, content: Content) -> str:
     return f"（{'，'.join(parts)}）" if parts else ""
 
 
-def free_text_note(choice: FreeTextChoice, content: Content) -> str:
-    """「隨口應對」那一顆按鈕：失敗另扣的體力照 stamina_note 的寫法（成功也扣的照寫「體力 -N」）。"""
+WRITE_NOTE = "（寫一句你要怎麼做）"  # 待 joy 潤：分岔開著時「隨口應對」那一顆的小字（可能的走向在 options[].outcomes，畫面照它寫）
+
+
+def free_text_note(choice: FreeTextChoice, content: Content, branching: bool = False) -> str:
+    """「隨口應對」那一顆按鈕：失敗另扣的體力照 stamina_note 的寫法（成功也扣的照寫「體力 -N」）。
+    branching：這一季分岔開著、這則事件寫了後果（減法季批 4）——每一種後果的得失不同，改寫 WRITE_NOTE。"""
+    if branching:
+        return WRITE_NOTE
     paid = -choice.effect.stamina if choice.effect.stamina < 0 else 0
     extra = -fail_stamina(choice.fail_effect.stamina, content) - paid
     parts = ([f"體力 -{paid}"] if paid else []) + ([f"失手多耗體力 {extra}"] if extra > 0 else [])

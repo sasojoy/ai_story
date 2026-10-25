@@ -419,10 +419,12 @@ class FreeTextChoice(_Strict):
     effect: Effect = Field(default_factory=Effect)
     fail_effect: Effect = Field(default_factory=Effect)
     outcomes: list[Outcome] = Field(default_factory=list)  # 空的時候不寫進序列化
+    # 只在分岔開著的季才有這一顆（PM 2026-10-25 第 7 件：人拉犁原本沒有隨口應對，關著的季不多一顆鈕）；要寫 outcomes。False 時不寫進序列化
+    outcomes_only: bool = False
 
     @model_serializer(mode="wrap")
     def _drop_new_defaults(self, handler):
-        return _drop_unset(handler(self), ("outcomes",))
+        return _drop_unset(handler(self), ("outcomes", "outcomes_only"))
 
 
 class Event(_Strict):
@@ -2935,6 +2937,9 @@ class JianfaRules(_Strict):
     rewrite_narration: bool = True  # 第十章 事件旁白每週改寫（批 10）
     morning_mail: bool = True  # 第十章 回來的理由：人物的信每天 mail_hour 點送到（批 9；letters.mail_day）
     mail_hour: int = Field(default=9, ge=0, le=23)  # 當地幾點送信（時區照 pill_day_utc_offset_hours）
+    # ── 批 4：隨口應對分岔與痕跡（主機側計畫第六節；子開關 free_text_outcomes、marks_visible）──
+    # 【預設】一天（季曆日，同推線的 daily_push_cap）從分岔的後果（之後連心意、託付）記進陣營帳的貢獻上限；同出陣推線的量級（整合設計 5.3）
+    deed_contribution_cap: int = Field(default=12, ge=0)
 
 
 class WebPushRules(_Strict):

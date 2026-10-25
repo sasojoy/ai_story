@@ -365,10 +365,10 @@ def stat_rate(llm_rate: int, stat: str, state: GameState, content: Content, worl
     return value_rate(llm_rate, team.check_value(state, content, world, PLAYER, stat))
 
 
-def value_rate(llm_rate: int, value: float) -> int:
-    """stat_rate 的算法：LLM 評的分數加上（屬性值 − 5）× FREE_TEXT_PER_POINT，夾在 5～85。隨口應對分岔的檢定（outcomes.rate，
-    屬性值是 check_stat_value：best_of 取最高）也走它。"""
-    rate = round(llm_rate + (value - 5) * FREE_TEXT_PER_POINT)
+def value_rate(llm_rate: int, value: float, base: float = 5) -> int:
+    """stat_rate 的算法：LLM 評的分數加上（屬性值 − base）× FREE_TEXT_PER_POINT，夾在 5～85。隨口應對分岔的檢定（outcomes.rate，
+    屬性值是 check_stat_value：best_of 取最高）也走它，base 換成那一種後果的難度（PM 2026-10-25 第 3 件）；其餘照舊是 5。"""
+    rate = round(llm_rate + (value - base) * FREE_TEXT_PER_POINT)
     return max(FREE_TEXT_MIN_RATE, min(FREE_TEXT_MAX_RATE, rate))
 
 
