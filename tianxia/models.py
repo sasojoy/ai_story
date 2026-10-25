@@ -2961,6 +2961,9 @@ class JianfaRules(_Strict):
     errands: bool = True  # 第五章 託付與來信（批 6）
     week_unlock: bool = True  # 6.6 功能照週解鎖（批 5）
     rewrite_narration: bool = True  # 第十章 事件旁白每週改寫（批 10）
+    rewrite_round_seconds: float = Field(default=20, gt=0)  # 伺服器的背景執行緒幾秒改寫一則（一週約兩百六十則，一個多小時寫完）
+    rewrite_budget_seconds: float = Field(default=40, gt=0)  # 一則最多等模型幾秒（含排隊）
+    rewrite_tries: int = Field(default=2, ge=1)  # 同一則同一週寫壞幾次就這一週照原文
     morning_mail: bool = True  # 第十章 回來的理由：人物的信每天 mail_hour 點送到（批 9；letters.mail_day）
     opening: bool = True  # 6.7 開局第一分鐘（批 7 前半，tianxia/opening.py）：不進草廬，旁白→三選一→人物開口託付→本週卡；關著照舊走草廬序章
     mail_hour: int = Field(default=9, ge=0, le=23)  # 當地幾點送信（時區照 pill_day_utc_offset_hours）

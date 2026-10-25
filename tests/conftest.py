@@ -207,7 +207,7 @@ def no_tale_threads(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def no_leftover_web_push(monkeypatch, tmp_path):
-    """server.main() 照正式內容（web_push 開著）會建 WEB_PUSH、開通知的看守、在 repo 的 .local/ 產生 VAPID 金鑰：金鑰改寫到這個測試的
+    """server.main() 照正式內容（web_push 開著）會建 WEB_PUSH、開通知的看守與旁白改寫的執行緒、在 repo 的 .local/ 產生 VAPID 金鑰：金鑰改寫到這個測試的
     暫存目錄；結束時停掉看守、WEB_PUSH 放回 None，同一個 worker 裡下一個測試從關著開始（減法季批 9）。"""
     import server
 
@@ -221,6 +221,14 @@ def no_leftover_web_push(monkeypatch, tmp_path):
     server.WEB_PUSH = None
     server.NOTICE_SENT.clear()
     server.MAIL_DONE.clear()
+    server.NARRATION_STOP.set()  # 旁白改寫（減法季批 10）：main() 照 season21／week7 會開這一條
+    if server.NARRATION_THREAD is not None:
+        server.NARRATION_THREAD.join(5.0)
+    server.NARRATION_THREAD = None
+    server.NARRATION_STOP.clear()
+    server.NARRATION = None
+    server.NARRATION_CLIENT = None
+    server.NARRATION_FAILS.clear()
 
 
 @pytest.fixture(autouse=True)
