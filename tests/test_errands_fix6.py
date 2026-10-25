@@ -2,12 +2,13 @@
 - 託付辦成了的貢獻不吃每天的貢獻上限（deed_contribution_cap，分岔與心意那一本），也不佔那一本的額度；心意一筆照舊共用。
 - 託付辦成了的情誼照寫的數字給（不照 affinity_gain_scale 放慢）。
 - 收到託付的情誼門檻另開一個數 errand_affinity（20【預設】）；figure_life.letter_affinity（40）照舊給書信與勸降的情誼加成。
+- FB-828：投靠了的人只收自己這一邊人物的託付（豪強看此刻幫的那一軍）；散人都收得到。
 正式內容的 season21；模型一律是假的。"""
 from __future__ import annotations
 
 import pytest
 
-from stances_kit import LUZHI, at, real_game
+from stances_kit import BOCAI, LUZHI, at, real_game
 from tianxia import calendar, errands, letters, renown
 
 pytestmark = pytest.mark.slow  # 載正式內容、照伺服器開季
@@ -89,6 +90,23 @@ def test_letters_and_persuasion_still_read_letter_affinity():
     e = _give(g, LUZHI, "luzhi_persuade")
     s.player.stats["fame"] = 0
     assert errands.persuade_rate(s, c, e, 50) == 50 + (48 - 40) // c.config.jianfa.persuade_affinity_step
+
+
+@pytest.mark.parametrize("faction, ally, gets", [
+    ("guan", None, False),  # 官軍的人收不到波才（黃巾）的託付
+    ("huang", None, True),
+    ("haoqiang", "guan", False),  # 豪強看此刻幫的那一軍（wins.lean_of）
+    ("haoqiang", "huang", True),
+    (None, None, True),  # 散人都收得到（本來就不記貢獻）
+])
+def test_only_your_own_side_figures_send_errands(faction, ally, gets):
+    """FB-828：投靠了的人只收自己這一邊人物的託付（豪強看此刻幫的那一軍）；散人都收得到。"""
+    g = real_game(faction=faction)
+    s = g.state
+    s.player.ally = ally
+    _friend(g, BOCAI)
+    at(g, g.now + 60)
+    assert [e.figure for e in s.player.errands] == ([BOCAI] if gets else [])
 
 
 def test_a_stance_point_still_shares_the_daily_cap():

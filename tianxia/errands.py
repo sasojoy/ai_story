@@ -1,7 +1,7 @@
 """託付與來信（減法季整合設計 5.5、5.9，主機側計畫 Task 6-2；企劃者 2026-10-24 定）。
 
 能深度對話、寫了託付池（FigureDef.errands）的大勢人物，情誼到 Config.jianfa.errand_affinity（20【預設】，PM 2026-10-26；另開的數，
-不是書信的 figure_life.letter_affinity 40）時，每週（7 天的季是每段）
+不是書信的 figure_life.letter_affinity 40）、跟你同一邊（side_of，FB-828）時，每週（7 天的季是每段）
 託你一件事，以一封「託付」信送到（letters.deliver 的第一順位：託付 → 道賀 → 邀宴 → 求援，一個送信日一封；減法季照早上 9 點的送信日）。
 三種，事情本身是規則定的：
 - 送信（letter）：走到 target，「此地」多一顆「交信」，按了就成；他回一封道謝信（不佔一天一封）。
@@ -88,12 +88,26 @@ def task_text(content: Content, e: ErrandState) -> str:
     return d.task.format(place=place(content, e.target)) if d is not None else LABELS[e.kind]
 
 
+def side_of(state: GameState, content: Content) -> str | None:
+    """託付照哪一邊收（FB-828，PM 2026-10-26）：兩軍的人是自己的陣營，豪強是此刻幫的那一軍（wins.lean_of；還沒傾向是 None），
+    散人是 None（哪一邊的人物都託得到）。"""
+    from . import wins  # noqa: PLC0415  wins → rules（貢獻呼叫點）：延後
+
+    p = state.player
+    if p.faction is None:
+        return None
+    return wins.lean_of(p, content) if wins.is_gentry(p, content) else p.faction
+
+
 def _pool(state: GameState, content: Content, reachable) -> list[str]:
-    """這一週還能託你事的人物（人物表 id，照 id 排）：寫了託付池、對話人物聯絡得上（情誼到、在場：reachable）、這一週還沒託過你。"""
+    """這一週還能託你事的人物（人物表 id，照 id 排）：寫了託付池、對話人物聯絡得上（情誼到、在場：reachable）、這一週還沒託過你、
+    跟你同一邊（side_of；散人哪一邊都行，FB-828）。"""
     week = calendar.point(state.world.time, content, state.world).week
     asked = {e.figure for e in state.player.errands if e.week == week}
+    anyone, side = state.player.faction is None, side_of(state, content)
     return sorted(fid for fid, fig in content.figures.items()
-                  if fig.errands and fig.character and fid not in asked and reachable(fig.character))
+                  if fig.errands and fig.character and fid not in asked and (anyone or fig.faction == side)
+                  and reachable(fig.character))
 
 
 def offer(state: GameState, content: Content, rng: random.Random, reachable) -> Letter | None:
