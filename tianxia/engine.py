@@ -498,6 +498,7 @@ class Game:
         self.peer_brief: str | None = None
         self.forged = False  # 上一次 forge() 真的合成了（被拒絕的是 False）：煉製頁拿它決定爐子要不要清空（server.api_menxia_do）
         self.forged_thing: tuple[str, str] | None = None  # 上一次 forge() 合出來的那一樣（"art"／"ins", id）：煉製頁在結果底下畫它的卡
+        self.secret_solved: dict | None = None  # 上一次開爐或裝意境這一季第一次參透一條秘方：跳的那個視窗（secret_recipes.solved_card）
         # 勝算的記憶（team.OddsMemo，FB-321）：伺服器上的 Game 共用一份（server.game_for 掛上），輿圖疊層與按鈕上的勝算輸入一樣就不再模擬；
         # 直接建的 Game（測試、腳本、假人程式）是 None，照舊每次算
         self.odds_memo: team.OddsMemo | None = None
@@ -10873,12 +10874,14 @@ class Game:
         合成花心得與體力（設計 12.1）：花了的體力跟心得一起寫在這一則的數值變化上。"""
         self.forged = False
         self.forged_thing = None
+        self.secret_solved = None
         if art_id or len(insight_ids) != 2:
             return self._log([fusion.ART_IN_FURNACE if art_id else fusion.TWO_INSIGHTS])
         refusal = prologue_rules.fuse_problem(self.state, self.content, insight_ids)  # 序章只准照劇本合成
         if refusal is not None:
             return self._log([refusal])
         xinde, stamina = self._xinde(), self.state.player.stamina
+        solved = self._solved_secrets()
         mixed = insight_fx.base_id(insight_ids[0]) != insight_fx.base_id(insight_ids[1])  # 兩種不同的意境（合成；同一種是揣摩）
         insight, msgs = fusion.merge(self.state, self.content, self.world, self._quick_client(), *insight_ids, proposed=proposed)
         tag = f"合併「{insight.name}」" if insight is not None else None
@@ -10895,7 +10898,26 @@ class Game:
                 tag, xinde, guide=True, title=journal.CRAFT, extra=[f"體力 -{spent}"] if spent > 0 else None,
                 lines=out[:1],
             )
+            self._note_solved(solved)
         return out
+
+    def _solved_secrets(self) -> list[str]:
+        """這一季已經參透的秘方（開爐、裝意境之前記一份，做完跟 _note_solved 比）。"""
+        return list(secret_recipes.manual(self.state, secret_recipes.tianji_of(self.world)).solved)
+
+    def _note_solved(self, before: list[str]) -> None:
+        """這一下動作參透了新的秘方：另寫一則標題「武學譜」的江湖紀錄（煉製那一則只收結果第一句，參透那句會被丟掉；
+        玩家回報 2026-10-25），記下要跳的視窗（secret_solved）。"""
+        fresh = [r for r in secret_recipes.manual(self.state, secret_recipes.tianji_of(self.world)).solved if r not in before]
+        recipe = next((r for r in secret_recipes.active(self.content, secret_recipes.tianji_of(self.world)) if r.id in fresh), None)
+        if recipe is None:
+            return
+        card = secret_recipes.solved_card(self.state, self.content, self.world, recipe)
+        self.secret_solved = card
+        journal.add_entry(self.state, JournalEntry(
+            time=self.state.world.time, title=journal.MANUAL, tag=f"參透「{card['name']}」",
+            lines=[card["note"]] if card["note"] else [],
+        ))
 
     def forge_line(self, insight_ids: list[str]) -> str:
         return skillview.forge_line(self.state, self.content, self.world, insight_ids)
@@ -11074,15 +11096,18 @@ class Game:
         """把一個意境裝進一門武學的意境槽（武學重構；修練頁與煉製頁都走這裡，MENXIA_ACTIONS["slot"]）：不花心得體力，
         裝成了寫一則「裝意境」江湖紀錄，被拒絕只回一句。"""
         xinde = self._xinde()
+        self.secret_solved = None
         problem = prologue_rules.slot_problem(self.state, self.content, art_id) or arts_mod.slot_problem(
             self.state, self.content, self.world, art_id, insight_id, index)
         if problem is not None:
             self.forged = False
             return self._log([problem])
+        solved = self._solved_secrets()
         msgs = self._log(arts_mod.slot(self.state, self.content, self.world, art_id, insight_id, index))
         self.forged = True
         self.forged_thing = None
         self._menxia_entry(msgs[0], xinde, guide=True, action="slot")
+        self._note_solved(solved)
         return msgs
 
     @_not_while_preparing
@@ -15689,6 +15714,7 @@ class Game:
             "bounties": bounties.status(s, c, self.world),
             # 武學譜（口訣與秘方）：這一季聽過口訣或合中過的秘方，一條一筆 {"clues": [聽過的口訣], "solved": 名號或 None}
             "manual": secret_recipes.view(s, c, self.world),
+            "manual_total": secret_recipes.progress(s, c, self.world)[1],  # 武學譜入口的分母：這一季全服共有幾條（不是「你聽過的」）
             "seal_duel": self.seal_duel_card(),  # 奪璽卡（玉璽碎片設計 5.10）：全服看得到；沒有單挑是 None
             "seal": self.seal_view(),  # 持有者的碎片卡（玉璽碎片設計第十節）
             "seal_watch": self.seal_watch(),  # 為真時網頁在背景也輪詢、輪到出招改分頁標題（5.5）

@@ -95,6 +95,7 @@
     }
   },
   "secrets": {
+    "per_season": {"fuse": 4, "merge": 4},
     "quality_points": 30,
     "insight_points": 10,
     "tale_events": ["teahouse", "tale_yc_riverbank", "tale_yc_academy", "tale_wan_road", "tale_xy_river", "tale_mt_scribes", "tale_xqy_fort", "tale_rnmk_ford", "tale_rn_mengjin"],

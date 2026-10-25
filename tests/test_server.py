@@ -5616,7 +5616,7 @@ def test_a_refused_forge_does_not_leave_the_waiting_message_on_the_craft_page():
     const window = { scrollTo() { scrolled += 1; } };
     const forgeBody = () => ({});
     const renderPage = () => seen.push(S.forgeResult && S.forgeResult.html);
-    const guideKey = () => null, updateForgeLine = () => {}, keepPlace = (draw) => draw(), showMadeCard = () => {}, kilnBurst = () => {};
+    const guideKey = () => null, updateForgeLine = () => {}, keepPlace = (draw) => draw(), showMadeCard = () => {}, kilnBurst = () => {}, secretPop = () => {};
     const renderTop = () => {};
     const setMain = () => {};
     const run = async (answer) => {
