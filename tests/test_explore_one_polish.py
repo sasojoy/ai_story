@@ -229,3 +229,35 @@ def test_the_map_names_keep_the_place_kind_words():
     places = {p["id"]: p["mostly"] for p in game.map_base()["places"]}
     kind = explore_one.kind_of(game.content.config.jianfa, game.content.locations["changshe"]).kind
     assert places["changshe"] == explore_one.MOSTLY[kind]
+
+
+# ── 4. hints.json 的「尋敵」 ──
+
+
+def _drill_done(game) -> str:
+    return hints.note_for(game.state, game.content, "h_drill_done").text
+
+
+def test_the_drill_done_hint_names_the_outing_when_explore_one_is_on():
+    on = jianfa_game()
+    assert "尋敵" not in _drill_done(on) and "出門探索" in _drill_done(on)
+    assert "尋敵" in _drill_done(jianfa_game(explore_one=False))  # 子開關關著照舊
+    assert "尋敵" in _drill_done(plain_game())  # 減法季關著照舊
+
+
+def test_a_hint_line_for_the_outing_is_checked_when_loaded(hints_root):
+    import json
+
+    from tianxia.content import ContentError, load_content
+
+    path = hints_root / "hints.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["hints"][3]["explore_one"] = "引薦人不寫這一句。"
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    with pytest.raises(ContentError, match="不寫 explore_one"):
+        load_content(hints_root)
+    data["hints"][3].pop("explore_one")
+    data["hints"][0]["explore_one"] = "到 {oops} 再說。"
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    with pytest.raises(ContentError, match=re.escape("不認得的 {oops}")):
+        load_content(hints_root)

@@ -1339,6 +1339,9 @@ class HintDef(_Strict):
     # 第一季的規則開著時師父改說這一句（只有師父的條能寫；空的就照 text）：有些事只有第一季才是真的（explain-1 的 h_bond：
     # 情誼夠深人物會透露伏筆、機緣的風聲），beta 那一季說了就是假話
     season_one: str = ""
+    # 減法季探索一顆開著時（rules.jianfa 的 explore_one）師父改說這一句（只有師父的條能寫；空的就照 text；先於 season_one）：
+    # 那一季沒有「尋敵」那顆鈕了（h_drill_done，FB-816 同一類）。待 joy 潤
+    explore_one: str = ""
     # 豪強分屬兩軍的季（allied.on）引薦人改說的那一句：陣營 id → 句子（新寫；只寫要換的，例：豪強不再臨時投效）
     allied: dict[str, str] = Field(default_factory=dict)
 
