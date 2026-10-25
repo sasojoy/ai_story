@@ -181,6 +181,14 @@ def test_a_good_outcome_is_not_turned_evil_by_the_moral(content, world):
     assert TALK.effect.text in g.state.journal[0].lines
 
 
+def test_paying_is_never_turned_evil_by_the_moral(content, world):
+    """掏錢的後果也不擲骰、必成，但它不是最後一種：善惡怎麼評都照那一種自己的效果（PM 第 8 件）。"""
+    g = branch_game(content, world, silver=30)
+    answer(g, "給他十兩去喝醒酒湯", "give", moral="惡")
+    assert g.last_gamble.evil is False and GIVE.effect.text in g.state.journal[0].lines
+    assert g.state.player.stats["good"] == 1 and g.state.player.stats.get("evil", 0) == 0
+
+
 def test_the_fallback_still_reads_the_moral_like_before(content, world):
     """歸到最後一種：照舊用模型的善惡評分（FB-223）——判「惡」就是惡行成了（rules.EVIL_DONE、行狀照實寫），潤色照惡行寫。"""
     g = branch_game(content, world)
