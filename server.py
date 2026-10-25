@@ -63,8 +63,8 @@ import zhuan_html
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
     arena_crowd, ascend, battle_instance, biography, calendar, companion_agent, create, divine, duel, event_llm, feasts, fight_llm, foreshadow, gather_llm, gender, glyph, insight_llm, leaderboard, letters, mall, mapdata, might,
-    naming,
-    ollama_client, rules,
+    naming, narration,
+    ollama_client, power_save, rules,
     precise, seal, seal_duel, server_bots, social, sortie, speech, tavern, team, timetable, training, treasures, weekcard, xingshi, yuedan,
 )
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
@@ -168,6 +168,8 @@ def game_for(name: str) -> Game:
         if game is None:
             game = GAMES[key] = open_game(name)
             game.odds_memo = ODDS_MEMO
+            if NARRATION is not None:  # 事件旁白每週改寫（減法季批 10）：這一週寫好的旁白從小檔讀
+                game.narration = NARRATION.get
         return game
 
 
@@ -292,7 +294,10 @@ def _play_where(game: Game) -> tuple[str, int, int] | None:
 
 
 def _play_seen(game: Game) -> None:
-    """自己的請求進鎖、同步過之後：這一天上線了（真人量表）。在 act／act_look 的那一筆交易裡。"""
+    """自己的請求進鎖、同步過之後：這一天上線了（真人量表）。在 act／act_look 的那一筆交易裡。
+    也記下全服最後一次有真人來（LAST_HUMAN：省電模式沒人在線時，旁白改寫不叫模型）。"""
+    global LAST_HUMAN
+    LAST_HUMAN = time.time()
     where = _play_where(game)
     if where is not None:
         PlayLog(game.world.db).seen(*where)
@@ -672,6 +677,101 @@ def notice_round(clock: Callable[[], float] = time.time) -> int:
             sent_total += bool(push.send(account_key, NOTICE_TITLE, n.text, tag=n.kind, now=now))
         NOTICE_SENT[account_key] = (keys & seen) | {n.key for n in fresh[:cfg.per_round]}
     return sent_total
+
+
+# ── 事件旁白每週改寫（減法季整合設計第十章，批 10；tianxia/narration.py）──
+# 全服一條背景執行緒（start_narration，main() 開）：每 rewrite_round_seconds 秒改寫一則，這一週的寫完就停到下一週。
+# 不拿行動鎖（只讀季的快照、寫旁邊的小檔），模型呼叫排在真人後面（佇列開著時當假人排；關著時一輪只叫一次、短的），
+# 省電模式開著而 ONLINE_SECONDS 之內沒有真人來過就不叫（不讓它把模型載回 VRAM）。這一季沒開改寫、休季、籌備中什麼都不做。
+NARRATION: narration.NarrationStore | None = None
+NARRATION_CLIENT = None  # 改寫用的 client（main() 照設定建；測試塞假的）
+NARRATION_STOP = threading.Event()
+NARRATION_THREAD: threading.Thread | None = None
+NARRATION_FAILS: dict[tuple[int, int, str], int] = {}  # （季, 週, 事件）寫壞了幾次：rewrite_tries 次就這一週照原文，不再試
+LAST_HUMAN = float("-inf")  # 最後一次有真人的請求（_play_seen）
+ONLINE_SECONDS = 600.0  # 省電模式下「有人在線」的窗口（跟 scripts/warm_keeper.py 同一個數，不讀 presence_seconds）
+NARRATION_KEY = "旁白改寫"  # 佇列裡的名號（不是任何角色：一人一件的規矩只管它自己）
+
+
+def narration_store_path() -> Path:
+    db = default_path()
+    return db.with_name(f"{db.stem}-narration.sqlite")
+
+
+def narration_line(config) -> str:
+    if not config.jianfa.enabled or not config.jianfa.rewrite_narration:
+        return "旁白改寫：關"
+    return f"旁白改寫：開（每 {config.jianfa.rewrite_round_seconds:g} 秒一則，排在真人後面；寫在 {narration_store_path()}）"
+
+
+def start_narration(config, client=None) -> threading.Thread | None:
+    """減法季的開關與 rewrite_narration 開著：建 NARRATION、開背景執行緒（daemon）；不然什麼都不做。只有 main() 與測試呼叫。
+    小檔不管開關都建起來（讀的一邊才有東西可查；開關關著的季 narration.text_of 本來就照原文）。"""
+    global NARRATION, NARRATION_CLIENT, NARRATION_THREAD
+    NARRATION = narration.NarrationStore(narration_store_path())
+    if not config.jianfa.enabled or not config.jianfa.rewrite_narration:
+        return None
+    if client is None:
+        try:
+            client = OllamaClient.from_config(config)
+        except Exception:  # noqa: BLE001  建不起 client：照原文，不擋伺服器
+            return None
+    NARRATION_CLIENT = client
+    failures = _StepFailures(time.monotonic, "旁白改寫")
+
+    def loop() -> None:
+        while not NARRATION_STOP.wait(config.jianfa.rewrite_round_seconds):
+            try:
+                narration_round()
+            except Exception as e:  # noqa: BLE001  一則出錯不能讓整條停下來
+                failures.failed(e)
+            failures.tick()
+
+    NARRATION_THREAD = threading.Thread(target=loop, daemon=True, name="narration")
+    NARRATION_THREAD.start()
+    return NARRATION_THREAD
+
+
+def narration_round(clock: Callable[[], float] = time.time) -> str | None:
+    """改寫一則（背景執行緒的一輪；測試直接叫）：這一季開著改寫、這一週還有沒寫過的，就挑第一則請模型寫，寫成了存進小檔。
+    回傳寫成的事件 id；沒做事或寫壞了是 None。呼叫端不能握著行動鎖。"""
+    store, client = NARRATION, NARRATION_CLIENT
+    if store is None or client is None:
+        return None
+    if power_save.on() and clock() - LAST_HUMAN > ONLINE_SECONDS:
+        return None  # 省電模式、沒人在線：讓模型卸掉，等有人來再寫
+    world = open_world()
+    if world.season_phase() != "running":
+        return None
+    season = world.get_season()
+    if not narration.on(CONTENT, season) or season.ended:
+        return None
+    number, week = world.get_season_number(), narration.period(CONTENT, season)
+    cfg = CONTENT.config.jianfa
+    done = store.done(number, week)
+    todo = [e for e in narration.eligible(CONTENT)
+            if e not in done and NARRATION_FAILS.get((number, week, e), 0) < cfg.rewrite_tries]
+    if not todo:
+        return None
+    event = CONTENT.events[todo[0]]
+    budget = cfg.rewrite_budget_seconds
+    started = _monotonic()
+
+    def ask() -> str | None:
+        return narration.write(within_budget(client, budget - (_monotonic() - started)), CONTENT, event)
+
+    if QUEUE is None:
+        text = ask()
+    else:
+        try:
+            text = QUEUE.run(NARRATION_KEY, ask, fallback=None, bot=True, wait=budget)
+        except (Busy, QueueTimeout):
+            return None  # 真人正在等模型：這一輪讓路，下一輪再來（不算寫壞）
+    if not text:
+        NARRATION_FAILS[(number, week, event.id)] = NARRATION_FAILS.get((number, week, event.id), 0) + 1
+        return None
+    store.put(number, week, event.id, text)
+    return event.id
 
 
 def _tell_tabs(game: Game, also: str = "") -> None:
@@ -3184,6 +3284,8 @@ def main(argv: list[str] | None = None) -> None:
     start_push(CONTENT.config)  # 開關關著什麼都不做：HUB 是 None、/api/events 是 404
     print(web_push_line(CONTENT.config), flush=True)
     start_web_push(CONTENT.config)  # 開關關著、沒裝 cryptography 什麼都不做：WEB_PUSH 是 None
+    print(narration_line(CONTENT.config), flush=True)
+    start_narration(CONTENT.config)  # 減法季的開關關著只建小檔、不開執行緒
     if args.lan:
         print("已開放區網連線：同一個網路裡的裝置都連得到。", flush=True)
     # timeout_graceful_shutdown：uvicorn 關機時會等進行中的回應收完，而 SSE 串流永遠不會自己收完，Ctrl+C 一下就卡住

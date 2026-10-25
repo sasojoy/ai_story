@@ -5287,7 +5287,8 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
     # xingshi_once：〈天下形勢〉的文章（領地爭奪第三批 A），同 yuedan_once，名號是 XINGSHI_OWNER（不是任何一個角色）
     assert _users_in_server("QUEUE") == {None, "model_call", "main", "api_queue", "admin_choices", "narrate_once", "crowd_once",
                                          "letter_once", "yuedan_once", "chatter_once",  # chatter_once：酒肆鄰桌閒談，同 crowd_once 當假人排
-                                         "xingshi_once"}
+                                         "xingshi_once",
+                                         "narration_round"}  # 事件旁白每週改寫（減法季批 10）：背景一則一則，當假人排，名號 NARRATION_KEY
     importers = [
         p.name for p in (server.ROOT / "tianxia").glob("*.py")
         if re.search(r"^\s*(import|from)\s+llm_queue\b", p.read_text(encoding="utf-8"), re.M)

@@ -126,6 +126,25 @@ Start-Process "C:\Users\User\AppData\Local\Programs\Ollama\ollama app.exe"
 4. 真的事件：關掉遊戲，等 09:00 來信，或請另一個人截殺你、等決戰集結；30 秒內跳一則。
 5. 沒跳：看手機系統的通知設定有沒有擋 Chrome／這個網站；伺服器視窗印「通知的看守這一下出錯：…」請截圖回報（同排程的規矩，只寫錯誤的種類）。
 
+## 事件旁白每週改寫（減法季批 10，2026-10-25）
+
+減法季的季（`season21`、`week7`）裡，事件卡上那一段旁白每週由本機模型重寫一次，全服同一份；選項、檢定、效果一個字都不變。序章、開局、伏筆、晉升召見、一次性奇遇不改。模型沒開、寫壞了，照原文，遊戲不受影響。
+
+- 啟動訊息多一行：`旁白改寫：開（每 20 秒一則，排在真人後面；寫在 …\saves\tianxia-narration.sqlite）`。關著時是 `旁白改寫：關`。
+- 一週約兩百四十則短呼叫，每 20 秒一則，一個多小時寫完；排在真人後面。**省電模式開著、10 分鐘內沒人玩時不寫**，讓模型卸得掉；有人回來再接著寫。
+- 改寫存在 `saves/tianxia-narration.sqlite`（跟著 `TIANXIA_DB` 換名字）。丟了只是這一週照原文、背景再寫一次，不必備份。
+- 要關：在用的設定檔（`content/profiles/season21.json` 或 `week7.json`）把 `"jianfa": {"enabled": true}` 改成 `"jianfa": {"enabled": true, "rewrite_narration": false}`（`enabled` 要留著，不然整個減法季都關了），重開伺服器。
+
+**看品質（上線前先跑一次）**：伺服器不必停，但這台的 Ollama 同時在給線上用，先少量試：
+
+```
+.venv/Scripts/python.exe scripts/try_narration.py                 # 十則
+.venv/Scripts/python.exe scripts/try_narration.py -n 30 --random  # 隨機三十則
+.venv/Scripts/python.exe scripts/try_narration.py --all --out narration_week.txt  # 整週，全文存檔慢慢看
+```
+
+每一則印原文、改寫、幾秒；寫壞照原文的印原因（太長太短、冒出原文沒有的名字……）。最後一行是總計：寫成幾則、照原文幾則、平均幾秒。照原文的超過三成、或讀起來走味，把 `narration_week.txt` 傳回來。
+
 ## 網址在哪、怎麼給 joy
 
 - 伺服器視窗會先印「天下大勢：http://127.0.0.1:7861」和「資料庫：…」，**大約 7 秒後**再印：
