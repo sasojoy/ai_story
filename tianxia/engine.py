@@ -6442,7 +6442,7 @@ class Game:
                 del w.active_pushers[old]
         new_name = c.scenario.faction_name(side, side)
         msgs = [wins.LEAN_DONE.format(side=new_name, old=c.scenario.faction_name(old, old) if old else new_name)]
-        return msgs + bounties.drop_stranded(s, c, side) + self._ally_follows_battle()
+        return msgs + bounties.drop_stranded(s, c, side, lean=True) + self._ally_follows_battle()  # 作廢那一句寫「改幫」，不是投靠、叛投的「改投」（FB-811）
 
     def _join_lean(self) -> list[str]:
         """三陣營四勝利開著的季，拜入要依附一軍的門派而投靠（曹氏莊院）的那一下：照門派所在地直接給傾向（PM 2026-10-25 第 5 件），

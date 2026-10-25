@@ -159,8 +159,8 @@ def test_lean_switch_is_not_a_defection():
     assert "faction:lean:huang" in ids(game) and "faction:lean:guan" not in ids(game)
     msgs = game.choose("faction:lean:huang")
     assert msgs[0] == wins.LEAN_DONE.format(side="黃巾軍", old="官軍")
-    lapsed = bounties.LAPSED_SIDE.format(faction="黃巾軍", title=bounties.title(game.content, held))
-    assert msgs[1] == lapsed  # 舊那一軍的懸賞作廢、寫一句（PM 2026-10-25 第 4 件）
+    lapsed = bounties.LAPSED_LEAN.format(faction="黃巾軍", poster="官軍", title=bounties.title(game.content, held))
+    assert msgs[1] == lapsed  # 舊那一軍的懸賞作廢、寫一句（PM 2026-10-25 第 4 件；FB-811：改幫另寫一句，不帶「改投」的口氣）
     assert p.name not in held.takers
     assert (p.ally, p.lean_changed, p.defected, p.contrib, p.ledgers) == ("huang", 1, False, 30, {"guan": 30})
     assert len(w.rumors) == rumors  # 不發傳聞
@@ -168,6 +168,27 @@ def test_lean_switch_is_not_a_defection():
     assert p.name not in w.active_pushers.get("guan", {}) and w.active_pushers["huang"][p.name] == w.time - 5
     assert s.journal[0].title == "改幫黃巾軍"
     assert "faction:lean:guan" in ids(game)  # 隨時再換回來
+
+
+def test_lean_lapse_line_does_not_sound_like_a_defection():
+    """FB-811：改幫時舊那一軍的懸賞作廢，那一句不能寫「改投」（上一行才說不算叛投）；叛投照舊用 LAPSED_SIDE。"""
+    game = wins_game(faction="haoqiang", ally="guan", at="changshe")
+    held = _held_bounty(game, "guan")
+    other = _held_bounty(game, "guan")
+    other.id = "b-guan-2"
+    lines = game.choose("faction:lean:huang")
+    lapsed = [line for line in lines if line.startswith("【懸賞】")]
+    assert len(lapsed) == 2  # 每張一句
+    assert all("改投" not in line and "改幫黃巾軍" in line and "官軍掛的" in line for line in lapsed)
+    assert lapsed[0] == bounties.LAPSED_LEAN.format(faction="黃巾軍", poster="官軍", title=bounties.title(game.content, held))
+    assert game.state.journal[0].title == "改幫黃巾軍"
+    assert all("改投" not in line for line in game.state.journal[0].lines)  # 江湖紀錄那一則也是這兩行
+    # 叛投（換陣營）照舊那一句
+    defector = wins_game(name="乙客", faction="haoqiang", ally="huang", at="changshe")
+    theirs = _held_bounty(defector, "huang")
+    defector.choose("defect:guan")
+    msgs = defector.choose("defect:confirm")
+    assert bounties.LAPSED_SIDE.format(faction="官軍", title=bounties.title(defector.content, theirs)) in msgs
 
 
 def test_lean_options_only_for_gentry_when_on():
