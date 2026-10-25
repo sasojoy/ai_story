@@ -1,12 +1,13 @@
 """託付的修正輪（減法季批 6 修正輪；PM 2026-10-26 定，交接第四節之十二第 4～6 條、之十四）：
 - 託付辦成了的貢獻不吃每天的貢獻上限（deed_contribution_cap，分岔與心意那一本），也不佔那一本的額度；心意一筆照舊共用。
+- 託付辦成了的情誼照寫的數字給（不照 affinity_gain_scale 放慢）。
 正式內容的 season21；模型一律是假的。"""
 from __future__ import annotations
 
 import pytest
 
 from stances_kit import LUZHI, real_game
-from tianxia import calendar, errands
+from tianxia import calendar, errands, renown
 
 pytestmark = pytest.mark.slow  # 載正式內容、照伺服器開季
 
@@ -46,6 +47,20 @@ def test_errand_contribution_ignores_the_daily_deed_cap(used):
     assert e.status == "done"
     assert s.player.contrib == contrib + 4
     assert (s.player.deed_day, s.player.deed_today) == (_today(g), used)
+
+
+@pytest.mark.parametrize("start, gain", [(50, 5), (98, 2)])
+def test_errand_affinity_is_paid_as_written(start, gain):
+    """託付辦成了的情誼照寫的數字給（+5 就是 +5），不照 affinity_gain_scale 放慢；照舊夾在 100，訊息寫實際動了多少。"""
+    g = real_game()
+    s, c = g.state, g.content
+    assert renown.warmed(c, 5) != 5  # season21 的情誼放慢：事件給的 +5 實得不到 5
+    _friend(g, affinity=start)
+    e = _give(g, LUZHI, "luzhi_letter")
+    s.player.location = e.target
+    msgs = _press(g, f"errand:deliver:{e.id}")
+    assert s.player.affinities[LUZHI] == start + gain
+    assert f"盧植情誼 +{gain}" in msgs
 
 
 def test_a_stance_point_still_shares_the_daily_cap():

@@ -7,7 +7,7 @@ from __future__ import annotations
 import pytest
 
 from stances_kit import BOCAI, DAY, HUANGFU, LUZHI, at, real_game
-from tianxia import annals, errands, letters, renown, rules, stances
+from tianxia import annals, errands, letters, rules, stances
 from tianxia.state import BotProfile
 
 pytestmark = pytest.mark.slow  # 載正式內容、照伺服器開季
@@ -86,8 +86,8 @@ def test_delivering_the_letter_pays_affinity_contribution_a_stance_and_an_annal(
     affinity, contrib = s.player.affinities[LUZHI], s.player.contrib
     msgs = _press(g, f"errand:deliver:{e.id}")
     assert e.status == "done" and e.done_at is not None
-    # 情誼 +5 照事件效果的寫法走 _apply：加的照 Config.affinity_gain_scale 放慢（renown.warmed），跟事件給的情誼同一條
-    assert s.player.affinities[LUZHI] == affinity + renown.warmed(c, 5) and s.player.contrib == contrib + 4
+    # 情誼 +5 照寫的數字給（PM 2026-10-26 修正輪推翻「照 affinity_gain_scale 放慢」；新規則的測試在 test_errands_fix6.py）
+    assert s.player.affinities[LUZHI] == affinity + 5 and s.player.contrib == contrib + 4
     assert s.world.stance_counts[LUZHI]["chizhong"] == 1  # 心意 +1（這一件寫的是持重），不佔你一天一筆
     assert stances.heard_today(s, c, LUZHI) is None
     note = [a for a in s.player.annals if a.kind == annals.ERRAND]

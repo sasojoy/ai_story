@@ -179,6 +179,17 @@ def done(state: GameState, e: ErrandState, status: str = "done") -> None:
     e.status, e.done_at = status, state.world.time
 
 
+def warm(state: GameState, content: Content, cid: str, amount: int) -> list[str]:
+    """辦成了的情誼：照寫的數字給（+5 就是 +5，不照 Config.affinity_gain_scale 放慢；PM 2026-10-26），夾在 0～100；
+    訊息同事件效果那一句（「盧植情誼 +5」，照實際動了多少，沒動不寫）。"""
+    p = state.player
+    before = p.affinities.get(cid, 0)
+    p.affinities[cid] = max(0, min(100, before + amount))
+    gained = p.affinities[cid] - before
+    name = content.characters[cid].name if cid in content.characters else cid
+    return [f"{name}情誼 {gained:+d}"] if gained else []
+
+
 def thank(state: GameState, content: Content, e: ErrandState) -> Letter:
     """送信辦成了：他回一封道謝信（不佔一天一封；固定句，伺服器照樣請模型重寫）。"""
     p = state.player

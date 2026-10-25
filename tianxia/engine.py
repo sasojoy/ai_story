@@ -3813,15 +3813,15 @@ class Game:
         return self._errand_persuade(e)
 
     def _errand_reward(self, e) -> list[str]:
-        """辦成了（整合設計 5.5）：他的情誼 +affinity（照事件效果的寫法與放慢）、貢獻 +contribution（不吃每天的貢獻上限、也不佔那一本，
-        PM 2026-10-26）、他的那個心意 +1、行狀一則（annals.ERRAND）。回紀錄的句子。"""
+        """辦成了（整合設計 5.5）：他的情誼 +affinity（照寫的數字給、不照 affinity_gain_scale 放慢，夾在 0～100；PM 2026-10-26）、
+        貢獻 +contribution（不吃每天的貢獻上限、也不佔那一本，PM 2026-10-26）、他的那個心意 +1、行狀一則（annals.ERRAND）。回紀錄的句子。"""
         s, c = self.state, self.content
         d = errand_rules.find_def(c, e.figure, e.errand)
         errand_rules.done(s, e)
         cid = errand_rules.cid_of(c, e)
         msgs = [errand_rules.DONE.format(who=errand_rules.who(c, e))]
         if d is not None:
-            msgs += self._apply(Effect(affinity={cid: d.affinity}))
+            msgs += errand_rules.warm(s, c, cid, d.affinity)
             self._deed_points(d.contribution, capped=False)
             stance_rules.bump(s, c, e.figure, d.stance)
         annals.note(s, c, annals.ERRAND, f"替{errand_rules.who(c, e)}{errand_rules.task_text(c, e)}，辦成了。", 3, figure=cid)
