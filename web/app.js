@@ -1973,7 +1973,10 @@
     const fifth = !f ? "" : f.on
       ? `<span class="jd fifth on" title="絕招〔${esc(f.name)}〕">${ringHtml([], `<b>絕</b>`, "gold")}<small>〔${esc(f.name)}〕</small></span>`
       : `<span class="jd fifth" title="${esc(f.note)}">${ringHtml([], "<i>絕</i>", "vacant")}<small class="dim">${esc(f.note)}</small></span>`;
-    return `<div class="jade">${cells}${fifth}</div>${picker}`;
+    // 每一格裝的那一招寫出來（Joy 2026-10-25「武學裡面槽裡面擺的，他效果好像不會顯示」）：玉環上只放得下兩個字與效果名，
+    // 做什麼原本只在 title（手機上看不到）；底下一格一行：第幾格、意境、效果、這一招做什麼。字待 joy 潤
+    const notes = a.slots.map((s, i) => (s ? `<li><b>第 ${i + 1} 格「${esc(s.name)}」</b>${lookSeal(s.look)}<span class="jdn-fx">${esc(fxText(s.fx) || s.skill || "")}</span>${s.desc ? `<span class="jdn-desc">${esc(String(s.desc).replace(/^〔[^〕]*〕/, ""))}</span>` : ""}${stkHtml(s.stack)}</li>` : "")).join("");
+    return `<div class="jade">${cells}${fifth}</div>${notes ? `<ul class="jd-notes">${notes}</ul>` : ""}${picker}`;
   }
 
   // 衝關鈕（Joy 2026-10-21「把破境丹也加入商城，取消可以用心得衝」）：只剩服丹衝關，手上有丹、到了極處才亮；
@@ -2773,6 +2776,9 @@
   // 一條秘方一頁，聽過的口訣直書大字，合中了蓋一方朱印寫它的名號。只列聽過的那幾句：不寫種類、配方、還差幾句（還沒拿到的線索一律不露）
   // 兩本書：武學譜（口訣與秘方）、鑄譜（打造的隱藏配方）。字待 joy 潤。一行寫完：tests/test_arts_pages.py、test_arts_pages_two.py 的假瀏覽器照名字把這一行切出去（webharness.konst 只認一行的 const）
   const BOOKS = { arts: { title: "武學譜", verb: "合出", unit: "口訣", empty: "江湖上流傳的老話，有時藏著合成的門道。" }, forge: { title: "鑄譜", verb: "打出", unit: "鑄訣", empty: "鐵匠的閒話、說書人的掌故，有時藏著失傳的鑄法。" } };
+  // 武學譜兩段的段名與一句說明（字待 joy 潤）；秘方的種類：fuse 裝滿武學的意境槽、merge 兩個意境合成（secret_recipes.view 的 kind）
+  const MANUAL_PARTS = [["fuse", "武學篇", "武學的意境槽裝滿了，暗合口訣"], ["merge", "意境篇", "兩個意境放進爐裡合成"]];
+  const MANUAL_VERB = { fuse: "使出", merge: "合出" };
   function manualRows(which = "arts") {
     const st = S.main && S.main.status;
     return (st && (which === "forge" ? st.forge_manual : st.manual)) || [];
@@ -2788,8 +2794,32 @@
   function manualEntry(which) {
     const rows = manualRows(which), b = BOOKS[which];
     const solved = rows.filter((r) => r.solved).length;
-    const sub = rows.length ? `收錄${b.unit} ${rows.length} 則${solved ? `・已參透 ${solved}` : ""}` : "卷中尚無一字";
+    // 武學譜的分母是這一季全服共有幾條（status.manual_total；玩家回報 2026-10-25：以前寫「你聽過的」，參透完了也看不出還剩幾條）
+    const total = which === "arts" ? (S.main?.status?.manual_total | 0) : 0;
+    const sub = total ? `本季已參透 ${solved}／${total}${rows.length > solved ? `・線索 ${rows.length - solved} 條` : ""}`
+      : rows.length ? `收錄${b.unit} ${rows.length} 則${solved ? `・已參透 ${solved}` : ""}` : "卷中尚無一字";
     return `<button class="manual-entry" data-act="book-open" data-book="${which}">${bookIcon()}<span><b>${b.title}</b><small>${sub}</small></span><i class="go">翻閱 ›</i></button>`;
+  }
+  // 參透一條秘方的那一下跳的視窗（企劃者 2026-10-25「應該是跳顯出個視窗比較明顯」；伺服器的 secret，secret_recipes.solved_card）：
+  // 朱印蓋下來（同破境衝關的印）、參透的是哪一條、聽過的口訣、這一季的進度，「翻開武學譜」直接進那一頁。點外面或「收起」關掉。字待 joy 潤
+  function secretPop(c) {
+    if (!c) return;
+    document.getElementById("sp-pop")?.remove();
+    const box = document.createElement("div");
+    box.id = "sp-pop";
+    box.className = "sp-wrap";
+    const pct = c.total ? Math.round((c.solved / c.total) * 100) : 0;
+    const clues = (c.clues || []).map((t) => `<p class="sp-clue">「${esc(t)}」</p>`).join("");
+    box.innerHTML = `<div class="sp-card" role="dialog" aria-label="${esc(c.title)}">
+      <div class="sp-seal">${sealSvg(c.name)}</div>
+      <p class="sp-title">${esc(c.title)}</p>
+      <p class="sp-name">【${esc(c.name)}】</p>${clues}
+      <div class="sp-bar" aria-hidden="true"><i style="width:${pct}%"></i></div>
+      <p class="sp-note">${esc(c.note || `這一季的秘方，你已參透 ${c.solved}／${c.total}。`)}</p>
+      <div class="sp-btns"><button class="btn primary" data-act="secret-book">翻開武學譜</button><button class="btn ghost" data-act="secret-close">收起</button></div>
+    </div>`;
+    box.addEventListener("click", (ev) => { if (ev.target === box) box.remove(); });
+    document.body.appendChild(box);
   }
   // 直書一句一欄：口訣照標點斷開（「日出東嶺，」「一寸一寸爬上峰頂。」），每一段自己起一欄，不在句中折行
   const clauses = (text) => text.split(/(?<=[，。；！？、：])/).filter((t) => t.trim());
@@ -3912,12 +3942,17 @@
     const rows = manualRows(which), b = BOOKS[which];
     const now = rows.filter((r) => !r.past); // 卷首只算這一季真的聽到、打中的：跨季記得的那幾行（past）照樣列在卷裡（FB-404）
     const solved = now.filter((r) => r.solved).length;
-    const leaves = rows.length ? rows.map((r, k) => `<article class="leaf${r.solved ? " solved" : ""}">
+    const leaf = (r, k) => `<article class="leaf${r.solved ? " solved" : ""}">
         <header class="leaf-head"><span>第${cnNum(k + 1)}則</span><span class="leaf-state">${r.solved ? "已參透" : "未參透"}</span></header>
         <div class="leaf-text">${r.clues.map((c) => `<p>${clauses(c).map((t) => `<span>${esc(t)}</span>`).join("")}</p>`).join("")}</div>
-        <footer class="leaf-foot">${r.solved ? `${sealSvg(r.solved)}<span class="leaf-sign">${b.verb}<b>【${esc(r.solved)}】</b></span>` : '<span class="leaf-sign muted">尚待參悟</span>'}${r.recipe ? `<p class="leaf-recipe">${esc(r.recipe)}</p>` : ""}</footer>
-      </article>`).join("")
-      : `<article class="leaf empty"><div class="leaf-text"><p>卷中尚無一字</p></div>
+        <footer class="leaf-foot">${r.solved ? `${sealSvg(r.solved)}<span class="leaf-sign">${MANUAL_VERB[r.kind] || b.verb}<b>【${esc(r.solved)}】</b></span>` : '<span class="leaf-sign muted">尚待參悟</span>'}${r.recipe ? `<p class="leaf-recipe">${esc(r.recipe)}</p>` : ""}</footer>
+      </article>`;
+    // 武學譜分兩段（Joy 2026-10-25「武學跟意境合成兩個應該分開放」）：裝滿武學意境槽的（fuse）、兩個意境合成的（merge），各自從第一則數起
+    const parts = which === "arts" ? MANUAL_PARTS.map(([kind, head, hint]) => [head, hint, rows.filter((r) => r.kind === kind)]).filter(([, , rs]) => rs.length) : [];
+    const leaves = !rows.length ? null : parts.length
+      ? parts.map(([head, hint, rs]) => `<h3 class="leaf-part"><b>${head}</b><small>${hint}</small></h3>${rs.map(leaf).join("")}`).join("")
+      : rows.map(leaf).join("");
+    const body = leaves || `<article class="leaf empty"><div class="leaf-text"><p>卷中尚無一字</p></div>
         <p class="leaf-hint">${b.empty}</p></article>`;
     return `<div class="book-layer" role="dialog" aria-label="${b.title}">
       <header class="book-bar"><button class="book-back" data-act="book-close" aria-label="返回">‹ 返回</button><span class="book-bar-title">${b.title}</span></header>
@@ -3928,9 +3963,9 @@
         </svg>
         <i class="book-moon" aria-hidden="true"></i>
         <div class="book-title"><span>${b.title}</span></div>
-        <p class="book-sub">本季所聞${b.unit} ${now.length} 則${solved ? `・已參透 ${solved} 則` : ""}</p>
+        <p class="book-sub">${which === "arts" && S.main?.status?.manual_total ? `本季秘方 ${S.main.status.manual_total} 條・已參透 ${solved}・所聞${b.unit} ${now.length} 則` : `本季所聞${b.unit} ${now.length} 則${solved ? `・已參透 ${solved} 則` : ""}`}</p>
       </div>
-      <div class="leaves">${leaves}</div>
+      <div class="leaves">${body}</div>
     </div>`;
   }
 
@@ -5410,6 +5445,7 @@
       const was = S.menxia, mark = place ? placeTop(place.from) : null;
       const step = guideKey(S.main && S.main.guide);
       const r = await api(`/api/menxia/${op}`, { person: S.person, kind: S.kind, ...extra });
+      if (r.secret) setTimeout(() => secretPop(r.secret), 0); // 裝滿意境槽暗合「裝滿」秘方：重畫完再跳視窗
       S.menxia = r.menxia;
       trimPot(); // 熔掉的若正放在爐裡，回煉製頁時不能還留著
       const needsName = !!(r.menxia && r.menxia.naming) && !(was && was.naming);
@@ -5493,7 +5529,7 @@
   async function forge() {
     const btn = document.getElementById("forge");
     const step = guideKey(S.main && S.main.guide);
-    let guideMoved = false, made = false;
+    let guideMoved = false, made = false, secret = null;
     await busy(async () => {
       const lab = (btn.querySelector && btn.querySelector(".kiln-lab")) || btn; // 小太極上那兩個字（大爐子縮起來時的開爐鈕）
       btn.disabled = true;
@@ -5511,6 +5547,7 @@
         S.forgeResult = { html: r.message };
         S.forgeMade = r.made ? r.made_item || null : null; // 合出來的那一樣：結果底下畫它的卡
         made = !!r.made;
+        secret = r.secret || null; // 這一季第一次參透一條秘方：出爐之後跳視窗（secretPop）
         // 出爐的排場只演一次（一秒半，不擋操作）：畫完這一次就收，之後輪詢重畫不再翻一次
         S.forgeReveal = made;
         // 合成了：兩格清空，下一爐從頭放（Joy 2026-10-12「爐子合完應該要把上次放上去的東西自動卸下」）；
@@ -5537,6 +5574,7 @@
       if (made) kilnBurst();
       showMadeCard();
     }
+    secretPop(secret);
     updateForgeLine(); // 心得、體力、「已經有了」都變了：重問一次說明
   }
 
@@ -5743,6 +5781,8 @@
         case "here-more": S.hereOpen = true; renderPage(); break;
         case "calls-more": openCalls(); break; // 場景底下收起來的邀請（FB-117、FB-241）
         case "party-leave": await leaveParty(); break;
+        case "secret-close": document.getElementById("sp-pop")?.remove(); break;
+        case "secret-book": document.getElementById("sp-pop")?.remove(); S.bookFrom = window.scrollY; S.book = "arts"; render(); document.querySelector(".book-layer")?.scrollTo(0, 0); break;
         case "book-open": S.bookFrom = window.scrollY; S.book = el.dataset.book === "forge" ? "forge" : "arts"; render(); document.querySelector(".book-layer")?.scrollTo(0, 0); break;
         case "book-close": S.book = false; render(); window.scrollTo(0, S.bookFrom || 0); break;
         case "zhuan-open":

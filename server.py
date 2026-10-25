@@ -2655,6 +2655,8 @@ def api_menxia_do(op: str, request: Request, body: dict = Body(default={})):
         # 合出來的那一樣（煉製頁在結果底下直接畫它的卡，不必切去修練頁看；Joy 2026-10-17）：{"type": "art"／"ins", "id"}
         thing = game.forged_thing if made else None
         out["made_item"] = {"type": thing[0], "id": thing[1]} if thing else None
+    if op in ("forge", "slot"):
+        out["secret"] = game.secret_solved  # 這一季第一次參透一條秘方：網頁跳一個視窗（secretPop）；沒有是 None
     return out
 
 

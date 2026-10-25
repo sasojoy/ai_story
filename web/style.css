@@ -3304,3 +3304,35 @@ svg.fig .blade.bow { stroke-width: 3; }
 .cr-reroll { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: .4em 0; }
 .cr-reroll .btn small { display: block; font-size: .78em; opacity: .85; }
 .cr-reread { display: grid; gap: 4px; margin: .2em 0 .6em; padding-top: .5em; border-top: 1px dashed var(--line); }
+
+/* 參透秘方的視窗（app.js secretPop；企劃者 2026-10-25）：遮罩同衝關（.cg-wrap），卡片是武學譜的舊紙，朱印從大縮小蓋下來（同 cg-stamp） */
+.sp-wrap { position: fixed; inset: 0; z-index: 72; display: flex; align-items: center; justify-content: center;
+  padding: max(16px, env(safe-area-inset-top, 0px)) 16px max(16px, env(safe-area-inset-bottom, 0px));
+  background: rgba(20, 16, 12, .6); animation: cg-fade .25s ease-out; }
+.sp-card { width: 100%; max-width: 22rem; padding: 1.4rem 1.2rem 1.1rem; text-align: center; border-radius: 12px;
+  background: var(--bk-paper); color: var(--bk-ink); border: 2px solid var(--bk-rule); box-shadow: 0 10px 40px rgba(0, 0, 0, .35); }
+.sp-seal { display: flex; justify-content: center; margin-bottom: .4rem; }
+.sp-seal .seal { width: 84px; height: 84px; animation: sp-stamp .7s cubic-bezier(.2, .9, .3, 1.2) both; }
+.sp-title { margin: .2rem 0 0; font: 700 1.05rem var(--bk-serif); color: var(--bk-seal); letter-spacing: .12em; }
+.sp-name { margin: .2rem 0 .5rem; font: 700 1.4rem var(--bk-serif); }
+.sp-clue { margin: .1rem 0; font-family: var(--bk-serif); color: var(--bk-ink-2); font-size: .95rem; }
+.sp-bar { height: 6px; margin: .9rem .4rem .4rem; border-radius: 3px; background: var(--bk-paper-2); overflow: hidden; }
+.sp-bar i { display: block; height: 100%; background: var(--bk-seal); border-radius: 3px; transition: width .6s ease-out; }
+.sp-note { margin: .2rem 0 .9rem; font-size: .92rem; color: var(--bk-ink-2); }
+.sp-btns { display: flex; gap: .5rem; justify-content: center; flex-wrap: wrap; }
+@keyframes sp-stamp { 0% { opacity: 0; transform: rotate(-5deg) scale(2.4); } 70% { opacity: 1; transform: rotate(-5deg) scale(.92); } 100% { opacity: 1; transform: rotate(-5deg) scale(1); } }
+@media (prefers-reduced-motion: reduce) { .sp-seal .seal { animation: none; } }
+
+/* 武學譜分兩段（app.js bookHtml 的 MANUAL_PARTS；Joy 2026-10-25）：段名橫在兩疊書頁之間，朱色一條線 */
+.leaf-part { display: flex; align-items: baseline; gap: .6em; margin: 1.2rem 4px .4rem; padding-bottom: .3rem; border-bottom: 2px solid var(--bk-seal);
+  font: 700 1.05rem var(--bk-serif); color: var(--bk-ink); }
+.leaf-part:first-child { margin-top: .2rem; }
+.leaf-part small { font: 400 .8rem var(--sans, inherit); color: var(--bk-ink-2); }
+
+/* 意境槽底下每一格那一招寫出來（app.js slotsHtml 的 jd-notes；Joy 2026-10-25「槽裡面擺的，他效果好像不會顯示」） */
+.jd-notes { list-style: none; margin: .3rem 0 .5rem; padding: 0; display: grid; gap: .3rem; font-size: .88rem; }
+.jd-notes li { display: flex; flex-wrap: wrap; align-items: baseline; gap: .15rem .4rem; padding: .3rem .5rem; border-radius: 6px; background: var(--card-2); }
+.jd-notes b { font-weight: 600; }
+.jd-notes .jdn-fx { color: var(--accent); font-weight: 600; }
+.jd-notes .jdn-desc { flex-basis: 100%; color: var(--ink-2); line-height: 1.5; }
+.jd-notes .look { position: static; }

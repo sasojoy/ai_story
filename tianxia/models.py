@@ -2417,6 +2417,10 @@ class Secrets(_Strict):
     scrap_frame: str = "你在亂石堆裡翻出一頁殘譜，字跡斑駁，只認得出一句：「{clue}」"
     overheard: str = "（這句話你記進了武學譜。）"
     hit_line: str = "爐中忽地一變——這一爐竟暗合了江湖上流傳的一句口訣。"
+    # 這一季第一次參透一條（玩家回報 2026-10-25「武學譜很空」）：結果多一句進度，另寫一則標題「武學譜」的江湖紀錄、跳一個視窗。
+    # {n} 這一季參透了幾條、{total} 這一季全服共有幾條。待 joy 潤
+    solved_note: str = "武學譜上多了一方朱印——這一季的秘方，你已參透 {n}／{total}。"
+    solved_title: str = "參透口訣・{n}／{total}"
     rumor: str = "江湖上傳開了：{who}參透了一句口訣，合出了{thing}。"
     chronicle: str = "{who}參透口訣，首創{thing}。"
 
