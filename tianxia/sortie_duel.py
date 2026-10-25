@@ -23,13 +23,15 @@ from typing import NamedTuple
 
 from . import conquest, encounter, sortie, tactics
 from .characters import name_key
-from .models import MOVES, SortieRules
+from .models import MOVES, Content, SortieRules
+from .state import PlayerState, WorldState
 from .world_state import SharedWorldState, SortieDuel, SortieResult, SortieRound, SortieSide
 
 ROUNDS = 3
 RETREAT = "撤退"
 TIER_WORDS = {"big": "大勝", "win": "險勝", "draw": "僵持", "lose": "落敗"}  # 給戰報那一格（battlelog 認得的四種）
 GARRISON = "守軍"  # 守軍迎戰時卡上寫的應戰者（待 joy 潤）
+LABEL = "約戰"  # 戰報上寫的種類（BattleRecord.label；kind 照舊是 sortie：Literal 加值舊程式讀不進新存檔，計畫 4.0 之三第 4 條）
 _WON = encounter.TIERS[:2]  # 大勝、險勝：攻方贏了這一回合
 
 # 灰掉的原因（卡上、鈕上那一句）。待 joy 潤
@@ -48,6 +50,150 @@ WHY_FAR = "在{region}才應得了戰"
 WHY_ANSWERS = "今日應戰 {n} 次已用完"
 WHY_JOINED = "已經同去了"
 WHY_NOT_ALLY = "不是同袍的約戰"
+WHY_GONE = "這一場約戰已經不在了"
+WHY_NOT_BLOCK = "這裡不在爭奪之列"
+WHY_RESTING = "休季中"
+
+# ── 接線（減法季批 3b-2） ──
+# 三個動作的選項 id（不在選單上，Game.choose 最前面接走）：sortie:go:<三招>、sortie:answer:<約戰 id>:<三招>、sortie:join:<約戰 id>
+PREFIX = "sortie:"
+# 下面的字都待 joy 潤
+# 出陣那一格（act:train）在約戰開著時只是打開出陣前那張卡（main.sortie_card），按了不花體力、不寫紀錄（同探索的入口）
+PICK = "（封好三招再出陣：從強攻、固守、奇襲、撤退裡挑三招，一回合一招。）"
+GO_TITLE = "約戰・{place}"  # 貼、應、同去、結算的江湖紀錄同一個標題
+GO_LINE = "你在{place}替{side}貼出約戰，封好三招：{moves}。{window} 分鐘內對面的人可以來應戰；窗滿就開打，打完戰報送到。"
+ANSWER_LINE = "你應下{rival}在{place}的約戰，替{side}封好三招：{moves}。窗滿就開打，打完戰報送到。"
+JOIN_LINE = "你跟{rival}同去{place}，替{side}一起推這一塊（同去算集火）。窗滿就開打。"
+VOID_LINE = "{place}的約戰沒打成，出陣（應戰）的次數與體力退回。"
+VS_LINE = "{attacker}約戰，{defender}應戰。"  # 補位的人跟真人一樣只寫名號（不寫假人、不寫「沒有人防守」）
+VS_GARRISON = "{attacker}約戰，{garrison}守軍迎戰。"
+VS_ALLIES = "同去：{names}。"
+ROUND_LINE = "第{n}回合　{attacker}{a_move}，{defender}{d_move}：{verdict}"
+ROUND_TOP = "{name}佔上風"
+ROUND_EVEN = "不分上下"
+ROUND_BACK = "{name}撤退"
+TALLY_LINE = "三回合 {wins} 勝 {losses} 負 {draws} 平（{attacker}的角度）。"
+MOVE_LINES = {  # 這一塊怎麼動（一句話，不寫數字）
+    "big": "{side}在{place}大步推進。",
+    "win": "{side}在{place}推進了一截。",
+    "draw": "{side}在{place}只推進了一點。",
+    "pull": "{place}守住了，{side}的進度被拉回。",
+    "hold": "{place}守住了。",
+}
+MOVE_FLIP = "{place}被推滿，落入{side}之手！"
+MOVE_STILL = "{place}此刻推不動（{why}），這一場只打了仗。"
+GAP_LINE = "{side}在{place}的進度 {value}／100，離易手還差 {left}。"
+GAP_DONE = "{side}在{place}的進度歸零了。"
+RANK_LINE = "離升下一階還差 {n} 貢獻。"
+LOSE_LINE = "這一場輸了：內傷加重，下一次出陣與應戰多等 {n} 分。"
+NEXT_LINE = "下一次出陣：{sortie}；應戰：{answer}。"
+NEXT_NOW = "隨時"
+NEXT_LATER = "{n} 分後"
+NEXT_DONE = "今日已用完"
+CONVOY_LINE = "這週截糧的運糧隊正打{place}經過：在那裡按出陣就是去截糧。"
+CONVOY_NAME = "截糧"  # 運糧隊經過時出陣那一格的名字（「出陣・截糧」）
+LOOT_LINE = "經驗 {exp}・心得 {xinde}・銀兩 {silver}"  # 出陣前那張卡「贏了」那一段的戰利
+ANNAL_LINE = "在{place}約戰{rival}，{tier}。"  # 行狀（annals.FIGHT）
+
+
+# 出陣那一格灰著時格子裡的小字：五格、四格時每格只放得下四個字（FB-670，tests/test_fb670_practice_cell_web.py 守）；整句在行動列底下那一行
+# （howto.duel_line，網頁點灰格浮出那一句）與約戰卡的 why_not。散人、今天用完照舊給原句（網頁自己換成「未投靠」「今日已滿」）。待 joy 潤
+CELL_WAIT = "等對面約"
+CELL_COOL = "冷卻中"
+CELL_STUCK = "推不動"
+
+
+def cell_note(why: str) -> str:
+    """貼不了約戰的原因（open_problem 那一句）換成格子裡放得下的小字（cell_note）。"""
+    if why == WHY_WAIT:
+        return CELL_WAIT
+    if why.startswith(WHY_COOL.partition("{")[0]):
+        return CELL_COOL
+    if why == sortie.RANGER_NOTE or why.startswith(sortie.USED_UP.partition("{")[0]):
+        return why
+    return CELL_STUCK
+
+
+def on(content: Content, world: WorldState | None) -> bool:
+    """約戰在這一季開著：減法季的 sortie_duel 子開關（rules.jianfa：設定＋開季的章）、出陣開著、領地爭奪在這一季生效（約戰貼在區塊上）。"""
+    from . import rules  # noqa: PLC0415  rules → … → conquest：延後 import，免得載入時繞成環
+
+    return rules.jianfa(content, world, "sortie_duel") and sortie.on(content) and conquest.on(content, world)
+
+
+def parse_moves(moves) -> list[str]:
+    """網頁、選項 id 送來的三招：清單，或「強攻,固守,奇襲」（逗號、頓號、空白都算分隔）。不認得的字照留（moves_problem 擋）。"""
+    if isinstance(moves, (list, tuple)):
+        return [str(m).strip() for m in moves if str(m).strip()]
+    text = str(moves or "")
+    for sep in ("、", "，", " "):
+        text = text.replace(sep, ",")
+    return [m.strip() for m in text.split(",") if m.strip()]
+
+
+def left_today(p: PlayerState, cfg: SortieRules, today: int) -> int:
+    """約戰開著的季今天還能出陣（貼或同去）幾次：jianfa_per_day 減今天用掉的（sortie_day／sorties_today，同 sortie.left_today 的帳）。"""
+    return max(0, cfg.jianfa_per_day - (p.sorties_today if p.sortie_day == today else 0))
+
+
+def answers_left(p: PlayerState, cfg: SortieRules, today: int) -> int:
+    """今天還能應戰幾次（answer_per_day，跟出陣分開算；answer_day／answers_today）。"""
+    return max(0, cfg.answer_per_day - (p.answers_today if p.answer_day == today else 0))
+
+
+def spend_answer(p: PlayerState, today: int, n: int = 1) -> None:
+    """記今天應戰了（n 是 −1 時是退一次：作廢；只退今天的）。"""
+    if n < 0 and p.answer_day != today:
+        return
+    p.answers_today = max(0, (p.answers_today if p.answer_day == today else 0) + n)
+    p.answer_day = today
+
+
+def cooling(until: float | None, now: float) -> bool:
+    return until is not None and now < until
+
+
+def minutes_text(until: float | None, now: float) -> str:
+    """下一次什麼時候（戰報那一行）：還在冷卻寫「N 分後」，不然「隨時」。"""
+    return NEXT_LATER.format(n=_minutes_left(until, now)) if cooling(until, now) else NEXT_NOW
+
+
+def round_lines(duel: SortieDuel) -> list[str]:
+    """三回合各一行（戰報的「過程」）：兩邊的名號（守軍寫 GARRISON）、出的招、誰佔上風。"""
+    result, d = duel.result, duel.defender
+    if result is None or d is None:
+        return []
+    a_name, d_name = duel.attacker.name, GARRISON if d.garrison else d.name
+    out = []
+    for n, r in enumerate(result.rounds, 1):
+        if r.attacker_move == RETREAT and r.defender_move == RETREAT:
+            verdict = ROUND_EVEN
+        elif r.attacker_move == RETREAT:
+            verdict = ROUND_BACK.format(name=a_name)
+        elif r.defender_move == RETREAT:
+            verdict = ROUND_BACK.format(name=d_name)
+        else:
+            verdict = {"attacker": ROUND_TOP.format(name=a_name), "defender": ROUND_TOP.format(name=d_name), "draw": ROUND_EVEN}[r.winner]
+        out.append(ROUND_LINE.format(n=n, attacker=a_name, a_move=r.attacker_move, defender=d_name, d_move=r.defender_move, verdict=verdict))
+    return out
+
+
+def vs_line(duel: SortieDuel) -> str:
+    """對面是誰（戰報、紀錄）：補位的人跟真人一樣寫「某某應戰」；連補位都沒有寫「守軍迎戰」。"""
+    d = duel.defender
+    if d is not None and d.garrison:
+        return VS_GARRISON.format(attacker=duel.attacker.name, garrison=d.name)
+    return VS_LINE.format(attacker=duel.attacker.name, defender=d.name if d is not None else GARRISON)
+
+
+def scale_of(duel: SortieDuel, cfg: SortieRules) -> tuple[str, float]:
+    """這一場推（拉）的方向與倍率：攻方大勝、勝、僵持是（"push", result_scale[tier]）；攻方敗是（"pull", result_scale[defender_tier]）。"""
+    result = duel.result
+    if result is None:
+        return "push", 0.0
+    if result.tier == "lose":
+        return "pull", cfg.result_scale[result.defender_tier]
+    return "push", cfg.result_scale[result.tier]
 
 
 class Cooldown(NamedTuple):

@@ -14,6 +14,7 @@ from collections.abc import Sequence
 
 from . import allied as allied_rules
 from . import calendar, conquest, economy, equipment, explore_modes, figures, four_tiers, mall, precise, renown, rules, seal, sortie, territory, timetable, training
+from . import sortie_duel  # 出陣約戰（減法季批 3b）：出陣那一行與玩法說明
 from .models import Content
 from .rules import STANCE_NAMES  # 態勢卡上三方的叫法（官軍、黃巾、豪強）：說明跟卡上同一個叫法
 from .state import GameState, WorldState
@@ -139,6 +140,26 @@ def sortie_loot(content: Content) -> str:
     """出陣攻打贏給不給銀兩（素材與經濟設計第八節）：開著寫對手銀兩的幾成，關著照舊「不給銀兩、不掉東西」。"""
     econ = content.config.economy
     return SORTIE_LOOT_SILVER.format(silver=f"{econ.sortie_silver_share * 10:g}") if econ.sortie_silver else SORTIE_LOOT
+
+
+# 減法季批 3b：約戰開著時行動列底下出陣那一行（Game._duel_line；整合設計 4.3）。待 joy 潤
+DUEL_NOTES = {
+    "go": "在這一塊貼約戰：封好三招，{window} 分鐘內對面同一區的人可以應戰，沒人應由對面趕來的人或守軍迎戰；"
+          "贏了推這一塊的進度、記貢獻、拿戰利，輸了內傷加重、多等 {lose} 分。",
+    "wait": "這裡是自家的地方，守不是一顆鈕：對面來約戰時在約戰卡上應戰（一天 {answers} 次，跟出陣分開算），守住了把對面的進度拉回來。",
+    "blocked": "此刻貼不了約戰（{why}）。",
+    "convoy": "這週截糧的運糧隊正打這裡經過：出陣就是去截糧，打一場，打贏算截糧（不推進度、不貼約戰）。",
+}
+DUEL_LEFT = "今日還能出陣 {n} 次、應戰 {answers} 次。"
+
+
+def duel_line(content: Content, why: str | None, left: int, answers: int, convoy: bool = False) -> str:
+    """約戰開著時出陣這一下會怎樣（Game._duel_line 照規則算好傳進來）：截糧、貼得了、自家的地方等對面來約、其他原因各一句，再接今天還能幾次。"""
+    cfg = content.config.sortie
+    key = "convoy" if convoy else "go" if why is None else "wait" if why == sortie_duel.WHY_WAIT else "blocked"
+    text = DUEL_NOTES[key].format(window=f"{cfg.window_minutes:g}", lose=f"{cfg.lose_cooldown_minutes:g}", answers=cfg.answer_per_day,
+                                  why=why or "")
+    return text + DUEL_LEFT.format(n=left, answers=answers)
 
 
 def social_line(figure: str | None, events: bool, hall: bool) -> str:
