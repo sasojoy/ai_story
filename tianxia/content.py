@@ -2178,9 +2178,13 @@ def validate(c: Content) -> None:
         貢獻（公開的只有後果與痕跡：不寫傳聞、江湖史、推線）；獎勵只給不扣，不准比這則「有檢定或打仗的開放選項」多（俠寇選項不算，
         同 check_free_text），作惡那一種不准比原事件的作惡選項多（俠寇選項也算）、扣的是善名（第 8 件 a）。敘事不寫阿拉伯數字。"""
         outs = ev.free_text.outcomes
+        fw = f"{where} 隨口應對分岔"
+        # 只在分岔開著時才有的那一顆（人拉犁，PM 2026-10-25 第 7 件）：要寫後果；關著的季沒有這一顆，effect／fail_effect 沒人用、不准寫
+        need(not ev.free_text.outcomes_only or bool(outs), f"{fw}：outcomes_only 要寫 outcomes")
+        need(not ev.free_text.outcomes_only or (ev.free_text.effect == Effect() and ev.free_text.fail_effect == Effect()),
+             f"{fw}：outcomes_only 的隨口應對只在分岔開著時才有，effect／fail_effect 不寫")
         if not outs:
             return
-        fw = f"{where} 隨口應對分岔"
         evil = [o for o in outs if o.evil]
         plain = len(outs) - len(evil)
         need(OUTCOMES_MIN <= plain <= OUTCOMES_MAX, f"{fw}：後果要 {OUTCOMES_MIN}～{OUTCOMES_MAX} 種（作惡那一種另算），有 {plain} 種")

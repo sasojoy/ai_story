@@ -88,9 +88,11 @@ def test_added_events_vary_their_checks_and_stay_within_limits(content, path):
 
 
 def test_every_location_has_one_free_text_explore_event(content):
-    """隨口應對每個地點先開 1 則（探索的多人與 LLM 玩法設計第五節）。"""
+    """隨口應對每個地點先開 1 則（探索的多人與 LLM 玩法設計第五節）。只在分岔開著的季才有的那一顆（outcomes_only：人拉犁，
+    減法季批 4 接線、PM 2026-10-25 第 7 件）不算：關著的季沒有它，開著的季潁川郊野多這一則（tests/test_outcomes_answer.py 測選單）。"""
     counts = {
-        loc_id: sum(1 for e in _always_available(content, loc_id) if e.free_text and loc_id in e.locations)
+        loc_id: sum(1 for e in _always_available(content, loc_id)
+                    if e.free_text and not e.free_text.outcomes_only and loc_id in e.locations)
         for loc_id in _places(content)
     }
     assert all(n == 1 for n in counts.values()), counts
