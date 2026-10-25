@@ -208,3 +208,20 @@ def test_the_store_keeps_the_first_text_and_drops_old_weeks(tmp_path):
     assert store.get(1, 1, "a") is None and store.done(1, 3) == {"b"}  # 兩週以前的清掉
     store.put(2, 1, "c", "丁")
     assert store.done(1, 3) == set()  # 換季清掉上一季
+
+
+def test_cleaning_markdown_keeps_the_underscores_inside_marks(c):
+    """清 markdown 的那一步（拿掉 * _ ` #）不准動到 {marks:...} 裡的底線：標記的 id 多半帶底線
+    （yingchuan_academy、zhuo_county……），吃掉之後跟原文比標記永遠不相等，改寫永遠退回原文。
+    2026-10-26 主機整週實測抓到：241 則退回 25 則，其中 22 則是這樣來的，模型其實一字不差地照抄了標記。
+    順便守住原本的用意：真的 markdown 強調符號還是要清掉。"""
+    original = "前後有{marks:yingchuan_academy:密告}把壁上的字送了進去，郡吏堵在書院門口。"
+    rewritten = "先前有{marks:yingchuan_academy:密告}將牆上的文字送入，郡吏封鎖了書院門口。"
+    out = narration.clean(c, original, rewritten)
+    assert out == rewritten  # 標記完整，過得了
+    assert "{marks:yingchuan_academy:密告}" in out  # 底線沒被吃掉
+
+    emphasised = "先前有{marks:yingchuan_academy:密告}將*牆上*的文字送入，郡吏封鎖了書院門口。"
+    cleaned = narration.clean(c, original, emphasised)
+    assert cleaned is not None and "*" not in cleaned  # 真的強調符號照樣清掉
+    assert "{marks:yingchuan_academy:密告}" in cleaned
