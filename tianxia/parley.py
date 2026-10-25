@@ -1,4 +1,4 @@
-"""開口求人（Joy 2026-10-23「先做看看」；設計稿 https://claude.ai/artifact/KtRz62jWShogpaXEzv2sbt；Config.parley）。
+"""NPC 智能 2.0（Joy 2026-10-23「先做看看」；設計稿 https://claude.ai/artifact/KtRz62jWShogpaXEzv2sbt；Config.parley）。
 
 對話裡「自己說」那一句也可以是求他做事。三段式跟對話同一條（模型在鎖外）：
   A 引擎照此刻的事實列兩份清單（他做得到的事、他可以開的條件），每件事帶份量 1～3，一起放進「自己說」那一輪的提示；
@@ -324,7 +324,7 @@ def prompt_block(content: Content, cid: str, asks: list[Item], conditions: list[
     cond_lines = "\n".join(f"- {c.id}：{c.detail}" for c in conditions)
     side = "；你們分屬敵對的兩方，你對他天生戒備" if hostile else ""
     return (
-        f"\n【開口求人】先判斷玩家這句話是不是在求{name}做一件事，結果一定要填在 ask：是在求事，就從下面「{name}此刻做得到的事」"
+        f"\n【NPC 智能 2.0】先判斷玩家這句話是不是在求{name}做一件事，結果一定要填在 ask：是在求事，就從下面「{name}此刻做得到的事」"
         f"挑最貼近的一件，把它的 id 原樣填進 ask（例：要他帶路去某地，就填那個地方的 escort id）；"
         f"只是閒聊、寒暄、請教道理，ask 填空字串；求的事不在清單上，ask 填 \"{REFUSE}\"。"
         f"ask 只管玩家求的是什麼，跟{name}要不要開條件無關：就算他要先開條件，ask 也照樣填玩家求的那件事。"
@@ -498,7 +498,7 @@ def forsake_all(state: GameState, content: Content) -> list[str]:
 
 
 def settle_task(state: GameState, content: Content, task_id: str, cid: str | None) -> bool:
-    """一件委託辦成了（bounties._complete_commission）：是欠他的那一件就清掉、記一筆守約；回 True 表示是開口求人的委託。"""
+    """一件委託辦成了（bounties._complete_commission）：是欠他的那一件就清掉、記一筆守約；回 True 表示是NPC 智能 2.0的委託。"""
     p = state.player
     if cid is None:
         return False
@@ -558,7 +558,12 @@ def plea_prompt(content: Content, cid: str, mood: str, wanted: list[Item], rewar
     return (
         f"\n【{name}有求於玩家】{name}此刻{mood}，玩家剛好來見他。如果照他的性格與處境，他會開口請玩家幫忙，"
         f"就從「{name}想請玩家做的事」挑一件填 want，再從「{name}可以回報的事」挑一件填 reward（份量不能比 want 大）；"
-        f"narrative 就寫他開口請託的話（說出要玩家做什麼、事成之後怎麼回報），不寫數字。他不想求人，want 留空字串，照平常開場。\n"
+        f"narrative 就寫他開口請託的話（說出要玩家做什麼、事成之後怎麼回報），不寫數字。\n"
+        f"【narrative 與 want 必須是同一件事】narrative 裡只要出現請託——要玩家去做什麼、事成怎麼回報——"
+        f"want 就一定要填清單上對應的那一件、reward 填回報的那一件，兩邊不能各說各話。"
+        f"他這一刻真的不想求人，就兩件都不要做：want 與 reward 都填空字串，而且 narrative 只寫寒暄、一個字都不提請託。\n"
+        f"【實機看過的錯誤寫法，不要這樣寫】narrative 寫「可否幫我查探那一處的動向？事成之後我親自護送你」，"
+        f"want 卻留空字串——玩家看到他開口相求，系統卻判定他沒開口，什麼也不會發生。\n"
         f"【{name}想請玩家做的事】\n{want_lines}\n"
         f"【{name}可以回報的事】\n{reward_lines}\n"
         "JSON 一定要多這兩個欄位（不求人就都填空字串）：\"want\": \"...\", \"reward\": \"...\""

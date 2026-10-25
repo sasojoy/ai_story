@@ -1,5 +1,5 @@
 """見面情誼起步與冷淡、對話提示帶稱號（名聲設計 4.3、5.2）。"""
-from conftest import real_content
+from conftest import real_content, renown_unscaled
 
 from tianxia import companion_agent, renown
 from tianxia.companion_agent import CompanionTurn
@@ -17,7 +17,7 @@ def _turn():
 
 
 def test_first_meet_gives_once_and_tops_up_after_a_new_tier():
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     c.config.affinity_gain_scale = 1.0  # 這裡量的是寫好的情誼數字；歷史武將同行的情誼放慢（Config.affinity_gain_scale）另測（tests/test_companions.py）
     s = new_game_state(c, "甲")
     liubei = _cid(c, "劉備")
@@ -32,7 +32,7 @@ def test_first_meet_gives_once_and_tops_up_after_a_new_tier():
 
 
 def test_fame_below_the_tier_is_not_recorded():
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     c.config.affinity_gain_scale = 1.0  # 這裡量的是寫好的情誼數字；歷史武將同行的情誼放慢（Config.affinity_gain_scale）另測（tests/test_companions.py）
     s = new_game_state(c, "甲")
     lu = _cid(c, "盧植")
@@ -43,17 +43,17 @@ def test_fame_below_the_tier_is_not_recorded():
 
 
 def test_the_wrong_kind_of_person_gets_no_virtue_start():
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     s = new_game_state(c, "甲")
     s.player.stats["good"] = 15
     assert renown.first_meet(s, c, _cid(c, "董卓")) == []  # 喜狠的人不理俠
     s.player.stats.update({"good": 0, "evil": 6})
-    assert renown.first_meet(s, c, _cid(c, "董卓")) == ["董卓早聽說你是綠林好漢。（情誼 +3）"]
+    assert renown.first_meet(s, c, _cid(c, "董卓")) == [f"董卓早聽說你是綠林好漢。（情誼 +{renown.warmed(c, 3)}）"]
     assert renown.first_meet(s, c, _cid(c, "張角")) == []  # 不偏
 
 
 def test_cold_trims_gains_only():
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     s = new_game_state(c, "甲")
     s.player.stats.update({"evil": 6})
     luzhi = _cid(c, "盧植")
@@ -64,7 +64,7 @@ def test_cold_trims_gains_only():
 
 
 def test_the_dialogue_starts_warmer_and_a_cold_turn_says_why():
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     c.config.affinity_gain_scale = 1.0  # 這裡量的是寫好的情誼數字；歷史武將同行的情誼放慢（Config.affinity_gain_scale）另測（tests/test_companions.py）
     w = open_world()
     s = new_game_state(c, "甲")
@@ -80,7 +80,7 @@ def test_the_dialogue_starts_warmer_and_a_cold_turn_says_why():
 
 
 def test_the_prompt_carries_titles_and_the_regard():
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     w = open_world()
     s = new_game_state(c, "甲")
     s.player.stats.update({"fame": 27, "good": 18})
@@ -95,7 +95,7 @@ def test_the_prompt_carries_titles_and_the_regard():
 
 
 def test_the_virtue_perks_name_the_welcome():
-    c = real_content("weekend")
+    c = renown_unscaled(real_content("week7"))
     assert "敬俠的人見面情誼 +6" in renown.virtue_perks(c, "俠", 2)
     kou = renown.virtue_perks(c, "寇", 1)
     assert "喜狠的人見面情誼 +3" in kou and "敬俠的人對你冷淡" in kou

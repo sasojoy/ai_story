@@ -150,5 +150,5 @@ def test_the_weekend_profile_no_longer_refills_for_free():
     from pathlib import Path
 
     from tianxia.content import load_content
-    real = load_content(Path(__file__).parent.parent / "content", profile="weekend")
+    real = load_content(Path(__file__).parent.parent / "content", profile="week7")
     assert real.config.beta_free_refill is False

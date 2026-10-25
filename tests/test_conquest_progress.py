@@ -157,7 +157,7 @@ def test_action_note_says_progress_not_the_line():
     assert howto.SORTIE_HOLD_PROGRESS in _note(game, "yingchuan_wilds")
     go(game, "changshe")  # 大本營搶不下來：沒有進度（FB-532：自家的大本營另一句，見 test_conquest_sortie_notes）
     assert "沒有進度可推" in _note(game, "changshe") and howto.SORTIE_PROGRESS not in _note(game, "changshe")
-    plain = go(join(plain_game("weekend"), "huang"), "runan_wilds")
+    plain = go(join(plain_game("week7"), "huang"), "runan_wilds")
     assert howto.SORTIE_PROGRESS not in _note(plain, "runan_wilds")  # 關著照舊寫推動戰局
 
 
@@ -173,7 +173,7 @@ def test_ranger_sees_why_at_every_block():
 
 
 def test_switch_off_sortie_unchanged():
-    game = go(join(plain_game("weekend"), "huang"), "runan_wilds")
+    game = go(join(plain_game("week7"), "huang"), "runan_wilds")
     w = game.state.world
     assert game.sortie_push("guan_camp", "attack")  # 關著：出陣照舊推線
     assert w.conquest is None and game.sortie_progress("guan_camp") == 0

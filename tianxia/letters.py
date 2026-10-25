@@ -16,7 +16,7 @@ import re
 
 from pydantic import BaseModel
 
-from . import bounties, calendar, figure_life, gender, prologue, zh
+from . import bounties, calendar, figure_life, gender, prologue, rules, zh
 from .calendar import DAY
 from .models import Content
 from .state import Bounty, GameState, Letter
@@ -52,8 +52,19 @@ def note_cheer(state: GameState, content: Content, cid: str, text: str) -> None:
     del state.player.cheers[:-CHEERS_KEEP]
 
 
-def deliver(state: GameState, content: Content) -> list[str]:
+def mail_day(content: Content, world, real_now: float | None) -> int | None:
+    """減法季「09:00 來信」（整合設計第十章，批 9）：現實時間 real_now 落在第幾個送信日——當地 mail_hour（9）點起算的 24 小時
+    （時區照 pill_day_utc_offset_hours，跟回體丹同一個）。一個送信日最多一封，所以新的信總是 9 點以後才到。
+    減法季的 morning_mail 沒開、或沒給現實時間（舊的呼叫端）回 None，照舊用遊戲日。"""
+    if real_now is None or not rules.jianfa(content, world, "morning_mail"):
+        return None
+    cfg = content.config
+    return int((real_now + (cfg.pill_day_utc_offset_hours - cfg.jianfa.mail_hour) * 3600) // 86400)
+
+
+def deliver(state: GameState, content: Content, real_now: float | None = None) -> list[str]:
     """同步時叫（Game.sync）：過了期限的委託作罷各補一句；這個遊戲日還沒收過信，就看有沒有人該寫一封（道賀先、求援後）。
+    減法季的季照送信日算（mail_day，real_now 是 Game.now；伺服器的看守 9 點替開了推播的人先送，Game.morning_mail）。
     回傳江湖紀錄的句子（標題 TITLE）。開關關著、休季、序章裡什麼都不做。"""
     if not on(content):
         return []
@@ -64,7 +75,9 @@ def deliver(state: GameState, content: Content) -> list[str]:
         if t is not None and not letter.lapsed and not t.done_by and t.expires <= w.time:
             letter.lapsed = True
             msgs.append(LAPSED.format(who=_name(content, letter.sender)))
-    day = int(w.time // DAY)
+    day = mail_day(content, w, real_now)
+    if day is None:
+        day = int(w.time // DAY)
     if w.ended or p.letter_day == day or prologue.active(state, content) or not content.characters:
         return msgs
     letter = _cheer_letter(state, content) or _feast_letter(state, content) or _help_letter(state, content, random.Random(f"書信|{w.tianji}|{p.name}|{day}"))
@@ -210,7 +223,8 @@ def view(state: GameState, content: Content) -> dict | None:
     letter = unread(state)
     if letter is None or not on(content):
         return None
-    out = {"id": letter.id, "kind": letter.kind, "sender": _name(content, letter.sender), "text": letter.text, "task": None}
+    out = {"id": letter.id, "kind": letter.kind, "sender": _name(content, letter.sender), "text": letter.text, "task": None,
+           "open": letter.kind == "託付"}  # 開局那一封（opening.py）一到就攤開：人物開口的話要看得到，不是只露一行
     t = letter.task
     if t is not None:
         live = not letter.lapsed and not t.done_by and t.expires > state.world.time
@@ -287,6 +301,9 @@ def write(client, note: LetterNote) -> str:
         return ""
     if note.kind == "求援":
         what = f"他此刻{note.mood}，寫信向{note.hero}求援，託的事是：{note.task}（事情要寫進信裡，可以換成他的說法）"
+    elif note.kind == "託付":  # 開局第一分鐘（opening.py）：初到江湖的人，他在城門口開口託第一件事
+        what = (f"{note.hero}剛到潁川、還沒投靠任何一方，他看中了這個生面孔，開口託{note.hero}一件事：{note.task}"
+                "（事情要寫進信裡，可以換成他的說法；順口說一句為什麼託給一個生面孔）")
     elif note.kind == "邀宴":
         what = f"他在{note.about}設宴，寫信邀{note.hero}來赴宴（地點要寫進信裡）"
     elif note.kind == "道謝":

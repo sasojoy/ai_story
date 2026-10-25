@@ -1,5 +1,5 @@
 """盡頭阻力、季長縮放與事件五折（docs/superpowers/specs/2026-10-14-出陣探索與地盤-design.md 第五節、3.2）。
-正式內容；預設是週末設定（第一季規則開著、季長 2.5 天，季長倍數 1）。"""
+正式內容；預設是 7 天季（第一季規則開著；21 天季的頂與每日上限自己一套，不乘季長倍數）。"""
 from __future__ import annotations
 
 import random
@@ -15,7 +15,7 @@ from tianxia.sqlite_world import open_world
 TUNING = PushResistance()
 
 
-def _game(profile="weekend", days=None, faction="huang", name="沈浪"):
+def _game(profile="week7", days=None, faction="huang", name="沈浪"):
     c = real_content(profile)
     c.config.auto_open_first_season = True
     if days is not None:
@@ -40,18 +40,6 @@ def test_the_resistance_table(value, direction, share):
 
 def test_rounding_half_away_from_zero():
     assert [push.round_half_away(x) for x in (1.6, 0.6, 0.4, -0.6, -1.5, 2.5)] == [2, 1, 0, -1, -2, 3]
-
-
-def test_the_weekend_cap_stays_put():
-    game = _game()
-    assert game.season_scale() == 1.0 and game.daily_push_cap() == game.content.config.daily_push_cap == 10
-
-
-def test_a_week_long_season_shrinks_the_daily_cap():
-    game = _game(days=7)
-    assert game.daily_push_cap() == pytest.approx(10 * 2.5 / 7)
-    game.content.config.push_resistance.enabled = False
-    assert game.daily_push_cap() == 10
 
 
 def test_pushing_deeper_is_resisted_and_pulling_back_is_not():
@@ -84,15 +72,6 @@ def test_repeatable_events_push_the_fronts_at_half_and_one_off_events_in_full():
     game.content.config.explore_modes.enabled = False
     game.push_trend("yingru", 2, source="event")
     assert w.trends["yingru"] == 55
-
-
-def test_a_sortie_push_follows_the_season_length_in_season_one():
-    game = _game(days=7)
-    w = game.state.world
-    w.trends["yingru"] = 50
-    assert game.push_trend("yingru", 2, source="sortie") == []  # 2 × 2.5／7 ≈ 0.71：零頭記著，不寫推動那一行
-    game.push_trend("yingru", 2, source="sortie")
-    assert w.trends["yingru"] == 51
 
 
 def test_the_combined_line_of_a_fourteen_day_season_is_resisted_too():

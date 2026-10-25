@@ -99,8 +99,11 @@ def is_town(content: Content, loc_id: str) -> bool:
 
 
 def board_here(state: GameState, content: Content) -> bool:
-    """這裡看得到懸賞榜：懸賞榜開著（active）、人在城鎮類的地點。"""
-    return active(state, content) and is_town(content, state.player.location)
+    """這裡看得到懸賞榜：懸賞榜開著（active）、人在城鎮類的地點、這一季走到開榜的那一週（減法季 6.6 第 2 週，week_unlock.open；
+    規則關著一律開）。榜鎖著時系統通緝照掛（post_auto 不問這裡）、揭了的單照交，只是榜不畫、不能揭新的。"""
+    from . import week_unlock  # 繞回來的 import，呼叫時才取
+
+    return active(state, content) and is_town(content, state.player.location) and week_unlock.open(state, content, "bounties")
 
 
 def close_board(p: PlayerState) -> None:
@@ -171,7 +174,7 @@ def how(content: Content, b: Bounty, state: GameState | None = None, world: Worl
     if b.motive == "求援":  # 求援委託：護衛、犒軍那位人物也算（大勢人物擴充第三批，跟「大勢人物參戰與護衛」對齊）
         return how(content, b.model_copy(update={"motive": None}), state, world) + RALLY_AID.format(who=issuer(content, b))
     if b.kind == "strike":
-        from . import explore_modes, precise, sortie  # noqa: PLC0415  延後 import 只是保險
+        from . import explore_modes, precise, sortie  # 延後 import 只是保險
 
         target = _loc_name(content, b.location)
         if precise.on(content, world):
@@ -655,7 +658,7 @@ def rallies(state: GameState, content: Content) -> list[Bounty]:
 
 def _complete_rally(state: GameState, content: Content, b: Bounty) -> list[str]:
     """求援委託辦成了：銀兩 b.silver（同委託，不乘加成）、那位人物情誼 +rally_affinity，他寫一封道謝信。"""
-    from . import letters  # noqa: PLC0415  letters → bounties
+    from . import letters  # letters → bounties
 
     p = state.player
     b.done_by.append(p.name)
@@ -688,7 +691,7 @@ def rally_reward(content: Content, b: Bounty) -> str:
 def post_rally(state: GameState, content: Content, cid: str) -> Bounty | None:
     """cid（大勢人物）對自己陣營全部人發一件求援委託（figure_life.tick：心事焦慮時擲中）：在他所在那一區，有對頭站著的地方就討伐，
     否則打探那一區危險度 2 以上、不是城鎮的地方。同一位一次一件。懸賞榜關著、他不是交戰兩軍、那一區什麼都挑不出來回 None。"""
-    from . import atlas, figure_life  # noqa: PLC0415  atlas → world → rules：延後載入
+    from . import atlas, figure_life  # atlas → world → rules：延後載入
 
     side = figure_life.side_of(content, cid)
     w, tuning = state.world, content.config.figure_life
@@ -747,10 +750,10 @@ def _complete_commission(state: GameState, content: Content, b: Bounty) -> list[
     msgs = [COMMISSION_DONE.format(who=issuer(content, b), title=title(content, b))]
     if b.silver:
         msgs.append(f"銀兩 +{b.silver}")
-    from . import parley  # noqa: PLC0415  parley → bounties：延後載入
+    from . import parley  # parley → bounties：延後載入
 
     settled = parley.settle_task(state, content, b.id, b.figure)  # 第二批：欠他的那一件（先做後付、接了他的請託）做到了，守約 +1
-    if b.parley_ask:  # 開口求人的條件（parley.py）：辦成了，下回見面他兌現答應你的那一件
+    if b.parley_ask:  # NPC 智能 2.0的條件（parley.py）：辦成了，下回見面他兌現答應你的那一件
         p.parley_owed[b.figure] = b.parley_ask
         msgs.append(parley.COMMISSION_OWED.format(name=issuer(content, b)))
         if not settled:  # 你求他、他開的條件：做到了也記一筆守約
@@ -926,7 +929,7 @@ def hand_in_options(
     """懸賞榜第三層（替 b 挑一件，設計 4.4）：合用的（items，fitting 排好的）最不值錢的 give_list 件各一顆交出，每顆先問一次
     （確認只在網頁那一層；give 自己整個重驗）；多的收成一行灰掉的；最後永遠按得下去的「回到懸賞榜」。
     只讓交最不值錢的這幾件是有意的：交出去就沒了，該交的是最捨得的。"""
-    from .engine import Option  # noqa: PLC0415  engine 會 import 這裡（同 smithing.temper_option）
+    from .engine import Option  # engine 會 import 這裡（同 smithing.temper_option）
 
     cfg = content.config.bounties
     opts = []
@@ -1234,8 +1237,8 @@ def commission_reward(state: GameState, content: Content, b: Bounty) -> str:
     amount = content.config.figure_life.commission_affinity
     if amount and b.figure in content.characters:
         parts.append(f"{content.characters[b.figure].name}情誼 +{amount}")
-    if b.parley_ask:  # 開口求人的條件：辦成了他兌現你求的那一件
-        from . import parley  # noqa: PLC0415  parley → bounties：延後載入
+    if b.parley_ask:  # NPC 智能 2.0的條件：辦成了他兌現你求的那一件
+        from . import parley  # parley → bounties：延後載入
 
         parts.append(f"他兌現：{parley.ask_label(content, b.parley_ask)}")
     return "・".join(parts)
@@ -1246,9 +1249,9 @@ def post_figure(state: GameState, content: Content, cid: str, motive: str, regio
     倒下的地方（spot）有對頭的隊伍就掛那裡，否則照那一區的地點挑（自己一份亂數：天機｜人物｜此刻）。賞銀是一般討伐的
     revenge_silver_scale 倍，掛 revenge_cal_days 個季曆天。懸賞榜關著、cid 不是交戰兩軍、那一區沒有對頭站著的地方、
     同一位人物還有一張有效的同一種，都不掛（回 None）。"""
-    from . import atlas  # noqa: PLC0415  atlas → world → rules：延後載入
+    from . import atlas  # atlas → world → rules：延後載入
 
-    from .relations import side_of  # noqa: PLC0415
+    from .relations import side_of
 
     side = side_of(content, cid)
     if not active(state, content) or side not in ENEMY or region is None:

@@ -2,6 +2,7 @@
   {
     "id": "yuxi_scroll",
     "title": "枯骨與符卷",
+    "image": "treasure",
     "locations": [
       "songshan_foot",
       "deep_mountain",
@@ -57,6 +58,7 @@
   {
     "id": "yuxi_antique",
     "title": "古物商的舊卷",
+    "image": "treasure",
     "actions": [
       "socialize"
     ],
@@ -107,6 +109,7 @@
   {
     "id": "yuxi_dig",
     "title": "循符探查",
+    "image": "treasure",
     "locations": [
       "songshan_foot",
       "deep_mountain"
@@ -150,6 +153,7 @@
   {
     "id": "yuxi_rival",
     "title": "董卓的斥候",
+    "image": "forest",
     "locations": [
       "songshan_foot",
       "deep_mountain"
@@ -212,6 +216,7 @@
   {
     "id": "yuxi_scholar",
     "title": "汝南名士",
+    "image": "academy",
     "actions": [
       "socialize"
     ],
@@ -269,6 +274,7 @@
   {
     "id": "yuxi_guardian",
     "title": "南華觀看守者",
+    "image": "treasure",
     "locations": [
       "jade_cave"
     ],

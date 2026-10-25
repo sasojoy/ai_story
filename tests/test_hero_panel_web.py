@@ -57,9 +57,10 @@ def test_a_tapped_gear_node_opens_that_slot_in_the_drawer_and_gear_nodes_follow_
     page = run(m, "return H.pagePractice();", menxia=x, S={"pdrawer": {"t": "gear", "key": "weapon"}})
     panel = _panel(page)
     assert 'data-key="weapon"' in panel and 'data-key="armor"' in panel and 'data-key="mount"' not in panel
-    assert 'hero-node dim r" style' in panel.split('data-key="armor"')[0].rsplit("<button", 1)[1]  # 沒穿防具：點暗著
-    assert 'hero-node on r" style' in panel.split('data-key="weapon"')[0].rsplit("<button", 1)[1]
-    assert "&lt;i&gt;試刃&lt;/i&gt;" in panel and "<i>試刃</i>" not in page  # 名字寫在點旁邊，跳脫
+    # 減法季批 1：裝備是人像四角的四格（左上武器、左下防具……），沒穿的那一格虛線框
+    assert 'class="self-gear bl empty"' in panel.split('data-key="armor"')[0].rsplit("<button", 1)[1]  # 沒穿防具：空著
+    assert 'class="self-gear tl"' in panel.split('data-key="weapon"')[0].rsplit("<button", 1)[1]
+    assert "&lt;i&gt;試刃&lt;/i&gt;" in panel and "<i>試刃</i>" not in page  # 名字寫在格子裡，跳脫
     assert 'data-slot="weapon"' in _drawer(page)  # 抽屜裡是那一欄
 
 

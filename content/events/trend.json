@@ -1,5 +1,5 @@
 [
-  {"id": "trend_yingchuan_refugees", "title": "城門閉早", "locations": ["yingchuan"],
+  {"id": "trend_yingchuan_refugees", "title": "城門閉早", "image": "refugees", "locations": ["yingchuan"],
    "condition": {"trend_min": {"huangjin": 40}},
    "text": "黃巾聲勢一天比一天大，陽翟的城門申時就關了。門外擠滿從長社逃來的百姓，守門的屯長隔著門縫喊：「再擠，就放箭了！」門內有人在罵，門外有孩子在哭。",
    "choices": [
@@ -11,7 +11,7 @@
       "fail_effect": {"text": "後半夜你撐不住打了個盹，醒來時已有兩家人被搶了包袱。", "stamina": -15}},
      {"text": "趁亂收些銀錢，替人走後門", "effect": {"text": "幾家富戶從側門進了城，你袖裡沉甸甸的。", "stats": {"silver": 25, "evil": 2}}}
    ]},
-  {"id": "trend_luoyang_road_cut", "title": "官道斷絕", "locations": ["luoyang_road"],
+  {"id": "trend_luoyang_road_cut", "title": "官道斷絕", "image": "road", "locations": ["luoyang_road"],
    "condition": {"world_flags_all": ["road_blocked"]},
    "text": "官道被黃巾截斷後，往來潁川的軍報全靠小道傳遞。路旁的哨卡空了一半，一個驛卒牽著瘸馬在路邊發愁：他手上的軍書再送不到陽翟，前線就要斷糧了。",
    "choices": [
@@ -23,7 +23,7 @@
       "fail_effect": {"text": "封泥的字你一個也認不出來，驛卒嘆口氣，自己牽著馬走了。"}},
      {"text": "說官道斷了，誰也幫不上", "effect": {"text": "驛卒望著北邊，一句話也沒說。"}}
    ]},
-  {"id": "trend_nanyang_road_quiet", "title": "流民返鄉", "locations": ["nanyang_road"],
+  {"id": "trend_nanyang_road_quiet", "title": "流民返鄉", "image": "refugees", "locations": ["nanyang_road"],
    "condition": {"trend_max": {"huangjin": 15}},
    "text": "各路義士連番剿討，黃巾在南陽一帶的聲勢退了。官道上開始有人推著獨輪車往回走，車上綁著鍋碗和孩子。一戶人家的車軸在坑裡卡住，全家人圍著發愁。",
    "choices": [
@@ -35,7 +35,7 @@
       "fail_effect": {"text": "削出來的軸粗細不合，你白忙了一場。", "stamina": -5}},
      {"text": "繼續趕路", "effect": {"text": "你從他們身旁走過，聽見孩子在唱一首鄉下的歌。"}}
    ]},
-  {"id": "trend_zhuo_volunteers", "title": "南下的鄉勇", "locations": ["zhuo_county"],
+  {"id": "trend_zhuo_volunteers", "title": "南下的鄉勇", "image": "town", "locations": ["zhuo_county"],
    "condition": {"trend_min": {"huangjin": 40}},
    "text": "冀州的黃巾越打越兇，涿縣縣門外每天都有一隊鄉勇整裝南下。今天這一隊連鞋都沒穿齊，帶隊的豪族子弟急著要湊足人數，見你就拉：「少俠，一起去吧！」",
    "choices": [
@@ -47,7 +47,7 @@
       "fail_effect": {"text": "走到半路你腿一軟，糧袋滾進溝裡，還得大家幫你撈。", "stamina": -15}},
      {"text": "說自己另有要事", "effect": {"text": "隊伍走遠了，揚起的塵土半天沒落。"}}
    ]},
-  {"id": "trend_baima_ford_panic", "title": "爭渡", "locations": ["baima_ford"],
+  {"id": "trend_baima_ford_panic", "title": "爭渡", "image": "river", "locations": ["baima_ford"],
    "condition": {"trend_min": {"huangjin": 50}},
    "text": "黃巾聲勢浩大，冀州的大戶都想渡河南逃。白馬津只剩三條渡船，船家把價錢喊到一人十兩，岸邊推擠成一團，已經有人被擠下水。",
    "choices": [

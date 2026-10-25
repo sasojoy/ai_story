@@ -183,6 +183,7 @@
     },
     "desc": "拜左中郎將，與朱儁分道討黃巾，於長社（火攻大破黃巾）、廣宗（擊斬張梁）等地連戰連捷，是平定黃巾的首功之臣。",
     "talk_at": "changshe",
+    "image": "figures/huangfusong",
     "affinity_tag_deltas": {
       "真誠請教": 8,
       "由衷讚賞": 3
@@ -263,6 +264,7 @@
     },
     "desc": "拜北中郎將討張角，圍困廣宗幾乎破城，卻因不肯賄賂前來監軍的宦官左豐，被誣陷「畏敵不進」下獄，功敗垂成。劉備、公孫瓚都曾是他的學生。",
     "talk_at": "luzhi_camp",
+    "image": "figures/luzhi",
     "affinity_tag_deltas": {
       "真誠請教": 9,
       "強人所難": -8,
@@ -639,6 +641,7 @@
     },
     "desc": "甲子年二月隨三十六方一同起事，統領潁川的黃巾，四處截斷官道、劫奪官糧，朝廷派來的中郎將正往潁川趕。",
     "talk_at": "huangjin_camp",
+    "image": "figures/bocai",
     "affinity_tag_deltas": {
       "雪中送炭": 10,
       "由衷讚賞": 7,

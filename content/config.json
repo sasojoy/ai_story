@@ -62,6 +62,7 @@
   "bot_strength": 0.6,
   "bot_tick_seconds": 20,
   "world_tick_seconds": 10,
+  "web_push": {"enabled": true},
   "bot_fill_seconds": 3600,
   "battle": {"push_max": 20},
   "fuse_quality": {
@@ -94,6 +95,7 @@
     }
   },
   "secrets": {
+    "per_season": {"fuse": 4, "merge": 4},
     "quality_points": 30,
     "insight_points": 10,
     "tale_events": ["teahouse", "tale_yc_riverbank", "tale_yc_academy", "tale_wan_road", "tale_xy_river", "tale_mt_scribes", "tale_xqy_fort", "tale_rnmk_ford", "tale_rn_mengjin"],

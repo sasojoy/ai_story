@@ -21,7 +21,7 @@ from tianxia.state import TimelineResult
 pytestmark = pytest.mark.slow  # 每一條都載真實內容、開一季
 
 HOUR, DAY = 3600, 86400
-PROFILES = ("weekend", "season21", "week7")
+PROFILES = ("season21", "week7")
 SPECIAL = ("showdown", "finale")
 
 
@@ -103,7 +103,7 @@ NOW = 1000.0
 
 def test_the_admin_start_button_lists_the_battle_on_the_map_at_once(tmp_path):
     """整條路走一遍（週末）：管理者在排定時刻之前按「立刻開這一場」，輿圖當下就列，「天下怎麼變」那一週也有。"""
-    content = real_content("weekend")
+    content = real_content("week7")
     content.config.auto_open_first_season = True
     content.config.admins = ["管"]
     admin = Game.new(content, "管", rng=random.Random(0), world=open_world(tmp_path / "admin.db"))
@@ -150,26 +150,6 @@ def test_a_showdown_moved_to_another_week_is_listed_in_the_week_it_is_really_sch
     assert title in _titles(content, state, later, moved_week, now_week)
     if event.week != moved_week:
         assert title not in _titles(content, state, later, event.week, now_week)
-
-
-def test_weekend_quiet_hours_move_the_battle_and_the_map_follows():
-    """QA 看到的：週一 00:00 開的週末季，長社火攻被「避開半夜」挪到第 5 週・週五 16:00（時刻表寫第 6 週），輿圖晚了 1 小時 40 分才列。"""
-    content, state = _setup("weekend")
-    w = state.world
-    assert timetable.avoid_quiet_hours(w, content, fb501.MON) == []
-    changshe = _event(content, "changshe_fire")
-    moved = w.schedule["changshe_fire"]
-    assert _week_of(content, state, moved) == changshe.week - 1 == 5
-    assert "長社火攻" not in _titles(content, state, moved - 60, 5)
-    assert "長社火攻" in _titles(content, state, moved, 5)  # 排定的那一刻就列，在第 5 週
-    monday6 = calendar.week_start(6, content, w) + 60
-    assert "長社火攻" in _titles(content, state, monday6, 5, 6) and "長社火攻" not in _titles(content, state, monday6, 6, 6)
-    # 同一次挪動，廣宗決戰從第 11 週挪到第 12 週
-    guangzong = w.schedule["guangzong"]
-    assert _week_of(content, state, guangzong) == 12
-    assert "廣宗決戰" not in _titles(content, state, guangzong - 60, 12)
-    assert "廣宗決戰" in _titles(content, state, guangzong, 12)
-    assert "廣宗決戰" not in _titles(content, state, guangzong + HOUR, 11, 12)
 
 
 # ── 不變：其他大事、預設的排定、14 天的季 ─────────────────

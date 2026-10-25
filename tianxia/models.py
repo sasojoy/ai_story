@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, GetCoreSchemaHandler, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, GetCoreSchemaHandler, field_validator, model_serializer, model_validator
 from pydantic_core import core_schema
 
 STATS = ("str", "agi", "con", "wis", "lore", "silver", "good", "evil", "fame", "xinde")
@@ -32,6 +32,16 @@ SPECIAL_HOOKS = (  # 特別功效的掛點（13.4）：一個掛點只能有一�
 class _Strict(BaseModel):
     """內容檔的欄位拼錯時直接報錯，而不是被默默忽略。"""
     model_config = ConfigDict(extra="forbid")
+
+
+def _drop_unset(data: Any, keys: tuple[str, ...]) -> Any:
+    """新加的欄位還是預設值（0、空的）時不寫進序列化（減法季批 4：沒有分岔的事件、沒有貢獻的效果，鍵一個都不多）。
+    不用 Field(exclude_if=…)：那是 Pydantic 2.11 才有的，requirements.txt 寫 pydantic>=2.6（同 world_state.SealRegistry）。"""
+    if isinstance(data, dict):
+        for key in keys:
+            if key in data and not data[key]:
+                del data[key]
+    return data
 
 
 class Condition(_Strict):
@@ -145,6 +155,13 @@ class Effect(_Strict):
     # 奇遇給的寶物或良駒（裝備四欄 6.4）：content/gear.json 掉落池的 id，或 GOOD_HORSE（一匹良駒）；名將贈禮與名駒不准
     # （content.check_effect），隨口應對不准（check_free_text），路上見聞只准屬性與素材
     gear: str | None = None
+    # 陣營貢獻幾點（減法季整合設計 5.3：痕跡一筆記一筆貢獻；每天上限是接線那一批的事）。現在只准寫在隨口應對分岔的後果上
+    # （content.check_outcomes）：rules.apply_effect 不讀它，接線之前寫在別處會靜靜沒作用。0 的時候不寫進序列化
+    contribution: int = Field(default=0, ge=0, le=6)
+
+    @model_serializer(mode="wrap")
+    def _drop_new_defaults(self, handler):
+        return _drop_unset(handler(self), ("contribution",))
 
 
 class Material(_Strict):
@@ -202,6 +219,9 @@ class Drop(_Strict):
     count: int = Field(default=1, ge=1)
 
 
+BEST_OF = "best_of"  # Check.stat 寫它：看 Check.stats 裡最高的那一項（隨口應對分岔的後果用，減法季整合設計 5.9「出力」那一種）
+
+
 class Check(_Strict):
     stat: str
     difficulty: int
@@ -211,6 +231,21 @@ class Check(_Strict):
     # 熟練（企劃者 2026-10-05「你常常做壞事，因為很熟練所以也增加成功率」）：寫了 "evil" 時，
     # 本人的檢定值再加上由惡名換算的加成（Config.practice_bonus）。
     practice: str | None = None
+    # stat 是 BEST_OF 時取這幾項裡最高的（至少兩項；rules.check_stat_value）；別的 stat 不寫。現在只有分岔的後果用得到
+    # （固定選項的 stat 要是一項屬性，content.validate 擋）。空的時候不寫進序列化
+    stats: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _best_of_names_its_stats(self) -> Check:
+        if self.stat == BEST_OF and len(self.stats) < 2:
+            raise ValueError(f"stat 是 {BEST_OF} 時，stats 要寫至少兩項屬性")
+        if self.stat != BEST_OF and self.stats:
+            raise ValueError(f"stats 只跟 stat「{BEST_OF}」一起寫")
+        return self
+
+    @model_serializer(mode="wrap")
+    def _drop_new_defaults(self, handler):
+        return _drop_unset(handler(self), ("stats",))
 
 
 class PracticeBonus(_Strict):
@@ -332,21 +367,73 @@ class Choice(_Strict):
 FREE_TEXT_MAX = 20  # 隨口應對最多幾個字（跟決戰的放手一搏一樣）
 
 
+OutcomeKind = Literal["check", "combat", "cost", "fallback"]
+
+
+class Outcome(_Strict):
+    """隨口應對的一種後果（減法季整合設計 5.1、5.9；主機側計畫 Task 4-1）：模型把玩家寫的那句話歸到其中一種、評一個成功率，
+    引擎照這一種的判法走——check 擲骰（成套 effect、敗套 fail_effect）、combat 打這一路（贏套 effect、輸套 fail_effect）、
+    cost 掏這麼多銀兩、必成（企劃者 2026-10-24 第 8 件 c；不夠就不做、不扣次數）；三樣都沒寫的是 fallback（只套 effect）。
+    effect.stats 的 good 為負的是作惡的那一種（第 8 件 a）。其餘規矩在 content.check_outcomes。"""
+
+    id: str
+    tag: str  # 「短名：給模型看的說明」——模型歸類看整句；給玩家看的（欄位表、江湖紀錄、行狀）只用冒號前的短名（outcomes.short_name，FB-800）；永遠不寫數字
+    check: Check | None = None
+    combat: str | None = None  # 敵方隊伍 id：這則事件固定選項裡打的那一路
+    cost: dict[str, int] | None = None  # 只能是 {"silver": 正數}
+    effect: Effect = Field(default_factory=Effect)
+    fail_effect: Effect = Field(default_factory=Effect)
+
+    @model_validator(mode="after")
+    def _one_way(self) -> Outcome:
+        ways = [name for name, used in (("check", self.check), ("combat", self.combat), ("cost", self.cost)) if used is not None]
+        if len(ways) > 1:
+            raise ValueError(f"後果 {self.id} 的判法只能寫一種（check／combat／cost），寫了 {'、'.join(ways)}")
+        return self
+
+    @property
+    def kind(self) -> OutcomeKind:
+        if self.check is not None:
+            return "check"
+        if self.combat is not None:
+            return "combat"
+        if self.cost is not None:
+            return "cost"
+        return "fallback"
+
+    @property
+    def evil(self) -> bool:
+        """作惡的那一種：效果扣善名（企劃者 2026-10-24 第 8 件 a）。"""
+        return self.effect.stats.get("good", 0) < 0
+
+
 class FreeTextChoice(_Strict):
     """隨口應對（探索的多人與LLM玩法 §8.1）：事件多一個自己寫一句話的選項。LLM 只評估成功率，
-    引擎再按 stat 修正、夾在 5%～85% 之後擲骰：成功套 effect，失敗套 fail_effect。"""
+    引擎再按 stat 修正、夾在 5%～85% 之後擲骰：成功套 effect，失敗套 fail_effect。
+    outcomes（減法季分岔，整合設計 5.1）：寫了的事件在分岔開著的季照後果走（歸類、各自的判法）；最後一種是對不上時的 fallback。
+    關著的季照舊用 stat、effect、fail_effect，所以兩組都留著。"""
 
     prompt: str  # 選單上的標籤，例如「自己想辦法……」
     stat: Literal["str", "agi", "con", "wis", "lore"]
     by: Literal["team", "self"] = "team"  # 跟 Check.by 一樣：讀得進來、不再有作用，隨口應對也只看本人的屬性
     effect: Effect = Field(default_factory=Effect)
     fail_effect: Effect = Field(default_factory=Effect)
+    outcomes: list[Outcome] = Field(default_factory=list)  # 空的時候不寫進序列化
+    # 只在分岔開著的季才有這一顆（PM 2026-10-25 第 7 件：人拉犁原本沒有隨口應對，關著的季不多一顆鈕）；要寫 outcomes。False 時不寫進序列化
+    outcomes_only: bool = False
+
+    @model_serializer(mode="wrap")
+    def _drop_new_defaults(self, handler):
+        return _drop_unset(handler(self), ("outcomes", "outcomes_only"))
 
 
 class Event(_Strict):
     id: str
     title: str
     text: str
+    # 事件卡的插圖（減法季批 8 圖像版）：20 類場景的類型鍵（content/art.json 的 events；圖檔是 web/img/events/<鍵>.webp）。
+    # 沒寫就沒圖、卡片一字不變；伺服器另看圖檔在不在（server.scene_art）
+    image: str | None = None
     actions: list[ActionKind] = Field(default_factory=lambda: ["explore"])  # 空清單＝只能由 next_event 串接
     locations: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
@@ -425,6 +512,30 @@ class LocationText(_Strict):
     text: str
 
 
+class MarkText(_Strict):
+    """地點描寫照痕跡多接的一段（減法季整合設計 5.2；marks.describe）：這個地點的痕跡 mark 全服累計到 min，描寫後面接 text。
+    同一個痕跡可以寫好幾段（門檻不同）；跟痕跡規則（MarkRule.describe）一起比，挑門檻最高的那一段。min 照 Config.mark_threshold_scale 換算。"""
+
+    mark: str  # 「地點 id:痕跡名」，地點要是寫它的那個地點
+    min: int = Field(ge=1)
+    text: str
+
+
+class MarkRule(_Strict):
+    """地方痕跡過門檻（減法季整合設計 5.2；主機側計畫 Task 4-3，content/mark_rules.json）：全服累計到 threshold 那一刻
+    （marks.fire_due）發一則地方傳聞（不列名字；世界層那一句 PM 2026-10-25 修正輪拿掉，江湖史在季末寫，marks.close_season），有寫 trend 的
+    照原本的量推一次線（企劃者 2026-10-24 第 8 件 b：只有「趕走散兵」那一類）；之後地點描寫多接 describe 那一段（marks.describe），〈天下形勢〉照 xingshi 寫一句（marks.xingshi_facts）。只發一次
+    （WorldState.marks_fired）。threshold 照 Config.mark_threshold_scale 換算（同條件的 marks_min）。字都待 joy 潤。"""
+
+    mark: str  # 「地點 id:痕跡名」
+    threshold: int = Field(default=20, ge=1)  # 【預設】全服累計幾筆過門檻
+    describe: str  # 過了門檻之後接在地點描寫後面的一段
+    rumor: str  # 過門檻那一刻的地方傳聞
+    xingshi: str = ""  # 〈天下形勢〉的一句；空的照 rumor
+    chronicle: str = ""  # 江湖史；空的照 rumor
+    trend: dict[str, int] = Field(default_factory=dict)  # 過門檻那一刻推的線（front＝這個地點所在大區的戰線）；空的不推
+
+
 class Location(_Strict):
     id: str
     name: str
@@ -436,6 +547,9 @@ class Location(_Strict):
     tags: list[str] = Field(default_factory=list)
     danger: int = Field(default=1, ge=1, le=3)
     important: bool = False
+    # 江湖頁站在這裡時場景卡上面的圖（減法季批 8）：web/img/ 底下不含副檔名的路徑（例 places/yingru）；
+    # 沒寫就退回所屬大區的 places/<大區 id>（atlas.region_of），沒有大區是 places/world
+    image: str | None = None
     enemies: list[str] = Field(default_factory=list)
     train_trend: dict[str, int] = Field(default_factory=dict)  # 遊歷打贏／操練推大勢的量；正負是散人的方向，有陣營目標的人照自己的目標推（Game._train_push）
     materials: list[str] = Field(default_factory=list)  # 路邊採集（兩頭的地點）出什麼屬性的素材：採到的是那些屬性的一階；探索不再撿素材（探索改悟意境，見 insights）
@@ -445,6 +559,12 @@ class Location(_Strict):
     # 序章（新手引導計畫一）的草廬：只有站在這裡的人看得到、到得了（atlas.is_unlocked）；序章走完離開後誰都回不去。
     # 一份內容最多一個，而且就是 Tutorial.location（content.validate）
     prologue_only: bool = False
+    # 照痕跡多接的一段（減法季整合設計 5.2；marks.describe 讀，接線之前沒人讀）：空的時候不寫進序列化
+    desc_marks: list[MarkText] = Field(default_factory=list)
+
+    @model_serializer(mode="wrap")
+    def _drop_new_defaults(self, handler):
+        return _drop_unset(handler(self), ("desc_marks",))
 
     def describe(self, world_flags: set[str]) -> str:
         """此刻的描寫：desc_when 裡第一個旗標成立的那一版，都不成立時是 description。"""
@@ -712,6 +832,7 @@ class CharacterDef(_Strict):
     deep_interaction: bool = False  # 是否走 companion_agent.py 的即時 LLM 對話（見設計文件四.3）
     recruit_at: str | None = None  # 可招募的同伴在哪個地點找得到他（龍頭人物不填，用 talk_at）
     talk_at: str | None = None  # kind=locked 的龍頭人物在哪個地點可以深度對話（不可招募，見上一輪「還要改進」5）
+    image: str | None = None  # 跟他談話時場景卡上面的人物像（減法季批 8）：web/img/ 底下不含副檔名的路徑（例 figures/luzhi）；沒寫就沒圖
     affinity_tag_deltas: dict[str, int] | None = None  # 覆寫 companion_agent.AFFINITY_TAG_DELTAS 的個別項目；None／缺的 tag 用預設值
     audience_fame: int = 0  # 求見門檻：名望要到多少才見得到他（透過他的「結識」劇情事件認識的人不受限制）
     brush_off: list[str] = Field(default_factory=list)  # 名望不夠時打發人的話（他自己的口吻，最多三句，武學與成長設計 9.1）
@@ -814,6 +935,8 @@ class Ending(_Strict):
     stance_max: dict[StanceSide, int] = Field(default_factory=dict)  # 態勢至多（同上）
     stance_top: StanceSide | None = None  # 季末比態勢：這一方最高（平手時照清單順序，排前面的先成立）
     mandate: bool = False  # 天命結局（玉璽二）：只在天命之爭有一方得天命時由 world.evaluate_ending 照時刻表的 mandate_endings 挑，不進一般的清單與保底
+    # 三陣營四勝利（減法季整合設計 3.1、3.3；wins.winner_of／settle）：這個結局是哪一軍贏；None 是和局（豪強的兩種結局）或 beta 的結局
+    winner: Literal["guan", "huang"] | None = None
 
 
 class MapLabel(_Strict):
@@ -1168,6 +1291,25 @@ class Enlist(_Strict):
     drifter_line: str = ""  # 「主線與目標」裡散人那一行：三邊各在哪裡收人（設計 6.3）
 
 
+class OpeningSender(_Strict):
+    """開局三選一的一個選項對到的那位人物（content/opening.json）：選了帶 flag 的那一顆，就是他在城門口開口、託你送信。"""
+
+    flag: str  # 事件那一顆選項 flags_add 裡的旗標（例「開局:投軍」）
+    figure: str  # 對話人物 id（content/characters.json；要是大勢人物，信才寫得出他在哪）
+    text: str  # 信的固定句（模型寫不出來時照它；{hero} 換成少俠／女俠，{end} 換成送到的地名）
+
+
+class Opening(_Strict):
+    """開局第一分鐘（減法季整合設計 6.7，批 7 前半；tianxia/opening.py）：減法季的新角色不進草廬，站在起點看一段旁白、
+    三選一定起手的屬性，接著照選的那一顆由一位人物開口託付第一件事（把一封信送到 end），本週卡才出現。沒有這個檔就沒有這一段。"""
+
+    event: str  # 開局那一則事件（旁白＋三選一；每一顆選項 flags_add 要帶 senders 其中一個 flag）
+    end: str  # 第一個託付：把信送到這個地點（護送委託，到了就算）
+    senders: list[OpeningSender] = Field(min_length=1)
+    days: float = Field(default=3.0, gt=0)  # 第一件託付幾個遊戲日內要送到（書信委託平常是 figure_life.commission_days 1 天；新人多給幾天）【預設】
+    arrived: str = "{who}在城門口叫住你，託你把一封信送到{end}。"  # 江湖紀錄那一句（待 joy 潤）
+
+
 class Tutorial(_Strict):
     speaker: str = "老說書人"
     steps: list[TutorialStep] = Field(default_factory=list)
@@ -1290,6 +1432,8 @@ class Scenario(_Strict):
     jade_seal_flag: str | None = None  # 這個世界旗標代表玩家親手取得了這一季的玉璽碎片（設計文件九），記進跨季持久紀錄
     season_one_off: SeasonOneOff = Field(default_factory=SeasonOneOff)  # 第一季不觸發的 beta 門檻、主線、決戰、事件
     territory: TerritoryDef | None = None  # 地盤易手（出陣探索與地盤設計第四節）；不寫＝這個劇本沒有地盤
+    # 江湖頁本週卡第二行（減法季整合設計 6.8）：一季前、中、後三段各一句（21 天季是三週，7 天的季是三段）；不寫就不畫那一行
+    week_themes: list[str] = Field(default_factory=list, max_length=3)
 
     def faction(self, faction_id: str | None) -> FactionDef:
         """id 對得上的那個陣營（factions 裡的第一個）；劇本裡沒有就丟 LookupError。給一定要有這個陣營的地方用（選單上的
@@ -2275,6 +2419,10 @@ class Secrets(_Strict):
     scrap_frame: str = "你在亂石堆裡翻出一頁殘譜，字跡斑駁，只認得出一句：「{clue}」"
     overheard: str = "（這句話你記進了武學譜。）"
     hit_line: str = "爐中忽地一變——這一爐竟暗合了江湖上流傳的一句口訣。"
+    # 這一季第一次參透一條（玩家回報 2026-10-25「武學譜很空」）：結果多一句進度，另寫一則標題「武學譜」的江湖紀錄、跳一個視窗。
+    # {n} 這一季參透了幾條、{total} 這一季全服共有幾條。待 joy 潤
+    solved_note: str = "武學譜上多了一方朱印——這一季的秘方，你已參透 {n}／{total}。"
+    solved_title: str = "參透口訣・{n}／{total}"
     rumor: str = "江湖上傳開了：{who}參透了一句口訣，合出了{thing}。"
     chronicle: str = "{who}參透口訣，首創{thing}。"
 
@@ -2600,12 +2748,12 @@ class FigureLifeTuning(_Strict):
 
 
 class ParleyTuning(_Strict):
-    """開口求人（Joy 2026-10-23「先做看看」；設計稿 https://claude.ai/artifact/KtRz62jWShogpaXEzv2sbt；tianxia/parley.py）：
+    """NPC 智能 2.0（Joy 2026-10-23「先做看看」；設計稿 https://claude.ai/artifact/KtRz62jWShogpaXEzv2sbt；tianxia/parley.py）：
     對話裡「自己說」那一句也可以是求他做事。模型當談判者，從引擎列的清單挑一件、評一個意願、要不要開條件；引擎照情誼與份量夾住意願、
     自己擲骰、做事。第一批：當場做、先付後做、婉拒；帶路、並肩出陣、指點、給情報、贈物五件事。數字全在這裡，模型不碰。"""
 
     enabled: bool = False  # 關著時「自己說」一個字都不變（20 字、不列清單、不擲骰）
-    say_max: int = Field(default=40, ge=1)  # 開著時「自己說」最多幾個字（開口求人要講得清楚一點）
+    say_max: int = Field(default=40, ge=1)  # 開著時「自己說」最多幾個字（NPC 智能 2.0要講得清楚一點）
     asks_per_day: int = Field(default=2, ge=1)  # 同一位人物一個遊戲日最多被求幾件事（算在一天三輪對話裡）
     # 意願的天花板：情誼到第幾檔（[門檻, 上限]，由低到高）；份量 1、2、3 各減多少；敵對陣營再減；最低 floor
     bands: list[list[int]] = Field(default_factory=lambda: [[0, 50], [20, 65], [40, 80], [60, 90]])
@@ -2850,6 +2998,27 @@ class JianfaRules(_Strict):
     errands: bool = True  # 第五章 託付與來信（批 6）
     week_unlock: bool = True  # 6.6 功能照週解鎖（批 5）
     rewrite_narration: bool = True  # 第十章 事件旁白每週改寫（批 10）
+    rewrite_round_seconds: float = Field(default=20, gt=0)  # 伺服器的背景執行緒幾秒改寫一則（一週約兩百六十則，一個多小時寫完）
+    rewrite_budget_seconds: float = Field(default=40, gt=0)  # 一則最多等模型幾秒（含排隊）
+    rewrite_tries: int = Field(default=2, ge=1)  # 同一則同一週寫壞幾次就這一週照原文
+    morning_mail: bool = True  # 第十章 回來的理由：人物的信每天 mail_hour 點送到（批 9；letters.mail_day）
+    opening: bool = True  # 6.7 開局第一分鐘（批 7 前半，tianxia/opening.py）：不進草廬，旁白→三選一→人物開口託付→本週卡；關著照舊走草廬序章
+    mail_hour: int = Field(default=9, ge=0, le=23)  # 當地幾點送信（時區照 pill_day_utc_offset_hours）
+    # ── 批 4：隨口應對分岔與痕跡（主機側計畫第六節；子開關 free_text_outcomes、marks_visible）──
+    # 【預設】一天（季曆日，同推線的 daily_push_cap）從分岔的後果（之後連心意、託付）記進陣營帳的貢獻上限；同出陣推線的量級（整合設計 5.3）
+    deed_contribution_cap: int = Field(default=12, ge=0)
+
+
+class WebPushRules(_Strict):
+    """網頁推送（減法季整合設計第十章「回來的理由」，批 9）：分頁關著、手機鎖著也跳一則通知，五種事——來信、約戰、決戰集結、
+    被截殺、被〈天下形勢〉提到（tianxia/notices.py 認，server.py 的看守送）。玩家在設定頁自己打開（預設關、第一次來信時問一次）；
+    enabled 是主機的開關，關著設定頁不畫那一顆、看守不開。畫面的改動，不掛 Config.jianfa。"""
+
+    enabled: bool = False  # 測試內容照它關著；content/config.json 打開
+    watch_seconds: float = Field(default=30, gt=0)  # 看守每幾秒看一次開了推播的人有沒有新的事
+    quiet_seconds: float = Field(default=120, ge=0)  # 這麼久之內同步過（分頁開著、正在玩）就不跳通知：畫面上已經看得到
+    per_round: int = Field(default=3, ge=1)  # 同一個人一輪最多跳幾則（離線一陣子回來不會被一串通知淹掉）
+    max_devices: int = Field(default=5, ge=1)  # 一個帳號最多記幾台裝置
 
 
 class ConquestRules(_Strict):
@@ -3268,7 +3437,7 @@ class Config(_Strict):
     signature_arts: SignatureArtTuning = Field(default_factory=SignatureArtTuning)  # 本命武學的威力與學到時的成數（見 SignatureArtTuning）
     tactics: TacticTuning = Field(default_factory=TacticTuning)  # 一般的仗的回合與本命戰法（見 TacticTuning）
     figure_life: FigureLifeTuning = Field(default_factory=FigureLifeTuning)  # 人物活起來：每日行事、心事、風聞（見 FigureLifeTuning）
-    parley: ParleyTuning = Field(default_factory=ParleyTuning)  # 開口求人：模型談判、引擎做事（見 ParleyTuning）
+    parley: ParleyTuning = Field(default_factory=ParleyTuning)  # NPC 智能 2.0：模型談判、引擎做事（見 ParleyTuning）
     companions: CompanionsTuning = Field(default_factory=CompanionsTuning)  # 歷史武將同行：招募、名下三位、決戰助陣（見 CompanionsTuning）
     # 情誼放慢（歷史武將同行第三節、9.4）：每一筆加的情誼乘這個倍數（renown.warmed：四捨五入，原本加 1 以上的至少加 1；扣的不乘）。
     # 1 是不放慢；正式 0.7、週末設定 0.85。對話、事件、名聲起步、風聞都走它；名將贈禮、本命、招募的門檻不動，所以跟著晚一點拿到
@@ -3340,6 +3509,7 @@ class Config(_Strict):
     push_events: bool = False
     push_watch_seconds: float = Field(default=5, gt=0)
     push_world_min_seconds: float = Field(default=10, ge=0)
+    web_push: WebPushRules = Field(default_factory=WebPushRules)  # 手機跳通知（減法季第十章，批 9；server_push.WebPush）
 
     season_days: float = DEFAULT_SEASON_DAYS
     # 第一季濃縮版的規則（預設關，beta 那一季照舊）：季曆、時刻表、三條戰線都掛在這個開關後面。
@@ -4506,6 +4676,13 @@ class CreateForms(_Strict):
     moves: list[CreateMove] = Field(default_factory=list)
 
 
+class ArtBook(_Strict):
+    """圖的分類表（content/art.json，減法季批 8 圖像版；第一批圖提示單）：events 是事件插圖的 20 類，類型鍵 → 名字
+    （圖檔 web/img/events/<鍵>.webp）。事件的 image 只能寫這裡有的鍵，分類表在內容檔、不寫死在程式。"""
+
+    events: dict[str, str] = Field(default_factory=dict)
+
+
 class Content(_Strict):
     config: Config
     scenario: Scenario
@@ -4551,8 +4728,61 @@ class Content(_Strict):
     mall: dict[str, MallItem] = Field(default_factory=dict)  # 商城的商品（content/mall.json，照 id、照檔案的順序）；沒有這個檔就是空的
     relations: list[RelationDef] = Field(default_factory=list)  # 人物之間的關係（content/relations.json，大勢人物擴充第二批）；沒有這個檔就是沒有
     gather_branches: dict[str, GatherBranch] = Field(default_factory=dict)  # 找素材分支（content/gather_branches.json，照內容的順序）；沒有這個檔就是空的（分支關著）
+    mark_rules: list[MarkRule] = Field(default_factory=list)  # 地方痕跡過門檻（content/mark_rules.json，減法季批 4）；沒有這個檔就是空的
     map: MapLayout
     tutorial: Tutorial
+    art: ArtBook = Field(default_factory=ArtBook)  # 圖的分類表（content/art.json，減法季批 8）；沒有這個檔就是空的（事件不准寫 image）
+    opening: Opening | None = None  # 開局第一分鐘（content/opening.json，減法季批 7）；沒有這個檔就沒有（測試內容、舊內容照走草廬）
     hints: Hints = Field(default_factory=Hints)  # 碰到才說（content/hints.json，新手引導計畫三）；沒有這個檔就是沒有提示
     check_voice: CheckVoice = Field(default_factory=CheckVoice)  # 檢定選項括號裡的那一句（content/check_voice.json，載入時必備）
     create_forms: CreateForms = Field(default_factory=CreateForms)  # 自創武學的兵器偏向、起點架式、關鍵字表（content/create_forms.json）
+
+    @model_serializer(mode="wrap")
+    def _drop_new_defaults(self, handler):
+        return _drop_unset(handler(self), ("mark_rules",))  # 沒有痕跡規則的內容（測試內容）序列化一個鍵都不多
+
+
+# ── 三陣營四勝利（減法季整合設計第三章；計畫第五節，批 3c）──
+# 批 0 的 JianfaRules（Config.jianfa）還沒來，這一塊先獨立放、不掛 Config：批 0 到了在 JianfaRules 加 tiers、lean_default_by_join
+# 兩個欄位（同名、同預設），wins.rules_of 改讀 content.config.jianfa（計畫 5.0 第 7 條）。
+
+# 豪強開季的「此刻幫誰」照投靠點預設（企劃者 2026-10-24，計畫第十一節第 6 件）：鄉里結社、曹氏莊院幫官軍，豪族塢堡幫黃巾
+LEAN_DEFAULT_BY_JOIN = {"zhuo_militia_hall": "guan", "cao_manor": "guan", "haozu_fort": "huang"}
+# 四階的稱號（設計 3.3；鍵是「階:陣營 id」，wins.title_of 照它找、找不到再看只寫階的鍵）：第一階分官軍、黃巾，第三、四階分兩軍與豪強。
+# 字待 joy 潤（企劃者 2026-10-24 第 4 件：先用這組）
+TIER_TITLES = {
+    "1:guan": "漢室忠良", "1:huang": "黃天功臣",
+    "2:haoqiang": "一方之雄",
+    "3:guan": "有功之臣", "3:huang": "有功之臣", "3:haoqiang": "鄉里之望",
+    "4:guan": "隨軍", "4:huang": "隨軍", "4:haoqiang": "附從",
+}
+
+
+class TierRules(_Strict):
+    """季末四階（設計 3.3；wins.settle）。名次只在過了門檻的人裡排，人數照比例無條件捨去；第一、二階至少 1 人，
+    第三階的「前 40%」是累計的（含第一、二階）；同分同階（計畫 5.0 第 13 條）。20 人與 2,000 人同一條規則。"""
+
+    tier1_share: float = Field(default=0.10, ge=0, le=1)  # 第一階：贏的那一軍裡前 10%（至少 1 人）【定】
+    tier2_share: float = Field(default=0.10, ge=0, le=1)  # 第二階：豪強「替贏的那一軍」那一本前 10%（至少 1 人）；兩軍拿不到【定】
+    tier3_share: float = Field(default=0.40, ge=0, le=1)  # 第三階：各自前 40% 的其餘人（贏的、輸的、豪強都有）【定】
+    min_contribution: int = Field(default=60, ge=0)  # 每一階都要先過的門檻（絕對數，約「一季認真玩三天」）【待量】
+    start_shares: dict[int, float] = Field(default_factory=lambda: {1: 1.0, 2: 0.8, 3: 0.5, 4: 0.3})  # 下一季起手資源的成數【預設】
+    start_silver: int = Field(default=300, ge=0)  # 起手資源滿額：銀兩【預設】
+    start_xinde: int = Field(default=200, ge=0)  # 起手資源滿額：心得【預設】
+    titles: dict[str, str] = Field(default_factory=lambda: dict(TIER_TITLES))  # 「階:陣營 id」→ 稱號（待 joy 潤）
+
+    @model_validator(mode="after")
+    def _shares_in_order(self) -> "TierRules":
+        if self.tier1_share > self.tier3_share or self.tier2_share > self.tier3_share:
+            raise ValueError("第一、二階的比例不能大於第三階（第三階是累計的前幾成）")
+        if set(self.start_shares) - {1, 2, 3, 4}:
+            raise ValueError("start_shares 只有第 1～4 階")
+        return self
+
+
+class WinsRules(_Strict):
+    """三陣營四勝利的數字（批 0 之前的獨立一塊；欄位名照計畫第五節，到時候搬進 JianfaRules）。"""
+
+    tiers: TierRules = Field(default_factory=TierRules)
+    # 豪強的投靠點 → 開季（投靠那一下）預設幫哪一軍（wins.lean_default；wins.check 驗每個投靠點都有、都是它能幫的那一軍）
+    lean_default_by_join: dict[str, str] = Field(default_factory=lambda: dict(LEAN_DEFAULT_BY_JOIN))

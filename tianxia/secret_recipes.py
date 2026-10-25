@@ -149,9 +149,11 @@ def set_lines(state: GameState, content: Content, world: WorldStateStore, recipe
 
     cfg = content.config.secrets
     tianji = tianji_of(world)
-    solve(state, tianji, recipe)
+    fresh = solve(state, tianji, recipe)
     sp = next((t for t in content.traits.special if t.id == special_for(content, recipe, tianji)), None)
     lines = [SET_LINE.format(art=art_name, name=recipe.name, special=sp.name if sp else "特別功效")]
+    if fresh:
+        lines += solved_lines(state, content, world)
     season = getattr(state, "world", None)
     if season is not None and recipe.id not in season.secret_sets:
         who = state.player.name
@@ -184,10 +186,53 @@ def manual(state: GameState, tianji: int) -> Manual:
     return state.player.manual
 
 
-def solve(state: GameState, tianji: int, recipe: SecretRecipe) -> None:
+def solve(state: GameState, tianji: int, recipe: SecretRecipe) -> bool:
+    """記下合中了這一條；這一季第一次參透回 True（照著合第二次回 False）。"""
     book = manual(state, tianji)
-    if recipe.id not in book.solved:
-        book.solved.append(recipe.id)
+    if recipe.id in book.solved:
+        return False
+    book.solved.append(recipe.id)
+    return True
+
+
+def progress(state: GameState, content: Content, world: WorldStateStore) -> tuple[int, int]:
+    """（這一季參透了幾條, 這一季全服共有幾條）：分母是這一季挑出來的那一批，不是「你聽過的」（玩家回報 2026-10-25）。"""
+    tianji = tianji_of(world)
+    live = {r.id for r in active(content, tianji)}
+    book = state.player.manual
+    done = sum(1 for r in book.solved if r in live) if book.tianji == tianji else 0
+    return done, len(live)
+
+
+def solved_name(world: WorldStateStore, recipe: SecretRecipe) -> str:
+    """合中了寫它的名號：照全服登記的那一筆（名號撞到時換過名字）。"""
+    made = world.lookup_insight_recipe(key(recipe)) if recipe.kind == "merge" else world.lookup_recipe(key(recipe))
+    return made.name if made is not None else recipe.name
+
+
+def solved_lines(state: GameState, content: Content, world: WorldStateStore) -> list[str]:
+    """剛參透一條：結果多一句這一季的進度（Config.secrets.solved_note）。"""
+    note_line = content.config.secrets.solved_note
+    if not note_line:
+        return []
+    done, total = progress(state, content, world)
+    return [note_line.format(n=done, total=total)]
+
+
+def solved_card(state: GameState, content: Content, world: WorldStateStore, recipe: SecretRecipe) -> dict:
+    """參透那一下跳的視窗（Game.secret_solved → 伺服器的 secret，網頁 secretPop；企劃者 2026-10-25「應該是跳顯出個視窗比較明顯」）：
+    朱印寫它的名號、聽過的口訣、這一季的進度。"""
+    cfg = content.config.secrets
+    done, total = progress(state, content, world)
+    heard = state.player.manual.heard.get(recipe.id, [])
+    return {
+        "title": cfg.solved_title.format(n=done, total=total),
+        "name": solved_name(world, recipe),
+        "clues": [recipe.clues[i] for i in heard],
+        "solved": done,
+        "total": total,
+        "note": cfg.solved_note.format(n=done, total=total) if cfg.solved_note else "",
+    }
 
 
 def note(book: Manual, recipe: SecretRecipe, source: int) -> bool:
@@ -270,7 +315,8 @@ def overheard(state: GameState, content: Content, world: WorldStateStore, compan
 
 def view(state: GameState, content: Content, world: WorldStateStore) -> list[dict]:
     """武學譜給畫面的資料：這一季聽過口訣或合中過的秘方，一條一筆——聽過的那幾句（照版本的先後）、合中了寫它的名號
-    （沒合中是 None）。不寫秘方的種類與配方。"""
+    （沒合中是 None）、種類（kind：fuse 裝滿武學的意境槽、merge 兩個意境合成；Joy 2026-10-25「兩個應該分開放，或是有標示種類，
+    不然很容易搞混」，武學譜照它分兩段）。不寫配方。"""
     tianji = tianji_of(world)
     book = state.player.manual if state.player.manual.tianji == tianji else Manual(tianji=tianji)
     rows = []
@@ -278,9 +324,6 @@ def view(state: GameState, content: Content, world: WorldStateStore) -> list[dic
         heard = book.heard.get(recipe.id, [])
         solved = recipe.id in book.solved
         if heard or solved:
-            name = None
-            if solved:  # 登記的名字（名號撞到時換過名字）：照全服登記的那一筆寫
-                made = world.lookup_insight_recipe(key(recipe)) if recipe.kind == "merge" else world.lookup_recipe(key(recipe))
-                name = made.name if made is not None else recipe.name
-            rows.append({"clues": [recipe.clues[i] for i in heard], "solved": name})
+            name = solved_name(world, recipe) if solved else None
+            rows.append({"clues": [recipe.clues[i] for i in heard], "solved": name, "kind": recipe.kind})
     return rows

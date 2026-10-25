@@ -2,6 +2,7 @@
   {
     "id": "drunk_token",
     "title": "狼頭鐵牌",
+    "image": "tavern",
     "locations": [
       "yingshui",
       "runan_academy"
@@ -102,6 +103,7 @@
   {
     "id": "drunk_warehouse",
     "title": "官道倉庫",
+    "image": "night",
     "actions": [],
     "text": "倉庫裡燈火昏暗，十幾名黃巾軍正在搬運私鹽，那醉漢正向一名頭目低聲稟報。",
     "choices": [
@@ -179,6 +181,7 @@
   {
     "id": "herb",
     "title": "紫靈芝",
+    "image": "forest",
     "tags": [
       "山林"
     ],
@@ -225,6 +228,7 @@
   {
     "id": "beggar",
     "title": "路邊乞丐",
+    "image": "road",
     "tags": [
       "官道",
       "野外"
@@ -288,6 +292,7 @@
   {
     "id": "temple_zen",
     "title": "禪房聽經",
+    "image": "temple",
     "tags": [
       "寺院"
     ],
@@ -338,6 +343,7 @@
   {
     "id": "tavern_brawl",
     "title": "酒樓鬥毆",
+    "image": "tavern",
     "tags": [
       "城鎮"
     ],
@@ -416,6 +422,7 @@
   {
     "id": "teahouse",
     "title": "茶館說書",
+    "image": "tale",
     "actions": [
       "socialize"
     ],
@@ -466,6 +473,7 @@
   {
     "id": "fisherman",
     "title": "補網的漁翁",
+    "image": "river",
     "tags": [
       "湖畔",
       "水路"
@@ -518,6 +526,7 @@
   {
     "id": "wolves",
     "title": "狼群",
+    "image": "forest",
     "tags": [
       "山林",
       "野外"
@@ -557,6 +566,7 @@
   {
     "id": "hanshan_bell",
     "title": "夜半鐘聲",
+    "image": "temple",
     "locations": [
       "market_town"
     ],
@@ -584,6 +594,7 @@
   {
     "id": "train_insight",
     "title": "拆招頓悟",
+    "image": "road",
     "actions": [
       "train"
     ],
@@ -621,6 +632,7 @@
   {
     "id": "train_onlooker",
     "title": "錦衣少年",
+    "image": "road",
     "actions": [
       "train"
     ],
@@ -658,6 +670,7 @@
   {
     "id": "escort_teacher",
     "title": "汝南商行",
+    "image": "town",
     "actions": [
       "socialize"
     ],
@@ -709,6 +722,7 @@
   {
     "id": "monk_jinshan",
     "title": "白馬寺方丈",
+    "image": "temple",
     "actions": [
       "socialize"
     ],
@@ -751,6 +765,7 @@
   {
     "id": "qinhuai_song",
     "title": "畫舫歌聲",
+    "image": "river",
     "actions": [
       "socialize"
     ],
@@ -785,6 +800,7 @@
   {
     "id": "waterfall",
     "title": "瀑布怪客",
+    "image": "forest",
     "tags": [
       "山林"
     ],
@@ -832,6 +848,7 @@
   {
     "id": "zhenshan_pagoda",
     "title": "鎮山塔",
+    "image": "temple",
     "tags": [
       "寺院"
     ],

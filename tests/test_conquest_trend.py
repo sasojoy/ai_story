@@ -118,7 +118,7 @@ def test_timetable_assign_sticks_and_reweighs():
 
 
 def test_switch_off_change_trend_is_unchanged():
-    game = plain_game("weekend")
+    game = plain_game("week7")
     before = _value(game, "yingru")
     rules.change_trend(game.state, game.content, "yingru", 3)
     assert _value(game, "yingru") == before + 3

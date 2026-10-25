@@ -11,7 +11,7 @@ from tianxia.state import new_game_state
 
 
 def test_gain_moves_the_stat_and_never_goes_below_zero():
-    c = real_content("weekend")
+    c = real_content("week7")
     s = new_game_state(c, "甲")
     assert renown.gain(s, c, "fame", 3) == ["名望 +3"] and s.player.stats["fame"] == 3
     assert renown.gain(s, c, "fame", -5) == ["名望 -3"] and s.player.stats["fame"] == 0
@@ -27,7 +27,7 @@ def _game(c):
 
 
 def test_deed_fame_reads_the_table_and_the_switch():
-    c = real_content("weekend")
+    c = real_content("week7")
     g = _game(c)
     assert g._deed_fame("sortie") == ["名望 +1"] and g.state.player.stats["fame"] == 1
     c.config.renown.deeds["sortie"] = 0
@@ -41,7 +41,7 @@ def _showdown(margin="大勝", side="guan"):
 
 
 def test_showdown_pay_gives_fame_only_to_those_who_acted():
-    c = real_content("weekend")
+    c = real_content("week7")
     g = _game(c)
     idle = bi.BattleParticipant(name="甲", faction="guan", neili=1, neili_cap=1, acted_rounds=0)
     assert not any(x.startswith("名望") for x in g._showdown_pay(_showdown(), idle, []))
@@ -52,7 +52,7 @@ def test_showdown_pay_gives_fame_only_to_those_who_acted():
 
 
 def test_showdown_pay_without_renown_has_no_fame():
-    c = real_content("weekend")
+    c = real_content("week7")
     c.config.renown.titles = False
     g = _game(c)
     me = bi.BattleParticipant(name="甲", faction="guan", neili=1, neili_cap=1, acted_rounds=2)

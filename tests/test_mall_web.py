@@ -157,7 +157,7 @@ def test_buying_tells_whether_it_went_through(content):
 def test_off_means_no_entry_and_five_tabs(m_off):
     out = run(m_off, "return { top: H.topHtml(), tabs: H.tabsHtml() };")
     assert "mall-open" not in out["top"] and "mall-open" not in out["tabs"]
-    assert "repeat(5, 1fr)" in out["tabs"] and "商城" not in out["tabs"]
+    assert "repeat(4, 1fr)" in out["tabs"] and "商城" not in out["tabs"]
 
 
 def test_on_puts_an_ingot_button_beside_the_gear_and_a_sixth_tab(m_on):
@@ -168,7 +168,7 @@ def test_on_puts_an_ingot_button_beside_the_gear_and_a_sixth_tab(m_on):
     assert 'class="ingot"' in btn[:btn.index("</button>")] and "5000" in btn[:btn.index("</button>")]
     assert 'aria-label="商城，元寶 5000"' in top
     tabs = out["tabs"]
-    assert "repeat(6, 1fr)" in tabs and tabs.count('class="tab ') == 6
+    assert "repeat(5, 1fr)" in tabs and tabs.count('class="tab ') == 5
     sixth = tabs[tabs.rindex('<button class="tab'):]
     assert 'data-act="mall-open"' in sixth and "商城" in sixth and 'data-glow="tab:mall"' in sixth
 
@@ -176,10 +176,10 @@ def test_on_puts_an_ingot_button_beside_the_gear_and_a_sixth_tab(m_on):
 def test_the_prologue_hides_both_entries_like_any_tab_not_open_yet(m_on):
     early = with_reveal(m_on, ["stamina", "hp", "silver", "xinde", "stats", "tab:jianghu", "tab:practice", "tab:craft", "tab:map", "tab:news"])
     out = run(early, "return { top: H.topHtml(), tabs: H.tabsHtml() };")
-    assert "mall-open" not in out["top"] and "mall-open" not in out["tabs"] and "repeat(5, 1fr)" in out["tabs"]
+    assert "mall-open" not in out["top"] and "mall-open" not in out["tabs"] and "repeat(4, 1fr)" in out["tabs"]
     done = with_reveal(m_on, ["all"])
     out = run(done, "return { top: H.topHtml(), tabs: H.tabsHtml() };")
-    assert "mall-open" in out["top"] and "repeat(6, 1fr)" in out["tabs"]
+    assert "mall-open" in out["top"] and "repeat(5, 1fr)" in out["tabs"]
 
 
 def test_after_graduating_both_entries_show_through_the_onboarding_steps(real):

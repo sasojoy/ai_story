@@ -63,9 +63,9 @@ import zhuan_html
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
     arena_crowd, ascend, battle_instance, biography, calendar, companion_agent, create, divine, duel, event_llm, feasts, fight_llm, foreshadow, gather_llm, gender, glyph, insight_llm, leaderboard, letters, mall, mapdata, might,
-    naming,
-    ollama_client, rules,
-    precise, seal, seal_duel, server_bots, social, sortie, speech, tavern, team, timetable, training, treasures, xingshi, yuedan,
+    naming, narration,
+    ollama_client, power_save, rules,
+    precise, seal, seal_duel, server_bots, social, sortie, speech, tavern, team, timetable, training, treasures, weekcard, xingshi, yuedan,
 )
 from tianxia.accounts import NAME_TAKEN, PASSWORDS_DIFFER, AccountError, AccountStore, normalize
 from tianxia.content import env_profile, load_content, profile_line
@@ -73,6 +73,7 @@ from tianxia.characters import name_key, open_characters
 from tianxia.database import default_path, open_database
 from tianxia.engine import FIGHT_GONE_LINES, FREE_TEXT_OPTION, PAUSED_TEXT, SAY_OPTION, TEXT_TALKS, Game, Refused
 from tianxia.models import FREE_TEXT_MAX
+from tianxia.notices import current as current_notices
 from tianxia.journal import CSS as JOURNAL_CSS
 from tianxia.sqlite_world import open_world
 from tianxia.ollama_client import OllamaClient
@@ -81,6 +82,21 @@ from tianxia.world_state import season_length_days
 
 ROOT = Path(__file__).parent
 WEB = ROOT / "web"
+
+
+def scene_art(game: Game, status: dict) -> dict | None:
+    """江湖頁場景卡上面那張圖（減法季批 8 圖像版）：引擎挑圖（Game.scene_art），這裡只看 web/img/<路徑>.webp 真的在不在——
+    沒檔案就不給（None），網頁一字不變（同 horse_art：正式圖到了放進資料夾就上，程式不用改）。head 是場景 Markdown 的第一段轉好的
+    HTML，網頁有圖時把那一段拿掉、把地名／危險／時刻（事件標題；人名與情誼）疊在圖的下緣。"""
+    got = game.scene_art()
+    if got is None or not (WEB / "img" / f"{got['path']}.webp").is_file():
+        return None
+    cal = status.get("calendar")
+    when = cal["text"] if cal and cal.get("text") else f"第{status['day']}天 {status['clock']}"
+    return {
+        "kind": got["kind"], "src": f"/static/img/{got['path']}.webp", "title": got["title"], "sub": got["sub"],
+        "time": when if got["kind"] == "place" else "", "head": md(got["head"]),
+    }
 
 
 def horse_art() -> list[str]:
@@ -152,6 +168,8 @@ def game_for(name: str) -> Game:
         if game is None:
             game = GAMES[key] = open_game(name)
             game.odds_memo = ODDS_MEMO
+            if NARRATION is not None:  # 事件旁白每週改寫（減法季批 10）：這一週寫好的旁白從小檔讀
+                game.narration = NARRATION.get
         return game
 
 
@@ -276,7 +294,10 @@ def _play_where(game: Game) -> tuple[str, int, int] | None:
 
 
 def _play_seen(game: Game) -> None:
-    """自己的請求進鎖、同步過之後：這一天上線了（真人量表）。在 act／act_look 的那一筆交易裡。"""
+    """自己的請求進鎖、同步過之後：這一天上線了（真人量表）。在 act／act_look 的那一筆交易裡。
+    也記下全服最後一次有真人來（LAST_HUMAN：省電模式沒人在線時，旁白改寫不叫模型）。"""
+    global LAST_HUMAN
+    LAST_HUMAN = time.time()
     where = _play_where(game)
     if where is not None:
         PlayLog(game.world.db).seen(*where)
@@ -563,6 +584,196 @@ def start_push(config) -> server_push.PushHub | None:
     return HUB
 
 
+# ── 網頁推送（減法季整合設計第十章「回來的理由」，批 9；server_push.WebPush、tianxia/notices.py）──
+# 開關是 Config.web_push.enabled（content/config.json 打開；測試內容關著）＋主機裝了 cryptography：關著 WEB_PUSH 是 None、
+# 設定頁不畫「手機通知」、/api/push* 回 404。玩家在設定頁自己打開（預設關），訂閱記在資料庫旁邊的小檔（PushStore）。
+# 看守（notice_round）每 watch_seconds 秒把開了通知的人看一遍：到了 09:00 先替他送今天的信（Game.morning_mail），再比五種事
+# （notices.current）有沒有新的，新的才跳。哪幾件跳過了記在記憶體（NOTICE_SENT）：伺服器重開後第一輪只記下、不跳，
+# 停機那段時間發生的事不補跳（畫面上照樣看得到）。
+WEB_PUSH: server_push.WebPush | None = None
+NOTICE_STOP = threading.Event()  # 讓通知的看守停下來（測試用）
+NOTICE_THREAD: threading.Thread | None = None
+NOTICE_SENT: dict[str, set[str]] = {}  # 帳號 → 上一輪看到的事（已跳過、或正在玩不必跳的）
+MAIL_DONE: dict[str, int] = {}  # 帳號 → 已經替他送過信的送信日（letters.mail_day），同一天不再進鎖試
+NOTICE_TITLE = "天下大勢"
+PUSH_WELCOME = "手機通知開了：來信、約戰、決戰集結、被截殺、被〈天下形勢〉提到時，會在這裡告訴你。"  # 待 joy 潤
+VAPID_FILE = ROOT / ".local" / "webpush_vapid.pem"  # 這台主機的 VAPID 金鑰：第一次開時產生；換了它，所有人要重開一次通知
+
+
+def push_store_path() -> Path:
+    """訂閱的小檔：遊戲資料庫旁邊、同名多「-push.sqlite」（TIANXIA_DB 換了檔，它跟著換）。"""
+    db = default_path()
+    return db.with_name(f"{db.stem}-push.sqlite")
+
+
+def web_push_line(config) -> str:
+    if not config.web_push.enabled:
+        return "手機通知：關"
+    if not server_push.AVAILABLE:
+        return "手機通知：關（這台主機沒裝 cryptography：pip install -r requirements.txt）"
+    return f"手機通知：開（每 {config.web_push.watch_seconds:g} 秒看一次開了通知的人；金鑰 {VAPID_FILE}）"
+
+
+def start_web_push(config, post=None) -> server_push.WebPush | None:
+    """開關開著、cryptography 在：建 WEB_PUSH、開看守執行緒（daemon）；不然什麼都不做、回 None。只有 main() 與測試呼叫。
+    簽名的 sub 照 TIANXIA_PUBLIC_URL（固定網域），沒設就寫固定網域本身（推送服務只認 https 或 mailto）。"""
+    global WEB_PUSH, NOTICE_THREAD
+    if not config.web_push.enabled or not server_push.AVAILABLE:
+        return None
+    subject = os.environ.get("TIANXIA_PUBLIC_URL") or "https://tianxiadashi.com"
+    WEB_PUSH = server_push.WebPush(server_push.PushStore(push_store_path()), server_push.Vapid(VAPID_FILE, subject), post=post)
+    failures = _StepFailures(time.monotonic, "通知的看守")
+
+    def loop() -> None:
+        while not NOTICE_STOP.wait(config.web_push.watch_seconds):
+            try:
+                notice_round()
+            except Exception as e:  # noqa: BLE001  看守不能因為一輪出錯就停
+                failures.failed(e)
+            failures.tick()
+
+    NOTICE_THREAD = threading.Thread(target=loop, daemon=True, name="notice-watch")
+    NOTICE_THREAD.start()
+    return WEB_PUSH
+
+
+def _notice_keys(game: Game, account_key: str, now: float) -> tuple[list, bool]:
+    """行動鎖內：到了送信的時刻先替他送今天的信（送了就存角色；開著的分頁照常輪詢就看得到，不叫 HUB：只有動作的端點叫，
+    見 _tell_tabs），回傳（五種事, 正在玩）。
+    正在玩：quiet_seconds 之內同步過（分頁開著），畫面上已經看得到，不必再跳。"""
+    day = letters.mail_day(game.content, game.state.world, now)
+    if day is not None and MAIL_DONE.get(account_key) != day:
+        if game.morning_mail(now):
+            open_characters().save(game.state)
+        MAIL_DONE[account_key] = day
+    last = game.state.last_real
+    busy = last is not None and now - last < game.content.config.web_push.quiet_seconds
+    return current_notices(game.state, game.content, game.world.get_battle()), busy
+
+
+def notice_round(clock: Callable[[], float] = time.time) -> int:
+    """看守的一輪：開了通知的每一個帳號進一次鎖（_notice_keys），鎖外比上一輪、新的才跳（一人一輪最多 per_round 則，
+    多的下一輪再跳）。第一次看到這個帳號只記下、不跳。回傳跳了幾則（測試用）。"""
+    push = WEB_PUSH
+    if push is None:
+        return 0
+    cfg = CONTENT.config.web_push
+    sent_total = 0
+    for account_key in push.store.accounts():
+        account = account_store().get(account_key)
+        if account is None or account.character is None:
+            continue
+        game = game_for(account.character)
+        with _locked(game):
+            now = clock()
+            notes, busy = _notice_keys(game, account_key, now)
+        keys = {n.key for n in notes}
+        seen = NOTICE_SENT.get(account_key)
+        if seen is None or busy:
+            NOTICE_SENT[account_key] = keys
+            continue
+        fresh = [n for n in notes if n.key not in seen]
+        for n in fresh[:cfg.per_round]:
+            sent_total += bool(push.send(account_key, NOTICE_TITLE, n.text, tag=n.kind, now=now))
+        NOTICE_SENT[account_key] = (keys & seen) | {n.key for n in fresh[:cfg.per_round]}
+    return sent_total
+
+
+# ── 事件旁白每週改寫（減法季整合設計第十章，批 10；tianxia/narration.py）──
+# 全服一條背景執行緒（start_narration，main() 開）：每 rewrite_round_seconds 秒改寫一則，這一週的寫完就停到下一週。
+# 不拿行動鎖（只讀季的快照、寫旁邊的小檔），模型呼叫排在真人後面（佇列開著時當假人排；關著時一輪只叫一次、短的），
+# 省電模式開著而 ONLINE_SECONDS 之內沒有真人來過就不叫（不讓它把模型載回 VRAM）。這一季沒開改寫、休季、籌備中什麼都不做。
+NARRATION: narration.NarrationStore | None = None
+NARRATION_CLIENT = None  # 改寫用的 client（main() 照設定建；測試塞假的）
+NARRATION_STOP = threading.Event()
+NARRATION_THREAD: threading.Thread | None = None
+NARRATION_FAILS: dict[tuple[int, int, str], int] = {}  # （季, 週, 事件）寫壞了幾次：rewrite_tries 次就這一週照原文，不再試
+LAST_HUMAN = float("-inf")  # 最後一次有真人的請求（_play_seen）
+ONLINE_SECONDS = 600.0  # 省電模式下「有人在線」的窗口（跟 scripts/warm_keeper.py 同一個數，不讀 presence_seconds）
+NARRATION_KEY = "旁白改寫"  # 佇列裡的名號（不是任何角色：一人一件的規矩只管它自己）
+
+
+def narration_store_path() -> Path:
+    db = default_path()
+    return db.with_name(f"{db.stem}-narration.sqlite")
+
+
+def narration_line(config) -> str:
+    if not config.jianfa.enabled or not config.jianfa.rewrite_narration:
+        return "旁白改寫：關"
+    return f"旁白改寫：開（每 {config.jianfa.rewrite_round_seconds:g} 秒一則，排在真人後面；寫在 {narration_store_path()}）"
+
+
+def start_narration(config, client=None) -> threading.Thread | None:
+    """減法季的開關與 rewrite_narration 開著：建 NARRATION、開背景執行緒（daemon）；不然什麼都不做。只有 main() 與測試呼叫。
+    小檔不管開關都建起來（讀的一邊才有東西可查；開關關著的季 narration.text_of 本來就照原文）。"""
+    global NARRATION, NARRATION_CLIENT, NARRATION_THREAD
+    NARRATION = narration.NarrationStore(narration_store_path())
+    if not config.jianfa.enabled or not config.jianfa.rewrite_narration:
+        return None
+    if client is None:
+        try:
+            client = OllamaClient.from_config(config)
+        except Exception:  # noqa: BLE001  建不起 client：照原文，不擋伺服器
+            return None
+    NARRATION_CLIENT = client
+    failures = _StepFailures(time.monotonic, "旁白改寫")
+
+    def loop() -> None:
+        while not NARRATION_STOP.wait(config.jianfa.rewrite_round_seconds):
+            try:
+                narration_round()
+            except Exception as e:  # noqa: BLE001  一則出錯不能讓整條停下來
+                failures.failed(e)
+            failures.tick()
+
+    NARRATION_THREAD = threading.Thread(target=loop, daemon=True, name="narration")
+    NARRATION_THREAD.start()
+    return NARRATION_THREAD
+
+
+def narration_round(clock: Callable[[], float] = time.time) -> str | None:
+    """改寫一則（背景執行緒的一輪；測試直接叫）：這一季開著改寫、這一週還有沒寫過的，就挑第一則請模型寫，寫成了存進小檔。
+    回傳寫成的事件 id；沒做事或寫壞了是 None。呼叫端不能握著行動鎖。"""
+    store, client = NARRATION, NARRATION_CLIENT
+    if store is None or client is None:
+        return None
+    if power_save.on() and clock() - LAST_HUMAN > ONLINE_SECONDS:
+        return None  # 省電模式、沒人在線：讓模型卸掉，等有人來再寫
+    world = open_world()
+    if world.season_phase() != "running":
+        return None
+    season = world.get_season()
+    if not narration.on(CONTENT, season) or season.ended:
+        return None
+    number, week = world.get_season_number(), narration.period(CONTENT, season)
+    cfg = CONTENT.config.jianfa
+    done = store.done(number, week)
+    todo = [e for e in narration.eligible(CONTENT)
+            if e not in done and NARRATION_FAILS.get((number, week, e), 0) < cfg.rewrite_tries]
+    if not todo:
+        return None
+    event = CONTENT.events[todo[0]]
+    budget = cfg.rewrite_budget_seconds
+    started = _monotonic()
+
+    def ask() -> str | None:
+        return narration.write(within_budget(client, budget - (_monotonic() - started)), CONTENT, event)
+
+    if QUEUE is None:
+        text = ask()
+    else:
+        try:
+            text = QUEUE.run(NARRATION_KEY, ask, fallback=None, bot=True, wait=budget)
+        except (Busy, QueueTimeout):
+            return None  # 真人正在等模型：這一輪讓路，下一輪再來（不算寫壞）
+    if not text:
+        NARRATION_FAILS[(number, week, event.id)] = NARRATION_FAILS.get((number, week, event.id), 0) + 1
+        return None
+    store.put(number, week, event.id, text)
+    return event.id
+
+
 def _tell_tabs(game: Game, also: str = "") -> None:
     """動作做完、行動鎖已經放掉：叫這個角色開著的分頁刷新（推送開著時；其他分頁會去抓 /api/main，這一個分頁通常正忙著、
     會略過）。只有動作的端點叫它（api_choose、api_answer、api_do、api_menxia_do、api_travel），而且在動作成功之後：
@@ -711,7 +922,7 @@ def say(game: Game, text: str, option: str = SAY_OPTION) -> list[str] | None:
     A 鎖內驗這句話能不能送（還在對話裡、按得下去、1～Game.say_max() 字）並開單，B 鎖外請模型歸類那句話、寫回應與下一輪選項，
     C 鎖內 Game.choose(SAY_OPTION, prepared=…, text=…) 整個重驗再套用（好感度照模型挑的類別查表）。
     送不出去（不在對話裡、字數不對）丟 GameError，什麼都不動。"""
-    if option not in TEXT_TALKS:  # 開口求人第二批：商量打法（talk:plan）、帶路的路上（parley:road）也走這一條
+    if option not in TEXT_TALKS:  # NPC 智能 2.1：商量打法（talk:plan）、帶路的路上（parley:road）也走這一條
         option = SAY_OPTION
     prepared = prepare_dialogue(game, option, text)
     if prepared is None:
@@ -908,29 +1119,45 @@ def answer_event(game: Game, text: str) -> list[str] | None:
       D、E 擲骰之後在鎖外請模型潤色一兩句（model_call：同一個人這時沒有別件在排，照常再排一次），再進鎖插回那一則江湖紀錄
         （Game.add_gamble_narration）。潤色跟評分共用同一份 free_text_budget_seconds（控制者 2026-10-06）：從 A 段算起，
         扣掉評分、等鎖與排隊花掉的，剩下的給潤色（同一個 within_budget）；不夠一趟就不叫、不插句子，跟模型叫不動時一樣。
-        整個請求因此在 free_text_budget_seconds 加兩次進鎖之內結束，不會超過 trycloudflare 約 100 秒的切斷。"""
+        整個請求因此在 free_text_budget_seconds 加兩次進鎖之內結束，不會超過 trycloudflare 約 100 秒的切斷。
+    減法季的分岔（批 4）：A 段的單子帶了可能的走向（request.outcomes，分岔開著、這則事件寫了後果）時，B 段改請模型把這句話歸到其中一種
+    （event_llm.judge_outcome：歸到最後一種才另外判善惡），C 段多交那一種的 id；D／E 照舊潤色，結果文字就是那一種後果的那一句。"""
     started, request = _open_request(game, lambda: game.free_text_request(text))
     if request is None:
         raise GameError(f"寫一句 1～{FREE_TEXT_MAX} 字的做法；眼前的事已經過去的話，就不必再寫了。")
     event = CONTENT.events[request.event_id]
     total = game.content.config.free_text_budget_seconds
+    if request.outcomes:  # 減法季的分岔（批 4）：B 段歸類、評分，歸到最後一種才另外判善惡（善惡那一次用歸類剩下的預算再切一份）
+        branches = event.free_text.outcomes
+        fallback = event_llm.OutcomeVerdict(branches[-1].id, event_llm.DEFAULT_FREE_TEXT_SUCCESS_RATE)
 
-    fallback = event_llm.EventVerdict(event_llm.DEFAULT_FREE_TEXT_SUCCESS_RATE)
+        def score():
+            client = within_budget(game.client, total - (_monotonic() - started))
+            if client is None and game.client is not None:
+                return fallback  # 等鎖、排隊把整份預算用完了：不叫模型，最後一種、保底值、善惡當「中」
+            return event_llm.judge_outcome(
+                client, event, branches, request.text, moral_client=lambda: within_budget(game.client, total - (_monotonic() - started)),
+            )
 
-    def score():
-        client = within_budget(game.client, total - (_monotonic() - started))
-        if client is None and game.client is not None:
-            return fallback  # 等鎖、排隊把整份預算用完了：不叫模型，保底值（善惡當「中」）
-        # 評分之後另外很短地判善惡（FB-223）：用評分剩下來的預算再切一份；不夠一趟就不叫、當「中」，成功率照用
-        return event_llm.judge_event_gamble(
-            client, event, request.text, moral_client=lambda: within_budget(game.client, total - (_monotonic() - started)),
-        )
+        verdict = model_call(game, score, fallback=fallback, left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT)
+        msgs = act(game, lambda g: g.answer_event(request, verdict.rate, verdict.moral, verdict.outcome))
+    else:
+        fallback = event_llm.EventVerdict(event_llm.DEFAULT_FREE_TEXT_SUCCESS_RATE)
 
-    verdict = model_call(game, score, fallback=fallback, left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT)
-    msgs = act(game, lambda g: g.answer_event(request, verdict.rate, verdict.moral))  # 善惡在 C 段再驗一次（FB-223）
+        def score():
+            client = within_budget(game.client, total - (_monotonic() - started))
+            if client is None and game.client is not None:
+                return fallback  # 等鎖、排隊把整份預算用完了：不叫模型，保底值（善惡當「中」）
+            # 評分之後另外很短地判善惡（FB-223）：用評分剩下來的預算再切一份；不夠一趟就不叫、當「中」，成功率照用
+            return event_llm.judge_event_gamble(
+                client, event, request.text, moral_client=lambda: within_budget(game.client, total - (_monotonic() - started)),
+            )
+
+        verdict = model_call(game, score, fallback=fallback, left=total - (_monotonic() - started), busy=BUSY_FREE_TEXT)
+        msgs = act(game, lambda g: g.answer_event(request, verdict.rate, verdict.moral))  # 善惡在 C 段再驗一次（FB-223）
     outcome = game.last_gamble
     if outcome is not None:  # D（鎖外）擲骰之後請模型潤色一兩句，E（鎖內）插回那一則紀錄；失敗、預算用完就只留結果文字
-        def narrate():
+        def narrate():  # 結果文字是 C 段實際套的那一句（分岔開著時是走的那一種後果的那一句）
             client = within_budget(game.client, total - (_monotonic() - started))  # 評分剩下來的預算，不是重新算一份
             if client is None and game.client is not None:
                 return None  # 評分、等鎖、排隊把整份預算用完了：不叫模型，不插句子
@@ -1530,8 +1757,9 @@ def _main_view_body(game: Game) -> dict:
         "status": status,
         "quest": quest,
         "scene": scene,
+        "art": scene_art(game, status),  # 場景卡上面那張圖（減法季批 8）：事件插圖、人物像或地點的圖；沒有圖檔是 None、網頁一字不變
         "options": [o.model_dump() for o in options],
-        "say_max": game.say_max(),  # 「自己說」最多幾個字（開口求人開著時比較長，網頁的輸入框照它）
+        "say_max": game.say_max(),  # 「自己說」最多幾個字（NPC 智能 2.0開著時比較長，網頁的輸入框照它）
         # 出陣開著（出陣探索與地盤設計第二節）：行動列那一格叫「出陣」、等候的話換一句；關著時照舊「遊歷」
         "sortie": sortie.on(game.content),
         # 一類一顆開著（正式季整合第二章）：應召畫成行動列上面一條金框橫幅（設計 9.1 第 1 組乙），不收在「此地還能做」
@@ -1589,6 +1817,7 @@ def _main_view_body(game: Game) -> dict:
         # push_spread 是收到「世界變了」之後各分頁重抓畫面要攤開的秒數（預檢 F3：全服同時重抓會在同一把行動鎖上排隊）
         "push": HUB is not None,
         "push_spread": game.content.config.push_world_min_seconds,
+        "web_push": WEB_PUSH is not None,  # 手機通知（減法季批 9）：設定頁畫不畫那一顆、第一次來信問不問
     }
     shop = game.shop_view([o.id for o in options])  # 店面（店面獨立介面設計 6.1）：開關開著、店開著、鐵匠鋪那一串是眼前的選單才有
     if shop is not None:
@@ -1603,6 +1832,19 @@ def _main_view_body(game: Game) -> dict:
     orders = game.orders_view()  # 第一季：自己陣營的本週軍令（計畫 T6；散人、別陣營、開關關著時都沒有這個鍵）
     if orders:
         view["orders"] = orders
+    # 減法季批 1（整合設計 6.1、3.4）：江湖頁最上面的本週卡（主題、你這一步）與三方卡；序章裡、休季沒有這兩個鍵
+    week = weekcard.week_card(game, status, orders)
+    if week is not None:
+        view["week_card"] = week
+    mostly = mapdata.mostly_here(game.state, game.content)  # 四格探索那一格的小字「城裡多事」（整合設計 6.3，批 5）；在路上沒有這個鍵
+    if mostly:
+        view["mostly"] = mostly
+    sides = weekcard.sides_card(game)
+    if sides is not None:
+        view["sides_card"] = sides
+    event_opts = game.event_option_view()  # 事件選項只留動作（整合設計 6.4）：選項 id → 動作、圖示、沒把握時的心裡話；沒有事件沒有這個鍵
+    if event_opts is not None:
+        view["event_opts"] = event_opts
     layers = game.rumor_layers()  # 第一季：見聞頁的傳聞分四層（開關關著時不送，頁面照舊畫 rumors 那一條清單）
     if layers is not None:
         view["rumor_layers"] = [{**layer, "body": md(layer["body"])} for layer in layers]
@@ -2024,14 +2266,14 @@ def content_version(content: bytes) -> str:
 
 
 def asset_version(url_path: str) -> str:
-    """頁面引用的網址（/journal.css 或 /static/<檔名>）對應的版本；檔案不存在就丟 FileNotFoundError。"""
+    """頁面引用的網址（/journal.css、/manifest.webmanifest 或 /static/<檔名>）對應的版本；檔案不存在就丟 FileNotFoundError。"""
     if url_path == "/journal.css":
         return content_version(JOURNAL_CSS.encode("utf-8"))
-    return content_version((WEB / url_path.removeprefix("/static/")).read_bytes())
+    return content_version((WEB / url_path.removeprefix("/static/").lstrip("/")).read_bytes())
 
 
 # 頁面裡指向我們自己檔案的網址；不碰 data:、外部網址，也不碰已經帶了 ? 的
-OWN_ASSET = re.compile(r"""(src|href)=(["'])(/static/[^"'?#]+|/journal\.css)\2""")
+OWN_ASSET = re.compile(r"""(src|href)=(["'])(/static/[^"'?#]+|/journal\.css|/manifest\.webmanifest)\2""")
 
 
 def versioned_page(html: str, version_of: Callable[[str], str]) -> str:
@@ -2529,6 +2771,8 @@ def api_menxia_do(op: str, request: Request, body: dict = Body(default={})):
         # 合出來的那一樣（煉製頁在結果底下直接畫它的卡，不必切去修練頁看；Joy 2026-10-17）：{"type": "art"／"ins", "id"}
         thing = game.forged_thing if made else None
         out["made_item"] = {"type": thing[0], "id": thing[1]} if thing else None
+    if op in ("forge", "slot"):
+        out["secret"] = game.secret_solved  # 這一季第一次參透一條秘方：網頁跳一個視窗（secretPop）；沒有是 None
     return out
 
 
@@ -2879,6 +3123,62 @@ async def api_events(request: Request):
     )
 
 
+def _web_push() -> server_push.WebPush:
+    push = WEB_PUSH
+    if push is None:
+        raise HTTPException(404)
+    return push
+
+
+@app.get("/api/push")
+def api_push(request: Request):
+    """手機通知（減法季批 9）：瀏覽器訂閱要的那一串公鑰。開關關著 404。"""
+    _account(request)
+    return {"key": _web_push().vapid.public}
+
+
+@app.post("/api/push/subscribe")
+def api_push_subscribe(request: Request, body: dict = Body(...)):
+    """這台裝置開通知：{endpoint, keys: {p256dh, auth}, quiet}（瀏覽器 PushSubscription 的 JSON，多一個 quiet）。
+    位址不是認得的推送服務就不收。開了先把他身上現有的事記成看過（不會一開就跳一串舊信）；不是 quiet 就送一則「開了」的通知，
+    手機上當場看得到通不通（主機驗收也看這一則）。"""
+    push = _web_push()
+    account_key = _account(request)
+    endpoint = str(body.get("endpoint", ""))
+    keys = body.get("keys") if isinstance(body.get("keys"), dict) else {}
+    p256dh, auth = str(keys.get("p256dh", "")), str(keys.get("auth", ""))
+    if len(endpoint) > 1024 or not server_push.push_host_ok(endpoint) or not (40 <= len(p256dh) <= 200 and 8 <= len(auth) <= 64):
+        raise GameError("這個瀏覽器給的通知位址不對，換一個瀏覽器試試。")  # 待 joy 潤
+    push.store.add(account_key, endpoint, p256dh, auth, time.time(), CONTENT.config.web_push.max_devices)
+    game = _game(request)
+    with _locked(game):
+        notes = current_notices(game.state, game.content, game.world.get_battle())
+    NOTICE_SENT[account_key] = {n.key for n in notes}
+    if not body.get("quiet"):
+        threading.Thread(target=push.send, args=(account_key, NOTICE_TITLE, PUSH_WELCOME), kwargs={"tag": "welcome"}, daemon=True).start()
+    return {"on": True}
+
+
+@app.post("/api/push/unsubscribe")
+def api_push_unsubscribe(request: Request, body: dict = Body(...)):
+    """這台裝置關通知：{endpoint}。只刪得掉自己帳號的。"""
+    push = _web_push()
+    push.store.remove(str(body.get("endpoint", "")), _account(request))
+    return {"on": False}
+
+
+@app.get("/sw.js")
+def service_worker():
+    """手機通知的 service worker：放在根目錄，管得到整個網站（/static 底下的管不到 /）。"""
+    return Response((WEB / "sw.js").read_bytes(), media_type="text/javascript", headers=NO_CACHE)
+
+
+@app.get("/manifest.webmanifest")
+def manifest():
+    """加到主畫面用的說明檔（iPhone 要先加到主畫面才收得到通知）。"""
+    return Response((WEB / "manifest.webmanifest").read_bytes(), media_type="application/manifest+json", headers=NO_CACHE)
+
+
 @app.get("/api/admin")
 def api_admin(request: Request):
     game = _game(request)
@@ -2998,6 +3298,10 @@ def main(argv: list[str] | None = None) -> None:
     start_scheduler(interval)
     print(push_line(CONTENT.config), flush=True)
     start_push(CONTENT.config)  # 開關關著什麼都不做：HUB 是 None、/api/events 是 404
+    print(web_push_line(CONTENT.config), flush=True)
+    start_web_push(CONTENT.config)  # 開關關著、沒裝 cryptography 什麼都不做：WEB_PUSH 是 None
+    print(narration_line(CONTENT.config), flush=True)
+    start_narration(CONTENT.config)  # 減法季的開關關著只建小檔、不開執行緒
     if args.lan:
         print("已開放區網連線：同一個網路裡的裝置都連得到。", flush=True)
     # timeout_graceful_shutdown：uvicorn 關機時會等進行中的回應收完，而 SSE 串流永遠不會自己收完，Ctrl+C 一下就卡住

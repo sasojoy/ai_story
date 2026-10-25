@@ -24,7 +24,7 @@ def test_past_thirty_each_level_costs_more_and_more(content):
 
 
 def test_the_real_content_goes_to_fifty_and_the_weekend_is_gentler():
-    plain, weekend = real_content().config, real_content("weekend").config
+    plain, weekend = real_content().config, real_content("week7").config
     assert plain.max_level == weekend.max_level == 50
     assert weekend.late_exp_step < plain.late_exp_step  # 2.5 天的季要讓最拚的人碰得到 50 級
 

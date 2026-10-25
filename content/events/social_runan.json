@@ -2,6 +2,7 @@
   {
     "id": "sc_rn_feast",
     "title": "袁門故吏宴",
+    "image": "tavern",
     "actions": [
       "socialize"
     ],
@@ -67,6 +68,7 @@
   {
     "id": "sc_rn_mourning",
     "title": "名士弔喪",
+    "image": "town",
     "actions": [
       "socialize"
     ],
@@ -139,6 +141,7 @@
   {
     "id": "sc_rn_dispute",
     "title": "酒肆清議",
+    "image": "tavern",
     "actions": [
       "socialize"
     ],
@@ -217,6 +220,7 @@
   {
     "id": "sc_rnac_question",
     "title": "講經問難",
+    "image": "academy",
     "actions": [
       "socialize"
     ],
@@ -279,6 +283,7 @@
   {
     "id": "sc_rnac_pitchpot",
     "title": "學宮投壺",
+    "image": "academy",
     "actions": [
       "socialize"
     ],
@@ -337,6 +342,7 @@
   {
     "id": "sc_rnac_recommend",
     "title": "寒士求薦",
+    "image": "academy",
     "actions": [
       "socialize"
     ],
@@ -424,6 +430,7 @@
   {
     "id": "sc_rnmk_thief",
     "title": "市中扒手",
+    "image": "market",
     "actions": [
       "socialize"
     ],
@@ -516,6 +523,7 @@
   {
     "id": "sc_rnmk_measure",
     "title": "斛量之爭",
+    "image": "market",
     "actions": [
       "socialize"
     ],
@@ -603,6 +611,7 @@
   {
     "id": "sc_rnmk_wedding",
     "title": "鄉人迎親",
+    "image": "village",
     "actions": [
       "socialize"
     ],
@@ -674,6 +683,7 @@
   {
     "id": "sc_qiao_levy",
     "title": "曹門召勇",
+    "image": "town",
     "actions": [
       "socialize"
     ],
@@ -751,6 +761,7 @@
   {
     "id": "sc_qiao_betrothal",
     "title": "亭中退聘",
+    "image": "town",
     "actions": [
       "socialize"
     ],
@@ -831,6 +842,7 @@
   {
     "id": "sc_qiao_liubo",
     "title": "門客六博",
+    "image": "tavern",
     "actions": [
       "socialize"
     ],
