@@ -681,7 +681,88 @@
           "text": "你走出很遠，回頭還看得見老漢彎著腰的身影。"
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "另想法子幫老漢下種",
+      "stat": "str",
+      "outcomes_only": true,
+      "outcomes": [
+        {
+          "id": "labor",
+          "tag": "出力：替他拉犁、修犁、想省力的法子",
+          "check": {
+            "stat": "best_of",
+            "stats": [
+              "str",
+              "wis"
+            ],
+            "difficulty": 4
+          },
+          "effect": {
+            "text": "你拉著犁走完一整壟，泥土翻出新的顏色。老漢硬塞給你兩個麥餅，說這田總算下得了種。",
+            "stats": {
+              "good": 2,
+              "xinde": 5
+            },
+            "marks": {
+              "yingchuan_wilds:田有人耕": 1
+            },
+            "contribution": 2
+          },
+          "fail_effect": {
+            "text": "犁頭卡進石縫，你使勁一扯，腰閃了一下，半天直不起來。",
+            "stamina": -15
+          }
+        },
+        {
+          "id": "chase",
+          "tag": "討牛：去追那夥散兵",
+          "combat": "dipi",
+          "effect": {
+            "text": "你在破廟後頭追上那夥流寇，把牛奪了回來。老漢牽著牛，眼淚都流下來了。",
+            "stats": {
+              "good": 2,
+              "fame": 1
+            },
+            "marks": {
+              "yingchuan_wilds:散兵退了": 1
+            },
+            "contribution": 4
+          },
+          "fail_effect": {
+            "text": "流寇人多，你被打得退回田邊，錢袋也被搶了去，老漢反過來安慰你。",
+            "stamina": -15,
+            "stats": {
+              "silver": -10
+            }
+          }
+        },
+        {
+          "id": "give",
+          "tag": "周濟：給他錢或糧",
+          "cost": {
+            "silver": 10
+          },
+          "effect": {
+            "text": "你把幾個錢塞進老漢手裡，說去鄰村租頭牛。他攥著錢，半天說不出話。",
+            "stats": {
+              "good": 1
+            },
+            "marks": {
+              "yingchuan_wilds:鄉里得濟": 1
+            },
+            "contribution": 1
+          }
+        },
+        {
+          "id": "leave",
+          "tag": "走開：不管、看著、對不上的",
+          "effect": {
+            "text": "你走出很遠，回頭還看得見老漢彎著腰的身影。"
+          }
+        }
+      ]
+    }
   },
   {
     "id": "yc_wilds_toll",

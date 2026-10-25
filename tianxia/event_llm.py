@@ -364,6 +364,29 @@ def classify_outcome(client: OllamaClient | None, event: Event, outcomes: list[O
     return outcome_of(getattr(result, "outcome", None), ids), _rate_of(getattr(result, "success_rate", None))
 
 
+class OutcomeVerdict(NamedTuple):
+    """歸類一次隨口應對（分岔開著的季）：哪一種後果、模型的成功率（0～100）、做法的善惡（只有歸到最後一種才判，其餘是「中」）。"""
+
+    outcome: str
+    rate: int
+    moral: str = MORAL_NEUTRAL
+
+
+def judge_outcome(
+    client: OllamaClient | None, event: Event, outcomes: list[Outcome], text: str,
+    moral_client: Callable[[], object] | None = None,
+) -> OutcomeVerdict:
+    """分岔開著的季的 B 段（鎖內自己歸類時也走它）：先歸類（classify_outcome），歸到最後一種（fallback）才另外很短地判善惡
+    （judge_moral；PM 2026-10-25 第 8 件：選中別的後果時善惡只看那一種後果自己的效果，同一句話不加兩次）。
+    moral_client 同 judge_event_gamble：判善惡那一次的 client 怎麼拿（伺服器照剩下的預算再切一份、鎖內照 _quick_client 的額度）；
+    沒給就跟歸類用同一個。沒有 client、沒寫字是（最後一種, 40, 中）。"""
+    chosen, rate = classify_outcome(client, event, outcomes, text)
+    if client is None or not _clip(text) or not outcomes or chosen != outcomes[-1].id:
+        return OutcomeVerdict(chosen, rate)
+    second = client if moral_client is None else moral_client()
+    return OutcomeVerdict(chosen, rate, judge_moral(second, event, text))
+
+
 def narrate_event_gamble(
     client: OllamaClient | None, event: Event, text: str, success: bool, effect_text: str, evil: bool = False,
 ) -> str | None:

@@ -12,7 +12,7 @@ import pytest
 from tests.conftest import real_content
 from tianxia import wins
 from tianxia.models import LEAN_DEFAULT_BY_JOIN, WinsRules
-from tianxia.state import GameState, WorldState, new_game_state
+from tianxia.state import QUIET_DEFAULTS, GameState, WorldState, new_game_state
 
 pytestmark = pytest.mark.slow
 
@@ -155,7 +155,8 @@ def test_new_fields_add_no_keys_until_used(content):
     state = new_game_state(content, "甲客")
     keys = _keys(state)
     assert "ledgers" not in keys and "lean_changed" not in keys
-    assert keys == set(type(state.player).model_fields) - {"ledgers", "lean_changed"} - _excluded(state)
+    # 別的批也往 QUIET_DEFAULTS 加欄位（批 4 的 deed_day、deed_today）：照整份清單扣，不寫死這兩個
+    assert keys == set(type(state.player).model_fields) - set(QUIET_DEFAULTS) - _excluded(state)
     p = state.player
     p.faction, p.ally = "haoqiang", "guan"
     wins.credit(p, content, WorldState(), 1, 9)
