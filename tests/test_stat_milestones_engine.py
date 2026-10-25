@@ -130,7 +130,9 @@ def test_event_bump_is_scaled_down():
     on = ready(jianfa_game(), side="guan", loc="yingshui", level=40)
     off = ready(plain_game(), side="guan", loc="yingshui", level=40)
     assert rise.event_bump(off.state, off.content) > 0
-    assert rise.event_bump(on.state, on.content) == rise.event_bump(off.state, off.content) * on.content.config.jianfa.event_bump_scale
+    assert rise.event_bump(on.state, on.content) == 0  # 量過定 0（主機側計畫 Task 2-6）
+    on.content.config.jianfa.event_bump_scale = 0.5
+    assert rise.event_bump(on.state, on.content) == rise.event_bump(off.state, off.content) * 0.5
 
 
 def test_the_battle_report_says_when_strength_carried_the_fight():

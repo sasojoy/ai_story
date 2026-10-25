@@ -220,6 +220,15 @@ def test_outing_lines_are_checked_when_loaded():
         validate(c)
 
 
+def test_the_howto_explains_the_outing_the_gates_and_the_milestones():
+    on = ready(jianfa_game(), side="guan", loc="yingshui").howto_text()
+    off = ready(plain_game(), side="guan", loc="yingshui").howto_text()
+    assert "出門一趟" in on and "收穫漸少" in on and "境界與配點" in on and "找素材" not in on.split("**探索**")[1].split("\n")[0]
+    assert "出門一趟" not in off and "境界與配點" not in off
+    off_gates = ready(jianfa_game(explore_one=False), side="guan", loc="yingshui").howto_text()
+    assert "出門一趟" not in off_gates and "收穫漸少" in off_gates  # 子開關各管各的
+
+
 def test_is_idle_follows_the_explore_button():
     game = ready(jianfa_game(), side="guan", loc="yingshui")
     assert game.is_idle()

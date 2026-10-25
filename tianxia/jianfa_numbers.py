@@ -118,7 +118,9 @@ class JianfaNumbers(_Strict):
     milestone_levels: list[int] = Field(default_factory=lambda: [10, 20, 30, 40, 50])  # 到這幾級各一次境界【定】（計畫寫 stat_milestones，跟子開關同名）
     stat_points_per_milestone: int = Field(default=5, ge=0)  # 每次幾點【定】
     stat_rates: StatRates = Field(default_factory=StatRates)  # 每點的效果【預設】
-    event_bump_scale: float = Field(default=0.5, ge=0, le=1)  # 江湖水漲的事件加難（rise.event_bump）乘這個【待量】
+    # 江湖水漲的事件加難（rise.event_bump）乘這個【量過：0】：2026-10-25 measure_difficulty --tiers（season21，種子 1、2，solo 與 team，
+    # 主機側計畫第三節 Task 2-6 的量表）第 30 級事件檢定平均 ×1 42～54%、×0.5 53～64%、×0 64～73%；判準「第 30 級不低於 70%」只有 0 摸得到
+    event_bump_scale: float = Field(default=0.0, ge=0, le=1)
 
     @field_validator("milestone_levels")
     @classmethod
