@@ -96,6 +96,10 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 - 用正式內容測舊規則的測試，要在 helper 裡把新開關關掉（例 `c.config.precise_actions = False`、`four_tiers.enabled = False`）。新規則另開一個測試檔，不要改寫舊的斷言去迎合新規則。
   - **領地爭奪 2026-10-22 起正式內容打開**（`content/config.json`；週末、21 天、7 天新開的季都蓋章）：拿 `real_content("weekend"/"season21"/"week7")` 測地盤拔河、出陣推線、攻敵方大本營、「關著一個字都不變」的，建局那一處叫 `tests/conftest.py::no_conquest(content)`（`conquest_kit.plain_game` 已經叫了）。打開那一批第一次整套紅了 89 條，全是這一種（`docs/superpowers/plans/2026-10-22-打開領地爭奪.md` 6.8）。
   例外：PM 的裁決直接推翻還沒上線的這一批的做法（不是開關後面的舊季）時，鎖住舊做法的那一條斷言照裁決翻過來，註明哪一條裁決、新規則的測試在哪一個檔（例：裁決 19 之後 `test_siege_void_when_no_attacker` 改成「沒有作罷的天下大事」，新的在 `test_conquest_void_quiet.py`）。
+- **週末季封存之後（測試整理批 1，2026-10-25），正式內容的測試一律 `real_content("week7")`，門檻有倍數、功能有週次**（2026-10-26 `test_renown_web.py` 紅 4 條就是這個）：
+  - 名聲的測試寫的是門檻原數（名望 10／25／50／90、「再 23 到威震州郡」），以前週末季倍數剛好是 1；現在要 `renown_unscaled(real_content("week7"))`，不然名望 27 沒到第一段、名號行只剩善名那一個。同一個檔裡別的測試有 `renown_unscaled` 就是這個理由。
+  - 開季第一天就要進鐵匠鋪、擂台、自創、懸賞榜的舊測試要 `no_week_unlock(...)`（那幾樣第 2 週才開）。兩個常一起疊：`renown_unscaled(no_week_unlock(real_content("week7")))`。
+  - 批量把 `weekend` 換成 `week7` 的 commit 容易漏掉只有斷言字串、沒有 `renown_unscaled` 的檔；整批合進來之後有紅，先 `git log --oneline -- <那個測試檔>` 看最後一個改它的是不是這種整理批，再用 `git worktree add --detach <scratchpad>/bis <commit>^` 與 `<commit>` 各跑一次釘死是哪一筆（用完 `git worktree remove --force`）。
 - 江湖紀錄 `state.journal` 新的在前（index 0）。找某一則照標題找，不要拿 `[-1]`。`_write` 寫的那一則，「銀兩 +N」這種數值變化在 `entry.changes`、不在 `entry.lines`。
 - **兩個人的測試**（截殺、領地爭奪的混戰，2026-10-20 翻地與爭搶）：`Game.new` 不存角色，另一個人要被 `_load_kin` 讀到就先 `CharacterStore(world.db).save(game.state)`；
   照伺服器的做法每一個動作從資料庫重讀自己（`tests/test_raid.py::_do`、`tests/test_conquest_clash.py::_do`）。season21 的新手期看 `newbie_real_hours`（現實 48 小時），
