@@ -226,6 +226,12 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 - **接手一批被停掉的半成品，先找上一位的暫存資料夾**（減法季批 7b 收尾，2026-10-26）：交接寫的「停在哪」是 PM 從上一位最後一則訊息摘的，可能已經過時（7b 寫「停在列傳請求的接線」，其實那一段已經提交，上一位停在跑 `test_for`）。`ls -d /c/Users/ray61/AppData/Local/Temp/claude/*/*/scratchpad/<派工寫的暫存名>` 找得到它（不一定在 PM 這個 session 底下），裡面的 `picked.txt`、跑到一半的 log、`head.tar` 的時間對 `git log` 的提交時間，就看得出做到哪一步；對照腳本照抄來用。核對還是照派工的每一條 Task 對程式一條一條看。
 - **事後夾的上限（`Game._log` 裡才夾的情誼這種）會在「一過門檻當下就給東西」的地方漏**（同批：深交上限）：動作中途就看門檻給獎勵的（對話裡 70 教本命武學 `companion_agent._maybe_grant_signature_skill`、80 送名將本命兵器 `Game._signature_arms`），在 `_log` 之前就給了，之後才被夾回去。加這種上限時 grep 那個門檻的每個讀者（`signature_affinity`、`weapons.signature_affinity`），在讀之前先夾一次（`Game._deep_cap_now`，句子留到 `_log` 才說）；共用函式加的回呼照「舊的呼叫一個字不動」那一條，只在新規則的呼叫點傳。測試照真的路走（`choose("talk:0", prepared=PreparedTurn(...))`、動作前把情誼直接寫過門檻再 `choose`），修前要紅。
 - **`test_explain` 連交給模型的字串也掃**（同批）：「好感」「交情」在 `tianxia/`、`server.py` 的任何字串常數都不准（說明字串與 `companion_agent.build_system_prompt` 例外），`content/` 只准名單上那兩處；新寫的模型提示、商城說明一律寫「情誼」。`test_for` 挑得到它（改了 `tianxia/` 就挑），挑到了才知道。
+- **購買那一列就是票的東西，「綁季」看購買的 `season` 欄位，不是 `data.season`**（減法季批 7b 修正，FB-845）：`data.season` 是用掉的那一季（`mark_used` 才寫），沒用的票沒有。`mall.tokens(season=)`、`zhuan_end.unused(season=)` 篩 `Purchase.season`，用票也拿同一季的那一張，不然舊季的票排在前面（`tokens` 舊的在前）會被先用掉。測試塞一張 `season=0` 的舊票再買一張新的，斷言用掉的是新的。
+- **「這個人這一季用不上就不賣」走 `mall.Moment.blocked`**（商品 id → 原因，`Game._mall_moment` 算；同批 FB-845）：`buy_problem`（排在限購後面，已經買了的人聽到的是限購）和 `view`（灰掉寫原因、`max` 0）都讀它，貨架與購買才一致。季中看不出的事（第幾階）不擋，只擋看得出的（沒陣營）。
+- **派生的名單能從「寫成的正文」認就別另存**（FB-847）：評曰名單改從傳的段首（`zhuan_end.VERDICT_HEAD`，產段落與認段落共用同一個常數）認，退款、重修自動對得上，資料庫結構（第 7 版）不動；還沒寫成時才用票預告。
+- **固定句要「整篇一起挑」**（FB-848）：每位各自雜湊挑，撞句機率擋不掉（池子 3 句、4 位一定撞）；改 `fixed_verdicts(writers)` 同理由輪著挑、用過的跳過、不夠往別組借、全用過才重複；`check_verdicts` 加「各組不重複」，池子夠不夠用測試鎖（深交三位加名額一位＝4）。
+- **內容說明裡照季換字的插槽**（FB-849 的 `{上架}`，同軍令的 `{本週}`）：填字函式一個（`mall.note_text`，7 天季用 `calendar.segment_days`、其他季照舊的字），`item_problems` 驗插槽認得、需要的欄位有寫；測試把「說明寫的那一天」跟真的上架那一刻（前 10 分鐘沒有、後 10 分鐘有）綁在一起。
+- **一批好幾張小單、測試各一個檔最省拆 commit**（減法季批 7b 修正）：每張自己一個測試檔＋一個共用 kit（`tests/zhuan_fix_kit.py`），照「寫測試→看紅→修→變異→commit」一張一張來，不必拆 hunk。變異腳本 `scratchpad/jf7bfix/mutate.py <根> <檔> <測試檔,…> '<舊>' '<新>'`（舊字串單引號、挑不含雙引號的片段，斷言剛好一處、`finally` 寫回）；關著對照 `scratchpad/jf7bfix/cmp_driver.py <base.tar> <head.tar> <資料夾>`（兩份 `git archive` 用 QA 的 `qajf7b/cmpq/cmp_qa.py` 五種平行跑，約十幾分鐘）。
 
 ## 量表怎麼讀
 
