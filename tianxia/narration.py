@@ -93,8 +93,16 @@ def clean(content: Content, original: str, text: str | None) -> str | None:
     {marks:…} 標記一個不少、一個不多；沒有阿拉伯數字（原文有的照原文）、假名、英文字母；不冒出原文沒有的人名、地名、門派、陣營；
     不用到禁用名單（既有作品的專有名詞）。過不了是 None（照原文）。"""
     out = zh.to_traditional(str(text or "")).strip()
+    # 清 markdown 之前先把 {marks:...} 收起來：標記的 id 多半帶底線（yingchuan_academy、zhuo_county……），
+    # 底下那一行為了拿掉強調符號會連標記裡的底線一起吃掉，於是跟原文比標記永遠不相等、改寫永遠退回原文
+    # （2026-10-26 主機整週實測：退回的 25 則裡 22 則是這樣來的，模型其實一字不差地照抄了標記）。
+    kept = _MARKS.findall(out)
+    for i, mark in enumerate(kept):
+        out = out.replace(mark, f"\x00{i}\x00", 1)
     out = re.sub(r"^[#>*\-\s]+", "", out, flags=re.MULTILINE)
     out = re.sub(r"[*_`#]", "", out)
+    for i, mark in enumerate(kept):
+        out = out.replace(f"\x00{i}\x00", mark, 1)
     out = "".join(p.strip() for p in out.split("\n") if p.strip())
     if len(out) >= 2 and out[0] in "「『\"“" and out[-1] in "」』\"”" and out.count(out[0]) == 1:
         out = out[1:-1].strip()
