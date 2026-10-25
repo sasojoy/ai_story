@@ -225,12 +225,13 @@ def letter_card(state: GameState, content: Content, letter: Letter) -> dict | No
 
 
 def step_items(state: GameState, content: Content) -> list[dict]:
-    """本週卡「你這一步」的第一順位（整合設計 6.1）：身上還在辦的那一件，[{"kind": "errand", "text", "who", "id"}]；沒有、關著是空的。"""
+    """本週卡「你這一步」的第一順位（整合設計 6.1；weekcard._steps 接在最前面）：身上還在辦的那一件，
+    [{"kind": "errand", "text", "who", "id", "target": {"location", "name", "minutes"}}]；沒有、關著是空的。"""
     e = live(state)
     if e is None or not on(content, state.world):
         return []
     return [{"kind": "errand", "text": STEP.format(place=place(content, e.target), who=who(content, e), label=LABELS[e.kind]),
-             "who": who(content, e), "id": e.id}]
+             "who": who(content, e), "id": e.id, "target": card(state, content, e)["target"]}]
 
 
 def scout_lines(state: GameState, content: Content, e: ErrandState) -> list[str]:

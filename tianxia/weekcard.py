@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from . import calendar, foreshadow, rules, week_unlock
+from . import calendar, errands, foreshadow, rules, week_unlock
 from . import opening as opening_rules
 from . import prologue as prologue_rules
 from .rules import STANCE_NAMES
@@ -87,9 +87,11 @@ def sides_card(game: Game) -> dict | None:
 
 
 def _steps(game: Game, status: dict, orders: list[dict]) -> list[dict]:
-    """「你這一步」的候選，照整合設計 6.1 的順序：託付（委託）→ 軍令 → 揭了的懸賞 → 伏筆 → 新手目標 → 去投靠。"""
+    """「你這一步」的候選，照整合設計 6.1 的順序：託付（委託）→ 軍令 → 揭了的懸賞 → 伏筆 → 新手目標 → 去投靠。
+    託付的正式來源（減法季批 6，errands.step_items：身上還在辦的人物託付，多 id 與 target）排在最前面，懸賞列裡的委託接在後面；
+    託付關著是空的，一個字都不變。"""
     s, c = game.state, game.content
-    out: list[dict] = []
+    out: list[dict] = errands.step_items(s, c)
     rows = status.get("bounties") or []
     for b in rows:
         if b.get("commission"):

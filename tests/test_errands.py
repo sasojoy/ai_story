@@ -45,8 +45,9 @@ def test_a_friend_sends_one_errand_letter_and_it_leads_the_week_card():
     assert row["id"] == e.id and row["figure"] == LUZHI and row["who"] == "盧植" and row["kind"] == e.kind
     assert row["target"]["location"] == e.target and row["target"]["name"] == c.locations[e.target].name and row["target"]["minutes"] >= 1
     assert row["deadline"].startswith("第 ") and row["status"] == "open"
-    assert errands.step_items(s, c) == [{"kind": "errand", "text": errands.STEP.format(
-        place=c.locations[e.target].name, who="盧植", label=errands.LABELS[e.kind]), "who": "盧植", "id": e.id}]
+    [step] = errands.step_items(s, c)
+    assert {k: step[k] for k in ("kind", "text", "who", "id")} == {"kind": "errand", "text": errands.STEP.format(
+        place=c.locations[e.target].name, who="盧植", label=errands.LABELS[e.kind]), "who": "盧植", "id": e.id}
 
 
 def test_one_errand_at_a_time_and_one_per_figure_per_week():
