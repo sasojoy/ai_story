@@ -12,6 +12,9 @@
 
 用法：.venv/Scripts/python.exe scripts/measure_difficulty.py --seeds 1 2 [--profile weekend] [--kinds solo team taught] [--rise on|off]
 （--rise off 是修前：江湖水漲關著；人物的難度照開季聲威，練功的走法不打人物）
+減法季（主機側計畫 Task 2-6；Config.jianfa，season21、week7 開著）：--jianfa on|off 強制開關（預設照設定）；--bump 0 0.5 1 在每一個停的等級
+把江湖水漲的事件加難乘這幾個倍數（Config.jianfa.event_bump_scale）各算一次事件檢定的平均與 ≥90% 的佔幾成（不必重練；關著的季倍數不起作用）。
+--tiers 也印事件檢定那兩欄（屬性五段讓點變少，決定 event_bump_scale 用的就是這兩欄）。
 """
 from __future__ import annotations
 
@@ -42,6 +45,7 @@ BIG = ("toumu", "shoumu", "fanjianglong")
 RUNS = 2000
 TIERS_ONLY = False
 TIER_RUNS = 300
+BUMPS: list[float] = []  # --bump：事件檢定另外照這幾個 event_bump_scale 算（減法季）
 
 
 def win_rate(power: float, difficulty: float, mods=None) -> float:
@@ -166,12 +170,30 @@ def tier_table(game, runs: int) -> dict[int, dict[str, float]]:
     return table
 
 
+def event_rates(game) -> dict:
+    """事件檢定（正式內容每一個檢定，照本人此刻的屬性）的平均與 ≥90% 的佔幾成；BUMPS 有寫時另照每一個 event_bump_scale 各算一次（鍵 bump）。"""
+    s, c, w = game.state, game.content, game.world
+
+    def rate() -> tuple[float, float]:
+        rates = [rules.check_chance(ch, s, c, w) for ch in checks(c)]
+        return statistics.mean(rates), sum(1 for r in rates if r >= 0.9) / len(rates)
+
+    out = {"now": rate(), "bump": {}}
+    keep = c.config.jianfa.event_bump_scale
+    for scale in BUMPS:
+        c.config.jianfa.event_bump_scale = scale
+        out["bump"][scale] = rate()
+    c.config.jianfa.event_bump_scale = keep
+    return out
+
+
 def snapshot(game) -> dict:
     s, c, w = game.state, game.content, game.world
     mods = mods_of(game)
     if TIERS_ONLY:
         return {"level": s.player.member.level, "mine": grind.powers(game)[0], "whole": grind.powers(game)[3],
-                "tiers": tier_table(game, TIER_RUNS)}
+                "tiers": tier_table(game, TIER_RUNS), "events": event_rates(game),
+                "stats": {k: team.check_value(s, c, w, PLAYER, k) for k in ("str", "agi", "con", "wis")}}
     figs = []
     for fid, fig in c.figures.items():
         squad = game._figure_squad(fid)  # 開季聲威（練功的走法不打人物）、江湖水漲開著就浮上來
@@ -187,6 +209,7 @@ def snapshot(game) -> dict:
     hard_duel = max(c.duels.values(), key=lambda b: b.difficulty).id
     rates = [rules.check_chance(ch, s, c, w) for ch in checks(c)]
     stats = {k: team.check_value(s, c, w, PLAYER, k) for k in ("str", "agi", "con", "wis")}
+    events = event_rates(game) if BUMPS else None
     mine, mates, troops, whole = grind.powers(game)
     return {
         "level": s.player.member.level, "mine": mine, "whole": whole,
@@ -195,7 +218,7 @@ def snapshot(game) -> dict:
         "big": big, "hard_train": (hard, c.squads[hard].difficulty, win_rate(team_power_vs(game, hard), c.squads[hard].difficulty, mods)),
         "duel": (hard_duel, duel_rate(game, hard_duel)),
         "ev_mean": statistics.mean(rates), "ev_90": sum(1 for r in rates if r >= 0.9) / len(rates),
-        "stats": stats,
+        "stats": stats, "events": events,
     }
 
 
@@ -203,6 +226,8 @@ def run(seed, args, kind):
     content = load_content(ROOT / "content", profile=None if args.profile == "none" else args.profile)
     content.config.chuangong.enabled = kind == "taught"
     content.config.rise.enabled = args.rise == "on"
+    if args.jianfa is not None:  # 減法季：強制開關（預設照設定：season21、week7 開）
+        content.config.jianfa.enabled = args.jianfa == "on"
     world = open_world(TMP / f"w{seed}{kind}.db")
     if not world.get_season().storyline:
         world.seed_first_season(content)
@@ -283,19 +308,27 @@ def main():
     ap.add_argument("--profile", default="weekend")
     ap.add_argument("--kinds", nargs="+", default=["solo", "team", "taught"])
     ap.add_argument("--rise", choices=("on", "off"), default="on", help="江湖水漲開著（修後）或關著（修前）")
-    ap.add_argument("--tiers", action="store_true", help="只量挑戰本人的大勝／險勝／僵持／落敗（照打起來的回合與戰法）")
+    ap.add_argument("--tiers", action="store_true", help="只量挑戰本人的大勝／險勝／僵持／落敗（照打起來的回合與戰法）與事件檢定")
+    ap.add_argument("--jianfa", choices=("on", "off"), default=None, help="減法季強制開或關（預設照設定）")
+    ap.add_argument("--bump", type=float, nargs="+", default=[], help="事件檢定另照這幾個 event_bump_scale 各算一次（減法季）")
     args = ap.parse_args()
     global TIERS_ONLY
     TIERS_ONLY = args.tiers
+    BUMPS[:] = args.bump
     for kind in args.kinds:
         for seed in args.seeds:
             snaps = run(seed, args, kind)
             print(f"== {kind} 種子 {seed}", flush=True)
             for lv, r in sorted(snaps.items()):
+                ev = r.get("events")
+                bumps = "" if not ev or not ev["bump"] else "｜事件加難乘 " + "・".join(
+                    f"{k:g}：平均 {pct(m)}・≥90% {pct(n)}" for k, (m, n) in ev["bump"].items())
                 if TIERS_ONLY:
                     cells = "｜".join(f"贏{k}次 " + "/".join(pct(t[n]) for n in TIER_NAMES) + ("" if on else "（不打回合）")
                                       for (k, on), t in r["tiers"].items())
-                    print(f"  {lv:>2} 級（實 {r['level']}）本人 {r['mine']:.0f} 全隊 {r['whole']:.0f}｜大勝/險勝/僵持/落敗 {cells}", flush=True)
+                    st = "/".join(f"{v:.0f}" for v in r["stats"].values())
+                    print(f"  {lv:>2} 級（實 {r['level']}）本人 {r['mine']:.0f} 全隊 {r['whole']:.0f}｜大勝/險勝/僵持/落敗 {cells}"
+                          f"｜事件 平均 {pct(ev['now'][0])}・≥90% {pct(ev['now'][1])}（臂身根悟 {st}）{bumps}", flush=True)
                     continue
                 lo, mid, hi = r["fig_low"], r["fig_mid"], r["fig_high"]
                 big = "・".join(f"{k} {pct(v)}" for k, v in r["big"].items())
@@ -306,7 +339,7 @@ def main():
                       f"（打贏兩次後 {pct(hi[3])}）"
                       f"（≥90% 的 {pct(r['fig_all_win'])}）｜大場面 {big}｜遊歷最難 {ht[0]}{ht[1]} {pct(ht[2])}"
                       f"｜頭目 {r['duel'][0]} {pct(r['duel'][1])}｜事件 平均 {pct(r['ev_mean'])}・≥90% {pct(r['ev_90'])}"
-                      f"（臂身根悟 {st}）", flush=True)
+                      f"（臂身根悟 {st}）{bumps}", flush=True)
 
 
 if __name__ == "__main__":

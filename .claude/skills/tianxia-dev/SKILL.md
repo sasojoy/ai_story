@@ -29,12 +29,13 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   - 用 `;`、`&` 串起來的、`cat > 檔 <<EOF` 寫檔的，也常被當成「太複雜」拒絕：寫檔用 Write 工具，指令一條一條下。
 - **在 scratchpad 解一份複本跑伺服器**（2026-10-20）：`git archive HEAD -o <scratchpad>/<名字>/src.tar`，再 `tar --force-local -x -f <tar> -C <目錄>`。不加 `--force-local` 時 Git Bash 的 tar 把 `C:/…` 的 `C:` 當成遠端主機（「Cannot connect to C: resolve failed」）。
 - **中文輸出**：Python 印中文前包 UTF-8（`PYTHONIOENCODING=utf-8` 或 `sys.stdout = io.TextIOWrapper(...)`），不然 cp950 會炸（連 `print` 一個 `−` 都會）。
-- **TIANXIA_DB**：每次跑測試、跑腳本都設到 repo 外一個新的暫存檔（`$env:TEMP\tx_xxx.db`）。舊的資料庫會讓測試假失敗。
+- **TIANXIA_DB**：每次跑測試、跑腳本都設到 repo 外一個新的暫存檔（`$env:TEMP\tx_xxx.db`）。舊的資料庫會讓測試假失敗。**每一輪都換新檔，不要沿用上一輪的**：模組範圍的 fixture 在 conftest 換成每個測試自己的檔之前就開世界（例 `tests/test_renown_web.py` 的 `base`，`Game.new` 沒給 world），讀到外面那個檔裡上一輪留下的季，4 條假紅、base 一樣紅，很像「別人留下的老毛病」（批 2 接線碰過，2026-10-26）。
 - **git stash 是所有工作樹共用的**，別的 session 也在用。
   - 不要裸 `git stash` / `pop`。
   - 要用就 `git stash push -m <獨一無二的標籤> -- <檔>`，`git stash list --format='%H %gd %gs'` 找到自己那一筆，`git stash apply <sha>`，再照標籤找 `stash@{n}` 去 drop。
   - 想證明測試「修之前是紅的」，最簡單的就是這樣把改動暫時收起來跑一次。
 - **用 `python -I` 跑腳本時 `PYTHONIOENCODING` 不生效**（`-I` 忽略所有 PYTHON 開頭的環境變數）：在腳本裡 `sys.stdout.reconfigure(encoding="utf-8")`。
+  **`PYTHONHASHSEED` 也一樣不生效**（2026-10-25 減法季批 2 的關著對照）：加了 `-I` 的兩份輸出差在存檔裡集合欄位的順序（`seen_events`、`visited`、`revealed`），不是程式的差。要固定雜湊就不加 `-I`，腳本開頭 `sys.path.insert(0, 根目錄)`、`os.chdir(根目錄)` 擋掉別份；同一份程式跑兩次先確認一模一樣。
 - **實機看畫面**：PM 會給你一個埠與 `<名字>.localhost`（別的子代理同時在跑伺服器，cookie 照主機名分開）；瀏覽器窗格是共用的，**每一個動作都帶自己的 tabId**，看完把視窗設回 desktop、關掉自己的分頁、`taskkill /T` 關伺服器。窗格在背後時截圖可能拍到動畫中途，數字用 `javascript_tool` 量。
 - **這台的 Ollama 沒有 `gemma4:12b`**（只有 26b 等舊模型，2026-10-20 查的）：真模型實測叫不動就照實回報；不要改拿 26b 代跑（17GB、keep_alive 12 小時會一直佔著顯卡）。
 - **開伺服器又不能打到 11434**：模型網址（`Config.ollama_url`）沒有環境變數可改，設定覆寫檔照派工指定的（例 `week7`）就不另寫一份。在 scratchpad 寫一支包裝：`sys.path.insert(0, 工作樹)`、`import server`、`server.CONTENT.config.ollama_url = "http://127.0.0.1:9"`、`server.main(["--port", 埠])`，用 `Start-Process` 跑它（`TIANXIA_DB`、`TIANXIA_PROFILE` 照設在 PowerShell 裡，子行程繼承）。角色在每次建 `Game` 時才照設定建 client，所以先改再 `main` 就全部指到那裡（FB-490～493 這一輪）。
@@ -56,6 +57,9 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   - 長的等待：PowerShell 的 `Start-Sleep` 超過一定秒數會被擋；在瀏覽器分頁裡 `javascript_tool` 跑 `await new Promise(r => setTimeout(r, 30000))` 再抓 `/api/main`，或用 Monitor。
 - **Bash 隔離會擋「`diff <(…) <(…)` 加 `git add` 串在一起」的指令**（too complex，2026-10-21）：拆成兩條，一條比檔、一條 git。
 - **PowerShell 把含雙引號的字串傳給外部程式時，雙引號被吃掉**（2026-10-21 變異腳本的「舊字串」引數是 `phase == "preparing"`，到 python 手上變 `phase == preparing`，斷言「舊字串在檔裡 0 處」、什麼都沒跑）：引數用單引號、而且挑一段不含雙引號的獨特片段（例：`season.ended or phase == ` 換成 `season.ended or phase != `）。變異腳本（自己在 scratchpad 寫一支，參數 `<工作樹> <相對檔> <測試檔> <舊> <新>`）：舊字串先斷言剛好一處（換 CRLF 檔先轉 `\n`）、`finally` 寫回原檔 bytes、跑完 `git status` 確認沒留下改壞的檔。
+- **「關著不變」的 base 自己 `git archive <commit>` 解一份，別借 scratchpad 裡別人開的 `fjbase` 之類的工作樹**（2026-10-26 修正輪）：那種工作樹的 HEAD 會被別的 session 挪走，名字還叫 base、內容已是更新的功能分支，關著三種季比出 90 行差（本週卡、三方卡多了雲端後來的欄位）。比之前先 `Get-Content <工作樹>/.git`＋`HEAD` 檔看它現在是哪一版，或乾脆自己解（`git archive f329d059 -o X.tar`、`tar --force-local -x -f X.tar -C 目錄`）。
+- **`Start-Process -ArgumentList` 的陣列裡有空白的引數要自己加引號**：`-m "slow or not slow"` 寫成 `'"slow or not slow"'`，不然 pytest 把 `or`、`not`、`slow` 當成檔名，印「no tests ran」、結束碼 5（2026-10-26）。
+- **一件事一個 commit、但共用同一個測試檔**：測試檔照 `# ── N. 標題` 的段落標記切（標頭＋第 1..k 段），引擎的 hunk 退回去用 `(最終, 修之前)` 字串對照；一支 `split_commits.py <k>` 把第 k 件放進索引、工作樹不動（本輪六件，scratchpad `jianfa-2-fix/split_commits.py`），提交完用 `git archive <commit>` 解出來各跑一次相關測試檔確認單獨一筆是綠的（`verify_each.py`）。
 - **解 `git archive` 的 tar 用 Python 的 `tarfile`**（2026-10-25 減法季批 3c 接線）：Git Bash 的 `tar --force-local` 碰到 PowerShell 給的反斜線路徑照樣「Cannot open」；`python -c "import tarfile,sys; tarfile.open(sys.argv[1]).extractall(sys.argv[2])" <tar> <目錄>` 一次就好。
 - **整份對照（資料庫 JSON）不要加 `-I`**（2026-10-25）：`-I` 連 `PYTHONHASHSEED` 也忽略，`WorldState.flags`／`revealed`／`fired_thresholds` 這些 set 每次寫出來順序不同，同一版跑兩次 `seasons` 那一列的雜湊就不一樣（長度一樣）。腳本自己 `sys.path.insert(0, root)`、`os.chdir(root)`，不加 `-I`、設 `PYTHONHASHSEED=0`，先跑同一版兩次確認零差異再比。
 - **不要寫帶中文路徑的 `.ps1`**：Write 工具寫出的 .ps1 沒有 BOM，Windows PowerShell 5.1 照 ANSI 讀，`C:/Ray/專案/…/python.exe` 變亂碼、每一行都 CommandNotFound（2026-10-20 背景跑對照表踩到，log 只看得到一串錯）。要串好幾個 python 程式，就寫一支 Python 調度腳本，用 `sys.executable` 叫子程式，再從 PowerShell 跑那一支。
@@ -176,6 +180,9 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   - 戰報欄位用加的（`record.xinde = (record.xinde or 0) + x`），不要覆蓋，前面可能已經加了別的（FB-450）。
 - 會不會先升級再轉換這類順序問題（例：滿級換心得要在 `add_exp` 之前判），寫一條「剛好升到頂的那一下」的測試。
 - 擲骰一律用自己的亂數（`random.Random("用途|季數|名號|戰報流水號")`），不碰 `Game.rng`：整季測試與量表的序列才不會位移。
+- **改一個會被 monkeypatch 的函式的參數**（2026-10-25 減法季批 2：`team.add_exp` 多一個 `source`）：`tests/test_seal.py` 用四個參數的 lambda 換掉它、`scripts/measure_exp_pace.py` 的 Ledger 包著它，`grant_team_exp` 一傳五個參數兩邊都炸（只在跑到那幾條時才紅）。新參數放在有預設值的尾巴、內部呼叫照舊用舊的個數（來源先在別處驗），改之前 grep `mock.patch.object(<模組>, "<函式>"` 與 scripts 裡 `<模組>.<函式> =`，包裝的函式一律收 `*args, **kw`。
+- **每季不同的數字要穿過一串不收 state 的函式**（減法季每點加倍：`team.neili_cap`、`_cap_of`、`neili_ceiling`、`member_neili`、`regen_neili`、`_apply_toll`）：加 `season=None`（`state.world`），沒給照舊；每一個呼叫端都要給，漏一個在新規則的季就是「狀態列寫的上限跟打起來的不一樣」。寫一條測試把狀態列、角色卡、決戰的池子、本人氣血幾個數比在一起（`tests/test_stat_milestones_engine.py::test_hp_cap_is_one_number_everywhere`），再拿新開關關著的整份畫面對照證明舊季一個位元組不變。
+- **`PlayerState` 加進 `QUIET_DEFAULTS` 的欄位**：`tests/test_gentry_ledgers.py::test_new_fields_add_no_keys_until_used` 現在照整個 `QUIET_DEFAULTS` 減（以前寫死只少兩個鍵），之後加欄位不必再改它；自己那一批另寫一條「預設不寫、有值寫得回來、舊存檔讀得進來」。
 - **動作中間要改全服狀態**（例：探索撿到碎片，`Game._seal_find`）：用一次 `self.world.mutate(...)`，寫入時整個重驗；只想補天下大事或江湖史就寫在 mutate 裡的 `shared.season`（傳聞與江湖史只增不減，動作結束的 `_save_season` 不會蓋掉）。**不要**在動作中間把 `self.state.world = self.world.get_season()` 換掉：這個動作前面對 `self.state.world` 的就地修改還沒存，會一起丟掉（決戰收場那幾處這樣換是因為前面沒有未存的修改）。
 - **新的全服登記欄位（`SealRegistry` 這類）在開季才寫**：寫的地方有三個進入點——`seed_first_season`（自動開季）、`open_season`、`next_season`；沒蓋章的季連登記都不要碰（`filled(...)` 也會改登記），舊的季才一個字不變。
 - 資料庫結構（第 5 版）不改，要改先問 PM。新狀態欄位加在 `PlayerState`／`WorldState`，舊存檔讀得進來。
@@ -195,6 +202,8 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 - **一件事拆成幾個 commit，檔案卻有幾件共用時，不要動工作樹**：寫一支 scratchpad 腳本，每個 commit 從「工作樹的最終版」把別件的幾處換回舊字（每處 `assert count == 1`）、`git hash-object -w --stdin --path` ＋ `git update-index --add --cacheinfo` 放進索引，commit 後工作樹照舊；提交前 `git write-tree` 取出索引的 tree，`git archive` 解到 scratchpad 跑那幾個測試檔，確認單獨一筆也是綠的（2026-10-25 批 4 修正輪，`engine.py`、`models.py`、導覽、`test_outcomes_answer.py` 都三件共用）。
 - **`branch_game(faction="guan")` 之類的測試會多一則 `annals.DEED`「投靠官軍。」**：斷言行狀的字要先篩「隨口應對」，不然 `== [..]` 多一筆。
 - **QA 的 `qcmp.py` 比的是行號**：上游少了幾十行（例：拿掉 93 則傳聞）後面的表（chronicle、seasons）整片位移、全算差；先看差的行數是不是剛好等於少掉的行數，再用 tag 與內容確認，不要把位移當成真的差異。
+- **有一個「另外擲的」對手（頭目）不要算進「這裡有沒有對手」**（減法季批 2 修正輪 FB-815，2026-10-26）：`_outing_plan` 把頭目也算 `has_foes`，只有頭目的地點遭遇那一格就留著、遭遇拍一定撞上他（長社官軍 400 趟 387 趟）。唯讀的計畫（比重、鈕上的小字、假人打分數）只看一般對手；頭目在做動作時另擲一次（亂數用「頭目」這個新用途，不動別的序列），擲中才把遭遇拍放進這一趟（`explore_one.draw(bounty_here=True)` 的「第一拍就是遭遇」，比重改回 `has_foes=True` 那一份）。測試兩條：一趟的機會約 5%（`_duel_start` 換成只記一筆、連出 400 趟、斷言落在一個帶子裡），以及把倍數拉到一定擲中（`renown.duel_chance` 回 20）斷言**每一趟**都有頭目——只有後一條抓得到「擲中了卻沒有遭遇拍」的變異。
+- **新規則改了一句話，用正式內容 week7／season21 斷言舊句子的舊測試會紅**（同批 `test_core_loop_fb.py::test_fb250`）：`test_for` 挑得到、grep 舊常數名（`RANGER_LINE_PRECISE`）也找得到；在那一條測試開頭叫 `jianfa_kit.classic_explore(game.content)` 鎖舊句子，新句子的斷言放在新規則自己的測試檔，不改舊斷言。
 - **兩局測試各有一份內容**：`conquest_kit.conquest_game()`（同 `test_territory._game`）每一局各載一份 `real_content` 的複本，同一個資料庫開兩局時，在測試裡往內容加東西（例：借一份戰鬥範本）要兩局都加，不然第二局找不到、畫面靜靜地沒有那一場。
 
 ## 量表怎麼讀
@@ -206,6 +215,9 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
   - 看結果要連它印的每天威力一起看。要比練功點，另外照威力 60／90／120／160 算「對手經驗 × 勝率」。
   - 回報時兩種讀法都寫，讓 PM 定。
 - 一次跑很多組要很久（21 天 × 四方約 25 分鐘），背景跑。跑的時候不要改它會讀的內容檔（每一組重新載內容）。
+- **量表跑之前擋模型**：scratchpad 寫一支包裝（把 `socket.socket.connect`／`socket.create_connection` 對 11434 的連線改成拒絕、`OllamaClient.from_config` 換成回 None，再 `runpy.run_path` 那支量表），量表的 `print` 包在 TextIOWrapper 裡，導到檔案時跑完才看得到（減法季批 2 的 `run_blocked.py`）。
+- **新規則多了一種「要選」的狀態，量表的迴圈要跟著了結**（減法季批 2：出門一趟的感悟拍會進有所感的「畫一筆」）：`measure_exp_pace._settle` 以前按選單第一顆，碰到 `sensing.DRAW` 只回「在畫布上畫」、迴圈空轉到上限，一天只出門兩趟；改成照整季機器人 `bot.sense_pick`／`bot.sense_draw`。先跑一天看一眼數字合不合理再背景跑整季。
+- `measure_difficulty` 的練功走法在減法季可能卡死：銀兩花光、內傷疊到氣血不到一半就不出門、付不起醫館，整季停在第 6 級（2026-10-25 season21 solo 種子 1，季在第 17.7 天收了，一個停點都沒量到）。照實報那一組，不要為了好看換種子不說。
 - **量貢獻別用 `measure_exp_pace` 的「最認真」**（2026-10-25 減法季批 3c）：它每一下挑經驗最多的（出陣守、練功），領地爭奪的季守推不動就不記，三天量出來是 0；只挑「攻」又常常打不贏（估的勝率偏高）。要量「認真玩幾天累積多少貢獻」改用假人的打分：建角色、`p.bot = BotProfile(personality="積極", …)`、每次同步之後一直叫 `bot_policy.take_turn` 到它回空的，貢獻照每一下前後的 `contrib` 差、記到那一下江湖紀錄的標題（腳本在當時 scratchpad 的 `jianfa-3c-wire/measure_contrib2.py`）。
 
 ## 回報 PM

@@ -116,7 +116,7 @@ def seize(
             continue
         art = team.resolve_art(art_id, content, world)
         # 寶物「cultivate」（凝神香囊、檀木念珠）以前乘修練升品，衝品拿掉之後改乘絕學這一步（契機與服丹都乘）；頒詔同一個位置（peak_scale）
-        odds = rule.chance * ratio / rule.par_ratio * team.stat_factor(content, p.stats.get("wis", team.BASE_STAT))
+        odds = rule.chance * ratio / rule.par_ratio * team.stat_factor(content, p.stats.get("wis", team.BASE_STAT), state.world)
         odds *= peak_scale(state, content)
         odds += silver.take_mentor(state, content)  # 名師指點（銀兩出口）：衝品拿掉之後加在絕學這一步，擲一次用掉
         if rng.random() * 100 < max(1.0, min(rule.max_chance, odds)):
@@ -129,7 +129,7 @@ def force_odds(state: GameState, content: Content, world: WorldStateStore, art_i
     """不等契機，服一枚破境丹關起門來強行衝關的機會（%）：legend_item_bonus × 悟性，夾在 1～breakthrough.max_chance；
     再加上這一門之前沒衝開的次數 × legend_fail_step（Joy 2026-10-22「同一門武學成功率應該逐次上升」），這份可以越過上限、到 legend_fail_cap。"""
     cfg = content.config
-    odds = cfg.legend_item_bonus * team.stat_factor(content, state.player.stats.get("wis", team.BASE_STAT))
+    odds = cfg.legend_item_bonus * team.stat_factor(content, state.player.stats.get("wis", team.BASE_STAT), state.world)
     odds *= peak_scale(state, content)  # 衝絕學的寶物與頒詔，同 seize
     odds += silver.mentor_bonus(state, content)  # 名師指點（銀兩出口）：在上限之內加，服丹那一次用掉（_force）
     odds = min(cfg.breakthrough.max_chance, odds)

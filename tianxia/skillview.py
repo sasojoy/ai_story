@@ -61,10 +61,81 @@ def fifth_ring(content: Content, art: MartialArt, level: int | None) -> dict | N
         return {"on": True, "name": move.name if move is not None else art.name, "note": ""}
     return {"on": False, "name": "", "note": RIPE_NOTE if (level or 0) >= MAX_LEVEL else "破境"}
 
-def stat_uses(content: Content) -> list[tuple[str, str]]:
-    """五屬性的（名字, 用途），順序同 team.COMBAT_STATS——也就是狀態列 attrs、＋鈕的順序。"""
+def stat_uses(content: Content, state: GameState | None = None) -> list[tuple[str, str]]:
+    """五屬性的（名字, 用途），順序同 team.COMBAT_STATS——也就是狀態列 attrs、＋鈕的順序。
+    減法季屬性五段開著（state 給了、這一季 Config.jianfa 的 stat_milestones）：用途換成「現在給你什麼」的數字（stat_lines，設計 4.5「看得見」）；
+    關著照舊只寫用途。"""
     names = content.config.stat_names
+    if state is not None and _milestones(state, content):
+        lines = stat_lines(state, content)
+        return [(names.get(key, key), lines[key]) for key in team.COMBAT_STATS]
     return [(names.get(key, key), STAT_USES[key]) for key in team.COMBAT_STATS]
+
+
+def _milestones(state: GameState, content: Content) -> bool:
+    from .rules import jianfa  # noqa: PLC0415  rules → team → …
+
+    return jianfa(content, state.world, "stat_milestones")
+
+
+def _signed_pct(ratio: float) -> str:
+    """+12%、-6%（整數就不寫小數）。"""
+    return f"{ratio:+.0%}" if round(ratio * 100, 6).is_integer() else f"{ratio:+.1%}"
+
+
+# 減法季屬性五段（設計 4.5「看得見」）：角色卡、＋鈕底下那一行寫「現在給你什麼」；配點那一刻寫加了這一點多了什麼。字都待 joy 潤
+STAT_NOW = {
+    "str": "武學威力 {bonus}",
+    "agi": "少損氣血 {saved}・閃避 {dodge}",
+    "con": "內功威力 {bonus}・氣血上限 {hp}・少受內傷 {saved}",
+    "wis": "修練與衝關 ×{factor}・感悟 {sense}",
+    "lore": "持有 {slots} 格",
+}
+STAT_STEP = {  # 多配一點多了什麼（Game.allocate_stat 那一句冒號後面）
+    "str": "武學威力 {bonus}",
+    "agi": "閃避 {dodge_up}、少損氣血 {bonus}",
+    "con": "內功威力 {bonus}、氣血上限 {hp}",
+    "wis": "修練與衝關 {bonus}、感悟 {sense}",
+    "lore": "持有 {slots} 格",
+}
+
+
+def _stat_numbers(state: GameState, content: Content, value: float, base: float) -> dict[str, str]:
+    """一項屬性從 base 到 value 給的那幾個數字（每一點照這一季，team.per_point）：威力加成（bonus）、少損氣血與少受內傷（saved，
+    照到 value 為止的總量）、閃避（dodge 總量、dodge_up 這一段）、氣血上限（hp）、修練與衝關的倍數（factor）、感悟（sense）、持有格（slots）。"""
+    season = state.world
+    delta = value - base
+    rate = team.per_point(content, season, "bonus_per_point")
+    dodge = team.per_point(content, season, "dodge_per_point")
+    per_lore = team.per_point(content, season, "holding_per_lore_point")
+    level = state.player.member.level
+    hp = team.neili_cap(content, level, value, season=season) - team.neili_cap(content, level, base, season=season)
+    slots = (max(0, int(value) - team.BASE_STAT) - max(0, int(base) - team.BASE_STAT)) * per_lore
+    return {
+        "bonus": _signed_pct(rate * delta),
+        "saved": f"{max(0.0, rate * (value - team.BASE_STAT)):.0%}",
+        "dodge": f"{max(0.0, dodge * (value - team.BASE_STAT)):.0%}",
+        "dodge_up": _signed_pct(dodge * delta),
+        "hp": f"{hp:+.0f}",
+        "factor": f"{team.stat_factor(content, value, season):.2f}",
+        "sense": f"{team.per_point(content, season, 'sense_rate_per_wis') * delta:+.0f}%",
+        "slots": f"{slots:+.0f}",
+    }
+
+
+def stat_lines(state: GameState, content: Content) -> dict[str, str]:
+    """五項各寫「現在給你什麼」（減法季屬性五段，設計 4.5）：從基準 5 到現在的值，照這一季每一點的效果（team.per_point）。"""
+    stats = state.player.stats
+    out = {}
+    for key in team.COMBAT_STATS:
+        value = float(stats.get(key, team.BASE_STAT))
+        out[key] = STAT_NOW[key].format(**_stat_numbers(state, content, value, team.BASE_STAT))
+    return out
+
+
+def stat_step(state: GameState, content: Content, key: str, before: float) -> str:
+    """多配一點（before → before＋1）多了什麼（Game.allocate_stat 那一句冒號後面；減法季屬性五段）。"""
+    return STAT_STEP[key].format(**_stat_numbers(state, content, before + 1, before))
 
 
 def rules_line(content: Content) -> str:
@@ -798,7 +869,7 @@ def member_card(state: GameState, content: Content, world: WorldStateStore, key:
         member = world.get_companion(key)
         name = content.characters[key].name
     own = state if key == PLAYER else None  # 玩家那一列顯示自己修練到的品質；同伴照全服登記的
-    now, cap = team.member_neili(content, member, team.con_of(state, content, world, key))  # 本人與同伴各照自己的根骨
+    now, cap = team.member_neili(content, member, team.con_of(state, content, world, key), season=state.world)  # 本人與同伴各照自己的根骨
     lines = [
         f"### {name}",
         f"第 {member.level} 級　氣血 {now:.0f}/{cap:.0f}",
@@ -891,7 +962,7 @@ def boost_line(state: GameState, content: Content, world: WorldStateStore) -> st
     neigong = team.player_art(state, content, world, member.neigong_id)
     parts = []
     for art, word, key, stat_name in ((wugong, "武學", "str", "臂力"), (neigong, "內功", "con", "根骨")):
-        bonus = team.stat_bonus(content, stats.get(key, team.BASE_STAT))
+        bonus = team.stat_bonus(content, stats.get(key, team.BASE_STAT), state.world)
         if art is not None and bonus:
             parts.append(f"{word} {_pct(bonus)}（{stat_name}）")
     pair = team.pairing(content, wugong, neigong)

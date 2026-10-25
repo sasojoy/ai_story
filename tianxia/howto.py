@@ -14,6 +14,7 @@ from collections.abc import Sequence
 
 from . import allied as allied_rules
 from . import calendar, conquest, economy, equipment, explore_modes, figures, four_tiers, mall, precise, renown, rules, seal, sortie, territory, timetable, training
+from . import explore_one  # 減法季探索一顆（批 2）：行動列底下那一行用同一份兩個字的叫法
 from .models import Content
 from .rules import STANCE_NAMES  # 態勢卡上三方的叫法（官軍、黃巾、豪強）：說明跟卡上同一個叫法
 from .state import GameState, WorldState
@@ -57,6 +58,30 @@ TERRAIN_HOWTO = ("- 各地的氣象不同：身上的武學、內功跟此地最
 EXPLORE_FIGHT = "（這裡可能撞上怪，打贏是經驗的大宗）"
 EXPLORE_CALM = "（這裡不會撞上怪）"
 EXPLORE_NO_SENSE = "（這裡悟不出什麼）"
+
+
+# 減法季探索一顆（整合設計 4.1，批 2）：行動列底下探索那一行。照擲骰用的那一份比重（Game._outing_weights）排，不寫百分比；都待 joy 潤
+OUTING_WORDS = explore_one.BEAT_WORDS
+OUTING_HEAD = "出門一趟走{beats}拍"
+OUTING_TAIL = "；要選的事件、感悟一趟最多一回，放在最後"
+OUTING_FOE = {"town": "；城裡遇敵是街上的地痞，給得少", "spar": "；自家營寨遇敵是跟同袍比劃，不掉東西",
+              "bounty": "；接了這裡的討伐，至少一拍撞上懸賞那一路"}
+
+
+def outing_line(weights: dict[str, float], beats: int, foe: str | None = None) -> str:
+    """探索一顆開著時行動列底下探索那一行（Game.action_notes）：weights 是這一處每一拍的比重（做不了的已經是 0）；比重最大的寫「多半」、
+    其他照大小寫「也可能」，並列最大一起寫「可能」，只剩一類寫「會」（同 explore_line 的寫法）。foe：城裡的地痞（"town"）、自家營寨的比劃
+    （"spar"）、接了這裡的討伐（"bounty"）各補一句，其餘 None。"""
+    ranked = sorted(((k, w) for k, w in weights.items() if w > 0), key=lambda pair: -pair[1])
+    words = [OUTING_WORDS[k] for k, _ in ranked]
+    if len(words) == 1:
+        body = f"，會{words[0]}"
+    elif ranked and ranked[0][1] > ranked[1][1]:
+        body = f"，多半{words[0]}，也可能{'、'.join(words[1:])}"
+    else:
+        body = f"，可能{'、'.join(words)}" if words else ""
+    count = "一兩三四五六".__getitem__(beats - 1) if 1 <= beats <= 6 else str(beats)
+    return OUTING_HEAD.format(beats=count) + body + OUTING_FOE.get(foe or "", "") + OUTING_TAIL
 
 
 def explore_modes_line(fight: bool, sense: bool) -> str:
@@ -397,8 +422,10 @@ def explore_lines(content: Content, season: WorldState | None = None) -> list[st
     一類一顆在這一季生效時（precise.on）寫另一版：找素材一定給、不打仗，練功另一條（FB-422）；舊季一個字都不變。"""
     cfg = content.config
     names = explore_modes.NAMES
+    if rules.jianfa(content, season, "explore_one"):  # 減法季探索一顆（批 2）：只剩一顆、出門一趟；關著下面一個字不變
+        return outing_lines(content, season) + jianfa_growth_lines(content, season)
     if precise.on(content, season):
-        return precise_explore_lines(content, season) + gather_branch_lines(content, season)
+        return precise_explore_lines(content, season) + gather_branch_lines(content, season) + jianfa_growth_lines(content, season)
     legend = f"三種都有機會撿到{cfg.legend_item_name}。" if cfg.explore_legend_chance > 0 else ""
     econ = cfg.economy  # 素材與經濟設計第七節：一階從一定給改成七成
     first = f"（一階約 {econ.gather_first_chance * 10:g} 成撿得到）" if econ.gather_cut else ""
@@ -407,6 +434,42 @@ def explore_lines(content: Content, season: WorldState | None = None) -> list[st
         f"城外約 {cfg.explore_modes.encounter_chance * 10:g} 成會撞上怪，打贏是經驗的大宗；{names['seek']}：碰上這一帶的事，偶有奇遇；"
         f"{names['sense']}：只在悟得到意境的地方。{legend}",
     ]
+
+
+def _pct(share: float) -> str:
+    return f"{share * 10:g} 成"
+
+
+def outing_lines(content: Content, season: WorldState | None = None) -> list[str]:
+    """減法季探索一顆（整合設計 4.1，批 2；待 joy 潤）的玩法說明：一顆、出門一趟幾拍、地點決定多半給什麼、地痞與比劃、懸賞。數字讀 Config.jianfa。"""
+    jf = content.config.jianfa
+    tables = "，".join(explore_one.HINTS.get(t.kind, "") for t in jf.explore_tables)
+    legend = f"偶爾撿到{content.config.legend_item_name}。" if content.config.explore_legend_chance > 0 else ""
+    return [
+        f"- **探索**（體力 {jf.explore_stamina}）：只有一顆，按一下是出門一趟，走{'一兩三四五六'[jf.beats - 1] if 1 <= jf.beats <= 6 else jf.beats}拍，"
+        f"每一拍照這個地方抽遇事、遇敵、得料或有悟——地點決定多半給什麼（{tables}），運氣決定這一趟給什麼。"
+        "得料、遇敵當場算完；遇事、有悟要你自己選，一趟最多一回、放在最後。回來是一段話，最後一行寫這一趟的得失。"
+        f"危險的地方多遇敵、少遇事；城裡沒有對手時遇上的是街上的地痞，給得少；自家營寨遇敵是跟同袍比劃，不受傷也不掉東西。"
+        f"接了這裡的討伐懸賞，至少一拍撞上懸賞那一路。{legend}",
+    ]
+
+
+def jianfa_growth_lines(content: Content, season: WorldState | None = None) -> list[str]:
+    """減法季三道閘與屬性五段（整合設計 4.2、4.5，批 2；待 joy 潤）的玩法說明；各自的子開關關著就不寫（關著的季一個字都不多）。"""
+    jf = content.config.jianfa
+    out: list[str] = []
+    if rules.jianfa(content, season, "drill_gates"):
+        out.append(
+            f"- **練得多了收穫漸少**：出門遇敵，一天前 {jf.drill_full_per_day} 場收穫全額，之後一場比一場少（最少剩 {_pct(jf.drill_floor)}，"
+            f"天亮 00:00 重算）；對手比你低一截給一半、低兩截只給一成，要找配得上的對手。"
+            f"第 {jf.drill_level_cap} 級以後只有打出來的經驗（遇敵、頭目、出陣、切磋、截殺、擂台、決戰、挑戰人物）算數，其餘的經驗化作心得。")
+    if rules.jianfa(content, season, "stat_milestones"):
+        levels = "、".join(str(lv) for lv in jf.milestone_levels)
+        out.append(
+            f"- **境界與配點**：升級不再給屬性點；到第 {levels} 級各是一次境界，給 {jf.stat_points_per_milestone} 點自己配。"
+            f"點少了、每一點重了：臂力、根骨一點多 {jf.stat_rates.bonus_per_point * 100:g}% 的威力，身法一點多 {jf.stat_rates.dodge_per_point * 100:g}% 的閃避，"
+            f"博聞一點多 {jf.stat_rates.holding_per_lore_point} 格持有。配滿一項是一條路，配下去那一刻會寫多了什麼。")
+    return out
 
 
 def precise_explore_lines(content: Content, season: WorldState | None = None) -> list[str]:

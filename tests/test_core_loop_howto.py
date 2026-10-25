@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from conftest import classic_rules, no_conquest, real_content, third_party_gentry
+from jianfa_kit import classic_explore
 from tianxia import howto
 
 
@@ -14,6 +15,7 @@ def _page(content):
 
 def test_the_howto_page_explains_the_new_loop():
     c = no_conquest(real_content("week7"))  # 地盤拔河那一版；領地爭奪的「地盤」一節在 tests/test_conquest_progress.py
+    classic_explore(c)  # 探索三選一那一段（減法季探索一顆開著時寫出門一趟，tests/test_explore_one.py）
     page = _page(c)
     assert "**出陣**" in page and "每天 5 次" in page and "**遊歷**" not in page
     assert "找素材" in page and "靜心感悟" in page and "照地點三選一：悟意境" not in page

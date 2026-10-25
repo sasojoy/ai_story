@@ -12,6 +12,7 @@ import random
 
 import pytest
 from conftest import real_content
+from jianfa_kit import no_jianfa
 
 from tianxia import explore_modes, howto
 from tianxia import duel as duel_rules
@@ -27,7 +28,7 @@ PRACTICE = "explore:practice"
 
 
 def _game(at, faction, profile="week7"):
-    c = real_content(profile)
+    c = no_jianfa(real_content(profile))  # 減法季探索一顆開著時沒有練功鈕（頭目改掛在出門一趟的遭遇拍）：這一份測的是舊的練功鈕
     store = open_world()
     store.seed_first_season(c)
     store.open_season(c, NOW)
