@@ -75,13 +75,13 @@ def _note(state: GameState, fid: str, week: int) -> StanceNote:
 
 
 def heard_today(state: GameState, content: Content, fid: str) -> str | None:
-    """你今天跟他記過的那一筆（人物頁的 my_stance_today）；沒記過、上一週的、關著是 None。"""
+    """你今天跟他說話記的那一筆（人物頁的 my_stance_today；辦成託付的心意 +1 不算，FB-825）；沒記過、上一週的、關著是 None。"""
     note = state.player.stance_notes.get(fid)
     if not on(content, state.world) or note is None or note.week != week_of(content, state.world):
         return None
-    if note.day != rules.game_day(content, state.world) or not note.said:
+    if note.day != rules.game_day(content, state.world):
         return None
-    return note.said[-1]
+    return note.spoke
 
 
 def record(state: GameState, content: Content, fid: str, sid: str) -> bool:
@@ -93,7 +93,7 @@ def record(state: GameState, content: Content, fid: str, sid: str) -> bool:
     book = w.stance_counts.setdefault(fid, {})
     book[sid] = book.get(sid, 0) + 1
     note = _note(state, fid, week)
-    note.day = rules.game_day(content, w)
+    note.day, note.spoke = rules.game_day(content, w), sid
     if sid not in note.said:
         note.said.append(sid)
     check(state, content, fid)
@@ -101,7 +101,8 @@ def record(state: GameState, content: Content, fid: str, sid: str) -> bool:
 
 
 def bump(state: GameState, content: Content, fid: str, sid: str | None) -> None:
-    """替他的這個心意加一筆，不佔你一天一筆的額度（託付辦成了的「心意 +1」，整合設計 5.5）。"""
+    """替他的這個心意加一筆，不佔你一天一筆的額度（託付辦成了的「心意 +1」，整合設計 5.5）；不改「你今天勸的」（FB-825），
+    行狀照舊認（記進 said）。"""
     w = state.world
     if sid is None or not on(content, w) or find(content, fid, sid) is None:
         return
