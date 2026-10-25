@@ -130,6 +130,16 @@ def pick_event(
     return rng.choices(fresh, weights=weights)[0]
 
 
+def pick_from(state: GameState, content: Content, candidates: list[Event], action: str, rng: random.Random) -> Event | None:
+    """在給定的幾則裡照防重複輪替、照權重抽一則（同 pick_event 的寫法，只是候選由呼叫端先篩：減法季探索一顆的野類地點先在「旅人」那幾則
+    裡抽，Game._outing_event）。不改狀態；一則都沒有是 None。"""
+    fresh = _fresh_among(state, candidates, action)
+    if not fresh:
+        return None
+    multiplier = content.config.qiyu_weight_multiplier
+    return rng.choices(fresh, weights=[event.weight * (multiplier if event.qiyu else 1.0) for event in fresh])[0]
+
+
 def note_round(state: GameState, content: Content, event: Event, action: str) -> None:
     """事件真的端到玩家眼前時（只有 Game._present 呼叫）記進這一輪。抽中的那一則已經在它那一池的這一輪裡，
     表示 pick_event 是在「全都看過了」之後抽的：先把這裡、這個行動所有合格事件所屬的池子清空、重開一輪，再記

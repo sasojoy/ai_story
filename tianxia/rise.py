@@ -41,12 +41,16 @@ def duel(content: Content, base: float, power: float, meets: int = 0) -> float:
     return max(base, power * rule.duel_scale * (1 + rule.duel_per_meet * max(0, meets)))
 
 
-def event_bump(state: GameState, content: Content) -> int:
-    """事件檢定加深幾點：本人第 event_from_level 級起每 event_per_levels 級 +1，最多 event_cap。"""
+def event_bump(state: GameState, content: Content) -> float:
+    """事件檢定加深幾點：本人第 event_from_level 級起每 event_per_levels 級 +1，最多 event_cap。
+    減法季屬性五段開著（Config.jianfa 的 stat_milestones：點少了，事件檢定本來就更常失手，設計 4.5「連帶」）再乘 event_bump_scale。"""
     if not on(content):
         return 0
     rule = content.config.rise
     level = state.player.member.level
     if level < rule.event_from_level:
         return 0
-    return min(rule.event_cap, 1 + (level - rule.event_from_level) // rule.event_per_levels)
+    bump = min(rule.event_cap, 1 + (level - rule.event_from_level) // rule.event_per_levels)
+    from .rules import jianfa  # noqa: PLC0415  rules 反過來 import 這裡
+
+    return bump * content.config.jianfa.event_bump_scale if jianfa(content, state.world, "stat_milestones") else bump

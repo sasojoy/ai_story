@@ -2,8 +2,10 @@
 對手要配得上你（`outlevel_factor`）、45 級以後只認打出來的經驗（`exp_source`、`capped_exp`、`room_to_cap`）；屬性五段加點
 （`reached`、`milestone_points`）與假人照路配點（`stat_path`、`plan_points`）。
 
-cfg 是 `jianfa_numbers.JianfaNumbers`（批 0 之後是 `Config.jianfa`）。不 import engine、不改狀態：開關、`PlayerState.fights_today`、
-十一處給經驗的地方標來源、`team.add_exp` 收來源、`team.points_between` 走里程碑、`bot.allocate_points` 照路配，都在引擎接線（批 0 之後）。
+cfg 是 `Config.jianfa`（`models.JianfaRules`，繼承 `jianfa_numbers.JianfaNumbers`；純規則的測試直接建後者）。不 import engine、不改狀態。
+接線（批 2）：遭遇拍乘前兩道閘在 `Game._fight_gate`（`PlayerState.fights_today`／`fight_day`）；十一處給經驗的地方標來源、
+`team.player_exp`／`maxed_xinde`／`grant_team_exp`／`add_exp` 收來源；升級給點走 `team.level_points`（開著時照里程碑）；
+`bot.allocate_points` 照路配。開關一律問 `rules.jianfa(content, world, "drill_gates"|"stat_milestones")`。
 """
 
 from __future__ import annotations
@@ -123,6 +125,15 @@ STATS = ("str", "agi", "con", "wis", "lore")  # 五條路：力、巧、韌、�
 def reached(cfg: JianfaNumbers, before: int, after: int) -> list[int]:
     """從第 before 級升到第 after 級，跨過哪幾個境界（milestone_levels）。接線時最後一個記進 PlayerState.milestone_due（境界卡）。"""
     return [lv for lv in cfg.milestone_levels if before < lv <= after]
+
+
+# 五個境界的名字（境界卡 main.milestone 的 title；設計 4.5 的例子是第 20 級「筋骨大成」）：佔位，待 joy 潤。milestone_levels 改了多出來的等級寫「第 N 級」
+MILESTONE_TITLES = {10: "初窺門徑", 20: "筋骨大成", 30: "登堂入室", 40: "爐火純青", 50: "返璞歸真"}
+
+
+def milestone_title(level: int) -> str:
+    """境界卡上那一級的名字（MILESTONE_TITLES；沒寫的寫「第 N 級」）。"""
+    return MILESTONE_TITLES.get(level, f"第 {level} 級")
 
 
 def milestone_points(cfg: JianfaNumbers, before: int, after: int) -> int:
