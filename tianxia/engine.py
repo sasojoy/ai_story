@@ -18,6 +18,7 @@ from pydantic import BaseModel
 
 from . import arts as arts_mod
 from . import ascend  # 破境卡（招式與絕學稿案第三節）
+from . import narration  # 事件旁白每週改寫（減法季批 10）
 from . import (
     allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, checkin, chuangong, clinic, companion_agent, conquest, conquest_day, create, cultivation, defection, divine, economy, encounter, enlist, equipment, event_llm, explore_modes, escorts,
     fight_llm, figure_aid, figure_life, figures, foreshadow, four_tiers, gather_llm, generals, forge_secrets, front_lines, fusion, gender, howto, insight_fx, insights, invites, journal, letters, library, mapdata, martial_arts, feasts,
@@ -432,6 +433,8 @@ class Game:
         self._last_wear: list[str] = []  # 最近一場戰報歸檔時兵器鈍了、防具破了的提醒（_file_battle，兵器先、防具後）；沒有草稿的呼叫端（切磋、截殺的另一邊）自己接到訊息裡
         # 這一個動作動到（或要通知）的別人的名號（玩家卡上的互動、邀請）：伺服器做完動作叫他們開著的分頁也刷新（server._tell_tabs）
         self.touched: set[str] = set()
+        # 事件旁白每週改寫（減法季批 10，tianxia/narration.py）：伺服器塞進來的查詢函式；沒有（假人程式、測試）一律照內容原文
+        self.narration: narration.Lookup | None = None
         # 翻地與爭搶（領地爭奪）：這一下出陣撞上對面、打贏了（_push_progress 乘 clash_scale）；這一下出陣記過一筆了沒（_sortie 補記 0 的那一筆）
         self._clash_won = False
         self._sortie_marked = False
@@ -8609,10 +8612,14 @@ class Game:
         self.state.pending_event = event.id
         self.state.player.seen_events.add(event.id)
         head = f"✦ 奇遇：{event.title}" if event.qiyu else f"【{event.title}】"
-        text = fill_marks(event.text, self.state)
+        text = fill_marks(self._event_text(event), self.state)
         self._outcome(journal.event_marker(event.title, event.qiyu), head)
         self._hide(text)
         return [head, text] + foreshadow.hear_from_event(self.state, self.content, event.id, self.world)  # 片段事件（計畫 T7）
+
+    def _event_text(self, event: Event) -> str:
+        """事件卡上的旁白（還沒套 fill_marks）：減法季這一週改寫好了就用改寫的（narration.text_of），否則照內容原文。"""
+        return narration.text_of(self.content, self.state.world, event, self.state.player.season_number, self.narration)
 
     def _squad_encounter(self, squad_id: str, wild: bool = False, as_sortie: bool = False) -> list[str]:
         """遭遇一支敵方隊伍：單次判定，勝得對手獎勵，落敗失落一成銀兩；自己陣營的隊伍改成操練（見 _drill）。
@@ -15102,7 +15109,7 @@ class Game:
             return f"## {s.world.ending_title}\n\n{s.world.ending_text}"
         if s.pending_event:
             event = c.events[s.pending_event]
-            return f"**{event.title}**\n\n{fill_marks(event.text, s)}"
+            return f"**{event.title}**\n\n{fill_marks(self._event_text(event), s)}"
         if s.player.duel is not None:
             return self._duel_scene()
         if s.player.arena is not None:
