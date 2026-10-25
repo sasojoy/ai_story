@@ -74,3 +74,65 @@ def test_camp_sparring_share_stacks_with_the_fatigue_gate():
     assert p.member.exp - exp0 == drill_share(40, 0.3 * 0.8)
 
 
+# ── 2. 只有頭目的地點：頭目照 5% × 名聲倍數 ──
+
+
+def _trips(game, n: int):
+    """在所在地連出 n 趟（頭目戰換成只記一筆，不真的開打），回（撞上頭目的趟數, 沒撞上的那幾趟的江湖紀錄標記）。"""
+    met: list[str] = []
+    tags: list[str] = []
+    game._duel_start = lambda boss: met.append(boss.id) or []
+    for _ in range(n):
+        _reset(game)
+        before = len(met)
+        game.choose("act:explore")
+        if len(met) == before:
+            tags.append(game.state.journal[0].tag)
+    return len(met), tags
+
+
+def test_an_official_newbie_at_changshe_meets_the_boss_about_five_percent_of_trips():
+    game = ready(jianfa_game(), side="guan", loc="changshe")  # 長社對官軍沒有別的隊伍，只有段鐵頭
+    plan = game.outing_plan()
+    assert plan.foe is None and plan.boss is not None
+    assert plan.weights[explore_one.ENCOUNTER] == 0  # 沒擲中頭目就當這裡沒有對手：遭遇那一格分給其餘三類
+    battles = len(game.state.battles)
+    hits, tags = _trips(game, 400)
+    assert 8 <= hits <= 36, hits  # 5% 是 20，以前一趟三拍至少一拍遇敵的機會約九成
+    assert len(game.state.battles) == battles  # 沒撞上頭目的趟：沒有仗
+    assert tags and not any("遇敵" in tag for tag in tags)  # 沒撞上時不出現遇敵拍
+
+
+def test_the_boss_chance_follows_the_renown_multiplier():
+    plain = ready(jianfa_game(), side="guan", loc="changshe")
+    famous = ready(jianfa_game(), side="guan", loc="changshe")
+    with mock.patch.object(renown, "duel_chance", return_value=3.0):
+        more, _ = _trips(famous, 400)
+    less, _ = _trips(plain, 400)
+    assert more > less * 2 and 25 <= more <= 100, (more, less)  # 15% 約 60
+
+
+def test_a_hit_on_the_boss_roll_always_puts_the_boss_in_the_trip():
+    """擲中的那一趟遭遇拍一定有（第一拍就是頭目擋路），不是看三拍抽不抽得到遭遇——一趟的機會才是 5% × 倍數。"""
+    game = ready(jianfa_game(), side="guan", loc="changshe")
+    with mock.patch.object(renown, "duel_chance", return_value=20.0):  # 5% × 20 = 一定擲中
+        hits, tags = _trips(game, 150)
+    assert hits == 150 and not tags
+
+
+def test_a_place_with_foes_still_rolls_the_boss_on_the_encounter_beat():
+    """有一般對手的地點照舊：遭遇拍擲 5% × 倍數，沒中就打那一路（只有頭目的地點才改成一趟擲一次）。"""
+    game = ready(jianfa_game(), side="huang", loc="changshe")  # 黃巾在長社有官軍巡哨
+    plan = game.outing_plan()
+    assert plan.foe is not None and plan.boss is not None and plan.weights[explore_one.ENCOUNTER] > 0
+
+
+def test_the_tag_does_not_name_the_beat_the_boss_ate():
+    """頭目擋路時要選的那一拍不出，江湖紀錄的結果標記也不寫它（以前寫「有悟」）。"""
+    game = ready(jianfa_game(), side="guan", loc="changshe")
+    game._duel_start = lambda boss: []
+    with _beats("material", "encounter", "insight"):
+        game.choose("act:explore")
+    assert game.state.journal[0].tag == "得料・遇敵"
+
+

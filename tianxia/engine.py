@@ -4970,20 +4970,28 @@ class Game:
                 return "town", c.squads[sid]
         return None, None
 
+    def _outing_weights(self, loc: Location, *, has_foes: bool, bounty_here: bool) -> dict[str, int]:
+        """這一處每一拍四類的比重（explore_one.weights：表照標籤或 explore_mix、危險度、懸賞、有沒有對手），再把此刻做不到的歸 0：
+        抽不到事件（一次性、可重複的都沒有）事件是 0，悟不出（insights.explore_gives 是空的，或這個遊戲日在這裡選錯過做法）感悟是 0——
+        那一份照比重分給其餘的。只讀，不擲骰。"""
+        s, c = self.state, self.content
+        weights = explore_one.weights(c.config.jianfa, loc, has_foes=has_foes, bounty_here=bounty_here)
+        if not event_candidates(s, c, "explore", "rare") and not event_candidates(s, c, "explore", "common"):
+            weights[explore_one.EVENT] = 0
+        if not insights.explore_gives(loc, c) or sensing.missed_today(s, c, loc):
+            weights[explore_one.INSIGHT] = 0
+        return weights
+
     def _outing_plan(self, loc: Location) -> OutingPlan:
-        """這一處此刻出門一趟怎麼抽（OutingPlan）：表照標籤（地點寫了 explore_mix 照它的四欄）、危險度與懸賞照 explore_one.weights；
-        這裡沒有對手（也沒有頭目）遭遇是 0，此刻抽不到事件（一次性、可重複的都沒有）事件是 0，悟不出（insights.explore_gives 是空的，
-        或這個遊戲日在這裡選錯過做法）感悟是 0——那一份照比重分給其餘的。只讀，不擲骰。"""
+        """這一處此刻出門一趟怎麼抽（OutingPlan）：比重照 _outing_weights。這裡沒有一般對手（也沒有討伐懸賞）遭遇就是 0，那一份分給其餘三類；
+        頭目不算對手（FB-815：只有頭目的地點不是一定撞上他）——他是這一趟另外擲的（_explore_one：5% × 名聲倍數），擲中那一趟才有
+        遭遇拍。只讀，不擲骰。"""
         s, c = self.state, self.content
         cfg = c.config.jianfa
         kind = explore_one.kind_of(cfg, loc).kind
         how, foe = self._outing_foe(loc, kind)
         boss = None if how == "bounty" else duel_rules.available(s, c)  # 接了懸賞：遭遇就是懸賞那一路，不擲頭目
-        weights = explore_one.weights(cfg, loc, has_foes=foe is not None or boss is not None, bounty_here=how == "bounty")
-        if not event_candidates(s, c, "explore", "rare") and not event_candidates(s, c, "explore", "common"):
-            weights[explore_one.EVENT] = 0
-        if not insights.explore_gives(loc, c) or sensing.missed_today(s, c, loc):
-            weights[explore_one.INSIGHT] = 0
+        weights = self._outing_weights(loc, has_foes=foe is not None, bounty_here=how == "bounty")
         return OutingPlan(kind=kind, weights=weights, how=how, foe=foe, boss=boss, hint=explore_one.hint_of(kind, how))
 
     def mostly_here(self) -> str:
@@ -5020,8 +5028,14 @@ class Game:
         p.explore_seq += 1
         roll = functools.partial(explore_one.rng_for, self.world.get_season_number(), p.name, p.explore_seq)
         last_loc, _, last_kind = p.outing_last.partition(":")
+        weights, first_is_encounter = plan.weights, plan.how == "bounty"
+        if plan.boss is not None and plan.foe is None and plan.how != "bounty":
+            # 這裡只有頭目、沒有一般對手（官軍在長社，FB-815）：這一趟照 5% × 名聲倍數擲一次他；擲中了遭遇拍才有（第一拍就是它，頭目擋路），
+            # 沒擲中就當這裡沒有對手——遭遇那一格已經分給其餘三類（plan.weights 的遭遇是 0）
+            if roll("頭目").random() < c.config.duel.explore_chance * renown.duel_chance(s, c):
+                weights, first_is_encounter = self._outing_weights(loc, has_foes=True, bounty_here=False), True
         beats = explore_one.draw(
-            cfg, roll("拍"), plan.weights, last_choice=last_kind if last_loc == loc.id else None, bounty_here=plan.how == "bounty",
+            cfg, roll("拍"), weights, last_choice=last_kind if last_loc == loc.id else None, bounty_here=first_is_encounter,
         )
         say, lines = roll("段落"), c.outing_lines
         story = [explore_one.line(lines, "open", plan.kind, say, place=loc.name)]
@@ -5067,6 +5081,8 @@ class Game:
                 got_any, choice = True, beat
         if boss is not None:
             out += self._duel_start(boss)
+            if self._draft is not None:  # 頭目擋路：要選的那一拍不出，江湖紀錄的標記也不寫它（以前寫「有悟」，FB-815）
+                self._draft.tag = explore_one.tag_of([b for b in beats if b not in explore_one.CHOICE])
         if not got_any:  # 三拍都沒收穫：補一個一階素材（設計 4.1【PM】）
             kinds = {c.materials[m].attribute for m in loc.materials if m in c.materials}
             mid = explore_modes.one_of(c, kinds, 1, roll("補"))
