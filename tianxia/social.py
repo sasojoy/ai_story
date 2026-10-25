@@ -125,7 +125,7 @@ def side(state: GameState, content: Content) -> str:
 
 
 def affiliation(state: GameState, content: Content) -> str:
-    """門派・陣營・頭銜・擂台稱號（有哪幾樣寫哪幾樣），都沒有是散人；散人有遊俠名號時寫「散人・江湖遊俠」（有門派時門派代替「散人」）。
+    """門派・陣營・頭銜・擂台稱號・上一季論功的稱號（有哪幾樣寫哪幾樣），都沒有是散人；散人有遊俠名號時寫「散人・江湖遊俠」（有門派時門派代替「散人」）。
     狀態列（Game.status_data）與玩家卡都用這一個。"""
     p = state.player
     sect = content.sects[p.sect].name if p.sect else None
@@ -136,7 +136,9 @@ def affiliation(state: GameState, content: Content) -> str:
         base = f"{sect or '散人'}・{named}"
     else:
         base = "・".join(name for name in (sect, faction, ranks.title(content, state)) if name) or "散人"
-    return f"{base}・{ring}" if ring else base
+    base = f"{base}・{ring}" if ring else base
+    # 上一季論功的稱號（減法季設計 3.3；PlayerState.season_title，換季時掛上）：沒有是空字串，一個字都不多
+    return f"{base}・{p.season_title}" if p.season_title else base
 
 
 def arts(other: Game) -> list[dict]:

@@ -1724,9 +1724,12 @@ def _main_view_body(game: Game) -> dict:
     result = game.season_result()  # 第一季休季：江湖頁最上面的結算卡（計畫 T9；開關關著、進行中都不送）
     if result is not None:
         view["season_result"] = {
-            **result, "text": md(result["text"]),
+            **{key: value for key, value in result.items() if key != "ending"}, "text": md(result["text"]),
             "timeline": [{**row, "text": md(row["text"])} for row in result["timeline"]],
         }
+    ending = game.ending_card()  # 三陣營四勝利的結局卡（減法季批 3c；計畫 1.3 欄位表的 main.ending）：關著的季沒有這個鍵
+    if ending is not None:
+        view["ending"] = ending
     return view
 
 

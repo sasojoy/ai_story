@@ -6,7 +6,7 @@ import random
 import re
 from collections.abc import Callable
 
-from . import arena, battle_instance, bounties, calendar, feasts, figure_life, figures, flavor, leaderboard, orders, ranks, renown, seal_acts, seats, territory, timetable, yuedan
+from . import arena, battle_instance, bounties, calendar, feasts, figure_life, figures, flavor, leaderboard, orders, ranks, renown, seal_acts, seats, territory, timetable, wins, yuedan
 from .models import Act, BattleDef, Content, Ending, SimPlayer, SimRumor, Storyline, TimetableEvent
 from .ollama_client import OllamaClient
 from .rules import (
@@ -362,6 +362,7 @@ def end_season(
         w.ending_text = ending.text
         add_chronicle(state, f"賽季落幕：{ending.title}")
         msgs += [f"══ 賽季落幕：{ending.title} ══", ending.text]
+    _settle_tiers(state, content, world)
     if arena.on(content):  # 擂台：前三名記名次（休季時同步補獎勵），江湖史一句（擂主）、天下大事一句
         lines = arena.close_season(w, content.config.arena)
         if lines:  # 前三名上天下大事；江湖史只記「本季擂主」（歷屆擂主照它，跨季），擂台榜的前三名由 leaderboard.chronicle_lines 寫
@@ -373,6 +374,22 @@ def end_season(
         for line in leaderboard.chronicle_lines(board, world.get_season_number()):  # 江湖史跨季保留：一張榜一行、前三名
             add_chronicle(state, line)
     return msgs
+
+
+def _settle_tiers(state: GameState, content: Content, world: WorldStateStore | None) -> None:
+    """三陣營四勝利（減法季設計 3.3；wins.settle）：收季那一刻每個投靠了陣營的人照名次分四階，存 final_tiers（結局卡、下一季的
+    起手資源與稱號讀它），第一、二階寫江湖史。要讀這一季每個角色的帳，給了 store 才算（第一季收季的每一條路都給）；
+    開關關著、沒給 store 什麼都不做。"""
+    w = state.world
+    if world is None or not wins.on(content, w):
+        return
+    from .characters import CharacterStore, open_characters  # noqa: PLC0415  同 leaderboard：讀角色的那一側
+
+    db = getattr(world, "db", None)
+    store = CharacterStore(db) if db is not None else open_characters()
+    w.final_tiers = wins.settle(w, content, store.books(world.get_season_number()))
+    for line in wins.chronicle_lines(content, w.final_tiers):
+        add_chronicle(state, line)
 
 
 def season_end_time(season: WorldState, content: Content) -> float:

@@ -754,6 +754,23 @@ class Game:
         self._write(
             self.content.scenario.name, [self.content.scenario.intro], tag=journal.SEASON_START, guide=tutorial_intro(self.content),
         )
+        self._season_grant(old)
+
+    def _season_grant(self, old: GameState) -> None:
+        """三陣營四勝利（減法季設計 3.3）：上一季收季時論了功的人（那一季的 WorldState.final_tiers），新的一季開局照那一階發起手資源
+        （wins.start_grant）、掛上稱號（PlayerState.season_title，social.affiliation 接在後面），另寫一則江湖紀錄。
+        上一季沒論功（四勝利關著、散人、不到門檻）什麼都不做，一個字都不變。不看新的一季開不開四勝利：獎勵是上一季掙的。"""
+        past = self.world.past_season(old.player.season_number)
+        result = past.final_tiers.get(old.player.name) if past is not None else None
+        if result is None or not result.tier:
+            return
+        silver, xinde = wins.start_grant(wins.rules_of(self.content), result.tier)
+        p = self.state.player
+        p.stats["silver"] = p.stats.get("silver", 0) + silver
+        p.stats["xinde"] = p.stats.get("xinde", 0) + xinde
+        p.season_title = result.title
+        line = wins.GRANT_LINE.format(tier=wins.TIER_NAMES[result.tier], title=result.title)
+        self._write(wins.GRANT_TITLE, [line] + [f"{name} +{n}" for name, n in (("銀兩", silver), ("心得", xinde)) if n])
 
     def _drop_old_zhuifeng(self) -> None:
         """追風步（PM 2026-10-14；企劃者跟玩家談過，玩家同意退回下品）：內容以前沒寫品質、照 SkillDef 的預設成了絕學，現在是下品。
@@ -15343,7 +15360,7 @@ class Game:
                 "week": event.week, "title": event.title, "text": text,
                 "locked_by": timetable.shown(lock) if lock is not None else None,
             })
-        return {
+        out = {
             "title": w.ending_title, "text": w.ending_text,
             "stances": [{"side": side, "name": names.get(side, side), "value": value} for side, value in standing.items()],
             "fronts": [{"id": f, "name": trend_name(c, f), "value": values.get(f, 0)} for f in front_ids(c)],
@@ -15352,6 +15369,28 @@ class Game:
                 {"faction": f.id, "name": f.name, "rows": [list(row) for row in w.final_rankings.get(f.id, [])]}
                 for f in c.scenario.factions
             ],
+        }
+        ending = self.ending_card()  # 三陣營四勝利（減法季批 3c，欄位表 main.ending）：關著的季沒有這個鍵
+        if ending is not None:
+            out["ending"] = ending
+        return out
+
+    # ── 三陣營四勝利（減法季整合設計第三章；計畫 Task 3c-2、3c-3：欄位表 main.ending、main.sides、main.sides_card、main.step）──
+
+    def ending_card(self) -> dict | None:
+        """結局卡（欄位表 main.ending；設計 3.4）：收季之後、四勝利開著的季才有。winner 是贏的那一軍（和局 None），condition 是你算在
+        哪一條（兩軍是陣營名，豪強是「地方豪強（官軍）」；散人、豪強沒有階是 None），my_tier 第幾階（0 是沒有），title 稱號，
+        reward 下一季分到的，ledger_used 照哪一本排（豪強和局是 wins.BOTH）。收季那一刻存好（WorldState.final_tiers），這裡只讀。"""
+        s, c = self.state, self.content
+        w = s.world
+        if not w.ended or not self._four_wins():
+            return None
+        result = w.final_tiers.get(s.player.name)
+        tier = result.tier if result is not None else 0
+        return {
+            "winner": wins.winner_of(w, c), "condition": wins.condition_of(c, s.player.faction, result), "my_tier": tier,
+            "title": result.title if result is not None else "", "reward": wins.reward_text(wins.rules_of(c), tier),
+            "ledger_used": result.ledger_used if result is not None else None,
         }
 
     def annals_view(self) -> dict:
