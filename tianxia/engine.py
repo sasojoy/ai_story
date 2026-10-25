@@ -15105,9 +15105,12 @@ class Game:
         s, c = self.state, self.content
         faction = self._side()  # 豪強分屬兩軍：照依附那一軍畫出陣與地盤
         on = sortie.on(c) and faction is not None
+        duel = self.duel_on()
 
         def mode(loc_id: str) -> str | None:
-            return sortie.mode(c, s.world, faction, loc_id, bool(self._sortie_foes(c.locations[loc_id]))) if on else None
+            how = sortie.mode(c, s.world, faction, loc_id, bool(self._sortie_foes(c.locations[loc_id]))) if on else None
+            # 約戰開著（減法季批 3b）：沒有零風險的守，自家的地方出陣那一格灰著「等對面來約」——輿圖不畫「出陣・守」、不推薦去那裡出陣
+            return None if duel and how == "hold" else how
 
         out = mapdata.state(
             s, c, odds=self.odds, sortie_mode=mode, sorties_left=self.sorties_left() if on else None, real_minutes=self._real_minutes,
