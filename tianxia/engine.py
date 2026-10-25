@@ -5093,14 +5093,15 @@ class Game:
                 story.append(explore_one.line(lines, "close", "empty", say, place=loc.name,
                                               item=explore_one.items_of([granted], materials.GRANT_PREFIX)))
                 out.append(granted)
-        if any(line.startswith(team.CAPPED_XINDE.partition("，")[0]) for line in out):
+        # 收尾的幾樣先算（打探懸賞交差在 45 級換成心得時，那一句「境界已到」也在這裡面，段落結尾要看得到它，FB-818）
+        extras = self._pill_find(roll("回體丹")) + self._scrap_find() + self._legend_find(roll("破境丹"))
+        extras += bounties.on_explore(s, c, self.world, loc.id) + self._seal_find(loc.id)  # 打探懸賞：出門一趟就算
+        if any(line.startswith(team.CAPPED_XINDE.partition("，")[0]) for line in out + extras):
             self._outing_close.add("capped")
         for key in explore_one.LINE_KEYS["close"]:  # 段落結尾：疲勞打了折、對手配不上你、境界已到（三道閘，設計 4.2）
             if key in self._outing_close:
                 story.append(explore_one.line(lines, "close", key, say, place=loc.name))
         p.outing_last = f"{loc.id}:{choice}" if choice else ""
-        extras = self._pill_find(roll("回體丹")) + self._scrap_find() + self._legend_find(roll("破境丹"))
-        extras += bounties.on_explore(s, c, self.world, loc.id) + self._seal_find(loc.id)  # 打探懸賞：出門一趟就算
         ledger = self._outing_ledger(out + extras, before)
         return ["".join(story)] + ([ledger] if ledger else []) + out + extras
 

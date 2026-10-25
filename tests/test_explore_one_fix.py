@@ -207,3 +207,29 @@ def test_the_ranger_line_names_the_outing_when_explore_one_is_on():
     assert off.action_notes([o.id for o in off.options(odds=False)])["act:train"] == sortie.RANGER_LINE_PRECISE
 
 
+# ── 5. 45 級打探懸賞交差：段落結尾也寫境界已到 ──
+
+
+def test_the_capped_close_is_written_when_the_scout_bounty_pays_the_xinde():
+    game = ready(jianfa_game(), side="guan", loc="yingshui", level=45)
+    capped = team.CAPPED_XINDE.format(n=9)
+    with _beats("material", "material", "material"), mock.patch.object(bounties, "on_explore", return_value=[capped]):
+        msgs = game.choose("act:explore")
+    assert "境界已到，再往上只能打出來。" in msgs[0] and capped in msgs  # 段落結尾有那一句，訊息那一行也在
+    low = ready(jianfa_game(), side="guan", loc="yingshui", level=10)
+    with _beats("material", "material", "material"):
+        assert "境界已到" not in low.choose("act:explore")[0]
+
+
+def test_the_capped_close_for_a_real_scout_bounty():
+    game = ready(jianfa_game(), side="guan", loc="yingshui", level=45)
+    p = game.state.player
+    game.state.world.bounties.append(Bounty(id="s1", kind="scout", faction="guan", week=1, expires=1e12, silver=10, deeds=1,
+                                            location="yingshui", takers=[p.name]))
+    exp0, xinde0 = p.member.exp, p.stats.get("xinde", 0)
+    with _beats("material", "material", "material"):
+        msgs = game.choose("act:explore")
+    assert p.member.exp == exp0 and p.stats.get("xinde", 0) > xinde0 and any(m.startswith("境界已到") for m in msgs)  # 經驗換成心得
+    assert msgs[0].count("境界已到，再往上只能打出來。") == 1  # 段落結尾也寫了
+
+
