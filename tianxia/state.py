@@ -1254,11 +1254,11 @@ class StoryProgress(BaseModel):
 
 
 class StoryCard(BaseModel):
-    """一張跳出來的卡（特殊事件設計稿的跳顯框）：kind 是 start（開頭）、end（此事已了・入傳）、unfinished（此事未了）。
+    """一張跳出來的卡（特殊事件設計稿的跳顯框）：kind 是 start（開頭）、stage（進某一段時跳的那張，StoryStage.card）、end（此事已了・入傳）、unfinished（此事未了）。
     網頁照順序一張一張跳，看過就清（storyline.seen）。"""
 
     line: str
-    kind: Literal["start", "end", "unfinished"]
+    kind: Literal["start", "stage", "end", "unfinished"]
     title: str
     text: str
     image: str | None = None

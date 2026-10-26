@@ -51,12 +51,12 @@ def rank_suggestions(rows: list[dict]) -> list[dict]:
 
 def mostly_here(state: GameState, content: Content) -> str:
     """腳下這一處「多半給什麼」那一句（MOSTLY_HERE；四格探索的小字，整合設計 6.3）：在路上、地點不在表上是空字串。
-    減法季探索一顆開著（批 2）照出門一趟抽的那一張表（explore_one.HINTS；伺服器另用 Game.mostly_here 補上「有賞」「同袍比劃」）。"""
+    減法季探索一顆開著（批 2）照出門一趟抽的那一張表（explore_one.hint_in，照表算；伺服器另用 Game.mostly_here 補上此刻的比重、「有賞」「同袍比劃」）。"""
     loc = content.locations.get(state.player.location)
     if loc is None or state.player.journey is not None:
         return ""
     if _outing_tables(state.world, content):
-        return explore_one.HINTS[explore_one.kind_of(content.config.jianfa, loc).kind]
+        return explore_one.hint_in(explore_one.kind_of(content.config.jianfa, loc))
     return MOSTLY_HERE.get(mapview.GLYPHS[mapart.icon_kind(loc)], "")
 
 
@@ -66,10 +66,10 @@ def _outing_tables(world: WorldState, content: Content) -> bool:
 
 
 def place_mostly(world: WorldState, content: Content, loc: Location, glyph: str) -> str:
-    """輿圖第一層名字旁的兩個字（MOSTLY，照小圖）；減法季探索一顆開著照出門一趟的表（explore_one.MOSTLY，三處跟小圖不一樣：
-    樓桑里、廣宗、草廬）。"""
+    """輿圖第一層名字旁的兩個字（MOSTLY，照小圖）；減法季探索一顆開著照出門一趟的表（explore_one.mostly_in，照表算；幾處跟小圖不一樣：
+    樓桑里、廣宗、草廬，寺是表上事件最大〔2e，FB-882〕）。"""
     if _outing_tables(world, content):
-        return explore_one.MOSTLY[explore_one.kind_of(content.config.jianfa, loc).kind]
+        return explore_one.mostly_in(explore_one.kind_of(content.config.jianfa, loc))
     return MOSTLY.get(glyph, "")
 
 

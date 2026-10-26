@@ -1121,6 +1121,10 @@
     document.querySelector("#page > .now [data-act=\"now-more\"]")?.focus();
   }
 
+  // 事件分級（事件分級設計稿）：眼前是第二、三階的事件時，場景卡頂上一行小字（州郡大事、天下大事），第三階的框描金；第一階一字不變
+  const tierClass = (m) => (m.event_tier ? ` tier-${m.event_tier.tier | 0}` : "");
+  const tierTag = (m) => (m.event_tier ? `<p class="tier-tag">${esc(m.event_tier.name)}</p>` : "");
+
   // 場景卡上面那張圖（減法季批 8 圖像版）：伺服器真的有圖檔才給 m.art（事件插圖、人物像、地點的圖，server.scene_art）。圖佔卡片上方約三分之一，
   // 地名／危險／時刻（事件標題；人名與情誼）疊在圖的下緣，所以場景文字裡原本寫那一行的第一段（m.art.head）拿掉、不寫兩次。沒圖（null）一字不變。
   function sceneArtHtml(a) {
@@ -1211,7 +1215,7 @@
     const scene = masterTalks ? ""
       : m.on_road
         ? `<section class="card scene road${S.sceneOpen ? "" : " clamp"}" data-act="scene-more" role="button" tabindex="0" aria-expanded="${!!S.sceneOpen}">${m.scene}</section>`
-        : `<section class="card scene${m.art ? " has-art" : ""}">${m.art ? sceneArtHtml(m.art) : ""}${siegeStrip(withGauge(musterScene(m, roundBlocks(battleScene(sceneUnderArt(m)), m.battle_gauge)), m.battle_gauge), m.siege)}${myTurn ? "" : people}</section>`;
+        : `<section class="card scene${m.art ? " has-art" : ""}${tierClass(m)}">${m.art ? sceneArtHtml(m.art) : ""}${tierTag(m)}${siegeStrip(withGauge(musterScene(m, roundBlocks(battleScene(sceneUnderArt(m)), m.battle_gauge)), m.battle_gauge), m.siege)}${myTurn ? "" : people}</section>`;
     const peopleAfter = myTurn && people && !masterTalks && !m.on_road ? `<section class="card people-after">${people}</section>` : "";
     const week = peekWeek(m);
     // 本週卡（減法季批 1，整合設計 6.1）排在最上面、「剛剛」之前（在路上排到選項底下，FB-055）：吃掉以前那一排小標。來信到了換成來信（回了信或收起來才換回本週卡）；

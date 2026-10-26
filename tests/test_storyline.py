@@ -206,6 +206,27 @@ def test_a_task_stage_moves_on_when_its_condition_holds_and_end_hooks_run():
         del storyline.END_HOOKS["測試"]
 
 
+def test_a_stage_with_a_card_queues_it_after_the_opening_and_the_view_tells_the_kind():
+    """段落卡（StoryStage.card，特殊頓悟心魔那一關之前那張）：進那一段時排一張 kind="stage"；第一段就有的排在開頭那張後面。
+    網頁那一份（Game.story_card_view）帶這條線的類別，頓悟的卡照它換樣子。"""
+    game = ready(jianfa_game(), side="guan", loc=HERE)
+    game.story_start(StoryDef(**{
+        "id": "dun_card", "title": "雨打殘荷", "kind": "頓悟", "intro": "雨落下來。", "image": "stories/dunwu_enter",
+        "stages": [
+            {"id": "a", "kind": "task", "until": {"flags_all": ["test_done"]}, "next": "b", "card": "心魔來了。", "image": "stories/dunwu_demon"},
+            {"id": "b", "kind": "task", "task": "never", "next": "ok", "card": "又一張。"},
+        ],
+        "endings": [{"id": "ok", "title": "悟成", "text": "成了。", "annal": "{name}悟了。"}],
+    }))
+    view = game.story_card_view()
+    assert [(c["kind"], c["text"], c["image"], c["sort"]) for c in view] == [
+        ("start", "雨落下來。", "stories/dunwu_enter", "頓悟"), ("stage", "心魔來了。", "stories/dunwu_demon", "頓悟")]
+    game.story_seen()
+    game.state.player.flags.add("test_done")
+    game._story_tick()
+    assert [(c.kind, c.text, c.image) for c in game.story_cards()] == [("stage", "又一張。", None)]
+
+
 def test_caps_count_lines_by_kind():
     game = ready(jianfa_game(), side="guan", loc=HERE)
 
@@ -290,6 +311,22 @@ def test_fuzhi_buy_medicine_and_guard_the_shrine_ends_in_the_notes():
         game.choose("choice:0")  # 擋在祠堂門口
     assert progress.ending == "notes" and "zhongjing_owes" in s.player.flags
     assert s.player.annals[-1].text == f"{s.player.name}嘗入涅陽疫村，負藥助張機，活一童子。"
+
+
+def test_fuzhi_scenes_use_their_own_pictures_and_the_files_ship():
+    """事件段寫了 image 時，場景卡用那張（Game.scene_art）；奇事卡的圖檔都在 web/img/（Joy 2026-10-26 第二批圖）。"""
+    from pathlib import Path
+
+    game = ready(jianfa_game(), side="guan", loc="nanyang_wilds")
+    _fuzhi(game)
+    assert game.scene_art()["path"] == "stories/fuzhi_act1"
+    assert game.story_card_view()[0]["image"] == "stories/fuzhi_act1"
+    line = game.content.storylines["fuzhi"]
+    web = Path(__file__).resolve().parents[1] / "web" / "img"
+    for img in [line.image] + [st.image for st in line.stages] + [e.image for e in line.endings]:
+        assert (web / f"{img}.webp").is_file(), img
+    for key in ("enter", "demon", "done", "fail"):  # 特殊頓悟那條線（武學合成優化）開線時填這四張
+        assert (web / "stories" / f"dunwu_{key}.webp").is_file(), key
 
 
 def test_fuzhi_carrying_the_jar_ends_in_the_jar_and_missing_the_deadline_is_too_late():
