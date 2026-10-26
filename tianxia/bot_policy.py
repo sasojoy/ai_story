@@ -10,7 +10,7 @@ import hashlib
 import random
 from dataclasses import dataclass
 
-from . import allied, arena, atlas, battle_instance, bot, bounties, conquest, cultivation, duel, explore_modes, forge_secrets, invites, leaderboard, library, mingtie, naming, orders, precise, rules, sensing, server_bots, social, sortie, stances, team
+from . import allied, arena, atlas, battle_instance, bot, bounties, conquest, cultivation, duel, epiphany, explore_modes, forge_secrets, invites, leaderboard, library, mingtie, naming, orders, precise, rules, sensing, server_bots, social, sortie, stances, team
 from . import sortie_duel  # 出陣約戰（減法季批 3b）
 from .bot import allocate_points, can_practise, wants_heal
 from .engine import FREE_TEXT_OPTION, Game, Option
@@ -137,14 +137,23 @@ class DiscussJob:
     request: naming.NamingRequest
 
 
+@dataclass(frozen=True)
+class EpiphanyJob:
+    """特殊頓悟按「靜心思名」：A 段在鎖內開的單（epiphany.NameAsk），交給 bot_runner 在鎖外請模型取三個名字，
+    C 段再拿鎖交回 Game.epiphany_names（不然候選全是字表的樣子，首悟的名字看得出是假人）。"""
+
+    request: object  # epiphany.NameAsk
+
+
 @dataclass
 class NamingSlot:
     """這一輪這個假人能不能把一件取名交給模型（首創的爐或絕學定名；bot_runner 給：一次一件、兩件之間要隔一段時間）。
     open 時開成單子放進 job；不 open 時那一爐不開、那個名先不定，skipped 加一（只是數字，主控台只印總數）。"""
 
     open: bool = False
-    job: ForgeJob | MasterJob | SenseJob | DiscussJob | None = None
+    job: ForgeJob | MasterJob | SenseJob | DiscussJob | EpiphanyJob | None = None
     skipped: int = 0
+    model: bool = True  # 這個假人程式叫得到模型（有 client、設定開著）；叫不到時頓悟取名直接用字表，不然那個假人一季都卡在取名
 
 
 def take_turn(game: Game, profile: BotProfile, rng: random.Random, slot: NamingSlot | None = None) -> list[str]:
@@ -154,6 +163,8 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random, slot: NamingS
     game.options(odds=False)  # 每一輪先替全服戰鬥追趕一次時間（集結截止、回合逾時），跟真人的畫面刷新一樣；在路上、趕路的假人也不例外
     if game.state.player.journey is not None:
         return []
+    if game.state.player.god_naming is not None:
+        return _god_name(game, rng, slot)  # 頓悟取名的時候選單上只有取名（同真人）
     look_after(game, rng)
     msgs = tend_arts(game, rng, slot)
     if slot is not None and slot.job is not None:
@@ -684,7 +695,27 @@ def _master(game: Game, slot: NamingSlot | None) -> None:
         slot.skipped += 1
 
 
-def apply_job(game: Game, job: ForgeJob | MasterJob | SenseJob | DiscussJob, proposed: tuple[str | None, str]) -> list[str]:
+def _god_name(game: Game, rng: random.Random, slot: NamingSlot | None) -> list[str]:
+    """特殊頓悟取名：還沒想過名字的，輪得到就開單交給假人程式請模型取（B、C 段在 bot_runner）；輪不到先等，下一輪再來；
+    假人程式叫不到模型（slot.model 是 False）、或不是從假人程式來的（slot 是 None）直接按靜心思名（字表）。候選排好了挑一個（不自己寫）。"""
+    naming_ = game.state.player.god_naming
+    if not naming_.asked:
+        request = game.epiphany_request()
+        if request is None:
+            return []
+        if slot is None or not slot.model:
+            return game.choose(f"{epiphany.OPTION}:{epiphany.THINK}")
+        if slot.open and slot.job is None:
+            slot.job = EpiphanyJob(request)
+        else:
+            slot.skipped += 1
+        return []
+    if not naming_.candidates:
+        return []
+    return game.choose(f"{epiphany.OPTION}:{rng.randrange(len(naming_.candidates))}")
+
+
+def apply_job(game: Game, job: ForgeJob | MasterJob | SenseJob | DiscussJob | EpiphanyJob, proposed) -> list[str]:
     """C 段（bot_runner 在鎖內、重讀角色之後呼叫）：
     - 首創的爐：交給 Game.forge(proposed=...) 整個重驗再登記（等名字的時候配方被別人登記了，照查到的給、不收第二次）。
       取新名字的單（沒有候選）要是沒有過得了過濾的名字（模型沒取到、或這時重驗過不了），這一爐不開、不收費：
@@ -693,6 +724,8 @@ def apply_job(game: Game, job: ForgeJob | MasterJob | SenseJob | DiscussJob, pro
     - 絕學定名：還輪到這一門才定。模型的名字先過一次完整的過濾（naming.recheck），跟原名一樣、過不了、或定的時候
       被用掉了，就用退路字表另組（salt 從 0 起），最多 MASTER_TRIES 個，一定跟原名不同。都定不成就留著，下次再來。"""
     state, content, world = game.state, game.content, game.world
+    if isinstance(job, EpiphanyJob):  # 頓悟取名：proposed 是模型給的名字清單；一個都沒拿到不交回（等下一次輪到再請模型），不用字表搶
+        return game.epiphany_names(job.request, list(proposed)) if proposed else []
     if isinstance(job, DiscussJob):  # 論武：同首創的爐，取新名字卻沒有名字可用就不答（不用字表名字搶首創）
         if not job.request.choices and naming.recheck(content, proposed, world.is_character_name)[0] is None:
             return []

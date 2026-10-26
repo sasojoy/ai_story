@@ -14,31 +14,38 @@
 
 心魔過了（END_HOOKS）挑模板：路＝做法的屬性與心中之形照合併的規則結合（insights.merged_attribute，八路）；善名到悟浩然的門檻、
 拷問至少兩題選了正的改走「正」，惡名與邪一樣。型＝攻守變心記號最多的那一個（同分照天機｜名號｜第幾次的雜湊；手上已經有這個模板換次高的）。
-挑好了存成待取名（PlayerState.god_naming）：三個候選的名字（字表；模型取名是之後那一批），也可以自己寫一個（過 naming.name_problem）。
+挑好了存成待取名（PlayerState.god_naming）。按「靜心思名」（dunwu:think）才排候選：伺服器走三段式（A 在鎖內 Game.epiphany_request
+開單、B 在鎖外 propose_names 請模型一次取三個、C 在鎖內 Game.epiphany_names 重驗、不夠三個用字表補）；假人也走同一條（bot_runner，
+名字看不出是假人）；引擎直接按（整季機器人、測試、沒開模型）就是字表。也可以自己寫一個（過 naming.name_problem）。
 名字這一季全服不重複（WorldState.god_names）。取了名收進自己的意境（sensing.add_own）：上品、那一路一般功效三重、真意是模板的戰法，
 品相照 insight_fx.look 是「神」。寫進傳；這一季第一個悟出這個模板的寫進江湖史。
 
 神品意境不能揣摩、不能拿去合成、熔不得（fusion.merge_problem、library.melt_insight_problem），身上同時只准裝一個（arts.slot_problem），
-都認 insight_fx.is_god。玩家看得到的字都還「待 joy 潤」。
+都認 insight_fx.is_god。
 """
 from __future__ import annotations
 
 import hashlib
 import random
+from dataclasses import dataclass
 from types import SimpleNamespace
+
+from pydantic import BaseModel
 
 from . import annals, insight_fx, insights, naming, storyline
 from .martial_arts import Insight
 from .models import (
     GOD_FORMS, Content, Effect, GodTrait, StoryAnswer, StoryDef, StoryEnding, StoryQuestion, StoryStage,
 )
+from .ollama_client import capped
 from .rules import apply_effect, day_seconds
 from .state import GameState, GodNaming, InsightFx, StoryProgress
 from .world_state import WorldStateStore
 
 KIND = "頓悟"  # StoryDef.kind（Config.jianfa.story_caps 的「頓悟」一條）
-OPTION = "dunwu"  # 取名的選單：dunwu:<候選序號>、dunwu:own（自己寫，走輸入框）
+OPTION = "dunwu"  # 取名的選單：dunwu:think（靜心思名，排出候選）、dunwu:<候選序號>、dunwu:own（自己寫，走輸入框）
 OWN = "own"
+THINK = "think"
 SHAPES = ("剛", "柔", "快", "慢")
 SHAPE_MARK = "形"  # 心中之形的記號：「形剛」「形柔」…
 RIGHT, WRONG = "正", "邪"
@@ -46,7 +53,7 @@ NAMES_OFFERED = 3
 FALLBACK_TRIES = 12
 IMAGE = {key: f"stories/dunwu_{key}" for key in ("enter", "demon", "done", "fail")}  # web/img/stories/dunwu_*.webp（Joy 10/26 給的圖）
 
-# ── 玩家看得到的字（都待 joy 潤）──
+# ── 玩家看得到的字 ──
 TITLE = "特殊頓悟"
 INTRO = "心念凝住的那一刻，四周忽然靜了下來。你沒有去畫那個形——它自己往心裡沉，沉到一個你從沒到過的地方。"
 DONE_TEXT = "心魔散去，留下的是一個從沒有人走過的境界。"
@@ -56,6 +63,8 @@ ASK_HINT = "靜心自問"
 DEMON_HINT = "去面對心魔"
 DEMON_CARD = "你在心裡看見了一個人，跟你一模一樣，朝你走過來。"
 NAME_ASK = "替這個境界取個名字：挑一個，或自己寫一個。"
+THINK_LABEL = "靜心思名"
+THINK_ASK = "這個境界還沒有名字。靜下心來想一想，或者自己寫一個。"
 NAME_OWN = "自己取一個名字…"
 NAME_OWN_ASK = "（寫下你替它取的名字。）"
 NAME_TAKEN = "這一季江湖上已經有一個神品意境叫這個名字了，換一個吧。"
@@ -335,10 +344,9 @@ def _end(state: GameState, content: Content, world: WorldStateStore, progress: S
     place = progress.said[0] if progress.said else ""
     asked = [q.text for q in (progress.custom.stages[0].questions if progress.custom else [])]
     state.player.god_naming = GodNaming(
-        line=progress.line, god=god.id, attribute=god.attribute, lean=god.lean, place=place,
-        candidates=candidates(state, content, world, god), answers=asked,
+        line=progress.line, god=god.id, attribute=god.attribute, lean=god.lean, place=place, answers=asked,
     )
-    return [NAME_ASK]
+    return [THINK_ASK]
 
 
 storyline.END_HOOKS[KIND] = _end
@@ -348,20 +356,116 @@ storyline.END_HOOKS[KIND] = _end
 
 
 def menu(state: GameState) -> list[tuple[str, str]]:
-    """等著取名時的選單：三個候選＋自己寫。"""
+    """等著取名時的選單：還沒想過名字是「靜心思名」＋自己寫；想過了是三個候選＋自己寫。"""
     naming_ = state.player.god_naming
     if naming_ is None:
         return []
+    if not naming_.asked:
+        return [(f"{OPTION}:{THINK}", THINK_LABEL), (f"{OPTION}:{OWN}", NAME_OWN)]
     return [(f"{OPTION}:{i}", name) for i, name in enumerate(naming_.candidates)] + [(f"{OPTION}:{OWN}", NAME_OWN)]
+
+
+def _god(content: Content, god_id: str) -> GodTrait | None:
+    return next((g for g in content.traits.god if g.id == god_id), None)
+
+
+@dataclass(frozen=True)
+class NameAsk:
+    """A 段開的單（鎖內、只讀）：哪一條線、哪一個模板，送模型的訊息。拿著它就能在鎖外叫模型，不必再碰遊戲狀態。"""
+
+    line: str
+    god: str
+    messages: list[dict[str, str]]
+
+
+class GodNames(BaseModel):
+    """模型唯一被允許回傳的東西：三個名字。沒有任何數字欄位。"""
+
+    names: list[str]
+
+
+NAME_PROMPT = (
+    "有一個武人在{place}頓悟，打敗了自己的心魔，悟出一個從沒有人走過的意境。\n"
+    "這個意境屬「{attribute}」{lean}，路數是「{form}」：{desc}\n"
+    "他頓悟時心裡問過自己：{asked}\n"
+    "請替這個意境取三個不同的名字，要有境界感、像一句意象，不要直接寫屬性或招式的字眼。\n"
+    "names：三個名字，每個 {low}～{high} 個中文字，必須原創，不可使用金庸等武俠小說裡的專有名詞，不要標點符號。"
+)
+FORM_WORDS = {"攻": "以攻為先", "守": "以守為本", "變": "以變制勝", "心": "以心馭招"}
+
+
+def name_request(state: GameState, content: Content) -> NameAsk | None:
+    """A 段（行動鎖內、很快、只讀）：還沒想過名字的那一個神品，開一張請模型取三個名字的單；不在等著取名、已經想過了是 None。"""
+    naming_ = state.player.god_naming
+    if naming_ is None or naming_.asked:
+        return None
+    god = _god(content, naming_.god)
+    if god is None:
+        return None
+    lean = {"正": "，走正道", "邪": "，走邪路"}.get(god.lean, "")
+    prompt = NAME_PROMPT.format(
+        place=naming_.place or "江湖上", attribute=god.attribute, lean=lean, form=FORM_WORDS.get(god.form, god.form), desc=god.desc,
+        asked="；".join(naming_.answers) or "（沒有說出口）", low=naming.NAME_MIN_CHARS, high=naming.NAME_MAX_CHARS,
+    )
+    messages = [{"role": "system", "content": naming.SYSTEM_PROMPT}, {"role": "user", "content": prompt}]
+    return NameAsk(naming_.line, god.id, messages)
+
+
+def propose_names(
+    client, content: Content, ask: NameAsk, budget: float | None = None, person: naming.PersonCheck | None = None,
+) -> list[str]:
+    """B 段（鎖外、很慢，不碰狀態、不拿鎖）：請模型一次取三個名字，每個過一次名字檢查（給了 person 也擋角色的名號）；
+    連不上、逾時、取壞了都是空的（C 段用字表補）。只叫一次，預算照 naming 的分法（一次最多兩趟）。"""
+    if client is None:
+        return []
+    caller = client
+    if budget is not None:
+        per_post = naming.per_post_seconds(client, budget)
+        if per_post is None:
+            return []
+        caller = capped(client, per_post)
+    try:
+        reply = caller.chat_structured(ask.messages, GodNames, required_fields=["names"])
+    except Exception:  # noqa: BLE001  連不上、404、逾時——一律當作沒拿到
+        return []
+    out: list[str] = []
+    for raw in (reply.names if reply is not None else [])[: NAMES_OFFERED * 2]:
+        name = naming.clean_name(raw if isinstance(raw, str) else "")
+        if name and name not in out and naming.name_problem(name, content, person) is None:
+            out.append(name)
+    return out[:NAMES_OFFERED]
+
+
+def fill(state: GameState, content: Content, world: WorldStateStore, ask: NameAsk | None, names: list[str]) -> list[str]:
+    """C 段（鎖內）：還在等同一個神品的名字（ask 是 None＝引擎直接按，不核對單子）才排候選：模型給的名字重驗一次
+    （名字檢查、這一季全服用掉了、自己手上有的都不收），不夠三個用字表補。回那一句叫人挑。"""
+    naming_ = state.player.god_naming
+    if naming_ is None or naming_.asked or (ask is not None and (ask.line != naming_.line or ask.god != naming_.god)):
+        return []
+    god = _god(content, naming_.god)
+    if god is None:
+        return []
+    out: list[str] = []
+    for raw in names:
+        name, _ = naming.recheck(content, (raw, ""), world.is_character_name)
+        if name and name not in out and not _taken(state, world, name):
+            out.append(name)
+    for name in candidates(state, content, world, god):
+        if len(out) >= NAMES_OFFERED:
+            break
+        if name not in out:
+            out.append(name)
+    naming_.candidates, naming_.asked = out[:NAMES_OFFERED], True
+    return [NAME_ASK]
 
 
 def scene_text(state: GameState, content: Content) -> str:
     """取名那一張場景：這一境是哪一路、真意寫什麼，叫人取名（Markdown）。"""
     naming_ = state.player.god_naming
-    god = next((g for g in content.traits.god if g.id == naming_.god), None) if naming_ is not None else None
+    god = _god(content, naming_.god) if naming_ is not None else None
     if god is None:
         return ""
-    return f"**{TITLE}・悟成**\n\n{DONE_TEXT}\n\n> 屬{god.attribute}・{god.desc}\n\n{NAME_ASK}"
+    return f"**{TITLE}・悟成**\n\n{DONE_TEXT}\n\n> 屬{god.attribute}・{god.desc}\n\n{NAME_ASK if naming_.asked else THINK_ASK}"
 
 
 def name_problem(state: GameState, content: Content, world: WorldStateStore, name: str) -> str | None:
@@ -378,11 +482,13 @@ def choose(state: GameState, content: Content, world: WorldStateStore, arg: str,
     naming_ = state.player.god_naming
     if naming_ is None:
         return ["（此刻無法這麼做。）"]
+    if arg == THINK:  # 引擎直接按（伺服器與假人程式在外面走三段式，交給 fill）：字表
+        return fill(state, content, world, None, []) or ["（此刻無法這麼做。）"]
     if arg == OWN:
         name = naming.clean_name(text or "")
         if not name:
             return [NAME_OWN_ASK]
-    elif arg.isdecimal() and int(arg) < len(naming_.candidates):
+    elif naming_.asked and arg.isdecimal() and int(arg) < len(naming_.candidates):
         name = naming_.candidates[int(arg)]
     else:
         return ["（此刻無法這麼做。）"]

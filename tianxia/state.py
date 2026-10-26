@@ -1260,7 +1260,7 @@ class StoryProgress(BaseModel):
 
 class GodNaming(BaseModel):
     """特殊頓悟心魔過了、還沒取名的那一個神品意境（tianxia/epiphany.py）：挑到的模板、這一路的屬性與正邪、在哪裡悟的、
-    三個候選的名字（模型取的或字表的；玩家也可以自己寫）、拷問答了什麼（給模型取名當線索）。取了名才收進自己的意境。"""
+    三個候選的名字（按了靜心思名才排：模型取的，不夠用字表補；玩家也可以自己寫）、拷問答了什麼（給模型取名當線索）。取了名才收進自己的意境。"""
 
     line: str
     god: str  # TraitBook.god 的 id
@@ -1269,6 +1269,7 @@ class GodNaming(BaseModel):
     place: str = ""
     candidates: list[str] = Field(default_factory=list)
     answers: list[str] = Field(default_factory=list)
+    asked: bool = False  # 按過「靜心思名」、候選排好了（epiphany.fill）
 
 
 class StoryCard(BaseModel):

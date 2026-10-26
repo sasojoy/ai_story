@@ -5278,6 +5278,7 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
         "create_reread",  # 重悟帖重讀這句意：三段同 create_intent
         "ascend_line",  # 破境卡那一句（招式與絕學稿案第三節）：三段同 create_intent
         "persuade_text",  # 託付的勸降（減法季批 6）：三段同 gather_text，模型只評那一句
+        "epiphany_think",  # 特殊頓悟的靜心思名：三段同 prepare_forge，模型一次取三個名字
     }
     # 宣告、model_call 讀、main() 建佇列；另外兩個只看不排：/api/queue 問位置、管理者那份資料抄總數（admin_choices 在 look 的鎖裡，
     # 但 snapshot 只碰佇列自己的短鎖、不等任何一件，不算在行動鎖裡排隊）
@@ -6744,3 +6745,25 @@ def test_the_first_request_after_a_restart_posts_the_wanted_notice(client):
     client.get("/api/main")
     posted = [b for b in open_world().get_season().bounties if b.auto_by == "陣營" and b.target == "沈青衫"]
     assert len(posted) == 1 and posted[0].faction == "huang"
+
+
+def test_epiphany_think_names_outside_the_lock(monkeypatch):
+    """特殊頓悟的「靜心思名」走三段式：A 鎖內開單、B 鎖外請模型（model_call：在鎖裡被叫到會丟錯）、C 鎖內交回 Game.epiphany_names；不在等著取名照一般的按鈕走。"""
+    from tianxia import epiphany
+
+    game = _forger()
+    ask = epiphany.NameAsk("頓悟1", "god_x", [])
+    seen = {}
+
+    def propose(client, content, request, budget=None, person=None):
+        seen["request"] = request
+        return ["寒潭映月"]
+
+    monkeypatch.setattr(Game, "epiphany_request", lambda self: ask)
+    monkeypatch.setattr(epiphany, "propose_names", propose)
+    monkeypatch.setattr(Game, "epiphany_names", lambda self, request, names: [f"{request.god}:{names[0]}"])
+    assert server.choose(game, server.EPIPHANY_THINK) == ["god_x:寒潭映月"]
+    assert seen["request"] is ask
+    monkeypatch.setattr(Game, "epiphany_request", lambda self: None)
+    monkeypatch.setattr(epiphany, "propose_names", mock.Mock(side_effect=AssertionError("不該叫模型")))
+    server.choose(game, server.EPIPHANY_THINK)

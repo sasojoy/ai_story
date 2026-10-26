@@ -4069,6 +4069,18 @@ class Game:
         """特殊頓悟心魔過了之後取名（epiphany.choose）：挑三個候選之一，或自己寫（dunwu:own，名字在 text）。"""
         return epiphany.choose(self.state, self.content, self.world, arg, text)
 
+    def epiphany_request(self) -> epiphany.NameAsk | None:
+        """特殊頓悟取名的 A 段（行動鎖內、只讀）：按「靜心思名」時開請模型取三個名字的單（server.epiphany_think、假人程式）。
+        不在等著取名、已經想過了、賽季籌備中是 None。"""
+        if self._preparing():
+            return None
+        return epiphany.name_request(self.state, self.content)
+
+    def epiphany_names(self, ask: epiphany.NameAsk, names: list[str]) -> list[str]:
+        """C 段（鎖內）：鎖外拿到的名字交回來，重驗、不夠三個用字表補（epiphany.fill）；單子對不上（已經想過、換了一條線）什麼都不做。"""
+        msgs = epiphany.fill(self.state, self.content, self.world, ask, names)
+        return self._log(msgs) if msgs else msgs
+
     def sense_request(self, points: list | None, png: str = "") -> sensing.SenseRequest | str:
         """畫完那一筆的 A 段（server.py 在行動鎖內、很快地呼叫）：還在感悟狀態才開單；讀不出那一筆回一句話（字串）。
         只讀、不改狀態。單子的 needs_name 是 True 才要在鎖外叫模型看圖取名（insight_llm.name）。"""
