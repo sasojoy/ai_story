@@ -928,11 +928,11 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
 
 
 OUTING_SCORE = PRACTICE_SCORE  # 減法季探索一顆（整合設計 4.1）：出門一趟是經驗與素材的大宗，同以前的練功；出陣照舊排在它前面（出陣另加 PRACTICE_SCORE）
-OUTING_CRIPPLED_SHARE = 0.5  # 內傷重又付不起醫館（_crippled）時，遭遇佔一拍比重這麼多以上的地方不出門（同不去練功）
+OUTING_CRIPPLED_SHARE = 0.5  # 內傷重又付不起醫館（_crippled）時，遭遇佔比重這麼多以上的地方（這一趟有這麼大的機會遇敵）不出門（同不去練功）
 
 
 def _outing_score(game: Game, plan) -> float | None:
-    """探索一顆的分數（Game.outing_plan 那一份比重）：底分 OUTING_SCORE，遭遇佔一拍的那一份乘下一場的疲勞（Game.fatigue_next：減法季三道閘，
+    """探索一顆的分數（Game.outing_plan 那一份比重）：底分 OUTING_SCORE，遭遇佔比重的那一份（一趟只抽一件事，就是這一趟遇敵的機會；接了討伐懸賞是整趟）乘下一場的疲勞（Game.fatigue_next：減法季三道閘，
     今天打得多了遭遇的收穫少，出門的意願跟著降；三道閘關著是 1）；接了這裡的討伐懸賞、這裡有打探懸賞各加 BOUNTY_SCORE；缺素材而這裡素材的比重
     不比遭遇低再加 NEED_MATERIAL_SCORE。內傷重、付不起醫館的不去多半遇敵的地方（去城裡、寺裡攢錢）。"""
     w = plan.weights
