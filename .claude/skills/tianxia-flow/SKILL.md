@@ -1,6 +1,6 @@
 ---
 name: tianxia-flow
-description: 《天下大勢》的分支、測試與合併規矩（企劃者 2026-10-18 定）。開工、派工、開發、QA 驗收、合併、推上 GitHub、部署之前都先看這一份：功能在哪一條分支做、合到哪裡、什麼時候才跑整套測試、QA 要跑哪些測試。
+description: 《天下大勢》的分支、測試與合併規矩（企劃者 2026-10-18 定；測試規矩 Joy 2026-10-26 改）。開工、派工、開發、QA 驗收、合併、推上 GitHub、部署之前都先看這一份：功能在哪一條分支做、合到哪裡、什麼時候跑哪一種整套測試、QA 要跑哪些測試。
 ---
 
 # 天下大勢：分支、測試與合併
@@ -28,10 +28,10 @@ description: 《天下大勢》的分支、測試與合併規矩（企劃者 202
   - 在批的工作樹裡：`.venv/Scripts/python.exe scripts/test_for.py --base origin/feature/<名字>`（只跟功能分支比；不給 `--base` 會跟 `origin/main` 比，把整條功能分支以前的改動都算進來）。也可以設環境變數 `TIANXIA_TEST_BASE`，或直接給檔名（`scripts/test_for.py tianxia/fusion.py`）、直接跑 `pytest tests/test_x.py`。
   - QA 只跑它驗的那幾樣的測試檔，其餘靠實機（瀏覽器）驗；不要為了「保險」跑整套。
   - 改到 `tests/conftest.py`、`tests/fixtures/`、`pyproject.toml` 的批，開發跑 `test_for.py` 會挑到整套：這時只跑那幾個改到的測試檔與直接相關的，整套留到合併那一刻。
-- **整套（含 slow）只在分支合併的那一刻跑一次**，由做合併的人（PM）跑：
-  `.venv/Scripts/python.exe -m pytest -q -n auto -m "slow or not slow"`（`TIANXIA_DB` 設到 repo 外的暫存檔；不寫 `-m ""`）。
-  - 時機：批合進功能分支、功能分支合進 `develop`、`develop` 合進 `main`、`main` 合進 `develop`／功能分支。
-  - 整套綠了才推；紅了把失敗的那幾條交回開發，修好之後再跑那幾條就好，推之前再跑一次整套。
+- **合併時跑哪一種**（Joy 2026-10-26 在決定卡上選「只有上 main 跑整套 slow」；以前每一次合併都跑整套含 slow）：
+  - **批合進功能分支、功能分支合進 `develop`、`main` 合回 `develop`／功能分支**：`scripts/test_for.py --base origin/<要合進去的分支>` 挑的相關測試，加上**不含 slow 的整套** `.venv/Scripts/python.exe -m pytest -q -n auto`（`pyproject.toml` 預設就擋掉 slow）。這一次合進來的改動碰到 `tianxia/` 或 `content/` 時，再加跑 slow：`.venv/Scripts/python.exe -m pytest -q -n auto -m slow`。只改 `web/`、文件、測試的不跑 slow。
+  - **`develop` 合進 `main`（上線）之前一定跑整套含 slow**：`.venv/Scripts/python.exe -m pytest -q -n auto -m "slow or not slow"`（不寫 `-m ""`）。
+  - 都由做合併的人跑，`TIANXIA_DB` 設到 repo 外的暫存檔。綠了才推；紅了把失敗的那幾條交回開發，修好之後再跑那幾條就好，推之前再跑一次同一種。
 - 不要為了預先判斷平衡跑模擬或量表（企劃者 2026-10-14「給玩家實際體驗回饋最準」）；計畫本身寫了要量的照量。
 - 開發、QA 自己不再開多代理工作流程（Workflow），也不一項一個子代理（PM 派出來的那一個子代理就是開發或 QA 本人）。
 
@@ -84,10 +84,10 @@ description: 《天下大勢》的分支、測試與合併規矩（企劃者 202
   - `試玩回饋.md` 兩邊都留，表格照 FB 編號排，檔尾的驗收紀錄照時間排。
   - `CLAUDE.md` 一律留瘦身版，對方新加的那一行搬進對應的 `docs/guide/`。
   - 用腳本解衝突時保留檔案原本的換行（`newline=""`），每一處 assert。
-- **合併的順序**：功能分支合進 develop 之前，先把 develop（與 main 的新東西）合進功能分支，在那裡跑整套；合進 develop 時內容跟測過的一樣（`git diff --quiet HEAD <功能分支>`）就不必再跑一次。
+- **合併的順序**：功能分支合進 develop 之前，先把 develop（與 main 的新東西）合進功能分支，在那裡照上面「合併時跑哪一種」跑；合進 develop 時內容跟測過的一樣（`git diff --quiet HEAD <功能分支>`）就不必再跑一次。
 - **git 沒衝突不代表合得起來**（10/21）：develop 與 main 各自都過，合起來正式內容載入就炸（main 給學來的武學掛小戰法、develop 讓同伴拿它們當起始武學；名品撞新招名）。合 main 之後先在不帶設定、`weekend`、`season21`、`week7` 各載一次內容、起一次伺服器，再跑整套。`git merge-tree --write-tree --name-only A B` 可以先看會不會有文字衝突。
 - **上 main 用上線分支**（10/21）：從 develop 開 `release/<日期>`，企劃者說「這一樣不放」就在上線分支 `git revert -m 1 <那個合併>`；合 main 之前每次 `ls-remote origin main`，Joy 又推了就先合進上線分支、整套。合進 main 之後把 main 合回 develop，再在 develop `git revert <那筆 revert>` 把功能還回來，整套、推，接著 develop 合進功能分支。合進 main 的時機跟部署一起排：一進 main，Joy 下一次照常部署就會換上它（資料庫改版回不去、季中換季曆會跳）。部署說明寫在 `docs/superpowers/feedback/`，經企劃者同意、由企劃者轉給 Joy。
-- **跑整套的指令**：`TIANXIA_DB=<scratchpad>/db/x.db PYTHONIOENCODING=utf-8 C:/Ray/專案/天下大勢/.venv/Scripts/python.exe -m pytest -q -n auto -m "slow or not slow" -p no:cacheprovider > log 2>&1; echo EXIT=$? >> log`，背景跑，看最後那一行「N passed」與 EXIT 再推。
+- **跑整套的指令**：`TIANXIA_DB=<scratchpad>/db/x.db PYTHONIOENCODING=utf-8 C:/Ray/專案/天下大勢/.venv/Scripts/python.exe -m pytest -q -n auto -p no:cacheprovider > log 2>&1; echo EXIT=$? >> log`（不含 slow；上 main 之前加 `-m "slow or not slow"`、改到 `tianxia/`、`content/` 時另跑 `-m slow`），背景跑，看最後那一行「N passed」與 EXIT 再推。
 - **設計稿請人審**：寫完設計稿派一個子代理用「拿這份能不能開工」讀一遍，只把「只有企劃者能答」的問題一次問完，其餘 PM 自己定、標【PM】。
 
 ## 流程
@@ -95,9 +95,9 @@ description: 《天下大勢》的分支、測試與合併規矩（企劃者 202
 1. **設計定了**：開發 session 照設計寫這一批的計畫（superpowers:writing-plans，存 `docs/superpowers/plans/`，不必給企劃者審），再照計畫在 session 裡一步一步做（executing-plans，不開子代理）。
 2. **開發做完**：回報 commit、跑了哪些測試。不跑整套。
 3. **PM 派 QA**：只驗這一批，只跑最小量測試；回饋單編號 PM 派工時給。
-4. **QA 過了**：PM 把批合進功能分支 → 跑整套 → 綠了推上 → 更新架構圖（`docs/superpowers/architecture/三國篇架構.html`，重新發佈 artifact）。
-5. **功能做完（或企劃者說要內測的一段）**：PM 合進 `develop` → 整套 → 推上；要內測時寫部署說明給 Joy。
-6. **企劃者說可以上線**：PM 把 `develop` 合進 `main` → 整套 → 推上 → 寫部署說明給 Joy（資料庫改版、要備份、要在休季部署的都寫明）。
+4. **QA 過了**：PM 把批合進功能分支 → 相關測試＋不含 slow 的整套（改到 `tianxia/`、`content/` 加跑 slow）→ 綠了推上 → 更新架構圖（`docs/superpowers/architecture/三國篇架構.html`，重新發佈 artifact）。
+5. **功能做完（或企劃者說要內測的一段）**：PM 合進 `develop` → 相關測試＋不含 slow 的整套（改到 `tianxia/`、`content/` 加跑 slow）→ 推上；要內測時寫部署說明給 Joy。
+6. **企劃者說可以上線**：PM 把 `develop` 合進 `main` → 整套含 slow → 推上 → 寫部署說明給 Joy（資料庫改版、要備份、要在休季部署的都寫明）。
 
 照舊的規矩：
 - 畫面改動先出 2～3 張對比圖給企劃者挑（企劃者 2026-10-15）。
