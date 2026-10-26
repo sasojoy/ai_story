@@ -101,12 +101,13 @@ const tf = () => {{
 }};
 const toScreen = (x, y) => {{ const t = tf(); return [t.x + x * t.s, t.y + y * t.s]; }};
 const toMap = (px, py) => {{ const t = tf(); return [(px - t.x) / t.s, (py - t.y) / t.s]; }};
-// 內容框（區圖：取景框；天下圖：world.frame）此刻在螢幕上的四邊
+// 內容框（夾邊照它：天下圖與全區都是整張圖 world.frame——全區以前是這一區的取景框，FB-876 企劃者 2026-10-26 選甲改成整張圖）此刻在螢幕上的四邊
 const content = () => {{
-  const w = H.S.mapLayer === 'world', f = w ? H.S.mapBase.world.frame : H.S.regionView.frame;
-  const [x0, y0, x1, y1] = w ? [f[0], f[1], f[0] + f[2], f[1] + f[3]] : f;
-  return [...toScreen(x0, y0), ...toScreen(x1, y1)];
+  const f = H.S.mapBase.world.frame;
+  return [...toScreen(f[0], f[1]), ...toScreen(f[0] + f[2], f[1] + f[3])];
 }};
+// 這一區的取景框（全區）此刻在螢幕上的四邊
+const regionBox = () => {{ const f = H.S.regionView.frame; return [...toScreen(f[0], f[1]), ...toScreen(f[2], f[3])]; }};
 const pan = () => H.S.mapPan && {{ z: +H.S.mapPan.z.toFixed(6), x: +H.S.mapPan.x.toFixed(3), y: +H.S.mapPan.y.toFixed(3) }};
 // 用滾輪（小步、對著地圖框中間）放大到至少 zt 倍
 const zoomTo = (zt) => {{ for (let i = 0; i < 300 && (!H.S.mapPan || H.S.mapPan.z < zt); i++) {{ wheel(VW / 2, 330, -20); flush(); }} return pan(); }};
@@ -248,35 +249,43 @@ return { z0, z1, there, mid1, after, opened, capturedAtSecond, will: world.style
 
 @pytest.mark.parametrize("dx,dy,edge", [(3000, 0, "left"), (-3000, 0, "right"), (0, 3000, "top"), (0, -3000, "bottom")])
 def test_dragging_hard_stops_at_the_edges(dx, dy, edge):
-    """夾邊（企劃者「圖不能完全拖出框外」）：放大之後往一個方向拖到底，內容框（區圖：取景框）那一邊剛好貼齊露出來的那一塊——
-    左右是地圖框、上面是那一排底下（58）、底下是抽屜上面（收著 54）。整張不會拖出框外。"""
+    """夾邊（企劃者「圖不能完全拖出框外」）：放大之後往一個方向拖到底，內容框那一邊剛好貼齊露出來的那一塊——
+    左右是地圖框、上面是那一排底下（58）、底下是抽屜上面（收著 54）。整張不會拖出框外。
+    FB-876（企劃者 2026-10-26 選甲）：全區的內容框從這一區的取景框改成整張圖，看洛陽（在整張圖中間，四邊都拖得到整張圖的邊；
+    潁川汝南貼著整張圖的南緣，1 倍時南緣就露在框裡，軟夾照規則不往外，新規則另見 tests/test_fb876_region_neighbours_web.py）。"""
     out = run(_game(), READY + f"""
 zoomTo(3);
 down(1, 180, 300); move(1, 180 + {dx} / 2, 300 + {dy} / 2); flush(); move(1, 180 + {dx}, 300 + {dy}); flush(); up(1, 180 + {dx}, 300 + {dy}); flush();
 return content();
-""")
+""", region="luoyang")
     x0, y0, x1, y1 = out
     want = {"left": (x0, 0), "right": (x1, 375), "top": (y0, 58), "bottom": (y1, 604 - 54)}[edge]
     assert want[0] == pytest.approx(want[1], abs=1e-6)
     assert x0 <= 0 + 1e-6 and x1 >= 375 - 1e-6 and y0 <= 58 + 1e-6 and y1 >= 550 - 1e-6  # 3 倍時內容框照樣蓋滿露出來的那一塊
 
 
-def test_at_one_times_the_region_stays_inside_the_open_area():
-    """1 倍時內容框本來就整個在露出來的那一塊裡：拖只能在空隙裡挪，挪不出去（往哪拖都一樣）；縮回 1 倍時照 1 倍的範圍夾回框裡。"""
+def test_at_one_times_the_region_map_drags_out_of_its_region():
+    """FB-876（企劃者 2026-10-26 選甲）推翻以前這一條（「1 倍時這一區的取景框整個在露出來的那一塊裡，拖只能在空隙裡挪，挪不出去」）：
+    全區照整張圖夾，1 倍時也拖得出這一區——往右拖 400，這一區的取景框左緣離開框邊一大截（看得到西邊的鄰區）；整張圖的四邊照樣不拖進露出來的
+    那一塊（1 倍時就已經露在框裡的那一邊照軟夾不再往裡）；縮回 1 倍時回到 1 倍的取景。新規則另見 tests/test_fb876_region_neighbours_web.py。"""
     out = run(_game(), READY + """
-const res = [];
+const start = content(), startRegion = regionBox(), res = [];
 for (const [dx, dy] of [[400, 0], [-400, 0], [0, 400], [0, -400]]) {
+  H.S.mapPan = null; H.S.panFrom = null; H.applyMapView(false);
   down(1, 180, 300); move(1, 180 + dx, 300 + dy); flush(); up(1, 180 + dx, 300 + dy); flush();
-  res.push(content());
+  res.push({ whole: content(), region: regionBox(), pan: pan() });
 }
 for (let i = 0; i < 30; i++) { wheel(VW / 2, 330, -100); flush(); }
 down(1, 180, 300); move(1, 3000, 300); flush(); up(1, 3000, 300); flush(); // 3 倍拖到最左邊
 for (let i = 0; i < 80; i++) { wheel(20, 330, 100); flush(); }
-res.push(content());
-return res;
+return { start, startRegion, res, back: H.S.mapPan };
 """)
-    for x0, y0, x1, y1 in out:
-        assert x0 >= -1e-6 and x1 <= 375 + 1e-6 and y0 >= 58 - 1e-6 and y1 <= 550 + 1e-6, (x0, y0, x1, y1)
+    start, (right, left, down, up), back = out["start"], out["res"], out["back"]
+    assert right["region"][0] > 150 and right["whole"][0] <= 1e-6  # 拖得出這一區（修前 1 倍時一點都不動），整張圖的西緣不拖進框裡
+    assert left["region"][2] < out["startRegion"][2] - 20 and left["whole"][2] == pytest.approx(375)  # 往左拖到整張圖的東緣停住
+    assert down["pan"]["y"] == pytest.approx(400) and down["whole"][1] <= 58 + 1e-6  # 往下拖看北邊
+    assert up["whole"][3] == pytest.approx(start[3])  # 潁川汝南貼著整張圖的南緣：1 倍時南緣已經露在框裡，往上拖不再往外（軟夾）
+    assert back is None  # 縮回 1 倍：1 倍的取景
 
 
 def test_the_soft_edge_never_jumps():
@@ -370,10 +379,11 @@ return [same, writes.length, H.mapFrame()];
 
 def test_fb710_the_frame_growing_reclamps_once_through_the_status_bar():
     """框變高（狀態列少一行）時照新的可見區夾一次（PM 定「重夾一次」）：2 倍拖到下緣貼著可見區下緣（550），狀態列少 43px，
-    經 renderTop 時內容的下緣跟著到新的下緣（593），上緣照舊在那一排上面；手勢一開始才發現框換了的那一條路不挪（只准不再往外）。"""
+    經 renderTop 時內容的下緣跟著到新的下緣（593），上緣照舊在那一排上面；手勢一開始才發現框換了的那一條路不挪（只准不再往外）。
+    內容框是整張圖（FB-876 企劃者選甲，以前是這一區的取景框）：看洛陽（潁川汝南貼著整張圖的南緣，2 倍時南緣拖不到可見區的下緣）。"""
     out = run(_game(), READY + """
 const go = (viaTop) => {
-  frameTo(VH); H.S.tab = 'map'; H.renderTop(); H.enterRegion('yingru'); H.regionPick(null);
+  frameTo(VH); H.S.tab = 'map'; H.renderTop(); H.enterRegion('luoyang'); H.regionPick(null);
   zoomTo(2);
   down(1, 150, 400); move(1, 150, 200); flush(); move(1, 150, -600); flush(); up(1, 150, -600); flush(); // 往上拖到底：下緣貼著 550
   const pinned = content();

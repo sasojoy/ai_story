@@ -279,7 +279,8 @@ def _foes(
 ) -> list[tuple[str, str]]:
     """這裡遇得上的隊伍與勝算（atlas.foes：自己陣營的寫「操練」），加上這週截糧帶來的敵方運糧隊（orders.extra_enemies，
     出陣攻的對手就有它）：截糧的地點歸自己時，那一處的對手就是糧隊（FB-258）。
-    squad_ids 給了（FB-858）：領地爭奪開著、這一處是出陣攻，列出陣真的會打的那幾路（Game._map_foes），不查站的隊伍。"""
+    squad_ids 給了（FB-858）：領地爭奪開著、這一處是出陣攻（或約戰開著、此刻攻不了，FB-878），列出陣真的會打的那幾路（Game._map_foes），
+    不查站的隊伍。"""
     listed = atlas.foes(content, loc, odds, faction, state.world, squad_ids)
     names = {name for name, _ in listed}
     for sid in orders.extra_enemies(state, content, loc.id, faction):
@@ -513,8 +514,9 @@ def state(
     """疊層（設計第九節）。odds 是 Game.odds，照 odds(隊伍, at=地點) 問：每一處的勝算照那一處的地利算（terrain.strong_at，
     武學隨地理環境計畫第六節）；這裡記住，同一支隊伍、同一種地利只算一次；sortie_mode(地點) 是 sortie.mode 的結果；
     sorties_left 是今天還能出陣幾次（散人、出陣關著是 None）；real_minutes 把世界秒換成現實分鐘（Game._real_minutes）；
-    sortie_foes(地點) 是 Game._map_foes（FB-858，減法季 3d），只在那一處的出陣是攻時問：領地爭奪開著，出陣真的會打的那幾路隊伍 id
-    （地點卡的對手、勝算字、推薦排序都跟著它）；領地爭奪關著、沒給、回 None 是照舊列站的隊伍（atlas.foes）。
+    sortie_foes(地點) 由 Game.map_state 給（FB-858，減法季 3d；每一處都問，問誰由它決定：標攻的地方，與約戰開著、此刻攻不了的敵方與中立區塊，
+    FB-878）：領地爭奪開著，出陣真的會打的那幾路隊伍 id（Game._map_foes；地點卡的對手、勝算字、推薦排序都跟著它）；領地爭奪關著、沒給、
+    回 None 是照舊列站的隊伍（atlas.foes）。
 
     {"key", "now_week", "weeks_total", "season_one", "territory", "faction", "sides", "here", "stamina", "sorties_left",
      "journey": None | {"to","to_name","minutes","next_name","x","y"}, "travel_block": None | {"reason","to_jianghu"},
@@ -557,7 +559,7 @@ def state(
         if route is not None and not route.path:
             route = None
         how = sortie_mode(loc_id)
-        listed = _foes(s, c, loc, odds_at(loc_id), faction, sortie_foes(loc_id) if sortie_foes is not None and how == "attack" else None)
+        listed = _foes(s, c, loc, odds_at(loc_id), faction, sortie_foes(loc_id) if sortie_foes is not None else None)
         worst = _worst(listed)
         places[loc_id] = {
             "control": territory.controller(w, c, loc_id),
