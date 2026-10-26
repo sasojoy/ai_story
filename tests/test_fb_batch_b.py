@@ -275,9 +275,10 @@ def test_fb136_in_a_battle_round_the_three_moves_come_right_after_the_scene(batt
 
 
 @node
-def test_fb136_outside_a_battle_round_the_box_stays_above_the_actions(battle):
-    """不是輪到出招（只能觀戰、平常閒著）：說書人的框照企劃者 10/5 的決定留在行動列上面。"""
+def test_fb136_outside_a_battle_round_the_box_sits_below_the_actions(battle):
+    """不是輪到出招（只能觀戰、平常閒著）：序章以外說書人的框排在行動列底下（Joy 2026-10-26「至少要在行動鈕下面」；
+    以前照企劃者 10/5 的決定留在行動列上面）。"""
     watcher, _ = battle
     m = {**server.main_view(watcher), "guide": SHOWDOWN_BOX}
     page = run(m, "return H.pageJianghu();")
-    assert page.index('<section class="card guide"') < page.index('class="act-bar')
+    assert page.index('class="act-bar') < page.index('<section class="card guide"')
