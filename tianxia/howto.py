@@ -423,6 +423,8 @@ SORTIE_RANGER = "散人不出陣，靠懸賞與事件出力"
 # 領地爭奪（第 38 項改版第一批）：出陣推的是那一塊的進度、戰線照佔領算——上面三句在這種季換成這幾句（待 joy 潤）
 CONQUEST_PLACES = "在官軍、黃巾的領地與中立地出陣，推的是那一塊的進度，不直接推戰線"
 CONQUEST_JOIN = "在官軍、黃巾的領地與中立地出陣：別人的地方打贏把那一塊的進度往你那一邊推，自家的地方守一回、推一半"
+# 約戰開著（減法季批 3b；FB-857）：沒有零風險的守，出陣是貼約戰、守就是應戰；取代上面那一句（sortie_duel.on 的季）。待 joy 潤
+CONQUEST_JOIN_DUEL = "在官軍、黃巾的領地與中立地出陣：別人的地方、中立地封好三招貼約戰，打贏把那一塊的進度往你那一邊推，自家的地方等對面來約、應戰守住了把進度拉回來"
 CONQUEST_FRONTS = "戰線照兩軍佔了多少地來算：佔下中立地、打進敵方的領地，戰線就往那一邊偏"
 
 
@@ -997,7 +999,7 @@ def join_lines(content: Content, season: WorldState) -> list[str]:
               else "陣營不是交戰的兩軍時，跟散人一樣臨時投效。")
     lines = [
         "**投靠**：在陣營收人的地方按「投靠」，要再確認一次；也可以拜入陣營名下的門派。投靠之後，"
-        f"{CONQUEST_JOIN if conquest.on(content, season) else SORTIE_JOIN if sortie.on(content) else SOME_PLACES + '，推向你那一邊，遇上自己陣營的隊伍是操練'}"
+        f"{(CONQUEST_JOIN_DUEL if sortie_duel.on(content, season) else CONQUEST_JOIN) if conquest.on(content, season) else SORTIE_JOIN if sortie.on(content) else SOME_PLACES + '，推向你那一邊，遇上自己陣營的隊伍是操練'}"
         "；全服決戰替自己的陣營出戰，"
         f"{gentry}"
         "散人照樣能玩，只是沒有軍令與晉升；遇上決戰，人到了決戰的大區，可以臨時投效交戰兩軍之一，只算那一場，打完照樣是散人。",
