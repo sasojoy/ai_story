@@ -33,7 +33,7 @@ from .models import (
     GiftDef, Hints, MingtieContent, InsightDef, Location, MallItem, MarkRule, MarkText, OppDef,
     InsightScene, Opening, OrdersContent, PresetRecipe, PromotionDef, RealDay, RealSlot, RelationDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, ShardDef,
     SimRumor, SkillDef,
-    SignatureArmDef, SteedDef, Squad, Tier4Named, TimetableEvent, TraitBook, TreasureDef, Tutorial, allow_known,
+    SignatureArmDef, SteedDef, Squad, StoryDef, Tier4Named, TimetableEvent, TraitBook, TreasureDef, Tutorial, allow_known,
 )
 from .martial_arts import ATTRIBUTE_COUNTERS, ATTRIBUTES, QUALITIES
 from .naming import FORGE_CLASH, GEAR_CLASH, PRESET_CLASH, SEAL_CLASH, name_problem
@@ -134,6 +134,7 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         mark_rules=[_build(MarkRule, raw) for raw in _read(root / "mark_rules.json")] if (root / "mark_rules.json").exists() else [],
         outing_lines=_read(root / "outing_lines.json") if (root / "outing_lines.json").exists() else {},  # 探索一顆的段落（減法季批 2）
         verdicts=_read(root / "verdicts.json") if (root / "verdicts.json").exists() else {},  # 人物評曰的固定句（減法季批 7b-2）
+        storylines=_index(StoryDef, _read(root / "storylines.json")) if (root / "storylines.json").exists() else {},  # 一條線（特殊事件）
         figures=_index(FigureDef, _read(root / "figures.json")) if (root / "figures.json").exists() else {},
         duels=_index(DuelBoss, _read(root / "duels.json")) if (root / "duels.json").exists() else {},
         gear=_gear(root / "gear.json"),
@@ -147,6 +148,7 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         art=ArtBook(**_read(root / "art.json")) if (root / "art.json").exists() else ArtBook(),  # 圖的分類表（減法季批 8）
     )
     content.config.admins = _with_local_admins(content.config.admins)
+    _fill_story_lines(content)
     validate(content)
     _scale_marks(content, content.config.mark_threshold_scale)
     return content
@@ -784,6 +786,110 @@ def check_outing_lines(c: Content, need) -> None:
 
 
 ART_PATH = re.compile(r"^(places|figures|events)/[a-z0-9_]+$")  # web/img/ 底下的路徑：子資料夾／鍵，不含副檔名
+STORY_ART = re.compile(r"^stories/[a-z0-9_]+$")  # 一條線與它的結局的專屬圖（web/img/stories/<鍵>.webp）
+
+
+def event_effects(ev: Event) -> list[Effect]:
+    """一則事件寫的每一個效果：選項的成敗、隨口應對的成敗與分岔的每一種後果。"""
+    out = [e for ch in ev.choices for e in (ch.effect, ch.fail_effect)]
+    if ev.free_text is not None:
+        out += [ev.free_text.effect, ev.free_text.fail_effect]
+        out += [e for o in ev.free_text.outcomes for e in (o.effect, o.fail_effect)]
+    return out
+
+
+def event_endings(ev: Event) -> list[Effect]:
+    """一則事件了結時真的會套的那幾個效果：每個選項的成套（有檢定或開打的再加敗套）、隨口應對的成敗或分岔每一種後果的成敗。"""
+    out = []
+    for ch in ev.choices:
+        out += [ch.effect] + ([ch.fail_effect] if ch.check is not None or ch.combat is not None else [])
+    free = ev.free_text
+    if free is not None:
+        out += [e for o in free.outcomes for e in [o.effect] + ([o.fail_effect] if o.kind in ("check", "combat") else [])]
+        if not free.outcomes_only:
+            out += [free.effect, free.fail_effect]
+    return out
+
+
+def _fill_story_lines(c: Content) -> None:
+    """一條線的段落事件上，效果的 story 沒寫 line 的補上那一條線的 id（一則事件只准屬於一條線，check_storylines 驗）。"""
+    for line in c.storylines.values():
+        for stage in line.stages:
+            ev = c.events.get(stage.event) if stage.event else None
+            if ev is None:
+                continue
+            for eff in event_effects(ev):
+                if eff.story is not None and not eff.story.line:
+                    eff.story.line = line.id
+
+
+def check_storylines(c: Content, need) -> None:
+    """一條線（content/storylines.json，特殊事件設計稿；tianxia/storyline.py）：段與結局的 id 不重複、往哪裡都指得到、
+    段落事件只能接在這條線上（actions 寫 []、只屬於一條線），fight 寫得出打哪一路、打贏打輸往哪裡，task 寫得出等什麼。
+    效果的 story 只准寫在段落事件上，line 要是那一條線。"""
+    owner: dict[str, str] = {}
+    for line in c.storylines.values():
+        lw = f"一條線 {line.id}"
+        ids = [st.id for st in line.stages] + [e.id for e in line.endings]
+        need(len(ids) == len(set(ids)), f"{lw}：段與結局的 id 有重複")
+        known_ids = set(ids)
+        for img in [line.image] + [e.image for e in line.endings]:
+            need(img is None or bool(STORY_ART.match(img)), f"{lw}：image「{img}」要寫成 stories/<鍵>")
+        if line.start is not None:
+            check_story_place(c, need, f"{lw} 的開頭", line.start.where)
+        need(any(not e.failed for e in line.endings), f"{lw}：至少要有一個不是失敗的結局")
+        for end in line.endings:
+            need(end.effect.story is None, f"{lw} 結局 {end.id}：結局的效果不能再寫 story")
+            need(bool(end.annal.strip()), f"{lw} 結局 {end.id}：annal（寫進傳的那一句）是空的")
+
+        def target(where: str, go: str | None) -> None:
+            need(go is None or go in known_ids, f"{where}：往「{go}」指不到這條線的段或結局")
+
+        for st in line.stages:
+            sw = f"{lw} 段 {st.id}"
+            check_story_place(c, need, sw, st.where)
+            for name in ("next", "late", "win", "lose"):
+                target(f"{sw} 的 {name}", getattr(st, name))
+            for route in st.routes:
+                target(f"{sw} 的 routes", route.go)
+            need(st.days is None or st.late is not None, f"{sw}：寫了期限 days 就要寫過期往哪裡（late）")
+            routed = st.next is not None or bool(st.routes)
+            if st.kind == "event":
+                ev = c.events.get(st.event or "")
+                need(ev is not None, f"{sw}：事件「{st.event}」不存在")
+                if ev is None:
+                    continue
+                need(ev.actions == [], f"{sw}：事件 {ev.id} 的 actions 要寫 []（只由這條線端出來）")
+                need(owner.setdefault(ev.id, line.id) == line.id, f"{sw}：事件 {ev.id} 已經是一條線 {owner[ev.id]} 的段落")
+                effects = event_effects(ev)
+                for eff in effects:
+                    if eff.story is not None:
+                        need(eff.story.line == line.id, f"{sw}：事件 {ev.id} 的 story.line 要是 {line.id}")
+                        target(f"{sw} 事件 {ev.id} 的 story.go", eff.story.go)
+                # 選項都寫了往哪裡（或事件串到下一則）才可以不寫 routes／next
+                need(routed or all((eff.story is not None and eff.story.go) or eff.next_event for eff in event_endings(ev)),
+                     f"{sw}：有選項沒寫 story.go，這一段又沒寫 next 或 routes（走完不知道往哪裡）")
+            elif st.kind == "quiz":
+                need(bool(st.questions), f"{sw}：quiz 要寫 questions")
+                need(routed, f"{sw}：quiz 要寫 next 或 routes")
+            elif st.kind == "fight":
+                need(st.squad in c.squads, f"{sw}：打的那一路「{st.squad}」不在 squads")
+                need(st.win is not None and st.lose is not None, f"{sw}：fight 要寫 win 與 lose")
+            else:
+                need(st.until is not None or bool(st.task), f"{sw}：task 要寫 until（條件）或 task（登記的判斷名）")
+                need(routed, f"{sw}：task 要寫 next 或 routes")
+    for ev in c.events.values():
+        if ev.id in owner:
+            continue
+        need(all(eff.story is None for eff in event_effects(ev)), f"事件 {ev.id}：story 只能寫在一條線的段落事件上")
+
+
+def check_story_place(c: Content, need, where: str, place) -> None:
+    for lid in place.locations:
+        need(lid in c.locations, f"{where}：地點「{lid}」不存在")
+    regions = {r.id for r in c.map.regions}
+    for rid in place.regions:
+        need(rid in regions, f"{where}：大區「{rid}」不存在")
 
 
 def check_art(c: Content, need) -> None:
@@ -3139,6 +3245,7 @@ def validate(c: Content) -> None:
     check_siege_templates(c, need)
     check_explore_one(c, need)
     check_outing_lines(c, need)
+    check_storylines(c, need)
 
     # 地方痕跡過門檻（減法季整合設計 5.2；主機側計畫 Task 4-3，content/mark_rules.json）：一個痕跡一條規則，算「有人讀」；
     # 過門檻那一刻的傳聞、之後地點描寫多接的那一段都要寫（〈天下形勢〉與江湖史沒寫就照傳聞那一句）；推的線同事件效果的規矩

@@ -1209,4 +1209,11 @@ def apply_effect(
         fragment = world.record_jade_seal_fragment(name, content.scenario.name, fragment_text)
         if fragment is not None:
             msgs.append(f"🏺 【天下大事】{name}尋得傳國玉璽第 {fragment.number} 塊碎片！（{fragment.number}/{JADE_SEAL_FRAGMENT_COUNT} 已現世）")
+    step = effect.story
+    progress = p.storylines.get(step.line) if step is not None else None
+    if progress is not None and progress.ending is None:  # 一條線的一步（storyline.py）：記號加上去、記下往哪裡，動作結束時 storyline.tick 才走
+        for key, value in step.marks.items():
+            progress.marks[key] = progress.marks.get(key, 0) + value
+        if step.go:
+            progress.go = step.go
     return msgs
