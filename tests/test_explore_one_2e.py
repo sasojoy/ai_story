@@ -8,12 +8,13 @@
 用正式內容（season21），整個檔標 slow。"""
 from __future__ import annotations
 
+import re
 from unittest import mock
 
 import pytest
 from jianfa_kit import jianfa_game, ready
 
-from tianxia import explore_one, team
+from tianxia import explore_one, mapdata, team
 from tianxia.encounter import EncounterResult
 from tianxia.state import Bounty
 
@@ -215,3 +216,100 @@ def test_a_lost_fight_does_not_read_as_a_won_one_in_the_same_paragraph():
     story = _story(game, "落敗")
     assert not _closes(game, story)
     assert "配不上你" not in story
+
+
+# ── 3. FB-882 ──
+
+
+def _w(event: int, encounter: int, material: int, insight: int) -> dict[str, int]:
+    return {explore_one.EVENT: event, explore_one.ENCOUNTER: encounter, explore_one.MATERIAL: material, explore_one.INSIGHT: insight}
+
+
+def test_the_small_word_is_the_biggest_class_of_what_is_drawn():
+    h = explore_one.hint_of
+    assert h(explore_one.TEMPLE, None, _w(50, 0, 15, 30)) == "寺裡多事" and h(explore_one.TEMPLE, "foe", _w(50, 5, 15, 30)) == "寺裡多事"
+    assert h(explore_one.TEMPLE, None, _w(50, 0, 15, 0)) == "寺裡多事"  # 悟不出感悟
+    assert h(explore_one.TEMPLE, None, _w(0, 5, 15, 30)) == "寺裡多悟"  # 抽不到事件，感悟才最大
+    assert h(explore_one.TOWN, "town", _w(60, 15, 15, 10)) == "城裡多事"
+    assert h(explore_one.WILD, "foe", _w(15, 55, 20, 10)) == "野外多敵" and h(explore_one.WILD, None, _w(15, 0, 20, 10)) == "野外多料"
+    assert h(explore_one.CAMP, "foe", _w(15, 60, 15, 10)) == "營裡多敵"
+    assert h(explore_one.HILL, "foe", _w(10, 30, 40, 20)) == "山裡多料"
+    assert h(explore_one.HILL, "foe", _w(5, 40, 40, 20)) == "山裡參半"  # 危險的山：遭遇追平素材
+    assert h(explore_one.HILL, "foe", _w(5, 50, 40, 20)) == "山裡多敵"  # 更危險：遭遇最大
+    assert h(explore_one.FORD, "foe", _w(30, 30, 30, 10)) == "渡口參半"
+    assert h(explore_one.FORD, "foe", _w(20, 40, 30, 10)) == "渡口多敵"  # 危險的渡口：遭遇最大
+    assert h(explore_one.FORD, None, _w(30, 0, 30, 10)) == "渡口參半"
+    assert h(explore_one.WILD, "bounty", _w(0, 100, 0, 0)) == "野外有賞" and h(explore_one.CAMP, "spar", _w(15, 0, 15, 10)) == "同袍比劃"
+
+
+def test_each_default_table_is_worded_by_its_own_biggest_column():
+    """六張表（含寺）的字照表算，不寫死：最大那一欄的字，並列最大寫參半。"""
+    cfg = jianfa_game().content.config.jianfa
+    words = {explore_one.EVENT: "多事", explore_one.ENCOUNTER: "多敵", explore_one.MATERIAL: "多料", explore_one.INSIGHT: "多悟"}
+    assert {t.kind for t in cfg.explore_tables} == set(explore_one.PLACE_WORDS)
+    for t in cfg.explore_tables:
+        cols = {explore_one.EVENT: t.event, explore_one.ENCOUNTER: t.encounter, explore_one.MATERIAL: t.material, explore_one.INSIGHT: t.insight}
+        top = [k for k, v in cols.items() if v == max(cols.values())]
+        expect = "參半" if len(top) > 1 else words[top[0]]
+        assert explore_one.mostly_in(t) == expect and explore_one.hint_in(t) == explore_one.PLACE_WORDS[t.kind] + expect, t.kind
+    temple = next(t for t in cfg.explore_tables if t.kind == explore_one.TEMPLE)
+    assert (temple.event, temple.insight) == (50, 30) and explore_one.hint_in(temple) == "寺裡多事"
+
+
+def test_the_temple_says_so_on_the_button_the_cell_the_map_and_the_howto():
+    import server
+
+    game = ready(jianfa_game(), side="guan", loc="baima_temple")
+    plan = game.outing_plan()
+    assert plan.kind == explore_one.TEMPLE and plan.hint == "寺裡多事"
+    label = next(o for o in game.options(odds=False) if o.id == "act:explore").label
+    assert label.endswith("・寺裡多事）") and server.main_view(game)["mostly"] == "寺裡多事"
+    assert "多半遇事" in _note(game)  # 行動列那一行本來就這麼說，現在小字跟它一致
+    assert {p["id"]: p["mostly"] for p in game.map_base()["places"]}["baima_temple"] == "多事"
+    text = game.howto_text().split("**探索**")[1].split("\n")[0]
+    assert "寺裡多事" in text and "寺裡多悟" not in text
+    assert mapdata.mostly_here(game.state, game.content) == "寺裡多事"
+
+
+LINE_WORD = {"遇事": "多事", "遇敵": "多敵", "得料": "多料", "有悟": "多悟"}
+
+
+@pytest.mark.parametrize("side", ["guan", "huang", "haoqiang", None])
+def test_the_cell_word_and_the_action_line_always_say_the_same_thing(side):
+    """每一處、每一種身分：鈕上的字＝四格那一格的字；而且跟行動列底下那一行說的「多半…」「可能…」「會…」是同一件事。"""
+    import server
+
+    game = ready(jianfa_game(), side=side, loc="yingshui")
+    if side == "haoqiang":  # 地方豪強先挑依附哪一軍，選單才是平常的樣子
+        game.choose("faction:ally:guan")
+    checked = 0
+    for loc_id, loc in game.content.locations.items():
+        if loc.prologue_only:
+            continue
+        ready(game, loc=loc_id)
+        _reset(game)
+        options = {o.id: o for o in game.options(odds=False)}
+        if "act:explore" not in options:
+            continue
+        plan = game.outing_plan()
+        assert options["act:explore"].label.endswith(f"・{plan.hint}）"), (loc_id, plan.hint)
+        assert server.main_view(game)["mostly"] == plan.hint, loc_id
+        if plan.how in ("bounty", "spar"):
+            continue
+        head = _note(game).partition("，")[2].partition("；")[0]  # 「多半遇事，也可能有悟、得料」
+        word = plan.hint.removeprefix(explore_one.PLACE_WORDS[plan.kind])
+        if head.startswith("多半"):
+            assert word == LINE_WORD[head[2:4]], (loc_id, head, plan.hint)
+        elif head.startswith("會"):
+            assert word == LINE_WORD[head[1:3]], (loc_id, head, plan.hint)
+        else:  # 可能A、B：並列最大
+            assert head.startswith("可能") and word == "參半", (loc_id, head, plan.hint)
+        checked += 1
+    assert checked > 20
+
+
+def test_closed_and_off_seasons_keep_the_old_words():
+    """探索一顆關著的季：名字旁與四格的字還是雲端那一套（寺 多悟），一個字不變。"""
+    off = ready(jianfa_game(explore_one=False), side="guan", loc="baima_temple")
+    assert off.mostly_here() == "寺裡多悟" and re.search(r"多悟", mapdata.MOSTLY["寺"])
+    assert {p["id"]: p["mostly"] for p in off.map_base()["places"]}["baima_temple"] == "多悟"
