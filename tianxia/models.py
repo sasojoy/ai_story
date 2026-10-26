@@ -1380,6 +1380,13 @@ class FactionDef(_Strict):
     # 空的＝這個陣營本身就是一軍
     allies: list[str] = Field(default_factory=list)
     ink: FactionInk | None = None  # 輿圖上的顏色與字（輿圖第三版第 3 批）；沒寫的照 mapdata.FALLBACK_INKS 的順序挑
+    # 列傳為終點（減法季批 7b-2，整合設計 3.3、第九章）：季末論功拿到第一、二階的人，列傳的評曰由這一方的哪幾位人物寫（characters 的 id；
+    # 跟他情誼最高的那一位寫，一樣高照寫的順序）。官軍皇甫嵩、盧植，黃巾張角、波才，豪強曹操；空的是沒有（不寫進序列化）
+    verdict_by: list[str] = Field(default_factory=list)
+
+    @model_serializer(mode="wrap")
+    def _drop_new_defaults(self, handler):
+        return _drop_unset(handler(self), ("verdict_by",))
 
 
 class SeasonOneOff(_Strict):
@@ -3080,6 +3087,11 @@ class JianfaRules(JianfaNumbers):
     tiers: TierRules = Field(default_factory=TierRules)  # 季末四階的切法、門檻、起手資源與稱號（wins.settle）
     # 豪強的投靠點 → 投靠那一下預設幫哪一軍（wins.lean_default；content.validate 叫 wins.check 驗每個投靠點都有、都是它能幫的那一軍）
     lean_default_by_join: dict[str, str] = Field(default_factory=lambda: dict(LEAN_DEFAULT_BY_JOIN))
+    # ── 批 7b：列傳為終點（整合設計第九章；主機側計畫第八節；tianxia/zhuan_end.py）──
+    zhuan_end: bool = True  # 第九章 列傳為終點：行狀補齊（季末論功、〈天下形勢〉）、人物評曰、四件商品、深交上限（批 7b）
+    deep_figures: int = Field(default=3, ge=0)  # 同時情誼漲得過 signature_affinity 的人物最多幾位【預設】（企劃者 2026-10-24；深交名額票多一位）
+    verdict_chars: int = Field(default=40, ge=1)  # 人物評曰一句最多幾個字【預設】
+    verdict_budget_seconds: float = Field(default=40, gt=0)  # 一條評曰最多等模型幾秒（含排隊，排在真人後面）【預設】
 
 
 class WebPushRules(_Strict):
@@ -3390,11 +3402,17 @@ class MallLimit(_Strict):
 
 
 class MallWindow(_Strict):
-    """一件商品的上架期間（4.3）：哪幾季（空的是每一季）、哪一段日子（台灣日期 YYYY-MM-DD，含頭尾；不寫是不限）。"""
+    """一件商品的上架期間（4.3）：哪幾季（空的是每一季）、哪一段日子（台灣日期 YYYY-MM-DD，含頭尾；不寫是不限）。
+    減法季批 7b（列傳為終點的四件商品，整合設計第九章）多三樣，都不寫就跟以前一樣：rule 是 Config.jianfa 的子開關名，這一季
+    （開季的章）開著才上架；phases 是賣在季中（season：籌備中與開打的季）還是休季（resting），空的是都賣；from_week 是季中從季曆
+    第幾週起賣（休季不看）。"""
 
     seasons: list[int] = Field(default_factory=list)
     start: str | None = None
     end: str | None = None
+    rule: str | None = None
+    phases: list[Literal["season", "resting"]] = Field(default_factory=list)
+    from_week: int | None = Field(default=None, ge=1)
 
 
 class MallItem(_Strict):
@@ -4870,6 +4888,9 @@ class Content(_Strict):
     # 探索一顆出門一趟的段落句子（content/outing_lines.json，減法季批 2；explore_one.paragraph 讀、content.check_outing_lines 驗）：
     # 拍的類 → 結果 → 句子；沒有這個檔就是空的（照 explore_one.FALLBACK 寫）
     outing_lines: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
+    # 人物評曰的固定句（content/verdicts.json，減法季批 7b-2；模型叫不動時照它，待 joy 潤）：寫的理由（affinity／tier／bought）→ 句子，
+    # {name} 換成名號；沒有這個檔就是空的（照 zhuan_end.DEFAULT_VERDICTS）
+    verdicts: dict[str, list[str]] = Field(default_factory=dict)
     map: MapLayout
     tutorial: Tutorial
     art: ArtBook = Field(default_factory=ArtBook)  # 圖的分類表（content/art.json，減法季批 8）；沒有這個檔就是空的（事件不准寫 image）
@@ -4880,4 +4901,4 @@ class Content(_Strict):
 
     @model_serializer(mode="wrap")
     def _drop_new_defaults(self, handler):
-        return _drop_unset(handler(self), ("mark_rules", "outing_lines"))  # 沒有痕跡規則、段落句子的內容（測試內容）序列化一個鍵都不多
+        return _drop_unset(handler(self), ("mark_rules", "outing_lines", "verdicts"))  # 沒有痕跡規則、段落句子、評曰固定句的內容（測試內容）序列化一個鍵都不多

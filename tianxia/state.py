@@ -620,6 +620,9 @@ class PlayerState(BaseModel):
     # 記號留到下一次同步、看到存檔裡這一份已經減過才清（FB-361：收場那一下在輪詢組畫面時，角色不存、全服的記號照樣提交）
     parted_done: list[str] = Field(default_factory=list)
     affinities: dict[str, int] = Field(default_factory=dict)  # 人物 id -> 0~100 好感度，跟有沒有招到他無關
+    # 深交（減法季批 7b，zhuan_end.enforce_deep_cap）：此刻情誼在 signature_affinity 以上、佔著深交名額的人物，照先來後到；
+    # 空的時候不寫進存檔（QUIET_DEFAULTS），角色每季重來
+    deep_order: list[str] = Field(default_factory=list)
     relationship_notes: dict[str, str] = Field(default_factory=dict)  # 人物 id -> 一句話關係現況
     # 風聞（figure_life.spread）：人物 id → 他聽說的你做過的事（一句一條，最新的在後，最多 hearsay_keep 條）；這一季的，換季清掉
     hearsay: dict[str, list[str]] = Field(default_factory=dict)
@@ -887,6 +890,9 @@ class PlayerState(BaseModel):
     # 上一次看過的幾樣狀態（陣營、門派、階、等級、名號、同伴、寶物、情誼……，annals.watch）：每個動作結束時拿現在的跟它比，變了的記一筆。
     # None＝還沒看過（新角色、這一版之前的存檔）：第一次只記下來、不補記以前的事
     annals_mark: dict | None = None
+    # 列傳為終點（減法季批 7b，annals.xingshi_notes）：〈天下形勢〉看到第幾篇了（之後收下、寫到你名號的那幾篇各記一則行狀）。
+    # 0 的時候不寫進存檔（QUIET_DEFAULTS）；角色每季重來
+    xingshi_seen: int = 0
 
     # ── 推力與貢獻帳（計畫 T3、第一季設計第七節）；角色每季重來，跟著新角色清空 ──
     # 遊俠名號（ranger.py；散人的成長階梯）：散人時攢的善名、惡名（只算加的）與懸賞的功績；投靠了陣營就不再記（凍結）
@@ -1009,6 +1015,7 @@ QUIET_DEFAULTS = (
     "ledgers", "lean_changed", "season_title", "step_day", "step_skip", "deed_day", "deed_today",  # 批 3c、批 4
     "fights_today", "fight_day", "milestone_due", "outing_last",  # 批 2
     "stance_notes", "errands",  # 批 6
+    "xingshi_seen", "deep_order",  # 批 7b
     # 出陣約戰（減法季批 3b）
     "answer_day", "answers_today", "sortie_cooldown_until", "answer_cooldown_until", "duty_day", "duties_today",
 )

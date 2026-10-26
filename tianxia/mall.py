@@ -12,10 +12,10 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 
-from . import library, naming
+from . import calendar, library, naming
 from .characters import name_key
 from .models import Content, MallItem
 from .state import GameState
@@ -43,7 +43,14 @@ EFFECTS: dict[str, EffectSpec] = {
     "legend": EffectSpec("consumable", "{legend} {n} 顆", 99),
     # 重悟帖（Joy 2026-10-21「弄個商城道具可以直接重骰，有上限」）：自創成形之後直接重骰一次（PlayerState.create_rerolls，換季帶著走；一門最多 Config.arts.create_reroll_cap 次）
     "create_reroll": EffectSpec("consumable", "自創重骰 {n} 次", 99),
+    # 列傳為終點的四件（減法季批 7b，整合設計第九章；zhuan_end.py）：都不改角色，購買那一列就是票（同重修列傳）。插畫、紀念印、
+    # 親筆評曰休季時按鈕用掉（data 記 used、season，親筆評曰另記 fid）；深交名額不用按，只算買的那一季（tokens(season=)）
+    "zhuan_art": EffectSpec("consumable", "列傳插畫 {n} 張（休季時用）", 1),
+    "zhuan_seal": EffectSpec("consumable", "紀念印 {n} 方（休季時用）", 1),
+    "zhuan_quote": EffectSpec("consumable", "人物親筆評曰 {n} 張（休季時挑人物）", 1),
+    "deep_slot": EffectSpec("consumable", "深交名額 +{n}（這一季）", 1),
 }
+TICKET_NAMES = {"zhuan_art": "列傳插畫", "zhuan_seal": "紀念印", "zhuan_quote": "人物親筆評曰", "deep_slot": "深交名額"}  # 退款那一句
 KIND_NAMES = {"look": "外觀", "consumable": "消耗品", "card": "月卡", "pass": "通行證"}
 REASONS = {"grant": "封測發放", "buy": "購買", "refund": "退款", "reissue": "補發", "revoke": "扣回", "topup": "儲值"}
 # 月卡的元寶照舊記成 grant（帳本的原因有 CHECK，加原因要改結構；不改結構版本），照編號的開頭認是月卡的哪一份：
@@ -86,6 +93,7 @@ HOLDING_UP = "功法庫上限 +{n}（現在 {cap} 格，這一季）"
 HOLDING_BACK = "功法庫上限收回 {n} 格。"
 REROLL_BACK = "重悟帖收回 {n} 張。"
 CARD_BACK = "月卡少 {n} 天。"
+TICKET_BACK = "{name}作廢。"  # 列傳的四件（批 7b）：退了那一列就不算票、用過的也不再畫
 REBATE_BACK = "當場回的 {n} 元寶扣回。"
 # 月卡每日領（定案甲）：待 joy 潤
 DAILY_PART = "，每天領 {ingots} 元寶與 {pills} 顆{pill}"  # 效果那一句（月卡）多這一段
@@ -171,14 +179,56 @@ def effects_text(item: MallItem, content: Content) -> str:
     )
 
 
-def on_sale(item: MallItem, day: int, season: int) -> bool:
-    """這一天、這一季上不上架（MallWindow：季的清單空的是每一季；日期含頭尾、不寫是不限）。"""
+@dataclass(frozen=True)
+class Moment:
+    """上架看的「此刻」（減法季批 7b 的 MallWindow.rule、phases、from_week 用）：phase 是 season（籌備中、開打的季）或 resting（休季），
+    week 是季曆第幾週（開打的季才有；籌備中、休季是 None），rules 是這一季（開季的章）開著的子開關名。呼叫端（Game._mall_moment）給；
+    沒給（MOMENT）就是季中、不知道第幾週、子開關都不算：只有沒寫這三樣的商品照舊上架。
+    segments：這一季的季曆照段（7 天濃縮季，calendar.week7_on）：說明裡的上架時機（{上架}）寫「第 5 天」不寫「第三週」（FB-849）。
+    blocked：商品 id → 這個人這一季用不上的那一句（FB-845，例：沒投靠一方的人買不了列傳插畫）：貨架上那一列灰掉寫這一句、
+    買也買不了（buy_problem）；沒有這個商品的鍵就是買得了。"""
+
+    phase: str = "season"
+    week: int | None = None
+    rules: frozenset[str] = frozenset()
+    segments: bool = False
+    blocked: dict[str, str] = field(default_factory=dict)
+
+
+MOMENT = Moment()
+SLOTS = ("{上架}",)  # 商品說明（content/mall.json 的 note）裡照季換字的插槽：上架時機，note_text 填，item_problems 驗
+_NUMERALS = "〇一二三四五六七八九十"
+
+
+def _week_cn(n: int) -> str:
+    return _NUMERALS[n] if 0 <= n <= 10 else "十" + _NUMERALS[n - 10] if 11 <= n < 20 else str(n)
+
+
+def note_text(item: MallItem, content: Content, moment: Moment = MOMENT) -> str:
+    """商品說明（FB-849）：{上架} 換成上架時機，讀 MallWindow.from_week、照這一季的季曆寫——7 天濃縮季的「週」是段，畫面上沒有第三週，
+    寫這一段的第一天（calendar.segment_days，「第 5 天」）；其他季照舊「第三週」。沒有插槽的說明原樣不動。待 joy 潤。"""
+    if "{上架}" not in item.note or item.on_sale.from_week is None:
+        return item.note
+    week = item.on_sale.from_week
+    when = f"第 {calendar.segment_days(week, content)[0]} 天" if moment.segments else f"第{_week_cn(week)}週"
+    return item.note.replace("{上架}", when)
+
+
+def on_sale(item: MallItem, day: int, season: int, moment: Moment = MOMENT) -> bool:
+    """這一天、這一季上不上架（MallWindow：季的清單空的是每一季；日期含頭尾、不寫是不限）。減法季批 7b：寫了 rule 的要那個子開關
+    這一季開著；寫了 phases 的要此刻在那一段；寫了 from_week 的季中要到那一週（休季不看）。"""
     window = item.on_sale
     if window.seasons and season not in window.seasons:
         return False
     if window.start and day < date_day(window.start):
         return False
-    return not (window.end and day > date_day(window.end))
+    if window.end and day > date_day(window.end):
+        return False
+    if window.rule is not None and window.rule not in moment.rules:
+        return False
+    if window.phases and moment.phase not in window.phases:
+        return False
+    return window.from_week is None or moment.phase == "resting" or (moment.week is not None and moment.week >= window.from_week)
 
 
 def limit_problem(item: MallItem, wallet: Wallet, owner: str, day: int, season: int) -> str | None:
@@ -205,11 +255,15 @@ def limit_left(item: MallItem, wallet: Wallet, owner: str, day: int, season: int
     return max(0, min(left)) if left else None
 
 
-def buy_problem(item: MallItem, wallet: Wallet, owner: str, day: int, season: int) -> str | None:
-    """買不了的那一句（限購、元寶不夠）；買得了是 None。上架由呼叫端先看（on_sale）。"""
+def buy_problem(item: MallItem, wallet: Wallet, owner: str, day: int, season: int, moment: Moment = MOMENT) -> str | None:
+    """買不了的那一句（限購、這個人這一季用不上、元寶不夠）；買得了是 None。上架由呼叫端先看（on_sale）。
+    限購排在「用不上」前面（FB-845：季中買了一張、休季才知道用不上，再按說的是限購）。"""
     problem = limit_problem(item, wallet, owner, day, season)
     if problem:
         return problem
+    unfit = moment.blocked.get(item.id)
+    if unfit:
+        return unfit
     balance = wallet.balance(owner)
     return SHORT.format(name=item.name, price=item.price, balance=balance) if balance < item.price else None
 
@@ -221,6 +275,7 @@ def buy_ref(owner: str, ref: str) -> str:
 
 def buy(
     state: GameState, content: Content, wallet: Wallet, item_id: str, ref: str, *, now: float, day: int, season: int, qty: int = 1,
+    moment: Moment = MOMENT,
 ) -> Bought | str:
     """買 qty 件（4.4；一次買好幾件，Joy 2026-10-22「應該可以一次買多個」）：查重 → 上架 → 限購 → 餘額 → 寫購買紀錄 → 扣元寶 → 發貨，
     全部在一筆交易裡（呼叫端開著就併進去）。qty 夾在 1～MAX_QTY、再夾在限購剩的件數裡（訊息照實際買的件數寫）；
@@ -235,9 +290,9 @@ def buy(
             known = content.mall.get(done.item)
             return DUPLICATE.format(name=known.name if known else done.item)
         item = content.mall.get(item_id)
-        if item is None or not on_sale(item, day, season):
+        if item is None or not on_sale(item, day, season, moment):
             return NO_ITEM
-        problem = buy_problem(item, wallet, owner, day, season)
+        problem = buy_problem(item, wallet, owner, day, season, moment)
         if problem:
             return problem
         want = max(1, min(MAX_QTY, int(qty)))
@@ -325,6 +380,9 @@ def _deliver(
     if rerolls:
         state.player.create_rerolls += rerolls
         changes.append(f"重悟帖 +{rerolls}")
+    for key, name in TICKET_NAMES.items():  # 列傳的四件（批 7b）：不改角色，那一列購買就是票
+        if item.effects.get(key, 0):
+            changes.append(f"{name} +{item.effects[key]}")
     return changes
 
 
@@ -382,9 +440,11 @@ def claim_daily(state: GameState, content: Content, wallet: Wallet, *, now: floa
     return Claimed(lines=[CLAIMED.format(ingots=ingots, pills=pills, pill=pill, left=left)], changes=changes)
 
 
-def tokens(wallet: Wallet, owner: str, effect: str) -> list[int]:
-    """帶著 effect（zhuan_rewrite、rename）還沒用掉的那幾筆購買（id，舊的在前）：沒退、data 裡沒有 used。每一筆是一次。"""
-    return [b.id for b in reversed(wallet.purchases(owner)) if b.refunded is None and b.data.get(effect) and not b.data.get("used")]
+def tokens(wallet: Wallet, owner: str, effect: str, season: int | None = None) -> list[int]:
+    """帶著 effect（zhuan_rewrite、rename、列傳的四件）還沒用掉的那幾筆購買（id，舊的在前）：沒退、data 裡沒有 used。每一筆是一次。
+    season 給了只算那一季買的（深交名額只這一季有效，減法季批 7b）。"""
+    return [b.id for b in reversed(wallet.purchases(owner)) if b.refunded is None and b.data.get(effect) and not b.data.get("used")
+            and (season is None or b.season == season)]
 
 
 def rewrite_tokens(wallet: Wallet, owner: str) -> list[int]:
@@ -434,7 +494,7 @@ def limit_text(item: MallItem, wallet: Wallet, owner: str, day: int, season: int
     return "、".join(parts)
 
 
-def view(content: Content, wallet: Wallet, owner: str, day: int, season: int) -> dict:
+def view(content: Content, wallet: Wallet, owner: str, day: int, season: int, moment: Moment = MOMENT) -> dict:
     """商城那一頁的資料：餘額、月卡、這一刻上架的商品（照 content/mall.json 的順序；沒上架的不列）。每件寫買不買得了、
     為什麼、買了之後剩多少（購買確認用，4.6）；gives 是這件發什麼（允許表的鍵 → 數量）、card_to 是今天買的話月卡用到哪一天
     （含；不是月卡是 None）：購買確認寫「丹或月卡變成多少」用（商城第二批）。"""
@@ -442,15 +502,15 @@ def view(content: Content, wallet: Wallet, owner: str, day: int, season: int) ->
     span = wallet.card(owner, CARD_KEY)
     items = []
     for item in content.mall.values():
-        if not on_sale(item, day, season):
+        if not on_sale(item, day, season, moment):
             continue
-        why = buy_problem(item, wallet, owner, day, season)
+        why = buy_problem(item, wallet, owner, day, season, moment)
         days = item.effects.get("card_days", 0)
         room = limit_left(item, wallet, owner, day, season)
         # 一次最多買幾件（網頁的數量框，Joy 2026-10-22）：限購剩的、元寶買得起的、MAX_QTY 取最少；月卡一次一張（確認那一行寫用到哪一天）
         most = 0 if why else 1 if days else min(MAX_QTY, balance // max(1, item.price), MAX_QTY if room is None else room)
         items.append({
-            "id": item.id, "name": item.name, "note": item.note, "price": item.price, "kind": item.kind,
+            "id": item.id, "name": item.name, "note": note_text(item, content, moment), "price": item.price, "kind": item.kind,
             "kind_name": KIND_NAMES[item.kind], "effects": effects_text(item, content),
             "limit": limit_text(item, wallet, owner, day, season), "can": why is None, "why": why, "after": balance - item.price + item.effects.get("card_rebate", 0),
             "gives": {key: n for key, n in item.effects.items() if key in EFFECTS},
@@ -568,6 +628,9 @@ def refund(
             back = min(rerolls, state.player.create_rerolls)
             state.player.create_rerolls -= back
             took.append(REROLL_BACK.format(n=back))
+        for key, name in TICKET_NAMES.items():  # 列傳的四件（批 7b）：退了那一列就不算票（沒用的不能用、用過的列傳不再畫、名額少一位）
+            if bought.data.get(key):
+                took.append(TICKET_BACK.format(name=name))
         left = wallet.balance(owner)
     known = content.mall.get(bought.item)
     return REFUNDED.format(name=shown, item=known.name if known else bought.item, price=bought.price, left=left, took="".join(took))
@@ -608,4 +671,11 @@ def item_problems(item: MallItem, content: Content) -> list[str]:
         out.append(f"{where}：上架日期的開始（{window.start}）在結束（{window.end}）之後")
     if any(n < 1 for n in window.seasons):
         out.append(f"{where}：上架的季要是正整數（寫了 {window.seasons}）")
+    if window.rule is not None and not isinstance(getattr(content.config.jianfa, window.rule, None), bool):
+        out.append(f"{where}：上架的子開關 {window.rule} 不是 Config.jianfa 的子開關")
+    for slot in re.findall(r"\{[^{}]*\}", item.note):  # 說明裡照季換字的插槽（FB-849）
+        if slot not in SLOTS:
+            out.append(f"{where}：說明裡不認得的插槽 {slot}（認得 {'、'.join(SLOTS)}）")
+    if "{上架}" in item.note and window.from_week is None:
+        out.append(f"{where}：說明寫了 {{上架}}，上架時段要寫 from_week")
     return out
