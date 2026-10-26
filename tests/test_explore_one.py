@@ -1,7 +1,10 @@
 """減法季探索一顆的引擎接線（減法季整合設計 4.1；主機側計畫 Task 2-3）：開著時選單只剩一顆「探索」（act:explore，出門一趟），
-不畫三選一、尋敵、城裡操練；按一下扣 explore_stamina、抽三拍逐拍結算，回一段話與一則「出門一趟」的江湖紀錄。
+不畫三選一、尋敵、城裡操練；按一下扣 explore_stamina（15）、抽一件事結算，回一段話與一則「出門一趟」的江湖紀錄。
 城類地點自己沒有對手時遭遇換成地痞（不推線、不算討伐、戰利打 town_loot_scale），自家營寨的遭遇是跟同袍比劃（不掉東西）；
-事件拍留在最後、端出 pending_event。用正式內容（season21）開局，整個檔標 slow。"""
+事件端出 pending_event。用正式內容（season21）開局，整個檔標 slow。
+
+2d（企劃者 2026-10-26「只抽一件事情，然後體力先維持不動」，同天體力改 15）：以前連抽三拍，這個檔斷言三拍與體力 18 的測試照新規則改；
+一趟只有一件事的整體行為在 tests/test_explore_one_single.py。"""
 from __future__ import annotations
 
 from unittest import mock
@@ -22,13 +25,20 @@ def _fight(tier: str = "大勝"):
     return mock.patch.object(team, "fight", return_value=EncounterResult(tier=tier, margin=50, our_power=200, difficulty=40))
 
 
-def _beats(*beats: str):
-    """這一趟抽到的拍照給的（不擲骰；要選的拍照 draw 的規矩要放最後）。"""
-    return mock.patch.object(explore_one, "draw", return_value=list(beats))
+def _beat(beat: str):
+    """這一趟抽到的那一件事照給的（不擲骰）。"""
+    return mock.patch.object(explore_one, "draw", return_value=beat)
 
 
 def _ids(game) -> list[str]:
     return [o.id for o in game.options(odds=False)]
+
+
+def _reset(game) -> None:
+    """下一趟：體力補滿、沒有待選的事件與感悟。"""
+    game.state.player.stamina = 250.0
+    game.state.pending_event = None
+    game.state.player.sensing = None
 
 
 def test_the_menu_has_one_explore_button_and_no_modes_drill_or_practice():
@@ -37,11 +47,11 @@ def test_the_menu_has_one_explore_button_and_no_modes_drill_or_practice():
     assert ids.count("act:explore") == 1
     assert not [i for i in ids if i.startswith("explore:")] and "act:drill" not in ids
     option = next(o for o in game.options(odds=False) if o.id == "act:explore")
-    assert option.label == "探索（體力 18・城裡多事）" and option.enabled
+    assert option.label == "探索（體力 15・城裡多事）" and option.enabled
     ready(game, loc="yingshui")  # 城外：以前有練功（尋敵）
     ids = _ids(game)
     assert "explore:practice" not in ids and not [i for i in ids if i.startswith("explore:")]
-    assert game.action_notes(ids)["act:explore"].startswith("出門一趟走三拍")
+    assert game.action_notes(ids)["act:explore"].startswith("出門一趟只碰上一件事")
 
 
 def test_closed_season_keeps_the_old_menu():
@@ -51,25 +61,33 @@ def test_closed_season_keeps_the_old_menu():
     assert next(o for o in game.options(odds=False) if o.id == "act:explore").label == "探索"
 
 
-def test_one_press_costs_eighteen_and_writes_one_outing_entry():
+def test_one_press_costs_fifteen_and_writes_one_outing_entry():
     game = ready(jianfa_game(), side="guan", loc="yingshui")
     p = game.state.player
     stamina, seq = p.stamina, p.explore_seq
-    with _beats("material", "material", "encounter"), _fight("大勝"):
+    with _beat("material"):
         msgs = game.choose("act:explore")
-    assert p.stamina == stamina - 18 and p.explore_seq == seq + 1
+    assert p.stamina == stamina - 15 and p.explore_seq == seq + 1
     entry = game.state.journal[0]
-    assert entry.title == f"{journal.OUTING}・潁水河畔"
-    assert msgs[0].startswith("你") and "潁水河畔" in msgs[0]  # 一段話：出門那一句接每一拍
+    assert entry.title == f"{journal.OUTING}・潁水河畔" and entry.tag == "得料"
+    assert msgs[0].startswith("你") and "潁水河畔" in msgs[0]  # 一段話：出門那一句接這一件事
     assert msgs[1].startswith("得：")  # 得失那一行
-    record = game.state.battles[0]  # 新的在前
-    assert record.label == OUTING_LABEL and record.kind == "wild"
     assert any(line.startswith("獲得 ") for line in msgs)
+    assert not game.state.battles  # 這一趟沒有打仗
 
 
-def test_the_event_beat_stays_last_and_leaves_a_pending_event():
+def test_an_encounter_trip_writes_one_battle_record_labelled_as_the_outing():
     game = ready(jianfa_game(), side="guan", loc="yingshui")
-    with _beats("material", "material", "event"):
+    with _beat("encounter"), _fight("大勝"):
+        game.choose("act:explore")
+    record = game.state.battles[0]  # 新的在前
+    assert len(game.state.battles) == 1 and record.label == OUTING_LABEL and record.kind == "wild"
+    assert game.state.journal[0].tag == "遇敵"
+
+
+def test_the_event_trip_leaves_a_pending_event():
+    game = ready(jianfa_game(), side="guan", loc="yingshui")
+    with _beat("event"):
         game.choose("act:explore")
     assert game.state.pending_event is not None
     assert game.state.player.outing_last == "yingshui:event"
@@ -84,7 +102,7 @@ def test_town_encounters_are_street_toughs_that_push_nothing_and_count_no_bounty
     assert plan.kind == explore_one.TOWN and plan.how == "town" and plan.foe.id == "dipi"
     trends = dict(game.state.world.trends)
     silver = p.stats["silver"]
-    with _beats("encounter", "material", "material"), _fight("大勝"):
+    with _beat("encounter"), _fight("大勝"):
         game.choose("act:explore")
     record = game.state.battles[0]
     assert record.opponent == c.squads["dipi"].name and record.label == OUTING_LABEL
@@ -108,20 +126,25 @@ def test_own_camp_encounter_is_sparring_with_comrades_and_drops_nothing():
     plan = game.outing_plan()
     assert plan.kind == explore_one.CAMP and plan.how == "spar" and plan.hint == explore_one.SPAR_HINT
     bag, battles, xinde = dict(p.materials), len(game.state.battles), p.stats.get("xinde", 0)
-    with _beats("encounter", "encounter", "event"):
+    with _beat("encounter"):
         game.choose("act:explore")
     assert len(game.state.battles) == battles  # 比劃不是一場仗、沒有戰報
-    assert p.materials == bag or game.state.pending_event is not None
+    assert p.materials == bag and game.state.pending_event is None  # 這一趟就是比劃，不掉東西、不遇事
     assert p.stats.get("xinde", 0) > xinde
 
 
 def test_nothing_gained_fills_one_tier_one_material():
+    """這一件沒收穫補一個一階素材（2d 以前是三拍都沒收穫）：遭遇打輸、素材找不到料。"""
     game = ready(jianfa_game(), side="guan", loc="yingshui")
     p = game.state.player
     bag = sum(p.materials.values())
-    with _beats("encounter", "encounter", "material"), _fight("落敗"), mock.patch(
-        "tianxia.explore_modes.gather_finds", return_value=[]
-    ):
+    with _beat("encounter"), _fight("落敗"):
+        msgs = game.choose("act:explore")
+    assert sum(p.materials.values()) == bag + 1
+    assert any(line.startswith("獲得 ") for line in msgs)
+    bag = sum(p.materials.values())
+    _reset(game)
+    with _beat("material"), mock.patch("tianxia.explore_modes.gather_finds", return_value=[]):
         msgs = game.choose("act:explore")
     assert sum(p.materials.values()) == bag + 1
     assert any(line.startswith("獲得 ") for line in msgs)
@@ -142,7 +165,8 @@ def test_insight_is_not_drawn_twice_in_a_row_at_the_same_place():
     assert spy.call_args.kwargs["last_choice"] is None  # 換了地方不擋
 
 
-def test_a_strike_bounty_here_makes_the_first_beat_that_bounty():
+def test_a_strike_bounty_here_makes_the_trip_that_bounty():
+    """2d：接了這裡的討伐懸賞，這一趟就是遭遇（打懸賞那一路）；以前是「至少一拍是遭遇」。"""
     game = ready(jianfa_game(), side="guan", loc="yingshui")
     foe = game._wild_foes(game.content.locations["yingshui"])[0]
     bounty = mock.Mock(kind="strike", location="yingshui", squad=foe.id)
@@ -150,12 +174,12 @@ def test_a_strike_bounty_here_makes_the_first_beat_that_bounty():
         plan = game.outing_plan()
         assert plan.how == "bounty" and plan.foe.id == foe.id and plan.hint == "渡口有賞" and plan.boss is None
         assert game.mostly_here() == "渡口有賞"  # 四格那一格的小字跟鈕同一個字（/api/main 的 mostly）
-        rng = explore_one.rng_for(1, "沈浪", 1, "拍")
-        beats = explore_one.draw(game.content.config.jianfa, rng, plan.weights, bounty_here=True)
-    assert beats[0] == explore_one.ENCOUNTER
+        assert plan.weights == explore_one.encounter_only()
+        for n in range(20):
+            assert explore_one.draw(explore_one.rng_for(1, "沈浪", n, "拍"), plan.weights) == explore_one.ENCOUNTER
 
 
-def test_a_boss_on_the_encounter_beat_ends_the_outing_in_the_duel(monkeypatch):
+def test_a_boss_on_the_encounter_ends_the_outing_in_the_duel(monkeypatch):
     game = ready(jianfa_game(), side="guan", loc="yingshui")
     boss = next(iter(game.content.duels.values()))
     real = game._outing_plan
@@ -165,9 +189,10 @@ def test_a_boss_on_the_encounter_beat_ends_the_outing_in_the_duel(monkeypatch):
         return type(plan)(kind=plan.kind, weights=plan.weights, how=None, foe=None, boss=boss, hint=plan.hint)
 
     monkeypatch.setattr(game, "_outing_plan", with_boss)
-    with _beats("material", "encounter", "event"):
+    with _beat("encounter"):
         game.choose("act:explore")
     assert game.state.player.duel is not None and game.state.pending_event is None
+    assert game.state.journal[0].tag == "遇敵"
 
 
 def test_an_outing_rolls_the_pill_and_the_seal_shard_like_the_old_explore():
@@ -178,7 +203,7 @@ def test_an_outing_rolls_the_pill_and_the_seal_shard_like_the_old_explore():
         game.content.config.checkin.pill_drop = chance
         ready(game, side="guan", loc="yingshui")
         pills = game.state.player.stamina_pills
-        with _beats("material", "material", "material"):
+        with _beat("material"):
             msgs = game.choose("act:explore")
         got.append((game.state.player.stamina_pills - pills, "回體丹 +1" in msgs))
     assert got[1] == (got[0][0] + 1, True) and not got[0][1]
@@ -188,7 +213,7 @@ def test_an_outing_rolls_the_pill_and_the_seal_shard_like_the_old_explore():
     cache = game.world.seal_state().registry.cache
     assert cache is not None
     ready(game, side="guan", loc=cache.loc)
-    with _beats("material", "material", "material"):
+    with _beat("material"):
         game.choose("act:explore")
     assert game.state.player.heirloom is not None
 
@@ -257,6 +282,6 @@ def test_the_howto_explains_the_outing_the_gates_and_the_milestones():
 def test_is_idle_follows_the_explore_button():
     game = ready(jianfa_game(), side="guan", loc="yingshui")
     assert game.is_idle()
-    with _beats("material", "material", "event"):
+    with _beat("event"):
         game.choose("act:explore")
     assert not game.is_idle()  # 事件擋著
