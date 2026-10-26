@@ -63,7 +63,7 @@ def test_fb197_the_practice_page_form_says_jian_for_armor_and_fu_for_a_fist(hint
     import random
 
     from test_prologue_web import run
-    from test_weapons_web import _armor_row, _gear, _row, _slot_block
+    from test_weapons_web import _armor_row, _gear, _practice, _row, _slot_block
 
     from tianxia.engine import Game
 
@@ -75,7 +75,7 @@ def test_fb197_the_practice_page_form_says_jian_for_armor_and_fu_for_a_fist(hint
                                        _row(id="兵:3", name="無名神器", keep="原品不能拆", divine={"pattern": "墜星劍", "unit": "把"})]},
         armor={"worn": _armor_row(id="甲:1", name="無名神器", keep="原品不能拆", divine={"pattern": "鎮星甲", "unit": "件"}), "rack": []},
     )
-    page = run(m, "return H.pagePractice();", menxia=x)
+    page = _practice(m, menxia=x)  # 裝備庫在那一格的抽屜裡（俠客頁改版）
     armor_block, weapon_block = _slot_block(page, "armor"), _slot_block(page, "weapon")
     assert "打出這件神器的人" in armor_block and "這把神器" not in armor_block
     assert "打出這副神器的人" in weapon_block and "打出這把神器的人" in weapon_block

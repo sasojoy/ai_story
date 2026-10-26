@@ -14270,6 +14270,9 @@ class Game:
     def member_card(self, key: str) -> str:
         return skillview.member_card(self.state, self.content, self.world, key)
 
+    def roster_cards(self) -> list[dict]:
+        return skillview.roster_cards(self.state, self.content, self.world)
+
     def menxia_rules(self) -> str:
         return skillview.rules_line(self.content)
 

@@ -884,5 +884,6 @@ def test_the_cards_draw_the_ten_levels_as_cells_not_circles(prologue_content):
     """企劃者 10/6：功法卡、人物卡裡的十成不要圈圈，跟卷軸卡同一種格子；修練鈕也不寫「→ 下一品」。"""
     page = _scroll_page(prologue_content, S={"artInfo": "basic_fist"})
     assert "●" not in page and "○" not in page
-    assert 'class="ten mini" role="img" aria-label="第1成"' in page
+    # 俠客頁改版（Joy 2026-10-26）之後本人的角色卡不再整張攤在門下：門下卡上的兩門是同一種十格（sa-ten）
+    assert 'class="sa-ten" role="meter"' in page and 'aria-label="粗淺拳腳第1成"' in page
     assert "→" not in page and "下一品" not in page

@@ -88,7 +88,7 @@ def test_the_heirloom_row_gets_a_button_and_the_card_a_line():
 def test_the_practice_page_draws_the_button_in_the_heirloom_row():
     """修練頁裝備塊（真的 /api/menxia）：傳承那一列帶著那一顆鈕。"""
     c, w, g = _holder("xuanniu", at="changshe")
-    page = webharness.run(DRIVER, {"m": server.main_view(g), "script": "return H.pagePractice();", "S": {"tab": "practice"},
+    page = webharness.run(DRIVER, {"m": server.main_view(g), "script": "return H.pagePractice();", "S": {"tab": "practice", "pdrawer": {"t": "gear", "key": "treasure"}},
                                    "menxia": server.menxia_view(g), "stored": {}, "responses": {}})
     row = page[page.index('class="wrow heirloom"'):]
     assert row.index('data-act="seal-act"') < row.index("</section>") and "引將・剩 2 次" in row

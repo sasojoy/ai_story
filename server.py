@@ -1938,6 +1938,7 @@ def menxia_view(game: Game, person: str | None = None) -> dict:
         "attribute_note": game.attribute_note(),  # 純文字，網頁自己跳脫；兩頁各摺一行（W2）
         "player_card": md(game.member_card("player")),
         "roster": [{"label": label, "key": key} for label, key in lines],
+        "roster_cards": game.roster_cards(),  # 門下一人一張卡（俠客頁，Joy 2026-10-26）
         "person": person,
         "person_card": md(game.member_card(person)) if person else None,
         "on_team": person is not None and person in game.state.player.team,

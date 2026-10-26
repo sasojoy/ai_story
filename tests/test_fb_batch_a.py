@@ -74,7 +74,7 @@ def test_fb127_the_practice_page_writes_the_noun(hints_content, world):
     if webharness.NODE is None:
         pytest.skip("沒有 node，前端畫面測試略過")
     from test_prologue_web import run
-    from test_weapons_web import _gear, _row, _weapons_block
+    from test_weapons_web import _gear, _practice, _row, _weapons_block
 
     import server
     from tianxia.engine import Game
@@ -84,7 +84,7 @@ def test_fb127_the_practice_page_writes_the_noun(hints_content, world):
     m, x = server.main_view(game), server.menxia_view(game)
     x["gear"] = _gear(weapon={"worn": _row(kind="拳腳", noun="拳套", grade="一階下品", confirm=""),
                               "rack": [_row(id="兵:2", kind="弓弩", noun="弩", grade="一階下品", confirm="")]})
-    block = _weapons_block(run(m, "return H.pagePractice();", menxia=x))
+    block = _weapons_block(_practice(m, menxia=x))  # 裝備庫在那一格的抽屜裡（俠客頁改版）
     assert "拳套・屬柔" in block and "弩・屬柔" in block and "拳腳" not in block and "弓弩" not in block
 
 
