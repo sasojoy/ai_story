@@ -5278,6 +5278,7 @@ def test_only_the_out_of_lock_steps_enter_the_model_queue():
         "create_reread",  # 重悟帖重讀這句意：三段同 create_intent
         "ascend_line",  # 破境卡那一句（招式與絕學稿案第三節）：三段同 create_intent
         "persuade_text",  # 託付的勸降（減法季批 6）：三段同 gather_text，模型只評那一句
+        "epiphany_think",  # 特殊頓悟的靜心思名：三段同 prepare_forge，模型一次取三個名字
     }
     # 宣告、model_call 讀、main() 建佇列；另外兩個只看不排：/api/queue 問位置、管理者那份資料抄總數（admin_choices 在 look 的鎖裡，
     # 但 snapshot 只碰佇列自己的短鎖、不等任何一件，不算在行動鎖裡排隊）
