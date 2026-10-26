@@ -124,6 +124,11 @@ class JianfaNumbers(_Strict):
     # 江湖水漲的事件加難（rise.event_bump）乘這個【量過：0】：2026-10-25 measure_difficulty --tiers（season21，種子 1、2，solo 與 team，
     # 主機側計畫第三節 Task 2-6 的量表）第 30 級事件檢定平均 ×1 42～54%、×0.5 53～64%、×0 64～73%；判準「第 30 級不低於 70%」只有 0 摸得到
     event_bump_scale: float = Field(default=0.0, ge=0, le=1)
+    # 第一階事件的檢定放寬幾點（企劃者 2026-10-26「事件初期根本一個都過不了…我們現在這批事件滿適配第一階段，只需調低能力檢定的基礎」）：
+    # rules.check_outlook 的差值加這麼多，成功率與選項上的心裡話一起變（不改內容寫的難度、不動 DIFFICULTY_BANDS）。
+    # 【待 joy 定】量過（scratchpad measure_novice：season21，第 1～9 級屬性全 5）：0 是危險度一 58%、二 44%、三 31%；
+    # 1.5 是 73%、59%、46%（每則挑最好的那一個 77%、63%、50%）。之後的第二、三階事件不吃這個（事件分級設計稿）
+    event_ease: float = Field(default=1.5, ge=0, le=5)
 
     @field_validator("milestone_levels")
     @classmethod

@@ -314,6 +314,8 @@ def check_outlook(check: Check, state: GameState, content: Content, world: World
     stat_value = check_stat_value(check, state, content, world)
     bonus = team.practice_bonus(state, content, check)
     gap = stat_value + bonus - check.difficulty - rise.event_bump(state, content)  # 江湖水漲：等級高了檢定加深（Config.rise）
+    if jianfa(content, state.world):  # 減法季：第一階事件放寬（Config.jianfa.event_ease，企劃者 2026-10-26）；關著一個字都不變
+        gap += content.config.jianfa.event_ease
     return CheckOutlook(stat_value, bonus, gap, min(0.95, max(0.05, 0.5 + gap * 0.1)))
 
 
