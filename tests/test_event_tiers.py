@@ -96,3 +96,7 @@ def test_tier_one_events_and_checks_serialize_as_before_and_doors_are_checked():
     game.content.events["nodoor"] = Event(id="nodoor", title="x", text="x", tier=2, choices=[{"text": "x"}])
     with pytest.raises(ContentError, match="nodoor"):
         validate(game.content)
+    del game.content.events["nodoor"]
+    game.content.events["easy"] = _event("easy", 2, "武事", difficulty=6)
+    with pytest.raises(ContentError, match="9～12"):
+        validate(game.content)

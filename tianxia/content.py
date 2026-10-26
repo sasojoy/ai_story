@@ -71,6 +71,9 @@ def env_profile() -> str | None:
     return os.environ.get(PROFILE_ENV) or None
 
 
+TIER_BANDS = {2: (9, 12), 3: (12, 15)}  # 第二、三階事件的難度帶（事件分級設計稿：照剛開門的人定）；第一階照地點的危險度（tests/test_real_content.py）
+
+
 def stamp_tier(event: Event) -> None:
     """事件分級：把事件的階蓋到它每一個檢定上（選項、隨口應對分岔的後果），rules.check_outlook 照它決定放不放寬。"""
     checks = [ch.check for ch in event.choices]
@@ -3150,8 +3153,13 @@ def validate(c: Content) -> None:
     check_siege_templates(c, need)
     check_explore_one(c, need)
     check_outing_lines(c, need)
-    for ev in c.events.values():  # 事件分級：第二、三階要寫從哪一道門進來，第一階不寫門
+    for ev in c.events.values():  # 事件分級：第二、三階要寫從哪一道門進來，第一階不寫門；第二、三階的難度帶（事件分級設計稿）
         need((ev.tier == 1) == (ev.door is None), f"事件 {ev.id}：第二、三階要寫 door，第一階不寫（tier {ev.tier}、door {ev.door}）")
+        low, high = TIER_BANDS.get(ev.tier, (None, None))
+        checks = [ch.check for ch in ev.choices] + ([o.check for o in ev.free_text.outcomes] if ev.free_text else [])
+        for check in checks:
+            if check is not None and low is not None:
+                need(low <= check.difficulty <= high, f"事件 {ev.id}：第 {ev.tier} 階的難度要在 {low}～{high}（寫了 {check.difficulty}）")
 
     # 地方痕跡過門檻（減法季整合設計 5.2；主機側計畫 Task 4-3，content/mark_rules.json）：一個痕跡一條規則，算「有人讀」；
     # 過門檻那一刻的傳聞、之後地點描寫多接的那一段都要寫（〈天下形勢〉與江湖史沒寫就照傳聞那一句）；推的線同事件效果的規矩
