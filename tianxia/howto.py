@@ -63,16 +63,17 @@ EXPLORE_NO_SENSE = "（這裡悟不出什麼）"
 
 # 減法季探索一顆（整合設計 4.1，批 2）：行動列底下探索那一行。照擲骰用的那一份比重（Game._outing_weights）排，不寫百分比；都待 joy 潤
 OUTING_WORDS = explore_one.BEAT_WORDS
-OUTING_HEAD = "出門一趟走{beats}拍"
-OUTING_TAIL = "；要選的事件、感悟一趟最多一回，放在最後"
-OUTING_FOE = {"town": "；城裡遇敵是街上的地痞，給得少", "spar": "；自家營寨遇敵是跟同袍比劃，不掉東西",
-              "bounty": "；接了這裡的討伐，至少一拍撞上懸賞那一路"}
+OUTING_HEAD = "出門一趟只碰上一件事"  # 2d（企劃者 2026-10-26「只抽一件事情」）：以前寫「出門一趟走三拍」
+OUTING_FOE = {"town": "；城裡遇敵是街上的地痞，給得少", "spar": "；自家營寨遇敵是跟同袍比劃，不掉東西"}
+OUTING_BOUNTY = "出門一趟，接了這裡的討伐，每一趟都撞上懸賞那一路，交了差才回到平常"  # 接了這裡的討伐懸賞：整行換成這一句（一定是遭遇，不寫機率）
 
 
-def outing_line(weights: dict[str, float], beats: int, foe: str | None = None) -> str:
-    """探索一顆開著時行動列底下探索那一行（Game.action_notes）：weights 是這一處每一拍的比重（做不了的已經是 0）；比重最大的寫「多半」、
+def outing_line(weights: dict[str, float], foe: str | None = None) -> str:
+    """探索一顆開著時行動列底下探索那一行（Game.action_notes）：weights 是這一處這一趟四類事的比重（做不了的已經是 0）；比重最大的寫「多半」、
     其他照大小寫「也可能」，並列最大一起寫「可能」，只剩一類寫「會」（同 explore_line 的寫法）。foe：城裡的地痞（"town"）、自家營寨的比劃
-    （"spar"）、接了這裡的討伐（"bounty"）各補一句，其餘 None。"""
+    （"spar"）各補一句；接了這裡的討伐（"bounty"）整行換成 OUTING_BOUNTY（每一趟都是懸賞那一路的遭遇）；其餘 None。"""
+    if foe == "bounty":
+        return OUTING_BOUNTY
     ranked = sorted(((k, w) for k, w in weights.items() if w > 0), key=lambda pair: -pair[1])
     words = [OUTING_WORDS[k] for k, _ in ranked]
     if len(words) == 1:
@@ -81,8 +82,7 @@ def outing_line(weights: dict[str, float], beats: int, foe: str | None = None) -
         body = f"，多半{words[0]}，也可能{'、'.join(words[1:])}"
     else:
         body = f"，可能{'、'.join(words)}" if words else ""
-    count = "一兩三四五六".__getitem__(beats - 1) if 1 <= beats <= 6 else str(beats)
-    return OUTING_HEAD.format(beats=count) + body + OUTING_FOE.get(foe or "", "") + OUTING_TAIL
+    return OUTING_HEAD + body + OUTING_FOE.get(foe or "", "")
 
 
 def explore_modes_line(fight: bool, sense: bool) -> str:
@@ -484,16 +484,17 @@ def _pct(share: float) -> str:
 
 
 def outing_lines(content: Content, season: WorldState | None = None) -> list[str]:
-    """減法季探索一顆（整合設計 4.1，批 2；待 joy 潤）的玩法說明：一顆、出門一趟幾拍、地點決定多半給什麼、地痞與比劃、懸賞。數字讀 Config.jianfa。"""
+    """減法季探索一顆（整合設計 4.1，批 2；2d 企劃者 2026-10-26 改成一趟一件事；待 joy 潤）的玩法說明：一顆、出門一趟碰上一件事、
+    地點決定多半給什麼、地痞與比劃、懸賞。數字讀 Config.jianfa。"""
     jf = content.config.jianfa
     tables = "，".join(explore_one.HINTS.get(t.kind, "") for t in jf.explore_tables)
     legend = f"偶爾撿到{content.config.legend_item_name}。" if content.config.explore_legend_chance > 0 else ""
     return [
-        f"- **探索**（體力 {jf.explore_stamina}）：只有一顆，按一下是出門一趟，走{'一兩三四五六'[jf.beats - 1] if 1 <= jf.beats <= 6 else jf.beats}拍，"
-        f"每一拍照這個地方抽遇事、遇敵、得料或有悟——地點決定多半給什麼（{tables}），運氣決定這一趟給什麼。"
-        "得料、遇敵當場算完；遇事、有悟要你自己選，一趟最多一回、放在最後。回來是一段話，最後一行寫這一趟的得失。"
+        f"- **探索**（體力 {jf.explore_stamina}）：只有一顆，按一下是出門一趟，一趟只碰上一件事，"
+        f"照這個地方抽遇事、遇敵、得料或有悟其中一件——地點決定多半給什麼（{tables}），運氣決定這一趟給什麼。"
+        "得料、遇敵當場算完；遇事、有悟要你自己選。回來是一段話，底下一行寫這一趟的得失。"
         f"危險的地方多遇敵、少遇事；城裡沒有對手時遇上的是街上的地痞，給得少；自家營寨遇敵是跟同袍比劃，不受傷也不掉東西。"
-        f"接了這裡的討伐懸賞，至少一拍撞上懸賞那一路。{legend}",
+        f"接了這裡的討伐懸賞，在那裡出門每一趟都撞上懸賞那一路，交了差才回到平常。{legend}",
     ]
 
 

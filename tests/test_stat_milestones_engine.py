@@ -33,7 +33,7 @@ def test_levelling_up_through_a_fight_grants_the_milestone_and_the_card():
     p = game.state.player
     p.member.level, p.member.exp = 9, team.level_cost(game.content.config, 9) - 1
     points = p.stat_points
-    with mock.patch.object(explore_one, "draw", return_value=["encounter", "material", "material"]), \
+    with mock.patch.object(explore_one, "draw", return_value="encounter"), \
             mock.patch.object(team, "fight", return_value=EncounterResult(tier="大勝", margin=50, our_power=200, difficulty=40)):
         game.choose("act:explore")
     assert p.member.level == 10 and p.stat_points == points + 5
