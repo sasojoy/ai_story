@@ -4535,7 +4535,81 @@
     else if (Notification.permission === "denied") note = "通知被這個瀏覽器擋了：到瀏覽器的網站設定裡打開。";
     const off = !!note || S.pushBusy;
     return `<label class="toggle"><input type="checkbox" id="push-on" ${S.pushOn && !note ? "checked" : ""} ${off ? "disabled" : ""}> 手機通知</label>
-      <p class="muted push-note">${note || `${PUSH_KINDS}時跳出來，遊戲關著也會。`}</p>`;
+      <p class="muted push-note">${note || `${PUSH_KINDS}時跳出來，遊戲關著也會。`}</p>
+      <div class="row push-help"><button class="btn small" data-act="push-how">${PUSH_HOW_TITLE} ›</button></div>`;
+  }
+
+  // ── 怎麼收到手機通知（Joy 2026-10-26：設定頁一顆鈕點開獨立的一步步說明，不跟玩法說明、新手引導混在一起；現階段很重要）──
+  // 自己一頁（S.pushHow 時設定抽屜整個換成它，「← 回設定」回來）。照這台裝置排：iPhone／iPad（Safari 要先加入主畫面、從主畫面開，
+  // iOS 16.4 起）、Android（Chrome 直接開，加到主畫面是建議）、電腦；偵測到的那一種攤開寫在最前面，其他兩種收在摺疊裡。
+  // 頂上一句照此刻的狀況說下一步是什麼（還在瀏覽器裡、已經從主畫面開了、被擋了、已經開了）。字待 joy 潤
+  const PUSH_HOW_TITLE = "怎麼收到手機通知";
+  const PUSH_HOW_SITE = "tianxiadashi.com";
+  function pushDevice() { // "ios"、"android"、"desktop"
+    const ua = (typeof navigator !== "undefined" && navigator.userAgent) || "";
+    return /iP(hone|ad|od)/.test(ua) ? "ios" : /Android/.test(ua) ? "android" : "desktop";
+  }
+  function pushStandalone() { // 從主畫面（安裝好的那一份）打開的
+    return !!(typeof navigator !== "undefined" && navigator.standalone)
+      || !!(typeof window !== "undefined" && window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
+  }
+  function pushPermission() { return typeof Notification !== "undefined" ? Notification.permission : "none"; }
+  const PUSH_HOW_IOS = [
+    `用 <b>Safari</b> 打開 <b>${PUSH_HOW_SITE}</b>（在 Chrome、LINE 裡打開的話先換到 Safari；要 iOS 16.4 以上）。`,
+    "按畫面底下中間的<b>分享</b>鈕（一個方框、上面一支往上的箭頭）。",
+    "選單往下捲，按<b>「加入主畫面」</b>，右上角按<b>「新增」</b>。",
+    "回到手機的主畫面，點新出現的朱紅<b>「勢」</b>圖示打開遊戲（以後都從這裡進；在 Safari 裡開是收不到通知的）。",
+    "遊戲裡右上角 <b>⚙ 設定</b> → 勾<b>「手機通知」</b> → 跳出來問的時候按<b>「允許」</b>。",
+  ];
+  const PUSH_HOW_IOS_DENIED = "之前按過「不允許」：到 iPhone 的<b>「設定」→「通知」</b>，找<b>「天下大勢」</b>，打開<b>「允許通知」</b>，再回遊戲勾「手機通知」。";
+  const PUSH_HOW_ANDROID = [
+    `用 <b>Chrome</b> 打開 <b>${PUSH_HOW_SITE}</b>。`,
+    "遊戲裡右上角 <b>⚙ 設定</b> → 勾<b>「手機通知」</b> → 跳出來問的時候按<b>「允許」</b>。",
+    "建議也加到主畫面：Chrome 右上角 <b>⋮</b> →<b>「加到主畫面」</b>（或「安裝應用程式」），以後點主畫面的朱紅<b>「勢」</b>圖示進來。",
+  ];
+  const PUSH_HOW_ANDROID_DENIED = "之前按過「封鎖」：按網址列左邊的<b>鎖頭（或設定）圖示</b> →<b>「權限」→「通知」</b>→ 改成允許；或到手機的<b>「設定」→「應用程式」→ Chrome →「通知」</b>打開，再回遊戲勾「手機通知」。";
+  const PUSH_HOW_DESKTOP = [
+    "右上角 <b>⚙ 設定</b> → 勾<b>「手機通知」</b> → 瀏覽器問的時候按<b>「允許」</b>（電腦也收得到，桌面會跳）。",
+  ];
+  const PUSH_HOW_DESKTOP_DENIED = "之前按過「封鎖」：按網址列左邊的<b>鎖頭圖示</b> →<b>「通知」</b>改成允許，再回來勾「手機通知」。";
+  const PUSH_HOW_SECTIONS = {
+    ios: { title: "iPhone、iPad", steps: PUSH_HOW_IOS, denied: PUSH_HOW_IOS_DENIED },
+    android: { title: "Android 手機", steps: PUSH_HOW_ANDROID, denied: PUSH_HOW_ANDROID_DENIED },
+    desktop: { title: "電腦", steps: PUSH_HOW_DESKTOP, denied: PUSH_HOW_DESKTOP_DENIED },
+  };
+  function pushHowStatus() { // 頂上那一句：此刻卡在哪、下一步做什麼
+    const dev = pushDevice();
+    if (S.pushOn && pushPermission() === "granted") return "這一台已經開了通知。想再開一台（另一支手機、電腦），在那一台照底下做一次。";
+    if (pushPermission() === "denied") return "這一台的通知被擋著了：看底下「被擋了怎麼辦」那一段。";
+    if (dev === "ios") return pushStandalone()
+      ? "你已經是從主畫面打開的了：直接做第 5 步，勾「手機通知」就好。"
+      : "你現在是在 iPhone 的瀏覽器裡：要先照第 1 到第 4 步把遊戲加到主畫面、從主畫面打開，才開得了通知。";
+    if (dev === "android") return "Android 直接勾就好：照第 2 步。";
+    return "電腦上直接勾就好；手機要收的話在手機上照底下做一次。";
+  }
+  function pushHowSection(key, open) {
+    const sec = PUSH_HOW_SECTIONS[key];
+    const body = `<ol class="push-steps">${sec.steps.map((t) => `<li>${t}</li>`).join("")}</ol>
+      <h5>被擋了怎麼辦</h5><p>${sec.denied}</p>`;
+    return open ? `<section class="push-how-sec"><h4>${sec.title}</h4>${body}</section>`
+      : `<details class="fold push-how-sec"><summary>${sec.title}</summary><div class="fold-body">${body}</div></details>`;
+  }
+  function pushHowHtml() { // 設定抽屜整頁換成它
+    const dev = pushDevice();
+    const others = ["ios", "android", "desktop"].filter((k) => k !== dev);
+    const canNow = pushSupported() && !pushNeedsHome() && pushPermission() === "default" && !S.pushOn;
+    return `
+      <div class="sheet-bg" data-act="sheet-close"></div>
+      <div class="sheet push-how" role="dialog" aria-label="${PUSH_HOW_TITLE}">
+        <div class="grip"></div>
+        <div class="top-row"><button class="btn small ghost" data-act="push-how-back">← 回設定</button><h3 style="flex:1">${PUSH_HOW_TITLE}</h3><button class="btn small ghost" data-act="sheet-close">關閉</button></div>
+        <p class="muted">開了之後，${PUSH_KINDS}時手機會跳出來告訴你，遊戲關著也會。不用裝 App、不收錢。</p>
+        <p class="push-status">${pushHowStatus()}</p>
+        ${canNow ? `<div class="row"><button class="btn primary" data-act="push-yes">現在就開通知</button></div>` : ""}
+        ${pushHowSection(dev, true)}
+        <p class="muted">用別的裝置？</p>
+        ${others.map((k) => pushHowSection(k, false)).join("")}
+      </div>`;
   }
 
   function pushAskHtml(m) { // 江湖頁信的小卡底下：第一次來信時問一次
@@ -4549,6 +4623,7 @@
   // 21 天季：軍令每天、第 4 階席次照舊每週一（FB-502，待 joy 潤）
   const ADMIN_DAILY_SEASON21 = "每天、每週的事（軍令照 00:00、席次照週一的做法立刻再做一次；之後照常）";
   function sheetHtml() {
+    if (S.pushHow) return pushHowHtml(); // 「怎麼收到手機通知」自己一頁
     const s = S.main.status;
     const a = S.admin;
     const opts = (list) => list.map((x) => `<option value="${esc(x.id)}">${esc(x.label)}</option>`).join("");
@@ -5801,7 +5876,9 @@
           try { localStorage.setItem(ZHUAN_VERTICAL, S.zhuanVertical ? "1" : "0"); } catch (e) { /* 存不了：只在這一頁有效 */ }
           render();
           break;
-        case "sheet-close": S.sheet = false; S.recapOpen = false; S.howtoOpen = false; render(); break;
+        case "sheet-close": S.sheet = false; S.recapOpen = false; S.howtoOpen = false; S.pushHow = false; render(); break;
+        case "push-how": S.pushHow = true; render(); break; // 設定頁「怎麼收到手機通知 ›」：抽屜整頁換成說明
+        case "push-how-back": S.pushHow = false; render(); break;
         case "howto": // 玩法說明：攤開就再問一次（refreshHowto），收起只是收起
           S.howtoOpen = !S.howtoOpen;
           if (S.howtoOpen) await refreshHowto();
