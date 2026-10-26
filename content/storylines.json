@@ -17,7 +17,8 @@
     "stages": [
       {
         "id": "act1",
-        "event": "fuzhi_act1"
+        "event": "fuzhi_act1",
+        "image": "stories/fuzhi_act1"
       },
       {
         "id": "act2a",
@@ -29,7 +30,8 @@
         },
         "hint": "張機要麻黃與桂枝，綠林山寨那一帶的山裡有",
         "days": 2,
-        "late": "late"
+        "late": "late",
+        "image": "stories/fuzhi_act2a"
       },
       {
         "id": "act2b",
@@ -43,7 +45,8 @@
         },
         "hint": "潁川有大賢良師的弟子在聚眾",
         "days": 2,
-        "late": "late"
+        "late": "late",
+        "image": "stories/fuzhi_act2b"
       },
       {
         "id": "act3",
@@ -79,7 +82,8 @@
             "go": "notes"
           }
         ],
-        "next": "ashes"
+        "next": "ashes",
+        "image": "stories/fuzhi_act3"
       }
     ],
     "endings": [
@@ -89,7 +93,8 @@
         "failed": true,
         "weight": 5,
         "text": "你回到村裡時，祠堂門口已經掛上了草繩。草蓆空了。",
-        "annal": "{name}嘗負藥入涅陽，往返過時，童子已歿。"
+        "annal": "{name}嘗負藥入涅陽，往返過時，童子已歿。",
+        "image": "stories/fuzhi_late"
       },
       {
         "id": "notes",
@@ -104,7 +109,8 @@
           "flags_add": [
             "zhongjing_owes"
           ]
-        }
+        },
+        "image": "stories/fuzhi_notes"
       },
       {
         "id": "ashes",
@@ -116,7 +122,8 @@
             "xinde": 15,
             "good": 2
           }
-        }
+        },
+        "image": "stories/fuzhi_ashes"
       },
       {
         "id": "jar",
@@ -127,8 +134,10 @@
           "stats": {
             "evil": 2
           }
-        }
+        },
+        "image": "stories/fuzhi_jar"
       }
-    ]
+    ],
+    "image": "stories/fuzhi_act1"
   }
 ]

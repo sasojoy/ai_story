@@ -545,7 +545,7 @@ class StoryStage(_Strict):
     lose: str | None = None
     immediate: bool = True
     card: str = ""  # 進這一段時跳一張卡（StoryCard kind="stage"）寫的那一句；空的不跳（例：特殊頓悟心魔那一關打之前）
-    image: str | None = None  # 那張卡的圖（同 StoryDef.image）
+    image: str | None = None  # 那張卡的圖（同 StoryDef.image）；事件段端出事件時場景卡也用它（storyline.stage_art）
 
 
 class StoryEnding(_Strict):

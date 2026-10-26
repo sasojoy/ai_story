@@ -16848,9 +16848,11 @@ class Game:
             return None
         if s.pending_event:
             event = c.events[s.pending_event]
-            if not event.image:
+            own = storyline.stage_art(s, c)  # 一條線事件段的專屬圖（StoryStage.image）蓋過事件的類型圖
+            if not event.image and own is None:
                 return None
-            return {"kind": "event", "path": f"events/{event.image}", "title": event.title, "sub": "", "head": f"**{event.title}**"}
+            path = own or f"events/{event.image}"
+            return {"kind": "event", "path": path, "title": event.title, "sub": "", "head": f"**{event.title}**"}
         if p.duel is not None or p.arena is not None or p.feasting is not None or p.sensing is not None:
             return None
         if p.pending_companion:

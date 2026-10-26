@@ -313,6 +313,22 @@ def test_fuzhi_buy_medicine_and_guard_the_shrine_ends_in_the_notes():
     assert s.player.annals[-1].text == f"{s.player.name}嘗入涅陽疫村，負藥助張機，活一童子。"
 
 
+def test_fuzhi_scenes_use_their_own_pictures_and_the_files_ship():
+    """事件段寫了 image 時，場景卡用那張（Game.scene_art）；奇事卡的圖檔都在 web/img/（Joy 2026-10-26 第二批圖）。"""
+    from pathlib import Path
+
+    game = ready(jianfa_game(), side="guan", loc="nanyang_wilds")
+    _fuzhi(game)
+    assert game.scene_art()["path"] == "stories/fuzhi_act1"
+    assert game.story_card_view()[0]["image"] == "stories/fuzhi_act1"
+    line = game.content.storylines["fuzhi"]
+    web = Path(__file__).resolve().parents[1] / "web" / "img"
+    for img in [line.image] + [st.image for st in line.stages] + [e.image for e in line.endings]:
+        assert (web / f"{img}.webp").is_file(), img
+    for key in ("enter", "demon", "done", "fail"):  # 特殊頓悟那條線（武學合成優化）開線時填這四張
+        assert (web / "stories" / f"dunwu_{key}.webp").is_file(), key
+
+
 def test_fuzhi_carrying_the_jar_ends_in_the_jar_and_missing_the_deadline_is_too_late():
     game = ready(jianfa_game(), side="guan", loc="yu_river")
     s = game.state

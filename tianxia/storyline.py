@@ -130,6 +130,16 @@ def current(content: Content, progress: StoryProgress) -> tuple[StoryDef, StoryS
     return None if stage is None else (line, stage)
 
 
+def stage_art(state: GameState, content: Content) -> str | None:
+    """眼前端出來的事件是某條線事件段的那一則（含它接下去的 next_event）、那一段寫了 image 時，場景卡用那張專屬圖
+    （Game.scene_art；web/img/<image>.webp）。沒有是 None，場景卡照事件自己的類型圖。"""
+    for progress in active(state):
+        pair = current(content, progress)
+        if pair is not None and progress.opened and pair[1].kind == "event" and pair[1].image:
+            return pair[1].image
+    return None
+
+
 def doable(state: GameState, content: Content, progress: StoryProgress) -> bool:
     """這一段此刻在這裡按得下去：event、quiz、fight 才有鈕（task 是去做別的事），還沒端出來、站在對的地方。"""
     pair = current(content, progress)
