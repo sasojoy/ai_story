@@ -15177,7 +15177,14 @@ class Game:
         def mode(loc_id: str) -> str | None:
             how = sortie.mode(c, s.world, faction, loc_id, bool(self._sortie_foes(c.locations[loc_id]))) if on else None
             # 約戰開著（減法季批 3b）：沒有零風險的守，自家的地方出陣那一格灰著「等對面來約」——輿圖不畫「出陣・守」、不推薦去那裡出陣
-            return None if duel and how == "hold" else how
+            if duel and how == "hold":
+                return None
+            # 攻也一樣（FB-855）：貼不了約戰的敵方地方（跟自家領地不相連、冷卻、戰書凍結、碎片鎮地……）不標「攻」、不推薦——問的跟貼約戰
+            # （sortie_go_problem）同一個 conquest.push_problem；截糧的運糧隊正打那裡經過的，出陣照舊攻打運糧隊（_duel_option），照舊是攻
+            if duel and how == "attack" and not orders.extra_enemies(s, c, loc_id, faction) \
+                    and conquest.push_problem(s.world, c, self._conquest_side(), loc_id, "attack") is not None:
+                return None
+            return how
 
         out = mapdata.state(
             s, c, odds=self.odds, sortie_mode=mode, sorties_left=self.sorties_left() if on else None, real_minutes=self._real_minutes,
