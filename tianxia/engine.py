@@ -15194,10 +15194,29 @@ class Game:
 
         out = mapdata.state(
             s, c, odds=self.odds, sortie_mode=mode, sorties_left=self.sorties_left() if on else None, real_minutes=self._real_minutes,
+            sortie_foes=self._map_foes,
         )
         for loc_id, info in out["places"].items():  # 地點卡上那一句這一帶多兇（尋敵分級，Joy 2026-10-22：不寫幾級）；沒有是空字串
             info["fierce"] = self._fierce_line(c.locations[loc_id])
         return out
+
+    def _map_foes(self, loc_id: str) -> list[str] | None:
+        """輿圖地點卡的對手與勝算照「出陣真的會打的那一路」列（FB-858，減法季 3d；mapdata.state 的 sortie_foes，只在那一處的出陣是攻時問）：
+        領地爭奪開著，約戰關著是出陣擲的那一批（_sortie_foes：conquest.sortie_foes——中立地那裡站的全部、別人的陣營區塊控制方的兵、那裡沒兵時
+        退回 Scenario.territory.side_garrison——加上截糧的運糧隊），約戰開著是貼約戰時守軍迎戰挑的那一路（_duel_squad，經驗最高的一路）；
+        截糧的運糧隊正打那裡經過的，出陣那一格照舊攻打運糧隊（_duel_entry），就只有運糧隊。領地爭奪關著、散人、不是區塊、沒有對手是 None＝
+        照舊列站的隊伍（atlas.foes）。只讀，不擲骰。"""
+        s, c = self.state, self.content
+        side = self._side()
+        if side is None or not sortie.on(c) or not conquest.on(c, s.world) or loc_id not in conquest.blocks(c):
+            return None
+        if not self.duel_on() or self._conquest_side() is None:
+            return self._sortie_foes(c.locations[loc_id]) or None
+        extra = orders.extra_enemies(s, c, loc_id, side)
+        if extra:
+            return extra[:1]
+        squad = self._duel_squad(loc_id)
+        return None if squad is None else [squad.id]
 
     def _fierce_line(self, loc: Location) -> str:
         """輿圖地點卡與舊地點詳情的那一句（training.PLACE_LINE）：城外尋敵得到的地方照分級寫「此地宵小出沒。」，城鎮、沒有對手、

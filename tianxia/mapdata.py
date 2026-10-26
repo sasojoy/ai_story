@@ -274,10 +274,13 @@ def _week_place(state: GameState, content: Content, faction: str | None, places:
     return None
 
 
-def _foes(state: GameState, content: Content, loc: Location, odds: atlas.Odds, faction: str | None) -> list[tuple[str, str]]:
+def _foes(
+    state: GameState, content: Content, loc: Location, odds: atlas.Odds, faction: str | None, squad_ids: list[str] | None = None,
+) -> list[tuple[str, str]]:
     """這裡遇得上的隊伍與勝算（atlas.foes：自己陣營的寫「操練」），加上這週截糧帶來的敵方運糧隊（orders.extra_enemies，
-    出陣攻的對手就有它）：截糧的地點歸自己時，那一處的對手就是糧隊（FB-258）。"""
-    listed = atlas.foes(content, loc, odds, faction, state.world)
+    出陣攻的對手就有它）：截糧的地點歸自己時，那一處的對手就是糧隊（FB-258）。
+    squad_ids 給了（FB-858）：領地爭奪開著、這一處是出陣攻，列出陣真的會打的那幾路（Game._map_foes），不查站的隊伍。"""
+    listed = atlas.foes(content, loc, odds, faction, state.world, squad_ids)
     names = {name for name, _ in listed}
     for sid in orders.extra_enemies(state, content, loc.id, faction):
         squad = content.squads[sid]
@@ -505,11 +508,13 @@ def flip_marks(world: WorldState, content: Content, loc_id: str) -> dict:
 
 def state(
     state: GameState, content: Content, *, odds: Callable[..., str], sortie_mode: Callable[[str], str | None],
-    sorties_left: int | None, real_minutes: Callable[[float], int],
+    sorties_left: int | None, real_minutes: Callable[[float], int], sortie_foes: Callable[[str], list[str] | None] | None = None,
 ) -> dict:
     """疊層（設計第九節）。odds 是 Game.odds，照 odds(隊伍, at=地點) 問：每一處的勝算照那一處的地利算（terrain.strong_at，
     武學隨地理環境計畫第六節）；這裡記住，同一支隊伍、同一種地利只算一次；sortie_mode(地點) 是 sortie.mode 的結果；
-    sorties_left 是今天還能出陣幾次（散人、出陣關著是 None）；real_minutes 把世界秒換成現實分鐘（Game._real_minutes）。
+    sorties_left 是今天還能出陣幾次（散人、出陣關著是 None）；real_minutes 把世界秒換成現實分鐘（Game._real_minutes）；
+    sortie_foes(地點) 是 Game._map_foes（FB-858，減法季 3d），只在那一處的出陣是攻時問：領地爭奪開著，出陣真的會打的那幾路隊伍 id
+    （地點卡的對手、勝算字、推薦排序都跟著它）；領地爭奪關著、沒給、回 None 是照舊列站的隊伍（atlas.foes）。
 
     {"key", "now_week", "weeks_total", "season_one", "territory", "faction", "sides", "here", "stamina", "sorties_left",
      "journey": None | {"to","to_name","minutes","next_name","x","y"}, "travel_block": None | {"reason","to_jianghu"},
@@ -551,7 +556,8 @@ def state(
         route = None if here else (routes.get(loc_id) if p.journey is None else atlas.way_to(s, c, loc_id))
         if route is not None and not route.path:
             route = None
-        listed = _foes(s, c, loc, odds_at(loc_id), faction)
+        how = sortie_mode(loc_id)
+        listed = _foes(s, c, loc, odds_at(loc_id), faction, sortie_foes(loc_id) if sortie_foes is not None and how == "attack" else None)
         worst = _worst(listed)
         places[loc_id] = {
             "control": territory.controller(w, c, loc_id),
@@ -559,7 +565,7 @@ def state(
             else _conquest_kind(w, c, loc_id) if conquest_on  # 領地爭奪：中立地 neutral、搶得下來的陣營區塊 line（網頁照它畫灰、寫「可易手」）
             else "line" if on and territory.line_of(c, loc_id) else None,
             "odds": None if worst is None else {"word": worst[1], "tone": ODDS_TONE.get(worst[1], "ok")},
-            "sortie": sortie_mode(loc_id),
+            "sortie": how,
             "armed": (loc_id in armed) if armed is not None else bool(loc.enemies),
             "minutes": None if route is None else atlas.whole_minutes(route.minutes * atlas.TIME_SHARE["walk"] * pace),
             # 走過去依序經過哪幾站（最後一個是這一處；就在這裡、走不到是空的）：第二層點一處、本週那一處的金路照它描（減法季第七章）
