@@ -176,3 +176,42 @@ def test_a_hopeless_bounty_at_a_boss_only_place_leaves_the_boss_roll_alone():
     assert game.odds("shanzei") != LOSE
     forced = game.outing_plan()
     assert forced.how == "bounty" and forced.boss is None and forced.weights == explore_one.encounter_only()  # 打得過才是整趟懸賞、不擲頭目
+
+
+# ── 2. FB-881 ──
+
+
+def _story(game, tier: str, loc_beat: str = "encounter") -> str:
+    _reset(game)
+    with _beat(loc_beat), _fight(tier):
+        return game.choose("act:explore")[0]
+
+
+def _closes(game, story: str) -> bool:
+    return any(line in story for line in game.content.outing_lines["close"]["outlevel"]) or CLOSE_OUTLEVEL in story
+
+
+def test_the_out_of_your_league_close_is_only_written_when_you_won_and_it_cut_the_pay():
+    game = ready(jianfa_game(), side="guan", loc="yingchuan", level=30)  # 城裡的地痞：難度 8，三十級低三檔
+    assert _closes(game, _story(game, "大勝"))
+    assert _closes(game, _story(game, "險勝"))
+    assert not _closes(game, _story(game, "僵持"))  # 平手：沒拿到什麼，也不是因為對手檔
+    assert not _closes(game, _story(game, "落敗"))
+    wilds = ready(jianfa_game(), side="guan", loc="yingchuan_wilds", level=20)  # 難度 8 的流寇，二十級低兩檔
+    for tier in ("僵持", "落敗"):
+        assert not _closes(wilds, _story(wilds, tier)), tier
+    assert _closes(wilds, _story(wilds, "大勝"))
+
+
+def test_no_close_when_the_foe_did_not_cut_the_pay():
+    game = ready(jianfa_game(), side="guan", loc="yingchuan_wilds", level=1)  # 一級打流寇：同一檔
+    for tier in ("大勝", "僵持", "落敗"):
+        assert not _closes(game, _story(game, tier)), tier
+
+
+def test_a_lost_fight_does_not_read_as_a_won_one_in_the_same_paragraph():
+    """FB-881 原例：吃了虧只得退走，下一句不再說對手配不上你。"""
+    game = ready(jianfa_game(), side="guan", loc="yingchuan_wilds", level=20)
+    story = _story(game, "落敗")
+    assert not _closes(game, story)
+    assert "配不上你" not in story

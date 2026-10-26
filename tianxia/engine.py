@@ -5388,6 +5388,8 @@ class Game:
             self._loot_scale = self._drop_scale = self._gate_scale = 1.0
         record = next((r for r in s.battles if r.id == s.battle_card), None) if s.battle_card != card else None
         won = record is not None and record.tier in team.WIN_TIERS
+        if not won:
+            self._outing_close.discard("outlevel")  # FB-881：「對手配不上你，所得有限」只在打贏、真的因為對手檔打了折才寫；輸了、平手不寫
         if record is not None:
             record.label = battlelog.OUTING_LABEL
         if won and not town:
@@ -5407,7 +5409,8 @@ class Game:
         """遭遇拍這一場的倍數（減法季三道閘的前兩道，整合設計 4.2；Config.jianfa 的 drill_gates）：今天第幾場（PlayerState.fights_today，
         台灣 00:00 換日、照 _pill_day）的疲勞（growth.fatigue_factor：前 drill_full_per_day 場 1，之後每場 ×drill_decay，最低 drill_floor）
         乘對手的檔（growth.outlevel_factor：對手難度的檔比自己等級的檔低一檔 0.5、兩檔 0.1）。關著是 1、也不記場數（存檔一個鍵都不多）。
-        打了折的那一道記進 _outing_close（段落結尾那一句：tired、outlevel）。"""
+        打了折的那一道記進 _outing_close（段落結尾那一句：tired、outlevel）；outlevel 在 _outing_fight 看到這一場沒打贏時收回（FB-881：
+        輸了、平手沒拿到東西，不是因為對手檔）。"""
         s, c = self.state, self.content
         if not jianfa(c, s.world, "drill_gates"):
             return 1.0
