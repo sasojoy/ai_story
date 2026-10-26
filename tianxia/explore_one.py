@@ -7,7 +7,7 @@
 
 cfg 是 `Config.jianfa`（`models.JianfaRules`，繼承 `jianfa_numbers.JianfaNumbers`；純規則的測試直接建後者）；地點只讀 `tags`、
 `danger` 與 `explore_mix`。不 import engine、不碰 Game.rng：開關、選單、結算在引擎（`Game._explore_one`，Task 2-3）；
-這裡另放鈕上的小字（`HINTS`）與段落的寫法（`line`：照 content/outing_lines.json 抽句子、接成一段，結尾「得：…　失：…」）。
+這裡另放鈕上的小字（`hint_of`，照比重算）與段落的寫法（`line`：照 content/outing_lines.json 抽句子、接成一段，結尾「得：…　失：…」）。
 """
 
 from __future__ import annotations
@@ -101,17 +101,14 @@ def rng_for(season: int, name: str, serial: int, what: str) -> random.Random:
 
 # ── 鈕上的小字與段落（Task 2-3；字都待 joy 潤）──
 
-# 這一處「多半給什麼」（設計 4.1「地點決定多半給什麼」）：照這一處的表。字跟雲端批 5 的 mapdata.MOSTLY／MOSTLY_HERE 同一套（那兩張照地點的小圖，
-# 探索一顆開著時改照這裡的表）；待 joy 潤。MOSTLY 是輿圖第一層名字旁的兩個字（地點種類，不看誰站在那裡）、HINTS 是同一套字加上地點的字
-# （玩法說明列六張表的樣子、小字沒有比重可看時的退路）。鈕上括號最後那一段（「探索（體力 18・城裡多事）」）與四格探索那一格的小字
-# （/api/main 的 mostly）以 HINTS 為主，只有這一種的招牌類在這一處此刻的比重是 0 時才改寫（hint_of 的 weights，FB-832，PM 2026-10-26）
-MOSTLY = {TOWN: "多事", TEMPLE: "多悟", FORD: "參半", WILD: "多敵", HILL: "多料", CAMP: "多敵"}
+# 這一處「多半給什麼」（設計 4.1「地點決定多半給什麼」）：**照表算出來，不寫死**（2e，FB-882，企劃者 2026-10-26「小字照表寫」；字待 joy 潤）。
+# 一張表（或此刻擲骰用的比重）四欄裡最大的那一欄寫成兩個字（BEAT_MOSTLY），並列最大寫「參半」（mostly_of），前面接地點種類的字（PLACE_WORDS）。
+# 鈕上括號最後那一段與四格探索那一格的小字（/api/main 的 mostly）讀這一處此刻的比重（hint_of：危險度往上加減、沒有對手、抽不到事件、悟不出感悟都算進去），
+# 所以跟行動列底下那一行（howto.outing_line）永遠說同一件事；輿圖第一層名字旁的兩個字（mostly_in）與玩法說明列六張表的樣子（hint_in）讀地點種類的表本身，
+# 不看誰站在那裡、也沒有危險度。以前（FB-832）寫的是寫死的一組字、只有招牌類的比重是 0 才改寫，寺的「多悟」就跟表對不上（事件 50、感悟 30）。
 PLACE_WORDS = {TOWN: "城裡", TEMPLE: "寺裡", FORD: "渡口", WILD: "野外", HILL: "山裡", CAMP: "營裡"}
-HINTS = {kind: PLACE_WORDS[kind] + MOSTLY[kind] for kind in MOSTLY}
 BEAT_MOSTLY = {EVENT: "多事", ENCOUNTER: "多敵", MATERIAL: "多料", INSIGHT: "多悟"}  # 比重最高的那一類寫成哪兩個字
 BALANCED = "參半"  # 最高的有兩類以上並列
-# 每一種地點的招牌類（MOSTLY 的字說的是哪一類）：城多事、寺多悟、野與營多敵、山多料；渡口「參半」說的是事件、遭遇、素材三樣差不多
-SIGNATURE = {TOWN: (EVENT,), TEMPLE: (INSIGHT,), FORD: (EVENT, ENCOUNTER, MATERIAL), WILD: (ENCOUNTER,), HILL: (MATERIAL,), CAMP: (ENCOUNTER,)}
 BOUNTY_WORD = "有賞"  # 接了這裡的討伐懸賞：「多半」那兩個字換成「有賞」（設計 4.1）：「野外有賞」
 SPAR_HINT = "同袍比劃"  # 自家營寨：遭遇是跟同袍比劃
 
@@ -125,24 +122,33 @@ def mostly_of(weights: Mapping[str, float]) -> str:
     return BALANCED if len(best) > 1 else BEAT_MOSTLY[best[0]]
 
 
-def signature_holds(kind: str, weights: Mapping[str, float]) -> bool:
-    """這一種地點的招牌類在這一處此刻還抽得到（比重不是 0）。渡口的「參半」要事件、遭遇、素材三樣裡至少兩樣抽得到才成立。"""
-    live = sum(1 for beat in SIGNATURE[kind] if weights.get(beat, 0) > 0)
-    return live >= min(2, len(SIGNATURE[kind]))
+def table_weights(table: ExploreOneTable) -> dict[str, int]:
+    """一張表的四欄（事件、遭遇、素材、感悟），照 KINDS 的順序。"""
+    return {EVENT: table.event, ENCOUNTER: table.encounter, MATERIAL: table.material, INSIGHT: table.insight}
 
 
-def hint_of(kind: str, how: str | None, weights: Mapping[str, float] | None = None) -> str:
-    """鈕上與四格那一格的小字：接了這裡的討伐懸賞「野外有賞」、自家營寨「同袍比劃」，其餘以地點種類的字為主（HINTS，跟輿圖名字旁的
-    MOSTLY、玩法說明一致）；只有這一種的招牌類在這一處此刻的比重是 0（weights：`weights()` 再扣掉做不到的——沒有對手遭遇是 0、抽不到事件、
-    悟不出感悟）時，才改寫比重最高的那一類（`mostly_of`）：長社的官軍遭遇是 0，就不再寫「野外多敵」（FB-832，PM 2026-10-26）。
-    weights 沒給照地點種類。"""
+def mostly_in(table: ExploreOneTable) -> str:
+    """這一種地點的「多半」兩個字，照它的表算（沒有危險度）：輿圖第一層名字旁。"""
+    return mostly_of(table_weights(table))
+
+
+def hint_in(table: ExploreOneTable) -> str:
+    """這一種地點的小字，照它的表算（沒有危險度）：玩法說明列六張表的樣子、沒有比重可看時的退路。"""
+    return PLACE_WORDS[table.kind] + mostly_in(table)
+
+
+def hint_of(kind: str, how: str | None, weights: Mapping[str, float]) -> str:
+    """鈕上括號裡最後那一段與四格探索那一格的小字：接了這裡的討伐懸賞「野外有賞」、自家營寨「同袍比劃」，其餘是地點種類的字加上這一處此刻
+    比重最大的那一類（`mostly_of`）。weights 就是擲骰用的那一份（`weights()` 再扣掉做不到的——沒有對手遭遇是 0、抽不到事件、悟不出感悟），
+    所以行動列底下那一行寫「多半遇事」，這裡就是「…多事」：長社的官軍遭遇是 0 不寫「野外多敵」（FB-832）、寺的事件比感悟重寫「寺裡多事」、
+    危險的山遭遇追過素材寫「山裡多敵」（2e，FB-882）。"""
     if how == "bounty":
         return PLACE_WORDS[kind] + BOUNTY_WORD
     if how == "spar":
         return SPAR_HINT
-    if weights is None or signature_holds(kind, weights):
-        return HINTS[kind]
     return PLACE_WORDS[kind] + mostly_of(weights)
+
+
 BEAT_WORDS = {EVENT: "遇事", ENCOUNTER: "遇敵", MATERIAL: "得料", INSIGHT: "有悟"}  # 一類事寫成兩個字（紀錄的結果標記、行動列底下那一行）
 TRAVELER = "旅人"  # 野類地點的事件偏這個標籤的事件（救助旅人那一類；content.check_explore_one 驗至少三則、都在野類地點）
 
