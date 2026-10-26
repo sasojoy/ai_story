@@ -66,7 +66,7 @@ ANSWER_LINE = "你應下{rival}在{place}的約戰，替{side}封好三招：{mo
 JOIN_LINE = "你跟{rival}同去{place}，替{side}一起推這一塊（同去算集火）。窗滿就開打。"
 VOID_LINE = "{place}的約戰沒打成，出陣（應戰）的次數與體力退回。"
 VS_LINE = "{attacker}約戰，{defender}應戰。"  # 補位的人跟真人一樣只寫名號（不寫假人、不寫「沒有人防守」）
-VS_GARRISON = "{attacker}約戰，{garrison}守軍迎戰。"
+VS_GARRISON = "{attacker}約戰，" + GARRISON + "迎戰。"  # 回合、對面那一行、戰報的對手、行狀、約戰卡都只寫「守軍」，不寫駐軍那一路的名字（QA 順帶）
 VS_ALLIES = "同去：{names}。"
 ROUND_LINE = "第{n}回合　{attacker}{a_move}，{defender}{d_move}：{verdict}"
 ROUND_TOP = "{name}佔上風"
@@ -188,7 +188,7 @@ def vs_line(duel: SortieDuel) -> str:
     """對面是誰（戰報、紀錄）：補位的人跟真人一樣寫「某某應戰」；連補位都沒有寫「守軍迎戰」。"""
     d = duel.defender
     if d is not None and d.garrison:
-        return VS_GARRISON.format(attacker=duel.attacker.name, garrison=d.name)
+        return VS_GARRISON.format(attacker=duel.attacker.name)
     return VS_LINE.format(attacker=duel.attacker.name, defender=d.name if d is not None else GARRISON)
 
 

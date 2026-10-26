@@ -10735,7 +10735,7 @@ class Game:
         tier_word = sortie_duel.side_tier(duel, p.name) or sortie_duel.TIER_WORDS[result.tier]
         record = BattleRecord(
             id=s.battle_seq + 1, time=w.time, location=duel.place, kind="sortie", label=sortie_duel.LABEL,
-            opponent=rival.name if rival is not None else sortie_duel.GARRISON, ours=[Fighter(name=p.name, level=p.member.level)],
+            opponent=sortie_duel.GARRISON if rival is None or rival.garrison else rival.name, ours=[Fighter(name=p.name, level=p.member.level)],
             tier=tier_word, our_power=mine.power if mine is not None else 0.0, difficulty=rival.power if rival is not None else 0.0,
             rounds=sortie_duel.round_lines(duel),
         )
