@@ -4,6 +4,7 @@
 2. FB-831：撞到破境丹、回體丹時，「得：」那一行只列「破境丹 +1」「回體丹 +1」，不把整句說明當成一樣東西列進去（說明那一句照舊留在訊息裡）；
 3. FB-832：長社（官軍）、洛陽官道（黃巾）遭遇是 0，小字不再寫「野外多敵」（PM 2026-10-26）；2e（FB-882，企劃者 2026-10-26）起整套小字都照
    這一處此刻的比重算（寺的「多悟」跟表對不上），舊的「以地點種類的字為主」那幾條斷言翻過來，新規則與全部地點的對照在 tests/test_explore_one_2e.py；
+   2f（FB-886，PM 2026-10-26）輿圖名字旁也照這一處此刻的比重，「名字旁不隨比重變」那一條翻過來，對照在 tests/test_explore_one_2f.py；
 4. hints.json 的 h_drill_done 在探索一顆開著時不再說「尋敵」。
 用正式內容（season21），整個檔標 slow。"""
 from __future__ import annotations
@@ -183,11 +184,13 @@ def test_a_place_with_only_a_boss_no_longer_says_many_enemies(side, loc):
     assert label.endswith("・野外多料）") and server.main_view(game)["mostly"] == "野外多料" and game.mostly_here() == "野外多料"
 
 
-def test_the_map_names_keep_the_place_kind_words():
-    """輿圖名字旁的兩個字照地點種類（表，是地點自己的事、不看誰站在那裡）：這一格不隨此刻的比重變。"""
+def test_the_map_name_beside_a_boss_only_place_follows_the_button():
+    """輿圖名字旁的兩個字（2f，FB-886，PM 2026-10-26）跟鈕上小字的最後兩個字一樣，隨看的人的比重變：官軍在長社遭遇是 0，名字旁「多料」
+    （以前這一條鎖「名字旁照地點種類的表、不看誰站在那裡」，寫「多敵」；翻過來，逐處逐身分的對照在 tests/test_explore_one_2f.py）。"""
     game = ready(jianfa_game(), side="guan", loc="changshe")
     places = {p["id"]: p["mostly"] for p in game.map_base()["places"]}
-    assert places["changshe"] == explore_one.mostly_in(explore_one.kind_of(game.content.config.jianfa, game.content.locations["changshe"]))
+    assert places["changshe"] == "多料" == game.outing_plan().hint[-2:]
+    assert places["changshe"] != explore_one.mostly_in(explore_one.kind_of(game.content.config.jianfa, game.content.locations["changshe"]))
 
 
 # ── 4. hints.json 的「尋敵」 ──

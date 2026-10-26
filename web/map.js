@@ -1460,11 +1460,13 @@
     return d;
   }
   // 名字旁那一行：分鐘數＋多半（城多事、野多敵……；接了討伐懸賞寫「有賞」）；本週那一處寫分鐘數＋一句為什麼
+  // 底圖帶 viewer_mostly（減法季探索一顆開著，伺服器照你站過去之後鈕上的小字給）時，兩個字整個照底圖：「有賞」也是伺服器給的
+  // （接了、而且對那一路不是必敗才寫，必敗放開時照表），這裡不另判討伐；沒帶（關著的季、序章）照舊，疊層的 bounty 含「討伐」就寫「有賞」
   function nearSub(base, st, id, week) {
     const q = st.places[id], b = placeOf(base, id);
     const far = q.minutes !== null && q.minutes !== undefined ? `${Number(q.minutes)} 分` : "";
     if (week && week.id === id) return [far, week.why].filter(Boolean).join("・");
-    const tag = q.bounty && q.bounty.includes("討伐") ? NEAR_WORDS.bounty : b.mostly || "";
+    const tag = !base.viewer_mostly && q.bounty && q.bounty.includes("討伐") ? NEAR_WORDS.bounty : b.mostly || "";
     return [far, tag].filter(Boolean).join("・");
   }
   // 第一層的記號（純函式）：o = { v: nearFit 的取景, vw, vh, sel: 點了哪一處 }。回 [底下那一張, 上面那一張]
