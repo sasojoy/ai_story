@@ -1366,7 +1366,6 @@
   // 「全區」是舊的區圖（"region"，第三層），「天下」是天下圖（"world"，第四層）；每一次打開輿圖都從這一層開始（goTab）。拖與縮放照舊疊在取景上
   const NEAR_EDGE = { x: 84, t: 44, b: 34 }; // 取景：走得到的地方離地圖框左右、上（旗）、下（字）至少多少（px）
   const NEAR_MAX = 2.4, NEAR_MIN = 0.6; // 第一層的倍率夾在這中間（相連的地點很近時不放到太大、很遠時不縮到看不清）
-  const NEAR_FRAME = 60; // 拖的範圍：這一區的地點與走得到的地方的外框往外多少（地圖單位）
   const NEAR_NAME = 15, NEAR_SUB = 12, NEAR_GAP = 3; // 名字、底下那一行（分鐘・多半）的字級、兩行之間（px）
   const NEAR_FAINT = 0.34, NEAR_DIM = 0.4, NEAR_PICK = 1.35; // 其餘地點多淡；點了一處時其餘退成幾成；點的那一處放大幾倍
   const NEAR_RING = 22; // 點了的那一處 drawSel 那一圈的半徑（px）
@@ -1399,27 +1398,26 @@
   function nearWeek(st) {
     return st.week && st.places[st.week.id] ? st.week : null;
   }
-  // 第一層的取景：以你為中心（露出來的那一塊的正中），倍率讓走得到的地方都在框裡（左右留 NEAR_EDGE.x 給名字）；拖的範圍是這一區的地點、
-  // 走得到的地方與你的外框加 NEAR_FRAME。回 { s, cx, cy, frame, bottom }（同 regionFit）
+  // 第一層的取景：以你為中心（露出來的那一塊的正中），倍率讓走得到的地方都在框裡（左右留 NEAR_EDGE.x 給名字）；拖的範圍是整張圖
+  // （FB-876）。回 { s, cx, cy, frame, bottom }（同 regionFit）
   function nearFit(base, st, vw, vh, top = REGION_TOP, pad = REGION_PAD) {
     const me = youXY(base, st);
     if (!me) return null;
     const ids = nearIds(base, st), y0s = top + NEAR_EDGE.t, y1s = Math.max(y0s + 40, vh - pad - NEAR_EDGE.b);
     const midY = (y0s + y1s) / 2, halfW = Math.max(40, vw / 2 - NEAR_EDGE.x), halfH = Math.max(30, (y1s - y0s) / 2);
     let s = NEAR_MAX;
-    const pts = [];
     for (const id of ids) {
       const p = placeOf(base, id);
       if (!p) continue;
-      pts.push(p);
       const dx = Math.abs(p.x - me[0]), dy = Math.abs(p.y - me[1]);
       if (dx > 0.5) s = Math.min(s, halfW / dx);
       if (dy > 0.5) s = Math.min(s, halfH / dy);
     }
     s = Math.max(NEAR_MIN, s);
-    const area = [...pts, ...regionPlaces(base, hereRegion() || S.mapRegion)];
-    const xs = [me[0], ...area.map((p) => p.x)], ys = [me[1], ...area.map((p) => p.y)];
-    const frame = [Math.min(...xs) - NEAR_FRAME, Math.min(...ys) - NEAR_FRAME, Math.max(...xs) + NEAR_FRAME, Math.max(...ys) + NEAR_FRAME];
+    // 拖的範圍是整張圖（FB-876，企劃者 2026-10-26「輿圖拖曳的時候沒辦法跨區」）：其餘地點（別區的也是）本來就畫成淡墨小圖、點得到，
+    // 以前夾在這一區的地點與走得到的地方外框加 60，拖不過區界
+    const wf = base.world && base.world.frame, W = base.w || 900, H = base.h || 1340;
+    const frame = wf ? [wf[0], wf[1], wf[0] + wf[2], wf[1] + wf[3]] : [0, 0, W, H];
     return { s, cx: me[0], cy: me[1] + (vh / 2 - midY) / s, frame, bottom: y1s };
   }
   // 一條路畫成哪一條曲線（底圖的 roads：跟底圖同一條二次曲線）；沒有那一份（舊的底圖）照直線
