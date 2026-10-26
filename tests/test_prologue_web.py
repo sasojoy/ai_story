@@ -134,7 +134,7 @@ def with_reveal(m, reveal, glow=(), skip=False):
 
 
 def has_week(html):
-    return 'class="card wk-card"' in html
+    return 'id="week"' in html or 'class="card wk-card' in html  # 灰線一直在（沒收起）；「眼下要事」沒有要做的事不畫
 
 
 STANCES = {"guan": 40, "huang": 30, "haoqiang": 20}

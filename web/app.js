@@ -5997,6 +5997,7 @@
         case "scene-more": S.sceneOpen = !S.sceneOpen; renderPage(); break;
         case "wk": wkTap(el.dataset.id); break; // 本週卡的「為什麼」「今日簽到」與兩軍態勢：只換那一張，「剛剛」不會重播
         case "wk-next": wkNext(); break; // 本週卡的「換一件事」
+        case "wk-hide": wkHideOne(el.dataset.id); break; // 灰線、「眼下要事」的 ×：收到明天
         case "newbie-go": newbieGo(Number(el.dataset.i)); break; // 新手目標的「去做」
         case "newbie-drifter": await doMain("newbie_drifter"); break; // 新手目標的「就當散人」
         case "hear-more": hearToggle(el); break; // 戰鬥卡片底下聽來的那一句：原地展開／收起，不重畫
