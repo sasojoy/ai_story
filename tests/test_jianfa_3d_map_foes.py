@@ -153,8 +153,14 @@ def test_places_that_are_not_attacks_keep_the_old_listing(off):
     game = game_of(c, world, "甲")
     state = game.map_state()
     kept = 0
+    season = game.state.world
     for loc, info in state["places"].items():
         if info["sortie"] == "attack":
+            continue
+        # FB-878（PM 2026-10-26）：約戰開著、此刻攻不了的敵方與中立區塊（不相連、冷卻、戰書凍結）改列守軍那一路，新規則在
+        # tests/test_fb878_map_foes_shut.py；這裡只守其餘照舊（自家的、不在爭奪之列、搶不下來的）
+        if not off and loc in conquest.blocks(c) and conquest.holder(season, c, loc) != "guan" and game._duel_squad(loc) is not None \
+                and conquest.push_problem(season, c, "guan", loc, "attack") is not None:
             continue
         expected = atlas.foes(c, c.locations[loc], lambda sid, at=loc: game.odds(sid, at=at), "guan", game.state.world)
         assert [(q["name"], q["odds"]) for q in info["squads"]] == expected, loc

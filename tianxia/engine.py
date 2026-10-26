@@ -15179,29 +15179,38 @@ class Game:
         faction = self._side()  # 豪強分屬兩軍：照依附那一軍畫出陣與地盤
         on = sortie.on(c) and faction is not None
         duel = self.duel_on()
+        judged: dict[str, tuple[str | None, bool]] = {}
 
-        def mode(loc_id: str) -> str | None:
+        def judge(loc_id: str) -> tuple[str | None, bool]:
+            """（出陣那一格是哪一種, 攻被約戰擋下）：同一處只算一次。"""
+            if loc_id in judged:
+                return judged[loc_id]
             how = sortie.mode(c, s.world, faction, loc_id, bool(self._sortie_foes(c.locations[loc_id]))) if on else None
             # 約戰開著（減法季批 3b）：沒有零風險的守，自家的地方出陣那一格灰著「等對面來約」——輿圖不畫「出陣・守」、不推薦去那裡出陣
-            if duel and how == "hold":
-                return None
             # 攻也一樣（FB-855）：貼不了約戰的敵方地方（跟自家領地不相連、冷卻、戰書凍結、碎片鎮地……）不標「攻」、不推薦——問的跟貼約戰
             # （sortie_go_problem）同一個 conquest.push_problem；截糧的運糧隊正打那裡經過的，出陣照舊攻打運糧隊（_duel_option），照舊是攻
-            if duel and how == "attack" and not orders.extra_enemies(s, c, loc_id, faction) \
-                    and conquest.push_problem(s.world, c, self._conquest_side(), loc_id, "attack") is not None:
-                return None
-            return how
+            shut = duel and how == "attack" and not orders.extra_enemies(s, c, loc_id, faction) \
+                and conquest.push_problem(s.world, c, self._conquest_side(), loc_id, "attack") is not None
+            judged[loc_id] = (None if shut or (duel and how == "hold") else how, shut)
+            return judged[loc_id]
+
+        def foes(loc_id: str) -> list[str] | None:
+            # 地點卡的對手與勝算照出陣真的會打的那一路（_map_foes）：標攻的地方（FB-858，3d），還有約戰開著、此刻攻不了的敵方與中立區塊
+            # （FB-878：不相連、冷卻、戰書凍結——卡上照舊寫攻不了的原因，對手照貼約戰時會迎戰的守軍那一路寫，不再列站在那裡的隊伍）
+            how, shut = judge(loc_id)
+            return self._map_foes(loc_id) if how == "attack" or shut else None
 
         out = mapdata.state(
-            s, c, odds=self.odds, sortie_mode=mode, sorties_left=self.sorties_left() if on else None, real_minutes=self._real_minutes,
-            sortie_foes=self._map_foes,
+            s, c, odds=self.odds, sortie_mode=lambda loc_id: judge(loc_id)[0], sorties_left=self.sorties_left() if on else None,
+            real_minutes=self._real_minutes, sortie_foes=foes,
         )
         for loc_id, info in out["places"].items():  # 地點卡上那一句這一帶多兇（尋敵分級，Joy 2026-10-22：不寫幾級）；沒有是空字串
             info["fierce"] = self._fierce_line(c.locations[loc_id])
         return out
 
     def _map_foes(self, loc_id: str) -> list[str] | None:
-        """輿圖地點卡的對手與勝算照「出陣真的會打的那一路」列（FB-858，減法季 3d；mapdata.state 的 sortie_foes，只在那一處的出陣是攻時問）：
+        """輿圖地點卡的對手與勝算照「出陣真的會打的那一路」列（FB-858，減法季 3d；mapdata.state 的 sortie_foes，在那一處的出陣是攻時問，
+        約戰開著、此刻攻不了〔不相連、冷卻、戰書凍結〕的敵方與中立區塊也問，FB-878）：
         領地爭奪開著，約戰關著是出陣擲的那一批（_sortie_foes：conquest.sortie_foes——中立地那裡站的全部、別人的陣營區塊控制方的兵、那裡沒兵時
         退回 Scenario.territory.side_garrison——加上截糧的運糧隊），約戰開著是貼約戰時守軍迎戰挑的那一路（_duel_squad，經驗最高的一路）；
         截糧的運糧隊正打那裡經過的，出陣那一格照舊攻打運糧隊（_duel_entry），就只有運糧隊。領地爭奪關著、散人、不是區塊、沒有對手是 None＝
