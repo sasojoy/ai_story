@@ -10770,8 +10770,9 @@ class Game:
                 p.answer_cooldown_until = max(p.answer_cooldown_until or 0.0, after.answer)
             if lost:
                 record.notes.append(sortie_duel.LOSE_LINE.format(n=f"{cfg.lose_cooldown_minutes:g}"))
-            annals.note(s, c, annals.FIGHT, sortie_duel.ANNAL_LINE.format(
-                place=duel.place, rival=rival.name if rival is not None and not rival.garrison else sortie_duel.GARRISON, tier=tier_word), 2)
+            annals.note(s, c, annals.DUEL, sortie_duel.ANNAL_LINE.format(  # 地點寫約戰的那一塊（結算時人可能已經走了）
+                place=duel.place, rival=rival.name if rival is not None and not rival.garrison else sortie_duel.GARRISON, tier=tier_word), 2,
+                place=duel.place)
         rank = ranks.rank_of(s)
         if 1 <= rank < 3 and calendar.season_one_on(w, c):
             record.notes.append(sortie_duel.RANK_LINE.format(n=max(0, ranks.threshold(c, rank + 1) - p.contrib)))

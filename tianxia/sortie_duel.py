@@ -93,7 +93,7 @@ NEXT_DONE = "今日已用完"
 CONVOY_LINE = "這週截糧的運糧隊正打{place}經過：在那裡按出陣就是去截糧。"
 CONVOY_NAME = "截糧"  # 運糧隊經過時出陣那一格的名字（「出陣・截糧」）
 LOOT_LINE = "經驗 {exp}・心得 {xinde}・銀兩 {silver}"  # 出陣前那張卡「贏了」那一段的戰利
-ANNAL_LINE = "在{place}約戰{rival}，{tier}。"  # 行狀（annals.FIGHT）
+ANNAL_LINE = "在{place}約戰{rival}，{tier}。"  # 行狀（annals.DUEL）
 
 
 # 出陣那一格灰著時格子裡的小字：五格、四格時每格只放得下四個字（FB-670，tests/test_fb670_practice_cell_web.py 守）；整句在行動列底下那一行
