@@ -203,12 +203,16 @@ def test_no_progress_bars_when_conquest_is_off():
     assert "r-bar" not in low and "r-cool" not in low and 'class="r-frame"' in low
 
 
-def test_you_get_a_red_ring_and_flag_in_your_region_only():
+def test_you_get_a_red_ring_and_flag_in_every_region():
+    """以前只有你站的那一區畫你（別區上面那一張是空的：取景框外蓋著紙、拖不出去）。全區選甲（FB-876）之後別區拖得過來，
+    企劃者 2026-10-26（FB-884）決定「全區看別區時也畫出你站的位置（朱圈），跟本區一樣」：別區也畫朱圈、跳的圈與旗，圓心在你腳下那一處；
+    斷言照翻過來，新規則的測試在 tests/test_fb884_region_you_marker_web.py。"""
     game = _game()
     _, high = parts(game, "yingru")
     assert 'class="r-you"' in high and 'class="pulse"' in high
     _, other = parts(game, "nanyang")
-    assert other == ""
+    assert 'class="r-you"' in other and 'class="pulse"' in other
+    assert re.search(r'class="r-you" cx="464" cy="940"', other) and re.search(r'class="r-you" cx="464" cy="940"', high)  # 都在潁川郡（你站的地方）
 
 
 def test_exits_name_the_neighbour_region_and_lead_there():

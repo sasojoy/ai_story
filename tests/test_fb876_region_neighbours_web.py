@@ -128,7 +128,7 @@ MOVE = re.compile(r"translate\(([-\d.e]+),([-\d.e]+)\) scale\(([-\d.e]+)\)")
 
 def _hits(svg: str):
     """點得到的框照畫的先後 [(種類, 地點, 框)]：帶 data-act 的透明 rect、帶 data-act 那一組裡的每一個 rect（名字框、寶、小圖的透明框；
-    小圖那一組照它的 translate／scale 換算）。小圖中心 {地點: (x, y)}（本區 r-icon、別區 r-faint）。"""
+    小圖那一組照它的 translate／scale 換算）。小圖中心 {地點: (x, y)}（本區 r-icon、別區 r-faint、你腳下不在這一區時的 r-here）。"""
     stack, out, icons = [], [], {}
     for m in TAG.finditer(svg):
         close, tag, attrs = m.group(1), m.group(2), dict(ATTR.findall(m.group(3)))
@@ -137,7 +137,7 @@ def _hits(svg: str):
                 stack.pop()
             else:
                 stack.append(attrs)
-                if attrs.get("class") in ("r-icon", "r-faint"):
+                if attrs.get("class") in ("r-icon", "r-faint", "r-here"):
                     icons[attrs["data-id"]] = tuple(float(n) for n in MOVE.search(attrs["transform"]).groups()[:2])
             continue
         owner = attrs if "data-act" in attrs else next((g for g in reversed(stack) if "data-act" in g), None)
@@ -213,10 +213,13 @@ def _old_app(tmp_path):
 
 def test_the_home_region_draws_byte_for_byte_as_before(tmp_path):
     """五區 × 三處站位 × 三種地圖框（另加塗層開著）：拿掉別區的淡墨小圖與點擊區（g.r-faints、g.r-hits）之後，跟選甲之前那一版拿掉取景框外
-    那層紙（g.r-mask）逐位元組一樣；上面那一張（你、旗、跳的圈）整份一樣。"""
+    那層紙（g.r-mask）逐位元組一樣；你站的那一區上面那一張（你、旗、跳的圈）整份一樣。
+    你站在別區的那幾張（FB-884，企劃者 2026-10-26：全區看別區時也畫出你）多畫你腳下那一處（g.r-here，被拿掉的淡墨小圖換成它）與上面那一張的朱圈：
+    拿掉 g.r-here 之後下面那一張一樣；選甲那一版看別區時上面那一張是空的。"""
     old_app = _old_app(tmp_path)
     game = _game("yingchuan")
     base = game.map_base()
+    region_of = {p["id"]: p["region"] for p in base["places"]}
     cases = []
     for at in ("yingchuan", "luoyang_road", "zhuo_county"):
         game.state.player.location = at
@@ -224,13 +227,21 @@ def test_the_home_region_draws_byte_for_byte_as_before(tmp_path):
         cases += [{"st": st, "vw": vw, "vh": vh, "rid": r["id"], "wash": False} for r in base["regions"] for vw, vh in FRAMES]
         cases += [{"st": st, "vw": 375, "vh": 604, "rid": r["id"], "wash": True} for r in base["regions"]]
     new, old = _parts(game, cases), _parts(game, cases, app=old_app)
-    stripped = 0
+    stripped = away = 0
     for case, (nl, nh), (ol, oh) in zip(cases, new, old):
         where = f"{case['rid']} {case['vw']}×{case['vh']} 塗層{case['wash']}"
+        elsewhere = region_of[case["st"]["here"]] != case["rid"]
         n = re.sub(r'<g class="r-faints">(?:<g class="r-faint".*?</g>)*</g>|<g class="r-hits">(?:<rect [^>]*/>)*</g>', "", nl)
+        n, here = re.subn(r'<g class="r-here".*?</g>', "", n)
         o, k = re.subn(r'<g class="r-mask"[^>]*>(?:<path [^>]*/>)*</g>', "", ol)
         assert k == 1 and "r-mask" not in nl, where
+        assert here == (1 if elsewhere else 0), where  # 你腳下那一處不在這一區才多一個 r-here
         assert n == o, where
-        assert nh == oh, where
+        if elsewhere:
+            assert oh == "" and 'class="r-you"' in nh, where  # 選甲那一版看別區沒有你；現在有朱圈
+            away += 1
+        else:
+            assert nh == oh, where
         stripped += nl != n
     assert stripped == len(cases)  # 每一張都真的有別區的小圖（拿掉了才一樣）
+    assert 0 < away < len(cases)
