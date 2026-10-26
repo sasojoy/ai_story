@@ -68,6 +68,7 @@ from .guide import speaker_of as guide_speaker_of
 from .guide import speakers as guide_speakers
 from .guide import steps as tutorial_steps
 from .journal import LOG_BREAK, Draft
+from . import mapview  # 輿圖名字旁（map_mostly）問 mapview.open_places：哪些地點畫得出來，跟底圖、疊層同一個判斷
 from .mapview import legend_data, render_map, render_minimap
 from .martial_arts import QUALITIES, is_renamed
 from .models import (
@@ -195,7 +196,7 @@ class OutingPlan:
     how: str | None  # 遭遇打誰：bounty 討伐懸賞那一路（對它必敗時不算，2e）、spar 自家營寨跟同袍比劃、foe 這裡最弱的對手、town 城裡的地痞；都沒有是 None
     foe: Squad | None  # 那一路
     boss: DuelBoss | None  # 遭遇有機會撞上的頭目（接了這裡的討伐懸賞不擲）
-    hint: str  # 鈕上括號裡最後那一段小字，也是四格探索那一格的小字（/api/main 的 mostly；explore_one.hint_of：以地點種類的字為主，招牌類此刻的比重是 0 才照上面 weights 最重的一類；有賞、同袍比劃）
+    hint: str  # 鈕上括號裡最後那一段小字，也是四格探索那一格的小字（/api/main 的 mostly；explore_one.hint_of：地點種類的字加上面 weights 最重的一類；有賞、同袍比劃）；最後兩個字是輿圖名字旁（map_mostly）
 
     @property
     def foe_note(self) -> str | None:
@@ -5256,19 +5257,20 @@ class Game:
                 return "town", c.squads[sid]
         return None, None
 
-    def _outing_weights(self, loc: Location, *, has_foes: bool, bounty_here: bool) -> dict[str, int]:
+    def _outing_weights(self, loc: Location, *, has_foes: bool, bounty_here: bool, hidden: set[str] | None = None) -> dict[str, int]:
         """這一處這一趟四類事的比重（explore_one.weights：表照標籤或 explore_mix、危險度、懸賞、有沒有對手），再把此刻做不到的歸 0：
         抽不到事件（一次性、可重複的都沒有）事件是 0，悟不出（insights.explore_gives 是空的，或這個遊戲日在這裡選錯過做法）感悟是 0——
-        那一份照比重分給其餘的。只讀，不擲骰。"""
+        那一份照比重分給其餘的。只讀，不擲骰。hidden：藏起來的事件（events.hidden_events），替好幾處一起問時（map_mostly）先算好給。"""
         s, c = self.state, self.content
         weights = explore_one.weights(c.config.jianfa, loc, has_foes=has_foes, bounty_here=bounty_here)
-        if not event_candidates(s, c, "explore", "rare") and not event_candidates(s, c, "explore", "common"):
+        # 一次性與奇遇（rare）加可重複的（common）就是全部（pool=None），一趟只問一次，找到一則就夠
+        if not event_rules.has_event_candidates(s, c, "explore", hidden=hidden):
             weights[explore_one.EVENT] = 0
         if not insights.explore_gives(loc, c) or sensing.missed_today(s, c, loc):
             weights[explore_one.INSIGHT] = 0
         return weights
 
-    def _outing_plan(self, loc: Location) -> OutingPlan:
+    def _outing_plan(self, loc: Location, *, hidden: set[str] | None = None) -> OutingPlan:
         """這一處此刻出門一趟怎麼抽（OutingPlan）：比重照 _outing_weights。這裡沒有一般對手（也沒有討伐懸賞）遭遇就是 0，那一份分給其餘三類；
         頭目不算對手（FB-815：只有頭目的地點不是一定撞上他）——他是這一趟另外擲的（_explore_one：5% × 名聲倍數），擲中那一趟才是
         遭遇。接了討伐懸賞：這一趟就是遭遇（weights 只有遭遇，explore_one.encounter_only）；對懸賞那一路是必敗時不算（_outing_foe，2e），
@@ -5278,7 +5280,7 @@ class Game:
         kind = explore_one.kind_of(cfg, loc).kind
         how, foe = self._outing_foe(loc, kind)
         boss = None if how == "bounty" else duel_rules.available(s, c)  # 接了懸賞：遭遇就是懸賞那一路，不擲頭目
-        weights = self._outing_weights(loc, has_foes=foe is not None, bounty_here=how == "bounty")
+        weights = self._outing_weights(loc, has_foes=foe is not None, bounty_here=how == "bounty", hidden=hidden)
         return OutingPlan(kind=kind, weights=weights, how=how, foe=foe, boss=boss, hint=explore_one.hint_of(kind, how, weights))
 
     def mostly_here(self) -> str:
@@ -5296,6 +5298,34 @@ class Game:
         if not self._outing_on() or p.journey is not None:
             return None
         return self._outing_plan(self.content.locations[p.location])
+
+    def map_mostly(self) -> dict[str, str] | None:
+        """輿圖第一層名字旁的兩個字（2f，FB-886；PM 2026-10-26「照這一處自己的比重寫，跟鈕上同一套」）：每一個畫得出來的地點，這個人**站過去之後**
+        鈕上小字的最後兩個字（explore_one.tail_of：多事、多敵、多料、多悟、參半，接了這裡的討伐懸賞「有賞」、自家營寨「比劃」）。
+        替每一處「假裝站過去」叫 _outing_plan（鈕、四格、行動列那一行讀的同一個函式，不另寫一份判斷）：危險度、有沒有對手（看的人是哪一邊、
+        這一處此刻歸誰）、懸賞、自家營寨、抽不到事件、悟不出感悟都算進去，也就不看他現在站在哪。探索一顆沒開著、序章裡（探索鈕是寫好的幾步，
+        沒有比重可看）是 None，名字旁照舊（mapdata.place_mostly）。只讀，不擲骰、不動存檔（站回原處），在路上也算得出。"""
+        if not self._outing_on():
+            return None
+        out: dict[str, str] = {}
+        hidden = event_rules.hidden_events(self.state, self.content)  # 藏起來的事件不看站在哪，四十幾處共用一份，不必每處重算
+        for loc_id in mapview.open_places(self.state, self.content):
+            with self._standing_at(loc_id):
+                plan = self._outing_plan(self.content.locations[loc_id], hidden=hidden)
+            out[loc_id] = explore_one.tail_of(plan.how, plan.weights)
+        return out
+
+    @contextlib.contextmanager
+    def _standing_at(self, loc_id: str):
+        """裡面的讀取都當作這個人已經站在 loc_id（沒有在路上）：state 換成一份淺拷貝（只有 player 的位置與路上換掉，其餘還是同一批物件，不動它們），
+        出了範圍（含丟例外）換回原來那一份。給「站過去之後會怎樣」的只讀查詢用（map_mostly）：事件抽得到嗎、對手是誰、勝算的地利都看
+        state.player.location，一處一處改函式簽名既費事又會漏，換一份 state 才跟真的站過去一樣。範圍裡不准寫。"""
+        home = self.state
+        self.state = home.model_copy(update={"player": home.player.model_copy(update={"location": loc_id, "journey": None})})
+        try:
+            yield
+        finally:
+            self.state = home
 
     def _outing_option(self, loc: Location) -> Option:
         """探索一顆的鈕：「探索（體力 15・城裡多事）」，括號裡最後那一段是這一處多半給什麼（同 /api/main 的 mostly，mostly_here）。"""
@@ -15251,9 +15281,10 @@ class Game:
 
     # ── 大地圖 ────────────────────────────────────────────
 
-    def map_base(self) -> dict:
-        """輿圖升級的底圖與清單（mapdata.base）：伺服器照 mapdata.base_key 快取。"""
-        return mapdata.base(self.state, self.content)
+    def map_base(self, *, viewer: bool = True) -> dict:
+        """輿圖升級的底圖與清單（mapdata.base）：伺服器照 mapdata.base_key 快取。名字旁的兩個字是看的人的（map_mostly，2f）；viewer=False 是跟人無關
+        的那一份（名字旁照地點種類的表），伺服器快取這一份、每個人再換上自己的（mapdata.with_mostly）。"""
+        return mapdata.base(self.state, self.content, self.map_mostly() if viewer else None)
 
     def map_state(self) -> dict:
         """輿圖升級的疊層（mapdata.state）：勝算、出陣、分鐘換算由這裡傳進去。只讀，不擲骰。"""
@@ -15276,7 +15307,7 @@ class Game:
 
         out = mapdata.state(
             s, c, odds=self.odds, sortie_mode=mode, sorties_left=self.sorties_left() if on else None, real_minutes=self._real_minutes,
-            sortie_foes=self._map_foes,
+            sortie_foes=self._map_foes, mostly=self.map_mostly(),
         )
         for loc_id, info in out["places"].items():  # 地點卡上那一句這一帶多兇（尋敵分級，Joy 2026-10-22：不寫幾級）；沒有是空字串
             info["fierce"] = self._fierce_line(c.locations[loc_id])

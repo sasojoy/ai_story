@@ -60,16 +60,28 @@ def test_the_first_layer_names_only_you_and_the_places_you_can_walk_to():
 
 
 def test_each_walkable_place_says_minutes_and_what_it_mostly_holds():
-    """名字底下一行：分鐘數＋「多半」兩字（城多事、野多敵、山多料、渡參半、營多敵、寺多悟）；接了討伐懸賞寫「有賞」。"""
+    """名字底下一行：分鐘數＋「多半」兩字（城多事、野多敵、山多料、渡參半、營多敵、寺多悟）；接了討伐懸賞寫「有賞」。
+    減法季探索一顆開著的季（這一局的正式內容 season21）2f 起兩個字是看的人站過去之後鈕上小字的最後兩個字：官軍自己的營寨是跟同袍比劃，寫「比劃」
+    （以前這一句鎖「多敵」；逐處逐身分的對照在 tests/test_explore_one_2f.py）。"""
     game = _game()
     low = near_parts(game)["parts"][0]
     subs = dict(re.findall(r'data-id="([^"]+)"[^>]*>(?:(?!</g>).)*?<text class="n-sub"[^>]*>([^<]+)</text>', low))
-    assert subs["yingchuan"].endswith("分・多事") and subs["yingshui"].endswith("分・參半") and subs["guan_camp"].endswith("分・多敵")
+    assert subs["yingchuan"].endswith("分・多事") and subs["yingshui"].endswith("分・參半") and subs["guan_camp"].endswith("分・比劃")
     st = game.map_state()
     st["week"] = None
     st["places"]["guan_camp"]["bounty"] = "討伐"
     low = near_parts(game, st=st)["parts"][0]
     assert re.search(r'data-id="guan_camp"(?:(?!</g>).)*?分・有賞</text>', low)
+
+
+def test_the_name_line_beside_a_dangerous_ford_reads_like_the_button_there():
+    """FB-886 的實機證據：站在白馬寺，隔壁孟津渡（渡口 2★）名字旁以前寫「參半」，走到那裡探索鈕寫「渡口多敵」；現在網頁畫出來的就是「多敵」。"""
+    game = _game(at="baima_temple")
+    low = near_parts(game)["parts"][0]
+    subs = dict(re.findall(r'data-id="([^"]+)"[^>]*>(?:(?!</g>).)*?<text class="n-sub"[^>]*>([^<]+)</text>', low))
+    assert subs["mengjin_ford"].endswith("分・多敵") and subs["luoyang_palace"].endswith("分・多事"), subs
+    game.state.player.location = "mengjin_ford"
+    assert game.outing_plan().hint == "渡口多敵"
 
 
 def test_this_weeks_place_has_the_gold_road_the_flag_and_the_seal():
