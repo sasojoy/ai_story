@@ -355,6 +355,15 @@ def menu(state: GameState) -> list[tuple[str, str]]:
     return [(f"{OPTION}:{i}", name) for i, name in enumerate(naming_.candidates)] + [(f"{OPTION}:{OWN}", NAME_OWN)]
 
 
+def scene_text(state: GameState, content: Content) -> str:
+    """取名那一張場景：這一境是哪一路、真意寫什麼，叫人取名（Markdown）。"""
+    naming_ = state.player.god_naming
+    god = next((g for g in content.traits.god if g.id == naming_.god), None) if naming_ is not None else None
+    if god is None:
+        return ""
+    return f"**{TITLE}・悟成**\n\n{DONE_TEXT}\n\n> 屬{god.attribute}・{god.desc}\n\n{NAME_ASK}"
+
+
 def name_problem(state: GameState, content: Content, world: WorldStateStore, name: str) -> str | None:
     problem = naming.name_problem(name, content, person=world.is_character_name)
     if problem is not None:

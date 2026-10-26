@@ -227,3 +227,18 @@ def test_season_cap_and_one_at_a_time():
     s, c = game.state, game.content
     _begin(game)
     assert not epiphany.roll(s, c, mock.Mock(random=mock.Mock(return_value=0.0)))  # 還有一條沒收
+
+
+def test_the_demon_fight_runs_for_real_and_leaves_no_squad_behind():
+    game = _game()
+    s, c = game.state, game.content
+    _begin(game)
+    line = next(iter(s.player.storylines))
+    _answer_all(game)
+    s.world.time += day_seconds(c, s.world)
+    game._story_tick()
+    before = set(c.squads)
+    game.choose(f"{storyline.OPTION}:{line}")  # 不 mock：真的打一場（打輸也只是等一日再打）
+    assert s.battles and s.battles[0].kind == "event"
+    assert set(c.squads) == before
+    assert game.state.player.storylines[line].ending in (None, "done")

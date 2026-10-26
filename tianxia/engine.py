@@ -4212,6 +4212,12 @@ class Game:
             verb = arg.partition(":")[0]
             what = invites.kind_name(inv.kind)
             return {"yes": f"{what}・{inv.sender}", "no": f"婉拒{what}", "cancel": "收回邀請"}.get(verb, f"與{inv.sender}")
+        if kind == storyline.OPTION:  # 一條線（答題、打一場、端事件）：寫線的名字
+            progress = s.player.storylines.get(arg.partition(":")[0])
+            line = storyline.definition(c, progress) if progress is not None else None
+            return line.title if line is not None else "奇事"
+        if kind == epiphany.OPTION:  # 特殊頓悟取名
+            return epiphany.TITLE
         if kind == "act" and arg.startswith("challenge:"):
             return f"挑戰・{figures.name_of(c, arg.partition(':')[2])}"
         if kind == "act" and arg.startswith("bribe:"):  # 銀兩出口的打點門路（21 天季）
@@ -9932,7 +9938,17 @@ class Game:
     def _story_fight(self, progress: StoryProgress, stage: StoryStage) -> list[str]:
         """一條線的 fight 段：照劇情戰打（不閃、不扣氣血，同 _event_battle），打完交給 storyline.fought（鉤子寫記號、往 win 或 lose、輸了等再試）。"""
         s, c = self.state, self.content
-        squad = self._mirror_squad(progress, stage) if stage.mirror is not None else self._story_squad(c.squads[stage.squad])
+        if stage.mirror is not None:  # 自己的影子不在內容的隊伍表裡：打這一場的時候借放一下（行動鎖裡，打完就拿掉）
+            squad = self._mirror_squad(progress, stage)
+            c.squads[squad.id] = squad
+            try:
+                return self._story_bout(progress, stage, squad)
+            finally:
+                c.squads.pop(squad.id, None)
+        return self._story_bout(progress, stage, self._story_squad(c.squads[stage.squad]))
+
+    def _story_bout(self, progress: StoryProgress, stage: StoryStage, squad: Squad) -> list[str]:
+        s, c = self.state, self.content
         judged = self._judged(squad)
         result = self._fight_with(squad, judged, dodge=False, difficulty=squad.difficulty)
         line = storyline.definition(c, progress)
@@ -16981,6 +16997,13 @@ class Game:
         sense_card = sensing.scene_text(s, c) if s.player.sensing is not None else ""
         if sense_card:
             return sense_card
+        if s.player.god_naming is not None:  # 特殊頓悟心魔過了：取名（同選單的順序）
+            return epiphany.scene_text(s, c)
+        question = storyline.question_text(s, c) if s.player.story_open is not None else None
+        if question:  # 一條線的答題：場景寫這一題（選單上是答案）
+            progress = s.player.storylines[s.player.story_open]
+            line = storyline.definition(c, progress)
+            return f"**{line.title}**\n\n{question}"
         if s.player.pending_companion:
             character = c.characters[s.player.pending_companion]
             history = s.player.dialogue_history.get(s.player.pending_companion, [])
