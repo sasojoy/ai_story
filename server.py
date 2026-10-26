@@ -2009,13 +2009,19 @@ MAP_BASE_KEEP = 8  # 超過就整個清掉重來（劇情開放的地點只有�
 
 
 def map_base_view(game: Game) -> dict:
-    """輿圖升級的底圖與清單（/api/map/base）：同一把鍵（開放的地點一樣）回同一份，不重畫。呼叫端拿著行動鎖（look）。"""
+    """輿圖升級的底圖與清單（/api/map/base）：同一把鍵（開放的地點一樣）回同一份，不重畫。呼叫端拿著行動鎖（look）。
+    減法季探索一顆開著的季，名字旁的兩個字是看的人的（Game.map_mostly，2f，FB-886；網頁讀這裡 places[].mostly）：快取的是跟人無關的那一份
+    （山河的圖、路、大區、天下圖），每個人再換上自己的名字旁與鍵（mapdata.with_mostly，新的 dict、重的部分同一份物件）；鍵跟疊層
+    （Game.map_state）的 key 是同一串，字變了網頁就會重抓。"""
     key = mapdata.base_key(game.state, game.content)
     if key not in MAP_BASE:
         if len(MAP_BASE) >= MAP_BASE_KEEP:
             MAP_BASE.clear()
-        MAP_BASE[key] = game.map_base()
-    return MAP_BASE[key]
+        MAP_BASE[key] = game.map_base(viewer=False)
+    mostly = game.map_mostly()
+    if mostly is None:
+        return MAP_BASE[key]
+    return mapdata.with_mostly(MAP_BASE[key], mapdata.base_key(game.state, game.content, mostly), mostly)
 
 
 def map_view(game: Game, layer: str, selected: str | None) -> dict:

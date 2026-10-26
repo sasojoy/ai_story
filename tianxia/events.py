@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import random
+from collections.abc import Iterator
 from typing import Literal
 
 from . import foreshadow, precise, tiers
@@ -35,21 +36,25 @@ def is_rare(event: Event) -> bool:
     return event.once or event.qiyu
 
 
-def event_candidates(
-    state: GameState, content: Content, action: str, pool: EventPool | None = None,
-) -> list[Event]:
-    """這裡、現在可以抽的事件（依內容順序）。pool 給探索三選一用："rare" 只要一次性與奇遇，
-    "common" 只要可重複的；None 是全部（遊歷、交友照舊用這個）。
-    看過的一次性事件不再出現；奇遇沒標 once 的看過也照樣留著（企劃者 2026-10-03 改）。
-    伏筆的事件（片段事件、準備事件，foreshadow.event_ids）只在伏筆在跑時出現（foreshadow.active：開關、蓋章、有鏈）。
-    第一季的規則開著時，劇本 season_one_off.events 裡的 beta 事件不出現（例：kou_boss，由挑戰大勢人物本人取代，T4）。"""
-    location = content.locations[state.player.location]
+def hidden_events(state: GameState, content: Content) -> set[str]:
+    """此刻抽不到的事件 id（藏起來的）：伏筆的事件（片段事件、準備事件，foreshadow.event_ids）只在伏筆在跑時出現（foreshadow.active：開關、蓋章、有鏈）；
+    第一季的規則開著時，劇本 season_one_off.events 裡的 beta 事件不出現（例：kou_boss，由挑戰大勢人物本人取代，T4）；人物心意開的事件；
+    豪強分屬兩軍的季第三方的伏筆事件。只看內容、世界與這個人的旗標，不看他站在哪裡（所以一次算好可以給好幾處用，event_candidates 的 hidden）。"""
     hidden = set() if foreshadow.active(state, content) else foreshadow.event_ids(content)
     hidden |= season_one_off(content, state.world, "events")
     hidden |= stance_rules.closed_events(state, content)  # 人物心意開的事件：心意生效時才有、每人每天一則（減法季批 6 修正輪）
     if haoqiang_allied(content, state.world):  # 豪強分屬兩軍：沒有第三方，豪強那兩則第三方的伏筆事件不出現（設計第十節）
         hidden |= foreshadow.third_party_events(content)
-    candidates: list[Event] = []
+    return hidden
+
+
+def _candidates(
+    state: GameState, content: Content, action: str, pool: EventPool | None, hidden: set[str] | None,
+) -> Iterator[Event]:
+    """event_candidates 與 has_event_candidates 的同一份篩選（一個一個吐出來，依內容順序）：只在這裡寫一次，兩邊永遠說同一件事。"""
+    location = content.locations[state.player.location]
+    if hidden is None:
+        hidden = hidden_events(state, content)
     for event in content.events.values():
         if action not in precise.actions_of(event, state, content):  # 一類一顆：交友事件併進找事件、拜門派另成一顆
             continue
@@ -65,8 +70,24 @@ def event_candidates(
             continue
         if not check_condition(event.condition, state, content):
             continue
-        candidates.append(event)
-    return candidates
+        yield event
+
+
+def event_candidates(
+    state: GameState, content: Content, action: str, pool: EventPool | None = None, *, hidden: set[str] | None = None,
+) -> list[Event]:
+    """這裡、現在可以抽的事件（依內容順序）。pool 給探索三選一用："rare" 只要一次性與奇遇，
+    "common" 只要可重複的；None 是全部（遊歷、交友照舊用這個）。
+    看過的一次性事件不再出現；奇遇沒標 once 的看過也照樣留著（企劃者 2026-10-03 改）。
+    藏起來的事件見 hidden_events；hidden 給了（呼叫端替好幾處一起問時先算好）就不再算。"""
+    return list(_candidates(state, content, action, pool, hidden))
+
+
+def has_event_candidates(
+    state: GameState, content: Content, action: str, pool: EventPool | None = None, *, hidden: set[str] | None = None,
+) -> bool:
+    """event_candidates 有沒有東西（同一份篩選，找到第一則就停）：只問「抽不抽得到」的人用，不必把整份清單列出來。"""
+    return next(_candidates(state, content, action, pool, hidden), None) is not None
 
 
 BORROWED_POOL = ":戰後"  # 借進找事件的戰後事件另開的防重複池子（接在池子名後面，precise.borrowed）

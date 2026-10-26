@@ -31,6 +31,9 @@ FALLBACK_INKS = ["#7A4E8C", "#2E7D7A", "#A0522D", "#5C6B2E", "#8C3B5A", "#3B5C8C
 WORLD_CACHE_KEEP = 8  # 幾何照內容快取最多幾份
 # 輿圖第一層（減法季整合設計第七章）：走得到的地方名字旁的「多半」兩字，照地點的小圖（城、營、寺、渡、山、野）；內容的事實，放底圖。待 joy 潤
 MOSTLY = {"城": "多事", "野": "多敵", "山": "多料", "渡": "參半", "營": "多敵", "寺": "多悟"}
+# 底圖的旗子（2f 補一筆）：名字旁的兩個字是看的人的（Game.map_mostly，減法季探索一顆開著才有），含接了討伐懸賞的「有賞」——網頁 nearSub 看到它就整個照
+# 底圖的 mostly，不再自己因為疊層的 bounty 含「討伐」就寫「有賞」（必敗放開時鈕上照表，名字旁也要照表）。關著的季、序章沒有這個鍵，網頁照舊
+VIEWER_MOSTLY = "viewer_mostly"
 # 四格探索那一格的小字（減法季整合設計 6.3「這裡多半給什麼」；批 5）：腳下這一處照小圖寫一句，同一張表加地點的字。待 joy 潤
 MOSTLY_HERE = {"城": "城裡多事", "野": "野外多敵", "山": "山裡多料", "渡": "渡口參半", "營": "營裡多敵", "寺": "寺裡多悟"}
 # 本週要去的那一處那一句為什麼（減法季整合設計第七章第 1 條；來源照本週卡：軍令、懸賞、主線）。待 joy 潤
@@ -65,19 +68,33 @@ def _outing_tables(world: WorldState, content: Content) -> bool:
     return rules.jianfa(content, world, "explore_one")
 
 
-def place_mostly(world: WorldState, content: Content, loc: Location, glyph: str) -> str:
-    """輿圖第一層名字旁的兩個字（MOSTLY，照小圖）；減法季探索一顆開著照出門一趟的表（explore_one.mostly_in，照表算；幾處跟小圖不一樣：
-    樓桑里、廣宗、草廬，寺是表上事件最大〔2e，FB-882〕）。"""
+def place_mostly(world: WorldState, content: Content, loc: Location, glyph: str, mostly: dict[str, str] | None = None) -> str:
+    """輿圖第一層名字旁的兩個字（MOSTLY，照小圖）；減法季探索一顆開著照出門一趟（2f，FB-886）：mostly 是 Game.map_mostly 替看的人算好的
+    （每一處「站過去之後」鈕上小字的最後兩個字，含危險度、有沒有對手、懸賞、自家營寨）；沒給（序章裡沒有比重可看、直接叫 mapdata 的）照地點種類的
+    表（explore_one.mostly_in；幾處跟小圖不一樣：樓桑里、廣宗、草廬，寺是表上事件最大〔2e，FB-882〕）。"""
     if _outing_tables(world, content):
+        if mostly is not None and loc.id in mostly:
+            return mostly[loc.id]
         return explore_one.mostly_in(explore_one.kind_of(content.config.jianfa, loc))
     return MOSTLY.get(glyph, "")
 
 
-def base_key(state: GameState, content: Content) -> str:
-    """底圖的快取鍵：開放的地點（劇情開放了新地點才換）。減法季探索一顆開著的季，名字旁的「多半」照表（place_mostly），鍵多一段
-    「|出門」，跟關著的季的底圖分開快取（關著的鍵一個字不變）。"""
-    places = ",".join(mapview.open_places(state, content)) + ("|出門" if _outing_tables(state.world, content) else "")
+def base_key(state: GameState, content: Content, mostly: dict[str, str] | None = None) -> str:
+    """底圖的快取鍵：開放的地點（劇情開放了新地點才換）。減法季探索一顆開著的季，名字旁的「多半」照出門一趟（place_mostly），鍵多一段
+    「|出門」，跟關著的季的底圖分開快取（關著的鍵一個字不變）。mostly 給了（看的人的那一份，Game.map_mostly）鍵再多一段每一處的字：
+    網頁拿疊層（/api/map/state）的 key 跟手上的底圖比，不一樣才重抓，所以字變了（換了陣營、接了懸賞、地盤易手）網頁才會換上新的字。"""
+    shown = mapview.open_places(state, content)
+    places = ",".join(shown) + ("|出門" if _outing_tables(state.world, content) else "")
+    if mostly:
+        places += "|" + ",".join(f"{loc_id}={mostly[loc_id]}" for loc_id in shown if loc_id in mostly)
     return hashlib.sha1(places.encode()).hexdigest()[:12]
+
+
+def with_mostly(core: dict, key: str, mostly: dict[str, str]) -> dict:
+    """底圖（base，快取起來每個人共用的那一份）換上看的人的名字旁：新的 dict，只有 key 與 places 是新的（山河的圖、路、大區、天下圖還是同一份物件，
+    不重畫、不重複存）。沒在 mostly 裡的地點照原樣。同 base(…, mostly)，多一個 VIEWER_MOSTLY 的旗子。"""
+    places = [{**p, "mostly": mostly[p["id"]]} if p["id"] in mostly and mostly[p["id"]] != p["mostly"] else p for p in core["places"]]
+    return {**core, "key": key, "places": places, VIEWER_MOSTLY: True}
 
 
 def insight_pool(loc: Location, content: Content) -> list[str]:
@@ -90,9 +107,11 @@ def insight_pool(loc: Location, content: Content) -> list[str]:
     return sorted(gives, key=lambda i: i != strong)
 
 
-def base(state: GameState, content: Content) -> dict:
+def base(state: GameState, content: Content, mostly: dict[str, str] | None = None) -> dict:
     """底圖與清單（這裡不快取：伺服器 server.map_base_view 照 base_key 快取）。每個地點帶悟得到什麼、最濃、地形（意境提示設計第六節：
-    內容的事實，不是這一刻的狀態，所以放底圖不放疊層），與地利那一行（terrain.place_line，同一個道理）。"""
+    內容的事實，不是這一刻的狀態，所以放底圖不放疊層），與地利那一行（terrain.place_line，同一個道理）。
+    mostly：看的人的名字旁（Game.map_mostly，減法季探索一顆開著才有）；給了 key 也帶著它（base_key），沒給是跟人無關的那一份（伺服器快取這一份、
+    每個人再換上自己的名字旁，with_mostly）。"""
     shown = mapview.open_places(state, content)
     keep = set(shown)
     places = []
@@ -101,7 +120,7 @@ def base(state: GameState, content: Content) -> dict:
         region = atlas.region_of(content, loc_id)
         glyph = mapview.GLYPHS[mapart.icon_kind(loc)]
         places.append({
-            "id": loc_id, "name": loc.name, "x": loc.x, "y": loc.y, "glyph": glyph, "mostly": place_mostly(state.world, content, loc, glyph),
+            "id": loc_id, "name": loc.name, "x": loc.x, "y": loc.y, "glyph": glyph, "mostly": place_mostly(state.world, content, loc, glyph, mostly),
             "big": loc.important, "region": region.id if region is not None else None,
             "insights": insight_pool(loc, content), "strong": None if loc.prologue_only else insights.strong_of(loc, content),
             "terrain": next(iter(sensing.terrain_tags(loc)), ""),
@@ -114,13 +133,16 @@ def base(state: GameState, content: Content) -> dict:
         "id": r.id, "name": r.name,
         "cx": round(sum(p[0] for p in r.points) / len(r.points)), "cy": round(sum(p[1] for p in r.points) / len(r.points)),
     } for r in content.map.regions]
-    return {
-        "key": base_key(state, content), "w": content.map.width, "h": content.map.height,
+    out = {
+        "key": base_key(state, content, mostly), "w": content.map.width, "h": content.map.height,
         "svg": mapview.render_base(state, content), "places": places, "edges": edges, "roads": roads, "regions": regions,
         "insight_kinds": {d.id: {"name": d.name, "attribute": d.attribute} for d in content.insights.values() if d.grant is None},
         "insight_layer": content.config.insight_strong.enabled and any(p["strong"] for p in places),
         "world": world(state, content),
     }
+    if mostly is not None:
+        out[VIEWER_MOSTLY] = True  # 名字旁整個是看的人的（含「有賞」）：網頁不再另判討伐；沒給的季這個鍵不存在，底圖一個字不變
+    return out
 
 
 def ground_places(state: GameState, content: Content) -> list[str]:
@@ -509,12 +531,14 @@ def flip_marks(world: WorldState, content: Content, loc_id: str) -> dict:
 def state(
     state: GameState, content: Content, *, odds: Callable[..., str], sortie_mode: Callable[[str], str | None],
     sorties_left: int | None, real_minutes: Callable[[float], int], sortie_foes: Callable[[str], list[str] | None] | None = None,
+    mostly: dict[str, str] | None = None,
 ) -> dict:
     """疊層（設計第九節）。odds 是 Game.odds，照 odds(隊伍, at=地點) 問：每一處的勝算照那一處的地利算（terrain.strong_at，
     武學隨地理環境計畫第六節）；這裡記住，同一支隊伍、同一種地利只算一次；sortie_mode(地點) 是 sortie.mode 的結果；
     sorties_left 是今天還能出陣幾次（散人、出陣關著是 None）；real_minutes 把世界秒換成現實分鐘（Game._real_minutes）；
     sortie_foes(地點) 是 Game._map_foes（FB-858，減法季 3d），只在那一處的出陣是攻時問：領地爭奪開著，出陣真的會打的那幾路隊伍 id
-    （地點卡的對手、勝算字、推薦排序都跟著它）；領地爭奪關著、沒給、回 None 是照舊列站的隊伍（atlas.foes）。
+    （地點卡的對手、勝算字、推薦排序都跟著它）；領地爭奪關著、沒給、回 None 是照舊列站的隊伍（atlas.foes）；
+    mostly 是看的人的名字旁（Game.map_mostly，2f）：key 要跟他手上的底圖（同一份 mostly）對得上，字變了網頁才會重抓底圖。
 
     {"key", "now_week", "weeks_total", "season_one", "territory", "faction", "sides", "here", "stamina", "sorties_left",
      "journey": None | {"to","to_name","minutes","next_name","x","y"}, "travel_block": None | {"reason","to_jianghu"},
@@ -626,7 +650,7 @@ def state(
         if fixed:
             chart.append({"name": FIXED_ROW, "spots": list(fixed)})
     return {
-        "key": base_key(s, c), "now_week": now_week, "weeks_total": weeks_total, "season_one": rules.season_one(c, w),
+        "key": base_key(s, c, mostly), "now_week": now_week, "weeks_total": weeks_total, "season_one": rules.season_one(c, w),
         "territory": on, "faction": faction, "here": p.location, "stamina": int(p.stamina), "sorties_left": sorties_left,
         # 會佔地的幾方（網頁的各佔幾處、圖例照它畫）：劇本的陣營，豪強分屬兩軍的季拿掉要依附的那一個（豪強不佔地）
         "sides": [f.id for f in c.scenario.factions if not (f.allies and rules.haoqiang_allied(c, w))],

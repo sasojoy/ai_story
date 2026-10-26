@@ -491,9 +491,9 @@ def outing_lines(content: Content, season: WorldState | None = None) -> list[str
     legend = f"偶爾撿到{content.config.legend_item_name}。" if content.config.explore_legend_chance > 0 else ""
     return [
         f"- **探索**（體力 {jf.explore_stamina}）：只有一顆，按一下是出門一趟，一趟只碰上一件事，"
-        f"照這個地方抽遇事、遇敵、得料或有悟其中一件——地點決定多半給什麼（{tables}），運氣決定這一趟給什麼。"
+        f"照這個地方抽遇事、遇敵、得料或有悟其中一件——地點決定多半給什麼（{tables}），危險的地方遇敵多些、遇事少些，運氣決定這一趟給什麼。"
         "得料、遇敵當場算完；遇事、有悟要你自己選。回來是一段話，底下一行寫這一趟的得失。"
-        f"危險的地方多遇敵、少遇事；城裡沒有對手時遇上的是街上的地痞，給得少；自家營寨遇敵是跟同袍比劃，不受傷也不掉東西。"
+        "城裡沒有對手時遇上的是街上的地痞，給得少；自家營寨遇敵是跟同袍比劃，不受傷也不掉東西。"
         f"接了這裡的討伐懸賞，在那裡出門每一趟都撞上懸賞那一路，交了差才回到平常。{legend}",
     ]
 
