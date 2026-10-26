@@ -4,7 +4,7 @@ from __future__ import annotations
 import random
 from typing import Literal
 
-from . import foreshadow, precise
+from . import foreshadow, precise, tiers
 from . import stances as stance_rules
 from .models import Check, Choice, Content, Event, FreeTextChoice, Location
 from .rules import check_condition, check_outlook, fail_stamina, haoqiang_allied, practice_line, season_one_off
@@ -60,6 +60,8 @@ def event_candidates(
         if event.once and event.id in state.player.seen_events:
             continue
         if event.id in hidden:
+            continue
+        if not tiers.open_for(state, content, event):  # 事件分級：第二、三階要那一道門開到那一階（關著一則都抽不到）
             continue
         if not check_condition(event.condition, state, content):
             continue
@@ -121,7 +123,7 @@ def pick_event(
     （剛看過的那一則這次先不抽，免得換輪時連著兩次一樣）。
     這個函式**不改狀態**：抽中的那一則要等 Game._present 真的端給玩家時，才由 note_round 記進
     PlayerState.event_rounds（全都看過時的清空也在那裡）。所以選單、勝算、機器人怎麼預覽都不會讓輪替往前走。"""
-    candidates = event_candidates(state, content, action, pool)
+    candidates = tiers.narrow(state, content, event_candidates(state, content, action, pool), rng)  # 事件分級：先挑一階
     fresh = _fresh_among(state, _capped_group(state, content, candidates, action, rng), action)
     if not fresh:
         return None
@@ -133,7 +135,7 @@ def pick_event(
 def pick_from(state: GameState, content: Content, candidates: list[Event], action: str, rng: random.Random) -> Event | None:
     """在給定的幾則裡照防重複輪替、照權重抽一則（同 pick_event 的寫法，只是候選由呼叫端先篩：減法季探索一顆的野類地點先在「旅人」那幾則
     裡抽，Game._outing_event）。不改狀態；一則都沒有是 None。"""
-    fresh = _fresh_among(state, candidates, action)
+    fresh = _fresh_among(state, tiers.narrow(state, content, candidates, rng), action)  # 事件分級：先挑一階
     if not fresh:
         return None
     multiplier = content.config.qiyu_weight_multiplier

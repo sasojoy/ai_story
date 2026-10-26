@@ -1048,7 +1048,10 @@ def _event_danger(content, event):
 
 
 def _checks(content):
+    """只看第一階：第二、三階的檢定有自己的難度帶（content.TIER_BANDS），開了門的人才抽得到。"""
     for event in content.events.values():
+        if event.tier != 1:
+            continue
         for choice in event.choices:
             if choice.check is not None:
                 yield event, choice.check
@@ -2309,3 +2312,12 @@ def test_the_strongest_follows_the_terrain(content):
 def test_luoyang_gets_its_water_at_the_white_horse_temple(content):
     assert content.locations["baima_temple"].insights == ["shan", "shui"]
     assert content.locations["baima_temple"].insight_strong == "shui"
+
+
+def test_higher_tiers_have_events_behind_every_door(content):
+    """事件分級設計稿：第二階每道門至少四則、第三階每道門至少兩則；都有門、難度在自己那一帶。"""
+    from tianxia.tiers import DOORS
+    for tier, least in ((2, 4), (3, 2)):
+        for door in DOORS:
+            n = sum(1 for e in content.events.values() if e.tier == tier and e.door == door)
+            assert n >= least, (tier, door, n)

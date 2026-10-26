@@ -38,10 +38,13 @@ TIER = "tier"
 # 出陣約戰打了一場（減法季批 3b，Game._duel_report；計畫 8.0 的「3b 約戰結算 → DUEL」）：攻方與應戰的人各記一則（同去的人沒下場不記）。
 # 行狀頁的小標、季末的傳都跟其他單挑一樣寫「交手」（GROUPS 歸 FIGHT）；另開一類是給列傳那一小步（7b-1 剩下的）認得出約戰
 DUEL = "duel"
+# 一條線收了（特殊事件與特殊頓悟，storyline.py；企劃者 2026-10-26「必定會進入傳記中」）：成的、失敗的、季末還沒了的都記一則，份量照結局。
+# 行狀頁的小標寫「奇事」，季末的傳照行事寫
+STORY = "story"
 KINDS = {SHOWDOWN: "大戰", FIGURE: "人物", FIGHT: "交手", DEED: "行事", CONQUER: "攻守", SEAL: "行事", MARK: "行事",
-         STANCE: "人物", ERRAND: "人物", XINGSHI: "行事", TIER: "論功", DUEL: "交手"}  # 行狀頁的小標（待 joy 潤）
+         STANCE: "人物", ERRAND: "人物", XINGSHI: "行事", TIER: "論功", DUEL: "交手", STORY: "奇事"}  # 行狀頁的小標（待 joy 潤）
 # 季末的傳（biography._group）照哪一段寫：沒列的照自己的種類（TIER 自己一段）
-GROUPS = {SEAL: DEED, MARK: DEED, STANCE: FIGURE, ERRAND: FIGURE, XINGSHI: DEED, DUEL: FIGHT}
+GROUPS = {SEAL: DEED, MARK: DEED, STANCE: FIGURE, ERRAND: FIGURE, XINGSHI: DEED, DUEL: FIGHT, STORY: DEED}
 TIER_LINE = "季末論功，{who}出力排第 {rank}（共 {of} 人），得{tier}「{title}」。"  # 待 joy 潤
 TIER_GENTRY = "替{side}"  # 豪強照哪一本排：替哪一軍（和局兩本合計寫 TIER_BOTH）
 TIER_BOTH = "替兩軍"

@@ -6,7 +6,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator, model_serializer
 
 from .martial_arts import Insight
-from .models import Content, TravelMode
+from .models import Content, StoryDef, TravelMode
 from .tactics import Bout, BoutSide
 
 PLAYER = "player"  # 沿用舊名，指玩家本人；同伴不再用 key 存在 PlayerState 裡（見下）
@@ -997,6 +997,11 @@ class PlayerState(BaseModel):
     title_book: list[str] = Field(default_factory=list)  # 過去幾季掙到的頭銜（「第N季 某某」），換季時記下、名帖照樣能印
     gift_day: int = 0  # 贈物記在哪一天（同 pill_day）
     gifts_today: int = 0  # 那一天送了幾次（Config.gift_per_day，不分送給誰）
+    # 一條線（特殊事件與特殊頓悟，tianxia/storyline.py）：這一季開過的線（線 id → 進度；收了的也留著，一季一條線只開一次）、
+    # 正在答題的那一條（quiz 的選單）、等著跳出來的卡（開頭、此事未了、入傳）。都在 QUIET_DEFAULTS：沒用到不寫進存檔；角色每季重來
+    storylines: dict[str, StoryProgress] = Field(default_factory=dict)
+    story_open: str | None = None
+    story_cards: list[StoryCard] = Field(default_factory=list)
 
     @model_serializer(mode="wrap")
     def _drop_quiet_defaults(self, handler):
@@ -1018,6 +1023,7 @@ QUIET_DEFAULTS = (
     "xingshi_seen", "deep_order",  # 批 7b
     # 出陣約戰（減法季批 3b）
     "answer_day", "answers_today", "sortie_cooldown_until", "answer_cooldown_until", "duty_day", "duties_today",
+    "storylines", "story_open", "story_cards",  # 一條線（特殊事件）
 )
 
 
@@ -1224,6 +1230,40 @@ class TalkMemo(BaseModel):
     text: str
     at: float
     place: str = ""
+
+
+class StoryProgress(BaseModel):
+    """一條線走到哪裡（tianxia/storyline.py；PlayerState.storylines）。stage 是現在這一段（收了是空字串）；marks 是這條線一路記下的記號；
+    said 是這條線裡自己寫過的話（隨口應對，給結尾與模型用）；due 是這一段的期限（世界秒，None 是沒有）；tries、retry_at 是 fight 打了幾次、
+    什麼時候能再打；step 是 quiz 答到第幾題；opened 是這一段已經端到眼前了（事件、答題）；go 是選項記下的下一步，結算時才走；
+    ending 是收在哪一個結局（「未了」是季末還沒收）；custom 是程式自己組的線（storyline.start），內容寫的線是 None。"""
+
+    line: str
+    stage: str = ""
+    marks: dict[str, int] = Field(default_factory=dict)
+    said: list[str] = Field(default_factory=list)
+    started: float = 0
+    due: float | None = None
+    tries: int = 0
+    retry_at: float | None = None
+    step: int = 0
+    opened: bool = False
+    go: str | None = None
+    ending: str | None = None
+    custom: StoryDef | None = None
+
+
+class StoryCard(BaseModel):
+    """一張跳出來的卡（特殊事件設計稿的跳顯框）：kind 是 start（開頭）、end（此事已了・入傳）、unfinished（此事未了）。
+    網頁照順序一張一張跳，看過就清（storyline.seen）。"""
+
+    line: str
+    kind: Literal["start", "end", "unfinished"]
+    title: str
+    text: str
+    image: str | None = None
+    ending: str = ""  # 結局的名字（end 才有）
+    failed: bool = False
 
 
 class StanceNote(BaseModel):
