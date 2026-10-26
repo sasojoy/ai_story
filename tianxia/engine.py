@@ -28,6 +28,8 @@ from . import (
     social, sortie, styles, tactics, team, terrain, territory, timetable, traits, treasures, weapons, week_unlock, works, xingshi, zh, yuedan,
 )
 from . import sortie_duel  # 出陣約戰（減法季批 3b）
+from . import storyline  # 一條線：特殊事件與特殊頓悟的底座（企劃者 2026-10-26）
+from . import tiers  # 事件分級：場景卡上那一行「州郡大事」「天下大事」
 from . import explore_one, growth  # 減法季批 2：探索一顆、三道閘、屬性五段的純規則（開關走 rules.jianfa）
 from . import zhuan_end  # 減法季批 7b：列傳為終點（票、深交上限、人物評曰）
 from . import ambush as ambush_rules  # 設伏劫道（後期體力玩法第一批）；叫 ambush_rules：這個檔裡有區域變數叫 ambush
@@ -51,7 +53,7 @@ from . import outcomes as outcome_rules
 from . import stances as stance_rules  # 人物心意（減法季批 6）；叫 stance_rules：rules.stances 是陣營的態勢
 from . import errands as errand_rules  # 託付與來信（減法季批 6）
 from . import wins as wins_rules
-from .models import FreeTextChoice, Outcome
+from .models import FreeTextChoice, Outcome, StoryDef, StoryStage
 from .rules import jianfa
 from . import step as step_rules  # 本週卡「你這一步」（減法季批 3c）；叫 step_rules：這個檔裡有區域變數叫 step
 from . import wins  # 三陣營四勝利（減法季批 3c）：豪強兩本帳、傾向、季末四階
@@ -88,7 +90,7 @@ from .sqlite_world import open_world
 from .wallet import Wallet
 from .state import (
     ONBOARDING_VERSION, PLAYER, ArenaEntry, ArenaFight, ArenaReport, ArenaResult, ArenaSide, BattleRecord, Convoy, CrowdNote, DuelState, Equipment, Feast, Fighter, FrontReport, GameState, HintNote, JournalEntry, Journey, Letter, Mingtie, ParleyBacking, ParleyDebt, ParleyTerms, Rumor, Tagalong, TavernHit, TavernWatch, TimelineResult,
-    TierResult, Whisper, WorldState, XingshiEssay, XingshiMark, XingshiTicket,
+    StoryCard, StoryProgress, TierResult, Whisper, WorldState, XingshiEssay, XingshiMark, XingshiTicket,
     new_game_state,
 )
 from .world import (
@@ -191,7 +193,7 @@ class OutingPlan:
 
     kind: str  # 這一處算哪一種地點（explore_one.kind_of：town、temple、ford、wild、hill、camp）
     weights: dict[str, int]  # 這一趟四類事的比重（explore_one.weights；這裡此刻抽不到事件、悟不出的那一類已經是 0；接了討伐懸賞只有遭遇）
-    how: str | None  # 遭遇打誰：bounty 討伐懸賞那一路、spar 自家營寨跟同袍比劃、foe 這裡最弱的對手、town 城裡的地痞；都沒有是 None
+    how: str | None  # 遭遇打誰：bounty 討伐懸賞那一路（對它必敗時不算，2e）、spar 自家營寨跟同袍比劃、foe 這裡最弱的對手、town 城裡的地痞；都沒有是 None
     foe: Squad | None  # 那一路
     boss: DuelBoss | None  # 遭遇有機會撞上的頭目（接了這裡的討伐懸賞不擲）
     hint: str  # 鈕上括號裡最後那一段小字，也是四格探索那一格的小字（/api/main 的 mostly；explore_one.hint_of：以地點種類的字為主，招牌類此刻的比重是 0 才照上面 weights 最重的一類；有賞、同袍比劃）
@@ -728,6 +730,7 @@ class Game:
         之後新增的 PlayerState 欄位預設就跟著新角色重來；要跨季保留的才加進下面這份清單。"""
         old = self.state
         past = self._zhuan_past(old)  # 列傳為終點（減法季批 7b）：收季之後沒回來過的人，存之前補季末論功與〈天下形勢〉
+        storyline.close_season(old, self.content)  # 一條線：還沒收的寫「此事未了」進傳（休季時同步過的已經寫了）
         if old.player.annals:  # 行狀跟著角色重來：先把上一季的存起來，季末的傳照它寫（玩家傳）
             self.world.save_annals(
                 old.player.season_number, old.player.name, [e.model_dump() for e in old.player.annals],
@@ -1116,6 +1119,9 @@ class Game:
         summons = ranks.check_summons(self.state, self.content)  # 行動之外記到的貢獻（抵達、別人觸發的結算）：同步時補發召見（計畫 T5）
         if summons:
             self._write("召見", summons)
+        story = self._story_tick()  # 一條線：不在線時過了的期限、休季時還沒收的（此事未了），回來第一次同步就走
+        if story:
+            self._write(storyline.JOURNAL, story)
         # 第四階席次：抄帳、補缺（正式版丁）。輪詢只同步、只存角色（server.poll_main → act_look），所以帳或名單變了要自己把共用賽季存回去，
         # 不然補上的缺、那一則陣營軍情都會丟掉，下一次輪詢又補一次、又寫一則紀錄
         watching = self.state.player.qualified or seats.on_the_books(self.state)  # 沒資格、帳上也沒有名字的人，同步不碰共用賽季
@@ -1355,6 +1361,10 @@ class Game:
             menu = sensing.menu(s, c)
             if menu:
                 return [Option(id=option_id, label=label) for option_id, label in menu]
+        if s.player.story_open is not None:  # 一條線的答題（storyline.quiz_menu）：只有這一題的答案與「先擱著」
+            menu = storyline.quiz_menu(s, c)
+            if menu:
+                return [Option(id=option_id, label=label) for option_id, label in menu]
         if s.player.pending_companion:
             dialogue_options, _ = companion_agent.offered(s, s.player.pending_companion)
             talk_cost = c.config.talk_stamina
@@ -1453,6 +1463,8 @@ class Game:
             # 晉升奇遇（計畫 T5）：人在召見的地點才有，不花體力。一類一顆開著時網頁畫成行動列上面一條金框橫幅（設計 9.1 第 1 組乙），
             # 鈕上寫它自己的名字與一行小字
             opts.append(Option(id="act:summons", label=SUMMONS_LABEL if precise.on(c, s.world) else "應召"))
+        # 一條線（特殊事件）：此刻在這裡做得了的那一段一顆，不花體力（同應召）
+        opts += [Option(id=option_id, label=label, enabled=ok) for option_id, label, ok in storyline.options(s, c)]
         people = self._figures_here()
         if precise.on(c, s.world):  # 一類一顆（正式季整合 2.8）：交友只談話、求見併進交友；拜入門派另成一顆（2.7）
             opts += self._sect_options() + [self._precise_social_option(cost["socialize"])]
@@ -3499,6 +3511,8 @@ class Game:
                 msgs = self._feast_act(arg)
             elif kind == "errand":
                 msgs = self._errand_act(arg)
+            elif kind == storyline.OPTION:
+                msgs = self._story_act(arg)
             else:
                 msgs = self._choose(int(arg))
             # 三選一開著時按「探索」本身（_act 只回 PICK）：不算探索過、不寫紀錄。要在後面接上大勢門檻、召見那些訊息之前記
@@ -3536,6 +3550,7 @@ class Game:
             gifts = self._general_gifts() + self._signature_arms()
             msgs += check_thresholds(self.state, self.content, self.world, self._quick_client(), now=self.now)
             msgs += self._settle_plots()  # 參與過的密謀收場了：各自結算一次（正式版乙二）
+            msgs += self._story_tick()  # 一條線：這一下做成的事、過了的期限往下走（關著是空的）
             msgs += ranks.check_summons(self.state, self.content)  # 貢獻跨過門檻就發召見（計畫 T5）
             msgs += self._report_seat()  # 第四階席次：抄帳、補缺（正式版丁）；這個動作結束時 _save_season 一起存
             if not picked_only:  # 只按「探索」展開三顆（什麼都沒做）：排著的提示留到下一個真的動作再上框，這一下才不必寫紀錄
@@ -3654,6 +3669,7 @@ class Game:
         if current is None or current.event_id != request.event_id:
             return self._log(["（事情已經過去了，這句話沒派上用場。）"])
         event = c.events[request.event_id]
+        storyline.heard(s, c, event.id, request.text)  # 一條線的段落：自己寫的那一句記進那條線（結尾與模型用）
         branches = self._branches(event)
         if branches:
             return self._answer_branch(event, request, branches, llm_rate, moral, outcome)
@@ -5217,11 +5233,15 @@ class Game:
 
     def _outing_foe(self, loc: Location, kind: str) -> tuple[str | None, Squad | None]:
         """遭遇拍打誰（設計 4.1，PM 2026-10-25 第 3 件）：手上有這裡的討伐懸賞、那一路不是自己人，就是它（bounty；易手了也找得到，同
-        _gather_foe）；自家營寨（營類、此刻歸自己這一邊、有自家的隊伍）是跟同袍比劃（spar，_sortie_host 那一路）；否則這裡此刻站的、
+        _gather_foe）；**可是對那一路的勝算是必敗時不算**（2e，FB-880，企劃者 2026-10-26「勝算是必敗時不強制打懸賞，照原本的表抽」）：
+        問的是鈕上寫勝算的同一個函式（odds，固定種子、不碰 Game.rng），必敗就當這一處沒有這張懸賞，往下照沒有懸賞時挑；變強到不再必敗
+        就又是它。自家營寨（營類、此刻歸自己這一邊、有自家的隊伍）是跟同袍比劃（spar，_sortie_host 那一路）；否則這裡此刻站的、
         不是自家的隊伍裡最弱的一路（foe）；城類的地點自己沒有對手才換成地痞（town，Config.jianfa.town_foes 的第一路）。都沒有是 (None, None)。"""
         s, c = self.state, self.content
         for b in bounties.mine(s, c):
             if b.kind == "strike" and b.location == loc.id and b.squad in c.squads and not self._drills_with(c.squads[b.squad]):
+                if self.odds(b.squad) == mapdata.LOSE_WORD:
+                    continue  # 打不贏的懸賞不強制：這一處當作沒有它（沒有放棄，手上還揭著）
                 return "bounty", c.squads[b.squad]
         side = self._side()
         if kind == explore_one.CAMP and side is not None and territory.controller(s.world, c, loc.id) == side:
@@ -5252,7 +5272,8 @@ class Game:
     def _outing_plan(self, loc: Location) -> OutingPlan:
         """這一處此刻出門一趟怎麼抽（OutingPlan）：比重照 _outing_weights。這裡沒有一般對手（也沒有討伐懸賞）遭遇就是 0，那一份分給其餘三類；
         頭目不算對手（FB-815：只有頭目的地點不是一定撞上他）——他是這一趟另外擲的（_explore_one：5% × 名聲倍數），擲中那一趟才是
-        遭遇。接了討伐懸賞：這一趟就是遭遇（weights 只有遭遇，explore_one.encounter_only）。只讀，不擲骰。"""
+        遭遇。接了討伐懸賞：這一趟就是遭遇（weights 只有遭遇，explore_one.encounter_only）；對懸賞那一路是必敗時不算（_outing_foe，2e），
+        整份（對手、頭目、比重、小字）跟沒有這張懸賞時一樣。只讀，不擲骰（判勝算也不碰 Game.rng）。"""
         s, c = self.state, self.content
         cfg = c.config.jianfa
         kind = explore_one.kind_of(cfg, loc).kind
@@ -5278,7 +5299,7 @@ class Game:
         return self._outing_plan(self.content.locations[p.location])
 
     def _outing_option(self, loc: Location) -> Option:
-        """探索一顆的鈕：「探索（體力 18・城裡多事）」，括號裡最後那一段是這一處多半給什麼（同 /api/main 的 mostly，mostly_here）。"""
+        """探索一顆的鈕：「探索（體力 15・城裡多事）」，括號裡最後那一段是這一處多半給什麼（同 /api/main 的 mostly，mostly_here）。"""
         return self._cost_option("act:explore", "探索", self.content.config.jianfa.explore_stamina, note=self._outing_plan(loc).hint)
 
     def _explore_one(self) -> list[str]:
@@ -5303,6 +5324,10 @@ class Game:
             if roll("頭目").random() < c.config.duel.explore_chance * renown.duel_chance(s, c):
                 weights = explore_one.encounter_only()
         beat = explore_one.draw(roll("拍"), weights, last_choice=last_kind if last_loc == loc.id else None)
+        # 一條線（特殊事件）：在開頭的地方擲中了，這一趟就是那條線的第一段（關著、沒有線不擲；用自己的亂數，不動拍子）
+        strand = storyline.roll_start(s, c, roll("奇事"))
+        if strand is not None:
+            beat = explore_one.EVENT
         say, lines = roll("段落"), c.outing_lines
         story = [explore_one.line(lines, "open", plan.kind, say, place=loc.name)]
         if self._draft is not None and not self._draft.tag:
@@ -5331,8 +5356,8 @@ class Game:
                 story.append(explore_one.line(lines, "encounter", key, say, place=loc.name, foe=plan.foe.name))
                 out += msgs
                 got_any = won
-        elif beat == explore_one.EVENT:  # 要選的：事件（野類偏旅人那一類）
-            msgs = self._outing_event(loc, plan.kind, rng)
+        elif beat == explore_one.EVENT:  # 要選的：事件（野類偏旅人那一類）；擲中了一條線就是那條線的第一段
+            msgs = self._story_begin(strand) if strand is not None else self._outing_event(loc, plan.kind, rng)
             if msgs:
                 story.append(explore_one.line(lines, "event", "lead", say, place=loc.name))
                 out += msgs
@@ -5383,6 +5408,8 @@ class Game:
             self._loot_scale = self._drop_scale = self._gate_scale = 1.0
         record = next((r for r in s.battles if r.id == s.battle_card), None) if s.battle_card != card else None
         won = record is not None and record.tier in team.WIN_TIERS
+        if not won:
+            self._outing_close.discard("outlevel")  # FB-881：「對手配不上你，所得有限」只在打贏、真的因為對手檔打了折才寫；輸了、平手不寫
         if record is not None:
             record.label = battlelog.OUTING_LABEL
         if won and not town:
@@ -5402,7 +5429,8 @@ class Game:
         """遭遇拍這一場的倍數（減法季三道閘的前兩道，整合設計 4.2；Config.jianfa 的 drill_gates）：今天第幾場（PlayerState.fights_today，
         台灣 00:00 換日、照 _pill_day）的疲勞（growth.fatigue_factor：前 drill_full_per_day 場 1，之後每場 ×drill_decay，最低 drill_floor）
         乘對手的檔（growth.outlevel_factor：對手難度的檔比自己等級的檔低一檔 0.5、兩檔 0.1）。關著是 1、也不記場數（存檔一個鍵都不多）。
-        打了折的那一道記進 _outing_close（段落結尾那一句：tired、outlevel）。"""
+        打了折的那一道記進 _outing_close（段落結尾那一句：tired、outlevel）；outlevel 在 _outing_fight 看到這一場沒打贏時收回（FB-881：
+        輸了、平手沒拿到東西，不是因為對手檔）。"""
         s, c = self.state, self.content
         if not jianfa(c, s.world, "drill_gates"):
             return 1.0
@@ -9771,8 +9799,95 @@ class Game:
         s, c = self.state, self.content
         p = s.player
         if s.pending_event is not None or p.journey is not None or not conquest.on(c, s.world) or p.location is None:
+            return self._story_tick()  # 一條線：段落事件了結了，照記下的那一步往下走（下一段就在這裡時直接端出來）
+        return self._push_progress(p.location, c.config.conquest.event_progress, "event") + self._story_tick()
+
+    # ── 一條線（特殊事件與特殊頓悟的底座，tianxia/storyline.py；企劃者 2026-10-26）──
+
+    def story_start(self, definition: StoryDef) -> list[str]:
+        """程式組的線（例：特殊頓悟）從這裡開：整份 StoryDef 存進進度，第一段是事件、人又在那裡就直接端出來。
+        關著、這一季開過同一個 id、這一種沒有空位（Config.jianfa.story_caps）時回空的、什麼都不動。呼叫端自己存檔。"""
+        return self._story_begin(definition, custom=True)
+
+    def story_cards(self) -> list[StoryCard]:
+        """等著跳出來的卡（開頭、此事已了・入傳、此事未了），照發生的順序。"""
+        return list(self.state.player.story_cards)
+
+    def story_seen(self) -> None:
+        storyline.seen(self.state)
+
+    def story_card_view(self) -> list[dict]:
+        """網頁跳顯框要的那幾張卡（特殊事件設計稿的跳顯框）：sort 是這條線的類別（奇事、頓悟），自訂的線照存檔裡那一份。
+        image 是 web/img/ 底下不含副檔名的路徑，圖檔在不在是伺服器的事（同 scene_art）。"""
+        p = self.state.player
+        out = []
+        for card in p.story_cards:
+            progress = p.storylines.get(card.line)
+            line = storyline.definition(self.content, progress) if progress is not None else self.content.storylines.get(card.line)
+            out.append({
+                "line": card.line, "kind": card.kind, "sort": line.kind if line is not None else storyline.JOURNAL,
+                "title": card.title, "text": card.text, "image": card.image, "ending": card.ending, "failed": card.failed,
+            })
+        return out
+
+    def event_tier(self) -> dict | None:
+        """眼前這一則事件是第二、三階時，場景卡上那一行小字與框色（事件分級設計稿：州郡大事、天下大事）；第一階、沒有事件、
+        全服戰鬥蓋著場景都是 None。"""
+        s = self.state
+        if not s.pending_event or s.world.ended or self._battle_for_me(tick=False) is not None:
+            return None
+        event = self.content.events.get(s.pending_event)
+        if event is None or event.tier <= 1:
+            return None
+        return {"tier": event.tier, "name": tiers.NAMES[event.tier]}
+
+    def _story_begin(self, definition: StoryDef, custom: bool = False) -> list[str]:
+        progress = storyline.start(self.state, self.content, definition, custom=custom)
+        if progress is None:
             return []
-        return self._push_progress(p.location, c.config.conquest.event_progress, "event")
+        head = f"✦ 奇事：{definition.title}"
+        self._outcome(journal.event_marker(definition.title, True), head)
+        intro = [fill_marks(definition.intro, self.state)] if definition.intro else []
+        return [head] + intro + self._story_tick()
+
+    def _story_tick(self) -> list[str]:
+        """一條線往前走（storyline.tick）；剛進的那一段是事件、人就在那裡時直接端出來。關著是空的。"""
+        msgs, event_id = storyline.tick(self.state, self.content, self.world)
+        if event_id is not None:
+            msgs += self._present(self.content.events[event_id])
+        return msgs
+
+    def _story_act(self, arg: str) -> list[str]:
+        """按「未了之事」那一顆（story:<線>）：事件段端出事件、答題段出第一題、打一場的段直接打；答題的答案是 story:<線>:a<序號>，
+        先擱著是 story:<線>:later。選單上才有這幾顆（choose 先驗過），所以這裡不再驗地方。"""
+        s, c = self.state, self.content
+        line_id, _, sub = arg.partition(":")
+        if sub:
+            return storyline.answer(s, c, line_id, sub)
+        progress = s.player.storylines[line_id]
+        line, stage = storyline.current(c, progress)
+        if stage.kind == "event":
+            progress.opened = True
+            return self._present(c.events[stage.event])
+        if stage.kind == "quiz":
+            return [f"【{line.title}】"] + storyline.open_quiz(s, c, progress)
+        return self._story_fight(progress, stage)
+
+    def _story_fight(self, progress: StoryProgress, stage: StoryStage) -> list[str]:
+        """一條線的 fight 段：照劇情戰打（不閃、不扣氣血，同 _event_battle），打完交給 storyline.fought（鉤子寫記號、往 win 或 lose、輸了等再試）。"""
+        s, c = self.state, self.content
+        squad = self._story_squad(c.squads[stage.squad])
+        judged = self._judged(squad)
+        result = self._fight_with(squad, judged, dodge=False, difficulty=squad.difficulty)
+        line = storyline.definition(c, progress)
+        record = battlelog.new_record(s, c, self.world, squad, result, "event", line.title)
+        record.notes += self._style_note(squad, result) + self._terrain_note()
+        self._narrate(record, result, judged)
+        self._play_rounds(record, squad, result.tier, None, self._hp_facts(), clash=result.clash)
+        won = result.tier in team.WIN_TIERS
+        rewards = self._battle_rewards(squad, record) if won else []
+        storyline.fought(s, c, progress, won, record)
+        return [self._file_battle(record)] + rewards
 
     # ── 混戰（翻地與爭搶，輿圖簡化設計 4.3）：出陣時撞上對面剛在這一塊推過的人，照截殺的規則打一場 ──
 
@@ -16741,9 +16856,11 @@ class Game:
             return None
         if s.pending_event:
             event = c.events[s.pending_event]
-            if not event.image:
+            own = storyline.stage_art(s, c)  # 一條線事件段的專屬圖（StoryStage.image）蓋過事件的類型圖
+            if not event.image and own is None:
                 return None
-            return {"kind": "event", "path": f"events/{event.image}", "title": event.title, "sub": "", "head": f"**{event.title}**"}
+            path = own or f"events/{event.image}"
+            return {"kind": "event", "path": path, "title": event.title, "sub": "", "head": f"**{event.title}**"}
         if p.duel is not None or p.arena is not None or p.feasting is not None or p.sensing is not None:
             return None
         if p.pending_companion:

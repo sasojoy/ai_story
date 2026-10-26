@@ -376,6 +376,7 @@
   function setMain(main) {
     // 破境卡：動作回來的與輪詢拿到的都走這裡（S.main 換好之後才畫）。測試只抽 setMain 出來跑，沒有 ascendCard 就不畫
     if (typeof ascendCard === "function") setTimeout(ascendCard, 0);
+    if (typeof storyCard === "function") setTimeout(storyCard, 0); // 特殊事件的跳顯框：同上
     if (main.event_free_text == null) S.answering = false; // 事件過去了，輸入框跟著收起
     if (!(main.options || []).some((o) => o.id === sayingId())) S.saying = false; // 交談結束了（或那一顆沒了），輸入框跟著收起
     if (S.persuading && !(main.options || []).some((o) => o.id === S.persuading)) S.persuading = false; // 走開了、那一件辦完了：勸降的輸入框收起
@@ -5246,6 +5247,30 @@
     }
   }
 
+  // 特殊事件的跳顯框（特殊事件設計稿）：一條線開頭、此事已了・入傳、此事未了，各跳一張蓋在畫面上；有圖放在上面，沒圖只有字。
+  // 好幾張時照順序一張一張看（S.storyAt 記看到第幾張），看完最後一張才送 story_seen 清掉。破境卡在它上面（z-index 高一層）
+  function storyCard() {
+    const cards = (S.main && S.main.story_cards) || [];
+    let box = document.getElementById("story-pop");
+    if (!cards.length) { S.storyAt = 0; if (box) box.remove(); return; }
+    const at = Math.min(S.storyAt || 0, cards.length - 1), c = cards[at];
+    if (!box) { box = document.createElement("div"); box.id = "story-pop"; box.className = "story-wrap"; document.body.appendChild(box); }
+    const opening = c.kind === "start" || c.kind === "stage"; // 段落卡（StoryStage.card，例：頓悟心魔那一關之前）跟開頭同一個寫法
+    const head = opening ? `${esc(c.sort)}・${esc(c.title)}`
+      : c.kind === "end" ? `此事已了・入傳` : `此事未了・入傳`;
+    const sub = opening ? "" : `<p class="story-sub">《${esc(c.title)}》${c.ending ? `・${esc(c.ending)}` : ""}</p>`;
+    const dun = c.sort === "頓悟"; // 特殊頓悟（Joy 2026-10-26「頓悟那邊也要有圖」）：圖照樣放上面，墨底與「悟」章分得出；沒圖就是墨底純字
+    const src = c.src;
+    const last = at >= cards.length - 1;
+    const btn = opening ? "且看下去" : "收下";
+    box.innerHTML = `<div class="story-card story-${esc(c.kind)}${c.failed ? " failed" : ""}${src ? " has-art" : ""}${dun ? " dun" : ""}" role="dialog" aria-label="${esc(c.title)}">
+      ${src ? `<img class="story-art" src="${esc(src)}" alt="">` : ""}
+      <div class="story-body"><p class="story-head">${tsealHtml(dun ? "悟" : opening ? "奇" : "傳")}<b>${head}</b></p>${sub}
+      <div class="story-text">${c.text}</div>
+      ${cards.length > 1 ? `<p class="muted small story-count">${at + 1}／${cards.length}</p>` : ""}
+      <button class="btn primary" data-act="story-ok" data-last="${last ? 1 : 0}">${btn}</button></div></div>`;
+  }
+
   function applyMain(main) {
     const before = S.main ? S.main.status : null;
     setMain(main); // 見聞的紅點在 setMain 裡判斷（新的一場才亮）
@@ -6164,6 +6189,9 @@
         case "create-intent": await createIntent(); break;
         case "create-back": await mx("create_back", { to: el.dataset.to }); break;
         case "ascend-ok": await mx("ascend_dismiss", {}); break;
+        case "story-ok": // 特殊事件的跳顯框：還有下一張就翻過去，最後一張才請伺服器清掉
+          if (el.dataset.last === "1") { S.storyAt = 0; await doMain("story_seen", {}); } else { S.storyAt = (S.storyAt || 0) + 1; storyCard(); }
+          break;
         case "create-name": {
           const n = document.getElementById("create-name"), m = document.getElementById("create-move");
           document.activeElement?.blur?.(); // 手機的鍵盤先在這一下收起，不要等換頁那一刻才收、整頁再跳一次
