@@ -241,13 +241,26 @@ def test_the_timeline_drawer_is_320_high_on_a_phone():
 
 
 def test_a_losing_suggestion_is_faded():
-    """對比 4 選乙（企劃者 10/15）：必敗的照樣列、排在最後、整列淡一點（挪到卡底下照舊）。"""
+    """對比 4 選乙（企劃者 10/15）：必敗的照樣列、排在最後、整列淡一點（挪到卡底下照舊）。
+    約戰開著時推薦只列貼得了約戰的地方（FB-855），新角色那幾處全是必敗的，下一條另鎖；這一條量的是舊出陣的推薦（約戰子開關關掉，同 conquest_kit）。"""
     game = _game()
+    game.content.config.jianfa.sortie_duel = False
     st = game.map_state()
     out = run(game, "return H.cardExtras(H.S.mapBase, H.S.mapState);")
     assert [g["lose"] for g in st["suggest"]] == [False, False, False, True]  # 官軍在潁川：三處打得過，再一處必敗的
     assert out.count('class="m-go lose"') == 1 and out.count('class="m-go"') == 3
     assert out.index('class="m-go lose"') > out.rindex('class="m-go"')
+
+
+def test_with_duels_on_the_suggestions_are_only_places_that_can_post_and_a_new_hand_sees_them_all_faded():
+    """FB-855 之後：約戰開著，開季官軍新角色的推薦只剩貼得了約戰的三處，威力不夠全是必敗的，照樣整列淡一點。"""
+    game = _game()
+    st = game.map_state()
+    rows = st["suggest"]
+    assert rows and all(g["lose"] for g in rows)
+    assert len(rows) <= 3 and all(g["sortie"] == "attack" for g in rows)
+    out = run(game, "return H.cardExtras(H.S.mapBase, H.S.mapState);")
+    assert out.count('class="m-go lose"') == len(rows) and out.count('class="m-go"') == 0
 
 
 def test_fb262_standing_there_still_shows_the_odds():
