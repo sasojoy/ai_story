@@ -8,7 +8,7 @@ import random
 import pytest
 
 from conftest import no_week_unlock, real_content
-from tianxia import arena, bounties, calendar, create, equipment, mapdata, roster, rules, week_unlock, weekcard
+from tianxia import arena, bounties, calendar, create, equipment, explore_one, mapdata, roster, rules, week_unlock, weekcard
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 
@@ -213,7 +213,9 @@ def test_mostly_here_names_what_this_place_mostly_gives():
     assert mapdata.mostly_here(s, c) == "城裡多事"
     assert server.main_view(g)["mostly"] == "城裡多事"
     kinds = {mapdata.mostly_here(_relocate(g, loc_id), c) for loc_id in c.locations}
-    assert kinds <= set(mapdata.MOSTLY_HERE.values()) | {""} and len(kinds) >= 3
+    # 探索一顆開著（week7）的字照表算（explore_one.hint_in，2e FB-882：寺是「寺裡多事」）；雲端批 5 那一套（MOSTLY_HERE）是關著時的
+    tables = {explore_one.hint_in(t) for t in c.config.jianfa.explore_tables}
+    assert kinds <= tables | {""} and len(kinds) >= 3
     g.state.player.location = TOWN
     g.state.player.journey = _journey(g)
     assert mapdata.mostly_here(g.state, c) == ""

@@ -193,7 +193,7 @@ class OutingPlan:
 
     kind: str  # 這一處算哪一種地點（explore_one.kind_of：town、temple、ford、wild、hill、camp）
     weights: dict[str, int]  # 這一趟四類事的比重（explore_one.weights；這裡此刻抽不到事件、悟不出的那一類已經是 0；接了討伐懸賞只有遭遇）
-    how: str | None  # 遭遇打誰：bounty 討伐懸賞那一路、spar 自家營寨跟同袍比劃、foe 這裡最弱的對手、town 城裡的地痞；都沒有是 None
+    how: str | None  # 遭遇打誰：bounty 討伐懸賞那一路（對它必敗時不算，2e）、spar 自家營寨跟同袍比劃、foe 這裡最弱的對手、town 城裡的地痞；都沒有是 None
     foe: Squad | None  # 那一路
     boss: DuelBoss | None  # 遭遇有機會撞上的頭目（接了這裡的討伐懸賞不擲）
     hint: str  # 鈕上括號裡最後那一段小字，也是四格探索那一格的小字（/api/main 的 mostly；explore_one.hint_of：以地點種類的字為主，招牌類此刻的比重是 0 才照上面 weights 最重的一類；有賞、同袍比劃）
@@ -5233,11 +5233,15 @@ class Game:
 
     def _outing_foe(self, loc: Location, kind: str) -> tuple[str | None, Squad | None]:
         """遭遇拍打誰（設計 4.1，PM 2026-10-25 第 3 件）：手上有這裡的討伐懸賞、那一路不是自己人，就是它（bounty；易手了也找得到，同
-        _gather_foe）；自家營寨（營類、此刻歸自己這一邊、有自家的隊伍）是跟同袍比劃（spar，_sortie_host 那一路）；否則這裡此刻站的、
+        _gather_foe）；**可是對那一路的勝算是必敗時不算**（2e，FB-880，企劃者 2026-10-26「勝算是必敗時不強制打懸賞，照原本的表抽」）：
+        問的是鈕上寫勝算的同一個函式（odds，固定種子、不碰 Game.rng），必敗就當這一處沒有這張懸賞，往下照沒有懸賞時挑；變強到不再必敗
+        就又是它。自家營寨（營類、此刻歸自己這一邊、有自家的隊伍）是跟同袍比劃（spar，_sortie_host 那一路）；否則這裡此刻站的、
         不是自家的隊伍裡最弱的一路（foe）；城類的地點自己沒有對手才換成地痞（town，Config.jianfa.town_foes 的第一路）。都沒有是 (None, None)。"""
         s, c = self.state, self.content
         for b in bounties.mine(s, c):
             if b.kind == "strike" and b.location == loc.id and b.squad in c.squads and not self._drills_with(c.squads[b.squad]):
+                if self.odds(b.squad) == mapdata.LOSE_WORD:
+                    continue  # 打不贏的懸賞不強制：這一處當作沒有它（沒有放棄，手上還揭著）
                 return "bounty", c.squads[b.squad]
         side = self._side()
         if kind == explore_one.CAMP and side is not None and territory.controller(s.world, c, loc.id) == side:
@@ -5268,7 +5272,8 @@ class Game:
     def _outing_plan(self, loc: Location) -> OutingPlan:
         """這一處此刻出門一趟怎麼抽（OutingPlan）：比重照 _outing_weights。這裡沒有一般對手（也沒有討伐懸賞）遭遇就是 0，那一份分給其餘三類；
         頭目不算對手（FB-815：只有頭目的地點不是一定撞上他）——他是這一趟另外擲的（_explore_one：5% × 名聲倍數），擲中那一趟才是
-        遭遇。接了討伐懸賞：這一趟就是遭遇（weights 只有遭遇，explore_one.encounter_only）。只讀，不擲骰。"""
+        遭遇。接了討伐懸賞：這一趟就是遭遇（weights 只有遭遇，explore_one.encounter_only）；對懸賞那一路是必敗時不算（_outing_foe，2e），
+        整份（對手、頭目、比重、小字）跟沒有這張懸賞時一樣。只讀，不擲骰（判勝算也不碰 Game.rng）。"""
         s, c = self.state, self.content
         cfg = c.config.jianfa
         kind = explore_one.kind_of(cfg, loc).kind
@@ -5294,7 +5299,7 @@ class Game:
         return self._outing_plan(self.content.locations[p.location])
 
     def _outing_option(self, loc: Location) -> Option:
-        """探索一顆的鈕：「探索（體力 18・城裡多事）」，括號裡最後那一段是這一處多半給什麼（同 /api/main 的 mostly，mostly_here）。"""
+        """探索一顆的鈕：「探索（體力 15・城裡多事）」，括號裡最後那一段是這一處多半給什麼（同 /api/main 的 mostly，mostly_here）。"""
         return self._cost_option("act:explore", "探索", self.content.config.jianfa.explore_stamina, note=self._outing_plan(loc).hint)
 
     def _explore_one(self) -> list[str]:
@@ -5403,6 +5408,8 @@ class Game:
             self._loot_scale = self._drop_scale = self._gate_scale = 1.0
         record = next((r for r in s.battles if r.id == s.battle_card), None) if s.battle_card != card else None
         won = record is not None and record.tier in team.WIN_TIERS
+        if not won:
+            self._outing_close.discard("outlevel")  # FB-881：「對手配不上你，所得有限」只在打贏、真的因為對手檔打了折才寫；輸了、平手不寫
         if record is not None:
             record.label = battlelog.OUTING_LABEL
         if won and not town:
@@ -5422,7 +5429,8 @@ class Game:
         """遭遇拍這一場的倍數（減法季三道閘的前兩道，整合設計 4.2；Config.jianfa 的 drill_gates）：今天第幾場（PlayerState.fights_today，
         台灣 00:00 換日、照 _pill_day）的疲勞（growth.fatigue_factor：前 drill_full_per_day 場 1，之後每場 ×drill_decay，最低 drill_floor）
         乘對手的檔（growth.outlevel_factor：對手難度的檔比自己等級的檔低一檔 0.5、兩檔 0.1）。關著是 1、也不記場數（存檔一個鍵都不多）。
-        打了折的那一道記進 _outing_close（段落結尾那一句：tired、outlevel）。"""
+        打了折的那一道記進 _outing_close（段落結尾那一句：tired、outlevel）；outlevel 在 _outing_fight 看到這一場沒打贏時收回（FB-881：
+        輸了、平手沒拿到東西，不是因為對手檔）。"""
         s, c = self.state, self.content
         if not jianfa(c, s.world, "drill_gates"):
             return 1.0
