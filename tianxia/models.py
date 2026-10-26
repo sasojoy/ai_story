@@ -102,6 +102,9 @@ class Condition(_Strict):
     # 戰後事件用：這次行動打的那一場（戰鬥卡片 state.battle_card 指著的那筆）的結果（大勝／險勝／僵持／落敗）在清單裡才成立；
     # 這次行動沒打架（卡片已清掉）一律不成立。文字假設打贏了的戰後事件寫 ["大勝", "險勝"]。載入時只准寫在 actions 剛好是 ["train"] 的事件的條件上
     fight_tiers: list[str] = Field(default_factory=list)
+    # 一條線的記號至少到幾（「線 id:記號」→ 數；tianxia/storyline.py）：那條線沒開過算 0。給段落事件的選項分邊用（例：帶了符水才有「倒進井裡」）
+    story_marks: dict[str, int] = Field(default_factory=dict)
+    level_min: int | None = Field(default=None, ge=1)  # 本人等級至少幾級（事件分級，企劃者 2026-10-26）
     any_of: list[Condition] = Field(default_factory=list)  # 非空時，至少一個子條件成立
 
 
@@ -118,6 +121,16 @@ class EventMod(_Strict):
     event: str
     side: Literal["guan", "huang"]
     amount: float
+
+
+class StoryStep(_Strict):
+    """一條線（特殊事件、特殊頓悟，tianxia/storyline.py）的一步：寫在那一條線某一段事件的選項效果上。
+    marks 加進這一條線自己的記號（「醫」「符」「攻」「正」…，只在這條線裡算）；go 是接下來往哪一段（段 id）或哪一個結局（結局 id），
+    沒寫就照那一段的 routes／next 走。line 是哪一條線；載入時照段落的事件自動補上（content.load_content），手寫可以省。"""
+
+    line: str = ""
+    marks: dict[str, int] = Field(default_factory=dict)
+    go: str | None = None
 
 
 class Effect(_Strict):
@@ -160,10 +173,12 @@ class Effect(_Strict):
     # 陣營貢獻幾點（減法季整合設計 5.3：痕跡一筆記一筆貢獻；每天上限是接線那一批的事）。現在只准寫在隨口應對分岔的後果上
     # （content.check_outcomes）：rules.apply_effect 不讀它，接線之前寫在別處會靜靜沒作用。0 的時候不寫進序列化
     contribution: int = Field(default=0, ge=0, le=6)
+    # 一條線的一步（特殊事件，tianxia/storyline.py）：只准寫在一條線的段落事件上（content.validate）。None 的時候不寫進序列化
+    story: StoryStep | None = None
 
     @model_serializer(mode="wrap")
     def _drop_new_defaults(self, handler):
-        return _drop_unset(handler(self), ("contribution",))
+        return _drop_unset(handler(self), ("contribution", "story"))
 
 
 class Material(_Strict):
@@ -245,9 +260,16 @@ class Check(_Strict):
             raise ValueError(f"stats 只跟 stat「{BEST_OF}」一起寫")
         return self
 
+    # 這一個檢定出自第幾階的事件（事件分級，企劃者 2026-10-26）：載入時照事件的 tier 蓋（content.load_content），內容不寫。
+    # 第一階才吃減法季的放寬（Config.jianfa.event_ease，rules.check_outlook）；1 的時候不寫進序列化
+    tier: int = Field(default=1, ge=1, le=3)
+
     @model_serializer(mode="wrap")
     def _drop_new_defaults(self, handler):
-        return _drop_unset(handler(self), ("stats",))
+        data = _drop_unset(handler(self), ("stats",))
+        if isinstance(data, dict) and data.get("tier") == 1:
+            del data["tier"]
+        return data
 
 
 class PracticeBonus(_Strict):
@@ -446,6 +468,124 @@ class Event(_Strict):
     condition: Condition = Field(default_factory=Condition)
     choices: list[Choice] = Field(min_length=1)
     free_text: FreeTextChoice | None = None
+    # 事件分級（企劃者 2026-10-26，事件分級設計稿）：第幾階（1 是現有的事件；2「州郡大事」、3「天下大事」）與從哪一道門進來
+    # （武事看等級、名流看名望、俠義看善名、綠林看惡名、擂主看擂台名次；門檻在 Config.jianfa.tier_doors，tiers.door_open）。
+    # 第二、三階一定要寫門；減法季的 event_tiers 關著時第二、三階一則都抽不到。預設值不寫進序列化
+    tier: int = Field(default=1, ge=1, le=3)
+    door: Literal["武事", "名流", "俠義", "綠林", "擂主"] | None = None
+
+    @model_serializer(mode="wrap")
+    def _drop_new_defaults(self, handler):
+        data = handler(self)
+        if isinstance(data, dict):
+            if data.get("tier") == 1:
+                del data["tier"]
+            if data.get("door") is None:
+                data.pop("door", None)
+        return data
+
+
+class StoryPlace(_Strict):
+    """一條線的一段在哪裡做得了（任一項符合就算；三樣都空的是哪裡都行）：地點 id、地點的標籤、大區（Location.region）。"""
+
+    locations: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+    regions: list[str] = Field(default_factory=list)
+
+    def empty(self) -> bool:
+        return not (self.locations or self.tags or self.regions)
+
+
+class StoryAnswer(_Strict):
+    text: str
+    marks: dict[str, int] = Field(default_factory=dict)  # 選了這一個，這條線的記號加多少（「攻」「守」「變」「心」「正」「邪」…）
+
+
+class StoryQuestion(_Strict):
+    text: str
+    answers: list[StoryAnswer] = Field(min_length=2)
+
+
+class StoryRoute(_Strict):
+    """一段走完往哪裡：when 的每一個記號都至少到那個數才算（空的是一定成立）；照寫的順序第一個成立的。"""
+
+    when: dict[str, int] = Field(default_factory=dict)
+    go: str
+
+
+StoryStageKind = Literal["event", "quiz", "fight", "task"]
+
+
+class StoryStage(_Strict):
+    """一條線的一段（特殊事件設計稿「一條線」的底座）。四種：
+    event 端出一則事件（Event，actions 寫 []），選項的 effect.story 寫記號與往哪裡；
+    quiz 一題一題答（questions），每一個答案加記號，答完照 routes／next；
+    fight 打 squad 這一路，打贏往 win、打輸過了 retry_days 可以再打，輸滿 retries 次往 lose（打完那一下叫這條線種類的 fight 鉤子）；
+    task 等一件事做成：until 這個條件成立，或 task 這個名字登記的判斷（storyline.TASKS）回真，往 next。
+    where 是這一段在哪裡做得了；days 是期限（這一季的遊戲日，照季長，rules.day_seconds），過了往 late。
+    immediate：上一段走完、人剛好站在這一段做得了的地方時直接端出來（不必再按一次）；只有 event 用得到。"""
+
+    id: str
+    kind: StoryStageKind = "event"
+    event: str | None = None
+    questions: list[StoryQuestion] = Field(default_factory=list)
+    squad: str | None = None
+    retries: int = Field(default=2, ge=1)
+    retry_days: float = Field(default=1 / 12, ge=0)  # 一個時辰
+    task: str | None = None
+    until: Condition | None = None
+    where: StoryPlace = Field(default_factory=StoryPlace)
+    hint: str = ""  # 「未了之事」那一行寫的這一步要做什麼（例：「去山裡找藥」）
+    days: float | None = Field(default=None, gt=0)
+    late: str | None = None
+    next: str | None = None
+    routes: list[StoryRoute] = Field(default_factory=list)
+    win: str | None = None
+    lose: str | None = None
+    immediate: bool = True
+
+
+class StoryEnding(_Strict):
+    """一個結局：一定寫進傳（annals，份量 weight）。failed 是失敗的收法（一樣入傳）。effect 是收在這裡給的東西。"""
+
+    id: str
+    title: str
+    text: str
+    annal: str  # 寫進行狀的那一句（{name} 換成名號）
+    image: str | None = None
+    effect: Effect = Field(default_factory=Effect)
+    failed: bool = False
+    weight: int = Field(default=5, ge=1, le=5)
+
+
+class StoryStart(_Strict):
+    """內容寫的線怎麼開頭：在 where 做得了的地方探索，條件成立，擲中 chance 就開（一季一條線只開一次）。"""
+
+    where: StoryPlace = Field(default_factory=StoryPlace)
+    condition: Condition = Field(default_factory=Condition)
+    chance: float = Field(default=0.08, ge=0, le=1)
+
+
+class StoryDef(_Strict):
+    """一條線（content/storylines.json，或程式在跑的時候自己組的，storyline.start）。kind 分開算同時開著幾條
+    （Config.jianfa.story_caps：「奇事」兩條、「頓悟」一條），也決定叫哪一組鉤子（storyline.FIGHT_HOOKS、END_HOOKS）。
+    unfinished 是季末還沒收的那一句（寫進傳，{name} 換成名號）。"""
+
+    id: str
+    title: str
+    kind: str = "奇事"
+    image: str | None = None
+    intro: str = ""
+    start: StoryStart | None = None  # None：只有程式開得了（storyline.start）
+    stages: list[StoryStage] = Field(min_length=1)
+    endings: list[StoryEnding] = Field(min_length=1)
+    unfinished: str = "{name}手上的一件事，到季末還沒有了結。"
+
+    def stage(self, stage_id: str) -> StoryStage | None:
+        return next((st for st in self.stages if st.id == stage_id), None)
+
+    def ending(self, ending_id: str) -> StoryEnding | None:
+        return next((e for e in self.endings if e.id == ending_id), None)
 
 
 RoadKind = Literal["官道", "路", "山路"]
@@ -3065,6 +3205,19 @@ class JianfaRules(JianfaNumbers):
     morning_mail: bool = True  # 第十章 回來的理由：人物的信每天 mail_hour 點送到（批 9；letters.mail_day）
     opening: bool = True  # 6.7 開局第一分鐘（批 7 前半，tianxia/opening.py）：不進草廬，旁白→三選一→人物開口託付→本週卡；關著照舊走草廬序章
     mail_hour: int = Field(default=9, ge=0, le=23)  # 當地幾點送信（時區照 pill_day_utc_offset_hours）
+    # 一條線（特殊事件與特殊頓悟的底座，tianxia/storyline.py；企劃者 2026-10-26 設計稿）：關著時內容寫的線一條都不開、程式也開不了
+    storylines: bool = True
+    # 同時開著幾條（照 StoryDef.kind）；沒列的種類不限。【預設】設計稿：奇事兩條、頓悟一條
+    story_caps: dict[str, int] = Field(default_factory=lambda: {"奇事": 2, "頓悟": 1})
+    # 事件分級（企劃者 2026-10-26，事件分級設計稿；tianxia/tiers.py）：第二、三階事件照門開，抽的時候照開到第幾階的比例先挑階
+    event_tiers: bool = True
+    # 五道門：[第二階的門檻, 第三階的門檻]。武事是等級、名流是名望第幾段、俠義與綠林是善名、惡名第幾段（要走那一條路）、
+    # 擂主是擂台名次至少到第幾名（擂台十傑、天下第一）。【預設】設計稿
+    tier_doors: dict[str, list[int]] = Field(default_factory=lambda: {
+        "武事": [20, 40], "名流": [2, 3], "俠義": [2, 3], "綠林": [2, 3], "擂主": [10, 1],
+    })
+    # 開到第幾階的人抽事件時各階的比重（第一階、第二階、第三階）；這裡沒有合格事件的階不算。【預設】設計稿：開到二是六比四、開到三是 4:3.5:2.5
+    tier_mix: dict[int, list[float]] = Field(default_factory=lambda: {1: [1.0], 2: [6.0, 4.0], 3: [4.0, 3.5, 2.5]})
     # ── 批 2（探索一顆、三道閘、屬性五段；數字在 JianfaNumbers）──
     stat_milestones: bool = True  # 4.5 屬性五段加點、每點加倍、境界卡（批 2；數字是 milestone_levels、stat_points_per_milestone、stat_rates）
     # ── 批 4：隨口應對分岔與痕跡（主機側計畫第六節；子開關 free_text_outcomes、marks_visible）──
@@ -4894,6 +5047,8 @@ class Content(_Strict):
     # 人物評曰的固定句（content/verdicts.json，減法季批 7b-2；模型叫不動時照它，待 joy 潤）：寫的理由（affinity／tier／bought）→ 句子，
     # {name} 換成名號；沒有這個檔就是空的（照 zhuan_end.DEFAULT_VERDICTS）
     verdicts: dict[str, list[str]] = Field(default_factory=dict)
+    # 一條線（content/storylines.json，特殊事件設計稿；tianxia/storyline.py）：照 id、照檔案的順序；沒有這個檔就是空的
+    storylines: dict[str, StoryDef] = Field(default_factory=dict)
     map: MapLayout
     tutorial: Tutorial
     art: ArtBook = Field(default_factory=ArtBook)  # 圖的分類表（content/art.json，減法季批 8）；沒有這個檔就是空的（事件不准寫 image）
@@ -4904,4 +5059,4 @@ class Content(_Strict):
 
     @model_serializer(mode="wrap")
     def _drop_new_defaults(self, handler):
-        return _drop_unset(handler(self), ("mark_rules", "outing_lines", "verdicts"))  # 沒有痕跡規則、段落句子、評曰固定句的內容（測試內容）序列化一個鍵都不多
+        return _drop_unset(handler(self), ("mark_rules", "outing_lines", "verdicts", "storylines"))  # 沒有痕跡規則、段落句子、評曰固定句的內容（測試內容）序列化一個鍵都不多

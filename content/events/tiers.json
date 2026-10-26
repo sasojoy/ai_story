@@ -1,0 +1,2782 @@
+[
+  {
+    "id": "t2_changshe_grain",
+    "title": "長社糧道",
+    "image": "camp",
+    "tier": 2,
+    "door": "武事",
+    "text": "皇甫將軍的糧隊在長社城外被截了，十幾車粟米停在一處窪地，押車的兵卒死的死、逃的逃。一個滿臉血的校尉攔住你：「鄉勇我湊了十幾個，缺一個帶頭的。天黑之前得奪回來。」",
+    "choices": [
+      {
+        "text": "領著鄉勇正面衝下去",
+        "check": {
+          "stat": "str",
+          "difficulty": 11
+        },
+        "effect": {
+          "text": "你頭一個衝進窪地，鄉勇跟著吶喊，截糧的黃巾丟下車子跑了。校尉把你的名字報了上去。",
+          "stats": {
+            "silver": 35,
+            "xinde": 14,
+            "fame": 3
+          },
+          "trend": {
+            "front": -2
+          },
+          "affinity": {
+            "huangfusong": 3
+          }
+        },
+        "fail_effect": {
+          "text": "黃巾人比你算的多，鄉勇被衝散了，你帶著幾個傷兵退回城下。",
+          "stats": {
+            "fame": -1
+          },
+          "stamina": -12
+        }
+      },
+      {
+        "text": "繞到後頭放火燒他們的營",
+        "check": {
+          "stat": "agi",
+          "difficulty": 10
+        },
+        "effect": {
+          "text": "後頭火一起，窪地裡的黃巾以為被抄了後路，一哄而散。十幾車糧一車沒少。",
+          "stats": {
+            "silver": 30,
+            "xinde": 15,
+            "fame": 3
+          },
+          "materials": {
+            "kuai_2": 1
+          },
+          "trend": {
+            "front": -2
+          }
+        },
+        "fail_effect": {
+          "text": "你摸到一半被哨兵發現，火沒放成，只好原路退回。",
+          "stamina": -12
+        }
+      },
+      {
+        "text": "扮成黃巾傳令，騙他們撤",
+        "check": {
+          "stat": "wis",
+          "difficulty": 12
+        },
+        "effect": {
+          "text": "你撕了一條黃布纏在頭上，喊說波才渠帥要人回營。那夥人將信將疑地拉著空車走了，糧車原地不動。",
+          "stats": {
+            "silver": 40,
+            "xinde": 15,
+            "fame": 4
+          },
+          "trend": {
+            "front": -2
+          }
+        },
+        "fail_effect": {
+          "text": "你的口音一開口就露了餡，被追了二里地。",
+          "stats": {
+            "fame": -1
+          },
+          "stamina": -12
+        }
+      }
+    ],
+    "locations": [
+      "changshe"
+    ],
+    "condition": {
+      "factions_none": [
+        "huang"
+      ]
+    },
+    "free_text": {
+      "prompt": "自己想辦法……",
+      "stat": "wis",
+      "effect": {
+        "text": "你的法子成了，糧車趕在天黑前進了城。",
+        "stats": {
+          "silver": 30,
+          "xinde": 12,
+          "fame": 3
+        },
+        "trend": {
+          "front": -1
+        }
+      },
+      "fail_effect": {
+        "text": "法子沒成，糧車被拉走了大半。",
+        "stamina": -12
+      }
+    }
+  },
+  {
+    "id": "t2_juma_ford",
+    "title": "拒馬河的夜渡",
+    "image": "river",
+    "tier": 2,
+    "door": "武事",
+    "text": "拒馬河上游的鄉勇傳話：黃巾別部要趁夜從淺灘過河，往涿郡去。鄉里能拿刀的只有三十來人，渡口那條纜繩一斬，船就過不來。",
+    "choices": [
+      {
+        "text": "在灘頭守一整夜",
+        "check": {
+          "stat": "con",
+          "difficulty": 10
+        },
+        "effect": {
+          "text": "你在冰冷的河灘上站了一夜，黃巾三次試渡都被你帶人頂回去。天亮時鄉勇都喊你的名字。",
+          "stats": {
+            "silver": 30,
+            "xinde": 13,
+            "fame": 3
+          },
+          "trend": {
+            "front": -2
+          }
+        },
+        "fail_effect": {
+          "text": "下半夜你凍得握不住刀，被人從灘頭擠了下來。",
+          "stamina": -12
+        }
+      },
+      {
+        "text": "摸黑游過去斬纜",
+        "check": {
+          "stat": "agi",
+          "difficulty": 11
+        },
+        "effect": {
+          "text": "你咬著短刀游過河，一刀斬斷了纜。對岸的船在河心打轉，再也靠不過來。",
+          "stats": {
+            "silver": 35,
+            "xinde": 15,
+            "fame": 3
+          },
+          "materials": {
+            "rou_2": 1
+          },
+          "trend": {
+            "front": -2
+          }
+        },
+        "fail_effect": {
+          "text": "水太急，你被沖到下游，爬上岸時渡口已經打起來了。",
+          "stamina": -12
+        }
+      },
+      {
+        "text": "迎著第一條船殺過去",
+        "combat": "nz_xiangma",
+        "effect": {
+          "text": "你跳上頭一條船，把船上的人一個個推下河。後面的船看了，掉頭回去了。",
+          "stats": {
+            "silver": 40,
+            "xinde": 14,
+            "fame": 4
+          },
+          "trend": {
+            "front": -2
+          }
+        },
+        "fail_effect": {
+          "text": "船上的人比你想的硬，你被打落河裡，嗆了好幾口水。",
+          "stamina": -12
+        }
+      }
+    ],
+    "locations": [
+      "juma_river"
+    ],
+    "condition": {
+      "factions_none": [
+        "huang"
+      ]
+    }
+  },
+  {
+    "id": "t2_luzhi_scouts",
+    "title": "數營火",
+    "image": "night",
+    "tier": 2,
+    "door": "武事",
+    "text": "盧植的帳下要人摸到廣宗城下，數清張角大營的營火。「數字報上來，中郎將自有分寸。」帳外已經回來過兩個，一個少了耳朵。",
+    "choices": [
+      {
+        "text": "貼著壕溝一路數過去",
+        "check": {
+          "stat": "agi",
+          "difficulty": 11
+        },
+        "effect": {
+          "text": "你在壕溝裡趴了半夜，把東西兩營的火堆一個一個記清楚。盧植聽完，只說了一句「好」。",
+          "stats": {
+            "silver": 35,
+            "xinde": 14,
+            "fame": 3
+          },
+          "trend": {
+            "front": -1
+          },
+          "affinity": {
+            "luzhi": 4
+          }
+        },
+        "fail_effect": {
+          "text": "巡夜的黃巾點著火把走過來，你只數了一半就得退。",
+          "stamina": -12
+        }
+      },
+      {
+        "text": "看灶煙算人數",
+        "check": {
+          "stat": "wis",
+          "difficulty": 10
+        },
+        "effect": {
+          "text": "你沒靠太近，只在山坡上看了一早的炊煙，照煙數算出城裡大約多少人吃飯。盧植把你的數寫進了軍報。",
+          "stats": {
+            "silver": 30,
+            "xinde": 15,
+            "fame": 3
+          },
+          "affinity": {
+            "luzhi": 4
+          }
+        },
+        "fail_effect": {
+          "text": "風把煙吹散了，你算出來的數連自己都不信。",
+          "stamina": -12
+        }
+      },
+      {
+        "text": "找城裡逃出來的人問",
+        "check": {
+          "stat": "wis",
+          "difficulty": 12
+        },
+        "effect": {
+          "text": "你在逃難的人裡找到一個廣宗的糧吏，他把城裡每天出多少糧說得清清楚楚。",
+          "stats": {
+            "silver": 40,
+            "xinde": 15,
+            "fame": 3
+          },
+          "affinity": {
+            "luzhi": 5
+          }
+        },
+        "fail_effect": {
+          "text": "那人說的前後對不上，你白白耗了一天。",
+          "stamina": -12
+        }
+      }
+    ],
+    "locations": [
+      "luzhi_camp"
+    ],
+    "condition": {
+      "factions_none": [
+        "huang"
+      ]
+    }
+  },
+  {
+    "id": "t2_wan_wall",
+    "title": "宛城的缺口",
+    "image": "camp",
+    "tier": 2,
+    "door": "武事",
+    "text": "官軍挖了三天地道，宛城的北牆塌了一角。渠帥在城頭上大喊：缺口要有人頂住，頂到天亮，官軍的雲梯就上不來。",
+    "choices": [
+      {
+        "text": "扛石頭把缺口填起來",
+        "check": {
+          "stat": "str",
+          "difficulty": 10
+        },
+        "effect": {
+          "text": "你和幾十個弟兄扛了一夜的石頭，缺口在天亮前補上了。渠帥拍著你的肩說要報給趙弘將軍。",
+          "stats": {
+            "silver": 30,
+            "xinde": 13,
+            "fame": 3
+          },
+          "trend": {
+            "front": 2
+          }
+        },
+        "fail_effect": {
+          "text": "石頭還沒填一半，官軍的箭就到了，你們只好退下城牆。",
+          "stamina": -12
+        }
+      },
+      {
+        "text": "堵在缺口上頂一夜",
+        "check": {
+          "stat": "con",
+          "difficulty": 11
+        },
+        "effect": {
+          "text": "你在缺口上站到天亮，腳下的屍首疊了半人高。官軍收兵的鼓響了。",
+          "stats": {
+            "silver": 35,
+            "xinde": 15,
+            "fame": 4
+          },
+          "materials": {
+            "man_2": 1
+          },
+          "trend": {
+            "front": 2
+          }
+        },
+        "fail_effect": {
+          "text": "你頂到半夜，被一槍挑翻，弟兄們把你拖了下來。",
+          "stamina": -12
+        }
+      },
+      {
+        "text": "殺出缺口，把挖地道的人趕走",
+        "combat": "huangjin_sishi",
+        "effect": {
+          "text": "你帶人殺出去，把地道口填了火。官軍三天的工夫白費了。",
+          "stats": {
+            "silver": 40,
+            "xinde": 14,
+            "fame": 3
+          },
+          "trend": {
+            "front": 2
+          }
+        },
+        "fail_effect": {
+          "text": "城外的官軍早有準備，你們被一陣箭雨逼回城裡。",
+          "stamina": -12
+        }
+      }
+    ],
+    "locations": [
+      "wan_city"
+    ],
+    "condition": {
+      "factions": [
+        "huang"
+      ]
+    }
+  },
+  {
+    "id": "t2_mengjin_ferry",
+    "title": "孟津的渡船",
+    "image": "river",
+    "tier": 2,
+    "door": "武事",
+    "text": "大將軍府調兵出關，孟津渡口的船卻全被一個鄉豪扣下了，說是官府欠他的船錢。押兵的軍候急得跳腳：「明天一早要過河。」",
+    "choices": [
+      {
+        "text": "把扣船的家丁一個個扔下水",
+        "check": {
+          "stat": "str",
+          "difficulty": 11
+        },
+        "effect": {
+          "text": "你把守船的家丁丟進河裡，船一條一條放了出來。軍候在冊子上記了你一筆。",
+          "stats": {
+            "silver": 35,
+            "xinde": 13,
+            "fame": 3
+          },
+          "trend": {
+            "front": -1
+          }
+        },
+        "fail_effect": {
+          "text": "家丁人多勢眾，你被他們用篙子頂下了岸。",
+          "stamina": -12
+        }
+      },
+      {
+        "text": "跟鄉豪算清那筆船錢",
+        "check": {
+          "stat": "wis",
+          "difficulty": 10
+        },
+        "effect": {
+          "text": "你翻了他的帳，指出官府欠的錢早就從他的租裡扣過了。鄉豪臉紅脖子粗，船放了。",
+          "stats": {
+            "silver": 30,
+            "xinde": 15,
+            "fame": 3
+          },
+          "affinity": {
+            "hejin": 3
+          }
+        },
+        "fail_effect": {
+          "text": "帳越算越亂，天都黑了，船還扣著。",
+          "stamina": -12
+        }
+      },
+      {
+        "text": "夜裡把船一條條偷出來",
+        "check": {
+          "stat": "agi",
+          "difficulty": 12
+        },
+        "effect": {
+          "text": "你帶著兵卒摸黑解了纜，天亮時二十條船都泊在對岸。",
+          "stats": {
+            "silver": 40,
+            "xinde": 15,
+            "fame": 3
+          },
+          "materials": {
+            "kuai_2": 1
+          }
+        },
+        "fail_effect": {
+          "text": "看船的狗叫了，你們只偷出三條。",
+          "stamina": -12
+        }
+      }
+    ],
+    "locations": [
+      "mengjin_ford"
+    ],
+    "condition": {
+      "factions_none": [
+        "huang"
+      ]
+    },
+    "free_text": {
+      "prompt": "自己想辦法……",
+      "stat": "wis",
+      "effect": {
+        "text": "你的法子讓船趕在天亮前過了河。",
+        "stats": {
+          "silver": 30,
+          "xinde": 12,
+          "fame": 3
+        }
+      },
+      "fail_effect": {
+        "text": "法子沒成，大軍晚了一天出關。",
+        "stamina": -12
+      }
+    }
+  },
+  {
+    "id": "t2_xun_letter",
+    "title": "荀氏的信",
+    "image": "academy",
+    "tier": 2,
+    "door": "名流",
+    "text": "荀家一位長老把一封封了蠟的信交到你手上，請你送進陳留。「信裡寫的是潁川士人對這場亂事的看法。」他頓了頓，「路上若有人問起，你什麼都不知道。」",
+    "choices": [
+      {
+        "text": "不拆信，原封送到",
+        "check": {
+          "stat": "con",
+          "difficulty": 10
+        },
+        "effect": {
+          "text": "一路上兩撥人攔你問信，你一個字都沒說。陳留那頭收了信，回了一句「荀氏有人」。",
+          "stats": {
+            "silver": 30,
+            "xinde": 13,
+            "fame": 4
+          },
+          "affinity": {
+            "xunyu": 4
+          }
+        },
+        "fail_effect": {
+          "text": "路上被人搜了身，信雖沒被拆，蠟封卻壓碎了。收信的人臉色很難看。",
+          "stats": {
+            "fame": -1
+          },
+          "stamina": -12
+        }
+      },
+      {
+        "text": "不拆封，隔著燈影看信裡寫了什麼",
+        "check": {
+          "stat": "wis",
+          "difficulty": 12
+        },
+        "effect": {
+          "text": "你隔著燈影讀出了大半：潁川士人兩邊都不押。你把信送到，心裡多了一盤棋。",
+          "stats": {
+            "silver": 35,
+            "xinde": 15,
+            "fame": 3
+          }
+        },
+        "fail_effect": {
+          "text": "燈火一晃，蠟封燙化了一角。你只好硬著頭皮送去。",
+          "stats": {
+            "fame": -1
+          },
+          "stamina": -12
+        }
+      },
+      {
+        "text": "拆開來看，再封回去",
+        "effect": {
+          "text": "信上寫著潁川士族不附黃巾、也不全信官軍。你把蠟封重新封好，誰也看不出來。",
+          "stats": {
+            "silver": 15,
+            "xinde": 12,
+            "evil": 2
+          },
+          "chronicle": "傳聞{name}替荀氏送信入陳留，信在路上被人拆過。"
+        }
+      }
+    ],
+    "locations": [
+      "yingchuan_academy"
+    ],
+    "free_text": {
+      "prompt": "自己想辦法……",
+      "stat": "wis",
+      "effect": {
+        "text": "你照自己的法子把信送到了。",
+        "stats": {
+          "silver": 25,
+          "xinde": 12,
+          "fame": 3
+        }
+      },
+      "fail_effect": {
+        "text": "法子不靈，信晚了三天才到。",
+        "stamina": -12
+      }
+    }
+  },
+  {
+    "id": "t2_xushao_review",
+    "title": "月旦評",
+    "image": "academy",
+    "tier": 2,
+    "door": "名流",
+    "text": "汝南許劭每月初一品評人物，一句話能讓人一夜成名，也能讓人一輩子抬不起頭。這個月有人把你的名字遞了上去。堂上擠滿了人，都等著看許子將怎麼說你。",
+    "choices": [
+      {
+        "text": "引經據典，跟他論一論天下",
+        "check": {
+          "stat": "wis",
+          "difficulty": 11
+        },
+        "effect": {
+          "text": "你和許劭論了一個時辰，他最後說你「可與議事」。堂下一陣騷動。",
+          "stats": {
+            "silver": 30,
+            "xinde": 15,
+            "fame": 4
+          },
+          "affinity": {
+            "xushao": 5
+          }
+        },
+        "fail_effect": {
+          "text": "你引錯了一句經，許劭笑而不語，堂下有人笑出了聲。",
+          "stats": {
+            "fame": -1
+          },
+          "stamina": -12
+        }
+      },
+      {
+        "text": "一句話都不說，等他先開口",
+        "check": {
+          "stat": "wis",
+          "difficulty": 12
+        },
+        "effect": {
+          "text": "許劭看了你許久，說：「此人難測。」這三個字比什麼都好用。",
+          "stats": {
+            "silver": 35,
+            "xinde": 14,
+            "fame": 4
+          },
+          "affinity": {
+            "xushao": 4
+          }
+        },
+        "fail_effect": {
+          "text": "你沉默得太久，許劭搖搖頭，評了下一個人。",
+          "stamina": -12
+        }
+      },
+      {
+        "text": "把自己做過的事一件件說出來",
+        "check": {
+          "stat": "con",
+          "difficulty": 10
+        },
+        "effect": {
+          "text": "你說得平實，沒有一句誇口。許劭說你「實」，寫進了這個月的評。",
+          "stats": {
+            "silver": 30,
+            "xinde": 13,
+            "fame": 3
+          }
+        },
+        "fail_effect": {
+          "text": "說到一半你自己也覺得像在吹噓，越說越小聲。",
+          "stats": {
+            "fame": -1
+          },
+          "stamina": -12
+        }
+      }
+    ],
+    "locations": [
+      "runan"
+    ],
+    "free_text": {
+      "prompt": "自己說……",
+      "stat": "wis",
+      "effect": {
+        "text": "你的話讓許劭多看了你一眼，評語裡有你一句。",
+        "stats": {
+          "silver": 25,
+          "xinde": 12,
+          "fame": 3
+        }
+      },
+      "fail_effect": {
+        "text": "你的話沒有人記得。",
+        "stamina": -12
+      }
+    }
+  },
+  {
+    "id": "t2_hejin_hire",
+    "title": "大將軍府延聘",
+    "image": "office",
+    "tier": 2,
+    "door": "名流",
+    "text": "大將軍何進要招天下的豪傑入幕，府門口的長史一個個問話。輪到你時，他把一卷兵書推到你面前：「讀過嗎？說說看。」",
+    "choices": [
+      {
+        "text": "照兵書說，再說哪裡不合今天的仗",
+        "check": {
+          "stat": "wis",
+          "difficulty": 10
+        },
+        "effect": {
+          "text": "長史聽完把兵書收了起來，在名冊上你的名字旁畫了一個圈。",
+          "stats": {
+            "silver": 35,
+            "xinde": 14,
+            "fame": 3
+          },
+          "affinity": {
+            "hejin": 4
+          }
+        },
+        "fail_effect": {
+          "text": "你說得太細，長史聽得打起了呵欠。",
+          "stamina": -12
+        }
+      },
+      {
+        "text": "說京裡的事：宦官與外戚",
+        "check": {
+          "stat": "wis",
+          "difficulty": 11
+        },
+        "effect": {
+          "text": "你只說了三句，長史就把左右屏退了。走的時候他塞給你一封大將軍的帖子。",
+          "stats": {
+            "silver": 40,
+            "xinde": 15,
+            "fame": 3
+          },
+          "affinity": {
+            "hejin": 5
+          }
+        },
+        "fail_effect": {
+          "text": "你話說得太直，長史的臉色變了，請你出去。",
+          "stats": {
+            "fame": -1
+          },
+          "stamina": -12
+        }
+      },
+      {
+        "text": "不說話，在校場上演一趟刀",
+        "check": {
+          "stat": "str",
+          "difficulty": 12
+        },
+        "effect": {
+          "text": "你一刀劈斷了靶樁。府裡的武人都出來看，長史把你的名字報上去了。",
+          "stats": {
+            "silver": 35,
+            "xinde": 13,
+            "fame": 4
+          },
+          "affinity": {
+            "hejin": 3
+          }
+        },
+        "fail_effect": {
+          "text": "刀卡在靶樁裡拔不出來，場邊一片笑聲。",
+          "stats": {
+            "fame": -1
+          },
+          "stamina": -12
+        }
+      }
+    ],
+    "locations": [
+      "dajiangjun_fu"
+    ]
+  },
+  {
+    "id": "t2_haozu_banquet",
+    "title": "塢堡的宴",
+    "image": "fort",
+    "tier": 2,
+    "door": "名流",
+    "text": "冀州的豪族擺了一桌宴，座上一邊是盧植營裡來的軍候，一邊是黃巾派來的說客。塢堡主人舉杯對你笑：「你是外人，兩邊都說得上話。今晚替我探探，誰的價錢高。」",
+    "choices": [
+      {
+        "text": "兩邊各敬一杯，各套一句話",
+        "check": {
+          "stat": "wis",
+          "difficulty": 10
+        },
+        "effect": {
+          "text": "散席時你把兩邊開的價都摸清了。塢堡主人送你出門，一路送到了堡外。",
+          "stats": {
+            "silver": 40,
+            "xinde": 13,
+            "fame": 3
+          }
+        },
+        "fail_effect": {
+          "text": "兩邊都看出你在套話，宴席不歡而散。",
+          "stats": {
+            "fame": -1
+          },
+          "stamina": -12
+        }
+      },
+      {
+        "text": "說清楚：冀州的糧該歸誰",
+        "check": {
+          "stat": "wis",
+          "difficulty": 12
+        },
+        "effect": {
+          "text": "你把冀州幾年的收成與賦稅一筆筆擺出來，兩邊都說不出話。塢堡主人決定先誰都不給。",
+          "stats": {
+            "silver": 35,
+            "xinde": 15,
+            "fame": 4
+          },
+          "trend": {
+            "geju": 1
+          }
+        },
+        "fail_effect": {
+          "text": "你數字說錯了一個，軍候當場戳破。",
+          "stamina": -12
+        }
+      },
+      {
+        "text": "陪著喝，喝到他們說真話",
+        "check": {
+          "stat": "con",
+          "difficulty": 11
+        },
+        "effect": {
+          "text": "三巡之後兩邊都醉了，真話一句句漏出來。你記得清清楚楚。",
+          "stats": {
+            "silver": 30,
+            "xinde": 14,
+            "fame": 3
+          }
+        },
+        "fail_effect": {
+          "text": "你先醉倒了，第二天什麼也想不起來。",
+          "stamina": -12
+        }
+      }
+    ],
+    "locations": [
+      "haozu_fort"
+    ],
+    "free_text": {
+      "prompt": "自己說……",
+      "stat": "wis",
+      "effect": {
+        "text": "你一席話讓塢堡主人點頭。",
+        "stats": {
+          "silver": 30,
+          "xinde": 12,
+          "fame": 3
+        }
+      },
+      "fail_effect": {
+        "text": "沒人把你的話當真。",
+        "stamina": -12
+      }
+    }
+  },
+  {
+    "id": "t2_xinye_qingyi",
+    "title": "新野的清議",
+    "image": "tavern",
+    "tier": 2,
+    "door": "名流",
+    "text": "新野一間酒肆的後堂，幾個從京裡被罷官回鄉的士人在議論：黃巾一起，朝廷才肯赦黨人，這仗打得是福是禍？有人轉頭問你。",
+    "choices": [
+      {
+        "text": "說黃巾起事的根，在豪強兼併",
+        "check": {
+          "stat": "wis",
+          "difficulty": 11
+        },
+        "effect": {
+          "text": "你說得有根有據，在座的人都沉默了。散席時有人說要把你的話寫下來。",
+          "stats": {
+            "silver": 30,
+            "xinde": 15,
+            "fame": 4
+          }
+        },
+        "fail_effect": {
+          "text": "你說到一半，有人冷笑：「豪強？在座的哪個家裡沒有幾百畝。」",
+          "stamina": -12
+        }
+      },
+      {
+        "text": "勸他們少說話，京裡耳目多",
+        "check": {
+          "stat": "wis",
+          "difficulty": 10
+        },
+        "effect": {
+          "text": "你這一句讓幾個人醒了酒。後來真有人因議論被捕，這幾位都平安。",
+          "stats": {
+            "silver": 35,
+            "xinde": 13,
+            "fame": 3,
+            "good": 1
+          }
+        },
+        "fail_effect": {
+          "text": "他們笑你膽小，議論得更大聲了。",
+          "stamina": -12
+        }
+      }
+    ],
+    "locations": [
+      "xinye"
+    ],
+    "free_text": {
+      "prompt": "自己說……",
+      "stat": "wis",
+      "effect": {
+        "text": "你的話傳出了新野。",
+        "stats": {
+          "silver": 25,
+          "xinde": 12,
+          "fame": 3
+        }
+      },
+      "fail_effect": {
+        "text": "你的話沒人接。",
+        "stamina": -12
+      }
+    }
+  },
+  {
+    "id": "t2_wan_granary",
+    "title": "宛城的空倉",
+    "image": "town",
+    "tier": 2,
+    "door": "俠義",
+    "text": "縣吏貼了告示說開倉賑災，城外的饑民天沒亮就排到了城門口。倉門一開，裡頭是空的。糧早被城裡的豪族搬走了，縣吏裝作不知道。",
+    "choices": [
+      {
+        "text": "翻縣衙的帳，查糧去了哪",
+        "check": {
+          "stat": "wis",
+          "difficulty": 10
+        },
+        "effect": {
+          "text": "帳上一筆一筆都對得上，就是少了三千石。你把帳攤在縣吏面前，他當晚就叫豪族把糧吐了一半出來。",
+          "stats": {
+            "silver": 30,
+            "xinde": 14,
+            "good": 4
+          }
+        },
+        "fail_effect": {
+          "text": "帳做得太乾淨，你什麼也查不出來。",
+          "stamina": -12
+        }
+      },
+      {
+        "text": "帶饑民去豪族門口鬧",
+        "check": {
+          "stat": "str",
+          "difficulty": 11
+        },
+        "effect": {
+          "text": "幾百人圍著豪族的宅門，你一腳踹開了糧倉的門。豪族不敢鬧大，開倉放了糧。",
+          "stats": {
+            "silver": 20,
+            "xinde": 13,
+            "good": 4,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "豪族的家丁拿著棍子衝出來，饑民一哄而散，你挨了好幾下。",
+          "stamina": -12
+        }
+      },
+      {
+        "text": "找城裡的糧商合夥平糶",
+        "check": {
+          "stat": "wis",
+          "difficulty": 12
+        },
+        "effect": {
+          "text": "你說動兩個糧商按平價賣糧，豪族囤的糧一下子不值錢了。",
+          "stats": {
+            "silver": 35,
+            "xinde": 15,
+            "good": 3
+          }
+        },
+        "fail_effect": {
+          "text": "糧商聽完只是搖頭，誰也不想得罪豪族。",
+          "stamina": -12
+        }
+      }
+    ],
+    "locations": [
+      "wan_city"
+    ],
+    "free_text": {
+      "prompt": "自己想辦法……",
+      "stat": "wis",
+      "effect": {
+        "text": "你的法子讓城外的人吃上了一頓飯。",
+        "stats": {
+          "silver": 15,
+          "xinde": 12,
+          "good": 3
+        }
+      },
+      "fail_effect": {
+        "text": "法子沒成，城外的人散了。",
+        "stamina": -12
+      }
+    }
+  },
+  {
+    "id": "t2_runan_refugees",
+    "title": "汝南的流民",
+    "image": "refugees",
+    "tier": 2,
+    "door": "俠義",
+    "text": "一百多個流民要穿過汝南荒野去潁川投親，路上有亂兵。領頭的老漢跪在你面前，身後的孩子們餓得哭不出聲。",
+    "choices": [
+      {
+        "text": "揹著老弱，陪他們走完",
+        "check": {
+          "stat": "con",
+          "difficulty": 10
+        },
+        "effect": {
+          "text": "你走了三天，背過七八個孩子。到潁川時一百多人一個沒少。",
+          "stats": {
+            "silver": 15,
+            "xinde": 15,
+            "good": 4
+          }
+        },
+        "fail_effect": {
+          "text": "第二天你也倒下了，流民們反過來抬著你走。",
+          "stamina": -12
+        }
+      },
+      {
+        "text": "先一步去探路，避開亂兵",
+        "check": {
+          "stat": "agi",
+          "difficulty": 11
+        },
+        "effect": {
+          "text": "你在前頭跑了一夜，找到一條沒人走的舊河道。流民平安過去了。",
+          "stats": {
+            "silver": 25,
+            "xinde": 14,
+            "good": 3
+          }
+        },
+        "fail_effect": {
+          "text": "你探錯了路，繞了一大圈，耽誤了兩天。",
+          "stamina": -12
+        }
+      },
+      {
+        "text": "迎上那夥亂兵",
+        "combat": "nz_luanbing",
+        "effect": {
+          "text": "你把亂兵殺散，從他們營裡翻出幾袋糧，分給了流民。",
+          "stats": {
+            "silver": 30,
+            "xinde": 13,
+            "good": 4,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "亂兵人多，你只能護著流民往回退。",
+          "stamina": -12
+        }
+      }
+    ],
+    "locations": [
+      "runan_wilds"
+    ]
+  },
+  {
+    "id": "t2_zhuo_wrong",
+    "title": "涿郡的冤案",
+    "image": "office",
+    "tier": 2,
+    "door": "俠義",
+    "text": "涿郡縣吏抓了一個賣草鞋的，說他通黃巾，三天後要斬。他的娘在縣衙門口哭了兩天，沒人理她。你聽說那人只是欠了縣吏小舅子的錢。",
+    "choices": [
+      {
+        "text": "找證人，翻這個案",
+        "check": {
+          "stat": "wis",
+          "difficulty": 11
+        },
+        "effect": {
+          "text": "你找到三個證人，當堂把縣吏的話一句句駁倒。人放了，縣吏被郡裡記了一過。",
+          "stats": {
+            "silver": 25,
+            "xinde": 15,
+            "good": 4,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "證人被縣吏嚇住了，一個都不敢上堂。",
+          "stamina": -12
+        }
+      },
+      {
+        "text": "翻律條，找出這案的破綻",
+        "check": {
+          "stat": "wis",
+          "difficulty": 12
+        },
+        "effect": {
+          "text": "你翻出一條：通敵要有實證。縣吏拿不出來，只好放人。",
+          "stats": {
+            "silver": 30,
+            "xinde": 14,
+            "good": 4
+          }
+        },
+        "fail_effect": {
+          "text": "律條你找到了，可縣吏根本不聽。",
+          "stamina": -12
+        }
+      },
+      {
+        "text": "夜裡劫獄",
+        "check": {
+          "stat": "str",
+          "difficulty": 10
+        },
+        "effect": {
+          "text": "你把人從牢裡揹了出來，連夜送出了涿郡。縣裡貼出了你的畫像。",
+          "stats": {
+            "silver": 15,
+            "xinde": 13,
+            "good": 4,
+            "fame": -1
+          }
+        },
+        "fail_effect": {
+          "text": "牢門太結實，你只砸壞了一把鎖，獄卒就喊起來了。",
+          "stamina": -12
+        }
+      }
+    ],
+    "locations": [
+      "zhuo_county"
+    ],
+    "free_text": {
+      "prompt": "自己想辦法……",
+      "stat": "wis",
+      "effect": {
+        "text": "你的法子救下了一條命。",
+        "stats": {
+          "silver": 15,
+          "xinde": 12,
+          "good": 3
+        }
+      },
+      "fail_effect": {
+        "text": "法子沒成，三天後那人還是死了。",
+        "stamina": -12
+      }
+    }
+  },
+  {
+    "id": "t2_xiaquyang_plague",
+    "title": "下曲陽的疫",
+    "image": "clinic",
+    "tier": 2,
+    "door": "俠義",
+    "text": "下曲陽城裡起了疫，死人沒人收，就扔在城牆根。醫館的老大夫一個人忙不過來，見到你就把一把藥杵塞進你手裡。",
+    "choices": [
+      {
+        "text": "留下來收屍、燒衣",
+        "check": {
+          "stat": "con",
+          "difficulty": 11
+        },
+        "effect": {
+          "text": "你和幾個膽大的鄉人收了三天的屍，城牆根乾淨了，疫也慢了下來。",
+          "stats": {
+            "silver": 20,
+            "xinde": 15,
+            "good": 4
+          }
+        },
+        "fail_effect": {
+          "text": "第三天你也發起了熱，被老大夫灌了好幾碗藥。",
+          "stamina": -12
+        }
+      },
+      {
+        "text": "照老大夫的方子配藥",
+        "check": {
+          "stat": "wis",
+          "difficulty": 10
+        },
+        "effect": {
+          "text": "你照方子配了三百帖藥，城裡的哭聲少了。",
+          "stats": {
+            "silver": 30,
+            "xinde": 14,
+            "good": 3
+          },
+          "materials": {
+            "rou_2": 1
+          }
+        },
+        "fail_effect": {
+          "text": "藥材認錯了兩味，老大夫只好重配。",
+          "stamina": -12
+        }
+      }
+    ],
+    "locations": [
+      "xiaquyang"
+    ]
+  },
+  {
+    "id": "t2_yingshui_boys",
+    "title": "潁水的童子",
+    "image": "river",
+    "tier": 2,
+    "door": "俠義",
+    "text": "潁水邊的村子裡，黃巾的人拿繩子拴了十幾個半大孩子，說要帶去當兵。孩子們的爹娘跪在河灘上，一聲也不敢出。",
+    "choices": [
+      {
+        "text": "趁他們不備，一個一個解繩子",
+        "check": {
+          "stat": "agi",
+          "difficulty": 10
+        },
+        "effect": {
+          "text": "你在河灘的蘆葦裡摸過去，解開了繩子，孩子們鑽進蘆葦蕩跑回了家。",
+          "stats": {
+            "silver": 20,
+            "xinde": 14,
+            "good": 4
+          }
+        },
+        "fail_effect": {
+          "text": "被你解開的兩個孩子又被抓了回去，你只好先退。",
+          "stamina": -12
+        }
+      },
+      {
+        "text": "拔刀攔下他們",
+        "combat": "nz_kuibing",
+        "effect": {
+          "text": "你把那夥人打散，孩子們撲回爹娘懷裡。",
+          "stats": {
+            "silver": 30,
+            "xinde": 13,
+            "good": 4,
+            "fame": 1
+          },
+          "trend": {
+            "front": -1
+          }
+        },
+        "fail_effect": {
+          "text": "對方人多，孩子們還是被帶走了。",
+          "stamina": -12
+        }
+      }
+    ],
+    "locations": [
+      "yingshui"
+    ],
+    "condition": {
+      "factions_none": [
+        "huang"
+      ]
+    }
+  },
+  {
+    "id": "t2_runan_salt",
+    "title": "私鹽船",
+    "image": "river",
+    "tier": 2,
+    "door": "綠林",
+    "text": "汝南集市的後巷，一個船老大拍著你的肩：「河上有一船鹽，官府的鹽丁盯得緊。你幫我押一趟，三七分。」",
+    "choices": [
+      {
+        "text": "跟他談分成",
+        "check": {
+          "stat": "wis",
+          "difficulty": 10,
+          "practice": "evil"
+        },
+        "effect": {
+          "text": "你把三七談成了四六，船老大苦著臉答應了。",
+          "stats": {
+            "silver": 40,
+            "xinde": 13,
+            "evil": 3
+          }
+        },
+        "fail_effect": {
+          "text": "船老大翻臉了，這趟生意黃了。",
+          "stamina": -12
+        }
+      },
+      {
+        "text": "夜裡押船闖過鹽丁的卡子",
+        "check": {
+          "stat": "agi",
+          "difficulty": 11,
+          "practice": "evil"
+        },
+        "effect": {
+          "text": "你撐著船從卡子底下溜了過去，鹽丁的火把照不到河心。",
+          "stats": {
+            "silver": 40,
+            "xinde": 14,
+            "evil": 4
+          },
+          "materials": {
+            "kuai_2": 1
+          }
+        },
+        "fail_effect": {
+          "text": "鹽丁的船追了上來，你們只好把鹽倒進河裡。",
+          "stats": {
+            "silver": -10
+          },
+          "stamina": -12
+        }
+      },
+      {
+        "text": "鹽丁攔船，就跟他們動手",
+        "combat": "nz_shuifei",
+        "effect": {
+          "text": "你把攔船的鹽丁打下了水，船平安靠岸。",
+          "stats": {
+            "silver": 35,
+            "xinde": 13,
+            "evil": 4
+          }
+        },
+        "fail_effect": {
+          "text": "鹽丁比你想的硬，船被扣了。",
+          "stamina": -12
+        }
+      }
+    ],
+    "locations": [
+      "runan_market"
+    ]
+  },
+  {
+    "id": "t2_lulin_join",
+    "title": "山寨入夥",
+    "image": "forest",
+    "tier": 2,
+    "door": "綠林",
+    "text": "綠林山寨的寨主擺了一碗酒在你面前：「聽說你在外頭的名聲不太好。喝了這碗，就是自家兄弟。」堂下的人都看著你。",
+    "choices": [
+      {
+        "text": "喝了，跟寨主比一比臂力",
+        "check": {
+          "stat": "str",
+          "difficulty": 11,
+          "practice": "evil"
+        },
+        "effect": {
+          "text": "你一碗喝乾，掰腕子贏了寨主。寨主大笑，分了你一份山裡的財。",
+          "stats": {
+            "silver": 40,
+            "xinde": 14,
+            "evil": 3
+          }
+        },
+        "fail_effect": {
+          "text": "你輸了腕子，寨主說你還得再練練。",
+          "stamina": -12
+        }
+      },
+      {
+        "text": "喝了，連喝十碗不倒",
+        "check": {
+          "stat": "con",
+          "difficulty": 10
+        },
+        "effect": {
+          "text": "你喝到第十碗，堂下的人都站起來了。寨主把你排進了頭領。",
+          "stats": {
+            "silver": 35,
+            "xinde": 13,
+            "evil": 4
+          }
+        },
+        "fail_effect": {
+          "text": "第六碗你就趴下了，醒來時已經在山腳。",
+          "stamina": -12
+        }
+      }
+    ],
+    "locations": [
+      "lulin_zhai"
+    ],
+    "free_text": {
+      "prompt": "自己說……",
+      "stat": "wis",
+      "effect": {
+        "text": "寨主聽完你的話，點了點頭。",
+        "stats": {
+          "silver": 30,
+          "xinde": 12,
+          "evil": 3
+        }
+      },
+      "fail_effect": {
+        "text": "寨主沒聽完就揮手讓你走。",
+        "stamina": -12
+      }
+    }
+  },
+  {
+    "id": "t2_baima_escort",
+    "title": "白馬津的鏢",
+    "image": "river",
+    "tier": 2,
+    "door": "綠林",
+    "text": "白馬津口泊著一支鏢船，插的是冀州豪族的旗。津口的混混說，那船底下夾帶著黃金，鏢頭只有四個人。",
+    "choices": [
+      {
+        "text": "混上船，夜裡把箱子換掉",
+        "check": {
+          "stat": "agi",
+          "difficulty": 10,
+          "practice": "evil"
+        },
+        "effect": {
+          "text": "你扮成縴夫上了船，半夜把一口箱子換成了石頭。天亮時你已經在對岸了。",
+          "stats": {
+            "silver": 40,
+            "xinde": 14,
+            "evil": 4
+          }
+        },
+        "fail_effect": {
+          "text": "鏢頭睡得很淺，你剛摸到箱子他就醒了。",
+          "stamina": -12
+        }
+      },
+      {
+        "text": "在津口直接劫",
+        "combat": "nz_jinba",
+        "effect": {
+          "text": "你帶著津口的混混一擁而上，鏢頭丟下船跑了。",
+          "stats": {
+            "silver": 40,
+            "xinde": 13,
+            "evil": 4
+          }
+        },
+        "fail_effect": {
+          "text": "鏢頭的刀很快，你被砍了一道，混混們跑得比你還快。",
+          "stamina": -12
+        }
+      }
+    ],
+    "locations": [
+      "baima_ford"
+    ]
+  },
+  {
+    "id": "t2_luoyang_black",
+    "title": "洛陽的黑市",
+    "image": "market",
+    "tier": 2,
+    "door": "綠林",
+    "text": "洛陽官道邊的一間破廟，夜裡是黑市。有人在賣宮裡流出來的東西，也有人在賣軍械。一個戴斗笠的人問你，要不要做個中間人。",
+    "choices": [
+      {
+        "text": "替他們估價，抽一成",
+        "check": {
+          "stat": "wis",
+          "difficulty": 11,
+          "practice": "evil"
+        },
+        "effect": {
+          "text": "你一眼看出那面銅鏡是宮裡的東西，估了個好價。兩邊都服，你抽了一成。",
+          "stats": {
+            "silver": 40,
+            "xinde": 14,
+            "evil": 3
+          }
+        },
+        "fail_effect": {
+          "text": "你估錯了價，買家當場翻臉。",
+          "stamina": -12
+        }
+      },
+      {
+        "text": "聽他們說話，把消息賣給別人",
+        "check": {
+          "stat": "wis",
+          "difficulty": 12,
+          "practice": "evil"
+        },
+        "effect": {
+          "text": "你在角落裡聽了一夜，把誰在買軍械賣給了另一夥人。",
+          "stats": {
+            "silver": 40,
+            "xinde": 15,
+            "evil": 4
+          }
+        },
+        "fail_effect": {
+          "text": "戴斗笠的人發現你在偷聽，請你出去。",
+          "stamina": -12
+        }
+      }
+    ],
+    "locations": [
+      "luoyang_road"
+    ],
+    "free_text": {
+      "prompt": "自己想辦法……",
+      "stat": "wis",
+      "effect": {
+        "text": "你在黑市裡做成了一筆。",
+        "stats": {
+          "silver": 30,
+          "xinde": 12,
+          "evil": 3
+        }
+      },
+      "fail_effect": {
+        "text": "這一夜什麼也沒做成。",
+        "stamina": -12
+      }
+    }
+  },
+  {
+    "id": "t2_market_contract",
+    "title": "殺手的生意",
+    "image": "tavern",
+    "tier": 2,
+    "door": "綠林",
+    "text": "集市小鎮的酒肆裡，一個商人把一袋錢推到你面前：「城東的鄉嗇夫，壞了我的生意。」他沒說要你做什麼，錢袋很沉。",
+    "choices": [
+      {
+        "text": "收錢，去嚇一嚇那個鄉嗇夫",
+        "check": {
+          "stat": "agi",
+          "difficulty": 11,
+          "practice": "evil"
+        },
+        "effect": {
+          "text": "你夜裡在鄉嗇夫的枕邊插了一把刀。第二天他就把商人的貨放了。",
+          "stats": {
+            "silver": 40,
+            "xinde": 13,
+            "evil": 4
+          }
+        },
+        "fail_effect": {
+          "text": "鄉嗇夫家的狗叫醒了一屋子人，你翻牆跑了。",
+          "stamina": -12
+        }
+      },
+      {
+        "text": "收錢，轉頭把這事告訴鄉嗇夫",
+        "check": {
+          "stat": "wis",
+          "difficulty": 10,
+          "practice": "evil"
+        },
+        "effect": {
+          "text": "兩頭的錢你都收了，商人和鄉嗇夫到現在都以為你是自己人。",
+          "stats": {
+            "silver": 40,
+            "xinde": 14,
+            "evil": 3
+          }
+        },
+        "fail_effect": {
+          "text": "商人早就派人跟著你，這事露了。",
+          "stats": {
+            "fame": -1
+          },
+          "stamina": -12
+        }
+      }
+    ],
+    "locations": [
+      "market_town"
+    ]
+  },
+  {
+    "id": "t2_door_challenger",
+    "title": "上門挑戰",
+    "image": "fight",
+    "tier": 2,
+    "door": "擂主",
+    "text": "一個背著長刀的漢子堵在你歇腳的客棧門口，說是聽說擂台上新出了一號人物，特地從外郡趕來。「不比也行，」他說，「你自己把名字從擂上撤下來。」",
+    "choices": [
+      {
+        "text": "跟他比",
+        "combat": "nz_youxia",
+        "effect": {
+          "text": "你們從客棧打到街上，最後他的刀落了地。他抱拳說：「名不虛傳。」",
+          "stats": {
+            "silver": 35,
+            "xinde": 15,
+            "fame": 4
+          }
+        },
+        "fail_effect": {
+          "text": "你輸了半招。他沒有再逼你撤名，只是笑著走了。",
+          "stats": {
+            "fame": -1
+          },
+          "stamina": -12
+        }
+      },
+      {
+        "text": "請他喝酒，聽他說說自己的刀",
+        "check": {
+          "stat": "wis",
+          "difficulty": 11
+        },
+        "effect": {
+          "text": "酒過三巡，他說起自己的師門，你聽出了刀法的破綻，他也聽出來了。兩人大笑一場，各自散去。",
+          "stats": {
+            "silver": 30,
+            "xinde": 14,
+            "fame": 3
+          }
+        },
+        "fail_effect": {
+          "text": "他喝了你的酒，還是要比。",
+          "stamina": -12
+        }
+      },
+      {
+        "text": "只出一招，讓他自己看",
+        "check": {
+          "stat": "agi",
+          "difficulty": 12
+        },
+        "effect": {
+          "text": "你一招就削下了他刀穗上的一顆珠子。他看了很久，收刀走了。",
+          "stats": {
+            "silver": 40,
+            "xinde": 15,
+            "fame": 4
+          }
+        },
+        "fail_effect": {
+          "text": "你那一招慢了，他輕輕一擋就化開了。",
+          "stamina": -12
+        }
+      }
+    ],
+    "tags": [
+      "城鎮"
+    ],
+    "free_text": {
+      "prompt": "自己說……",
+      "stat": "wis",
+      "effect": {
+        "text": "你的話讓他收了刀。",
+        "stats": {
+          "silver": 25,
+          "xinde": 12,
+          "fame": 3
+        }
+      },
+      "fail_effect": {
+        "text": "他沒聽完就拔了刀。",
+        "stamina": -12
+      }
+    }
+  },
+  {
+    "id": "t2_master_spar",
+    "title": "名家比劃",
+    "image": "fight",
+    "tier": 2,
+    "door": "擂主",
+    "text": "城裡一位成名多年的老拳師派人送來帖子，說想跟擂上的新人「比劃比劃」。帖子寫得客氣，請的人卻不少，看來是要當眾分個高下。",
+    "choices": [
+      {
+        "text": "硬碰硬，拳對拳",
+        "check": {
+          "stat": "str",
+          "difficulty": 11
+        },
+        "effect": {
+          "text": "三十招後老拳師退了一步，笑著說：「後生可畏。」滿堂叫好。",
+          "stats": {
+            "silver": 35,
+            "xinde": 14,
+            "fame": 4
+          }
+        },
+        "fail_effect": {
+          "text": "老拳師的拳像鐵，你被震退了三步。",
+          "stats": {
+            "fame": -1
+          },
+          "stamina": -12
+        }
+      },
+      {
+        "text": "繞著他打，耗他的氣",
+        "check": {
+          "stat": "agi",
+          "difficulty": 10
+        },
+        "effect": {
+          "text": "你繞了他半個時辰，老拳師的氣喘了，自己收了手。",
+          "stats": {
+            "silver": 30,
+            "xinde": 15,
+            "fame": 3
+          }
+        },
+        "fail_effect": {
+          "text": "你繞得太遠，看熱鬧的人喊你不敢打。",
+          "stamina": -12
+        }
+      },
+      {
+        "text": "站著不動，讓他打",
+        "check": {
+          "stat": "con",
+          "difficulty": 12
+        },
+        "effect": {
+          "text": "他打了你十拳，你一步沒退。老拳師嘆了口氣，把自己的護腕送給了你。",
+          "stats": {
+            "silver": 35,
+            "xinde": 15,
+            "fame": 4
+          },
+          "materials": {
+            "man_2": 1
+          }
+        },
+        "fail_effect": {
+          "text": "第七拳你就站不住了。",
+          "stamina": -12
+        }
+      }
+    ],
+    "tags": [
+      "城鎮"
+    ]
+  },
+  {
+    "id": "t2_guanwai_blade",
+    "title": "關外來的刀客",
+    "image": "fight",
+    "tier": 2,
+    "door": "擂主",
+    "text": "一個胡人打扮的刀客騎著瘦馬進了城，馬鞍上掛著三把中原人的刀。他在街口立了一塊木牌：「擂上的人，來取。」",
+    "choices": [
+      {
+        "text": "去取刀",
+        "combat": "nz_huqi",
+        "effect": {
+          "text": "你們在街口鬥了五十招，他的彎刀斷了。他把三把刀留下，騎馬出了城。",
+          "stats": {
+            "silver": 40,
+            "xinde": 15,
+            "fame": 4
+          }
+        },
+        "fail_effect": {
+          "text": "他的刀太快，你的刀成了第四把。",
+          "stats": {
+            "fame": -1
+          },
+          "stamina": -12
+        }
+      },
+      {
+        "text": "看他的刀，看出路數再說",
+        "check": {
+          "stat": "con",
+          "difficulty": 11
+        },
+        "effect": {
+          "text": "你看了他三天，第四天才去。他只出了兩刀就停了：「你看過了。」他留下一把刀走了。",
+          "stats": {
+            "silver": 30,
+            "xinde": 14,
+            "fame": 3
+          },
+          "materials": {
+            "gang_2": 1
+          }
+        },
+        "fail_effect": {
+          "text": "你看了三天也沒看懂。",
+          "stamina": -12
+        }
+      }
+    ],
+    "locations": [
+      "zhuo_county",
+      "market_town",
+      "juma_river"
+    ],
+    "free_text": {
+      "prompt": "自己想辦法……",
+      "stat": "wis",
+      "effect": {
+        "text": "你的法子讓刀客收了牌子。",
+        "stats": {
+          "silver": 25,
+          "xinde": 12,
+          "fame": 3
+        }
+      },
+      "fail_effect": {
+        "text": "法子沒成，木牌還立在街口。",
+        "stamina": -12
+      }
+    }
+  },
+  {
+    "id": "t2_disciple_ask",
+    "title": "求拜師",
+    "image": "town",
+    "tier": 2,
+    "door": "擂主",
+    "text": "一個十四五歲的少年在你門口跪了一夜，說是看過你在擂上的那一場，要拜你為師。他家裡是殺豬的，手上有把力氣。",
+    "choices": [
+      {
+        "text": "考他三天，看是不是塊料",
+        "check": {
+          "stat": "wis",
+          "difficulty": 10
+        },
+        "effect": {
+          "text": "三天裡你看出他心性穩。你沒收他，卻把入門的功夫教了，他磕了三個頭走了。",
+          "stats": {
+            "silver": 15,
+            "xinde": 15,
+            "fame": 3,
+            "good": 1
+          }
+        },
+        "fail_effect": {
+          "text": "你沒看準，他第二天就受不了跑了。",
+          "stamina": -12
+        }
+      },
+      {
+        "text": "跟他講你這一路是怎麼過來的",
+        "check": {
+          "stat": "wis",
+          "difficulty": 11
+        },
+        "effect": {
+          "text": "你講了一夜，他聽了一夜。後來城裡都說擂上那位肯教人。",
+          "stats": {
+            "silver": 20,
+            "xinde": 14,
+            "fame": 4
+          }
+        },
+        "fail_effect": {
+          "text": "你講得太多，他聽到一半睡著了。",
+          "stamina": -12
+        }
+      }
+    ],
+    "tags": [
+      "城鎮"
+    ],
+    "free_text": {
+      "prompt": "自己說……",
+      "stat": "wis",
+      "effect": {
+        "text": "你的話他記了一輩子。",
+        "stats": {
+          "silver": 15,
+          "xinde": 12,
+          "fame": 3
+        }
+      },
+      "fail_effect": {
+        "text": "他沒聽懂。",
+        "stamina": -12
+      }
+    }
+  },
+  {
+    "id": "t3_changshe_fire",
+    "title": "長社一把火",
+    "image": "night",
+    "tier": 3,
+    "door": "武事",
+    "text": "波才的大軍把長社圍得水洩不通，城裡人心惶惶。皇甫嵩把你叫到城頭，指著城外依草結營的黃巾：「今夜有大風。我要一個人先摸出去，在他們的營裡點第一把火。」",
+    "choices": [
+      {
+        "text": "縋城而下，摸進草營",
+        "check": {
+          "stat": "agi",
+          "difficulty": 13
+        },
+        "effect": {
+          "text": "你在大風裡點著了第一把火。火借風勢，連營燒成一片，城裡的鼓聲響了，皇甫嵩帶兵殺了出來。",
+          "stats": {
+            "silver": 70,
+            "xinde": 25,
+            "fame": 6
+          },
+          "materials": {
+            "kuai_3": 1
+          },
+          "trend": {
+            "front": -3
+          },
+          "affinity": {
+            "huangfusong": 6
+          },
+          "chronicle": "長社之戰，{name}夜縋出城，縱火黃巾草營，皇甫嵩乘勢破波才。"
+        },
+        "fail_effect": {
+          "text": "你在營外被巡夜的人發現，火沒點成，身上中了一箭。皇甫嵩只說了一句「再等」。",
+          "affinity": {
+            "huangfusong": -3
+          },
+          "stamina": -15
+        }
+      },
+      {
+        "text": "看風向，教城裡什麼時候放火箭",
+        "check": {
+          "stat": "wis",
+          "difficulty": 14
+        },
+        "effect": {
+          "text": "你算準了風轉的那一刻，城頭的火箭齊發，黃巾的草營一片火海。",
+          "stats": {
+            "silver": 65,
+            "xinde": 25,
+            "fame": 5
+          },
+          "trend": {
+            "front": -3
+          },
+          "affinity": {
+            "huangfusong": 6
+          },
+          "chronicle": "長社之戰，{name}算準風向，城頭火箭齊發，黃巾大潰。"
+        },
+        "fail_effect": {
+          "text": "你算錯了半個時辰，火箭落在空地上，打草驚蛇。",
+          "affinity": {
+            "huangfusong": -3
+          },
+          "stamina": -15
+        }
+      },
+      {
+        "text": "殺進營去，直取波才",
+        "combat": "figure_bocai",
+        "effect": {
+          "text": "你殺到波才的帳前，他棄帳而走。黃巾一夜之間退了三十里。",
+          "stats": {
+            "silver": 80,
+            "xinde": 25,
+            "fame": 6
+          },
+          "materials": {
+            "gang_3": 1
+          },
+          "trend": {
+            "front": -3
+          },
+          "chronicle": "長社之戰，{name}殺入黃巾大營，波才棄帳而走。"
+        },
+        "fail_effect": {
+          "text": "波才身邊的人太多，你被逼了回來，身上多了幾道傷。",
+          "affinity": {
+            "huangfusong": -2
+          },
+          "stamina": -15
+        }
+      }
+    ],
+    "locations": [
+      "changshe"
+    ],
+    "condition": {
+      "factions_none": [
+        "huang"
+      ]
+    },
+    "free_text": {
+      "prompt": "自己想辦法……",
+      "stat": "wis",
+      "effect": {
+        "text": "你的法子讓長社的火燒起來了。",
+        "stats": {
+          "silver": 60,
+          "xinde": 25,
+          "fame": 5
+        },
+        "trend": {
+          "front": -2
+        }
+      },
+      "fail_effect": {
+        "text": "法子沒成，長社又被圍了一天。",
+        "stamina": -15
+      }
+    }
+  },
+  {
+    "id": "t3_guangzong_wall",
+    "title": "廣宗城頭",
+    "image": "camp",
+    "tier": 3,
+    "door": "武事",
+    "text": "官軍的雲梯一架接一架靠上了廣宗的城牆。人公將軍張梁在城頭上親自擂鼓，把你叫到身邊：「這一面牆交給你。牆在，大賢良師就在。」",
+    "choices": [
+      {
+        "text": "一架一架推倒雲梯",
+        "check": {
+          "stat": "str",
+          "difficulty": 13
+        },
+        "effect": {
+          "text": "你推倒了第九架雲梯，官軍收兵了。張梁把自己的佩刀解下來給了你。",
+          "stats": {
+            "silver": 70,
+            "xinde": 25,
+            "fame": 6
+          },
+          "materials": {
+            "man_3": 1
+          },
+          "trend": {
+            "front": 3
+          },
+          "affinity": {
+            "zhangliang": 6
+          },
+          "chronicle": "廣宗守城，{name}力推雲梯，官軍一日不得上城。"
+        },
+        "fail_effect": {
+          "text": "第五架雲梯上來的人太多，你被逼退了一段城牆。",
+          "affinity": {
+            "zhangliang": -3
+          },
+          "stamina": -15
+        }
+      },
+      {
+        "text": "守在最險的那一段，寸步不退",
+        "check": {
+          "stat": "con",
+          "difficulty": 14
+        },
+        "effect": {
+          "text": "你在城頭站了一天一夜，那一段牆一個官兵也沒上來。",
+          "stats": {
+            "silver": 65,
+            "xinde": 25,
+            "fame": 6
+          },
+          "trend": {
+            "front": 3
+          },
+          "affinity": {
+            "zhangliang": 5
+          },
+          "chronicle": "廣宗守城，{name}據守西牆一晝夜，寸步不退。"
+        },
+        "fail_effect": {
+          "text": "到了半夜你撐不住了，那一段牆被官軍佔了半個時辰。",
+          "affinity": {
+            "zhangliang": -3
+          },
+          "stamina": -15
+        }
+      }
+    ],
+    "locations": [
+      "guangzong"
+    ],
+    "condition": {
+      "factions": [
+        "huang"
+      ]
+    },
+    "free_text": {
+      "prompt": "自己想辦法……",
+      "stat": "wis",
+      "effect": {
+        "text": "你的法子讓廣宗又守住了一天。",
+        "stats": {
+          "silver": 60,
+          "xinde": 25,
+          "fame": 5
+        },
+        "trend": {
+          "front": 2
+        }
+      },
+      "fail_effect": {
+        "text": "法子沒成，城牆塌了一角。",
+        "stamina": -15
+      }
+    }
+  },
+  {
+    "id": "t3_wan_first",
+    "title": "宛城先登",
+    "image": "camp",
+    "tier": 3,
+    "door": "武事",
+    "text": "朱儁圍宛城兩個月了，趙弘據城死守。今天朱儁要強攻，孫堅自請先登，回頭看了你一眼：「敢不敢跟我搶這頭功？」",
+    "choices": [
+      {
+        "text": "跟著孫堅，第一個爬上城頭",
+        "check": {
+          "stat": "str",
+          "difficulty": 14
+        },
+        "effect": {
+          "text": "你和孫堅幾乎同時翻上了城頭。城破之後，兩個人背靠背殺到了天亮。",
+          "stats": {
+            "silver": 75,
+            "xinde": 25,
+            "fame": 6
+          },
+          "materials": {
+            "gang_3": 1
+          },
+          "trend": {
+            "front": -3
+          },
+          "affinity": {
+            "sunjian": 6,
+            "zhujun": 3
+          },
+          "chronicle": "宛城之戰，{name}與孫堅並肩先登，城遂破。"
+        },
+        "fail_effect": {
+          "text": "你爬到一半被一塊滾石砸了下來。孫堅在城頭上回頭看了你一眼。",
+          "affinity": {
+            "sunjian": -2
+          },
+          "stamina": -15
+        }
+      },
+      {
+        "text": "從城的另一面翻上去，分他們的兵",
+        "check": {
+          "stat": "agi",
+          "difficulty": 13
+        },
+        "effect": {
+          "text": "你從北面翻上城，守軍兩頭顧不過來，孫堅那邊一舉破了城。",
+          "stats": {
+            "silver": 70,
+            "xinde": 25,
+            "fame": 5
+          },
+          "trend": {
+            "front": -3
+          },
+          "affinity": {
+            "zhujun": 5
+          },
+          "chronicle": "宛城之戰，{name}自北面潛登，分守軍之勢。"
+        },
+        "fail_effect": {
+          "text": "北面的守軍比你想的多，你被困在城角，到城破才脫身。",
+          "affinity": {
+            "zhujun": -2
+          },
+          "stamina": -15
+        }
+      },
+      {
+        "text": "在城下截住出城突圍的趙弘",
+        "combat": "figure_zhaohong",
+        "effect": {
+          "text": "趙弘突圍不成，退回城裡，當夜宛城就破了。",
+          "stats": {
+            "silver": 80,
+            "xinde": 25,
+            "fame": 6
+          },
+          "trend": {
+            "front": -3
+          },
+          "chronicle": "宛城之戰，{name}截住突圍的趙弘，宛城遂破。"
+        },
+        "fail_effect": {
+          "text": "趙弘從你身邊衝了過去，你追不上。",
+          "affinity": {
+            "zhujun": -2
+          },
+          "stamina": -15
+        }
+      }
+    ],
+    "locations": [
+      "wan_city",
+      "nanyang_huangjin_camp"
+    ],
+    "condition": {
+      "factions_none": [
+        "huang"
+      ]
+    }
+  },
+  {
+    "id": "t3_danggu_pardon",
+    "title": "黨錮的赦令",
+    "image": "office",
+    "tier": 3,
+    "door": "名流",
+    "text": "宮裡傳出消息：中常侍呂強勸天子解黨錮，說黨人久怨，若跟黃巾合謀，天下就完了。可張讓那幫人還在擋。有位老臣私下找到你：你在外頭的名聲大，說的話天子身邊的人聽得到。",
+    "choices": [
+      {
+        "text": "寫一篇文章，說黨人與黃巾不同路",
+        "check": {
+          "stat": "wis",
+          "difficulty": 13
+        },
+        "effect": {
+          "text": "你的文章抄遍了洛陽。三天後，赦令下來了。",
+          "stats": {
+            "silver": 60,
+            "xinde": 25,
+            "fame": 6,
+            "good": 1
+          },
+          "chronicle": "黨錮解禁之前，{name}作文論黨人與黃巾不同路，洛陽傳抄。"
+        },
+        "fail_effect": {
+          "text": "文章傳到了張讓手裡，他記下了你的名字。",
+          "affinity": {
+            "zhangrang": -3
+          },
+          "stamina": -15
+        }
+      },
+      {
+        "text": "託人把話遞到天子身邊",
+        "check": {
+          "stat": "wis",
+          "difficulty": 14
+        },
+        "effect": {
+          "text": "你的話經了三個人的手，最後到了天子耳裡。赦令下來那天，有人在宮門口對你拱了拱手。",
+          "stats": {
+            "silver": 70,
+            "xinde": 25,
+            "fame": 6
+          },
+          "chronicle": "黨錮解禁，{name}有一言之力。"
+        },
+        "fail_effect": {
+          "text": "話傳到半路就被攔了下來，那位老臣再也不敢找你。",
+          "stats": {
+            "fame": -2
+          },
+          "stamina": -15
+        }
+      }
+    ],
+    "locations": [
+      "luoyang_palace"
+    ],
+    "free_text": {
+      "prompt": "自己說……",
+      "stat": "wis",
+      "effect": {
+        "text": "你的話在洛陽傳開了。",
+        "stats": {
+          "silver": 60,
+          "xinde": 25,
+          "fame": 5
+        }
+      },
+      "fail_effect": {
+        "text": "你的話沒人敢傳。",
+        "stamina": -15
+      }
+    }
+  },
+  {
+    "id": "t3_hejin_zhangrang",
+    "title": "大將軍與中常侍",
+    "image": "office",
+    "tier": 3,
+    "door": "名流",
+    "text": "大將軍何進想借黃巾的事整頓宦官，中常侍張讓也想借黃巾的事扳倒外戚。兩邊都派人來請你，都說只要你一句話。",
+    "choices": [
+      {
+        "text": "兩邊都去，誰也不許",
+        "check": {
+          "stat": "wis",
+          "difficulty": 14
+        },
+        "effect": {
+          "text": "你在大將軍府喝了酒，又在張讓的宅子裡吃了飯，兩邊都以為你是自己人。",
+          "stats": {
+            "silver": 80,
+            "xinde": 25,
+            "fame": 5
+          },
+          "affinity": {
+            "hejin": 3,
+            "zhangrang": 3
+          }
+        },
+        "fail_effect": {
+          "text": "兩邊都看穿了你，從此誰也不信你。",
+          "affinity": {
+            "hejin": -3,
+            "zhangrang": -3
+          },
+          "stamina": -15
+        }
+      },
+      {
+        "text": "把宦官跟黃巾往來的證據交給何進",
+        "check": {
+          "stat": "wis",
+          "difficulty": 13
+        },
+        "effect": {
+          "text": "你交出的書信讓何進在朝上大大露臉。張讓從此恨你入骨。",
+          "stats": {
+            "silver": 75,
+            "xinde": 25,
+            "fame": 6
+          },
+          "affinity": {
+            "hejin": 6,
+            "zhangrang": -6
+          },
+          "chronicle": "{name}出宦官交通黃巾之書，大將軍何進據以奏事。"
+        },
+        "fail_effect": {
+          "text": "你的證據有一封是假的，何進差點出了醜。",
+          "affinity": {
+            "hejin": -4
+          },
+          "stamina": -15
+        }
+      }
+    ],
+    "locations": [
+      "dajiangjun_fu",
+      "luoyang_palace"
+    ]
+  },
+  {
+    "id": "t3_julu_famine",
+    "title": "鉅鹿的饑民",
+    "image": "refugees",
+    "tier": 3,
+    "door": "俠義",
+    "text": "冀州打了半年的仗，地沒人種。鉅鹿一帶的饑民成群往南逃，官軍怕裡頭混著黃巾，在路口設卡，誰也不放。卡前已經餓死了好幾十人。",
+    "choices": [
+      {
+        "text": "去跟守卡的將領理論",
+        "check": {
+          "stat": "wis",
+          "difficulty": 14
+        },
+        "effect": {
+          "text": "你跟守卡的將領談了一夜。天亮時卡開了，饑民一個個領著一碗粥過去。",
+          "stats": {
+            "silver": 60,
+            "xinde": 25,
+            "good": 6
+          },
+          "chronicle": "冀州饑民困於關卡，{name}與守將爭之一夜，卡遂開。"
+        },
+        "fail_effect": {
+          "text": "將領不肯，還把你也扣了一天。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "用自己的錢在卡前施粥",
+        "check": {
+          "stat": "con",
+          "difficulty": 13
+        },
+        "effect": {
+          "text": "你在卡前支了三口大鍋，煮了半個月的粥。來往的人都記得你。",
+          "stats": {
+            "silver": 20,
+            "xinde": 25,
+            "good": 6,
+            "fame": 2
+          },
+          "chronicle": "冀州饑荒，{name}施粥於關前半月，活人無數。"
+        },
+        "fail_effect": {
+          "text": "粥煮到第五天，你也病倒了。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "查出誰在囤糧，逼他放出來",
+        "check": {
+          "stat": "wis",
+          "difficulty": 15
+        },
+        "effect": {
+          "text": "你查出郡裡的豪族囤了上萬石，一封信寄到盧植營裡，糧放出來了。",
+          "stats": {
+            "silver": 70,
+            "xinde": 25,
+            "good": 5
+          },
+          "materials": {
+            "rou_3": 1
+          },
+          "chronicle": "{name}揭冀州豪族囤糧事，萬石得出。"
+        },
+        "fail_effect": {
+          "text": "你查到一半，豪族的人就找上門來了。",
+          "stamina": -15
+        }
+      }
+    ],
+    "locations": [
+      "xiaquyang",
+      "julu_altar"
+    ],
+    "free_text": {
+      "prompt": "自己想辦法……",
+      "stat": "wis",
+      "effect": {
+        "text": "你的法子讓卡前的人活了下來。",
+        "stats": {
+          "silver": 50,
+          "xinde": 25,
+          "good": 5
+        }
+      },
+      "fail_effect": {
+        "text": "法子沒成，卡前又多了幾具屍首。",
+        "stamina": -15
+      }
+    }
+  },
+  {
+    "id": "t3_beimang_orphans",
+    "title": "北邙山的孤兒",
+    "image": "forest",
+    "tier": 3,
+    "door": "俠義",
+    "text": "北邙山上的一座破廟裡收著三十幾個孤兒，全是黃巾與官軍打過的村子裡撿來的。廟裡的老僧死了，山下有人販子在打這些孩子的主意。",
+    "choices": [
+      {
+        "text": "把人販子全打下山",
+        "check": {
+          "stat": "str",
+          "difficulty": 13
+        },
+        "effect": {
+          "text": "你把那夥人販子打得滾下了山，又在廟裡住了半個月，直到洛陽的白馬寺派人來接。",
+          "stats": {
+            "silver": 60,
+            "xinde": 25,
+            "good": 6
+          },
+          "chronicle": "北邙山孤兒三十餘，{name}逐人販、守之半月，送入白馬寺。"
+        },
+        "fail_effect": {
+          "text": "人販子人多，帶走了三個孩子。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "連夜把孩子們送下山",
+        "check": {
+          "stat": "agi",
+          "difficulty": 14
+        },
+        "effect": {
+          "text": "你分三趟把孩子們揹下山，天亮時一個不少地到了白馬寺。",
+          "stats": {
+            "silver": 65,
+            "xinde": 25,
+            "good": 6
+          },
+          "materials": {
+            "kuai_3": 1
+          },
+          "chronicle": "{name}夜負北邙孤兒下山，送入白馬寺。"
+        },
+        "fail_effect": {
+          "text": "第二趟時你在山路上摔了，孩子們只送下去一半。",
+          "stamina": -15
+        }
+      }
+    ],
+    "locations": [
+      "beimang_hill"
+    ]
+  },
+  {
+    "id": "t3_imperial_tax",
+    "title": "劫皇綱",
+    "image": "road",
+    "tier": 3,
+    "door": "綠林",
+    "text": "一隊押著賦稅進京的車馬要從洛陽官道經過，聽說車上有幾萬錢。道上的朋友都說，這一票做成了，你的名字就傳遍天下了。",
+    "choices": [
+      {
+        "text": "扮成驛卒，騙開押車的",
+        "check": {
+          "stat": "agi",
+          "difficulty": 14,
+          "practice": "evil"
+        },
+        "effect": {
+          "text": "你拿著一面假令牌把押車的騙進了驛亭，車馬上的東西連夜換了主人。",
+          "stats": {
+            "silver": 80,
+            "xinde": 25,
+            "evil": 6
+          },
+          "chronicle": "洛陽官道賦稅車馬遭劫，傳為{name}所為。"
+        },
+        "fail_effect": {
+          "text": "押車的軍官認得驛卒的服色，當場拔了刀。",
+          "stats": {
+            "fame": -2
+          },
+          "stamina": -15
+        }
+      },
+      {
+        "text": "在山口硬劫",
+        "combat": "nz_huqi",
+        "effect": {
+          "text": "押車的兵被你殺散，車上的錢分了一半給道上的兄弟。",
+          "stats": {
+            "silver": 80,
+            "xinde": 25,
+            "evil": 6
+          },
+          "materials": {
+            "gang_3": 1
+          },
+          "chronicle": "洛陽官道賦稅車馬遭劫，劫者{name}。"
+        },
+        "fail_effect": {
+          "text": "押車的兵是北軍的老卒，你們被打得四散。",
+          "stamina": -15
+        }
+      }
+    ],
+    "locations": [
+      "luoyang_road"
+    ],
+    "free_text": {
+      "prompt": "自己想辦法……",
+      "stat": "wis",
+      "effect": {
+        "text": "你的法子讓車馬上的東西換了主人。",
+        "stats": {
+          "silver": 60,
+          "xinde": 25,
+          "evil": 5
+        }
+      },
+      "fail_effect": {
+        "text": "法子沒成，車馬平安進了京。",
+        "stamina": -15
+      }
+    }
+  },
+  {
+    "id": "t3_heishan_invite",
+    "title": "黑山的請帖",
+    "image": "forest",
+    "tier": 3,
+    "door": "綠林",
+    "text": "燕山腳下來了一個送帖子的人，帖子上只畫了一座黑色的山。他說張燕手下有上萬人，缺一個能管人的頭領，請你上山喝一碗酒。",
+    "choices": [
+      {
+        "text": "上山，在聚義的場子上鎮住眾人",
+        "check": {
+          "stat": "str",
+          "difficulty": 13,
+          "practice": "evil"
+        },
+        "effect": {
+          "text": "你在山上一刀砍斷了聚義的旗桿，又親手扶了起來。張燕當晚就把一營人交給了你。",
+          "stats": {
+            "silver": 70,
+            "xinde": 25,
+            "evil": 6
+          },
+          "affinity": {
+            "zhangyan": 6
+          },
+          "chronicle": "{name}上黑山聚義，張燕以一營付之。"
+        },
+        "fail_effect": {
+          "text": "場子上有人不服，你沒鎮住，被請下了山。",
+          "affinity": {
+            "zhangyan": -3
+          },
+          "stamina": -15
+        }
+      },
+      {
+        "text": "上山，跟張燕談條件",
+        "check": {
+          "stat": "wis",
+          "difficulty": 14
+        },
+        "effect": {
+          "text": "你和張燕談了一夜。你不入夥，可黑山的路從此對你敞開。",
+          "stats": {
+            "silver": 75,
+            "xinde": 25,
+            "evil": 5
+          },
+          "affinity": {
+            "zhangyan": 5
+          }
+        },
+        "fail_effect": {
+          "text": "條件沒談攏，張燕送你下山時臉色很冷。",
+          "affinity": {
+            "zhangyan": -3
+          },
+          "stamina": -15
+        }
+      }
+    ],
+    "locations": [
+      "yanshan_foot"
+    ]
+  },
+  {
+    "id": "t3_tianxia_challenge",
+    "title": "天下第一的帖子",
+    "image": "fight",
+    "tier": 3,
+    "door": "擂主",
+    "text": "一封帖子送到你手上，落款只有一個「南」字。送帖的人說，帖子的主人在南華觀住了十年，聽說擂上有了天下第一，想看看這四個字值多少。",
+    "choices": [
+      {
+        "text": "赴約",
+        "combat": "shoumu",
+        "effect": {
+          "text": "你們在南華觀前的空地上鬥了一個時辰，他最後收了手：「名副其實。」",
+          "stats": {
+            "silver": 70,
+            "xinde": 25,
+            "fame": 6
+          },
+          "materials": {
+            "rou_3": 1
+          },
+          "chronicle": "南華觀前，{name}以天下第一之名赴約，一戰而名副其實。"
+        },
+        "fail_effect": {
+          "text": "你輸了。他沒有聲張，只說：「天下第一，還早。」",
+          "stats": {
+            "fame": -2
+          },
+          "stamina": -15
+        }
+      },
+      {
+        "text": "回帖：天下第一不是比出來的",
+        "check": {
+          "stat": "wis",
+          "difficulty": 14
+        },
+        "effect": {
+          "text": "你的回帖傳遍了江湖。南華觀那邊再也沒有派人來。",
+          "stats": {
+            "silver": 60,
+            "xinde": 25,
+            "fame": 5
+          }
+        },
+        "fail_effect": {
+          "text": "江湖上都說你怕了。",
+          "stats": {
+            "fame": -2
+          },
+          "stamina": -15
+        }
+      }
+    ],
+    "tags": [
+      "城鎮"
+    ],
+    "free_text": {
+      "prompt": "自己回帖……",
+      "stat": "wis",
+      "effect": {
+        "text": "你的回帖讓江湖上議論了很久。",
+        "stats": {
+          "silver": 50,
+          "xinde": 25,
+          "fame": 5
+        }
+      },
+      "fail_effect": {
+        "text": "沒人看懂你的回帖。",
+        "stamina": -15
+      }
+    }
+  },
+  {
+    "id": "t3_arena_assassin",
+    "title": "擂台下的刺客",
+    "image": "night",
+    "tier": 3,
+    "door": "擂主",
+    "text": "有人出了大價錢要你的命。夜裡你住的客棧屋頂上有腳步聲，一下、兩下，然後停了。",
+    "choices": [
+      {
+        "text": "先一步翻上屋頂",
+        "check": {
+          "stat": "agi",
+          "difficulty": 14
+        },
+        "effect": {
+          "text": "你在屋頂上截住了刺客，逼出了雇主的名字。第二天，那個名字在城裡傳開了。",
+          "stats": {
+            "silver": 70,
+            "xinde": 25,
+            "fame": 6
+          },
+          "materials": {
+            "kuai_3": 1
+          },
+          "chronicle": "有人雇刺客刺天下第一，{name}夜擒刺客，問出雇主。"
+        },
+        "fail_effect": {
+          "text": "刺客比你快，一刀劃過你的肩頭就走了。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "裝睡，等他下來",
+        "check": {
+          "stat": "con",
+          "difficulty": 13
+        },
+        "effect": {
+          "text": "刺客的刀落下時，你一把扣住了他的手腕。他看了你一眼，把雇主的名字說了出來。",
+          "stats": {
+            "silver": 65,
+            "xinde": 25,
+            "fame": 5
+          }
+        },
+        "fail_effect": {
+          "text": "你等得太久，真的睡著了，醒來時枕邊插著一把刀。",
+          "stats": {
+            "fame": -2
+          },
+          "stamina": -15
+        }
+      },
+      {
+        "text": "等他下來，跟他動手",
+        "combat": "nz_youxia",
+        "effect": {
+          "text": "刺客被你打落了兵刃，跪在地上求饒。",
+          "stats": {
+            "silver": 70,
+            "xinde": 25,
+            "fame": 6
+          }
+        },
+        "fail_effect": {
+          "text": "刺客身手很好，你們打了半夜，他還是跑了。",
+          "stamina": -15
+        }
+      }
+    ],
+    "tags": [
+      "城鎮"
+    ]
+  }
+]
