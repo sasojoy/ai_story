@@ -18,7 +18,7 @@ from typing import ClassVar
 
 from pydantic import BaseModel, Field, create_model
 
-from . import figure_life, gender, parley, renown, seal_acts, stances, zh
+from . import figure_life, gender, parley, renown, seal_acts, stances, zh, zhuan_end
 from .models import CharacterDef, Content
 from .ollama_client import OllamaClient
 from .state import GameState, TalkMemo
@@ -684,6 +684,8 @@ def _maybe_grant_signature_skill(state: GameState, content: Content, character: 
         return []
     flag = f"學會本命:{companion_id}"
     if flag in p.flags:
+        return []
+    if zhuan_end.by_slot(state, content, companion_id):  # 買來的深交名額不給數值（減法季批 7c）：靠名額進名單的不教、旗標不記（名單裡讓出位子之後下一輪才教）
         return []
     # 本命武學是絕學（十八位大勢人物的都是）；歷史武將同行補的起始武學是一般的內容武學，不算本命、不教（FB-364）。沒有可教的不寫那一句、不記旗標
     from .tactics import figure_arts  # 本命的判斷只有一處（FB-640）

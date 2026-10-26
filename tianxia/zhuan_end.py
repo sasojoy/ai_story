@@ -44,6 +44,8 @@ ART_FREE = "你的列傳得了第一階，插畫白送，不必買。"
 DEEP_FULL = "你已深交{n}位人物，{name}的情誼停在 {cap}。"
 DEEP_NOTE = "已深交{n}位"
 DEEP_TITLE = "深交"
+DEEP_KEEP = "{name}把你當作知己，卻不打算把看家本領交出來。"  # 靠買來的深交名額進名單的那一位（批 7c：不賣數值，不教本命武學、不送本命兵器）；待 joy 潤
+LEARNED_FLAG = "學會本命:"  # companion_agent._maybe_grant_signature_skill 記的旗標前綴（後面接人物 id）
 _DIGITS = "〇一二三四五六七八九十"
 _DIGIT = re.compile(r"[0-9０-９]")
 _KANA = re.compile(r"[぀-ヿㇰ-ㇿ]")
@@ -184,18 +186,53 @@ def enforce_deep_cap(state: GameState, content: Content, slots: int = 0) -> list
     沒位子就夾在 69、回一句。回這一下夾了誰的那幾句。"""
     p, edge = state.player, content.config.signature_affinity
     deep = {cid for cid, v in p.affinities.items() if v >= edge and cid in content.characters}
-    order = [cid for cid in p.deep_order if cid in deep]
+    order = deep_list(state, content)
     fresh = sorted((cid for cid in deep if cid not in order), key=lambda cid: (-p.affinities[cid], cid))
     cap = deep_cap(content, slots)
+    free = content.config.jianfa.deep_figures
     lines: list[str] = []
     for cid in fresh:
         if len(order) < cap:
             order.append(cid)
+            if len(order) > free and withheld(state, content, cid):  # 排在免費那幾位之後＝靠買來的名額進來的（批 7c）：說清楚他不傳什麼
+                lines.append(DEEP_KEEP.format(name=content.characters[cid].name))
             continue
         p.affinities[cid] = edge - 1
         lines.append(DEEP_FULL.format(n=_cn(cap), name=content.characters[cid].name, cap=edge - 1))
     p.deep_order = order
     return lines
+
+
+def deep_list(state: GameState, content: Content) -> list[str]:
+    """此刻還在 signature_affinity 以上、佔著深交名額的人物，照先來後到（PlayerState.deep_order 濾掉已經掉下去的；
+    enforce_deep_cap 與 by_slot 共用——deep_order 只在有人新過 70 時才整理，中間有人掉下去，這裡照此刻的情誼算）。"""
+    p, edge = state.player, content.config.signature_affinity
+    return [cid for cid in p.deep_order if cid in content.characters and p.affinities.get(cid, 0) >= edge]
+
+
+def by_slot(state: GameState, content: Content, cid: str) -> bool:
+    """這一位是不是靠買來的深交名額才進名單的（批 7c，企劃者 2026-10-26「買來的名額不給數值」）：名單（deep_list，先來後到）裡排在
+    Config.jianfa.deep_figures 位之後的。名單內那幾位不管有沒有買名額都照舊；名單裡有人掉下 70，後面的遞補成名單內的。
+    這樣的人物情誼照長、對話書信評曰照舊，但不教本命武學、不送名將本命兵器（companion_agent、signature_arms 問這一個）。
+    子開關關著、不在名單上都是 False。"""
+    if not on(content, state.world):
+        return False
+    order = deep_list(state, content)
+    return cid in order and order.index(cid) >= content.config.jianfa.deep_figures
+
+
+def withheld(state: GameState, content: Content, cid: str) -> bool:
+    """這一位有沒有東西因為「靠名額」被扣著：本命武學還沒學（沒有旗標、而且真的有本命可教），或名將本命兵器這一季還沒給過人。
+    都沒有就不必說「不打算把看家本領交出來」。"""
+    from .tactics import figure_arts  # noqa: PLC0415
+
+    character = content.characters.get(cid)
+    if character is None:
+        return False
+    if LEARNED_FLAG + cid not in state.player.flags and figure_arts(content, character):
+        return True
+    return content.config.weapons.enabled and cid not in state.world.signature_arms and any(
+        arm.character == cid for arm in content.gear.signature_arms)
 
 
 def deep_note(state: GameState, content: Content, cid: str, slots: int = 0) -> str:
