@@ -57,7 +57,7 @@ def test_once_the_letter_is_put_away_the_week_card_says_deliver_the_letter_first
     m = server.main_view(g)
     assert m.get("letter") is None
     page = run(m, "return H.pageJianghu();")
-    card = re.search(r'<section data-wk class="card wk-card".*?</section>', page, re.S).group(0)
+    card = re.search(r'<section data-wk="low" class="card wk-card".*?</section>', page, re.S).group(0)
     assert "護送" in card and "長社" in card and 'data-act="tab" data-tab="map"' in card
     assert page.index("sides-first") < page.index("wk-card")
 

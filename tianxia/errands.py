@@ -254,12 +254,22 @@ def letter_card(state: GameState, content: Content, letter: Letter) -> dict | No
 
 def step_items(state: GameState, content: Content) -> list[dict]:
     """本週卡「你這一步」的第一順位（整合設計 6.1；weekcard._steps 接在最前面）：身上還在辦的那一件，
-    [{"kind": "errand", "text", "who", "id", "target": {"location", "name", "minutes"}}]；沒有、關著是空的。"""
+    [{"kind": "errand", "text", "who", "id", "target": {"location", "name", "minutes"}, "reward"}]；沒有、關著是空的。"""
     e = live(state)
     if e is None or not on(content, state.world):
         return []
     return [{"kind": "errand", "text": STEP.format(place=place(content, e.target), who=who(content, e), label=LABELS[e.kind]),
-             "who": who(content, e), "id": e.id, "target": card(state, content, e)["target"]}]
+             "who": who(content, e), "id": e.id, "target": card(state, content, e)["target"], "reward": gain_text(content, e)}]
+
+
+def gain_text(content: Content, e: ErrandState) -> str:
+    """辦成了拿什麼（本週卡「眼下要事」那一件後面寫的）：「盧植情誼 +20・貢獻 +4」，照 ErrandDef 寫的數；找不到定義是空字串。"""
+    d = find_def(content, e.figure, e.errand)
+    if d is None:
+        return ""
+    cid = cid_of(content, e)
+    name = content.characters[cid].name if cid in content.characters else who(content, e)
+    return "・".join(x for x in (f"{name}情誼 +{d.affinity}" if d.affinity else "", f"貢獻 +{d.contribution}" if d.contribution else "") if x)
 
 
 def scout_lines(state: GameState, content: Content, e: ErrandState) -> list[str]:

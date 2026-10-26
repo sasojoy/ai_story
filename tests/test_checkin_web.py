@@ -20,9 +20,9 @@ ROOT = Path(__file__).parent.parent
 DRIVER = r"""
 const S = { wkOpen: null };
 const H = new Function("S", [
-  ...["esc", "CK_ATTR", "CK_LAST", "WK_STEP", "WK_WHY", "WK_NEXT", "WK_GO", "WK_MAP", "WK_IDLE", "CK_PICK_TITLE", "CK_PICK_NOTE", "wkKey"].map(konst),
+  ...["esc", "CK_ATTR", "CK_LAST", "WK_STEP", "WK_WHY", "WK_NEXT", "WK_GO", "WK_MAP", "WK_IDLE", "CK_PICK_TITLE", "CK_PICK_NOTE", "WK_HIDE", "WK_HIDE_STORE", "wkKey", "wkDay"].map(konst),
   "const shown = () => true, STANCE_NAMES = [], whyHtml = () => '';",
-  ...["ckGift", "checkinPeek", "wkStepOf", "wkSidesHtml", "wkSplit", "checkinPickHtml", "weekCardHtml"].map(fn),
+  ...["ckGift", "checkinPeek", "wkStepOf", "wkSidesHtml", "wkSplit", "wkHidden", "checkinPickHtml", "weekCardHtml"].map(fn),
   "return { checkinPeek, weekCardHtml };",
 ].join("\n"))(S);
 const part = H.checkinPeek(input.m);
@@ -76,7 +76,7 @@ def test_tier4_day_shows_four_picks():
     pick = [{"attribute": a, "id": i, "name": n, "held": h} for a, i, n, h in
             (("剛", "gang_4", "熔星髓", 1), ("柔", "rou_4", "天池露", 0), ("快", "kuai_4", "奔雷角", 2), ("慢", "man_4", "歸墟壤", 0))]
     html = run(_m(day=6, week=_week(6), pick=pick, step="回體丹 2 顆，再挑一種四階料（點一種就領）："))["html"]
-    card = re.search(r'<section data-wk class="card ck-card".*?</section>', html, re.S).group(0)  # 本週卡底下那一張小卡
+    card = re.search(r'<section data-wk="low" class="card ck-card".*?</section>', html, re.S).group(0)  # 本週卡底下那一張小卡
     assert "簽到第 6 天" in card and card.count('data-act="checkin"') == 4
     for attr in "剛柔快慢":
         assert f'data-attr="{attr}"' in card
