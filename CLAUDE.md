@@ -25,7 +25,7 @@
 
 | 區塊 | 管什麼 | 模組（`tianxia/`） | 原本「規則速查」的節 |
 |---|---|---|---|
-| [核心與存檔](docs/guide/核心與存檔.md) | 門面、存檔與全服狀態、規則核心（條件與效果、事件、世界、性別、行狀與傳）、事件檢定 | database、world_state、characters、accounts、models、rules、gender、events、world、annals、biography、journal、guide、newbie | 事件檢定 |
+| [核心與存檔](docs/guide/核心與存檔.md) | 門面、存檔與全服狀態、規則核心（條件與效果、事件、世界、性別、行狀與傳）、事件檢定、減法季的開關、真人量表 | database、world_state、characters、accounts、playlog、models、rules、gender、events、world、annals、biography、journal、guide、newbie、prologue、opening | 事件檢定 |
 | [行動與地盤](docs/guide/行動與地盤.md) | 體力與行動、探索三選一、出陣、交友求見、閉關、移動、醫館、地盤易手、設伏與工事 | territory、sortie、explore_modes、training、gather_llm、clinic、ambush、works | 行動、屬性、威力與氣血、地盤易手（每季都有，`Config.territory`；`tianxia/territory.py`）、後期體力玩法（第一批，Joy 2026-10-16；2026-10-16 合進 main〔ff60ed83〕，正式內容三個開關都關著，數字等 21 天的季一起定） |
 | [戰鬥](docs/guide/戰鬥.md) | 屬性與威力、單次判定、回合與戰法、大場面、頭目戰、擂台、全服決戰、江湖水漲 | encounter、team、rounds、tactics、battlelog、styles、fight_llm、duel、arena、arena_crowd、escorts、generals、battle_instance、rise、terrain | 屬性、威力與氣血、戰鬥的演出與大場面、第一季濃縮版（`rules.season_one` 開著時才有）、江湖水漲（大場面、頭目、事件跟得上變強的人）、擂台賽（每季都有，`Config.arena`；設計 `docs/superpowers/specs/2026-10-14-擂台賽-design.md`）、全服決戰 |
 | [武學與成長](docs/guide/武學與成長.md) | 等級、武學、意境槽、兩種合成、自創、絕學、口訣秘方、熔煉、傳功 | martial_arts、arts、insight_fx、insights、fusion、create、secret_recipes、naming、signature、cultivation、library、chuangong、skillview | 行動、屬性、威力與氣血、武學與成長（武學與成長設計；計畫一～三、二之二、二之三、四、五都已在 main）、第一季濃縮版（`rules.season_one` 開著時才有） |
@@ -34,7 +34,7 @@
 | [散人與玩家互動](docs/guide/散人與玩家互動.md) | 遊俠名號、懸賞榜、求兵、截殺、玩家卡、切磋、論武 | ranger、bounties、raid | 第一季濃縮版（`rules.season_one` 開著時才有）、散人、懸賞與截殺（每季都有） |
 | [玉璽碎片](docs/guide/玉璽碎片.md) | 七片碎片、璽動與奪璽單挑、天命之季與天命之爭、碎片的獨門行動 | seal、seal_duel、seal_acts | 玉璽碎片（玉璽一；天命之爭是玉璽二） |
 | [商城](docs/guide/商城.md) | 元寶錢包與帳本、商品表與允許的效果、購買發貨、月卡（每日領）、重修列傳、易名帖（改名當場生效）、封測發放、管理者工具、資料庫第 6 版 | mall、wallet、rename | —（2026-10-20 新開） |
-| [地圖與介面](docs/guide/地圖與介面.md) | 輿圖資料與畫法、網頁各分頁與店面的畫面 | atlas、mapview、mapart | 介面（`web/`） |
+| [地圖與介面](docs/guide/地圖與介面.md) | 輿圖資料與畫法、網頁各分頁與店面的畫面、江湖頁的本週卡與三方卡 | atlas、mapview、mapart、weekcard | 介面（`web/`） |
 | [模型與假人](docs/guide/模型與假人.md) | Ollama 與三段式、繁體、省電與維修頁、伺服器假人、整季機器人 | ollama_client、power_save、zh、event_llm、server_bots、bot_policy、bot_runner、bot | 模型呼叫 |
 | [量表與教訓](docs/guide/量表與教訓.md) | 量表與模擬腳本、好玩度量表、量平衡的教訓、歷史 | — | 量表與教訓、歷史（已完成或已取代，細節看原文件） |
 

@@ -23,7 +23,7 @@ from tianxia.world_state import fresh_season, stamp_season
 pytestmark = pytest.mark.slow  # 每一條都載真實內容、開一季
 
 HOUR, DAY = 3600, 86400
-PROFILES = ("weekend", "season21", "week7")
+PROFILES = ("season21", "week7")
 TW = datetime.timezone(datetime.timedelta(hours=8))
 MON = datetime.datetime(2026, 10, 19, 0, 0, tzinfo=TW).timestamp()  # 週一 00:00（台灣）
 ADMIN = "管"
@@ -139,7 +139,7 @@ def test_a_cancelled_showdown_the_admin_later_settles_is_listed_again():
     """取消之後管理者「定結果」了（時間軸上有結果）：那就是發生了，照有結果的寫法列（取排定的時刻與定結果那一刻較早的）。"""
     from tianxia.state import new_game_state
 
-    content = real_content("weekend")
+    content = real_content("week7")
     state = new_game_state(content, "甲")
     state.world = fresh_season(content)
     stamp_season(state.world, content, now=MON)
@@ -219,7 +219,7 @@ def _ordered(content, season):
 def test_the_weekend_mandate_stamp_after_a_monday_midnight_open_lands_after_guangzong(tmp_path):
     """QA 重現（FB-564）：週一 00:00 開季的週末，管理者「這一季立刻蓋章」，修前天命之爭被挪到第 10 週・週四 06:00，
     廣宗決戰被挪到第 12 週・週二 10:00（約晚 9 個現實小時）。現在天命之爭排在廣宗決戰收尾之後。"""
-    content, world, admin, start = _game("weekend", tmp_path)
+    content, world, admin, start = _game("week7", tmp_path)
     admin.admin_seal_mandate("now")
     season = admin.world.get_season()
     assert season.mandate
@@ -231,7 +231,7 @@ def test_the_weekend_mandate_stamp_after_a_monday_midnight_open_lands_after_guan
 def test_the_season_change_route_through_the_store_keeps_the_order(hour, tmp_path):
     """換季蓋章那條路整條走一遍（管理者收季、開下一季，天命之季的章在 SqliteWorldStore.next_season 蓋）：換季那一刻不論落在
     當地幾點，天命之爭都在廣宗收尾之後、季末之前。"""
-    content, world, admin, start = _game("weekend", tmp_path)
+    content, world, admin, start = _game("week7", tmp_path)
     admin.admin_seal_mandate("next")
     admin.admin_end_season(start + 100)
     admin.admin_next_season(start + 3 * DAY + hour * HOUR)
@@ -280,7 +280,7 @@ def test_a_guangzong_the_admin_scheduled_late_pushes_the_mandate_battle_behind_i
     content = real_content(profile)
     scale = content.config.time_scale
     now = MON  # 21 天、7 天季的日曆貼著現實的天（預設 20:00、22:00），不碰半夜；週末下面換成正午
-    if profile == "weekend":
+    if profile == "week7":
         probe = fresh_season(content)
         stamp_season(probe, content, now=MON)
         default = timetable.default_time(timetable.find(content, "tianming"), content, probe)
@@ -295,55 +295,6 @@ def test_a_guangzong_the_admin_scheduled_late_pushes_the_mandate_battle_behind_i
     assert season.schedule["guangzong"] == default - 10 * 60 * scale  # 廣宗不動
     assert _ordered(content, season)
     assert season.schedule["tianming"] - default <= 2 * calendar.cal_hour_seconds(content, season) + _span_world(content)  # 只往後挪一點
-    assert _mandate_notes(content, season, now) == []
-
-
-def _frozen_guangzong_season(local_clock_hours, finale_after, tianming_after=600):
-    """週末季：廣宗已經開過（凍住，不再挪）、當地時間 local_clock_hours 點整；天命之爭預設排在廣宗之後 tianming_after 世界秒
-    （比廣宗集結加一幕還早，所以得往後挪）；季末排在廣宗之後 finale_after 世界秒。回（內容, 季, now）。"""
-    content = real_content("weekend")
-    probe = fresh_season(content)
-    stamp_season(probe, content, now=MON)
-    g = probe.schedule["guangzong"]
-    scale = content.config.time_scale
-    now = 20_000 * DAY + local_clock_hours * HOUR - g / scale - content.config.pill_day_utc_offset_hours * HOUR
-    season = fresh_season(content)
-    stamp_season(season, content, now=now)
-    assert season.schedule["guangzong"] == g
-    season.showdowns_opened["guangzong"] = "guangzong"
-    season.mandate = True
-    season.schedule["tianming"] = g + tianming_after * scale
-    season.schedule["finale"] = g + finale_after * scale
-    return content, season, now
-
-
-def test_when_only_the_small_hours_are_left_behind_guangzong_the_order_still_wins():
-    """廣宗當地 01:00（集結加打一幕到 01:39）、季末當地 07:00：天命之爭後面只剩半夜可排。先後不能亂：排在廣宗收尾之後
-    最近的曆時（碰到半夜），管理者那一行寫出來（FB-564：挪不開半夜時寫進那一行）。"""
-    content, season, now = _frozen_guangzong_season(1, 6 * HOUR)
-    timetable.avoid_quiet_hours(season, content, now)
-    g, floor = season.schedule["guangzong"], season.schedule["guangzong"] + _span_world(content)
-    assert floor < season.schedule["tianming"] <= floor + calendar.cal_hour_seconds(content, season)
-    assert season.schedule["tianming"] < season.schedule["finale"]
-    notes = _mandate_notes(content, season, now)
-    assert len(notes) == 1 and "排時間" in notes[0] and "廣宗" in notes[0]
-
-
-def test_when_there_is_no_room_behind_guangzong_the_time_stays_and_the_admin_line_says_so():
-    """廣宗當地正午、季末只在廣宗之後 25 分鐘（放不下集結加打一幕）：天命之爭排不進去，照原時間不動，管理者那一行寫出來。"""
-    content, season, now = _frozen_guangzong_season(12, 1500)
-    before = season.schedule["tianming"]
-    stuck = timetable.avoid_quiet_hours(season, content, now)
-    assert "tianming" in [e.id for e in stuck] and season.schedule["tianming"] == before
-    notes = _mandate_notes(content, season, now)
-    assert len(notes) == 1 and "排時間" in notes[0] and "廣宗" in notes[0]
-
-
-def test_a_clear_slot_behind_guangzong_needs_no_words():
-    """廣宗當地正午、季末還有六小時：天命之爭排在廣宗之後的白天，管理者那一行沒有話。"""
-    content, season, now = _frozen_guangzong_season(12, 6 * HOUR)
-    timetable.avoid_quiet_hours(season, content, now)
-    assert _ordered(content, season)
     assert _mandate_notes(content, season, now) == []
 
 

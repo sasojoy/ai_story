@@ -205,10 +205,10 @@ def _howto(c):
 
 
 def test_the_howto_says_each_place_has_a_strongest_insight():
-    assert howto.STRONG_HOWTO in _howto(real_content("weekend"))
+    assert howto.STRONG_HOWTO in _howto(real_content("week7"))
 
 
 def test_the_howto_is_unchanged_with_the_switch_off():
-    c = real_content("weekend")
+    c = real_content("week7")
     c.config.insight_strong.enabled = False
     assert howto.STRONG_HOWTO not in _howto(c) and "哪裡悟得到什麼看地形。" in _howto(c)

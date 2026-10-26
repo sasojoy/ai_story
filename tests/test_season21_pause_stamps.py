@@ -79,9 +79,3 @@ def test_two_pauses_stack_without_moving_the_first_entries():
     game.admin_resume_clock(second + HOUR)
     assert _stamp(game, 0) == "第 1 週・週一 03:30" and _stamp(game, paused.time) == "第 1 週・週一 03:35"
     assert _stamp(game, game.state.world.time) == "第 1 週・週二 15:05"
-
-
-def test_the_weekend_pause_writes_no_history():
-    game, paused = _paused_and_resumed("weekend")
-    season = game.world.get_season()
-    assert season.cal_offset == 0 and season.cal_offset_history == []

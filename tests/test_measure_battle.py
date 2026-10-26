@@ -78,7 +78,7 @@ def test_the_server_bot_measurement_runs_on_a_temporary_database(tmp_path, monke
 def test_the_generals_mode_runs_and_commanders_carry_weight():
     """--generals（龍頭上陣）：同一個種子兩次一樣；人物上陣那一邊的份量佔比落在兩到四成之間。"""
     m = _load()
-    content = load_content(ROOT / "content", profile="weekend")
+    content = load_content(ROOT / "content", profile="week7")
     definition = content.battles["changshe_fire"].model_copy(update={"trend_start": 50})
     from tianxia import generals
     from tianxia.state import GameState, PlayerState

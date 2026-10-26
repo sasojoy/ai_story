@@ -525,8 +525,8 @@ def test_no_gift_no_line_and_the_refill_wording(content):
     )
 
 
-@pytest.mark.parametrize("profile, refill", [("weekend", True), (None, False)])
-def test_the_gift_line_matches_the_refill_switch_through_the_server(monkeypatch, profile, refill):
+@pytest.mark.parametrize("refill", [True, False])
+def test_the_gift_line_matches_the_refill_switch_through_the_server(monkeypatch, refill):
     """控制者走查：測試期一鍵補滿打開時（週末設定），體力條那顆鈕是「補滿」、不花丹——建角色記下的那一行要說丹先收著、按「補滿」免費；
     關著時照舊說按「丹」服下。走伺服器建角色的那條路（序章裡建的角色）。"""
     from fastapi.testclient import TestClient
@@ -534,12 +534,12 @@ def test_the_gift_line_matches_the_refill_switch_through_the_server(monkeypatch,
     import server
     from tianxia.content import load_content
 
-    content = load_content(server.ROOT / "content", profile=profile)
+    content = load_content(server.ROOT / "content")
     content.config.auto_open_first_season = True
-    content.config.beta_free_refill = refill  # 週末設定 2026-10-12 起不開了，開關照舊管用
+    content.config.beta_free_refill = refill  # 2026-10-12 起沒有設定開著它，開關照舊管用
     monkeypatch.setattr(server, "CONTENT", content)
     client = TestClient(server.app)
-    client.post("/api/register", json={"login": f"gift_{profile}", "password": "secret-pw", "again": "secret-pw"})
+    client.post("/api/register", json={"login": f"gift_{int(refill)}", "password": "secret-pw", "again": "secret-pw"})
     client.post("/api/character", json={"name": "贈禮人"})
     line = server.game_for("贈禮人").state.journal[0].lines[-1]
     assert line == howto.gift_line(content)

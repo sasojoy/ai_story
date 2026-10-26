@@ -26,7 +26,7 @@ DRIVER = r"""
 const vm = require("vm");
 // 整支 app.js（webharness 的 wholeApp）：最後一行啟動的呼叫前面把要測的名字交給 globalThis.__H
 const app = wholeApp(["S", "pro", "shown", "prologueKey", "topHtml", "tabsHtml", "idleMenu", "actionBar", "guideHtml", "nextGuidePage",
-  "guideCue", "scrollToGuideTarget", "setMain", "pageJianghu", "pagePractice", "pageCraft", "peekBlock", "sheetHtml", "applyGlow",
+  "guideCue", "scrollToGuideTarget", "setMain", "pageJianghu", "pagePractice", "pageCraft", "weekCardHtml", "trendsTopHtml", "sheetHtml", "applyGlow",
   "renderTop", "render", "goTab", "renderPage", "refreshPage", "enter", "sayLine", "pick", "forge", "updateForgeLine",
   "toggleLock", "trimForgeSel", "bookHtml", "peerHtml"]);
 
@@ -133,13 +133,14 @@ def with_reveal(m, reveal, glow=(), skip=False):
     return {**m, "prologue": {"reveal": list(reveal), "glow": list(glow), "skip": skip}}
 
 
-def chip_ids(html):
-    return re.findall(r'class="peek-chip (\w+)', html)
+def has_week(html):
+    return 'class="card wk-card"' in html
 
 
 STANCES = {"guan": 40, "huang": 30, "haoqiang": 20}
 BULLETIN = ["<p><strong>甲事</strong></p>"]
 FRONTS = [{"name": "潁川", "value": 40, "chaos": False}]
+WEEK = {"label": "本週", "when": "第 1 週", "theme": "THEME", "sides": {"guan": 40, "huang": 30}, "steps": [], "next": None}
 ORDERS = [{"title": "守關", "text": "守住", "progress": 1, "quota": 5, "done": False, "mine": 0, "deadline": "週五"}]
 
 
@@ -147,7 +148,7 @@ def season_one_view(m):
     """序章裡通常沒有的東西全放進去，才看得出是哪一步把它們藏起來、哪一步放出來。"""
     status = {**m["status"], "stances": STANCES, "stance_notes": {}, "stance_rule": "規則"}
     return {**m, "status": status, "bulletin": BULLETIN, "quest": "<p>QUESTMARK</p>", "fronts": FRONTS, "orders": ORDERS,
-            "minimap": "<svg>MINIMAP</svg>"}
+            "minimap": "<svg>MINIMAP</svg>", "week_card": m.get("week_card") or WEEK}
 
 
 # ── 第一屏與每一步亮什麼 ────────────────────────────────
@@ -178,7 +179,7 @@ def test_after_meeting_the_master_only_the_name_and_xinde_and_two_tabs_show(hut)
     assert "第 " not in top and "下一件" not in top  # 序章裡所在只寫地名：沒有日期
     tabs = out["tabs"]
     assert re.findall(r'data-tab="(\w+)"', tabs) == ["jianghu", "practice"]
-    assert "repeat(2, 1fr)" in tabs and 'data-glow="tab:practice"' in tabs
+    assert "repeat(2, 1fr)" in tabs and re.search(r'data-glow="[^"]*\btab:practice\b', tabs)
     assert "skip-prologue" not in out["page"]  # 略過只在第一步
     assert "師父" in out["page"] and "去看修練頁" in out["page"]  # 對話框
 
@@ -196,9 +197,9 @@ def test_each_step_lights_up_the_next_thing(hut):
                        if mark in out["top"]],
             "toggle": 'data-act="toggle-more"' in out["top"],
         })
-    # 煉製頁到揣摩那一步（第 6 步）才亮：裝意境那一步在修練頁（爐裡只合意境，Joy 2026-10-21）
-    jp, jpc = ["jianghu", "practice"], ["jianghu", "practice", "craft"]
-    assert [s["tabs"] for s in seen[:6]] == [[], jp, jp, jp, jp, jpc]
+    # 煉製頁（減法季批 1 起在「自己」那一格底下，沒有自己的籤）到揣摩那一步（第 6 步）才亮：「自己」那一格多發 tab:craft 的光
+    jp = ["jianghu", "practice"]
+    assert [s["tabs"] for s in seen[:6]] == [[], jp, jp, jp, jp, jp]
     assert seen[1]["vitals"] == ["xinde"] and seen[2]["vitals"] == ["stamina", "xinde"]
     assert seen[2]["cells"] == ["explore"] and seen[6]["cells"] == ["explore", "rest"]
     assert seen[7]["cells"] == ["explore", "train"] and seen[7]["vitals"] == ["stamina", "hp", "xinde"]
@@ -210,7 +211,7 @@ def test_each_step_lights_up_the_next_thing(hut):
 def test_the_farewell_step_lights_everything_and_the_menu_is_only_the_walk(hut):
     m = main_at(hut, 10)
     out = run(m, "return { tabs: H.tabsHtml(), page: H.pageJianghu(), top: H.topHtml() };")
-    assert re.findall(r'data-tab="(\w+)"', out["tabs"]) == ["jianghu", "practice", "craft", "map", "news"]
+    assert re.findall(r'data-tab="(\w+)"', out["tabs"]) == ["jianghu", "practice", "map", "news"]
     cells = {key: cls for cls, key in re.findall(r'class="act-ink([^"]*)" data-key="(\w+)"', out["page"])}
     assert sorted(cells) == ["explore", "move", "social", "train"]  # 打坐 2026-10-12 拿掉了：出師之後是四格
     assert " off" in cells["explore"] and " off" not in cells["move"]  # 只有走出草廬按得下去
@@ -222,55 +223,41 @@ def test_after_the_prologue_the_ordinary_screen_comes_back(hut, content):
     m = server.main_view(plain)
     assert m["prologue"] is None
     out = run(m, "return { tabs: H.tabsHtml(), top: H.topHtml(), shown: H.shown('tab:map') && H.shown('board') && H.shown('act:move') };")
-    assert re.findall(r'data-tab="(\w+)"', out["tabs"]) == ["jianghu", "practice", "craft", "map", "news"] and out["shown"] is True
+    assert re.findall(r'data-tab="(\w+)"', out["tabs"]) == ["jianghu", "practice", "map", "news"] and out["shown"] is True
     assert "第 " in out["top"] and "toggle-more" in out["top"]  # 平常的狀態列：日期、點名號展開
 
 
-# ── 態勢｜大事｜主線 三塊小標 ────────────────────────────
+# ── 本週卡（減法季批 1：取代態勢｜大事｜主線三塊小標） ────────────────────
 
 @pytest.mark.parametrize("reveal, expected", [
-    ([], []),
-    (["xinde", "tab:practice"], []),  # 別的鍵不管用
-    (["board"], ["board"]),
-    (["stances"], ["stance"]),
-    (["quest"], ["quest"]),
-    (["stances", "board"], ["stance", "board"]),  # 態勢跟大事一起亮
-    (["stances", "board", "quest"], ["stance", "board", "quest"]),
-    (["all"], ["stance", "board", "quest"]),
+    ([], False), (["xinde", "tab:practice", "board", "stances"], False), (["quest"], True), (["all"], True),
 ])
-def test_each_chip_shows_only_when_its_own_key_is_revealed(hut, reveal, expected):
+def test_the_week_card_shows_only_once_the_quest_is_revealed(hut, reveal, expected):
     m = with_reveal(season_one_view(main_at(hut, 1)), reveal)
-    assert chip_ids(run(m, "return H.peekBlock(m);")) == expected
+    assert has_week(run(m, "return H.weekCardHtml(m);")) is expected
+    assert has_week(run(m, "return H.pageJianghu();")) is expected
 
 
-def test_with_all_three_chips_hidden_there_is_no_row_at_all(hut):
-    m = with_reveal(season_one_view(main_at(hut, 1)), ["xinde"])
-    html = run(m, "return H.peekBlock(m);")
-    assert html == "" and "peek" not in run(m, "return H.pageJianghu();")
+def test_the_week_card_comes_back_at_the_farewell_step(newcomer):
+    assert has_week(run(season_one_view(main_at(newcomer(), 10)), "return H.weekCardHtml(m);"))
+    assert not has_week(run(season_one_view(main_at(newcomer(), 5)), "return H.weekCardHtml(m);"))  # 序章中途（揣摩那一步）：還藏著
 
 
-def test_the_chips_come_back_at_the_farewell_step(newcomer):
-    m = season_one_view(main_at(newcomer(), 10))
-    assert chip_ids(run(m, "return H.peekBlock(m);")) == ["stance", "board", "quest"]
-    early = season_one_view(main_at(newcomer(), 5))  # 序章中途（揣摩那一步）：三塊都還藏著
-    assert chip_ids(run(early, "return H.peekBlock(m);")) == []
-
-
-def test_the_chips_are_all_there_outside_the_prologue(content):
-    plain = season_one_view(server.main_view(Game.new(content, "路人", rng=random.Random(0))))
-    assert chip_ids(run(plain, "return H.peekBlock(m);")) == ["stance", "board", "quest"]  # 測試內容的引導還沒走完：沒有新手目標那一顆
+def test_the_week_card_is_there_outside_the_prologue(content):
+    plain = server.main_view(Game.new(content, "路人", rng=random.Random(0)))
+    assert plain["week_card"] and has_week(run(plain, "return H.weekCardHtml(m);"))
 
 
 # ── 江湖頁其他的塊 ───────────────────────────────────
 
-def test_fronts_orders_and_the_minimap_wait_for_their_keys(hut):
+def test_fronts_and_orders_wait_for_their_keys(hut):
+    """軍令卡在江湖頁；三條戰況搬到見聞・大事・大勢的最上面（減法季批 1，trendsTopHtml）；小地圖不在江湖頁畫了。"""
     m = season_one_view(main_at(hut, 3))
-    hidden = run(m, "return H.pageJianghu();")
-    assert "fronts" not in hidden and "orders" not in hidden and "MINIMAP" not in hidden and "看江湖紀錄" not in hidden
-    for key, mark in (("fronts", 'class="fronts"'), ("orders", "本週軍令"), ("minimap", "MINIMAP")):
-        lit = run(with_reveal(m, [*m["prologue"]["reveal"], key]), "return H.pageJianghu();")
-        assert mark in lit, key
-    assert all(mark in run(with_reveal(m, ["all"]), "return H.pageJianghu();") for mark in ('class="fronts"', "本週軍令", "MINIMAP", "看江湖紀錄"))
+    assert "orders" not in run(m, "return H.pageJianghu();") and 'class="fronts"' not in run(m, "return H.trendsTopHtml(m);")
+    assert "本週軍令" in run(with_reveal(m, [*m["prologue"]["reveal"], "orders"]), "return H.pageJianghu();")
+    assert 'class="fronts"' in run(with_reveal(m, [*m["prologue"]["reveal"], "fronts"]), "return H.trendsTopHtml(m);")
+    lit = run(with_reveal(m, ["all"]), "return H.pageJianghu();")
+    assert "本週軍令" in lit and 'class="fronts"' not in lit and "MINIMAP" not in lit
 
 
 def test_a_cell_that_is_not_lit_keeps_its_option_out_of_the_fold(hut):
@@ -374,7 +361,7 @@ def test_every_button_the_prologue_points_at_carries_its_key(hut):
 
 @pytest.mark.parametrize("reveal, bars", [
     (["xinde"], ["xinde"]), (["stamina"], ["stamina"]), (["hp"], ["hp"]), (["silver"], ["silver"]),
-    (["stamina", "hp", "silver", "xinde"], ["stamina", "hp", "silver", "xinde"]),
+    (["stamina", "hp", "silver", "xinde"], ["stamina", "hp", "silver"]),  # 心得在銀兩亮了以後搬到「自己」頁（減法季批 1：狀態列三行）
 ])
 def test_each_number_on_the_status_bar_has_its_own_key(hut, reveal, bars):
     html = run(with_reveal(main_at(hut, 1), reveal), "return H.topHtml();")
@@ -407,7 +394,7 @@ def test_the_whole_page_redraws_when_the_prologue_lights_something_new(hut):
       const same = [T.els.app.innerHTML, T.els.top.hidden];
       H.S.main = %s;                                   // 多亮了分頁
       H.renderTop();
-      return [same, T.els.app.innerHTML.includes('data-tab="craft"'), H.S.prologueKey];""" % json.dumps(with_reveal(m, ["xinde", "tab:practice", "tab:craft"])))
+      return [same, T.els.app.innerHTML !== "OLD", H.S.prologueKey];""" % json.dumps(with_reveal(m, ["xinde", "tab:practice", "tab:craft"])))
     assert out[0] == ["OLD", False] and out[1] is True and out[2] == "xinde,tab:practice,tab:craft"
 
 
@@ -649,7 +636,7 @@ def test_step_five_points_at_a_row_under_the_arts_library_title(hut):
 
 def test_the_click_handlers_for_the_two_new_box_buttons_are_wired():
     """「下一段 ▸」與「在下面 ↓」是事件代理的 data-act：少接一個，鈕就按不動。"""
-    source = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    source = webharness.app_source()
     assert 'case "guide-next": nextGuidePage(S.main.guide); renderPage(); break;' in source
     assert 'case "guide-below": scrollToGuideTarget(); break;' in source
 
@@ -676,20 +663,21 @@ def test_the_four_sights_screen_has_no_now_card_and_its_choices_fit(hut):
     assert 'class="now' not in page and 'class="card guide' not in page and page.count('data-act="choose"') == 4
 
 
-def test_the_seclusion_form_and_the_insight_melt_are_greyed_in_the_hut(hut):
-    """T6 review M4、M7：草廬裡不閉關、不熔意境。按鈕灰掉、寫師父的原因（跟練成鈕同一個做法），不是亮著按了才被擋。"""
+def test_the_insight_melt_is_greyed_in_the_hut(hut):
+    """T6 review M4、M7：草廬裡不熔意境。按鈕灰掉、寫師父的原因（跟練成鈕同一個做法），不是亮著按了才被擋。
+    閉關鈕 Joy 2026-10-25 從俠客頁拿掉了：引擎照舊回 seclude_blocked，頁面上不畫閉關。"""
     m, x = pages_at(hut, 3)
     assert x["seclude_blocked"] and x["insights"][0]["blocked"]
-    # 卷軸卡版：意境是一顆一顆的籤，點開才有「化成心得」鈕（S.insOpen），閉關鈕是兩行
+    # 卷軸卡版：意境是一顆一顆的籤，點開才有「化成心得」鈕（S.insOpen）
     page = run(m, "return H.pagePractice();", S={"insOpen": x["insights"][0]["id"]}, menxia=x)
-    assert re.search(r'<button class="btn" type="submit" disabled>閉關<small>', page) and x["seclude_blocked"] in page
+    assert "閉關" not in page
     assert re.search(r'data-act="melt-insight"[^>]*disabled', page) and x["insights"][0]["blocked"] in page
     out = Game.new(hut.content, "路人", rng=random.Random(0), world=hut.world)
     out.state.player.insights.append("feng")
     x = server.menxia_view(out)
     page = run(server.main_view(out), "return H.pagePractice();", S={"insOpen": "feng"}, menxia=x)
     assert 'data-act="melt-insight"' in page  # 開著的那個意境的鈕在，只是沒灰
-    assert x["seclude_blocked"] is None and 'type="submit" disabled' not in page
+    assert x["seclude_blocked"] is None and "閉關" not in page
     assert not re.search(r'data-act="melt-insight"[^>]*disabled', page)
 
 

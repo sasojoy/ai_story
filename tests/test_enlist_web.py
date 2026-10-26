@@ -386,7 +386,7 @@ def test_the_timer_does_not_send_if_the_observer_last_said_the_card_is_off_scree
 def test_the_next_page_button_leaves_no_gap_above_it():
     """375×812 量過（長社投靠官軍、剛剛卡片是「投靠官軍」）：入伍段第一步第一頁，「下一段 ▸」上面留 4px 的話行動列下緣是 757，碰到
     分頁列（756）；不留是 753。這是量出來的數字，改樣式表時要重量。"""
-    css = (webharness.APP.parent / "style.css").read_text(encoding="utf-8")
+    css = (webharness.WEB / "style.css").read_text(encoding="utf-8")
     rule = next(line for line in css.splitlines() if line.startswith(".guide-next {"))
     assert "margin: 0 0 0 auto" in rule
 

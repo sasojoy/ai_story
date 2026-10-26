@@ -42,7 +42,7 @@ def _state(content, faction=None):
 # ── 同一個函式：照軍令是不是每天發 ──
 
 
-@pytest.mark.parametrize("profile,daily", [("week7", True), ("season21", True), ("weekend", False), (None, False)])
+@pytest.mark.parametrize("profile,daily", [("week7", True), ("season21", True), (None, False)])
 def test_orders_daily_is_the_one_switch(profile, daily):
     content = _content(profile)
     state = _state(content)
@@ -59,7 +59,7 @@ def test_season21_order_words_say_today_but_weeks_stay():
     assert calendar.week_words(c21, s21) == {"order_this": "今日", "order_that": "今天", "order_each": "每天", "order_every": "每天"}
 
 
-@pytest.mark.parametrize("profile", ["weekend", None])
+@pytest.mark.parametrize("profile", [None])
 def test_weekend_and_fourteen_day_keep_every_week_word(profile):
     content = _content(profile)
     season = _season(content)
@@ -105,7 +105,7 @@ def test_season21_issued_orders_read_today():
 # ── 入伍段：引薦人說的話（content/tutorial.json 的 {本週}／{每週}）──
 
 
-@pytest.mark.parametrize("profile,each,this", [("season21", "每天", "今日"), ("week7", "每天", "今日"), ("weekend", "每週", "本週")])
+@pytest.mark.parametrize("profile,each,this", [("season21", "每天", "今日"), ("week7", "每天", "今日")])
 def test_recruiters_follow_the_order_rhythm(profile, each, this):
     content = _content(profile)
     for faction, brief in (("guan", f"上頭{each}發幾道軍令"), ("huang", f"上頭{each}傳幾道令下來")):
@@ -120,22 +120,7 @@ def test_recruiters_follow_the_order_rhythm(profile, each, this):
     state.player.enlist_step = 1
     hint = enlist.box(state, content)["text"]
     assert "{" not in hint
-    if profile != "weekend":  # 豪強分屬兩軍的季：依附那一邊的軍令
-        assert f"你跟的那一邊{each}發的軍令寫在卡上" in hint
-
-
-def test_weekend_recruiter_lines_are_word_for_word_the_old_ones():
-    """週末（照週發令）填完的字跟改之前的原句一模一樣。"""
-    content = real_content("weekend")
-    state = _state(content, "guan")
-    state.player.enlist_step = 0
-    assert enlist.box(state, content)["text"].endswith(
-        "上頭每週發幾道軍令，在『江湖』頁行動列底下，自己挑一道。」")
-    state = _state(content, "haoqiang")  # 週末也是豪強分屬兩軍的季：第二步照依附那一邊
-    state.player.enlist_step = 1
-    assert enlist.box(state, content)["text"].startswith("你跟的那一邊每週發的軍令寫在卡上。")
-    who = enlist.recruiter(state, content)  # 豪強不分屬兩軍時的原句（家主吩咐）
-    assert "家主每週會吩咐一件事" in enlist.fill(who.briefing, state, content)
+    assert f"你跟的那一邊{each}發的軍令寫在卡上" in hint  # 豪強分屬兩軍的季：依附那一邊的軍令
 
 
 # ── 管理者：重發軍令的回話 ──
@@ -157,8 +142,7 @@ def _admin_game(profile):
     return game
 
 
-@pytest.mark.parametrize("profile,head", [("season21", "已照 00:00 的做法重發第 1 天的軍令"), ("week7", "已照 00:00 的做法重發第 1 天的軍令"),
-                                          ("weekend", "已照週一的做法重發第 1 週的軍令")])
+@pytest.mark.parametrize("profile,head", [("season21", "已照 00:00 的做法重發第 1 天的軍令"), ("week7", "已照 00:00 的做法重發第 1 天的軍令")])
 def test_admin_reissue_reply_follows_the_order_rhythm(profile, head):
     msg = _admin_game(profile).admin_issue_orders()[0]
     assert msg.startswith(head), msg
@@ -187,6 +171,6 @@ def test_season21_pages_say_todays_orders_and_keep_weeks(monkeypatch):
     assert "每天、每週的事（軍令照 00:00、席次照週一的做法立刻再做一次；之後照常）" in out["sheet"] and "立刻發今日軍令" in out["sheet"]
     assert out["issue"].startswith("立刻發今日軍令：今天還沒達成的軍令照 00:00 的做法重挑") and "明天 00:00 照常發令" in out["issue"]
     # 其他「週」的字照舊（大事小標、季末結算卡、天下怎麼變、第 4 階席次）
-    assert out["board"] == "本週江湖大事 1 則" and "<b>第 1 週・三十六方起義</b>" in out["result"]
+    assert out["board"] == "本週江湖大事" and "<b>第 1 週・三十六方起義</b>" in out["result"]
     assert "<small>第 1 週週末</small>" in out["timeline"] and "<h4>本週大事</h4>" in out["overview"]
     assert "照上一週的貢獻" in out["rotate"] and "下週一照常再排" in out["rotate"]

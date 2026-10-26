@@ -16,6 +16,7 @@ from tianxia.content import ContentError, load_content
 from tianxia.engine import Game
 from tianxia.models import Effect, Enlist, EnlistStep, ExploreMix, FreeTextChoice, HintDef, Hints, Recruiter, TutorialGoal
 from tianxia.state import BattleRecord, BotProfile, Fighter, HintNote, PlayerState, Summons
+import webharness
 
 MENTOR = "想起師父說過"
 
@@ -448,7 +449,7 @@ def test_status_data_carries_the_switch(game):
 
 def test_the_settings_sheet_has_the_switch_and_sends_hints_off():
     """設定抽屜的「不再提示」（網頁沒有建置步驟、沒有前端測試：這裡只看原始碼有接上，node --check 另外擋語法）。"""
-    src = (Path(__file__).parent.parent / "web" / "app.js").read_text(encoding="utf-8").replace("\r\n", "\n")
+    src = webharness.app_source().replace("\r\n", "\n")
     assert 'id="hints-off" ${s.hints_off ? "checked" : ""}> 不再提示（碰到新玩法時的小提醒）' in src
     assert 'ev.target.id === "hints-off") await doMain("hints_off", { value: ev.target.checked })' in src
     assert src.index("略過新手引導</button>") < src.index('id="hints-off"')  # 在「略過新手引導」下面

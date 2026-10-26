@@ -2,6 +2,7 @@
   {
     "id": "yc_city_courier",
     "title": "驛卒墜馬",
+    "image": "town",
     "locations": [
       "yingchuan"
     ],
@@ -65,6 +66,7 @@
   {
     "id": "yc_city_axle",
     "title": "輜車斷軸",
+    "image": "town",
     "locations": [
       "yingchuan"
     ],
@@ -151,6 +153,7 @@
   {
     "id": "yc_city_petition",
     "title": "署前投牒",
+    "image": "office",
     "locations": [
       "yingchuan"
     ],
@@ -230,12 +233,89 @@
           "silver": -10,
           "fame": -1
         }
-      }
+      },
+      "outcomes": [
+        {
+          "id": "rewrite",
+          "tag": "代筆：替他改訴狀、句句扣住律條",
+          "check": {
+            "stat": "wis",
+            "difficulty": 4
+          },
+          "effect": {
+            "text": "你把狀子改得條理分明，門吏看了一眼，竟不敢攔，收下送了進去。老書生拉著你的手說不出話。",
+            "stats": {
+              "good": 2,
+              "xinde": 8
+            },
+            "marks": {
+              "yingchuan:代筆": 1
+            },
+            "contribution": 2
+          },
+          "fail_effect": {
+            "text": "狀子寫得引經據典，門吏只瞄了一眼就丟還給你，說這不是講學的地方。",
+            "stats": {
+              "fame": -1
+            }
+          }
+        },
+        {
+          "id": "sneak",
+          "tag": "闖門：趁換班帶他從側門溜進去",
+          "check": {
+            "stat": "agi",
+            "difficulty": 3
+          },
+          "effect": {
+            "text": "你們趁換班的空檔閃進側門，正好撞見郡丞，狀子當面遞了上去。",
+            "stats": {
+              "good": 1,
+              "fame": 1
+            },
+            "marks": {
+              "yingchuan:闖署": 1
+            },
+            "contribution": 2
+          },
+          "fail_effect": {
+            "text": "你才拉著老書生跨過門檻就被扭住，罰了錢才放人。",
+            "stats": {
+              "silver": -10
+            }
+          }
+        },
+        {
+          "id": "give",
+          "tag": "周濟：給他錢、勸他先回去",
+          "cost": {
+            "silver": 5
+          },
+          "effect": {
+            "text": "老書生收下錢，嘆了口氣，把訴狀小心收進懷裡，說來日再來。",
+            "stats": {
+              "good": 1
+            },
+            "marks": {
+              "yingchuan:慰書生": 1
+            },
+            "contribution": 1
+          }
+        },
+        {
+          "id": "leave",
+          "tag": "走開：不管、看著、對不上的",
+          "effect": {
+            "text": "你從門吏的戟旁走過，老書生還捧著訴狀站在郡府門外。"
+          }
+        }
+      ]
     }
   },
   {
     "id": "yc_river_overboard",
     "title": "渡船落水",
+    "image": "river",
     "locations": [
       "yingshui"
     ],
@@ -297,12 +377,89 @@
       "fail_effect": {
         "text": "你的法子慢了一步，自己也被浪打得渾身濕透，最後是船家撐篙把人撈上來的。",
         "stamina": -12
-      }
+      },
+      "outcomes": [
+        {
+          "id": "dive",
+          "tag": "下水：跳下去撈人",
+          "check": {
+            "stat": "con",
+            "difficulty": 5
+          },
+          "effect": {
+            "text": "你頂著刺骨的河水把母子拖上岸。婦人跪在泥裡磕頭，渡口茶棚的人都圍過來看。",
+            "stats": {
+              "good": 2,
+              "fame": 1
+            },
+            "marks": {
+              "yingshui:救溺": 1
+            },
+            "contribution": 2
+          },
+          "fail_effect": {
+            "text": "水冷得你手腳抽筋，嗆了好幾口才被人拉上岸。母子倆是被下游的漁網撈起來的。",
+            "stamina": -20
+          }
+        },
+        {
+          "id": "rope",
+          "tag": "拋繩：甩纜繩、遞竹篙",
+          "check": {
+            "stat": "agi",
+            "difficulty": 4
+          },
+          "effect": {
+            "text": "纜繩正落在婦人手邊，你和船家合力把她拉回船上，孩子還在她懷裡哭。",
+            "stats": {
+              "good": 2
+            },
+            "marks": {
+              "yingshui:拋纜": 1
+            },
+            "contribution": 2
+          },
+          "fail_effect": {
+            "text": "纜繩甩偏了，你自己差點被船舷絆下水，最後是別人跳下去救的人。",
+            "stamina": -10
+          }
+        },
+        {
+          "id": "steady",
+          "tag": "穩船：喝住船客、叫船家先把船撐穩",
+          "check": {
+            "stat": "wis",
+            "difficulty": 4
+          },
+          "effect": {
+            "text": "你喝住亂成一團的船客，叫船家先把船撐穩再靠岸。等靠了岸，婦人已被兩個漁夫救起。",
+            "stats": {
+              "good": 1
+            },
+            "marks": {
+              "yingshui:穩船": 1
+            },
+            "contribution": 1
+          },
+          "fail_effect": {
+            "text": "船上的人越喊越亂，船差點翻了，你跟著嗆了一口水。",
+            "stamina": -10
+          }
+        },
+        {
+          "id": "leave",
+          "tag": "走開：不管、看著、對不上的",
+          "effect": {
+            "text": "你扶著船舷站穩，等船靠了岸，婦人已被漁夫救起，渾身發抖。"
+          }
+        }
+      ]
     }
   },
   {
     "id": "yc_river_teashed",
     "title": "茶棚暗語",
+    "image": "tavern",
     "locations": [
       "yingshui"
     ],
@@ -368,6 +525,7 @@
   {
     "id": "yc_river_shacks",
     "title": "棚屋起火",
+    "image": "refugees",
     "locations": [
       "yingshui"
     ],
@@ -456,6 +614,7 @@
   {
     "id": "yc_wilds_plow",
     "title": "人拉犁",
+    "image": "field",
     "locations": [
       "yingchuan_wilds"
     ],
@@ -522,11 +681,93 @@
           "text": "你走出很遠，回頭還看得見老漢彎著腰的身影。"
         }
       }
-    ]
+    ],
+    "free_text": {
+      "prompt": "另想法子幫老漢下種",
+      "stat": "str",
+      "outcomes_only": true,
+      "outcomes": [
+        {
+          "id": "labor",
+          "tag": "出力：替他拉犁、修犁、想省力的法子",
+          "check": {
+            "stat": "best_of",
+            "stats": [
+              "str",
+              "wis"
+            ],
+            "difficulty": 4
+          },
+          "effect": {
+            "text": "你拉著犁走完一整壟，泥土翻出新的顏色。老漢硬塞給你兩個麥餅，說這田總算下得了種。",
+            "stats": {
+              "good": 2,
+              "xinde": 5
+            },
+            "marks": {
+              "yingchuan_wilds:田有人耕": 1
+            },
+            "contribution": 2
+          },
+          "fail_effect": {
+            "text": "犁頭卡進石縫，你使勁一扯，腰閃了一下，半天直不起來。",
+            "stamina": -15
+          }
+        },
+        {
+          "id": "chase",
+          "tag": "討牛：去追那夥散兵",
+          "combat": "dipi",
+          "effect": {
+            "text": "你在破廟後頭追上那夥流寇，把牛奪了回來。老漢牽著牛，眼淚都流下來了。",
+            "stats": {
+              "good": 2,
+              "fame": 1
+            },
+            "marks": {
+              "yingchuan_wilds:散兵退了": 1
+            },
+            "contribution": 4
+          },
+          "fail_effect": {
+            "text": "流寇人多，你被打得退回田邊，錢袋也被搶了去，老漢反過來安慰你。",
+            "stamina": -15,
+            "stats": {
+              "silver": -10
+            }
+          }
+        },
+        {
+          "id": "give",
+          "tag": "周濟：給他錢或糧",
+          "cost": {
+            "silver": 10
+          },
+          "effect": {
+            "text": "你把幾個錢塞進老漢手裡，說去鄰村租頭牛。他攥著錢，半天說不出話。",
+            "stats": {
+              "good": 1
+            },
+            "marks": {
+              "yingchuan_wilds:鄉里得濟": 1
+            },
+            "contribution": 1
+          }
+        },
+        {
+          "id": "leave",
+          "tag": "走開：不管、看著、對不上的",
+          "effect": {
+            "text": "你走出很遠，回頭還看得見老漢彎著腰的身影。"
+          }
+        }
+      ]
+    }
   },
   {
     "id": "yc_wilds_toll",
     "title": "田埂設卡",
+    "image": "field",
     "locations": [
       "yingchuan_wilds"
     ],
@@ -650,12 +891,87 @@
         "stats": {
           "silver": -10
         }
-      }
+      },
+      "outcomes": [
+        {
+          "id": "reason",
+          "tag": "說理：跟散兵講鄉民也是窮人",
+          "check": {
+            "stat": "wis",
+            "difficulty": 5
+          },
+          "effect": {
+            "text": "為首的散兵搔搔頭，揮手讓鄉民過去，嘴裡嘟囔著大賢良師也說過不欺貧苦。",
+            "stats": {
+              "good": 2
+            },
+            "marks": {
+              "yingchuan_wilds:說退": 1
+            },
+            "contribution": 2
+          },
+          "fail_effect": {
+            "text": "他們聽得不耐煩，把你的錢袋搶去倒了個乾淨，才放你走。",
+            "stats": {
+              "silver": -10,
+              "fame": -1
+            }
+          }
+        },
+        {
+          "id": "fight",
+          "tag": "動手：踢開枯木、打跑散兵",
+          "combat": "shanzei",
+          "effect": {
+            "text": "你把三個散兵打得四散奔逃，挑菜的鄉民這才敢過田埂，一路向你道謝。",
+            "stats": {
+              "good": 1,
+              "fame": 1
+            },
+            "marks": {
+              "yingchuan_wilds:拆卡": 1
+            },
+            "contribution": 3
+          },
+          "fail_effect": {
+            "text": "他們纏住你打了好一陣，你身上的錢被搜走一半。",
+            "stamina": -10,
+            "stats": {
+              "silver": -15
+            }
+          }
+        },
+        {
+          "id": "pay",
+          "tag": "付錢：替鄉民付、自己付",
+          "cost": {
+            "silver": 10
+          },
+          "effect": {
+            "text": "你替鄉民把錢付了，散兵挪開枯木，鄉民挑著擔子千恩萬謝地過去了。",
+            "stats": {
+              "good": 2
+            },
+            "marks": {
+              "yingchuan_wilds:代付": 1
+            },
+            "contribution": 1
+          }
+        },
+        {
+          "id": "leave",
+          "tag": "走開：不管、看著、對不上的",
+          "effect": {
+            "text": "你站在田埂這頭看了一陣，掉頭從另一條小路走了。"
+          }
+        }
+      ]
     }
   },
   {
     "id": "yc_wilds_horse",
     "title": "無主戰馬",
+    "image": "field",
     "locations": [
       "yingchuan_wilds"
     ],
@@ -765,6 +1081,7 @@
   {
     "id": "yc_cs_nightwatch",
     "title": "營外守夜",
+    "image": "camp",
     "locations": [
       "changshe"
     ],
@@ -855,6 +1172,7 @@
   {
     "id": "yc_cs_old_rampart",
     "title": "舊壘鏽鐵",
+    "image": "field",
     "locations": [
       "changshe"
     ],
@@ -937,6 +1255,7 @@
   {
     "id": "yc_cs_grain_cart",
     "title": "截糧牛車",
+    "image": "road",
     "locations": [
       "changshe"
     ],
@@ -1061,12 +1380,93 @@
       "fail_effect": {
         "text": "黃巾別部發現了你，你被追得翻過好幾道土坎才脫身。",
         "stamina": -15
-      }
+      },
+      "outcomes": [
+        {
+          "id": "charge",
+          "tag": "衝上去：正面搶回糧車",
+          "combat": "shuikou",
+          "effect": {
+            "text": "你衝散了卸糧的人，搶回大半車糧。營中的人都在說這件事。",
+            "stats": {
+              "fame": 2,
+              "silver": 10
+            },
+            "marks": {
+              "changshe:奪糧": 1
+            },
+            "contribution": 4
+          },
+          "fail_effect": {
+            "text": "對方人多，你被逼退到焦土裡，糧車被趕走了，身上的錢也被搜了去。",
+            "stamina": -20,
+            "stats": {
+              "silver": -15
+            }
+          }
+        },
+        {
+          "id": "cut",
+          "tag": "割繩：繞到後頭割繩、趕車就跑",
+          "check": {
+            "stat": "agi",
+            "difficulty": 6
+          },
+          "effect": {
+            "text": "你跳上車轅一刀割斷繩子，牛車一路狂奔回營，留下一地麻袋。",
+            "stats": {
+              "good": 1,
+              "silver": 10
+            },
+            "marks": {
+              "changshe:奔車": 1
+            },
+            "contribution": 3
+          },
+          "fail_effect": {
+            "text": "牛一直打轉不肯走，對方發現了你，你只好跳車逃命。",
+            "stamina": -15
+          }
+        },
+        {
+          "id": "carry",
+          "tag": "救人：扛起車夫就跑",
+          "check": {
+            "stat": "str",
+            "difficulty": 5
+          },
+          "effect": {
+            "text": "你扛著車夫跑回營柵，他說這輩子都記得你。糧雖然丟了，人保住了。",
+            "stats": {
+              "good": 2
+            },
+            "marks": {
+              "changshe:救車夫": 1
+            },
+            "contribution": 2
+          },
+          "fail_effect": {
+            "text": "車夫比你想的重，你跑不遠就被追上，兩個人都挨了打。",
+            "stamina": -15,
+            "stats": {
+              "fame": -1
+            }
+          }
+        },
+        {
+          "id": "leave",
+          "tag": "走開：不管、看著、對不上的",
+          "effect": {
+            "text": "你伏在土坎後看著他們卸完糧，把牛車推進了溝裡。"
+          }
+        }
+      ]
     }
   },
   {
     "id": "yc_ac_debate",
     "title": "講堂論難",
+    "image": "academy",
     "locations": [
       "yingchuan_academy"
     ],
@@ -1125,6 +1525,7 @@
   {
     "id": "yc_ac_copying",
     "title": "藏書樓抄書",
+    "image": "academy",
     "locations": [
       "yingchuan_academy"
     ],
@@ -1183,6 +1584,7 @@
   {
     "id": "yc_ac_well",
     "title": "井中玉佩",
+    "image": "academy",
     "locations": [
       "yingchuan_academy"
     ],
@@ -1258,6 +1660,7 @@
   {
     "id": "yc_ac_archery",
     "title": "射圃鄉射",
+    "image": "academy",
     "locations": [
       "yingchuan_academy"
     ],
@@ -1316,6 +1719,7 @@
   {
     "id": "yc_sf_caravan",
     "title": "商旅結伴",
+    "image": "road",
     "locations": [
       "songshan_foot"
     ],
@@ -1391,6 +1795,7 @@
   {
     "id": "yc_sf_herbwife",
     "title": "採藥婦人",
+    "image": "forest",
     "locations": [
       "songshan_foot"
     ],
@@ -1457,12 +1862,89 @@
       "fail_effect": {
         "text": "你的法子沒能止住毒，只好一路背她下山找醫匠，累得幾乎虛脫。",
         "stamina": -12
-      }
+      },
+      "outcomes": [
+        {
+          "id": "herb",
+          "tag": "認草：在竹簍裡找解毒的草、嚼碎敷上",
+          "check": {
+            "stat": "wis",
+            "difficulty": 4
+          },
+          "effect": {
+            "text": "你認出一株葉背帶紫的草，敷上不久，她腳踝的青色就退了。她說你比山下的醫匠還懂。",
+            "stats": {
+              "good": 2,
+              "xinde": 5
+            },
+            "marks": {
+              "songshan_foot:識藥": 1
+            },
+            "contribution": 2
+          },
+          "fail_effect": {
+            "text": "你敷錯了草，她的腳腫得更厲害，你只好背著她下山找醫匠。",
+            "stamina": -15
+          }
+        },
+        {
+          "id": "carry",
+          "tag": "背人：背她下山找醫匠",
+          "check": {
+            "stat": "str",
+            "difficulty": 4
+          },
+          "effect": {
+            "text": "你背著她跑了三里山路，醫匠說再晚一刻就保不住那條腿了。",
+            "stats": {
+              "good": 2
+            },
+            "marks": {
+              "songshan_foot:背傷": 1
+            },
+            "contribution": 2
+          },
+          "fail_effect": {
+            "text": "山路濕滑，你跌了一跤，兩人都滾進草叢，耽擱了好一陣才下山。",
+            "stamina": -15
+          }
+        },
+        {
+          "id": "bind",
+          "tag": "裹傷：吸出毒血、綁緊小腿",
+          "check": {
+            "stat": "con",
+            "difficulty": 4
+          },
+          "effect": {
+            "text": "你照老獵戶的法子替她吸出毒血、綁緊小腿，她能自己拄著棍子慢慢走下山了。",
+            "stats": {
+              "good": 1
+            },
+            "marks": {
+              "songshan_foot:裹傷": 1
+            },
+            "contribution": 1
+          },
+          "fail_effect": {
+            "text": "毒血吸得你自己嘴唇發麻，頭暈了好一陣，最後兩個人互相攙著下了山。",
+            "stamina": -10
+          }
+        },
+        {
+          "id": "leave",
+          "tag": "走開：不管、看著、對不上的",
+          "effect": {
+            "text": "你把她扶到樹蔭下坐好，喊了山下的樵夫來接她。"
+          }
+        }
+      ]
     }
   },
   {
     "id": "yc_sf_stele",
     "title": "林中殘碑",
+    "image": "forest",
     "locations": [
       "songshan_foot"
     ],
@@ -1514,6 +1996,7 @@
   {
     "id": "yc_dm_coldpool",
     "title": "寒潭一夜",
+    "image": "forest",
     "locations": [
       "deep_mountain"
     ],
@@ -1566,6 +2049,7 @@
   {
     "id": "yc_dm_stockade",
     "title": "木寨擄人",
+    "image": "fort",
     "locations": [
       "deep_mountain"
     ],
@@ -1681,6 +2165,7 @@
   {
     "id": "yc_dm_cypress",
     "title": "古柏樹洞",
+    "image": "forest",
     "locations": [
       "deep_mountain"
     ],
@@ -1738,6 +2223,7 @@
   {
     "id": "yc_jc_pilgrim",
     "title": "遠道香客",
+    "image": "temple",
     "locations": [
       "jade_cave"
     ],
@@ -1801,6 +2287,7 @@
   {
     "id": "yc_jc_scrolls",
     "title": "梁上道書",
+    "image": "treasure",
     "locations": [
       "jade_cave"
     ],
@@ -1853,6 +2340,7 @@
   {
     "id": "yc_jc_bell",
     "title": "半塌鐘樓",
+    "image": "temple",
     "locations": [
       "jade_cave"
     ],
@@ -1920,6 +2408,7 @@
   {
     "id": "yc_jc_rain",
     "title": "夜雨借宿",
+    "image": "temple",
     "locations": [
       "jade_cave"
     ],
@@ -1976,6 +2465,7 @@
   {
     "id": "yc_guancamp_drill",
     "title": "校場比刀",
+    "image": "fight",
     "locations": [
       "guan_camp"
     ],
@@ -2027,6 +2517,7 @@
   {
     "id": "yc_guancamp_gate",
     "title": "轅門盤查",
+    "image": "camp",
     "locations": [
       "guan_camp"
     ],
@@ -2112,6 +2603,7 @@
   {
     "id": "yc_guancamp_wounded",
     "title": "傷兵草棚",
+    "image": "clinic",
     "locations": [
       "guan_camp"
     ],
@@ -2163,6 +2655,7 @@
   {
     "id": "yc_guancamp_scouts",
     "title": "巡騎出營",
+    "image": "camp",
     "locations": [
       "guan_camp"
     ],

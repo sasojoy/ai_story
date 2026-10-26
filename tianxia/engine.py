@@ -15,18 +15,23 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
 from pydantic import BaseModel
+from pydantic import model_serializer  # Option 的 outcomes 空著不寫（減法季批 4）
 
 from . import arts as arts_mod
 from . import ascend  # 破境卡（招式與絕學稿案第三節）
+from . import narration  # 事件旁白每週改寫（減法季批 10）
 from . import (
     allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, checkin, chuangong, clinic, companion_agent, conquest, conquest_day, create, cultivation, defection, divine, economy, encounter, enlist, equipment, event_llm, explore_modes, escorts,
     fight_llm, figure_aid, figure_life, figures, foreshadow, four_tiers, gather_llm, generals, forge_secrets, front_lines, fusion, gender, howto, insight_fx, insights, invites, journal, letters, library, mapdata, martial_arts, feasts,
     mall, materials, mounts, naming, newbie, rename, server_bots, opportunities, orders, parley, precise, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_acts, seal_duel, seats, secret_recipes, sensing,
     shopview, siege, signature, signature_arms, silver, skillview, smithing,
-    social, sortie, styles, tactics, team, terrain, territory, timetable, traits, treasures, weapons, works, xingshi, zh, yuedan,
+    social, sortie, styles, tactics, team, terrain, territory, timetable, traits, treasures, weapons, week_unlock, works, xingshi, zh, yuedan,
 )
+from . import explore_one, growth  # 減法季批 2：探索一顆、三道閘、屬性五段的純規則（開關走 rules.jianfa）
+from . import zhuan_end  # 減法季批 7b：列傳為終點（票、深交上限、人物評曰）
 from . import ambush as ambush_rules  # 設伏劫道（後期體力玩法第一批）；叫 ambush_rules：這個檔裡有區域變數叫 ambush
 from . import duel as duel_rules  # 單人頭目戰（Joy 2026-10-10）
+from . import opening as opening_rules  # 開局第一分鐘（減法季批 7；叫 opening_rules：避免跟戰法的 opening 混）
 from . import discuss as _discuss_card  # noqa: F401  論武登記進玩家卡的動作表（social.ACTIONS）
 from . import raid as _raid_card  # noqa: F401  截殺登記進玩家卡的動作表（social.ACTIONS）
 from . import wanted as _wanted_card  # noqa: F401  通緝登記進玩家卡的動作表（social.ACTIONS）
@@ -39,6 +44,16 @@ from . import hints as hint_rules  # 碰到才說（新手引導計畫三）；�
 from . import tavern as tavern_rules  # 酒肆（企劃者 2026-10-18）；叫 tavern_rules：跟其他 *_rules 一樣避開區域變數
 from . import prologue as prologue_rules  # Game.new 有個參數也叫 prologue，所以模組在這裡一律叫 prologue_rules
 from . import rumor_view  # 傳聞分層的畫面：見聞頁的四層、你不在的時候（計畫 2026-10-06 傳聞分層一）
+# 減法季批 4：隨口應對分岔、痕跡看得見、貢獻（三陣營四勝利的 wins.credit）；別名避開這個檔裡叫 marks、outcomes 的區域變數
+from . import marks as marks_rules
+from . import outcomes as outcome_rules
+from . import stances as stance_rules  # 人物心意（減法季批 6）；叫 stance_rules：rules.stances 是陣營的態勢
+from . import errands as errand_rules  # 託付與來信（減法季批 6）
+from . import wins as wins_rules
+from .models import FreeTextChoice, Outcome
+from .rules import jianfa
+from . import step as step_rules  # 本週卡「你這一步」（減法季批 3c）；叫 step_rules：這個檔裡有區域變數叫 step
+from . import wins  # 三陣營四勝利（減法季批 3c）：豪強兩本帳、傾向、季末四階
 from .accounts import AccountStore
 from .accounts import NAME_TAKEN as NAME_IN_USE  # 易名帖撞名：跟建角色同一句（不洩漏誰是假人）
 from .characters import CharacterStore, name_key
@@ -60,22 +75,23 @@ from .models import (
 from .ollama_client import ModelBudget, OllamaClient, quick_client
 from .rules import (
     GEJU, HUANGJIN, add_chronicle, add_marks, add_rumor, add_world_flags, display_name, apply_effect, audible, audience_bar, audience_hint, can_meet, change_trend,
-    check_result_line,
+    check_gap, check_result_line,
     day_turn, ears_of, evil_success, failed, fill_marks, free_text_rate, game_day, geju_resisted, here_regions,
     can_draw_side_change, chaos_fronts, chaos_note, front_chip, front_ids, front_of, front_text, humanize, in_chaos,
     is_revealed, learn_skill, pushable, rate_words, recompute_trends, resolve_goals, resolve_trend, resolve_trends, roll_check,
     season_one, season_one_off, stance_rule_note, stance_sum_note, stances, stat_rate, trend_name, trend_shown, trend_value,
     world_day, world_trend_value,
 )
+from .rules import jianfa  # 減法季（Config.jianfa＋開季的章；子開關照名字問）
 from .sqlite_world import open_world
 from .wallet import Wallet
 from .state import (
     ONBOARDING_VERSION, PLAYER, ArenaEntry, ArenaFight, ArenaReport, ArenaResult, ArenaSide, BattleRecord, Convoy, CrowdNote, DuelState, Equipment, Feast, FrontReport, GameState, HintNote, JournalEntry, Journey, Letter, Mingtie, ParleyBacking, ParleyDebt, ParleyTerms, Rumor, Tagalong, TavernHit, TavernWatch, TimelineResult,
-    Whisper, WorldState, XingshiEssay, XingshiMark, XingshiTicket,
+    TierResult, Whisper, WorldState, XingshiEssay, XingshiMark, XingshiTicket,
     new_game_state,
 )
 from .world import (
-    _season_vehicle, advance_world_state, check_thresholds, end_season, fire_by_id, open_showdown, open_waiting_showdown,
+    _season_vehicle, advance_world_state, check_thresholds, end_season, evaluate_ending, fire_by_id, open_showdown, open_waiting_showdown,
     resume_season_clock, settle_season_start, showdown_battle, showdown_key, start_pending_battle,
 )
 from .world_state import SealDuel, SealSide, WorldStateStore, season_length_days
@@ -142,6 +158,16 @@ class Option(BaseModel):
     confirm_yes: str = ""  # 確認層上「做」那一顆寫什麼；空的照舊寫「照打」（FB-125：拆解寫「拆掉」）
     tag: str = ""  # 名聲 5B：俠寇選項的「俠」「寇」（網頁畫在編號那一格）；空的照舊寫編號
     note: str = ""  # 名聲 5B：標籤底下第二行小字（俠寇選項寫為什麼合你的路數）；空的不畫
+    # 減法季批 4（主機側計畫 1.3 欄位表 options[].outcomes）：分岔開著時「隨口應對」那一顆的可能走向 [{id, tag}]（outcomes.tags，不給數字）；
+    # 其餘是 None，不寫進 model_dump（關著的季選單一個鍵都不多）
+    outcomes: list[dict[str, str]] | None = None
+
+    @model_serializer(mode="wrap")
+    def _drop_no_outcomes(self, handler):
+        data = handler(self)
+        if isinstance(data, dict) and data.get("outcomes") is None:
+            data.pop("outcomes", None)
+        return data
 
 
 @dataclass(frozen=True)
@@ -155,6 +181,24 @@ class TollFacts:
     saved: int = 0  # 化勁這一場少扣的氣血（team.toll_saved）
     spared: int = 0  # 不動這一場免掉的內傷（team.toll_saved）
     gained: tuple[tuple[str, int], ...] = ()  # 回血的功效掛點 → 回了多少氣血（「氣血 +N」那一行的 N），順序同 healed
+
+
+@dataclass(frozen=True)
+class OutingPlan:
+    """減法季探索一顆（整合設計 4.1）：這一處此刻出門一趟會怎麼抽（Game._outing_plan；鈕上的小字、行動列底下那一行、真的出門、假人打分數
+    都讀這一份，說的跟擲的不會走樣）。只讀，不擲骰。"""
+
+    kind: str  # 這一處算哪一種地點（explore_one.kind_of：town、temple、ford、wild、hill、camp）
+    weights: dict[str, int]  # 每一拍四類的比重（explore_one.weights；這裡此刻抽不到事件、悟不出的那一類已經是 0）
+    how: str | None  # 遭遇拍打誰：bounty 討伐懸賞那一路、spar 自家營寨跟同袍比劃、foe 這裡最弱的對手、town 城裡的地痞；都沒有是 None
+    foe: Squad | None  # 那一路
+    boss: DuelBoss | None  # 遭遇拍有機會撞上的頭目（接了這裡的討伐懸賞不擲）
+    hint: str  # 鈕上括號裡最後那一段小字，也是四格探索那一格的小字（/api/main 的 mostly；explore_one.hint_of：以地點種類的字為主，招牌類此刻的比重是 0 才照上面 weights 最重的一類；有賞、同袍比劃）
+
+    @property
+    def foe_note(self) -> str | None:
+        """行動列底下那一行補的那一句（howto.OUTING_FOE 的鍵）；一般的對手不補。"""
+        return self.how if self.how in ("town", "spar", "bounty") else None
 
 
 def _rank_action_id(arg: str) -> str | None:
@@ -349,6 +393,8 @@ class FreeTextRequest(BaseModel):
     """隨口應對鎖外評估的單子（server.py 的 A 段拿到、B 段送模型、C 段交回 answer_event 重驗）。"""
     event_id: str
     text: str
+    # 減法季批 4：分岔開著、這則事件寫了後果時是可能的走向（outcomes.tags；B 段照它改叫 event_llm.judge_outcome）；其餘是空的
+    outcomes: list[dict[str, str]] = []
 
 
 class BattleTextRequest(BaseModel):
@@ -399,6 +445,7 @@ class FreeTextOutcome(BaseModel):
     time: float  # 那一則紀錄的遊戲時間與標題，插潤色前用來認是不是同一則
     title: str
     evil: bool = False  # 判成惡行而且成了（FB-223）：effect_text 是 rules.EVIL_DONE，潤色照惡行寫、寫成了換掉那一句
+    outcome: str = ""  # 減法季批 4：分岔開著時走的是哪一種後果（id）；關著是空的
 
 
 ONBOARD_SEGMENT = 4  # 初入江湖上線的版本章（ONBOARDING_VERSION 升到 4 的那一版）：比它小、已經走出草廬的存檔讀檔時蓋成引導走完
@@ -423,7 +470,12 @@ class Game:
         self._preparing_memo: list[bool] | None = None  # 一次畫面建構裡記住的「籌備中嗎」；None＝不在範圍裡（見 phase_memo）
         self._draft: Draft | None = None  # choose() 進行中那次行動的江湖紀錄草稿
         self._loot_scale = 1.0  # 打贏的心得與銀兩倍數：練功分級（_practice，Config.training）那一場才不是 1
+        # 減法季探索一顆（批 2）：遭遇拍那一場掉的素材打幾成（城裡的地痞 town_loot_scale、三道閘的倍數）；其餘的仗都是 1，一個字不變
+        self._drop_scale = 1.0
+        self._gate_scale = 1.0  # 減法季三道閘（批 2）：遭遇拍那一場的經驗、心得、銀兩乘疲勞與對手兩道閘（_fight_gate）；其餘是 1
+        self._outing_close: set[str] = set()  # 這一趟出門打了折的那幾道閘（_fight_gate 記、_explore_one 寫段落結尾那一句）
         self._affinity_before: dict[str, int] | None = None  # choose()、隨口應對進行中：這一下之前的情誼（_people_here 認這一下加了誰的情誼）
+        self._deep_said: list[str] = []  # 深交上限（減法季批 7b）這一下提早夾過時的那幾句（_deep_cap_now 記、_log 接在訊息後面）
         # 歷史武將同行：挑好了隨你上陣的那一位、正在照它加入（_escort_step 開著、_escort_carry 讀）
         self._escort_picked = False
         self._escort_now: battle_instance.Escort | None = None
@@ -431,6 +483,8 @@ class Game:
         self._last_wear: list[str] = []  # 最近一場戰報歸檔時兵器鈍了、防具破了的提醒（_file_battle，兵器先、防具後）；沒有草稿的呼叫端（切磋、截殺的另一邊）自己接到訊息裡
         # 這一個動作動到（或要通知）的別人的名號（玩家卡上的互動、邀請）：伺服器做完動作叫他們開著的分頁也刷新（server._tell_tabs）
         self.touched: set[str] = set()
+        # 事件旁白每週改寫（減法季批 10，tianxia/narration.py）：伺服器塞進來的查詢函式；沒有（假人程式、測試）一律照內容原文
+        self.narration: narration.Lookup | None = None
         # 翻地與爭搶（領地爭奪）：這一下出陣撞上對面、打贏了（_push_progress 乘 clash_scale）；這一下出陣記過一筆了沒（_sortie 補記 0 的那一筆）
         self._clash_won = False
         self._sortie_marked = False
@@ -505,7 +559,10 @@ class Game:
         game = cls(content, state, rng, world)
         if sex in gender.GENDERS:
             game.state.player.gender, game.state.player.gender_chosen = sex, True
-        if prologue:
+        if (prologue or graduated) and opening_rules.on(content, game.state.world):
+            # 減法季的開局第一分鐘（整合設計 6.7）：真人與假人都不進草廬，站在起點看旁白、三選一；人物的信在選完那一下送到（choose）
+            opening_rules.begin(game.state, content)
+        elif prologue:
             prologue_rules.begin(game.state, content)
         elif graduated and prologue_rules.has(content):
             game._graduate()
@@ -670,10 +727,11 @@ class Game:
         world 欄位這裡不用管，呼叫端（_reconcile_season）緊接著就會把它指向共用賽季。
         之後新增的 PlayerState 欄位預設就跟著新角色重來；要跨季保留的才加進下面這份清單。"""
         old = self.state
+        past = self._zhuan_past(old)  # 列傳為終點（減法季批 7b）：收季之後沒回來過的人，存之前補季末論功與〈天下形勢〉
         if old.player.annals:  # 行狀跟著角色重來：先把上一季的存起來，季末的傳照它寫（玩家傳）
             self.world.save_annals(
                 old.player.season_number, old.player.name, [e.model_dump() for e in old.player.annals],
-                annals.profile(old, self.content),
+                annals.profile(old, self.content, season=past),
             )
         fresh = new_game_state(self.content, old.player.name)
         fresh.last_real = old.last_real
@@ -754,6 +812,38 @@ class Game:
         self._write(
             self.content.scenario.name, [self.content.scenario.intro], tag=journal.SEASON_START, guide=tutorial_intro(self.content),
         )
+        self._season_grant(old)
+
+    def _zhuan_past(self, old: GameState) -> WorldState | None:
+        """換季那一刻（_reset_player_for_new_season）：上一季開著列傳為終點（zhuan_end）就回那一季（WorldStateStore.past_season），
+        先替這個人補上收季之後還沒記的季末論功與〈天下形勢〉（同步時記的那兩種，annals.tier_note、xingshi_notes），身家照它多論功的那幾樣；
+        關著（設定沒開就不讀資料庫）是 None，一個字都不變。old 是上一季的存檔，馬上就丟：old.world 換成上一季那一份才記得到正確的時刻。"""
+        cfg = self.content.config.jianfa
+        if not (cfg.enabled and cfg.zhuan_end):
+            return None
+        past = self.world.past_season(old.player.season_number)
+        if past is None or not jianfa(self.content, past, "zhuan_end"):
+            return None
+        old.world = past
+        annals.xingshi_notes(old, self.content, past)
+        annals.tier_note(old, self.content, past)
+        return past
+
+    def _season_grant(self, old: GameState) -> None:
+        """三陣營四勝利（減法季設計 3.3）：上一季收季時論了功的人（那一季的 WorldState.final_tiers），新的一季開局照那一階發起手資源
+        （wins.start_grant）、掛上稱號（PlayerState.season_title，social.affiliation 接在後面），另寫一則江湖紀錄。
+        上一季沒論功（四勝利關著、散人、不到門檻）什麼都不做，一個字都不變。不看新的一季開不開四勝利：獎勵是上一季掙的。"""
+        past = self.world.past_season(old.player.season_number)
+        result = past.final_tiers.get(old.player.name) if past is not None else None
+        if result is None or not result.tier:
+            return
+        silver, xinde = wins.start_grant(wins.rules_of(self.content), result.tier)
+        p = self.state.player
+        p.stats["silver"] = p.stats.get("silver", 0) + silver
+        p.stats["xinde"] = p.stats.get("xinde", 0) + xinde
+        p.season_title = result.title
+        line = wins.GRANT_LINE.format(tier=wins.TIER_NAMES[result.tier], title=result.title)
+        self._write(wins.GRANT_TITLE, [line] + [f"{name} +{n}" for name, n in (("銀兩", silver), ("心得", xinde)) if n])
 
     def _drop_old_zhuifeng(self) -> None:
         """追風步（PM 2026-10-14；企劃者跟玩家談過，玩家同意退回下品）：內容以前沒寫品質、照 SkillDef 的預設成了絕學，現在是下品。
@@ -929,6 +1019,9 @@ class Game:
         self._reconcile_season()
         msgs = list(self.world.catch_up_season(self.content, now, self.rng))
         self.state.world = self.world.get_season()
+        # 減法季批 4：痕跡過門檻的防漏（只發，不替任何人記行狀：排程那一份 Game 沒有自己的人；直接寫回、不經 _save_season）
+        if jianfa(self.content, self.state.world, "marks_visible") and marks_rules.fire_due(self.state, self.content):
+            self.world.save_season(self.state.world)
         msgs += self._conquest_tick()  # 領地爭奪：22:00 沒人在線也照時換天
         self._battle_status(tick=True)
         self._seal_tick()
@@ -947,6 +1040,7 @@ class Game:
         msgs = list(self.world.catch_up_season(self.content, now, self.rng))
         self.state.world = self.world.get_season()  # 剛才的追趕可能進一步推進了賽季，拉回最新的一份
         self._stamp_join()  # 新角色、換季重來的角色：補算完賽季才記下加入的那一刻
+        self._week_unlock_tick()  # 減法季 6.6：第 2 週的功能對這個人開了的那一刻，寫一則紀錄
         self._record_faction()
         self._copy_heirloom()  # 排在 _advance_player_local 之前：承露照整段離線時間算體力回復（7.4）
         if self.state.last_real is None:
@@ -989,8 +1083,11 @@ class Game:
         self._conquest_tick()  # 領地爭奪：換天（22:00）的掛鉤（前一天沒開成的攻城作罷；第一個看到新的一天的人觸發）
         self._deliver_conquest()  # 領地爭奪：翻地的分紅、守城功（下線時易手的回來補）
         self._deliver_arena()  # 擂台：被挑了的戰報、季末前三名的獎勵；季收了還沒打完的那一場作廢
+        self._marks_tick()  # 減法季批 4：痕跡過門檻的防漏、替自己記出過力的行狀（關著什麼都不做）
+        self._stance_annals()  # 減法季批 6：這一週勸過的心意到了門檻，記一則行狀（關著什麼都不做）
+        self._zhuan_tick()  # 減法季批 7b：〈天下形勢〉寫到名號、季末論功各記一則行狀（關著什麼都不做）
         mail = parley.lapse(self.state, self.content)  # NPC 智能 2.1：欠人物的事過了期限是食言（附的委託先作罷，書信不再補一句）
-        mail += letters.deliver(self.state, self.content)  # 書信（大勢人物擴充第二批）：人物來信、過期的委託作罷
+        mail += letters.deliver(self.state, self.content, now)  # 書信（大勢人物擴充第二批）：人物來信、過期的委託作罷
         if mail:
             self._write(letters.TITLE, mail)
         cheered = feasts.deliver(self.state, self.content)  # 宴客（第三批）：散席時我那一句是席間最佳，補名望
@@ -999,6 +1096,7 @@ class Game:
         if self.state.player.feasting is not None and self._feast_seat() is None:
             self.state.player.feasting = None  # 宴散了、人走了：收起敬酒的選單
         self._deliver_held_gear()  # 寄放的重賞、贈禮：裝備庫有空位就補（裝備四欄 6.5）
+        self._auto_checkin()  # 每日簽到自動領（Joy 2026-10-24 挑江湖頁乙案：簽到不放鈕）；要挑四階的日子留給玩家挑
         self._settle_partings()  # 歷史武將同行：從你身邊回江湖的人，情誼減半（9.6；補戰報時已經算過的不再算）
         refunds = bounties.deliver_refunds(self.state, self.content)  # 掛的通緝沒人揭成：押金退回
         if refunds:
@@ -1074,6 +1172,7 @@ class Game:
         if self.world.paused_at() is not None:  # 管理者的快轉：時鐘停著時不推，先按「繼續」
             return self._log(["（賽季時鐘暫停中，不能快轉；先按「繼續」。）"])  # 待 S1／joy 潤
         self._stamp_join()  # 同 sync：推進之前先記下加入的那一刻（沒同步過就直接快轉的測試與整季機器人）
+        self._week_unlock_tick()
         msgs: list[str] = []
         if self.world.season_phase() == "running":
             msgs += advance_world_state(self.state.world, self.content, seconds, self.rng, self.world)
@@ -1085,6 +1184,7 @@ class Game:
         self._save_season()
         msgs += start_pending_battle(self.world, self.content, self.now)
         self.state.world = self.world.get_season()
+        self._week_unlock_tick()  # 推完了再看一次：快轉跨過第 2 週（整季機器人、測試）那一下就寫
         news = journal.news_entry(self.state.world.time, self._without_timetable(msgs))
         if news is not None:
             journal.add_entry(self.state, news, merge=True)
@@ -1098,6 +1198,27 @@ class Game:
         p = self.state.player
         if p.joined_at is None:
             p.joined_at = self.state.world.time
+
+    def week_unlock_names(self) -> list[str]:
+        """第 2 週才開的功能裡這一季真的有的（減法季 6.6；week_unlock.WEEK2 的順序）：鐵匠鋪（武器或防具開著）、擂台、自創、懸賞榜。
+        紀錄那一行、本週卡那一句照它列；一樣都沒有是空的。"""
+        s, c = self.state, self.content
+        have = {
+            "smith": any(equipment.on(c, slot) for slot in equipment.SMITH_PAGES), "arena": arena.on(c), "create": create.on(c),
+            "bounties": bounties.active(s, c),
+        }
+        return [name for key, name in week_unlock.WEEK2.items() if have.get(key)]
+
+    def _week_unlock_tick(self) -> None:
+        """第 2 週的功能對這個人開了的那一刻（減法季 6.6「開了的那一刻江湖紀錄一行、本週卡一句」）：蓋 PlayerState.week_unlocked_at、
+        寫一則紀錄。規則關著不蓋、不寫；蓋過就不再動；季收了不寫。sync 與 advance 都叫（補算完賽季、記下加入那一刻之後）。"""
+        p = self.state.player
+        if p.week_unlocked_at is not None or self.state.world.ended or not week_unlock.unlocked_now(self.state, self.content):
+            return
+        p.week_unlocked_at = self.state.world.time
+        names = self.week_unlock_names()
+        if names:
+            self._write(week_unlock.TITLE, [week_unlock.journal_line(names, self.content, self.state.world)])
 
     def mark_seen(self, now: float) -> None:
         """這是那個人自己的請求（伺服器的 act／act_look、假人程式自己那一輪寫 seen_real 另見 bot_runner）：記他自己上線的現實時間
@@ -1146,10 +1267,11 @@ class Game:
             rate *= 2
         if cfg.newbie_hp_double and roster.newbie(self.state, self.content):  # 第一季從自己加入那天起算（roster.since_join），beta 照舊從季初
             rate *= 2
-        team.regen_neili(self.content, p.member, rate, team.con_of(self.state, self.content, self.world, PLAYER))
+        season = self.state.world  # 減法季每點加倍：氣血上限照這一季（team.neili_cap 的 season）
+        team.regen_neili(self.content, p.member, rate, team.con_of(self.state, self.content, self.world, PLAYER), season=season)
         for cid in p.team:
             con = team.con_of(self.state, self.content, self.world, cid)  # 同伴回到他自己的上限（人物資質設計 14.3）
-            self.world.update_companion(cid, lambda progress, con=con: team.regen_neili(self.content, progress, rate, con))
+            self.world.update_companion(cid, lambda progress, con=con: team.regen_neili(self.content, progress, rate, con, season=season))
         msgs: list[str] = []
         if p.busy_until is not None and w.time >= p.busy_until:
             msgs += self._finish_seclusion(p.busy_until)
@@ -1186,8 +1308,8 @@ class Game:
         s, c = self.state, self.content
         if self._preparing():
             return [Option(id="season:preparing", label=PREPARING_TEXT, enabled=False)]
-        if s.world.ended:
-            return [Option(id="season:resting", label="休季中，等待管理者開啟下一季", enabled=False)]
+        if s.world.ended:  # 休季：列傳為終點開著、手上有列傳的票時多幾顆用票的鈕（減法季批 7b；關著、沒票一顆不多）
+            return [Option(id="season:resting", label="休季中，等待管理者開啟下一季", enabled=False)] + self._zhuan_options()
         if s.pending_event:
             event = c.events[s.pending_event]
             opts = []
@@ -1203,8 +1325,13 @@ class Game:
                     opt.enabled, opt.tag = ok, ch.needs.path
                     opt.note = "" if ok else renown.needs_line(s, ch.needs.path, ch.needs.tier)
                 opts.append(opt)
-            if event.free_text is not None:
-                opts.append(Option(id=FREE_TEXT_OPTION, label=event.free_text.prompt + free_text_note(event.free_text, c)))
+            free = self._free_text_of(event)
+            if free is not None:
+                branches = self._branches(event)
+                opts.append(Option(
+                    id=FREE_TEXT_OPTION, label=free.prompt + free_text_note(free, c, branching=bool(branches)),
+                    outcomes=outcome_rules.tags(branches) if branches else None,
+                ))
             return opts
         if s.player.duel is not None:  # 單人頭目戰：三招與抽身；放手一搏走輸入框（duel_free_text_prompt），選單上沒有
             held = tactics.locks(s.player.duel.bout).no_moves  # 本命戰法：卸勁出不了強攻、只攻不守出不了固守
@@ -1287,12 +1414,15 @@ class Game:
             return opts + self._road_task_options(j) + self._arena_entry()  # 路上也能上擂台
         loc = c.locations[s.player.location]
         cost = self._action_costs()
-        modes = self._explore_mode_options(loc, cost["explore"], odds)
-        if modes:  # 探索三選一：「探索」只是展開三顆的入口、按了不花體力，鈕上不寫體力（三顆各自寫）；三顆都按不下去時入口也灰（PM 2026-10-14）
+        outing = self._outing_on()  # 減法季探索一顆（整合設計 4.1）：只剩一顆「探索」，不畫三選一、尋敵、操練
+        modes = [] if outing else self._explore_mode_options(loc, cost["explore"], odds)
+        if outing:
+            opts = [self._outing_option(loc)]
+        elif modes:  # 探索三選一：「探索」只是展開三顆的入口、按了不花體力，鈕上不寫體力（三顆各自寫）；三顆都按不下去時入口也灰（PM 2026-10-14）
             opts = [Option(id="act:explore", label="探索", enabled=any(o.enabled for o in modes)), *modes]
         else:
             opts = [self._cost_option("act:explore", "探索", cost["explore"])]
-        if training.on(c, s.world) and not prologue_rules.active(s, c):  # 新手引導重做：城裡操練、城外練功，行動列自成一格
+        if training.on(c, s.world) and not prologue_rules.active(s, c) and not outing:  # 新手引導重做：城裡操練、城外練功，行動列自成一格
             opts.append(self._training_option(loc, cost["explore"], odds))
         if prologue_rules.active(s, c) or not sortie.on(c):
             if self._train_squad_ids(loc):
@@ -1375,11 +1505,13 @@ class Game:
         for target, ally in self._defect_targets():  # 叛投（計畫甲）：別的陣營的投靠點、一季一次、不在沒打完的決戰的參戰名單上
             option_id = f"defect:{target.id}" + (f":{ally}" if ally else "")  # 豪強分屬兩軍：豪強的投靠點每一軍一顆
             opts.append(Option(id=option_id, label=defection.slot_label(s, c, target, ally)))
+        opts += self._lean_options()  # 三陣營四勝利：豪強改幫另一軍（隨時換、不算叛投；開關關著沒有）
         opts += self._order_options(loc)  # 軍令（計畫 T6）：守勢行動、接糧車；開關關著、散人沒有
         opts += self._rank2_options(loc)  # 第 2 階行動（正式版乙一）
         opts += self._rank_action_options(loc)  # 第 3、4 階的行動（正式版戊一）
         opts += opportunities.place_options(s, c, loc.id)  # 機緣：交東西、天時地利（正式版乙一）
         opts += foreshadow.final_options(s, c, loc.id)  # 伏筆的最後一步（計畫 T7）：做得了的人在那個地點才有
+        opts += self._errand_options()  # 託付（減法季批 6）：人在託付的地點才有那一顆；關著是空的
         opts += self._invite_options()  # 玩家之間的邀請（切磋）：別人發給你的、你發出去還在等的
         shown = bounties.visible(s, c) if bounties.board_here(s, c) else []
         if shown:  # 懸賞榜：城鎮類的地點、有看得到的單才有（FB-121：張數只算看得到的，0 張不畫）；只是打開第二層選單，不花體力
@@ -1556,7 +1688,7 @@ class Game:
                 msgs.append(f"{armament} +{points}")
         total = sum(by_attribute.values())
         if season_one(c, w):  # 晉升只在第一季的規則下有：規則關著的季只記軍備
-            push.add_contribution(p, calendar.point(w.time, c, w).week, total)
+            wins.credit(p, c, w, calendar.point(w.time, c, w).week, total)  # 豪強另記此刻幫的那一軍那一本（減法季批 3c）
             msgs.append(f"貢獻 +{total}")
         target = economy.donate_target(c, w, side, p.location)
         if target is not None:
@@ -1945,12 +2077,13 @@ class Game:
         if self._draft is not None:
             self._draft.hide(xinde_line)
             self._draft.changes.append(xinde_line)
-        gained = team.maxed_xinde(s, c, exp)  # 滿級：本人的經驗照 5 換 1 換成心得，同伴照拿經驗
+        keep = team.player_exp(s, c, exp, "drill")[0]  # 減法季三道閘：城裡操練不是仗，45 級以後換心得
+        gained = team.maxed_xinde(s, c, exp, "drill")  # 滿級：本人的經驗照 5 換 1 換成心得，同伴照拿經驗
         if gained:
-            msgs.append(team.MAXED_XINDE.format(n=gained))
-        msgs += team.add_team_exp(s, c, self.world, exp)
+            msgs.append(team.xinde_line(c, p.member, gained))
+        msgs += team.add_team_exp(s, c, self.world, exp, "drill")
         if self._draft is not None and exp > 0:
-            self._draft.changes.append(f"心得 +{gained}" if team.maxed(c, p.member) else f"經驗 +{exp}（每人）")
+            self._draft.changes += self._exp_changes(exp, keep, gained)
         left = training.drills_left(p, cfg, today)
         if left == 0:
             self._hint("h_drill_done")
@@ -2076,7 +2209,10 @@ class Game:
         ids = set(option_ids)
         loc = c.locations[s.player.location]
         notes: dict[str, str] = {}
-        if "act:explore" in ids and explore_modes.on(c):  # 探索三選一：會不會撞上怪、悟不悟得出（設計第三節）
+        if "act:explore" in ids and self._outing_on():  # 減法季探索一顆：這一處多半給什麼（比重照擲骰用的那一份，_outing_plan）
+            plan = self._outing_plan(loc)
+            notes["act:explore"] = howto.outing_line(plan.weights, c.config.jianfa.beats, plan.foe_note)
+        elif "act:explore" in ids and explore_modes.on(c):  # 探索三選一：會不會撞上怪、悟不悟得出（設計第三節）
             # 一類一顆開著時找素材不撞仗（正式季整合 2.4），打一場在練功
             fight = not precise.on(c, s.world) and not explore_modes.is_town(c, loc) and bool(self._wild_foes(loc))
             notes["act:explore"] = howto.explore_modes_line(fight, bool(insights.explore_gives(loc, c)))
@@ -2150,6 +2286,8 @@ class Game:
                 return sortie.OUT_LINE  # 領地爭奪：別人的大本營、廣宗不給攻（裁決 18）
             if not sortie.ranger_here(self.content, self._side(), loc.id, self.state.world):
                 return ""
+            if self._outing_on():  # 減法季探索一顆：沒有尋敵了，散人的仗靠出門一趟的遭遇拍（FB-817）
+                return sortie.RANGER_LINE_OUTING
             return sortie.RANGER_LINE_PRECISE if precise.on(self.content, self.state.world) else sortie.RANGER_LINE
         left = self.sorties_left()
         if left <= 0:
@@ -2185,6 +2323,30 @@ class Game:
             label = choice_label(choice, self.state, self.content, self.world)
         return label + bounties.join_note(self.state, self.content, choice)
 
+    def event_option_view(self) -> dict[str, dict] | None:
+        """江湖頁事件選項的樣子（減法季批 1，整合設計 6.4）：鈕上只留動作，心裡話只在「難說」以下才寫在底下一行小字，失手的代價不寫在鈕上。
+        眼前沒有事件是 None；有的話每一顆 choice:N 一筆 {"act": 動作（拜入門派會作廢懸賞的那一句照樣接在後面）, "kind": 檢定的屬性鍵／
+        "fight"／""（網頁照它畫鈕前的小圖示）, "worry": 心裡話或對手與勝算（沒把握才有，有把握是空字串）}。選單上的標籤一個字不改（假人與模擬照舊讀它）。
+        只讀：勝算照 odds 的備忘，不擲骰。"""
+        s, c = self.state, self.content
+        if not s.pending_event or s.pending_event not in c.events:
+            return None
+        out: dict[str, dict] = {}
+        for i, ch in visible_choices(c.events[s.pending_event], s, c):
+            act = ch.text + bounties.join_note(s, c, ch)
+            if ch.combat:
+                squad = self._story_squad(c.squads[ch.combat])
+                odds = team.estimate(s, c, self.world, squad.id, difficulty=squad.difficulty, memo=self.odds_memo)
+                worry = "" if odds in ("穩勝", "有把握") else f"對手：{squad.name}・{odds}"
+                out[f"choice:{i}"] = {"act": act, "kind": "fight", "worry": worry}
+            elif ch.check:
+                gap = check_gap(ch.check, s, c, self.world)
+                worry = event_rules.check_note(ch.check, s, c, self.world).split("：", 1)[-1] if gap < 0 else ""
+                out[f"choice:{i}"] = {"act": act, "kind": ch.check.stat, "worry": worry}
+            else:
+                out[f"choice:{i}"] = {"act": act, "kind": "", "worry": ""}
+        return out
+
     def odds(self, squad_id: str, at: str | None = None) -> str:
         """勝算的字。at：照哪一處的地利算（輿圖替每一處算，武學隨地理環境計畫第六節）；不給是此刻腳下（在路上沒有）。"""
         return team.estimate(self.state, self.content, self.world, squad_id, memo=self.odds_memo, at=at)
@@ -2192,8 +2354,55 @@ class Game:
     def _save_season(self) -> None:
         """choose()/travel() 直接在 self.state.world 上就地修改（check_thresholds、
         apply_effect 的 trend 變動等既有程式碼都是這樣寫的，沒有、也不需要特別改寫成
-        認得共用儲存的樣子），行動結束後這裡統一寫回共用賽季一次。"""
+        認得共用儲存的樣子），行動結束後這裡統一寫回共用賽季一次。
+        痕跡看得見（減法季批 4）：寫回之前先看有沒有痕跡過了門檻（痕跡只在有人記的那一下漲，記的那一下存季時發就夠；_marks_tick 防漏）。"""
+        if jianfa(self.content, self.state.world, "marks_visible"):
+            marks_rules.fire_due(self.state, self.content)
         self.world.save_season(self.state.world)
+
+    MARK_ANNAL = "{rumor}這裡頭有你出的一分力。"  # 待 joy 潤：行狀（annals.MARK）——痕跡過了門檻、你在那之前出過力
+
+    def _marks_tick(self) -> None:
+        """痕跡看得見（減法季批 4）：同步時補發過了門檻還沒發的（防漏），再替自己記出過力的那幾則行狀（_mark_credits）；
+        有改到季（發了、名號拿掉了）才存季。關著什麼都不做。"""
+        if not jianfa(self.content, self.state.world, "marks_visible"):
+            return
+        fired = marks_rules.fire_due(self.state, self.content)
+        if self._mark_credits() or fired:
+            self._save_season()
+
+    def _zhuan_tick(self) -> None:
+        """列傳為終點（減法季批 7b-1）：同步時替自己記行狀——〈天下形勢〉上一次看到之後寫到名號的那幾篇（annals.xingshi_notes），
+        季收了之後的季末論功（annals.tier_note）。只改自己的存檔，不存季。關著（zhuan_end）什麼都不做。"""
+        s, c = self.state, self.content
+        if not jianfa(c, s.world, "zhuan_end"):
+            return
+        annals.xingshi_notes(s, c, s.world)
+        if s.world.ended:
+            annals.tier_note(s, c, s.world)
+
+    def _mark_credits(self) -> bool:
+        """跨過門檻那一刻出過力的人（WorldState.mark_helpers）裡有自己的，各記一則行狀（annals.MARK：只寫那一句傳聞，不列名字、
+        不寫玩家的句子），名號從名單拿掉（名單空了鍵也拿掉）。只在自己的同步裡叫：排程與替別人寫東西的那一份 Game 不記。
+        回有沒有記到。"""
+        s, c = self.state, self.content
+        w, name = s.world, s.player.name
+        mine = [mark for mark, names in w.mark_helpers.items() if mark in w.marks_fired and name in names]
+        if not mine:
+            return False
+        by_mark = {r.mark: r for r in c.mark_rules}
+        for mark in mine:
+            names = w.mark_helpers[mark]
+            names.remove(name)
+            if not names:
+                del w.mark_helpers[mark]
+            rule = by_mark.get(mark)
+            if rule is None:
+                continue
+            loc = c.locations.get(marks_rules.place_of(mark))
+            annals.note(s, c, annals.MARK, self.MARK_ANNAL.format(rumor=rule.rumor), 2,
+                        place=loc.name if loc is not None else "", time=w.marks_fired[mark])
+        return True
 
     def dialogue_request(self, option_id: str, text: str | None = None) -> companion_agent.DialogueRequest | None:
         """鎖外生成的階段 A（server.py 在行動鎖內、很快地呼叫）：現在選這個選項，會不會生成一輪對話？
@@ -2823,7 +3032,7 @@ class Game:
             con = team.con_of(s, c, self.world, PLAYER)
             cut = team.armor_cut(s, c, self.world)
             hp, _ = team._apply_toll(c, me.member, cfg.hit_hp_loss * (1 - cut), agi=me.stats.get("agi", team.BASE_STAT), con=con,
-                                     injury=treasures.amount(s, c, "injury"))  # 螭首（玉璽碎片改版）：變成內傷的減半
+                                     injury=treasures.amount(s, c, "injury"), season=s.world)  # 螭首（玉璽碎片改版）：變成內傷的減半
             hp_lost = round(hp)
             if hp_lost > 0:
                 record.changes.append(f"氣血 -{hp_lost}")
@@ -3157,7 +3366,17 @@ class Game:
         驗不過就忽略、照平常打（優勢 0）。假人、整季機器人不帶，大場面也是優勢 0、照平常演出（武學與成長設計 8.3）。
         不過等判讀的時候這個選項已經不在選單上了（人被帶走、事件被了結）就不打：回一句話說這一仗沒打成（_fight_gone），
         不寫戰報也不寫江湖紀錄（跟其他的拒絕一樣）。"""
+        if option_id == step_rules.NEXT and step_rules.on(self):  # 本週卡「換一件事」（減法季批 3c）：不在選單上（假人碰不到）、
+            return step_rules.skip(self)  # 不花體力、不寫江湖紀錄；關著的季照舊當成不在選單上
+        if option_id.startswith(zhuan_end.PREFIX) and any(o.id == option_id and o.enabled for o in self.options(odds=False)):
+            return self._log(self._zhuan_act(option_id))  # 休季用列傳的票（減法季批 7b）：不走行動那一串（季收了，不推大勢、不存季）
         option = {o.id: o for o in self.options(odds=False)}.get(option_id)
+        if option is None and option_id.startswith(wins.LEAN_PREFIX):
+            option = self._lean_anytime(option_id)  # 「改幫…」隨時都能換（設計 3.2）：在路上、決戰的大區選單上沒有它，照樣收
+            if option is not None and self.state.pending_event is not None:
+                # 唯一的例外：有事件待選時不收（FB-820，PM 2026-10-26）——不然同一則事件裡依陣營出現的選項兩邊都挑得到。
+                # 回一句（Refused：伺服器傳去網頁跳提示），什麼都不動、不寫江湖紀錄
+                return Refused(self._log([wins.LEAN_EVENT_PENDING]))
         if option is None and option_id.startswith("bounty:"):
             # FB-162：懸賞選項已經不在選單上（兩個分頁搶同一張，慢的那一頁）：回這一步為什麼不成的那一句，不寫江湖紀錄；
             # 回傳值是 Refused，伺服器照它把同一句傳去網頁跳提示（server.api_choose）
@@ -3199,6 +3418,8 @@ class Game:
             return self._log(self._arena_act(arg))
         if option_id == FREE_TEXT_OPTION:
             return self._log([f"（寫下你的做法，{FREE_TEXT_MAX} 字以內。）"])  # 選項本身只叫出輸入框，不消耗事件
+        if kind == "errand" and arg.startswith("persuade:") and self._persuade_said is None:
+            return self._log([errand_rules.PERSUADE_ASK])  # 勸降（減法季批 6）：選項本身只叫出輸入框，送出走 persuade_request／persuade
         if option_id == sensing.DRAW:
             return self._log(["（在畫布上一筆畫下心中的形。）"])  # 只叫出畫布；畫完送出走 sense_request／sense_draw
         if option_id == explore_modes.SAY_ID and self._gather_said is None:
@@ -3208,6 +3429,7 @@ class Game:
             return self._log([f"（寫下你想說的話，{self.say_max()} 字以內。）"])  # 選項本身只叫出輸入框
         prepared = self._checked_prepared(option_id, prepared, text) if kind in ("act", "talk", "call", "parley") else None
         self._fight = self._checked_fight(option_id, fight)
+        was_opening = kind == "choice" and opening_rules.pending(self.state, self.content)  # 開局三選一（減法季批 7）：選完人物的信到
         self._draft = Draft(self._action_title(kind, arg))
         self._affinity_before = dict(self.state.player.affinities)
         stamina = self.state.player.stamina
@@ -3265,12 +3487,16 @@ class Game:
                 msgs = self._aid_act(arg)
             elif kind == "feast":
                 msgs = self._feast_act(arg)
+            elif kind == "errand":
+                msgs = self._errand_act(arg)
             else:
                 msgs = self._choose(int(arg))
             # 三選一開著時按「探索」本身（_act 只回 PICK）：不算探索過、不寫紀錄。要在後面接上大勢門檻、召見那些訊息之前記
             # 找素材分支的入口（第 32 項）也一樣：按「找素材」本身只回 GATHER_PICK、展開分支
             picked_only = (kind == "act" and arg == "explore" and msgs == [explore_modes.PICK]) or (
                 kind == "explore" and msgs == [explore_modes.GATHER_PICK])
+            if faction_before is None and self.state.player.faction is not None:
+                msgs += self._join_lean()  # 三陣營四勝利：拜入曹氏莊院而投靠的那一下照門派所在地給傾向（關著什麼都不做）
             self._begin_enlistment(faction_before)  # 投靠（或拜入陣營名下的門派）那一下：入伍段開始，同一下不算完成任何一步
             self._greet_rejoin(faction_before)  # 入伍段早就走完的人再投靠：引薦人打個招呼（新手引導計畫三）
             if faction_before is None and self.state.player.faction is not None:  # 這一下才投靠（確認，或拜入陣營名下的門派）：手上新陣營接不了的懸賞作廢、說一聲（FB-151）；叛投在 defection.defect 裡做
@@ -3278,6 +3504,8 @@ class Game:
             msgs += self._hear_after_stamina(stamina)
             if kind == "choice":  # 選了事件的選項：序章的遇險、拜師、四景（新手引導計畫一）
                 msgs += self._guide(note_action(self.state, self.content, self.world, "choice"))
+            if was_opening and not opening_rules.pending(self.state, self.content):  # 開局第一分鐘：那位人物開口、託付第一件事（信附委託）
+                msgs += opening_rules.deliver(self.state, self.content)
             if kind == "act" and arg != "break" and not picked_only:
                 msgs += self._guide(note_action(self.state, self.content, self.world, arg))
                 if arg in SHOP_ACTS:  # 初入江湖「進城裡的鋪子看看」：進哪一間都算（新手引導第四段）
@@ -3293,6 +3521,7 @@ class Game:
                 msgs += self._guide(note_action(self.state, self.content, self.world, "socialize"))  # 指名求見算一次交友
             # 名將贈禮（裝備四欄 6.4）與本命兵器（打造第三批）：這一下的情誼（對話、事件）到了門檻就送；另起一則「名將贈禮」，
             # 不接在當下這個動作的紀錄裡（FB-139、FB-149：名將多半不在場，也跟那件事無關），排在這一則之後（「剛剛」看得到）
+            self._deep_cap_now()  # 深交上限（減法季批 7b）：贈禮與本命兵器照夾過的情誼判（關著什麼都不做）
             gifts = self._general_gifts() + self._signature_arms()
             msgs += check_thresholds(self.state, self.content, self.world, self._quick_client(), now=self.now)
             msgs += self._settle_plots()  # 參與過的密謀收場了：各自結算一次（正式版乙二）
@@ -3378,22 +3607,45 @@ class Game:
             return None
         if FREE_TEXT_OPTION not in {o.id for o in self.options(odds=False, tick=False) if o.enabled}:
             return None
-        return FreeTextRequest(event_id=event_id, text=text)
+        branches = self._branches(self.content.events[event_id])
+        return FreeTextRequest(event_id=event_id, text=text, outcomes=outcome_rules.tags(branches) if branches else [])
 
-    def answer_event(self, request: FreeTextRequest, llm_rate: int | None = None, moral: str | None = None) -> list[str]:
+    def _free_text_of(self, event: Event) -> FreeTextChoice | None:
+        """這則事件此刻有沒有「隨口應對」那一顆：寫了 free_text，而且不是只在分岔開著時才有的那一種（outcomes_only，人拉犁；PM 2026-10-25
+        第 7 件）——那一種在關著的季沒有這一顆，選單、輸入框的提示語、新手提示都照沒有。"""
+        free = event.free_text
+        if free is None or (free.outcomes_only and not jianfa(self.content, self.state.world, "free_text_outcomes")):
+            return None
+        return free
+
+    def _branches(self, event: Event) -> list[Outcome]:
+        """這一則的隨口應對此刻照分岔走嗎（減法季批 4，整合設計 5.1）：子開關 free_text_outcomes 開著（加上這一季的章）、事件寫了後果，
+        是那幾種後果（最後一種是 fallback）；其餘是空的，照舊用 stat、effect、fail_effect。"""
+        free = self._free_text_of(event)
+        if free is None or not free.outcomes or not jianfa(self.content, self.state.world, "free_text_outcomes"):
+            return []
+        return free.outcomes
+
+    def answer_event(
+        self, request: FreeTextRequest, llm_rate: int | None = None, moral: str | None = None, outcome: str | None = None,
+    ) -> list[str]:
         """隨口應對的階段 C（鎖內）：重驗還停在同一則事件、寫的是同一句話，才算成功率、擲骰、套用效果。
         llm_rate 是鎖外評好的 0～100、moral 是同一次評出來的善惡（event_llm.MORALS）；llm_rate 沒給（直接呼叫的測試、腳本）
         就在這裡評（行動鎖內，用 _quick_client 的短逾時複本），評不到一樣退回 40、善惡當「中」。
         成功率＝LLM 評分加屬性修正、夾在 5～85（rules.free_text_rate）；擲骰用引擎自己的 rng。
         善惡再驗一次（event_llm.moral_of：不是那三個字當「中」）。判成「惡」而且擲中了（FB-223）：成功效果換成惡行的版本
         （rules.evil_success：善名換惡名、扣惡名與加情誼拿掉、結果句換成 rules.EVIL_DONE），潤色照惡行寫（FreeTextOutcome.evil）；
-        「善」「中」、或「惡」沒擲中，一個字都不變。"""
+        「善」「中」、或「惡」沒擲中，一個字都不變。
+        分岔開著、這則事件寫了後果（_branches）時改走 _answer_branch（outcome 是 B 段歸好的那一種的 id）；關著的季 outcome 不理。"""
         s, c = self.state, self.content
         self.last_gamble = None
         current = self.free_text_request(request.text)
         if current is None or current.event_id != request.event_id:
             return self._log(["（事情已經過去了，這句話沒派上用場。）"])
         event = c.events[request.event_id]
+        branches = self._branches(event)
+        if branches:
+            return self._answer_branch(event, request, branches, llm_rate, moral, outcome)
         choice = event.free_text
         if llm_rate is None:
             # 判善惡那一次照 _quick_client 的額度：評分失敗用掉了額度就不叫、當「中」
@@ -3425,6 +3677,7 @@ class Game:
             msgs += self._event_progress()  # 領地爭奪：隨口應對了結也推一次進度（開關關著是空的）
             self._begin_enlistment(faction_before)  # 隨口應對的結果也可能拜入門派
             self._greet_rejoin(faction_before)  # 同樣：入伍段早就走完的人拜入門派，引薦人打個招呼（新手引導計畫三）
+            self._deep_cap_now()  # 深交上限（減法季批 7b）：同 choose
             gifts = self._general_gifts() + self._signature_arms()  # 隨口應對的效果也可能加情誼（同 choose：另起一則）
             msgs += check_thresholds(s, c, self.world, self._quick_client(), now=self.now)
             msgs += self._report_seat()  # 隨口應對的效果也可能推大勢、記貢獻：第四階席次的帳在這裡也抄（正式版丁）
@@ -3442,6 +3695,276 @@ class Game:
         self._record_faction()
         self._save_season()
         return self._log(msgs)
+
+    def _answer_branch(
+        self, event: Event, request: FreeTextRequest, branches: list[Outcome], llm_rate: int | None, moral: str | None,
+        outcome: str | None,
+    ) -> list[str]:
+        """隨口應對分岔的 C 段（減法季批 4；整合設計 5.1、5.9，主機側計畫 Task 4-2）：照 outcomes.plan 分四條走——
+        check 照那一種的檢定擲骰（self.rng；成功率比的是那一種的難度，outcomes.rate）、成套 effect 敗套 fail_effect；combat 照固定選項開打
+        （_event_battle），贏套 effect、輸套 fail_effect；cost 掏銀兩、必成（不夠就回 NOT_ENOUGH_SILVER、不做、不扣次數，事件還停著）；
+        最後一種（fallback）只套那一句。outcome 是 B 段歸好的 id（不在清單一律最後一種）；llm_rate 沒給（直接呼叫的測試、腳本）就在鎖內
+        自己歸類（event_llm.judge_outcome，_quick_client 的額度）。
+        善惡（FB-223）只在歸到最後一種時照舊看模型的評分（判「惡」就是惡行成了：rules.evil_success）；選中別的後果時只看那一種自己的效果
+        （作惡那一種本來就扣善名），同一句話不加兩次（PM 2026-10-25 第 8 件）。成了的後果記貢獻（_deed_credit）。
+        行狀只寫後果的類名，不存玩家寫的句子（公開的只有後果與痕跡）；江湖紀錄是自己的，照舊寫那一句，括號裡多寫類名。"""
+        s, c = self.state, self.content
+        if llm_rate is None:
+            verdict = event_llm.judge_outcome(self._quick_client(), event, branches, request.text, moral_client=self._quick_client)
+            llm_rate, outcome = verdict.rate, verdict.outcome
+            moral = verdict.moral if moral is None else moral
+        plan = outcome_rules.plan(branches, outcome, llm_rate, s, c, self.world)
+        chosen = plan.outcome
+        problem = outcome_rules.cost_problem(chosen, s) if plan.way == "cost" else ""
+        if problem:
+            return self._log([problem])
+        fallback = plan.way == "fallback"
+        moral = event_llm.moral_of(moral) if fallback else event_llm.MORAL_NEUTRAL
+        # 類名（短名）寫進紀錄的括號與行狀；歸到最後一種（走開）不寫類名，照關著時的寫法（FB-800，PM 2026-10-25：紀錄與行狀
+        # 「隨口應對，行了一件惡事，成了。」不寫成「隨口應對：走開，…」；判善、判中也不寫）
+        name = "" if fallback else outcome_rules.kind_name(chosen)
+        s.battle_card = None
+        faction_before = s.player.faction
+        self._draft = Draft(f"{event.title}・隨口應對")
+        self._affinity_before = dict(s.player.affinities)
+        try:
+            s.pending_event = None
+            evil = False
+            if plan.way == "check":
+                success = self.rng.random() * 100 < plan.rate
+                tag, line = check_result_line(success)  # 一律是本人：不寫誰出手
+                msgs = [f"你：「{request.text}」（{name}・{rate_words(plan.rate)}）", line]
+                self._outcome(tag, line)
+                effect = chosen.effect if success else failed(chosen.fail_effect, c)
+                msgs += self._apply(effect, once=event.once)
+            elif plan.way == "combat":
+                msgs = [f"你：「{request.text}」（{name}）"]
+                msgs += self._event_battle(event, outcome_rules.as_choice(chosen))  # 效果在打完那一刻照勝負套
+                success = s.battles[0].tier in team.WIN_TIERS
+                effect = chosen.effect if success else failed(chosen.fail_effect, c)
+            else:  # 掏錢的、最後一種：不擲骰、必成
+                success = True
+                evil = fallback and moral == event_llm.MORAL_EVIL
+                effect = evil_success(chosen.effect) if evil else outcome_rules.paid(chosen)
+                msgs = [f"你：「{request.text}」" + (f"（{name}）" if name else "")]
+                msgs += self._apply(effect, once=event.once)
+            self._deed_credit(chosen, success)
+            done = EVIL_ANNAL if evil else "。" if fallback else "，成了。" if success else "，沒成。"
+            annals.note(s, c, annals.DEED, f"遇上{'奇遇' if event.qiyu else ''}【{event.title}】，隨口應對{'：' + name if name else ''}{done}",
+                        3 if event.once or event.qiyu else 1)  # 不存玩家的句子（quote 空著）
+            msgs += self._event_progress()  # 領地爭奪：隨口應對了結也推一次進度（開關關著是空的）
+            self._begin_enlistment(faction_before)
+            self._greet_rejoin(faction_before)
+            self._deep_cap_now()  # 深交上限（減法季批 7b）：同 choose
+            gifts = self._general_gifts() + self._signature_arms()
+            msgs += check_thresholds(s, c, self.world, self._quick_client(), now=self.now)
+            msgs += self._report_seat()
+            self._check_hints()
+            journal.add_entry(s, self._draft.entry(s.world.time, msgs))
+            self._gift_entry(gifts)
+            msgs += gifts
+            self.last_gamble = FreeTextOutcome(
+                event_id=event.id, text=request.text, success=success, effect_text=fill_marks(effect.text, s),
+                time=s.world.time, title=self._draft.title, evil=evil, outcome=chosen.id,
+            )
+        finally:
+            self._draft = None
+            self._affinity_before = None
+        self._record_faction()
+        self._save_season()
+        return self._log(msgs)
+
+    def _deed_credit(self, outcome: Outcome, success: bool) -> None:
+        """分岔的後果記貢獻（整合設計 5.3）：成了、不是作惡那一種（PM 2026-10-25 第 6 件）、有那一邊（散人照留痕跡、不記貢獻，同推線）。
+        一天（季曆日，同推線的上限）最多 Config.jianfa.deed_contribution_cap，超過的不記（PlayerState.deed_day／deed_today）。
+        走 wins.credit：兩軍照舊加 contrib 與那一週的帳，豪強另記此刻幫的那一軍那一本。"""
+        self._deed_points(outcome.effect.contribution if success and not outcome.evil else 0)
+
+    def _deed_points(self, points: int, *, capped: bool = True) -> int:
+        """記 points 點陣營貢獻進「文字的事」那一本（整合設計 5.3：分岔的後果、心意一筆、託付辦成了；減法季批 4、6）：有那一邊才記
+        （散人不記，同推線），一天（季曆日）最多 Config.jianfa.deed_contribution_cap，超過的不記（PlayerState.deed_day／deed_today）。
+        capped=False（託付辦成了，PM 2026-10-26：一週才一件，共用的話分岔記滿那一天託付就記不到）：照數全記，也不佔那一天的額度。
+        走 wins.credit：兩軍照舊加 contrib 與那一週的帳，豪強另記此刻幫的那一軍那一本。回實際記了幾點。"""
+        s, c = self.state, self.content
+        if not points or self._side() is None:
+            return 0
+        w, p = s.world, s.player
+        at = calendar.point(w.time, c, w)
+        if not capped:
+            wins_rules.credit(p, c, w, at.week, points)
+            return points
+        if p.deed_day != at.cal_day:
+            p.deed_day, p.deed_today = at.cal_day, 0
+        room = outcome_rules.contribution_room(points, p.deed_today, c.config.jianfa.deed_contribution_cap)
+        if room:
+            p.deed_today += room
+            wins_rules.credit(p, c, w, at.week, room)
+        return room
+
+    # ── 人物心意（減法季批 6；tianxia/stances.py）────────────
+
+    def _stance_before(self, cid: str) -> str | None:
+        """這一輪對話之前，你今天跟這位人物記過的那一筆（沒有心意、關著是 None）：跟之後比，看這一輪有沒有記到。"""
+        fid = stance_rules.figure_of(self.content, cid)
+        return stance_rules.heard_today(self.state, self.content, fid) if fid is not None else None
+
+    def _stance_credit(self, cid: str, before: str | None) -> None:
+        """這一輪對話記到一筆心意（之前今天沒記過、之後有了）：記 Config.jianfa.stance_contribution 點貢獻（整合設計 5.3，跟分岔同一本上限）。"""
+        fid = stance_rules.figure_of(self.content, cid)
+        if fid is not None and before is None and stance_rules.heard_today(self.state, self.content, fid) is not None:
+            self._deed_points(self.content.config.jianfa.stance_contribution)
+
+    def voice_stance(self, fid: str, sid: str) -> bool:
+        """不說話、直接記一筆心意（只有伺服器假人叫：bot_policy 照 stances.bot_pick，企劃者 2026-10-24 第 5 件）：一人一天一筆的規則、
+        到門檻、貢獻都跟真人說話那一輪一樣，只是沒有那一輪對話、不寫江湖紀錄。記到了存季，回有沒有記。"""
+        if self.world.paused_at() is not None or self.state.world.ended:
+            return False
+        if not stance_rules.record(self.state, self.content, fid, sid):
+            return False
+        self._deed_points(self.content.config.jianfa.stance_contribution)
+        self._save_season()
+        return True
+
+    def figure_view(self, cid: str) -> dict | None:
+        """人物頁的資料（主機側計畫 1.3 的 figure.stances、figure.errands）：{"id", "name", "stances", "my_stance_today", "errands"}；
+        心意關著（或他沒有心意）沒有前兩個鍵、託付關著（或他沒有託付池）沒有 errands。兩樣都沒有是 None。"""
+        s, c = self.state, self.content
+        fid = figures.of_character(c, cid)
+        if fid is None:
+            return None
+        mind = stance_rules.view(s, c, fid)
+        jobs = errand_rules.view(s, c, fid=fid) if errand_rules.on(c, s.world) and c.figures[fid].errands else None
+        if mind is None and jobs is None:
+            return None
+        out: dict = {"id": cid, "name": c.figures[fid].name, **(mind or {})}
+        if jobs is not None:
+            out["errands"] = jobs
+        return out
+
+    # ── 託付與來信（減法季批 6；tianxia/errands.py）────────────
+
+    _persuade_said: tuple[errand_rules.PersuadeRequest, int] | None = None  # 勸降的 C 段（persuade）交給 choose 的單子與模型的分數
+
+    def errands_view(self) -> list[dict] | None:
+        """江湖畫面的 main.errands（主機側計畫 1.3）：這一季人物託你的事；託付關著是 None（畫面沒有這個鍵）。"""
+        s, c = self.state, self.content
+        return errand_rules.view(s, c) if errand_rules.on(c, s.world) else None
+
+    def _errand_options(self) -> list[Option]:
+        """人在託付的地點：交信（不花體力）、探營、勸降（花 errand_stamina）。勸降按下去只叫出輸入框（choose 的早退）。"""
+        s, c = self.state, self.content
+        opts = []
+        for e in errand_rules.here(s, c):
+            option_id = f"errand:{errand_rules.VERBS[e.kind]}:{e.id}"
+            label = f"{errand_rules.LABELS[e.kind]}（替{errand_rules.who(c, e)}{errand_rules.task_text(c, e)}）"
+            if e.kind == "letter":
+                opts.append(Option(id=option_id, label=label))
+            else:
+                opts.append(self._cost_option(option_id, label, c.config.jianfa.errand_stamina))
+        return opts
+
+    def _errand_act(self, arg: str) -> list[str]:
+        """交信（errand:deliver:<id>）、探營（errand:scout:<id>）、勸降（errand:persuade:<id>，只從 persuade 的 C 段進來）：重驗那一件
+        還在辦、人在那裡、是那一種，照種類做完、給獎勵。"""
+        s, c = self.state, self.content
+        verb, _, eid = arg.partition(":")
+        e = errand_rules.find(s, eid)
+        if e is None or e not in errand_rules.here(s, c) or errand_rules.VERBS[e.kind] != verb:
+            return [errand_rules.NOT_HERE]
+        if e.kind == "letter":
+            d = errand_rules.find_def(c, e.figure, e.errand)
+            msgs = [errand_rules.DELIVERED.format(to=d.to or errand_rules.place(c, e.target))]
+            msgs += self._errand_reward(e)
+            errand_rules.thank(s, c, e)
+            return msgs
+        s.player.stamina -= c.config.jianfa.errand_stamina
+        if e.kind == "scout":
+            lines = errand_rules.scout_lines(s, c, e)
+            errand_rules.note_scout(s, c, e, lines)
+            return [errand_rules.SCOUT_TITLE.format(place=errand_rules.place(c, e.target)), *lines, *self._errand_reward(e)]
+        return self._errand_persuade(e)
+
+    def _errand_reward(self, e) -> list[str]:
+        """辦成了（整合設計 5.5）：他的情誼 +affinity（照寫的數字給、不照 affinity_gain_scale 放慢，夾在 0～100；PM 2026-10-26）、
+        貢獻 +contribution（不吃每天的貢獻上限、也不佔那一本，PM 2026-10-26）、他的那個心意 +1、行狀一則（annals.ERRAND）。回紀錄的句子。"""
+        s, c = self.state, self.content
+        d = errand_rules.find_def(c, e.figure, e.errand)
+        errand_rules.done(s, e)
+        cid = errand_rules.cid_of(c, e)
+        msgs = [errand_rules.DONE.format(who=errand_rules.who(c, e))]
+        if d is not None:
+            msgs += errand_rules.warm(s, c, cid, d.affinity)
+            self._deed_points(d.contribution, capped=False)
+            stance_rules.bump(s, c, e.figure, d.stance)
+        annals.note(s, c, annals.ERRAND, f"替{errand_rules.who(c, e)}{errand_rules.task_text(c, e)}，辦成了。", 3, figure=cid)
+        return msgs
+
+    def _errand_persuade(self, e) -> list[str]:
+        """勸降的結果（choose 的這一下，_persuade_said 是單子與模型的分數）：引擎加情誼名望的修正、夾、自己擲骰；成了立痕跡 band_turned
+        （Effect.marks 走 _apply：一人一天一筆、恤民這類心意的倍數照算）、推那一條線（errands.turn_band：一次性的推法，照寫的量、不打事件五折、
+        不另記推線的貢獻；FB-827）、給獎勵；敗了打一場遭遇（_squad_encounter，同探索撞上的野怪），那一件沒談成。"""
+        s, c = self.state, self.content
+        request, rate = self._persuade_said
+        d = errand_rules.find_def(c, e.figure, e.errand)
+        who = d.persuade.who if d is not None and d.persuade is not None else ""
+        final = errand_rules.persuade_rate(s, c, e, rate)
+        msgs = [f"你：「{request.text}」（{rate_words(final)}）"]
+        if errand_rules.persuade_roll(s, e) < final:
+            msgs.append(errand_rules.PERSUADE_WON.format(who=who))
+            if d is not None and d.persuade is not None:
+                msgs += self._apply(Effect(marks=dict(d.persuade.marks)))
+                msgs += errand_rules.turn_band(s, c, d, e.target)
+            return msgs + self._errand_reward(e)
+        msgs.append(errand_rules.PERSUADE_LOST.format(who=who))
+        errand_rules.done(s, e, "failed")
+        if d is not None and d.persuade is not None and d.persuade.foe in c.squads:
+            msgs += self._squad_encounter(d.persuade.foe, wild=True)
+        return msgs
+
+    def persuade_request(self, errand_id: str, text: str) -> errand_rules.PersuadeRequest | list[str]:
+        """勸降的 A 段（server.persuade_text 在行動鎖內、很快地呼叫；只讀）：那一件按得下去（勸降、人在那裡、體力夠）、字是 1～20 字，
+        就開單；不行回拒絕的話。"""
+        if self.world.paused_at() is not None:
+            return [f"（{PAUSED_TEXT}。）"]
+        s, c = self.state, self.content
+        problem = errand_rules.persuade_problem(s, c, errand_id)
+        if problem is not None:
+            return [problem]
+        said = errand_rules.clean_text(text)
+        option = {o.id: o for o in self.options(odds=False, tick=False)}.get(f"errand:persuade:{errand_id}")
+        if said is None or option is None or not option.enabled:
+            return [errand_rules.PERSUADE_ASK]
+        e = errand_rules.find(s, errand_id)
+        d = errand_rules.find_def(c, e.figure, e.errand)
+        return errand_rules.PersuadeRequest(
+            errand=errand_id, figure=errand_rules.who(c, e), who=d.persuade.who if d is not None and d.persuade else "",
+            place=errand_rules.place(c, e.target), text=zh.to_traditional(said),
+        )
+
+    def persuade(self, request: errand_rules.PersuadeRequest, rate: int | None = None) -> list[str]:
+        """勸降的 C 段（鎖內）：重驗同一件、同一句還按得下去才扣體力擲骰（choose 的 errand:persuade，紀錄、行狀照一般動作寫）。
+        rate 是鎖外評好的 0～100；None＝模型叫不動：照批 4 的慣例落到最保守的結果——什麼都不發生（不扣體力、不打、那一件照舊在），
+        回 PERSUADE_SILENT，不寫紀錄。"""
+        now = self.persuade_request(request.errand, request.text)
+        if isinstance(now, list):
+            return self._log(now)
+        if (now.errand, now.text) != (request.errand, request.text):
+            return self._log([errand_rules.NOT_HERE])
+        if rate is None:
+            return self._log([errand_rules.PERSUADE_SILENT])
+        self._persuade_said = (now, max(0, min(100, int(rate))))
+        try:
+            return self.choose(f"errand:persuade:{request.errand}")
+        finally:
+            self._persuade_said = None
+
+    def _stance_annals(self) -> None:
+        """同步時：這一週你勸過的心意到了門檻，記一則行狀（annals.STANCE：只寫他改做什麼，不列名字、不寫你說的話）。"""
+        s, c = self.state, self.content
+        for fid, d in stance_rules.annals_due(s, c):
+            cid = c.figures[fid].character or fid
+            annals.note(s, c, annals.STANCE, stance_rules.ANNAL.format(name=c.figures[fid].name, stance=d.name, rumor=d.rumor), 2,
+                        figure=cid, time=s.world.stance_active[fid].at)
 
     def add_gamble_narration(self, outcome: FreeTextOutcome, narration: str) -> None:
         """隨口應對的潤色（鎖外生成）插回那一則江湖紀錄：接在「你：「…」」那一行後面、結果文字前面。
@@ -3560,6 +4083,8 @@ class Game:
                 return "再想想"
             if arg.startswith("ally:"):  # 豪強分屬兩軍：挑依附哪一軍
                 return f"依附{c.scenario.faction_name(arg[5:], arg[5:])}"
+            if arg.startswith("lean:"):  # 三陣營四勝利：豪強改幫另一軍
+                return wins.LEAN_BUTTON.format(side=c.scenario.faction_name(arg[5:], arg[5:]))
             return f"考慮投靠{self.content.scenario.faction(arg).name}"
         if kind == "defect":
             if arg == "confirm":
@@ -3620,6 +4145,9 @@ class Game:
         if kind == "works":
             name = works.FORT_TITLE if arg == "fortify" else works.STOCK_TITLE
             return f"{name}・{c.locations[s.player.location].name}"
+        if kind == "errand":  # 託付（減法季批 6）：「交信・盧植」
+            e = errand_rules.find(s, arg.partition(":")[2])
+            return f"{errand_rules.LABELS[e.kind]}・{errand_rules.who(c, e)}" if e is not None else "託付"
         if kind == "arena":
             foe = arena.entry_of(s.world, arg.partition(":")[2]) if arg.startswith("fight:") else None
             return f"{arena.ARENA}・{foe.name}" if foe is not None else arena.ARENA
@@ -3648,7 +4176,7 @@ class Game:
         duty = c.orders.duties.get(s.player.faction or "")  # 守勢行動的標題寫陣營自己的名字（巡哨、傳道、保境安民）
         action2 = opportunities.rank2_action(s, c)  # 第 2 階行動的標題也寫它自己的名字（招降黃巾散兵、施符水收人心）
         titles = {
-            "explore": f"探索{here}", "socialize": f"交友・{here}", "call": f"求見・{here}", "train": f"{self._train_title()}・{here}",
+            "explore": f"{journal.OUTING}・{here}" if self._outing_on() else f"探索{here}", "socialize": f"交友・{here}", "call": f"求見・{here}", "train": f"{self._train_title()}・{here}",
             "recruit": f"招募・{here}", "rest": f"調息・{here}", "summons": f"應召・{here}", "halt": "喊停", "part": "分道揚鑣",
             "duty": f"{duty.name if duty else '守勢'}・{here}", "convoy": f"接下糧車・{here}",
             "rank2": f"{action2.name if action2 else '第二階行動'}・{here}",
@@ -3878,7 +4406,7 @@ class Game:
             on.append("h_recruit")
         if want("h_free_text") and s.pending_event:
             event = c.events.get(s.pending_event)
-            if event is not None and event.free_text is not None:
+            if event is not None and self._free_text_of(event) is not None:
                 on.append("h_free_text")
         if want("h_road") and p.recent_sights:  # 路上見聞真的發生過才會記
             on.append("h_road")
@@ -3972,7 +4500,7 @@ class Game:
         s, c = self.state, self.content
         if not newbie.active(s, c) or prologue_rules.onboard_step(s, c) is not None:
             return None
-        rows = [{"key": g.key, "text": g.text, "reward": newbie.reward_text(c, g), "go": self._newbie_go(g.go),
+        rows = [{"key": g.key, "text": newbie.text_of(s, c, g), "reward": newbie.reward_text(c, g), "go": self._newbie_go(g.go),
                  "drifter": g.key == "side" and s.player.faction is None} for g in newbie.todo(s)]
         return {"title": newbie.TITLE, "rows": rows, "done": len(s.player.newbie_done), "total": len(newbie.GOALS)}
 
@@ -4001,6 +4529,23 @@ class Game:
         if msgs and msgs[0] != letters.NO_LETTER:
             self._write(letters.TITLE, msgs)
         return msgs
+
+    def morning_mail(self, now: float) -> bool:
+        """減法季「09:00 來信」（整合設計第十章，批 9）：伺服器的看守替開了推播的人送今天的信，不必等他上線（送了手機才跳得出
+        「某某來信」）。只做同步裡書信那一格（letters.deliver），不補算體力、不算上線、不動「此地還有」；他下次同步照常，同一個
+        送信日不會再送第二封。角色還停在上一季（換季後還沒上線過）、或這一季沒開 morning_mail 時什麼都不做。
+        呼叫端拿著行動鎖、事後存角色；送了一封回 True。"""
+        self.now = now
+        if self.state.player.season_number < self.world.get_season_number():
+            return False
+        self.state.world = self.world.get_season()
+        if letters.mail_day(self.content, self.state.world, now) is None:
+            return False
+        seq = self.state.player.letter_seq
+        mail = letters.deliver(self.state, self.content, now)
+        if mail:
+            self._write(letters.TITLE, mail)
+        return self.state.player.letter_seq != seq
 
     def letter_request(self) -> letters.LetterNote | None:
         """還等著模型照他的口氣重寫的那一封（server 鎖外寫；A 段，只讀）。"""
@@ -4129,6 +4674,8 @@ class Game:
         return dict(self.content.config.action_cost)
 
     def _act(self, what: str, prepared: companion_agent.PreparedTurn | None = None) -> list[str]:
+        if what == "explore" and self._outing_on():  # 減法季探索一顆：出門一趟（體力在裡面扣）
+            return self._explore_one()
         if what == "explore" and explore_modes.on(self.content) and not prologue_rules.active(self.state, self.content):
             return [explore_modes.PICK]  # 三選一開著：「探索」只是展開三顆的入口，按了不花體力、不做事（網頁在行動列底下展開）
         if what == "break":
@@ -4444,7 +4991,7 @@ class Game:
         探索真的擲骰（_explore_outcome）與行動列底下那一行（action_notes，explain-1）讀同一份：說的跟擲的不會走樣。"""
         s, c = self.state, self.content
         mix = c.config.explore_mix_of(loc.tags).weights
-        wis = team.stat_factor(c, s.player.stats.get("wis", team.BASE_STAT))
+        wis = team.stat_factor(c, s.player.stats.get("wis", team.BASE_STAT), s.world)
         sharp = wis * treasures.amount(s, c, "insight")  # 寶物「探索悟意境」跟悟性疊乘（裝備四欄 6.2）
         return [
             (b, mix[b] * (sharp if b == "insight" else 1))
@@ -4647,6 +5194,262 @@ class Game:
             return sensing.start(s, c, sensing.pick_scene(loc, c, rng), rng)
         found = insights.roll_explore(loc, c, rng)
         return [f"你在{loc.name}靜下心來，看了好一陣。"] + insights.learn(s, c, self.world, found, at=loc)
+
+    # ── 減法季探索一顆（整合設計 4.1，批 2；Config.jianfa 的 explore_one）────────────────
+
+    def _outing_on(self) -> bool:
+        """探索一顆在這一季開著（Config.jianfa 的 explore_one＋開季的章，rules.jianfa），而且不在序章裡（序章照舊按「探索」走寫好的那幾步）。
+        開著時選單上只剩一顆「探索」（act:explore，出門一趟），不畫三選一（explore:*）、尋敵、城裡操練。"""
+        return jianfa(self.content, self.state.world, "explore_one") and not prologue_rules.active(self.state, self.content)
+
+    def _outing_foe(self, loc: Location, kind: str) -> tuple[str | None, Squad | None]:
+        """遭遇拍打誰（設計 4.1，PM 2026-10-25 第 3 件）：手上有這裡的討伐懸賞、那一路不是自己人，就是它（bounty；易手了也找得到，同
+        _gather_foe）；自家營寨（營類、此刻歸自己這一邊、有自家的隊伍）是跟同袍比劃（spar，_sortie_host 那一路）；否則這裡此刻站的、
+        不是自家的隊伍裡最弱的一路（foe）；城類的地點自己沒有對手才換成地痞（town，Config.jianfa.town_foes 的第一路）。都沒有是 (None, None)。"""
+        s, c = self.state, self.content
+        for b in bounties.mine(s, c):
+            if b.kind == "strike" and b.location == loc.id and b.squad in c.squads and not self._drills_with(c.squads[b.squad]):
+                return "bounty", c.squads[b.squad]
+        side = self._side()
+        if kind == explore_one.CAMP and side is not None and territory.controller(s.world, c, loc.id) == side:
+            host = self._sortie_host(loc, "hold")
+            if host is not None:
+                return "spar", host
+        foes = self._wild_foes(loc)
+        if foes:
+            return "foe", min(foes, key=lambda foe: foe.difficulty)  # 同分取這裡列的第一路
+        if kind == explore_one.TOWN:
+            sid = next((sid for sid in c.config.jianfa.town_foes if sid in c.squads), None)
+            if sid is not None:
+                return "town", c.squads[sid]
+        return None, None
+
+    def _outing_weights(self, loc: Location, *, has_foes: bool, bounty_here: bool) -> dict[str, int]:
+        """這一處每一拍四類的比重（explore_one.weights：表照標籤或 explore_mix、危險度、懸賞、有沒有對手），再把此刻做不到的歸 0：
+        抽不到事件（一次性、可重複的都沒有）事件是 0，悟不出（insights.explore_gives 是空的，或這個遊戲日在這裡選錯過做法）感悟是 0——
+        那一份照比重分給其餘的。只讀，不擲骰。"""
+        s, c = self.state, self.content
+        weights = explore_one.weights(c.config.jianfa, loc, has_foes=has_foes, bounty_here=bounty_here)
+        if not event_candidates(s, c, "explore", "rare") and not event_candidates(s, c, "explore", "common"):
+            weights[explore_one.EVENT] = 0
+        if not insights.explore_gives(loc, c) or sensing.missed_today(s, c, loc):
+            weights[explore_one.INSIGHT] = 0
+        return weights
+
+    def _outing_plan(self, loc: Location) -> OutingPlan:
+        """這一處此刻出門一趟怎麼抽（OutingPlan）：比重照 _outing_weights。這裡沒有一般對手（也沒有討伐懸賞）遭遇就是 0，那一份分給其餘三類；
+        頭目不算對手（FB-815：只有頭目的地點不是一定撞上他）——他是這一趟另外擲的（_explore_one：5% × 名聲倍數），擲中那一趟才有
+        遭遇拍。只讀，不擲骰。"""
+        s, c = self.state, self.content
+        cfg = c.config.jianfa
+        kind = explore_one.kind_of(cfg, loc).kind
+        how, foe = self._outing_foe(loc, kind)
+        boss = None if how == "bounty" else duel_rules.available(s, c)  # 接了懸賞：遭遇就是懸賞那一路，不擲頭目
+        weights = self._outing_weights(loc, has_foes=foe is not None, bounty_here=how == "bounty")
+        return OutingPlan(kind=kind, weights=weights, how=how, foe=foe, boss=boss, hint=explore_one.hint_of(kind, how, weights))
+
+    def mostly_here(self) -> str:
+        """四格探索那一格的小字（/api/main 的 mostly；雲端批 5 的欄位，網頁 m.mostly）：探索一顆開著時是出門一趟的那一份
+        （_outing_plan 的 hint：地點種類的字，招牌類此刻的比重是 0 才改寫比重最高的那一類；接了討伐懸賞「…有賞」、自家營寨「同袍比劃」，跟鈕上括號那一段同一個字）；
+        關著照雲端的 mapdata.mostly_here（照地點的小圖）。在路上是空字串。"""
+        plan = self.outing_plan()
+        if plan is not None:
+            return plan.hint
+        return mapdata.mostly_here(self.state, self.content)
+
+    def outing_plan(self) -> OutingPlan | None:
+        """探索一顆開著時，這裡此刻出門一趟怎麼抽（假人打分數、量表讀；同 _outing_plan）；關著、序章裡、在路上是 None。"""
+        p = self.state.player
+        if not self._outing_on() or p.journey is not None:
+            return None
+        return self._outing_plan(self.content.locations[p.location])
+
+    def _outing_option(self, loc: Location) -> Option:
+        """探索一顆的鈕：「探索（體力 18・城裡多事）」，括號裡最後那一段是這一處多半給什麼（同 /api/main 的 mostly，mostly_here）。"""
+        return self._cost_option("act:explore", "探索", self.content.config.jianfa.explore_stamina, note=self._outing_plan(loc).hint)
+
+    def _explore_one(self) -> list[str]:
+        """出門一趟（減法季探索一顆，整合設計 4.1）：扣 explore_stamina，照這一處的比重（_outing_plan）抽 beats 拍（explore_one.draw：
+        同一類最多兩拍、要選的拍最多一個排最後、感悟不連兩趟、接了懸賞第一拍就是遭遇）。素材與遭遇當場結算；要選的那一拍（事件或感悟）
+        端出來等玩家選；遭遇拍上撞到頭目時，那一趟收在頭目戰（要選的那一拍不出）。回來寫成一段（content/outing_lines.json 每一拍一句），
+        後面一行「得：…　失：…」；三拍都沒收穫補一個一階素材；最後照舊擲回體丹、殘譜、破境丹、打探懸賞、玉璽碎片。
+        擲骰都用自己的亂數（explore_one.rng_for），不碰 Game.rng（頭目戰與仗本身照它們原本的）。"""
+        s, c = self.state, self.content
+        p, cfg = s.player, c.config.jianfa
+        loc = c.locations[p.location]
+        plan = self._outing_plan(loc)
+        p.stamina -= cfg.explore_stamina
+        p.explore_seq += 1
+        roll = functools.partial(explore_one.rng_for, self.world.get_season_number(), p.name, p.explore_seq)
+        last_loc, _, last_kind = p.outing_last.partition(":")
+        weights, first_is_encounter = plan.weights, plan.how == "bounty"
+        if plan.boss is not None and plan.foe is None and plan.how != "bounty":
+            # 這裡只有頭目、沒有一般對手（官軍在長社，FB-815）：這一趟照 5% × 名聲倍數擲一次他；擲中了遭遇拍才有（第一拍就是它，頭目擋路），
+            # 沒擲中就當這裡沒有對手——遭遇那一格已經分給其餘三類（plan.weights 的遭遇是 0）
+            if roll("頭目").random() < c.config.duel.explore_chance * renown.duel_chance(s, c):
+                weights, first_is_encounter = self._outing_weights(loc, has_foes=True, bounty_here=False), True
+        beats = explore_one.draw(
+            cfg, roll("拍"), weights, last_choice=last_kind if last_loc == loc.id else None, bounty_here=first_is_encounter,
+        )
+        say, lines = roll("段落"), c.outing_lines
+        story = [explore_one.line(lines, "open", plan.kind, say, place=loc.name)]
+        if self._draft is not None and not self._draft.tag:
+            self._draft.tag = explore_one.tag_of(beats)
+        before = len(self._draft.changes) if self._draft is not None else 0
+        out: list[str] = []
+        got_any, home_done, boss, choice = False, False, None, ""
+        self._outing_close = set()
+        for i, beat in enumerate(beats, 1):
+            rng = roll(f"第{i}拍")
+            if beat == explore_one.MATERIAL:  # 素材拍：找素材一定給的那一套（不展開分支；屬性照這裡的素材）
+                mids = explore_modes.gather_finds(c, loc, rng, sure=True)
+                found = [granted for mid in mids if (granted := materials.grant(s, c, mid))]
+                if not home_done:  # 領地爭奪：站在自家領地多給的那一個，一趟擲一次
+                    found += self._home_gather(loc, mids)
+                    home_done = True
+                items = explore_one.items_of(found, materials.GRANT_PREFIX)
+                if items:
+                    story.append(explore_one.line(lines, "material", "found", say, place=loc.name, item=items))
+                    got_any = True
+                out += found
+            elif beat == explore_one.ENCOUNTER:
+                if (plan.boss is not None and boss is None
+                        and (plan.foe is None or rng.random() < c.config.duel.explore_chance * renown.duel_chance(s, c))):
+                    boss = plan.boss  # 頭目擋路（5% × 名聲倍數；這裡只有頭目時直接對上）：頭目戰收在這一趟最後
+                    story.append(explore_one.line(lines, "encounter", "boss", say, place=loc.name, foe=self._boss_face(boss)))
+                    got_any = True
+                elif plan.foe is not None:
+                    msgs, key, won = self._outing_fight(loc, plan)
+                    story.append(explore_one.line(lines, "encounter", key, say, place=loc.name, foe=plan.foe.name))
+                    out += msgs
+                    got_any = got_any or won
+            elif boss is None and beat == explore_one.EVENT:  # 要選的那一拍：事件（野類偏旅人那一類）
+                msgs = self._outing_event(loc, plan.kind, rng)
+                if msgs:
+                    story.append(explore_one.line(lines, "event", "lead", say, place=loc.name))
+                    out += msgs
+                    got_any, choice = True, beat
+            elif boss is None and beat == explore_one.INSIGHT:  # 要選的那一拍：感悟（有所感）
+                story.append(explore_one.line(lines, "insight", "lead", say, place=loc.name))
+                out += self._sense_here(loc, rng)
+                got_any, choice = True, beat
+        if boss is not None:
+            out += self._duel_start(boss)
+            if self._draft is not None:  # 頭目擋路：要選的那一拍不出，江湖紀錄的標記也不寫它（以前寫「有悟」，FB-815）
+                self._draft.tag = explore_one.tag_of([b for b in beats if b not in explore_one.CHOICE])
+        if not got_any:  # 三拍都沒收穫：補一個一階素材（設計 4.1【PM】）
+            kinds = {c.materials[m].attribute for m in loc.materials if m in c.materials}
+            mid = explore_modes.one_of(c, kinds, 1, roll("補"))
+            granted = materials.grant(s, c, mid) if mid is not None else None
+            if granted:
+                story.append(explore_one.line(lines, "close", "empty", say, place=loc.name,
+                                              item=explore_one.items_of([granted], materials.GRANT_PREFIX)))
+                out.append(granted)
+        # 收尾的幾樣先算（打探懸賞交差在 45 級換成心得時，那一句「境界已到」也在這裡面，段落結尾要看得到它，FB-818）
+        extras = self._pill_find(roll("回體丹")) + self._scrap_find() + self._legend_find(roll("破境丹"))
+        extras += bounties.on_explore(s, c, self.world, loc.id) + self._seal_find(loc.id)  # 打探懸賞：出門一趟就算
+        if any(line.startswith(team.CAPPED_XINDE.partition("，")[0]) for line in out + extras):
+            self._outing_close.add("capped")
+        for key in explore_one.LINE_KEYS["close"]:  # 段落結尾：疲勞打了折、對手配不上你、境界已到（三道閘，設計 4.2）
+            if key in self._outing_close:
+                story.append(explore_one.line(lines, "close", key, say, place=loc.name))
+        p.outing_last = f"{loc.id}:{choice}" if choice else ""
+        ledger = self._outing_ledger(out + extras, before)
+        return ["".join(story)] + ([ledger] if ledger else []) + out + extras
+
+    def _outing_fight(self, loc: Location, plan: OutingPlan) -> tuple[list[str], str, bool]:
+        """遭遇拍打的那一場：回（訊息, outing_lines 的 encounter 鍵, 打贏了沒）。自家營寨跟同袍比劃：不打、不掉東西，照 _sortie_host 那一路
+        的心得經驗 camp_spar_share（三成，_drill_gains；算仗）。其餘照探索的野怪打（_squad_encounter(wild=True)：扣氣血減半、不問模型、不推大勢），戰報標
+        「出門一趟・遭遇」；城裡的地痞戰利（銀兩、心得、掉的素材）乘 town_loot_scale、不算討伐；其餘打贏算討伐懸賞的交差。"""
+        s, c = self.state, self.content
+        cfg, foe = c.config.jianfa, plan.foe
+        gate = self._fight_gate(foe)  # 三道閘的前兩道（疲勞、對手配不配得上你）：這一場的經驗、心得、銀兩、掉的素材一起乘
+        if plan.how == "spar":  # 對手那一路心得、經驗的 camp_spar_share（三成）乘三道閘的倍數（PM 2026-10-26：以前全額）
+            return self._drill_gains(foe, cfg.camp_spar_share * gate, "camp_spar", echo=False), "spar", True  # 心得只由草稿記（FB-830）
+        town = plan.how == "town"
+        self._loot_scale = cfg.town_loot_scale if town else 1.0
+        self._gate_scale = gate
+        self._drop_scale = gate * self._loot_scale
+        card = s.battle_card
+        try:
+            msgs = self._squad_encounter(foe.id, wild=True)
+        finally:
+            self._loot_scale = self._drop_scale = self._gate_scale = 1.0
+        record = next((r for r in s.battles if r.id == s.battle_card), None) if s.battle_card != card else None
+        won = record is not None and record.tier in team.WIN_TIERS
+        if record is not None:
+            record.label = battlelog.OUTING_LABEL
+        if won and not town:
+            done = bounties.on_win(s, c, self.world, loc.id, foe.id)
+            changes, notes = battlelog.split_changes(done, for_record=True)
+            record.changes += changes
+            record.notes += notes
+            msgs += done
+        if won and not town and (self._practice_tier(loc) or 0) >= 1:
+            s.player.newbie_marks.add("field2")  # 新手目標：在二級以上的地方打贏一場（這一季沒有尋敵，遭遇拍打贏也算，FB-816）
+        tier = record.tier if record is not None else "落敗"
+        if town:
+            return msgs, "town_win" if won else "town_draw" if tier == "僵持" else "town_lose", won  # 平手有自己的句子（FB-819）
+        return msgs, "win" if won else "draw" if tier == "僵持" else "lose", won
+
+    def _fight_gate(self, foe: Squad) -> float:
+        """遭遇拍這一場的倍數（減法季三道閘的前兩道，整合設計 4.2；Config.jianfa 的 drill_gates）：今天第幾場（PlayerState.fights_today，
+        台灣 00:00 換日、照 _pill_day）的疲勞（growth.fatigue_factor：前 drill_full_per_day 場 1，之後每場 ×drill_decay，最低 drill_floor）
+        乘對手的檔（growth.outlevel_factor：對手難度的檔比自己等級的檔低一檔 0.5、兩檔 0.1）。關著是 1、也不記場數（存檔一個鍵都不多）。
+        打了折的那一道記進 _outing_close（段落結尾那一句：tired、outlevel）。"""
+        s, c = self.state, self.content
+        if not jianfa(c, s.world, "drill_gates"):
+            return 1.0
+        cfg, p = c.config.jianfa, s.player
+        today = self._pill_day()
+        n = growth.nth_fight(fight_day=p.fight_day, fights_today=p.fights_today, today=today)
+        p.fight_day, p.fights_today = today, n
+        tired = growth.fatigue_factor(cfg, n)
+        matched = growth.outlevel_factor(cfg, p.member.level, foe.difficulty)
+        if tired < 1:
+            self._outing_close.add("tired")
+        if matched < 1:
+            self._outing_close.add("outlevel")
+        return tired * matched
+
+    def fatigue_next(self) -> float:
+        """下一場遭遇的疲勞倍數（同 _fight_gate 的第一道，只讀、不記場數）：假人打探索的分數、量表讀；三道閘關著是 1。"""
+        s, c = self.state, self.content
+        if not jianfa(c, s.world, "drill_gates"):
+            return 1.0
+        p = s.player
+        n = growth.nth_fight(fight_day=p.fight_day, fights_today=p.fights_today, today=self._pill_day())
+        return growth.fatigue_factor(c.config.jianfa, n)
+
+    def _outing_event(self, loc: Location, kind: str, rng: random.Random) -> list[str]:
+        """事件拍（設計 4.1）：一次性奇遇先擲 rare_explore_chance（可重複的一則都沒有時直接是它）；沒中照防重複輪替抽這裡可重複的事件，
+        野類的地點有標了「旅人」的就在那幾則裡抽（救助旅人那一類）。抽到就端出來（pending_event），一則都沒有是空的。"""
+        s, c = self.state, self.content
+        common = event_candidates(s, c, "explore", "common")
+        if event_candidates(s, c, "explore", "rare") and (rng.random() < c.config.rare_explore_chance or not common):
+            return self._present(pick_event(s, c, "explore", rng, "rare"), "explore")
+        travelers = [e for e in common if explore_one.TRAVELER in e.tags] if kind == explore_one.WILD else []
+        event = event_rules.pick_from(s, c, travelers, "explore", rng) if travelers else None
+        event = event or pick_event(s, c, "explore", rng, "common")
+        return self._present(event, "explore") if event is not None else []
+
+    def _outing_ledger(self, msgs: list[str], since: int) -> str:
+        """出門一趟最後那一行「得：…　失：…」：這一趟的訊息裡撿到的東西（「獲得 精鐵砂 ×1」，只列這種「名 ×數量」的；破境丹、回體丹
+        那一句說明不是一樣東西，帳上只列它後面的「破境丹 +1」，FB-831）與數值變化，加上草稿裡另外補的（仗的經驗，since 之後那幾筆）；
+        同一個標籤加總，增加的寫在「得」、減少的（與內傷）寫在「失」。"""
+        extra = self._draft.changes[since:] if self._draft is not None else []
+        changes, notes = battlelog.split_changes(msgs)
+        totals = journal.combine_changes(changes + extra)
+        grants = (note.removeprefix(materials.GRANT_PREFIX) for note in notes if note.startswith(materials.GRANT_PREFIX))
+        items = explore_one.merge_items(item for item in grants if explore_one.is_item(item))
+        gains = items + [ch for ch in totals if journal.change_class(ch) == "tx-up"]
+        losses = [ch for ch in totals if journal.change_class(ch) == "tx-down"]
+        return explore_one.ledger(gains, losses)
+
+    def is_idle(self) -> bool:
+        """此刻閒著（切磋、論武、假人答論武都問它）：選單上有探索（IDLE_MARK）——不在路上、沒有事件、對話、店面的選單擋著、不在開打的決戰裡。
+        減法季探索一顆開著時「探索」照舊是 act:explore、出現在同樣的那幾種選單上，判斷不必換訊號；序章另外擋（呼叫端）。"""
+        return IDLE_MARK in {o.id for o in self.options(odds=False, tick=False)}
 
     def _train(self) -> list[str]:
         """遊歷：找這個地點的敵人打一場，**必定開打**；打完有機率接一段戰後的餘韻事件。
@@ -4900,7 +5703,7 @@ class Game:
         key = f"{loc_id}:糧草"
         p.donations[key] = p.donations.get(key, 0) + convoy.grain
         # 護糧沒有推動，另記一次第 1 階推動的貢獻（總計畫 T6）
-        push.add_contribution(p, orders.week_of(s, c), c.config.contrib_per_push)
+        wins.credit(p, c, s.world, orders.week_of(s, c), c.config.contrib_per_push)
         msgs.append(f"糧車送進了{c.locations[loc_id].name}，一粒不少。")
         return msgs + self._order_credit(kind="convoy", location=loc_id, front=front_of(c, loc_id), order=convoy.order)
 
@@ -5604,8 +6407,15 @@ class Game:
 
     def affinity_text(self, companion_id: str) -> str:
         """「情誼 N」：你跟這位人物的情誼（PlayerState.affinities，0～100）。談話畫面、求見名單、輿圖的人物都寫這個詞（explain-1：
-        玩家看得到的只叫「情誼」，程式裡照舊叫 affinity）。"""
-        return f"情誼 {self.state.player.affinities.get(companion_id, 0)}"
+        玩家看得到的只叫「情誼」，程式裡照舊叫 affinity）。深交名單滿了、這一位停在門檻下面時接「・已深交三位」（減法季批 7b，
+        zhuan_end.deep_note；關著一個字不變）。"""
+        text = f"情誼 {self.state.player.affinities.get(companion_id, 0)}"
+        # 先照沒有名額票算（不讀錢包）：那樣都不寫，多了名額更不會寫
+        if zhuan_end.on(self.content, self.state.world) and zhuan_end.deep_note(self.state, self.content, companion_id):
+            note = zhuan_end.deep_note(self.state, self.content, companion_id, self._deep_slots())
+            if note:
+                text += f"・{note}"
+        return text
 
     def _no_audience_line(self) -> str:
         """交友時見不到這裡的大勢人物時的說明；這裡沒有大勢人物就是原本的「此地無人可訪」；
@@ -5667,6 +6477,7 @@ class Game:
         if arg == "plan":  # NPC 智能 2.1：出陣前跟他商量打法（模型評成功率，不扣體力、不算輪數）
             return self._parley_plan(companion_id, prepared, said)
         affinity = self.state.player.affinities.get(companion_id, 0)
+        heard = self._stance_before(companion_id)
         self._parley_decision = None
         try:
             if arg == "say":  # 自己說：said 是 choose 驗過、轉過繁體的那一句；江湖紀錄先寫你說了什麼（同隨口應對的「你：「…」」）
@@ -5674,15 +6485,16 @@ class Game:
                 msgs = [f"你：「{said}」"] + companion_agent.say_dialogue(
                     self._quick_client(), self.state, self.content, self.world, companion_id, said,
                     turn=self._prepared_turn(prepared), extra=extra, required=parley.ASK_FIELDS if extra else (),
-                    decide=lambda turn: self._parley_decide(companion_id, turn),
+                    decide=lambda turn: self._parley_decide(companion_id, turn), cap=self._deep_cap_now,
                 )
             else:
                 msgs = companion_agent.continue_dialogue(
                     self._quick_client(), self.state, self.content, self.world, companion_id, int(arg), self.rng,
-                    turn=self._prepared_turn(prepared),
+                    turn=self._prepared_turn(prepared), cap=self._deep_cap_now,
                 )
         except companion_agent.DialogueUnavailable:
             return self._dialogue_unavailable(companion_id)
+        self._stance_credit(companion_id, heard)
         self._annal_talk(companion_id, self.state.player.affinities.get(companion_id, 0) - affinity, said)
         msgs += self._overhear(companion_id, msgs)
         self.state.player.stamina -= self.content.config.talk_stamina  # 每一輪對話都要花體力（伺服器假人設計第八節第 4 項）；生成不出來的那輪不算
@@ -6037,16 +6849,18 @@ class Game:
         if cid is None or j is None or said is None or s.player.parley_road_leg == j.reached:
             return ["（此刻無法這麼做。）"]
         affinity = s.player.affinities.get(cid, 0)
+        heard = self._stance_before(cid)
         self._parley_decision = None
         extra = self._parley_prompt(cid, road=True)
         try:
             msgs = [f"你：「{said}」"] + companion_agent.say_dialogue(
                 self._quick_client(), s, c, self.world, cid, said, turn=self._prepared_turn(prepared),
                 extra=extra, decide=lambda turn: self._parley_decide(cid, turn, road=True),
-                required=parley.ASK_FIELDS if extra else (),
+                required=parley.ASK_FIELDS if extra else (), cap=self._deep_cap_now,
             )
         except companion_agent.DialogueUnavailable:
             return [f"{c.characters[cid].name}沉吟不語。"]
+        self._stance_credit(cid, heard)
         s.player.parley_road_leg = j.reached
         self._annal_talk(cid, s.player.affinities.get(cid, 0) - affinity, said)
         decision, self._parley_decision = self._parley_decision, None
@@ -6086,6 +6900,8 @@ class Game:
             p.pending_faction = p.pending_ally = None
             return ["你決定再想想。"]
         kind, _, ally_id = arg.partition(":")
+        if kind == "lean":  # 三陣營四勝利：豪強改幫另一軍（本週卡「改幫黃巾」；選單只在 _lean_options 給）
+            return self._lean_step(ally_id)
         if kind == "ally":
             ally = self.content.scenario.faction(ally_id)
             if p.pending_faction is None:  # 拜入門派之後挑一邊（選單只在 needs_ally 時給這兩顆）
@@ -6101,7 +6917,7 @@ class Game:
             if p.location not in faction.join_at:
                 return ["（你已經不在投靠的地方了。）"]
             p.faction = faction.id
-            p.ally = ally if allied.on(self.content, self.state.world) else None
+            p.ally = self._bot_lean(faction.id, ally) if allied.on(self.content, self.state.world) else None
             # 投靠這一刻就推一次新手引導：第一季「投靠、看一眼本週軍令」那一步只看陣營（計畫 T6）；beta 照舊等下一個行動
             msgs = [f"你投靠了{allied.label(self.content, p.faction, p.ally)}。"]
             if p.ally is not None:
@@ -6110,10 +6926,73 @@ class Game:
                 msgs += self._guide(note_action(self.state, self.content, self.world, "join"))  # 走對話框（畫面批次審查 I2）
             return msgs
         faction = self.content.scenario.faction(arg)
-        p.pending_faction, p.pending_ally = faction.id, None
+        # 三陣營四勝利開著的季，投靠豪強照投靠點直接給傾向、不出選邊鈕（企劃者 2026-10-24 第 6 件；之後隨時改幫）
+        lean = wins.join_lean(self.content, faction.id, p.location) if self._four_wins() and allied.on(self.content, self.state.world) else None
+        p.pending_faction, p.pending_ally = faction.id, lean
         prompt = self._faction_prompt(faction)
         self._hide(prompt)  # 場景已經寫著這一問（_own_scene_text），江湖紀錄那一則只留標題（FB-046）
         return [prompt]
+
+    def _bot_lean(self, faction_id: str, picked: str | None) -> str | None:
+        """三陣營四勝利開著的季，伺服器假人投靠豪強那一下的傾向（FB-810）：依附豪強人數少的那一軍（wins.bot_lean，確認這一下才數），
+        不看投靠點；真人、兩軍的人、開關關著（還有選邊鈕）都照 picked。假人投靠之後不按「改幫」，所以這一下就是它這一季幫誰。"""
+        if self.state.player.bot is None or not self._four_wins():
+            return picked
+        season = self.world.get_season_number()
+        return wins.bot_lean(self.state.player.name, season, self.content, faction_id, self.world.roll_counts()) or picked
+
+    def _lean_options(self) -> list[Option]:
+        """本週卡「改幫…」（三陣營四勝利，設計 3.2）：豪強能幫、此刻沒在幫的那幾軍各一顆，不花體力、隨時換、不算叛投。
+        按不下去（wins.lean_problem）灰著寫原因。開關關著、不是豪強是空的。"""
+        s, c = self.state, self.content
+        if not self._four_wins() or not wins.is_gentry(s.player, c):
+            return []
+        opts = []
+        for side in wins.lean_sides(s.player, c):
+            label = wins.LEAN_BUTTON.format(side=c.scenario.faction_name(side, side))
+            problem = wins.lean_problem(s.player, c, side)
+            opts.append(Option(id=f"{wins.LEAN_PREFIX}{side}", label=f"{label}（{problem}）" if problem else label, enabled=not problem))
+        return opts
+
+    def _lean_anytime(self, option_id: str) -> Option | None:
+        """「改幫…」不看此地的選單（設計 3.2「隨時換」，FB-812）：選單上沒有它的時候（在路上、人站在正在打決戰的大區，
+        選單只剩那些事）照樣收（有事件待選是例外，choose 擋：FB-820），條件跟選單上的那一顆一樣（_lean_options：豪強、四勝利開著，按不下去的原因照 wins.lean_problem）。
+        只有賽季不在跑（籌備中、休季、時鐘暫停，這幾種選單本來就只剩一顆灰的）才不收；開關關著、不是豪強、本來就幫它、
+        不是它能幫的那一軍，都找不到那一顆，照舊「此刻無法這麼做」。決戰那一場的戰功照舊記參戰那一軍，開打了這一場照舊站原來那一邊
+        （_lean_step 的 _ally_follows_battle）。"""
+        if self.world.paused_at() is not None or self._preparing() or self.state.world.ended:
+            return None
+        return next((o for o in self._lean_options() if o.id == option_id), None)
+
+    def _lean_step(self, side: str) -> list[str]:
+        """豪強改幫 side（wins.set_lean：寫 ally、換邊次數 +1，不算叛投、帳不清）。跟著換的：活躍名單搬到新的那一邊（人數緩衝照新的
+        那一邊算），決戰集結中參戰名單跟著換、開打了這一場照舊（_ally_follows_battle，FB-273），手上揭著、新的那一邊接不了的
+        懸賞作廢、每張一句（不扣東西，PM 2026-10-25 第 4 件）。投靠名冊由 choose() 結尾的 _record_faction 改記。不發傳聞；
+        江湖紀錄就是這一下的那一則（choose 寫）。"""
+        s, c = self.state, self.content
+        p, w = s.player, s.world
+        old = p.ally
+        if not self._four_wins() or not wins.set_lean(p, c, side):
+            return ["（此刻無法這麼做。）"]
+        names = w.active_pushers.get(old or "")
+        if names is not None and p.name in names:
+            w.active_pushers.setdefault(side, {})[p.name] = names.pop(p.name)
+            if not names:
+                del w.active_pushers[old]
+        new_name = c.scenario.faction_name(side, side)
+        msgs = [wins.LEAN_DONE.format(side=new_name, old=c.scenario.faction_name(old, old) if old else new_name)]
+        return msgs + bounties.drop_stranded(s, c, side, lean=True) + self._ally_follows_battle()  # 作廢那一句寫「改幫」，不是投靠、叛投的「改投」（FB-811）
+
+    def _join_lean(self) -> list[str]:
+        """三陣營四勝利開著的季，拜入要依附一軍的門派而投靠（曹氏莊院）的那一下：照門派所在地直接給傾向（PM 2026-10-25 第 5 件），
+        不出選邊鈕；先臨時投效了另一邊的照 _ally_follows_battle 換過去。其他時候什麼都不做（照舊 allied.needs_ally 出選邊鈕）。"""
+        s, c = self.state, self.content
+        p = s.player
+        if not self._four_wins() or not allied.needs_ally(s, c):
+            return []
+        sect = c.sects.get(p.sect) if p.sect else None
+        p.ally = wins.join_lean(c, p.faction, sect.location if sect is not None else p.location)
+        return [allied.ALLY_DONE.format(ally=c.scenario.faction_name(p.ally, p.ally))] + self._ally_follows_battle()
 
     def _ally_follows_battle(self) -> list[str]:
         """選邊的那一刻（豪強分屬兩軍），人已經在這一場決戰的參戰名單上、站的是另一邊（先臨時投效了，FB-273）：集結時照新選的
@@ -6439,6 +7318,7 @@ class Game:
         """決戰的氣血池上限：決戰的池子不吃螭首（玉璽碎片設計 7.1：決戰一個字都不改）。"""
         _, cap = team.member_neili(
             self.content, self.state.player.member, team.con_of(self.state, self.content, self.world, PLAYER), plain=True,
+            season=self.state.world,
         )
         return cap
 
@@ -7696,15 +8576,15 @@ class Game:
             p.stats["silver"] = p.stats.get("silver", 0) + silver
             changes.append(f"銀兩 +{silver}")
         if exp and team.maxed(c, p.member):  # 滿級：經驗照 5 換 1 換成心得（3.5）
-            gained = team.maxed_xinde(s, c, exp)
+            gained = team.maxed_xinde(s, c, exp, "showdown")
             if gained:
                 lines.append(team.MAXED_XINDE.format(n=gained))  # 跟其他來源同一句（FB-452）
                 changes.append(f"心得 +{gained}")
-        elif exp:  # 同伴不進決戰（人物資質設計 14.5）：只給本人；升級給屬性點同切磋
+        elif exp:  # 同伴不進決戰（人物資質設計 14.5）：只給本人；升級給屬性點同切磋。決戰是仗（減法季 45 級以後照算）
             before = p.member.level
-            lines += team.add_exp(c, p.member, exp, p.name)
+            lines += team.add_exp(c, p.member, exp, p.name, "showdown")
             if p.member.level > before:
-                points = team.points_between(c.config, before, p.member.level)
+                points = team.level_points(self.state, c, before, p.member.level)
                 p.stat_points += points
                 if points:
                     lines.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
@@ -7716,15 +8596,29 @@ class Game:
         if me.acted_rounds >= 1:  # 名聲 3.1：自己出手至少 1 回合（同首功）；掛機被代為固守的回合不算
             rout = self._deed_fame("showdown_rout") if won and battle.outcome_margin == "大勝" else []
             changes += journal.combine_changes(self._deed_fame("showdown") + rout)
-        if self._side() is not None and me.faction == self._side():  # 替自己這一方出戰才記（豪強分屬兩軍：依附那一軍）；臨時投效的不記
+        if self._showdown_credits(me):  # 替自己這一方出戰才記（豪強分屬兩軍：依附那一軍）；臨時投效的不記
             push_points = pay.contrib_push + (pay.win_contrib_push.get(battle.outcome_margin, 0) if won else 0)
             contrib = round(c.config.contrib_per_push * push_points * share * half)
             if contrib and season_one(c, s.world):
-                push.add_contribution(p, calendar.point(s.world.time, c, s.world).week, contrib)
+                # 豪強記參戰那一刻那一邊那一本（計畫 5.0 第 12 條：中途改幫另一軍，這一場照舊記原來那一軍）
+                wins.credit(p, c, s.world, calendar.point(s.world.time, c, s.world).week, contrib, side=me.faction)
                 changes.append(f"貢獻 +{contrib}")
         if changes:
             lines.append(f"{'得勝的' if won else ''}軍餉發下來了。")
         return changes + self._showdown_tier4(battle, me, lines)
+
+    def _showdown_credits(self, me: battle_instance.BattleParticipant) -> bool:
+        """這一場的戰功記不記貢獻：站的是自己這一方（豪強分屬兩軍：依附那一軍）才記，臨時投效的不記。三陣營四勝利開著的季，
+        豪強站的是它能幫的那一軍就記（記參戰那一刻那一邊那一本，_showdown_pay），不看此刻幫誰——中途改幫另一軍，這一場照舊算。"""
+        side = self._side()
+        if side is not None and me.faction == side:
+            return True
+        p = self.state.player
+        return self._four_wins() and me.faction in wins.allies(p, self.content)
+
+    def _four_wins(self) -> bool:
+        """這一季三陣營四勝利開著嗎（wins.on：Config.jianfa 的 four_wins＋開季的章）。"""
+        return wins.on(self.content, self.state.world)
 
     def _watching_battle(self, battle: battle_instance.BattleInstance, definition: BattleDef) -> bool:
         """這個人此刻打不了這場仗、只能在一旁看（options() 照常給平常的選項，場景上仍看得到戰場）：
@@ -8171,9 +9065,8 @@ class Game:
     def event_free_text_prompt(self) -> str | None:
         """眼前的事件可以隨口應對時回傳提示語（選單上那一顆的標籤），否則 None；server.py 用它決定輸入框。"""
         event_id = self.state.pending_event
-        if event_id is None or self.content.events[event_id].free_text is None:
-            return None
-        return self.content.events[event_id].free_text.prompt
+        free = None if event_id is None else self._free_text_of(self.content.events[event_id])
+        return None if free is None else free.prompt
 
     def battle_free_text_prompt(self) -> str | None:
         """這回合是否有自訂行動的輸入框可以用，有的話回傳提示語（見 BattleOption.free_text
@@ -8534,13 +9427,18 @@ class Game:
         寫出來卻只進 GameState.log（事件文字在紀錄裡是藏起來的、場景照內容原文畫），畫面上從來看不到。"""
         if action is not None:
             event_rules.note_round(self.state, self.content, event, action)
+            stance_rules.met(self.state, self.content, event.id)  # 人物心意開的那一則：每人每天一則（減法季批 6 修正輪）
         self.state.pending_event = event.id
         self.state.player.seen_events.add(event.id)
         head = f"✦ 奇遇：{event.title}" if event.qiyu else f"【{event.title}】"
-        text = fill_marks(event.text, self.state)
+        text = fill_marks(self._event_text(event), self.state)
         self._outcome(journal.event_marker(event.title, event.qiyu), head)
         self._hide(text)
         return [head, text] + foreshadow.hear_from_event(self.state, self.content, event.id, self.world)  # 片段事件（計畫 T7）
+
+    def _event_text(self, event: Event) -> str:
+        """事件卡上的旁白（還沒套 fill_marks）：減法季這一週改寫好了就用改寫的（narration.text_of），否則照內容原文。"""
+        return narration.text_of(self.content, self.state.world, event, self.state.player.season_number, self.narration)
 
     def _squad_encounter(self, squad_id: str, wild: bool = False, as_sortie: bool = False) -> list[str]:
         """遭遇一支敵方隊伍：單次判定，勝得對手獎勵，落敗失落一成銀兩；自己陣營的隊伍改成操練（見 _drill）。
@@ -8701,9 +9599,13 @@ class Game:
             msgs += self._drill_push(trend_id, delta)
         return msgs
 
-    def _drill_gains(self, squad: Squad, share: float | None = None) -> list[str]:
+    def _drill_gains(self, squad: Squad, share: float | None = None, source: str = "hold", echo: bool = True) -> list[str]:
         """跟這一路一起操練拿的：對手心得與經驗的 share（預設 drill_reward_share；不給銀兩、素材）；經驗本人與帶著的同伴都拿（FB-002）。
-        操練（_drill）與出陣的守、攪局（_sortie_hold）、守勢行動（_duty）共用；一類一顆開著時守、攪局、守勢行動給全額（_hold_share）。"""
+        操練（_drill）與出陣的守、攪局（_sortie_hold）、守勢行動（_duty）共用；一類一顆開著時守、攪局、守勢行動給全額（_hold_share）。
+        source（growth.exp_source）：這幾樣都不打仗（hold，PM 2026-10-25 第 5 件）；減法季自家營寨跟同袍比劃算仗（camp_spar）。
+        echo：「心得 +N」那一行要不要也放進回傳的訊息。江湖紀錄的標籤本來就由草稿（_draft.changes）記一顆、訊息那一行在敘事裡收掉；
+        出門一趟的比劃（_outing_fight）自己有「得：」那一行，兩邊都有就被 _outing_ledger 加成兩倍、後面還多一則單獨的訊息
+        （FB-830），所以它傳 False：只由草稿記。沒有草稿時（直接叫的）照樣放進訊息，帳才不會漏掉這一筆。"""
         s, c = self.state, self.content
         p = s.player
         share = c.config.drill_reward_share if share is None else share
@@ -8712,17 +9614,29 @@ class Game:
         if xinde:
             p.stats["xinde"] = p.stats.get("xinde", 0) + xinde
             xinde_line = f"心得 +{xinde}"
-            msgs.append(xinde_line)
+            if echo or self._draft is None:
+                msgs.append(xinde_line)
             if self._draft is not None:
-                self._draft.hide(xinde_line)
+                if echo:
+                    self._draft.hide(xinde_line)
                 self._draft.changes.append(xinde_line)
-        gained = team.maxed_xinde(s, c, exp)  # 滿級：本人的經驗照 5 換 1 換成心得（3.5），同伴照拿經驗
+        keep = team.player_exp(s, c, exp, source)[0]  # 減法季三道閘：不是仗的 45 級以後換心得
+        gained = team.maxed_xinde(s, c, exp, source)  # 滿級：本人的經驗照 5 換 1 換成心得（3.5），同伴照拿經驗
         if gained:
-            msgs.append(team.MAXED_XINDE.format(n=gained))
-        msgs += team.add_team_exp(s, c, self.world, exp)
+            msgs.append(team.xinde_line(c, p.member, gained))
+        msgs += team.add_team_exp(s, c, self.world, exp, source)
         if self._draft is not None and exp > 0:
-            self._draft.changes.append(f"心得 +{gained}" if team.maxed(c, p.member) else f"經驗 +{exp}（每人）")
+            self._draft.changes += self._exp_changes(exp, keep, gained)
         return msgs
+
+    def _exp_changes(self, exp: int, keep: int, gained: int) -> list[str]:
+        """操練這一類（不畫戰報的）經驗寫進江湖紀錄得失的那幾筆：滿級寫「心得 +N」、照常寫「經驗 +N（每人）」（同以前）；
+        減法季 45 級的閘換了一截心得時，寫換到的心得與本人真的加的經驗（同伴照拿全額，不寫「每人」）。"""
+        if team.maxed(self.content, self.state.player.member):
+            return [f"心得 +{gained}"]
+        if keep == exp:
+            return [f"經驗 +{exp}（每人）"]
+        return ([f"心得 +{gained}"] if gained else []) + ([f"經驗 +{keep}"] if keep else [])
 
     # ── 出陣（出陣探索與地盤設計第二節）──────────────────────────
 
@@ -8747,7 +9661,9 @@ class Game:
         return ids + [sid for sid in extra if sid not in ids]
 
     def _sortie_mode(self, loc: Location) -> str | None:
-        return sortie.mode(self.content, self.state.world, self._side(), loc.id, bool(self._sortie_foes(loc)))
+        mode = sortie.mode(self.content, self.state.world, self._side(), loc.id, bool(self._sortie_foes(loc)))
+        # 三陣營四勝利開著的季拿掉攪局（設計 3.2）：豪強分屬兩軍時本來就碰不到，開關後面的保險（豪強照依附那一軍攻守）
+        return None if mode == "stir" and self._four_wins() else mode
 
     def sortie_mode(self) -> str | None:
         """所在地此刻出陣是哪一種（假人照它挑，bot_policy）；在路上是 None。"""
@@ -8817,7 +9733,7 @@ class Game:
             self._sortie_flipped = self._sortie_flipped or done.flipped
             if calendar.season_one_on(w, c):
                 gained = push.contribution(nominal, 1.0, 1.0, cfg.contrib_per_push, cfg.over_cap_contrib_ratio)
-                push.add_contribution(p, calendar.point(w.time, c, w).week, gained)
+                wins.credit(p, c, w, calendar.point(w.time, c, w).week, gained)
         w.active_pushers.setdefault(side, {})[p.name] = w.time
         w.active_pushers = push.drop_stale(w.active_pushers, w.time, window)
         return done.lines
@@ -9036,8 +9952,8 @@ class Game:
             msgs.append(f"心得 +{xinde}")
         factor = ranger.exp_factor(s, c)
         exp = round(squad.exp * cfg.reward_scale * (1 + treasures.amount(s, c, "win_exp_pct")) * factor)
-        msgs += self._record_exp(record, exp)
-        levels, record.levelups = team.grant_team_exp(s, c, self.world, exp)
+        msgs += self._record_exp(record, exp, "sortie")
+        levels, record.levelups = team.grant_team_exp(s, c, self.world, exp, "sortie")
         record.notes += levels
         return msgs + levels
 
@@ -9076,8 +9992,8 @@ class Game:
             record.xinde = xinde
             msgs.append(f"心得 +{xinde}")
         exp = drill_share(squad.exp, share)
-        msgs += self._record_exp(record, exp)
-        levels, record.levelups = team.grant_team_exp(self.state, self.content, self.world, exp)
+        msgs += self._record_exp(record, exp, "sortie")
+        levels, record.levelups = team.grant_team_exp(self.state, self.content, self.world, exp, "sortie")
         record.notes += levels
         return msgs + levels
 
@@ -9136,13 +10052,18 @@ class Game:
         mine = side is not None and loc is not None and territory.controller(self.state.world, self.content, loc) == side
         return push.STEADY_LINE if mine else push.RESISTED_LINE
 
-    def _record_exp(self, record, exp: int) -> list[str]:
+    def _record_exp(self, record, exp: int, source: str = "battle") -> list[str]:
         """這一場本人的經驗寫進戰報（record.exp）：已經滿級時照 5 換 1 換成心得（team.maxed_xinde，3.5），戰報的得失寫心得、
-        不寫經驗，回江湖紀錄那一句；沒滿級照舊寫經驗、回空的。經驗本身照舊交給 grant_team_exp／add_exp（滿級的本人不加，同伴照拿）。"""
-        gained = team.maxed_xinde(self.state, self.content, exp)
+        不寫經驗，回江湖紀錄那一句；沒滿級照舊寫經驗、回空的。經驗本身照舊交給 grant_team_exp／add_exp（滿級的本人不加，同伴照拿）。
+        source（growth.exp_source）：減法季三道閘開著時不是仗的經驗過了 45 級那一截也換心得（戰報寫真的加的經驗，回 CAPPED_XINDE 那一句）；
+        仗的經驗照舊。"""
+        gained = team.maxed_xinde(self.state, self.content, exp, source)
         if not team.maxed(self.content, self.state.player.member):
-            record.exp = exp
-            return []
+            record.exp = team.player_exp(self.state, self.content, exp, source)[0]
+            if not gained:
+                return []
+            record.xinde = (record.xinde or 0) + gained
+            return [team.CAPPED_XINDE.format(n=gained), f"心得 +{gained}"]
         record.exp = 0
         record.xinde = (record.xinde or 0) + gained
         # 那一句之外另回「心得 +N」：江湖紀錄那一則的心得跟戰報得失對得上，「剛剛」卡片底下不多一顆「心得 -N」（FB-451）
@@ -9176,7 +10097,7 @@ class Game:
     def _player_hp_and_cap(self) -> tuple[float, float]:
         """本人此刻的氣血與上限（上限吃根骨：con_of 認 key，所以傳 PLAYER，不傳 Member）。"""
         return team.member_neili(
-            self.content, self.state.player.member, team.con_of(self.state, self.content, self.world, PLAYER),
+            self.content, self.state.player.member, team.con_of(self.state, self.content, self.world, PLAYER), season=self.state.world,
         )
 
     def _player_hp(self) -> float:
@@ -9422,8 +10343,8 @@ class Game:
             p.stats["xinde"] = p.stats.get("xinde", 0) + xinde
             record.xinde = xinde
             msgs.append(f"心得 +{xinde}")
-        msgs += self._record_exp(record, exp)
-        levels, record.levelups = team.grant_team_exp(self.state, self.content, self.world, exp)
+        msgs += self._record_exp(record, exp, "challenge")
+        levels, record.levelups = team.grant_team_exp(self.state, self.content, self.world, exp, "challenge")
         record.notes += levels
         return msgs + levels
 
@@ -9460,7 +10381,7 @@ class Game:
             text=f"在{c.locations[p.location].name}打退了{fig.name}")
         p.snubbed_until[fid] = self.now + cfg.snub_hours * HOUR
         if season_one(c, w):
-            push.add_contribution(p, calendar.point(w.time, c, w).week, cfg.figure_defeat_prestige * cfg.contrib_per_push)
+            wins.credit(p, c, w, calendar.point(w.time, c, w).week, cfg.figure_defeat_prestige * cfg.contrib_per_push)
         msgs += self._order_credit(  # 「打擊大勢人物」軍令（計畫 T6）：只算目標本人
             kind="challenge", location=p.location, front=figures.state_of(s, c, fid).front, figure=fid,
         )
@@ -9657,11 +10578,12 @@ class Game:
             goal = faction.goals.get(trend_id, 0) if faction is not None else 0
             # 出陣的攪局（sortie.mode：陣營在這條線上沒有目標，只有豪強）把線往 50 拉，就是替豪強做事：照推的量記（PM 2026-10-14，
             # 同攻守的帳：名目量，超過上限的部分照記兩成）
-            stir = source == "sortie" and not goal
+            # 三陣營四勝利開著的季沒有攪局（設計 3.2：幫不到任何一本帳；_sortie_mode 也不給）
+            stir = source == "sortie" and not goal and not self._four_wins()
             # 捐軍備（source="donate"）的貢獻照捐的份量在 _donate 記，推力不另記（PM 2026-10-15）
             if source != "donate" and (stir or (goal and (goal > 0) == (amount > 0))):  # 替自己陣營的目標方向推；逆著推、這條線沒有目標（攪局以外）都不記
                 gained = push.contribution(abs(delta), pushed, moved, cfg.contrib_per_push, cfg.over_cap_contrib_ratio)
-                push.add_contribution(p, at.week, gained)
+                wins.credit(p, c, w, at.week, gained)
             w.active_pushers.setdefault(side, {})[p.name] = now
         w.active_pushers = push.drop_stale(w.active_pushers, now, window)  # 順手清掉超過時窗的人，名單不會一直長
         return msgs + tail
@@ -9670,7 +10592,8 @@ class Game:
         p = self.state.player
         msgs = []
         scale = self._loot_scale  # 練功分級的倍數（_practice 打的那一場才不是 1；Config.training）
-        silver_won = round(squad.reward_silver * scale)
+        gate = self._gate_scale  # 減法季三道閘（遭遇拍那一場才不是 1）：經驗、心得、銀兩一起乘（乘 1 一個位元都不動）
+        silver_won = round(squad.reward_silver * scale * gate)
         if silver_won:
             p.stats["silver"] += silver_won
             record.silver = silver_won
@@ -9678,7 +10601,7 @@ class Game:
         # 寶物「打贏的心得／經驗」（裝備四欄 6.2）；兩種數字不同，拆成兩個倍數。乘勝、悟招以前多給獎勵，本命戰法第三批起改成回合裡的戰法
         more_xinde = 1 + treasures.amount(self.state, self.content, "win_xinde_pct")
         more_exp = 1 + treasures.amount(self.state, self.content, "win_exp_pct")
-        xinde = round(squad.reward_xinde * more_xinde * scale)
+        xinde = round(squad.reward_xinde * more_xinde * scale * gate)
         if xinde:
             p.stats["xinde"] = p.stats.get("xinde", 0) + xinde
             record.xinde = xinde
@@ -9687,7 +10610,10 @@ class Game:
             got: list[str] = []  # 這一場掉到的素材（寶物「多掉一個素材」從這裡挑）
             if max_tier is None and record.kind in ("train", "wild"):  # 領地爭奪：剛易手的中立地，駐軍只掉一階（翻地與爭搶，冷卻期高階回饋暫停）
                 max_tier = conquest.drop_cap(self.state.world, self.content, self.state.player.location)
-            for material_id, count in materials.roll_squad_drops(squad, self.content, self.rng, max_tier=max_tier):  # 挑戰本人丁 (c) 才給 max_tier
+            drops = materials.roll_squad_drops(squad, self.content, self.rng, max_tier=max_tier)  # 挑戰本人丁 (c) 才給 max_tier
+            if self._drop_scale < 1:  # 減法季探索一顆的遭遇拍（城裡的地痞、三道閘）：掉的素材打折，用自己的亂數（不碰 Game.rng）
+                drops = self._thin_drops(drops, record)
+            for material_id, count in drops:
                 line = materials.grant(self.state, self.content, material_id, count)
                 if line:
                     got.append(material_id)
@@ -9711,13 +10637,25 @@ class Game:
                     msgs += dropped_lines
         # 經驗本來就是每人拿一樣多（FB-002），乘勝與寶物整隊一起乘；散人的遊俠名號每一階再多一成（ranger.exp_factor，陣營的人是 1）
         factor = ranger.exp_factor(self.state, self.content)
-        exp = round(squad.exp * more_exp * factor)
-        msgs += self._record_exp(record, exp)
-        levels, record.levelups = team.grant_team_exp(self.state, self.content, self.world, exp)  # 每人都拿（FB-002）
+        exp = round(squad.exp * more_exp * factor * gate)
+        exp_from = "encounter" if record.kind == "wild" else "battle"  # 都是仗（growth.BATTLE_KINDS）：減法季 45 級以後照算
+        msgs += self._record_exp(record, exp, exp_from)
+        levels, record.levelups = team.grant_team_exp(self.state, self.content, self.world, exp, exp_from)  # 每人都拿（FB-002）
         record.notes += levels  # 完整的句子留著（戰報頁、江湖紀錄）；戰鬥卡片畫 levelups 那一行簡短的（FB-074）
         why = renown.ranger_exp_note(self.state, self.content, factor)  # 名聲 6.3：散人的經驗加成說出原因
         record.notes += why
         return msgs + levels + why
+
+    def _thin_drops(self, drops, record) -> list[tuple[str, int]]:
+        """遭遇拍那一場掉的素材打 _drop_scale 折（減法季探索一顆：城裡的地痞、三道閘）：每一種的數量乘倍數，零頭照機率進位；
+        亂數是自己的（「出門掉落|季數|名號|戰報流水號」），不碰 Game.rng。打到 0 的那一種不給。"""
+        rng = random.Random(f"出門掉落|{self.world.get_season_number()}|{self.state.player.name}|{record.id}")
+        out = []
+        for material_id, count in drops:
+            kept = int(count * self._drop_scale + rng.random())
+            if kept > 0:
+                out.append((material_id, kept))
+        return out
 
     def _seize(self, record, draw: bool = False) -> list[str]:
         """絕學的契機（方案 C，cultivation.seize）：打贏了（險勝以上）、序章外，照這一場的難度比擲一次頓悟。
@@ -10676,6 +11614,8 @@ class Game:
         """每日簽到（21 天季，正式季整合 6.2；tianxia/checkin.py）：領今天的份，四階的日子帶 attribute（剛柔快慢）。草廬序章裡不簽
         （同回體丹）；關著、簽過了、沒挑或挑錯四階都只回一句、什麼都不動。成了寫一則「簽到」江湖紀錄（數值變化寫丹、銀兩、素材）。"""
         s, c = self.state, self.content
+        if checkin.on(c, s.world) and opening_rules.pending(s, c):  # 開局第一分鐘：三選一還沒選，福利之後寫進紀錄、不當第一張卡
+            return self._log([opening_rules.GATE])
         if checkin.on(c, s.world) and prologue_rules.active(s, c):
             return self._log([checkin.HUT])
         result = checkin.claim(s, c, s.world, attribute)
@@ -10685,10 +11625,26 @@ class Game:
         journal.add_entry(s, JournalEntry(time=s.world.time, title=checkin.TITLE, lines=lines, changes=changes))
         return self._log(lines + changes)
 
+    def _auto_checkin(self) -> None:
+        """每日簽到自動領（減法季批 1；Joy 2026-10-24 挑了江湖頁乙案：簽到不放鈕）：每天第一次同步時，今天的份不必挑的就直接領、
+        寫一則「簽到」江湖紀錄（同 check_in，「剛剛」那一行會寫出來）；要挑四階的日子不動，江湖頁冒一張挑屬性的小卡（status.checkin.pick），
+        挑了才領（check_in）。草廬序章裡不簽（同 check_in）。假人照舊在 bot.check_in 自己簽，先同步到的這裡順手領了也只是同一份。"""
+        s, c = self.state, self.content
+        if prologue_rules.active(s, c) or opening_rules.pending(s, c):
+            return
+        day = checkin.due(s, c, s.world)
+        if day is None or checkin.needs_pick(c, day):
+            return
+        result = checkin.claim(s, c, s.world)
+        if isinstance(result, str):
+            return
+        lines, changes = result
+        journal.add_entry(s, JournalEntry(time=s.world.time, title=checkin.TITLE, lines=lines, changes=changes))
+
     def checkin_view(self) -> dict | None:
         """江湖頁「簽到」小標的資料（checkin.view）：簽到關著、草廬序章裡、過了這一季最後一天（管理者把季末往後排）是 None。"""
         s, c = self.state, self.content
-        if not checkin.on(c, s.world) or not checkin.in_season(c, s.world) or prologue_rules.active(s, c):
+        if not checkin.on(c, s.world) or not checkin.in_season(c, s.world) or prologue_rules.active(s, c) or opening_rules.pending(s, c):
             return None
         return checkin.view(s, c, s.world)
 
@@ -10801,15 +11757,15 @@ class Game:
                 p.stats["silver"] = p.stats.get("silver", 0) + pay.silver
                 lines.append(f"銀兩 +{pay.silver}")
             if pay.exp and team.maxed(c, p.member):
-                gained = team.maxed_xinde(s, c, pay.exp)
+                gained = team.maxed_xinde(s, c, pay.exp, "dividend")
                 if gained:
                     lines += [team.MAXED_XINDE.format(n=gained), f"心得 +{gained}"]
-            elif pay.exp:
+            elif pay.exp:  # 翻地分紅算仗（地是打下來的，growth.BATTLE_KINDS）
                 before = p.member.level
                 lines.append(f"經驗 +{pay.exp}")
-                lines += team.add_exp(c, p.member, pay.exp, p.name)
+                lines += team.add_exp(c, p.member, pay.exp, p.name, "dividend")
                 if p.member.level > before:
-                    points = team.points_between(c.config, before, p.member.level)
+                    points = team.level_points(self.state, c, before, p.member.level)
                     p.stat_points += points
                     if points:
                         lines.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
@@ -10845,10 +11801,12 @@ class Game:
         n = max([e.n for e in w.xingshi], default=0) + 1
         w.xingshi_ticket = XingshiTicket(
             n=n, key=key, opened_real=self.now,  # 現實時鐘（FB-577）
-            facts=xingshi.facts(w, c, notes, mark.lines, mark.rumors, night=xingshi.is_night(self.pill_now(), c)),  # 白天開的不寫「打到入夜」
+            facts=xingshi.facts(w, c, notes, mark.lines, mark.rumors, night=xingshi.is_night(self.pill_now(), c),  # 白天開的不寫「打到入夜」
+                                marks_from=mark.fired),  # 減法季批 4：上一篇開單以後過門檻的痕跡（PM 2026-10-25 修正輪：不再靠世界層傳聞補）
             line=xingshi.summary_line(notes, c),
         )
-        w.xingshi_mark = XingshiMark(log=len(w.conquest.day_log), rumors=len(w.rumors), lines=xingshi.line_values(w, c))
+        w.xingshi_mark = XingshiMark(log=len(w.conquest.day_log), rumors=len(w.rumors), lines=xingshi.line_values(w, c),
+                                     fired=len(w.marks_fired))  # 這一篇開單那一刻讀到哪裡：開單到收下之間過門檻的，下一篇寫
 
     def _xingshi_finish(self, essay: str | None) -> XingshiEssay:
         """收下還在等的那一張：模型寫的過得了 xingshi.clean 就用，不然照固定段（by_rule，畫面上看不出差別）；天下大事一則、江湖史一筆，
@@ -11090,7 +12048,7 @@ class Game:
             return self._log([mall.OFF])
         result = mall.buy(
             self.state, self.content, wallet, item_id, ref,
-            now=self.pill_now(), day=self._pill_day(), season=self.world.get_season_number(), qty=qty,
+            now=self.pill_now(), day=self._pill_day(), season=self.world.get_season_number(), qty=qty, moment=self._mall_moment(),
         )
         if isinstance(result, str):
             done = wallet.purchase_by_ref(mall.buy_ref(self._mall_owner(), ref))
@@ -11101,6 +12059,24 @@ class Game:
         ))
         self.mall_bought = result.item.id
         return self._log(result.lines)
+
+    def _mall_moment(self) -> mall.Moment:
+        """上架看的「此刻」（減法季批 7b：MallWindow 的 rule、phases、from_week）：休季或季中、開打的季是季曆第幾週、這一季（開季的章）
+        開著哪幾個商品寫到的子開關；segments 是這一季的季曆照不照段（7 天濃縮季），商品說明的上架時機（{上架}）照它寫（FB-849）；
+        blocked 是這個人這一季用不上的商品 → 原因（現在只有列傳插畫票，zhuan_end.art_problem；FB-845）：貨架灰掉、買不了。
+        沒寫這三樣的商品不看它，一個字都不變。"""
+        c, w = self.content, self.state.world
+        phase = self.world.season_phase()
+        rules_named = {item.on_sale.rule for item in c.mall.values() if item.on_sale.rule}
+        rules = frozenset(part for part in rules_named if jianfa(c, w, part))
+        blocked: dict[str, str] = {}
+        if "zhuan_end" in rules and (unfit := zhuan_end.art_problem(self.state, c, w)):  # 這一季用不上的插畫票不賣（FB-845）
+            blocked.update({item.id: unfit for item in c.mall.values() if item.effects.get(zhuan_end.ART)})
+        return mall.Moment(
+            phase="resting" if phase == "resting" else "season",
+            week=calendar.point(w.time, c, w).week if phase == "running" and not w.ended else None,
+            rules=rules, segments=calendar.week7_on(w, c), blocked=blocked,
+        )
 
     def mall_entry(self) -> dict | None:
         """狀態列的商城入口（齒輪旁的錠子鈕、底部第六格；商城第二批）：{balance}；商城關著是 None（沒有入口）。
@@ -11185,7 +12161,7 @@ class Game:
         wallet = self._wallet()
         if wallet is None:
             return None
-        view = mall.view(self.content, wallet, self._mall_owner(), self._pill_day(), self.world.get_season_number())
+        view = mall.view(self.content, wallet, self._mall_owner(), self._pill_day(), self.world.get_season_number(), self._mall_moment())
         cfg = self.content.config
         view["pills"] = {
             "name": cfg.stamina_pill_name, "count": self.state.player.stamina_pills, "today": self.pills_left_today(),
@@ -11311,16 +12287,41 @@ class Game:
             return self._log(["沒有可以分配的屬性點，升級才會有。"])
         if p.stats.get(stat, 0) >= cfg.stat_cap:
             return self._log([f"{name}已經到頂（{cfg.stat_cap}）。"])
+        seen = jianfa(self.content, self.state.world, "stat_milestones")  # 減法季屬性五段：配點那一刻寫實際變了多少（設計 4.5「看得見」）
+        was = p.stats.get(stat, 0)
+        power = team.fresh_power(self.state, self.content, self.world) if seen else 0.0
         p.stat_points -= 1
         p.stats[stat] = p.stats.get(stat, 0) + 1
+        said = self._allocate_line(stat, was, power) if seen else ""
+        if seen and p.stat_points <= 0:
+            p.milestone_due = 0  # 境界卡（main.milestone）：配完就收
         journal.add_entry(
-            self.state, JournalEntry(time=self.state.world.time, title=journal.ALLOCATE, changes=[f"{name} +1"]),
+            self.state, JournalEntry(time=self.state.world.time, title=journal.ALLOCATE, changes=[f"{name} +1"],
+                                     lines=[said] if said else []),
             merge=True,
         )
         left = f"（還有 {p.stat_points} 點可以分配）" if p.stat_points else ""  # 最後一點不寫「還有 0 點」
         self._guide(note_action(self.state, self.content, self.world, "allocate"))  # 序章第 9 步（新手引導計畫一）
         self._check_hints()  # 博聞加了持有上限會變（h_cap 的條件）：配成了之後看一遍（新手引導計畫三）
-        return self._log([f"{name} +1{left}"])
+        return self._log([f"{said or f'{name} +1'}{left}"])
+
+    def _allocate_line(self, stat: str, was: float, power: float) -> str:
+        """配點那一句（減法季屬性五段，設計 4.5）：「臂力 8 → 9：武學威力 +6%，此刻全隊 182 → 193」——前後威力用 team.fresh_power
+        （滿血、不看對手）各算一次，沒變（身法、悟性、博聞）就不寫全隊那一段。待 joy 潤。"""
+        s, c = self.state, self.content
+        name = c.config.stat_names.get(stat, stat)
+        after = team.fresh_power(s, c, self.world)
+        tail = f"，此刻全隊 {power:.0f} → {after:.0f}" if round(after) != round(power) else ""
+        return f"{name} {was:.0f} → {was + 1:.0f}：{skillview.stat_step(s, c, stat, was)}{tail}"
+
+    def milestone_card(self) -> dict | None:
+        """境界卡（減法季屬性五段，設計 4.5；欄位表 main.milestone）：升到境界那一級、手上還有點沒配時是
+        {"level": 20, "points": 5, "title": "筋骨大成"}；配完了、關著的季是 None。名字照 growth.MILESTONE_TITLES（待 joy 潤）。"""
+        s, c = self.state, self.content
+        p = s.player
+        if not p.milestone_due or p.stat_points <= 0 or not jianfa(c, s.world, "stat_milestones"):
+            return None
+        return {"level": p.milestone_due, "points": p.stat_points, "title": growth.milestone_title(p.milestone_due)}
 
     # ── 玩家之間的邀請與切磋（玩家互動第二層，企劃者 2026-10-08「互動的兩層也可以派下去做了」）──────────
     # 切磋掛在玩家卡上（spar.py 登記進 social.ACTIONS）：發邀請、答應、婉拒、收回都是按的那個人自己的動作，在他自己那一把行動鎖裡做；
@@ -11329,13 +12330,13 @@ class Game:
     # 「是假人」不影響任何一句話。
 
     def _spar_problem(self, who: Game, *, me: bool, what: str = "切磋", cost: int | None = None) -> str | None:
-        """這個人此刻能不能切磋（論武也問這一個，what 換成「論武」）：拒絕的話；能是 None。不在序章、閒著（選單上有探索，IDLE_MARK：
+        """這個人此刻能不能切磋（論武也問這一個，what 換成「論武」）：拒絕的話；能是 None。不在序章、閒著（Game.is_idle：
         不在事件、路上、閉關、決戰裡）、體力付得起（cost 沒給是一次遊歷）。me 是說話的人自己（「你」），不然寫對方的名號。"""
         s, c = who.state, self.content
         name = "你" if me else s.player.name
         if prologue_rules.active(s, c):
             return f"{name}還在草廬學藝，下山之後才能{what}。"
-        if IDLE_MARK not in {o.id for o in who.options(odds=False, tick=False)}:
+        if not who.is_idle():
             return f"{name}此刻正忙，騰不出手來{what}。"
         cost = c.config.action_cost["train"] if cost is None else cost
         if s.player.stamina < cost:
@@ -11753,10 +12754,10 @@ class Game:
         p.stats["xinde"] = p.stats.get("xinde", 0) + xinde
         record.xinde = xinde
         before = p.member.level
-        maxed_note = self._record_exp(record, cfg.exp)  # 先換（滿級才換）；升到滿級那一下剩下的不換
-        ups = team.add_exp(c, p.member, cfg.exp, p.name)
+        maxed_note = self._record_exp(record, cfg.exp, "spar")  # 先換（滿級才換）；升到滿級那一下剩下的不換
+        ups = team.add_exp(c, p.member, cfg.exp, p.name, "spar")  # 切磋是仗（減法季 45 級以後照算）
         if p.member.level > before:
-            points = team.points_between(c.config, before, p.member.level)
+            points = team.level_points(self.state, c, before, p.member.level)
             p.stat_points += points
             if points:
                 ups.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
@@ -11932,11 +12933,12 @@ class Game:
         wp.stats["silver"] = wp.stats.get("silver", 0) + taken
         con = team.con_of(loser.state, c, loser.world, PLAYER)
         cut = team.armor_cut(loser.state, c, loser.world)  # 截殺輸的一方只吃防具（裝備四欄 4.4）：不吃化勁，也就不必夾合計上限
-        hp, _ = team._apply_toll(c, lp.member, cfg.hp_loss * (1 - cut), agi=lp.stats.get("agi", team.BASE_STAT), con=con, injury=0.0)
+        hp, _ = team._apply_toll(c, lp.member, cfg.hp_loss * (1 - cut), agi=lp.stats.get("agi", team.BASE_STAT), con=con, injury=0.0,
+                                 season=loser.state.world)
         # 散人（揭了通緝）不記貢獻；第一季規則關著的季沒有晉升，也不記（懸賞榜設計 2.2 第 4 點，寫法同軍餉 _showdown_pay）
         contrib = c.config.contrib_per_push * cfg.win_contrib_push if wp.faction is not None and season_one(c, self.state.world) else 0
         if contrib:
-            push.add_contribution(wp, calendar.point(self.state.world.time, c, self.state.world).week, contrib)
+            wins.credit(wp, c, self.state.world, calendar.point(self.state.world.time, c, self.state.world).week, contrib)
         cut = min(evil, lp.stats.get("evil", 0))
         if cut > 0:
             lp.stats["evil"] = lp.stats.get("evil", 0) - cut
@@ -12104,7 +13106,7 @@ class Game:
             self._draft.changes += changes
         if season_one(c, s.world) and cfg.contrib_push:
             contrib = c.config.contrib_per_push * cfg.contrib_push
-            push.add_contribution(p, calendar.point(s.world.time, c, s.world).week, contrib)
+            wins.credit(p, c, s.world, calendar.point(s.world.time, c, s.world).week, contrib)
             msgs.append(f"貢獻 +{contrib}")
         return msgs
 
@@ -12263,10 +13265,11 @@ class Game:
             left -= got
         con = team.con_of(loser.state, c, loser.world, PLAYER)
         cut = team.armor_cut(loser.state, c, loser.world)
-        hp, _ = team._apply_toll(c, lp.member, cfg.hp_loss * (1 - cut), agi=lp.stats.get("agi", team.BASE_STAT), con=con, injury=0.0)
+        hp, _ = team._apply_toll(c, lp.member, cfg.hp_loss * (1 - cut), agi=lp.stats.get("agi", team.BASE_STAT), con=con, injury=0.0,
+                                 season=loser.state.world)
         contrib = c.config.contrib_per_push * cfg.win_contrib_push if wp.faction is not None and season_one(c, self.state.world) else 0
         if contrib:
-            push.add_contribution(wp, calendar.point(self.state.world.time, c, self.state.world).week, contrib)
+            wins.credit(wp, c, self.state.world, calendar.point(self.state.world.time, c, self.state.world).week, contrib)
         return RaidSpoils(winner=wp.name, lost=lost, taken=taken, hp=round(hp), contrib=contrib, goods=tuple(goods))
 
     def _ambush_record(
@@ -12340,7 +13343,7 @@ class Game:
             self._draft.changes.append(f"體力 -{cost}")
         if p.faction is not None and season_one(c, s.world):
             contrib = c.config.contrib_per_push
-            push.add_contribution(p, calendar.point(s.world.time, c, s.world).week, contrib)
+            wins.credit(p, c, s.world, calendar.point(s.world.time, c, s.world).week, contrib)
             msgs.append(f"貢獻 +{contrib}")
         return msgs
 
@@ -12714,7 +13717,7 @@ class Game:
         if lost > 0:
             con = team.con_of(s, c, self.world, PLAYER)
             injury = treasures.amount(s, c, "injury")  # 螭首（玉璽碎片改版）：變成內傷的減半；沒帶是 1
-            p.member.injury += lost * c.config.injury_share * max(0.0, 1 - team.stat_bonus(c, con)) * injury
+            p.member.injury += lost * c.config.injury_share * max(0.0, 1 - team.stat_bonus(c, con, s.world)) * injury
             p.member.neili = max(0.0, now - lost)
         title = f"頭目戰・{foe.name}"
         if tier is None:
@@ -12740,10 +13743,10 @@ class Game:
             before = p.member.level
             # 滿級換心得（先換，升到滿級那一下剩下的不換）：extra 會進戰報敘事、紀錄另接得失（已含換來的那一份），所以只留那一句，
             # 「心得 +N」不接（同切磋；FB-453：以前紀錄寫心得 +39、實際 +27）
-            extra += [n for n in self._record_exp(record, exp) if not n.startswith("心得 +")]
-            extra += team.add_exp(c, p.member, exp, p.name)
+            extra += [n for n in self._record_exp(record, exp, "boss") if not n.startswith("心得 +")]
+            extra += team.add_exp(c, p.member, exp, p.name, "boss")  # 頭目戰是仗（減法季 45 級以後照算）
             if p.member.level > before:
-                points = team.points_between(c.config, before, p.member.level)
+                points = team.level_points(self.state, c, before, p.member.level)
                 p.stat_points += points
                 if points:
                     extra.append(f"你有 {p.stat_points} 點屬性可以分配（點名號展開）。")
@@ -14973,7 +15976,43 @@ class Game:
 
     def location_text(self) -> str:
         loc = self.content.locations[self.state.player.location]
+        if jianfa(self.content, self.state.world, "marks_visible"):  # 減法季批 4：痕跡過了門檻，描寫多接一段（marks.describe）
+            return f"【{loc.name}】危險 {'★' * loc.danger}\n\n{marks_rules.describe(loc, self.state.world, self.content)}"
         return f"【{loc.name}】危險 {'★' * loc.danger}\n\n{loc.describe(self.state.world.flags)}"  # 宛城的描寫隨版本換
+
+    def scene_art(self) -> dict | None:
+        """江湖頁場景卡上面那張圖（減法季批 8 圖像版；減法季整合設計第八章、第一批圖提示單）。回 {kind, path, title, sub, head}：
+        path 是 web/img/ 底下不含副檔名的路徑；head 是場景 Markdown 的第一行（地名那一行、事件標題、人名），有圖時網頁把它疊在圖上、
+        不在卡片裡寫第二次。事件開著（pending_event）→ 事件的類型圖 events/<Event.image>；跟人物談話 → 他的像（CharacterDef.image）；
+        平常站在地點 → Location.image，沒寫就是所屬大區的 places/<大區 id>（atlas.region_of），沒有大區是 places/world。
+        其餘的畫面一律 None、一字不變：全服戰鬥蓋著場景、季收了、單挑、擂台、宴席、有所感、投靠與叛投、求見名單、伏筆問話、在路上，
+        還有事件沒寫 image、人物沒有像。圖檔在不在是伺服器的事（server.scene_art）。"""
+        s, c = self.state, self.content
+        p = s.player
+        if s.world.ended or self._battle_for_me(tick=False) is not None:
+            return None
+        if s.pending_event:
+            event = c.events[s.pending_event]
+            if not event.image:
+                return None
+            return {"kind": "event", "path": f"events/{event.image}", "title": event.title, "sub": "", "head": f"**{event.title}**"}
+        if p.duel is not None or p.arena is not None or p.feasting is not None or p.sensing is not None:
+            return None
+        if p.pending_companion:
+            character = c.characters[p.pending_companion]
+            if not character.image:
+                return None
+            sub = self.affinity_text(p.pending_companion)
+            return {"kind": "figure", "path": character.image, "title": character.name, "sub": sub, "head": f"**{character.name}**（{sub}）"}
+        if self._own_scene_text() != self.location_text():  # 投靠、叛投、求見、伏筆問話、在路上……都不是地點的描寫
+            return None
+        loc = c.locations[p.location]
+        if loc.image:
+            path = loc.image
+        else:
+            region = atlas.region_of(c, loc.id)
+            path = f"places/{region.id}" if region is not None else "places/world"
+        return {"kind": "place", "path": path, "title": loc.name, "sub": f"危險 {'★' * loc.danger}", "head": f"【{loc.name}】危險 {'★' * loc.danger}"}
 
     def method_help(self, option_ids: Iterable[str]) -> dict | None:
         """有所感選做法那一步，網頁畫在做法鈕底下的兩行小字（explain-2，sensing.method_help；鈕上的心意審查 I1 起預設不給）；
@@ -15002,7 +16041,7 @@ class Game:
             return f"## {s.world.ending_title}\n\n{s.world.ending_text}"
         if s.pending_event:
             event = c.events[s.pending_event]
-            return f"**{event.title}**\n\n{fill_marks(event.text, s)}"
+            return f"**{event.title}**\n\n{fill_marks(self._event_text(event), s)}"
         if s.player.duel is not None:
             return self._duel_scene()
         if s.player.arena is not None:
@@ -15051,11 +16090,11 @@ class Game:
         s, c = self.state, self.content
         p, w = s.player, s.world
         names = c.config.stat_names
-        now, cap = team.member_neili(c, p.member, team.con_of(s, c, self.world, PLAYER))
+        now, cap = team.member_neili(c, p.member, team.con_of(s, c, self.world, PLAYER), season=w)
         mates = []
         for cid in p.team:
             progress = self.world.get_companion(cid)
-            mate_now, mate_cap = team.member_neili(c, progress, team.con_of(s, c, self.world, cid))
+            mate_now, mate_cap = team.member_neili(c, progress, team.con_of(s, c, self.world, cid), season=w)
             mates.append({"name": c.characters[cid].name, "level": progress.level,
                           "hp": round(mate_now), "hp_max": round(mate_cap)})
         data = {
@@ -15111,7 +16150,7 @@ class Game:
             "stat_points": p.stat_points,
             "stat_cap": c.config.stat_cap,
             # ＋鈕底下那一行：五項各管什麼、事件檢定也看它們（計畫二最終審查 M2）；網頁只在有點可配時畫
-            "stat_uses": skillview.stat_uses(c),
+            "stat_uses": skillview.stat_uses(c, s),  # 減法季屬性五段開著時寫「現在給你什麼」的數字（設計 4.5）
             "stat_uses_note": skillview.STAT_CHECK_NOTE,
             # 心得付得起、又真的有事可做時才有；籌備中練成、合成都被擋，不提示（explain-2 審查 Minor 1）
             "hint": None if self._preparing() else skillview.practice_hint(s, c),
@@ -15282,7 +16321,7 @@ class Game:
                 "week": event.week, "title": event.title, "text": text,
                 "locked_by": timetable.shown(lock) if lock is not None else None,
             })
-        return {
+        out = {
             "title": w.ending_title, "text": w.ending_text,
             "stances": [{"side": side, "name": names.get(side, side), "value": value} for side, value in standing.items()],
             "fronts": [{"id": f, "name": trend_name(c, f), "value": values.get(f, 0)} for f in front_ids(c)],
@@ -15292,6 +16331,91 @@ class Game:
                 for f in c.scenario.factions
             ],
         }
+        ending = self.ending_card()  # 三陣營四勝利（減法季批 3c，欄位表 main.ending）：關著的季沒有這個鍵
+        if ending is not None:
+            out["ending"] = ending
+        return out
+
+    # ── 三陣營四勝利（減法季整合設計第三章；計畫 Task 3c-2、3c-3：欄位表 main.ending；三方卡與「你這一步」補在批 1 的 weekcard 裡）──
+
+    def ending_card(self) -> dict | None:
+        """結局卡（欄位表 main.ending；設計 3.4）：收季之後、四勝利開著的季才有。winner 是贏的那一軍（和局 None），condition 是你算在
+        哪一條（兩軍是陣營名，豪強是「地方豪強（官軍）」；散人、豪強沒有階是 None），my_tier 第幾階（0 是沒有），title 稱號，
+        reward 下一季分到的，ledger_used 照哪一本排（豪強和局是 wins.BOTH）。收季那一刻存好（WorldState.final_tiers），這裡只讀。"""
+        s, c = self.state, self.content
+        w = s.world
+        if not w.ended or not self._four_wins():
+            return None
+        result = w.final_tiers.get(s.player.name)
+        tier = result.tier if result is not None else 0
+        return {
+            "winner": wins.winner_of(w, c), "condition": wins.condition_of(c, s.player.faction, result), "my_tier": tier,
+            "title": result.title if result is not None else "", "reward": wins.reward_text(wins.rules_of(c), tier),
+            "ledger_used": result.ledger_used if result is not None else None,
+        }
+
+    def _tier_outlook(self) -> tuple[TierResult, int | None]:
+        """此刻就收季（結局照此刻會成立的那一種，world.evaluate_ending）自己拿第幾階、離上一階還差多少（wins.outlook）。名次要讀
+        這一季每個人的帳（CharacterStore.books，只挑那幾欄）；自己照記憶體裡的這一份（這一下剛記的貢獻可能還沒存）。"""
+        s, c = self.state, self.content
+        me = s.player
+        others = [q for q in CharacterStore(self.world.db).books(me.season_number) if name_key(q.name) != name_key(me.name)]
+        winner = evaluate_ending(_season_vehicle(c, s.world), c).winner
+        return wins.outlook(c, [*others, me], me.name, winner)
+
+    def tier_hint(self) -> str | None:
+        """三方卡的 tier_hint（weekcard.sides_card，批 3c）：此刻就收季拿第幾階・離上一階還差多少（「第三階・還差 40」「第一階」
+        「未入階・還差 20」，wins.tier_hint）。四勝利開著、季還沒收、投靠了劇本裡的陣營才有；其餘是 None。"""
+        s, c = self.state, self.content
+        if not self._four_wins() or s.world.ended or c.scenario.find_faction(s.player.faction) is None:
+            return None
+        return wins.tier_hint(*self._tier_outlook())
+
+    def place_minutes(self, loc_id: str) -> int | None:
+        """從此刻的位置走到 loc_id（步行；騎著馬照馬的步調）要現實幾分鐘（同狀態列的「現實約 N 分鐘後抵達」）；就在這裡是 0、走不到是 None。
+        先照摸清的路（atlas.way_to），走不到再照所有開放的地點（投靠點是公開的，三方卡照樣寫得出分鐘）。三方卡、本週卡的目標用。"""
+        s, c = self.state, self.content
+        if s.player.journey is None and s.player.location == loc_id:
+            return 0
+        route = atlas.way_to(s, c, loc_id)
+        if route is None and s.player.journey is None:
+            route = atlas.shortest_routes(s, c).get(loc_id)
+        if route is None or not route.path:
+            return None
+        return self._real_minutes(atlas.travel_seconds(route.minutes, "walk", pace=mounts.pace(s, c)))
+
+    def _gentry_now(self, faction: FactionDef) -> str:
+        """三方卡豪強那一欄的「現在」：看的人是豪強寫此刻幫誰與兩本帳（設計 3.4），其他人寫此刻依附兩軍各幾人（投靠名冊）。"""
+        s, c = self.state, self.content
+
+        def name(side: str) -> str:
+            return c.scenario.faction_name(side, side)
+
+        if s.player.faction == faction.id:
+            books = "、".join(wins.NOW_GENTRY_BOOK.format(side=name(side), n=n) for side, n in (wins.ledger_view(s.player, c) or {}).items())
+            return wins.NOW_GENTRY_MINE.format(side=name(s.player.ally) if s.player.ally else "", books=books)
+        rolls = allied.gentry_totals(self.world.roll_counts())
+        return "、".join(wins.NOW_GENTRY_ROLL.format(side=name(side), n=rolls.get(side, 0)) for side in faction.allies)
+
+    def sides_card(self) -> dict | None:
+        """三方卡的批 3c 資料（設計 3.4）：劇本的每一方（陣營 id →）{name, goal 要做到, reward 贏了給, join_at 投靠在哪
+        [{location, name, minutes}], now 現在}，稱號與比例照 Config.jianfa.tiers。畫面的三方卡是批 1 的 weekcard.sides_card
+        （欄位表 main.sides_card），它拿這一份補豪強那一格的「現在」、每一方的「贏了給」與投靠點的分鐘；最後一週「離贏還差多少」
+        在 week_unlock.win_gap（wins.gap_line）。四勝利關著、休季沒有。"""
+        s, c = self.state, self.content
+        w = s.world
+        if not self._four_wins() or w.ended:
+            return None
+        standing = stances(s, c)
+        out = {}
+        for f in c.scenario.factions:
+            now = self._gentry_now(f) if f.allies else wins.NOW_ARMY.format(value=standing.get(f.id, 0))
+            out[f.id] = {
+                "name": f.name, "goal": wins.goal_text(c, f), "reward": wins.reward_card(c, f),
+                "join_at": [{"location": loc, "name": c.locations[loc].name, "minutes": self.place_minutes(loc)} for loc in f.join_at],
+                "now": now,
+            }
+        return out
 
     def annals_view(self) -> dict:
         """見聞的「行狀」頁（玩家傳第一批）：這一季至今記下的事，照時間先後；開關關著時 on 是 False、rows 是空的。
@@ -15310,13 +16434,89 @@ class Game:
 
     def biography_entry(self) -> dict | None:
         """休季時江湖頁最上面的「讀你的傳」（這一季的那一篇）：季收了、有行狀或已經存了那一篇才有；假人、開關關著、季還在跑是 None。
-        輪詢每次都問：季還在跑時不讀資料庫。"""
+        輪詢每次都問：季還在跑時不讀資料庫。列傳為終點開著（減法季批 7b）多 tier、illustration、seal（_zhuan_extra）。"""
         p = self.state.player
         if not annals.on(self.content) or p.bot is not None or not self.state.world.ended:
             return None
         if not p.annals and self.world.biography(p.season_number, p.name) is None:
             return None
-        return {"season": p.season_number, "title": biography.title(p.name)}
+        return {"season": p.season_number, "title": biography.title(p.name), **self._zhuan_extra(p.season_number)}
+
+    # ── 列傳為終點（減法季批 7b）：休季用票、列傳多畫的那幾樣 ──
+
+    def _zhuan_season(self, season: int) -> WorldState | None:
+        """那一季的 WorldState（這一季照手上的，以前的照 past_season）；沒有是 None。"""
+        p = self.state.player
+        return self.state.world if season == p.season_number else self.world.past_season(season)
+
+    def _zhuan_purchases(self) -> list:
+        wallet = self._wallet()
+        return [] if wallet is None else wallet.purchases(self._mall_owner())
+
+    def _zhuan_extra(self, season: int) -> dict:
+        """列傳多畫的那幾樣（zhuan_end.extras：季末論功、插畫的圖庫鍵、紀念印的字）；那一季沒開列傳為終點是空的（一個鍵都不多）。
+        這一季的身家照角色身上的，以前的季照存起來的那一份。評曰的名單照寫成的那一篇傳列（FB-847，zhuan_end.extras 的 text）：
+        還沒寫成是 None（預告要寫的人）。"""
+        p = self.state.player
+        world = self._zhuan_season(season)
+        if world is None or not zhuan_end.on(self.content, world):
+            return {}
+        row = self.world.biography(season, p.name)
+        if season == p.season_number:
+            profile = annals.profile(self.state, self.content, season=world)
+        else:
+            profile = row["profile"] if row is not None else {}
+        text = row["text"] if row is not None else None
+        return zhuan_end.extras(self.content, season, profile, zhuan_end.season_tickets(self._zhuan_purchases(), season), text)
+
+    def _zhuan_options(self) -> list[Option]:
+        """休季用列傳的票（減法季批 7b；設計第九章）：列傳為終點開著、季收了，手上有沒用的票才有那一顆。插畫：投靠了劇本裡的陣營、
+        這一季還沒用過、不是第一階（第一階白送）；紀念印：這一季還沒蓋；親筆評曰：情誼 40～69、這一季還沒替你寫的人物一位一顆。"""
+        s, c = self.state, self.content
+        if not s.world.ended or not zhuan_end.on(c, s.world):
+            return []
+        purchases = self._zhuan_purchases()
+        if not purchases:
+            return []
+        n = s.player.season_number
+        used = zhuan_end.season_tickets(purchases, n)
+        standing = annals.standing(s, c, s.world)
+        out = []
+        # 票綁買的那一季（FB-845）：只數這一季買的，之前的季沒用掉的不再冒出用票的鈕
+        if zhuan_end.unused(purchases, zhuan_end.ART, n) and standing.get("illustration") and not used["art"] and standing.get("tier") != 1:
+            out.append(Option(id=zhuan_end.PICK_ART, label=zhuan_end.ART_BUTTON))
+        if zhuan_end.unused(purchases, zhuan_end.SEAL_TICKET, n) and not used["seal"]:
+            out.append(Option(id=zhuan_end.SEAL, label=zhuan_end.SEAL_BUTTON.format(seal=zhuan_end.seal_text(c, n, standing))))
+        if zhuan_end.unused(purchases, zhuan_end.QUOTE_TICKET, n):
+            taken = set(used["quotes"]) | set(self._verdict_taken(standing))
+            out += [Option(id=f"{zhuan_end.QUOTE}{cid}", label=zhuan_end.QUOTE_BUTTON.format(name=c.characters[cid].name, value=value))
+                    for cid, value in zhuan_end.quote_figures(s, c, taken)]
+        return out
+
+    def _verdict_taken(self, standing: dict) -> list[str]:
+        """這一季已經白送評曰的人物（annals.standing 的 verdicts：第一二階的主將或家主、情誼 70 以上的；親筆評曰不再列他們）。"""
+        return [w["fid"] for w in standing.get("verdicts", [])]
+
+    def _zhuan_act(self, option_id: str) -> list[str]:
+        """用掉一張列傳的票（_zhuan_options 驗過有票、按得下去）：那一列購買記 used、season（親筆評曰另記 fid），寫一則「列傳」紀錄。"""
+        s, c = self.state, self.content
+        wallet, owner, n = self._wallet(), self._mall_owner(), s.player.season_number
+        now = self.pill_now()
+        if option_id == zhuan_end.PICK_ART:
+            wallet.mark_used(mall.tokens(wallet, owner, zhuan_end.ART, season=n)[0], now, season=n, art=zhuan_end.illustration_for(s, c, s.world))
+            lines = [zhuan_end.ART_DONE]
+        elif option_id == zhuan_end.SEAL:
+            wallet.mark_used(mall.tokens(wallet, owner, zhuan_end.SEAL_TICKET, season=n)[0], now, season=n)
+            lines = [zhuan_end.SEAL_DONE.format(seal=zhuan_end.seal_text(c, n, annals.standing(s, c, s.world)))]
+        else:
+            cid = option_id.removeprefix(zhuan_end.QUOTE)
+            wallet.mark_used(mall.tokens(wallet, owner, zhuan_end.QUOTE_TICKET, season=n)[0], now, season=n, fid=cid)
+            lines = [zhuan_end.QUOTE_DONE.format(name=c.characters[cid].name)]
+            row = self.world.biography(n, s.player.name)
+            if row is not None and row["text"] is not None:
+                lines.append(zhuan_end.QUOTE_LATER)
+        journal.add_entry(s, JournalEntry(time=s.world.time, title=zhuan_end.TITLE, lines=lines))
+        return lines
 
     def biography_list(self) -> list[dict]:
         """歷季列傳：每一季一列（季別、篇名、寫成了沒、公開了沒）。這一季收了、行狀還在角色身上（還沒換季）的那一季排第一。"""
@@ -15342,7 +16542,7 @@ class Game:
             if rewrite or season != p.season_number or not self._season_closed() or not p.annals:
                 return None
             entries = tuple(e.model_dump() for e in sorted(p.annals, key=lambda e: e.time))
-            profile = annals.profile(self.state, c)
+            profile = annals.profile(self.state, c, season=self.state.world)
         else:
             if season == p.season_number and not self._season_closed():
                 return None
@@ -15350,7 +16550,7 @@ class Game:
             profile = row["profile"]
             if season == p.season_number and p.annals and row["text"] is None:  # 這一季還沒寫成：照角色身上最新的
                 entries = tuple(e.model_dump() for e in sorted(p.annals, key=lambda e: e.time))
-                profile = annals.profile(self.state, c)
+                profile = annals.profile(self.state, c, season=self.state.world)
             written = row["text"] is not None
             if written != rewrite or (rewrite and row["rewrites"] >= self._rewrites_allowed()):
                 return None
@@ -15360,12 +16560,29 @@ class Game:
         era = [r.text for r in chronicle][: biography.ERA_MAX]
         return biography.BiographyRequest(
             season=season, name=p.name, scenario=c.scenario.name, era_note=c.scenario.era_note, profile=profile,
-            annals=entries, era=tuple(era), rewrite=rewrite, sex=gender.of(p),
+            annals=entries, era=tuple(era), rewrite=rewrite, sex=gender.of(p), verdicts=self._verdict_jobs(season, entries, profile),
         )
 
-    def write_biography(self, request: biography.BiographyRequest, text: str | None, now: float) -> bool:
+    def _verdict_jobs(self, season: int, entries: tuple[dict, ...], profile: dict) -> tuple:
+        """人物評曰的單子（減法季批 7b-2，zhuan_end.verdict_request）：身家裡白送的寫手（第一二階的主將或家主、情誼 70 以上的），
+        接這一季用了親筆評曰請的那幾位。那一季沒開列傳為終點是空的。"""
+        c, p = self.content, self.state.player
+        world = self._zhuan_season(season)
+        if world is None or not zhuan_end.on(c, world):
+            return ()
+        free = [zhuan_end.Writer(w["fid"], w["reason"]) for w in profile.get("verdicts", [])]
+        bought = zhuan_end.season_tickets(self._zhuan_purchases(), season)["quotes"]
+        writers = zhuan_end.with_bought(free, bought, c)
+        fixed = zhuan_end.fixed_verdicts(c, writers, p.name, season)  # 整篇一起挑固定句：模型叫不動時兩位寫手也不會一字不差（FB-848）
+        return tuple(zhuan_end.verdict_request(c, w, p.name, gender.of(p), entries, profile, season, fixed=fixed[w.fid])
+                     for w in writers)
+
+    def write_biography(
+        self, request: biography.BiographyRequest, text: str | None, now: float, verdicts: dict[str, str] | None = None,
+    ) -> bool:
         """C 段（鎖內）：重驗單子（同一季、同一份行狀、還寫得了），存進 biographies。text 是 B 段模型寫好、清過的全文；None 就照規則拼。
-        這一季的先把行狀與身家存起來（換季時存的是同一份；之後再來的決戰照 add_saved_annal 補）。存了回 True。"""
+        這一季的先把行狀與身家存起來（換季時存的是同一份；之後再來的決戰照 add_saved_annal 補）。存了回 True。
+        列傳為終點（減法季批 7b-2）：單子上的每一位評曰寫手接一段「評曰：」（verdicts 是 B 段寫好的，人物 id → 一句；沒寫成照固定句）。"""
         current = self.biography_request(request.season, request.rewrite)
         if current is None or current.annals != request.annals:
             return False
@@ -15374,9 +16591,10 @@ class Game:
             self.world.save_annals(request.season, p.name, list(request.annals), dict(request.profile))
         by = biography.MODEL if text else biography.RULE
         row = self.world.biography(request.season, p.name) if request.rewrite else None
-        stored = self.world.store_biography(
-            request.season, p.name, text or biography.rule_text(request), by, now, request.rewrite,
-        )
+        body = text or biography.rule_text(request)
+        for job in request.verdicts:  # 人物評曰（批 7b-2）：一位一段，接在正文（含史官的評曰）後面
+            body += "\n\n" + zhuan_end.apply_verdict(job, (verdicts or {}).get(job.fid, ""))
+        stored = self.world.store_biography(request.season, p.name, body, by, now, request.rewrite)
         if stored and row is not None and row["rewrites"] >= self.content.config.biography.rewrites:
             self._use_rewrite_token(now)  # 白送的重寫用完了，這一次是萬寶閣買的「重修列傳」
         return stored
@@ -15407,12 +16625,13 @@ class Game:
                 return None
             return {
                 "season": season, "title": biography.title(p.name), "written": False, "can_write": ready, "paragraphs": [],
-                "scenario": self.content.scenario.name,
+                "scenario": self.content.scenario.name, **self._zhuan_extra(season),  # 列傳為終點（批 7b）：關著一個鍵都不多
             }
         return {
             "season": season, "title": biography.title(row["name"]), "written": True, "paragraphs": row["text"].split("\n\n"),
             "by": row["written_by"], "public": row["public"], "code": row["share_code"] if row["public"] else None,
             "can_rewrite": row["rewrites"] < self._rewrites_allowed(), "scenario": self.content.scenario.name,
+            **self._zhuan_extra(season),
         }
 
     def share_biography(self, season: int, public: bool, code: str) -> str | None:
@@ -15560,6 +16779,8 @@ class Game:
         hut = prologue_rules.active(self.state, self.content)
         if hut and (self.state.pending_event is not None or self.state.player.sensing is not None):
             return ""  # 草廬的事件或草廬四景的有所感（做法、畫下來）在眼前：整張卡不放
+        if opening_rules.pending(self.state, self.content):
+            return ""  # 開局第一分鐘（減法季批 7）：旁白與三選一就是第一張卡，開場那一則（含丹的福利）留在紀錄裡（整合設計 6.7）
         entry = self._now_entry()
         return journal.card_html(entry, self.stamp, self._chip) if entry is not None else ""
 
@@ -15661,10 +16882,34 @@ class Game:
         for text, weight in crossed.annals:
             annals.note(s, c, annals.DEED, text, weight)
 
+    def _deep_slots(self) -> int:
+        """這一季買的深交名額幾張（mall.tokens(season=)，只這一季有效）；商城關著是 0。"""
+        wallet = self._wallet()
+        return 0 if wallet is None else len(mall.tokens(wallet, self._mall_owner(), zhuan_end.DEEP_SLOT, season=self.state.player.season_number))
+
+    def _deep_cap(self) -> list[str]:
+        """深交上限（zhuan_end.enforce_deep_cap）：列傳為終點開著時，名單外有人過了 70 才讀錢包算名額、夾；夾了另寫一則「深交」江湖紀錄，
+        回那幾句（接在這一下回給玩家的訊息後面）。名單裡有人掉下 70 只是讓出位子，下一次有人過門檻時一起整理。關著什麼都不做。"""
+        s, c = self.state, self.content
+        if not zhuan_end.on(c, s.world) or not zhuan_end.deep_pending(s, c):
+            return []
+        lines = zhuan_end.enforce_deep_cap(s, c, self._deep_slots())
+        if lines:
+            journal.add_entry(s, JournalEntry(time=s.world.time, title=zhuan_end.DEEP_TITLE, lines=lines))
+        return lines
+
+    def _deep_cap_now(self) -> None:
+        """深交上限提早夾一次（減法季批 7b）：情誼一過 70 就有東西給的地方（對話裡的本命武學 companion_agent._maybe_grant_signature_skill、
+        名將本命兵器 signature_arms 的 80）在給之前先夾，名單外的第四位停在 69 就拿不到；夾到的那幾句留到 _log 接在訊息後面（只說一次）。
+        關著什麼都不做。"""
+        self._deep_said += self._deep_cap()
+
     def _log(self, msgs: list[str]) -> list[str]:
         """回給呼叫端、也存進 GameState.log 的訊息。戰況變化（機器可讀的寫法）在這裡換成一句話——這些話玩家（管理者工具列的
         提示）看得到，數字不外露（FB-064）；江湖紀錄那邊在畫的時候換（見 _chip），兩邊用同一個 seed（現在的時間），是同一句。"""
         self._renown_after()  # 名聲：這一下的名望、善名、惡名接差距，比跨段（設計 3.3、6.4）
+        said, self._deep_said = self._deep_said, []
+        msgs = msgs + said + self._deep_cap()  # 深交上限（減法季批 7b）：情誼沒有單一寫入口，在這裡事後夾；排在行狀之前，夾掉的不記成跨格
         annals.watch(self.state, self.content, art_name=self._art_name)  # 行狀：這一下改了什麼（投靠、晉升、情誼……）記一筆
         msgs = humanize(self.content, msgs, str(self.state.world.time))
         if not msgs:

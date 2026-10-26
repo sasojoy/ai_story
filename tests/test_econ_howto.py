@@ -7,7 +7,7 @@ from tianxia.world_state import fresh_season
 
 
 def _page(**econ):
-    c = real_content("weekend")
+    c = real_content("week7")
     for key, value in econ.items():
         setattr(c.config.economy, key, value)
     return howto.page(c, fresh_season(c), recruitable=False), c
@@ -40,7 +40,7 @@ def test_only_the_switched_on_parts_are_written():
 
 
 def test_sortie_and_gathering_say_the_new_numbers():
-    c = real_content("weekend")
+    c = real_content("week7")
     attack = howto.sortie_line("attack", True, 5, c)
     assert "銀兩也是 3 成" in attack and "不給銀兩" not in attack
     assert any("一階約 7 成" in line for line in howto.explore_lines(c))

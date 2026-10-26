@@ -4,7 +4,9 @@ PM 2026-10-22；照伺服器給的 note），整句（最近的在哪、
 步行多久）在行動列底下那一行，照伺服器的 action_notes（Game._practice_line，見 tests/test_fb670_practice_cell.py），網頁不另寫判斷；
 不帶路（按不下去）。探索卡回到真的三選一。五格每格約 62 px（320 寬約 51 px）：灰格小字最多四個字，長的原因格子寫短的、整句在底下那一行
 （同 FB-664）；出陣的名字（「出陣・攪局」）只在「・」後面換行。序章與初入江湖照 reveal 的鍵（act:practice）亮，教學沒寫的步驟不畫。
-node 排不了版：這裡看畫了什麼；375／320 寬切不切字在瀏覽器裡量，數字寫在試玩回饋 FB-670 那一列。沒有 node 就略過。"""
+node 排不了版：這裡看畫了什麼；375／320 寬切不切字在瀏覽器裡量，數字寫在試玩回饋 FB-670 那一列。沒有 node 就略過。
+減法季批 1（整合設計 6.3【定】）起行動列回到四格（探索、出陣、交友、移動）：練功那一格只在序章與初入江湖（引導）時畫，平常收進「此地還能做」，
+等批 2 把練功併進探索；行動列底下那幾行說明拿掉了，灰格點了浮出那一句（data-why）。這一份留下還成立的幾條。"""
 from __future__ import annotations
 
 import random
@@ -12,6 +14,7 @@ import re
 
 import pytest
 from conftest import classic_rules, real_content
+from jianfa_kit import no_jianfa
 from test_prologue_web import run, with_reveal
 
 import server
@@ -36,6 +39,7 @@ PRACTICE = "explore:practice"
 def _content(profile):
     c = real_content(profile)
     c.config.training.enabled = False
+    no_jianfa(c)  # 減法季探索一顆開著時沒有練功這一格（tests/test_explore_one.py）：這一份測的是舊的練功格
     return c
 
 
@@ -71,9 +75,8 @@ def _sub(cell):
     return re.search(r"</b><small>(.*?)</small>", cell).group(1)
 
 
-def _rows(bar):
-    block = re.search(r'<div class="act-notes">(.*?)</div>', bar, re.S)
-    return re.findall(r"<p><b>(.*?)</b>(.*?)</p>", block.group(1)) if block else []
+def _why(cell):
+    return re.search(r'data-why="([^"]*)"', cell).group(1)
 
 
 def _width(text):
@@ -81,106 +84,14 @@ def _width(text):
     return sum(1 if ord(ch) > 0x2E80 else 0.5 for ch in text)
 
 
-# ── 五格 ─────────────────────────────────
+# ── 四格（減法季批 1） ─────────────────────────────────
 
 
-def test_the_wild_shows_five_cells_with_practice_lit_beside_explore():
-    game = _game("yingshui")
-    m = server.main_view(game)
-    bar = _bar(m)
-    assert _keys(bar) == ["explore", "practice", "train", "social", "move"]
-    assert 'class="act-bar" role="group" aria-label="行動" style="--cells:5"' in bar
-    cell = _cell(bar, "practice")
-    assert 'data-act="choose" data-id="explore:practice"' in cell and " off" not in cell
-    assert '<b>尋敵</b><small>不限次數</small><small class="ink-note good">穩勝</small>' in cell
-    rows = _rows(bar)
-    assert ("尋敵", m["action_notes"][PRACTICE]) in rows  # 底下那一行是伺服器那一句
-    assert [name for name, _ in rows][:2] == ["探索", "尋敵"]  # 照格子的順序
-
-
-def test_the_explore_card_is_back_to_three():
-    bar = _bar(server.main_view(_game("yingshui")), wheelSel="explore")
-    card = re.search(r'<div class="card act-explore">.*?</div></div>', bar, re.S).group(0)
-    assert all(f'data-id="explore:{mode}"' in card for mode in ("gather", "seek", "sense"))
-    assert PRACTICE not in card and "尋敵" not in card
-    assert bar.count(f'data-id="{PRACTICE}"') == 1  # 只有行動列那一格
-    assert "此地還能做" not in bar or PRACTICE not in bar[bar.index("此地還能做"):]
-
-
-def test_in_town_the_cell_is_grey_and_the_row_below_says_where_and_how_far():
-    game = _game("yingchuan")
-    m = server.main_view(game)
-    note = m["action_notes"][PRACTICE]
-    assert note.startswith("城外才有對手，最近的在潁水河畔（步行約 ")  # 伺服器那一句（tests/test_fb670_practice_cell.py）
-    bar = _bar(m)
-    assert _keys(bar) == ["explore", "practice", "train", "social", "move"]  # 出陣那一格在城裡照舊灰著寫「不在戰線」
-    cell = _cell(bar, "practice")
-    assert '<button class="act-ink off" data-key="practice"' in cell and " disabled>" in cell and "data-id" not in cell  # 不帶路
-    assert "<b>尋敵</b><small>城外才有</small>" in cell and "ink-note" not in cell
-    assert ("尋敵", note) in _rows(bar)
-
-
-@pytest.mark.parametrize("faction, at, word", [
-    (None, "yingchuan", "城外才有"),  # 城鎮
-    ("guan", "guan_camp", "這裡沒有"),  # 自家大營：不是城鎮、沒有對手
-    ("huang", "huangjin_camp", "這裡沒有"),
-    (None, "jade_cave", "這裡沒有"),
-])
-def test_a_grey_cell_says_outside_the_walls_only_in_town(faction, at, word):
-    """PM 2026-10-22（FB-670 回覆第 1 條）：城鎮寫「城外才有」；城外、沒有對手的地方（自家大營、黃巾營寨、玉洞、草廬）人已經在城外，
-    寫「這裡沒有」。是不是城鎮照伺服器的判斷（練功鈕的 note，explore_modes.is_town），網頁不另寫。"""
-    m = server.main_view(_game(at, faction))
-    option = next(o for o in m["options"] if o["id"] == PRACTICE)
-    assert not option["enabled"] and option["note"] == word
-    assert f"<b>尋敵</b><small>{word}</small>" in _cell(_bar(m), "practice")
-
-
-def test_the_grey_cells_word_is_the_servers():
-    """格子的字照伺服器給的那一個（練功鈕的 note）：伺服器換了就照換；舊版伺服器沒給（note 是空的）寫「城外才有」。"""
-    m = server.main_view(_game("guan_camp", "guan"))
-    option = next(o for o in m["options"] if o["id"] == PRACTICE)
-    option["note"] = "伺服器"
-    assert "<b>尋敵</b><small>伺服器</small>" in _cell(_bar(m), "practice")
-    option["note"] = ""
-    assert "<b>尋敵</b><small>城外才有</small>" in _cell(_bar(m), "practice")
-
-
-def test_the_row_below_is_only_ever_the_servers_sentence():
-    """網頁不另寫判斷：伺服器那一句換了，底下就照換；伺服器沒給（舊版）就不畫那一行，格子照畫。"""
-    m = server.main_view(_game("yingchuan"))
-    m["action_notes"][PRACTICE] = "伺服器換了一句"
-    assert ("尋敵", "伺服器換了一句") in _rows(_bar(m))
-    m["action_notes"].pop(PRACTICE)
-    bar = _bar(m)
-    assert "尋敵" not in [name for name, _ in _rows(bar)] and "<b>尋敵</b><small>城外才有</small>" in _cell(bar, "practice")
-
-
-def test_a_boss_only_place_lights_the_cell_for_the_boss_and_greys_it_while_he_is_away():
-    game = _game("julu_altar", faction="huang")
-    s, c = game.state, game.content
-    bar = _bar(server.main_view(game))
-    cell = _cell(bar, "practice")
-    assert "<b>尋敵</b><small>對上頭目</small>" in cell and "ink-note" not in cell and " off" not in cell
-    s.player.duel_last = [float(s.player.season_number), s.world.time]  # 冷卻中
-    m = server.main_view(game)
-    bar = _bar(m)
-    assert "<b>尋敵</b><small>頭目不在</small>" in _cell(bar, "practice")
-    assert ("尋敵", m["action_notes"][PRACTICE]) in _rows(bar) and "後才會再現身" in m["action_notes"][PRACTICE]
-    s.player.duel_last = []
-    boss = duel_rules.here(s, c)[0]
-    s.player.duel_tally[duel_rules.week_key(s, c, boss.id)] = c.config.duel.per_boss_week
-    m = server.main_view(game)
-    bar = _bar(m)
-    assert "<b>尋敵</b><small>頭目不在</small>" in _cell(bar, "practice") and "不再現身" in m["action_notes"][PRACTICE]
-
-
-def test_a_tired_player_sees_practice_greyed_for_stamina():
-    game = _game("yingshui")
-    game.state.player.stamina = 0.0
-    assert "<b>尋敵</b><small>體力不夠</small>" in _cell(_bar(server.main_view(game)), "practice")
-
-
-# ── 五格時每一格的小字都放得下 ─────────────────────────────
+def test_outside_the_guide_practice_waits_in_the_here_fold():
+    bar = _bar(server.main_view(_game("yingshui")))
+    assert _keys(bar) == ["explore", "train", "social", "move"] and "--cells:4" in bar
+    fold = bar[bar.index("此地還能做"):]
+    assert f'data-id="{PRACTICE}"' in fold
 
 
 PLACES = [  # (陣營, 地點)：城裡、野外、戰線、自家大營、頭目、名望不夠、散人站在戰線上
@@ -190,20 +101,20 @@ PLACES = [  # (陣營, 地點)：城裡、野外、戰線、自家大營、頭�
 ]
 
 
-@pytest.mark.parametrize("profile", ["week7", "season21", "weekend"])
+@pytest.mark.parametrize("profile", ["week7", "season21"])
 def test_every_grey_cell_says_at_most_four_characters(profile):
     seen = set()
     for faction, at in PLACES:
         bar = _bar(server.main_view(_game(at, faction, profile)))
-        assert "practice" in _keys(bar), (at, faction)
+        assert "practice" not in _keys(bar), (at, faction)
         for off in re.findall(r'<button class="act-ink[^"]* off".*?</button>', bar, re.S):
             assert _width(_sub(off)) <= 4, (profile, at, faction, off)
             seen.add(_sub(off))
-    assert {"城外才有", "這裡沒有", "未投靠", "名望不夠", "不在戰線", "沒有人"} <= seen  # 真的量到了這幾種灰格
+    assert {"未投靠", "名望不夠", "不在戰線", "沒有人"} <= seen  # 真的量到了這幾種灰格
 
 
-def test_the_long_reasons_go_to_the_row_below():
-    """散人站在戰線上：格子「未投靠」，「散人不能出陣」整句是伺服器寫的出陣那一行；名望不夠：格子「名望不夠」，還差多少寫在底下（同 FB-664）。"""
+def test_the_long_reasons_go_to_the_tap():
+    """散人站在戰線上：格子「未投靠」，「散人不能出陣」整句是伺服器寫的出陣那一句；名望不夠：格子「名望不夠」，還差多少在點了浮出的那一句。"""
     game = _game("changshe")
     m = server.main_view(game)
     social = next(o for o in m["options"] if o["id"] == "act:socialize")
@@ -211,16 +122,8 @@ def test_the_long_reasons_go_to_the_row_below():
     assert not social["enabled"] and gap.startswith("名望還差 ")  # 前提
     bar = _bar(m)
     assert "<b>出陣</b><small>未投靠</small>" in _cell(bar, "train") and "<b>交友</b><small>名望不夠</small>" in _cell(bar, "social")
-    rows = dict(_rows(bar))
-    assert rows["出陣"] == m["action_notes"]["act:train"] and rows["出陣"].startswith(sortie.RANGER_NOTE)
-    assert rows["交友"] == f"{gap}。"
-
-
-def test_a_sortie_name_breaks_only_after_the_dot():
-    """「出陣・守」「出陣・攪局」：五格時一行放不下，換行只換在「・」後面，不斷在「攪／局」中間。"""
-    bar = _bar(server.main_view(_game("huangjin_camp", "huang")))
-    assert '<b><span class="nb">出陣・</span><span class="nb">守</span></b>' in _cell(bar, "train")
-    assert "<b>尋敵</b>" in _cell(bar, "practice") and "<b>探索</b>" in _cell(bar, "explore")  # 沒有「・」的照舊
+    assert _why(_cell(bar, "train")) == m["action_notes"]["act:train"] and _why(_cell(bar, "train")).startswith(sortie.RANGER_NOTE)
+    assert _why(_cell(bar, "social")) == f"{gap}。"
 
 
 # ── 舊季、序章與初入江湖 ─────────────────────────────
@@ -266,12 +169,14 @@ def test_the_tutorial_only_draws_the_cell_from_a_step_that_reveals_it():
         assert PRACTICE not in bar.replace(_cell(bar, "practice"), "") if lit else PRACTICE not in bar, t.steps[step].id
     p.tutorial_step = len(t.steps)
     m = server.main_view(game)
-    assert m["onboard"] is None and "practice" in _keys(_bar(m))
+    bar = _bar(m)
+    assert m["onboard"] is None and "practice" not in _keys(bar) and PRACTICE in bar  # 走完：收進「此地還能做」
 
 
 def test_the_hut_never_has_a_practice_option():
     """草廬裡（序章）探索不展開、也沒有練功（_explore_mode_options 在序章是空的）：格子不會在序章冒出來。"""
     c = _content("week7")
+    c.config.jianfa.enabled = False  # 減法季的新角色不進草廬（開局第一分鐘）：這一條測的是草廬本身
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world(), prologue=True)
     game.client = None
     m = server.main_view(game)

@@ -17,14 +17,14 @@ def _wild(c, danger):
 
 
 def test_gather_first_tier_is_seventy_percent():
-    c = real_content("weekend")
+    c = real_content("week7")
     loc = _wild(c, 1)
     got = sum(any(c.materials[m].tier == 1 for m in explore_modes.gather_finds(c, loc, random.Random(i))) for i in range(2000))
     assert 0.65 < got / 2000 < 0.75
 
 
 def test_gather_second_tier_odds_are_unchanged():
-    c = real_content("weekend")
+    c = real_content("week7")
     loc = _wild(c, 3)
     got = sum(any(c.materials[m].tier == 2 for m in explore_modes.gather_finds(c, loc, random.Random(i))) for i in range(2000))
     assert 0.45 < got / 2000 < 0.55
@@ -32,7 +32,7 @@ def test_gather_second_tier_odds_are_unchanged():
 
 def test_gather_cut_off_draws_the_same_dice():
     """關著時一階不擲骰（一個字都不變，亂數序列也一樣）。"""
-    c = real_content("weekend")
+    c = real_content("week7")
     c.config.economy.gather_cut = False
     loc = _wild(c, 2)
     a, b = random.Random(5), random.Random(5)

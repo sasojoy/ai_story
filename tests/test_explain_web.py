@@ -35,37 +35,14 @@ def _main(game=None, **over):
 # ── 行動列底下那幾行 ─────────────────────────────────────────
 
 
-def test_the_notes_sit_under_the_action_row_in_cell_order():
-    m = _main(_game(classic=True))  # 探索那一行照舊探索的寫法（出陣探索與地盤之前）；三選一那一行見 tests/test_explore_modes.py
+def test_the_notes_are_no_longer_a_row_under_the_action_row():
+    """減法季批 1（整合設計 6.3）：行動列底下那一行一行的說明拿掉了；格子底下只留一行小字。灰掉的格點了浮出一句為什麼（data-why），
+    伺服器照規則寫的那句（action_notes）就是它。"""
+    m = _main(_game(classic=True))
     notes = m["action_notes"]
     assert notes["act:explore"].startswith("這裡")  # 伺服器照規則寫好的
     page = run(m, "return H.pageJianghu();")
-    bar_end = page.index("</div>", page.index('class="act-bar"'))
-    block = re.search(r'<div class="act-notes">(.*?)</div>', page)
-    assert block and page.index('class="act-notes"') > page.index('class="act-bar"')
-    rows = re.findall(r"<p><b>(.*?)</b>(.*?)</p>", block.group(1))
-    assert rows[0] == ("探索", notes["act:explore"])  # 照格子的順序、冠格子上的名字
-    for name, text in rows:
-        assert text in notes.values() and name in ("探索", "遊歷", "操練", "出陣・攻", "出陣・守", "出陣・攪局", "交友", "求見")
-    assert page.index('class="act-notes"') > bar_end  # 在行動列後面：不推動「剛剛」、場景與整排行動
-
-
-def test_the_notes_give_way_to_the_move_card():
-    m = _main()
-    page = run(m, "return H.pageJianghu();", S={"wheelSel": "move"})
-    assert 'class="card act-move"' in page and 'class="act-notes"' not in page
-
-
-def test_the_notes_give_way_when_the_guide_points_into_the_here_fold():
-    """入伍段要按的鈕收在「此地還能做」裡（guide.glow）：說明不畫，不把那一顆往下推。"""
-    m = _main()
-    extra = next(o["id"] for o in m["options"] if o["id"].startswith("move:"))  # 隨便一顆不在行動列格子裡的（這裡用前往）
-    m["options"] = [o for o in m["options"] if not o["id"].startswith("move:")] + [{"id": "act:duty", "label": "巡哨", "enabled": True}]
-    m["guide"] = {"glow": ["act:duty"]}
-    bar = run(m, "return H.actionBar(H.S.main);")
-    assert 'class="act-notes"' not in bar and "此地還能做" in bar
-    m["guide"] = {"glow": [extra]}  # 發光的不在摺疊裡：說明照畫
-    assert 'class="act-notes"' in run(m, "return H.actionBar(H.S.main);")
+    assert 'class="act-notes"' not in page and 'class="act-bar"' in page
 
 
 def test_no_notes_without_server_notes():
@@ -301,20 +278,24 @@ def test_the_howto_endpoint_serves_the_page_as_html():
     assert f"<strong>探索</strong>（體力 {cfg.action_cost['explore']}）" in text and "<script" not in text
 
 
-def test_notes_are_escaped():
+def test_the_reason_on_a_greyed_cell_is_escaped():
     m = _main()
-    m["action_notes"] = {"act:explore": "<b>x</b>"}
-    page = run(m, "return H.pageJianghu();")
-    assert "&lt;b&gt;x&lt;/b&gt;" in page
+    oid = next(o["id"] for o in m["options"] if o["id"] == "act:explore")
+    for o in m["options"]:
+        if o["id"] == oid:
+            o["enabled"] = False
+    m["action_notes"] = {oid: "<b>x</b>"}
+    page = run(m, "return H.actionBar(H.S.main);")
+    assert 'data-why="&lt;b&gt;x&lt;/b&gt;"' in page and "<b>x</b>" not in page
 
 
-def test_a_talked_out_lone_audience_cell_says_so_briefly_and_the_note_row_names_the_moment():
+def test_a_talked_out_lone_audience_cell_says_so_briefly_and_the_tap_names_the_moment():
     """day-scale 審查 I1：這裡唯一那位人物談滿了、又沒有交友的事時，行動列的交友格放的是灰掉的「求見某某」。格子約 60 px、不換行，
     放不下「第 1 週・週日 00:00 之後再來」（會被切成「週・週日 00:0」這種碎片）：格子寫「已談滿」，整句連同換日的那一刻寫在底下那一行。
-    孟津渡是正式內容裡真的會這樣的地方（週末設定）。"""
+    孟津渡是正式內容裡真的會這樣的地方（7 天季）。"""
     from tianxia import rules
 
-    content = real_content("weekend")
+    content = real_content("week7")
     content.config.auto_open_first_season = True
     content.config.precise_actions = False  # 一類一顆之前的交友、求見（新規則在 tests/test_precise_actions.py，設計 8.4）
     game = Game.new(content, "沈浪", rng=random.Random(0))
@@ -330,7 +311,8 @@ def test_a_talked_out_lone_audience_cell_says_so_briefly_and_the_note_row_names_
     assert "act:socialize" not in ids and not next(o for o in m["options"] if o["id"] == f"call:{cid}")["enabled"]
     bar = run(m, "return H.actionBar(H.S.main);")
     cell = re.search(r'<button class="act-ink off" data-key="social".*?</button>', bar, re.S).group(0)
-    assert "<b>求見</b><small>已談滿</small>" in cell and "00:00" not in cell
+    face = cell[cell.index(">") + 1:]  # 格子上看得到的字（標籤裡 data-why 那一句不算）
+    assert "<b>求見</b><small>已談滿</small>" in face and "00:00" not in face
     note = game._talked_out_note()
-    assert note.startswith(f"已經談滿 {content.config.talk_turns_per_day} 輪，第 1 週・週") and note.endswith(" 之後再來")
-    assert f"<p><b>求見</b>{note}</p>" in bar  # 整句在行動列底下那一行（整列寬、第一屏）
+    assert note.startswith(f"已經談滿 {content.config.talk_turns_per_day} 輪，第 2 天 ") and note.endswith(" 之後再來")
+    assert f'data-why="{note}"' in cell  # 整句在點了浮出的那一句（減法季批 1 拿掉了行動列底下那一行）

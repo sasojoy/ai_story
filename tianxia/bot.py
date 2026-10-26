@@ -14,9 +14,12 @@ from typing import NamedTuple
 
 from . import arts as arts_mod, allied, armor, bounties, checkin, chuangong, clinic, create, cultivation, economy, equipment, explore_modes, forge_secrets, four_tiers, fusion, glyph, insights, library, mounts, naming, sensing, smithing, team, traits, treasures, weapons
 from . import prologue as prologue_rules
+from . import growth  # 減法季屬性五段：假人照路配點（stat_path、plan_points）
 from .engine import ARENA_YIELD, DUEL_FLEE, FREE_TEXT_OPTION, TEXT_TALKS, Game, Option
+from .rules import jianfa
 from .martial_arts import MartialArt, next_quality
 from .models import Content
+from .models import Outcome  # 減法季批 4：pick_outcome 的位子
 from .state import PLAYER
 from .sqlite_world import open_world
 from .world_state import WorldStateStore
@@ -62,7 +65,7 @@ def can_pay_clinic(game: Game) -> bool:
 def injury_share(game: Game) -> float:
     """本人的內傷佔氣血上限的幾成（醫館的兩道門檻 CLINIC_AT、CLINIC_URGENT 都跟它比）。"""
     s, c = game.state, game.content
-    _, cap = team.member_neili(c, s.player.member, team.con_of(s, c, game.world, PLAYER))
+    _, cap = team.member_neili(c, s.player.member, team.con_of(s, c, game.world, PLAYER), season=s.world)
     return s.player.member.injury / cap if cap > 0 else 0.0
 
 
@@ -109,6 +112,15 @@ def allocate_points(game: Game, rng: random.Random) -> None:
     迴圈有界：它在全服寫入鎖裡跑，空轉會凍住伺服器。最多試「手上有幾點」次；全到頂、或 allocate_stat
     拒絕了（賽季籌備中等，點數沒少）就停，剩下的點留著。"""
     p, cap = game.state.player, game.content.config.stat_cap
+    if jianfa(game.content, game.state.world, "stat_milestones"):
+        # 減法季屬性五段（設計 4.5「配滿一項是一條路」）：照名號挑一條路（growth.stat_path：力、巧、韌、悟、博排個先後），第一項配滿再第二項；
+        # 不擲骰。整季機器人與伺服器假人同一個（bot_policy.look_after 叫這裡）
+        for stat in growth.plan_points(p.stats, p.stat_points, cap, growth.stat_path(p.name)):
+            before = p.stat_points
+            game.allocate_stat(stat)
+            if p.stat_points >= before:  # 被拒絕：再試也一樣
+                return
+        return
     for _ in range(p.stat_points):
         open_stats = [k for k in team.COMBAT_STATS if p.stats.get(k, 0) < cap]
         if not open_stats:
@@ -397,6 +409,14 @@ def explore_choice(ids, want: str = "material") -> str | None:
     return gather if gather in ids else "act:explore" if "act:explore" in ids else None
 
 
+def pick_outcome(game: Game, outcomes: list[Outcome], rng: random.Random) -> str | None:
+    """假人挑隨口應對分岔的後果（減法季整合設計 5.1、5.7「假人可以挑後果、挑心意、應約戰、封招，不可以寫字」）：**這一版不做**
+    （企劃者 2026-10-24 第 5 件：歸類要句子，假人不寫字），一律回 None——pick 照舊把隨口應對（choice:free）排除，伺服器假人
+    （bot_policy.take_turn）也照舊不按。留著位子：之後要做就照個性挑一種的 id，直接交給 Game.answer_event 的 outcome
+    （不經模型、不寫字；江湖紀錄與行狀照真人一樣只寫類名，看不出是假人）。"""
+    return None
+
+
 def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
     """結識（choice 的 effect.recruit）一定接受；其餘隨機挑一個。沒得挑時回傳 None。
 
@@ -458,8 +478,9 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
         if o.id not in ("act:rest", "act:halt", "act:bounties", "act:smith", "act:market", "act:heal", "act:arena", "act:donate", "act:dadian",
                         "act:tavern", DUEL_FLEE, ARENA_YIELD)
         and not o.id.startswith(("road:", "defect:", "invite:", "smith:page:", "donate:", "dadian:", "ambush:", "works:", "aid:", "feast:", "tavern:",
-                                 "act:recruit:"))
-    ]  # 招募歷史武將（act:recruit:<id>，歷史武將同行第七節）：整季機器人不招。頭目戰的抽身退走（DUEL_FLEE）：打到一半一直按得下去，機器人照出招打完
+                                 "act:recruit:", "errand:", "faction:lean:"))
+    ]  # 招募歷史武將（act:recruit:<id>，歷史武將同行第七節）：整季機器人不招。託付（errand:，減法季批 6）：機器人不收託付，萬一有也不按（勸降要寫字）。頭目戰的抽身退走（DUEL_FLEE）：打到一半一直按得下去，機器人照出招打完
+    # 豪強改幫另一軍（faction:lean:，三陣營四勝利）：隨時按得下去、不花體力，同叛投排除（機器人不換邊）
     # 會被打發的求見（名望不夠）永遠按得下去，不排除的話「沒事可做就推進時間」的訊號會失效（同 act:rest）
     options = [
         o for o in options

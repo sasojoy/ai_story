@@ -29,7 +29,7 @@ def test_switch_is_on_in_the_real_content_pm_1022():
     """企劃者 2026-10-22「領地爭奪……要打開」：正式內容的開關打開（content/config.json，三種設定覆寫檔都不寫、照它）。以前這一條鎖
     「每一份設定都關著」（裁決 15：三批做完、QA 過、PM 說可以再開）。Config 的預設與測試內容照舊關著；哪幾種季開得了見
     tests/test_conquest_on.py。"""
-    for profile in (None, "weekend", "season21", "week7"):
+    for profile in (None, "season21", "week7"):
         assert real_content(profile).config.conquest.enabled is True, profile
     assert ConquestRules().enabled is False
 

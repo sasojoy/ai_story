@@ -93,9 +93,9 @@ def test_a_day_is_a_world_day_without_the_calendar(sealed):
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize(("profile", "day"), [("weekend", DAY * 2.5 / 84), ("season21", DAY), (None, DAY)])
+@pytest.mark.parametrize(("profile", "day"), [("week7", DAY), ("season21", DAY), (None, DAY)])
 def test_a_day_follows_the_season_calendar(profile, day):
-    """有季曆的季照季曆天（週末 2.5 天的季一個季曆天約 43 分鐘、21 天季 24 小時）；14 天的季照世界天。"""
+    """有季曆的季照季曆天（7 天、21 天季一個季曆天 24 小時）；14 天的季照世界天。"""
     c = real_content(profile)
     c.config.auto_open_first_season = True
     w = open_world(Path(tempfile.mkdtemp(prefix="seal2d-")) / "t.db")

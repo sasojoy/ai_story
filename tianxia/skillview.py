@@ -20,7 +20,7 @@ STAT_USES = {
     "str": "武學威力",
     "agi": "打完一場少損氣血・落敗有機會閃成平手",
     "con": "內功威力・氣血上限・少受內傷",
-    "wis": "探索悟得意境・閉關心得・衝關",
+    "wis": "探索悟得意境・衝關",  # 閉關 Joy 2026-10-25 拿掉了（畫面上沒有入口），不再寫
     "lore": "武學與意境的持有上限",
 }
 # 事件檢定、隨口應對讀得到五項（設計 6.1、6.3），但正式內容還沒有任何事件檢定博聞，所以先寫「前四項」（PM 2026-10-05）。
@@ -61,10 +61,81 @@ def fifth_ring(content: Content, art: MartialArt, level: int | None) -> dict | N
         return {"on": True, "name": move.name if move is not None else art.name, "note": ""}
     return {"on": False, "name": "", "note": RIPE_NOTE if (level or 0) >= MAX_LEVEL else "破境"}
 
-def stat_uses(content: Content) -> list[tuple[str, str]]:
-    """五屬性的（名字, 用途），順序同 team.COMBAT_STATS——也就是狀態列 attrs、＋鈕的順序。"""
+def stat_uses(content: Content, state: GameState | None = None) -> list[tuple[str, str]]:
+    """五屬性的（名字, 用途），順序同 team.COMBAT_STATS——也就是狀態列 attrs、＋鈕的順序。
+    減法季屬性五段開著（state 給了、這一季 Config.jianfa 的 stat_milestones）：用途換成「現在給你什麼」的數字（stat_lines，設計 4.5「看得見」）；
+    關著照舊只寫用途。"""
     names = content.config.stat_names
+    if state is not None and _milestones(state, content):
+        lines = stat_lines(state, content)
+        return [(names.get(key, key), lines[key]) for key in team.COMBAT_STATS]
     return [(names.get(key, key), STAT_USES[key]) for key in team.COMBAT_STATS]
+
+
+def _milestones(state: GameState, content: Content) -> bool:
+    from .rules import jianfa  # noqa: PLC0415  rules → team → …
+
+    return jianfa(content, state.world, "stat_milestones")
+
+
+def _signed_pct(ratio: float) -> str:
+    """+12%、-6%（整數就不寫小數）。"""
+    return f"{ratio:+.0%}" if round(ratio * 100, 6).is_integer() else f"{ratio:+.1%}"
+
+
+# 減法季屬性五段（設計 4.5「看得見」）：角色卡、＋鈕底下那一行寫「現在給你什麼」；配點那一刻寫加了這一點多了什麼。字都待 joy 潤
+STAT_NOW = {
+    "str": "武學威力 {bonus}",
+    "agi": "少損氣血 {saved}・閃避 {dodge}",
+    "con": "內功威力 {bonus}・氣血上限 {hp}・少受內傷 {saved}",
+    "wis": "修練與衝關 ×{factor}・感悟 {sense}",
+    "lore": "持有 {slots} 格",
+}
+STAT_STEP = {  # 多配一點多了什麼（Game.allocate_stat 那一句冒號後面）
+    "str": "武學威力 {bonus}",
+    "agi": "閃避 {dodge_up}、少損氣血 {bonus}",
+    "con": "內功威力 {bonus}、氣血上限 {hp}",
+    "wis": "修練與衝關 {bonus}、感悟 {sense}",
+    "lore": "持有 {slots} 格",
+}
+
+
+def _stat_numbers(state: GameState, content: Content, value: float, base: float) -> dict[str, str]:
+    """一項屬性從 base 到 value 給的那幾個數字（每一點照這一季，team.per_point）：威力加成（bonus）、少損氣血與少受內傷（saved，
+    照到 value 為止的總量）、閃避（dodge 總量、dodge_up 這一段）、氣血上限（hp）、修練與衝關的倍數（factor）、感悟（sense）、持有格（slots）。"""
+    season = state.world
+    delta = value - base
+    rate = team.per_point(content, season, "bonus_per_point")
+    dodge = team.per_point(content, season, "dodge_per_point")
+    per_lore = team.per_point(content, season, "holding_per_lore_point")
+    level = state.player.member.level
+    hp = team.neili_cap(content, level, value, season=season) - team.neili_cap(content, level, base, season=season)
+    slots = (max(0, int(value) - team.BASE_STAT) - max(0, int(base) - team.BASE_STAT)) * per_lore
+    return {
+        "bonus": _signed_pct(rate * delta),
+        "saved": f"{max(0.0, rate * (value - team.BASE_STAT)):.0%}",
+        "dodge": f"{max(0.0, dodge * (value - team.BASE_STAT)):.0%}",
+        "dodge_up": _signed_pct(dodge * delta),
+        "hp": f"{hp:+.0f}",
+        "factor": f"{team.stat_factor(content, value, season):.2f}",
+        "sense": f"{team.per_point(content, season, 'sense_rate_per_wis') * delta:+.0f}%",
+        "slots": f"{slots:+.0f}",
+    }
+
+
+def stat_lines(state: GameState, content: Content) -> dict[str, str]:
+    """五項各寫「現在給你什麼」（減法季屬性五段，設計 4.5）：從基準 5 到現在的值，照這一季每一點的效果（team.per_point）。"""
+    stats = state.player.stats
+    out = {}
+    for key in team.COMBAT_STATS:
+        value = float(stats.get(key, team.BASE_STAT))
+        out[key] = STAT_NOW[key].format(**_stat_numbers(state, content, value, team.BASE_STAT))
+    return out
+
+
+def stat_step(state: GameState, content: Content, key: str, before: float) -> str:
+    """多配一點（before → before＋1）多了什麼（Game.allocate_stat 那一句冒號後面；減法季屬性五段）。"""
+    return STAT_STEP[key].format(**_stat_numbers(state, content, before + 1, before))
 
 
 def rules_line(content: Content) -> str:
@@ -101,7 +172,7 @@ def practice_hint(state: GameState, content: Content) -> str | None:
 
     心得的去處（武學與成長設計第四節）：練成（身上這一門還沒第十成、付得起下一成）與合成（手上有意境、
     持有沒滿、付得起一次，見 fusion.can_forge）。兩樣都做不了就閉嘴，免得變成嘮叨。休季時什麼都不能做，也不提示（FB-047）。
-    去處照底部分頁的名字寫「修練」「煉製」（舊的門下頁已經拆成這兩頁，FB-047）。
+    去處照畫面寫：練成的鈕就在俠客頁身上那一門的卡上（分頁 2026-10-24 從「修練」改成「俠客」，這句就寫在那一頁上，不寫「去修練」）、煉製照底部分頁的名字（FB-047）。
     """
     xinde = state.player.stats.get("xinde", 0)
     if xinde < content.config.xinde_hint_threshold or state.world.ended:
@@ -109,7 +180,7 @@ def practice_hint(state: GameState, content: Content) -> str | None:
     todo = [kind for kind in ("內功", "武學") if team.can_practise(state, content, kind)]
     parts = []
     if todo:
-        parts.append(f"去「修練」練成{'、'.join(todo)}")
+        parts.append(f"點上面身上的武學練成{'、'.join(todo)}")
     if fusion.can_forge(state, content):  # 手上有意境、持有沒滿、付得起一次合成或合併才提；光有意境不算
         parts.append("去「煉製」把兩個意境合成新的")  # 待 joy 潤
     if not parts:
@@ -798,7 +869,7 @@ def member_card(state: GameState, content: Content, world: WorldStateStore, key:
         member = world.get_companion(key)
         name = content.characters[key].name
     own = state if key == PLAYER else None  # 玩家那一列顯示自己修練到的品質；同伴照全服登記的
-    now, cap = team.member_neili(content, member, team.con_of(state, content, world, key))  # 本人與同伴各照自己的根骨
+    now, cap = team.member_neili(content, member, team.con_of(state, content, world, key), season=state.world)  # 本人與同伴各照自己的根骨
     lines = [
         f"### {name}",
         f"第 {member.level} 級　氣血 {now:.0f}/{cap:.0f}",
@@ -891,7 +962,7 @@ def boost_line(state: GameState, content: Content, world: WorldStateStore) -> st
     neigong = team.player_art(state, content, world, member.neigong_id)
     parts = []
     for art, word, key, stat_name in ((wugong, "武學", "str", "臂力"), (neigong, "內功", "con", "根骨")):
-        bonus = team.stat_bonus(content, stats.get(key, team.BASE_STAT))
+        bonus = team.stat_bonus(content, stats.get(key, team.BASE_STAT), state.world)
         if art is not None and bonus:
             parts.append(f"{word} {_pct(bonus)}（{stat_name}）")
     pair = team.pairing(content, wugong, neigong)

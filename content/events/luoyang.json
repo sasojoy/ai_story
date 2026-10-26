@@ -2,6 +2,7 @@
   {
     "id": "luoyang_palace_whispers",
     "title": "宮門傳言",
+    "image": "office",
     "locations": [
       "luoyang_palace"
     ],
@@ -46,6 +47,7 @@
   {
     "id": "luoyang_palace_broker",
     "title": "宮中門路",
+    "image": "office",
     "locations": [
       "luoyang_palace"
     ],
@@ -98,6 +100,7 @@
   {
     "id": "luoyang_fu_petition",
     "title": "府前請命",
+    "image": "office",
     "locations": [
       "dajiangjun_fu"
     ],
@@ -150,6 +153,7 @@
   {
     "id": "luoyang_beimang_diggers",
     "title": "夜半掘墓",
+    "image": "night",
     "locations": [
       "beimang_hill"
     ],
@@ -202,6 +206,7 @@
   {
     "id": "luoyang_beimang_search",
     "title": "陵道搜身",
+    "image": "road",
     "locations": [
       "beimang_hill"
     ],
@@ -260,6 +265,7 @@
   {
     "id": "luoyang_mengjin_horse",
     "title": "渡口烈馬",
+    "image": "river",
     "locations": [
       "mengjin_ford"
     ],

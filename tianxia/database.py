@@ -268,13 +268,37 @@ SCHEMA_V6_TABLES: tuple[str, ...] = (
     )""",
 )
 
+# 第 7 版（減法季批 0，設計稿第十章「真人量表」、整合設計 11.4 的 action_counts）：真人每天按了哪幾顆、哪幾天上線、
+# 第一次寫隨口應對、第一次跟人物說話、第一次看「全區」是哪一天。
+# 只有伺服器（真人的請求）寫，假人程式不經過伺服器、不記；不露給玩家，只給主機端的 scripts/play_metrics.py 算總數。
+# owner 同第 6 版（characters.name_key；一個帳號一個角色）；day 是回體丹換日的那一天（台灣 00:00，Game._pill_day），season 是那時的季數。
+SCHEMA_V7_TABLES: tuple[str, ...] = (
+    # 一人一季一天一列：那一天有上線（自己的請求）就有一列；buttons 是 {按鈕: 次數}（playlog.button_of 歸類，JSON）
+    """CREATE TABLE action_counts (
+        owner TEXT NOT NULL,
+        season INTEGER NOT NULL,
+        day INTEGER NOT NULL,
+        buttons TEXT NOT NULL DEFAULT '{}',
+        PRIMARY KEY (owner, season, day)
+    )""",
+    # 第一次做某件事：free_text 寫隨口應對、figure_talk 跟人物說話、whole_area 看過輿圖的「全區」（輿圖四層那一批才記）；同一季只記第一次
+    """CREATE TABLE action_firsts (
+        owner TEXT NOT NULL,
+        season INTEGER NOT NULL,
+        kind TEXT NOT NULL CHECK (kind IN ('free_text', 'figure_talk', 'whole_area')),
+        day INTEGER NOT NULL,
+        time REAL NOT NULL,
+        PRIMARY KEY (owner, season, kind)
+    )""",
+)
+
 SCHEMA: tuple[str, ...] = (  # 新檔一次建好
-    SCHEMA_V1 + SCHEMA_V2_TABLES + SCHEMA_V3_TABLES + SCHEMA_V4_TABLES + SCHEMA_V5_TABLES + SCHEMA_V6_TABLES
+    SCHEMA_V1 + SCHEMA_V2_TABLES + SCHEMA_V3_TABLES + SCHEMA_V4_TABLES + SCHEMA_V5_TABLES + SCHEMA_V6_TABLES + SCHEMA_V7_TABLES
 )
 MIGRATIONS: dict[int, tuple[str, ...]] = {  # 第 n 版 → 第 n+1 版要跑的句子
-    1: SCHEMA_V2_TABLES, 2: SCHEMA_V3_TABLES, 3: SCHEMA_V4_TABLES, 4: SCHEMA_V5_TABLES, 5: SCHEMA_V6_TABLES,
+    1: SCHEMA_V2_TABLES, 2: SCHEMA_V3_TABLES, 3: SCHEMA_V4_TABLES, 4: SCHEMA_V5_TABLES, 5: SCHEMA_V6_TABLES, 6: SCHEMA_V7_TABLES,
 }
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 
 def default_path() -> Path:

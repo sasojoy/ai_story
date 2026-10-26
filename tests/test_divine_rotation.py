@@ -230,7 +230,7 @@ def test_one_divine_each():
     assert w.divine_state().finds[SWORD].copies == 0
 
 
-@pytest.mark.parametrize("profile", [None, "weekend"])
+@pytest.mark.parametrize("profile", [None, "week7"])
 def test_unstamped_seasons_never_pick_the_new_divines(profile, monkeypatch):
     """FB-401：沒有輪替章的季（開關關著、上線那一刻正在跑的季）照舊只從原本那九件挑，第二批的十二件不進來；
     每個天機挑出來的跟上線前（內容裡還沒有第二批）一字不差。週末那一種是第一季的章（同一種兵器各一件）。"""

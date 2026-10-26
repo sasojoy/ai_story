@@ -2,6 +2,7 @@
   {
     "id": "tale_yc_riverbank",
     "title": "新編河灘段子",
+    "image": "tale",
     "actions": [
       "socialize"
     ],
@@ -92,6 +93,7 @@
   {
     "id": "tale_yc_academy",
     "title": "書院風聲",
+    "image": "tale",
     "actions": [
       "socialize"
     ],
@@ -165,6 +167,7 @@
   {
     "id": "tale_wan_road",
     "title": "官道上的車隊",
+    "image": "tale",
     "actions": [
       "socialize"
     ],
@@ -233,6 +236,7 @@
   {
     "id": "tale_xy_river",
     "title": "淯水上的閒話",
+    "image": "tale",
     "actions": [
       "socialize"
     ],
@@ -307,6 +311,7 @@
   {
     "id": "tale_mt_scribes",
     "title": "酒肆裡的家書",
+    "image": "tale",
     "actions": [
       "socialize"
     ],
@@ -382,6 +387,7 @@
   {
     "id": "tale_xqy_fort",
     "title": "道徒口中的塢堡",
+    "image": "tale",
     "actions": [
       "socialize"
     ],
@@ -462,6 +468,7 @@
   {
     "id": "tale_rnmk_ford",
     "title": "津口的行情",
+    "image": "tale",
     "actions": [
       "socialize"
     ],
@@ -530,6 +537,7 @@
   {
     "id": "tale_rn_mengjin",
     "title": "洛陽回來的客人",
+    "image": "tale",
     "actions": [
       "socialize"
     ],

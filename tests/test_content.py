@@ -12,6 +12,7 @@ from tianxia.models import (
     MOVES, BattleAct, BattleDef, BattleFaction, BattleOption, BattleOutcome, Condition, Config, FactionDef,
     SpecialTrait, Threshold, Trend,
 )
+import webharness
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -1211,21 +1212,6 @@ WEEKEND_KEYS = {"season_one", "season_days", "server_max_players", "late_exp_ste
 BETA_TEST_KEYS = {"beta_free_refill"}  # 一鍵補滿體力（企劃者 2026-10-07 開、2026-10-12 拿掉）：週末設定不再開它
 
 
-def test_weekend_profile_overrides_the_season_settings_and_the_test_period_switch_only():
-    base = load_content(CONTENT_DIR).config
-    weekend = load_content(CONTENT_DIR, profile="weekend").config
-    # 人數上限 2026-10-14 從 2 改成 20（企劃者，20 名內測玩家進來那一天）：軍令陣營額度（全部 4 → 4/6/8）
-    # 與伏筆需求量照它換算。10 是伏筆分檔的交界（foreshadow_tiers 第一檔是「未滿 10 → 0.2」），所以 10 跟 20
-    # 的伏筆係數都是 0.3、需求量 ×1.5、片段機率剩 0.67 倍，但 10 拿不到放大的軍令額度——要維持 0.2 得寫 9 以下。
-    assert (weekend.season_one, weekend.season_days, weekend.server_max_players) == (True, 2.5, 20)
-    assert (base.season_one, base.season_days, base.server_max_players) == (False, 14, 30)  # 不給 profile 時照 config.json
-    assert (weekend.beta_free_refill, base.beta_free_refill) == (False, False)
-    assert (weekend.late_exp_step, base.late_exp_step) == (0.12, 0.5)
-    assert (weekend.haoqiang_allied, base.haoqiang_allied) == (True, False)
-    assert (weekend.affinity_gain_scale, base.affinity_gain_scale) == (0.85, 0.7)
-    assert weekend.model_dump(exclude=WEEKEND_KEYS | BETA_TEST_KEYS) == base.model_dump(exclude=WEEKEND_KEYS | BETA_TEST_KEYS)  # 其他設定一個都不動
-
-
 def test_profile_with_unknown_key_fails_to_load(tmp_path):
     root = copy_fixture(tmp_path)
     (root / "profiles").mkdir()
@@ -1241,8 +1227,8 @@ def test_a_profile_that_does_not_exist_fails_to_load(tmp_path):
 
 def test_the_profile_line_says_what_the_profile_turns_on():
     assert profile_line(load_content(CONTENT_DIR), None) == "設定：預設"
-    assert profile_line(load_content(CONTENT_DIR, profile="weekend"), "weekend") == (
-        "設定：weekend（第一季濃縮版規則開啟、季長 2.5 天、人數上限 20）"
+    assert profile_line(load_content(CONTENT_DIR, profile="week7"), "week7") == (
+        "設定：week7（第一季濃縮版規則開啟、季長 7 天、人數上限 20）"
     )
 
 
@@ -1275,9 +1261,10 @@ def test_no_profile_overrides_the_time_scale_or_the_season_weeks():
         assert not banned & set(overridden), path.name
 
 
-# 可以打開伺服器排程的設定：只有壓測用的（壓測計畫 Task 4 的 content/profiles/loadtest.json 寫 10）。其他設定（試玩的
-# weekend 等）一律關著，直到 PM 驗收之後決定在哪一份打開——到時改 test_world_tick_is_off_by_default，寫明是哪一份、為什麼
+# 伺服器排程（Config.world_tick_seconds）：減法季批 0（設計稿第十章「伺服器排程打開」，企劃者 2026-10-24）起 content/config.json
+# 打開，每 10 秒推一次全服的事，每一份設定都照它；壓測用的（content/profiles/loadtest.json）本來就開著。設定檔裡要關的話寫 0。
 LOAD_TEST_PROFILES = frozenset({"loadtest"})
+SCHEDULE_SECONDS = 10
 
 
 def _schedule_switched_on(root: Path) -> list[str]:
@@ -1288,12 +1275,13 @@ def _schedule_switched_on(root: Path) -> list[str]:
     ]
 
 
-def test_world_tick_is_off_by_default():
-    """伺服器排程預設關（線上架構排程計畫）：0＝不開執行緒，世界時間照舊等有人連線才推。
-    content/config.json 與玩家用的設定（weekend 等）都還沒打開；只有 LOAD_TEST_PROFILES 列的壓測設定（loadtest）可以打開
-    （最終審查 M1）。要在哪一份玩家用的設定打開，由 PM 驗收之後決定，到時改這個測試、寫明是哪一份。"""
-    assert load_content(CONTENT_DIR).config.world_tick_seconds == 0
-    assert _schedule_switched_on(CONTENT_DIR) == []
+def test_world_tick_is_on_in_the_real_content():
+    """伺服器排程在正式內容打開（減法季批 0）：不帶設定與每一份設定（weekend、season21、week7……）都每 10 秒推一次，
+    世界時間、時刻表、決戰逾時、季末不再等有人連線。測試內容照 Config 的預設關著（伺服器的測試自己開）。"""
+    assert load_content(CONTENT_DIR).config.world_tick_seconds == SCHEDULE_SECONDS
+    for path in sorted((CONTENT_DIR / "profiles").glob("*.json")):
+        assert load_content(CONTENT_DIR, profile=path.stem).config.world_tick_seconds == SCHEDULE_SECONDS, path.stem
+    assert load_content(FIXTURE).config.world_tick_seconds == 0
 
 
 def test_only_the_load_test_profiles_may_switch_the_schedule_on(tmp_path):
@@ -2070,7 +2058,7 @@ def test_every_glow_key_the_page_draws_is_one_the_content_may_name():
 
     from tianxia import models
 
-    source = (Path(models.__file__).parent.parent / "web" / "app.js").read_text(encoding="utf-8")
+    source = webharness.app_source()
     literal = set(re.findall(r'data-glow="([a-z:_]+)"', source))
     assert literal and literal <= models.GLOW_KEYS, sorted(literal - models.GLOW_KEYS)
     assert {"pick:insight", "slot", "switch", "cultivate", "melt"} <= literal  # 煉製頁挑選清單與修練頁各列的鍵（伺服器說哪一列）也認得到

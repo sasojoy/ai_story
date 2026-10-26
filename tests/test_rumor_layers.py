@@ -21,6 +21,7 @@ from tianxia.engine import Game
 from tianxia.martial_arts import Insight, shown_creator
 from tianxia.models import Effect
 from tianxia.state import BotProfile, Lock, Order, Rumor, TimelineResult
+import webharness
 
 CONTENT_DIR = Path(__file__).parent.parent / "content"
 
@@ -572,7 +573,7 @@ def _js_function(js: str, header: str) -> str:
 
 def test_the_page_draws_the_layers_when_the_server_sends_them():
     """網頁沒有測試框架：擋住「伺服器送了四層、網頁卻還畫一整張」與「每次輪詢都重畫」。"""
-    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    js = webharness.app_source()
     assert "m.rumor_layers ? rumorLayersHtml(m.rumor_layers)" in _js_function(js, "function pageNews(")
     layers = _js_function(js, "function rumorLayersHtml(")
     assert "esc(l.title)" in layers and "${l.body}" in layers  # 標題跳脫；內容是伺服器跳脫過的 HTML
@@ -996,7 +997,7 @@ def test_an_anonymous_player_is_named_in_the_promotion_summary(on):
 
 def test_the_settings_say_where_walking_anonymously_applies():
     """設定頁的匿名開關寫清楚只在地方傳聞裡有用（網頁沒有測試框架，讀 app.js）。"""
-    js = (server.WEB / "app.js").read_text(encoding="utf-8")
+    js = webharness.app_source()
     assert "匿名行走（只在地方傳聞裡不寫名號；天下大事、軍情、江湖史、排行照寫）" in js
     assert "江湖傳聞中不顯示名號" not in js
 

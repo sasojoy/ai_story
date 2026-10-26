@@ -29,13 +29,13 @@ pytestmark = [pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，
 NAMES = ["S", "pageMap", "regionFit", "regionLabels", "regionExits", "regionParts", "regionTopHtml", "placeCard", "placeLine",
          "flipSection", "drawerHtml", "worldDrawerHtml", "sideInk", "sideText", "regionCrowded"]
 DRIVER = re.sub(r"wholeApp\(\[.*?\]\)", "wholeApp(" + repr(NAMES).replace("'", '"') + ")", test_prologue_web.DRIVER, count=1, flags=re.S)
-APP = Path(server.WEB) / "app.js"
+APP = webharness.APP  # 三個檔（main.js、map.js、app.js）接起來的那一份
 # 地圖框（寬 × 高）：實機量的。375×812 → 375×604（2026-10-21 map4.localhost，狀態列多一行心得提示、商城開著）、375×624（第 3 批量的）、
 # 375×667 → 375×479、360×640 → 360×452／360×436
 PHONES = [(375, 604), (375, 624), (375, 479), (360, 452), (360, 436)]
 
 
-def _game(content=None, faction="guan", at="yingchuan", conquest_on=True, profile="weekend"):
+def _game(content=None, faction="guan", at="yingchuan", conquest_on=True, profile="week7"):
     c = content or real_content(profile)
     if conquest_on:
         conquest_rules(c)
@@ -198,7 +198,7 @@ def test_progress_bars_show_the_top_attacker_and_cooling_is_grey():
 
 def test_no_progress_bars_when_conquest_is_off():
     """領地爭奪關著的季（設計 5.6）：照新畫法畫，沒有進度條與冷卻（疊層沒有 tug／cool）；框色照控制方。"""
-    game = _game(content=classic_rules(real_content("weekend")), conquest_on=False)
+    game = _game(content=classic_rules(real_content("week7")), conquest_on=False)
     low, _ = parts(game)
     assert "r-bar" not in low and "r-cool" not in low and 'class="r-frame"' in low
 
@@ -236,18 +236,19 @@ def test_the_wash_toggle_only_adds_one_layer():
 
 
 def test_the_region_top_row():
-    """上面一排（設計 5.2）：‹ 天下、大區名下拉（每一區一個、這一區選著）、塗層、⏱ 版圖；搜尋不在這一排（天下圖才有）。"""
+    """全區上面一排（減法季整合設計第七章：大區名、全區、天下）：大區名下拉（每一區一個、這一區選著）、塗層（只在全區）、全區（按著）、天下；
+    搜尋與 ⏱ 版圖在天下圖那一排。"""
     game = _game()
     out = run(game, "return H.regionTopHtml();")
-    assert 'data-act="map-world"' in out and "‹ 天下" in out and 'data-act="map-timeline"' in out and 'data-act="map-wash"' in out
+    assert 'data-act="map-world"' in out and 'data-act="map-full"' in out and 'data-act="map-wash"' in out and "map-timeline" not in out
     options = re.findall(r'<option value="([a-z]+)"( selected)?>', out)
     assert [x for x, _ in options] == [r.id for r in game.content.map.regions] and [x for x, s in options if s] == ["yingru"]
-    assert "map-search" not in out and out.index("map-world") < out.index("region-pick") < out.index("map-wash") < out.index("map-timeline")
+    assert "map-search" not in out and out.index("region-pick") < out.index("map-wash") < out.index("map-full") < out.index("map-world")
 
 
 def _four_sides():
     """四方的測試劇本（設計 3.3、第十二章）：官軍、黃巾之外加魏、吳（各自的顏色）；潁川汝南的區塊照方位分給四方。"""
-    c = real_content("weekend")
+    c = real_content("week7")
     c.scenario.factions = [f for f in c.scenario.factions if f.id != "haoqiang"] + [
         FactionDef(id="wei", name="魏", ink=FactionInk(color="#6A3D7A", soft="#C3A6CC", tint="#EADCEF", short="魏", label="魏")),
         FactionDef(id="wu", name="吳", ink=FactionInk(color="#2E7D5B", soft="#9FD1B8", tint="#DCEFE5", short="吳", label="吳")),
@@ -308,7 +309,7 @@ return out;
 
 
 @pytest.mark.parametrize("vw,vh", PHONES)
-@pytest.mark.parametrize("profile", ["weekend", "season21"])
+@pytest.mark.parametrize("profile", ["week7", "season21"])
 def test_region_labels_do_not_overlap_on_a_phone(profile, vw, vh):
     """375／360 寬：每一區的名字框兩兩不相交、不壓別處的小圖與鄰區出口、不出畫面（潁川汝南 17 處最擠）。名字框只貼著小圖擺、不拉線
     （企劃者 2026-10-21 從對比圖選乙）。320 寬（地圖框 320×344）潁川汝南放不開，先這樣（PM 2026-10-21，同企劃者「320 寬先這樣」）。"""
@@ -330,7 +331,7 @@ def _qa_push(game, combo):
 
 
 @pytest.mark.parametrize("vw,vh", PHONES)
-@pytest.mark.parametrize("profile", ["weekend", "season21"])
+@pytest.mark.parametrize("profile", ["week7", "season21"])
 def test_fb648_region_labels_do_not_overlap_while_flipping(profile, vw, vh):
     """FB-648：翻地進行中（潁川郊野有進度條、潁水河畔在冷卻）你站潁川郡，375／360 寬名字框互壓（修前 375 寬 4 對、360 寬 6 對）。
     名字框照樣只貼著小圖擺（企劃者選的乙）；第一輪的位置擺不開時第二輪沿著小圖四邊滑、你的朱圈照圓的算、鄰區出口原本的位置也讓開。
@@ -449,7 +450,7 @@ FLIP_TIMEOUT = 240  # 秒：FB-711，單跑最久約 41 秒（weekend-yingru）�
 
 
 @pytest.mark.parametrize("rid", ["yingru", "nanyang", "luoyang", "jizhou", "youzhou"])
-@pytest.mark.parametrize("profile", ["weekend", "season21"])
+@pytest.mark.parametrize("profile", ["week7", "season21"])
 def test_fb648_no_name_frame_overlaps_or_moves_while_blocks_flip(profile, rid):
     """FB-648 第二段乙：進度條收進框裡、冷卻不寫字（框的大小翻不翻地都一樣），擠不下時這一區的名字縮一號。掃描見 FLIP_SWEEP 上面那一段。"""
     game = _game(profile=profile)
@@ -534,7 +535,7 @@ TIGHT_LEFT = {
 }
 
 
-@pytest.mark.parametrize("profile", ["weekend", "season21"])
+@pytest.mark.parametrize("profile", ["week7", "season21"])
 def test_fb651_rows_of_different_places_keep_apart(profile):
     """FB-651：每一區 × 你站每一處與在路上 × 五個手機地圖框（同 FB-648 掃描；名字框的大小不看翻地，沒翻地的這一套就是全部），
     不同地點的兩列之間都隔 R_ROW_GAP——只有 TIGHT_LEFT 那幾種照這個規矩隔不開（修前 238 對，這裡最多 30 對），QA 那一對（南陽官道、
@@ -650,7 +651,7 @@ def test_card_line_says_whose_land_and_which_kind():
 
 def test_card_line_in_a_season_without_conquest():
     """領地爭奪關著的季（設計 5.6）：不寫基礎、高級資源領地（那是翻地的區塊），照控制方寫。"""
-    game = _game(content=classic_rules(real_content("weekend")), conquest_on=False)
+    game = _game(content=classic_rules(real_content("week7")), conquest_on=False)
     lines = run(game, "return ['yingchuan', 'cao_manor'].map((id) => H.placeLine(H.S.mapState, id));")
     assert all("資源領地" not in x for x in lines)
 
@@ -672,7 +673,7 @@ def test_flipping_section_lists_who_pushes_and_how_far():
 
 
 def test_no_flipping_section_when_conquest_is_off():
-    game = _game(content=classic_rules(real_content("weekend")), conquest_on=False)
+    game = _game(content=classic_rules(real_content("week7")), conquest_on=False)
     assert server.main_view(game).get("conquest") is None
     card = run(game, 'return H.placeCard(H.S.mapBase, H.S.mapState, "runan_wilds");')
     assert "正在翻" not in card and "下戰書" not in card
@@ -683,7 +684,8 @@ def test_the_card_says_today_s_yield():
     st = game.map_state()
     assert st["places"]["runan_wilds"]["yield"].startswith("今日產出：")
     card = run(game, 'return H.placeCard(H.S.mapBase, H.S.mapState, "runan_wilds");')
-    assert st["places"]["runan_wilds"]["yield"] in card and card.index("此地的對手") < card.index("今日產出") < card.index('class="m-acts"')
+    # 減法季整合設計第七章第 2 條：動作在前，往上拉才有對手、今日產出
+    assert st["places"]["runan_wilds"]["yield"] in card and card.index('class="m-acts"') < card.index("此地的對手") < card.index('class="m-yield"')
 
 
 def test_the_letter_button_follows_the_server():
@@ -828,7 +830,7 @@ def test_the_removed_pieces_are_gone():
 
 def test_conquest_off_seasons_draw_the_new_map_too():
     """設計 5.6：同一個劇本、規則開關不同的季也用新畫法（印章框、小圖、意境字），沒有翻地資料的那幾段不出現。"""
-    for profile in ("weekend", None, "season21"):
+    for profile in ("week7", None, "season21"):
         game = _game(profile=profile, conquest_on=False)
         assert not conquest.on(game.content, game.state.world)
         low, _ = parts(game)

@@ -13,7 +13,7 @@ import math
 import random
 from typing import NamedTuple
 
-from . import calendar, figures, foreshadow, push, ranks, timetable
+from . import calendar, figures, foreshadow, ranks, timetable, wins
 from .journal import fragment_line
 from .models import Content, Effect, OppDef, OppPiece, Rank2Action
 from .rules import GEJU, add_rumor, apply_effect, change_trend, front_of, geju_resisted, haoqiang_allied, roll_check, season_one, side_of
@@ -566,7 +566,7 @@ def settle(state: GameState, content: Content) -> list[str]:
             msgs += [o.plot.done_text] + _complete(state, o)
         else:
             msgs.append(o.plot.helper_text)
-            push.add_contribution(p, calendar.point(state.world.time, content, state.world).week, content.config.plot_contrib)
+            wins.credit(p, content, state.world, calendar.point(state.world.time, content, state.world).week, content.config.plot_contrib)
     return msgs
 
 

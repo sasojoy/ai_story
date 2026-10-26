@@ -7,6 +7,7 @@ import random
 
 import pytest
 from conftest import real_content
+from jianfa_kit import classic_explore
 
 from tianxia import bounties, content as content_mod, explore_modes, insights, materials, rules
 from tianxia.content import ContentError
@@ -22,8 +23,8 @@ NOW = MON + 10 * HOUR
 COST = 6
 
 
-def _game(at="deep_mountain", stamina=250.0, profile="weekend", branches=True):
-    c = real_content(profile)
+def _game(at="deep_mountain", stamina=250.0, profile="week7", branches=True):
+    c = classic_explore(real_content(profile))  # 找素材分支是探索三選一的（減法季探索一顆開著時沒有，tests/test_explore_one.py）
     c.config.train_event_chance = 0.0
     c.config.gather_branches.enabled = branches
     store = open_world()
@@ -59,7 +60,7 @@ def _check(c):
 
 
 def test_the_real_content_loads_and_the_test_content_keeps_it_off():
-    c = real_content("weekend")
+    c = classic_explore(real_content("week7"))
     assert set(c.gather_branches) == {"mine", "hunt", "forage", "deep"}
     assert c.config.gather_branches.enabled
     from conftest import FIXTURE, cached_content  # noqa: PLC0415
@@ -69,7 +70,7 @@ def test_the_real_content_loads_and_the_test_content_keeps_it_off():
 
 
 def test_bad_branches_are_refused():
-    c = real_content("weekend")
+    c = classic_explore(real_content("week7"))
     good = dict(c.gather_branches)
     c.gather_branches = {**good, "x": GatherBranch(id="x", name="亂找", tags=["山林"], attributes=["金"], line="你在{place}亂找。")}
     assert any("屬性" in e for e in _check(c))
@@ -95,7 +96,7 @@ def test_a_duplicate_id_is_refused_at_load():
 
 
 def test_which_branches_show_where():
-    c = real_content("weekend")
+    c = classic_explore(real_content("week7"))
     here = lambda loc: [b.id for b in explore_modes.branches_here(c, c.locations[loc])]  # noqa: E731
     assert here("deep_mountain") == ["mine", "hunt", "deep"]
     assert here("songshan_foot") == ["mine", "hunt"]  # 危險度 1：沒有深入
@@ -126,7 +127,7 @@ def _old_gather_finds(c, loc, rng, sure=False):
 
 
 def test_no_attributes_finds_exactly_what_it_found_before():
-    c = real_content("weekend")
+    c = classic_explore(real_content("week7"))
     for loc_id in ("deep_mountain", "yingchuan", "jade_cave", "yingshui"):
         loc = c.locations[loc_id]
         for sure in (False, True):
@@ -136,7 +137,7 @@ def test_no_attributes_finds_exactly_what_it_found_before():
 
 
 def test_each_branch_only_finds_its_own_attributes():
-    c = real_content("weekend")
+    c = classic_explore(real_content("week7"))
     loc = c.locations["deep_mountain"]
     for branch in explore_modes.branches_here(c, loc):
         want = set(explore_modes.branch_attributes(c, loc, branch))
@@ -152,7 +153,7 @@ def test_each_branch_only_finds_its_own_attributes():
 
 
 def test_deep_insight_only_where_something_can_be_sensed(monkeypatch):
-    c = real_content("weekend")
+    c = classic_explore(real_content("week7"))
     monkeypatch.setattr(c.config.gather_branches, "deep_insight_chance", 1.0)
     loc = c.locations["deep_mountain"]
     got = {explore_modes.deep_insight(c, loc, random.Random(seed)) for seed in range(40)}
@@ -162,7 +163,7 @@ def test_deep_insight_only_where_something_can_be_sensed(monkeypatch):
 
 
 def test_say_choices_are_the_union_of_the_branches_here():
-    c = real_content("weekend")
+    c = classic_explore(real_content("week7"))
     assert explore_modes.say_choices(c, c.locations["deep_mountain"]) == ["剛", "慢", "快", "柔"]
     assert explore_modes.say_choices(c, c.locations["yingchuan_wilds"]) == ["快", "柔", "慢"]
 

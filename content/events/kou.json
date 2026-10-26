@@ -2,6 +2,7 @@
   {
     "id": "kou_escort",
     "title": "布商求援",
+    "image": "road",
     "locations": [
       "luoyang_road",
       "wan_city"
@@ -73,6 +74,7 @@
   {
     "id": "kou_recruit",
     "title": "黃巾軍拉人",
+    "image": "road",
     "locations": [
       "changshe",
       "runan_wilds"
@@ -156,6 +158,7 @@
   {
     "id": "kou_spy_report",
     "title": "守城校尉",
+    "image": "office",
     "actions": [
       "socialize"
     ],
@@ -206,6 +209,7 @@
   {
     "id": "kou_member_raid",
     "title": "黃巾營寨的命令",
+    "image": "camp",
     "tags": [
       "水路"
     ],
@@ -272,6 +276,7 @@
   {
     "id": "kou_blockade",
     "title": "官道封鎖",
+    "image": "road",
     "locations": [
       "baima_ford"
     ],
@@ -359,6 +364,7 @@
   {
     "id": "kou_captives",
     "title": "亂葬崗",
+    "image": "field",
     "locations": [
       "runan_wilds",
       "huangjin_camp"
@@ -401,6 +407,7 @@
   {
     "id": "kou_boss",
     "title": "波才",
+    "image": "camp",
     "locations": [
       "huangjin_camp"
     ],
@@ -456,6 +463,7 @@
   {
     "id": "kou_reward",
     "title": "郡守設宴",
+    "image": "tavern",
     "actions": [
       "socialize"
     ],

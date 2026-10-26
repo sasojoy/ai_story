@@ -66,8 +66,23 @@ def slip_size(title: str) -> int:
     return min(30, int(176 / len(title) / 1.3))
 
 
-def page(row: dict, scenario: str, url: str, image: str) -> str:
-    """一篇公開的傳。row 是 biographies 的一列（WorldStateStore.biography_by_code）；url 是這一頁的網址，image 是題簽圖的網址。"""
+# 列傳為終點（減法季批 7b）：開頭的插畫、末尾的紀念印。只有給了 extras 才多這一段樣式，沒給一個位元組都不變
+EXTRA_CSS = """
+.zh-art{max-width:640px;margin:0 auto 18px;padding:0 16px}
+.zh-art img{display:block;width:100%;height:auto;border-radius:6px}
+.zh-mark{margin:10px auto 0;max-width:15em;padding:6px 10px;border:2px solid #b3261e;border-radius:4px;color:#b3261e;
+font:700 15px/1.5 var(--zh-font);text-align:center;letter-spacing:.08em}
+"""
+
+
+def page(row: dict, scenario: str, url: str, image: str, extras: dict | None = None) -> str:
+    """一篇公開的傳。row 是 biographies 的一列（WorldStateStore.biography_by_code）；url 是這一頁的網址，image 是題簽圖的網址。
+    extras（減法季批 7b，server.zhuan_extras）：art 是列傳插畫的網址（有圖檔才給）、seal 是紀念印上的字；沒給或空的跟以前一模一樣。"""
+    extras = extras or {}
+    art = (f'<figure class="zh-art"><img src="{escape(extras["art"])}" alt="{escape(biography.title(row["name"]))}的插畫"></figure>'
+           if extras.get("art") else "")
+    mark = f'<div class="zh-mark">{escape(extras["seal"])}</div>' if extras.get("seal") else ""
+    css = CSS + (EXTRA_CSS if art or mark else "")
     name = row["name"]
     title = biography.title(name)
     paras = [p for p in row["text"].split("\n\n") if p.strip()]
@@ -85,10 +100,10 @@ def page(row: dict, scenario: str, url: str, image: str) -> str:
 <html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>{escape(title)}・天下大勢</title><meta name="description" content="{escape(lead)}"><meta name="robots" content="noindex">
 {meta}<meta name="twitter:card" content="summary_large_image">
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="/static/zhuan.css"><style>{CSS}</style></head>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="/static/zhuan.css"><style>{css}</style></head>
 <body class="zh zh-bamboo">{head(title, sub)}
 <div class="zh-tools"><button id="vert" aria-pressed="false">直書</button><button id="share">分享</button></div>
-<main class="zh-body"><article class="zh-text">{body}</article><div class="zh-seals">{seal(name)}</div></main>
+<main class="zh-body">{art}<article class="zh-text">{body}</article><div class="zh-seals">{seal(name)}{mark}</div></main>
 <footer>這是《天下大勢》裡一位江湖人物的列傳。<br><a href="/">也去江湖走一遭 ›</a></footer>
 <script>{SCRIPT}</script></body></html>"""
 

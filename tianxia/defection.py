@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from . import allied, bounties, opportunities, ranks, roster, seats
+from . import allied, bounties, opportunities, ranks, roster, seats, wins
 from .models import Content, FactionDef, Sect
 from .rules import add_rumor, display_name
 from .state import GameState, PlayerState
@@ -51,7 +51,8 @@ def slots_here(
     state: GameState, content: Content, battle: BattleInstance | None = None,
 ) -> list[tuple[FactionDef, str | None]]:
     """這裡能叛投去的「陣營＋依附哪一軍」（照劇本的陣營順序）：規則同 targets_here。豪強分屬兩軍的季（企劃者 2026-10-15 第 2 題甲），
-    要依附的陣營（豪強）的投靠點每一軍一個槽，自己現在的那一個不算——換依附的一邊、豪強與同一邊的純兩軍互換都是叛投。"""
+    要依附的陣營（豪強）的投靠點每一軍一個槽，自己現在的那一個不算——換依附的一邊、豪強與同一邊的純兩軍互換都是叛投。
+    三陣營四勝利開著的季（減法季設計 3.2），豪強換一軍幫是「改幫」不是叛投：同一個陣營換一軍的槽不列（_lean_free）。"""
     if not allied.on(content, state.world):
         return [(f, None) for f in targets_here(state, content, battle)]
     if not can_defect(state, content, battle):
@@ -61,9 +62,14 @@ def slots_here(
     out: list[tuple[FactionDef, str | None]] = []
     for f in here:
         for ally in [a.id for a in allied.allies_of(content, f.id)] or [None]:
-            if (f.id, ally) != mine:
+            if (f.id, ally) != mine and not _lean_free(state, content, f):
                 out.append((f, ally))
     return out
+
+
+def _lean_free(state: GameState, content: Content, target: FactionDef) -> bool:
+    """叛投去 target 其實只是同一個陣營換一軍幫：三陣營四勝利開著的季那是改幫（Game._lean_step），不是叛投。"""
+    return target.id == state.player.faction and wins.on(content, state.world)
 
 
 def slot_label(state: GameState, content: Content, target: FactionDef, ally: str | None) -> str:
@@ -88,6 +94,8 @@ def refusal(
         return "這一季你已經叛投過一次了。"
     if enlisted(battle, p.name):
         return f"決戰還沒打完，你名字還在{content.scenario.faction(p.faction).name}的陣上，打完再說。"
+    if _lean_free(state, content, target):
+        return wins.LEAN_NOT_DEFECT
     if (target.id, ally) == _slot(state, content) or p.location not in target.join_at:
         return "你已經不在叛投的地方了。"
     return None
@@ -150,6 +158,7 @@ def clear_progress(p: PlayerState) -> None:
     p.follower_drill = []  # 傳功給部下的跟著部下一起走（Config.chuangong）
     p.contrib = 0
     p.contrib_weeks = {}
+    p.ledgers, p.lean_changed = {}, 0  # 豪強兩本帳與這一季換邊的次數（三陣營四勝利；PM 2026-10-25 第 4 件）：舊帳帶不走
     p.donations = {}
     p.convoy = None  # 押著的糧車留給舊陣營，交出去的糧草不退【預設】
     # 舊陣營的引薦人排著還沒說的提示作廢（新手引導計畫三，N7）：換了邊之後由新的引薦人說；師父的（by 是空的）不動

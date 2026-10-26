@@ -23,7 +23,7 @@ FIELDS = {"weekly", "events", "missing", "showdowns", "orders", "promoted", "end
 
 
 def _content(days: float = 0.25):
-    c = load_content(ROOT / "content", profile="weekend")
+    c = load_content(ROOT / "content", profile="week7")
     c.config.season_days = days
     return c
 

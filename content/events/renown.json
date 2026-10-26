@@ -2,6 +2,7 @@
   {
     "id": "xia_grain",
     "title": "鄉民送糧",
+    "image": "village",
     "actions": [
       "socialize"
     ],
@@ -42,6 +43,7 @@
   {
     "id": "xia_tipoff",
     "title": "有人報信",
+    "image": "town",
     "actions": [
       "socialize"
     ],
@@ -86,6 +88,7 @@
   {
     "id": "lulin_spoils",
     "title": "山寨分贓",
+    "image": "fort",
     "actions": [
       "explore"
     ],

@@ -39,7 +39,7 @@ def counted(monkeypatch):
 
 
 def _game(name="沈浪", faction="guan", at="changshe"):
-    c = real_content("weekend")
+    c = real_content("week7")
     c.config.auto_open_first_season = True
     game = Game.new(c, name, rng=random.Random(0), world=open_world())
     game.client = None
@@ -106,7 +106,7 @@ def test_the_memory_keeps_only_the_latest_questions():
 
 def test_games_on_the_server_carry_the_memory_and_plain_games_do_not(monkeypatch):
     monkeypatch.setattr(server, "GAMES", {})
-    monkeypatch.setattr(server, "open_game", lambda name: Game.new(real_content("weekend"), name, rng=random.Random(0), world=open_world()))
+    monkeypatch.setattr(server, "open_game", lambda name: Game.new(real_content("week7"), name, rng=random.Random(0), world=open_world()))
     assert server.game_for("沈浪").odds_memo is server.ODDS_MEMO
     assert _game().odds_memo is None
 
@@ -146,7 +146,7 @@ def _map_game():
 def test_fb322_dragging_never_swaps_the_cursor():
     """輿圖第三版第 4 批拿掉了手勢；企劃者 2026-10-22 改回兩張都能拖、能捏合縮放（tests/test_map_pan_web.py）。FB-322 照舊守：
     拖的時候不換游標（cursor 會一路繼承、換一次整棵約 1,550 個元素重算樣式）——游標寫死 grab，沒有 grabbing 那一套。"""
-    src = (Path(server.WEB) / "app.js").read_text(encoding="utf-8")
+    src = webharness.app_source()
     css = (Path(server.WEB) / "style.css").read_text(encoding="utf-8")
     assert "function panDown(" in src and '"grabbing"' not in src and ".map-wrap.grabbing" not in css
 
@@ -254,7 +254,7 @@ def test_fb329_logging_out_or_in_forgets_the_last_players_map():
   await new Promise((r) => setTimeout(r, 30));
   return { after, sel: H.S.mapSel, asked: T.calls.map((c) => c[0]), here: H.S.mapState && H.S.mapState.here };
 })();"""})
-    assert out["after"] == {"base": None, "state": None, "layer": "world", "region": None, "view": None, "sel": None, "mode": "overview",
+    assert out["after"] == {"base": None, "state": None, "layer": "near", "region": None, "view": None, "sel": None, "mode": "overview",
                             "drawer": "min", "week": None, "query": "", "at": 0, "host": "", "away": True}
     assert out["sel"] is None and "/api/map/state" in out["asked"] and out["here"] == st["here"]
 

@@ -71,6 +71,7 @@ LAPSED_FULL = "【懸賞】「{title}」名額被別人交滿了，你手上這�
 LAPSED_DUE = "【懸賞】「{title}」過了期限，你手上這一張作廢。"  # 待 joy 潤
 LAPSED_SEASON = "【懸賞】這一季收了，你手上「{title}」作廢。"  # 待 joy 潤（FB-152、FB-153：寫「到季末」的單撐到季真的收了；收季那一刻手上揭著的都補這一句，第 11、12 週掛的一樣）
 LAPSED_SIDE = "【懸賞】你改投{faction}，手上「{title}」是別的陣營掛的，這一張作廢。"  # 待 joy 潤（FB-151：投靠、叛投那一下；換版前就換了陣營的存檔由 deliver_lapses 補同一句）
+LAPSED_LEAN = "【懸賞】你改幫{faction}，手上「{title}」是{poster}掛的，這一張作廢。"  # 待 joy 潤（FB-811：三陣營四勝利開著、豪強改幫另一軍那一下；不能用 LAPSED_SIDE 的「改投」，上一行才說改幫不算叛投）
 STRANDED_JOIN = "投靠之後，手上 {n} 張別的陣營掛的懸賞會作廢。"  # 待 joy 潤（FB-151：投靠的確認畫面）
 STRANDED_LOST = "手上 {n} 張{faction}掛的懸賞作廢"  # 待 joy 潤（FB-151：叛投確認畫面「會失去」清單裡的一項，faction 是舊陣營）
 WANTED_NEWBIE = "你初入江湖，還在新手期，截殺不了人，這張通緝先別揭。"  # 待 joy 潤（FB-154：揭的人自己還在截殺的新手期；跟 post_problem 的「…初入江湖，還在新手期，通緝不了他。」同一個口氣）
@@ -99,8 +100,11 @@ def is_town(content: Content, loc_id: str) -> bool:
 
 
 def board_here(state: GameState, content: Content) -> bool:
-    """這裡看得到懸賞榜：懸賞榜開著（active）、人在城鎮類的地點。"""
-    return active(state, content) and is_town(content, state.player.location)
+    """這裡看得到懸賞榜：懸賞榜開著（active）、人在城鎮類的地點、這一季走到開榜的那一週（減法季 6.6 第 2 週，week_unlock.open；
+    規則關著一律開）。榜鎖著時系統通緝照掛（post_auto 不問這裡）、揭了的單照交，只是榜不畫、不能揭新的。"""
+    from . import week_unlock  # 繞回來的 import，呼叫時才取
+
+    return active(state, content) and is_town(content, state.player.location) and week_unlock.open(state, content, "bounties")
 
 
 def close_board(p: PlayerState) -> None:
@@ -161,6 +165,9 @@ STRIKE_GATHER = "找素材撞上的那一場也算"  # 待 joy 潤：探索三�
 # 一類一顆生效的季（FB-420）：找素材不打仗，討伐在練功交差（待 joy 潤）
 STRIKE_PRECISE = "到{target}尋敵或出陣攻打贏一場{enemy}的隊伍"
 STRIKE_PRACTICE = "到{target}尋敵打贏一場{enemy}的隊伍"
+# 減法季探索一顆開著的季（Config.jianfa 的 explore_one）：沒有「尋敵」這顆鈕了，討伐在出門一趟的遭遇拍交差（FB-817；待 joy 潤）
+STRIKE_OUTING = "到{target}出門探索或出陣攻打贏一場{enemy}的隊伍"
+STRIKE_OUTING_RANGER = "到{target}出門探索打贏一場{enemy}的隊伍"
 
 
 def how(content: Content, b: Bounty, state: GameState | None = None, world: WorldState | None = None) -> str:
@@ -171,12 +178,16 @@ def how(content: Content, b: Bounty, state: GameState | None = None, world: Worl
     if b.motive == "求援":  # 求援委託：護衛、犒軍那位人物也算（大勢人物擴充第三批，跟「大勢人物參戰與護衛」對齊）
         return how(content, b.model_copy(update={"motive": None}), state, world) + RALLY_AID.format(who=issuer(content, b))
     if b.kind == "strike":
-        from . import explore_modes, precise, sortie  # noqa: PLC0415  延後 import 只是保險
+        from . import explore_modes, precise, sortie  # 延後 import 只是保險
+        from .rules import jianfa
 
         target = _loc_name(content, b.location)
         if precise.on(content, world):
             ranger = state is not None and state.player.faction is None  # 散人不出陣
-            line = STRIKE_PRECISE if sortie.on(content) and not ranger else STRIKE_PRACTICE
+            if jianfa(content, world, "explore_one"):  # 減法季探索一顆：出門一趟的遭遇拍（FB-817）
+                line = STRIKE_OUTING if sortie.on(content) and not ranger else STRIKE_OUTING_RANGER
+            else:
+                line = STRIKE_PRECISE if sortie.on(content) and not ranger else STRIKE_PRACTICE
             return line.format(target=target, enemy=_enemy_name(content, b))
         if sortie.on(content):
             ways = f"{STRIKE_SORTIE}，{STRIKE_GATHER}" if explore_modes.on(content) else STRIKE_SORTIE
@@ -364,15 +375,19 @@ def join_note(state: GameState, content: Content, choice: Choice) -> str:
     return ""
 
 
-def drop_stranded(state: GameState, content: Content, faction_id: str | None) -> list[str]:
+def drop_stranded(state: GameState, content: Content, faction_id: str | None, *, lean: bool = False) -> list[str]:
     """投靠或叛投 faction_id 的那一下（Game.choose、defection.defect）：手上新陣營接不了的單拿掉名字，每張回一句原因（FB-151）。
+    lean：豪強改幫另一軍（Game._lean_step，三陣營四勝利）不是換陣營，那一句寫「改幫…是某某掛的」（LAPSED_LEAN，FB-811），不寫「改投」。
     改的是共用的季（takers），呼叫端的動作結束時存季（choose 的結尾統一存）。要在 p.faction 改之前或之後呼叫都行：只看名字與 faction_id。"""
     me = name_key(state.player.name)
     faction = content.scenario.faction_name(faction_id, "別的陣營")
     msgs: list[str] = []
     for b in stranded(state, content, faction_id):
         b.takers = [t for t in b.takers if name_key(t) != me]
-        msgs.append(LAPSED_SIDE.format(faction=faction, title=title(content, b)))
+        if lean:
+            msgs.append(LAPSED_LEAN.format(faction=faction, poster=content.scenario.faction_name(b.faction, "別的陣營"), title=title(content, b)))
+        else:
+            msgs.append(LAPSED_SIDE.format(faction=faction, title=title(content, b)))
     return msgs
 
 
@@ -450,6 +465,9 @@ def reward_bits(state: GameState, content: Content, b: Bounty) -> RewardBits:
     xinde = cfg.xinde.get(b.kind, 0)
     if exp and team.maxed(content, state.player.member):  # 滿級：經驗換成心得（3.5，第 8 批起每一種季都是）
         xinde, exp = xinde + team.as_xinde(content, exp), 0
+    elif exp:  # 減法季三道閘：45 級以後（跨過 45 的那一截）不是仗的經驗換心得，同交差（team.player_exp）；關著原數
+        keep, over = team.player_exp(state, content, exp, "bounty")
+        xinde, exp = xinde + (team.as_xinde(content, over) if over else 0), keep
     if b.kind == "arms":
         low, high = (_silver(state, content, b, base=price * cfg.arms_tier["1"])
                      for price in (min(cfg.arms_silver.values()), max(cfg.arms_silver.values())))
@@ -608,13 +626,18 @@ def _complete(state: GameState, content: Content, world: WorldStateStore, b: Bou
     msgs = [f"【懸賞】「{title(content, b)}」交差了，{issuer(content, b)}的賞銀送到。", f"銀兩 +{silver}"]
     exp = _exp(state, content, b)
     if exp and team.maxed(content, p.member):  # 滿級：本人的經驗照 5 換 1 換成心得（3.5，team.maxed_xinde），同伴照拿經驗
-        gained = team.maxed_xinde(state, content, exp)
+        gained = team.maxed_xinde(state, content, exp, "bounty")
         if gained:
             msgs += [team.MAXED_XINDE.format(n=gained), f"心得 +{gained}"]  # 跟其他來源同一句（FB-452）
-        msgs += team.add_team_exp(state, content, world, exp)
-    elif exp:
-        msgs.append(f"經驗 +{exp}")
-        msgs += team.add_team_exp(state, content, world, exp)
+        msgs += team.add_team_exp(state, content, world, exp, "bounty")
+    elif exp:  # 懸賞交付不是仗（減法季三道閘：45 級以後、跨過 45 的那一截換心得，team.player_exp）
+        keep = team.player_exp(state, content, exp, "bounty")[0]
+        gained = team.maxed_xinde(state, content, exp, "bounty")
+        if gained:
+            msgs += [team.CAPPED_XINDE.format(n=gained), f"心得 +{gained}"]
+        if keep:
+            msgs.append(f"經驗 +{keep}")
+        msgs += team.add_team_exp(state, content, world, exp, "bounty")
     msgs += _attached(state, content, world, b)
     msgs[2:2] = ranger.add_deeds(state, content, b.deeds)  # 散人的功績（名聲開著時記成善名或惡名）
     if b.kind != "wanted":  # 通緝照押金給，沒有加成（_silver）
@@ -655,7 +678,7 @@ def rallies(state: GameState, content: Content) -> list[Bounty]:
 
 def _complete_rally(state: GameState, content: Content, b: Bounty) -> list[str]:
     """求援委託辦成了：銀兩 b.silver（同委託，不乘加成）、那位人物情誼 +rally_affinity，他寫一封道謝信。"""
-    from . import letters  # noqa: PLC0415  letters → bounties
+    from . import letters  # letters → bounties
 
     p = state.player
     b.done_by.append(p.name)
@@ -688,7 +711,7 @@ def rally_reward(content: Content, b: Bounty) -> str:
 def post_rally(state: GameState, content: Content, cid: str) -> Bounty | None:
     """cid（大勢人物）對自己陣營全部人發一件求援委託（figure_life.tick：心事焦慮時擲中）：在他所在那一區，有對頭站著的地方就討伐，
     否則打探那一區危險度 2 以上、不是城鎮的地方。同一位一次一件。懸賞榜關著、他不是交戰兩軍、那一區什麼都挑不出來回 None。"""
-    from . import atlas, figure_life  # noqa: PLC0415  atlas → world → rules：延後載入
+    from . import atlas, figure_life  # atlas → world → rules：延後載入
 
     side = figure_life.side_of(content, cid)
     w, tuning = state.world, content.config.figure_life
@@ -747,7 +770,7 @@ def _complete_commission(state: GameState, content: Content, b: Bounty) -> list[
     msgs = [COMMISSION_DONE.format(who=issuer(content, b), title=title(content, b))]
     if b.silver:
         msgs.append(f"銀兩 +{b.silver}")
-    from . import parley  # noqa: PLC0415  parley → bounties：延後載入
+    from . import parley  # parley → bounties：延後載入
 
     settled = parley.settle_task(state, content, b.id, b.figure)  # 第二批：欠他的那一件（先做後付、接了他的請託）做到了，守約 +1
     if b.parley_ask:  # NPC 智能 2.0的條件（parley.py）：辦成了，下回見面他兌現答應你的那一件
@@ -926,7 +949,7 @@ def hand_in_options(
     """懸賞榜第三層（替 b 挑一件，設計 4.4）：合用的（items，fitting 排好的）最不值錢的 give_list 件各一顆交出，每顆先問一次
     （確認只在網頁那一層；give 自己整個重驗）；多的收成一行灰掉的；最後永遠按得下去的「回到懸賞榜」。
     只讓交最不值錢的這幾件是有意的：交出去就沒了，該交的是最捨得的。"""
-    from .engine import Option  # noqa: PLC0415  engine 會 import 這裡（同 smithing.temper_option）
+    from .engine import Option  # engine 會 import 這裡（同 smithing.temper_option）
 
     cfg = content.config.bounties
     opts = []
@@ -1235,7 +1258,7 @@ def commission_reward(state: GameState, content: Content, b: Bounty) -> str:
     if amount and b.figure in content.characters:
         parts.append(f"{content.characters[b.figure].name}情誼 +{amount}")
     if b.parley_ask:  # NPC 智能 2.0的條件：辦成了他兌現你求的那一件
-        from . import parley  # noqa: PLC0415  parley → bounties：延後載入
+        from . import parley  # parley → bounties：延後載入
 
         parts.append(f"他兌現：{parley.ask_label(content, b.parley_ask)}")
     return "・".join(parts)
@@ -1246,9 +1269,9 @@ def post_figure(state: GameState, content: Content, cid: str, motive: str, regio
     倒下的地方（spot）有對頭的隊伍就掛那裡，否則照那一區的地點挑（自己一份亂數：天機｜人物｜此刻）。賞銀是一般討伐的
     revenge_silver_scale 倍，掛 revenge_cal_days 個季曆天。懸賞榜關著、cid 不是交戰兩軍、那一區沒有對頭站著的地方、
     同一位人物還有一張有效的同一種，都不掛（回 None）。"""
-    from . import atlas  # noqa: PLC0415  atlas → world → rules：延後載入
+    from . import atlas  # atlas → world → rules：延後載入
 
-    from .relations import side_of  # noqa: PLC0415
+    from .relations import side_of
 
     side = side_of(content, cid)
     if not active(state, content) or side not in ENEMY or region is None:
