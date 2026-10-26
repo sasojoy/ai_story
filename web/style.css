@@ -3345,3 +3345,52 @@ svg.fig .blade.bow { stroke-width: 3; }
 .jd-notes .jdn-fx { color: var(--accent); font-weight: 600; }
 .jd-notes .jdn-desc { flex-basis: 100%; color: var(--ink-2); line-height: 1.5; }
 .jd-notes .look { position: static; }
+
+/* 俠客頁「裝備」一欄一格（Joy 2026-10-26「裝備可以類似意境那樣，要直覺好看懂」；app.js 的 gearCell）：2×2 的名帖小牌，
+   左上圖示與欄名、右上階品；中間裝了什麼（宋體）、一句效果；底下一條還剩幾成（鋒利、耐久、飽足），空的那一格虛線框 */
+.gear-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.gear-cell { display: grid; align-content: start; gap: 4px; min-height: 112px; padding: 10px 12px; text-align: left; color: var(--ink);
+  background: var(--card); border: 1px solid var(--line); border-top: 3px solid var(--gold); border-radius: 6px 6px 12px 12px; font: inherit; cursor: pointer; }
+.gear-cell.empty { border: 1px dashed var(--line); border-top: 1px dashed var(--line); background: none; color: var(--ink-2); }
+.gear-cell.off { border-top-color: var(--line); }
+.gc-hd { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.gc-hd svg { width: 18px; height: 18px; flex: none; fill: none; stroke: var(--gold); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.gear-cell.empty .gc-hd svg { stroke: var(--ink-2); }
+.gc-hd em { font: 600 12px var(--sans); font-style: normal; color: var(--ink-2); letter-spacing: 0.08em; }
+.gc-hd small { margin-left: auto; font-size: 11px; color: var(--ink-2); white-space: nowrap; }
+.gc-name { font: 700 15px var(--serif); line-height: 1.3; overflow-wrap: anywhere; }
+.gear-cell.empty .gc-name { font-weight: 400; color: var(--ink-2); }
+.gc-fx { font-size: 12px; line-height: 1.4; color: var(--accent); }
+.gear-cell.empty .gc-fx, .gear-cell.off .gc-fx { color: var(--ink-2); }
+.gc-edge { display: block; height: 5px; margin-top: 2px; border-radius: 3px; background: var(--card-2); overflow: hidden; }
+.gc-edge > i { display: block; height: 100%; background: var(--gold); }
+.gc-edgen, .gc-more { font-size: 11px; color: var(--ink-2); }
+
+/* 俠客頁「門下」一人一張卡（app.js 的 mateCard）：左邊一枚印（本、出、在、部），名字與等級、氣血一條、身上兩門各一行（十格成數）；
+   點了在卡底下攤開角色卡與加入、移出、傳功 */
+.mates { display: grid; gap: 8px; }
+.mate { border: 1px solid var(--line); border-radius: 12px; background: var(--card); overflow: hidden; }
+.mate.on { border-color: var(--gold); }
+.mate-hd { display: flex; align-items: flex-start; gap: 10px; width: 100%; padding: 10px 12px; text-align: left; background: none; border: 0; color: var(--ink); font: inherit; cursor: pointer; }
+.mate-seal { flex: none; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 6px; font: 700 15px var(--serif); color: #fff; background: var(--ink-2); }
+.mate.role-self .mate-seal { background: var(--gold); }
+.mate.role-fight .mate-seal { background: var(--accent); }
+.mate.role-follow .mate-seal { background: #4f6b5a; }
+.mate-body { flex: 1; min-width: 0; display: grid; gap: 5px; }
+.mate-name { display: flex; align-items: baseline; gap: 8px; }
+.mate-name b { font: 700 16px var(--serif); }
+.mate-name small { font-size: 12px; color: var(--ink-2); }
+.mate-name em { margin-left: auto; font: 600 12px var(--sans); font-style: normal; color: var(--ink-2); }
+.mate.role-fight .mate-name em { color: var(--accent); }
+.mate-hp { display: block; height: 5px; border-radius: 3px; background: var(--card-2); overflow: hidden; }
+.mate-hp > i { display: block; height: 100%; background: var(--accent); }
+.mate-hpn { font-size: 11px; color: var(--ink-2); margin-top: -3px; }
+.mate-art { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: baseline; gap: 2px 8px; font-size: 13px; }
+.mate-art em { font-style: normal; font-size: 12px; color: var(--ink-2); }
+.mate-art b { font: 600 14px var(--serif); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mate-art small { font-size: 11px; color: var(--ink-2); white-space: nowrap; }
+.mate-art .sa-ten { grid-column: 2 / -1; }
+.mate-arrow { flex: none; color: var(--ink-2); font-size: 16px; line-height: 30px; }
+.mate-detail { padding: 4px 12px 12px; border-top: 1px dashed var(--line); display: grid; gap: 8px; }
+.mates-none { margin: 6px 2px 0; font-size: 13px; }
+.mate-lines { margin: 0; font-size: 13px; line-height: 1.6; }

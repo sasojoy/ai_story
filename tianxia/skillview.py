@@ -4,7 +4,7 @@
 """
 from __future__ import annotations
 
-from . import armor, arts as arts_mod, atlas, clinic, create as create_mod, cultivation, encounter, equipment, forge_secrets, fusion, insight_fx, insights, mall as mall_mod, martial_arts, materials, might, mounts, moves, prologue, renown, seal, smithing, tactics as tactics_mod, team, traits, treasures, weapons
+from . import armor, arts as arts_mod, atlas, clinic, roster, create as create_mod, cultivation, encounter, equipment, forge_secrets, fusion, insight_fx, insights, mall as mall_mod, martial_arts, materials, might, mounts, moves, prologue, renown, seal, smithing, tactics as tactics_mod, team, traits, treasures, weapons
 from .library import TOWN_TAG, cap_of, held_count, level_of, melt_confirm, melt_note, melt_problem, melt_value, owned_arts
 from .martial_arts import (
     MAX_LEVEL, QUALITIES, MartialArt, power_at, shown_creator,
@@ -892,6 +892,41 @@ def member_card(state: GameState, content: Content, world: WorldStateStore, key:
     if key == PLAYER and (boosts := boost_line(state, content, world)):  # 共鳴與功效只算本人，同伴的卡這一版不寫加成那一行
         lines.append(boosts)
     return "\n".join(lines)
+
+
+def _art_cell(content: Content, world: WorldStateStore, kind: str, skill_id: str | None, level: int, state: GameState | None = None) -> dict:
+    """門下卡上的一門：{"kind", "name", "quality", "attribute", "level"}；還沒學是 name 空字串（網頁寫「尚未習得」）。"""
+    art = None
+    if skill_id is not None:
+        art = team.player_art(state, content, world, skill_id) if state is not None else team.resolve_art(skill_id, content, world)
+    if art is None:
+        return {"kind": kind, "name": "", "quality": "", "attribute": "", "level": 0}
+    return {"kind": kind, "name": art.name, "quality": art.quality, "attribute": art.attribute or "", "level": level}
+
+
+def roster_cards(state: GameState, content: Content, world: WorldStateStore) -> list[dict]:
+    """俠客頁「門下」一人一張卡（Joy 2026-10-26「門下顯示優化」）：名冊的順序（本人、同伴、部下），每人
+    {"key", "name", "role"（本人／出戰／在門下／部下）, "level"（部下 None）, "hp", "hp_max"（部下 None）, "arts": [內功, 武學]（部下只有武學）}。
+    點了照舊是名冊那一下（person），細節在角色卡。"""
+    out = []
+    for _label, key in roster.roster_lines(state, content, world):
+        if key.startswith(team.FOLLOWER_KEY):
+            follower = dict(team.follower_rows(state, content)).get(key)
+            if follower is None:
+                continue
+            out.append({"key": key, "name": follower.name, "role": "部下", "level": None, "hp": None, "hp_max": None,
+                        "arts": [_art_cell(content, world, "武學", follower.wugong, team.follower_level(state, content, follower, key))]})
+            continue
+        if key == PLAYER:
+            member, name, own, role = state.player.member, state.player.name, state, "本人"
+        else:
+            member, name, own = world.get_companion(key), content.characters[key].name, None
+            role = "出戰" if key in state.player.team else "在門下"
+        now, cap = team.member_neili(content, member, team.con_of(state, content, world, key), season=state.world)
+        out.append({"key": key, "name": name, "role": role, "level": member.level, "hp": round(now), "hp_max": round(cap),
+                    "arts": [_art_cell(content, world, "內功", member.neigong_id, member.neigong_level, own),
+                             _art_cell(content, world, "武學", member.wugong_id, member.wugong_level, own)]})
+    return out
 
 
 def gear_rows(state: GameState, content: Content, world: WorldStateStore) -> dict:
