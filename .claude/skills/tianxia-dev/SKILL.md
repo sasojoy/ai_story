@@ -232,6 +232,10 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 - **固定句要「整篇一起挑」**（FB-848）：每位各自雜湊挑，撞句機率擋不掉（池子 3 句、4 位一定撞）；改 `fixed_verdicts(writers)` 同理由輪著挑、用過的跳過、不夠往別組借、全用過才重複；`check_verdicts` 加「各組不重複」，池子夠不夠用測試鎖（深交三位加名額一位＝4）。
 - **內容說明裡照季換字的插槽**（FB-849 的 `{上架}`，同軍令的 `{本週}`）：填字函式一個（`mall.note_text`，7 天季用 `calendar.segment_days`、其他季照舊的字），`item_problems` 驗插槽認得、需要的欄位有寫；測試把「說明寫的那一天」跟真的上架那一刻（前 10 分鐘沒有、後 10 分鐘有）綁在一起。
 - **一批好幾張小單、測試各一個檔最省拆 commit**（減法季批 7b 修正）：每張自己一個測試檔＋一個共用 kit（`tests/zhuan_fix_kit.py`），照「寫測試→看紅→修→變異→commit」一張一張來，不必拆 hunk。變異腳本 `scratchpad/jf7bfix/mutate.py <根> <檔> <測試檔,…> '<舊>' '<新>'`（舊字串單引號、挑不含雙引號的片段，斷言剛好一處、`finally` 寫回）；關著對照 `scratchpad/jf7bfix/cmp_driver.py <base.tar> <head.tar> <資料夾>`（兩份 `git archive` 用 QA 的 `qajf7b/cmpq/cmp_qa.py` 五種平行跑，約十幾分鐘）。
+- **「買來的東西不給數值」不另存欄位，用名單位置判**（減法季批 7c，FB-860）：靠買來的深交名額進名單的人＝`zhuan_end.deep_list` 裡排在 `deep_figures` 之後的（`zhuan_end.by_slot`）。存下來的名單（`PlayerState.deep_order`）只在有人新過門檻時才整理，中間有人掉下去它就是舊的，所以**讀的地方照此刻的條件再濾一次**（`deep_list` 濾掉情誼已經掉下 70 的），不要直接讀存檔裡的順序；名單裡有人讓出位子，後面的人自動遞補成「名單內」。要擋的讀者還是 grep 那個門檻的每一處（對話教本命武學 `companion_agent._maybe_grant_signature_skill`、名將本命兵器 `signature_arms.due`，奪走那條路跟情誼無關、別擋）。擋了不記旗標（`學會本命:`），位子讓出來之後才教得成；說明那一句放在**進名單那一下**（`enforce_deep_cap`，只會跑一次），不放在每輪對話的路上，也不要放進 `_gift_entry` 這種把第一句當標題的列表。
+- **驗「動作最後那幾步」不要連按同一個動作**（同批）：`choose("act:explore")` 常撞上事件，下一個 `choose("act:explore")` 只回「（此刻無法這麼做。）」、什麼都沒跑，測試看起來像規則沒作用。要在同一局連驗兩次「動作尾端的檢查」，直接叫尾端的函式（`game._deep_cap_now(); game._signature_arms()`，就是 `Game.choose` 在 `_log` 前叫的那兩步），或按完事件的選項再按。
+- **變異檢查抓不到的，補一條會抓的測試再比一次**（同批）：「進名單那一下的說明連免費那幾位也說」一開始沒被抓到（測試只斷言靠名額的那一位有說），補「名單內三位不說」的斷言就紅了；「`withheld` 永遠 True」要補「沒東西可扣的人物不說」才抓得到。變異腳本在這一輪 scratchpad 的 `mutate7c.py <工作樹> <相對檔> <測試檔> '<舊>' '<新>'`，一行一個、舊字串必須剛好一處、`finally` 寫回；PowerShell 傳多行舊字串直接寫單引號跨行就行。
+- **關著對照的腳本可以重用上一批的**（同批）：`Get-ChildItem C:\Users\ray61\AppData\Local\Temp\claude -Recurse -Include cmp7b.py,cmp_qa.py` 找得到前幾輪留下的（`jf7b/cmp/cmp7b.py` + `cmp_run.py`：解兩份 tar、五種平行跑、逐行比）；抄到自己的 scratchpad，只改要比的東西（這一批多印商城每一列的說明，免得說明字串在關著時漏出來）。**全開那一種行數不同時逐行 zip 比會整片錯位**（報 460 行不同其實只差十幾處）：另寫一支 `difflib.SequenceMatcher(None, a, b, autojunk=False).get_opcodes()` 分塊（800 行幾秒就好），逐塊看是不是預期的差。
 
 ## 量表怎麼讀
 
