@@ -5,6 +5,7 @@ from __future__ import annotations
 import random
 
 from conftest import real_content
+from jianfa_kit import classic_explore
 
 from tianxia import newbie, training
 from tianxia.engine import Game
@@ -16,7 +17,7 @@ NOW = MON + 10 * HOUR
 
 
 def _game(at="yingchuan", level=None, name="沈浪"):
-    c = real_content("weekend")
+    c = classic_explore(real_content("week7"))  # 城裡操練與練功分級（減法季探索一顆開著時沒有，tests/test_explore_one.py）
     c.config.train_event_chance = 0.0
     store = open_world()
     store.seed_first_season(c)

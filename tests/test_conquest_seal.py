@@ -7,6 +7,7 @@ import json
 import pytest
 from conquest_kit import _new, conquest_rules, go, join
 from conftest import next_season, no_conquest, real_content
+from jianfa_kit import no_jianfa
 
 import server
 from tianxia import atlas, conquest, explore_modes, library, seal
@@ -20,7 +21,7 @@ NAME = "沈浪"
 
 def _content(hide: float = 1.0, find: float = 1.0, profile: str = "season21"):
     """正式內容（21 天季）、領地爭奪打開；hide／find 是這一批的兩個機率（1.0＝一定藏、一定撿到，好測）。"""
-    c = conquest_rules(real_content(profile))
+    c = no_jianfa(conquest_rules(real_content(profile)))  # 這一份測探索三選一撿碎片（explore:*）；出門一趟撿碎片在 tests/test_explore_one.py
     c.config.seal.cache.hide_chance, c.config.seal.cache.find_chance = hide, find
     return c
 
@@ -130,7 +131,7 @@ def test_core_regions_weigh_more_and_the_default_names_the_core_region():
 
 def test_no_cache_when_the_switch_is_off_or_the_season_is_not_conquest():
     """領地爭奪沒開（沒有蓋章）：什麼都不藏，宛城照舊擲現世。"""
-    c = no_conquest(real_content("weekend"))  # PM 2026-10-22 起正式內容打開，沒蓋章的季要明講關掉
+    c = no_conquest(real_content("week7"))  # PM 2026-10-22 起正式內容打開，沒蓋章的季要明講關掉
     c.config.seal.cache.hide_chance = 1.0
     game = _new(c, NAME)
     assert _cache(game) is None
@@ -260,7 +261,7 @@ def test_no_find_while_the_block_is_cooling():
 
 def test_find_is_not_rolled_when_the_season_is_not_conquest():
     """領地爭奪沒開的季：探索照舊，不碰登記（也沒有藏處可言）。"""
-    c = no_conquest(real_content("weekend"))  # PM 2026-10-22 起正式內容打開，沒蓋章的季要明講關掉
+    c = no_conquest(real_content("week7"))  # PM 2026-10-22 起正式內容打開，沒蓋章的季要明講關掉
     c.config.seal.cache.hide_chance = c.config.seal.cache.find_chance = 1.0
     game = _new(c, NAME)
     cache = SealCache(season=1, shard="chishou", loc=_neutral(_content())[0])  # 硬塞一個：不算數
@@ -462,7 +463,7 @@ def test_the_admin_hides_one_now_under_conquest_and_still_forces_emergence_other
     assert any("這一季" in line for line in game.admin_seal_emerge())
     assert _cache(game) is None
 
-    old = no_conquest(real_content("weekend"))  # PM 2026-10-22 起正式內容打開，沒蓋章的季要明講關掉
+    old = no_conquest(real_content("week7"))  # PM 2026-10-22 起正式內容打開，沒蓋章的季要明講關掉
     old.config.admins = [NAME]
     legacy = _new(old, NAME)
     assert legacy.admin_seal_choices()["hide"] is False

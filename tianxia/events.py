@@ -5,6 +5,7 @@ import random
 from typing import Literal
 
 from . import foreshadow, precise
+from . import stances as stance_rules
 from .models import Check, Choice, Content, Event, FreeTextChoice, Location
 from .rules import check_condition, check_outlook, fail_stamina, haoqiang_allied, practice_line, season_one_off
 from .state import GameState
@@ -45,6 +46,7 @@ def event_candidates(
     location = content.locations[state.player.location]
     hidden = set() if foreshadow.active(state, content) else foreshadow.event_ids(content)
     hidden |= season_one_off(content, state.world, "events")
+    hidden |= stance_rules.closed_events(state, content)  # 人物心意開的事件：心意生效時才有、每人每天一則（減法季批 6 修正輪）
     if haoqiang_allied(content, state.world):  # 豪強分屬兩軍：沒有第三方，豪強那兩則第三方的伏筆事件不出現（設計第十節）
         hidden |= foreshadow.third_party_events(content)
     candidates: list[Event] = []
@@ -128,6 +130,16 @@ def pick_event(
     return rng.choices(fresh, weights=weights)[0]
 
 
+def pick_from(state: GameState, content: Content, candidates: list[Event], action: str, rng: random.Random) -> Event | None:
+    """在給定的幾則裡照防重複輪替、照權重抽一則（同 pick_event 的寫法，只是候選由呼叫端先篩：減法季探索一顆的野類地點先在「旅人」那幾則
+    裡抽，Game._outing_event）。不改狀態；一則都沒有是 None。"""
+    fresh = _fresh_among(state, candidates, action)
+    if not fresh:
+        return None
+    multiplier = content.config.qiyu_weight_multiplier
+    return rng.choices(fresh, weights=[event.weight * (multiplier if event.qiyu else 1.0) for event in fresh])[0]
+
+
 def note_round(state: GameState, content: Content, event: Event, action: str) -> None:
     """事件真的端到玩家眼前時（只有 Game._present 呼叫）記進這一輪。抽中的那一則已經在它那一池的這一輪裡，
     表示 pick_event 是在「全都看過了」之後抽的：先把這裡、這個行動所有合格事件所屬的池子清空、重開一輪，再記
@@ -194,8 +206,14 @@ def stamina_note(choice: Choice, content: Content) -> str:
     return f"（{'，'.join(parts)}）" if parts else ""
 
 
-def free_text_note(choice: FreeTextChoice, content: Content) -> str:
-    """「隨口應對」那一顆按鈕：失敗另扣的體力照 stamina_note 的寫法（成功也扣的照寫「體力 -N」）。"""
+WRITE_NOTE = "（寫一句你要怎麼做）"  # 待 joy 潤：分岔開著時「隨口應對」那一顆的小字（可能的走向在 options[].outcomes，畫面照它寫）
+
+
+def free_text_note(choice: FreeTextChoice, content: Content, branching: bool = False) -> str:
+    """「隨口應對」那一顆按鈕：失敗另扣的體力照 stamina_note 的寫法（成功也扣的照寫「體力 -N」）。
+    branching：這一季分岔開著、這則事件寫了後果（減法季批 4）——每一種後果的得失不同，改寫 WRITE_NOTE。"""
+    if branching:
+        return WRITE_NOTE
     paid = -choice.effect.stamina if choice.effect.stamina < 0 else 0
     extra = -fail_stamina(choice.fail_effect.stamina, content) - paid
     parts = ([f"體力 -{paid}"] if paid else []) + ([f"失手多耗體力 {extra}"] if extra > 0 else [])

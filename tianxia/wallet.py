@@ -137,11 +137,13 @@ class Wallet:
         with self.db.snapshot() as conn:
             return conn.execute(sql, args).fetchone()[0]
 
-    def mark_used(self, pid: int, time: float) -> None:
-        """這一筆購買用掉了（重修列傳）：data 多一個 used（時刻）。不改結構版本，記在原本那一列的 data 裡。"""
+    def mark_used(self, pid: int, time: float, **extra) -> None:
+        """這一筆購買用掉了（重修列傳、易名帖、列傳的票）：data 多一個 used（時刻），extra 一起記（列傳的票記用在哪一季 season、
+        親筆評曰請了哪一位 fid，減法季批 7b）。不改結構版本，記在原本那一列的 data 裡。"""
         with self.db.transaction() as conn:
             r = conn.execute("SELECT data FROM mall_purchases WHERE id = ?", (pid,)).fetchone()
             data = json.loads(r["data"]) if r is not None else {}
+            data.update(extra)
             data["used"] = time
             conn.execute("UPDATE mall_purchases SET data = ? WHERE id = ?", (json.dumps(data, ensure_ascii=False), pid))
 

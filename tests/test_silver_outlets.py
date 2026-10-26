@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import random
 
-from conftest import real_content
+from conftest import no_week_unlock, real_content
 
 from tianxia import economy, silver
 from tianxia.engine import Game
@@ -16,7 +16,7 @@ NOW = MON + 10 * HOUR
 
 
 def _game(profile="season21", at="changshe", faction="guan", money=500):
-    c = real_content(profile)
+    c = no_week_unlock(real_content(profile))  # 開季第一天就進店：功能照週解鎖（減法季 6.6）關掉
     c.config.train_event_chance = 0.0
     store = open_world()
     store.seed_first_season(c)
@@ -227,12 +227,6 @@ def test_bribe_refused_at_forty():
     assert not option.enabled and silver.BRIBE_TOP in option.label
     game.choose(f"act:bribe:{fid}")
     assert p.affinities[cid] == 40 and p.stats["silver"] == 500
-
-
-def test_weekend_has_no_silver_outlets():
-    game = _game("weekend")
-    assert not silver.on(game.content, game.state.world)
-    assert not any(i.startswith(("act:silver_donate", "act:mentor", "act:furnace", "act:buy_legend", "act:bribe")) for i in _ids(game))
 
 
 def test_old_save_without_outlet_fields_loads():

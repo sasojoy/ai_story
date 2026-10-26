@@ -209,16 +209,6 @@ def test_bujue_lists_what_was_flipped_away_within_a_day():
     assert late["why"] == seal_acts.NOTHING["bujue"]
 
 
-def test_the_window_is_at_least_the_cooldown():
-    """週末季一個季曆天約 43 分鐘，比一小時的冷卻短：窗口照冷卻（設計表格寫的「還在翻後冷卻裡的」一定在內）。"""
-    c, w = _world("weekend")
-    from conquest_kit import _new
-
-    wd = _new(c, "推", world=w).state.world
-    assert seal_acts.day_seconds(c, wd) < 3600
-    assert seal_acts.mend_seconds(c, wd) == pytest.approx(conquest._seconds(c, c.config.conquest.cooldown_minutes))
-
-
 def test_bujue_hands_the_block_back_like_a_flip():
     """補缺：當場退回原主——「收復」天下大事與江湖史、冷卻重新起算、所有條清掉、不分紅；同一塊一季只能補一次。"""
     c, w, g = _holder("jinjiao")
@@ -307,7 +297,7 @@ def test_mend_rows_only_count_flips():
 
 # ── 兩片共用 ──
 
-@pytest.mark.parametrize("profile", ["weekend", None, "season21"])
+@pytest.mark.parametrize("profile", ["week7", None, "season21"])
 @pytest.mark.parametrize("shard", ["chishou", "jinjiao"])
 def test_without_conquest_the_button_greys_out_and_nothing_happens(profile, shard):
     """設計第四章：領地爭奪沒開的季（PM 2026-10-22 打開之前正式內容的三種季都是；現在只有 14 天的季與打開之前開的季）鎮地與補缺按不下去、灰鈕寫原因；碎片卡那一行寫原因（idle）。"""

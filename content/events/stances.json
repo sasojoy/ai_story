@@ -1,0 +1,154 @@
+[
+  {
+    "id": "stance_luzhi_assault",
+    "title": "盧植急攻",
+    "image": "camp",
+    "locations": [
+      "luzhi_camp"
+    ],
+    "text": "盧植聽了眾人之勸，決意速攻廣宗。營中鼓聲徹夜不歇，先登營在轅門前點名，雲梯、衝車一架架推出營外，民夫扛著箭捆在後頭追。",
+    "choices": [
+      {
+        "text": "報名先登，隨大軍撲城",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
+        "check": {
+          "stat": "str",
+          "difficulty": 6,
+          "by": "self"
+        },
+        "effect": {
+          "text": "你攀著雲梯搶上城頭，砍翻兩個守卒，身後的士卒一擁而上。收兵時軍侯記下了你的名字，賞錢另算。",
+          "stats": {
+            "silver": 15,
+            "fame": 2
+          },
+          "trend": {
+            "front": -1
+          }
+        },
+        "fail_effect": {
+          "text": "一桶滾油潑下來，你從雲梯半腰摔進壕溝，被抬回營裡躺了半天。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "替大軍推衝車、運箭捆",
+        "condition": {
+          "factions_none": [
+            "huang"
+          ]
+        },
+        "check": {
+          "stat": "con",
+          "difficulty": 5,
+          "by": "self"
+        },
+        "effect": {
+          "text": "你跟著民夫一趟趟把箭捆送到陣前，衝車撞門時你也在後頭推了一把。軍需官塞給你一份口糧錢。",
+          "stats": {
+            "silver": 10,
+            "fame": 1
+          },
+          "trend": {
+            "front": -1
+          }
+        },
+        "fail_effect": {
+          "text": "衝車的輪子陷進泥裡，你推得筋疲力盡也沒推動，被督戰的軍吏罵了回來。",
+          "stamina": -10
+        }
+      },
+      {
+        "text": "混在民夫裡，把攻城的時辰報給城裡",
+        "condition": {
+          "factions": [
+            "huang"
+          ]
+        },
+        "check": {
+          "stat": "agi",
+          "difficulty": 6
+        },
+        "effect": {
+          "text": "你趁亂溜到城下，把官軍幾時攻哪一面低聲報給牆頭的人。天亮時那一面的城頭早已堆滿了滾木礌石。",
+          "stats": {
+            "fame": 1
+          },
+          "trend": {
+            "front": 1
+          }
+        },
+        "fail_effect": {
+          "text": "巡騎盯上了你，你在亂軍裡躲了大半夜才脫身，什麼也沒報成。",
+          "stamina": -15
+        }
+      },
+      {
+        "text": "遠遠看一陣就走",
+        "effect": {
+          "text": "鼓聲、喊殺聲隔著幾里地都聽得見，廣宗城頭的煙一直沒散。"
+        }
+      }
+    ]
+  },
+  {
+    "id": "stance_luzhi_refugees",
+    "title": "收容流民",
+    "image": "refugees",
+    "locations": [
+      "luzhi_camp",
+      "xiaquyang",
+      "haozu_fort",
+      "baima_ford"
+    ],
+    "text": "盧植下令開倉放糧，在下曲陽城外搭棚收容流民。路邊一群從鉅鹿逃出來的流民拖家帶口，老的走不動，小的哭著喊餓，領頭的漢子攔住你，問官府的粥棚在哪裡。",
+    "choices": [
+      {
+        "text": "背起走不動的老人，護送他們去下曲陽城外的粥棚",
+        "check": {
+          "stat": "con",
+          "difficulty": 5,
+          "by": "self"
+        },
+        "effect": {
+          "text": "你背著老漢走了大半天，把一行人送進粥棚。管棚的書吏記下人數，你把身上的乾糧也留給了他們。",
+          "stats": {
+            "good": 2
+          }
+        },
+        "fail_effect": {
+          "text": "走到半路你腿一軟，跟老漢一起摔在路邊，流民只好先把你們扶到樹下歇著。",
+          "stamina": -10
+        }
+      },
+      {
+        "text": "替他們登記名冊、分派去處",
+        "check": {
+          "stat": "wis",
+          "difficulty": 5
+        },
+        "effect": {
+          "text": "你把一家家的人口、籍貫寫得清清楚楚，誰該去粥棚、誰能投親，一一分派妥當。書吏誇你辦事利落。",
+          "stats": {
+            "good": 1,
+            "fame": 1
+          }
+        },
+        "fail_effect": {
+          "text": "人越圍越多，你寫亂了好幾家的名字，爭吵聲裡只得收起筆墨。",
+          "stamina": -10
+        }
+      },
+      {
+        "text": "指了路就走",
+        "effect": {
+          "text": "流民謝過你，扶老攜幼往下曲陽去了，塵土裡留下一串深深淺淺的腳印。"
+        }
+      }
+    ]
+  }
+]

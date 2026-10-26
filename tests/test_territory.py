@@ -21,7 +21,7 @@ OPENING = {
 }
 
 
-def _game(profile="weekend"):
+def _game(profile="week7"):
     c = third_party_gentry(real_content(profile))  # 這一檔測割據佔地：豪強是第三方的規則（豪強分屬兩軍見 test_gentry_allied.py）
     c.config.auto_open_first_season = True
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world())
@@ -44,7 +44,7 @@ def _flips(game):
 
 
 def test_the_spots_bases_and_the_two_luoyang_places():
-    c = real_content("weekend")
+    c = real_content("week7")
     assert territory.line_of(c, "changshe") == "yingru" and territory.line_of(c, "xiaquyang") == "jizhou"
     assert territory.line_of(c, "luoyang_road") is None and territory.line_of(c, "mengjin_ford") is None  # 寫的是 front，洛陽沒有戰線
     assert territory.line_of(c, "wan_city") is None  # 投靠點但不在戰線上
@@ -167,7 +167,7 @@ def test_the_switch_off_has_no_controller_and_the_old_enemies():
 
 
 def test_opening_a_prepared_season_starts_the_map_over(tmp_path):
-    c = real_content("weekend")
+    c = real_content("week7")
     store = open_world(tmp_path / "w.db")
     store.seed_first_season(c)
     season = store.get_season()

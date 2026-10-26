@@ -25,12 +25,12 @@ pytestmark = [pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，
 NAMES = ["S", "applyMapView", "mapReady", "mapTransform", "panClamp", "panZoom", "panBox", "panWire", "enterRegion", "toWorld",
          "mapTimeline", "mapWeekTo", "regionPick", "curView", "PAN_MAX", "PAN_SLOP", "renderTop", "mapFrame"]
 DRIVER = re.sub(r"wholeApp\(\[.*?\]\)", "wholeApp(" + repr(NAMES).replace("'", '"') + ")", test_prologue_web.DRIVER, count=1, flags=re.S)
-APP = Path(server.WEB) / "app.js"
+APP = webharness.APP  # 三個檔（main.js、map.js、app.js）接起來的那一份
 CSS = Path(server.WEB) / "style.css"
 
 
 def _game(at="yingchuan"):
-    c = real_content("weekend")
+    c = real_content("week7")
     conquest_rules(c)
     c.config.auto_open_first_season = True
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world())

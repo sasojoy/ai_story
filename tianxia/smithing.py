@@ -139,7 +139,7 @@ def forge_odds(state: GameState, content: Content, world: WorldStateStore, kind:
     done = state.player.forge_counts.get(recipe_key(kind, main, aux), 0)
     scored = [
         ("aux", rule.aux_tier.get(str(a.tier - m.tier), 0.0)),
-        ("wis", (team.stat_factor(content, wis) - 1) * 100 * rule.wis_weight),
+        ("wis", (team.stat_factor(content, wis, state.world) - 1) * 100 * rule.wis_weight),
         ("practice", min(rule.practice_cap, rule.practice_point * done)),
     ]
     scored += setting_points(state, content, attribute_of(world, content, kind, main, aux), slot_of(kind))

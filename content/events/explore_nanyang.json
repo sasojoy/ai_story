@@ -2,6 +2,7 @@
   {
     "id": "ny_wan_stonelock",
     "title": "校場石鎖",
+    "image": "fight",
     "locations": [
       "wan_city"
     ],
@@ -83,6 +84,7 @@
   {
     "id": "ny_wan_gatecheck",
     "title": "城門盤查",
+    "image": "town",
     "locations": [
       "wan_city"
     ],
@@ -169,12 +171,90 @@
         "stats": {
           "silver": -10
         }
-      }
+      },
+      "outcomes": [
+        {
+          "id": "inspect",
+          "tag": "看布：細看那塊黃布、指出不是頭巾",
+          "check": {
+            "stat": "wis",
+            "difficulty": 4
+          },
+          "effect": {
+            "text": "你指出布邊繡著小花，是女兒家的針線，不是黃巾的頭巾。守卒悻悻放人，老漢塞給你一把乾棗。",
+            "stats": {
+              "good": 2,
+              "silver": 5
+            },
+            "marks": {
+              "wan_city:辨布": 1
+            },
+            "contribution": 2
+          },
+          "fail_effect": {
+            "text": "你說了半天也說不出所以然，守卒嫌你囉嗦，連你的行囊也翻了一遍，順手拿走幾個錢。",
+            "stamina": -5,
+            "stats": {
+              "silver": -5
+            }
+          }
+        },
+        {
+          "id": "vouch",
+          "tag": "擔保：替老漢擔保、任守卒罰",
+          "check": {
+            "stat": "con",
+            "difficulty": 4
+          },
+          "effect": {
+            "text": "你挨了守卒兩記藤條，一聲沒吭。守卒反倒不好意思，揮手讓你們都過去。",
+            "stats": {
+              "good": 2,
+              "fame": 1
+            },
+            "marks": {
+              "wan_city:擔保": 1
+            },
+            "contribution": 2
+          },
+          "fail_effect": {
+            "text": "兩記藤條下來你疼得叫出聲，守卒冷笑說擔保也得有骨頭，罰了你一筆錢才放人。",
+            "stats": {
+              "silver": -15
+            }
+          }
+        },
+        {
+          "id": "bribe",
+          "tag": "塞錢：給守卒錢了事",
+          "cost": {
+            "silver": 10
+          },
+          "effect": {
+            "text": "十來枚錢遞過去，守卒把繩索收了回去。老漢千恩萬謝，挑著擔子進了城。",
+            "stats": {
+              "good": 1
+            },
+            "marks": {
+              "wan_city:買放": 1
+            },
+            "contribution": 1
+          }
+        },
+        {
+          "id": "leave",
+          "tag": "走開：不管、看著、對不上的",
+          "effect": {
+            "text": "你從旁邊走過，身後老漢的哭喊聲越來越遠。"
+          }
+        }
+      ]
     }
   },
   {
     "id": "ny_road_well",
     "title": "井中母子",
+    "image": "village",
     "locations": [
       "nanyang_road"
     ],
@@ -229,11 +309,15 @@
           }
         }
       }
+    ],
+    "tags": [
+      "旅人"
     ]
   },
   {
     "id": "ny_road_brokencart",
     "title": "斷軸牛車",
+    "image": "refugees",
     "locations": [
       "nanyang_road"
     ],
@@ -344,12 +428,117 @@
       "fail_effect": {
         "text": "法子不管用，你們被散兵追得四散奔逃，你跑得腿都軟了。",
         "stamina": -12
-      }
-    }
+      },
+      "outcomes": [
+        {
+          "id": "fight",
+          "tag": "攔敵：迎上去打退散兵",
+          "combat": "shanzei",
+          "effect": {
+            "text": "散兵被你打得丟下刀槍逃回坡後。逃難的人家趁機把箱籠搬上別的車，向你作揖道謝。",
+            "stats": {
+              "good": 2,
+              "fame": 1
+            },
+            "marks": {
+              "nanyang_road:護車": 1
+            },
+            "contribution": 3
+          },
+          "fail_effect": {
+            "text": "散兵人多，你被逼退到路旁，眼看他們搶走了兩口箱子揚長而去。",
+            "stamina": -15,
+            "stats": {
+              "fame": -1
+            }
+          }
+        },
+        {
+          "id": "lure",
+          "tag": "引開：把散兵引走",
+          "check": {
+            "stat": "agi",
+            "difficulty": 5
+          },
+          "effect": {
+            "text": "你在坡下兜了一大圈，散兵追著你跑遠了。等你繞回來，車隊已經換好車軸上路。",
+            "stats": {
+              "good": 2
+            },
+            "marks": {
+              "nanyang_road:引敵": 1
+            },
+            "contribution": 2
+          },
+          "fail_effect": {
+            "text": "跑到一半被追上，你挨了一刀背才甩脫，車隊那邊還是被搶了些糧。",
+            "stamina": -15
+          }
+        },
+        {
+          "id": "lift",
+          "tag": "換軸：扛起車身幫忙換軸",
+          "check": {
+            "stat": "str",
+            "difficulty": 6
+          },
+          "effect": {
+            "text": "你一肩扛起車身，車主飛快換上備用的車軸，車隊趕在散兵到前上了路，車主硬塞給你一些錢。",
+            "stats": {
+              "silver": 15,
+              "good": 1
+            },
+            "marks": {
+              "nanyang_road:換軸": 1
+            },
+            "contribution": 2
+          },
+          "fail_effect": {
+            "text": "車身太沉，你一鬆勁差點壓到車主的腳，只好眼睜睜看他們丟下車往前逃。",
+            "stamina": -10
+          }
+        },
+        {
+          "id": "plunder",
+          "tag": "趁火：跟散兵一起分了箱籠",
+          "check": {
+            "stat": "wis",
+            "difficulty": 5
+          },
+          "effect": {
+            "text": "你朝坡頂的散兵招了招手，一起撬開散在地上的箱籠，把裡頭的東西分了個乾淨。車主蹲在路邊，一聲也不敢吭。",
+            "stats": {
+              "silver": 10,
+              "good": -3
+            },
+            "marks": {
+              "nanyang_road:分箱籠": 1
+            }
+          },
+          "fail_effect": {
+            "text": "散兵嫌你來搶他們的份，刀背一橫把你趕開，還順手摸走了你腰間的錢袋。",
+            "stats": {
+              "silver": -10
+            }
+          }
+        },
+        {
+          "id": "leave",
+          "tag": "走開：不管、看著、對不上的",
+          "effect": {
+            "text": "你繞進路旁的麥田，回頭時看見散兵已經圍住了牛車。"
+          }
+        }
+      ]
+    },
+    "tags": [
+      "旅人"
+    ]
   },
   {
     "id": "ny_road_postbooth",
     "title": "郵亭遺簡",
+    "image": "road",
     "locations": [
       "nanyang_road"
     ],
@@ -444,6 +633,7 @@
   {
     "id": "ny_camp_wrestle",
     "title": "營中角力",
+    "image": "camp",
     "locations": [
       "nanyang_huangjin_camp"
     ],
@@ -505,6 +695,7 @@
   {
     "id": "ny_camp_talisman",
     "title": "符水驅疫",
+    "image": "altar",
     "locations": [
       "nanyang_huangjin_camp"
     ],
@@ -591,6 +782,7 @@
   {
     "id": "ny_yu_nightferry",
     "title": "夜渡淯水",
+    "image": "river",
     "locations": [
       "yu_river"
     ],
@@ -666,6 +858,7 @@
   {
     "id": "ny_yu_net",
     "title": "網底油包",
+    "image": "river",
     "locations": [
       "yu_river"
     ],
@@ -758,6 +951,7 @@
   {
     "id": "ny_yu_ropetoll",
     "title": "河灣攔繩",
+    "image": "river",
     "locations": [
       "yu_river"
     ],
@@ -914,12 +1108,111 @@
         "stats": {
           "silver": -10
         }
-      }
+      },
+      "outcomes": [
+        {
+          "id": "dive",
+          "tag": "潛過：從繩下潛過去、順手割繩",
+          "check": {
+            "stat": "agi",
+            "difficulty": 5
+          },
+          "effect": {
+            "text": "你貼著水面從繩下滑過，鈴鐺一聲沒響，順手還割斷了繩子，後面的漁船一擁而過。",
+            "stats": {
+              "good": 2,
+              "fame": 1
+            },
+            "marks": {
+              "yu_river:斷繩": 1
+            },
+            "contribution": 3
+          },
+          "fail_effect": {
+            "text": "你的髮髻勾到了繩子，鈴鐺響成一片，嘍囉用竹篙把你打回了岸邊。",
+            "stamina": -15
+          }
+        },
+        {
+          "id": "fight",
+          "tag": "動手：上岸打散嘍囉",
+          "combat": "louluo",
+          "effect": {
+            "text": "嘍囉們被你打得四散，船家們拍手叫好，七手八腳拆了攔繩。",
+            "stats": {
+              "good": 1,
+              "fame": 1
+            },
+            "marks": {
+              "yu_river:拆繩": 1
+            },
+            "contribution": 3
+          },
+          "fail_effect": {
+            "text": "嘍囉們一擁而上把你打下河，你游出老遠才敢上岸，身上的錢也被搜走了。",
+            "stamina": -15,
+            "stats": {
+              "silver": -10
+            }
+          }
+        },
+        {
+          "id": "haggle",
+          "tag": "講價：跟頭目談、少交些",
+          "check": {
+            "stat": "wis",
+            "difficulty": 3
+          },
+          "effect": {
+            "text": "你說船上只有幾條魚，頭目看你不像有錢人，收了幾個錢就放行了。",
+            "marks": {
+              "yu_river:講價": 1
+            },
+            "contribution": 1
+          },
+          "fail_effect": {
+            "text": "頭目不吃這套，硬是搜走了你身上的一串錢。",
+            "stats": {
+              "silver": -15
+            }
+          }
+        },
+        {
+          "id": "extort",
+          "tag": "收例錢：站到繩邊替嘍囉收米收錢",
+          "check": {
+            "stat": "str",
+            "difficulty": 4
+          },
+          "effect": {
+            "text": "你往繩邊一站，過往的漁船一條條給你交米交錢，嘍囉頭目分了你一份。船家們低著頭撐過去，沒人敢多看你一眼。",
+            "stats": {
+              "silver": 10,
+              "good": -2
+            },
+            "marks": {
+              "yu_river:收例錢": 1
+            }
+          },
+          "fail_effect": {
+            "text": "頭目嫌你搶了他的買賣，叫嘍囉把你推下河，你游出老遠才爬上岸。",
+            "stamina": -10
+          }
+        },
+        {
+          "id": "leave",
+          "tag": "走開：不管、看著、對不上的",
+          "effect": {
+            "text": "你把船停在灣外，看著一條條船在繩前交米，天黑才撐走。"
+          }
+        }
+      ]
     }
   },
   {
     "id": "ny_xinye_wallgap",
     "title": "連夜補牆",
+    "image": "town",
     "locations": [
       "xinye"
     ],
@@ -1004,12 +1297,91 @@
       "fail_effect": {
         "text": "你的法子沒幫上忙，反倒耽誤了工，挑了一夜土累得直不起腰。",
         "stamina": -10
-      }
+      },
+      "outcomes": [
+        {
+          "id": "carry",
+          "tag": "挑土：挑土挑到天亮",
+          "check": {
+            "stat": "con",
+            "difficulty": 5
+          },
+          "effect": {
+            "text": "你挑了一整夜的土，天亮時肩膀磨出了繭，腳下卻越走越穩。縣尉看在眼裡，多給了你一份工錢。",
+            "stats": {
+              "silver": 10,
+              "con": 1
+            },
+            "marks": {
+              "xinye:夯牆": 1
+            },
+            "contribution": 2
+          },
+          "fail_effect": {
+            "text": "挑到下半夜你腰一閃，被抬到牆根下躺著，看別人做完。",
+            "stamina": -15
+          }
+        },
+        {
+          "id": "ram",
+          "tag": "打夯：掄夯杵",
+          "check": {
+            "stat": "str",
+            "difficulty": 3
+          },
+          "effect": {
+            "text": "夯杵在你手裡一下一下砸得結實，這段牆比別處夯得都硬。工頭賞了你幾個錢。",
+            "stats": {
+              "silver": 10,
+              "good": 1
+            },
+            "marks": {
+              "xinye:硬牆": 1
+            },
+            "contribution": 2
+          },
+          "fail_effect": {
+            "text": "你掄了沒多久手臂就抬不起來了，工頭叫你去旁邊遞水。",
+            "stamina": -10
+          }
+        },
+        {
+          "id": "watch",
+          "tag": "瞭望：上牆頭守夜、示警",
+          "check": {
+            "stat": "agi",
+            "difficulty": 4
+          },
+          "effect": {
+            "text": "你在牆頭盯了一夜，下半夜發現城外有火光移動，及早示警，民夫們趕緊點起火把。",
+            "stats": {
+              "fame": 1,
+              "good": 1
+            },
+            "marks": {
+              "xinye:守夜": 1
+            },
+            "contribution": 2
+          },
+          "fail_effect": {
+            "text": "牆頭的土鬆，你一腳踩空摔了下來，蹭破了一大片皮。",
+            "stamina": -10
+          }
+        },
+        {
+          "id": "leave",
+          "tag": "走開：不管、看著、對不上的",
+          "effect": {
+            "text": "你在城門口看了一陣挑土的人，轉身進了城。"
+          }
+        }
+      ]
     }
   },
   {
     "id": "ny_wilds_runaways",
     "title": "石洞逃丁",
+    "image": "forest",
     "locations": [
       "nanyang_wilds"
     ],
@@ -1102,12 +1474,119 @@
         "stats": {
           "silver": -10
         }
-      }
+      },
+      "outcomes": [
+        {
+          "id": "mislead",
+          "tag": "誆兵：出洞給郡兵指錯方向",
+          "check": {
+            "stat": "wis",
+            "difficulty": 6
+          },
+          "effect": {
+            "text": "你說看見幾個人往北邊山路跑了，郡兵信以為真，罵罵咧咧地往北追去。洞裡的人向你拱手，消失在雨夜裡。",
+            "stats": {
+              "good": 2
+            },
+            "marks": {
+              "nanyang_wilds:指錯路": 1
+            },
+            "contribution": 2
+          },
+          "fail_effect": {
+            "text": "郡兵隊率看穿了你的謊話，把你押著搜了一遍，拿走了你身上的錢。",
+            "stats": {
+              "silver": -15
+            }
+          }
+        },
+        {
+          "id": "hide",
+          "tag": "同躲：跟他們一起躲到天亮",
+          "check": {
+            "stat": "con",
+            "difficulty": 5
+          },
+          "effect": {
+            "text": "你在冰冷的石壁邊一動不動蹲到天亮，火把三次照到洞口都沒發現裡頭的人。",
+            "stats": {
+              "good": 1,
+              "xinde": 8
+            },
+            "marks": {
+              "nanyang_wilds:藏丁": 1
+            },
+            "contribution": 1
+          },
+          "fail_effect": {
+            "text": "你蹲到腿麻打了個噴嚏，郡兵衝進洞裡，那些人四散逃竄，你也挨了好幾下槍桿。",
+            "stamina": -15,
+            "stats": {
+              "good": -1
+            }
+          }
+        },
+        {
+          "id": "fight",
+          "tag": "動手：堵在洞口打退郡兵",
+          "combat": "jun_bing",
+          "effect": {
+            "text": "郡兵被你打退下山，逃丁們趁機鑽進深山。只是郡府那邊，大概要記下你這個人了。",
+            "stats": {
+              "good": 2,
+              "fame": 1
+            },
+            "marks": {
+              "nanyang_wilds:退郡兵": 1
+            },
+            "contribution": 3
+          },
+          "fail_effect": {
+            "text": "郡兵人多勢眾，你被打倒在洞口，逃丁們也一個個被綁了下山。",
+            "stamina": -15,
+            "stats": {
+              "fame": -1
+            }
+          }
+        },
+        {
+          "id": "betray",
+          "tag": "告密：喊郡兵過來抓人、討賞",
+          "check": {
+            "stat": "wis",
+            "difficulty": 5
+          },
+          "effect": {
+            "text": "你朝洞外喊了一聲，火把一下子圍了過來。郡兵把逃丁一個個綁走，隊率賞了你幾個錢，被拖出洞的那個漢子回頭看了你一眼。",
+            "stats": {
+              "silver": 10,
+              "good": -2
+            },
+            "marks": {
+              "nanyang_wilds:告密": 1
+            }
+          },
+          "fail_effect": {
+            "text": "你喊得太早，洞裡的人一擁而出把你撞翻在泥裡，四散逃進深山，郡兵趕到時只罵你謊報。",
+            "stats": {
+              "fame": -1
+            }
+          }
+        },
+        {
+          "id": "leave",
+          "tag": "走開：不管、看著、對不上的",
+          "effect": {
+            "text": "你縮在洞口的陰影裡一動不動，火把晃過去，又遠了。"
+          }
+        }
+      ]
     }
   },
   {
     "id": "ny_wilds_herbcliff",
     "title": "崖上採藥",
+    "image": "forest",
     "locations": [
       "nanyang_wilds"
     ],
@@ -1164,11 +1643,15 @@
           }
         }
       }
+    ],
+    "tags": [
+      "旅人"
     ]
   },
   {
     "id": "lulin_gate",
     "title": "寨門盤問",
+    "image": "fort",
     "locations": [
       "lulin_zhai"
     ],
@@ -1241,6 +1724,7 @@
   {
     "id": "lulin_drill",
     "title": "寨前比刀",
+    "image": "fight",
     "locations": [
       "lulin_zhai"
     ],
@@ -1300,6 +1784,7 @@
   {
     "id": "lulin_snare",
     "title": "山道絆索",
+    "image": "forest",
     "locations": [
       "lulin_zhai"
     ],

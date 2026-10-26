@@ -36,7 +36,7 @@ const parts = [
   src.slice(src.indexOf("\n  // ── 修練 ──"), src.indexOf("\n  function pagePractice(")),
   ...input.fns.map(fn),
   input.stubs || "",
-  "return { " + [...input.fns, ...input.consts, "libFilter", "setLibFilter", "healButton", "meltView", "meltShown", "meltPickShown"].join(", ") + " };",  // 後面這幾個在上面那一段裡
+  "return { " + [...input.fns, ...input.consts, "libFilter", "setLibFilter", "meltView", "meltShown", "meltPickShown"].join(", ") + " };",  // 後面這幾個在上面那一段裡
 ];
 const H = new Function("S", "calls", parts.join("\n"))(S, calls);
 H.S = S; H.calls = calls; H.store = store;
@@ -96,7 +96,7 @@ def test_a_melted_starter_art_is_offered_again_in_every_town_and_learning_it_put
 def test_the_lesson_lands_in_the_collapsed_here_fold_not_in_the_action_bar():
     """網頁怎麼擺：行動列只認探索、遊歷、打坐、交友、移動；「學…」不在裡面，掉進「此地還能做 N 件事」摺疊。
     （QA 沒找到它的原因之一：摺疊預設是收著的。）"""
-    src = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    src = webharness.app_source()
     cells = re.search(r"const ACT_CELLS = \[(.*?)\n  \];", src, re.S).group(1)
     assert "learn:" not in cells
     assert "此地還能做 ${extras.length} 件事" in src and "const extras = m.options.filter((o) => !used.has(o.id))" in src
@@ -404,7 +404,7 @@ def test_the_record_is_a_player_field_and_needs_no_schema_change(content):
     from tianxia import database
     from tianxia.state import PlayerState, new_game_state
 
-    assert database.SCHEMA_VERSION == 6  # 兵器第二批（gear_recipes）升到 4、玩家傳（biographies）升到 5、商城升到 6；renames_told 自己是 PlayerState 的欄位，沒有升版
+    assert database.SCHEMA_VERSION == 7  # 兵器第二批（gear_recipes）升到 4、玩家傳（biographies）升到 5、商城升到 6、真人量表升到 7；renames_told 自己是 PlayerState 的欄位，沒有升版
     data = new_game_state(content, "舊檔").player.model_dump()
     assert data.pop("renames_told") == []
     assert PlayerState.model_validate(data).renames_told == []  # 沒有這個欄位的舊存檔照樣讀得進來
@@ -487,7 +487,7 @@ def test_the_same_order_reaches_the_page_data(real):
     assert page[:2] == ["jichu_tuna", "jichu_quanjiao"] and len(page) == 5  # 身上兩門同品質同成，照名字（吐 < 拳）
 
 
-PRACTICE_STUBS = 'const guideHtml = () => "", proGuide = () => "", createEntry = () => "";'  # 自創的入口（修練頁功法庫頂上）這裡不看
+PRACTICE_STUBS = 'const guideHtml = () => "", proGuide = () => "", createSub = () => "", shown = () => true, SELF_NEWS = [];'  # 自己頁底下的入口（自創、行狀）這裡不看
 CRAFT_STUBS = PRACTICE_STUBS + 'const furnaceSvg = () => "<svg></svg>", toast = () => {}, spinAt = () => "";'  # 自創那一頁的入口（自創單獨一頁）這裡不看
 CRAFT_FNS = ["pageCraft", "forgeBody", "forgeReady", "artFilter", "setArtFilter", "filterChips", "showArts",
              "pickMark", "craftView", "craftFilterRow", "craftChip", "kilnWarn", "kilnHtml", "madeCardHtml", "previewCardHtml", "forgeLineHtml", "craftSheetHtml", "craftSheetInner", "potGlow", "kilnPeek", "manualRows", "manualEntry", "bookIcon"]
@@ -692,43 +692,29 @@ def test_the_craft_choice_is_remembered_in_the_browser_too():
     assert out == ["意境", {"tx-arts-filter-craft": "意境"}]
 
 
-def test_the_practice_poll_redraws_when_the_heal_button_changes():
-    """療傷鈕能不能按、寫什麼，看內傷與銀兩：輪詢只在 MENXIA_SHOWN 列的欄位變了才重畫，heal 不在裡面的話，
-    銀兩夠不夠變了鈕還是舊的（review-ap2 的小毛病）。煉製頁沒畫療傷鈕，不必。"""
-    src = (ROOT / "web" / "app.js").read_text(encoding="utf-8").replace("\r\n", "\n")
+def test_the_practice_poll_no_longer_watches_the_heal_fields():
+    """療傷鈕 Joy 2026-10-25 從俠客頁拿掉了（療傷只在醫館，入口是江湖頁的「醫館療傷」）：輪詢重畫的欄位表（MENXIA_SHOWN）
+    不再看 heal、heal_cost——內傷或銀兩變了不必重畫俠客頁。"""
+    src = webharness.app_source().replace("\r\n", "\n")
     shown = {
         page: re.findall(r'"([a-z_]+)"', fields)
         for page, fields in re.findall(r"^\s+(practice|craft): \[(.*?)\],?(?:\s*//.*)?$", src[src.index("const MENXIA_SHOWN"):], re.M)
     }
-    assert "heal" in shown["practice"] and "heal_cost" in shown["practice"] and "heal" not in shown["craft"]
+    assert "heal" not in shown["practice"] and "heal_cost" not in shown["practice"] and "heal" not in shown["craft"]
 
 
-# ── 卷軸卡上的療傷鈕：joy 的兩行（內傷與價錢）為底，加上伺服器說的「按不下去」──
+# ── 俠客頁沒有療傷鈕、沒有閉關（Joy 2026-10-25）──
 
 
-def _heal_button(x, injury, **kw):
+@needs_node
+def test_the_self_page_has_no_heal_button_and_no_seclusion_form():
+    """療傷只在醫館做得了，入口是江湖頁「此地還能做」的「醫館療傷」（act:heal）；閉關現在的玩法用不到。「去做」只剩煉製與自創。"""
     html = run(
-        f"S.menxia = {json.dumps(x)}; S.main.status.injury = {injury}; return H.pagePractice();",
-        S={"main": {"status": {"injury": injury}}}, fns=["pagePractice"], stubs=PRACTICE_STUBS,
+        f"S.menxia = {json.dumps(_menxia(heal_cost=12))}; S.main.status.injury = 23; return H.pagePractice();",
+        S={"main": {"status": {"injury": 23}}}, fns=["pagePractice"], stubs=PRACTICE_STUBS,
     )
-    return re.search(r'<button class="btn" data-act="mx" data-op="heal"[^>]*>.*?</button>', html, re.S).group(0)
-
-
-@needs_node
-def test_the_heal_button_says_the_wound_and_the_price_and_is_greyed_out_when_it_cannot_be_pressed():
-    ok = _heal_button(_menxia(heal_cost=12), 23)
-    assert ">療傷<small>內傷 23・銀 12</small>" in ok and "disabled" not in ok
-    none = _heal_button(_menxia(heal_cost=0, heal={"ok": False, "why": "氣血無恙，不用療傷。"}), 0)
-    assert ">療傷<small>沒有內傷</small>" in none and "disabled" in none
-    poor = _heal_button(_menxia(heal_cost=12, heal={"ok": False, "why": "銀兩不足：療傷需要 12 兩。"}), 23)
-    assert "內傷 23・銀 12 不夠" in poor and "disabled" in poor and 'title="銀兩不足：療傷需要 12 兩。"' in poor
-
-
-@needs_node
-def test_an_old_server_without_the_heal_field_still_gets_the_wound_based_button():
-    old = _menxia(heal_cost=12)
-    del old["heal"]
-    assert "disabled" not in _heal_button(old, 23) and "disabled" in _heal_button(old, 0)
+    assert 'data-op="heal"' not in html and 'id="seclude"' not in html and "閉關" not in html
+    assert re.search(r'<section class="self-sec" aria-label="去做">.*?data-tab="craft".*?</section>', html, re.S)
 
 
 # ── 卷軸卡裡 W6、序章指路、閉關與意境的拒絕 ──
@@ -784,19 +770,21 @@ def test_a_greyed_melt_says_why_in_the_card_where_a_phone_player_can_read_it():
 
 
 @needs_node
-def test_the_hut_greys_out_seclusion_and_the_insight_melt_with_the_servers_reason():
+def test_the_hut_greys_out_the_insight_melt_with_the_servers_reason():
+    """閉關鈕 2026-10-25 拿掉了：伺服器還送 seclude_blocked，俠客頁不畫它。"""
     html = _practice([_art("w1", "武學", "甲拳", worn=True)], "S.insOpen = 'feng';",
                      seclude_blocked="草廬裡不能閉關。", insights=[{**_insight("feng", "風"), "blocked": "師父沒叫你熔意境。"}])
-    assert re.search(r'<button class="btn" type="submit" disabled>閉關', html) and "草廬裡不能閉關。" in html
+    assert "閉關" not in html
     assert re.search(r'data-act="melt-insight"[^>]*disabled>化成心得 10</button><small class="muted">師父沒叫你熔意境。</small>', html)
 
 
 @needs_node
 def test_the_library_keeps_its_title_and_the_chips_sit_under_it():
     html = _practice(_library_of_ten())
+    # 俠客頁重排（Joy 2026-10-24）：功法庫是一個摺疊，批量熔煉那一顆在摺疊的第一行、篩選緊接在它底下
     assert re.search(
-        r'<div class="label">功法庫 <small class="muted">武學與意境 0/50</small>'
-        r'<button class="linkish melt-mode" data-act="melt-mode">批量熔煉</button></div>\s*<div class="lib-filter">', html,
+        r'<summary>功法庫 <small class="muted">武學與意境 0/50</small></summary><div class="fold-body">'
+        r'<button class="linkish melt-mode" data-act="melt-mode">批量熔煉</button>\s*<div class="lib-filter">', html,
     )
 
 
@@ -928,12 +916,12 @@ def test_melting_an_insight_asks_the_same_way():
 
 
 def test_the_page_no_longer_uses_the_browsers_confirm_box():
-    src = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    src = webharness.app_source()
     assert not re.search(r"\bconfirm\(", src) and "window.confirm" not in src
 
 
 def test_the_melt_buttons_go_through_the_pages_own_layer():
-    src = (ROOT / "web" / "app.js").read_text(encoding="utf-8").replace("\r\n", "\n")
+    src = webharness.app_source().replace("\r\n", "\n")
     assert 'case "melt": askMelt(el); break;' in src and 'case "melt-insight": askMeltInsight(el); break;' in src
     assert 'case "art-filter":' in src
 

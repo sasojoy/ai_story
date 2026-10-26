@@ -95,7 +95,7 @@ def test_the_base_keeps_its_line():
     assert "沒有進度可推" in _note(game, "changshe")
 
 
-@pytest.mark.parametrize("profile", ["weekend", None, "season21"])  # 一個測試只開一季
+@pytest.mark.parametrize("profile", ["week7", None, "season21"])  # 一個測試只開一季
 def test_switch_off_the_line_never_mentions_a_siege(profile):
     """領地爭奪關著：行動列這一行沒有任何攻城的字（舊規則推線）；siege_state 關著也沒東西可讀。"""
     game = go(join(plain_game(profile), "huang"), "runan_wilds")

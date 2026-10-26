@@ -266,7 +266,7 @@ def test_poll_requests_between_actions_are_measured_separately(tmp_path):
     assert plain["poll_locked"] == []  # 預設不穿插，跟只量動作時一樣
 
 
-@pytest.mark.parametrize("profile", [None, "weekend"])
+@pytest.mark.parametrize("profile", [None, "week7"])
 def test_run_puts_back_everything_it_touched(tmp_path, monkeypatch, profile):
     """run 動了環境變數（TIANXIA_DB、TIANXIA_PROFILE）、內容設定的三個欄位與伺服器的角色表：跑完都要放回去，
     不然同一個 pytest 程序裡別的測試會被帶歪。「放回去」的對象是這個測試自己先設好的哨兵值，不是從目前狀態抄來的

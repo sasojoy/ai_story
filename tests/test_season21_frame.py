@@ -28,7 +28,7 @@ def test_the_season21_profile_turns_the_frame_on_and_nothing_else_does():
     cfg = c21.config
     assert cfg.season21 and cfg.season_weeks == 3 and cfg.season_days == 21
     assert cfg.newbie_real_hours == 48  # 新手期 48 小時已經上線（Joy 2026-10-17），只核對
-    assert not real_content().config.season21 and not real_content("weekend").config.season21
+    assert not real_content().config.season21
 
 
 def test_the_anchor_is_the_taiwan_monday_of_the_opening_week():
@@ -49,20 +49,11 @@ def test_a_wednesday_opening_reads_wednesday_and_ends_on_the_third_sunday():
     assert world.season_end_time(season, c21) == finale
 
 
-def test_the_weekend_season_ignores_the_opening_moment():
-    wk = real_content("weekend")
-    season = _season(wk, now=WED)
-    plain = _season(wk)
-    assert not season.season21 and season.cal_offset == 0
-    assert calendar.stamp_text(0, wk, season) == "第 1 週・週一 00:00"
-    assert season.schedule == plain.schedule
-
-
 def test_calendar_hours_tick_on_the_hour_after_an_odd_opening():
     c21 = real_content("season21")
     season = _season(c21, now=WED)
     assert calendar.next_hour_mark(0, c21, season) == 1800
-    wk = real_content("weekend")
+    wk = real_content("week7")
     weekend = _season(wk)
     for t in (0.0, 123.4, 5000.0):
         assert calendar.next_hour_mark(t, wk, weekend) == world._to_next_cal_hour(t, calendar.cal_hour_seconds(wk, weekend))
@@ -91,7 +82,7 @@ def test_open_season_stamps_the_anchor(world):
 
 def test_a_weekend_program_warns_on_a_season21_season():
     """Review Focus 2：21 天季蓋的章、這個程式卻用週末的設定開著：啟動時要印對不上那一行。"""
-    c21, wk = real_content("season21"), real_content("weekend")
+    c21, wk = real_content("season21"), real_content("week7")
     season = _season(c21, now=WED)
     assert calendar.profile_warning(wk, season) is not None
     assert calendar.profile_warning(c21, season) is None
@@ -116,15 +107,6 @@ def test_season21_has_its_own_timetable_in_time_order():
     assert at["guangzong"] == 2 * WEEK + 5 * DAY + 20 * HOUR and at["xiaquyang"] == 3 * WEEK
     [tianming] = c21.mandate_timetable
     assert timetable.default_time(tianming, c21, season) == 2 * WEEK + 6 * DAY + 20 * HOUR
-
-
-def test_the_weekend_timetable_is_untouched():
-    import json
-    from pathlib import Path
-
-    raw = json.loads((Path(__file__).parent.parent / "content" / "timetable.json").read_text(encoding="utf-8"))
-    expected = [(e["id"], e["week"], e.get("day", 0)) for e in raw if not e.get("mandate_only")]
-    assert [(e.id, e.week, e.day) for e in real_content("weekend").timetable] == expected
 
 
 def _opened(content, now):
@@ -159,16 +141,12 @@ def test_the_generals_march_out_by_day_in_season21():
     for fid in GENERALS:
         assert not figures.started(state, c21, fid, 1.4 * DAY) and figures.started(state, c21, fid, 1.6 * DAY), fid
     assert figures.started(state, c21, "bocai", 0.0)
-    wk = real_content("weekend")
-    weekend = world._season_vehicle(wk, _season(wk))
-    week2 = calendar.week_start(2, wk, weekend.world)
-    assert not figures.started(weekend, wk, "huangfusong", week2 - 60) and figures.started(weekend, wk, "huangfusong", week2 + 60)
 
 
 def test_the_two_buyers_foreshadow_is_open_by_day_in_season21():
     from tianxia.rules import check_condition
 
-    c21, wk = real_content("season21"), real_content("weekend")
+    c21 = real_content("season21")
     cond = c21.events["fs_ev_two_buyers"].condition.model_copy(update={"factions": []})
     state = world._season_vehicle(c21, _season(c21, now=MON))
     opened = {}
@@ -176,11 +154,6 @@ def test_the_two_buyers_foreshadow_is_open_by_day_in_season21():
         state.world.time = (day - 1) * DAY + HOUR
         opened[day] = check_condition(cond, state, c21)
     assert opened == {5: False, 6: True, 11: True, 12: False}
-    weekend = world._season_vehicle(wk, _season(wk))
-    wcond = wk.events["fs_ev_two_buyers"].condition.model_copy(update={"factions": []})
-    for week, ok in ((3, False), (4, True), (6, True), (7, False)):
-        weekend.world.time = calendar.week_start(week, wk, weekend.world) + 60
-        assert check_condition(wcond, weekend, wk) is ok, week
 
 
 def test_season21_content_must_carry_the_day_versions():
@@ -233,9 +206,6 @@ def test_the_stance_note_says_no_early_end_and_only_a_mandate_season_says_mandat
     assert "黃巾的態勢在 85 以上" in note and "官軍的態勢在 85 以上" in note  # 85 照樣算，只是到季末才判（1.1）
     season.mandate = True
     assert rules.stance_rule_note(vehicle, c21) == rules.MANDATE_RULE
-    wk = real_content("weekend")
-    _, weekend = _late(wk, 1, 50)
-    assert rules.stance_rule_note(weekend, wk).startswith("第 10 週起")
 
 
 def test_the_season21_ending_hints_drop_week_ten():
@@ -245,9 +215,6 @@ def test_the_season21_ending_hints_drop_week_ten():
     _, vehicle = _late(c21, 1, 50, now=MON)
     text = guide.quest_text(vehicle, c21)
     assert "第 10 週" not in text and "季末黃巾的態勢在 85 以上。" in text and "季末官軍的態勢在 85 以上。" in text
-    wk = real_content("weekend")
-    _, weekend = _late(wk, 1, 50)
-    assert "第 10 週起，黃巾的態勢一到 85" in guide.quest_text(weekend, wk)
 
 
 # ── Task 4：「今天」是現實的一天 ──
@@ -266,17 +233,6 @@ def test_today_turns_over_at_taiwan_midnight_in_season21():
     assert rules.world_day(c21, season, midnight - 1) == 2 and rules.world_day(c21, season, midnight) == 3
     late = season.schedule["finale"] + 2 * DAY  # 管理者把季末往後排：季曆寫到 23:59 為止，「今天」照樣換
     assert rules.game_day(c21, season, late) == 24 and rules.day_ends(c21, season, late) == late + DAY
-
-
-def test_the_weekend_day_is_unchanged():
-    from tianxia import rules
-
-    wk = real_content("weekend")
-    season = _season(wk, now=WED)
-    assert rules.day_seconds(wk, season) == DAY * 2.5 / 14
-    for t in (0.0, 5000.0, 20000.0, 3 * DAY + 7):
-        assert rules.game_day(wk, season, t) == int(t // (DAY * 2.5 / 14)) + 1
-        assert rules.world_day(wk, season, t) == int(t // DAY)
 
 
 def test_a_figure_daily_cap_resets_at_midnight_not_24_hours_after_opening():
@@ -312,7 +268,7 @@ def test_season_clock_resume_refuses_a_profile_without_the_season21_switch():
 def test_a_season21_program_warns_on_a_season_opened_without_it():
     """season_weeks 不蓋在季上：用 21 天季的設定開著的程式讀到還在跑的週末季（或 14 天季），季曆整個算錯，啟動時也要印對不上那一行
     （另一句，不是第一季規則那一句）。21 天季對 21 天季不印、季收了不印。"""
-    c21, wk = real_content("season21"), real_content("weekend")
+    c21, wk = real_content("season21"), real_content("week7")
     weekend = _season(wk)
     assert calendar.profile_warning(c21, weekend) == calendar.SEASON21_MISMATCH
     assert calendar.profile_warning(c21, _season(real_content())) == calendar.SEASON21_MISMATCH
@@ -350,19 +306,3 @@ def test_resuming_realigns_the_calendar_and_settles_what_was_due(world):
     assert calendar.stamp_text(season.schedule["changshe_fire"], c21, season) == "第 1 週・週六 20:00"
     assert season.schedule["finale"] + season.cal_offset == 3 * WEEK  # 季末照原本的現實日期
     assert rules_world.RESUME_SKIP_REAL in lines[0]
-
-
-def test_the_weekend_pause_is_unchanged(world):
-    """週末的季照舊：照整個曆時扣、季末往後延，偏移一直是 0。"""
-    from tianxia import world as rules_world
-
-    wk = real_content("weekend")
-    store = world
-    store.seed_first_season(wk)
-    assert store.open_season(wk, MON)
-    before = store.get_season().schedule["finale"]
-    assert store.pause_clock(MON + 600)
-    lines = _resume(store, wk, MON + 600 + 3 * HOUR)
-    season = store.get_season()
-    assert season.cal_offset == 0 and season.schedule["finale"] == before
-    assert rules_world.RESUME_SKIP_REAL not in lines[0]

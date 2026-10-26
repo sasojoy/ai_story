@@ -4,10 +4,15 @@
   "intro": "漢室衰微，宦官弄權，天下早已民不聊生。鉅鹿人張角自稱得「南華老仙」傳授《太平要術》，暗中以「蒼天已死，黃天當立，歲在甲子，天下大吉」串連八州信眾。甲子年春，黃巾軍揭竿而起，烽煙四起。你背著一個包袱，站在潁川郡城門口——亂世江湖，就從這裡開始。",
   "era_note": "東漢靈帝光和七年（公元184年，年底改元中平）春，張角的太平道在八州同時起事，史稱黃巾之亂。朝廷派皇甫嵩、朱儁、盧植領兵討伐。此時曹操是騎都尉，劉備、關羽、張飛還是涿郡鄉間的豪俠，孫堅在朱儁麾下任佐軍司馬，袁紹在洛陽與士人往來、尚未統兵，董卓是朝廷派在邊地的將領。諸葛亮、周瑜、陸遜都還是孩童；董卓入京、群雄討董、官渡、赤壁、三顧茅廬、三分天下，都是很多年以後的事。",
   "start_location": "yingchuan",
+  "week_themes": [
+    "黃巾起事，各郡募兵。先投一方，認識幾個人。",
+    "兩軍在潁汝、南陽、冀州相持。替你的人把地推過來。",
+    "廣宗決戰在即。這一週的每一步都會寫進列傳。"
+  ],
   "factions": [
-    {"id": "guan", "name": "官軍", "join_at": ["changshe", "wan_city", "luzhi_camp"], "sects": ["yingchuan_academy"], "goals": {"yingru": -1, "nanyang": -1, "jizhou": -1}, "defect_text": "營門的軍吏把你的名字從另一本冊子上劃掉，寫進了官軍的名冊：「過去的事不問，往後聽號令。」", "ink": {"color": "#3D5F8F", "soft": "#9DB4D3", "tint": "#DCE5F0", "short": "官", "label": "官軍"}},
-    {"id": "huang", "name": "黃巾軍", "join_at": ["huangjin_camp", "julu_altar", "nanyang_huangjin_camp"], "goals": {"yingru": 1, "nanyang": 1, "jizhou": 1}, "defect_text": "一個頭目往你額上綁了一條黃巾：「從今往後，你就是黃天的人了。」", "ink": {"color": "#B9821A", "soft": "#E7C778", "tint": "#F4E7C2", "short": "巾", "label": "黃巾"}},
-    {"id": "haoqiang", "name": "地方豪強", "join_at": ["zhuo_militia_hall", "cao_manor", "haozu_fort"], "sects": ["cao_manor"], "goals": {"geju": 1}, "allies": ["guan", "huang"], "defect_text": "管事在帳本上記了一筆：「哪裡來的不要緊，往後跟著咱們做。」", "ink": {"color": "#4E7D59", "soft": "#A5C6A6", "tint": "#DFEBDD", "short": "豪", "label": "豪強"}}
+    {"id": "guan", "name": "官軍", "join_at": ["changshe", "wan_city", "luzhi_camp"], "sects": ["yingchuan_academy"], "goals": {"yingru": -1, "nanyang": -1, "jizhou": -1}, "defect_text": "營門的軍吏把你的名字從另一本冊子上劃掉，寫進了官軍的名冊：「過去的事不問，往後聽號令。」", "ink": {"color": "#3D5F8F", "soft": "#9DB4D3", "tint": "#DCE5F0", "short": "官", "label": "官軍"}, "verdict_by": ["huangfusong", "luzhi"]},
+    {"id": "huang", "name": "黃巾軍", "join_at": ["huangjin_camp", "julu_altar", "nanyang_huangjin_camp"], "goals": {"yingru": 1, "nanyang": 1, "jizhou": 1}, "defect_text": "一個頭目往你額上綁了一條黃巾：「從今往後，你就是黃天的人了。」", "ink": {"color": "#B9821A", "soft": "#E7C778", "tint": "#F4E7C2", "short": "巾", "label": "黃巾"}, "verdict_by": ["zhangjiao", "bocai"]},
+    {"id": "haoqiang", "name": "地方豪強", "join_at": ["zhuo_militia_hall", "cao_manor", "haozu_fort"], "sects": ["cao_manor"], "goals": {"geju": 1}, "allies": ["guan", "huang"], "defect_text": "管事在帳本上記了一筆：「哪裡來的不要緊，往後跟著咱們做。」", "ink": {"color": "#4E7D59", "soft": "#A5C6A6", "tint": "#DFEBDD", "short": "豪", "label": "豪強"}, "verdict_by": ["caocao"]}
   ],
   "trends": [
     {"id": "huangjin", "name": "黃巾聲勢", "desc": "黃巾軍在潁川一帶的聲勢。到 50 官道將被切斷，到 80 潁川恐將淪陷。剿討能讓它下降。", "start": 25, "derived": {"yingru": 0.35, "nanyang": 0.25, "jizhou": 0.40}},
@@ -114,21 +119,21 @@
      "text": "黃巾大軍在潁川城下鎩羽而歸，中原暫得喘息；但波才仍在，下一場烽煙隨時會來。"},
     {"id": "default", "title": "中原依舊烽煙未散",
      "text": "這一季，沒有人能徹底改變中原的局勢。黃巾軍與漢室互有勝負，玉璽的傳說仍在流傳。"},
-    {"id": "s1_tianming_guan", "season_one": true, "mandate": true, "title": "漢室重光",
+    {"id": "s1_tianming_guan", "season_one": true, "mandate": true, "winner": "guan", "title": "漢室重光",
      "hint": "天命之季，官軍贏下天命之爭。", "text": "天命歸漢：七片玉璽聚到了洛陽的方向，朝廷的威望重新立了起來。"},
-    {"id": "s1_tianming_huang", "season_one": true, "mandate": true, "title": "黃天當立",
+    {"id": "s1_tianming_huang", "season_one": true, "mandate": true, "winner": "huang", "title": "黃天當立",
      "hint": "天命之季，黃巾贏下天命之爭。", "text": "天命歸於黃天：太平道的黃旗插上了冀州的每一座城頭。"},
-    {"id": "s1_huangtian", "season_one": true, "title": "黃天當立（無璽）", "stance_min": {"huang": 85},
+    {"id": "s1_huangtian", "season_one": true, "winner": "huang", "title": "黃天當立（無璽）", "stance_min": {"huang": 85},
      "hint": "第 10 週起，黃巾的態勢一到 85，這一季當場收場。", "hint_season21": "季末黃巾的態勢在 85 以上。", "text": "下曲陽沒有破，黃巾的聲勢席捲了半個天下。"},
-    {"id": "s1_pacified", "season_one": true, "title": "黃巾平定", "stance_max": {"huang": 15},
+    {"id": "s1_pacified", "season_one": true, "winner": "guan", "title": "黃巾平定", "stance_max": {"huang": 15},
      "hint": "第 10 週起，官軍的態勢一到 85，這一季當場收場。", "hint_season21": "季末官軍的態勢在 85 以上。", "text": "黃巾的最後一座城破了，餘眾散入山林。"},
-    {"id": "s1_warlords", "season_one": true, "title": "群雄並起", "stance_min": {"haoqiang": 85},
+    {"id": "s1_warlords", "season_one": true, "winner": null, "title": "群雄並起", "stance_min": {"haoqiang": 85},
      "hint": "到了季末，豪強的態勢在 85 以上。", "text": "官軍與黃巾兩敗俱傷，各地豪族築塢自守，天下從此四分五裂。"},
-    {"id": "s1_turbans_hold", "season_one": true, "title": "黃巾坐地", "stance_top": "huang",
+    {"id": "s1_turbans_hold", "season_one": true, "winner": "huang", "title": "黃巾坐地", "stance_top": "huang",
      "hint": "到了季末，黃巾的態勢最高。", "text": "下曲陽沒有破，黃巾在冀州站穩了腳跟。"},
-    {"id": "s1_turbans_retreat", "season_one": true, "title": "黃巾敗退", "stance_top": "guan",
+    {"id": "s1_turbans_retreat", "season_one": true, "winner": "guan", "title": "黃巾敗退", "stance_top": "guan",
      "hint": "到了季末，官軍的態勢最高。", "text": "下曲陽破了，可冀州的山裡仍有黃旗。"},
-    {"id": "s1_gentry", "season_one": true, "title": "豪強坐大", "stance_top": "haoqiang",
+    {"id": "s1_gentry", "season_one": true, "winner": null, "title": "豪強坐大", "stance_top": "haoqiang",
      "hint": "到了季末，豪強的態勢最高。", "text": "仗打完了，得利最多的卻是地方的豪族。"}
   ],
   "territory": {

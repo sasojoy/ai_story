@@ -2,6 +2,7 @@
   {
     "id": "youzhou_sangshu_drill",
     "title": "桑樹下操練",
+    "image": "village",
     "locations": [
       "loushang_village"
     ],
@@ -57,6 +58,7 @@
   {
     "id": "youzhou_mat_weaver",
     "title": "織蓆人家",
+    "image": "village",
     "locations": [
       "loushang_village"
     ],
@@ -112,6 +114,7 @@
   {
     "id": "youzhou_jieshe_stage",
     "title": "結社招人",
+    "image": "fight",
     "locations": [
       "zhuo_militia_hall"
     ],
@@ -164,6 +167,7 @@
   {
     "id": "youzhou_juma_flood",
     "title": "急流難渡",
+    "image": "river",
     "locations": [
       "juma_river"
     ],
@@ -208,6 +212,7 @@
   {
     "id": "youzhou_reed_boat",
     "title": "蘆葦叢中",
+    "image": "river",
     "locations": [
       "juma_river"
     ],
@@ -259,6 +264,7 @@
   {
     "id": "youzhou_hunter_cabin",
     "title": "獵戶木屋",
+    "image": "forest",
     "locations": [
       "yanshan_foot"
     ],

@@ -2,6 +2,7 @@
   {
     "id": "nanyang_camp_conscripts",
     "title": "裹挾入營",
+    "image": "camp",
     "locations": [
       "nanyang_huangjin_camp"
     ],
@@ -61,6 +62,7 @@
   {
     "id": "nanyang_camp_ledger",
     "title": "糧倉對帳",
+    "image": "camp",
     "locations": [
       "nanyang_huangjin_camp"
     ],
@@ -122,6 +124,7 @@
   {
     "id": "nanyang_yu_grainboat",
     "title": "淺灘糧船",
+    "image": "river",
     "locations": [
       "yu_river"
     ],
@@ -184,6 +187,7 @@
   {
     "id": "nanyang_xinye_notice",
     "title": "徵糧告示",
+    "image": "office",
     "locations": [
       "xinye"
     ],
@@ -236,6 +240,7 @@
   {
     "id": "nanyang_xinye_lost_child",
     "title": "城牆下",
+    "image": "refugees",
     "locations": [
       "xinye"
     ],
@@ -287,6 +292,7 @@
   {
     "id": "nanyang_wilds_scout",
     "title": "草叢傷兵",
+    "image": "field",
     "locations": [
       "nanyang_wilds"
     ],

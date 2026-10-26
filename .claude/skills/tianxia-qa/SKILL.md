@@ -59,6 +59,8 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
   - **要驗序章或初入江湖的某一步**：先走網頁那一條建角色，再直接改 `characters.data` 裡的 `player.tutorial_step` 與 `player.location`（`tutorial.json` 的 `prologue_steps`＝11，0～10 在草廬、`location` 要是 `mentor_hut`；11～14 是初入江湖 e1～e4，`location` 換成 `yingchuan`；15 走完）。伺服器開著也能改：`sqlite3.connect(db, timeout=30)`、`BEGIN IMMEDIATE`，下一個請求會從資料庫重讀。
   - 不同資料庫的帳號用不同的 `--local-dir`，才不會互相蓋掉。
 - **管理者**：設環境變數 `TIANXIA_ADMINS=驗收官`，再建一個叫這個名號的角色。全服第一季停在「籌備中」，要用管理者開季。
+- **`set_password.py` 的帳號只收英文數字底線（3～20 字）**，名號才能是中文；PowerShell 傳中文引數給 python 會變亂碼（2026-10-26 減法季 7b 複驗）：寫一支 python 用 `subprocess.run([py, set_password.py, 帳號, "--character", 名號, ...], env=..., encoding="utf-8")` 一個一個建（範本 `scratchpad/qajf7bb/mkacct.py`），從 PowerShell `python -X utf8` 跑。
+- **管理者 `fast_forward {hours}` 推的是世界（季曆）小時**，不是現實小時：week7 開季是第 1 天 06:59，推 7 小時是第 1 天 14:00，再推 81 小時是第 4 天 23:00，再推 1 小時是第 5 天 00:00（剛好第 3 段起點，上架時刻的邊界）。
 - **啟動**：用 PowerShell `Start-Process -FilePath <python> -ArgumentList "-u","server.py","--port","<埠>" -WorkingDirectory <複本> -RedirectStandardOutput out.log -RedirectStandardError err.log -WindowStyle Hidden -PassThru`。
   - 記下回傳的 PID。
   - 讀 log 用 `Get-Content out.log -Encoding UTF8`，核對印出來的「資料庫：」與「設定：」對不對。
@@ -72,6 +74,8 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
 - 打 API 的腳本從 **bash** 跑，PowerShell 會把 JSON 參數弄壞。用 `requests.Session()`，先 `POST /api/login {login,password}`。
 - 被引擎擋的動作（非管理者打管理者的 op）回 400，body 是 `{"error": "只有管理者能這麼做。"}`；找不到的 op 才是 404 `{"detail": "Not Found"}`——檢查字樣讀 `error`，不是 `detail`（2026-10-21，FB-609 複驗）。
 - **玩家**：`GET /api/main` 會同步並回 `status`／`options`／`latest`；按選項是 `POST /api/choose {id}`；其他動作走 `POST /api/do/<op>`。回傳的 `message` 是 HTML，`main` 是畫面。
+  - 移動是 `POST /api/travel {"place": <地點 id>, "mode": "dash"|"walk"}`，鍵是 `place`（寫成 `to` 回 200 但原地不動、體力不扣；看回傳的 `arrived`）。配點是 `POST /api/do/allocate {"stat": "str"}`。
+  - PowerShell 工具的 `Set-Location` 會留到下一次呼叫（跑 `set_password.py` 時 cd 進複本，之後的 `git` 就在複本裡跑）：用完 cd 回自己的工作樹，或 python 一律寫絕對路徑、不 cd。
 - **管理者**也走 `POST /api/do/<op>`，不是 `/api/admin`。常用的：
   - `open_season`、`end_season`、`next_season`
   - `fast_forward {hours}`
@@ -177,6 +181,18 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
   - **反查**要換成「甲或乙去打聽看客、看客再 `tavern_do("trace")`」：反查讀的是**打聽的人**的名氣（`person_fame(asker)`），所以旁觀客站的位置不重要，要讓打聽的人名望 0（風聲不具名）、打聽度剛好在 2／3 的界線上。
   - **買兇找人整條路**：兩個敵陣營的人各 `tavern_do("seek", 目標)` 再 `tavern_do("hit", 目標, "0")` 雇（散人沒有仇、雇不成，兩個世界回同一句拒絕），目標走到城外（`location = "runan_wilds"`），每隔 600 秒叫一次 `g._tavern_hit_check()`，比每一次擲「找到／沒找到」的序列；**不要比找到之後的戰報字**：持有者本人的威力含碎片（戰力 ×1.1），同一組亂數也會打出不同的結果，那是設計，旁人看不到。
 - **用自己亂數的掉落**（名號＋戰報流水號）：先照種子挑出擲得中的名號建角色，再實打。
+- **減法季（`Config.jianfa`）顯示字小修的驗法**（2026-10-26 2c 複驗，`a772b958` 對 `7791d2ff`）：
+  - **「得：」帳對存檔差額**：每一趟快照前後的經驗、心得、銀兩、丹、素材，逐項對帳上的數字；兩版（`git archive` 各解一份、同一組亂數）各跑一次再逐趟比。**每個新角色第一趟的存檔差額一定多 +2 顆回體丹**（新手目標 `level5`、`side` 各 +1，第一次 `choose` 就發），不是漏帳，先動作一趟再量或把它排除。判「多出一則單獨的『心得 +N』訊息」要排除戰報卡片明細（`⚔` 那一則後面緊跟的得失行），不然每場仗都誤報。
+  - **一個行程只 `boot` 一種設定**：同一個行程連叫兩次 `qc.boot`（兩種 profile）會把 stdout 包兩次（`I/O operation on closed file`）、第二個資料庫 `open_season` 的 assert 也會掛；每種設定一個行程，PowerShell 同一個呼叫裡 `Start-Process` 一排再 `Wait-Process`。
+  - **開著的那一份對照要分類，不是看總差**：關著的季 0 行差就過；開著的季用 token diff 把每一對不同的行切成片段彙整（按 `，、。「」（）|` 切 token 再 `difflib`；直接字元層級 `SequenceMatcher` 在幾 KB 的行上會跑好幾分鐘），每一類都要對得上這一批改的東西；存檔另外逐欄走 JSON 比，**江湖紀錄與滾動 `log` 會因為訊息變少而整串位移，要排除它們**才看得出實際入帳（心得、經驗、素材、丹、銀兩）有沒有動。
+  - **探索一顆開著時城裡操練（`act:drill`）不畫、直叫回「（此刻無法這麼做。）」**：只有操練會叫的事件型提示（`h_drill_done`）在那種季玩不到，只能用 `hints.note_for(state, content, id)` 驗字（四種身分、六種季各印一次，兩版逐字比），可達性另外按按看。
+  - **開實機看**：`/api/main` 有 `mostly` 與 `options`（`act:explore` 的 `label`＝「探索（體力 18・野外多料）」），行動列的格子是 `button.act-ink`（小字在 `small`），「剛剛」那張卡是 `.now-one`（拿 `innerText` 就有「得：…」那一行與底下的標籤）；讓角色在同一個頁面按鈕、用頁面自己的 `fetch('/api/main')` 前後各讀 `status.xinde`／`status.exp.have` 對帳，不必再用 `requests` 登入（再登入同一帳號會把分頁的 session 踢掉）。出門一趟抽到「有悟」那一拍會把選單換成 `sense:0..3`，要先按掉才能再按探索。
+- **列傳、評曰、商城的票**（2026-10-26 批 7b，`cb202c8c` 對 `9f68f257`；範本 scratchpad `qajf7b\`：`kit.py`、`v2_annals.py`、`v3_mall.py`、`cmpq\cmp_qa.py`）：
+  - **腳本 `import server` 之後先 `server.CONTENT = c`**：`server.zhuan_extras`（公開頁的紀念印與插畫）照模組層的 `CONTENT` 判開關，那一份照啟動時的環境變數載；腳本沒設 `TIANXIA_PROFILE` 就是不帶設定、減法季關著，回 `{}`，看起來像「公開頁沒蓋印」。
+  - **收季要哪一軍贏就自己給結局**：`store.mutate_season(lambda s: end_season(_season_vehicle(c, s), c, store, ending=<scenario.endings 裡 winner 是那一軍的>))`（`from tianxia.world import end_season, _season_vehicle`），角色要先存進資料庫（論功讀 `CharacterStore.books`）；之後每人同步一次才記論功的行狀。
+  - **假模型**：一個物件有 `chat_structured(messages, schema, **kw)`，照系統提示第一句裡的人物名回 `schema(verdict="…")` 或丟例外；`game.client = fake`、`server.QUEUE = None` 再叫 `server.verdict_text(game, job)`，B 段清理（假名、數字、太長、簡轉繁）都驗得到。實機模型擋掉時 `/api/zhuan/write` 背景十幾秒照備援寫成（`by: rule`、評曰全照固定句），輪詢 `/api/zhuan?season=N` 的 `written`。
+  - **季中上架照季曆的週**：把季的 `time` 改成 `calendar.week_start(k, c, s) ± 600` 再讓角色同步，讀 `g._mall_moment()` 與 `g.mall_view()`；week7 的週是段（第 3 段＝第 5 天）。退款是管理者 `/api/do/mall_refund {name, id, note}`，編號從 `/api/admin/mall {name}` 的 `purchases[].id` 拿。
+  - 公開頁有額外樣式時 `<style>` 裡本來就有 `.zh-art`，判有沒有插畫要找 `<figure class="zh-art"`；要看有圖的樣子，在複本放一個假的 `web/img/zhuan/<鍵>.webp`（驗完刪掉）。
 - **注意**：
   - 腳本用暫存的 `TIANXIA_DB`；設定檔要用 `load_content(Path("content"), profile)` 傳進去，環境變數讀不到。
   - 超過兩分鐘的跑法放背景。

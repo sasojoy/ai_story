@@ -352,7 +352,7 @@ def test_the_reader_draws_each_state():
 
 
 def test_the_page_wires_the_entries_and_the_handlers():
-    src = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    src = webharness.app_source()
     for needle in ('case "zhuan-open"', 'case "zhuan-write"', 'case "zhuan-share"', 'case "zhuan-send"', 'case "zhuan-rewrite"',
                    "m.zhuan ? zhuanEntry(", "歷季列傳", 'api(`/api/zhuan?season='):
         assert needle in src, needle

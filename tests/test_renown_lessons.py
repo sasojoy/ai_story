@@ -11,7 +11,7 @@ from tianxia.state import new_game_state
 
 
 def test_lean_reaches_the_art_and_resonance():
-    c = real_content("weekend")
+    c = real_content("week7")
     art = team.resolve_art("shouyi_jian", c, open_world())
     assert art.lean == "正" and team.resolve_art("xiaolin_gong", c, open_world()).lean == "邪"
     assert team.resolve_art("jichu_tuna", c, open_world()).lean == "無"  # 現有的不加正邪
@@ -21,7 +21,7 @@ def test_lean_reaches_the_art_and_resonance():
 
 
 def test_title_gate():
-    c = real_content("weekend")
+    c = real_content("week7")
     s = new_game_state(c, "甲")
     skill = c.skills["yanghao_jue"]
     s.player.stats.update({"good": 10, "silver": 100})
@@ -33,7 +33,7 @@ def test_title_gate():
 
 
 def test_the_wicked_gate_says_the_female_title():
-    c = real_content("weekend")
+    c = real_content("week7")
     s = new_game_state(c, "甲")
     s.player.gender = "女"
     s.player.stats.update({"evil": 2, "silver": 100})
@@ -41,7 +41,7 @@ def test_the_wicked_gate_says_the_female_title():
 
 
 def test_lessons_off_hides_the_four():
-    c = real_content("weekend")
+    c = real_content("week7")
     c.config.renown.lessons = False
     s = new_game_state(c, "甲")
     s.player.location = c.skills["shouyi_jian"].learn.at
@@ -50,7 +50,7 @@ def test_lessons_off_hides_the_four():
 
 
 def test_learning_one_at_the_academy():
-    c = real_content("weekend")
+    c = real_content("week7")
     s = new_game_state(c, "甲")
     s.player.location = "yingchuan_academy"
     s.player.stats.update({"good": 6, "silver": 50})
@@ -61,12 +61,12 @@ def test_learning_one_at_the_academy():
 
 
 def test_the_greenwood_fort_opens_with_the_season_only_when_lessons_are_on():
-    c = real_content("weekend")
+    c = real_content("week7")
     c.config.auto_open_first_season = True
     g = Game.new(c, "甲", rng=random.Random(0))
     assert renown.GREENWOOD_FLAG in g.state.world.flags
     assert atlas.is_unlocked(c.locations["lulin_zhai"], g.state, c)
-    off = real_content("weekend")
+    off = real_content("week7")
     off.config.renown.lessons = False
     off.config.auto_open_first_season = True
     h = Game.new(off, "乙", rng=random.Random(0), world=g.world)
@@ -81,14 +81,14 @@ def test_the_greenwood_fort_is_strongest_in_mountain():
     悟得到風與山，最濃是山；這裡用得到的有所感場景線索指得到慢（山）。"""
     from tianxia.insights import scenes_for
 
-    c = real_content("weekend")
+    c = real_content("week7")
     fort = c.locations["lulin_zhai"]
     assert fort.insight_strong == "shan" and c.insights["shan"].strong_line
     assert any("慢" in scene.hints for scene in scenes_for(fort, c))
 
 
 def test_the_virtue_perks_name_the_lessons():
-    c = real_content("weekend")
+    c = real_content("week7")
     assert "潁川書院教守義劍" in renown.virtue_perks(c, "俠", 1) and "潁川書院教養浩訣" in renown.virtue_perks(c, "俠", 2)
     assert "綠林山寨教剪徑刀" in renown.virtue_perks(c, "寇", 1) and "綠林山寨教嘯林功" in renown.virtue_perks(c, "寇", 2)
     c.config.renown.lessons = False
@@ -96,7 +96,7 @@ def test_the_virtue_perks_name_the_lessons():
 
 
 def test_the_boost_line_names_the_title_when_the_path_matches():
-    c = real_content("weekend")
+    c = real_content("week7")
     w = open_world()
     s = new_game_state(c, "甲")
     s.player.member.wugong_id = "shouyi_jian"

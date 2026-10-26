@@ -19,6 +19,7 @@ from typing import get_args
 from pydantic import BaseModel, ValidationError
 
 from . import encounter
+from . import explore_one  # 減法季探索一顆（批 2）：只 import 標準庫，載入時驗表與段落句子（check_explore_one、check_outing_lines）
 from . import forge_secrets as forge_rules
 from . import hints as hint_rules
 from .companion_agent import DIALOGUE_TAGS
@@ -26,10 +27,11 @@ from .encounter import FALLBACK_TIER, TIER_RATIOS
 from .front_lines import BAND_KEYS, GEJU_KEYS
 from .materials import DEFAULT_DROPS, TIER_NAMES
 from .models import (
-    FRONT_KEY, GLOW_KEYS, GOOD_HORSE, MOVES, RECRUITER_ALLIED_FIELDS, REVEAL_KEYS, ROADS, STATS, TREASURE_EFFECTS, WEAPON_KINDS, Attribute, BattleDef, CharacterDef, CheckVoice,
+    ArtBook,
+    BEST_OF, FRONT_KEY, GLOW_KEYS, GOOD_HORSE, MOVES, RECRUITER_ALLIED_FIELDS, REVEAL_KEYS, ROADS, STATS, TREASURE_EFFECTS, WEAPON_KINDS, Attribute, BattleDef, CharacterDef, CheckVoice,
     CombatLines, Condition, Config, Content, CraftNames, CreateForms, DuelBoss, Effect, Event, FigureDef, FollowerDef, ForgeSecret, Foreshadows, FrontLines, GatherBranch, GearBook,
-    GiftDef, Hints, MingtieContent, InsightDef, Location, MallItem, OppDef,
-    InsightScene, OrdersContent, PresetRecipe, PromotionDef, RealDay, RealSlot, RelationDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, ShardDef,
+    GiftDef, Hints, MingtieContent, InsightDef, Location, MallItem, MarkRule, MarkText, OppDef,
+    InsightScene, Opening, OrdersContent, PresetRecipe, PromotionDef, RealDay, RealSlot, RelationDef, SecretRecipe, MapLayout, Material, RoadSight, Scenario, Sect, ShardDef,
     SimRumor, SkillDef,
     SignatureArmDef, SteedDef, Squad, Tier4Named, TimetableEvent, TraitBook, TreasureDef, Tutorial, allow_known,
 )
@@ -129,6 +131,9 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         mall=_index(MallItem, _read(root / "mall.json")) if (root / "mall.json").exists() else {},  # 商城的商品（joy 寫）
         relations=[_build(RelationDef, raw) for raw in _read(root / "relations.json")] if (root / "relations.json").exists() else [],
         gather_branches=_index(GatherBranch, _read(root / "gather_branches.json")) if (root / "gather_branches.json").exists() else {},
+        mark_rules=[_build(MarkRule, raw) for raw in _read(root / "mark_rules.json")] if (root / "mark_rules.json").exists() else [],
+        outing_lines=_read(root / "outing_lines.json") if (root / "outing_lines.json").exists() else {},  # 探索一顆的段落（減法季批 2）
+        verdicts=_read(root / "verdicts.json") if (root / "verdicts.json").exists() else {},  # 人物評曰的固定句（減法季批 7b-2）
         figures=_index(FigureDef, _read(root / "figures.json")) if (root / "figures.json").exists() else {},
         duels=_index(DuelBoss, _read(root / "duels.json")) if (root / "duels.json").exists() else {},
         gear=_gear(root / "gear.json"),
@@ -137,7 +142,9 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         events=events,
         map=MapLayout(**_read(root / "map.json")),
         tutorial=Tutorial(**_read(root / "tutorial.json")),
+        opening=Opening(**_read(root / "opening.json")) if (root / "opening.json").exists() else None,  # 開局第一分鐘（減法季批 7）
         hints=Hints(**_read(root / "hints.json")) if (root / "hints.json").exists() else Hints(),
+        art=ArtBook(**_read(root / "art.json")) if (root / "art.json").exists() else ArtBook(),  # 圖的分類表（減法季批 8）
     )
     content.config.admins = _with_local_admins(content.config.admins)
     validate(content)
@@ -221,6 +228,10 @@ def _scale_marks(obj, scale: float) -> None:
         for limits in (obj.marks_min, obj.marks_max):
             for key, value in limits.items():
                 limits[key] = math.ceil(value * scale)
+    if isinstance(obj, MarkRule):  # 痕跡過門檻（減法季批 4）同一個換算
+        obj.threshold = math.ceil(obj.threshold * scale)
+    if isinstance(obj, MarkText):
+        obj.min = math.ceil(obj.min * scale)
     if isinstance(obj, BaseModel):
         for name in type(obj).model_fields:
             _scale_marks(getattr(obj, name), scale)
@@ -236,6 +247,11 @@ MARKS_TOKEN = re.compile(r"\{marks:([^{}]+)\}")  # 文字裡的模糊人數（ru
 STEP_PLACEHOLDER = re.compile(r"\{([^{}]*)\}")  # 序章步驟文字裡要換掉的字（{武學}、{意境}、{心得}）
 LORE = "lore"  # 博聞（team.LORE）：只靠升級的點數增加，任何獎勵都不能給、不能扣（validate 的 no_lore）
 FREE_TEXT_REWARDS = ("silver", "fame", "good", "xinde", "str", "agi", "con", "wis")  # 隨口應對的獎勵不能超過檢定選項的這幾項（博聞不在內：一律不能給）
+# 隨口應對分岔（減法季整合設計 5.1、5.9；check_outcomes）：一則 2～4 種後果（最後一種是 fallback），另外最多一種作惡的
+OUTCOMES_MIN, OUTCOMES_MAX = 2, 4
+OUTCOME_CHECK_STATS = ("str", "agi", "con", "wis", "lore")  # 後果的檢定（含 best_of 的每一項）看得了哪幾項
+OUTCOME_EFFECT_FIELDS = {"text", "stats", "stamina", "marks", "contribution"}  # 後果的效果只准寫這幾樣（公開的只有後果與痕跡，5.1）
+OUTCOME_DIGITS = re.compile(r"[0-9０-９]")  # 後果的敘事不寫阿拉伯數字（數字只能是引擎的）
 
 
 LOCAL_DIR = Path(__file__).resolve().parent.parent / ".local"
@@ -709,6 +725,84 @@ def check_xingshi_lines(c: Content, need) -> None:
             check(f"{group}.{key}", text)
 
 
+TRAVELER_TAG = explore_one.TRAVELER  # 野外的事件拍偏向救助旅人那一類（減法季整合設計 4.1）：從現有的野外事件挑合適的標上（PM 2026-10-25 第 7 件）
+TRAVELER_MIN = 3  # 野類地點抽得到的旅人事件至少幾則（PM 2026-10-25 第 7 件）
+
+
+def check_explore_one(c: Content, need) -> None:
+    """減法季探索一顆（整合設計 4.1，批 2；Config.jianfa 開著的設定才驗，測試內容與週末設定關著不驗）：
+    每個地點都靠自己的標籤歸得到一張探索表（explore_one.match；拼錯的標籤會靜靜掉進最後一張）；城裡換上的地痞是認得的隊伍、
+    沒有陣營（不然會被當成自己人）；標了「旅人」的事件至少 TRAVELER_MIN 則抽得到、而且都在野類的地點。
+    四欄加起來 100、標籤只落一張表在數字模型（jianfa_numbers）自己驗。"""
+    from .events import event_matches_location  # noqa: PLC0415  events → rules → …：在函式裡 import
+
+    cfg = c.config.jianfa
+    if not (cfg.enabled and cfg.explore_one):
+        return
+    for loc in c.locations.values():
+        need(explore_one.match(cfg, loc.tags) is not None,
+             f"地點 {loc.id}：標籤 {loc.tags} 一張探索表都對不上（Config.jianfa.explore_tables；減法季探索一顆照它抽）")
+    for sid in cfg.town_foes:
+        need(sid in c.squads and c.squads[sid].faction is None, f"config.jianfa.town_foes：{sid} 要是認得的隊伍、不能有陣營")
+    wild = {loc.id for loc in c.locations.values() if explore_one.kind_of(cfg, loc).kind == explore_one.WILD}
+    travelers = []
+    for event in c.events.values():
+        if TRAVELER_TAG not in event.tags:
+            continue
+        places = {loc.id for loc in c.locations.values() if event_matches_location(event, loc)}
+        need("explore" in event.actions and bool(places) and places <= wild,
+             f"事件 {event.id}：標了「{TRAVELER_TAG}」要是探索抽得到、只在野類地點的事件（現在在 {sorted(places - wild) or '哪裡都不在'}）")
+        travelers.append(event.id)
+    need(len(travelers) >= TRAVELER_MIN, f"標了「{TRAVELER_TAG}」的野外事件只有 {len(travelers)} 則，至少要 {TRAVELER_MIN} 則")
+
+
+def check_outing_lines(c: Content, need) -> None:
+    """探索一顆出門一趟的段落句子（content/outing_lines.json，減法季批 2；字待 joy 潤）：寫了的只能是認得的組與鍵
+    （explore_one.LINE_KEYS），每一句照 explore_one.SAMPLE 填得進去、只用繁體中文、不寫阿拉伯數字（數字只在「得：…　失：…」那一行，
+    是引擎拼的）；Config.jianfa 的探索一顆開著時每一個鍵都要有句子（沒寫的會退回 explore_one.FALLBACK 那一句，正式內容不准）。"""
+    lines = c.outing_lines
+    for group, table in lines.items():
+        keys = explore_one.LINE_KEYS.get(group)
+        need(keys is not None and isinstance(table, dict), f"outing_lines：不認得的組 {group}（要寫成「鍵：一串句子」）")
+        for key, pool in (table.items() if keys is not None and isinstance(table, dict) else ()):
+            need(key in keys, f"outing_lines.{group}：不認得的鍵 {key}")
+            need(isinstance(pool, list) and bool(pool), f"outing_lines.{group}.{key}：要寫成一串句子")
+            for text in pool if isinstance(pool, list) else []:
+                where = f"outing_lines.{group}.{key}"
+                try:
+                    filled = str(text).format(**explore_one.SAMPLE)
+                except (KeyError, IndexError, ValueError) as e:
+                    need(False, f"{where}：「{text}」填不進去（{e}）")
+                    continue
+                need(bool(filled.strip()) and not any(ch.isdigit() for ch in str(text)), f"{where}：「{text}」不能空、不能有數字")
+                need(to_traditional(str(text)) == str(text), f"{where}：文字只能用繁體中文（「{str(text)[:12]}」）")
+    cfg = c.config.jianfa
+    if cfg.enabled and cfg.explore_one:
+        for group, keys in explore_one.LINE_KEYS.items():
+            for key in keys:
+                need(bool((lines.get(group) or {}).get(key)), f"outing_lines.{group} 缺少 {key}（減法季探索一顆開著時每一個鍵都要有句子）")
+
+
+ART_PATH = re.compile(r"^(places|figures|events)/[a-z0-9_]+$")  # web/img/ 底下的路徑：子資料夾／鍵，不含副檔名
+
+
+def check_art(c: Content, need) -> None:
+    """圖的分類表與 image 欄位（減法季批 8 圖像版）：事件的 image 只能是 art.json 的 events 有的類型鍵；地點與人物的 image 是
+    web/img/ 底下的路徑（places/…、figures/…）。圖檔在不在這裡不管（伺服器看，沒檔案就不給圖）。"""
+    for key, name in c.art.events.items():
+        need(bool(re.fullmatch(r"[a-z0-9_]+", key)), f"art.events 的類型鍵「{key}」只能是小寫英數與底線（圖檔名）")
+        need(bool(name.strip()), f"art.events.{key} 的名字是空的")
+    for ev in c.events.values():
+        if ev.image is not None:
+            need(ev.image in c.art.events, f"事件 {ev.id} 的 image「{ev.image}」不在 art.json 的 events 類型表裡")
+    for loc in c.locations.values():
+        if loc.image is not None:
+            need(bool(ART_PATH.match(loc.image)), f"地點 {loc.id} 的 image「{loc.image}」要寫成 places/<鍵> 這種路徑（不含副檔名）")
+    for ch in c.characters.values():
+        if ch.image is not None:
+            need(bool(ART_PATH.match(ch.image)), f"人物 {ch.id} 的 image「{ch.image}」要寫成 figures/<鍵> 這種路徑（不含副檔名）")
+
+
 def check_mall(c: Content, need) -> None:
     """商城的商品（content/mall.json，商城架構設計 4.3）：每一件照 mall.item_problems（效果在允許的效果表裡、種類對得上、數量、
     名字過命名過濾、上架日期與季的格式）；商品之間不同名。開關關著也照驗（檔案寫壞了早點知道）。"""
@@ -1159,6 +1253,8 @@ def check_figures(c: Content, need, known, front_ids: list[str]) -> None:
             f"{where}：active_from_day7（{fig.active_from_day7:g}）超出 7 天" if fig.active_from_day7 is not None else "",
         )
         need(to_traditional(fig.name) == fig.name, f"{where}：名字只能用繁體中文（{fig.name}）")
+        check_stances(c, need, where, fig)
+        check_errands(c, need, where, fig)
         if fig.out_flag is not None:  # 丙 (c)：退場時記的世界旗標要有人讀（劇本或事件的條件），打錯字才抓得到
             need(fig.out_flag in _condition_flags(c), f"{where}：out_flag {fig.out_flag} 沒有任何劇本或事件的條件讀它")
         meet = c.characters.get(fig.character) if fig.character is not None else None
@@ -1176,6 +1272,64 @@ def check_figures(c: Content, need, known, front_ids: list[str]) -> None:
             chain.append(nxt)
             nxt = c.figures[nxt].successor
         need(nxt not in chain, f"{where}：接位鏈繞回來了（{'→'.join(chain)}→{nxt}）")
+
+
+STANCE_MAX = 3  # 一位人物最多幾個心意（整合設計 5.4「2～3 個」）
+
+
+def check_stances(c: Content, need, where: str, fig) -> None:
+    """人物心意（減法季批 6，整合設計 5.4）：要有對話人物（歸類在對話裡）、最多 STANCE_MAX 個、id 不重複、id 不是 stances.NONE；
+    字只用繁體；改做的事裡痕跡的鍵是「地點 id:痕跡名」、地點存在、倍數至少 1。"""
+    if not fig.stances:
+        return
+    need(fig.character is not None, f"{where}：有心意的人物要有對話人物（心意在跟他說話時歸類）")
+    need(len(fig.stances) <= STANCE_MAX, f"{where}：心意最多 {STANCE_MAX} 個（現在 {len(fig.stances)} 個）")
+    ids = [x.id for x in fig.stances]
+    need(len(set(ids)) == len(ids), f"{where}：心意的 id 重複了（{ids}）")
+    for x in fig.stances:
+        at = f"{where} 的心意 {x.id}"
+        need(x.id != "none", f"{at}：id 不能是 none（模型歸不進任何一種時填的）")
+        for text in (x.name, x.hint, x.rumor, x.chronicle):
+            need(to_traditional(text) == text, f"{at}：字只能用繁體中文（{text}）")
+        for key, times in x.action.marks.items():
+            loc, sep, name = key.partition(":")
+            need(bool(sep and name) and loc in c.locations, f"{at}：痕跡要寫成「地點 id:痕跡名」、地點存在（{key}）")
+            need(times >= 1, f"{at}：痕跡 {key} 的倍數至少 1")
+        if x.action.event_daily is not None:  # 生效時開的人物事件（批 6 修正輪）：從探索的池子抽、可重複（每人每天一則由 stances 管）
+            ev = c.events.get(x.action.event_daily)
+            need(ev is not None, f"{at}：event_daily 的事件 {x.action.event_daily} 不存在")
+            if ev is not None:
+                need("explore" in ev.actions and not ev.once and not ev.qiyu and not ev.fortune and ev.free_text is None,
+                     f"{at}：event_daily 的事件 {ev.id} 要是探索抽得到、可重複、沒有隨口應對的事件")
+
+
+ERRAND_SLOTS = ("{place}", "{hero}")  # 託付的字認得的插槽（errands.give、task_text 填）
+
+
+def check_errands(c: Content, need, where: str, fig) -> None:
+    """託付的池子（減法季批 6，整合設計 5.5、5.9）：要有對話人物（信是他寫的）、id 不重複、地點存在；勸降要寫 persuade（勸不成打的隊伍存在、
+    痕跡是「地點 id:痕跡名」、推的線是 front 或戰線 id），其他兩種不寫；寫了 stance 要是他自己的心意；字只用繁體、只用認得的插槽。"""
+    if not fig.errands:
+        return
+    need(fig.character is not None, f"{where}：有託付的人物要有對話人物（託付以他的信送到）")
+    ids = [d.id for d in fig.errands]
+    need(len(set(ids)) == len(ids), f"{where}：託付的 id 重複了（{ids}）")
+    stance_ids = {x.id for x in fig.stances}
+    lines = {t.id for t in c.scenario.trends} | {"front"}
+    for d in fig.errands:
+        at = f"{where} 的託付 {d.id}"
+        need(d.target in c.locations, f"{at}：地點 {d.target} 不存在")
+        need(d.stance is None or d.stance in stance_ids, f"{at}：心意 {d.stance} 不是他的心意（{sorted(stance_ids)}）")
+        need((d.kind == "persuade") == (d.persuade is not None), f"{at}：勸降才寫 persuade、勸降一定要寫")
+        for text in (d.task, d.text, d.to):
+            need(to_traditional(text) == text, f"{at}：字只能用繁體中文（{text}）")
+            need(not [s for s in re.findall(r"\{[^}]*\}", text) if s not in ERRAND_SLOTS], f"{at}：只認得 {ERRAND_SLOTS}（{text}）")
+        if d.persuade is not None:
+            need(d.persuade.foe in c.squads, f"{at}：勸不成打的隊伍 {d.persuade.foe} 不存在")
+            for key in d.persuade.marks:
+                loc, sep, name = key.partition(":")
+                need(bool(sep and name) and loc in c.locations, f"{at}：痕跡要寫成「地點 id:痕跡名」、地點存在（{key}）")
+            need(set(d.persuade.trend) <= lines, f"{at}：推的線只能是 front 或戰線 id（{sorted(d.persuade.trend)}）")
 
 
 ORDER_SLOTS = ("{戰線}", "{地點}", "{起點}", "{終點}", "{主將}", "{人物}", "{號令}", "{本週}", "{這週}")  # 後兩個照季換字（FB-501）
@@ -1987,6 +2141,7 @@ def validate(c: Content) -> None:
     marks_written: dict[str, str] = {}  # 痕跡 → 第一個寫它的地方
     taught: dict[str, str] = {}  # 事件 learn_skills 給得到的武學 → 第一個給它的地方（品質要明寫，見最後）
     marks_read: dict[str, str] = {}  # 痕跡 → 第一個讀它的地方（條件或文字裡的模糊人數）
+    outcome_marks: dict[str, str] = {}  # 隨口應對分岔的後果寫的痕跡 → 第一個寫它的後果（減法季批 4）
 
     def check_mark_key(where: str, key: str) -> None:
         loc, sep, name = key.partition(":")
@@ -2045,12 +2200,18 @@ def validate(c: Content) -> None:
         檢定（Check／隨口應對的 stat）可以照樣考博聞，那不是獎勵。"""
         need(LORE not in eff.stats, f"{where}：stats 不能有 {LORE}（博聞只能靠升級的點數增加，事件、奇遇、隨口應對的獎勵都不能給、也不能扣）")
 
-    def check_effect(where: str, eff: Effect) -> None:
+    def check_effect(where: str, eff: Effect, outcome: bool = False) -> None:
+        """outcome：這是隨口應對分岔的一種後果（減法季批 4）——只有它准寫 contribution（rules.apply_effect 不讀，接線之前寫在別處
+        會靜靜沒作用）；它寫的痕跡另記一筆（check_outcomes）。"""
         no_lore(where, eff)
+        need(outcome or eff.contribution == 0,
+             f"{where}：contribution 只能寫在隨口應對分岔的後果上（接線之前 rules.apply_effect 不讀它，寫在這裡不會有作用）")
         for key, n in eff.marks.items():
             check_mark_key(where, key)
             need(1 <= n <= 3, f"{where}：痕跡 {key} 一次只能加 1～3（不能減）")
             marks_written.setdefault(key, where)
+            if outcome:
+                outcome_marks.setdefault(key, where)
         read_marks_in(where, eff.text)
         known(where, eff.stats, STATS, "屬性")
         known(where, eff.learn_skills, c.skills, "武學")
@@ -2129,6 +2290,89 @@ def validate(c: Content) -> None:
                 ) if used
             ]
             need(not banned, f"{fw} {label}：不能有 {'、'.join(banned)}")
+
+    def check_outcomes(where: str, ev: Event) -> None:
+        """隨口應對分岔（減法季整合設計 5.1、5.9；主機側計畫 Task 4-1，規則從 scripts/check_outcomes.py 搬來）：
+        2～4 種後果（作惡那一種另算、最多一種、原事件要有作惡的固定選項），最後一種是 fallback（只有一句結果）；其餘每一種判法寫一種
+        ——check（屬性是看得了的那幾項或 best_of、難度在這則固定選項的帶子裡）、combat（這則固定選項裡打的那一路）、cost（正的銀兩、
+        必成，沒有失手，企劃者第 8 件 c）——都留一個這則事件地點上的痕跡、記貢獻（作惡的不記）。效果只准寫結果、獎勵、體力、痕跡、
+        貢獻（公開的只有後果與痕跡：不寫傳聞、江湖史、推線）；獎勵只給不扣，不准比這則「有檢定或打仗的開放選項」多（俠寇選項不算，
+        同 check_free_text），作惡那一種不准比原事件的作惡選項多（俠寇選項也算）、扣的是善名（第 8 件 a）。敘事不寫阿拉伯數字。"""
+        outs = ev.free_text.outcomes
+        fw = f"{where} 隨口應對分岔"
+        # 只在分岔開著時才有的那一顆（人拉犁，PM 2026-10-25 第 7 件）：要寫後果；關著的季沒有這一顆，effect／fail_effect 沒人用、不准寫
+        need(not ev.free_text.outcomes_only or bool(outs), f"{fw}：outcomes_only 要寫 outcomes")
+        need(not ev.free_text.outcomes_only or (ev.free_text.effect == Effect() and ev.free_text.fail_effect == Effect()),
+             f"{fw}：outcomes_only 的隨口應對只在分岔開著時才有，effect／fail_effect 不寫")
+        if not outs:
+            return
+        evil = [o for o in outs if o.evil]
+        plain = len(outs) - len(evil)
+        need(OUTCOMES_MIN <= plain <= OUTCOMES_MAX, f"{fw}：後果要 {OUTCOMES_MIN}～{OUTCOMES_MAX} 種（作惡那一種另算），有 {plain} 種")
+        need(len(evil) <= 1, f"{fw}：作惡的後果最多一種，有 {len(evil)} 種")
+        ids = [o.id for o in outs]
+        need(all(ids) and len(set(ids)) == len(ids), f"{fw}：後果的 id 是空的或重複（{ids}）")
+        evil_choices = [ch for ch in ev.choices if ch.effect.stats.get("evil", 0) > 0]
+        need(not evil or bool(evil_choices), f"{fw}：原事件沒有作惡的固定選項，不能有作惡的後果")
+        open_choices = [ch for ch in ev.choices if ch.needs is None]
+        graded = [ch for ch in open_choices if ch.check is not None or ch.combat] or open_choices
+        diffs = [ch.check.difficulty for ch in ev.choices if ch.check is not None]
+        band = (min(diffs), max(diffs)) if diffs else (3, 8)
+        squads = {ch.combat for ch in ev.choices if ch.combat}
+        for i, o in enumerate(outs):
+            ow = f"{fw} {o.id}"
+            head, _, how = o.tag.partition("：")
+            need(bool(head.strip() and how.strip()), f"{ow}：tag 要寫成「類名：怎麼做」（{o.tag!r}）")
+            need(not OUTCOME_DIGITS.search(o.tag), f"{ow}：tag 不寫阿拉伯數字")
+            for label, eff in (("effect", o.effect), ("fail_effect", o.fail_effect)):
+                check_effect(f"{ow} {label}", eff, outcome=True)
+                known(f"{ow} {label}", eff.stats, FREE_TEXT_REWARDS, "隨口應對的獎勵屬性")
+                extra = [
+                    name for name, info in Effect.model_fields.items()
+                    if name not in OUTCOME_EFFECT_FIELDS and getattr(eff, name) != info.get_default(call_default_factory=True)
+                ]
+                need(not extra, f"{ow} {label}：後果的效果只准寫 {'、'.join(sorted(OUTCOME_EFFECT_FIELDS))}"
+                                f"（公開的只有後果與痕跡），不能有 {'、'.join(extra)}")
+                need(not OUTCOME_DIGITS.search(eff.text), f"{ow} {label}：敘事裡不寫阿拉伯數字（數字只能是引擎的）")
+            need(not o.fail_effect.marks and not o.fail_effect.contribution, f"{ow} fail_effect：失手不留痕跡、不記貢獻")
+            if i == len(outs) - 1:
+                need(
+                    o.kind == "fallback" and bool(o.effect.text) and not o.effect.stats and not o.effect.marks
+                    and not o.effect.contribution and not o.effect.stamina and o.fail_effect == Effect(),
+                    f"{ow}：最後一種要是對不上時的 fallback（只寫結果那一句：不寫判法、獎勵、體力、痕跡、貢獻、失手）",
+                )
+                continue
+            need(o.kind != "fallback", f"{ow}：判法要寫一種（check／combat／cost）；只有最後一種是 fallback")
+            if o.check is not None:
+                known(ow, o.check.stats if o.check.stat == BEST_OF else [o.check.stat], OUTCOME_CHECK_STATS, "檢定屬性")
+                need(band[0] <= o.check.difficulty <= band[1],
+                     f"{ow}：難度 {o.check.difficulty} 要在這則固定選項的帶子 {band[0]}～{band[1]} 裡")
+                if o.check.practice:
+                    known(ow, [o.check.practice], c.config.practice_bonus, "熟練（config.practice_bonus）")
+            if o.combat is not None:
+                known(ow, [o.combat], c.squads, "敵方隊伍")
+                need(o.combat in squads, f"{ow}：combat {o.combat} 要是這則事件固定選項裡打的隊伍（{sorted(squads)}）")
+            if o.cost is not None:
+                need(set(o.cost) == {"silver"} and o.cost["silver"] > 0, f"{ow}：cost 只能是正的 silver（{o.cost}）")
+                need(o.fail_effect == Effect(), f"{ow}：掏錢的後果必成（企劃者第 8 件 c），不寫 fail_effect")
+            else:
+                need(bool(o.fail_effect.text), f"{ow}：check／combat 要寫 fail_effect 的那一句")
+            need(bool(o.effect.text), f"{ow}：effect 要寫結果那一句")
+            need(bool(o.effect.marks), f"{ow}：每一種後果都要留一個痕跡")
+            for key in o.effect.marks:
+                need(key.partition(":")[0] in ev.locations, f"{ow}：痕跡 {key} 要留在這則事件的地點（{'、'.join(ev.locations)}）")
+            for key, delta in o.effect.stats.items():
+                need(delta > 0 or (key == "good" and delta < 0),
+                     f"{ow}：effect 的 {key} {delta:+d}：後果的效果只給不扣（掏錢寫 cost，扣善名的是作惡那一種）")
+            rivals, rival_word = (evil_choices, "原事件的作惡選項") if o.evil else (graded, "有檢定或打仗的開放選項")
+            for key in FREE_TEXT_REWARDS:
+                got = o.effect.stats.get(key, 0)
+                best = max((ch.effect.stats.get(key, 0) for ch in rivals), default=0)
+                need(got <= max(best, 0), f"{ow}：{key} +{got} 比{rival_word}最多的 +{best} 還多")
+            if o.evil:
+                need(o.effect.contribution == 0, f"{ow}：作惡的後果不記貢獻")
+            else:
+                need(o.effect.contribution >= 1, f"{ow}：每一種後果都記貢獻（1～6）")
 
     cfg = c.config
     for action in ("explore", "train", "socialize"):
@@ -2242,6 +2486,7 @@ def validate(c: Content) -> None:
     check_combat_lines(c, need)
     check_shop_lines(c, need)
     check_mall(c, need)
+    check_art(c, need)
     check_arena_crowd(c, need)
     check_xingshi_lines(c, need)
     check_traits(c, need)
@@ -2280,6 +2525,7 @@ def validate(c: Content) -> None:
         read_marks_in(where, ev.text)
         if ev.free_text is not None:
             check_free_text(where, ev)
+            check_outcomes(where, ev)
         recruits = {eff.recruit for ch in ev.choices for eff in (ch.effect, ch.fail_effect) if eff.recruit}
         for cid in sorted(recruits):
             need(
@@ -2489,6 +2735,19 @@ def validate(c: Content) -> None:
              f"陣營 {faction.id}：allies 只能寫劇本裡別的陣營（{faction.allies}）")
         need(not any(c.scenario.find_faction(a) is not None and c.scenario.find_faction(a).allies for a in faction.allies),
              f"陣營 {faction.id}：allies 寫的陣營自己不能再有 allies")
+    jf = c.config.jianfa  # 三陣營四勝利（減法季批 3c）：「此刻幫誰」就是 ally，只在豪強分屬兩軍的季寫；投靠點的預設對得上劇本
+    if jf.enabled and jf.four_wins:
+        need(c.config.haoqiang_allied, "config.jianfa.four_wins 開著，可是 haoqiang_allied 關著：豪強的「此刻幫誰」（ally）只在豪強分屬兩軍的季有")
+        if any(f.allies for f in c.scenario.factions):
+            from .wins import check as wins_check  # noqa: PLC0415  延後 import：wins → allied → calendar，content 不必一開始就依賴
+
+            errors.extend(f"config.jianfa.{line}" for line in wins_check(c, jf))
+    # 列傳為終點（減法季批 7b-2）：寫評曰的人物要在 characters 裡；評曰的固定句照 zhuan_end.check_verdicts（理由、長度、沒有數字）
+    for faction in c.scenario.factions:
+        need(all(cid in c.characters for cid in faction.verdict_by), f"陣營 {faction.id}：verdict_by 寫的人物不在 characters 裡（{faction.verdict_by}）")
+    from .zhuan_end import check_verdicts  # noqa: PLC0415
+
+    errors.extend(f"verdicts.json：{line}" for line in check_verdicts(c))
     # 輿圖上的一個字（輿圖第三版第 3 批，FactionInk.short）：天下圖大區名底下「官 N・巾 N」照它認是哪一方，兩方同一個字就分不出來
     shorts = [f.ink.short for f in c.scenario.factions if f.ink is not None and f.ink.short]
     need(len(shorts) == len(set(shorts)), f"劇本：陣營在輿圖上的一個字（ink.short）重複了：{'、'.join(shorts)}")
@@ -2629,6 +2888,7 @@ def validate(c: Content) -> None:
             need(bool(hint.texts), f"{where}：引薦人的提示要有 texts（陣營 id → 那一位說的話）")
             need(not hint.text, f"{where}：引薦人的提示不寫 text（寫在 texts 裡，散人版寫 drifter）")
             need(not hint.season_one, f"{where}：引薦人的提示不寫 season_one（第一季那一句只有師父的條有）")
+            need(not hint.explore_one, f"{where}：引薦人的提示不寫 explore_one（出門探索那一句只有師父的條有）")
         for faction_id, line in hint.texts.items():
             need(faction_id in faction_ids, f"{where}：texts 有不是劇本陣營的 {faction_id}")
             need(bool(line.strip()), f"{where}：texts 的 {faction_id} 是空的")
@@ -2636,9 +2896,27 @@ def validate(c: Content) -> None:
             need(faction_id in hint.texts, f"{where}：allied 的 {faction_id} 在 texts 裡沒有")
             need(bool(line.strip()) and to_traditional(line) == line, f"{where}：allied 的 {faction_id} 要是繁體、不能是空的")
         # 句子裡的 {名字} 只能是設定裡有的數（hints.values，explain-1）：寫錯名字的話框上會留著大括號
-        for line in (hint.text, hint.drifter, hint.season_one, *hint.texts.values(), *hint.allied.values()):
+        for line in (hint.text, hint.drifter, hint.season_one, hint.explore_one, *hint.texts.values(), *hint.allied.values()):
             bad = hint_rules.unknown(c, line)
             need(not bad, f"{where}：不認得的 {{{'}、{'.join(bad)}}}（只認 {sorted(hint_rules.values(c))}）")
+
+    # ── 開局第一分鐘（減法季批 7，content/opening.json；tianxia/opening.py）──
+    o = c.opening
+    if o is not None:
+        need(o.event in c.events, f"opening.json：事件 {o.event} 不存在")
+        need(o.end in c.locations, f"opening.json：送信的終點 {o.end} 不存在")
+        flags = {x.flag for x in o.senders}
+        need(len(flags) == len(o.senders), "opening.json：senders 的 flag 不能重複")
+        for x in o.senders:
+            ch = c.characters.get(x.figure)
+            need(ch is not None and ch.deep_interaction, f"opening.json：{x.figure} 要是 characters.json 裡能深交的人物")
+            need(any(fig.character == x.figure for fig in c.figures.values()), f"opening.json：{x.figure} 要是大勢人物（信才寫得出他在哪）")
+        if o.event in c.events:
+            ev = c.events[o.event]
+            need(bool(ev.choices), f"opening.json：事件 {o.event} 要有選項")
+            for ch in ev.choices:
+                need(any(f in flags for f in ch.effect.flags_add), f"opening.json：事件 {o.event} 的選項「{ch.text}」要帶 senders 其中一個 flag")
+                need(ch.effect.next_event is None, f"opening.json：事件 {o.event} 的選項「{ch.text}」不能接 next_event（人物開口是信）")
 
     # ── 序章（新手引導計畫一）──
     t = c.tutorial
@@ -2835,6 +3113,15 @@ def validate(c: Content) -> None:
     front_ids = sorted(region_fronts)  # 戰線 id 照 T1 的大區 front，不另寫一份清單
     check_timetable(c, need, known, front_ids, trend_ids)
     check_figures(c, need, known, front_ids)
+    stance_events: dict[str, str] = {}  # 人物心意開的事件 → 開它的心意（一則事件只掛一個心意）
+    for fid, fig in c.figures.items():  # 勸降成了立的痕跡（減法季批 6，FB-827）也算「有效果寫它」：痕跡規則讀它
+        for d in fig.errands:
+            for key in (d.persuade.marks if d.persuade is not None else {}):
+                marks_written.setdefault(key, f"大勢人物 {fid} 的託付 {d.id}")
+        for x in fig.stances:
+            if x.action.event_daily is not None:
+                first = stance_events.setdefault(x.action.event_daily, f"{fid}:{x.id}")
+                need(first == f"{fid}:{x.id}", f"大勢人物 {fid} 的心意 {x.id}：事件 {x.action.event_daily} 已經掛在 {first}")
     check_relations(c, need, known)
     check_companions(c, need)
     check_foreshadows(c, need, known, region_ids, front_ids, counters_written)
@@ -2850,6 +3137,36 @@ def validate(c: Content) -> None:
     check_territory(c, need, known, front_ids)
     check_conquest_blocks(c, need, known, front_ids)
     check_siege_templates(c, need)
+    check_explore_one(c, need)
+    check_outing_lines(c, need)
+
+    # 地方痕跡過門檻（減法季整合設計 5.2；主機側計畫 Task 4-3，content/mark_rules.json）：一個痕跡一條規則，算「有人讀」；
+    # 過門檻那一刻的傳聞、之後地點描寫多接的那一段都要寫（〈天下形勢〉與江湖史沒寫就照傳聞那一句）；推的線同事件效果的規矩
+    rule_marks: dict[str, str] = {}
+    for rule in c.mark_rules:
+        rw = f"痕跡規則 {rule.mark}"
+        check_mark_key(rw, rule.mark)
+        need(rule.mark not in rule_marks, f"{rw}：重複（一個痕跡只寫一條規則）")
+        rule_marks.setdefault(rule.mark, rw)
+        marks_read.setdefault(rule.mark, rw)
+        for name in ("describe", "rumor"):
+            need(bool(getattr(rule, name).strip()), f"{rw}：{name} 要寫（過門檻那一刻的地方傳聞、之後地點描寫多接的那一段）")
+        for name in ("describe", "rumor", "xingshi", "chronicle"):
+            need(not OUTCOME_DIGITS.search(getattr(rule, name)), f"{rw}：{name} 不寫阿拉伯數字（數字只能是引擎的）")
+        known(rw, rule.trend, trend_ids | {FRONT_KEY}, "大勢線")
+        front_needs_total(rw, rule.trend)
+        not_derived(rw, rule.trend)
+        need(all(rule.trend.values()), f"{rw}：trend 的量不能是 0")
+    for key, where in sorted(outcome_marks.items()):
+        need(key in rule_marks,
+             f"{where}：痕跡 {key} 是分岔的後果寫的，要有一條痕跡規則讀它（content/mark_rules.json：過門檻換地點描寫、發傳聞）")
+    for loc in c.locations.values():
+        for text in loc.desc_marks:
+            lw = f"地點 {loc.id} 的 desc_marks"
+            check_mark_key(lw, text.mark)
+            need(text.mark.partition(":")[0] == loc.id, f"{lw}：痕跡 {text.mark} 要是這個地點（{loc.id}）的")
+            need(bool(text.text.strip()) and not OUTCOME_DIGITS.search(text.text), f"{lw}：{text.mark} 那一段是空的或寫了阿拉伯數字")
+            marks_read.setdefault(text.mark, lw)
 
     for key, where in sorted(marks_written.items()):
         need(key in marks_read, f"{where}：痕跡 {key} 寫了卻沒有任何條件或文字讀它")
