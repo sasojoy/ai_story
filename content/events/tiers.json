@@ -2650,7 +2650,7 @@
             "fame": 6
           },
           "materials": {
-            "rou_4": 1
+            "rou_3": 1
           },
           "chronicle": "南華觀前，{name}以天下第一之名赴約，一戰而名副其實。"
         },
@@ -2727,7 +2727,7 @@
             "fame": 6
           },
           "materials": {
-            "kuai_4": 1
+            "kuai_3": 1
           },
           "chronicle": "有人雇刺客刺天下第一，{name}夜擒刺客，問出雇主。"
         },
