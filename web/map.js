@@ -1519,8 +1519,11 @@
       boxes.push([L, T, L + Wd, T + Hd]);
       const [x, y] = mp(L, T), ty = y + NEAR_NAME * 0.88 * k, sy = y + (NEAR_NAME + NEAR_GAP + NEAR_SUB * 0.88) * k;
       const halo = `stroke="${MAP_HALO}" stroke-width="${f1(3 * k)}" paint-order="stroke"`;
+      // 點擊區照字：名字那一行、底下那一行各一塊（FB-877：整個名字框一塊的話，框裡沒有字的角會蓋住別處看得到的字）
+      const subW = sub ? textW(sub, NEAR_SUB) : 0;
       const parts = [`<g class="n-label" data-act="region-place" data-id="${esc(id)}" style="cursor:pointer;font-family:serif"${dim(id)}>`,
-        `<rect x="${f1(x)}" y="${f1(y)}" width="${f1(Wd * k)}" height="${f1(Hd * k)}" fill="#000000" fill-opacity="0"/>`,
+        `<rect x="${f1(x)}" y="${f1(y)}" width="${f1(nameW * k)}" height="${f1((NEAR_NAME + NEAR_GAP) * k)}" fill="#000000" fill-opacity="0"/>`,
+        subW ? `<rect x="${f1(x)}" y="${f1(y + (NEAR_NAME + NEAR_GAP) * k)}" width="${f1(subW * k)}" height="${f1(NEAR_SUB * k)}" fill="#000000" fill-opacity="0"/>` : "",
         `<text x="${f1(x)}" y="${f1(ty)}" font-size="${f1(NEAR_NAME * k)}" font-weight="700" fill="${MAP_INK}" ${halo}>${esc(p.name)}</text>`];
       if (isWeek) { // 「本週」朱印：名字後面
         const sx = x + (textW(p.name, NEAR_NAME) + 4) * k, sh = 15;
@@ -1530,6 +1533,22 @@
       if (sub) parts.push(`<text class="n-sub" x="${f1(x)}" y="${f1(sy)}" font-size="${f1(NEAR_SUB * k)}" font-weight="${isWeek ? 700 : 500}" fill="${isWeek ? NEAR_GOLD_TEXT : NEAR_SUB_INK}" ${halo}>${esc(sub)}</text>`);
       out.push(parts.join("") + "</g>");
     }
+    // 小圖與你的點擊區疊在名字上面（FB-877，企劃者 2026-10-26「文字甚至會直接擋到地點的選取」）：名字挑位子只讓開走得到的那幾處，擠的時候
+    // 會壓到別處的淡墨小圖（例：站潁川郡，潁水河畔的名字蓋著長社），你（上面那一張）不收點擊、底下是別處的名字就點到別處。透明的一層，畫面不變：
+    // 由下往上是「你・地名」、每一處的小圖、你的朱圈——點到小圖選那一處、點你與「你・地名」選你腳下（字壓著別處的小圖時小圖優先），
+    // 點名字的其餘地方照舊是它自己那一處
+    const hit = (id, x, y, w, h) => `<rect class="n-hit" data-act="region-place" data-id="${esc(id)}" x="${f1(x)}" y="${f1(y)}" width="${f1(w)}" height="${f1(h)}" fill="#000000" fill-opacity="0"/>`;
+    const hp0 = me && here ? placeOf(base, here) : null;
+    if (hp0) {
+      const fs = NEAR_SUB + 1, tw = textW(`${NEAR_WORDS.you}・${hp0.name}`, fs), seal = week && week.id === here ? sealW + 4 : 0;
+      out.push(hit(here, me[0] - ((tw + seal) / 2) * k, me[1] + 20 * k, (tw + seal) * k, (fs + 4) * k)); // 「你・地名」（與朱印）
+    }
+    for (const p of base.places) {
+      if (p.id === here || !st.places[p.id]) continue;
+      const r = 14 * z.icon * (p.id === sel && shown.includes(p.id) ? NEAR_PICK : 1) * k; // 同小圖那一組的透明框（28 見方照小圖的倍率）
+      out.push(hit(p.id, p.x - r, p.y - r, 2 * r, 2 * r));
+    }
+    if (hp0) out.push(hit(here, me[0] - 18 * k, me[1] - 18 * k, 36 * k, 36 * k)); // 朱圈（半徑 17、線寬 2.4）
     // 上面那一張：有約戰的塊一面小旗、本週那一處的紅旗、你（朱圈＋墨筆小圖＋「你・地名」；在路上是路上那一點）
     const high = [];
     for (const p of base.places) {

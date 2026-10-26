@@ -93,7 +93,7 @@ def test_a_far_week_place_is_named_too_and_its_road_follows_the_route():
     st["week"] = {"id": far, "why": "主線的目標", "minutes": st["places"][far]["minutes"]}
     out = near_parts(game, st=st)
     low = out["parts"][0]
-    assert f'data-id="{far}"' in re.sub(r'<g class="n-faint".*?</g>', "", low)
+    assert f'data-id="{far}"' in re.sub(r'<g class="n-faint".*?</g>|<rect class="n-hit"[^>]*/>', "", low)  # 點擊區（FB-877）每一處都有，不算
     d = re.search(r'class="n-gold" d="([^"]+)"', low).group(1)
     assert d.count("Q") + d.count("L") == len(st["places"][far]["path"])
 
