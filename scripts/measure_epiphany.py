@@ -2,14 +2,14 @@
 
 擂台（measure_tactics.ring_share，兩邊威力 150）十八位本命對三種玩家：
 - 最強配法（/mnt/project-files/plan/最強配法-2026-10-22，破境修法甲之後本命贏 47.5% 的那一套）；
-- 最強配法裡武學第三格（快）換成這個神品：那一格的一般功效照舊三重、真意換成模板的戰法（只比戰法）；
+- 最強配法裡沒有真意的那一格（內功第一格，陽；--cell 換）裝上這個神品：那一格的第一個一般功效照舊三重，第二個換成模板的戰法；
 - 隨機破境滿配（measure_tactics.own_kit ascended，去掉重算的真意）帶不帶這個神品（多一招，不拿掉別的：一般玩家槽裡多半沒有真意）。
 另量同一格換成合出來的神品（那一路的真意＋一般功效三重）當對照。
 
 設計稿的過關線：本命對「最強配法＋神品」48～50%（本命底蘊另補，--might-add 試）、四十個之間最強最弱差不超過 3 個百分點、
 隨機破境滿配帶神品贏面多 8～12 個百分點（本命少贏這麼多）。
 
-用法：python scripts/measure_epiphany.py [--runs 300] [--kits 4] [--only god_kuai_gong,...] [--might-add 0.15] [--json out.json]
+用法：python scripts/measure_epiphany.py [--runs 300] [--kits 4] [--only god_kuai_gong,...] [--might-add 0.15] [--cell 1,0] [--json out.json]
 """
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ NEIGONG_STANCE = {"心法": "攻勢", "起手": "起勢"}
 ARMS = {r.name: r for r in C.forge_secrets.values() if r.tactic is not None and r.slot == "weapon"}
 BEST = {"a": ["陽", "陽", "快"], "b": ["陽", "慢", "慢"], "ma": ["快", "出招", True], "mb": ["慢", "起手", True],
         "arm": "隕星刀", "pure": [True, True]}
-GOD_CELL = (0, 2)  # 換掉哪一格：武學第三格
+GOD_CELL = (1, 0)  # 換掉哪一格：內功第一格（陽）。最強配法裡只有這一格沒有真意（陽已經有兩格帶真意），玩家會把神品裝在這裡
 MIGHT_ADD = 0.0
 
 
@@ -134,8 +134,9 @@ def sigs():
 
 def job(args):
     """一格：(標籤, 模板 id 或 None/"merged", 哪一種套, runs, kits, might_add) → 本命贏面平均。"""
-    label, gid, which, runs, kits, might_add = args
-    global SIGS, SHARE, MIGHT_ADD
+    label, gid, which, runs, kits, might_add, cell = args
+    global SIGS, SHARE, MIGHT_ADD, GOD_CELL
+    GOD_CELL = cell
     if SIGS is None:
         MIGHT_ADD = might_add
         SIGS, SHARE = sigs(), mt.ring_share(C, runs)
@@ -157,13 +158,15 @@ def main():
     parser.add_argument("--no-random", action="store_true", help="不量隨機破境滿配")
     parser.add_argument("--json", help="結果另存成 JSON")
     parser.add_argument("--procs", type=int, default=4)
+    parser.add_argument("--cell", default="1,0", help="最強配法換掉哪一格（第幾門,第幾格，從 0 數）")
     a = parser.parse_args()
     ids = a.only.split(",") if a.only else list(gods(C))
-    jobs = [("基準", None, "best", a.runs, a.kits, a.might_add), ("合出來的神品", "merged", "best", a.runs, a.kits, a.might_add)]
-    jobs += [(gods(C)[g].name, g, "best", a.runs, a.kits, a.might_add) for g in ids]
+    cell = tuple(int(x) for x in a.cell.split(","))
+    jobs = [("基準", None, "best", a.runs, a.kits, a.might_add, cell), ("合出來的神品", "merged", "best", a.runs, a.kits, a.might_add, cell)]
+    jobs += [(gods(C)[g].name, g, "best", a.runs, a.kits, a.might_add, cell) for g in ids]
     if not a.no_random:
-        jobs += [("基準", None, "random", a.runs, a.kits, a.might_add)]
-        jobs += [(gods(C)[g].name, g, "random", a.runs, a.kits, a.might_add) for g in ids]
+        jobs += [("基準", None, "random", a.runs, a.kits, a.might_add, cell)]
+        jobs += [(gods(C)[g].name, g, "random", a.runs, a.kits, a.might_add, cell) for g in ids]
     with mp.Pool(a.procs) as pool:
         res = pool.map(job, jobs, chunksize=1)
     by = {(gid, which): (avg, lo, hi) for _, gid, which, avg, lo, hi in res}
