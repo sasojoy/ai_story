@@ -233,7 +233,7 @@ def test_in_the_prologue_the_names_stay_by_the_table():
     cfg = prologue.content.config.jianfa
     assert all(p["mostly"] == explore_one.mostly_in(explore_one.kind_of(cfg, prologue.content.locations[p["id"]]))
                for p in prologue.map_base()["places"])
-    assert prologue.map_base()["key"] == prologue.map_state()["key"]
+    assert prologue.map_base()["key"] == prologue.map_state()["key"] and mapdata.VIEWER_MOSTLY not in prologue.map_base()
 
 
 # ── 3. 底圖與疊層的 key：字變了網頁才會重抓 ──
@@ -261,7 +261,10 @@ def test_the_base_and_the_overlay_differ_from_the_old_ones_only_by_the_words_and
     assert {"changshe", "guan_camp", "luzhi_camp", *DANGEROUS_FORDS, *DANGEROUS_HILLS} <= changed
     for p, q in zip(base["places"], old_base["places"], strict=True):
         assert {k: v for k, v in p.items() if k != "mostly"} == {k: v for k, v in q.items() if k != "mostly"}
-    assert {k: v for k, v in base.items() if k not in ("key", "places")} == {k: v for k, v in old_base.items() if k not in ("key", "places")}
+    assert base[mapdata.VIEWER_MOSTLY] is True and mapdata.VIEWER_MOSTLY not in old_base  # 旗子：網頁看到它，名字旁整個照底圖（含「有賞」）
+    assert server.map_base_view(game)[mapdata.VIEWER_MOSTLY] is True
+    skip = ("key", "places", mapdata.VIEWER_MOSTLY)
+    assert {k: v for k, v in base.items() if k not in skip} == {k: v for k, v in old_base.items() if k not in skip}
     assert {k: v for k, v in state.items() if k != "key"} == {k: v for k, v in old_state.items() if k != "key"}
 
 
@@ -297,6 +300,7 @@ def test_when_the_small_words_are_off_the_names_and_keys_are_the_old_ones(make):
     assert game.map_mostly() is None
     base = game.map_base()
     assert all(p["mostly"] == mapdata.MOSTLY[p["glyph"]] for p in base["places"])
+    assert mapdata.VIEWER_MOSTLY not in base and mapdata.VIEWER_MOSTLY not in server.map_base_view(game)  # 關著的季底圖沒有旗子，網頁照舊
     assert base["key"] == mapdata.base_key(game.state, game.content) == game.map_state()["key"]
     assert server.map_base_view(game) is server.map_base_view(game)  # 同一把鍵：同一份物件，不重畫（沒有人別的版本）
 

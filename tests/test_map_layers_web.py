@@ -11,11 +11,13 @@ import re
 import pytest
 import test_prologue_web
 from conftest import real_content
+from jianfa_kit import no_jianfa
 
 import server
 import webharness
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
+from tianxia.state import Bounty
 
 pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 NAMES = ["S", "nearFit", "nearParts", "nearIds", "nearLineHtml", "regionTopHtml", "placeCard", "peekPx", "mapFirst", "drawerHtml",
@@ -24,8 +26,8 @@ DRIVER = re.sub(r"wholeApp\(\[.*?\]\)", "wholeApp(" + repr(NAMES).replace("'", '
 NEAR = {"yingchuan", "yingshui", "changshe", "guan_camp"}  # 潁川郊野走得到的四處（正式內容）
 
 
-def _game(at="yingchuan_wilds"):
-    c = real_content("season21")
+def _game(at="yingchuan_wilds", closed=False):
+    c = no_jianfa(real_content("season21")) if closed else real_content("season21")  # closed：減法季關著（名字旁還是雲端批 3 那一套）
     c.config.auto_open_first_season = True
     game = Game.new(c, "陸乙", rng=random.Random(0), world=open_world())
     game.client = None
@@ -69,9 +71,60 @@ def test_each_walkable_place_says_minutes_and_what_it_mostly_holds():
     assert subs["yingchuan"].endswith("分・多事") and subs["yingshui"].endswith("分・參半") and subs["guan_camp"].endswith("分・比劃")
     st = game.map_state()
     st["week"] = None
+    st["places"]["guan_camp"]["bounty"] = "討伐"  # 疊層寫了討伐也不另寫「有賞」：底圖帶 viewer_mostly，兩個字整個照伺服器給的（下面真的接了懸賞的兩條測）
+    low = near_parts(game, st=st)["parts"][0]
+    assert re.search(r'data-id="guan_camp"(?:(?!</g>).)*?分・比劃</text>', low) and "分・有賞" not in low
+
+
+def test_a_closed_season_still_writes_has_reward_from_the_overlay_bounty():
+    """減法季關著的季：底圖沒有 viewer_mostly（名字旁還是雲端批 3 的 MOSTLY，營多敵），網頁照舊——疊層的 bounty 含「討伐」就寫「有賞」，一個字不變。"""
+    game = _game(closed=True)
+    assert "viewer_mostly" not in game.map_base()
+    low = near_parts(game)["parts"][0]
+    subs = dict(re.findall(r'data-id="([^"]+)"[^>]*>(?:(?!</g>).)*?<text class="n-sub"[^>]*>([^<]+)</text>', low))
+    assert subs["yingchuan"].endswith("分・多事") and subs["yingshui"].endswith("分・參半") and subs["guan_camp"].endswith("分・多敵")
+    st = game.map_state()
+    st["week"] = None
     st["places"]["guan_camp"]["bounty"] = "討伐"
     low = near_parts(game, st=st)["parts"][0]
     assert re.search(r'data-id="guan_camp"(?:(?!</g>).)*?分・有賞</text>', low)
+
+
+def _held_strike(able: bool):
+    """官軍站潁川郊野，揭了隔壁潁水的討伐懸賞（黃巾散兵）：able 裝起手拳腳（對它「難分勝負」，強制遭遇）、否則沒裝武學（威力 0，必敗放開）。"""
+    game = _game()
+    game.state.player.member.wugong_id = "jichu_quanjiao" if able else None
+    game.state.world.bounties.append(Bounty(id="s1", kind="strike", faction="guan", week=1, expires=1e12, silver=10, deeds=1,
+                                            location="yingshui", squad="shanzei", takers=[game.state.player.name]))
+    return game
+
+
+def _subs(game) -> dict[str, str]:
+    """第一層每個名字旁那一行。揭著的懸賞會成為「本週要去的那一處」，那一處的那一行換成一句為什麼（「懸賞・討伐」），所以疊層的 week 先清掉。"""
+    st = game.map_state()
+    st["week"] = None
+    low = near_parts(game, st=st)["parts"][0]
+    return dict(re.findall(r'data-id="([^"]+)"[^>]*>(?:(?!</g>).)*?<text class="n-sub"[^>]*>([^<]+)</text>', low))
+
+
+def test_a_held_bounty_that_is_not_hopeless_reads_has_reward_beside_the_name():
+    """接了討伐、不是必敗：網頁畫「有賞」，跟走到那裡探索鈕的「野外有賞」「渡口有賞」同一個字。"""
+    game = _held_strike(able=True)
+    assert game.odds("shanzei", at="yingshui") != "必敗" and game.map_state()["places"]["yingshui"]["bounty"] == "討伐"
+    assert _subs(game)["yingshui"].endswith("分・有賞")
+    game.state.player.location = "yingshui"
+    assert game.outing_plan().hint == "渡口有賞"
+
+
+def test_a_held_bounty_that_is_hopeless_reads_the_table_not_has_reward():
+    """接了討伐、必敗放開（2e）：鈕上照表寫「渡口參半」，名字旁網頁以前自己因為疊層有討伐就寫「有賞」，現在照伺服器給的、跟鈕一致。"""
+    game = _held_strike(able=False)
+    assert game.odds("shanzei", at="yingshui") == "必敗" and game.map_state()["places"]["yingshui"]["bounty"] == "討伐"  # 疊層照舊標討伐
+    sub = _subs(game)["yingshui"]
+    assert sub.endswith("分・參半") and "有賞" not in sub
+    game.state.player.location = "yingshui"
+    plan = game.outing_plan()
+    assert plan.how != "bounty" and plan.hint == "渡口參半" and sub.endswith(plan.hint[-2:])
 
 
 def test_the_name_line_beside_a_dangerous_ford_reads_like_the_button_there():

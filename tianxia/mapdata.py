@@ -31,6 +31,9 @@ FALLBACK_INKS = ["#7A4E8C", "#2E7D7A", "#A0522D", "#5C6B2E", "#8C3B5A", "#3B5C8C
 WORLD_CACHE_KEEP = 8  # 幾何照內容快取最多幾份
 # 輿圖第一層（減法季整合設計第七章）：走得到的地方名字旁的「多半」兩字，照地點的小圖（城、營、寺、渡、山、野）；內容的事實，放底圖。待 joy 潤
 MOSTLY = {"城": "多事", "野": "多敵", "山": "多料", "渡": "參半", "營": "多敵", "寺": "多悟"}
+# 底圖的旗子（2f 補一筆）：名字旁的兩個字是看的人的（Game.map_mostly，減法季探索一顆開著才有），含接了討伐懸賞的「有賞」——網頁 nearSub 看到它就整個照
+# 底圖的 mostly，不再自己因為疊層的 bounty 含「討伐」就寫「有賞」（必敗放開時鈕上照表，名字旁也要照表）。關著的季、序章沒有這個鍵，網頁照舊
+VIEWER_MOSTLY = "viewer_mostly"
 # 四格探索那一格的小字（減法季整合設計 6.3「這裡多半給什麼」；批 5）：腳下這一處照小圖寫一句，同一張表加地點的字。待 joy 潤
 MOSTLY_HERE = {"城": "城裡多事", "野": "野外多敵", "山": "山裡多料", "渡": "渡口參半", "營": "營裡多敵", "寺": "寺裡多悟"}
 # 本週要去的那一處那一句為什麼（減法季整合設計第七章第 1 條；來源照本週卡：軍令、懸賞、主線）。待 joy 潤
@@ -89,9 +92,9 @@ def base_key(state: GameState, content: Content, mostly: dict[str, str] | None =
 
 def with_mostly(core: dict, key: str, mostly: dict[str, str]) -> dict:
     """底圖（base，快取起來每個人共用的那一份）換上看的人的名字旁：新的 dict，只有 key 與 places 是新的（山河的圖、路、大區、天下圖還是同一份物件，
-    不重畫、不重複存）。沒在 mostly 裡的地點照原樣。"""
+    不重畫、不重複存）。沒在 mostly 裡的地點照原樣。同 base(…, mostly)，多一個 VIEWER_MOSTLY 的旗子。"""
     places = [{**p, "mostly": mostly[p["id"]]} if p["id"] in mostly and mostly[p["id"]] != p["mostly"] else p for p in core["places"]]
-    return {**core, "key": key, "places": places}
+    return {**core, "key": key, "places": places, VIEWER_MOSTLY: True}
 
 
 def insight_pool(loc: Location, content: Content) -> list[str]:
@@ -130,13 +133,16 @@ def base(state: GameState, content: Content, mostly: dict[str, str] | None = Non
         "id": r.id, "name": r.name,
         "cx": round(sum(p[0] for p in r.points) / len(r.points)), "cy": round(sum(p[1] for p in r.points) / len(r.points)),
     } for r in content.map.regions]
-    return {
+    out = {
         "key": base_key(state, content, mostly), "w": content.map.width, "h": content.map.height,
         "svg": mapview.render_base(state, content), "places": places, "edges": edges, "roads": roads, "regions": regions,
         "insight_kinds": {d.id: {"name": d.name, "attribute": d.attribute} for d in content.insights.values() if d.grant is None},
         "insight_layer": content.config.insight_strong.enabled and any(p["strong"] for p in places),
         "world": world(state, content),
     }
+    if mostly is not None:
+        out[VIEWER_MOSTLY] = True  # 名字旁整個是看的人的（含「有賞」）：網頁不再另判討伐；沒給的季這個鍵不存在，底圖一個字不變
+    return out
 
 
 def ground_places(state: GameState, content: Content) -> list[str]:
