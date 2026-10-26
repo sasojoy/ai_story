@@ -194,6 +194,11 @@ def check_condition(cond: Condition, state: GameState, content: Content | None =
         return False
     if cond.no_sect and p.sect is not None:
         return False
+    for key, need in cond.story_marks.items():  # 一條線的記號（storyline.py）：那條線沒開過算 0
+        line, _, mark = key.partition(":")
+        progress = p.storylines.get(line)
+        if (progress.marks.get(mark, 0) if progress is not None else 0) < need:
+            return False
     # 擁有的武學都算（身上兩欄＋功法庫）：事件教的武學在欄位滿了時收進功法庫（F2），只看身上的話「還沒學過才出現」的
     # 付費課程（潁川汝南鏢局的追風步）學完還會一直回來、再收一次錢
     known_skills = set(library.owned_arts(state))

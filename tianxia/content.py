@@ -811,14 +811,26 @@ def event_endings(ev: Event) -> list[Effect]:
     return out
 
 
-def _fill_story_lines(c: Content) -> None:
-    """一條線的段落事件上，效果的 story 沒寫 line 的補上那一條線的 id（一則事件只准屬於一條線，check_storylines 驗）。"""
-    for line in c.storylines.values():
-        for stage in line.stages:
-            ev = c.events.get(stage.event) if stage.event else None
-            if ev is None:
+def stage_events(c: Content, line) -> dict[str, str]:
+    """一條線的段落事件與它們 next_event 串下去的事件（事件 id → 哪一段）：都算這一條線的，選項可以寫 story。"""
+    owned: dict[str, str] = {}
+    for stage in line.stages:
+        todo = [stage.event] if stage.event else []
+        while todo:
+            eid = todo.pop()
+            ev = c.events.get(eid)
+            if ev is None or eid in owned:
                 continue
-            for eff in event_effects(ev):
+            owned[eid] = stage.id
+            todo += [eff.next_event for eff in event_effects(ev) if eff.next_event]
+    return owned
+
+
+def _fill_story_lines(c: Content) -> None:
+    """一條線的段落事件（含串下去的）上，效果的 story 沒寫 line 的補上那一條線的 id（一則事件只准屬於一條線，check_storylines 驗）。"""
+    for line in c.storylines.values():
+        for eid in stage_events(c, line):
+            for eff in event_effects(c.events[eid]):
                 if eff.story is not None and not eff.story.line:
                     eff.story.line = line.id
 
@@ -859,13 +871,16 @@ def check_storylines(c: Content, need) -> None:
                 need(ev is not None, f"{sw}：事件「{st.event}」不存在")
                 if ev is None:
                     continue
-                need(ev.actions == [], f"{sw}：事件 {ev.id} 的 actions 要寫 []（只由這條線端出來）")
-                need(owner.setdefault(ev.id, line.id) == line.id, f"{sw}：事件 {ev.id} 已經是一條線 {owner[ev.id]} 的段落")
-                effects = event_effects(ev)
-                for eff in effects:
-                    if eff.story is not None:
-                        need(eff.story.line == line.id, f"{sw}：事件 {ev.id} 的 story.line 要是 {line.id}")
-                        target(f"{sw} 事件 {ev.id} 的 story.go", eff.story.go)
+                for eid, from_stage in stage_events(c, line).items():
+                    if from_stage != st.id:
+                        continue
+                    chained = c.events[eid]
+                    need(chained.actions == [], f"{sw}：事件 {eid} 的 actions 要寫 []（只由這條線端出來）")
+                    need(owner.setdefault(eid, line.id) == line.id, f"{sw}：事件 {eid} 已經是一條線 {owner[eid]} 的段落")
+                    for eff in event_effects(chained):
+                        if eff.story is not None:
+                            need(eff.story.line == line.id, f"{sw}：事件 {eid} 的 story.line 要是 {line.id}")
+                            target(f"{sw} 事件 {eid} 的 story.go", eff.story.go)
                 # 選項都寫了往哪裡（或事件串到下一則）才可以不寫 routes／next
                 need(routed or all((eff.story is not None and eff.story.go) or eff.next_event for eff in event_endings(ev)),
                      f"{sw}：有選項沒寫 story.go，這一段又沒寫 next 或 routes（走完不知道往哪裡）")

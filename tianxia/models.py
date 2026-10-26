@@ -102,6 +102,8 @@ class Condition(_Strict):
     # 戰後事件用：這次行動打的那一場（戰鬥卡片 state.battle_card 指著的那筆）的結果（大勝／險勝／僵持／落敗）在清單裡才成立；
     # 這次行動沒打架（卡片已清掉）一律不成立。文字假設打贏了的戰後事件寫 ["大勝", "險勝"]。載入時只准寫在 actions 剛好是 ["train"] 的事件的條件上
     fight_tiers: list[str] = Field(default_factory=list)
+    # 一條線的記號至少到幾（「線 id:記號」→ 數；tianxia/storyline.py）：那條線沒開過算 0。給段落事件的選項分邊用（例：帶了符水才有「倒進井裡」）
+    story_marks: dict[str, int] = Field(default_factory=dict)
     any_of: list[Condition] = Field(default_factory=list)  # 非空時，至少一個子條件成立
 
 
