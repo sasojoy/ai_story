@@ -14,7 +14,7 @@ import re
 from dataclasses import dataclass, field
 
 from . import gender, zh
-from .annals import GROUPS, MARK, TIER, XINGSHI
+from .annals import DUEL, ERRAND, GROUPS, MARK, STANCE, TIER, XINGSHI
 
 MODEL, RULE = "model", "rule"
 TITLE = "{name}傳"
@@ -105,6 +105,28 @@ def _tiered(req: BiographyRequest) -> bool:
     return "tier" in req.profile or any(e.get("kind") == TIER for e in req.annals)
 
 
+# 列傳為終點（減法季 7e）讀的三類新行狀：人物心意（批 6）、託付辦成（批 6）、出陣約戰（批 3b）。它們早就靠 annals.GROUPS 歸段
+# （STANCE、ERRAND 在「與英雄交往」，DUEL 在「單打獨鬥」），outline 與備援文字照一般的事讀得到；7e 多的是兩件：模型的提示多一條
+# 怎麼寫（TIES_RULE），備援文字替它們留位子、補主詞與時刻（TIES_LINE）——不然人物交談多、單挑多的人，備援文字只取前幾則、這幾則被擠掉。
+# 身家有 contrib（annals.profile 只在 zhuan_end 開著時放）才這麼讀；關著的季（或存起來的舊身家）一個字不變。
+TIES = frozenset({STANCE, ERRAND, DUEL})
+TIES_LINE = {  # 待 joy 潤：備援文字裡這三類各一句（when 是「第二週，」、name 是名號；「替某某…辦成了」「在某地約戰…」原句沒有主詞）
+    STANCE: "{when}{text}",
+    ERRAND: "{when}{name}{text}",
+    DUEL: "{when}{name}{text}",
+}
+
+
+def _zhuan(req: BiographyRequest) -> bool:
+    """列傳為終點開著（身家有 contrib；沒有這個鍵的是關著的季，或 7b 以前存起來的舊身家）。"""
+    return "contrib" in req.profile
+
+
+def _ties(req: BiographyRequest) -> bool:
+    """這一篇要照 7e 讀：列傳為終點開著、而且行狀裡真的有那三類。沒有就不多寫一個字。"""
+    return _zhuan(req) and any(e.get("kind") in TIES for e in req.annals)
+
+
 SYSTEM = (
     "你是史官，替一位江湖人物寫列傳。文體仿《三國志》列傳的半文言：文雅、簡潔、讀得懂，不要太艱澀。\n"
     "規矩：\n"
@@ -117,13 +139,19 @@ SYSTEM = (
 )
 # 列傳為終點（減法季批 7b）：有季末論功的那一篇多這一條（_tiered）；關著的季系統提示一個字不變
 TIER_RULE = "\n7. 季末論功的名次與第幾階，寫在結局那一段的最後。"
+# 減法季 7e：清單裡有人物心意、受託辦事、約戰（TIES）的那一篇多這一條（_ties；待 joy 潤）。條號接在前面的後面（有 TIER_RULE 是 8，沒有是 7）
+TIES_RULE = ("\n{n}. 清單裡若有人物心意、受託辦事、出陣約戰這幾類事，各用一兩句帶過，放進與英雄交往或單打獨鬥那一段。"
+             "人物心意是眾人合力勸成的，只能寫{name}也在其中，不可寫成{him}一人改了人物的主意；約戰的勝負只用清單裡的字，對手是誰照清單寫。")
 
 
 def messages(req: BiographyRequest) -> list[dict[str, str]]:
     ask = f"請替「{req.name}」寫列傳。以下是事實清單：\n\n{outline(req)}"
     if req.rewrite:
         ask += "\n\n（這是重寫：換一種起筆與剪裁。）"
-    system = SYSTEM.format(name=req.name, him=gender.pronoun(req.sex), word=gender.word(req.sex)) + (TIER_RULE if _tiered(req) else "")
+    him = gender.pronoun(req.sex)
+    system = SYSTEM.format(name=req.name, him=him, word=gender.word(req.sex)) + (TIER_RULE if _tiered(req) else "")
+    if _ties(req):
+        system += TIES_RULE.format(n=8 if _tiered(req) else 7, name=req.name, him=him)
     return [{"role": "system", "content": system}, {"role": "user", "content": ask}]
 
 
@@ -189,6 +217,23 @@ def _when(when: str) -> str:
     return f"第{_cn(int(m.group(1)))}日" if m else ""
 
 
+def _pick(rows: list[dict], limit: int, prefer: frozenset[str] = frozenset()) -> list[dict]:
+    """備援文字每一段最多取 limit 則，照時間先後排。prefer 空的（關著的季）就是前 limit 則，跟以前一樣；有 prefer（7e，列傳為終點）：
+    那幾類先留 limit 的一半位子（份量重的先、同份量取近的），剩下的位子照時間先後給別的（包括沒進一半位子的那幾類）。"""
+    if not prefer:
+        return rows[:limit]
+    wanted = sorted((i for i, e in enumerate(rows) if e.get("kind") in prefer), key=lambda i: (-rows[i].get("weight", 1), -i))
+    chosen = set(wanted[: limit // 2])
+    chosen |= set([i for i in range(len(rows)) if i not in chosen][: limit - len(chosen)])
+    return [rows[i] for i in sorted(chosen)]
+
+
+def _tie_line(e: dict, name: str) -> str:
+    """心意、託付、約戰（TIES）的一句備援（7e）：時刻只留到週或日、接在前面，沒有主詞的補上名號（TIES_LINE）。"""
+    when = _when(e.get("when", ""))
+    return _end(TIES_LINE[e["kind"]].format(when=f"{when}，" if when else "", name=name, text=_strip(e["text"], name)))
+
+
 def rule_text(req: BiographyRequest) -> str:
     """照行狀拼一篇：四段加評曰。每一句都是行狀裡的原話，只多一些接筆的字。"""
     name, p = req.name, req.profile
@@ -215,10 +260,14 @@ def rule_text(req: BiographyRequest) -> str:
         paras.append("其臨陣也，" + "".join(lines))
     else:
         paras.append(f"{name}未嘗與於天下大戰。")
+    zhuan = _zhuan(req)  # 列傳為終點開著（7e）：心意、託付、約戰各留位子、補主詞與時刻；關著照原本取前幾則
     figures = groups["figure"]
     if figures:
         lines = []
-        for e in figures[:8]:
+        for e in _pick(figures, 8, frozenset({STANCE, ERRAND}) if zhuan else frozenset()):
+            if zhuan and e.get("kind") in TIES:
+                lines.append(_tie_line(e, name))
+                continue
             line = _end(_strip(e["text"], name))
             if e.get("quote"):
                 line += f"{name}問曰：「{e['quote']}」"
@@ -226,8 +275,8 @@ def rule_text(req: BiographyRequest) -> str:
                 line += f"對曰：「{e['reply']}」"
             lines.append(_end(line))
         paras.append("其與當世英雄交也，" + "".join(lines))
-    fights = groups["fight"][:4]
-    end = "".join(f"{_strip(e['text'], name)}。" for e in fights)
+    fights = _pick(groups["fight"], 4, frozenset({DUEL}) if zhuan else frozenset())
+    end = "".join(_tie_line(e, name) if zhuan and e.get("kind") in TIES else f"{_strip(e['text'], name)}。" for e in fights)
     tail = f"季終，年資武藝至第{_cn(p.get('level', 1))}級"
     if p.get("ranger"):
         tail += f"，江湖稱「{p['ranger']}」"
