@@ -62,6 +62,8 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 - **一件事一個 commit、但共用同一個測試檔**：測試檔照 `# ── N. 標題` 的段落標記切（標頭＋第 1..k 段），引擎的 hunk 退回去用 `(最終, 修之前)` 字串對照；一支 `split_commits.py <k>` 把第 k 件放進索引、工作樹不動（本輪六件，scratchpad `jianfa-2-fix/split_commits.py`），提交完用 `git archive <commit>` 解出來各跑一次相關測試檔確認單獨一筆是綠的（`verify_each.py`）。
 - **解 `git archive` 的 tar 用 Python 的 `tarfile`**（2026-10-25 減法季批 3c 接線）：Git Bash 的 `tar --force-local` 碰到 PowerShell 給的反斜線路徑照樣「Cannot open」；`python -c "import tarfile,sys; tarfile.open(sys.argv[1]).extractall(sys.argv[2])" <tar> <目錄>` 一次就好。
 - **整份對照（資料庫 JSON）不要加 `-I`**（2026-10-25）：`-I` 連 `PYTHONHASHSEED` 也忽略，`WorldState.flags`／`revealed`／`fired_thresholds` 這些 set 每次寫出來順序不同，同一版跑兩次 `seasons` 那一列的雜湊就不一樣（長度一樣）。腳本自己 `sys.path.insert(0, root)`、`os.chdir(root)`，不加 `-I`、設 `PYTHONHASHSEED=0`，先跑同一版兩次確認零差異再比。
+- **scratchpad 的腳本別取標準庫的名字**（2026-10-26：`inspect.py`）：Python 把腳本所在的資料夾排在 `sys.path` 最前面，`pydantic` → `typing_extensions` 的 `import inspect` 拿到自己那支，報「partially initialized module 'tianxia.characters'（circular import）」，看起來像程式壞了。取 `look_saves.py` 這種名字。
+- **文件的衝突兩邊都留**：scratchpad 一支 `union.py <檔>`（照 CRLF 讀、`<<<<<<<`／`=======`／`>>>>>>>` 成對拿掉標記、HEAD 那一段在前、斷言成對），一個檔一次，跑完 `git grep -n "^<<<<<<<"` 確認沒有剩。程式的衝突照舊一處一處用 Edit 看著解。
 - **不要寫帶中文路徑的 `.ps1`**：Write 工具寫出的 .ps1 沒有 BOM，Windows PowerShell 5.1 照 ANSI 讀，`C:/Ray/專案/…/python.exe` 變亂碼、每一行都 CommandNotFound（2026-10-20 背景跑對照表踩到，log 只看得到一串錯）。要串好幾個 python 程式，就寫一支 Python 調度腳本，用 `sys.executable` 叫子程式，再從 PowerShell 跑那一支。
 
 ## 測試怎麼挑
@@ -222,6 +224,8 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 - **`BattleRecord.kind` 是 Literal，新的一種戰報不要加值**（FB-695：舊程式讀不進新存檔）：照舊用現成的 kind（例 `sortie`），種類的字寫在 `BattleRecord.label`（戰報上寫的種類，空的照 `battlelog.KIND_WORDS`）。
 - **照現實秒走的規則，整季機器人推不動**（`Game.advance` 只加 `advanced_real`、不動 `now`）：約戰的窗、冷卻照 `self.now`（FB-577：存進全服的時刻不用 `pill_now`），`bot.play_season` 裡永遠不到時，貼了就等季末作廢。量表與測試照伺服器的做法一步一步 `sync(now)`（`scripts/measure_conquest.py`）。
 - **參數放不進選單的玩家動作**（約戰封三招有 64 種組合，2026-10-26）：同 `step:next`，在 `Game.choose` 最前面接走（先問那條規則的 `on()`，關著照舊「此刻無法這麼做」），各自在 `world.mutate` 裡重驗；伺服器另開 `MAIN_ACTIONS` 走同一組 `Game` 方法。整季機器人與假人挑到的是選單上那一格（`act:train`），在 `bot.pick`／`bot_policy.take_turn` 最後換成帶參數的 id（`bot.duel_go`），不然按了那一格什麼都不做、每一步都白按。
+- **拿掉一顆行動，輿圖的疊層也要跟著拿**（2026-10-26 3b 收尾：約戰開著時沒有「守」）：行動列那一格、行動說明、玩法說明都改了，`Game.map_state` 傳給 `mapdata.state` 的 `sortie_mode` 還照 `sortie.mode` 回 `"hold"`，地點卡就畫「出陣・守」、「今天去哪裡出陣」照樣推薦、還寫「軍令・守城」。grep 那個規則函式（`sortie.mode`）的每一個呼叫點，輿圖那一處也要問新開關。
+- **伺服器排程的實機（窗、逾時這種現實時間）**：抄一份設定檔到 scratchpad、把那個窗改短（約戰 `"sortie": {…, "window_minutes": 1}`，`sortie` 這一塊在 `config.json` 沒有，淺層合併不會蓋掉別的），先在 `TIANXIA_DB` 用一支小腳本 `seed_first_season`＋`open_season(now=time.time())`，再 `Start-Process` 開伺服器；兩個帳號用 httpx 各一個 Client 走 API，**中間不輪詢**等窗滿，直接讀 world 那一列看是不是排程收的（2026-10-26 3b 收尾，scratchpad `jf3b/live/`）。
 - **結算時替好幾個人寫紀錄**（約戰的攻方、同去、應戰的人）：每個人一份 `Draft` 掛在他那一份 Game 上（`_order_credit` 的引導、`_file_battle` 的結果標記都寫進它），做完 `journal.add_entry(g.state, g._draft.entry(...))`、`finally` 還原；自己就是其中一方時用自己（不要另讀一份，不然存檔會被蓋掉），別人 `_load_kin` 改完 `_save_kin`。掉落用這一場自己的亂數：暫時把那一份 Game 的 `rng` 換掉、`finally` 換回。
 
 ## 量表怎麼讀
@@ -236,6 +240,8 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 - **量表跑之前擋模型**：scratchpad 寫一支包裝（把 `socket.socket.connect`／`socket.create_connection` 對 11434 的連線改成拒絕、`OllamaClient.from_config` 換成回 None，再 `runpy.run_path` 那支量表），量表的 `print` 包在 TextIOWrapper 裡，導到檔案時跑完才看得到（減法季批 2 的 `run_blocked.py`）。
 - **新規則多了一種「要選」的狀態，量表的迴圈要跟著了結**（減法季批 2：出門一趟的感悟拍會進有所感的「畫一筆」）：`measure_exp_pace._settle` 以前按選單第一顆，碰到 `sensing.DRAW` 只回「在畫布上畫」、迴圈空轉到上限，一天只出門兩趟；改成照整季機器人 `bot.sense_pick`／`bot.sense_draw`。先跑一天看一眼數字合不合理再背景跑整季。
 - `measure_difficulty` 的練功走法在減法季可能卡死：銀兩花光、內傷疊到氣血不到一半就不出門、付不起醫館，整季停在第 6 級（2026-10-25 season21 solo 種子 1，季在第 17.7 天收了，一個停點都沒量到）。照實報那一組，不要為了好看換種子不說。
+- **`scripts/measure_conquest.py`（約戰開著的季 20 人一季易手幾次）很慢**（2026-10-26 3b 收尾）：week7 一季一個種子單獨跑約 5 分鐘一天、整季 55～70 分鐘（八個平行時也是），season21 整季三個半小時以上。從 `git archive HEAD` 解到 scratchpad 的那一份跑（量表跑的時候你還要改工作樹、合分支），一支 Python 調度腳本平行開好幾個種子與倍數（`PYTHONHASHSEED=0`，每個子行程自己的 `TIANXIA_DB`），先拿 `--days 1` 看一眼合不合理。同一個種子同一份程式結果一樣（不設雜湊種子也一樣），種子之間差很大（week7 倍數 30：6～11 次），一個倍數至少三到五個種子才下結論。
+- **接手暫停的批，先找上一位開發的 scratchpad**（2026-10-26 3b 收尾）：`ls -d /c/Users/ray61/AppData/Local/Temp/claude/*/*/scratchpad/<批名>*`，探針（`cmp_off.py`）、量表的半成品（空的輸出檔就是被暫停打斷的那幾組）都在，照用、不必重寫。
 - **量貢獻別用 `measure_exp_pace` 的「最認真」**（2026-10-25 減法季批 3c）：它每一下挑經驗最多的（出陣守、練功），領地爭奪的季守推不動就不記，三天量出來是 0；只挑「攻」又常常打不贏（估的勝率偏高）。要量「認真玩幾天累積多少貢獻」改用假人的打分：建角色、`p.bot = BotProfile(personality="積極", …)`、每次同步之後一直叫 `bot_policy.take_turn` 到它回空的，貢獻照每一下前後的 `contrib` 差、記到那一下江湖紀錄的標題（腳本在當時 scratchpad 的 `jianfa-3c-wire/measure_contrib2.py`）。
 
 ## 回報 PM
