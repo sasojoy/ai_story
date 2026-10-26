@@ -800,7 +800,7 @@ def check_outing_lines(c: Content, need) -> None:
 
 
 ART_PATH = re.compile(r"^(places|figures|events)/[a-z0-9_]+$")  # web/img/ 底下的路徑：子資料夾／鍵，不含副檔名
-STORY_ART = re.compile(r"^stories/[a-z0-9_]+$")  # 一條線與它的結局的專屬圖（web/img/stories/<鍵>.webp）
+STORY_ART = re.compile(r"^stories/[a-z0-9_]+$")  # 一條線、段落卡與結局的專屬圖（web/img/stories/<鍵>.webp；頓悟是 dunwu_*）
 
 
 def event_effects(ev: Event) -> list[Effect]:
@@ -859,7 +859,7 @@ def check_storylines(c: Content, need) -> None:
         ids = [st.id for st in line.stages] + [e.id for e in line.endings]
         need(len(ids) == len(set(ids)), f"{lw}：段與結局的 id 有重複")
         known_ids = set(ids)
-        for img in [line.image] + [e.image for e in line.endings]:
+        for img in [line.image] + [e.image for e in line.endings] + [st.image for st in line.stages]:
             need(img is None or bool(STORY_ART.match(img)), f"{lw}：image「{img}」要寫成 stories/<鍵>")
         if line.start is not None:
             check_story_place(c, need, f"{lw} 的開頭", line.start.where)

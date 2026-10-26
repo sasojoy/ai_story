@@ -100,6 +100,17 @@ def scene_art(game: Game, status: dict) -> dict | None:
     }
 
 
+def story_cards(game: Game) -> list[dict]:
+    """特殊事件的跳顯框（Game.story_card_view）：圖檔真的在 web/img/ 才給 src（同 scene_art），內文轉成 HTML。"""
+    out = []
+    for card in game.story_card_view():
+        image = card.pop("image")
+        card["src"] = f"/static/img/{image}.webp" if image and (WEB / "img" / f"{image}.webp").is_file() else None
+        card["text"] = md(card["text"])
+        out.append(card)
+    return out
+
+
 def zhuan_art_src(key: str | None) -> str | None:
     """列傳插畫（減法季批 7b，zhuan_end.illustration_for 的圖庫鍵）的網址：web/img/zhuan/<鍵>.webp 真的在才給（雲端批 8 放圖；同 scene_art）。"""
     if not key:
@@ -1806,7 +1817,11 @@ def _main_view_body(game: Game) -> dict:
         "free_op": "battle_text" if game.battle_free_text_prompt() is not None
         else "seal_text" if game.seal_free_text_prompt() is not None
         else "feast_text" if game.feast_free_text_prompt() is not None else "duel_text",
-        "event_free_text": game.event_free_text_prompt(),  # 眼前事件的隨口應對：選單上那一顆按下去叫出輸入框
+        "event_free_text": game.event_free_text_prompt(),
+        # 事件分級：眼前的事件是第二、三階時，場景卡頂上那一行（州郡大事、天下大事）與框色；第一階是 None、一字不變
+        "event_tier": game.event_tier(),
+        # 特殊事件的跳顯框（開頭、此事已了・入傳、此事未了）：照順序一張一張跳，「收下」送 story_seen 清掉；沒有是空的
+        "story_cards": story_cards(game),  # 眼前事件的隨口應對：選單上那一顆按下去叫出輸入框
         # 「剛剛」：這次行動打了仗就放戰鬥卡片，卡片沒寫到的補充放在 now；之後配了點也一樣（配點不換「剛剛」，計畫二最終審查 M1）
         "card": md(card) if card is not None else None,
         "card_id": game.battle_card_id() if card is not None else None,
@@ -2427,6 +2442,7 @@ MAIN_ACTIONS = {
     "tavern": lambda g, b: g.tavern_do(str(b.get("op", "")), str(b.get("target", ""))[:20], str(b.get("text", ""))[:40]),
     "anonymous": lambda g, b: g.set_anonymous(bool(b.get("value"))),
     "gender": lambda g, b: g.set_gender(str(b.get("value", ""))),  # 設定頁：還沒選過性別的舊角色選一次（PM 2026-10-12）
+    "story_seen": lambda g, b: g.story_seen(),  # 特殊事件的跳顯框按「收下」：看過的卡清掉
     "letter_read": lambda g, b: g.read_letter(_int(b.get("id"), -1)),  # 書信小卡的「收起」（大勢人物擴充第二批）
     "letter_decline": lambda g, b: g.decline_letter(_int(b.get("id"), -1)),  # 書信小卡的「婉拒」：委託作罷
     "hints_off": lambda g, b: g.set_hints_off(bool(b.get("value"))),  # 設定頁的「不再提示」（碰到才說，新手引導計畫三）
@@ -2453,7 +2469,7 @@ MAIN_ACTIONS = {
 }
 # 賽季時鐘暫停中也照做的畫面設定（不推任何東西、不碰別人）：匿名、不再提示、略過引導、打開輿圖（頁面靠它載入輿圖）、軍令卡出現（入伍段第一步，
 # 只動自己的引導；被擋下的話網頁已經記成「送過了」，這個工作階段不會再送）、對話框的「知道了」
-PAUSE_OK_ACTIONS = frozenset({"anonymous", "gender", "hints_off", "skip_tutorial", "view_map", "view_orders", "guide_ack"})
+PAUSE_OK_ACTIONS = frozenset({"anonymous", "gender", "hints_off", "story_seen", "skip_tutorial", "view_map", "view_orders", "guide_ack"})
 ADMIN_ACTIONS = {
     "open_season": lambda g, b: g.admin_open_season(time.time()),
     "end_season": lambda g, b: g.admin_end_season(time.time()),

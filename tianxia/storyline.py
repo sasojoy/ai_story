@@ -105,8 +105,8 @@ def start(state: GameState, content: Content, line: StoryDef, custom: bool = Tru
         return None
     progress = StoryProgress(line=line.id, started=state.world.time, custom=line if custom else None)
     p.storylines[line.id] = progress
-    _enter(state, content, progress, line, line.stages[0].id)
     p.story_cards.append(StoryCard(line=line.id, kind="start", title=line.title, text=fill_marks(line.intro, state), image=line.image))
+    _enter(state, content, progress, line, line.stages[0].id)  # 第一段若有段落卡，排在開頭那張後面
     return progress
 
 
@@ -115,6 +115,9 @@ def _enter(state: GameState, content: Content, progress: StoryProgress, line: St
     progress.stage, progress.opened, progress.go = stage_id, False, None
     progress.tries, progress.retry_at, progress.step = 0, None, 0
     progress.due = None if stage.days is None else state.world.time + stage.days * day_seconds(content, state.world)
+    if stage.card:
+        state.player.story_cards.append(StoryCard(line=line.id, kind="stage", title=line.title, text=fill_marks(stage.card, state),
+                                                  image=stage.image))
 
 
 # ── 這一段做得了嗎、選單 ──────────────────────────────────
@@ -125,6 +128,16 @@ def current(content: Content, progress: StoryProgress) -> tuple[StoryDef, StoryS
         return None
     stage = line.stage(progress.stage)
     return None if stage is None else (line, stage)
+
+
+def stage_art(state: GameState, content: Content) -> str | None:
+    """眼前端出來的事件是某條線事件段的那一則（含它接下去的 next_event）、那一段寫了 image 時，場景卡用那張專屬圖
+    （Game.scene_art；web/img/<image>.webp）。沒有是 None，場景卡照事件自己的類型圖。"""
+    for progress in active(state):
+        pair = current(content, progress)
+        if pair is not None and progress.opened and pair[1].kind == "event" and pair[1].image:
+            return pair[1].image
+    return None
 
 
 def doable(state: GameState, content: Content, progress: StoryProgress) -> bool:
