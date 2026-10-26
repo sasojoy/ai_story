@@ -5533,7 +5533,9 @@ def test_the_page_polls_the_queue_only_while_waiting_on_the_model():
     assert 'watchQueue(submitBtn, "對方沉吟中…")' in say and "stop();" in say.split("finally")[1]
     gather = _js_function(js, "async function gatherSay(")  # 找素材的「自己說」（第 32 項）
     assert "watchQueue(submitBtn, GATHER_SAY_WAIT)" in gather and "stop();" in gather.split("finally")[1]
-    assert js.count("watchQueue(") == 7  # 定義一個、使用六個（對話與大場面是同一個選項流程；有所感畫完送出、對話「自己說」、找素材「自己說」各另一個）
+    persuade = _js_function(js, "async function persuadeSay(")  # 託付的勸降（減法季批 6，FB-829）
+    assert "watchQueue(submitBtn, PERSUADE_WAIT)" in persuade and "stop();" in persuade.split("finally")[1]
+    assert js.count("watchQueue(") == 8  # 定義一個、使用七個（對話與大場面是同一個選項流程；有所感畫完送出、對話「自己說」、找素材「自己說」、勸降各另一個）
     sheet = _js_function(js, "function sheetHtml(")
     assert "a && a.llm_queue" in sheet and "模型佇列：處理中" in sheet
 

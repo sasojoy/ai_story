@@ -171,6 +171,7 @@
     wheelSel: null, // 江湖頁行動列展開的那一格（move；探索三選一開著時也有 explore）
     gatherOpen: false, // 探索卡上「找素材」底下的分支攤開了沒（第 32 項；做完一件事不收，下次點探索就直接看到）
     gatherSaying: false, // 找素材的「自己說…」輸入框叫出來了沒
+    persuading: false, // 託付的勸降：輸入框叫出來的那一顆（errand:persuade:<id>），沒有是 false
     sensing: false, // 有所感：畫布叫出來了沒（按了「把心中的形畫下來」）；感悟狀態結束（選單上沒有 SENSE_DRAW）就收起
     sensePts: [], // 畫布上那一筆的點位 [[x, y, 毫秒], …]（畫布座標 0～256）；輪詢重畫頁面之後照它補畫回去
     senseNote: "", // 畫布底下那一行：這一筆落下了沒（/api/sense_read；不寫筆畫的幾何）
@@ -377,6 +378,7 @@
     if (typeof ascendCard === "function") setTimeout(ascendCard, 0);
     if (main.event_free_text == null) S.answering = false; // 事件過去了，輸入框跟著收起
     if (!(main.options || []).some((o) => o.id === sayingId())) S.saying = false; // 交談結束了（或那一顆沒了），輸入框跟著收起
+    if (S.persuading && !(main.options || []).some((o) => o.id === S.persuading)) S.persuading = false; // 走開了、那一件辦完了：勸降的輸入框收起
     if (S.sensing && !(main.options || []).some((o) => o.id === SENSE_DRAW)) closeSense(); // 感悟狀態過去了（悟成、作廢），畫布跟著收起
     // 見聞的紅點只為新的一場亮（比 card_id）：配點之後「剛剛」照舊是升級那一場的卡片，看過戰報再配點不再亮一次（計畫二最終審查 M1）；
     // 放在這裡是因為動作回來的與輪詢拿到的都走 setMain——決戰收場的卡片常常是輪詢（sync）補送的。登入那一份不亮（S.main 還沒有）
@@ -5353,6 +5355,13 @@
       if (input) input.focus();
       return;
     }
+    if (id.startsWith(PERSUADE_PREFIX)) { // 託付的勸降：先叫出輸入框，寫好再送（見 persuadeSay；按了 /api/choose 只回一句「寫下你要怎麼勸他」，FB-829）
+      S.persuading = id;
+      renderPage();
+      const input = document.querySelector("#persuade-form .input");
+      if (input) input.focus();
+      return;
+    }
     if (id === GATHER_SAY_ID) { // 找素材的「自己說」：先叫出輸入框，寫好再送（見 gatherSay）
       S.gatherSaying = true;
       renderPage();
@@ -5378,6 +5387,7 @@
         S.answering = false;
         S.saying = false;
         S.gatherSaying = false; // 找素材「自己說」的輸入框叫出來之後改按了別的（一條分支）：下次攤開分支不再停在輸入框
+        S.persuading = false;
         S.wheelSel = null; // 收起展開的移動
         applyMain(r.main);
         if (id.startsWith("bounty:give:")) boardHanded(id, shopBefore); // 店面的懸賞榜：交差了蓋朱印（第四節）
@@ -5439,6 +5449,31 @@
         submitBtn.textContent = GATHER_SAY_GO;
       }
     }, waitLineFor(GATHER_SAY_ID));
+  }
+
+  // 託付的勸降（減法季批 6，FB-829）：送出後要等模型評這一句（同隨口應對），按鈕先寫「斟酌中……」；
+  // 被擋下來的那一句（字數不對、人不在那裡）在江湖紀錄裡沒有，用提示泡泡講，輸入框留著；送成了（勸成、打起來、對方不置可否）收起
+  const PERSUADE_WAIT = "斟酌中……"; // 待 joy 潤
+  async function persuadeSay(form, text) {
+    await busy(async () => {
+      form.querySelectorAll("input, button").forEach((el) => { el.disabled = true; });
+      const submitBtn = form.querySelector("[type=submit]");
+      submitBtn.textContent = PERSUADE_WAIT;
+      const stop = watchQueue(submitBtn, PERSUADE_WAIT);
+      try {
+        const r = await api("/api/do/persuade_text", { id: form.dataset.id, text });
+        const said = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+        const done = said.startsWith("你：") || !((r.main && r.main.options) || []).some((o) => o.id === S.persuading);
+        if (done) S.persuading = false;
+        applyMain(r.main);
+        if (said && !done) toast(said);
+        if (done) window.scrollTo({ top: 0, behavior: "smooth" });
+      } finally {
+        stop();
+        form.querySelectorAll("input, button").forEach((el) => { el.disabled = false; });
+        submitBtn.textContent = PERSUADE_GO;
+      }
+    });
   }
 
   // 隨口應對：送出後要等模型評這個做法，首次常要好幾秒，按鈕先寫「思量中……」
@@ -6375,6 +6410,9 @@
       } else if (form.id === "say-form") {
         if (!data.text.trim()) return;
         await sayLine(form, data.text.trim());
+      } else if (form.id === "persuade-form") {
+        if (!data.text.trim()) return;
+        await persuadeSay(form, data.text.trim());
       } else if (form.id === "gather-say-form") {
         if (!data.text.trim()) return;
         await gatherSay(form, data.text.trim());

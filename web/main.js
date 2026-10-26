@@ -249,6 +249,15 @@
   const GATHER_ID = "explore:gather"; // engine：explore_modes.option_id(GATHER)
   const GATHER_BRANCH = "explore:gather:"; // 分支的前綴
   const GATHER_SAY_ID = "explore:gather:say"; // explore_modes.SAY_ID
+  // 託付的勸降（減法季批 6，主機側計畫 1.3）：此地的「勸降」按了不送 /api/choose，就地換成二十字的輸入框（S.persuading 記那一顆的 id），
+  // 送 POST /api/do/persuade_text {id: 那一件託付, text}（persuadeSay）
+  const PERSUADE_PREFIX = "errand:persuade:";
+  const PERSUADE_HINT = "怎麼勸他？（20字內）"; // 待 joy 潤：輸入框的提示
+  const PERSUADE_GO = "勸他"; // 待 joy 潤：送出鈕
+  function persuadeForm(o) {
+    return `<form class="free answer persuade" id="persuade-form" data-id="${esc(o.id.slice(PERSUADE_PREFIX.length))}"><input class="input" name="text" maxlength="20" placeholder="${esc(PERSUADE_HINT)}" aria-label="${esc(o.label)}"><button class="btn primary small" type="submit">${esc(PERSUADE_GO)}</button></form>`;
+  }
+  const persuadingNow = (o) => S.persuading === o.id && o.enabled;
   // 勝算的顏色（FB-044）：遊歷的小字第二行照風險上色
   const ODDS_TONE = { "穩勝": "good", "有把握": "good", "零風險": "good", "五五波": "even", "難分勝負": "even", "凶險": "bad", "必敗": "bad" };
   // 選單上有「探索」就是平常閒著的時候（以前認打坐，2026-10-12 拿掉了）：用行動列。事件、對話、路上、決戰的選項每次都不一樣，照舊排成一列按鈕
@@ -564,10 +573,10 @@
     // 入伍段要你按的那一顆收在這裡（巡哨、傳道、保境安民、接糧車……，伺服器在框上帶的 guide.glow，FB-093）：那一步在這一處開頭摺疊先打開
     // 一次、那一顆發光（applyGlow）；其他時候收著。開合記在 S.here（hereFold，FB-087），重畫照它補回
     const extras = m.options.filter((o) => !used.has(o.id));
-    const hotHere = extras.some((o) => guideGlow().includes(o.id));
+    const hotHere = extras.some((o) => guideGlow().includes(o.id)) || extras.some(persuadingNow); // 勸降的輸入框叫出來了：摺疊要開著
     // 論武的「答應」（選單上那一顆引擎不收、是灰的）：場景底下那一列帶了 peer，這裡同一顆也畫成打開他的玩家卡（FB-117，callPeers）
     const peers = callPeers(m);
-    const here = extras.length ? `<details class="fold here"${hereFold(m, hotHere) ? " open" : ""}><summary>此地還能做 ${extras.length} 件事</summary><div class="fold-body options">${extras.map((o) => peers[o.id] ? `
+    const here = extras.length ? `<details class="fold here"${hereFold(m, hotHere) ? " open" : ""}><summary>此地還能做 ${extras.length} 件事</summary><div class="fold-body options">${extras.map((o) => persuadingNow(o) ? persuadeForm(o) : peers[o.id] ? `
         <button class="btn" data-act="peer-answer" data-name="${esc(peers[o.id])}"><span>${esc(o.label)}</span></button>` : `
         <button class="btn" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}><span>${dealHtml(o.label)}</span></button>`).join("")}</div></details>` : "";
     const drawn = cells.filter(Boolean); // 序章裡沒亮的格子是空字串；一格都沒有、也沒有「此地還能做」時整條不畫
@@ -660,6 +669,7 @@
 
   // 書信（大勢人物擴充第二批）：「剛剛」上面一張小卡，收著只露一行（誰來信、開頭幾個字），點了攤開全文與委託；
   // 「收起」記成看過了（委託照樣在身上，懸賞卡上看得到），求援的「婉拒」讓委託作罷。字都是伺服器寫好的（letters.view）
+  const ERRAND_STATE = { open: "託付", done: "辦成了", lapsed: "作罷了", declined: "婉拒了", failed: "沒談成" }; // errands.card 的 status
   function letterHtml(x) {
     if (!x) return "";
     const open = S.letterOpen === x.id || (!!x.open && S.letterShut !== x.id); // 開局的託付一到就攤開（letters.view 的 open），收攏過才收著
@@ -667,10 +677,14 @@
     const t = x.task;
     const task = t ? `<div class="letter-task"><div class="order-head"><b>${esc(t.title)}</b><span>${esc(t.state || "委託")}</span></div>
         <div class="order-how">${esc(t.how)}</div><div class="order-meta">${esc(t.reward)}</div><div class="order-meta">${esc(t.due)}</div></div>` : "";
-    const decline = t && t.live ? `<button class="btn small ghost" data-act="letter-decline" data-id="${x.id}">婉拒</button>` : "";
+    // 人物每週託的那一件（減法季批 6，letter.errand：同 main.errands 的一筆）：做什麼、到哪裡、期限，還在辦（open）時一樣能婉拒（letters.decline）
+    const e = x.errand;
+    const errand = e ? `<div class="letter-task"><div class="order-head"><b>${esc(e.text)}</b><span>${esc(ERRAND_STATE[e.status] || "託付")}</span></div>
+        ${e.target && e.target.name ? `<div class="order-how">到${esc(e.target.name)}${e.target.minutes ? `（步行約 ${e.target.minutes} 分鐘）` : e.target.minutes === 0 ? "（就在這裡）" : ""}</div>` : ""}<div class="order-meta">期限 ${esc(e.deadline)}</div></div>` : "";
+    const decline = (t && t.live) || (e && e.status === "open") ? `<button class="btn small ghost" data-act="letter-decline" data-id="${x.id}">婉拒</button>` : "";
     return `<section class="card letter${open ? " open" : ""}" data-letter="${x.id}">
       <button class="letter-head" data-act="letter-open" data-id="${x.id}" aria-expanded="${open}"><span class="letter-k">${esc(x.kind)}</span><b>${esc(x.sender)}來信</b>${open ? "" : `<span class="letter-peek">${esc(x.text)}</span>`}<span class="letter-arrow" aria-hidden="true">${open ? "▴" : "›"}</span></button>
-      ${open ? `<div class="letter-body"><p>${esc(x.text)}</p><p class="letter-sign">${esc(x.sender)}</p>${task}<div class="row">${decline}<button class="btn small" data-act="letter-read" data-id="${x.id}">收起</button></div></div>` : ""}
+      ${open ? `<div class="letter-body"><p>${esc(x.text)}</p><p class="letter-sign">${esc(x.sender)}</p>${task}${errand}<div class="row">${decline}<button class="btn small" data-act="letter-read" data-id="${x.id}">收起</button></div></div>` : ""}
     </section>`;
   }
 
@@ -1139,7 +1153,7 @@
     // 有所感選做法（explain-2）：伺服器給了 sense_help.tags 才把鈕上原本寫 1～4 的那一格改寫這個做法是哪一種心意（不多佔寬度）。
     // 審查 I1 起伺服器預設不給（sensing.SHOW_KINDS）：鈕上照舊 1～4；企劃者要恢復時伺服器那邊改一行，這裡照畫
     const senseTag = (o) => (m.sense_help && m.sense_help.tags && m.sense_help.tags[o.id]) || "";
-    const menu = idleMenu(m) ? actionBar(m) : `<div class="options">${opts.map((o, i) => S.sensing && o.id === SENSE_DRAW ? sensePadHtml() : o.id === FREE_TEXT_OPTION && S.answering && o.enabled ? `
+    const menu = idleMenu(m) ? actionBar(m) : `<div class="options">${opts.map((o, i) => S.sensing && o.id === SENSE_DRAW ? sensePadHtml() : persuadingNow(o) ? persuadeForm(o) : o.id === FREE_TEXT_OPTION && S.answering && o.enabled ? `
         <form class="free answer" id="answer-form"><input class="input" name="text" maxlength="20" placeholder="${esc(o.label)}（20字內）" aria-label="${esc(o.label)}"><button class="btn primary small" type="submit">說出口</button></form>` : SAY_OPTIONS.includes(o.id) && S.saying && o.id === sayingId() && o.enabled ? `
         <form class="free answer" id="say-form"><input class="input" name="text" maxlength="${m.say_max || 20}" placeholder="${SAY_HINTS[o.id] ? `${SAY_HINTS[o.id]}（${m.say_max || 20}字內）` : (m.say_max || 20) > 20 ? `想對他說的話，也可以開口求他做事（${m.say_max}字內）` : "想對他說的話（20字內）"}" aria-label="${esc(o.label)}"><button class="btn primary small" type="submit">說出口</button></form>` : isTask(o) ? `${i === firstTask ? '<div class="road-tasks">' : ""}${taskButton(o)}${i === lastTask ? "</div>" : ""}` : paired && isWay(o) ? `${i === firstWay ? '<div class="road-tasks road-ways">' : ""}${wayButton(o)}${i === lastWay ? "</div>" : ""}` : `${i === firstMove && !modesLast ? modes : ""}
         <button class="btn ${followsMode(o.id) ? "go" : ""}${!o.enabled && o.note ? " off" : ""}" data-act="${!o.enabled && o.note ? "opt-why" : "choose"}" data-id="${esc(o.id)}" ${!o.enabled && o.note ? `data-why="${esc(o.note)}" title="${esc(o.note)}" aria-disabled="true"` : o.enabled ? "" : "disabled"}>
