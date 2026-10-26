@@ -1383,6 +1383,15 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .sheet.still, .sheet-bg.still { animation: none; } /* 玩家卡跟著輪詢換一張（FB-117）：不再滑上來一次 */
 .toggle { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); margin-bottom: 10px; cursor: pointer; }
 .toggle input { width: 20px; height: 20px; accent-color: var(--accent); }
+.push-help { margin: -4px 0 12px; }
+/* 怎麼收到手機通知（設定抽屜整頁換成它）：頂上一句此刻的狀況、偵測到的裝置攤開、其他兩種收在摺疊裡 */
+.push-how .push-status { padding: 10px 14px; border-left: 3px solid var(--accent); background: var(--card); border-radius: var(--radius); font-size: 15px; line-height: 1.6; }
+.push-how-sec { margin-top: 12px; }
+.push-how-sec h4 { margin: 0 0 6px; font-size: 16px; }
+.push-how-sec h5 { margin: 12px 0 4px; font-size: 14px; color: var(--ink-2); }
+.push-how-sec p { margin: 0; font-size: 14px; line-height: 1.65; }
+.push-steps { margin: 0; padding-left: 1.4em; font-size: 15px; line-height: 1.7; }
+.push-steps li + li { margin-top: 6px; }
 /* 管理者工具（G3）：排在一般設定之後、虛線框加淡金底，一眼看得出是另一塊；「開啟下一季」用警示樣式 */
 .admin-zone {
   margin-top: 24px; padding: 12px 14px 14px; border: 1.5px dashed var(--gold); border-radius: var(--radius);

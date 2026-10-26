@@ -302,3 +302,33 @@ def test_service_worker_and_manifest_are_served():
     assert sw.status_code == 200 and "showNotification" in sw.text and "javascript" in sw.headers["content-type"]
     assert client.get("/manifest.webmanifest").json()["start_url"] == "/"
     assert 'rel="manifest"' in client.get("/").text
+
+
+def test_home_screen_icons_are_linked_and_really_that_size():
+    """加入主畫面的圖示（Joy 2026-10-26）：iPhone 不吃 manifest 的 SVG，index.html 要 apple-touch-icon 的 PNG（180、滿版）與
+    apple-mobile-web-app-title；manifest 的 icons 補 192／512 的 PNG 與一張 maskable；每一張都在 web/、尺寸跟寫的一樣、拿得到。"""
+    import io
+    import re
+
+    from PIL import Image
+
+    client = TestClient(server.app)
+    page = client.get("/").text
+    assert '<meta name="apple-mobile-web-app-title" content="天下大勢">' in page
+    touch = re.search(r'<link rel="apple-touch-icon" href="(/static/icon-180\.png\?v=[^"]+)">', page)
+    assert touch, page[:600]
+    r = client.get(touch[1])
+    assert r.status_code == 200 and r.headers["content-type"] == "image/png"
+    im = Image.open(io.BytesIO(r.content))
+    assert im.size == (180, 180) and im.getpixel((0, 0))[3] == 255  # 滿版：iOS 自己切圓角，透明的角會變黑
+    icons = client.get("/manifest.webmanifest").json()["icons"]
+    assert [(i["sizes"], i["purpose"]) for i in icons if i["type"] == "image/png"] == [("192x192", "any"), ("512x512", "any"), ("512x512", "maskable")]
+    for icon in icons:
+        if icon["type"] != "image/png":
+            continue
+        r = client.get(icon["src"])
+        assert r.status_code == 200 and r.headers["content-type"] == "image/png"
+        size = int(icon["sizes"].split("x")[0])
+        im = Image.open(io.BytesIO(r.content))
+        assert im.size == (size, size)
+        assert (im.getpixel((0, 0))[3] == 255) == (icon["purpose"] == "maskable")  # maskable 滿版；any 的跟 icon.svg 一樣圓角
