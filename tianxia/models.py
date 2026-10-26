@@ -2688,6 +2688,9 @@ class SortieRules(_Strict):
     rare_horse: float = Field(default=0.02, ge=0, le=1)  # 良駒
     treasure_cap: int = Field(default=2, ge=0)  # 出陣掉的寶物一人一季最多幾件（不讀 figure_treasure_cap；season21 寫 3【PM】）
     horse_cap: int = Field(default=1, ge=0)  # 出陣掉的良駒一人一季最多幾匹
+    # ── 出陣回報的小籤寫字不寫數字（企劃者 2026-10-26「出陣寫字」；sortie.amount_words、order_words）──
+    chip_mine_steps: tuple[float, float] = (5.0, 15.0)  # 【PM】今天自己推的量：到第一個「推了不少」、到第二個「推了一大截」，不到「推了一點」
+    chip_all_steps: tuple[float, float] = (15.0, 50.0)  # 【PM】全軍今天推的量，同上（全軍是很多人加起來，門檻高一些）
 
 
 class ExploreModes(_Strict):

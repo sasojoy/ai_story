@@ -158,16 +158,29 @@ REPORT_HOLD = "{place}{side}守著。{rival}的進度被拉到 {value}／100，�
 REPORT_HOLD_CLEAR = "{place}{side}守著，對面的進度都已歸零。"
 REPORT_BLOCKED = "{place}此刻推不動進度：{why}。"
 CHIP_FLIP = "易手・這一下是你推滿的"
-CHIP_MINE = "今天你替{side}推了 {n}"
-CHIP_ALL = "全軍今天 {n}"
-CHIP_ORDER = "軍令「{kind}」{done}/{quota}"
-CHIP_ORDER_DONE = "軍令「{kind}」{done}/{quota} 已達成"
+# 小籤寫字不寫數字（企劃者 2026-10-26「出陣寫字」）：推的量照 Config.sortie.chip_*_steps 分三級，軍令照完成幾成分級。進度條、「你今日出陣 n/5」照舊
+CHIP_MINE = "今天你替{side}{n}"
+CHIP_ALL = "全軍今天{n}"
+CHIP_ORDER = "軍令「{kind}」{done}"
+CHIP_ORDER_DONE = "軍令「{kind}」已達成"
+AMOUNT_NONE = "還沒推動"
+AMOUNT_WORDS = ("推了一點", "推了不少", "推了一大截")  # 待 joy 潤
+ORDER_WORDS = ((0.0, "還沒起頭"), (0.5, "剛起頭"), (0.8, "過半"), (1.0, "快成了"))  # 完成幾成「不到」這個數用這一句；待 joy 潤
 
 
-def amount_text(x: float) -> str:
-    """小籤上的量：四捨五入成整數（同 conquest.PUSH_LINE）；推動了卻不到半點寫「不到 1」，沒推是 0。"""
-    n = int(x + 0.5)
-    return str(n) if n > 0 or x <= 0 else "不到 1"
+def amount_words(x: float, steps: tuple[float, float]) -> str:
+    """小籤上的量：沒推（四捨五入不到 0.5 也算推了一點）寫「還沒推動」，其餘照 steps 分三級。"""
+    if x <= 0:
+        return AMOUNT_NONE
+    return AMOUNT_WORDS[sum(x >= s for s in steps)]
+
+
+def order_words(done: int, quota: int) -> str:
+    """軍令進度：0 次「還沒起頭」，不到一半「剛起頭」，不到八成「過半」，其餘「快成了」（達成了另一句 CHIP_ORDER_DONE）。"""
+    if done <= 0 or quota <= 0:
+        return ORDER_WORDS[0][1]
+    share = done / quota
+    return next((w for cap, w in ORDER_WORDS[1:] if share < cap), ORDER_WORDS[-1][1])
 
 
 def report(
@@ -205,9 +218,10 @@ def report(
         text = (REPORT_HOLD.format(place=place, side=name(side), rival=name(rivals[0][1]), value=int(rivals[0][0] + 0.5)) if rivals
                 else REPORT_HOLD_CLEAR.format(place=place, side=name(side)))
     chips = [FrontChip(text=CHIP_FLIP, kind="flip")] if flipped else []
-    chips += [FrontChip(text=CHIP_MINE.format(side=name(side), n=amount_text(mine_today))),
-              FrontChip(text=CHIP_ALL.format(side=name(side), n=amount_text(side_today)))]
-    chips += [FrontChip(text=(CHIP_ORDER_DONE if done else CHIP_ORDER).format(kind=kind, done=n, quota=quota))
+    cfg = content.config.sortie
+    chips += [FrontChip(text=CHIP_MINE.format(side=name(side), n=amount_words(mine_today, cfg.chip_mine_steps))),
+              FrontChip(text=CHIP_ALL.format(side=name(side), n=amount_words(side_today, cfg.chip_all_steps)))]
+    chips += [FrontChip(text=(CHIP_ORDER_DONE if done else CHIP_ORDER).format(kind=kind, done=order_words(n, quota)))
               for kind, n, quota, done in orders]
     return FrontReport(
         loc=loc_id, title=REPORT_TITLE.format(place=place), count=REPORT_COUNT.format(n=used, cap=content.config.sortie.per_day),
