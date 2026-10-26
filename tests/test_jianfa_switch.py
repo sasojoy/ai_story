@@ -61,7 +61,9 @@ def test_batch2_numbers_ride_on_config_jianfa():
 
     cfg = load_content(CONTENT, profile="season21").config.jianfa
     assert isinstance(cfg, JianfaNumbers)
-    assert (cfg.explore_stamina, cfg.beats, cfg.drill_full_per_day, cfg.drill_floor, cfg.drill_level_cap) == (18, 3, 15, 0.3, 45)
+    # 2d（企劃者 2026-10-26）：一趟只抽一件事（沒有「一趟幾拍」了）、體力 15（原本 18）
+    assert (cfg.explore_stamina, cfg.drill_full_per_day, cfg.drill_floor, cfg.drill_level_cap) == (15, 15, 0.3, 45)
+    assert not hasattr(cfg, "beats")
     assert cfg.milestone_levels == [10, 20, 30, 40, 50] and cfg.stat_points_per_milestone == 5
     assert cfg.stat_rates.bonus_per_point == 0.06 and cfg.town_foes == ["dipi"] and cfg.town_loot_scale == 0.5
     assert cfg.camp_spar_share == 0.3  # 修正輪（PM 2026-10-26）：自家營寨比劃給對手那一路的三成

@@ -18,13 +18,13 @@ def _fight(tier: str = "大勝"):
 
 
 def _outing_fight(game, nth: int | None = None):
-    """在所在地出門一趟、第一拍打一場（打贏）；nth 給了先把今天記成已經打了 nth − 1 場。回那一場的戰報。"""
+    """在所在地出門一趟、遇上一場（打贏；2d 起一趟只有一件事）；nth 給了先把今天記成已經打了 nth − 1 場。回那一場的戰報。"""
     p = game.state.player
     if nth is not None:
         p.fight_day, p.fights_today = game._pill_day(), nth - 1
     p.stamina = 250.0
     game.state.pending_event = None
-    with mock.patch.object(explore_one, "draw", return_value=["encounter", "material", "material"]), _fight():
+    with mock.patch.object(explore_one, "draw", return_value="encounter"), _fight():
         game.choose("act:explore")
     return next(r for r in game.state.battles if r.id == game.state.battle_card)
 
@@ -112,7 +112,7 @@ def test_camp_sparring_is_a_fight_past_45():
     game = _camp(side="guan")
     p = _to(game, 45, 10)
     p.fight_day, p.fights_today = game._pill_day(), 0
-    with mock.patch.object(explore_one, "draw", return_value=["encounter", "material", "material"]):
+    with mock.patch.object(explore_one, "draw", return_value="encounter"):
         game.choose("act:explore")
     assert p.member.level == 46 and p.fights_today == 1
 

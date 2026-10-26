@@ -190,10 +190,10 @@ class OutingPlan:
     都讀這一份，說的跟擲的不會走樣）。只讀，不擲骰。"""
 
     kind: str  # 這一處算哪一種地點（explore_one.kind_of：town、temple、ford、wild、hill、camp）
-    weights: dict[str, int]  # 每一拍四類的比重（explore_one.weights；這裡此刻抽不到事件、悟不出的那一類已經是 0）
-    how: str | None  # 遭遇拍打誰：bounty 討伐懸賞那一路、spar 自家營寨跟同袍比劃、foe 這裡最弱的對手、town 城裡的地痞；都沒有是 None
+    weights: dict[str, int]  # 這一趟四類事的比重（explore_one.weights；這裡此刻抽不到事件、悟不出的那一類已經是 0；接了討伐懸賞只有遭遇）
+    how: str | None  # 遭遇打誰：bounty 討伐懸賞那一路、spar 自家營寨跟同袍比劃、foe 這裡最弱的對手、town 城裡的地痞；都沒有是 None
     foe: Squad | None  # 那一路
-    boss: DuelBoss | None  # 遭遇拍有機會撞上的頭目（接了這裡的討伐懸賞不擲）
+    boss: DuelBoss | None  # 遭遇有機會撞上的頭目（接了這裡的討伐懸賞不擲）
     hint: str  # 鈕上括號裡最後那一段小字，也是四格探索那一格的小字（/api/main 的 mostly；explore_one.hint_of：以地點種類的字為主，招牌類此刻的比重是 0 才照上面 weights 最重的一類；有賞、同袍比劃）
 
     @property
@@ -2215,7 +2215,7 @@ class Game:
         notes: dict[str, str] = {}
         if "act:explore" in ids and self._outing_on():  # 減法季探索一顆：這一處多半給什麼（比重照擲骰用的那一份，_outing_plan）
             plan = self._outing_plan(loc)
-            notes["act:explore"] = howto.outing_line(plan.weights, c.config.jianfa.beats, plan.foe_note)
+            notes["act:explore"] = howto.outing_line(plan.weights, plan.foe_note)
         elif "act:explore" in ids and explore_modes.on(c):  # 探索三選一：會不會撞上怪、悟不悟得出（設計第三節）
             # 一類一顆開著時找素材不撞仗（正式季整合 2.4），打一場在練功
             fight = not precise.on(c, s.world) and not explore_modes.is_town(c, loc) and bool(self._wild_foes(loc))
@@ -5238,7 +5238,7 @@ class Game:
         return None, None
 
     def _outing_weights(self, loc: Location, *, has_foes: bool, bounty_here: bool) -> dict[str, int]:
-        """這一處每一拍四類的比重（explore_one.weights：表照標籤或 explore_mix、危險度、懸賞、有沒有對手），再把此刻做不到的歸 0：
+        """這一處這一趟四類事的比重（explore_one.weights：表照標籤或 explore_mix、危險度、懸賞、有沒有對手），再把此刻做不到的歸 0：
         抽不到事件（一次性、可重複的都沒有）事件是 0，悟不出（insights.explore_gives 是空的，或這個遊戲日在這裡選錯過做法）感悟是 0——
         那一份照比重分給其餘的。只讀，不擲骰。"""
         s, c = self.state, self.content
@@ -5251,8 +5251,8 @@ class Game:
 
     def _outing_plan(self, loc: Location) -> OutingPlan:
         """這一處此刻出門一趟怎麼抽（OutingPlan）：比重照 _outing_weights。這裡沒有一般對手（也沒有討伐懸賞）遭遇就是 0，那一份分給其餘三類；
-        頭目不算對手（FB-815：只有頭目的地點不是一定撞上他）——他是這一趟另外擲的（_explore_one：5% × 名聲倍數），擲中那一趟才有
-        遭遇拍。只讀，不擲骰。"""
+        頭目不算對手（FB-815：只有頭目的地點不是一定撞上他）——他是這一趟另外擲的（_explore_one：5% × 名聲倍數），擲中那一趟才是
+        遭遇。接了討伐懸賞：這一趟就是遭遇（weights 只有遭遇，explore_one.encounter_only）。只讀，不擲骰。"""
         s, c = self.state, self.content
         cfg = c.config.jianfa
         kind = explore_one.kind_of(cfg, loc).kind
@@ -5282,10 +5282,11 @@ class Game:
         return self._cost_option("act:explore", "探索", self.content.config.jianfa.explore_stamina, note=self._outing_plan(loc).hint)
 
     def _explore_one(self) -> list[str]:
-        """出門一趟（減法季探索一顆，整合設計 4.1）：扣 explore_stamina，照這一處的比重（_outing_plan）抽 beats 拍（explore_one.draw：
-        同一類最多兩拍、要選的拍最多一個排最後、感悟不連兩趟、接了懸賞第一拍就是遭遇）。素材與遭遇當場結算；要選的那一拍（事件或感悟）
-        端出來等玩家選；遭遇拍上撞到頭目時，那一趟收在頭目戰（要選的那一拍不出）。回來寫成一段（content/outing_lines.json 每一拍一句），
-        後面一行「得：…　失：…」；三拍都沒收穫補一個一階素材；最後照舊擲回體丹、殘譜、破境丹、打探懸賞、玉璽碎片。
+        """出門一趟（減法季探索一顆，整合設計 4.1）：扣 explore_stamina（15），照這一處的比重（_outing_plan）抽**一件事**
+        （explore_one.draw；2d，企劃者 2026-10-26「只抽一件事情」，同天體力改 15）：遭遇、事件、素材、感悟其中一件，感悟不連兩趟，
+        接了討伐懸賞這一趟就是遭遇（打懸賞那一路，交了差回原表）。素材與遭遇當場結算；事件或感悟端出來等玩家選；遭遇上撞到頭目時，
+        那一趟收在頭目戰。回來寫成一段（content/outing_lines.json：出門那一句加這一件事的一句），後面一行「得：…　失：…」；
+        這一趟沒收穫補一個一階素材；收尾照舊擲回體丹、殘譜、破境丹、打探懸賞、玉璽碎片。
         擲骰都用自己的亂數（explore_one.rng_for），不碰 Game.rng（頭目戰與仗本身照它們原本的）。"""
         s, c = self.state, self.content
         p, cfg = s.player, c.config.jianfa
@@ -5295,62 +5296,54 @@ class Game:
         p.explore_seq += 1
         roll = functools.partial(explore_one.rng_for, self.world.get_season_number(), p.name, p.explore_seq)
         last_loc, _, last_kind = p.outing_last.partition(":")
-        weights, first_is_encounter = plan.weights, plan.how == "bounty"
+        weights = plan.weights
         if plan.boss is not None and plan.foe is None and plan.how != "bounty":
-            # 這裡只有頭目、沒有一般對手（官軍在長社，FB-815）：這一趟照 5% × 名聲倍數擲一次他；擲中了遭遇拍才有（第一拍就是它，頭目擋路），
+            # 這裡只有頭目、沒有一般對手（官軍在長社，FB-815）：這一趟照 5% × 名聲倍數擲一次他；擲中了這一趟就是遭遇（頭目擋路），
             # 沒擲中就當這裡沒有對手——遭遇那一格已經分給其餘三類（plan.weights 的遭遇是 0）
             if roll("頭目").random() < c.config.duel.explore_chance * renown.duel_chance(s, c):
-                weights, first_is_encounter = self._outing_weights(loc, has_foes=True, bounty_here=False), True
-        beats = explore_one.draw(
-            cfg, roll("拍"), weights, last_choice=last_kind if last_loc == loc.id else None, bounty_here=first_is_encounter,
-        )
+                weights = explore_one.encounter_only()
+        beat = explore_one.draw(roll("拍"), weights, last_choice=last_kind if last_loc == loc.id else None)
         say, lines = roll("段落"), c.outing_lines
         story = [explore_one.line(lines, "open", plan.kind, say, place=loc.name)]
         if self._draft is not None and not self._draft.tag:
-            self._draft.tag = explore_one.tag_of(beats)
+            self._draft.tag = explore_one.BEAT_WORDS[beat]
         before = len(self._draft.changes) if self._draft is not None else 0
         out: list[str] = []
-        got_any, home_done, boss, choice = False, False, None, ""
+        got_any, boss, choice = False, None, ""
         self._outing_close = set()
-        for i, beat in enumerate(beats, 1):
-            rng = roll(f"第{i}拍")
-            if beat == explore_one.MATERIAL:  # 素材拍：找素材一定給的那一套（不展開分支；屬性照這裡的素材）
-                mids = explore_modes.gather_finds(c, loc, rng, sure=True)
-                found = [granted for mid in mids if (granted := materials.grant(s, c, mid))]
-                if not home_done:  # 領地爭奪：站在自家領地多給的那一個，一趟擲一次
-                    found += self._home_gather(loc, mids)
-                    home_done = True
-                items = explore_one.items_of(found, materials.GRANT_PREFIX)
-                if items:
-                    story.append(explore_one.line(lines, "material", "found", say, place=loc.name, item=items))
-                    got_any = True
-                out += found
-            elif beat == explore_one.ENCOUNTER:
-                if (plan.boss is not None and boss is None
-                        and (plan.foe is None or rng.random() < c.config.duel.explore_chance * renown.duel_chance(s, c))):
-                    boss = plan.boss  # 頭目擋路（5% × 名聲倍數；這裡只有頭目時直接對上）：頭目戰收在這一趟最後
-                    story.append(explore_one.line(lines, "encounter", "boss", say, place=loc.name, foe=self._boss_face(boss)))
-                    got_any = True
-                elif plan.foe is not None:
-                    msgs, key, won = self._outing_fight(loc, plan)
-                    story.append(explore_one.line(lines, "encounter", key, say, place=loc.name, foe=plan.foe.name))
-                    out += msgs
-                    got_any = got_any or won
-            elif boss is None and beat == explore_one.EVENT:  # 要選的那一拍：事件（野類偏旅人那一類）
-                msgs = self._outing_event(loc, plan.kind, rng)
-                if msgs:
-                    story.append(explore_one.line(lines, "event", "lead", say, place=loc.name))
-                    out += msgs
-                    got_any, choice = True, beat
-            elif boss is None and beat == explore_one.INSIGHT:  # 要選的那一拍：感悟（有所感）
-                story.append(explore_one.line(lines, "insight", "lead", say, place=loc.name))
-                out += self._sense_here(loc, rng)
+        rng = roll("結算")
+        if beat == explore_one.MATERIAL:  # 素材：找素材一定給的那一套（不展開分支；屬性照這裡的素材）
+            mids = explore_modes.gather_finds(c, loc, rng, sure=True)
+            found = [granted for mid in mids if (granted := materials.grant(s, c, mid))]
+            found += self._home_gather(loc, mids)  # 領地爭奪：站在自家領地多給的那一個
+            items = explore_one.items_of(found, materials.GRANT_PREFIX)
+            if items:
+                story.append(explore_one.line(lines, "material", "found", say, place=loc.name, item=items))
+                got_any = True
+            out += found
+        elif beat == explore_one.ENCOUNTER:
+            if plan.boss is not None and (plan.foe is None or rng.random() < c.config.duel.explore_chance * renown.duel_chance(s, c)):
+                boss = plan.boss  # 頭目擋路（5% × 名聲倍數；這裡只有頭目時直接對上）：頭目戰收在這一趟最後
+                story.append(explore_one.line(lines, "encounter", "boss", say, place=loc.name, foe=self._boss_face(boss)))
+                got_any = True
+            elif plan.foe is not None:
+                msgs, key, won = self._outing_fight(loc, plan)
+                story.append(explore_one.line(lines, "encounter", key, say, place=loc.name, foe=plan.foe.name))
+                out += msgs
+                got_any = won
+        elif beat == explore_one.EVENT:  # 要選的：事件（野類偏旅人那一類）
+            msgs = self._outing_event(loc, plan.kind, rng)
+            if msgs:
+                story.append(explore_one.line(lines, "event", "lead", say, place=loc.name))
+                out += msgs
                 got_any, choice = True, beat
+        elif beat == explore_one.INSIGHT:  # 要選的：感悟（有所感）
+            story.append(explore_one.line(lines, "insight", "lead", say, place=loc.name))
+            out += self._sense_here(loc, rng)
+            got_any, choice = True, beat
         if boss is not None:
             out += self._duel_start(boss)
-            if self._draft is not None:  # 頭目擋路：要選的那一拍不出，江湖紀錄的標記也不寫它（以前寫「有悟」，FB-815）
-                self._draft.tag = explore_one.tag_of([b for b in beats if b not in explore_one.CHOICE])
-        if not got_any:  # 三拍都沒收穫：補一個一階素材（設計 4.1【PM】）
+        if not got_any:  # 這一趟沒收穫（素材找不到料、遭遇打輸或沒對手）：補一個一階素材（設計 4.1【PM】）
             kinds = {c.materials[m].attribute for m in loc.materials if m in c.materials}
             mid = explore_modes.one_of(c, kinds, 1, roll("補"))
             granted = materials.grant(s, c, mid) if mid is not None else None

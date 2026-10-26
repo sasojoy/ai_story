@@ -80,14 +80,15 @@ def _win_rate(game: Game, squad, runs: int = 40) -> float:
 
 
 def _outing_value(game: Game) -> float:
-    """減法季：這一處出門一趟的期望經驗（三拍各照遭遇的比重；那一路的經驗 × 勝率 × 對手那一道閘，比劃不必打贏）。按不下去是 -1。"""
+    """減法季：這一處出門一趟的期望經驗（一趟一件事，是遭遇的機會就是遭遇的比重；那一路的經驗 × 勝率 × 對手那一道閘，比劃不必打贏）。
+    按不下去是 -1。"""
     plan = game.outing_plan()
     if plan is None or plan.foe is None or not any(o.id == OUTING and o.enabled for o in game.options(odds=False)):
         return -1.0
     share = plan.weights.get("encounter", 0) / (sum(plan.weights.values()) or 1)
     jf, level = game.content.config.jianfa, game.state.player.member.level
     win = jf.camp_spar_share if plan.how == "spar" else _win_rate(game, plan.foe)  # 比劃不必打贏，只拿同袍那一路的 camp_spar_share（三成）
-    return share * game.content.config.jianfa.beats * plan.foe.exp * win * growth.outlevel_factor(jf, level, plan.foe.difficulty)
+    return share * plan.foe.exp * win * growth.outlevel_factor(jf, level, plan.foe.difficulty)
 
 
 def _best_spot(game: Game, press: str) -> str:
