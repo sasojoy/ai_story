@@ -211,16 +211,16 @@ def test_a_stage_with_a_card_queues_it_after_the_opening_and_the_view_tells_the_
     網頁那一份（Game.story_card_view）帶這條線的類別，頓悟的卡照它換樣子。"""
     game = ready(jianfa_game(), side="guan", loc=HERE)
     game.story_start(StoryDef(**{
-        "id": "dun_card", "title": "雨打殘荷", "kind": "頓悟", "intro": "雨落下來。", "image": "epiphany/enter",
+        "id": "dun_card", "title": "雨打殘荷", "kind": "頓悟", "intro": "雨落下來。", "image": "stories/dunwu_enter",
         "stages": [
-            {"id": "a", "kind": "task", "until": {"flags_all": ["test_done"]}, "next": "b", "card": "心魔來了。", "image": "epiphany/demon"},
+            {"id": "a", "kind": "task", "until": {"flags_all": ["test_done"]}, "next": "b", "card": "心魔來了。", "image": "stories/dunwu_demon"},
             {"id": "b", "kind": "task", "task": "never", "next": "ok", "card": "又一張。"},
         ],
         "endings": [{"id": "ok", "title": "悟成", "text": "成了。", "annal": "{name}悟了。"}],
     }))
     view = game.story_card_view()
     assert [(c["kind"], c["text"], c["image"], c["sort"]) for c in view] == [
-        ("start", "雨落下來。", "epiphany/enter", "頓悟"), ("stage", "心魔來了。", "epiphany/demon", "頓悟")]
+        ("start", "雨落下來。", "stories/dunwu_enter", "頓悟"), ("stage", "心魔來了。", "stories/dunwu_demon", "頓悟")]
     game.story_seen()
     game.state.player.flags.add("test_done")
     game._story_tick()
