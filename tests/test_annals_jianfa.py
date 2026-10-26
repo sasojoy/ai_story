@@ -5,7 +5,7 @@
 - 〈天下形勢〉寫到你的名號（annals.XINGSHI）：自己同步那一下，上一次看到的那一篇之後的每一篇各記一則，不重複。
 - 列傳的提示詞與備援文字：季末論功自己一段、寫在最後一段；痕跡（MARK）與〈天下形勢〉照行事寫。
 - 關著（zhuan_end 關掉）什麼都不記、身家一個鍵都不多、提示詞與備援文字一個字不變。
-約戰（DUEL，批 3b）、心意與託付（STANCE／ERRAND，批 6）還沒合進來，不在這一份。"""
+約戰（DUEL，批 3b）、心意與託付（STANCE／ERRAND，批 6）的列傳讀法在 tests/test_biography_ties.py（減法季 7e）。"""
 from __future__ import annotations
 
 import json

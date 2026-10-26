@@ -5,7 +5,7 @@
 - 一人一天一筆（PlayerState.stance_notes，天是 rules.game_day），全服這一週的計數在 WorldState.stance_counts；
 - 這一週有心意到門檻（StanceDef.threshold，沒寫照 Config.jianfa.stance_threshold 30【預設】），他照最多的那一個改做事
   （WorldState.stance_active）：推線乘倍（figures.tick 讀 push_scale）、每天 00:00 拉下他那一條線上自家塊的對面進度（daily）、
-  幾條痕跡記一筆算幾筆（rules.add_marks 讀 mark_scale）、開他自己的人物事件（event_daily：closed_events／met，每人每天一則）；過門檻那一刻先生效，之後換手只在每天 00:00 重算（FB-826）；生效、換手
+  幾條痕跡記一筆算幾筆（rules.add_marks 讀 mark_scale）、開他自己的人物事件（event_daily：closed_events／met，每人每天一則）；過門檻那一刻先生效，之後換手只在每天 00:00 重算（FB-826），而且要別的心意票數超過他此刻照著做的才換、同票不換（7e）；生效、換手
   各發一則天下大事（不列名字），江湖史同一位人物一週只記一筆（生效那一刻），這一週勸過那一個心意的人
   各在下一次同步記一則行狀（annals.STANCE，酒肆打聽不到）；
 - 每週一 00:00（world.WEEK_HOOKS；7 天的季照段）歸零重算：計數與他此刻照哪一個做事一起清掉。
@@ -117,7 +117,8 @@ def bump(state: GameState, content: Content, fid: str, sid: str | None) -> None:
 
 
 def _best(content: Content, world: WorldState, fid: str) -> StanceDef | None:
-    """這一週到門檻的心意裡最多的那一個（同數照內容的順序）；都沒到是 None。"""
+    """這一週到門檻的心意裡最多的那一個（同數照內容的順序）；都沒到是 None。他已經照某一個做事時，同票不換手
+    （check：要別的心意票數超過他此刻照著做的才換），這裡的「同數照內容的順序」只管第一次過門檻與挑戰者之間。"""
     book = world.stance_counts.get(fid, {})
     reached = [(book.get(d.id, 0), -i, d) for i, d in enumerate(defs(content, fid)) if book.get(d.id, 0) >= threshold(content, d)]
     return max(reached, key=lambda x: (x[0], x[1]))[2] if reached else None
@@ -127,11 +128,17 @@ def check(state: GameState, content: Content, fid: str, *, midnight: bool = Fals
     """到門檻的心意裡照最多的那一個（_best）。他這一週還沒照哪一個做事：過門檻那一刻就生效，發天下大事（不列名字）、記江湖史。
     已經照某一個做事了：換手只在每天 00:00 重算（midnight，daily 叫；FB-826，PM 2026-10-26——不然兩個都過門檻之後一筆換一次），
     換了照發天下大事；江湖史同一位人物一週只記一次（就是生效的那一刻；週初歸零之後重來）。
+    換手要「追過才換」（減法季 7e，PM 2026-10-26）：別的心意票數超過他此刻照著做的才換，追平不換——不然兩個心意同票時，
+    排在內容前面的那一個追平就搶走、排在後面的追平不會，對兩個心意不公平。
     回他此刻照著做的那一個；都沒到、還沒生效是 None（此刻照著做的照留：歸零只在週初）。"""
     w = state.world
     best, now = _best(content, w, fid), w.stance_active.get(fid)
     if best is None or (now is not None and (now.stance == best.id or not midnight)):
         return find(content, fid, now.stance) if now is not None else None
+    if now is not None:
+        book = w.stance_counts.get(fid, {})
+        if book.get(best.id, 0) <= book.get(now.stance, 0):  # 追平不換（best 是最多的，沒有誰超過他此刻照著做的）
+            return find(content, fid, now.stance)
     w.stance_active[fid] = StanceOn(stance=best.id, at=w.time, week=w.stance_week or week_of(content, w))
     loc = content.figures[fid].location
     rules.add_rumor(state, best.rumor, loc, content=content, layer="world", named=False)
