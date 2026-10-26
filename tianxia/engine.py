@@ -5647,11 +5647,12 @@ class Game:
             msgs += self.push_trend(line, self._goals()[line] * action.push, source="rank")
         return msgs + self._order_credit(kind=action.id, location=loc.id, front=front, weight=rank_actions.weight(action))
 
-    def _order_credit(self, **kw) -> list[str]:
+    def _order_credit(self, *, side: str | None = None, **kw) -> list[str]:
         """替自己記一次軍令（orders.credit）；真的記到了就推新手引導的「完成一次軍令的個人部分」（計畫 T6 Task 8）。
-        達成時陣營軍情列的前三名一律寫名號（傳聞分層第七節：陣營軍情一律具名），所以不給 shown。"""
+        達成時陣營軍情列的前三名一律寫名號（傳聞分層第七節：陣營軍情一律具名），所以不給 shown。
+        side 不給就是此刻的陣營；約戰結算（FB-856）給貼（應）約戰那一刻替哪一軍出力，豪強窗內改幫也不搬帳。"""
         s, c = self.state, self.content
-        msgs = orders.credit(s, c, self._side(), s.player.name, **kw)  # 豪強分屬兩軍：記在依附那一軍的軍令上
+        msgs = orders.credit(s, c, side or self._side(), s.player.name, **kw)  # 豪強分屬兩軍：記在依附那一軍的軍令上
         if msgs:
             msgs += self._guide(note_action(s, c, self.world, "order"))
         return msgs
@@ -10626,9 +10627,9 @@ class Game:
             # 軍令：推（拉）之前的清單（推滿易手、拉回歸零的那一下推完就不在清單上了）
             if tier in ("big", "win") and attacker is not None and squad is not None:
                 msgs[name_key(duel.attacker.name)] += attacker._order_credit(
-                    kind="win", location=loc, front=front_of(c, loc), squad=squad.id, squad_faction=squad.faction)
+                    side=side, kind="win", location=loc, front=front_of(c, loc), squad=squad.id, squad_faction=squad.faction)
             if how == "pull" and defender is not None:
-                msgs[name_key(d.name)] += defender._order_credit(kind="duty", location=loc, front=conquest.line_of(w, c, loc))
+                msgs[name_key(d.name)] += defender._order_credit(side=d.side, kind="duty", location=loc, front=conquest.line_of(w, c, loc))
             moved, credited = self._duel_move(duel, how, scale, nominal)
             week = calendar.point(w.time, c, w).week
             points = push.contribution(nominal * scale, 1.0, 1.0, c.config.contrib_per_push, c.config.over_cap_contrib_ratio) \
@@ -10638,7 +10639,10 @@ class Game:
                 if g is None:
                     continue
                 if points and (role in ("attacker", "ally")) == (how == "push"):
-                    wins.credit(g.state.player, c, w, week, points)
+                    # 帳記貼（應）約戰那一刻替的那一軍（FB-856）：攻方與同去的是攻方那一軍（同去要同一軍），應戰的是守方那一軍；
+                    # 豪強窗內改幫，結算時 p.ally 已經是新的那一軍，不照它記
+                    mine = side if role in ("attacker", "ally") else (d.side if d is not None else None)
+                    wins.credit(g.state.player, c, w, week, points, side=mine)
                     msgs[name_key(name)].append(f"貢獻 +{points}")
                 msgs[name_key(name)] += g._duel_report(duel, role, squad, moved)
             for key, g in games.items():
