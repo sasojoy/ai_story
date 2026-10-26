@@ -59,6 +59,8 @@ description: 《天下大勢》驗收一批或一張回饋單（FB）之前先�
   - **要驗序章或初入江湖的某一步**：先走網頁那一條建角色，再直接改 `characters.data` 裡的 `player.tutorial_step` 與 `player.location`（`tutorial.json` 的 `prologue_steps`＝11，0～10 在草廬、`location` 要是 `mentor_hut`；11～14 是初入江湖 e1～e4，`location` 換成 `yingchuan`；15 走完）。伺服器開著也能改：`sqlite3.connect(db, timeout=30)`、`BEGIN IMMEDIATE`，下一個請求會從資料庫重讀。
   - 不同資料庫的帳號用不同的 `--local-dir`，才不會互相蓋掉。
 - **管理者**：設環境變數 `TIANXIA_ADMINS=驗收官`，再建一個叫這個名號的角色。全服第一季停在「籌備中」，要用管理者開季。
+- **`set_password.py` 的帳號只收英文數字底線（3～20 字）**，名號才能是中文；PowerShell 傳中文引數給 python 會變亂碼（2026-10-26 減法季 7b 複驗）：寫一支 python 用 `subprocess.run([py, set_password.py, 帳號, "--character", 名號, ...], env=..., encoding="utf-8")` 一個一個建（範本 `scratchpad/qajf7bb/mkacct.py`），從 PowerShell `python -X utf8` 跑。
+- **管理者 `fast_forward {hours}` 推的是世界（季曆）小時**，不是現實小時：week7 開季是第 1 天 06:59，推 7 小時是第 1 天 14:00，再推 81 小時是第 4 天 23:00，再推 1 小時是第 5 天 00:00（剛好第 3 段起點，上架時刻的邊界）。
 - **啟動**：用 PowerShell `Start-Process -FilePath <python> -ArgumentList "-u","server.py","--port","<埠>" -WorkingDirectory <複本> -RedirectStandardOutput out.log -RedirectStandardError err.log -WindowStyle Hidden -PassThru`。
   - 記下回傳的 PID。
   - 讀 log 用 `Get-Content out.log -Encoding UTF8`，核對印出來的「資料庫：」與「設定：」對不對。
