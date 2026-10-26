@@ -275,7 +275,7 @@
       {
         "text": "接下甕，路上換成藥鋪配的湯藥",
         "check": {
-          "stat": "lore",
+          "stat": "wis",
           "difficulty": 6
         },
         "effect": {

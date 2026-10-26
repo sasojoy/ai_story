@@ -256,7 +256,7 @@
       {
         "text": "找城裡逃出來的人問",
         "check": {
-          "stat": "lore",
+          "stat": "wis",
           "difficulty": 12
         },
         "effect": {
@@ -402,7 +402,7 @@
       {
         "text": "跟鄉豪算清那筆船錢",
         "check": {
-          "stat": "lore",
+          "stat": "wis",
           "difficulty": 10
         },
         "effect": {
@@ -568,7 +568,7 @@
       {
         "text": "引經據典，跟他論一論天下",
         "check": {
-          "stat": "lore",
+          "stat": "wis",
           "difficulty": 11
         },
         "effect": {
@@ -666,7 +666,7 @@
       {
         "text": "照兵書說，再說哪裡不合今天的仗",
         "check": {
-          "stat": "lore",
+          "stat": "wis",
           "difficulty": 10
         },
         "effect": {
@@ -773,7 +773,7 @@
       {
         "text": "說清楚：冀州的糧該歸誰",
         "check": {
-          "stat": "lore",
+          "stat": "wis",
           "difficulty": 12
         },
         "effect": {
@@ -843,7 +843,7 @@
       {
         "text": "說黃巾起事的根，在豪強兼併",
         "check": {
-          "stat": "lore",
+          "stat": "wis",
           "difficulty": 11
         },
         "effect": {
@@ -911,7 +911,7 @@
       {
         "text": "翻縣衙的帳，查糧去了哪",
         "check": {
-          "stat": "lore",
+          "stat": "wis",
           "difficulty": 10
         },
         "effect": {
@@ -1086,7 +1086,7 @@
       {
         "text": "翻律條，找出這案的破綻",
         "check": {
-          "stat": "lore",
+          "stat": "wis",
           "difficulty": 12
         },
         "effect": {
@@ -1173,7 +1173,7 @@
       {
         "text": "照老大夫的方子配藥",
         "check": {
-          "stat": "lore",
+          "stat": "wis",
           "difficulty": 10
         },
         "effect": {
@@ -1457,7 +1457,7 @@
       {
         "text": "替他們估價，抽一成",
         "check": {
-          "stat": "lore",
+          "stat": "wis",
           "difficulty": 11,
           "practice": "evil"
         },
@@ -1836,7 +1836,7 @@
       {
         "text": "跟他講你這一路是怎麼過來的",
         "check": {
-          "stat": "lore",
+          "stat": "wis",
           "difficulty": 11
         },
         "effect": {
@@ -2210,7 +2210,7 @@
       {
         "text": "寫一篇文章，說黨人與黃巾不同路",
         "check": {
-          "stat": "lore",
+          "stat": "wis",
           "difficulty": 13
         },
         "effect": {
@@ -2313,7 +2313,7 @@
       {
         "text": "把宦官跟黃巾往來的證據交給何進",
         "check": {
-          "stat": "lore",
+          "stat": "wis",
           "difficulty": 13
         },
         "effect": {
@@ -2395,7 +2395,7 @@
       {
         "text": "查出誰在囤糧，逼他放出來",
         "check": {
-          "stat": "lore",
+          "stat": "wis",
           "difficulty": 15
         },
         "effect": {

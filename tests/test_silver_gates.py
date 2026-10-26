@@ -12,7 +12,8 @@ min_stats.silver（慣例是剛好等於價錢）。懲罰從結構上認：檢�
 test_this_file_names_every_event_file 守著這份清單）：explore_jizhou.json、explore_luoyang.json、explore_nanyang.json、
 explore_runan.json、explore_yingchuan.json、explore_youzhou.json、foreshadow_fragments.json、foreshadow_prep.json、general.json、
 jizhou.json、kou.json、luoyang.json、marks.json、nanyang.json、opening.json、prologue.json、promotion.json、ranger.json、recruit.json、renown.json、sects.json、
-social_nanyang_yingchuan.json、social_north.json、social_runan.json、stances.json、stealth.json、tales.json、train_aftermath.json、treasure.json、
+social_nanyang_yingchuan.json、social_north.json、social_runan.json、stances.json、stealth.json、storylines.json、tales.json、tiers.json、
+train_aftermath.json、treasure.json、
 trend.json、youzhou.json。"""
 from __future__ import annotations
 
