@@ -793,15 +793,18 @@
     document.querySelectorAll("#page .act-move [data-id]").forEach((el) => { if (hit(el.dataset.id)) el.classList.add("glow"); });
   }
 
-  // ── 本週卡與三方卡（減法季批 1，整合設計 6.1、3.4；Joy 2026-10-24 挑了乙案）──
-  // 本週卡吃掉以前那一排小標（新手、態勢、主線、簽到）、狀態列的「下一件」與黃底提示句。乙案：卡上面一條灰線寫第 N 週、主題一句、兩軍態勢
-  // （整條是一顆鈕，點了在它底下攤開「為什麼」：三方卡、主線、收季規則、下一件、新手目標、簽到這一週七格）；卡本身只剩「你這一步」——
-  // 標題（文字冒號前那一截）、說明、底下一顆去輿圖（新手目標是「去做」）與一顆「換一件」（伺服器照順序排好的 steps：託付→軍令→懸賞→伏筆→
-  // 新手目標→去投靠，S.wkStep 記第幾個、換週歸零）。簽到不放鈕：每天第一次同步引擎自動領（Game._auto_checkin，「剛剛」那一行寫出來），
-  // 要挑四階的日子卡底下冒一張挑屬性的小卡（status.checkin.pick）。攤開記在 S.wkOpen（"why"／null，帶週次）。來信到了本週卡換成來信（pageJianghu）。
+  // ── 本週卡與三方卡（減法季批 1，整合設計 6.1、3.4；Joy 2026-10-24 挑了乙案；2026-10-26 改：排到行動列底下、可以收起）──
+  // 本週卡吃掉以前那一排小標（新手、態勢、主線、簽到）、狀態列的「下一件」與黃底提示句。Joy 2026-10-26：四顆行動鈕一定在第一屏，
+  // 所以整塊排在行動列底下；「眼下要事」（以前叫「你這一步」）收成兩行——標題（文字冒號前那一截，點了攤說明與「換一件」）、做完拿什麼
+  // （伺服器的 step.reward：託付、懸賞、新手目標原本的賞，軍令寫記功幾次；卡本身不另給）與一顆去輿圖（新手目標是「去做」）；
+  // 一條灰線寫第 N 週、主題一句、兩軍態勢（整條是一顆鈕，點了在它底下攤開「為什麼」：三方卡、主線、收季規則、下一件、新手目標、簽到七格）。
+  // 灰線與「眼下要事」各有一顆 ×，收到換日（wkHidden，記在這個瀏覽器）。「換一件」照伺服器排好的 steps（託付→軍令→懸賞→伏筆→新手目標→去投靠，
+  // S.wkStep 記第幾個、換週歸零）；做完的那一件伺服器下一次就不給，自然換到下一件。簽到不放鈕：每天第一次同步引擎自動領，
+  // 要挑四階的日子卡底下冒一張挑屬性的小卡（status.checkin.pick）。攤開記在 S.wkOpen（"why"／"step"／null，帶週次）。來信到了本週卡換成來信（pageJianghu）。
   // 序章裡、休季伺服器不給 week_card：不畫。字待 joy 潤
   // （一行一個 const：測試的 konst 照「const 名字」切）
-  const WK_STEP = "你這一步";
+  const WK_STEP = "眼下要事";
+  const WK_HIDE = "收起，明天再出現";
   const WK_WHY = "為什麼";
   const WK_NEXT = "換一件";
   const WK_GO = "去做";
@@ -810,6 +813,25 @@
   const CK_PICK_TITLE = "簽到第 {day} 天";
   const CK_PICK_NOTE = "今天的份要挑一樣";
   const wkKey = (w) => `${w.label}${w.when}`;
+  // 「×收起」（Joy 2026-10-26）：灰線與「眼下要事」各一顆，收到換日為止（照季曆第幾天、沒有季曆照第幾天）；記在這個瀏覽器（重整、重登照舊收著）
+  const WK_HIDE_STORE = "tianxia.wkHide";
+  const wkDay = (m) => String((m.status && m.status.calendar && m.status.calendar.day) || (m.status && m.status.day) || (m.week_card && m.week_card.when) || "");
+  function wkHidden(m, part) {
+    if (!S.wkHide) {
+      try { S.wkHide = JSON.parse(localStorage.getItem(WK_HIDE_STORE) || "null"); } catch (e) { S.wkHide = null; }
+      S.wkHide = S.wkHide || { day: "", parts: [] };
+    }
+    return S.wkHide.day === wkDay(m) && S.wkHide.parts.includes(part);
+  }
+  function wkHideOne(part) {
+    const day = wkDay(S.main);
+    wkHidden(S.main, part);
+    if (S.wkHide.day !== day) S.wkHide = { day, parts: [] };
+    if (!S.wkHide.parts.includes(part)) S.wkHide.parts.push(part);
+    try { localStorage.setItem(WK_HIDE_STORE, JSON.stringify(S.wkHide)); } catch (e) { /* 私密視窗：這一次收著就好 */ }
+    if (part === "strip" && S.wkOpen && S.wkOpen.id === "why") S.wkOpen = null;
+    wkRepaint("");
+  }
   function wkStepOf(w) {
     if (!w.steps.length) return null;
     if (!S.wkStep || S.wkStep.key !== wkKey(w)) S.wkStep = { key: wkKey(w), i: 0 };
@@ -834,18 +856,25 @@
     // 本週要去的那一處畫在輿圖第一層（批 3：/api/map/state 的 week，金路、紅旗、「本週」朱印）：這裡不另算，只給一顆去輿圖看的
     const go = step && step.kind === "newbie" ? `<button class="btn primary wk-go" data-act="newbie-go" data-i="${step.i | 0}">${WK_GO} ›</button>`
       : step && shown("tab:map") ? `<button class="btn primary wk-go" data-act="tab" data-tab="map">${WK_MAP} ›</button>` : "";
-    const strip = `<button id="week" class="wk-strip${open === "why" ? " on" : ""}" data-act="wk" data-id="why" aria-expanded="${open === "why"}" aria-label="${esc(w.label)}${esc(w.when)}，點了看為什麼">`
-      + `<b class="wk-seg">${esc(w.when)}</b>${w.theme ? `<span class="wk-th">${esc(w.theme)}</span>` : '<span class="wk-th"></span>'}${w.sides ? wkSidesHtml(w.sides) : ""}<i class="wk-chev" aria-hidden="true"></i></button>`;
-    const panel = open === "why" ? `<div class="card wk-panel why">${whyHtml(m)}</div>` : "";
+    const x = (part) => `<button class="wk-x" data-act="wk-hide" data-id="${part}" aria-label="${WK_HIDE}" title="${WK_HIDE}">×</button>`;
+    // 灰線（第 N 週、主題、兩軍態勢）整條是一顆鈕、點了攤開「為什麼」；右邊一顆 × 收到明天。灰線底下那一行小字跟著它收
+    const hideStrip = wkHidden(m, "strip");
+    const strip = hideStrip ? "" : `<div class="wk-stripbar"><button id="week" class="wk-strip${open === "why" ? " on" : ""}" data-act="wk" data-id="why" aria-expanded="${open === "why"}" aria-label="${esc(w.label)}${esc(w.when)}，點了看為什麼">`
+      + `<b class="wk-seg">${esc(w.when)}</b>${w.theme ? `<span class="wk-th">${esc(w.theme)}</span>` : '<span class="wk-th"></span>'}${w.sides ? wkSidesHtml(w.sides) : ""}<i class="wk-chev" aria-hidden="true"></i></button>${x("strip")}</div>`;
+    const panel = !hideStrip && open === "why" ? `<div class="card wk-panel why">${whyHtml(m)}</div>` : "";
     // 灰線底下一行小字（批 5，整合設計 6.8）：第 3 週「離贏還差多少」、第 2 週的功能剛開了那一句、45 級之後那一句；都沒有不畫
     const notes = [w.gap, w.unlock, w.cap].filter(Boolean);
-    const note = notes.length ? `<p class="wk-note">${notes.map(esc).join(" ")}</p>` : "";
-    const card = `<section class="card wk-card" aria-label="${WK_STEP}">
-      <p class="wk-lab">${WK_STEP}</p>
-      ${step ? `<h2 class="wk-title">${esc(title)}</h2>${detail ? `<p class="wk-detail">${esc(detail)}</p>` : ""}` : `<p class="wk-detail">${WK_IDLE}</p>`}
-      ${go || w.steps.length > 1 ? `<div class="wk-foot">${go}${w.steps.length > 1 ? `<button class="linkish wk-next" data-act="wk-next">↻ ${WK_NEXT}</button>` : ""}</div>` : ""}</section>`;
-    // 四塊是江湖頁的兄弟元素、不包一層（fitFirstScreen 認 #page > .wk-card 收它）：每塊帶 data-wk，wkRepaint 一起換掉
-    return [strip, note, panel, card, checkinPickHtml(m)].filter(Boolean).map((h) => h.replace(/^<(\w+) /, '<$1 data-wk ')).join("\n      ");
+    const note = !hideStrip && notes.length ? `<p class="wk-note">${notes.map(esc).join(" ")}</p>` : "";
+    // 「眼下要事」（Joy 2026-10-26：以前叫「你這一步」）排在行動列底下，平常收成兩行：標題、做完拿什麼與去做；點標題才攤說明與「換一件」。
+    // 沒有要做的事不畫；× 收到明天。做完的那一件伺服器下一次就不給了，這裡自然換到下一件
+    const more = open === "step";
+    const card = !step || wkHidden(m, "card") ? "" : `<section class="card wk-card${more ? " on" : ""}" aria-label="${WK_STEP}">
+      <div class="wk-head"><button class="wk-tap" data-act="wk" data-id="step" aria-expanded="${more}"><span class="wk-lab">${WK_STEP}</span><b class="wk-title">${esc(title)}</b></button>${x("card")}</div>
+      ${more && detail ? `<p class="wk-detail">${esc(detail)}</p>` : ""}
+      <div class="wk-foot">${step.reward ? `<span class="wk-gain">${esc(step.reward)}</span>` : '<span class="wk-gain"></span>'}${more && w.steps.length > 1 ? `<button class="linkish wk-next" data-act="wk-next">↻ ${WK_NEXT}</button>` : ""}${go}</div></section>`;
+    // 幾塊是江湖頁的兄弟元素、不包一層：每塊帶 data-wk，wkRepaint 一起換掉；什麼都沒畫時留一個空的記號，收起之後原地還找得到位置
+    const parts = [card, strip, note, panel, checkinPickHtml(m)].filter(Boolean); // 要做的事在前，週次與態勢在後
+    return (parts.length ? parts : ['<i class="wk-none" hidden></i>']).map((h) => h.replace(/^<(\w+) /, '<$1 data-wk ')).join("\n      ");
   }
   // 簽到要挑四階的日子（還沒挑）：本週卡底下一張小卡，四顆挑屬性的鈕（點一種就領，同以前簽到格裡的那四顆）
   function checkinPickHtml(m) {
@@ -1183,7 +1212,9 @@
     const letterCard = letterHtml(m.letter);
     const pushAsk = letterCard && typeof pushAskHtml === "function" ? pushAskHtml(m) : ""; // 第一次來信時信的小卡底下問一次手機通知（批 9；pushAskHtml 在 app.js，只切 main.js 的網頁測試沒有它）
     // 開局頭一刻（整合設計 6.7，批 7）：人物開口的那一封（letter.open）排在三方卡前面——先聽人說話，再看三方；其餘時候三方卡照舊在最上面
-    const peek = letterCard && m.letter.open ? letterCard + pushAsk + sidesFirstHtml(m) : sidesFirstHtml(m) + (letterCard ? letterCard + pushAsk : weekCardHtml(m));
+    const peek = letterCard && m.letter.open ? letterCard + pushAsk + sidesFirstHtml(m) : sidesFirstHtml(m) + (letterCard ? letterCard + pushAsk : "");
+    // 本週卡（灰線與「眼下要事」）排在行動列底下（Joy 2026-10-26：四顆行動鈕一定在第一屏）；來信到了照舊換成來信
+    const weekCard = letterCard ? "" : weekCardHtml(m);
     // 休季的結算卡排在最上面（計畫 T9）；季收了、有行狀時緊接一張「讀你的傳」（玩家傳第二批，m.zhuan）
     const resultCard = (m.season_result ? resultHtml(m.season_result) : "") + (m.zhuan ? zhuanEntry(m.zhuan, "這一季收了，史官替你立傳", "讀你的傳") : "");
     const letter = dailyCardHtml(m); // 月卡今天的份還沒領時「剛剛」上面一張（書信小卡在本週卡的位置，見上面）
@@ -1207,9 +1238,9 @@
     // 決戰輪到你出招的回合（FB-136）：三招緊接在場景底下，放手一搏的輸入框與說書人的框排在三招後面（同在路上，這一刻要按的排前面）。
     // 開打那一刻場景多了戰局條、這一幕的開場、騎兵那一句，框與輸入框再排在上面的話三招整排落到分頁列底下（14 天、騎著馬、框還在：855～999）
     if (myTurn) {
-      return `${resultCard}${peek}${letter}${now}${scene}${links}${menu}${peopleAfter}${free}${guide}${senseNotes}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}`;
+      return `${resultCard}${peek}${letter}${now}${scene}${links}${menu}${peopleAfter}${free}${guide}${senseNotes}${weekCard}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}`;
     }
-    return `${resultCard}${peek}${letter}${now}${scene}${links}${guide}${free}${menu}${senseNotes}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}`;
+    return `${resultCard}${peek}${letter}${now}${scene}${links}${guide}${free}${menu}${senseNotes}${weekCard}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}`;
   }
 
   // 此地還有誰（玩家之間的互動第一層，企劃者 2026-10-08）：場景卡底下一行，名字點了打開玩家卡（peerHtml）。

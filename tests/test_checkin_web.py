@@ -20,9 +20,9 @@ ROOT = Path(__file__).parent.parent
 DRIVER = r"""
 const S = { wkOpen: null };
 const H = new Function("S", [
-  ...["esc", "CK_ATTR", "CK_LAST", "WK_STEP", "WK_WHY", "WK_NEXT", "WK_GO", "WK_MAP", "WK_IDLE", "CK_PICK_TITLE", "CK_PICK_NOTE", "wkKey"].map(konst),
+  ...["esc", "CK_ATTR", "CK_LAST", "WK_STEP", "WK_WHY", "WK_NEXT", "WK_GO", "WK_MAP", "WK_IDLE", "CK_PICK_TITLE", "CK_PICK_NOTE", "WK_HIDE", "WK_HIDE_STORE", "wkKey", "wkDay"].map(konst),
   "const shown = () => true, STANCE_NAMES = [], whyHtml = () => '';",
-  ...["ckGift", "checkinPeek", "wkStepOf", "wkSidesHtml", "wkSplit", "checkinPickHtml", "weekCardHtml"].map(fn),
+  ...["ckGift", "checkinPeek", "wkStepOf", "wkSidesHtml", "wkSplit", "wkHidden", "checkinPickHtml", "weekCardHtml"].map(fn),
   "return { checkinPeek, weekCardHtml };",
 ].join("\n"))(S);
 const part = H.checkinPeek(input.m);

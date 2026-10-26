@@ -47,7 +47,7 @@ def test_the_strip_gets_a_note_line_only_when_there_is_something_to_say():
     note = html[html.index('<p data-wk class="wk-note">'):]
     note = note[: note.index("</p>")]
     assert GAP in note and UNLOCK in note and week_unlock.CAP_NOTE in note
-    assert html.index("wk-strip") < html.index("wk-note") < html.index("wk-card")  # 灰線底下、你這一步上面
+    assert html.index("wk-card") < html.index("wk-strip") < html.index("wk-note")  # 灰線底下（「眼下要事」排在灰線上面）
 
 
 def test_why_lists_what_opens_in_week_two():
