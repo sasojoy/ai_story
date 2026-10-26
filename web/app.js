@@ -3998,12 +3998,13 @@
   }
 
   function bookHtml(which = S.book === "forge" ? "forge" : "arts") {
+    // 參透了卻一句口訣都沒聽過的那一頁寫一句（Joy 2026-10-26 卡上選「補一句」；以前直書區是空的）。寫在行內：有測試只抽這一支。待 joy 潤
     const rows = manualRows(which), b = BOOKS[which];
     const now = rows.filter((r) => !r.past); // 卷首只算這一季真的聽到、打中的：跨季記得的那幾行（past）照樣列在卷裡（FB-404）
     const solved = now.filter((r) => r.solved).length;
     const leaf = (r, k) => `<article class="leaf${r.solved ? " solved" : ""}">
         <header class="leaf-head"><span>第${cnNum(k + 1)}則</span><span class="leaf-state">${r.solved ? "已參透" : "未參透"}</span></header>
-        <div class="leaf-text">${r.clues.map((c) => `<p>${clauses(c).map((t) => `<span>${esc(t)}</span>`).join("")}</p>`).join("")}</div>
+        <div class="leaf-text">${r.clues.length ? r.clues.map((c) => `<p>${clauses(c).map((t) => `<span>${esc(t)}</span>`).join("")}</p>`).join("") : r.solved ? `<p class="leaf-blank"><span>未聞口訣，誤打誤撞${which === "forge" ? "打" : "合"}了出來。</span></p>` : ""}</div>
         <footer class="leaf-foot">${r.solved ? `${sealSvg(r.solved)}<span class="leaf-sign">${MANUAL_VERB[r.kind] || b.verb}<b>【${esc(r.solved)}】</b></span>` : '<span class="leaf-sign muted">尚待參悟</span>'}${r.recipe ? `<p class="leaf-recipe">${esc(r.recipe)}</p>` : ""}</footer>
       </article>`;
     // 武學譜分兩段（Joy 2026-10-25「武學跟意境合成兩個應該分開放」）：裝滿武學意境槽的（fuse）、兩個意境合成的（merge），各自從第一則數起
