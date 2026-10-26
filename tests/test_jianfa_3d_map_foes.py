@@ -15,7 +15,7 @@ import re
 
 import pytest
 
-from duel_kit import MOVES, NOW, duel_content, duel_world, game_of, load, seat
+from duel_kit import MOVES, NOW, duel_content, duel_world, game_of, seat
 from tianxia import atlas, conquest, mapdata, orders
 from tianxia.characters import CharacterStore
 from tianxia.state import Order
@@ -132,9 +132,8 @@ def test_fb858_zhuo_county_names_the_garrison_and_is_marked_a_sure_loss_while_du
     assert zhuo["squads"] == [{"name": "郡國兵", "odds": "必敗"}]  # 修前 []：「此地的對手 沒有對手」
     assert zhuo["odds"] == {"word": "必敗", "tone": "risk"}
     rows = state["suggest"]
-    assert rows[0]["id"] != "zhuo_county"  # 修前：沒有勝算字的涿郡不算必敗，排第一（步行 38 分也蓋不掉）
-    assert all(r["lose"] for r in rows)  # 新手開季，推薦的三處都是必敗（企劃者 10/26 說先不用動），涿郡因為路遠自然掉出前三
-    assert not any(r["id"] == "zhuo_county" for r in rows) or next(r for r in rows if r["id"] == "zhuo_county")["why"] == [["必敗", "risk"]]
+    assert all(r["lose"] for r in rows)  # 新手開季，推薦的三處都是必敗（企劃者 10/26 說先不用動）
+    assert "zhuo_county" not in [r["id"] for r in rows]  # 修前：沒有勝算字的涿郡不算必敗，排第一（步行 38 分也蓋不掉）；現在照必敗排，路遠掉出前三
 
 
 def test_fb858_zhuo_county_lists_both_garrison_squads_while_duels_are_off():
