@@ -28,6 +28,7 @@ from . import (
     social, sortie, styles, tactics, team, terrain, territory, timetable, traits, treasures, weapons, week_unlock, works, xingshi, zh, yuedan,
 )
 from . import explore_one, growth  # 減法季批 2：探索一顆、三道閘、屬性五段的純規則（開關走 rules.jianfa）
+from . import zhuan_end  # 減法季批 7b：列傳為終點（票、深交上限、人物評曰）
 from . import ambush as ambush_rules  # 設伏劫道（後期體力玩法第一批）；叫 ambush_rules：這個檔裡有區域變數叫 ambush
 from . import duel as duel_rules  # 單人頭目戰（Joy 2026-10-10）
 from . import opening as opening_rules  # 開局第一分鐘（減法季批 7；叫 opening_rules：避免跟戰法的 opening 混）
@@ -474,6 +475,7 @@ class Game:
         self._gate_scale = 1.0  # 減法季三道閘（批 2）：遭遇拍那一場的經驗、心得、銀兩乘疲勞與對手兩道閘（_fight_gate）；其餘是 1
         self._outing_close: set[str] = set()  # 這一趟出門打了折的那幾道閘（_fight_gate 記、_explore_one 寫段落結尾那一句）
         self._affinity_before: dict[str, int] | None = None  # choose()、隨口應對進行中：這一下之前的情誼（_people_here 認這一下加了誰的情誼）
+        self._deep_said: list[str] = []  # 深交上限（減法季批 7b）這一下提早夾過時的那幾句（_deep_cap_now 記、_log 接在訊息後面）
         # 歷史武將同行：挑好了隨你上陣的那一位、正在照它加入（_escort_step 開著、_escort_carry 讀）
         self._escort_picked = False
         self._escort_now: battle_instance.Escort | None = None
@@ -725,10 +727,11 @@ class Game:
         world 欄位這裡不用管，呼叫端（_reconcile_season）緊接著就會把它指向共用賽季。
         之後新增的 PlayerState 欄位預設就跟著新角色重來；要跨季保留的才加進下面這份清單。"""
         old = self.state
+        past = self._zhuan_past(old)  # 列傳為終點（減法季批 7b）：收季之後沒回來過的人，存之前補季末論功與〈天下形勢〉
         if old.player.annals:  # 行狀跟著角色重來：先把上一季的存起來，季末的傳照它寫（玩家傳）
             self.world.save_annals(
                 old.player.season_number, old.player.name, [e.model_dump() for e in old.player.annals],
-                annals.profile(old, self.content),
+                annals.profile(old, self.content, season=past),
             )
         fresh = new_game_state(self.content, old.player.name)
         fresh.last_real = old.last_real
@@ -810,6 +813,21 @@ class Game:
             self.content.scenario.name, [self.content.scenario.intro], tag=journal.SEASON_START, guide=tutorial_intro(self.content),
         )
         self._season_grant(old)
+
+    def _zhuan_past(self, old: GameState) -> WorldState | None:
+        """換季那一刻（_reset_player_for_new_season）：上一季開著列傳為終點（zhuan_end）就回那一季（WorldStateStore.past_season），
+        先替這個人補上收季之後還沒記的季末論功與〈天下形勢〉（同步時記的那兩種，annals.tier_note、xingshi_notes），身家照它多論功的那幾樣；
+        關著（設定沒開就不讀資料庫）是 None，一個字都不變。old 是上一季的存檔，馬上就丟：old.world 換成上一季那一份才記得到正確的時刻。"""
+        cfg = self.content.config.jianfa
+        if not (cfg.enabled and cfg.zhuan_end):
+            return None
+        past = self.world.past_season(old.player.season_number)
+        if past is None or not jianfa(self.content, past, "zhuan_end"):
+            return None
+        old.world = past
+        annals.xingshi_notes(old, self.content, past)
+        annals.tier_note(old, self.content, past)
+        return past
 
     def _season_grant(self, old: GameState) -> None:
         """三陣營四勝利（減法季設計 3.3）：上一季收季時論了功的人（那一季的 WorldState.final_tiers），新的一季開局照那一階發起手資源
@@ -1067,6 +1085,7 @@ class Game:
         self._deliver_arena()  # 擂台：被挑了的戰報、季末前三名的獎勵；季收了還沒打完的那一場作廢
         self._marks_tick()  # 減法季批 4：痕跡過門檻的防漏、替自己記出過力的行狀（關著什麼都不做）
         self._stance_annals()  # 減法季批 6：這一週勸過的心意到了門檻，記一則行狀（關著什麼都不做）
+        self._zhuan_tick()  # 減法季批 7b：〈天下形勢〉寫到名號、季末論功各記一則行狀（關著什麼都不做）
         mail = parley.lapse(self.state, self.content)  # NPC 智能 2.1：欠人物的事過了期限是食言（附的委託先作罷，書信不再補一句）
         mail += letters.deliver(self.state, self.content, now)  # 書信（大勢人物擴充第二批）：人物來信、過期的委託作罷
         if mail:
@@ -1289,8 +1308,8 @@ class Game:
         s, c = self.state, self.content
         if self._preparing():
             return [Option(id="season:preparing", label=PREPARING_TEXT, enabled=False)]
-        if s.world.ended:
-            return [Option(id="season:resting", label="休季中，等待管理者開啟下一季", enabled=False)]
+        if s.world.ended:  # 休季：列傳為終點開著、手上有列傳的票時多幾顆用票的鈕（減法季批 7b；關著、沒票一顆不多）
+            return [Option(id="season:resting", label="休季中，等待管理者開啟下一季", enabled=False)] + self._zhuan_options()
         if s.pending_event:
             event = c.events[s.pending_event]
             opts = []
@@ -2352,6 +2371,16 @@ class Game:
         if self._mark_credits() or fired:
             self._save_season()
 
+    def _zhuan_tick(self) -> None:
+        """列傳為終點（減法季批 7b-1）：同步時替自己記行狀——〈天下形勢〉上一次看到之後寫到名號的那幾篇（annals.xingshi_notes），
+        季收了之後的季末論功（annals.tier_note）。只改自己的存檔，不存季。關著（zhuan_end）什麼都不做。"""
+        s, c = self.state, self.content
+        if not jianfa(c, s.world, "zhuan_end"):
+            return
+        annals.xingshi_notes(s, c, s.world)
+        if s.world.ended:
+            annals.tier_note(s, c, s.world)
+
     def _mark_credits(self) -> bool:
         """跨過門檻那一刻出過力的人（WorldState.mark_helpers）裡有自己的，各記一則行狀（annals.MARK：只寫那一句傳聞，不列名字、
         不寫玩家的句子），名號從名單拿掉（名單空了鍵也拿掉）。只在自己的同步裡叫：排程與替別人寫東西的那一份 Game 不記。
@@ -3339,6 +3368,8 @@ class Game:
         不寫戰報也不寫江湖紀錄（跟其他的拒絕一樣）。"""
         if option_id == step_rules.NEXT and step_rules.on(self):  # 本週卡「換一件事」（減法季批 3c）：不在選單上（假人碰不到）、
             return step_rules.skip(self)  # 不花體力、不寫江湖紀錄；關著的季照舊當成不在選單上
+        if option_id.startswith(zhuan_end.PREFIX) and any(o.id == option_id and o.enabled for o in self.options(odds=False)):
+            return self._log(self._zhuan_act(option_id))  # 休季用列傳的票（減法季批 7b）：不走行動那一串（季收了，不推大勢、不存季）
         option = {o.id: o for o in self.options(odds=False)}.get(option_id)
         if option is None and option_id.startswith(wins.LEAN_PREFIX):
             option = self._lean_anytime(option_id)  # 「改幫…」隨時都能換（設計 3.2）：在路上、決戰的大區選單上沒有它，照樣收
@@ -3490,6 +3521,7 @@ class Game:
                 msgs += self._guide(note_action(self.state, self.content, self.world, "socialize"))  # 指名求見算一次交友
             # 名將贈禮（裝備四欄 6.4）與本命兵器（打造第三批）：這一下的情誼（對話、事件）到了門檻就送；另起一則「名將贈禮」，
             # 不接在當下這個動作的紀錄裡（FB-139、FB-149：名將多半不在場，也跟那件事無關），排在這一則之後（「剛剛」看得到）
+            self._deep_cap_now()  # 深交上限（減法季批 7b）：贈禮與本命兵器照夾過的情誼判（關著什麼都不做）
             gifts = self._general_gifts() + self._signature_arms()
             msgs += check_thresholds(self.state, self.content, self.world, self._quick_client(), now=self.now)
             msgs += self._settle_plots()  # 參與過的密謀收場了：各自結算一次（正式版乙二）
@@ -3645,6 +3677,7 @@ class Game:
             msgs += self._event_progress()  # 領地爭奪：隨口應對了結也推一次進度（開關關著是空的）
             self._begin_enlistment(faction_before)  # 隨口應對的結果也可能拜入門派
             self._greet_rejoin(faction_before)  # 同樣：入伍段早就走完的人拜入門派，引薦人打個招呼（新手引導計畫三）
+            self._deep_cap_now()  # 深交上限（減法季批 7b）：同 choose
             gifts = self._general_gifts() + self._signature_arms()  # 隨口應對的效果也可能加情誼（同 choose：另起一則）
             msgs += check_thresholds(s, c, self.world, self._quick_client(), now=self.now)
             msgs += self._report_seat()  # 隨口應對的效果也可能推大勢、記貢獻：第四階席次的帳在這裡也抄（正式版丁）
@@ -3722,6 +3755,7 @@ class Game:
             msgs += self._event_progress()  # 領地爭奪：隨口應對了結也推一次進度（開關關著是空的）
             self._begin_enlistment(faction_before)
             self._greet_rejoin(faction_before)
+            self._deep_cap_now()  # 深交上限（減法季批 7b）：同 choose
             gifts = self._general_gifts() + self._signature_arms()
             msgs += check_thresholds(s, c, self.world, self._quick_client(), now=self.now)
             msgs += self._report_seat()
@@ -6373,8 +6407,15 @@ class Game:
 
     def affinity_text(self, companion_id: str) -> str:
         """「情誼 N」：你跟這位人物的情誼（PlayerState.affinities，0～100）。談話畫面、求見名單、輿圖的人物都寫這個詞（explain-1：
-        玩家看得到的只叫「情誼」，程式裡照舊叫 affinity）。"""
-        return f"情誼 {self.state.player.affinities.get(companion_id, 0)}"
+        玩家看得到的只叫「情誼」，程式裡照舊叫 affinity）。深交名單滿了、這一位停在門檻下面時接「・已深交三位」（減法季批 7b，
+        zhuan_end.deep_note；關著一個字不變）。"""
+        text = f"情誼 {self.state.player.affinities.get(companion_id, 0)}"
+        # 先照沒有名額票算（不讀錢包）：那樣都不寫，多了名額更不會寫
+        if zhuan_end.on(self.content, self.state.world) and zhuan_end.deep_note(self.state, self.content, companion_id):
+            note = zhuan_end.deep_note(self.state, self.content, companion_id, self._deep_slots())
+            if note:
+                text += f"・{note}"
+        return text
 
     def _no_audience_line(self) -> str:
         """交友時見不到這裡的大勢人物時的說明；這裡沒有大勢人物就是原本的「此地無人可訪」；
@@ -6444,12 +6485,12 @@ class Game:
                 msgs = [f"你：「{said}」"] + companion_agent.say_dialogue(
                     self._quick_client(), self.state, self.content, self.world, companion_id, said,
                     turn=self._prepared_turn(prepared), extra=extra, required=parley.ASK_FIELDS if extra else (),
-                    decide=lambda turn: self._parley_decide(companion_id, turn),
+                    decide=lambda turn: self._parley_decide(companion_id, turn), cap=self._deep_cap_now,
                 )
             else:
                 msgs = companion_agent.continue_dialogue(
                     self._quick_client(), self.state, self.content, self.world, companion_id, int(arg), self.rng,
-                    turn=self._prepared_turn(prepared),
+                    turn=self._prepared_turn(prepared), cap=self._deep_cap_now,
                 )
         except companion_agent.DialogueUnavailable:
             return self._dialogue_unavailable(companion_id)
@@ -6815,7 +6856,7 @@ class Game:
             msgs = [f"你：「{said}」"] + companion_agent.say_dialogue(
                 self._quick_client(), s, c, self.world, cid, said, turn=self._prepared_turn(prepared),
                 extra=extra, decide=lambda turn: self._parley_decide(cid, turn, road=True),
-                required=parley.ASK_FIELDS if extra else (),
+                required=parley.ASK_FIELDS if extra else (), cap=self._deep_cap_now,
             )
         except companion_agent.DialogueUnavailable:
             return [f"{c.characters[cid].name}沉吟不語。"]
@@ -12007,7 +12048,7 @@ class Game:
             return self._log([mall.OFF])
         result = mall.buy(
             self.state, self.content, wallet, item_id, ref,
-            now=self.pill_now(), day=self._pill_day(), season=self.world.get_season_number(), qty=qty,
+            now=self.pill_now(), day=self._pill_day(), season=self.world.get_season_number(), qty=qty, moment=self._mall_moment(),
         )
         if isinstance(result, str):
             done = wallet.purchase_by_ref(mall.buy_ref(self._mall_owner(), ref))
@@ -12018,6 +12059,24 @@ class Game:
         ))
         self.mall_bought = result.item.id
         return self._log(result.lines)
+
+    def _mall_moment(self) -> mall.Moment:
+        """上架看的「此刻」（減法季批 7b：MallWindow 的 rule、phases、from_week）：休季或季中、開打的季是季曆第幾週、這一季（開季的章）
+        開著哪幾個商品寫到的子開關；segments 是這一季的季曆照不照段（7 天濃縮季），商品說明的上架時機（{上架}）照它寫（FB-849）；
+        blocked 是這個人這一季用不上的商品 → 原因（現在只有列傳插畫票，zhuan_end.art_problem；FB-845）：貨架灰掉、買不了。
+        沒寫這三樣的商品不看它，一個字都不變。"""
+        c, w = self.content, self.state.world
+        phase = self.world.season_phase()
+        rules_named = {item.on_sale.rule for item in c.mall.values() if item.on_sale.rule}
+        rules = frozenset(part for part in rules_named if jianfa(c, w, part))
+        blocked: dict[str, str] = {}
+        if "zhuan_end" in rules and (unfit := zhuan_end.art_problem(self.state, c, w)):  # 這一季用不上的插畫票不賣（FB-845）
+            blocked.update({item.id: unfit for item in c.mall.values() if item.effects.get(zhuan_end.ART)})
+        return mall.Moment(
+            phase="resting" if phase == "resting" else "season",
+            week=calendar.point(w.time, c, w).week if phase == "running" and not w.ended else None,
+            rules=rules, segments=calendar.week7_on(w, c), blocked=blocked,
+        )
 
     def mall_entry(self) -> dict | None:
         """狀態列的商城入口（齒輪旁的錠子鈕、底部第六格；商城第二批）：{balance}；商城關著是 None（沒有入口）。
@@ -12102,7 +12161,7 @@ class Game:
         wallet = self._wallet()
         if wallet is None:
             return None
-        view = mall.view(self.content, wallet, self._mall_owner(), self._pill_day(), self.world.get_season_number())
+        view = mall.view(self.content, wallet, self._mall_owner(), self._pill_day(), self.world.get_season_number(), self._mall_moment())
         cfg = self.content.config
         view["pills"] = {
             "name": cfg.stamina_pill_name, "count": self.state.player.stamina_pills, "today": self.pills_left_today(),
@@ -16375,13 +16434,89 @@ class Game:
 
     def biography_entry(self) -> dict | None:
         """休季時江湖頁最上面的「讀你的傳」（這一季的那一篇）：季收了、有行狀或已經存了那一篇才有；假人、開關關著、季還在跑是 None。
-        輪詢每次都問：季還在跑時不讀資料庫。"""
+        輪詢每次都問：季還在跑時不讀資料庫。列傳為終點開著（減法季批 7b）多 tier、illustration、seal（_zhuan_extra）。"""
         p = self.state.player
         if not annals.on(self.content) or p.bot is not None or not self.state.world.ended:
             return None
         if not p.annals and self.world.biography(p.season_number, p.name) is None:
             return None
-        return {"season": p.season_number, "title": biography.title(p.name)}
+        return {"season": p.season_number, "title": biography.title(p.name), **self._zhuan_extra(p.season_number)}
+
+    # ── 列傳為終點（減法季批 7b）：休季用票、列傳多畫的那幾樣 ──
+
+    def _zhuan_season(self, season: int) -> WorldState | None:
+        """那一季的 WorldState（這一季照手上的，以前的照 past_season）；沒有是 None。"""
+        p = self.state.player
+        return self.state.world if season == p.season_number else self.world.past_season(season)
+
+    def _zhuan_purchases(self) -> list:
+        wallet = self._wallet()
+        return [] if wallet is None else wallet.purchases(self._mall_owner())
+
+    def _zhuan_extra(self, season: int) -> dict:
+        """列傳多畫的那幾樣（zhuan_end.extras：季末論功、插畫的圖庫鍵、紀念印的字）；那一季沒開列傳為終點是空的（一個鍵都不多）。
+        這一季的身家照角色身上的，以前的季照存起來的那一份。評曰的名單照寫成的那一篇傳列（FB-847，zhuan_end.extras 的 text）：
+        還沒寫成是 None（預告要寫的人）。"""
+        p = self.state.player
+        world = self._zhuan_season(season)
+        if world is None or not zhuan_end.on(self.content, world):
+            return {}
+        row = self.world.biography(season, p.name)
+        if season == p.season_number:
+            profile = annals.profile(self.state, self.content, season=world)
+        else:
+            profile = row["profile"] if row is not None else {}
+        text = row["text"] if row is not None else None
+        return zhuan_end.extras(self.content, season, profile, zhuan_end.season_tickets(self._zhuan_purchases(), season), text)
+
+    def _zhuan_options(self) -> list[Option]:
+        """休季用列傳的票（減法季批 7b；設計第九章）：列傳為終點開著、季收了，手上有沒用的票才有那一顆。插畫：投靠了劇本裡的陣營、
+        這一季還沒用過、不是第一階（第一階白送）；紀念印：這一季還沒蓋；親筆評曰：情誼 40～69、這一季還沒替你寫的人物一位一顆。"""
+        s, c = self.state, self.content
+        if not s.world.ended or not zhuan_end.on(c, s.world):
+            return []
+        purchases = self._zhuan_purchases()
+        if not purchases:
+            return []
+        n = s.player.season_number
+        used = zhuan_end.season_tickets(purchases, n)
+        standing = annals.standing(s, c, s.world)
+        out = []
+        # 票綁買的那一季（FB-845）：只數這一季買的，之前的季沒用掉的不再冒出用票的鈕
+        if zhuan_end.unused(purchases, zhuan_end.ART, n) and standing.get("illustration") and not used["art"] and standing.get("tier") != 1:
+            out.append(Option(id=zhuan_end.PICK_ART, label=zhuan_end.ART_BUTTON))
+        if zhuan_end.unused(purchases, zhuan_end.SEAL_TICKET, n) and not used["seal"]:
+            out.append(Option(id=zhuan_end.SEAL, label=zhuan_end.SEAL_BUTTON.format(seal=zhuan_end.seal_text(c, n, standing))))
+        if zhuan_end.unused(purchases, zhuan_end.QUOTE_TICKET, n):
+            taken = set(used["quotes"]) | set(self._verdict_taken(standing))
+            out += [Option(id=f"{zhuan_end.QUOTE}{cid}", label=zhuan_end.QUOTE_BUTTON.format(name=c.characters[cid].name, value=value))
+                    for cid, value in zhuan_end.quote_figures(s, c, taken)]
+        return out
+
+    def _verdict_taken(self, standing: dict) -> list[str]:
+        """這一季已經白送評曰的人物（annals.standing 的 verdicts：第一二階的主將或家主、情誼 70 以上的；親筆評曰不再列他們）。"""
+        return [w["fid"] for w in standing.get("verdicts", [])]
+
+    def _zhuan_act(self, option_id: str) -> list[str]:
+        """用掉一張列傳的票（_zhuan_options 驗過有票、按得下去）：那一列購買記 used、season（親筆評曰另記 fid），寫一則「列傳」紀錄。"""
+        s, c = self.state, self.content
+        wallet, owner, n = self._wallet(), self._mall_owner(), s.player.season_number
+        now = self.pill_now()
+        if option_id == zhuan_end.PICK_ART:
+            wallet.mark_used(mall.tokens(wallet, owner, zhuan_end.ART, season=n)[0], now, season=n, art=zhuan_end.illustration_for(s, c, s.world))
+            lines = [zhuan_end.ART_DONE]
+        elif option_id == zhuan_end.SEAL:
+            wallet.mark_used(mall.tokens(wallet, owner, zhuan_end.SEAL_TICKET, season=n)[0], now, season=n)
+            lines = [zhuan_end.SEAL_DONE.format(seal=zhuan_end.seal_text(c, n, annals.standing(s, c, s.world)))]
+        else:
+            cid = option_id.removeprefix(zhuan_end.QUOTE)
+            wallet.mark_used(mall.tokens(wallet, owner, zhuan_end.QUOTE_TICKET, season=n)[0], now, season=n, fid=cid)
+            lines = [zhuan_end.QUOTE_DONE.format(name=c.characters[cid].name)]
+            row = self.world.biography(n, s.player.name)
+            if row is not None and row["text"] is not None:
+                lines.append(zhuan_end.QUOTE_LATER)
+        journal.add_entry(s, JournalEntry(time=s.world.time, title=zhuan_end.TITLE, lines=lines))
+        return lines
 
     def biography_list(self) -> list[dict]:
         """歷季列傳：每一季一列（季別、篇名、寫成了沒、公開了沒）。這一季收了、行狀還在角色身上（還沒換季）的那一季排第一。"""
@@ -16407,7 +16542,7 @@ class Game:
             if rewrite or season != p.season_number or not self._season_closed() or not p.annals:
                 return None
             entries = tuple(e.model_dump() for e in sorted(p.annals, key=lambda e: e.time))
-            profile = annals.profile(self.state, c)
+            profile = annals.profile(self.state, c, season=self.state.world)
         else:
             if season == p.season_number and not self._season_closed():
                 return None
@@ -16415,7 +16550,7 @@ class Game:
             profile = row["profile"]
             if season == p.season_number and p.annals and row["text"] is None:  # 這一季還沒寫成：照角色身上最新的
                 entries = tuple(e.model_dump() for e in sorted(p.annals, key=lambda e: e.time))
-                profile = annals.profile(self.state, c)
+                profile = annals.profile(self.state, c, season=self.state.world)
             written = row["text"] is not None
             if written != rewrite or (rewrite and row["rewrites"] >= self._rewrites_allowed()):
                 return None
@@ -16425,12 +16560,29 @@ class Game:
         era = [r.text for r in chronicle][: biography.ERA_MAX]
         return biography.BiographyRequest(
             season=season, name=p.name, scenario=c.scenario.name, era_note=c.scenario.era_note, profile=profile,
-            annals=entries, era=tuple(era), rewrite=rewrite, sex=gender.of(p),
+            annals=entries, era=tuple(era), rewrite=rewrite, sex=gender.of(p), verdicts=self._verdict_jobs(season, entries, profile),
         )
 
-    def write_biography(self, request: biography.BiographyRequest, text: str | None, now: float) -> bool:
+    def _verdict_jobs(self, season: int, entries: tuple[dict, ...], profile: dict) -> tuple:
+        """人物評曰的單子（減法季批 7b-2，zhuan_end.verdict_request）：身家裡白送的寫手（第一二階的主將或家主、情誼 70 以上的），
+        接這一季用了親筆評曰請的那幾位。那一季沒開列傳為終點是空的。"""
+        c, p = self.content, self.state.player
+        world = self._zhuan_season(season)
+        if world is None or not zhuan_end.on(c, world):
+            return ()
+        free = [zhuan_end.Writer(w["fid"], w["reason"]) for w in profile.get("verdicts", [])]
+        bought = zhuan_end.season_tickets(self._zhuan_purchases(), season)["quotes"]
+        writers = zhuan_end.with_bought(free, bought, c)
+        fixed = zhuan_end.fixed_verdicts(c, writers, p.name, season)  # 整篇一起挑固定句：模型叫不動時兩位寫手也不會一字不差（FB-848）
+        return tuple(zhuan_end.verdict_request(c, w, p.name, gender.of(p), entries, profile, season, fixed=fixed[w.fid])
+                     for w in writers)
+
+    def write_biography(
+        self, request: biography.BiographyRequest, text: str | None, now: float, verdicts: dict[str, str] | None = None,
+    ) -> bool:
         """C 段（鎖內）：重驗單子（同一季、同一份行狀、還寫得了），存進 biographies。text 是 B 段模型寫好、清過的全文；None 就照規則拼。
-        這一季的先把行狀與身家存起來（換季時存的是同一份；之後再來的決戰照 add_saved_annal 補）。存了回 True。"""
+        這一季的先把行狀與身家存起來（換季時存的是同一份；之後再來的決戰照 add_saved_annal 補）。存了回 True。
+        列傳為終點（減法季批 7b-2）：單子上的每一位評曰寫手接一段「評曰：」（verdicts 是 B 段寫好的，人物 id → 一句；沒寫成照固定句）。"""
         current = self.biography_request(request.season, request.rewrite)
         if current is None or current.annals != request.annals:
             return False
@@ -16439,9 +16591,10 @@ class Game:
             self.world.save_annals(request.season, p.name, list(request.annals), dict(request.profile))
         by = biography.MODEL if text else biography.RULE
         row = self.world.biography(request.season, p.name) if request.rewrite else None
-        stored = self.world.store_biography(
-            request.season, p.name, text or biography.rule_text(request), by, now, request.rewrite,
-        )
+        body = text or biography.rule_text(request)
+        for job in request.verdicts:  # 人物評曰（批 7b-2）：一位一段，接在正文（含史官的評曰）後面
+            body += "\n\n" + zhuan_end.apply_verdict(job, (verdicts or {}).get(job.fid, ""))
+        stored = self.world.store_biography(request.season, p.name, body, by, now, request.rewrite)
         if stored and row is not None and row["rewrites"] >= self.content.config.biography.rewrites:
             self._use_rewrite_token(now)  # 白送的重寫用完了，這一次是萬寶閣買的「重修列傳」
         return stored
@@ -16472,12 +16625,13 @@ class Game:
                 return None
             return {
                 "season": season, "title": biography.title(p.name), "written": False, "can_write": ready, "paragraphs": [],
-                "scenario": self.content.scenario.name,
+                "scenario": self.content.scenario.name, **self._zhuan_extra(season),  # 列傳為終點（批 7b）：關著一個鍵都不多
             }
         return {
             "season": season, "title": biography.title(row["name"]), "written": True, "paragraphs": row["text"].split("\n\n"),
             "by": row["written_by"], "public": row["public"], "code": row["share_code"] if row["public"] else None,
             "can_rewrite": row["rewrites"] < self._rewrites_allowed(), "scenario": self.content.scenario.name,
+            **self._zhuan_extra(season),
         }
 
     def share_biography(self, season: int, public: bool, code: str) -> str | None:
@@ -16728,10 +16882,34 @@ class Game:
         for text, weight in crossed.annals:
             annals.note(s, c, annals.DEED, text, weight)
 
+    def _deep_slots(self) -> int:
+        """這一季買的深交名額幾張（mall.tokens(season=)，只這一季有效）；商城關著是 0。"""
+        wallet = self._wallet()
+        return 0 if wallet is None else len(mall.tokens(wallet, self._mall_owner(), zhuan_end.DEEP_SLOT, season=self.state.player.season_number))
+
+    def _deep_cap(self) -> list[str]:
+        """深交上限（zhuan_end.enforce_deep_cap）：列傳為終點開著時，名單外有人過了 70 才讀錢包算名額、夾；夾了另寫一則「深交」江湖紀錄，
+        回那幾句（接在這一下回給玩家的訊息後面）。名單裡有人掉下 70 只是讓出位子，下一次有人過門檻時一起整理。關著什麼都不做。"""
+        s, c = self.state, self.content
+        if not zhuan_end.on(c, s.world) or not zhuan_end.deep_pending(s, c):
+            return []
+        lines = zhuan_end.enforce_deep_cap(s, c, self._deep_slots())
+        if lines:
+            journal.add_entry(s, JournalEntry(time=s.world.time, title=zhuan_end.DEEP_TITLE, lines=lines))
+        return lines
+
+    def _deep_cap_now(self) -> None:
+        """深交上限提早夾一次（減法季批 7b）：情誼一過 70 就有東西給的地方（對話裡的本命武學 companion_agent._maybe_grant_signature_skill、
+        名將本命兵器 signature_arms 的 80）在給之前先夾，名單外的第四位停在 69 就拿不到；夾到的那幾句留到 _log 接在訊息後面（只說一次）。
+        關著什麼都不做。"""
+        self._deep_said += self._deep_cap()
+
     def _log(self, msgs: list[str]) -> list[str]:
         """回給呼叫端、也存進 GameState.log 的訊息。戰況變化（機器可讀的寫法）在這裡換成一句話——這些話玩家（管理者工具列的
         提示）看得到，數字不外露（FB-064）；江湖紀錄那邊在畫的時候換（見 _chip），兩邊用同一個 seed（現在的時間），是同一句。"""
         self._renown_after()  # 名聲：這一下的名望、善名、惡名接差距，比跨段（設計 3.3、6.4）
+        said, self._deep_said = self._deep_said, []
+        msgs = msgs + said + self._deep_cap()  # 深交上限（減法季批 7b）：情誼沒有單一寫入口，在這裡事後夾；排在行狀之前，夾掉的不記成跨格
         annals.watch(self.state, self.content, art_name=self._art_name)  # 行狀：這一下改了什麼（投靠、晉升、情誼……）記一筆
         msgs = humanize(self.content, msgs, str(self.state.world.time))
         if not msgs:
