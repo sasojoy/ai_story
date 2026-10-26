@@ -36,7 +36,7 @@ from .models import BattleDef, Content
 from .state import GearFind, Rumor, SignatureClaim, WeaponRecipe, WorldState
 from .world_state import (
     JADE_SEAL_FRAGMENT_COUNT, CompanionProgress, DivineRegistry, JadeSealFragment, SealDuel, SealRegistry, SealView, SeasonPhase,
-    SharedWorldState,
+    SharedWorldState, SortieDuel,
     fresh_season,
     jade_seal_summary, stamp_season,
 )
@@ -817,6 +817,7 @@ class SqliteWorldStore:
             avoid_quiet_hours(state.season, content, now)  # 同開季：季曆排的決戰（含天命之爭）照這一刻挪開半夜
             state.active_battle = None  # 上一季沒打完（或打完沒清掉）的戰鬥不帶進新的一季
             state.sieges = []  # 攻城戰同上（領地爭奪第二批）
+            state.sorties = {}  # 出陣約戰（減法季批 3b）同上：季結束時還沒打的已記成作廢（sortie_duel.advance），塊與條都是上一季的
             self._save(conn, state)
             return True
 
@@ -923,6 +924,9 @@ class SqliteWorldStore:
                 for side in (duel.challenger, duel.holder):
                     if side.last_seen is not None:
                         side.last_seen += span
+            for sortie in state.sorties.values():  # 出陣約戰（減法季批 3b）：還沒結算的，窗的期限往後挪停的長度（開的時刻不動：這一場的亂數照舊）
+                if sortie.status in ("open", "answered"):
+                    sortie.expires_at += span
             result["span"] = span
 
         self.mutate(_apply)
@@ -981,6 +985,13 @@ class SqliteWorldStore:
         with self.db.snapshot() as conn:
             row = conn.execute("SELECT json_array_length(data, '$.seal_duels') AS n FROM world WHERE id = 1").fetchone()
         return row is not None and bool(row["n"])
+
+    def sortie_duels(self) -> dict[str, SortieDuel]:
+        with self.db.snapshot() as conn:
+            row = conn.execute("SELECT json_extract(data, '$.sorties') AS sorties FROM world WHERE id = 1").fetchone()
+        if row is None or not row["sorties"]:  # 空的時候 world 那一列沒有這個鍵（SharedWorldState._drop_empty_sorties）
+            return {}
+        return {key: SortieDuel.model_validate(d) for key, d in json.loads(row["sorties"]).items()}
 
     # ── 全服即時多人戰鬥 ──────────────────────────────────
 

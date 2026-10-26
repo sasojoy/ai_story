@@ -93,6 +93,7 @@ class BotRunner:
         except Exception as exc:  # 補人出錯不能讓整個程式倒下：記下來，這一輪照樣讓在線的假人做事
             log_failure(exc)
             report.failed += 1
+        self._duel_tick(report)  # 出陣約戰（減法季批 3b）：窗滿了的約戰替它結算（補位的假人在引擎裡挑）
         season = self.world.get_season_number()
         battle = self._battle_sides()  # 決戰與攻城戰（領地爭奪第二批）每一場一筆
         owes = self._battle_owes()
@@ -128,6 +129,25 @@ class BotRunner:
                 log_failure(exc)
                 report.failed += 1
         return report
+
+    def _duel_tick(self, report: TickReport) -> None:
+        """出陣約戰（減法季批 3b，計畫 Review Focus 第 1 條）：窗滿了還沒結算的約戰，這一輪替它結算——伺服器排程關著、也沒有人同步時，十分鐘到了
+        照樣收（Game.sortie_duel_tick：補位的人是這一邊此刻能應戰的假人，同區優先）。先只讀 world 那一列看有沒有到時的，沒有就不拿鎖、不建 Game。
+        拿不到鎖就跳過（下一輪或下一個同步的人再收；結算只往前走，誰收都一樣）。"""
+        now = self.clock()
+        if not any(d.status in ("open", "answered") and now >= d.expires_at for d in self.world.sortie_duels().values()):
+            return
+        try:
+            with self.world.action_lock(timeout=LOCK_WAIT):
+                game = Game.for_world(self.content, self.world, self.rng)
+                game.client = None
+                game.reset_model_budget()
+                game.sortie_duel_tick(self.clock())
+        except TimeoutError:
+            report.skipped += 1
+        except Exception as exc:  # 結算出錯不能讓整個程式倒下：記下來（不寫名號），假人照樣做事
+            log_failure(exc)
+            report.failed += 1
 
     def battle_tick(self) -> TickReport:
         """決戰回合裡，在場還沒出招的假人第一時間出招（Joy 2026-10-13：「機器人是不是都不會第一時間選擇行動，這樣很拖時間」）。

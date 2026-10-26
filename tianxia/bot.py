@@ -14,11 +14,12 @@ from typing import NamedTuple
 
 from . import arts as arts_mod, allied, armor, bounties, checkin, chuangong, clinic, create, cultivation, economy, equipment, explore_modes, forge_secrets, four_tiers, fusion, glyph, insights, library, mounts, naming, sensing, smithing, team, traits, treasures, weapons
 from . import prologue as prologue_rules
+from . import sortie_duel, tactics  # 出陣約戰（減法季批 3b）：封三招
 from . import growth  # 減法季屬性五段：假人照路配點（stat_path、plan_points）
 from .engine import ARENA_YIELD, DUEL_FLEE, FREE_TEXT_OPTION, TEXT_TALKS, Game, Option
 from .rules import jianfa
 from .martial_arts import MartialArt, next_quality
-from .models import Content
+from .models import MOVES, Content
 from .models import Outcome  # 減法季批 4：pick_outcome 的位子
 from .state import PLAYER
 from .sqlite_world import open_world
@@ -409,6 +410,24 @@ def explore_choice(ids, want: str = "material") -> str | None:
     return gather if gather in ids else "act:explore" if "act:explore" in ids else None
 
 
+def duel_moves(rng: random.Random) -> list[str]:
+    """約戰封的三招（減法季批 3b；設計 5.7「假人可以應約戰、封招」，計畫 Task 3b-3）：對面封的招看不到，每一回合先猜一招，出剋它的那一招
+    （tactics.best_against），其中隨機一回合換成隨便一招；不撤退（撤退是真人看形勢用的）。整季機器人與伺服器假人共用。"""
+    random_round = rng.randrange(3)
+    moves = []
+    for i in range(3):
+        guess = rng.choice(MOVES)
+        moves.append(rng.choice(MOVES) if i == random_round else tactics.best_against([guess], list(MOVES)))
+    return moves
+
+
+def duel_go(game: Game, option_id: str, rng: random.Random) -> str:
+    """出陣那一格（act:train）在約戰開著、不是截糧時只是打開出陣前那張卡（按了什麼都不做）：換成 sortie:go:<三招>，真的貼一張。其餘照原樣。"""
+    if option_id == "act:train" and game.duel_on() and not game.duel_convoy_here():
+        return f"{sortie_duel.PREFIX}go:{','.join(duel_moves(rng))}"
+    return option_id
+
+
 def pick_outcome(game: Game, outcomes: list[Outcome], rng: random.Random) -> str | None:
     """假人挑隨口應對分岔的後果（減法季整合設計 5.1、5.7「假人可以挑後果、挑心意、應約戰、封招，不可以寫字」）：**這一版不做**
     （企劃者 2026-10-24 第 5 件：歸類要句子，假人不寫字），一律回 None——pick 照舊把隨口應對（choice:free）排除，伺服器假人
@@ -495,7 +514,8 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
         hard = [o for o in options if o.id.startswith("act:challenge:")]
         if hard:
             return rng.choice(hard).id
-    return rng.choice(options).id if options else None
+    # 約戰開著（減法季批 3b）：挑到出陣那一格換成真的貼一張（封好三招）；那一格每貼一次就扣次數、起冷卻，不是永遠按得下去
+    return duel_go(game, rng.choice(options).id, rng) if options else None
 
 
 def take_bounties(game: Game) -> None:

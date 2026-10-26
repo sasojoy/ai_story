@@ -748,6 +748,14 @@ class PlayerState(BaseModel):
     # 出陣（出陣探索與地盤設計 2.3）：上次出陣是哪一天（同 pill_day 的換日）與那一天出了幾次；跨季保留（換季不能多出一輪）
     sortie_day: int = -1
     sorties_today: int = 0
+    # 出陣約戰（減法季批 3b，tianxia/sortie_duel.py）：應戰記在哪一天（同 pill_day 的換日，0 是沒應過）與那一天應了幾次；下一次出陣（貼、同去）
+    # 與下一次應戰要等到的現實秒（None 是不必等）；巡哨、傳道、保境安民那一點貢獻記在哪一天、那一天記了幾次。都在 QUIET_DEFAULTS：沒用到不寫進存檔
+    answer_day: int = 0
+    answers_today: int = 0
+    sortie_cooldown_until: float | None = None
+    answer_cooldown_until: float | None = None
+    duty_day: int = 0
+    duties_today: int = 0
     # 城裡操練（Config.training，新手引導重做 2026-10-22）：上次操練是哪一天（同 pill_day 的換日）與那一天練了幾次；跨季保留
     drill_day: int = -1
     drills_today: int = 0
@@ -1008,6 +1016,8 @@ QUIET_DEFAULTS = (
     "fights_today", "fight_day", "milestone_due", "outing_last",  # 批 2
     "stance_notes", "errands",  # 批 6
     "xingshi_seen", "deep_order",  # 批 7b
+    # 出陣約戰（減法季批 3b）
+    "answer_day", "answers_today", "sortie_cooldown_until", "answer_cooldown_until", "duty_day", "duties_today",
 )
 
 

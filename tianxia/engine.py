@@ -27,6 +27,7 @@ from . import (
     shopview, siege, signature, signature_arms, silver, skillview, smithing,
     social, sortie, styles, tactics, team, terrain, territory, timetable, traits, treasures, weapons, week_unlock, works, xingshi, zh, yuedan,
 )
+from . import sortie_duel  # 出陣約戰（減法季批 3b）
 from . import explore_one, growth  # 減法季批 2：探索一顆、三道閘、屬性五段的純規則（開關走 rules.jianfa）
 from . import zhuan_end  # 減法季批 7b：列傳為終點（票、深交上限、人物評曰）
 from . import ambush as ambush_rules  # 設伏劫道（後期體力玩法第一批）；叫 ambush_rules：這個檔裡有區域變數叫 ambush
@@ -86,7 +87,7 @@ from .rules import jianfa  # 減法季（Config.jianfa＋開季的章；子開�
 from .sqlite_world import open_world
 from .wallet import Wallet
 from .state import (
-    ONBOARDING_VERSION, PLAYER, ArenaEntry, ArenaFight, ArenaReport, ArenaResult, ArenaSide, BattleRecord, Convoy, CrowdNote, DuelState, Equipment, Feast, FrontReport, GameState, HintNote, JournalEntry, Journey, Letter, Mingtie, ParleyBacking, ParleyDebt, ParleyTerms, Rumor, Tagalong, TavernHit, TavernWatch, TimelineResult,
+    ONBOARDING_VERSION, PLAYER, ArenaEntry, ArenaFight, ArenaReport, ArenaResult, ArenaSide, BattleRecord, Convoy, CrowdNote, DuelState, Equipment, Feast, Fighter, FrontReport, GameState, HintNote, JournalEntry, Journey, Letter, Mingtie, ParleyBacking, ParleyDebt, ParleyTerms, Rumor, Tagalong, TavernHit, TavernWatch, TimelineResult,
     TierResult, Whisper, WorldState, XingshiEssay, XingshiMark, XingshiTicket,
     new_game_state,
 )
@@ -94,7 +95,7 @@ from .world import (
     _season_vehicle, advance_world_state, check_thresholds, end_season, evaluate_ending, fire_by_id, open_showdown, open_waiting_showdown,
     resume_season_clock, settle_season_start, showdown_battle, showdown_key, start_pending_battle,
 )
-from .world_state import SealDuel, SealSide, WorldStateStore, season_length_days
+from .world_state import SealDuel, SealSide, SortieDuel, SortieSide, WorldStateStore, season_length_days
 
 HOUR = 3600
 DAY = 86400
@@ -1021,6 +1022,7 @@ class Game:
         # 減法季批 4：痕跡過門檻的防漏（只發，不替任何人記行狀：排程那一份 Game 沒有自己的人；直接寫回、不經 _save_season）
         if jianfa(self.content, self.state.world, "marks_visible") and marks_rules.fire_due(self.state, self.content):
             self.world.save_season(self.state.world)
+        self._sortie_duel_tick()  # 減法季批 3b：窗滿了的約戰沒人在線也照時結算（關著、沒有到時的什麼都不做、不寫）
         msgs += self._conquest_tick()  # 領地爭奪：22:00 沒人在線也照時換天
         self._battle_status(tick=True)
         self._seal_tick()
@@ -1038,6 +1040,8 @@ class Game:
         self._reconcile_season()
         msgs = list(self.world.catch_up_season(self.content, now, self.rng))
         self.state.world = self.world.get_season()  # 剛才的追趕可能進一步推進了賽季，拉回最新的一份
+        # 減法季批 3b：排程關著（或還沒輪到）時，下一個同步的人替窗滿了的約戰結算（只往前走；手上這一份季剛讀回來，結算改的進度當場存）
+        self._sortie_duel_tick()
         self._stamp_join()  # 新角色、換季重來的角色：補算完賽季才記下加入的那一刻
         self._week_unlock_tick()  # 減法季 6.6：第 2 週的功能對這個人開了的那一刻，寫一則紀錄
         self._record_faction()
@@ -1180,6 +1184,7 @@ class Game:
         arrived = self._arrivals()  # 同 sync：抵達自己寫紀錄
         msgs += self._conquest_tick(save=False)  # 領地爭奪：快轉跨過 22:00 也換天（下面一起存）
         self._deliver_conquest()  # 同 sync：快轉（與只 advance 的整季機器人）也補翻地的分紅
+        self._sortie_duel_tick()  # 減法季批 3b：快轉不動現實時刻，約戰的窗照現實時間；快轉到季末時還沒打的作廢、退次數
         self._save_season()
         msgs += start_pending_battle(self.world, self.content, self.now)
         self.state.world = self.world.get_season()
@@ -2223,7 +2228,9 @@ class Game:
         practice = explore_modes.option_id(explore_modes.PRACTICE)
         if practice in ids:  # 練功在行動列自己一格（FB-670）：灰著的城鎮寫最近的在哪、步行多久
             notes[practice] = self._practice_line(loc)
-        if "act:train" in ids:
+        if "act:train" in ids and self.duel_on():  # 減法季批 3b：出陣那一格是貼約戰（或截糧）
+            notes["act:train"] = self._duel_line(loc)
+        elif "act:train" in ids:
             notes["act:train"] = self._sortie_line(loc) if sortie.on(c) and not prologue_rules.active(s, c) else self._train_line(loc)
         if "act:socialize" in ids:
             figure = self._socialize_figure()
@@ -3259,6 +3266,8 @@ class Game:
         隨口應對（choice:free）不是數字，不是仗。"""
         s, c = self.state, self.content
         kind, _, arg = option_id.partition(":")
+        if option_id == "act:train" and self.duel_on():
+            return None  # 約戰開著：出陣那一格是貼約戰（或截糧，不判大場面）
         if option_id == "act:train":
             pick = self._train_pick(c.locations[s.player.location])
             return None if pick is None or self._drills_with(pick) else pick  # 遇上自己人是操練，不打架
@@ -3367,6 +3376,8 @@ class Game:
         不寫戰報也不寫江湖紀錄（跟其他的拒絕一樣）。"""
         if option_id == step_rules.NEXT and step_rules.on(self):  # 本週卡「換一件事」（減法季批 3c）：不在選單上（假人碰不到）、
             return step_rules.skip(self)  # 不花體力、不寫江湖紀錄；關著的季照舊當成不在選單上
+        if option_id.startswith(sortie_duel.PREFIX) and self.duel_on():  # 出陣約戰（減法季批 3b）：貼、應戰、同去不在選單上（封招的組合放不進選單），
+            return self._duel_choice(option_id)  # 各自在 world.mutate 裡重驗；關著的季照舊當成不在選單上
         if option_id.startswith(zhuan_end.PREFIX) and any(o.id == option_id and o.enabled for o in self.options(odds=False)):
             return self._log(self._zhuan_act(option_id))  # 休季用列傳的票（減法季批 7b）：不走行動那一串（季收了，不推大勢、不存季）
         option = {o.id: o for o in self.options(odds=False)}.get(option_id)
@@ -3493,7 +3504,8 @@ class Game:
             # 三選一開著時按「探索」本身（_act 只回 PICK）：不算探索過、不寫紀錄。要在後面接上大勢門檻、召見那些訊息之前記
             # 找素材分支的入口（第 32 項）也一樣：按「找素材」本身只回 GATHER_PICK、展開分支
             picked_only = (kind == "act" and arg == "explore" and msgs == [explore_modes.PICK]) or (
-                kind == "explore" and msgs == [explore_modes.GATHER_PICK])
+                kind == "explore" and msgs == [explore_modes.GATHER_PICK]) or (
+                kind == "act" and arg == "train" and msgs == [sortie_duel.PICK])  # 約戰開著時按出陣那一格只是打開出陣前那張卡（減法季批 3b）
             if faction_before is None and self.state.player.faction is not None:
                 msgs += self._join_lean()  # 三陣營四勝利：拜入曹氏莊院而投靠的那一下照門派所在地給傾向（關著什麼都不做）
             self._begin_enlistment(faction_before)  # 投靠（或拜入陣營名下的門派）那一下：入伍段開始，同一下不算完成任何一步
@@ -3538,7 +3550,7 @@ class Game:
             quiet = kind == "smith" and arg.startswith("page:") and not (entry.lines or entry.changes or entry.guide)
             quiet = quiet or (kind == "bounty" and arg.partition(":")[0] in bounties.BROWSE_VERBS and not (entry.changes or entry.guide)
                               and all(bounties.is_browse_line(line) for line in entry.lines))
-            quiet = quiet or (picked_only and entry.lines in ([explore_modes.PICK], [explore_modes.GATHER_PICK])
+            quiet = quiet or (picked_only and entry.lines in ([explore_modes.PICK], [explore_modes.GATHER_PICK], [sortie_duel.PICK])
                               and not (entry.changes or entry.guide))
             if not quiet:
                 # FB-141：開爐成了（_smith_act 打完把單子收起來了）那一下併進「打造」那一則時只留結果——結果句排第一，375 寬「剛剛」
@@ -4747,6 +4759,8 @@ class Game:
         promotion = ranks.summons_event(self.state, self.content)
         if what == "summons":
             return self._present(self.content.events[promotion])
+        if what == "train" and self.duel_on() and not prologue_rules.active(self.state, self.content):
+            return self._duel_entry()  # 減法季批 3b：出陣那一格打開出陣前那張卡（不花體力）；截糧的運糧隊經過時照舊攻打（體力在裡面扣）
         self.state.player.stamina -= self._action_costs()[what]  # 不花體力的行動（上面那些）不必算（要翻武學的資料）
         if promotion is not None and what in ("explore", "socialize") and not precise.on(self.content, self.state.world):
             # 在召見的地點探索、交友：端出晉升奇遇（計畫 T5）；一類一顆開著時不再換掉（正式季整合 2.10），應召照舊在「此地還能做」
@@ -5529,7 +5543,7 @@ class Game:
         problem = sortie.duty_problem(c, self.state.world, self._side(), self.state.player.location)
         if problem:
             return Option(id="act:duty", label=f"{name}（{problem}）", enabled=False)
-        if not sortie.on(c):
+        if not sortie.on(c) or self.duel_on():  # 約戰開著（減法季批 3b）：收進此地、不佔出陣的次數
             return self._cost_option("act:duty", name, cost)
         left = self.sorties_left()
         if left <= 0:
@@ -5632,11 +5646,12 @@ class Game:
             msgs += self.push_trend(line, self._goals()[line] * action.push, source="rank")
         return msgs + self._order_credit(kind=action.id, location=loc.id, front=front, weight=rank_actions.weight(action))
 
-    def _order_credit(self, **kw) -> list[str]:
+    def _order_credit(self, *, side: str | None = None, **kw) -> list[str]:
         """替自己記一次軍令（orders.credit）；真的記到了就推新手引導的「完成一次軍令的個人部分」（計畫 T6 Task 8）。
-        達成時陣營軍情列的前三名一律寫名號（傳聞分層第七節：陣營軍情一律具名），所以不給 shown。"""
+        達成時陣營軍情列的前三名一律寫名號（傳聞分層第七節：陣營軍情一律具名），所以不給 shown。
+        side 不給就是此刻的陣營；約戰結算（FB-856）給貼（應）約戰那一刻替哪一軍出力，豪強窗內改幫也不搬帳。"""
         s, c = self.state, self.content
-        msgs = orders.credit(s, c, self._side(), s.player.name, **kw)  # 豪強分屬兩軍：記在依附那一軍的軍令上
+        msgs = orders.credit(s, c, side or self._side(), s.player.name, **kw)  # 豪強分屬兩軍：記在依附那一軍的軍令上
         if msgs:
             msgs += self._guide(note_action(s, c, self.world, "order"))
         return msgs
@@ -5651,11 +5666,12 @@ class Game:
         duty = c.orders.duties[p.faction]
         front = front_of(c, loc.id)
         p.stamina -= c.config.duty_stamina
-        if sortie.on(c):  # 出陣開著：守勢行動算一次出陣（PM 2026-10-14，_duty_option）
+        duel = self.duel_on()  # 約戰開著（減法季批 3b；企劃者 2026-10-24 第 2 件）：收進此地——不佔出陣、不推線、不算守城，一天記一點貢獻
+        if sortie.on(c) and not duel:  # 出陣開著：守勢行動算一次出陣（PM 2026-10-14，_duty_option）
             sortie.spend(p, self._pill_day())
         text = duty.text.replace("{地點}", loc.name)
         msgs = [text]
-        goals = self._goals()
+        goals = {} if duel else self._goals()  # 約戰開著：線只在約戰結算、軍令、大勢人物、事件的痕跡這幾處動（設計 4.3）
         if goals.get(front):
             msgs += self.push_trend(front, goals[front], source="duty")
         elif goals.get(GEJU) and in_chaos(s, c, front):
@@ -5665,9 +5681,25 @@ class Game:
             host = self._sortie_host(loc, "hold")
             if host is not None:
                 msgs += self._drill_gains(host, 1.0)
+        if duel:  # 守城軍令改成應戰守住才記（計畫 4.0 之三第 17 條）；入伍段「出一次力」照舊認它
+            return msgs + self._duty_credit() + self._guide(note_action(s, c, self.world, "order"))
         credit = self._order_credit(kind="duty", location=loc.id, front=front)  # 地點：領地爭奪的守城認自家被推得最高的那一塊（裁決 11、翻地與爭搶）
         # 入伍段第 2 步「出一次力」：守勢行動不在這週軍令裡也算（FB-094：豪強第一週只有打擊，新人打不過；FB-093：巡哨、傳道就在營裡）
         return msgs + (credit or self._guide(note_action(s, c, self.world, "order")))
+
+    def _duty_credit(self) -> list[str]:
+        """約戰開著的季巡哨、傳道、保境安民那一點貢獻（企劃者 2026-10-24 第 2 件：Config.sortie.duty_contribution，一天 duty_per_day 次；
+        duty_day／duties_today 照 _pill_day 換日）。第一季的規則關著（沒有貢獻）、今天記滿了是空的。"""
+        s, c = self.state, self.content
+        p, w, cfg = s.player, s.world, c.config.sortie
+        today = self._pill_day()
+        if p.duty_day != today:
+            p.duty_day, p.duties_today = today, 0
+        if cfg.duty_contribution <= 0 or p.duties_today >= cfg.duty_per_day or not calendar.season_one_on(w, c):
+            return []
+        p.duties_today += 1
+        wins.credit(p, c, w, calendar.point(w.time, c, w).week, cfg.duty_contribution)
+        return [f"貢獻 +{cfg.duty_contribution}"]
 
     def _take_convoy(self) -> list[str]:
         """接下糧車（護糧，軍令文件 3.4）：交出 convoy_grain 份糧草（從低階的慢屬性素材用起，多的不找），記下要送到哪裡。
@@ -9473,7 +9505,8 @@ class Game:
                 for trend_id, delta in pushes.items():  # 換算過的線，照舊交給 T3 的 push_trend
                     extra += self.push_trend(trend_id, delta, source="sortie" if as_sortie else "train")
                 credit: list[str] | None = None
-                if as_sortie and conquest.on(c, s.world):  # 領地爭奪：出陣攻打贏推這一塊的進度、不推線（設計 3.7）
+                # 領地爭奪：出陣攻打贏推這一塊的進度、不推線（設計 3.7）；約戰開著時這裡只剩截糧（減法季批 3b：進度只在約戰結算動）
+                if as_sortie and conquest.on(c, s.world) and not self.duel_on():
                     # 軍令照推之前的清單記（FB-608：推滿易手的那一下，推完那一塊已經是自家的、在冷卻，不在攻的清單上）；那一句照舊排在後面
                     credit = self._order_credit(
                         kind="win", location=loc.id, front=front_of(c, loc.id), squad=squad.id, squad_faction=squad.faction,
@@ -9640,7 +9673,9 @@ class Game:
     # ── 出陣（出陣探索與地盤設計第二節）──────────────────────────
 
     def sorties_left(self) -> int:
-        """今天還能出陣幾次（Config.sortie.per_day；換日同回體丹，_pill_day）。"""
+        """今天還能出陣幾次（Config.sortie.per_day；換日同回體丹，_pill_day）。約戰開著的季讀 jianfa_per_day（減法季批 3b）。"""
+        if self.duel_on():
+            return sortie_duel.left_today(self.state.player, self.content.config.sortie, self._pill_day())
         return sortie.left_today(self.state.player, self.content, self._pill_day())
 
     def _sortie_foes(self, loc: Location) -> list[str]:
@@ -9834,7 +9869,10 @@ class Game:
 
     def _sortie_option(self, loc: Location, cost: int, odds: bool) -> Option | None:
         """出陣的鈕（設計 2.2、2.3）：沒有出陣是 None；今天次數用完灰掉、寫什麼時候再來；攻照遊歷的寫法寫對手與勝算、必敗先問、
-        大場面等模型（_train_option）；守、攪局寫零風險。標籤一律「出陣・攻／守／攪局（體力 N・今日還能 M 次・…）」。"""
+        大場面等模型（_train_option）；守、攪局寫零風險。標籤一律「出陣・攻／守／攪局（體力 N・今日還能 M 次・…）」。
+        約戰開著的季（減法季批 3b）換成 _duel_option。"""
+        if self.duel_on():
+            return self._duel_option(loc)
         how = self._sortie_mode(loc)
         if how is None:
             return None
@@ -10071,6 +10109,692 @@ class Game:
     def _hold_share(self) -> float | None:
         """守、攪局、守勢行動拿 _sortie_host 那一路的幾成：一類一顆開著是全額（正式季整合 2.6），關著照操練的三成（None）。"""
         return 1.0 if precise.on(self.content, self.state.world) else None
+
+    # ── 出陣約戰（減法季批 3b；整合設計 4.3，計畫第四節 4.0 之二、之三）──────────────
+    # 貼（sortie_go）、應戰（sortie_answer）、同去（sortie_join）各在一次 world.mutate 裡重驗再寫（先按的那一位才進得去）；窗滿了伺服器排程、
+    # 任何人的同步、假人程式誰先到誰結算（_sortie_duel_tick → sortie_duel.advance，只往前走），結算那一下就把季的進度與兩邊（含同去的）做完。
+
+    def duel_on(self) -> bool:
+        """約戰在這一季開著（sortie_duel.on：減法季的 sortie_duel 子開關、出陣、領地爭奪都在這一季生效）。關著一律照舊。"""
+        return sortie_duel.on(self.content, self.state.world)
+
+    def answers_left(self) -> int:
+        """今天還能應戰幾次（Config.sortie.answer_per_day，跟出陣分開算；換日同出陣）。"""
+        return sortie_duel.answers_left(self.state.player, self.content.config.sortie, self._pill_day())
+
+    @staticmethod
+    def _duel_power_of(state: GameState, content: Content, world: WorldStateStore) -> float:
+        """約戰封招那一刻的威力快照：整隊（本人、出戰的同伴、部下，同出陣打駐軍的算法），對手的屬性不算（計畫 4.0 之三第 7 條）。"""
+        members, conditions, boosts = team._fighters(state, content, world)
+        return encounter.team_power(members, team.team_arts(state, content, world), None, conditions, boosts)
+
+    def _duel_power(self) -> float:
+        return self._duel_power_of(self.state, self.content, self.world)
+
+    def _duel_region(self) -> tuple[str | None, str]:
+        """此刻站在哪一個大區（id, 名字）；在路上、地圖沒有大區是 (None, "")。"""
+        p = self.state.player
+        if p.journey is not None or p.location is None:
+            return None, ""
+        region = atlas.region_of(self.content, p.location)
+        return (region.id, region.name) if region is not None else (None, "")
+
+    def duel_convoy_here(self) -> bool:
+        """這週截糧的運糧隊正打這裡經過（orders.extra_enemies）：約戰開著時出陣那一格照舊攻打運糧隊、不貼約戰（設計 4.3）。"""
+        p = self.state.player
+        if p.journey is not None or p.location is None:
+            return False
+        return bool(orders.extra_enemies(self.state, self.content, p.location, self._side()))
+
+    def _duel_squad(self, loc_id: str) -> Squad | None:
+        """這一塊此刻的駐軍（conquest.sortie_foes，不含運糧隊）裡經驗最高的那一路（同 _sortie_host 的挑法，同分取先列的）：守軍迎戰的威力、
+        打贏的戰利、守方贏的經驗心得都照它。貼的那一刻抄進 SortieDuel.report["squad"]。"""
+        ids = conquest.sortie_foes(self.state.world, self.content, loc_id, self._conquest_side())
+        squads = [self.content.squads[sid] for sid in ids]
+        return max(squads, key=lambda q: q.exp) if squads else None
+
+    def sortie_go_problem(self, moves: list[str] | None = None) -> str | None:
+        """貼不了約戰的那一句（不含括號；貼得了是 None）：暫停、休季、三招不對（給了 moves 才驗）、散人、在路上、不是區塊、今天的次數、冷卻、
+        這一塊推不動（自家的寫「等對面來約」，sortie_duel.open_problem）、體力。"""
+        s, c = self.state, self.content
+        p, cfg = s.player, c.config.sortie
+        if self.world.paused_at() is not None:
+            return PAUSED_TEXT
+        if s.world.ended:
+            return sortie_duel.WHY_RESTING
+        if moves is not None and (why := sortie_duel.moves_problem(cfg, moves)) is not None:
+            return why
+        side = self._conquest_side()
+        block_why = None
+        if side is not None and p.journey is None:
+            if p.location not in conquest.blocks(c):
+                block_why = sortie_duel.WHY_NOT_BLOCK
+            else:
+                block_why = conquest.push_problem(s.world, c, side, p.location, "attack")
+        return sortie_duel.open_problem(
+            cfg, self.now, side=side, left=self.sorties_left(), cooldown_until=p.sortie_cooldown_until, block_why=block_why,
+            stamina=p.stamina, traveling=p.journey is not None,
+        )
+
+    def _duel_option(self, loc: Location) -> Option | None:
+        """約戰開著時出陣那一格（id 照留 act:train，計畫 4.0 之三第 2 條）：散人、不是區塊、別人搶不下來的區塊是 None（options 照舊寫散人、
+        不在爭奪之列）；截糧的運糧隊經過時照舊攻打運糧隊；其餘按了只打開出陣前那張卡（不花體力），貼不了時灰著寫原因。"""
+        s, c = self.state, self.content
+        side = self._conquest_side()
+        if side is None or loc.id not in conquest.blocks(c):
+            return None
+        cfg = c.config.sortie
+        left = self.sorties_left()
+        if self.duel_convoy_here():
+            if left <= 0:
+                return Option(id="act:train", label=f"{sortie.NAME}（{sortie.USED_UP.format(n=cfg.jianfa_per_day)}）", enabled=False)
+            return self._cost_option("act:train", f"{sortie.NAME}・{sortie_duel.CONVOY_NAME}", cfg.jianfa_stamina,
+                                     note=sortie.LEFT_NOTE.format(n=left))
+        if not conquest.capturable(c, loc.id):
+            if conquest.holder(s.world, c, loc.id) != side:
+                return None
+            return Option(id="act:train", label=f"{sortie.NAME}（{sortie.OUT_NOTE}）", enabled=False)  # 自家的大本營、廣宗
+        problem = self.sortie_go_problem()
+        if problem is not None and problem != sortie_duel.WHY_TIRED.format(n=cfg.jianfa_stamina):
+            # 格子只放得下四個字（FB-670）：整句在行動列底下那一行（_duel_line）與卡上的 why_not
+            return Option(id="act:train", label=f"{sortie.NAME}（{sortie_duel.cell_note(problem)}）", enabled=False)
+        return self._cost_option("act:train", sortie.NAME, cfg.jianfa_stamina, note=sortie.LEFT_NOTE.format(n=left))  # 體力不夠照別格灰
+
+    def _duel_line(self, loc: Location) -> str:
+        """約戰開著時行動列底下出陣那一行（howto.duel_line）：散人、不在爭奪之列照舊；截糧、貼得了、等對面來約、其他原因各一句。"""
+        if self._conquest_side() is None or (
+                not conquest.capturable(self.content, loc.id) and conquest.holder(self.state.world, self.content, loc.id) != self._conquest_side()):
+            return self._sortie_line(loc)
+        if loc.id in conquest.blocks(self.content) and not conquest.capturable(self.content, loc.id) and not self.duel_convoy_here():
+            return sortie.OUT_LINE  # 自家的大本營、廣宗：不在爭奪之列
+        return howto.duel_line(self.content, self.sortie_go_problem(), self.sorties_left(), self.answers_left(),
+                               convoy=self.duel_convoy_here())
+
+    def _duel_entry(self) -> list[str]:
+        """約戰開著時按出陣那一格（act:train）：截糧的運糧隊經過時攻打運糧隊（扣一次出陣與 jianfa_stamina，照舊打一場、算截糧，約戰開著時出陣
+        不推進度）；其餘只打開出陣前那張卡（sortie_duel.PICK，不花體力、不寫紀錄，同探索的入口）。"""
+        s, c = self.state, self.content
+        if not self.duel_convoy_here():
+            return [sortie_duel.PICK]
+        p = s.player
+        p.stamina -= c.config.sortie.jianfa_stamina
+        sortie.spend(p, self._pill_day())
+        squad = orders.extra_enemies(s, c, p.location, self._side())[0]
+        return self._squad_encounter(squad, as_sortie=True) + self._guide(note_action(s, c, self.world, "order"))
+
+    def _duel_choice(self, option_id: str) -> list[str]:
+        """sortie:go:<三招>、sortie:answer:<約戰 id>:<三招>、sortie:join:<約戰 id>（choose 最前面接走的）。"""
+        verb, _, rest = option_id.removeprefix(sortie_duel.PREFIX).partition(":")
+        if verb == "go":
+            return self.sortie_go(rest)
+        if verb == "answer":
+            duel_id, _, moves = rest.rpartition(":")
+            return self.sortie_answer(duel_id, moves)
+        if verb == "join":
+            return self.sortie_join(rest)
+        return self._log(["（此刻無法這麼做。）"])
+
+    def _duel_who(self, side: str | None) -> str:
+        return self.content.scenario.faction_name(side, side or "")
+
+    def sortie_go(self, moves) -> list[str]:
+        """貼約戰（MAIN_ACTIONS 的 sortie_go、選項 sortie:go:<三招>；設計 4.3）：重驗（sortie_go_problem）之後在 world.mutate 裡貼一張——攻方的快照
+        （整隊威力、封好的三招、站的大區）、這一塊的駐軍抄成守軍、駐軍那一路與今天記進 report；扣一次出陣與 jianfa_stamina、寫冷卻、記一則江湖紀錄。"""
+        s, c = self.state, self.content
+        if not self.duel_on():
+            return self._log(["（此刻無法這麼做。）"])
+        moves = sortie_duel.parse_moves(moves)
+        problem = self.sortie_go_problem(moves)
+        if problem is not None:
+            return self._log([f"（{problem}。）"])
+        p, cfg = s.player, c.config.sortie
+        loc = c.locations[p.location]
+        side = self._conquest_side()
+        region, region_name = self._duel_region()
+        squad = self._duel_squad(loc.id)
+        garrison = None
+        if squad is not None:
+            holder = conquest.holder(s.world, c, loc.id) or ""
+            garrison = SortieSide(name=squad.name, side=holder, power=float(squad.difficulty), region=region, garrison=True)
+        me = SortieSide(name=p.name, side=side, power=self._duel_power(), moves=moves, region=region)
+        today = self._pill_day()
+        tag = hashlib.sha256(name_key(p.name).encode()).hexdigest()[:8]
+        duel_id = f"s{self.world.get_season_number()}-{int(self.now * 1000)}-{tag}"
+        refused: list[str] = []
+
+        def _apply(shared) -> None:
+            if duel_id in shared.sorties:  # 同一刻按了兩次（兩個分頁）：第二張不貼
+                refused.append(sortie_duel.WHY_COOL.format(n=c.config.sortie.cooldown_minutes))
+                return
+            duel = sortie_duel.open(shared, id=duel_id, block=loc.id, region=region, place=loc.name, region_name=region_name,
+                                    attacker=me, now=self.now, cfg=cfg, garrison=garrison)
+            duel.report.update({"squad": squad.id if squad is not None else "", "day": today})
+
+        self.world.mutate(_apply)
+        if refused:
+            return self._log([f"（{refused[0]}。）"])
+        sortie.spend(p, today)
+        p.stamina -= cfg.jianfa_stamina
+        p.sortie_cooldown_until = max(p.sortie_cooldown_until or 0.0, self.now + cfg.cooldown_minutes * 60)
+        line = sortie_duel.GO_LINE.format(place=loc.name, side=self._duel_who(side), moves="、".join(moves), window=f"{cfg.window_minutes:g}")
+        self._write(sortie_duel.GO_TITLE.format(place=loc.name), [line], tag=sortie_duel.LABEL)
+        self._guide(note_action(s, c, self.world, "order"))  # 入伍段「出一次力」：貼一張約戰就算
+        return self._log([line])
+
+    def sortie_answer(self, duel_id: str, moves) -> list[str]:
+        """應戰（MAIN_ACTIONS 的 sortie_answer、選項 sortie:answer:<id>:<三招>）：在 world.mutate 裡照 sortie_duel.answer_problem 重驗——先按的那一位
+        是守方，第二位回「已有人應戰」、什麼都不扣（Review Focus 第 2 條）；成了扣一次應戰與 answer_stamina、記一則江湖紀錄。"""
+        s, c = self.state, self.content
+        if not self.duel_on():
+            return self._log(["（此刻無法這麼做。）"])
+        if self.world.paused_at() is not None:
+            return self._log([f"（{PAUSED_TEXT}。）"])
+        p, cfg = s.player, c.config.sortie
+        moves = sortie_duel.parse_moves(moves)
+        if (why := sortie_duel.moves_problem(cfg, moves)) is not None:
+            return self._log([f"（{why}。）"])
+        side = self._conquest_side()
+        region, _ = self._duel_region()
+        left = self.answers_left()
+        power = self._duel_power()  # 封招那一刻的快照（在 mutate 外面算：裡面只讀寫 world 那一列）
+        got: list[SortieDuel] = []
+        refused: list[str] = []
+
+        def _apply(shared) -> None:
+            duel = shared.sorties.get(duel_id)
+            why = sortie_duel.WHY_GONE if duel is None else sortie_duel.answer_problem(
+                cfg, duel, self.now, name=p.name, side=side, region=region, answers_left=left, stamina=p.stamina,
+                cooldown_until=p.answer_cooldown_until, traveling=p.journey is not None,
+            )
+            if why is not None:
+                refused.append(why)
+                return
+            sortie_duel.answer(duel, SortieSide(name=p.name, side=side, power=power, moves=moves, region=region), self.now)
+            got.append(duel.model_copy(deep=True))
+
+        self.world.mutate(_apply)
+        if refused:
+            return self._log([f"（{refused[0]}。）"])
+        duel = got[0]
+        sortie_duel.spend_answer(p, self._pill_day())
+        p.stamina -= cfg.answer_stamina
+        line = sortie_duel.ANSWER_LINE.format(rival=duel.attacker.name, place=duel.place, side=self._duel_who(side), moves="、".join(moves))
+        self._write(sortie_duel.GO_TITLE.format(place=duel.place), [line], tag=sortie_duel.LABEL)
+        return self._log([line])
+
+    def _duel_join_extra(self, duel: SortieDuel) -> str | None:
+        """同去比 sortie_duel.join_problem 多驗的（PM 四之五第 6 件：同去算一次出陣、要站在那一塊所在的大區）：在路上、不在那個大區、
+        今天的出陣次數、出陣的冷卻、體力。"""
+        p, cfg = self.state.player, self.content.config.sortie
+        region, _ = self._duel_region()
+        if p.journey is not None:
+            return sortie_duel.WHY_ROAD
+        if duel.region is not None and region != duel.region:
+            return sortie_duel.WHY_FAR.format(region=duel.region_name or duel.region).replace("應得了戰", "同得了去")
+        if self.sorties_left() <= 0:
+            return sortie.USED_UP.format(n=cfg.jianfa_per_day)
+        if sortie_duel.cooling(p.sortie_cooldown_until, self.now):
+            return sortie_duel.WHY_COOL.format(n=sortie_duel._minutes_left(p.sortie_cooldown_until, self.now))
+        if p.stamina < cfg.jianfa_stamina:
+            return sortie_duel.WHY_TIRED.format(n=cfg.jianfa_stamina)
+        return None
+
+    def sortie_join(self, duel_id: str) -> list[str]:
+        """同去（MAIN_ACTIONS 的 sortie_join、選項 sortie:join:<id>；集火）：在 world.mutate 裡重驗（join_problem＋_duel_join_extra），記進攻方的
+        allies；扣一次出陣與 jianfa_stamina、寫冷卻、在那一塊記一筆出陣（conquest.mark，結算時攻方的集火把它算進去）、記一則江湖紀錄。"""
+        s, c = self.state, self.content
+        if not self.duel_on():
+            return self._log(["（此刻無法這麼做。）"])
+        if self.world.paused_at() is not None:
+            return self._log([f"（{PAUSED_TEXT}。）"])
+        p, cfg = s.player, c.config.sortie
+        side = self._conquest_side()
+        got: list[SortieDuel] = []
+        refused: list[str] = []
+
+        def _apply(shared) -> None:
+            duel = shared.sorties.get(duel_id)
+            why = sortie_duel.WHY_GONE if duel is None else (
+                sortie_duel.join_problem(duel, self.now, name=p.name, side=side) or self._duel_join_extra(duel))
+            if why is not None:
+                refused.append(why)
+                return
+            sortie_duel.join(duel, p.name)
+            got.append(duel.model_copy(deep=True))
+
+        self.world.mutate(_apply)
+        if refused:
+            return self._log([f"（{refused[0]}。）"])
+        duel = got[0]
+        sortie.spend(p, self._pill_day())
+        p.stamina -= cfg.jianfa_stamina
+        p.sortie_cooldown_until = max(p.sortie_cooldown_until or 0.0, self.now + cfg.cooldown_minutes * 60)
+        conquest.mark(s.world, c, duel.block, p.name, side, "attack", 0.0)
+        self._save_season()
+        line = sortie_duel.JOIN_LINE.format(rival=duel.attacker.name, place=duel.place, side=self._duel_who(side))
+        self._write(sortie_duel.GO_TITLE.format(place=duel.place), [line], tag=sortie_duel.LABEL)
+        self._guide(note_action(s, c, self.world, "order"))
+        return self._log([line])
+
+    def _duel_mine(self, duel: SortieDuel) -> bool:
+        me = name_key(self.state.player.name)
+        if me in {name_key(duel.attacker.name), *(name_key(n) for n in duel.attacker.allies)}:
+            return True
+        return duel.defender is not None and not duel.defender.garrison and name_key(duel.defender.name) == me
+
+    def sortie_cards(self) -> list[dict] | None:
+        """main.sorties（欄位表 1.3；sortie_duel.card）：約戰關著、序章裡是 None；散人是空的。還沒打的約戰兩邊都列（對面的是應戰、同袍的是同去、
+        自己的是 mine），結算完（或作廢）的只列自己有份的、留 keep_hours。同去那一顆照 _duel_join_extra 再驗；不同區的照 place_minutes 寫步行幾分。
+        多一個 result：看的人這一場的結果（大勝、險勝、僵持、落敗；沒結算是 None）。"""
+        s, c = self.state, self.content
+        if not self.duel_on() or prologue_rules.active(s, c):
+            return None
+        side = self._conquest_side()
+        if side is None:
+            return []
+        p, cfg = s.player, c.config.sortie
+        region, _ = self._duel_region()
+        keep = cfg.keep_hours * 3600
+        left = self.answers_left()
+        duels = sorted(self.world.sortie_duels().values(),
+                       key=lambda d: (d.status not in ("open", "answered"), -(d.settled_at or d.opened_at), d.id))
+        out: list[dict] = []
+        for duel in duels:
+            live = duel.status in ("open", "answered")
+            if not live and (not self._duel_mine(duel) or (duel.settled_at is not None and self.now - duel.settled_at >= keep)):
+                continue
+            far = duel.region is not None and region != duel.region
+            card = sortie_duel.card(
+                duel, p.name, side, region, self.now, cfg, answers_left=left, stamina=p.stamina, cooldown_until=p.answer_cooldown_until,
+                traveling=p.journey is not None, travel_minutes=self.place_minutes(duel.block) if far else None,
+            )
+            if card["role"] == "join" and card["can_join"] and (extra := self._duel_join_extra(duel)) is not None:
+                card["can_join"], card["why_not"] = False, extra
+            card["result"] = sortie_duel.side_tier(duel, p.name)
+            out.append(card)
+        return out
+
+    def _duel_amount(self, side: str, loc_id: str, base: float, name: str) -> tuple[float, float]:
+        """約戰推（拉）的量（計畫 4.0 之三第 11 條）：base（名目量 × 結果倍率）× progress_scale × 傳檄 ÷ √n（side 這一邊的活躍人數，含 name）
+        ×（1＋集火：side 一小時內在這一塊出陣過的別人，含同去的）。回（量, 集火）。"""
+        s, c = self.state, self.content
+        w, cfg = s.world, c.config
+        amount = base * sortie_duel.progress_scale(c)
+        if (writ := seal_acts.writ_factor(w, c, conquest.line_of(w, c, loc_id), side)) != 1.0:
+            amount *= writ
+        window = cfg.active_window_days * DAY / calendar.cal_scale(c, w)
+        recent = {n for n, last in w.active_pushers.get(side, {}).items() if w.time - last <= window} | {name}
+        amount = push.buffered(amount, len(recent))
+        focus = conquest.focus_bonus(w, c, loc_id, side, name)
+        return amount * (1 + focus), focus
+
+    def _duel_loot(self, squad: Squad | None) -> str:
+        """出陣前那張卡「贏了」那一段的戰利（一句話）：照 _sortie_full（一類一顆開著）或 _sortie_drill 的算法；沒有駐軍是空字串。"""
+        if squad is None:
+            return ""
+        s, c = self.state, self.content
+        cfg = c.config.sortie
+        if precise.on(c, s.world):
+            exp, xinde = round(squad.exp * cfg.reward_scale), round(squad.reward_xinde * cfg.reward_scale)
+            silver = squad.reward_silver + s.player.member.level * cfg.merit_silver_per_level
+        else:
+            share = c.config.drill_reward_share
+            exp, xinde = drill_share(squad.exp, share), drill_share(squad.reward_xinde, share)
+            silver = int(squad.reward_silver * c.config.economy.sortie_silver_share + 0.5) if c.config.economy.sortie_silver else 0
+        return sortie_duel.LOOT_LINE.format(exp=exp, xinde=xinde, silver=silver)
+
+    def sortie_card(self) -> dict | None:
+        """main.sortie_card（欄位表 1.3 的「出陣前那張卡」；main.sortie 是出陣開著的布林、照舊）：約戰關著、序章、散人、在路上、不是區塊是 None。
+        這一塊（兩條各幾成、離易手、對面幾人在推、同袍幾人與集火、運糧隊）、贏了（推一程、貢獻、離下一階、戰利、翻了分紅、軍令對不對、戰書還差）、
+        今天還能幾次、冷卻、能封的招、貼不了的原因。"""
+        s, c = self.state, self.content
+        if not self.duel_on() or prologue_rules.active(s, c):
+            return None
+        p, w = s.player, s.world
+        side = self._conquest_side()
+        loc = p.location
+        if side is None or p.journey is not None or loc not in conquest.blocks(c):
+            return None
+        cfg, qcfg = c.config.sortie, c.config.conquest
+        bars = conquest.bars(w, loc)
+        mine = bars.get(side, 0.0)
+        theirs = max((v for k, v in bars.items() if k != side), default=0.0)
+        nominal = conquest.sortie_nominal(c, loc, "attack")
+        est, focus = self._duel_amount(side, loc, nominal * cfg.result_scale["win"], p.name)
+        squad = self._duel_squad(loc)
+        fight = conquest.fight_of(w, loc)
+        pushed = dict(fight.bars[side].pushers) if fight is not None and side in fight.bars else {}
+        total = sum(pushed.values()) + est
+        part = (pushed.get(p.name, 0.0) + est) / total if total > 0 else 0.0
+        pool = qcfg.take_silver * (1.0 if conquest.start_kind(w, c, loc) == conquest.NEUTRAL else qcfg.faction_pool_share)
+        rank = ranks.rank_of(s)
+        rank_next = max(0, ranks.threshold(c, rank + 1) - p.contrib) if 1 <= rank < 3 and calendar.season_one_on(w, c) else None
+        line = conquest.line_of(w, c, loc)
+        order_match = any(
+            o.template == "siege" and not o.done and o.front == line and loc in orders.siege_places(c, side, line, w)
+            for o in orders.current(s, c, side) if o.front is not None
+        )
+        convoy = orders.extra_enemies(s, c, loc, self._side()) if p.journey is None else []
+        cooldown = p.sortie_cooldown_until if sortie_duel.cooling(p.sortie_cooldown_until, self.now) else None
+        contribution = push.contribution(nominal, 1.0, 1.0, c.config.contrib_per_push, c.config.over_cap_contrib_ratio) \
+            if calendar.season_one_on(w, c) else 0
+        return {
+            "block": loc, "place": c.locations[loc].name,
+            "bars": {"mine": round(mine), "theirs": round(theirs)}, "to_flip": max(0, round(conquest.FULL - mine)),
+            "foe_pushing": sum(1 for row in conquest.pushers(w, c, loc) if row["side"] != side),
+            "allies": round(focus / qcfg.focus_step) if qcfg.focus_step > 0 else 0, "focus_bonus": round(focus, 2),
+            "convoy_at": c.squads[convoy[0]].name if convoy else None,
+            "gain": {
+                "push": round(est), "contribution": contribution, "rank_next": rank_next, "loot": self._duel_loot(squad),
+                "dividend": round(pool * part), "order_match": order_match, "letter_gap": max(0, round(qcfg.letter_at - mine)),
+            },
+            "left_today": self.sorties_left(), "cooldown_until": cooldown, "cost": cfg.jianfa_stamina,
+            "moves": list(cfg.moves), "why_not": self.sortie_go_problem() or "",
+        }
+
+    # ── 約戰到時：結算（Review Focus 第 1 條）──
+
+    def _duel_candidates_for(self) -> Callable[[SortieDuel], list[SortieSide]]:
+        """到時沒有真人應戰時能補位的人（sortie_duel.advance 的 candidates_for；計畫 4.0 之三第 15 條）：這一季的假人裡跟攻方不同一軍（兩軍之一）、
+        不在路上、今天還有應戰次數、體力夠、不在輸了的冷卻裡的。威力照 _duel_power_of 抄；同區優先由 sortie_duel.bot_answer 挑。真人不補位。"""
+        if not hasattr(self.world, "db"):
+            return lambda duel: []
+        c, cfg = self.content, self.content.config.sortie
+        season, today = self.world.get_season_number(), self._pill_day()
+        pool: list[list[SortieSide]] = []
+
+        def candidates(duel: SortieDuel) -> list[SortieSide]:
+            if not pool:
+                rows: list[SortieSide] = []
+                for state in CharacterStore(self.world.db).all(bots_only=True):
+                    p = state.player
+                    if p.bot is None or not server_bots.active(p.bot, season) or p.journey is not None or p.location is None:
+                        continue
+                    state.world = self.state.world  # 存檔不帶季（exclude）：豪強依附哪一軍、威力都照手上這一份季算
+                    side = allied.side_of(state, c)
+                    if side not in conquest.SIDES:
+                        continue
+                    if sortie_duel.answers_left(p, cfg, today) <= 0 or p.stamina < cfg.answer_stamina \
+                            or sortie_duel.cooling(p.answer_cooldown_until, self.now):
+                        continue
+                    rows.append(SortieSide(name=p.name, side=side, power=self._duel_power_of(state, c, self.world),
+                                           region=seal_acts.region_of(c, p.location)))
+                pool.append(rows)
+            return [row for row in pool[0] if row.side != duel.attacker.side]
+
+        return candidates
+
+    def _sortie_duel_tick(self) -> list[SortieDuel]:
+        """把到時的約戰結算掉（sortie_duel.advance）：world_tick（伺服器排程）、sync（排程關著時下一個同步的人替它收）、advance 都叫；假人程式另外
+        每一輪叫 sortie_duel_tick。先只讀 world 那一列（sortie_duels）看有沒有到時的（季收了的、還沒打的也算），沒有就不開 world.mutate；advance
+        只碰 open／answered 的（結算過的在 world 那一列已經是 settled），兩個程式輪流同步不重複、不倒退。標好結果之後在同一把鎖裡把季的進度與
+        兩邊做完（_settle_duel）、存季。關著、暫停中什麼都不做。回這一下結算或作廢的那幾張。"""
+        if not self.duel_on() or self.world.paused_at() is not None:
+            return []
+        ended = self.state.world.ended
+        if not any(d.status in ("open", "answered") and (ended or sortie_duel.due(d, self.now))
+                   for d in self.world.sortie_duels().values()):
+            return []
+        cfg = self.content.config.sortie
+        candidates = self._duel_candidates_for()
+        done: list[SortieDuel] = []
+
+        def _apply(shared) -> None:
+            waiting = {key for key, d in shared.sorties.items() if d.status == "open" and d.defender is None}
+            for duel in sortie_duel.advance(shared, cfg, self.now, candidates):
+                if duel.id in waiting and duel.defender is not None and not duel.defender.garrison:
+                    duel.report["filled"] = True  # 補位的人：結算時扣他一次應戰與體力（同真人應戰）
+                done.append(duel.model_copy(deep=True))
+
+        self.world.mutate(_apply)
+        for duel in done:
+            self._settle_duel(duel)
+        if done:
+            self._save_season()
+        return done
+
+    def sortie_duel_tick(self, now: float) -> int:
+        """假人程式每一輪替窗滿了的約戰結算（bot_runner.BotRunner.tick；伺服器排程關著、也沒有人同步時，十分鐘到了照樣收）：讀回這一季、推到 now。
+        回這一下結算或作廢了幾張。"""
+        self.now = now
+        self.state.world = self.world.get_season()
+        return len(self._sortie_duel_tick())
+
+    def _duel_party(self, name: str) -> Game | None:
+        """這一場的一方（自己就是那一位時是自己，不然照 _load_kin 讀出來、季接上手上這一份）。讀不到是 None。"""
+        if name and name_key(name) == name_key(self.state.player.name):
+            return self
+        return self._load_kin(name)
+
+    def _settle_duel(self, duel: SortieDuel) -> None:
+        """一張約戰結算（或作廢）之後（計畫 4.0 之三第 8、11～16 條）：季的進度改在 self.state.world；攻方、同去的、應戰的人（含補位的）各一份戰報與
+        一則江湖紀錄，自己就是那一方時改自己，別人改完存回（_save_kin）。守軍什麼都不拿。"""
+        roles: list[tuple[str, str]] = [(duel.attacker.name, "attacker"), *((n, "ally") for n in duel.attacker.allies)]
+        d = duel.defender
+        if d is not None and not d.garrison:
+            roles.append((d.name, "defender"))
+        games: dict[str, Game] = {}
+        for name, _ in roles:
+            g = self._duel_party(name)
+            if g is not None:
+                games[name_key(name)] = g
+        try:
+            if duel.status == "void":
+                for name, role in roles:
+                    if (g := games.get(name_key(name))) is not None:
+                        g._duel_void(duel, role)
+                return
+            self._duel_result(duel, roles, games)
+        finally:
+            for g in games.values():
+                if g is not self:
+                    self._save_kin(g)
+
+    def _duel_void(self, duel: SortieDuel, role: str) -> None:
+        """沒打成（季終、連守軍都沒有；PM 四之五第 5 件）：攻方與同去的退一次出陣（同一天才退次數）與 jianfa_stamina，應戰了的人退一次應戰與
+        answer_stamina；冷卻不退。記一則江湖紀錄。"""
+        s, c = self.state, self.content
+        p, cfg = s.player, c.config.sortie
+        today = self._pill_day()
+        if role == "defender":
+            sortie_duel.spend_answer(p, today, -1)
+            p.stamina = min(float(c.config.stamina_max), p.stamina + cfg.answer_stamina)
+        else:
+            if p.sortie_day == today and duel.report.get("day") == today:
+                p.sorties_today = max(0, p.sorties_today - 1)
+            p.stamina = min(float(c.config.stamina_max), p.stamina + cfg.jianfa_stamina)
+        self._write(sortie_duel.GO_TITLE.format(place=duel.place), [sortie_duel.VOID_LINE.format(place=duel.place)], tag=sortie_duel.LABEL)
+
+    def _duel_result(self, duel: SortieDuel, roles: list[tuple[str, str]], games: dict[str, Game]) -> None:
+        """結算了的那一張：軍令照推（拉）之前的清單記（FB-608）→ 推攻方那一條或拉回（守方贏）→ 貢獻 → 每一方的戰報、戰利或經驗心得、
+        氣血內傷、冷卻、紀錄（_duel_report）。"""
+        s, c = self.state, self.content
+        w, cfg = s.world, c.config.sortie
+        loc, side, d = duel.block, duel.attacker.side, duel.defender
+        squad = c.squads.get(duel.report.get("squad") or "")
+        how, scale = sortie_duel.scale_of(duel, cfg)
+        tier = duel.result.tier
+        nominal = conquest.sortie_nominal(c, loc, "attack")
+        attacker = games.get(name_key(duel.attacker.name))
+        defender = games.get(name_key(d.name)) if d is not None and not d.garrison else None
+        drafts = {key: Draft(sortie_duel.GO_TITLE.format(place=duel.place)) for key in games}  # 結果標記照戰報（_file_battle 填）
+        saved = {key: g._draft for key, g in games.items()}
+        msgs: dict[str, list[str]] = {key: [] for key in games}
+        for key, g in games.items():
+            g._draft = drafts[key]
+        try:
+            # 軍令：推（拉）之前的清單（推滿易手、拉回歸零的那一下推完就不在清單上了）
+            if tier in ("big", "win") and attacker is not None and squad is not None:
+                msgs[name_key(duel.attacker.name)] += attacker._order_credit(
+                    side=side, kind="win", location=loc, front=front_of(c, loc), squad=squad.id, squad_faction=squad.faction)
+            if how == "pull" and defender is not None:
+                msgs[name_key(d.name)] += defender._order_credit(side=d.side, kind="duty", location=loc, front=conquest.line_of(w, c, loc))
+            moved, credited = self._duel_move(duel, how, scale, nominal)
+            week = calendar.point(w.time, c, w).week
+            points = push.contribution(nominal * scale, 1.0, 1.0, c.config.contrib_per_push, c.config.over_cap_contrib_ratio) \
+                if credited and calendar.season_one_on(w, c) else 0
+            for name, role in roles:
+                g = games.get(name_key(name))
+                if g is None:
+                    continue
+                if points and (role in ("attacker", "ally")) == (how == "push"):
+                    # 帳記貼（應）約戰那一刻替的那一軍（FB-856）：攻方與同去的是攻方那一軍（同去要同一軍），應戰的是守方那一軍；
+                    # 豪強窗內改幫，結算時 p.ally 已經是新的那一軍，不照它記
+                    mine = side if role in ("attacker", "ally") else (d.side if d is not None else None)
+                    wins.credit(g.state.player, c, w, week, points, side=mine)
+                    msgs[name_key(name)].append(f"貢獻 +{points}")
+                msgs[name_key(name)] += g._duel_report(duel, role, squad, moved)
+            for key, g in games.items():
+                journal.add_entry(g.state, g._draft.entry(w.time, msgs[key]))
+        finally:
+            for key, g in games.items():
+                g._draft = saved[key]
+
+    def _duel_move(self, duel: SortieDuel, how: str, scale: float, nominal: float) -> tuple[list[str], bool]:
+        """這一塊怎麼動（季的進度，self.state.world）：攻方大勝、勝、僵持推攻方那一條（conquest.push；推不動照舊打完、不推、不記貢獻）；攻方敗拉攻方
+        那一條（conquest.guard_pull，守城功照翻地設計 4.5）。回（寫給兩邊的句子，記不記貢獻）。"""
+        s, c = self.state, self.content
+        w = s.world
+        loc, side, place = duel.block, duel.attacker.side, duel.place
+        name = self._duel_who(side)
+        if how == "push":
+            if scale <= 0:
+                return [], False
+            why = conquest.push_problem(w, c, side, loc, "attack")
+            if why is not None:
+                return [sortie_duel.MOVE_STILL.format(place=place, why=why)], False
+            amount, _ = self._duel_amount(side, loc, nominal * scale, duel.attacker.name)
+            done = conquest.push(w, c, loc, side, duel.attacker.name, amount, "attack")
+            conquest.mark(w, c, loc, duel.attacker.name, side, "attack", done.moved)
+            conquest.tally(w, c, self._pill_day(), side, duel.attacker.name, done.moved)
+            window = c.config.active_window_days * DAY / calendar.cal_scale(c, w)
+            for who in (duel.attacker.name, *duel.attacker.allies):
+                w.active_pushers.setdefault(side, {})[who] = w.time
+            w.active_pushers = push.drop_stale(w.active_pushers, w.time, window)
+            if done.flipped:
+                return [sortie_duel.MOVE_FLIP.format(place=place, side=name), conquest.PAYOUT_NEXT], True
+            return [sortie_duel.MOVE_LINES[duel.result.tier].format(place=place, side=name)], True
+        d = duel.defender
+        if conquest._still(w, c, loc):  # noqa: SLF001  剛易手、戰書凍結、碎片鎮住：誰都動不了（同 conquest.pull）
+            return [sortie_duel.MOVE_STILL.format(place=place, why=conquest.push_problem(w, c, side, loc, "attack") or "")], False
+        amount, _ = self._duel_amount(side, loc, nominal * scale, duel.attacker.name)
+        holder = d.side if d is not None and d.side in conquest.SIDES else None
+        pulled = conquest.guard_pull(w, c, loc, side, amount, name="" if d is None or d.garrison else d.name, holder_side=holder)
+        key = "pull" if pulled.moved > 0 else "hold"
+        return [sortie_duel.MOVE_LINES[key].format(place=place, side=name), *pulled.lines], d is not None and not d.garrison
+
+    def _duel_toll(self, share: float, lost: bool) -> list[str]:
+        """三回合扣的氣血（share 是氣血上限的幾成，照舊吃身法、根骨、防具減損，一部分變內傷：team._apply_toll）；輸的另加內傷 lose_injury。"""
+        s, c = self.state, self.content
+        p = s.player
+        msgs: list[str] = []
+        hurt = 0.0
+        if share > 0:
+            cut = min(c.config.armor.total_cap, team.armor_cut(s, c, self.world))
+            lost_hp, hurt = team._apply_toll(c, p.member, share * (1 - cut), agi=p.stats.get("agi", team.BASE_STAT),
+                                             con=team.con_of(s, c, self.world, PLAYER), injury=treasures.amount(s, c, "injury"))
+            if round(lost_hp) > 0:
+                msgs.append(f"氣血 -{lost_hp:.0f}")
+        if lost and c.config.sortie.lose_injury > 0:
+            p.member.injury += c.config.sortie.lose_injury
+            hurt += c.config.sortie.lose_injury
+        if hurt >= 1:
+            msgs.append(f"內傷 +{hurt:.0f}")
+        return msgs
+
+    def _duel_hold_gains(self, squad: Squad, record) -> list[str]:
+        """守方贏了（真人或補位的人）：跟攻方打贏一樣的經驗心得（那一塊駐軍那一路的 reward_scale 倍；一類一顆關著照三成），不給銀兩與掉落（PM）。"""
+        s, c = self.state, self.content
+        p, cfg = s.player, c.config.sortie
+        if precise.on(c, s.world):
+            xinde = round(squad.reward_xinde * cfg.reward_scale * (1 + treasures.amount(s, c, "win_xinde_pct")))
+            exp = round(squad.exp * cfg.reward_scale * (1 + treasures.amount(s, c, "win_exp_pct")) * ranger.exp_factor(s, c))
+        else:
+            share = c.config.drill_reward_share
+            xinde, exp = drill_share(squad.reward_xinde, share), drill_share(squad.exp, share)
+        msgs: list[str] = []
+        if xinde:
+            p.stats["xinde"] = p.stats.get("xinde", 0) + xinde
+            record.xinde = (record.xinde or 0) + xinde
+            msgs.append(f"心得 +{xinde}")
+        msgs += self._record_exp(record, exp, "answer")  # 應戰是仗（growth.exp_source；45 級以後照樣升，不乘遭遇拍的兩道閘）
+        levels, record.levelups = team.grant_team_exp(s, c, self.world, exp, "answer")
+        record.notes += levels
+        return msgs + levels
+
+    def _duel_report(self, duel: SortieDuel, role: str, squad: Squad | None, moved: list[str]) -> list[str]:
+        """這一方的戰報（kind sortie、label 約戰；三回合各一行、對面是誰、結果、這一塊怎麼動、離易手還差、離下一階、同去的、戰利或經驗心得、
+        氣血內傷、截糧、下一次什麼時候）、行狀一筆、冷卻；補位的人扣一次應戰與體力。回寫進這一則江湖紀錄的話。"""
+        s, c = self.state, self.content
+        p, w, cfg = s.player, s.world, c.config.sortie
+        result, d = duel.result, duel.defender
+        fought = role != "ally"
+        mine = d if role == "defender" else duel.attacker
+        rival = duel.attacker if role == "defender" else d
+        tier_word = sortie_duel.side_tier(duel, p.name) or sortie_duel.TIER_WORDS[result.tier]
+        record = BattleRecord(
+            id=s.battle_seq + 1, time=w.time, location=duel.place, kind="sortie", label=sortie_duel.LABEL,
+            opponent=sortie_duel.GARRISON if rival is None or rival.garrison else rival.name, ours=[Fighter(name=p.name, level=p.member.level)],
+            tier=tier_word, our_power=mine.power if mine is not None else 0.0, difficulty=rival.power if rival is not None else 0.0,
+            rounds=sortie_duel.round_lines(duel),
+        )
+        record.notes.append(sortie_duel.vs_line(duel))
+        if duel.attacker.allies:
+            record.notes.append(sortie_duel.VS_ALLIES.format(names="、".join(duel.attacker.allies)))
+        record.notes.append(sortie_duel.TALLY_LINE.format(wins=result.wins, losses=result.losses, draws=result.draws, attacker=duel.attacker.name))
+        record.notes += moved
+        bar = conquest.bar(w, duel.block, duel.attacker.side)
+        who = self._duel_who(duel.attacker.side)
+        if bar > 0:
+            record.notes.append(sortie_duel.GAP_LINE.format(side=who, place=duel.place, value=round(bar), left=max(0, round(conquest.FULL - bar))))
+        msgs: list[str] = []
+        won = tier_word in team.WIN_TIERS
+        if fought and won and squad is not None:
+            rng, self.rng = self.rng, random.Random(f"約戰戰利|{duel.id}|{p.name}")  # 掉落用這一場自己的亂數（不碰 Game.rng）
+            try:
+                msgs += self._sortie_rewards(squad, record) if role == "attacker" else self._duel_hold_gains(squad, record)
+            finally:
+                self.rng = rng
+            if role == "attacker":
+                msgs += self._deed_fame("sortie")  # 名聲 3.1：出陣攻打贏 +1
+        if role == "defender" and duel.report.get("filled"):
+            sortie_duel.spend_answer(p, self._pill_day())  # 補位的人：同真人應戰扣一次應戰與體力
+            p.stamina = max(0.0, p.stamina - cfg.answer_stamina)
+        lost = fought and tier_word == "落敗"
+        if fought:
+            share = result.defender_toll if role == "defender" else result.attacker_toll
+            toll = self._duel_toll(share, lost)
+            record.changes += toll
+            msgs += toll
+            after = sortie_duel.cooldown_after(duel, p.name, cfg)
+            if after.sortie is not None:
+                p.sortie_cooldown_until = max(p.sortie_cooldown_until or 0.0, after.sortie)
+            if after.answer is not None:
+                p.answer_cooldown_until = max(p.answer_cooldown_until or 0.0, after.answer)
+            if lost:
+                record.notes.append(sortie_duel.LOSE_LINE.format(n=f"{cfg.lose_cooldown_minutes:g}"))
+            annals.note(s, c, annals.DUEL, sortie_duel.ANNAL_LINE.format(  # 地點寫約戰的那一塊（結算時人可能已經走了）
+                place=duel.place, rival=rival.name if rival is not None and not rival.garrison else sortie_duel.GARRISON, tier=tier_word), 2,
+                place=duel.place)
+        rank = ranks.rank_of(s)
+        if 1 <= rank < 3 and calendar.season_one_on(w, c):
+            record.notes.append(sortie_duel.RANK_LINE.format(n=max(0, ranks.threshold(c, rank + 1) - p.contrib)))
+        if orders.extra_enemies(s, c, duel.block, self._side()):
+            record.notes.append(sortie_duel.CONVOY_LINE.format(place=duel.place))
+        left, answers = self.sorties_left(), self.answers_left()
+        record.notes.append(sortie_duel.NEXT_LINE.format(
+            sortie=sortie_duel.NEXT_DONE if left <= 0 else sortie_duel.minutes_text(p.sortie_cooldown_until, self.now),
+            answer=sortie_duel.NEXT_DONE if answers <= 0 else sortie_duel.minutes_text(p.answer_cooldown_until, self.now),
+        ))
+        if fought:
+            line = self._file_battle(record)
+        else:
+            battlelog.add_record(s, record)
+            line = battlelog.summary_line(record)
+            if self._draft is not None:
+                self._draft.outcome(battlelog.outcome_text(record), line)
+                self._draft.battle_id = record.id
+        return [line, sortie_duel.vs_line(duel), *moved, *msgs]
 
     def _lose_silver(self, record) -> list[str]:
         """落敗失落一成銀兩（遊歷、探索野怪、挑戰本人共用），記在戰報上。騎著馬有機會策馬脫身、保住這一成（裝備四欄 5.11）：
@@ -14454,9 +15178,19 @@ class Game:
         s, c = self.state, self.content
         faction = self._side()  # 豪強分屬兩軍：照依附那一軍畫出陣與地盤
         on = sortie.on(c) and faction is not None
+        duel = self.duel_on()
 
         def mode(loc_id: str) -> str | None:
-            return sortie.mode(c, s.world, faction, loc_id, bool(self._sortie_foes(c.locations[loc_id]))) if on else None
+            how = sortie.mode(c, s.world, faction, loc_id, bool(self._sortie_foes(c.locations[loc_id]))) if on else None
+            # 約戰開著（減法季批 3b）：沒有零風險的守，自家的地方出陣那一格灰著「等對面來約」——輿圖不畫「出陣・守」、不推薦去那裡出陣
+            if duel and how == "hold":
+                return None
+            # 攻也一樣（FB-855）：貼不了約戰的敵方地方（跟自家領地不相連、冷卻、戰書凍結、碎片鎮地……）不標「攻」、不推薦——問的跟貼約戰
+            # （sortie_go_problem）同一個 conquest.push_problem；截糧的運糧隊正打那裡經過的，出陣照舊攻打運糧隊（_duel_option），照舊是攻
+            if duel and how == "attack" and not orders.extra_enemies(s, c, loc_id, faction) \
+                    and conquest.push_problem(s.world, c, self._conquest_side(), loc_id, "attack") is not None:
+                return None
+            return how
 
         out = mapdata.state(
             s, c, odds=self.odds, sortie_mode=mode, sorties_left=self.sorties_left() if on else None, real_minutes=self._real_minutes,

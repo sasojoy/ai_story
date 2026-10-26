@@ -1891,6 +1891,13 @@ def _main_view_body(game: Game) -> dict:
     conquest_view = game.conquest_view()  # 領地爭奪：戰書排的攻城、每一塊的翻地資料、能不能下戰書（開關關著、季收了沒有這個鍵）
     if conquest_view is not None:
         view["conquest"] = conquest_view
+    # 出陣約戰（減法季批 3b，計畫 1.3）：出陣前那張卡（main.sortie 已經是出陣開著的布林，卡放 sortie_card）與約戰卡清單；約戰關著沒有這兩個鍵
+    duel_card = game.sortie_card()
+    if duel_card is not None:
+        view["sortie_card"] = duel_card
+    duel_cards = game.sortie_cards()
+    if duel_cards is not None:
+        view["sorties"] = duel_cards
     banner = game.siege_banner()  # 領地爭奪第三批 A：場景裡畫的是攻城戰時，最上面那一條「攻城・地點｜守方：某某」（企劃者挑甲；決戰沒有這個鍵）
     if banner is not None:
         view["siege"] = banner
@@ -2150,6 +2157,12 @@ def _int(value, default: int) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def _moves(value) -> list[str]:
+    """約戰卡送來的三招（減法季批 3b）：清單或「強攻,固守,奇襲」，最多看前幾樣、每樣最多幾個字；對不對由引擎驗（sortie_duel.moves_problem）。"""
+    items = value if isinstance(value, list) else str(value or "").replace("、", ",").replace("，", ",").split(",")
+    return [str(m).strip()[:4] for m in items[:6] if str(m).strip()]
 
 
 DONATE_ITEMS_MAX = 40  # 一次最多捐幾種（背包裡的素材種類遠少於這個；擋亂送的長清單）
@@ -2432,6 +2445,11 @@ MAIN_ACTIONS = {
     # 玉璽碎片改版第 2 批：起用懷中那一片的獨門行動。target 是指定的目標（大勢人物、戰線、人物 id），side 是散人傳檄挑的那一軍；
     # 玩家的叫 seal_use，跟管理者那一組 seal_* 不同名（FB-609）
     "seal_use": lambda g, b: g.seal_use(str(b.get("target", ""))[:40], str(b.get("side", ""))[:20]),
+    # 出陣約戰（減法季批 3b；main.sortie_card、main.sorties）：moves 是三招（清單，或「強攻,固守,奇襲」），id 是約戰卡上的 id。
+    # 引擎在 world.mutate 裡重驗（兩個人同時應戰，先到的那一位是守方）；關著的季回「此刻無法這麼做」
+    "sortie_go": lambda g, b: g.sortie_go(_moves(b.get("moves"))),
+    "sortie_answer": lambda g, b: g.sortie_answer(str(b.get("id", ""))[:80], _moves(b.get("moves"))),
+    "sortie_join": lambda g, b: g.sortie_join(str(b.get("id", ""))[:80]),
 }
 # 賽季時鐘暫停中也照做的畫面設定（不推任何東西、不碰別人）：匿名、不再提示、略過引導、打開輿圖（頁面靠它載入輿圖）、軍令卡出現（入伍段第一步，
 # 只動自己的引導；被擋下的話網頁已經記成「送過了」，這個工作階段不會再送）、對話框的「知道了」

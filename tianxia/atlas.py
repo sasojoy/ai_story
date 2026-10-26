@@ -346,12 +346,16 @@ SIEGE_AREA_SORTIE = "到{front}一帶{enemy}的地盤出陣，打贏一場記一
 SIEGE_CONQUEST_FOE = "守軍"
 SIEGE_AREA_CONQUEST = "到{front}一帶我軍進度最高的幾處出陣，打贏一場守軍記一次。"  # 並列最高的多過 SIEGE_NAMED_MAX（全是 0 時就是那一帶推得動的每一處）
 SIEGE_NONE_CONQUEST = "{front}一帶此刻沒有我軍推得動的地方（剛易手、下了戰書、或碰不到），在那裡打贏記不到。"
+# 約戰開著（減法季批 3b，QA 順帶）：貼約戰、打贏一場就記一次——對面是真人、補位的人還是守軍都算，不寫「守軍」。待 joy 潤
+SIEGE_AREA_DUEL = "到{front}一帶我軍進度最高的幾處出陣，打贏一場記一次。"
 INTERCEPT_SORTIE = "到{place}出陣，撞上對面的運糧隊、打贏記一次。"  # 待 joy 潤（FB-248：出陣開著時糧隊只在這一處，orders.intercept_spots）
 DEFEND_SORTIE = "在{front}一帶自家的地盤出陣守一回，或按「{duty}」（收在「此地還能做」裡），做一次記一次。"  # 待 joy 潤
 # 領地爭奪開著時（裁決 24、FB-565；翻地與爭搶 PM 2026-10-20 第 1 條）：守城記的是自家被對面推得最高、守得動的那幾塊（orders.defend_places），
 # 卡上照它寫，輿圖也只標那幾處；沒有就直說此刻沒有可守的（記不到）。投票與 22:00 公告拿掉了，不再寫「被公告要攻」（dev/flip-1 收尾）。待 joy 潤
 DEFEND_ACT_SORTIE = "出陣守一回，或按「{duty}」（收在「此地還能做」裡）"
 DEFEND_ACT_PLAIN = "按「{duty}」（收在「此地還能做」裡）"
+# 約戰開著（減法季批 3b）：守城是應戰守住（巡哨、傳道、保境安民不再算守城）。待 joy 潤
+DEFEND_ACT_DUEL = "，對面在那裡約戰時去應戰、守住"
 DEFEND_AT_CONQUEST = "到{where}{act}，做一次記一次。"  # 對面推得最高的自家地方只有一兩處（SIEGE_NAMED_MAX）時寫出地名
 DEFEND_AREA_CONQUEST = "到{front}一帶對面推得最高的幾處自家地方{act}，做一次記一次。"  # 並列最高的多過 SIEGE_NAMED_MAX
 DEFEND_NONE_CONQUEST = "{front}一帶此刻沒有對面在推、守得動的自家地方（剛易手的也守不動），沒有可守的，守了也記不到。"
@@ -372,9 +376,12 @@ def siege_how(state: GameState, content: Content, order: Order) -> str:
     if conquest.on(content, state.world):
         if not places:
             return SIEGE_NONE_CONQUEST.format(front=front)
+        from . import sortie_duel  # noqa: PLC0415  sortie_duel → conquest → …：延後 import
+
+        duel = sortie_duel.on(content, state.world)
         if len(places) > SIEGE_NAMED_MAX:
-            return SIEGE_AREA_CONQUEST.format(front=front)
-        enemy = SIEGE_CONQUEST_FOE
+            return (SIEGE_AREA_DUEL if duel else SIEGE_AREA_CONQUEST).format(front=front)
+        enemy = "" if duel else SIEGE_CONQUEST_FOE  # 約戰開著：打贏一場就記，不分對面是誰（真人、補位、守軍）
     if not places or len(places) > SIEGE_NAMED_MAX:
         if sortie.on(content):
             return SIEGE_AREA_SORTIE.format(front=front, enemy=enemy)
@@ -414,7 +421,12 @@ def order_how(state: GameState, content: Content, order: Order) -> str:
             places = [loc_id for loc_id in listed if loc_id not in sieged]
             parts: list[str] = []
             if places:
-                act = (DEFEND_ACT_SORTIE if sortie.on(content) else DEFEND_ACT_PLAIN).format(duty=name)
+                from . import sortie_duel  # noqa: PLC0415  sortie_duel → conquest → …：延後 import
+
+                if sortie_duel.on(content, state.world):  # 約戰開著：守城記的是應戰守住（Game._duel_result 的 duty）
+                    act = DEFEND_ACT_DUEL
+                else:
+                    act = (DEFEND_ACT_SORTIE if sortie.on(content) else DEFEND_ACT_PLAIN).format(duty=name)
                 if len(places) > SIEGE_NAMED_MAX:
                     parts.append(DEFEND_AREA_CONQUEST.format(front=front, act=act))
                 else:
