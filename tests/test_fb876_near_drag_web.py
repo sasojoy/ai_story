@@ -1,7 +1,8 @@
 """FB-876（企劃者 2026-10-26 試玩新輿圖：「輿圖拖曳的時候沒辦法跨區」）：輿圖第一層、第二層（S.mapLayer "near"）拖的範圍以前夾在
 「這一區的地點、走得到的地方與你的外框加 60」——別區的地點明明畫成淡墨小圖、點得到，卻拖不過去（站潁川郡 375 寬：往右拖 300 一點都不動、
 往下拖只動 59.5）。改成整張圖（底圖的 world.frame）：拖得過區界、看得到隔壁，拖到底停在整張圖的邊上（照舊「圖不能完全拖出框外」）。
-全區（區圖）與天下圖的範圍不變（全區要不要畫隔壁、拖到邊界要不要換區是畫面的設計，等 PM 選做法）。
+天下圖的範圍不變。全區（區圖）企劃者 2026-10-26 選甲：也照整張圖夾、別區畫淡墨小圖，測試在 tests/test_fb876_region_neighbours_web.py
+（以前這裡有一條「全區照舊夾在這一區的取景框」，選了甲之後拿掉）。
 
 在 node 裡跑整支 app.js（tests/webharness.py）；假地圖框、手勢照 tests/test_map_pan_web.py。沒有 node 就略過。"""
 from __future__ import annotations
@@ -47,13 +48,3 @@ return {{ edges: edges(), open: open() }};
     assert e[side] == pytest.approx(a[side], abs=1e-6)  # 那一邊貼齊
     assert e[0] <= a[0] + 1e-6 and e[1] <= a[1] + 1e-6 and e[2] >= a[2] - 1e-6 and e[3] >= a[3] - 1e-6  # 照樣蓋滿露出來的那一塊
 
-
-def test_the_region_map_still_stops_at_its_own_frame():
-    """全區（區圖）照舊：取景框（這一區）夾邊，1 倍往下拖 200 挪不出這一區的外框（要不要跨區是畫面的設計，等 PM 選）。"""
-    out = run(_game("yingchuan"), READY + EDGES + """
-dragBy(0, 200);
-const f = H.S.regionView.frame, [x0, y0] = toScreen(f[0], f[1]), [x1, y1] = toScreen(f[2], f[3]);
-return [x0, y0, x1, y1];
-""")
-    x0, y0, x1, y1 = out
-    assert x0 >= -1e-6 and x1 <= 375 + 1e-6 and y0 >= 58 - 1e-6 and y1 <= 550 + 1e-6

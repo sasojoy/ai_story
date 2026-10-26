@@ -17,7 +17,6 @@
   const FRONT_RED = "#A8322A";
   const MAP_INK = "#2B241B"; // 地圖上的字（紙色描邊）
   const MAP_HALO = "#F7F1E3";
-  const MAP_PAPER = "#E9E2CC"; // 底圖的紙色（content/map.json 的 background）：區圖取景框外蓋的那一層
   const MAP_STATE_EVERY = 30000; // 輿圖開著時疊層多久重抓一次（毫秒）
   // 意境照屬性上色（意境提示設計第四節；意境改名也不跑掉）：c 區圖名字底下的字與卡上牌子的顏色、dark 深色主題上空心牌子的字
   const INSIGHT_INK = {
@@ -893,7 +892,8 @@
   // （企劃者 2026-10-22：整張連字一起動，擺法不重算）。只畫這一區的地點：
   // 墨筆小圖（線色＝誰佔著）、名字裝在印章框裡（框色＝誰的，顏色照劇本 sideInk、沒人佔照底圖的 unheld；大城框粗）、框裡的下緣一條細進度條
   // （攻方的顏色；剛易手整條灰、不寫字，FB-648 第二段乙）、朱印「寶」、名字底下最多兩個意境字（最濃的在前）、你的朱圈與旗、通到鄰區的路在取景框邊寫「→ 南陽」
-  // （點了換到那一區）、取景框外蓋一層半透明的紙。底圖的州界點劃線收掉、大區名藏起來，路照 CSS 換成一種淡實線（style.css 的
+  // （點了換到那一區）；別區的地點只畫淡墨小圖（點得到、不寫名；拖得過區界，FB-876 企劃者選甲，以前取景框外蓋一層半透明的紙）。
+  // 底圖的州界點劃線收掉、大區名藏起來，路照 CSS 換成一種淡實線（style.css 的
   // .mapx.region .tx-roads）。「塗層」開了多一層照歸屬融成一片的淡彩（草圖清甲）。名字框的位置照螢幕大小挑（regionLabels）：不壓別的名字框、
   // 小圖、你的旗、鄰區出口；擠不下時這一區的名字縮一號。點一處：抽屜半開那一處的卡，地圖不動（取景先替半開的卡留位子，peekPx）。字待 joy 潤
   const REGION_TOP = 58; // 上面那一排（‹ 天下・大區・版圖）讓開多高（px）
@@ -929,7 +929,6 @@
   }
   const RICH_SEAL = "#B03A2E", BAR_TRACK = "#D8CDB4", COOL_GREY = "#B3AA98";
   const R_WASH = { r: 64, blur: 8, warp: 20, freq: 0.024, op: 0.42 }; // 塗層（草圖清甲）：每一處一團多大、暈開、邊緣扭幾分（px）、整層多濃
-  const R_MASK = 3, R_MASK_STEP = 7, R_MASK_OP = 0.35; // 取景框外的紙：三層、每層往外推 7px、每層多濃（最外面約七成三）
   const WASH_WORD = "塗層"; // 待 joy 潤
   const WASH_KEY = "tx-map-wash"; // 塗層開關記在這個瀏覽器（平常關著）
   function washOn() {
@@ -1288,7 +1287,7 @@
   function regionParts(base, st, o) {
     const v = o.v, k = 1 / v.s, rid = o.rid, pts = regionPlaces(base, rid), pos = Object.fromEntries(pts.map((p) => [p.id, p])), z = regionSizes(v.s);
     const mp = (X, Y) => [v.cx + (X - o.vw / 2) * k, v.cy + (Y - o.vh / 2) * k]; // 螢幕 → 地圖
-    const [fx0, fy0, fx1, fy1] = v.frame, W = base.w || 900, H = base.h || 1340;
+    const [fx0, fy0, fx1, fy1] = v.frame;
     const labels = regionLabels(base, st, rid, v, o.vw, o.vh), exits = regionExits(base, rid, v, o.vw, o.vh, labels);
     const none = noneInk(base), inkOf = (id) => (st.places[id] && st.places[id].control ? sideInk(st.places[id].control) : none);
     const out = [];
@@ -1299,12 +1298,13 @@
     }
     // 點空白：收起卡（取景框一塊透明的點擊區，畫在記號最底下）
     out.push(`<rect data-act="region-blank" x="${f1(fx0)}" y="${f1(fy0)}" width="${f1(fx1 - fx0)}" height="${f1(fy1 - fy0)}" fill="#000000" fill-opacity="0"/>`);
-    // 取景框外的紙：三層由內往外漸濃（邊緣不是一刀切）
-    const ring = Array.from({ length: R_MASK }, (_, i) => {
-      const g = i * R_MASK_STEP * k;
-      return `<path d="M${-W},${-H}H${2 * W}V${2 * H}H${-W}ZM${f1(fx0 - g)},${f1(fy0 - g)}V${f1(fy1 + g)}H${f1(fx1 + g)}V${f1(fy0 - g)}Z" fill-rule="evenodd"/>`;
-    }).join("");
-    out.push(`<g class="r-mask" fill="${MAP_PAPER}" fill-opacity="${R_MASK_OP}" pointer-events="none">${ring}</g>`);
+    // 別區的地點（FB-876，企劃者 2026-10-26 選甲）：全區也拖得過區界（panBox 照整張圖夾），取景框外不再蓋紙；別區的地點畫成第一層那種
+    // 淡墨小圖（點得到、不寫名，點了開那一處的卡），畫在本區的記號底下。本區的畫法、名字、點擊不變
+    const others = base.places.filter((p) => p.region !== rid && st.places[p.id]), oz = z.icon * k;
+    if (others.length) {
+      out.push(`<g class="r-faints">${others.map((p) => `<g class="r-faint" data-act="region-place" data-id="${esc(p.id)}" transform="translate(${p.x},${p.y}) scale(${f2(oz)})" opacity="${NEAR_FAINT}" style="cursor:pointer">`
+        + `<rect x="-14" y="-14" width="28" height="28" fill="#000000" fill-opacity="0"/>${inkIcon(p.glyph, MAP_INK, MAP_HALO)}</g>`).join("")}</g>`);
+    }
     // 鄰區出口
     for (const e of exits) {
       const [x, y] = mp(e.box[0], e.box[1]), w = (e.box[2] - e.box[0]) * k, h = (e.box[3] - e.box[1]) * k;
@@ -1344,6 +1344,11 @@
       const base0 = y + fh + (R_INS_GAP + L.insPx * 0.9) * k;
       L.ins.forEach((ins, i) => parts.push(`<text class="r-ins" x="${f1(x + i * (L.insPx + 2) * k)}" y="${f1(base0)}" font-size="${f1(L.insPx * k)}" font-weight="700" fill="${ins.c}" stroke="${MAP_HALO}" stroke-width="${f1(2.6 * k)}" paint-order="stroke">${esc(ins.name)}</text>`));
       out.push(parts.join("") + "</g>");
+    }
+    // 別區小圖的點擊區疊在本區的名字框、出口上面（同 FB-877 第一層的規則：名字不吃別處小圖的點擊）；透明的，畫面不變
+    if (others.length) {
+      const r = 14 * oz;
+      out.push(`<g class="r-hits">${others.map((p) => `<rect class="r-hit" data-act="region-place" data-id="${esc(p.id)}" x="${f1(p.x - r)}" y="${f1(p.y - r)}" width="${f1(2 * r)}" height="${f1(2 * r)}" fill="#000000" fill-opacity="0"/>`).join("")}</g>`);
     }
     // 上面那一張：你（朱圈與旗；在路上畫在路上，在取景框裡才畫）
     const high = [], j = st.journey, h = pos[st.here];
@@ -1836,12 +1841,14 @@
   function mapTransform(v, vw, vh, p = PAN_ONE) {
     return `translate(${p.z * (vw / 2 - v.cx * v.s) + p.x}px, ${p.z * (vh / 2 - v.cy * v.s) + p.y}px) scale(${p.z * v.s})`;
   }
-  // 夾邊用的兩個框（取景的螢幕座標 [x0, y0, x1, y1]）：b＝內容框（區圖：取景框 v.frame，這一區的地點與名字框都在裡面；天下圖：底圖的
-  // world.frame），a＝露出來的那一塊（左右整個地圖框，上面讓開那一排，底下讓開抽屜此刻的高度；桌機右欄、版圖變化時地圖框本來就在抽屜外）
+  // 夾邊用的兩個框（取景的螢幕座標 [x0, y0, x1, y1]）：b＝內容框（天下圖與全區：底圖的 world.frame，整張圖——全區拖得過區界是 FB-876
+  // 企劃者 2026-10-26 選的甲，以前是這一區的取景框；第一層：nearFit 的 frame，也是整張圖），a＝露出來的那一塊（左右整個地圖框，上面讓開那一排，
+  // 底下讓開抽屜此刻的高度；桌機右欄、版圖變化時地圖框本來就在抽屜外）
   function panBox(v, vw, vh) {
-    const world = S.mapLayer === "world" && S.mapBase && S.mapBase.world, f = world ? S.mapBase.world.frame : v.frame;
+    const world = S.mapLayer === "world" && S.mapBase && S.mapBase.world;
+    const whole = (world || S.mapLayer === "region") && S.mapBase && S.mapBase.world, f = whole ? S.mapBase.world.frame : v.frame;
     if (!f) return null;
-    const [x0, y0, x1, y1] = world ? [f[0], f[1], f[0] + f[2], f[1] + f[3]] : f;
+    const [x0, y0, x1, y1] = whole ? [f[0], f[1], f[0] + f[2], f[1] + f[3]] : f;
     const scr = (x, y) => [vw / 2 + (x - v.cx) * v.s, vh / 2 + (y - v.cy) * v.s];
     const tl = S.mapMode === "timeline", top = world ? (tl ? WORLD_TL_TOP : WORLD_TOP) : REGION_TOP;
     const bottom = deskMap() || tl ? 0 : mapDrawerPx(S.mapDrawer);
