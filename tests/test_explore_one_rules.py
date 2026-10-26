@@ -1,7 +1,10 @@
-"""探索一顆（減法季整合設計 4.1；主機側實作計畫 Task 2-1 的六張表、Task 2-2 的抽三拍）的純規則。
+"""探索一顆（減法季整合設計 4.1；主機側實作計畫 Task 2-1 的六張表、Task 2-2 的抽一件事）的純規則。
 
 批 0 的 `Config.jianfa` 還沒到：數字吃 `tianxia/jianfa_numbers.py` 的 `JianfaNumbers`（批 0 到了之後併進 `JianfaRules`），
-這裡直接建它。開關、接線（選單只剩一顆探索、逐拍結算）在批 0 之後的 Task 2-3。"""
+這裡直接建它。開關、接線（選單只剩一顆探索、結算）在批 0 之後的 Task 2-3。
+
+2d（企劃者 2026-10-26「只抽一件事情，然後體力先維持不動」，同天體力改 15）：以前一趟連抽三拍（同一類最多兩拍、要選的拍放最後、
+接了討伐懸賞至少一拍是遭遇）；現在一趟只抽一件事，那些規則作廢，斷言三拍的舊測試照新規則改。"""
 import ast
 import random
 from collections import Counter
@@ -13,7 +16,7 @@ from pydantic import ValidationError
 
 from conftest import real_content
 from tianxia import explore_one
-from tianxia.explore_one import CHOICE, ENCOUNTER, EVENT, INSIGHT, MATERIAL
+from tianxia.explore_one import ENCOUNTER, EVENT, INSIGHT, KINDS, MATERIAL
 from tianxia.jianfa_numbers import ExploreOneTable, JianfaNumbers
 
 CFG = JianfaNumbers()
@@ -85,7 +88,7 @@ def test_tags_no_table_names_fall_to_the_last_table():
     assert CFG.explore_tables[-1].kind == "wild"
 
 
-# ── 這一處每一拍的比重 ──────────────────────────────────────────
+# ── 這一處這一趟的比重 ──────────────────────────────────────────
 
 
 @pytest.mark.parametrize("kind", sorted(TABLES))
@@ -107,15 +110,24 @@ def test_no_foe_here_gives_the_encounter_share_to_the_other_three():
     assert got == {EVENT: 60, ENCOUNTER: 0, MATERIAL: 15, INSIGHT: 10}
 
 
-def test_a_bounty_here_adds_30_to_encounter_capped_at_80():
+def test_a_bounty_here_makes_the_whole_trip_that_bounty_encounter():
+    """2d：一趟只有一件事，接了這裡的討伐懸賞這一趟就是遭遇（以前遭遇那一欄 +30、至少一拍是遭遇）；任何地點、任何危險度、
+    有沒有對手（懸賞那一路易手了也找得到）都一樣。"""
     w = explore_one.weights
-    assert w(CFG, _place("寺院"), has_foes=True, bounty_here=True)[ENCOUNTER] == 35
-    assert w(CFG, _place("野外"), has_foes=True, bounty_here=True)[ENCOUNTER] == 80
-    assert w(CFG, _place("營寨", danger=3), has_foes=True, bounty_here=True)[ENCOUNTER] == 80
-    assert w(CFG, _place("城鎮"), has_foes=False, bounty_here=True)[ENCOUNTER] == 45  # 懸賞那一路易手了也找得到
+    only = {EVENT: 0, ENCOUNTER: 100, MATERIAL: 0, INSIGHT: 0}
+    assert explore_one.encounter_only() == only
+    for tag, danger, foes in (("寺院", 1, True), ("野外", 1, True), ("營寨", 3, True), ("城鎮", 1, False), ("山林", 2, False)):
+        assert w(CFG, _place(tag, danger=danger), has_foes=foes, bounty_here=True) == only, tag
+    assert w(CFG, _place("野外"), has_foes=True, bounty_here=False) != only  # 交了差回原表
+    assert not hasattr(CFG, "bounty_encounter_bonus") and not hasattr(CFG, "beats")
 
 
-# ── 抽一拍、出門一趟 ──────────────────────────────────────────
+def test_the_outing_costs_fifteen_stamina_by_default():
+    """企劃者 2026-10-26：一趟一件事、體力 15（原本 18）。"""
+    assert CFG.explore_stamina == 15
+
+
+# ── 抽一件事、出門一趟 ──────────────────────────────────────────
 
 
 @pytest.mark.parametrize("kind", sorted(TABLES))
@@ -128,50 +140,50 @@ def test_single_beats_follow_each_table_within_5_points(kind):
 
 
 def _outings(row, n=600, **kw):
-    return [explore_one.draw(CFG, random.Random(f"出門|{i}"), row, **kw) for i in range(n)]
+    return [explore_one.draw(random.Random(f"出門|{i}"), row, **kw) for i in range(n)]
 
 
 @pytest.mark.parametrize("kind", sorted(TABLES))
-def test_an_outing_is_three_beats_at_most_two_alike_and_one_choice_placed_last(kind):
-    for beats in _outings(_row(TABLES[kind])):
-        assert len(beats) == CFG.beats == 3
-        assert max(Counter(beats).values()) <= 2
-        picks = [i for i, b in enumerate(beats) if b in CHOICE]
-        assert len(picks) <= 1
-        assert picks in ([], [len(beats) - 1])
+def test_an_outing_is_one_thing_that_follows_the_table_within_5_points(kind):
+    """2d：一趟就是一件事（以前三拍、要選的拍最多一個，城裡約八成的出門帶一則事件），所以每一類的機會就是表上的數字。"""
+    row = _row(TABLES[kind])
+    got = Counter(_outings(row, n=1000))
+    assert set(got) <= set(KINDS) and all(isinstance(k, str) for k in got)
+    for k, share in row.items():
+        assert abs(got[k] / 10 - share) <= 5, (kind, k, got)
 
 
-def test_town_outings_mostly_bring_an_event():
-    """城裡多事：一趟最多一個要選的拍，城裡八成上下的出門都帶一則事件（一拍一拍算的比例不會是 60%）。"""
+def test_town_outings_bring_an_event_about_sixty_percent_of_the_time():
     outings = _outings(_row(TABLES["town"]), n=1000)
-    share = sum(EVENT in beats for beats in outings) / len(outings)
-    assert 0.75 <= share <= 0.9
+    share = sum(kind == EVENT for kind in outings) / len(outings)
+    assert 0.55 <= share <= 0.65
 
 
-def test_a_bounty_here_puts_an_encounter_in_every_outing():
+def test_a_bounty_here_makes_every_outing_an_encounter():
     for kind in ("temple", "town", "wild"):
         row = explore_one.weights(CFG, _place(TABLES[kind].tags[0]), has_foes=kind != "town", bounty_here=True)
-        assert all(ENCOUNTER in beats for beats in _outings(row, bounty_here=True)), kind
+        assert set(_outings(row)) == {ENCOUNTER}, kind
 
 
 def test_a_place_with_no_foe_never_draws_an_encounter():
     row = explore_one.weights(CFG, _place("營寨", danger=3), has_foes=False)
-    assert not any(ENCOUNTER in beats for beats in _outings(row))
+    assert ENCOUNTER not in set(_outings(row))
 
 
 def test_sensing_here_twice_in_a_row_is_not_drawn_but_events_are_left_to_the_rotation():
-    """同一處連兩趟要選的拍不同一則：上一趟在這裡是感悟，這一趟不抽感悟；事件的不重照舊交給 events.rotation_pool。"""
+    """同一處連兩趟要選的那件事不同一則：上一趟在這裡是感悟，這一趟不抽感悟；事件的不重照舊交給 events.rotation_pool。"""
     row = _row(TABLES["temple"])
-    assert not any(INSIGHT in beats for beats in _outings(row, last_choice=INSIGHT))
-    assert any(EVENT in beats for beats in _outings(row, last_choice=EVENT))
-    assert any(INSIGHT in beats for beats in _outings(row, last_choice=EVENT))
+    assert INSIGHT not in set(_outings(row, last_choice=INSIGHT))
+    assert EVENT in set(_outings(row, last_choice=EVENT))
+    assert INSIGHT in set(_outings(row, last_choice=EVENT))
 
 
-def test_when_nothing_can_be_drawn_the_beat_is_a_material():
+def test_when_nothing_can_be_drawn_the_outing_is_a_material():
     empty = {EVENT: 0, ENCOUNTER: 0, MATERIAL: 0, INSIGHT: 0}
-    assert explore_one.draw(CFG, random.Random(1), empty) == [MATERIAL, MATERIAL, MATERIAL]
-    only_event = {EVENT: 100, ENCOUNTER: 0, MATERIAL: 0, INSIGHT: 0}
-    assert explore_one.draw(CFG, random.Random(1), only_event) == [MATERIAL, MATERIAL, EVENT]
+    assert explore_one.draw(random.Random(1), empty) == MATERIAL
+    only_insight = {EVENT: 0, ENCOUNTER: 0, MATERIAL: 0, INSIGHT: 100}
+    assert explore_one.draw(random.Random(1), only_insight) == INSIGHT
+    assert explore_one.draw(random.Random(1), only_insight, last_choice=INSIGHT) == MATERIAL  # 抽不了感悟、其餘都是 0：補素材
 
 
 # ── 亂數 ─────────────────────────────────────────────────────
@@ -179,10 +191,10 @@ def test_when_nothing_can_be_drawn_the_beat_is_a_material():
 
 def test_the_same_seed_draws_the_same_outing():
     row = _row(TABLES["ford"])
-    one = [explore_one.draw(CFG, explore_one.rng_for(1, "沈浪", n, "抽拍"), row) for n in range(50)]
-    two = [explore_one.draw(CFG, explore_one.rng_for(1, "沈浪", n, "抽拍"), row) for n in range(50)]
+    one = [explore_one.draw(explore_one.rng_for(1, "沈浪", n, "抽拍"), row) for n in range(50)]
+    two = [explore_one.draw(explore_one.rng_for(1, "沈浪", n, "抽拍"), row) for n in range(50)]
     assert one == two
-    assert len({tuple(b) for b in one}) > 1  # 第幾趟不同，抽出來的不一樣
+    assert len(set(one)) > 1  # 第幾趟不同，抽出來的不一樣
 
 
 def test_drawing_never_touches_the_shared_random():
@@ -190,7 +202,7 @@ def test_drawing_never_touches_the_shared_random():
     random.seed(7)
     expected = random.random()
     random.seed(7)
-    explore_one.draw(CFG, explore_one.rng_for(1, "沈浪", 3, "抽拍"), explore_one.weights(CFG, _place("山林"), has_foes=True))
+    explore_one.draw(explore_one.rng_for(1, "沈浪", 3, "抽拍"), explore_one.weights(CFG, _place("山林"), has_foes=True))
     explore_one.roll(random.Random(2), row)
     assert random.random() == expected
 

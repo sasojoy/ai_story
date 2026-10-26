@@ -1,12 +1,13 @@
-"""探索一顆（減法季整合設計 4.1；主機側實作計畫 Task 2-2）的純規則：這一處算哪一張表（`kind_of`）、這一趟每一拍的比重
-（`weights`）、抽一拍（`roll`）、出門一趟抽幾拍（`draw`）、自己的亂數（`rng_for`）。
+"""探索一顆（減法季整合設計 4.1；主機側實作計畫 Task 2-2）的純規則：這一處算哪一張表（`kind_of`）、這一趟四類事的比重
+（`weights`）、抽一類（`roll`）、出門一趟發生哪一件事（`draw`）、自己的亂數（`rng_for`）。
 
-按一下「探索」＝出門一趟：連抽 `beats`（3）拍，每一拍照這一處的表抽一類——事件、遭遇、素材、感悟。素材與遭遇自動結算；
-事件與感悟要玩家選（`CHOICE`），一趟最多一個、排最後。同一類一趟最多兩拍。
+按一下「探索」＝出門一趟：照這一處的表抽**一件事**（`draw`）——事件、遭遇、素材、感悟其中一類。素材與遭遇自動結算；
+事件與感悟要玩家選。2d（企劃者 2026-10-26「只抽一件事情」）以前是連抽三拍，同一類最多兩拍、要選的拍放最後；一件事就沒有那些規則了。
+接了這裡的討伐懸賞，這一趟就是遭遇（`weights` 的 `bounty_here`：遭遇 100、其餘 0），交了差回原表。
 
 cfg 是 `Config.jianfa`（`models.JianfaRules`，繼承 `jianfa_numbers.JianfaNumbers`；純規則的測試直接建後者）；地點只讀 `tags`、
-`danger` 與 `explore_mix`。不 import engine、不碰 Game.rng：開關、選單、逐拍結算在引擎（`Game._explore_one`，Task 2-3）；
-這裡另放鈕上的小字（`HINTS`）與段落的寫法（`paragraph`：照 content/outing_lines.json 每一拍抽一句、接成一段，結尾「得：…　失：…」）。
+`danger` 與 `explore_mix`。不 import engine、不碰 Game.rng：開關、選單、結算在引擎（`Game._explore_one`，Task 2-3）；
+這裡另放鈕上的小字（`HINTS`）與段落的寫法（`line`：照 content/outing_lines.json 抽句子、接成一段，結尾「得：…　失：…」）。
 """
 
 from __future__ import annotations
@@ -20,13 +21,11 @@ if TYPE_CHECKING:
 
 TOWN, TEMPLE, FORD, WILD, HILL, CAMP = "town", "temple", "ford", "wild", "hill", "camp"  # 六種地點（jianfa_numbers.ExploreKind）
 EVENT, ENCOUNTER, MATERIAL, INSIGHT = "event", "encounter", "material", "insight"
-KINDS = (EVENT, ENCOUNTER, MATERIAL, INSIGHT)  # 一拍的四類（比重的鍵照這個順序）
-CHOICE = (EVENT, INSIGHT)  # 要玩家選的拍：一趟最多一個、排最後
-MAX_SAME = 2  # 同一趟同一類最多幾拍
-# 上一趟在這裡要選的那一拍若是這幾類，這一趟不再抽它：同一處的感悟是同一則（設計 4.1「同一處連續兩趟要選的拍不同一則」）。
+KINDS = (EVENT, ENCOUNTER, MATERIAL, INSIGHT)  # 一趟可能發生的四類事（比重的鍵照這個順序）
+# 上一趟在這裡要選的那件事若是這幾類，這一趟不再抽它：同一處的感悟是同一則（設計 4.1「同一處連續兩趟要選的拍不同一則」）。
 # 事件不在這裡：事件的不重照舊交給 events.rotation_pool，連兩趟都抽到事件是兩則不同的。
 REPEATS_SAME = (INSIGHT,)
-FILL = MATERIAL  # 什麼都抽不出來的那一拍（比重全是 0、或能抽的都抽滿了）補素材
+FILL = MATERIAL  # 什麼都抽不出來（比重全是 0）補素材
 
 
 def match(cfg: JianfaNumbers, tags: Iterable[str]) -> ExploreOneTable | None:
@@ -41,21 +40,27 @@ def kind_of(cfg: JianfaNumbers, loc) -> ExploreOneTable:
     return match(cfg, loc.tags) or cfg.explore_tables[-1]
 
 
+def encounter_only() -> dict[str, int]:
+    """這一趟一定是遭遇（接了這裡的討伐懸賞、頭目擋路）：遭遇 100、其餘 0。"""
+    return {kind: 100 if kind == ENCOUNTER else 0 for kind in KINDS}
+
+
 def weights(cfg: JianfaNumbers, loc, *, has_foes: bool, bounty_here: bool = False) -> dict[str, int]:
-    """這一處每一拍四類的比重（設計 4.1）：
+    """這一處這一趟四類的比重（設計 4.1）：
+    - 接了這裡的討伐懸賞（bounty_here）：一趟只有一件事，這一趟就是懸賞那一路的遭遇（`encounter_only`；企劃者 2026-10-26 2d。懸賞那一路
+      易手了也找得到，所以不看 has_foes），交了差回原表；
     - 照表；危險度每多一星（一星就是表上的數字），遭遇 +`danger_shift`、事件 −`danger_shift`，這兩欄夾在 `beat_floor`～`beat_cap`；
-    - 接了這裡的討伐懸賞（bounty_here）：遭遇 +`bounty_encounter_bonus`、夾在 `beat_cap`（懸賞那一路易手了也找得到，所以不看 has_foes）；
-    - 沒接懸賞、這裡沒有對手（has_foes：引擎照此刻站的、不是自家的隊伍判）：遭遇是 0，那一份照比重分給其餘三類。
+    - 這裡沒有對手（has_foes：引擎照此刻站的、不是自家的隊伍判）：遭遇是 0，那一份照比重分給其餘三類。
     地點自己寫了四欄（`Location.explore_mix`，設計 4.1 的覆寫）就照它，不照表的四欄。"""
+    if bounty_here:
+        return encounter_only()
     t = getattr(loc, "explore_mix", None) or kind_of(cfg, loc)
     got = {EVENT: t.event, ENCOUNTER: t.encounter, MATERIAL: t.material, INSIGHT: t.insight}
     shift = cfg.danger_shift * (loc.danger - 1)
     if shift:
         got[EVENT] = _clamp(cfg, t.event - shift)
         got[ENCOUNTER] = _clamp(cfg, t.encounter + shift)
-    if bounty_here:
-        got[ENCOUNTER] = min(cfg.beat_cap, got[ENCOUNTER] + cfg.bounty_encounter_bonus)
-    elif not has_foes:
+    if not has_foes:
         got[ENCOUNTER] = 0
     return got
 
@@ -78,31 +83,19 @@ def roll(rng: random.Random, weights: Mapping[str, float], exclude: Iterable[str
     return pool[-1][0]
 
 
-def draw(
-    cfg: JianfaNumbers, rng: random.Random, weights: Mapping[str, float], *,
-    last_choice: str | None = None, bounty_here: bool = False,
-) -> list[str]:
-    """出門一趟的 `beats` 拍（設計 4.1）：一拍一拍照比重抽，
-    - 同一類最多 `MAX_SAME`（2）拍；
-    - 要選的拍（事件、感悟）最多一個，排最後；
-    - last_choice：上一趟在這裡要選的那一拍是哪一類（換了地方就給 None）；是 `REPEATS_SAME` 的（感悟）這一趟不抽它；
-    - bounty_here（接了這裡的討伐懸賞）：第一拍就是遭遇（比重裡遭遇是 0 時不放；weights 給了 bounty_here 就不會是 0）；
-    - 什麼都抽不了的那一拍補素材（`FILL`）。
-    「三拍都沒收穫補一個一階素材」看的是結算的結果，在引擎（Task 2-3）。"""
-    beats: list[str] = [ENCOUNTER] if bounty_here and weights.get(ENCOUNTER, 0) > 0 else []
-    while len(beats) < cfg.beats:
-        exclude = {kind for kind in KINDS if beats.count(kind) >= MAX_SAME}
-        if any(b in CHOICE for b in beats):
-            exclude.update(CHOICE)
-        if last_choice in REPEATS_SAME:
-            exclude.add(last_choice)
-        beats.append(roll(rng, weights, exclude) or FILL)
-    return [b for b in beats if b not in CHOICE] + [b for b in beats if b in CHOICE]
+def draw(rng: random.Random, weights: Mapping[str, float], *, last_choice: str | None = None) -> str:
+    """出門一趟發生的那一件事（設計 4.1；2d，企劃者 2026-10-26「只抽一件事情」）：照比重抽一類。
+    - last_choice：上一趟在這裡要選的那件事是哪一類（換了地方就給 None）；是 `REPEATS_SAME` 的（感悟）這一趟不抽它；
+    - 什麼都抽不了（比重全是 0）補素材（`FILL`）。
+    接了討伐懸賞、頭目擋路的趟，引擎給的比重是 `encounter_only`，抽出來就是遭遇。
+    「這一件沒收穫補一個一階素材」看的是結算的結果，在引擎（Task 2-3）。"""
+    exclude = (last_choice,) if last_choice in REPEATS_SAME else ()
+    return roll(rng, weights, exclude) or FILL
 
 
 def rng_for(season: int, name: str, serial: int, what: str) -> random.Random:
     """出門這一趟、這一個用途自己的亂數：季數｜名號｜第幾次探索（PlayerState.explore_seq）｜用途。決定性，不動 Game.rng；
-    跟 `explore_modes.rng_for`（「探索|…」）分開，拍裡叫的舊結算照舊用它自己的。"""
+    跟 `explore_modes.rng_for`（「探索|…」）分開，這一件事裡叫的舊結算照舊用它自己的。"""
     return random.Random(f"出門|{season}|{name}|{serial}|{what}")
 
 
@@ -124,7 +117,7 @@ SPAR_HINT = "同袍比劃"  # 自家營寨：遭遇是跟同袍比劃
 
 
 def mostly_of(weights: Mapping[str, float]) -> str:
-    """「多半」那兩個字照比重寫：四類裡比重最高的那一類（BEAT_MOSTLY），並列最高寫「參半」；全是 0 的那一拍補素材（FILL）所以寫「多料」。"""
+    """「多半」那兩個字照比重寫：四類裡比重最高的那一類（BEAT_MOSTLY），並列最高寫「參半」；全是 0 的那一趟補素材（FILL）所以寫「多料」。"""
     top = max((weights.get(kind, 0) for kind in KINDS), default=0)
     if top <= 0:
         return BEAT_MOSTLY[FILL]
@@ -150,13 +143,8 @@ def hint_of(kind: str, how: str | None, weights: Mapping[str, float] | None = No
     if weights is None or signature_holds(kind, weights):
         return HINTS[kind]
     return PLACE_WORDS[kind] + mostly_of(weights)
-BEAT_WORDS = {EVENT: "遇事", ENCOUNTER: "遇敵", MATERIAL: "得料", INSIGHT: "有悟"}  # 一拍的那一類寫成兩個字（紀錄的結果標記、行動列底下那一行）
-TRAVELER = "旅人"  # 野類地點的事件拍偏這個標籤的事件（救助旅人那一類；content.check_explore_one 驗至少三則、都在野類地點）
-
-
-def tag_of(beats: list[str]) -> str:
-    """這一趟江湖紀錄的結果標記：抽到的幾類照順序、不重複，「得料・遇敵・遇事」。"""
-    return "・".join(dict.fromkeys(BEAT_WORDS[b] for b in beats))
+BEAT_WORDS = {EVENT: "遇事", ENCOUNTER: "遇敵", MATERIAL: "得料", INSIGHT: "有悟"}  # 一類事寫成兩個字（紀錄的結果標記、行動列底下那一行）
+TRAVELER = "旅人"  # 野類地點的事件偏這個標籤的事件（救助旅人那一類；content.check_explore_one 驗至少三則、都在野類地點）
 
 
 def items_of(lines: list[str], prefix: str) -> str:
@@ -194,7 +182,7 @@ LINE_KEYS: dict[str, tuple[str, ...]] = {
     "encounter": ("win", "draw", "lose", "town_win", "town_draw", "town_lose", "spar", "boss"),
     "event": ("lead",),  # 事件拍：接在事件卡前面那一句
     "insight": ("lead",),  # 感悟拍：接在有所感前面那一句
-    # 結尾：疲勞打了折（tired）、對手配不上你（outlevel）、境界已到經驗換心得（capped）、三拍都沒收穫補一個一階（empty）
+    # 結尾：疲勞打了折（tired）、對手配不上你（outlevel）、境界已到經驗換心得（capped）、這一趟沒收穫補一個一階（empty）
     "close": ("tired", "outlevel", "capped", "empty"),
 }
 SAMPLE = {"place": "潁水河畔", "foe": "河灘潑皮", "item": "精鐵砂 ×1"}  # 驗句子填不填得進去用的（content.check_outing_lines）
