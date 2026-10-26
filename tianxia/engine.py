@@ -475,7 +475,6 @@ class Game:
         self._gate_scale = 1.0  # 減法季三道閘（批 2）：遭遇拍那一場的經驗、心得、銀兩乘疲勞與對手兩道閘（_fight_gate）；其餘是 1
         self._outing_close: set[str] = set()  # 這一趟出門打了折的那幾道閘（_fight_gate 記、_explore_one 寫段落結尾那一句）
         self._affinity_before: dict[str, int] | None = None  # choose()、隨口應對進行中：這一下之前的情誼（_people_here 認這一下加了誰的情誼）
-        self._deep_said: list[str] = []  # 深交上限（減法季批 7b）這一下提早夾過時的那幾句（_deep_cap_now 記、_log 接在訊息後面）
         # 歷史武將同行：挑好了隨你上陣的那一位、正在照它加入（_escort_step 開著、_escort_carry 讀）
         self._escort_picked = False
         self._escort_now: battle_instance.Escort | None = None
@@ -16887,29 +16886,22 @@ class Game:
         wallet = self._wallet()
         return 0 if wallet is None else len(mall.tokens(wallet, self._mall_owner(), zhuan_end.DEEP_SLOT, season=self.state.player.season_number))
 
-    def _deep_cap(self) -> list[str]:
-        """深交上限（zhuan_end.enforce_deep_cap）：列傳為終點開著時，名單外有人過了 70 才讀錢包算名額、夾；夾了另寫一則「深交」江湖紀錄，
-        回那幾句（接在這一下回給玩家的訊息後面）。名單裡有人掉下 70 只是讓出位子，下一次有人過門檻時一起整理。關著什麼都不做。"""
+    def _deep_cap_now(self) -> None:
+        """深交上限（zhuan_end.enforce_deep_cap；減法季批 7b）：列傳為終點開著時，名單外有人過了 70 才讀錢包算名額、夾。
+        情誼一過 70 就有東西給的地方（對話裡的本命武學 companion_agent._maybe_grant_signature_skill、名將本命兵器 signature_arms 的 80）
+        在給之前先叫一次，名單外的第四位停在 69 就拿不到；_log 也叫一次（情誼沒有單一寫入口，事後夾）。
+        名單裡有人掉下 70 只是讓出位子，下一次有人過門檻時一起整理。批 7d（企劃者 2026-10-26）：夾了不告訴玩家——不回句子、
+        不寫「深交」那一則江湖紀錄。關著什麼都不做。"""
         s, c = self.state, self.content
         if not zhuan_end.on(c, s.world) or not zhuan_end.deep_pending(s, c):
-            return []
-        lines = zhuan_end.enforce_deep_cap(s, c, self._deep_slots())
-        if lines:
-            journal.add_entry(s, JournalEntry(time=s.world.time, title=zhuan_end.DEEP_TITLE, lines=lines))
-        return lines
-
-    def _deep_cap_now(self) -> None:
-        """深交上限提早夾一次（減法季批 7b）：情誼一過 70 就有東西給的地方（對話裡的本命武學 companion_agent._maybe_grant_signature_skill、
-        名將本命兵器 signature_arms 的 80）在給之前先夾，名單外的第四位停在 69 就拿不到；夾到的那幾句留到 _log 接在訊息後面（只說一次）。
-        關著什麼都不做。"""
-        self._deep_said += self._deep_cap()
+            return
+        zhuan_end.enforce_deep_cap(s, c, self._deep_slots())
 
     def _log(self, msgs: list[str]) -> list[str]:
         """回給呼叫端、也存進 GameState.log 的訊息。戰況變化（機器可讀的寫法）在這裡換成一句話——這些話玩家（管理者工具列的
         提示）看得到，數字不外露（FB-064）；江湖紀錄那邊在畫的時候換（見 _chip），兩邊用同一個 seed（現在的時間），是同一句。"""
         self._renown_after()  # 名聲：這一下的名望、善名、惡名接差距，比跨段（設計 3.3、6.4）
-        said, self._deep_said = self._deep_said, []
-        msgs = msgs + said + self._deep_cap()  # 深交上限（減法季批 7b）：情誼沒有單一寫入口，在這裡事後夾；排在行狀之前，夾掉的不記成跨格
+        self._deep_cap_now()  # 深交上限（減法季批 7b）：情誼沒有單一寫入口，在這裡事後夾；排在行狀之前，夾掉的不記成跨格（批 7d：夾了不說）
         annals.watch(self.state, self.content, art_name=self._art_name)  # 行狀：這一下改了什麼（投靠、晉升、情誼……）記一筆
         msgs = humanize(self.content, msgs, str(self.state.world.time))
         if not msgs:

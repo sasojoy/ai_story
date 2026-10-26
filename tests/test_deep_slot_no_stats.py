@@ -25,8 +25,9 @@ def _buy_slot(game, tag: str = "deep-7c") -> None:
     assert game.mall_buy("deep_slot", tag)[0].startswith("買下")
 
 
-def _keep_line(game, cid: str) -> str:
-    return zhuan_end.DEEP_KEEP.format(name=game.content.characters[cid].name)
+# 批 7d（企劃者 2026-10-26，FB-869）：「某某把你當作知己，卻不打算把看家本領交出來」不給玩家看——規則照舊，句子不說
+def _said_keep(msgs) -> bool:
+    return any("看家本領" in m or "把你當作知己" in m for m in msgs)
 
 
 def test_a_figure_let_in_by_a_bought_slot_does_not_teach_the_signature_art():
@@ -41,11 +42,11 @@ def test_a_figure_let_in_by_a_bought_slot_does_not_teach_the_signature_art():
     assert p.deep_order == ["zhujun", "huangfusong", "luzhi", "caocao"]
     assert p.affinities["caocao"] >= 70  # 情誼照長
     assert "學會本命:caocao" not in p.flags and set(p.arts) == arts and not any("傾囊相授" in m for m in msgs)
-    assert _keep_line(game, "caocao") in msgs  # 那一下說明一句
-    assert any(e.title == zhuan_end.DEEP_TITLE and _keep_line(game, "caocao") in e.lines for e in game.state.journal)
-    # 再談一輪：還是不教、那一句只說一次
+    assert not _said_keep(msgs)  # 進名單那一下不說
+    assert not any(e.title == "深交" or any("看家本領" in line for line in e.lines) for e in game.state.journal)
+    # 再談一輪：還是不教（也不說）
     msgs = _talk(game, "caocao")
-    assert "學會本命:caocao" not in p.flags and _keep_line(game, "caocao") not in msgs and not any("傾囊相授" in m for m in msgs)
+    assert "學會本命:caocao" not in p.flags and not _said_keep(msgs) and not any("傾囊相授" in m for m in msgs)
     assert p.affinities["caocao"] > 70
 
 
@@ -59,14 +60,14 @@ def test_the_three_on_the_list_still_teach_even_with_a_slot_bought():
         p.affinities[cid] = 69
         msgs = _talk(game, cid)
         assert p.affinities[cid] >= 70 and f"學會本命:{cid}" in p.flags and any("傾囊相授" in m for m in msgs), cid
-        assert _keep_line(game, cid) not in msgs, cid  # 名單內的三位不說「不打算交出來」
+        assert not _said_keep(msgs), cid
     assert p.deep_order == list(ARM3)
     p.affinities["caocao"] = 69
     msgs = _talk(game, "caocao")
     assert p.deep_order[-1] == "caocao" and "學會本命:caocao" not in p.flags and not any("傾囊相授" in m for m in msgs)
 
 
-def test_the_line_is_only_said_when_something_is_actually_held_back():
+def test_a_bought_slot_lets_in_a_figure_with_nothing_to_give_and_keeps_his_affinity():
     game = _game()
     s, c = game.state, game.content
     p = s.player
@@ -76,7 +77,7 @@ def test_the_line_is_only_said_when_something_is_actually_held_back():
     zhuan_end.enforce_deep_cap(s, c, slots=1)
     _set(game, {bare: 75})
     assert zhuan_end.enforce_deep_cap(s, c, slots=1) == [] and p.deep_order[-1] == bare and p.affinities[bare] == 75
-    # 本命武學已經學過、本命兵器這一季已經給了別人：也沒什麼好扣著的
+    # 本命武學已經學過、本命兵器這一季已經給了別人：照樣進名單
     p.flags.add("學會本命:caocao")
     s.world.signature_arms["caocao"] = SignatureClaim(owner="別人", via="gift")
     _set(game, {"caocao": 75})
@@ -91,8 +92,8 @@ def test_nobody_is_held_back_without_a_bought_slot_the_fourth_just_stops_at_69()
     p.affinities["caocao"] = 69
     msgs = _talk(game, "caocao")
     assert p.affinities["caocao"] == 69 and "學會本命:caocao" not in p.flags
-    assert zhuan_end.DEEP_FULL.format(n="三", name="曹操", cap=69) in msgs
-    assert _keep_line(game, "caocao") not in msgs  # 沒買名額：照 7b 夾在 69，沒有「不傳」那一句
+    assert not any("停在 69" in m or "你已深交" in m for m in msgs)  # 批 7d：夾在 69 的規則照 7b，可是那一句不給玩家看
+    assert not _said_keep(msgs)
 
 
 def test_a_freed_place_lets_the_slot_figure_in_and_he_teaches_on_the_next_talk():

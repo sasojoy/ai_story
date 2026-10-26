@@ -13,7 +13,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from . import allied as allied_rules
-from . import calendar, conquest, economy, equipment, explore_modes, figures, four_tiers, mall, precise, renown, rules, seal, sortie, territory, timetable, training
+from . import calendar, conquest, economy, equipment, explore_modes, figures, four_tiers, mall, precise, renown, rules, seal, sortie, territory, timetable, training, zhuan_end
 from . import explore_one  # 減法季探索一顆（批 2）：行動列底下那一行用同一份兩個字的叫法
 from .models import Content
 from .rules import STANCE_NAMES  # 態勢卡上三方的叫法（官軍、黃巾、豪強）：說明跟卡上同一個叫法
@@ -1213,6 +1213,8 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
         + ("交友名單上也有）。" if precise.on(content, season) else "求見名單上也有）。"),
         f"- 情誼到 {cfg.signature_affinity}，有些人物會把本命武學傳給你。",
     ]
+    if deep := zhuan_end.howto_line(content, season):  # 減法季批 7d（待 joy 潤）：最多深交幾位；子開關關著、沒蓋章是空的，一個字不變
+        bond.append(deep)
     if first:
         # 片段只給做得了那條鏈的人（foreshadow.capable 要陣營對得上）：散人聽不到（審查 M4，待 joy 潤）
         bond.append("- 情誼夠深，他會跟你聊起一些風聲：機緣的話題，還有你那一邊的伏筆的片段（散人聽不到片段）。")

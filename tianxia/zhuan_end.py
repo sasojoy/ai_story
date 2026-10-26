@@ -41,11 +41,13 @@ QUOTE_DONE = "你請{name}替你的列傳寫一句評曰。"
 QUOTE_LATER = "你的列傳已經寫成，下一次重修時這一句才會寫進去。"
 ART_NO_SIDE = "沒投靠一方的人，列傳配不了插畫。"  # 插畫票不賣的原因（FB-845）
 ART_FREE = "你的列傳得了第一階，插畫白送，不必買。"
-DEEP_FULL = "你已深交{n}位人物，{name}的情誼停在 {cap}。"
 DEEP_NOTE = "已深交{n}位"
-DEEP_TITLE = "深交"
-DEEP_KEEP = "{name}把你當作知己，卻不打算把看家本領交出來。"  # 靠買來的深交名額進名單的那一位（批 7c：不賣數值，不教本命武學、不送本命兵器）；待 joy 潤
-LEARNED_FLAG = "學會本命:"  # companion_agent._maybe_grant_signature_skill 記的旗標前綴（後面接人物 id）
+# 批 7d（企劃者 2026-10-26，FB-869）：「你已深交三位人物，某某的情誼停在 69。」與「某某把你當作知己，卻不打算把看家本領交出來。」
+# 不給玩家看——這兩句的常數與「深交」那一則江湖紀錄都拿掉了；夾 69、靠名額不教不送的規則照舊在背後運作（enforce_deep_cap、by_slot）。
+DEEP_HOWTO = (  # 玩法說明「情誼」那一節的一句（待 joy 潤）：只講規則本身，數字讀 Config.jianfa.deep_figures 與 signature_affinity
+    "- 最多同時深交 {n} 位（情誼到 {edge} 以上）；第 {next} 位起情誼不再往上加，要再深交一位得用深交名額{where}。"
+)
+DEEP_WHERE = "（商城有賣，只這一季有效）"  # 商城開著而且架上有深交名額才接
 _DIGITS = "〇一二三四五六七八九十"
 _DIGIT = re.compile(r"[0-9０-９]")
 _KANA = re.compile(r"[぀-ヿㇰ-ㇿ]")
@@ -183,24 +185,21 @@ def deep_pending(state: GameState, content: Content) -> bool:
 def enforce_deep_cap(state: GameState, content: Content, slots: int = 0) -> list[str]:
     """深交上限（企劃者 2026-10-24：同時情誼漲得過 signature_affinity 的人物最多 deep_figures 位，深交名額每張多一位）：
     還在 70 以上的照先來後到留在 PlayerState.deep_order（掉到 70 以下的讓出位子），新過 70 的照情誼高、id 排，有位子就進名單，
-    沒位子就夾在 69、回一句。回這一下夾了誰的那幾句。"""
+    沒位子就夾在 69。回這一下被夾住的人物 id（不是句子：批 7d 起夾住了不告訴玩家，玩家看不到任何一句）。"""
     p, edge = state.player, content.config.signature_affinity
     deep = {cid for cid, v in p.affinities.items() if v >= edge and cid in content.characters}
     order = deep_list(state, content)
     fresh = sorted((cid for cid in deep if cid not in order), key=lambda cid: (-p.affinities[cid], cid))
     cap = deep_cap(content, slots)
-    free = content.config.jianfa.deep_figures
-    lines: list[str] = []
+    stopped: list[str] = []
     for cid in fresh:
         if len(order) < cap:
             order.append(cid)
-            if len(order) > free and withheld(state, content, cid):  # 排在免費那幾位之後＝靠買來的名額進來的（批 7c）：說清楚他不傳什麼
-                lines.append(DEEP_KEEP.format(name=content.characters[cid].name))
             continue
         p.affinities[cid] = edge - 1
-        lines.append(DEEP_FULL.format(n=_cn(cap), name=content.characters[cid].name, cap=edge - 1))
+        stopped.append(cid)
     p.deep_order = order
-    return lines
+    return stopped
 
 
 def deep_list(state: GameState, content: Content) -> list[str]:
@@ -221,18 +220,16 @@ def by_slot(state: GameState, content: Content, cid: str) -> bool:
     return cid in order and order.index(cid) >= content.config.jianfa.deep_figures
 
 
-def withheld(state: GameState, content: Content, cid: str) -> bool:
-    """這一位有沒有東西因為「靠名額」被扣著：本命武學還沒學（沒有旗標、而且真的有本命可教），或名將本命兵器這一季還沒給過人。
-    都沒有就不必說「不打算把看家本領交出來」。"""
-    from .tactics import figure_arts  # noqa: PLC0415
+def howto_line(content: Content, world: WorldState | None) -> str:
+    """玩法說明「情誼」那一節的一句「最多深交幾位」（批 7d，企劃者 2026-10-26；待 joy 潤）：數字讀 Config，
+    子開關 zhuan_end 或減法季關著、這一季沒蓋章是空字串（玩法說明一個字都不變）。只講規則本身。"""
+    if not on(content, world):
+        return ""
+    from . import mall  # noqa: PLC0415
 
-    character = content.characters.get(cid)
-    if character is None:
-        return False
-    if LEARNED_FLAG + cid not in state.player.flags and figure_arts(content, character):
-        return True
-    return content.config.weapons.enabled and cid not in state.world.signature_arms and any(
-        arm.character == cid for arm in content.gear.signature_arms)
+    n = content.config.jianfa.deep_figures
+    where = DEEP_WHERE if mall.on(content) and DEEP_SLOT in content.mall else ""
+    return DEEP_HOWTO.format(n=n, edge=content.config.signature_affinity, next=n + 1, where=where)
 
 
 def deep_note(state: GameState, content: Content, cid: str, slots: int = 0) -> str:
