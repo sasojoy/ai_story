@@ -15,6 +15,12 @@ def _suggested(game) -> list[str]:
     return [g["id"] for g in game.map_state()["suggest"]]
 
 
+def _listed(game, loc: str) -> bool:
+    """3d（FB-858）之後：潁水河畔剛被黃巾拿下，官軍在那裡出陣打的是黃巾的巡邏（難分勝負、必敗），不再是站在那裡的河灘潑皮（有把握）——
+    它是必敗，排在三處打得過的自家地方後面（原本被錯當成有把握才排第一）；這幾條鎖的是冷卻、戰書凍結的那一道篩，所以改問列不列，不問排第幾。"""
+    return loc in _suggested(game)
+
+
 def test_a_cooling_block_is_not_suggested_until_it_cools_down():
     game = go(join(conquest_game("season21"), "guan"), "yingchuan")
     w, c = game.state.world, game.content
@@ -25,7 +31,7 @@ def test_a_cooling_block_is_not_suggested_until_it_cools_down():
     assert "yingshui" not in _suggested(game)  # 修前排第一（出陣・攻 有把握）
     w.conquest.fights["yingshui"].flipped_at = w.time - 10**8  # 冷卻過了
     assert not conquest.cooling(w, c, "yingshui")
-    assert _suggested(game)[0] == "yingshui"
+    assert _listed(game, "yingshui")
 
 
 def test_your_own_cooling_block_is_not_suggested_to_hold_either():
@@ -47,12 +53,12 @@ def test_fb692_a_block_frozen_by_a_letter_is_not_suggested_until_the_siege_is_ov
     game = go(join(conquest_game("season21"), "guan"), "yingchuan")
     w, c = game.state.world, game.content
     conquest.flip(w, c, "yingshui", "huang")
-    w.conquest.fights["yingshui"].flipped_at = w.time - 10**8  # 冷卻過了：排第一（同上一條）
-    assert _suggested(game)[0] == "yingshui"
+    w.conquest.fights["yingshui"].flipped_at = w.time - 10**8  # 冷卻過了：照舊列（同上一條）
+    assert _listed(game, "yingshui")
     slot = announce(game, "yingshui", "guan")  # 官軍對潁水河畔下了戰書
     assert conquest.frozen(w, "yingshui") is slot
     assert "yingshui" not in _suggested(game)  # 修前照樣排第一
     slot.status = "open"  # 集結・交戰中也一樣
     assert "yingshui" not in _suggested(game)
     slot.status = "done"  # 打完（守住了）：不凍結了
-    assert conquest.frozen(w, "yingshui") is None and _suggested(game)[0] == "yingshui"
+    assert conquest.frozen(w, "yingshui") is None and _listed(game, "yingshui")

@@ -509,13 +509,21 @@ def _in_earshot(state: GameState, content: Content, loc_id: str) -> bool:
 
 def foes(
     content: Content, loc: Location, odds: Odds, faction: str | None = None, world: WorldState | None = None,
+    squad_ids: list[str] | None = None,
 ) -> list[tuple[str, str]]:
     """可能遇到的隊伍與勝算：（隊伍名稱, 勝算），同一隊只列一次。faction 是自己的陣營：自己陣營的隊伍遇上了是
     一起操練、不會輸（engine._drill），寫「操練」不算勝算（試玩回饋 FB-008）。
     world 給了：站的隊伍照控制方（territory.squads_at，地盤易手）；沒給照 loc.enemies。
+    squad_ids 給了（FB-858，減法季 3d）：就列這幾路，不另查站的隊伍——領地爭奪開著時出陣真的會打的那一路
+    （Game._map_foes：conquest.sortie_foes，含敵方大本營、城鎮沒有兵時退回的控制方巡邏；約戰開著是守軍迎戰挑的那一路），
+    輿圖地點卡的對手與勝算跟出陣鈕寫的是同一批人。
     不檢查視野：呼叫端要先用 is_known 把關，沒摸清的地點不能露出敵人，也不該去算勝算。"""
     listed = []
-    for squad_id in dict.fromkeys(territory.squads_at(world, content, loc.id) if world is not None else loc.enemies):
+    if squad_ids is not None:
+        ids = squad_ids
+    else:
+        ids = territory.squads_at(world, content, loc.id) if world is not None else loc.enemies
+    for squad_id in dict.fromkeys(ids):
         squad = content.squads[squad_id]
         own = squad.faction is not None and squad.faction == faction
         listed.append((squad.name, DRILL if own else odds(squad_id)))
