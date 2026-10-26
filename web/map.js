@@ -1299,11 +1299,18 @@
     // 點空白：收起卡（取景框一塊透明的點擊區，畫在記號最底下）
     out.push(`<rect data-act="region-blank" x="${f1(fx0)}" y="${f1(fy0)}" width="${f1(fx1 - fx0)}" height="${f1(fy1 - fy0)}" fill="#000000" fill-opacity="0"/>`);
     // 別區的地點（FB-876，企劃者 2026-10-26 選甲）：全區也拖得過區界（panBox 照整張圖夾），取景框外不再蓋紙；別區的地點畫成第一層那種
-    // 淡墨小圖（點得到、不寫名，點了開那一處的卡），畫在本區的記號底下。本區的畫法、名字、點擊不變
-    const others = base.places.filter((p) => p.region !== rid && st.places[p.id]), oz = z.icon * k;
+    // 淡墨小圖（點得到、不寫名，點了開那一處的卡），畫在本區的記號底下。本區的畫法、名字、點擊不變。
+    // 你站的那一處在別區（FB-884，企劃者 2026-10-26「全區看別區時也畫出你站的位置（朱圈），跟本區一樣」）：不畫成淡的，照本區的小圖畫（控制方的顏色，
+    // g.r-here）、朱圈與旗在上面那一張（跟本區同一份）；朱圈的點擊區在 g.r-hits 裡，所以淡墨小圖不跟朱圈疊成兩個
+    const hp = st.journey ? null : placeOf(base, st.here), away = hp && hp.region !== rid ? hp : null;
+    const others = base.places.filter((p) => p.region !== rid && st.places[p.id] && !(away && p.id === away.id)), oz = z.icon * k;
     if (others.length) {
       out.push(`<g class="r-faints">${others.map((p) => `<g class="r-faint" data-act="region-place" data-id="${esc(p.id)}" transform="translate(${p.x},${p.y}) scale(${f2(oz)})" opacity="${NEAR_FAINT}" style="cursor:pointer">`
         + `<rect x="-14" y="-14" width="28" height="28" fill="#000000" fill-opacity="0"/>${inkIcon(p.glyph, MAP_INK, MAP_HALO)}</g>`).join("")}</g>`);
+    }
+    if (away) {
+      out.push(`<g class="r-here" data-act="region-place" data-id="${esc(away.id)}" transform="translate(${away.x},${away.y}) scale(${f2(z.icon * k)})" style="cursor:pointer">`
+        + `<rect x="-14" y="-14" width="28" height="28" fill="#000000" fill-opacity="0"/>${inkIcon(away.glyph, inkOf(away.id).color, MAP_HALO)}</g>`);
     }
     // 鄰區出口
     for (const e of exits) {
@@ -1346,14 +1353,16 @@
       out.push(parts.join("") + "</g>");
     }
     // 別區小圖的點擊區疊在本區的名字框、出口上面（同 FB-877 第一層的規則：名字不吃別處小圖的點擊）；透明的，畫面不變
-    if (others.length) {
-      const r = 14 * oz;
-      out.push(`<g class="r-hits">${others.map((p) => `<rect class="r-hit" data-act="region-place" data-id="${esc(p.id)}" x="${f1(p.x - r)}" y="${f1(p.y - r)}" width="${f1(2 * r)}" height="${f1(2 * r)}" fill="#000000" fill-opacity="0"/>`).join("")}</g>`);
+    // 你腳下那一處不在這一區時，朱圈的點擊區（36 見方，同第一層 FB-877 的朱圈）疊在最上面，不准被名字或出口吃掉
+    if (others.length || away) {
+      const r = 14 * oz, ring = away ? 18 * k : 0;
+      out.push(`<g class="r-hits">${others.map((p) => `<rect class="r-hit" data-act="region-place" data-id="${esc(p.id)}" x="${f1(p.x - r)}" y="${f1(p.y - r)}" width="${f1(2 * r)}" height="${f1(2 * r)}" fill="#000000" fill-opacity="0"/>`).join("")}`
+        + (away ? `<rect class="r-hit-you" data-act="region-place" data-id="${esc(away.id)}" x="${f1(away.x - ring)}" y="${f1(away.y - ring)}" width="${f1(2 * ring)}" height="${f1(2 * ring)}" fill="#000000" fill-opacity="0"/>` : "") + "</g>");
     }
-    // 上面那一張：你（朱圈與旗；在路上畫在路上，在取景框裡才畫）
-    const high = [], j = st.journey, h = pos[st.here];
+    // 上面那一張：你（朱圈與旗；在路上畫在路上）。以前只在取景框裡才畫（框外蓋著紙、拖不出去）；選甲之後框外看得到、拖得到，你在哪裡都畫（FB-884）
+    const high = [], j = st.journey, h = pos[st.here] || away;
     const hx = j ? j.x : h && h.x, hy = j ? j.y : h && h.y;
-    if (hx !== undefined && hx >= fx0 && hx <= fx1 && hy >= fy0 && hy <= fy1) {
+    if (hx !== undefined) {
       high.push(`<circle class="pulse" cx="${hx}" cy="${hy}" r="${f1(14 * k)}" fill="none" stroke="${FRONT_RED}" stroke-width="${f1(2.2 * k)}" pointer-events="none"/>`);
       high.push(j ? `<circle class="r-you" cx="${hx}" cy="${hy}" r="${f1(6 * k)}" fill="${FRONT_RED}" stroke="#FFFFFF" stroke-width="${f1(1.6 * k)}" pointer-events="none"/>`
         : `<circle class="r-you" cx="${hx}" cy="${hy}" r="${f1(17 * k)}" fill="none" stroke="${FRONT_RED}" stroke-width="${f1(2.4 * k)}" pointer-events="none"/>`);

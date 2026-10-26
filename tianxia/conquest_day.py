@@ -14,7 +14,7 @@ import math
 
 from . import calendar, conquest, timetable
 from .models import Config, Content
-from .state import DayNote, Rumor, SiegeSlot, WorldState
+from .state import ConquestState, DayNote, Rumor, SiegeSlot, WorldState
 
 HOUR = 3600
 DAY = 24 * HOUR
@@ -157,6 +157,20 @@ def place_letter(world: WorldState, content: Content, side: str, loc_id: str, na
 ANNOUNCE = "{who}定於{time} 攻{place}。"  # 管理者「立刻下戰書」的天下大事（公告不寫管理者；待 joy 潤）
 
 
+def _now_id(state: ConquestState, second: int, side: str) -> str:
+    """管理者立刻下戰書的 id（FB-883）：now-<世界秒>-<邊>；同一秒同一邊再下一張（一個管理者動作裡連下幾張）時時程表上已經有了，往後加 -2、-3…，
+    撤戰書（admin_conquest_cancel）與開集結（siege.open_waiting）都照 id 認那一張，所以時程表上不准有兩張同號（打完、作罷還沒清掉的也算）。
+    第一張照舊 now-<秒>-<邊>。"""
+    taken = {slot.id for slot in state.schedule}
+    base = f"now-{second}-{side}"
+    if base not in taken:
+        return base
+    n = 2
+    while f"{base}-{n}" in taken:
+        n += 1
+    return f"{base}-{n}"
+
+
 def place_now(world: WorldState, content: Content, side: str, loc_id: str, real_now: float) -> str:
     """管理者救場（Game.admin_conquest_letter，QA 用）：替 side 排一場在「此刻＋集結」開打、集結馬上開的攻城；同一塊別一邊下了、還沒開集結
     就併進那一場。不記 letter_days（不算那一邊今天的那一張）、day_log 照戰書記（reason 空的）。回天下大事那一句。"""
@@ -169,7 +183,7 @@ def place_now(world: WorldState, content: Content, side: str, loc_id: str, real_
     else:
         local = (real_now + cfg.conquest.muster_minutes * 60 + cfg.pill_day_utc_offset_hours * HOUR) % DAY
         slot = SiegeSlot(
-            id=f"now-{int(world.time)}-{side}", key=day_key(real_now, cfg), loc=loc_id, minute=int(local // 60),
+            id=_now_id(state, int(world.time), side), key=day_key(real_now, cfg), loc=loc_id, minute=int(local // 60),
             at=world.time + cfg.conquest.muster_minutes * 60 * cfg.time_scale, muster_at=world.time,
             attackers=[side], by={side: LETTER}, reasons={side: ""},
         )
