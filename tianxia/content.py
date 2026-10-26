@@ -1064,6 +1064,7 @@ def check_signature_arts(c: Content, need) -> None:
     own += [(f"神器配方 {r.id}", r.tactic) for r in c.forge_secrets.values() if r.tactic is not None]
     own += [(f"名將本命兵器 {a.character}", a.tactic) for a in c.gear.signature_arms if a.tactic is not None]
     own += [(f"高階技能 {h.id}", h.tactic) for h in c.traits.high]  # 武學技能分檔
+    own += [(f"神品意境 {g.id}", g.tactic) for g in c.traits.god]  # 特殊頓悟
     for where, tactic in own:
         first = seen.setdefault(tactic.name, where)
         need(first == where or (where.startswith("特別功效") and tactic.name in trait_names and first.startswith("特別功效")),
@@ -1128,6 +1129,16 @@ def check_traits(c: Content, need) -> None:
         for h in book.high:
             need(h.tactic.name == h.name, f"content/traits.json：高階技能 {h.id} 的戰法名字要跟技能名字一樣")
             need(h.name not in {t.name for t in book.general} | {t.name for t in book.special}, f"content/traits.json：高階技能 {h.id} 跟功效同名")
+    if book.god:  # 特殊頓悟的神品模板：一路一型一個，id 不重複、跟高階技能不撞；帶的一般功效要是同一個屬性的
+        need(len({g.id for g in book.god}) == len(book.god), "content/traits.json：神品意境的 id 不能重複")
+        need(not {g.id for g in book.god} & ({h.id for h in book.high} | {t.key for t in book.general}), "content/traits.json：神品意境的 id 跟高階技能或一般功效撞了")
+        slots = [(g.attribute, g.lean, g.form) for g in book.god]
+        need(len(slots) == len(set(slots)), "content/traits.json：神品意境一路一型只能有一個")
+        generals = {t.key: t for t in book.general}
+        for g in book.god:
+            need(g.tactic.name == g.name, f"content/traits.json：神品意境 {g.id} 的戰法名字要跟模板名字一樣")
+            need(g.general in generals and generals[g.general].attribute == g.attribute, f"content/traits.json：神品意境 {g.id} 帶的一般功效 {g.general} 要是{g.attribute}的")
+            need(g.lean == "無" or (g.lean, g.attribute) in (("正", "陽"), ("邪", "陰")), f"content/traits.json：神品意境 {g.id} 正路要是陽、邪路要是陰")
     owners: dict[str, list[str]] = {}
     for skill in c.skills.values():
         need(skill.kind == "武學" or skill.weapon is None, f"內功 {skill.id} 不能有兵器種類（兵器設計 2.3）")

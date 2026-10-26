@@ -143,9 +143,9 @@ def test_the_insight_stone_card_follows_the_explore_switch():
 
 @pytest.mark.parametrize("skill_id, shown", [
     # 武學重構第三批照新的滿配（每格三重加大獎）重調過（2026-10-20）；同效果第二份算半之後每門 +0.15（2026-10-22）；
-    # 破境修法甲每門 +0.65（2026-10-23）；盧植是最小的那一格
-    ("caocao_wugong", "185"), ("guanyu_wugong", "187"), ("yuanshao_wugong", "185"), ("taoqian_wugong", "202"),
-    ("zhujun_wugong", "185"), ("luzhi_wugong", "144"), ("luzhi_neigong", "144"),
+    # 破境修法甲每門 +0.65（2026-10-23）；特殊頓悟本命走甲每門 +0.1（Joy 2026-10-26 決策卡）；盧植是最小的那一格
+    ("caocao_wugong", "195"), ("guanyu_wugong", "197"), ("yuanshao_wugong", "195"), ("taoqian_wugong", "212"),
+    ("zhujun_wugong", "195"), ("luzhi_wugong", "154"), ("luzhi_neigong", "154"),
 ])
 def test_the_might_note_writes_the_real_number(skill_id, shown):
     content = real_content()

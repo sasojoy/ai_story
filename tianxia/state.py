@@ -1002,6 +1002,10 @@ class PlayerState(BaseModel):
     storylines: dict[str, StoryProgress] = Field(default_factory=dict)
     story_open: str | None = None
     story_cards: list[StoryCard] = Field(default_factory=list)
+    # 特殊頓悟（tianxia/epiphany.py）：這一季開過幾次頓悟、擲中感悟幾次都沒頓悟（保底，只管第一次）、心魔過了等著取名的那一個神品。都在 QUIET_DEFAULTS
+    epiphanies: int = 0
+    epiphany_dry: int = 0
+    god_naming: GodNaming | None = None
 
     @model_serializer(mode="wrap")
     def _drop_quiet_defaults(self, handler):
@@ -1024,6 +1028,7 @@ QUIET_DEFAULTS = (
     # 出陣約戰（減法季批 3b）
     "answer_day", "answers_today", "sortie_cooldown_until", "answer_cooldown_until", "duty_day", "duties_today",
     "storylines", "story_open", "story_cards",  # 一條線（特殊事件）
+    "epiphanies", "epiphany_dry", "god_naming",  # 特殊頓悟
 )
 
 
@@ -1251,6 +1256,19 @@ class StoryProgress(BaseModel):
     go: str | None = None
     ending: str | None = None
     custom: StoryDef | None = None
+
+
+class GodNaming(BaseModel):
+    """特殊頓悟心魔過了、還沒取名的那一個神品意境（tianxia/epiphany.py）：挑到的模板、這一路的屬性與正邪、在哪裡悟的、
+    三個候選的名字（模型取的或字表的；玩家也可以自己寫）、拷問答了什麼（給模型取名當線索）。取了名才收進自己的意境。"""
+
+    line: str
+    god: str  # TraitBook.god 的 id
+    attribute: str
+    lean: str = "無"
+    place: str = ""
+    candidates: list[str] = Field(default_factory=list)
+    answers: list[str] = Field(default_factory=list)
 
 
 class StoryCard(BaseModel):
@@ -1710,6 +1728,9 @@ class WorldState(BaseModel):
     # ── 推力規則（計畫 T3）──
     trend_accum: dict[str, float] = Field(default_factory=dict)  # 不足一點的推力（全服共用，滿一點才真的推；正負會抵銷）：大勢線 id、"geju"、"fig:<人物 id>"（大勢人物每天的推動）、"prestige:<人物 id>"（挑戰打贏扣聲威不足一點的部分）、"regen:<人物 id>"（沒有時刻表的季聲威回復不足一點的部分）、"lost:<人物 id>:<遊戲日>"（沒有時刻表的季這一天被打掉了多少，一天上限用）
     active_pushers: dict[str, dict[str, float]] = Field(default_factory=dict)  # 陣營 id → 名號 → 最後一次推大勢的世界秒（人數緩衝用，過期的順手清掉）
+    # 特殊頓悟（tianxia/epiphany.py）：這一季全服神品意境的名字 → 悟的人（名字全服不重複）；模板 id → 這一季第一個悟出它的「名字|名號」
+    god_names: dict[str, str] = Field(default_factory=dict)
+    god_firsts: dict[str, str] = Field(default_factory=dict)
     bounties: list[Bounty] = Field(default_factory=list)  # 懸賞榜（bounties.py）：陣營掛的還沒過期的單、還沒退押金的通緝，加上過期但還有人揭著的（留到他們同步，deliver_lapses）；換季整個重來
 
     @field_validator("bounties", mode="after")
@@ -1725,7 +1746,7 @@ class WorldState(BaseModel):
         （同 world_state.SealRegistry._drop_empty_uses；不用 Field(exclude_if=…)：Pydantic 2.11 才有）。"""
         data = handler(self)
         if isinstance(data, dict):
-            for key in ("marks_fired", "mark_helpers", "final_tiers", "stance_counts", "stance_week", "stance_active"):
+            for key in ("marks_fired", "mark_helpers", "final_tiers", "stance_counts", "stance_week", "stance_active", "god_names", "god_firsts"):
                 if key in data and not data[key]:
                     del data[key]
         return data
