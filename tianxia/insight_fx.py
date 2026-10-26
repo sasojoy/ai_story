@@ -74,7 +74,7 @@ def general(content: Content, key: str) -> GeneralTrait | None:
 def grand(content: Content, grand_id: str | None) -> HighTrait | None:
     if not grand_id:
         return None
-    return next((h for h in content.traits.high if h.id == grand_id), None)
+    return next((h for h in (*content.traits.high, *content.traits.god) if h.id == grand_id), None)
 
 
 # ── 一份意境的效果 ────────────────────────────────────────

@@ -755,10 +755,30 @@ class HighTrait(_Strict):
     tactic: TacticDef
 
 
+GodForm = Literal["攻", "守", "變", "心"]
+GOD_FORMS: tuple[GodForm, ...] = ("攻", "守", "變", "心")
+
+
+class GodTrait(_Strict):
+    """神品意境的模板（特殊頓悟，Joy 2026-10-26；設計稿 https://claude.ai/artifact/EBUqqzK3dPMpjwYTdRzLs3）：十路（八種屬性，
+    加上正〔陽〕、邪〔陰〕）× 四型（攻守變心）。效果與數字寫死、先量好平衡；玩家頓悟時引擎照這一次的路與型挑一個，名字由模型取
+    （name 只是內容裡的代稱）。裝進槽跟大獎走同一條路（InsightFx.grand 記模板 id），另帶 general 那個一般功效三重。"""
+
+    id: str
+    attribute: Attribute
+    lean: Lean = "無"  # 正路是陽＋正、邪路是陰＋邪，其餘無
+    form: GodForm
+    name: str
+    general: str  # 帶的一般功效（GeneralTrait.key，要是同一個屬性的），三重
+    desc: str
+    tactic: TacticDef
+
+
 class TraitBook(_Strict):
     general: list[GeneralTrait] = Field(default_factory=list)
     special: list[SpecialTrait] = Field(default_factory=list)
     high: list[HighTrait] = Field(default_factory=list)
+    god: list[GodTrait] = Field(default_factory=list)  # 神品意境模板（特殊頓悟）
 
 
 class InsightGrant(_Strict):

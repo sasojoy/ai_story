@@ -325,7 +325,7 @@ EMPTY_LINE = "功效：（意境槽空著，到煉製頁裝意境）"  # 待 joy
 def high(content: Content, high_id: str | None):
     if not high_id:
         return None
-    return next((h for h in content.traits.high if h.id == high_id), None)
+    return next((h for h in (*content.traits.high, *content.traits.god) if h.id == high_id), None)
 
 
 def fixed_art(content: Content, art: MartialArt) -> bool:
