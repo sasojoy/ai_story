@@ -1733,6 +1733,42 @@
     mount: '<path d="M4 18c1-4 3-6 6-7l2-5 3 2 3-1-1 4 3 3-2 1-2-2c-2 1-3 3-3 6M8 18v3m8-4v4"/>',
     treasure: '<path d="M12 2l3 6.5 7 .8-5.2 4.8 1.5 7-6.3-3.6-6.3 3.6 1.5-7L2 9.3l7-.8z"/>',
   };
+  // 「裝備」那一段的一格（gearBlock）：圖示、欄名、階品；裝了什麼、一句效果；武器、防具、坐騎多一條還剩幾成（鋒利、耐久、飽足）；
+  // 裝備庫裡同一欄還有幾件。空的那一格虛線框，寫空著的那一句與哪裡拿得到。點了開那一欄的抽屜（hero-node，同人像四角）
+  function gearEffect(slot, w) {
+    if (slot === "weapon") return w.bonus ? `威力 ${w.bonus}` : "用不上你身上的武學";
+    if (slot === "armor") return `一場少扣 ${w.cut} 氣血${w.fit ? `・${w.fit}` : ""}`;
+    if (slot === "mount") return `疾行省 ${w.save} 體力・路上快 ${w.speed}`;
+    return w.effect_text || "";
+  }
+  function gearCell(g) {
+    const w = g.worn, label = g.label || HERO_GEAR_NAMES[g.slot];
+    // 傳承（玉璽碎片的抄本，寶物那一欄）：沒帶寶物時那一格寫它；帶著寶物時底下多一行
+    const heir = g.heirloom ? `<small class="gc-more">傳承【${esc(g.heirloom.name)}】</small>` : "";
+    const more = (g.rack.length ? `<small class="gc-more">裝備庫還有 ${g.rack.length} 件</small>` : "") + (w ? heir : "");
+    const icon = `<svg viewBox="0 0 24 24" aria-hidden="true">${GEAR_ICONS[g.slot] || ""}</svg>`;
+    if (!w && g.heirloom) {
+      return `<button class="gear-cell ${esc(g.slot)}" data-act="hero-node" data-kind="gear" data-key="${esc(g.slot)}" aria-label="${esc(label)}：${esc(g.heirloom.name)}">
+        <span class="gc-hd"><svg viewBox="0 0 24 24" aria-hidden="true">${GEAR_ICONS[g.slot] || ""}</svg><em>${esc(label)}</em><small>傳承</small></span><b class="gc-name">【${esc(g.heirloom.name)}】</b><small class="gc-fx">${esc(g.heirloom.effect_text || "")}</small>${more}</button>`;
+    }
+    if (!w) {
+      return `<button class="gear-cell empty" data-act="hero-node" data-kind="gear" data-key="${esc(g.slot)}" aria-label="${esc(label)}：空著">
+        <span class="gc-hd">${icon}<em>${esc(label)}</em></span><b class="gc-name">空著</b><small class="gc-fx">${esc(g.where || g.empty || "")}</small>${more}</button>`;
+    }
+    const edge = g.slot === "treasure" ? "" : `<span class="gc-edge" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${w.edge | 0}" aria-label="${esc(w.wear_word || "鋒利度")}"><i style="width:${Math.max(0, Math.min(100, w.edge | 0))}%"></i></span><small class="gc-edgen">${esc(w.wear_word || "鋒利度")} ${w.edge | 0}</small>`;
+    const off = g.slot === "weapon" && !w.bonus;
+    return `<button class="gear-cell ${esc(g.slot)}${off ? " off" : ""}" data-act="hero-node" data-kind="gear" data-key="${esc(g.slot)}" aria-label="${esc(label)}：${esc(w.name)}">
+        <span class="gc-hd">${icon}<em>${esc(label)}</em>${w.grade ? `<small>${esc(w.grade)}</small>` : ""}</span><b class="gc-name">【${esc(w.name)}】</b><small class="gc-fx">${esc(gearEffect(g.slot, w))}</small>${edge}${more}</button>`;
+  }
+  // 門下卡攤開那一塊：角色卡（member_card）拿掉卡頭已經寫了的（名字、等級氣血、內功、武學；本人的四欄裝備在「裝備」那一段），
+  // 只留本命戰法、傳功、加成那幾行；都拿掉了就不畫
+  const MATE_DUP = /^(第 \d+ 級|內功|武學|兵器|防具|坐騎|寶物|部下：|威力)/;
+  function mateExtra(html) {
+    const body = String(html || "").replace(/<h3>[\s\S]*?<\/h3>/, "").replace(/<\/?p>/g, "");
+    const lines = body.split(/<br\s*\/?>/).map((t) => t.trim()).filter((t) => t && !MATE_DUP.test(t.replace(/<[^>]+>/g, "")));
+    return lines.length ? `<p class="mate-lines">${lines.join("<br>")}</p>` : "";
+  }
+  const MATE_ROLES = { 本人: "self", 出戰: "fight", 在門下: "home", 部下: "follow" }; // 門下卡左邊那枚印的顏色
   function selfCorners(x, s) {
     if (!x.gear) return "";
     const cells = SELF_CORNERS.map(([key, at]) => {
@@ -2235,16 +2271,13 @@
     const heldLine = gear && gear.held_note ? `<p class="muted">${esc(gear.held_note)}</p>` : "";
     // 塊名由「兵器」改成「裝備」（待 joy 潤）；段名（武器、防具）是伺服器給的 label
     const hasGear = gear && (heldLine || gear.slots.some((g) => g.worn || g.heirloom || g.rack.length)); // 傳承那一列（玉璽碎片）也算有東西
-    // FB-138：開著的欄位都空著、也沒有寄放的（新角色）也畫一塊精簡的：每欄一行，欄名、空著的那一句、哪裡買得到（where，伺服器照內容的地點標籤給；
-    // 內容裡沒有那種地點時是空字串，只寫空著的那一句）。沒有按鈕、沒有格數。這一版畫不出的欄位略過；四欄都關著（slots 空）整塊不畫。待 joy 潤
-    const emptyLines = gear && !hasGear ? gear.slots.filter((g) => GEAR_ROWS[g.slot]).map((g) => `<p data-empty="${esc(g.slot)}"><b>${esc(g.label)}</b>　${esc(g.empty)}${g.where ? esc(g.where) : ""}</p>`) : [];
-    // 俠客頁重排之後整塊收在「裝備」摺疊裡（self-fold；標題列上寫格數），四欄的小段照舊
-    const gearBlock = hasGear ? `<details class="fold self-fold" data-sec="gear"${S.selfOpen && S.selfOpen.gear ? " open" : ""}><summary>裝備 <small class="muted">裝備庫 ${gear.used | 0}/${gear.cap | 0}</small></summary><div class="fold-body gear">
-        ${gear.slots.map(slotBlock).join("")}
-        ${heldLine}
-      </div></details>` : emptyLines.length ? `<details class="fold self-fold" data-sec="gear"${S.selfOpen && S.selfOpen.gear ? " open" : ""}><summary>裝備 <small class="muted">身上還沒有任何裝備</small></summary><div class="fold-body gear gear-empty">
-        ${emptyLines.join("")}
-      </div></details>` : "";
+    // FB-138：空著的那一格寫空著的那一句與哪裡拿得到（where，伺服器照內容的地點標籤給；內容裡沒有那種地點時是空字串）
+    // 「裝備」那一段（Joy 2026-10-26「裝備跟門下顯示優化，裝備可以類似意境那樣，要直覺好看懂」）：四欄一欄一格（2×2），
+    // 空的也畫（虛線框、寫哪裡拿得到）；格子裡寫裝了什麼、一句效果、還剩幾成（鋒利、耐久、飽足）。點一格開那一欄的抽屜（slotBlock：
+    // 換上、拆解、修、餵都在那裡，同人像四角）。這一版畫不出的欄位略過；四欄都關著（slots 空）整段不畫。字待 joy 潤
+    const gearBlock = gear && gear.slots.some((g) => GEAR_ROWS[g.slot]) ? `<section class="self-sec gear-sec" aria-label="裝備"><div class="self-hd"><h3>裝備</h3>${hasGear ? `<small class="muted">裝備庫 ${gear.used | 0}/${gear.cap | 0}</small>` : ""}</div>
+      <div class="gear-grid">${gear.slots.filter((g) => GEAR_ROWS[g.slot]).map(gearCell).join("")}</div>
+      ${heldLine}</section>` : "";
     // 抽屜（招式與絕學稿案第四輪：點什麼，內容就從底下升起；整頁只用這一個）：庫裡的一門、意境、身上的一門、一欄裝備。
     // S.pdrawer 是點了哪個光點（false 是剛關上）；序章裡師父點名要按的鈕在身上那一門時，沒點過也先攤開那一門
     const stepGlow = (S.main && S.main.prologue && S.main.prologue.glow) || [];
@@ -2265,7 +2298,7 @@
       drawerBody = a ? artSheet(a, slot) : `<div class="acard empty">${slot.card || `你還沒有${esc(pd.key)}。`}</div>`;
     } else if (pd && pd.t === "gear" && gear) {
       const g = gear.slots.find((sl) => sl.slot === pd.key);
-      drawerTitle = g ? g.label : ""; drawerBody = g ? slotBlock(g) : "";
+      drawerTitle = g ? g.label : ""; drawerBody = g ? `<div class="gear">${slotBlock(g)}${heldLine}</div>` : ""; // .gear：一件一行、鈕靠右（同以前的摺疊）
     }
     const drawerHtml = drawerBody ? `<div class="sheet-bg" data-act="drawer-close"></div>
       <div class="sheet pr-sheet" role="dialog" aria-label="${esc(drawerTitle)}"><div class="grip"></div>
@@ -2293,18 +2326,42 @@
           : `<button class="btn ${x.on_team ? "" : "primary"}" data-act="mx" data-op="${x.on_team ? "leave" : "join"}">${x.on_team ? "移出隊伍" : "加入隊伍"}</button>`}
         ${x.release ? `<button class="btn ghost" data-act="release-mate" data-confirm="${esc(x.release.confirm)}">放他回江湖</button>` : ""}
         ${lessonsHtml(x.lessons)}</div>` : ""}`;
+    // 「門下」那一段（Joy 2026-10-26「門下顯示優化」）：一人一張卡（server 的 roster_cards）——名字、本人／出戰／在門下／部下的印、等級、
+    // 氣血一條、身上兩門各一行（名字、品質、成數十格）。點一張在它底下攤開角色卡與加入、移出、放回江湖、傳功（同以前名冊點人）；再點收起。
+    // 舊伺服器沒有 roster_cards 時照舊畫摺疊裡的名冊
+    const mateCard = (c) => {
+      const on = x.person === c.key;
+      const hp = c.hp_max ? `<span class="mate-hp" role="meter" aria-valuemin="0" aria-valuemax="${c.hp_max}" aria-valuenow="${c.hp}" aria-label="氣血"><i style="width:${Math.max(0, Math.min(100, Math.round((c.hp / c.hp_max) * 100)))}%"></i></span><small class="mate-hpn">氣血 ${c.hp}／${c.hp_max}</small>` : "";
+      const arts = c.arts.map((a) => `<span class="mate-art"><em>${esc(a.kind)}</em>${a.name ? `<b>${esc(a.name)}</b><small>${esc(a.quality)}${a.attribute ? `・屬${esc(a.attribute)}` : ""}</small>`
+        + `<i class="sa-ten" role="meter" aria-valuemin="0" aria-valuemax="10" aria-valuenow="${a.level | 0}" aria-label="${esc(a.name)}第${a.level | 0}成">${Array.from({ length: 10 }, (_, k) => `<i${k < (a.level | 0) ? ' class="on"' : ""}></i>`).join("")}</i>` : '<small class="muted">尚未習得</small>'}</span>`).join("");
+      const detail = on && x.person_card ? `<div class="mate-detail">${mateExtra(x.person_card)}${noteAt("person")}
+        ${x.person === "player" || x.person.startsWith("follower:") ? ""
+          : `<button class="btn ${x.on_team ? "" : "primary"}" data-act="mx" data-op="${x.on_team ? "leave" : "join"}">${x.on_team ? "移出隊伍" : "加入隊伍"}</button>`}
+        ${x.release ? `<button class="btn ghost" data-act="release-mate" data-confirm="${esc(x.release.confirm)}">放他回江湖</button>` : ""}
+        ${lessonsHtml(x.lessons)}</div>` : "";
+      return `<div class="mate${on ? " on" : ""} role-${MATE_ROLES[c.role] || "home"}"><button class="mate-hd" data-act="person" data-key="${esc(c.key)}" aria-expanded="${on}">
+        <span class="mate-seal" aria-hidden="true">${esc(c.role.slice(0, 1))}</span>
+        <span class="mate-body"><span class="mate-name"><b>${esc(c.name)}</b>${c.level != null ? `<small>第 ${c.level | 0} 級</small>` : ""}<em>${esc(c.role)}</em></span>${hp}${arts}</span>
+        <span class="mate-arrow" aria-hidden="true">${on ? "▴" : "›"}</span></button>${detail}</div>`;
+    };
+    const cards = x.roster_cards;
+    const fighting = cards ? cards.filter((c) => c.role === "出戰" || c.role === "部下").length : 0;
+    const rosterBlock = cards ? `<section class="self-sec mates-sec" aria-label="門下"><div class="self-hd"><h3>門下</h3><small class="muted">${cards.length > 1 ? `${cards.length - 1} 人・出戰 ${fighting} 人` : "還沒有同伴"}</small></div>
+      <div class="mates">${cards.map(mateCard).join("")}</div>
+      ${cards.length > 1 ? "" : '<p class="muted mates-none">交友、結識大勢人物，情誼夠了就有人願意追隨你。</p>'}</section>`
+      : fold("roster", `門下${mates ? ` <small class="muted">${x.roster.length} 人</small>` : ""}`, rosterBody);
     return `
       ${proGuide()}
       ${heroPanel(x, s)}
       ${selfArtsHtml(x)}
+      ${gearBlock}
+      ${rosterBlock}
       ${selfStatsHtml(s)}
       ${selfEntriesHtml(x)}
       <div class="msg" id="mx-msg">${S.message}</div>
       ${naming}
       ${attrNoteHtml(x)}
       ${fold("lib", `功法庫 <small class="muted">武學與意境 ${x.holdings.count}/${x.holdings.cap}</small>`, libBody)}
-      ${gearBlock}
-      ${fold("roster", `門下${mates ? ` <small class="muted">${x.roster.length} 人</small>` : ""}`, rosterBody)}
       ${fold("rules", "修練的規矩", x.rules)}
       ${meltGo}
       ${meltOn ? "" : drawerHtml}`;

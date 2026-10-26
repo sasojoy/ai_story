@@ -34,12 +34,13 @@ def test_the_fourth_stops_at_69_and_a_slot_lets_one_more_through():
     assert zhuan_end.enforce_deep_cap(s, c) == []
     assert s.player.deep_order == ["zhujun", "huangfusong", "luzhi"]  # 同一下過門檻的照情誼高、id 排
     _set(game, {"caocao": 75})
-    lines = zhuan_end.enforce_deep_cap(s, c)
-    assert s.player.affinities["caocao"] == 69 and lines == ["你已深交三位人物，曹操的情誼停在 69。"]
+    stopped = zhuan_end.enforce_deep_cap(s, c)
+    assert s.player.affinities["caocao"] == 69 and stopped == ["caocao"]  # 批 7d：回被夾住的人物 id，不是句子（那一句不給玩家看）
     assert zhuan_end.deep_note(s, c, "caocao") == "已深交三位"
     assert zhuan_end.deep_note(s, c, "luzhi") == "" and zhuan_end.deep_note(s, c, "zhangjiao") == ""
     _set(game, {"caocao": 75})
-    assert zhuan_end.enforce_deep_cap(s, c, slots=1) == [] and s.player.affinities["caocao"] == 75  # 名額票多一位
+    # 名額票多一位；批 7c：靠名額進來的不給數值（不教不送，見 test_deep_slot_no_stats.py）；批 7d：進名單那一下什麼也不說
+    assert zhuan_end.enforce_deep_cap(s, c, slots=1) == [] and s.player.affinities["caocao"] == 75
     assert s.player.deep_order[-1] == "caocao"
     _set(game, {"luzhi": 60, "caocao": 75})  # 掉到 70 以下的讓出位子
     assert zhuan_end.enforce_deep_cap(s, c) == [] and "luzhi" not in s.player.deep_order
@@ -56,8 +57,9 @@ def test_the_cap_holds_through_actions_and_sync_and_the_figure_page_says_so():
     game.sync(game.now)
     _set(game, {"caocao": 74})
     msgs = game.sync(game.now)  # 同步最後走 _log：在那裡夾
-    assert p.affinities["caocao"] == 69 and "你已深交三位人物，曹操的情誼停在 69。" in msgs
-    assert game.state.journal[0].title == zhuan_end.DEEP_TITLE
+    # 批 7d（企劃者 2026-10-26 定，不是放寬）：夾在 69 的規則照舊，可是那一句不再給玩家看，也不寫「深交」那一則紀錄
+    assert p.affinities["caocao"] == 69 and not any("停在 69" in m or "你已深交" in m for m in msgs)
+    assert not any(e.title == "深交" for e in game.state.journal)
     assert game.affinity_text("caocao") == "情誼 69・已深交三位"
     assert game.affinity_text("zhujun") == "情誼 80"
     saved = json.loads(p.model_dump_json())
@@ -86,7 +88,8 @@ def _talk(game: Game, cid: str) -> list[str]:
 @pytest.mark.slow
 def test_the_fourth_figure_cannot_teach_the_signature_art_past_the_cap():
     """深交名單滿了，第四位人物在一輪對話裡越過 70：先夾回 69 才看本命武學（companion_agent._maybe_grant_signature_skill），
-    不教、不記旗標；買了深交名額，同一句話他就教。名將本命兵器（80）、贈禮在同一個動作裡照夾過的情誼判。"""
+    不教、不記旗標；買了深交名額，情誼過得去，但他也不教（批 7c：買來的名額不給數值，教不教看有沒有排進名單裡前三位，見
+    test_deep_slot_no_stats.py）。名將本命兵器（80）、贈禮在同一個動作裡照夾過的情誼判。"""
     game = _game()
     p = game.state.player
     _set(game, {"huangfusong": 72, "luzhi": 70, "zhujun": 80})
@@ -95,14 +98,14 @@ def test_the_fourth_figure_cannot_teach_the_signature_art_past_the_cap():
     p.affinities["caocao"] = 69
     arts = set(p.arts)
     msgs = _talk(game, "caocao")
-    assert p.affinities["caocao"] == 69 and "你已深交三位人物，曹操的情誼停在 69。" in msgs
+    assert p.affinities["caocao"] == 69 and not any("停在 69" in m or "你已深交" in m for m in msgs)  # 批 7d：夾了不說（企劃者 2026-10-26）
     assert "學會本命:caocao" not in p.flags and set(p.arts) == arts and not any("傾囊相授" in m for m in msgs)
     wallet = Wallet(game.world.db)
     wallet.post(name_key(p.name), 1000, "grant", "test:deep3", time=game.now)
     assert game.mall_buy("deep_slot", "deep-3")[0].startswith("買下")
     msgs = _talk(game, "caocao")
-    assert p.affinities["caocao"] >= 70 and "學會本命:caocao" in p.flags and any("傾囊相授" in m for m in msgs)
-    assert p.deep_order[-1] == "caocao"
+    assert p.affinities["caocao"] >= 70 and p.deep_order[-1] == "caocao"  # 情誼過得去
+    assert "學會本命:caocao" not in p.flags and set(p.arts) == arts and not any("傾囊相授" in m for m in msgs)  # 批 7c：靠名額的不教
 
 
 @pytest.mark.slow

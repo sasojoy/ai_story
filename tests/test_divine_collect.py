@@ -1,6 +1,7 @@
 """正式季第 10 批：神器跨季帶著走、15 級才穿得上、鑄譜記得打中過的（正式季整合設計 5.6、5.8）。"""
 from __future__ import annotations
 
+from test_weapons_web import _practice
 from test_divine_rotation import NOW, SWORD, _content, _forge_sword, _next, _opened, _smith
 
 from tianxia import equipment, forge_secrets, weapons
@@ -100,10 +101,10 @@ def test_the_practice_page_greys_the_wield_button_below_fifteen():
     jia = _smith(c, w, "甲", level=14)
     robe, _ = _forge_sword(c, w, jia, ROBE)
     low = equipment.WEAR_LOW.format(n=1)
-    page = run(server.main_view(jia), "return H.pagePractice();", menxia=server.menxia_view(jia))
+    page = _practice(server.main_view(jia), menxia=server.menxia_view(jia))  # 裝備庫在那一格的抽屜裡（俠客頁改版）
     assert f'data-act="wield" data-id="{robe.id}" disabled title="{low}"' in page and f'<small class="rwhy">{low}</small>' in page
     jia.state.player.member.level = 15
-    page = run(server.main_view(jia), "return H.pagePractice();", menxia=server.menxia_view(jia))
+    page = _practice(server.main_view(jia), menxia=server.menxia_view(jia))  # 裝備庫在那一格的抽屜裡（俠客頁改版）
     assert f'data-act="wield" data-id="{robe.id}">換上' in page and low not in page
 
 

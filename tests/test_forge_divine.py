@@ -388,9 +388,9 @@ def test_gear_rows_put_the_unnamed_original_first_in_a_long_rack(divine_content,
 @pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 def test_the_naming_form_is_drawn_without_pressing_more_when_the_original_is_stored_last(divine_content, world):
     """終審 I1：手上一把、裝備庫九把一般的、原品放最後——修練頁預設只列 8 件，定名表單照樣畫在前 8 件裡（不必按「再列 N 件」）。"""
-    from test_prologue_web import run
+    from test_weapons_web import _practice
     game, original = _crowded_rack(divine_content, world)
-    page = run(server.main_view(game), "return H.pagePractice();", menxia=server.menxia_view(game))
+    page = _practice(server.main_view(game), menxia=server.menxia_view(game))  # 裝備庫在那一格的抽屜裡（俠客頁改版）
     block = page.split('data-slot="weapon"')[1].split("</section>")[0]
     assert f'data-op="name-divine" data-id="{original.id}"' in block and f'data-act="divine-keep" data-id="{original.id}"' in block
     assert "再列 2 件" in block and block.count('data-act="wield"') == 8  # 裝備庫仍只列 8 件，表單是其中一件的

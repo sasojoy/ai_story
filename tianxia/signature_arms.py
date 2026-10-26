@@ -8,11 +8,12 @@
 - 拿到時江湖史一行、天下大事傳聞一句（具名）；上神器譜（book_rows，forge_secrets.divine_book 併進去，跨季讀 seasons 表）。
 - 不擲骰：兩條路都是門檻，不碰 Game.rng（FB-129）。
 
-只 import models、state、weapons、treasures、figures、rules；只有 engine import 這裡。
+靠買來的深交名額進名單的那位名將不送（zhuan_end.by_slot，減法季批 7c：不賣數值）；奪走那條路照舊。
+只 import models、state、weapons、treasures、figures、rules、zhuan_end；只有 engine import 這裡。
 """
 from __future__ import annotations
 
-from . import figures, treasures, weapons
+from . import figures, treasures, weapons, zhuan_end
 from .models import Content, SignatureArmDef
 from .rules import add_chronicle, add_rumor
 from .state import Equipment, GameState, PlayerState, SignatureClaim
@@ -72,8 +73,8 @@ def due(state: GameState, content: Content, *, beaten: str | None = None,
             continue
         if arm.figure is not None and arm.figure != beaten and figures.is_out(state, arm.figure):
             continue  # 退場、重創：這一季不再出現，本命兵器也跟著沒了（挑戰每季都有設計 3.5、5.4）
-        if p.affinities.get(arm.character, 0) >= cfg.signature_affinity:
-            via = "gift"
+        if p.affinities.get(arm.character, 0) >= cfg.signature_affinity and not zhuan_end.by_slot(state, content, arm.character):
+            via = "gift"  # 靠買來的深交名額進名單的那位不送（減法季批 7c：不賣數值）；奪走那條路跟情誼無關、照舊
         elif arm.figure is not None and p.figure_wins.get(arm.figure, 0) >= cfg.signature_wins:
             via = "seized"
         else:

@@ -197,7 +197,7 @@ def test_the_other_blocks_draw_their_result_inside_themselves():
     x = menxia(gear={"used": 1, "cap": 100, "held_note": "", "slots": [
         {"slot": "mount", "label": "坐騎", "worn": None, "rack": [], "empty": "身上沒有坐騎", "note": "N", "where": ""},
         {"slot": "weapon", "label": "武器", "worn": {"id": "兵:1", "name": "劍", "kind": "劍", "attribute": "剛", "edge": 90, "fits": True}, "rack": [], "empty": "", "note": "N"}]})
-    html = page("pagePractice", x, mxNote={"at": "gear:weapon", "html": "<p>GEARNOTE</p>"})
+    html = page("pagePractice", x, mxNote={"at": "gear:weapon", "html": "<p>GEARNOTE</p>"}, pdrawer={"t": "gear", "key": "weapon"})  # 武器那一格的抽屜
     weapon = html.split('data-slot="weapon"')[1]
     assert weapon.index('<div class="sub">武器</div>') < weapon.index("GEARNOTE")  # 武器那一段的標題底下
     assert "GEARNOTE" not in html.split('data-slot="weapon"')[0]
