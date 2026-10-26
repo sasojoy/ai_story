@@ -87,8 +87,14 @@ def test_roll_counts_dry_hits_and_the_first_one_has_a_pity():
     assert not epiphany.roll(s, c, never)  # 保底只管第一次
 
 
+def test_the_season_profiles_turn_it_on():
+    game = ready(jianfa_game(), side="guan", loc=HERE)
+    assert game.content.config.epiphany.enabled and epiphany.on(game.content, game.state)
+
+
 def test_off_means_no_roll_and_no_new_save_keys():
     game = ready(jianfa_game(), side="guan", loc=HERE)
+    game.content.config.epiphany.enabled = False
     rng = mock.Mock(random=mock.Mock(return_value=0.0))
     assert not epiphany.roll(game.state, game.content, rng)
     rng.random.assert_not_called()
