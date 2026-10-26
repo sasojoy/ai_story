@@ -520,6 +520,7 @@ class StoryStage(_Strict):
     """一條線的一段（特殊事件設計稿「一條線」的底座）。四種：
     event 端出一則事件（Event，actions 寫 []），選項的 effect.story 寫記號與往哪裡；
     quiz 一題一題答（questions），每一個答案加記號，答完照 routes／next；
+    card 有字時進這一段跳一張卡（kind="stage"，圖是 image）。
     fight 打 squad 這一路，打贏往 win、打輸過了 retry_days 可以再打，輸滿 retries 次往 lose（打完那一下叫這條線種類的 fight 鉤子）；
     task 等一件事做成：until 這個條件成立，或 task 這個名字登記的判斷（storyline.TASKS）回真，往 next。
     where 是這一段在哪裡做得了；days 是期限（這一季的遊戲日，照季長，rules.day_seconds），過了往 late。
@@ -543,6 +544,8 @@ class StoryStage(_Strict):
     win: str | None = None
     lose: str | None = None
     immediate: bool = True
+    card: str = ""  # 進這一段時跳一張卡（StoryCard kind="stage"）寫的那一句；空的不跳（例：特殊頓悟心魔那一關打之前）
+    image: str | None = None  # 那張卡的圖（同 StoryDef.image）
 
 
 class StoryEnding(_Strict):

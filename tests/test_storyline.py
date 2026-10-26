@@ -206,6 +206,27 @@ def test_a_task_stage_moves_on_when_its_condition_holds_and_end_hooks_run():
         del storyline.END_HOOKS["測試"]
 
 
+def test_a_stage_with_a_card_queues_it_after_the_opening_and_the_view_tells_the_kind():
+    """段落卡（StoryStage.card，特殊頓悟心魔那一關之前那張）：進那一段時排一張 kind="stage"；第一段就有的排在開頭那張後面。
+    網頁那一份（Game.story_card_view）帶這條線的類別，頓悟的卡照它換樣子。"""
+    game = ready(jianfa_game(), side="guan", loc=HERE)
+    game.story_start(StoryDef(**{
+        "id": "dun_card", "title": "雨打殘荷", "kind": "頓悟", "intro": "雨落下來。", "image": "epiphany/enter",
+        "stages": [
+            {"id": "a", "kind": "task", "until": {"flags_all": ["test_done"]}, "next": "b", "card": "心魔來了。", "image": "epiphany/demon"},
+            {"id": "b", "kind": "task", "task": "never", "next": "ok", "card": "又一張。"},
+        ],
+        "endings": [{"id": "ok", "title": "悟成", "text": "成了。", "annal": "{name}悟了。"}],
+    }))
+    view = game.story_card_view()
+    assert [(c["kind"], c["text"], c["image"], c["sort"]) for c in view] == [
+        ("start", "雨落下來。", "epiphany/enter", "頓悟"), ("stage", "心魔來了。", "epiphany/demon", "頓悟")]
+    game.story_seen()
+    game.state.player.flags.add("test_done")
+    game._story_tick()
+    assert [(c.kind, c.text, c.image) for c in game.story_cards()] == [("stage", "又一張。", None)]
+
+
 def test_caps_count_lines_by_kind():
     game = ready(jianfa_game(), side="guan", loc=HERE)
 

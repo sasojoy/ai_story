@@ -3185,9 +3185,11 @@ svg.fig .blade.bow { stroke-width: 3; }
 .story-text p { margin: .4em 0; }
 .story-count { text-align: center; margin: .5em 0 0; }
 .story-card .btn { width: 100%; margin-top: .7em; }
-/* 特殊頓悟（Joy 2026-10-26）：不放圖，墨底、字放大、留白；兩種主題都是這個樣子 */
+/* 特殊頓悟（Joy 2026-10-26）：墨底、字放大、留白，有圖時圖在上面；兩種主題都是這個樣子 */
 .story-card.dun { background: #1c1915; color: #efe6d5; border-color: #8a6a2c; }
 .story-card.dun .story-body { padding: 2.2rem 1.6rem 1.4rem; }
+.story-card.dun.has-art .story-body { padding-top: 1.2rem; }
+.story-card.dun .story-art { filter: saturate(.85); }
 .story-card.dun .story-head { justify-content: center; font-size: 1.25em; margin-bottom: .8em; }
 .story-card.dun .story-sub { text-align: center; color: #d6a548; }
 .story-card.dun .story-text { font-family: var(--serif); font-size: 1.2em; line-height: 2.1; letter-spacing: .06em; text-align: center; margin: 1.2em 0; }

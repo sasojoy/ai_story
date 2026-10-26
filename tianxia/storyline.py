@@ -105,8 +105,8 @@ def start(state: GameState, content: Content, line: StoryDef, custom: bool = Tru
         return None
     progress = StoryProgress(line=line.id, started=state.world.time, custom=line if custom else None)
     p.storylines[line.id] = progress
-    _enter(state, content, progress, line, line.stages[0].id)
     p.story_cards.append(StoryCard(line=line.id, kind="start", title=line.title, text=fill_marks(line.intro, state), image=line.image))
+    _enter(state, content, progress, line, line.stages[0].id)  # 第一段若有段落卡，排在開頭那張後面
     return progress
 
 
@@ -115,6 +115,9 @@ def _enter(state: GameState, content: Content, progress: StoryProgress, line: St
     progress.stage, progress.opened, progress.go = stage_id, False, None
     progress.tries, progress.retry_at, progress.step = 0, None, 0
     progress.due = None if stage.days is None else state.world.time + stage.days * day_seconds(content, state.world)
+    if stage.card:
+        state.player.story_cards.append(StoryCard(line=line.id, kind="stage", title=line.title, text=fill_marks(stage.card, state),
+                                                  image=stage.image))
 
 
 # ── 這一段做得了嗎、選單 ──────────────────────────────────

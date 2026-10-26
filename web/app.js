@@ -5254,16 +5254,17 @@
     if (!cards.length) { S.storyAt = 0; if (box) box.remove(); return; }
     const at = Math.min(S.storyAt || 0, cards.length - 1), c = cards[at];
     if (!box) { box = document.createElement("div"); box.id = "story-pop"; box.className = "story-wrap"; document.body.appendChild(box); }
-    const head = c.kind === "start" ? `${esc(c.sort)}・${esc(c.title)}`
+    const opening = c.kind === "start" || c.kind === "stage"; // 段落卡（StoryStage.card，例：頓悟心魔那一關之前）跟開頭同一個寫法
+    const head = opening ? `${esc(c.sort)}・${esc(c.title)}`
       : c.kind === "end" ? `此事已了・入傳` : `此事未了・入傳`;
-    const sub = c.kind === "start" ? "" : `<p class="story-sub">《${esc(c.title)}》${c.ending ? `・${esc(c.ending)}` : ""}</p>`;
-    const dun = c.sort === "頓悟"; // 特殊頓悟（Joy 2026-10-26）：永遠不放圖，墨底、字放大、留白，跟有圖的奇事分得出來
-    const src = dun ? null : c.src;
+    const sub = opening ? "" : `<p class="story-sub">《${esc(c.title)}》${c.ending ? `・${esc(c.ending)}` : ""}</p>`;
+    const dun = c.sort === "頓悟"; // 特殊頓悟（Joy 2026-10-26「頓悟那邊也要有圖」）：圖照樣放上面，墨底與「悟」章分得出；沒圖就是墨底純字
+    const src = c.src;
     const last = at >= cards.length - 1;
-    const btn = c.kind === "start" ? "且看下去" : "收下";
+    const btn = opening ? "且看下去" : "收下";
     box.innerHTML = `<div class="story-card story-${esc(c.kind)}${c.failed ? " failed" : ""}${src ? " has-art" : ""}${dun ? " dun" : ""}" role="dialog" aria-label="${esc(c.title)}">
       ${src ? `<img class="story-art" src="${esc(src)}" alt="">` : ""}
-      <div class="story-body"><p class="story-head">${tsealHtml(dun ? "悟" : c.kind === "start" ? "奇" : "傳")}<b>${head}</b></p>${sub}
+      <div class="story-body"><p class="story-head">${tsealHtml(dun ? "悟" : opening ? "奇" : "傳")}<b>${head}</b></p>${sub}
       <div class="story-text">${c.text}</div>
       ${cards.length > 1 ? `<p class="muted small story-count">${at + 1}／${cards.length}</p>` : ""}
       <button class="btn primary" data-act="story-ok" data-last="${last ? 1 : 0}">${btn}</button></div></div>`;
