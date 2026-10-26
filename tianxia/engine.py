@@ -193,7 +193,7 @@ class OutingPlan:
     how: str | None  # 遭遇拍打誰：bounty 討伐懸賞那一路、spar 自家營寨跟同袍比劃、foe 這裡最弱的對手、town 城裡的地痞；都沒有是 None
     foe: Squad | None  # 那一路
     boss: DuelBoss | None  # 遭遇拍有機會撞上的頭目（接了這裡的討伐懸賞不擲）
-    hint: str  # 鈕上括號裡最後那一段小字，也是四格探索那一格的小字（/api/main 的 mostly；explore_one.hint_of：照表、有賞、同袍比劃）
+    hint: str  # 鈕上括號裡最後那一段小字，也是四格探索那一格的小字（/api/main 的 mostly；explore_one.hint_of：以地點種類的字為主，招牌類此刻的比重是 0 才照上面 weights 最重的一類；有賞、同袍比劃）
 
     @property
     def foe_note(self) -> str | None:
@@ -5226,11 +5226,11 @@ class Game:
         how, foe = self._outing_foe(loc, kind)
         boss = None if how == "bounty" else duel_rules.available(s, c)  # 接了懸賞：遭遇就是懸賞那一路，不擲頭目
         weights = self._outing_weights(loc, has_foes=foe is not None, bounty_here=how == "bounty")
-        return OutingPlan(kind=kind, weights=weights, how=how, foe=foe, boss=boss, hint=explore_one.hint_of(kind, how))
+        return OutingPlan(kind=kind, weights=weights, how=how, foe=foe, boss=boss, hint=explore_one.hint_of(kind, how, weights))
 
     def mostly_here(self) -> str:
         """四格探索那一格的小字（/api/main 的 mostly；雲端批 5 的欄位，網頁 m.mostly）：探索一顆開著時是出門一趟的那一份
-        （_outing_plan 的 hint：照這一處的表、接了討伐懸賞「…有賞」、自家營寨「同袍比劃」，跟鈕上括號那一段同一個字）；
+        （_outing_plan 的 hint：地點種類的字，招牌類此刻的比重是 0 才改寫比重最高的那一類；接了討伐懸賞「…有賞」、自家營寨「同袍比劃」，跟鈕上括號那一段同一個字）；
         關著照雲端的 mapdata.mostly_here（照地點的小圖）。在路上是空字串。"""
         plan = self.outing_plan()
         if plan is not None:
@@ -5345,7 +5345,7 @@ class Game:
         cfg, foe = c.config.jianfa, plan.foe
         gate = self._fight_gate(foe)  # 三道閘的前兩道（疲勞、對手配不配得上你）：這一場的經驗、心得、銀兩、掉的素材一起乘
         if plan.how == "spar":  # 對手那一路心得、經驗的 camp_spar_share（三成）乘三道閘的倍數（PM 2026-10-26：以前全額）
-            return self._drill_gains(foe, cfg.camp_spar_share * gate, "camp_spar"), "spar", True
+            return self._drill_gains(foe, cfg.camp_spar_share * gate, "camp_spar", echo=False), "spar", True  # 心得只由草稿記（FB-830）
         town = plan.how == "town"
         self._loot_scale = cfg.town_loot_scale if town else 1.0
         self._gate_scale = gate
@@ -5414,12 +5414,14 @@ class Game:
         return self._present(event, "explore") if event is not None else []
 
     def _outing_ledger(self, msgs: list[str], since: int) -> str:
-        """出門一趟最後那一行「得：…　失：…」：這一趟的訊息裡撿到的東西（「獲得 …」）與數值變化，加上草稿裡另外補的（仗的經驗，
-        since 之後那幾筆）；同一個標籤加總，增加的寫在「得」、減少的（與內傷）寫在「失」。"""
+        """出門一趟最後那一行「得：…　失：…」：這一趟的訊息裡撿到的東西（「獲得 精鐵砂 ×1」，只列這種「名 ×數量」的；破境丹、回體丹
+        那一句說明不是一樣東西，帳上只列它後面的「破境丹 +1」，FB-831）與數值變化，加上草稿裡另外補的（仗的經驗，since 之後那幾筆）；
+        同一個標籤加總，增加的寫在「得」、減少的（與內傷）寫在「失」。"""
         extra = self._draft.changes[since:] if self._draft is not None else []
         changes, notes = battlelog.split_changes(msgs)
         totals = journal.combine_changes(changes + extra)
-        items = explore_one.merge_items(note.removeprefix(materials.GRANT_PREFIX) for note in notes if note.startswith(materials.GRANT_PREFIX))
+        grants = (note.removeprefix(materials.GRANT_PREFIX) for note in notes if note.startswith(materials.GRANT_PREFIX))
+        items = explore_one.merge_items(item for item in grants if explore_one.is_item(item))
         gains = items + [ch for ch in totals if journal.change_class(ch) == "tx-up"]
         losses = [ch for ch in totals if journal.change_class(ch) == "tx-down"]
         return explore_one.ledger(gains, losses)
@@ -9588,10 +9590,13 @@ class Game:
             msgs += self._drill_push(trend_id, delta)
         return msgs
 
-    def _drill_gains(self, squad: Squad, share: float | None = None, source: str = "hold") -> list[str]:
+    def _drill_gains(self, squad: Squad, share: float | None = None, source: str = "hold", echo: bool = True) -> list[str]:
         """跟這一路一起操練拿的：對手心得與經驗的 share（預設 drill_reward_share；不給銀兩、素材）；經驗本人與帶著的同伴都拿（FB-002）。
         操練（_drill）與出陣的守、攪局（_sortie_hold）、守勢行動（_duty）共用；一類一顆開著時守、攪局、守勢行動給全額（_hold_share）。
-        source（growth.exp_source）：這幾樣都不打仗（hold，PM 2026-10-25 第 5 件）；減法季自家營寨跟同袍比劃算仗（camp_spar）。"""
+        source（growth.exp_source）：這幾樣都不打仗（hold，PM 2026-10-25 第 5 件）；減法季自家營寨跟同袍比劃算仗（camp_spar）。
+        echo：「心得 +N」那一行要不要也放進回傳的訊息。江湖紀錄的標籤本來就由草稿（_draft.changes）記一顆、訊息那一行在敘事裡收掉；
+        出門一趟的比劃（_outing_fight）自己有「得：」那一行，兩邊都有就被 _outing_ledger 加成兩倍、後面還多一則單獨的訊息
+        （FB-830），所以它傳 False：只由草稿記。沒有草稿時（直接叫的）照樣放進訊息，帳才不會漏掉這一筆。"""
         s, c = self.state, self.content
         p = s.player
         share = c.config.drill_reward_share if share is None else share
@@ -9600,9 +9605,11 @@ class Game:
         if xinde:
             p.stats["xinde"] = p.stats.get("xinde", 0) + xinde
             xinde_line = f"心得 +{xinde}"
-            msgs.append(xinde_line)
+            if echo or self._draft is None:
+                msgs.append(xinde_line)
             if self._draft is not None:
-                self._draft.hide(xinde_line)
+                if echo:
+                    self._draft.hide(xinde_line)
                 self._draft.changes.append(xinde_line)
         keep = team.player_exp(s, c, exp, source)[0]  # 減法季三道閘：不是仗的 45 級以後換心得
         gained = team.maxed_xinde(s, c, exp, source)  # 滿級：本人的經驗照 5 換 1 換成心得（3.5），同伴照拿經驗
