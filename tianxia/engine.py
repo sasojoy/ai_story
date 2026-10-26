@@ -29,6 +29,7 @@ from . import (
 )
 from . import sortie_duel  # 出陣約戰（減法季批 3b）
 from . import storyline  # 一條線：特殊事件與特殊頓悟的底座（企劃者 2026-10-26）
+from . import epiphany  # 特殊頓悟（登記一條線的鉤子；企劃者 2026-10-26）
 from . import tiers  # 事件分級：場景卡上那一行「州郡大事」「天下大事」
 from . import explore_one, growth  # 減法季批 2：探索一顆、三道閘、屬性五段的純規則（開關走 rules.jianfa）
 from . import zhuan_end  # 減法季批 7b：列傳為終點（票、深交上限、人物評曰）
@@ -1361,6 +1362,8 @@ class Game:
             menu = sensing.menu(s, c)
             if menu:
                 return [Option(id=option_id, label=label) for option_id, label in menu]
+        if s.player.god_naming is not None:  # 特殊頓悟心魔過了：先取名（三個候選＋自己寫），取了才收進意境
+            return [Option(id=option_id, label=label) for option_id, label in epiphany.menu(s)]
         if s.player.story_open is not None:  # 一條線的答題（storyline.quiz_menu）：只有這一題的答案與「先擱著」
             menu = storyline.quiz_menu(s, c)
             if menu:
@@ -3513,6 +3516,8 @@ class Game:
                 msgs = self._errand_act(arg)
             elif kind == storyline.OPTION:
                 msgs = self._story_act(arg)
+            elif kind == epiphany.OPTION:
+                msgs = self._epiphany_name(arg, text)
             else:
                 msgs = self._choose(int(arg))
             # 三選一開著時按「探索」本身（_act 只回 PICK）：不算探索過、不寫紀錄。要在後面接上大勢門檻、召見那些訊息之前記
@@ -4040,7 +4045,28 @@ class Game:
         got = sensing.current(s, c)
         prologue = got is not None and got[1].prologue
         rng = prologue_rules.SureRandom() if prologue else self.rng  # 序章草廬：必中（悟意境設計第七節）
-        return sensing.choose(s, c, int(arg), rng) if arg.isdecimal() else ["（此刻無法這麼做。）"]
+        if not arg.isdecimal():
+            return ["（此刻無法這麼做。）"]
+        msgs = sensing.choose(s, c, int(arg), rng)
+        sense = s.player.sensing
+        if not prologue and sense is not None and sense.stage == "draw" and epiphany.roll(s, c, self.rng):  # 特殊頓悟：不畫那一筆，開一條頓悟的線
+            msgs += self._epiphany_begin(sense.method or "", c.locations[sense.location].name)
+        return msgs
+
+    def _epiphany_begin(self, method: str, place: str) -> list[str]:
+        """特殊頓悟中了（epiphany.roll）：收掉那一份感悟、開線、直接端出第一題（心靈拷問）；江湖紀錄另起一則「頓悟」。"""
+        s, c = self.state, self.content
+        progress = epiphany.begin(s, c, method, place)
+        if progress is None:
+            return []
+        s.player.sensing = None
+        line = storyline.definition(c, progress)
+        self._outcome(journal.event_marker(epiphany.TITLE, True), f"✦ {epiphany.TITLE}")
+        return [f"✦ {epiphany.TITLE}", line.intro, f"【{line.title}】"] + storyline.open_quiz(s, c, progress)
+
+    def _epiphany_name(self, arg: str, text: str | None) -> list[str]:
+        """特殊頓悟心魔過了之後取名（epiphany.choose）：挑三個候選之一，或自己寫（dunwu:own，名字在 text）。"""
+        return epiphany.choose(self.state, self.content, self.world, arg, text)
 
     def sense_request(self, points: list | None, png: str = "") -> sensing.SenseRequest | str:
         """畫完那一筆的 A 段（server.py 在行動鎖內、很快地呼叫）：還在感悟狀態才開單；讀不出那一筆回一句話（字串）。
@@ -9876,7 +9902,7 @@ class Game:
     def _story_fight(self, progress: StoryProgress, stage: StoryStage) -> list[str]:
         """一條線的 fight 段：照劇情戰打（不閃、不扣氣血，同 _event_battle），打完交給 storyline.fought（鉤子寫記號、往 win 或 lose、輸了等再試）。"""
         s, c = self.state, self.content
-        squad = self._story_squad(c.squads[stage.squad])
+        squad = self._mirror_squad(progress, stage) if stage.mirror is not None else self._story_squad(c.squads[stage.squad])
         judged = self._judged(squad)
         result = self._fight_with(squad, judged, dodge=False, difficulty=squad.difficulty)
         line = storyline.definition(c, progress)
@@ -9885,9 +9911,16 @@ class Game:
         self._narrate(record, result, judged)
         self._play_rounds(record, squad, result.tier, None, self._hp_facts(), clash=result.clash)
         won = result.tier in team.WIN_TIERS
-        rewards = self._battle_rewards(squad, record) if won else []
+        rewards = self._battle_rewards(squad, record) if won and stage.mirror is None else []  # 打自己的影子沒有東西掉
         storyline.fought(s, c, progress, won, record)
         return [self._file_battle(record)] + rewards
+
+    def _mirror_squad(self, progress: StoryProgress, stage: StoryStage) -> Squad:
+        """fight 段的對手是自己的影子（StoryStage.mirror，特殊頓悟的心魔）：難度＝你此刻的全隊威力（氣血當滿的、不算地利與碎片，同江湖水漲）
+        × mirror，名字是 mirror_name。"""
+        base = Squad(id=f"mirror:{progress.line}", name=stage.mirror_name, difficulty=1.0)
+        power = team.power_vs(self.state, self.content, self.world, base, fresh=True, terrain=False, seal=False)
+        return base.model_copy(update={"difficulty": round(max(1.0, power * stage.mirror), 1)})
 
     # ── 混戰（翻地與爭搶，輿圖簡化設計 4.3）：出陣時撞上對面剛在這一塊推過的人，照截殺的規則打一場 ──
 

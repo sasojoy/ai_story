@@ -546,6 +546,9 @@ class StoryStage(_Strict):
     immediate: bool = True
     card: str = ""  # 進這一段時跳一張卡（StoryCard kind="stage"）寫的那一句；空的不跳（例：特殊頓悟心魔那一關打之前）
     image: str | None = None  # 那張卡的圖（同 StoryDef.image）；事件段端出事件時場景卡也用它（storyline.stage_art）
+    # fight 段的對手是自己的影子（特殊頓悟的心魔）：給了就不讀 squad，難度＝你此刻的全隊威力 × mirror，屬性照你武學的主屬性，名字是 mirror_name
+    mirror: float | None = Field(default=None, gt=0)
+    mirror_name: str = "心魔"
 
 
 class StoryEnding(_Strict):
@@ -3201,6 +3204,22 @@ class TierRules(_Strict):
         return self
 
 
+class EpiphanyRules(_Strict):
+    """特殊頓悟（tianxia/epiphany.py；企劃者 2026-10-26 設計稿 https://claude.ai/artifact/EBUqqzK3dPMpjwYTdRzLs3）：有所感選對做法、擲中進感悟狀態的那一刻
+    再擲一次，中了不畫那一筆，改走一條「頓悟」的線（storyline，kind「頓悟」）：心靈拷問 → 心境小試 → 心魔，過了從四十個神品意境模板
+    （TraitBook.god）挑一個、取名、收進自己的意境。另要一條線的底座開著（Config.jianfa.storylines）；序章不擲。
+    失敗可以重複挑戰（Joy 10/26「留住玩家很重要」）：沒有期限，心魔打輸過 retry_days 再打，次數不限。"""
+
+    enabled: bool = False
+    chances: list[float] = Field(default_factory=lambda: [0.03, 0.015, 0.0075])  # 這一季第幾次頓悟的機率；列完就是一季的上限
+    wis_from: int = 5  # 悟性高過這個數，每一點機率乘 (1 + wis_step)，最多乘 wis_cap
+    wis_step: float = Field(default=0.05, ge=0)
+    wis_cap: float = Field(default=1.5, ge=1)
+    pity: int = Field(default=40, ge=0)  # 只管第一次：這一季擲中感悟這麼多次都沒頓悟，下一次必中；0 是不保底
+    demon_scale: float = Field(default=0.95, gt=0)  # 心魔的難度＝你此刻的全隊威力 × 這個倍數（你自己的影子）
+    retry_days: float = Field(default=1.0, ge=0)  # 心魔打輸了，過幾個遊戲日能再打（照季長，rules.day_seconds）
+
+
 class JianfaRules(JianfaNumbers):
     """減法季（減法季整合設計，企劃者 2026-10-24；設計稿第十章）：把遊戲從「打怪、練等、拚戰力」拉回「文字互動改變世界」。
     規則的改動全掛在這裡加上開季時蓋的章（WorldState.jianfa_on，world_state.stamp_season；讀的時候一律走 rules.jianfa）：
@@ -3687,6 +3706,7 @@ class Config(_Strict):
     territory: TerritoryRules = Field(default_factory=TerritoryRules)  # 地盤易手（見 TerritoryRules）
     conquest: ConquestRules = Field(default_factory=ConquestRules)  # 領地爭奪（見 ConquestRules）
     jianfa: JianfaRules = Field(default_factory=JianfaRules)  # 減法季（見 JianfaRules；暫名）
+    epiphany: EpiphanyRules = Field(default_factory=EpiphanyRules)  # 特殊頓悟（見 EpiphanyRules）
     xingshi: XingshiTuning = Field(default_factory=XingshiTuning)  # 〈天下形勢〉：領地爭奪每天一篇的旁白（見 XingshiTuning）
     ambush: AmbushRules = Field(default_factory=AmbushRules)  # 設伏劫道（見 AmbushRules）
     fortify: FortifyRules = Field(default_factory=FortifyRules)  # 修築工事（見 FortifyRules）

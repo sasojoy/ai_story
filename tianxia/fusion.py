@@ -374,6 +374,7 @@ def same_kind(state: GameState, ia: Insight, ib: Insight) -> bool:
     if insights.is_own(ia.id) and insights.is_own(ib.id):
         return ia.attribute == ib.attribute and not ia.parents and not ib.parents
     return insight_fx.base_id(ia.id) == insight_fx.base_id(ib.id)
+GOD_KEPT = "頓悟悟來的神品意境是獨一份的境界，不能拿去揣摩、合成。"  # 待 joy 潤
 OWN_IN_DISCUSS = "心裡那份自己悟的意境，說不出口，論武時拿不出來。"
 
 
@@ -389,6 +390,8 @@ def merge_problem(
     ia, ib = insights.resolve(a, content, world, state), insights.resolve(b, content, world, state)
     if ia is None or ib is None:
         return "找不到它的資料。"
+    if insight_fx.is_god(state, a) or insight_fx.is_god(state, b):  # 特殊頓悟的神品意境：不能揣摩、不能合成（tianxia/epiphany.py）
+        return _refuse(GOD_KEPT, "神品")
     if a == b:
         if partner is not None:
             return _refuse("論武要兩個不同的意境。", "同一個")

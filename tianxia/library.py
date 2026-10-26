@@ -327,6 +327,7 @@ def melt_many(
 
 
 INSIGHT_SLOTTED = "「{name}」還裝在【{art}】上，先拆下來。"  # 待 joy 潤
+GOD_KEPT = "頓悟悟來的神品意境是獨一份的境界，熔不得。"  # 待 joy 潤
 
 
 def melt_insight_problem(state: GameState, content: Content, world: WorldStateStore, insight_id: str) -> str | None:
@@ -335,6 +336,8 @@ def melt_insight_problem(state: GameState, content: Content, world: WorldStateSt
 
     if insight_id not in state.player.insights:
         return "你沒有這個意境。"
+    if insight_fx.is_god(state, insight_id):  # 特殊頓悟的神品意境熔不得（tianxia/epiphany.py）
+        return GOD_KEPT
     where = arts_mod.where_slotted(state, insight_id)
     if where is not None:
         insight = insights.resolve(insight_id, content, world, state)

@@ -282,6 +282,7 @@ FIXED_LINE = "【{name}】的招式是定的，裝不了意境。"  # 待 joy �
 NOT_OWNED = "你沒有這一門武學。"
 NO_INSIGHT = "你沒有這個意境。"
 FULL_LINE = "【{name}】的意境槽已經滿了（{n} 格），先拆一個下來。"
+GOD_ONE = "身上已經裝著一個神品意境了，同時只能裝一個，先拆下那一個。"  # 待 joy 潤
 ELSEWHERE_LINE = "「{insight}」裝在【{other}】上，先從那裡拆下來。"
 SLOTTED_LINE = "「{insight}」裝進了【{art}】第 {i} 格。"
 UNSLOTTED_LINE = "「{insight}」從【{art}】拆了下來。"
@@ -370,6 +371,10 @@ def slot_problem(
     colors = colors_of(art, len(slots))
     if ins is not None and not any(takes_at(art, c, ins.attribute) for c in colors):
         return refuse(AFFINITY_LINE.format(name=art.name, insight=ins.name, attrs=affinity_text(art)), "收不下")
+    if insight_fx.is_god(state, insight_id) and any(  # 特殊頓悟的神品意境：身上同時只准裝一個（tianxia/epiphany.py）
+        insight_fx.is_god(state, held) for held_slots in state.player.art_slots.values() for held in held_slots if held and held != insight_id
+    ):
+        return refuse(GOD_ONE, "只裝一個")
     other = where_slotted(state, insight_id)
     if other is not None:
         o = team.resolve_art(other, content, world)

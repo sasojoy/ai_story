@@ -71,6 +71,15 @@ def general(content: Content, key: str) -> GeneralTrait | None:
     return next((t for t in content.traits.general if t.key == key), None)
 
 
+GOD_PREFIX = "god_"  # 神品意境模板（TraitBook.god，特殊頓悟）的 id 開頭
+
+
+def is_god(state: GameState, insight_id: str) -> bool:
+    """這一份是特殊頓悟悟來的神品意境（真意是神品模板）：不能揣摩、不能合成、熔不得，身上同時只准裝一個（tianxia/epiphany.py）。"""
+    fx = state.player.insight_fx.get(insight_id)
+    return fx is not None and bool(fx.grand) and fx.grand.startswith(GOD_PREFIX)
+
+
 def grand(content: Content, grand_id: str | None) -> HighTrait | None:
     if not grand_id:
         return None
