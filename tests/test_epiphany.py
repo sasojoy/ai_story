@@ -60,6 +60,10 @@ def _through_demon(game) -> str:
     return line
 
 
+def _think(game) -> None:
+    game.choose(f"{epiphany.OPTION}:{epiphany.THINK}")
+
+
 def test_chances_halve_scale_with_wit_and_stop_at_the_season_cap():
     game = _game()
     s, c = game.state, game.content
@@ -120,7 +124,11 @@ def test_the_whole_way_through_names_and_grants_a_god_insight():
     line = _through_demon(game)
     assert s.player.storylines[line].ending == "done"
     naming = s.player.god_naming
-    assert naming is not None and len(naming.candidates) == 3
+    assert naming is not None and not naming.candidates and not naming.asked
+    assert [o.id for o in game.options()] == [f"{epiphany.OPTION}:{epiphany.THINK}", f"{epiphany.OPTION}:{epiphany.OWN}"]
+    assert game.choose(f"{epiphany.OPTION}:0") == ["（此刻無法這麼做。）"]  # 還沒想過名字，沒有候選可挑
+    _think(game)
+    assert naming.asked and len(naming.candidates) == 3
     god = next(g for g in c.traits.god if g.id == naming.god)
     assert god.form == "攻"  # 三題都選了攻（+6），小試是心（+1），心魔贏了再加一型（+2）：攻還是最多
     options = [o.id for o in game.options()]
@@ -209,6 +217,7 @@ def test_god_insights_cannot_be_merged_melted_or_stacked_in_slots():
     game = _game()
     s, c, w = game.state, game.content, game.world
     _through_demon(game)
+    _think(game)
     game.choose(f"{epiphany.OPTION}:0")
     god_id = next(i for i in s.player.insights if insight_fx.is_god(s, i))
     other = next(i for i in s.player.insights if i != god_id) if len(s.player.insights) > 1 else None
@@ -242,3 +251,76 @@ def test_the_demon_fight_runs_for_real_and_leaves_no_squad_behind():
     assert s.battles and s.battles[0].kind == "event"
     assert set(c.squads) == before
     assert game.state.player.storylines[line].ending in (None, "done")
+
+
+class _Model:
+    """假的模型：chat_structured 回固定的三個名字（或丟錯）。"""
+
+    timeout = 30
+
+    def __init__(self, names=None, fail=False):
+        self.names, self.fail, self.messages = names or [], fail, None
+
+    def chat_structured(self, messages, model, **_):
+        self.messages = messages
+        if self.fail:
+            raise ConnectionError("down")
+        return model(names=self.names)
+
+
+def test_three_stage_naming_takes_the_model_names_and_tops_up_from_the_word_list():
+    game = _game()
+    s, c = game.state, game.content
+    _through_demon(game)
+    ask = game.epiphany_request()
+    assert ask is not None and ask.god == s.player.god_naming.god
+    assert s.player.god_naming.place in ask.messages[-1]["content"]  # 在哪裡悟的、拷問問了什麼都給模型當線索
+    model = _Model(["「寒潭映月」", "寒潭映月", "張角", "孤燈照雪"])  # 包裝、重複、人物的名字都不收
+    names = epiphany.propose_names(model, c, ask, budget=20.0, person=game.world.is_character_name)
+    assert names == ["寒潭映月", "孤燈照雪"]
+    game.world.mutate_season(lambda w: w.god_names.update({"孤燈照雪": "別人"}))  # 等名字的時候被別人用掉了
+    game.epiphany_names(ask, names)
+    got = s.player.god_naming.candidates
+    assert got[0] == "寒潭映月" and "孤燈照雪" not in got and len(got) == 3
+    assert game.epiphany_request() is None  # 想過了不再開單
+    assert game.epiphany_names(ask, ["別的名字"]) == [] and s.player.god_naming.candidates == got  # 舊單子交回來不動
+
+
+def test_model_down_means_word_list_names():
+    game = _game()
+    s, c = game.state, game.content
+    _through_demon(game)
+    ask = game.epiphany_request()
+    assert epiphany.propose_names(_Model(fail=True), c, ask) == []
+    assert epiphany.propose_names(None, c, ask) == []
+    game.epiphany_names(ask, [])
+    assert len(s.player.god_naming.candidates) == 3
+
+
+def test_bots_wait_for_a_model_slot_and_never_take_word_list_names():
+    from tianxia import bot_policy
+
+    game = _game()
+    s = game.state
+    _through_demon(game)
+    rng = mock.Mock(randrange=mock.Mock(return_value=1))
+    closed = bot_policy.NamingSlot(open=False)
+    assert bot_policy._god_name(game, rng, closed) == [] and closed.skipped == 1 and not s.player.god_naming.asked
+    slot = bot_policy.NamingSlot(open=True)
+    bot_policy._god_name(game, rng, slot)
+    assert isinstance(slot.job, bot_policy.EpiphanyJob)
+    assert bot_policy.apply_job(game, slot.job, []) == [] and not s.player.god_naming.asked  # 模型沒給名字：不交回
+    bot_policy.apply_job(game, slot.job, ["寒潭映月"])
+    assert s.player.god_naming.candidates[0] == "寒潭映月"
+    name = s.player.god_naming.candidates[1]
+    bot_policy._god_name(game, rng, bot_policy.NamingSlot(open=True))
+    assert any(i.name == name for i in s.player.own_insights.values())
+
+
+def test_a_bot_runner_without_a_model_falls_back_to_the_word_list():
+    from tianxia import bot_policy
+
+    game = _game()
+    _through_demon(game)
+    bot_policy._god_name(game, mock.Mock(), bot_policy.NamingSlot(open=False, model=False))
+    assert game.state.player.god_naming.asked and len(game.state.player.god_naming.candidates) == 3

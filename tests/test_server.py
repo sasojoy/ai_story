@@ -6744,3 +6744,25 @@ def test_the_first_request_after_a_restart_posts_the_wanted_notice(client):
     client.get("/api/main")
     posted = [b for b in open_world().get_season().bounties if b.auto_by == "陣營" and b.target == "沈青衫"]
     assert len(posted) == 1 and posted[0].faction == "huang"
+
+
+def test_epiphany_think_names_outside_the_lock(monkeypatch):
+    """特殊頓悟的「靜心思名」走三段式：A 鎖內開單、B 鎖外請模型（model_call：在鎖裡被叫到會丟錯）、C 鎖內交回 Game.epiphany_names；不在等著取名照一般的按鈕走。"""
+    from tianxia import epiphany
+
+    game = _forger()
+    ask = epiphany.NameAsk("頓悟1", "god_x", [])
+    seen = {}
+
+    def propose(client, content, request, budget=None, person=None):
+        seen["request"] = request
+        return ["寒潭映月"]
+
+    monkeypatch.setattr(Game, "epiphany_request", lambda self: ask)
+    monkeypatch.setattr(epiphany, "propose_names", propose)
+    monkeypatch.setattr(Game, "epiphany_names", lambda self, request, names: [f"{request.god}:{names[0]}"])
+    assert server.choose(game, server.EPIPHANY_THINK) == ["god_x:寒潭映月"]
+    assert seen["request"] is ask
+    monkeypatch.setattr(Game, "epiphany_request", lambda self: None)
+    monkeypatch.setattr(epiphany, "propose_names", mock.Mock(side_effect=AssertionError("不該叫模型")))
+    server.choose(game, server.EPIPHANY_THINK)

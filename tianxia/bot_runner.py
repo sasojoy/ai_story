@@ -22,7 +22,7 @@ import traceback
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from . import battle_instance, bot_policy, gender, insight_llm, naming, seal, server_bots, team
+from . import battle_instance, bot_policy, epiphany, gender, insight_llm, naming, seal, server_bots, team
 from .characters import CharacterStore, open_characters
 from .engine import Game
 from .models import Content
@@ -113,7 +113,7 @@ class BotRunner:
             owes_round = state.player.name in owes
             if not owes_round and self.rng.random() >= server_bots.act_chance(profile, self.content.config):
                 continue
-            slot = bot_policy.NamingSlot(open=self._naming_open())
+            slot = bot_policy.NamingSlot(open=self._naming_open(), model=self.client is not None and self.content.config.bot_naming)
             try:
                 with self.world.action_lock(timeout=LOCK_WAIT):
                     # 拿到寫入權之後才看錶：上一個假人做完到現在，真人可能已經把共用時鐘對到更晚了
@@ -253,7 +253,8 @@ class BotRunner:
         return True
 
     def _name_and_apply(
-        self, name: str, job: bot_policy.ForgeJob | bot_policy.MasterJob | bot_policy.SenseJob | bot_policy.DiscussJob,
+        self, name: str,
+        job: bot_policy.ForgeJob | bot_policy.MasterJob | bot_policy.SenseJob | bot_policy.DiscussJob | bot_policy.EpiphanyJob,
         report: TickReport,
     ) -> None:
         """假人取名的 B、C 段：首創配方（企劃者 2026-10-05）與絕學定名（2026-10-06）都請模型取，不然名字是字表的樣子、
@@ -261,11 +262,15 @@ class BotRunner:
         C 再拿鎖、重讀角色、交給 bot_policy.apply_job 重驗再套用。拿不到鎖就放掉這一件（名字丟掉：首創的話之後誰先合到誰取名，
         定名的話下次再來）。
         模型沒取到名字（連不上、逾時、取壞了）：首創的爐不開（C 段不做、不收費）——走字表名字搶下首創就是看得出是假人的樣子；
-        下一次要等 bot_naming_gap_seconds 之後。挑一個的單（有候選）沒挑到照常進 C 段，由規則挑，不產生新名字；
+        下一次要等 bot_naming_gap_seconds 之後；頓悟取名一個名字都沒拿到也一樣不交回、下次再請。挑一個的單（有候選）沒挑到照常進 C 段，由規則挑，不產生新名字；
         絕學定名照常進 C 段，用字表另組一個跟原名不同的（見 bot_policy.apply_job）。"""
         cfg = self.content.config
         self.last_naming = self.clock()
-        if isinstance(job, bot_policy.SenseJob):  # 有所感：只看文字特徵（假人的筆畫是現成的那幾筆，不送圖）
+        if isinstance(job, bot_policy.EpiphanyJob):  # 特殊頓悟：一次取三個名字；一個都沒拿到不進 C 段（下一次輪到再請模型）
+            proposed = epiphany.propose_names(
+                self.client, self.content, job.request, budget=cfg.bot_naming_budget_seconds, person=self.world.is_character_name,
+            )
+        elif isinstance(job, bot_policy.SenseJob):  # 有所感：只看文字特徵（假人的筆畫是現成的那幾筆，不送圖）
             got = insight_llm.name(
                 self.client, self.content, job.request.facts, budget=cfg.bot_naming_budget_seconds,
                 person=self.world.is_character_name,
@@ -277,6 +282,8 @@ class BotRunner:
                 person=self.world.is_character_name,
             )
         report.named += 1
+        if isinstance(job, bot_policy.EpiphanyJob) and not proposed:
+            return
         if isinstance(job, (bot_policy.ForgeJob, bot_policy.DiscussJob)) and proposed[0] is None and not job.request.choices:
             return
         try:

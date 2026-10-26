@@ -62,7 +62,7 @@ import server_push
 import zhuan_html
 from llm_queue import Busy, LlmQueue, QueueTimeout
 from tianxia import (
-    arena_crowd, ascend, battle_instance, biography, calendar, companion_agent, create, divine, duel, event_llm, feasts, fight_llm, foreshadow, gather_llm, gender, glyph, insight_llm, leaderboard, letters, mall, mapdata, might,
+    arena_crowd, ascend, battle_instance, biography, calendar, companion_agent, create, divine, duel, epiphany, event_llm, feasts, fight_llm, foreshadow, gather_llm, gender, glyph, insight_llm, leaderboard, letters, mall, mapdata, might,
     naming, narration,
     ollama_client, power_save, rules,
     precise, seal, seal_duel, server_bots, social, sortie, speech, tavern, team, timetable, training, treasures, weekcard, xingshi, yuedan,
@@ -998,6 +998,8 @@ def prepare_fight(game: Game, option_id: str) -> list[str] | fight_llm.PreparedF
 
 
 def choose(game: Game, option_id: str) -> list[str] | None:
+    if option_id == EPIPHANY_THINK:
+        return epiphany_think(game)
     if may_generate_dialogue(option_id):
         prepared = prepare_dialogue(game, option_id)
         return act(game, lambda g: g.choose(option_id, prepared=prepared))
@@ -1096,6 +1098,29 @@ def forge(game: Game, art_id: str | None, insight_ids: list[str]) -> list[str] |
     字表的名字登記，第一件模型取的名字被丟掉）。不必叫模型的爐（配方已經有人合過）不經過佇列，兩個分頁照常都走得完。"""
     proposed = prepare_forge(game, art_id, insight_ids)
     return act(game, lambda g: g.forge(art_id, insight_ids, proposed=proposed))
+
+
+EPIPHANY_THINK = f"{epiphany.OPTION}:{epiphany.THINK}"
+BUSY_EPIPHANY = "還在想名字，稍等。"
+
+
+def epiphany_think(game: Game) -> list[str] | None:
+    """特殊頓悟的「靜心思名」，跟開爐取名一樣分三段：
+      A（鎖內、很快）同步時間，Game.epiphany_request 開單（只讀）；不在等著取名、已經想過了是 None，照一般的按鈕走（引擎回那一句）；
+      B（鎖外、很慢）epiphany.propose_names 請模型一次取三個（model_call 排隊），預算是 Config.naming_budget_seconds 扣掉 A 段；
+        取不到是空的；
+      C（鎖內、很快）Game.epiphany_names 重驗還是同一個神品、名字再過一次過濾，不夠三個用字表補。"""
+    started, request = _open_request(game, game.epiphany_request)
+    if request is None:
+        return act(game, lambda g: g.choose(EPIPHANY_THINK))
+    total = game.content.config.naming_budget_seconds
+
+    def name_it():
+        budget = max(0.0, total - (_monotonic() - started))
+        return epiphany.propose_names(game.client, game.content, request, budget=budget, person=game.world.is_character_name)
+
+    names = model_call(game, name_it, fallback=[], left=total - (_monotonic() - started), busy=BUSY_EPIPHANY)
+    return act(game, lambda g: g.epiphany_names(request, names))
 
 
 SENSE_PNG_MAX = 300_000  # 畫布存的小 PNG（base64 字數）最多收這麼多；再大就不給模型看圖，只給文字特徵（畫布 256×256，實際約一兩萬字）

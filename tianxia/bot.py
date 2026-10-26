@@ -502,7 +502,7 @@ def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:
     # 豪強改幫另一軍（faction:lean:，三陣營四勝利）：隨時按得下去、不花體力，同叛投排除（機器人不換邊）
     # 一條線答題的「先擱著」（story:<線>:later）：擱著之後那一顆又按得下去，同 act:rest 排除（答題照隨機答完）
     options = [o for o in options if not (o.id.startswith("story:") and o.id.endswith(":later"))]
-    # 特殊頓悟取名的「自己寫」（dunwu:own）：要寫字，按了只回一句叫出輸入框，一直按得下去；機器人從三個候選裡挑
+    # 特殊頓悟取名的「自己寫」（dunwu:own）：要寫字，按了只回一句叫出輸入框，一直按得下去；機器人先按靜心思名、再從三個候選裡挑
     options = [o for o in options if o.id != "dunwu:own"]
     # 會被打發的求見（名望不夠）永遠按得下去，不排除的話「沒事可做就推進時間」的訊號會失效（同 act:rest）
     options = [
