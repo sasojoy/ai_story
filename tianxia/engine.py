@@ -29,6 +29,7 @@ from . import (
 )
 from . import sortie_duel  # 出陣約戰（減法季批 3b）
 from . import storyline  # 一條線：特殊事件與特殊頓悟的底座（企劃者 2026-10-26）
+from . import tiers  # 事件分級：場景卡上那一行「州郡大事」「天下大事」
 from . import explore_one, growth  # 減法季批 2：探索一顆、三道閘、屬性五段的純規則（開關走 rules.jianfa）
 from . import zhuan_end  # 減法季批 7b：列傳為終點（票、深交上限、人物評曰）
 from . import ambush as ambush_rules  # 設伏劫道（後期體力玩法第一批）；叫 ambush_rules：這個檔裡有區域變數叫 ambush
@@ -9806,6 +9807,31 @@ class Game:
 
     def story_seen(self) -> None:
         storyline.seen(self.state)
+
+    def story_card_view(self) -> list[dict]:
+        """網頁跳顯框要的那幾張卡（特殊事件設計稿的跳顯框）：sort 是這條線的類別（奇事、頓悟），自訂的線照存檔裡那一份。
+        image 是 web/img/ 底下不含副檔名的路徑，圖檔在不在是伺服器的事（同 scene_art）。"""
+        p = self.state.player
+        out = []
+        for card in p.story_cards:
+            progress = p.storylines.get(card.line)
+            line = storyline.definition(self.content, progress) if progress is not None else self.content.storylines.get(card.line)
+            out.append({
+                "line": card.line, "kind": card.kind, "sort": line.kind if line is not None else storyline.JOURNAL,
+                "title": card.title, "text": card.text, "image": card.image, "ending": card.ending, "failed": card.failed,
+            })
+        return out
+
+    def event_tier(self) -> dict | None:
+        """眼前這一則事件是第二、三階時，場景卡上那一行小字與框色（事件分級設計稿：州郡大事、天下大事）；第一階、沒有事件、
+        全服戰鬥蓋著場景都是 None。"""
+        s = self.state
+        if not s.pending_event or s.world.ended or self._battle_for_me(tick=False) is not None:
+            return None
+        event = self.content.events.get(s.pending_event)
+        if event is None or event.tier <= 1:
+            return None
+        return {"tier": event.tier, "name": tiers.NAMES[event.tier]}
 
     def _story_begin(self, definition: StoryDef, custom: bool = False) -> list[str]:
         progress = storyline.start(self.state, self.content, definition, custom=custom)
