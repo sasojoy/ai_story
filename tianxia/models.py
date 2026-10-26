@@ -2872,6 +2872,9 @@ class SortieRules(_Strict):
     duel_progress_scale: float | None = Field(default=None, ge=0)
     duty_contribution: int = Field(default=1, ge=0)  # 巡哨、傳道、保境安民收進此地：不推線、不佔出陣次數，記這麼多貢獻（企劃者 2026-10-24 第 2 件）
     duty_per_day: int = Field(default=1, ge=0)  # 上面那一點貢獻一天記幾次
+    # ── 出陣回報的小籤寫字不寫數字（企劃者 2026-10-26「出陣寫字」；sortie.amount_words、order_words）──
+    chip_mine_steps: tuple[float, float] = (5.0, 15.0)  # 【PM】今天自己推的量：到第一個「推了不少」、到第二個「推了一大截」，不到「推了一點」
+    chip_all_steps: tuple[float, float] = (15.0, 50.0)  # 【PM】全軍今天推的量，同上（全軍是很多人加起來，門檻高一些）
 
     @model_validator(mode="after")
     def _duel_tables(self) -> SortieRules:

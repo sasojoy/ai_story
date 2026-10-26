@@ -39,7 +39,8 @@ def test_the_fourth_stops_at_69_and_a_slot_lets_one_more_through():
     assert zhuan_end.deep_note(s, c, "caocao") == "已深交三位"
     assert zhuan_end.deep_note(s, c, "luzhi") == "" and zhuan_end.deep_note(s, c, "zhangjiao") == ""
     _set(game, {"caocao": 75})
-    assert zhuan_end.enforce_deep_cap(s, c, slots=1) == [] and s.player.affinities["caocao"] == 75  # 名額票多一位
+    # 名額票多一位；批 7c：靠名額進來的不給數值，進名單那一下說一句（曹操有本命武學與本命兵器可以給）
+    assert zhuan_end.enforce_deep_cap(s, c, slots=1) == [zhuan_end.DEEP_KEEP.format(name="曹操")] and s.player.affinities["caocao"] == 75
     assert s.player.deep_order[-1] == "caocao"
     _set(game, {"luzhi": 60, "caocao": 75})  # 掉到 70 以下的讓出位子
     assert zhuan_end.enforce_deep_cap(s, c) == [] and "luzhi" not in s.player.deep_order
@@ -86,7 +87,8 @@ def _talk(game: Game, cid: str) -> list[str]:
 @pytest.mark.slow
 def test_the_fourth_figure_cannot_teach_the_signature_art_past_the_cap():
     """深交名單滿了，第四位人物在一輪對話裡越過 70：先夾回 69 才看本命武學（companion_agent._maybe_grant_signature_skill），
-    不教、不記旗標；買了深交名額，同一句話他就教。名將本命兵器（80）、贈禮在同一個動作裡照夾過的情誼判。"""
+    不教、不記旗標；買了深交名額，情誼過得去，但他也不教（批 7c：買來的名額不給數值，教不教看有沒有排進名單裡前三位，見
+    test_deep_slot_no_stats.py）。名將本命兵器（80）、贈禮在同一個動作裡照夾過的情誼判。"""
     game = _game()
     p = game.state.player
     _set(game, {"huangfusong": 72, "luzhi": 70, "zhujun": 80})
@@ -101,8 +103,8 @@ def test_the_fourth_figure_cannot_teach_the_signature_art_past_the_cap():
     wallet.post(name_key(p.name), 1000, "grant", "test:deep3", time=game.now)
     assert game.mall_buy("deep_slot", "deep-3")[0].startswith("買下")
     msgs = _talk(game, "caocao")
-    assert p.affinities["caocao"] >= 70 and "學會本命:caocao" in p.flags and any("傾囊相授" in m for m in msgs)
-    assert p.deep_order[-1] == "caocao"
+    assert p.affinities["caocao"] >= 70 and p.deep_order[-1] == "caocao"  # 情誼過得去
+    assert "學會本命:caocao" not in p.flags and set(p.arts) == arts and not any("傾囊相授" in m for m in msgs)  # 批 7c：靠名額的不教
 
 
 @pytest.mark.slow

@@ -24,17 +24,37 @@ from .state import WorldState
 Lookup = Callable[[int, int, str], "str | None"]  # (第幾季, 第幾週, 事件 id) → 改寫好的旁白；沒有是 None
 
 NUM_PREDICT = 600  # 一段旁白（原文多半一百多字）加一點餘裕：只加不減（模型與假人那一份導覽「num_predict 只加不減」）
-MIN_RATIO, MAX_RATIO = 0.6, 1.6  # 改寫的長度要在原文的幾倍之間（太短是漏了事，太長是加了戲）
+# 改寫的長度要在原文的幾倍之間（太短是漏了事，太長是加了戲）。上限原本 1.6：2026-10-26 主機整週實測發現
+# 99% 的改寫都比原文長（平均 1.19 倍、最長 1.53），1.6 等於沒在擋。SYSTEM 補了「字數不可以多於原文」之後
+# 同一批 30 則平均 0.97 倍、最長 1.03，1.25 留的是模型偶爾不聽話時的餘裕。
+MIN_RATIO, MAX_RATIO = 0.6, 1.25
 _MARKS = re.compile(r"\{marks:[^}]+\}")
 _DIGITS = re.compile(r"[0-9０-９]")
 _KANA = re.compile(r"[぀-ヿㇰ-ㇿ]")
 _LATIN = re.compile(r"[A-Za-zＡ-Ｚａ-ｚ]")
 
 SYSTEM = (
-    "你替一款東漢末年黃巾之亂的武俠文字遊戲潤飾事件的旁白。使用者給你一段原文，請換一種說法重寫同一件事："
+    "你替一款東漢末年黃巾之亂的武俠文字遊戲潤飾事件的旁白。使用者給你一則事件的標題與原文，請換一種說法重寫同一件事："
     "人、地、物、發生了什麼、誰說了什麼都照原文，不添新的人名、地名、門派與兵器，不改任何數目，不加結局，不替讀者做決定。"
-    "用第二人稱「你」，繁體中文，跟原文差不多長，只寫旁白本身：不要標題、不要列點、不要引號包起整段、不要解說。"
+    "標題只是讓你知道這是哪一件事，不要寫進旁白。"
+    "用第二人稱「你」，繁體中文，只寫旁白本身：不要標題、不要列點、不要引號包起整段、不要解說。"
     "原文裡像 {marks:…} 這種大括號標記要原樣留著、一個字都不能改。"
+    "有人說話時照原文用「」把話括起來，原文有幾個引號就有幾個。"
+    "語感照原文：短句、口語的武俠白話，不是現代書面語。字數不可以多於原文，跟原文一樣長最好；"
+    "但也不要為了短而壓成文言、省掉原文交代的事。"
+    "「換一種說法」可以換句子的排法（語序、斷句、先說哪一件），但換完一定要讀得順、意思跟原文一樣："
+    "寧可保守，也不要為了「有換過」就把句子拆亂、寫出不通的句子、或把同一句話說兩次。"
+    "原文挑過的那些具體的詞（器物、動作、神態：博局、石鎖、拄著、砍過、喊得）照原樣留著，不要換成同義詞，換了多半更差；"
+    "想不出別的說法的那一句，照原文抄回來就好。"
+    "這幾種寫法一律不要（都是把旁白寫長、寫成現代文章的毛病）："
+    "一、改原文的量詞——原文寫「一個」「幾個」「十幾個」就照寫，不要換成「一名」「幾名」「十幾名」。"
+    "二、在句子前面補「在……」「此時……」「就在這……」把句子框起來。"
+    "三、加「正忙於」「進行」「處於……的狀態」「顯得」「察覺」「表示」「注意到」「明顯」這類交代與解釋的話。"
+    "四、原文直接接引號說話的，前面不要補「對你說」「開口道」「命令你」。"
+    "五、原文沒有的文言虛詞不要自己加（其、其中、將其、並、然而、因此、由於、立於、之下），"
+    "現代詞也不要（民眾、過程、狀態、情緒、動作、邀請、協助、控訴、販售）。"
+    "六、每一句都是「誰、做了什麼」的走法：做事的人照原文留在動作前面，原文是主動就主動（不要改成「被」字句），"
+    "交代人在哪、東西在哪的那一截（「劉備身旁」「集市角落」）也留在它說明的那個人、那件東西前面。"
 )
 
 
@@ -88,9 +108,15 @@ def _names(content: Content) -> list[str]:
     return [n for n in found if n and len(n) >= 2]
 
 
+def _repeats(out: str, original: str) -> bool:
+    """同一句話寫了兩次（原文自己沒有重複的那一句才算壞）：照句號、問號、驚嘆號斷句，只看夠長的句子。"""
+    cut = [s for s in re.split(r"[。！？]", out) if len(s.strip()) >= 8]
+    return any(cut.count(s) > 1 and original.count(s) < cut.count(s) for s in cut)
+
+
 def clean(content: Content, original: str, text: str | None) -> str | None:
     """模型寫的能不能用：轉繁體、去 markdown 的標記與包住整段的引號、併成一段；長度在原文的 MIN_RATIO～MAX_RATIO 倍之間；
-    {marks:…} 標記一個不少、一個不多；沒有阿拉伯數字（原文有的照原文）、假名、英文字母；不冒出原文沒有的人名、地名、門派、陣營；
+    {marks:…} 標記一個不少、一個不多；引號「」跟原文一樣多；沒有阿拉伯數字（原文有的照原文）、假名、英文字母；不冒出原文沒有的人名、地名、門派、陣營；
     不用到禁用名單（既有作品的專有名詞）。過不了是 None（照原文）。"""
     out = zh.to_traditional(str(text or "")).strip()
     # 清 markdown 之前先把 {marks:...} 收起來：標記的 id 多半帶底線（yingchuan_academy、zhuo_county……），
@@ -104,6 +130,8 @@ def clean(content: Content, original: str, text: str | None) -> str | None:
     for i, mark in enumerate(kept):
         out = out.replace(f"\x00{i}\x00", mark, 1)
     out = "".join(p.strip() for p in out.split("\n") if p.strip())
+    if "【" not in original:  # 模型自己加的標題（內容的原文裡一個全角方括號都沒有）：拿掉開頭那一個，後面照用
+        out = re.sub(r"^【[^】]{0,16}】[，。：\s]*", "", out)
     if len(out) >= 2 and out[0] in "「『\"“" and out[-1] in "」』\"”" and out.count(out[0]) == 1:
         out = out[1:-1].strip()
     if not out or out == original:
@@ -111,6 +139,11 @@ def clean(content: Content, original: str, text: str | None) -> str | None:
     if not (MIN_RATIO * len(original) <= len(out) <= MAX_RATIO * len(original)):
         return None
     if sorted(_MARKS.findall(out)) != sorted(_MARKS.findall(original)):
+        return None
+    # 引號一個不少（2026-10-26 主機實測：改寫把「」整對吃掉的有一成四，對話沒有引號玩家一眼看得出來）
+    if any(out.count(q) != original.count(q) for q in "「」"):
+        return None
+    if _repeats(out, original):  # 搬句子搬到把同一句寫兩次（同一輪實測遇到）
         return None
     bare = _MARKS.sub("", out)
     if _DIGITS.findall(bare) != _DIGITS.findall(_MARKS.sub("", original)) or _KANA.search(bare) or _LATIN.search(bare):
@@ -128,7 +161,8 @@ def write(client, content: Content, event: Event) -> str | None:
         return None
     messages = [
         {"role": "system", "content": SYSTEM},
-        {"role": "user", "content": f"【{event.title}】\n{event.text}"},
+        # 標題標明是參考、原文標明是原文：原本直接餵「【標題】\n原文」，模型照著格式回，旁白開頭長出【壕溝之外】這種自訂標題
+        {"role": "user", "content": f"標題（參考，不要寫進旁白）：{event.title}\n原文（{len(event.text)} 字）：{event.text}"},
     ]
     try:
         reply = client.chat_text(messages, temperature=0.9, num_predict=NUM_PREDICT)
