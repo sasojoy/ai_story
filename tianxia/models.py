@@ -102,6 +102,7 @@ class Condition(_Strict):
     # 戰後事件用：這次行動打的那一場（戰鬥卡片 state.battle_card 指著的那筆）的結果（大勝／險勝／僵持／落敗）在清單裡才成立；
     # 這次行動沒打架（卡片已清掉）一律不成立。文字假設打贏了的戰後事件寫 ["大勝", "險勝"]。載入時只准寫在 actions 剛好是 ["train"] 的事件的條件上
     fight_tiers: list[str] = Field(default_factory=list)
+    level_min: int | None = Field(default=None, ge=1)  # 本人等級至少幾級（事件分級，企劃者 2026-10-26）
     any_of: list[Condition] = Field(default_factory=list)  # 非空時，至少一個子條件成立
 
 
@@ -245,9 +246,16 @@ class Check(_Strict):
             raise ValueError(f"stats 只跟 stat「{BEST_OF}」一起寫")
         return self
 
+    # 這一個檢定出自第幾階的事件（事件分級，企劃者 2026-10-26）：載入時照事件的 tier 蓋（content.load_content），內容不寫。
+    # 第一階才吃減法季的放寬（Config.jianfa.event_ease，rules.check_outlook）；1 的時候不寫進序列化
+    tier: int = Field(default=1, ge=1, le=3)
+
     @model_serializer(mode="wrap")
     def _drop_new_defaults(self, handler):
-        return _drop_unset(handler(self), ("stats",))
+        data = _drop_unset(handler(self), ("stats",))
+        if isinstance(data, dict) and data.get("tier") == 1:
+            del data["tier"]
+        return data
 
 
 class PracticeBonus(_Strict):
@@ -446,6 +454,21 @@ class Event(_Strict):
     condition: Condition = Field(default_factory=Condition)
     choices: list[Choice] = Field(min_length=1)
     free_text: FreeTextChoice | None = None
+    # 事件分級（企劃者 2026-10-26，事件分級設計稿）：第幾階（1 是現有的事件；2「州郡大事」、3「天下大事」）與從哪一道門進來
+    # （武事看等級、名流看名望、俠義看善名、綠林看惡名、擂主看擂台名次；門檻在 Config.jianfa.tier_doors，tiers.door_open）。
+    # 第二、三階一定要寫門；減法季的 event_tiers 關著時第二、三階一則都抽不到。預設值不寫進序列化
+    tier: int = Field(default=1, ge=1, le=3)
+    door: Literal["武事", "名流", "俠義", "綠林", "擂主"] | None = None
+
+    @model_serializer(mode="wrap")
+    def _drop_new_defaults(self, handler):
+        data = handler(self)
+        if isinstance(data, dict):
+            if data.get("tier") == 1:
+                del data["tier"]
+            if data.get("door") is None:
+                data.pop("door", None)
+        return data
 
 
 RoadKind = Literal["官道", "路", "山路"]
@@ -3065,6 +3088,15 @@ class JianfaRules(JianfaNumbers):
     morning_mail: bool = True  # 第十章 回來的理由：人物的信每天 mail_hour 點送到（批 9；letters.mail_day）
     opening: bool = True  # 6.7 開局第一分鐘（批 7 前半，tianxia/opening.py）：不進草廬，旁白→三選一→人物開口託付→本週卡；關著照舊走草廬序章
     mail_hour: int = Field(default=9, ge=0, le=23)  # 當地幾點送信（時區照 pill_day_utc_offset_hours）
+    # 事件分級（企劃者 2026-10-26，事件分級設計稿；tianxia/tiers.py）：第二、三階事件照門開，抽的時候照開到第幾階的比例先挑階
+    event_tiers: bool = True
+    # 五道門：[第二階的門檻, 第三階的門檻]。武事是等級、名流是名望第幾段、俠義與綠林是善名、惡名第幾段（要走那一條路）、
+    # 擂主是擂台名次至少到第幾名（擂台十傑、天下第一）。【預設】設計稿
+    tier_doors: dict[str, list[int]] = Field(default_factory=lambda: {
+        "武事": [20, 40], "名流": [2, 3], "俠義": [2, 3], "綠林": [2, 3], "擂主": [10, 1],
+    })
+    # 開到第幾階的人抽事件時各階的比重（第一階、第二階、第三階）；這裡沒有合格事件的階不算。【預設】設計稿：開到二是六比四、開到三是 4:3.5:2.5
+    tier_mix: dict[int, list[float]] = Field(default_factory=lambda: {1: [1.0], 2: [6.0, 4.0], 3: [4.0, 3.5, 2.5]})
     # ── 批 2（探索一顆、三道閘、屬性五段；數字在 JianfaNumbers）──
     stat_milestones: bool = True  # 4.5 屬性五段加點、每點加倍、境界卡（批 2；數字是 milestone_levels、stat_points_per_milestone、stat_rates）
     # ── 批 4：隨口應對分岔與痕跡（主機側計畫第六節；子開關 free_text_outcomes、marks_visible）──

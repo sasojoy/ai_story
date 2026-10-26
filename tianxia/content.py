@@ -71,6 +71,16 @@ def env_profile() -> str | None:
     return os.environ.get(PROFILE_ENV) or None
 
 
+def stamp_tier(event: Event) -> None:
+    """事件分級：把事件的階蓋到它每一個檢定上（選項、隨口應對分岔的後果），rules.check_outlook 照它決定放不放寬。"""
+    checks = [ch.check for ch in event.choices]
+    if event.free_text is not None:
+        checks += [o.check for o in event.free_text.outcomes]
+    for check in checks:
+        if check is not None:
+            check.tier = event.tier
+
+
 def load_content(root: Path, profile: str | None = None) -> Content:
     """profile 給了就把 profiles/<profile>.json 的鍵蓋在 config.json 上（例如週末設定一次打開季曆與 2.5 天的季），
     不必手改 config.json；覆寫檔只能寫 Config 有的欄位，拼錯在載入當下就報錯。"""
@@ -81,6 +91,7 @@ def load_content(root: Path, profile: str | None = None) -> Content:
             event = _build(Event, raw)
             if event.id in events:
                 raise ContentError(f"事件 id 重複：{event.id}（{path.name}）")
+            stamp_tier(event)
             events[event.id] = event
     timetable_events = [_build(TimetableEvent, raw) for raw in _read(root / "timetable.json")] if (root / "timetable.json").exists() else []
     config = _config(root, profile)
@@ -3139,6 +3150,8 @@ def validate(c: Content) -> None:
     check_siege_templates(c, need)
     check_explore_one(c, need)
     check_outing_lines(c, need)
+    for ev in c.events.values():  # 事件分級：第二、三階要寫從哪一道門進來，第一階不寫門
+        need((ev.tier == 1) == (ev.door is None), f"事件 {ev.id}：第二、三階要寫 door，第一階不寫（tier {ev.tier}、door {ev.door}）")
 
     # 地方痕跡過門檻（減法季整合設計 5.2；主機側計畫 Task 4-3，content/mark_rules.json）：一個痕跡一條規則，算「有人讀」；
     # 過門檻那一刻的傳聞、之後地點描寫多接的那一段都要寫（〈天下形勢〉與江湖史沒寫就照傳聞那一句）；推的線同事件效果的規矩

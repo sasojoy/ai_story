@@ -194,6 +194,8 @@ def check_condition(cond: Condition, state: GameState, content: Content | None =
         return False
     if cond.no_sect and p.sect is not None:
         return False
+    if cond.level_min is not None and p.member.level < cond.level_min:
+        return False
     # 擁有的武學都算（身上兩欄＋功法庫）：事件教的武學在欄位滿了時收進功法庫（F2），只看身上的話「還沒學過才出現」的
     # 付費課程（潁川汝南鏢局的追風步）學完還會一直回來、再收一次錢
     known_skills = set(library.owned_arts(state))
@@ -314,8 +316,8 @@ def check_outlook(check: Check, state: GameState, content: Content, world: World
     stat_value = check_stat_value(check, state, content, world)
     bonus = team.practice_bonus(state, content, check)
     gap = stat_value + bonus - check.difficulty - rise.event_bump(state, content)  # 江湖水漲：等級高了檢定加深（Config.rise）
-    if jianfa(content, state.world):  # 減法季：第一階事件放寬（Config.jianfa.event_ease，企劃者 2026-10-26）；關著一個字都不變
-        gap += content.config.jianfa.event_ease
+    if jianfa(content, state.world) and check.tier == 1:  # 減法季：第一階事件放寬（Config.jianfa.event_ease，企劃者 2026-10-26）；
+        gap += content.config.jianfa.event_ease  # 第二、三階事件的檢定不放寬（事件分級設計稿）；關著一個字都不變
     return CheckOutlook(stat_value, bonus, gap, min(0.95, max(0.05, 0.5 + gap * 0.1)))
 
 
