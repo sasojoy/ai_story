@@ -63,6 +63,10 @@ def why_not(content, original: str, raw: str) -> str:
         return f"長度 {ratio:.2f} 倍"
     if sorted(narration._MARKS.findall(out)) != sorted(narration._MARKS.findall(original)):
         return "標記不對"
+    if any(out.count(q) != original.count(q) for q in "「」"):
+        return "引號"
+    if narration._repeats(out, original):
+        return "重複整句"
     bare = narration._MARKS.sub("", out)
     if narration._DIGITS.findall(bare) != narration._DIGITS.findall(narration._MARKS.sub("", original)):
         return "數字"

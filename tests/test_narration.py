@@ -74,6 +74,21 @@ def test_clean_keeps_the_marks_tokens(c):
     assert narration.clean(c, original, "村口擠著一群流民，哭的哭、罵的罵，你一走近，他們全都抬起頭來看你。") is None
 
 
+
+def test_clean_rejects_the_tics_measured_on_the_host(c):
+    """2026-10-26 主機拿真模型整週實測（243 則）抓到的三種毛病：自己加一行標題、把對話的引號吃掉、把同一句寫兩次。"""
+    e = _plain(c)
+    good = "這時，" + e.text
+    assert narration.clean(c, e.text, "【壕溝之外】" + good) == good  # 模型照著餵進去的格式加的標題：拿掉，後面照用
+    talk = e.text + "他說：「跟我來。」"
+    assert narration.clean(c, talk, "這時，" + talk) == "這時，" + talk  # 引號齊的照過
+    assert narration.clean(c, talk, "這時，" + e.text + "他說：跟我來。") is None  # 引號被吃掉
+    assert narration.clean(c, talk, "這時，" + talk + "「再說一次。」") is None  # 多一對引號也不行
+    twice = [s for s in e.text.split("。") if len(s) >= 8][0]
+    assert narration._repeats(e.text + twice + "。", e.text)  # 搬句子搬成同一句兩次
+    assert not narration._repeats(good, e.text)
+
+
 # ── 引擎照這一週的讀 ──
 
 def test_text_of_follows_the_switch_and_the_week(c):
@@ -108,6 +123,12 @@ def test_the_scene_and_the_journal_show_this_weeks_text(c):
 
 
 # ── 伺服器的背景一輪 ──
+
+def echo(prompt: str) -> str:
+    """假的改寫：把 user 訊息裡的原文抄回來，前面加兩個字。訊息是「標題（參考，不要寫進旁白）：…（換行）原文（N 字）：原文」，
+    原文在第二行的第一個全角冒號之後（旁白的提示詞 2026-10-26 改過格式，這裡跟著改）。"""
+    return "這時，" + prompt.split(chr(10), 1)[1].split("：", 1)[1]
+
 
 class FakeClient:
     def __init__(self, reply):
@@ -148,7 +169,7 @@ def round_kit(monkeypatch, tmp_path):
 
 def test_a_round_rewrites_the_next_event_once(round_kit, monkeypatch):
     content, world = round_kit
-    client = FakeClient(lambda prompt: "這時，" + prompt.split("\n", 1)[1])
+    client = FakeClient(echo)
     monkeypatch.setattr(server, "NARRATION_CLIENT", client)
     first = narration.eligible(content)[0]
     assert server.narration_round() == first
@@ -165,14 +186,14 @@ def test_a_bad_reply_is_tried_twice_then_left_as_written(round_kit, monkeypatch)
     first, second = narration.eligible(content)[:2]
     assert server.narration_round() is None and server.narration_round() is None
     assert client.calls == 2
-    client.reply = lambda prompt: "這時，" + prompt.split("\n", 1)[1]
+    client.reply = echo
     assert server.narration_round() == second  # 第一則這一週照原文，換下一則
     assert server.NARRATION.get(2, narration.period(content, world.season), first) is None
 
 
 def test_no_model_call_when_off_resting_or_saving_power(round_kit, monkeypatch):
     content, world = round_kit
-    client = FakeClient(lambda prompt: "這時，" + prompt.split("\n", 1)[1])
+    client = FakeClient(echo)
     monkeypatch.setattr(server, "NARRATION_CLIENT", client)
     world.phase = "resting"
     assert server.narration_round() is None
