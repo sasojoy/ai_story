@@ -847,7 +847,7 @@
     const at = String(text || "").indexOf("：");
     return at > 0 ? [text.slice(0, at), text.slice(at + 1)] : [text, ""];
   }
-  function weekCardHtml(m) {
+  function weekCardHtml(m, part) {
     const w = m.week_card;
     if (!w || !shown("quest")) return "";
     const open = S.wkOpen && S.wkOpen.key === wkKey(w) ? S.wkOpen.id : null;
@@ -873,8 +873,11 @@
       ${more && detail ? `<p class="wk-detail">${esc(detail)}</p>` : ""}
       <div class="wk-foot">${step.reward ? `<span class="wk-gain">${esc(step.reward)}</span>` : '<span class="wk-gain"></span>'}${more && w.steps.length > 1 ? `<button class="linkish wk-next" data-act="wk-next">↻ ${WK_NEXT}</button>` : ""}${go}</div></section>`;
     // 幾塊是江湖頁的兄弟元素、不包一層：每塊帶 data-wk，wkRepaint 一起換掉；什麼都沒畫時留一個空的記號，收起之後原地還找得到位置
-    const parts = [card, strip, note, panel, checkinPickHtml(m)].filter(Boolean); // 要做的事在前，週次與態勢在後
-    return (parts.length ? parts : ['<i class="wk-none" hidden></i>']).map((h) => h.replace(/^<(\w+) /, '<$1 data-wk ')).join("\n      ");
+    // 兩組：灰線那一組（灰線、小字、為什麼）排在行動列上面（data-wk="top"），「眼下要事」與簽到小卡排在行動列底下（data-wk="low"）；
+    // part 不給是兩組接在一起（在路上整塊排在選項底下）。一組什麼都沒畫時留一個空記號，收起之後 wkRepaint 原地還找得到位置
+    const tag = (group, parts) => (parts.length ? parts : ['<i class="wk-none" hidden></i>']).map((h) => h.replace(/^<(\w+) /, `<$1 data-wk="${group}" `)).join("\n      ");
+    const top = tag("top", [strip, note, panel].filter(Boolean)), low = tag("low", [card, checkinPickHtml(m)].filter(Boolean));
+    return part === "top" ? top : part === "low" ? low : `${top}\n      ${low}`;
   }
   // 簽到要挑四階的日子（還沒挑）：本週卡底下一張小卡，四顆挑屬性的鈕（點一種就領，同以前簽到格裡的那四顆）
   function checkinPickHtml(m) {
@@ -927,10 +930,12 @@
   }
   // 只換本週卡那幾塊（灰線、為什麼、你這一步、簽到小卡都帶 data-wk）：新的插在第一塊的位置、舊的拿掉；整頁不重畫，「剛剛」不重播
   function wkRepaint(focus) {
-    const old = [...document.querySelectorAll("#page [data-wk]")];
-    if (!old.length) return;
-    old[0].insertAdjacentHTML("beforebegin", weekCardHtml(S.main));
-    old.forEach((el) => el.remove());
+    for (const group of ["top", "low"]) { // 灰線那一組在行動列上面、「眼下要事」在底下：各自原地換
+      const old = [...document.querySelectorAll(`#page [data-wk="${group}"]`)];
+      if (!old.length) continue;
+      old[0].insertAdjacentHTML("beforebegin", weekCardHtml(S.main, group));
+      old.forEach((el) => el.remove());
+    }
     document.querySelector(`#page [data-wk]${focus}, #page [data-wk] ${focus}`)?.focus();
   }
 
@@ -1051,7 +1056,9 @@
     }
     const done = g.done.length ? `<div class="guide-done">${g.done.map((d) => d.startsWith("✔")
       ? '<span class="ok">✔ 完成</span>' : `<span class="reward">${esc(d)}</span>`).join("")}</div>` : "";
-    const btn = g.end ? '<button class="btn small" data-act="guide-ack">知道了</button>'
+    // 序章以外（Joy 2026-10-26：師父的話排在行動列底下）右上角一顆 ×：做的事同「知道了」（g.end）／「收起」
+    const btn = !pro() ? `<button class="wk-x guide-x" data-act="${g.end ? "guide-ack" : "guide-shut"}" aria-label="${g.end ? "知道了" : "收起"}" title="${g.end ? "知道了" : "收起"}">×</button>`
+      : g.end ? '<button class="btn small" data-act="guide-ack">知道了</button>'
       : '<button class="linkish" data-act="guide-shut">收起</button>';
     // 長的那幾步（軍令兩步一百多字）先露三行、點了看全文，不把行動與選項擠出第一屏（畫面批次審查 I3）
     // 序章裡師父的話不切（設計 6.2「話不會被切掉」，T7 審查 I1）：不收成三行；段落照 \n\n 排（樣式表 pre-line）。
@@ -1212,9 +1219,9 @@
     const letterCard = letterHtml(m.letter);
     const pushAsk = letterCard && typeof pushAskHtml === "function" ? pushAskHtml(m) : ""; // 第一次來信時信的小卡底下問一次手機通知（批 9；pushAskHtml 在 app.js，只切 main.js 的網頁測試沒有它）
     // 開局頭一刻（整合設計 6.7，批 7）：人物開口的那一封（letter.open）排在三方卡前面——先聽人說話，再看三方；其餘時候三方卡照舊在最上面
-    const peek = letterCard && m.letter.open ? letterCard + pushAsk + sidesFirstHtml(m) : sidesFirstHtml(m) + (letterCard ? letterCard + pushAsk : "");
-    // 本週卡（灰線與「眼下要事」）排在行動列底下（Joy 2026-10-26：四顆行動鈕一定在第一屏）；來信到了照舊換成來信
-    const weekCard = letterCard ? "" : weekCardHtml(m);
+    // 本週卡：灰線（一行）照舊在最上面，「眼下要事」排在行動列底下（Joy 2026-10-26：四顆行動鈕一定在第一屏）；來信到了照舊換成來信
+    const peek = letterCard && m.letter.open ? letterCard + pushAsk + sidesFirstHtml(m) : sidesFirstHtml(m) + (letterCard ? letterCard + pushAsk : weekCardHtml(m, "top"));
+    const weekCard = letterCard ? "" : weekCardHtml(m, "low");
     // 休季的結算卡排在最上面（計畫 T9）；季收了、有行狀時緊接一張「讀你的傳」（玩家傳第二批，m.zhuan）
     const resultCard = (m.season_result ? resultHtml(m.season_result) : "") + (m.zhuan ? zhuanEntry(m.zhuan, "這一季收了，史官替你立傳", "讀你的傳") : "");
     const letter = dailyCardHtml(m); // 月卡今天的份還沒領時「剛剛」上面一張（書信小卡在本週卡的位置，見上面）
@@ -1232,6 +1239,8 @@
     // 路上的三個捷徑（links）緊接在場景（「也可以打開輿圖改去別處，或去修練、煉製」那一段）底下、選項上面：
     // 排在路上的五六顆選項底下時落在第一屏外，要捲才看得到（FB-048）。說書人的話緊貼在行動上方（引導重做設計 8.1）
     const guide = guideHtml(m.guide, m.on_road);
+    // 說書人、師父的話：序章裡緊貼在行動上方（引導重做設計 8.1）；序章以外排在行動列與「眼下要事」底下（Joy 2026-10-26「至少要在行動鈕下面」）
+    const guideUp = pro() ? guide : "", guideDown = pro() ? "" : guide;
     // 在路上（FB-055）：路上的五個選項要全在第一屏（375×812），所以那一排小標與說書人的框都排在選項底下——
     // 不是這一刻要按的；捷徑還是緊接在場景底下（FB-048）
     if (m.on_road) return `${resultCard}${letter}${letterCard}${pushAsk}${now}${scene}${links}${free}${menu}${guide}${sidesFirstHtml(m)}${weekCardHtml(m)}${orderCard}${bountyCard}${sealMine}${sealCard}`;
@@ -1240,7 +1249,7 @@
     if (myTurn) {
       return `${resultCard}${peek}${letter}${now}${scene}${links}${menu}${peopleAfter}${free}${guide}${senseNotes}${weekCard}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}`;
     }
-    return `${resultCard}${peek}${letter}${now}${scene}${links}${guide}${free}${menu}${senseNotes}${weekCard}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}`;
+    return `${resultCard}${peek}${letter}${now}${scene}${links}${guideUp}${free}${menu}${senseNotes}${weekCard}${guideDown}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}`;
   }
 
   // 此地還有誰（玩家之間的互動第一層，企劃者 2026-10-08）：場景卡底下一行，名字點了打開玩家卡（peerHtml）。

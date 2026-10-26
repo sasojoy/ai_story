@@ -76,7 +76,7 @@ def test_tier4_day_shows_four_picks():
     pick = [{"attribute": a, "id": i, "name": n, "held": h} for a, i, n, h in
             (("剛", "gang_4", "熔星髓", 1), ("柔", "rou_4", "天池露", 0), ("快", "kuai_4", "奔雷角", 2), ("慢", "man_4", "歸墟壤", 0))]
     html = run(_m(day=6, week=_week(6), pick=pick, step="回體丹 2 顆，再挑一種四階料（點一種就領）："))["html"]
-    card = re.search(r'<section data-wk class="card ck-card".*?</section>', html, re.S).group(0)  # 本週卡底下那一張小卡
+    card = re.search(r'<section data-wk="low" class="card ck-card".*?</section>', html, re.S).group(0)  # 本週卡底下那一張小卡
     assert "簽到第 6 天" in card and card.count('data-act="checkin"') == 4
     for attr in "剛柔快慢":
         assert f'data-attr="{attr}"' in card
