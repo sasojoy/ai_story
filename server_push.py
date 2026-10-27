@@ -284,6 +284,7 @@ class PushStore:
             conn.execute(
                 "CREATE TABLE IF NOT EXISTS subs (endpoint TEXT PRIMARY KEY, account TEXT NOT NULL, "
                 "p256dh TEXT NOT NULL, auth TEXT NOT NULL, created REAL NOT NULL)")
+            conn.execute("CREATE TABLE IF NOT EXISTS prefs (account TEXT PRIMARY KEY, off TEXT NOT NULL)")  # 關掉的那幾種（JSON 陣列）
 
     def _conn(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.path, timeout=10)
@@ -314,6 +315,20 @@ class PushStore:
         with contextlib.closing(self._conn()) as conn:
             return [r["account"] for r in conn.execute("SELECT DISTINCT account FROM subs ORDER BY account")]
 
+    def kinds_off(self, account: str) -> set[str]:
+        """這個帳號關掉的通知種類（notices.KINDS 的鍵；預設全開，沒有這一列就是空的）。"""
+        with contextlib.closing(self._conn()) as conn:
+            row = conn.execute("SELECT off FROM prefs WHERE account = ?", (account,)).fetchone()
+        return set(json.loads(row["off"])) if row is not None else set()
+
+    def set_kind(self, account: str, kind: str, on: bool) -> set[str]:
+        """開或關一種；回關掉的那幾種。"""
+        off = self.kinds_off(account)
+        (off.discard if on else off.add)(kind)
+        with contextlib.closing(self._conn()) as conn, conn:
+            conn.execute("INSERT OR REPLACE INTO prefs VALUES (?, ?)", (account, json.dumps(sorted(off))))
+        return off
+
     def devices(self, account: str) -> list[dict]:
         with contextlib.closing(self._conn()) as conn:
             rows = conn.execute("SELECT endpoint, p256dh, auth FROM subs WHERE account = ? ORDER BY created", (account,))
@@ -331,21 +346,27 @@ class WebPush:
             post = requests.post
         self.post = post
 
-    def send(self, account: str, title: str, body: str, *, tag: str = "", url: str = "/", now: float | None = None) -> int:
+    def send(self, account: str, title: str, body: str, *, tag: str = "", url: str = "/", now: float | None = None,
+             endpoint: str | None = None) -> int:
+        """送給這個帳號的每一台裝置（endpoint 給了就只送那一台）；回送成的台數。"""
+        return sum(self.deliver(d, title, body, tag=tag, url=url, now=now) is None
+                   for d in self.store.devices(account) if endpoint is None or d["endpoint"] == endpoint)
+
+    def deliver(self, d: dict, title: str, body: str, *, tag: str = "", url: str = "/", now: float | None = None) -> str | None:
+        """送一台（d 是 PushStore.devices 的一列）；送成回 None，不成回原因（設定頁「傳一則測試通知」照實寫給玩家看）。"""
         now = time.time() if now is None else now
         payload = json.dumps({"title": title, "body": body, "tag": tag, "url": url}, ensure_ascii=False).encode("utf-8")
-        sent = 0
-        for d in self.store.devices(account):
-            try:
-                data = encrypt(payload, d["p256dh"], d["auth"])
-                resp = self.post(d["endpoint"], data=data, timeout=self.timeout, headers={
-                    "Authorization": self.vapid.header(d["endpoint"], now), "TTL": str(TTL_SECONDS),
-                    "Content-Encoding": "aes128gcm", "Content-Type": "application/octet-stream", "Urgency": "normal",
-                })
-            except Exception:  # noqa: BLE001  一台送不到不影響其他台；訂閱給的鑰匙壞了也一樣
-                continue
-            if resp.status_code in (404, 410):
-                self.store.remove(d["endpoint"])
-            elif 200 <= resp.status_code < 300:
-                sent += 1
-        return sent
+        try:
+            data = encrypt(payload, d["p256dh"], d["auth"])
+            resp = self.post(d["endpoint"], data=data, timeout=self.timeout, headers={
+                "Authorization": self.vapid.header(d["endpoint"], now), "TTL": str(TTL_SECONDS),
+                "Content-Encoding": "aes128gcm", "Content-Type": "application/octet-stream", "Urgency": "normal",
+            })
+        except Exception as e:  # noqa: BLE001  一台送不到不影響其他台；訂閱給的鑰匙壞了也一樣
+            return f"連不上推送服務（{type(e).__name__}）"
+        if resp.status_code in (404, 410):
+            self.store.remove(d["endpoint"])
+            return f"這台裝置的訂閱已經失效（推送服務回 {resp.status_code}），請把手機通知關掉再勾一次"
+        if not 200 <= resp.status_code < 300:
+            return f"推送服務不收（回 {resp.status_code}）"
+        return None

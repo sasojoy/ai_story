@@ -74,6 +74,7 @@ from tianxia.characters import name_key, open_characters
 from tianxia.database import default_path, open_database
 from tianxia.engine import FIGHT_GONE_LINES, FREE_TEXT_OPTION, PAUSED_TEXT, SAY_OPTION, TEXT_TALKS, Game, Refused
 from tianxia.models import FREE_TEXT_MAX
+from tianxia.notices import KINDS as NOTICE_KINDS
 from tianxia.notices import current as current_notices
 from tianxia.journal import CSS as JOURNAL_CSS
 from tianxia.sqlite_world import open_world
@@ -617,6 +618,8 @@ NOTICE_SENT: dict[str, set[str]] = {}  # 帳號 → 上一輪看到的事（已�
 MAIL_DONE: dict[str, int] = {}  # 帳號 → 已經替他送過信的送信日（letters.mail_day），同一天不再進鎖試
 NOTICE_TITLE = "天下大勢"
 PUSH_WELCOME = "手機通知開了：來信、約戰、決戰集結、被截殺、被〈天下形勢〉提到時，會在這裡告訴你。"  # 待 joy 潤
+PUSH_TEST = "通知設定好了：這一台收得到。"  # 設定頁「傳一則測試通知」（待 joy 潤）
+PUSH_NOT_HERE = "這台裝置還沒開手機通知：先勾「手機通知」。"  # 待 joy 潤
 VAPID_FILE = ROOT / ".local" / "webpush_vapid.pem"  # 這台主機的 VAPID 金鑰：第一次開時產生；換了它，所有人要重開一次通知
 
 
@@ -668,7 +671,7 @@ def _notice_keys(game: Game, account_key: str, now: float) -> tuple[list, bool]:
         MAIL_DONE[account_key] = day
     last = game.state.last_real
     busy = last is not None and now - last < game.content.config.web_push.quiet_seconds
-    return current_notices(game.state, game.content, game.world.get_battle()), busy
+    return current_notices(game.state, game.content, game.world.get_battle(), game.world.sortie_duels()), busy
 
 
 def notice_round(clock: Callable[[], float] = time.time) -> int:
@@ -692,10 +695,12 @@ def notice_round(clock: Callable[[], float] = time.time) -> int:
         if seen is None or busy:
             NOTICE_SENT[account_key] = keys
             continue
-        fresh = [n for n in notes if n.key not in seen]
+        off = push.store.kinds_off(account_key)  # 設定頁關掉的那幾種：不跳，也記成看過（之後打開不會補跳一串舊的）
+        muted = {n.key for n in notes if n.key not in seen and n.kind in off}
+        fresh = [n for n in notes if n.key not in seen and n.kind not in off]
         for n in fresh[:cfg.per_round]:
             sent_total += bool(push.send(account_key, NOTICE_TITLE, n.text, tag=n.kind, now=now))
-        NOTICE_SENT[account_key] = (keys & seen) | {n.key for n in fresh[:cfg.per_round]}
+        NOTICE_SENT[account_key] = (keys & seen) | muted | {n.key for n in fresh[:cfg.per_round]}
     return sent_total
 
 
@@ -3301,9 +3306,34 @@ def _web_push() -> server_push.WebPush:
 
 @app.get("/api/push")
 def api_push(request: Request):
-    """手機通知（減法季批 9）：瀏覽器訂閱要的那一串公鑰。開關關著 404。"""
-    _account(request)
-    return {"key": _web_push().vapid.public}
+    """手機通知（減法季批 9）：瀏覽器訂閱要的那一串公鑰，加上五種通知各開著沒（設定頁一種一個開關，預設全開）。開關關著 404。"""
+    push = _web_push()
+    off = push.store.kinds_off(_account(request))
+    return {"key": push.vapid.public, "kinds": {k: k not in off for k in NOTICE_KINDS}}
+
+
+@app.post("/api/push/prefs")
+def api_push_prefs(request: Request, body: dict = Body(...)):
+    """開或關一種通知：{kind, on}。存在這個帳號（每一台裝置一樣）。"""
+    push = _web_push()
+    kind = str(body.get("kind", ""))
+    if kind not in NOTICE_KINDS:
+        raise GameError("沒有這一種通知。")
+    off = push.store.set_kind(_account(request), kind, bool(body.get("on")))
+    return {"kinds": {k: k not in off for k in NOTICE_KINDS}}
+
+
+@app.post("/api/push/test")
+def api_push_test(request: Request, body: dict = Body(...)):
+    """設定頁「傳一則測試通知」：{endpoint}。當場對這一台送一則，送不出去把原因回給畫面（{sent: false, error}）。"""
+    push = _web_push()
+    account_key = _account(request)
+    endpoint = str(body.get("endpoint", ""))
+    device = next((d for d in push.store.devices(account_key) if d["endpoint"] == endpoint), None)
+    if device is None:
+        return {"sent": False, "error": PUSH_NOT_HERE}
+    why = push.deliver(device, NOTICE_TITLE, PUSH_TEST, tag="test")
+    return {"sent": why is None, "error": why or ""}
 
 
 @app.post("/api/push/subscribe")
@@ -3321,7 +3351,7 @@ def api_push_subscribe(request: Request, body: dict = Body(...)):
     push.store.add(account_key, endpoint, p256dh, auth, time.time(), CONTENT.config.web_push.max_devices)
     game = _game(request)
     with _locked(game):
-        notes = current_notices(game.state, game.content, game.world.get_battle())
+        notes = current_notices(game.state, game.content, game.world.get_battle(), game.world.sortie_duels())
     NOTICE_SENT[account_key] = {n.key for n in notes}
     if not body.get("quiet"):
         threading.Thread(target=push.send, args=(account_key, NOTICE_TITLE, PUSH_WELCOME), kwargs={"tag": "welcome"}, daemon=True).start()
