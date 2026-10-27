@@ -236,7 +236,7 @@ def observe_step(game: Game, log: FunLog, before: tuple, option_id: str, before_
 
 
 def fake_structured(self, messages, response_model, **kwargs):
-    """LLM 一律假掉（照 tests/test_real_content.py 的作法），合成與合併因此走決定性組名那條退路。"""
+    """LLM 一律假掉（照 tests/season/test_real_content.py 的作法），合成與合併因此走決定性組名那條退路。"""
     if response_model is companion_agent.CompanionTurn:
         return companion_agent.CompanionTurn(
             narrative="他微微頷首。", options=["繼續交談", "就此告辭"], option_tags=["尋常寒暄", "尋常寒暄"],

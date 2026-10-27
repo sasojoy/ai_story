@@ -655,7 +655,7 @@ def kits(content, runs):
 DIRECT, INDIRECT, UNTOUCHED = "直接", "間接", "不碰"
 # 效果鍵 → 類別（計畫 2.1【PM】）：寶物八種（Config.treasures.effects）＋玉璽七片（content/seal.json 的 effect，數字在 Config.seal.effects）
 # ＋玉璽碎片改版的效果（content/seal.json 的 effects，數字在 Config.seal.revamp.effects：injury、keep_silver、chuangong 是新的，其餘沿用）。
-# tests/test_measure_tactics_gear.py 驗它涵蓋每一個效果鍵：之後加了新寶物或新碎片效果，要先來這裡分類，平衡表才不會漏。
+# tests/season/test_measure_tactics_gear.py 驗它涵蓋每一個效果鍵：之後加了新寶物或新碎片效果，要先來這裡分類，平衡表才不會漏。
 # --gear 量的是舊的七個效果（改版關著）；改版的效果與每片的戰力 ×Config.seal.revamp.power 這一張表還沒量（改版第 1 批不跑平衡）
 KIND = {
     "cultivate": INDIRECT, "insight": INDIRECT, "win_xinde_pct": INDIRECT, "win_exp_pct": INDIRECT,

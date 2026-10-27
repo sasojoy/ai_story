@@ -71,7 +71,7 @@ def env_profile() -> str | None:
     return os.environ.get(PROFILE_ENV) or None
 
 
-TIER_BANDS = {2: (9, 12), 3: (12, 15)}  # 第二、三階事件的難度帶（事件分級設計稿：照剛開門的人定）；第一階照地點的危險度（tests/test_real_content.py）
+TIER_BANDS = {2: (9, 12), 3: (12, 15)}  # 第二、三階事件的難度帶（事件分級設計稿：照剛開門的人定）；第一階照地點的危險度（tests/season/test_real_content.py）
 
 
 def stamp_tier(event: Event) -> None:
@@ -560,7 +560,7 @@ def check_insight_strong(c: Content, need) -> None:
     - 開關開著時，探索悟得到意境的每一個地點（序章草廬除外）都要寫。
     - 有所感的場景要對得上：這裡用得到的每一段都要有最濃那一種屬性的做法；寫了線索的場景裡，至少一段指得到它
       （一段都沒寫線索的不查）——不然照著場景描寫選的人永遠選不到最濃的。
-    正式內容的分布（每一種至少 5 處、五個大區都有）鎖在 tests/test_real_content.py。"""
+    正式內容的分布（每一種至少 5 處、五個大區都有）鎖在 tests/season/test_real_content.py。"""
     from .insights import explore_gives, scenes_for  # noqa: PLC0415  insights → state → models，延後免得循環
 
     hut = c.tutorial.location

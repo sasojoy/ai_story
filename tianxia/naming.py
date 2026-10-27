@@ -234,7 +234,7 @@ def fallback_name(content: Content, key: str, kind: str, salt: int = 0, tianji: 
     """決定性組名：同一個配方永遠組出同一個名字，離線也能玩、全服也一致。kind 是「內功」「武學」「意境」。
     種子是配方鍵＋這一季的天機（天機 0 照舊只用配方鍵，跟 martial_arts.generate_from_name 同一個規矩），
     所以名字只看配方與這一季，不看誰先到；同一個配方每季組出不同的名字。
-    `tests/test_real_content.py` 的整季模擬把模型 mock 掉，走的就是這條路。"""
+    `tests/season/test_real_content.py` 的整季模擬把模型 mock 掉，走的就是這條路。"""
     names = content.craft_names
     suffixes = {"內功": names.neigong, "武學": names.wugong, "意境": names.insight}[kind]
     seed = key if tianji == 0 else f"{tianji}|{key}"

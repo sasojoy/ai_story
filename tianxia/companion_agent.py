@@ -638,7 +638,7 @@ def generate_turn(
     if client is None:
         raise DialogueUnavailable("沒有可用的模型")
     try:
-        if stances:  # 人物心意開著（減法季批 6）：另一個呼叫點，關著的那一個一個字都不動（tests/test_schema_required.py 照字掃呼叫點）
+        if stances:  # 人物心意開著（減法季批 6）：另一個呼叫點，關著的那一個一個字都不動（tests/bots/test_schema_required.py 照字掃呼叫點）
             turn = client.chat_structured(
                 messages, turn_model(stances), num_predict=TURN_PREDICT,
                 required_fields=["narrative", "options"], require_in_schema=True, schema_required=[*required, "stance"],

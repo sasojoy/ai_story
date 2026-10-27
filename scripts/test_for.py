@@ -62,9 +62,15 @@ def imported(test: Path) -> set[str]:
     return names
 
 
+def all_tests() -> list[Path]:
+    """tests/ 底下所有的測試檔（照區塊分資料夾，2026-10-27 測試整理 2；fixtures 不算）。"""
+    return sorted(t for t in TESTS.rglob("test_*.py") if "fixtures" not in t.relative_to(TESTS).parts)
+
+
 def pick(files: list[str]) -> list[Path] | None:
     """要跑的測試檔；None 是整套。"""
-    tests = sorted(TESTS.glob("test_*.py"))
+    tests = all_tests()
+    named = {t.name: t for t in tests}
     texts = {t: t.read_text(encoding="utf-8") for t in tests}
     imports = {t: imported(t) for t in tests}
     chosen: set[Path] = set()
@@ -85,11 +91,12 @@ def pick(files: list[str]) -> list[Path] | None:
                           or (f.startswith("scripts/") and f"{mod}.py" in texts[t]))
             continue
         if f.startswith("content/"):
-            chosen.update(TESTS / n for n in ("test_content.py", "test_real_content.py"))
+            chosen.update(named[n] for n in ("test_content.py", "test_real_content.py") if n in named)
             chosen.update(t for t in tests if path.name in texts[t])
             continue
         if f.startswith("web/"):
-            chosen.add(TESTS / "test_server.py")
+            if "test_server.py" in named:
+                chosen.add(named["test_server.py"])
             # 江湖頁（main.js）、輿圖（map.js）是從 app.js 切出來的（減法季批 0）：測試照舊寫「app.js」，也算寫到它們
             names = {path.name, "app.js"} if path.name in WEB_SCRIPTS else {path.name}
             chosen.update(t for t in tests if any(n in texts[t] for n in names))
