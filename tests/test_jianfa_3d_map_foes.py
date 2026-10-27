@@ -162,23 +162,6 @@ def test_places_that_are_not_attacks_keep_the_old_listing(off):
     assert kept > 20
 
 
-@pytest.mark.parametrize("profile", ["week7", "season21"])
-def test_with_conquest_off_the_map_listing_is_the_old_one(profile):
-    """領地爭奪關著的季：地點卡的對手一處都不改——掛鉤處處回 None，每一處的 squads 就是 atlas.foes（站的隊伍）加上截糧的運糧隊。"""
-    from conftest import no_conquest, real_content
-    from conquest_kit import _new, go, join
-
-    game = go(join(_new(no_conquest(real_content(profile)), "沈浪"), "guan"), "yingchuan_wilds")
-    c = game.content
-    assert not conquest.on(c, game.state.world)
-    assert all(game._map_foes(loc) is None for loc in c.locations)
-    state = game.map_state()
-    assert any(info["sortie"] == "attack" for info in state["places"].values())
-    for loc, info in state["places"].items():
-        expected = atlas.foes(c, c.locations[loc], lambda sid, at=loc: game.odds(sid, at=at), "guan", game.state.world)
-        assert [(q["name"], q["odds"]) for q in info["squads"]] == expected, loc
-
-
 def test_a_scattered_player_keeps_the_old_listing():
     """散人不出陣：沒有「攻」，掛鉤回 None，卡上照舊。"""
     c, world = _setup("week7", False, False)

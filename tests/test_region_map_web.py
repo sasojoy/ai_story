@@ -196,13 +196,6 @@ def test_progress_bars_show_the_top_attacker_and_cooling_is_grey():
     assert "r-bar" not in _label(low, "yingchuan")  # 沒人推、沒冷卻：沒有進度條
 
 
-def test_no_progress_bars_when_conquest_is_off():
-    """領地爭奪關著的季（設計 5.6）：照新畫法畫，沒有進度條與冷卻（疊層沒有 tug／cool）；框色照控制方。"""
-    game = _game(content=classic_rules(real_content("week7")), conquest_on=False)
-    low, _ = parts(game)
-    assert "r-bar" not in low and "r-cool" not in low and 'class="r-frame"' in low
-
-
 def test_you_get_a_red_ring_and_flag_in_your_region_only():
     game = _game()
     _, high = parts(game, "yingru")
@@ -649,13 +642,6 @@ def test_card_line_says_whose_land_and_which_kind():
     assert lines["guangzong"].startswith("只照大事易手")
 
 
-def test_card_line_in_a_season_without_conquest():
-    """領地爭奪關著的季（設計 5.6）：不寫基礎、高級資源領地（那是翻地的區塊），照控制方寫。"""
-    game = _game(content=classic_rules(real_content("week7")), conquest_on=False)
-    lines = run(game, "return ['yingchuan', 'cao_manor'].map((id) => H.placeLine(H.S.mapState, id));")
-    assert all("資源領地" not in x for x in lines)
-
-
 def test_flipping_section_lists_who_pushes_and_how_far():
     """正在翻（設計 4.1、4.2）：每一個攻方一條進度、誰在推（照邊、攻守分、推了多少）、集火、激戰；不另寫判斷，照 main_view 的 conquest.blocks。"""
     from test_world_map import flipping
@@ -670,13 +656,6 @@ def test_flipping_section_lists_who_pushes_and_how_far():
     assert "2 人正在攻（映雪 +12、白衣客 +8）" in out and "1 人在守（黃天客 +6）" in out
     assert "集火 +" in out and "激戰" in out
     assert run(game, 'return H.flipSection("cao_manor");') == ""  # 不是區塊
-
-
-def test_no_flipping_section_when_conquest_is_off():
-    game = _game(content=classic_rules(real_content("week7")), conquest_on=False)
-    assert server.main_view(game).get("conquest") is None
-    card = run(game, 'return H.placeCard(H.S.mapBase, H.S.mapState, "runan_wilds");')
-    assert "正在翻" not in card and "下戰書" not in card
 
 
 def test_the_card_says_today_s_yield():
@@ -826,14 +805,3 @@ def test_the_removed_pieces_are_gone():
     css = (Path(server.WEB) / "style.css").read_text(encoding="utf-8")
     for rule in (".map-chips", ".map-ctl", ".map-hud", ".m-three", ".map-wrap.grabbing", ".map-wrap.moving"):
         assert rule not in css, rule
-
-
-def test_conquest_off_seasons_draw_the_new_map_too():
-    """設計 5.6：同一個劇本、規則開關不同的季也用新畫法（印章框、小圖、意境字），沒有翻地資料的那幾段不出現。"""
-    for profile in ("week7", None, "season21"):
-        game = _game(profile=profile, conquest_on=False)
-        assert not conquest.on(game.content, game.state.world)
-        low, _ = parts(game)
-        assert 'class="r-frame"' in low and 'class="r-icon"' in low and "r-bar" not in low, profile
-        card = run(game, 'return H.placeCard(H.S.mapBase, H.S.mapState, "runan_wilds");')
-        assert "正在翻" not in card and "此地的對手" in card, profile

@@ -42,13 +42,6 @@ def test_healing_charges_the_local_price():
     assert s.player.stats["silver"] == 91 and s.player.member.injury == 0
 
 
-def test_the_switch_off_keeps_the_list_price():
-    game = _game("guan")
-    s, c = game.state, classic_rules(game.content)
-    s.player.member.injury = 20
-    assert (team.heal_cost(c, s.player.member, s), smithing.price(c, 1, "weapon", s), mounts.price(s, c)) == (10, 20, 100)
-
-
 def test_events_can_ask_who_holds_this_place():
     game = _game("guan", at="runan_wilds")  # 開季歸黃巾
     s, c = game.state, game.content

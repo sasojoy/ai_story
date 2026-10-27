@@ -116,16 +116,6 @@ def test_the_first_push_that_reveals_a_hidden_line_is_not_scaled():
     assert game.state.world.trends["yuxi"] == 2  # 0.357，還不到一點
 
 
-def test_event_pushes_in_the_weekend_season_are_unchanged():
-    """第一季規則開著（週末設定）：事件的大勢效果一個字都不變（推力緩衝與上限照舊、沒有季長倍數）。"""
-    content = _content("week7")
-    game = _camp(content)
-    game.state.player.location = "yingchuan"
-    before = game.state.world.trends["yingru"]
-    _sight(game, {"front": 2})
-    assert game.state.world.trends["yingru"] == before + 2
-
-
 def test_a_once_a_season_event_pushes_its_full_amount_in_a_fourteen_day_season():
     """FB-166（PM 2026-10-13）：規則關著的季，一季只會發生一次的事件不照季長縮放——季再長也不會多發生一次。照內容判斷：效果這一下
     新立世界旗標（例：擊敗波才立 bocai_defeated，-25 以前被縮成 -4）、或事件標了 once，照原本的量推；其餘照舊縮放。

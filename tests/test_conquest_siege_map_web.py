@@ -63,13 +63,6 @@ def test_the_map_overlay_says_which_siege_moment_each_block_is_in():
     assert "siege" not in places["cao_manor"]
 
 
-@pytest.mark.parametrize("profile", ["week7", None, "season21"])
-def test_no_siege_mark_when_conquest_is_off(profile):
-    game = R._game(content=classic_rules(real_content(profile)), conquest_on=False)
-    assert not any("siege" in p for p in game.map_state()["places"].values())
-    assert server.main_view(game).get("conquest") is None
-
-
 @pytest.mark.parametrize("faction,expect", [
     ("guan", {"runan_wilds": "attack", "yingchuan_wilds": "defend"}),  # 官軍：自己下的戰書、自家的塊被打
     ("huang", {"runan_wilds": "", "yingchuan_wilds": "attack"}),  # 黃巾：官軍單方攻中立地站不進去

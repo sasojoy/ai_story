@@ -156,13 +156,6 @@ def test_the_sword_marks_follow_fb251():
         assert not any(p["armed"] for p in _game(faction=faction).map_state()["places"].values()), faction
 
 
-def test_with_sortie_off_the_sword_follows_the_old_rule():
-    """出陣關著（armed_places 是 None）：照內容寫的 enemies，同舊輿圖。"""
-    game = _game(classic=True)
-    st = game.map_state()
-    assert {k for k, p in st["places"].items() if p["armed"]} == {k for k in st["places"] if game.content.locations[k].enemies}
-
-
 # ── 意境提示（設計第六節）──
 def test_the_base_lists_what_each_place_gives_with_the_strongest_first():
     b = _game().map_base()

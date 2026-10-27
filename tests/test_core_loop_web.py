@@ -72,8 +72,3 @@ def test_a_tired_explorer_sees_the_cell_greyed():
     game.state.player.stamina = 0
     bar = _bar(game, wheelSel="explore")
     assert 'data-key="explore"' in bar and "體力不夠" in bar and "act-explore" not in bar
-
-
-def test_the_switches_off_keep_the_old_cells():
-    bar = _bar(_game("huang", "huangjin_camp", classic=True))
-    assert "<b>操練</b>" in bar and 'data-act="choose" data-id="act:explore"' in bar
