@@ -278,39 +278,11 @@ def test_content_checks_catch_bad_targets_and_stray_story_steps():
     assert "指不到" in text and "t_stray" in text
 
 
-def _win():
-    return mock.patch.object(team, "fight", return_value=EncounterResult(tier="大勝", margin=50, our_power=200, difficulty=40))
-
-
 def _fuzhi(game):
-    """《符水與湯藥》：南陽郊野探索、擲中（chance 照 1）就開。"""
+    """《符水與湯藥》：南陽郊野探索、擲中（chance 照 1）就開。走完各條路在 tests/core/test_story_fuzhi.py。"""
     game.content.storylines["fuzhi"].start.chance = 1.0
     _explore(game)
-    assert game.state.pending_event == "fuzhi_act1"
-
-
-def test_fuzhi_buy_medicine_and_guard_the_shrine_ends_in_the_notes():
-    game = ready(jianfa_game(), side="guan", loc="nanyang_wilds")
-    s = game.state
-    _fuzhi(game)
-    s.player.stats["con"] = 15
-    with mock.patch("random.Random.random", return_value=0.0):
-        game.choose("choice:0")  # 留下來幫張機（根骨 5）
-    progress = s.player.storylines["fuzhi"]
-    assert progress.stage == "act2a" and progress.marks == {"醫": 1} and progress.due is not None
-    s.player.location = "lulin_zhai"  # 山林
-    s.player.stats["silver"] = 100
-    game.choose("story:fuzhi")
-    assert s.pending_event == "fuzhi_act2a"
-    game.choose("choice:0")  # 買
-    assert progress.stage == "act3" and s.player.stats["silver"] == 60
-    s.player.location = "yu_river"
-    game.choose("story:fuzhi")
-    assert "choice:2" not in [o.id for o in game.options(odds=False)]  # 沒帶符水：沒有「倒進井裡」
-    with _win():
-        game.choose("choice:0")  # 擋在祠堂門口
-    assert progress.ending == "notes" and "zhongjing_owes" in s.player.flags
-    assert s.player.annals[-1].text == f"{s.player.name}嘗入涅陽疫村，負藥助張機，活一童子。"
+    assert game.state.pending_event == "fuzhi_1"
 
 
 def test_fuzhi_scenes_use_their_own_pictures_and_the_files_ship():
@@ -323,29 +295,8 @@ def test_fuzhi_scenes_use_their_own_pictures_and_the_files_ship():
     assert game.story_card_view()[0]["image"] == "stories/fuzhi_act1"
     line = game.content.storylines["fuzhi"]
     web = Path(__file__).resolve().parents[2] / "web" / "img"
-    for img in [line.image] + [st.image for st in line.stages] + [e.image for e in line.endings]:
+    after = [b.image for e in line.endings for b in e.after if b.image]
+    for img in [line.image] + [st.image for st in line.stages] + [e.image for e in line.endings] + after:
         assert (web / f"{img}.webp").is_file(), img
     for key in ("enter", "demon", "done", "fail"):  # 特殊頓悟那條線（武學合成優化）開線時填這四張
         assert (web / "stories" / f"dunwu_{key}.webp").is_file(), key
-
-
-def test_fuzhi_carrying_the_jar_ends_in_the_jar_and_missing_the_deadline_is_too_late():
-    game = ready(jianfa_game(), side="guan", loc="yu_river")
-    s = game.state
-    _fuzhi(game)
-    game.choose("choice:1")  # 求符水 → 潁川
-    s.player.location = "yingchuan"
-    game.choose("story:fuzhi")
-    game.choose("choice:0")  # 接下甕
-    s.player.location = "wan_city"
-    game.choose("story:fuzhi")
-    assert "choice:2" in [o.id for o in game.options(odds=False)]  # 帶著符水：可以倒進井裡
-    with mock.patch("random.Random.random", return_value=0.0):
-        game.choose("choice:1")  # 從後門走
-    assert s.player.storylines["fuzhi"].ending == "jar"
-    late = ready(jianfa_game(name="陸小鳳"), side="guan", loc="yu_river")
-    _fuzhi(late)
-    late.choose("choice:1")
-    late.state.world.time += 3 * day_seconds(late.content, late.state.world)
-    late._story_tick()
-    assert late.state.player.storylines["fuzhi"].ending == "late"

@@ -587,10 +587,11 @@ def _price_here(state: GameState | None, content: Content) -> float:
     territory → rules → team：延後 import，避免循環。"""
     if state is None:
         return 1.0
-    from . import figure_life, renown, territory  # noqa: PLC0415
+    from . import clinic, figure_life, renown, territory  # noqa: PLC0415
 
     return (territory.price_here(state, content, heal=True) * renown.clinic_factor(state, content)  # price_here 照依附那一軍算自家地盤
-            * figure_life.healer_factor(state, content))  # 華佗坐診的醫館
+            * figure_life.healer_factor(state, content)  # 華佗坐診的醫館
+            * clinic.zhongjing_factor(state, content))  # 仲景欠你一次（《符水與湯藥》）
 
 
 def heal_cost(content: Content, member, state: GameState | None = None) -> int:
@@ -652,14 +653,16 @@ def heal(state: GameState, content: Content, member, where: str | None = None) -
     p = state.player
     p.stats["silver"] -= cost
     member.neili = None
+    from . import clinic  # noqa: PLC0415
+
     if left > 0:
         member.injury = max(0.0, member.injury - points)
-        return [f"銀兩只夠治一部分：內傷 -{points}，還剩 {left} 點（銀兩 -{cost}）。"]
+        return [f"銀兩只夠治一部分：內傷 -{points}，還剩 {left} 點（銀兩 -{cost}）。"] + clinic.zhongjing_note(state)
     healed = member.injury
     member.injury = 0.0
     if cost == 0 and heal_free(state, content):
         return [f"療傷完畢，內傷 -{healed:.0f}、氣血回滿（{HEAL_FREE}）。"]
-    return [f"療傷完畢，內傷 -{healed:.0f}、氣血回滿（銀兩 -{cost}）。"]
+    return [f"療傷完畢，內傷 -{healed:.0f}、氣血回滿（銀兩 -{cost}）。"] + clinic.zhongjing_note(state)
 
 
 # ── 經驗與等級 ────────────────────────────────────────────

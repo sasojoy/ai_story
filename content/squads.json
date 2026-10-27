@@ -662,5 +662,32 @@
     "reward_xinde": 12,
     "exp": 14,
     "desc": "侯七從洛陽帶來的三個隨從，衣服跟他一樣乾淨。"
+  },
+  {
+    "id": "fuzhi_han",
+    "name": "韓老七",
+    "difficulty": 10,
+    "attribute": "剛",
+    "reward_xinde": 5,
+    "exp": 8,
+    "desc": "南陽官道邊打獵出身的黑臉漢子，帶著四個拿竹竿鋤頭的飢民；右手少了兩根指頭，柴刀握不太緊。"
+  },
+  {
+    "id": "fuzhi_gate",
+    "name": "新野門卒",
+    "difficulty": 14,
+    "attribute": "快",
+    "reward_xinde": 7,
+    "exp": 10,
+    "desc": "新野縣城門底下看門的兩個兵卒。"
+  },
+  {
+    "id": "fuzhi_jia",
+    "name": "賈亭長",
+    "difficulty": 22,
+    "attribute": "剛",
+    "reward_xinde": 12,
+    "exp": 15,
+    "desc": "新野縣穿皂衣的亭長，帶著四個打火把的兵，奉告示來柳灣收捕符水道人。"
   }
 ]

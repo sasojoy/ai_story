@@ -52,7 +52,7 @@ XINGSHI_LINE = "名號上了〈天下形勢〉第 {n} 篇：「{said}」"  # 待
 XINGSHI_SAID_MAX = 50
 UNHEARD = frozenset({SEAL, MARK, STANCE})  # 酒肆打聽不到的種類
 TEXT_MAX, QUOTE_MAX, REPLY_MAX = 80, 40, 80
-STORY_TEXT_MAX = 240  # 奇事收尾寫進傳的那一章（長篇奇事，企劃者 2026-10-27）：照走過的路拼的一段，比一般的行狀長
+STORY_TEXT_MAX = 260  # 奇事收尾寫進傳的那一章（長篇奇事，企劃者 2026-10-27）：照走過的路拼的一段，兩百字上下；其他種類照 TEXT_MAX
 MASTERED = "絕學"  # martial_arts.QUALITIES 的最後一品
 
 
