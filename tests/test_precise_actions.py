@@ -178,7 +178,7 @@ def test_boss_cooldown_and_used_up_grey_the_boss_only_place():
     boss = duel_rules.here(s, c)[0]
     s.player.duel_tally[duel_rules.week_key(s, c, boss.id)] = c.config.duel.per_boss_week  # 7 天季：每段 per_boss_week 次
     option = _ids(game)["explore:practice"]
-    # FB-672：次數用完那一句帶頭目的名字（「他」→「頭目某某」，名字是黃巾看到的那一面；tests/test_fb672_boss_away_name.py）
+    # FB-672：次數用完那一句帶頭目的名字（「他」→「頭目某某」，名字是黃巾看到的那一面；tests/test_practice_spots.py）
     assert not option.enabled and "這一段頭目衛重不再現身" in option.label
 
 

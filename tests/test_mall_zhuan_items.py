@@ -14,6 +14,18 @@ from tianxia.characters import CharacterStore, name_key
 from tianxia.engine import Game
 from tianxia.models import MallItem, MallWindow
 from tianxia.wallet import Wallet
+from conftest import next_season
+from zhuan_fix_kit import close_season, make_game, option_ids, row, to_week
+from tianxia import zhuan_end
+from tianxia.wallet import Purchase, Wallet
+from zhuan_fix_kit import add_story, close_season, figures, make_game, verdict_paras
+from tianxia.wallet import Purchase
+from zhuan_fix_kit import add_story, admin_of, close_season, figures, make_game, verdict_paras
+from jianfa_kit import jianfa_game
+from tianxia.characters import name_key
+from zhuan_fix_kit import add_story, close_season, make_game, verdict_paras
+from zhuan_fix_kit import close_season, make_game, row, to_week
+from tianxia import calendar, mall
 
 pytestmark = pytest.mark.slow
 
@@ -237,3 +249,449 @@ def test_the_schema_does_not_move_and_bad_windows_are_caught():
     assert any("no_such_switch" in line for line in mall.item_problems(bad, c))
     assert set(mall.EFFECTS) >= FOUR
     assert all(c.mall[i].on_sale.rule == "zhuan_end" for i in FOUR)
+
+
+# ── 原 test_fb845_art_ticket.py（整檔搬進來） ──
+# FB-845：這一季用不到的列傳插畫票不賣，票綁買的那一季。
+# - 沒投靠一方的人（散人）：列傳配不了插畫，商城那一列灰掉寫原因、買也買不了；休季時已經得第一階的人：插畫白送，同樣灰掉寫原因
+#   （季中看不出會是第幾階，照舊賣）。已經買了一張的人說的是限購。
+# - 列傳的三種票（插畫、紀念印、親筆評曰）綁買的那一季：之後的季不再冒出用票的鈕，用票用的是這一季買的那一張。
+
+def test_a_wanderer_cannot_buy_the_art_ticket_in_season_or_in_the_rest():
+    game = make_game(side=None)
+    to_week(game, 3)
+    art = row(game, "zhuan_art")
+    assert art is not None and art["can"] is False and art["why"] == zhuan_end.ART_NO_SIDE and art["max"] == 0
+    wallet, owner = Wallet(game.world.db), name_key(game.state.player.name)
+    before = wallet.balance(owner)
+    assert game.mall_buy("zhuan_art", "w1") == [zhuan_end.ART_NO_SIDE]
+    assert wallet.balance(owner) == before and not [b for b in wallet.purchases(owner) if b.item == "zhuan_art"]
+    close_season(game)
+    assert row(game, "zhuan_art")["why"] == zhuan_end.ART_NO_SIDE
+    assert game.mall_buy("zhuan_art", "w2") == [zhuan_end.ART_NO_SIDE]
+    assert row(game, "zhuan_seal")["can"] is True  # 紀念印、親筆評曰散人也用得上，照舊賣
+
+
+def test_a_wanderer_who_joins_a_side_can_buy_it():
+    game = make_game(side=None)
+    to_week(game, 3)
+    assert row(game, "zhuan_art")["can"] is False
+    game.state.player.faction = "guan"
+    assert row(game, "zhuan_art")["can"] is True and row(game, "zhuan_art")["why"] is None
+    assert game.mall_buy("zhuan_art", "j1")[0].startswith("買下")
+
+
+def test_the_first_tier_cannot_buy_the_art_ticket_once_the_season_is_over():
+    game = make_game()
+    game.state.player.contrib = 120  # 這一局官軍只有他：過了門檻就是第一階
+    CharacterStore(game.world.db).save(game.state)
+    to_week(game, 3)
+    assert row(game, "zhuan_art")["can"] is True  # 季中看不出會是第幾階：照舊賣
+    close_season(game)
+    assert game.biography_entry()["tier"]["tier"] == 1
+    art = row(game, "zhuan_art")
+    assert art["can"] is False and art["why"] == zhuan_end.ART_FREE and art["max"] == 0
+    wallet, owner = Wallet(game.world.db), name_key(game.state.player.name)
+    assert game.mall_buy("zhuan_art", "t1") == [zhuan_end.ART_FREE]
+    assert not [b for b in wallet.purchases(owner) if b.item == "zhuan_art"]
+
+
+def test_a_lower_tier_keeps_buying_the_art_ticket_in_the_rest():
+    game = make_game()
+    to_week(game, 3)
+    close_season(game)
+    assert game.biography_entry()["tier"] is None
+    assert row(game, "zhuan_art")["can"] is True
+    assert game.mall_buy("zhuan_art", "l1")[0].startswith("買下")
+    assert zhuan_end.PICK_ART in option_ids(game)
+
+
+def test_the_limit_is_told_before_the_unfit_reason():
+    """季中買了一張、休季才知道是第一階：再按說的是限購，不是「第一階白送」。"""
+    game = make_game()
+    game.state.player.contrib = 120
+    CharacterStore(game.world.db).save(game.state)
+    to_week(game, 3)
+    assert game.mall_buy("zhuan_art", "b1")[0].startswith("買下")
+    close_season(game)
+    assert "這一季已經買了" in row(game, "zhuan_art")["why"]
+
+
+def test_the_other_shelf_rows_are_not_blocked():
+    game = make_game(side=None)
+    to_week(game, 3)
+    others = [r for r in game.mall_view()["items"] if r["id"] != "zhuan_art"]
+    assert others and all(r["can"] and r["why"] is None for r in others)
+
+
+def test_a_ticket_belongs_to_the_season_it_was_bought_in():
+    game = make_game()
+    game.state.player.affinities.update({"luzhi": 55})
+    CharacterStore(game.world.db).save(game.state)
+    to_week(game, 3)
+    assert game.mall_buy("zhuan_art", "a1")[0].startswith("買下")
+    close_season(game)
+    for item, ref in (("zhuan_seal", "s1"), ("zhuan_quote", "q1")):
+        assert game.mall_buy(item, ref)[0].startswith("買下")
+    assert {zhuan_end.PICK_ART, zhuan_end.SEAL, "zhuan:quote:luzhi"} <= option_ids(game)  # 這一季的票這一季用得上
+    next_season(game.content, game.world, game)  # 第 2 季開了：第 1 季沒用掉的三張不再算
+    game.state.player.affinities.update({"luzhi": 55})
+    CharacterStore(game.world.db).save(game.state)
+    close_season(game)
+    assert game.state.player.season_number == 2 and game.state.world.ended
+    assert not {zhuan_end.PICK_ART, zhuan_end.SEAL, "zhuan:quote:luzhi"} & option_ids(game)
+    wallet, owner = Wallet(game.world.db), name_key(game.state.player.name)
+    assert game.mall_buy("zhuan_seal", "s2")[0].startswith("買下")  # 第 2 季的限購另算
+    assert zhuan_end.SEAL in option_ids(game)
+    game.choose(zhuan_end.SEAL)
+    used = [(b.item, b.season, b.data.get("season")) for b in wallet.purchases(owner) if b.data.get("used")]
+    assert used == [("zhuan_seal", 2, 2)]  # 用掉的是第 2 季買的那一張，第 1 季的還躺著（沒作廢也用不到）
+    assert sum(1 for b in wallet.purchases(owner) if b.item == "zhuan_seal" and not b.data.get("used")) == 1
+
+
+def test_the_button_spends_the_ticket_of_this_season_not_an_older_one():
+    """手上同時有舊季的票和這一季的票：用掉的是這一季買的那一張（舊的留著）。"""
+    game = make_game()
+    game.state.player.affinities.update({"luzhi": 55})
+    CharacterStore(game.world.db).save(game.state)
+    close_season(game)
+    wallet, owner = Wallet(game.world.db), name_key(game.state.player.name)
+    wallet.add_purchase(owner, "old-art", "zhuan_art", 300, time=game.now, day=0, season=0, data={"zhuan_art": 1})
+    game.mall_buy("zhuan_art", "new-art")
+    assert zhuan_end.PICK_ART in option_ids(game)
+    game.choose(zhuan_end.PICK_ART)
+    used = {b.ref.split(":")[-1]: b.data.get("used") is not None for b in wallet.purchases(owner) if b.item == "zhuan_art"}
+    assert used == {"old-art": False, "new-art": True}
+
+
+def test_only_this_seasons_tickets_are_counted_when_the_buttons_are_drawn():
+    """純規則：zhuan_end.unused 帶了季就只數那一季買的。"""
+    rows = [
+        Purchase(id=3, owner="x", ref="r3", item="zhuan_seal", price=1, time=0, day=0, season=2, data={"zhuan_seal": 1}, refunded=None),
+        Purchase(id=2, owner="x", ref="r2", item="zhuan_seal", price=1, time=0, day=0, season=1, data={"zhuan_seal": 1}, refunded=None),
+    ]
+    assert [b.id for b in zhuan_end.unused(rows, "zhuan_seal", 2)] == [3]
+    assert [b.id for b in zhuan_end.unused(rows, "zhuan_seal", 1)] == [2]
+
+
+def test_art_problem_is_a_pure_rule():
+    game = make_game(side=None)
+    s, c = game.state, game.content
+    assert zhuan_end.art_problem(s, c, s.world) == zhuan_end.ART_NO_SIDE
+    s.player.faction = "guan"
+    assert zhuan_end.art_problem(s, c, s.world) is None
+
+
+# ── 原 test_fb846_quote_order.py（整檔搬進來） ──
+# FB-846：兩張親筆評曰照「請的先後」排，不是買的先後倒過來（QA 減法季批 7b：先請曹操、再請波才，名單與寫成的傳都是波才在前）。
+# 原因：zhuan_end.season_tickets 照 Wallet.purchases（新的在前）收 quotes，而每一次請都用最舊的一張票，先請的人記在舊的那一筆、排到後面。
+
+def test_quotes_follow_the_order_they_were_asked():
+    game = make_game()
+    game.state.player.affinities.update({"luzhi": 55, "zhujun": 45, "caocao": 50})
+    add_story(game)
+    close_season(game)
+    for ref in ("q1", "q2"):
+        assert game.mall_buy("zhuan_quote", ref)[0].startswith("買下")
+    game.choose("zhuan:quote:caocao")
+    game.choose("zhuan:quote:luzhi")
+    assert figures(game.biography_entry()) == ["caocao", "luzhi"]
+    assert [j.fid for j in game.biography_request(1).verdicts] == ["caocao", "luzhi"]
+    assert game.write_biography(game.biography_request(1), None, game.now + 40)
+    assert [p[3:5] for p in verdict_paras(game.biography_view(1)["paragraphs"])] == ["曹操", "盧植"]
+    assert figures(game.biography_view(1)) == ["caocao", "luzhi"]
+
+
+def test_the_order_does_not_depend_on_when_the_tickets_were_bought():
+    """買一張、請一位，再買一張、請一位：照請的先後。"""
+    game = make_game()
+    game.state.player.affinities.update({"luzhi": 55, "caocao": 50})
+    close_season(game)
+    game.mall_buy("zhuan_quote", "q1")
+    game.choose("zhuan:quote:luzhi")
+    game.mall_buy("zhuan_quote", "q2")
+    game.choose("zhuan:quote:caocao")
+    assert figures(game.biography_entry()) == ["luzhi", "caocao"]
+
+
+def test_season_tickets_collects_the_quotes_oldest_purchase_first():
+    def ticket(pid, fid):
+        return Purchase(id=pid, owner="x", ref=f"r{pid}", item="zhuan_quote", price=1, time=0, day=0, season=1,
+                        data={"zhuan_quote": 1, "used": float(pid), "season": 1, "fid": fid}, refunded=None)
+
+    newest_first = [ticket(5, "c"), ticket(4, "b"), ticket(3, "a")]  # Wallet.purchases 的次序
+    assert zhuan_end.season_tickets(newest_first, 1)["quotes"] == ["a", "b", "c"]
+
+
+# ── 原 test_fb847_verdict_list.py（整檔搬進來） ──
+# FB-847：評曰名單（main.zhuan／/api/zhuan 的 verdicts）照寫成的那一篇傳列。
+# （一）傳寫成之後才請的人不列，等重修寫進去才列；（二）管理者退了已經用過的那一張，寫成的正文照留，名單也照正文列（不因退款拿掉）。
+# 還沒寫成時列的是「要寫的人」（預告）。名單從正文的段首「評曰：某某云：「」認，不另存一份。
+
+def _written():
+    game = make_game()
+    game.state.player.affinities.update({"luzhi": 55})
+    add_story(game)
+    close_season(game)
+    assert game.write_biography(game.biography_request(1), None, game.now + 30)
+    return game
+
+
+def test_a_quote_asked_after_the_biography_is_written_is_listed_only_after_the_rewrite():
+    game = _written()
+    assert game.biography_entry()["verdicts"] == []
+    game.mall_buy("zhuan_quote", "q1")
+    out = game.choose("zhuan:quote:luzhi")
+    assert zhuan_end.QUOTE_LATER in out
+    assert game.biography_entry()["verdicts"] == [] and game.biography_view(1)["verdicts"] == []
+    assert verdict_paras(game.biography_view(1)["paragraphs"]) == []
+    request = game.biography_request(1, rewrite=True)
+    assert request is not None and [j.fid for j in request.verdicts] == ["luzhi"]
+    assert game.write_biography(request, None, game.now + 60)
+    got = game.biography_entry()["verdicts"]
+    assert got == [{"figure": "luzhi", "name": "盧植", "reason": zhuan_end.BOUGHT}]
+    assert game.biography_view(1)["verdicts"] == got
+    assert game.biography_view(1)["paragraphs"][-1].startswith("評曰：盧植云：「")
+
+
+def test_before_the_biography_is_written_the_list_says_who_will_write():
+    game = make_game()
+    game.state.player.affinities.update({"luzhi": 55})
+    add_story(game)
+    close_season(game)
+    game.mall_buy("zhuan_quote", "q1")
+    game.choose("zhuan:quote:luzhi")
+    assert figures(game.biography_entry()) == ["luzhi"]  # 還沒寫：預告要寫的人
+    assert figures(game.biography_view(1)) == ["luzhi"]
+    assert game.biography_view(1)["written"] is False
+
+
+def test_a_refunded_used_quote_stays_listed_because_the_text_still_has_it():
+    game = make_game()
+    game.state.player.affinities.update({"luzhi": 55})
+    add_story(game)
+    close_season(game)
+    game.mall_buy("zhuan_quote", "q1")
+    game.choose("zhuan:quote:luzhi")
+    assert game.write_biography(game.biography_request(1), None, game.now + 30)
+    assert figures(game.biography_entry()) == ["luzhi"]
+    wallet, owner = Wallet(game.world.db), name_key(game.state.player.name)
+    pid = next(b.id for b in wallet.purchases(owner) if b.item == "zhuan_quote")
+    msg = admin_of(game).admin_mall_refund(game.state.player.name, pid, "測試退款")[0]
+    assert "人物親筆評曰作廢" in msg
+    game.sync(game.now + 40)
+    assert figures(game.biography_entry()) == ["luzhi"]  # 正文還有他，名單就還有他
+    assert figures(game.biography_view(1)) == ["luzhi"]
+    assert verdict_paras(game.biography_view(1)["paragraphs"])[0].startswith("評曰：盧植云：「")
+
+
+def test_a_refund_before_the_biography_is_written_takes_him_off_the_list_and_the_text():
+    game = make_game()
+    game.state.player.affinities.update({"luzhi": 55})
+    add_story(game)
+    close_season(game)
+    game.mall_buy("zhuan_quote", "q1")
+    game.choose("zhuan:quote:luzhi")
+    wallet, owner = Wallet(game.world.db), name_key(game.state.player.name)
+    pid = next(b.id for b in wallet.purchases(owner) if b.item == "zhuan_quote")
+    admin_of(game).admin_mall_refund(game.state.player.name, pid, "測試退款")
+    game.sync(game.now + 40)
+    assert game.biography_entry()["verdicts"] == []
+    assert game.write_biography(game.biography_request(1), None, game.now + 50)
+    assert verdict_paras(game.biography_view(1)["paragraphs"]) == [] and game.biography_view(1)["verdicts"] == []
+
+
+def test_the_list_is_what_the_text_has_free_writers_first_then_the_asked_ones():
+    game = make_game()
+    game.state.player.affinities.update({"zhujun": 75, "luzhi": 55, "caocao": 50})
+    add_story(game)
+    close_season(game)
+    for ref in ("q1", "q2"):
+        game.mall_buy("zhuan_quote", ref)
+    game.choose("zhuan:quote:luzhi")
+    game.choose("zhuan:quote:caocao")
+    assert game.write_biography(game.biography_request(1), None, game.now + 30)
+    got = game.biography_entry()["verdicts"]
+    assert [(v["figure"], v["reason"]) for v in got] == [
+        ("zhujun", zhuan_end.AFFINITY), ("luzhi", zhuan_end.BOUGHT), ("caocao", zhuan_end.BOUGHT)]
+    assert [p[3:5] for p in verdict_paras(game.biography_view(1)["paragraphs"])] == ["朱儁", "盧植", "曹操"]
+
+
+def test_written_writers_reads_only_the_verdict_paragraphs():
+    content = jianfa_game().content
+    text = "\n\n".join([
+        "沈浪者，不知何許人也。",
+        "評曰：此人敢作敢當，頗有可取。",  # 史官自己的評曰
+        "評曰：盧植云：「沈浪此季之功，吾親書以表之。」",
+        "評曰：不知名者云：「這一段不認得。」",
+        "評曰：盧植云：「同一位不重複列。」",
+        "評曰：曹操云：「可託大事。」",
+        "評曰：皇甫嵩云：「三個字的名字也認得。」",
+    ])
+    got = zhuan_end.written_writers(text, content, {"caocao": zhuan_end.TIER})
+    assert got == [zhuan_end.Writer("luzhi", zhuan_end.BOUGHT), zhuan_end.Writer("caocao", zhuan_end.TIER),
+                   zhuan_end.Writer("huangfusong", zhuan_end.BOUGHT)]
+    assert zhuan_end.written_writers("", content, {}) == []
+
+
+def test_the_public_page_extras_do_not_move(monkeypatch):
+    """公開頁只用插畫與紀念印；名單改照正文列不動它們。"""
+    import server
+
+    game = make_game()
+    add_story(game)
+    close_season(game)
+    game.mall_buy("zhuan_seal", "s1")
+    game.choose(zhuan_end.SEAL)
+    assert game.write_biography(game.biography_request(1), None, game.now + 30)
+    code = game.share_biography(1, True, "fb847")
+    monkeypatch.setattr(server, "CONTENT", game.content)
+    got = server.zhuan_extras(game.world, game.world.biography_by_code(code))
+    assert set(got) == {"seal"} and got["seal"].startswith("黃巾之亂・第 1 季")
+
+
+# ── 原 test_fb848_fixed_lines.py（整檔搬進來） ──
+# FB-848：模型叫不動時，同一篇傳裡每位寫手的固定句不重複（QA：波才與曹操同一個理由，固定句一字不差）。
+# 固定句改成整篇一起挑（zhuan_end.fixed_verdicts）：同一個理由的寫手照順序輪著挑、整篇不撞句；自己那一組不夠了往別組借，句子全用過了才重複。
+
+def _writers(*pairs) -> list[zhuan_end.Writer]:
+    return [zhuan_end.Writer(fid, reason) for fid, reason in pairs]
+
+
+def test_fixed_lines_never_repeat_inside_one_piece():
+    content = jianfa_game().content
+    ws = _writers(("huangfusong", zhuan_end.TIER), ("zhujun", zhuan_end.AFFINITY), ("caocao", zhuan_end.AFFINITY),
+                  ("liubei", zhuan_end.AFFINITY), ("guanyu", zhuan_end.AFFINITY), ("luzhi", zhuan_end.BOUGHT),
+                  ("xunyu", zhuan_end.BOUGHT))
+    for name in ("甲客", "乙客", "沈浪", "丙", "丁客", "無名氏", "蘭陵王", "青衫"):
+        for season in (1, 2, 3):
+            lines = zhuan_end.fixed_verdicts(content, ws, name, season)
+            assert list(lines) == [w.fid for w in ws]
+            assert len(set(lines.values())) == len(ws), (name, season)
+            assert all(name in line and "{name}" not in line for line in lines.values())
+
+
+def test_each_writer_gets_a_line_from_his_own_reason_while_the_pool_lasts():
+    content = jianfa_game().content
+    ws = _writers(("huangfusong", zhuan_end.TIER), ("zhujun", zhuan_end.AFFINITY), ("luzhi", zhuan_end.BOUGHT))
+    lines = zhuan_end.fixed_verdicts(content, ws, "甲客", 1)
+    for w in ws:
+        assert lines[w.fid] in [x.replace("{name}", "甲客") for x in content.verdicts[w.reason]]
+
+
+def test_the_same_inputs_give_the_same_lines():
+    content = jianfa_game().content
+    ws = _writers(("zhujun", zhuan_end.AFFINITY), ("caocao", zhuan_end.AFFINITY))
+    assert zhuan_end.fixed_verdicts(content, ws, "甲客", 1) == zhuan_end.fixed_verdicts(content, ws, "甲客", 1)
+
+
+def test_a_content_with_one_fixed_line_per_reason_still_never_repeats():
+    content = jianfa_game().content
+    content.verdicts = {}  # 測試內容沒有 verdicts.json：照 DEFAULT_VERDICTS 每種一句，同理由的第二位往別組借
+    ws = _writers(("zhujun", zhuan_end.AFFINITY), ("caocao", zhuan_end.AFFINITY), ("luzhi", zhuan_end.AFFINITY))
+    assert len(set(zhuan_end.fixed_verdicts(content, ws, "甲客", 1).values())) == 3
+
+
+def test_more_writers_than_lines_repeats_instead_of_failing():
+    content = jianfa_game().content
+    content.verdicts = {"affinity": ["{name}一。", "{name}二。"], "tier": ["{name}三。"], "bought": ["{name}四。"]}
+    ws = _writers(*[(f"p{i}", zhuan_end.AFFINITY) for i in range(6)])
+    lines = zhuan_end.fixed_verdicts(content, ws, "甲客", 1)
+    assert len(lines) == 6 and len(set(lines.values())) == 4  # 四句都用過了才重複
+
+
+def test_the_content_pools_are_big_enough_for_the_most_writers_a_piece_can_have():
+    content = jianfa_game().content
+    most = content.config.jianfa.deep_figures + 1  # 深交三位加名額一位
+    assert len(content.verdicts[zhuan_end.AFFINITY]) >= most
+    assert len(content.verdicts[zhuan_end.BOUGHT]) >= content.mall["zhuan_quote"].limit.season
+    lines = [line for pool in content.verdicts.values() for line in pool]
+    assert len(lines) == len(set(lines))  # 各組之間、組裡面都不重複（往別組借時才不會借到同一句）
+
+
+def test_the_content_check_catches_a_repeated_line():
+    content = jianfa_game().content
+    assert zhuan_end.check_verdicts(content) == []
+    content.verdicts = {"affinity": ["{name}可交。", "{name}可交。"], "tier": ["{name}可交。"]}
+    problems = zhuan_end.check_verdicts(content)
+    assert any("重複" in p for p in problems)
+
+
+def test_four_deep_friends_and_a_tier_writer_get_five_different_lines():
+    game = make_game()
+    assert game.mall_buy("deep_slot", "d1")[0].startswith("買下")
+    p = game.state.player
+    p.contrib = 120  # 第一階：官軍的主將（皇甫嵩，情誼 0）替他寫
+    p.affinities.update({"zhujun": 80, "caocao": 75, "liubei": 72, "guanyu": 71})
+    game.sync(game.now)
+    assert len(p.deep_order) == 4
+    add_story(game)
+    close_season(game)
+    request = game.biography_request(1)
+    assert [(j.fid, j.reason) for j in request.verdicts] == [
+        ("huangfusong", zhuan_end.TIER), ("zhujun", zhuan_end.AFFINITY), ("caocao", zhuan_end.AFFINITY),
+        ("liubei", zhuan_end.AFFINITY), ("guanyu", zhuan_end.AFFINITY)]
+    assert len({j.fixed for j in request.verdicts}) == 5
+    assert game.write_biography(request, None, game.now + 30)  # 模型叫不動：整篇都是固定句
+    said = [para.split("：「", 1)[1] for para in verdict_paras(game.biography_view(1)["paragraphs"])]
+    assert len(said) == 5 and len(set(said)) == 5
+
+
+def test_a_single_writer_keeps_the_old_entry_point():
+    content = jianfa_game().content
+    writer = zhuan_end.Writer("luzhi", zhuan_end.TIER)
+    assert zhuan_end.fixed_verdict(content, writer, "甲客", 1) in [line.replace("{name}", "甲客") for line in content.verdicts["tier"]]
+
+
+# ── 原 test_fb849_art_note.py（整檔搬進來） ──
+# FB-849：列傳插畫票的說明照這一季的季曆寫上架時機：7 天季的「週」是段，畫面上沒有「第三週」，寫「第 5 天起買得到」（讀 MallWindow.from_week
+# 和 calendar 的段，不另寫一份判斷）；其他季照舊「第三週起買得到」。說明（content/mall.json 的 note）用插槽 {上架}，載入時驗插槽。
+
+@pytest.mark.parametrize("profile, said, other", [("season21", "第三週起買得到", "第 5 天"), ("week7", "第 5 天起買得到", "第三週")])
+def test_the_art_note_says_when_it_goes_on_sale_in_the_calendars_own_words(profile, said, other):
+    game = make_game(profile)
+    to_week(game, 3)
+    note = row(game, "zhuan_art")["note"]
+    assert said in note and other not in note and "{" not in note
+
+
+def test_the_week7_note_names_the_day_the_item_really_goes_on_sale():
+    game = make_game("week7")
+    c, w = game.content, game.state.world
+    first = calendar.segment_days(3, c)[0]
+    assert first == 5
+    start = calendar.week_start(3, c, w)
+    w.time = start - 600
+    game._save_season()
+    assert row(game, "zhuan_art") is None  # 第 4 天 23:50：還沒上架
+    w.time = start + 600
+    game._save_season()
+    assert f"第 {first} 天起買得到" in row(game, "zhuan_art")["note"]  # 第 5 天 00:10：上架了，說明寫的就是這一天
+
+
+def test_the_rest_keeps_the_same_words_and_the_other_items_are_untouched():
+    game = make_game("week7")
+    to_week(game, 3)
+    shelf = {r["id"]: r["note"] for r in game.mall_view()["items"]}
+    for item_id, note in shelf.items():
+        if item_id != "zhuan_art":
+            assert note == game.content.mall[item_id].note  # 沒有插槽的說明一個字不變
+    close_season(game)
+    assert "第 5 天起買得到" in row(game, "zhuan_art")["note"]
+
+
+def test_a_note_slot_has_to_be_known_and_needs_a_week_to_fill():
+    content = jianfa_game().content
+    bad = MallItem(id="x", name="測試貨", price=10, kind="consumable", effects={"zhuan_seal": 1}, note="買不到{別的}。")
+    assert any("{別的}" in line for line in mall.item_problems(bad, content))
+    no_week = MallItem(id="y", name="測試二", price=10, kind="consumable", effects={"zhuan_seal": 1}, note="{上架}起買得到。")
+    assert any("{上架}" in line for line in mall.item_problems(no_week, content))
+    ok = MallItem(id="z", name="測試三", price=10, kind="consumable", effects={"zhuan_seal": 1}, note="{上架}起買得到。",
+                  on_sale=MallWindow(rule="zhuan_end", from_week=3))
+    assert not any("{" in line for line in mall.item_problems(ok, content))
+
+
+def test_the_real_content_note_uses_the_slot():
+    content = jianfa_game().content
+    assert "{上架}" in content.mall["zhuan_art"].note and "第三週" not in content.mall["zhuan_art"].note
+    assert not any("zhuan_art" in line for item in content.mall.values() for line in mall.item_problems(item, content))

@@ -27,6 +27,7 @@ description: 《天下大勢》的分支、測試與合併規矩（企劃者 202
 - **開發中、QA 驗收**：只跑跟這一次改動直接相關的測試，**不跑整套**。
   - 在批的工作樹裡：`.venv/Scripts/python.exe scripts/test_for.py --base origin/feature/<名字>`（只跟功能分支比；不給 `--base` 會跟 `origin/main` 比，把整條功能分支以前的改動都算進來）。也可以設環境變數 `TIANXIA_TEST_BASE`，或直接給檔名（`scripts/test_for.py tianxia/fusion.py`）、直接跑 `pytest tests/test_x.py`。
   - QA 只跑它驗的那幾樣的測試檔，其餘靠實機（瀏覽器）驗；不要為了「保險」跑整套。
+  - 修回饋單的測試寫進那個模組的測試檔，不開 `test_fb…` 新檔（2026-10-27 測試整理 1b 併掉了 53 個）；派工單寫「測試寫進 `tests/test_<模組>.py`」。
   - 改到 `tests/conftest.py`、`tests/fixtures/`、`pyproject.toml` 的批，開發跑 `test_for.py` 會挑到整套：這時只跑那幾個改到的測試檔與直接相關的，整套留到合併那一刻。
 - **合併時跑哪一種**（Joy 2026-10-26 在決定卡上選「只有上 main 跑整套 slow」；以前每一次合併都跑整套含 slow）：
   - **批合進功能分支、功能分支合進 `develop`、`main` 合回 `develop`／功能分支**（Joy 2026-10-27「改UI也需要跑那麼多那麼久是不是有什麼問題？」之後 PM 再收）：

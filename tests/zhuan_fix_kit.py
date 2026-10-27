@@ -1,5 +1,5 @@
 """減法季批 7b QA 之後的修正（FB-845～849）測試共用的建法：正式內容、減法季開著，官軍（或散人）站在長社，帳上有 5000 元寶。
-測試檔：test_fb845_art_ticket.py、test_fb846_quote_order.py、test_fb847_verdict_list.py、test_fb848_fixed_lines.py、test_fb849_art_note.py。"""
+測試檔：test_mall_zhuan_items.py、test_mall_zhuan_items.py、test_mall_zhuan_items.py、test_mall_zhuan_items.py、test_mall_zhuan_items.py。"""
 from __future__ import annotations
 
 import random
