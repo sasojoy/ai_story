@@ -374,7 +374,12 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 /* 收著的「剛剛」是一行（減法季批 1，整合設計 6.3；圖解版第 21 頁）：時間一小行，底下標題接第一句、放不下加「…」；整塊是一顆鈕，點了攤開全文 */
 .now-one { display: block; width: 100%; padding: 0; border: 0; background: none; text-align: left; font: inherit; color: var(--ink); cursor: pointer; }
 .now-one .tx-when { display: block; font-size: 13px; color: var(--ink-2); }
-.now-one .now-line { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.now-one .now-line { display: flex; align-items: baseline; gap: 6px; font-weight: 600; }
+.now-one .now-text-one { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 結果的小章（Joy 2026-10-27）：排在那一行最右邊、不被「…」切掉；成功綠、失敗紅 */
+.now-one .now-stamp { flex: none; padding: 0 6px; border: 1px solid var(--line); border-radius: 4px; font-size: 13px; line-height: 20px; color: var(--ink-2); }
+.now-one .now-stamp.ok { color: var(--ok); border-color: currentColor; }
+.now-one .now-stamp.bad { color: var(--bad); border-color: currentColor; }
 .now.one { padding-top: 8px; padding-bottom: 8px; }
 .now.clamp .now-more { position: absolute; right: 0; bottom: -6px; padding-left: 1.6em; background: linear-gradient(90deg, transparent, var(--card) 1.4em); }
 .now.fits .now-more { display: none; }

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import random
 import re
+from pathlib import Path
 
 import pytest
 from conftest import real_content
@@ -15,6 +16,8 @@ import webharness
 from tianxia.engine import Game
 
 pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
+
+ROOT = Path(__file__).resolve().parent.parent
 
 
 def _main(*, faction=None, event=None, **over):
@@ -144,6 +147,39 @@ def test_the_now_card_is_one_line_until_tapped():
     assert '<span class="tx-when">剛剛　第 1 天</span>' in one and "甲事　第一句 &amp; 第二句" in one
     opened = run(m, "return H.pageJianghu();", S={"nowOpen": now})
     assert "now-one" not in opened and 'class="now open' in opened
+
+
+def _now_shut(now):
+    shut = run(_main(now=now), "return H.pageJianghu();")
+    return re.search(r'<div class="now one">.*?(?=<section|<div class="card|$)', shut, re.S).group(0)
+
+
+def test_the_result_stamp_stays_outside_the_cut_line():
+    # Joy 2026-10-27「看不出是成功還是失敗」：結果標記拿出來排在那一行最右邊，不跟著被「…」切掉；成功綠、失敗紅
+    head = '<div class="tx-when">剛剛　第 1 天</div><div class="tx-head"><span class="tx-title">田埂設卡・脫了鞋，涉過旁邊的爛泥溝繞過去</span><span class="tx-tag">{}</span></div>'
+    for tag, tone in (("失敗", " bad"), ("成功", " ok"), ("韓鐵出手・失敗", " bad"), ("得料", "")):
+        box = _now_shut(f'<div class="tx-now">{head.format(tag)}<div class="tx-line">你在泥裡陷到腰。</div></div>')
+        text = re.search(r'<span class="now-text-one">(.*?)</span>', box).group(1)
+        assert tag not in text and "田埂設卡" in text
+        assert f'<span class="now-stamp{tone}">{tag}</span>' in box
+    css = (ROOT / "web" / "style.css").read_text(encoding="utf-8")
+    assert re.search(r"\.now-one \.now-text-one \{[^}]*text-overflow: ellipsis", css)
+    assert re.search(r"\.now-one \.now-stamp \{[^}]*flex: none", css)
+
+
+def test_the_items_you_got_show_without_opening():
+    # Joy 2026-10-27「材料事件，第二行…顯示獲得的物品跟數量，不用展開」：「得：」那一行的物品排成小籤；數值得失那一排本來就有，不重複
+    lines = ("你出了大路。", "得：驚羽 ×2、銀兩 +5", "獲得 驚羽 ×1", "自家地盤，多撿了一份。", "獲得 驚羽 ×1")
+    body = "".join(f'<div class="tx-line">{x}</div>' for x in lines)
+    head = '<div class="tx-when">剛剛　第 1 天</div><div class="tx-head"><span class="tx-title">出門一趟</span><span class="tx-tag">得料</span></div>'
+    box = _now_shut(f'<div class="tx-now">{head}{body}</div>')
+    assert re.findall(r'<span class="tx-chg tx-up now-item">(.*?)</span>', box) == ["驚羽 ×2"]  # 銀兩是數值，在得失那一排
+    # 沒有「得：」那一行：照「獲得 X ×N」加總
+    body = "".join(f'<div class="tx-line tx-new">{x}</div>' for x in ("獲得 精鐵砂 ×1", "獲得 精鐵砂 ×2", "獲得 柳絲綿 ×1"))
+    box = _now_shut(f'<div class="tx-now">{head}{body}</div>')
+    assert re.findall(r'now-item">(.*?)</span>', box) == ["精鐵砂 ×3", "柳絲綿 ×1"]
+    # 什麼都沒拿到：不多一排
+    assert "tx-chgs" not in _now_shut(f'<div class="tx-now">{head}<div class="tx-line">一路無事。</div></div>')
 
 
 def test_event_options_get_an_icon_and_keep_only_the_action():
