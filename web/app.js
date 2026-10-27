@@ -88,6 +88,10 @@
     letterShut: null, // 伺服器說一到就攤開的那一封（開局的託付，letter.open）被玩家收攏了（id）：下一次重畫不再自己攤開
     pushOn: false, // 手機通知：這台裝置訂著沒有（打開設定時問瀏覽器，pushRefresh）
     pushBusy: false, // 正在開、關手機通知（那一顆先灰掉）
+    pushError: "", // 手機通知開不了、關不掉的原因（寫在那一顆底下）
+    pushTestNote: "", // 「傳一則測試通知」送出去了沒
+    pushKey: null, // 伺服器的公鑰（打開設定時先拿好，勾下去的那一下不必再等網路）
+    pushKinds: null, // 五種通知各開著沒（/api/push 的 kinds）
     roundsOpen: null, // 江湖頁戰鬥卡片「過程」展開的那一場（戰報流水號）；換成新的一場就收回（計畫三 G6）
     peekOpen: null, // 江湖頁那一排小標（態勢｜大事｜主線）展開著的那一塊：{ id, week }；點同一個收起，換週就不再對得上（FB-039、正式版辛）
     hearOpen: null, // 戰鬥卡片底下聽來的那一句展開著的那一場（卡片的戰報流水號）；換成下一場就收回（FB-074）
@@ -4567,41 +4571,73 @@
     const raw = atob(text.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((text.length + 3) % 4));
     return Uint8Array.from(raw, (c) => c.charCodeAt(0));
   }
-  async function pushReg() { return navigator.serviceWorker.register("/sw.js"); }
+  // service worker 註冊好、啟用了才訂得了（第一次註冊時 register 回來的那一份還在安裝，直接 subscribe 會被拒：iPhone 上就是勾不起來）
+  async function pushReg() {
+    await navigator.serviceWorker.register("/sw.js");
+    return navigator.serviceWorker.ready;
+  }
+  // 五種通知各一個開關（設定頁，預設全開；存在伺服器、這個帳號每一台一樣，/api/push 的 kinds）。字待 joy 潤
+  const PUSH_KIND_NAMES = [["letter", "來信"], ["duel", "約戰"], ["rally", "決戰集結"], ["raid", "被截殺"], ["xingshi", "被〈天下形勢〉提到"]];
+  const PUSH_TEST_OK = "送出去了：這一台應該馬上跳一則「通知設定好了」。沒跳的話看看手機有沒有開勿擾、專注模式。";
+  function pushErrorText(e) { // 開不了的原因照實寫給玩家看（以前有錯就靜靜地沒勾起來）
+    const name = (e && e.name) || "";
+    if (name === "NotAllowedError") return pushDevice() === "ios"
+      ? "iPhone 沒有給通知的權限：到 iPhone 的「設定」→「通知」→「天下大勢」打開「允許通知」，再回來勾一次。"
+      : "瀏覽器沒有給通知的權限：到瀏覽器的網站設定裡把通知改成允許，再回來勾一次。";
+    if (name === "AbortError" || name === "InvalidStateError") return `推送服務沒接通（${(e && e.message) || name}）：等一下再勾一次。`;
+    return `開不了通知：${(e && e.message) || name || "不明的錯"}`;
+  }
+  function pushPaint() { // 只換設定頁「手機通知」那一塊（以前整個畫面重畫：iPhone 上一直閃）
+    const box = typeof document !== "undefined" && document.querySelector(".push-box");
+    if (box) box.innerHTML = pushBoxHtml();
+    else if (S.sheet && S.pushHow) renderKeepingSheet(); // 「怎麼收到手機通知」那一頁按的「現在就開通知」：那一頁頂上那一句跟著換
+  }
 
   async function pushRefresh() { // 打開設定時：這台裝置有沒有訂著；訂著就再交一次給伺服器（伺服器那份丟了也補得回來，不再送「開了」）
     if (!pushSupported()) return;
     try {
-      const sub = await (await pushReg()).pushManager.getSubscription();
+      const reg = await pushReg(); // 先註冊好、拿好公鑰：勾下去的那一下就能直接要權限、直接訂（iPhone 要在按下去的那一下做）
+      const info = await api("/api/push");
+      S.pushKey = info.key;
+      S.pushKinds = info.kinds || null;
+      const sub = await reg.pushManager.getSubscription();
       S.pushOn = !!sub && Notification.permission === "granted";
       if (S.pushOn) await api("/api/push/subscribe", { ...sub.toJSON(), quiet: true });
     } catch (e) { S.pushOn = false; }
-    if (S.sheet) render();
+    pushPaint();
   }
 
   async function pushEnable() {
     pushMarkAsked();
     if (!pushSupported()) return;
     S.pushBusy = true;
-    render();
+    S.pushError = "";
+    S.pushTestNote = "";
+    pushPaint();
     try {
-      const perm = await Notification.requestPermission();
-      if (perm !== "granted") { S.pushOn = false; toast("沒有拿到通知的權限：要到瀏覽器的網站設定裡打開。"); return; }
+      const perm = await Notification.requestPermission(); // 第一件事就問（前面不先等網路）：iPhone 只在按下去的那一下肯問
+      if (perm !== "granted") {
+        const err = new Error("");
+        err.name = "NotAllowedError";
+        throw err;
+      }
       const reg = await pushReg();
-      const { key } = await api("/api/push");
+      const key = S.pushKey || (S.pushKey = (await api("/api/push")).key);
       const sub = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: pushKey(key) });
       await api("/api/push/subscribe", sub.toJSON());
       S.pushOn = true;
       toast("手機通知開了，馬上會跳一則試試。");
     } catch (e) {
       S.pushOn = false;
-      if (!e || !e.message) toast("這個瀏覽器開不了通知。");
-    } finally { S.pushBusy = false; render(); }
+      S.pushError = pushErrorText(e);
+    } finally { S.pushBusy = false; pushPaint(); }
   }
 
   async function pushDisable() {
     S.pushBusy = true;
-    render();
+    S.pushError = "";
+    S.pushTestNote = "";
+    pushPaint();
     try {
       const sub = await (await pushReg()).pushManager.getSubscription();
       if (sub) {
@@ -4609,20 +4645,53 @@
         await sub.unsubscribe();
       }
       S.pushOn = false;
-    } catch (e) { /* 關不掉就照實留著勾 */ }
-    finally { S.pushBusy = false; render(); }
+    } catch (e) { S.pushError = `關不掉：${(e && e.message) || "不明的錯"}`; } // 關不掉就照實留著勾
+    finally { S.pushBusy = false; pushPaint(); }
   }
 
-  function pushRow() { // 設定頁那一顆
-    if (!(S.main && S.main.web_push)) return "";
+  async function pushTest() { // 「傳一則測試通知」：伺服器當場對這一台推一則，推不出去把原因寫在底下
+    S.pushBusy = true;
+    S.pushTestNote = "";
+    pushPaint();
+    try {
+      const sub = await (await pushReg()).pushManager.getSubscription();
+      if (!sub) throw new Error("這台裝置還沒開手機通知：先勾「手機通知」。");
+      const res = await api("/api/push/test", { endpoint: sub.endpoint });
+      S.pushTestNote = res.sent ? PUSH_TEST_OK : `沒送出去：${res.error || "不明的錯"}`;
+    } catch (e) { S.pushTestNote = `沒送出去：${(e && e.message) || "不明的錯"}`; }
+    finally { S.pushBusy = false; pushPaint(); }
+  }
+
+  async function pushKind(kind, on) { // 一種通知開或關
+    try {
+      const res = await api("/api/push/prefs", { kind, on });
+      S.pushKinds = res.kinds;
+    } catch (e) { /* api 已經跳了原因；照伺服器原本的畫回去 */ }
+    pushPaint();
+  }
+
+  function pushBoxHtml() { // 設定頁「手機通知」那一塊的內容（pushPaint 只換這一塊）
     let note = "";
     if (pushNeedsHome()) note = "iPhone 要先在 Safari 按「分享 → 加入主畫面」，從主畫面打開遊戲，這裡才打得開。";
     else if (!pushSupported()) note = "這個瀏覽器收不到通知。";
     else if (Notification.permission === "denied") note = "通知被這個瀏覽器擋了：到瀏覽器的網站設定裡打開。";
     const off = !!note || S.pushBusy;
-    return `<label class="toggle"><input type="checkbox" id="push-on" ${S.pushOn && !note ? "checked" : ""} ${off ? "disabled" : ""}> 手機通知</label>
-      <p class="muted push-note">${note || `${PUSH_KINDS}時跳出來，遊戲關著也會。`}</p>
+    const on = S.pushOn && !note;
+    const kinds = S.pushKinds || {};
+    const list = on ? `<div class="push-kinds">${PUSH_KIND_NAMES.map(([k, name]) =>
+      `<label class="toggle"><input type="checkbox" class="push-kind" data-kind="${k}" ${kinds[k] !== false ? "checked" : ""} ${S.pushBusy ? "disabled" : ""}> ${name}</label>`).join("")}</div>
+      <div class="row"><button class="btn small" data-act="push-test" ${S.pushBusy ? "disabled" : ""}>傳一則測試通知</button></div>` : "";
+    return `<label class="toggle"><input type="checkbox" id="push-on" ${on ? "checked" : ""} ${off ? "disabled" : ""}> 手機通知${S.pushBusy ? "（處理中…）" : ""}</label>
+      <p class="muted push-note">${note || (on ? "要跳哪幾種，底下一種一個開關（每一台裝置一樣）：" : `${PUSH_KINDS}時跳出來，遊戲關著也會。`)}</p>
+      ${S.pushError ? `<p class="push-err">${esc(S.pushError)}</p>` : ""}
+      ${list}
+      ${S.pushTestNote ? `<p class="push-test-note">${esc(S.pushTestNote)}</p>` : ""}
       <div class="row push-help"><button class="btn small" data-act="push-how">${PUSH_HOW_TITLE} ›</button></div>`;
+  }
+
+  function pushRow() { // 設定頁那一顆
+    if (!(S.main && S.main.web_push)) return "";
+    return `<div class="push-box">${pushBoxHtml()}</div>`;
   }
 
   // ── 怎麼收到手機通知（Joy 2026-10-26：設定頁一顆鈕點開獨立的一步步說明，不跟玩法說明、新手引導混在一起；現階段很重要）──
@@ -6096,6 +6165,7 @@
         }
         case "letter-read": S.letterOpen = null; await doMain("letter_read", { id: Number(el.dataset.id) }); break;
         case "letter-decline": await doMain("letter_decline", { id: Number(el.dataset.id) }); break;
+        case "push-test": await pushTest(); break; // 設定頁「傳一則測試通知」
         case "push-yes": await pushEnable(); break; // 第一次來信時問的那一張（手機通知，減法季批 9）
         case "push-no": pushMarkAsked(); renderPage(); break;
         case "gender-pick": S.genderPick = el.dataset.value || null; render(); break;
@@ -6429,6 +6499,7 @@
   document.addEventListener("change", async (ev) => {
     if (ev.target.id === "anon") await doMain("anonymous", { value: ev.target.checked });
     if (ev.target.id === "push-on") await (ev.target.checked ? pushEnable() : pushDisable()); // 手機通知（減法季批 9）
+    if (ev.target.classList && ev.target.classList.contains("push-kind")) await pushKind(ev.target.dataset.kind, ev.target.checked); // 五種各一個開關
     if (ev.target.id === "hints-off") await doMain("hints_off", { value: ev.target.checked }); // 碰到才說的小提醒（新手引導計畫三）；打開時排著的清掉
     if (ev.target.dataset && ev.target.dataset.act === "region-pick") enterRegion(ev.target.value); // 區圖上面那一排換一區
     if (ev.target.id === "mt-preset" && S.mtEdit && ev.target.value) { // 名帖：換成一張現成的畫（之後照樣能再畫幾筆）

@@ -8,7 +8,7 @@ import random
 
 import pytest
 import webharness
-from test_prologue_web import run
+from test_prologue_web import DRIVER, run
 
 import server
 from tianxia.engine import Game
@@ -101,3 +101,78 @@ def test_the_button_opens_the_page_and_back_or_close_leaves_it(content):
     assert 'aria-label="怎麼收到手機通知"' in out["opened"] and "push-how-sec" in out["opened"]
     assert out["back"] is False and out["closed"] == [False, False]
     assert 'data-act="push-how"' in out["again"] and "push-how-sec" not in out["again"]
+
+
+# ── 勾下去之後（iPhone 勾不起來，PM 2026-10-27）：假的 service worker 與 PushManager ──
+
+PUSH_DRIVER = DRIVER.replace('"bookHtml", "peerHtml"]', '"bookHtml", "peerHtml", "pushEnable", "pushRefresh", "pushTest", "pushBoxHtml"]')
+assert PUSH_DRIVER != DRIVER
+
+
+def _push(m, body, *, subscribe="ok", permission="granted", responses=None):
+    """iPhone 從主畫面打開、還沒開過通知。subscribe："ok" 訂得到、其他字串是丟出來的錯的 name。permission：按了之後給的權限。
+    script 本體裡 box 是設定頁那一塊（pushPaint 只換它的 innerHTML），log 記下先後（perm、register、ready、subscribe、fetch 網址）。"""
+    setup = f"""
+      const log = [];
+      const sub = {{ endpoint: "https://web.push.apple.com/abc", toJSON: () => ({{ endpoint: "https://web.push.apple.com/abc", keys: {{ p256dh: "p", auth: "a" }} }}) }};
+      const reg = {{ pushManager: {{
+        getSubscription: async () => null,
+        subscribe: async (opts) => {{ log.push("subscribe:" + (Object.prototype.toString.call(opts.applicationServerKey) === "[object Uint8Array]")); if ({subscribe!r} !== "ok") {{ const e = new Error("boom"); e.name = {subscribe!r}; throw e; }} return sub; }},
+      }} }};
+      T.ctx.navigator.userAgent = {IPHONE!r};
+      T.ctx.navigator.standalone = true;
+      T.ctx.navigator.serviceWorker = {{ register: async () => {{ log.push("register"); return {{}}; }}, get ready() {{ log.push("ready"); return Promise.resolve(reg); }} }};
+      T.ctx.window.PushManager = {{}};
+      const N = {{ permission: "default", requestPermission: async () => {{ log.push("perm@" + T.calls.length); N.permission = {permission!r}; return {permission!r}; }} }};
+      T.ctx.Notification = T.ctx.window.Notification = N;
+      T.ctx.atob = (s) => Buffer.from(s, "base64").toString("binary");
+      const box = {{ innerHTML: "" }};
+      T.qs[".push-box"] = box;
+      return (async () => {{ {body} }})();"""
+    return webharness.run(PUSH_DRIVER, {"m": m, "script": setup, "S": {"sheet": True}, "menxia": None, "stored": {}, "responses": {**(responses or {}), "/api/push/": {}, "/api/push": {"key": "BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4", "kinds": {}}}})
+
+
+def test_allowing_on_an_iphone_subscribes_and_ticks_the_box(content):
+    """按允許之後：先問權限（之前不等任何網路請求）、等 service worker 啟用好（ready）才訂，公鑰是 Uint8Array；訂到了交給伺服器、勾起來。"""
+    out = _push(_main(content), """
+      await H.pushEnable();
+      return { log, html: box.innerHTML, calls: T.calls.map((c) => c[0]), on: H.S.pushOn };""")
+    assert out["log"][0] == "perm@0"  # 第一件事就問權限：iPhone 只在按下去的那一下肯問
+    assert out["log"].index("ready") < out["log"].index("subscribe:true")  # 啟用好了才訂；公鑰轉成 Uint8Array
+    assert "/api/push/subscribe" in out["calls"] and out["on"] is True
+    assert 'id="push-on" checked' in out["html"] and "傳一則測試通知" in out["html"]
+    for name in ("來信", "約戰", "決戰集結", "被截殺", "被〈天下形勢〉提到"):  # 開了：五種各一個開關，預設全開
+        assert f'checked > {name}</label>' in out["html"]
+
+
+def test_a_failed_subscribe_is_written_on_the_page_not_swallowed(content):
+    out = _push(_main(content), """
+      await H.pushEnable();
+      return { html: box.innerHTML, on: H.S.pushOn };""", subscribe="AbortError")
+    assert out["on"] is False and 'id="push-on" ' in out["html"] and 'id="push-on" checked' not in out["html"]
+    assert '<p class="push-err">推送服務沒接通（boom）' in out["html"]
+    denied = _push(_main(content), "await H.pushEnable(); return box.innerHTML;", permission="denied")
+    assert "「設定」→「通知」→「天下大勢」" in denied  # iPhone 按了不允許：寫去哪裡打開
+
+
+def test_opening_settings_repaints_only_the_push_box(content):
+    """打開設定問這台裝置訂著沒：只換「手機通知」那一塊（以前整個畫面重畫，iPhone 上一直閃），順手先拿好公鑰。"""
+    out = _push(_main(content), """
+      const before = T.els.app.innerHTML;
+      await H.pushRefresh();
+      return { same: T.els.app.innerHTML === before, key: H.S.pushKey, painted: box.innerHTML.includes('id="push-on"') };""")
+    assert out["same"] and out["painted"] and out["key"].startswith("BCVx")
+
+
+def test_the_test_button_writes_what_happened(content):
+    m = _main(content)
+    body = """
+      H.S.pushOn = true;
+      reg.pushManager.getSubscription = async () => sub;
+      await H.pushTest();
+      return { html: box.innerHTML, sent: T.calls.find((c) => c[0] === "/api/push/test") };"""
+    ok = _push(m, body, responses={"/api/push/test": {"sent": True, "error": ""}})
+    assert ok["sent"][1] == {"endpoint": "https://web.push.apple.com/abc"} and "送出去了" in ok["html"]
+    bad = _push(m, body, responses={"/api/push/test": {"sent": False, "error": "推送服務不收（回 500）"}})
+    assert "沒送出去：推送服務不收（回 500）" in bad["html"]
+

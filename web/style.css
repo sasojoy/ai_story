@@ -1407,6 +1407,11 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .toggle { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); margin-bottom: 10px; cursor: pointer; }
 .toggle input { width: 20px; height: 20px; accent-color: var(--accent); }
 .push-help { margin: -4px 0 12px; }
+.push-err { margin: 4px 0 8px; padding: 8px 12px; border-left: 3px solid var(--bad); color: var(--bad); background: var(--card); border-radius: var(--radius); font-size: 14px; line-height: 1.6; }
+.push-test-note { margin: 4px 0 8px; font-size: 14px; line-height: 1.6; color: var(--ink-2); }
+.push-kinds { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px; margin: 2px 0 8px; }
+.push-kinds .toggle { margin: 0; padding: 8px 10px; font-size: 14px; }
+.push-kinds .toggle input { flex: none; }
 /* 怎麼收到手機通知（設定抽屜整頁換成它）：頂上一句此刻的狀況、偵測到的裝置攤開、其他兩種收在摺疊裡 */
 .push-how .push-status { padding: 10px 14px; border-left: 3px solid var(--accent); background: var(--card); border-radius: var(--radius); font-size: 15px; line-height: 1.6; }
 .push-how-sec { margin-top: 12px; }

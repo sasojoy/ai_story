@@ -157,10 +157,40 @@ def test_the_five_kinds(c):
 
 
 def test_duel_sources_hook(c, monkeypatch):
-    """約戰是批 3b 的：它在 DUEL_SOURCES 登記一個來源，這裡就照收。"""
+    """約戰的來源登記在 DUEL_SOURCES（拿得到全服的約戰），這裡就照收。"""
     s = _state(c)
-    monkeypatch.setattr(notices, "DUEL_SOURCES", [lambda st, ct: [notices.Notice(key="duel:1", kind="duel", text="有人向你約戰。")]])
+    monkeypatch.setattr(notices, "DUEL_SOURCES", [lambda st, ct, sorties: [notices.Notice(key="duel:1", kind="duel", text="有人向你約戰。")]])
     assert [n.key for n in notices.current(s, c)] == ["duel:1"]
+
+
+def _duel(c, did, who, side, *, status="open", defender=None, region="here"):
+    from tianxia.world_state import SortieDuel, SortieSide
+
+    return SortieDuel(id=did, block="runan_wilds", region=region, place="汝南荒野", attacker=SortieSide(name=who, side=side),
+                      defender=SortieSide(name=defender, side="guan") if defender else None, opened_at=0, expires_at=600, status=status)
+
+
+def test_duel_notices_someone_challenges_your_region_and_someone_answers_yours(c):
+    """批 3b 接上：對面在你這一區貼了、還沒人應的約戰跳一則；你貼的約戰有人應了跳一則。同一邊、別區、散人、已經有人應了的不跳。"""
+    from tianxia import atlas
+
+    s = _state(c)
+    s.player.faction = "guan"
+    here = atlas.region_of(c, s.player.location)
+    region = here.id if here is not None else None
+    other = next((r.id for r in c.map.regions if r.id != region), "elsewhere") if region is not None else None
+    sorties = {
+        "a": _duel(c, "a", "黃甲", "huang", region=region),  # 對面、這一區、等人應：跳
+        "b": _duel(c, "b", "官乙", "guan", region=region),  # 同一邊：只能同去，不跳
+        "c": _duel(c, "c", "黃丙", "huang", region=other) if other else _duel(c, "c", "黃丙", "huang", status="settled"),  # 別區
+        "d": _duel(c, "d", "黃丁", "huang", status="answered", defender="官戊", region=region),  # 別人已經應了
+        "e": _duel(c, "e", "沈青衫", "guan", status="answered", defender="黃己", region=region),  # 我貼的、有人應了：跳
+        "f": _duel(c, "f", "沈青衫", "guan", region=region),  # 我貼的、還沒人應
+    }
+    got = {n.key: n.text for n in notices.current(s, c, sorties=sorties)}
+    assert got == {"duel:open:a": "黃甲在汝南荒野下了約戰，就在你這一區，等人應戰。", "duel:answered:e": "黃己應了你在汝南荒野的約戰。"}
+    s.player.faction = None  # 散人應不了戰：只剩自己貼的那一張（散人貼不了，這裡只驗不跳對面的）
+    assert set(n.key for n in notices.current(s, c, sorties=sorties)) == {"duel:answered:e"}
 
 
 # ── 09:00 來信 ──
@@ -294,6 +324,48 @@ def test_morning_mail_is_delivered_by_the_watcher(push, monkeypatch):
     assert phone.open(post.calls[-1][1])["body"] == "秦頡派人送來一封信。"
     state = characters.load("沈青衫")
     assert state.player.letters[-1].kind == "道賀" and state.player.letter_day == letters.mail_day(content, world.get_season(), later())
+
+
+def test_each_kind_has_its_own_switch_and_an_off_kind_never_pops_later(push):
+    """設定頁一種一個開關（預設全開）：關掉的那一種不跳，也記成看過——之後打開不會補跳一串舊的。"""
+    web, post = push
+    client = TestClient(server.app)
+    _login(client)
+    assert client.get("/api/push").json()["kinds"] == {k: True for k in notices.KINDS}
+    phone = Phone()
+    client.post("/api/push/subscribe", json={**phone.subscription(), "quiet": True})
+    assert client.post("/api/push/prefs", json={"kind": "letter", "on": False}).json()["kinds"]["letter"] is False
+    assert client.post("/api/push/prefs", json={"kind": "沒有", "on": False}).status_code == 400
+    later = lambda: server.time.time() + 3600  # noqa: E731
+    server.notice_round(later)
+    characters = open_characters()
+    state = characters.load("沈青衫")
+    state.player.letters.append(Letter(id=99, kind="道賀", sender="qinjie", at=0, text="…"))
+    characters.save(state)
+    assert server.notice_round(later) == 0 and post.calls == []  # 來信關著：不跳
+    client.post("/api/push/prefs", json={"kind": "letter", "on": True})
+    assert server.notice_round(later) == 0  # 打開了：關著那段時間的那封不補跳
+    assert client.get("/api/push").json()["kinds"]["letter"] is True
+
+
+def test_the_test_button_pushes_to_this_device_and_says_why_not(push):
+    """「傳一則測試通知」：當場推給這一台（不是這個帳號的每一台）；推不出去照實回原因。"""
+    web, post = push
+    client = TestClient(server.app)
+    _login(client)
+    phone, other = Phone(), Phone("https://web.push.apple.com/other")
+    assert client.post("/api/push/test", json={"endpoint": phone.endpoint}).json() == {"sent": False, "error": server.PUSH_NOT_HERE}
+    for p in (phone, other):
+        client.post("/api/push/subscribe", json={**p.subscription(), "quiet": True})
+    assert client.post("/api/push/test", json={"endpoint": phone.endpoint}).json() == {"sent": True, "error": ""}
+    assert [c[0] for c in post.calls] == [phone.endpoint]  # 只推這一台
+    assert phone.open(post.calls[-1][1])["body"] == server.PUSH_TEST
+    web.post = Post(500)
+    res = client.post("/api/push/test", json={"endpoint": phone.endpoint}).json()
+    assert res["sent"] is False and "500" in res["error"]
+    web.post = Post(410)
+    res = client.post("/api/push/test", json={"endpoint": phone.endpoint}).json()
+    assert res["sent"] is False and "失效" in res["error"] and not web.store.has(web.store.accounts()[0], phone.endpoint)
 
 
 def test_service_worker_and_manifest_are_served():
