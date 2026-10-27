@@ -8,12 +8,15 @@
     .venv/Scripts/python.exe scripts/figure_ask_trial.py --figure luzhi --affinity 60 "盧公可否陪我出陣"
     .venv/Scripts/python.exe scripts/figure_ask_trial.py --part plea  # 第二批：他心事焦慮，求見時先開口求你（10 次）
     .venv/Scripts/python.exe scripts/figure_ask_trial.py --part plan  # 第二批：答應陪你出陣之後商量打法（三句各 10 次）
-    .venv/Scripts/python.exe scripts/figure_ask_trial.py --part all   # 三樣都跑（約 70 次）
+    .venv/Scripts/python.exe scripts/figure_ask_trial.py --part gift  # 贈物：指名要他給不了的東西（三句各 10 次），看話跟真的給的對不對得上
+    .venv/Scripts/python.exe scripts/figure_ask_trial.py --part all   # 四樣都跑（約 100 次）
 
 預期：求指點挑 spar、求帶路去廣宗挑 escort:guangzong（份量大、情誼淺時多半開條件）、借兵這種清單外的事填 refuse；
 條件 id 都在清單上（清單外的會印「清單外」，引擎當沒開）。最後印每句的統計：挑了什麼、意願平均、開條件幾成、結果分布。
 第二批：擲中又開了條件是「先做後付」（腳本當作還能欠他）；plea 看他開口求你挑的 want／reward 合不合清單（回報份量不能比請託大）；
 plan 看模型給的成功率（引擎夾在 plan_floor～plan_cap）合不合打法的險與穩。
+gift（2026-10-27 正式站：求天池露，他「取出一小瓶晶瑩剔透的液體」，實際給精鐵砂）：提示裡寫了他只給得出哪一樣，
+看答應、開條件兩版有沒有說出那一樣、有沒有把玩家指名的答應下來；「對不上」那幾次遊戲裡會換成固定句（parley.gift_slip），越少越好。
 """
 from __future__ import annotations
 
@@ -52,6 +55,11 @@ PLAN_LINES = [
     "我們兩個直接衝他中軍斬將",  # 險：該給低的機會
     "等夜裡放火燒他的糧車",  # 看人物性格
 ]
+GIFT_LINES = [
+    "我完成了委託，是不是可以拿天池露給我了？",  # 正式站那一句：天池露是高階素材，他給不了
+    "聽說你有隕鐵膽，送我一塊吧",  # 指名另一樣給不了的
+    "盧公，手頭有什麼能送我的嗎？",  # 沒指名：看他有沒有說出真的給的那樣
+]
 
 
 def main() -> None:
@@ -66,8 +74,8 @@ def main() -> None:
     parser.add_argument("--model", help="換一個模型試（預設用 content/config.json 的 ollama_model）")
     parser.add_argument("--warmup-timeout", type=int, default=600, help="第一次載入模型最多等幾秒")
     parser.add_argument("--quiet", action="store_true", help="不印每一次的回話，只印統計")
-    parser.add_argument("--part", choices=["ask", "plea", "plan", "all"], default="ask",
-                        help="ask 你求他（第一批，預設）、plea 他主動開口求你、plan 出陣前商量打法、all 三樣都跑")
+    parser.add_argument("--part", choices=["ask", "plea", "plan", "gift", "all"], default="ask",
+                        help="ask 你求他（第一批，預設）、plea 他主動開口求你、plan 出陣前商量打法、gift 贈物對不對得上、all 四樣都跑")
     parser.add_argument("--mood", default="焦慮", help="plea 用：把他此刻的心事當成這一種（焦慮、悲憤才會開口）")
     args = parser.parse_args()
 
@@ -116,6 +124,8 @@ def main() -> None:
         _plea(game, content, client, cid, args)
     if args.part in ("plan", "all"):
         _plan(game, content, client, cid, args)
+    if args.part in ("gift", "all"):
+        _gift(game, content, client, cid, args, extra)
     if args.part not in ("ask", "all"):
         return
 
@@ -164,6 +174,40 @@ def main() -> None:
         print(f"  ── 統計（{done} 次{f'，{fails} 次失敗' if fails else ''}）：挑了 {dict(picked)}；意願平均 {avg}（{len(willing)} 筆有填）；"
               f"開條件 {conds}/{done}；結果 {dict(outcomes)}")
         print(f"     漏填：ask 空白（當閒聊） {picked['']}/{done}、willing {no_willing}/{done}、婉拒那一版（narrative_no）{no_no}/{done}\n")
+
+
+def _gift(game, content, client, cid, args, extra) -> None:
+    """贈物：提示裡寫了他只給得出哪一樣（parley.gift_of），看答應、開條件兩版跟真的給的對不對得上。"""
+    gift = parley.gift_of(game.state, content, cid)
+    print(f"══ 贈物：他此刻只給得出 {parley.gift_text(gift)}")
+    for line in GIFT_LINES:
+        said = say_text(line, game.say_max())
+        if said is None:
+            continue
+        picked, slips, done = Counter(), Counter(), 0
+        print(f"── 你：「{said}」")
+        for n in range(1, args.runs + 1):
+            request = companion_agent.build_request(game.state, content, game.world, cid, "talk:say", said, free=True, extra=extra,
+                                                    required=parley.ASK_FIELDS)
+            turn, secs = _generate(client, request)
+            if turn is None:
+                continue
+            done += 1
+            ask = (turn.ask or "").strip()
+            picked[ask or "空"] += 1
+            marks = []
+            for label, text in (("答應", turn.narrative), ("開條件", turn.narrative_terms or "")):
+                slip = parley.gift_slip(content, gift, said, text) if text else None
+                if slip is not None:
+                    slips[label] += 1
+                    marks.append(f"{label}對不上（{slip or '別樣東西'}）")
+            if args.quiet:
+                continue
+            print(f"  #{n} ask={ask or '空'}　{'、'.join(marks) or '對得上'}　{secs:.0f} 秒")
+            print(f"     答應：{turn.narrative}")
+            if turn.narrative_terms:
+                print(f"     開條件：{turn.narrative_terms}")
+        print(f"  ── 統計（{done} 次）：挑了 {dict(picked)}；對不上（遊戲裡換固定句）答應 {slips['答應']}/{done}、開條件 {slips['開條件']}/{done}\n")
 
 
 def _generate(client, request):
