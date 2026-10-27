@@ -1056,6 +1056,9 @@ class Game:
             elapsed = max(0.0, now - self.state.last_real) * self.content.config.time_scale
             self.state.last_real = now
             msgs += self._advance_player_local(elapsed)
+            if away_from is not None and now - away_from >= self.content.config.tavern.hit_offline_minutes * 60:
+                if self._tavern_hit_check(away_from):  # 酒肆：下線那一段殺手找上門（站在城外下線的人）；戰報與紀錄自己寫，不併進江湖大事
+                    self._save_season()
         if self.state.player.picking_smith and not equipment.smith_open(self.state, self.content):
             equipment.close_smith(self.state.player)  # 開關關了、人不在城鎮了（內容改版、管理者挪人）：收起鐵匠鋪，單子與頁一起清
         if self.state.player.smith_draft is not None and not smithing.draft_here(self.state, self.content, self.state.player.smith_draft):
@@ -2879,8 +2882,8 @@ class Game:
     # 雇主收結果（_deliver_hits，雇主自己同步時）。單子在季上（WorldState.tavern_hits），亂數用自己的種子，不動 Game.rng ──
 
     def _tavern_hit_problem(self, target: str, tier: int) -> tuple[str | None, Game | None]:
-        """雇不雇得了（拒絕的話, 對方那一份）：要先在酒肆查到過這個人（不然查無此人與默默無名讀得出差別）、有仇（照截殺的規矩）、
-        雙方都過了新手期、對方身上沒有別人的單、同一對人 hit_pair_hours 內沒雇過、季還在跑。"""
+        """雇不雇得了（拒絕的話, 對方那一份）：要先在酒肆查到過這個人（不然查無此人與默默無名讀得出差別）、不是自己、
+        截殺的緊急開關開著（Config.raid.enabled）；同陣營也接（企劃者 2026-10-27「不應該限制玩家」，以前要有仇）；雙方都過了新手期、對方身上沒有別人的單、同一對人 hit_pair_hours 內沒雇過、季還在跑。"""
         s, c, cfg = self.state, self.content, self.content.config.tavern
         if s.world.ended:
             return tavern_rules.HIT_ENDED, None
@@ -2892,8 +2895,10 @@ class Game:
         if other is None:
             return tavern_rules.HIT_NEED_KNOWN, None
         them = other.state.player.name
-        if not self.raid_shown(other):
-            return tavern_rules.HIT_NO_FEUD.format(name=them, him=gender.pronoun(other.state)), other
+        if name_key(them) == name_key(s.player.name):
+            return tavern_rules.HIT_SELF, other
+        if not c.config.raid.enabled:
+            return tavern_rules.HIT_ENDED, other
         if roster.raid_newbie(s, c):
             return tavern_rules.HIT_NEWBIE_ME, other
         if roster.raid_newbie(other.state, c):
@@ -2916,15 +2921,16 @@ class Game:
             self._shop_after(problem, "refused")
             return [problem]
         hush = flag == "hush"
-        base = cfg.hit_prices[tier] + (cfg.hush_price if hush else 0)
+        them = other.state.player.name
+        w = s.world
+        streak = tavern_rules.hit_streak(w, s.player.name, them, cfg.hit_fail_max)
+        base = tavern_rules.hit_price_base(c, tier, streak) + (cfg.hush_price if hush else 0)
         price = self._tavern_charge(base)
         if price is None:
             return self._tavern_short(base)
-        them = other.state.player.name
-        w = s.world
         w.tavern_hit_seq += 1
         hit = TavernHit(id=w.tavern_hit_seq, client=s.player.name, target=them, tier=tier, price=price, place=s.player.location,
-                        placed_real=self.now, until_real=self.now + cfg.hit_hours * 3600, hushed=hush)
+                        placed_real=self.now, until_real=self.now + cfg.hit_hours * 3600, hushed=hush, streak=streak)
         warn = cfg.hit_warn + 0.05 * renown.fame_tier(other.state, c)
         if tavern_rules.rng_for("酒肆殺手風聲", w.tavern_hit_seq, s.player.name, them, w.time).random() < warn:
             hit.warned = True
@@ -2935,6 +2941,8 @@ class Game:
         w.tavern_hits.append(hit)
         name = tavern_rules.hit_tier_name(tier)
         lines = [tavern_rules.HIT_PLACED.format(name=them, tier=name, until=self._real_stamp(hit.until_real))]
+        if streak:
+            lines.append(tavern_rules.HIT_STREAK.format(name=them, n=streak, pct=round(cfg.hit_fail_price_step * streak * 100)))
         if hush:
             lines.append(tavern_rules.HIT_HUSHED)
         tavern_rules.add_note(s, c, "hit", f"{tavern_rules.TITLES['hit']}・{them}", lines)
@@ -2966,9 +2974,11 @@ class Game:
         self._shop_say("hide")
         return [line]
 
-    def _tavern_hit_check(self) -> list[str]:
-        """自己（被盯上的人）剛做完一件事：有一張找你的單子、你人在城外、不在路上、不在決戰裡、沒剛被人截殺或設伏過，殺手照打聽度
-        擲一次找不找得到；找到了本人對本人打一場。到期的單子在這裡收（退款由雇主自己同步時領）。"""
+    def _tavern_hit_check(self, away_from: float | None = None) -> list[str]:
+        """自己（被盯上的人）剛做完一件事：有一張找你的單子、你人在城外、不在路上、不在決戰裡、沒剛被人截殺或設伏過、沒剛被殺手得手過
+        （tavern_shield_until），殺手照打聽度擲一次找不找得到；找到了本人對本人打一場。到期的單子在這裡收（退款由雇主自己同步時領）。
+        away_from 是同步時「上一次同步的現實秒」（下線那一段，企劃者 2026-10-27）：這一段跟單子的期限重疊、你下線那一刻站在城外，
+        一樣擲一次（城鎮裡下線照舊安全）；在這一段裡到期的單子先擲再收。"""
         s, c = self.state, self.content
         w, me = s.world, s.player
         if not tavern_rules.on(c) or not w.tavern_hits:
@@ -2977,11 +2987,15 @@ class Game:
         mine = [h for h in w.tavern_hits if not h.done and name_key(h.target) == key]
         if not mine:
             return []
+        start = self.now if away_from is None else away_from
+        live = [h for h in mine if h.until_real > start and h.placed_real < self.now]
         for h in mine:
             if h.until_real <= self.now:
                 h.done, h.outcome = True, "過期"
-        hit = next((h for h in mine if not h.done), None)
+        hit = next(iter(live), None)
         if hit is None or w.ended or me.journey is not None or tavern_rules.town(c, me.location) or roster.raid_newbie(s, c):
+            return []
+        if me.tavern_shield_until > self.now:
             return []
         battle = self._battle_now()  # 有攻城戰時是自己參戰的那一場（領地爭奪第二批）
         if battle is not None and me.name in battle.participants:
@@ -2993,18 +3007,19 @@ class Game:
         reach = tavern_rules.hit_reach(c, hit.place, s, self._tavern_wanted_of(me.name))
         if rng.random() >= tavern_rules.find_chance(c, reach):
             return []
-        return self._tavern_hit_fight(hit, rng)
+        hit.done = False  # 下線那一段裡到期的單子：上面先收成過期，擲中了照打
+        return self._tavern_hit_fight(hit, rng, away=away_from is not None)
 
     def _tavern_wanted_of(self, name: str) -> set[str]:
         """這個人身上有沒有通緝（名氣 +1）：有就回只含他名號鍵的集合。"""
         return {name_key(name)} & self._tavern_wanted()
 
-    def _tavern_hit_fight(self, hit, rng: random.Random) -> list[str]:
+    def _tavern_hit_fight(self, hit, rng: random.Random, away: bool = False) -> list[str]:
         s, c, cfg = self.state, self.content, self.content.config.tavern
         w, me = s.world, s.player
         tier_name = tavern_rules.hit_tier_name(hit.tier)
         mine = self._spar_power(self, self)
-        power = cfg.hit_power[min(hit.tier, len(cfg.hit_power) - 1)]
+        power = tavern_rules.hit_power_of(c, hit.tier, hit.streak)
         if me.tavern_guard_until > self.now:
             power *= cfg.guard_scale
         # 殺手照你自己的威力浮上來（同江湖水漲）：玉璽碎片的戰力不浮上去（改版），沒碎片時跟 mine 一樣
@@ -3044,13 +3059,14 @@ class Game:
             me.stats["silver"] = purse - lost
             record.silver = -lost
             con = team.con_of(s, c, self.world, PLAYER)
-            cut = team.armor_cut(s, c, self.world)
-            hp, _ = team._apply_toll(c, me.member, cfg.hit_hp_loss * (1 - cut), agi=me.stats.get("agi", team.BASE_STAT), con=con,
-                                     injury=treasures.amount(s, c, "injury"), season=s.world)  # 螭首（玉璽碎片改版）：變成內傷的減半
-            hp_lost = round(hp)
-            if hp_lost > 0:
-                record.changes.append(f"氣血 -{hp_lost}")
+            now_hp, _ = team.member_neili(c, me.member, con, season=s.world)
+            me.member.neili = min(now_hp, 1.0)  # 只剩一口氣（企劃者 2026-10-27）：防具、化勁都不擋，逼人去醫館
+            hp_lost = max(0, round(now_hp - me.member.neili))
+            record.changes.append(tavern_rules.HIT_HP_LEFT)
+            me.tavern_shield_until = self.now + cfg.hit_shield_hours * 3600
             story = tavern_rules.HIT_STORY_LOST.format(tier=tier_name)
+        if away:
+            story = tavern_rules.HIT_AWAY.format(place=c.locations[me.location].name) + story
         record.notes.append(story)
         record.notes += extra
         annals.note(s, c, annals.FIGHT, story, 2)
@@ -3232,6 +3248,8 @@ class Game:
             "mine": [tavern_rules.HIT_ACTIVE.format(name=h.target, tier=tavern_rules.hit_tier_name(h.tier), until=self._real_stamp(h.until_real))
                      for h in s.world.tavern_hits if not h.done and name_key(h.client) == me and h.until_real > self.now],
             "ended": bool(s.world.ended),
+            "streaks": [tavern_rules.HIT_STREAK.format(name=n, n=k, pct=round(cfg.hit_fail_price_step * k * 100))
+                        for n in p.tavern_known if (k := tavern_rules.hit_streak(s.world, p.name, n, cfg.hit_fail_max))],
         }
         return {
             "shop": "tavern",

@@ -238,7 +238,7 @@ def _feud(world, c, *, target_fame=10_000, target_at="wan_city"):
     return me, them
 
 
-def test_hiring_needs_a_name_you_found_and_a_feud():
+def test_hiring_needs_a_name_you_found():
     world = open_world()
     c = _content()
     me, them = _feud(world, c)
@@ -437,6 +437,133 @@ def test_leaving_the_tavern_keeps_the_save_readable():
     data = game.state.model_dump(mode="json")
     data["player"]["shop_hold"] = None
     assert GameState.model_validate(data).player.shop_hold == ""
+
+
+def _outside(c):
+    return next(lid for lid in c.locations if not tavern.town(c, lid) and tavern.near(c, "wan_city", lid) >= 1
+                and not c.locations[lid].tags.count("序章"))
+
+
+def _rig(monkeypatch, tier):
+    """殺手那一場的結果定死（tier 是本人這一邊的結果）；回傳記下殺手威力的清單。"""
+    from tianxia import encounter
+
+    seen = []
+
+    def fake(mine, killer, rng, *a, **k):
+        seen.append(killer / mine)
+        return encounter.EncounterResult(tier=tier, margin=0.0, our_power=mine, difficulty=killer)
+
+    monkeypatch.setattr("tianxia.engine.encounter.resolve_encounter", fake)
+    monkeypatch.setattr(tavern, "find_chance", lambda c, reach: 1.0)
+    return seen
+
+
+def test_same_side_can_hire_and_a_kill_leaves_one_hp_and_a_shield(monkeypatch):
+    """企劃者 2026-10-27：同陣營也能雇；得手了對方氣血只剩 1（不是扣上限的一成半），銀兩照丟，之後 hit_shield_hours 殺手找不上。"""
+    world = open_world()
+    c = _content()
+    me = _game(world=world, content=c, faction="guanjun")
+    them = _game("李尋歡", world=world, content=c, faction="guanjun")
+    for g in (me, them):
+        g.state.player.joined_at = -10 ** 9
+        CharacterStore(world.db).save(g.state)
+    me.choose("act:tavern")
+    me.tavern_do("seek", "李尋歡")
+    assert me._tavern_hit_problem("李尋歡", 0)[0] is None
+    me.tavern_do("hit", "李尋歡", "1")
+    me._save_season()
+    _rig(monkeypatch, "落敗")
+    them.sync(NOW + 5)
+    them.state.player.location = _outside(c)
+    purse = them.state.player.stats["silver"]
+    msgs = them._tavern_hit_check()
+    assert msgs and them.state.player.member.neili == 1.0
+    assert them.state.player.stats["silver"] < purse
+    assert them.state.player.tavern_shield_until == them.now + c.config.tavern.hit_shield_hours * 3600
+    them.state.world.raided.clear()
+    them.state.world.tavern_hits[-1].done = False  # 再來一次：護身期間殺手找不上
+    assert them._tavern_hit_check() == []
+
+
+def test_a_target_who_logs_off_outside_town_is_found_while_away(monkeypatch):
+    """下線那一段：站在城外下線、單子期限跟這一段重疊，回來同步時擲一次，紀錄裡有遭殺手找上；城鎮裡下線照舊安全。"""
+    world = open_world()
+    c = _content()
+    me, them = _feud(world, c)
+    me.choose("act:tavern")
+    me.tavern_do("seek", "李尋歡")
+    me.tavern_do("hit", "李尋歡", "0")
+    me._save_season()
+    _rig(monkeypatch, "落敗")
+    them.sync(NOW + 5)  # 宛城：城裡下線
+    them.sync(NOW + 3600)
+    assert not them.state.world.tavern_hits[-1].done
+    them.state.player.location = _outside(c)
+    them.sync(NOW + 3700)  # 才隔不到 hit_offline_minutes：不算下線
+    assert not them.state.world.tavern_hits[-1].done
+    them.sync(NOW + 3700 + c.config.tavern.hit_offline_minutes * 60 + 1)
+    hit = them.state.world.tavern_hits[-1]
+    assert hit.done and hit.outcome == "殺手贏"
+    struck = [e for e in them.state.journal if e.title == tavern.HIT_STRUCK]
+    assert struck and any("下線歇在" in line for line in struck[-1].lines)
+    assert them.state.player.member.neili == 1.0
+
+
+def test_an_order_that_lapsed_while_away_still_gets_its_roll(monkeypatch):
+    world = open_world()
+    c = _content()
+    me, them = _feud(world, c)
+    them.state.player.location = _outside(c)
+    CharacterStore(world.db).save(them.state)
+    me.choose("act:tavern")
+    me.tavern_do("seek", "李尋歡")
+    me.tavern_do("hit", "李尋歡", "0")
+    me._save_season()
+    _rig(monkeypatch, "落敗")
+    them.state.last_real = NOW + 1
+    them.sync(NOW + c.config.tavern.hit_hours * 3600 + 3600)  # 整張單子都在下線那一段裡過期
+    hit = them.state.world.tavern_hits[-1]
+    assert hit.outcome == "殺手贏"
+
+
+def test_each_miss_raises_the_next_price_and_the_killer_up_to_three(monkeypatch):
+    """同一個雇主找同一個人：每失手一次（打退、平手），下一張 +50% 價錢、威力 +0.1，最多疊 3 次；得手歸零。"""
+    world = open_world()
+    c = _content()
+    cfg = c.config.tavern
+    me, them = _feud(world, c)
+    me.choose("act:tavern")
+    me.tavern_do("seek", "李尋歡")
+    seen = _rig(monkeypatch, "僵持")
+    them.state.player.location = _outside(c)
+    for n in range(5):
+        k = min(n, cfg.hit_fail_max)
+        assert tavern.hit_streak(me.state.world, me.state.player.name, "李尋歡", cfg.hit_fail_max) == k
+        before = me.state.player.stats["silver"]
+        me.tavern_do("hit", "李尋歡", "0")
+        hit = me.state.world.tavern_hits[-1]
+        assert hit.streak == k
+        assert before - me.state.player.stats["silver"] == me._tavern_price(round(cfg.hit_prices[0] * (1 + 0.5 * k)))
+        me._save_season()
+        them.sync(them.now + 1)
+        them.state.player.location = _outside(c)
+        them.state.world.raided.clear()  # 截殺那一道一小時的護身不在這裡量
+        them._tavern_hit_check()
+        assert len(seen) == n + 1 and abs(seen[-1] - (cfg.hit_power[0] + 0.1 * k)) < 1e-6
+        them._save_season()
+        me.sync(me.now + 1)
+        hit = next(h for h in me.state.world.tavern_hits if h.id == hit.id)
+        assert hit.outcome == "平手"
+        for h in me.state.world.tavern_hits:  # 跳過同一對人 24 小時一次的限制
+            h.placed_real -= cfg.hit_pair_hours * 3600 + 10
+        them.state.player.tavern_shield_until = 0
+        me.state.player.stats["silver"] = 500
+    assert me.shop_view()["hits"]["streaks"]
+    me.state.world.tavern_hits[-1].outcome = "殺手贏"
+    assert tavern.hit_streak(me.state.world, me.state.player.name, "李尋歡", cfg.hit_fail_max) == 0
+
+
 def test_the_keeper_finds_facts_for_whatever_you_ask():
     """問酒家照問句找事實（企劃者 2026-10-27「大大小小的東西都可以問」）：人物、地名、素材、武學、店面、玩法各自帶得出那一樣，
     什麼都沒點到時給附近城鎮與野外；改版前清單裡只有這一區的局勢與傳聞。"""

@@ -243,8 +243,9 @@ def test_chishou_halves_the_injury_of_a_boss_fight(content, world):
     assert hurt[1] > 0 and hurt[0] == pytest.approx(hurt[1] * 0.5)
 
 
-def test_chishou_halves_the_injury_a_hired_killer_leaves(content, world):
-    """酒肆買兇的殺手打贏那一場：變成內傷的減半（Game._tavern_hit_fight）。"""
+def test_a_hired_killer_leaves_one_hp_with_or_without_chishou(content, world):
+    """酒肆買兇的殺手打贏那一場：氣血只剩 1，不加內傷（企劃者 2026-10-27「上線回來時氣血只剩 1 點」；以前扣上限一成半、
+    其中變內傷的螭首減半，現在沒有內傷可減，帶不帶螭首一樣）。"""
     from unittest import mock
 
     from tianxia import encounter
@@ -257,8 +258,8 @@ def test_chishou_halves_the_injury_a_hired_killer_leaves(content, world):
                         until_real=1e12)
         with mock.patch.object(encounter, "resolve_encounter", return_value=_lost()):
             game._tavern_hit_fight(hit, random.Random(0))
-        hurt.append(game.state.player.member.injury)
-    assert hurt[1] > 0 and hurt[0] == pytest.approx(hurt[1] * 0.5)
+        hurt.append((game.state.player.member.injury, game.state.player.member.neili))
+    assert hurt[0] == hurt[1] == (0.0, 1.0)
 
 
 def test_jinjiao_keeps_the_silver_when_you_lose(content, world):
