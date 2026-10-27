@@ -444,6 +444,13 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 /* 4. 戰鬥卡片底下的補充收成一行、放不下加「…」，點了看全文（同聽來的那一句，上下多 7px 的點擊範圍用負的 margin 吃回去） */
 .battle-card .tx-extra .tx-line.tx-tight { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; padding-top: 7px; padding-bottom: 7px; margin: -5px 0; }
 .battle-card .tx-extra .tx-line.tx-tight.open { white-space: normal; overflow: visible; text-overflow: clip; }
+/* 第一屏放不下（app.js FIT_STEPS 5c）：補充只留第一行，底下一行「展開全文 ▾」，點了整塊攤開 */
+.battle-card .tx-extra.fit-extra { cursor: pointer; }
+.battle-card .tx-extra.fit-extra > .tx-line ~ .tx-line { display: none; }
+.battle-card .tx-extra.fit-extra::after { content: "展開全文 ▾"; display: block; margin-top: 2px; font-size: 13px; color: var(--accent); }
+/* 第一屏放不下（app.js FIT_STEPS 5a）：場景的畫縮成一條橫幅，地名與時刻照舊壓在上面 */
+.card.scene > .scene-art.fit-art { height: 84px; }
+.card.scene > .scene-art.fit-art figcaption { padding-top: 14px; }
 /* 5. 第一回合也收進「展開過程」（按了 .open 照舊一回合一回合攤開）；「得失」那一段不在這裡面，照舊看得到 */
 .battle-card ul.rounds.fit-fold:not(.open) { display: none; }
 .battle-card p.rounds-tale.fit-fold:not(.open) { display: none; }
@@ -483,6 +490,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 /* 收著的第一回合最多兩行（PM 2026-10-05）：app.js 的 fitFirstRound 量過、放不進兩行又拼得出數字行時，整句（.r-full）省略、
    換成只有數字的那一行（.r-short，「第1回合　你氣血 -13，對手氣勢 -10……」）；展開時一律是整句 */
 .battle-card ul.rounds .r-short { display: none; }
+.battle-card .nb { white-space: nowrap; } /* 得失的每一樣（「氣血 -11」）整顆不拆兩行（main.js 的 keepGainsWhole） */
 .battle-card ul.rounds.tight:not(.open) .r-full { display: none; }
 .battle-card ul.rounds.tight:not(.open) .r-short { display: inline; }
 .battle-card ul.rounds > li { animation: tx-round-in 0.3s ease-out both; }
@@ -1194,11 +1202,11 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 }
 .r-wash.on { background: var(--ink); border-color: var(--ink); color: var(--paper); }
 /* 輿圖四層（減法季整合設計第七章）：上面一排「大區名・全區・天下」；全區按著是墨底；拖遠了右上角一顆「回到我這」（app.js 的 homeCheck） */
-.r-full {
+.r-top .r-full { /* 只限輿圖上面那一排：戰鬥卡片收著的第一回合也有 .r-full（main.js 的 fitFirstRound），不加範圍會把它畫成一顆不換行的膠囊 */
   flex: none; height: 40px; padding: 0 14px; border-radius: 20px; border: 1px solid var(--line); box-shadow: var(--shadow); cursor: pointer;
   background: color-mix(in srgb, var(--card) 96%, transparent); color: var(--ink); font: inherit; font-size: 14px; white-space: nowrap;
 }
-.r-full.on { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+.r-top .r-full.on { background: var(--ink); border-color: var(--ink); color: var(--paper); }
 .map-home {
   position: absolute; right: 10px; top: 58px; z-index: 1; height: 34px; padding: 0 14px; border-radius: 17px; border: 1px solid var(--accent);
   background: color-mix(in srgb, var(--card) 96%, transparent); color: var(--accent); font: inherit; font-size: 13px; font-weight: 700; box-shadow: var(--shadow); cursor: pointer;
@@ -1211,7 +1219,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
   display: block; width: 100%; margin: 8px 0 2px; padding: 4px 0; border: 0; border-bottom: 1px dashed var(--line); background: none;
   color: var(--ink-2); font: inherit; font-size: 12px; text-align: center; cursor: pointer;
 }
-@media (max-width: 349px) { .r-top { gap: 6px; } .r-top .w-back, .r-top .w-tl, .r-wash, .r-full { padding: 0 9px; } .r-pick { letter-spacing: 0; padding: 0 26px 0 12px; } }
+@media (max-width: 349px) { .r-top { gap: 6px; } .r-top .w-back, .r-top .w-tl, .r-wash, .r-top .r-full { padding: 0 9px; } .r-pick { letter-spacing: 0; padding: 0 26px 0 12px; } }
 .r-compass { position: absolute; left: 10px; bottom: 62px; display: none; pointer-events: none; opacity: 0.9; }
 .mapx.region .r-compass { display: block; }
 .mapx.region.near .r-compass { display: none; } /* 第一層不畫羅盤（減法季整合設計第七章的對照圖；左下角會壓到走得到的地方的名字） */

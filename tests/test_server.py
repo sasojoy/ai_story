@@ -1201,7 +1201,7 @@ def _app_functions_in_node(js: str, script: str) -> str:
     consts = [m.group(0) for name in names if (m := re.search(rf"(?m)^  const {name} = .*;$", js))]
     funcs = [
         _js_function(js, f"function {name}(") + "\n  }"
-        for name in ("roundsFold", "withReportLink", "fightCard", "trailMoves", "compactRound", "foldTraitItems", "foldTraitText")
+        for name in ("roundsFold", "withReportLink", "fightCard", "keepGainsWhole", "trailMoves", "compactRound", "foldTraitItems", "foldTraitText")
         if f"function {name}(" in js
     ]
     prelude = 'const S = { roundsOpen: null };\nconst roundsMore = (open) => (open ? "收起過程 ▴" : "展開過程 ▾");\n'

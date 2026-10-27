@@ -1048,6 +1048,26 @@
       if (list) list.classList.add("fit-fold");
       return !!list;
     } },
+    // 5a. 場景的畫（減法季批 8）縮成一條橫幅（地名、時刻照舊壓在上面）：畫在行動列上面最佔高度（375×812 約 270px），
+    //     「剛剛」的戰鬥卡長一點就把整排行動推出第一屏（2026-10-27 回報：以前沒有畫，行動鈕一直在第一屏）
+    { key: "art", run: () => {
+      const art = document.querySelector("#page > .card.scene > .scene-art:not(.fit-art)");
+      if (art) art.classList.add("fit-art");
+      return !!art;
+    } },
+    // 5c. 戰鬥卡片底下的補充（得了什麼、地盤多撿一份、鑄譜的那一句……）只留第一行，其餘收起來；點那一塊整塊攤開（S.extraOpen 記這一場）。
+    //     得失那一段（數字）照舊在卡片上
+    { key: "extra", run: () => {
+      if (S.extraOpen != null && S.extraOpen === S.main.card_id) return false; // 玩家點開過：不收回去
+      const box = document.querySelector("#page .battle-card .tx-extra:not(.fit-extra)");
+      if (!box || box.querySelectorAll(":scope > .tx-line").length < 2) return false;
+      box.classList.add("fit-extra");
+      box.setAttribute("data-act", "extra-more");
+      box.setAttribute("role", "button");
+      box.setAttribute("tabindex", "0");
+      box.setAttribute("aria-expanded", "false");
+      return true;
+    } },
     // 5b. 決戰的本場戰功（名聲 4B）：名字底下那一行稱號收掉（名字照舊；三招不能被擠出第一屏）
     { key: "merit", run: () => {
       const rows = document.querySelectorAll(".g-merit .rn-two small:not(.fit-hide)");
@@ -1174,6 +1194,11 @@
       ["data-act", "role", "tabindex", "aria-expanded"].forEach((a) => el.removeAttribute(a));
     });
     page.querySelectorAll(".fit-fold").forEach((el) => el.classList.remove("fit-fold"));
+    page.querySelectorAll(".fit-art").forEach((el) => el.classList.remove("fit-art")); // 5a
+    page.querySelectorAll(".fit-extra").forEach((el) => { // 5c
+      el.classList.remove("fit-extra");
+      ["data-act", "role", "tabindex", "aria-expanded"].forEach((a) => el.removeAttribute(a));
+    });
     page.querySelectorAll(".wk-card.fit-hide, .opt-note.fit-hide").forEach((el) => el.classList.remove("fit-hide")); // 第 10 步
     page.querySelectorAll(".now.fit-title").forEach((el) => el.classList.remove("fit-title")); // 第 10 步；fits／clamp 照下一段還原
     page.querySelectorAll(".now.fit-short").forEach((el) => {
@@ -6028,6 +6053,11 @@
         case "newbie-drifter": await doMain("newbie_drifter"); break; // 新手目標的「就當散人」
         case "hear-more": hearToggle(el); break; // 戰鬥卡片底下聽來的那一句：原地展開／收起，不重畫
         case "front-more": frontOpen(el); break; // 收著的出陣回報：原地攤開，不重畫
+        case "extra-more": // 5c 收起來的戰鬥補充：整塊攤開，不重畫（之後重量也不再收這一場）
+          S.extraOpen = S.main.card_id;
+          el.classList.remove("fit-extra");
+          ["data-act", "role", "tabindex", "aria-expanded"].forEach((a) => el.removeAttribute(a));
+          break;
         case "line-more": lineToggle(el); break; // FB-107 收成一行的補充（對手的描述）：原地展開／收起，不重畫
         case "own-more": ownOpen(); break; // FB-107：決戰時收成一行的所在地描述，原地攤開
         case "battle-open": battleOpen(); break; // FB-120：只能觀戰的人收成一行的開打中的戰場，攤開（記戰場的名字）

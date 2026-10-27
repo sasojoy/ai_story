@@ -20,7 +20,7 @@ pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，�
 
 DRIVER = r"""
 const H = new Function("S", [konst("ROUNDS_MARK"), konst("TALE_MARK"), konst("reportLink"), konst("TRAIT_LEAD"), konst("roundsMore"),
-  fn("foldTraitItems"), fn("foldTraitText"), fn("roundsFold"), fn("withReportLink"), fn("trailMoves"), fn("fightCard"),
+  fn("foldTraitItems"), fn("foldTraitText"), fn("roundsFold"), fn("withReportLink"), fn("trailMoves"), fn("keepGainsWhole"), fn("fightCard"),
   "return { fightCard };"].join("\n"))({ roundsOpen: null });
 finish(input.cards.map((c) => H.fightCard(c, 7)));
 """
