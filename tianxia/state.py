@@ -1008,6 +1008,9 @@ class PlayerState(BaseModel):
     epiphanies: int = 0
     epiphany_dry: int = 0
     god_naming: GodNaming | None = None
+    # 長篇奇事（企劃者 2026-10-27）：紀念物（沒有效果、不能賣，跨季跟著角色）、跨季的旗標（換季時再立進新角色的 flags）。都在 QUIET_DEFAULTS
+    keepsakes: list[str] = Field(default_factory=list)
+    lasting: list[str] = Field(default_factory=list)
 
     @model_serializer(mode="wrap")
     def _drop_quiet_defaults(self, handler):
@@ -1031,6 +1034,7 @@ QUIET_DEFAULTS = (
     "answer_day", "answers_today", "sortie_cooldown_until", "answer_cooldown_until", "duty_day", "duties_today",
     "storylines", "story_open", "story_cards",  # 一條線（特殊事件）
     "epiphanies", "epiphany_dry", "god_naming",  # 特殊頓悟
+    "keepsakes", "lasting",  # 長篇奇事
 )
 
 
@@ -1258,6 +1262,9 @@ class StoryProgress(BaseModel):
     go: str | None = None
     ending: str | None = None
     custom: StoryDef | None = None
+    entered: float | None = None  # 進這一段的時刻（wait_days 從這裡起算；舊進度沒有是 None＝不用等）
+    ended_at: float | None = None  # 收的時刻（餘波 StoryAfter.days 從這裡起算）
+    after_seen: list[int] = Field(default_factory=list)  # 已經跳過（或過期）的餘波序號
 
 
 class GodNaming(BaseModel):
@@ -1279,7 +1286,7 @@ class StoryCard(BaseModel):
     網頁照順序一張一張跳，看過就清（storyline.seen）。"""
 
     line: str
-    kind: Literal["start", "stage", "end", "unfinished"]
+    kind: Literal["start", "stage", "end", "unfinished", "after"]
     title: str
     text: str
     image: str | None = None
