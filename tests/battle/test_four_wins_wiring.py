@@ -112,16 +112,6 @@ def test_off_gentry_credit_keeps_no_books():
     assert game.state.player.contrib > 0 and game.state.player.ledgers == {}
 
 
-def test_no_stir_when_four_wins_is_on():
-    """攪局（陣營在這條線上沒有目標的出陣）拿掉：豪強依附一軍本來就碰不到，開關後面另擋一層。"""
-    game = wins_game(faction="haoqiang", ally="guan", at="zhuo_militia_hall")
-    with mock.patch("tianxia.sortie.mode", return_value="stir"):
-        assert game._sortie_mode(game.content.locations["changshe"]) is None
-    off = wins_game(wins_content(off=True), name="乙客", faction="haoqiang", ally="guan", at="zhuo_militia_hall")
-    with mock.patch("tianxia.sortie.mode", return_value="stir"):
-        assert off._sortie_mode(off.content.locations["changshe"]) == "stir"
-
-
 def test_showdown_credits_the_side_it_joined():
     """決戰的戰功記參戰那一刻那一邊那一本（計畫 5.0 第 12 條）：中途改幫另一軍，這一場照舊記原來那一軍。"""
     from tianxia.battle_instance import BattleParticipant

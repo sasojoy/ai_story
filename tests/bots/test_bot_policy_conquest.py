@@ -33,7 +33,6 @@ def _odds(monkeypatch, word: str) -> None:
     monkeypatch.setattr(Game, "odds", lambda self, squad_id, at=None: word)
 
 
-
 def test_a_bot_does_not_attack_where_it_cannot_win(monkeypatch):
     game = _bot(go(join(conquest_game("week7", name="假官"), "guan"), "runan_wilds"), "guan")
     w, c, profile = game.state.world, game.content, game.state.player.bot
@@ -119,14 +118,6 @@ def test_a_strike_order_still_leads_the_bot_to_a_figure_standing_on_a_block_it_c
     _odds(monkeypatch, "必敗")
     assert bot_policy._outmatched(game, "runan_wilds")
     assert bot_policy._order_hop(game) is not None
-
-
-def test_switched_off_the_odds_do_not_matter(monkeypatch):
-    """領地爭奪關著（舊規則的季）：出陣照舊不看勝算。"""
-    game = _bot(go(join(plain_game("week7", name="假官"), "guan"), "runan_wilds"), "guan")
-    _odds(monkeypatch, "必敗")
-    assert not bot_policy._outmatched(game, "runan_wilds")
-    assert not bot_policy._outmatched(game, "hilltop_wilds")
 
 
 def test_pick_remembers_the_order_hop_only_inside_one_pick(monkeypatch):

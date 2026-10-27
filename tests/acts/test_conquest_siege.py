@@ -1466,17 +1466,6 @@ def test_the_base_keeps_its_line():
     assert "沒有進度可推" in _note(game, "changshe")
 
 
-@pytest.mark.slow  # 單一條超過一秒（2026-10-27 測試整理 4 量的）
-@pytest.mark.parametrize("profile", ["week7", None, "season21"])  # 一個測試只開一季
-def test_switch_off_the_line_never_mentions_a_siege(profile):
-    """領地爭奪關著：行動列這一行沒有任何攻城的字（舊規則推線）；siege_state 關著也沒東西可讀。"""
-    game = go(join(plain_game(profile), "huang"), "runan_wilds")
-    assert game.state.world.conquest is None
-    for text in conquest.FROZEN_WHY.values():
-        assert text not in _note(game, "runan_wilds")
-    assert conquest.siege_state(game.state.world, "runan_wilds") is None
-
-
 # ── 原 test_conquest_fb566.py（整檔搬進來） ──
 # FB-566（領地爭奪小單 QA 開的，`97567ff0` 就有）：同一個大區兩場攻城同時集結，排在前面的那一場自己站不進去時，自己站得進去的那一場
 # 沒有加入鈕。重現：官軍攻嵩山深處、黃巾攻荒丘（都是中立地、同一刻開集結），黃巾的人站在荒丘：`_joinable()` 是黃巾那一場，`_battle_now`

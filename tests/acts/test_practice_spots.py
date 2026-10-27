@@ -267,15 +267,6 @@ def test_season21_says_this_week():
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize("profile", [None])
-def test_the_other_seasons_say_this_season(profile):
-    game = _game_fb672("changshe", "guan", profile)
-    face = _face_before(game)
-    _use_up(game)
-    assert _note(game) == _reason_fb672(_option(game)) == f"這一季頭目{face}不再現身"
-
-
-@pytest.mark.slow
 @pytest.mark.parametrize("faction,place,seen,other", [("guan", "changshe", "段鐵頭", "韓稜"), ("huang", "julu_altar", "衛重", "梁鶴")])
 def test_the_name_is_the_face_he_shows_that_side(faction, place, seen, other):
     """同一隻頭目有兩個面貌（官軍遇上黃巾那一面、黃巾遇上官軍那一面），寫的是你看到的那一個。"""

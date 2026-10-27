@@ -437,11 +437,9 @@ def test_crossed_swords_on_every_block_you_can_attack():
 
 @pytest.mark.slow  # 單一條超過一秒（2026-10-27 測試整理 4 量的）
 def test_ropes_hang_no_beads_without_tug_of_war():
-    """領地爭奪沒有拔河：輿圖總覽的三條戰線照舊寫值，繩上不掛照門檻擺的地點；關著照舊掛。"""
+    """領地爭奪沒有拔河：輿圖總覽的三條戰線照舊寫值，繩上不掛照門檻擺的地點（舊拔河 2026-10-27 拿掉，沒有「關著照舊掛」了）。"""
     ropes = _game().map_state()["ropes"]
     assert len(ropes) == 3 and all(r["beads"] == [] for r in ropes)
-    plain = go(join(plain_game("week7"), "guan"), "yingchuan")
-    assert any(r["beads"] for r in plain.map_state()["ropes"])
 
 
 def _frame(out: str, loc_id: str) -> str:

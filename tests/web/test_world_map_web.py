@@ -149,21 +149,6 @@ def test_region_labels_show_name_and_counts_from_the_sides():
     assert f">{by['luoyang']['line']}<" in low and ">洛陽<" in low and " 0・" not in low and "寶 0" not in low
 
 
-def test_a_region_with_nothing_to_count_has_no_second_line():
-    """全是 0 那一行就不畫（企劃者 2026-10-20）：地盤關著（整張沒人佔）時沒有高級資源地的大區只寫名字，框也矮一截。"""
-    game = _game(content=classic_rules(real_content("week7")), conquest=False)
-    by = {x["id"]: x for x in run(game, LABELS)}
-    want = _lines(game)
-    bare = [k for k, v in want.items() if not v]
-    rich = [k for k, v in want.items() if v]
-    assert bare and rich and all(by[k]["line"] == "" for k in bare) and all(by[k]["line"].startswith("寶 ") for k in rich)
-    assert by[bare[0]]["h"] < by[rich[0]]["h"]
-    low, _ = parts(game)
-    name = low.index(f'paint-order="stroke">{by[bare[0]]["name"]}</text>')  # 大區名那一行（點擊區的 <title> 也寫大區名）
-    group = low[low.rindex('<g class="w-label"', 0, name):]
-    assert group[: group.index("</g>")].count("<text") == 1
-
-
 # 地圖框的大小（寬 × 高）：實機量的（2026-10-21，world3.localhost 預覽、狀態列底下多一行心得提示時最矮）：375×812 → 375×624、
 # 375×667 → 375×479、360×640 → 360×452、320×568 → 320×344（320 寬的狀態列折成好幾行，天下圖只剩約 0.17 倍）。收尾那一次
 # （2026-10-21，world3b.localhost、翻地合進來之後）360×640 量到 360×436（狀態列折幾行跟著那一刻的字長短變），一起守
@@ -299,27 +284,6 @@ def test_on_the_road_you_are_drawn_on_the_road_and_the_drawer_says_where():
     assert "往 <b>潁川郊野</b>" in out and "分鐘" in out and "你在" not in out
     _, high = parts(game)
     assert f'cx="{st["journey"]["x"]:g}"' in high and 'class="w-you"' in high
-
-
-def test_the_timeline_repaints_the_ground_for_that_week():
-    game = _game(conquest=False)  # 舊拔河：推線就會易手
-    w, c = game.state.world, game.content
-    territory.update(w, c)
-    w.time = calendar.week_start(2, c, w) + 60
-    w.trends["yingru"] = 95
-    territory.update(w, c)
-    w.time = calendar.week_start(3, c, w) + 60
-    territory.update(w, c)
-    st = game.map_state()
-    changed = next(x for x in st["weeks"] if x["week"] == 2)["changed"]
-    flip = next(e for e in changed if e["id"] == "guan_camp")
-    assert flip["to"] == "huang" and flip["from"] not in (None, "huang")
-    soft = {s["id"]: s["soft"] for s in game.map_base()["world"]["sides"]}
-    week1, _ = parts(game, "{ k: 2.5, week: 1, tl: true, sel: null }")
-    week2, high2 = parts(game, "{ k: 2.5, week: 2, tl: true, sel: null }")
-    assert re.search(rf'data-cell="guan_camp" d="[^"]+" fill="{soft[flip["from"]]}"', week1)
-    assert re.search(rf'data-cell="guan_camp" d="[^"]+" fill="{soft["huang"]}"', week2)
-    assert high2.count('class="pulse"') == len(changed) + 1  # 易手的那幾處閃一圈，加上你的那一圈
 
 
 def _four_sides():

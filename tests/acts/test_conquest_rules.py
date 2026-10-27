@@ -1227,27 +1227,6 @@ def test_fb687_the_mandate_line_says_the_shards_add_nothing_more():
     assert seal.shift_text(0, {}, d, extra=True) == "起點不再另偏"
 
 
-@pytest.mark.slow  # 單一條超過一秒（2026-10-27 測試整理 4 量的）
-@pytest.mark.parametrize("profile", ["week7", None, "season21"])
-def test_conquest_off_not_a_byte_changes(profile, monkeypatch):
-    """領地爭奪關著（正式內容的預設）：開集結的訊息、決戰那一列的 JSON、季（含天下大事）、決戰畫面，跟拿掉這個掛點時一模一樣，
-    決戰那一列連 front_note 這個鍵都沒有。"""
-    def run(hooked: bool):
-        game = plain_game(profile)
-        if not hooked:
-            monkeypatch.setattr(world_mod, "_front_muster", lambda *a, **k: [])
-        d, msgs, battle, season = _muster(game)
-        out = (msgs, battle.model_dump_json(exclude={"record_id", "rounds"}), season.model_dump_json(),
-               game._battle_scene_text(battle, d))  # noqa: SLF001
-        monkeypatch.undo()
-        return out
-
-    with_hook, without = run(True), run(False)
-    assert with_hook == without
-    assert '"front_note"' not in with_hook[1]
-    assert "戰況" not in with_hook[3].split("\n\n")[1]
-
-
 def test_old_rows_without_the_snapshot_still_render():
     """舊資料（這一版以前開的決戰，那一列沒有 front_note）：讀得進來、是 None，畫面不多寫、不炸。"""
     game = conquest_game("season21")

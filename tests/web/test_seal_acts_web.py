@@ -304,19 +304,6 @@ def test_fb645_every_block_greyed_still_opens_the_layer_and_lists_them():
     assert out["out"][0]["open"] is not True and "shop-seal" not in out["out"][0]["app"]
 
 
-def test_without_conquest_the_card_line_says_why_not_how_many():
-    """領地爭奪關著的季（PM 2026-10-22 打開之前正式內容的三種季；現在要明講關掉）：鎮地的鈕灰著、碎片卡那一行寫原因（不寫「還能起用 2 次」，
-    FB-626 那種一句說能用一句說不能）。"""
-    c, w, m = _view("chishou", at="changshe", conquest_on=False)
-    act = m["status"]["seal"]["act"]
-    assert act["idle"] and not act["ok"]
-    assert "獨門行動・鎮地：這一季沒有領地爭奪，起用不了。" in run(m, "return H.pageJianghu();")
-    row = run(m, 'return H.heirloomRow({name: "螭首", effect_text: "x"}, H.sealActNow());')
-    assert re.search(r'data-act="seal-act" disabled title="這一季沒有領地爭奪', row)
-    c, w, m = _view("xuanniu", at="changshe", conquest_on=False)
-    assert "獨門行動・引將：這一季還能起用 2 次" in run(m, "return H.pageJianghu();")  # 別的照舊
-
-
 def _bot_world(bot: bool):
     """甲客懷著玄紐（伺服器假人或真人），一個旁觀客在別處；回旁觀客的 /api/main。"""
     c = real_content("season21")

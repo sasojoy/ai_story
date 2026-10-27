@@ -959,24 +959,6 @@ def test_howto_says_duty_stays_on_own_ground():
     assert "守勢行動" not in " ".join(howto.territory_lines(off.content, True, off.state.world))  # 關著：拔河那一版，一個字不變
 
 
-@pytest.mark.slow  # 單一條超過一秒（2026-10-27 測試整理 4 量的）
-@pytest.mark.parametrize("profile", ["week7", None, "season21"])  # 週末、14 天（不帶設定檔）、21 天；一個測試只開一季
-def test_switch_off_the_duty_button_is_unchanged(profile):
-    """領地爭奪關著（正式內容的預設，週末、14 天、21 天都一樣）：每一個地點都沒有灰掉的原因；別人的地方、中立地照舊按得下去、
-    照舊那一個標籤。14 天的季沒有第一季規則、沒有軍令，守勢行動本來就不在選單上（修前修後都一樣）。"""
-    game = go(join(plain_game(profile), "guan"), "huangjin_camp")
-    for loc_id in game.content.locations:
-        assert sortie.duty_problem(game.content, game.state.world, "guan", loc_id) == ""
-    option = _duty(game)
-    if profile is None:
-        assert option is None
-        return
-    assert option is not None and option.enabled
-    assert option.label.startswith(game.content.orders.duties["guan"].name)
-    assert sortie.DUTY_OUT_OTHER not in option.label and sortie.DUTY_OUT_OPEN not in option.label
-    assert go(game, "deep_mountain") is game and _duty(game).enabled
-
-
 # ── 原 test_conquest_sortie_notes.py（整檔搬進來） ──
 # 領地爭奪第一批 QA 之後：行動列底下出陣那一行照實寫（FB-532、FB-533），敵方大本營與廣宗不給攻（計畫第八章裁決 18）。字待 joy 潤。
 #
@@ -1043,19 +1025,6 @@ def test_howto_sortie_line_drops_the_resistance_half_sentence():
     game = conquest_game("season21")
     text = " ".join(howto.sortie_lines(game.content, True, game.state.world))
     assert "越往對方老巢推越難推" not in text and "還沒人佔" in text
-
-
-@pytest.mark.slow  # 單一條超過一秒（2026-10-27 測試整理 4 量的）
-def test_switch_off_sortie_howto_and_line_unchanged():
-    """關著：說明與那一行一個字都不變（a73c111e 上量的）。"""
-    plain = plain_game("season21")
-    assert howto.sortie_lines(plain.content, True, plain.state.world) == [
-        "- **出陣**（體力 6，每天 5 次，台灣時間 00:00 換日）：投靠了陣營才有，只在戰線上的地點。這裡歸別人就打一場，打贏推動戰局、記貢獻；"
-        "歸自家就守，不用打；地方豪強照依附的那一邊攻守。守推的量是攻的一半。只拿對手 3 成的心得與經驗，攻打贏銀兩也是 3 成，不掉東西。"
-        "越往對方老巢推越難推。"
-    ]
-    game = go(join(plain_game("season21"), "huang"), "guan_camp")
-    assert _note(game, "guan_camp").startswith("這裡歸別人：打一場，打贏推動戰局、記貢獻；")
 
 
 # ── 原 test_conquest_merge_c1.py（整檔搬進來） ──
@@ -1413,20 +1382,6 @@ def test_the_card_never_talks_about_announcements():
     assert texts[0] == atlas.DEFEND_NONE_CONQUEST.format(front=atlas.trend_name(game.content, "yingru"))
     assert texts[-1] == atlas.DEFEND_AREA_CONQUEST.format(
         front=atlas.trend_name(game.content, "yingru"), act=atlas.DEFEND_ACT_SORTIE.format(duty="巡哨"))
-
-
-@pytest.mark.slow  # 單一條超過一秒（2026-10-27 測試整理 4 量的）
-@pytest.mark.parametrize("profile", ["week7", None, "season21"])  # 一個測試只開一季
-def test_switch_off_the_defend_card_is_the_old_sentence(profile):
-    """領地爭奪關著：卡上照舊那一句、輿圖照舊標自家控制的戰線地點（舊規則整條線都記，不問哪一塊被公告）。"""
-    game = join(plain_game(profile), "guan")
-    game.state.world.orders.clear()
-    order = _defend(game)
-    c, w = game.content, game.state.world
-    assert orders.defend_places(c, w, order) == []  # 新函式只在領地爭奪生效時有東西
-    text = atlas.order_how(game.state, c, order)
-    assert "今天沒有" not in text and "被公告" not in text and "此刻沒有" not in text and "對面推得最高" not in text
-    assert text.startswith("在潁川汝南一帶") and "巡哨" in text
 
 
 # ── 原 test_conquest_fb608_edge_credit.py（整檔搬進來） ──

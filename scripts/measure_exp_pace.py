@@ -131,7 +131,7 @@ def _sortie_spot(game: Game) -> str | None:
             foes = [c.squads[sid] for sid in game._sortie_foes(loc) if sid in c.squads]
             v = min((f.exp * _win_rate(game, f) for f in foes), default=0.0) if foes else 0.0
         else:
-            host = game._sortie_host(loc, mode)
+            host = game._sortie_host(loc)
             v = float(host.exp) if host is not None else 0.0
         if v > value:
             best, value = loc.id, v
