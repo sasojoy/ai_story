@@ -6602,7 +6602,7 @@ class Game:
                 msgs = [f"你：「{said}」"] + companion_agent.say_dialogue(
                     self._quick_client(), self.state, self.content, self.world, companion_id, said,
                     turn=self._prepared_turn(prepared), extra=extra, required=parley.ASK_FIELDS if extra else (),
-                    decide=lambda turn: self._parley_decide(companion_id, turn), cap=self._deep_cap_now,
+                    decide=lambda turn: self._parley_decide(companion_id, turn, said=said or ""), cap=self._deep_cap_now,
                 )
             else:
                 msgs = companion_agent.continue_dialogue(
@@ -6692,11 +6692,12 @@ class Game:
             return ""
         asks, conditions = self._parley_lists(cid, road)
         hostile = parley.enemy(s, c, cid, self._side())
-        return parley.prompt_block(c, cid, asks, conditions, s.player.affinities.get(cid, 0), hostile)
+        gift = parley.gift_text(parley.gift_of(s, c, cid)) if any(a.id == "gift" for a in asks) else ""
+        return parley.prompt_block(c, cid, asks, conditions, s.player.affinities.get(cid, 0), hostile, gift)
 
-    def _parley_decide(self, cid: str, turn: companion_agent.CompanionTurn, road: bool = False) -> companion_agent.CompanionTurn:
+    def _parley_decide(self, cid: str, turn: companion_agent.CompanionTurn, road: bool = False, said: str = "") -> companion_agent.CompanionTurn:
         """C 段：驗模型挑的那一件、夾意願、擲骰，記今天求了幾件／婉拒了哪件／開了什麼條件，換上那一版回話。
-        關著、今天求滿了、模型沒挑事（只是閒聊）時原樣回去。"""
+        關著、今天求滿了、模型沒挑事（只是閒聊）時原樣回去。贈物那一版話跟他真的給的對不上（parley.gift_slip）換固定句；said 是玩家那一句。"""
         s, c = self.state, self.content
         if not parley.on(c) or parley.asks_left(s, c, cid) <= 0 or not (turn.ask or "").strip():
             return turn
@@ -6710,11 +6711,12 @@ class Game:
         self._parley_decision = decision
         name = c.characters[cid].name
         if decision.kind == "owe":  # 先做後付：他答應了、也說了要你之後做什麼——給玩家看開條件那一版（說得出條件）
-            text = (turn.narrative_terms or "").strip() or turn.narrative
+            text = self._parley_gift_check(cid, decision, said, (turn.narrative_terms or "").strip() or turn.narrative)
             return turn.model_copy(update={"narrative": text})
         if decision.kind == "terms":
             cond = parley.condition_text(c, decision.condition, decision.ask.weight)
             text = (turn.narrative_terms or "").strip() or parley.TERMS_FALLBACK.format(name=name, cond=cond)
+            text = self._parley_gift_check(cid, decision, said, text)
             s.player.parley_terms[cid] = ParleyTerms(ask=decision.ask.id, condition=decision.condition.id, text=text, at=s.world.time)
             return turn.model_copy(update={"narrative": text})
         if decision.kind == "no":
@@ -6722,7 +6724,19 @@ class Game:
                 record.refused.append(decision.ask.id)
             text = (turn.narrative_no or "").strip() or parley.NO_FALLBACK.format(name=name)
             return turn.model_copy(update={"narrative": text})
-        return turn
+        text = self._parley_gift_check(cid, decision, said, turn.narrative)
+        return turn if text == turn.narrative else turn.model_copy(update={"narrative": text})
+
+    def _parley_gift_check(self, cid: str, decision: parley.Decision, said: str, text: str) -> str:
+        """贈物答應了（當場、先做後付、開條件）：話裡給的要是他真的給得出的那一樣，對不上換固定句。別的事原樣回去。"""
+        if decision.ask is None or decision.ask.id != "gift":
+            return text
+        gift = parley.gift_of(self.state, self.content, cid)
+        wanted = parley.gift_slip(self.content, gift, said, text)
+        if wanted is None:
+            return text
+        cond = parley.condition_text(self.content, decision.condition, decision.ask.weight) if decision.condition is not None else ""
+        return parley.gift_fix(self.content, cid, gift, wanted, decision.kind, cond)
 
     def _parley_do(self, cid: str, ask_id: str) -> list[str]:
         """他答應的那一件，引擎真的去做（模型只說了話，這裡才動數字與位置）。"""
@@ -6754,17 +6768,13 @@ class Game:
         if kind == "intel":
             facts = parley.intel_facts(s, c, cid)
             return [parley.INTEL_HEAD.format(name=name, facts="；".join(facts))] if facts else []
-        if kind == "gift":
-            where = figure_life.where(s, c, cid) or s.player.location
-            kinds = {c.materials[m].attribute for m in c.locations[where].materials if m in c.materials} if where in c.locations else set()
-            pool = [m for m in materials.by_tier(c, 1) if m.attribute in kinds]
-            if pool:
-                pick = random.Random(f"贈物|{s.player.name}|{cid}|{s.world.time:.0f}").choice(pool).id
-                line = materials.grant(s, c, pick)
-                if line:
-                    return [parley.GIFT_LINE.format(name=name), line]
+        if kind == "gift":  # 給的就是提示裡寫給模型的那一樣（parley.gift_of）
+            gift = parley.gift_of(s, c, cid)
+            line = materials.grant(s, c, gift.material, gift.count) if gift.material else None
+            if line:
+                return [parley.GIFT_LINE.format(name=name, gift=parley.gift_text(gift)), line]
             s.player.stats["silver"] = s.player.stats.get("silver", 0) + tuning.gift_silver
-            return [parley.GIFT_LINE.format(name=name), f"銀兩 +{tuning.gift_silver}"]
+            return [parley.GIFT_LINE.format(name=name, gift=f"{tuning.gift_silver} 兩銀子"), f"銀兩 +{tuning.gift_silver}"]
         return []
 
     def _parley_options(self, cid: str) -> list[Option]:
@@ -6972,7 +6982,7 @@ class Game:
         try:
             msgs = [f"你：「{said}」"] + companion_agent.say_dialogue(
                 self._quick_client(), s, c, self.world, cid, said, turn=self._prepared_turn(prepared),
-                extra=extra, decide=lambda turn: self._parley_decide(cid, turn, road=True),
+                extra=extra, decide=lambda turn: self._parley_decide(cid, turn, road=True, said=said or ""),
                 required=parley.ASK_FIELDS if extra else (), cap=self._deep_cap_now,
             )
         except companion_agent.DialogueUnavailable:
