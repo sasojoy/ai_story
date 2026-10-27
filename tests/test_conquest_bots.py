@@ -12,7 +12,6 @@ from tianxia.bot_runner import BotRunner
 from tianxia.characters import open_characters
 from tianxia.state import BotProfile
 
-pytestmark = pytest.mark.slow  # 建 Game、載正式內容
 
 NOW = 1_792_000_000.0
 
@@ -30,6 +29,7 @@ def _open(game, slot):
     game.state.world = game.world.get_season()
 
 
+@pytest.mark.slow  # 單一條超過一秒（2026-10-27 測試整理 4 量的）
 def test_attacker_bot_heads_to_the_siege_region():
     game = _bot(go(join(conquest_game("season21", name="假黃"), "huang"), "julu_altar"), "huang")  # 人在冀州
     game.now = NOW

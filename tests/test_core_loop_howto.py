@@ -20,7 +20,7 @@ def _page(content):
 
 
 def test_the_howto_page_explains_the_new_loop():
-    c = no_conquest(real_content("week7"))  # 地盤拔河那一版；領地爭奪的「地盤」一節在 tests/test_conquest_progress.py
+    c = no_conquest(real_content("week7"))  # 地盤拔河那一版；領地爭奪的「地盤」一節在 tests/test_conquest_flip.py
     classic_explore(c)  # 探索三選一那一段（減法季探索一顆開著時寫出門一趟，tests/test_explore_one.py）
     page = _page(c)
     assert "**出陣**" in page and "每天 5 次" in page and "**遊歷**" not in page
@@ -28,7 +28,7 @@ def test_the_howto_page_explains_the_new_loop():
     assert "- 靜心感悟時「有所感」" in page
     assert "#### 地盤" in page and "換了人" in page
     # 地盤福利與輿圖上色（計畫 Task 5）。輿圖上色那一句以前寫「輿圖局勢層的底色」；輿圖第三版沒有局勢層了，第 5 批照 PM 2026-10-22 改寫
-    # 天下圖的地面與區圖的名字框（關著領地爭奪的季也改；tests/test_conquest_seam.py 守），這一條照改
+    # 天下圖的地面與區圖的名字框（關著領地爭奪的季也改；tests/test_conquest_rules.py 守），這一條照改
     assert "便宜一成" in page and "貴兩成" in page and "天下圖的地面、區圖名字框的顏色就是此刻誰佔著" in page and "局勢層" not in page
 
 
