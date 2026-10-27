@@ -2380,13 +2380,17 @@
       <div class="mates">${cards.map(mateCard).join("")}</div>
       ${cards.length > 1 ? "" : '<p class="muted mates-none">交友、結識大勢人物，情誼夠了就有人願意追隨你。</p>'}</section>`
       : fold("roster", `門下${mates ? ` <small class="muted">${x.roster.length} 人</small>` : ""}`, rosterBody);
+    // 紀念物（長篇奇事，企劃者 2026-10-27）：故事裡收下的小東西，沒有效果、不能賣，跨季跟著角色；一件都沒有不畫
+    const keepItems = (S.main && S.main.keepsakes) || [];
+    const keeps = keepItems.length ? `<section class="self-sec keepsakes" aria-label="紀念"><div class="self-hd"><h3>紀念</h3><small class="muted">故事裡收下的，留著</small></div>
+      <p class="keep-list">${keepItems.map((k) => `<span class="keep">${esc(k)}</span>`).join("")}</p></section>` : "";
     return `
       ${proGuide()}
       ${heroPanel(x, s)}
       ${selfArtsHtml(x)}
       ${gearBlock}
       ${rosterBlock}
-      ${keepsakesHtml()}
+      ${keeps}
       ${selfStatsHtml(s)}
       ${selfEntriesHtml(x)}
       <div class="msg" id="mx-msg">${S.message}</div>
@@ -2396,14 +2400,6 @@
       ${fold("rules", "修練的規矩", x.rules)}
       ${meltGo}
       ${meltOn ? "" : drawerHtml}`;
-  }
-
-  // 紀念物（長篇奇事，企劃者 2026-10-27）：故事裡收下的小東西，沒有效果、不能賣，跨季跟著角色；一件都沒有不畫
-  function keepsakesHtml() {
-    const items = (S.main && S.main.keepsakes) || [];
-    if (!items.length) return "";
-    return `<section class="self-sec keepsakes" aria-label="紀念"><div class="self-hd"><h3>紀念</h3><small class="muted">故事裡收下的，留著</small></div>
-      <p class="keep-list">${items.map((k) => `<span class="keep">${esc(k)}</span>`).join("")}</p></section>`;
   }
 
   // 傳功門下（Config.chuangong）：人物卡底下一排鈕，鈕上寫要練什麼與心得，底下一行寫效果；按不下去的灰掉、原因寫在效果那一行

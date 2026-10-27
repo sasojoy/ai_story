@@ -180,7 +180,7 @@ DONGJIA = P(
 to4 = lambda marks: step(L, marks, "act4")  # noqa: E731
 ev += [
     event("maier_3", "夜裡的鍋", "night", ACT3, [
-        choice("「你是怎麼進蘇家的？」", eff(TONG, to4({"同": 1})), check=("wis", 7), fail=eff(MO, to4({"默": 1}))),
+        choice("「你是怎麼進蘇家的？」", eff(TONG, to4({"同": 1})), check=("wis", 6), fail=eff(MO, to4({"默": 1}))),
         choice("陪他把鍋抬回去，什麼也不說", eff(MO, to4({"默": 1}))),
         choice("「東家知道嗎？」", eff(DONGJIA, to4({"問東家": 1}))),
     ]),
@@ -293,7 +293,7 @@ to6 = lambda marks: step(L, marks, "day1")  # noqa: E731
 act5_choices = [
     choice("「我帶你回家。」", eff(HUI, to6({"回": 1}))),
     choice("撿起一紮柴，去幫何大娘", eff(BANG, to6({"幫": 1}))),
-    choice("「妳收這些孩子，是要做什麼？」", eff(YI, to6({"疑": 1})), check=("wis", 7), fail=eff(YI_FAIL, to6({}))),
+    choice("「妳收這些孩子，是要做什麼？」", eff(YI, to6({"疑": 1})), check=("wis", 6), fail=eff(YI_FAIL, to6({}))),
 ]
 act5_free = free("對小滿說……", eff(SAY5, to6({"話5": 1})))
 ev += [
@@ -455,7 +455,7 @@ SCOUT = "火光裡有人喝了一聲。是官軍的前哨，三四個人，舉�
 act7_choices = [
     choice("帶一家三口從官軍的空隙穿回荒野", eff(P(RIVERBED, SU_CART), step(L, {"穿": 1}, "home")),
            condition={"any_of": [{"story_marks": {f"{L}:同": 1}}, {"story_marks": {f"{L}:上車": 1}}]}),
-    choice("帶一家三口從官軍的空隙穿回荒野", eff(RIVERBED, step(L, {"穿": 1}, "home")), check=("agi", 7),
+    choice("帶一家三口從官軍的空隙穿回荒野", eff(RIVERBED, step(L, {"穿": 1}, "home")), check=("agi", 6),
            fail=eff(P(RIVERBED, SCOUT), next_event="maier_7s"),
            condition={"story_marks_max": {f"{L}:同": 0, f"{L}:上車": 0}}),
     choice("讓兩個孩子跟何大娘往南走，葛三留下", eff(NAN, step(L, {"南": 1}, "south", keepsake="小滿的一把粟"))),
