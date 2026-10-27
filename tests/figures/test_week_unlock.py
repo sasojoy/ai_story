@@ -21,6 +21,7 @@ def _game(profile, open_at=MON + 10 * HOUR, *, setup=None):
     """照伺服器開一季（store.open_season 蓋章）、建一個走完引導的角色、同步到開季那一刻。"""
     c = real_content(profile)
     c.config.train_event_chance = 0.0
+    c.config.jianfa.week_unlock = True  # 7 天版內測關著（企劃者 2026-10-27「先把鎖第二周才能觸發的條件拿掉」）；這裡量的是開著的規則
     if setup is not None:
         setup(c)
     store = open_world()
@@ -112,6 +113,7 @@ def test_a_late_joiner_waits_out_the_newbie_period_on_their_own_clock(profile):
     過了那一刻才開、才寫紀錄。"""
     c = real_content(profile)
     c.config.train_event_chance = 0.0
+    c.config.jianfa.week_unlock = True  # 7 天版內測關著；這裡量的是開著的規則
     store = open_world()
     store.seed_first_season(c)
     store.open_season(c, MON + 10 * HOUR)
@@ -234,3 +236,20 @@ def _journey(game):
     j = game.state.player.journey
     assert j is not None
     return j
+
+
+def test_the_week7_profile_has_the_week_lock_off_for_the_closed_beta():
+    """7 天版內測先不鎖第 2 週（企劃者 2026-10-27）：子開關讀的是此刻的設定、不是開季的章，重開伺服器就生效、不必換季。"""
+    c = real_content("week7")
+    assert c.config.jianfa.enabled and not c.config.jianfa.week_unlock
+    store = open_world()
+    store.seed_first_season(c)
+    store.open_season(c, MON + 10 * HOUR)
+    g = Game.new(c, "沈浪", rng=random.Random(0), world=store)
+    g.client = None
+    g.state.player.tutorial_step = len(c.tutorial.steps)
+    g.state.player.location = TOWN
+    _at(g, MON + 10 * HOUR)
+    assert week_unlock.phase_now(g.state, c) == 0 and roster.newbie(g.state, c)
+    assert _open(g) == {"smith": True, "arena": True, "bounties": True, "create": True}
+    assert _card(g)["locked"] is None
