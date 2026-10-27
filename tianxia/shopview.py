@@ -39,7 +39,7 @@ BACKS = {"smith": ("smith:back",), "market": (mounts.BACK,), "board": ("bounty:b
          "donate": ("donate:back",), "dadian": ("dadian:back",), "tavern": ("tavern:back",)}
 _HELD_HEAD = bounties.HELD_FULL.partition("{")[0]
 FORGED_KEYS = {"下品": "forge_low", "中品": "forge_mid", "上品": "forge_high"}
-RACK_FULL = "裝備庫滿了"  # 同 equipment.RACK_FULL（problem_key 照它認；tests/test_shop.py 鎖住兩邊一樣）
+RACK_FULL = "裝備庫滿了"  # 同 equipment.RACK_FULL（problem_key 照它認；tests/gear/test_shop.py 鎖住兩邊一樣）
 
 
 def problem_key(problem: str | None, done: str) -> str:

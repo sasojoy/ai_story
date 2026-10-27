@@ -149,7 +149,7 @@ def clear_progress(p: PlayerState) -> None:
     跟 active_pushers 的清理放在一起。
     刻意沒清的：`runic_pieces`（符文殘片，丙二）、聽過的伏筆片段（`fragments`）與聽過的機緣線索（`opp_clues`，企劃者裁決 E5.2）
     ——它們是「知道的事」、不是陣營給的身份，跟伏筆物品一樣留著。殘片與片段當初是現在的做法、待企劃者確認（在 PM 那裡）；
-    tests/test_promotions_huang.py 的 test_defecting_keeps_the_runic_pieces_for_now 釘著它，改了就改那個測試。"""
+    tests/figures/test_promotions_huang.py 的 test_defecting_keeps_the_runic_pieces_for_now 釘著它，改了就改那個測試。"""
     p.rank = 0
     p.summons = None
     p.qualified, p.rank_hinted = False, []  # 第 4 階資格（候缺）與說過的「只缺一個機會」（正式版丙一）

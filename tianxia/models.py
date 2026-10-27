@@ -197,7 +197,7 @@ class CraftNames(_Strict):
     """合成、合併時模型不可用（或產出的名字過不了過濾）的決定性組名字表，見無限煉製設計 §5.6、武學與成長設計 3.6。
 
     用配方鍵的雜湊挑 prefix × suffix，所以同一個配方永遠組出同一個名字——離線也能玩，
-    而且 `tests/test_real_content.py` 整季模擬（LLM 被 mock）走的就是這條路。
+    而且 `tests/season/test_real_content.py` 整季模擬（LLM 被 mock）走的就是這條路。
 
     兵器、防具的一般組合不照雜湊挑：字首照主料、中間字照輔料在素材表的位置取（打造隱藏配方設計 4.1、PM 2026-10-12 決定第 1 條），
     所以 prefixes、weapon、armor 的前「素材數」個字不能重複；新素材加在 materials.json 最後，不然後面幾種素材的字會位移。
@@ -1264,8 +1264,8 @@ GLOW_KEYS = (REVEAL_KEYS - {"all"}) | frozenset({
 # 序章每一步 allow 可以寫的選單 id（TutorialStep.allow 是前綴比對，見 prologue.allowed）：照 Game._everyday_options 與它叫的
 # 幾個函式真的做得出來的 id 列。固定的整串寫在 ALLOW_FIXED；帶參數的（尾巴是地點、人物、武學的 id）只列到冒號，在 ALLOW_FAMILIES，
 # allow 可以寫到整個家族（"move:"）或家族加上 id（"move:town"）。兩道檢查，都不是萬全的：
-#   tests/test_prologue.py::test_the_allow_lists_only_name_ids_the_code_really_makes 只查「這裡列的每一筆都真的出現在原始碼」（不憑空多寫）；
-#   tests/test_real_content.py::test_every_idle_menu_id_is_one_the_prologue_allow_list_knows 整季隨機玩、對照每個閒著的選單，
+#   tests/core/test_prologue.py::test_the_allow_lists_only_name_ids_the_code_really_makes 只查「這裡列的每一筆都真的出現在原始碼」（不憑空多寫）；
+#   tests/season/test_real_content.py::test_every_idle_menu_id_is_one_the_prologue_allow_list_knows 整季隨機玩、對照每個閒著的選單，
 #   查「引擎做得出來的有沒有漏列」，但只看得到那一季玩到的 id。引擎多了閒著選單的行動，記得手動補進這兩個。
 ALLOW_FIXED = frozenset({
     "act:explore", "act:train", "act:socialize", "act:rest", "act:summons", "act:call", "act:recruit", "act:duty", "act:convoy",

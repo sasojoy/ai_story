@@ -5,7 +5,15 @@ import os
 import pickle
 import random
 import shutil
+import sys
 from pathlib import Path
+
+# 測試照區塊分資料夾（2026-10-27 測試整理 2；資料夾對 CLAUDE.md 的區塊表）：tests/kit/ 是共用工具（webharness、conquest_kit……），
+# 各資料夾的測試檔照舊互相 import（from test_prologue_web import run），所以每個資料夾都放上 sys.path。資料夾之間檔名不能重複
+_TESTS = Path(__file__).resolve().parent
+for _d in sorted(p for p in _TESTS.iterdir() if p.is_dir() and p.name not in ("fixtures", "__pycache__")):
+    if str(_d) not in sys.path:
+        sys.path.insert(0, str(_d))
 
 import pytest
 
