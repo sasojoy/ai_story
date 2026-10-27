@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import random
 
-from conftest import no_conquest, real_content
+from conftest import real_content
 from tianxia import atlas, calendar, mapdata, orders, territory
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
@@ -12,7 +12,7 @@ from tianxia.state import Order
 
 
 def _game(faction="guan", at="yingchuan"):
-    c = no_conquest(real_content("week7"))  # 地盤拔河的舊規則（領地爭奪 PM 2026-10-22 起正式內容打開）
+    c = real_content("week7")  # 地盤拔河的舊規則（領地爭奪 PM 2026-10-22 起正式內容打開）
     c.config.auto_open_first_season = True
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world())
     game.client = None
@@ -56,50 +56,6 @@ def test_fb258_a_hold_never_gives_intercept_as_the_reason():
             assert not any("截糧" in t for t in _why(st, g["id"])), g
     runan = st["places"]["runan_wilds"]
     assert runan["sortie"] == "attack" and "軍令・截糧" in _why(st, "runan_wilds")
-
-
-def test_fb258_an_intercept_on_your_own_ground_is_against_the_convoy():
-    """截糧的地點歸自己（官軍截南陽郊野）：出陣是攻，對手是運糧隊；「打得過嗎」照運糧隊算，站著的隊伍也列它。"""
-    game = _game("guan", "yingchuan")
-    _intercept(game, "guan", "nanyang_wilds")
-    w, c = game.state.world, game.content
-    assert territory.controller(w, c, "nanyang_wilds") == "guan"
-    convoy = c.squads[c.orders.convoy_squads["huang"]]
-    st = game.map_state()
-    p = st["places"]["nanyang_wilds"]
-    assert p["sortie"] == "attack" and p["odds"] is not None
-    assert atlas.ODDS_ORDER.index(p["odds"]["word"]) >= atlas.ODDS_ORDER.index(game.odds(convoy.id))  # 最險的算進糧隊
-    assert convoy.name in [q["name"] for q in p["squads"]]
-    g = next(g for g in st["suggest"] if g["id"] == "nanyang_wilds")
-    assert g["lose"] == (p["odds"]["word"] == mapdata.LOSE_WORD)
-
-
-# ── FB-259：豪強攪局不打，不標必敗、不畫淡；理由只寫攪局記得到的（什麼軍令都不記）──
-
-
-def test_fb259_stirring_is_never_marked_losing_and_counts_no_order():
-    game = _game("haoqiang", "haozu_fort")
-    _order(game, "haoqiang", "strike", figure=next(iter(game.content.figures)))  # 打擊要挑戰本人，攪局不記
-    st = game.map_state()
-    assert st["suggest"] and all(g["sortie"] == "stir" for g in st["suggest"])
-    for g in st["suggest"]:
-        assert g["lose"] is False and not any(t == mapdata.LOSE_WORD or t.startswith("軍令") for t, _ in g["why"]), g
-
-
-# ── FB-264：版圖變化補「開季」的基準，第 1 週的易手才看得到 ──
-
-
-def test_fb264_the_first_reckoning_in_week_one_keeps_the_season_start():
-    game = _game()
-    w, c = game.state.world, game.content
-    territory.update(w, c)  # 開季：第一次算
-    assert w.territory.weeks[0].control == w.territory.weeks[1].control
-    territory.assign(w, c, {"runan_wilds": "guan"})  # 第 1 週就易手
-    assert w.territory.weeks[0].control["runan_wilds"] == "huang" and w.territory.weeks[1].control["runan_wilds"] == "guan"
-    st = game.map_state()
-    assert st["start"]["runan_wilds"] == "huang"
-    assert {"id": "runan_wilds", "from": "huang", "to": "guan"} in st["weeks"][0]["changed"]
-    assert {"week": 1, "from": "huang", "to": "guan"} in st["places"]["runan_wilds"]["flips"]
 
 
 def test_fb264_a_season_first_reckoned_later_has_no_start():

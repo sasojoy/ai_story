@@ -114,9 +114,7 @@
     "rotation": true
   },
   "ambush": {"enabled": false},
-  "fortify": {"enabled": false},
   "stockpile": {"enabled": false},
-  "conquest": {"enabled": true},
   "parley": {"enabled": true},
   "renown": {
     "titles": true, "scale": true, "deed_fame": true, "discount": true, "prize_gate": true, "affinity": true, "duel": true,

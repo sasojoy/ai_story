@@ -16,11 +16,10 @@ from tianxia.state import SiegeSlot
 
 
 def conquest_rules(content: Content, xingshi: bool = False) -> Content:
-    """打開領地爭奪（Config.conquest.enabled），回傳同一份內容。〈天下形勢〉（第三批 A，Config.xingshi）預設關掉：第一、二批的測試照舊
+    """領地爭奪的測試用的內容（地盤開著就是領地爭奪，沒有開關），回傳同一份內容。〈天下形勢〉（第三批 A，Config.xingshi）預設關掉：第一、二批的測試照舊
     （每天結算不開單、不多一則天下大事），要測它的另外給 xingshi=True。
     減法季的出陣約戰（批 3b，jianfa 的 sortie_duel）關掉：這裡建的局測的是翻地、混戰、出陣攻守那一套（season21、week7 的設定減法季開著，
     出陣換成約戰之後那幾條就不成立了；斷言不動。約戰的測試在 tests/test_sortie_duel*.py，建法 tests/duel_kit.py）。"""
-    content.config.conquest.enabled = True
     content.config.xingshi.enabled = xingshi
     content.config.jianfa.sortie_duel = False
     return content
@@ -43,10 +42,8 @@ def conquest_game(profile: str = "season21", name: str = "沈浪", world=None, x
 
 
 def plain_game(profile: str = "week7", name: str = "沈浪", world=None) -> Game:
-    """同上，領地爭奪關著（PM 2026-10-22 打開之前正式內容的預設；現在明講關掉，conftest.no_conquest）。"""
-    from conftest import no_conquest  # 這裡 import：檔頭那幾行 dev/map-5 也改，分開免得合併撞在一起
-
-    return _new(no_conquest(real_content(profile)), name, world)
+    """同上，正式內容照原樣（領地爭奪 2026-10-27 起沒有開關，地盤開著就是）。"""
+    return _new(real_content(profile), name, world)
 
 
 def join(game: Game, side: str | None) -> Game:

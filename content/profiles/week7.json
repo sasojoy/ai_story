@@ -7,5 +7,5 @@
  "silver_outlets": {"enabled": true, "legend_season_cap": 1},
  "checkin": {"enabled": true, "pill_days": [3, 6], "tier4_days": [6]},
  "mall": {"enabled": true, "beta_grant": 5000, "card_daily_ingots": 60, "card_daily_pills": 1},
- "conquest": {"enabled": true, "progress_scale": 12},
+ "conquest": {"progress_scale": 12},
  "jianfa": {"enabled": true}, "epiphany": {"enabled": true}}

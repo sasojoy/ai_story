@@ -370,11 +370,11 @@ def test_map_view_gives_the_legend_as_data_for_the_layer_shown(game):
     legend = server.look(game, lambda g: server.map_view(g, "enemies", None))["legend"]
     assert legend["layer"] == mapview.LEGEND_LAYERS["enemies"] and len(legend["icons"]) == 6
     assert all(item["svg"].startswith("<svg") and item["label"] for item in legend["icons"])
-    # 正式內容出陣開著：⚔ 那一句是出陣的說法（FB-251；出陣關著是 LEGEND_RING，見 tests/test_mapview.py）
-    assert legend["states"] == mapview.LEGEND_STATES and legend["ring"] == mapview.LEGEND_RING_SORTIE and legend["strike"] == ""
+    # 不帶設定的正式內容沒有第一季規則、沒有地盤與出陣：⚔ 那一句是遊歷的說法（出陣開著是 LEGEND_RING_SORTIE，見 tests/test_mapview.py）
+    assert legend["states"] == mapview.LEGEND_STATES and legend["ring"] == mapview.LEGEND_RING and legend["strike"] == ""
     fallback = server.look(game, lambda g: server.map_view(g, "沒這層", None))["legend"]
-    # 預設那一層是局勢層：地盤易手開著（正式內容）時多一句誰佔著（出陣探索與地盤設計 4.3）
-    assert fallback["layer"] == f"{mapview.LEGEND_LAYERS[server.DEFAULT_LAYER]}　{mapview.LEGEND_CONTROL}"
+    # 預設那一層是局勢層：沒有地盤，不多那一句誰佔著（地盤開著才有，出陣探索與地盤設計 4.3）
+    assert fallback["layer"] == mapview.LEGEND_LAYERS[server.DEFAULT_LAYER]
 
 
 def test_reports_view_is_empty_with_no_battles(game):
@@ -3541,7 +3541,6 @@ def _a_big_fight_at_the_wilds(game, monkeypatch):
     """潁川郊野的對手難度都不到大場面的門檻（100）：把門檻壓到 1，這裡的遊歷就是大場面（鎖外判讀、按鈕寫「兩人對峙」）。
     存一份到資料庫：鎖外判讀的時候，別的分頁看到、改的就是這一份。散人的遊歷：出陣關掉（出陣開著時散人沒有這顆鈕）。"""
     monkeypatch.setattr(server.CONTENT.config, "big_fight_difficulty", 1)
-    monkeypatch.setattr(server.CONTENT.config.sortie, "enabled", False)
     server.act(game, lambda g: setattr(g.state.player, "location", "yingchuan_wilds"))  # 進鎖會先從資料庫重讀，改要在鎖裡改
     assert next(o for o in server.look(game, lambda g: g.options()) if o.id == "act:train").wait == "兩人對峙……"
 
@@ -3600,7 +3599,6 @@ def test_a_big_fight_that_became_impossible_for_another_reason_says_the_situatio
 def test_an_ordinary_fight_takes_the_lock_once_and_never_asks_the_model(game, lock_events, event, option, monkeypatch):
     """Review Focus 5：一般的仗（潁川郊野的地痞、山賊；狼群）不問模型、按鈕不寫「兩人對峙」，而且只拿一次行動鎖——
     備料與動作在同一次拿鎖裡做完（計畫三 G14：遊歷與事件選項天天在按，不能每一下都多搶一次鎖）。散人的遊歷：出陣關掉。"""
-    monkeypatch.setattr(server.CONTENT.config.sortie, "enabled", False)
     game.state.player.location = "yingchuan_wilds"
     game.state.pending_event = event
     assert next(o for o in game.options() if o.id == option).wait == ""
@@ -4266,7 +4264,6 @@ def test_a_fight_then_an_event_sends_a_short_now_card_and_a_stable_guide_key(cli
     from tianxia import journal
 
     monkeypatch.setattr(server.CONTENT.config, "train_event_chance", 1.0)  # 打完一定接戰後的事件
-    monkeypatch.setattr(server.CONTENT.config.sortie, "enabled", False)  # 舊遊歷打完才接戰後事件（出陣不接）
     first_step = _a_guide_step_after_the_hut(monkeypatch)  # 序章之後沒有引導步驟了（軍令兩步由入伍段取代）：接一步測試用的
     _player(client, prologue=True)
     game = server.game_for("沈青衫")
@@ -5824,7 +5821,6 @@ def test_a_name_with_capitals_is_subscribed_and_notified_under_the_same_lowercas
 def test_a_fight_notifies_even_though_it_never_goes_through_act(client, told, monkeypatch):
     """預檢 F1：一般的仗（遊歷、事件選項）在 prepare_fight 的 A 段同一次拿鎖裡就做完、存檔，不經過 act()。
     通知在端點、不在 act，所以天天在按的遊歷與事件選項也會通知；而這一步確實沒走 act。散人的遊歷：出陣關掉。"""
-    monkeypatch.setattr(server.CONTENT.config.sortie, "enabled", False)
     _player(client)
     game = server.game_for("沈青衫")
     server.act(game, lambda g: setattr(g.state.player, "location", "yingchuan_wilds"))

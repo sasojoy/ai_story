@@ -141,15 +141,6 @@ def test_stale_season_control_reads_no_gentry_base():
     assert territory.controller(w, game.content, "cao_manor") is None
 
 
-def test_old_rules_gentry_bases_stay_theirs():
-    from tianxia import territory
-
-    off = _old_rules()
-    game = _game(off, name="乙", faction="guan")
-    game.advance(60)
-    w = game.state.world
-    assert all(territory.controller(w, off, loc) == "haoqiang" for loc in GENTRY_BASES)
-
 # ── FB-275：此地還有寫出依附哪一邊 ─────────────────────────────
 
 

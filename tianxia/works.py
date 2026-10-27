@@ -1,8 +1,4 @@
-"""修築工事與屯糧練兵（後期體力玩法第一批，Joy 2026-10-16；Config.fortify、Config.stockpile）的純規則。
-
-修築工事：在自家控制的戰線地點花體力修工事（TerritoryState.forts），讓這一處更難易手——拔河的門檻往對方那邊再推
-工事÷cap × band 點（territory.fort_extra、territory._tug）。大勢線一點都不動。工事照時間壞（territory.fort_level），易手就沒了。
-只有拔河的兩方修得了，而且這一處此刻要歸自己（控制方與拔河都是自己這一方；豪強割據佔著的這一批不修）。
+"""屯糧練兵（後期體力玩法第一批，Joy 2026-10-16；Config.stockpile）的純規則。修築工事（替舊的拔河多撐幾點）2026-10-27 跟著舊拔河拿掉。
 
 屯糧練兵：在自家控制的地方（大本營、自家的戰線地點）花體力替自己那一軍屯糧（WorldState.supply），下一場時刻表決戰開集結那一刻
 （world._open_claimed → on_muster）換成起點往屯得多的那一軍偏 cap×(甲−乙)÷(甲＋乙＋soft)，四捨五入、最多 cap 點，
@@ -14,55 +10,16 @@ from __future__ import annotations
 
 from . import allied, rules, territory
 from .models import BattleDef, Content
-from .state import Fort, GameState, Rumor, WorldState
+from .state import GameState, Rumor, WorldState
 from .world_state import WorldStateStore
 
 # 玩家看得到的字（待 joy 潤）
-FORT_TITLE = "修築工事"
-FORT_LABEL = "修築工事（此處工事 {level}/{cap}）"
-FORT_FULL = "工事已經修到頂"
-FORT_DONE = "你帶人加固{place}的寨牆、壕溝，工事 {before}→{after}。工事越牢，敵軍要把戰線推得越遠才奪得走這裡；放著不修會慢慢壞。"
 STOCK_TITLE = "屯糧練兵"
 STOCK_LABEL = "屯糧練兵（{side}已屯 {n}）"
 STOCK_DONE = "你替{side}運糧、操練新兵，{side}這一回已屯 {n}。下一場決戰開集結時，屯得多的一方起手佔點便宜。"
 MUSTER_LINE = "{battle}開集結，{a}屯了 {na}、{b}屯了 {nb}。{lean}"
 LEAN_TO = "糧足兵精，起手往{side}偏了 {n} 點。"
 LEAN_NONE = "兩軍屯得相當，起手不偏。"
-
-
-def fortify_on(content: Content) -> bool:
-    return content.config.fortify.enabled and territory.on(content)
-
-
-def fort_spot(state: GameState, content: Content, side: str | None) -> bool:
-    """這裡修不修得了工事（鈕要不要畫）：開關開著、這裡是可易手的戰線地點、此刻控制方與拔河都是你這一方。"""
-    if side is None or not fortify_on(content) or state.world.ended:
-        return False
-    from . import conquest  # noqa: PLC0415  conquest → territory：在函式裡 import
-
-    if conquest.on(content, state.world):  # 領地爭奪：沒有拔河，工事替拔河多撐的那幾點沒作用，先不畫（裁決 12）
-        return False
-    loc = state.player.location
-    line = territory.line_of(content, loc)
-    if line is None or loc not in content.scenario.territory.lines.get(line, []):
-        return False
-    t = state.world.territory
-    return t is not None and t.control.get(loc) == side and t.tug.get(loc) == side
-
-
-def fort_now(state: GameState, content: Content) -> int:
-    """這裡此刻的工事（整數，給鈕上寫）。"""
-    return int(territory.fort_level(state.world, content, state.player.location) + 1e-9)
-
-
-def fortify(state: GameState, content: Content, side: str) -> tuple[int, int]:
-    """修一下（呼叫端先問 fort_spot、扣體力）：照此刻壞到哪裡再加 per_press，夾在 cap；記下這一刻。回（修之前, 修之後）。"""
-    cfg, w = content.config.fortify, state.world
-    loc = state.player.location
-    before = territory.fort_level(w, content, loc)
-    after = min(float(cfg.cap), before + cfg.per_press)
-    w.territory.forts[loc] = Fort(side=side, level=after, at=w.time)
-    return int(before + 1e-9), int(after + 1e-9)
 
 
 def battle_sides(content: Content) -> set[str]:

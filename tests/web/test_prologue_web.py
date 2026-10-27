@@ -939,9 +939,9 @@ def test_fb093_every_order_card_says_how(on):
     for kind, card in cards.items():
         assert card.get("how"), kind  # 每一道都有做法那一行
     name = lambda loc_id: on.locations[loc_id].name  # noqa: E731
-    # 出陣探索與地盤（設計第七節）：攻城、截糧認出陣的攻，卡上寫「出陣」（舊遊歷的寫法見 tests/test_orders.py，那裡關著出陣）
-    assert "出陣" in cards["攻城"]["how"] and on.orders.duties["guan"].name in cards["守城"]["how"]
-    assert name("hilltop_wilds") in cards["截糧"]["how"] and "出陣" in cards["截糧"]["how"]
+    # 豪強是第三方的季沒有地盤、沒有出陣：攻城、截糧寫遊歷（有出陣的寫法見 tests/acts/test_conquest_*.py）
+    assert "遊歷" in cards["攻城"]["how"] and on.orders.duties["guan"].name in cards["守城"]["how"]
+    assert name("hilltop_wilds") in cards["截糧"]["how"] and "遊歷" in cards["截糧"]["how"]
     assert name("luoyang_road") in cards["護糧"]["how"] and name("changshe") in cards["護糧"]["how"] and "糧車" in cards["護糧"]["how"]
     assert "挑戰" in cards["打擊"]["how"]  # 打擊那一行本來就有（FB-072）：不動
 

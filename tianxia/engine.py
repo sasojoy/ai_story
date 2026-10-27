@@ -2310,24 +2310,19 @@ class Game:
         left = self.sorties_left()
         if left <= 0:
             return sortie.USED_UP.format(n=self.content.config.sortie.per_day) + "。"
-        if how == "stir" and not self.sortie_push(loc.id, how):  # 線正好 50（FB-253）
-            return sortie.STIR_FLAT_LINE
-        push_ok = any(amount and self._push_room(line) > 0 for line, amount in self.sortie_push(loc.id, how).items())
         own = how == "attack" and territory.controller(self.state.world, self.content, loc.id) == self._side()
         # 領地爭奪：出陣推的是這一塊的進度（大本營、廣宗推不動），不是線——那一句照進度寫；推不動照 conquest.push_problem 寫原因
         # （剛易手、戰書凍結、不相連、守了沒得拉；翻地與爭搶）
-        on = conquest.on(self.content, self.state.world)
-        why = conquest.push_problem(self.state.world, self.content, self._side(), loc.id, how) if on else None
-        progress = why is None if on else None
+        why = conquest.push_problem(self.state.world, self.content, self._side(), loc.id, how)
         note = "convoy" if own else how  # 自家地盤上攻的只有運糧隊（FB-255）
-        if on and how == "hold" and not conquest.capturable(self.content, loc.id):
+        if how == "hold" and not conquest.capturable(self.content, loc.id):
             note = "home"  # 自家的大本營、廣宗：不在爭奪之列（FB-532）
-        elif on and how == "attack" and not conquest.capturable(self.content, loc.id):
+        elif how == "attack" and not conquest.capturable(self.content, loc.id):
             note = "convoy_out"  # 大本營、廣宗上攻的只有截糧的運糧隊（裁決 18）：只算截糧、沒有進度
-        elif on and note == "attack" and conquest.holder(self.state.world, self.content, loc.id) is None:
+        elif note == "attack" and conquest.holder(self.state.world, self.content, loc.id) is None:
             note = "open"  # 還沒人佔的中立地：不寫「這裡歸別人」（FB-533）
         # FB-552：被戰書凍結的那一塊，原因照那一場攻城在哪一步寫（已下戰書、集結中、開打中；conquest.push_problem 讀 siege_state）
-        return howto.sortie_line(note, push_ok, left, self.content, progress, why)
+        return howto.sortie_line(note, left, self.content, why is None, why)
 
     def _choice_label(self, choice: Choice, odds: bool) -> str:
         """動手的選項寫對手與勝算，後面照樣接體力的代價（輸了多扣的，企劃者裁決 E6；events.stamina_note）；
@@ -4206,8 +4201,7 @@ class Game:
                 s, int(arg.partition(":")[2]) if arg.partition(":")[2].isdecimal() else None)
             return f"{feasts.TITLE}・{feasts.host_name(c, f)}" if f is not None else feasts.TITLE
         if kind == "works":
-            name = works.FORT_TITLE if arg == "fortify" else works.STOCK_TITLE
-            return f"{name}・{c.locations[s.player.location].name}"
+            return f"{works.STOCK_TITLE}・{c.locations[s.player.location].name}"
         if kind == "errand":  # 託付（減法季批 6）：「交信・盧植」
             e = errand_rules.find(s, arg.partition(":")[2])
             return f"{errand_rules.LABELS[e.kind]}・{errand_rules.who(c, e)}" if e is not None else "託付"
@@ -5287,7 +5281,7 @@ class Game:
                 return "bounty", c.squads[b.squad]
         side = self._side()
         if kind == explore_one.CAMP and side is not None and territory.controller(s.world, c, loc.id) == side:
-            host = self._sortie_host(loc, "hold")
+            host = self._sortie_host(loc)
             if host is not None:
                 return "spar", host
         foes = self._wild_foes(loc)
@@ -5770,7 +5764,7 @@ class Game:
             msgs += self.push_trend(GEJU, 1, source="duty")
         msgs += opportunities.after_success(s, c, "duty", loc.id, self.rng)  # 收容流民（正式版乙一）
         if precise.on(c, s.world):  # 一類一顆（正式季整合 2.6）：再加跟守一樣的經驗心得（這裡自家那一路的全額；沒有自家隊伍不給，只推線）
-            host = self._sortie_host(loc, "hold")
+            host = self._sortie_host(loc)
             if host is not None:
                 msgs += self._drill_gains(host, 1.0)
         if duel:  # 守城軍令改成應戰守住才記（計畫 4.0 之三第 17 條）；入伍段「出一次力」照舊認它
@@ -9571,7 +9565,7 @@ class Game:
         一成銀兩都照常。戰後事件本來就只在 _train 裡接，野怪不走那裡。遊歷不帶這個旗標，一點都不變。
         野怪是當下擲出來的，不問模型、也不吃判讀（武學與成長設計 8.3）；遊歷的大場面吃鎖外的判讀（_judged）。
         as_sortie：出陣的攻（出陣探索與地盤設計 2.2、2.4）——戰報類型 sortie、給自己的照 _sortie_rewards（三成、不給銀兩掉落）、
-        推的量照 sortie_push、source="sortie"。"""
+        不推線，推那一塊的進度（_push_progress）。"""
         s, c = self.state, self.content
         p = s.player
         loc = c.locations[p.location]
@@ -9593,12 +9587,12 @@ class Game:
             msgs += rewards
             extra: list[str] = []
             if not wild and not prologue_rules.active(s, c):  # 序章打贏不推大勢、不抽伏筆、不記軍令
-                pushes = self.sortie_push(loc.id, "attack") if as_sortie else self.train_trend_push(loc.id)
-                for trend_id, delta in pushes.items():  # 換算過的線，照舊交給 T3 的 push_trend
-                    extra += self.push_trend(trend_id, delta, source="sortie" if as_sortie else "train")
+                if not as_sortie:  # 出陣不推線（領地爭奪：推那一塊的進度，下面 _push_progress）
+                    for trend_id, delta in self.train_trend_push(loc.id).items():  # 換算過的線，照舊交給 T3 的 push_trend
+                        extra += self.push_trend(trend_id, delta, source="train")
                 credit: list[str] | None = None
                 # 領地爭奪：出陣攻打贏推這一塊的進度、不推線（設計 3.7）；約戰開著時這裡只剩截糧（減法季批 3b：進度只在約戰結算動）
-                if as_sortie and conquest.on(c, s.world) and not self.duel_on():
+                if as_sortie and not self.duel_on():
                     # 軍令照推之前的清單記（FB-608：推滿易手的那一下，推完那一塊已經是自家的、在冷卻，不在攻的清單上）；那一句照舊排在後面
                     credit = self._order_credit(
                         kind="win", location=loc.id, front=front_of(c, loc.id), squad=squad.id, squad_faction=squad.faction,
@@ -9771,41 +9765,21 @@ class Game:
         return sortie.left_today(self.state.player, self.content, self._pill_day())
 
     def _sortie_foes(self, loc: Location) -> list[str]:
-        """出陣攻打的對手（設計 2.2）：此刻控制這裡的那一方的隊伍（地盤關著時：這裡有陣營、不是自己陣營的隊伍），加上截糧軍令帶來的
-        敵方運糧隊（orders.extra_enemies；自家地盤上有運糧隊時出陣就是去截它）。流寇、野獸不在裡面（那是找素材撞上的）。"""
+        """出陣攻打的對手（設計 2.2；領地爭奪 conquest.sortie_foes），加上截糧軍令帶來的敵方運糧隊（orders.extra_enemies；
+        自家地盤上有運糧隊時出陣就是去截它）。"""
         s, c = self.state, self.content
         own = self._side()  # 豪強分屬兩軍：依附的那一軍
-        side = territory.controller(s.world, c, loc.id)
-        if conquest.on(c, s.world):  # 領地爭奪：中立地打那裡的駐軍與流寇野獸，敵方的陣營區塊打控制方的兵（conquest.sortie_foes）
-            ids = conquest.sortie_foes(s.world, c, loc.id, own)
-        else:
-            ids = [
-                sid for sid in territory.squads_at(s.world, c, loc.id)
-                if (faction := c.squads[sid].faction) is not None and faction != own and (side is None or faction == side)
-            ]
+        ids = conquest.sortie_foes(s.world, c, loc.id, own)  # 中立地打那裡的駐軍與流寇野獸，敵方的陣營區塊打控制方的兵
         extra = orders.extra_enemies(s, c, loc.id, own)
         return ids + [sid for sid in extra if sid not in ids]
 
     def _sortie_mode(self, loc: Location) -> str | None:
-        mode = sortie.mode(self.content, self.state.world, self._side(), loc.id, bool(self._sortie_foes(loc)))
-        # 三陣營四勝利開著的季拿掉攪局（設計 3.2）：豪強分屬兩軍時本來就碰不到，開關後面的保險（豪強照依附那一軍攻守）
-        return None if mode == "stir" and self._four_wins() else mode
+        return sortie.mode(self.content, self.state.world, self._side(), loc.id, bool(self._sortie_foes(loc)))
 
     def sortie_mode(self) -> str | None:
         """所在地此刻出陣是哪一種（假人照它挑，bot_policy）；在路上是 None。"""
         p = self.state.player
         return None if p.journey is not None else self._sortie_mode(self.content.locations[p.location])
-
-    def sortie_push(self, loc_id: str | None = None, how: str | None = None) -> dict[str, float]:
-        """在這個地點（預設所在地）出陣推哪幾條線、各推多少（sortie.pushes：還沒打季長倍數與盡頭阻力）；how 不給照那裡此刻是哪一種。
-        沒有出陣（散人、不是戰線地點）是空的。假人照它挑往哪裡走（bot_policy._train_value）。"""
-        s, c = self.state, self.content
-        loc = c.locations[loc_id or s.player.location]
-        how = how or self._sortie_mode(loc)
-        side = self._side()  # 豪強分屬兩軍：照依附那一軍的目標推
-        if how is None or side is None or conquest.on(c, s.world):  # 領地爭奪：出陣不推線、推進度（sortie_progress）
-            return {}
-        return sortie.pushes(c, s.world, side, loc.id, how)
 
     def sortie_progress(self, loc_id: str | None = None, how: str | None = None) -> float:
         """領地爭奪：在這個地點（預設所在地）出陣推（攻）或拉（守）進度的名目量（conquest.sortie_nominal；還沒打人數緩衝與集火）。
@@ -10077,21 +10051,19 @@ class Game:
         if left <= 0:
             used = sortie.USED_UP.format(n=self.content.config.sortie.per_day)
             return Option(id="act:train", label=f"{name}（{used}）", enabled=False)
-        if how == "stir" and not self.sortie_push(loc.id, how):  # 線正好 50：攪局推不動，不能按、不花次數（FB-253）
-            return Option(id="act:train", label=f"{name}（{sortie.STIR_FLAT}）", enabled=False)
         tail = sortie.LEFT_NOTE.format(n=left)
         if how != "attack":
             return self._cost_option("act:train", name, cost, note=f"{tail}・零風險")
         return self._train_option(loc, cost, odds, name=name, tail=tail)
 
     def _sortie(self) -> list[str]:
-        """出陣（act:train；體力 _act 已經扣了）：記今天一次，照這裡此刻歸誰攻、守或攪局。不接戰後事件（搬到找素材，設計 2.4）。
+        """出陣（act:train；體力 _act 已經扣了）：記今天一次，照這裡此刻歸誰攻或守。不接戰後事件（搬到找素材，設計 2.4）。
         不論哪一種、有沒有替軍令記到功，都算入伍段的「出一次力」（note_action 對已經走過的步驟什麼都不做）。"""
         s, c = self.state, self.content
         loc = c.locations[s.player.location]
         how = self._sortie_mode(loc)
         sortie.spend(s.player, self._pill_day())
-        on = conquest.on(c, s.world) and how in ("attack", "hold")
+        on = how in ("attack", "hold")
         # 領地爭奪（翻地與爭搶）：推得動的地方出陣，先看撞不撞得上對面正在推的人（混戰，輿圖簡化設計 4.3）；輸了這一下白跑
         side = self._side()
         why = conquest.push_problem(s.world, c, side, loc.id, how) if on else None
@@ -10245,11 +10217,11 @@ class Game:
             return []
         return renown.gain(self.state, c, "fame", n)
 
-    def _sortie_host(self, loc: Location, how: str) -> Squad | None:
-        """守、攪局拿誰的數字（設計 2.4「守用這個地點自己陣營那一路的數字」）：守是這裡自家陣營的隊伍、攪局是此刻控制方的隊伍
-        （設計沒寫，照守的算法），取經驗最高的一路、同分取先列的；沒有是 None（不給心得經驗，推力照推）。"""
+    def _sortie_host(self, loc: Location) -> Squad | None:
+        """守拿誰的數字（設計 2.4「守用這個地點自己陣營那一路的數字」）：這裡自家陣營的隊伍，取經驗最高的一路、同分取先列的；
+        沒有是 None（不給心得經驗，進度照拉）。"""
         s, c = self.state, self.content
-        side = self._side() if how == "hold" else territory.controller(s.world, c, loc.id)
+        side = self._side()
         squads = [
             c.squads[sid] for sid in territory.squads_at(s.world, c, loc.id)
             if c.squads[sid].faction is not None and (side is None or c.squads[sid].faction == side)
@@ -10257,26 +10229,19 @@ class Game:
         return max(squads, key=lambda q: q.exp) if squads else None
 
     def _sortie_hold(self, loc: Location, how: str) -> list[str]:
-        """守、攪局（設計 2.2）：不打、不會輸、不扣氣血、不磨兵器。給自己的照操練（_drill_gains，_sortie_host 那一路）；推的量是攻的
-        hold_share（push_trend 再打季長倍數與盡頭阻力）；守算一次守城（軍令文件 3.2，同巡哨、傳道）。"""
+        """守（設計 2.2）：不打、不會輸、不扣氣血、不磨兵器。給自己的照操練（_drill_gains，_sortie_host 那一路）；把這一塊的進度
+        推回自己那一邊（_push_progress，量是攻的 hold_share；設計 3.7、4.4）；算一次守城（軍令文件 3.2，同巡哨、傳道）。"""
         s, c = self.state, self.content
-        line = (sortie.HOLD_LINE if how == "hold" else sortie.STIR_LINE).format(place=loc.name)
+        line = sortie.HOLD_LINE.format(place=loc.name)
         msgs = [line]
         self._outcome(sortie.MODE_NAMES[how], line)
-        host = self._sortie_host(loc, how)
+        host = self._sortie_host(loc)
         if host is not None:
             msgs += self._drill_gains(host, self._hold_share())
-        for trend_id, amount in self.sortie_push(loc.id, how).items():
-            msgs += self.push_trend(trend_id, amount, source="sortie")
-        on = conquest.on(c, s.world)
-        credit: list[str] = []
-        if on and how == "hold":  # 守城照拉之前的清單記（FB-608：拉到零的那一下，拉完那一塊沒有條，不在守的清單上）；那一句照舊排在最後
-            credit = self._order_credit(kind="duty", location=loc.id, front=conquest.line_of(s.world, c, loc.id))
-        if on:  # 領地爭奪：守把這一塊的進度推回自己那一邊（設計 3.7、4.4）
-            msgs += self._push_progress(loc.id, conquest.sortie_nominal(c, loc.id, how), "sortie", how)
-        if how == "hold":
-            msgs += credit if on else self._order_credit(kind="duty", location=loc.id, front=territory.line_of(c, loc.id))
-        return msgs
+        # 守城照拉之前的清單記（FB-608：拉到零的那一下，拉完那一塊沒有條，不在守的清單上）；那一句照舊排在最後
+        credit = self._order_credit(kind="duty", location=loc.id, front=conquest.line_of(s.world, c, loc.id))
+        msgs += self._push_progress(loc.id, conquest.sortie_nominal(c, loc.id, how), "sortie", how)
+        return msgs + credit
 
     def _resisted_line(self) -> str:
         """盡頭阻力打了折的那一下接哪一句（FB-432）：人站在自家陣營控制的地方（守、巡哨、傳道、在自家地盤碰上的事）推過頭是
@@ -13893,10 +13858,10 @@ class Game:
             self._write(f"截殺・{rival}" if attacker else f"遭{rival}截殺", msgs, tag=battlelog.outcome_text(record))
         return msgs
 
-    # ── 後期體力玩法第一批（Joy 2026-10-16）：設伏劫道（ambush.py）、修築工事、屯糧練兵（works.py）──
+    # ── 後期體力玩法第一批（Joy 2026-10-16）：設伏劫道（ambush.py）、屯糧練兵（works.py；修築工事 2026-10-27 跟著舊拔河拿掉）──
 
     def _stamina_play_options(self) -> list[Option]:
-        """「此地還能做」裡的三種體力玩法：守著埋伏時只有「收伏」；否則這裡設得了伏的每一段路一顆、修工事、屯糧各一顆。
+        """「此地還能做」裡的體力玩法：守著埋伏時只有「收伏」；否則這裡設得了伏的每一段路一顆、屯糧一顆。
         劫不到人的（散人沒揭通緝、新手期）不畫設伏鈕；序章裡沒有。"""
         s, c = self.state, self.content
         if prologue_rules.active(s, c) or s.world.ended:
@@ -13910,14 +13875,6 @@ class Game:
             for to in ambush_rules.roads(s, c):
                 label = ambush_rules.SET_LABEL.format(to=c.locations[to].name)
                 opts.append(self._cost_option(f"ambush:set:{to}", label, c.config.ambush.stamina))
-        side = self._side()
-        if works.fort_spot(s, c, side):
-            level, cfg = works.fort_now(s, c), c.config.fortify
-            label = works.FORT_LABEL.format(level=level, cap=cfg.cap)
-            if level >= cfg.cap:
-                opts.append(Option(id="works:fortify", label=f"{label}（{works.FORT_FULL}）", enabled=False))
-            else:
-                opts.append(self._cost_option("works:fortify", label, cfg.stamina))
         stock = works.stock_spot(s, c)
         if stock is not None:
             name = c.scenario.faction_name(stock, stock)
@@ -14219,19 +14176,10 @@ class Game:
         return msgs
 
     def _works_act(self, arg: str) -> list[str]:
-        """修築工事（works:fortify）、屯糧練兵（works:stockpile）：重驗、扣體力、記進這一季；第一季規則開著時記一點貢獻（同捐軍備的寫法）。"""
+        """屯糧練兵（works:stockpile）：重驗、扣體力、記進這一季；第一季規則開著時記一點貢獻（同捐軍備的寫法）。"""
         s, c = self.state, self.content
         p = s.player
-        if arg == "fortify":
-            side = self._side()
-            cfg = c.config.fortify
-            if not works.fort_spot(s, c, side) or works.fort_now(s, c) >= cfg.cap or p.stamina < cfg.stamina:
-                return ["（此刻無法這麼做。）"]
-            p.stamina -= cfg.stamina
-            before, after = works.fortify(s, c, side)
-            msgs = [works.FORT_DONE.format(place=c.locations[p.location].name, before=before, after=after)]
-            cost = cfg.stamina
-        elif arg == "stockpile":
+        if arg == "stockpile":
             side = works.stock_spot(s, c)
             cfg = c.config.stockpile
             if side is None or p.stamina < cfg.stamina:

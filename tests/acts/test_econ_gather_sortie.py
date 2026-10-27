@@ -79,7 +79,7 @@ def test_losing_or_holding_pays_no_silver():
     with _fight("落敗"):
         game.choose("act:train")
     assert game.state.battles[-1].silver == -10 and game.state.player.stats["silver"] == 90  # 照舊只失一成，不加給
-    hold = _game()  # 黃巾在自家大本營：守
+    hold = _game(at="huangjin_camp")  # 黃巾在自家大本營：守
     silver = hold.state.player.stats["silver"]
     hold.choose("act:train")
     assert hold.state.player.stats["silver"] == silver

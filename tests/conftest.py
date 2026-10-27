@@ -86,10 +86,10 @@ def real_content(profile=None) -> Content:
 
 
 def classic_rules(content: Content) -> Content:
-    """出陣探索與地盤（2026-10-14）之前的規則：出陣、探索三選一、地盤、盡頭阻力四個開關都關掉，回傳同一份內容。
-    測的是舊規則本身、或只是拿遊歷／探索／推大勢當手段的舊測試用它；新規則的測試不要叫。"""
+    """出陣探索與地盤（2026-10-14）之前的規則：探索三選一、盡頭阻力兩個開關關掉，回傳同一份內容（出陣與地盤 2026-10-27 起沒有開關）。
+    測的是舊規則本身、或只是拿探索／推大勢當手段的舊測試用它；新規則的測試不要叫。"""
     cfg = content.config
-    cfg.sortie.enabled = cfg.explore_modes.enabled = cfg.territory.enabled = cfg.push_resistance.enabled = False
+    cfg.explore_modes.enabled = cfg.push_resistance.enabled = False
     return content
 
 
@@ -97,14 +97,6 @@ def no_week_unlock(content: Content) -> Content:
     """功能照週解鎖（減法季 6.6，Config.jianfa.week_unlock）關掉，回傳同一份內容：用 week7／season21 的正式內容、開季第一天就要進鐵匠鋪、
     擂台、自創、懸賞榜的舊測試叫它（那幾樣在減法季第 2 週才開）；解鎖本身的測試在 tests/test_week_unlock.py。"""
     content.config.jianfa.week_unlock = False
-    return content
-
-
-def no_conquest(content: Content) -> Content:
-    """領地爭奪（Config.conquest，第 38 項改版；PM 2026-10-22 起正式內容打開）之前的規則：地盤照拔河與割據易手、出陣推戰線、
-    沒有翻地與戰書，回傳同一份內容。測的是舊的地盤、出陣推線、「關著一個字都不變」的舊測試用它；新規則的測試不要叫
-    （見 tests/conquest_kit.py 的 conquest_game）。共用的內容用 monkeypatch.setattr(content.config.conquest, "enabled", False)。"""
-    content.config.conquest.enabled = False
     return content
 
 

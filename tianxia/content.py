@@ -1512,9 +1512,9 @@ def check_orders(c: Content, need, known, front_ids: list[str]) -> None:
             if slot.intercept in c.locations:
                 region = region_of(c, slot.intercept)
                 need(region is not None and region.front == front, f"{where}：截糧的地點 {slot.intercept} 不在這條戰線上")
-                if c.config.sortie.enabled and c.scenario.factions:  # FB-248：出陣開著時糧隊只在這一處，要是出得了陣的戰線地點
-                    from . import territory  # noqa: PLC0415  延後 import（同 check_territory）
+                from . import sortie, territory  # noqa: PLC0415  延後 import（同 check_territory）
 
+                if sortie.on(c):  # FB-248：出陣開著時糧隊只在這一處，要是出得了陣的戰線地點
                     need(territory.line_of(c, slot.intercept) == front,
                          f"{where}：截糧的地點 {slot.intercept} 不是這條戰線的戰線地點（出陣開著時那裡沒有出陣）")
             if side in factions:
@@ -1960,11 +1960,8 @@ def check_bounties(c: Content, need) -> None:
 
 
 def check_core_loop(c: Content, need) -> None:
-    """出陣探索與地盤的設定（Config.territory、push_resistance、explore_modes）：割據的三個門檻照大小排、阻力的兩段照大小排、
-    二階素材的機會只寫危險度 1～3。"""
-    t, r = c.config.territory, c.config.push_resistance
-    need(t.geju_release <= t.geju_one <= t.geju_two,
-         f"Config.territory：geju_release ≤ geju_one ≤ geju_two（{t.geju_release}、{t.geju_one}、{t.geju_two}）")
+    """出陣探索與地盤的設定（Config.push_resistance、explore_modes）：阻力的兩段照大小排、二階素材的機會只寫危險度 1～3。"""
+    r = c.config.push_resistance
     need(r.full_within <= r.half_within,
          f"Config.push_resistance：full_within 不能大於 half_within（{r.full_within}、{r.half_within}）")
     need(set(c.config.explore_modes.second_tier) <= {1, 2, 3},
@@ -2027,7 +2024,7 @@ def check_territory(c: Content, need, known, front_ids: list[str]) -> None:
             need(territory.line_of(c, loc_id) == line, f"{where}：{loc_id} 的 train_trend 不在這條戰線上")
             need(loc_id not in bases, f"{where}：{loc_id} 是投靠點（大本營不易手）")
             need(loc_id not in t.fixed, f"{where}：{loc_id} 同時寫在 fixed")
-            for side in (low, high, territory.geju_side(c)):
+            for side in (low, high):
                 stands(where, loc_id, side)
     for loc_id, side in t.fixed.items():
         where = "地盤的 fixed"

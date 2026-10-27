@@ -5,7 +5,7 @@ import random
 
 import pytest
 
-from conftest import classic_rules, no_conquest, real_content
+from conftest import classic_rules, real_content
 from tianxia import atlas, mapview, mounts, rules, smithing, team
 from tianxia.content import ContentError, validate
 from tianxia.engine import Game
@@ -14,7 +14,7 @@ from tianxia.sqlite_world import open_world
 
 
 def _game(faction, at="wan_city"):
-    c = no_conquest(real_content("week7"))  # 地盤拔河的舊規則（領地爭奪 PM 2026-10-22 起正式內容打開；領地加成在 tests/test_conquest_rules.py）
+    c = real_content("week7")  # 地盤拔河的舊規則（領地爭奪 PM 2026-10-22 起正式內容打開；領地加成在 tests/test_conquest_rules.py）
     c.config.auto_open_first_season = True
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world())
     game.client = None
@@ -24,32 +24,12 @@ def _game(faction, at="wan_city"):
     return game
 
 
-@pytest.mark.parametrize(("faction", "heal", "forge", "horse"), [("guan", 9, 18, 90), ("huang", 12, 24, 120), (None, 10, 20, 100)])
-def test_your_own_ground_is_cheaper_and_the_enemys_dearer(faction, heal, forge, horse):
-    game = _game(faction)
-    s, c = game.state, game.content
-    s.player.member.injury = 20  # 原價 10 兩
-    assert team.heal_cost(c, s.player.member, s) == heal
-    assert smithing.price(c, 1, "weapon", s) == forge  # 一階工錢原價 20
-    assert mounts.price(s, c) == horse  # 駑馬原價 100
-
-
 def test_healing_charges_the_local_price():
     game = _game("guan")
     s = game.state
     s.player.member.injury, s.player.stats["silver"] = 20, 100
     game.heal()
     assert s.player.stats["silver"] == 91 and s.player.member.injury == 0
-
-
-def test_events_can_ask_who_holds_this_place():
-    game = _game("guan", at="runan_wilds")  # 開季歸黃巾
-    s, c = game.state, game.content
-    assert rules.check_condition(Condition(controlled_by=["huang"]), s, c)
-    assert not rules.check_condition(Condition(controlled_by=["guan"]), s, c)
-    assert not rules.check_condition(Condition(controlled_by=["huang"]), s, None)
-    s.player.location = "yingshui"  # 不是戰線地點：沒有控制方
-    assert not rules.check_condition(Condition(controlled_by=["huang", "guan", "haoqiang"]), s, c)
 
 
 def test_an_unknown_side_in_controlled_by_is_refused():

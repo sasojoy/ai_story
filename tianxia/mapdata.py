@@ -409,19 +409,14 @@ def _titles(state: GameState, content: Content, week: int, now_week: int) -> lis
 
 
 def _ropes(state: GameState, content: Content, now_week: int) -> list[dict]:
-    """三條戰線（第一季）或一根黃巾聲勢（規則關著的季）：值、比上一週推了多少、繩上的可易手地點（地盤開著才有）。
-    領地爭奪開著的季沒有拔河：地點不照戰線的門檻易手，繩上不掛地點（不然小方印擺在已經不作用的門檻上）。"""
+    """三條戰線（第一季）或一根黃巾聲勢（規則關著的季）：值、比上一週推了多少。繩上不掛地點（beads 是空的）：領地爭奪沒有拔河，
+    地點不照戰線的門檻易手（舊的拔河 2026-10-27 拿掉）。"""
     w = state.world
     fronts = rules.front_ids(content)
     if not fronts:
         return []
-    lines = content.scenario.territory.lines if territory.on(content) and not conquest.on(content, w) else {}
     names = {t.id: t.name for t in content.scenario.trends}
     prev = territory.week_at(w, now_week - 1) if now_week > 1 else None
-
-    def bead(loc_id: str, spots: list[str]) -> dict:
-        return {"id": loc_id, "threshold": territory.threshold(spots.index(loc_id) + 1, len(spots)),
-                "control": territory.controller(w, content, loc_id)}
 
     def ends(line: str) -> dict:  # 繩的兩頭是誰（往 0 推的、往 100 推的；territory.sides 照劇本的 goals）：網頁不寫死官軍、黃巾
         low, high = territory.sides(content, line)
@@ -432,15 +427,12 @@ def _ropes(state: GameState, content: Content, now_week: int) -> list[dict]:
         for line in fronts:
             value = rules.world_trend_value(w, content, line)
             before = prev.fronts.get(line, value) if prev is not None else value
-            spots = lines.get(line, [])
-            out.append({"id": line, "name": names.get(line, line), "value": value, "delta": value - before,
-                        "beads": [bead(x, spots) for x in spots], **ends(line)})
+            out.append({"id": line, "name": names.get(line, line), "value": value, "delta": value - before, "beads": [], **ends(line)})
         return out
     trend = rules.resolve_trend(content, w, fronts[0]) or fronts[0]
     value = rules.world_trend_value(w, content, trend)
     before = next(iter(prev.fronts.values()), value) if prev is not None and prev.fronts else value
-    beads = [bead(x, spots) for spots in lines.values() for x in spots]
-    return [{"id": trend, "name": names.get(trend, trend), "value": value, "delta": value - before, "beads": beads, **ends(fronts[0])}]
+    return [{"id": trend, "name": names.get(trend, trend), "value": value, "delta": value - before, "beads": [], **ends(fronts[0])}]
 
 
 def _rope_values(snap: TerritoryWeek, ropes: list[dict]) -> dict[str, int | None]:

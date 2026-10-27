@@ -397,9 +397,6 @@ def stamp_season(season: WorldState, content: Content, now: float | None = None)
     season.precise_actions = cfg.precise_actions  # 一類一顆（正式季整合第二章、12.3 第 13 條）：照開季蓋章，正在跑的季不變
     season.cal_offset = anchor_offset(now, content) if cfg.season21 and now is not None else 0.0
     season.haoqiang_allied = cfg.season_one and cfg.haoqiang_allied  # 豪強分屬兩軍（企劃者 2026-10-15）：只在第一季的季（allied.on）
-    from . import conquest  # noqa: PLC0415  延後 import：conquest → territory → rules → world_state
-    # 領地爭奪（第 38 項改版）：要第一季規則、劇本有官軍與黃巾、寫了區塊、豪強分屬兩軍（設計 4.1、4.10）；正在跑的季不變
-    season.conquest_on = cfg.conquest.enabled and cfg.season_one and conquest.eligible(content)
     season.jianfa_on = cfg.jianfa.enabled  # 減法季（Config.jianfa）：season21、week7 開，週末不開；正在跑的季不變（rules.jianfa）
     season.schedule = default_schedule(content, season) if cfg.season_one else {}  # 照剛蓋好的季長排
     # 素材與經濟（企劃者 2026-10-15）：神器配方的條數與線索分片從下一季開季起照這個章（正在跑的季沒有＝照舊）

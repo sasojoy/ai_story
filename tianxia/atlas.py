@@ -314,7 +314,6 @@ SIEGE_AT = "到{where}遊歷，打贏一場{enemy}記一次{note}。"  # 待 joy
 SIEGE_UNSEEN = "（那裡你還沒摸清）"  # 待 joy 潤（FB-221）：記得了次數的地方都還沒摸清，只寫大區
 SIEGE_SOME_UNSEEN = "（另一處你還沒摸清）"  # 待 joy 潤（FB-221）：兩處裡摸清了一處
 SIEGE_AT_SORTIE = "到{where}出陣，打贏一場{enemy}記一次{note}。"  # 待 joy 潤：出陣開著時的攻城（設計第七節）
-SIEGE_AREA_SORTIE = "到{front}一帶{enemy}的地盤出陣，打贏一場記一次。"  # 待 joy 潤
 # 領地爭奪開著時（裁決 20；翻地與爭搶 PM 2026-10-20 第 1 條）：攻城認這一邊此刻進度最高、推得動的那一塊，打贏那裡的守軍（敵方的兵、中立駐軍都算），卡上照 siege_places 寫；待 joy 潤
 SIEGE_CONQUEST_FOE = "守軍"
 SIEGE_AREA_CONQUEST = "到{front}一帶我軍進度最高的幾處出陣，打贏一場守軍記一次。"  # 並列最高的多過 SIEGE_NAMED_MAX（全是 0 時就是那一帶推得動的每一處）
@@ -322,7 +321,6 @@ SIEGE_NONE_CONQUEST = "{front}一帶此刻沒有我軍推得動的地方（剛�
 # 約戰開著（減法季批 3b，QA 順帶）：貼約戰、打贏一場就記一次——對面是真人、補位的人還是守軍都算，不寫「守軍」。待 joy 潤
 SIEGE_AREA_DUEL = "到{front}一帶我軍進度最高的幾處出陣，打贏一場記一次。"
 INTERCEPT_SORTIE = "到{place}出陣，撞上對面的運糧隊、打贏記一次。"  # 待 joy 潤（FB-248：出陣開著時糧隊只在這一處，orders.intercept_spots）
-DEFEND_SORTIE = "在{front}一帶自家的地盤出陣守一回，或按「{duty}」（收在「此地還能做」裡），做一次記一次。"  # 待 joy 潤
 # 領地爭奪開著時（裁決 24、FB-565；翻地與爭搶 PM 2026-10-20 第 1 條）：守城記的是自家被對面推得最高、守得動的那幾塊（orders.defend_places），
 # 卡上照它寫，輿圖也只標那幾處；沒有就直說此刻沒有可守的（記不到）。投票與 22:00 公告拿掉了，不再寫「被公告要攻」（dev/flip-1 收尾）。待 joy 潤
 DEFEND_ACT_SORTIE = "出陣守一回，或按「{duty}」（收在「此地還能做」裡）"
@@ -356,8 +354,6 @@ def siege_how(state: GameState, content: Content, order: Order) -> str:
             return (SIEGE_AREA_DUEL if duel else SIEGE_AREA_CONQUEST).format(front=front)
         enemy = "" if duel else SIEGE_CONQUEST_FOE  # 約戰開著：打贏一場就記，不分對面是誰（真人、補位、守軍）
     if not places or len(places) > SIEGE_NAMED_MAX:
-        if sortie.on(content):
-            return SIEGE_AREA_SORTIE.format(front=front, enemy=enemy)
         return f"到{front}一帶遊歷，打贏一場對面的兵記一次。"
     known = [content.locations[loc_id].name for loc_id in places if is_known(state, content, loc_id)]
     hidden: list[str] = []
@@ -407,8 +403,6 @@ def order_how(state: GameState, content: Content, order: Order) -> str:
             if sieged:
                 parts.append(DEFEND_SIEGE_CONQUEST.format(where="、".join(content.locations[loc_id].name for loc_id in sieged)))
             return "".join(parts)
-        if sortie.on(content):
-            return DEFEND_SORTIE.format(front=front, duty=name)
         return f"在{front}一帶按「{name}」（收在「此地還能做」裡），做一次記一次。"
     if order.template == "intercept":
         if sortie.on(content):

@@ -56,7 +56,6 @@ def _tw(d: int, h: int, mi: int = 0) -> float:
 def one_day() -> tuple[Game, xingshi.XingshiRequest]:
     """暫存的世界跑一天：21 天的季、領地爭奪與〈天下形勢〉打開；黃巾攻南陽官道大勝；22:01 結算開單。回（Game, A 段的單）。"""
     content = load_content(ROOT / "content", "season21")
-    content.config.conquest.enabled = True
     content.config.xingshi.enabled = True
     content.config.auto_open_first_season = True
     game = Game.new(content, "史官試筆", rng=random.Random(0), world=open_world())

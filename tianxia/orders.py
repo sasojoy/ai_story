@@ -14,7 +14,7 @@ from __future__ import annotations
 import math
 import random
 
-from . import calendar, figures, push, rules, territory, timetable
+from . import calendar, figures, push, rules, timetable
 from .models import Content, OrderTemplate
 from .state import GameState, Order, WorldState
 
@@ -142,7 +142,7 @@ def _enemy_sieged_last_week(state: GameState, side: str, front: str, week: int) 
 
 def siege_places(content: Content, faction: str, front: str, world: WorldState | None = None) -> list[str]:
     """這條戰線上打得到敵方陣營隊伍的地點（攻城的個人部分只算打贏敵方陣營的隊伍）；照內容檔的地點順序。
-    地盤開著（給了 world）：這條戰線上此刻歸敵方的戰線地點（出陣攻打的地方，出陣探索與地盤設計第七節）。關著照舊看地點的 enemies。
+    地盤開著（＝領地爭奪）：這一邊此刻進度最高、推得動的那一塊（見下）。關著照舊看地點的 enemies。
     T6 審查 I2：沒有這種地點的戰線，攻城永遠湊不滿，不發攻城。潁川汝南以前沒有官軍隊伍、黃巾在那裡不發攻城；
     FB-184 開了官軍大營（整支官軍）之後黃巾在潁川汝南也有攻城（攻打官軍大營）。"""
     enemy = ENEMY.get(faction)
@@ -156,11 +156,6 @@ def siege_places(content: Content, faction: str, front: str, world: WorldState |
             loc_id for loc_id in _today(content, world, faction, "attack")
             if conquest.line_of(world, content, loc_id) == front
             and _all_enemy(content, faction, conquest.sortie_foes(world, content, loc_id, faction), garrison=True)
-        ]
-    if world is not None and territory.on(content):
-        return [
-            loc_id for loc_id in content.locations
-            if territory.line_of(content, loc_id) == front and territory.controller(world, content, loc_id) == enemy
         ]
     return [
         loc_id for loc_id, loc in content.locations.items()

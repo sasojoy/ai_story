@@ -7,7 +7,7 @@ import random
 
 import pytest
 
-from conftest import no_conquest, real_content, third_party_gentry
+from conftest import real_content, third_party_gentry
 from tianxia import allied, calendar, rules
 from tianxia.engine import Game
 from tianxia.state import PlayerState, WorldState
@@ -15,7 +15,7 @@ from tianxia.state import PlayerState, WorldState
 
 @pytest.fixture
 def wk():
-    c = no_conquest(real_content("week7"))  # 地盤拔河、出陣推線的舊規則（領地爭奪 PM 2026-10-22 起正式內容打開）
+    c = real_content("week7")  # 地盤拔河、出陣推線的舊規則（領地爭奪 PM 2026-10-22 起正式內容打開）
     c.config.jianfa.four_wins = False  # 三陣營四勝利之前的規則（挑邊、改依附算叛投、攪局；測試整理批 1 把這個檔從週末搬到 7 天季，減法季開著）；新規則在 tests/test_four_wins_wiring.py
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
@@ -283,31 +283,6 @@ def test_territory_has_no_geju_hold(wk):
     assert "haoqiang" not in {territory.controller(w, wk, loc) for loc in spots}
 
 
-# ── Task 4：推線、出陣、地盤、守勢與第 3 階行動、機緣、捐軍備照那一邊 ─────────
-
-
-def _spots(game, content, side):
-    """這一方控制的、另一方控制的戰線地點各一處（照此刻的控制方）。"""
-    from tianxia import territory
-
-    w = game.state.world
-    spots = [loc for line in content.scenario.territory.lines.values() for loc in line]
-    own = next(loc for loc in spots if territory.controller(w, content, loc) == side)
-    foe = next(loc for loc in spots if territory.controller(w, content, loc) not in (None, side))
-    return own, foe
-
-
-def test_gentry_sortie_attacks_and_holds_like_its_side(wk):
-    game = _game(wk, faction="haoqiang", ally="guan")
-    own, foe = _spots(game, wk, "guan")
-    game.state.player.location = own
-    assert game.sortie_mode() == "hold"
-    game.state.player.location = foe
-    assert game.sortie_mode() == "attack"
-    push = game.sortie_push(foe)
-    assert push and all(v < 0 for v in push.values())  # 往官軍那一頭（0）推
-
-
 def test_goals_are_the_sides(wk):
     game = _game(wk, faction="haoqiang", ally="huang")
     goals = game._goals()
@@ -324,18 +299,6 @@ def test_push_buffer_counts_the_allied_gentry(wk):
     assert game.state.player.contrib > 0  # 往官軍的目標推，記貢獻
 
 
-def test_price_follows_the_side(wk):
-    from tianxia import team, territory
-
-    game = _game(wk, faction="haoqiang", ally="guan")
-    own, foe = _spots(game, wk, "guan")
-    game.state.player.location = own
-    assert team._price_here(game.state, wk) == wk.config.territory.own_price
-    game.state.player.location = foe
-    assert team._price_here(game.state, wk) == wk.config.territory.enemy_price
-    assert territory.price_factor(game.state.world, wk, allied.side_of(game.state, wk), foe) == wk.config.territory.enemy_price
-
-
 def test_gentry_manors_are_neither_sides_ground(wk):
     """豪強的投靠點不在戰線上，豪強分屬兩軍的季不算哪一軍的地盤：誰在那裡買東西都是原價（不會讓依附的豪強在自己莊院付貴兩成）。"""
     from tianxia import team, territory
@@ -344,28 +307,6 @@ def test_gentry_manors_are_neither_sides_ground(wk):
     assert team._price_here(game.state, wk) == 1.0
     assert territory.price_factor(game.state.world, wk, "huang", "cao_manor") == 1.0
     assert territory.price_factor(game.state.world, wk, "guan", "changshe") == wk.config.territory.own_price
-
-
-def test_old_rules_gentry_manors_still_price_by_faction():
-    from tianxia import territory
-
-    off = _old_rules()
-    w = _game(off, name="乙").state.world
-    assert territory.price_factor(w, off, "haoqiang", "cao_manor") == off.config.territory.own_price
-    assert territory.price_factor(w, off, "guan", "cao_manor") == off.config.territory.enemy_price
-
-
-def test_duty_pushes_the_front_for_the_side(wk):
-    game = _game(wk, faction="haoqiang", ally="huang")
-    own, _ = _spots(game, wk, "huang")
-    game.state.player.location = own
-    line = rules.front_of(wk, own)
-    w = game.state.world
-    before = w.trends[line] + w.trend_accum.get(line, 0.0)
-    msgs = game._duty()
-    assert any("保境安民" in m or m for m in msgs)
-    assert w.trends[line] + w.trend_accum.get(line, 0.0) > before  # 往黃巾那一頭（100）推
-    assert rules.GEJU not in w.trends
 
 
 def test_donate_goes_to_the_side_stock(wk):
