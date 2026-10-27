@@ -644,5 +644,23 @@
     "reward_xinde": 16,
     "exp": 18,
     "desc": "朱將軍麾下打頭陣的一隊步卒，夜裡衝營。"
+  },
+  {
+    "id": "wolong_yellow",
+    "name": "黃巾散兵",
+    "difficulty": 12,
+    "attribute": "剛",
+    "reward_xinde": 6,
+    "exp": 8,
+    "desc": "老耿帶的二十幾個人，鋤頭、斧頭、削尖的竹竿，穿得跟逃難的人一樣。"
+  },
+  {
+    "id": "wolong_houqi",
+    "name": "侯七的人",
+    "difficulty": 20,
+    "attribute": "快",
+    "reward_xinde": 12,
+    "exp": 14,
+    "desc": "侯七從洛陽帶來的三個隨從，衣服跟他一樣乾淨。"
   }
 ]
