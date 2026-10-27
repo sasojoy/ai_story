@@ -28,6 +28,7 @@ from . import (
     social, sortie, styles, tactics, team, terrain, territory, timetable, traits, treasures, weapons, week_unlock, works, xingshi, zh, yuedan,
 )
 from . import sortie_duel  # 出陣約戰（減法季批 3b）
+from . import tavern_ask  # 問酒家照問題找事實（企劃者 2026-10-27）
 from . import storyline  # 一條線：特殊事件與特殊頓悟的底座（企劃者 2026-10-26）
 from . import epiphany  # 特殊頓悟（登記一條線的鉤子；企劃者 2026-10-26）
 from . import tiers  # 事件分級：場景卡上那一行「州郡大事」「天下大事」
@@ -3113,16 +3114,26 @@ class Game:
 
     # ── 問酒家（設計第八節）：A tavern_ask_request（只讀）→ B 鎖外 tavern.ask_write → C tavern_ask（重驗同一間、同一句，再過一次 ask_clean）──
 
-    def _tavern_ask_facts(self) -> tuple[str, ...]:
+    def _tavern_ask_facts(self, question: str = "") -> tuple[tuple[str, ...], tuple[str, ...]]:
+        """問酒家的事實清單與問到的是哪幾類：先照問句找（tavern_ask.topics：名號、地名、素材、武學、店面、玩法、季勢；問句裡的玩家名號
+        從存檔載入），再接原本那幾條（這一區的局勢、最近的傳聞、這裡的出產、座上客、你自己）。A、C 兩段各算一次，同一句算出來一樣。"""
         s, c = self.state, self.content
         p = s.player
+        players: dict[str, GameState] = {}
+        if hasattr(self.world, "db") and question:
+            for name in tavern_ask.name_hits(question, CharacterStore(self.world.db).names()):
+                other = self._load_kin(name)
+                if other is not None:
+                    players[other.state.player.name] = other.state
+        topic, kinds = tavern_ask.topics(s, c, question, players, self._tavern_wanted())
         extra = []
         guests = [o.player.name for o in social.here(self)][:6]
         if guests:
             extra.append(f"此刻也在{c.locations[p.location].name}的江湖人：{'、'.join(guests)}。")
         side = social.side(s, c)
-        extra.append(f"問話的客官是{side}，名號{p.name}。")
-        return tavern_rules.ask_facts(s, c, extra)
+        extra.append(f"問話的客官是{side}，名號{p.name}，此刻在{c.locations[p.location].name}。")
+        base = [f for f in tavern_rules.ask_facts(s, c, extra) if f not in topic]
+        return tuple(topic + base), tuple(kinds)
 
     def tavern_chatter_request(self) -> tavern_rules.ChatterRequest | None:
         """A 段（鎖內、只讀）：酒肆開著、這一間的閒談該換了，就開一張單（server.write_chatter 在背景請模型寫）。"""
@@ -3154,8 +3165,10 @@ class Game:
             problem = tavern_rules.pay_problem(s, self._tavern_price(c.config.tavern.ask_price))
         if problem is not None:
             return [problem]
+        secret = tavern_rules.secret_asked(q)
+        facts, kinds = ((), ()) if secret else self._tavern_ask_facts(q)
         return tavern_rules.AskRequest(name=s.player.name, place=s.player.location, sign=tavern_rules.sign(s, c), question=q,
-                                       facts=self._tavern_ask_facts(), secret=tavern_rules.secret_asked(q))
+                                       facts=facts, secret=secret, kinds=kinds)
 
     def tavern_ask(self, text: str, reply: str | None, request: tavern_rules.AskRequest | None = None) -> list[str]:
         """C 段：重驗（酒肆還開著、還在同一間、同一句），回話再過一次 ask_clean（照此刻的清單），然後收錢寫紀錄。"""
@@ -3187,8 +3200,9 @@ class Game:
             return lines
         if self._tavern_charge(cfg.ask_price) is None:
             return self._tavern_short(cfg.ask_price)
+        facts, kinds = self._tavern_ask_facts(q)
         req = tavern_rules.AskRequest(name=s.player.name, place=s.player.location, sign=tavern_rules.sign(s, c), question=q,
-                                      facts=self._tavern_ask_facts())
+                                      facts=facts, kinds=kinds)
         reply = getattr(self, "_tavern_reply", None)  # B 段寫好的（tavern_ask 放的）；直接呼叫沒有 B 段，當叫不動
         reply = tavern_rules.ask_clean(reply, req) if reply else None
         if reply is None:
@@ -3196,6 +3210,10 @@ class Game:
             self._shop_say("nothing")
             return [tavern_rules.ASK_BUSY]
         lines = [tavern_rules.ASK_YOU.format(q=q), tavern_rules.ASK_HIM.format(a=reply)]
+        if tavern_rules.unsure(reply):  # 酒家說不上來：退一半，指一條路（企劃者 2026-10-27）
+            refund = self._tavern_price(cfg.ask_price) // 2
+            tavern_rules.pay(s, -refund)
+            lines.append(tavern_rules.ASK_UNSURE.format(refund=refund, tip=tavern_ask.pointer(list(kinds))))
         tavern_rules.add_note(s, c, "ask", tavern_rules.ASK_TITLE, lines)
         self._shop_say("asked")
         return lines

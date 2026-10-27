@@ -896,6 +896,8 @@ ASK_EMPTY_Q = "想問什麼？寫一句吧。"
 ASK_LONG_Q = "一句最多 {n} 個字"
 ASK_SECRET = "酒家擺擺手：「這種事得自己去悟，我一個賣酒的哪曉得。」（只收一半）"
 ASK_BUSY = "酒家忙得團團轉：「今天客人多，改天再說。」（沒收錢）"
+ASK_UNSURE = "（酒家說不上來，退你 {refund} 兩。{tip}）"
+UNSURE_WORDS = ("不清楚", "不曉得", "不知道", "沒聽說", "沒聽過", "說不上來", "說不準", "不太清楚", "聽說不多")  # 酒家這一句是答不出來
 ASK_YOU = "你：「{q}」"
 ASK_HIM = "酒家：「{a}」"
 ASK_RUMOR_KEEP = 6  # 清單裡放幾則最近的傳聞
@@ -913,6 +915,7 @@ class AskRequest:
     question: str
     facts: tuple[str, ...]
     secret: bool = False
+    kinds: tuple[str, ...] = ()  # 問句認出的是哪幾類（tavern_ask.topics）；答不出來時照它指路
 
 
 class AskReply(BaseModel):
@@ -957,13 +960,20 @@ def ask_facts(state: GameState, content: Content, extra: list[str]) -> tuple[str
     return tuple(out)
 
 
+def unsure(text: str) -> bool:
+    """酒家這一句是不是「答不出來」（退一半、指一條路）。"""
+    return any(word in text for word in UNSURE_WORDS)
+
+
 def ask_messages(req: AskRequest) -> list[dict[str, str]]:
     facts = "\n".join(f"- {f}" for f in req.facts) or "- （這兩日沒什麼新鮮事）"
     return [
         {"role": "system", "content": (
-            f"你是東漢末年{req.sign}的酒家，見多識廣、說話市井而老練。客人問你一句話，你只能根據下面「你知道的事」回答；"
-            "清單裡沒有的事就說不清楚、聽說不多，不要編造人名、地名、數字。用繁體中文、半白話、八十字以內、一段話，"
-            "稱客人為「客官」，不要寫標題或列點，不要提到遊戲、系統、清單。"
+            f"你是東漢末年{req.sign}的酒家，見多識廣、說話市井而老練，南來北往的客人什麼都跟你說。客人問你一句話，"
+            "先從下面「你知道的事」裡挑跟問題有關的，具體地答（在哪、怎麼走、找誰、怎麼做）；以「玩法：」開頭的是江湖上的規矩，"
+            "照它的意思用你的口吻說。清單沒寫到的，可以講東漢末年的一般見聞與常理（風俗、物產、兵荒馬亂的世道），"
+            "但不要編造清單裡沒有的人名、地名、數字。真的不知道，就直說「這事我不清楚」。"
+            "用繁體中文、半白話、八十字以內、一段話，稱客人為「客官」，不要寫標題或列點，不要提到遊戲、系統、清單。"
         )},
         {"role": "user", "content": f"你知道的事：\n{facts}\n\n客官問：「{req.question}」\n請給 reply。"},
     ]
