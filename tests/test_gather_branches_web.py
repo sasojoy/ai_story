@@ -13,6 +13,8 @@ import server
 import webharness
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
+import re
+from pathlib import Path
 
 pytestmark = [pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過"), pytest.mark.slow]
 
@@ -83,3 +85,77 @@ def test_the_box_sends_the_line_to_gather_text():
               responses={"/api/do/gather_text": {"main": m, "message": "你：「敲開山岩找鐵砂」（成算六成）"}})
     assert out["calls"] == [["/api/do/gather_text", {"text": "敲開山岩找鐵砂"}]]
     assert out["saying"] is False and out["open"] is True  # 分支展開照記著，輸入框收起
+
+
+# ── 原 test_fb460_gather_say_hint.py（整檔搬進來） ──
+# FB-460（第 32 項 QA，2026-10-20）：找素材「自己說」輸入框的提示字在 320 寬被切到「沿著獸徑」，也沒寫 20 字內。
+# 這一格縮在分支那一排裡，比事件的隨口應對、對話的自己說窄。餵真的引擎資料給 app.js（test_gather_branches_web 的假瀏覽器）；
+# CSS 在 node 裡排不了版，寬度照字數粗估（實機量的在回饋單裡）。沒有 node 就略過。
+
+# QA 在 320 寬量到的：輸入框扣掉內距剩 152 像素，提示字 16px（一個全形字 16 像素）
+NARROW_BOX = 152
+
+
+def _placeholder(bar: str) -> str:
+    found = re.search(r'id="gather-say-form"><input [^>]*placeholder="([^"]*)"', bar)
+    assert found, "找不到找素材「自己說」的輸入框"
+    return found.group(1)
+
+
+def _width(text: str, em: float = 16.0) -> float:
+    """粗估一行字的寬：全形字一個 em，半形（數字、英文）0.6 em——偏寬估，寧可多算。"""
+    return sum(em if ord(ch) > 0xFF else em * 0.6 for ch in text)
+
+
+def test_hint_says_twenty_characters_like_the_other_boxes():
+    hint = _placeholder(_bar(_main(), gatherOpen=True, gatherSaying=True))
+    assert hint.endswith("（20字內）")  # 同事件隨口應對「…（20字內）」、對話「想對他說的話（20字內）」
+
+
+def test_hint_fits_the_box_at_320():
+    hint = _placeholder(_bar(_main(), gatherOpen=True, gatherSaying=True))
+    assert _width(hint) <= NARROW_BOX, (hint, _width(hint))  # 修前「怎麼找？例：沿著獸徑找落羽」208 像素
+
+
+# ── 原 test_fb461_gather_odd_branches.py（整檔搬進來） ──
+# FB-461（第 32 項 QA，2026-10-20）：有三條分支的地方（北邙山、嵩山深處、綠林山寨、燕山腳），分支兩欄排，「深入」旁邊空一格。
+# 單數條時最後一條佔整列。餵真的引擎資料給 app.js（test_gather_branches_web 的假瀏覽器）；CSS 在 node 裡排不了版，讀 style.css 的
+# 那一條規則。沒有 node 就略過。
+
+CSS = (Path(__file__).resolve().parents[1] / "web" / "style.css").read_text(encoding="utf-8")
+
+
+def _branch_classes(bar: str) -> dict[str, list[str]]:
+    found = re.findall(r'<button class="btn gather-branch([^"]*)" data-act="choose" data-id="explore:gather:(\w+)"', bar)
+    return {branch: extra.split() for extra, branch in found}
+
+
+def test_odd_branches_last_one_takes_the_row():
+    classes = _branch_classes(_bar(_main(), gatherOpen=True))  # 嵩山深處：挖礦、狩獵、深入
+    assert set(classes) == {"mine", "hunt", "deep", "say"}
+    assert "wide" in classes["deep"]
+    assert "wide" not in classes["mine"] and "wide" not in classes["hunt"] and "wide" not in classes["say"]
+
+
+def test_odd_branches_while_saying_too():
+    classes = _branch_classes(_bar(_main(), gatherOpen=True, gatherSaying=True))  # 「自己說…」換成輸入框，深入照樣佔整列
+    assert "say" not in classes and "wide" in classes["deep"]
+
+
+def test_odd_branches_without_the_say_button():
+    m = _main()
+    m["options"] = [o for o in m["options"] if o["id"] != "explore:gather:say"]  # Config.gather_branches.say_enabled 關著
+    classes = _branch_classes(_bar(m, gatherOpen=True))
+    assert set(classes) == {"mine", "hunt", "deep"} and "wide" in classes["deep"]
+
+
+def test_even_branches_stay_two_by_two():
+    classes = _branch_classes(_bar(_main("songshan_foot"), gatherOpen=True))  # 嵩山腳兩條
+    assert len([k for k in classes if k != "say"]) == 2
+    assert not any("wide" in c for c in classes.values())
+
+
+def test_the_wide_branch_spans_both_columns():
+    rule = re.search(r"([^{}]*\.gather-branch\.wide[^{}]*)\{([^}]*)\}", CSS)
+    assert rule, "style.css 沒有 .gather-branch.wide 的規則"
+    assert re.search(r"grid-column:\s*1\s*/\s*-1", rule.group(2))

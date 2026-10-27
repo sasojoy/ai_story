@@ -46,7 +46,7 @@ PROMPT = "另想法子打發醉漢"
 
 def branch_game(content, world, *, name="甲", on=True, parts=None, faction="guan", rng=None, silver=50) -> Game:
     """開一個停在「醉漢」上的角色：on 是減法季的總開關與這一季的章（一起開關）；parts 再改子開關（例 {"free_text_outcomes": False}）。
-    劇本補兩個陣營（tests/test_fb223_evil_free_text.py 的做法），faction 是這個人的陣營（None＝散人：照推、不記貢獻）；打開行狀。
+    劇本補兩個陣營（tests/test_free_text_and_marks.py 的做法），faction 是這個人的陣營（None＝散人：照推、不記貢獻）；打開行狀。
     rng 在開好之後才換上（擲骰從同一個地方開始）。同一個測試開第二個角色時換 name，內容已經改過一次也照樣改（冪等）。"""
     content.scenario.factions = [
         FactionDef(id="guan", name="官軍", join_at=["town"]),

@@ -10,6 +10,8 @@ from tianxia import arts as arts_mod, create, moves, tactics, team
 from tianxia.content import load_content
 from tianxia.engine import Game
 from tianxia.martial_arts import ATTRIBUTES, MartialArt as _MA
+from tianxia import create
+from tianxia.state import CreateDraft
 
 
 def MartialArt(**kw):
@@ -374,3 +376,20 @@ def test_no_slip_points_to_the_mall(content):
     assert create.view(game.state, content, game.world)["shop"] == "reroll_1"
     game.state.player.create_rerolls = 1
     assert create.view(game.state, content, game.world)["shop"] is None
+
+
+# ── 原 test_fb653_create_draft_doc.py（整檔搬進來） ──
+# FB-653：`state.CreateDraft` 的說明不再寫「擲品級」。
+#
+# 自創武學的品級不擲（武學重構之後；`create.finish` 的 `grade = content.config.arts.create_grade`），說明還寫「立名（付心得、擲品級、登記）」
+# 會讓讀的人以為立名這一步有一擲。說明寫現在的規則；只是文字，不影響執行。
+
+def test_the_draft_doc_says_the_grade_is_not_rolled():
+    doc = CreateDraft.__doc__
+    assert "擲品級" not in doc
+    assert "付心得、登記" in doc and "create_grade" in doc
+
+
+def test_the_create_module_agrees():
+    assert "擲品級" not in create.__doc__
+    assert "Config.arts.create_grade" in create.__doc__

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import re
 
-from test_fb120_battle_fold import _fight_round, battle, node, run  # noqa: F401（battle 是 fixture）
+from test_jianghu_page_web import _fight_round, battle, node, run_prologue_web as run  # noqa: F401（battle 是 fixture）
 
 import server
 from tianxia import engine

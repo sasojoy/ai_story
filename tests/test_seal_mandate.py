@@ -11,6 +11,7 @@ from test_seal import SALT, _ended, _registry, seal_problems, sealed  # noqa: F4
 from test_seal_engine import _admin, _player
 from tianxia import seal
 from tianxia.engine import Game
+from tianxia import atlas, fusion, seal, social
 
 
 def install_mandate(content):
@@ -589,3 +590,21 @@ def test_the_mandate_texts_stay_true_when_the_admin_stamps_early_fb187():
     acts = c.battles["tianming"].acts
     texts = [event.preface or "", *(a.text for a in acts), *(line for a in acts for line in a.text_by_lead.values())]
     assert texts[0] and not any("七片" in line for line in texts)
+
+
+# ── 原 test_fb_batch_b.py ──
+
+# ── FB-189：沒有人持有碎片的天命之季，決戰畫面不寫「懷璽的人到場」 ──
+
+
+def test_fb189_the_holders_clause_only_shows_when_someone_holds_a_shard(mandated, world):
+    from test_seal_mandate import _destiny_open, _opened
+    from test_seal_mandate import _player as _mandate_player
+
+    _opened(mandated, world)
+    game = _mandate_player(mandated, world, "官一", "guan")
+    _destiny_open(mandated, world)  # 第 2 輪：七片全都沒人持有
+    game.sync(10.0)
+    scene = game.scene_text()
+    assert "天命之爭：" in scene and seal.MANDATE_WEIGHT not in scene
+    assert not seal.holders(world.seal_state().registry)

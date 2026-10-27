@@ -96,7 +96,7 @@ LOOT_LINE = "經驗 {exp}・心得 {xinde}・銀兩 {silver}"  # 出陣前那張
 ANNAL_LINE = "在{place}約戰{rival}，{tier}。"  # 行狀（annals.DUEL）
 
 
-# 出陣那一格灰著時格子裡的小字：五格、四格時每格只放得下四個字（FB-670，tests/test_fb670_practice_cell_web.py 守）；整句在行動列底下那一行
+# 出陣那一格灰著時格子裡的小字：五格、四格時每格只放得下四個字（FB-670，tests/test_jianghu_page_web.py 守）；整句在行動列底下那一行
 # （howto.duel_line，網頁點灰格浮出那一句）與約戰卡的 why_not。散人、今天用完照舊給原句（網頁自己換成「未投靠」「今日已滿」）。待 joy 潤
 CELL_WAIT = "等對面約"
 CELL_COOL = "冷卻中"

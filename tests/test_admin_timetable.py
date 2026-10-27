@@ -18,6 +18,16 @@ from tianxia.engine import Game
 from tianxia.state import Lock, TimelineResult
 from tianxia.sqlite_world import open_world
 from tianxia.world_state import season_length_days
+import re
+from test_prologue_web import run
+import server
+import webharness
+from tianxia import timetable
+from unittest import mock
+from conftest import FixedRandom, walk_to
+from test_day_scale import SHORT, WEEKEND, _lake, _miss, _season, _talk_out, SCENE
+from tianxia import rules, sensing
+from tianxia.models import TimetableEvent
 
 CONTENT_DIR = Path(__file__).parent.parent / "content"
 NOW = 1000.0
@@ -361,3 +371,224 @@ def test_admin_revives_a_fallen_figure_at_half_on_his_old_front(on):
     assert stored["pengtuo"].front is None and game.admin_fallen() == []
     assert game.admin_revive_figure("bocai") == ["（這位人物此刻沒有退場。）"]
     assert _game(on, "路人").admin_revive_figure("bocai") == ["（只有管理者能叫回人物。）"]
+
+
+# ── 原 test_fb099_cancelled_showdown.py（整檔搬進來） ──
+# FB-099（QA 驗管理者觸發鈕時發現）：管理者按了一場大戲的「立刻開這一場」再按「⚠ 取消決戰」，管理者工具的三場大戲那一列一直寫
+# 「（長社火攻已經開打過了。）」、時刻表那一列寫「開打了」——可是這一仗沒打成、時間軸上也沒有結果，只能用「定結果」收尾，畫面上卻沒說。
+#
+# 裁決照舊：開過的記號（WorldState.showdowns_opened）留著，提早開的決戰不會再開。只改字（只有管理者看得到）：開打後被取消、
+# 時間軸上還沒有結果的那一場，三場大戲那一列與時刻表那一列都說「開打後被取消，還沒有結果；要收尾請用「定結果」」；定了結果之後照平常的
+# 「已經結算了」；真的打完的照舊。真實內容、週末設定的開關；管理者是「管」。
+
+CANCELLED = "（長社火攻開打後被取消，還沒有結果；要收尾請用「定結果」。）"
+
+
+@pytest.fixture
+def on_fb099(monkeypatch):
+    c = real_content()
+    c.config.auto_open_first_season = True
+    c.config.train_event_chance = 0.0
+    c.config.admins = ["管"]
+    c.config.season_one, c.config.season_days, c.config.server_max_players = True, 2.5, 250
+    monkeypatch.setattr(server, "CONTENT", c)  # 伺服器整理管理者資料讀的是 server.CONTENT
+    return c
+
+
+def _admin(content):
+    game = Game.new(content, "管", rng=random.Random(0))
+    game.client = None
+    game.sync(NOW)
+    return game
+
+
+def _notes(game):
+    return {event.id: why for event, why in game.admin_showdowns()}
+
+
+def _row(game, event_id="changshe_fire"):
+    return next(r for r in server.timetable_choices(game)["timetable"] if r["id"] == event_id)
+
+
+def test_open_then_cancel_says_cancelled_in_both_places(on_fb099):
+    admin = _admin(on_fb099)
+    admin.admin_start_showdown("changshe_fire", NOW)
+    admin.admin_cancel_battle()
+    season = admin.world.get_season()
+    assert "changshe_fire" in season.showdowns_opened and "changshe_fire" not in season.timeline  # 記號照舊、沒有結果
+    assert _notes(admin)["changshe_fire"] == CANCELLED
+    assert admin.admin_start_showdown("changshe_fire", NOW) == [CANCELLED]  # 照舊開不了（不會再開），按下去也是這一句
+    row = _row(admin)
+    assert row["state"] == "cancelled" and row["state_text"] == "開打後取消・待定結果" and row["result"] is None
+    assert not row["schedulable"]  # 開過了：照舊不能再排時間
+
+
+def test_open_cancel_then_set_a_result_says_settled(on_fb099):
+    admin = _admin(on_fb099)
+    admin.admin_start_showdown("changshe_fire", NOW)
+    admin.admin_cancel_battle()
+    admin.admin_resolve_event("changshe_fire", "guan:大勝")
+    assert _notes(admin)["changshe_fire"] == "（長社火攻已經結算了。）"
+    row = _row(admin)
+    assert (row["state"], row["state_text"], row["result"]) == ("done", "已結算", "官軍大勝")
+
+
+def test_a_running_battle_keeps_its_wording(on_fb099):
+    admin = _admin(on_fb099)
+    admin.admin_start_showdown("changshe_fire", NOW)
+    assert _notes(admin)["changshe_fire"] == "（長社火攻已經開打過了。）"
+    row = _row(admin)
+    assert (row["state"], row["state_text"]) == ("running", "開打了")
+
+
+def test_a_battle_that_was_fought_to_the_end_keeps_its_wording(on_fb099):
+    """真的打完的（沒人上陣，回合逾時、照保底收場，時刻表照戰局判結果）：照舊「已經結算了」「已結算」。"""
+    from conftest import at
+
+    admin = _admin(on_fb099)
+    admin.admin_start_showdown("changshe_fire", NOW)
+    deadline = admin.world.get_battle().muster_deadline_real
+    for now in (deadline, deadline + on_fb099.battles["changshe_fire"].round_seconds):  # 集結截止開打，再過一回合逾時照保底收場
+        with at(admin, now):
+            admin.options()
+    assert admin.world.get_battle().phase == "ended" and "changshe_fire" in admin.world.get_season().timeline
+    assert _notes(admin)["changshe_fire"] == "（長社火攻已經結算了。）"
+    assert (_row(admin)["state"], _row(admin)["state_text"]) == ("done", "已結算")
+
+
+def test_a_cancelled_battle_beside_another_live_one_still_says_cancelled(on_fb099):
+    """取消了長社、之後開了廣宗（另一場在打）：長社那一列照樣說取消了；廣宗是開打中。"""
+    admin = _admin(on_fb099)
+    admin.admin_start_showdown("changshe_fire", NOW)
+    admin.admin_cancel_battle()
+    admin.admin_start_showdown("guangzong", NOW)
+    assert admin.world.get_battle() is not None and admin.world.get_battle().phase != "ended"
+    rows = {r["id"]: r["state"] for r in timetable.status_rows(admin.state, on_fb099, cancelled=admin.cancelled_showdowns())}
+    assert rows["changshe_fire"] == "cancelled" and rows["guangzong"] == "running"
+    assert _notes(admin)["changshe_fire"] == CANCELLED
+
+
+@pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
+def test_the_drawer_shows_the_cancelled_wording(on_fb099):
+    """設定抽屜的管理者工具（node 假瀏覽器，伺服器給的真資料）：三場大戲那一列與時刻表那一列都寫取消了、待定結果。"""
+    admin = _admin(on_fb099)
+    admin.admin_start_showdown("changshe_fire", NOW)
+    admin.admin_cancel_battle()
+    m = server.main_view(admin)
+    assert m["admin"] is True
+    drawer = run(m, "return H.sheetHtml();", S={"sheet": True, "admin": server.admin_choices(admin)})
+    assert CANCELLED in drawer
+    assert re.search(r'<span class="tt-name">第\d+週　長社火攻</span><span class="tt-state">開打後取消・待定結果</span>', drawer)
+
+
+# ── 原 test_fb102_postponed_finale.py（整檔搬進來） ──
+# FB-102（QA 7cc1fd7，2026-10-08）：管理者把季末往後排時，最後一天的「這一季之內…」說錯了。
+#
+# 換日在名義季長之後寫不出時刻（季曆只寫到第 12 週・週日 23:59），以前一律改寫「這一季之內不能再來…」；可是季末延後時，名義季長
+# 之後照樣換日（每 4 小時 17 分重算），照字面走的人會白白放棄。換日的時刻怎麼算不改（PM：不改什麼時候換日）。
+#
+# 現在（rules.day_turn）分三種：
+# - 換日在真的季末（排定的 schedule["finale"]）之前、寫得出來：照舊寫那一刻；
+# - 換日在真的季末之前、但在名義季長之後（寫不出來）：寫一句不承諾時刻的話（「過一陣子」，待 joy 潤）；
+# - 換日在真的季末那一刻或之後：「這一季之內…」（那時才是真的）。
+# 測試內容（tests/fixtures），第一季縮小的時刻表（conftest.install_season_one）；句子照字比（每一句都是待 joy 潤的初稿，改字時改這裡）。
+
+LATER_TEXTS = {
+    "warning": "> 選錯了做法，這裡要過一陣子才悟得出。",
+    "miss": "心浮氣躁，什麼也沒抓住。要過一陣子，這裡才悟得出東西。",
+    "explore": "；這裡要過一陣子才悟得出",
+    "talk": "韓鐵起身送客，改日再敘：過一陣子再來拜會吧。",
+    "talked_out": "已經談滿 3 輪，過一陣子再來",
+    "busy": "韓鐵事忙，過一陣子才得空。",
+    "intro": "最多談 3 輪，過一陣子重新算起；",
+    "gather": "你留心路邊，這陣子已經撿夠了，沒再去翻（過一陣子再說）。",
+    "think": "你邊走邊想，這陣子想得夠多了，沒有新的心得（過一陣子才會再有）。",
+}
+
+
+def _postponed(content, game, finale=16 * SHORT):
+    """管理者把季末排到 finale（世界秒）：時刻表要有季末那一件，排定的時間記在 schedule["finale"]。"""
+    if not any(e.kind == "finale" for e in content.timetable):
+        content.timetable.append(TimetableEvent(id="finale", week=12, title="季末", kind="finale"))
+    game.state.world.schedule["finale"] = finale
+
+
+def test_the_three_kinds_of_day_turn(content):
+    content.config.season_one = True
+    content.timetable.append(TimetableEvent(id="finale", week=12, title="季末", kind="finale"))
+    season = _season(content, WEEKEND, one=True)
+    season.schedule["finale"] = 16 * SHORT  # 延後兩個多遊戲日
+    season.time = 12.5 * SHORT
+    assert rules.day_turn(content, season) == ("at", "第 12 週・週二 00:00")  # 名義季長以內：照舊
+    for t in (13.5, 14.5):  # 換日落在名義季長之後、真的季末之前：寫不出時刻，但還會換日
+        season.time = t * SHORT
+        assert rules.day_turn(content, season) == ("later", None) and rules.day_ends_text(content, season) is None
+    season.time = 15.5 * SHORT  # 真的最後一個遊戲日：換日在季末那一刻之後
+    assert rules.day_turn(content, season) == ("season", None)
+    plain = _season(content, WEEKEND, one=True)  # 沒延後：最後一天照舊是「這一季之內」
+    plain.time = 13.5 * SHORT
+    assert rules.day_turn(content, plain) == ("season", None)
+
+
+def test_days_still_turn_after_the_nominal_end(content):
+    """換日的時刻不改：名義季長之後照樣每一個遊戲日換一次（以前就是這樣，句子跟著說實話）。"""
+    season = _season(content, WEEKEND, one=True)
+    days = [rules.game_day(content, season, t * SHORT) for t in (13.5, 14.5, 15.5)]
+    assert days == [14, 15, 16]
+
+
+def _texts(game, content):
+    """所有寫「什麼時候再來」的句子，照 LATER_TEXTS 的鍵。"""
+    out = {}
+    sensing.start(game.state, content, SCENE, random.Random(0))
+    out["warning"] = sensing.scene_text(game.state, content)
+    game.state.player.sensing = None
+    out["miss"] = _miss(game)[-1]
+    out["explore"] = game.action_notes(["act:explore"])["act:explore"]
+    game.state.player.location = "town"
+    out["talk"] = _talk_out(game)[-1]
+    out["talked_out"] = game._talked_out_note()  # noqa: SLF001
+    with mock.patch("tianxia.engine.pick_event", return_value=None):
+        out["busy"] = game.choose("act:socialize")[0]
+    content.characters["scholar"].deep_interaction = True
+    content.characters["scholar"].audience_fame = 0
+    out["intro"] = game._audience_intro()  # noqa: SLF001
+    content.config.road_reward_daily_cap = 1
+    game.choose("move:lake")
+    game.choose("road:think")
+    game.rng = FixedRandom(0.1)
+    out["gather"] = game.choose("road:gather")[0]
+    walk_to(game, "lake")
+    game.choose("move:town")
+    out["think"] = game.choose("road:think")[0]
+    return out
+
+
+def test_after_the_nominal_end_of_a_postponed_season_nothing_promises_the_whole_season(content):
+    game = _lake(content, WEEKEND, one=True)
+    _postponed(content, game)
+    game.state.world.time = 13.5 * SHORT
+    texts = _texts(game, content)
+    for key, line in LATER_TEXTS.items():
+        assert line in texts[key], key
+    assert not any("這一季之內" in t or "23:59" in t or "第 12 週・週日" in t for t in texts.values())
+
+
+def test_the_real_last_day_still_says_this_season(content):
+    game = _lake(content, WEEKEND, one=True)
+    _postponed(content, game)
+    game.state.world.time = 15.5 * SHORT
+    texts = _texts(game, content)
+    assert "這一季之內" in texts["talk"] and "這一季之內" in texts["warning"] and "過一陣子" not in texts["talked_out"]
+    assert texts["talked_out"] == "已經談滿 3 輪，這一季之內不能再來"
+
+
+@pytest.mark.parametrize("finale", [None, 10 * SHORT])
+def test_a_season_that_was_not_postponed_is_unchanged(content, finale):
+    """沒延後（最後一天照舊「這一季之內」）、提前收季（換日在季末之後：也是「這一季之內」）。"""
+    game = _lake(content, WEEKEND, one=True)
+    if finale is not None:
+        _postponed(content, game, finale)
+    game.state.world.time = (9.5 if finale else 13.5) * SHORT
+    assert rules.day_turn(content, game.state.world) == ("season", None)
+    assert game._talked_out_note() == "已經談滿 3 輪，這一季之內不能再來"  # noqa: SLF001

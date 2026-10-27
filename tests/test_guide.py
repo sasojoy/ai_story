@@ -1,6 +1,7 @@
 from tianxia import guide
 from tianxia.guide import next_hint, note_action, quest_text, tutorial_active, tutorial_intro
 from tianxia.state import Journey
+import pytest
 
 
 def test_intro_is_first_step(content):
@@ -151,3 +152,50 @@ def test_quest_text_is_empty_when_everything_is_skipped(state, content):
     assert quest_text(state, content) == ""
     state.player.stamina = 150  # 只剩體力的提醒時照樣畫（150 是滿的：「體力滿了」，FB-108）
     assert "體力滿了" in quest_text(state, content)
+
+
+# ── 原 test_fb108_full_stamina.py（整檔搬進來） ──
+# FB-108（QA 93e7037，2026-10-08）：體力 250/250 時主線的「下一步」還寫「體力將滿」。
+#
+# 現在分兩段（guide.next_hint）：九成到還沒滿寫「將滿」（guide.FULL_STAMINA_NOTE，照舊）；滿了（含補滿、丹吃過頭）寫「滿了」
+# （guide.STAMINA_FULL_NOTE，待 joy 潤）；九成以下兩句都不寫。上限照設定（Config.stamina_max）。
+
+def _hint(game, fraction):
+    game.skip_tutorial()
+    game.state.player.stamina = game.content.config.stamina_max * fraction
+    return guide.next_hint(game.state, game.content, game.world)
+
+
+@pytest.mark.parametrize("fraction, nearly, full", [
+    (0.5, False, False), (0.89, False, False), (0.9, True, False), (0.99, True, False), (1.0, False, True), (1.2, False, True),
+])
+def test_nearly_full_and_full_are_two_bands(game, fraction, nearly, full):
+    hint = _hint(game, fraction)
+    assert (guide.FULL_STAMINA_NOTE in hint, guide.STAMINA_FULL_NOTE in hint) == (nearly, full)
+
+
+def test_the_full_line_says_it_is_full_not_nearly(game):
+    assert guide.STAMINA_FULL_NOTE.startswith("體力滿了") and "將滿" not in guide.STAMINA_FULL_NOTE
+    assert guide.FULL_STAMINA_NOTE.startswith("體力將滿")
+
+
+def test_the_bands_follow_the_configured_maximum(game):
+    game.content.config.stamina_max = 100
+    game.skip_tutorial()
+    game.state.player.stamina = 100
+    assert guide.STAMINA_FULL_NOTE in guide.next_hint(game.state, game.content, game.world)
+    game.state.player.stamina = 95
+    assert guide.FULL_STAMINA_NOTE in guide.next_hint(game.state, game.content, game.world)
+
+
+# ── 原 test_fb_batch_b.py ──
+
+# ── FB-170：打贏波才之後主線寫「波才若未除」 → 第 3 幕那一句不管怎麼進來的都通 ──
+
+
+def test_fb170_act_three_reads_true_however_it_was_reached(real):
+    act = next(a for s in real.scenario.storylines for a in s.acts if a.id == "huangjin_3")
+    ways = next(a for s in real.scenario.storylines for a in s.acts if a.id == "huangjin_2").advance_when.any_of
+    assert any(c.world_flags_all == ["bocai_defeated"] for c in ways)  # 打贏波才也會進第 3 幕
+    assert "波才" not in act.text  # 不寫他還在不在：打贏他、聲勢到 70、第 10 天，三條路進來的都讀得通
+    assert "最後" not in act.text  # 審查：14 天的季打贏波才（kou_boss）可能第 2、3 天就進第 3 幕，不寫還剩多少時間
