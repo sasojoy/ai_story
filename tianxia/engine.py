@@ -1210,12 +1210,11 @@ class Game:
             p.joined_at = self.state.world.time
 
     def week_unlock_names(self) -> list[str]:
-        """第 2 週才開的功能裡這一季真的有的（減法季 6.6；week_unlock.WEEK2 的順序）：鐵匠鋪（武器或防具開著）、擂台、自創、懸賞榜。
+        """第 2 週才開的功能裡這一季真的有的（減法季 6.6；week_unlock.WEEK2 的順序）：擂台、自創、懸賞榜。
         紀錄那一行、本週卡那一句照它列；一樣都沒有是空的。"""
         s, c = self.state, self.content
         have = {
-            "smith": any(equipment.on(c, slot) for slot in equipment.SMITH_PAGES), "arena": arena.on(c), "create": create.on(c),
-            "bounties": bounties.active(s, c),
+            "arena": arena.on(c), "create": create.on(c), "bounties": bounties.active(s, c),
         }
         return [name for key, name in week_unlock.WEEK2.items() if have.get(key)]
 

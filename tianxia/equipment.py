@@ -303,11 +303,8 @@ MATERIAL_LABEL = "素材買賣…"  # 待 joy 潤：兵器、防具頁進素材�
 
 def smith_open(state: GameState, content: Content) -> bool:
     """鐵匠鋪開不開門：武器或防具開著、人在城鎮。進門（act:smith）、收選單（存檔修補、同步）看這個；能不能買修打某一欄的東西
-    另看那一欄自己的 smith_here（weapons.smith_here、armor.smith_here）。這一季要走到開鐵匠鋪的那一週（減法季 6.6 第 2 週，
-    week_unlock.open；規則關著一律開）。"""
-    from . import week_unlock  # 繞回來的 import，呼叫時才取
-
-    return any(on(content, slot) for slot in SMITH_PAGES) and in_town(state, content) and week_unlock.open(state, content, "smith")
+    另看那一欄自己的 smith_here（weapons.smith_here、armor.smith_here）。不照週解鎖（企劃者 2026-10-27「把鐵匠放回來」）。"""
+    return any(on(content, slot) for slot in SMITH_PAGES) and in_town(state, content)
 
 
 def first_page(content: Content) -> str:
