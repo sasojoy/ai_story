@@ -1096,11 +1096,42 @@
   const plainText = (html) => String(html).replace(/<(br|\/(div|p|li|h\d))\b[^>]*>/gi, "　").replace(/<[^>]*>/g, "")
     .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&")
     .replace(/[\s　]+/g, (w) => (w.includes("　") ? "　" : " ")).replace(/^[\s　]+|[\s　]+$/g, "");
+  // 結果標記（.tx-tag：成功、失敗、得料、遇事……）收成一行時不跟著被「…」切掉（Joy 2026-10-27「看不出是成功還是失敗」）：
+  // 拿出來排在那一行最右邊的小章，成功綠、失敗紅（「韓鐵出手・失敗」這種照結尾），其餘照一般的字色
+  const NOW_TAG = /<span class="tx-tag">([\s\S]*?)<\/span>/;
+  const nowTagTone = (tag) => (/成功$/.test(tag) ? " ok" : /失敗$/.test(tag) ? " bad" : "");
   function nowOneHtml(html) {
     const hit = NOW_WHEN.exec(html);
     const when = hit ? plainText(hit[1]) : "";
-    const rest = plainText(hit ? html.replace(hit[0], "") : html);
-    return `<button class="now-one" data-act="now-more" aria-expanded="false">${when ? `<span class="tx-when">${esc(when)}</span>` : ""}<span class="now-line">${esc(rest)}</span></button>`;
+    let body = hit ? html.replace(hit[0], "") : html;
+    const tagHit = NOW_TAG.exec(body);
+    const tag = tagHit ? plainText(tagHit[1]) : "";
+    if (tagHit) body = body.replace(tagHit[0], "");
+    const stamp = tag ? `<span class="now-stamp${nowTagTone(tag)}">${esc(tag)}</span>` : "";
+    return `<button class="now-one" data-act="now-more" aria-expanded="false">${when ? `<span class="tx-when">${esc(when)}</span>` : ""}<span class="now-line"><span class="now-text-one">${esc(plainText(body))}</span>${stamp}</span></button>`;
+  }
+  // 收著時拿到的東西也看得到（Joy 2026-10-27「材料事件…顯示獲得的物品跟數量，不用展開」）：敘事裡「得：驚羽 ×2、銀兩 +5」那一行的
+  // 物品（帶「×」的）排成綠色小籤，接在得失那一排；沒有「得：」那一行時照「獲得 X ×N」那幾行（同一樣加總）。銀兩、心得這些
+  // 數值得失那一排本來就有（entry.changes），不重複
+  const NOW_LINE = /<div class="tx-line[^"]*">([\s\S]*?)<\/div>/g;
+  function nowGains(html) {
+    const lines = [...String(html).matchAll(NOW_LINE)].map((x) => plainText(x[1]));
+    const got = lines.find((l) => l.startsWith("得："));
+    const items = got
+      ? got.slice(2).split(/　失：/)[0].split("、").filter((x) => / ×\d+$/.test(x))
+      : lines.filter((l) => /^獲得 \S+ ×\d+$/.test(l)).map((l) => l.slice(3));
+    const sum = new Map();
+    for (const it of items) {
+      const [, name, n] = /^(.*) ×(\d+)$/.exec(it.trim());
+      sum.set(name, (sum.get(name) || 0) + Number(n));
+    }
+    return [...sum].map(([name, n]) => `<span class="tx-chg tx-up now-item">${esc(name)} ×${n}</span>`).join("");
+  }
+  // 物品籤併進得失那一排（splitChips 拆出來的 .tx-chgs）；那一排沒有時自己開一排
+  function withGains(chips, html) {
+    const gains = nowGains(html);
+    if (!gains) return chips;
+    return chips ? chips.replace(/(<div class="tx-chgs">)/, `$1${gains}`) : `<div class="tx-chgs">${gains}</div>`;
   }
 
   // 「剛剛」那一張（不是戰鬥卡片的那種）：收著是一行（nowOneHtml，整合設計 6.3），點開整則攤開、底下「收起 ▴」；在路上照舊收成三行（FB-060）
@@ -1110,7 +1141,7 @@
     const [text, chips] = splitChips(m.now);
     return expanded || m.on_road
       ? `<div class="now ${expanded ? "open" : "clamp"}${m.on_road ? " road" : ""}"><div class="now-text">${text}<button class="linkish now-more" data-act="now-more" aria-expanded="${expanded}">${nowMore(expanded)}</button></div>${chips}${frontReportHtml(m.front)}</div>`
-      : `<div class="now one">${nowOneHtml(text)}${chips}${frontReportHtml(m.front)}</div>`;
+      : `<div class="now one">${nowOneHtml(text)}${withGains(chips, text)}${frontReportHtml(m.front)}</div>`;
   }
   // 點「剛剛」：在路上原地換 class（同以前，不重播浮現動畫）；平常一行與整則之間原地換掉那一張
   function nowToggle(el) {
