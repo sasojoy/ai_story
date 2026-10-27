@@ -2,11 +2,11 @@
 
 - 這一季走到前、中、後哪一段（`phase`、`phase_now`）：21 天季是第幾週，7 天的季是第幾段（季曆本來就分三段 [2, 2, 3]），
   週末式的十二週照比例切。本週卡的主題句（Scenario.week_themes）、功能解鎖、第 3 週那一句都照它。
-- 第 2 週才開的功能（`WEEK2`：鐵匠鋪打造、擂台、自創、懸賞榜）：第 1 週的探索、出陣、交友、移動、此地（醫館、酒肆）、商城照舊開季就有。
+- 第 2 週才開的功能（`WEEK2`：擂台、自創、懸賞榜；鐵匠鋪 2026-10-27 起開季就有）：第 1 週的探索、出陣、交友、移動、此地（醫館、酒肆）、商城照舊開季就有。
   `open(state, content, feature)`：規則關著（`rules.jianfa(..., "week_unlock")` 是假：總開關、這一季的章、子開關任一個關著）一律開、一個字都不變；
   開著時要這一季走到第 2 段**而且**自己的新手期過了（roster.newbie，Config.newbie_real_hours 48 小時從自己加入那一刻算）——
   「新手期內照自己的時鐘開」（6.6）：第 2 週才來的人也先有兩天只做第 1 週的事，不是一進來什麼都有。
-  入口（arena.here、bounties.board_here、equipment.smith_open、create.allowed／view）各自問它；假人走同一條（bot.py 問的是同幾個入口）。
+  入口（arena.here、bounties.board_here、create.allowed／view）各自問它；假人走同一條（bot.py 問的是同幾個入口）。
 - 開了的那一刻（Game._week_unlock_tick）江湖紀錄一行（`JOURNAL`）、本週卡一句（`CARD`，開了之後一個季曆天內寫）；還沒開的本週卡
   「為什麼」裡寫哪幾樣第 2 週開（`LOCKED`）。
 - 第 3 週「離贏還差多少」（`win_gap`）：要主機側批 3c 的勝利條件數字（官軍離平定還差 12、黃巾離當立還差 28），先留位、
@@ -23,7 +23,7 @@ from .models import Content
 from .state import GameState, WorldState
 
 # 第 2 段才開的功能（設計 6.6、6.8）：入口的鍵 → 寫給玩家看的名字（紀錄那一行、本週卡那一句照這個順序列）
-WEEK2 = {"smith": "打造", "arena": "擂台", "create": "自創", "bounties": "懸賞榜"}
+WEEK2 = {"arena": "擂台", "create": "自創", "bounties": "懸賞榜"}  # 鐵匠鋪不鎖（企劃者 2026-10-27「把鐵匠放回來」）
 STAGE = {k: 1 for k in WEEK2}  # 哪一段（0 起）開；不在表上的功能是 0（開季就有）
 
 TITLE = "江湖新事"  # 開了那一則江湖紀錄的標題。待 joy 潤
@@ -79,7 +79,7 @@ def open(state: GameState, content: Content, feature: str) -> bool:  # 入口都
 
 def unlocked_now(state: GameState, content: Content) -> bool:
     """第 2 段的功能此刻全開了（都掛同一段、同一個時鐘，問一個就夠）。規則關著是假：不寫紀錄、不寫那一句。"""
-    return on(content, state.world) and open(state, content, "smith")
+    return on(content, state.world) and open(state, content, "arena")
 
 
 def journal_line(names: list[str], content: Content, world: WorldState | None) -> str:
@@ -99,7 +99,7 @@ def card_line(state: GameState, content: Content, names: list[str]) -> str | Non
 
 def locked_line(state: GameState, content: Content, names: list[str]) -> str | None:
     """還沒開的那一句（本週卡「為什麼」）：規則開著、第 2 段的功能還鎖著、有東西可開才寫。"""
-    if not names or not on(content, state.world) or open(state, content, "smith"):
+    if not names or not on(content, state.world) or open(state, content, "arena"):
         return None
     return LOCKED.format(names="、".join(names), when=stage_label(1, content, state.world))
 

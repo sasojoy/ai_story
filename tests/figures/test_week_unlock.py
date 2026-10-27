@@ -1,5 +1,5 @@
 """功能照週解鎖與三週主題（減法季整合設計 6.6、6.8、4.2；批 5；tianxia/week_unlock.py）：
-第 2 週才開的鐵匠鋪打造、擂台、自創、懸賞榜；新手期內照自己的時鐘；開了那一刻一則紀錄、本週卡一句；第 3 週「離贏還差多少」留位；
+第 2 週才開的擂台、自創、懸賞榜（鐵匠鋪開季就有）；新手期內照自己的時鐘；開了那一刻一則紀錄、本週卡一句；第 3 週「離贏還差多少」留位；
 45 級之後那一句；四格探索的小字「城裡多事」。7 天與 21 天兩種季各走一遍；規則關著一個字都不變。"""
 from __future__ import annotations
 
@@ -63,19 +63,19 @@ def test_phase_cuts_the_season_in_three_and_weekcard_still_exports_it():
 
 @pytest.mark.parametrize("profile", ["week7", "season21"])
 def test_week_two_features_are_locked_on_day_one_and_open_in_stage_two(profile):
-    """開季第一天四樣都鎖著：入口不給、自創回「第 2 週起才開」、本週卡「為什麼」寫哪幾樣第 2 週開；走到第 2 段（新手期也過了）全開，
+    """開季第一天三樣都鎖著（鐵匠鋪不鎖，企劃者 2026-10-27）：入口不給、自創回「第 2 週起才開」、本週卡「為什麼」寫哪幾樣第 2 週開；走到第 2 段（新手期也過了）全開，
     紀錄一行、本週卡一句；再過一個季曆天那一句不寫了，紀錄只寫一次。"""
     g = _game(profile)
     s, c = g.state, g.content
     assert rules.jianfa(c, s.world, "week_unlock")
     assert week_unlock.phase_now(s, c) == 0
-    assert _open(g) == {"smith": False, "arena": False, "bounties": False, "create": False}
+    assert _open(g) == {"smith": True, "arena": False, "bounties": False, "create": False}
     assert create.allowed(s, c) == create.LOCKED.format(when=week_unlock.stage_label(1, c, s.world))
     assert create.view(s, c, g.world)["on"] is False
     card = _card(g)
     assert card["theme"] == c.scenario.week_themes[0]
     assert card["unlock"] is None and card["gap"] is None and card["cap"] is None
-    assert card["locked"] == week_unlock.LOCKED.format(names="打造、擂台、自創、懸賞榜", when=week_unlock.stage_label(1, c, s.world))
+    assert card["locked"] == week_unlock.LOCKED.format(names="擂台、自創、懸賞榜", when=week_unlock.stage_label(1, c, s.world))
     assert s.player.week_unlocked_at is None and not [e for e in s.journal if e.title == week_unlock.TITLE]
 
     _at(g, _stage(g, 2))
@@ -83,7 +83,7 @@ def test_week_two_features_are_locked_on_day_one_and_open_in_stage_two(profile):
     assert week_unlock.phase_now(s, c) == 1
     if roster.newbie(s, c):  # 7 天的季：開季那天 10:00 建的角色，第 3 天 00:00 進第 2 段時 48 小時的新手期還沒過——照自己的時鐘，再等 10 小時
         assert profile == "week7"
-        assert _open(g) == {"smith": False, "arena": False, "bounties": False, "create": False}
+        assert _open(g) == {"smith": True, "arena": False, "bounties": False, "create": False}
         assert s.player.week_unlocked_at is None and _card(g)["locked"] is not None
         _at(g, MON + 10 * HOUR + c.config.newbie_real_hours * HOUR + 60)
         s = g.state
@@ -93,10 +93,10 @@ def test_week_two_features_are_locked_on_day_one_and_open_in_stage_two(profile):
     assert s.player.week_unlocked_at == s.world.time
     entries = [e for e in s.journal if e.title == week_unlock.TITLE]
     assert len(entries) == 1
-    assert entries[0].lines == [week_unlock.journal_line(["打造", "擂台", "自創", "懸賞榜"], c, s.world)]
+    assert entries[0].lines == [week_unlock.journal_line(["擂台", "自創", "懸賞榜"], c, s.world)]
     card = _card(g)
     assert card["theme"] == c.scenario.week_themes[1]
-    assert card["unlock"] == week_unlock.CARD.format(names="打造、擂台、自創、懸賞榜") and card["locked"] is None
+    assert card["unlock"] == week_unlock.CARD.format(names="擂台、自創、懸賞榜") and card["locked"] is None
 
     stamped = s.player.week_unlocked_at
     _at(g, g.now + (week_unlock.CARD_DAYS * DAY / calendar.cal_scale(c, s.world)) / c.config.time_scale + 60)
@@ -126,13 +126,13 @@ def test_a_late_joiner_waits_out_the_newbie_period_on_their_own_clock(profile):
     _at(g, joined)
     s = g.state
     assert week_unlock.phase_now(s, c) >= 1 and roster.newbie(s, c)
-    assert _open(g) == {"smith": False, "arena": False, "bounties": False, "create": False}
+    assert _open(g) == {"smith": True, "arena": False, "bounties": False, "create": False}
     assert s.player.week_unlocked_at is None
     assert _card(g)["locked"] is not None
     hours = c.config.newbie_real_hours
     assert hours > 0
     _at(g, joined + hours * HOUR - 60)
-    assert _open(g)["smith"] is False
+    assert _open(g)["arena"] is False
     _at(g, joined + hours * HOUR + 60)
     s = g.state
     assert _open(g) == {"smith": True, "arena": True, "bounties": True, "create": True}
@@ -188,7 +188,7 @@ def test_names_follow_what_this_season_really_has():
         c.config.arena.enabled = False
 
     g = _game("week7", setup=off)
-    assert g.week_unlock_names() == ["打造", "自創", "懸賞榜"]
+    assert g.week_unlock_names() == ["自創", "懸賞榜"]
     assert "擂台" not in _card(g)["locked"]
     assert week_unlock.card_line(g.state, g.content, []) is None and week_unlock.locked_line(g.state, g.content, []) is None
 
