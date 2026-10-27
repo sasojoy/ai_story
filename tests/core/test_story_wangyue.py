@@ -47,10 +47,10 @@ def _say(game, text: str, rate: int, roll: float) -> list[str]:
 
 
 def _annal(game, ending: str) -> str:
-    """寫進傳的那一句：照記號拼好的底稿（行狀照 annals.TEXT_MAX 截，存進去的是它的開頭）。"""
+    """寫進傳的那一句：照記號拼好的底稿（奇事那一章照 annals.STORY_TEXT_MAX 截，一般放得下整段）。"""
     p = game.state.player
     full = storyline.vary(game.content.storylines[L].ending(ending).annal, game.state).replace("{name}", p.name)
-    assert p.annals[-1].text == annals.clip(full, annals.TEXT_MAX)
+    assert p.annals[-1].text == annals.clip(full, annals.STORY_TEXT_MAX)
     return full
 
 
