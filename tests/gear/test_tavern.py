@@ -5,7 +5,7 @@ from __future__ import annotations
 import random
 
 from conftest import real_content
-from tianxia import tavern
+from tianxia import tavern, tavern_ask
 from tianxia.characters import CharacterStore
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
@@ -437,3 +437,44 @@ def test_leaving_the_tavern_keeps_the_save_readable():
     data = game.state.model_dump(mode="json")
     data["player"]["shop_hold"] = None
     assert GameState.model_validate(data).player.shop_hold == ""
+def test_the_keeper_finds_facts_for_whatever_you_ask():
+    """問酒家照問句找事實（企劃者 2026-10-27「大大小小的東西都可以問」）：人物、地名、素材、武學、店面、玩法各自帶得出那一樣，
+    什麼都沒點到時給附近城鎮與野外；改版前清單裡只有這一區的局勢與傳聞。"""
+    world = open_world()
+    c = _content()
+    game = _game(world=world, content=c)
+    them = _game("李尋歡", at="songshan_foot", world=world, content=c)
+    them.state.player.stats["fame"] = 400
+    CharacterStore(world.db).save(them.state)
+    game.choose("act:tavern")
+    cases = {
+        "波才現在在哪？": ("figure", "波才"),
+        "嵩山腳危險嗎？": ("place", "嵩山腳"),
+        "精鐵砂哪裡採得到？": ("material", "精鐵砂"),
+        "青龍刀法是什麼？": ("skill", "青龍刀法"),
+        "鐵匠鋪在哪裡？": ("shop", "鐵匠鋪"),
+        "體力不夠怎麼辦？": ("guide", "體力"),
+        "李尋歡是誰？": ("player", "李尋歡"),
+    }
+    for q, (kind, word) in cases.items():
+        facts, kinds = game._tavern_ask_facts(q)
+        assert kind in kinds and word in facts[0], (q, facts[:3])
+    facts, kinds = game._tavern_ask_facts("李尋歡是誰？")
+    assert not any("嵩山腳" in f for f in facts)  # 玩家只說到大區，確切地點是「查人」的事
+    facts, kinds = game._tavern_ask_facts("我該先做什麼？")
+    assert kinds == () and facts[0].startswith("附近的城鎮")
+    req = game.tavern_ask_request("鐵匠鋪在哪裡？")
+    assert req.kinds == ("shop",) and req.facts == game._tavern_ask_facts("鐵匠鋪在哪裡？")[0]
+
+
+def test_a_keeper_who_cannot_say_refunds_half_and_points_the_way():
+    game = _game()
+    c = game.content
+    game.choose("act:tavern")
+    before = game.state.player.stats["silver"]
+    req = game.tavern_ask_request("精鐵砂好不好用？")
+    msgs = game.tavern_ask(req.question, "客官，這事我不清楚。", request=req)
+    price = game._tavern_price(c.config.tavern.ask_price)
+    assert game.state.player.stats["silver"] == before - price + price // 2
+    assert tavern.ASK_UNSURE.format(refund=price // 2, tip=tavern_ask.POINTERS["material"]) in msgs
+    assert c.config.tavern.ask_chars == 40

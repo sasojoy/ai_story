@@ -2154,7 +2154,7 @@ class TavernTuning(_Strict):
     hush_price: int = Field(default=20, ge=0)  # 雇主封口：被供出的機會減半
     # 問酒家（AI 問答，設計第八節）
     ask_price: int = Field(default=20, ge=0)
-    ask_chars: int = Field(default=30, ge=1)
+    ask_chars: int = Field(default=40, ge=1)  # 一句最多幾個字（企劃者 2026-10-27 問酒家強化：30 → 40）
     ask_budget_seconds: float = Field(default=30.0, ge=0)
     chatter_hours: float = Field(default=1.0, gt=0)  # 酒客閒談每間酒肆多久換一段（世界小時）
     # 託酒家留意（設計第三節）：查人時多付一半，之後那個人打聽得到確切地點（打聽度 3 以上）時捎信，寫進江湖紀錄
