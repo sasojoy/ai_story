@@ -1363,5 +1363,370 @@
         ]
       }
     ]
+  },
+  {
+    "id": "wangyue",
+    "title": "王越的劍",
+    "kind": "奇事",
+    "image": "stories/wangyue_oil",
+    "intro": "洛陽官道邊上一間當鋪，牆上一根新釘子，掛著一把當了一年零九個月的劍。",
+    "start": {
+      "where": {
+        "locations": [
+          "luoyang_road"
+        ]
+      },
+      "chance": 0.08
+    },
+    "unfinished": "{name}答應過洛陽當鋪的姑娘替她看著那個劍客，到季末還沒有看到。",
+    "stages": [
+      {
+        "id": "act1",
+        "event": "wangyue_1",
+        "image": "stories/wangyue_oil"
+      },
+      {
+        "id": "act2",
+        "event": "wangyue_2",
+        "where": {
+          "locations": [
+            "luoyang_road"
+          ]
+        },
+        "hint": "隔天到洛陽官道上東門外的市口",
+        "wait_days": 0.5,
+        "days": 2,
+        "late": "act3",
+        "image": "stories/wangyue_market"
+      },
+      {
+        "id": "act3",
+        "event": "wangyue_3",
+        "where": {
+          "locations": [
+            "beimang_hill"
+          ]
+        },
+        "hint": "天亮之前上北邙山，躲在墳堆後面看",
+        "wait_days": 0.25,
+        "days": 2,
+        "late": "act4",
+        "image": "stories/wangyue_three"
+      },
+      {
+        "id": "act4",
+        "event": "wangyue_4",
+        "where": {
+          "locations": [
+            "baima_temple"
+          ]
+        },
+        "hint": "當天午後，白馬寺",
+        "days": 1,
+        "late": "wan",
+        "image": "stories/wangyue_temple"
+      },
+      {
+        "id": "night4",
+        "event": "wangyue_4n",
+        "where": {
+          "locations": [
+            "beimang_hill"
+          ]
+        },
+        "hint": "夜裡回北邙山腳，王越那間沒有門的屋子",
+        "wait_days": 0.25,
+        "days": 1,
+        "late": "day1",
+        "image": "stories/wangyue_three"
+      },
+      {
+        "id": "day1",
+        "event": "wangyue_5a",
+        "where": {
+          "locations": [
+            "luoyang_road"
+          ]
+        },
+        "hint": "當期的最後一天，回洛陽官道的當鋪",
+        "wait_days": 0.5,
+        "days": 1,
+        "late": "day2",
+        "image": "stories/wangyue_oil"
+      },
+      {
+        "id": "day2",
+        "event": "wangyue_5b",
+        "where": {
+          "locations": [
+            "luoyang_palace"
+          ]
+        },
+        "hint": "去洛陽宮城，銅駝街後那條小巷",
+        "wait_days": 0.5,
+        "days": 1,
+        "late": "day3",
+        "image": "stories/wangyue_door"
+      },
+      {
+        "id": "day3",
+        "event": "wangyue_5c",
+        "where": {
+          "locations": [
+            "beimang_hill"
+          ]
+        },
+        "hint": "北邙山腳下那口井",
+        "wait_days": 0.5,
+        "days": 1,
+        "late": "act6",
+        "image": "stories/wangyue_well"
+      },
+      {
+        "id": "act6",
+        "event": "wangyue_6",
+        "where": {
+          "locations": [
+            "luoyang_road"
+          ]
+        },
+        "hint": "第四天傍晚，回洛陽官道的當鋪",
+        "wait_days": 0.5,
+        "days": 1,
+        "late": "wan",
+        "image": "stories/wangyue_oil"
+      },
+      {
+        "id": "act7",
+        "event": "wangyue_7",
+        "where": {
+          "locations": [
+            "luoyang_palace"
+          ]
+        },
+        "hint": "當天夜裡，洛陽宮城銅駝街後那條巷子",
+        "days": 1,
+        "late": "wan",
+        "image": "stories/wangyue_door",
+        "routes": [
+          {
+            "when": {
+              "讓": 1,
+              "點破": 1
+            },
+            "go": "zi"
+          },
+          {
+            "when": {
+              "讓": 1,
+              "末油": 1
+            },
+            "go": "zi"
+          }
+        ],
+        "next": "ming"
+      }
+    ],
+    "endings": [
+      {
+        "id": "zi",
+        "title": "字",
+        "text": "王越把劍尖垂下去。\n\n范老看著他，看了一會兒，轉身走進屋裡。他出來的時候，手上多了一支筆、一方硯台，硯台裡的墨是早就磨好的。\n\n「劍鞘給我。」他說。\n\n王越把劍鞘解下來，遞過去。范老把燈交給你，讓你舉著。他把劍鞘橫放在石階上，蘸了墨。\n\n「十年前，我寫了四個字。」他說，「今天還你四個。」\n\n他寫得很慢。木頭吸墨，每一筆都要壓一會兒。\n\n**市井第一。**\n\n王越看著那四個字。燈在你手裡晃，字也在晃。\n\n「不好看。」范老自己先說了，「我這輩子沒寫過一個好看的字。可是這四個是真的。」\n\n{?wangyue.話5:他把筆擱在硯台上，又說：「前幾天有人跟我說，『{?wangyue.一句:{said:wangyue.-2}|{said:wangyue.-1}}』。我那時候不信。」}\n\n王越把劍收進鞘裡。他收得很慢，怕把墨蹭掉。\n\n他走下石階，在你面前停住。他從背後解下一樣東西，是那天夜裡你看見的那個布包，長長的。他把布一層一層打開。\n\n是一把劍，比他那把短一點，窄一點。只有一面開了刃，另一面是厚的、鈍的，摸上去是圓的。劍柄纏的繩子很細，是小孩子的手握得住的粗細。\n\n「單刃。」他說。\n\n「給孩子削的。」\n\n「背面不割手。」\n\n「沒人見過。」\n\n他把劍放在你手上。\n\n「給你。」\n\n史阿在後面張大了嘴，一句話也說不出來。王越走過他身邊，在他頭上按了一下。\n\n「走。」他說，「徒弟。」\n\n史阿沒有動。過了一會兒，他用袖子在臉上很用力地抹了一下，挑起空扁擔追上去，左腳先。",
+        "annal": "中平元年，{name}客洛陽。有劍客王越，貧而質其劍，不肯以技干食。{?wangyue.交手:{name}嘗與越搏於北邙墓間。}{?wangyue.看懂:{name}觀越擊劍三式，得其一。}{?wangyue.贖劍:{name}以三十銀贖其劍。|{?wangyue.點破:當肆女以奩資贖之，{name}以告越。|當肆女以奩資贖之。}}會中常侍張讓使人以百金募越，刺故黨人范公。{?wangyue.拿錢:{name}受張氏金，不辭。}{?wangyue.告范:{name}先以告范公，公不去。}越至其門，{?wangyue.一句:將入。{name}謂之曰：『{said:wangyue.-1}』越閉目良久，垂劍。|范公持燈而出，請觀其劍。越垂劍。}范公書其鞘曰『市井第一』。越遂解所藏單刃劍以贈{name}，攜童子史阿而去。",
+        "image": "stories/wangyue_end_sheath",
+        "effect": {
+          "stats": {
+            "xinde": 40,
+            "fame": 3,
+            "good": 3
+          }
+        },
+        "keepsakes": [
+          "單刃"
+        ],
+        "after": [
+          {
+            "days": 3,
+            "where": {
+              "locations": [
+                "luoyang_road"
+              ]
+            },
+            "title": "三天後・洛陽官道",
+            "image": "stories/wangyue_oil",
+            "text": "初一還沒到，王越來了。\n\n他把一個錢放在櫃檯上，一個。阿蘅看著那個錢，看了很久，收進抽屜，在帳上記了一筆。\n\n他站在櫃檯前，看那根空釘子。阿蘅看他。\n\n他要走的時候，阿蘅追到門口：「鞘給我。」墨已經淡了。她拿桐油，沿著那四個字的邊緣，一筆一筆描了一遍。油乾了，字就封在裡面了。\n\n{?wangyue.話1:她把鞘還給他的時候，對你說：「客人那天說『{said:wangyue}』。我把這句也描進去了。」你看了看鞘，上面只有四個字。}"
+          },
+          {
+            "days": 7,
+            "where": {
+              "locations": [
+                "luoyang_palace"
+              ]
+            },
+            "title": "一週後・洛陽宮城",
+            "text": "宮門口貼了一張告示，招善擊劍者充羽林。告示底下圍著一群人，有人說有一個姓王的去應了，薦書上的薦主，是一個剛出黨錮的老官人。\n\n也有人說他沒去。那張薦書他收下了，摺成很小的一塊，跟另一張舊的放在一起。"
+          },
+          {
+            "days": 14,
+            "where": {
+              "tags": [
+                "酒肆"
+              ]
+            },
+            "title": "兩週後・酒肆",
+            "text": "有人在說市口出了一個孩子，十二三歲，拿一根扁擔跟人比，比贏了不收錢。人家問他師父是誰。\n\n「王越。」他說，「天下劍術，王越第一。」\n\n說完他自己先紅了臉，挑起水桶就跑。"
+          }
+        ]
+      },
+      {
+        "id": "yuan",
+        "title": "遠",
+        "text": "他的劍落在石階上。響了一聲，在巷子裡傳了很遠，傳到巷口那兩隻銅駱駝那裡，又傳回來。\n\n他彎腰撿起來，看了看劍刃，又看了看你。\n\n「好。」他說。\n\n他把劍收回鞘裡，對著門裡的范老，彎下腰，行了一個很深的禮。你從來沒見過他對誰彎腰。\n\n范老也還了他一禮，燈在他手裡晃了一下，這是那一晚燈唯一晃的一次。\n\n王越轉身走出巷子。史阿跟上去，走了幾步回頭看你，想說什麼，最後只揮了一下手。\n\n你在巷口追上他們。他沒有停。\n\n「去哪？」\n\n「北。」\n\n「洛陽呢？」\n\n「不回了。」\n\n走到銅駱駝那裡，他停了一下，沒有回頭。「當鋪。」他說，「替我說一聲。」他沒說要說什麼。",
+        "annal": "中平元年，{name}客洛陽。有劍客王越，貧而質其劍，不肯以技干食。{?wangyue.交手:{name}嘗與越搏於北邙墓間。}{?wangyue.看懂:{name}觀越擊劍三式，得其一。}{?wangyue.贖劍:{name}以三十銀贖其劍。|{?wangyue.點破:當肆女以奩資贖之，{name}以告越。|當肆女以奩資贖之。}}會中常侍張讓使人以百金募越，刺故黨人范公。{?wangyue.拿錢:{name}受張氏金，不辭。}{?wangyue.告范:{name}先以告范公，公不去。}越至其門，{name}當門拒之，與越鬥於階下，越劍墮。越拾劍，拜范公而去，北之遼東，終身不復入洛。",
+        "image": "stories/wangyue_door",
+        "effect": {
+          "stats": {
+            "xinde": 40,
+            "fame": 2,
+            "good": 2
+          }
+        },
+        "keepsakes": [
+          "阿蘅的油布"
+        ],
+        "after": [
+          {
+            "days": 3,
+            "where": {
+              "locations": [
+                "luoyang_road"
+              ]
+            },
+            "title": "三天後・洛陽官道",
+            "image": "stories/wangyue_oil",
+            "text": "當鋪照常開門。阿蘅在櫃檯後面撥算盤。\n\n釘子還在牆上，空著。她沒有拔。\n\n她看見你，問：「走了？」你說走了。你把他那一句也說了。她點點頭，把那塊疊好的布拿起來，又放下，又拿起來，隔著櫃檯遞給你。\n\n「這個用不著了。」她說，「你拿著。上面的油，是他那把劍的。」\n\n{?wangyue.話1:她又說：「客人那天跟我說，『{said:wangyue}』。我想了很多天。」她低頭撥了一顆珠子，「他不來也好。來了，也只是看劍。」}"
+          },
+          {
+            "days": 7,
+            "where": {
+              "locations": [
+                "baima_temple"
+              ]
+            },
+            "title": "一週後・白馬寺",
+            "image": "stories/wangyue_temple",
+            "text": "廊下掃地的小沙彌說，前些天有一大一小兩個人在寺外討水喝，往北去。大的那個腰上有劍，從頭到尾沒有拔過。小的那個一邊走一邊拿扁擔在地上比劃，比錯了，大的那個就說兩個字：「左腳。」\n\n「小的那個，」沙彌說，「跟我比過丟石子。他輸了，不服氣，說等他回來再比。」"
+          },
+          {
+            "days": 14,
+            "where": {
+              "tags": [
+                "酒肆"
+              ]
+            },
+            "title": "兩週後・酒肆",
+            "text": "有人在說遼東。說遼東海邊有一間沒有門的屋子，住著一個劍客。有人去找他比劍，他站著，一劍不出。去比劍的人站了半天，自己走了。\n\n「那叫什麼劍客？」有人笑。\n\n說話的人想了想：「他徒弟說，那叫『等』。」"
+          }
+        ]
+      },
+      {
+        "id": "ming",
+        "title": "名",
+        "text": "范老讓開了門。王越走上三級石階，走進去。門在他身後關上了。\n\n燈還亮著，從門縫裡透出一線。你站在巷子裡，史阿站在你旁邊。很久，什麼聲音都沒有。\n\n然後那一線燈滅了。\n\n門開了。王越走出來，劍已經在鞘裡。他走下三級石階，從你身邊走過去，沒有看你。\n\n史阿跟上去。他走了幾步，回頭看了那扇門一眼，又回頭看了你一眼。他的臉在黑裡，你看不清楚。",
+        "annal": "中平元年，{name}客洛陽。有劍客王越，貧而質其劍，不肯以技干食。{?wangyue.交手:{name}嘗與越搏於北邙墓間。}{?wangyue.看懂:{name}觀越擊劍三式，得其一。}{?wangyue.贖劍:{name}以三十銀贖其劍。|{?wangyue.點破:當肆女以奩資贖之，{name}以告越。|當肆女以奩資贖之。}}會中常侍張讓使人以百金募越，刺故黨人范公。{?wangyue.拿錢:{name}受張氏金，不辭。}{?wangyue.告范:{name}先以告范公，公不去。}越至其門，{?wangyue.一句:將入。{name}謂之曰：『{said:wangyue.-1}』越不顧。}{name}不能止。是夜范公卒。越由是名聞京師。當肆女拔壁上釘，以授{name}。",
+        "image": "stories/wangyue_door",
+        "effect": {
+          "stats": {
+            "xinde": 40,
+            "fame": 1
+          }
+        },
+        "keepsakes": [
+          "牆上的釘子"
+        ],
+        "after": [
+          {
+            "days": 3,
+            "where": {
+              "locations": [
+                "luoyang_palace"
+              ]
+            },
+            "title": "三天後・洛陽宮城",
+            "text": "銅駝街後那條巷子的門上貼了封條。坊間說，范公年老，夜裡無疾而終。張常侍府上送了一副很體面的棺木。\n\n院子裡的掃帚還靠在牆上。那塊掃了十四年的地上，落了三天的灰。"
+          },
+          {
+            "days": 7,
+            "where": {
+              "locations": [
+                "luoyang_road"
+              ]
+            },
+            "title": "一週後・洛陽官道",
+            "image": "stories/wangyue_market",
+            "text": "市口那個耍刀的漢子換了一個地方耍。有人問他為什麼，他說：「這裡人人都在說王越，誰還看我。」\n\n王越名聞京師。有人說他進了張常侍的府，教府上的人擊劍，一個月二十金；有人說在宮裡見過他，站在一個孩子的身後，一句話也不說。"
+          },
+          {
+            "days": 14,
+            "where": {
+              "locations": [
+                "luoyang_road"
+              ]
+            },
+            "title": "兩週後・洛陽官道",
+            "image": "stories/wangyue_end_nail",
+            "text": "初一。\n\n阿蘅在櫃檯後面等了一整天。到傍晚，她站起來，踮起腳，拿一把鉗子去拔牆上那根釘子。釘子釘得很深，她拔了很久，拔出來的時候牆上掉下一塊灰。\n\n她把釘子放在你手心裡。「客人拿著。」她說，「我留著，會一直看。」\n\n{?wangyue.話1:她又說：「你那天說『{said:wangyue}』。你說得對，也不對。」}\n\n酒肆裡偶爾有人說起「王越的徒弟」，說那孩子不住在王越的府上，住在北邙山腳一間沒有門的屋子裡，每天天沒亮上山，練三招。"
+          }
+        ]
+      },
+      {
+        "id": "wan",
+        "title": "晚",
+        "failed": true,
+        "weight": 3,
+        "text": "那一夜你不在銅駝街後那條巷子裡。巷底那扇門開了又關上，沒有人替誰看著。",
+        "annal": "中平元年，{name}客洛陽。有劍客王越，貧而質其劍，不肯以技干食。{?wangyue.交手:{name}嘗與越搏於北邙墓間。}{?wangyue.看懂:{name}觀越擊劍三式，得其一。}{?wangyue.贖劍:{name}以三十銀贖其劍。|{?wangyue.點破:當肆女以奩資贖之，{name}以告越。|當肆女以奩資贖之。}}會中常侍張讓使人以百金募越，刺故黨人范公。{?wangyue.拿錢:{name}受張氏金，不辭。}{?wangyue.告范:{name}先以告范公，公不去。}{name}不及至。范公以夜卒，越名聞京師。",
+        "image": "stories/wangyue_oil",
+        "effect": {
+          "stats": {
+            "xinde": 40,
+            "fame": 1
+          }
+        },
+        "after": [
+          {
+            "days": 3,
+            "where": {
+              "locations": [
+                "luoyang_palace"
+              ]
+            },
+            "title": "三天後・洛陽宮城",
+            "text": "銅駝街後那條巷子的門上貼了封條。坊間說，范公年老，夜裡無疾而終。\n\n{?wangyue.告范:門環上掛著一張紙，是給你的。上面只有一行字，字不好看：「門不鎖。來過了。」}"
+          },
+          {
+            "days": 7,
+            "where": {
+              "locations": [
+                "luoyang_road"
+              ]
+            },
+            "title": "一週後・洛陽官道",
+            "image": "stories/wangyue_oil",
+            "text": "阿蘅看見你，愣了一下。\n\n「那天晚上，」她說，「我讓你替我看著。」\n\n她沒有怪你。她只是說了這一句，就低頭撥算盤。釘子還在牆上，空著。"
+          },
+          {
+            "days": 14,
+            "where": {
+              "tags": [
+                "酒肆"
+              ]
+            },
+            "title": "兩週後・酒肆",
+            "text": "有人在說王越名聞京師。說的人不認得他，只知道他的劍很快。\n\n鄰桌一個挑水的孩子把碗一放，說：「他的劍不快。他的劍是等。」說完就走了，沒付錢。"
+          }
+        ]
+      }
+    ]
   }
 ]
