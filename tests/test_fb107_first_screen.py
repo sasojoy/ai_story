@@ -55,6 +55,10 @@ const rounds = L.rounds ? el("rounds", L.roundsOpen ? ["rounds", "open"] : ["rou
 const now = L.now ? el("now", ["now", L.nowFits ? "fits" : "clamp"].concat(L.nowOpen ? ["open"] : [])) : null;
 const body = L.now ? el("body", ["tx-now"]) : null;
 const scene = L.scene ? el("scene", ["card", "scene"]) : null;
+// 場景的畫（減法季批 8；收法 5a 縮成橫幅）與戰鬥補充那一塊（收法 5c 只留第一行；L.extra 是一共幾行）
+const art = L.art ? el("art", ["scene-art"]) : null;
+const extra = L.extra ? el("extra", ["tx-extra"]) : null;
+if (extra) extra.querySelectorAll = (s) => (s === ":scope > .tx-line" ? Array.from({ length: L.extra }, () => ({})) : []);
 const box = L.box ? el("box", ["card", "guide"]) : null;
 const hint = L.hint ? el("hint", ["hint"]) : null;  // 狀態列的 💡（#top 裡）；收成一行看的是 S.hintTight（renderTop 照它畫）
 // 名聲（名聲設計十一之二）：狀態列名號底下那一行稱號（1B，收不收看 S.renownTight）與決戰本場戰功名字底下的稱號（4B，L.merit 是幾行）
@@ -105,7 +109,7 @@ if (callsBox) {
   callsBox.insertAdjacentHTML = () => { callsMore = makeMore("", true); };
 }
 // 每一樣收起來省多少 px（假的；真的看 375×812 估的數字）
-const SAVE = Object.assign({ space: 30, cardSpace: 6, box: 22, hint: 20, renown: 20, line: 20, rounds: 23, merit: 6, own: 27, muster: 27, options: 22, call: 70, moreLine: 0, peek: 56, note: 18 }, input.save || {});
+const SAVE = Object.assign({ art: 190, extra: 60, space: 30, cardSpace: 6, box: 22, hint: 20, renown: 20, line: 20, rounds: 23, merit: 6, own: 27, muster: 27, options: 22, call: 70, moreLine: 0, peek: 56, note: 18 }, input.save || {});
 // 「剛剛」只留時間與標題（fit-title）時剩兩行 48px；只露三行（fit-short）時最多 72px
 const bodyHeight = () => (now && has(now, "fit-title") && !has(now, "open") ? Math.min(L.nowBody, 48)
   : now && has(now, "fit-short") ? Math.min(L.nowBody, 72) : Math.min(L.nowBody || 0, 120));
@@ -119,6 +123,8 @@ const bottom = () => {
   meritSmalls.forEach((x) => { if (has(x, "fit-hide")) b -= SAVE.merit; });
   lines.forEach((x) => { if (has(x, "tx-tight") && !has(x, "open")) b -= SAVE.line; });
   if (rounds && has(rounds, "fit-fold") && !has(rounds, "open")) b -= SAVE.rounds;
+  if (art && has(art, "fit-art")) b -= SAVE.art;
+  if (extra && has(extra, "fit-extra")) b -= SAVE.extra;
   if (now) b -= Math.min(L.nowBody || 0, 120) - bodyHeight();
   if (own.some((p) => has(p, "fit-clip"))) b -= SAVE.own;
   if (musterLines.some((p) => has(p, "fit-clip"))) b -= SAVE.muster;
@@ -156,6 +162,10 @@ const where = {
   ".fit-box": () => all.filter((x) => has(x, "fit-box")),
   ".tx-tight": () => all.filter((x) => has(x, "tx-tight")),
   ".fit-fold": () => all.filter((x) => has(x, "fit-fold")),
+  ".fit-art": () => all.filter((x) => has(x, "fit-art")),
+  ".fit-extra": () => all.filter((x) => has(x, "fit-extra")),
+  "#page > .card.scene > .scene-art:not(.fit-art)": () => (art && !has(art, "fit-art") ? [art] : []),
+  "#page .battle-card .tx-extra:not(.fit-extra)": () => (extra && !has(extra, "fit-extra") ? [extra] : []),
   ".now.fit-short": () => all.filter((x) => has(x, "now", "fit-short")),
   ".fit-own, .fit-muster": () => all.filter((x) => has(x, "fit-own") || has(x, "fit-muster")),
   ".fit-clip": () => all.filter((x) => has(x, "fit-clip")),
@@ -194,7 +204,7 @@ if (scene) {
     : s === ":scope > p" ? (mhead ? musterLines[0] || null : title) : s === ":scope > .battle-shut" ? (L.battleShut ? {} : null) : null);
   scene.querySelectorAll = (s) => (s === ":scope > hr ~ p" && hr ? own : s === ".fit-clip" ? all.filter((x) => has(x, "fit-clip")) : []);
 }
-const S = Object.assign({ stage: "game", tab: "jianghu", hearOpen: null, linesOpen: null, ownOpen: null, hintTight: false, hintOpen: false, renownTight: false,
+const S = Object.assign({ stage: "game", tab: "jianghu", hearOpen: null, linesOpen: null, extraOpen: null, ownOpen: null, hintTight: false, hintOpen: false, renownTight: false,
   fitWidth: 0, main: { card_id: 7, scene: "<p>x</p>", on_road: false } }, input.S || {});
 const pro = () => input.pro || null;
 const idleMenu = () => input.idle !== false;
@@ -212,6 +222,7 @@ const snap = () => ({
   musterAttrs: musterLines.map((x) => x.attrs), menu: menu ? [...menu.classes].sort() : null,
   calls: callRows.map((x) => has(x, "fit-hide")), more: callsMore ? [callsMore.textContent, callsMore.dataset.fit || ""] : null,
   renownTight: S.renownTight, merit: meritSmalls.map((x) => has(x, "fit-hide")),
+  art: art ? [...art.classes].sort() : null, extra: extra ? [...extra.classes].sort() : null, extraAttrs: extra ? extra.attrs : null,
   peek: peek ? [...peek.classes].sort() : null, notes: notes.map((x) => has(x, "fit-hide")), nowWas: now ? now.dataset.fitWas || null : null,
 });
 finish(new Function("H", "S", "snap", "L", "W", "els", input.script || "H.fitFirstScreen(); return snap();")(
@@ -626,11 +637,13 @@ def _rules(css, needle):
 
 
 def test_each_step_only_touches_what_it_names():
-    """每一步一個 class；藏東西的只有收著的回合清單或大場面那一段話（展開 .open 就回來），與第 6b 步收掉的邀請（FB-117：
+    """每一步一個 class；藏東西的只有收著的回合清單或大場面那一段話（展開 .open 就回來）、第 5c 步收掉的戰鬥補充，與第 6b 步收掉的邀請（FB-117：
     併進「還有 N 份邀請」那一行，點了攤開）；第 2、5 步是一行加「…」。"""
     css = _css()
     hiding = [sel for sel, body in re.findall(r"(?m)^([^{}\n@]*fit-[^{}\n]*)\{([^}]*)\}", css) if "display: none" in body]
     assert sorted(s.strip() for s in hiding) == [
+        # 第 5c 步（extra）：戰鬥補充第一行以後的（點那一塊整塊攤開，extraOpen）
+        ".battle-card .tx-extra.fit-extra > .tx-line ~ .tx-line",
         ".battle-card p.rounds-tale.fit-fold:not(.open)", ".battle-card ul.rounds.fit-fold:not(.open)", ".call.fit-hide",
         ".g-mcol li .rn-two small.fit-hide",  # 名聲 4B：本場戰功名字底下那一行稱號（名字照舊）
         # 第 10 步（choices）：「剛剛」的敘事（展開 .open 就回來）、灰掉的鈕底下那一行原因（在鈕的 title，點了說整句）、態勢那一排
@@ -708,3 +721,43 @@ def test_the_players_here_row_does_not_style_the_here_fold():
     assert "border-top: 1px dashed" in here and "display: flex" in here
     js = webharness.app_source()
     assert '<div class="here">' in js and '<details class="fold here"' in js
+
+
+# ── 場景的畫與戰鬥補充（2026-10-27：pull develop 之後打完一場，行動列被推出第一屏）────────────
+
+
+ART_FIGHT = {"bottom": 1060, "actbar": True, "card": True, "lines": [False, False], "rounds": True, "scene": True, "art": True, "extra": 6}
+
+
+@node
+def test_a_tall_fight_with_scene_art_shrinks_the_art_then_folds_the_extra_lines():
+    """戰鬥卡片＋場景有畫：第一回合收進「展開過程」之後先把畫縮成橫幅，還放不下才把補充收成一行；行動列回到第一屏。"""
+    out = run(ART_FIGHT)
+    assert out["fitted"][:5] == ["space", "lines", "rounds", "art", "extra"]
+    assert "fit-art" in out["art"] and "fit-extra" in out["extra"] and out["bottom"] <= 756 - 16
+    assert out["extraAttrs"] == {"data-act": "extra-more", "role": "button", "tabindex": "0", "aria-expanded": "false"}
+
+
+@node
+def test_the_art_alone_is_enough_when_it_is():
+    out = run({**ART_FIGHT, "bottom": 1000})
+    assert "art" in out["fitted"] and "extra" not in out["fitted"] and "fit-extra" not in out["extra"]
+
+
+@node
+def test_opened_extra_lines_stay_open_and_one_line_is_left_alone():
+    out = run(ART_FIGHT, S={"extraOpen": 7})
+    assert "extra" not in out["fitted"] and "fit-extra" not in out["extra"]
+    assert "extra" not in run({**ART_FIGHT, "extra": 1})["fitted"]  # 只有一行：沒東西可收
+
+
+@node
+def test_refitting_brings_the_art_and_the_extra_lines_back():
+    out = run(ART_FIGHT, script="H.fitFirstScreen(); L.bottom = 700; H.fitFirstScreen(); return snap();")
+    assert out["fitted"] == [] and "fit-art" not in out["art"] and "fit-extra" not in out["extra"] and out["extraAttrs"] == {}
+
+
+def test_the_art_and_extra_folds_are_styled():
+    css = _css()
+    assert re.search(r"(?m)^\.card\.scene > \.scene-art\.fit-art \{[^}]*height: 84px", css)
+    assert re.search(r'(?m)^\.battle-card \.tx-extra\.fit-extra::after \{[^}]*content: "展開全文 ▾"', css)
