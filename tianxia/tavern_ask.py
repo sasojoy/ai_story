@@ -35,7 +35,7 @@ FAR_MORE = "四站以上的路"
 FIGURE_SIDE = "{name}是{side}的人。"
 FIGURE_STORY = "{name}的出身：{text}"
 FIGURE_NOW = "{name}眼下：{text}"
-PLAYER_REGION = "江湖人{name}，聽說在{region}一帶；要問確切在哪，得用「查人」。"
+PLAYER_REGION = "江湖人{name}，聽說在{region}一帶；要問確切在哪，得用「查人在哪」。"
 PLAYER_FAINT = "江湖人{name}，酒家只聽過名頭，不知道在哪。"
 SKILL_LINE = "{name}是一門{quality}的{kind}，走{attr}的路子。{learn}"
 SKILL_LEARN = "在{place}學得到。"
@@ -68,12 +68,12 @@ GUIDE: tuple[tuple[tuple[str, ...], str], ...] = (
     (("同伴", "收徒", "門下", "結伴"), "情誼夠深的人物肯跟你走，收在門下一起闖。"),
 )
 POINTERS = {
-    "player": "要問人在哪，可以用「查人」；問人跟誰交好，用「打聽交情」。",
-    "figure": "要問人物在哪、跟誰交好，可以用「查人」「打聽交情」。",
+    "player": "要問人在哪，可以用「查人在哪」；問人跟誰交好，用「打聽情誼」。",
+    "figure": "要問人物在哪、跟誰交好，可以用「查人在哪」「打聽情誼」。",
     "material": "要問素材哪裡採得到，用「打聽素材」最準。",
     "place": "要問那一帶的事，可以先走過去看看，或在那裡的酒肆聽消息。",
 }
-POINTER_DEFAULT = "新鮮事可以點「聽消息」，問人用「查人」，問素材用「打聽素材」。"
+POINTER_DEFAULT = "新鮮事可以點「聽消息」，問人用「查人在哪」，問素材用「打聽素材」。"
 
 
 def _short(name: str) -> str:
@@ -178,7 +178,7 @@ def figure_lines(state: GameState, content: Content, cid: str) -> list[str]:
 
 
 def player_lines(state: GameState, content: Content, other: GameState, wanted: set[str] | None = None) -> list[str]:
-    """一個玩家：照打聽度說哪一方、稱號、身邊同伴、近來的事（tavern.ties_player_lines），人在哪只說到大區（確切地點是「查人」的事）。"""
+    """一個玩家：照打聽度說哪一方、稱號、身邊同伴、近來的事（tavern.ties_player_lines），人在哪只說到大區（確切地點是「查人在哪」的事）。"""
     score = tavern.person_reach(state, content, other, wanted)
     p = other.player
     lines, ok = tavern.ties_player_lines(state, content, other, [], wanted)
