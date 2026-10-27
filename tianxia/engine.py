@@ -2346,9 +2346,12 @@ class Game:
         return label + bounties.join_note(self.state, self.content, choice)
 
     def event_option_view(self) -> dict[str, dict] | None:
-        """江湖頁事件選項的樣子（減法季批 1，整合設計 6.4）：鈕上只留動作，心裡話只在「難說」以下才寫在底下一行小字，失手的代價不寫在鈕上。
+        """江湖頁事件選項的樣子（減法季批 1，整合設計 6.4）：鈕上只留動作，底下一行小字寫成算，失手的代價不寫在鈕上。
         眼前沒有事件是 None；有的話每一顆 choice:N 一筆 {"act": 動作（拜入門派會作廢懸賞的那一句照樣接在後面）, "kind": 檢定的屬性鍵／
-        "fight"／""（網頁照它畫鈕前的小圖示）, "worry": 心裡話或對手與勝算（沒把握才有，有把握是空字串）}。選單上的標籤一個字不改（假人與模擬照舊讀它）。
+        "fight"／""（網頁照它畫鈕前的小圖示）, "worry": 檢定是「{屬性名} {數值}：{心裡話}」（events.check_note）、動手是「對手：{名字}・{勝算}」、
+        不擲骰是空字串, "sure": 有把握（檢定不缺、勝算穩勝或有把握）——網頁照它決定那一行要不要標成擔心的顏色}。
+        成算每一顆都寫（Joy 2026-10-27 在決定卡上選「每顆都寫回來」；批 1 原本只在「難說」以下才寫心裡話、不寫屬性與數值）。
+        選單上的標籤一個字不改（假人與模擬照舊讀它）。
         只讀：勝算照 odds 的備忘，不擲骰。"""
         s, c = self.state, self.content
         if not s.pending_event or s.pending_event not in c.events:
@@ -2359,14 +2362,12 @@ class Game:
             if ch.combat:
                 squad = self._story_squad(c.squads[ch.combat])
                 odds = team.estimate(s, c, self.world, squad.id, difficulty=squad.difficulty, memo=self.odds_memo)
-                worry = "" if odds in ("穩勝", "有把握") else f"對手：{squad.name}・{odds}"
-                out[f"choice:{i}"] = {"act": act, "kind": "fight", "worry": worry}
+                out[f"choice:{i}"] = {"act": act, "kind": "fight", "worry": f"對手：{squad.name}・{odds}", "sure": odds in ("穩勝", "有把握")}
             elif ch.check:
                 gap = check_gap(ch.check, s, c, self.world)
-                worry = event_rules.check_note(ch.check, s, c, self.world).split("：", 1)[-1] if gap < 0 else ""
-                out[f"choice:{i}"] = {"act": act, "kind": ch.check.stat, "worry": worry}
+                out[f"choice:{i}"] = {"act": act, "kind": ch.check.stat, "worry": event_rules.check_note(ch.check, s, c, self.world), "sure": gap >= 0}
             else:
-                out[f"choice:{i}"] = {"act": act, "kind": "", "worry": ""}
+                out[f"choice:{i}"] = {"act": act, "kind": "", "worry": "", "sure": True}
         return out
 
     def odds(self, squad_id: str, at: str | None = None) -> str:

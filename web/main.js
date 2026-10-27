@@ -1086,7 +1086,8 @@
     return (m.event_opts || {})[o.id] || null;
   }
   const evIconHtml = (ev) => `<span class="k ev ev-${ev.kind || "plain"}" aria-hidden="true">${EV_ICON[ev.kind] || EV_ICON[""]}</span>`;
-  const evLabelHtml = (o, ev) => `<span>${esc(ev.act)}${ev.worry ? `<small class="opt-note ev-worry">${esc(ev.worry)}</small>` : ""}${o.note ? `<small class="opt-note">${esc(o.note)}</small>` : ""}</span>`;
+  // 成算每一顆都寫（Joy 2026-10-27）：「臂力 9：有把握」「對手：河灘潑皮・穩勝」；沒把握（ev.sure 是 false）的那一行標成擔心的顏色
+  const evLabelHtml = (o, ev) => `<span>${esc(ev.act)}${ev.worry ? `<small class="opt-note ev-odds${ev.sure === false ? " ev-worry" : ""}">${esc(ev.worry)}</small>` : ""}${o.note ? `<small class="opt-note">${esc(o.note)}</small>` : ""}</span>`;
 
   // 「剛剛」收著時一行（整合設計 6.3）：時間一小行，底下標題接第一句，放不下加「…」；點了攤開全文（S.nowOpen，同以前的「展開全文」）。
   // 在路上照舊三行（FB-060 的排法沒動）
