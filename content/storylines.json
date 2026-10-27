@@ -543,12 +543,7 @@
           "yingchuan_academy"
         ]
       },
-      "chance": 0.08,
-      "condition": {
-        "week_min": 2,
-        "cal_day_min": 8,
-        "cal_day_min7": 2
-      }
+      "chance": 0.08
     },
     "unfinished": "{name}受水鏡先生之託押一車書往南陽隆中，到季末還沒有送到。",
     "stages": [

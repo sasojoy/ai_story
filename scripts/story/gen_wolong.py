@@ -436,7 +436,7 @@ line = {
     "kind": "奇事",
     "intro": "潁川書院的院子裡停著一輛牛車，車上是一卷一卷包好的竹簡。",
     # 第 2 週起（21 天季第 8 天起、7 天濃縮季第 2 天起；沒有季曆的季不開）
-    "start": {"where": ACADEMY, "chance": 0.08, "condition": {"week_min": 2, "cal_day_min": 8, "cal_day_min7": 2}},
+    "start": {"where": ACADEMY, "chance": 0.08},
     "unfinished": "{name}受水鏡先生之託押一車書往南陽隆中，到季末還沒有送到。",
     "stages": [
         {"id": "act1", "event": "wolong_1"},
