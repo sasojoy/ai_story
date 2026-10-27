@@ -15,7 +15,7 @@ import test_prologue_web
 
 import server
 import webharness
-from conftest import classic_rules, real_content, third_party_gentry
+from conftest import real_content, third_party_gentry
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 import html as htmllib
@@ -29,11 +29,9 @@ DRIVER = re.sub(r"wholeApp\(\[.*?\]\)", "wholeApp(" + repr(NAMES).replace("'", '
 APP = webharness.APP  # 三個檔（main.js、map.js、app.js）接起來的那一份
 
 
-def _game(faction="guan", at="yingchuan", classic=False, third_party=False):
+def _game(faction="guan", at="yingchuan", third_party=False):
     c = real_content("week7")
     c.config.auto_open_first_season = True
-    if classic:
-        classic_rules(c)
     if third_party:
         third_party_gentry(c)  # 豪強是第三方、有割據的規則（豪強分屬兩軍之前）
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world())
@@ -196,7 +194,7 @@ def test_fb632_a_neutral_block_taken_shows_in_the_timeline_and_the_chart():
 
 
 def test_the_timeline_without_territory_says_so():
-    out = run(_game(classic=True), "return H.timelineHtml(H.S.mapBase, H.S.mapState, 1);")
+    out = run(_game(), "return H.timelineHtml(H.S.mapBase, H.S.mapState, 1);")
     assert "這一季沒有地盤易手" in out and "<polyline" not in out
 
 

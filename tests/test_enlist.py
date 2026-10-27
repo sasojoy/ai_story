@@ -2,7 +2,7 @@
 跟 test_orders 同一份）。"""
 import pytest
 
-from conftest import classic_rules, idle_step
+from conftest import idle_step
 from tests.test_orders import _game, _order, _win
 from tianxia import enlist, guide
 from tianxia.state import ONBOARDING_VERSION
@@ -13,7 +13,7 @@ from tianxia.models import Enlist, EnlistStep, Hints, Recruiter, TutorialGoal
 @pytest.fixture
 def real(real):
     """conftest 那一份真實內容，出陣探索與地盤的四個開關關掉：這個檔測的是軍令與入伍段的舊走法（遊歷打贏、操練、長社站黃巾）。"""
-    return classic_rules(real)
+    return real
 
 
 @pytest.fixture

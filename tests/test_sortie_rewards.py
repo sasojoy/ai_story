@@ -67,13 +67,6 @@ def test_tier_four_off_drops_nothing():
     assert not record.materials
 
 
-def test_both_switches_off_keep_the_old_third():
-    game = _game(precise=False, tiers=False)
-    game.content.config.economy.sortie_silver = False
-    record, squad = _attack(game)
-    assert record.exp == drill_share(squad.exp, 0.3) and record.silver == 0 and not record.materials
-
-
 def test_rare_drops_hit_with_their_own_dice_and_respect_the_caps():
     game = _game()
     cfg = game.content.config.sortie

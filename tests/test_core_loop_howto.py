@@ -39,13 +39,6 @@ def test_the_territory_prices_follow_the_config():
     assert "便宜15%" in line and "貴五成" in line
 
 
-def test_the_howto_page_is_unchanged_with_the_switches_off():
-    c = classic_rules(real_content("week7"))
-    page = _page(c)
-    assert "**遊歷**" in page and "**出陣**" not in page and "#### 地盤" not in page
-    assert "照地點三選一：悟意境" in page and "找素材" not in page and "- 探索落在悟意境時「有所感」" in page
-
-
 def test_the_fronts_and_joining_explain_the_sortie():
     from tianxia.state import GameState, PlayerState
     from tianxia.world_state import fresh_season

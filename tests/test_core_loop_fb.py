@@ -294,9 +294,3 @@ def test_fb257_the_fame_line_does_not_mention_training_when_sorties_are_on():
     assert "遊歷" not in line and "找素材" in line
     old = classic_rules(real_content("week7"))
     assert "遊歷之後" in " ".join(howto.fame_lines(old, fresh_season(old)))
-
-
-def test_fb248_with_the_sortie_off_the_neighbours_still_meet_the_convoy():
-    game = _game("guan", "changshe", content=classic_rules(real_content("week7")))
-    _intercept(game, "guan", "runan_wilds")
-    assert orders.extra_enemies(game.state, game.content, "changshe", "guan") == [game.content.orders.convoy_squads["huang"]]

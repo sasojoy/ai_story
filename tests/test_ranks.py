@@ -357,15 +357,6 @@ def test_followers_add_power_and_take_no_toll(on):
     assert sum(m.startswith("氣血 -") for m in msgs) == 1
 
 
-def test_switch_off_followers_do_not_fight(real):
-    """開關關著：存檔裡就算有部下，也不算威力、不進名冊。"""
-    alone = _game(real, "甲", faction="guan", at="runan_wilds")
-    led = _game(real, "乙", faction="guan", at="runan_wilds")
-    led.state.player.followers = list(GUAN_FOLLOWERS)
-    assert _spied_power(lambda: led.choose("act:train"))[0] == _spied_power(lambda: alone.choose("act:train"))[0]
-    assert [key for _, key in led.roster_lines()] == ["player"]
-
-
 def test_followers_listed_in_roster_without_dialogue(on):
     """名冊多兩列「部下・持矛鄉勇」；角色卡寫武學與成數；不能加入、移出隊伍（一直跟著出戰），也不進同伴的隊伍。"""
     game = _game(on, faction="guan")

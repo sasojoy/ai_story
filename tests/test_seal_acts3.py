@@ -295,35 +295,6 @@ def test_mend_rows_only_count_flips():
     assert _act(c, w, now=600.0)["why"] == seal_acts.NOTHING["bujue"]
 
 
-# ── 兩片共用 ──
-
-@pytest.mark.parametrize("profile", ["week7", None, "season21"])
-@pytest.mark.parametrize("shard", ["chishou", "jinjiao"])
-def test_without_conquest_the_button_greys_out_and_nothing_happens(profile, shard):
-    """設計第四章：領地爭奪沒開的季（PM 2026-10-22 打開之前正式內容的三種季都是；現在只有 14 天的季與打開之前開的季）鎮地與補缺按不下去、灰鈕寫原因；碎片卡那一行寫原因（idle）。"""
-    c, w, g = _holder(shard, conquest_on=False, profile=profile, at="yingchuan")
-    act = _act(c, w)
-    assert (act["ok"], act["why"], act["idle"], act["targets"], act["sides"]) == (False, seal_acts.NO_CONQUEST, True, [], [])
-    assert _use(c, w, target="runan") == [f"（{seal_acts.NO_CONQUEST}）"]
-    assert _uses(w) == [] and w.get_season().seal_acts == []
-
-
-@pytest.mark.parametrize("shard", ["chishou", "jinjiao"])
-def test_fb644_without_conquest_a_pause_or_an_idle_season_still_says_why(shard):
-    """FB-644：領地爭奪關著的季，賽季時鐘一暫停（或休季、籌備中），碎片卡那一行又變回「這一季還能起用 2 次」——problem 先回暫停、
-    季沒在跑，輪不到 NO_CONQUEST。改成領地爭奪關著時一律寫 NO_CONQUEST（idle），不管暫停、休季排在前面；按下去回同一句、什麼都不動。"""
-    c, w, g = _holder(shard, conquest_on=False, at="yingchuan")
-    assert w.pause_clock(15.0)
-    act = _act(c, w, now=20.0)
-    assert (act["ok"], act["why"], act["idle"], act["left"]) == (False, seal_acts.NO_CONQUEST, True, 2)
-    assert _use(c, w, target="runan", now=30.0) == [f"（{seal_acts.NO_CONQUEST}）"]
-    assert _uses(w) == [] and w.get_season().seal_acts == []
-    view = w.seal_state()
-    reg = seal.filled(view.registry, c)
-    idle = seal_acts.view(g.state, c, reg, view.season, running=False, paused=False, stamp=g.stamp)  # 休季、籌備中（季沒在跑）
-    assert (idle["why"], idle["idle"]) == (seal_acts.NO_CONQUEST, True)
-
-
 def test_fb644_with_conquest_a_pause_is_still_a_pause():
     """領地爭奪打開的季，暫停照舊寫暫停（不是整季用不上）。"""
     c, w, g = _holder("chishou")

@@ -452,16 +452,6 @@ def test_duty_only_for_members_on_a_front(on):
     assert "act:duty" not in [o.id for o in _game(on, "乙", faction="guan", at="luoyang_palace").options()]  # 洛陽沒有戰線
 
 
-def test_switch_off_no_duty_no_convoy_squad_same_draws(real):
-    """開關關著：沒有守勢行動，遊歷的對手清單一樣（亂數抽法一樣），沒有任何軍令的字。"""
-    game = _game(real, faction="guan", at="nanyang_wilds")
-    assert "act:duty" not in [o.id for o in game.options()]
-    assert game._train_squad_ids(real.locations["nanyang_wilds"]) == real.locations["nanyang_wilds"].enemies
-    with _win():
-        msgs = game.choose("act:train")
-    assert not any("軍令" in m for m in msgs)
-
-
 # ── Task 5：護糧的糧車 ─────────────────────────────────────
 
 

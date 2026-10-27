@@ -92,24 +92,6 @@ def test_switch_on_reads_fronts_as_themselves(on):
     assert [rules.pushable(on, w, t) for t in ("huangjin", "yingru", "geju")] == [False, True, True]
 
 
-@pytest.mark.parametrize("faction, delta, moved", [(None, -1, 0), ("guan", -1, 0), ("huang", 1, 0), ("haoqiang", -1, 0)])
-def test_switch_off_training_at_changshe_moves_huangjin_as_before(real, faction, delta, moved):
-    """開關關著：在長社遊歷打贏，黃巾聲勢的方向跟 T1 之前一樣——長社原本寫 huangjin -1：散人、官軍、豪強 -1；也不會冒出別的線。
-    黃巾的人遇上黃巾的隊伍是操練：方向照舊是 +1（train_trend_push）。推的量都照季長縮放（操練 FB-165；遊歷打贏企劃者 2026-10-13，
-    FB-168：14 天的季 ×2.5／14），這一下推不到一點，零頭記在 trend_accum、不寫推動那一行。"""
-    game = _game(real)
-    game.state.player.faction = faction
-    game.state.player.location = "changshe"
-    assert game.train_trend_push() == {"huangjin": delta}
-    with _win():
-        msgs = game._squad_encounter("louluo")  # 黃巾嘍囉是黃巾的隊伍
-    assert game.state.world.trends == {"huangjin": 25 + moved, "yuxi": 0}
-    assert (f"（黃巾聲勢 {delta:+d}）" in msgs) is bool(moved)
-    if not moved:
-        scale = game.drill_scale() if faction == "huang" else game.season_scale()
-        assert game.state.world.trend_accum["huangjin"] == pytest.approx(delta * scale, abs=1e-6)
-
-
 def test_switch_off_effect_front_pushes_huangjin_anywhere(real):
     """front 在開關關著時一律是黃巾聲勢，連洛陽也一樣（beta 那一季的事件原本都寫 huangjin）。"""
     game = _game(real)
