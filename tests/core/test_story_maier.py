@@ -87,6 +87,7 @@ def test_home_path_recalls_marks_and_leaves_aftermath_and_keepsake_across_season
     assert "姊姊會寫字" in end.text
     note = s.player.annals[-1].text
     assert "讀之以實" in note and "教其女書己名" in note and "賴糧商蘇氏之車而出" in note and "{" not in note
+    assert note.endswith("是歲西坪始雨。")  # 傳的那一章不截斷（annals.STORY_TEXT_MAX）
     # 餘波：三天後在汝南集市；不在那裡不跳
     s.player.story_cards = []
     _go(game, WILDS, 3)

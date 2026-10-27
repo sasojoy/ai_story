@@ -155,3 +155,22 @@ def test_a_crippled_bot_that_cannot_pay_stops_fighting(real):
     assert not bot_policy._crippled(game)  # 湊得出錢：先去醫館
     game.state.player.member.injury, game.state.player.stats["silver"] = 0.2 * cap, 0
     assert not bot_policy._crippled(game)  # 傷還不重：照打
+
+
+def test_zhongjing_owes_takes_thirty_percent_off_and_the_doctor_mentions_it_once(real):
+    """《符水與湯藥》湯藥那條路的「仲景欠你一次」（旗標 zhongjing_owes）：這一季療傷照 Config.zhongjing_clinic_share 收，
+    第一次用到時大夫多一句，之後不再說。"""
+    game = _game(real, injury=40.0, silver=100)
+    s = game.state
+    member = s.player.member
+    base = team._price_here(s, real)
+    full = team.heal_cost(real, member, s)
+    s.player.flags.add(clinic.ZHONGJING)
+    assert team._price_here(s, real) == pytest.approx(base * real.config.zhongjing_clinic_share)
+    owed = team.heal_cost(real, member, s)
+    assert owed < full
+    msgs = game.heal()
+    assert s.player.stats["silver"] == 100 - owed
+    assert any("南陽張家二郎的信" in m for m in msgs)
+    member.injury = 40.0
+    assert not any("南陽張家二郎的信" in m for m in game.heal())

@@ -644,5 +644,77 @@
     "reward_xinde": 16,
     "exp": 18,
     "desc": "朱將軍麾下打頭陣的一隊步卒，夜裡衝營。"
+  },
+  {
+    "id": "wolong_yellow",
+    "name": "黃巾散兵",
+    "difficulty": 12,
+    "attribute": "剛",
+    "reward_xinde": 6,
+    "exp": 8,
+    "desc": "老耿帶的二十幾個人，鋤頭、斧頭、削尖的竹竿，穿得跟逃難的人一樣。"
+  },
+  {
+    "id": "wolong_houqi",
+    "name": "侯七的人",
+    "difficulty": 20,
+    "attribute": "快",
+    "reward_xinde": 12,
+    "exp": 14,
+    "desc": "侯七從洛陽帶來的三個隨從，衣服跟他一樣乾淨。"
+  },
+  {
+    "id": "fuzhi_han",
+    "name": "韓老七",
+    "difficulty": 10,
+    "attribute": "剛",
+    "reward_xinde": 5,
+    "exp": 8,
+    "desc": "南陽官道邊打獵出身的黑臉漢子，帶著四個拿竹竿鋤頭的飢民；右手少了兩根指頭，柴刀握不太緊。"
+  },
+  {
+    "id": "fuzhi_gate",
+    "name": "新野門卒",
+    "difficulty": 14,
+    "attribute": "快",
+    "reward_xinde": 7,
+    "exp": 10,
+    "desc": "新野縣城門底下看門的兩個兵卒。"
+  },
+  {
+    "id": "fuzhi_jia",
+    "name": "賈亭長",
+    "difficulty": 22,
+    "attribute": "剛",
+    "reward_xinde": 12,
+    "exp": 15,
+    "desc": "新野縣穿皂衣的亭長，帶著四個打火把的兵，奉告示來柳灣收捕符水道人。"
+  },
+  {
+    "id": "wangyue_bare",
+    "name": "空手王越",
+    "difficulty": 24,
+    "attribute": "快",
+    "reward_xinde": 12,
+    "exp": 14,
+    "desc": "北邙山墳堆間空著手的劍客，手裡沒有劍，指尖在霧裡劃得開一道。"
+  },
+  {
+    "id": "wangyue_sword",
+    "name": "王越",
+    "difficulty": 40,
+    "attribute": "快",
+    "reward_xinde": 20,
+    "exp": 24,
+    "desc": "銅駝街後那扇門前，劍已經拔出來的王越。"
+  },
+  {
+    "id": "wangyue_sword_seen",
+    "name": "王越",
+    "difficulty": 36,
+    "attribute": "快",
+    "reward_xinde": 20,
+    "exp": 24,
+    "desc": "銅駝街後那扇門前，劍已經拔出來的王越。你見過他的劍。"
   }
 ]
