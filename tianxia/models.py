@@ -3995,6 +3995,8 @@ class Config(_Strict):
     heal_neili_per_silver: float = 2.0  # 療傷：每幾點內傷算一兩銀子（氣血設計 §二：預設每 2 點 1 兩，無條件進位）
     # 療傷只在醫館（帶「醫館」標籤的地點，tianxia/clinic.py；企劃者 2026-10-12「不能隨地療傷」）。關著時哪裡都能療傷（測試內容關著）
     heal_at_clinic: bool = True
+    # 《符水與湯藥》湯藥那條路的「仲景欠你一次」（旗標 zhongjing_owes，這一季有效）：醫館療傷照這個倍數收（tianxia/clinic.py）
+    zhongjing_clinic_share: float = Field(default=0.7, gt=0, le=1)
     # 鐵匠鋪、馬市、懸賞榜的獨立介面（店面獨立介面設計 6.4；第一批：鐵匠鋪）：關著時 main_view 不給 shop，網頁照現在把店裡的選項
     # 畫成一串按鈕（現在的選單本來就留著，所以不用退版）。主機在 config.json 寫 false、兩個程式重開
     shop_screens: bool = True

@@ -1,7 +1,8 @@
 """醫館（企劃者 2026-10-12「療傷我認為不能隨地療傷，應該去城鎮有醫館的地方讓玩家不能無腦打怪升級」）：
 療傷（清內傷、氣血回滿，team.heal）只在帶「醫館」標籤的地點做得了。修練頁的療傷鈕、江湖頁「此地還能做」的療傷、
 Game.heal 都問這裡；離開醫館時寫最近的一家在哪。氣血隨時間回、打坐、閉關、吸取與回春都只回到「上限－內傷」，內傷只有醫館治得好。
-Config.heal_at_clinic 關著時哪裡都能療傷（測試內容關著）。只 import models、state、atlas。"""
+Config.heal_at_clinic 關著時哪裡都能療傷（測試內容關著）。只 import models、state、atlas。
+《符水與湯藥》湯藥那條路收在 zhongjing_owes（仲景欠你一次）：這一季療傷打 Config.zhongjing_clinic_share 折，第一次用到時大夫多一句。"""
 
 from __future__ import annotations
 
@@ -51,3 +52,23 @@ def problem(state: GameState, content: Content) -> str | None:
     if route is None:
         return f"{NONE_HERE}。"
     return f"{NONE_HERE}，最近的在{content.locations[route.path[-1]].name}。"
+
+
+ZHONGJING = "zhongjing_owes"  # 《符水與湯藥》湯藥的結局立的旗標（content/storylines.json 的 fuzhi）；flags 換季就清
+ZHONGJING_TOLD = "zhongjing_owes_told"  # 大夫那一句說過了
+ZHONGJING_LINE = ("醫館的大夫多說了一句：「南陽張家二郎的信，我看過。他說你來了就少收一點。"
+                  "他還說，你要是先冷後熱、不出汗，別自己硬撐。」")
+
+
+def zhongjing_factor(state: GameState, content: Content) -> float:
+    """仲景欠你一次：療傷價錢的倍數（team._price_here 乘上它）；沒有旗標是 1。"""
+    return content.config.zhongjing_clinic_share if ZHONGJING in state.player.flags else 1.0
+
+
+def zhongjing_note(state: GameState) -> list[str]:
+    """第一次靠仲景的名字少付錢時大夫多說的那一句（一季一次）；沒有旗標或說過了是空的。"""
+    flags = state.player.flags
+    if ZHONGJING not in flags or ZHONGJING_TOLD in flags:
+        return []
+    flags.add(ZHONGJING_TOLD)
+    return [ZHONGJING_LINE]

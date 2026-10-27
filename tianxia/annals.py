@@ -52,6 +52,8 @@ XINGSHI_LINE = "名號上了〈天下形勢〉第 {n} 篇：「{said}」"  # 待
 XINGSHI_SAID_MAX = 50
 UNHEARD = frozenset({SEAL, MARK, STANCE})  # 酒肆打聽不到的種類
 TEXT_MAX, QUOTE_MAX, REPLY_MAX = 80, 40, 80
+# 長篇奇事收在哪裡寫的那一段底稿（例：《符水與湯藥》的開頭＋中段兩句＋結尾，兩百字上下）照這個長度截，其他種類照 TEXT_MAX
+STORY_TEXT_MAX = 260
 MASTERED = "絕學"  # martial_arts.QUALITIES 的最後一品
 
 
@@ -105,7 +107,7 @@ def entry(
         place = loc.name if loc is not None and p.journey is None else ""
     return AnnalEntry(
         kind=kind, time=when, when=stamp_text(when, content, w if season else None), place=place, figure=figure,
-        text=clip(text, TEXT_MAX), quote=clip(quote, QUOTE_MAX), reply=clip(reply, REPLY_MAX), weight=max(1, min(5, weight)),
+        text=clip(text, STORY_TEXT_MAX if kind == STORY else TEXT_MAX), quote=clip(quote, QUOTE_MAX), reply=clip(reply, REPLY_MAX), weight=max(1, min(5, weight)),
     )
 
 
