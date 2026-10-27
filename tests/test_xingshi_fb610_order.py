@@ -7,7 +7,7 @@ xingshi.facts 把沒有結果的 day_log（戰書）一律當「下一仗打哪�
 順帶（同一輪 QA）：管理者白天按「現在就開一篇」時，正在打的那一場不寫「一仗打到入夜」（fighting_day）。
 
 輿圖第三版第 5 批：原本還有一條「舊季（第二批投票那一版）的眾議、主將定奪照舊是下一仗」，那兩種 day_log 收掉了（領地爭奪從沒合進
-develop／main，沒有那一版的存檔），那一條拿掉；舊資料讀得進來、略過不寫，改在 tests/test_conquest_seam.py 守。"""
+develop／main，沒有那一版的存檔），那一條拿掉；舊資料讀得進來、略過不寫，改在 tests/test_conquest_rules.py 守。"""
 from __future__ import annotations
 
 import calendar as pycal

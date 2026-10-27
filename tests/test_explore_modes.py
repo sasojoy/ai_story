@@ -16,7 +16,7 @@ from tianxia.state import Bounty
 
 
 def _game(faction=None, at="yingshui", **cfg):
-    c = no_conquest(real_content("week7"))  # 領地加成（自家領地找素材多一份）另測（tests/test_conquest_perks.py）
+    c = no_conquest(real_content("week7"))  # 領地加成（自家領地找素材多一份）另測（tests/test_conquest_rules.py）
     classic_explore(c)  # 探索三選一本身（減法季探索一顆開著時選單上沒有這幾顆，tests/test_explore_one.py）
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
