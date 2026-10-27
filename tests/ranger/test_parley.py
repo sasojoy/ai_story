@@ -124,6 +124,62 @@ def test_asks_per_day_are_capped(talking):
     assert not any("他答應了。）" in m for m in msgs)
 
 
+# ── 贈物：話跟真的給的要一樣（2026-10-27 正式站：求天池露，他「取出一小瓶晶瑩剔透的液體」，實際給精鐵砂）──
+
+
+def _gift(game):
+    return parley.gift_of(game.state, game.content, "mate")
+
+
+def test_the_prompt_names_the_one_thing_he_can_give(talking):
+    gift = parley.gift_text(_gift(talking))
+    prompt = talking._parley_prompt("mate")
+    assert f"手頭只給得出{gift}" in prompt and f"把手頭的{gift}給玩家" in prompt
+
+
+def test_a_gift_he_cannot_give_is_not_promised(talking):
+    """玩家指名要隕鐵膽，模型寫他答應了、拿出來了，話裡卻沒說他真的給的那樣：換固定句，給的照引擎定的。"""
+    gift = _gift(talking)
+    msgs = _say(talking, _ask("gift", narrative="他從懷中取出一小塊沉甸甸的東西：「此物便歸你所有。」"), text="可以把隕鐵膽給我嗎")
+    assert "他從懷中取出一小塊沉甸甸的東西：「此物便歸你所有。」" not in msgs
+    assert parley.GIFT_SWAP.format(name="韓鐵", wanted="隕鐵膽", gift=parley.gift_text(gift)) in msgs
+    assert parley.GIFT_LINE.format(name="韓鐵", gift=parley.gift_text(gift)) in msgs
+    if gift.material:
+        assert talking.state.player.materials.get(gift.material) == 1 and "gang_3" not in talking.state.player.materials
+
+
+def test_a_gift_line_naming_another_item_is_replaced(talking):
+    gift = _gift(talking)
+    other = next(m.name for m in talking.content.materials.values() if m.name != gift.name)
+    msgs = _say(talking, _ask("gift", narrative=f"他遞來一份{other}。"), text="送我點東西吧")
+    assert f"他遞來一份{other}。" not in msgs
+    assert parley.GIFT_PLAIN.format(name="韓鐵", gift=parley.gift_text(gift)) in msgs
+
+
+def test_a_gift_line_that_says_no_to_the_wanted_item_and_names_the_real_one_stays(talking):
+    gift = _gift(talking)
+    mine = gift.name if gift.material else "二十兩銀子"
+    line = f"他搖頭：「隕鐵膽我沒有，這{mine}你拿去。」"
+    msgs = _say(talking, _ask("gift", narrative=line), text="給我隕鐵膽")
+    assert line in msgs
+
+
+def test_gift_terms_that_promise_the_wanted_item_are_replaced(talking):
+    gift = _gift(talking)
+    msgs = _say(talking, _ask("gift", willing=0, condition="silver", terms="拿二十兩來，隕鐵膽就是你的。"), text="給我隕鐵膽", dice=100)
+    want = parley.GIFT_SWAP_TERMS.format(name="韓鐵", wanted="隕鐵膽", gift=parley.gift_text(gift), cond="交 20 兩銀子")
+    assert want in msgs and talking.state.player.parley_terms["mate"].text == want
+
+
+def test_gift_slip_ignores_names_inside_longer_names(content):
+    gift = parley.Gift("gang_1", "精鐵砂")
+    assert parley.gift_slip(content, gift, "送我點東西", "他給了你一把精鐵砂。") is None
+    assert parley.gift_slip(content, gift, "送我點東西", "他給了你一包東西。") is None  # 沒指名、也沒寫別的：照引擎給
+    assert parley.gift_slip(content, gift, "給我驚羽", "他把東西塞給你。") == "驚羽"
+    assert parley.gift_slip(content, gift, "給我驚羽", "他說驚羽沒有，給你精鐵砂。") is None
+    assert parley.gift_slip(content, gift, "送我點東西", "他給了你玄鋼骨和精鐵砂。") == ""
+
+
 # ── 開條件 ────────────
 
 

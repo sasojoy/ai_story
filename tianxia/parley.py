@@ -40,7 +40,13 @@ OWED_DONE = "{name}記得答應過你的事。"
 OWED_LATER = "{name}點了點頭：「答應你的事我記著，只是此刻辦不到，改日吧。」"
 COMMISSION_OWED = "下回見到{name}，他會兌現答應你的事。"
 SPAR_LINE = "{name}陪你拆了幾招，隨手點出你的破綻。"
-GIFT_LINE = "{name}送了你一點東西。"
+GIFT_LINE = "{name}送了你{gift}。"
+# 贈物的話跟真的給的不一樣時（模型寫他給了別的東西、或答應了玩家指名要的東西）換上的固定句（FB 2026-10-27：求天池露、文字答應、實際給精鐵砂）
+GIFT_SWAP = "{name}搖了搖頭：「{wanted}我拿不出來。手頭只有{gift}，你先拿去。」"
+GIFT_PLAIN = "{name}從行囊裡取出{gift}，遞給了你。"
+GIFT_SWAP_TERMS = "{name}沉吟片刻：「{wanted}我拿不出來，手頭只有{gift}。你先替我{cond}，這個就給你。」"
+GIFT_SWAP_OWE = "{name}沉吟片刻：「{wanted}我拿不出來，手頭只有{gift}，先給你。回頭你替我{cond}。」"
+GIFT_WANTED = "那樣東西"
 INTEL_HEAD = "（{name}說起的事：{facts}。）"
 BACKING_LINE = "{name}答應今天在{region}陪你出陣一回：下一次在那一帶出陣，他的部曲與你並肩。"
 BACKED_LINE = "〔{name}的部曲與你並肩，這一仗威力 +{pct}%〕"
@@ -202,8 +208,69 @@ def ask_items(state: GameState, content: Content, cid: str, side: str | None, ca
     facts = intel_facts(state, content, cid)
     if facts:
         items.append(Item("intel", "說說敵情", 1, "把這些事告訴玩家：" + "；".join(facts)))
-    items.append(Item("gift", "贈點東西", 1, "從手頭給玩家一點素材或銀兩"))
+    items.append(Item("gift", "贈點東西", 1, f"把手頭的{gift_text(gift_of(state, content, cid))}給玩家（他只給得出這個，別的給不了）"))
     return [item for item in items if item.id not in record.refused]
+
+
+@dataclass(frozen=True)
+class Gift:
+    """贈物這一回他真的給得出的東西（引擎先定、寫進提示，模型照它寫）：material 是素材 id，沒有素材時給 silver 兩銀子。"""
+
+    material: str | None
+    name: str
+    count: int = 1
+    silver: int = 0
+
+
+def gift_of(state: GameState, content: Content, cid: str) -> Gift:
+    """他此刻給得出的那一樣：他所在地點產的一階素材挑一個（同一天同一個人挑到的一樣，提示裡寫的跟真的給的對得上），
+    那裡不產素材就給 gift_silver 兩銀子。"""
+    where = figure_life.where(state, content, cid) or state.player.location
+    kinds = {content.materials[m].attribute for m in content.locations[where].materials if m in content.materials} if where in content.locations else set()
+    pool = [m for m in materials.by_tier(content, 1) if m.attribute in kinds]
+    if pool:
+        pick = random.Random(f"贈物|{state.player.name}|{cid}|{game_day(content, state.world)}").choice(pool)
+        return Gift(pick.id, pick.name)
+    return Gift(None, "銀兩", 0, content.config.parley.gift_silver)
+
+
+def gift_text(gift: Gift) -> str:
+    return f"{gift.name} ×{gift.count}" if gift.material else f"{gift.silver} 兩銀子"
+
+
+def _item_names(content: Content) -> set[str]:
+    """他的話裡會被當成「給出去的東西」的名字：素材與四階名器。"""
+    return {m.name for m in content.materials.values()} | {n.name for n in content.tier4_named.values()}
+
+
+def _named(names: set[str], text: str) -> list[str]:
+    """text 裡提到的東西名字；被更長的名字包住的不算（「鐵砂」在「精鐵砂」裡）。"""
+    found = [n for n in names if n and n in text]
+    return sorted((n for n in found if not any(n != m and n in m for m in found)), key=text.index)
+
+
+def gift_slip(content: Content, gift: Gift, said: str, text: str) -> str | None:
+    """C 段重驗贈物那一版回話：對不上就回玩家指名要的東西名（沒指名回空字串），對得上回 None。
+    對不上是：話裡提到他給的以外、玩家也沒提的東西；或玩家指名要了別的（或話裡出現別的），話裡卻沒說出他真的給的那樣
+    （那就是把玩家要的答應下來了，例：求天池露，他「取出一小瓶晶瑩剔透的液體」）。"""
+    names = _item_names(content)
+    mine = gift.name if gift.material else "銀"
+    wanted = [n for n in _named(names, said) if n != gift.name]
+    others = [n for n in _named(names, text) if n != gift.name]
+    if [n for n in others if n not in wanted] or ((wanted or others) and mine not in text):
+        return wanted[0] if wanted else ""
+    return None
+
+
+def gift_fix(content: Content, cid: str, gift: Gift, wanted: str, kind: str, cond: str = "") -> str:
+    """對不上時換上的那一句（kind 同 Decision.kind）。"""
+    name, text = _name(content, cid), gift_text(gift)
+    w = wanted or GIFT_WANTED
+    if kind == "terms":
+        return GIFT_SWAP_TERMS.format(name=name, wanted=w, gift=text, cond=cond)
+    if kind == "owe":
+        return GIFT_SWAP_OWE.format(name=name, wanted=w, gift=text, cond=cond)
+    return GIFT_SWAP.format(name=name, wanted=w, gift=text) if wanted else GIFT_PLAIN.format(name=name, gift=text)
 
 
 def _region_name(content: Content, region: str | None) -> str:
@@ -316,8 +383,9 @@ PLAN_FIELDS = ("willing", "narrative_no")
 PLEA_FIELDS = ("want", "reward")
 
 
-def prompt_block(content: Content, cid: str, asks: list[Item], conditions: list[Item], affinity: int, hostile: bool) -> str:
-    """接在「自己說」那一輪 user 訊息後面的一段：兩份清單、怎麼挑、多填哪幾個欄位。情誼只給一個詞，不給數字。"""
+def prompt_block(content: Content, cid: str, asks: list[Item], conditions: list[Item], affinity: int, hostile: bool, gift: str = "") -> str:
+    """接在「自己說」那一輪 user 訊息後面的一段：兩份清單、怎麼挑、多填哪幾個欄位。情誼只給一個詞，不給數字。
+    gift 是清單上有贈物時他真的給得出的那一樣（gift_text），模型照它寫，不准答應給玩家指名的別樣東西。"""
     name = _name(content, cid)
     word, _ = band(content, affinity)
     ask_lines = "\n".join(f"- {a.id}：{a.detail}（份量 {a.weight}）" for a in asks) or "（此刻沒有）"
@@ -332,7 +400,10 @@ def prompt_block(content: Content, cid: str, asks: list[Item], conditions: list[
         f"【{name}此刻做得到的事】\n{ask_lines}\n"
         f"【{name}可以開的條件】\n{cond_lines}\n"
         f"【你們的情誼】{word}{side}。\n"
-        f"willing 填 0～100：照{name}的性格、此刻的處境與心事、你們的情誼、玩家說話的方式，他「不要任何條件就答應」的意願。"
+        + (f"贈物：{name}手頭只給得出{gift}。玩家指名要別的東西（某種藥、素材、兵器、寶物）時，ask 照樣填 gift，"
+           f"但回話裡他要給（或答應之後給）的只能是{gift}，要說出這個名字；玩家指名的那樣要寫成他給不了，不准寫成他答應給或拿出來，也不准提到他給了別的東西。\n"
+           if gift else "")
+        + f"willing 填 0～100：照{name}的性格、此刻的處境與心事、你們的情誼、玩家說話的方式，他「不要任何條件就答應」的意願。"
         f"condition 填上面「{name}可以開的條件」的一個 id，或空字串：他想先要玩家做點什麼才肯答應，就開條件。份量大的事、情誼淺的人，多半要開條件。"
         f"condition 只能是條件清單上的 id 或空字串，不能填 \"{REFUSE}\"（婉拒是系統照 willing 擲骰決定的）。\n"
         "narrative 寫他答應時的反應；narrative_terms 寫他開條件時說的話（要說出條件）；narrative_no 寫他婉拒時的反應。"
