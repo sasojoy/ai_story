@@ -2136,12 +2136,21 @@ class TavernTuning(_Strict):
     offline_hours: float = Field(default=24.0, ge=0)  # 現實多久沒上線算「近來沒人見過他」
     # 買殺手（設計第六節）
     hit_prices: list[int] = Field(default_factory=lambda: [20, 40, 60], min_length=1)  # 三檔殺手
-    hit_power: list[float] = Field(default_factory=lambda: [0.85, 1.0, 1.15], min_length=1)  # 殺手威力＝對方本人威力 × 這個
+    # 殺手威力＝對方本人威力 × 這個（企劃者 2026-10-27 酒肆殺手優化：以前 0.85／1.0／1.15 幾乎殺不成，提高到真的會得手）
+    hit_power: list[float] = Field(default_factory=lambda: [1.3, 1.5, 1.7], min_length=1)
     hit_hours: float = Field(default=6.0, gt=0)  # 單子有效幾個現實小時
     hit_pair_hours: float = Field(default=24.0, ge=0)  # 同一對人多久只能雇一次（現實小時）
     hit_silver_share: float = Field(default=0.10, ge=0, le=1)  # 殺手贏：對方失幾成銀兩
     hit_silver_cap: int = Field(default=60, ge=0)
-    hit_hp_loss: float = Field(default=0.15, ge=0, le=1)  # 殺手贏：扣氣血上限幾成（其中 injury_share 變內傷）
+    # 殺手贏：對方氣血只剩 1（企劃者 2026-10-27「上線回來時氣血只剩 1 點，強迫去醫館」），之後 hit_shield_hours 個現實小時殺手找不上他
+    hit_shield_hours: float = Field(default=6.0, ge=0)
+    # 下線也找得到：同步時離上一次同步超過 hit_offline_minutes 分鐘（現實），照他下線那一刻站的地方（城外、不在路上）擲一次
+    hit_offline_minutes: float = Field(default=10.0, ge=0)
+    # 同一個雇主找同一個人，每失手一次（被打退或不分高下），下一張單價錢 +hit_fail_price_step 成、殺手威力 +hit_fail_power_step，
+    # 最多疊 hit_fail_max 次；得手歸零，換季自然歸零（單子照季存）
+    hit_fail_price_step: float = Field(default=0.5, ge=0)
+    hit_fail_power_step: float = Field(default=0.1, ge=0)
+    hit_fail_max: int = Field(default=3, ge=0)
     hit_evil: int = Field(default=3, ge=0)  # 雇主得的惡名
     hit_bounty_share: float = Field(default=0.25, ge=0, le=1)  # 對方打贏：搜出雇金的幾成
     hit_win_fame: int = Field(default=1, ge=0)

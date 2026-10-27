@@ -398,6 +398,7 @@ class TavernHit(BaseModel):
     done: bool = False  # 打過了（或作廢）
     outcome: str = ""  # 殺手贏／對方贏／平手／過期
     refunded: bool = False  # 過期退款已經記給雇主了
+    streak: int = 0  # 掛單那一刻，這個雇主找這個人連著失手了幾次（Config.tavern.hit_fail_max 為止；價錢與威力照它加）
 
 
 class CrowdSide(BaseModel):
@@ -796,6 +797,7 @@ class PlayerState(BaseModel):
     hidden_until: float = 0.0  # 藏行跡到幾時（世界秒）
     tavern_watches: list[TavernWatch] = Field(default_factory=list)  # 託酒家留意的人（最多 Config.tavern.watch_keep 個）
     tavern_guard_until: float = 0.0  # 雇的保鏢跟到幾時（現實秒）
+    tavern_shield_until: float = 0.0  # 剛被殺手得手：到幾時（現實秒）殺手找不上（Config.tavern.hit_shield_hours）
     guarded_until_real: float = 0.0  # 雇的保鏢跟到幾時（現實秒）
     xinde_cultivations: int = 0  # 這一季花心得修練了幾次（以心得修練拿掉了，欄位留著讓舊存檔讀得進來）；角色每季重來
     legend_bought: int = 0  # 10-18～10-21 用心得換了幾枚破境丹；換丹拿掉了（Joy 2026-10-21），留著讓舊存檔讀得進來，不再用

@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 from . import allied, arena, atlas, battle_instance, bot, bounties, conquest, cultivation, duel, epiphany, explore_modes, forge_secrets, invites, leaderboard, library, mingtie, naming, orders, precise, rules, sensing, server_bots, social, sortie, stances, team
 from . import sortie_duel  # 出陣約戰（減法季批 3b）
+from . import tavern as tavern_rules  # 酒肆殺手：失手加價
 from .bot import allocate_points, can_practise, wants_heal
 from .engine import FREE_TEXT_OPTION, Game, Option
 from .models import MOVES, Content, Effect, SkillDef
@@ -404,8 +405,8 @@ def _arena(game: Game, rng: random.Random) -> list[str] | None:
 
 # 酒肆（tianxia/tavern.py）：人在有酒肆的城鎮、手上銀兩比這一下的價錢多 TAVERN_RESERVE 時，每一輪 TAVERN_CHANCE 的機會進去問一件事、
 # 問完出門。真人會打聽人，假人也要會：不然「有人打聽你」的風聲只會來自真人，看得出誰是假人。問什麼照 TAVERN_ASKS 的權重擲；
-# 打聽人挑在座的客人、問過的名號或這一區的大勢人物，打聽素材挑一階、二階的；偶爾對查到過、有仇的人雇最便宜的那一檔殺手
-# （「有人出錢買你」不能只來自真人）。不寫題壁、不請酒、不藏行跡、不反查。
+# 打聽人挑在座的客人、問過的名號或這一區的大勢人物，打聽素材挑一階、二階的；偶爾對查到過的人雇最便宜的那一檔殺手
+# （「有人出錢買你」不能只來自真人；同陣營也雇，跟真人一樣不限，企劃者 2026-10-27）；失手過的照加價後的價錢量銀兩。不寫題壁、不請酒、不藏行跡、不反查。
 TAVERN_CHANCE = 0.03
 TAVERN_RESERVE = 30
 TAVERN_ASKS = (("news", 5), ("seek", 3), ("material", 2), ("ties", 1), ("hit", 0.5))
@@ -437,7 +438,10 @@ def _tavern(game: Game, rng: random.Random) -> list[str] | None:
         if not target:
             op = "news"
     elif op == "hit":
-        foes = [n for n in view["known"] if game._tavern_hit_problem(n, 0)[0] is None]
+        purse = s.player.stats.get("silver", 0) - TAVERN_RESERVE
+        foes = [n for n in view["known"] if game._tavern_hit_problem(n, 0)[0] is None
+                and game._tavern_price(tavern_rules.hit_price_base(game.content, 0, tavern_rules.hit_streak(
+                    s.world, s.player.name, n, t.hit_fail_max))) <= purse]
         if foes:
             msgs += game.tavern_do("hit", rng.choice(foes), "0")
             if s.player.picking_tavern:

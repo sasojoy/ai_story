@@ -3339,12 +3339,13 @@
     const tiers = h.tiers.map((t) => `<button type="button" class="tav-tier${t.tier === tier ? " on" : ""}" data-act="tav-tier" data-tier="${t.tier}"><b>${esc(t.name)}</b><small>${t.price | 0} 兩</small></button>`).join("");
     const names = shop.known.slice(0, 8).map((n) => `<button class="tav-chip" data-act="tav-hit-name" data-name="${esc(n)}">${esc(n)}</button>`).join("");
     const mine = h.mine.length ? `<ul class="tav-whispers">${h.mine.map((m) => `<li class="named">${esc(m)}</li>`).join("")}</ul>` : "";
+    const streaks = (h.streaks || []).length ? `<ul class="tav-whispers">${h.streaks.map((m) => `<li>${esc(m)}</li>`).join("")}</ul>` : "";
     const hire = h.ended ? "" : `<h4 class="tav-h">買殺手<small>找上門的事，不說是誰</small></h4>
-      <p class="shop-cap">報一個查到過的名號。殺手只在城外出手；找不到人，期限到了退一半。</p>
+      <p class="shop-cap">報一個查到過的名號，同陣營也接。殺手只在城外出手（下線時人在城外也一樣）；得手了對方氣血只剩 1。失手一次，下一張找同一人的單貴一半、殺手更狠，最多三次。找不到人，期限到了退一半。</p>
       <div class="tav-tiers">${tiers}</div>
       <form class="tav-form" id="tav-hit"><input class="input" name="target" data-keep="hit" maxlength="20" placeholder="名號" autocomplete="off"><button class="btn primary small" type="submit">雇</button></form>
       <label class="tav-hush"><input type="checkbox" name="hush" form="tav-hit"${S.tavHush ? " checked" : ""}> 加付封口錢 ${h.hush | 0} 兩（失手、被反查時不容易供出你）</label>
-      ${names ? `<div class="tav-known"><span class="gl">查到過的</span>${names}</div>` : ""}${mine}`;
+      ${names ? `<div class="tav-known"><span class="gl">查到過的</span>${names}</div>` : ""}${streaks}${mine}`;
     return `<h4 class="tav-h">風聲<small>有人在打聽你</small></h4>${heard}
       <div class="tav-row">${tavBtn("trace", "反查是誰", shop.prices.trace, "")}${tavBtn("hide", "藏起行跡", shop.prices.hide, shop.problems.hide)}${tavBtn("guard", "雇保鏢", h.guard, h.guard_problem)}</div>
       ${shop.hidden ? `<p class="shop-cap">${esc(shop.hidden)}</p>` : '<p class="shop-cap">藏行跡：打點酒家與跑堂，接下來一天別人難打聽到你。保鏢：殺手找上時有人替你擋一擋。</p>'}

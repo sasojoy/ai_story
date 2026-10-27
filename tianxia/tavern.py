@@ -798,7 +798,7 @@ WATCH_ACTIVE = "託酒家留意 {name}，到 {until}"
 WATCH_AT = 3  # 打聽度到這裡（確切地點）才捎信
 HIT_LABEL = "雇殺手"
 HIT_NEED_KNOWN = "酒家搖頭：「這人在哪都還沒打聽清楚，殺手不接。」"
-HIT_NO_FEUD = "酒家壓低聲音：「你跟{name}沒仇沒怨（不同陣營，或揭了{him}的通緝），這種單子沒人接。」"
+HIT_SELF = "酒家瞪了你一眼：「客官要找的是自己？」"
 HIT_ENDED = "天下暫歇，殺手也歇著。"
 HIT_NEWBIE_ME = "你初入江湖，還在新手期，先別結這種仇。"
 HIT_NEWBIE_THEM = "{name}初入江湖，殺手不接這種單。"
@@ -808,13 +808,15 @@ HIT_BAD_TIER = "沒有這一檔殺手"
 HIT_PLACED = "你把銀子推過去：「{name}。」酒家收了錢，朝角落裡的{tier}點了點頭。單子到{until}為止。"
 HIT_HUSHED = "你另外塞了一包封口錢：就算失手，也不容易把你供出來。"
 HIT_REFUND = "你雇去找{name}的{tier}空等到期限，沒找到人，退回 {n} 兩。"
-HIT_WON_CLIENT = "你雇的{tier}得手了：{name}吃了虧，丟了銀兩。"
+HIT_WON_CLIENT = "你雇的{tier}得手了：{name}身受重傷，只剩一口氣，還丟了銀兩。"
 HIT_LOST_CLIENT = "你雇的{tier}失了手，被{name}打退。"
 HIT_LOST_NAMED = "聽說殺手被問出了是誰雇的。"
 HIT_DRAW_CLIENT = "你雇的{tier}跟{name}交了手，不分高下，自己先跑了。"
 HIT_EVIL = "惡名 +{n}"
 HIT_STRUCK = "遭殺手找上"
-HIT_STORY_LOST = "一個{tier}從暗處撲出來，你不是對手，丟下銀兩脫身。"
+HIT_STORY_LOST = "一個{tier}從暗處撲出來，你不是對手，身受重傷、丟下銀兩，只剩一口氣逃脫。快去醫館。"
+HIT_HP_LEFT = "氣血只剩 1"
+HIT_AWAY = "你下線歇在{place}的時候，殺手摸上門來。"
 HIT_STORY_WON = "一個{tier}從暗處撲出來，被你打退了。你從他身上搜出 {n} 兩。"
 HIT_STORY_DRAW = "一個{tier}從暗處撲出來，鬥了一陣不分高下，他翻身遁走。"
 HIT_REVEALED = "那殺手吃不住打，供出是{who}雇的。"
@@ -825,6 +827,7 @@ GUARD_DONE = "你雇了兩個保鏢跟著，到{until}為止。殺手找上時�
 GUARD_ALREADY = "保鏢還跟著，到{until}為止"
 HUSH_LABEL = "加付封口"
 HIT_ACTIVE = "你雇去找{name}的{tier}，單子到{until}為止。"
+HIT_STREAK = "找{name}已經失手 {n} 次：這一張價錢多 {pct}%，殺手也更狠。"
 
 
 def hit_tier_name(tier: int) -> str:
@@ -846,6 +849,31 @@ def hit_reach(content: Content, place: str, other: GameState, wanted: set[str] |
 def find_chance(content: Content, reach: int) -> float:
     """殺手這一下找不找得到人：打聽度 5 以上必找到，每少一點少 hit_find_drop。"""
     return max(0.0, min(1.0, 1.0 - content.config.tavern.hit_find_drop * max(0, 5 - reach)))
+
+
+def hit_streak(world: WorldState, client: str, target: str, cap: int) -> int:
+    """這個雇主找這個人連著失手了幾次（被打退、不分高下）：得手歸零，過期不算也不歸零，最多 cap。單子照季存，換季自然歸零。"""
+    ck, tk = name_key(client), name_key(target)
+    n = 0
+    for h in sorted(world.tavern_hits, key=lambda h: h.id):
+        if not h.done or name_key(h.client) != ck or name_key(h.target) != tk:
+            continue
+        if h.outcome == "殺手贏":
+            n = 0
+        elif h.outcome.startswith("對方贏") or h.outcome == "平手":
+            n += 1
+    return min(n, cap)
+
+
+def hit_price_base(content: Content, tier: int, streak: int) -> int:
+    """這一檔、連著失手 streak 次時的底價（再過酒肆的物價，Game._tavern_charge）。"""
+    cfg = content.config.tavern
+    return round(cfg.hit_prices[tier] * (1 + cfg.hit_fail_price_step * streak))
+
+
+def hit_power_of(content: Content, tier: int, streak: int) -> float:
+    cfg = content.config.tavern
+    return cfg.hit_power[min(tier, len(cfg.hit_power) - 1)] + cfg.hit_fail_power_step * streak
 
 
 def active_hit(world: WorldState, target: str, now_real: float) -> TavernHit | None:
