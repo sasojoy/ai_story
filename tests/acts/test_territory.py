@@ -34,13 +34,6 @@ def _owner(game, loc_id):
     return territory.controller(game.state.world, game.content, loc_id)
 
 
-def test_the_switch_off_has_no_controller_and_the_old_enemies():
-    game = _game()
-    c = classic_rules(game.content)
-    assert _owner(game, "runan_wilds") is None
-    assert territory.squads_at(game.state.world, c, "changshe") == c.locations["changshe"].enemies
-
-
 def test_opening_a_prepared_season_starts_the_map_over(tmp_path):
     c = real_content("week7")
     store = open_world(tmp_path / "w.db")

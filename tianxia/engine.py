@@ -5586,7 +5586,7 @@ class Game:
         序章（新手引導計畫一）：只有這一步寫的對手（雪恥那一步才有斷眉），草廬自己沒有敵人。"""
         if prologue_rules.active(self.state, self.content):
             return prologue_rules.enemies(self.state, self.content)
-        if sortie.on(self.content):  # 出陣：只有攻才打，對手是 _sortie_foes；守、攪局、散人沒有對手
+        if sortie.on(self.content):  # 出陣：只有攻才打，對手是 _sortie_foes；守、散人沒有對手
             loc_mode = self._sortie_mode(loc)
             return self._sortie_foes(loc) if loc_mode == "attack" else []
         base = territory.squads_at(self.state.world, self.content, loc.id)  # 地盤易手：站的照控制方（關著時就是 loc.enemies）
@@ -5621,7 +5621,7 @@ class Game:
         return opts
 
     def _duty_option(self, name: str) -> Option:
-        """守勢行動的鈕。出陣開著時每用一次扣一次出陣次數（PM 2026-10-14：跟攻、守、攪局共用每日的次數），鈕上寫今天還能幾次、
+        """守勢行動的鈕。出陣開著時每用一次扣一次出陣次數（PM 2026-10-14：跟攻、守共用每日的次數），鈕上寫今天還能幾次、
         用完灰掉、寫跟出陣同一句；關著照舊。領地爭奪在這一季生效時，站在不是自家的區塊（別人的、沒佔下的中立地）灰掉寫原因，
         按下去不扣體力與次數、不推線、不記守城（裁決 24；choose 照選單驗，灰的按不下去）。"""
         c = self.content
@@ -9719,7 +9719,7 @@ class Game:
 
     def _drill_gains(self, squad: Squad, share: float | None = None, source: str = "hold", echo: bool = True) -> list[str]:
         """跟這一路一起操練拿的：對手心得與經驗的 share（預設 drill_reward_share；不給銀兩、素材）；經驗本人與帶著的同伴都拿（FB-002）。
-        操練（_drill）與出陣的守、攪局（_sortie_hold）、守勢行動（_duty）共用；一類一顆開著時守、攪局、守勢行動給全額（_hold_share）。
+        操練（_drill）與出陣的守（_sortie_hold）、守勢行動（_duty）共用；一類一顆開著時守、守勢行動給全額（_hold_share）。
         source（growth.exp_source）：這幾樣都不打仗（hold，PM 2026-10-25 第 5 件）；減法季自家營寨跟同袍比劃算仗（camp_spar）。
         echo：「心得 +N」那一行要不要也放進回傳的訊息。江湖紀錄的標籤本來就由草稿（_draft.changes）記一顆、訊息那一行在敘事裡收掉；
         出門一趟的比劃（_outing_fight）自己有「得：」那一行，兩邊都有就被 _outing_ledger 加成兩倍、後面還多一則單獨的訊息
@@ -10039,7 +10039,7 @@ class Game:
 
     def _sortie_option(self, loc: Location, cost: int, odds: bool) -> Option | None:
         """出陣的鈕（設計 2.2、2.3）：沒有出陣是 None；今天次數用完灰掉、寫什麼時候再來；攻照遊歷的寫法寫對手與勝算、必敗先問、
-        大場面等模型（_train_option）；守、攪局寫零風險。標籤一律「出陣・攻／守／攪局（體力 N・今日還能 M 次・…）」。
+        大場面等模型（_train_option）；守寫零風險。標籤一律「出陣・攻／守（體力 N・今日還能 M 次・…）」。
         約戰開著的季（減法季批 3b）換成 _duel_option。"""
         if self.duel_on():
             return self._duel_option(loc)
@@ -10268,7 +10268,7 @@ class Game:
         return [team.MAXED_XINDE.format(n=gained), f"心得 +{gained}"] if gained else []
 
     def _hold_share(self) -> float | None:
-        """守、攪局、守勢行動拿 _sortie_host 那一路的幾成：一類一顆開著是全額（正式季整合 2.6），關著照操練的三成（None）。"""
+        """守、守勢行動拿 _sortie_host 那一路的幾成：一類一顆開著是全額（正式季整合 2.6），關著照操練的三成（None）。"""
         return 1.0 if precise.on(self.content, self.state.world) else None
 
     # ── 出陣約戰（減法季批 3b；整合設計 4.3，計畫第四節 4.0 之二、之三）──────────────
@@ -11460,12 +11460,8 @@ class Game:
         if side is not None:  # 散人：照推，但不記貢獻、不進活躍名單
             faction = c.scenario.find_faction(side)
             goal = faction.goals.get(trend_id, 0) if faction is not None else 0
-            # 出陣的攪局（sortie.mode：陣營在這條線上沒有目標，只有豪強）把線往 50 拉，就是替豪強做事：照推的量記（PM 2026-10-14，
-            # 同攻守的帳：名目量，超過上限的部分照記兩成）
-            # 三陣營四勝利開著的季沒有攪局（設計 3.2：幫不到任何一本帳；_sortie_mode 也不給）
-            stir = source == "sortie" and not goal and not self._four_wins()
             # 捐軍備（source="donate"）的貢獻照捐的份量在 _donate 記，推力不另記（PM 2026-10-15）
-            if source != "donate" and (stir or (goal and (goal > 0) == (amount > 0))):  # 替自己陣營的目標方向推；逆著推、這條線沒有目標（攪局以外）都不記
+            if source != "donate" and goal and (goal > 0) == (amount > 0):  # 替自己陣營的目標方向推；逆著推、這條線沒有目標都不記
                 gained = push.contribution(abs(delta), pushed, moved, cfg.contrib_per_push, cfg.over_cap_contrib_ratio)
                 wins.credit(p, c, w, at.week, gained)
             w.active_pushers.setdefault(side, {})[p.name] = now
