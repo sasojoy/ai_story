@@ -1,68 +1,648 @@
 [
-  {"id": "dipi", "name": "流寇散兵", "difficulty": 8, "attribute": "剛", "reward_silver": 5, "reward_xinde": 8, "exp": 10},
-  {"id": "hetan_popi", "name": "河灘潑皮", "difficulty": 4, "attribute": "柔", "reward_silver": 3, "reward_xinde": 4, "exp": 5,
-   "desc": "在河灘上攔著流民收「過河錢」的幾個潑皮，手裡的竹篙比刀還趁手。"},
-  {"id": "touwang_zei", "name": "偷網賊", "difficulty": 5, "attribute": "快", "reward_silver": 2, "reward_xinde": 5, "exp": 6,
-   "desc": "趁漁家不在偷收漁網的毛賊，滑得像泥鰍，一見人就往水裡鑽。"},
-  {"id": "shanzei", "name": "黃巾散兵", "difficulty": 15, "attribute": "剛", "reward_silver": 10, "reward_xinde": 12, "exp": 15, "faction": "huang"},
-  {"id": "yelang", "name": "山匪", "difficulty": 15, "attribute": "快", "reward_xinde": 12, "exp": 15},
-  {"id": "heixiong", "name": "山寨悍匪", "difficulty": 30, "attribute": "剛", "reward_xinde": 20, "exp": 25},
-  {"id": "louluo", "name": "黃巾嘍囉", "difficulty": 15, "attribute": "剛", "reward_silver": 8, "reward_xinde": 12, "exp": 15, "faction": "huang"},
-  {"id": "shuikou", "name": "黃巾別部", "difficulty": 35, "attribute": "剛", "reward_silver": 15, "reward_xinde": 20, "exp": 25, "faction": "huang"},
-  {"id": "toumu", "name": "黃巾渠帥", "difficulty": 70, "attribute": "快", "reward_silver": 40, "reward_xinde": 35, "exp": 40, "faction": "huang"},
-  {"id": "fanjianglong", "name": "波才", "difficulty": 150, "attribute": "剛", "reward_xinde": 80, "exp": 80, "faction": "huang",
-   "drops": [{"material": "gang_2"}, {"material": "gang_3", "chance": 0.35}]},
-  {"id": "guishou", "name": "董卓帳下斥候", "difficulty": 60, "attribute": "虛", "reward_xinde": 40, "exp": 40, "faction": "guan"},
-  {"id": "shoumu", "name": "南華觀看守者", "difficulty": 120, "attribute": "柔", "reward_xinde": 100, "exp": 80,
-   "drops": [{"material": "rou_2"}, {"material": "rou_3", "chance": 0.3}]},
-  {"id": "xuantie_dizi", "name": "曹家護院", "difficulty": 25, "attribute": "剛", "reward_xinde": 20, "exp": 20, "faction": "haoqiang"},
-  {"id": "guan_patrol", "name": "官軍巡騎", "difficulty": 20, "attribute": "快", "reward_silver": 8, "reward_xinde": 14, "exp": 18, "faction": "guan"},
-  {"id": "jun_bing", "name": "郡國兵", "difficulty": 35, "attribute": "剛", "reward_silver": 15, "reward_xinde": 20, "exp": 25, "faction": "guan"},
-  {"id": "beijun_wuzu", "name": "北軍五校", "difficulty": 55, "attribute": "實", "reward_silver": 25, "reward_xinde": 30, "exp": 35, "faction": "guan"},
-  {"id": "liangzhou_cavalry", "name": "涼州鐵騎", "difficulty": 65, "attribute": "快", "reward_silver": 30, "reward_xinde": 35, "exp": 40, "faction": "guan"},
-  {"id": "taiping_lishi", "name": "太平道力士", "difficulty": 40, "attribute": "剛", "reward_silver": 15, "reward_xinde": 22, "exp": 28, "faction": "huang"},
-  {"id": "huangjin_sishi", "name": "黃巾死士", "difficulty": 60, "attribute": "剛", "reward_silver": 25, "reward_xinde": 32, "exp": 38, "faction": "huang"},
-  {"id": "wubao_buqu", "name": "塢堡部曲", "difficulty": 30, "attribute": "實", "reward_silver": 12, "reward_xinde": 18, "exp": 22, "faction": "haoqiang"},
-  {"id": "yiyong", "name": "涿郡義勇", "difficulty": 25, "attribute": "快", "reward_silver": 10, "reward_xinde": 16, "exp": 20, "faction": "haoqiang"},
-  {"id": "yan_mazei", "name": "燕山馬賊", "difficulty": 25, "attribute": "快", "reward_silver": 12, "reward_xinde": 15, "exp": 20},
-  {"id": "he_shuikou", "name": "河上水寇", "difficulty": 20, "attribute": "柔", "reward_silver": 10, "reward_xinde": 12, "exp": 16},
-  {"id": "figure_bocai", "name": "波才", "difficulty": 150, "attribute": "剛", "reward_xinde": 80, "exp": 80, "faction": "huang"},
-  {"id": "figure_pengtuo", "name": "彭脫", "difficulty": 110, "attribute": "剛", "reward_xinde": 80, "exp": 80, "faction": "huang"},
-  {"id": "figure_zhangmancheng", "name": "張曼成", "difficulty": 130, "attribute": "柔", "reward_xinde": 80, "exp": 80, "faction": "huang"},
-  {"id": "figure_zhaohong", "name": "趙弘", "difficulty": 130, "attribute": "實", "reward_xinde": 80, "exp": 80, "faction": "huang"},
-  {"id": "figure_hanzhong", "name": "韓忠", "difficulty": 110, "attribute": "實", "reward_xinde": 80, "exp": 80, "faction": "huang"},
-  {"id": "figure_zhangjiao", "name": "張角", "difficulty": 160, "attribute": "柔", "reward_xinde": 80, "exp": 80, "faction": "huang"},
-  {"id": "figure_zhangbao", "name": "張寶", "difficulty": 140, "attribute": "快", "reward_xinde": 80, "exp": 80, "faction": "huang"},
-  {"id": "figure_zhangliang", "name": "張梁", "difficulty": 150, "attribute": "剛", "reward_xinde": 80, "exp": 80, "faction": "huang"},
-  {"id": "figure_huangfusong", "name": "皇甫嵩", "difficulty": 150, "attribute": "實", "reward_xinde": 80, "exp": 80, "faction": "guan"},
-  {"id": "figure_zhujun", "name": "朱儁", "difficulty": 140, "attribute": "實", "reward_xinde": 80, "exp": 80, "faction": "guan"},
-  {"id": "figure_luzhi", "name": "盧植", "difficulty": 140, "attribute": "柔", "reward_xinde": 80, "exp": 80, "faction": "guan"},
-  {"id": "figure_sunjian", "name": "孫堅", "difficulty": 150, "attribute": "快", "reward_xinde": 80, "exp": 80, "faction": "guan"},
-  {"id": "figure_hejin", "name": "何進", "difficulty": 100, "attribute": "虛", "reward_xinde": 80, "exp": 80, "faction": "guan"},
-  {"id": "figure_dongzhuo", "name": "董卓", "difficulty": 160, "attribute": "剛", "reward_xinde": 80, "exp": 80, "faction": "guan"},
   {
-    "id": "guan_grain_convoy", "name": "官軍糧隊", "difficulty": 30, "attribute": "實", "faction": "guan",
-    "reward_silver": 12, "reward_xinde": 18, "exp": 22, "drops": [{"material": "man_1"}],
+    "id": "dipi",
+    "name": "流寇散兵",
+    "difficulty": 8,
+    "attribute": "剛",
+    "reward_silver": 5,
+    "reward_xinde": 8,
+    "exp": 10
+  },
+  {
+    "id": "hetan_popi",
+    "name": "河灘潑皮",
+    "difficulty": 4,
+    "attribute": "柔",
+    "reward_silver": 3,
+    "reward_xinde": 4,
+    "exp": 5,
+    "desc": "在河灘上攔著流民收「過河錢」的幾個潑皮，手裡的竹篙比刀還趁手。"
+  },
+  {
+    "id": "touwang_zei",
+    "name": "偷網賊",
+    "difficulty": 5,
+    "attribute": "快",
+    "reward_silver": 2,
+    "reward_xinde": 5,
+    "exp": 6,
+    "desc": "趁漁家不在偷收漁網的毛賊，滑得像泥鰍，一見人就往水裡鑽。"
+  },
+  {
+    "id": "shanzei",
+    "name": "黃巾散兵",
+    "difficulty": 15,
+    "attribute": "剛",
+    "reward_silver": 10,
+    "reward_xinde": 12,
+    "exp": 15,
+    "faction": "huang"
+  },
+  {
+    "id": "yelang",
+    "name": "山匪",
+    "difficulty": 15,
+    "attribute": "快",
+    "reward_xinde": 12,
+    "exp": 15
+  },
+  {
+    "id": "heixiong",
+    "name": "山寨悍匪",
+    "difficulty": 30,
+    "attribute": "剛",
+    "reward_xinde": 20,
+    "exp": 25
+  },
+  {
+    "id": "louluo",
+    "name": "黃巾嘍囉",
+    "difficulty": 15,
+    "attribute": "剛",
+    "reward_silver": 8,
+    "reward_xinde": 12,
+    "exp": 15,
+    "faction": "huang"
+  },
+  {
+    "id": "shuikou",
+    "name": "黃巾別部",
+    "difficulty": 35,
+    "attribute": "剛",
+    "reward_silver": 15,
+    "reward_xinde": 20,
+    "exp": 25,
+    "faction": "huang"
+  },
+  {
+    "id": "toumu",
+    "name": "黃巾渠帥",
+    "difficulty": 70,
+    "attribute": "快",
+    "reward_silver": 40,
+    "reward_xinde": 35,
+    "exp": 40,
+    "faction": "huang"
+  },
+  {
+    "id": "fanjianglong",
+    "name": "波才",
+    "difficulty": 150,
+    "attribute": "剛",
+    "reward_xinde": 80,
+    "exp": 80,
+    "faction": "huang",
+    "drops": [
+      {
+        "material": "gang_2"
+      },
+      {
+        "material": "gang_3",
+        "chance": 0.35
+      }
+    ]
+  },
+  {
+    "id": "guishou",
+    "name": "董卓帳下斥候",
+    "difficulty": 60,
+    "attribute": "虛",
+    "reward_xinde": 40,
+    "exp": 40,
+    "faction": "guan"
+  },
+  {
+    "id": "shoumu",
+    "name": "南華觀看守者",
+    "difficulty": 120,
+    "attribute": "柔",
+    "reward_xinde": 100,
+    "exp": 80,
+    "drops": [
+      {
+        "material": "rou_2"
+      },
+      {
+        "material": "rou_3",
+        "chance": 0.3
+      }
+    ]
+  },
+  {
+    "id": "xuantie_dizi",
+    "name": "曹家護院",
+    "difficulty": 25,
+    "attribute": "剛",
+    "reward_xinde": 20,
+    "exp": 20,
+    "faction": "haoqiang"
+  },
+  {
+    "id": "guan_patrol",
+    "name": "官軍巡騎",
+    "difficulty": 20,
+    "attribute": "快",
+    "reward_silver": 8,
+    "reward_xinde": 14,
+    "exp": 18,
+    "faction": "guan"
+  },
+  {
+    "id": "jun_bing",
+    "name": "郡國兵",
+    "difficulty": 35,
+    "attribute": "剛",
+    "reward_silver": 15,
+    "reward_xinde": 20,
+    "exp": 25,
+    "faction": "guan"
+  },
+  {
+    "id": "beijun_wuzu",
+    "name": "北軍五校",
+    "difficulty": 55,
+    "attribute": "實",
+    "reward_silver": 25,
+    "reward_xinde": 30,
+    "exp": 35,
+    "faction": "guan"
+  },
+  {
+    "id": "liangzhou_cavalry",
+    "name": "涼州鐵騎",
+    "difficulty": 65,
+    "attribute": "快",
+    "reward_silver": 30,
+    "reward_xinde": 35,
+    "exp": 40,
+    "faction": "guan"
+  },
+  {
+    "id": "taiping_lishi",
+    "name": "太平道力士",
+    "difficulty": 40,
+    "attribute": "剛",
+    "reward_silver": 15,
+    "reward_xinde": 22,
+    "exp": 28,
+    "faction": "huang"
+  },
+  {
+    "id": "huangjin_sishi",
+    "name": "黃巾死士",
+    "difficulty": 60,
+    "attribute": "剛",
+    "reward_silver": 25,
+    "reward_xinde": 32,
+    "exp": 38,
+    "faction": "huang"
+  },
+  {
+    "id": "wubao_buqu",
+    "name": "塢堡部曲",
+    "difficulty": 30,
+    "attribute": "實",
+    "reward_silver": 12,
+    "reward_xinde": 18,
+    "exp": 22,
+    "faction": "haoqiang"
+  },
+  {
+    "id": "yiyong",
+    "name": "涿郡義勇",
+    "difficulty": 25,
+    "attribute": "快",
+    "reward_silver": 10,
+    "reward_xinde": 16,
+    "exp": 20,
+    "faction": "haoqiang"
+  },
+  {
+    "id": "yan_mazei",
+    "name": "燕山馬賊",
+    "difficulty": 25,
+    "attribute": "快",
+    "reward_silver": 12,
+    "reward_xinde": 15,
+    "exp": 20
+  },
+  {
+    "id": "he_shuikou",
+    "name": "河上水寇",
+    "difficulty": 20,
+    "attribute": "柔",
+    "reward_silver": 10,
+    "reward_xinde": 12,
+    "exp": 16
+  },
+  {
+    "id": "figure_bocai",
+    "name": "波才",
+    "difficulty": 150,
+    "attribute": "剛",
+    "reward_xinde": 80,
+    "exp": 80,
+    "faction": "huang"
+  },
+  {
+    "id": "figure_pengtuo",
+    "name": "彭脫",
+    "difficulty": 110,
+    "attribute": "剛",
+    "reward_xinde": 80,
+    "exp": 80,
+    "faction": "huang"
+  },
+  {
+    "id": "figure_zhangmancheng",
+    "name": "張曼成",
+    "difficulty": 130,
+    "attribute": "柔",
+    "reward_xinde": 80,
+    "exp": 80,
+    "faction": "huang"
+  },
+  {
+    "id": "figure_zhaohong",
+    "name": "趙弘",
+    "difficulty": 130,
+    "attribute": "實",
+    "reward_xinde": 80,
+    "exp": 80,
+    "faction": "huang"
+  },
+  {
+    "id": "figure_hanzhong",
+    "name": "韓忠",
+    "difficulty": 110,
+    "attribute": "實",
+    "reward_xinde": 80,
+    "exp": 80,
+    "faction": "huang"
+  },
+  {
+    "id": "figure_zhangjiao",
+    "name": "張角",
+    "difficulty": 160,
+    "attribute": "柔",
+    "reward_xinde": 80,
+    "exp": 80,
+    "faction": "huang"
+  },
+  {
+    "id": "figure_zhangbao",
+    "name": "張寶",
+    "difficulty": 140,
+    "attribute": "快",
+    "reward_xinde": 80,
+    "exp": 80,
+    "faction": "huang"
+  },
+  {
+    "id": "figure_zhangliang",
+    "name": "張梁",
+    "difficulty": 150,
+    "attribute": "剛",
+    "reward_xinde": 80,
+    "exp": 80,
+    "faction": "huang"
+  },
+  {
+    "id": "figure_huangfusong",
+    "name": "皇甫嵩",
+    "difficulty": 150,
+    "attribute": "實",
+    "reward_xinde": 80,
+    "exp": 80,
+    "faction": "guan"
+  },
+  {
+    "id": "figure_zhujun",
+    "name": "朱儁",
+    "difficulty": 140,
+    "attribute": "實",
+    "reward_xinde": 80,
+    "exp": 80,
+    "faction": "guan"
+  },
+  {
+    "id": "figure_luzhi",
+    "name": "盧植",
+    "difficulty": 140,
+    "attribute": "柔",
+    "reward_xinde": 80,
+    "exp": 80,
+    "faction": "guan"
+  },
+  {
+    "id": "figure_sunjian",
+    "name": "孫堅",
+    "difficulty": 150,
+    "attribute": "快",
+    "reward_xinde": 80,
+    "exp": 80,
+    "faction": "guan"
+  },
+  {
+    "id": "figure_hejin",
+    "name": "何進",
+    "difficulty": 100,
+    "attribute": "虛",
+    "reward_xinde": 80,
+    "exp": 80,
+    "faction": "guan"
+  },
+  {
+    "id": "figure_dongzhuo",
+    "name": "董卓",
+    "difficulty": 160,
+    "attribute": "剛",
+    "reward_xinde": 80,
+    "exp": 80,
+    "faction": "guan"
+  },
+  {
+    "id": "guan_grain_convoy",
+    "name": "官軍糧隊",
+    "difficulty": 30,
+    "attribute": "實",
+    "faction": "guan",
+    "reward_silver": 12,
+    "reward_xinde": 18,
+    "exp": 22,
+    "drops": [
+      {
+        "material": "man_1"
+      }
+    ],
     "desc": "十幾輛牛車，押車的郡兵比牛還累，糧袋上蓋著官印。"
   },
   {
-    "id": "huang_grain_convoy", "name": "黃巾糧隊", "difficulty": 30, "attribute": "慢", "faction": "huang",
-    "reward_silver": 12, "reward_xinde": 18, "exp": 22, "drops": [{"material": "man_1"}],
+    "id": "huang_grain_convoy",
+    "name": "黃巾糧隊",
+    "difficulty": 30,
+    "attribute": "慢",
+    "faction": "huang",
+    "reward_silver": 12,
+    "reward_xinde": 18,
+    "exp": 22,
+    "drops": [
+      {
+        "material": "man_1"
+      }
+    ],
     "desc": "推獨輪車的信眾，糧袋上縫著黃布，前後各有幾個拿刀的力士。"
   },
-  {"id": "prologue_duanmei", "name": "斷眉", "difficulty": 15, "attribute": "剛", "reward_silver": 0, "reward_xinde": 0, "exp": 10, "desc": ""},
-  {"id": "figure_fuxie", "name": "傅燮", "difficulty": 110, "attribute": "剛", "reward_xinde": 80, "exp": 80, "faction": "guan"},
-  {"id": "figure_qinjie", "name": "秦頡", "difficulty": 110, "attribute": "實", "reward_xinde": 80, "exp": 80, "faction": "guan"},
-  {"id": "figure_buji", "name": "卜己", "difficulty": 110, "attribute": "柔", "reward_xinde": 80, "exp": 80, "faction": "huang"},
-  {"id": "figure_liupi", "name": "劉辟", "difficulty": 110, "attribute": "快", "reward_xinde": 80, "exp": 80, "faction": "huang"},
-  {"id": "nz_kuibing", "name": "潰營悍卒", "difficulty": 65, "attribute": "剛", "reward_silver": 30, "reward_xinde": 38, "exp": 42, "drops": [{"material": "gang_2"}, {"material": "gang_3", "chance": 0.15}]},
-  {"id": "nz_daoke", "name": "荒丘刀客", "difficulty": 58, "attribute": "快", "reward_silver": 26, "reward_xinde": 34, "exp": 38, "drops": [{"material": "kuai_2"}, {"material": "kuai_3", "chance": 0.12}]},
-  {"id": "nz_tiger", "name": "吊睛白額虎", "difficulty": 78, "attribute": "剛", "reward_xinde": 45, "exp": 48, "drops": [{"material": "gang_2"}, {"material": "gang_3", "chance": 0.2}]},
-  {"id": "nz_xiangma", "name": "劫道響馬", "difficulty": 62, "attribute": "快", "reward_silver": 30, "reward_xinde": 36, "exp": 40, "drops": [{"material": "kuai_2"}, {"material": "kuai_3", "chance": 0.12}]},
-  {"id": "nz_luanbing", "name": "亡命亂兵", "difficulty": 68, "attribute": "慢", "reward_silver": 32, "reward_xinde": 40, "exp": 44, "drops": [{"material": "man_2"}, {"material": "man_3", "chance": 0.15}]},
-  {"id": "nz_haoke", "name": "綠林豪客", "difficulty": 82, "attribute": "柔", "reward_silver": 40, "reward_xinde": 45, "exp": 50, "drops": [{"material": "rou_2"}, {"material": "rou_3", "chance": 0.2}]},
-  {"id": "nz_jinba", "name": "津口惡霸", "difficulty": 70, "attribute": "柔", "reward_silver": 35, "reward_xinde": 40, "exp": 44, "drops": [{"material": "rou_2"}, {"material": "rou_3", "chance": 0.15}]},
-  {"id": "nz_youxia", "name": "亡命游俠", "difficulty": 72, "attribute": "快", "reward_silver": 36, "reward_xinde": 42, "exp": 46, "drops": [{"material": "kuai_2"}, {"material": "kuai_3", "chance": 0.15}]},
-  {"id": "nz_shuifei", "name": "蘆蕩水匪", "difficulty": 66, "attribute": "柔", "reward_silver": 32, "reward_xinde": 38, "exp": 42, "drops": [{"material": "rou_2"}, {"material": "rou_3", "chance": 0.15}]},
-  {"id": "nz_huqi", "name": "塞外胡騎", "difficulty": 88, "attribute": "快", "reward_silver": 45, "reward_xinde": 48, "exp": 52, "drops": [{"material": "kuai_2"}, {"material": "kuai_3", "chance": 0.25}]}
+  {
+    "id": "prologue_duanmei",
+    "name": "斷眉",
+    "difficulty": 15,
+    "attribute": "剛",
+    "reward_silver": 0,
+    "reward_xinde": 0,
+    "exp": 10,
+    "desc": ""
+  },
+  {
+    "id": "figure_fuxie",
+    "name": "傅燮",
+    "difficulty": 110,
+    "attribute": "剛",
+    "reward_xinde": 80,
+    "exp": 80,
+    "faction": "guan"
+  },
+  {
+    "id": "figure_qinjie",
+    "name": "秦頡",
+    "difficulty": 110,
+    "attribute": "實",
+    "reward_xinde": 80,
+    "exp": 80,
+    "faction": "guan"
+  },
+  {
+    "id": "figure_buji",
+    "name": "卜己",
+    "difficulty": 110,
+    "attribute": "柔",
+    "reward_xinde": 80,
+    "exp": 80,
+    "faction": "huang"
+  },
+  {
+    "id": "figure_liupi",
+    "name": "劉辟",
+    "difficulty": 110,
+    "attribute": "快",
+    "reward_xinde": 80,
+    "exp": 80,
+    "faction": "huang"
+  },
+  {
+    "id": "nz_kuibing",
+    "name": "潰營悍卒",
+    "difficulty": 65,
+    "attribute": "剛",
+    "reward_silver": 30,
+    "reward_xinde": 38,
+    "exp": 42,
+    "drops": [
+      {
+        "material": "gang_2"
+      },
+      {
+        "material": "gang_3",
+        "chance": 0.15
+      }
+    ]
+  },
+  {
+    "id": "nz_daoke",
+    "name": "荒丘刀客",
+    "difficulty": 58,
+    "attribute": "快",
+    "reward_silver": 26,
+    "reward_xinde": 34,
+    "exp": 38,
+    "drops": [
+      {
+        "material": "kuai_2"
+      },
+      {
+        "material": "kuai_3",
+        "chance": 0.12
+      }
+    ]
+  },
+  {
+    "id": "nz_tiger",
+    "name": "吊睛白額虎",
+    "difficulty": 78,
+    "attribute": "剛",
+    "reward_xinde": 45,
+    "exp": 48,
+    "drops": [
+      {
+        "material": "gang_2"
+      },
+      {
+        "material": "gang_3",
+        "chance": 0.2
+      }
+    ]
+  },
+  {
+    "id": "nz_xiangma",
+    "name": "劫道響馬",
+    "difficulty": 62,
+    "attribute": "快",
+    "reward_silver": 30,
+    "reward_xinde": 36,
+    "exp": 40,
+    "drops": [
+      {
+        "material": "kuai_2"
+      },
+      {
+        "material": "kuai_3",
+        "chance": 0.12
+      }
+    ]
+  },
+  {
+    "id": "nz_luanbing",
+    "name": "亡命亂兵",
+    "difficulty": 68,
+    "attribute": "慢",
+    "reward_silver": 32,
+    "reward_xinde": 40,
+    "exp": 44,
+    "drops": [
+      {
+        "material": "man_2"
+      },
+      {
+        "material": "man_3",
+        "chance": 0.15
+      }
+    ]
+  },
+  {
+    "id": "nz_haoke",
+    "name": "綠林豪客",
+    "difficulty": 82,
+    "attribute": "柔",
+    "reward_silver": 40,
+    "reward_xinde": 45,
+    "exp": 50,
+    "drops": [
+      {
+        "material": "rou_2"
+      },
+      {
+        "material": "rou_3",
+        "chance": 0.2
+      }
+    ]
+  },
+  {
+    "id": "nz_jinba",
+    "name": "津口惡霸",
+    "difficulty": 70,
+    "attribute": "柔",
+    "reward_silver": 35,
+    "reward_xinde": 40,
+    "exp": 44,
+    "drops": [
+      {
+        "material": "rou_2"
+      },
+      {
+        "material": "rou_3",
+        "chance": 0.15
+      }
+    ]
+  },
+  {
+    "id": "nz_youxia",
+    "name": "亡命游俠",
+    "difficulty": 72,
+    "attribute": "快",
+    "reward_silver": 36,
+    "reward_xinde": 42,
+    "exp": 46,
+    "drops": [
+      {
+        "material": "kuai_2"
+      },
+      {
+        "material": "kuai_3",
+        "chance": 0.15
+      }
+    ]
+  },
+  {
+    "id": "nz_shuifei",
+    "name": "蘆蕩水匪",
+    "difficulty": 66,
+    "attribute": "柔",
+    "reward_silver": 32,
+    "reward_xinde": 38,
+    "exp": 42,
+    "drops": [
+      {
+        "material": "rou_2"
+      },
+      {
+        "material": "rou_3",
+        "chance": 0.15
+      }
+    ]
+  },
+  {
+    "id": "nz_huqi",
+    "name": "塞外胡騎",
+    "difficulty": 88,
+    "attribute": "快",
+    "reward_silver": 45,
+    "reward_xinde": 48,
+    "exp": 52,
+    "drops": [
+      {
+        "material": "kuai_2"
+      },
+      {
+        "material": "kuai_3",
+        "chance": 0.25
+      }
+    ]
+  },
+  {
+    "id": "maier_jiading",
+    "name": "蘇家家丁",
+    "difficulty": 8,
+    "attribute": "剛",
+    "reward_xinde": 4,
+    "exp": 6,
+    "desc": "蘇家糧行看門的幾個家丁，手裡是頂門的木槓。"
+  },
+  {
+    "id": "maier_scout",
+    "name": "官軍前哨",
+    "difficulty": 18,
+    "attribute": "快",
+    "reward_xinde": 10,
+    "exp": 12,
+    "desc": "夜裡舉著火把搜河床的三四個官軍。"
+  },
+  {
+    "id": "maier_vanguard",
+    "name": "官軍先鋒",
+    "difficulty": 28,
+    "attribute": "剛",
+    "reward_xinde": 16,
+    "exp": 18,
+    "desc": "朱將軍麾下打頭陣的一隊步卒，夜裡衝營。"
+  }
 ]

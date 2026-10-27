@@ -139,5 +139,397 @@
       }
     ],
     "image": "stories/fuzhi_act1"
+  },
+  {
+    "id": "maier",
+    "title": "賣兒契",
+    "kind": "奇事",
+    "image": "stories/maier_start",
+    "intro": "汝南大旱，路邊剝了皮的榆樹底下，坐著一個抱著孩子的男人。",
+    "start": {
+      "where": {
+        "locations": [
+          "runan_wilds"
+        ]
+      },
+      "chance": 0.08
+    },
+    "unfinished": "{name}答應替汝南一個農人看看他賣掉的女兒，到季末還沒有看到。",
+    "stages": [
+      {
+        "id": "act1",
+        "event": "maier_1",
+        "image": "stories/maier_start"
+      },
+      {
+        "id": "act2",
+        "event": "maier_2",
+        "where": {
+          "locations": [
+            "runan_market"
+          ]
+        },
+        "hint": "去汝南集市的蘇家糧行找小滿",
+        "days": 2,
+        "late": "late",
+        "image": "stories/maier_ledger"
+      },
+      {
+        "id": "act3",
+        "event": "maier_3",
+        "where": {
+          "locations": [
+            "runan_market"
+          ]
+        },
+        "hint": "等保境車出發；晚上回汝南集市",
+        "wait_days": 0.5,
+        "days": 2,
+        "late": "act4",
+        "image": "stories/maier_night_pot"
+      },
+      {
+        "id": "act4",
+        "event": "maier_4",
+        "where": {
+          "locations": [
+            "runan_market"
+          ]
+        },
+        "hint": "在汝南集市跟蘇家的車去西華",
+        "wait_days": 0.25,
+        "days": 2,
+        "late": "late",
+        "image": "stories/maier_cart"
+      },
+      {
+        "id": "act5",
+        "event": "maier_5",
+        "where": {
+          "locations": [
+            "runan_wilds"
+          ]
+        },
+        "hint": "西華營寨（汝南荒野往西）",
+        "days": 2,
+        "late": "late",
+        "image": "stories/maier_stove"
+      },
+      {
+        "id": "day1",
+        "event": "maier_6a",
+        "where": {
+          "locations": [
+            "runan_wilds"
+          ]
+        },
+        "hint": "在西華營寨住下，明天再來灶房",
+        "wait_days": 0.5,
+        "image": "stories/maier_ash_char"
+      },
+      {
+        "id": "day2",
+        "event": "maier_6b",
+        "where": {
+          "locations": [
+            "runan_wilds"
+          ]
+        },
+        "hint": "營裡的第二天",
+        "wait_days": 0.5,
+        "image": "stories/maier_ash_char"
+      },
+      {
+        "id": "day3",
+        "event": "maier_6c",
+        "where": {
+          "locations": [
+            "runan_wilds"
+          ]
+        },
+        "hint": "營裡的第三天",
+        "wait_days": 0.5,
+        "image": "stories/maier_ash_char"
+      },
+      {
+        "id": "act7",
+        "event": "maier_7",
+        "where": {
+          "locations": [
+            "runan_wilds"
+          ]
+        },
+        "hint": "官軍要到西華了，一天內回營",
+        "wait_days": 0.5,
+        "days": 1,
+        "late": "ash",
+        "image": "stories/maier_rope",
+        "routes": [
+          {
+            "when": {
+              "交契": 1,
+              "回": 1
+            },
+            "go": "home"
+          },
+          {
+            "when": {
+              "交契": 1,
+              "幫": 1
+            },
+            "go": "stay"
+          },
+          {
+            "when": {
+              "交契": 1
+            },
+            "go": "south"
+          }
+        ]
+      },
+      {
+        "id": "act7b",
+        "event": "maier_7m",
+        "where": {
+          "locations": [
+            "runan_wilds"
+          ]
+        },
+        "hint": "火線越來越近了",
+        "days": 1,
+        "late": "ash",
+        "image": "stories/maier_rope",
+        "routes": [
+          {
+            "when": {
+              "交契": 1,
+              "回": 1
+            },
+            "go": "home"
+          },
+          {
+            "when": {
+              "交契": 1,
+              "幫": 1
+            },
+            "go": "stay"
+          },
+          {
+            "when": {
+              "交契": 1
+            },
+            "go": "south"
+          }
+        ]
+      }
+    ],
+    "endings": [
+      {
+        "id": "home",
+        "title": "回家",
+        "text": "草屋還在。門沒有了，是葛三自己拆了換的水錢。\n\n小滿進屋第一件事，是把袖子裡的粟倒進鍋裡。她一粒一粒地數，數到一半，就不數了。\n\n葛三坐在門檻上，張了張嘴：「秋後……」\n\n他沒有說完。小滿也沒有回頭。鍋裡的水開了，她拿一根筷子慢慢地攪。\n\n狗兒站在你旁邊。他一路上都沒有說過話。這時候他拉了拉你的衣角，讓你彎下腰，在你耳邊說了他的第一句話：\n\n{?maier.字名:「姊姊會寫字。」|「姊姊回來了。」}",
+        "annal": "中平元年秋，汝南大旱。{name}過其野，有農人葛三以契來問，契書永賣，{?maier.實:{name}讀之以實。|{?maier.欺:{name}紿之曰：「秋後可贖。」|{name}未之讀，問其所欲聞。}}後隨糧車入西華賊營，居數日，{?maier.字名:教其女書己名。|{?maier.字永:教其女書一永字。|與其女同灶。}}會官軍夜至，{?maier.交契:{name}以契付其女，女從父歸。|{?maier.同:賴糧商蘇氏之車而出。|{?maier.上車:賴糧商蘇氏之車而出。|{name}攜其父子穿營而出。}}}{?maier.話7:臨別，{name}嘗謂之曰：「{said:maier.-1}」}葛三後自賣為佃，以養兒女。是歲西坪始雨。",
+        "image": "stories/maier_end_home",
+        "effect": {
+          "stats": {
+            "xinde": 40,
+            "fame": 1,
+            "good": 3
+          }
+        },
+        "after": [
+          {
+            "days": 3,
+            "where": {
+              "locations": [
+                "runan_market"
+              ]
+            },
+            "title": "三天後・汝南集市",
+            "image": "stories/maier_ledger",
+            "text": "蘇家糧行的門板全卸了。麻袋不見了，帳不見了，矮桌還在。東家往潁川走了。\n\n矮桌上壓著一張紙，是從帳上撕下來的一頁。最後一行寫著：\n\n**葛三，自賣為佃，換粟五斗。佃田在西坪，許攜兒女。**\n\n{?maier.同:那一行底下還有一行，字跡是一樣的，可是寫得很慢，每一筆都壓得很重：\n\n**前帳沖銷。阿禾記。**}"
+          },
+          {
+            "days": 7,
+            "where": {
+              "locations": [
+                "runan_wilds"
+              ]
+            },
+            "title": "一週後・汝南荒野",
+            "text": "西坪的田裡有三個人。一個大人在前面拉犁，後面一大一小兩個孩子在撿石頭。\n\n葛三看見你，笑了。這一次他的笑沒有賠的意思。他從地上拔了兩根草，編了一隻蚱蜢，放在你手裡。\n\n「客人拿著。」他說，「我沒別的。」"
+          },
+          {
+            "days": 14,
+            "where": {
+              "tags": [
+                "酒肆"
+              ]
+            },
+            "title": "兩週後・酒肆",
+            "text": "有人在說汝南西坪下了一場雨。兩年來第一場。說的人不知道西坪住了誰。你知道。"
+          }
+        ]
+      },
+      {
+        "id": "south",
+        "title": "往南",
+        "text": "天亮以後，你送葛三回草屋。他一路上沒有說話，腳上的血乾了，走一步裂一下。\n\n{?maier.南:你手心裡還握著小滿的那一把粟。|你走在他旁邊。他一次也沒有往南邊看。}",
+        "annal": "中平元年秋，汝南大旱。{name}過其野，有農人葛三以契來問，契書永賣，{?maier.實:{name}讀之以實。|{?maier.欺:{name}紿之曰：「秋後可贖。」|{name}未之讀，問其所欲聞。}}後入西華賊營尋其女。會官軍夜至，{?maier.斷後:{name}為賊營斷後，營中婦人得攜群兒南去。|其女隨營中婦人南去。}{?maier.話7:臨別，{name}嘗謂之曰：「{said:maier.-1}」}{?maier.欺:其父至死不知契為永賣，或曰知之。|不知所終。}",
+        "image": "stories/maier_rope",
+        "effect": {
+          "stats": {
+            "xinde": 40,
+            "fame": 1,
+            "good": 2
+          }
+        },
+        "after": [
+          {
+            "days": 0,
+            "within": 3,
+            "where": {
+              "locations": [
+                "runan_wilds"
+              ]
+            },
+            "when": {
+              "南": 1
+            },
+            "title": "送粟",
+            "keepsake_drop": "小滿的一把粟",
+            "text": "你把那把粟放在葛三手裡。\n\n「我不餓。」他說。\n\n你想起小滿說的那句：你別信。\n\n你站在那裡，看著他把粟倒進鍋裡。煮了。喝了。喝完了，他拿手指把鍋底抹了一圈，放進嘴裡。"
+          },
+          {
+            "days": 3,
+            "where": {
+              "locations": [
+                "runan_wilds"
+              ]
+            },
+            "title": "三天後・汝南荒野",
+            "text": "草屋空了。門檻上放著一隻草蚱蜢，編得很完整，腿彎彎的。地上的土裡有一個字，是用手指畫的，畫了很多次。你看了很久才看出來，是「永」字，少了一筆。"
+          },
+          {
+            "days": 7,
+            "where": {
+              "regions": [
+                "nanyang"
+              ],
+              "tags": [
+                "酒肆"
+              ]
+            },
+            "title": "一週後・酒肆",
+            "text": "「有人在淮水邊上見過一個女人，腰上繫一根繩子，繩子上拴了一串孩子。最小那個男孩一直喊『姊、姊』，最後一個小姑娘一邊走一邊數步子。」"
+          },
+          {
+            "days": 14,
+            "where": {
+              "locations": [
+                "nanyang_road"
+              ]
+            },
+            "title": "兩週後・南陽官道",
+            "text": "官道邊上搭了一個粥棚，是南陽的大戶人家設的。粥棚裡掌勺的是一個很高很壯的女人，頭髮用一塊發白的布紮著。她一邊敲鍋一邊罵：「排好！誰插隊誰喝湯底！」\n\n粥棚後面的地上，有人用木炭寫了兩個字。{?maier.字名:小滿。|一個「永」字，又被人用腳抹掉了一半。}\n\n她沒有看見你。你也沒有叫她。"
+          }
+        ]
+      },
+      {
+        "id": "stay",
+        "title": "留下",
+        "text": "她把狗兒送上那條繩子，幫他繫好。只繫了一次。她的手沒有抖。\n\n狗兒拉著她的袖子不放。她把袖子裡的那把粟倒進他的手裡，讓他握緊，他就不拉了。\n\n然後她拉著她爹的手，走進反方向的黑裡。她跟你說的最後一句話是：「他一個人，不會煮粥。」",
+        "annal": "中平元年秋，汝南大旱。{name}過其野，有農人葛三以契來問，契書永賣，{?maier.實:{name}讀之以實。|{?maier.欺:{name}紿之曰：「秋後可贖。」|{name}未之讀，問其所欲聞。}}後入西華賊營。會官軍夜至，{name}以契付其女，使自擇。女遣其弟隨營中婦人南去，自留事父。{?maier.話7:臨別，{name}嘗謂之曰：「{said:maier.-1}」}後學書其弟之名，以待其歸。",
+        "image": "stories/maier_end_home",
+        "effect": {
+          "stats": {
+            "xinde": 40,
+            "fame": 1,
+            "good": 3
+          }
+        },
+        "after": [
+          {
+            "days": 3,
+            "where": {
+              "locations": [
+                "runan_wilds"
+              ]
+            },
+            "title": "三天後・汝南荒野",
+            "text": "下雨了。兩年來第一場。\n\n你經過那間草屋，小滿蹲在田裡，在裂開的地上一個坑一個坑地挖。她看見你，沒有招手，只舉起一隻拳頭，打開。是三粒種子。"
+          },
+          {
+            "days": 7,
+            "where": {
+              "locations": [
+                "runan_wilds"
+              ]
+            },
+            "title": "一週後・汝南荒野",
+            "text": "她在門口等你，好像知道你今天會來。\n\n「狗兒的狗，怎麼寫？」她問，把一根木棍遞給你。\n\n你在濕的土上寫。她照著寫。寫了三次。\n\n「你要是聽到他，」她說，「就跟他說，姊會寫他的名字了。」"
+          },
+          {
+            "days": 14,
+            "where": {
+              "tags": [
+                "酒肆"
+              ]
+            },
+            "title": "兩週後・酒肆",
+            "text": "有人說南陽官道邊上的粥棚裡，有一個小男孩，不說話，每天拿一根木棍在地上畫。畫的是什麼，沒人看得懂。"
+          }
+        ]
+      },
+      {
+        "id": "ash",
+        "title": "灰",
+        "failed": true,
+        "text": "營寨燒了一夜。\n\n天亮以後，官軍在河灘上數人頭，一個一個寫在帳上。寫帳的人寫得很快，字很潦草。\n\n你在灶房的灰裡找。鍋翻在地上，粥潑了一地，結成一層硬殼。你找到一根燒斷的繩子，是草、破布、衣服上拆下來的線編的。{?maier.拆衣:其中一節的顏色跟別的不一樣。}\n\n你沒有找到她。也沒有找到別人。你不知道這是好事還是壞事。",
+        "annal": "中平元年秋，汝南大旱。{name}過其野，有農人葛三以契來問，契書永賣，{?maier.實:{name}讀之以實。|{?maier.欺:{name}紿之曰：「秋後可贖。」|{name}未之讀，問其所欲聞。}}後入西華賊營。會官軍夜至，{?maier.斷後:{name}為賊營斷後，不能守。|{name}不能救。}營焚，女不知所在。{?maier.話7:臨別，{name}嘗謂之曰：「{said:maier.-1}」}{name}收其斷繩一截，終身不棄。",
+        "image": "stories/maier_end_ash",
+        "effect": {
+          "stats": {
+            "xinde": 40,
+            "fame": 1,
+            "good": 1
+          }
+        },
+        "keepsakes": [
+          "一段燒斷的繩子"
+        ],
+        "after": [
+          {
+            "days": 3,
+            "where": {
+              "locations": [
+                "runan_wilds"
+              ]
+            },
+            "title": "三天後・汝南荒野",
+            "text": "草屋的門檻上，葛三坐著，編蚱蜢。他身邊已經有很多隻了，排成一排。他看見你，沒有問。他笑了一下。他一直在等你開口，又怕你開口。"
+          },
+          {
+            "days": 14,
+            "where": {
+              "tags": [
+                "城鎮"
+              ]
+            },
+            "title": "兩週後",
+            "text": "你在一間糧行門口看見一個小姑娘替掌櫃數糧。「一斗十升，三斗三十升。」她的臉被麻袋擋住了，你看不清楚。\n\n你問她的名字。她說她不記得了。\n\n她的袖子裡，有一個針腳歪歪的口袋。"
+          }
+        ]
+      },
+      {
+        "id": "late",
+        "title": "來不及",
+        "failed": true,
+        "weight": 3,
+        "text": "你到汝南集市的時候，蘇家糧行的門板全上了。門縫裡沒有燈。帳上那一行，大概已經翻過去了。",
+        "annal": "中平元年秋，{name}過汝南，有農人以賣兒契來問。{name}後尋其女，不及。",
+        "image": "stories/maier_start"
+      }
+    ]
   }
 ]

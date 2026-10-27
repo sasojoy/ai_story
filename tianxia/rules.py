@@ -199,6 +199,11 @@ def check_condition(cond: Condition, state: GameState, content: Content | None =
         progress = p.storylines.get(line)
         if (progress.marks.get(mark, 0) if progress is not None else 0) < need:
             return False
+    for key, most in cond.story_marks_max.items():
+        line, _, mark = key.partition(":")
+        progress = p.storylines.get(line)
+        if (progress.marks.get(mark, 0) if progress is not None else 0) > most:
+            return False
     if cond.level_min is not None and p.member.level < cond.level_min:
         return False
     # 擁有的武學都算（身上兩欄＋功法庫）：事件教的武學在欄位滿了時收進功法庫（F2），只看身上的話「還沒學過才出現」的
@@ -411,6 +416,10 @@ def fill_marks(text: str, state: GameState) -> str:
     """把文字裡的 {marks:地點:痕跡} 換成這個痕跡目前的模糊人數；寫給這個人看的稱呼照性別換（gender.address：女的「少俠」→「女俠」）。
     事件的本文與結果都經過這裡（也只寫給這個人看），所以內容裡寫死給玩家的稱呼在這裡換一次就好。"""
     text = gender.address(text, state)
+    if "{?" in text or "{!" in text or "{said:" in text:  # 長篇奇事：照一條線的記號換段落、引自己寫過的話（storyline.vary）
+        from . import storyline  # noqa: PLC0415  storyline → rules：延後 import
+
+        text = storyline.vary(text, state)
     if "{marks:" not in text:
         return text
     return _MARKS_TOKEN.sub(lambda m: fuzzy_count(state.world.marks.get(m.group(1), 0)), text)
@@ -1225,4 +1234,9 @@ def apply_effect(
             progress.marks[key] = progress.marks.get(key, 0) + value
         if step.go:
             progress.go = step.go
+    if step is not None and step.keepsake and step.keepsake not in p.keepsakes:  # 紀念物：線收了也給（例：交契之後才拿到的）
+        p.keepsakes.append(step.keepsake)
+        msgs.append(f"（收進行囊：{step.keepsake}）")
+    if step is not None and step.keepsake_drop in p.keepsakes:
+        p.keepsakes.remove(step.keepsake_drop)
     return msgs

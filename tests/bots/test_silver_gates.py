@@ -9,7 +9,7 @@ min_stats.silver（慣例是剛好等於價錢）。懲罰從結構上認：檢�
 其餘不擋的（檢定成功或打贏也要付錢的）列在 NOT_GATED，一則一句理由；joy 新寫的付錢選項忘了擋，這裡就紅。
 
 釘住的內容：content/events/ 底下的每一個檔（任何一則事件都可能寫進付錢的選項；scripts/test_for.py 靠檔名挑到這裡，
-test_this_file_names_every_event_file 守著這份清單）：explore_jizhou.json、explore_luoyang.json、explore_nanyang.json、
+test_this_file_names_every_event_file 守著這份清單）：explore_jizhou.json、explore_luoyang.json、story_maier.json、explore_nanyang.json、
 explore_runan.json、explore_yingchuan.json、explore_youzhou.json、foreshadow_fragments.json、foreshadow_prep.json、general.json、
 jizhou.json、kou.json、luoyang.json、marks.json、nanyang.json、opening.json、prologue.json、promotion.json、ranger.json、recruit.json、renown.json、sects.json、
 social_nanyang_yingchuan.json、social_north.json、social_runan.json、stances.json、stealth.json、storylines.json、tales.json、tiers.json、

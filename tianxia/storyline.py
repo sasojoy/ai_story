@@ -15,10 +15,18 @@
 
 規則掛在 Config.jianfa.storylines（rules.jianfa）：關著時內容寫的線不開、start 回空的、已經開了的線也不往下走。
 所有擲骰用呼叫端給的亂數，引擎不讀時鐘：時間一律是 state.world.time。
+
+長篇奇事（企劃者 2026-10-27「寫入人心的那種」）多的幾樣：
+- 文字照記號換段落（vary）：{?線.記號:有記的寫這段|沒記的寫這段}、{!線.記號:沒記才寫}，可以巢狀；{said:線} 是這條線裡自己寫的第一句話
+  （{said:線.1} 第二句）。事件本文、選項結果、卡、結局、傳都經過 rules.fill_marks，所以哪裡都能寫。
+- 多日段（StoryStage.wait_days）：進段之後再過幾天才按得下去。
+- 餘波（StoryEnding.after）：收了之後過幾天、人走到某地，跳一張卡。
+- 紀念物（StoryStep.keepsake、StoryEnding.keepsakes）與跨季旗標（StoryEnding.lasting），換季時跟著角色。
 """
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 
 from . import annals
@@ -35,6 +43,10 @@ PENDING_HEAD = "未了之事"  # 選單與「你這一步」那一行的開頭�
 RETRY_NOTE = "（再等一個時辰才能再試）"  # fight 段打輸了還沒到再試的時候（待 joy 潤）
 LATER_LABEL = "先擱著"  # 答題答到一半先走（待 joy 潤）
 JOURNAL = "奇事"  # 同步時往下走的那幾句另起一則江湖紀錄的標題（待 joy 潤）
+
+AFTER_JOURNAL = "後來"  # 餘波那一則江湖紀錄與卡的標題開頭
+_VARY = re.compile(r"\{([?!])([^{}:.]+)\.([^{}:]+):")
+_SAID = re.compile(r"\{said:([^{}.]+)(?:\.(-?\d+))?\}")
 
 FightHook = Callable[..., None]
 EndHook = Callable[..., list[str]]
@@ -79,6 +91,70 @@ def here(state: GameState, content: Content, place: StoryPlace) -> bool:
     return region is not None and region.id in place.regions
 
 
+# ── 照記號換段落 ──────────────────────────────────────────
+
+def _close_brace(text: str, start: int) -> int:
+    """text[start] 之後第一個沒配對的 }（巢狀的 {…} 跳過）；沒有是 -1。"""
+    depth = 0
+    for i in range(start, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            if depth == 0:
+                return i
+            depth -= 1
+    return -1
+
+
+def _split_else(body: str) -> tuple[str, str]:
+    """「有記的|沒記的」：只認最外層的 |。"""
+    depth = 0
+    for i, ch in enumerate(body):
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+        elif ch == "|" and depth == 0:
+            return body[:i], body[i + 1:]
+    return body, ""
+
+
+def vary(text: str, state: GameState, marks: dict[str, dict[str, int]] | None = None) -> str:
+    """{?線.記號:A|B}、{!線.記號:A}、{said:線}（模組說明）。marks 給了就用它（線 id → 記號），否則讀這個人的進度；
+    「說」是虛擬的記號：這條線裡寫過話就算有。寫壞的（沒有收尾的 }）原樣留著。"""
+    def has(line: str, mark: str) -> bool:
+        if marks is not None and line in marks:
+            got = marks[line]
+        else:
+            progress = state.player.storylines.get(line)
+            if progress is None:
+                return False
+            got = dict(progress.marks)
+            if progress.said:
+                got["說"] = 1
+        return got.get(mark, 0) > 0
+
+    out, pos = [], 0
+    while (m := _VARY.search(text, pos)) is not None:
+        end = _close_brace(text, m.end())
+        if end < 0:
+            break
+        out.append(text[pos:m.start()])
+        yes, no = _split_else(text[m.end():end])
+        hit = has(m.group(2), m.group(3))
+        out.append(vary(yes if hit == (m.group(1) == "?") else no, state, marks))
+        pos = end + 1
+    out.append(text[pos:])
+    text = "".join(out)
+
+    def said(m: re.Match) -> str:
+        progress = state.player.storylines.get(m.group(1))
+        n = int(m.group(2) or 0)
+        return progress.said[n] if progress is not None and -len(progress.said) <= n < len(progress.said) else ""
+
+    return _SAID.sub(said, text)
+
+
 # ── 開頭 ──────────────────────────────────────────────
 
 def roll_start(state: GameState, content: Content, rng) -> StoryDef | None:
@@ -114,7 +190,9 @@ def _enter(state: GameState, content: Content, progress: StoryProgress, line: St
     stage = line.stage(stage_id)
     progress.stage, progress.opened, progress.go = stage_id, False, None
     progress.tries, progress.retry_at, progress.step = 0, None, 0
-    progress.due = None if stage.days is None else state.world.time + stage.days * day_seconds(content, state.world)
+    progress.entered = state.world.time
+    wait = stage.wait_days * day_seconds(content, state.world)
+    progress.due = None if stage.days is None else state.world.time + wait + stage.days * day_seconds(content, state.world)
     if stage.card:
         state.player.story_cards.append(StoryCard(line=line.id, kind="stage", title=line.title, text=fill_marks(stage.card, state),
                                                   image=stage.image))
@@ -140,13 +218,20 @@ def stage_art(state: GameState, content: Content) -> str | None:
     return None
 
 
+def waiting(state: GameState, content: Content, progress: StoryProgress, stage: StoryStage) -> bool:
+    """多日段還沒到時候（StoryStage.wait_days）。"""
+    if not stage.wait_days or progress.entered is None:
+        return False
+    return state.world.time < progress.entered + stage.wait_days * day_seconds(content, state.world)
+
+
 def doable(state: GameState, content: Content, progress: StoryProgress) -> bool:
-    """這一段此刻在這裡按得下去：event、quiz、fight 才有鈕（task 是去做別的事），還沒端出來、站在對的地方。"""
+    """這一段此刻在這裡按得下去：event、quiz、fight 才有鈕（task 是去做別的事），還沒端出來、等完了、站在對的地方。"""
     pair = current(content, progress)
     if pair is None or progress.opened:
         return False
     _, stage = pair
-    return stage.kind != "task" and here(state, content, stage.where)
+    return stage.kind != "task" and not waiting(state, content, progress, stage) and here(state, content, stage.where)
 
 
 def ready_event(state: GameState, content: Content) -> str | None:
@@ -156,7 +241,7 @@ def ready_event(state: GameState, content: Content) -> str | None:
         if pair is None or progress.opened:
             continue
         _, stage = pair
-        if stage.kind == "event" and stage.immediate and here(state, content, stage.where):
+        if stage.kind == "event" and stage.immediate and not waiting(state, content, progress, stage) and here(state, content, stage.where):
             progress.opened = True
             return stage.event
     return None
@@ -192,7 +277,8 @@ def pending_lines(state: GameState, content: Content) -> list[dict]:
             continue
         line, stage = pair
         out.append({"line": line.id, "title": line.title, "kind": line.kind, "hint": stage.hint, "due": progress.due,
-                    "here": doable(state, content, progress), "image": line.image})
+                    "here": doable(state, content, progress), "image": line.image,
+                    "wait": waiting(state, content, progress, stage)})
     return out
 
 
@@ -277,7 +363,7 @@ def heard(state: GameState, content: Content, event_id: str, text: str) -> None:
     """隨口應對寫的那一句：眼前這一則是哪一條線端出來的段落，就記進那條線的 said（結尾與模型用）。"""
     for progress in active(state):
         pair = current(content, progress)
-        if pair is not None and progress.opened and pair[1].kind == "event" and pair[1].event == event_id:
+        if pair is not None and progress.opened and pair[1].kind == "event":  # 段落事件或它串接下去的（next_event）都算
             progress.said.append(text)
             return
 
@@ -297,7 +383,7 @@ def tick(state: GameState, content: Content, world: WorldStateStore) -> tuple[li
     期限過了往 late；休季了還沒收的收成「此事未了」。回 (要說的話, 要端出來的事件 id)。關著時什麼都不做。"""
     if not on(content, state):
         return [], None
-    msgs: list[str] = []
+    msgs: list[str] = aftermath(state, content)
     for progress in active(state):
         line = definition(content, progress)
         if line is None:
@@ -345,17 +431,71 @@ def finish(state: GameState, content: Content, world: WorldStateStore, progress:
            ending: StoryEnding) -> list[str]:
     """收在一個結局：給結局的東西、寫進傳、排一張入傳的卡、叫這一種的收尾鉤子。"""
     p = state.player
+    text = fill_marks(ending.text, state)  # 還沒收之前換段落（記號、寫過的話都還讀得到）
+    annal = fill_marks(ending.annal, state).replace("{name}", p.name)
     progress.ending, progress.stage, progress.go, progress.due = ending.id, "", None, None
+    progress.ended_at = state.world.time
     if p.story_open == progress.line:
         p.story_open = None
-    msgs = [fill_marks(ending.text, state)] + apply_effect(ending.effect, state, content, world)
-    annals.note(state, content, annals.STORY, ending.annal.replace("{name}", p.name), ending.weight)
+    msgs = [text] + apply_effect(ending.effect, state, content, world)
+    for item in ending.keepsakes:
+        if item not in p.keepsakes:
+            p.keepsakes.append(item)
+            msgs.append(f"（收進行囊：{item}）")
+    for flag in ending.lasting:
+        p.flags.add(flag)
+        if flag not in p.lasting:
+            p.lasting.append(flag)
+    annals.note(state, content, annals.STORY, annal, ending.weight)
     p.story_cards.append(StoryCard(
-        line=line.id, kind="end", title=line.title, text=fill_marks(ending.text, state), image=ending.image or line.image,
+        line=line.id, kind="end", title=line.title, text=text, image=ending.image or line.image,
         ending=ending.title, failed=ending.failed,
     ))
     hook = END_HOOKS.get(line.kind)
     return msgs + (hook(state, content, world, progress, ending) if hook is not None else [])
+
+
+def aftermath(state: GameState, content: Content) -> list[str]:
+    """收了的線的餘波（StoryEnding.after）：時候到了、人站在那裡、記號對得上，跳一張卡（kind="after"），回要記進江湖紀錄的那幾句。
+    過了 within 的記成看過（不再出現）。一次同步每條線最多跳一段。"""
+    msgs: list[str] = []
+    p, now = state.player, state.world.time
+    for progress in p.storylines.values():
+        if progress.ending is None or progress.ending == UNFINISHED or progress.ended_at is None:
+            continue
+        line = definition(content, progress)
+        ending = None if line is None else line.ending(progress.ending)
+        if ending is None:
+            continue
+        day = day_seconds(content, state.world)
+        for i, beat in enumerate(ending.after):
+            if i in progress.after_seen or now < progress.ended_at + beat.days * day:
+                continue
+            if beat.within is not None and now > progress.ended_at + (beat.days + beat.within) * day:
+                progress.after_seen.append(i)
+                continue
+            if any(progress.marks.get(k, 0) < v for k, v in beat.when.items()):
+                progress.after_seen.append(i)
+                continue
+            if not here(state, content, beat.where):
+                continue
+            progress.after_seen.append(i)
+            text = vary(fill_marks(beat.text, state), state, {line.id: _marks_with_said(progress)})
+            title = beat.title or f"{AFTER_JOURNAL}・{line.title}"
+            p.story_cards.append(StoryCard(line=line.id, kind="after", title=line.title, text=text, image=beat.image or ending.image or line.image,
+                                           ending=beat.title))
+            if beat.keepsake_drop in p.keepsakes:
+                p.keepsakes.remove(beat.keepsake_drop)
+            msgs += [f"【{title}】", text]
+            break
+    return msgs
+
+
+def _marks_with_said(progress: StoryProgress) -> dict[str, int]:
+    got = dict(progress.marks)
+    if progress.said:
+        got["說"] = 1
+    return got
 
 
 def close(state: GameState, content: Content, world: WorldStateStore | None, progress: StoryProgress, line: StoryDef,
