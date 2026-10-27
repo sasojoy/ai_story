@@ -644,5 +644,32 @@
     "reward_xinde": 16,
     "exp": 18,
     "desc": "朱將軍麾下打頭陣的一隊步卒，夜裡衝營。"
+  },
+  {
+    "id": "wangyue_bare",
+    "name": "空手王越",
+    "difficulty": 24,
+    "attribute": "快",
+    "reward_xinde": 12,
+    "exp": 14,
+    "desc": "北邙山墳堆間空著手的劍客，手裡沒有劍，指尖在霧裡劃得開一道。"
+  },
+  {
+    "id": "wangyue_sword",
+    "name": "王越",
+    "difficulty": 40,
+    "attribute": "快",
+    "reward_xinde": 20,
+    "exp": 24,
+    "desc": "銅駝街後那扇門前，劍已經拔出來的王越。"
+  },
+  {
+    "id": "wangyue_sword_seen",
+    "name": "王越",
+    "difficulty": 36,
+    "attribute": "快",
+    "reward_xinde": 20,
+    "exp": 24,
+    "desc": "銅駝街後那扇門前，劍已經拔出來的王越。你見過他的劍。"
   }
 ]
