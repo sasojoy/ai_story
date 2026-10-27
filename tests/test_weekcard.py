@@ -96,5 +96,9 @@ def test_event_option_view_keeps_the_action_and_tags_each_choice(on):
         ch = ev.choices[int(key.split(":")[1])]
         assert v["act"].startswith(ch.text)
         assert v["kind"] == ("fight" if ch.combat else ch.check.stat if ch.check else "")
-        if v["worry"] and ch.combat:
-            assert v["worry"].startswith("對手：")
+        if ch.combat:
+            assert v["worry"].startswith("對手：") and isinstance(v["sure"], bool)  # 每一顆都寫（Joy 2026-10-27）
+        elif ch.check:
+            assert v["worry"].startswith(on.config.stat_names[ch.check.stat]) and "：" in v["worry"]
+        else:
+            assert v["worry"] == "" and v["sure"] is True

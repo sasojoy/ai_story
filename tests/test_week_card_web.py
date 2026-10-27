@@ -155,7 +155,35 @@ def test_event_options_get_an_icon_and_keep_only_the_action():
     for oid, ev in opts.items():
         button = re.search(rf'<button[^>]*data-id="{oid}".*?</button>', page, re.S).group(0)
         assert f'class="k ev ev-{ev["kind"] or "plain"}"' in button and ev["act"] in button
-        assert ("ev-worry" in button) is bool(ev["worry"])
+        assert ("ev-odds" in button) is bool(ev["worry"]) and ("ev-worry" in button) is (not ev["sure"])
+        if ev["worry"]:
+            assert f'<small class="opt-note ev-odds' in button and ev["worry"] in button
+
+
+def test_every_checked_or_fought_option_shows_its_odds():
+    """Joy 2026-10-27 在決定卡上選「每顆都寫回來」：有檢定的選項一定看得到「屬性 數值：心裡話」、動手的一定看得到對手與勝算，
+    有把握的也寫（批 1 原本只在沒把握時才寫）。"""
+    from tianxia import events as event_rules  # noqa: PLC0415
+
+    m = _main(event="jz_altar_roster")
+    content = real_content("week7")
+    ev = content.events["jz_altar_roster"]
+    page = run(m, "return H.pageJianghu();")
+    names = set(content.config.stat_names.values())
+    seen = set()
+    for oid, view in m["event_opts"].items():
+        ch = ev.choices[int(oid.split(":")[1])]
+        button = re.search(rf'<button[^>]*data-id="{oid}".*?</button>', page, re.S).group(0)
+        if ch.check:
+            stat = content.config.stat_names[ch.check.stat]
+            assert view["worry"].startswith(f"{stat} ") and "：" in view["worry"] and view["worry"] in button
+            seen.add("check")
+        elif ch.combat:
+            assert view["worry"].startswith("對手：") and "・" in view["worry"] and view["worry"] in button
+            seen.add("fight")
+        else:
+            assert view["worry"] == "" and "ev-odds" not in button
+    assert {"fight"} <= seen and names
 
 
 def test_a_greyed_cell_says_why_when_tapped():
