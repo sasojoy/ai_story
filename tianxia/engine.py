@@ -810,6 +810,9 @@ class Game:
         book_titles = mingtie_rules.season_book(old, self.content, old.player.season_number)
         fresh.player.title_book = old.player.title_book + [t for t in book_titles if t not in old.player.title_book]
         fresh.player.seen_real = old.player.seen_real
+        # 長篇奇事（企劃者 2026-10-27）：紀念物一輩子帶著；跨季的旗標（例：隆中藏書）在新角色身上再立一次
+        fresh.player.keepsakes, fresh.player.lasting = list(old.player.keepsakes), list(old.player.lasting)
+        fresh.player.flags |= set(old.player.lasting)
         fresh.player.season_number = season_number
         self.state = fresh
         self.state.world = self.world.get_season()  # 開場那一則記此刻的季時間（FB-052：以前記成新存檔的 0）

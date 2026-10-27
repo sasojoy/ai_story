@@ -3451,3 +3451,7 @@ svg.fig .blade.bow { stroke-width: 3; }
 .mate-detail { padding: 4px 12px 12px; border-top: 1px dashed var(--line); display: grid; gap: 8px; }
 .mates-none { margin: 6px 2px 0; font-size: 13px; }
 .mate-lines { margin: 0; font-size: 13px; line-height: 1.6; }
+
+/* 紀念物（長篇奇事）：俠客頁一小段，一件一個淡框 */
+.keepsakes .keep-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 0; }
+.keepsakes .keep { padding: 2px 10px; border: 1px solid var(--line, #c9b98f); border-radius: 999px; font: 14px var(--serif); color: var(--ink-2); background: var(--card-2); }

@@ -104,6 +104,7 @@ class Condition(_Strict):
     fight_tiers: list[str] = Field(default_factory=list)
     # 一條線的記號至少到幾（「線 id:記號」→ 數；tianxia/storyline.py）：那條線沒開過算 0。給段落事件的選項分邊用（例：帶了符水才有「倒進井裡」）
     story_marks: dict[str, int] = Field(default_factory=dict)
+    story_marks_max: dict[str, int] = Field(default_factory=dict)  # 同上，至多到幾（寫 0 是「沒記過」：例 沒跟蘇掌櫃交心的人才要檢定）
     level_min: int | None = Field(default=None, ge=1)  # 本人等級至少幾級（事件分級，企劃者 2026-10-26）
     any_of: list[Condition] = Field(default_factory=list)  # 非空時，至少一個子條件成立
 
@@ -131,6 +132,9 @@ class StoryStep(_Strict):
     line: str = ""
     marks: dict[str, int] = Field(default_factory=dict)
     go: str | None = None
+    # 紀念物（長篇奇事，企劃者 2026-10-27）：沒有效果、不能賣，收進 PlayerState.keepsakes 跟著角色跨季；drop 是交出去（例：粟送到了）
+    keepsake: str | None = None
+    keepsake_drop: str | None = None
 
 
 class Effect(_Strict):
@@ -549,6 +553,23 @@ class StoryStage(_Strict):
     # fight 段的對手是自己的影子（特殊頓悟的心魔）：給了就不讀 squad，難度＝你此刻的全隊威力 × mirror，屬性照你武學的主屬性，名字是 mirror_name
     mirror: float | None = Field(default=None, gt=0)
     mirror_name: str = "心魔"
+    # 長篇奇事的多日段（企劃者 2026-10-27）：進這一段之後要再過幾個遊戲日才按得下去（照季長，rules.day_seconds）；
+    # 中間做別的事，時候到了、人在那裡才接下一段（例：營裡的第二天、第三天）。期限 days 從等完那一刻起算
+    wait_days: float = Field(default=0, ge=0)
+
+
+class StoryAfter(_Strict):
+    """結局之後的一段餘波（長篇奇事，企劃者 2026-10-27）：收了之後過 days 個遊戲日、人走到 where，跳一張卡、記一則江湖紀錄，一段只一次。
+    within 是過了幾天就不再出現（None 是一季都等）；when 是這條線的記號都到了才有（空的是一定有）；keepsake_drop 是這一段收走的紀念物。"""
+
+    days: float = Field(default=0, ge=0)
+    within: float | None = Field(default=None, gt=0)
+    where: StoryPlace = Field(default_factory=StoryPlace)
+    when: dict[str, int] = Field(default_factory=dict)
+    title: str = ""
+    text: str
+    image: str | None = None
+    keepsake_drop: str | None = None
 
 
 class StoryEnding(_Strict):
@@ -562,6 +583,9 @@ class StoryEnding(_Strict):
     effect: Effect = Field(default_factory=Effect)
     failed: bool = False
     weight: int = Field(default=5, ge=1, le=5)
+    after: list[StoryAfter] = Field(default_factory=list)  # 餘波（長篇奇事）
+    keepsakes: list[str] = Field(default_factory=list)  # 收在這裡給的紀念物（同 StoryStep.keepsake）
+    lasting: list[str] = Field(default_factory=list)  # 跨季的旗標（PlayerState.lasting；例：隆中藏書），同時立成這一季的 flags
 
 
 class StoryStart(_Strict):
