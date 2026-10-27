@@ -96,9 +96,10 @@ class JianfaNumbers(_Strict):
     """減法季批 2 的數字（批 0 之後併進 `JianfaRules`；開關與蓋章在那裡，這裡只有數字）。"""
 
     # ── 探索一顆（設計 4.1）──
-    # 出門一趟的體力【定】（設計的 outing_stamina）。企劃者 2026-10-26：一趟一件事、體力 15（原本 18）。
+    # 出門一趟的體力【定】（設計的 outing_stamina）。企劃者 2026-10-26：一趟一件事、體力 15（原本 18）；
+    # 企劃者 2026-10-27 改回 6（15 一天只出得去幾趟，玩的次數太少）。
     # 一趟只抽一件事（遭遇、事件、素材、感悟其中一件；2d，企劃者 2026-10-26「只抽一件事情」），所以沒有「一趟幾拍」這個數字了
-    explore_stamina: int = Field(default=15, ge=0)
+    explore_stamina: int = Field(default=6, ge=0)
     danger_shift: int = Field(default=10, ge=0)  # 危險度每多一星（一星是表上的數字）：遭遇 +N、事件 −N【預設】
     beat_floor: int = Field(default=5, ge=0)  # 危險度移過的那兩欄夾在 beat_floor～beat_cap【預設】
     beat_cap: int = Field(default=80, ge=1)

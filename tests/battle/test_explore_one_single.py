@@ -2,7 +2,7 @@
 →「只抽一件事情，然後體力先維持不動」；同一天又改口：體力 18 → 15）。
 
 以前：按一次探索連抽三拍（同一類最多兩拍、要選的拍放最後、三拍都沒收穫補一個一階素材、接了討伐懸賞至少一拍是遭遇）。
-現在：一趟只抽一拍、只發生一件事——遭遇、事件、素材、感悟其中一件；體力 15。
+現在：一趟只抽一拍、只發生一件事——遭遇、事件、素材、感悟其中一件；體力 6。
 - 接了這裡的討伐懸賞：每一趟都是遭遇（打懸賞那一路），交了差回原表；
 - 這一拍沒收穫（抽到素材卻沒料、遭遇打輸）照舊補一個一階素材；
 - 頭目、三道閘照舊掛在遭遇那一拍；同一處連兩趟不抽同一則感悟（outing_last）照舊。
@@ -69,16 +69,16 @@ def test_a_real_trip_brings_one_thing_only():
     assert len(seen) >= 3, seen  # 不是每一趟都抽到同一件
 
 
-def test_one_press_costs_fifteen_stamina():
+def test_one_press_costs_six_stamina():
     game = ready(jianfa_game(), side="guan", loc="yingshui")
     p = game.state.player
-    assert game.content.config.jianfa.explore_stamina == 15
+    assert game.content.config.jianfa.explore_stamina == 6
     option = next(o for o in game.options(odds=False) if o.id == "act:explore")
-    assert option.label.startswith("探索（體力 15・")
+    assert option.label.startswith("探索（體力 6・")
     stamina = p.stamina
     with _fight():
         game.choose("act:explore")
-    assert p.stamina == stamina - 15
+    assert p.stamina == stamina - 6
 
 
 def test_a_strike_bounty_here_makes_every_trip_that_bounty_fight_and_handing_it_in_goes_back_to_the_table():
@@ -122,7 +122,7 @@ def test_the_howto_and_the_action_note_talk_about_one_thing_not_beats():
     note = game.action_notes([o.id for o in game.options(odds=False)])["act:explore"]
     assert note.startswith("出門一趟只碰上一件事") and "拍" not in note
     text = game.howto_text().split("**探索**")[1].split("\n")[0]
-    assert "體力 15" in text and "一件事" in text and "拍" not in text and "放在最後" not in text
+    assert "體力 6" in text and "一件事" in text and "拍" not in text and "放在最後" not in text
     ready(game, loc="yingchuan_wilds")
     _strike_bounty(game, "yingchuan_wilds")
     bounty_note = game.action_notes([o.id for o in game.options(odds=False)])["act:explore"]

@@ -122,9 +122,9 @@ def test_a_bounty_here_makes_the_whole_trip_that_bounty_encounter():
     assert not hasattr(CFG, "bounty_encounter_bonus") and not hasattr(CFG, "beats")
 
 
-def test_the_outing_costs_fifteen_stamina_by_default():
-    """企劃者 2026-10-26：一趟一件事、體力 15（原本 18）。"""
-    assert CFG.explore_stamina == 15
+def test_the_outing_costs_six_stamina_by_default():
+    """企劃者 2026-10-26：一趟一件事；體力企劃者 2026-10-27 改回 6（曾是 18、15）。"""
+    assert CFG.explore_stamina == 6
 
 
 # ── 抽一件事、出門一趟 ──────────────────────────────────────────

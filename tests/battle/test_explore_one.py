@@ -1,5 +1,5 @@
 """減法季探索一顆的引擎接線（減法季整合設計 4.1；主機側計畫 Task 2-3）：開著時選單只剩一顆「探索」（act:explore，出門一趟），
-不畫三選一、尋敵、城裡操練；按一下扣 explore_stamina（15）、抽一件事結算，回一段話與一則「出門一趟」的江湖紀錄。
+不畫三選一、尋敵、城裡操練；按一下扣 explore_stamina（6）、抽一件事結算，回一段話與一則「出門一趟」的江湖紀錄。
 城類地點自己沒有對手時遭遇換成地痞（不推線、不算討伐、戰利打 town_loot_scale），自家營寨的遭遇是跟同袍比劃（不掉東西）；
 事件端出 pending_event。用正式內容（season21）開局，整個檔標 slow。
 
@@ -47,7 +47,7 @@ def test_the_menu_has_one_explore_button_and_no_modes_drill_or_practice():
     assert ids.count("act:explore") == 1
     assert not [i for i in ids if i.startswith("explore:")] and "act:drill" not in ids
     option = next(o for o in game.options(odds=False) if o.id == "act:explore")
-    assert option.label == "探索（體力 15・城裡多事）" and option.enabled
+    assert option.label == "探索（體力 6・城裡多事）" and option.enabled
     ready(game, loc="yingshui")  # 城外：以前有練功（尋敵）
     ids = _ids(game)
     assert "explore:practice" not in ids and not [i for i in ids if i.startswith("explore:")]
@@ -61,13 +61,13 @@ def test_closed_season_keeps_the_old_menu():
     assert next(o for o in game.options(odds=False) if o.id == "act:explore").label == "探索"
 
 
-def test_one_press_costs_fifteen_and_writes_one_outing_entry():
+def test_one_press_costs_six_and_writes_one_outing_entry():
     game = ready(jianfa_game(), side="guan", loc="yingshui")
     p = game.state.player
     stamina, seq = p.stamina, p.explore_seq
     with _beat("material"):
         msgs = game.choose("act:explore")
-    assert p.stamina == stamina - 15 and p.explore_seq == seq + 1
+    assert p.stamina == stamina - 6 and p.explore_seq == seq + 1
     entry = game.state.journal[0]
     assert entry.title == f"{journal.OUTING}・潁水河畔" and entry.tag == "得料"
     assert msgs[0].startswith("你") and "潁水河畔" in msgs[0]  # 一段話：出門那一句接這一件事
