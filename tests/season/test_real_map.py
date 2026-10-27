@@ -56,17 +56,12 @@ def _detail(content, state, loc_id: str) -> str:
     return detail_text(state, content, loc_id, lambda squad_id: "穩勝")
 
 
-def test_the_map_detail_of_a_scouted_wild_place_lists_the_insight_exploring_teaches(content, monkeypatch):
-    """W3，真實內容：潁川郊野寫的是風——摸清了詳情欄就寫「這裡能悟：風」，沒摸清的地點什麼也不露。"""
+def test_the_map_detail_of_a_wild_place_lists_the_insight_exploring_teaches(content):
+    """W3，真實內容：潁川郊野寫的是風——詳情欄就寫「這裡能悟：風」。"""
     from tianxia import insights
 
-    monkeypatch.setattr(content.config, "open_map", False)  # 沒摸清是全圖開放之前的規則（同 closed_map；內容是整個模組共用的）
     state = new_game_state(content, "甲")
     state.player.location = "yingchuan"
-    assert "yingchuan_wilds" not in state.player.visited
-    far = _detail(content, state, "zhuo_county")  # 隔了好幾個大區、視野之外的涿郡
-    assert far == "### ？\n\n尚未摸清" or "這裡能悟" not in far
-    state.player.visited.add("yingchuan_wilds")
     near = _detail(content, state, "yingchuan_wilds")
     assert "**意境**　這裡能悟：風\n" in near
     for loc_id in ("changshe", "nanyang_wilds", "deep_mountain"):  # 兩個以上的，頓號隔開、順序照內容

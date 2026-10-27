@@ -108,13 +108,6 @@ def no_conquest(content: Content) -> Content:
     return content
 
 
-def closed_map(content: Content) -> Content:
-    """全圖開放（企劃者 2026-10-15，Config.open_map）之前的摸清規則：視野、去過、留意地形才算摸清，回傳同一份內容。
-    測的是摸清、視野、留意地形、「還沒摸清」那些字本身的舊測試用它；新規則的測試不要叫（見 tests/test_open_map.py）。"""
-    content.config.open_map = False
-    return content
-
-
 RENOWN_SWITCHES = (
     "titles", "scale", "deed_fame", "discount", "prize_gate", "affinity", "duel", "news", "faction_wanted", "arena_reach",
     "virtue_insight", "lessons", "prompt", "clinic", "black_market", "virtue_choices", "official_wanted", "explain",

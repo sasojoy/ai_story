@@ -1602,7 +1602,7 @@ def test_on_the_road_you_can_turn_back_but_not_do_what_needs_a_place(game):
     opts = game.options()
     assert [(o.id, o.enabled) for o in opts] == [
         ("act:on_road", False), ("road:back", True),
-        ("road:think", True), ("road:ask", True), ("road:survey", True), ("road:gather", True),
+        ("road:think", True), ("road:ask", True), ("road:gather", True),
     ]
     assert "抵達湖邊" in opts[0].label
     assert game.choose("act:explore") == ["（此刻無法這麼做。）"]
@@ -4967,23 +4967,6 @@ def test_asking_with_nothing_to_hear_still_counts(game):
     assert not _task(game, "ask").enabled
 
 
-def test_surveying_marks_the_unknown_places_near_both_ends(content, game):
-    content.config.vision_base = 0  # 只看得見自己那一站
-    game.state.world.flags.add("cave_open")
-    game.choose("move:lake")
-    assert atlas.views(game.state, content)["lake"] == "dot"
-    msgs = game.choose("road:survey")
-    assert msgs == ["你留意沿路的地形，摸清了湖邊、寶洞的位置。"]
-    assert game.state.player.surveyed == {"lake", "cave"}
-    assert atlas.views(game.state, content)["cave"] == "remembered"
-
-
-def test_surveying_with_nothing_left_to_find_still_counts(game):
-    game.choose("move:lake")
-    assert game.choose("road:survey") == ["你留意了一路的地形，附近沒有什麼沒摸清的地方。"]
-    assert not _task(game, "survey").enabled
-
-
 def test_gathering_by_the_road_follows_what_the_two_ends_offer(content, game):
     content.locations["lake"].materials = ["gang_2"]  # 湖邊出剛的素材：路邊撿到的是剛的一階
     game.choose("move:lake")
@@ -5010,7 +4993,7 @@ def test_gathering_without_any_tier_one_material_finds_nothing(content, game):
 
 def test_the_road_scene_lists_the_road_tasks(game):
     game.choose("move:lake")
-    assert "邊走邊想、沿途打聽、留意地形、路邊採集" in game.scene_text()
+    assert "邊走邊想、沿途打聽、路邊採集" in game.scene_text()
 
 
 def test_old_saves_without_road_fields_load(content, game):
@@ -5086,8 +5069,8 @@ def test_thinking_and_gathering_share_the_days_road_rewards(content, game):
     assert game.choose("road:gather") == [f"你留心路邊，這陣子已經撿夠了，沒再去翻（{moment} 之後再說）。"]
     assert p.materials == {} and p.road_rewards_today == {"task": [1, 1]}
     assert not _task(game, "gather").enabled  # 照樣算這段路做過了
-    # 沿途打聽、留意地形沒有經濟上的收穫，不設上限
-    assert [_task(game, what).label for what in ("ask", "survey")] == ["沿途打聽（聽一則這一帶的傳聞）", "留意地形（摸清附近的地點）"]
+    # 沿途打聽沒有經濟上的收穫，不設上限
+    assert _task(game, "ask").label == "沿途打聽（聽一則這一帶的傳聞）"
 
 
 # ── 路上見聞（路上設計第五節）──────────────────────────────

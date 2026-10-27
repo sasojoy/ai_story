@@ -914,8 +914,6 @@ def _fame_uses(content: Content, k: float = 1.0, season: WorldState | None = Non
         span = f"門檻最低 {scaled(bars[0])}、最高 {scaled(bars[-1])}"
         uses.append(f"跟大勢人物說上話（{span}；不夠的見不到）" if precise.on(content, season)
                     else f"求見大勢人物（{span}；不夠的會打發你）")
-    if not cfg.open_map:  # 全圖開放（企劃者 2026-10-15）沒有視野，名望不再多看一站
-        uses.append(f"名望到 {cfg.vision_fame}，輿圖多看一站")
     lessons = sorted(s.learn.fame for s in content.skills.values() if s.learn is not None and s.learn.fame > 0)
     if lessons:
         uses.append(f"有些師父要名望 {scaled(lessons[0])} 以上才肯教")
@@ -1293,7 +1291,7 @@ def page(content: Content, season: WorldState, *, recruitable: bool, rule: str =
         + (f"{cfg.talk_turns_per_day} 輪）。名望不夠的人物在名單上灰著，寫還差多少；交友的事在探索的{explore_modes.NAMES['seek']}裡。"
            if precise.on(content, season) else f"{cfg.talk_turns_per_day} 輪），或碰上交友的事。名望不夠的人物會打發你。"),
         "- **移動**：步行不花體力、只花時間；疾行立刻到、要花體力。步行時，每一段路可以邊走邊想、"
-        + ("沿途打聽、路邊採集各一次。" if cfg.open_map else "沿途打聽、留意地形、路邊採集各一次。"),  # 全圖開放拿掉了留意地形
+        + "沿途打聽、路邊採集各一次。",  # 全圖開放拿掉了留意地形
         "",
         "#### 體力",
         *[f"- {line}" for line in stamina_lines(content, season)],

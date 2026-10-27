@@ -48,17 +48,12 @@ def test_no_regions_means_no_region(content):
     assert region_of(content, "town") is None
 
 
-# ── 視野與選得到的地點 ─────────────────────────────────
+# ── 選得到的地點 ─────────────────────────────────
 
 
 def test_known_locations_and_place_choices(state, content):
     assert known_locations(state, content) == {"town", "lake"}  # 寶洞未開放
     assert place_choices(state, content) == [("小鎮（所在地）", "town"), ("湖邊", "lake")]
-    content.config.vision_base = 0
-    assert known_locations(state, content) == {"town"}
-    assert place_choices(state, content) == [("小鎮（所在地）", "town")]  # 沒名字的淡點不列
-    content.locations["lake"].important = True
-    assert place_choices(state, content) == [("小鎮（所在地）", "town"), ("湖邊？", "lake")]
 
 
 # ── 大區 ──────────────────────────────────────────────
@@ -217,21 +212,12 @@ def test_routes_take_the_quickest_way(state, content):
     assert quick.path == ("hill", "cave") and quick.minutes == pytest.approx(2 * leg_minutes(content, "town", "hill"))
 
 
-def test_routes_only_pass_known_and_open_places(state, content):
+def test_routes_only_pass_open_places(state, content):
     assert "cave" not in routes(state, content)  # 未開放
-    content.config.vision_base = 0
-    assert routes(state, content) == {"town": Route((), ())}  # 湖邊沒摸清
-    state.player.visited.add("lake")
-    assert routes(state, content)["lake"].path == ("lake",)
-    add_hill(content)  # 比較快，但山丘沒摸清
-    state.world.flags.add("cave_open")
-    state.player.visited.add("cave")
-    assert routes(state, content)["cave"].path == ("lake", "cave")
 
 
 def test_routes_prefer_fewer_stops_when_equally_quick(state, content):
     state.world.flags.add("cave_open")
-    content.config.vision_base = 3
     content.locations["lake"].connections = ["town", "cave"]  # 湖邊—寶洞改成一般路：小鎮→寶洞 6 分鐘
     content.locations["cave"].connections = ["lake"]
     for loc_id, x in (("aa", 150), ("ab", 250)):  # 同一直線上多兩站：小鎮—aa—ab—寶洞，一樣 6 分鐘
@@ -270,8 +256,6 @@ def test_travel_options_offer_walking_and_dashing(state, content):
     state.player.stamina = 4
     assert travel_options(state, content, "lake")[1] == TravelOption("dash", "疾行（體力不足，要 6）", False)
     assert travel_options(state, content, "lake")[0].enabled  # 步行不花體力
-    content.config.vision_base = 0
-    assert travel_options(state, content, "lake") is None  # 沒摸清
 
 
 def test_travel_options_and_refusal_explain_why_you_cannot_go(state, content):
@@ -332,30 +316,14 @@ def test_the_season_ending_outranks_a_pending_event_in_the_travel_block(state, c
     assert travel_block(state, content) == TravelBlock("賽季已結束，不能安排前往")
 
 
-# ── 詳情欄 ────────────────────────────────────────────
-
-
-def test_detail_of_an_unknown_place_leaks_nothing(state, content):
-    content.config.vision_base = 0
-    content.locations["lake"].important = True
-    assert detail_text(state, content, "lake", no_odds) == "### 湖邊？\n\n尚未摸清"  # 只有畫出輪廓的才有名字
-
-
-def test_detail_of_a_locked_place_or_a_dot_leaks_no_name(state, content):
+def test_detail_of_a_locked_place_leaks_no_name(state, content):
     assert detail_text(state, content, "cave", no_odds) == "### ？\n\n尚未摸清"  # 未開放：完全不畫
-    content.config.vision_base = 0
-    assert content.locations["lake"].important is False
-    assert detail_text(state, content, "lake", no_odds) == "### ？\n\n尚未摸清"  # 淡點沒有名字
 
 
 def test_is_known_gates_places_for_the_layer_primitives(state, content):
     assert (is_known(state, content, "town"), is_known(state, content, "lake"), is_known(state, content, "cave")) == (
         True, True, False,
     )
-    content.config.vision_base = 0
-    assert is_known(state, content, "lake") is False
-    state.player.visited.add("lake")
-    assert is_known(state, content, "lake") is True  # 去過的記得
 
 
 def test_detail_lists_situation_enemies_story_and_route(state, content):
@@ -479,14 +447,6 @@ def test_detail_says_nothing_about_insights_where_exploring_gives_none(state, co
     assert "這裡能悟：風、火、水、山" in detail_text(state, content, "lake", {"thug": "穩勝"}.get)
 
 
-def test_an_unscouted_place_lists_no_insights(state, content):
-    content.config.vision_base = 0
-    content.locations["lake"].important = True
-    assert detail_text(state, content, "lake", no_odds) == "### 湖邊？\n\n尚未摸清"  # 沒摸清：連「這裡能悟」也不露
-    state.player.visited.add("lake")
-    assert "這裡能悟：水、風" in detail_text(state, content, "lake", {"thug": "穩勝"}.get)  # 去過了才寫
-
-
 def test_the_insights_the_map_promises_are_exactly_what_exploring_teaches(game):
     """「這裡能悟」永遠不會說探索給不出的東西，也不漏掉探索給得出的：把探索的比例逼成只悟意境，探很多次，悟到的就是詳情欄寫的那幾個。"""
     from tianxia.models import ExploreMix
@@ -501,14 +461,6 @@ def test_the_insights_the_map_promises_are_exactly_what_exploring_teaches(game):
         game._explore()
     learned = list(dict.fromkeys(c.insights[insight_fx.base_id(i)].name for i in p.insights))  # 同一種悟到幾份都算一種
     assert sorted(learned) == sorted(listed) == ["水", "風"]
-
-
-def test_detail_of_an_unknown_place_still_says_nothing_about_leaders(state, content):
-    content.config.vision_base = 0
-    content.locations["lake"].important = True
-    state.world.rumors.append(Rumor(time=0, text="翻江龍又劫了一艘船。", location="lake"))
-    text = detail_text(state, content, "lake", no_odds)
-    assert text == "### 湖邊？\n\n尚未摸清" and "翻江龍" not in text
 
 
 def test_detail_names_the_places_on_the_way(state, content):

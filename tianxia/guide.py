@@ -101,7 +101,6 @@ def note_action(state: GameState, content: Content, world: WorldStateStore, acti
         in_hut = prologue.has(content) and state.player.tutorial_step < t.prologue_steps
         state.player.tutorial_step += 1
         completed = True
-        state.player.surveyed.update(step.survey)  # 出師那一步講到的投靠地點：做完就記成摸清了（略過的人沒走到這裡）
         if not in_hut:
             msgs.append("✔ 引導完成")
         reward = apply_effect(step.reward, state, content, world)

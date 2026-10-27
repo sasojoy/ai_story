@@ -2996,7 +2996,6 @@ def validate(c: Content) -> None:
     for step in c.tutorial.steps:
         where = f"新手引導 {step.id}"
         known(where, step.done_when.locations, c.locations, "地點")
-        known(where, step.survey, c.locations, "地點")
         check_condition(where, step.done_when.condition)
         check_effect(where, step.reward)
     enlist = c.tutorial.enlist  # 入伍段（新手引導計畫二）：引薦人要對得上劇本的陣營、每位每一步都有收起來那一行

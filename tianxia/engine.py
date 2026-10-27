@@ -122,7 +122,6 @@ MELT_MANY_PROLOGUE = "這裡照師父說的，一門一門熔。"  # 序章裡�
 ROAD_TASKS: dict[str, tuple[str, str]] = {
     "think": ("邊走邊想", "想過了"),
     "ask": ("沿途打聽", "打聽過了"),
-    "survey": ("留意地形", "留意過了"),
     "gather": ("路邊採集", "找過了"),
 }
 ROAD_REWARD_TASKS = ("think", "gather")  # 有經濟收穫、受每天上限管的路上小事（Config.road_reward_daily_cap）
@@ -917,7 +916,6 @@ class Game:
         ):
             p.journey = None
             p.leg_actions = set()  # 這段路不在了：下次出發是新的一段
-        p.surveyed = {loc_id for loc_id in p.surveyed if loc_id in c.locations}
         p.leg_actions &= set(ROAD_TASKS)
         p.recent_sights = [sight_id for sight_id in p.recent_sights if sight_id in c.road_sights]
         p.team = [k for k in p.team if k in c.characters][: team.MAX_TEAM_COMPANIONS]
@@ -1883,7 +1881,6 @@ class Game:
         hints = {
             "think": f"心得 +{self.content.config.road_think_xinde}",
             "ask": "聽一則這一帶的傳聞",
-            "survey": "摸清附近的地點",
             "gather": "有機會撿到素材",
         }
         if not self._road_reward_due("task"):
@@ -1894,7 +1891,6 @@ class Game:
             Option(id=f"road:{what}", label=f"{name}（{did}，到下一站再說）", enabled=False) if what in done
             else Option(id=f"road:{what}", label=f"{name}（{hints[what]}）")
             for what, (name, did) in ROAD_TASKS.items()
-            if not (what == "survey" and self.content.config.open_map)  # 全圖開放：沒有沒摸清的地方，「留意地形」拿掉（剩三樣）
         ]
 
     def set_move_mode(self, mode: str) -> None:
@@ -11630,7 +11626,7 @@ class Game:
         if what == "back":
             return self._depart(self._back_way(), mode or "walk")
         self.state.player.leg_actions.add(what)
-        tasks = {"think": self._road_think, "ask": self._road_ask, "survey": self._road_survey, "gather": self._road_gather}
+        tasks = {"think": self._road_think, "ask": self._road_ask, "gather": self._road_gather}
         self._road_gain = None  # 這件小事的收穫（分給結伴同行的人，_share_road）；各個小事真的給了東西才填
         msgs = tasks[what]()
         return msgs + self._share_road(what, self._road_gain)
@@ -11688,22 +11684,6 @@ class Game:
         text = self.rng.choice(heard).text
         self._road_gain = ("rumor", text)
         return [f"你沿途向人打聽，聽說：{text}"]
-
-    def _road_survey(self) -> list[str]:
-        """留意地形：這段路兩頭一站以內、還沒摸清（也已開放）的地點，標成摸清（PlayerState.surveyed，大地圖上跟去過一樣
-        算記得）。沒有可標的就寫一句，仍算做過。全圖開放（Config.open_map）時選單上沒有這一顆（_road_task_options）。"""
-        s, c = self.state, self.content
-        views = atlas.views(s, c)
-        found: list[str] = []
-        for end in self._road_ends():
-            for loc_id in (end, *(str(dest) for dest in c.locations[end].connections)):
-                if views[loc_id] in ("outline", "dot") and loc_id not in found:
-                    found.append(loc_id)
-        if not found:
-            return ["你留意了一路的地形，附近沒有什麼沒摸清的地方。"]
-        s.player.surveyed |= set(found)
-        self._road_gain = ("survey", found)
-        return [f"你留意沿路的地形，摸清了{'、'.join(c.locations[loc_id].name for loc_id in found)}的位置。"]
 
     def _road_gather(self) -> list[str]:
         """路邊採集：一定機率撿到一樣一階素材；屬性照這段路兩頭的地點寫的素材（Location.materials），兩頭都沒寫就隨機。
@@ -16750,9 +16730,6 @@ class Game:
                 elif kind == "material":
                     got = [materials.grant(other.state, self.content, value)]
                     other._count_road_reward("task")
-                elif kind == "survey":
-                    o.surveyed |= set(value)
-                    got = [f"摸清了{'、'.join(self.content.locations[x].name for x in value)}的位置。"]
                 elif kind == "rumor":
                     got = [f"聽說：{value}"]
             if got:
@@ -17042,7 +17019,7 @@ class Game:
         if s.player.journey is not None:
             # 往哪、幾時抵達只寫在狀態列（status_data 的 journey，每一頁都看得到），場景不再寫一次（FB-046）
             halted = "（已經喊停）" if s.player.journey.stop_at is not None else ""
-            tasks = "邊走邊想、沿途打聽、路邊採集" if c.config.open_map else "邊走邊想、沿途打聽、留意地形、路邊採集"  # 全圖開放拿掉了留意地形（FB-300，同 howto）
+            tasks = "邊走邊想、沿途打聽、路邊採集"  # 全圖開放拿掉了留意地形（FB-300，同 howto）
             return (
                 f"**在路上**{halted}\n\n"
                 f"路上可以折返，也可以打開輿圖改去別處，或去修練、煉製；{tasks}，"

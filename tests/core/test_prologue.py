@@ -42,7 +42,7 @@ def test_hut_is_invisible_to_everyone_outside(fresh, prologue_content):
     assert atlas.is_unlocked(hut, fresh.state)
     assert not atlas.is_unlocked(hut, other.state)
     assert all(not o.id.startswith("move:hut") for o in other.options())
-    assert "hut" not in atlas.visible_locations(other.state, prologue_content)
+    assert atlas.views(other.state, prologue_content)["hut"] == "hidden"
     assert "hut" not in atlas.shortest_routes(other.state, prologue_content)
 
 

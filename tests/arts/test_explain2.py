@@ -13,7 +13,7 @@ import re
 from pathlib import Path
 
 import pytest
-from conftest import classic_rules, closed_map, real_content
+from conftest import classic_rules, real_content
 
 from tianxia import howto, renown, rules, timetable
 from tianxia.engine import Game
@@ -313,17 +313,14 @@ def test_the_first_echo_line_follows_the_config_and_only_in_season_one(on):
 
 
 def test_what_fame_is_for_follows_the_content(on):
-    closed_map(on)  # 名望多看一站是全圖開放之前的視野；全圖開放的那一句見 tests/test_open_map.py
     game = _war(on)
     bars = sorted(ch.audience_fame for ch in on.characters.values() if ch.deep_interaction and ch.audience_fame > 0)
     lessons = sorted(s.learn.fame for s in on.skills.values() if s.learn is not None and s.learn.fame > 0)
     line = next(x for x in _fame_section(game).splitlines() if "名望拿來" in x)
     k = renown.scale(game.state.world)  # 名聲開著時門檻照這一季的倍數（rules.audience_parts）
     bars, lessons = [int(b * k + 0.5) for b in bars], [int(n * k + 0.5) for n in lessons]
-    assert f"門檻最低 {bars[0]}、最高 {bars[-1]}" in line and f"名望到 {on.config.vision_fame}，輿圖多看一站" in line
+    assert f"門檻最低 {bars[0]}、最高 {bars[-1]}" in line and "輿圖多看一站" not in line
     assert f"有些師父要名望 {lessons[0]} 以上才肯教" in line
-    on.config.vision_fame = 12
-    assert "名望到 12，輿圖多看一站" in _fame_section(game)
 
 
 def test_joining_and_orders_read_the_config(on):
