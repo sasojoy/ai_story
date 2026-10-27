@@ -38,7 +38,6 @@ from conquest_kit import conquest_game, join, plain_game, press
 from tianxia import atlas, conquest, mapdata, orders
 
 
-
 def _game():
     game = conquest_game("season21")
     return game, game.state.world, game.content
@@ -231,16 +230,6 @@ def test_halve_and_siege_start_shift():
     assert conquest.bar(w, "hilltop_wilds", "guan") == 40
 
 
-def test_switch_off_nothing_moves():
-    from conquest_kit import plain_game
-
-    game = plain_game("season21")
-    w, c = game.state.world, game.content
-    assert conquest.push_problem(w, c, "guan", "hilltop_wilds", "attack") == conquest.WHY_OFF
-    assert conquest.focus_blocks(w, c, "guan", "attack") == [] and not conquest.cooling(w, c, "hilltop_wilds")
-    assert w.conquest is None
-
-
 # ── 原 test_conquest_flip_game.py（整檔搬進來） ──
 # 翻地與爭搶接到出陣上（輿圖簡化設計 4.1、4.2、4.5；計畫 docs/superpowers/plans/2026-10-20-翻地與爭搶.md）：出陣攻推自己那一條、推滿那一下
 # 當場易手、分紅在自己同步時送到（下線的人回來也拿得到）、冷卻期行動列寫原因、掉落只給一階、每日回在世界推進時跑、集火寫在那一句裡。
@@ -343,13 +332,6 @@ def test_focus_shows_in_the_line():
     msgs = win_sortie(game)
     assert any("集火 +10%" in m for m in msgs)
     assert conquest.bar(w, "hilltop_wilds", "guan") == pytest.approx(_nominal(game) * 1.1)
-
-
-def test_switch_off_sortie_and_payouts_unchanged():
-    game = go(join(plain_game("season21"), "guan"), "hilltop_wilds")
-    assert game.sortie_progress("hilltop_wilds") == 0 and game.state.world.conquest is None
-    game._deliver_conquest()  # 沒有這一本：什麼都不做
-    assert game.conquest_view() is None
 
 
 # ── 原 test_conquest_flip_qa_small.py（整檔搬進來） ──
@@ -797,34 +779,21 @@ def test_siege_places_are_the_highest_block_on_that_line():
     assert orders.siege_places(c, "huang", "yingru", w) == ["runan_wilds"]  # 區塊表 v3：黃巾開季碰不到荒丘
 
 
-def test_fortify_is_not_drawn():
-    game = go(join(conquest_game("season21"), "guan"), "yingchuan_wilds")
-    game.content.config.fortify.enabled = True
-    assert not works.fort_spot(game.state, game.content, "guan")
-    assert not any(o.id == "works:fortify" for o in game.options())
-
-
 def test_howto_has_the_conquest_version():
     game = conquest_game("season21")
     lines = howto.territory_lines(game.content, True, game.state.world)
     assert any("中立地" in line for line in lines)
-    plain = plain_game("season21")
-    assert not any("中立地" in line for line in howto.territory_lines(plain.content, True, plain.state.world))
 
 
 def test_help_texts_say_progress_and_holdings():
-    """戰況圖卡、主線小標、投靠那一段的說明：出陣推進度、戰線照佔領算（不再寫「在戰線上的地點出陣會推動戰況」）；關著照舊。"""
+    """戰況圖卡、主線小標、投靠那一段的說明：出陣推進度、戰線照佔領算（不再寫「在戰線上的地點出陣會推動戰況」）。"""
     game = conquest_game("season21")
     s, c = game.state, game.content
     helps = howto.war_help(s, c)
-    assert howto.CONQUEST_FRONTS in " ".join(helps["fronts"]) and howto.SORTIE_PLACES not in " ".join(helps["fronts"])
+    assert howto.CONQUEST_FRONTS in " ".join(helps["fronts"])
     assert howto.CONQUEST_PLACES in " ".join(helps["quest"])
     assert howto.CONQUEST_PLACES in " ".join(howto.season_page_lines(c, s.world))
     assert howto.CONQUEST_JOIN in " ".join(howto.join_lines(c, s.world))
-    plain = plain_game("season21")
-    old = howto.war_help(plain.state, plain.content)
-    assert howto.SORTIE_PLACES in " ".join(old["quest"]) and howto.CONQUEST_FRONTS not in " ".join(old["fronts"])
-    assert howto.SORTIE_JOIN in " ".join(howto.join_lines(plain.content, plain.state.world))
 
 
 def _note(game, loc_id):
@@ -834,14 +803,12 @@ def _note(game, loc_id):
 def test_action_note_says_progress_not_the_line():
     """行動列底下那一行：出陣推的是這一塊的進度，不寫「這條線推滿了」（sortie_push 開著時是空的，舊寫法會判成推不動）。"""
     game = go(join(conquest_game("season21"), "huang"), "nanyang_road")
-    assert howto.SORTIE_PROGRESS in _note(game, "nanyang_road") and howto.SORTIE_NO_PUSH not in _note(game, "nanyang_road")
+    assert howto.SORTIE_PROGRESS in _note(game, "nanyang_road")
     conquest.push(game.state.world, game.content, "yingchuan_wilds", "huang", "某", 10, "attack")
     go(join(game, "guan"), "yingchuan_wilds")  # 守自家的區塊：有人在推，拉得回來
     assert howto.SORTIE_HOLD_PROGRESS in _note(game, "yingchuan_wilds")
     go(game, "changshe")  # 大本營搶不下來：沒有進度（FB-532：自家的大本營另一句，見 test_conquest_sortie_notes）
     assert "沒有進度可推" in _note(game, "changshe") and howto.SORTIE_PROGRESS not in _note(game, "changshe")
-    plain = go(join(plain_game("week7"), "huang"), "runan_wilds")
-    assert howto.SORTIE_PROGRESS not in _note(plain, "runan_wilds")  # 關著照舊寫推動戰局
 
 
 def test_ranger_sees_why_at_every_block():
@@ -851,15 +818,6 @@ def test_ranger_sees_why_at_every_block():
     assert option is not None and not option.enabled and sortie.RANGER_NOTE in option.label
     go(game, "haozu_fort")  # 不是區塊：沒有出陣那一格
     assert _sortie_progress(game) is None
-    plain = go(join(plain_game("season21"), None), "deep_mountain")
-    assert _sortie_progress(plain) is None  # 關著：嵩山深處不是戰線地點，照舊沒有
-
-
-def test_switch_off_sortie_unchanged():
-    game = go(join(plain_game("week7"), "huang"), "runan_wilds")
-    w = game.state.world
-    assert game.sortie_push("guan_camp", "attack")  # 關著：出陣照舊推線
-    assert w.conquest is None and game.sortie_progress("guan_camp") == 0
 
 
 # ── 原 test_conquest_duty.py（整檔搬進來） ──
@@ -1064,14 +1022,6 @@ def test_others_block_out_of_reach_line_says_why():
     """別人的區塊、跟自家的領地不相連：一個括號寫原因。"""
     game = go(join(conquest_game("season21"), "guan"), "runan")
     assert _note(game, "runan").startswith("這裡歸別人：打一場，打贏推不動進度（這裡跟自家的領地不相連）；只拿對手 3 成的心得與經驗，")
-
-
-def test_switch_off_hold_line_is_unchanged():
-    """關著：自家大本營照舊寫推動戰局（a73c111e 上量的）。"""
-    game = go(join(plain_game("season21"), "guan"), "changshe")
-    assert _note(game, "changshe") == (
-        "這裡是自家地盤：不用打，推動戰局、記貢獻（量是攻的一半）；拿自家隊伍 3 成的心得與經驗。今日還能出陣 5 次。"
-    )
 
 
 def test_unheld_neutral_block_does_not_say_someone_else_holds_it():
@@ -1318,17 +1268,6 @@ def test_a_siege_is_issued_where_only_captured_neutral_blocks_are_enemy_held():
     conquest.set_control(w, c, "nanyang_road", "huang")
     conquest.push(w, c, "nanyang_road", "guan", "某", 10, "attack")
     assert orders.siege_places(c, "guan", "nanyang", w) == ["nanyang_road"]
-
-
-def test_switch_off_siege_places_unchanged():
-    """關著：照修之前（a73c111e 上量的）一個字都不變——地盤照控制方、沒給 world 照地點的 enemies。"""
-    game = plain_game("season21")
-    w, c = game.state.world, game.content
-    assert orders.siege_places(c, "guan", "yingru", w) == ["runan_wilds", "huangjin_camp"]
-    assert orders.siege_places(c, "guan", "jizhou", w) == ["juma_river", "yanshan_foot", "julu_altar", "guangzong"]
-    assert orders.siege_places(c, "huang", "nanyang", w) == ["yu_river", "nanyang_wilds"]
-    assert orders.siege_places(c, "guan", "yingru") == ["yingchuan_wilds", "changshe", "runan_wilds", "huangjin_camp"]
-    assert orders.siege_places(c, "huang", "jizhou") == ["luzhi_camp", "baima_ford"]
 
 
 # ── 原 test_conquest_fb565_defend.py（整檔搬進來） ──

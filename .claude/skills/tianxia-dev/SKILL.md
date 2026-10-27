@@ -102,7 +102,7 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 - **修 bug 先寫會紅的測試**：先確認它在修之前真的失敗、失敗的數字跟 QA 回報的一樣，再修。回報時寫「修前重現了什麼」。
 - **「確認並守住」的測試**（程式沒改、一寫就綠，例：假人不買商城的東西）：要證明它抓得到退步，另寫一個暫時的測試檔 import 它，monkeypatch 一個退步（例 `bot_policy.take_turn` 先叫 `mall_buy`、`social.card` 多塞一個「元寶」），跑一次看它紅，再刪掉那個暫時的檔（不提交）。
 - 用正式內容測舊規則的測試，要在 helper 裡把新開關關掉（例 `c.config.precise_actions = False`、`four_tiers.enabled = False`）。新規則另開一個測試檔，不要改寫舊的斷言去迎合新規則。
-  - **領地爭奪 2026-10-22 起正式內容打開**（`content/config.json`；週末、21 天、7 天新開的季都蓋章）：拿 `real_content("weekend"/"season21"/"week7")` 測地盤拔河、出陣推線、攻敵方大本營、「關著一個字都不變」的，建局那一處叫 `tests/conftest.py::no_conquest(content)`（`conquest_kit.plain_game` 已經叫了）。打開那一批第一次整套紅了 89 條，全是這一種（`docs/superpowers/plans/2026-10-22-打開領地爭奪.md` 6.8）。
+  - **領地爭奪沒有開關**（2026-10-27 舊的地盤拔河、出陣推線、攪局、修築工事連開關與 `no_conquest` 一起拿掉）：`real_content("season21"/"week7")` 就是領地爭奪；出陣要打一場的測試用 `conquest_kit.conquest_rules`（約戰關掉）、站中立地（汝南荒野），敵方的大本營不給攻。
   例外：PM 的裁決直接推翻還沒上線的這一批的做法（不是開關後面的舊季）時，鎖住舊做法的那一條斷言照裁決翻過來，註明哪一條裁決、新規則的測試在哪一個檔（例：裁決 19 之後 `test_siege_void_when_no_attacker` 改成「沒有作罷的天下大事」，新的在 `test_conquest_siege.py`）。
 - **週末季封存之後（測試整理批 1，2026-10-25），正式內容的測試一律 `real_content("week7")`，門檻有倍數、功能有週次**（2026-10-26 `test_renown_web.py` 紅 4 條就是這個）：
   - 名聲的測試寫的是門檻原數（名望 10／25／50／90、「再 23 到威震州郡」），以前週末季倍數剛好是 1；現在要 `renown_unscaled(real_content("week7"))`，不然名望 27 沒到第一段、名號行只剩善名那一個。同一個檔裡別的測試有 `renown_unscaled` 就是這個理由。

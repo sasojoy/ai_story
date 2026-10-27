@@ -501,10 +501,6 @@ def test_pull_lowers_only_that_attackers_bar_and_respects_the_still_times():
     slot = announce(g, loc, "guan")
     assert conquest.pull(w, c, loc, "guan", 5).moved == 0
     w.conquest.schedule.remove(slot)
-    # 關著的季：不動
-    c.config.conquest.enabled = False
-    assert conquest.pull(w, c, loc, "guan", 5).moved == 0
-    c.config.conquest.enabled = True
     assert conquest.pull(w, c, loc, "guan", 5).moved == pytest.approx(5)
 
 

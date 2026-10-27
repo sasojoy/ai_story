@@ -235,13 +235,6 @@ def test_siege_reports_keep_their_own_twenty():
     assert any(r.kind == "showdown" for r in s.battles)
 
 
-def test_switch_off_nothing_opens():
-    game = plain_game("season21")
-    assert siege.open_waiting(game.world, game.content, NOW) == []
-    assert game.world.get_sieges() == []
-    assert conquest_day.today(game.state.world, game.content, "huang", "attack") == []
-
-
 # ── 原 test_conquest_multi_battle.py（整檔搬進來） ──
 # 領地爭奪第二批 Task 10：多場戰鬥並存（攻城戰另存一串、找戰場、加入鈕、季終收兵、暫停繼續、假人、補戰報；Review Focus 4、5）。
 # 資料庫結構不動（第 6 版排給商城）：攻城存在既有的 battles 表、world 那一列的 JSON 記流水號。

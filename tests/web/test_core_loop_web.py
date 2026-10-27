@@ -9,7 +9,7 @@ from test_prologue_web import run
 
 import server
 import webharness
-from conftest import classic_rules, no_conquest, real_content
+from conftest import classic_rules, real_content
 from jianfa_kit import classic_explore
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
@@ -18,7 +18,7 @@ pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，�
 
 
 def _game(faction, at, classic=False):
-    c = no_conquest(real_content("week7"))  # 出陣推線的舊規則（領地爭奪 PM 2026-10-22 起正式內容打開）
+    c = real_content("week7")  # 出陣推線的舊規則（領地爭奪 PM 2026-10-22 起正式內容打開）
     classic_explore(c)  # 探索三選一（減法季探索一顆開著時只剩一顆）
     c.config.auto_open_first_season = True
     if classic:
@@ -32,29 +32,6 @@ def _game(faction, at, classic=False):
 
 def _bar(game, **S):
     return run(server.main_view(game), "return H.actionBar(H.S.main);", S=S)
-
-
-def test_the_sortie_cell_says_how_many_are_left():
-    bar = _bar(_game("huang", "huangjin_camp"))
-    assert "<b>出陣</b>" in bar and "今日 5 次" in bar and "零風險" in bar  # 格子只寫「出陣」（減法季批 1：四顆主鈕），攻守在出陣那一張卡上
-
-
-def test_a_used_up_sortie_greys_out():
-    game = _game("huang", "huangjin_camp")
-    for _ in range(5):
-        game.choose("act:train")
-    bar = _bar(game)
-    assert "今日已滿" in bar and 'data-id="act:train"' not in bar
-
-
-def test_a_ranger_sees_the_sortie_cell_greyed():
-    """FB-250：散人站在戰線上寫散人不能出陣；不在戰線的地方照舊寫「不在戰線」。"""
-    from tianxia import sortie
-
-    bar = _bar(_game(None, "changshe"))
-    assert "<b>出陣</b>" in bar and sortie.RANGER_NOTE in bar and "不在戰線" not in bar
-    bar = _bar(_game(None, "yingshui"))
-    assert "<b>出陣</b>" in bar and "不在戰線" in bar
 
 
 def test_the_explore_cell_unfolds_three_ways():

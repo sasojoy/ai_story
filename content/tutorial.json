@@ -209,16 +209,7 @@
         },
         "stamina": 250
       },
-      "paged": true,
-      "survey": [
-        "changshe",
-        "huangjin_camp",
-        "cao_manor",
-        "runan_wilds",
-        "runan",
-        "runan_market",
-        "qiao_county"
-      ]
+      "paged": true
     },
     {
       "id": "e1_clinic",

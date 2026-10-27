@@ -2,7 +2,7 @@
 from __future__ import annotations
 from conftest import real_content
 from conquest_kit import conquest_rules, plain_game
-from tianxia import conquest
+from tianxia import conquest, sortie
 from tianxia.models import BlockDef, ConquestRules
 from tianxia.state import WorldState
 from tianxia.world_state import stamp_season
@@ -32,7 +32,7 @@ from conquest_kit import _new, conquest_rules, go, join, plain_game
 from test_seal_web import DRIVER
 import server
 import webharness
-from conftest import no_conquest, real_content
+from conftest import real_content
 from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 from conquest_kit import conquest_game, go, join, plain_game
@@ -44,21 +44,11 @@ from tianxia import battle_instance as bi
 from tianxia import conquest, seal, territory
 from tianxia import world as world_mod
 from conquest_kit import _new, conquest_rules, go, join
-from conftest import next_season, no_conquest, real_content
+from conftest import next_season, real_content
 from jianfa_kit import no_jianfa
 from tianxia import atlas, conquest, explore_modes, library, seal
 from tianxia import world as world_rules
 from tianxia.world_state import SealCache, SealRegistry
-
-
-# ── 原 test_conquest_model.py（整檔搬進來） ──
-# 領地爭奪第一批 Task 1：設定、蓋章與資料模型（計畫 docs/superpowers/plans/2026-10-20-領地爭奪.md 三、Task 1）。
-
-def _with_blocks(content):
-    """這一條只測蓋章：給一塊區塊就夠（正式的區塊表在 Task 2）。"""
-    if not content.scenario.territory.blocks:
-        content.scenario.territory.blocks = {"changshe": BlockDef(kind="guan", line="yingru")}
-    return content
 
 
 def test_old_season_json_reads_without_conquest_fields():
@@ -66,46 +56,18 @@ def test_old_season_json_reads_without_conquest_fields():
     assert w.conquest_on is False and w.conquest is None
 
 
-def test_switch_is_on_in_the_real_content_pm_1022():
-    """企劃者 2026-10-22「領地爭奪……要打開」：正式內容的開關打開（content/config.json，三種設定覆寫檔都不寫、照它）。以前這一條鎖
-    「每一份設定都關著」（裁決 15：三批做完、QA 過、PM 說可以再開）。Config 的預設與測試內容照舊關著；哪幾種季開得了見
-    tests/test_conquest_rules.py。"""
-    for profile in (None, "season21", "week7"):
-        assert real_content(profile).config.conquest.enabled is True, profile
-    assert ConquestRules().enabled is False
-
-
-def test_stamp_needs_switch_season_one_and_blocks():
-    c = _with_blocks(conquest_rules(real_content("season21")))
-    season = WorldState()
-    stamp_season(season, c, now=0.0)
-    assert season.conquest_on is True and conquest.on(c, season)
-    c.config.conquest.enabled = False
-    assert conquest.on(c, season) is False  # 主機關掉：照關著
-    c2 = _with_blocks(conquest_rules(real_content()))  # 14 天：第一季規則關著
-    s2 = WorldState()
-    stamp_season(s2, c2, now=0.0)
-    assert s2.conquest_on is False
-
-
-def test_stamp_needs_blocks_and_allied_gentry():
-    c = conquest_rules(real_content("season21"))
-    c.scenario.territory.blocks = {}
-    season = WorldState()
-    stamp_season(season, c, now=0.0)
-    assert season.conquest_on is False  # 沒寫區塊
-    c = _with_blocks(conquest_rules(real_content("season21")))
+@pytest.mark.parametrize(("profile", "on"), [("week7", True), ("season21", True), (None, False)])
+def test_conquest_is_on_wherever_territory_is(profile, on):
+    """沒有開關（2026-10-27 舊出陣拔河拿掉）：有第一季規則、劇本寫了區塊、豪強分屬兩軍就是領地爭奪，不看季上的章；14 天（不帶設定）沒有第一季規則。"""
+    c = real_content(profile)
+    assert conquest.on(c) is on and territory.on(c) is on and sortie.on(c) is on
+    if not on:
+        return
     c.config.haoqiang_allied = False  # 豪強是第三方：割據要佔地，跟領地爭奪對不上（設計 4.1）
-    s2 = WorldState()
-    stamp_season(s2, c, now=0.0)
-    assert s2.conquest_on is False
-
-
-def test_running_season_keeps_its_stamp():
-    game = plain_game("season21")  # 開季時開關關著
-    assert game.state.world.conquest_on is False
-    game.content.config.conquest.enabled = True  # 開季後才打開：這一季不變
-    assert conquest.on(game.content, game.state.world) is False
+    assert not conquest.on(c)
+    c = real_content(profile)
+    c.scenario.territory.blocks = {}
+    assert not conquest.on(c)
 
 
 # ── 原 test_conquest_map.py（整檔搬進來） ──
@@ -369,14 +331,6 @@ def test_timetable_assign_sticks_and_reweighs():
     assert _owner(game, "xiaquyang") == "guan" and conquest.base(w, c, "jizhou") == pytest.approx(50 - 35 / 3)
 
 
-def test_switch_off_change_trend_is_unchanged():
-    game = plain_game("week7")
-    before = _value(game, "yingru")
-    rules.change_trend(game.state, game.content, "yingru", 3)
-    assert _value(game, "yingru") == before + 3
-    assert game.state.world.conquest is None
-
-
 def test_admin_sets_a_block():
     game = conquest_game("season21", name="Rayal")
     msgs = game.admin_conquest_set("nanyang_wilds", "huang")
@@ -444,12 +398,6 @@ def test_validate_rejects_bad_neutral_garrison(change):
     change(c.scenario.territory)
     with pytest.raises(ContentError):
         validate(c)
-
-
-def test_switch_off_squads_unchanged():
-    game = plain_game("week7")
-    assert _squads(game, "nanyang_wilds") == ["jun_bing"]  # 地盤易手：官軍控制的那一組
-    assert "nz_shuifei" not in _squads(game, "yu_river")
 
 
 # ── 原 test_conquest_perks.py（整檔搬進來） ──
@@ -544,16 +492,6 @@ def test_sense_rate_plus_five_at_home():
     assert sensing.rate(s, c, loc) == away + c.config.conquest.sense_bonus_points
 
 
-def test_switch_off_perks_unchanged():
-    game = plain_game("week7")
-    s, c = game.state, game.content
-    _at(game, "deep_mountain", None)
-    assert not conquest.home(s, c)
-    assert territory.price_factor(s.world, c, None, "deep_mountain") == 1.0
-    _at(game, "yingchuan", "huang")
-    assert territory.price_here(s, c, heal=True) == territory.price_here(s, c)
-
-
 # ── 原 test_conquest_day.py（整檔搬進來） ──
 # 領地爭奪：每天的鐘與攻城時段（tianxia/conquest_day.py；設計 4.3，裁決 6）。投票、主將定奪、合成時程表照翻地與爭搶拿掉了（PM 2026-10-20），
 # 那幾條測試跟著拿掉；戰書挑時段（next_slot）在這裡，戰書本身在 test_conquest_siege.py。
@@ -598,13 +536,6 @@ def test_slots_skip_showdown_window():
     assert not {19 * 60 + 30, 20 * 60, 20 * 60 + 30} & set(got)  # 19:30～20:45 拿掉（裁決 6）
     today = conquest_day.day_key(real_now, c.config)  # 今天（10/20 的 12:00～21:00）：10:00 看，12:00 之前的都還開得了集結
     assert conquest_day.slots(w, c, today, _utc(2026, 10, 20, 12))[0] == 20 * 60 + 30  # 台灣 20:00 看：20:30 以前的都來不及
-
-
-def test_switch_off_today_is_empty():
-    game = plain_game("season21")
-    w, c = game.state.world, game.content
-    assert not conquest.on(c, w)
-    assert conquest_day.today(w, c, "huang", "attack") == [] and conquest_day.today(w, c, "guan", "defend") == []
 
 
 # ── 原 test_conquest_settle.py（整檔搬進來） ──
@@ -663,15 +594,6 @@ def test_settle_only_moves_forward():
     behind = _tick(a, _tw(2026, 10, 20, 22, 1))  # a 天數小：不倒退、不作罷今天的
     assert behind.settled_key == ahead.settled_key
     assert [s.status for s in behind.schedule] == ["planned"]
-
-
-def test_switch_off_tick_never_touches_world():
-    game = join(plain_game("season21"), "huang")
-    before = game.state.world.model_dump_json()
-    game.now = _tw(2026, 10, 20, 22, 1)
-    assert game._conquest_tick() == []
-    assert game.state.world.conquest is None
-    assert before == game.state.world.model_dump_json()
 
 
 def test_sync_and_world_tick_turn_the_day():
@@ -873,45 +795,6 @@ def _world():
     return open_world(Path(tempfile.mkdtemp(prefix="conqon-")) / "t.db")
 
 
-@pytest.mark.parametrize(("profile", "stamped"), [("week7", True), ("season21", True), ("week7", True), (None, False)])
-def test_a_newly_opened_season_is_stamped_on_for_three_kinds(profile, stamped):
-    """週末、21 天、7 天（線上那一種）新開的季蓋上章；14 天（不帶設定）沒有第一季規則的章，蓋不上。籌備中種季、管理者開季兩步都走 stamp_season。"""
-    c = real_content(profile)
-    assert c.config.conquest.enabled is True
-    w = _world()
-    w.seed_first_season(c)
-    assert w.open_season(c, NOW)
-    season = w.get_season()
-    assert season.conquest_on is stamped and conquest.on(c, season) is stamped
-
-
-def test_a_season_opened_before_the_switch_stays_off_until_the_next_season():
-    """部署那一刻正在跑的季（舊程式開的、章上沒有領地爭奪）：換上打開的程式照舊關著；管理者收季、開下一季，新的一季才有。"""
-    w = _world()
-    old = no_conquest(real_content("week7"))
-    w.seed_first_season(old)
-    assert w.open_season(old, NOW)
-    new = real_content("week7")
-    new.config.admins = [ADMIN]
-    game = Game.new(new, ADMIN, rng=random.Random(0), world=w)
-    game.client = None
-    game.sync(NOW + 3600)
-    assert game.state.world.conquest_on is False and not conquest.on(new, game.state.world)
-    assert game.conquest_view() is None and game.admin_conquest_choices() is None
-    game.admin_end_season(NOW + 7200)
-    game.admin_next_season(NOW + 7300)
-    season = w.get_season()
-    assert w.get_season_number() == 2 and season.conquest_on is True and conquest.on(new, season)
-
-
-def test_the_host_switch_still_turns_a_stamped_season_off():
-    """主機的緊急開關：蓋了章的季，設定關掉就照關著（conquest.on 也看設定）。"""
-    game = _admin_game()
-    assert conquest.on(game.content, game.state.world)
-    game.content.config.conquest.enabled = False
-    assert not conquest.on(game.content, game.state.world) and game.admin_conquest_choices() is None
-
-
 # ── 設定頁「領地爭奪」救場一組 ──
 
 
@@ -922,7 +805,7 @@ def _admin_game(profile: str = "week7"):
 
 
 def test_admin_choices_list_capturable_blocks_two_sides_and_open_sieges():
-    """下拉選單：搶得下來的區塊（大本營、廣宗不列；字寫此刻歸誰、進度、冷卻、戰書凍結）、交戰兩軍、還沒打完的攻城。關著的季是 None。"""
+    """下拉選單：搶得下來的區塊（大本營、廣宗不列；字寫此刻歸誰、進度、冷卻、戰書凍結）、交戰兩軍、還沒打完的攻城。"""
     game = _admin_game()
     c, w = game.content, game.state.world
     q = game.admin_conquest_choices()
@@ -946,16 +829,12 @@ def test_admin_choices_list_capturable_blocks_two_sides_and_open_sieges():
     assert "戰書凍結" in next(b["label"] for b in q["blocks"] if b["id"] == "runan_wilds")
     game.admin_conquest_cancel(siege["id"])
     assert game.admin_conquest_choices()["sieges"] == []
-    assert plain_game("week7").admin_conquest_choices() is None
 
 
 def test_server_admin_choices_carry_the_conquest_group(monkeypatch):
     game = _admin_game()
     monkeypatch.setattr(server, "CONTENT", game.content)
     assert server.admin_choices(game)["conquest"] == game.admin_conquest_choices()
-    off = plain_game("week7")
-    monkeypatch.setattr(server, "CONTENT", off.content)
-    assert server.admin_choices(off)["conquest"] is None
 
 
 def test_the_four_routes_are_admin_actions_named_after_the_engine():
@@ -1186,14 +1065,6 @@ def test_own_base_still_holds():
     assert option is not None and option.enabled and "守" in option.label
 
 
-def test_switch_off_enemy_base_is_unchanged():
-    """關著：照舊攻得了、畫 ⚔（a73c111e 上量的）。"""
-    game = go(join(plain_game("season21"), "guan"), "huangjin_camp")
-    option = _train(game)
-    assert option is not None and option.enabled and option.label.startswith("出陣・攻（")
-    assert "huangjin_camp" in mapview.armed_places(game.state, game.content)
-
-
 # ── 原 test_conquest_front_note.py（整檔搬進來） ──
 # 時刻表決戰的起點照哪一條戰線（企劃者 2026-10-22 選計畫 2026-10-22-長社火攻主場 第七節第 4 條：不另加主場偏移，照現在的規則補一句說明）。
 #
@@ -1356,17 +1227,6 @@ def test_fb687_the_mandate_line_says_the_shards_add_nothing_more():
     assert seal.shift_text(0, {}, d, extra=True) == "起點不再另偏"
 
 
-@pytest.mark.parametrize("profile", ["week7", "season21"])
-def test_fb687_conquest_off_the_mandate_line_is_unchanged(profile):
-    """領地爭奪關著（沒有起點照戰況那一句）：天命之爭碎片那一句照舊「戰局起點不偏」，畫面上也沒有新的那一行。"""
-    game = plain_game(profile)
-    d, msgs, battle, season = _muster(game, "tianming")
-    assert battle.front_note is None
-    scene = game._battle_scene_text(battle, d)  # noqa: SLF001
-    assert "天命之爭：玉璽碎片不在交戰的任何一方手上，戰局起點不偏。" in scene and "戰況" not in scene.split("\n\n")[1]
-    assert "天命之爭集結：玉璽碎片不在交戰的任何一方手上，戰局起點不偏。" in [r.text for r in season.rumors]
-
-
 @pytest.mark.slow  # 單一條超過一秒（2026-10-27 測試整理 4 量的）
 @pytest.mark.parametrize("profile", ["week7", None, "season21"])
 def test_conquest_off_not_a_byte_changes(profile, monkeypatch):
@@ -1522,12 +1382,8 @@ def test_core_regions_weigh_more_and_the_default_names_the_core_region():
     assert abs(share - want) < 0.07
 
 
-def test_no_cache_when_the_switch_is_off_or_the_season_is_not_conquest():
-    """領地爭奪沒開（沒有蓋章）：什麼都不藏，宛城照舊擲現世。"""
-    c = no_conquest(real_content("week7"))  # PM 2026-10-22 起正式內容打開，沒蓋章的季要明講關掉
-    c.config.seal.cache.hide_chance = 1.0
-    game = _new(c, NAME)
-    assert _cache(game) is None
+def test_no_cache_when_the_seal_is_off():
+    """主機關掉碎片：什麼都不藏。"""
     off = _content()
     off.config.seal.enabled = False  # 主機關掉碎片
     assert _cache(_game_seal(content=off)) is None
@@ -1650,18 +1506,6 @@ def test_no_find_while_the_block_is_cooling():
     game._save_season()
     game._explore_mode(_mode_for(game, "seek"))
     assert seal.shard_of(_reg(game), NAME) is not None
-
-
-def test_find_is_not_rolled_when_the_season_is_not_conquest():
-    """領地爭奪沒開的季：探索照舊，不碰登記（也沒有藏處可言）。"""
-    c = no_conquest(real_content("week7"))  # PM 2026-10-22 起正式內容打開，沒蓋章的季要明講關掉
-    c.config.seal.cache.hide_chance = c.config.seal.cache.find_chance = 1.0
-    game = _new(c, NAME)
-    cache = SealCache(season=1, shard="chishou", loc=_neutral_seal(_content())[0])  # 硬塞一個：不算數
-    game.world.mutate(lambda st: setattr(st.seal, "cache", cache))
-    _stand(game, cache.loc)
-    game._explore_mode(_mode_for(game, "seek"))
-    assert seal.shard_of(_reg(game), NAME) is None
 
 
 @pytest.mark.slow  # 單一條超過一秒（2026-10-27 測試整理 4 量的）
@@ -1825,22 +1669,18 @@ def _muster_wancheng(content):
 
 
 def test_wancheng_does_not_emerge_under_conquest_but_still_does_without_it():
-    """領地爭奪的季不擲宛城現世（碎片只從探索來）；璽動照舊。沒蓋章的季宛城照舊擲，一個字不變。"""
+    """領地爭奪的季不擲宛城現世（碎片只從探索來）；璽動照舊。"""
     c = _content(hide=0.0)
     c.config.seal.emerge_chance = 1.0
     game, battle = _muster_wancheng(c)
     assert battle is not None and battle.seal_emerge is None
     assert seal.EMERGE_OMEN.format(battle="宛城之戰") not in [r.text for r in game.world.get_season().rumors]
     assert _reg(game).force_emerge == "yunzhuan"  # 管理者的記號留著，不吃掉
-    plain = no_conquest(real_content("season21"))  # PM 2026-10-22 起正式內容打開，沒蓋章的季要明講關掉
-    plain.config.seal.emerge_chance = 1.0
-    _, battle = _muster_wancheng(plain)
-    assert battle is not None and battle.seal_emerge == "yunzhuan"
 
 
 def test_the_admin_hides_one_now_under_conquest_and_still_forces_emergence_otherwise():
     """管理者「強制現世」在領地爭奪的季改成「現在藏一片」：略過 hide_chance，可指定哪一片；回話不寫藏在哪；已經藏著、這一季已經現世過
-    都不再藏。沒蓋章的季照舊設 force_emerge。"""
+    都不再藏。"""
     c = _content(hide=0.0, find=0.0)
     c.config.admins = [NAME]
     game = _game_seal(content=c)
@@ -1856,13 +1696,6 @@ def test_the_admin_hides_one_now_under_conquest_and_still_forces_emergence_other
     game.world.mutate(lambda st: setattr(st.seal, "emerge_season", 1))
     assert any("這一季" in line for line in game.admin_seal_emerge())
     assert _cache(game) is None
-
-    old = no_conquest(real_content("week7"))  # PM 2026-10-22 起正式內容打開，沒蓋章的季要明講關掉
-    old.config.admins = [NAME]
-    legacy = _new(old, NAME)
-    assert legacy.admin_seal_choices()["hide"] is False
-    legacy.admin_seal_emerge("guixin")
-    assert _reg(legacy).force_emerge == "guixin" and _cache(legacy) is None
 
 
 def test_the_howto_says_where_shards_come_from_without_saying_where():

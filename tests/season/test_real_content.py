@@ -184,7 +184,7 @@ def test_the_real_prologue_walks_to_yingchuan(content, world):
     assert p.stats["silver"] == silver + 30  # 序章裡銀兩只有出師的盤纏會動
     # 心得的帳：20 → 裝意境不花 → 練到第三成 −6 → 揣摩 −5 → 熔蠻牛拳 +16 → 25（練成每成 2N，企劃者 2026-10-07 方案 A；熔煉退八成跟著翻倍）
     assert p.stamina == content.config.stamina_max and p.stats["xinde"] == content.config.start_stats["xinde"] + 5
-    assert "mentor_hut" not in atlas.visible_locations(game.state, content)
+    assert atlas.views(game.state, content)["mentor_hut"] == "hidden"
     assert any(content.tutorial.leave_text in line for e in game.state.journal for line in e.lines)
 
 
@@ -234,7 +234,7 @@ def test_bots_and_scripts_skip_the_real_prologue_and_look_like_graduates(content
     script = Game.new(content, "腳本", rng=random.Random(0), world=world)
     assert script.state.player.location == "yingchuan" and script.state.pending_event is None
     assert script.state.player.tutorial_step == len(content.tutorial.steps)  # 序章與初入江湖都略過
-    assert "mentor_hut" not in atlas.visible_locations(script.state, content)
+    assert atlas.views(script.state, content)["mentor_hut"] == "hidden"
 
     human = Game.new(content, "真人", rng=random.Random(0), world=world, prologue=True)
     _walk_the_real_prologue(human)
@@ -393,79 +393,17 @@ def test_no_hut_step_promises_odds_the_hut_never_shows(content):
     assert p8.force_tier is not None and "徒兒，選單上多了一個「雪恥」。這一仗，為師看好你。" in p8.text
 
 
-def test_the_farewell_scouts_the_places_it_names_and_a_skipper_gets_nothing(content, world):
-    """計畫者的規則：師父的出師那一步講了三個投靠的地方（長社、黃巾別部營寨、曹氏莊院），走出草廬的那一刻就把它們記成摸清了
-    （PlayerState.surveyed：輿圖上有名字、點得開），不用先自己走過去；略過序章的人什麼都沒有。清單寫在內容裡（TutorialStep.survey）。"""
-    from tianxia import atlas
-
-    farewell = next(s for s in content.tutorial.steps if s.id == "p11_farewell")
-    assert farewell.survey[:3] == NAMED_BY_THE_FAREWELL  # 師父點名的三個地方在前面；後面是路上的站（下面的測試釘它們為什麼在）
-    assert all(word in farewell.text for word in ("長社", "別部營寨", "曹家"))  # 師父的話真的講到它們
-    game = Game.new(content, "新人", rng=random.Random(0), world=world, prologue=True)
-    _walk_the_hut(game)
-    assert not set(farewell.survey) & game.state.player.surveyed  # 還在草廬：還沒有
-    game.choose("move:yingchuan")
-    game.advance(game.state.player.journey.arrive_at[-1] - game.state.world.time)
-    p = game.state.player
-    assert set(farewell.survey) <= p.surveyed and set(farewell.survey) <= atlas.known_locations(game.state, content)
-    skipper = Game.new(content, "略過", rng=random.Random(0), world=world, prologue=True)
-    skipper.skip_tutorial()
-    assert not set(farewell.survey) & skipper.state.player.surveyed
-    plain = Game.new(content, "腳本", rng=random.Random(0), world=world)
-    assert not set(farewell.survey) & plain.state.player.surveyed
-
-
-# 師父講到的地方「摸清了」不等於走得到：路線只走摸清的站（atlas.routes，規則不改），曹氏莊院離潁川 7 站，路上的站（汝南荒野、汝南、汝南集市、
-# 譙縣）視野之外、沒去過，不一起摸清的話疾行去會被擋下。計畫者選的做法：出師那一步的 survey 清單把路上要走的站也寫進去（寫在內容裡），
-# 這樣師父點名的每一個地方，剛走出草廬就疾行得到。
+# 師父出師那一步講到的三個投靠地點（長社、黃巾別部營寨、曹氏莊院）：剛走出草廬就疾行得到（全圖開放，已開放的地點都摸清）。
 NAMED_BY_THE_FAREWELL = ["changshe", "huangjin_camp", "cao_manor"]
-ROUTE_STOPS = {"cao_manor": ["runan_wilds", "runan", "runan_market", "qiao_county"]}  # 潁川→潁水河畔→荒丘（視野之內）→這四站→曹氏莊院
 
 
 @pytest.mark.parametrize("place", NAMED_BY_THE_FAREWELL)
 def test_a_new_player_leaving_the_hut_can_dash_to_each_place_the_farewell_names(content, world, place):
-    """出師摸清的三個投靠地點，剛走出草廬的新人疾行去得了：用遊戲自己的路線函式、同一條「只走摸清的站」的規則（Game.travel_refusal）。
-    拿掉 survey 清單裡路上的任何一站，曹氏莊院就走不到，這個測試會掉。"""
+    """師父點名的三個投靠地點，剛走出草廬的新人疾行去得了：用遊戲自己的路線函式（Game.travel_refusal）。"""
     game = Game.new(content, "新人", rng=random.Random(0), world=world, prologue=True)
     _walk_the_real_prologue(game)
-    assert game.state.player.location == "yingchuan" and place in game.state.player.surveyed
+    assert game.state.player.location == "yingchuan"
     assert game.travel_refusal(place, "dash") is None, game.travel_refusal(place, "dash")
-
-
-def test_every_stop_the_farewell_scouts_on_the_way_is_needed_and_is_on_the_route(content, world, monkeypatch):
-    """survey 清單裡的每一站都有理由：一條路上的站（汝南荒野、汝南、汝南集市、譙縣）少了任何一站，走去曹氏莊院的最短路就斷在那裡、疾行被擋；
-    清單裡沒有多餘的站（多出來的不是路上的、不必摸清的地方）。路上的站本來就在視野之內（荒丘、潁水河畔）的不用寫。
-    摸清是全圖開放之前的規則（全圖開放時這份清單照記、用不到）。"""
-    from tianxia import atlas
-
-    monkeypatch.setattr(content.config, "open_map", False)  # 同 closed_map；內容是整個模組共用的
-
-    farewell = next(s for s in content.tutorial.steps if s.id == "p11_farewell")
-    stops = farewell.survey[len(NAMED_BY_THE_FAREWELL):]
-    assert stops == [s for place in NAMED_BY_THE_FAREWELL for s in ROUTE_STOPS.get(place, [])]
-    for stop in stops:
-        game = Game.new(content, f"新人{stop}", rng=random.Random(0), world=world, prologue=True)
-        _walk_the_real_prologue(game)
-        assert stop in game.state.player.surveyed
-        game.state.player.surveyed.discard(stop)  # 把這一站拿掉：視野之外、沒去過，就不在摸清的站裡
-        assert stop not in atlas.known_locations(game.state, content)
-        assert game.travel_refusal("cao_manor", "dash") is not None, stop
-
-
-def test_a_survey_naming_an_unknown_place_is_rejected_when_the_content_loads(tmp_path):
-    import json
-    import shutil
-
-    from tianxia.content import ContentError, load_content
-
-    root = tmp_path / "content"
-    shutil.copytree(CONTENT_DIR, root)
-    path = root / "tutorial.json"
-    data = json.loads(path.read_text(encoding="utf-8-sig"))
-    next(s for s in data["steps"] if s["id"] == "p11_farewell")["survey"] = ["changshe", "nowhere_land"]
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    with pytest.raises(ContentError, match="nowhere_land"):
-        load_content(root)
 
 
 def test_the_real_enlistment_has_three_recruiters_and_the_drifter_line_names_every_join_place(content):
@@ -1242,25 +1180,13 @@ def _owner_by_name(content, text: str) -> str | None:
     return max(names, key=lambda loc: len(loc.name)).id if names else None
 
 
-def test_minimap_never_collides_from_any_location(content, monkeypatch):
-    monkeypatch.setattr(content.config, "open_map", False)  # 新角色只摸清一部分（全圖開放之前，同 closed_map）；全圖開放的見下一個
-    game = Game.new(content, "測試俠客", rng=random.Random(0))
-    for loc_id in content.locations:
-        game.state.player.location = loc_id
-        svg = render_minimap(game.state, content)
-        assert _collisions(svg, _minimap_window(svg)) == [], loc_id
-        texts = [(text, box, _owner_by_name(content, text)) for text, box in _text_boxes(svg)]
-        assert _disc_overlaps(game, content, svg, texts) == [], loc_id
-
-
-# 全圖開放（Config.open_map）時小地圖上每個已開放的地點都有圓盤與名字，名字壓到「別的地點的圓盤」的地方（只准變少）：
+# 全圖開放時小地圖上每個已開放的地點都有圓盤與名字，名字壓到「別的地點的圓盤」的地方（只准變少）：
 # 洛陽官道——嵩山腳貼著視窗右緣，名字只能往左擺，壓到嵩山深處圓盤的一角（大地圖那邊同 DISC_OVERLAPS 的做法）。
 # 全圖開放之前，什麼地方都去過的人從洛陽官道看出去就是這樣（另外還有南陽郊野的「↑ 白馬寺」壓到南華觀），不是新的毛病。
 MINI_DISC_OVERLAPS_OPEN = 1
 
 
 def test_minimap_with_the_whole_map_open_never_collides_from_any_location(content):
-    assert content.config.open_map  # 正式設定：全圖開放
     game = Game.new(content, "測試俠客", rng=random.Random(0))
     overlaps = []
     for loc_id in content.locations:

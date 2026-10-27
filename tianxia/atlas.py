@@ -1,9 +1,8 @@
-"""江湖輿圖的資料（純資料與文字，不依賴介面框架）：視野、大區歸屬、路程最短的路線與三種走法的時間、體力、
+"""江湖輿圖的資料（純資料與文字，不依賴介面框架）：大區歸屬、路程最短的路線與三種走法的時間、體力、
 大地圖四個圖層要標的東西、地點詳情與「安排前往」的條件。畫圖在 mapview.py。
 
-全圖開放（Config.open_map，企劃者 2026-10-15）：已開放的地點全部算摸清，沒有視野這件事；摸不摸清只由 location_view 判斷。
-開關關著是舊規則：沒摸清（看不見、沒去過、也沒在路上留意地形摸清）的地點在每個圖層都只畫輪廓與「？」，詳情只寫「尚未摸清」。
-未開放的地點兩種都完全不畫。
+全圖開放（企劃者 2026-10-15）：已開放的地點全部算摸清，沒有視野這件事；摸不摸清只由 location_view 判斷。
+未開放的地點完全不畫。舊的摸清規則（視野、去過、留意地形）2026-10-27 拿掉（企劃者選「拿掉舊玩法和它的測試」）。
 勝算只在呼叫端傳入 odds 函式時才算（敵情層與詳情欄），平常重畫不模擬。
 """
 from __future__ import annotations
@@ -23,7 +22,7 @@ from .rules import (
 from .state import GameState, Order, Rumor, WorldState
 from .world import current_act, sim_active, storyline_off
 
-KNOWN = ("current", "visible", "remembered")  # 摸清的地點
+KNOWN = ("current", "visible")  # 摸清的地點（已開放的都是）
 LAYERS = {"situation": "局勢", "enemies": "敵情", "story": "劇情", "routes": "路線"}
 NEWS_DAYS = 3  # Config.rumor_board_days 的預設，只給 mapview.LEGEND_LAYERS 那一份預設說明用；✦、詳情欄、圖例真正用的是 news_days(content)
 NEWS_FAR = "這一帶離得遠，沒聽到什麼消息"  # 詳情欄：不在耳聞所及的大區，不替玩家斷言「沒有消息」（待 joy 潤）
@@ -37,13 +36,7 @@ UNKNOWN = "尚未摸清"
 Odds = Callable[[str], str]  # 敵方隊伍 id → 勝算（Game.odds）
 
 
-# ── 視野 ──────────────────────────────────────────────
-
-
-def vision_range(state: GameState, content: Content) -> int:
-    cfg, p = content.config, state.player
-    bonus = p.stats.get("fame", 0) >= cfg.vision_fame
-    return cfg.vision_base + (1 if bonus else 0)
+# ── 開放與摸清 ──────────────────────────────────────────────
 
 
 def is_unlocked(loc: Location, state: GameState, content: Content | None = None) -> bool:
@@ -72,58 +65,38 @@ def road_hops(state: GameState, content: Content, limit: int) -> dict[str, int]:
     return hops
 
 
-def visible_locations(state: GameState, content: Content) -> set[str]:
-    """看得見的地點（舊規則的視野）；全圖開放時沒有視野這件事，是空的（也不必走一遍路）。"""
-    if content.config.open_map:
-        return set()
-    return set(road_hops(state, content, vision_range(state, content)))
-
-
-def location_view(loc_id: str, state: GameState, content: Content, visible: set[str]) -> str:
-    """地點在地圖上的樣子，也是「摸不摸清」唯一的判斷（KNOWN 那三種是摸清）：未開放的 hidden；所在地 current；
-    全圖開放（Config.open_map）時其餘已開放的一律 visible（已開放就算知道）；開關關著才照視野、去過、留意地形分。"""
+def location_view(loc_id: str, state: GameState, content: Content) -> str:
+    """地點在地圖上的樣子，也是「摸不摸清」唯一的判斷：未開放的 hidden；所在地 current；其餘已開放的一律 visible（已開放就算知道）。"""
     loc = content.locations[loc_id]
     if not is_unlocked(loc, state, content):
         return "hidden"
     if loc_id == state.player.location and state.player.journey is None:
         return "current"  # 在路上時沒有哪一站是所在地：人在兩站之間（路上設計 3.4，地圖另外畫「你」）
-    if content.config.open_map:
-        return "visible"
-    if loc_id in visible:
-        return "visible"
-    if loc_id in state.player.visited or loc_id in state.player.surveyed:
-        return "remembered"  # 去過，或在路上留意地形摸清了（路上設計第四節）
-    return "outline" if loc.important else "dot"
+    return "visible"
 
 
 def views(state: GameState, content: Content) -> dict[str, str]:
-    """每個地點在地圖上的樣子：current／visible／remembered（摸清）、outline（有名字的未知）、dot、hidden。"""
-    visible = visible_locations(state, content)
-    return {loc_id: location_view(loc_id, state, content, visible) for loc_id in content.locations}
+    """每個地點在地圖上的樣子：current／visible（摸清）、hidden（未開放）。"""
+    return {loc_id: location_view(loc_id, state, content) for loc_id in content.locations}
 
 
 def known_locations(state: GameState, content: Content) -> set[str]:
-    """摸清的地點（location_view）：全圖開放時是所有已開放的地點；舊規則是看得見、去過或在路上留意地形摸清（PlayerState.surveyed）。"""
+    """摸清的地點（location_view）：所有已開放的地點。"""
     return {loc_id for loc_id, view in views(state, content).items() if view in KNOWN}
 
 
 def is_known(state: GameState, content: Content, loc_id: str) -> bool:
-    """這個地點摸清了嗎（location_view；全圖開放時已開放就算）。沒摸清的地點不能洩漏敵人、勝算、路線或名字：
+    """這個地點摸清了嗎（location_view：已開放就算）。未開放的地點不能洩漏敵人、勝算、路線或名字：
     下面局勢、劇情、敵情的資料函式本身不檢查，呼叫端（圖層、詳情欄）要先用這個把關。"""
-    return location_view(loc_id, state, content, visible_locations(state, content)) in KNOWN
+    return location_view(loc_id, state, content) in KNOWN
 
 
 def place_choices(state: GameState, content: Content) -> list[tuple[str, str]]:
-    """大地圖選得到的地點（顯示文字, 地點 id），依內容順序：摸清的寫名字（所在地另外註明），
-    畫出輪廓的未知重要地點寫「名字？」；沒名字的淡點與未開放的地點不列。"""
-    out = []
-    for loc_id, view in views(state, content).items():
-        name = content.locations[loc_id].name
-        if view in KNOWN:
-            out.append((name + ("（所在地）" if view == "current" else ""), loc_id))
-        elif view == "outline":
-            out.append((f"{name}？", loc_id))
-    return out
+    """大地圖選得到的地點（顯示文字, 地點 id），依內容順序：已開放的寫名字（所在地另外註明）；未開放的不列。"""
+    return [
+        (content.locations[loc_id].name + ("（所在地）" if view == "current" else ""), loc_id)
+        for loc_id, view in views(state, content).items() if view in KNOWN
+    ]
 
 
 # ── 大區 ──────────────────────────────────────────────
@@ -341,7 +314,6 @@ SIEGE_AT = "到{where}遊歷，打贏一場{enemy}記一次{note}。"  # 待 joy
 SIEGE_UNSEEN = "（那裡你還沒摸清）"  # 待 joy 潤（FB-221）：記得了次數的地方都還沒摸清，只寫大區
 SIEGE_SOME_UNSEEN = "（另一處你還沒摸清）"  # 待 joy 潤（FB-221）：兩處裡摸清了一處
 SIEGE_AT_SORTIE = "到{where}出陣，打贏一場{enemy}記一次{note}。"  # 待 joy 潤：出陣開著時的攻城（設計第七節）
-SIEGE_AREA_SORTIE = "到{front}一帶{enemy}的地盤出陣，打贏一場記一次。"  # 待 joy 潤
 # 領地爭奪開著時（裁決 20；翻地與爭搶 PM 2026-10-20 第 1 條）：攻城認這一邊此刻進度最高、推得動的那一塊，打贏那裡的守軍（敵方的兵、中立駐軍都算），卡上照 siege_places 寫；待 joy 潤
 SIEGE_CONQUEST_FOE = "守軍"
 SIEGE_AREA_CONQUEST = "到{front}一帶我軍進度最高的幾處出陣，打贏一場守軍記一次。"  # 並列最高的多過 SIEGE_NAMED_MAX（全是 0 時就是那一帶推得動的每一處）
@@ -349,7 +321,6 @@ SIEGE_NONE_CONQUEST = "{front}一帶此刻沒有我軍推得動的地方（剛�
 # 約戰開著（減法季批 3b，QA 順帶）：貼約戰、打贏一場就記一次——對面是真人、補位的人還是守軍都算，不寫「守軍」。待 joy 潤
 SIEGE_AREA_DUEL = "到{front}一帶我軍進度最高的幾處出陣，打贏一場記一次。"
 INTERCEPT_SORTIE = "到{place}出陣，撞上對面的運糧隊、打贏記一次。"  # 待 joy 潤（FB-248：出陣開著時糧隊只在這一處，orders.intercept_spots）
-DEFEND_SORTIE = "在{front}一帶自家的地盤出陣守一回，或按「{duty}」（收在「此地還能做」裡），做一次記一次。"  # 待 joy 潤
 # 領地爭奪開著時（裁決 24、FB-565；翻地與爭搶 PM 2026-10-20 第 1 條）：守城記的是自家被對面推得最高、守得動的那幾塊（orders.defend_places），
 # 卡上照它寫，輿圖也只標那幾處；沒有就直說此刻沒有可守的（記不到）。投票與 22:00 公告拿掉了，不再寫「被公告要攻」（dev/flip-1 收尾）。待 joy 潤
 DEFEND_ACT_SORTIE = "出陣守一回，或按「{duty}」（收在「此地還能做」裡）"
@@ -383,8 +354,6 @@ def siege_how(state: GameState, content: Content, order: Order) -> str:
             return (SIEGE_AREA_DUEL if duel else SIEGE_AREA_CONQUEST).format(front=front)
         enemy = "" if duel else SIEGE_CONQUEST_FOE  # 約戰開著：打贏一場就記，不分對面是誰（真人、補位、守軍）
     if not places or len(places) > SIEGE_NAMED_MAX:
-        if sortie.on(content):
-            return SIEGE_AREA_SORTIE.format(front=front, enemy=enemy)
         return f"到{front}一帶遊歷，打贏一場對面的兵記一次。"
     known = [content.locations[loc_id].name for loc_id in places if is_known(state, content, loc_id)]
     hidden: list[str] = []
@@ -434,8 +403,6 @@ def order_how(state: GameState, content: Content, order: Order) -> str:
             if sieged:
                 parts.append(DEFEND_SIEGE_CONQUEST.format(where="、".join(content.locations[loc_id].name for loc_id in sieged)))
             return "".join(parts)
-        if sortie.on(content):
-            return DEFEND_SORTIE.format(front=front, duty=name)
         return f"在{front}一帶按「{name}」（收在「此地還能做」裡），做一次記一次。"
     if order.template == "intercept":
         if sortie.on(content):
@@ -886,12 +853,10 @@ def insight_names(content: Content, loc: Location) -> list[str]:
 
 def detail_text(state: GameState, content: Content, loc_id: str, odds: Odds) -> str:
     """詳情欄（Markdown）：局勢（含常出沒在此的龍頭人物是誰、現在在做什麼、最近的傳聞）、敵情、劇情、路線。
-    沒摸清的地點只寫「尚未摸清」，也不算勝算。"""
+    未開放的地點只寫「尚未摸清」、連名字都不露，也不算勝算。"""
     loc = content.locations[loc_id]
     if not is_known(state, content, loc_id):
-        # 只有畫出輪廓的未知重要地點才有名字；淡點與未開放的地點連名字都不能露
-        outlined = views(state, content)[loc_id] == "outline"
-        return f"### {loc.name if outlined else ''}？\n\n{UNKNOWN}"
+        return f"### ？\n\n{UNKNOWN}"
     here = loc_id == state.player.location and state.player.journey is None  # 在路上時沒有所在地
     parts = [f"### {loc.name}" + ("（所在地）" if here else "") + f"　危險 {'★' * loc.danger}"]
 

@@ -1279,7 +1279,7 @@ ALLOW_FIXED = frozenset({
     "act:dadian",  # 打點（21 天季的銀兩出口收成一間店）
     "act:tavern",  # 酒肆（帶「酒肆」標籤的城鎮；tianxia/tavern.py）
     "act:drill",  # 城裡操練（新手引導重做；tianxia/training.py）
-    "ambush:lift", "works:fortify", "works:stockpile",  # 後期體力玩法：收伏、修築工事、屯糧練兵
+    "ambush:lift", "works:stockpile",  # 後期體力玩法：收伏、屯糧練兵
 })
 # opp: 是機緣的交東西與天時地利（opp:deliver:<id>、opp:try:<id>，正式版乙一）；對話選單的 talk:opp: 不是閒著的選單，不列
 # act:rank: 是第 3、4 階的行動（act:rank:<行動 id>，正式版戊一）
@@ -1338,9 +1338,6 @@ class TutorialStep(_Strict):
     # 這一步的動作做成之後，結果那一句（設計 10.3 的「…之後（場景）」）：草廬裡合成、修練、熔煉成功時用它取代引擎的一般那句。
     # {意境}、{武學}、{心得} 換成這一次真的合出來的／修練的／退回的（prologue.after_line）
     after: str = ""
-    # 這一步真的做完（走出草廬的出師那一步）時，把這些地點記成摸清了（PlayerState.surveyed）：師父的話講到的地方，輿圖上就有名字、點得開，
-    # 不用先自己走過去。寫在內容裡、載入時檢查地點 id；略過序章的人不做這一步，什麼都沒有（guide.note_action）
-    survey: list[str] = Field(default_factory=list)
 
 
 class ArtPattern(_Strict):
@@ -2999,10 +2996,9 @@ class RiseTuning(_Strict):
 
 
 class SortieRules(_Strict):
-    """出陣（docs/superpowers/specs/2026-10-14-出陣探索與地盤-design.md 第二節；遊歷改版）。enabled 關掉回到舊的遊歷與操練。
-    不看第一季開關：劇本有陣營就有（sortie.on）。"""
+    """出陣（docs/superpowers/specs/2026-10-14-出陣探索與地盤-design.md 第二節；遊歷改版）。地盤（＝領地爭奪，territory.on）開著就有
+    （sortie.on），沒有開關；沒有地盤的季（沒有第一季規則、劇本沒寫區塊）是舊的遊歷與操練（2026-10-27 舊出陣的推線與攪局拿掉）。"""
 
-    enabled: bool = True
     per_day: int = Field(default=5, ge=1)  # 每人每天幾次（攻、守、攪局共用；照 pill_day_utc_offset_hours 的 00:00 換日，同回體丹）
     hold_share: float = Field(default=0.5, gt=0, le=1)  # 守、攪局推的量是攻的幾成
     # ── 出陣更誘人（正式季整合 2.6、第 4 批；一類一顆 precise_actions 開著才有，關著照舊三成）──
@@ -3156,13 +3152,8 @@ class TerrainArts(_Strict):
 
 
 class TerritoryRules(_Strict):
-    """地盤易手（設計第四節；tianxia/territory.py）。enabled 關掉：沒有控制方，隊伍照 Location.enemies，價錢照原價。"""
+    """地盤易手（設計第四節；tianxia/territory.py）。沒有開關：territory.on 照內容與第一季規則；沒有地盤的季沒有控制方，隊伍照 Location.enemies，價錢照原價。"""
 
-    enabled: bool = True
-    band: int = Field(default=5, ge=0)  # 拔河門檻上下各幾點不動（免得在門檻上來回翻）
-    geju_one: int = Field(default=60, ge=0, le=100)  # 豪強割據到這裡，每條線一處歸豪強
-    geju_two: int = Field(default=80, ge=0, le=100)  # 到這裡每條線兩處
-    geju_release: int = Field(default=50, ge=0, le=100)  # 降到這裡以下，豪強佔的交還給拔河
     own_price: float = Field(default=0.9, gt=0)  # 在自己陣營控制的地方療傷、打造工錢、買馬
     enemy_price: float = Field(default=1.2, gt=0)  # 在別的陣營控制的地方
 
@@ -3306,15 +3297,12 @@ class WebPushRules(_Strict):
 
 class ConquestRules(_Strict):
     """領地爭奪（第 38 項改版，docs/superpowers/specs/2026-10-20-領地爭奪-design.md；計畫 docs/superpowers/plans/2026-10-20-領地爭奪.md；
-    tianxia/conquest.py）。開季時蓋章（WorldState.conquest_on，要第一季規則開著、劇本有官軍與黃巾、寫了 territory.blocks、豪強分屬兩軍），
-    正在跑的季不變；enabled 是主機的開關（關掉時照關著）。開著時：控制方只照佔領（不拔河、不割據），三條戰線的值＝佔領的基準＋其他
+    tianxia/conquest.py）。地盤開著（territory.on：第一季規則開著、劇本有官軍與黃巾、寫了 territory.blocks、豪強分屬兩軍）就是領地爭奪，
+    沒有開關（2026-10-27 舊的拔河與割據連 enabled、開季的章一起拿掉，企劃者選「拿掉舊玩法和它的測試」）。控制方只照佔領（不拔河、不割據），三條戰線的值＝佔領的基準＋其他
     來源的偏移，出陣推那一塊的進度、不推線，人站在自家領地吃加成，散人在開季中立的區塊也吃。翻地與爭搶（輿圖簡化設計第四章）：每一塊對
     每個攻方一條進度，推滿當場易手、冷卻一小時；兩邊推到同一塊撞上就打（混戰）；一起推有集火；攻下與守住都分紅；第 4 階的人進度過門檻
     可以下戰書，時間到了開攻城戰（siege.py，決戰的縮小版，跟決戰同時打），攻方贏了就易手。數字全是【預設】，等 21 天的季試玩再調。"""
 
-    # 預設關（測試內容照它）；正式內容在 content/config.json 打開（企劃者 2026-10-22「要打開」，三種設定覆寫檔都不寫、照它）：週末、21 天、
-    # 7 天新開的季蓋得上章，14 天沒有第一季規則的章；正在跑的季照它開季時的章（裁決 15 原本寫只開 season21.json）
-    enabled: bool = False
     share: float = Field(default=35.0, ge=0)  # 【預設】佔領的份量：中立地全被一方拿下，基準偏到 50±share（分母只算中立時，設計 4.7）
     neutral_weight: float = Field(default=1.0, ge=0)  # 【預設】中立區塊的權重（設計 4.7）
     faction_weight: float = Field(default=2.0, ge=0)  # 【預設】陣營區塊的權重：打進敵方陣營影響比較大（設計 4.7、3.2）
@@ -3420,18 +3408,6 @@ class FigureAidRules(_Strict):
     visit_hours: float = Field(default=2.0, gt=0)
     visit_max_share: float = Field(default=0.5, ge=0, le=1)
     contrib_push: int = Field(default=1, ge=0)  # 第一季規則開著時，每一下記幾點推力的貢獻
-
-
-class FortifyRules(_Strict):
-    """修築工事（後期體力玩法第一批；tianxia/works.py）：在自家控制的戰線地點花體力修工事，工事讓這一處更難易手——拔河的門檻往
-    對方那邊再推 level/100 × band 點（大勢線不動）。工事照時間慢慢壞，易手就整個沒了。只有拔河的兩方修得了（豪強佔的地點這一批不修）。"""
-
-    enabled: bool = True
-    stamina: int = Field(default=50, ge=0)  # 修一下花的體力
-    per_press: int = Field(default=10, ge=1)  # 一下加幾點
-    cap: int = Field(default=100, ge=1)  # 最多幾點
-    band: int = Field(default=10, ge=0)  # 滿的工事讓易手的門檻再多幾點
-    decay_per_hour: float = Field(default=8.0, ge=0)  # 每個世界小時壞幾點（滿的約 12 小時壞光）
 
 
 class StockpileRules(_Strict):
@@ -3709,7 +3685,6 @@ class Config(_Strict):
     epiphany: EpiphanyRules = Field(default_factory=EpiphanyRules)  # 特殊頓悟（見 EpiphanyRules）
     xingshi: XingshiTuning = Field(default_factory=XingshiTuning)  # 〈天下形勢〉：領地爭奪每天一篇的旁白（見 XingshiTuning）
     ambush: AmbushRules = Field(default_factory=AmbushRules)  # 設伏劫道（見 AmbushRules）
-    fortify: FortifyRules = Field(default_factory=FortifyRules)  # 修築工事（見 FortifyRules）
     figure_aid: FigureAidRules = Field(default_factory=FigureAidRules)  # 護衛、犒軍、探望大勢人物（見 FigureAidRules）
     stockpile: StockpileRules = Field(default_factory=StockpileRules)  # 屯糧練兵（見 StockpileRules）
     push_resistance: PushResistance = Field(default_factory=PushResistance)  # 盡頭阻力與季長縮放（見 PushResistance）
@@ -3924,11 +3899,6 @@ class Config(_Strict):
             "silver": "銀兩", "good": "善名", "evil": "惡名", "fame": "名望", "xinde": "心得",
         }
     )
-    vision_base: int = 2  # 從所在地沿道路看得見幾步（open_map 關著才有視野）
-    vision_fame: int = 10  # 名望達到這個值，視野 +1（open_map 關著才有）
-    # 全圖開放（企劃者 2026-10-15「未來不再限制有沒有去過的地點~都可以直接移動過去」）：已開放的地點全部算摸清（atlas.location_view），
-    # 沒有視野、名望不多看一站、路上沒有「留意地形」；劇情還沒開放的地點（unlock_flag、序章專屬）照舊不畫。關掉回到舊的摸清規則
-    open_map: bool = True
     max_log: int = 200
     neili_base: float = 300
     neili_per_level: float = 20

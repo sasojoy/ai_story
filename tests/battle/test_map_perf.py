@@ -184,15 +184,6 @@ def test_fb323_the_pulses_live_in_the_layer_above_the_map_not_in_its_svg():
     assert f'<svg{root} class="mk-top" id="mkt"></svg></div>' in out["page"]  # 跟底圖同一個 viewBox、大小與字型，疊在它上面
 
 
-@needs_node
-def test_fb323_a_flashing_place_lives_in_the_layer_above():
-    """版圖變化看以前的某一週（在天下圖上播）：易手的地點閃一圈，圈都在上面那一張，底圖那一張沒有。"""
-    game = _timeline_game()
-    changed = next(x for x in game.map_state()["weeks"] if x["week"] == 2)["changed"]
-    low, high = _run(game, "return H.worldParts(H.S.mapBase, H.S.mapState, { k: 2.5, week: 2, tl: true, sel: null });", mapLayer="world")
-    assert 'class="pulse"' not in low and high.count('class="pulse"') == len(changed) + 1
-
-
 def test_fb323_the_pulse_grows_by_transform_and_fades_by_opacity():
     """FB-323（企劃者 10/17 從對比圖選丙）：圈的跳法改成整個圈放大（transform）、淡出（opacity），合成器自己跑、閒置不吃主執行緒；
     從半徑 16 放到 36（2.25 倍），線跟著變粗（企劃者接受）。不再改 r（那要主執行緒每一幀重畫）。"""

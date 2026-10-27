@@ -4,7 +4,8 @@ from __future__ import annotations
 import random
 from unittest import mock
 
-from conftest import no_conquest, real_content
+from conftest import real_content
+from conquest_kit import conquest_rules
 
 from tianxia import battle_instance, forge_secrets, four_tiers, team
 from tianxia.encounter import EncounterResult
@@ -12,8 +13,8 @@ from tianxia.engine import Game, drill_share
 from tianxia.sqlite_world import open_world
 
 
-def _game(faction="guan", at="huangjin_camp", profile="week7", precise=True, tiers=True):
-    c = no_conquest(real_content(profile))  # 出陣攻敵方大本營（領地爭奪的季不給攻，PM 2026-10-22 起正式內容打開）
+def _game(faction="guan", at="runan_wilds", profile="week7", precise=True, tiers=True):
+    c = conquest_rules(real_content(profile))  # 出陣攻中立地（敵方的大本營不給攻）；出陣約戰關掉，攻一下就打一場
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
     c.config.precise_actions = precise

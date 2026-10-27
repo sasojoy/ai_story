@@ -341,7 +341,7 @@ def _said(entry):
 @pytest.mark.parametrize("rank", [1, 2])
 def test_summon_issues_the_same_summons_as_reaching_the_threshold(on, rank):
     """雙胞胎：甲的貢獻（第 3 階另加一種機緣）到了、同步時自然收到召見；乙什麼都沒有，管理者替他發。召見（哪一階、誰出面、在哪、
-    第幾段、演哪一則）、摸清的路、江湖紀錄那一句都一樣；乙的貢獻照舊是 0（門檻是略過，不是補上）。"""
+    第幾段、演哪一則）、江湖紀錄那一句都一樣；乙的貢獻照舊是 0（門檻是略過，不是補上）。"""
     admin = _game(on)
     natural = _member(on, "甲", rank=rank, save=False)
     natural.state.player.contrib = ranks.threshold(on, rank + 1)
@@ -353,7 +353,6 @@ def test_summon_issues_the_same_summons_as_reaching_the_threshold(on, rank):
     [msg] = admin.admin_summon("乙")
     saved = _saved(admin, "乙")
     assert saved.player.summons.model_dump() == natural.state.player.summons.model_dump()
-    assert saved.player.surveyed == natural.state.player.surveyed and saved.player.surveyed
     entry = _entry(saved, "召見")
     told = _entry(natural.state, "召見")  # 審查 M-1：他那一則跟自然收到的一模一樣，不寫是管理者發的
     assert (entry.title, entry.tag, entry.lines, entry.changes) == (told.title, told.tag, told.lines, told.changes)

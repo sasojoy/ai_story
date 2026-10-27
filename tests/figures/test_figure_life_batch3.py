@@ -276,9 +276,11 @@ def test_an_anxious_figure_calls_his_whole_side(c):
     assert b not in s.world.bounties  # 不上懸賞榜
 
 
-def test_a_rally_rumor_says_practice_or_sortie_where_precise_is_on(c):
+def test_a_rally_rumor_says_practice_or_sortie_where_precise_is_on():
     """FB-435：一類一顆的季，求援的陣營傳聞寫「尋敵或出陣攻打贏」（以前寫練功），不寫找素材撞上（那種季找素材不打仗）；沒蓋章的季照舊。"""
     from tianxia.world_state import stamp_season
+
+    c = real_content("week7")  # 有地盤、有出陣的季
 
     c.config.figure_life.rally_chance = 1.0
     for precise_on in (True, False):
@@ -291,7 +293,7 @@ def test_a_rally_rumor_says_practice_or_sortie_where_precise_is_on(c):
         assert b.kind == "strike"
         text = next(r.text for r in s.world.rumors if r.layer == "faction" and "求援" in r.text)
         if precise_on:
-            assert "尋敵或出陣攻打贏" in text and "找素材" not in text
+            assert "或出陣攻打贏" in text and "找素材" not in text  # 減法季探索一顆開著：寫「出門探索或出陣攻打贏」
         else:
             assert "找素材撞上" in text
 

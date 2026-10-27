@@ -13,7 +13,7 @@ import re
 from pathlib import Path
 
 import pytest
-from conftest import classic_rules, closed_map, real_content
+from conftest import classic_rules, real_content
 
 from tianxia import howto, renown, rules, timetable
 from tianxia.engine import Game
@@ -38,7 +38,7 @@ def test_each_war_element_has_its_explanation_in_season_one(on):
     board = "".join(help_["board"])
     assert "擲骰" in board and "看戰況" in board and "史書寫定" in board and "決戰" in board and "關鍵伏筆" in board  # 大事怎麼定：戰況、伏筆、寫定的
     quest = "".join(help_["quest"])
-    assert "出陣" in quest and "軍令" in quest and "伏筆" in quest  # 你能怎麼出力（出陣探索與地盤：遊歷換成出陣）
+    assert "遊歷" in quest and "軍令" in quest and "伏筆" in quest  # 你能怎麼出力（豪強是第三方的季沒有地盤，沒有出陣：照舊遊歷）
 
 
 def test_no_war_explanations_outside_season_one(real):
@@ -313,17 +313,14 @@ def test_the_first_echo_line_follows_the_config_and_only_in_season_one(on):
 
 
 def test_what_fame_is_for_follows_the_content(on):
-    closed_map(on)  # 名望多看一站是全圖開放之前的視野；全圖開放的那一句見 tests/test_open_map.py
     game = _war(on)
     bars = sorted(ch.audience_fame for ch in on.characters.values() if ch.deep_interaction and ch.audience_fame > 0)
     lessons = sorted(s.learn.fame for s in on.skills.values() if s.learn is not None and s.learn.fame > 0)
     line = next(x for x in _fame_section(game).splitlines() if "名望拿來" in x)
     k = renown.scale(game.state.world)  # 名聲開著時門檻照這一季的倍數（rules.audience_parts）
     bars, lessons = [int(b * k + 0.5) for b in bars], [int(n * k + 0.5) for n in lessons]
-    assert f"門檻最低 {bars[0]}、最高 {bars[-1]}" in line and f"名望到 {on.config.vision_fame}，輿圖多看一站" in line
+    assert f"門檻最低 {bars[0]}、最高 {bars[-1]}" in line and "輿圖多看一站" not in line
     assert f"有些師父要名望 {lessons[0]} 以上才肯教" in line
-    on.config.vision_fame = 12
-    assert "名望到 12，輿圖多看一站" in _fame_section(game)
 
 
 def test_joining_and_orders_read_the_config(on):
@@ -347,8 +344,8 @@ def test_the_three_sides_are_read_from_the_scenario_and_the_rank_content(on):
         for action in on.orders.rank_actions:
             assert (f"第 {action.rank} 階起多「{action.name}」" in row) == (action.faction == faction.id)
     guan, huang, hao = rows
-    # FB-112；出陣探索與地盤之後豪強是出陣攪局（舊遊歷的說法見 tests/test_core_loop_howto.py，那裡關著出陣）
-    assert "往官軍那一邊推" in guan and "往黃巾那一邊推" in huang and "不推戰線，在戰線上出陣攪局" in hao
+    # FB-112；豪強是第三方的季沒有地盤、沒有出陣：遊歷打贏推割據
+    assert "往官軍那一邊推" in guan and "往黃巾那一邊推" in huang and "不推戰線，在亂局的戰線上遊歷打贏才推割據" in hao
     assert "軍令只有打擊" in hao and "軍令有攻城、守城、截糧、護糧、打擊" in guan
     on.orders.templates = [t for t in on.orders.templates if not (t.side == "guan" and t.kind != "strike")]
     assert "軍令只有打擊" in re.search(r"- \*\*官軍\*\*.*", _war(on, "乙").howto_text()).group(0)

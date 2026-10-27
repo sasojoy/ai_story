@@ -11,7 +11,7 @@ from unittest import mock
 
 import pytest
 
-from conftest import classic_rules, closed_map
+from conftest import classic_rules
 from tianxia import atlas, calendar, enlist, figures, front_lines, mapview, orders, rules, team, timetable
 from tianxia.content import load_content
 from tianxia.encounter import EncounterResult
@@ -27,9 +27,8 @@ CONTENT_DIR = Path(__file__).parents[2] / "content"
 
 @pytest.fixture
 def real(real):
-    """conftest 那一份真實內容，出陣探索與地盤的四個開關關掉：這個檔測的是軍令與入伍段的舊走法（遊歷打贏、操練、長社站黃巾）；
-    全圖開放也關掉（closed_map）：打擊軍令的卡與輿圖的 ◎ 在這裡測「還沒摸清只寫大區」（FB-072），全圖開放的見 tests/test_open_map.py。"""
-    return closed_map(classic_rules(real))
+    """conftest 那一份真實內容，出陣探索與地盤的四個開關關掉：這個檔測的是軍令與入伍段的舊走法（遊歷打贏、操練、長社站黃巾）。"""
+    return classic_rules(real)
 
 BASE = 18  # 引導的步數（序章十一步＋初入江湖七步〔新手引導重做〕；第一季的軍令兩步已經由入伍段取代，新手引導計畫二）：做完它們就是「引導做完」
 
@@ -1008,8 +1007,7 @@ def test_switch_off_no_orders_in_any_week(real):
 # ── FB-072：打擊軍令寫明怎麼打、在哪裡，輿圖標出目標 ─────────────────────────
 
 
-# （陣營, 目標人物, 他的所在, 大區 id, 大區名）：三邊的打擊模板各一道。這三位開季時，新角色都還沒摸清他們的所在
-# （新角色摸得清的只有開局那十個地點）；要「摸清」就把所在加進 visited。
+# （陣營, 目標人物, 他的所在, 大區 id, 大區名）：三邊的打擊模板各一道（全圖開放：他們的所在都摸清了）。
 STRIKES = [
     ("guan", "bocai", "huangjin_camp", "yingru", "潁川汝南"),
     ("huang", "luzhi", "luzhi_camp", "jizhou", "冀州"),
@@ -1036,27 +1034,10 @@ def test_strike_card_names_the_place_when_you_know_it(on, faction, fid, loc, reg
     assert card["how"] == _how(on.figures[fid].name, f"他現在在{on.locations[loc].name}")
 
 
-@pytest.mark.parametrize("faction,fid,loc,region_id,region", STRIKES)
-def test_strike_card_gives_only_the_region_for_a_place_you_have_not_found(on, faction, fid, loc, region_id, region):
-    game, _ = _strike_game(on, faction, fid)
-    assert not atlas.is_known(game.state, on, loc)
-    [card] = game.orders_view()
-    assert card["how"] == _how(on.figures[fid].name, f"他現在在{region}一帶，那裡你還沒摸清")
-    assert on.locations[loc].name not in card["how"]  # 沒摸清的地方不洩漏名字（atlas.is_known）
-
-
-def test_strike_card_without_map_regions_only_says_it_is_not_found(on):
-    on.map.regions = []  # 沒有大區的內容（部分夾具）：連一帶都沒得說
-    game, _ = _strike_game(on, "haoqiang", "zhangmancheng")
-    [card] = game.orders_view()
-    assert card["how"] == _how("張曼成", "他在哪裡你還沒摸清")
-    assert on.locations["nanyang_huangjin_camp"].name not in card["how"]
-
-
 @pytest.mark.parametrize("change", [{"front": None}, {"status": "retired"}, {"status": "jailed"}, {"status": "crippled"}])
 def test_strike_card_says_so_when_the_target_cannot_be_challenged(on, change):
     game, _ = _strike_game(on, "haoqiang", "zhangmancheng")
-    game.state.player.visited.add("nanyang_huangjin_camp")  # 就算摸清了他的所在，也不指路
+    # 摸清了他的所在（全圖開放），也不指路
     for key, value in change.items():
         setattr(game.state.world.figures["zhangmancheng"], key, value)
     [card] = game.orders_view()
@@ -1077,7 +1058,7 @@ def test_a_target_off_the_front_but_challengeable_still_gets_the_place(on):
     assert on.figures["hejin"].challenge_off_front
     game, _ = _strike_game(on, "haoqiang", "hejin")
     [card] = game.orders_view()
-    assert card["how"] == _how("何進", "他現在在洛陽一帶，那裡你還沒摸清")
+    assert card["how"] == _how("何進", "他現在在大將軍府")
 
 
 def test_every_open_card_says_how_to_do_it(on):
@@ -1150,17 +1131,6 @@ def test_situation_layer_marks_a_known_strike_target_place(on, faction, fid, loc
     assert "◎" not in mapview.render_minimap(game.state, on)
 
 
-@pytest.mark.parametrize("faction,fid,loc,region_id,region", STRIKES)
-def test_unknown_strike_target_place_marks_its_region_label_never_the_place(on, faction, fid, loc, region_id, region):
-    game, _ = _strike_game(on, faction, fid)
-    assert atlas.strike_marks(game.state, on) == (set(), {region_id})
-    layers = _all_layers(game, on)
-    assert f">◎ {region}</text>" in layers["situation"]
-    assert f"◎ {on.locations[loc].name}" not in layers["situation"]
-    assert all("◎" not in svg for layer, svg in layers.items() if layer != "situation")
-    assert "◎" not in mapview.render_minimap(game.state, on)
-
-
 def test_no_strike_mark_for_other_sides_loners_finished_orders_or_a_target_you_cannot_challenge(on):
     game, order = _strike_game(on, "guan", "bocai")
     game.state.player.visited.add("huangjin_camp")
@@ -1197,24 +1167,6 @@ def test_situation_legend_data_has_the_strike_line_only_when_the_mark_is_drawn(o
     guan = _game(on, faction="guan")  # 這個陣營沒有打擊軍令：沒標，也沒有那一行
     assert atlas.strike_marks(guan.state, on) == (set(), set())
     assert mapview.legend_data(guan.state, on, "situation")["strike"] == ""
-
-
-@pytest.mark.parametrize("faction,fid,loc,region_id,region", STRIKES)
-def test_strike_legend_line_follows_the_mark_whether_it_sits_on_the_place_or_only_the_region(on, faction, fid, loc, region_id, region):
-    """◎ 那一行跟地圖標 ◎ 是同一個條件（atlas.strike_marks）：標在摸清的地點、或沒摸清只標在大區，都有；那一行只講
-    「本週軍令要打擊的人物」，沒有地名，所以沒摸清的地點不會從圖例洩漏。"""
-    game, order = _strike_game(on, faction, fid)
-    assert atlas.strike_marks(game.state, on) == (set(), {region_id})  # 沒摸清：只標大區
-    legend = mapview.legend_data(game.state, on, "situation")
-    assert legend["strike"] == mapview.LEGEND_STRIKE and on.locations[loc].name not in legend["strike"]
-    game.state.player.visited.add(loc)
-    assert atlas.strike_marks(game.state, on) == ({loc}, set())  # 摸清了：標地點
-    assert mapview.legend_data(game.state, on, "situation")["strike"] == mapview.LEGEND_STRIKE
-    for layer in ("enemies", "story", "routes"):
-        assert mapview.legend_data(game.state, on, layer)["strike"] == ""
-    order.done = True  # 已經達成：圖上不標，圖例也不多那一行
-    assert atlas.strike_marks(game.state, on) == (set(), set())
-    assert mapview.legend_data(game.state, on, "situation")["strike"] == ""
 
 
 def test_the_strike_line_is_not_drawn_into_the_svg(on):
@@ -1318,29 +1270,23 @@ def _siege_card(on, faction, front, at, visited=()):
 
 
 def test_fb221_the_yellow_turbans_siege_names_the_government_camp(on):
-    from conftest import classic_rules, closed_map
+    from conftest import classic_rules
     from tianxia import atlas, orders
 
     classic_rules(on)  # FB-221 的攻城地名照舊站法（出陣探索與地盤之前）；地盤開著時照控制方，另見 tests/test_territory.py
-    closed_map(on)  # 「還沒摸清只寫大區」是全圖開放之前的規則；全圖開放的見 tests/test_open_map.py
     assert orders.siege_places(on, "huang", "yingru") == ["guan_camp"]
     known = _siege_card(on, "huang", "yingru", at="guangzong", visited=["guan_camp"])
     assert known == "到官軍大營遊歷，打贏一場官軍記一次。" == atlas.SIEGE_AT.format(where="官軍大營", enemy="官軍", note="")
-    unseen = _siege_card(on, "huang", "yingru", at="guangzong")  # 還沒摸清：只寫大區，不寫「官軍大營」
-    assert "官軍大營" not in unseen and unseen == f"到潁川汝南一帶遊歷，打贏一場官軍記一次{atlas.SIEGE_UNSEEN}。"
 
 
-def test_fb221_two_places_are_both_named_and_an_unseen_one_stays_a_region(on):
-    from conftest import classic_rules, closed_map
+def test_fb221_two_places_are_both_named(on):
+    from conftest import classic_rules
     from tianxia import atlas, orders
 
     classic_rules(on)  # FB-221 的攻城地名照舊站法（出陣探索與地盤之前）；地盤開著時照控制方，另見 tests/test_territory.py
-    closed_map(on)  # 「另一處你還沒摸清」是全圖開放之前的規則；全圖開放的見 tests/test_open_map.py
     assert orders.siege_places(on, "huang", "jizhou") == ["luzhi_camp", "baima_ford"]
     both = _siege_card(on, "huang", "jizhou", at="nanyang_wilds", visited=["luzhi_camp", "baima_ford"])
     assert both == "到盧植營或白馬津遊歷，打贏一場官軍記一次。"
-    one = _siege_card(on, "huang", "jizhou", at="nanyang_wilds", visited=["luzhi_camp"])
-    assert one == f"到盧植營或冀州一帶遊歷，打贏一場官軍記一次{atlas.SIEGE_SOME_UNSEEN}。" and "白馬津" not in one
 
 
 def test_fb221_three_or_more_places_still_say_the_whole_front(on):

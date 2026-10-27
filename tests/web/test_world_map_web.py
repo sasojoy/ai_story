@@ -15,7 +15,7 @@ import test_prologue_web
 
 import server
 import webharness
-from conftest import classic_rules, no_conquest, real_content
+from conftest import classic_rules, real_content
 from tianxia import calendar, territory
 from tianxia.engine import Game
 from tianxia.models import FactionDef, FactionInk
@@ -37,8 +37,6 @@ def _game(content=None, faction="guan", at="yingchuan", conquest=True):
     c = content or real_content("week7")
     if conquest:
         conquest_rules(c)
-    else:
-        no_conquest(c)  # PM 2026-10-22 起正式內容打開，關著的季要明講
     c.config.auto_open_first_season = True
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world())
     game.client = None

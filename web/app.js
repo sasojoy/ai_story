@@ -63,7 +63,7 @@
   ];
   // 照「走法」切換的選項：「前往」與路上的「折返」（路上設計 3.2）。切換鈕緊貼在第一個這種選項上面（A4／W6）
   const followsMode = (id) => id.startsWith("move:") || id.startsWith("road:back");
-  const ROAD_TASKS = /^road:(think|ask|survey|gather)$/; // 路上的四樣小事（engine.ROAD_TASKS），排成 2×2（FB-055）
+  const ROAD_TASKS = /^road:(think|ask|gather)$/; // 路上的三樣小事（engine.ROAD_TASKS），排成 2×2（FB-055）
   // 路上的江湖頁多三個捷徑（路上設計 3.3）：是頁面切換，不是引擎的行動
   const ROAD_LINKS = [
     { tab: "map", name: "打開輿圖改去別處" },

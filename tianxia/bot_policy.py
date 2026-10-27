@@ -34,7 +34,6 @@ CHALLENGE_ODDS = bot.CHALLENGE_ODDS  # 假人只挑這兩種勝算的人物（�
 ORDER_SCORE = 30.0
 ORDER_MOVE_SCORE = 12.0
 DUTY_SCORE = 0.5  # 守勢行動本身（不替軍令記功時）：低於探索，不然假人整天巡哨
-STIR_SCORE = 1.1  # 豪強攪局（出陣探索與地盤設計第七節）：沒有陣營目標算不出大勢分，給一個比探索高一點的底分（只有豪強假人做）
 GATHER_SCORE = 1.0  # 探索三選一（出陣探索與地盤設計第七節）：找素材是練功的主要來源，跟以前的探索一樣
 SEEK_SCORE = 0.9  # 閒著找事件
 SENSE_SCORE = 0.5  # 悟得到的地方偶爾靜心感悟
@@ -920,8 +919,6 @@ def score(game: Game, option: Option, profile: BotProfile) -> float | None:
                 return None
             s, c = game.state, game.content
             convoy = game.duel_on() and game.duel_convoy_here()  # 約戰開著：運糧隊經過時出陣是截糧（自家的地方也打）
-            if sortie.on(c) and not game.duel_on() and game.sortie_mode() == "stir":
-                return STIR_SCORE if game.sortie_push() else None  # 線在 50：攪局什麼都不推
             if not convoy and _cannot_push(game, s.player.location):  # 領地爭奪：推不動的地方不出陣（翻地 QA 順帶：真人看得出有人一直在推不動的地方出陣）
                 return None
             if _outmatched(game, s.player.location):  # 領地爭奪：贏面太低的地方不攻（打輸不推，只扣血掉銀兩）；去練功、去贏得了的地方
@@ -1001,11 +998,7 @@ def _train_value(game: Game, profile: BotProfile, loc_id: str | None = None) -> 
         if game.sorties_left() <= 0 or _outmatched(game, loc_id or game.state.player.location):  # 贏面太低的地方攻了也推不動
             return 0.0
         return TREND_WEIGHT * game.sortie_progress(loc_id)
-    if sortie.on(game.content):
-        pushes = game.sortie_push(loc_id) if game.sorties_left() > 0 else {}
-    else:
-        pushes = game.train_trend_push(loc_id)
-    return TREND_WEIGHT * sum(goals.get(t, 0) * d for t, d in pushes.items())
+    return TREND_WEIGHT * sum(goals.get(t, 0) * d for t, d in game.train_trend_push(loc_id).items())
 
 
 def _toward_battle(game: Game) -> list[str] | None:

@@ -1,14 +1,11 @@
 """地盤易手（docs/superpowers/specs/2026-10-14-出陣探索與地盤-design.md 第四節）。
 
-戰線地點（line_of：地點的 train_trend 寫了戰線；寫 front 的照所在大區的戰線，洛陽兩處的大區沒有戰線就不算）有一個控制方：
-- 大本營（劇本陣營的 join_at，含不在戰線上的投靠點）永遠歸那一方；
-- Scenario.territory.fixed（廣宗）開季照寫，只照大事易手；
-- Scenario.territory.lines 裡的可易手地點照拔河（戰線的值對各地點的門檻，±band 不動）、豪強割據（≥geju_one 每條線一處、
-  ≥geju_two 兩處、<geju_release 交還）與大事指定（assign：留到規則算出來的控制方改變那一刻）。
+地盤開著（on）就是領地爭奪（conquest.py）：控制方只照佔領（攻城戰、翻地、時刻表指定、管理者改），這裡留共用的那幾樣——
+大本營（劇本陣營的 join_at）、控制方（controller → conquest.holder）、站的隊伍（squads_at）、地盤福利（price_*）、
+易手的天下大事與每週快照（_announce、_snapshot，conquest 叫）。舊的拔河、豪強割據、工事（2026-10-27 企劃者選「拿掉舊玩法和它的測試」）拿掉了。
 存在 WorldState.territory（整份 JSON，資料庫結構不動）；None＝這一季還沒算過：第一次算不發天下大事（設計第六節）。
-拔河看的線照 rules.resolve_trend：第一季是那條戰線，規則關著的季是黃巾聲勢（三條線上的地點一起動，那種季沒有割據）。
 只讀寫 WorldState；天下大事與江湖史直接記進 world.rumors／world.chronicle（rules.add_rumor 要 GameState）。
-開關（Config.territory.enabled）關著或劇本沒寫 territory：controller 回 None，squads_at 照 Location.enemies。
+沒有地盤的季（on 是假：沒有第一季規則、劇本沒寫區塊）：controller 回 None，squads_at 照 Location.enemies。
 rules → territory 只在 rules.change_trend 裡延後 import；這裡 import rules 整個模組、呼叫時才取屬性。"""
 from __future__ import annotations
 
@@ -21,8 +18,18 @@ RETAKE_LINE = "{side}收復{place}。"  # 待 joy 潤（FB-252）：這一季佔
 CONTROL_LINE = "此刻由{side}控制"  # 待 joy 潤：輿圖詳情欄局勢那一行
 
 
+SIDES = ("guan", "huang")  # 交戰兩軍（領地爭奪設計 4.1：豪強不佔地；conquest.SIDES 同一份）
+
+
 def on(content: Content) -> bool:
-    return content.config.territory.enabled and bool(content.scenario.factions) and content.scenario.territory is not None
+    """地盤（＝領地爭奪，conquest.on）開著：第一季規則開著、劇本有官軍與黃巾、寫了區塊；劇本有要依附的陣營（豪強）時豪強分屬兩軍
+    也開著（領地爭奪設計 4.1、4.10）。舊的拔河與割據（沒有第一季規則的季、豪強不分屬兩軍的季）2026-10-27 拿掉：那種季沒有地盤。"""
+    cfg, scen = content.config, content.scenario
+    if not cfg.season_one or scen.territory is None or not scen.territory.blocks:
+        return False
+    if not set(SIDES) <= {f.id for f in scen.factions}:
+        return False
+    return cfg.haoqiang_allied or not any(f.allies for f in scen.factions)
 
 
 def line_of(content: Content, loc_id: str) -> str | None:
@@ -65,98 +72,13 @@ def sides(content: Content, line: str) -> tuple[str | None, str | None]:
 
 
 def geju_side(content: Content) -> str | None:
-    """割據佔地的那一方：目標推豪強割據的陣營。"""
+    """推豪強割據那一條線的陣營（輿圖版圖變化那一條曲線照它的顏色）。"""
     return next((f.id for f in content.scenario.factions if f.goals.get(rules.GEJU, 0) > 0), None)
-
-
-def threshold(j: int, k: int) -> float:
-    """從低的那一頭數第 j 個（1 起算）、共 k 個可易手地點的門檻：75 − 50 ×（j − 0.5）÷ k（設計 4.2）。"""
-    return 75 - 50 * (j - 0.5) / k
 
 
 def line_value(world: WorldState, content: Content, line: str) -> int:
     """拔河看的值：這條戰線照這一季的規則換成真的會動的線（第一季是它自己；規則關著的季是黃巾聲勢）。"""
     return rules.world_trend_value(world, content, rules.resolve_trend(content, world, line) or line)
-
-
-def fort_level(world: WorldState, content: Content, loc_id: str) -> float:
-    """這一處此刻的工事（修築工事，works.py）：修到的點數照時間扣 Config.fortify.decay_per_hour；沒修過、開關關著是 0。"""
-    t = world.territory
-    fort = t.forts.get(loc_id) if t is not None else None
-    if fort is None or not content.config.fortify.enabled:
-        return 0.0
-    return max(0.0, fort.level - content.config.fortify.decay_per_hour * max(0.0, world.time - fort.at) / 3600)
-
-
-def fort_extra(world: WorldState, content: Content, loc_id: str) -> tuple[str | None, float]:
-    """工事替修它的那一方多撐幾點：（那一方, 門檻往對方那邊多推的點數＝工事÷cap × Config.fortify.band）。"""
-    t = world.territory
-    fort = t.forts.get(loc_id) if t is not None else None
-    if fort is None:
-        return None, 0.0
-    cfg = content.config.fortify
-    return fort.side, fort_level(world, content, loc_id) / cfg.cap * cfg.band
-
-
-def _tug(prev: str | None, value: float, t: float, low: str, high: str, band: int, extra: float = 0.0) -> str:
-    """extra：守著的那一方（prev）修了工事，對方要再多推這麼多才翻得過來（修築工事）；第一次算（prev 是 None）不看。"""
-    up = band + (extra if prev == low else 0.0)
-    down = band + (extra if prev == high else 0.0)
-    if value >= t + up:
-        return high
-    if value <= t - down:
-        return low
-    if prev in (low, high):
-        return prev
-    return high if value >= t else low  # 第一次算、剛好在緩衝裡：照門檻
-
-
-def _recompute(world: WorldState, content: Content, t: TerritoryState) -> dict[str, str]:
-    """可易手地點照規則此刻歸誰（拔河、割據），順便更新 t.tug 與 t.geju；回傳 {地點: 控制方}。"""
-    cfg = content.config.territory
-    haoqiang = geju_side(content)
-    geju = rules.world_trend_value(world, content, rules.GEJU) if rules.trend_shown(content, world, rules.GEJU) else None
-    held = list(t.geju)
-    result: dict[str, str] = {}
-    for line, spots in content.scenario.territory.lines.items():
-        low, high = sides(content, line)
-        if low is None or high is None or not spots:
-            continue
-        value = line_value(world, content, line)
-        k = len(spots)
-        for j, loc_id in enumerate(spots, start=1):
-            prev = t.tug.get(loc_id)
-            side, extra = fort_extra(world, content, loc_id)
-            t.tug[loc_id] = _tug(prev, value, threshold(j, k), low, high, cfg.band, extra if side == prev else 0.0)
-            if loc_id in t.forts and t.forts[loc_id].side != t.tug[loc_id]:
-                del t.forts[loc_id]  # 易手了（或修的那一方本來就不是守著的那一方）：工事整個沒了
-        if haoqiang is None or geju is None or geju < cfg.geju_release:
-            held = [loc_id for loc_id in held if loc_id not in spots]
-        else:
-            mine = [loc_id for loc_id in held if loc_id in spots]
-            want = 2 if geju >= cfg.geju_two else 1 if geju >= cfg.geju_one else 0
-            free = sorted(
-                (loc_id for loc_id in spots if loc_id not in mine),
-                key=lambda loc_id: (abs(threshold(spots.index(loc_id) + 1, k) - value), spots.index(loc_id)),
-            )
-            held += free[: max(0, want - len(mine))]
-        for loc_id in spots:
-            result[loc_id] = haoqiang if haoqiang is not None and loc_id in held else t.tug[loc_id]
-    t.geju = held
-    return result
-
-
-def _control_now(world: WorldState, content: Content, t: TerritoryState) -> dict[str, str]:
-    control = dict(held_bases(world, content))
-    for loc_id, side in content.scenario.territory.fixed.items():
-        control[loc_id] = t.control.get(loc_id, side)
-    for loc_id, side in _recompute(world, content, t).items():
-        if t.pinned.get(loc_id) == side and loc_id in t.control:
-            control[loc_id] = t.control[loc_id]  # 大事指定的留著：規則算出來的還跟指定那一刻一樣
-        else:
-            t.pinned.pop(loc_id, None)
-            control[loc_id] = side
-    return control
 
 
 def _announce(world: WorldState, content: Content, t: TerritoryState, before: dict[str, str]) -> None:
@@ -180,52 +102,21 @@ def _remember(t: TerritoryState) -> None:
 
 def update(world: WorldState, content: Content) -> None:
     """重算一次（設計 4.2 最後一段）：rules.change_trend 真的動了一條線、決戰結果直接寫進季（Game._apply_outcome_trends_and_flags）、
-    推進世界（world.advance_world_state）時叫。這一季第一次算（world.territory 是 None）不發天下大事；之後控制方換了的地點各發
-    一句天下大事、記一筆江湖史。開關關著什麼都不做。領地爭奪開著的季（conquest.on）改走 conquest.update：不拔河、不割據。"""
+    推進世界（world.advance_world_state）時叫。地盤開著就是領地爭奪（conquest.update：不拔河、不割據）；關著什麼都不做。"""
     if not on(content):
         return
     from . import conquest  # noqa: PLC0415  conquest → territory：在函式裡 import，避免循環
 
-    if conquest.on(content, world):
-        conquest.update(world, content)
-        return
-    first = world.territory is None
-    t = world.territory or TerritoryState()
-    before = dict(t.control)
-    t.control = _control_now(world, content, t)
-    world.territory = t
-    if first:
-        _remember(t)  # 開季（第一次算）的控制方也算佔過：之後拿回來是收復
-    else:
-        _announce(world, content, t, before)
-    _snapshot(world, content, t)
-    if first and calendar.point(world.time, content, world).week == 1:  # 開季那一刻：版圖變化第 1 週的易手跟它比（FB-264）
-        t.weeks[START_WEEK] = t.weeks[1].model_copy(deep=True)
+    conquest.update(world, content)
 
 
 def assign(world: WorldState, content: Content, given: dict[str, str]) -> None:
-    """大事指定易手（TimetableOutcome.control，設計 4.2 第 3 點）：先照規則算一次，再把指定的地點換成指定的那一方。可易手的地點記下
-    「這一刻規則算出來的控制方」（pinned），之後規則算出來的改變那一刻才回到規則；固定的地點（廣宗）換了就是換了。大本營不收
-    （載入時也擋）。換了的地點照樣發天下大事。"""
+    """大事指定易手（TimetableOutcome.control，設計 4.2 第 3 點）：指定了就是指定了（conquest.assign，重算三條線）。大本營不收（載入時也擋）。"""
     if not on(content) or not given:
         return
     from . import conquest  # noqa: PLC0415
 
-    if conquest.on(content, world):  # 領地爭奪：指定了就是指定了（不記 pinned、不回到規則），重算三條線
-        conquest.assign(world, content, given)
-        return
-    update(world, content)
-    t = world.territory
-    base, fixed, haoqiang = bases(content), content.scenario.territory.fixed, geju_side(content)
-    before = dict(t.control)
-    for loc_id, side in given.items():
-        if loc_id in base or loc_id not in t.control:
-            continue
-        if loc_id not in fixed:
-            t.pinned[loc_id] = haoqiang if haoqiang is not None and loc_id in t.geju else t.tug[loc_id]
-        t.control[loc_id] = side
-    _announce(world, content, t, before)
-    _snapshot(world, content, t)
+    conquest.assign(world, content, given)
 
 
 START_WEEK = 0  # TerritoryState.weeks 裡開季那一刻的鍵：這一季第一次算地盤就在第 1 週時才記（中途上線的季沒有，FB-264）
@@ -250,21 +141,12 @@ def week_at(world: WorldState, week: int) -> TerritoryWeek | None:
 
 
 def controller(world: WorldState, content: Content, loc_id: str) -> str | None:
-    """這個地點此刻歸誰；不是戰線地點也不是大本營、或開關關著是 None。這一季還沒算過時照規則現算（不存，Review Focus 4）。"""
+    """這個地點此刻歸誰（領地爭奪：只有區塊有控制方，中立而沒人佔是 None，conquest.holder）；地盤關著是 None。"""
     if not on(content) or unheld(world, content, loc_id):
         return None
     from . import conquest  # noqa: PLC0415
 
-    if conquest.on(content, world):  # 領地爭奪：只有區塊有控制方，中立而沒人佔是 None
-        return conquest.holder(world, content, loc_id)
-    t = world.territory
-    if t is not None and loc_id in t.control:
-        return t.control[loc_id]
-    if loc_id in bases(content):
-        return bases(content)[loc_id]
-    if line_of(content, loc_id) is None and loc_id not in content.scenario.territory.fixed:
-        return None
-    return _control_now(world, content, (t or TerritoryState()).model_copy(deep=True)).get(loc_id)
+    return conquest.holder(world, content, loc_id)
 
 
 def squads_at(world: WorldState, content: Content, loc_id: str) -> list[str]:
@@ -273,7 +155,7 @@ def squads_at(world: WorldState, content: Content, loc_id: str) -> list[str]:
     loc = content.locations[loc_id]
     from . import conquest  # noqa: PLC0415
 
-    if conquest.on(content, world) and conquest.start_kind(world, content, loc_id) == conquest.NEUTRAL:
+    if on(content) and conquest.start_kind(world, content, loc_id) == conquest.NEUTRAL:
         return conquest.neutral_squads(world, content, loc_id)  # 領地爭奪：開季中立的區塊照它自己那一套，不看控制方（設計 3.3）
     side = controller(world, content, loc_id)
     garrison = content.scenario.territory.garrison.get(loc_id) if side is not None else None
@@ -307,7 +189,7 @@ def _land_here(state: GameState, content: Content, heal: bool = False) -> float:
 
     p = state.player
     land = price_factor(state.world, content, rules.side_of(state, content), p.location)
-    if heal and land > 1 and conquest.on(content, state.world) and roster.newbie(state, content):
+    if heal and land > 1 and on(content) and roster.newbie(state, content):
         return 1.0
     return land
 

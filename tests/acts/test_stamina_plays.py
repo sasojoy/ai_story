@@ -16,8 +16,8 @@ HOUR = 3600.0
 
 
 def _plays_on(c):
-    """正式內容把三個開關寫成關（企劃者 10/16：數字與設計等第 5 塊）；這一份測的是規則本身，自己打開。"""
-    c.config.ambush.enabled = c.config.fortify.enabled = c.config.stockpile.enabled = True
+    """正式內容把兩個開關寫成關（企劃者 10/16：數字與設計等第 5 塊）；這一份測的是規則本身，自己打開。"""
+    c.config.ambush.enabled = c.config.stockpile.enabled = True
     return c
 
 
@@ -186,46 +186,6 @@ def test_prune_keeps_records_for_late_walkers_then_drops_them(real, world):
     w.time += 2 * HOUR
     ambush.prune(w, real)
     assert seg not in w.ambushes
-
-
-# ── 修築工事 ──
-
-
-def _fort_world(real, world, line_value):
-    game = _player(real, world, "官甲", "guan", "changshe")
-    w = game.state.world
-    territory.update(w, real)
-    return game, w
-
-
-def test_tug_holds_longer_with_a_fort():
-    assert territory._tug("guan", 56, 50, "guan", "huang", 5) == "huang"
-    assert territory._tug("guan", 56, 50, "guan", "huang", 5, extra=10) == "guan"
-    assert territory._tug("guan", 66, 50, "guan", "huang", 5, extra=10) == "huang"
-    assert territory._tug("huang", 44, 50, "guan", "huang", 5, extra=10) == "huang"  # 黃巾守著：官軍那頭的門檻也照推
-    assert territory._tug(None, 56, 50, "guan", "huang", 5, extra=10) == "huang"
-
-
-def test_fortify_on_your_own_spot_and_decay(real, world):
-    game = _player(real, world, "官甲", "guan", "changshe")
-    w = game.state.world
-    territory.update(w, real)
-    spots = [loc for spots in real.scenario.territory.lines.values() for loc in spots]
-    mine = next(loc for loc in spots if w.territory.control.get(loc) == "guan" and w.territory.tug.get(loc) == "guan")
-    game.state.player.location = mine
-    assert "works:fortify" in {o.id for o in game.options() if o.enabled}
-    game.choose("works:fortify")
-    assert works.fort_now(game.state, real) == real.config.fortify.per_press
-    assert game.state.player.stamina == 250 - real.config.fortify.stamina
-    w = game.state.world
-    w.time += 1.25 * HOUR
-    assert territory.fort_level(w, real, mine) == pytest.approx(real.config.fortify.per_press - 1.25 * real.config.fortify.decay_per_hour)
-
-
-def test_no_fortify_on_the_enemys_spot(real, world):
-    game = _player(real, world, "黃甲", "huang", "changshe")
-    territory.update(game.state.world, real)
-    assert not works.fort_spot(game.state, real, "huang")
 
 
 # ── 屯糧練兵 ──

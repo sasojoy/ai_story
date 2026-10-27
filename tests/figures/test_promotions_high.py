@@ -9,8 +9,8 @@ import random
 import pytest
 from pydantic import ValidationError
 
-from conftest import FixedRandom, classic_rules, closed_map, real_content
-from tianxia import atlas, bot_policy, calendar, defection, enlist, figures, ranks, rules, seats, timetable
+from conftest import FixedRandom, classic_rules, real_content
+from tianxia import bot_policy, calendar, defection, enlist, figures, ranks, rules, seats, timetable
 from tianxia.content import ContentError, validate
 from tianxia.engine import Game
 from tianxia.models import Check, Config, Effect, EventMod, PatronLine, PromotionCast, PromotionDef, PromotionLeg
@@ -1527,10 +1527,7 @@ def test_a_last_leg_choice_must_promote(real):
         validate(real)
 
 
-# ── 企劃者裁決 E2（2026-10-07）：召見的地點與路上的站都摸清 ─────────────
-# 發召見、往下一段（next_leg）、換人（_refresh 換了地點）的當下，把從所在地到召見地點最短的那條路（所有已開放的地點，
-# 同 summons_place）上沒去過的站記成摸清（PlayerState.surveyed）：看得見、還沒去過的站也記（人走開就看不見了）。
-# 不另寫一句話（同送別時的留意地形）。
+# ── 召見的地點到得了（企劃者裁決 E2 的摸清路 2026-10-27 跟著舊的摸清規則拿掉：全圖開放，已開放的地點本來就到得了）──
 
 
 def _fresh(content, faction, join):
@@ -1648,66 +1645,30 @@ def test_every_summons_place_can_be_reached_by_dash(on, faction, join):
             _can_get_there(game, f"{faction} 第 {rank} 階 {cast.event} → {cast1.event} 從 {join}")
 
 
-def _route_stops(game, dest):
-    return set(atlas.shortest_routes(game.state, game.content)[dest].path)
-
-
-def test_issuing_a_summons_surveys_the_stops_on_the_way(on):
-    """南陽黃巾營投靠的黃巾，第 3 階召見到下曲陽（張寶）：原本疾行安排不了（路上的站都沒摸清），發召見之後到得了，
-    路上每一站不是去過就是摸清。"""
-    closed_map(on)  # 召見摸清路是全圖開放之前的規則（全圖開放時已開放的地點本來就到得了）
-    game = _fresh(on, "huang", "nanyang_huangjin_camp")
-    p = game.state.player
-    assert game.travel_refusal("xiaquyang", "dash") == "無法安排前往這裡"
-    stops = _route_stops(game, "xiaquyang")
-    assert _issue(game, 3) == ["張寶召你到下曲陽。"]
-    assert p.summons.location == "xiaquyang"
-    assert stops <= p.visited | p.surveyed and "xiaquyang" in p.surveyed
-    assert p.surveyed.isdisjoint(p.visited - stops) and p.surveyed == stops - p.visited  # 只記這一條路上的站
-    assert game.travel_refusal("xiaquyang", "dash") is None
-
-
-def test_the_next_leg_surveys_its_way(on):
-    """黃巾第 3 階第一段在下曲陽演完，第二段要帶著符去南陽黃巾營：往下一段的當下就摸清那一條路。"""
+def test_the_next_leg_points_the_way(on):
+    """黃巾第 3 階第一段在下曲陽演完，第二段要帶著符去南陽黃巾營：往下一段的當下就說，疾行到得了（全圖開放）。"""
     game = _fresh(on, "huang", "huangjin_camp")
     p = game.state.player
     _issue(game, 3)
     p.location = "xiaquyang"
     p.visited.add("xiaquyang")
-    stops = _route_stops(game, "nanyang_huangjin_camp")
-    assert not stops <= p.visited | p.surveyed  # 還沒摸清
     assert ranks.next_leg(game.state, on, "promo_huang_3_talisman") == ["帶著符去南陽黃巾營。"]
-    assert stops <= p.visited | p.surveyed
     assert game.travel_refusal("nanyang_huangjin_camp", "dash") is None
 
 
-def test_rank_two_is_surveyed_too(on):
-    """第 2 階的召見也一樣（企劃者「發召見」說的是每一種召見）：宛城投靠的官軍召到長社、鉅鹿道壇投靠的黃巾召到黃巾別部營寨。"""
-    closed_map(on)  # 召見摸清路是全圖開放之前的規則
-    for faction, join, dest in (("guan", "wan_city", "changshe"), ("huang", "julu_altar", "huangjin_camp")):
-        game = _fresh(on, faction, join)
-        assert game.travel_refusal(dest, "dash") == "無法安排前往這裡"
-        assert _issue(game, 2)
-        assert game.state.player.summons.location == dest
-        assert game.travel_refusal(dest, "dash") is None
-
-
-def test_a_presenter_who_moves_takes_the_survey_with_him(on):
-    """營中授印跟著人走：皇甫嵩從長社調到宛城，召見改寫到宛城（話變了，照說），那一條路也摸清。"""
+def test_a_presenter_who_moves_takes_the_summons_with_him(on):
+    """營中授印跟著人走：皇甫嵩從長社調到宛城，召見改寫到宛城（話變了，照說）。"""
     game = _fresh(on, "guan", "changshe")
     p = game.state.player
     _retire(game, "hejin")
     assert _issue(game, 4) == ["皇甫嵩召你到長社營中授印。"]
-    _place(game, "huangfusong", "dajiangjun_fu")  # 很遠的地方：從長社看不見、沒去過
-    stops = _route_stops(game, "dajiangjun_fu")
-    assert not stops <= p.visited | p.surveyed
+    _place(game, "huangfusong", "dajiangjun_fu")  # 很遠的地方：沒去過
     assert ranks.check_summons(game.state, on) == ["皇甫嵩召你到大將軍府營中授印。"]
-    assert stops <= p.visited | p.surveyed
     assert game.travel_refusal("dajiangjun_fu", "dash") is None
 
 
-def test_a_silent_swap_that_moves_the_place_still_surveys(on):
-    """換了地點、話卻沒變（召見那一句不寫{據點}）時悄悄換、不再說一次，可是路照樣摸清：地點變了就摸清，跟說不說無關。"""
+def test_a_silent_swap_that_moves_the_place_says_nothing(on):
+    """換了地點、話卻沒變（召見那一句不寫{據點}）時悄悄換、不再說一次，地點照樣換、疾行到得了。"""
     camp = next(c for c in next(x for x in on.promotions if x.faction == "guan" and x.rank == 4).legs[0].casts
                 if c.figure == "huangfusong")
     camp.summons_text = "皇甫嵩召你到營中授印。"
@@ -1719,23 +1680,6 @@ def test_a_silent_swap_that_moves_the_place_still_surveys(on):
     assert ranks.check_summons(game.state, on) == []  # 話沒變：不說
     assert p.summons.location == "dajiangjun_fu"
     assert game.travel_refusal("dajiangjun_fu", "dash") is None
-
-
-def test_stops_you_can_see_now_are_surveyed_too(on):
-    """路上此刻看得見、還沒去過的站也要記：人走開之後就看不見了，路會斷在那裡。發召見之後走回起點（一路都是去過的站），
-    召見的地點照樣疾行到得了。"""
-    closed_map(on)  # 視野與召見摸清路是全圖開放之前的規則
-    game = _fresh(on, "huang", "nanyang_huangjin_camp")
-    p = game.state.player
-    seen = atlas.visible_locations(game.state, on)
-    stops = _route_stops(game, "xiaquyang")
-    _issue(game, 3)
-    assert (stops & seen) - p.visited and (stops & seen) - p.visited <= p.surveyed  # 看得見的站也記成摸清
-    start = on.scenario.start_location
-    back = atlas.shortest_routes(game.state, on)[start].path
-    p.visited |= set(back)  # 一路走回起點
-    p.location = start
-    assert game.travel_refusal("xiaquyang", "dash") is None
 
 
 def test_the_far_summons_places_are_marked_important(on):

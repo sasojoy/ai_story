@@ -6,7 +6,7 @@ import random
 
 import pytest
 
-from conftest import no_conquest, real_content
+from conftest import real_content
 from jianfa_kit import classic_explore
 from tianxia import bot, bot_policy
 from tianxia.engine import Game, Option
@@ -16,7 +16,7 @@ import server
 
 
 def _game(faction=None, at="yingshui"):
-    c = no_conquest(real_content("week7"))  # 地盤拔河、出陣推線的舊規則（領地爭奪 PM 2026-10-22 起正式內容打開）
+    c = real_content("week7")  # 地盤拔河、出陣推線的舊規則（領地爭奪 PM 2026-10-22 起正式內容打開）
     classic_explore(c)  # 探索三選一的入口與三顆（減法季探索一顆開著時只剩一顆，tests/test_explore_one.py）
     c.config.jianfa.four_wins = False  # 三陣營四勝利之前的規則（挑邊、改依附算叛投、攪局；測試整理批 1 把這個檔從週末搬到 7 天季，減法季開著）；新規則在 tests/test_four_wins_wiring.py
     c.config.auto_open_first_season = True
@@ -74,30 +74,10 @@ def test_server_bots_gather_more_when_short_of_materials():
     assert short == pytest.approx(_score(game, "explore:gather") + bot_policy.NEED_MATERIAL_SCORE)
 
 
-def test_server_bots_hold_their_camp_for_the_defend_order_and_the_gentry_stir():
-    huang = _game("huang", "huangjin_camp")
-    huang.state.world.orders = []  # 開季自動發的軍令先拿掉，只看這一道守城
-    plain = _score(huang, "act:train")
-    huang.state.world.orders.append(Order(id="1:huang:defend:yingru", template="defend", faction="huang", week=1,
-                                          front="yingru", quota=99, text=""))
-    assert _score(huang, "act:train") == pytest.approx(plain + bot_policy.ORDER_SCORE)
-    gentry = _game("haoqiang", "runan_wilds")
-    assert _score(gentry, "act:train") == bot_policy.STIR_SCORE
-
-
 def test_the_gentry_does_not_stir_a_line_sitting_at_the_middle():
     gentry = _game("haoqiang", "runan_wilds")
     gentry.state.world.trends["yingru"] = 50
     assert _score(gentry, "act:train") is None
-
-
-def test_a_used_up_sortie_stops_pulling_bots_to_the_front():
-    """出陣用完了：那個戰線地點對假人不再有大勢分（往那裡走不加 TRAIN_MOVE_SCORE），改去探索練功（設計第七節）。"""
-    game = _game("guan", "yingchuan_wilds")
-    profile = _profile(game)
-    assert bot_policy._train_value(game, profile, "huangjin_camp") > 0
-    game.state.player.sortie_day, game.state.player.sorties_today = game._pill_day(), 5
-    assert bot_policy._train_value(game, profile, "huangjin_camp") == 0
 
 
 def test_the_page_knows_whether_sorties_are_on():

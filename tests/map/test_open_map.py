@@ -1,6 +1,6 @@
-"""全圖開放（企劃者 2026-10-15「未來不再限制有沒有去過的地點~都可以直接移動過去」；Config.open_map）：
+"""全圖開放（企劃者 2026-10-15「未來不再限制有沒有去過的地點~都可以直接移動過去」）：
 已開放的地點全部算摸清（名字、敵情、勝算、詳情都看得到，都能直接安排前往，路線照全部已開放的地點算）；劇情還沒開放的地點照舊不畫、
-不能去；路上小事「留意地形」拿掉；名望不再多看一站；「還沒摸清」的字不再出現。開關關掉回到舊的摸清規則。
+不能去；路上小事「留意地形」拿掉；名望不再多看一站；「還沒摸清」的字不再出現。舊的摸清規則 2026-10-27 拿掉，沒有開關了。
 正式內容（預設設定：第一季規則關著，南華觀要等 xi_open）。"""
 from __future__ import annotations
 
@@ -15,10 +15,9 @@ from tianxia.state import Order
 FAR = ("guangzong", "zhuo_county")  # 冀州的廣宗、幽州的涿郡：新角色在潁川郡開局，舊規則下都看不見
 
 
-def _game(open_map=True, faction=None, profile=None):
+def _game(faction=None, profile=None):
     c = real_content(profile)
     c.config.auto_open_first_season = True
-    c.config.open_map = open_map
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world())
     game.client = None
     p = game.state.player
@@ -74,28 +73,24 @@ def test_the_road_has_no_terrain_survey_any_more():
 
 
 def test_the_road_scene_lists_three_road_tasks():
-    """FB-300：「在路上」那一張場景卡照同一個開關寫路上小事——全圖開放沒有留意地形，關著照舊寫四樣。"""
+    """FB-300：「在路上」那一張場景卡寫路上小事——全圖開放沒有留意地形。"""
     game = _game()
     game.choose("move:yingshui")
     scene = game.scene_text()
     assert "邊走邊想、沿途打聽、路邊採集，到下一站之前各能做一次" in scene and "留意地形" not in scene
-    game.content.config.open_map = False
-    assert "邊走邊想、沿途打聽、留意地形、路邊採集，到下一站之前各能做一次" in game.scene_text()
 
 
 def test_the_how_to_page_lists_three_road_tasks():
     game = _game()
     c, w = game.content, game.state.world
     assert "留意地形" not in howto.page(c, w, recruitable=False)
-    c.config.open_map = False
-    assert "留意地形" in howto.page(c, w, recruitable=False)
 
 
 def test_fame_no_longer_widens_the_map():
     game = _game()
     s, c = game.state, game.content
     before = atlas.views(s, c)
-    s.player.stats["fame"] = c.config.vision_fame
+    s.player.stats["fame"] = 100
     assert atlas.views(s, c) == before
     assert not any("輿圖" in line for line in howto.fame_lines(c, s.world))
 
@@ -123,18 +118,6 @@ def test_the_legend_and_the_map_say_nothing_of_unknown_places():
     s, c = game.state, game.content
     legend = mapview.legend_data(s, c)
     assert "摸清" not in legend["states"] and "未知" not in legend["states"]
-    assert "摸清" not in mapview.LEGEND_STRIKE_OPEN
+    assert "摸清" not in mapview.LEGEND_STRIKE
     assert all(view in ("current", "visible", "hidden") for view in atlas.views(s, c).values())
     assert "？" not in game.world_map_svg()
-
-
-def test_switched_off_the_old_rule_comes_back():
-    game = _game(open_map=False)
-    s, c = game.state, game.content
-    assert not atlas.is_known(s, c, "guangzong") and game.travel_options("guangzong") is None
-    assert atlas.UNKNOWN in game.place_detail("guangzong")
-    game.choose("move:yingshui")
-    assert "road:survey" in [o.id for o in game.options()]
-    s.player.stats["fame"] = c.config.vision_fame
-    assert atlas.vision_range(s, c) == c.config.vision_base + 1
-    assert any("輿圖多看一站" in line for line in howto.fame_lines(c, s.world))

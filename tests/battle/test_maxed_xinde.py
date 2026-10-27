@@ -4,7 +4,8 @@ from __future__ import annotations
 import random
 from unittest import mock
 
-from conftest import no_conquest, real_content
+from conftest import real_content
+from conquest_kit import conquest_rules
 
 from tianxia import battle_instance, team
 from tianxia.encounter import EncounterResult
@@ -12,8 +13,8 @@ from tianxia.engine import Game
 from tianxia.sqlite_world import open_world
 
 
-def _game(faction="guan", at="huangjin_camp", level=50):
-    c = no_conquest(real_content("week7"))  # 出陣攻敵方大本營（領地爭奪的季不給攻，PM 2026-10-22 起正式內容打開）
+def _game(faction="guan", at="runan_wilds", level=50):
+    c = conquest_rules(real_content("week7"))  # 出陣攻中立地（敵方的大本營不給攻）；出陣約戰關掉，攻一下就打一場
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
     game = Game.new(c, "沈浪", rng=random.Random(0), world=open_world())
@@ -62,8 +63,8 @@ def test_reaching_the_top_in_this_win_does_not_convert_the_rest():
 
 
 def test_a_maxed_hold_converts_the_host_exp():
-    game = _game(faction="huang")
-    host = game._sortie_host(game.content.locations["huangjin_camp"], "hold")
+    game = _game(faction="huang", at="huangjin_camp")
+    host = game._sortie_host(game.content.locations["huangjin_camp"])
     xinde = game.state.player.stats.get("xinde", 0)
     msgs = game.choose("act:train")
     assert game.state.player.stats["xinde"] - xinde == host.reward_xinde + host.exp // 5

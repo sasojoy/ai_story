@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from tianxia.atlas import location_view, vision_range, visible_locations
+from tianxia.atlas import location_view
 from tianxia.content import load_content
 from tianxia.mapart import bezier_point, bezier_tail, fmt, icon_kind, icon_svg, mix, road_control, terrain
 from tianxia.mapview import (
@@ -20,30 +20,13 @@ def no_odds(squad_id: str) -> str:
     raise AssertionError(f"不該算勝算：{squad_id}")
 
 
-def test_vision_range_grows_with_fame(state, content):
-    assert vision_range(state, content) == 2
-    state.player.stats["fame"] = 10
-    assert vision_range(state, content) == 3
-
-
-def test_visible_locations_skip_locked(state, content):
-    assert visible_locations(state, content) == {"town", "lake"}
-    state.world.flags.add("cave_open")
-    assert visible_locations(state, content) == {"town", "lake", "cave"}
-
-
 def test_location_views(state, content):
-    content.config.vision_base = 0
-    visible = visible_locations(state, content)
-    assert location_view("town", state, content, visible) == "current"
-    assert location_view("lake", state, content, visible) == "dot"
-    assert location_view("cave", state, content, visible) == "hidden"
-    content.locations["lake"].important = True
-    assert location_view("lake", state, content, visible) == "outline"
-    state.player.visited.add("lake")
-    assert location_view("lake", state, content, visible) == "remembered"
-    content.config.vision_base = 1
-    assert location_view("lake", state, content, visible_locations(state, content)) == "visible"
+    """全圖開放：所在地 current、其餘已開放的 visible、未開放的 hidden。"""
+    assert location_view("town", state, content) == "current"
+    assert location_view("lake", state, content) == "visible"
+    assert location_view("cave", state, content) == "hidden"
+    state.world.flags.add("cave_open")
+    assert location_view("cave", state, content) == "visible"
 
 
 def test_render_map(state, content):
@@ -57,9 +40,6 @@ def test_render_map(state, content):
     svg = html_out
     assert "小鎮" in svg and "湖邊" in svg and "測試區" in svg
     assert "寶洞" not in svg  # 尚未解鎖
-    content.config.vision_base = 0
-    content.locations["lake"].important = True
-    assert "湖邊？" in render_map(state, content)
 
 
 def test_icons_follow_tags_and_the_first_match_wins(content):
@@ -151,22 +131,6 @@ def test_names_may_use_the_corner_the_legend_used_to_take(state, content):
     assert 140 <= box[1] and box[3] <= 186 and box[0] > 60  # 整個名字都在原本圖例那一條裡面，在記號右邊
 
 
-def test_view_states_are_full_faded_ghost_and_dot(state, content):
-    lake = place(render_map(state, content), "lake")  # 看得見：全彩的小旗，圓盤外圈是危險色
-    assert 'fill="#A0522D"' in lake and 'r="13" fill="#F4EFDF" stroke="#BA7517"' in lake
-    content.config.vision_base = 0
-    state.player.visited.add("lake")  # 去過但看不見：同一個圖示淡一點，圓盤與外圈也淡
-    lake = place(render_map(state, content), "lake")
-    flag, ring = mix("#A0522D", "#E9E2CC", 0.58), mix("#BA7517", "#E9E2CC", 0.45)
-    assert f'fill="{flag}"' in lake and f'r="13" fill="#EDE7D4" stroke="{ring}"' in lake and 'fill="#A0522D"' not in lake
-    state.player.visited.discard("lake")
-    content.locations["lake"].important = True  # 未知、畫出輪廓：灰色剪影，沒有圓盤
-    svg = render_map(state, content)
-    assert 'fill="#B6AE99"' in place(svg, "lake") and 'r="13"' not in place(svg, "lake") and "湖邊？" in svg
-    content.locations["lake"].important = False  # 淡點：小灰點
-    assert '<circle cx="200" cy="100" r="4" fill="#C2BAA4"/>' in render_map(state, content)
-
-
 def test_current_place_has_a_red_ring_and_a_red_flag_that_names_avoid(state, content):
     svg = render_map(state, content)
     assert '<circle cx="100" cy="100" r="17" fill="none" stroke="#C0392B" stroke-width="2"/>' in svg
@@ -187,14 +151,6 @@ def test_selected_current_place_keeps_its_name_off_the_rings_and_the_flag(state,
     assert 'r="23" fill="none" stroke="#2C2C2A"' in svg and 'r="17" fill="none" stroke="#C0392B"' in svg
     town = label_box(svg, "town")
     assert not overlap(town, (75.5, 75.5, 124.5, 124.5)) and not overlap(town, (109, 65, 126, 91))
-
-
-def test_enemies_layer_tints_remembered_places_too(state, content):
-    content.config.vision_base = 0
-    state.player.visited.add("lake")  # 去過但看不見
-    lake = place(render_map(state, content, "enemies", odds={"thug": "穩勝"}.get), "lake")
-    disc, ring = mix("#BA7517", "#F4EFDF", 0.5), mix("#BA7517", "#E9E2CC", 0.45)
-    assert f'r="13" fill="{disc}" stroke="{ring}"' in lake  # 圓盤照樣是危險色（這一層要看的就是危險），外圈照去過的淡色
 
 
 # ── 大地圖的圖層 ─────────────────────────────────────
@@ -246,20 +202,6 @@ def test_selected_place_is_outlined_and_places_are_clickable(state, content):
     assert f'r="23" fill="none" stroke="{SELECT_STROKE}" stroke-width="3"' in svg  # 湖邊 13 ＋ 10
     assert svg.count('<g data-loc="town"') == 1 and svg.count('<g data-loc="lake"') == 1
     assert 'data-loc="cave"' not in svg  # 未開放：不畫
-    content.config.vision_base = 0
-    assert 'data-loc="lake"' not in render_map(state, content)  # 沒名字的淡點點不到
-    content.locations["lake"].important = True
-    assert '<g data-loc="lake"' in render_map(state, content)  # 畫出「湖邊？」的輪廓可以點
-
-
-def test_unknown_places_show_only_outline_and_question_mark(state, content):
-    content.config.vision_base = 0
-    content.locations["lake"].important = True
-    state.world.rumors.append(Rumor(time=0, text="湖邊出事了。", location="lake"))
-    for layer in LEGEND_LAYERS:
-        svg = render_map(state, content, layer, odds=no_odds)
-        assert "湖邊？" in svg
-        assert all(mark not in svg for mark in ("★", "✦", "⚑", "最險", "5 體力", "湖邊 ⚔"))
 
 
 # ── 場景小地圖 ─────────────────────────────────────
@@ -332,21 +274,6 @@ def test_minimap_names_regions_and_rivers_only_when_they_fit(state, content):
     assert ">測試北區<" in svg and ">測試區<" in svg
 
 
-def test_minimap_fog_matches_the_big_map(state, content):
-    content.config.vision_base = 0
-    svg = render_minimap(state, content)
-    assert "湖邊" not in svg and '<circle cx="200" cy="100" r="4" fill="#C2BAA4"/>' in svg  # 沒名字的淡點
-    content.locations["lake"].important = True
-    assert ">湖邊？<" in render_minimap(state, content)  # 畫出輪廓的未知地點
-    cave = content.locations["cave"]
-    cave.x, cave.y = 150, 60  # 挪進視窗，但還沒開放
-    svg = render_minimap(state, content)
-    assert "寶洞" not in svg and 'cx="150"' not in svg and "150,60" not in svg  # 記號與通往它的路都不畫
-    state.world.flags.add("cave_open")
-    content.config.vision_base = 2
-    assert ">寶洞<" in render_minimap(state, content)
-
-
 def test_minimap_leaves_out_layer_marks_odds_costs_news_and_legend(state, content):
     state.world.rumors.append(Rumor(time=0, text="湖邊出事了。", location="lake"))
     svg = render_minimap(state, content)
@@ -369,12 +296,6 @@ def test_minimap_points_to_known_places_beyond_the_window(state, content):
     ((_, box),) = [(text, box) for text, box in texts(svg) if text == "→ 寶洞"]
     left, top, right, bottom = window(svg)
     assert right - 20 < box[2] <= right and top < box[1] and box[3] < bottom  # 貼著右邊
-    content.config.vision_base = 1  # 看不見寶洞：沒摸清就不標
-    assert ARROW_RE.findall(render_minimap(state, content)) == []
-    content.locations["cave"].important = True
-    assert "寶洞" not in render_minimap(state, content)
-    state.player.visited.add("cave")  # 去過：記得在哪
-    assert ARROW_RE.findall(render_minimap(state, content)) == [("→", "寶洞")]
 
 
 def test_minimap_places_just_beyond_the_edge_get_an_arrow_not_a_clipped_mark(state, content):
@@ -498,9 +419,6 @@ def test_roads_bend_and_are_drawn_by_their_kind(state, content):
     content.locations["town"].connections = [Connection("lake", "官道")]
     content.locations["lake"].connections = [Connection("town", "官道"), Connection("cave", "山路")]
     assert 'stroke="#8E6B45" stroke-width="2.6" stroke-dasharray="8 4"' in render_map(state, content)
-    content.config.vision_base = 0  # 湖邊、寶洞都成了淡點：兩頭都沒摸清的路畫成淡色點線
-    faint = f'<path d="M300,100 Q{fmt(bx)},{fmt(by)} 200,100" fill="none" stroke="#C2B394" stroke-width="1.4" stroke-dasharray="1.5 4"'
-    assert faint in render_map(state, content)
 
 
 # ── 地形、外框、指北針（輿圖美術設計 2.1、2.5）──────────────────────

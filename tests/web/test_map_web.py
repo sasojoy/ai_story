@@ -138,28 +138,6 @@ def _timeline_game():
     return game
 
 
-def test_the_timeline_has_the_curve_the_tallies_and_the_chart():
-    game = _timeline_game()
-    out = run(game, "return H.timelineHtml(H.S.mapBase, H.S.mapState, H.S.mapState.now_week);")
-    assert "天下怎麼變" in out and out.count("<polyline") >= 4  # 三條戰線＋割據
-    assert all(name in out for name in ("官軍", "黃巾", "豪強"))
-    st = game.map_state()
-    assert len(re.findall(r'class="cell[ "]', out)) == sum(len(g["spots"]) for g in st["chart"]) * st["weeks_total"]
-    assert "官軍大營" in out  # 第 3 週易手的那一處照地點的名字寫
-    assert 'data-act="map-play"' in out and 'data-act="map-now"' in out
-
-
-def test_picking_an_earlier_week_flashes_what_changed():
-    """版圖變化在天下圖上播（輿圖第三版第 3 批）：看以前的某一週，那一週易手的地點閃一圈（加上你的那一圈）。"""
-    game = _timeline_game()
-    changed = next(x for x in game.map_state()["weeks"] if x["week"] == 2)["changed"]
-    assert {"id": "guan_camp", "from": "guan", "to": "huang"} in changed
-    _, high = world_parts(game, week=2)
-    assert high.count('class="pulse"') == len(changed) + 1
-    assert world_parts(game)[1].count('class="pulse"') == 1  # 平常看現在：只有你的那一圈
-    assert world_parts(game, tl="true")[1].count('class="pulse"') == 1  # 版圖變化停在現在這一週：這一週沒有易手
-
-
 def test_the_chart_draws_unknown_weeks_as_blank():
     from tianxia import calendar, territory
 
@@ -196,13 +174,6 @@ def test_fb632_a_neutral_block_taken_shows_in_the_timeline_and_the_chart():
 def test_the_timeline_without_territory_says_so():
     out = run(_game(), "return H.timelineHtml(H.S.mapBase, H.S.mapState, 1);")
     assert "這一季沒有地盤易手" in out and "<polyline" not in out
-
-
-def test_the_tally_compares_with_the_season_start():
-    """版圖變化的處數跟開季那一刻比（FB-264：第一次算地盤就在第 1 週時有開季的基準），看第 1 週也比得出來。"""
-    game = _timeline_game()
-    out = run(game, "return [H.timelineHtml(H.S.mapBase, H.S.mapState, 3), H.timelineHtml(H.S.mapBase, H.S.mapState, 1)];")
-    assert "比開季" in out[0] and "比開季" in out[1] and "比第" not in out[0]
 
 
 def test_the_tally_without_a_season_start_compares_with_the_first_recorded_week():

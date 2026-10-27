@@ -5,7 +5,7 @@ from __future__ import annotations
 import random
 from unittest import mock
 
-from conftest import classic_rules, no_conquest, real_content
+from conftest import classic_rules, real_content
 from jianfa_kit import classic_explore
 from tianxia import engine as engine_mod
 from tianxia import explore_modes, rules, sensing, team, treasures
@@ -16,7 +16,7 @@ from tianxia.state import Bounty
 
 
 def _game(faction=None, at="yingshui", **cfg):
-    c = no_conquest(real_content("week7"))  # 領地加成（自家領地找素材多一份）另測（tests/test_conquest_rules.py）
+    c = real_content("week7")  # 領地加成（自家領地找素材多一份）另測（tests/test_conquest_rules.py）
     classic_explore(c)  # 探索三選一本身（減法季探索一顆開著時選單上沒有這幾顆，tests/test_explore_one.py）
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
@@ -101,7 +101,7 @@ def test_dangerous_places_add_a_second_tier():
     before = _bag(game)
     game.choose("explore:gather")
     got = sorted(game.content.materials[m].tier for m in _new(before, _bag(game)))
-    assert got == [1, 2]
+    assert got.count(2) == 1 and 1 in got  # 自家的領地多一份一階（領地加成，tests/acts/test_conquest_rules.py）
 
 
 def test_towns_never_fight_and_find_half_the_time():

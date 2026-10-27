@@ -15,8 +15,8 @@ from .models import Content, Location, MapLabel, MapLayout, MapRegion
 from .rules import side_of
 from .state import GameState
 
-NODE_SIZE = {"current": 13, "visible": 13, "remembered": 13, "outline": 11, "dot": 4}  # 摸清的是圓盤半徑，未知是剪影
-LOOKS = {"current": "full", "visible": "full", "remembered": "faded", "outline": "ghost"}  # 圖示的畫法（mapart.icon）
+NODE_SIZE = {"current": 13, "visible": 13}  # 圓盤半徑
+LOOKS = {"current": "full", "visible": "full"}  # 圖示的畫法（mapart.icon）
 CURRENT_RING = 17  # 所在地的紅圈
 DANGER_RING = {1: "#639922", 2: "#BA7517", 3: "#A32D2D"}
 ENEMY_DISC = 0.5  # 敵情層：圓盤是危險色往圓盤原色淡幾成
@@ -49,7 +49,7 @@ TEXT_WEIGHT = 4
 # 只影響沒有空位的名字擺哪裡：有空位就是「什麼都不壓」，權重不看
 NODE_WEIGHT = 3
 RING_WEIGHT = 0.2
-SELECTABLE = (*KNOWN, "outline")  # 點得到、選得到的地點
+SELECTABLE = KNOWN  # 點得到、選得到的地點
 HIT_RADIUS = 16  # 地點可點的範圍（透明圓）
 SELECT_STROKE = "#2C2C2A"
 ROUTE_STROKE = "#D85A30"
@@ -57,14 +57,12 @@ TREND_RED = "#C0392B"
 TREND_TINT = 0.6  # 大勢 100 時，大區顏色往紅色靠六成
 TREND_TEXT = "#A32D2D"
 LEGEND_ICONS = [("town", "城鎮"), ("roof", "寺院書院"), ("camp", "營寨"), ("ferry", "渡口"), ("peak", "山林"), ("flag", "野外")]
-LEGEND_STATES = "全彩：看得見　淡色：去過／摸清　灰：未知　紅旗：所在地"
-LEGEND_STATES_OPEN = "紅旗：所在地"  # 全圖開放（Config.open_map）：已開放的地點都畫全彩，沒有看得見、摸清、未知之分（待 joy 潤）
+LEGEND_STATES = "紅旗：所在地"  # 全圖開放：已開放的地點都畫全彩，沒有看得見、摸清、未知之分（待 joy 潤）
 LEGEND_RING = "外圈：綠安全／橙危險／紅兇險　⚔ 可遊歷"
 # 待 joy 潤（FB-251）：出陣開著時 ⚔ 照地盤畫（armed_places）。不能比 LEGEND_RING 長：375 寬一行只放得下那麼多（「可出陣攻打」把「打」擠到第二行，FB-256）
 LEGEND_RING_SORTIE = "外圈：綠安全／橙危險／紅兇險　⚔ 可攻打"
 LEGEND_CONTROL = "地點的底色：官軍藍、黃巾黃、豪強綠，是此刻誰佔著"  # 待 joy 潤：局勢層開著地盤時多的那一句
-LEGEND_STRIKE = f"{atlas.STRIKE_MARK} 本週軍令要打擊的人物（還沒摸清時標在大區）"  # 局勢層：有標記時多一行（FB-072）
-LEGEND_STRIKE_OPEN = f"{atlas.STRIKE_MARK} 本週軍令要打擊的人物"  # 全圖開放：目標的所在都知道，一律標在地點上
+LEGEND_STRIKE = f"{atlas.STRIKE_MARK} 本週軍令要打擊的人物"  # 局勢層：有標記時多一行（FB-072）；全圖開放，目標的所在都知道
 LEGEND_STORY = "★ 這一幕主線的目標　✦ 最近 {days:g} 天的大事與傳聞"  # 天數照傳聞板的長度（legend_data 照內容填）
 LEGEND_LAYERS = {
     "situation": "⚑ 龍頭人物（會自己行動的江湖人物）常出沒　大區越紅，大勢越凶",
@@ -210,12 +208,12 @@ def _text(
 
 
 def _label(loc: Location, view: str, fights: bool = True, armed: set[str] | None = None) -> str:
-    """地點的名字：摸清的寫名字（fights 時能打的加 ⚔，所在地加「（你）」），畫出輪廓的寫「名字？」，淡點不寫。
+    """地點的名字：摸清的寫名字（fights 時能打的加 ⚔，所在地加「（你）」），未開放的不寫。
     armed：出陣開著時能出陣攻的地點（armed_places）；None 是舊規則，照內容的 enemies 畫。"""
     if view in KNOWN:
         sword = fights and (loc.id in armed if armed is not None else bool(loc.enemies))
         return loc.name + (" ⚔" if sword else "") + ("（你）" if view == "current" else "")
-    return f"{loc.name}？" if view == "outline" else ""
+    return ""
 
 
 def armed_places(state: GameState, content: Content) -> set[str] | None:
@@ -228,23 +226,11 @@ def armed_places(state: GameState, content: Content) -> set[str] | None:
     side = content.scenario.find_faction(faction) if faction is not None else None
     if side is None:
         return set()
-    out: set[str] = set()
-    if conquest.on(content, state.world):  # 領地爭奪：每一塊不是自家的區塊都能出陣攻（同 sortie.mode），加上截糧的糧隊
-        own = side_of(state, content)  # 豪強分屬兩軍：依附那一軍
-        return {
-            loc_id for loc_id in content.locations
-            if conquest.sortie_foes(state.world, content, loc_id, own) or orders.extra_enemies(state, content, loc_id, own)
-        }
-    for loc_id in content.locations:
-        line = territory.line_of(content, loc_id)
-        if line is None or not side.goals.get(line):
-            continue
-        held = territory.controller(state.world, content, loc_id) not in (None, faction)
-        enemy = any(content.squads[sid].faction not in (None, faction)
-                    for sid in territory.squads_at(state.world, content, loc_id) if sid in content.squads)
-        if (held and enemy) or orders.extra_enemies(state, content, loc_id, faction):
-            out.add(loc_id)
-    return out
+    own = side_of(state, content)  # 領地爭奪：每一塊不是自家的區塊都能出陣攻（同 sortie.mode），加上截糧的糧隊；豪強分屬兩軍：依附那一軍
+    return {
+        loc_id for loc_id in content.locations
+        if conquest.sortie_foes(state.world, content, loc_id, own) or orders.extra_enemies(state, content, loc_id, own)
+    }
 
 
 def _tint(color: str, value: int) -> str:
@@ -258,15 +244,14 @@ def legend_data(state: GameState, content: Content, layer: str = "situation") ->
     layer 是這一層的說明（認不得的圖層是空字串）；strike 是局勢層有本週打擊軍令的標記時多的那一句說明，沒有就是空字串
     （跟 render_map 標 ◎ 同一個條件，見 atlas.strike_marks；小地圖沒有圖例）。全是字串，原樣就是 JSON。"""
     strike_places, strike_regions = atlas.strike_marks(state, content) if layer == "situation" else (set(), set())
-    opened = content.config.open_map  # 全圖開放：沒有摸清、未知之分，圖例不提
     return {
         "icons": [{"kind": kind, "label": text, "svg": mapart.icon_svg(kind)} for kind, text in LEGEND_ICONS],
-        "states": LEGEND_STATES_OPEN if opened else LEGEND_STATES,
+        "states": LEGEND_STATES,
         "ring": LEGEND_RING_SORTIE if sortie.on(content) else LEGEND_RING,
         "layer": LEGEND_STORY.format(days=atlas.news_days(content)) if layer == "story" else (
             LEGEND_LAYERS.get(layer, "") + (f"　{LEGEND_CONTROL}" if layer == "situation" and territory.on(content) else "")
             + (f"，{LEGEND_NEUTRAL}" if layer == "situation" and conquest.on(content, state.world) else "")),
-        "strike": (LEGEND_STRIKE_OPEN if opened else LEGEND_STRIKE) if strike_places or strike_regions else "",
+        "strike": LEGEND_STRIKE if strike_places or strike_regions else "",
     }
 
 
@@ -383,7 +368,7 @@ def _route_line(state: GameState, content: Content, selected: str | None, spot: 
 def _reach(view: str, selected: bool) -> tuple[float, float]:
     """地點記號從中心往外畫到多遠：（記號本身（摸清的到圓盤外圈）, 連同所在地的紅圈、選定地點的圓圈）。"""
     size = NODE_SIZE[view]
-    mark = size + (1 if view in KNOWN else 0)  # 圓盤的外圈：線寬 2
+    mark = size + 1  # 圓盤的外圈：線寬 2
     ring = mark
     if view == "current":
         ring = max(ring, CURRENT_RING + 1)  # 紅圈：線寬 2
@@ -500,16 +485,15 @@ def _river_label(label: MapLabel) -> tuple[str, Box]:
 
 
 def _roads(content: Content, views: dict[str, str]) -> list[str]:
-    """地點之間的路：兩頭都畫得出來（不是未開放）才畫，畫成彎一點的二次曲線（mapart.road_control，兩個方向同一條）。
-    有一頭摸清時照路的種類畫（官道、一般的路、山路），不然是淡色點線。"""
+    """地點之間的路：兩頭都畫得出來（不是未開放）才畫，畫成彎一點的二次曲線（mapart.road_control，兩個方向同一條），
+    照路的種類畫（官道、一般的路、山路）。"""
     out = []
     for a_id, a in content.locations.items():
         for b_id in a.connections:
             if a_id > b_id or "hidden" in (views[a_id], views[b_id]):
                 continue
             b = content.locations[b_id]
-            known = views[a_id] in KNOWN or views[b_id] in KNOWN
-            color, width, dash = mapart.ROAD_STYLE[a.road_to(b_id)] if known else mapart.FAINT_ROAD
+            color, width, dash = mapart.ROAD_STYLE[a.road_to(b_id)]
             cx, cy = mapart.road_control(content, a_id, b_id)
             out.append(
                 f'<path d="M{a.x},{a.y} Q{fmt(cx)},{fmt(cy)} {b.x},{b.y}" fill="none" stroke="{color}" '
@@ -519,25 +503,19 @@ def _roads(content: Content, views: dict[str, str]) -> list[str]:
 
 
 def _node(loc: Location, view: str, disc: str | None, selected: bool, taken: list[Taken]) -> tuple[list[str], float]:
-    """地點記號（輿圖美術設計 2.6、2.7）：摸清的底下一個圓盤，外圈是危險色（去過／摸清的圓盤與外圈淡一點；
-    disc 是圖層換的圓盤顏色，例如敵情層），上面照標籤畫圖示（看得見全彩、去過／摸清淡色、未知灰色剪影）；
-    淡點只是一個小灰點。所在地加紅圈、插紅旗，選定的加深色圓圈。
+    """地點記號（輿圖美術設計 2.6、2.7）：底下一個圓盤，外圈是危險色（disc 是圖層換的圓盤顏色，例如敵情層），
+    上面照標籤畫全彩圖示。所在地加紅圈、插紅旗，選定的加深色圓圈。
     把記號與紅旗佔的範圍加進 taken，回傳（SVG 片段, 記號往外畫到多遠）。"""
     x, y, size = loc.x, loc.y, NODE_SIZE[view]
     mark, reach = _reach(view, selected)
     taken.append(((x - mark, y - mark, x + mark, y + mark), NODE_WEIGHT))
     if reach > mark:  # 所在地、選定的圓圈：壓到細圓圈沒有壓到實心記號那麼糟
         taken.append(((x - reach, y - reach, x + reach, y + reach), RING_WEIGHT))
-    parts = []
-    if view == "dot":
-        parts.append(f'<circle cx="{x}" cy="{y}" r="{size}" fill="{mapart.DOT}"/>')
-    else:
-        if view in KNOWN:
-            ring, fill = DANGER_RING[loc.danger], disc or mapart.DISC
-            if view == "remembered":
-                ring, fill = mapart.mix(ring, mapart.PAPER, mapart.RING_FADE), disc or mapart.DISC_FADED
-            parts.append(f'<circle cx="{x}" cy="{y}" r="{size}" fill="{fill}" stroke="{ring}" stroke-width="2"/>')
-        parts.append(mapart.icon(mapart.icon_kind(loc), x, y, LOOKS[view]))
+    ring, fill = DANGER_RING[loc.danger], disc or mapart.DISC
+    parts = [
+        f'<circle cx="{x}" cy="{y}" r="{size}" fill="{fill}" stroke="{ring}" stroke-width="2"/>',
+        mapart.icon(mapart.icon_kind(loc), x, y, LOOKS[view]),
+    ]
     if view == "current":
         parts.append(f'<circle cx="{x}" cy="{y}" r="{CURRENT_RING}" fill="none" stroke="{mapart.BANNER}" stroke-width="2"/>')
         parts.append(mapart.banner(x, y))
