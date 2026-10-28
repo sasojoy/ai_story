@@ -168,6 +168,21 @@ def test_far_away_the_answer_button_is_grey_with_the_walk():
     assert _only(world).status == "open" and "才應得了戰" in msgs[0]
 
 
+def test_every_duel_card_carries_both_army_names_and_the_answer_stamina_even_off_a_block():
+    """FB-903：站在不是區塊的地方（南華觀）沒有出陣前那張卡，網頁的陣營名與應戰的體力只能從約戰卡自己拿。"""
+    c, world = _pair()
+    cfg = c.config.sortie
+    seat(c, world, "乙", "huang", "jade_cave")  # 潁川汝南的南華觀：不是區塊，跟約戰的汝南荒野同一個大區
+    _go(c, world)
+    game = game_of(c, world, "乙")
+    assert game.sortie_card() is None
+    card = game.sortie_cards()[0]
+    assert card["can_answer"] and card["same_region"]
+    assert card["sides"] == {"guan": "官軍", "huang": "黃巾軍"} and card["answer_stamina"] == cfg.answer_stamina
+    mine = game_of(c, world, "甲").sortie_cards()[0]  # 自己貼的那一張、對面看的那一張一樣帶
+    assert mine["sides"] == card["sides"] and mine["answer_stamina"] == cfg.answer_stamina
+
+
 def test_the_same_side_can_only_join():
     c, world = _pair()
     seat(c, world, "丙", "guan")

@@ -607,7 +607,8 @@
   // 卡上「這一塊」「贏了」各收成一行（點了攤開，開合記在 S.sortieFold），封三招三排各四招（S.sortiePick），三招都挑了底鈕才亮、送 sortie_go。
   // 約戰卡（m.sorties）一張一行：應戰（打開同一張封三招的卡，S.sortieAnswer 記那一張，送 sortie_answer）、同去（sortie_join）、
   // 別區的「前往 N 分」（照現有的移動：移動清單上有那一條就展開移動，沒有就開輿圖那一處的卡）。
-  // 陣營名、窗幾分鐘、體力都照伺服器給的（sortie_card.sides、window_minutes、cost、answer_stamina），不寫死。新寫的字都待 joy 潤
+  // 陣營名、窗幾分鐘、體力都照伺服器給的（sortie_card.sides、window_minutes、cost、answer_stamina；約戰卡自己也帶 sides、answer_stamina，
+  // 站的地方不是區塊時沒有出陣卡，FB-903），不寫死。新寫的字都待 joy 潤
   // （一行一個 const：測試的 konst 照「const 名字」切）
   const SX_OPEN = "sortie";
   const SX_ROUNDS = ["一", "二", "三"];
@@ -632,10 +633,11 @@
   function sxMine(c) {
     return Object.keys(c.sides || {}).find((k) => k !== c.bars.theirs_side) || "";
   }
-  // 陣營的名字照卡上的 sides（劇本的陣營名）；沒有卡（站的地方不是區塊、在路上）寫「對面」
-  function sxSide(m, side) {
+  // 陣營的名字：約戰卡自己帶的 sides（站的地方不是區塊就沒有出陣卡，豪族塢堡、南華觀……，FB-903），再來是出陣卡的 sides（都是劇本的陣營名）；
+  // 兩邊都沒有（在路上）才寫「對面」
+  function sxSide(m, side, d) {
     const c = m.sortie_card;
-    return (c && c.sides && c.sides[side]) || SX_FOE;
+    return ((d && d.sides) || (c && c.sides) || {})[side] || SX_FOE;
   }
   // 「這一塊」收起來的那一行：歸誰・兩條・還差多少易手；自家的地方寫對面推到多少
   function sxBlockLine(c) {
@@ -672,7 +674,7 @@
   }
   // 應戰那一張「守住了」攤開：伺服器沒給數字（應戰前看得到的獎勵是之後的事），照設計寫幾句
   function sxKeep(m, d) {
-    const rows = [["這一塊", `<b>${esc(sxSide(m, d.attacker_side))}的進度被拉回</b>`], ["貢獻", "<b>記一筆守城功</b>"],
+    const rows = [["這一塊", `<b>${esc(sxSide(m, d.attacker_side, d))}的進度被拉回</b>`], ["貢獻", "<b>記一筆守城功</b>"],
       ["經驗心得", "<b>同出陣打贏的那一份</b>"], ["輸了", '<small class="sx-only">內傷加重，出陣與應戰要多等一陣</small>']];
     return `<dl class="sx-gl">${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>`;
   }
@@ -685,7 +687,8 @@
   function sxGo(c, d) {
     const picked = (S.sortiePick || []).filter(Boolean);
     const need = SX_ROUNDS.length - picked.length;
-    const sub = d ? `${c && c.answer_stamina != null ? `體力 ${c.answer_stamina}・` : ""}今日還能應戰 ${d.answers_left} 次`
+    const stamina = d ? (d.answer_stamina != null ? d.answer_stamina : c && c.answer_stamina) : null; // 約戰卡自己帶的（站的地方不是區塊沒有出陣卡，FB-903）
+    const sub = d ? `${stamina != null ? `體力 ${stamina}・` : ""}今日還能應戰 ${d.answers_left} 次`
       : `體力 ${c.cost}・今日還能 ${c.left_today} 次`;
     const why = d || !c.why_not ? "" : c.cooldown_until && /^還要/.test(c.why_not) ? `冷卻中・${c.why_not}` : c.why_not;
     const ready = !why && need <= 0;
@@ -713,7 +716,7 @@
     let top, body;
     if (d) {
       const same = !!c && c.block === d.block; // 約戰的那一塊就是腳下這一塊：兩條的數字卡上有
-      const first = (s) => sxSide(m, s).slice(0, 1);
+      const first = (s) => sxSide(m, s, d).slice(0, 1);
       top = `<p class="sx-top"><b>應戰・${esc(d.place)}</b><span>${esc(d.attacker)}約戰・還有 ${sxMins(d.expires_in)} 分</span></p>`;
       body = (same ? sxFold("block", "這一塊", `${first(sxMine(c))} ${c.bars.mine}／${first(d.attacker_side)} ${c.bars.theirs}・${c.foe_pushing ? `對面 ${c.foe_pushing} 人在推` : "對面沒人在推"}`, sxBars(c, true))
         : `<p class="sx-flat"><b>這一塊</b><span>${esc(d.place)}</span></p>`)
@@ -733,7 +736,7 @@
   // 約戰卡一張一行：小章（陣營／同袍／自己）、誰約戰哪裡、還有幾分、右邊一顆鈕（或這一場的狀態）；灰的原因放不進鈕，寫在那一行底下
   function sxRow(m, d) {
     const live = sxLive(d), join = d.role === "join";
-    const tag = join ? SX_ALLY : d.role === "mine" ? SX_SELF : sxSide(m, d.attacker_side);
+    const tag = join ? SX_ALLY : d.role === "mine" ? SX_SELF : sxSide(m, d.attacker_side, d);
     const far = live && d.role !== "mine" && !d.same_region && d.travel_minutes != null && !d.can_answer && !d.can_join;
     const state = (t) => `<span class="sx-state">${esc(t)}</span>`;
     let right, why = "";

@@ -287,6 +287,30 @@ def test_a_narrow_phone_lets_the_duel_text_wrap_and_keeps_the_place_whole():
     assert '<span class="sx-dt"><b>鄧七郎</b>約戰<span class="sx-pl">潁川郊野</span></span>' in bar  # 地名自己一段，換行只換在「約戰」與它之間
 
 
+# FB-903（QA 2026-10-28）：站在不是區塊的地方應戰（南華觀、豪族塢堡……）沒有出陣卡，陣營名都寫「對面」、底鈕少了「體力 12」，按下去照樣扣。
+# 現在約戰卡自己帶 sides 與 answer_stamina，網頁先讀它
+
+
+@pytest.mark.slow
+def test_answering_off_a_block_still_names_the_armies_and_shows_the_stamina():
+    from duel_kit import do, seat
+
+    c, world = _duel_cast()
+    seat(c, world, "乙", "huang", "jade_cave")  # 南華觀：潁川汝南的地方、不是區塊
+    do(c, world, "甲", lambda g: g.choose("sortie:go:強攻,固守,奇襲"))
+    duel_id = next(iter(world.sortie_duels()))
+    m = _view(c, world, "乙", 1_792_000_060.0)
+    assert "sortie_card" not in m and m["sorties"][0]["can_answer"]
+    bar = _bar_of(m)
+    assert ">官軍</span><span" in bar and ">對面</span>" not in bar  # 約戰卡上的小章寫陣營名
+    picks = [{"act": "sortie-move", "round": str(i), "move": "固守"} for i in range(3)]
+    out = _clicks(m, [{"act": "sortie-answer", "id": duel_id}, *picks])
+    opened, sealed = out["bars"][0], out["bars"][-1]
+    assert "官軍的進度被拉回" in opened and "對面的進度被拉回" not in opened  # 「守住了」那一段也寫陣營名
+    assert "<b>還要挑 3 招</b><small>體力 12・今日還能應戰 3 次</small>" in opened
+    assert "<b>封好三招，應戰</b><small>固守・固守・固守・體力 12・今日還能應戰 3 次</small>" in sealed
+
+
 def test_duel_rows_sort_and_settled_ones_say_how_it_went():
     base = {"block": "b", "place": "某地", "attacker_side": "huang", "defender": None, "expires_in": 300, "answers_left": 3,
             "same_region": True, "travel_minutes": None, "result": None, "why_not": "", "can_answer": False, "can_join": False}
