@@ -62,7 +62,7 @@ CLICKS = """return (async () => {
   const bars = [];
   for (const dataset of input.clicks) { await click(dataset); bars.push(H.S.tab === "jianghu" ? H.actionBar(H.S.main) : ""); }
   return { calls: T.calls.filter((c) => c[0] === "/api/choose" || c[0].startsWith("/api/do/sortie")).map((c) => [c[0], c[1]]),
-           wheel: H.S.wheelSel, answer: H.S.sortieAnswer, pick: H.S.sortiePick, tab: H.S.tab, mapSel: H.S.mapSel, bars };
+           wheel: H.S.wheelSel, answer: H.S.sortieAnswer, pick: H.S.sortiePick, tab: H.S.tab, mapSel: H.S.mapSel, route: H.S.glowRoute, bars };
 })();"""
 
 
@@ -197,6 +197,73 @@ def test_the_three_duel_cards_answer_join_and_walk():
     assert "1 張在別區" in bar and 'data-act="sortie-answer"' not in bar
     out = _clicks(m, [{"act": "sortie-far", "id": LOC}], responses={"/api/do/view_map": {"main": m}})
     assert out["tab"] == "map" and out["mapSel"] == LOC and out["calls"] == []
+
+
+# FB-901（QA 2026-10-28）：「前往 N 分」展開移動後往那一處的那一條光只亮 24 毫秒（重插的摺疊 toggle、下一次輪詢重畫都把 .glow 清掉）。
+# 現在要發光的那一條記在 S.glowRoute，畫移動卡時直接寫進 class、applyGlow 清掉之後也補回；按了選項、收起移動卡、換分頁、走了就熄
+
+
+def _far_view():
+    """官軍的甲在白馬津貼約戰，黃巾的乙站長社（隔著大區、相鄰）：乙的約戰卡別區那一行「前往」，移動清單上有往白馬津的路。"""
+    from duel_kit import NOW, do, seat
+
+    c, world = _duel_cast()
+    seat(c, world, "甲", "guan", "baima_ford")
+    seat(c, world, "乙", "huang", "changshe")
+    do(c, world, "甲", lambda g: g.choose("sortie:go:強攻,固守,奇襲"))
+    m = _view(c, world, "乙", NOW + 60)
+    assert any(o["id"] == "move:baima_ford" for o in m["options"]) and m["sorties"][0]["block"] == "baima_ford"
+    return m
+
+
+@pytest.mark.slow
+def test_far_travel_keeps_the_route_glow_in_the_state_and_the_class():
+    m = _far_view()
+    out = _clicks(m, [{"act": "sortie-far", "id": "baima_ford"}])
+    assert out["wheel"] == "move" and out["route"] == "move:baima_ford"
+    bar = out["bars"][0]
+    assert 'class="btn go glow" data-act="choose" data-id="move:baima_ford"' in bar and bar.count(" glow") == 1  # 只有那一條
+    # 輪詢重畫：S 還在，畫出來照樣帶光（以前加在畫好的元素上，一重畫就沒了）
+    assert 'class="btn go glow" data-act="choose" data-id="move:baima_ford"' in _bar_of(m, wheelSel="move", glowRoute="move:baima_ford")
+    assert " glow" not in _bar_of(m, wheelSel="move")
+
+
+@pytest.mark.slow
+def test_apply_glow_puts_the_route_glow_back_after_it_clears_everything():
+    """摺疊 toggle 之後跑的 applyGlow 第一行清掉所有 .glow：路的光要在它後面補回來。"""
+    m = _far_view()
+    script = """
+      const here = T.button("move:baima_ford"), other = T.button("move:runan_wilds");
+      H.S.wheelSel = "move"; H.S.glowRoute = "move:baima_ford";
+      H.applyGlow(); H.applyGlow();  // toggle 一次又一次
+      const kept = [here.classes.has("glow"), other.classes.has("glow")];
+      H.S.wheelSel = null; H.applyGlow();  // 移動卡收起：光熄、記的也清掉
+      return { kept, closed: [here.classes.has("glow"), H.S.glowRoute] };"""
+    out = run(m, script)
+    assert out["kept"] == [True, False] and out["closed"] == [False, None]
+
+
+@pytest.mark.slow
+def test_the_route_glow_goes_out_when_nothing_is_left_to_point_at():
+    m = _far_view()
+    stale = {**m, "options": [o for o in m["options"] if not o["id"].startswith("move:baima_ford")]}  # 走了、換了地方：清單上沒有那一條
+    script = "H.S.wheelSel = 'move'; H.S.glowRoute = 'move:baima_ford'; const bar = H.actionBar(H.S.main); return { glow: bar.includes(' glow'), route: H.S.glowRoute };"
+    assert run(stale, script) == {"glow": False, "route": None}
+    on_map = "H.S.tab = 'map'; H.S.wheelSel = 'move'; H.S.glowRoute = 'move:baima_ford'; H.applyGlow(); return H.S.glowRoute;"
+    assert run(m, on_map) is None  # 換分頁
+    out = _clicks(m, [{"act": "sortie-far", "id": "baima_ford"}, {"act": "choose", "id": "move:baima_ford"}],
+                  responses={"/api/choose": {"main": m}})
+    assert out["route"] is None  # 按了選項
+
+
+@pytest.mark.slow
+def test_the_newbie_go_button_keeps_its_route_glow_the_same_way():
+    m = _far_view()
+    m["status"]["newbie"] = {"title": "新手目標", "done": 0, "total": 1, "rows": [
+        {"text": "走一趟", "reward": "回體丹", "go": {"move": "baima_ford", "place": "白馬津"}, "drifter": False}]}
+    out = _clicks(m, [{"act": "newbie-go", "i": "0"}])
+    assert out["wheel"] == "move" and out["route"] == "move:baima_ford"
+    assert 'class="btn go glow" data-act="choose" data-id="move:baima_ford"' in out["bars"][0]
 
 
 def test_duel_rows_sort_and_settled_ones_say_how_it_went():

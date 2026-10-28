@@ -577,7 +577,7 @@
     }
     const moveCard = !open || !shown("act:move") ? "" : `<div class="card act-move"><div class="seg move-mode" role="group" aria-label="走法">${MOVE_MODES.map((x) => `
           <button class="${S.moveMode === x.id ? "on" : ""}" data-act="move-mode" data-mode="${x.id}" aria-pressed="${S.moveMode === x.id}">${x.name}</button>`).join("")}</div>
-        <div class="options">${moves.map((o) => `<button class="btn go" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}>
+        <div class="options">${moves.map((o) => `<button class="btn go${routeGlowOn(m, o.id) ? " glow" : ""}" data-act="choose" data-id="${esc(o.id)}" ${o.enabled ? "" : "disabled"}>
           <span class="k">→</span><span>${esc(o.label)}${o.note ? `<small class="opt-note">${esc(o.note)}</small>` : ""}</span></button>`).join("")}</div></div>`;
     const exploreCard = !exploreOpen ? "" : `<div class="card act-explore"><div class="options">${modes.map((o) => o.id === GATHER_ID && branches.length
       ? gatherWheel(o, branches) : `
@@ -800,6 +800,24 @@
     return !!(S.here && S.here.at === at && S.here.open);
   }
 
+  // 要發光的那一條路（FB-901，QA 2026-10-28）：約戰卡別區那一行的「前往 N 分」、新手目標的「去做」展開移動之後，往那一處的那一條發光。
+  // 記在 S.glowRoute（move:<地點>）：畫移動卡時直接寫進 class（routeGlowOn），applyGlow 清掉所有 .glow 之後也補回（routeGlowKey），
+  // 所以重插的摺疊觸發 toggle、輪詢重畫都不會把光清掉（以前展開之後 .glow 直接加在畫好的元素上，24 毫秒內的 toggle 或下一次重畫就沒了）。
+  // 什麼時候熄掉（都在重畫時判斷，不設計時器）：移動卡收起或換別格（S.wheelSel 不是 move；按了選項送出去之後 choose 也會收起移動卡）、
+  // 換分頁、移動清單上沒有那一條了（走了、換了地方）
+  const routeHit = (id, key) => id === key || id.startsWith(`${key}:`); // 疾行的 id 後面多接走法
+  function routeGlowKey(m = S.main) {
+    const key = S.glowRoute;
+    if (!key) return "";
+    const live = S.tab === "jianghu" && S.wheelSel === "move" && !!m && (m.options || []).some((o) => routeHit(o.id, key));
+    if (!live) S.glowRoute = null;
+    return live ? key : "";
+  }
+  function routeGlowOn(m, id) {
+    const key = routeGlowKey(m);
+    return !!key && routeHit(id, key);
+  }
+
   // 展開移動（或探索三選一、找素材分支）之後，把展開的那張卡整張捲到底部分頁列上方看得到（FB-663，PM 2026-10-21 給號）。
   // 以前用 scrollIntoView({ block: "nearest" }) 加 CSS 的 scroll-margin-bottom：卡本身還在視窗裡、只是落在分頁列底下時，瀏覽器認為
   // 「已經看得到」不捲，scroll-margin 不算數（量到：375×812 站潁川郡，探索卡底 797、分頁列頂 756，最後一顆〔練功〕下半截被蓋住，
@@ -962,9 +980,9 @@
     const id = `move:${r.go.move}`, hit = (x) => x === id || x.startsWith(`${id}:`); // 疾行的 id 後面多接走法
     if (!S.main.options.some((o) => hit(o.id))) { goTab("map"); return; }
     S.wheelSel = "move";
+    S.glowRoute = id; // 往那一處的那一條發光：記在狀態裡，重畫、摺疊 toggle 都保得住（FB-901）
     renderPage();
     revealMoveCard();
-    document.querySelectorAll("#page .act-move [data-id]").forEach((el) => { if (hit(el.dataset.id)) el.classList.add("glow"); });
   }
 
   // ── 本週卡與三方卡（減法季批 1，整合設計 6.1、3.4；Joy 2026-10-24 挑了乙案；2026-10-26 改：排到行動列底下、可以收起）──

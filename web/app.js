@@ -173,6 +173,7 @@
     forgeSel: [], // 爐裡放的：{type: "ins", id}，最多兩個（爐裡只合意境，Joy 2026-10-21）
     forgeLock: null, // 鎖在爐裡的那一樣（{type, id}，一次一樣；Joy 2026-10-19「尤其獲得新意境時會想要試他的所有組合」）：開爐成了它留在爐裡、只清另一格
     wheelSel: null, // 江湖頁行動列展開的那一格（move；探索三選一開著時也有 explore；出陣約戰開著時 sortie＝出陣前那張卡）
+    glowRoute: null, // 展開移動之後要發光的那一條路（move:<地點>）：約戰卡的「前往」、新手目標的「去做」記下，什麼時候熄掉見 routeGlowKey（FB-901）
     sortieAnswer: null, // 出陣約戰：約戰卡上按了「應戰」的那一張（id），同一張封三招的卡寫應戰；別人先應、窗過了就收起（setMain）
     sortiePick: [], // 出陣約戰：封三招挑到一半的（一回合一招，沒挑的是 null）；打開別的、送出去就清掉
     sortieFold: {}, // 出陣約戰的卡上「這一塊」「贏了」「守住了」攤開了哪幾段（{block: true, …}）：輪詢重畫照它補回
@@ -897,6 +898,9 @@
     // 入伍段「出一次力」（FB-093）：伺服器在框上帶了能完成它的那幾顆選項的 id（guide.glow），序章外也亮；收在關著的摺疊裡的，
     // 光給摺疊的標題列（glowTarget）
     guideGlow().forEach((id) => document.querySelectorAll(`#page [data-id="${CSS.escape(id)}"]:not([disabled])`).forEach((el) => glowTarget(el).classList.add("glow")));
+    // 約戰卡的「前往」、新手目標的「去做」展開移動後往那一處的那一條（FB-901）：上面清掉了所有 .glow，這裡補回；序章裡也不例外
+    const route = routeGlowKey();
+    if (route) (S.main.options || []).filter((o) => routeHit(o.id, route)).forEach((o) => document.querySelectorAll(`#page .act-move [data-id="${CSS.escape(o.id)}"]`).forEach((el) => el.classList.add("glow")));
     const p = pro() || onb();
     if (!p) {
       litBefore = null;
@@ -5831,9 +5835,9 @@
     if ((S.main.options || []).some((o) => hit(o.id))) {
       S.sortieAnswer = null;
       S.wheelSel = "move";
+      S.glowRoute = id; // 往那一處的那一條發光：記在狀態裡，重畫、摺疊 toggle 都保得住（FB-901）
       renderPage();
       revealMoveCard();
-      document.querySelectorAll("#page .act-move [data-id]").forEach((el) => { if (hit(el.dataset.id)) el.classList.add("glow"); });
       return;
     }
     mapFirst(loc);
