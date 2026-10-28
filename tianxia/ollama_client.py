@@ -318,9 +318,13 @@ class OllamaClient:
         self, base_url: str = "http://localhost:11434", model: str = "qwen2.5:14b",
         timeout: int = 120, context_length: int = 8192, think: bool | None = None, keep_alive: str = "30m",
         repeat_penalty: float = 1.18, presence_penalty: float = 0.3, frequency_penalty: float = 0.3,
+        swap_model: bool = False,
     ):
         self.base_url = base_url.rstrip("/")
-        self.model = model
+        self._model = model  # 實際送出去的看 model 這個 property（省電模式可能換成小的）
+        # 省電模式要不要換模型：只有照設定建的 client（from_config，也就是真的在跑遊戲的那些）會換。
+        # 實測腳本自己指定模型（--model），不能被主機此刻的省電模式偷偷改掉，不然量出來的是別的模型
+        self._swap_model = swap_model
         self.timeout = timeout
         self.context_length = context_length
         self.think = think  # None：不送 think 欄位（沒有思考模式的模型）
@@ -341,6 +345,15 @@ class OllamaClient:
         """
         return power_save.keep_alive(self._keep_alive)
 
+    @property
+    def model(self) -> str:
+        """這一次要叫哪個模型：省電模式（tianxia/power_save.py）指定了小模型就換成它。
+
+        同 keep_alive，故意每次調用都問一次：開關換了不必重開伺服器（重開就是全服重新登入），
+        已經建好的 client（每個角色一份，還有 capped 複本）也跟著換。
+        """
+        return power_save.model(self._model) if self._swap_model else self._model
+
     @classmethod
     def from_config(cls, cfg: Config) -> OllamaClient:
         """照設定建一個 client（Game 與伺服器假人程式共用同一套參數）。"""
@@ -348,6 +361,7 @@ class OllamaClient:
             base_url=cfg.ollama_url, model=cfg.ollama_model, timeout=cfg.ollama_timeout, think=cfg.ollama_think,
             keep_alive=cfg.ollama_keep_alive, repeat_penalty=cfg.ollama_repeat_penalty,
             presence_penalty=cfg.ollama_presence_penalty, frequency_penalty=cfg.ollama_frequency_penalty,
+            swap_model=True,  # 真的在跑遊戲的這些 client 才跟著省電模式換模型
         )
 
     def warm(self, seconds: float = WARM_TIMEOUT, block: bool = False) -> bool:
