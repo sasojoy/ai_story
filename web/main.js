@@ -746,7 +746,7 @@
     else { right = `<button class="btn small" disabled>${join ? "同去" : "應戰"}</button>`; why = d.why_not; }
     const left = live && d.role !== "mine" ? `<span class="sx-left">${sxMins(d.expires_in)} 分</span>` : "";
     return `<div class="sx-drow${far ? " sx-far" : ""}${live ? "" : " sx-done"}"><span class="sx-tag side-${esc(d.attacker_side)}">${esc(tag)}</span>`
-      + `<span class="sx-dt"><b>${esc(d.attacker)}</b>約戰${esc(d.place)}</span>${left}${right}</div>${why ? `<p class="sx-why">${esc(why)}</p>` : ""}`;
+      + `<span class="sx-dt"><b>${esc(d.attacker)}</b>約戰<span class="sx-pl">${esc(d.place)}</span></span>${left}${right}</div>${why ? `<p class="sx-why">${esc(why)}</p>` : ""}`;
   }
   // 約戰卡（m.sorties）：一張一行排在行動列底下，標題寫幾張、幾張在別區
   function sortieDuelsHtml(m) {

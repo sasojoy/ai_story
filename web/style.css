@@ -1657,6 +1657,12 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .sx-tag.side-huang { --c: var(--gold); color: #2a241d; } /* 金底配白字太淡：深墨（同 .sf-chip.flip.side-huang） */
 .sx-far > :not(.btn) { opacity: .6; }
 .sx-why { margin: -4px 0 4px; font-size: 12px; line-height: 1.4; color: var(--ink-2); text-align: right; }
+/* 320 寬（FB-902）：別區那一行的鈕「前往 N 分」比「應戰」寬，名號加地名只剩約 103 px，三字名號加四字地名被收成「…」、看不到要去哪裡。
+   窄寬時那一段准兩行，地名整個不拆（.sx-pl）：要換行就換在「約戰」與地名之間。360、375 沒有這一段，一個字都不變 */
+@media (max-width: 340px) {
+  .sx-drow .sx-dt { white-space: normal; overflow: visible; text-overflow: clip; }
+  .sx-drow .sx-dt .sx-pl { display: inline-block; white-space: nowrap; }
+}
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }

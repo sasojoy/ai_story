@@ -172,7 +172,7 @@ def test_the_three_duel_cards_answer_join_and_walk():
     # 對面、同一區：應戰 → 同一張封三招的卡，卡頂寫應戰；挑滿三招送 sortie_answer
     m = _view(c, world, "乙", 1_792_000_060.0)
     bar = _bar_of(m)
-    assert '>官軍</span><span class="sx-dt"><b>甲</b>約戰汝南荒野</span><span class="sx-left">9 分</span>' in bar
+    assert '>官軍</span><span class="sx-dt"><b>甲</b>約戰<span class="sx-pl">汝南荒野</span></span><span class="sx-left">9 分</span>' in bar
     assert f'data-act="sortie-answer" data-id="{duel_id}">應戰</button>' in bar
     out = _clicks(m, [{"act": "sortie-answer", "id": duel_id}, *[{"act": "sortie-move", "round": str(i), "move": "固守"} for i in range(3)],
                       {"act": "sortie-send"}], responses={"/api/do/sortie_answer": {"main": m, "message": ""}})
@@ -264,6 +264,27 @@ def test_the_newbie_go_button_keeps_its_route_glow_the_same_way():
     out = _clicks(m, [{"act": "newbie-go", "i": "0"}])
     assert out["wheel"] == "move" and out["route"] == "move:baima_ford"
     assert 'class="btn go glow" data-act="choose" data-id="move:baima_ford"' in out["bars"][0]
+
+
+# FB-902（QA 2026-10-28）：320 寬別區那一行只剩約 103 px 放「某某約戰某地」，三字名號加四字地名被收成「…」。窄寬時那一段准兩行、
+# 地名整個不拆（.sx-pl）；360、375 不加任何規則。真正的幾何在瀏覽器裡量（CSS 在 node 裡排不了版）
+
+
+def test_a_narrow_phone_lets_the_duel_text_wrap_and_keeps_the_place_whole():
+    import re
+    from pathlib import Path
+
+    css = (Path(__file__).parents[2] / "web" / "style.css").read_text(encoding="utf-8").replace("\r\n", "\n")
+    assert re.search(r"(?m)^\.sx-drow \.sx-dt \{[^}]*white-space: nowrap;[^}]*text-overflow: ellipsis", css)  # 平常（360、375）照舊一行
+    narrow = re.search(r"@media \(max-width: 340px\) \{\n((?:  [^\n]*\n)+)\}", css)
+    assert narrow and ".sx-drow .sx-dt { white-space: normal; overflow: visible; text-overflow: clip; }" in narrow.group(1)
+    assert ".sx-drow .sx-dt .sx-pl { display: inline-block; white-space: nowrap; }" in narrow.group(1)
+    assert css.count(".sx-pl {") == 1  # 只有那一條規則認它，寬的畫面沒有任何東西跟著變
+    row = {"id": "d", "block": "yingchuan_wilds", "place": "潁川郊野", "attacker": "鄧七郎", "attacker_side": "guan", "defender": None,
+           "expires_in": 300, "answers_left": 3, "same_region": False, "travel_minutes": 15, "result": None, "why_not": "在汝南才應得了戰",
+           "can_answer": False, "can_join": False, "status": "open", "role": "answer"}
+    bar = run({"options": [], "sorties": [row], "status": {}}, "return H.actionBar(H.S.main);")
+    assert '<span class="sx-dt"><b>鄧七郎</b>約戰<span class="sx-pl">潁川郊野</span></span>' in bar  # 地名自己一段，換行只換在「約戰」與它之間
 
 
 def test_duel_rows_sort_and_settled_ones_say_how_it_went():
