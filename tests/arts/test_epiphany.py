@@ -118,6 +118,67 @@ def test_a_hit_on_sensing_opens_the_line_and_asks_the_first_question():
     assert epiphany.busy(s, game.content)
 
 
+def test_the_waiting_trial_shows_a_row_and_counts_down():
+    """FB-902：小試抽到「靜候」時 task 段在選單上一行都不畫（doable 排除 task），玩家什麼都看不到——
+    上班想下班就這樣「卡住」一整天。現在灰著列一行、後面寫還要多久。"""
+    game = _game(trial_wait_days=0.25)  # 四分之一個遊戲日
+    s, c = game.state, game.content
+    _begin(game)
+    line = next(iter(s.player.storylines))
+    _answer_all(game)
+    progress = s.player.storylines[line]
+    assert progress.stage == "trial"
+
+    def row():
+        return next((o for o in game.options() if o.id == f"{storyline.OPTION}:{line}"), None)
+
+    got = row()
+    assert got is not None and not got.enabled  # 有這一行，但按不下去（要去等／去做那件事）
+    assert epiphany.TRIALS["wait"][0] in got.label and "還要 6 小時" in got.label
+    assert "一日" not in got.label  # 以前寫死「靜候一日」，等多久變成設定之後那句話會騙人
+    assert game.choose(f"{storyline.OPTION}:{line}") == ["（此刻無法這麼做。）"]  # 灰的按下去引擎本來就擋
+
+    s.world.time += day_seconds(c, s.world) * 0.25 - 30  # 剩不到一分鐘
+    assert storyline.WAIT_SOON in row().label
+    s.world.time += 60  # 到了：這一段過去了，換心魔那一行
+    game._story_tick()
+    assert s.player.storylines[line].stage == "demon"
+    assert row().enabled
+
+
+def test_how_long_the_waiting_trial_takes_follows_the_setting():
+    """「靜候一日」在 7 天的季裡是真實 24 小時（整季的 1/7）：改成設定、正式設定寫一個時辰（FB-902）。"""
+    game = _game(trial_wait_days=1.0)
+    s, c = game.state, game.content
+    _begin(game)
+    line = next(iter(s.player.storylines))
+    _answer_all(game)
+    s.world.time += day_seconds(c, s.world) * 0.5
+    game._story_tick()
+    assert s.player.storylines[line].stage == "trial"  # 半日還不夠
+    # 這一刻把設定調短（線已經在走）：每次檢定都照此刻的設定讀，所以當場就過
+    c.config.epiphany.trial_wait_days = 1 / 12
+    game._story_tick()
+    assert s.player.storylines[line].stage == "demon"
+
+
+def test_the_old_wait_hint_in_a_running_line_is_rewritten():
+    """進行中的線 hint 是存檔裡那一份：舊存檔寫著「靜候一日，什麼都別急」，讀出來要換成新的那一句
+    （REFRESH_HOOKS；還要多久由倒數寫）。"""
+    game = _game()
+    s, c = game.state, game.content
+    _begin(game)
+    progress = next(iter(s.player.storylines.values()))
+    stale = [st.model_copy(update={"hint": "靜候一日，什麼都別急"}) if st.id == "trial" else st
+             for st in progress.custom.stages]
+    progress.custom = progress.custom.model_copy(update={"stages": stale})
+    _, stage = storyline.current(c, s.player.storylines[progress.line])
+    assert stage.id == "ask"
+    _answer_all(game)
+    _, stage = storyline.current(c, s.player.storylines[progress.line])
+    assert stage.id == "trial" and stage.hint == epiphany.TRIALS["wait"][0] and "一日" not in stage.hint
+
+
 def test_the_whole_way_through_names_and_grants_a_god_insight():
     game = _game()
     s, c = game.state, game.content
