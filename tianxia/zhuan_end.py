@@ -200,8 +200,9 @@ class VerdictJob:
 
 def writers(state: GameState, content: Content, season: WorldState) -> list[Writer]:
     """這一季替你寫評曰的人物（不含買了請的，那幾位照票）：第一、二階由自己這一方 FactionDef.verdict_by 裡跟你情誼最高的那一位寫
-    （一樣高照寫的順序；官軍皇甫嵩或盧植、黃巾張角或波才、豪強曹操）；情誼到 signature_affinity（70）以上的人物各一位（情誼高的在前）。
-    同一位人物只寫一條。關著的季、散人沒有階也沒有 70 以上的人物是空的。"""
+    （一樣高照寫的順序；官軍皇甫嵩或盧植、黃巾張角或波才、豪強曹操）；情誼到 signature_affinity（70）以上的人物各一位（情誼高的在前），
+    最多 Config.jianfa.verdict_affinity_max（3）位——深交不限人數之後（企劃者 2026-10-28），PM 定只取情誼最高的前三位，省模型呼叫、
+    固定句也不重複。同一位人物只寫一條。關著的季、散人沒有階也沒有 70 以上的人物是空的。"""
     p, c = state.player, content
     out: dict[str, str] = {}
     result = season.final_tiers.get(p.name)
@@ -209,10 +210,13 @@ def writers(state: GameState, content: Content, season: WorldState) -> list[Writ
     if result is not None and result.tier in (1, 2) and faction is not None and faction.verdict_by:
         order = {cid: i for i, cid in enumerate(faction.verdict_by)}
         out[min(faction.verdict_by, key=lambda cid: (-p.affinities.get(cid, 0), order[cid]))] = TIER
-    edge = c.config.signature_affinity
+    edge, room = c.config.signature_affinity, c.config.jianfa.verdict_affinity_max
     for cid, value in sorted(p.affinities.items(), key=lambda x: (-x[1], x[0])):
+        if room <= 0:
+            break
         if value >= edge and cid in c.characters and cid not in out:
             out[cid] = AFFINITY
+            room -= 1
     return [Writer(cid, reason) for cid, reason in out.items()]
 
 
