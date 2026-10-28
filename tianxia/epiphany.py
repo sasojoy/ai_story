@@ -266,6 +266,22 @@ for _name in TRIALS:
     storyline.TASKS[f"{KIND}:{_name}"] = _task(_name)
 
 
+def _refresh(content: Content, line: StoryDef) -> StoryDef:
+    """每次讀這一條線都照此刻的設定重算心魔那一關的數字（storyline.REFRESH_HOOKS）：
+    線是程式組的、整份存在 progress.custom 裡，不這樣做的話改了設定只對之後新開的線有效。"""
+    r = rules(content)
+    stages = [
+        s.model_copy(update={"retry_days": r.retry_days, "mirror_weaken": r.demon_weaken,
+                             "mirror_floor": r.demon_floor, "mirror": r.demon_scale})
+        if s.kind == "fight" and s.mirror is not None else s
+        for s in line.stages
+    ]
+    return line.model_copy(update={"stages": stages})
+
+
+storyline.REFRESH_HOOKS[KIND] = _refresh
+
+
 # ── 心魔（storyline.FIGHT_HOOKS）──────────────────────────
 
 

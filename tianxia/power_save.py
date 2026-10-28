@@ -28,19 +28,35 @@ FLAG = ROOT / ".local" / "power_save"  # .local/ 不進版控：這是這台主�
 ENV = "TIANXIA_POWER_SAVE"
 DEFAULT = "5m"  # 省電模式的 keep_alive：最後一次模型呼叫之後五分鐘放掉 VRAM
 OFF_WORDS = frozenset({"0", "off", "false", "no", "none"})
+# 省電模式下要換成的模型（企劃者 2026-10-28「休眠模式的時候換成比較小的模型。不要占滿十二 GB」）：
+# 只改 keep_alive 的話，有人一來整張卡又被 gemma4:12b 佔滿（9.1 GiB／12 GiB），這台就不能同時做別的重活。
+# 旗標檔裡寫模型名（例 gemma3:4b）就換，沒這個檔、或寫 off／0 就照設定的模型——**不給預設值**：
+# 偷偷換模型會讓 NPC 對話與旁白的品質變了而沒人知道，一定要主機端明寫（tianxia-powersave.ps1 幫你寫）。
+MODEL_FLAG = ROOT / ".local" / "power_save_model"
+MODEL_ENV = "TIANXIA_POWER_SAVE_MODEL"
 
 
-def _value(text: str | None) -> str | None:
-    """旗標檔／環境變數寫的字換成 keep_alive。
+def _clean(text: str | None) -> str | None:
+    """旗標檔／環境變數寫的字清乾淨：空的、或 off 字樣一律 None。
 
     `strip` 連 BOM 一起吃掉：PowerShell 的 `Set-Content -Encoding utf8` 會在檔頭寫 BOM，
-    帶著 BOM 送給 Ollama 是 HTTP 400（`time: invalid duration "ï»¿5m"`），
+    帶著 BOM 送給 Ollama 是 HTTP 400（`time: invalid duration "ï»¿5m"`）或模型 404，
     而暖機失敗只記一行警告——於是「模型就是不載」而且看不出原因（2026-10-18 實機踩到）。
     """
     if text is None:
         return None
     text = text.strip().strip("﻿​").strip()
-    return None if text.lower() in OFF_WORDS else (text or DEFAULT)
+    return None if (not text or text.lower() in OFF_WORDS) else text
+
+
+def _value(text: str | None) -> str | None:
+    """旗標檔／環境變數寫的字換成 keep_alive：**空的等於開著、用預設值**（主機端 `New-Item` 建的空檔就是開）。"""
+    if text is None:
+        return None
+    cleaned = _clean(text)
+    if cleaned is not None:
+        return cleaned
+    return None if text.strip().strip("﻿​").strip() else DEFAULT
 
 
 def wanted() -> str | None:
@@ -56,6 +72,19 @@ def wanted() -> str | None:
         return None
 
 
+def small_model() -> str | None:
+    """省電模式下要換成的模型名，沒指定是 None（照設定的模型）。環境變數優先，其次旗標檔。"""
+    env = os.environ.get(MODEL_ENV)
+    if env is not None:
+        return _clean(env)
+    try:
+        if not MODEL_FLAG.is_file():
+            return None
+        return _clean(MODEL_FLAG.read_text(encoding="utf-8"))
+    except OSError:  # 讀不到就照設定的模型：省電是方便，不能因為它讓模型叫不動
+        return None
+
+
 def on() -> bool:
     """省電模式開著嗎（給腳本與說明用；要值的地方直接問 wanted）。"""
     return wanted() is not None
@@ -64,3 +93,14 @@ def on() -> bool:
 def keep_alive(normal: str) -> str:
     """這一次模型呼叫要送的 keep_alive：省電模式開著就是它的值，否則照設定（Config.ollama_keep_alive）。"""
     return wanted() or normal
+
+
+def model(normal: str) -> str:
+    """這一次模型呼叫要用的模型：省電模式開著**而且**指定了小模型才換，否則照設定（Config.ollama_model）。
+
+    `_value` 連 keep_alive 那套 BOM 與 off 字樣一起處理（寫 off／0 ＝ 不換）。省電模式一關就立刻回到大模型，
+    不必記得去刪那個檔。兩站共用一張卡：換模型的那一刻另一站也要跟著換，不然 12 GB 放不下兩個（見主機端技能）。
+    """
+    if wanted() is None:
+        return normal
+    return small_model() or normal

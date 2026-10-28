@@ -61,15 +61,31 @@ def players_online(db: Path, presence: float, now: float) -> int:
         conn.close()
 
 
-def unload(client: OllamaClient) -> None:
-    """請 Ollama 現在就把模型卸掉（keep_alive 0）：省電模式下沒人玩時用，不用等 keep_alive 到期。"""
+def loaded_models(client: OllamaClient) -> list[str]:
+    """Ollama 此刻載著哪幾個模型（/api/ps）。問不到就回空的（當成不知道，不動模型）。"""
     import requests
     try:
-        requests.post(
-            f"{client.base_url}/api/generate", json={"model": client.model, "keep_alive": 0}, timeout=UNLOAD_SECONDS,
-        )
-    except Exception:  # noqa: BLE001  卸不掉就算了，keep_alive 到期一樣會卸
-        pass
+        res = requests.get(f"{client.base_url}/api/ps", timeout=UNLOAD_SECONDS)
+        return [str(m.get("model") or m.get("name")) for m in (res.json().get("models") or []) if m.get("model") or m.get("name")]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def unload(client: OllamaClient) -> None:
+    """請 Ollama 現在就把模型卸掉（keep_alive 0）：省電模式下沒人玩時用，不用等 keep_alive 到期。
+
+    **卸掉載著的每一個，不只 client 此刻要用的那一個**：省電模式可以換小模型（power_save.model），
+    換過去之後大模型還躺在 VRAM 裡、要等它自己的 keep_alive（正式設定 12h）才會走，那整段時間卡還是滿的。
+    問不到 /api/ps 時退回只卸自己那一個（舊行為）。
+    """
+    import requests
+    for name in loaded_models(client) or [client.model]:
+        try:
+            requests.post(
+                f"{client.base_url}/api/generate", json={"model": name, "keep_alive": 0}, timeout=UNLOAD_SECONDS,
+            )
+        except Exception:  # noqa: BLE001  卸不掉就算了，keep_alive 到期一樣會卸
+            pass
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -91,7 +107,9 @@ def main(argv: list[str] | None = None) -> None:
     print(f"暖機看守：每 {args.every:g} 秒看一次　在線＝{presence:g} 秒內的真人　模型 {client.model}", flush=True)
     print(f"資料庫：{db}（唯讀）", flush=True)
     print(profile_line(content, profile), flush=True)
+    small = power_save.small_model() if power_save.on() else None
     print(f"省電模式：{'開（keep_alive ' + str(power_save.wanted()) + '）' if power_save.on() else '關'}"
+          f"{'　模型換成 ' + small if small else ''}"
           f"　——開關是 {power_save.FLAG}，隨時改、不必重開（Ctrl+C 結束）", flush=True)
 
     if args.warm_now:  # 開服腳本用：讓 client 自己決定 keep_alive（省電模式開著就是短的）

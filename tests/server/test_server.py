@@ -780,7 +780,7 @@ def test_the_play_log_counts_what_a_real_player_pressed_and_nothing_else(client,
     assert [(d["owner"], json.loads(d["buttons"])) for d in days] == [("沈青衫", {"act:explore": 1})]
     assert days[0]["season"] >= 1 and firsts == []
     assert not {"action_counts", "buttons", "figure_talk"} & set(out["main"])
-    monkeypatch.setattr(server, "choose", lambda game, option_id: ["（你走上前去。）"])
+    monkeypatch.setattr(server, "choose", lambda game, option_id, text=None: ["（你走上前去。）"])
     client.post("/api/choose", json={"id": "talk:2"})
     days, firsts = _play_rows()
     assert json.loads(days[0]["buttons"]) == {"act:explore": 1, "talk": 1}

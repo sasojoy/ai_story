@@ -266,6 +266,15 @@
     return `<form class="free answer persuade" id="persuade-form" data-id="${esc(o.id.slice(PERSUADE_PREFIX.length))}"><input class="input" name="text" maxlength="20" placeholder="${esc(PERSUADE_HINT)}" aria-label="${esc(o.label)}"><button class="btn primary small" type="submit">${esc(PERSUADE_GO)}</button></form>`;
   }
   const persuadingNow = (o) => S.persuading === o.id && o.enabled;
+  // 神品意境「自己取一個名字…」（epiphany.OPTION:OWN）：按了不送 /api/choose，就地換成輸入框（S.godNaming 記著），
+  // 送出時帶 text（godName）。以前這一顆按下去只回一句「（寫下你替它取的名字。）」，沒有地方寫，等於按不動（FB-901）
+  const OWN_NAME_ID = "dunwu:own";
+  const OWN_NAME_HINT = "這個境界叫什麼？（2～6 字）"; // 待 joy 潤：輸入框的提示
+  const OWN_NAME_GO = "就叫這個"; // 待 joy 潤：送出鈕
+  function ownNameForm(o) {
+    return `<form class="free answer own-name" id="own-name-form"><input class="input" name="text" maxlength="6" placeholder="${esc(OWN_NAME_HINT)}" aria-label="${esc(o.label)}"><button class="btn primary small" type="submit">${esc(OWN_NAME_GO)}</button></form>`;
+  }
+  const namingGodNow = (o) => S.godNaming && o.id === OWN_NAME_ID && o.enabled;
   // 勝算的顏色（FB-044）：遊歷的小字第二行照風險上色
   const ODDS_TONE = { "穩勝": "good", "有把握": "good", "零風險": "good", "五五波": "even", "難分勝負": "even", "凶險": "bad", "必敗": "bad" };
   // 選單上有「探索」就是平常閒著的時候（以前認打坐，2026-10-12 拿掉了）：用行動列。事件、對話、路上、決戰的選項每次都不一樣，照舊排成一列按鈕
@@ -1432,7 +1441,7 @@
     // 有所感選做法（explain-2）：伺服器給了 sense_help.tags 才把鈕上原本寫 1～4 的那一格改寫這個做法是哪一種心意（不多佔寬度）。
     // 審查 I1 起伺服器預設不給（sensing.SHOW_KINDS）：鈕上照舊 1～4；企劃者要恢復時伺服器那邊改一行，這裡照畫
     const senseTag = (o) => (m.sense_help && m.sense_help.tags && m.sense_help.tags[o.id]) || "";
-    const menu = idleMenu(m) ? actionBar(m) : `<div class="options">${opts.map((o, i) => S.sensing && o.id === SENSE_DRAW ? sensePadHtml() : persuadingNow(o) ? persuadeForm(o) : o.id === FREE_TEXT_OPTION && S.answering && o.enabled ? `
+    const menu = idleMenu(m) ? actionBar(m) : `<div class="options">${opts.map((o, i) => S.sensing && o.id === SENSE_DRAW ? sensePadHtml() : persuadingNow(o) ? persuadeForm(o) : namingGodNow(o) ? ownNameForm(o) : o.id === FREE_TEXT_OPTION && S.answering && o.enabled ? `
         <form class="free answer" id="answer-form"><input class="input" name="text" maxlength="20" placeholder="${esc(o.label)}（20字內）" aria-label="${esc(o.label)}"><button class="btn primary small" type="submit">說出口</button></form>` : SAY_OPTIONS.includes(o.id) && S.saying && o.id === sayingId() && o.enabled ? `
         <form class="free answer" id="say-form"><input class="input" name="text" maxlength="${m.say_max || 20}" placeholder="${SAY_HINTS[o.id] ? `${SAY_HINTS[o.id]}（${m.say_max || 20}字內）` : (m.say_max || 20) > 20 ? `想對他說的話，也可以開口求他做事（${m.say_max}字內）` : "想對他說的話（20字內）"}" aria-label="${esc(o.label)}"><button class="btn primary small" type="submit">說出口</button></form>` : isTask(o) ? `${i === firstTask ? '<div class="road-tasks">' : ""}${taskButton(o)}${i === lastTask ? "</div>" : ""}` : paired && isWay(o) ? `${i === firstWay ? '<div class="road-tasks road-ways">' : ""}${wayButton(o)}${i === lastWay ? "</div>" : ""}` : `${i === firstMove && !modesLast ? modes : ""}
         <button class="btn ${followsMode(o.id) ? "go" : ""}${!o.enabled && o.note ? " off" : ""}" data-act="${!o.enabled && o.note ? "opt-why" : "choose"}" data-id="${esc(o.id)}" ${!o.enabled && o.note ? `data-why="${esc(o.note)}" title="${esc(o.note)}" aria-disabled="true"` : o.enabled ? "" : "disabled"}>
