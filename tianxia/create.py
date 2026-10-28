@@ -54,7 +54,6 @@ POSE_FLOOR = 0.35  # 最強那一路不到這麼多就是「平正，不偏」
 
 OFF = "這裡不興自創武學。"
 IN_PROLOGUE = "師父還沒教到這一步。"
-LOCKED = "自創{when}起才開。"  # 待 joy 潤：減法季 6.6 第 2 週才開（week_unlock）
 NAMING_FIRST = "你練成絕學的武學還沒定名，先替它取好正式的名字。"
 CAP_LINE = "這一季你已經自創了 {n} 門，再多也立不住了。"
 FULL_LINE = "功法庫滿了，先熔掉一門再立新派。"
@@ -112,16 +111,14 @@ def price(state: GameState, content: Content) -> int:
 
 
 def allowed(state: GameState, content: Content) -> str | None:
-    """現在能不能自創（每一步之前都問它）；None＝可以。"""
-    from . import prologue, week_unlock
+    """現在能不能自創（每一步之前都問它）；None＝可以。不照週解鎖：開季就有（企劃者 2026-10-28「開季就有」）。"""
+    from . import prologue
 
     cfg = content.config.arts
     if not on(content):
         return OFF
     if prologue.active(state, content):
         return IN_PROLOGUE
-    if not week_unlock.open(state, content, "create"):  # 減法季 6.6：第 2 週（自己的新手期過了）才開；規則關著一律開
-        return LOCKED.format(when=week_unlock.stage_label(1, content, state.world))
     if state.player.naming is not None:
         return NAMING_FIRST
     paid = state.player.creating is not None and state.player.creating.paid  # 立意付過了：這一門已經數進去，照樣走完
@@ -846,14 +843,11 @@ def _odds_word(x: float) -> str:
 
 
 def view(state: GameState, content: Content, world: WorldStateStore) -> dict:
-    """煉製頁「自創」那一塊要的資料。只讀。還沒到開自創的那一週（減法季 6.6，week_unlock）"on" 是假：那一塊整個不畫，同沒開一樣。"""
-    from . import week_unlock
-
+    """煉製頁「自創」那一塊要的資料。只讀。"on" 只看自創開不開（開季就有，不照週解鎖：企劃者 2026-10-28）。"""
     cfg = content.config.arts
     draft = state.player.creating
     base = {
-        "on": on(content) and week_unlock.open(state, content, "create"), "problem": allowed(state, content), "price": price(state, content),
-        "xinde": _xinde(state),
+        "on": on(content), "problem": allowed(state, content), "price": price(state, content), "xinde": _xinde(state),
         # 一季還能立幾門：create_per_season 0 是不限（None）
         "left": max(0, cfg.create_per_season - state.player.created_count) if cfg.create_per_season else None,
         "kinds": list(KINDS),
