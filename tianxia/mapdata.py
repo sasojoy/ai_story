@@ -524,7 +524,7 @@ def flip_marks(world: WorldState, content: Content, loc_id: str) -> dict:
 def state(
     state: GameState, content: Content, *, odds: Callable[..., str], sortie_mode: Callable[[str], str | None],
     sorties_left: int | None, real_minutes: Callable[[float], int], sortie_foes: Callable[[str], list[str] | None] | None = None,
-    mostly: dict[str, str] | None = None,
+    mostly: dict[str, str] | None = None, convoy: Callable[[str], bool] | None = None,
 ) -> dict:
     """疊層（設計第九節）。odds 是 Game.odds，照 odds(隊伍, at=地點) 問：每一處的勝算照那一處的地利算（terrain.strong_at，
     武學隨地理環境計畫第六節）；這裡記住，同一支隊伍、同一種地利只算一次；sortie_mode(地點) 是 sortie.mode 的結果；
@@ -533,6 +533,8 @@ def state(
     FB-878）：領地爭奪開著，出陣真的會打的那幾路隊伍 id（Game._map_foes；地點卡的對手、勝算字、推薦排序都跟著它）；領地爭奪關著、沒給、
     回 None 是照舊列站的隊伍（atlas.foes）。
     mostly 是看的人的名字旁（Game.map_mostly，2f）：key 要跟他手上的底圖（同一份 mostly）對得上，字變了網頁才會重抓底圖。
+    convoy(地點) 由 Game.map_state 給（FB-905）：約戰開著、出陣標攻、這週截糧的運糧隊正打那裡經過（行動列那一格寫「出陣・截糧」、按了打運糧隊）；
+    真的才在那一處多一個 "convoy": True（沒給、不是的地方一個鍵都不多），網頁的卡寫「出陣・截糧」、不掛攻的勝算。
 
     {"key", "now_week", "weeks_total", "season_one", "territory", "faction", "sides", "here", "stamina", "sorties_left",
      "journey": None | {"to","to_name","minutes","next_name","x","y"}, "travel_block": None | {"reason","to_jianghu"},
@@ -600,6 +602,8 @@ def state(
         }
         if conquest_on and loc_id in blocks:  # 「正在翻」「激戰」「冷卻」：領地爭奪關著的季沒有這三個鍵（網頁就不畫）
             places[loc_id].update(flip_marks(w, c, loc_id))
+        if how == "attack" and convoy is not None and convoy(loc_id):
+            places[loc_id]["convoy"] = True
     suggest = []
     for loc_id, info in places.items():
         if info["sortie"] is None:

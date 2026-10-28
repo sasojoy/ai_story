@@ -175,6 +175,7 @@
   }
   // ── 輿圖的抽屜（設計 5.3）：一張卡（點一個地點、天下圖拉開你腳下這一處）、找地點、版圖變化；收著時一行 ──
   const SORTIE_WORD = { attack: "攻", hold: "守", stir: "攪局" }; // 出陣是哪一種（sortie.mode），待 joy 潤
+  const SORTIE_CONVOY = "截糧"; // 運糧隊正打這裡經過（place.convoy，FB-905）：跟行動列那一格一樣寫「出陣・截糧」（sortie_duel.CONVOY_NAME），不掛攻的勝算
   const ODDS_TONE_WEB = { 穩勝: "safe", 有把握: "safe", 五五波: "ok", 難分勝負: "ok", 凶險: "risk", 必敗: "risk", 操練: "safe" };
   const placeOf = (base, id) => base.places.find((p) => p.id === id);
   const ctrlSeal = (c) => (c ? `<span class="m-seal" style="background:${sideInk(c).color}">${esc(sideInk(c).short)}</span>` : '<span class="m-seal none">—</span>');
@@ -357,8 +358,8 @@
     let acts;
     if (here) { // 就在這裡：出陣、探索都回江湖頁按（江湖頁照舊處理接下來的事）
       // 出陣・攻那一顆也寫勝算：要按之前最想看的就是它（FB-262）
-      const risk = p.sortie === "attack" && p.odds ? `${esc(p.odds.word)}・` : "";
-      const sortie = p.sortie && st.sorties_left !== null ? `<button type="button" class="main" data-act="map-jianghu" data-key="sortie">出陣・${SORTIE_WORD[p.sortie] || ""}<small>${risk}今日還能 ${Number(st.sorties_left)} 次</small></button>` : "";
+      const risk = p.sortie === "attack" && p.odds && !p.convoy ? `${esc(p.odds.word)}・` : ""; // 截糧：按了打運糧隊，不是攻，不寫攻的勝算（FB-905）
+      const sortie = p.sortie && st.sorties_left !== null ? `<button type="button" class="main" data-act="map-jianghu" data-key="sortie">出陣・${p.convoy ? SORTIE_CONVOY : SORTIE_WORD[p.sortie] || ""}<small>${risk}今日還能 ${Number(st.sorties_left)} 次</small></button>` : "";
       acts = `${sortie}<button type="button"${sortie ? "" : ' class="main"'} data-act="map-jianghu" data-key="explore">探索<small>回江湖頁挑一種</small></button>`;
     } else if (block) {
       acts = `<button type="button" disabled>${esc(block.reason)}</button>${block.to_jianghu ? '<button type="button" class="main" data-act="tab" data-tab="jianghu">回江湖</button>' : ""}`;

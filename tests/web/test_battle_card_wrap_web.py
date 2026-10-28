@@ -58,6 +58,23 @@ def test_each_gain_is_kept_whole():
     assert re.search(r"(?m)^\.battle-card \.nb \{[^}]*white-space: nowrap", CSS)
 
 
+@pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
+def test_a_long_result_sentence_still_wraps():
+    """約戰輸了那一則（出陣約戰網頁實機，2026-10-28）：「結果」跟「得失」在同一段，結果裡 24 個字的整句也被包成不換行的 .nb，
+    375 寬整頁被撐成 397 寬。超過 16 個字的整句不包（照常換行），短的（「升到第 2 級」、得失的每一樣）照舊整顆包。"""
+    js = webharness.app_source()
+    start = js.index("  function keepGainsWhole(")
+    fn = js[start:js.index("\n  }\n", start) + 4]
+    long = "這一場輸了：內傷加重，下一次出陣與應戰多等 30 分。"
+    card = (f"<p><strong>結果</strong>　顧長風約戰，褚大石應戰。　{long}　<strong>得失</strong>　氣血 -70　內傷 +24</p>\n")
+    done = webharness.node(fn + "\nprocess.stdout.write(JSON.stringify(keepGainsWhole(" + json.dumps(card, ensure_ascii=False) + ")));")
+    assert done.returncode == 0, done.stderr
+    out = json.loads(done.stdout)
+    assert f"　{long}　" in out and f'<span class="nb">{long}</span>' not in out
+    for item in ("顧長風約戰，褚大石應戰。", "氣血 -70", "內傷 +24"):
+        assert f'<span class="nb">{item}</span>' in out
+
+
 # ── 原 test_fb471_card_label_nowrap.py（整檔搬進來） ──
 # FB-471（第 36 項「武學隨地理環境」QA，2026-10-19）：「剛剛」戰鬥卡片的粗體標籤（「得失」等）沒有 nowrap，地利那一句讓
 # 「結果」多一行時，375 寬「得」「失」被拆在兩行——卡片自己那幾段（.battle-card > p）的粗體標籤不折行。

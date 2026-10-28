@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>出陣約戰網頁・對比圖</title>
+<style>
+  :root {
+    --paper: #f4ede0; --card: #fbf7ef; --card-2: #efe6d5; --ink: #2a241d; --ink-2: #6b6155; --line: #ddd1bc;
+    --accent: #a8322a; --gold: #b7862b; --kuai: #2f5d8a; --ok: #2f7d4f; --radius: 14px;
+    --serif: "Noto Serif TC", "Songti TC", "PMingLiU", serif;
+    --sans: -apple-system, BlinkMacSystemFont, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --paper: #16130f; --card: #211c17; --card-2: #2b251e; --ink: #ece3d3; --ink-2: #a89b88; --line: #3a3229; --accent: #d2574a; --gold: #d6a548; --kuai: #4a7cae; --ok: #5cb67f; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font: 15px/1.7 var(--sans); }
+  main { max-width: 1240px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font: 700 26px/1.4 var(--serif); margin: 0 0 4px; }
+  h2 { font: 700 20px/1.4 var(--serif); margin: 36px 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  h3 { font: 700 17px/1.4 var(--serif); margin: 0 0 6px; }
+  .lead { color: var(--ink-2); margin: 0 0 12px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; margin: 0 0 12px; }
+  .verdicts { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+  .verdicts .card { margin: 0; }
+  .verdicts .tag { display: inline-block; font: 700 22px var(--serif); color: var(--accent); margin-right: 8px; }
+  .pick { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent); }
+  .pros, .cons { margin: 6px 0 0; padding-left: 1.2em; }
+  .pros li::marker { content: "＋ "; color: var(--ok); }
+  .cons li::marker { content: "－ "; color: var(--accent); }
+  .grid { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .row { display: grid; grid-template-columns: 120px repeat(3, 375px); gap: 16px; align-items: start; margin: 0 0 22px; min-width: 1309px; }
+  .row.two { grid-template-columns: 120px repeat(2, 375px); min-width: 900px; }
+  .row .lab { font: 700 15px/1.5 var(--serif); position: sticky; left: 0; background: var(--paper); padding-right: 6px; }
+  .row .lab small { display: block; font: 400 13px/1.5 var(--sans); color: var(--ink-2); }
+  .row figure { margin: 0; }
+  .row img { display: block; width: 375px; height: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--card); }
+  .row figcaption { font-size: 13px; color: var(--ink-2); margin-top: 4px; }
+  .head .lab, .head div { font: 700 18px var(--serif); color: var(--accent); }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { border-bottom: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top; }
+  th { color: var(--ink-2); font-weight: 600; white-space: nowrap; }
+  code { font-size: 13px; background: var(--card-2); padding: 0 4px; border-radius: 4px; }
+  ol li, ul li { margin: 2px 0; }
+  .muted { color: var(--ink-2); font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>出陣約戰網頁・對比圖</h1>
+  <p class="lead">2026-10-28・網頁開發（草圖，不改程式）・<code>feature/jianfa</code>・week7 設定（線上那一份）・375×812</p>
+
+  <div class="card">
+    <h3>為什麼要做</h3>
+    <p style="margin:0">減法季批 3b「出陣約戰」的引擎上了線：約戰開著時按行動列的「出陣」（選項 id 照留 <code>act:train</code>），伺服器只回
+    <code>sortie_duel.PICK</code>、不花體力、不寫紀錄，等網頁打開「出陣前那張卡」（<code>main.sortie_card</code>）讓玩家封三招再貼約戰。可是 <code>web/</code>
+    沒有任何一行畫 <code>main.sortie_card</code> 或約戰卡清單 <code>main.sorties</code>，也沒有送 <code>sortie_go</code>／<code>sortie_answer</code>／<code>sortie_join</code>。
+    企劃者選了「做約戰網頁」：這一頁是三版畫面，挑完再做進程式（下一批）。</p>
+  </div>
+
+  <div class="card">
+    <h3>怎麼拍的</h3>
+    <ul style="margin:0;padding-left:1.2em">
+      <li>預覽伺服器（埠 8141、<code>sortiemock.localhost</code>、<code>TIANXIA_PROFILE=week7</code>、模型網址指到死埠），工作樹的程式照原樣。</li>
+      <li>官軍的「顧長風」站在<b>白馬津</b>（冀州，中立地，兩軍都推得動；<code>sortie_go_problem()</code> 回空、<code>sortie_card.why_not</code> 空）。
+        白馬津兩條的進度用管理者的「定一塊的進度」定成官軍 48、黃巾 31（效果同自然推）。</li>
+      <li>別的角色照公開的 <code>sortie:go:&lt;三招&gt;</code> 貼了三張約戰：黃巾「褚大石」在白馬津（同一區，可應戰）、黃巾「郝三刀」在汝南荒野（潁川汝南，要移動）、
+        官軍「韓守義」在白馬津（同袍，可同去）；另外各有一位同陣營的人 <code>sortie:join</code> 同去，對面在推、同袍集火才有數字。</li>
+      <li>灰的兩種：站到<b>涿郡</b>（官軍的地方：<code>why_not</code>＝「等對面來約」）、回白馬津把出陣冷卻設到 42 分後、今天用過一次（「還要 42 分」）。</li>
+      <li>甲乙丙都是<b>注入在真的頁面上的原型</b>（<a href="proto.js">proto.js</a>）：先 <code>fetch("/api/main")</code>、<code>fetch("/api/map/state")</code> 拿伺服器真的給的資料再畫，
+        <code>window.fetch</code> 換成永遠不回（輪詢不會重畫掉），關動畫。class 盡量用現有的（<code>.card</code>、<code>.btn</code>、<code>.seg</code>、<code>.sheet</code>、<code>.sf-row</code>／<code>.sf-chip</code>、<code>.wk-x</code>），
+        版面多出來的用 <code>sx-</code> 開頭。<code>web/</code>、<code>tianxia/</code>、<code>content/</code>、<code>server.py</code> 一個字沒改。</li>
+      <li>無頭 Chromium＋CDP，375×812、<code>deviceScaleFactor</code> 2、淺色、減少動態。22 個場面量過：沒有橫向捲軸、按鈕與標題沒有被切掉的字。</li>
+    </ul>
+  </div>
+
+  <h2>總覽</h2>
+  <p class="lead">一張拼好的（每張縮成 300 寬）：<a href="overview.png">overview.png</a>。底下逐列是原尺寸。</p>
+
+  <h2>三版各自的好壞</h2>
+  <div class="verdicts">
+    <div class="card">
+      <h3><span class="tag">甲</span>行動列底下原地展開・三段全攤開</h3>
+      <p class="muted" style="margin:0">點「出陣」那一格，像探索三選一一樣在行動列底下展開一張卡：這一塊、贏了、封三招全攤開，出陣鈕在卡底。約戰卡一張一塊（兩行：誰、哪裡、還有幾分；鈕與一句說明），排在行動列底下、「此地還能做」上面。</p>
+      <ul class="pros">
+        <li>跟探索三選一、移動同一個做法，不多一層。</li>
+        <li>「看完才封」最徹底：每一項數字都攤在那裡，按出陣之前一定經過。</li>
+        <li>約戰卡每張都寫清楚次數、體力、為什麼灰。</li>
+      </ul>
+      <ul class="cons">
+        <li>卡高 632 px：展開時整頁往下捲 463 px，行動列被捲出畫面，第一屏只剩這張卡。</li>
+        <li>約戰卡三張 278 px，開季的第一屏只看得到第一張半（最後一張落在分頁列底下）。</li>
+        <li>頁面越長越鬆：卡、約戰、此地還能做、眼下要事疊成一長串。</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3><span class="tag">乙</span>半屏抽屜・兩個頁籤</h3>
+      <p class="muted" style="margin:0">點「出陣」從底下拉上一層抽屜（同玩家卡的 <code>.sheet</code>）：上面「我來約戰／應戰・同去 3」兩個頁籤，第一頁三段＋封三招、出陣鈕釘在抽屜底；第二頁是約戰卡。江湖頁本身只在「出陣」格子角上多一個數字。</p>
+      <ul class="pros">
+        <li>一個畫面看得完三段、出陣鈕永遠在拇指底下（釘在抽屜底），最像「一張卡」。</li>
+        <li>江湖頁的第一屏一個像素都不動（只多一個角標），不推擠「剛剛」、場景與行動列。</li>
+        <li>應戰也在同一層：按了換成應戰的那一頁，同一個封三招。</li>
+      </ul>
+      <ul class="cons">
+        <li>約戰卡藏在抽屜第二頁：只有一個數字在提醒，十分鐘的窗很容易錯過。</li>
+        <li>多一層要收（×、點暗處），跟探索、移動的「就地展開」不一樣。</li>
+        <li>抽屜蓋住「剛剛」：按完出陣看結果要先收抽屜。</li>
+      </ul>
+    </div>
+    <div class="card pick">
+      <h3><span class="tag">丙</span>原地展開・兩段收成一行（推薦）</h3>
+      <p class="muted" style="margin:0">同甲在行動列底下展開，但「這一塊」「贏了」各收成一行（要緊的數字寫在那一行：官 48／黃 31・還差 52 易手；進度 +30・貢獻 +10・分紅約 200），點了攤開全部（1b）；封三招與出陣鈕緊接在後。約戰卡一張一行，排在行動列底下。</p>
+      <ul class="pros">
+        <li>卡高 409 px：展開只捲 239 px，行動列還在畫面上方，封三招與出陣鈕都在第一屏。</li>
+        <li>約戰一張一行，三張 183 px，開季那一屏（沒按任何東西）就看得到全部三張與應戰／同去鈕。</li>
+        <li>跟探索三選一同一個做法；收起來的兩行點一下就是甲的全攤開。</li>
+      </ul>
+      <ul class="cons">
+        <li>「看完才封」打了折：戰利、軍令、戰書、分紅以外的細項要點開才看得到（要緊的幾個數字在那一行上）。</li>
+        <li>一行的約戰卡放不下次數、體力與灰的原因：別區那張只寫「前往 18 分」，為什麼灰要點進去才知道。</li>
+      </ul>
+    </div>
+  </div>
+  <p><b>推薦丙</b>：十分鐘的約戰最怕沒看到，丙在不按任何東西的第一屏就把三張約戰與應戰、同去的鈕擺出來；出陣卡展開之後行動列還在、封三招與出陣鈕不用再捲。
+  企劃者若要「看完才封」照字面（每一項都攤開才准封），就用丙的頁面（約戰一張一行）配乙的抽屜當出陣卡——抽屜一屏看得完三段、鈕釘在底下。</p>
+
+  <h2>修前：按「出陣」什麼都沒發生</h2>
+  <div class="grid">
+    <div class="row two">
+      <div class="lab">修前<small>現在的網頁，不注入任何東西</small></div>
+      <figure><img src="0-before-idle.png" alt="修前：按出陣之前"><figcaption>按之前：出陣那一格寫「今日 2 次」，亮著。</figcaption></figure>
+      <figure><img src="0-before-tapped.png" alt="修前：按了出陣之後"><figcaption>按了之後 2.5 秒：<code>POST /api/choose {"id":"act:train"}</code> 回 200、沒有 <code>message</code>，<code>main.now</code> 還是開季那一則；整頁 HTML 一字不差，兩張 PNG 逐像素比對 0 個像素不同。</figcaption></figure>
+    </div>
+  </div>
+
+  <h2>逐列對照（原尺寸 375 寬）</h2>
+  <div class="grid">
+    <div class="row head"><div class="lab"></div><div>甲・原地展開</div><div>乙・半屏抽屜</div><div>丙・兩段收合</div></div>
+    <div class="row">
+      <div class="lab">入口<small>還沒按任何東西</small></div>
+      <figure><img src="A-0-page.png" alt="甲 入口"><figcaption>約戰卡排在行動列底下（三張 278 px，第三張在第一屏外）。</figcaption></figure>
+      <figure><img src="B-0-page.png" alt="乙 入口"><figcaption>頁面不動，「出陣」角上一個 3。</figcaption></figure>
+      <figure><img src="C-0-page.png" alt="丙 入口"><figcaption>約戰一張一行，三張都在第一屏。</figcaption></figure>
+    </div>
+    <div class="row">
+      <div class="lab">出陣前那張卡<small>點了「出陣」</small></div>
+      <figure><img src="A-1-card.png" alt="甲 卡"><figcaption>三段全攤開；卡高 632 px，行動列被捲出畫面。</figcaption></figure>
+      <figure><img src="B-1-card.png" alt="乙 卡"><figcaption>抽屜一屏三段，出陣鈕釘在底下。</figcaption></figure>
+      <figure><img src="C-1-card.png" alt="丙 卡"><figcaption>兩段收成一行，行動列還在上面。</figcaption></figure>
+    </div>
+    <div class="row">
+      <div class="lab">封好三招<small>按下去之前</small></div>
+      <figure><img src="A-2-sealed.png" alt="甲 封好"><figcaption>強攻・奇襲・固守；鈕亮起來、寫著封的三招。</figcaption></figure>
+      <figure><img src="B-2-sealed.png" alt="乙 封好"><figcaption>同上，鈕在抽屜底。</figcaption></figure>
+      <figure><img src="C-2-sealed.png" alt="丙 封好"><figcaption>同上。</figcaption></figure>
+    </div>
+    <div class="row">
+      <div class="lab">約戰卡三種<small>同一區應戰、別區要移動、同袍同去</small></div>
+      <figure><img src="A-3-duels.png" alt="甲 約戰卡"><figcaption>應得了的排最前；別區那張淡掉、不畫應戰鈕，寫原因與「前往・步行約 18 分」。</figcaption></figure>
+      <figure><img src="B-3-duels.png" alt="乙 約戰卡"><figcaption>抽屜第二頁，卡跟甲一樣。</figcaption></figure>
+      <figure><img src="C-3-duels.png" alt="丙 約戰卡"><figcaption>一張一行：應戰／同去／前往 18 分。</figcaption></figure>
+    </div>
+    <div class="row">
+      <div class="lab">按了「應戰」<small>同一個封三招</small></div>
+      <figure><img src="A-3b-answer.png" alt="甲 應戰"><figcaption>卡頂換成「應戰・白馬津／褚大石約戰・還有 N 分」；守住了得什麼伺服器沒給數字。</figcaption></figure>
+      <figure><img src="B-3b-answer.png" alt="乙 應戰"><figcaption>抽屜換成應戰那一頁。</figcaption></figure>
+      <figure><img src="C-3b-answer.png" alt="丙 應戰"><figcaption>兩段一樣收成一行。</figcaption></figure>
+    </div>
+    <div class="row">
+      <div class="lab">灰：自家的地方<small>涿郡，why_not「等對面來約」</small></div>
+      <figure><img src="A-4-own.png" alt="甲 自家"><figcaption>格子小字照伺服器「等對面約」，點得開；沒有「贏了」，封三招換成一句守就是應戰。</figcaption></figure>
+      <figure><img src="B-4-own.png" alt="乙 自家"><figcaption>同上，在抽屜裡。</figcaption></figure>
+      <figure><img src="C-4-own.png" alt="丙 自家"><figcaption>同上。</figcaption></figure>
+    </div>
+    <div class="row">
+      <div class="lab">灰：冷卻中<small>白馬津，還要 42 分、今天用過 1 次</small></div>
+      <figure><img src="A-5-cool.png" alt="甲 冷卻"><figcaption>三段照樣看得到，封三招淡掉，鈕寫「冷卻中・還要 42 分」。</figcaption></figure>
+      <figure><img src="B-5-cool.png" alt="乙 冷卻"><figcaption>同上。</figcaption></figure>
+      <figure><img src="C-5-cool.png" alt="丙 冷卻"><figcaption>同上。</figcaption></figure>
+    </div>
+    <div class="row two">
+      <div class="lab">丙 1b<small>兩段都點開</small></div>
+      <figure><img src="C-1b-card-open.png" alt="丙 兩段攤開"><figcaption>點開「這一塊」「贏了」之後就是甲的全攤開（635 px）。</figcaption></figure>
+    </div>
+  </div>
+
+  <h2>灰著也點得開</h2>
+  <p>三版都假設：出陣那一格<b>灰著也點得開那張卡</b>（設計 4.3「每一個功用按前按後都看得到」），卡上的鈕寫為什麼。現在伺服器在貼不了時把 <code>act:train</code> 給成 <code>enabled: false</code>，網頁照灰格子畫、點了只浮一句（<code>opt-why</code>）；
+  做進程式時這一格要當展開鈕（同探索三選一的 <code>data-act="wheel"</code>），卡的資料 <code>main.sortie_card</code> 灰著的時候本來就有（<code>why_not</code> 寫原因）。截糧的運糧隊經過時那一格是「出陣・截糧」、照舊直接打，不開卡。</p>
+
+  <h2>資料不夠或不對的地方（只列，沒改引擎）</h2>
+  <table>
+    <tr><th>#</th><th>哪裡</th><th>現在</th><th>畫面要的</th></tr>
+    <tr><td>1</td><td><code>sortie_card</code> 歸誰</td><td>沒有這個鍵</td><td>設計「這一塊（歸誰…）」：原型改讀 <code>/api/map/state</code> 的 <code>places[block].control</code>。卡上多一個 <code>holder</code> 比較乾淨。</td></tr>
+    <tr><td>2</td><td><code>bars.theirs</code>、約戰卡的 <code>attacker_side</code></td><td>只有數字、只有陣營 id</td><td><code>theirs</code> 是「其他陣營的最大值」，不知道是哪一軍；陣營的名字（官軍、黃巾）卡上都沒有，原型寫死。</td></tr>
+    <tr><td>3</td><td>自家的地方的 <code>to_flip</code></td><td>算的是自己那一條（涿郡 0 → 還差 100）</td><td>自家的地方要的是「對面離翻走這裡還差多少」（100 − 對面那一條）；<code>gain</code>（推一程、分紅、戰書）在自家的地方也照算，沒意義。原型自己換掉了。</td></tr>
+    <tr><td>4</td><td><code>convoy_at</code></td><td>只有「此刻正經過」時給那一路的名字</td><td>設計「運糧隊幾點經過」：沒有時刻。</td></tr>
+    <tr><td>5</td><td><code>foe_pushing</code></td><td>人數</td><td>設計「對面在推的是誰」：要名字的話伺服器得給（<code>conquest.pushers</code> 有）。</td></tr>
+    <tr><td>6</td><td>窗幾分鐘、應戰的體力</td><td>卡上都沒有（<code>window_minutes</code> 10、<code>answer_stamina</code> 12）</td><td>原型寫死「10 分鐘後開打」「體力 12」；出陣的體力有（<code>cost</code>）。</td></tr>
+    <tr><td>7</td><td>應戰前看的東西</td><td>沒有</td><td>守住了拉回多少、貢獻、經驗心得都沒數字；約戰在同一區的<b>另一塊</b>時，那一塊的兩條也沒有（<code>sortie_card</code> 只給腳下這一塊）。原型只在約戰就在腳下那一塊時畫兩條。</td></tr>
+    <tr><td>8</td><td>約戰卡</td><td>沒有同去幾人、沒有勝算</td><td>同袍那張想寫「已有 N 人同去」；輿圖的 <code>places[*].odds</code> 有勝算（打守軍的），約戰卡與出陣卡都沒有。</td></tr>
+    <tr><td>9</td><td>別區那張的 <code>why_not</code></td><td>「在潁川汝南才應得了戰」10 個字</td><td>放不進鈕：原型不畫應戰鈕，原因寫成一句、鈕寫「前往・步行約 18 分」（<code>travel_minutes</code> 是步行；設計寫「給疾行」，疾行幾分沒有）。點了開輿圖選那一處。</td></tr>
+    <tr><td>10</td><td>修前</td><td><code>/api/choose</code> 回 200、沒有 <code>message</code>、<code>main.now</code> 不變</td><td><code>PICK</code> 那一句沒寫紀錄也沒回給網頁（照設計），所以現在的網頁按了完全沒反應；輿圖卡上的「出陣・攻」（<code>web/map.js</code>）也是送 <code>act:train</code>，一樣沒反應（沒另外拍）。</td></tr>
+    <tr><td>11</td><td><code>main.sorties</code> 排序</td><td>新的在前</td><td>原型改成應得了的、同去得了的在前、別區的在後（網頁自己排即可）。</td></tr>
+    <tr><td>12</td><td>推送指紋</td><td>交接已知</td><td><code>server_push.world_fingerprint</code> 沒算約戰：別人剛貼的約戰要等十秒一次的輪詢才看得到（計畫 4.0 之四第 9 條，雲端側）。</td></tr>
+  </table>
+
+  <h2>新寫的字（全部待 joy 潤）</h2>
+  <table>
+    <tr><th>哪裡</th><th>字</th></tr>
+    <tr><td>卡頂</td><td>出陣・{地點}／今日還能 {n} 次・體力 {n}；應戰・{地點}／{名號}約戰・還有 {n} 分</td></tr>
+    <tr><td>這一塊</td><td>這一塊／{地點}・中立地・還沒人佔／{陣營}的地方；推滿 100 易手・還差 {n}；對面 {n} 人在推／對面沒人在推；同袍 {n} 人・集火 +{n}%／同袍還沒人來；運糧隊「{名}」正經過；{對面}推滿 100 才翻走這裡・還差 {n}</td></tr>
+    <tr><td>贏了</td><td>贏了／照險勝估；大勝多推五成、僵持只推四成；推一程 +{n} → {n}，離易手還差 {n}／推滿易手；貢獻 +{n} 離下一階還差 {n}；戰利；易手分紅 約 {n} 銀兩 推滿那一刻照推的份分；軍令 正是本週攻城軍令／不是本週軍令要的地方；戰書 還差 {n} 推到 {n} 可下戰書／已可下戰書</td></tr>
+    <tr><td>守住了（應戰）</td><td>守住了／數字等伺服器給；這一塊 {對面}的進度被拉回；貢獻 記一筆守城功；經驗心得 同出陣打贏的那一份；輸了 內傷加重・出陣與應戰多等 30 分</td></tr>
+    <tr><td>封三招</td><td>封三招／固守剋強攻・強攻剋奇襲・奇襲剋固守；第一（二、三）回合；撤退：這一回合認輸，少扣七成氣血。封了就不能改，{n} 分鐘後開打，戰報送到。；這裡不貼約戰；這裡是{陣營}的地方：守就是應戰。對面在這一區約戰時，約戰卡上按「應戰」、封三招守住它。</td></tr>
+    <tr><td>鈕</td><td>還要挑 {n} 招；封好三招，出陣；封好三招，應戰；冷卻中・還要 {n} 分；（灰著時照 <code>why_not</code>）；小字「{三招}・體力 {n}・今日還能 {n} 次」</td></tr>
+    <tr><td>約戰卡</td><td>約戰／{n} 張・{n} 張在別區・窗滿就開打；同袍；約戰{地點}；還有 {n} 分；應戰；同去；今日還能應戰 {n} 次・體力 12・封三招；算一次出陣・體力 {n}・集火加成；前往・步行約 {n} 分；前往 {n} 分</td></tr>
+    <tr><td>乙的抽屜</td><td>我來約戰；應戰・同去 {n}</td></tr>
+  </table>
+  <p class="muted">沒有一個字寫到誰是怎麼補位的；守軍迎戰只在戰報裡由引擎寫，畫面上不提。</p>
+</main>
+</body>
+</html>
