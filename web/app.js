@@ -5962,6 +5962,8 @@
           const loc = el.classList.contains("mini") && ev.target.closest && ev.target.closest("[data-loc]");
           // 江湖頁的小地圖點了某一處（設計第八節）：輿圖開在那一處所在的區圖、抽屜半開它的卡（那一區照它算：mapReady）
           if (loc) { mapFirst(loc.getAttribute("data-loc")); S.mapKeep = true; }
+          // 底下的「見聞」：從「俠客」進過行狀（SELF_NEWS）的話換回上一次見聞的那一段，不然籤不畫、只剩「‹ 俠客」（Joy 2026-10-28「見聞那邊只剩下行狀」）
+          if (el.dataset.tab === "news" && selfNews(S.news)) S.news = S.newsBack || "reports";
           await goTab(el.dataset.tab);
           break;
         }
@@ -6473,6 +6475,7 @@
         case "mt-report": await mtReport(); break;
         case "news":
           S.news = el.dataset.news;
+          if (!selfNews(S.news)) S.newsBack = S.news; // 見聞的籤記下來：從行狀按底下的「見聞」回到這一段
           S.reportOpen = false;
           if (S.tab !== "news") { await goTab("news"); break; }
           renderPage();
