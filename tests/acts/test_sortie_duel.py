@@ -87,6 +87,37 @@ def test_own_block_waits_for_the_other_side():
     assert world.sortie_duels() == {} and load(world, "甲").player.sorties_today == 0
 
 
+# 出陣約戰網頁（企劃者 2026-10-28 選丙）要的幾樣：這一塊歸誰、對面那一條是哪一軍、兩軍的名字、窗幾分鐘、應戰的體力——網頁不寫死
+
+
+def test_the_card_names_the_holder_both_armies_the_window_and_the_answer_stamina():
+    c, world = _pair()
+    cfg = c.config.sortie
+    card = game_of(c, world, "甲").sortie_card()
+    assert card["holder"] is None  # 汝南荒野開季是中立地、還沒人佔
+    assert card["sides"] == {"guan": c.scenario.faction_name("guan"), "huang": c.scenario.faction_name("huang")}
+    assert card["sides"]["guan"] == "官軍" and card["sides"]["huang"] == "黃巾軍"  # 照劇本的陣營名
+    assert card["bars"]["theirs_side"] == "huang" and game_of(c, world, "乙").sortie_card()["bars"]["theirs_side"] == "guan"
+    assert card["window_minutes"] == cfg.window_minutes and card["answer_stamina"] == cfg.answer_stamina
+    assert card["to_flip"] == 100 - card["bars"]["mine"] and card["gain"] is not None  # 不是自家的地方：照舊算自己那一條
+
+
+def test_on_its_own_block_the_card_counts_the_other_sides_bar_and_offers_no_gain():
+    c, world = _pair()
+    season = world.get_season()
+    own = next(b for b in conquest.blocks(c) if conquest.capturable(c, b) and conquest.holder(season, c, b) == "guan")
+    seat(c, world, "甲", "guan", own)
+    game = game_of(c, world, "甲")
+    conquest._fight(game.state.world, c, own).bars.setdefault("huang", conquest.Bar()).value = 30.0  # 黃巾軍在官軍的地方推到 30
+    card = game.sortie_card()
+    assert card["holder"] == "guan" and card["why_not"] == sortie_duel.WHY_WAIT
+    assert card["bars"] == {"mine": 0, "theirs": 30, "theirs_side": "huang"}
+    assert card["to_flip"] == 70 and card["gain"] is None  # 對面離翻走這裡還差 70（以前寫自己那一條「還差 100」）；守就是應戰，沒有「贏了」
+    game.state.player.sortie_cooldown_until = NOW + 600  # 冷卻中：按出陣寫「還要 N 分」，可是這裡照樣是自家的地方
+    card = game.sortie_card()
+    assert card["why_not"].startswith("還要") and card["gain"] is None and card["to_flip"] == 70
+
+
 def test_the_cooldown_and_the_daily_cap_block_the_next_post():
     c, world = _pair()
     _go(c, world)
