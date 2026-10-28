@@ -85,3 +85,30 @@ def test_settings_offer_old_characters_one_gender_pick(views):
     m["status"].update(gender="女", gender_chosen=True)
     done = run(m, "return H.sheetHtml();")
     assert "性別：女" in done and "gender-pick" not in done
+
+
+# 一顆一顆點（同 test_seal_acts_web.CLICK）：點完記下 #page 畫了什麼
+CLICKS = """return (async () => {
+  const target = (dataset) => ({ dataset, classList: { contains: () => false, add() {}, remove() {} } });
+  const out = [];
+  for (const dataset of input.clicks) {
+    await T.docListeners.click[0]({ target: { closest: () => target(dataset) } });
+    out.push((T.els.page || T.els.app).innerHTML);
+  }
+  return out;
+})();"""
+
+
+def test_the_bottom_news_tab_brings_back_the_news_tabs_after_the_hero_record(views):
+    """從「俠客」進行狀，再按底下的「見聞」：回到見聞上一次看的那一段、五顆籤都在，不是只剩「‹ 俠客」（Joy 2026-10-28「見聞那邊只剩下行狀」）。"""
+    import json
+
+    m, x = views
+    clicks = [{"act": "tab", "tab": "news"}, {"act": "news", "news": "boards"}, {"act": "tab", "tab": "practice"},
+              {"act": "news", "news": "annals"}, {"act": "tab", "tab": "news"}]
+    pages = run(m, CLICKS.replace("input.clicks", json.dumps(clicks)), S={"tab": "jianghu"}, menxia=x,
+                responses={"/api/": {"main": m, "entries": [], "boards": [], "items": []}})
+    hero, back = pages[3], pages[4]
+    assert "‹ 俠客" in hero and "news-seg" not in hero
+    assert "news-seg" in back and "‹ 俠客" not in back
+    assert 'class="on" data-act="news" data-news="boards"' in back
