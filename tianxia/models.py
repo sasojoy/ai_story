@@ -553,6 +553,10 @@ class StoryStage(_Strict):
     # fight 段的對手是自己的影子（特殊頓悟的心魔）：給了就不讀 squad，難度＝你此刻的全隊威力 × mirror，屬性照你武學的主屬性，名字是 mirror_name
     mirror: float | None = Field(default=None, gt=0)
     mirror_name: str = "心魔"
+    # 重複挑戰時削弱：難度的倍數＝max(mirror_floor, mirror − mirror_weaken × 輸過幾次)；
+    # mirror_weaken 是 0 就照舊不削（別的 mirror 戰一個字都不變）
+    mirror_weaken: float = Field(default=0.0, ge=0)
+    mirror_floor: float = Field(default=0.0, ge=0)
     # 長篇奇事的多日段（企劃者 2026-10-27）：進這一段之後要再過幾個遊戲日才按得下去（照季長，rules.day_seconds）；
     # 中間做別的事，時候到了、人在那裡才接下一段（例：營裡的第二天、第三天）。期限 days 從等完那一刻起算
     wait_days: float = Field(default=0, ge=0)
@@ -3242,6 +3246,11 @@ class EpiphanyRules(_Strict):
     pity: int = Field(default=40, ge=0)  # 只管第一次：這一季擲中感悟這麼多次都沒頓悟，下一次必中；0 是不保底
     demon_scale: float = Field(default=0.95, gt=0)  # 心魔的難度＝你此刻的全隊威力 × 這個倍數（你自己的影子）
     retry_days: float = Field(default=1.0, ge=0)  # 心魔打輸了，過幾個遊戲日能再打（照季長，rules.day_seconds）
+    # 重複挑戰時削弱他（企劃者 2026-10-28「心魔重複打的時候削弱他好了」；「僵持也算過關」被否了：太簡單）：
+    # 每輸一次（含僵持）難度的倍數降這麼多，降到 demon_floor 為止。0.95 滿血勝率約三成，每次 −0.05：
+    # 第三次過半、第六次九成五、第七次起照 floor 幾乎篤定過，所以不會卡死，但也不是白給。
+    demon_weaken: float = Field(default=0.05, ge=0)
+    demon_floor: float = Field(default=0.65, gt=0)
 
 
 class JianfaRules(JianfaNumbers):

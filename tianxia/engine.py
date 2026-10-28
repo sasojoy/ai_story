@@ -9997,7 +9997,10 @@ class Game:
         × mirror，名字是 mirror_name。"""
         base = Squad(id=f"mirror:{progress.line}", name=stage.mirror_name, difficulty=1.0)
         power = team.power_vs(self.state, self.content, self.world, base, fresh=True, terrain=False, seal=False)
-        return base.model_copy(update={"difficulty": round(max(1.0, power * stage.mirror), 1)})
+        scale = stage.mirror
+        if stage.mirror_weaken:  # 重複挑戰時越打越弱（企劃者 2026-10-28）：輸過幾次就削幾次，削到 mirror_floor 為止
+            scale = max(stage.mirror_floor, stage.mirror - stage.mirror_weaken * progress.tries)
+        return base.model_copy(update={"difficulty": round(max(1.0, power * scale), 1)})
 
     # ── 混戰（翻地與爭搶，輿圖簡化設計 4.3）：出陣時撞上對面剛在這一塊推過的人，照截殺的規則打一場 ──
 

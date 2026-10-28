@@ -271,7 +271,9 @@ def test_the_explore_cell_reads_the_same_hint_as_the_button():
 
 
 def test_the_howto_explains_the_outing_the_gates_and_the_milestones():
-    on = ready(jianfa_game(), side="guan", loc="yingshui").howto_text()
+    # 自己把屬性五段打開：正式設定 2026-10-28 起把 stat_milestones 關掉了（線上玩家沒點可配），
+    # 這一條驗的是「開著時玩法說明寫了沒」，不跟著設定的取捨跑
+    on = ready(jianfa_game(stat_milestones=True), side="guan", loc="yingshui").howto_text()
     off = ready(plain_game(), side="guan", loc="yingshui").howto_text()
     assert "出門一趟" in on and "收穫漸少" in on and "境界與配點" in on and "找素材" not in on.split("**探索**")[1].split("\n")[0]
     assert "出門一趟" not in off and "境界與配點" not in off
