@@ -1000,7 +1000,8 @@
   // 約戰卡緊接在行動列底下、第一張是應得了或同去得了的（FB-906，企劃者 2026-10-28「要露出來」；sxRank 把可按的排在最前面）時，要擠進第一屏的
   // 是那一行（連右邊的鈕）：它在行動列底下，量它就連整排行動列一起照顧到了，只是多縮場景的畫（收法 5a）；約戰卡本身的版面不動、也不搬到行動列上面。
   // 沒有可按的約戰（只有自己貼的、結算完的、別區的、約戰關著），或行動列與約戰卡之間展開了移動、探索、出陣前那張卡（玩家自己攤開的），
-  // 量的還是行動列，第一屏一個像素都不變
+  // 量的還是行動列，第一屏一個像素都不變。量的是約戰那一行、前面的步驟都收完還放不下時，再多收一步 desc（6c，企劃者 2026-10-28「擠完再上」）：
+  // 閒著的場景卡把所在地的描述每段收成一行；目標是行動列、一組選項時那一步不做
   const FIT_DUEL_BTN = '#page > .act-bar + #sortie-duels > .sx-drow:first-of-type > [data-act="sortie-answer"], '
     + '#page > .act-bar + #sortie-duels > .sx-drow:first-of-type > [data-act="sortie-join"]';
   function fitDuelRow() {
@@ -1149,6 +1150,21 @@
       } while (fitOver() > 0 && hidden < rows.length);
       return true;
     } },
+    // 6c. 量的目標是約戰卡第一張可按的那一行（fitDuelRow，FB-906）、前面的步驟都收了還放不下（矮手機：375×667、360×700 被分頁列蓋了 4～10 px）：
+    //     閒著（沒有分隔線：不是集結、觀戰）的場景卡把所在地的描述每段收成一行、放不下加「…」，點了整張場景卡攤開（同第 7 步：fitClip、
+    //     ownOpen，S.ownOpen 記著玩家攤開過就不再收）。企劃者 2026-10-28「擠完再上」。排在 7 之前：先收不少字的步驟，還不夠才收描述。
+    //     只在量約戰那一行時做：目標是行動列、一組選項時一個像素都不動。「此地還有」、結伴、別人遞來的邀請（.calls）、地名與時刻那一條
+    //     （有畫時疊在畫上；沒有畫時是場景卡第一段）都不是描述，不收
+    { key: "desc", run: () => {
+      if (!fitDuelRow()) return false;
+      const scene = document.querySelector("#page > .card.scene:not(.road)");
+      if (!scene || scene.querySelector(":scope > hr") || !idleMenu(S.main) || S.ownOpen === fitOwnKey()) return false;
+      const paras = [...scene.querySelectorAll(":scope > p:not([class])")];
+      if (!scene.querySelector(":scope > .scene-art")) paras.shift(); // 沒有畫：第一段是「【地名】危險 ★★」那一條，不是描述
+      const any = fitClip(paras);
+      if (any) scene.classList.add("fit-own"); // 跟第 7 步同一個記號（ownOpen、fitReset 照樣拿掉）
+      return any;
+    } },
     // 7. 決戰集結、只能觀戰時，場景卡在戰場底下接著所在地（分隔線之後）：閒著時那是地點的描述，每段收成一行、點了攤開（S.ownOpen）。
     //    有事件、有所感、對話時分隔線之後是那件事本身（joy 的字），不收
     { key: "own", run: () => {
@@ -1229,7 +1245,7 @@
       if (el.dataset.fitWas && !el.classList.contains("open")) el.classList.replace(el.classList.contains("fits") ? "fits" : "clamp", el.dataset.fitWas);
       delete el.dataset.fitWas;
     });
-    page.querySelectorAll(".fit-own, .fit-muster").forEach((el) => el.classList.remove("fit-own", "fit-muster"));
+    page.querySelectorAll(".fit-own, .fit-muster").forEach((el) => el.classList.remove("fit-own", "fit-muster")); // 第 6c、7、8 步（收成一行的段落由下面的 fitUnclip 攤回來）
     page.querySelectorAll(".call.fit-hide").forEach((el) => el.classList.remove("fit-hide")); // 6b：收掉的邀請攤回來
     page.querySelectorAll(".calls-more").forEach((el) => {
       if (el.dataset.fit) el.remove();
@@ -1242,13 +1258,13 @@
       ["data-act", "role", "tabindex", "aria-expanded"].forEach((a) => el.removeAttribute(a));
     });
   }
-  // 場景卡裡收成一行的段落（第 7、8 步）：一行、放不下加「…」（style.css 的 p.fit-clip），點了整張場景卡攤開（ownOpen）。
+  // 場景卡裡收成一行的段落（第 6c、7、8 步）：一行、放不下加「…」（style.css 的 p.fit-clip），點了整張場景卡攤開（ownOpen）。
   // 收了之後數字（倒數、戰局）會藏到「…」後面的那一段不收
   function fitClip(paras) {
     let any = false;
     paras.forEach((p) => {
       p.classList.add("fit-clip");
-      if (!fitDigitsShown(p)) { p.classList.remove("fit-clip"); return; }
+      if (!fitDigitsShown(p)) { dropClip(p); return; }
       p.setAttribute("data-act", "own-more");
       p.setAttribute("role", "button");
       p.setAttribute("tabindex", "0");
@@ -1281,9 +1297,15 @@
     const first = String(m.scene || "").split("</p>")[0].replace(/[0-9０-９]+/g, "#");
     return `${(m.status && m.status.location) || ""}|${first}`;
   }
+  // 拿掉收成一行的記號。classList 拿光 class 之後，真的瀏覽器留下空的 class=""，而第 6c 步（desc）用 :scope > p:not([class]) 挑沒有 class 的描述段落——
+  // 空屬性還在就再也選不到：沒有重畫的重量（轉向、拉視窗、點名號展開再收起）之後折疊消失、約戰鈕又掉回分頁列底下（FB-9010）。空了就把屬性整個拿掉
+  function dropClip(p) {
+    p.classList.remove("fit-clip");
+    if (!p.getAttribute("class")) p.removeAttribute("class");
+  }
   function fitUnclip(root) {
     root.querySelectorAll(".fit-clip").forEach((p) => {
-      p.classList.remove("fit-clip");
+      dropClip(p);
       ["data-act", "role", "tabindex", "aria-expanded"].forEach((a) => p.removeAttribute(a));
     });
   }
