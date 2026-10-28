@@ -334,9 +334,16 @@ def answer(state: GameState, content: Content, line_id: str, arg: str) -> list[s
 
 # ── 打一場（fight）──────────────────────────────────────
 
-def fought(state: GameState, content: Content, progress: StoryProgress, won: bool, record) -> None:
+def wait_text(days: float) -> str:
+    """「過多久」寫給玩家看的那一截：一天以上寫「N 天」，不到一天寫「N 個時辰」（一天十二個時辰，至少一個）。"""
+    if days >= 1:
+        return f"{round(days, 1):g} 天"
+    return f"{max(1, round(days * 12))} 個時辰"
+
+
+def fought(state: GameState, content: Content, progress: StoryProgress, won: bool, record) -> list[str]:
     """fight 段打完那一下（Game._story_fight）：先叫這一種的 fight 鉤子寫記號；贏了往 win，輸了算一次，輸滿 retries 次往 lose，
-    沒滿就過 retry_days 才能再打。"""
+    沒滿就過 retry_days 才能再打——那一段寫了 fail 時跳一張卡、記一行行狀，回江湖紀錄那一行（其餘回空的）。"""
     line, stage = current(content, progress)
     hook = FIGHT_HOOKS.get(line.kind)
     if hook is not None:
@@ -344,12 +351,20 @@ def fought(state: GameState, content: Content, progress: StoryProgress, won: boo
     progress.opened = False
     if won:
         progress.go = stage.win
-        return
+        return []
     progress.tries += 1
     if progress.tries >= stage.retries:
         progress.go = stage.lose
-    else:
-        progress.retry_at = state.world.time + stage.retry_days * day_seconds(content, state.world)
+        return []
+    progress.retry_at = state.world.time + stage.retry_days * day_seconds(content, state.world)
+    fail = stage.fail
+    if fail is None:
+        return []
+    days = wait_text(stage.retry_days)
+    state.player.story_cards.append(StoryCard(line=line.id, kind="retry", title=fail.title, text=fill_marks(fail.card.replace("{days}", days), state),
+                                              image=fail.image, failed=True))
+    annals.note(state, content, annals.STORY, fail.annal.replace("{name}", state.player.name), 1)
+    return [fail.log.replace("{days}", days)] if fail.log else []
 
 
 # ── 效果與自己寫的話 ─────────────────────────────────────

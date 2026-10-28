@@ -177,6 +177,34 @@ def test_losing_to_the_demon_waits_a_day_and_never_ends_the_line():
     assert s.player.god_naming is not None
 
 
+def test_losing_to_the_demon_pops_a_card_with_the_fail_art_and_writes_it_down():
+    """Joy 2026-10-28「心魔挑戰失敗沒有明顯提示，我們不是有做圖片嗎」：打輸了（還能再打）跳一張「心魔未破」的卡，圖是 dunwu_fail，
+    寫幾天後能再打、前面的關都還算數；江湖紀錄與行狀各一行。打贏不跳。"""
+    game = _game()
+    s, c = game.state, game.content
+    _begin(game)
+    line = next(iter(s.player.storylines))
+    _answer_all(game)
+    s.world.time += day_seconds(c, s.world)
+    game._story_tick()
+    s.player.story_cards = []
+    with _loss():
+        msgs = game.choose(f"{storyline.OPTION}:{line}")
+    (card,) = [x for x in s.player.story_cards if x.kind == "retry"]
+    days = storyline.wait_text(c.config.epiphany.retry_days)
+    assert card.title == epiphany.FAIL_TITLE and card.image == epiphany.IMAGE["fail"] and card.failed
+    assert f"過 {days}，可以再去面對它" in card.text and "前面問過的心、試過的手都還算數" in card.text
+    assert epiphany.FAIL_LOG.replace("{days}", days) in "\n".join(msgs)
+    assert s.player.annals[-1].text == epiphany.FAIL_ANNAL.replace("{name}", s.player.name)
+    (view,) = [v for v in game.story_card_view() if v["kind"] == "retry"]
+    assert view["title"] == epiphany.FAIL_TITLE and view["image"] == "stories/dunwu_fail"
+    s.player.story_cards = []
+    s.world.time = s.player.storylines[line].retry_at
+    with _win():
+        game.choose(f"{storyline.OPTION}:{line}")
+    assert not [x for x in s.player.story_cards if x.kind == "retry"]
+
+
 def test_the_demon_is_your_own_shadow():
     game = _game()
     s, c = game.state, game.content
