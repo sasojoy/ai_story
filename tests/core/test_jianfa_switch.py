@@ -67,7 +67,8 @@ def test_batch2_numbers_ride_on_config_jianfa():
     assert cfg.milestone_levels == [10, 20, 30, 40, 50] and cfg.stat_points_per_milestone == 5
     assert cfg.stat_rates.bonus_per_point == 0.06 and cfg.town_foes == ["dipi"] and cfg.town_loot_scale == 0.5
     assert cfg.camp_spar_share == 0.3  # 修正輪（PM 2026-10-26）：自家營寨比劃給對手那一路的三成
-    assert cfg.stat_milestones is True
+    # 子開關 2026-10-28 關掉（85ed8748，FB-899：1～9 級沒點可配）：數字留在 Config.jianfa，開關照現行設定；五段本身在 test_stat_milestones_engine 自己打開
+    assert cfg.stat_milestones is False
 
 
 def test_every_real_place_has_an_explore_table_and_travelers_are_wild():
