@@ -176,6 +176,7 @@
     gatherOpen: false, // 探索卡上「找素材」底下的分支攤開了沒（第 32 項；做完一件事不收，下次點探索就直接看到）
     gatherSaying: false, // 找素材的「自己說…」輸入框叫出來了沒
     persuading: false, // 託付的勸降：輸入框叫出來的那一顆（errand:persuade:<id>），沒有是 false
+    godNaming: false, // 神品意境自己取名：輸入框叫出來了沒（那一顆只有一種，OWN_NAME_ID；FB-901）
     sensing: false, // 有所感：畫布叫出來了沒（按了「把心中的形畫下來」）；感悟狀態結束（選單上沒有 SENSE_DRAW）就收起
     sensePts: [], // 畫布上那一筆的點位 [[x, y, 毫秒], …]（畫布座標 0～256）；輪詢重畫頁面之後照它補畫回去
     senseNote: "", // 畫布底下那一行：這一筆落下了沒（/api/sense_read；不寫筆畫的幾何）
@@ -384,6 +385,7 @@
     if (main.event_free_text == null) S.answering = false; // 事件過去了，輸入框跟著收起
     if (!(main.options || []).some((o) => o.id === sayingId())) S.saying = false; // 交談結束了（或那一顆沒了），輸入框跟著收起
     if (S.persuading && !(main.options || []).some((o) => o.id === S.persuading)) S.persuading = false; // 走開了、那一件辦完了：勸降的輸入框收起
+    if (S.godNaming && !(main.options || []).some((o) => o.id === OWN_NAME_ID)) S.godNaming = false; // 取成了、換了別的：取名的輸入框收起
     if (S.sensing && !(main.options || []).some((o) => o.id === SENSE_DRAW)) closeSense(); // 感悟狀態過去了（悟成、作廢），畫布跟著收起
     // 見聞的紅點只為新的一場亮（比 card_id）：配點之後「剛剛」照舊是升級那一場的卡片，看過戰報再配點不再亮一次（計畫二最終審查 M1）；
     // 放在這裡是因為動作回來的與輪詢拿到的都走 setMain——決戰收場的卡片常常是輪詢（sync）補送的。登入那一份不亮（S.main 還沒有）
@@ -5548,6 +5550,13 @@
       if (input) input.focus();
       return;
     }
+    if (id === OWN_NAME_ID) { // 神品意境自己取名：先叫出輸入框，寫好再送（見 godName；按了 /api/choose 只回一句「寫下你替它取的名字」，FB-901）
+      S.godNaming = true;
+      renderPage();
+      const input = document.querySelector("#own-name-form .input");
+      if (input) input.focus();
+      return;
+    }
     if (id === GATHER_SAY_ID) { // 找素材的「自己說」：先叫出輸入框，寫好再送（見 gatherSay）
       S.gatherSaying = true;
       renderPage();
@@ -5590,6 +5599,29 @@
     // 換上「對方沉吟中…」「兩人對峙……」，兩種都要還原（審查 I2）
     // 上一個還在等、這一下沒送（sent 是 false）：那顆 busy 是上一個的，不能動
     if (sent && document.querySelector(".options .btn.busy, .act-ink.busy")) renderPage();
+  }
+
+  // 神品意境自己取名（FB-901）：送 /api/choose 帶 text。名字不合格、這一季全服撞名時伺服器回一句話，
+  // 表單留著、字也留著（同絕學定名那張），改一改再送；取成了選項就沒了，輸入框收起、回頁首看結果
+  async function godName(form, text) {
+    await busy(async () => {
+      form.querySelectorAll("input, button").forEach((el) => { el.disabled = true; });
+      try {
+        const r = await api("/api/choose", { id: OWN_NAME_ID, text });
+        const done = !((r.main && r.main.options) || []).some((o) => o.id === OWN_NAME_ID);
+        if (done) S.godNaming = false;
+        applyMain(r.main);
+        const said = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+        if (said) toast(said);
+        if (done) window.scrollTo({ top: 0, behavior: "smooth" });
+        else {
+          const again = document.querySelector("#own-name-form .input");
+          if (again) { again.value = text; again.focus(); }
+        }
+      } finally {
+        form.querySelectorAll("input, button").forEach((el) => { el.disabled = false; });
+      }
+    });
   }
 
   // 自己說：送出後要等人物答話（跟按選項一樣十來秒），按鈕先寫「對方沉吟中…」；排在佇列後面時補「前面還有 N 件」
@@ -6613,6 +6645,9 @@
       } else if (form.id === "persuade-form") {
         if (!data.text.trim()) return;
         await persuadeSay(form, data.text.trim());
+      } else if (form.id === "own-name-form") {
+        if (!data.text.trim()) return;
+        await godName(form, data.text.trim());
       } else if (form.id === "gather-say-form") {
         if (!data.text.trim()) return;
         await gatherSay(form, data.text.trim());

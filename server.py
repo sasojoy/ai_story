@@ -1002,7 +1002,8 @@ def prepare_fight(game: Game, option_id: str) -> list[str] | fight_llm.PreparedF
     return fight_llm.PreparedFight(request=request, judgment=judgment)
 
 
-def choose(game: Game, option_id: str) -> list[str] | None:
+def choose(game: Game, option_id: str, text: str | None = None) -> list[str] | None:
+    """text 只有需要玩家打字的那幾顆用（神品意境「自己取一個名字」dunwu:own）：原樣交給引擎，它自己驗。"""
     if option_id == EPIPHANY_THINK:
         return epiphany_think(game)
     if may_generate_dialogue(option_id):
@@ -1013,7 +1014,7 @@ def choose(game: Game, option_id: str) -> list[str] | None:
         if isinstance(fight, list):
             return fight  # 不是大場面：A 段那一次拿鎖已經做完了
         return act(game, lambda g: g.choose(option_id, fight=fight))
-    return act(game, lambda g: g.choose(option_id))
+    return act(game, lambda g: g.choose(option_id, text=text))
 
 
 NO_NAME: tuple[str | None, str] = (None, "")  # 開爐的 B 段沒取到名字（或不必取）：C 段直接走退路字表、不在鎖裡叫模型
@@ -1106,6 +1107,7 @@ def forge(game: Game, art_id: str | None, insight_ids: list[str]) -> list[str] |
 
 
 EPIPHANY_THINK = f"{epiphany.OPTION}:{epiphany.THINK}"
+EPIPHANY_OWN = f"{epiphany.OPTION}:{epiphany.OWN}"  # 自己取名：/api/choose 帶 text 送上來（web 的 own-name-form）
 BUSY_EPIPHANY = "還在想名字，稍等。"
 
 
@@ -2668,7 +2670,9 @@ def api_admin_mall(request: Request, body: dict = Body(...)):
 def api_choose(request: Request, body: dict = Body(...)):
     game = _game(request)
     option_id = str(body.get("id", ""))
-    msgs = choose(game, option_id)
+    # text：需要打字的那幾顆（神品意境自己取名 dunwu:own）；沒帶就是 None，跟以前一樣
+    said = body.get("text")
+    msgs = choose(game, option_id, text=None if said is None else str(said))
     if not isinstance(msgs, Refused) and NOT_ON_MENU not in (msgs or []):  # 被擋下來、不在選單上的不算按了
         _play_did(game, button_of(option_id), FIGURE_TALK if may_generate_dialogue(option_id) else None)
     _tell_tabs(game)
@@ -2678,6 +2682,10 @@ def api_choose(request: Request, body: dict = Body(...)):
         # 大場面等判讀的時候選項沒了（「你離開了，這一仗沒打成。」）：這一仗沒打、不寫江湖紀錄，也只有這句回話。
         # 兩個分頁搶同一張懸賞，慢的那一頁按下去的懸賞選項已經不在選單上（FB-162）：同樣沒寫江湖紀錄，只有這句回話。
         # 其他選項的話已經寫進江湖紀錄、「剛剛」看得到，再回一句會重複，所以不回。
+        out["message"] = joined(msgs)
+    # 神品意境自己取名被擋（名字不合格、這一季全服撞名）：那一句要回給表單，不然玩家只看到輸入框沒反應。
+    # 取成了不回（話在江湖紀錄與「剛剛」卡上，同別的選項）
+    elif option_id == EPIPHANY_OWN and game.state.player.god_naming is not None:
         out["message"] = joined(msgs)
     return out
 
