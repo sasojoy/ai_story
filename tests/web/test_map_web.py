@@ -249,6 +249,26 @@ def test_fb262_standing_there_still_shows_the_odds():
     assert "沒有對手" in calm[calm.index("此地的對手"):calm.index("此地的對手") + 200]
 
 
+def test_fb905_a_passing_convoy_makes_the_card_button_say_intercept_without_the_attack_odds():
+    """FB-905（PM 照 QA 驗收順帶開，2026-10-28）：這週截糧的運糧隊正打這裡經過，行動列那一格是「出陣・截糧」、按了打運糧隊；輿圖卡上的鈕照舊寫
+    「出陣・攻 必敗」，跟行動列對不上。現在寫「出陣・截糧」、小字只剩今日還能幾次（不掛攻的勝算；卡下面的「此地的對手」照舊列運糧隊與它的勝算）。"""
+    from tianxia import orders
+    from tianxia.state import Order
+
+    game = _game(faction="guan", at="runan_wilds")
+    game.state.world.orders.append(Order(id="t:guan:intercept", template="intercept", faction="guan", week=orders.period_of(game.state, game.content),
+                                         location="runan_wilds", quota=4, text="（測試）"))
+    st = game.map_state()
+    p = st["places"]["runan_wilds"]
+    assert p["sortie"] == "attack" and p["convoy"] is True and p["odds"]
+    out = run(game, 'return H.placeCard(H.S.mapBase, H.S.mapState, "runan_wilds");', st=st)
+    sortie = out[out.index('data-key="sortie"'):]
+    button = sortie[:sortie.index("</button>")]
+    assert "出陣・截糧" in button and "出陣・攻" not in button and p["odds"]["word"] not in button and "今日還能" in button
+    foes = out[out.index("此地的對手"):out.index('class="m-foes"') + 400]
+    assert p["odds"]["word"] in foes  # 對手那一段照舊寫運糧隊與勝算
+
+
 def test_the_card_says_what_you_can_sense_with_the_strongest_filled():
     out = run(_game(), 'return H.placeCard(H.S.mapBase, H.S.mapState, "changshe");')
     assert "此地能悟" in out and 'class="ig strong"' in out and "最濃" in out

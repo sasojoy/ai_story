@@ -77,6 +77,10 @@ const scene = L.scene ? el("scene", ["card", "scene"]) : null;
 // 場景的畫（減法季批 8；收法 5a 縮成橫幅）與戰鬥補充那一塊（收法 5c 只留第一行；L.extra 是一共幾行）
 const art = L.art ? el("art", ["scene-art"]) : null;
 const extra = L.extra ? el("extra", ["tx-extra"]) : null;
+// 約戰卡第一張應得了、同去得了的那一行（FB-906，收法 fitDuelRow）：L.duel 是那一行的下緣比行動列下緣低幾 px（沒給＝沒有可按的約戰，量的還是行動列）；
+// 它的鈕（sortie-answer／sortie-join）掛在那一行底下，fitDuelRow 取鈕的 parentElement
+const duelRow = L.duel ? el("duelrow", ["sx-drow"]) : null;
+const duelBtn = L.duel ? el("duelbtn", ["btn"], { parentElement: duelRow }) : null;
 if (extra) extra.querySelectorAll = (s) => (s === ":scope > .tx-line" ? Array.from({ length: L.extra }, () => ({})) : []);
 const box = L.box ? el("box", ["card", "guide"]) : null;
 const hint = L.hint ? el("hint", ["hint"]) : null;  // 狀態列的 💡（#top 裡）；收成一行看的是 S.hintTight（renderTop 照它畫）
@@ -157,6 +161,8 @@ const bottom = () => {
 const target = actbar || last;
 // 畫面上的位置＝頁面上的位置 − 捲了多少（分頁列固定在畫面底下）
 if (target) target.getBoundingClientRect = () => ({ bottom: bottom() - globalThis.window.scrollY });
+if (duelRow) duelRow.getBoundingClientRect = () => ({ bottom: bottom() + L.duel - globalThis.window.scrollY }); // 在行動列底下，一起跟著收的東西上下移
+const DUEL_SEL = new Function(`return ${src.match(/const FIT_DUEL_BTN = ('[^']*'\s*\+\s*'[^']*');/)[1]}`)();
 // 分頁列頂：手機網址列收起時分頁列跟著往下（FB-123），測試用 els.setTabsTop 換
 let tabsTop = input.tabsTop || 756;
 tabs.getBoundingClientRect = () => ({ top: tabsTop });
@@ -165,6 +171,7 @@ if (body) Object.defineProperty(body, "clientHeight", { get: () => bodyHeight() 
 const where = {
   "#page > .act-bar": () => (actbar ? [actbar] : []),
   "#page > .options > :last-child": () => (last ? [last] : []),
+  [DUEL_SEL]: () => (L.duel && duelBtn ? [duelBtn] : []),
   ".tabs": () => [tabs],
   "#page > .battle-card": () => (card ? [card] : []),
   ".battle-card .tx-extra .tx-line:not(.tx-hearsay)": () => lines.filter((x) => !has(x, "tx-hearsay")),
@@ -775,6 +782,66 @@ def test_opened_extra_lines_stay_open_and_one_line_is_left_alone():
 def test_refitting_brings_the_art_and_the_extra_lines_back():
     out = run(ART_FIGHT, script="H.fitFirstScreen(); L.bottom = 700; H.fitFirstScreen(); return snap();")
     assert out["fitted"] == [] and "fit-art" not in out["art"] and "fit-extra" not in out["extra"] and out["extraAttrs"] == {}
+
+
+# ── 約戰卡第一張那一行要露在第一屏（FB-906，企劃者 2026-10-28「要露出來」）──────────────────────
+# 約戰卡排在行動列底下。真資料下「此地還有」只有一人時場景的畫不縮（約 267 px），卡從約 732～772 px 開始、分頁列頂在 756，375×812
+# 只露出「約戰 N 張」標題，應戰、同去的鈕被擠到分頁列底下。第一張是應得了或同去得了的（sxRank 把可按的排最前面）時，收法量的改成那一行
+# （連右邊的鈕）：它比行動列低，所以整排行動列一起照顧到，多縮的是場景的畫；沒有可按的約戰一個像素都不變
+
+
+@node
+def test_an_answerable_duel_row_squeezes_the_scene_art_so_its_button_is_on_the_first_screen():
+    """756 − 16 = 740。行動列下緣 690 本來放得下（什麼都不收）；第一張約戰那一行的下緣在 780：間距收了 30 還差 10，再縮場景的畫就夠。"""
+    layout = {"bottom": 690, "actbar": True, "scene": True, "art": True}
+    assert run(layout)["fitted"] == []  # 沒有約戰：放得下，什麼都不收
+    out = run({**layout, "duel": 90})
+    assert out["fitted"] == ["space", "art"] and "fit-art" in out["art"]
+    assert out["bottom"] + 90 <= 740  # 那一行的下緣（鈕整顆）在分頁列頂往上 16 以內
+
+
+@node
+def test_a_duel_row_that_already_fits_leaves_the_page_alone():
+    out = run({"bottom": 600, "actbar": True, "scene": True, "art": True, "duel": 90})
+    assert out["fitted"] == [] and out["page"] == ["page"] and out["art"] == ["scene-art"]
+
+
+@node
+def test_without_an_answerable_duel_the_first_screen_does_not_change_by_a_pixel():
+    """只有自己貼的、結算完的、別區的、約戰關著，或行動列與約戰卡之間展開了別的卡：fitDuelRow 回 null，量的還是行動列。
+    同一個行動列下緣 690、同一個場景：沒有可按的那一行就一個 class 都不加。"""
+    base = run({"bottom": 690, "actbar": True, "scene": True, "art": True})
+    assert base["fitted"] == [] and base["art"] == ["scene-art"] and base["page"] == ["page"]
+    # 行動列自己放不下的畫面，收的步驟與停的地方跟以前一樣（有沒有那個欄位都一樣：沒有 duel 就是以前的量法）
+    tall = run({"bottom": 960, "actbar": True, "scene": True, "art": True})
+    assert tall["fitted"] == ["space", "art"] and tall["bottom"] <= 740
+
+
+@node
+def test_refitting_brings_the_art_back_once_there_is_no_answerable_duel_left():
+    script = "H.fitFirstScreen(); const tight = snap(); L.duel = 0; H.fitFirstScreen(); return { tight, roomy: snap() };"
+    out = run({"bottom": 690, "actbar": True, "scene": True, "art": True, "duel": 90}, script=script)
+    assert out["tight"]["fitted"] == ["space", "art"]
+    assert out["roomy"]["fitted"] == [] and out["roomy"]["art"] == ["scene-art"] and out["roomy"]["page"] == ["page"]  # 約戰被人應了：畫攤回來
+
+
+@node
+def test_the_selector_follows_the_real_markup_the_duel_card_draws():
+    """fitDuelRow 的選擇器照 actionBar 真的畫出來的標記寫：約戰卡緊接在行動列後面（中間沒有展開的卡）、第一張那一行的鈕是那一行的直接孩子；
+    灰的（應戰按不下去）、別區的（前往）、自己貼的那一張第一行不算。"""
+    row = {"id": "d1", "block": "b", "place": "某地", "attacker": "甲", "attacker_side": "huang", "defender": None, "expires_in": 300, "answers_left": 3,
+           "same_region": True, "travel_minutes": None, "result": None, "why_not": "", "can_answer": True, "can_join": False, "status": "open", "role": "answer"}
+    m = {"options": [], "sorties": [row], "status": {}}
+    bar = run_prologue_web(m, "return H.actionBar(H.S.main);")
+    assert '<div class="card sx-duels" id="sortie-duels"><p class="sx-h">' in bar
+    first = bar[bar.index('<div class="sx-drow'):]
+    first = first[:first.index("</div>")]  # 第一張那一行（裡面只有 span 與一顆鈕，沒有再巢一層 div）
+    assert '<button class="btn small primary" data-act="sortie-answer" data-id="d1">應戰</button>' in first and "<div" not in first[4:]
+    src = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    sel = re.search(r"const FIT_DUEL_BTN = ('[^']*'\s*\+\s*'[^']*');", src).group(1)
+    assert '#page > .act-bar + #sortie-duels > .sx-drow:first-of-type > [data-act="sortie-answer"]' in sel and '[data-act="sortie-join"]' in sel
+    grey = run_prologue_web({**m, "sorties": [{**row, "can_answer": False, "why_not": "今日應戰 3 次已用完"}]}, "return H.actionBar(H.S.main);")
+    assert 'data-act="sortie-answer"' not in grey  # 灰的那一行沒有可按的鈕：選擇器抓不到、量的還是行動列
 
 
 def test_the_art_and_extra_folds_are_styled():

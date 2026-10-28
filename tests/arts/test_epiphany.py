@@ -188,6 +188,44 @@ def test_the_demon_is_your_own_shadow():
     assert squad.name == "心魔" and squad.difficulty == pytest.approx(round(power * c.config.epiphany.demon_scale, 1), abs=0.11)
 
 
+def test_the_demon_gets_weaker_every_time_you_fail_down_to_a_floor():
+    """企劃者 2026-10-28「心魔重複打的時候削弱他好了」（「僵持也算過關」被否了：太簡單）：
+    每輸一次（含僵持）難度的倍數降 demon_weaken，降到 demon_floor 為止，所以不會永遠卡在那裡。"""
+    game = _game()
+    s, c = game.state, game.content
+    _begin(game)
+    line = next(iter(s.player.storylines))
+    progress = s.player.storylines[line]
+    stage = epiphany.storyline.definition(c, progress).stage("demon")
+    r = c.config.epiphany
+    assert r.demon_weaken > 0 and 0 < r.demon_floor < r.demon_scale   # 設定真的開著
+    base = game._mirror_squad(progress, stage).difficulty
+
+    seen = [base]
+    for tries in range(1, 9):
+        progress.tries = tries
+        seen.append(game._mirror_squad(progress, stage).difficulty)
+    assert seen[1] < seen[0]                                         # 輸一次就弱一點
+    assert all(b <= a for a, b in zip(seen, seen[1:]))               # 一路不回頭
+    floor_at = int(round((r.demon_scale - r.demon_floor) / r.demon_weaken))
+    assert seen[floor_at] == seen[floor_at + 1] == seen[-1]          # 到底就不再削
+    assert seen[-1] == pytest.approx(base * r.demon_floor / r.demon_scale, rel=0.02)
+
+
+def test_other_mirror_fights_are_not_weakened():
+    """削弱只掛在帶了 mirror_weaken 的那一關；沒帶的（預設 0）一個字都不變。"""
+    game = _game()
+    s, c = game.state, game.content
+    _begin(game)
+    progress = next(iter(s.player.storylines.values()))
+    stage = epiphany.storyline.definition(c, progress).stage("demon")
+    plain = stage.model_copy(update={"mirror_weaken": 0.0, "mirror_floor": 0.0})
+    progress.tries = 0
+    first = game._mirror_squad(progress, plain).difficulty
+    progress.tries = 5
+    assert game._mirror_squad(progress, plain).difficulty == first
+
+
 def test_path_follows_method_and_shape_and_the_righteous_road_needs_good_name():
     game = _game()
     s, c = game.state, game.content

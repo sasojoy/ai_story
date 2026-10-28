@@ -9995,7 +9995,10 @@ class Game:
         × mirror，名字是 mirror_name。"""
         base = Squad(id=f"mirror:{progress.line}", name=stage.mirror_name, difficulty=1.0)
         power = team.power_vs(self.state, self.content, self.world, base, fresh=True, terrain=False, seal=False)
-        return base.model_copy(update={"difficulty": round(max(1.0, power * stage.mirror), 1)})
+        scale = stage.mirror
+        if stage.mirror_weaken:  # 重複挑戰時越打越弱（企劃者 2026-10-28）：輸過幾次就削幾次，削到 mirror_floor 為止
+            scale = max(stage.mirror_floor, stage.mirror - stage.mirror_weaken * progress.tries)
+        return base.model_copy(update={"difficulty": round(max(1.0, power * scale), 1)})
 
     # ── 混戰（翻地與爭搶，輿圖簡化設計 4.3）：出陣時撞上對面剛在這一塊推過的人，照截殺的規則打一場 ──
 
@@ -10592,17 +10595,20 @@ class Game:
     def sortie_cards(self) -> list[dict] | None:
         """main.sorties（欄位表 1.3；sortie_duel.card）：約戰關著、序章裡是 None；散人是空的。還沒打的約戰兩邊都列（對面的是應戰、同袍的是同去、
         自己的是 mine），結算完（或作廢）的只列自己有份的、留 keep_hours。同去那一顆照 _duel_join_extra 再驗；不同區的照 place_minutes 寫步行幾分。
-        多一個 result：看的人這一場的結果（大勝、險勝、僵持、落敗；沒結算是 None）。"""
+        多一個 result：看的人這一場的結果（大勝、險勝、僵持、落敗；沒結算是 None）；sides（兩軍的名字，同 sortie_card.sides）與 answer_stamina（應戰的體力）
+        每一張都帶：站的地方不是區塊時沒有 sortie_card，網頁的陣營名與底鈕的體力只能從這裡拿（FB-903）。還沒打的另帶約戰那一塊此刻的樣子
+        （holder、bars、to_flip、foe_pushing；應戰卡寫這一場牽動什麼，FB-904）。"""
         s, c = self.state, self.content
         if not self.duel_on() or prologue_rules.active(s, c):
             return None
         side = self._conquest_side()
         if side is None:
             return []
-        p, cfg = s.player, c.config.sortie
+        p, cfg, w = s.player, c.config.sortie, s.world
         region, _ = self._duel_region()
         keep = cfg.keep_hours * 3600
         left = self.answers_left()
+        sides ={x: c.scenario.faction_name(x, x) for x in conquest.SIDES}
         duels = sorted(self.world.sortie_duels().values(),
                        key=lambda d: (d.status not in ("open", "answered"), -(d.settled_at or d.opened_at), d.id))
         out: list[dict] = []
@@ -10618,6 +10624,17 @@ class Game:
             if card["role"] == "join" and card["can_join"] and (extra := self._duel_join_extra(duel)) is not None:
                 card["can_join"], card["why_not"] = False, extra
             card["result"] = sortie_duel.side_tier(duel, p.name)
+            # 出陣約戰網頁（FB-903）：站的地方不是區塊（豪族塢堡、南華觀……）就沒有 sortie_card，卡上的陣營名與應戰的體力要從每一張約戰卡自己帶
+            card["sides"], card["answer_stamina"] = dict(sides), cfg.answer_stamina
+            # 應戰卡寫的是這一場牽動的那一塊（FB-904，不是看的人自己推這一塊）：還沒打的帶約戰那一塊此刻歸誰、兩條進度（mine 是看的人這一邊、
+            # theirs 是約戰那一軍）、約戰那一軍離翻走還差多少、幾人在推——站在哪裡都一樣，守住了拉回的就是 theirs
+            if card["status"] in ("open", "answered"):
+                bars = conquest.bars(w, duel.block)
+                foe = bars.get(duel.attacker.side, 0.0)
+                card["holder"] = conquest.holder(w, c, duel.block)
+                card["bars"] = {"mine": round(bars.get(side, 0.0)), "theirs": round(foe)}
+                card["to_flip"] = max(0, round(conquest.FULL - foe))
+                card["foe_pushing"] = sum(1 for row in conquest.pushers(w, c, duel.block) if row["side"] == duel.attacker.side)
             out.append(card)
         return out
 
@@ -10652,8 +10669,10 @@ class Game:
 
     def sortie_card(self) -> dict | None:
         """main.sortie_card（欄位表 1.3 的「出陣前那張卡」；main.sortie 是出陣開著的布林、照舊）：約戰關著、序章、散人、在路上、不是區塊是 None。
-        這一塊（兩條各幾成、離易手、對面幾人在推、同袍幾人與集火、運糧隊）、贏了（推一程、貢獻、離下一階、戰利、翻了分紅、軍令對不對、戰書還差）、
-        今天還能幾次、冷卻、能封的招、貼不了的原因。"""
+        這一塊（此刻歸誰、兩條各幾成與對面那一條是哪一軍、離易手、對面幾人在推、同袍幾人與集火、運糧隊）、贏了（推一程、貢獻、離下一階、戰利、
+        翻了分紅、軍令對不對、戰書還差）、今天還能幾次、冷卻、能封的招、貼不了的原因、兩軍的名字、約戰窗幾分鐘、應戰的體力（出陣約戰網頁丙，
+        2026-10-28：網頁不寫死陣營名、10 分、12）。自家的地方（搶得下來、此刻是自己這一邊的；按出陣只會「等對面來約」）：to_flip 是對面離翻走
+        這裡還差多少、gain 是 None（守就是應戰，推不了自家的條）。"""
         s, c = self.state, self.content
         if not self.duel_on() or prologue_rules.active(s, c):
             return None
@@ -10666,6 +10685,9 @@ class Game:
         bars = conquest.bars(w, loc)
         mine = bars.get(side, 0.0)
         theirs = max((v for k, v in bars.items() if k != side), default=0.0)
+        foe = next((x for x in conquest.SIDES if x != side), None)  # 交戰兩軍只有兩邊：對面那一條就是另一軍的
+        holder = conquest.holder(w, c, loc)
+        own = conquest.capturable(c, loc) and holder == side
         nominal = conquest.sortie_nominal(c, loc, "attack")
         est, focus = self._duel_amount(side, loc, nominal * cfg.result_scale["win"], p.name)
         squad = self._duel_squad(loc)
@@ -10686,17 +10708,20 @@ class Game:
         contribution = push.contribution(nominal, 1.0, 1.0, c.config.contrib_per_push, c.config.over_cap_contrib_ratio) \
             if calendar.season_one_on(w, c) else 0
         return {
-            "block": loc, "place": c.locations[loc].name,
-            "bars": {"mine": round(mine), "theirs": round(theirs)}, "to_flip": max(0, round(conquest.FULL - mine)),
+            "block": loc, "place": c.locations[loc].name, "holder": holder,
+            "sides": {x: c.scenario.faction_name(x, x) for x in conquest.SIDES},
+            "bars": {"mine": round(mine), "theirs": round(theirs), "theirs_side": foe},
+            "to_flip": max(0, round(conquest.FULL - (theirs if own else mine))),
             "foe_pushing": sum(1 for row in conquest.pushers(w, c, loc) if row["side"] != side),
             "allies": round(focus / qcfg.focus_step) if qcfg.focus_step > 0 else 0, "focus_bonus": round(focus, 2),
             "convoy_at": c.squads[convoy[0]].name if convoy else None,
-            "gain": {
+            "gain": None if own else {
                 "push": round(est), "contribution": contribution, "rank_next": rank_next, "loot": self._duel_loot(squad),
                 "dividend": round(pool * part), "order_match": order_match, "letter_gap": max(0, round(qcfg.letter_at - mine)),
             },
             "left_today": self.sorties_left(), "cooldown_until": cooldown, "cost": cfg.jianfa_stamina,
             "moves": list(cfg.moves), "why_not": self.sortie_go_problem() or "",
+            "window_minutes": cfg.window_minutes, "answer_stamina": cfg.answer_stamina,
         }
 
     # ── 約戰到時：結算（Review Focus 第 1 條）──
@@ -15374,6 +15399,8 @@ class Game:
         out = mapdata.state(
             s, c, odds=self.odds, sortie_mode=lambda loc_id: judge(loc_id)[0], sorties_left=self.sorties_left() if on else None,
             real_minutes=self._real_minutes, sortie_foes=foes, mostly=self.map_mostly(),
+            # 截糧的運糧隊正打那裡經過：出陣那一格是「出陣・截糧」、打運糧隊（_duel_option），輿圖卡上的鈕也寫截糧、不掛攻的勝算（FB-905）
+            convoy=(lambda loc_id: bool(orders.extra_enemies(s, c, loc_id, faction))) if duel else None,
         )
         for loc_id, info in out["places"].items():  # 地點卡上那一句這一帶多兇（尋敵分級，Joy 2026-10-22：不寫幾級）；沒有是空字串
             info["fierce"] = self._fierce_line(c.locations[loc_id])
