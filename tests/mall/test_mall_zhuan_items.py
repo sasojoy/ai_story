@@ -602,7 +602,7 @@ def test_more_writers_than_lines_repeats_instead_of_failing():
 
 def test_the_content_pools_are_big_enough_for_the_most_writers_a_piece_can_have():
     content = jianfa_game().content
-    most = 4  # 白送的評曰一組至少四句（深交不限人數之後，多過四位就照 fixed_verdicts 往別組借、再重複）
+    most = content.config.jianfa.verdict_affinity_max + 1  # 情誼寫手最多三位，再加一位買來的
     assert len(content.verdicts[zhuan_end.AFFINITY]) >= most
     assert len(content.verdicts[zhuan_end.BOUGHT]) >= content.mall["zhuan_quote"].limit.season
     lines = [line for pool in content.verdicts.values() for line in pool]
@@ -617,7 +617,8 @@ def test_the_content_check_catches_a_repeated_line():
     assert any("重複" in p for p in problems)
 
 
-def test_four_deep_friends_and_a_tier_writer_get_five_different_lines():
+def test_four_deep_friends_and_a_tier_writer_get_the_top_three_and_four_different_lines():
+    """深交不限人數（企劃者 2026-10-28），評曰只取情誼最高的前三位（PM 2026-10-28，Config.jianfa.verdict_affinity_max）：第四位關羽不寫。"""
     game = make_game()
     p = game.state.player
     p.contrib = 120  # 第一階：官軍的主將（皇甫嵩，情誼 0）替他寫
@@ -629,11 +630,11 @@ def test_four_deep_friends_and_a_tier_writer_get_five_different_lines():
     request = game.biography_request(1)
     assert [(j.fid, j.reason) for j in request.verdicts] == [
         ("huangfusong", zhuan_end.TIER), ("zhujun", zhuan_end.AFFINITY), ("caocao", zhuan_end.AFFINITY),
-        ("liubei", zhuan_end.AFFINITY), ("guanyu", zhuan_end.AFFINITY)]
-    assert len({j.fixed for j in request.verdicts}) == 5
+        ("liubei", zhuan_end.AFFINITY)]
+    assert len({j.fixed for j in request.verdicts}) == 4
     assert game.write_biography(request, None, game.now + 30)  # 模型叫不動：整篇都是固定句
     said = [para.split("：「", 1)[1] for para in verdict_paras(game.biography_view(1)["paragraphs"])]
-    assert len(said) == 5 and len(set(said)) == 5
+    assert len(said) == 4 and len(set(said)) == 4
 
 
 def test_a_single_writer_keeps_the_old_entry_point():
