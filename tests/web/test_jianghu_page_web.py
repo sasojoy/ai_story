@@ -49,15 +49,19 @@ const code = src.slice(head, tail) + fn("ownOpen") + konst("callKey") + fn("call
 
 // 假的頁面：每個元素是 { kind, classes, attrs, dataset, ... }；選擇器照 app.js 用到的那幾個寫成判斷式
 const all = [];
+// class 屬性照真的瀏覽器（FB-9010）：classList.add 會建出 class 屬性，拿光之後屬性還在、是空的 class=""，只有 removeAttribute("class") 才真的沒有；
+// e.hasClassAttr 記屬性有沒有，:not([class]) 看的就是它（沒有 class 的 <p> 一收一放就變成有 class 屬性的，除非程式自己把空的屬性拿掉）
 const el = (kind, classes = [], extra = {}) => {
-  const e = { kind, classes: new Set(classes), attrs: {}, dataset: {}, ...extra };
+  const e = { kind, classes: new Set(classes), attrs: {}, dataset: {}, hasClassAttr: classes.length > 0, ...extra };
   e.classList = {
-    add: (...c) => c.forEach((x) => e.classes.add(x)), remove: (...c) => c.forEach((x) => e.classes.delete(x)),
-    contains: (c) => e.classes.has(c), toggle: (c, on) => (on ?? !e.classes.has(c)) ? e.classes.add(c) : e.classes.delete(c),
+    add: (...c) => { c.forEach((x) => e.classes.add(x)); e.hasClassAttr = true; }, remove: (...c) => c.forEach((x) => e.classes.delete(x)),
+    contains: (c) => e.classes.has(c),
+    toggle: (c, on) => { if (on ?? !e.classes.has(c)) { e.classes.add(c); e.hasClassAttr = true; } else e.classes.delete(c); },
     replace: (a, b) => { if (!e.classes.has(a)) return false; e.classes.delete(a); e.classes.add(b); return true; },
   };
   e.setAttribute = (k, v) => { e.attrs[k] = String(v); };
-  e.removeAttribute = (k) => { delete e.attrs[k]; };
+  e.getAttribute = (k) => (k === "class" ? (e.hasClassAttr ? [...e.classes].join(" ") : null) : k in e.attrs ? e.attrs[k] : null);
+  e.removeAttribute = (k) => { if (k === "class") { e.classes.clear(); e.hasClassAttr = false; } delete e.attrs[k]; };
   all.push(e);
   return e;
 };
@@ -235,7 +239,7 @@ if (scene) {
     : s === ":scope > p" ? (mhead ? musterLines[0] || null : title) : s === ":scope > .battle-shut" ? (L.battleShut ? {} : null)
     : s === ":scope > .scene-art" ? art : null);
   scene.querySelectorAll = (s) => (s === ":scope > hr ~ p" && hr ? own : s === ".fit-clip" ? all.filter((x) => has(x, "fit-clip"))
-    : s === ":scope > p:not([class])" ? [descHead, ...descParas].filter(Boolean) : []);
+    : s === ":scope > p:not([class])" ? [descHead, ...descParas].filter((x) => x && !x.hasClassAttr) : []);
 }
 const S = Object.assign({ stage: "game", tab: "jianghu", hearOpen: null, linesOpen: null, extraOpen: null, ownOpen: null, hintTight: false, hintOpen: false, renownTight: false,
   fitWidth: 0, main: { card_id: 7, scene: "<p>x</p>", on_road: false } }, input.S || {});
@@ -256,7 +260,7 @@ const snap = () => ({
   calls: callRows.map((x) => has(x, "fit-hide")), more: callsMore ? [callsMore.textContent, callsMore.dataset.fit || ""] : null,
   renownTight: S.renownTight, merit: meritSmalls.map((x) => has(x, "fit-hide")),
   art: art ? [...art.classes].sort() : null, extra: extra ? [...extra.classes].sort() : null, extraAttrs: extra ? extra.attrs : null,
-  desc: descParas.map((x) => [...x.classes].sort()), descAttrs: descParas.map((x) => ({ ...x.attrs })), descHead: descHead ? [...descHead.classes].sort() : null,
+  desc: descParas.map((x) => [...x.classes].sort()), descAttrs: descParas.map((x) => ({ ...x.attrs })), descClassAttr: descParas.map((x) => x.getAttribute("class")), descHead: descHead ? [...descHead.classes].sort() : null,
   peek: peek ? [...peek.classes].sort() : null, notes: notes.map((x) => has(x, "fit-hide")), nowWas: now ? now.dataset.fitWas || null : null,
 });
 finish(new Function("H", "S", "snap", "L", "W", "els", input.script || "H.fitFirstScreen(); return snap();")(
@@ -949,6 +953,43 @@ def test_refitting_gives_the_same_result_each_time_and_unfolds_when_the_duel_is_
     assert out["a"]["desc"] == out["b"]["desc"] == out["c"]["desc"] == [["fit-clip"], ["fit-clip"]] and out["a"]["bottom"] == out["c"]["bottom"]
     assert out["gone"]["fitted"] == [] and out["gone"]["desc"] == [[], []] and out["gone"]["descAttrs"] == [{}, {}]  # 行動列 700 本來放得下
     assert "fit-own" not in out["gone"]["scene"]
+
+
+@node
+def test_the_description_is_folded_again_after_every_refit_that_does_not_redraw():
+    """FB-9010：沒有重畫的重量（轉向再轉回、視窗寬 375→376→375、點名號展開再收起）都從 fitReset 開始：先把收成一行的描述攤回來、再量。
+    真的瀏覽器的 classList 拿光 class 之後留下空的 class=""，第 6c 步的選擇器 :scope > p:not([class]) 就再也選不到那一段（假 DOM 照這樣做），
+    折疊從第二次量起消失、約戰鈕掉回分頁列底下（實機 375×667 −18.4 → +8.7、360×700 −51.4 → +2.9）。每一種之後：描述還收著、鈕整顆在第一屏。"""
+    script = """
+      H.fitFirstScreen(); const first = snap();
+      W.innerWidth = 376; H.fitOnResize(); const wider = snap();
+      W.innerWidth = 375; H.fitOnResize(); const back = snap();
+      const h0 = els.top.offsetHeight; els.top.offsetHeight = h0 + 80; H.fitTopMoved(h0); const expanded = snap();
+      els.top.offsetHeight = h0; H.fitTopMoved(h0 + 80); const collapsed = snap();
+      H.fitFirstScreen(); const again = snap();
+      return { first, wider, back, expanded, collapsed, again };"""
+    out = run(DESC, script)
+    for name, shot in out.items():
+        assert shot["fitted"] == ["space", "desc"], name
+        assert shot["desc"] == [["fit-clip"], ["fit-clip"]] and shot["descAttrs"] == [FOLD_ATTRS, FOLD_ATTRS], name
+        assert shot["bottom"] + 90 <= 740, name  # 約戰鈕整顆露在分頁列頂往上 16 以內
+
+
+@node
+def test_unfolding_a_description_leaves_no_empty_class_attribute_behind():
+    """FB-9010 的根：收成一行（加 fit-clip）再攤回來（拿掉 fit-clip），那一段又沒有 class 屬性了（不是空的 class=""），下一次量還選得到。
+    攤回來有兩條路：重量時 fitReset、點了描述 ownOpen；還有一條是收了才發現數字會被「…」吞掉、當場退回的那一段。"""
+    script = """
+      H.fitFirstScreen(); const folded = snap();
+      L.duel = 0; H.fitFirstScreen(); const reset = snap();
+      L.duel = 90; H.fitFirstScreen(); H.ownOpen(); const opened = snap();
+      return { folded, reset, opened };"""
+    out = run(DESC, script)
+    assert out["folded"]["descClassAttr"] == ["fit-clip", "fit-clip"]
+    assert out["reset"]["descClassAttr"] == [None, None] and out["opened"]["descClassAttr"] == [None, None]
+    long_run = "黃河南岸的渡口，渡船往來不絕。往南的官道這裡通往潁川有 12 條路"  # 數字在一行（300px）之外：收了就退回，那一段不是空的 class=""
+    edge = run({**DESC, "texts": {"desc": [long_run, "渡口今日有 5 艘船"]}}, measure=True)
+    assert edge["desc"] == [[], ["fit-clip"]] and edge["descClassAttr"] == [None, "fit-clip"]
 
 
 def _html_tree(html: str) -> dict:

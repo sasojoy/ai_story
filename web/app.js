@@ -1264,7 +1264,7 @@
     let any = false;
     paras.forEach((p) => {
       p.classList.add("fit-clip");
-      if (!fitDigitsShown(p)) { p.classList.remove("fit-clip"); return; }
+      if (!fitDigitsShown(p)) { dropClip(p); return; }
       p.setAttribute("data-act", "own-more");
       p.setAttribute("role", "button");
       p.setAttribute("tabindex", "0");
@@ -1297,9 +1297,15 @@
     const first = String(m.scene || "").split("</p>")[0].replace(/[0-9０-９]+/g, "#");
     return `${(m.status && m.status.location) || ""}|${first}`;
   }
+  // 拿掉收成一行的記號。classList 拿光 class 之後，真的瀏覽器留下空的 class=""，而第 6c 步（desc）用 :scope > p:not([class]) 挑沒有 class 的描述段落——
+  // 空屬性還在就再也選不到：沒有重畫的重量（轉向、拉視窗、點名號展開再收起）之後折疊消失、約戰鈕又掉回分頁列底下（FB-9010）。空了就把屬性整個拿掉
+  function dropClip(p) {
+    p.classList.remove("fit-clip");
+    if (!p.getAttribute("class")) p.removeAttribute("class");
+  }
   function fitUnclip(root) {
     root.querySelectorAll(".fit-clip").forEach((p) => {
-      p.classList.remove("fit-clip");
+      dropClip(p);
       ["data-act", "role", "tabindex", "aria-expanded"].forEach((a) => p.removeAttribute(a));
     });
   }
