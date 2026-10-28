@@ -94,8 +94,8 @@ def classic_rules(content: Content) -> Content:
 
 
 def no_week_unlock(content: Content) -> Content:
-    """功能照週解鎖（減法季 6.6，Config.jianfa.week_unlock）關掉，回傳同一份內容：用 week7／season21 的正式內容、開季第一天就要進鐵匠鋪、
-    擂台、自創、懸賞榜的舊測試叫它（那幾樣在減法季第 2 週才開）；解鎖本身的測試在 tests/test_week_unlock.py。"""
+    """功能照週解鎖（減法季 6.6，Config.jianfa.week_unlock）關掉，回傳同一份內容：用 week7／season21 的正式內容、開季第一天就要進
+    擂台、懸賞榜的舊測試叫它（那兩樣在減法季第 2 週才開；鐵匠鋪 2026-10-27、自創 2026-10-28 起開季就有）；解鎖本身的測試在 tests/test_week_unlock.py。"""
     content.config.jianfa.week_unlock = False
     return content
 
