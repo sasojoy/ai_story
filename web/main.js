@@ -646,10 +646,10 @@
     if (!c.gain) return `${sides[me] || ""}的地方・${sides[them] || ""}推到 ${c.bars.theirs}／100`;
     return `${c.holder ? `${first(c.holder)}佔` : "中立"}・${first(me)} ${c.bars.mine}／${first(them)} ${c.bars.theirs}・還差 ${c.to_flip} 易手`;
   }
-  // 「這一塊」攤開：兩條（自己那一條疊上這一程推得到的地方）與幾顆小籤。noGain：應戰那一張不疊
-  function sxBars(c, noGain = false) {
+  // 「這一塊」攤開：兩條（自己那一條疊上這一程推得到的地方）與幾顆小籤
+  function sxBars(c) {
     const sides = c.sides || {}, me = sxMine(c), them = c.bars.theirs_side;
-    const gain = !noGain && c.gain && !c.why_not ? Math.max(0, Math.min(Number(c.gain.push), 100 - c.bars.mine)) : 0;
+    const gain = c.gain && !c.why_not ? Math.max(0, Math.min(Number(c.gain.push), 100 - c.bars.mine)) : 0;
     const row = (side, v, mine) => `<div class="sf-row side-${esc(side)}${mine ? " mine" : ""}"><span class="sf-name">${esc(sides[side] || "")}</span>`
       + `<span class="sf-bar"><i class="sf-fill" style="width:${pct(v, 100)}%"></i>${mine && gain ? `<i class="sf-gain" style="left:${pct(v, 100)}%;width:${pct(gain, 100)}%"></i>` : ""}</span>`
       + `<span class="sf-num">${Number(v)}</span></div>`;
@@ -658,6 +658,20 @@
       : [`推滿 100 易手・還差 ${c.to_flip}`, foes, c.allies ? `同袍 ${c.allies} 人・集火 +${Math.round(c.focus_bonus * 100)}%` : "同袍還沒人來",
         c.convoy_at ? `運糧隊「${c.convoy_at}」正經過` : ""].filter(Boolean);
     return row(me, c.bars.mine, true) + row(them, c.bars.theirs, false) + `<div class="sf-chips">${chips.map((t) => `<span class="sf-chip">${esc(t)}</span>`).join("")}</div>`;
+  }
+  // 應戰卡的「這一塊」（FB-904）：寫這一場牽動什麼——約戰那一軍在那一塊推到幾、離翻走（沒人佔的寫拿下）還差多少，守住了拉回它。
+  // 資料是約戰卡自己帶的（d.bars：mine 看的人這一邊、theirs 約戰那一軍；d.to_flip、d.foe_pushing、d.holder），不是看的人自己推這一塊
+  // （以前借出陣卡的 sxBars，小籤寫的是自己「推滿 100 易手・還差 75」「同袍還沒人來」，跟這一場無關）。新寫的字待 joy 潤
+  const sxWin = (d) => (d.holder ? "翻走" : "拿下");
+  function sxDutyLine(m, d) {
+    return `${sxSide(m, d.attacker_side, d)} ${d.bars.theirs}／100・還差 ${d.to_flip} ${sxWin(d)}`;
+  }
+  function sxDutyBars(m, d) {
+    const them = d.attacker_side, me = Object.keys(d.sides || {}).find((k) => k !== them) || "";
+    const row = (side, v, mine) => `<div class="sf-row side-${esc(side)}${mine ? " mine" : ""}"><span class="sf-name">${esc(sxSide(m, side, d))}</span>`
+      + `<span class="sf-bar"><i class="sf-fill" style="width:${pct(v, 100)}%"></i></span><span class="sf-num">${Number(v)}</span></div>`;
+    const chips = [`${sxSide(m, them, d)}推滿 100 才${sxWin(d)}・還差 ${d.to_flip}`, d.foe_pushing ? `對面 ${d.foe_pushing} 人在推` : "對面沒人在推", "守住了能拉回它的進度"];
+    return row(me, d.bars.mine, true) + row(them, d.bars.theirs, false) + `<div class="sf-chips">${chips.map((t) => `<span class="sf-chip">${esc(t)}</span>`).join("")}</div>`;
   }
   // 「贏了」攤開：推一程、貢獻、戰利、易手分紅、軍令、戰書（照險勝估，伺服器算好的數字）
   function sxGain(c) {
@@ -715,11 +729,9 @@
     if (!d && !(sortieCardOn(m) && S.wheelSel === SX_OPEN)) return "";
     let top, body;
     if (d) {
-      const same = !!c && c.block === d.block; // 約戰的那一塊就是腳下這一塊：兩條的數字卡上有
-      const first = (s) => sxSide(m, s, d).slice(0, 1);
       top = `<p class="sx-top"><b>應戰・${esc(d.place)}</b><span>${esc(d.attacker)}約戰・還有 ${sxMins(d.expires_in)} 分</span></p>`;
-      body = (same ? sxFold("block", "這一塊", `${first(sxMine(c))} ${c.bars.mine}／${first(d.attacker_side)} ${c.bars.theirs}・${c.foe_pushing ? `對面 ${c.foe_pushing} 人在推` : "對面沒人在推"}`, sxBars(c, true))
-        : `<p class="sx-flat"><b>這一塊</b><span>${esc(d.place)}</span></p>`)
+      // 「這一塊」寫的是這一場牽動的那一塊（約戰卡自己帶的 bars、to_flip，站在哪裡都一樣，FB-904）；沒帶（舊資料）就只寫地名
+      body = (d.bars ? sxFold("block", "這一塊", sxDutyLine(m, d), sxDutyBars(m, d)) : `<p class="sx-flat"><b>這一塊</b><span>${esc(d.place)}</span></p>`)
         + sxFold("keep", "守住了", "拉回對面的進度・記貢獻・經驗心得", sxKeep(m, d));
     } else {
       const g = c.gain;

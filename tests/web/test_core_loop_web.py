@@ -311,6 +311,50 @@ def test_answering_off_a_block_still_names_the_armies_and_shows_the_stamina():
     assert "<b>封好三招，應戰</b><small>固守・固守・固守・體力 12・今日還能應戰 3 次</small>" in sealed
 
 
+# FB-904（PM 照 QA 驗收順帶開，2026-10-28）：守方應戰卡「這一塊」那一行的小籤寫的是看的人自己推這一塊（「推滿 100 易手・還差 75」「同袍還沒人來」），
+# 跟這一場應戰無關。現在寫這一場牽動什麼：約戰那一軍推到幾、離翻走（沒人佔的拿下）還差多少，守住了拉回它；資料是約戰卡自己帶的，站在哪裡都一樣
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("where", ["runan_wilds", "jade_cave"])  # 站在約戰的那一塊上／站在同一區不是區塊的地方
+def test_the_answer_card_says_what_this_fight_touches_not_my_own_push(where):
+    from duel_kit import do, seat
+
+    from tianxia import conquest
+
+    c, world = _duel_cast()
+    seat(c, world, "乙", "huang", where)
+    do(c, world, "甲", lambda g: g.choose("sortie:go:強攻,固守,奇襲"))
+
+    def push(g):  # 官軍在汝南荒野推到 30
+        conquest._fight(g.state.world, c, "runan_wilds").bars.setdefault("guan", conquest.Bar()).value = 30.0
+
+    do(c, world, "甲", push)
+    duel_id = next(iter(world.sortie_duels()))
+    m = _view(c, world, "乙", 1_792_000_060.0)
+    out = _clicks(m, [{"act": "sortie-answer", "id": duel_id}])
+    card = out["bars"][0]
+    assert '<summary><b>這一塊</b><span>官軍 30／100・還差 70 拿下</span></summary>' in card  # 沒人佔的地方寫「拿下」
+    assert ">官軍</span>" in card and '<span class="sf-num">30</span>' in card and '<span class="sf-num">0</span>' in card  # 兩條：對面 30、自己這一邊 0
+    assert "官軍推滿 100 才拿下・還差 70" in card and "對面沒人在推" in card and "守住了能拉回它的進度" in card
+    assert "推滿 100 易手" not in card and "同袍還沒人來" not in card and "集火" not in card  # 看的人自己推這一塊的小籤不在應戰卡上
+
+
+def test_a_held_block_says_flip_and_a_card_without_numbers_only_names_the_place():
+    base = {"id": "d", "block": "b", "place": "某地", "attacker": "甲", "attacker_side": "huang", "defender": None, "expires_in": 300, "answers_left": 3,
+            "same_region": True, "travel_minutes": None, "result": None, "why_not": "", "can_answer": True, "can_join": False, "status": "open",
+            "role": "answer", "sides": {"guan": "官軍", "huang": "黃巾軍"}, "answer_stamina": 12}
+    held = {**base, "holder": "guan", "bars": {"mine": 60, "theirs": 25}, "to_flip": 75, "foe_pushing": 2}
+    for row, line in ((held, "黃巾軍 25／100・還差 75 翻走"), (base, None)):
+        m = {"options": [], "sorties": [row], "status": {}}
+        card = run(m, "H.S.sortieAnswer = 'd'; return H.actionBar(H.S.main);")
+        if line:
+            assert f"<span>{line}</span>" in card and "黃巾軍推滿 100 才翻走・還差 75" in card and "對面 2 人在推" in card
+            assert '<span class="sf-name">官軍</span>' in card and '<span class="sf-num">60</span>' in card
+        else:
+            assert '<p class="sx-flat"><b>這一塊</b><span>某地</span></p>' in card  # 舊資料沒有那幾個鍵：只寫地名
+
+
 def test_duel_rows_sort_and_settled_ones_say_how_it_went():
     base = {"block": "b", "place": "某地", "attacker_side": "huang", "defender": None, "expires_in": 300, "answers_left": 3,
             "same_region": True, "travel_minutes": None, "result": None, "why_not": "", "can_answer": False, "can_join": False}

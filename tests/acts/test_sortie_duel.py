@@ -183,6 +183,29 @@ def test_every_duel_card_carries_both_army_names_and_the_answer_stamina_even_off
     assert mine["sides"] == card["sides"] and mine["answer_stamina"] == cfg.answer_stamina
 
 
+def test_a_live_duel_card_says_where_the_block_stands_for_the_side_that_posted(monkeypatch):
+    """FB-904：應戰卡寫的是這一場牽動的那一塊——約戰那一軍推到幾、離翻走還差多少、幾人在推；站在哪裡都一樣，打完的那一張不帶。"""
+    c, world = _pair()
+    seat(c, world, "乙", "huang", "jade_cave")  # 站的地方不是區塊
+    _go(c, world)
+
+    def push(g):  # 官軍在汝南荒野推到 30（約戰之外的人先推過）
+        conquest._fight(g.state.world, c, LOC).bars.setdefault("guan", conquest.Bar()).value = 30.0
+
+    do(c, world, "甲", push)
+    card = game_of(c, world, "乙").sortie_cards()[0]
+    assert card["holder"] is None and card["bars"] == {"mine": 0, "theirs": 30} and card["to_flip"] == 70 and card["foe_pushing"] == 0
+    assert game_of(c, world, "甲").sortie_cards()[0]["bars"] == {"mine": 30, "theirs": 30}  # 自己貼的那一張：兩條都是官軍的
+    seat(c, world, "乙", "huang", LOC)  # 站在那一塊上：數字一樣（以前借出陣卡寫自己這一邊）
+    assert game_of(c, world, "乙").sortie_cards()[0]["bars"] == {"mine": 0, "theirs": 30}
+    duel = _only(world)
+    _answer(c, world, "乙", duel.id)
+    rounds_go(monkeypatch, "大勝")
+    tick(c, world, NOW + WINDOW + 1)
+    settled = game_of(c, world, "乙", NOW + WINDOW + 2).sortie_cards()[0]
+    assert settled["status"] == "settled" and {"bars", "to_flip", "holder", "foe_pushing"}.isdisjoint(settled)  # 打完了：只剩結果
+
+
 def test_the_same_side_can_only_join():
     c, world = _pair()
     seat(c, world, "丙", "guan")
