@@ -188,6 +188,25 @@ def test_the_demon_is_your_own_shadow():
     assert squad.name == "心魔" and squad.difficulty == pytest.approx(round(power * c.config.epiphany.demon_scale, 1), abs=0.11)
 
 
+def test_config_changes_reach_a_line_that_is_already_running():
+    """程式組的線把整份定義存進 progress.custom，所以改了設定本來只對之後新開的線有效
+    （線上踩到：心魔的 retry_days 從一天改成一個時辰、削弱也加了，正在走的人完全沒吃到）。
+    storyline.REFRESH_HOOKS 讓每次讀出來的那一份照此刻的設定重算。"""
+    game = _game()
+    s, c = game.state, game.content
+    _begin(game)
+    progress = next(iter(s.player.storylines.values()))
+    frozen = progress.custom.stage("demon")          # 存檔裡凍著的那一份
+    assert frozen is not None
+
+    c.config.epiphany.retry_days = 0.5               # 開線之後才改設定
+    c.config.epiphany.demon_weaken = 0.2
+    c.config.epiphany.demon_floor = 0.5
+    live = storyline.definition(c, progress).stage("demon")
+    assert live.retry_days == 0.5 and live.mirror_weaken == 0.2 and live.mirror_floor == 0.5
+    assert progress.custom.stage("demon") is frozen   # 存檔沒被改，只有讀出來的那一份
+
+
 def test_the_retry_note_counts_down_from_retry_at():
     """FB-900：那句話以前寫死「再等一個時辰」（照 StoryStage.retry_days 的預設 1/12），
     心魔那一關卻用 Config.epiphany.retry_days 覆蓋它，字就騙人。現在照 retry_at 算。"""

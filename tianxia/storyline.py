@@ -73,8 +73,17 @@ def on(content: Content, state: GameState) -> bool:
     return jianfa(content, state.world, "storylines")
 
 
+# 程式組的線每次讀出來要照設定重算的數字（kind → 一個函式，拿 content 與那一份 StoryDef，回新的）：
+# custom 的線把整個定義存進存檔（progress.custom），不這樣做的話改了設定只對之後新開的線有效
+# （線上踩到：心魔的 retry_days 從一天改成一個時辰、削弱也加了，正在走的人卻完全沒吃到）。
+REFRESH_HOOKS: dict[str, Callable[[Content, StoryDef], StoryDef]] = {}
+
+
 def definition(content: Content, progress: StoryProgress) -> StoryDef | None:
-    return progress.custom if progress.custom is not None else content.storylines.get(progress.line)
+    if progress.custom is None:
+        return content.storylines.get(progress.line)
+    refresh = REFRESH_HOOKS.get(progress.custom.kind)
+    return refresh(content, progress.custom) if refresh is not None else progress.custom
 
 
 def active(state: GameState) -> list[StoryProgress]:
