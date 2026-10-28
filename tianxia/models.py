@@ -3319,8 +3319,7 @@ class JianfaRules(JianfaNumbers):
     # 豪強的投靠點 → 投靠那一下預設幫哪一軍（wins.lean_default；content.validate 叫 wins.check 驗每個投靠點都有、都是它能幫的那一軍）
     lean_default_by_join: dict[str, str] = Field(default_factory=lambda: dict(LEAN_DEFAULT_BY_JOIN))
     # ── 批 7b：列傳為終點（整合設計第九章；主機側計畫第八節；tianxia/zhuan_end.py）──
-    zhuan_end: bool = True  # 第九章 列傳為終點：行狀補齊（季末論功、〈天下形勢〉）、人物評曰、四件商品、深交上限（批 7b）
-    deep_figures: int = Field(default=3, ge=0)  # 同時情誼漲得過 signature_affinity 的人物最多幾位【預設】（企劃者 2026-10-24；深交名額票多一位）
+    zhuan_end: bool = True  # 第九章 列傳為終點：行狀補齊（季末論功、〈天下形勢〉）、人物評曰、列傳的三件商品（批 7b；深交上限企劃者 2026-10-28 拿掉）
     verdict_chars: int = Field(default=40, ge=1)  # 人物評曰一句最多幾個字【預設】
     verdict_budget_seconds: float = Field(default=40, gt=0)  # 一條評曰最多等模型幾秒（含排隊，排在真人後面）【預設】
 
