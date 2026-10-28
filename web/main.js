@@ -65,9 +65,11 @@
     return trailMoves(folded !== card ? folded : withReportLink(card, id));
   }
   // 「結果　…　得失　經驗 +5　氣血 -11…」那一段：每一樣以全形空白分開，各包成一顆 <span class="nb">（不換行），
-  // 換行只落在兩樣之間，不會把「氣血」和「-11」拆到兩行（2026-10-27 跑版回報）。只動含「得失」的那一段、不帶標籤的那幾樣
+  // 換行只落在兩樣之間，不會把「氣血」和「-11」拆到兩行（2026-10-27 跑版回報）。只動含「得失」的那一段、不帶標籤的那幾樣。
+  // 超過 16 個字的不包（那是「結果」裡的整句，例：約戰輸了「這一場輸了：內傷加重，下一次出陣與應戰多等 30 分。」24 個字）：包了就不能換行，
+  // 375 寬整頁被撐成 397 寬、分頁列落到畫面外（出陣約戰網頁實機，2026-10-28）
   function keepGainsWhole(card) {
-    return String(card).replace(/<p>(?:(?!<\/p>)[\s\S])*?<strong>得失<\/strong>(?:(?!<\/p>)[\s\S])*?<\/p>/g, (p) => p.replace(/(<\/strong>|　)([^　<\n]+)(?=　|<\/p>|<br)/g, (all, lead, item) => `${lead}<span class="nb">${item}</span>`));
+    return String(card).replace(/<p>(?:(?!<\/p>)[\s\S])*?<strong>得失<\/strong>(?:(?!<\/p>)[\s\S])*?<\/p>/g, (p) => p.replace(/(<\/strong>|　)([^　<\n]+)(?=　|<\/p>|<br)/g, (all, lead, item) => (item.length > 16 ? all : `${lead}<span class="nb">${item}</span>`)));
   }
   // 戰報裡招、功效、狀態那一句引擎寫成「〔疾風追影〕某某腳下一錯……」；畫面上人在前、招在後（招式與絕學稿案第一節）：
   // 「某某腳下一錯……〔疾風追影〕」，招名畫成一枚小籤。只動清單的一條（<li>），決戰那一條前面的陣營小標籤留在最前面
