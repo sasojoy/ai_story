@@ -8,7 +8,7 @@ from __future__ import annotations
 import pytest
 
 from duel_kit import LOC, duel_content, duel_world, game_of, seat
-from tianxia import conquest, orders
+from tianxia import conquest, mapdata, orders
 from tianxia.state import Order
 
 pytestmark = pytest.mark.slow  # 建 Game、載正式內容
@@ -116,6 +116,41 @@ def test_a_convoy_passing_an_unconnected_place_keeps_it_an_attack():
     state = game.map_state()
     assert state["places"][cannot]["sortie"] == "attack"
     assert cannot in {row["id"] for row in state["suggest"]}
+
+
+@pytest.mark.parametrize("off", [False, True], ids=["約戰開著", "約戰關著"])
+def test_a_passing_convoy_marks_only_its_place_and_only_with_duels_on(off):
+    """FB-905：輿圖那一處的 convoy 旗（網頁卡的鈕寫「出陣・截糧」、不掛攻的勝算）只在約戰開著、出陣標攻、運糧隊正打那裡經過時有；
+    沒有運糧隊、約戰關著（舊出陣照舊攻打駐軍與運糧隊擲一路）整份疊層一個鍵都不多。"""
+    c = duel_content("week7", off=off)
+    world = duel_world(c)
+    seat(c, world, "甲", "guan", LOC)
+    game = game_of(c, world, "甲")
+    assert all("convoy" not in info for info in game.map_state()["places"].values())
+    game.state.world.orders.append(Order(id="t:guan:intercept", template="intercept", faction="guan", week=orders.period_of(game.state, c),
+                                         location=LOC, quota=4, text="（測試）"))
+    state = game.map_state()
+    flagged = [loc for loc, info in state["places"].items() if "convoy" in info]
+    assert flagged == ([] if off else [LOC])
+    assert state["places"][LOC]["sortie"] == "attack"  # 輿圖照舊標攻（只換了鈕上的字）
+    own = _own_block(c, world, "guan")  # 自家的地方運糧隊經過：有運糧隊可打就照舊標攻（出陣那一格也是「出陣・截糧」），旗跟著在
+    game.state.world.orders.append(Order(id="t:guan:intercept2", template="intercept", faction="guan", week=orders.period_of(game.state, c),
+                                         location=own, quota=4, text="（測試）"))
+    state = game.map_state()
+    assert state["places"][own]["sortie"] == "attack" and state["places"][own].get("convoy") is (None if off else True)
+
+
+def test_only_the_places_marked_attack_get_the_convoy_flag():
+    """mapdata.state 的契約：convoy 是「運糧隊正打那裡經過」的判斷，旗只給出陣標攻的地方（不標攻的地方沒有那顆鈕，旗沒有用處、也不多一個鍵）。"""
+    c = duel_content("week7")
+    world = duel_world(c)
+    seat(c, world, "甲", "guan", LOC)
+    game = game_of(c, world, "甲")
+    quiet = {loc for i, loc in enumerate(c.locations) if i % 2}
+    state = mapdata.state(game.state, c, odds=game.odds, sortie_mode=lambda loc: None if loc in quiet else "attack", sorties_left=2,
+                          real_minutes=game._real_minutes, convoy=lambda loc: True)
+    flagged = {loc for loc, info in state["places"].items() if "convoy" in info}
+    assert flagged == {loc for loc, info in state["places"].items() if info["sortie"] == "attack"} and flagged and flagged.isdisjoint(quiet)
 
 
 @pytest.mark.parametrize("side", ["guan", "huang"])

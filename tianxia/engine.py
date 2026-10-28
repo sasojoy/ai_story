@@ -15396,6 +15396,8 @@ class Game:
         out = mapdata.state(
             s, c, odds=self.odds, sortie_mode=lambda loc_id: judge(loc_id)[0], sorties_left=self.sorties_left() if on else None,
             real_minutes=self._real_minutes, sortie_foes=foes, mostly=self.map_mostly(),
+            # 截糧的運糧隊正打那裡經過：出陣那一格是「出陣・截糧」、打運糧隊（_duel_option），輿圖卡上的鈕也寫截糧、不掛攻的勝算（FB-905）
+            convoy=(lambda loc_id: bool(orders.extra_enemies(s, c, loc_id, faction))) if duel else None,
         )
         for loc_id, info in out["places"].items():  # 地點卡上那一句這一帶多兇（尋敵分級，Joy 2026-10-22：不寫幾級）；沒有是空字串
             info["fierce"] = self._fierce_line(c.locations[loc_id])
