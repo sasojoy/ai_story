@@ -1,5 +1,5 @@
 """功能照週解鎖與三週主題（減法季整合設計 6.6、6.8、4.2；批 5；tianxia/week_unlock.py）：
-第 2 週才開的擂台、自創、懸賞榜（鐵匠鋪開季就有）；新手期內照自己的時鐘；開了那一刻一則紀錄、本週卡一句；第 3 週「離贏還差多少」留位；
+第 2 週才開的擂台、懸賞榜（鐵匠鋪、自創開季就有）；新手期內照自己的時鐘；開了那一刻一則紀錄、本週卡一句；第 3 週「離贏還差多少」留位；
 45 級之後那一句；四格探索的小字「城裡多事」。7 天與 21 天兩種季各走一遍；規則關著一個字都不變。"""
 from __future__ import annotations
 
@@ -64,19 +64,21 @@ def test_phase_cuts_the_season_in_three_and_weekcard_still_exports_it():
 
 @pytest.mark.parametrize("profile", ["week7", "season21"])
 def test_week_two_features_are_locked_on_day_one_and_open_in_stage_two(profile):
-    """開季第一天三樣都鎖著（鐵匠鋪不鎖，企劃者 2026-10-27）：入口不給、自創回「第 2 週起才開」、本週卡「為什麼」寫哪幾樣第 2 週開；走到第 2 段（新手期也過了）全開，
-    紀錄一行、本週卡一句；再過一個季曆天那一句不寫了，紀錄只寫一次。"""
+    """開季第一天兩樣鎖著（鐵匠鋪不鎖，企劃者 2026-10-27；自創不鎖，企劃者 2026-10-28「開季就有」）：擂台、懸賞榜入口不給、本週卡「為什麼」
+    寫哪幾樣第 2 週開（不列自創）；自創鎖著的那段時間照樣開（allowed 是 None、view 的 on 是真）；走到第 2 段（新手期也過了）全開，
+    紀錄一行、本週卡一句（也不列自創）；再過一個季曆天那一句不寫了，紀錄只寫一次。"""
     g = _game(profile)
     s, c = g.state, g.content
     assert rules.jianfa(c, s.world, "week_unlock")
     assert week_unlock.phase_now(s, c) == 0
-    assert _open(g) == {"smith": True, "arena": False, "bounties": False, "create": False}
-    assert create.allowed(s, c) == create.LOCKED.format(when=week_unlock.stage_label(1, c, s.world))
-    assert create.view(s, c, g.world)["on"] is False
+    assert _open(g) == {"smith": True, "arena": False, "bounties": False, "create": True}
+    assert create.allowed(s, c) is None
+    assert create.view(s, c, g.world)["on"] is True
     card = _card(g)
     assert card["theme"] == c.scenario.week_themes[0]
     assert card["unlock"] is None and card["gap"] is None and card["cap"] is None
-    assert card["locked"] == week_unlock.LOCKED.format(names="擂台、自創、懸賞榜", when=week_unlock.stage_label(1, c, s.world))
+    assert card["locked"] == week_unlock.LOCKED.format(names="擂台、懸賞榜", when=week_unlock.stage_label(1, c, s.world))
+    assert "自創" not in card["locked"]
     assert s.player.week_unlocked_at is None and not [e for e in s.journal if e.title == week_unlock.TITLE]
 
     _at(g, _stage(g, 2))
@@ -84,7 +86,7 @@ def test_week_two_features_are_locked_on_day_one_and_open_in_stage_two(profile):
     assert week_unlock.phase_now(s, c) == 1
     if roster.newbie(s, c):  # 7 天的季：開季那天 10:00 建的角色，第 3 天 00:00 進第 2 段時 48 小時的新手期還沒過——照自己的時鐘，再等 10 小時
         assert profile == "week7"
-        assert _open(g) == {"smith": True, "arena": False, "bounties": False, "create": False}
+        assert _open(g) == {"smith": True, "arena": False, "bounties": False, "create": True}
         assert s.player.week_unlocked_at is None and _card(g)["locked"] is not None
         _at(g, MON + 10 * HOUR + c.config.newbie_real_hours * HOUR + 60)
         s = g.state
@@ -94,10 +96,12 @@ def test_week_two_features_are_locked_on_day_one_and_open_in_stage_two(profile):
     assert s.player.week_unlocked_at == s.world.time
     entries = [e for e in s.journal if e.title == week_unlock.TITLE]
     assert len(entries) == 1
-    assert entries[0].lines == [week_unlock.journal_line(["擂台", "自創", "懸賞榜"], c, s.world)]
+    assert entries[0].lines == [week_unlock.journal_line(["擂台", "懸賞榜"], c, s.world)]
+    assert "自創" not in entries[0].lines[0]
     card = _card(g)
     assert card["theme"] == c.scenario.week_themes[1]
-    assert card["unlock"] == week_unlock.CARD.format(names="擂台、自創、懸賞榜") and card["locked"] is None
+    assert card["unlock"] == week_unlock.CARD.format(names="擂台、懸賞榜") and card["locked"] is None
+    assert "自創" not in card["unlock"]
 
     stamped = s.player.week_unlocked_at
     _at(g, g.now + (week_unlock.CARD_DAYS * DAY / calendar.cal_scale(c, s.world)) / c.config.time_scale + 60)
@@ -109,8 +113,8 @@ def test_week_two_features_are_locked_on_day_one_and_open_in_stage_two(profile):
 
 @pytest.mark.parametrize("profile", ["week7", "season21"])
 def test_a_late_joiner_waits_out_the_newbie_period_on_their_own_clock(profile):
-    """第 2 段才來的人（6.6「新手期內照自己的時鐘開」）：季已經走到第 2 段，自己的新手期（newbie_real_hours）還沒過，四樣照鎖；
-    過了那一刻才開、才寫紀錄。"""
+    """第 2 段才來的人（6.6「新手期內照自己的時鐘開」）：季已經走到第 2 段，自己的新手期（newbie_real_hours）還沒過，擂台、懸賞榜照鎖
+    （鐵匠鋪、自創不鎖）；過了那一刻才開、才寫紀錄。"""
     c = real_content(profile)
     c.config.train_event_chance = 0.0
     c.config.jianfa.week_unlock = True  # 7 天版內測關著；這裡量的是開著的規則
@@ -128,7 +132,7 @@ def test_a_late_joiner_waits_out_the_newbie_period_on_their_own_clock(profile):
     _at(g, joined)
     s = g.state
     assert week_unlock.phase_now(s, c) >= 1 and roster.newbie(s, c)
-    assert _open(g) == {"smith": True, "arena": False, "bounties": False, "create": False}
+    assert _open(g) == {"smith": True, "arena": False, "bounties": False, "create": True}
     assert s.player.week_unlocked_at is None
     assert _card(g)["locked"] is not None
     hours = c.config.newbie_real_hours
@@ -163,7 +167,7 @@ def test_stage_three_writes_the_win_gap_on_the_card_and_the_world_map(profile):
 
 
 def test_the_switch_off_changes_nothing():
-    """子開關關著（no_week_unlock）：開季第一天四樣都開、沒有鎖著那一句、不蓋章、不寫紀錄；本週卡的主題句照舊。"""
+    """子開關關著（no_week_unlock）：開季第一天四樣（鐵匠鋪、擂台、懸賞榜、自創）都開、沒有鎖著那一句、不蓋章、不寫紀錄；本週卡的主題句照舊。"""
     g = _game("week7", setup=no_week_unlock)
     s, c = g.state, g.content
     assert not rules.jianfa(c, s.world, "week_unlock")
@@ -181,7 +185,7 @@ def test_a_season_without_the_jianfa_stamp_locks_nothing(content):
     g.client = None
     s = g.state
     assert all(week_unlock.open(s, content, f) for f in week_unlock.WEEK2)
-    assert week_unlock.locked_line(s, content, ["打造"]) is None and week_unlock.card_line(s, content, ["打造"]) is None
+    assert week_unlock.locked_line(s, content, ["擂台"]) is None and week_unlock.card_line(s, content, ["擂台"]) is None
 
 
 def test_names_follow_what_this_season_really_has():
@@ -190,7 +194,7 @@ def test_names_follow_what_this_season_really_has():
         c.config.arena.enabled = False
 
     g = _game("week7", setup=off)
-    assert g.week_unlock_names() == ["自創", "懸賞榜"]
+    assert g.week_unlock_names() == ["懸賞榜"]
     assert "擂台" not in _card(g)["locked"]
     assert week_unlock.card_line(g.state, g.content, []) is None and week_unlock.locked_line(g.state, g.content, []) is None
 
