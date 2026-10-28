@@ -461,7 +461,7 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .battle-card p.rounds-tale.fit-fold:not(.open) { display: none; }
 /* 6. 「剛剛」收著時只露三行（同在路上，FB-060） */
 .now.clamp.fit-short .tx-now { max-height: 4.8em; }
-/* 7、8. 決戰時接在戰場底下的所在地（fit-own）、集結那一句（fit-muster）：每段一行、放不下加「…」，點了攤開（app.js 的 fitClip、ownOpen） */
+/* 6c、7、8. 閒著時量約戰那一行擠不進的所在地描述（6c）、決戰時接在戰場底下的所在地（fit-own）、集結那一句（fit-muster）：每段一行、放不下加「…」，點了攤開（app.js 的 fitClip、ownOpen） */
 .card.scene p.fit-clip { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 /* FB-120：只能觀戰的人，開打中的戰場收成一行（名字那一行的字體，app.js 的 battleScene）；放不下加「…」，點了攤開。
    攤開之後戰場底下一顆「收起戰場」，靠右、小字，不多撐一行的高度以外的空間 */
