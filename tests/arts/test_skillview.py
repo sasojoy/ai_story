@@ -1001,3 +1001,56 @@ def test_art_rows_carry_slots_affinity_and_rating_instead_of_forge_odds(state, c
     row = next(r for r in skillview.art_rows(state, content, world) if r["id"] == "basic_fist")
     assert row["rating"] == round(bare * (1 + content.config.arts.general_weight)) and row["slots"][0]["name"] == "風"
     assert row["rating"] == arts_mod.rating(content, team.player_art(state, content, world, "basic_fist"), 1, state, world)
+
+
+# ── 秘方特效只算會發動的那一條（Joy 2026-10-28「可以加，但是你要讓玩家能清楚知道」）──────────────────
+
+
+def _two_specials(state, world):
+    """一門中品三格：火、秘方 A（悟招）、秘方 B（連環）。打的時候只有槽裡第一條（悟招）發動。"""
+    art = generate_from_name("裂石拳", "武學", "裂石拳", attribute="剛").model_copy(update={"origin": "fused", "affinity": ["剛", "虛"]})
+    world.claim_skill_name(art)
+    a, _ = world.claim_insight_recipe("秘|a", Insight(id="秘甲", name="秘甲", attribute="虛", secret_special="wuzhao", parents=["a", "b"]))
+    b, _ = world.claim_insight_recipe("秘|b", Insight(id="秘乙", name="秘乙", attribute="虛", secret_special="lianhuan", parents=["c", "d"]))
+    state.player.arts, state.player.art_quality[art.id] = [art.id], "中品"
+    state.player.insights = ["huo", a.id, b.id]
+    state.player.art_slots[art.id] = ["huo", a.id, b.id]
+    return art, a.id, b.id
+
+
+def test_only_the_first_secret_special_fires_and_scores(state, content, world):
+    art, first, second = _two_specials(state, world)
+    mine = team.player_art(state, content, world, art.id)
+    assert mine.special == "wuzhao" and mine.extra_specials == []  # 打的時候只有第一條
+    assert arts_mod.idle_specials(state, content, world, mine) == {2: "同一門只發動一條秘方特效（這一門發動的是〔悟招〕）：這一條不發動，評分也不算"}
+    with_both = arts_mod.score(state, content, world, mine)
+    state.player.art_slots[art.id] = ["huo", first, None]
+    assert arts_mod.score(state, content, world, team.player_art(state, content, world, art.id)) == with_both  # 第二條不加分
+
+
+def test_the_card_says_which_secret_special_is_idle(state, content, world):
+    art, _first, second = _two_specials(state, world)
+    (row,) = [r for r in skillview.art_rows(state, content, world) if r["id"] == art.id]
+    assert [s["idle"] for s in row["slots"]] == ["", "", arts_mod.IDLE_SPECIAL.format(live="悟招")]
+    assert [t.get("idle", False) for t in row["slots"][2]["fx"] if t.get("special")] == [True]
+    assert [t.get("idle", False) for t in row["slots"][1]["fx"] if t.get("special")] == [False]
+    assert row["score_note"] == skillview.SCORE_NOTE
+    (ins,) = [r for r in skillview.insight_rows(state, content, world) if r["id"] == second]
+    assert ins["idle"] and [e.get("idle") for e in ins["effects"] if e["special"]] == [True]
+    state.player.art_slots[art.id] = ["huo", None, second]  # 只剩一條：它就是發動的那一條，什麼都不寫
+    (row,) = [r for r in skillview.art_rows(state, content, world) if r["id"] == art.id]
+    assert row["score_note"] == "" and not any(s and s["idle"] for s in row["slots"])
+
+
+def test_signature_arts_score_each_trait_as_a_full_cell(world):
+    """本命（有本命戰法、不是小戰法）每個功效當成滿的一格（三重＋真意）：三個功效 156（Joy 2026-10-27「50 幾分很掉價」）。
+    小戰法照舊。"""
+    from conftest import real_content
+    from tianxia.state import new_game_state
+
+    c = real_content("season21")
+    s = new_game_state(c, "甲")
+    signature = [k for k, v in c.skills.items() if v.tactic is not None and not v.tactic.minor]
+    minor = [k for k, v in c.skills.items() if v.tactic is not None and v.tactic.minor]
+    assert len(signature) == 36 and {arts_mod.score(s, c, world, team.player_art(s, c, world, k)) for k in signature} == {156}
+    assert all(arts_mod.score(s, c, world, team.player_art(s, c, world, k)) < 100 for k in minor)

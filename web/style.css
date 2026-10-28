@@ -3064,6 +3064,13 @@ details.self-fold > .fold-body.gear { padding-top: 0; }
 .fx.grand, .tr.grand { color: #5a3a00; border-color: #c9a24a; background: linear-gradient(135deg, #f5dc8e, #e2b54e);
   box-shadow: 0 0 5px color-mix(in srgb, #e2b54e 55%, transparent); font-weight: 700; }
 .fx.sp, .tr.sp { color: #fff; border-color: #8f2d24; background: #a8322a; }
+/* 不發動的秘方特效（同一門只發動一條；Joy 2026-10-28）：灰掉、劃一道，籤上寫「不發動」 */
+.fx.sp.idle { color: var(--ink-2); border-color: currentColor; background: transparent; }
+.fx.sp.idle small { margin-left: 3px; font-size: 9.5px; }
+.ic-fx li.sp.idle { background: transparent; opacity: .75; }
+.ic-fx li.sp.idle b { text-decoration: line-through; }
+.idle-why { display: block; font-style: normal; font-size: 11.5px; line-height: 1.4; color: var(--accent); }
+.score small { display: block; font-size: 10.5px; font-weight: 400; color: var(--ink-2); white-space: normal; }
 .fx.maybe, .tr.maybe { border-style: dashed; background: transparent; box-shadow: none; opacity: 0.85; }
 .tr.grand small { margin-left: 4px; font-size: 10px; color: #7a5200; }
 .tr .lv { margin-left: 4px; }

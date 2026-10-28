@@ -462,6 +462,7 @@ def art_rows(state: GameState, content: Content, world: WorldStateStore) -> list
             "rating": arts_mod.rating(content, art, level or 1, state, world),  # 戰力：威力 ×（1＋槽裡技能的加成）
             # 評分（第三批）：槽裡效果的分數加總，沒有上限；不是衝絕學的門檻（Joy 2026-10-20），只拿來比高下、排武學榜
             "score": arts_mod.score(state, content, world, art),
+            "score_note": score_note(state, content, world, art),  # 評分旁邊那一句（秘方特效只算發動的那一條）；沒有是空字串
             # 本命戰法或小戰法那一句（tactics.card_text）：直接寫在卡上，學來的武學靠它看得出跟別門不一樣（Joy 2026-10-21）；沒有是空字串
             # 自創的招照這一門練到的成數算（前幾成還生，卡上補一句）
             "tactic": tactic_line(content, art, level),
@@ -512,7 +513,7 @@ def shown_art(state: GameState, content: Content, world: WorldStateStore, kind: 
         "affinity": arts_mod.affinity_text(art),
         "slots": slot_rows(state, content, world, art), "colors": arts_mod.slot_colors(state, content, art),
         "pose": create_mod.icon_pose(content, art, weapon), "weapon": weapon,
-        "score": arts_mod.score(state, content, world, art),
+        "score": arts_mod.score(state, content, world, art), "score_note": score_note(state, content, world, art),
         "tactic": tactic_line(content, art, level), "fifth": fifth_ring(content, art, level),
         **_look(content, art),
     }
@@ -679,6 +680,7 @@ def slot_rows(state: GameState, content: Content, world: WorldStateStore, art: M
     stack 是同效果好幾份時這一份算了幾成（slot_stack_marks；照算的是空字串）。"""
     rows: list[dict | None] = []
     stacks = slot_stack_marks(state, content, world, art) if not arts_mod.fixed(content, art.id) else {}
+    idle = arts_mod.idle_specials(state, content, world, art)  # 同一門第二條起的秘方特效不發動、不算分：籤灰掉、底下寫為什麼
     for n_slot, insight_id in enumerate(arts_mod.slots_of(state, content, art)):
         if insight_id is None:
             rows.append(None)
@@ -695,7 +697,12 @@ def slot_rows(state: GameState, content: Content, world: WorldStateStore, art: M
             "quality": fx.quality, "fx": fx_traits(content, fx, ins),  # 意境效果池：這一份的品質與每一個效果（大獎 grand）
             "look": insight_fx.look(fx),  # 品相凡佳珍神（玉環上那一枚印；底子 quality 不給玩家看）
             "stack": stacks.get(n_slot, ""),
+            "idle": idle.get(n_slot, ""),
         })
+        if n_slot in idle:
+            for t in rows[-1]["fx"]:
+                if t.get("special"):
+                    t["idle"] = True
     return rows
 
 
@@ -775,10 +782,34 @@ def insight_rows(state: GameState, content: Content, world: WorldStateStore) -> 
                 # 感悟悟來的私有意境（悟意境設計 0.2b）：在哪裡悟的、畫的那一筆（修練頁畫小縮圖）
                 "own": insights.is_own(insight_id), "place": insight.place, "glyph": insight.glyph,
             }
+            why = _idle_why(state, content, world, insight_id)  # 裝在一門上、秘方特效卻不是那一門發動的那一條
+            if why:
+                row["idle"] = why
+                for t in (*row["fx"], *row["effects"]):
+                    if t.get("special"):
+                        t["idle"] = True
             if blocked is not None:  # 在序章裡（跟上面的拒絕同一個條件）：煉製頁這一步要放進爐子的意境發光（T7 走查 W-B）
                 row["glow"] = prologue.insight_glow(state, content)
             rows.append(row)
     return rows
+
+
+SCORE_NOTE = "秘方特效只算會發動的那一條"  # Joy 2026-10-28
+
+
+def score_note(state: GameState, content: Content, world: WorldStateStore, art) -> str:
+    """槽裡有不發動的秘方特效時，評分旁邊寫一句（arts.idle_specials）；沒有是空字串。"""
+    return SCORE_NOTE if arts_mod.idle_specials(state, content, world, art) else ""
+
+
+def _idle_why(state: GameState, content: Content, world: WorldStateStore, insight_id: str) -> str:
+    """這一份裝著、它的秘方特效卻不發動時那一句（arts.idle_specials）；沒裝、沒秘方特效、會發動都是空字串。"""
+    art_id = arts_mod.where_slotted(state, insight_id)
+    art = team.player_art(state, content, world, art_id) if art_id else None
+    if art is None:
+        return ""
+    idle = arts_mod.idle_specials(state, content, world, art)
+    return next((why for i, held in enumerate(arts_mod.slots_of(state, content, art)) if held == insight_id and (why := idle.get(i))), "")
 
 
 def _slotted_name(state: GameState, content: Content, world: WorldStateStore, insight_id: str) -> str | None:

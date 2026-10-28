@@ -1880,8 +1880,10 @@
   const FX_LAYERS = ["", "一重", "二重", "三重"];
   // 評分（第三批）：「・評 87」；上品還沒成絕學的寫門檻「・評 87／100」
   const scoreText = (a) => (typeof a.score === "number" ? `・評 ${a.score}` : ""); // 評分沒有上限、不是門檻（Joy 2026-10-20）
+  // 修練頁卡上的評分；槽裡有不發動的秘方特效時底下一行小字（skillview.score_note，Joy 2026-10-28「要讓玩家能清楚知道」）
+  const scoreHtml = (a) => (typeof a.score === "number" ? `<span class="score">評 ${a.score}${a.score_note ? `<small>${esc(a.score_note)}</small>` : ""}</span>` : "");
   const fxOne = (e) => e.grand ? `<i class="fx grand${e.maybe ? " maybe" : ""}">${esc(e.name)}</i>`
-    : e.special ? `<i class="fx sp">${esc(e.name)}</i>`
+    : e.special ? `<i class="fx sp${e.idle ? " idle" : ""}"${e.idle ? ' title="不發動"' : ""}>${e.idle ? `<s>${esc(e.name)}</s><small>不發動</small>` : esc(e.name)}</i>`
     : `<i class="fx${e.maybe ? " maybe" : ""}">${esc(e.name)}${e.maybe ? "" : lvHtml(e.layers)}</i>`;
   const fxHtml = (fx, cls) => (Array.isArray(fx) && fx.length ? `<span class="fxs${cls ? ` ${cls}` : ""}">${fx.map(fxOne).join("")}</span>` : "");
   // 意境的品相（招式與絕學稿案第五輪）：凡不蓋印，佳藍、珍紫、神金；修練頁的列、抽屜、出爐卡同一枚。底子（下中上）不給玩家看
@@ -1910,7 +1912,7 @@
   // o.fits：「裝進【某門】第 N 格」的鈕（伺服器算好裝得進哪裡，skillview._fits）；o.melt：化成心得；o.reveal：出爐的排場；o.cmp：跟舊的比
   function insightCardHtml(i, o = {}) {
     if (!i) return "";
-    const fx = (i.effects || []).map((e) => `<li class="${e.grand ? "grand" : e.special ? "sp" : ""}"><b>${esc(e.name)}${e.grand || e.special ? "" : esc(FX_LAYERS[e.layers] || "")}</b>${e.desc ? `<span>${esc(e.desc)}</span>` : ""}</li>`).join("");
+    const fx = (i.effects || []).map((e) => `<li class="${e.grand ? "grand" : e.special ? `sp${e.idle ? " idle" : ""}` : ""}"><b>${esc(e.name)}${e.grand || e.special ? "" : esc(FX_LAYERS[e.layers] || "")}</b>${e.desc ? `<span>${esc(e.desc)}</span>` : ""}${e.idle && i.idle ? `<em class="idle-why">${esc(i.idle)}</em>` : ""}</li>`).join("");
     const fits = o.fits ? (i.fits || []).map((f) => `<button class="btn small" data-act="slot-in" data-id="${esc(f.art)}" data-i="${f.i | 0}" data-ins="${esc(i.id)}">裝進【${esc(f.name)}】第 ${(f.i | 0) + 1} 格</button>${f.stack ? `<small class="stk">${esc(f.stack)}</small>` : ""}`).join("") : "";
     const where = i.slotted ? `裝在【${esc(i.slotted)}】` : o.fits && !fits ? "身上的武學沒有空格收得下它。" : ""; // 待 joy 潤
     const rare = i.look === "珍" || i.look === "神";
@@ -1939,7 +1941,7 @@
     return m ? `${tsealHtml(m[1])}${body(String(text).slice(m[1].length))}` : body(text || "");
   }
   // 純文字版（清單的小字、title）：「掠影二重・流光」
-  const fxText = (fx) => (Array.isArray(fx) ? fx.map((e) => (e.grand || e.special ? e.name : `${e.name}${FX_LAYERS[e.layers] || ""}`)).join("・") : "");
+  const fxText = (fx) => (Array.isArray(fx) ? fx.map((e) => (e.idle ? `${e.name}（不發動）` : e.grand || e.special ? e.name : `${e.name}${FX_LAYERS[e.layers] || ""}`)).join("・") : "");
 
   // 火柴人：九個角度（create.POSE_KEYS，度；0 朝下、正的往右），骨架跟 tianxia/create.py 同一組數字（伺服器照同一個幾何讀偏向）
   const RIG = { CX: 110, SY: 96, HIPY: 146, UA: 27, FA: 25, TH: 31, SH: 29 };
@@ -2043,7 +2045,7 @@
       : `<span class="jd fifth" title="${esc(f.note)}">${ringHtml([], "<i>絕</i>", "vacant")}<small class="dim">${esc(f.note)}</small></span>`;
     // 每一格裝的那一招寫出來（Joy 2026-10-25「武學裡面槽裡面擺的，他效果好像不會顯示」）：玉環上只放得下兩個字與效果名，
     // 做什麼原本只在 title（手機上看不到）；底下一格一行：第幾格、意境、效果、這一招做什麼。字待 joy 潤
-    const notes = a.slots.map((s, i) => (s ? `<li><b>第 ${i + 1} 格「${esc(s.name)}」</b>${lookSeal(s.look)}<span class="jdn-fx">${esc(fxText(s.fx) || s.skill || "")}</span>${s.desc ? `<span class="jdn-desc">${esc(String(s.desc).replace(/^〔[^〕]*〕/, ""))}</span>` : ""}${stkHtml(s.stack)}</li>` : "")).join("");
+    const notes = a.slots.map((s, i) => (s ? `<li><b>第 ${i + 1} 格「${esc(s.name)}」</b>${lookSeal(s.look)}<span class="jdn-fx">${esc(fxText(s.fx) || s.skill || "")}</span>${s.desc ? `<span class="jdn-desc">${esc(String(s.desc).replace(/^〔[^〕]*〕/, ""))}</span>` : ""}${stkHtml(s.stack)}${s.idle ? `<em class="idle-why">${esc(s.idle)}</em>` : ""}</li>` : "")).join("");
     return `<div class="jade">${cells}${fifth}</div>${notes ? `<ul class="jd-notes">${notes}</ul>` : ""}${picker}`;
   }
 
@@ -2129,7 +2131,7 @@
       // 功法庫的卡：跟身上同一種那門的比較（W6）直接寫在鈕的上面，改練之前看得到，不必先點「詳情」；點開詳情時功法卡裡也有，這裡就不重複
       const compare = !slot && a.compare && !info ? `<p class="cmp">${esc(a.compare)}</p>` : "";
       return `<div class="train">
-          <div class="tr-meter"><div class="tr-lv"><b>第${level}成</b>${typeof a.score === "number" ? `<span class="score">評 ${a.score}</span>` : ""}</div>${pips}</div>
+          <div class="tr-meter"><div class="tr-lv"><b>第${level}成</b>${scoreHtml(a)}</div>${pips}</div>
           ${train}
         </div>
         ${why ? `<p class="train-why">${esc(why)}</p>` : ""}
@@ -4231,7 +4233,7 @@
     return `<div class="acard ro${a.quality === "絕學" ? " q4" : ""}">
       <div class="hd">${a.quality === "絕學" ? '<span class="qseal q4 big">絕</span>' : ""}<div><h3>${esc(a.name)}</h3><div class="sub">${[a.kind, a.quality, a.look].filter(Boolean).map(esc).join("・")}</div></div>${a.pose ? figSvg(a.pose, a.weapon, "card-fig") : ""}</div>
       ${a.tier && a.quality !== "絕學" ? lookLadder(a.tier, ART_LOOK_STEPS) : ""}
-      <div class="train"><div class="tr-meter"><div class="tr-lv"><b>第${level}成</b>${typeof a.score === "number" ? `<span class="score">評 ${a.score}</span>` : ""}</div>
+      <div class="train"><div class="tr-meter"><div class="tr-lv"><b>第${level}成</b>${scoreHtml(a)}</div>
         <div class="ten">${Array.from({ length: 10 }, (_, k) => `<i${k < level ? ' class="on"' : ""}></i>`).join("")}</div></div></div>
       <div class="lvline"><span>${esc(a.kind)}${a.attribute ? `・屬${esc(a.attribute)}` : ""}・收${esc(a.affinity || "")}</span></div>
       ${slotsHtml(a, null, true)}

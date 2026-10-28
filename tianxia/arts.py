@@ -195,6 +195,29 @@ def apply(state: GameState, content: Content, world: WorldStateStore, art: Marti
     })
 
 
+IDLE_SPECIAL = "同一門只發動一條秘方特效（這一門發動的是〔{live}〕）：這一條不發動，評分也不算"  # Joy 2026-10-28「要讓玩家能清楚知道」
+
+
+def idle_specials(state: GameState, content: Content, world: WorldStateStore, art: MartialArt | None) -> dict[int, str]:
+    """槽裡帶秘方特效、卻不發動的那幾格：{第幾格: 為什麼}。同一門只發動槽裡第一條（apply 的 special），第二條起不發動，
+    評分（score）也只算發動的那一條。寫死的武學、只有一條的是空的。"""
+    if art is None or fixed(content, art.id):
+        return {}
+    from . import insights as insights_mod
+
+    live, out = None, {}
+    for i, insight_id in enumerate(slots_of(state, content, art)):
+        ins = insights_mod.resolve(insight_id, content, world, state) if insight_id else None
+        sp = special_of(content, ins.secret_special) if ins is not None and ins.secret_special else None
+        if sp is None:
+            continue
+        if live is None:
+            live = sp.name
+        else:
+            out[i] = IDLE_SPECIAL.format(live=live)
+    return out
+
+
 def rating(content: Content, view: MartialArt, level: int, state: GameState | None = None, world: WorldStateStore | None = None) -> int:
     """戰力：威力 ×（1 ＋ 槽裡技能的加成總和）。view 是 apply 過的那一份；寫死的武學照它的功效算。"""
     return int(round(power_at(view, level) * (1 + effect_bonus(content, view))))
@@ -226,8 +249,10 @@ def high_points(content: Content, counts: dict[str, int]) -> float:
 
 
 def score(state: GameState, content: Content, world: WorldStateStore, art: MartialArt | None) -> int:
-    """評分（第三批）：槽裡每一份意境的效果加總，單色格的 ×score_single_color（見 Config.arts）；槽裡沒有特別功效、
-    卻暗合「裝滿」秘方的另加一條特別功效。寫死的武學照它內容寫的功效算（本命戰法算一個大獎）。art 是 team.player_art 那一份。"""
+    """評分（第三批）：槽裡每一份意境的效果加總，單色格的 ×score_single_color（見 Config.arts）；秘方特效只算會發動的那一條
+    （槽裡第一條，idle_specials；Joy 2026-10-28）；槽裡沒有特別功效、卻暗合「裝滿」秘方的另加一條特別功效。
+    寫死的武學照它內容寫的功效算；有本命戰法的（不是小戰法）每個功效當成滿的一格（三重＋真意），三個功效是 156
+    （Joy 2026-10-27「本命才 50 幾分很掉價」，最強搭配重量：本命稍弱於最強的玩家兩門 158、176）。art 是 team.player_art 那一份。"""
     if art is None:
         return 0
     cfg = content.config.arts
@@ -235,11 +260,15 @@ def score(state: GameState, content: Content, world: WorldStateStore, art: Marti
         counts: dict[str, int] = {}
         for key in art.traits or ([art.attribute] if art.attribute else []):
             counts[key] = counts.get(key, 0) + 1
-        total = sum(cfg.score_per_layer * min(MAX_STRENGTH, n) for n in counts.values())
-        total += cfg.score_grand * len({h for h in (art.high, *art.extra_highs) if h})
-        total += cfg.score_special if art.special and special_of(content, art.special) is not None else 0
         skill = content.skills.get(art.id)
-        total += cfg.score_grand if skill is not None and skill.tactic is not None else 0
+        signature = skill is not None and skill.tactic is not None and not skill.tactic.minor
+        if signature:  # 本命：每個功效當成滿的一格
+            total = (cfg.score_per_layer * MAX_STRENGTH + cfg.score_grand) * len(counts)
+        else:
+            total = sum(cfg.score_per_layer * min(MAX_STRENGTH, n) for n in counts.values())
+            total += cfg.score_grand * len({h for h in (art.high, *art.extra_highs) if h})
+            total += cfg.score_grand if skill is not None and skill.tactic is not None else 0
+        total += cfg.score_special if art.special and special_of(content, art.special) is not None else 0
         return int(round(total))
     from . import insights as insights_mod
 
@@ -264,7 +293,8 @@ def score(state: GameState, content: Content, world: WorldStateStore, art: Marti
             seen = grand_seen[fx.grand] = grand_seen.get(fx.grand, 0) + 1
             pts += cfg.score_grand * (1.0 if seen == 1 else cfg.stack_share if seen == 2 else 0.0)
         if ins.secret_special and special_of(content, ins.secret_special) is not None:
-            pts += cfg.score_special
+            if not specials:  # 只算會發動的那一條（idle_specials）
+                pts += cfg.score_special
             specials += 1
         if i < len(colors) and len(colors[i]) == 1:
             pts *= cfg.score_single_color
