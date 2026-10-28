@@ -996,8 +996,18 @@
   // 量的是畫面本身（字體、寬度、狀態列幾行都算進去），所以手機高一點、字少一點就少收或不收。重畫、轉向、拉視窗之後重量（先全部還原）
   const FIT_MARGIN = 16;
   const fitPage = () => document.getElementById("page");
-  // 要放進第一屏的那一塊：平常閒著是行動列；事件、有所感、對話、決戰這種一組選項時是選單最後一顆
-  const fitTarget = () => document.querySelector("#page > .act-bar") || document.querySelector("#page > .options > :last-child");
+  // 要放進第一屏的那一塊：平常閒著是行動列；事件、有所感、對話、決戰這種一組選項時是選單最後一顆。
+  // 約戰卡緊接在行動列底下、第一張是應得了或同去得了的（FB-906，企劃者 2026-10-28「要露出來」；sxRank 把可按的排在最前面）時，要擠進第一屏的
+  // 是那一行（連右邊的鈕）：它在行動列底下，量它就連整排行動列一起照顧到了，只是多縮場景的畫（收法 5a）；約戰卡本身的版面不動、也不搬到行動列上面。
+  // 沒有可按的約戰（只有自己貼的、結算完的、別區的、約戰關著），或行動列與約戰卡之間展開了移動、探索、出陣前那張卡（玩家自己攤開的），
+  // 量的還是行動列，第一屏一個像素都不變
+  const FIT_DUEL_BTN = '#page > .act-bar + #sortie-duels > .sx-drow:first-of-type > [data-act="sortie-answer"], '
+    + '#page > .act-bar + #sortie-duels > .sx-drow:first-of-type > [data-act="sortie-join"]';
+  function fitDuelRow() {
+    const btn = document.querySelector(FIT_DUEL_BTN);
+    return btn ? btn.parentElement : null;
+  }
+  const fitTarget = () => fitDuelRow() || document.querySelector("#page > .act-bar") || document.querySelector("#page > .options > :last-child");
   function fitOver() {
     const target = fitTarget(), tabs = document.querySelector(".tabs");
     if (!target || !tabs) return 0;
