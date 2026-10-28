@@ -67,7 +67,7 @@ const matchOne = (e, sel) => {
   if (sel === ".glow") return e.classes.has("glow");
   if (sel === ".lit") return e.classes.has("lit");
   if (sel === ".onb-dim") return e.classes.has("onb-dim"); // applyFocus 先收掉上一次壓暗的（假元素不在 #top、#page 底下，不會被壓暗）
-  const byId = sel.match(/^#page (?:\.act-move )?\[data-id="(.*)"\](:not\(\[disabled\]\))?$/); // .act-move：展開的移動卡裡的那條路（FB-901 的 routeGlowKey）
+  const byId = sel.match(/^#page (?:\.act-move )?\[data-id="(.*)"\](:not\(\[disabled\]\))?$/); // .act-move：展開的移動卡裡的那條路（FB-9001 的 routeGlowKey）
   if (byId) return e.id === byId[1] && !(byId[2] && e.disabled);
   const m = sel.match(/^\[data-glow~="(.*)"\](:not\(\[disabled\]\))?$/);
   if (!m) throw new Error("假 DOM 不認得的選擇器：" + sel);
