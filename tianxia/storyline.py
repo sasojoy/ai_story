@@ -29,7 +29,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 
-from . import annals
+from . import annals, calendar
 from .atlas import region_of
 from .models import Content, StoryDef, StoryEnding, StoryPlace, StoryStage
 from .rules import apply_effect, check_condition, day_seconds, fill_marks, jianfa
@@ -40,7 +40,20 @@ UNFINISHED = "未了"  # StoryProgress.ending：季末還沒收
 OPTION = "story"  # 選單的 id 開頭：story:<線>、story:<線>:a<答案>、story:<線>:later
 LATER = "later"
 PENDING_HEAD = "未了之事"  # 選單與「你這一步」那一行的開頭（待 joy 潤）
-RETRY_NOTE = "（再等一個時辰才能再試）"  # fight 段打輸了還沒到再試的時候（待 joy 潤）
+RETRY_NOTE = "（再等 {left}才能再試）"
+RETRY_SOON = "（再等一下就能再試）"  # 剩不到一分鐘  # fight 段打輸了還沒到再試的時候；{left} 照 retry_at 算（待 joy 潤）
+
+
+def retry_note(state: GameState, content: Content, progress: StoryProgress) -> str:
+    """還要等多久才能再打那一場（給玩家看的字）。以前這一句是寫死的「一個時辰」，照 StoryStage.retry_days
+    的預設 1/12 寫；心魔那一關用 Config.epiphany.retry_days 覆蓋它（曾經是 1.0＝一整天），字就騙人
+    （FB-900）。現在照 retry_at 算，怎麼調都對。世界秒 ÷ time_scale 才是玩家感覺到的時間。"""
+    left = (progress.retry_at or 0) - state.world.time
+    scale = content.config.time_scale or 1.0
+    real = max(0.0, left) / scale
+    if real <= 60:
+        return RETRY_SOON
+    return RETRY_NOTE.format(left=calendar.span_text(real))
 LATER_LABEL = "先擱著"  # 答題答到一半先走（待 joy 潤）
 JOURNAL = "奇事"  # 同步時往下走的那幾句另起一則江湖紀錄的標題（待 joy 潤）
 
@@ -262,7 +275,8 @@ def options(state: GameState, content: Content) -> list[tuple[str, str, bool]]:
             continue
         _, stage = current(content, progress)
         waiting = stage.kind == "fight" and progress.retry_at is not None and state.world.time < progress.retry_at
-        out.append((f"{OPTION}:{progress.line}", label(content, progress) + (RETRY_NOTE if waiting else ""), not waiting))
+        note = retry_note(state, content, progress) if waiting else ""
+        out.append((f"{OPTION}:{progress.line}", label(content, progress) + note, not waiting))
     return out
 
 

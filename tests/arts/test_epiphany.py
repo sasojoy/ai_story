@@ -188,6 +188,36 @@ def test_the_demon_is_your_own_shadow():
     assert squad.name == "心魔" and squad.difficulty == pytest.approx(round(power * c.config.epiphany.demon_scale, 1), abs=0.11)
 
 
+def test_the_retry_note_counts_down_from_retry_at():
+    """FB-900：那句話以前寫死「再等一個時辰」（照 StoryStage.retry_days 的預設 1/12），
+    心魔那一關卻用 Config.epiphany.retry_days 覆蓋它，字就騙人。現在照 retry_at 算。"""
+    game = _game()
+    s, c = game.state, game.content
+    _begin(game)
+    line = next(iter(s.player.storylines))
+    _answer_all(game)
+    s.world.time += day_seconds(c, s.world)
+    game._story_tick()
+    with _loss():
+        game.choose(f"{storyline.OPTION}:{line}")
+    progress = s.player.storylines[line]
+    assert progress.retry_at is not None
+
+    def note() -> str:
+        return next(o for o in game.options() if o.id == f"{storyline.OPTION}:{line}").label
+
+    s.world.time = progress.retry_at - 7200          # 兩小時
+    assert "再等 2 小時才能再試" in note()
+    s.world.time = progress.retry_at - 900           # 十五分鐘
+    assert "再等 15 分鐘才能再試" in note()
+    s.world.time = progress.retry_at - 30            # 剩不到一分鐘
+    assert storyline.RETRY_SOON in note()
+    s.world.time = progress.retry_at                 # 到了：不再有那一段，而且按得下去
+    label = note()
+    assert "才能再試" not in label and storyline.RETRY_SOON not in label
+    assert next(o for o in game.options() if o.id == f"{storyline.OPTION}:{line}").enabled
+
+
 def test_the_demon_gets_weaker_every_time_you_fail_down_to_a_floor():
     """企劃者 2026-10-28「心魔重複打的時候削弱他好了」（「僵持也算過關」被否了：太簡單）：
     每輸一次（含僵持）難度的倍數降 demon_weaken，降到 demon_floor 為止，所以不會永遠卡在那裡。"""
