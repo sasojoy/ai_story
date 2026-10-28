@@ -1599,6 +1599,64 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .act-move .move-mode { margin: 0; }
 .fold.here summary { font-size: 14px; }
 .fold.here .options { margin: 0; }
+/* 出陣約戰（減法季批 3b；企劃者 2026-10-28 在對比圖裡選丙，docs/superpowers/specs/2026-10-28-出陣約戰網頁-草圖/）：出陣前那張卡在行動列底下原地展開
+   （同探索三選一，revealMoveCard 捲到看得見），「這一塊」「贏了」各收成一行、點了攤開，封三招三排各四招，鈕在卡底；約戰卡一張一行。
+   兩條進度與小籤照戰況卡的 .sf-row／.sf-chip；陣營的顏色照 .sf-row 的 side-guan／side-huang */
+.act-sortie { margin-bottom: 12px; padding: 10px 12px 12px; }
+.sx-top { display: flex; align-items: baseline; gap: 8px; margin: 0; }
+.sx-top b { flex: none; font: 700 17px var(--serif); }
+.sx-top span { flex: 1 1 auto; min-width: 0; text-align: right; font-size: 12px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sx-sec { margin-top: 8px; padding-top: 7px; border-top: 1px dashed var(--line); }
+.sx-h { display: flex; align-items: baseline; gap: 8px; margin: 0 0 4px; }
+.sx-h b { flex: none; font: 700 14px var(--serif); color: var(--accent); letter-spacing: .12em; }
+.sx-h span { flex: 1 1 auto; min-width: 0; font-size: 12px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sx-sec .sf-row { margin: 3px 0; }
+.sx-sec .sf-chips { margin-top: 5px; }
+.sx-gl { display: grid; grid-template-columns: 4.4em minmax(0, 1fr); column-gap: 8px; row-gap: 2px; margin: 0; font-size: 13px; line-height: 1.5; }
+.sx-gl dt { color: var(--ink-2); white-space: nowrap; }
+.sx-gl dd { margin: 0; min-width: 0; }
+.sx-gl dd b { font-weight: 700; }
+.sx-gl dd small { margin-left: 4px; font-size: 12px; color: var(--ink-2); }
+.sx-gl dd small.sx-only { margin-left: 0; }
+.sx-gl dd.up b { color: var(--ok); }
+.sx-note { margin: 4px 0 0; font-size: 12px; line-height: 1.5; color: var(--ink-2); }
+.sx-round { display: grid; grid-template-columns: 3.2em minmax(0, 1fr); align-items: center; column-gap: 6px; margin: 4px 0; }
+.sx-round .sx-n { font: 600 12px var(--serif); color: var(--ink-2); white-space: nowrap; }
+.sx-round .seg { margin: 0; padding: 2px; gap: 2px; overflow: visible; }
+.sx-round .seg button { flex: 1 1 0; min-width: 0; padding: 7px 0; font-size: 14px; }
+.sx-round .seg button.on { color: var(--accent); font-weight: 700; }
+.sx-round .seg button.sx-back { color: var(--ink-2); }
+.sx-round .seg button.sx-back.on { color: var(--ink); }
+.sx-round .seg button:disabled { cursor: default; }
+.sx-dim .sx-round { opacity: .55; }
+.btn.sx-go { flex-direction: column; gap: 0; margin-top: 8px; min-height: 52px; }
+.btn.sx-go b { font-size: 15px; }
+.btn.sx-go small { font-size: 12px; font-weight: 400; opacity: .92; }
+.sx-own { margin: 6px 0 0; padding: 8px 10px; border-left: 3px solid var(--kuai); background: var(--card-2); border-radius: 8px; font-size: 13px; line-height: 1.6; }
+.sx-det { border-top: 1px dashed var(--line); margin-top: 6px; }
+.sx-det > summary, .sx-flat { list-style: none; display: flex; align-items: baseline; gap: 8px; margin: 0; padding: 7px 0 5px; cursor: pointer; }
+.sx-flat { cursor: default; border-top: 1px dashed var(--line); margin-top: 6px; }
+.sx-det > summary::-webkit-details-marker { display: none; }
+.sx-det > summary b, .sx-flat b { flex: none; font: 700 14px var(--serif); color: var(--accent); letter-spacing: .12em; }
+.sx-det > summary span, .sx-flat span { flex: 1 1 auto; min-width: 0; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sx-det > summary::after { content: "▸"; flex: none; color: var(--ink-2); font-size: 12px; }
+.sx-det[open] > summary::after { content: "▾"; }
+.sx-det > .sx-sec { margin-top: 0; padding-top: 0; border-top: 0; }
+.sx-duels { padding: 8px 12px; margin-bottom: 12px; }
+.sx-drow { display: flex; align-items: center; gap: 6px; padding: 6px 0; font-size: 13px; line-height: 1.4; }
+.sx-drow + .sx-drow, .sx-why + .sx-drow { border-top: 1px solid var(--line); }
+.sx-drow .sx-dt { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sx-drow .sx-dt b { font-weight: 700; }
+.sx-left { flex: none; font-size: 12px; color: var(--accent); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sx-drow .btn.small { flex: none; min-width: 58px; min-height: 34px; padding: 4px 10px; }
+.sx-drow .btn.ghost { padding: 4px 10px; }
+.sx-state { flex: none; font-size: 12px; color: var(--ink-2); white-space: nowrap; }
+.sx-done .sx-state { color: var(--ink); font-weight: 700; }
+.sx-tag { --c: var(--ink-2); flex: none; align-self: center; padding: 0 6px; border-radius: 999px; background: var(--c); color: #fff; font: 700 11px/18px var(--sans); white-space: nowrap; }
+.sx-tag.side-guan { --c: var(--kuai); }
+.sx-tag.side-huang { --c: var(--gold); color: #2a241d; } /* 金底配白字太淡：深墨（同 .sf-chip.flip.side-huang） */
+.sx-far > :not(.btn) { opacity: .6; }
+.sx-why { margin: -4px 0 4px; font-size: 12px; line-height: 1.4; color: var(--ink-2); text-align: right; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }

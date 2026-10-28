@@ -172,7 +172,10 @@
     artNote: null, // 修練（衝品質）的結果：{ id, html }，寫在那一門卡片的按鈕底下（W7）；點別的卡片、切分頁、做別的動作就清掉
     forgeSel: [], // 爐裡放的：{type: "ins", id}，最多兩個（爐裡只合意境，Joy 2026-10-21）
     forgeLock: null, // 鎖在爐裡的那一樣（{type, id}，一次一樣；Joy 2026-10-19「尤其獲得新意境時會想要試他的所有組合」）：開爐成了它留在爐裡、只清另一格
-    wheelSel: null, // 江湖頁行動列展開的那一格（move；探索三選一開著時也有 explore）
+    wheelSel: null, // 江湖頁行動列展開的那一格（move；探索三選一開著時也有 explore；出陣約戰開著時 sortie＝出陣前那張卡）
+    sortieAnswer: null, // 出陣約戰：約戰卡上按了「應戰」的那一張（id），同一張封三招的卡寫應戰；別人先應、窗過了就收起（setMain）
+    sortiePick: [], // 出陣約戰：封三招挑到一半的（一回合一招，沒挑的是 null）；打開別的、送出去就清掉
+    sortieFold: {}, // 出陣約戰的卡上「這一塊」「贏了」「守住了」攤開了哪幾段（{block: true, …}）：輪詢重畫照它補回
     gatherOpen: false, // 探索卡上「找素材」底下的分支攤開了沒（第 32 項；做完一件事不收，下次點探索就直接看到）
     gatherSaying: false, // 找素材的「自己說…」輸入框叫出來了沒
     persuading: false, // 託付的勸降：輸入框叫出來的那一顆（errand:persuade:<id>），沒有是 false
@@ -385,6 +388,8 @@
     if (!(main.options || []).some((o) => o.id === sayingId())) S.saying = false; // 交談結束了（或那一顆沒了），輸入框跟著收起
     if (S.persuading && !(main.options || []).some((o) => o.id === S.persuading)) S.persuading = false; // 走開了、那一件辦完了：勸降的輸入框收起
     if (S.sensing && !(main.options || []).some((o) => o.id === SENSE_DRAW)) closeSense(); // 感悟狀態過去了（悟成、作廢），畫布跟著收起
+    // 出陣約戰：正在應的那一張應不了了（別人先應了、窗過了、走開了），應戰那張卡收起、挑到一半的招清掉
+    if (S.sortieAnswer && !(main.sorties || []).some((d) => d.id === S.sortieAnswer && d.can_answer)) { S.sortieAnswer = null; S.sortiePick = []; }
     // 見聞的紅點只為新的一場亮（比 card_id）：配點之後「剛剛」照舊是升級那一場的卡片，看過戰報再配點不再亮一次（計畫二最終審查 M1）；
     // 放在這裡是因為動作回來的與輪詢拿到的都走 setMain——決戰收場的卡片常常是輪詢（sync）補送的。登入那一份不亮（S.main 還沒有）
     if (main.card && S.main && S.main.card_id !== main.card_id) {
@@ -5575,6 +5580,7 @@
         S.gatherSaying = false; // 找素材「自己說」的輸入框叫出來之後改按了別的（一條分支）：下次攤開分支不再停在輸入框
         S.persuading = false;
         S.wheelSel = null; // 收起展開的移動
+        S.sortieAnswer = null; // 出陣約戰應戰那張卡也收起
         applyMain(r.main);
         if (id.startsWith("bounty:give:")) boardHanded(id, shopBefore); // 店面的懸賞榜：交差了蓋朱印（第四節）
         window.scrollTo({ top: 0, behavior: "smooth" });
@@ -5787,6 +5793,54 @@
     }, op === "battle_text" || op === "duel_text" ? WAIT_LINES.battle : SENT_WAITING);
   }
 
+  // ── 出陣約戰（丙；畫的部分在 main.js 的 sortiePanelHtml）──
+  // 封三招挑一招（再點同一招取消）：只換那一張卡（#sortie-panel 的 outerHTML），不重畫整頁（「剛剛」的浮現動畫不重播）
+  function sortieMove(round, move) {
+    const pick = (S.sortiePick || []).slice(0, SX_ROUNDS.length);
+    pick[round] = pick[round] === move ? null : move;
+    S.sortiePick = pick;
+    const panel = document.getElementById("sortie-panel");
+    if (panel) panel.outerHTML = sortiePanelHtml(S.main);
+    else renderPage();
+  }
+  // 封好三招的那一顆：應戰那一張送 sortie_answer（{id, moves}），出陣送 sortie_go（{moves}）；三招沒挑滿不送（鈕本來就灰著）
+  async function sortieSend() {
+    const moves = (S.sortiePick || []).slice(0, SX_ROUNDS.length);
+    if (moves.length < SX_ROUNDS.length || !moves.every(Boolean)) return;
+    const d = sortieAnswering(S.main);
+    if (d) await sortieDo("sortie_answer", { id: d.id, moves });
+    else if (sortieCardOn(S.main) && !S.main.sortie_card.why_not) await sortieDo("sortie_go", { moves });
+  }
+  // 貼、應、同去：伺服器回來之後卡收起、挑的招清掉，「剛剛」照伺服器寫的那一則（被擋下來是一句提示），捲回最上面看結果（同 choose）
+  async function sortieDo(op, body) {
+    await busy(async () => {
+      const r = await api(`/api/do/${op}`, body);
+      S.wheelSel = null;
+      S.sortieAnswer = null;
+      S.sortiePick = [];
+      applyMain(r.main);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      const text = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      if (text) toast(text);
+    });
+  }
+  // 別區那一張的「前往 N 分」：照現有的移動走（同新手目標的「去做」）——移動清單上有往那一塊的路就展開移動、讓那一條發光，
+  // 沒有（不相鄰）就開輿圖那一處的卡（步行、疾行的鈕在卡上，同江湖頁小地圖點一處）
+  function sortieTravel(loc) {
+    const id = `move:${loc}`, hit = (x) => x === id || x.startsWith(`${id}:`); // 疾行的 id 後面多接走法
+    if ((S.main.options || []).some((o) => hit(o.id))) {
+      S.sortieAnswer = null;
+      S.wheelSel = "move";
+      renderPage();
+      revealMoveCard();
+      document.querySelectorAll("#page .act-move [data-id]").forEach((el) => { if (hit(el.dataset.id)) el.classList.add("glow"); });
+      return;
+    }
+    mapFirst(loc);
+    S.mapKeep = true;
+    return goTab("map");
+  }
+
   // 放東西、輪詢都會問說明，回應可能晚到：只用最後一次請求的回應，而且爐子要還是問的那一爐
   let forgeLineSeq = 0;
   async function updateForgeLine() {
@@ -5950,7 +6004,7 @@
     const act = el.dataset.act;
     if (el.classList.contains("act-ink")) {
       const [key, x, y] = [el.dataset.key, ev.clientX, ev.clientY];
-      if (act === "wheel") requestAnimationFrame(() => inkRipple(key, x, y)); // 展開移動會重畫整頁
+      if (act === "wheel" || act === "sortie-open") requestAnimationFrame(() => inkRipple(key, x, y)); // 展開移動（出陣卡）會重畫整頁
       else inkRipple(key, x, y);
     }
     try {
@@ -6036,6 +6090,15 @@
         }
         case "map-jianghu": { // 就在這裡：出陣、探索真的做（減法季整合設計第七章【PM】），回江湖頁看結果；探索三選一開著時回江湖頁攤開那三種
           const key = el.dataset.key, opts = (S.main && S.main.options) || [];
+          // 出陣約戰開著（丙）：回江湖頁展開出陣前那張卡，不送 act:train（伺服器只會回一句「封好三招再出陣」）；截糧的運糧隊經過時照舊直接打
+          if (key === "sortie" && S.main && sortieCardOn(S.main)) {
+            S.wheelSel = SX_OPEN;
+            S.sortieAnswer = null;
+            S.sortiePick = [];
+            await goTab("jianghu");
+            revealMoveCard();
+            break;
+          }
           const modes = opts.some((o) => o.id.startsWith(EXPLORE_PREFIX) && !o.id.startsWith(GATHER_BRANCH) && o.id !== PRACTICE_ID);
           const id = key === "sortie" ? "act:train" : key === "explore" && !modes ? "act:explore" : null;
           const ready = id && opts.some((o) => o.id === id && o.enabled !== false);
@@ -6432,9 +6495,28 @@
           break;
         case "wheel":
           S.wheelSel = S.wheelSel === el.dataset.key ? null : el.dataset.key;
+          S.sortieAnswer = null; // 出陣約戰應戰那張卡收起（同一時間只攤一張）
           renderPage();
           if (S.wheelSel) revealMoveCard(); // 收起（再點一次）不捲
           break;
+        case "sortie-open": // 出陣約戰（丙）：出陣那一格點了在行動列底下展開出陣前那張卡、不送 act:train；再點收起。灰著也點得開
+          S.wheelSel = S.wheelSel === SX_OPEN ? null : SX_OPEN;
+          S.sortieAnswer = null;
+          S.sortiePick = [];
+          renderPage();
+          if (S.wheelSel) revealMoveCard();
+          break;
+        case "sortie-answer": // 約戰卡上的「應戰」：同一張封三招的卡，卡頂寫應戰・那一塊
+          S.wheelSel = null;
+          S.sortieAnswer = el.dataset.id;
+          S.sortiePick = [];
+          renderPage();
+          revealMoveCard();
+          break;
+        case "sortie-move": sortieMove(Number(el.dataset.round), el.dataset.move); break; // 封三招挑一招
+        case "sortie-send": await sortieSend(); break; // 封好三招，出陣（應戰）
+        case "sortie-join": await sortieDo("sortie_join", { id: el.dataset.id }); break; // 同袍的約戰：同去
+        case "sortie-far": await sortieTravel(el.dataset.id); break; // 別區那一張的「前往 N 分」
         case "drill-full": // 操練用完了：點了展開移動（最近的練功點寫在行動列底下那一行）
           S.wheelSel = S.wheelSel === "move" ? null : "move";
           renderPage();
@@ -6998,6 +7080,8 @@
     else if (box instanceof Element && box.matches("details.here")) S.here = { at: (S.main && S.main.status && S.main.status.location) || "", open: box.open };
     // 俠客頁底下的摺疊（功法庫、裝備、門下、規矩）：記開合，輪詢重畫照樣
     else if (box instanceof Element && box.matches("details.self-fold")) (S.selfOpen || (S.selfOpen = {}))[box.dataset.sec] = box.open;
+    // 出陣約戰的卡上收成一行的那幾段（這一塊、贏了、守住了）：記開合，輪詢重畫、挑招換卡照樣
+    else if (box instanceof Element && box.matches("details.sx-det")) (S.sortieFold || (S.sortieFold = {}))[box.dataset.sec] = box.open;
     // 決戰攤開、收起舊的回合（roundBlocks）：只記下來，下一次輪詢重畫照樣
     else if (box instanceof Element && box.matches("details.b-round")) {
       const open = S.roundsOpen || (S.roundsOpen = new Set());
