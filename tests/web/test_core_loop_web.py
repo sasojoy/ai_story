@@ -199,7 +199,7 @@ def test_the_three_duel_cards_answer_join_and_walk():
     assert out["tab"] == "map" and out["mapSel"] == LOC and out["calls"] == []
 
 
-# FB-901（QA 2026-10-28）：「前往 N 分」展開移動後往那一處的那一條光只亮 24 毫秒（重插的摺疊 toggle、下一次輪詢重畫都把 .glow 清掉）。
+# FB-9001（QA 2026-10-28）：「前往 N 分」展開移動後往那一處的那一條光只亮 24 毫秒（重插的摺疊 toggle、下一次輪詢重畫都把 .glow 清掉）。
 # 現在要發光的那一條記在 S.glowRoute，畫移動卡時直接寫進 class、applyGlow 清掉之後也補回；按了選項、收起移動卡、換分頁、走了就熄
 
 
@@ -266,7 +266,7 @@ def test_the_newbie_go_button_keeps_its_route_glow_the_same_way():
     assert 'class="btn go glow" data-act="choose" data-id="move:baima_ford"' in out["bars"][0]
 
 
-# FB-902（QA 2026-10-28）：320 寬別區那一行只剩約 103 px 放「某某約戰某地」，三字名號加四字地名被收成「…」。窄寬時那一段准兩行、
+# FB-9002（QA 2026-10-28）：320 寬別區那一行只剩約 103 px 放「某某約戰某地」，三字名號加四字地名被收成「…」。窄寬時那一段准兩行、
 # 地名整個不拆（.sx-pl）；360、375 不加任何規則。真正的幾何在瀏覽器裡量（CSS 在 node 裡排不了版）
 
 
@@ -287,7 +287,7 @@ def test_a_narrow_phone_lets_the_duel_text_wrap_and_keeps_the_place_whole():
     assert '<span class="sx-dt"><b>鄧七郎</b>約戰<span class="sx-pl">潁川郊野</span></span>' in bar  # 地名自己一段，換行只換在「約戰」與它之間
 
 
-# FB-903（QA 2026-10-28）：站在不是區塊的地方應戰（南華觀、豪族塢堡……）沒有出陣卡，陣營名都寫「對面」、底鈕少了「體力 12」，按下去照樣扣。
+# FB-9003（QA 2026-10-28）：站在不是區塊的地方應戰（南華觀、豪族塢堡……）沒有出陣卡，陣營名都寫「對面」、底鈕少了「體力 12」，按下去照樣扣。
 # 現在約戰卡自己帶 sides 與 answer_stamina，網頁先讀它
 
 
@@ -311,7 +311,7 @@ def test_answering_off_a_block_still_names_the_armies_and_shows_the_stamina():
     assert "<b>封好三招，應戰</b><small>固守・固守・固守・體力 12・今日還能應戰 3 次</small>" in sealed
 
 
-# FB-904（PM 照 QA 驗收順帶開，2026-10-28）：守方應戰卡「這一塊」那一行的小籤寫的是看的人自己推這一塊（「推滿 100 易手・還差 75」「同袍還沒人來」），
+# FB-9004（PM 照 QA 驗收順帶開，2026-10-28）：守方應戰卡「這一塊」那一行的小籤寫的是看的人自己推這一塊（「推滿 100 易手・還差 75」「同袍還沒人來」），
 # 跟這一場應戰無關。現在寫這一場牽動什麼：約戰那一軍推到幾、離翻走（沒人佔的拿下）還差多少，守住了拉回它；資料是約戰卡自己帶的，站在哪裡都一樣
 
 

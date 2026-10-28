@@ -173,7 +173,7 @@
     forgeSel: [], // 爐裡放的：{type: "ins", id}，最多兩個（爐裡只合意境，Joy 2026-10-21）
     forgeLock: null, // 鎖在爐裡的那一樣（{type, id}，一次一樣；Joy 2026-10-19「尤其獲得新意境時會想要試他的所有組合」）：開爐成了它留在爐裡、只清另一格
     wheelSel: null, // 江湖頁行動列展開的那一格（move；探索三選一開著時也有 explore；出陣約戰開著時 sortie＝出陣前那張卡）
-    glowRoute: null, // 展開移動之後要發光的那一條路（move:<地點>）：約戰卡的「前往」、新手目標的「去做」記下，什麼時候熄掉見 routeGlowKey（FB-901）
+    glowRoute: null, // 展開移動之後要發光的那一條路（move:<地點>）：約戰卡的「前往」、新手目標的「去做」記下，什麼時候熄掉見 routeGlowKey（FB-9001）
     sortieAnswer: null, // 出陣約戰：約戰卡上按了「應戰」的那一張（id），同一張封三招的卡寫應戰；別人先應、窗過了就收起（setMain）
     sortiePick: [], // 出陣約戰：封三招挑到一半的（一回合一招，沒挑的是 null）；打開別的、送出去就清掉
     sortieFold: {}, // 出陣約戰的卡上「這一塊」「贏了」「守住了」攤開了哪幾段（{block: true, …}）：輪詢重畫照它補回
@@ -898,7 +898,7 @@
     // 入伍段「出一次力」（FB-093）：伺服器在框上帶了能完成它的那幾顆選項的 id（guide.glow），序章外也亮；收在關著的摺疊裡的，
     // 光給摺疊的標題列（glowTarget）
     guideGlow().forEach((id) => document.querySelectorAll(`#page [data-id="${CSS.escape(id)}"]:not([disabled])`).forEach((el) => glowTarget(el).classList.add("glow")));
-    // 約戰卡的「前往」、新手目標的「去做」展開移動後往那一處的那一條（FB-901）：上面清掉了所有 .glow，這裡補回；序章裡也不例外
+    // 約戰卡的「前往」、新手目標的「去做」展開移動後往那一處的那一條（FB-9001）：上面清掉了所有 .glow，這裡補回；序章裡也不例外
     const route = routeGlowKey();
     if (route) (S.main.options || []).filter((o) => routeHit(o.id, route)).forEach((o) => document.querySelectorAll(`#page .act-move [data-id="${CSS.escape(o.id)}"]`).forEach((el) => el.classList.add("glow")));
     const p = pro() || onb();
@@ -997,7 +997,7 @@
   const FIT_MARGIN = 16;
   const fitPage = () => document.getElementById("page");
   // 要放進第一屏的那一塊：平常閒著是行動列；事件、有所感、對話、決戰這種一組選項時是選單最後一顆。
-  // 約戰卡緊接在行動列底下、第一張是應得了或同去得了的（FB-906，企劃者 2026-10-28「要露出來」；sxRank 把可按的排在最前面）時，要擠進第一屏的
+  // 約戰卡緊接在行動列底下、第一張是應得了或同去得了的（FB-9006，企劃者 2026-10-28「要露出來」；sxRank 把可按的排在最前面）時，要擠進第一屏的
   // 是那一行（連右邊的鈕）：它在行動列底下，量它就連整排行動列一起照顧到了，只是多縮場景的畫（收法 5a）；約戰卡本身的版面不動、也不搬到行動列上面。
   // 沒有可按的約戰（只有自己貼的、結算完的、別區的、約戰關著），或行動列與約戰卡之間展開了移動、探索、出陣前那張卡（玩家自己攤開的），
   // 量的還是行動列，第一屏一個像素都不變。量的是約戰那一行、前面的步驟都收完還放不下時，再多收一步 desc（6c，企劃者 2026-10-28「擠完再上」）：
@@ -1150,7 +1150,7 @@
       } while (fitOver() > 0 && hidden < rows.length);
       return true;
     } },
-    // 6c. 量的目標是約戰卡第一張可按的那一行（fitDuelRow，FB-906）、前面的步驟都收了還放不下（矮手機：375×667、360×700 被分頁列蓋了 4～10 px）：
+    // 6c. 量的目標是約戰卡第一張可按的那一行（fitDuelRow，FB-9006）、前面的步驟都收了還放不下（矮手機：375×667、360×700 被分頁列蓋了 4～10 px）：
     //     閒著（沒有分隔線：不是集結、觀戰）的場景卡把所在地的描述每段收成一行、放不下加「…」，點了整張場景卡攤開（同第 7 步：fitClip、
     //     ownOpen，S.ownOpen 記著玩家攤開過就不再收）。企劃者 2026-10-28「擠完再上」。排在 7 之前：先收不少字的步驟，還不夠才收描述。
     //     只在量約戰那一行時做：目標是行動列、一組選項時一個像素都不動。「此地還有」、結伴、別人遞來的邀請（.calls）、地名與時刻那一條
@@ -5867,7 +5867,7 @@
     if ((S.main.options || []).some((o) => hit(o.id))) {
       S.sortieAnswer = null;
       S.wheelSel = "move";
-      S.glowRoute = id; // 往那一處的那一條發光：記在狀態裡，重畫、摺疊 toggle 都保得住（FB-901）
+      S.glowRoute = id; // 往那一處的那一條發光：記在狀態裡，重畫、摺疊 toggle 都保得住（FB-9001）
       renderPage();
       revealMoveCard();
       return;

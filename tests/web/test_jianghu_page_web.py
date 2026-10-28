@@ -81,7 +81,7 @@ const scene = L.scene ? el("scene", ["card", "scene"]) : null;
 // 場景的畫（減法季批 8；收法 5a 縮成橫幅）與戰鬥補充那一塊（收法 5c 只留第一行；L.extra 是一共幾行）
 const art = L.art ? el("art", ["scene-art"]) : null;
 const extra = L.extra ? el("extra", ["tx-extra"]) : null;
-// 約戰卡第一張應得了、同去得了的那一行（FB-906，收法 fitDuelRow）：L.duel 是那一行的下緣比行動列下緣低幾 px（沒給＝沒有可按的約戰，量的還是行動列）；
+// 約戰卡第一張應得了、同去得了的那一行（FB-9006，收法 fitDuelRow）：L.duel 是那一行的下緣比行動列下緣低幾 px（沒給＝沒有可按的約戰，量的還是行動列）；
 // 它的鈕（sortie-answer／sortie-join）掛在那一行底下，fitDuelRow 取鈕的 parentElement
 const duelRow = L.duel ? el("duelrow", ["sx-drow"]) : null;
 const duelBtn = L.duel ? el("duelbtn", ["btn"], { parentElement: duelRow }) : null;
@@ -796,7 +796,7 @@ def test_refitting_brings_the_art_and_the_extra_lines_back():
     assert out["fitted"] == [] and "fit-art" not in out["art"] and "fit-extra" not in out["extra"] and out["extraAttrs"] == {}
 
 
-# ── 約戰卡第一張那一行要露在第一屏（FB-906，企劃者 2026-10-28「要露出來」）──────────────────────
+# ── 約戰卡第一張那一行要露在第一屏（FB-9006，企劃者 2026-10-28「要露出來」）──────────────────────
 # 約戰卡排在行動列底下。真資料下「此地還有」只有一人時場景的畫不縮（約 267 px），卡從約 732～772 px 開始、分頁列頂在 756，375×812
 # 只露出「約戰 N 張」標題，應戰、同去的鈕被擠到分頁列底下。第一張是應得了或同去得了的（sxRank 把可按的排最前面）時，收法量的改成那一行
 # （連右邊的鈕）：它比行動列低，所以整排行動列一起照顧到，多縮的是場景的畫；沒有可按的約戰一個像素都不變
@@ -857,7 +857,7 @@ def test_the_selector_follows_the_real_markup_the_duel_card_draws():
 
 
 # ── 約戰那一行擠完還放不下：再把場景卡的地點描述收成一行（企劃者 2026-10-28「擠完再上」）──────────────────
-# FB-906 讓量的目標改成約戰第一行之後，375×812 放得下，矮手機還是被分頁列蓋住（實機量：375×667 蓋約 10 px、360×700、320×700 蓋 4～6 px、
+# FB-9006 讓量的目標改成約戰第一行之後，375×812 放得下，矮手機還是被分頁列蓋住（實機量：375×667 蓋約 10 px、360×700、320×700 蓋 4～6 px、
 # 320×568 差一百多 px）：閒著時場景卡的地點描述從來不收（第 7 步 own 只收決戰集結時分隔線之後的）。收法多一步 desc（6c，排在 6b 邀請之後、
 # 7 之前）：只在量的是約戰那一行時，把沒有分隔線的閒著場景卡的描述每段收成一行，點了整張場景卡攤開（own-more、S.ownOpen）。
 # 「此地還有」、結伴、邀請、地名與時刻那一條（有畫時疊在畫上，沒有畫時是第一段）不是描述

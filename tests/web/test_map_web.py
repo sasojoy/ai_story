@@ -250,7 +250,7 @@ def test_fb262_standing_there_still_shows_the_odds():
 
 
 def test_fb905_a_passing_convoy_makes_the_card_button_say_intercept_without_the_attack_odds():
-    """FB-905（PM 照 QA 驗收順帶開，2026-10-28）：這週截糧的運糧隊正打這裡經過，行動列那一格是「出陣・截糧」、按了打運糧隊；輿圖卡上的鈕照舊寫
+    """FB-9005（PM 照 QA 驗收順帶開，2026-10-28）：這週截糧的運糧隊正打這裡經過，行動列那一格是「出陣・截糧」、按了打運糧隊；輿圖卡上的鈕照舊寫
     「出陣・攻 必敗」，跟行動列對不上。現在寫「出陣・截糧」、小字只剩今日還能幾次（不掛攻的勝算；卡下面的「此地的對手」照舊列運糧隊與它的勝算）。"""
     from tianxia import orders
     from tianxia.state import Order

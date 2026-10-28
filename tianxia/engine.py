@@ -10586,8 +10586,8 @@ class Game:
         """main.sorties（欄位表 1.3；sortie_duel.card）：約戰關著、序章裡是 None；散人是空的。還沒打的約戰兩邊都列（對面的是應戰、同袍的是同去、
         自己的是 mine），結算完（或作廢）的只列自己有份的、留 keep_hours。同去那一顆照 _duel_join_extra 再驗；不同區的照 place_minutes 寫步行幾分。
         多一個 result：看的人這一場的結果（大勝、險勝、僵持、落敗；沒結算是 None）；sides（兩軍的名字，同 sortie_card.sides）與 answer_stamina（應戰的體力）
-        每一張都帶：站的地方不是區塊時沒有 sortie_card，網頁的陣營名與底鈕的體力只能從這裡拿（FB-903）。還沒打的另帶約戰那一塊此刻的樣子
-        （holder、bars、to_flip、foe_pushing；應戰卡寫這一場牽動什麼，FB-904）。"""
+        每一張都帶：站的地方不是區塊時沒有 sortie_card，網頁的陣營名與底鈕的體力只能從這裡拿（FB-9003）。還沒打的另帶約戰那一塊此刻的樣子
+        （holder、bars、to_flip、foe_pushing；應戰卡寫這一場牽動什麼，FB-9004）。"""
         s, c = self.state, self.content
         if not self.duel_on() or prologue_rules.active(s, c):
             return None
@@ -10614,9 +10614,9 @@ class Game:
             if card["role"] == "join" and card["can_join"] and (extra := self._duel_join_extra(duel)) is not None:
                 card["can_join"], card["why_not"] = False, extra
             card["result"] = sortie_duel.side_tier(duel, p.name)
-            # 出陣約戰網頁（FB-903）：站的地方不是區塊（豪族塢堡、南華觀……）就沒有 sortie_card，卡上的陣營名與應戰的體力要從每一張約戰卡自己帶
+            # 出陣約戰網頁（FB-9003）：站的地方不是區塊（豪族塢堡、南華觀……）就沒有 sortie_card，卡上的陣營名與應戰的體力要從每一張約戰卡自己帶
             card["sides"], card["answer_stamina"] = dict(sides), cfg.answer_stamina
-            # 應戰卡寫的是這一場牽動的那一塊（FB-904，不是看的人自己推這一塊）：還沒打的帶約戰那一塊此刻歸誰、兩條進度（mine 是看的人這一邊、
+            # 應戰卡寫的是這一場牽動的那一塊（FB-9004，不是看的人自己推這一塊）：還沒打的帶約戰那一塊此刻歸誰、兩條進度（mine 是看的人這一邊、
             # theirs 是約戰那一軍）、約戰那一軍離翻走還差多少、幾人在推——站在哪裡都一樣，守住了拉回的就是 theirs
             if card["status"] in ("open", "answered"):
                 bars = conquest.bars(w, duel.block)
@@ -15389,7 +15389,7 @@ class Game:
         out = mapdata.state(
             s, c, odds=self.odds, sortie_mode=lambda loc_id: judge(loc_id)[0], sorties_left=self.sorties_left() if on else None,
             real_minutes=self._real_minutes, sortie_foes=foes, mostly=self.map_mostly(),
-            # 截糧的運糧隊正打那裡經過：出陣那一格是「出陣・截糧」、打運糧隊（_duel_option），輿圖卡上的鈕也寫截糧、不掛攻的勝算（FB-905）
+            # 截糧的運糧隊正打那裡經過：出陣那一格是「出陣・截糧」、打運糧隊（_duel_option），輿圖卡上的鈕也寫截糧、不掛攻的勝算（FB-9005）
             convoy=(lambda loc_id: bool(orders.extra_enemies(s, c, loc_id, faction))) if duel else None,
         )
         for loc_id, info in out["places"].items():  # 地點卡上那一句這一帶多兇（尋敵分級，Joy 2026-10-22：不寫幾級）；沒有是空字串
