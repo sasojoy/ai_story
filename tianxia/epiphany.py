@@ -207,6 +207,7 @@ def build(state: GameState, content: Content, method: str) -> tuple[StoryDef, di
         StoryStage(id="ask", kind="quiz", questions=_questions(state), hint=ASK_HINT, next="trial", immediate=False),
         StoryStage(id="trial", kind="task", task=f"{KIND}:{trial}", hint=hint, next="demon"),
         StoryStage(id="demon", kind="fight", mirror=r.demon_scale, hint=DEMON_HINT, card=DEMON_CARD, image=IMAGE["demon"],
+                   mirror_weaken=r.demon_weaken, mirror_floor=r.demon_floor,
                    retries=10**6, retry_days=r.retry_days, win="done", lose="done"),
     ]
     ending = StoryEnding(id="done", title="悟成", text=DONE_TEXT, annal=DONE_ANNAL, image=IMAGE["done"])
