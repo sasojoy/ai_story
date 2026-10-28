@@ -3321,6 +3321,7 @@ class JianfaRules(JianfaNumbers):
     # ── 批 7b：列傳為終點（整合設計第九章；主機側計畫第八節；tianxia/zhuan_end.py）──
     zhuan_end: bool = True  # 第九章 列傳為終點：行狀補齊（季末論功、〈天下形勢〉）、人物評曰、列傳的三件商品（批 7b；深交上限企劃者 2026-10-28 拿掉）
     verdict_chars: int = Field(default=40, ge=1)  # 人物評曰一句最多幾個字【預設】
+    verdict_affinity_max: int = Field(default=3, ge=0)  # 情誼 70 以上替你寫評曰的最多幾位（情誼高的在前；PM 2026-10-28，深交不限人數之後）【預設】
     verdict_budget_seconds: float = Field(default=40, gt=0)  # 一條評曰最多等模型幾秒（含排隊，排在真人後面）【預設】
 
 
