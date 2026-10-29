@@ -545,3 +545,202 @@ def test_another_players_find_never_shows_on_your_forge_page(content, world, kin
     assert shop["pending"] == {}
     game.smith_forge(kind, main, aux)  # 對照組：自己打中過一次，鑄譜記下了才寫
     assert game.smith_line(kind, main, aux)["head"].startswith("照鑄譜上的")
+
+
+# ── 鐵匠鋪與合成流程 3.2（B 批）：看火候（MAIN_ACTIONS["smith_furnace"]、smith_view.forge.furnace）──
+
+TW_MIDNIGHT = 16 * 3600  # UTC 16:00＝台灣 00:00：回體丹的換日（Game._pill_day）
+
+
+def _fire(silver=300, profile="week7", name="火候"):
+    """正式內容（week7：銀兩出口開著；weekend：關著）、店面開著；人在潁川（城鎮），背包精鐵砂 ×4、驚羽 ×2；走進鐵匠鋪（act:smith）。
+    game.now 停在台灣 01:00，要換日就加一天。"""
+    from conftest import no_week_unlock
+    from tianxia.engine import Game
+    from tianxia.sqlite_world import open_world
+
+    c = no_week_unlock(real_content(profile))
+    c.config.auto_open_first_season = True
+    game = Game.new(c, name, rng=random.Random(0), world=open_world())
+    game.client = None
+    p = game.state.player
+    p.location, p.faction, p.tutorial_step = "yingchuan", "guan", len(c.tutorial.steps)
+    p.stats["silver"], p.stats["wis"], p.materials = silver, 5, {"gang_1": 4, "kuai_1": 2}
+    game.now = TW_MIDNIGHT + 3600
+    game.choose("act:smith")
+    assert game.shop_view() is not None
+    return game
+
+
+def _furnace(game):
+    return game.shop_view()["forge"]["furnace"]
+
+
+def _state_of(game):
+    p = game.state.player
+    return (p.stats["silver"], dict(p.materials), p.furnace_ready, p.furnace_day, len(game.state.journal))
+
+
+def test_the_forge_page_carries_the_furnace_and_looking_at_it_pays_once():
+    from tianxia import silver
+
+    game = _fire()
+    cfg = game.content.config.silver_outlets
+    assert _furnace(game) == {"price": cfg.furnace_silver, "ready": False, "used_today": False, "problem": None, "id": "smith_furnace"}
+    msgs = game.smith_furnace()
+    p = game.state.player
+    assert msgs == [silver.FURNACE_DONE, f"銀兩 -{cfg.furnace_silver}"]
+    assert p.furnace_ready and p.stats["silver"] == 300 - cfg.furnace_silver
+    assert _furnace(game) == {"price": cfg.furnace_silver, "ready": True, "used_today": False, "problem": silver.FURNACE_READY, "id": "smith_furnace"}
+    top = game.state.journal[0]  # 人在店裡：寫一則「鐵匠鋪」紀錄（同 smith_upgrade），不是打點帳簿那一則「看火候」
+    assert top.title == weapons.SMITH and silver.FURNACE_DONE in top.lines and top.changes == [f"銀兩 -{cfg.furnace_silver}"]
+    forge = game.shop_view()["forge"]
+    assert forge["line"] == game.smith_line(forge["kind"])  # 打造頁的素材格與那一行照舊
+
+
+def test_the_furnace_state_is_the_same_one_the_dadian_page_reads():
+    """打點帳簿那一格照舊留著：同一個 furnace_ready，兩邊看到的是同一個狀態。"""
+    from tianxia import silver
+
+    game = _fire()
+    ledger = lambda: shopview.dadian_view(  # noqa: E731
+        game.state, game.content, day=game._pill_day(), room=0, base=False, clinic=False, smith=True, bribe=[], prologue=False)
+    assert silver.HANG_FURNACE not in ledger()["hang"]
+    game.smith_furnace()
+    assert silver.HANG_FURNACE in ledger()["hang"]  # 帳簿底下「記帳」那一行讀的就是 furnace_ready
+    game.choose("smith:back")
+    assert game.state.player.furnace_ready  # 離開店不洗掉
+
+
+def test_after_looking_the_next_forge_runs_on_the_new_base_and_uses_it_up():
+    from tianxia import silver
+
+    game = _fire()
+    plain = game.smith_line("劍", "gang_1", "kuai_1")["odds"]
+    game.smith_furnace()
+    warm = game.smith_line("劍", "gang_1", "kuai_1")["odds"]  # 當場換成新基準（付了錢重問一次就對）
+    pct = lambda odds: {x["q"]: x["pct"] for x in odds}  # noqa: E731
+    assert pct(warm)["上品"] > pct(plain)["上品"] and pct(warm)["下品"] < pct(plain)["下品"] and sum(pct(warm).values()) == 100
+    twin = _fire(name="照舊")  # 同一條路：打點那一頁的看火候（act:furnace 的引擎函式）算出來的機率一樣
+    silver.furnace(twin.state, twin.content, twin._pill_day(), False)
+    assert pct(twin.smith_line("劍", "gang_1", "kuai_1")["odds"]) == pct(warm)
+    game.smith_forge("劍", "gang_1", "kuai_1")  # 開爐那一下用掉
+    p = game.state.player
+    assert not p.furnace_ready and p.furnace_day == game._pill_day()
+    plain_twin = _fire(name="沒看")  # 對照：沒看火候、同樣打過一爐（熟手每爐 +2）的人，機率跟用掉之後的這個人一樣
+    plain_twin.smith_forge("劍", "gang_1", "kuai_1")
+    assert pct(game.smith_line("劍", "gang_1", "kuai_1")["odds"]) == pct(plain_twin.smith_line("劍", "gang_1", "kuai_1")["odds"])
+    cfg = game.content.config.silver_outlets
+    assert _furnace(game) == {"price": cfg.furnace_silver, "ready": False, "used_today": True, "problem": silver.FURNACE_TODAY, "id": "smith_furnace"}
+
+
+def test_looking_twice_in_one_day_is_refused_without_cost_and_a_new_day_works_again():
+    from tianxia import silver
+
+    game = _fire()
+    game.smith_furnace()
+    before = _state_of(game)
+    assert game.smith_furnace() == [f"（{silver.FURNACE_READY}。）"] and _state_of(game) == before  # 看過了、還沒開爐
+    game.smith_forge("劍", "gang_1", "kuai_1")
+    before = _state_of(game)
+    assert game.smith_furnace() == [f"（{silver.FURNACE_TODAY}。）"] and _state_of(game) == before  # 開了爐、今天用掉了
+    game.now += 24 * 3600
+    assert _furnace(game)["used_today"] is False and _furnace(game)["problem"] is None
+    assert game.smith_furnace()[0] == silver.FURNACE_DONE and game.state.player.furnace_ready
+
+
+def test_looking_is_refused_without_cost_when_short_of_silver_or_in_the_prologue(monkeypatch):
+    from tianxia import prologue, silver
+
+    game = _fire(silver=10)
+    assert _furnace(game)["problem"] == "還差 40 兩"
+    before = _state_of(game)
+    assert game.smith_furnace() == ["（還差 40 兩。）"] and _state_of(game) == before
+    game.state.player.stats["silver"] = 300
+    before = _state_of(game)
+    monkeypatch.setattr(prologue, "active", lambda s, c: True)  # 序章裡請不動老師傅
+    assert _furnace(game)["problem"] == silver.FURNACE_PROLOGUE
+    assert game.smith_furnace() == [f"（{silver.FURNACE_PROLOGUE}。）"] and _state_of(game) == before
+
+
+def test_looking_needs_the_smithy_open_and_the_menu_in_front():
+    """店沒開（走出去了、不在鐵匠鋪）、休季：同 smith_forge 拒（選單上沒有那一串），不收錢、不寫紀錄。"""
+    game = _fire()
+    game.choose("smith:back")
+    before = _state_of(game)
+    assert game.smith_furnace() == [equipment.NOT_NOW] and _state_of(game) == before
+    assert game.shop_view() is None
+    far = _fire(name="走遠")
+    far.state.player.location = "changshe"  # 人不在有鐵匠鋪的城鎮
+    before = _state_of(far)
+    assert far.smith_furnace() == [equipment.NOT_NOW] and _state_of(far) == before
+    game = _fire(name="休季")  # 最後才收季：收了之後這一份世界不再有店
+    game.content.config.admins = ["休季"]
+    game.admin_end_season(now=100.0)
+    before = _state_of(game)
+    assert [o.id for o in game.options(odds=False)] == ["season:resting"] and game.state.player.picking_smith
+    assert game.smith_furnace() == [equipment.NOT_NOW] and _state_of(game) == before
+
+
+def test_where_the_silver_outlets_are_off_there_is_no_furnace_and_nothing_changes():
+    """銀兩出口關著（週末、14 天季）：forge.furnace 是 None、直接按也只回「此刻無法」，打造頁其餘的一個字不動。"""
+    game = _fire(profile="weekend")
+    view = game.shop_view()
+    assert view["forge"]["furnace"] is None
+    assert set(view["forge"]) == {"kinds", "kind", "note", "materials", "line", "furnace"}
+    before = _state_of(game)
+    assert game.smith_furnace() == [equipment.NOT_NOW] and _state_of(game) == before
+
+
+def test_the_outlet_setting_off_also_hides_the_furnace_in_a_season_that_has_them():
+    game = _fire()
+    assert _furnace(game) is not None
+    game.content.config.silver_outlets.enabled = False
+    before = _state_of(game)
+    assert _furnace(game) is None and game.smith_furnace() == [equipment.NOT_NOW] and _state_of(game) == before
+
+
+def test_a_direct_smith_view_without_the_day_has_no_furnace(content, world):
+    game = _smith(content, world)
+    assert shopview.smith_view(game.state, content, world)["forge"]["furnace"] is None
+
+
+def test_the_server_route_looks_at_the_fire(monkeypatch):
+    """/api/do/smith_furnace 走真的伺服器（week7 的正式內容）：回的 main 裡 forge.furnace 換成「看過了」，收了 50 兩。"""
+    from fastapi.testclient import TestClient
+
+    import server
+    from tianxia import accounts
+    from tianxia.characters import open_characters
+
+    content = real_content("week7")
+    content.config.auto_open_first_season = True
+    content.config.jianfa.enabled = False
+    monkeypatch.setattr(server, "CONTENT", content)
+    monkeypatch.setattr(accounts, "SCRYPT_PARAMS", {"n": 2, "r": 1, "p": 1, "dklen": 32})
+    monkeypatch.setattr(server, "_breaker_until", None, raising=False)
+    stores = (server.LOGIN_FAILURES, server.SESSIONS, server.GAMES)
+    for store in stores:
+        store.clear()
+    try:
+        client = TestClient(server.app)
+        client.post("/api/register", json={"login": "fire_01", "password": "secret-pw", "again": "secret-pw"})
+        client.post("/api/character", json={"name": "火候客"})
+        client.post("/api/do/skip_tutorial", json={})
+        game = server.game_for("火候客")
+        p = game.state.player
+        p.location, p.stats["silver"] = "yingchuan", 300
+        equipment.open_smith(p, content)
+        open_characters().save(game.state)
+        shop = client.get("/api/main").json()["shop"]
+        furnace = shop["forge"]["furnace"]
+        assert furnace["ready"] is False and furnace["problem"] is None and furnace["id"] == "smith_furnace"
+        out = client.post(f"/api/do/{furnace['id']}", json={}).json()
+        after = out["main"]["shop"]
+        assert after["forge"]["furnace"]["ready"] is True and after["silver"] == shop["silver"] - furnace["price"]
+        assert "火候" in out["message"]
+        again = client.post("/api/do/smith_furnace", json={}).json()
+        assert again["main"]["shop"]["silver"] == after["silver"] and "請過了" in again["message"]  # 第二下被拒、不收錢
+    finally:
+        for store in stores:
+            store.clear()

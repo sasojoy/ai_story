@@ -6398,10 +6398,11 @@ class Game:
                                         prologue=prologue_rules.active(s, c))
         if shop == "tavern":
             return self.tavern_view()
-        view = {"smith": shopview.smith_view, "market": shopview.market_view, "board": shopview.board_view}[shop](s, c, self.world)
-        if shop == "smith":  # 素材買賣（素材與經濟設計第四、五節）：收購、升階都關著是 None
-            view["trade"] = shopview.trade_view(s, c, self._pill_day())
-        return view
+        if shop == "smith":  # 打造頁的爐火（鐵匠鋪與合成流程 3.2，forge.furnace）要回體丹的換日與序章：Game 才知道
+            view = shopview.smith_view(s, c, self.world, day=self._pill_day(), prologue=prologue_rules.active(s, c))
+            view["trade"] = shopview.trade_view(s, c, self._pill_day())  # 素材買賣（素材與經濟設計第四、五節）：收購、升階都關著是 None
+            return view
+        return {"market": shopview.market_view, "board": shopview.board_view}[shop](s, c, self.world)
 
     def smith_line(self, kind: str, main: str | None = None, aux: str | None = None) -> dict:
         """店面打造頁爐裡放了什麼，這一爐會怎樣（shopview.smith_line；/api/smith_line）。只讀。"""
@@ -6489,6 +6490,23 @@ class Game:
         msgs = msgs + clue
         journal.add_entry(s, Draft(weapons.SMITH).entry(s.world.time, msgs))
         self._save_season()
+        return self._log(msgs)
+
+    def smith_furnace(self) -> list[str]:
+        """打造頁爐火上的「看火候」（鐵匠鋪與合成流程 3.2；MAIN_ACTIONS["smith_furnace"]）：叫跟打點頁、選單 act:furnace 同一支 silver.furnace
+        （價錢、一天一次、序章不能用、下一爐用掉、只管打造不管煉製，一字不改），所以打點帳簿那一格讀的是同一個 furnace_ready。
+        擋法同 smith_forge／_trade_open：銀兩出口開著（silver.on）、店開著而且那一串是眼前的選單（休季、決戰開打時選單上沒有它，拒）——
+        不直接送 act:furnace，因為店開著時選單是店裡那一串，act:furnace 不在上面，Game.choose 會拒。看成了寫一則「鐵匠鋪」紀錄（同 smith_upgrade）；
+        被拒絕的不收錢、不寫紀錄。不擲鐵匠順口、不動掌櫃那一句（走打點那條路本來就不擲）。"""
+        s, c = self.state, self.content
+        if not self._trade_open(silver.on(c, s.world)):
+            return self._log([equipment.NOT_NOW])
+        day, prologue = self._pill_day(), prologue_rules.active(s, c)
+        problem = silver.furnace_problem(s, c, day, prologue)
+        msgs = silver.furnace(s, c, day, prologue)
+        if problem is None:
+            journal.add_entry(s, Draft(weapons.SMITH).entry(s.world.time, msgs))
+            self._save_season()
         return self._log(msgs)
 
     def wield_weapon(self, item_id: str) -> list[str]:

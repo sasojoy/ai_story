@@ -334,11 +334,33 @@ def smith_line(state: GameState, content: Content, world: WorldStateStore, kind:
     return out
 
 
-def smith_view(state: GameState, content: Content, world: WorldStateStore) -> dict:
-    """鐵匠鋪的店面（第一、二節）：招牌、銀兩、掌櫃的話、出店與兵器防具切換的選項 id，四頁的資料。"""
+FURNACE_OP = "smith_furnace"  # 爐火上「看火候」那一顆叫的 op（/api/do/smith_furnace；店開著時選單上沒有 act:furnace，不能送那個 id）
+
+
+def furnace_view(state: GameState, content: Content, day: int | None, prologue: bool = False) -> dict | None:
+    """打造頁爐火那一塊（鐵匠鋪與合成流程 3.2；smith_view 的 forge.furnace）：price 一次幾兩、ready 看過了還沒開爐（下一爐照新基準）、
+    used_today 今天看過而且已經用掉了、problem 此刻看不了的原因（照 silver.furnace_problem：序章、看過了還沒開爐、今天用掉了、錢不夠；
+    看得了是 None）、id 按下去叫的 op（FURNACE_OP）。價錢、一天一次全照 silver.furnace，跟打點帳簿同一個 furnace_ready。
+    銀兩出口關著（silver.on 是 False：週末、14 天季、設定關）是 None：網頁不畫那一塊，打造頁照舊。day 是回體丹的換日（Game._pill_day）；
+    沒給（只讀的直接呼叫）也是 None。"""
+    if day is None or not silver.on(content, state.world):
+        return None
+    p = state.player
+    return {
+        "price": content.config.silver_outlets.furnace_silver, "ready": p.furnace_ready,
+        "used_today": not p.furnace_ready and p.furnace_day == day,
+        "problem": silver.furnace_problem(state, content, day, prologue), "id": FURNACE_OP,
+    }
+
+
+def smith_view(state: GameState, content: Content, world: WorldStateStore, day: int | None = None, prologue: bool = False) -> dict:
+    """鐵匠鋪的店面（第一、二節）：招牌、銀兩、掌櫃的話、出店與兵器防具切換的選項 id，四頁的資料。day、prologue 是 Game 給的（回體丹的換日、
+    在不在序章），forge.furnace 要用；沒給 day 的直接呼叫 forge.furnace 是 None。"""
     p = state.player
     art, neigong = _arts(state, content, world)
     page = equipment.page(p, content)
+    forge = _forge(state, content, world, page, art)
+    forge["furnace"] = furnace_view(state, content, day, prologue)
     return {
         "shop": "smith",
         "sign": f"{content.locations[p.location].name}{SMITH_SIGN}",
@@ -353,7 +375,7 @@ def smith_view(state: GameState, content: Content, world: WorldStateStore) -> di
         "worn": _worn(state, content, world, page, art),
         "rack": _rack(state, content, world, page, art, neigong),
         "pending": forge_secrets.unnamed_originals(state, world),
-        "forge": _forge(state, content, world, page, art),
+        "forge": forge,
     }
 
 

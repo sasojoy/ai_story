@@ -2474,6 +2474,8 @@ MAIN_ACTIONS = {
     # 鐵匠鋪的素材買賣（素材與經濟設計第四、五節）：收購一次賣 count 個、升階一次換一個
     "smith_sell": lambda g, b: g.smith_sell(str(b.get("material", "")), max(1, _int(b.get("count"), 1))),
     "smith_upgrade": lambda g, b: g.smith_upgrade(str(b.get("attribute", "")), _int(b.get("tier"), 0)),
+    # 打造頁爐火上的「看火候」（鐵匠鋪與合成流程 3.2）：叫同一支 silver.furnace；店開著時選單上沒有 act:furnace，所以另開這一個
+    "smith_furnace": lambda g, b: g.smith_furnace(),
     # 自家大本營捐軍備（素材與經濟設計第六節）：一次捐一種素材 count 個（上限切一半：收得下的收）；軍需帳那一頁送 items
     # （[{material, count}, …]，挑好的幾種一起捐、一則紀錄）
     "donate": lambda g, b: g.donate_items(donate_items(b)) if "items" in b else g.donate(str(b.get("material", "")), max(1, _int(b.get("count"), 1))),
