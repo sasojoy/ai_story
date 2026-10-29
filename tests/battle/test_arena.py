@@ -478,3 +478,117 @@ def test_the_finishing_blow_reports_whole_numbers():
     assert isinstance(lost, int) and f"{-lost:+d}" == "-37" and side.hp == 0
     side = ArenaSide(name="乙", power=100.0, hp=399.5, hp_cap=400.0)
     assert isinstance(arena._pool(side, -30), int) and side.hp == 400.0
+
+
+# ── 鐵匠鋪與合成流程 3.9（D 批）：擂台吃防具（兩邊各吃自己的；分身報名、更新那一刻抄）──
+# 化勁在單挑裡本來就是戰法（Step.a_cut／b_cut）：cut 只抄防具那一份，乘的那一刻跟戰法的化勁相加、夾 total_cap
+
+
+def _mail(tier=3, quality="上品", edge=100):
+    from tianxia.state import Equipment
+
+    return Equipment(id="甲:1", slot="armor", name="試甲", attribute="剛", tier=tier, quality=quality, edge=edge)
+
+
+def _wearing(content, world, name, armor_item, act):
+    def go(g):
+        g.state.player.armor = armor_item
+        return act(g)
+    return _do(content, world, name, go)
+
+
+def test_joining_copies_the_armor_cut_and_joining_again_updates_it(ring):
+    content, world = ring
+    content.config.armor.enabled = True
+    join = lambda g: g.choose("act:arena") + g.choose("arena:join") + g.choose("arena:back")  # noqa: E731
+    _wearing(content, world, "乙", _mail(), join)
+    entry = arena.entry_of(world.get_season(), "乙")
+    assert entry.cut == pytest.approx(0.22) and entry.rank == 1  # 三階 18%＋上品 4%
+    _wearing(content, world, "甲", None, join)
+    assert arena.entry_of(world.get_season(), "甲").cut == 0.0  # 沒穿甲的人報名，是 0
+    _wearing(content, world, "乙", _mail(tier=1, quality="下品", edge=40), join)  # 再按報名＝更新分身：換成此刻的防具（含耐久）
+    entry = arena.entry_of(world.get_season(), "乙")
+    assert entry.cut == pytest.approx(0.06 * (0.5 + 0.5 * 0.4)) and entry.rank == 1  # 名次照舊
+    content.config.armor.enabled = False
+    _wearing(content, world, "乙", _mail(), join)
+    assert arena.entry_of(world.get_season(), "乙").cut == 0.0  # 防具關著不吃
+
+
+def test_each_side_of_a_fight_is_snapshotted_with_its_own_cut(ring):
+    content, world = ring
+    content.config.armor.enabled = True
+    join = lambda g: g.choose("act:arena") + g.choose("arena:join") + g.choose("arena:back")  # noqa: E731
+    _wearing(content, world, "乙", _mail(tier=2, quality="中品"), join)
+    _wearing(content, world, "甲", None, join)
+    fought = lambda g: g.choose("act:arena") + g.choose("arena:fight:乙")  # noqa: E731
+    _, game = _wearing(content, world, "甲", _mail(tier=3, quality="上品"), lambda g: join(g) + fought(g))
+    fight = game.state.player.arena
+    assert fight is not None
+    assert fight.me.cut == pytest.approx(0.22) and fight.foe.cut == pytest.approx(0.12 + 0.02)  # 你是開打這一刻的，他是分身報名時的
+    arena.entry_of(game.state.world, "乙").cut = 0.9  # 分身事後怎麼變不影響已經開打的這一場
+    assert game.state.player.arena.foe.cut == pytest.approx(0.14)
+
+
+def _sides(me_cut=0.0, foe_cut=0.0):
+    from tianxia import duel as duel_rules
+    from tianxia.state import ArenaFight, ArenaSide
+
+    scores = {"強攻": 60.0, "固守": 60.0, "奇襲": 60.0}
+    return ArenaFight(id=1, foe_key="乙", me=ArenaSide(name="甲", power=80.0, scores=dict(scores), hp=300.0, hp_cap=300.0, cut=me_cut),
+                      foe=ArenaSide(name="乙", power=80.0, scores=dict(scores), hp=300.0, hp_cap=300.0, cut=foe_cut), move="強攻")
+
+
+def test_the_blow_each_side_lands_is_cut_by_the_other_sides_own_armor(content):
+    content.config.duel.luck = 0
+    bare = arena.exchange_full(_sides(), "固守", content, random.Random(1))
+    worn = arena.exchange_full(_sides(me_cut=0.2, foe_cut=0.4), "固守", content, random.Random(1))
+    assert bare.mine_hp > 0 and bare.foe_hp > 0
+    assert worn.mine_hp == round(bare.mine_hp * 0.8) and worn.foe_hp == round(bare.foe_hp * 0.6)  # 兩邊各吃自己的
+    assert (worn.delta, worn.beat, worn.mine, worn.his) == (bare.delta, bare.beat, bare.mine, bare.his)
+    assert arena.exchange_full(_sides(me_cut=0.2), "固守", content, random.Random(1)).foe_hp == bare.foe_hp  # 只有我穿：他挨的不變
+
+
+def test_arena_blows_take_armor_and_tactic_toll_cut_together_clamped_at_the_cap(content, monkeypatch):
+    from tianxia import duel as duel_rules
+    from tianxia import tactics
+    from tianxia.state import PLAYER
+
+    content.config.duel.luck = 0
+    ctx = tactics.Ctx(foe="對手", our_agility=5.0, foe_agility=5.0, team=[PLAYER])
+    stub = tactics.Step(a_cut=0.3, b_cut=0.1)
+    monkeypatch.setattr(tactics, "step", lambda bout, move, his, *a, **k: stub.model_copy(update={"a_move": move, "b_move": his}))
+
+    def blows(me_cut, foe_cut):
+        fight = _sides(me_cut, foe_cut)
+        fight.bout = tactics.Bout(a=tactics.side_for([], ctx), b=tactics.side_for([], ctx))
+        out = arena.exchange_full(fight, "固守", content, random.Random(1), random.Random(2))
+        return out.mine_hp, out.foe_hp
+
+    raw_me = duel_rules.harm_of(300.0, 60.0, 60.0, 0, content.config.duel)
+    near = lambda got, want: abs(got - want) <= 0.51  # noqa: E731
+    assert blows(0.0, 0.0) == (round(raw_me * 0.7), round(raw_me * 0.9))  # 沒防具：戰法的化勁照舊（一字不差）
+    mine, foe = blows(0.22, 0.4)
+    assert near(mine, raw_me * 0.48) and near(foe, raw_me * 0.5)  # 22%＋30%；40%＋10%
+    mine, foe = blows(0.5, 0.55)
+    assert near(mine, raw_me * 0.4) and near(foe, raw_me * 0.4)  # 都超過 60%：夾在 total_cap
+
+
+def test_a_failed_gamble_in_the_ring_does_not_eat_the_armor(content):
+    content.config.duel.luck = 0
+    bare, worn = _sides(), _sides(me_cut=0.5, foe_cut=0.5)
+    assert arena.gamble(bare, 0, content, random.Random(3)) == arena.gamble(worn, 0, content, random.Random(3))
+    assert bare.me.hp == worn.me.hp < 300.0 and bare.foe.hp == worn.foe.hp == 300.0  # 失手重傷的是自己；他的招不算，也沒挨打
+
+
+def test_a_whole_ring_fight_does_not_wear_the_armor_out(ring):
+    content, world = ring
+    content.config.armor.enabled = True
+    join = lambda g: g.choose("act:arena") + g.choose("arena:join") + g.choose("arena:back")  # noqa: E731
+    _wearing(content, world, "乙", _mail(), join)
+    _wearing(content, world, "甲", _mail(), join)
+    joined = arena.entry_of(world.get_season(), "乙")
+    assert joined.cut > 0
+    _, game = _wearing(content, world, "甲", _mail(), lambda g: join(g) + g.choose("act:arena") + g.choose("arena:fight:乙"))
+    while game.state.player.arena is not None:
+        game.choose("arena:固守")
+    assert game.state.player.armor.edge == 100  # 不磨耐久（同切磋、決戰）

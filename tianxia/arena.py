@@ -335,7 +335,9 @@ def exchange(fight: ArenaFight, move: str, content: Content, rng: random.Random,
 
 def exchange_full(fight: ArenaFight, move: str, content: Content, rng: random.Random, trng: random.Random | None = None) -> Exchange:
     """你出一招、分身出他擲好的那一招。兩邊各扣自己的池子（同奪璽單挑）。fight.bout 在（有人帶著本命戰法）時先照戰法打這一回合
-    （tactics.step，亂數是 trng）：招可能被改掉、剋照無隙改、氣勢多推戰法那一份、沒挨打的那一邊不掉血、回的與焚身這類照池子算。"""
+    （tactics.step，亂數是 trng）：招可能被改掉、剋照無隙改、氣勢多推戰法那一份、沒挨打的那一邊不掉血、回的與焚身這類照池子算。
+    擂台吃防具（鐵匠鋪與合成流程 3.9）：兩邊打中對方的那一下，各自乘過自己這一邊的 ArenaSide.cut（挑的人開打那一刻、分身報名那一刻抄的）
+    與戰法的化勁（duel.blow_taken，合計夾在 Config.armor.total_cap）；放手一搏失手與戰法自扣不吃，也不磨耐久。"""
     tuning, battle, tt = content.config.duel, content.config.battle, content.config.tactics
     me, foe = fight.me, fight.foe
     his = fight.move
@@ -350,11 +352,15 @@ def exchange_full(fight: ArenaFight, move: str, content: Content, rng: random.Ra
     push = round(tactics.scale_push(duel_rules.push_of(mine, theirs, beat, me.role, tuning, battle, luck, foe_role=foe.role), step))
     my_hp = duel_rules.harm_of(me.hp_cap, mine, theirs, beat, tuning)
     foe_hp = duel_rules.harm_of(foe.hp_cap, theirs, mine, -beat, tuning)
+    # 打中的那一下乘過各自的防具與戰法的化勁（鐵匠鋪與合成流程 3.9；兩邊各吃自己的，沒穿甲的跟以前一字不差）；失手與戰法自扣不吃
+    cap = content.config.armor.total_cap
+    my_hp = duel_rules.blow_taken(my_hp, me.cut, step.a_cut if step is not None else 0.0, cap)
+    foe_hp = duel_rules.blow_taken(foe_hp, foe.cut, step.b_cut if step is not None else 0.0, cap)
     lines: list[str] = []
     if step is not None:
         push += round(step.push)
-        my_hp = (round(my_hp * (1 - step.a_cut)) if step.a_hit else 0) - round(step.a_hp * me.hp_cap)
-        foe_hp = (round(foe_hp * (1 - step.b_cut)) if step.b_hit else 0) - round(step.b_hp * foe.hp_cap)
+        my_hp = (my_hp if step.a_hit else 0) - round(step.a_hp * me.hp_cap)
+        foe_hp = (foe_hp if step.b_hit else 0) - round(step.b_hp * foe.hp_cap)
         lines = list(step.lines)
         guarded, said = tactics.guard_pool(fight.bout, "a", me.hp, my_hp, me.hp_cap)
         my_hp = round(guarded)

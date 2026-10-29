@@ -350,3 +350,123 @@ def test_fb174_some_proxied_rounds_get_the_milder_line(sealed, world):
     game._file_seal(e, "螭首", True)
     notes = game.state.battles[0].notes
     assert seal.PROXY_SOME_LINE in notes and seal.PROXY_LINE not in notes
+
+
+# ── 鐵匠鋪與合成流程 3.9（D 批）：奪璽單挑吃防具（兩邊各吃自己的；加入決戰那一刻抄進 BattleParticipant，照坐騎的先例）──
+# 化勁在單挑裡本來就是戰法（Step.a_cut／b_cut）：cut 只抄防具那一份，乘的那一刻跟戰法的化勁相加、夾 total_cap
+
+
+def _mail(tier=3, quality="上品", edge=100):
+    from tianxia.state import Equipment
+
+    return Equipment(id="甲:1", slot="armor", name="試甲", attribute="剛", tier=tier, quality=quality, edge=edge)
+
+
+def _blows(content, c_cut=0.0, h_cut=0.0, **extra):
+    """固守剋強攻、兩邊同強的一回合（沒有人放手一搏）：回（挑戰者掉多少, 持有者掉多少）。"""
+    put_shards(content)
+    d = _duel()
+    d.challenger.cut, d.holder.cut = c_cut, h_cut
+    d.pending = {"challenger": "固守", "holder": "強攻"}
+    for key, value in extra.items():
+        setattr(d, key, value)
+    seal_duel.resolve(d, content, SALT, 2)
+    return 300.0 - d.challenger.hp, 300.0 - d.holder.hp
+
+
+def test_each_side_takes_the_blow_cut_by_its_own_armor(content):
+    bare = _blows(content)
+    assert bare == (round(300 * 0.08 * 0.5), round(300 * 0.08 * 1.6))  # 固守剋強攻：挑戰者挨得輕、持有者挨得重
+    worn = _blows(content, c_cut=0.2, h_cut=0.4)
+    assert worn == (round(bare[0] * 0.8), round(bare[1] * 0.6))  # 兩邊各吃自己的
+    assert _blows(content, c_cut=0.2) == (round(bare[0] * 0.8), bare[1])  # 只有挑戰者穿：持有者挨的不變
+
+
+def test_the_seal_duel_adds_the_armor_to_the_tactics_toll_cut_and_clamps_it(content, monkeypatch):
+    from tianxia import tactics
+    from tianxia.state import PLAYER
+
+    ctx = tactics.Ctx(foe="對手", our_agility=5.0, foe_agility=5.0, team=[PLAYER])
+    stub = tactics.Step(a_cut=0.3, b_cut=0.1)
+    monkeypatch.setattr(tactics, "step", lambda bout, a, b, *rest, **k: stub.model_copy(update={"a_move": a, "b_move": b}))
+    bout = lambda: tactics.Bout(a=tactics.side_for([], ctx), b=tactics.side_for([], ctx))  # noqa: E731
+    raw = duel_rules.harm_of(300.0, 60.0, 60.0, 0, content.config.duel)  # 戰法的 Step.beat 是 0：兩邊都是不剋的一下
+    near = lambda got, want: abs(got - want) <= 0.51  # noqa: E731
+    assert _blows(content, bout=bout()) == (round(raw * 0.7), round(raw * 0.9))  # 沒防具：戰法的化勁照舊（一字不差）
+    mine, theirs = _blows(content, 0.22, 0.4, bout=bout())
+    assert near(mine, raw * 0.48) and near(theirs, raw * 0.5)  # 22%＋30%；40%＋10%
+    mine, theirs = _blows(content, 0.5, 0.55, bout=bout())
+    assert near(mine, raw * 0.4) and near(theirs, raw * 0.4)  # 都超過 60%：夾在 total_cap
+
+
+def test_a_failed_gamble_in_the_seal_duel_does_not_eat_the_armor(content):
+    put_shards(content)
+
+    def gambled(cut):
+        d = _duel()
+        d.challenger.cut = d.holder.cut = cut
+        d.challenger.present = True
+        seal_duel.submit(d, "challenger", text="拚了", rate=0)
+        d.proxy_move["holder"] = "強攻"
+        seal_duel.resolve(d, content, SALT, 2)
+        return d.challenger.hp, d.holder.hp
+
+    assert gambled(0.0) == gambled(0.5) and gambled(0.0)[0] < 300.0  # 失手重傷的是自己，不看防具
+
+
+def test_a_participant_carries_the_cut_into_both_kinds_of_duel_sides(content):
+    from test_engine import _install_battle_def
+
+    from tianxia import battle_instance
+    from tianxia.battle_instance import BattleInstance
+
+    definition = _install_battle_def(content)
+    b = BattleInstance(battle_id="changshe_fire")
+    battle_instance.join_faction(b, "甲", "guan", 300.0, cut=0.22)
+    battle_instance.join_faction(b, "乙", "guan", 300.0)  # 舊的呼叫法：沒穿
+    b.phase = "active"
+    battle_instance.auto_assign_latecomer(b, definition, "丙", 300.0, random.Random(0), faction="guan", cut=0.12)  # 開打後才到
+    assert (b.participants["甲"].cut, b.participants["乙"].cut, b.participants["丙"].cut) == (0.22, 0.0, 0.12)
+    assert seal_duel.side_from_participant(b.participants["甲"], "guan").cut == 0.22
+    assert seal_duel.side_from_participant(b.participants["乙"], "guan").cut == 0.0
+    assert seal_duel.side_from("丙", None, 80.0, {}, "", 300.0, cut=0.12).cut == 0.12 and seal_duel.side_from("丁", None, 80.0, {}, "", 300.0).cut == 0.0
+
+
+def test_joining_a_showdown_copies_the_armor_cut_and_the_backfill_does_too(content, game):
+    """五條加入的路都走 _battle_gear（join、集結時臨時投效、開打後臨時投效、晚到），跟坐騎同一刻抄；沒有份量快照的人同步時連防具一起補。"""
+    from test_engine import _open_three_move_battle, _strip_scores
+
+    content.config.armor.enabled = True
+    game.state.player.armor = _mail()
+    assert game._battle_gear()["cut"] == pytest.approx(0.22)
+    _open_three_move_battle(game)
+    name = game.state.player.name
+    me = game.world.get_battle().participants[name]
+    assert me.cut == pytest.approx(0.22)
+    game.state.player.armor = None  # 加入之後脫了：這一場照加入那一刻的
+    assert game.world.get_battle().participants[name].cut == pytest.approx(0.22)
+    game.world.mutate_battle(lambda b: setattr(b.participants[name], "cut", 0.0))
+    _strip_scores(game)
+    game.state.player.armor = _mail(tier=2, quality="中品")
+    game.sync(1.0)
+    assert game.world.get_battle().participants[name].cut == pytest.approx(0.14)  # 補快照時一起補
+
+
+def test_a_cut_is_clamped_to_the_total_cap_when_it_is_copied(content, game):
+    content.config.armor.enabled = True
+    content.config.armor.total_cap = 0.1
+    game.state.player.armor = _mail()
+    assert game._battle_gear()["cut"] == pytest.approx(0.1)
+    content.config.armor.enabled = False
+    assert game._battle_gear()["cut"] == 0.0  # 防具關著不吃
+
+
+def test_a_holder_off_the_field_takes_the_armor_of_his_live_game(content, world):
+    from test_seal_revamp import _two, revamp
+
+    revamp(content)
+    content.config.armor.enabled = True
+    game, plain = _two(content, world, "yunzhuan")
+    plain.state.player.armor = _mail()
+    assert plain._seal_side_of("平人").cut == pytest.approx(0.22)
+    assert game._seal_side_of("懷璽").cut == 0.0  # 沒穿
