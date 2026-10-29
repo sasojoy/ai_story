@@ -35,7 +35,7 @@ from pydantic import BaseModel
 from . import annals, insight_fx, insights, naming, storyline
 from .martial_arts import Insight
 from .models import (
-    GOD_FORMS, Content, Effect, GodTrait, StoryAnswer, StoryDef, StoryEnding, StoryQuestion, StoryStage,
+    GOD_FORMS, Content, Effect, GodTrait, StoryAnswer, StoryDef, StoryEnding, StoryFail, StoryQuestion, StoryStage,
 )
 from .ollama_client import capped
 from .rules import apply_effect, day_seconds
@@ -62,6 +62,12 @@ UNFINISHED = "{name}入了頓悟，心魔未除，到季末都沒有了結。"
 ASK_HINT = "靜心自問"
 DEMON_HINT = "去面對心魔"
 DEMON_CARD = "你在心裡看見了一個人，跟你一模一樣，朝你走過來。"
+# 心魔打輸了（還能再打）：跳一張卡（圖是 IMAGE["fail"]）、紀錄一行、行狀一行（Joy 2026-10-28「心魔挑戰失敗沒有明顯提示，我們不是有做圖片嗎」）
+FAIL_TITLE = "心魔未破"
+FAIL_CARD = "那個跟你一模一樣的人，這一次比你快了半步。\n\n這一關沒有過，前面問過的心、試過的手都還算數。過 {days}，可以再去面對它{weaker}。"
+FAIL_WEAKER = "，它也會弱一些"
+FAIL_LOG = "心魔未破：過 {days}可以再去面對它，前面過了的關都留著。"
+FAIL_ANNAL = "{name}頓悟時與心魔一戰，未能破之。"
 NAME_ASK = "替這個境界取個名字：挑一個，或自己寫一個。"
 THINK_LABEL = "靜心思名"
 THINK_ASK = "這個境界還沒有名字。靜下心來想一想，或者自己寫一個。"
@@ -211,7 +217,9 @@ def build(state: GameState, content: Content, method: str) -> tuple[StoryDef, di
         StoryStage(id="trial", kind="task", task=f"{KIND}:{trial}", hint=hint, next="demon"),
         StoryStage(id="demon", kind="fight", mirror=r.demon_scale, hint=DEMON_HINT, card=DEMON_CARD, image=IMAGE["demon"],
                    mirror_weaken=r.demon_weaken, mirror_floor=r.demon_floor,
-                   retries=10**6, retry_days=r.retry_days, win="done", lose="done"),
+                   retries=10**6, retry_days=r.retry_days, win="done", lose="done",
+                   fail=StoryFail(title=FAIL_TITLE, card=FAIL_CARD.replace("{weaker}", FAIL_WEAKER if r.demon_weaken > 0 else ""),
+                                  log=FAIL_LOG, annal=FAIL_ANNAL, image=IMAGE["fail"])),
     ]
     ending = StoryEnding(id="done", title="悟成", text=DONE_TEXT, annal=DONE_ANNAL, image=IMAGE["done"])
     line = StoryDef(id=f"{KIND}{n}", title=TITLE, kind=KIND, image=IMAGE["enter"], intro=INTRO, stages=stages, endings=[ending],

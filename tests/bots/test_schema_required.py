@@ -29,9 +29,6 @@ KNOWN = {
     ("battle_instance.py", "GambleScore"): "大場面放手一搏的評分：同上",
     ("feasts.py", "ToastScore"): "敬酒評分：同上",
     ("gather_llm.py", "reply_model"): "找素材的評分（create_model 動態組的類別，enum 照地點換）：同上",
-    ("fight_llm.py", "Judgment"): "大場面判讀：兩版過程必填，開之前要量 num_predict 夠不夠",
-    ("arena_crowd.py", "CrowdJudge"): "擂台看客評判：還沒實測",
-    ("arena_crowd.py", "CrowdLine"): "擂台看客一句：還沒實測",
     ("companion_agent.py", "DriftSynthesis"): "人物心境整理：背景執行、失敗不影響玩家，還沒實測",
     ("yuedan.py", "YuedanBatch"): "月旦評：背景執行、有固定段退路，還沒實測",
 }
