@@ -123,12 +123,38 @@ def test_the_fallback_has_a_sentence_for_each_kind():
     assert biography.clean(text, req) == text  # 規則版自己也過得了清理的檢查
 
 
-def test_a_garrison_duel_and_a_rival_with_digits_read_clean():
-    req = _request(_e(annals.DUEL, "在宛城約戰守軍，落敗。"), _e(annals.DUEL, "在長社約戰劍客2，大勝。", 3), _e(annals.ERRAND, "替波才到宛城探一探官軍的營，辦成了。", 3, 3))
+def test_a_garrison_duel_and_an_errand_read_clean():
+    req = _request(_e(annals.DUEL, "在宛城約戰守軍，落敗。"), _e(annals.ERRAND, "替波才到宛城探一探官軍的營，辦成了。", 3, 3))
     text = biography.rule_text(req)
-    assert "第二週，沈浪在宛城約戰守軍，落敗。" in text and "第三週，沈浪在長社約戰劍客二，大勝。" in text
+    assert "第二週，沈浪在宛城約戰守軍，落敗。" in text
     assert "第三週，沈浪替波才到宛城探一探官軍的營，辦成了。" in text
     assert not any(ch.isascii() and ch.isdigit() for ch in text)
+
+
+def test_a_rival_name_is_never_touched_by_the_fallback():
+    """FB-895：對手是玩家，名號只擋控制字元與長度，帶「你」、帶阿拉伯數字都有可能。備援文字別人的名號一個字都不動：
+    不能把「你好嗎」寫成「沈浪好嗎」、把「Rival2」寫成「Rival二」。「你」換成傳主名號只對心意那一句（原句寫給你看的「你也是其中之一」）。"""
+    req = _request(_e(annals.DUEL, "在長社約戰你好嗎，大勝。", 3), _e(annals.DUEL, "在宛城約戰Rival2，落敗。", 4),
+                   _e(annals.DUEL, "應下你好嗎2在汝南荒野的約戰，險勝。", 5), _e(annals.STANCE, STANCE_TEXT, figure="luzhi"))
+    text = biography.rule_text(req)
+    assert "第三週，沈浪在長社約戰你好嗎，大勝。" in text
+    assert "第四週，沈浪在宛城約戰Rival2，落敗。" in text
+    assert "第五週，沈浪應下你好嗎2在汝南荒野的約戰，險勝。" in text
+    assert "沈浪好嗎" not in text and "Rival二" not in text and "好嗎二" not in text
+    assert "沈浪也是其中之一" in text  # 心意那一句照舊：「你」換成名號
+
+
+def test_the_stance_line_still_turns_you_into_the_name_and_digits_into_chinese():
+    req = _request(_e(annals.STANCE, "眾人勸盧植速戰，你也是其中之一：盧植決意 3 日內速攻廣宗。", figure="luzhi"))
+    assert "第二週，眾人勸盧植速戰，沈浪也是其中之一：盧植決意三日內速攻廣宗。" in biography.rule_text(req)
+
+
+def test_an_errand_and_a_duel_line_only_lose_the_closing_stop():
+    """託付、約戰的原句整句原樣接進備援文字（只去掉句尾句號再補回）：人物的名字、地名、「你」「數字」都不經過 _strip。"""
+    for kind, text in ((annals.ERRAND, "替盧植把一封軍書送到長社，親手交給皇甫嵩，辦成了。"), (annals.DUEL, "在長社約戰Rival2你好，險勝。")):
+        line = biography._tie_line({"kind": kind, "when": "第 3 週・週二 10:00", "text": text}, "沈浪")
+        assert line == f"第三週，沈浪{text}"
+    assert biography._tie_line({"kind": annals.DUEL, "when": "", "text": "在長社約戰你好嗎，大勝"}, "沈浪") == "沈浪在長社約戰你好嗎，大勝。"  # 沒有句號也補得上
 
 
 # ── 擠位子：備援文字每一段只取前幾則 ──

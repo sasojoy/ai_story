@@ -231,7 +231,10 @@ def _pick(rows: list[dict], limit: int, prefer: frozenset[str] = frozenset()) ->
 def _tie_line(e: dict, name: str) -> str:
     """心意、託付、約戰（TIES）的一句備援（7e）：時刻只留到週或日、接在前面，沒有主詞的補上名號（TIES_LINE）。"""
     when = _when(e.get("when", ""))
-    return _end(TIES_LINE[e["kind"]].format(when=f"{when}，" if when else "", name=name, text=_strip(e["text"], name)))
+    # 只有心意那一句是寫給你看的（「你也是其中之一」）：「你」換成名號、數目換成中文。託付、約戰的原句沒有代詞、沒有數目，卻帶別人的名號
+    # （約戰的對手是玩家）：一個字都不動，只去掉句尾的句號（FB-895：對手叫「你好嗎」「Rival2」不能被寫成傳主的名號、「Rival二」）
+    text = _strip(e["text"], name) if e["kind"] == STANCE else e["text"].rstrip("。")
+    return _end(TIES_LINE[e["kind"]].format(when=f"{when}，" if when else "", name=name, text=text))
 
 
 def rule_text(req: BiographyRequest) -> str:
