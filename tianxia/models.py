@@ -612,6 +612,22 @@ class StoryStart(_Strict):
     chance: float = Field(default=0.08, ge=0, le=1)
 
 
+class ChapterSpec(_Strict):
+    """章回主線的一回（tianxia/chapters.py）：哪一方、第幾回、什麼時候開、收在哪一件大事、做成了推誰。
+    side 是陣營 id（guan、huang、haoqiang）；after 是同一方前面要先做完（或已經收了）的那幾回的線 id；after_beat 是還要等哪一件大事結算了才開。
+    beat 是收在哪一件時刻表大事（結算的那一刻沒做完就收成 missed）；做成＝走進最後一段 wait（task「chapter_beat」，等 beat 結算）。
+    sway 是做成推哪一方（None：豪強照此刻幫的那一軍；side_marks 的記號先算）；sway_marks 是帶著某個記號的人份量另加（可以是負的，份量最低 0）。"""
+
+    side: str
+    no: int = Field(ge=1)
+    after: list[str] = Field(default_factory=list)
+    after_beat: str | None = None
+    beat: str
+    sway: Literal["guan", "huang"] | None = None
+    sway_marks: dict[str, float] = Field(default_factory=dict)
+    side_marks: dict[str, Literal["guan", "huang"]] = Field(default_factory=dict)  # 帶著這個記號就推這一軍（豪強賣給誰；先於 sway）
+
+
 class StoryDef(_Strict):
     """一條線（content/storylines.json，或程式在跑的時候自己組的，storyline.start）。kind 分開算同時開著幾條
     （Config.jianfa.story_caps：「奇事」兩條、「頓悟」一條），也決定叫哪一組鉤子（storyline.FIGHT_HOOKS、END_HOOKS）。
@@ -626,6 +642,15 @@ class StoryDef(_Strict):
     stages: list[StoryStage] = Field(min_length=1)
     endings: list[StoryEnding] = Field(min_length=1)
     unfinished: str = "{name}手上的一件事，到季末還沒有了結。"
+    chapter: ChapterSpec | None = None  # 章回主線的一回（kind「章回」）；別種線是 None，不寫進序列化（_drop_no_chapter）
+
+    @model_serializer(mode="wrap")
+    def _drop_no_chapter(self, handler):
+        """chapter 是 None 時不寫這個鍵：存檔裡程式組的線（特殊頓悟）跟加這一欄之前一個位元組都一樣。"""
+        data = handler(self)
+        if isinstance(data, dict) and data.get("chapter", 0) is None:
+            del data["chapter"]
+        return data
 
     def stage(self, stage_id: str) -> StoryStage | None:
         return next((st for st in self.stages if st.id == stage_id), None)
@@ -3300,6 +3325,13 @@ class JianfaRules(JianfaNumbers):
     storylines: bool = True
     # 同時開著幾條（照 StoryDef.kind）；沒列的種類不限。【預設】設計稿：奇事兩條、頓悟一條
     story_caps: dict[str, int] = Field(default_factory=lambda: {"奇事": 2, "頓悟": 1})
+    # 章回主線（企劃者 2026-10-29 選丙、2026-10-29「四個都同意」；tianxia/chapters.py）：每一方照時刻表大事各幾回，做完改那一件大事。
+    # 要 storylines 也開著（章回是一條線，kind「章回」，不佔 story_caps）
+    chapters: bool = True
+    chapter_roll_cap: float = Field(default=0.15, ge=0, le=0.2)  # 【定：企劃者 10-29】全陣營做成這一回最多讓那一骰動多少（跟伏筆合計仍夾 ±0.20）
+    chapter_half_at: float = Field(default=9, gt=0)  # 【預設】做成的人（照份量）到幾個，那一方推到上限的一半（開根號：√n ÷（√n＋√half_at））
+    chapter_edge_cap: int = Field(default=5, ge=0, le=20)  # 【預設】決戰那幾回：開打時起點最多挪幾點（大場面判讀的量級）
+    chapter_contribution: int = Field(default=8, ge=0)  # 【預設】做成一回記幾點貢獻
     # 事件分級（企劃者 2026-10-26，事件分級設計稿；tianxia/tiers.py）：第二、三階事件照門開，抽的時候照開到第幾階的比例先挑階
     event_tiers: bool = True
     # 五道門：[第二階的門檻, 第三階的門檻]。武事是等級、名流是名望第幾段、俠義與綠林是善名、惡名第幾段（要走那一條路）、

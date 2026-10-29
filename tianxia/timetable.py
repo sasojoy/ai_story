@@ -436,7 +436,11 @@ def roll_chance(state: GameState, content: Content, event: TimetableEvent) -> fl
         p = event.base_chance if event.base_chance is not None else 0.5
     p = min(CHANCE_CEIL, max(CHANCE_FLOOR, p))
     w = state.world
-    mods = max(-EVENT_MODS_CAP, min(EVENT_MODS_CAP, w.event_mods.get(event.id, 0.0)))
+    from . import chapters  # noqa: PLC0415  章回主線 import storyline → rules → 這裡
+
+    # 章回主線做成的份量（chapters.roll_mod，自己夾在 ±chapter_roll_cap）跟伏筆、軍令合計仍夾在 ±0.20
+    total = w.event_mods.get(event.id, 0.0) + chapters.roll_mod(w, content, event)
+    mods = max(-EVENT_MODS_CAP, min(EVENT_MODS_CAP, total))
     return apply_mods(p, mods + w.event_bonus.get(event.id, 0.0))
 
 

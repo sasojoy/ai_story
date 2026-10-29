@@ -1720,6 +1720,10 @@ class WorldState(BaseModel):
     third_party_shown: dict[str, dict[str, str]] = Field(default_factory=dict)
     event_mods: dict[str, float] = Field(default_factory=dict)  # 大事 id → 一般伏筆、軍令的成功率修正（合計夾在 ±0.20）
     event_bonus: dict[str, float] = Field(default_factory=dict)  # 大事 id → 時刻表結果帶來的修正（例：波才北上，不夾）
+    # 章回主線（tianxia/chapters.py）：大事 id → 陣營 → 做成那一回的份量合計（改那一骰、決戰的起點）；線 id → 做成的人數（章回卡寫）。
+    # 空的時候不寫進 JSON（_drop_empty_marks_fired）
+    chapter_weights: dict[str, dict[str, float]] = Field(default_factory=dict)
+    chapter_done: dict[str, int] = Field(default_factory=dict)
     schedule: dict[str, float] = Field(default_factory=dict)  # 決戰 id 與 "finale" → 世界秒；開季時填預設、管理者可改
     mandate: bool = False  # 天命之季（玉璽碎片設計 8.1；換季時由 seal.stamp_mandate 蓋，季的規則看它）
     mandate_result: str | None = None  # 天命之爭得天命的那一軍；"" 是天命未定；None 是還沒定（季末看它，world.evaluate_ending）
@@ -1762,7 +1766,8 @@ class WorldState(BaseModel):
         （同 world_state.SealRegistry._drop_empty_uses；不用 Field(exclude_if=…)：Pydantic 2.11 才有）。"""
         data = handler(self)
         if isinstance(data, dict):
-            for key in ("marks_fired", "mark_helpers", "final_tiers", "stance_counts", "stance_week", "stance_active", "god_names", "god_firsts"):
+            for key in ("marks_fired", "mark_helpers", "final_tiers", "stance_counts", "stance_week", "stance_active", "god_names", "god_firsts",
+                        "chapter_weights", "chapter_done"):
                 if key in data and not data[key]:
                     del data[key]
         return data

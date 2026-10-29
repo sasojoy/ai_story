@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from . import calendar, errands, foreshadow, rules, week_unlock, wins
+from . import calendar, chapters, errands, foreshadow, rules, storyline, week_unlock, wins
 from . import step as step_rules
 from . import opening as opening_rules
 from . import prologue as prologue_rules
@@ -138,7 +138,25 @@ def _steps(game: Game, status: dict, orders: list[dict]) -> list[dict]:
     if s.player.faction is None and c.scenario.factions and not s.world.ended:
         places = "、".join(f"{STANCE_NAMES.get(f.id, f.name)}在{_places(game, f)[0]}" for f in c.scenario.factions if _places(game, f))
         out.append({"kind": "join", "text": JOIN_STEP.format(places=places), step_rules.REF: ("join",)})
-    return step_rules.finish(game, out)
+    rest = step_rules.finish(game, out)
+    chapter = chapter_card(game)
+    if chapter is None or chapter["waiting"]:
+        return rest
+    # 章回主線那一步永遠排第一（企劃者 2026-10-29 同意設計稿第四節）：不跟著「換一件事」輪
+    return [{"kind": "chapter", "text": CHAPTER_STEP.format(no=chapter["no"], title=chapter["title"], hint=chapter["hint"]),
+             "id": chapter["line"], "target": chapter["target"]}] + rest
+
+
+CHAPTER_STEP = "第{no}回・{title}：{hint}"  # 眼下要事第一件（文字第一個全形冒號前是標題，web 照它拆）
+
+
+def chapter_card(game: Game) -> dict | None:
+    """章回卡（main.week_card.chapter，chapters.card）：章回主線關著、手上沒有回是 None。"""
+    card = chapters.card(game.state, game.content, game.stamp, lambda loc: step_rules.place(game, loc))
+    if card is not None and card["here"]:  # 「去做」按的是選單上那一顆：選單此刻沒有它（例：豪強還沒挑一邊）就不畫
+        want = f"{storyline.OPTION}:{card['line']}"
+        card["here"] = any(o.id == want and o.enabled for o in game.options())
+    return card
 
 
 def week_card(game: Game, status: dict, orders: list[dict]) -> dict | None:
@@ -165,7 +183,11 @@ def week_card(game: Game, status: dict, orders: list[dict]) -> dict | None:
     sides = {k: stances[k] for k in ("guan", "huang") if k in stances} if stances else None
     nxt = status.get("next_event")
     names = game.week_unlock_names()  # 這一季真的開著的第 2 週功能（減法季 6.6）
-    return {"label": label, "when": when, "theme": theme, "sides": sides, "steps": _steps(game, status, orders),
+    card = {"label": label, "when": when, "theme": theme, "sides": sides, "steps": _steps(game, status, orders),
             "next": None if nxt is None else f"{nxt['title']}・{nxt['at']}" if nxt.get("at") else nxt["title"],
             "unlock": week_unlock.card_line(s, c, names), "locked": week_unlock.locked_line(s, c, names),
             "cap": week_unlock.cap_note(s, c), "gap": week_unlock.win_gap(s, c)}
+    chapter = chapter_card(game)
+    if chapter is not None:  # 章回主線（關著、手上沒有回時沒有這個鍵）
+        card["chapter"] = chapter
+    return card

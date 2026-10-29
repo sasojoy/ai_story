@@ -1095,6 +1095,26 @@
     const top = tag("top", [strip, note, panel].filter(Boolean)), low = tag("low", [card, checkinPickHtml(m)].filter(Boolean));
     return part === "top" ? top : part === "low" ? low : `${top}\n      ${low}`;
   }
+  // 章回卡（章回主線，企劃者 2026-10-29）：江湖頁最上面一張，你那一方此刻的那一回——第幾回、回目、哪一件大事什麼時候結算、
+  // 下一步去哪做什麼、這一方做完了幾個人推了多少；人就在那裡是一顆「去做」（按「未了之事」那一顆），不在是一顆去輿圖。
+  // 伺服器沒給（沒投靠、開關關著、這一季的回都收了）不畫。整張壓成三行，四顆行動鈕還在第一屏
+  const CH_NO = "第{no}回";
+  const CH_NEXT = "下一步：";
+  const CH_DO = "去做";
+  function chapterCardHtml(m) {
+    const c = m.week_card && m.week_card.chapter;
+    if (!c || !shown("quest")) return "";
+    const t = c.target;
+    // 說明裡已經寫了地名的（「出城看風（潁川郊野的草澤）」）不再補一次；回目就是那一件大事的（官軍第二回「長社火攻」）只寫時刻
+    const far = !c.waiting && t && !c.here && !String(c.hint).includes(t.name) ? `（${esc(t.name)}${t.minutes ? `・${t.minutes | 0} 分` : ""}）` : "";
+    const at = c.beat && c.beat !== c.title ? `${esc(c.beat)}・${esc(c.at)}` : esc(c.at);
+    const go = c.waiting || c.scene ? "" : c.here ? `<button class="btn primary ch-go" data-act="choose" data-id="story:${esc(c.line)}">${CH_DO} ›</button>`
+      : t && shown("tab:map") ? `<button class="btn primary ch-go" data-act="tab" data-tab="map">${WK_MAP} ›</button>` : "";
+    return `<section class="card ch-card side-${esc(c.side)}" aria-label="${esc(CH_NO.replace("{no}", c.no))}${esc(c.title)}">
+      <div class="ch-head"><span class="ch-no">${esc(CH_NO.replace("{no}", c.no))}</span><b class="ch-title">${esc(c.title)}</b>${at ? `<span class="ch-at">${at}</span>` : ""}</div>
+      <p class="ch-next">${c.waiting || c.scene ? "" : CH_NEXT}${esc(c.hint)}${far}</p>
+      <div class="ch-foot"><span class="ch-sway">${esc(c.sway)}</span>${go}</div></section>`;
+  }
   // 簽到要挑四階的日子（還沒挑）：本週卡底下一張小卡，四顆挑屬性的鈕（點一種就領，同以前簽到格裡的那四顆）
   function checkinPickHtml(m) {
     const k = m.status && m.status.checkin;
@@ -1472,7 +1492,7 @@
     const pushAsk = letterCard && typeof pushAskHtml === "function" ? pushAskHtml(m) : ""; // 第一次來信時信的小卡底下問一次手機通知（批 9；pushAskHtml 在 app.js，只切 main.js 的網頁測試沒有它）
     // 開局頭一刻（整合設計 6.7，批 7）：人物開口的那一封（letter.open）排在三方卡前面——先聽人說話，再看三方；其餘時候三方卡照舊在最上面
     // 本週卡：灰線（一行）照舊在最上面，「眼下要事」排在行動列底下（Joy 2026-10-26：四顆行動鈕一定在第一屏）；來信到了照舊換成來信
-    const peek = letterCard && m.letter.open ? letterCard + pushAsk + sidesFirstHtml(m) : sidesFirstHtml(m) + (letterCard ? letterCard + pushAsk : weekCardHtml(m, "top"));
+    const peek = letterCard && m.letter.open ? letterCard + pushAsk + sidesFirstHtml(m) : sidesFirstHtml(m) + (letterCard ? letterCard + pushAsk : weekCardHtml(m, "top") + chapterCardHtml(m));
     const weekCard = letterCard ? "" : weekCardHtml(m, "low");
     // 休季的結算卡排在最上面（計畫 T9）；季收了、有行狀時緊接一張「讀你的傳」（玩家傳第二批，m.zhuan）
     const resultCard = (m.season_result ? resultHtml(m.season_result) : "") + (m.zhuan ? zhuanEntry(m.zhuan, "這一季收了，史官替你立傳", "讀你的傳") : "");

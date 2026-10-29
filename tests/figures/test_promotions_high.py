@@ -1056,6 +1056,8 @@ def test_the_new_events_are_wired_to_their_legs(on):
 def test_bribe_mods_only_name_the_jailing_and_only_the_bribe_events_write_them(on):
     writers = {}
     for event in on.events.values():
+        if event.id.startswith(("chg", "chh", "chq")):  # 章回主線另有自己的修正（黃巾第五回求藥推張角病逝；tests/core/test_chapters.py）
+            continue
         for choice in event.choices:
             for effect in (choice.effect, choice.fail_effect):
                 for mod in effect.event_mods:

@@ -864,6 +864,8 @@ def check_storylines(c: Content, need) -> None:
         if line.start is not None:
             check_story_place(c, need, f"{lw} 的開頭", line.start.where)
         need(any(not e.failed for e in line.endings), f"{lw}：至少要有一個不是失敗的結局")
+        if line.chapter is not None:
+            check_chapter(c, need, line)
         for end in line.endings:
             need(end.effect.story is None, f"{lw} 結局 {end.id}：結局的效果不能再寫 story")
             need(bool(end.annal.strip()), f"{lw} 結局 {end.id}：annal（寫進傳的那一句）是空的")
@@ -911,6 +913,28 @@ def check_storylines(c: Content, need) -> None:
         if ev.id in owner:
             continue
         need(all(eff.story is None for eff in event_effects(ev)), f"事件 {ev.id}：story 只能寫在一條線的段落事件上")
+
+
+def check_chapter(c: Content, need, line) -> None:
+    """章回主線的一回（tianxia/chapters.py）：kind 寫「章回」、陣營在劇本裡、beat／after_beat 是時刻表的大事、after 是同一方的別回，
+    最後一段是 wait（task chapter_beat），有 missed 結局。"""
+    from . import chapters  # noqa: PLC0415
+
+    lw, spec = f"章回 {line.id}", line.chapter
+    timetable_ids = {e.id for e in c.timetable}
+    need(line.kind == chapters.KIND, f"{lw}：kind 要寫「{chapters.KIND}」")
+    need(line.start is None, f"{lw}：章回由時刻表開，不寫 start")
+    need(spec.side in {f.id for f in c.scenario.factions}, f"{lw}：陣營「{spec.side}」不在劇本裡")
+    need(spec.beat in timetable_ids, f"{lw}：beat「{spec.beat}」不是時刻表的大事")
+    need(spec.after_beat is None or spec.after_beat in timetable_ids, f"{lw}：after_beat「{spec.after_beat}」不是時刻表的大事")
+    for before in spec.after:
+        prev = c.storylines.get(before)
+        need(prev is not None and prev.chapter is not None and prev.chapter.side == spec.side, f"{lw}：after「{before}」不是同一方的章回")
+    last = line.stages[-1]
+    need(last.id == chapters.WAIT and last.kind == "task" and last.task == chapters.TASK,
+         f"{lw}：最後一段要是 {chapters.WAIT}（task {chapters.TASK}）")
+    need(all(st.id != chapters.WAIT for st in line.stages[:-1]), f"{lw}：{chapters.WAIT} 只能是最後一段")
+    need(line.ending(chapters.MISSED) is not None, f"{lw}：要有 {chapters.MISSED} 結局（大事結算了還沒做成）")
 
 
 def check_story_place(c: Content, need, where: str, place) -> None:
