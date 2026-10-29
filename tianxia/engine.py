@@ -8024,7 +8024,7 @@ class Game:
         journal.add_entry(s, JournalEntry(time=when, title=f"{label}奪璽・『{shard}』", tag=notes[0], lines=notes[1:],
                                           changes=changes, battle_id=record.id))
         if same:
-            annals.note(s, c, annals.DEED, notes[0], 5 if e.kind == "take" else 4, place=e.where)
+            annals.note(s, c, annals.DEED, notes[0], 5 if e.kind == "take" else 4, place=e.where, keep=[other])
 
     def _mandate_settle(self, winner: str, record: int | None, battle_name: str) -> None:
         """天命之爭定下來（8.3）：winner 是得天命的那一軍，"" 是天命未定（保底收場）。一次 world.mutate：這一季記下 mandate_result（季末
@@ -8694,6 +8694,7 @@ class Game:
             what = f"在{name}陣上放手一搏" + ("，成了" if g.won else "，沒成") + (f"，點名{g.target}" if g.target else "") + "。"
             entries.append(annals.entry(
                 s, c, annals.SHOWDOWN, what, 4 if g.won else 3, quote=g.text, reply=g.story, place=place, time=time, season=earlier is None,
+                keep=[g.target],  # 點名的人（參戰的玩家）的名號原樣留，沒點名是空的（FB-9020）
             ))
         if earlier is None:
             s.player.annals += entries
@@ -10068,7 +10069,7 @@ class Game:
         record = battlelog.new_record(s, c, self.world, squad, result, "melee")
         record.ours = record.ours[:1]
         record.notes.append(story)
-        annals.note(s, c, annals.FIGHT, story, 2)
+        annals.note(s, c, annals.FIGHT, story, 2, keep=[rival])
         self._play_rounds(record, squad, result.tier, 0)
         line = self._file_battle(record, wear=False, armor_wear=False, team_exp=False)
         msgs = [line, story]
@@ -10998,7 +10999,7 @@ class Game:
             annal_line = sortie_duel.ANNAL_ANSWER_LINE if role == "defender" else sortie_duel.ANNAL_LINE  # 應戰的人（含補位的）另一句（FB-897）
             annals.note(s, c, annals.DUEL, annal_line.format(  # 地點寫約戰的那一塊（結算時人可能已經走了）
                 place=duel.place, rival=rival.name if rival is not None and not rival.garrison else sortie_duel.GARRISON, tier=tier_word), 2,
-                place=duel.place)
+                place=duel.place, keep=[rival.name] if rival is not None and not rival.garrison else None)  # 對手是玩家：名號原樣留（FB-9020）；守軍不必
         rank = ranks.rank_of(s)
         if 1 <= rank < 3 and calendar.season_one_on(w, c):
             record.notes.append(sortie_duel.RANK_LINE.format(n=max(0, ranks.threshold(c, rank + 1) - p.contrib)))
@@ -13906,7 +13907,7 @@ class Game:
             story = f"你攔下{rival}動手，卻不是{gender.pronoun(rival_game.state)}的對手，只得丟下銀兩脫身。" if attacker else \
                 f"{rival}半路截殺你，你不敵，丟下銀兩脫身。"
         record.notes.append(story)
-        annals.note(s, c, annals.FIGHT, story, 3 if won else 2)  # 行狀：截殺與被截殺（兩邊各記自己的）
+        annals.note(s, c, annals.FIGHT, story, 3 if won else 2, keep=[rival])  # 行狀：截殺與被截殺（兩邊各記自己的；對手的名號原樣留，FB-9020）
         self._play_rounds(record, squad, result.tier, hp_lost)
         line = self._file_battle(record)
         msgs = [line, story, *battlelog.gains_list(record), *self._last_wear]
@@ -14225,7 +14226,7 @@ class Game:
                 record.changes.append(f"氣血 -{spoils.hp}")
             story = (ambush_rules.OWNER_LOST if as_owner else ambush_rules.PASSER_LOST).format(rival=rival, him=him)
         record.notes.append(story)
-        annals.note(s, c, annals.FIGHT, story, 3 if won else 2)
+        annals.note(s, c, annals.FIGHT, story, 3 if won else 2, keep=[rival])
         self._play_rounds(record, squad, result.tier, hp_lost)
         line = self._file_battle(record)
         msgs = [line, story, *battlelog.gains_list(record), *self._last_wear, *(extra or [])]
@@ -15007,7 +15008,7 @@ class Game:
         p.arena_last = ArenaResult(id=fight.id, foe=fight.foe.name, tier=tier, lines=list(fight.lines), changes=list(record.changes))
         p.picking_arena = arena.here(s, c)
         won = tier in team.WIN_TIERS
-        annals.note(s, c, annals.FIGHT, f"上擂台挑{fight.foe.name}，{tier}。", 2 if won else 1)
+        annals.note(s, c, annals.FIGHT, f"上擂台挑{fight.foe.name}，{tier}。", 2 if won else 1, keep=[fight.foe.name])
         self._save_season()  # 名次、戰績、留給守的人那一筆都在這一季的 WorldState
         return msgs
 
