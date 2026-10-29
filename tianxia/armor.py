@@ -135,13 +135,16 @@ def buy(state: GameState, content: Content, attribute: str) -> list[str]:
     return [f"你花 {price} 兩買下一件【{item.name}】。", equipment.store(state, item)]  # 待 joy 潤
 
 
-def repair_problem(state: GameState, content: Content) -> str | None:
+def repair_problem(state: GameState, content: Content, item_id: str | None = None) -> str | None:
+    """修不了的原因（修得了是 None）。item_id 是 None＝身上那件；給了裝備庫那件的 id（「甲:N」）就問那一件（鐵匠鋪與合成流程 3.4，
+    equipment.target），找不到是 equipment.RACK_MISSING。"""
     p, rule = state.player, content.config.armor
     if not smith_here(state, content):
         return NOT_HERE
-    if p.armor is None:
-        return NO_ARMOR
-    if p.armor.edge >= 100:
+    item = equipment.target(p, "armor", item_id)
+    if item is None:
+        return NO_ARMOR if item_id is None else equipment.RACK_MISSING
+    if item.edge >= 100:
         return INTACT
     if repair_material(state, content) is None:
         return NO_REPAIR_MATERIAL
@@ -149,19 +152,23 @@ def repair_problem(state: GameState, content: Content) -> str | None:
     return f"還差 {short} 兩" if short > 0 else None
 
 
-def repair(state: GameState, content: Content) -> list[str]:
-    """修（4.5）：一個一階素材（屬性不限）＋工錢，耐久度回滿。只能在鐵匠鋪。"""
-    problem = repair_problem(state, content)
+def repair(state: GameState, content: Content, item_id: str | None = None) -> list[str]:
+    """修（4.5）：一個一階素材（屬性不限）＋工錢，耐久度回滿。只能在鐵匠鋪。item_id 同 repair_problem：裝備庫那件修好還在裝備庫，
+    不換上，也不動身上那件的提醒旗標（armor_warned）。"""
+    problem = repair_problem(state, content, item_id)
     if problem is not None:
         return [f"（{problem}。）"]
     p, rule = state.player, content.config.armor
+    item = equipment.target(p, "armor", item_id)
     material = repair_material(state, content)
     p.materials[material] -= 1
     if not p.materials[material]:
         del p.materials[material]
     p.stats["silver"] -= rule.repair_silver
-    p.armor.edge, p.armor_warned = 100, False
-    return [f"鐵匠拿{content.materials[material].name}把【{p.armor.name}】補好了（銀兩 -{rule.repair_silver}）。"]  # 待 joy 潤
+    item.edge = 100
+    if item is p.armor:
+        p.armor_warned = False
+    return [f"鐵匠拿{content.materials[material].name}把【{item.name}】補好了（銀兩 -{rule.repair_silver}）。"]  # 待 joy 潤
 
 
 def wield(state: GameState, content: Content, item_id: str) -> list[str]:

@@ -157,6 +157,18 @@ def _find(p: PlayerState, item_id: str, slots: tuple[str, ...]) -> Equipment | N
     return next((item for item in p.rack if item.id == item_id and item.slot in slots), None)
 
 
+RACK_MISSING = "裝備庫裡沒有這一件"  # 待 joy 潤（鐵匠鋪與合成流程 3.4）：修、淬煉點名的那一件不在身上、也不在裝備庫（id 對不上、或是別一欄的）
+
+
+def target(p: PlayerState, slot: str, item_id: str | None = None) -> Equipment | None:
+    """修與淬煉要動的那一件（鐵匠鋪與合成流程 3.4）：item_id 是 None 就是身上這一欄那一件（舊呼叫端一字不改）；給了 id 就照 id 找——
+    先看是不是身上那件（同一件，結果跟 None 一樣），再在裝備庫裡找這一欄的；找不到（id 不對、別一欄的）是 None。"""
+    current = worn(p, slot)
+    if item_id is None or (current is not None and current.id == item_id):
+        return current
+    return _find(p, item_id, (slot,))
+
+
 def wield(state: GameState, content: Content, item_id: str, slots: tuple[str, ...]) -> list[str]:
     """換上（2.3）：裝備庫裡 slots 這幾欄的一件換到身上它自己那一欄，身上原本那件放回裝備庫（空著就直接穿上）；重設那一欄的提醒。
     不花體力；只有 road_locked 的欄位（坐騎）在路上不能換，其餘不看人在做什麼（寶物也是，2.3【定】）。先照 id 找、再看那一欄開著沒：找到了而那一欄關著、或 slots 裡一欄都沒開著，是 NOT_NOW；

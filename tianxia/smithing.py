@@ -636,9 +636,10 @@ def temper_floor(item: Equipment) -> int:
     return min(item.tier, four_tiers.TOP_COMMON)
 
 
-def temper_material(state: GameState, content: Content, slot: str = "weapon") -> str | None:
-    """淬身上那一件（slot 那一欄）要用的素材：階不低於 temper_floor 的、最低階的先（最便宜），同階數量多的先，再照 id；沒有是 None。"""
-    item = equipment.worn(state.player, slot)
+def temper_material(state: GameState, content: Content, slot: str = "weapon", item_id: str | None = None) -> str | None:
+    """淬身上那一件（slot 那一欄）要用的素材：階不低於 temper_floor 的、最低階的先（最便宜），同階數量多的先，再照 id；沒有是 None。
+    item_id 是裝備庫那一件的 id（鐵匠鋪與合成流程 3.4，equipment.target）時看那一件的階；None 就是身上那一件（舊呼叫端一字不改）。"""
+    item = equipment.target(state.player, slot, item_id)
     if item is None:
         return None
     mats, floor = content.materials, temper_floor(item)
@@ -646,37 +647,42 @@ def temper_material(state: GameState, content: Content, slot: str = "weapon") ->
     return min(held)[2] if held else None
 
 
-def temper_price(content: Content, material: Material, slot: str = "weapon") -> int:
+def temper_price(content: Content, material: Material, slot: str = "weapon", item_id: str | None = None) -> int:
+    """這個素材的淬煉工錢（照那一欄的設定與素材的階）。item_id 收了不影響價錢（現在的工錢只看素材階；留著跟 temper_material 等同一組引數，
+    之後淬煉的規則看裝備本身時不必再改呼叫端）。"""
     return rules_of(content, slot).temper_silver.get(str(material.tier), 0)
 
 
-def temper_problem(state: GameState, content: Content, slot: str = "weapon") -> str | None:
+def temper_problem(state: GameState, content: Content, slot: str = "weapon", item_id: str | None = None) -> str | None:
+    """淬不了的原因（淬得了是 None）。item_id 是 None＝身上那一件；給了裝備庫那一件的 id 就問那一件，找不到是 equipment.RACK_MISSING。"""
     p = state.player
     if not here(state, content, ARMOR_KIND if slot == "armor" else None):
         return weapons.NOT_HERE
-    item = equipment.worn(p, slot)
+    item = equipment.target(p, slot, item_id)
     if item is None:
+        if item_id is not None:
+            return equipment.RACK_MISSING
         return armor.NO_ARMOR if slot == "armor" else "手上沒有兵器"
     if item.tempers >= rules_of(content, slot).temper_max:
         return FULL
-    mid = temper_material(state, content, slot)
+    mid = temper_material(state, content, slot, item_id)
     if mid is None:
         return f"沒有{weapons.TIER_WORDS[temper_floor(item)]}以上的素材"
-    short = temper_price(content, content.materials[mid], slot) - p.stats.get("silver", 0)
+    short = temper_price(content, content.materials[mid], slot, item_id) - p.stats.get("silver", 0)
     return f"還差 {short} 兩" if short > 0 else None
 
 
-def temper(state: GameState, content: Content, slot: str = "weapon") -> list[str]:
+def temper(state: GameState, content: Content, slot: str = "weapon", item_id: str | None = None) -> list[str]:
     """淬煉身上那一件（兵器 4.7、防具 4.1）：用一個同階以上的素材（＋那一階的工錢），淬煉次數 +1（兵器的加成、防具的減損每次
-    +temper_step，都是現算）。"""
-    problem = temper_problem(state, content, slot)
+    +temper_step，都是現算）。item_id 是裝備庫那一件的 id 時淬那一件（淬完還在裝備庫、不換上；鐵匠鋪與合成流程 3.4）。"""
+    problem = temper_problem(state, content, slot, item_id)
     if problem is not None:
         return [f"（{problem}。）"]
     p = state.player
-    item = equipment.worn(p, slot)
-    mid = temper_material(state, content, slot)
+    item = equipment.target(p, slot, item_id)
+    mid = temper_material(state, content, slot, item_id)
     material = content.materials[mid]
-    cost = temper_price(content, material, slot)
+    cost = temper_price(content, material, slot, item_id)
     p.materials[mid] -= 1
     if not p.materials[mid]:
         del p.materials[mid]
