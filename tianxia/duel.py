@@ -140,8 +140,9 @@ def blow_taken(harm: int, cut: float, tactic_cut: float, cap: float) -> int:
     """對手打中你的那一下，乘過防具與化勁之後挨多少（鐵匠鋪與合成流程 3.9；頭目戰、擂台、奪璽單挑共用，harm_of 本身不動、呼叫端乘）。
     cut 是開打那一刻抄的防具減損（含耐久，DuelState／ArenaSide／SealSide 的 cut）；tactic_cut 是戰法的化勁這一回合挨的打少幾成
     （tactics.Step.a_cut／b_cut——單挑裡化勁本來就是戰法，所以快照不重複抄它）。沒有防具（cut 是 0）就是原本的 round(harm × (1 − 化勁))，
-    一個字不變；有防具兩份相加、合計夾在 cap（Config.armor.total_cap），同一般的仗。只乘「打中的那一下」：放手一搏失手扣的、戰法自扣的不經過這裡。"""
-    reduced = tactic_cut if cut <= 0 else min(cap, tactic_cut + cut)
+    一個字不變；有防具兩份相加、合計夾在 cap（Config.armor.total_cap），同一般的仗，但穿了防具不會比赤膊挨得多（戰法的化勁自己超過 cap 時照戰法的，FB-9031）。
+    只乘「打中的那一下」：放手一搏失手扣的、戰法自扣的不經過這裡。"""
+    reduced = tactic_cut if cut <= 0 else max(tactic_cut, min(cap, tactic_cut + cut))
     return round(harm * (1 - reduced))
 
 

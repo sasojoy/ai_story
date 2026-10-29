@@ -10,7 +10,7 @@ import random
 from .models import Content, Material, Tier4Named
 
 TIER = 4  # 神品：神器的料
-TOP_COMMON = 3  # 一般的料最高到三階（拆四階裝備回三階、四階裝備淬煉收三階以上，12.3 第 37 條、5.3）
+TOP_COMMON = 3  # 一般的料最高到三階（拆四階裝備回三階，12.3 第 37 條、5.3；四階裝備淬煉收三階以上那一條，鐵匠鋪與合成流程 3.7 改成一律收一階）
 
 
 def on(content: Content) -> bool:

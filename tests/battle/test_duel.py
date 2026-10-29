@@ -297,6 +297,8 @@ def test_the_blow_you_take_adds_the_armor_to_the_tactics_toll_cut_and_clamps_it(
     assert duel.blow_taken(50, 0.22, 0.0, 0.6) == round(50 * 0.78)
     assert duel.blow_taken(50, 0.22, 0.3, 0.6) == round(50 * 0.48)  # 兩份相加
     assert duel.blow_taken(50, 0.4, 0.5, 0.6) == round(50 * 0.4)  # 合計夾在 60%
+    assert duel.blow_taken(50, 0.01, 0.7, 0.6) == round(50 * 0.3)  # 戰法的化勁自己超過 60%：穿了防具不會反而挨得多（FB-9031）
+    assert duel.blow_taken(50, 0.3, 0.7, 0.6) == round(50 * 0.3)
 
 
 def test_the_armor_cut_is_the_clamped_armor_reduction_with_its_wear(setup):
