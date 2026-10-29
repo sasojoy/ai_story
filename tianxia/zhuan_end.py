@@ -4,9 +4,8 @@
 - 四件只對準列傳的商品用掉的票（mall.EFFECTS 的 zhuan_art、zhuan_seal、zhuan_quote；購買那一列就是票，用了在那一列的 data
   記 used、season，親筆評曰另記 fid）：列傳插畫的圖庫鍵（illustration_for，<陣營>_<win|lose>，圖檔由雲端批 8 放
   web/img/zhuan/）、紀念印上的字（seal_text）、休季那三顆行動（zhuan:pick_art、zhuan:seal、zhuan:quote:<人物>）。
-- 深交上限（enforce_deep_cap）：同時情誼漲得過 Config.signature_affinity（70）的人物最多 Config.jianfa.deep_figures（3）位，
-  深交名額（deep_slot，只這一季）每張多一位；第 4 位起情誼停在 69。情誼沒有單一的寫入口（計畫 8.0 第 5 條），所以在
-  Game._log 裡事後夾（動作與同步都會走到）。
+- 深交上限與深交名額（批 7b～7d）已拿掉（企劃者 2026-10-28「不要限制深交名額」）：情誼照舊一路往上長、知己不限人數；
+  DEEP_SLOT 這個鍵留在 mall.EFFECTS，只為了已經買過的那幾列讀得出來、退得了款。
 - 人物評曰（批 7b-2，見檔尾）。
 
 開關是 Config.jianfa 的子開關 zhuan_end ＋ 開季的章（on → rules.jianfa）；關著什麼都不做、商城不上架這四件（MallWindow.rule）。
@@ -41,13 +40,6 @@ QUOTE_DONE = "你請{name}替你的列傳寫一句評曰。"
 QUOTE_LATER = "你的列傳已經寫成，下一次重修時這一句才會寫進去。"
 ART_NO_SIDE = "沒投靠一方的人，列傳配不了插畫。"  # 插畫票不賣的原因（FB-845）
 ART_FREE = "你的列傳得了第一階，插畫白送，不必買。"
-DEEP_NOTE = "已深交{n}位"
-# 批 7d（企劃者 2026-10-26，FB-869）：「你已深交三位人物，某某的情誼停在 69。」與「某某把你當作知己，卻不打算把看家本領交出來。」
-# 不給玩家看——這兩句的常數與「深交」那一則江湖紀錄都拿掉了；夾 69、靠名額不教不送的規則照舊在背後運作（enforce_deep_cap、by_slot）。
-DEEP_HOWTO = (  # 玩法說明「情誼」那一節的一句（待 joy 潤）：只講規則本身，數字讀 Config.jianfa.deep_figures 與 signature_affinity
-    "- 最多同時深交 {n} 位（情誼到 {edge} 以上）；第 {next} 位起情誼不再往上加，要再深交一位得用深交名額{where}。"
-)
-DEEP_WHERE = "（商城有賣，只這一季有效）"  # 商城開著而且架上有深交名額才接
 _DIGITS = "〇一二三四五六七八九十"
 _DIGIT = re.compile(r"[0-9０-９]")
 _KANA = re.compile(r"[぀-ヿㇰ-ㇿ]")
@@ -169,78 +161,6 @@ def quote_figures(state: GameState, content: Content, taken: set[str]) -> list[t
     return sorted(picks, key=lambda x: (-x[1], x[0]))
 
 
-# ── 深交上限 ──
-
-
-def deep_cap(content: Content, slots: int = 0) -> int:
-    return content.config.jianfa.deep_figures + max(0, slots)
-
-
-def deep_pending(state: GameState, content: Content) -> bool:
-    """此刻有沒有「情誼過了 70、還不在深交名單上」的人物（Game 先問這個，有才去讀錢包算名額）。"""
-    p, edge = state.player, content.config.signature_affinity
-    return any(v >= edge and cid in content.characters and cid not in p.deep_order for cid, v in p.affinities.items())
-
-
-def enforce_deep_cap(state: GameState, content: Content, slots: int = 0) -> list[str]:
-    """深交上限（企劃者 2026-10-24：同時情誼漲得過 signature_affinity 的人物最多 deep_figures 位，深交名額每張多一位）：
-    還在 70 以上的照先來後到留在 PlayerState.deep_order（掉到 70 以下的讓出位子），新過 70 的照情誼高、id 排，有位子就進名單，
-    沒位子就夾在 69。回這一下被夾住的人物 id（不是句子：批 7d 起夾住了不告訴玩家，玩家看不到任何一句）。"""
-    p, edge = state.player, content.config.signature_affinity
-    deep = {cid for cid, v in p.affinities.items() if v >= edge and cid in content.characters}
-    order = deep_list(state, content)
-    fresh = sorted((cid for cid in deep if cid not in order), key=lambda cid: (-p.affinities[cid], cid))
-    cap = deep_cap(content, slots)
-    stopped: list[str] = []
-    for cid in fresh:
-        if len(order) < cap:
-            order.append(cid)
-            continue
-        p.affinities[cid] = edge - 1
-        stopped.append(cid)
-    p.deep_order = order
-    return stopped
-
-
-def deep_list(state: GameState, content: Content) -> list[str]:
-    """此刻還在 signature_affinity 以上、佔著深交名額的人物，照先來後到（PlayerState.deep_order 濾掉已經掉下去的；
-    enforce_deep_cap 與 by_slot 共用——deep_order 只在有人新過 70 時才整理，中間有人掉下去，這裡照此刻的情誼算）。"""
-    p, edge = state.player, content.config.signature_affinity
-    return [cid for cid in p.deep_order if cid in content.characters and p.affinities.get(cid, 0) >= edge]
-
-
-def by_slot(state: GameState, content: Content, cid: str) -> bool:
-    """這一位是不是靠買來的深交名額才進名單的（批 7c，企劃者 2026-10-26「買來的名額不給數值」）：名單（deep_list，先來後到）裡排在
-    Config.jianfa.deep_figures 位之後的。名單內那幾位不管有沒有買名額都照舊；名單裡有人掉下 70，後面的遞補成名單內的。
-    這樣的人物情誼照長、對話書信評曰照舊，但不教本命武學、不送名將本命兵器（companion_agent、signature_arms 問這一個）。
-    子開關關著、不在名單上都是 False。"""
-    if not on(content, state.world):
-        return False
-    order = deep_list(state, content)
-    return cid in order and order.index(cid) >= content.config.jianfa.deep_figures
-
-
-def howto_line(content: Content, world: WorldState | None) -> str:
-    """玩法說明「情誼」那一節的一句「最多深交幾位」（批 7d，企劃者 2026-10-26；待 joy 潤）：數字讀 Config，
-    子開關 zhuan_end 或減法季關著、這一季沒蓋章是空字串（玩法說明一個字都不變）。只講規則本身。"""
-    if not on(content, world):
-        return ""
-    from . import mall  # noqa: PLC0415
-
-    n = content.config.jianfa.deep_figures
-    where = DEEP_WHERE if mall.on(content) and DEEP_SLOT in content.mall else ""
-    return DEEP_HOWTO.format(n=n, edge=content.config.signature_affinity, next=n + 1, where=where)
-
-
-def deep_note(state: GameState, content: Content, cid: str, slots: int = 0) -> str:
-    """人物頁（談話畫面名字旁的情誼）多寫的「已深交三位」：深交名單滿了、這一位不在名單上、情誼已經停在門檻下面那一格才寫；其餘是空字串。"""
-    p, edge = state.player, content.config.signature_affinity
-    cap = deep_cap(content, slots)
-    if cid in p.deep_order or len(p.deep_order) < cap or p.affinities.get(cid, 0) < edge - 1:
-        return ""
-    return DEEP_NOTE.format(n=_cn(cap))
-
-
 # ── 人物評曰（批 7b-2；設計第九章、3.3）──
 # 三段式同書信（letters.request／write／apply）：A 鎖內 Game.biography_request 把每一位寫手開成一張 VerdictJob（verdict_request），
 # B 鎖外 server.write_zhuan 寫完正文再逐條請模型寫（write_verdict；排在真人後面），C 鎖內 Game.write_biography 每一條接一段「評曰：」
@@ -280,8 +200,9 @@ class VerdictJob:
 
 def writers(state: GameState, content: Content, season: WorldState) -> list[Writer]:
     """這一季替你寫評曰的人物（不含買了請的，那幾位照票）：第一、二階由自己這一方 FactionDef.verdict_by 裡跟你情誼最高的那一位寫
-    （一樣高照寫的順序；官軍皇甫嵩或盧植、黃巾張角或波才、豪強曹操）；情誼到 signature_affinity（70）以上的人物各一位（情誼高的在前）。
-    同一位人物只寫一條。關著的季、散人沒有階也沒有 70 以上的人物是空的。"""
+    （一樣高照寫的順序；官軍皇甫嵩或盧植、黃巾張角或波才、豪強曹操）；情誼到 signature_affinity（70）以上的人物各一位（情誼高的在前），
+    最多 Config.jianfa.verdict_affinity_max（3）位——深交不限人數之後（企劃者 2026-10-28），PM 定只取情誼最高的前三位，省模型呼叫、
+    固定句也不重複。同一位人物只寫一條。關著的季、散人沒有階也沒有 70 以上的人物是空的。"""
     p, c = state.player, content
     out: dict[str, str] = {}
     result = season.final_tiers.get(p.name)
@@ -289,10 +210,13 @@ def writers(state: GameState, content: Content, season: WorldState) -> list[Writ
     if result is not None and result.tier in (1, 2) and faction is not None and faction.verdict_by:
         order = {cid: i for i, cid in enumerate(faction.verdict_by)}
         out[min(faction.verdict_by, key=lambda cid: (-p.affinities.get(cid, 0), order[cid]))] = TIER
-    edge = c.config.signature_affinity
+    edge, room = c.config.signature_affinity, c.config.jianfa.verdict_affinity_max
     for cid, value in sorted(p.affinities.items(), key=lambda x: (-x[1], x[0])):
+        if room <= 0:
+            break
         if value >= edge and cid in c.characters and cid not in out:
             out[cid] = AFFINITY
+            room -= 1
     return [Writer(cid, reason) for cid, reason in out.items()]
 
 

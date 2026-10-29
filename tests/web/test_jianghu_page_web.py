@@ -49,15 +49,19 @@ const code = src.slice(head, tail) + fn("ownOpen") + konst("callKey") + fn("call
 
 // 假的頁面：每個元素是 { kind, classes, attrs, dataset, ... }；選擇器照 app.js 用到的那幾個寫成判斷式
 const all = [];
+// class 屬性照真的瀏覽器（FB-9010）：classList.add 會建出 class 屬性，拿光之後屬性還在、是空的 class=""，只有 removeAttribute("class") 才真的沒有；
+// e.hasClassAttr 記屬性有沒有，:not([class]) 看的就是它（沒有 class 的 <p> 一收一放就變成有 class 屬性的，除非程式自己把空的屬性拿掉）
 const el = (kind, classes = [], extra = {}) => {
-  const e = { kind, classes: new Set(classes), attrs: {}, dataset: {}, ...extra };
+  const e = { kind, classes: new Set(classes), attrs: {}, dataset: {}, hasClassAttr: classes.length > 0, ...extra };
   e.classList = {
-    add: (...c) => c.forEach((x) => e.classes.add(x)), remove: (...c) => c.forEach((x) => e.classes.delete(x)),
-    contains: (c) => e.classes.has(c), toggle: (c, on) => (on ?? !e.classes.has(c)) ? e.classes.add(c) : e.classes.delete(c),
+    add: (...c) => { c.forEach((x) => e.classes.add(x)); e.hasClassAttr = true; }, remove: (...c) => c.forEach((x) => e.classes.delete(x)),
+    contains: (c) => e.classes.has(c),
+    toggle: (c, on) => { if (on ?? !e.classes.has(c)) { e.classes.add(c); e.hasClassAttr = true; } else e.classes.delete(c); },
     replace: (a, b) => { if (!e.classes.has(a)) return false; e.classes.delete(a); e.classes.add(b); return true; },
   };
   e.setAttribute = (k, v) => { e.attrs[k] = String(v); };
-  e.removeAttribute = (k) => { delete e.attrs[k]; };
+  e.getAttribute = (k) => (k === "class" ? (e.hasClassAttr ? [...e.classes].join(" ") : null) : k in e.attrs ? e.attrs[k] : null);
+  e.removeAttribute = (k) => { if (k === "class") { e.classes.clear(); e.hasClassAttr = false; } delete e.attrs[k]; };
   all.push(e);
   return e;
 };
@@ -77,7 +81,7 @@ const scene = L.scene ? el("scene", ["card", "scene"]) : null;
 // 場景的畫（減法季批 8；收法 5a 縮成橫幅）與戰鬥補充那一塊（收法 5c 只留第一行；L.extra 是一共幾行）
 const art = L.art ? el("art", ["scene-art"]) : null;
 const extra = L.extra ? el("extra", ["tx-extra"]) : null;
-// 約戰卡第一張應得了、同去得了的那一行（FB-906，收法 fitDuelRow）：L.duel 是那一行的下緣比行動列下緣低幾 px（沒給＝沒有可按的約戰，量的還是行動列）；
+// 約戰卡第一張應得了、同去得了的那一行（FB-9006，收法 fitDuelRow）：L.duel 是那一行的下緣比行動列下緣低幾 px（沒給＝沒有可按的約戰，量的還是行動列）；
 // 它的鈕（sortie-answer／sortie-join）掛在那一行底下，fitDuelRow 取鈕的 parentElement
 const duelRow = L.duel ? el("duelrow", ["sx-drow"]) : null;
 const duelBtn = L.duel ? el("duelbtn", ["btn"], { parentElement: duelRow }) : null;
@@ -109,6 +113,10 @@ const title = L.hr && !mhead ? el("title", [], { tagName: "P", text: "廣宗決�
 const musterLines = (L.muster || 0) ? Array.from({ length: L.muster }, (_, i) => el("musterp", [], { tagName: "P", text: (T.muster || [])[i] || "" })) : [];
 const hr = L.hr ? el("hr", [], { tagName: "HR" }) : null;
 const own = (L.own || 0) ? Array.from({ length: L.own }, (_, i) => el("ownp", [], { tagName: "P", text: (T.own || [])[i] || "" })) : [];
+// 閒著的場景卡（沒有分隔線）裡所在地的描述（收法 6c）：L.desc 是一共幾段，都是沒有 class 的 <p>。沒有畫（L.art 沒給）時第一段是
+// 「【地名】危險 ★★」那一條（有畫時它疊在畫上、場景文字裡拿掉，sceneUnderArt）：不是描述，收法不收
+const descHead = L.desc && !L.art ? el("deschead", [], { tagName: "P", text: "【白馬津】危險 ★★" }) : null;
+const descParas = Array.from({ length: L.desc || 0 }, (_, i) => el("descp", [], { tagName: "P", text: (T.desc || [])[i] || "" }));
 lines.forEach((x, i) => { x.text = (T.lines || [])[i] || ""; });
 // 場景卡的順序：名字那一行（muster-head 或名字那一段）、集結那一句、分隔線、所在地
 const order = [mhead || title, ...musterLines, hr, ...own].filter(Boolean);
@@ -132,7 +140,7 @@ if (callsBox) {
   callsBox.insertAdjacentHTML = () => { callsMore = makeMore("", true); };
 }
 // 每一樣收起來省多少 px（假的；真的看 375×812 估的數字）
-const SAVE = Object.assign({ art: 190, extra: 60, space: 30, cardSpace: 6, box: 22, hint: 20, renown: 20, line: 20, rounds: 23, merit: 6, own: 27, muster: 27, options: 22, call: 70, moreLine: 0, peek: 56, note: 18 }, input.save || {});
+const SAVE = Object.assign({ art: 190, extra: 60, space: 30, cardSpace: 6, box: 22, hint: 20, renown: 20, line: 20, rounds: 23, merit: 6, own: 27, muster: 27, desc: 27, options: 22, call: 70, moreLine: 0, peek: 56, note: 18 }, input.save || {});
 // 「剛剛」只留時間與標題（fit-title）時剩兩行 48px；只露三行（fit-short）時最多 72px
 const bodyHeight = () => (now && has(now, "fit-title") && !has(now, "open") ? Math.min(L.nowBody, 48)
   : now && has(now, "fit-short") ? Math.min(L.nowBody, 72) : Math.min(L.nowBody || 0, 120));
@@ -150,6 +158,7 @@ const bottom = () => {
   if (extra && has(extra, "fit-extra")) b -= SAVE.extra;
   if (now) b -= Math.min(L.nowBody || 0, 120) - bodyHeight();
   if (own.some((p) => has(p, "fit-clip"))) b -= SAVE.own;
+  descParas.forEach((p) => { if (has(p, "fit-clip")) b -= SAVE.desc; }); // 一段收成一行省一行（描述每段約兩、三行）
   if (musterLines.some((p) => has(p, "fit-clip"))) b -= SAVE.muster;
   if (menu && has(menu, "fit-tight")) b -= SAVE.options;
   callRows.forEach((x) => { if (has(x, "fit-hide")) b -= SAVE.call; });
@@ -219,7 +228,7 @@ if (input.measure) {
   document.createTreeWalker = (e) => { let done = false; return { nextNode: () => (done ? null : (done = true, { data: e.text || "" })) }; };
   document.createRange = () => ({ setStart(n, i) { this.i = i; }, setEnd() {}, getBoundingClientRect() { return { right: (this.i + 1) * 15 }; } });
   globalThis.getComputedStyle = () => ({ fontSize: "15px" });
-  [...lines, ...musterLines, ...own].forEach((x) => { x.getBoundingClientRect = () => ({ right: 300 }); });
+  [...lines, ...musterLines, ...own, ...descParas].forEach((x) => { x.getBoundingClientRect = () => ({ right: 300 }); });
 }
 page.querySelectorAll = q;
 if (now) now.querySelector = (s) => (s === ".tx-now" ? body : null);
@@ -227,8 +236,10 @@ if (body) body.querySelector = (s) => (s === ".tx-line" && L.nowLines !== false 
 if (scene) {
   // 「收起戰場」那一行（FB-120）：只能觀戰的人自己攤開了開打中的戰場（L.battleShut）
   scene.querySelector = (s) => (s === ":scope > hr" ? hr : s === ":scope > .muster-head" ? mhead
-    : s === ":scope > p" ? (mhead ? musterLines[0] || null : title) : s === ":scope > .battle-shut" ? (L.battleShut ? {} : null) : null);
-  scene.querySelectorAll = (s) => (s === ":scope > hr ~ p" && hr ? own : s === ".fit-clip" ? all.filter((x) => has(x, "fit-clip")) : []);
+    : s === ":scope > p" ? (mhead ? musterLines[0] || null : title) : s === ":scope > .battle-shut" ? (L.battleShut ? {} : null)
+    : s === ":scope > .scene-art" ? art : null);
+  scene.querySelectorAll = (s) => (s === ":scope > hr ~ p" && hr ? own : s === ".fit-clip" ? all.filter((x) => has(x, "fit-clip"))
+    : s === ":scope > p:not([class])" ? [descHead, ...descParas].filter((x) => x && !x.hasClassAttr) : []);
 }
 const S = Object.assign({ stage: "game", tab: "jianghu", hearOpen: null, linesOpen: null, extraOpen: null, ownOpen: null, hintTight: false, hintOpen: false, renownTight: false,
   fitWidth: 0, main: { card_id: 7, scene: "<p>x</p>", on_road: false } }, input.S || {});
@@ -249,6 +260,7 @@ const snap = () => ({
   calls: callRows.map((x) => has(x, "fit-hide")), more: callsMore ? [callsMore.textContent, callsMore.dataset.fit || ""] : null,
   renownTight: S.renownTight, merit: meritSmalls.map((x) => has(x, "fit-hide")),
   art: art ? [...art.classes].sort() : null, extra: extra ? [...extra.classes].sort() : null, extraAttrs: extra ? extra.attrs : null,
+  desc: descParas.map((x) => [...x.classes].sort()), descAttrs: descParas.map((x) => ({ ...x.attrs })), descClassAttr: descParas.map((x) => x.getAttribute("class")), descHead: descHead ? [...descHead.classes].sort() : null,
   peek: peek ? [...peek.classes].sort() : null, notes: notes.map((x) => has(x, "fit-hide")), nowWas: now ? now.dataset.fitWas || null : null,
 });
 finish(new Function("H", "S", "snap", "L", "W", "els", input.script || "H.fitFirstScreen(); return snap();")(
@@ -784,7 +796,7 @@ def test_refitting_brings_the_art_and_the_extra_lines_back():
     assert out["fitted"] == [] and "fit-art" not in out["art"] and "fit-extra" not in out["extra"] and out["extraAttrs"] == {}
 
 
-# ── 約戰卡第一張那一行要露在第一屏（FB-906，企劃者 2026-10-28「要露出來」）──────────────────────
+# ── 約戰卡第一張那一行要露在第一屏（FB-9006，企劃者 2026-10-28「要露出來」）──────────────────────
 # 約戰卡排在行動列底下。真資料下「此地還有」只有一人時場景的畫不縮（約 267 px），卡從約 732～772 px 開始、分頁列頂在 756，375×812
 # 只露出「約戰 N 張」標題，應戰、同去的鈕被擠到分頁列底下。第一張是應得了或同去得了的（sxRank 把可按的排最前面）時，收法量的改成那一行
 # （連右邊的鈕）：它比行動列低，所以整排行動列一起照顧到，多縮的是場景的畫；沒有可按的約戰一個像素都不變
@@ -842,6 +854,215 @@ def test_the_selector_follows_the_real_markup_the_duel_card_draws():
     assert '#page > .act-bar + #sortie-duels > .sx-drow:first-of-type > [data-act="sortie-answer"]' in sel and '[data-act="sortie-join"]' in sel
     grey = run_prologue_web({**m, "sorties": [{**row, "can_answer": False, "why_not": "今日應戰 3 次已用完"}]}, "return H.actionBar(H.S.main);")
     assert 'data-act="sortie-answer"' not in grey  # 灰的那一行沒有可按的鈕：選擇器抓不到、量的還是行動列
+
+
+# ── 約戰那一行擠完還放不下：再把場景卡的地點描述收成一行（企劃者 2026-10-28「擠完再上」）──────────────────
+# FB-9006 讓量的目標改成約戰第一行之後，375×812 放得下，矮手機還是被分頁列蓋住（實機量：375×667 蓋約 10 px、360×700、320×700 蓋 4～6 px、
+# 320×568 差一百多 px）：閒著時場景卡的地點描述從來不收（第 7 步 own 只收決戰集結時分隔線之後的）。收法多一步 desc（6c，排在 6b 邀請之後、
+# 7 之前）：只在量的是約戰那一行時，把沒有分隔線的閒著場景卡的描述每段收成一行，點了整張場景卡攤開（own-more、S.ownOpen）。
+# 「此地還有」、結伴、邀請、地名與時刻那一條（有畫時疊在畫上，沒有畫時是第一段）不是描述
+
+
+# 行動列下緣 700、約戰那一行再低 90（＝790），沒有畫，描述兩段（沒有畫時第一段是「【地名】危險 ★★」那一條，另外算）
+DESC = {"bottom": 700, "actbar": True, "scene": True, "desc": 2, "duel": 90}
+FOLD_ATTRS = {"data-act": "own-more", "role": "button", "tabindex": "0", "aria-expanded": "false"}
+
+
+@node
+def test_a_short_phone_folds_the_place_description_to_bring_the_duel_button_up():
+    """756 − 16 = 740。約戰那一行下緣 790：間距收了 30 還是 760（鈕還在分頁列的邊上），描述兩段各收成一行（各省 27）才到 706。
+    地名那一條（沒有畫時的第一段）不收。"""
+    out = run(DESC)
+    assert out["fitted"] == ["space", "desc"] and out["desc"] == [["fit-clip"], ["fit-clip"]]
+    assert out["descAttrs"] == [FOLD_ATTRS, FOLD_ATTRS] and "fit-own" in out["scene"]
+    assert out["descHead"] == [] and out["bottom"] + 90 <= 740  # 那一行（鈕整顆）露在分頁列頂往上 16 以內
+
+
+@node
+def test_the_description_is_folded_after_the_art_and_the_steps_before_it():
+    """順序：間距 → 畫縮成橫幅 → 描述；有畫時地名那一條疊在畫上、不在場景文字裡，兩段都是描述。"""
+    out = run({**DESC, "bottom": 730, "art": True}, save={"art": 20})
+    assert out["fitted"] == ["space", "art", "desc"] and out["desc"] == [["fit-clip"], ["fit-clip"]] and out["descHead"] is None
+    assert out["bottom"] + 90 <= 740
+
+
+@node
+def test_the_description_stays_open_when_the_screen_has_room():
+    """放得下的畫面描述不收：本來就放得下（什麼都不收）、前面的步驟就夠了（只收間距）。"""
+    roomy = run({**DESC, "bottom": 600})
+    assert roomy["fitted"] == [] and roomy["desc"] == [[], []] and roomy["descAttrs"] == [{}, {}] and "fit-own" not in roomy["scene"]
+    enough = run({**DESC, "bottom": 680})  # 770 − 30 = 740：間距就夠
+    assert enough["fitted"] == ["space"] and enough["desc"] == [[], []] and "fit-own" not in enough["scene"]
+
+
+@node
+def test_without_an_answerable_duel_the_description_is_never_folded():
+    """目標是行動列（沒有可按的約戰：自己貼的、結算完的、別區的、約戰關著）：行動列放不下也只收別的步驟，描述一個字不動；
+    有沒有描述那幾段，收的步驟與停的地方都一樣。"""
+    tall = {"bottom": 900, "actbar": True, "scene": True}
+    with_desc, without = run({**tall, "desc": 2}), run(tall)
+    assert with_desc["fitted"] == without["fitted"] == ["space"] and with_desc["bottom"] == without["bottom"] == 870
+    assert with_desc["desc"] == [[], []] and with_desc["descAttrs"] == [{}, {}] and "fit-own" not in with_desc["scene"]
+
+
+@node
+def test_the_description_under_a_battle_or_an_event_is_not_this_steps_business():
+    """決戰集結（場景卡有分隔線）：這一步不做，分隔線之後照第 7 步收；事件、有所感（不是閒著的行動列）：那是 joy 的字，不收。"""
+    battle = run({**DESC, "bottom": 800, "hr": True, "own": 2})
+    assert "desc" not in battle["fitted"] and battle["desc"] == [[], []] and "own" in battle["fitted"]
+    event = run({**DESC, "bottom": 800}, idle=False)
+    assert "desc" not in event["fitted"] and event["desc"] == [[], []] and "fit-own" not in event["scene"]
+
+
+@node
+def test_a_description_with_digits_that_cannot_fit_on_one_line_is_left_alone():
+    """同第 7 步：收成一行之後數字會藏到「…」後面的那一段不收，其餘照收。"""
+    long_run = "黃河南岸的渡口，渡船往來不絕。往南的官道這裡通往潁川有 12 條路"  # 最後一個數字在第 19 個字之後：一行（300px，每字 15px）露不出來
+    assert long_run.rindex("2") > 18
+    out = run({**DESC, "texts": {"desc": [long_run, "渡口今日有 5 艘船"]}}, measure=True)
+    assert out["desc"] == [[], ["fit-clip"]] and out["descAttrs"][0] == {} and out["descAttrs"][1] == FOLD_ATTRS
+
+
+@node
+def test_an_opened_description_stays_open_when_the_page_is_redrawn():
+    """點了描述（ownOpen）：整張場景卡攤開，之後重畫（輪詢、轉向、拉視窗）不再收；換了地方才重新收；約戰被人應了、放得下之後重量，攤回來。"""
+    script = """
+      H.fitFirstScreen(); const folded = snap();
+      H.ownOpen(); const opened = snap();
+      H.fitFirstScreen(); const redrawn = snap();
+      S.main = Object.assign({}, S.main, { status: { location: "guangzong" } }); H.fitFirstScreen(); const moved = snap();
+      return { folded, opened, redrawn, moved, key: S.ownOpen };"""
+    out = run(DESC, script, S={"main": {"card_id": 7, "on_road": False, "status": {"location": "baima_ford"}, "scene": "<p>【白馬津】危險 ★★</p><p>渡口。</p>"}})
+    assert out["folded"]["fitted"] == ["space", "desc"] and out["folded"]["desc"] == [["fit-clip"], ["fit-clip"]]
+    assert out["opened"]["desc"] == [[], []] and out["opened"]["descAttrs"] == [{}, {}] and "fit-own" not in out["opened"]["scene"]
+    assert out["redrawn"]["fitted"] == ["space"] and out["redrawn"]["desc"] == [[], []] and out["key"]  # 攤開過的同一個地方：不再收
+    assert out["moved"]["fitted"] == ["space", "desc"] and out["moved"]["desc"] == [["fit-clip"], ["fit-clip"]]  # 換了地方：重新收
+
+
+@node
+def test_refitting_gives_the_same_result_each_time_and_unfolds_when_the_duel_is_gone():
+    """重畫、轉向、拉視窗之後重量：同一個畫面每一輪都收同樣幾步（先全部還原再收），不多收也不少收；沒有可按的約戰了，描述攤回來。"""
+    script = """
+      H.fitFirstScreen(); const a = snap();
+      H.fitFirstScreen(); const b = snap();
+      W.innerWidth = 320; H.fitOnResize(); const c = snap();
+      L.duel = 0; H.fitFirstScreen(); const gone = snap();
+      return { a, b, c, gone };"""
+    out = run(DESC, script)
+    assert out["a"]["fitted"] == out["b"]["fitted"] == out["c"]["fitted"] == ["space", "desc"]
+    assert out["a"]["desc"] == out["b"]["desc"] == out["c"]["desc"] == [["fit-clip"], ["fit-clip"]] and out["a"]["bottom"] == out["c"]["bottom"]
+    assert out["gone"]["fitted"] == [] and out["gone"]["desc"] == [[], []] and out["gone"]["descAttrs"] == [{}, {}]  # 行動列 700 本來放得下
+    assert "fit-own" not in out["gone"]["scene"]
+
+
+@node
+def test_the_description_is_folded_again_after_every_refit_that_does_not_redraw():
+    """FB-9010：沒有重畫的重量（轉向再轉回、視窗寬 375→376→375、點名號展開再收起）都從 fitReset 開始：先把收成一行的描述攤回來、再量。
+    真的瀏覽器的 classList 拿光 class 之後留下空的 class=""，第 6c 步的選擇器 :scope > p:not([class]) 就再也選不到那一段（假 DOM 照這樣做），
+    折疊從第二次量起消失、約戰鈕掉回分頁列底下（實機 375×667 −18.4 → +8.7、360×700 −51.4 → +2.9）。每一種之後：描述還收著、鈕整顆在第一屏。"""
+    script = """
+      H.fitFirstScreen(); const first = snap();
+      W.innerWidth = 376; H.fitOnResize(); const wider = snap();
+      W.innerWidth = 375; H.fitOnResize(); const back = snap();
+      const h0 = els.top.offsetHeight; els.top.offsetHeight = h0 + 80; H.fitTopMoved(h0); const expanded = snap();
+      els.top.offsetHeight = h0; H.fitTopMoved(h0 + 80); const collapsed = snap();
+      H.fitFirstScreen(); const again = snap();
+      return { first, wider, back, expanded, collapsed, again };"""
+    out = run(DESC, script)
+    for name, shot in out.items():
+        assert shot["fitted"] == ["space", "desc"], name
+        assert shot["desc"] == [["fit-clip"], ["fit-clip"]] and shot["descAttrs"] == [FOLD_ATTRS, FOLD_ATTRS], name
+        assert shot["bottom"] + 90 <= 740, name  # 約戰鈕整顆露在分頁列頂往上 16 以內
+
+
+@node
+def test_unfolding_a_description_leaves_no_empty_class_attribute_behind():
+    """FB-9010 的根：收成一行（加 fit-clip）再攤回來（拿掉 fit-clip），那一段又沒有 class 屬性了（不是空的 class=""），下一次量還選得到。
+    攤回來有兩條路：重量時 fitReset、點了描述 ownOpen；還有一條是收了才發現數字會被「…」吞掉、當場退回的那一段。"""
+    script = """
+      H.fitFirstScreen(); const folded = snap();
+      L.duel = 0; H.fitFirstScreen(); const reset = snap();
+      L.duel = 90; H.fitFirstScreen(); H.ownOpen(); const opened = snap();
+      return { folded, reset, opened };"""
+    out = run(DESC, script)
+    assert out["folded"]["descClassAttr"] == ["fit-clip", "fit-clip"]
+    assert out["reset"]["descClassAttr"] == [None, None] and out["opened"]["descClassAttr"] == [None, None]
+    long_run = "黃河南岸的渡口，渡船往來不絕。往南的官道這裡通往潁川有 12 條路"  # 數字在一行（300px）之外：收了就退回，那一段不是空的 class=""
+    edge = run({**DESC, "texts": {"desc": [long_run, "渡口今日有 5 艘船"]}}, measure=True)
+    assert edge["desc"] == [[], ["fit-clip"]] and edge["descClassAttr"] == [None, "fit-clip"]
+
+
+def _html_tree(html: str) -> dict:
+    from html.parser import HTMLParser
+
+    void = {"img", "hr", "br", "input", "meta", "link", "source"}
+    root = {"tag": "#", "attrs": {}, "kids": [], "text": ""}
+    stack = [root]
+
+    class Reader(HTMLParser):
+        def handle_starttag(self, tag, attrs):
+            node = {"tag": tag, "attrs": dict(attrs), "kids": [], "text": ""}
+            stack[-1]["kids"].append(node)
+            if tag not in void:
+                stack.append(node)
+
+        def handle_startendtag(self, tag, attrs):
+            stack[-1]["kids"].append({"tag": tag, "attrs": dict(attrs), "kids": [], "text": ""})
+
+        def handle_endtag(self, tag):
+            while len(stack) > 1 and stack[-1]["tag"] != tag:
+                stack.pop()
+            if len(stack) > 1:
+                stack.pop()
+
+        def handle_data(self, data):
+            for node in stack[1:]:
+                node["text"] += data
+
+    Reader().feed(html)
+    return root
+
+
+def _scene_card(node: dict) -> dict | None:
+    classes = node["attrs"].get("class", "").split()
+    if node["tag"] == "section" and "card" in classes and "scene" in classes:
+        return node
+    for kid in node["kids"]:
+        found = _scene_card(kid)
+        if found:
+            return found
+    return None
+
+
+@node
+@pytest.mark.parametrize("with_art", [True, False])
+def test_the_description_selector_follows_the_real_scene_markup(on, with_art):
+    """第 6c 步的選擇器（app.js：場景卡直接孩子裡沒有 class 的 <p>，沒有畫時去掉第一段）照真的場景卡寫：有畫時地名那一條疊在畫上、
+    場景文字裡拿掉；沒有畫時它是第一段；「此地還有」、邀請、結伴是 <div>，選不到。"""
+    game = Game.new(on, "甲", rng=random.Random(0))
+    game.client = None
+    m = server.main_view(game)
+    paras = re.findall(r"<p>(.*?)</p>", m["scene"], re.S)
+    head, desc = paras[0], paras[1:]
+    assert head.startswith("【") and desc
+    m["art"] = ({"kind": "place", "src": "/static/img/places/world.webp", "title": "某地", "sub": "危險 ★", "time": "第 1 天 08:00", "head": f"<p>{head}</p>"}
+                if with_art else None)
+    m["here"] = [{"name": "沈伯安", "side": "黃巾軍"}]
+    m["calls"] = [{"text": "有人跟你打招呼", "options": [{"id": "invite:accept:1", "label": "回禮", "enabled": True}]}]
+    m["party"] = {"text": "你與某人結伴同行", "lead": False}
+    kids = _scene_card(_html_tree(run_prologue_web(m, "return H.pageJianghu();")))["kids"]
+    drawn_art = any("scene-art" in k["attrs"].get("class", "") for k in kids)
+    assert drawn_art is with_art
+    picked = [k for k in kids if k["tag"] == "p" and "class" not in k["attrs"]]
+    if not drawn_art:
+        assert picked[0]["text"].startswith("【")  # 第一段是地名那一條
+        picked = picked[1:]
+    norm = lambda text: " ".join(re.sub(r"<[^>]*>", "", text).split())  # noqa: E731
+    assert [norm(k["text"]) for k in picked] == [norm(d) for d in desc]
+    divs = {k["attrs"].get("class") for k in kids if k["tag"] == "div"}
+    assert {"here", "calls"} <= divs and not any(k["tag"] == "p" and "here" in k["attrs"].get("class", "") for k in kids)
+    src = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    assert 'scene.querySelectorAll(":scope > p:not([class])")' in src and 'scene.querySelector(":scope > .scene-art")' in src
 
 
 def test_the_art_and_extra_folds_are_styled():

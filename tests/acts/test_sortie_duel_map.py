@@ -120,7 +120,7 @@ def test_a_convoy_passing_an_unconnected_place_keeps_it_an_attack():
 
 @pytest.mark.parametrize("off", [False, True], ids=["約戰開著", "約戰關著"])
 def test_a_passing_convoy_marks_only_its_place_and_only_with_duels_on(off):
-    """FB-905：輿圖那一處的 convoy 旗（網頁卡的鈕寫「出陣・截糧」、不掛攻的勝算）只在約戰開著、出陣標攻、運糧隊正打那裡經過時有；
+    """FB-9005：輿圖那一處的 convoy 旗（網頁卡的鈕寫「出陣・截糧」、不掛攻的勝算）只在約戰開著、出陣標攻、運糧隊正打那裡經過時有；
     沒有運糧隊、約戰關著（舊出陣照舊攻打駐軍與運糧隊擲一路）整份疊層一個鍵都不多。"""
     c = duel_content("week7", off=off)
     world = duel_world(c)

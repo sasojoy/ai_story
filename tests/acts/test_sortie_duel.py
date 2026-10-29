@@ -169,7 +169,7 @@ def test_far_away_the_answer_button_is_grey_with_the_walk():
 
 
 def test_every_duel_card_carries_both_army_names_and_the_answer_stamina_even_off_a_block():
-    """FB-903：站在不是區塊的地方（南華觀）沒有出陣前那張卡，網頁的陣營名與應戰的體力只能從約戰卡自己拿。"""
+    """FB-9003：站在不是區塊的地方（南華觀）沒有出陣前那張卡，網頁的陣營名與應戰的體力只能從約戰卡自己拿。"""
     c, world = _pair()
     cfg = c.config.sortie
     seat(c, world, "乙", "huang", "jade_cave")  # 潁川汝南的南華觀：不是區塊，跟約戰的汝南荒野同一個大區
@@ -184,7 +184,7 @@ def test_every_duel_card_carries_both_army_names_and_the_answer_stamina_even_off
 
 
 def test_a_live_duel_card_says_where_the_block_stands_for_the_side_that_posted(monkeypatch):
-    """FB-904：應戰卡寫的是這一場牽動的那一塊——約戰那一軍推到幾、離翻走還差多少、幾人在推；站在哪裡都一樣，打完的那一張不帶。"""
+    """FB-9004：應戰卡寫的是這一場牽動的那一塊——約戰那一軍推到幾、離翻走還差多少、幾人在推；站在哪裡都一樣，打完的那一張不帶。"""
     c, world = _pair()
     seat(c, world, "乙", "huang", "jade_cave")  # 站的地方不是區塊
     _go(c, world)

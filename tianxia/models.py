@@ -3258,6 +3258,10 @@ class EpiphanyRules(_Strict):
     pity: int = Field(default=40, ge=0)  # 只管第一次：這一季擲中感悟這麼多次都沒頓悟，下一次必中；0 是不保底
     demon_scale: float = Field(default=0.95, gt=0)  # 心魔的難度＝你此刻的全隊威力 × 這個倍數（你自己的影子）
     retry_days: float = Field(default=1.0, ge=0)  # 心魔打輸了，過幾個遊戲日能再打（照季長，rules.day_seconds）
+    # 心境小試抽到「靜候」那一種時要等幾個遊戲日（FB-902）：預設 1.0 是設計稿的「靜候一日」，
+    # 但 7 天的季裡那是真實 24 小時、一關吃掉整季的 1/7，所以 week7／season21 寫 1/12（一個時辰），
+    # 跟心魔重試的 retry_days 對齊。每次檢定都照此刻的設定讀，所以改了對正在走的線也立刻生效。
+    trial_wait_days: float = Field(default=1.0, ge=0)
     # 重複挑戰時削弱他（企劃者 2026-10-28「心魔重複打的時候削弱他好了」；「僵持也算過關」被否了：太簡單）：
     # 每輸一次（含僵持）難度的倍數降這麼多，降到 demon_floor 為止。0.95 滿血勝率約三成，每次 −0.05：
     # 第三次過半、第六次九成五、第七次起照 floor 幾乎篤定過，所以不會卡死，但也不是白給。
@@ -3331,9 +3335,9 @@ class JianfaRules(JianfaNumbers):
     # 豪強的投靠點 → 投靠那一下預設幫哪一軍（wins.lean_default；content.validate 叫 wins.check 驗每個投靠點都有、都是它能幫的那一軍）
     lean_default_by_join: dict[str, str] = Field(default_factory=lambda: dict(LEAN_DEFAULT_BY_JOIN))
     # ── 批 7b：列傳為終點（整合設計第九章；主機側計畫第八節；tianxia/zhuan_end.py）──
-    zhuan_end: bool = True  # 第九章 列傳為終點：行狀補齊（季末論功、〈天下形勢〉）、人物評曰、四件商品、深交上限（批 7b）
-    deep_figures: int = Field(default=3, ge=0)  # 同時情誼漲得過 signature_affinity 的人物最多幾位【預設】（企劃者 2026-10-24；深交名額票多一位）
+    zhuan_end: bool = True  # 第九章 列傳為終點：行狀補齊（季末論功、〈天下形勢〉）、人物評曰、列傳的三件商品（批 7b；深交上限企劃者 2026-10-28 拿掉）
     verdict_chars: int = Field(default=40, ge=1)  # 人物評曰一句最多幾個字【預設】
+    verdict_affinity_max: int = Field(default=3, ge=0)  # 情誼 70 以上替你寫評曰的最多幾位（情誼高的在前；PM 2026-10-28，深交不限人數之後）【預設】
     verdict_budget_seconds: float = Field(default=40, gt=0)  # 一條評曰最多等模型幾秒（含排隊，排在真人後面）【預設】
 
 

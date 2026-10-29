@@ -533,7 +533,7 @@ def state(
     FB-878）：領地爭奪開著，出陣真的會打的那幾路隊伍 id（Game._map_foes；地點卡的對手、勝算字、推薦排序都跟著它）；領地爭奪關著、沒給、
     回 None 是照舊列站的隊伍（atlas.foes）。
     mostly 是看的人的名字旁（Game.map_mostly，2f）：key 要跟他手上的底圖（同一份 mostly）對得上，字變了網頁才會重抓底圖。
-    convoy(地點) 由 Game.map_state 給（FB-905）：約戰開著、出陣標攻、這週截糧的運糧隊正打那裡經過（行動列那一格寫「出陣・截糧」、按了打運糧隊）；
+    convoy(地點) 由 Game.map_state 給（FB-9005）：約戰開著、出陣標攻、這週截糧的運糧隊正打那裡經過（行動列那一格寫「出陣・截糧」、按了打運糧隊）；
     真的才在那一處多一個 "convoy": True（沒給、不是的地方一個鍵都不多），網頁的卡寫「出陣・截糧」、不掛攻的勝算。
 
     {"key", "now_week", "weeks_total", "season_one", "territory", "faction", "sides", "here", "stamina", "sorties_left",

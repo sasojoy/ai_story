@@ -12,7 +12,7 @@ import pytest
 from conftest import install_season_one
 from tianxia import calendar, encounter, roster, rules, social, team
 from tianxia.characters import CharacterStore
-from tianxia.engine import Game
+from tianxia.engine import CLASH_OPEN, CLASH_THEIRS_WON, CLASH_WON, Game
 from tianxia.models import FactionDef
 from tianxia.state import BotProfile
 
@@ -209,6 +209,40 @@ def test_the_winner_takes_part_of_the_losers_silver_and_the_loser_bleeds_a_littl
     assert f"氣血 -{round(cap * cfg.hp_loss)}" in theirs.battles[0].changes
     assert theirs.journal[0].title == "遭甲截殺" and mine.journal[0].title == "截殺・乙"
     assert f"銀兩 -{lost}" in theirs.journal[0].changes
+
+
+def _fights(world, name):
+    return [e for e in _load(world, name).player.annals if e.kind == "fight"]
+
+
+@pytest.mark.parametrize("tier", ["大勝", "落敗"])
+def test_a_raid_notes_the_rivals_name_to_keep_on_both_sides(pair, monkeypatch, tier):
+    """FB-9020：對手是玩家，名號帶「你」或阿拉伯數字時季末備援列傳不能改它；原句同時有代詞「你」與對手名號，所以行狀記 keep。兩邊各記自己的。"""
+    content, world = pair
+    content.config.biography.enabled = True
+    _raid(content, world, tier=tier, monkeypatch=monkeypatch)
+    (mine,), (theirs,) = _fights(world, "甲"), _fights(world, "乙")
+    assert mine.keep == ["乙"] and "乙" in mine.text and "你" in mine.text
+    assert theirs.keep == ["甲"] and "甲" in theirs.text and "你" in theirs.text
+
+
+def test_a_melee_and_an_ambush_note_the_rivals_name_to_keep_too(pair):
+    content, world = pair
+    content.config.biography.enabled = True
+    result = encounter.EncounterResult(tier="大勝", margin=50, our_power=200, difficulty=40)
+    _, other = _do(content, world, "乙", lambda g: [])
+    story = CLASH_OPEN.format(rival="乙", place="湖畔", side="官軍") + CLASH_WON.format(rival="乙")
+    _, game = _do(content, world, "甲", lambda g: g._melee_record(result, "乙", 40.0, other, story, None))
+    mine = [e for e in game.state.player.annals if e.kind == "fight"]
+    assert [e.keep for e in mine] == [["乙"]] and mine[0].text.startswith("乙正在湖畔替官軍出力")
+    theirs_story = CLASH_THEIRS_WON.format(rival="甲", place="湖畔", him="他")
+    _, other3 = _do(content, world, "乙", lambda g: g._melee_record(result, "甲", 40.0, game, theirs_story, "遭甲撞上"))
+    assert [e.keep for e in other3.state.player.annals if e.kind == "fight"][-1] == ["甲"]
+    _, owner = _do(content, world, "甲", lambda g: g._ambush_record(result, "乙", 40.0, other, None, as_owner=True))
+    _, passer = _do(content, world, "乙", lambda g: g._ambush_record(result, "甲", 40.0, game, None, as_owner=False))
+    assert [e.keep for e in owner.state.player.annals if e.kind == "fight"][-1] == ["乙"]
+    assert [e.keep for e in passer.state.player.annals if e.kind == "fight"][-1] == ["甲"]
+    assert "乙" in [e for e in owner.state.player.annals if e.kind == "fight"][-1].text
 
 
 def test_an_attacker_who_loses_pays_the_defender(pair, monkeypatch):

@@ -556,6 +556,11 @@ class AnnalEntry(BaseModel):
     quote: str = ""  # 你說的那一句（自己說、放手一搏、隨口應對的原句）
     reply: str = ""  # 人物回的那一句，或放手一搏播出的那一版劇情
     weight: int = 1  # 份量 1～5：行狀滿了先丟輕的
+    # 這一則裡要原樣保留的別人的名號（FB-9020）：對手是玩家，名號帶「你」或阿拉伯數字時，季末備援列傳（biography._strip）整句把「你」換成
+    # 傳主、數字換成中文，會把別人的名號改壞；原句同時有代詞「你」與對手名號，光看字串分不出來，所以寫行狀那一刻記下名號。
+    # 傳主自己的名號不存在這裡（存檔不重複）；備援列傳遮名號時 _strip 另外固定加上傳主的。舊存檔沒有這個欄位（讀進來是空的）；
+    # 舊程式讀到它會忽略（AnnalEntry 不是 _Strict）
+    keep: list[str] = Field(default_factory=list)
 
 
 class RenownSeen(BaseModel):
@@ -621,8 +626,8 @@ class PlayerState(BaseModel):
     # 記號留到下一次同步、看到存檔裡這一份已經減過才清（FB-361：收場那一下在輪詢組畫面時，角色不存、全服的記號照樣提交）
     parted_done: list[str] = Field(default_factory=list)
     affinities: dict[str, int] = Field(default_factory=dict)  # 人物 id -> 0~100 好感度，跟有沒有招到他無關
-    # 深交（減法季批 7b，zhuan_end.enforce_deep_cap）：此刻情誼在 signature_affinity 以上、佔著深交名額的人物，照先來後到；
-    # 空的時候不寫進存檔（QUIET_DEFAULTS），角色每季重來
+    # 深交名單（減法季批 7b 的深交上限用的）：上限企劃者 2026-10-28 拿掉了，沒有人再讀寫這一欄；留著只為了舊存檔讀得進來。
+    # 空的時候不寫進存檔（QUIET_DEFAULTS）
     deep_order: list[str] = Field(default_factory=list)
     relationship_notes: dict[str, str] = Field(default_factory=dict)  # 人物 id -> 一句話關係現況
     # 風聞（figure_life.spread）：人物 id → 他聽說的你做過的事（一句一條，最新的在後，最多 hearsay_keep 條）；這一季的，換季清掉

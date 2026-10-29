@@ -29,7 +29,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 
-from . import annals
+from . import annals, calendar
 from .atlas import region_of
 from .models import Content, StoryDef, StoryEnding, StoryPlace, StoryStage
 from .rules import apply_effect, check_condition, day_seconds, fill_marks, jianfa
@@ -40,7 +40,36 @@ UNFINISHED = "未了"  # StoryProgress.ending：季末還沒收
 OPTION = "story"  # 選單的 id 開頭：story:<線>、story:<線>:a<答案>、story:<線>:later
 LATER = "later"
 PENDING_HEAD = "未了之事"  # 選單與「你這一步」那一行的開頭（待 joy 潤）
-RETRY_NOTE = "（再等一個時辰才能再試）"  # fight 段打輸了還沒到再試的時候（待 joy 潤）
+RETRY_NOTE = "（再等 {left}才能再試）"
+RETRY_SOON = "（再等一下就能再試）"  # 剩不到一分鐘  # fight 段打輸了還沒到再試的時候；{left} 照 retry_at 算（待 joy 潤）
+WAIT_NOTE = "（還要 {left}）"  # task 段要等時間的那幾種：還要多久（待 joy 潤）
+WAIT_SOON = "（就快了）"  # 剩不到一分鐘
+# task 段「還要等多久」的鉤子（StoryStage.task → 一個函式，回還差幾世界秒，到了或不是這一種回 None）：
+# task 段沒有鈕、要去做別的事，但靠時間的那幾種（例：頓悟的小試「靜候」）玩家看不出還要多久，
+# 不寫倒數的話看起來就是卡住了（FB-902）。靠動作的那幾種（打贏一場、靜坐、探訪）不註冊，只寫 hint。
+TASK_LEFT: dict[str, Callable[[GameState, Content, StoryProgress], float | None]] = {}
+
+
+def task_note(state: GameState, content: Content, progress: StoryProgress, stage: StoryStage) -> str:
+    """task 段那一行後面的倒數（沒有鉤子、或已經到了就是空字串）。世界秒 ÷ time_scale 才是玩家感覺到的時間。"""
+    hook = TASK_LEFT.get(stage.task or "")
+    left = hook(state, content, progress) if hook is not None else None
+    if left is None:
+        return ""
+    real = max(0.0, left) / (content.config.time_scale or 1.0)
+    return WAIT_SOON if real <= 60 else WAIT_NOTE.format(left=calendar.span_text(real))
+
+
+def retry_note(state: GameState, content: Content, progress: StoryProgress) -> str:
+    """還要等多久才能再打那一場（給玩家看的字）。以前這一句是寫死的「一個時辰」，照 StoryStage.retry_days
+    的預設 1/12 寫；心魔那一關用 Config.epiphany.retry_days 覆蓋它（曾經是 1.0＝一整天），字就騙人
+    （FB-900）。現在照 retry_at 算，怎麼調都對。世界秒 ÷ time_scale 才是玩家感覺到的時間。"""
+    left = (progress.retry_at or 0) - state.world.time
+    scale = content.config.time_scale or 1.0
+    real = max(0.0, left) / scale
+    if real <= 60:
+        return RETRY_SOON
+    return RETRY_NOTE.format(left=calendar.span_text(real))
 LATER_LABEL = "先擱著"  # 答題答到一半先走（待 joy 潤）
 JOURNAL = "奇事"  # 同步時往下走的那幾句另起一則江湖紀錄的標題（待 joy 潤）
 
@@ -60,8 +89,17 @@ def on(content: Content, state: GameState) -> bool:
     return jianfa(content, state.world, "storylines")
 
 
+# 程式組的線每次讀出來要照設定重算的數字（kind → 一個函式，拿 content 與那一份 StoryDef，回新的）：
+# custom 的線把整個定義存進存檔（progress.custom），不這樣做的話改了設定只對之後新開的線有效
+# （線上踩到：心魔的 retry_days 從一天改成一個時辰、削弱也加了，正在走的人卻完全沒吃到）。
+REFRESH_HOOKS: dict[str, Callable[[Content, StoryDef], StoryDef]] = {}
+
+
 def definition(content: Content, progress: StoryProgress) -> StoryDef | None:
-    return progress.custom if progress.custom is not None else content.storylines.get(progress.line)
+    if progress.custom is None:
+        return content.storylines.get(progress.line)
+    refresh = REFRESH_HOOKS.get(progress.custom.kind)
+    return refresh(content, progress.custom) if refresh is not None else progress.custom
 
 
 def active(state: GameState) -> list[StoryProgress]:
@@ -258,11 +296,22 @@ def options(state: GameState, content: Content) -> list[tuple[str, str, bool]]:
         return []
     out = []
     for progress in active(state):
+        pair = current(content, progress)
+        if pair is None or progress.opened:
+            continue
+        _, stage = pair
+        if stage.kind == "task":
+            # task 段沒有鈕（要去做別的事），但**灰著列一行**：不列的話玩家完全看不到自己卡在哪一步，
+            # 整條線從他那邊看就是消失了（FB-902，上班想下班停在小試「靜候」一天什麼都看不到）。
+            # 灰的選項引擎本來就擋（choose 的 not option.enabled → 「此刻無法這麼做」），假人也只挑亮的
+            out.append((f"{OPTION}:{progress.line}",
+                        label(content, progress) + task_note(state, content, progress, stage), False))
+            continue
         if not doable(state, content, progress):
             continue
-        _, stage = current(content, progress)
         waiting = stage.kind == "fight" and progress.retry_at is not None and state.world.time < progress.retry_at
-        out.append((f"{OPTION}:{progress.line}", label(content, progress) + (RETRY_NOTE if waiting else ""), not waiting))
+        note = retry_note(state, content, progress) if waiting else ""
+        out.append((f"{OPTION}:{progress.line}", label(content, progress) + note, not waiting))
     return out
 
 

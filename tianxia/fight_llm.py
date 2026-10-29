@@ -133,6 +133,10 @@ def judge(
     try:
         reply = caller.chat_structured(
             _messages(request, swing), Judgment, temperature=0.4, num_predict=PREDICT, required_fields=["winning", "losing"],
+            # 兩版過程寫進送出去的 schema 的 required：不開的話兩個欄位都有預設值、schema 連 required 都沒有，
+            # 模型可以回 {}、接著被判成「缺欄位、疑似被截斷」白跑一趟（線上一天 34 次）。
+            # 實測過 num_predict 夠（PREDICT 很寬）：開了兩版都寫到、字數沒變短、沒有截斷（FB-904）
+            require_in_schema=True,
         )
     except Exception:  # noqa: BLE001  連不上、逾時、格式不對——一律當作這次沒有判讀
         return None

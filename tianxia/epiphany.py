@@ -107,11 +107,14 @@ QUESTIONS: list[tuple[str, list[tuple[str, str, str]]]] = [
 ]
 ASKED = 3
 # 心境小試（引擎查得到的小事）：名字 → （「未了之事」那一行寫的這一步、做成了加哪一型）
+WAIT = "wait"  # 靠時間的那一種小試：等 Config.epiphany.trial_wait_days 個遊戲日（別的三種靠玩家動手）
 TRIALS: dict[str, tuple[str, str]] = {
     "win": ("出手打贏一場", "攻"),
     "terrain": ("到{tag}靜坐", "守"),
     "roam": ("四處探訪三回", "變"),
-    "wait": ("靜候一日，什麼都別急", "心"),
+    # 以前寫「靜候一日」：等多久改成設定之後這句話就會騙人（同心魔那一句，FB-900），
+    # 所以話裡不寫時間，還要多久由選單那一行的倒數寫（storyline.TASK_LEFT，FB-902）
+    WAIT: ("靜候，什麼都別急", "心"),
 }
 TERRAINS = ("山林", "河畔", "野外", "寺院", "古戰場")
 MOVE_FORMS = {"強攻": "攻", "固守": "守", "奇襲": "變"}
@@ -265,13 +268,47 @@ def _task(trial: str):
         elif trial == "roam":
             ok = p.explore_seq - progress.marks[START_ROAM] >= 3
         else:
-            ok = state.world.time - since >= day_seconds(content, state.world)
+            ok = _wait_left(state, content, progress) is None
         return _done(progress, trial) if ok else False
     return check
 
 
 for _name in TRIALS:
     storyline.TASKS[f"{KIND}:{_name}"] = _task(_name)
+
+
+def _wait_left(state: GameState, content: Content, progress: StoryProgress) -> float | None:
+    """「靜候」那一種小試還差幾世界秒（到了、或還沒開始算就是 None）。
+
+    每次都照此刻的 `Config.epiphany.trial_wait_days` 算，所以改了設定對**正在走的線**也立刻生效
+    （FB-902：7 天的季裡「一日」是真實 24 小時，玩家卡在這一步、畫面上又什麼都看不到）。"""
+    since = progress.marks.get(START)
+    if since is None:
+        return None
+    left = since + rules(content).trial_wait_days * day_seconds(content, state.world) - state.world.time
+    return left if left > 0 else None
+
+
+storyline.TASK_LEFT[f"{KIND}:{WAIT}"] = _wait_left
+
+
+def _refresh(content: Content, line: StoryDef) -> StoryDef:
+    """每次讀這一條線都照此刻的設定重算心魔那一關的數字（storyline.REFRESH_HOOKS）：
+    線是程式組的、整份存在 progress.custom 裡，不這樣做的話改了設定只對之後新開的線有效。"""
+    r = rules(content)
+    stages = [
+        s.model_copy(update={"retry_days": r.retry_days, "mirror_weaken": r.demon_weaken,
+                             "mirror_floor": r.demon_floor, "mirror": r.demon_scale})
+        if s.kind == "fight" and s.mirror is not None else
+        # 「靜候」那一段的 hint：以前寫死「靜候一日」，等多久變成設定之後那句話會騙人（FB-902）。
+        # 進行中的線 hint 是存檔裡那一份，所以這裡也換成新的那一句（還要多久由倒數寫）
+        s.model_copy(update={"hint": TRIALS[WAIT][0]}) if s.task == f"{KIND}:{WAIT}" else s
+        for s in line.stages
+    ]
+    return line.model_copy(update={"stages": stages})
+
+
+storyline.REFRESH_HOOKS[KIND] = _refresh
 
 
 # ── 心魔（storyline.FIGHT_HOOKS）──────────────────────────

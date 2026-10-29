@@ -173,13 +173,14 @@
     forgeSel: [], // 爐裡放的：{type: "ins", id}，最多兩個（爐裡只合意境，Joy 2026-10-21）
     forgeLock: null, // 鎖在爐裡的那一樣（{type, id}，一次一樣；Joy 2026-10-19「尤其獲得新意境時會想要試他的所有組合」）：開爐成了它留在爐裡、只清另一格
     wheelSel: null, // 江湖頁行動列展開的那一格（move；探索三選一開著時也有 explore；出陣約戰開著時 sortie＝出陣前那張卡）
-    glowRoute: null, // 展開移動之後要發光的那一條路（move:<地點>）：約戰卡的「前往」、新手目標的「去做」記下，什麼時候熄掉見 routeGlowKey（FB-901）
+    glowRoute: null, // 展開移動之後要發光的那一條路（move:<地點>）：約戰卡的「前往」、新手目標的「去做」記下，什麼時候熄掉見 routeGlowKey（FB-9001）
     sortieAnswer: null, // 出陣約戰：約戰卡上按了「應戰」的那一張（id），同一張封三招的卡寫應戰；別人先應、窗過了就收起（setMain）
     sortiePick: [], // 出陣約戰：封三招挑到一半的（一回合一招，沒挑的是 null）；打開別的、送出去就清掉
     sortieFold: {}, // 出陣約戰的卡上「這一塊」「贏了」「守住了」攤開了哪幾段（{block: true, …}）：輪詢重畫照它補回
     gatherOpen: false, // 探索卡上「找素材」底下的分支攤開了沒（第 32 項；做完一件事不收，下次點探索就直接看到）
     gatherSaying: false, // 找素材的「自己說…」輸入框叫出來了沒
     persuading: false, // 託付的勸降：輸入框叫出來的那一顆（errand:persuade:<id>），沒有是 false
+    godNaming: false, // 神品意境自己取名：輸入框叫出來了沒（那一顆只有一種，OWN_NAME_ID；FB-901）
     sensing: false, // 有所感：畫布叫出來了沒（按了「把心中的形畫下來」）；感悟狀態結束（選單上沒有 SENSE_DRAW）就收起
     sensePts: [], // 畫布上那一筆的點位 [[x, y, 毫秒], …]（畫布座標 0～256）；輪詢重畫頁面之後照它補畫回去
     senseNote: "", // 畫布底下那一行：這一筆落下了沒（/api/sense_read；不寫筆畫的幾何）
@@ -388,6 +389,7 @@
     if (main.event_free_text == null) S.answering = false; // 事件過去了，輸入框跟著收起
     if (!(main.options || []).some((o) => o.id === sayingId())) S.saying = false; // 交談結束了（或那一顆沒了），輸入框跟著收起
     if (S.persuading && !(main.options || []).some((o) => o.id === S.persuading)) S.persuading = false; // 走開了、那一件辦完了：勸降的輸入框收起
+    if (S.godNaming && !(main.options || []).some((o) => o.id === OWN_NAME_ID)) S.godNaming = false; // 取成了、換了別的：取名的輸入框收起
     if (S.sensing && !(main.options || []).some((o) => o.id === SENSE_DRAW)) closeSense(); // 感悟狀態過去了（悟成、作廢），畫布跟著收起
     // 出陣約戰：正在應的那一張應不了了（別人先應了、窗過了、走開了），應戰那張卡收起、挑到一半的招清掉
     if (S.sortieAnswer && !(main.sorties || []).some((d) => d.id === S.sortieAnswer && d.can_answer)) { S.sortieAnswer = null; S.sortiePick = []; }
@@ -898,7 +900,7 @@
     // 入伍段「出一次力」（FB-093）：伺服器在框上帶了能完成它的那幾顆選項的 id（guide.glow），序章外也亮；收在關著的摺疊裡的，
     // 光給摺疊的標題列（glowTarget）
     guideGlow().forEach((id) => document.querySelectorAll(`#page [data-id="${CSS.escape(id)}"]:not([disabled])`).forEach((el) => glowTarget(el).classList.add("glow")));
-    // 約戰卡的「前往」、新手目標的「去做」展開移動後往那一處的那一條（FB-901）：上面清掉了所有 .glow，這裡補回；序章裡也不例外
+    // 約戰卡的「前往」、新手目標的「去做」展開移動後往那一處的那一條（FB-9001）：上面清掉了所有 .glow，這裡補回；序章裡也不例外
     const route = routeGlowKey();
     if (route) (S.main.options || []).filter((o) => routeHit(o.id, route)).forEach((o) => document.querySelectorAll(`#page .act-move [data-id="${CSS.escape(o.id)}"]`).forEach((el) => el.classList.add("glow")));
     const p = pro() || onb();
@@ -997,10 +999,11 @@
   const FIT_MARGIN = 16;
   const fitPage = () => document.getElementById("page");
   // 要放進第一屏的那一塊：平常閒著是行動列；事件、有所感、對話、決戰這種一組選項時是選單最後一顆。
-  // 約戰卡緊接在行動列底下、第一張是應得了或同去得了的（FB-906，企劃者 2026-10-28「要露出來」；sxRank 把可按的排在最前面）時，要擠進第一屏的
+  // 約戰卡緊接在行動列底下、第一張是應得了或同去得了的（FB-9006，企劃者 2026-10-28「要露出來」；sxRank 把可按的排在最前面）時，要擠進第一屏的
   // 是那一行（連右邊的鈕）：它在行動列底下，量它就連整排行動列一起照顧到了，只是多縮場景的畫（收法 5a）；約戰卡本身的版面不動、也不搬到行動列上面。
   // 沒有可按的約戰（只有自己貼的、結算完的、別區的、約戰關著），或行動列與約戰卡之間展開了移動、探索、出陣前那張卡（玩家自己攤開的），
-  // 量的還是行動列，第一屏一個像素都不變
+  // 量的還是行動列，第一屏一個像素都不變。量的是約戰那一行、前面的步驟都收完還放不下時，再多收一步 desc（6c，企劃者 2026-10-28「擠完再上」）：
+  // 閒著的場景卡把所在地的描述每段收成一行；目標是行動列、一組選項時那一步不做
   const FIT_DUEL_BTN = '#page > .act-bar + #sortie-duels > .sx-drow:first-of-type > [data-act="sortie-answer"], '
     + '#page > .act-bar + #sortie-duels > .sx-drow:first-of-type > [data-act="sortie-join"]';
   function fitDuelRow() {
@@ -1149,6 +1152,21 @@
       } while (fitOver() > 0 && hidden < rows.length);
       return true;
     } },
+    // 6c. 量的目標是約戰卡第一張可按的那一行（fitDuelRow，FB-9006）、前面的步驟都收了還放不下（矮手機：375×667、360×700 被分頁列蓋了 4～10 px）：
+    //     閒著（沒有分隔線：不是集結、觀戰）的場景卡把所在地的描述每段收成一行、放不下加「…」，點了整張場景卡攤開（同第 7 步：fitClip、
+    //     ownOpen，S.ownOpen 記著玩家攤開過就不再收）。企劃者 2026-10-28「擠完再上」。排在 7 之前：先收不少字的步驟，還不夠才收描述。
+    //     只在量約戰那一行時做：目標是行動列、一組選項時一個像素都不動。「此地還有」、結伴、別人遞來的邀請（.calls）、地名與時刻那一條
+    //     （有畫時疊在畫上；沒有畫時是場景卡第一段）都不是描述，不收
+    { key: "desc", run: () => {
+      if (!fitDuelRow()) return false;
+      const scene = document.querySelector("#page > .card.scene:not(.road)");
+      if (!scene || scene.querySelector(":scope > hr") || !idleMenu(S.main) || S.ownOpen === fitOwnKey()) return false;
+      const paras = [...scene.querySelectorAll(":scope > p:not([class])")];
+      if (!scene.querySelector(":scope > .scene-art")) paras.shift(); // 沒有畫：第一段是「【地名】危險 ★★」那一條，不是描述
+      const any = fitClip(paras);
+      if (any) scene.classList.add("fit-own"); // 跟第 7 步同一個記號（ownOpen、fitReset 照樣拿掉）
+      return any;
+    } },
     // 7. 決戰集結、只能觀戰時，場景卡在戰場底下接著所在地（分隔線之後）：閒著時那是地點的描述，每段收成一行、點了攤開（S.ownOpen）。
     //    有事件、有所感、對話時分隔線之後是那件事本身（joy 的字），不收
     { key: "own", run: () => {
@@ -1229,7 +1247,7 @@
       if (el.dataset.fitWas && !el.classList.contains("open")) el.classList.replace(el.classList.contains("fits") ? "fits" : "clamp", el.dataset.fitWas);
       delete el.dataset.fitWas;
     });
-    page.querySelectorAll(".fit-own, .fit-muster").forEach((el) => el.classList.remove("fit-own", "fit-muster"));
+    page.querySelectorAll(".fit-own, .fit-muster").forEach((el) => el.classList.remove("fit-own", "fit-muster")); // 第 6c、7、8 步（收成一行的段落由下面的 fitUnclip 攤回來）
     page.querySelectorAll(".call.fit-hide").forEach((el) => el.classList.remove("fit-hide")); // 6b：收掉的邀請攤回來
     page.querySelectorAll(".calls-more").forEach((el) => {
       if (el.dataset.fit) el.remove();
@@ -1242,13 +1260,13 @@
       ["data-act", "role", "tabindex", "aria-expanded"].forEach((a) => el.removeAttribute(a));
     });
   }
-  // 場景卡裡收成一行的段落（第 7、8 步）：一行、放不下加「…」（style.css 的 p.fit-clip），點了整張場景卡攤開（ownOpen）。
+  // 場景卡裡收成一行的段落（第 6c、7、8 步）：一行、放不下加「…」（style.css 的 p.fit-clip），點了整張場景卡攤開（ownOpen）。
   // 收了之後數字（倒數、戰局）會藏到「…」後面的那一段不收
   function fitClip(paras) {
     let any = false;
     paras.forEach((p) => {
       p.classList.add("fit-clip");
-      if (!fitDigitsShown(p)) { p.classList.remove("fit-clip"); return; }
+      if (!fitDigitsShown(p)) { dropClip(p); return; }
       p.setAttribute("data-act", "own-more");
       p.setAttribute("role", "button");
       p.setAttribute("tabindex", "0");
@@ -1281,9 +1299,15 @@
     const first = String(m.scene || "").split("</p>")[0].replace(/[0-9０-９]+/g, "#");
     return `${(m.status && m.status.location) || ""}|${first}`;
   }
+  // 拿掉收成一行的記號。classList 拿光 class 之後，真的瀏覽器留下空的 class=""，而第 6c 步（desc）用 :scope > p:not([class]) 挑沒有 class 的描述段落——
+  // 空屬性還在就再也選不到：沒有重畫的重量（轉向、拉視窗、點名號展開再收起）之後折疊消失、約戰鈕又掉回分頁列底下（FB-9010）。空了就把屬性整個拿掉
+  function dropClip(p) {
+    p.classList.remove("fit-clip");
+    if (!p.getAttribute("class")) p.removeAttribute("class");
+  }
   function fitUnclip(root) {
     root.querySelectorAll(".fit-clip").forEach((p) => {
-      p.classList.remove("fit-clip");
+      dropClip(p);
       ["data-act", "role", "tabindex", "aria-expanded"].forEach((a) => p.removeAttribute(a));
     });
   }
@@ -5568,6 +5592,13 @@
       if (input) input.focus();
       return;
     }
+    if (id === OWN_NAME_ID) { // 神品意境自己取名：先叫出輸入框，寫好再送（見 godName；按了 /api/choose 只回一句「寫下你替它取的名字」，FB-901）
+      S.godNaming = true;
+      renderPage();
+      const input = document.querySelector("#own-name-form .input");
+      if (input) input.focus();
+      return;
+    }
     if (id === GATHER_SAY_ID) { // 找素材的「自己說」：先叫出輸入框，寫好再送（見 gatherSay）
       S.gatherSaying = true;
       renderPage();
@@ -5611,6 +5642,29 @@
     // 換上「對方沉吟中…」「兩人對峙……」，兩種都要還原（審查 I2）
     // 上一個還在等、這一下沒送（sent 是 false）：那顆 busy 是上一個的，不能動
     if (sent && document.querySelector(".options .btn.busy, .act-ink.busy")) renderPage();
+  }
+
+  // 神品意境自己取名（FB-901）：送 /api/choose 帶 text。名字不合格、這一季全服撞名時伺服器回一句話，
+  // 表單留著、字也留著（同絕學定名那張），改一改再送；取成了選項就沒了，輸入框收起、回頁首看結果
+  async function godName(form, text) {
+    await busy(async () => {
+      form.querySelectorAll("input, button").forEach((el) => { el.disabled = true; });
+      try {
+        const r = await api("/api/choose", { id: OWN_NAME_ID, text });
+        const done = !((r.main && r.main.options) || []).some((o) => o.id === OWN_NAME_ID);
+        if (done) S.godNaming = false;
+        applyMain(r.main);
+        const said = (r.message || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+        if (said) toast(said);
+        if (done) window.scrollTo({ top: 0, behavior: "smooth" });
+        else {
+          const again = document.querySelector("#own-name-form .input");
+          if (again) { again.value = text; again.focus(); }
+        }
+      } finally {
+        form.querySelectorAll("input, button").forEach((el) => { el.disabled = false; });
+      }
+    });
   }
 
   // 自己說：送出後要等人物答話（跟按選項一樣十來秒），按鈕先寫「對方沉吟中…」；排在佇列後面時補「前面還有 N 件」
@@ -5846,7 +5900,7 @@
     if ((S.main.options || []).some((o) => hit(o.id))) {
       S.sortieAnswer = null;
       S.wheelSel = "move";
-      S.glowRoute = id; // 往那一處的那一條發光：記在狀態裡，重畫、摺疊 toggle 都保得住（FB-901）
+      S.glowRoute = id; // 往那一處的那一條發光：記在狀態裡，重畫、摺疊 toggle 都保得住（FB-9001）
       renderPage();
       revealMoveCard();
       return;
@@ -6710,6 +6764,9 @@
       } else if (form.id === "persuade-form") {
         if (!data.text.trim()) return;
         await persuadeSay(form, data.text.trim());
+      } else if (form.id === "own-name-form") {
+        if (!data.text.trim()) return;
+        await godName(form, data.text.trim());
       } else if (form.id === "gather-say-form") {
         if (!data.text.trim()) return;
         await gatherSay(form, data.text.trim());

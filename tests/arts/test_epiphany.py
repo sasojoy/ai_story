@@ -118,6 +118,67 @@ def test_a_hit_on_sensing_opens_the_line_and_asks_the_first_question():
     assert epiphany.busy(s, game.content)
 
 
+def test_the_waiting_trial_shows_a_row_and_counts_down():
+    """FB-902：小試抽到「靜候」時 task 段在選單上一行都不畫（doable 排除 task），玩家什麼都看不到——
+    上班想下班就這樣「卡住」一整天。現在灰著列一行、後面寫還要多久。"""
+    game = _game(trial_wait_days=0.25)  # 四分之一個遊戲日
+    s, c = game.state, game.content
+    _begin(game)
+    line = next(iter(s.player.storylines))
+    _answer_all(game)
+    progress = s.player.storylines[line]
+    assert progress.stage == "trial"
+
+    def row():
+        return next((o for o in game.options() if o.id == f"{storyline.OPTION}:{line}"), None)
+
+    got = row()
+    assert got is not None and not got.enabled  # 有這一行，但按不下去（要去等／去做那件事）
+    assert epiphany.TRIALS["wait"][0] in got.label and "還要 6 小時" in got.label
+    assert "一日" not in got.label  # 以前寫死「靜候一日」，等多久變成設定之後那句話會騙人
+    assert game.choose(f"{storyline.OPTION}:{line}") == ["（此刻無法這麼做。）"]  # 灰的按下去引擎本來就擋
+
+    s.world.time += day_seconds(c, s.world) * 0.25 - 30  # 剩不到一分鐘
+    assert storyline.WAIT_SOON in row().label
+    s.world.time += 60  # 到了：這一段過去了，換心魔那一行
+    game._story_tick()
+    assert s.player.storylines[line].stage == "demon"
+    assert row().enabled
+
+
+def test_how_long_the_waiting_trial_takes_follows_the_setting():
+    """「靜候一日」在 7 天的季裡是真實 24 小時（整季的 1/7）：改成設定、正式設定寫一個時辰（FB-902）。"""
+    game = _game(trial_wait_days=1.0)
+    s, c = game.state, game.content
+    _begin(game)
+    line = next(iter(s.player.storylines))
+    _answer_all(game)
+    s.world.time += day_seconds(c, s.world) * 0.5
+    game._story_tick()
+    assert s.player.storylines[line].stage == "trial"  # 半日還不夠
+    # 這一刻把設定調短（線已經在走）：每次檢定都照此刻的設定讀，所以當場就過
+    c.config.epiphany.trial_wait_days = 1 / 12
+    game._story_tick()
+    assert s.player.storylines[line].stage == "demon"
+
+
+def test_the_old_wait_hint_in_a_running_line_is_rewritten():
+    """進行中的線 hint 是存檔裡那一份：舊存檔寫著「靜候一日，什麼都別急」，讀出來要換成新的那一句
+    （REFRESH_HOOKS；還要多久由倒數寫）。"""
+    game = _game()
+    s, c = game.state, game.content
+    _begin(game)
+    progress = next(iter(s.player.storylines.values()))
+    stale = [st.model_copy(update={"hint": "靜候一日，什麼都別急"}) if st.id == "trial" else st
+             for st in progress.custom.stages]
+    progress.custom = progress.custom.model_copy(update={"stages": stale})
+    _, stage = storyline.current(c, s.player.storylines[progress.line])
+    assert stage.id == "ask"
+    _answer_all(game)
+    _, stage = storyline.current(c, s.player.storylines[progress.line])
+    assert stage.id == "trial" and stage.hint == epiphany.TRIALS["wait"][0] and "一日" not in stage.hint
+
+
 def test_the_whole_way_through_names_and_grants_a_god_insight():
     game = _game()
     s, c = game.state, game.content
@@ -214,6 +275,55 @@ def test_the_demon_is_your_own_shadow():
     squad = game._mirror_squad(s.player.storylines[line], stage)
     power = team.power_vs(s, c, game.world, squad.model_copy(update={"difficulty": 1.0}), fresh=True, terrain=False, seal=False)
     assert squad.name == "心魔" and squad.difficulty == pytest.approx(round(power * c.config.epiphany.demon_scale, 1), abs=0.11)
+
+
+def test_config_changes_reach_a_line_that_is_already_running():
+    """程式組的線把整份定義存進 progress.custom，所以改了設定本來只對之後新開的線有效
+    （線上踩到：心魔的 retry_days 從一天改成一個時辰、削弱也加了，正在走的人完全沒吃到）。
+    storyline.REFRESH_HOOKS 讓每次讀出來的那一份照此刻的設定重算。"""
+    game = _game()
+    s, c = game.state, game.content
+    _begin(game)
+    progress = next(iter(s.player.storylines.values()))
+    frozen = progress.custom.stage("demon")          # 存檔裡凍著的那一份
+    assert frozen is not None
+
+    c.config.epiphany.retry_days = 0.5               # 開線之後才改設定
+    c.config.epiphany.demon_weaken = 0.2
+    c.config.epiphany.demon_floor = 0.5
+    live = storyline.definition(c, progress).stage("demon")
+    assert live.retry_days == 0.5 and live.mirror_weaken == 0.2 and live.mirror_floor == 0.5
+    assert progress.custom.stage("demon") is frozen   # 存檔沒被改，只有讀出來的那一份
+
+
+def test_the_retry_note_counts_down_from_retry_at():
+    """FB-900：那句話以前寫死「再等一個時辰」（照 StoryStage.retry_days 的預設 1/12），
+    心魔那一關卻用 Config.epiphany.retry_days 覆蓋它，字就騙人。現在照 retry_at 算。"""
+    game = _game()
+    s, c = game.state, game.content
+    _begin(game)
+    line = next(iter(s.player.storylines))
+    _answer_all(game)
+    s.world.time += day_seconds(c, s.world)
+    game._story_tick()
+    with _loss():
+        game.choose(f"{storyline.OPTION}:{line}")
+    progress = s.player.storylines[line]
+    assert progress.retry_at is not None
+
+    def note() -> str:
+        return next(o for o in game.options() if o.id == f"{storyline.OPTION}:{line}").label
+
+    s.world.time = progress.retry_at - 7200          # 兩小時
+    assert "再等 2 小時才能再試" in note()
+    s.world.time = progress.retry_at - 900           # 十五分鐘
+    assert "再等 15 分鐘才能再試" in note()
+    s.world.time = progress.retry_at - 30            # 剩不到一分鐘
+    assert storyline.RETRY_SOON in note()
+    s.world.time = progress.retry_at                 # 到了：不再有那一段，而且按得下去
+    label = note()
+    assert "才能再試" not in label and storyline.RETRY_SOON not in label
+    assert next(o for o in game.options() if o.id == f"{storyline.OPTION}:{line}").enabled
 
 
 def test_the_demon_gets_weaker_every_time_you_fail_down_to_a_floor():

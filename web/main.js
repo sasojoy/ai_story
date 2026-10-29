@@ -266,6 +266,15 @@
     return `<form class="free answer persuade" id="persuade-form" data-id="${esc(o.id.slice(PERSUADE_PREFIX.length))}"><input class="input" name="text" maxlength="20" placeholder="${esc(PERSUADE_HINT)}" aria-label="${esc(o.label)}"><button class="btn primary small" type="submit">${esc(PERSUADE_GO)}</button></form>`;
   }
   const persuadingNow = (o) => S.persuading === o.id && o.enabled;
+  // 神品意境「自己取一個名字…」（epiphany.OPTION:OWN）：按了不送 /api/choose，就地換成輸入框（S.godNaming 記著），
+  // 送出時帶 text（godName）。以前這一顆按下去只回一句「（寫下你替它取的名字。）」，沒有地方寫，等於按不動（FB-901）
+  const OWN_NAME_ID = "dunwu:own";
+  const OWN_NAME_HINT = "這個境界叫什麼？（2～6 字）"; // 待 joy 潤：輸入框的提示
+  const OWN_NAME_GO = "就叫這個"; // 待 joy 潤：送出鈕
+  function ownNameForm(o) {
+    return `<form class="free answer own-name" id="own-name-form"><input class="input" name="text" maxlength="6" placeholder="${esc(OWN_NAME_HINT)}" aria-label="${esc(o.label)}"><button class="btn primary small" type="submit">${esc(OWN_NAME_GO)}</button></form>`;
+  }
+  const namingGodNow = (o) => S.godNaming && o.id === OWN_NAME_ID && o.enabled;
   // 勝算的顏色（FB-044）：遊歷的小字第二行照風險上色
   const ODDS_TONE = { "穩勝": "good", "有把握": "good", "零風險": "good", "五五波": "even", "難分勝負": "even", "凶險": "bad", "必敗": "bad" };
   // 選單上有「探索」就是平常閒著的時候（以前認打坐，2026-10-12 拿掉了）：用行動列。事件、對話、路上、決戰的選項每次都不一樣，照舊排成一列按鈕
@@ -608,7 +617,7 @@
   // 約戰卡（m.sorties）一張一行：應戰（打開同一張封三招的卡，S.sortieAnswer 記那一張，送 sortie_answer）、同去（sortie_join）、
   // 別區的「前往 N 分」（照現有的移動：移動清單上有那一條就展開移動，沒有就開輿圖那一處的卡）。
   // 陣營名、窗幾分鐘、體力都照伺服器給的（sortie_card.sides、window_minutes、cost、answer_stamina；約戰卡自己也帶 sides、answer_stamina，
-  // 站的地方不是區塊時沒有出陣卡，FB-903），不寫死。新寫的字都待 joy 潤
+  // 站的地方不是區塊時沒有出陣卡，FB-9003），不寫死。新寫的字都待 joy 潤
   // （一行一個 const：測試的 konst 照「const 名字」切）
   const SX_OPEN = "sortie";
   const SX_ROUNDS = ["一", "二", "三"];
@@ -633,7 +642,7 @@
   function sxMine(c) {
     return Object.keys(c.sides || {}).find((k) => k !== c.bars.theirs_side) || "";
   }
-  // 陣營的名字：約戰卡自己帶的 sides（站的地方不是區塊就沒有出陣卡，豪族塢堡、南華觀……，FB-903），再來是出陣卡的 sides（都是劇本的陣營名）；
+  // 陣營的名字：約戰卡自己帶的 sides（站的地方不是區塊就沒有出陣卡，豪族塢堡、南華觀……，FB-9003），再來是出陣卡的 sides（都是劇本的陣營名）；
   // 兩邊都沒有（在路上）才寫「對面」
   function sxSide(m, side, d) {
     const c = m.sortie_card;
@@ -659,7 +668,7 @@
         c.convoy_at ? `運糧隊「${c.convoy_at}」正經過` : ""].filter(Boolean);
     return row(me, c.bars.mine, true) + row(them, c.bars.theirs, false) + `<div class="sf-chips">${chips.map((t) => `<span class="sf-chip">${esc(t)}</span>`).join("")}</div>`;
   }
-  // 應戰卡的「這一塊」（FB-904）：寫這一場牽動什麼——約戰那一軍在那一塊推到幾、離翻走（沒人佔的寫拿下）還差多少，守住了拉回它。
+  // 應戰卡的「這一塊」（FB-9004）：寫這一場牽動什麼——約戰那一軍在那一塊推到幾、離翻走（沒人佔的寫拿下）還差多少，守住了拉回它。
   // 資料是約戰卡自己帶的（d.bars：mine 看的人這一邊、theirs 約戰那一軍；d.to_flip、d.foe_pushing、d.holder），不是看的人自己推這一塊
   // （以前借出陣卡的 sxBars，小籤寫的是自己「推滿 100 易手・還差 75」「同袍還沒人來」，跟這一場無關）。新寫的字待 joy 潤
   const sxWin = (d) => (d.holder ? "翻走" : "拿下");
@@ -701,7 +710,7 @@
   function sxGo(c, d) {
     const picked = (S.sortiePick || []).filter(Boolean);
     const need = SX_ROUNDS.length - picked.length;
-    const stamina = d ? (d.answer_stamina != null ? d.answer_stamina : c && c.answer_stamina) : null; // 約戰卡自己帶的（站的地方不是區塊沒有出陣卡，FB-903）
+    const stamina = d ? (d.answer_stamina != null ? d.answer_stamina : c && c.answer_stamina) : null; // 約戰卡自己帶的（站的地方不是區塊沒有出陣卡，FB-9003）
     const sub = d ? `${stamina != null ? `體力 ${stamina}・` : ""}今日還能應戰 ${d.answers_left} 次`
       : `體力 ${c.cost}・今日還能 ${c.left_today} 次`;
     const why = d || !c.why_not ? "" : c.cooldown_until && /^還要/.test(c.why_not) ? `冷卻中・${c.why_not}` : c.why_not;
@@ -730,7 +739,7 @@
     let top, body;
     if (d) {
       top = `<p class="sx-top"><b>應戰・${esc(d.place)}</b><span>${esc(d.attacker)}約戰・還有 ${sxMins(d.expires_in)} 分</span></p>`;
-      // 「這一塊」寫的是這一場牽動的那一塊（約戰卡自己帶的 bars、to_flip，站在哪裡都一樣，FB-904）；沒帶（舊資料）就只寫地名
+      // 「這一塊」寫的是這一場牽動的那一塊（約戰卡自己帶的 bars、to_flip，站在哪裡都一樣，FB-9004）；沒帶（舊資料）就只寫地名
       body = (d.bars ? sxFold("block", "這一塊", sxDutyLine(m, d), sxDutyBars(m, d)) : `<p class="sx-flat"><b>這一塊</b><span>${esc(d.place)}</span></p>`)
         + sxFold("keep", "守住了", "拉回對面的進度・記貢獻・經驗心得", sxKeep(m, d));
     } else {
@@ -815,7 +824,7 @@
     return !!(S.here && S.here.at === at && S.here.open);
   }
 
-  // 要發光的那一條路（FB-901，QA 2026-10-28）：約戰卡別區那一行的「前往 N 分」、新手目標的「去做」展開移動之後，往那一處的那一條發光。
+  // 要發光的那一條路（FB-9001，QA 2026-10-28）：約戰卡別區那一行的「前往 N 分」、新手目標的「去做」展開移動之後，往那一處的那一條發光。
   // 記在 S.glowRoute（move:<地點>）：畫移動卡時直接寫進 class（routeGlowOn），applyGlow 清掉所有 .glow 之後也補回（routeGlowKey），
   // 所以重插的摺疊觸發 toggle、輪詢重畫都不會把光清掉（以前展開之後 .glow 直接加在畫好的元素上，24 毫秒內的 toggle 或下一次重畫就沒了）。
   // 什麼時候熄掉（都在重畫時判斷，不設計時器）：移動卡收起或換別格（S.wheelSel 不是 move；按了選項送出去之後 choose 也會收起移動卡）、
@@ -995,7 +1004,7 @@
     const id = `move:${r.go.move}`, hit = (x) => x === id || x.startsWith(`${id}:`); // 疾行的 id 後面多接走法
     if (!S.main.options.some((o) => hit(o.id))) { goTab("map"); return; }
     S.wheelSel = "move";
-    S.glowRoute = id; // 往那一處的那一條發光：記在狀態裡，重畫、摺疊 toggle 都保得住（FB-901）
+    S.glowRoute = id; // 往那一處的那一條發光：記在狀態裡，重畫、摺疊 toggle 都保得住（FB-9001）
     renderPage();
     revealMoveCard();
   }
@@ -1432,7 +1441,7 @@
     // 有所感選做法（explain-2）：伺服器給了 sense_help.tags 才把鈕上原本寫 1～4 的那一格改寫這個做法是哪一種心意（不多佔寬度）。
     // 審查 I1 起伺服器預設不給（sensing.SHOW_KINDS）：鈕上照舊 1～4；企劃者要恢復時伺服器那邊改一行，這裡照畫
     const senseTag = (o) => (m.sense_help && m.sense_help.tags && m.sense_help.tags[o.id]) || "";
-    const menu = idleMenu(m) ? actionBar(m) : `<div class="options">${opts.map((o, i) => S.sensing && o.id === SENSE_DRAW ? sensePadHtml() : persuadingNow(o) ? persuadeForm(o) : o.id === FREE_TEXT_OPTION && S.answering && o.enabled ? `
+    const menu = idleMenu(m) ? actionBar(m) : `<div class="options">${opts.map((o, i) => S.sensing && o.id === SENSE_DRAW ? sensePadHtml() : persuadingNow(o) ? persuadeForm(o) : namingGodNow(o) ? ownNameForm(o) : o.id === FREE_TEXT_OPTION && S.answering && o.enabled ? `
         <form class="free answer" id="answer-form"><input class="input" name="text" maxlength="20" placeholder="${esc(o.label)}（20字內）" aria-label="${esc(o.label)}"><button class="btn primary small" type="submit">說出口</button></form>` : SAY_OPTIONS.includes(o.id) && S.saying && o.id === sayingId() && o.enabled ? `
         <form class="free answer" id="say-form"><input class="input" name="text" maxlength="${m.say_max || 20}" placeholder="${SAY_HINTS[o.id] ? `${SAY_HINTS[o.id]}（${m.say_max || 20}字內）` : (m.say_max || 20) > 20 ? `想對他說的話，也可以開口求他做事（${m.say_max}字內）` : "想對他說的話（20字內）"}" aria-label="${esc(o.label)}"><button class="btn primary small" type="submit">說出口</button></form>` : isTask(o) ? `${i === firstTask ? '<div class="road-tasks">' : ""}${taskButton(o)}${i === lastTask ? "</div>" : ""}` : paired && isWay(o) ? `${i === firstWay ? '<div class="road-tasks road-ways">' : ""}${wayButton(o)}${i === lastWay ? "</div>" : ""}` : `${i === firstMove && !modesLast ? modes : ""}
         <button class="btn ${followsMode(o.id) ? "go" : ""}${!o.enabled && o.note ? " off" : ""}" data-act="${!o.enabled && o.note ? "opt-why" : "choose"}" data-id="${esc(o.id)}" ${!o.enabled && o.note ? `data-why="${esc(o.note)}" title="${esc(o.note)}" aria-disabled="true"` : o.enabled ? "" : "disabled"}>

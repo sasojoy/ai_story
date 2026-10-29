@@ -177,7 +177,9 @@ def test_a_fight_stage_retries_after_a_wait_and_the_hook_sees_every_bout():
         progress = s.player.storylines["duel_1"]
         assert progress.tries == 1 and progress.ending is None
         option = next(o for o in game.options(odds=False) if o.id == "story:duel_1")
-        assert not option.enabled and storyline.RETRY_NOTE in option.label
+        # 那一段照 retry_at 算出剩多久（FB-900；以前是寫死的「一個時辰」）
+        assert not option.enabled and "才能再試" in option.label
+        assert storyline.retry_note(s, game.content, progress) in option.label
         s.world.time = progress.retry_at
         with mock.patch.object(team, "fight", return_value=loss):
             game.choose("story:duel_1")

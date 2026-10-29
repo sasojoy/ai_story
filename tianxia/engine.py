@@ -3580,7 +3580,6 @@ class Game:
                 msgs += self._guide(note_action(self.state, self.content, self.world, "socialize"))  # 指名求見算一次交友
             # 名將贈禮（裝備四欄 6.4）與本命兵器（打造第三批）：這一下的情誼（對話、事件）到了門檻就送；另起一則「名將贈禮」，
             # 不接在當下這個動作的紀錄裡（FB-139、FB-149：名將多半不在場，也跟那件事無關），排在這一則之後（「剛剛」看得到）
-            self._deep_cap_now()  # 深交上限（減法季批 7b）：贈禮與本命兵器照夾過的情誼判（關著什麼都不做）
             gifts = self._general_gifts() + self._signature_arms()
             msgs += check_thresholds(self.state, self.content, self.world, self._quick_client(), now=self.now)
             msgs += self._settle_plots()  # 參與過的密謀收場了：各自結算一次（正式版乙二）
@@ -3738,7 +3737,6 @@ class Game:
             msgs += self._event_progress()  # 領地爭奪：隨口應對了結也推一次進度（開關關著是空的）
             self._begin_enlistment(faction_before)  # 隨口應對的結果也可能拜入門派
             self._greet_rejoin(faction_before)  # 同樣：入伍段早就走完的人拜入門派，引薦人打個招呼（新手引導計畫三）
-            self._deep_cap_now()  # 深交上限（減法季批 7b）：同 choose
             gifts = self._general_gifts() + self._signature_arms()  # 隨口應對的效果也可能加情誼（同 choose：另起一則）
             msgs += check_thresholds(s, c, self.world, self._quick_client(), now=self.now)
             msgs += self._report_seat()  # 隨口應對的效果也可能推大勢、記貢獻：第四階席次的帳在這裡也抄（正式版丁）
@@ -3816,7 +3814,6 @@ class Game:
             msgs += self._event_progress()  # 領地爭奪：隨口應對了結也推一次進度（開關關著是空的）
             self._begin_enlistment(faction_before)
             self._greet_rejoin(faction_before)
-            self._deep_cap_now()  # 深交上限（減法季批 7b）：同 choose
             gifts = self._general_gifts() + self._signature_arms()
             msgs += check_thresholds(s, c, self.world, self._quick_client(), now=self.now)
             msgs += self._report_seat()
@@ -6560,15 +6557,8 @@ class Game:
 
     def affinity_text(self, companion_id: str) -> str:
         """「情誼 N」：你跟這位人物的情誼（PlayerState.affinities，0～100）。談話畫面、求見名單、輿圖的人物都寫這個詞（explain-1：
-        玩家看得到的只叫「情誼」，程式裡照舊叫 affinity）。深交名單滿了、這一位停在門檻下面時接「・已深交三位」（減法季批 7b，
-        zhuan_end.deep_note；關著一個字不變）。"""
-        text = f"情誼 {self.state.player.affinities.get(companion_id, 0)}"
-        # 先照沒有名額票算（不讀錢包）：那樣都不寫，多了名額更不會寫
-        if zhuan_end.on(self.content, self.state.world) and zhuan_end.deep_note(self.state, self.content, companion_id):
-            note = zhuan_end.deep_note(self.state, self.content, companion_id, self._deep_slots())
-            if note:
-                text += f"・{note}"
-        return text
+        玩家看得到的只叫「情誼」，程式裡照舊叫 affinity）。深交不限人數（企劃者 2026-10-28「不要限制深交名額」），不再接「已深交三位」。"""
+        return f"情誼 {self.state.player.affinities.get(companion_id, 0)}"
 
     def _no_audience_line(self) -> str:
         """交友時見不到這裡的大勢人物時的說明；這裡沒有大勢人物就是原本的「此地無人可訪」；
@@ -6638,12 +6628,12 @@ class Game:
                 msgs = [f"你：「{said}」"] + companion_agent.say_dialogue(
                     self._quick_client(), self.state, self.content, self.world, companion_id, said,
                     turn=self._prepared_turn(prepared), extra=extra, required=parley.ASK_FIELDS if extra else (),
-                    decide=lambda turn: self._parley_decide(companion_id, turn, said=said or ""), cap=self._deep_cap_now,
+                    decide=lambda turn: self._parley_decide(companion_id, turn, said=said or ""),
                 )
             else:
                 msgs = companion_agent.continue_dialogue(
                     self._quick_client(), self.state, self.content, self.world, companion_id, int(arg), self.rng,
-                    turn=self._prepared_turn(prepared), cap=self._deep_cap_now,
+                    turn=self._prepared_turn(prepared),
                 )
         except companion_agent.DialogueUnavailable:
             return self._dialogue_unavailable(companion_id)
@@ -7019,7 +7009,7 @@ class Game:
             msgs = [f"你：「{said}」"] + companion_agent.say_dialogue(
                 self._quick_client(), s, c, self.world, cid, said, turn=self._prepared_turn(prepared),
                 extra=extra, decide=lambda turn: self._parley_decide(cid, turn, road=True, said=said or ""),
-                required=parley.ASK_FIELDS if extra else (), cap=self._deep_cap_now,
+                required=parley.ASK_FIELDS if extra else (),
             )
         except companion_agent.DialogueUnavailable:
             return [f"{c.characters[cid].name}沉吟不語。"]
@@ -8034,7 +8024,7 @@ class Game:
         journal.add_entry(s, JournalEntry(time=when, title=f"{label}奪璽・『{shard}』", tag=notes[0], lines=notes[1:],
                                           changes=changes, battle_id=record.id))
         if same:
-            annals.note(s, c, annals.DEED, notes[0], 5 if e.kind == "take" else 4, place=e.where)
+            annals.note(s, c, annals.DEED, notes[0], 5 if e.kind == "take" else 4, place=e.where, keep=[other])
 
     def _mandate_settle(self, winner: str, record: int | None, battle_name: str) -> None:
         """天命之爭定下來（8.3）：winner 是得天命的那一軍，"" 是天命未定（保底收場）。一次 world.mutate：這一季記下 mandate_result（季末
@@ -8704,6 +8694,7 @@ class Game:
             what = f"在{name}陣上放手一搏" + ("，成了" if g.won else "，沒成") + (f"，點名{g.target}" if g.target else "") + "。"
             entries.append(annals.entry(
                 s, c, annals.SHOWDOWN, what, 4 if g.won else 3, quote=g.text, reply=g.story, place=place, time=time, season=earlier is None,
+                keep=[g.target],  # 點名的人（參戰的玩家）的名號原樣留，沒點名是空的（FB-9020）
             ))
         if earlier is None:
             s.player.annals += entries
@@ -10078,7 +10069,7 @@ class Game:
         record = battlelog.new_record(s, c, self.world, squad, result, "melee")
         record.ours = record.ours[:1]
         record.notes.append(story)
-        annals.note(s, c, annals.FIGHT, story, 2)
+        annals.note(s, c, annals.FIGHT, story, 2, keep=[rival])
         self._play_rounds(record, squad, result.tier, 0)
         line = self._file_battle(record, wear=False, armor_wear=False, team_exp=False)
         msgs = [line, story]
@@ -10596,8 +10587,8 @@ class Game:
         """main.sorties（欄位表 1.3；sortie_duel.card）：約戰關著、序章裡是 None；散人是空的。還沒打的約戰兩邊都列（對面的是應戰、同袍的是同去、
         自己的是 mine），結算完（或作廢）的只列自己有份的、留 keep_hours。同去那一顆照 _duel_join_extra 再驗；不同區的照 place_minutes 寫步行幾分。
         多一個 result：看的人這一場的結果（大勝、險勝、僵持、落敗；沒結算是 None）；sides（兩軍的名字，同 sortie_card.sides）與 answer_stamina（應戰的體力）
-        每一張都帶：站的地方不是區塊時沒有 sortie_card，網頁的陣營名與底鈕的體力只能從這裡拿（FB-903）。還沒打的另帶約戰那一塊此刻的樣子
-        （holder、bars、to_flip、foe_pushing；應戰卡寫這一場牽動什麼，FB-904）。"""
+        每一張都帶：站的地方不是區塊時沒有 sortie_card，網頁的陣營名與底鈕的體力只能從這裡拿（FB-9003）。還沒打的另帶約戰那一塊此刻的樣子
+        （holder、bars、to_flip、foe_pushing；應戰卡寫這一場牽動什麼，FB-9004）。"""
         s, c = self.state, self.content
         if not self.duel_on() or prologue_rules.active(s, c):
             return None
@@ -10624,9 +10615,9 @@ class Game:
             if card["role"] == "join" and card["can_join"] and (extra := self._duel_join_extra(duel)) is not None:
                 card["can_join"], card["why_not"] = False, extra
             card["result"] = sortie_duel.side_tier(duel, p.name)
-            # 出陣約戰網頁（FB-903）：站的地方不是區塊（豪族塢堡、南華觀……）就沒有 sortie_card，卡上的陣營名與應戰的體力要從每一張約戰卡自己帶
+            # 出陣約戰網頁（FB-9003）：站的地方不是區塊（豪族塢堡、南華觀……）就沒有 sortie_card，卡上的陣營名與應戰的體力要從每一張約戰卡自己帶
             card["sides"], card["answer_stamina"] = dict(sides), cfg.answer_stamina
-            # 應戰卡寫的是這一場牽動的那一塊（FB-904，不是看的人自己推這一塊）：還沒打的帶約戰那一塊此刻歸誰、兩條進度（mine 是看的人這一邊、
+            # 應戰卡寫的是這一場牽動的那一塊（FB-9004，不是看的人自己推這一塊）：還沒打的帶約戰那一塊此刻歸誰、兩條進度（mine 是看的人這一邊、
             # theirs 是約戰那一軍）、約戰那一軍離翻走還差多少、幾人在推——站在哪裡都一樣，守住了拉回的就是 theirs
             if card["status"] in ("open", "answered"):
                 bars = conquest.bars(w, duel.block)
@@ -11005,9 +10996,10 @@ class Game:
                 p.answer_cooldown_until = max(p.answer_cooldown_until or 0.0, after.answer)
             if lost:
                 record.notes.append(sortie_duel.LOSE_LINE.format(n=f"{cfg.lose_cooldown_minutes:g}"))
-            annals.note(s, c, annals.DUEL, sortie_duel.ANNAL_LINE.format(  # 地點寫約戰的那一塊（結算時人可能已經走了）
+            annal_line = sortie_duel.ANNAL_ANSWER_LINE if role == "defender" else sortie_duel.ANNAL_LINE  # 應戰的人（含補位的）另一句（FB-897）
+            annals.note(s, c, annals.DUEL, annal_line.format(  # 地點寫約戰的那一塊（結算時人可能已經走了）
                 place=duel.place, rival=rival.name if rival is not None and not rival.garrison else sortie_duel.GARRISON, tier=tier_word), 2,
-                place=duel.place)
+                place=duel.place, keep=[rival.name] if rival is not None and not rival.garrison else None)  # 對手是玩家：名號原樣留（FB-9020）；守軍不必
         rank = ranks.rank_of(s)
         if 1 <= rank < 3 and calendar.season_one_on(w, c):
             record.notes.append(sortie_duel.RANK_LINE.format(n=max(0, ranks.threshold(c, rank + 1) - p.contrib)))
@@ -13915,7 +13907,7 @@ class Game:
             story = f"你攔下{rival}動手，卻不是{gender.pronoun(rival_game.state)}的對手，只得丟下銀兩脫身。" if attacker else \
                 f"{rival}半路截殺你，你不敵，丟下銀兩脫身。"
         record.notes.append(story)
-        annals.note(s, c, annals.FIGHT, story, 3 if won else 2)  # 行狀：截殺與被截殺（兩邊各記自己的）
+        annals.note(s, c, annals.FIGHT, story, 3 if won else 2, keep=[rival])  # 行狀：截殺與被截殺（兩邊各記自己的；對手的名號原樣留，FB-9020）
         self._play_rounds(record, squad, result.tier, hp_lost)
         line = self._file_battle(record)
         msgs = [line, story, *battlelog.gains_list(record), *self._last_wear]
@@ -14234,7 +14226,7 @@ class Game:
                 record.changes.append(f"氣血 -{spoils.hp}")
             story = (ambush_rules.OWNER_LOST if as_owner else ambush_rules.PASSER_LOST).format(rival=rival, him=him)
         record.notes.append(story)
-        annals.note(s, c, annals.FIGHT, story, 3 if won else 2)
+        annals.note(s, c, annals.FIGHT, story, 3 if won else 2, keep=[rival])
         self._play_rounds(record, squad, result.tier, hp_lost)
         line = self._file_battle(record)
         msgs = [line, story, *battlelog.gains_list(record), *self._last_wear, *(extra or [])]
@@ -15016,7 +15008,7 @@ class Game:
         p.arena_last = ArenaResult(id=fight.id, foe=fight.foe.name, tier=tier, lines=list(fight.lines), changes=list(record.changes))
         p.picking_arena = arena.here(s, c)
         won = tier in team.WIN_TIERS
-        annals.note(s, c, annals.FIGHT, f"上擂台挑{fight.foe.name}，{tier}。", 2 if won else 1)
+        annals.note(s, c, annals.FIGHT, f"上擂台挑{fight.foe.name}，{tier}。", 2 if won else 1, keep=[fight.foe.name])
         self._save_season()  # 名次、戰績、留給守的人那一筆都在這一季的 WorldState
         return msgs
 
@@ -15399,7 +15391,7 @@ class Game:
         out = mapdata.state(
             s, c, odds=self.odds, sortie_mode=lambda loc_id: judge(loc_id)[0], sorties_left=self.sorties_left() if on else None,
             real_minutes=self._real_minutes, sortie_foes=foes, mostly=self.map_mostly(),
-            # 截糧的運糧隊正打那裡經過：出陣那一格是「出陣・截糧」、打運糧隊（_duel_option），輿圖卡上的鈕也寫截糧、不掛攻的勝算（FB-905）
+            # 截糧的運糧隊正打那裡經過：出陣那一格是「出陣・截糧」、打運糧隊（_duel_option），輿圖卡上的鈕也寫截糧、不掛攻的勝算（FB-9005）
             convoy=(lambda loc_id: bool(orders.extra_enemies(s, c, loc_id, faction))) if duel else None,
         )
         for loc_id, info in out["places"].items():  # 地點卡上那一句這一帶多兇（尋敵分級，Joy 2026-10-22：不寫幾級）；沒有是空字串
@@ -17850,27 +17842,10 @@ class Game:
         for text, weight in crossed.annals:
             annals.note(s, c, annals.DEED, text, weight)
 
-    def _deep_slots(self) -> int:
-        """這一季買的深交名額幾張（mall.tokens(season=)，只這一季有效）；商城關著是 0。"""
-        wallet = self._wallet()
-        return 0 if wallet is None else len(mall.tokens(wallet, self._mall_owner(), zhuan_end.DEEP_SLOT, season=self.state.player.season_number))
-
-    def _deep_cap_now(self) -> None:
-        """深交上限（zhuan_end.enforce_deep_cap；減法季批 7b）：列傳為終點開著時，名單外有人過了 70 才讀錢包算名額、夾。
-        情誼一過 70 就有東西給的地方（對話裡的本命武學 companion_agent._maybe_grant_signature_skill、名將本命兵器 signature_arms 的 80）
-        在給之前先叫一次，名單外的第四位停在 69 就拿不到；_log 也叫一次（情誼沒有單一寫入口，事後夾）。
-        名單裡有人掉下 70 只是讓出位子，下一次有人過門檻時一起整理。批 7d（企劃者 2026-10-26）：夾了不告訴玩家——不回句子、
-        不寫「深交」那一則江湖紀錄。關著什麼都不做。"""
-        s, c = self.state, self.content
-        if not zhuan_end.on(c, s.world) or not zhuan_end.deep_pending(s, c):
-            return
-        zhuan_end.enforce_deep_cap(s, c, self._deep_slots())
-
     def _log(self, msgs: list[str]) -> list[str]:
         """回給呼叫端、也存進 GameState.log 的訊息。戰況變化（機器可讀的寫法）在這裡換成一句話——這些話玩家（管理者工具列的
         提示）看得到，數字不外露（FB-064）；江湖紀錄那邊在畫的時候換（見 _chip），兩邊用同一個 seed（現在的時間），是同一句。"""
         self._renown_after()  # 名聲：這一下的名望、善名、惡名接差距，比跨段（設計 3.3、6.4）
-        self._deep_cap_now()  # 深交上限（減法季批 7b）：情誼沒有單一寫入口，在這裡事後夾；排在行狀之前，夾掉的不記成跨格（批 7d：夾了不說）
         annals.watch(self.state, self.content, art_name=self._art_name)  # 行狀：這一下改了什麼（投靠、晉升、情誼……）記一筆
         msgs = humanize(self.content, msgs, str(self.state.world.time))
         if not msgs:

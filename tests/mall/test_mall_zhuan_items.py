@@ -62,18 +62,18 @@ def _close(game: Game) -> Game:
     return game
 
 
-def test_the_four_items_follow_their_windows():
+def test_the_items_follow_their_windows():
     game = _game()
     first = _shelf(game)
-    assert "deep_slot" in first and not first & {"zhuan_art", "zhuan_seal", "zhuan_quote"}  # 第 1 週：只有深交名額
+    assert not first & FOUR  # 第 1 週：一件都沒有（深交名額企劃者 2026-10-28 下架了）
     _to_week(game, 3)
-    assert {"deep_slot", "zhuan_art"} <= _shelf(game) and not _shelf(game) & {"zhuan_seal", "zhuan_quote"}  # 插畫第 3 週起
+    assert "zhuan_art" in _shelf(game) and not _shelf(game) & {"zhuan_seal", "zhuan_quote", "deep_slot"}  # 插畫第 3 週起
     _close(game)
     rest = _shelf(game)
     assert {"zhuan_art", "zhuan_seal", "zhuan_quote"} <= rest and "deep_slot" not in rest  # 休季：插畫、紀念印、親筆評曰
     prices = {item["id"]: item["price"] for item in game.mall_view()["items"]}
     assert (prices["zhuan_art"], prices["zhuan_seal"], prices["zhuan_quote"]) == (300, 150, 200)
-    assert game.content.mall["deep_slot"].price == 250
+    assert "deep_slot" not in game.content.mall
 
 
 def test_off_the_shelf_has_none_of_them_and_the_rest_menu_is_one_grey_button():
@@ -97,7 +97,7 @@ def test_limits_per_season():
     assert "這一季" in game.mall_buy("zhuan_quote", "q3")[0]
     assert game.mall_buy("zhuan_seal", "s1")[0].startswith("買下")
     assert "這一季" in game.mall_buy("zhuan_seal", "s2")[0]
-    assert game.mall_buy("deep_slot", "d1") == [mall.NO_ITEM]  # 深交名額只在季中賣
+    assert game.mall_buy("deep_slot", "d1") == [mall.NO_ITEM]  # 深交名額下架了（企劃者 2026-10-28）
 
 
 def test_rest_buttons_use_the_tickets_and_the_biography_shows_them():
@@ -248,7 +248,7 @@ def test_the_schema_does_not_move_and_bad_windows_are_caught():
                    on_sale=MallWindow(rule="no_such_switch", from_week=2))
     assert any("no_such_switch" in line for line in mall.item_problems(bad, c))
     assert set(mall.EFFECTS) >= FOUR
-    assert all(c.mall[i].on_sale.rule == "zhuan_end" for i in FOUR)
+    assert all(c.mall[i].on_sale.rule == "zhuan_end" for i in FOUR - {"deep_slot"})  # 深交名額只留在 EFFECTS（舊的購買讀得出來），架上沒有
 
 
 # ── 原 test_fb845_art_ticket.py（整檔搬進來） ──
@@ -602,7 +602,7 @@ def test_more_writers_than_lines_repeats_instead_of_failing():
 
 def test_the_content_pools_are_big_enough_for_the_most_writers_a_piece_can_have():
     content = jianfa_game().content
-    most = content.config.jianfa.deep_figures + 1  # 深交三位加名額一位
+    most = content.config.jianfa.verdict_affinity_max + 1  # 情誼寫手最多三位，再加一位買來的
     assert len(content.verdicts[zhuan_end.AFFINITY]) >= most
     assert len(content.verdicts[zhuan_end.BOUGHT]) >= content.mall["zhuan_quote"].limit.season
     lines = [line for pool in content.verdicts.values() for line in pool]
@@ -617,24 +617,24 @@ def test_the_content_check_catches_a_repeated_line():
     assert any("重複" in p for p in problems)
 
 
-def test_four_deep_friends_and_a_tier_writer_get_five_different_lines():
+def test_four_deep_friends_and_a_tier_writer_get_the_top_three_and_four_different_lines():
+    """深交不限人數（企劃者 2026-10-28），評曰只取情誼最高的前三位（PM 2026-10-28，Config.jianfa.verdict_affinity_max）：第四位關羽不寫。"""
     game = make_game()
-    assert game.mall_buy("deep_slot", "d1")[0].startswith("買下")
     p = game.state.player
     p.contrib = 120  # 第一階：官軍的主將（皇甫嵩，情誼 0）替他寫
     p.affinities.update({"zhujun": 80, "caocao": 75, "liubei": 72, "guanyu": 71})
     game.sync(game.now)
-    assert len(p.deep_order) == 4
+    assert all(p.affinities[cid] >= 70 for cid in ("zhujun", "caocao", "liubei", "guanyu"))  # 不限人數（企劃者 2026-10-28）
     add_story(game)
     close_season(game)
     request = game.biography_request(1)
     assert [(j.fid, j.reason) for j in request.verdicts] == [
         ("huangfusong", zhuan_end.TIER), ("zhujun", zhuan_end.AFFINITY), ("caocao", zhuan_end.AFFINITY),
-        ("liubei", zhuan_end.AFFINITY), ("guanyu", zhuan_end.AFFINITY)]
-    assert len({j.fixed for j in request.verdicts}) == 5
+        ("liubei", zhuan_end.AFFINITY)]
+    assert len({j.fixed for j in request.verdicts}) == 4
     assert game.write_biography(request, None, game.now + 30)  # 模型叫不動：整篇都是固定句
     said = [para.split("：「", 1)[1] for para in verdict_paras(game.biography_view(1)["paragraphs"])]
-    assert len(said) == 5 and len(set(said)) == 5
+    assert len(said) == 4 and len(set(said)) == 4
 
 
 def test_a_single_writer_keeps_the_old_entry_point():
