@@ -66,6 +66,31 @@ def other_player(content, insights=("feng",)):
 # ── 合成的結果放哪（W5、W6）────────────────────────
 
 
+def test_the_merge_preview_gives_the_true_meaning_percent_the_fire_was_cut_from(ready, content, world):
+    """鐵匠鋪與合成流程 3.5：合併（兩個不同意境）而且那一路有真意，forge_preview 多 grand_pct（整數，跟 _compound_grand 同一個數，
+    預覽卡寫「真意 N%」）；火候四段照的也是它。"""
+    from conftest import real_content
+
+    content.traits.high.append(next(h for h in real_content().traits.high if h.attribute == "陽"))  # 測試內容沒有高階技能：借正式內容的陽（風＋火合出來的屬性）
+    card = skillview.forge_preview(ready, content, world, ["feng", "huo"])
+    quality = insight_fx.better(insight_fx.quality_of(ready, "feng"), insight_fx.quality_of(ready, "huo"))
+    assert card["attribute"] == "陽" and arts_mod.high_of(content, "陽") is not None  # 那一路有真意
+    assert isinstance(card["grand_pct"], int) and card["grand_pct"] == skillview._compound_grand(content, quality)
+    assert card["fire"] == skillview.fire_of(card["grand_pct"])
+    content.config.arts.compound_grand_scale = 0.5  # 數字跟著設定走，不是寫死的
+    again = skillview.forge_preview(ready, content, world, ["feng", "huo"])
+    assert again["grand_pct"] == skillview._compound_grand(content, quality) != card["grand_pct"]
+
+
+def test_pondering_and_a_merge_without_a_true_meaning_give_no_percent(ready, content, world, monkeypatch):
+    ready.player.insights.append("feng~2")
+    assert skillview.forge_preview(ready, content, world, ["feng", "feng~2"])["grand_pct"] is None  # 揣摩不擲真意
+    assert skillview.forge_preview(ready, content, world, ["feng", "feng"])["grand_pct"] is None
+    monkeypatch.setattr(arts_mod, "high_of", lambda c, attribute: None)  # 那一路沒有真意：不寫「真意 0%」
+    card = skillview.forge_preview(ready, content, world, ["feng", "huo"])
+    assert card["kind"] == "合併" and card["grand_pct"] is None and card["fire"]["level"] == 0
+
+
 def test_a_merge_and_other_ways_of_storing_an_art_get_no_switch_hint(ready, content, world):
     """意境合併沒有放進功法庫；學藝、事件教的武學收進功法庫也不是「煉製」的結果，不加這句。"""
     _, msgs = fusion.merge(ready, content, world, named("燎原"), "huo", "feng")

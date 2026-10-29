@@ -254,12 +254,14 @@ def forge_preview(state: GameState, content: Content, world: WorldStateStore, in
     """煉製頁的預覽卡（合成前就看得到合出來的樣子，跟出爐卡同一個形狀）。兩格都放好、而且都是你的意境時才給；
     其餘是 None，網頁照舊畫 forge_line 那一行。每一格都跟 forge_line 同一套函式算。
     鍵：kind（合併／揣摩）、made、attribute、attribute_why、gen、depth、quality、why、near、odds、slots、
-    traits、keep、level、known、cost、problem。"""
+    traits、keep、level、known、cost、problem、fire、grand_pct（合併而且那一路有真意：整數，同 _compound_grand，火候四段照它分，網頁寫「真意 N%」；
+    揣摩、那一路沒有真意是 None，不寫「真意 0%」）。"""
     if len(insight_ids) != 2 or prologue.fuse_problem(state, content, insight_ids) is not None:
         return None
     cfg, xinde = content.config, state.player.stats.get("xinde", 0)
     held = state.player.insights
-    empty = {"attribute_why": None, "gen": None, "depth": None, "near": None, "odds": None, "why": [], "keep": None, "level": None}
+    empty = {"attribute_why": None, "gen": None, "depth": None, "near": None, "odds": None, "why": [], "keep": None, "level": None,
+             "grand_pct": None}
     if any(i not in held for i in insight_ids):
         return None
     a, b = (insights.resolve(i, content, world, state) for i in insight_ids)
@@ -280,9 +282,10 @@ def forge_preview(state: GameState, content: Content, world: WorldStateStore, in
     high = arts_mod.high_of(content, attribute)
     quality = insight_fx.better(insight_fx.quality_of(state, a.id), insight_fx.quality_of(state, b.id))
     pool = [t.name for t in insight_fx.generals(content, attribute)]
+    grand = _compound_grand(content, quality) if high is not None else None  # 那一路沒有真意（high 是 None）就沒有這個數
     return {
         **empty, "kind": "合併", "made": "一個新的意境", "attribute": attribute, "quality": None, "slots": None,
-        "fire": fire_of(_compound_grand(content, quality) if high is not None else 0),
+        "fire": fire_of(grand or 0), "grand_pct": grand,
         "traits": [{"name": n, "layers": 1, "maybe": True} for n in pool] + ([{"name": high.name, "layers": 0, "grand": True, "maybe": True}] if high is not None else []),
         "depth": (f"擲一到兩個效果：{'或'.join(pool)}" + (f"，真意〔{high.name}〕：{high.desc}" if high is not None else "")) if pool else None,
         "known": _strip_note(_known_insight_recipe(state, world, fusion.merge_key(*insight_ids))),
