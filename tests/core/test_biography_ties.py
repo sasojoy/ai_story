@@ -13,7 +13,7 @@ import random
 import pytest
 
 from wins_kit import save, wins_content, wins_game
-from tianxia import annals, biography, gender
+from tianxia import annals, biography, gender, sortie_duel
 from tianxia.characters import CharacterStore
 from tianxia.engine import Game
 
@@ -142,6 +142,15 @@ def test_a_rival_name_is_never_touched_by_the_fallback():
     assert "第五週，沈浪應下你好嗎2在汝南荒野的約戰，險勝。" in text
     assert "沈浪好嗎" not in text and "Rival二" not in text and "好嗎二" not in text
     assert "沈浪也是其中之一" in text  # 心意那一句照舊：「你」換成名號
+
+
+def test_the_one_who_answered_is_not_written_as_the_one_who_posted():
+    """FB-897：守方的行狀是「應下某某在某地的約戰」（sortie_duel.ANNAL_ANSWER_LINE），補了主詞與時刻之後讀起來是他應戰、不是他下戰書。"""
+    answered = sortie_duel.ANNAL_ANSWER_LINE.format(place="汝南荒野", rival="沈浪", tier="落敗")
+    posted = sortie_duel.ANNAL_LINE.format(place="汝南荒野", rival="乙守", tier="大勝")
+    req = _request(_e(annals.DUEL, answered, 1), name="乙守")
+    assert "第一週，乙守應下沈浪在汝南荒野的約戰，落敗。" in biography.rule_text(req)
+    assert "第一週，沈浪在汝南荒野約戰乙守，大勝。" in biography.rule_text(_request(_e(annals.DUEL, posted, 1)))  # 攻方照舊
 
 
 def test_the_stance_line_still_turns_you_into_the_name_and_digits_into_chinese():
