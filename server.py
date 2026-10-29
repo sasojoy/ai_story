@@ -2814,6 +2814,10 @@ MENXIA_ACTIONS = {
     "wield": lambda g, b: g.wield_weapon(str(b.get("weapon") or "")),  # 裝備庫上那一件換到身上它那一欄（兵器設計 2.2、裝備四欄 2.3）：武器、防具、坐騎、寶物都走這裡，網頁照舊送 weapon 這個鍵
     "dismantle": lambda g, b: g.dismantle_weapon(str(b.get("weapon") or "")),  # 裝備庫上那一件拆成一個素材（兵器設計 4.7.1、裝備四欄 4.8）：坐騎、寶物不能拆
     "feed": lambda g, b: g.feed_mount(),
+    # 裝備庫那一列的「修」「淬煉」（鐵匠鋪與合成流程 3.4）：item 是裝備庫那一件的 id（兵:N、甲:N；舊網頁送 weapon 也收），修好淬完還在裝備庫、不換上；
+    # 擋法同店裡的直接開爐（鐵匠鋪開著、那一串是眼前的選單）。身上那件照舊送選項 id（smith:repair 等），不走這裡
+    "repair_item": lambda g, b: g.repair_item(str(b.get("item") or b.get("weapon") or "")),
+    "temper_item": lambda g, b: g.temper_item(str(b.get("item") or b.get("weapon") or "")),
     # 傳功門下（Config.chuangong）：名冊上點的那個人（person）練一項（what：neigong／wugong／str／agi／con）；引擎照 lessons 驗
     "chuangong": lambda g, b: g.chuangong(str(b.get("person") or ""), str(b.get("what") or "")),  # 身上那匹餵一個一階素材（裝備四欄 5.4）：閒著時哪裡都能餵
 }

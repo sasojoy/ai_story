@@ -705,6 +705,138 @@ def test_a_direct_smith_view_without_the_day_has_no_furnace(content, world):
     assert shopview.smith_view(game.state, content, world)["forge"]["furnace"] is None
 
 
+# ── 鐵匠鋪與合成流程 3.4（B 批）：修與淬煉裝備庫裡的那一件（MENXIA_ACTIONS["repair_item"]、["temper_item"]）──
+
+
+def _gear(content, world, silver=300, name="試鋪"):
+    """_smith 的店（兵器防具開著、人在城鎮的鐵匠鋪）；身上：手上刃（兵:9，刀口 60）、身上甲（甲:8，耐久 60）；
+    裝備庫：庫刃（兵:1，二階中品，刀口 30）、庫甲（甲:2，一階下品，耐久 30）。背包精鐵砂 ×4、玄鋼骨 ×1、驚羽 ×2。"""
+    from tianxia.state import Equipment, Weapon
+
+    game = _smith(content, world, silver=silver, name=name)
+    p = game.state.player
+    p.weapon = Weapon(id="兵:9", name="手上刃", kind="劍", attribute="柔", tier=1, quality="下品", edge=60)
+    p.armor = Equipment(id="甲:8", slot="armor", name="身上甲", attribute="虛", tier=1, quality="下品", edge=60)
+    p.rack = [Weapon(id="兵:1", name="庫刃", kind="刀", attribute="剛", tier=2, quality="中品", edge=30),
+              Equipment(id="甲:2", slot="armor", name="庫甲", attribute="虛", tier=1, quality="下品", edge=30)]
+    return game
+
+
+def _gear_state(game):
+    p = game.state.player
+    return (p.stats["silver"], dict(p.materials), [(i.id, i.edge, i.tempers) for i in (p.weapon, p.armor, *p.rack)], len(game.state.journal))
+
+
+def test_repairing_a_rack_item_keeps_it_in_the_rack_and_writes_one_smithy_entry(content, world):
+    game = _gear(content, world)
+    p = game.state.player
+    msgs = game.repair_item("兵:1")
+    assert [i.id for i in p.rack] == ["兵:1", "甲:2"] and p.rack[0].edge == 100 and p.weapon.id == "兵:9" and p.weapon.edge == 60
+    assert p.stats["silver"] == 295 and p.materials["gang_1"] == 3
+    assert msgs[0] == "鐵匠拿精鐵砂把【庫刃】重新磨利了（銀兩 -5）。"
+    top = game.state.journal[0]
+    assert top.title == weapons.SMITH and msgs[0] in top.lines  # 修的句子裡自己帶著工錢（銀兩 -5），同選單上的 smith:repair
+    game.repair_item("甲:2")  # 防具那一欄：同一條路
+    assert p.rack[1].edge == 100 and p.armor.id == "甲:8" and p.armor.edge == 60 and p.stats["silver"] == 290
+    assert [e.title for e in game.state.journal[:2]] == [weapons.SMITH, weapons.SMITH]
+
+
+def test_tempering_a_rack_item_uses_the_material_that_fits_it_and_does_not_wield_it(content, world):
+    game = _gear(content, world)
+    p = game.state.player
+    msgs = game.temper_item("兵:1")  # 二階：不低於二階的料裡最便宜的，玄鋼骨 ×1＋30 兩
+    assert p.rack[0].tempers == 1 and p.weapon.id == "兵:9" and p.weapon.tempers == 0 and [i.id for i in p.rack] == ["兵:1", "甲:2"]
+    assert p.stats["silver"] == 270 and "gang_2" not in p.materials
+    assert msgs[0] == "鐵匠拿玄鋼骨把【庫刃】淬了一回，這是第 1 次。"
+    top = game.state.journal[0]
+    assert top.title == weapons.SMITH and msgs[0] in top.lines and "銀兩 -30" in top.changes  # 寫「鐵匠鋪」紀錄（稿 3.4）
+    game.temper_item("甲:2")  # 一階防具：一階的料不收錢
+    assert p.rack[1].tempers == 1 and p.armor.tempers == 0 and p.stats["silver"] == 270 and p.materials["gang_1"] == 3
+
+
+@pytest.mark.parametrize(("what", "option", "worn_id"), [("repair", "smith:repair", "兵:9"), ("temper", "smith:temper", "兵:9"),
+                                                          ("repair", "smith:armor-repair", "甲:8"), ("temper", "smith:armor-temper", "甲:8")])
+def test_the_worn_item_goes_the_old_way_with_the_same_result(content, world, what, option, worn_id):
+    """身上那件照舊走選單（smith:repair 等，網頁上面那張卡送的）；用它自己的 id 叫 repair_item／temper_item，花的錢料、結果、掌櫃那一句都一樣。"""
+    old, new = _gear(content, world, name="同名"), _gear(content, world, name="同名")
+    if option.startswith("smith:armor"):
+        old.choose("smith:page:armor")
+    old.choose(option)
+    getattr(new, f"{what}_item")(worn_id)
+    assert _gear_state(old)[:3] == _gear_state(new)[:3]
+    assert old.state.player.shop_line == new.state.player.shop_line == what
+    a, b = old.state.journal[0], new.state.journal[0]
+    assert (a.lines, a.changes) == (b.lines, b.changes)
+
+
+def test_the_keeper_says_the_next_thing_and_the_smith_may_let_a_clue_slip(content, world, monkeypatch):
+    game = _gear(content, world)
+    p = game.state.player
+    monkeypatch.setattr(game, "_smith_clue", lambda paid=True: [])  # 先不讓鐵匠說溜嘴：掌櫃那一句照情況鍵挑
+    game.repair_item("兵:1")
+    assert p.shop_line == "repair" and shopview.line_text(game.state, content, "smith") in LINES["smith"]["repair"]
+    game.temper_item("甲:2")
+    assert p.shop_line == "temper" and shopview.line_text(game.state, content, "smith") in LINES["smith"]["temper"]
+    monkeypatch.setattr(game, "_smith_clue", lambda paid=True: ["鐵匠順口說了一句口訣。"])  # 花了錢或料之後擲鐵匠順口（smith_chance）
+    game.repair_item("甲:2")
+    assert p.shop_clue == "鐵匠順口說了一句口訣。" and shopview.line_text(game.state, content, "smith") == p.shop_clue
+    assert "鐵匠順口說了一句口訣。" in game.state.journal[0].lines
+    monkeypatch.setattr(game, "_smith_clue", lambda paid=True: [])
+    game.temper_item("兵:1")
+    assert p.shop_clue == ""  # 每一下重擲一次，上一句不留著
+
+
+def test_a_refused_repair_or_temper_costs_nothing_writes_nothing_and_rolls_no_clue(content, world, monkeypatch):
+    game = _gear(content, world)
+    p = game.state.player
+    monkeypatch.setattr(game, "_smith_clue", lambda paid=True: (_ for _ in ()).throw(AssertionError("被拒絕不擲鐵匠順口")))
+    before = _gear_state(game)
+    assert game.repair_item("兵:77") == [f"（{equipment.RACK_MISSING}。）"] and p.shop_line == "refused"
+    assert game.temper_item("甲:77") == [f"（{equipment.RACK_MISSING}。）"]
+    assert game.repair_item("") == [f"（{equipment.RACK_MISSING}。）"]
+    p.rack[0].edge = 100
+    assert game.repair_item("兵:1") == [f"（{weapons.KEEN['刀']}。）"] and p.shop_line == "refused"  # 還利，不用修
+    p.rack[0].tempers = content.config.weapons.temper_max
+    assert game.temper_item("兵:1") == [f"（{smithing.FULL}。）"]
+    p.rack[0].tempers = 0
+    p.materials = {"gang_1": 4}  # 二階的庫刃沒有二階以上的料可淬
+    assert game.temper_item("兵:1") == ["（沒有二階以上的素材。）"]
+    p.stats["silver"] = 2
+    assert game.repair_item("甲:2") == ["（還差 3 兩。）"] and p.shop_line == "short_silver"
+    p.stats["silver"] = 300
+    assert _gear_state(game)[3] == before[3] and p.rack[0].tempers == 0  # 一則紀錄都沒寫
+
+
+def test_repair_and_temper_item_need_the_smithy_open_and_the_menu_in_front(content, world):
+    """擋法同 smith_forge：離開了店、休季（選單上沒有鐵匠鋪那一串）都拒，不收錢、不收料。"""
+    game = _gear(content, world)
+    game.choose("smith:back")
+    before = _gear_state(game)
+    assert game.repair_item("兵:1") == [equipment.NOT_NOW] and game.temper_item("兵:1") == [equipment.NOT_NOW]
+    assert _gear_state(game) == before
+    content.config.admins = ["休季客"]
+    game = _gear(content, world, name="休季客")
+    game.admin_end_season(now=100.0)
+    before = _gear_state(game)
+    assert [o.id for o in game.options(odds=False)] == ["season:resting"] and game.state.player.picking_smith
+    assert game.repair_item("兵:1") == [equipment.NOT_NOW] and game.temper_item("甲:2") == [equipment.NOT_NOW]
+    assert _gear_state(game) == before
+
+
+def test_the_menxia_routes_repair_and_temper_a_rack_item_past_the_menus_eight_buttons(content, world):
+    import server
+    from tianxia.state import Weapon
+
+    game = _gear(content, world)
+    p = game.state.player
+    p.rack = [Weapon(id=f"兵:{i}", name=f"庫刃{i}", kind="刀", attribute="剛", tier=1, quality="下品", edge=30) for i in range(1, 13)]
+    p.materials = {"gang_1": 6}
+    assert server.MENXIA_ACTIONS["repair_item"](game, {"item": "兵:11"})[0].startswith("鐵匠拿精鐵砂把【庫刃11】")  # 選單只列 8 顆之外的那一件
+    assert server.MENXIA_ACTIONS["temper_item"](game, {"weapon": "兵:12"})[0].startswith("鐵匠拿精鐵砂把【庫刃12】淬了一回")  # 舊的 weapon 鍵也收
+    assert next(w for w in p.rack if w.id == "兵:11").edge == 100 and next(w for w in p.rack if w.id == "兵:12").tempers == 1
+    assert server.MENXIA_ACTIONS["repair_item"](game, {}) == [f"（{equipment.RACK_MISSING}。）"]
+
+
 def test_the_server_route_looks_at_the_fire(monkeypatch):
     """/api/do/smith_furnace 走真的伺服器（week7 的正式內容）：回的 main 裡 forge.furnace 換成「看過了」，收了 50 兩。"""
     from fastapi.testclient import TestClient
