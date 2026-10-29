@@ -2818,6 +2818,8 @@ MENXIA_ACTIONS = {
     # 擋法同店裡的直接開爐（鐵匠鋪開著、那一串是眼前的選單）。身上那件照舊送選項 id（smith:repair 等），不走這裡
     "repair_item": lambda g, b: g.repair_item(str(b.get("item") or b.get("weapon") or "")),
     "temper_item": lambda g, b: g.temper_item(str(b.get("item") or b.get("weapon") or "")),
+    # 裝備庫勾好的一次拆完（鐵匠鋪與合成流程 3.4）：items 是 id 的串列（不是串列的當沒勾）；不擋地點、拆不了的跳過寫原因、一則修練紀錄
+    "dismantle_many": lambda g, b: g.dismantle_many(_id_list(b.get("items"))),
     # 傳功門下（Config.chuangong）：名冊上點的那個人（person）練一項（what：neigong／wugong／str／agi／con）；引擎照 lessons 驗
     "chuangong": lambda g, b: g.chuangong(str(b.get("person") or ""), str(b.get("what") or "")),  # 身上那匹餵一個一階素材（裝備四欄 5.4）：閒著時哪裡都能餵
 }

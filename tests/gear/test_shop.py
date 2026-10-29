@@ -837,6 +837,99 @@ def test_the_menxia_routes_repair_and_temper_a_rack_item_past_the_menus_eight_bu
     assert server.MENXIA_ACTIONS["repair_item"](game, {}) == [f"（{equipment.RACK_MISSING}。）"]
 
 
+# ── 鐵匠鋪與合成流程 3.4（B 批）：批量拆解（Game.dismantle_many、MENXIA_ACTIONS["dismantle_many"]）──
+
+
+def _breakables(content, world):
+    """_gear 的店，裝備庫另外多：神器原品（兵:3）、一把淬過 2 次的二階刀（兵:4）。要拆的：兵:1、兵:4、甲:2；回（game, 預期拿到的素材名字數量）。"""
+    from tianxia.state import Weapon
+
+    game = _gear(content, world)
+    p = game.state.player
+    p.rack += [Weapon(id="兵:3", name="無名神器", kind="劍", attribute="柔", tier=3, quality="上品", original=True, secret="t_star"),
+               Weapon(id="兵:4", name="淬過的刀", kind="刀", attribute="剛", tier=2, quality="下品", tempers=2)]
+    gain: dict[str, int] = {}
+    for item_id in ("兵:1", "兵:4", "甲:2"):
+        name = equipment.dismantle_material(content, next(i for i in p.rack if i.id == item_id)).name
+        gain[name] = gain.get(name, 0) + 1
+    return game, gain
+
+
+def test_dismantle_many_takes_what_can_go_and_says_why_for_the_rest_in_one_entry(content, world):
+    from tianxia import journal
+
+    game, gain = _breakables(content, world)
+    p = game.state.player
+    bag = dict(p.materials)
+    before = (p.stats["silver"], p.stamina, p.weapon.id, p.armor.id, len(game.state.journal))
+    msgs = game.dismantle_many(["兵:1", "兵:3", "兵:9", "兵:77", "甲:2", "兵:1", "兵:4"])  # 重複的只算一次
+    assert msgs[0] == "拆了 3 件，得 " + "、".join(f"{name} ×{n}" for name, n in gain.items())
+    assert [i.id for i in p.rack] == ["兵:3"]  # 拆得了的拆了；原品留著
+    for name, n in gain.items():
+        mid = next(m.id for m in content.materials.values() if m.name == name)
+        assert p.materials.get(mid, 0) == bag.get(mid, 0) + n  # 一件一個同階素材
+    assert msgs[1:] == [  # 拆不了的跳過、寫原因（原品、身上那把、沒有的）
+        f"【無名神器】沒拆：{equipment.ORIGINAL_KEPT_LINE.format(unit='把')}",
+        f"【手上刃】沒拆：{equipment.DISMANTLE_WORN}",
+        f"「兵:77」沒拆：{equipment.DISMANTLE_MISSING}",
+    ]
+    assert (p.stats["silver"], p.stamina, p.weapon.id, p.armor.id) == before[:4]  # 不花錢、不花體力、身上的不動
+    assert len(game.state.journal) == before[4] + 1 and game.state.journal[0].title == journal.PRACTICE  # 一則修練紀錄
+    assert game.state.journal[0].tag == msgs[0]
+
+
+def test_dismantle_many_needs_no_smithy_and_nothing_ticked_or_nothing_breakable_writes_nothing(content, world):
+    game, gain = _breakables(content, world)
+    p = game.state.player
+    game.choose("smith:back")
+    p.location = "lake"  # 不在鐵匠鋪、不在城鎮也拆得了（同 dismantle_weapon）
+    assert game.dismantle_many(["兵:1"])[0].startswith("拆了 1 件，得 ")
+    count = len(game.state.journal)
+    assert game.dismantle_many([]) == [equipment.DISMANTLE_MANY_NONE]
+    assert game.dismantle_many(["兵:3", "兵:9"]) == [
+        equipment.DISMANTLE_MANY_NOTHING, f"【無名神器】沒拆：{equipment.ORIGINAL_KEPT_LINE.format(unit='把')}",
+        f"【手上刃】沒拆：{equipment.DISMANTLE_WORN}"]
+    assert len(game.state.journal) == count and [i.id for i in p.rack][0] == "甲:2"  # 一則都沒多寫、東西沒少
+
+
+def test_dismantle_many_lists_at_most_three_reasons_and_counts_the_rest(content, world):
+    game, gain = _breakables(content, world)
+    msgs = game.dismantle_many(["兵:3", "兵:9", "甲:8", "兵:77", "兵:78"])
+    assert msgs[0] == equipment.DISMANTLE_MANY_NOTHING and len(msgs) == 1 + equipment.DISMANTLE_MANY_SKIPS + 1
+    assert msgs[-1] == equipment.DISMANTLE_MANY_MORE.format(n=2)
+
+
+def test_dismantle_many_is_refused_while_the_season_is_preparing(content, world, monkeypatch):
+    from tianxia.engine import PREPARING_REFUSAL
+
+    game, gain = _breakables(content, world)
+    before = [i.id for i in game.state.player.rack]
+    monkeypatch.setattr(game, "_preparing", lambda: True)
+    assert game.dismantle_many(["兵:1"]) == [PREPARING_REFUSAL]
+    assert [i.id for i in game.state.player.rack] == before
+
+
+def test_the_menxia_route_dismantles_many_and_ignores_what_is_not_a_list_of_ids(content, world):
+    import server
+
+    game, gain = _breakables(content, world)
+    assert server.MENXIA_ACTIONS["dismantle_many"](game, {"items": "兵:1"}) == [equipment.DISMANTLE_MANY_NONE]  # 不是串列
+    assert server.MENXIA_ACTIONS["dismantle_many"](game, {}) == [equipment.DISMANTLE_MANY_NONE]
+    msgs = server.MENXIA_ACTIONS["dismantle_many"](game, {"items": ["兵:1", 5, None, {"id": "兵:4"}]})
+    assert msgs[0].startswith("拆了 1 件，得 ") and [i.id for i in game.state.player.rack] == ["甲:2", "兵:3", "兵:4"]
+
+
+def test_one_by_one_dismantling_is_unchanged(content, world):
+    """批量拆解共用的檢查抽出來之後，一件一件拆（equipment.dismantle）的回話一個字不變。"""
+    game, gain = _breakables(content, world)
+    p = game.state.player
+    name = equipment.dismantle_material(content, p.rack[0]).name
+    assert equipment.dismantle(game.state, content, "兵:1", ("weapon",)) == [f"你拆解了【庫刃】，拆出了{name}×1。"]
+    assert equipment.dismantle(game.state, content, "兵:3", ("weapon",)) == [equipment.ORIGINAL_KEPT_LINE.format(unit="把")]
+    assert equipment.dismantle(game.state, content, "兵:9", ("weapon",)) == [equipment.DISMANTLE_MISSING]
+    assert equipment.dismantle(game.state, content, "甲:2", ("weapon",)) == [equipment.DISMANTLE_MISSING]  # 兵器頁拆不到防具
+
+
 def test_the_server_route_looks_at_the_fire(monkeypatch):
     """/api/do/smith_furnace 走真的伺服器（week7 的正式內容）：回的 main 裡 forge.furnace 換成「看過了」，收了 50 兩。"""
     from fastapi.testclient import TestClient

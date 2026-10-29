@@ -6572,6 +6572,16 @@ class Game:
             self._menxia_entry(msgs[0], self._xinde())
         return msgs
 
+    @_not_while_preparing
+    def dismantle_many(self, item_ids: list[str]) -> list[str]:
+        """批量拆解（鐵匠鋪與合成流程 3.4；MENXIA_ACTIONS["dismantle_many"]，見 equipment.dismantle_many）：裝備庫裡勾好的一次拆完，
+        照 melt_many 的做法——拆不了的跳過寫原因、拆成了寫一則修練紀錄（標記是那一句總結）。同 dismantle_weapon 不擋地點、不花體力。"""
+        held = len(self.state.player.rack)
+        msgs = self._log(equipment.dismantle_many(self.state, self.content, item_ids))
+        if len(self.state.player.rack) < held:
+            self._menxia_entry(msgs[0], self._xinde())
+        return msgs
+
     def _talked_out_note(self) -> str:
         """談滿了的求見鈕括號裡那一句（單人地點的「求見某某」與求見名單共用；待 joy 潤）：寫換日的那一刻，不寫「今天／明天」
         ——週末那一季的一天不是 24 小時（企劃者 2026-10-08）。開頭一律是「已經談滿」：網頁行動列的格子認它，只寫「已談滿」（審查 I1）。"""
