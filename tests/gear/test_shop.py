@@ -807,6 +807,16 @@ def test_a_refused_repair_or_temper_costs_nothing_writes_nothing_and_rolls_no_cl
     assert _gear_state(game)[3] == before[3] and p.rack[0].tempers == 0  # 一則紀錄都沒寫
 
 
+def test_a_refused_repair_item_for_silver_gives_way_once_the_silver_is_there(content, world):
+    """被拒的掌櫃那一句只撐到原因還成立（FB-192）：錢不夠的修、淬煉走新的入口也一樣記 short_silver 與要的銀兩，錢補夠了換回進門那一句。"""
+    game = _gear(content, world, silver=2)
+    p = game.state.player
+    assert game.repair_item("甲:2") == ["（還差 3 兩。）"] and p.shop_line == "short_silver"
+    assert shopview.line_text(game.state, content, "smith") in LINES["smith"]["short_silver"]
+    p.stats["silver"] = 300
+    assert shopview.line_text(game.state, content, "smith") in LINES["smith"]["enter"]
+
+
 def test_repair_and_temper_item_need_the_smithy_open_and_the_menu_in_front(content, world):
     """擋法同 smith_forge：離開了店、休季（選單上沒有鐵匠鋪那一串）都拒，不收錢、不收料。"""
     game = _gear(content, world)
