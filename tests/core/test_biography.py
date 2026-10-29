@@ -157,6 +157,16 @@ def test_without_keep_the_fallback_reads_exactly_as_before():
             assert biography._strip(sample, name, None) == biography._strip(sample, name, ()) == biography._strip(sample, name, ["", "不在這一句裡"]) == before(sample, name)
 
 
+def test_an_all_digit_subject_name_is_not_masked_so_the_same_numbers_still_read_in_chinese():
+    """FB-9021：傳主名號整個是數字時不遮，行狀裡湊巧一樣的數目照舊換中文、不漏阿拉伯數字（跟 FB-9020 以前一樣）；代詞照舊換成名號。"""
+    assert biography._strip("你到了第 10 級，出手 10 回合", "10") == "10到了第十級，出手十回合"
+    assert biography._strip("戰功排第 2／88", "88") == "戰功在八十八人中排第二"
+    assert biography._strip("你攔下Rival2動手，出手 4 回合", "4", ["Rival2"]) == "4攔下Rival2動手，出手四回合"  # 對手照舊護著
+    assert biography._strip("Zed12打了 12 場", "Zed12") == "Zed12打了十二場"  # 有字母的照護
+    model = "10者，" + "天下大亂，" * 60 + "出手 10 回合。"
+    assert biography.clean(model, _request(name="10")) is None  # 模型版：整個是數字的傳主名號不遮，有阿拉伯數字照擋
+
+
 def test_the_placeholders_cannot_be_confused_with_the_text_or_the_names():
     """遮名號用私用區的字元：挑文字、傳主名號、保留名號裡都沒有的；長的名號先遮，免得一個名號是另一個的一部分。"""
     assert biography._strip("你攔下Rival2動手", "沈浪", ["Rival2"]) == "沈浪攔下Rival2動手"

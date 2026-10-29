@@ -175,7 +175,8 @@ def clean(raw: str | None, req: BiographyRequest) -> str | None:
     paras = [x for x in paras if x and x not in (title(req.name), f"《{title(req.name)}》")]
     text = "\n\n".join(paras)
     bare = text  # 名號可以帶阿拉伯數字（Rival2）：模型照事實清單原樣寫了，檢查數字之前先遮掉傳主自己的與行狀記下要保留的（長的先遮）
-    for name in sorted({req.name, *(k for e in req.annals for k in e.get("keep") or ())} - {""}, key=len, reverse=True):
+    own = set() if _numeric(req.name) else {req.name}  # 整個是數字的名號不遮（FB-9021）：遮了別處一樣的數目也一起放過
+    for name in sorted({*own, *(k for e in req.annals for k in e.get("keep") or ())} - {""}, key=len, reverse=True):
         bare = bare.replace(name, "")
     if not (200 <= len(text) <= 3000) or req.name not in text or re.search(r"[0-9０-９]", bare) or _KANA.search(text):
         return None
@@ -201,6 +202,13 @@ def write(client, req: BiographyRequest, seconds: float) -> str | None:
 
 
 _HELD = 0xE000  # 私用區：遮名號用的佔位字元從這裡往上挑
+_NUMERIC = re.compile(r"[\s0-9０-９+\-＋－]+")
+
+
+def _numeric(name: str) -> bool:
+    """名號整個是數字（「10」「88」；名號只擋長度與控制字元，這種取得到）。傳主的這種名號不遮：每一則行狀都會遮傳主名號，
+    遮了就把行狀裡湊巧一樣的數目（「到了第 10 級」）也當成名號放過，漏出阿拉伯數字（FB-9021）；不遮就跟 FB-9020 以前一樣。"""
+    return bool(name) and _NUMERIC.fullmatch(name) is not None
 
 
 def _guard(text: str, name: str, keep) -> tuple[str, dict[str, str]]:
@@ -225,7 +233,8 @@ def _strip(text: str, name: str = "", keep=None, own: str = "") -> str:
     分不出哪個「你」是代詞，所以先把它們遮起來、換完再還原（對手叫「你好嗎」「Rival2」不能被寫成「沈浪好嗎」「Rival二」，FB-9020）。
     傳主自己的名號（name；不換代詞時給 own）不存在 keep 裡（存檔不重複），這裡固定加進去一起遮：原句照字寫出傳主名號的行狀
     （〈天下形勢〉那一句、首創、奇事收尾）不會把「你好嗎2」寫成「你好嗎2好嗎二」；代詞「你」整個換成名號，換進去的名號不再被改。"""
-    text, held = _guard(text, name, [*(keep or ()), name or own])
+    mine = name or own
+    text, held = _guard(text, name, [*(keep or ()), *([] if _numeric(mine) else [mine])])
     text = _plain(text).rstrip("。")
     if name:
         text = text.replace("你", name)
