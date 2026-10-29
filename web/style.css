@@ -3527,15 +3527,14 @@ svg.fig .blade.bow { stroke-width: 3; }
 .keepsakes .keep-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 0; }
 .keepsakes .keep { padding: 2px 10px; border: 1px solid var(--line, #c9b98f); border-radius: 999px; font: 14px var(--serif); color: var(--ink-2); background: var(--card-2); }
 
-/* 戰役話本（Joy 2026-10-29；版面照主機那份〈長社火攻話本〉，手機優先）：戰報頁「‹ 全部戰報」那一行右邊一顆「戰役話本 ›」，
-   話本頁是一張長卡：明體正文、幕名前一行金色小字、玩家原話左邊一道金線、尾段名錄名字一欄說的一欄（窄螢幕疊成一欄） */
+/* 戰記（Joy 2026-10-29，原稱戰役話本；版面照主機那份〈長社火攻話本〉，手機優先）：戰報頁「‹ 全部戰報」那一行右邊一顆「戰記 ›」，
+   戰記頁是一張長卡：明體正文、幕名前一行金色小字、玩家原話左邊一道金線、尾段名錄名字一欄說的一欄（窄螢幕疊成一欄） */
 .report-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .report-top .back { margin-bottom: 8px; }
 .huaben-link { font-family: var(--serif); color: var(--gold); padding: 8px 0; }
 .huaben-link:disabled { color: var(--ink-2); opacity: 0.7; }
 .huaben-page { font-family: var(--serif); font-size: 16.5px; line-height: 1.95; padding: 20px 18px 26px; }
 .huaben-page p { margin: 0 0 1.1em; }
-.huaben-eyebrow { font: 500 12px/1.4 var(--sans); letter-spacing: 0.22em; color: var(--ink-2); margin: 0 0 6px !important; }
 .huaben-page h2 { font-size: 30px; font-weight: 900; letter-spacing: 0.14em; line-height: 1.2; margin: 0 0 6px; text-wrap: balance; }
 .huaben-meta { font: 13px/1.6 var(--sans); color: var(--ink-2); padding-bottom: 14px; border-bottom: 2px solid var(--gold); width: fit-content; }
 .huaben-page h3 { font-size: 20px; font-weight: 900; letter-spacing: 0.1em; margin: 28px 0 10px; padding-top: 18px; border-top: 1px solid var(--line); text-wrap: balance; }

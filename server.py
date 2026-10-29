@@ -1879,7 +1879,7 @@ def _main_view_body(game: Game) -> dict:
         "trends": md(game.trends_text()),
         "rumors": md(game.rumors_text()),
         "chronicle": md(game.chronicle_text()),
-        "tales": tale_index(game),  # 江湖史最上面那排「戰役話本」：[{battle_id, title, season, result}]，新的在前；開關關著是空的
+        "tales": tale_index(game),  # 江湖史最上面那排「戰記」：[{battle_id, title, season, result}]，新的在前；開關關著是空的
         "admin": game.is_admin(),
         "paused": game.paused_minutes(),  # 賽季時鐘停了幾分鐘；沒暫停是 None（設定頁的「暫停／繼續」）
         "guide": game.guide_box(),  # 行動列上方的說書人對話框（引導重做設計 8.1）；略過或早就做完是 None
@@ -2094,7 +2094,7 @@ def reports_view(game: Game, record_id: int | None) -> dict:
         "selected": record_id,
         "detail": md(game.battle_detail(record_id)) if record_id is not None else md(REPORT_EMPTY_TEXT),
         "gauge": game.record_gauge(record_id),  # 決戰的戰報畫收場那一刻的戰局條（Joy 2026-10-10）；不是決戰是 None
-        # 戰役話本（Joy 2026-10-29）：決戰、奪璽單挑的戰報帶著資料庫裡那一場的流水號，網頁拿它問 /api/tale/<流水號>；其他是 None
+        # 戰記（Joy 2026-10-29）：決戰、奪璽單挑的戰報帶著資料庫裡那一場的流水號，網頁拿它問 /api/tale/<流水號>；其他是 None
         "tale_id": _tale_ref(game, record_id),
     }
 
@@ -2987,7 +2987,7 @@ def api_reports(request: Request, id: int | None = None):
     return look(game, lambda g: reports_view(g, id))
 
 
-# ── 戰役話本（Joy 2026-10-29）：決戰收場那一刻在背景寫、全服一份，戰報頁「戰役話本 ›」與話本頁讀它 ──
+# ── 戰記（Joy 2026-10-29，原稱戰役話本）：決戰收場那一刻在背景寫、全服一份，戰報頁「戰記 ›」與戰記頁讀它 ──
 # 介面（主機那邊照同一份寫）：{status: "ready"|"pending"|"none", title, season, battle_name, result,
 #   acts: [{title, banner?, scenes: [{head, text, said?: {who, side, line}}]}], cast: [{name, side?, line}], made_at}
 # 寫法、產生、存放歸主機；接上之前一律回 none（網頁就不畫那一顆）。
@@ -2995,12 +2995,12 @@ def tale_view(battle_id: int) -> dict:
     return {"status": "none"}
 
 
-# 江湖史也點得進話本：誰看得到（只有參戰的人，還是全服）等 Joy 定，先關著
+# 江湖史也點得進戰記：誰看得到（只有參戰的人，還是全服）等 Joy 定，先關著
 TALES_IN_CHRONICLE = False
 
 
 def tale_index(game: Game) -> list[dict]:
-    """江湖史的話本目錄（新的在前）：開關關著、或主機還沒接上都是空的。"""
+    """江湖史的戰記目錄（新的在前）：開關關著、或主機還沒接上都是空的。"""
     if not TALES_IN_CHRONICLE:
         return []
     return []
