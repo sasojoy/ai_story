@@ -88,6 +88,15 @@ def test_the_prompt_gets_one_more_rule_only_with_the_three_kinds_and_the_switch(
     assert biography.messages(_request(*THREE, profile={}))[0]["content"] == _system()
 
 
+def test_the_ties_rule_only_names_a_section_the_prompt_asks_for():
+    """FB-896：規矩 2 要的四段是出身與投靠、大戰、與英雄交往、結局，沒有「單打獨鬥」（那只是事實清單的標題，備援文字把約戰放在結局那一段）。
+    第 7（8）條說約戰放哪一段，只能是這四段裡的。"""
+    assert "分四段：出身與投靠、大戰、與英雄交往、結局" in biography.SYSTEM
+    assert "放進與英雄交往或結局那一段" in biography.TIES_RULE
+    assert "單打獨鬥" not in biography.TIES_RULE
+    assert "放進與英雄交往或結局那一段" in biography.messages(_request(*THREE))[0]["content"]
+
+
 def test_the_rule_number_follows_the_tier_rule():
     tiered = dict(ZHUAN, tier=1, tier_side="官軍", tier_title="漢室忠良", contrib=180, final_rank=3, final_of=20)
     got = biography.messages(_request(*THREE, profile=tiered))[0]["content"]
