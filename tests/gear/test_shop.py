@@ -7,7 +7,7 @@ import random
 import pytest
 
 from conftest import real_content
-from tianxia import equipment, shopview, smithing, weapons
+from tianxia import armor, equipment, shopview, smithing, weapons
 from tianxia.content import validate
 
 LINES = {"smith": {key: [f"鐵匠說{key}之一。", f"鐵匠說{key}之二。"] for key in shopview.SITUATIONS["smith"]}}
@@ -928,6 +928,78 @@ def test_one_by_one_dismantling_is_unchanged(content, world):
     assert equipment.dismantle(game.state, content, "兵:3", ("weapon",)) == [equipment.ORIGINAL_KEPT_LINE.format(unit="把")]
     assert equipment.dismantle(game.state, content, "兵:9", ("weapon",)) == [equipment.DISMANTLE_MISSING]
     assert equipment.dismantle(game.state, content, "甲:2", ("weapon",)) == [equipment.DISMANTLE_MISSING]  # 兵器頁拆不到防具
+
+
+# ── 鐵匠鋪與合成流程 3.4（B 批）：_rack 每一列的鈕資料（repair、temper、into、tempers）──
+
+
+def _rows(game):
+    return {r["id"]: r for r in game.shop_view()["rack"]["rows"]}
+
+
+def test_every_rack_row_says_whether_it_can_be_repaired_tempered_and_what_dismantling_gives(content, world):
+    game, gain = _breakables(content, world)
+    rows = _rows(game)
+    blade = rows["兵:1"]
+    assert blade["repair"] == {"ok": True, "why": None, "use": "精鐵砂×1＋5 兩"}
+    assert blade["temper"] == {"ok": True, "why": None, "use": "玄鋼骨×1＋30 兩"}  # 二階：不低於二階、最便宜的料
+    assert blade["into"] == {"name": equipment.dismantle_material(content, next(i for i in game.state.player.rack if i.id == "兵:1")).name, "count": 1}
+    assert blade["tempers"] == 0 and rows["兵:4"]["tempers"] == 2  # 淬過幾次（批量確認單寫「淬過 2 次一起沒了」）
+    game.choose("smith:page:armor")
+    jacket = _rows(game)["甲:2"]  # 防具頁：同一套寫法；一階淬煉不收錢，小字沒有「＋」
+    assert jacket["repair"] == {"ok": True, "why": None, "use": "精鐵砂×1＋5 兩"} and jacket["temper"] == {"ok": True, "why": None, "use": "精鐵砂×1"}
+    assert set(_rows(game)) == {"甲:2"}  # 各頁只列自己那一欄
+
+
+def test_the_row_buttons_give_the_same_reasons_as_the_worn_card_and_the_rules(content, world):
+    game, gain = _breakables(content, world)
+    p, s = game.state.player, game.state
+    p.rack[0].edge = 100  # 庫刃：還利
+    p.rack[1].tempers = content.config.armor.temper_max  # 庫甲（防具）淬滿：看防具頁
+    row = _rows(game)["兵:1"]
+    assert row["repair"] == {"ok": False, "why": weapons.KEEN["刀"], "use": "精鐵砂×1＋5 兩"}
+    p.rack[0].edge, p.materials = 30, {}
+    row = _rows(game)["兵:1"]
+    assert row["repair"]["why"] == equipment.NO_REPAIR_MATERIAL and row["repair"]["use"] == "一個一階素材＋5 兩"
+    assert row["temper"] == {"ok": False, "why": "沒有二階以上的素材", "use": ""}  # 沒料：沒有小字，原因寫在 why
+    p.materials, p.stats["silver"] = {"gang_1": 4, "gang_2": 1}, 2
+    next(i for i in p.rack if i.id == "兵:4").edge = 30
+    row = _rows(game)["兵:4"]
+    assert row["repair"]["why"] == "還差 3 兩" and row["temper"]["why"] == "還差 28 兩"
+    for item_id, row in _rows(game).items():  # 列上寫的就是規則函式現在回的
+        assert row["repair"]["why"] == weapons.repair_problem(s, content, item_id) and row["temper"]["why"] == smithing.temper_problem(s, content, "weapon", item_id)
+    game.choose("smith:page:armor")
+    full = _rows(game)["甲:2"]
+    assert full["temper"]["ok"] is False and full["temper"]["why"] == smithing.FULL
+    assert full["repair"]["why"] == armor.repair_problem(s, content, "甲:2")
+
+
+def test_a_row_that_cannot_be_dismantled_has_no_into_and_the_worn_card_is_unchanged(content, world):
+    game, gain = _breakables(content, world)
+    rows = _rows(game)
+    assert rows["兵:3"]["into"] is None and rows["兵:3"]["keep"] == equipment.ORIGINAL_KEPT  # 原品拆不得：不給拆成什麼
+    assert rows["兵:3"]["repair"]["why"] == weapons.repair_problem(game.state, content, "兵:3")  # 修、淬煉照樣問規則
+    assert all(r["into"] is not None for k, r in rows.items() if k != "兵:3")
+    worn = game.shop_view()["worn"]  # 身上那張卡照舊給（網頁搬到裝備庫頁最上面）
+    assert set(worn) == {"item", "empty", "repair", "temper", "unfit"} and set(worn["repair"]) == {"id", "use", "enabled", "why"}
+    assert worn["repair"]["id"] == "smith:repair" and worn["temper"]["id"] == smithing.TEMPER and worn["temper"]["use"] == "精鐵砂×1"
+
+
+def test_the_rows_follow_a_repair_and_a_dismantle(content, world):
+    game, gain = _breakables(content, world)
+    assert _rows(game)["兵:1"]["repair"]["ok"] is True
+    game.repair_item("兵:1")
+    assert _rows(game)["兵:1"]["repair"] == {"ok": False, "why": weapons.KEEN["刀"], "use": "精鐵砂×1＋5 兩"}
+    game.dismantle_many(["兵:1", "兵:4"])
+    assert set(_rows(game)) == {"兵:3"}
+
+
+def test_the_server_main_view_carries_the_row_buttons(content, world):
+    import server
+
+    game, gain = _breakables(content, world)
+    row = next(r for r in server.main_view(game)["shop"]["rack"]["rows"] if r["id"] == "兵:1")
+    assert row["repair"]["ok"] and row["temper"]["ok"] and row["into"]["count"] == 1
 
 
 def test_the_server_route_looks_at_the_fire(monkeypatch):
