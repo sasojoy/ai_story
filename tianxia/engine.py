@@ -10052,8 +10052,8 @@ class Game:
         self._play_rounds(record, squad, result.tier, None, self._hp_facts(), clash=result.clash)
         won = result.tier in team.WIN_TIERS
         rewards = self._battle_rewards(squad, record) if won and stage.mirror is None else []  # 打自己的影子沒有東西掉
-        storyline.fought(s, c, progress, won, record)
-        return [self._file_battle(record)] + rewards
+        after = storyline.fought(s, c, progress, won, record)  # 打輸、還能再打（心魔未破）：跳卡、記行狀，紀錄多一行
+        return [self._file_battle(record)] + rewards + after
 
     def _mirror_squad(self, progress: StoryProgress, stage: StoryStage) -> Squad:
         """fight 段的對手是自己的影子（StoryStage.mirror，特殊頓悟的心魔）：難度＝你此刻的全隊威力（氣血當滿的、不算地利與碎片，同江湖水漲）

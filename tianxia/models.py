@@ -520,6 +520,17 @@ class StoryRoute(_Strict):
 StoryStageKind = Literal["event", "quiz", "fight", "task"]
 
 
+class StoryFail(_Strict):
+    """fight 段打輸、還能再打時跳的那一張卡（特殊頓悟的心魔，Joy 2026-10-28「心魔挑戰失敗沒有明顯提示」）：title 是卡的標題，
+    card 是卡上的話、log 是江湖紀錄那一行、annal 是行狀那一行（{name} 換名號）；card 與 log 的 {days} 換成 retry_days 寫成的「N 天」或「N 個時辰」（storyline.wait_text）。"""
+
+    title: str
+    card: str
+    log: str = ""
+    annal: str = ""
+    image: str | None = None
+
+
 class StoryStage(_Strict):
     """一條線的一段（特殊事件設計稿「一條線」的底座）。四種：
     event 端出一則事件（Event，actions 寫 []），選項的 effect.story 寫記號與往哪裡；
@@ -560,6 +571,7 @@ class StoryStage(_Strict):
     # 長篇奇事的多日段（企劃者 2026-10-27）：進這一段之後要再過幾個遊戲日才按得下去（照季長，rules.day_seconds）；
     # 中間做別的事，時候到了、人在那裡才接下一段（例：營裡的第二天、第三天）。期限 days 從等完那一刻起算
     wait_days: float = Field(default=0, ge=0)
+    fail: StoryFail | None = None  # fight 段打輸、還能再打時跳一張卡、記一行紀錄與行狀；沒寫就照舊什麼都不跳
 
 
 class StoryAfter(_Strict):
