@@ -422,3 +422,170 @@ def test_closing_a_shop_clears_the_hold(content, world):
     assert game.state.player.shop_hold.startswith("same:")
     game.choose(mounts.BACK)
     assert game.state.player.shop_hold == ""
+
+
+# ── 鐵匠鋪與合成流程 3.8（D 批）：smith_view.divine（神器頁；守正式季整合 5.10：不劇透這一季輪到的名單與件數）──
+
+
+def _divine_ctx(rotation=True):
+    """正式內容（神器輪替開著）開第一季：九件全開（wave 1）。回（內容, 世界）。"""
+    from test_divine_rotation import _content, _opened
+
+    c = _content(rotation=rotation)
+    return c, _opened(c)
+
+
+def _pack(game, world):
+    return shopview.smith_view(game.state, game.content, world)["divine"]
+
+
+def _blob(pack) -> str:
+    return json.dumps(pack, ensure_ascii=False)
+
+
+def test_the_divine_pack_is_none_when_the_season_has_no_rotation_stamp():
+    from test_divine_rotation import _smith
+
+    c, w = _divine_ctx(rotation=False)
+    assert w.get_season().divine_lineup is None
+    jia = _smith(c, w, "甲")
+    assert shopview.smith_view(jia.state, c, w)["divine"] is None  # 沒蓋章的季：鐵匠鋪照四頁，整包是 None
+    assert "divine" in shopview.smith_view(jia.state, c, w)
+
+
+def test_a_fresh_rotation_season_says_nothing_about_the_lineup():
+    """守 5.10：還沒人打出任何一件，「江湖已見」是空的，收藏冊每一格都是「？」；這一季輪到的名單與件數，整包裡一個字都沒有。"""
+    from test_divine_rotation import _smith
+
+    c, w = _divine_ctx()
+    jia = _smith(c, w, "甲")
+    lineup = w.get_season().divine_lineup
+    assert len(lineup) == 9
+    pack = _pack(jia, w)
+    total = len([r for r in c.forge_secrets.values() if r.divine])
+    assert total == 21  # 九件原本的加十二件第二批的：N 照內容數
+    assert pack["seen"] == [] and pack["collected"]["have"] == 0 and pack["collected"]["total"] == total
+    assert len(pack["collected"]["cells"]) == total
+    assert all(cell == {"id": None, "name": None, "have": False, "forged": False, "now": False} for cell in pack["collected"]["cells"])
+    blob = _blob(pack)
+    for rid in lineup:
+        assert rid not in blob and c.forge_secrets[rid].name not in blob
+
+
+def test_once_an_original_is_forged_the_page_lists_only_that_one_and_hides_the_rest_of_the_lineup():
+    from test_divine_rotation import SWORD, _forge_sword, _smith
+
+    c, w = _divine_ctx()
+    jia, yi = _smith(c, w, "甲"), _smith(c, w, "乙")
+    _forge_sword(c, w, jia)
+    lineup = w.get_season().divine_lineup
+    sword = c.forge_secrets[SWORD]
+    for viewer, owner, mine in ((jia, "你", "original"), (yi, "甲", None)):  # 原品主人看自己寫「你」，別人看名號
+        pack = _pack(viewer, w)
+        assert pack["seen"] == [{"id": SWORD, "name": sword.name, "owner": owner, "copies": 0, "mine": mine, "solved_only": False}]
+        blob = _blob(pack)
+        for rid in lineup:
+            if rid != SWORD:  # 這一季輪到、還沒人打出的其餘八件：id 與名字都不在整包裡
+                assert rid not in blob and c.forge_secrets[rid].name not in blob
+    cells = {cell["id"]: cell for cell in _pack(yi, w)["collected"]["cells"] if cell["id"]}
+    assert cells == {SWORD: {"id": SWORD, "name": sword.name, "have": False, "forged": True, "now": True}}  # 只有打出過的有名字、有 id
+    assert _pack(jia, w)["collected"]["have"] == 1 and _pack(yi, w)["collected"]["have"] == 0
+
+
+def test_the_name_the_owner_gave_replaces_the_spec_name_and_copies_are_counted():
+    from test_divine_rotation import SWORD, _forge_sword, _smith
+
+    from tianxia import forge_secrets
+
+    c, w = _divine_ctx()
+    jia, yi = _smith(c, w, "甲"), _smith(c, w, "乙")
+    _forge_sword(c, w, jia)
+    assert w.name_divine(forge_secrets.key_for(SWORD), "甲", "寒星") is None
+    copy, _ = _forge_sword(c, w, yi)
+    assert copy.copy_of is not None
+    row = _pack(yi, w)["seen"][0]
+    assert (row["name"], row["owner"], row["copies"], row["mine"]) == ("寒星", "甲", 1, "copy")  # 定了名寫定名；仿品在手
+    assert _pack(jia, w)["seen"][0]["mine"] == "original" and _pack(jia, w)["seen"][0]["copies"] == 1
+    assert next(cell for cell in _pack(yi, w)["collected"]["cells"] if cell["id"] == SWORD)["name"] == "寒星"
+    assert c.forge_secrets[SWORD].name not in _blob(_pack(yi, w))  # 定了名之後，譜名不再露出來
+
+
+def test_a_recipe_you_solved_before_shows_only_to_you_until_someone_forges_it():
+    """自己鑄譜打中過（divine_solved，跨季帶著走）、這一季又現世、還沒人打出的那一件：只有自己看得到（5.10 的例外）。"""
+    from test_divine_rotation import SWORD, _forge_sword, _smith
+
+    c, w = _divine_ctx()
+    jia, yi = _smith(c, w, "甲"), _smith(c, w, "乙")
+    lineup = w.get_season().divine_lineup
+    other = next(rid for rid in lineup if rid != SWORD)
+    jia.state.player.divine_solved[other] = "某個組合"
+    row = {"id": other, "name": c.forge_secrets[other].name, "owner": None, "copies": 0, "mine": None, "solved_only": True}
+    assert _pack(jia, w)["seen"] == [row]
+    assert _pack(yi, w)["seen"] == [] and other not in _blob(_pack(yi, w)) and c.forge_secrets[other].name not in _blob(_pack(yi, w))
+    off = next(r.id for r in c.forge_secrets.values() if r.divine and r.id not in lineup)  # 這一季沒輪到的：鑄譜上有也不列
+    jia.state.player.divine_solved[off] = "舊的組合"
+    assert _pack(jia, w)["seen"] == [row] and off not in _blob(_pack(jia, w))
+    _forge_sword(c, w, yi, other)  # 有人打出來之後，變成一般的一列，不重複
+    seen = _pack(jia, w)["seen"]
+    assert [r["id"] for r in seen] == [other] and seen[0]["solved_only"] is False and seen[0]["owner"] == "乙"
+
+
+def test_an_original_from_an_earlier_season_is_in_the_album_but_not_on_the_seen_list():
+    """「江湖已見」只列這一季打出原品的；之前季打出的（原品全服一把、跨季）只在收藏冊：有名字、`now` 是假的。"""
+    from test_divine_rotation import NOW, SWORD, _forge_sword, _next, _smith
+
+    c, w = _divine_ctx()
+    jia = _smith(c, w, "甲")
+    _forge_sword(c, w, jia)
+    _next(c, w)
+    w.mutate_season(lambda s: setattr(s, "divine_lineup", [SWORD, "ad_still_wave"]))
+    jia.sync(NOW + 5 * 86400)
+    pack = _pack(jia, w)
+    assert pack["seen"] == []
+    cell = next(cell for cell in pack["collected"]["cells"] if cell["id"] == SWORD)
+    assert cell == {"id": SWORD, "name": c.forge_secrets[SWORD].name, "have": True, "forged": True, "now": False}
+    assert "ad_still_wave" not in _blob(pack)  # 這一季輪到的防具沒人打出過：整包裡沒有它
+
+
+def test_the_divine_pack_is_read_only_reads_the_records_once_and_never_names_a_bot():
+    from test_divine_rotation import SWORD, _forge_sword, _smith
+    from tianxia.state import BotProfile
+
+    c, w = _divine_ctx()
+    robot = _smith(c, w, "假俠")
+    robot.state.player.bot = BotProfile(personality="積極", seed=7, faction="guan", season_number=1)  # 伺服器假人：寫法跟真人一樣
+    _forge_sword(c, w, robot)
+    yi = _smith(c, w, "乙")
+    before = (yi.state.model_dump_json(), w.divine_state().model_dump_json())
+    calls = []
+    original = w.divine_records
+    w.divine_records = lambda: calls.append(1) or original()
+    pack = _pack(yi, w)
+    assert calls == [1]  # 一次一份
+    assert (yi.state.model_dump_json(), w.divine_state().model_dump_json()) == before  # 只讀
+    assert pack["seen"][0]["owner"] == "假俠"
+    blob = _blob(pack)
+    assert "bot" not in blob.lower() and "假人" not in blob and "機器人" not in blob
+    assert set(pack) == {"seen", "collected"} and set(pack["collected"]) == {"have", "total", "cells"}
+    assert set(pack["seen"][0]) == {"id", "name", "owner", "copies", "mine", "solved_only"}
+
+
+def test_a_season_without_the_rotation_stamp_never_reads_the_divine_records():
+    from test_divine_rotation import _smith
+
+    c, w = _divine_ctx(rotation=False)
+    calls = []
+    w.divine_records = lambda: calls.append(1) or []
+    shopview.smith_view(_smith(c, w, "丙").state, c, w)
+    assert calls == []  # 神器紀錄每次讀資料庫：沒蓋章的季不讀
+
+
+def test_the_shop_screen_carries_the_divine_pack_in_a_rotation_season():
+    from test_divine_rotation import SWORD, _forge_sword, _smith
+
+    c, w = _divine_ctx()
+    jia = _smith(c, w, "甲")
+    _forge_sword(c, w, jia)
+    jia.choose("act:smith")
+    view = jia.shop_view()
+    assert view is not None and [r["id"] for r in view["divine"]["seen"]] == [SWORD]

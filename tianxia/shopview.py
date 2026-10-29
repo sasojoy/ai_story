@@ -13,7 +13,7 @@ from . import arena, armor, bounties, economy, equipment, forge_secrets, four_ti
 from . import duel as duel_rules
 from .characters import name_key
 from .models import MOVES, WEAPON_KINDS, Content
-from .state import Equipment, GameState
+from .state import Equipment, GameState, GearFind
 from .world_state import WorldStateStore
 
 # ── 掌櫃的話（1.4）──
@@ -379,9 +379,58 @@ def furnace_view(state: GameState, content: Content, day: int | None, prologue: 
     }
 
 
+DIVINE_YOU = "你"  # 待 joy 潤（鐵匠鋪與合成流程 3.8）：神器頁「原品在誰手上」那一格，原品在你手上寫這一個字，別人寫名號
+
+
+def divine_view(state: GameState, content: Content, world: WorldStateStore) -> dict | None:
+    """鐵匠鋪的「神器」頁（鐵匠鋪與合成流程 3.8；smith_view 的 divine）。不是輪替季（WorldState.divine_lineup 是 None）整包 None。
+    只讀、不碰亂數；神器紀錄（world.divine_records）只在輪替季讀、一次一份。
+
+    seen（頁面上半「江湖已見」）：**這一季**已經有人打出原品的神器，每一件一列 {id, name, owner, copies, mine, solved_only}——
+    name 定了名寫定名、沒定寫譜名（同神器譜）；owner 是原品主人（名號，是你寫 DIVINE_YOU）；copies 全服仿品幾把；mine 是你手上有的那一把
+    （"original" 原品在手、"copy" 仿品在手、None 未有，照 forge_secrets.held_divine）；solved_only 是你自己鑄譜上打中過
+    （PlayerState.divine_solved，跨季帶著走）、這一季又現世、還沒人打出的那一件——只有你自己看得到（正式季整合 5.10 的例外：你的鑄譜本來
+    就寫「這一季已現世」），owner、copies 是空的。
+    collected（下半「收藏 M／N」）：內容裡全部的神器各一格（N 照內容數）{id, name, have, forged, now}——forged 是任何一季有人打出過原品
+    （divine_records：全服登記的加上線前照季分的），有了才給 id 與名字（沒打出過的 id、name 都是 None，網頁畫「？」、不可點）；have 是你手上有；
+    now 是這一季打出的。
+
+    **守 5.10**：這一季輪到、還沒人打出、自己也沒打中過的神器，整包裡不出現它的 id 與名字——所以不用全服登記的 seen（開季蓋章就寫），
+    收藏冊沒打出過的格子連 id 都不給（不然「哪幾格有 id」就是名單），江湖已見只列這一季才打出原品的（之前季打出的只在收藏冊）。
+    假人跟真人一樣：原品主人照神器譜現在的寫法寫名號。"""
+    lineup = state.world.divine_lineup
+    if lineup is None:
+        return None
+    p = state.player
+    season = world.get_season_number()
+    latest: dict[str, tuple[int, GearFind]] = {}
+    for found_in, find in world.divine_records():  # 照季排好的：同一件隔了好幾季才有新的一筆時，後面的蓋掉前面的
+        latest[find.secret] = (found_in, find)
+    seen: list[dict] = []
+    solved: list[dict] = []
+    cells: list[dict] = []
+    for recipe in (r for r in content.forge_secrets.values() if r.divine):
+        held = forge_secrets.held_divine(p, recipe.id)
+        mine = None if held is None else "original" if held.original else "copy"
+        record = latest.get(recipe.id)
+        if record is None:
+            if recipe.id in lineup and recipe.id in p.divine_solved:
+                solved.append({"id": recipe.id, "name": recipe.name, "owner": None, "copies": 0, "mine": None, "solved_only": True})
+            known = held is not None  # 手上有就一定有人打出過（資料對不上時也不把自己手上的畫成「？」）
+            cells.append({"id": recipe.id if known else None, "name": recipe.name if known else None, "have": known, "forged": known, "now": False})
+            continue
+        found_in, find = record
+        name = find.divine_name or find.title
+        if found_in == season:
+            owner = DIVINE_YOU if find.owner is not None and name_key(find.owner) == name_key(p.name) else find.master_shown or find.owner
+            seen.append({"id": recipe.id, "name": name, "owner": owner, "copies": find.copies, "mine": mine, "solved_only": False})
+        cells.append({"id": recipe.id, "name": name, "have": held is not None, "forged": True, "now": found_in == season})
+    return {"seen": seen + solved, "collected": {"have": sum(1 for cell in cells if cell["have"]), "total": len(cells), "cells": cells}}
+
+
 def smith_view(state: GameState, content: Content, world: WorldStateStore, day: int | None = None, prologue: bool = False) -> dict:
-    """鐵匠鋪的店面（第一、二節）：招牌、銀兩、掌櫃的話、出店與兵器防具切換的選項 id，四頁的資料。day、prologue 是 Game 給的（回體丹的換日、
-    在不在序章），forge.furnace 要用；沒給 day 的直接呼叫 forge.furnace 是 None。"""
+    """鐵匠鋪的店面（第一、二節）：招牌、銀兩、掌櫃的話、出店與兵器防具切換的選項 id，四頁的資料（輪替季多一頁神器，divine，見 divine_view）。
+    day、prologue 是 Game 給的（回體丹的換日、在不在序章），forge.furnace 要用；沒給 day 的直接呼叫 forge.furnace 是 None。"""
     p = state.player
     art, neigong = _arts(state, content, world)
     page = equipment.page(p, content)
@@ -402,6 +451,7 @@ def smith_view(state: GameState, content: Content, world: WorldStateStore, day: 
         "rack": _rack(state, content, world, page, art, neigong),
         "pending": forge_secrets.unnamed_originals(state, world),
         "forge": forge,
+        "divine": divine_view(state, content, world),  # 神器頁（3.8）：輪替季才有，其餘 None（鐵匠鋪照四頁）
     }
 
 
