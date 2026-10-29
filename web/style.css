@@ -3526,3 +3526,31 @@ svg.fig .blade.bow { stroke-width: 3; }
 /* 紀念物（長篇奇事）：俠客頁一小段，一件一個淡框 */
 .keepsakes .keep-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 0; }
 .keepsakes .keep { padding: 2px 10px; border: 1px solid var(--line, #c9b98f); border-radius: 999px; font: 14px var(--serif); color: var(--ink-2); background: var(--card-2); }
+
+/* 戰記（Joy 2026-10-29，原稱戰役話本；版面照主機那份〈長社火攻話本〉，手機優先）：戰報頁「‹ 全部戰報」那一行右邊一顆「戰記 ›」，
+   戰記頁是一張長卡：明體正文、幕名前一行金色小字、玩家原話左邊一道金線、尾段名錄名字一欄說的一欄（窄螢幕疊成一欄） */
+.report-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.report-top .back { margin-bottom: 8px; }
+.huaben-link { font-family: var(--serif); color: var(--gold); padding: 8px 0; }
+.huaben-link:disabled { color: var(--ink-2); opacity: 0.7; }
+.huaben-page { font-family: var(--serif); font-size: 16.5px; line-height: 1.95; padding: 20px 18px 26px; }
+.huaben-page p { margin: 0 0 1.1em; }
+.huaben-page h2 { font-size: 30px; font-weight: 900; letter-spacing: 0.14em; line-height: 1.2; margin: 0 0 6px; text-wrap: balance; }
+.huaben-meta { font: 13px/1.6 var(--sans); color: var(--ink-2); padding-bottom: 14px; border-bottom: 2px solid var(--gold); width: fit-content; }
+.huaben-page h3 { font-size: 20px; font-weight: 900; letter-spacing: 0.1em; margin: 28px 0 10px; padding-top: 18px; border-top: 1px solid var(--line); text-wrap: balance; }
+.huaben-page h3 .no { display: block; font: 500 12px/1.4 var(--sans); letter-spacing: 0.24em; color: var(--gold); margin-bottom: 4px; }
+.huaben-page h4 { font-size: 15px; color: var(--ink-2); letter-spacing: 0.08em; margin: 18px 0 6px; }
+.huaben-banner { font: 14px/1.8 var(--sans); color: var(--ink-2); background: var(--card-2); border-left: 2px solid var(--gold); padding: 8px 12px; }
+.huaben-said { border-left: 2px solid var(--gold); background: var(--card-2); padding: 10px 14px; margin: 0 0 1.2em; }
+.huaben-said .who { display: block; font: 700 12px/1.5 var(--sans); letter-spacing: 0.12em; color: var(--ink-2); }
+.huaben-said .line { font-size: 17px; font-weight: 600; overflow-wrap: anywhere; }
+.huaben-cast ul { list-style: none; margin: 0; padding: 0; }
+.huaben-cast li { display: grid; grid-template-columns: 7em 1fr; gap: 2px 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.huaben-cast li b { font-weight: 600; overflow-wrap: anywhere; }
+.huaben-cast .cast-side { grid-column: 1; font: 500 11px/1.4 var(--sans); letter-spacing: 0.1em; color: var(--ink-2); }
+.huaben-cast .say { grid-column: 2; grid-row: 1 / span 2; font-size: 15px; line-height: 1.75; color: var(--ink-2); min-width: 0; }
+@media (max-width: 360px) {
+  .huaben-cast li { grid-template-columns: 1fr; }
+  .huaben-cast .say { grid-column: 1; grid-row: auto; }
+}
+.huaben-index button { display: flex; justify-content: space-between; gap: 8px; }
