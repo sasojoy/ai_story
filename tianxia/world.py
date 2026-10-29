@@ -6,7 +6,7 @@ import random
 import re
 from collections.abc import Callable
 
-from . import arena, battle_instance, bounties, calendar, feasts, figure_life, figures, flavor, leaderboard, orders, ranks, renown, seal_acts, seats, territory, timetable, wins, yuedan
+from . import arena, battle_instance, bounties, calendar, feasts, figure_life, figures, flavor, leaderboard, orders, plans, ranks, renown, seal_acts, seats, territory, timetable, wins, yuedan
 from . import stances as stance_rules  # 人物心意（減法季批 6）；rules.stances（陣營的態勢）在這個檔裡也叫 stances
 from .models import Act, BattleDef, Content, Ending, SimPlayer, SimRumor, Storyline, TimetableEvent
 from .ollama_client import OllamaClient
@@ -740,6 +740,7 @@ def advance_world_state(
             msgs += seal_acts.tick(vehicle, content)  # 引將期滿回原處（玉璽碎片改版第 2 批）：排在人物走動之前（期滿的那一輪他就能走）
             figure_life.tick(vehicle, content)  # 人物的每日行事（大勢人物擴充第一批）：走動、募兵、襲擾，只寫傳聞
             feasts.settle(vehicle, content)  # 時間到了的宴散席（第三批）：席間最佳那一句上天下大事
+            plans.tick(vehicle, content, season_end_time(season, content))  # 世界活起來：人物照行程動身、盤算公告與結算
             yuedan.tick(vehicle, content, world)  # 月旦評（第三批）：跨進新的一週評六個人；給了 store 才評（要掃角色）
         if crossed and not season.ended:
             msgs += season_hour(vehicle, content, rng, players=players)

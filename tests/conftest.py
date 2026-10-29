@@ -100,6 +100,13 @@ def no_week_unlock(content: Content) -> Content:
     return content
 
 
+def no_plans(content: Content) -> Content:
+    """人物的行程與盤算（世界活起來，Config.plans）關掉，回傳同一份內容：用正式內容、要寫死傳聞清單、人物走到哪、大勢線數字的舊測試叫它
+    （有行程的人照行程動身、盤算會推線、發天下大事）；行程本身的測試在 tests/figures/test_plans.py。"""
+    content.config.plans.enabled = False
+    return content
+
+
 RENOWN_SWITCHES = (
     "titles", "scale", "deed_fame", "discount", "prize_gate", "affinity", "duel", "news", "faction_wanted", "arena_reach",
     "virtue_insight", "lessons", "prompt", "clinic", "black_market", "virtue_choices", "official_wanted", "explain",

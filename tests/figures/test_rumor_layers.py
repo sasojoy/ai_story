@@ -12,7 +12,7 @@ from unittest import mock
 import pytest
 
 import server
-from conftest import real_content
+from conftest import no_plans, real_content
 from tianxia import (
     atlas, calendar, defection, foreshadow, journal, mapview, opportunities, orders, ranks, rules, rumor_view, timetable,
 )
@@ -29,7 +29,7 @@ CONTENT_DIR = Path(__file__).parents[2] / "content"
 @pytest.fixture
 def real():
     """真實內容，開關關著（beta 那一季的樣子）。"""
-    c = real_content()
+    c = no_plans(real_content())  # 人物照行程動身會多出天下大事（世界活起來）
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0
     return c

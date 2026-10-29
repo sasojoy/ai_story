@@ -22,7 +22,7 @@ from . import ascend  # 破境卡（招式與絕學稿案第三節）
 from . import narration  # 事件旁白每週改寫（減法季批 10）
 from . import (
     allied, annals, arena, arena_crowd, armor, atlas, battle_instance, biography, battlelog, bounties, calendar, checkin, chuangong, clinic, companion_agent, conquest, conquest_day, create, cultivation, defection, divine, economy, encounter, enlist, equipment, event_llm, explore_modes, escorts,
-    fight_llm, figure_aid, figure_life, figures, foreshadow, four_tiers, gather_llm, generals, forge_secrets, front_lines, fusion, gender, howto, insight_fx, insights, invites, journal, letters, library, mapdata, martial_arts, feasts,
+    deeds, fight_llm, figure_aid, figure_life, figures, foreshadow, four_tiers, gather_llm, generals, forge_secrets, front_lines, fusion, gender, howto, insight_fx, insights, invites, journal, letters, library, mapdata, martial_arts, feasts, plans,
     mall, materials, mounts, naming, newbie, rename, server_bots, opportunities, orders, parley, precise, push, rank_actions, ranger, ranks, renown, rise, roster, rounds, seal, seal_acts, seal_duel, seats, secret_recipes, sensing,
     shopview, siege, signature, signature_arms, silver, skillview, smithing,
     social, sortie, styles, tactics, team, terrain, territory, timetable, traits, treasures, weapons, week_unlock, works, xingshi, zh, yuedan,
@@ -1103,6 +1103,9 @@ class Game:
         mail += letters.deliver(self.state, self.content, now)  # 書信（大勢人物擴充第二批）：人物來信、過期的委託作罷
         if mail:
             self._write(letters.TITLE, mail)
+        settled = plans.deliver(self.state, self.content)  # 世界活起來：我插過手的盤算有了結果
+        if settled:
+            self._write(plans.TITLE, settled)
         cheered = feasts.deliver(self.state, self.content)  # 宴客（第三批）：散席時我那一句是席間最佳，補名望
         if cheered:
             self._write(feasts.TITLE, cheered)
@@ -3541,6 +3544,8 @@ class Game:
                 msgs = self._aid_act(arg)
             elif kind == "feast":
                 msgs = self._feast_act(arg)
+            elif kind == "plan":
+                msgs = self._plan_act(arg)
             elif kind == "errand":
                 msgs = self._errand_act(arg)
             elif kind == storyline.OPTION:
@@ -4235,6 +4240,9 @@ class Game:
             return f"{feasts.TITLE}・{feasts.host_name(c, f)}" if f is not None else feasts.TITLE
         if kind == "works":
             return f"{works.STOCK_TITLE}・{c.locations[s.player.location].name}"
+        if kind == "plan":  # 盤算（世界活起來）：「盤算・劉備」
+            plan = plans.find(s, arg.partition(":")[2])
+            return f"{plans.TITLE}・{plans._name(c, plan.who)}" if plan is not None else plans.TITLE
         if kind == "errand":  # 託付（減法季批 6）：「交信・盧植」
             e = errand_rules.find(s, arg.partition(":")[2])
             return f"{errand_rules.LABELS[e.kind]}・{errand_rules.who(c, e)}" if e is not None else "託付"
@@ -4646,6 +4654,46 @@ class Game:
     def letter_request(self) -> letters.LetterNote | None:
         """還等著模型照他的口氣重寫的那一封（server 鎖外寫；A 段，只讀）。"""
         return letters.request(self.state, self.content)
+
+    # ── 人物的行程與盤算（世界活起來；tianxia/plans.py、deeds.py）──
+
+    def _plan_options(self) -> list[Option]:
+        """人在盤算的地點：助他一臂、壞他的事（花 Config.plans.stamina）；插過手的留一顆灰的。"""
+        cost = self.content.config.plans.stamina
+        return [self._cost_option(oid, label, cost) if ok else Option(id=oid, label=label, enabled=False)
+                for oid, label, ok in plans.options(self.state, self.content)]
+
+    def _plan_act(self, arg: str) -> list[str]:
+        """助一臂（plan:help:<站>）、壞他的事（plan:block:<站>）：重驗還開著、人在那裡、站的邊對、還沒插過手、體力夠。"""
+        s, c = self.state, self.content
+        verb, _, stop = arg.partition(":")
+        problem = plans.problem(s, c, verb, stop)
+        if problem is not None:
+            return [problem]
+        cost = c.config.plans.stamina
+        if s.player.stamina < cost:
+            return [f"體力不足（需要 {cost}）。"]
+        s.player.stamina -= cost
+        return plans.join(s, c, verb, stop, self.stamp(plans.find(s, stop).due))
+
+    def plan_view(self) -> dict | None:
+        """江湖頁的盤算卡（main.plan）：全服開著的盤算裡最切身的一件；沒有開著的、開關關著是 None。"""
+        s, c = self.state, self.content
+        plan = plans.pick(s, c)
+        if plan is None:
+            return None
+        view = plans.card(s, c, plan, when=self.stamp(plan.due), minutes=self.place_minutes(plan.place))
+        for act in view["acts"]:  # 卡上的鈕跟「此地還能做」那一顆同一個字（帶體力）
+            act["label"] = f"{act['label']}（體力 {c.config.plans.stamina}）"
+        return view
+
+    def place_deeds_view(self) -> list[dict] | None:
+        """此地舊事（main.place_deeds）：這裡最近的幾筆世界記事；在路上、沒有、開關關著是 None。"""
+        s, c = self.state, self.content
+        if s.player.journey is not None:
+            return None
+        found = deeds.at_place(s, c, s.player.location)
+        return [{"when": self.stamp(d.time), "text": d.text} for d in found] or None
 
     # ── 宴客（大勢人物擴充第三批；tianxia/feasts.py）──
 
@@ -11326,6 +11374,8 @@ class Game:
         msgs += figure_life.spread(  # 風聞（大勢人物擴充）：同一大區的人物聽說了，同一方的情誼掉、對頭的漲
             s, c, "beat", fid, at=p.location, side=fig.faction,
             text=f"在{c.locations[p.location].name}打退了{fig.name}")
+        deeds.record(s, c, "beat", f"{p.name}在{c.locations[p.location].name}打退了{fig.name}。", place=p.location,  # 世界活起來
+                     figures=[fig.character] if fig.character else [], actors=[p.name], side=self._side())
         p.snubbed_until[fid] = self.now + cfg.snub_hours * HOUR
         if season_one(c, w):
             wins.credit(p, c, w, calendar.point(w.time, c, w).week, cfg.figure_defeat_prestige * cfg.contrib_per_push)
@@ -13939,7 +13989,7 @@ class Game:
             name = c.scenario.faction_name(stock, stock)
             label = works.STOCK_LABEL.format(side=name, n=s.world.supply.get(stock, 0))
             opts.append(self._cost_option("works:stockpile", label, c.config.stockpile.stamina))
-        return opts + self._aid_options() + self._feast_options()
+        return opts + self._aid_options() + self._feast_options() + self._plan_options()
 
     def _aid_options(self) -> list[Option]:
         """護著同陣營的大勢人物（figure_aid）：這裡在場的同陣營人物各一顆護衛、一顆犒軍；在自己陣營的大本營，被挑戰打退、

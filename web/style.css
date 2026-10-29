@@ -849,6 +849,16 @@ details.fold > .fold-body { border: 1px solid var(--line); border-top: 0; border
 .letter-sign { text-align: right; color: var(--ink-2); }
 .letter-task { padding: 8px 0; border-top: 1px solid var(--line); margin-bottom: 8px; }
 .letter-body .row { display: flex; gap: 8px; justify-content: flex-end; }
+/* 人物的盤算（世界活起來）：行動列底下一張卡，朱色左線；此地舊事一行一筆 */
+.card.plan-card { border-left: 3px solid var(--accent); }
+.plan-k { font-size: 12px; letter-spacing: .12em; color: var(--accent); }
+.plan-text { margin: 2px 0 6px; font-family: var(--serif); font-weight: 600; line-height: 1.6; }
+.plan-meta { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.plan-mine { margin-top: 6px; font-size: 13px; color: var(--ok); }
+.plan-card .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.card.place-deeds p { margin: 4px 0 0; font-size: 13px; line-height: 1.6; }
+.pd-k { font-size: 12px; letter-spacing: .1em; color: var(--gold); }
+.pd-when { color: var(--ink-2); margin-right: 6px; font-variant-numeric: tabular-nums; }
 /* 奪璽卡（玉璽碎片設計 5.10）：對手的架勢、輪到你出招 */
 .seal-duel .tell { margin: 4px 0; font-size: 13px; color: var(--ink-2); }
 .seal-duel .turn { margin: 4px 0; font-weight: 600; color: var(--accent); }

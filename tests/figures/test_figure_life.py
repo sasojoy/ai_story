@@ -8,7 +8,7 @@ import random
 
 import pytest
 
-from conftest import real_content
+from conftest import no_plans, real_content
 from tianxia import figure_life, figures, team, world
 from tianxia.engine import Game
 from tianxia.state import GameState, PlayerState
@@ -17,7 +17,7 @@ from tianxia.world_state import fresh_season
 
 @pytest.fixture
 def c():
-    c = real_content()
+    c = no_plans(real_content())  # 這裡量的是常去的地方之間隨機晃；照行程走的人在 tests/figures/test_plans.py
     c.config.affinity_gain_scale = 1.0  # 這裡量的是寫好的情誼數字；歷史武將同行的情誼放慢（Config.affinity_gain_scale）另測（tests/test_companions.py）
     return c
 

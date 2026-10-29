@@ -180,8 +180,11 @@ def _maybe_rally(state: GameState, content: Content, cid: str, turn: int) -> Non
 def _act(state: GameState, content: Content, cid: str, rng: random.Random) -> None:
     ch = content.characters[cid]
     fid = figures.of_character(content, cid)
+    from . import plans  # noqa: PLC0415  plans → figure_life
+
+    walks = not plans.holds(content, cid)  # 照行程走的人（世界活起來）不在常去的地方之間隨機晃；亂數照抽，別人的序列不位移
     if fid is None:
-        if len(ch.haunts) > 1 and rng.random() < STROLL:
+        if len(ch.haunts) > 1 and rng.random() < STROLL and walks:
             _move(state, content, cid, None, rng)
         return
     now = figures.state_of(state, content, fid)
@@ -196,7 +199,7 @@ def _act(state: GameState, content: Content, cid: str, rng: random.Random) -> No
     timed = season_one(content, state.world)  # 第一季：時刻表搬人，自己不移動
     if roll < move:
         # 被引將釘著的人不走動（玉璽碎片改版第 2 批：坐鎮一日、期滿回原處）；亂數是每人每輪一份，別人的序列不位移
-        if not timed and len(ch.haunts) > 1 and now.location in ch.haunts and seal_acts.pinned(state.world, fid) is None:
+        if walks and not timed and len(ch.haunts) > 1 and now.location in ch.haunts and seal_acts.pinned(state.world, fid) is None:
             _move(state, content, cid, fid, rng)
         return
     if roll < move + recruit:
@@ -315,6 +318,21 @@ def on_fall(state: GameState, content: Content, fid: str) -> list[str]:
     return lines
 
 
+FELL_DEED = "{fallen}在{place}倒下。"  # 世界記事（世界活起來）：章回主線讀 figure_fell 換交代人
+
+
+def note_fall(state: GameState, content: Content, fid: str) -> None:
+    """一位大勢人物剛退場或重創：記一筆世界記事（figure_fell；開關關著 deeds 自己不記）。"""
+    from . import deeds  # noqa: PLC0415
+
+    fig = content.figures.get(fid)
+    if fig is None:
+        return
+    spot = figures.state_of(state, content, fid).location or None
+    deeds.record(state, content, "figure_fell", FELL_DEED.format(fallen=fig.name, place=_place(content, spot) if spot else "陣中"),
+                 place=spot, figures=[fig.character] if fig.character else [], side=fig.faction)
+
+
 def _rush_to(state: GameState, content: Content, cid: str, region: str | None, spot: str | None) -> str | None:
     """盟友趕往倒下那一區的哪裡：他自己在那一區的據點（haunts）；不是大勢人物的，那一區沒有據點就到倒下的地方。
     第一季的大勢人物不自己移動（時刻表搬人）；已經在那一區、或倒下的地方不明，就不動。"""
@@ -412,6 +430,9 @@ def prompt_lines(state: GameState, content: Content, cid: str) -> str:
     heard = state.player.hearsay.get(cid, [])[-content.config.figure_life.hearsay_prompt:] if content.config.figure_life.hearsay_prompt else []
     if heard:
         lines.append(f"【{ch.name}聽說過玩家的事】{'；'.join(heard)}（可以自然地提起，不必每句都提）\n")
+    from . import deeds  # noqa: PLC0415  deeds 只讀狀態（世界活起來）
+
+    lines.append(deeds.prompt_lines(state, content, cid))
     return "".join(lines)
 
 

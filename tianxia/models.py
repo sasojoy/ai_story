@@ -1059,6 +1059,41 @@ class CharacterDef(_Strict):
     recruitable: bool = False
 
 
+class PlanContest(_Strict):
+    """行程裡的一站是「盤算」（tianxia/plans.py）：提前公告，side 那一方的人可以助他一臂、交戰的另一方可以壞他的事（散人兩樣都行、
+    豪強照此刻幫的那一軍），到點照兩邊各幾人擲骰。trends 的正數是往黃巾推（同時刻表）。"""
+
+    side: str  # 想讓這件事成的那一方（陣營 id）
+    announce: str  # 公告：「{name}打算…」（{name} 換成人物名、{place} 換成地點名）
+    win: str  # 成了的天下大事
+    lose: str  # 不成的天下大事
+    base: float = Field(default=0.6, ge=0, le=1)  # 沒人插手時成的機會
+    trends_win: dict[str, int] = Field(default_factory=dict)
+    trends_lose: dict[str, int] = Field(default_factory=dict)
+    flag_win: str | None = None  # 成了立的世界旗標
+    lose_place: str | None = None  # 不成時他退到哪（沒寫就留在原地）
+
+
+class ItineraryStop(_Strict):
+    """行程的一站（content/itineraries.json）。day 照 7 天季寫（1.0 是第 1 天 00:00、2.5 是第 2 天 12:00），別的季長照比例。
+    沒有 contest 的一站到時間就做：人走到 place、發一則天下大事 text。if_won／if_lost 列的站（可以是別人的）辦成了、沒辦成，這一站才有。"""
+
+    id: str
+    day: float = Field(ge=1, le=8)
+    place: str
+    text: str = ""  # 一般的一站：天下大事（{name}、{place} 照換）；盤算照 contest 的字
+    contest: PlanContest | None = None
+    if_won: list[str] = Field(default_factory=list)
+    if_lost: list[str] = Field(default_factory=list)
+
+
+class Itinerary(_Strict):
+    """一位人物這一季的行程（content/itineraries.json）：照史書排的幾站。有行程的人不再在常去的地方之間隨機晃（figure_life._act）。"""
+
+    who: str  # 對話人物 id（characters.json）
+    stops: list[ItineraryStop]
+
+
 class RelationDef(_Strict):
     """人物之間的一條關係（content/relations.json；大勢人物擴充第二批）。kind：brother 兄弟、mentor 師生、chief 上下（head 是師長、上司，
     members 是學生、部屬）、foe 仇敵（members 兩兩為敵；寫了 faction 的是 members 跟那一方的每一位為敵，例：唐周與黃巾）。
@@ -1331,6 +1366,7 @@ ALLOW_FAMILIES = (
     "aid:guard:", "aid:rally:", "aid:visit:",  # 護著大勢人物（figure_aid；序章裡沒有陣營，不出現）
     "act:recruit:",  # 招募歷史武將（act:recruit:<人物>，歷史武將同行；序章裡不出現）
     "feast:join:",  # 入席（宴客，tianxia/feasts.py；序章裡不出現）
+    "plan:help:", "plan:block:",  # 盤算（世界活起來，tianxia/plans.py；序章裡不出現）
 )
 
 
@@ -2974,6 +3010,27 @@ class FigureLifeTuning(_Strict):
     rally_cal_days: float = Field(default=3.0, gt=0)
 
 
+class PlanTuning(_Strict):
+    """世界活起來（Joy 2026-10-29「讓整個世界活起來」，選了「世界會自己變」加「你做的事被世界記住」；設計稿
+    https://claude.ai/artifact/LFooPvhRw5NHosh3wDUKRV；tianxia/plans.py、tianxia/deeds.py）。有名的人物照 content/itineraries.json
+    的行程自己動身、自己做事；有些站是「盤算」：提前公告，全服的人都能去那裡助他一臂或壞他的事，到點由引擎照兩邊各幾人擲骰。
+    數字全在這裡，模型不碰。"""
+
+    enabled: bool = False  # 關著時人物照舊在常去的地方之間晃，沒有行程、沒有盤算、不記世界記事（一個字都不變）
+    lead_days7: float = Field(default=1.0, ge=0)  # 盤算提前多久公告（7 天季的天數；別的季長照比例：21 天季是 3 天）
+    max_open: int = Field(default=2, ge=1)  # 全服同時最多開幾件盤算（Joy 2026-10-29「會不會一大堆盤算玩家看都看不完」）
+    stamina: int = Field(default=10, ge=0)  # 助一臂、壞他的事花幾點體力（一人一件一次）
+    # 成算：base（內容寫，預設 0.6）＋ swing ×（助的人－壞的人）÷（助＋壞＋soft），夾在 [floor, cap]
+    swing: float = Field(default=0.35, ge=0, le=1)
+    soft: int = Field(default=3, ge=1)
+    floor: float = Field(default=0.1, ge=0, le=1)
+    cap: float = Field(default=0.9, ge=0, le=1)
+    affinity: int = Field(default=3, ge=0)  # 站對了邊：替他辦成的人跟他的情誼加多少（壞事得逞的人不加情誼）
+    deeds_keep: int = Field(default=300, ge=10)  # 世界記事全服留幾筆（舊的先丟）
+    deeds_prompt: int = Field(default=3, ge=0)  # 人物對話提示最多帶幾筆跟玩家有關的記事
+    deeds_place: int = Field(default=3, ge=0)  # 此地舊事最多列幾筆
+
+
 class ParleyTuning(_Strict):
     """NPC 智能 2.0（Joy 2026-10-23「先做看看」；設計稿 https://claude.ai/artifact/KtRz62jWShogpaXEzv2sbt；tianxia/parley.py）：
     對話裡「自己說」那一句也可以是求他做事。模型當談判者，從引擎列的清單挑一件、評一個意願、要不要開條件；引擎照情誼與份量夾住意願、
@@ -3760,6 +3817,7 @@ class Config(_Strict):
     signature_arts: SignatureArtTuning = Field(default_factory=SignatureArtTuning)  # 本命武學的威力與學到時的成數（見 SignatureArtTuning）
     tactics: TacticTuning = Field(default_factory=TacticTuning)  # 一般的仗的回合與本命戰法（見 TacticTuning）
     figure_life: FigureLifeTuning = Field(default_factory=FigureLifeTuning)  # 人物活起來：每日行事、心事、風聞（見 FigureLifeTuning）
+    plans: PlanTuning = Field(default_factory=PlanTuning)  # 世界活起來：人物的行程與盤算、世界記事（見 PlanTuning）
     parley: ParleyTuning = Field(default_factory=ParleyTuning)  # NPC 智能 2.0：模型談判、引擎做事（見 ParleyTuning）
     companions: CompanionsTuning = Field(default_factory=CompanionsTuning)  # 歷史武將同行：招募、名下三位、決戰助陣（見 CompanionsTuning）
     # 情誼放慢（歷史武將同行第三節、9.4）：每一筆加的情誼乘這個倍數（renown.warmed：四捨五入，原本加 1 以上的至少加 1；扣的不乘）。
@@ -5111,6 +5169,7 @@ class Content(_Strict):
     shop_lines: dict[str, dict[str, list[str]]] = Field(default_factory=dict)  # 店面上掌櫃的話（content/shop_lines.json，店面獨立介面設計 1.4）：店 → 情況 → 句子；沒有這個檔就是空的
     seal: dict[str, ShardDef] = Field(default_factory=dict)  # 玉璽碎片（content/seal.json，照 id）；沒有這個檔就是空的（碎片關著）
     mall: dict[str, MallItem] = Field(default_factory=dict)  # 商城的商品（content/mall.json，照 id、照檔案的順序）；沒有這個檔就是空的
+    itineraries: list[Itinerary] = Field(default_factory=list)  # 人物的行程（content/itineraries.json，世界活起來）；沒有這個檔就是沒有
     relations: list[RelationDef] = Field(default_factory=list)  # 人物之間的關係（content/relations.json，大勢人物擴充第二批）；沒有這個檔就是沒有
     gather_branches: dict[str, GatherBranch] = Field(default_factory=dict)  # 找素材分支（content/gather_branches.json，照內容的順序）；沒有這個檔就是空的（分支關著）
     mark_rules: list[MarkRule] = Field(default_factory=list)  # 地方痕跡過門檻（content/mark_rules.json，減法季批 4）；沒有這個檔就是空的

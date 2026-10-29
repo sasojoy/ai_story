@@ -904,6 +904,29 @@
     </section>`;
   }
 
+  // 人物的盤算（世界活起來，main.plan）：全服開著的盤算裡最切身的一件，行動列底下一張卡。誰打算做什麼、在哪、什麼時候見分曉、
+  // 兩邊各幾人；人在那裡就有「助一臂」「壞他的事」（就是選單上的 plan: 選項，按了走 choose），不在那裡寫走過去幾分鐘、一顆去輿圖。字都是伺服器寫好的
+  function planHtml(x) {
+    if (!x) return "";
+    const far = x.minutes ? `步行約 ${x.minutes} 分鐘` : x.minutes === 0 ? "就在這裡" : "";
+    const mine = x.mine === "help" ? "你已經出過力了" : x.mine === "block" ? "你已經出過手了" : "";
+    const acts = x.acts && x.acts.length
+      ? x.acts.map((a) => `<button class="btn small${a.id.includes(":help:") ? " primary" : ""}" data-act="choose" data-id="${esc(a.id)}">${esc(a.label)}</button>`).join("")
+      : !mine && x.minutes && shown("tab:map") ? `<button class="btn small" data-act="tab" data-tab="map">去${esc(x.place)} ›</button>` : "";
+    return `<section class="card plan-card"><div class="plan-k">${esc(x.head)}</div>
+      <p class="plan-text">${esc(x.text)}</p>
+      <div class="plan-meta"><span>${esc(x.place)}${far ? `・${esc(far)}` : ""}</span><span>${esc(x.when)} 見分曉</span></div>
+      <div class="plan-meta"><span>助${esc(x.help_side)}一方 ${x.help | 0} 人</span><span>壞事 ${x.block | 0} 人</span></div>
+      ${mine ? `<div class="plan-mine">${esc(mine)}</div>` : ""}${acts ? `<div class="row">${acts}</div>` : ""}</section>`;
+  }
+
+  // 此地舊事（世界活起來，main.place_deeds）：這裡最近的幾筆世界記事，一行一筆
+  function placeDeedsHtml(list) {
+    if (!list || !list.length) return "";
+    return `<section class="card place-deeds"><div class="pd-k">此地舊事</div>${list.map((d) =>
+      `<p><span class="pd-when">${esc(d.when)}</span>${esc(d.text)}</p>`).join("")}</section>`;
+  }
+
   // 手上揭了的懸賞，加上身上有合用兵器的求兵（status.bounties，bounties.status；後者多一行 have）：一張一行，怎麼交差、賞什麼。懸賞榜在城鎮才看得到，
   // 選單上有 act:bounties 時卡底下一顆「看懸賞榜」（就是那個選項，按了走 choose），不在城鎮寫一句去哪裡看。
   // 預設展開，收起來的狀態照手上那幾張記住（S.bountyShut）：揭了新的、交了差，清單變了就重新展開
@@ -1501,7 +1524,8 @@
     if (myTurn) {
       return `${resultCard}${peek}${letter}${now}${scene}${links}${menu}${peopleAfter}${free}${guide}${senseNotes}${weekCard}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}`;
     }
-    return `${resultCard}${peek}${letter}${now}${scene}${links}${guideUp}${free}${menu}${senseNotes}${weekCard}${guideDown}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}`;
+    const planCard = planHtml(m.plan) + placeDeedsHtml(m.place_deeds); // 世界活起來：行動列與眼下要事底下（四顆行動鈕一定在第一屏）
+    return `${resultCard}${peek}${letter}${now}${scene}${links}${guideUp}${free}${menu}${senseNotes}${weekCard}${planCard}${guideDown}${skip}${orderCard}${bountyCard}${sealMine}${sealCard}`;
   }
 
   // 此地還有誰（玩家之間的互動第一層，企劃者 2026-10-08）：場景卡底下一行，名字點了打開玩家卡（peerHtml）。

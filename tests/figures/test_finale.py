@@ -8,7 +8,7 @@ import random
 
 import pytest
 
-from conftest import real_content
+from conftest import no_plans, real_content
 from tianxia import calendar, guide, rules
 from tianxia import world as world_mod
 from tianxia.engine import Game
@@ -17,7 +17,7 @@ from tianxia.engine import Game
 @pytest.fixture
 def real():
     """真實內容，開關關著（beta 那一季的樣子）。"""
-    c = real_content()
+    c = no_plans(real_content())  # 盤算會推線（世界活起來）：這裡寫死結局的門檻
     c.config.auto_open_first_season = True
     return c
 

@@ -10,7 +10,7 @@ import random
 import re
 from unittest import mock
 
-from conftest import FixedRandom, real_content
+from conftest import FixedRandom, no_plans, real_content
 from tianxia import atlas, battle_instance, battlelog, bot_policy, calendar, figures, team, timetable, world
 from tianxia.encounter import EncounterResult
 from tianxia.engine import Game, Option
@@ -61,7 +61,7 @@ SQUAD_TABLE = {
 @pytest.fixture
 def real():
     """真實內容，開關關著（beta 那一季的樣子）。"""
-    c = real_content()
+    c = no_plans(real_content())  # 盤算會推線、搬人（世界活起來）：這裡寫死人物在哪、大勢線的數字
     c.config.auto_open_first_season = True
     c.config.train_event_chance = 0.0  # 遊歷打完不接戰後事件，結果才寫得死
     c.config.renown.scale = False  # 名聲（2026-10-15）的門檻倍數另測（tests/test_renown*）；這裡的求見照原本的門檻

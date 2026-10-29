@@ -326,6 +326,7 @@ def _change(state: GameState, content: Content, fid: str, change: FigureChange) 
         from . import figure_life  # noqa: PLC0415  figure_life → figures：延後載入
 
         react = figure_life.on_fall(state, content, fid)  # 第二批：盟友悲憤趕來、掛復仇懸賞，仇敵得意（接在接手那一句後面）
+        figure_life.note_fall(state, content, fid)  # 世界活起來：記一筆世界記事（figure_fell）
     if fate in ("重挫", "到任"):  # 重挫：退出原戰線、轉往別處；到任：接下新戰線
         figure.front = change.front
         if change.location is not None:

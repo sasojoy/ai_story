@@ -27,7 +27,7 @@ from .encounter import FALLBACK_TIER, TIER_RATIOS
 from .front_lines import BAND_KEYS, GEJU_KEYS
 from .materials import DEFAULT_DROPS, TIER_NAMES
 from .models import (
-    ArtBook,
+    ArtBook, Itinerary,
     BEST_OF, FRONT_KEY, GLOW_KEYS, GOOD_HORSE, MOVES, RECRUITER_ALLIED_FIELDS, REVEAL_KEYS, ROADS, STATS, TREASURE_EFFECTS, WEAPON_KINDS, Attribute, BattleDef, CharacterDef, CheckVoice,
     CombatLines, Condition, Config, Content, CraftNames, CreateForms, DuelBoss, Effect, Event, FigureDef, FollowerDef, ForgeSecret, Foreshadows, FrontLines, GatherBranch, GearBook,
     GiftDef, Hints, MingtieContent, InsightDef, Location, MallItem, MarkRule, MarkText, OppDef,
@@ -144,6 +144,7 @@ def load_content(root: Path, profile: str | None = None) -> Content:
         seal=_shards(root / "seal.json"),
         mall=_index(MallItem, _read(root / "mall.json")) if (root / "mall.json").exists() else {},  # 商城的商品（joy 寫）
         relations=[_build(RelationDef, raw) for raw in _read(root / "relations.json")] if (root / "relations.json").exists() else [],
+        itineraries=[_build(Itinerary, raw) for raw in _read(root / "itineraries.json")] if (root / "itineraries.json").exists() else [],
         gather_branches=_index(GatherBranch, _read(root / "gather_branches.json")) if (root / "gather_branches.json").exists() else {},
         mark_rules=[_build(MarkRule, raw) for raw in _read(root / "mark_rules.json")] if (root / "mark_rules.json").exists() else [],
         outing_lines=_read(root / "outing_lines.json") if (root / "outing_lines.json").exists() else {},  # 探索一顆的段落（減法季批 2）
@@ -1346,6 +1347,42 @@ def check_relations(c: Content, need, known) -> None:
         if rel.faction is not None:
             need(rel.kind == "foe", f"{where}：只有仇敵能寫 faction")
             known(where, [rel.faction], factions, "陣營")
+
+
+def check_itineraries(c: Content, need, known) -> None:
+    """人物的行程（content/itineraries.json，世界活起來）：人物存在、能深度對話、不是跟著別人走的（follows）、一人一份；
+    站的 id 全檔不重複、照 day 排、地點存在；if_won／if_lost 指的是更早的盤算；盤算的陣營與大勢線存在、退到的地點存在。"""
+    factions = [f.id for f in c.scenario.factions]
+    trends = [t.id for t in c.scenario.trends]
+    seen_who: set[str] = set()
+    stops: dict[str, tuple[float, bool]] = {}
+    for it in c.itineraries:
+        where = f"itineraries.json 的 {it.who}"
+        known(where, [it.who], c.characters, "人物")
+        need(it.who not in seen_who, f"{where}：同一個人只能有一份行程")
+        seen_who.add(it.who)
+        ch = c.characters.get(it.who)
+        if ch is not None:
+            need(ch.deep_interaction, f"{where}：要能深度對話（每日行事只動這種人）")
+            need(ch.follows is None, f"{where}：跟著別人走的人（follows）不寫行程，跟著帶頭的人走")
+        need(bool(it.stops), f"{where}：至少一站")
+        last = 0.0
+        for st in it.stops:
+            at = f"{where} 的 {st.id}"
+            need(st.id not in stops, f"{at}：站的 id 全檔重複")
+            need(st.day >= last, f"{at}：要照 day 排")
+            last = st.day
+            known(at, [st.place], c.locations, "地點")
+            for ref in st.if_won + st.if_lost:
+                need(ref in stops and stops[ref][1], f"{at}：if_won／if_lost 的 {ref} 要是更早的盤算")
+            if st.contest is None:
+                need(bool(st.text), f"{at}：一般的一站要寫 text")
+            else:
+                known(at, [st.contest.side], factions, "陣營")
+                known(at, list(st.contest.trends_win) + list(st.contest.trends_lose), trends, "大勢線")
+                if st.contest.lose_place is not None:
+                    known(at, [st.contest.lose_place], c.locations, "地點")
+            stops[st.id] = (st.day, st.contest is not None)
 
 
 def check_companions(c: Content, need) -> None:
@@ -3265,6 +3302,7 @@ def validate(c: Content) -> None:
                 first = stance_events.setdefault(x.action.event_daily, f"{fid}:{x.id}")
                 need(first == f"{fid}:{x.id}", f"大勢人物 {fid} 的心意 {x.id}：事件 {x.action.event_daily} 已經掛在 {first}")
     check_relations(c, need, known)
+    check_itineraries(c, need, known)
     check_companions(c, need)
     check_foreshadows(c, need, known, region_ids, front_ids, counters_written)
     check_orders(c, need, known, front_ids)

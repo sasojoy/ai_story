@@ -686,6 +686,7 @@ class PlayerState(BaseModel):
     picking_dadian: bool = False  # 打開了「打點」那一間店（21 天季的銀兩出口，第 9 批畫面乙）；離開、同步時這裡一樣都做不了、出發都收起來
     picking_market: bool = False  # 打開了馬市的第二層選單（同 picking_smith）；離開、存檔修補、同步時人不在馬市、出發都收起來
     feasting: int | None = None  # 赴宴中（宴客，tianxia/feasts.py）：坐在哪一場宴席上（Feast.id），選單換成敬酒詞
+    plans_paid: list[str] = Field(default_factory=list)  # 領過盤算結果的站 id（世界活起來，這一季的）
     feasts_paid: list[int] = Field(default_factory=list)  # 領過「席間最佳」名望的宴席 id（這一季的）
     picking_arena: bool = False  # 打開了擂台的第二層選單（同 picking_market）；離開、存檔修補、同步時人不在城鎮、出發都收起來
     treasure: Equipment | None = None  # 身上的寶物（裝備四欄設計第六節；隨時能換，2.3）；舊存檔沒有＝沒帶
@@ -1360,6 +1361,36 @@ class Toast(BaseModel):
     fixed: bool = False  # 挑的是固定的敬酒詞
 
 
+class Deed(BaseModel):
+    """世界記事的一筆（tianxia/deeds.py；世界活起來）：誰、在哪、做了什麼。kind：plan（盤算的結果）、move（人物照行程走到哪）、
+    beat（玩家打退大勢人物）、figure_fell（大勢人物退場或重創）；章回主線另寫 chapter。figures 是對話人物 id，actors 是玩家名號，
+    side 是這件事算哪一方的（沒有是 None）。人物對話、此地舊事、章回都讀它。"""
+
+    id: int
+    kind: str
+    text: str
+    place: str | None = None
+    figures: list[str] = Field(default_factory=list)
+    actors: list[str] = Field(default_factory=list)
+    side: str | None = None
+    time: float = 0.0
+
+
+class Plan(BaseModel):
+    """一件盤算（tianxia/plans.py）：行程的一站 stop，從 open_at 公告到 due 到點結算（世界秒）。helpers／blockers 是助他一臂、
+    壞他事的玩家名號（一人一件一次）。settled 之後 won 是成不成。"""
+
+    stop: str
+    who: str  # 對話人物 id
+    place: str
+    open_at: float
+    due: float
+    helpers: list[str] = Field(default_factory=list)
+    blockers: list[str] = Field(default_factory=list)
+    settled: bool = False
+    won: bool | None = None
+
+
 class Feast(BaseModel):
     """一位人物設的宴（tianxia/feasts.py）：在 place 從 start 擺到 end（世界秒），人在那裡就能赴宴、敬一句酒。
     散席（settled）時分數最高的那一句（best：名號）上天下大事，那個人同步時名望 +feast_fame（PlayerState.feasts_paid 記領過的）。"""
@@ -1762,7 +1793,7 @@ class WorldState(BaseModel):
         （同 world_state.SealRegistry._drop_empty_uses；不用 Field(exclude_if=…)：Pydantic 2.11 才有）。"""
         data = handler(self)
         if isinstance(data, dict):
-            for key in ("marks_fired", "mark_helpers", "final_tiers", "stance_counts", "stance_week", "stance_active", "god_names", "god_firsts"):
+            for key in ("marks_fired", "mark_helpers", "final_tiers", "stance_counts", "stance_week", "stance_active", "god_names", "god_firsts", "plans", "stops_done", "deeds", "deed_seq"):
                 if key in data and not data[key]:
                     del data[key]
         return data
@@ -1771,6 +1802,11 @@ class WorldState(BaseModel):
     # 大勢人物擴充第三批（tianxia/feasts.py、yuedan.py、bounties 的求援委託）：這一季的宴席、月旦評、人物對整個陣營發的求援委託
     feasts: list[Feast] = Field(default_factory=list)
     feast_seq: int = 0
+    # 世界活起來（tianxia/plans.py、deeds.py）：盤算（開著的與這一季結算過的）、行程每一站做完了沒（站 id → 成不成；一般的一站記 True）、世界記事
+    plans: list[Plan] = Field(default_factory=list)
+    stops_done: dict[str, bool] = Field(default_factory=dict)
+    deeds: list[Deed] = Field(default_factory=list)
+    deed_seq: int = 0
     yuedan: list[YuedanEntry] = Field(default_factory=list)
     yuedan_week: int = 0  # 月旦評評到第幾週了
     rallies: list[Bounty] = Field(default_factory=list)  # 求援委託（motive「求援」；不上懸賞榜，自己陣營的人都看得到、前 quota 個辦成的有賞）
