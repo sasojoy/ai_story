@@ -2474,6 +2474,8 @@ MAIN_ACTIONS = {
     # 鐵匠鋪的素材買賣（素材與經濟設計第四、五節）：收購一次賣 count 個、升階一次換一個
     "smith_sell": lambda g, b: g.smith_sell(str(b.get("material", "")), max(1, _int(b.get("count"), 1))),
     "smith_upgrade": lambda g, b: g.smith_upgrade(str(b.get("attribute", "")), _int(b.get("tier"), 0)),
+    # 打造頁爐火上的「看火候」（鐵匠鋪與合成流程 3.2）：叫同一支 silver.furnace；店開著時選單上沒有 act:furnace，所以另開這一個
+    "smith_furnace": lambda g, b: g.smith_furnace(),
     # 自家大本營捐軍備（素材與經濟設計第六節）：一次捐一種素材 count 個（上限切一半：收得下的收）；軍需帳那一頁送 items
     # （[{material, count}, …]，挑好的幾種一起捐、一則紀錄）
     "donate": lambda g, b: g.donate_items(donate_items(b)) if "items" in b else g.donate(str(b.get("material", "")), max(1, _int(b.get("count"), 1))),
@@ -2812,6 +2814,12 @@ MENXIA_ACTIONS = {
     "wield": lambda g, b: g.wield_weapon(str(b.get("weapon") or "")),  # 裝備庫上那一件換到身上它那一欄（兵器設計 2.2、裝備四欄 2.3）：武器、防具、坐騎、寶物都走這裡，網頁照舊送 weapon 這個鍵
     "dismantle": lambda g, b: g.dismantle_weapon(str(b.get("weapon") or "")),  # 裝備庫上那一件拆成一個素材（兵器設計 4.7.1、裝備四欄 4.8）：坐騎、寶物不能拆
     "feed": lambda g, b: g.feed_mount(),
+    # 裝備庫那一列的「修」「淬煉」（鐵匠鋪與合成流程 3.4）：item 是裝備庫那一件的 id（兵:N、甲:N；舊網頁送 weapon 也收），修好淬完還在裝備庫、不換上；
+    # 擋法同店裡的直接開爐（鐵匠鋪開著、那一串是眼前的選單）。身上那件照舊送選項 id（smith:repair 等），不走這裡
+    "repair_item": lambda g, b: g.repair_item(str(b.get("item") or b.get("weapon") or "")),
+    "temper_item": lambda g, b: g.temper_item(str(b.get("item") or b.get("weapon") or "")),
+    # 裝備庫勾好的一次拆完（鐵匠鋪與合成流程 3.4）：items 是 id 的串列（不是串列的當沒勾）；不擋地點、拆不了的跳過寫原因、一則修練紀錄
+    "dismantle_many": lambda g, b: g.dismantle_many(_id_list(b.get("items"))),
     # 傳功門下（Config.chuangong）：名冊上點的那個人（person）練一項（what：neigong／wugong／str／agi／con）；引擎照 lessons 驗
     "chuangong": lambda g, b: g.chuangong(str(b.get("person") or ""), str(b.get("what") or "")),  # 身上那匹餵一個一階素材（裝備四欄 5.4）：閒著時哪裡都能餵
 }

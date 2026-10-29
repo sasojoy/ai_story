@@ -417,6 +417,77 @@ def test_armor_temper_sits_after_repair_and_the_weapon_temper_is_untouched(conte
     assert p.armor.tempers == 1 and p.weapon.tempers == 0
 
 
+# 鐵匠鋪與合成流程 3.4（B 批）：修與淬煉裝備庫裡的那一件（item_id；None＝身上那件，舊呼叫端一字不改）
+
+
+def _two_jackets(content, world, **kw):
+    """身上一件（甲:1，一階、耐久 40）、裝備庫一件（甲:2，二階、耐久 30）。"""
+    game = _smithy(content, world, **kw)
+    p = game.state.player
+    p.armor = _jacket(edge=40)
+    p.rack = [_jacket(tier=2, edge=30, aid="甲:2", name="庫甲")]
+    return game
+
+
+def test_the_worn_armors_own_id_is_the_same_as_no_id(content, world):
+    a, b = _two_jackets(content, world, name="甲"), _two_jackets(content, world, name="乙")
+    assert armor.repair_problem(a.state, content) == armor.repair_problem(b.state, content, "甲:1") is None
+    assert smithing.temper_problem(a.state, content, "armor") == smithing.temper_problem(b.state, content, "armor", "甲:1") is None
+    assert smithing.temper_material(a.state, content, "armor") == smithing.temper_material(b.state, content, "armor", "甲:1") == "gang_1"
+    assert armor.repair(a.state, content) == armor.repair(b.state, content, "甲:1")
+    assert smithing.temper(a.state, content, "armor") == smithing.temper(b.state, content, "armor", "甲:1")
+    sa, sb = a.state.player, b.state.player
+    assert (sa.armor, sa.rack, sa.materials, sa.stats["silver"]) == (sb.armor, sb.rack, sb.materials, sb.stats["silver"])
+
+
+def test_repairing_a_rack_armor_leaves_the_worn_one_and_its_warning_alone(content, world):
+    game = _two_jackets(content, world)
+    p = game.state.player
+    p.armor_warned = True
+    msgs = armor.repair(game.state, content, "甲:2")
+    assert [a.id for a in p.rack] == ["甲:2"] and p.rack[0].edge == 100 and p.armor.id == "甲:1" and p.armor.edge == 40
+    assert p.armor_warned is True and p.stats["silver"] == 195 and p.materials == {"gang_1": 2, "gang_2": 2, "kuai_1": 2}
+    assert msgs == ["鐵匠拿精鐵砂把【庫甲】補好了（銀兩 -5）。"]
+    armor.repair(game.state, content, "甲:1")
+    assert p.armor.edge == 100 and p.armor_warned is False
+
+
+def test_a_rack_armor_is_repaired_only_when_it_needs_it_and_can_be_paid_for(content, world):
+    game = _two_jackets(content, world)
+    p, s = game.state.player, game.state
+    p.rack[0].edge = 100
+    assert armor.repair_problem(s, content, "甲:2") == armor.INTACT
+    p.rack[0].edge = 30
+    assert armor.repair_problem(s, content, "甲:2") is None
+    assert armor.repair_problem(s, content, "甲:9") == equipment.RACK_MISSING
+    assert armor.repair_problem(s, content, "兵:1") == equipment.RACK_MISSING  # 兵器的 id 不歸防具管
+    p.stats["silver"] = 3
+    assert armor.repair_problem(s, content, "甲:2") == "還差 2 兩"
+    p.stats["silver"], p.materials = 200, {"gang_2": 2}
+    assert armor.repair_problem(s, content, "甲:2") == equipment.NO_REPAIR_MATERIAL
+    p.materials, p.location = {"gang_1": 3}, "lake"
+    assert armor.repair_problem(s, content, "甲:2") == weapons.NOT_HERE
+    before = (p.stats["silver"], dict(p.materials), p.rack[0].edge)
+    assert armor.repair(s, content, "甲:2") == [f"（{weapons.NOT_HERE}。）"]
+    assert (p.stats["silver"], dict(p.materials), p.rack[0].edge) == before
+
+
+def test_tempering_a_rack_armor_takes_the_material_that_fits_it_and_keeps_it_in_the_rack(content, world):
+    game = _two_jackets(content, world)
+    p, s = game.state.player, game.state
+    p.materials = {"gang_1": 5, "gang_2": 1, "gang_3": 1}
+    assert smithing.temper_material(s, content, "armor") == "gang_1"
+    assert smithing.temper_material(s, content, "armor", "甲:2") == "gang_2"
+    assert smithing.temper_problem(s, content, "armor", "甲:2") is None
+    msgs = smithing.temper(s, content, "armor", "甲:2")
+    assert p.rack[0].tempers == 1 and p.armor.tempers == 0 and p.armor.id == "甲:1" and [a.id for a in p.rack] == ["甲:2"]
+    assert p.materials == {"gang_1": 5, "gang_3": 1} and p.stats["silver"] == 170
+    assert msgs[0] == "鐵匠拿玄鋼骨把【庫甲】淬了一回，這是第 1 次。"
+    p.rack[0].tempers = content.config.armor.temper_max
+    assert smithing.temper_problem(s, content, "armor", "甲:2") == smithing.FULL
+    assert smithing.temper_problem(s, content, "armor", "甲:9") == equipment.RACK_MISSING
+
+
 def test_armor_rows_and_card_carry_tempers_and_the_recipe(content, world):
     game = _smithy(content, world)
     smithing.forge(game.state, content, world, smithing.ARMOR_KIND, "gang_1", "kuai_1", rng=random.Random(0))

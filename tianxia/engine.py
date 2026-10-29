@@ -6398,10 +6398,11 @@ class Game:
                                         prologue=prologue_rules.active(s, c))
         if shop == "tavern":
             return self.tavern_view()
-        view = {"smith": shopview.smith_view, "market": shopview.market_view, "board": shopview.board_view}[shop](s, c, self.world)
-        if shop == "smith":  # 素材買賣（素材與經濟設計第四、五節）：收購、升階都關著是 None
-            view["trade"] = shopview.trade_view(s, c, self._pill_day())
-        return view
+        if shop == "smith":  # 打造頁的爐火（鐵匠鋪與合成流程 3.2，forge.furnace）要回體丹的換日與序章：Game 才知道
+            view = shopview.smith_view(s, c, self.world, day=self._pill_day(), prologue=prologue_rules.active(s, c))
+            view["trade"] = shopview.trade_view(s, c, self._pill_day())  # 素材買賣（素材與經濟設計第四、五節）：收購、升階都關著是 None
+            return view
+        return {"market": shopview.market_view, "board": shopview.board_view}[shop](s, c, self.world)
 
     def smith_line(self, kind: str, main: str | None = None, aux: str | None = None) -> dict:
         """店面打造頁爐裡放了什麼，這一爐會怎樣（shopview.smith_line；/api/smith_line）。只讀。"""
@@ -6491,6 +6492,62 @@ class Game:
         self._save_season()
         return self._log(msgs)
 
+    def smith_furnace(self) -> list[str]:
+        """打造頁爐火上的「看火候」（鐵匠鋪與合成流程 3.2；MAIN_ACTIONS["smith_furnace"]）：叫跟打點頁、選單 act:furnace 同一支 silver.furnace
+        （價錢、一天一次、序章不能用、下一爐用掉、只管打造不管煉製，一字不改），所以打點帳簿那一格讀的是同一個 furnace_ready。
+        擋法同 smith_forge／_trade_open：銀兩出口開著（silver.on）、店開著而且那一串是眼前的選單（休季、決戰開打時選單上沒有它，拒）——
+        不直接送 act:furnace，因為店開著時選單是店裡那一串，act:furnace 不在上面，Game.choose 會拒。看成了寫一則「鐵匠鋪」紀錄（同 smith_upgrade）；
+        被拒絕的不收錢、不寫紀錄。不擲鐵匠順口、不動掌櫃那一句（走打點那條路本來就不擲）。"""
+        s, c = self.state, self.content
+        if not self._trade_open(silver.on(c, s.world)):
+            return self._log([equipment.NOT_NOW])
+        day, prologue = self._pill_day(), prologue_rules.active(s, c)
+        problem = silver.furnace_problem(s, c, day, prologue)
+        msgs = silver.furnace(s, c, day, prologue)
+        if problem is None:
+            journal.add_entry(s, Draft(weapons.SMITH).entry(s.world.time, msgs))
+            self._save_season()
+        return self._log(msgs)
+
+    def repair_item(self, item_id: str) -> list[str]:
+        """裝備庫那一列的「修」（鐵匠鋪與合成流程 3.4；MENXIA_ACTIONS["repair_item"]，id 是「兵:N」「甲:N」）：見 _gear_work。"""
+        return self._gear_work(str(item_id), "repair")
+
+    def temper_item(self, item_id: str) -> list[str]:
+        """裝備庫那一列的「淬煉」（鐵匠鋪與合成流程 3.4；MENXIA_ACTIONS["temper_item"]）：見 _gear_work。"""
+        return self._gear_work(str(item_id), "temper")
+
+    def _gear_work(self, item_id: str, what: str) -> list[str]:
+        """修或淬煉裝備庫裡（或身上）的一件（what 是 repair 或 temper）：跟身上那件同一套規則（weapons／armor.repair、smithing.temper 的 item_id：
+        工錢、素材〔淬煉自動挑最便宜的同階以上〕、淬煉上限、修回滿），做完那一件還在原來的地方、不換上。走修練頁那條路（/api/menxia/…），
+        不受店裡選單只列 8 顆的限制；擋法同 smith_forge／_trade_open（鐵匠鋪開著、那一串是眼前的選單：休季、決戰開打時拒，不收錢）。
+        花了錢或料之後照 smith_upgrade 的路：掌櫃那一句換成這一下的（_shop_after：修、淬煉、被拒的原因）、擲鐵匠順口（_smith_clue，跟選單上
+        smith:repair／temper 一樣只在真的花了錢或料之後）、寫一則「鐵匠鋪」江湖紀錄；被拒絕的什麼都不動、不擲、不寫。"""
+        s, c = self.state, self.content
+        p = s.player
+        if not self._trade_open(True):
+            return self._log([equipment.NOT_NOW])
+        p.shop_clue = ""
+        slot = next((sl for sl in equipment.DISMANTLABLE if equipment.target(p, sl, item_id) is not None), None)
+        if slot is None:
+            self._shop_after(equipment.RACK_MISSING, what)
+            return self._log([f"（{equipment.RACK_MISSING}。）"])
+        gear = armor if slot == "armor" else weapons
+        problem = gear.repair_problem(s, c, item_id) if what == "repair" else smithing.temper_problem(s, c, slot, item_id)
+        self._shop_after(problem, what)
+        silver_before, mats_before = p.stats.get("silver", 0), sum(p.materials.values())
+        msgs = gear.repair(s, c, item_id) if what == "repair" else smithing.temper(s, c, slot, item_id)
+        if problem is not None:
+            return self._log(msgs)
+        if p.stats.get("silver", 0) < silver_before or sum(p.materials.values()) < mats_before:
+            clue = self._smith_clue(paid=p.stats.get("silver", 0) < silver_before)
+            if clue:
+                p.shop_clue = clue[0]
+            msgs = msgs + clue
+        journal.add_entry(s, Draft(weapons.SMITH).entry(s.world.time, msgs))
+        self._save_season()
+        return self._log(msgs)
+
     def wield_weapon(self, item_id: str) -> list[str]:
         """修練頁的「換上」（兵器設計 2.2、裝備四欄設計 2.3）：武器、防具、寶物哪裡都能換（含路上、閉關中；寶物不設限制，企劃者 2026-10-11），
         坐騎路上不能換（equipment.wield 擋）、不花體力，換進那一件自己的欄位；寫一則修練紀錄。網頁照舊送 weapon 這個鍵
@@ -6512,6 +6569,16 @@ class Game:
         """修練頁裝備庫的「拆解」（兵器設計 4.7.1、裝備四欄設計 4.8）：武器、防具哪裡都能拆、不花體力；坐騎、寶物不能拆；寫一則修練紀錄。"""
         msgs = self._log(equipment.dismantle(self.state, self.content, item_id, equipment.DISMANTLABLE))
         if msgs and msgs[0].startswith(equipment.DISMANTLE_PREFIX):
+            self._menxia_entry(msgs[0], self._xinde())
+        return msgs
+
+    @_not_while_preparing
+    def dismantle_many(self, item_ids: list[str]) -> list[str]:
+        """批量拆解（鐵匠鋪與合成流程 3.4；MENXIA_ACTIONS["dismantle_many"]，見 equipment.dismantle_many）：裝備庫裡勾好的一次拆完，
+        照 melt_many 的做法——拆不了的跳過寫原因、拆成了寫一則修練紀錄（標記是那一句總結）。同 dismantle_weapon 不擋地點、不花體力。"""
+        held = len(self.state.player.rack)
+        msgs = self._log(equipment.dismantle_many(self.state, self.content, item_ids))
+        if len(self.state.player.rack) < held:
             self._menxia_entry(msgs[0], self._xinde())
         return msgs
 

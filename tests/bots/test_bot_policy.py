@@ -799,3 +799,66 @@ def test_apply_job_for_a_mastery_that_is_no_longer_pending_does_nothing(content,
     game.state.player.naming = None
     assert bot_policy.apply_job(game, job, ("破雲拳", "一句話。")) == []
     assert not _named(game, "破雲拳")
+
+
+def _smith_with_a_dull_blade(content, world, name, armor_on=True):
+    """人在測試內容的城鎮鐵匠鋪（兵器開著，防具照 armor_on）、身上那門流雲劍配手上刃（刀口 40）、背包精鐵砂 ×6。"""
+    from tianxia import rules
+    from tianxia.engine import Game
+    from tianxia.state import Weapon
+
+    content.config.weapons.enabled, content.config.armor.enabled = True, armor_on
+    game = Game.new(content, name, rng=random.Random(0), world=world)
+    game.client = None
+    rules.learn_skill(game.state, content, "sword")
+    p = game.state.player
+    p.location, p.stamina, p.stats["silver"], p.stats["wis"] = "town", 100.0, 200, 5
+    p.member.wugong_id = "sword"
+    p.weapon = Weapon(id="兵:1", name="手上刃", kind="劍", attribute="柔", tier=1, quality="下品", edge=40)
+    p.materials = {"gang_1": 6}
+    game.sync(0.0)
+    game.choose("act:smith")
+    return game
+
+
+def _forbid_the_new_shop_actions(monkeypatch):
+    from tianxia.engine import Game
+
+    def never(name):
+        def refuse(self, *args, **kwargs):
+            raise AssertionError(f"機器人與假人不走 Game.{name}（鐵匠鋪與合成流程 B 批新開的，只給網頁）")
+        return refuse
+
+    for name in ("repair_item", "temper_item", "dismantle_many", "smith_furnace"):
+        monkeypatch.setattr(Game, name, never(name))
+
+
+def test_the_whole_season_bot_still_repairs_and_tempers_through_the_step_by_step_menu(content, world, monkeypatch):
+    """鐵匠鋪與合成流程 B 批新開的 repair_item／temper_item／dismantle_many／smith_furnace 只給網頁；整季機器人照舊按選單上的
+    smith:repair、smith:temper（店面設計 6.6：不替它們改）：選項 id、鈕上的字、做完的結果一個字不變。"""
+    from tianxia import smithing
+
+    game = _smith_with_a_dull_blade(content, world, "整季", armor_on=False)  # 防具開著機器人還會順便買一件甲：這一條只看兵器頁
+    ids = {o.id: o for o in game.options(odds=False)}
+    assert ids["smith:repair"].label == "修【手上刃】（鋒利度 40・精鐵砂×1＋5 兩）" and ids[smithing.TEMPER].label == "淬煉【手上刃】（第 1/5 次・精鐵砂×1）"
+    _forbid_the_new_shop_actions(monkeypatch)
+    monkeypatch.setattr(smithing, "forge_plan", lambda *a, **k: None)  # 這一條只看修與淬煉：不讓它先拿素材去打一把
+    game.choose("smith:back")  # visit_smith 自己進門（act:smith）
+    bot.visit_smith(game)
+    p = game.state.player
+    assert p.weapon.edge == 100 and p.weapon.tempers == 5 and p.materials == {} and p.stats["silver"] == 195  # 修一次（1 素材＋5 兩）、淬五次（一階不收錢）
+    assert not p.picking_smith  # 做完離開
+    assert smithing.TEMPER_TITLE in {e.title for e in game.state.journal} and "鐵匠鋪" in {e.title for e in game.state.journal}  # 選單那條路的紀錄標題照舊
+
+
+def test_the_server_bot_still_repairs_through_the_menu_and_never_tempers(content, world, monkeypatch):
+    from tianxia import smithing
+
+    game = _smith_with_a_dull_blade(content, world, "假人")
+    _forbid_the_new_shop_actions(monkeypatch)
+    profile = _profile("guan")
+    scored = {o.id: bot_policy.score(game, o, profile) for o in game.options(odds=False)}
+    assert scored["smith:repair"] == bot_policy.SMITH_SCORE and scored.get(smithing.TEMPER) is None  # 修；不淬煉
+    game.choose("smith:repair")
+    assert game.state.player.weapon.edge == 100 and game.state.player.weapon.tempers == 0
+    assert bot_policy._smith_want(game) != smithing.TEMPER

@@ -157,6 +157,18 @@ def _find(p: PlayerState, item_id: str, slots: tuple[str, ...]) -> Equipment | N
     return next((item for item in p.rack if item.id == item_id and item.slot in slots), None)
 
 
+RACK_MISSING = "裝備庫裡沒有這一件"  # 待 joy 潤（鐵匠鋪與合成流程 3.4）：修、淬煉點名的那一件不在身上、也不在裝備庫（id 對不上、或是別一欄的）
+
+
+def target(p: PlayerState, slot: str, item_id: str | None = None) -> Equipment | None:
+    """修與淬煉要動的那一件（鐵匠鋪與合成流程 3.4）：item_id 是 None 就是身上這一欄那一件（舊呼叫端一字不改）；給了 id 就照 id 找——
+    先看是不是身上那件（同一件，結果跟 None 一樣），再在裝備庫裡找這一欄的；找不到（id 不對、別一欄的）是 None。"""
+    current = worn(p, slot)
+    if item_id is None or (current is not None and current.id == item_id):
+        return current
+    return _find(p, item_id, (slot,))
+
+
 def wield(state: GameState, content: Content, item_id: str, slots: tuple[str, ...]) -> list[str]:
     """換上（2.3）：裝備庫裡 slots 這幾欄的一件換到身上它自己那一欄，身上原本那件放回裝備庫（空著就直接穿上）；重設那一欄的提醒。
     不花體力；只有 road_locked 的欄位（坐騎）在路上不能換，其餘不看人在做什麼（寶物也是，2.3【定】）。先照 id 找、再看那一欄開著沒：找到了而那一欄關著、或 slots 裡一欄都沒開著，是 NOT_NOW；
@@ -267,22 +279,77 @@ def dismantle_confirm(content: Content, item: Equipment) -> str:
 def dismantle(state: GameState, content: Content, item_id: str, slots: tuple[str, ...]) -> list[str]:
     """拆解（兵器設計 4.7.1、裝備四欄 4.8）：裝備庫裡 slots 這幾欄的一件拆掉，換一個素材。不花銀兩、不花體力、不必在鐵匠鋪；
     網頁先問一次（FB-125），引擎收到就拆。坐騎、寶物不在 DISMANTLABLE 裡，一開頭就濾掉（寶物的 attribute 是空字串，
-    丟進 dismantle_material 會硬拆出東西）。身上那件不在裝備庫裡，找不到。拒絕的順序同 wield。"""
+    丟進 dismantle_material 會硬拆出東西）。身上那件不在裝備庫裡，找不到。拒絕的順序同 wield（檢查在 _dismantle_check，批量拆解共用）。"""
+    chosen, problem = _dismantle_check(state, content, item_id, slots)
+    if problem is not None:
+        return [problem]
     p = state.player
-    slots = tuple(slot for slot in slots if slot in DISMANTLABLE)
-    chosen = _find(p, item_id, slots)
-    if chosen is None:
-        return [DISMANTLE_MISSING if any(on(content, slot) for slot in slots) else NOT_NOW]
-    if not on(content, chosen.slot):
-        return [NOT_NOW]
-    if chosen.signature is not None:
-        return [SIGNATURE_KEPT_LINE.format(unit=unit_for(chosen.slot, chosen.kind))]  # 本命兵器：一季全服只有一把，拆了就沒了、上不了神器譜
-    if chosen.original:
-        return [ORIGINAL_KEPT_LINE.format(unit=unit_for(chosen.slot, chosen.kind))]  # 5.4：一季全服只有一把，拆了就沒了、上不了神器譜；仿品照一般的拆
     material = dismantle_material(content, chosen)
     p.rack.remove(chosen)
     p.materials[material.id] = p.materials.get(material.id, 0) + 1
     return [f"{DISMANTLE_PREFIX}【{chosen.name}】，拆出了{material.name}×1。"]
+
+
+def _dismantle_check(state: GameState, content: Content, item_id: str, slots: tuple[str, ...]) -> tuple[Equipment | None, str | None]:
+    """拆得了嗎（dismantle 與 dismantle_many 共用）：回（那一件, 拒絕的話；拆得了是 None）。裝備庫裡找不到時那一件是 None。
+    坐騎、寶物不在 DISMANTLABLE 裡，一開頭就濾掉；身上那件不在裝備庫裡，找不到。"""
+    slots = tuple(slot for slot in slots if slot in DISMANTLABLE)
+    chosen = _find(state.player, item_id, slots)
+    if chosen is None:
+        return None, DISMANTLE_MISSING if any(on(content, slot) for slot in slots) else NOT_NOW
+    if not on(content, chosen.slot):
+        return chosen, NOT_NOW
+    if chosen.signature is not None:
+        return chosen, SIGNATURE_KEPT_LINE.format(unit=unit_for(chosen.slot, chosen.kind))  # 本命兵器：一季全服只有一把，拆了就沒了、上不了神器譜
+    if chosen.original:
+        return chosen, ORIGINAL_KEPT_LINE.format(unit=unit_for(chosen.slot, chosen.kind))  # 5.4：一季全服只有一把，拆了就沒了、上不了神器譜；仿品照一般的拆
+    return chosen, None
+
+
+# 批量拆解（鐵匠鋪與合成流程 3.4；字都待 joy 潤）
+DISMANTLE_MANY_NONE = "沒有勾選要拆的東西。"
+DISMANTLE_MANY_NOTHING = "一件都沒拆成。"
+DISMANTLE_MANY_DONE = "拆了 {n} 件，得 {gain}"  # 稿第八節：「拆了 2 件，得 驚羽 ×1、粗鐵 ×1」
+DISMANTLE_MANY_GAIN = "{name} ×{count}"
+DISMANTLE_MANY_SKIPS = 3  # 拆不了的最多列幾句原因（同批量熔煉），其餘寫「還有 N 件沒拆」
+DISMANTLE_MANY_MORE = "還有 {n} 件沒拆。"
+DISMANTLE_WORN = "身上這一件還穿著，拆不得，先換下來。"
+
+
+def dismantle_many(state: GameState, content: Content, item_ids: list[str], slots: tuple[str, ...] = DISMANTLABLE) -> list[str]:
+    """批量拆解（鐵匠鋪與合成流程 3.4，照 library.melt_many 的做法）：裝備庫裡勾的一次拆完。每一件的檢查、拆出什麼跟一件一件拆
+    （dismantle）一模一樣（一件一個同階素材、不花銀兩與體力、不必在鐵匠鋪；原品、本命兵器拆不得）；拆不了的跳過、寫原因（身上那件另寫
+    DISMANTLE_WORN）。重複的 id 只算一次、最多收裝備庫格數那麼多（多送的當沒送）。結果：[總結「拆了 N 件，得 甲 ×1、乙 ×1」（素材照
+    先拆的先寫、同一種合成一格）, 最多 DISMANTLE_MANY_SKIPS 句原因, 其餘「還有 N 件沒拆」]；一件都沒拆成第一句是 DISMANTLE_MANY_NOTHING，
+    沒勾東西是 [DISMANTLE_MANY_NONE]。序章與籌備中由呼叫端（Game.dismantle_many）擋。"""
+    p = state.player
+    ids = list(dict.fromkeys(i for i in item_ids if isinstance(i, str) and i))[: content.config.weapons.rack_cap]
+    if not ids:
+        return [DISMANTLE_MANY_NONE]
+    on_body = {item.id: item for item in (worn(p, slot) for slot in DISMANTLABLE) if item is not None}
+    gain: dict[str, int] = {}
+    count = 0
+    skipped: list[str] = []
+    for item_id in ids:
+        chosen, problem = _dismantle_check(state, content, item_id, slots)
+        if problem is not None:
+            body = on_body.get(item_id) if chosen is None else None
+            known = chosen or body
+            name = f"【{known.name}】" if known is not None else f"「{item_id}」"
+            skipped.append(f"{name}沒拆：{DISMANTLE_WORN if body is not None else problem}")
+            continue
+        material = dismantle_material(content, chosen)
+        p.rack.remove(chosen)
+        p.materials[material.id] = p.materials.get(material.id, 0) + 1
+        gain[material.name] = gain.get(material.name, 0) + 1
+        count += 1
+    shown = skipped[:DISMANTLE_MANY_SKIPS]
+    if len(skipped) > DISMANTLE_MANY_SKIPS:
+        shown.append(DISMANTLE_MANY_MORE.format(n=len(skipped) - DISMANTLE_MANY_SKIPS))
+    if not count:
+        return [DISMANTLE_MANY_NOTHING, *shown]
+    gained = "、".join(DISMANTLE_MANY_GAIN.format(name=name, count=n) for name, n in gain.items())
+    return [DISMANTLE_MANY_DONE.format(n=count, gain=gained), *shown]
 
 
 def repair_material(state: GameState, content: Content) -> str | None:
