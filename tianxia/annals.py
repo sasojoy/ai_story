@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 
 from .calendar import stamp_text
 from .models import Content
@@ -85,20 +86,23 @@ def first_sentence(text: str, limit: int = REPLY_MAX) -> str:
 def note(
     state: GameState, content: Content, kind: str, text: str, weight: int, *,
     figure: str = "", quote: str = "", reply: str = "", place: str | None = None, time: float | None = None,
+    keep: Iterable[str] | None = None,
 ) -> None:
-    """記一則行狀。place 沒給就是人此刻所在的地點；time 沒給就是此刻的世界時間（決戰收場給收場那一刻）。"""
+    """記一則行狀。place 沒給就是人此刻所在的地點；time 沒給就是此刻的世界時間（決戰收場給收場那一刻）。
+    keep 是這一句裡別的玩家的名號（對手、被點名的人），季末備援列傳照它原樣保留（AnnalEntry.keep）；沒有別人的名號不必給。"""
     if not on(content) or not text:
         return
-    state.player.annals.append(entry(state, content, kind, text, weight, figure=figure, quote=quote, reply=reply, place=place, time=time))
+    state.player.annals.append(entry(state, content, kind, text, weight, figure=figure, quote=quote, reply=reply, place=place, time=time, keep=keep))
     trim(state, content)
 
 
 def entry(
     state: GameState, content: Content, kind: str, text: str, weight: int, *,
     figure: str = "", quote: str = "", reply: str = "", place: str | None = None, time: float | None = None,
-    season=True,
+    season=True, keep: Iterable[str] | None = None,
 ) -> AnnalEntry:
-    """寫好一則（note 用它，不記進行狀）。season 是 False 時時刻照舊的寫法（上一季的事，這一季的季曆對不上）。"""
+    """寫好一則（note 用它，不記進行狀）。season 是 False 時時刻照舊的寫法（上一季的事，這一季的季曆對不上）。
+    keep 去掉空的與重複的，也不放傳主自己的名號（傳裡的「你」就是要換成他的名號）。"""
     p, w = state.player, state.world
     when = w.time if time is None else time
     if place is None:
@@ -107,7 +111,15 @@ def entry(
     return AnnalEntry(
         kind=kind, time=when, when=stamp_text(when, content, w if season else None), place=place, figure=figure,
         text=clip(text, STORY_TEXT_MAX if kind == STORY else TEXT_MAX), quote=clip(quote, QUOTE_MAX), reply=clip(reply, REPLY_MAX), weight=max(1, min(5, weight)),
+        keep=kept_names(keep, p.name),
     )
+
+
+def kept_names(keep: Iterable[str] | None, own: str = "") -> list[str]:
+    """AnnalEntry.keep 存什麼：名字的空白照 clip 收成一個（文字裡的名號是被 clip 收過的，對不上就找不到）、去掉空的與重複的、
+    不放傳主自己的名號（own）。"""
+    names = (" ".join(str(k).split()) for k in keep or ())
+    return list(dict.fromkeys(k for k in names if k and k != own))
 
 
 def profile(state: GameState, content: Content, season: WorldState | None = None) -> dict:

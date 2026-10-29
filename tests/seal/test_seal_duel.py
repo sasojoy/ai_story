@@ -319,6 +319,26 @@ def test_fb175_both_reports_carry_the_moment_the_duel_closed(sealed, world):
         assert seal.PROXY_LINE in report.notes  # 兩個人都沒來：整場代打，照舊寫「未及趕到」
 
 
+def test_the_seal_duel_annal_keeps_the_other_players_name(sealed, world):
+    """FB-9020：奪璽單挑那一則行狀（「你從某某懷中奪得…」）原句同時有代詞「你」與對手名號；對手的名號記在 keep。挑戰者看持有者、持有者看挑戰者。"""
+    from test_seal_engine import _player
+
+    from tianxia.world_state import SealEvent
+
+    sealed.config.biography.enabled = True
+    game = _player(sealed, world, "懷璽", now=10.0)
+    season = world.get_season_number()
+    took = SealEvent(seq=98, season=season, kind="take", shard="chishou", holder="懷璽", other="Rival2",
+                     result="大勝", edge=30.0, lines=["一句。"], at=game.state.world.time)
+    kept = SealEvent(seq=99, season=season, kind="keep", shard="chishou", holder="懷璽", other="你好嗎2",
+                     result="落敗", edge=30.0, lines=["一句。"], at=game.state.world.time)
+    game._file_seal(took, "螭首", True)
+    game._file_seal(kept, "螭首", True)
+    first, second = [e for e in game.state.player.annals if e.kind == "deed" and "螭首" in e.text]
+    assert first.text == seal.WON.format(other="Rival2", shard="螭首") and first.keep == ["Rival2"]
+    assert second.text == seal.KEPT.format(other="你好嗎2", shard="螭首") and second.keep == ["你好嗎2"]
+
+
 def test_fb174_some_proxied_rounds_get_the_milder_line(sealed, world):
     from test_seal_engine import _player
 

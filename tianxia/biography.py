@@ -5,7 +5,7 @@ C 鎖內 Game.write_biography 重驗再存進 biographies 表。模型寫的文�
 有阿拉伯數字、日文假名）就用 rule_text 照行狀拼一篇（照樣能讀、能分享）。之後可以請史官重寫一次（Config.biography.rewrites）。
 
 文體是史書列傳的半文言：開頭「某某者，……」，分出身與投靠、大戰、與英雄交往、結局四段，最後「評曰」。數字只能是行狀裡的；
-名字照行狀寫（其他玩家的名號照遊戲裡的寫）。只讀資料、不 import 引擎。
+名字照行狀寫（其他玩家的名號照遊戲裡的寫：行狀的 keep 記著這一則裡別人的名號，備援文字與清理都原樣放過它們，FB-9020）。只讀資料、不 import 引擎。
 """
 from __future__ import annotations
 
@@ -140,8 +140,17 @@ SYSTEM = (
 # 列傳為終點（減法季批 7b）：有季末論功的那一篇多這一條（_tiered）；關著的季系統提示一個字不變
 TIER_RULE = "\n7. 季末論功的名次與第幾階，寫在結局那一段的最後。"
 # 減法季 7e：清單裡有人物心意、受託辦事、約戰（TIES）的那一篇多這一條（_ties；待 joy 潤）。條號接在前面的後面（有 TIER_RULE 是 8，沒有是 7）
+# FB-9020（PM 2026-10-29）：這一篇有名號帶阿拉伯數字（傳主名號或任何一則行狀的 keep）時，規矩 4 後面多這一句，免得模型照「不得用阿拉伯數字」把
+# 「Rival2」寫成「Rival二」（clean 檢查數字之前遮掉這些名號）。沒有這種名號的篇，系統提示一個字不變（待 joy 潤）
+RULE4_END = "清單裡沒有的數目不寫。"
+NAME_NOTE = "名號照事實清單原樣寫，名號裡的數字不必改成中文。"
 TIES_RULE = ("\n{n}. 清單裡若有人物心意、受託辦事、出陣約戰這幾類事，各用一兩句帶過，放進與英雄交往或結局那一段。"
              "人物心意是眾人合力勸成的，只能寫{name}也在其中，不可寫成{him}一人改了人物的主意；約戰的勝負只用清單裡的字，對手是誰照清單寫。")
+
+
+def _digit_names(req: BiographyRequest) -> bool:
+    """這一篇有名號帶阿拉伯數字（半形全形都算）：傳主的名號，或任何一則行狀的 keep（別的玩家的名號）。"""
+    return any(re.search(r"[0-9０-９]", n) for n in (req.name, *(k for e in req.annals for k in e.get("keep") or ())))
 
 
 def messages(req: BiographyRequest) -> list[dict[str, str]]:
@@ -149,7 +158,8 @@ def messages(req: BiographyRequest) -> list[dict[str, str]]:
     if req.rewrite:
         ask += "\n\n（這是重寫：換一種起筆與剪裁。）"
     him = gender.pronoun(req.sex)
-    system = SYSTEM.format(name=req.name, him=him, word=gender.word(req.sex)) + (TIER_RULE if _tiered(req) else "")
+    template = SYSTEM.replace(RULE4_END, RULE4_END + NAME_NOTE, 1) if _digit_names(req) else SYSTEM  # 先改範本再填名號：名號裡有什麼字都碰不到
+    system = template.format(name=req.name, him=him, word=gender.word(req.sex)) + (TIER_RULE if _tiered(req) else "")
     if _ties(req):
         system += TIES_RULE.format(n=8 if _tiered(req) else 7, name=req.name, him=him)
     return [{"role": "system", "content": system}, {"role": "user", "content": ask}]
@@ -164,7 +174,11 @@ def clean(raw: str | None, req: BiographyRequest) -> str | None:
     paras = [" ".join(line.split()) for line in re.split(r"\n\s*\n|\n", text)]
     paras = [x for x in paras if x and x not in (title(req.name), f"《{title(req.name)}》")]
     text = "\n\n".join(paras)
-    if not (200 <= len(text) <= 3000) or req.name not in text or re.search(r"[0-9０-９]", text) or _KANA.search(text):
+    bare = text  # 名號可以帶阿拉伯數字（Rival2）：模型照事實清單原樣寫了，檢查數字之前先遮掉傳主自己的與行狀記下要保留的（長的先遮）
+    own = set() if _numeric(req.name) else {req.name}  # 整個是數字的名號不遮（FB-9021）：遮了別處一樣的數目也一起放過
+    for name in sorted({*own, *(k for e in req.annals for k in e.get("keep") or ())} - {""}, key=len, reverse=True):
+        bare = bare.replace(name, "")
+    if not (200 <= len(text) <= 3000) or req.name not in text or re.search(r"[0-9０-９]", bare) or _KANA.search(text):
         return None
     return text
 
@@ -187,11 +201,46 @@ def write(client, req: BiographyRequest, seconds: float) -> str | None:
 # ── 規則版（模型叫不動時；照樣能讀、能分享）───────────────
 
 
-def _strip(text: str, name: str = "") -> str:
+_HELD = 0xE000  # 私用區：遮名號用的佔位字元從這裡往上挑
+_NUMERIC = re.compile(r"[\s0-9０-９+\-＋－]+")
+
+
+def _numeric(name: str) -> bool:
+    """名號整個是數字（「10」「88」；名號只擋長度與控制字元，這種取得到）。傳主的這種名號不遮：每一則行狀都會遮傳主名號，
+    遮了就把行狀裡湊巧一樣的數目（「到了第 10 級」）也當成名號放過，漏出阿拉伯數字（FB-9021）；不遮就跟 FB-9020 以前一樣。"""
+    return bool(name) and _NUMERIC.fullmatch(name) is not None
+
+
+def _guard(text: str, name: str, keep) -> tuple[str, dict[str, str]]:
+    """把 keep 裡出現在這一句的名號遮成佔位字元，回（遮好的句子，佔位字元 → 名號）。佔位字元是私用區的字元，挑這一句、傳主名號、
+    保留名號裡都沒有的；長的名號先遮，免得一個名號是另一個的一部分。"""
+    names = sorted({k for k in keep or () if k and k in text}, key=len, reverse=True)
+    held: dict[str, str] = {}
+    used = set(text) | set(name) | set("".join(names))
+    code = _HELD
+    for k in names:
+        while chr(code) in used:
+            code += 1
+        held[chr(code)] = k
+        used.add(chr(code))
+        text = text.replace(k, chr(code))
+    return text, held
+
+
+def _strip(text: str, name: str = "", keep=None, own: str = "") -> str:
     """一則行狀的事實接進句子裡：數目換成中文、「你」換成名號（行狀是寫給你看的，傳是第三人稱）、去掉句尾的句號。
-    你說的那一句、人物回的那一句不經過這裡。"""
+    你說的那一句、人物回的那一句不經過這裡。keep（AnnalEntry.keep）是這一句裡別的玩家的名號：原句同時有代詞「你」與對手名號時，光看字串
+    分不出哪個「你」是代詞，所以先把它們遮起來、換完再還原（對手叫「你好嗎」「Rival2」不能被寫成「沈浪好嗎」「Rival二」，FB-9020）。
+    傳主自己的名號（name；不換代詞時給 own）不存在 keep 裡（存檔不重複），這裡固定加進去一起遮：原句照字寫出傳主名號的行狀
+    （〈天下形勢〉那一句、首創、奇事收尾）不會把「你好嗎2」寫成「你好嗎2好嗎二」；代詞「你」整個換成名號，換進去的名號不再被改。"""
+    mine = name or own
+    text, held = _guard(text, name, [*(keep or ()), *([] if _numeric(mine) else [mine])])
     text = _plain(text).rstrip("。")
-    return text.replace("你", name) if name else text
+    if name:
+        text = text.replace("你", name)
+    for mark, kept in held.items():
+        text = text.replace(mark, kept)
+    return text
 
 
 def _plain(text: str) -> str:
@@ -233,7 +282,7 @@ def _tie_line(e: dict, name: str) -> str:
     when = _when(e.get("when", ""))
     # 只有心意那一句是寫給你看的（「你也是其中之一」）：「你」換成名號、數目換成中文。託付、約戰的原句沒有代詞、沒有數目，卻帶別人的名號
     # （約戰的對手是玩家）：一個字都不動，只去掉句尾的句號（FB-895：對手叫「你好嗎」「Rival2」不能被寫成傳主的名號、「Rival二」）
-    text = _strip(e["text"], name) if e["kind"] == STANCE else e["text"].rstrip("。")
+    text = _strip(e["text"], name, e.get("keep")) if e["kind"] == STANCE else e["text"].rstrip("。")
     return _end(TIES_LINE[e["kind"]].format(when=f"{when}，" if when else "", name=name, text=text))
 
 
@@ -243,22 +292,22 @@ def rule_text(req: BiographyRequest) -> str:
     groups = _group(req.annals)
     head = f"{name}者，不知何許人也。生逢{req.scenario}，天下紛擾，負藝行走江湖。"
     joined = [e for e in groups["deed"] if e.get("weight", 1) >= 3][:6]
-    deeds = "".join(f"{_when(e.get('when', '')) + '，' if _when(e.get('when', '')) else ''}{_strip(e['text'], name)}。" for e in joined)
+    deeds = "".join(f"{_when(e.get('when', '')) + '，' if _when(e.get('when', '')) else ''}{_strip(e['text'], name, e.get('keep'))}。" for e in joined)
     if not deeds and p.get("faction"):
         deeds = f"後投{p['faction']}。"
     # 減法季：痕跡（MARK，份量 2，上面挑不到）與〈天下形勢〉寫到名號（XINGSHI）接在行事後面，最多三則；關著的季沒有這兩種
     heard = [e for e in groups["deed"] if e.get("kind") in (MARK, XINGSHI) and e not in joined][:3]
-    deeds += "".join(f"{_strip(e['text'], name)}。" for e in heard)
+    deeds += "".join(f"{_strip(e['text'], name, e.get('keep'))}。" for e in heard)
     paras = [head + deeds]
     battles = groups["showdown"]
     if battles:
         lines = []
         for e in battles[:6]:
-            line = _end(_strip(e["text"], name))
+            line = _end(_strip(e["text"], name, e.get("keep")))
             if e.get("quote"):
                 line += f"{name}曰：「{e['quote']}」"
                 if e.get("reply"):
-                    line += "於是" + _end(_strip(e["reply"]))
+                    line += "於是" + _end(_strip(e["reply"], "", e.get("keep"), own=name))
             lines.append(_end(line))
         paras.append("其臨陣也，" + "".join(lines))
     else:
@@ -271,7 +320,7 @@ def rule_text(req: BiographyRequest) -> str:
             if zhuan and e.get("kind") in TIES:
                 lines.append(_tie_line(e, name))
                 continue
-            line = _end(_strip(e["text"], name))
+            line = _end(_strip(e["text"], name, e.get("keep")))
             if e.get("quote"):
                 line += f"{name}問曰：「{e['quote']}」"
             if e.get("reply"):
@@ -279,13 +328,13 @@ def rule_text(req: BiographyRequest) -> str:
             lines.append(_end(line))
         paras.append("其與當世英雄交也，" + "".join(lines))
     fights = _pick(groups["fight"], 4, frozenset({DUEL}) if zhuan else frozenset())
-    end = "".join(_tie_line(e, name) if zhuan and e.get("kind") in TIES else f"{_strip(e['text'], name)}。" for e in fights)
+    end = "".join(_tie_line(e, name) if zhuan and e.get("kind") in TIES else f"{_strip(e['text'], name, e.get('keep'))}。" for e in fights)
     tail = f"季終，年資武藝至第{_cn(p.get('level', 1))}級"
     if p.get("ranger"):
         tail += f"，江湖稱「{p['ranger']}」"
     elif p.get("faction"):
         tail += f"，仍在{p['faction']}麾下"
-    tier = "".join(f"{_strip(e['text'], name)}。" for e in groups.get(TIER, [])[:1])  # 季末論功寫在結局那一段的最後（減法季批 7b）
+    tier = "".join(f"{_strip(e['text'], name, e.get('keep'))}。" for e in groups.get(TIER, [])[:1])  # 季末論功寫在結局那一段的最後（減法季批 7b）
     paras.append(end + tail + "。" + tier)
     paras.append("評曰：" + _verdict(name, p, bool(battles), bool(figures)))
     return "\n\n".join(paras)
