@@ -9,10 +9,10 @@ import pytest
 
 import webharness
 from conftest import next_season
-from tianxia import annals, battle_instance
+from tianxia import annals, battle_instance, biography
 from tianxia.database import SCHEMA, SCHEMA_V5_TABLES, SCHEMA_V6_TABLES, SCHEMA_V7_TABLES, SCHEMA_VERSION, open_database
 from tianxia.engine import Game
-from tianxia.state import AnnalEntry
+from tianxia.state import AnnalEntry, PlayerState
 
 
 @pytest.fixture
@@ -113,6 +113,21 @@ def test_a_showdown_writes_the_side_the_role_the_merit_and_each_gamble(on, world
     assert main.weight == 5 and main.kind == annals.SHOWDOWN
     assert (gamble.quote, gamble.reply, gamble.weight) == ("點火燒糧", "沈浪一把火燒了糧車", 4)
     assert gamble.text == "在長社火攻陣上放手一搏，成了，點名張三。"
+    assert gamble.keep == ["張三"] and main.keep == []  # 點名的人是玩家：名號原樣留（FB-9020）；主文裡沒有別人的名號
+
+
+def test_a_gamble_without_a_target_keeps_no_name_and_an_earlier_season_carries_it_to_the_saved_annals(on, world):
+    game = _game(on, world)
+    me = battle_instance.BattleParticipant(name="沈浪", faction="guan", neili=10, neili_cap=10, acted_rounds=1)
+    me.gambles.append(battle_instance.GambleMoment(name="沈浪", faction="guan", text="衝陣", story="沈浪衝進陣中", rate=20, won=True))
+    me.gambles.append(battle_instance.GambleMoment(name="沈浪", faction="guan", text="點你好嗎2", story="沈浪盯上你好嗎2", rate=20, won=False, target="你好嗎2"))
+    battle = battle_instance.BattleInstance(battle_id="xx", participants={"沈浪": me}, outcome_title="官軍大勝", outcome_side="guan")
+    game._annal_showdown(battle, me, "長社火攻", "官軍", "", None, 0, None, 5.0)
+    assert [e.keep for e in game.state.player.annals[-2:]] == [[], ["你好嗎2"]]
+    next_season(on, world, game)  # 上一季的決戰補寫進存起來的那一季：keep 跟著 model_dump 走
+    game._annal_showdown(battle, me, "廣宗", "官軍", "", None, 0, 1, 7.0)  # earlier=1：這一季的角色已經重來，寫進存起來的第一季
+    saved = world.biography(1, "沈浪")["annals"]
+    assert [e["keep"] for e in saved if "放手一搏" in e["text"]][-2:] == [[], ["你好嗎2"]]
 
 
 def test_gambles_are_kept_on_the_participant_when_a_round_resolves(content):
@@ -123,6 +138,53 @@ def test_gambles_are_kept_on_the_participant_when_a_round_resolves(content):
     instance.participants["甲"] = me
     again = battle_instance.BattleInstance.model_validate(json.loads(instance.model_dump_json()))
     assert again.participants["甲"].gambles[0].target == ""
+
+
+# ── 別的玩家的名號（FB-9020）：行狀記下這一則要原樣保留的名號 ──
+
+
+def test_a_note_keeps_the_other_players_names_clean_and_never_the_subjects_own(on, world):
+    game = _game(on, world)
+    s = game.state
+    annals.note(s, on, annals.FIGHT, "你攔下你好嗎2動手。", 3, keep=["你好嗎2", "你好嗎2", "", "沈浪", "  Rival   2 "])
+    annals.note(s, on, annals.FIGHT, "你一個人走了一趟。", 2)
+    annals.note(s, on, annals.FIGHT, "你一個人又走了一趟。", 2, keep=None)
+    named, plain, none = s.player.annals
+    assert named.keep == ["你好嗎2", "Rival 2"]  # 去空的、去重複、不放傳主自己的名號；空白照 clip 收成一個（文字裡的名號是那樣）
+    assert plain.keep == [] and none.keep == []
+    assert annals.entry(s, on, annals.DEED, "x", 1, keep=["甲"]).keep == ["甲"]
+    assert named.model_dump()["keep"] == ["你好嗎2", "Rival 2"]
+
+
+def test_a_saved_season_from_before_the_field_still_reads(on, world):
+    """舊存檔（行狀沒有 keep）讀得起來、讀出來是空的；新存檔照樣一圈讀回來；沒有 keep 的舊行狀寫出來的傳跟以前一字不差。"""
+    game = _game(on, world)
+    annals.note(game.state, on, annals.FIGHT, "你攔下乙動手。", 3, keep=["乙"])
+    player = game.state.player
+    dumped = json.loads(player.model_dump_json())
+    assert dumped["annals"][0]["keep"] == ["乙"]
+    assert PlayerState.model_validate_json(player.model_dump_json()).annals[0].keep == ["乙"]
+    for row in dumped["annals"]:
+        row.pop("keep")
+    old = PlayerState.model_validate(dumped)
+    assert [e.keep for e in old.annals] == [[] for _ in old.annals] and old.annals[0].text == "你攔下乙動手。"
+    assert AnnalEntry.model_validate({"kind": "deed", "time": 0, "when": "", "text": "x"}).keep == []  # 最小的舊行狀
+    legacy = [e.model_dump() for e in old.annals]
+    assert all(row["keep"] == [] for row in legacy)
+    req = biography.BiographyRequest(season=1, name="沈浪", scenario="黃巾之亂", era_note="", profile={}, annals=tuple({k: v for k, v in row.items() if k != "keep"} for row in legacy))
+    assert biography.rule_text(req) == biography.rule_text(biography.BiographyRequest(season=1, name="沈浪", scenario="黃巾之亂", era_note="", profile={}, annals=tuple(legacy)))
+
+
+def test_what_the_engine_notes_goes_into_the_biography_request_and_the_fallback_keeps_the_rival(on, world):
+    """記進行狀 → model_dump → 單子 → 備援文字，一整圈：對手叫「你好嗎2」，傳主的「你」換成名號、對手的名號一個字不動。"""
+    game = _game(on, world)
+    s = game.state
+    annals.note(s, on, annals.FIGHT, "你攔下你好嗎2動手，你好嗎2不敵，丟下銀兩走了。", 3, keep=["你好嗎2"])
+    annals.note(s, on, annals.FIGHT, "你好嗎2半路截殺你，你不敵，丟下銀兩脫身。", 3, keep=["你好嗎2"])
+    req = biography.BiographyRequest(season=1, name="沈浪", scenario="黃巾之亂", era_note="", profile={}, annals=tuple(e.model_dump() for e in s.player.annals))
+    text = biography.rule_text(req)
+    assert "沈浪攔下你好嗎2動手，你好嗎2不敵，丟下銀兩走了。你好嗎2半路截殺沈浪，沈浪不敵，丟下銀兩脫身。" in text
+    assert "沈浪好嗎" not in text and "好嗎二" not in text
 
 
 def test_a_new_season_saves_the_old_annals_and_starts_empty(on, world):

@@ -21,9 +21,13 @@ NOW = 1000.0
 @pytest.fixture
 def ring(content, world):
     """甲、乙兩個人都在小鎮，都學了拳腳。"""
+    return _ring(content, world, ("甲", "乙"))
+
+
+def _ring(content, world, names):
     content.config.auto_open_first_season = True
     content.config.arena.enabled = True
-    for name in ("甲", "乙"):
+    for name in names:
         game = Game.new(content, name, rng=random.Random(0), world=world)
         game.client = None
         rules.learn_skill(game.state, content, "fist")
@@ -170,6 +174,17 @@ def test_a_win_swaps_ranks_and_spares_the_body_and_stamina(ring):
     assert defender.state.battles[0].kind == "arena" and defender.state.battles[0].event == "守擂・甲"
     assert arena.SWAPPED.format(before=1, after=2) in defender.state.battles[0].changes
     assert arena.entry_of(defender.state.world, "乙").inbox == []
+
+
+def test_the_challenge_notes_the_foes_name_to_keep_for_the_biography(content, world):
+    """FB-9020：「上擂台挑某某」的對手是玩家，名號帶「你」或阿拉伯數字時季末備援列傳不能改它；行狀記 keep。"""
+    content, world = _ring(content, world, ("甲", "你好嗎2"))
+    content.config.biography.enabled = True
+    _join(content, world, "你好嗎2")
+    _join(content, world, "甲")
+    _, game = _fight(content, world, "甲", "你好嗎2")
+    (note,) = [e for e in game.state.player.annals if e.kind == "fight"]
+    assert note.text.startswith("上擂台挑你好嗎2，") and note.keep == ["你好嗎2"]
 
 
 def test_yielding_is_a_loss_and_ranks_stay(ring):

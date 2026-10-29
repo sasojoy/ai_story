@@ -41,6 +41,7 @@ def test_both_fighters_get_a_duel_annal_at_the_duel_place(monkeypatch):
     assert [e.text for e in theirs] == [f"應下甲在{place}的約戰，落敗。"]  # 守方不寫成他去約戰（FB-897）
     assert mine[0].place == theirs[0].place == place
     assert _duels(world, "丙") == []  # 同去的人沒下場
+    assert mine[0].keep == ["乙"] and theirs[0].keep == ["甲"]  # 對手是玩家：名號原樣留給季末的備援列傳（FB-9020）
 
 
 def test_the_answerer_has_his_own_line_and_the_attacker_keeps_the_old_one():
@@ -67,6 +68,7 @@ def test_a_filled_in_defender_reads_like_one_who_answered(monkeypatch):
     place = c.locations[LOC].name
     assert [e.text for e in _duels(world, "丁")] == [f"應下甲在{place}的約戰，落敗。"]
     assert [e.text for e in _duels(world, "甲")] == [f"在{place}約戰丁，大勝。"]
+    assert _duels(world, "丁")[0].keep == ["甲"] and _duels(world, "甲")[0].keep == ["丁"]  # 補位的人也是玩家
     assert _duels(world, "乙") == []
 
 
@@ -80,6 +82,7 @@ def test_the_garrison_still_reads_as_the_attackers_line(monkeypatch):
     tick(c, world, NOW + WINDOW + 1)
     assert next(iter(world.sortie_duels().values())).defender.garrison
     assert [e.text for e in _duels(world, "甲")] == [f"在{c.locations[LOC].name}約戰守軍，大勝。"]
+    assert _duels(world, "甲")[0].keep == []  # 守軍不是玩家的名號：不必留
     assert _duels(world, "乙") == []
 
 
