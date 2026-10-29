@@ -1002,6 +1002,46 @@ def test_the_server_main_view_carries_the_row_buttons(content, world):
     assert row["repair"]["ok"] and row["temper"]["ok"] and row["into"]["count"] == 1
 
 
+# ── 鐵匠鋪與合成流程 3.3（B 批補的測試，A 批雲端用）：打造頁開著時 smith_upgrade 照樣按得下去，熬成了素材格跟著變 ──
+
+
+def test_smith_upgrade_works_while_the_forge_page_is_the_open_one_and_the_grid_follows(content, world):
+    """灰格就地熬叫的是現成的 smith_upgrade：它只看 _trade_open（升階開著、鐵匠鋪開著、那一串是眼前的選單），不看網頁停在哪一頁
+    （引擎的頁是兵器頁、不是素材頁）。熬成了，shop.forge.materials（打造頁的素材格）就是背包，跟著少一個低階、多一個高階；
+    shop.trade.upgrade 的每一列寫得出熬不熬得起、短原因。"""
+    import server
+
+    content.config.economy.upgrade = True  # 測試內容的素材買賣預設關著
+    game = _smith(content, world)
+    p = game.state.player
+    view = game.shop_view()
+    assert view["page"] == "weapon" and p.smith_page == "weapon"  # 沒有停在素材頁
+    rows = {(r["attribute"], r["tier"]): r for r in view["trade"]["upgrade"]}
+    assert rows[("剛", 2)]["problem"] is None and (rows[("剛", 2)]["have"], rows[("剛", 2)]["need"], rows[("剛", 2)]["cost"]) == (4, 3, 5)
+    assert rows[("剛", 3)]["short"] == "手上 1／10" and rows[("剛", 3)]["problem"]  # 灰格：料不夠，素材頁同一句短原因
+    grid = lambda: {m["id"]: m["count"] for m in game.shop_view()["forge"]["materials"]}  # noqa: E731
+    assert grid() == {"gang_1": 4, "gang_2": 1, "kuai_1": 2}
+    msgs = server.MAIN_ACTIONS["smith_upgrade"](game, {"attribute": "剛", "tier": 2})  # 網頁送的就是這一個
+    assert msgs and p.stats["silver"] == 295 and game.state.journal[0].title == weapons.SMITH
+    after = grid()
+    assert after == dict(p.materials) and after["gang_1"] == 1  # 素材格就是背包：用掉三個一階
+    tier_two = sum(n for mid, n in after.items() if content.materials[mid].tier == 2)
+    assert tier_two == 2  # 原本一個、熬出一個（一半隨機落到別的屬性：哪一種不鎖）
+    assert next(r for r in game.shop_view()["trade"]["upgrade"] if (r["attribute"], r["tier"]) == ("剛", 2))["have"] == 1
+    before = (p.stats["silver"], dict(p.materials), len(game.state.journal))
+    refused = server.MAIN_ACTIONS["smith_upgrade"](game, {"attribute": "剛", "tier": 3})  # 熬不起的灰格：按了也只回原因、不收錢
+    assert refused and (p.stats["silver"], dict(p.materials), len(game.state.journal)) == before
+
+
+def test_smith_upgrade_is_closed_when_the_shop_is_not_in_front(content, world):
+    content.config.economy.upgrade = True
+    game = _smith(content, world)
+    game.choose("smith:back")
+    p = game.state.player
+    before = (p.stats["silver"], dict(p.materials))
+    assert game.smith_upgrade("剛", 2) == [equipment.NOT_NOW] and (p.stats["silver"], dict(p.materials)) == before
+
+
 def test_the_server_route_looks_at_the_fire(monkeypatch):
     """/api/do/smith_furnace 走真的伺服器（week7 的正式內容）：回的 main 裡 forge.furnace 換成「看過了」，收了 50 兩。"""
     from fastapi.testclient import TestClient
