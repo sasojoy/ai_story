@@ -213,6 +213,8 @@
     news: "reports",
     reports: null,
     reportOpen: false,
+    tales: {}, // 戰役話本：流水號 → /api/tale 回的那一份（ready、pending、none）
+    taleOpen: null, // 打開的那一篇（流水號）；null 是沒開
     showMore: false,
     sheet: false,
     admin: null,
@@ -4510,6 +4512,37 @@
     return top + `<div class="seg news-sub">${parts.map((n) => `<button class="${S.news === n.id ? "on" : ""}" data-act="news" data-news="${n.id}">${n.name}</button>`).join("")}</div>`;
   }
 
+  // 戰役話本（Joy 2026-10-29；版面照主機那份 長社火攻話本）：戰報頁「‹ 全部戰報」那一行右邊一顆「戰役話本 ›」。
+  // 寫好了（ready）才按得下去；還在寫（pending）灰掉寫「說書人還在落筆」；沒有（none、還沒問到、不是決戰）不畫
+  function taleLink(id) {
+    const t = id == null ? null : S.tales[id];
+    if (!t || t.status === "none") return "";
+    if (t.status === "pending") return '<button class="linkish huaben-link" disabled>說書人還在落筆</button>';
+    return `<button class="linkish huaben-link" data-act="tale" data-id="${id}">戰役話本 ›</button>`;
+  }
+  // 話本頁：抬頭（季、戰名、結果）→ 一幕一段（幕名、那一幕的時辰，再一回一回：小標、正文、玩家原話）→ 尾段名錄（三四個人各一句）
+  function taleHtml(t) {
+    const back = `<button class="linkish back" data-act="tale-back">‹ ${S.news === "chronicle" ? "江湖史" : "戰報"}</button>`;
+    if (!t) return `${back}<p class="muted">載入中…</p>`;
+    if (t.status !== "ready") return `${back}<div class="card"><p class="muted">${t.status === "pending" ? "說書人還在落筆，過一會兒再來。" : "這一場沒有話本。"}</p></div>`;
+    const paras = (text) => String(text || "").split(/\n+/).filter((x) => x.trim()).map((x) => `<p>${esc(x)}</p>`).join("");
+    const said = (x) => (x ? `<div class="huaben-said"><span class="who">${esc(x.who || "")}${x.side ? `・${esc(x.side)}` : ""}</span><span class="line">「${esc(x.line || "")}」</span></div>` : "");
+    const scene = (x) => `${x.head ? `<h4>${esc(x.head)}</h4>` : ""}${paras(x.text)}${said(x.said)}`;
+    const acts = (t.acts || []).map((a, i) => `<section class="huaben-act"><h3><span class="no">${esc(a.no || `第${cnNum(i + 1)}回`)}</span>${esc(a.title || "")}</h3>`
+      + `${a.banner ? `<p class="huaben-banner">${esc(a.banner)}</p>` : ""}${(a.scenes || []).map(scene).join("")}</section>`).join("");
+    const cast = (t.cast || []).length
+      ? `<section class="huaben-cast"><h3><span class="no">名錄</span>這一場在場的人</h3><ul>${t.cast.map((c) => `<li><b>${esc(c.name || "")}</b>${c.side ? `<span class="cast-side">${esc(c.side)}</span>` : ""}<span class="say">${esc(c.line || "")}</span></li>`).join("")}</ul></section>`
+      : "";
+    const meta = [t.season ? `第 ${t.season | 0} 季` : "", t.result || ""].filter(Boolean).join("・");
+    return `${back}<article class="card huaben-page"><p class="huaben-eyebrow">戰役話本</p><h2>${esc(t.battle_name || t.title || "")}</h2>`
+      + `${meta ? `<p class="huaben-meta">${esc(meta)}</p>` : ""}${acts}${cast}</article>`;
+  }
+  // 江湖史最上面的話本目錄（main.tales，伺服器的開關關著是空的、不畫）
+  function taleIndexHtml(list) {
+    if (!list || !list.length) return "";
+    return `<p class="report-group">戰役話本</p><div class="list huaben-index">${list.map((x) => `<button data-act="tale" data-id="${x.battle_id}">${esc(x.title || "")}<span class="muted small">${x.season ? `第 ${x.season | 0} 季` : ""}${x.result ? `・${esc(x.result)}` : ""}</span></button>`).join("")}</div>`;
+  }
+
   // 見聞・大事的「大勢」那一段最上面（減法季批 1）：三方卡（以前本週卡的「為什麼」也有）、本週江湖大事（以前江湖頁「大事」小標的面板）、
   // 三條戰況與軍備（以前在江湖頁行動列底下，6.3 拿掉）。都沒有就是空字串
   function trendsTopHtml(m) {
@@ -4546,7 +4579,8 @@
     if (S.news === "reports") {
       const r = S.reports;
       if (!r) body = '<p class="muted">載入中…</p>';
-      else if (S.reportOpen && r.selected != null) body = `<button class="linkish back" data-act="report-list">‹ 全部戰報</button><div class="card report-detail">${gaugeHtml(r.gauge)}${trailMoves(roundBlocks(r.detail, r.gauge, r.selected))}</div>`;
+      else if (S.taleOpen != null) body = taleHtml(S.tales[S.taleOpen]);
+      else if (S.reportOpen && r.selected != null) body = `<div class="report-top"><button class="linkish back" data-act="report-list">‹ 全部戰報</button>${taleLink(r.tale_id)}</div><div class="card report-detail">${gaugeHtml(r.gauge)}${trailMoves(roundBlocks(r.detail, r.gauge, r.selected))}</div>`;
       else if (!r.list.length) body = `<div class="card">${r.detail}</div>`;
       else {
         // 決戰與奪璽單挑另外一組排在最上面，不跟遊歷野怪混在一起（Joy 2026-10-14「這種大事件的決戰不應該跟一般的放在一起被洗掉」）
@@ -4558,7 +4592,7 @@
     } else if (S.news === "trends") body = `${trendsTopHtml(m)}<div class="card">${m.trends}</div>`;
     else if (S.news === "xingshi") body = xingshiHtml(S.xingshi);
     else if (S.news === "rumors") body = m.rumor_layers ? rumorLayersHtml(m.rumor_layers) : `<div class="card">${m.rumors}</div>`;
-    else if (S.news === "chronicle") body = `<div class="card">${m.chronicle}</div>`;
+    else if (S.news === "chronicle") body = S.taleOpen != null ? taleHtml(S.tales[S.taleOpen]) : `${taleIndexHtml(m.tales)}<div class="card">${m.chronicle}</div>`;
     else if (S.news === "annals") body = annalsHtml(S.annals);
     else if (S.news === "boards") body = boardsHtml(S.boards);
     else if (S.news === "mingtie") body = mingtieBoxHtml(S.mingtie);
@@ -5234,6 +5268,14 @@
   async function loadReports(id) {
     S.reports = await api(`/api/reports${id != null ? `?id=${id}` : ""}`);
     if (S.tab === "news") renderPage();
+    if (S.reportOpen && S.reports.tale_id != null) await loadTale(S.reports.tale_id);
+  }
+  // 戰役話本（/api/tale/<流水號>）：寫好了（ready）留著不再問；還在寫（pending）每次打開戰報都再問一次
+  async function loadTale(id) {
+    const had = S.tales[id];
+    if (had && had.status === "ready") return;
+    S.tales[id] = await api(`/api/tale/${id}`);
+    if (S.tab === "news") renderPage();
   }
 
   async function goTab(tab) {
@@ -5247,6 +5289,7 @@
     S.book = false; // 武學譜是疊在煉製頁上的一本書：換分頁就闔上
     S.zhuan = null; clearTimeout(zhuanTimer); // 傳也一樣
     S.mtEdit = null; S.mtZoom = null; S.boardCard = null; // 名帖的畫布與放大的那一張、榜單點開的卡也收起
+    S.taleOpen = null; // 戰役話本也闔上
     if (tab !== "map") stopPlay(); // 版圖變化的播放也停
     // 每一次打開輿圖都從第一層開始（減法季整合設計第七章：「全區」按過只這一次有效）；江湖頁的小地圖點了某一處另外挑好了（S.mapKeep）
     if (tab === "map" && !S.mapKeep) mapFirst();
@@ -6625,6 +6668,7 @@
         case "mt-report": await mtReport(); break;
         case "news":
           S.news = el.dataset.news;
+          S.taleOpen = null;
           if (!selfNews(S.news)) S.newsBack = S.news; // 見聞的籤記下來：從行狀按底下的「見聞」回到這一段
           S.reportOpen = false;
           if (S.tab !== "news") { await goTab("news"); break; }
@@ -6641,11 +6685,22 @@
         case "report":
           S.news = "reports";
           S.reportOpen = true;
+          S.taleOpen = null;
           if (S.tab !== "news") { S.tab = "news"; S.unseen = false; render(); }
           await loadReports(Number(el.dataset.id));
           window.scrollTo(0, 0);
           break;
         case "report-list": S.reportOpen = false; renderPage(); break;
+        case "tale": {
+          // 戰報頁的「戰役話本 ›」、江湖史的目錄：打開那一篇（還在寫、沒有的不畫成鈕，這裡不必再擋）
+          const id = Number(el.dataset.id);
+          S.taleOpen = id;
+          if (S.tab !== "news") { S.tab = "news"; S.unseen = false; render(); } else renderPage();
+          window.scrollTo(0, 0);
+          await loadTale(id);
+          break;
+        }
+        case "tale-back": S.taleOpen = null; renderPage(); window.scrollTo(0, 0); break;
       }
     } catch (e) { /* api() 已經提示過 */ }
   });

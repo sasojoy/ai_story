@@ -381,6 +381,8 @@ def test_reports_view_is_empty_with_no_battles(game):
     view = server.look(game, lambda g: server.reports_view(g, None))
     assert view["list"] == [] and view["selected"] is None
     assert "還沒有戰報" in view["detail"]
+    assert view["tale_id"] is None  # 不是決戰（這裡一場都沒有）就沒有話本
+    assert server.tale_view(1) == {"status": "none"}  # 主機接上之前一律沒有：網頁不畫那一顆
 
 
 def test_status_text_still_reads_the_same(game):

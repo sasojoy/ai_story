@@ -64,6 +64,8 @@ def test_the_report_list_marks_the_big_battles(battle):
     record = _finish(fighter)
     view = server.reports_view(fighter, None)
     assert next(x for x in view["list"] if x["id"] == record.id)["big"] is True
+    # 戰役話本（Joy 2026-10-29）：決戰的戰報帶著那一場的流水號，網頁拿它問 /api/tale
+    assert server.reports_view(fighter, record.id)["tale_id"] == record.battle_ref is not None
 
 
 @node
