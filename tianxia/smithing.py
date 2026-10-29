@@ -629,6 +629,7 @@ TEMPER = "smith:temper"
 ARMOR_TEMPER = "smith:armor-temper"  # 防具頁的「淬煉」（同 armor-buy、armor-repair 另開一個 id；兩頁各淬各的）
 TEMPER_TITLE = "淬煉"
 FULL = "已經淬滿了"  # 待 joy 潤
+temper_cap = equipment.temper_cap  # 這一件最多淬幾次（鐵匠鋪與合成流程 3.6：照品質）；放在 equipment 是因為 weapons／armor 的列不能 import 這裡
 
 
 def temper_floor(item: Equipment) -> int:
@@ -663,7 +664,7 @@ def temper_problem(state: GameState, content: Content, slot: str = "weapon", ite
         if item_id is not None:
             return equipment.RACK_MISSING
         return armor.NO_ARMOR if slot == "armor" else "手上沒有兵器"
-    if item.tempers >= rules_of(content, slot).temper_max:
+    if item.tempers >= temper_cap(item, content):
         return FULL
     mid = temper_material(state, content, slot, item_id)
     if mid is None:
@@ -702,8 +703,8 @@ def temper_option(state: GameState, content: Content, slot: str = "weapon"):
     item = equipment.worn(state.player, slot)
     if item is None:
         return None
-    oid, rule = (ARMOR_TEMPER if slot == "armor" else TEMPER), rules_of(content, slot)
-    if item.tempers >= rule.temper_max:
+    oid, cap = (ARMOR_TEMPER if slot == "armor" else TEMPER), temper_cap(item, content)
+    if item.tempers >= cap:
         return Option(id=oid, label=f"淬煉【{item.name}】（{FULL}）", enabled=False)
     problem = temper_problem(state, content, slot)
     if problem is None:
@@ -712,7 +713,7 @@ def temper_option(state: GameState, content: Content, slot: str = "weapon"):
         note = f"{m.name}×1" + (f"＋{cost} 兩" if cost else "")
     else:
         note = problem
-    return Option(id=oid, label=f"淬煉【{item.name}】（第 {item.tempers + 1}/{rule.temper_max} 次・{note}）", enabled=problem is None)
+    return Option(id=oid, label=f"淬煉【{item.name}】（第 {item.tempers + 1}/{cap} 次・{note}）", enabled=problem is None)
 
 
 # ---- 整季機器人用的（兵器設計第六節、四欄設計第九節：量平衡要用到打造與淬煉；伺服器假人不打造不淬煉，打造隱藏配方 PM 決定第 3 條）----

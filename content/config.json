@@ -79,6 +79,8 @@
     "near": 8
   },
   "weapons": {
+    "temper_max_by_quality": {"下品": 5, "中品": 6, "上品": 7},
+    "wear_less_by_quality": {"上品": 1},
     "quality": {
       "terrain": 10,
       "battlefield": 10,
@@ -87,6 +89,8 @@
     }
   },
   "armor": {
+    "temper_max_by_quality": {"下品": 5, "中品": 6, "上品": 7},
+    "wear_less_by_quality": {"上品": 1},
     "quality": {
       "terrain": 10,
       "battlefield": 10,

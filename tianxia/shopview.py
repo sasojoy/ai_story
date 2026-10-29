@@ -210,7 +210,8 @@ def _worn(state: GameState, content: Content, world: WorldStateStore, slot: str,
     unfit = weapons.unfit_note(item).lstrip("・") if slot == "weapon" and weapons.worn_unfit(state, art, content, world) else ""
     return {
         "item": {"id": item.id, "name": item.name, "grade": equipment.grade(item), "wear_word": equipment.WEAR_WORDS[slot],
-                 "wear": item.edge, "tempers": item.tempers, "temper_max": smithing.rules_of(content, slot).temper_max},
+                 "wear": item.edge, "tempers": item.tempers, "temper_max": equipment.temper_cap(item, content),  # 照這一件的品質（3.6）
+                 "wear_note": equipment.wear_note(item, content)},
         "empty": "",
         "repair": {"id": rid, "use": _repair_use(state, content, slot), "enabled": problem is None, "why": problem},
         "temper": {"id": smithing.ARMOR_TEMPER if slot == "armor" else smithing.TEMPER, "use": _temper_use(state, content, slot),

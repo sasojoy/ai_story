@@ -2342,6 +2342,10 @@ class WeaponRules(_Strict):
     forge_silver: dict[str, int] = Field(default_factory=lambda: {"1": 20, "2": 60, "3": 150, "4": 300})  # 打造的工錢（4.2）：照主料的階；素材另算、不花體力心得（四階 300，正式季整合 5.1）
     quality: SmithQuality = Field(default_factory=SmithQuality)  # 打造的品質機率（見 SmithQuality）
     temper_max: int = Field(default=5, ge=0)  # 淬煉最多幾次（4.7）；每次 +temper_step
+    # 淬煉上限照品質（鐵匠鋪與合成流程 3.6；佔位值寫在 content/config.json：下品 5、中品 6、上品 7）；沒寫的品質（整組沒寫也是）照 temper_max
+    temper_max_by_quality: dict[str, int] = Field(default_factory=dict)
+    # 每場少扣幾點鋒利度（3.6；佔位值上品 1）：本來會扣的那一場才套、最少扣 1；沒寫的品質少扣 0
+    wear_less_by_quality: dict[str, int] = Field(default_factory=dict)
     temper_silver: dict[str, int] = Field(default_factory=lambda: {"1": 0, "2": 30, "3": 80, "4": 150})  # 淬煉一次的工錢，照用的那個素材的階（4.7；四階料 150，正式季整合 5.3）
     named_bonus: float = Field(default=0.02, ge=0)  # 名器（照隱藏配方打出來的）的加成多這麼多（打造隱藏配方設計 4.2）
     copy_base: float = Field(default=0.19, ge=0)  # 神器仿品的基本加成，取代階那一格（打造隱藏配方設計 4.3；品質一律上品再 +4%，合計 23%）
@@ -2372,6 +2376,8 @@ class ArmorRules(_Strict):
     forge_silver: dict[str, int] = Field(default_factory=lambda: {"1": 20, "2": 60, "3": 150, "4": 300})  # 打造的工錢（同兵器 4.2）：照主料的階
     quality: SmithQuality = Field(default_factory=SmithQuality)  # 打造的品質機率（同兵器 4.3；天時地利預設 0，正式值在 config.json）
     temper_max: int = Field(default=5, ge=0)  # 淬煉最多幾次（4.1）；每次 +temper_step
+    temper_max_by_quality: dict[str, int] = Field(default_factory=dict)  # 淬煉上限照品質（同兵器，鐵匠鋪與合成流程 3.6）；沒寫的品質照 temper_max
+    wear_less_by_quality: dict[str, int] = Field(default_factory=dict)  # 每場少扣幾點耐久度（同兵器 3.6）：本來會扣的那一場才套、最少扣 1
     temper_silver: dict[str, int] = Field(default_factory=lambda: {"1": 0, "2": 30, "3": 80, "4": 150})  # 淬煉一次的工錢，照用的那個素材的階（同兵器 4.7）
     named_cut: float = Field(default=0.02, ge=0)  # 名器的減損多這麼多（同上）
     copy_cut: float = Field(default=0.22, ge=0)  # 神器仿品的基本減損，取代階那一格（打造隱藏配方設計 4.3、5.6；上品再 +4%，合計 26%）

@@ -613,3 +613,91 @@ def test_server_bots_forge_armor_step_by_step_and_never_temper_it(content, world
         game.choose(want)
     assert pressed[:4] == smithing.wizard_steps(*plan) and p.smith_draft is None  # 之後可能多一顆「換上」打出來的那件
     assert smithing.recipe_key(*plan) in {a.recipe for a in [p.armor, *p.rack] if a is not None and a.slot == "armor"}
+
+
+# ── 鐵匠鋪與合成流程 3.6（D 批）：品質有「質」的差別（防具；兵器的在 test_weapons_forge.py）──
+
+
+def _graded(content):
+    """稿的佔位值：淬煉上限下品 5、中品 6、上品 7；上品每場少扣 1（防具自己一組，四欄設計 2.6、3.4）。"""
+    content.config.armor.temper_max_by_quality = {"下品": 5, "中品": 6, "上品": 7}
+    content.config.armor.wear_less_by_quality = {"上品": 1}
+    return content
+
+
+def test_the_armor_temper_cap_follows_the_quality_and_reads_the_armor_group(content):
+    low, mid, top = (_jacket(quality=q) for q in ("下品", "中品", "上品"))
+    assert content.config.armor.temper_max_by_quality == {}
+    assert [smithing.temper_cap(a, content) for a in (low, mid, top)] == [5, 5, 5]  # 設定沒寫那一組：跟以前一字不差
+    _graded(content)
+    assert [smithing.temper_cap(a, content) for a in (low, mid, top)] == [5, 6, 7]
+    assert smithing.temper_cap(_jacket(quality=""), content) == content.config.armor.temper_max
+    weapon = Weapon(id="兵:1", name="刃", kind="劍", attribute="柔", tier=1, quality="上品")
+    assert smithing.temper_cap(weapon, content) == 5  # 兵器那一組沒寫：防具寫了不影響兵器
+
+
+def test_top_quality_armor_wears_one_less_but_never_below_one(content, world):
+    game = _smithy(content, world)
+    p, s = game.state.player, game.state
+    rule = content.config.armor
+    tiers = ("大勝", "險勝", "僵持", "落敗")
+    assert rule.wear == {"大勝": 1, "險勝": 2, "僵持": 3, "落敗": 5}
+
+    def lost(quality, tier):
+        p.armor = _jacket(quality=quality)
+        armor.wear(s, content, tier)
+        return 100 - p.armor.edge
+
+    assert [lost(q, t) for q in ("下品", "中品", "上品") for t in tiers] == [1, 2, 3, 5] * 3  # 沒寫那一組：跟以前一字不差
+    _graded(content)
+    assert [lost(q, t) for q in ("下品", "中品") for t in tiers] == [1, 2, 3, 5] * 2
+    assert [lost("上品", t) for t in tiers] == [1, 1, 2, 4]  # 大勝本來只扣 1：上品那一場等於沒省（刻意）
+    assert lost("上品", "平手") == 0  # 本來不扣的不扣
+    assert equipment.wear_note(_jacket(quality="上品"), content) == "磨得慢" and equipment.wear_note(_jacket(quality="中品"), content) == ""
+
+
+def test_each_armor_quality_tempers_up_to_its_own_cap_and_then_is_full(content, world):
+    _graded(content)
+    for quality, cap in (("下品", 5), ("中品", 6), ("上品", 7)):
+        game = _armor_smith(content, world, name=f"淬{quality}")
+        p = game.state.player
+        p.armor, p.materials, p.stats["silver"] = _jacket(quality=quality), {"gang_1": 9}, 500
+        for n in range(1, cap + 1):
+            opt = _ids(game)[smithing.ARMOR_TEMPER]
+            assert opt.enabled and f"第 {n}/{cap} 次" in opt.label
+            game.choose(smithing.ARMOR_TEMPER)
+        assert p.armor.tempers == cap
+        opt = _ids(game)[smithing.ARMOR_TEMPER]
+        assert not opt.enabled and smithing.FULL in opt.label
+        assert smithing.temper(game.state, content, "armor") == [f"（{smithing.FULL}。）"] and p.armor.tempers == cap
+
+
+def test_the_whole_season_bot_tempers_a_top_quality_jacket_seven_times(content, world, monkeypatch):
+    from tianxia import bot
+    _graded(content)
+    game = _smithy(content, world)
+    p = game.state.player
+    p.armor, p.materials, p.stats["silver"] = _jacket(quality="上品"), {"gang_1": 9}, 500
+    monkeypatch.setattr(smithing, "armor_plan", lambda *a, **k: None)  # 只看淬煉：不讓它先拿素材去打一件
+    assert smithing.armor_temper_wanted(game.state, content, world, _inner(game, content, world))
+    bot.visit_smith(game)
+    assert p.armor.tempers == 7 and p.materials == {"gang_1": 2}
+    assert not smithing.armor_temper_wanted(game.state, content, world, _inner(game, content, world))
+
+
+def test_a_divine_original_armor_is_top_quality_for_the_cap_and_the_rows_write_it(content, world):
+    _graded(content)
+    game = _smithy(content, world)
+    p, s = game.state.player, game.state
+    original = _jacket(tier=3, quality="上品", aid="甲:2", name="原品甲")
+    original.original = True
+    p.armor, p.rack = _jacket(quality="中品"), [original]
+    assert smithing.temper_cap(original, content) == 7
+    ng = _inner(game, content, world)
+    data = armor.rows(s, content, ng)
+    assert data["worn"]["temper_max"] == 6 and data["rack"][0]["temper_max"] == 7
+    assert data["worn"]["wear_note"] == "" and data["rack"][0]["wear_note"] == "磨得慢"
+    from tianxia import shopview
+    view = shopview.smith_view(s, content, world)
+    assert view["worn"]["item"]["temper_max"] == 6 and view["rack"]["rows"][0]["temper_max"] == 7
+    assert view["worn"]["item"]["wear_note"] == "" and view["rack"]["rows"][0]["wear_note"] == "磨得慢"
