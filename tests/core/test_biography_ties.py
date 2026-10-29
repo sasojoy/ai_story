@@ -144,6 +144,26 @@ def test_a_rival_name_is_never_touched_by_the_fallback():
     assert "沈浪也是其中之一" in text  # 心意那一句照舊：「你」換成名號
 
 
+def test_a_rival_name_is_kept_in_the_duel_lines_with_the_switch_open_or_closed():
+    """FB-9020：列傳為終點關著的季，約戰那一句走一般的 _strip（7f 照「關著一個字不變」沒動），對手叫「你好嗎2」「Rival2」就被改成
+    「沈浪好嗎二」「Rival二」；行狀記了 keep，關著的季也原樣（開著的季走 _tie_line，原句整句不動，跟 keep 無關）。攻方、守方兩種句子都是。"""
+    rows = {"在長社約戰你好嗎2，大勝。": "你好嗎2", "在宛城約戰Rival2，落敗。": "Rival2",
+            "應下你好嗎2在汝南荒野的約戰，險勝。": "你好嗎2", "應下Rival2在汝南荒野的約戰，險勝。": "Rival2"}
+    for profile, lead in ((CLOSED, ""), (ZHUAN, "第三週，沈浪")):  # 開著的季補時刻與主詞（7e）；關著的季是原句
+        for said, rival in rows.items():
+            text = biography.rule_text(_request(_e(annals.DUEL, said, 3, keep=[rival]), profile=profile))
+            assert lead + said in text, text
+            assert "好嗎二" not in text and "Rival二" not in text and "沈浪好嗎" not in text
+    legacy = biography.rule_text(_request(_e(annals.DUEL, "在宛城約戰Rival2，落敗。", 3), profile=CLOSED))  # 舊行狀沒有 keep：照舊
+    assert "Rival二" in legacy
+
+
+def test_the_garrison_line_needs_no_keep_and_reads_as_before():
+    for profile in (CLOSED, ZHUAN):
+        text = biography.rule_text(_request(_e(annals.DUEL, "在宛城約戰守軍，落敗。", 3), profile=profile))
+        assert "在宛城約戰守軍，落敗。" in text
+
+
 def test_the_one_who_answered_is_not_written_as_the_one_who_posted():
     """FB-897：守方的行狀是「應下某某在某地的約戰」（sortie_duel.ANNAL_ANSWER_LINE），補了主詞與時刻之後讀起來是他應戰、不是他下戰書。"""
     answered = sortie_duel.ANNAL_ANSWER_LINE.format(place="汝南荒野", rival="沈浪", tier="落敗")

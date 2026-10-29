@@ -94,6 +94,109 @@ def test_clean_keeps_good_model_text_and_rejects_the_bad():
     assert biography.clean(None, req) is None
 
 
+# ── 別的玩家的名號（FB-9020）：行狀記下這一則要原樣保留的名號（AnnalEntry.keep），備援文字與清理都照它 ──
+# 對手是玩家，名號只擋控制字元與長度：帶「你」、帶阿拉伯數字、帶正負號都有可能。_strip 整句把「你」換成傳主、把數字換成中文，原句同時有代詞
+# 「你」與對手名號時光看字串分不出哪個「你」是代詞，所以由寫行狀的那一刻（engine 的 _raid_record 等）把名號記在 keep 裡。
+
+RIVALS = ("你好嗎", "Rival2", "你好嗎2", "A-1", "+3號")
+# （種類、原句、傳裡的樣子）：原句是 engine 與各規則檔實際格式出來的，{r} 是對手的名號
+KEEP_CASES = {
+    "raid（攔人的）": ("fight", "你攔下{r}動手，{r}不敵，丟下銀兩走了。", "沈浪攔下{r}動手，{r}不敵，丟下銀兩走了。"),
+    "raid（被攔的）": ("fight", "{r}半路截殺你，反被你打退，丟下銀兩走了。", "{r}半路截殺沈浪，反被沈浪打退，丟下銀兩走了。"),
+    "ambush（設伏的）": ("fight", "{r}走進你的埋伏，被你打得丟下財物逃了。", "{r}走進沈浪的埋伏，被沈浪打得丟下財物逃了。"),
+    "ambush（路過的）": ("fight", "路上殺出伏兵{r}，你把他打退，搶下他的財物。", "路上殺出伏兵{r}，沈浪把他打退，搶下他的財物。"),
+    "melee（出陣的）": ("fight", "{r}正在長社替官軍出力，兩人撞個正著，當場動起手來。你逼退了{r}，這一下推得更多。",
+                    "{r}正在長社替官軍出力，兩人撞個正著，當場動起手來。沈浪逼退了{r}，這一下推得更多。"),
+    "melee（被撞的）": ("fight", "{r}在長社出陣，撞上了你；你逼退了他，他那一下白跑了。", "{r}在長社出陣，撞上了沈浪；沈浪逼退了他，他那一下白跑了。"),
+    "擂台": ("fight", "上擂台挑{r}，大勝。", "上擂台挑{r}，大勝。"),
+    "奪璽": ("deed", "你從{r}懷中奪得了『螭首』。", "沈浪從{r}懷中奪得了『螭首』。"),
+    "奪璽（守住的）": ("deed", "你擋下了{r}，『螭首』還在你懷中。", "沈浪擋下了{r}，『螭首』還在沈浪懷中。"),
+    "約戰（攻方）": ("duel", "在長社約戰{r}，大勝。", "在長社約戰{r}，大勝。"),
+    "約戰（守方）": ("duel", "應下{r}在汝南荒野的約戰，落敗。", "應下{r}在汝南荒野的約戰，落敗。"),
+}
+
+
+def _kept_request(kind: str, text: str, keep: list[str] | None, **kw) -> biography.BiographyRequest:
+    row = {"kind": kind, "when": "第 3 週・週二 10:00", "text": text, "weight": 5}
+    if keep is not None:
+        row["keep"] = keep
+    return _request(annals=(row,), **kw)
+
+
+@pytest.mark.parametrize("rival", RIVALS)
+@pytest.mark.parametrize("case", sorted(KEEP_CASES))
+def test_a_rival_name_stays_as_written_while_the_pronoun_still_becomes_the_subject(case, rival):
+    kind, said, wanted = KEEP_CASES[case]
+    text = biography.rule_text(_kept_request(kind, said.format(r=rival), [rival]))
+    assert wanted.format(r=rival) in text, text
+    assert "你" not in text.replace(rival, "")  # 對手名號以外沒有「你」：代詞都換成了傳主
+    assert not any(ch.isascii() and ch.isdigit() for ch in text.replace(rival, ""))  # 名號以外沒有阿拉伯數字
+    assert "。。" not in text
+
+
+def test_the_gamble_names_its_target_and_the_reply_keeps_the_name_too():
+    rival = "你好嗎2"
+    row = {"kind": "showdown", "when": "第 6 週・週三 20:00", "text": f"在長社火攻陣上放手一搏，成了，點名{rival}。", "weight": 4,
+           "quote": "點火燒糧", "reply": f"沈浪一把火燒了{rival}的 2 輛糧車", "keep": [rival]}
+    text = biography.rule_text(_request(annals=(row,)))
+    assert f"在長社火攻陣上放手一搏，成了，點名{rival}。沈浪曰：「點火燒糧」於是沈浪一把火燒了{rival}的二輛糧車。" in text  # 別的數字照舊換中文
+    legacy = biography.rule_text(_request(annals=({k: v for k, v in row.items() if k != "keep"},)))
+    assert rival not in legacy and "點名沈浪好嗎二" in legacy  # 沒有 keep（舊存檔）：照舊被改
+
+
+def test_without_keep_the_fallback_reads_exactly_as_before():
+    """沒有 keep（存在玩家存檔裡的舊行狀、或這一則沒有別人的名號）：_strip 跟修之前一字不差；keep 裡的名號不在這一句裡也一樣。"""
+    def before(text: str, name: str = "") -> str:
+        text = biography._plain(text).rstrip("。")
+        return text.replace("你", name) if name else text
+
+    samples = ["你攔下你好嗎動手，兩人鬥了半天不分高下，各自退開。", "出手 4 回合，在 12／30 人中排第 3／12，情誼 +6", "你從Rival2懷中奪得了『螭首』。", "", "你"]
+    for sample in samples:
+        for name in ("沈浪", "", "你好嗎2"):
+            assert biography._strip(sample, name) == before(sample, name)
+            assert biography._strip(sample, name, None) == biography._strip(sample, name, ()) == biography._strip(sample, name, ["", "不在這一句裡"]) == before(sample, name)
+
+
+def test_the_placeholders_cannot_be_confused_with_the_text_or_the_names():
+    """遮名號用私用區的字元：挑文字、傳主名號、保留名號裡都沒有的；長的名號先遮，免得一個名號是另一個的一部分。"""
+    assert biography._strip("你攔下Rival2動手", "沈浪", ["Rival2"]) == "沈浪攔下Rival2動手"
+    assert biography._strip("你攔下\ue000動手", "沈浪", ["\ue000"]) == "沈浪攔下\ue000動手"  # 對手名號裡就有私用區的字
+    assert biography._strip("你攔下Rival2動手", "\ue000傳主", ["Rival2"]) == "\ue000傳主攔下Rival2動手"  # 傳主名號裡有
+    assert biography._strip("你攔下\ue000\ue001動手", "沈浪", ["\ue000", "\ue001"]) == "沈浪攔下\ue000\ue001動手"
+    assert biography._strip("你攔下你好嗎2動手，你好也來", "沈浪", ["你好", "你好嗎2"]) == "沈浪攔下你好嗎2動手，你好也來"  # 兩個名號一個包著另一個
+    assert biography._strip("你攔下Rival22動手，你攔下Rival2動手", "沈浪", ["Rival2", "Rival22"]) == "沈浪攔下Rival22動手，沈浪攔下Rival2動手"
+    assert biography._strip("你攔下A-1動手", "沈浪", ["A-1"]) == "沈浪攔下A-1動手"  # 正負號也不被當成「增減」
+
+
+def test_the_subjects_own_name_is_not_kept_the_pronoun_still_takes_it_whole():
+    """傳主自己的名號不放進 keep（PM 定）：代詞「你」換成他的名號，名號帶「你」或數字也是整個放進去，不再被改。"""
+    assert biography._strip("你贏了", "你好嗎2") == "你好嗎2贏了"
+    assert biography._strip("你贏了，出手 3 回合", "Rival2") == "Rival2贏了，出手三回合"
+
+
+def test_the_outline_and_the_prompt_ignore_keep():
+    """給模型的事實清單不改格式：名號在清單裡本來就原樣；keep 只管備援文字與清理。"""
+    row = {"kind": "fight", "when": "第 3 週・週二 10:00", "text": "你攔下Rival2動手，Rival2不敵，丟下銀兩走了。", "weight": 3}
+    plain, kept = _request(annals=(row,)), _request(annals=({**row, "keep": ["Rival2"]},))
+    assert biography.outline(plain) == biography.outline(kept) and "你攔下Rival2動手" in biography.outline(kept)
+    assert biography.messages(plain) == biography.messages(kept)
+
+
+def test_clean_lets_a_name_with_digits_through_but_nothing_else():
+    """模型照事實清單把對手的名號（Rival2）原樣寫進傳：名號是行狀的 keep，檢查阿拉伯數字之前先遮掉；傳主自己的名號也一樣。其他數字照擋。"""
+    row = {"kind": "fight", "when": "第 3 週・週二 10:00", "text": "你攔下Rival2動手。", "weight": 3, "keep": ["Rival2"]}
+    req = _request(annals=(row,))
+    body = "沈浪者，" + "起於潁川，" * 40 + "曾攔下Rival2動手，不分高下。"
+    assert biography.clean(body, req) == body
+    assert biography.clean(body, _request(annals=({k: v for k, v in row.items() if k != "keep"},))) is None  # 沒有 keep：照舊擋
+    assert biography.clean(body + "前後戰了3回合。", req) is None  # 別的數字照擋
+    assert biography.clean(body.replace("Rival2", "Rival22"), req) is None  # 名號後面多一個數字：不是那個名號
+    assert biography.clean(body.replace("Rival2", "Rival2０"), req) is None  # 全形數字也一樣
+    own = _request(name="沈浪2", annals=({**row, "keep": []},))
+    assert biography.clean("沈浪2者，" + "起於潁川，" * 40 + "與Rival二周旋。", own) is not None  # 傳主名號帶數字
+    assert biography.clean("沈浪2者，" + "起於潁川，" * 40 + "戰了3回合。", own) is None
+
+
 def test_the_model_is_asked_with_the_facts_and_failures_fall_back_to_none():
     class Fake:
         timeout, retry = 99, True
