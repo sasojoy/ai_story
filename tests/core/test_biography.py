@@ -13,7 +13,7 @@ import server
 import webharness
 import zhuan_html
 from conftest import next_season
-from tianxia import annals, biography
+from tianxia import annals, biography, epiphany, gender
 from tianxia.engine import Game
 
 ROOT = Path(__file__).parents[2]
@@ -168,18 +168,64 @@ def test_the_placeholders_cannot_be_confused_with_the_text_or_the_names():
     assert biography._strip("你攔下A-1動手", "沈浪", ["A-1"]) == "沈浪攔下A-1動手"  # 正負號也不被當成「增減」
 
 
-def test_the_subjects_own_name_is_not_kept_the_pronoun_still_takes_it_whole():
-    """傳主自己的名號不放進 keep（PM 定）：代詞「你」換成他的名號，名號帶「你」或數字也是整個放進去，不再被改。"""
+def test_the_subjects_own_name_takes_the_pronoun_whole_and_is_never_changed_itself():
+    """傳主自己的名號不存在 keep 裡（存檔不重複），_strip 固定把它加進去一起遮：代詞「你」換成他的名號，名號帶「你」或數字也是整個放進去，
+    原句照字寫出的傳主名號也不被改（以前會寫成「你好嗎2好嗎二」「Zed二」）。"""
     assert biography._strip("你贏了", "你好嗎2") == "你好嗎2贏了"
     assert biography._strip("你贏了，出手 3 回合", "Rival2") == "Rival2贏了，出手三回合"
+    assert biography._strip("你好嗎2頓悟，悟出神品意境「天」。", "你好嗎2") == "你好嗎2頓悟，悟出神品意境「天」"
+    assert biography._strip("名號上了〈天下形勢〉第 5 篇：「Zed2下戰書攻荒丘」", "Zed2") == "名號上了〈天下形勢〉第五篇：「Zed2下戰書攻荒丘」"
+    assert biography._strip("你攔下Rival2動手，你好嗎2也受了傷", "你好嗎2", ["Rival2"]) == "你好嗎2攔下Rival2動手，你好嗎2也受了傷"  # 對手與傳主各護各的
+    assert biography._strip("Zed2一把火燒了糧車 2 輛", "", None, own="Zed2") == "Zed2一把火燒了糧車二輛"  # 不換代詞的那一句（放手一搏的 reply）照樣護傳主名號
 
 
-def test_the_outline_and_the_prompt_ignore_keep():
-    """給模型的事實清單不改格式：名號在清單裡本來就原樣；keep 只管備援文字與清理。"""
-    row = {"kind": "fight", "when": "第 3 週・週二 10:00", "text": "你攔下Rival2動手，Rival2不敵，丟下銀兩走了。", "weight": 3}
-    plain, kept = _request(annals=(row,)), _request(annals=({**row, "keep": ["Rival2"]},))
-    assert biography.outline(plain) == biography.outline(kept) and "你攔下Rival2動手" in biography.outline(kept)
-    assert biography.messages(plain) == biography.messages(kept)
+@pytest.mark.parametrize("me", ("你好嗎", "Zed2", "你好嗎2", "A-1", "+3號"))
+def test_a_sentence_that_writes_the_subjects_own_name_keeps_it_as_written(me):
+    """行狀原句照字寫出傳主名號的幾類（〈天下形勢〉那一句、神品意境的首創、奇事收尾；放手一搏播出的那一版也常寫到他）：傳主叫「你好嗎2」「Zed2」
+    也原樣；同一句的代詞「你」照舊換成他的名號。"""
+    rows = (
+        {"kind": "xingshi", "when": "第 3 週・週二 10:00", "text": f"名號上了〈天下形勢〉第 5 篇：「{me}下戰書攻荒丘」", "weight": 3},
+        {"kind": "story", "when": "第 4 週・週二 10:00", "text": epiphany.FIRST_ANNAL.format(name=me, insight="天人"), "weight": 5},
+        {"kind": "story", "when": "第 5 週・週二 10:00", "text": f"{me}替人傳了一封信，你也在場。", "weight": 4},
+        {"kind": "showdown", "when": "第 6 週・週三 20:00", "text": "在長社火攻陣上放手一搏，成了。", "weight": 4, "quote": "點火燒糧",
+         "reply": f"{me}一把火燒了糧車 2 輛"},
+    )
+    text = biography.rule_text(_request(name=me, annals=rows))
+    assert f"第三週，名號上了〈天下形勢〉第五篇：「{me}下戰書攻荒丘」" in text
+    assert f"第四週，{me}頓悟，悟出神品意境「天人」" in text
+    assert f"第五週，{me}替人傳了一封信，{me}也在場" in text
+    assert f"{me}曰：「點火燒糧」於是{me}一把火燒了糧車二輛" in text
+    assert biography.clean(text.replace("\n\n", "\n\n" + "起於潁川，" * 40, 1), _request(name=me, annals=rows)) is not None  # 傳主名號帶數字也過得了清理
+
+
+def _sys(name: str = "沈浪", sex: str = "男", note: bool = False) -> str:
+    """系統提示的樣子：note 是規矩 4 後面多一句名號的（先改範本再填名號）。"""
+    template = biography.SYSTEM.replace(biography.RULE4_END, biography.RULE4_END + biography.NAME_NOTE, 1) if note else biography.SYSTEM
+    return template.format(name=name, him=gender.pronoun(sex), word=gender.word(sex))
+
+
+def test_the_prompt_gains_one_sentence_only_when_a_name_carries_an_ascii_digit():
+    """PM 2026-10-29：這一篇有名號帶阿拉伯數字（傳主名號或任何一則 keep）時，規矩 4 後面接「名號照事實清單原樣寫，…」，免得模型把 Rival2 寫成
+    Rival二；沒有這種名號的篇系統提示一個字不變（名號帶「你」、沒有數字的也不變）。"""
+    row = {"kind": "fight", "when": "第 3 週・週二 10:00", "text": "你攔下你好嗎動手。", "weight": 3}
+    assert biography.messages(_request())[0]["content"] == _sys()
+    assert biography.messages(_request(annals=({**row, "keep": ["你好嗎"]},)))[0]["content"] == _sys()
+    assert biography.messages(_request(annals=({**row, "text": "你攔下Rival2動手。"},)))[0]["content"] == _sys()  # 沒有 keep 的舊行狀：不算
+    for req in (_request(name="沈浪2"), _request(annals=({**row, "keep": ["Rival2"]},)), _request(annals=(row, {**row, "keep": ["甲２"]})),
+                _request(name="Ｘ１", annals=({**row, "keep": []},)), _request(annals=({**row, "keep": ["A-1"]},), sex="女")):
+        got = biography.messages(req)[0]["content"]
+        assert got == _sys(req.name, req.sex, note=True)
+        assert got.count(biography.NAME_NOTE) == 1
+        assert f"清單裡沒有的數目不寫。{biography.NAME_NOTE}\n5. " in got  # 接在規矩 4 後面、5 之前
+    assert not any(ch.isascii() and ch.isdigit() for ch in biography.NAME_NOTE) and "你" not in biography.NAME_NOTE
+    # 名號不是範本：名號剛好叫「清單裡沒有的數目不寫。」也只在規矩 4 後面多那一句
+    odd = biography.RULE4_END
+    assert biography.messages(_request(name=odd + "2"))[0]["content"] == _sys(odd + "2", note=True)
+    assert f"{odd}{biography.NAME_NOTE}\n5. " in biography.messages(_request(name=odd + "2"))[0]["content"]  # 名號裡的那一段沒被當成範本
+    # 事實清單的格式不動：名號本來就原樣
+    kept, plain = _request(annals=({**row, "text": "你攔下Rival2動手。", "keep": ["Rival2"]},)), _request(annals=({**row, "text": "你攔下Rival2動手。"},))
+    assert biography.outline(kept) == biography.outline(plain) and "你攔下Rival2動手" in biography.outline(kept)
+    assert biography.messages(kept)[1] == biography.messages(plain)[1]  # 給模型的第二則（事實清單）一樣
 
 
 def test_clean_lets_a_name_with_digits_through_but_nothing_else():

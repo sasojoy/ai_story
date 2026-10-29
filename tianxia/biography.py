@@ -140,8 +140,17 @@ SYSTEM = (
 # 列傳為終點（減法季批 7b）：有季末論功的那一篇多這一條（_tiered）；關著的季系統提示一個字不變
 TIER_RULE = "\n7. 季末論功的名次與第幾階，寫在結局那一段的最後。"
 # 減法季 7e：清單裡有人物心意、受託辦事、約戰（TIES）的那一篇多這一條（_ties；待 joy 潤）。條號接在前面的後面（有 TIER_RULE 是 8，沒有是 7）
+# FB-9020（PM 2026-10-29）：這一篇有名號帶阿拉伯數字（傳主名號或任何一則行狀的 keep）時，規矩 4 後面多這一句，免得模型照「不得用阿拉伯數字」把
+# 「Rival2」寫成「Rival二」（clean 檢查數字之前遮掉這些名號）。沒有這種名號的篇，系統提示一個字不變（待 joy 潤）
+RULE4_END = "清單裡沒有的數目不寫。"
+NAME_NOTE = "名號照事實清單原樣寫，名號裡的數字不必改成中文。"
 TIES_RULE = ("\n{n}. 清單裡若有人物心意、受託辦事、出陣約戰這幾類事，各用一兩句帶過，放進與英雄交往或結局那一段。"
              "人物心意是眾人合力勸成的，只能寫{name}也在其中，不可寫成{him}一人改了人物的主意；約戰的勝負只用清單裡的字，對手是誰照清單寫。")
+
+
+def _digit_names(req: BiographyRequest) -> bool:
+    """這一篇有名號帶阿拉伯數字（半形全形都算）：傳主的名號，或任何一則行狀的 keep（別的玩家的名號）。"""
+    return any(re.search(r"[0-9０-９]", n) for n in (req.name, *(k for e in req.annals for k in e.get("keep") or ())))
 
 
 def messages(req: BiographyRequest) -> list[dict[str, str]]:
@@ -149,7 +158,8 @@ def messages(req: BiographyRequest) -> list[dict[str, str]]:
     if req.rewrite:
         ask += "\n\n（這是重寫：換一種起筆與剪裁。）"
     him = gender.pronoun(req.sex)
-    system = SYSTEM.format(name=req.name, him=him, word=gender.word(req.sex)) + (TIER_RULE if _tiered(req) else "")
+    template = SYSTEM.replace(RULE4_END, RULE4_END + NAME_NOTE, 1) if _digit_names(req) else SYSTEM  # 先改範本再填名號：名號裡有什麼字都碰不到
+    system = template.format(name=req.name, him=him, word=gender.word(req.sex)) + (TIER_RULE if _tiered(req) else "")
     if _ties(req):
         system += TIES_RULE.format(n=8 if _tiered(req) else 7, name=req.name, him=him)
     return [{"role": "system", "content": system}, {"role": "user", "content": ask}]
@@ -209,12 +219,13 @@ def _guard(text: str, name: str, keep) -> tuple[str, dict[str, str]]:
     return text, held
 
 
-def _strip(text: str, name: str = "", keep=None) -> str:
+def _strip(text: str, name: str = "", keep=None, own: str = "") -> str:
     """一則行狀的事實接進句子裡：數目換成中文、「你」換成名號（行狀是寫給你看的，傳是第三人稱）、去掉句尾的句號。
     你說的那一句、人物回的那一句不經過這裡。keep（AnnalEntry.keep）是這一句裡別的玩家的名號：原句同時有代詞「你」與對手名號時，光看字串
     分不出哪個「你」是代詞，所以先把它們遮起來、換完再還原（對手叫「你好嗎」「Rival2」不能被寫成「沈浪好嗎」「Rival二」，FB-9020）。
-    傳主自己的名號不在 keep 裡：「你」整個換成它，換進去的名號不再被改。"""
-    text, held = _guard(text, name, keep)
+    傳主自己的名號（name；不換代詞時給 own）不存在 keep 裡（存檔不重複），這裡固定加進去一起遮：原句照字寫出傳主名號的行狀
+    （〈天下形勢〉那一句、首創、奇事收尾）不會把「你好嗎2」寫成「你好嗎2好嗎二」；代詞「你」整個換成名號，換進去的名號不再被改。"""
+    text, held = _guard(text, name, [*(keep or ()), name or own])
     text = _plain(text).rstrip("。")
     if name:
         text = text.replace("你", name)
@@ -287,7 +298,7 @@ def rule_text(req: BiographyRequest) -> str:
             if e.get("quote"):
                 line += f"{name}曰：「{e['quote']}」"
                 if e.get("reply"):
-                    line += "於是" + _end(_strip(e["reply"], "", e.get("keep")))
+                    line += "於是" + _end(_strip(e["reply"], "", e.get("keep"), own=name))
             lines.append(_end(line))
         paras.append("其臨陣也，" + "".join(lines))
     else:

@@ -158,6 +158,17 @@ def test_a_rival_name_is_kept_in_the_duel_lines_with_the_switch_open_or_closed()
     assert "Rival二" in legacy
 
 
+def test_the_digit_name_note_comes_before_the_tier_and_ties_rules():
+    """名號帶數字的篇，規矩 4 後面那一句夾在規矩 4 與 5 之間；論功（7）與心意託付約戰（8）還是接在整份後面，條號不動。"""
+    tiered = dict(ZHUAN, tier=1, tier_side="官軍", tier_title="漢室忠良", contrib=180, final_rank=3, final_of=20)
+    req = _request(_e(annals.DUEL, "在長社約戰Rival2，大勝。", 3, keep=["Rival2"]), profile=tiered)
+    template = biography.SYSTEM.replace(biography.RULE4_END, biography.RULE4_END + biography.NAME_NOTE, 1)
+    assert biography.messages(req)[0]["content"] == (
+        template.format(name="沈浪", him="他", word=gender.word("男")) + biography.TIER_RULE + biography.TIES_RULE.format(n=8, name="沈浪", him="他"))
+    no_digit = _request(_e(annals.DUEL, "在長社約戰你好嗎，大勝。", 3, keep=["你好嗎"]), profile=tiered)
+    assert biography.messages(no_digit)[0]["content"] == _system() + biography.TIER_RULE + biography.TIES_RULE.format(n=8, name="沈浪", him="他")
+
+
 def test_the_garrison_line_needs_no_keep_and_reads_as_before():
     for profile in (CLOSED, ZHUAN):
         text = biography.rule_text(_request(_e(annals.DUEL, "在宛城約戰守軍，落敗。", 3), profile=profile))
