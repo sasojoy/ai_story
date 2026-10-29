@@ -228,12 +228,12 @@ def _repair_use(state: GameState, content: Content, slot: str) -> str:
 
 
 def _temper_use(state: GameState, content: Content, slot: str, item_id: str | None = None) -> str:
-    """淬煉那一顆的小字：自動挑的那一種素材（最便宜的同階以上，item_id 是裝備庫那一件的 id 時照那一件的階）＋工錢（一階不收錢就不寫）；
-    沒有料是空字串（原因在 why）。"""
+    """淬煉那一顆的小字：自動挑的那一種一階素材（鐵匠鋪與合成流程 3.7，料固定一階，數量多的先）＋工錢（照這一件的階，item_id 是裝備庫那一件
+    的 id 時照那一件；一階的裝備不收錢就不寫）；沒有料是空字串（原因在 why）。"""
     mid = smithing.temper_material(state, content, slot, item_id)
     if mid is None:
         return ""
-    cost = smithing.temper_price(content, content.materials[mid], slot, item_id)
+    cost = smithing.temper_price(state, content, slot, item_id)
     return f"{content.materials[mid].name}×1" + (f"＋{cost} 兩" if cost else "")
 
 

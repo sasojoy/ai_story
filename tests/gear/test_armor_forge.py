@@ -368,17 +368,18 @@ def test_the_armor_page_lists_at_most_eight_to_wield_best_first(content, world):
 
 # ── Task 4：淬煉防具、防具列與角色卡 ──
 
-def test_armor_temper_uses_the_cheapest_material_at_or_above_its_tier(content, world):
+def test_armor_temper_takes_one_tier_one_material_and_charges_by_the_armor_tier(content, world):
     game = _armor_smith(content, world)
     p = game.state.player
     p.armor, p.materials = _jacket(tier=2), {"gang_1": 5, "gang_2": 1, "gang_3": 1}
-    assert smithing.temper_material(game.state, content, "armor") == "gang_2"  # 一階不夠格；二階比三階便宜
+    assert smithing.temper_material(game.state, content, "armor") == "gang_1"  # 料一律一階（鐵匠鋪與合成流程 3.7）
+    assert smithing.temper_price(game.state, content, "armor") == 30  # 工錢照防具的階
     opt = _ids(game)[smithing.ARMOR_TEMPER]
-    assert opt.enabled and opt.label == "淬煉【試甲】（第 1/5 次・玄鋼骨×1＋30 兩）"
+    assert opt.enabled and opt.label == "淬煉【試甲】（第 1/5 次・精鐵砂×1＋30 兩）"
     ng = _inner(game, content, world)
     before = armor.cut(p.armor, ng, content)
     game.choose(smithing.ARMOR_TEMPER)
-    assert p.armor.tempers == 1 and p.materials == {"gang_1": 5, "gang_3": 1} and p.stats["silver"] == 170
+    assert p.armor.tempers == 1 and p.materials == {"gang_1": 4, "gang_2": 1, "gang_3": 1} and p.stats["silver"] == 170
     assert armor.cut(p.armor, ng, content) == pytest.approx(before + content.config.armor.temper_step)  # 減損每次 +1%（4.1）
     assert game.state.journal[0].title == smithing.TEMPER_TITLE
 
@@ -390,9 +391,9 @@ def test_armor_temper_stops_at_five_and_refuses_without_material_silver_or_armor
     opt = _ids(game)[smithing.ARMOR_TEMPER]
     assert not opt.enabled and smithing.FULL in opt.label
     assert smithing.temper(game.state, content, "armor") == [f"（{smithing.FULL}。）"] and p.materials == {"gang_1": 3}
-    p.armor = _jacket(tier=3)
-    assert smithing.temper_problem(game.state, content, "armor") == "沒有三階以上的素材"
-    p.armor, p.materials, p.stats["silver"] = _jacket(tier=2), {"gang_2": 1}, 10
+    p.armor, p.materials = _jacket(tier=3), {"gang_2": 1, "gang_3": 1}
+    assert smithing.temper_problem(game.state, content, "armor") == "沒有一階的料"  # 二階、三階的料不收（3.7）
+    p.armor, p.materials, p.stats["silver"] = _jacket(tier=2), {"gang_1": 1}, 10
     assert smithing.temper_problem(game.state, content, "armor") == "還差 20 兩"
     p.armor = None
     assert smithing.ARMOR_TEMPER not in _ids(game) and smithing.temper_problem(game.state, content, "armor") == armor.NO_ARMOR
@@ -472,17 +473,17 @@ def test_a_rack_armor_is_repaired_only_when_it_needs_it_and_can_be_paid_for(cont
     assert (p.stats["silver"], dict(p.materials), p.rack[0].edge) == before
 
 
-def test_tempering_a_rack_armor_takes_the_material_that_fits_it_and_keeps_it_in_the_rack(content, world):
+def test_tempering_a_rack_armor_pays_the_wage_of_that_very_armor_and_keeps_it_in_the_rack(content, world):
     game = _two_jackets(content, world)
     p, s = game.state.player, game.state
     p.materials = {"gang_1": 5, "gang_2": 1, "gang_3": 1}
-    assert smithing.temper_material(s, content, "armor") == "gang_1"
-    assert smithing.temper_material(s, content, "armor", "甲:2") == "gang_2"
+    assert smithing.temper_material(s, content, "armor") == smithing.temper_material(s, content, "armor", "甲:2") == "gang_1"
+    assert smithing.temper_price(s, content, "armor") == 0 and smithing.temper_price(s, content, "armor", "甲:2") == 30
     assert smithing.temper_problem(s, content, "armor", "甲:2") is None
     msgs = smithing.temper(s, content, "armor", "甲:2")
     assert p.rack[0].tempers == 1 and p.armor.tempers == 0 and p.armor.id == "甲:1" and [a.id for a in p.rack] == ["甲:2"]
-    assert p.materials == {"gang_1": 5, "gang_3": 1} and p.stats["silver"] == 170
-    assert msgs[0] == "鐵匠拿玄鋼骨把【庫甲】淬了一回，這是第 1 次。"
+    assert p.materials == {"gang_1": 4, "gang_2": 1, "gang_3": 1} and p.stats["silver"] == 170
+    assert msgs[0] == "鐵匠拿精鐵砂把【庫甲】淬了一回，這是第 1 次。"
     p.rack[0].tempers = content.config.armor.temper_max
     assert smithing.temper_problem(s, content, "armor", "甲:2") == smithing.FULL
     assert smithing.temper_problem(s, content, "armor", "甲:9") == equipment.RACK_MISSING
@@ -670,6 +671,17 @@ def test_each_armor_quality_tempers_up_to_its_own_cap_and_then_is_full(content, 
         opt = _ids(game)[smithing.ARMOR_TEMPER]
         assert not opt.enabled and smithing.FULL in opt.label
         assert smithing.temper(game.state, content, "armor") == [f"（{smithing.FULL}。）"] and p.armor.tempers == cap
+
+
+def test_the_armor_group_has_its_own_temper_material_tier_and_a_tier_four_coat_asks_for_no_tier_three(content, world):
+    game = _armor_smith(content, world)
+    p, s = game.state.player, game.state
+    p.armor, p.materials = _jacket(tier=4), {"gang_1": 1}
+    assert smithing.temper_problem(s, content, "armor") is None and smithing.temper_price(s, content, "armor") == 150  # 一個一階＋150 兩
+    content.config.weapons.temper_material_tier = 2  # 兵器那一組改了，不影響防具
+    assert smithing.temper_material(s, content, "armor") == "gang_1"
+    content.config.armor.temper_material_tier = 2
+    assert smithing.temper_material(s, content, "armor") is None and smithing.temper_problem(s, content, "armor") == "沒有二階的料"
 
 
 def test_the_whole_season_bot_tempers_a_top_quality_jacket_seven_times(content, world, monkeypatch):
