@@ -199,7 +199,10 @@ def judge_gamble(client, text: str, title: str, name: str) -> str:
         {"role": "user", "content": f"擂台：【{title}】\n出手的人：{name}\n他寫的招：「{text}」"},
     ]
     try:
-        result = client.chat_structured(messages, CrowdJudge, temperature=0.3, num_predict=JUDGE_PREDICT, required_fields=["crowd"])
+        result = client.chat_structured(
+            messages, CrowdJudge, temperature=0.3, num_predict=JUDGE_PREDICT,
+            required_fields=["crowd"], require_in_schema=True,  # 不開的話模型可以整個略過 crowd，白跑一趟（實測，FB-904）
+        )
     except Exception:
         return "平常"
     label = zh.to_traditional(str(result.crowd or "")).strip()
@@ -239,7 +242,10 @@ def write_line(client, note: CrowdNote) -> str:
         )},
     ]
     try:
-        result = client.chat_structured(messages, CrowdLine, temperature=0.8, num_predict=160, required_fields=["line"])
+        result = client.chat_structured(
+            messages, CrowdLine, temperature=0.8, num_predict=160,
+            required_fields=["line"], require_in_schema=True,  # 同上（FB-904）
+        )
     except Exception:
         return ""
     return clean(result.line, must, (note.name, note.rival, note.helper))
