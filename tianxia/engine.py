@@ -10995,7 +10995,8 @@ class Game:
                 p.answer_cooldown_until = max(p.answer_cooldown_until or 0.0, after.answer)
             if lost:
                 record.notes.append(sortie_duel.LOSE_LINE.format(n=f"{cfg.lose_cooldown_minutes:g}"))
-            annals.note(s, c, annals.DUEL, sortie_duel.ANNAL_LINE.format(  # 地點寫約戰的那一塊（結算時人可能已經走了）
+            annal_line = sortie_duel.ANNAL_ANSWER_LINE if role == "defender" else sortie_duel.ANNAL_LINE  # 應戰的人（含補位的）另一句（FB-897）
+            annals.note(s, c, annals.DUEL, annal_line.format(  # 地點寫約戰的那一塊（結算時人可能已經走了）
                 place=duel.place, rival=rival.name if rival is not None and not rival.garrison else sortie_duel.GARRISON, tier=tier_word), 2,
                 place=duel.place)
         rank = ranks.rank_of(s)

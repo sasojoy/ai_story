@@ -13,7 +13,7 @@ import random
 import pytest
 
 from wins_kit import save, wins_content, wins_game
-from tianxia import annals, biography, gender
+from tianxia import annals, biography, gender, sortie_duel
 from tianxia.characters import CharacterStore
 from tianxia.engine import Game
 
@@ -88,6 +88,15 @@ def test_the_prompt_gets_one_more_rule_only_with_the_three_kinds_and_the_switch(
     assert biography.messages(_request(*THREE, profile={}))[0]["content"] == _system()
 
 
+def test_the_ties_rule_only_names_a_section_the_prompt_asks_for():
+    """FB-896：規矩 2 要的四段是出身與投靠、大戰、與英雄交往、結局，沒有「單打獨鬥」（那只是事實清單的標題，備援文字把約戰放在結局那一段）。
+    第 7（8）條說約戰放哪一段，只能是這四段裡的。"""
+    assert "分四段：出身與投靠、大戰、與英雄交往、結局" in biography.SYSTEM
+    assert "放進與英雄交往或結局那一段" in biography.TIES_RULE
+    assert "單打獨鬥" not in biography.TIES_RULE
+    assert "放進與英雄交往或結局那一段" in biography.messages(_request(*THREE))[0]["content"]
+
+
 def test_the_rule_number_follows_the_tier_rule():
     tiered = dict(ZHUAN, tier=1, tier_side="官軍", tier_title="漢室忠良", contrib=180, final_rank=3, final_of=20)
     got = biography.messages(_request(*THREE, profile=tiered))[0]["content"]
@@ -114,12 +123,47 @@ def test_the_fallback_has_a_sentence_for_each_kind():
     assert biography.clean(text, req) == text  # 規則版自己也過得了清理的檢查
 
 
-def test_a_garrison_duel_and_a_rival_with_digits_read_clean():
-    req = _request(_e(annals.DUEL, "在宛城約戰守軍，落敗。"), _e(annals.DUEL, "在長社約戰劍客2，大勝。", 3), _e(annals.ERRAND, "替波才到宛城探一探官軍的營，辦成了。", 3, 3))
+def test_a_garrison_duel_and_an_errand_read_clean():
+    req = _request(_e(annals.DUEL, "在宛城約戰守軍，落敗。"), _e(annals.ERRAND, "替波才到宛城探一探官軍的營，辦成了。", 3, 3))
     text = biography.rule_text(req)
-    assert "第二週，沈浪在宛城約戰守軍，落敗。" in text and "第三週，沈浪在長社約戰劍客二，大勝。" in text
+    assert "第二週，沈浪在宛城約戰守軍，落敗。" in text
     assert "第三週，沈浪替波才到宛城探一探官軍的營，辦成了。" in text
     assert not any(ch.isascii() and ch.isdigit() for ch in text)
+
+
+def test_a_rival_name_is_never_touched_by_the_fallback():
+    """FB-895：對手是玩家，名號只擋控制字元與長度，帶「你」、帶阿拉伯數字都有可能。備援文字別人的名號一個字都不動：
+    不能把「你好嗎」寫成「沈浪好嗎」、把「Rival2」寫成「Rival二」。「你」換成傳主名號只對心意那一句（原句寫給你看的「你也是其中之一」）。"""
+    req = _request(_e(annals.DUEL, "在長社約戰你好嗎，大勝。", 3), _e(annals.DUEL, "在宛城約戰Rival2，落敗。", 4),
+                   _e(annals.DUEL, "應下你好嗎2在汝南荒野的約戰，險勝。", 5), _e(annals.STANCE, STANCE_TEXT, figure="luzhi"))
+    text = biography.rule_text(req)
+    assert "第三週，沈浪在長社約戰你好嗎，大勝。" in text
+    assert "第四週，沈浪在宛城約戰Rival2，落敗。" in text
+    assert "第五週，沈浪應下你好嗎2在汝南荒野的約戰，險勝。" in text
+    assert "沈浪好嗎" not in text and "Rival二" not in text and "好嗎二" not in text
+    assert "沈浪也是其中之一" in text  # 心意那一句照舊：「你」換成名號
+
+
+def test_the_one_who_answered_is_not_written_as_the_one_who_posted():
+    """FB-897：守方的行狀是「應下某某在某地的約戰」（sortie_duel.ANNAL_ANSWER_LINE），補了主詞與時刻之後讀起來是他應戰、不是他下戰書。"""
+    answered = sortie_duel.ANNAL_ANSWER_LINE.format(place="汝南荒野", rival="沈浪", tier="落敗")
+    posted = sortie_duel.ANNAL_LINE.format(place="汝南荒野", rival="乙守", tier="大勝")
+    req = _request(_e(annals.DUEL, answered, 1), name="乙守")
+    assert "第一週，乙守應下沈浪在汝南荒野的約戰，落敗。" in biography.rule_text(req)
+    assert "第一週，沈浪在汝南荒野約戰乙守，大勝。" in biography.rule_text(_request(_e(annals.DUEL, posted, 1)))  # 攻方照舊
+
+
+def test_the_stance_line_still_turns_you_into_the_name_and_digits_into_chinese():
+    req = _request(_e(annals.STANCE, "眾人勸盧植速戰，你也是其中之一：盧植決意 3 日內速攻廣宗。", figure="luzhi"))
+    assert "第二週，眾人勸盧植速戰，沈浪也是其中之一：盧植決意三日內速攻廣宗。" in biography.rule_text(req)
+
+
+def test_an_errand_and_a_duel_line_only_lose_the_closing_stop():
+    """託付、約戰的原句整句原樣接進備援文字（只去掉句尾句號再補回）：人物的名字、地名、「你」「數字」都不經過 _strip。"""
+    for kind, text in ((annals.ERRAND, "替盧植把一封軍書送到長社，親手交給皇甫嵩，辦成了。"), (annals.DUEL, "在長社約戰Rival2你好，險勝。")):
+        line = biography._tie_line({"kind": kind, "when": "第 3 週・週二 10:00", "text": text}, "沈浪")
+        assert line == f"第三週，沈浪{text}"
+    assert biography._tie_line({"kind": annals.DUEL, "when": "", "text": "在長社約戰你好嗎，大勝"}, "沈浪") == "沈浪在長社約戰你好嗎，大勝。"  # 沒有句號也補得上
 
 
 # ── 擠位子：備援文字每一段只取前幾則 ──

@@ -93,7 +93,9 @@ NEXT_DONE = "今日已用完"
 CONVOY_LINE = "這週截糧的運糧隊正打{place}經過：在那裡按出陣就是去截糧。"
 CONVOY_NAME = "截糧"  # 運糧隊經過時出陣那一格的名字（「出陣・截糧」）
 LOOT_LINE = "經驗 {exp}・心得 {xinde}・銀兩 {silver}"  # 出陣前那張卡「贏了」那一段的戰利
-ANNAL_LINE = "在{place}約戰{rival}，{tier}。"  # 行狀（annals.DUEL）
+ANNAL_LINE = "在{place}約戰{rival}，{tier}。"  # 行狀（annals.DUEL）：下戰書的攻方
+# 應戰的人（含補位的）另一句（FB-897；待 joy 潤）：同一句的話，列傳補了主詞之後守方的傳讀起來像他下的戰書。名字不叫 ANSWER_LINE：那是約戰卡「你應下…」那一句
+ANNAL_ANSWER_LINE = "應下{rival}在{place}的約戰，{tier}。"  # 行狀（annals.DUEL）：應戰的守方
 
 
 # 出陣那一格灰著時格子裡的小字：五格、四格時每格只放得下四個字（FB-670，tests/web/test_jianghu_page_web.py 守）；整句在行動列底下那一行

@@ -140,7 +140,7 @@ SYSTEM = (
 # 列傳為終點（減法季批 7b）：有季末論功的那一篇多這一條（_tiered）；關著的季系統提示一個字不變
 TIER_RULE = "\n7. 季末論功的名次與第幾階，寫在結局那一段的最後。"
 # 減法季 7e：清單裡有人物心意、受託辦事、約戰（TIES）的那一篇多這一條（_ties；待 joy 潤）。條號接在前面的後面（有 TIER_RULE 是 8，沒有是 7）
-TIES_RULE = ("\n{n}. 清單裡若有人物心意、受託辦事、出陣約戰這幾類事，各用一兩句帶過，放進與英雄交往或單打獨鬥那一段。"
+TIES_RULE = ("\n{n}. 清單裡若有人物心意、受託辦事、出陣約戰這幾類事，各用一兩句帶過，放進與英雄交往或結局那一段。"
              "人物心意是眾人合力勸成的，只能寫{name}也在其中，不可寫成{him}一人改了人物的主意；約戰的勝負只用清單裡的字，對手是誰照清單寫。")
 
 
@@ -231,7 +231,10 @@ def _pick(rows: list[dict], limit: int, prefer: frozenset[str] = frozenset()) ->
 def _tie_line(e: dict, name: str) -> str:
     """心意、託付、約戰（TIES）的一句備援（7e）：時刻只留到週或日、接在前面，沒有主詞的補上名號（TIES_LINE）。"""
     when = _when(e.get("when", ""))
-    return _end(TIES_LINE[e["kind"]].format(when=f"{when}，" if when else "", name=name, text=_strip(e["text"], name)))
+    # 只有心意那一句是寫給你看的（「你也是其中之一」）：「你」換成名號、數目換成中文。託付、約戰的原句沒有代詞、沒有數目，卻帶別人的名號
+    # （約戰的對手是玩家）：一個字都不動，只去掉句尾的句號（FB-895：對手叫「你好嗎」「Rival2」不能被寫成傳主的名號、「Rival二」）
+    text = _strip(e["text"], name) if e["kind"] == STANCE else e["text"].rstrip("。")
+    return _end(TIES_LINE[e["kind"]].format(when=f"{when}，" if when else "", name=name, text=text))
 
 
 def rule_text(req: BiographyRequest) -> str:
