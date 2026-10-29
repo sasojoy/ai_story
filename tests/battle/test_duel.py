@@ -272,6 +272,194 @@ def test_content_checks_the_faces(setup):
         validate(content)
 
 
+# ── 鐵匠鋪與合成流程 3.9（D 批）：頭目戰吃防具（對手打中你的那一下乘 1 − min(total_cap, 化勁＋防具減損)）──
+# 化勁在單挑裡本來就是戰法（Step.a_cut）：快照的 cut 只抄防具那一份，跟戰法的化勁在乘的那一刻相加、夾 total_cap（不重複算化勁）
+
+
+def _mail(tier=3, quality="上品", edge=100):
+    from tianxia.state import Equipment
+
+    return Equipment(id="甲:1", slot="armor", name="試甲", attribute="剛", tier=tier, quality=quality, edge=edge)
+
+
+def _bout():
+    from tianxia import tactics
+    from tianxia.state import PLAYER
+
+    ctx = tactics.Ctx(foe="對手", our_agility=5.0, foe_agility=5.0, team=[PLAYER])
+    return tactics.Bout(a=tactics.side_for([], ctx), b=tactics.side_for([], ctx))
+
+
+def test_the_blow_you_take_adds_the_armor_to_the_tactics_toll_cut_and_clamps_it():
+    assert duel.blow_taken(50, 0.0, 0.0, 0.6) == 50  # 沒防具沒化勁：不動
+    assert duel.blow_taken(50, 0.0, 0.3, 0.6) == round(50 * 0.7)  # 沒防具：只有戰法的化勁，跟以前一字不差
+    assert duel.blow_taken(50, 0.0, 0.7, 0.6) == round(50 * 0.3)  # 沒防具時不另外夾 60%（以前也沒有）
+    assert duel.blow_taken(50, 0.22, 0.0, 0.6) == round(50 * 0.78)
+    assert duel.blow_taken(50, 0.22, 0.3, 0.6) == round(50 * 0.48)  # 兩份相加
+    assert duel.blow_taken(50, 0.4, 0.5, 0.6) == round(50 * 0.4)  # 合計夾在 60%
+
+
+def test_the_armor_cut_is_the_clamped_armor_reduction_with_its_wear(setup):
+    from tianxia import team
+
+    content, game = setup
+    s, w = game.state, game.world
+    p = s.player
+    assert team.duel_armor_cut(s, content, w) == 0.0  # 防具關著、沒穿
+    content.config.armor.enabled = True
+    assert team.duel_armor_cut(s, content, w) == 0.0  # 開著但沒穿
+    p.armor = _mail()
+    assert team.duel_armor_cut(s, content, w) == pytest.approx(0.18 + 0.04)  # 三階 18%＋上品 4%
+    p.armor.edge = 0
+    assert team.duel_armor_cut(s, content, w) == pytest.approx(0.22 * content.config.armor.edge_floor)  # 破了剩一半（耐久算進來）
+    p.armor.edge = 100
+    content.config.armor.total_cap = 0.1
+    assert team.duel_armor_cut(s, content, w) == pytest.approx(0.1)  # 夾在 total_cap
+
+
+def test_a_boss_fight_copies_the_armor_cut_when_it_begins_and_keeps_it(setup):
+    content, game = setup
+    content.config.armor.enabled = True
+    p = game.state.player
+    p.armor = _mail()
+    _meet(game)
+    assert p.duel.cut == pytest.approx(0.22)
+    p.armor = None  # 打到一半脫了、壞了：這一場照開打那一刻的算
+    assert p.duel.cut == pytest.approx(0.22)
+    boss = content.duels["lake_boss"]
+    p.duel = None
+    game._duel_start(boss)
+    assert p.duel.cut == 0.0  # 下一場開打時沒穿，就是 0
+    content.config.armor.enabled = False
+    p.duel = None
+    p.armor = _mail()
+    game._duel_start(boss)
+    assert p.duel.cut == 0.0  # 防具關著不吃
+
+
+def test_the_blow_a_boss_lands_is_cut_by_the_armor_and_nothing_else_moves(setup):
+    content, game = setup
+    content.config.armor.enabled = True
+    content.config.duel.luck = 0
+    p = game.state.player
+    p.armor = _mail()
+    _meet(game)
+    boss, cfg, tuning = content.duels["lake_boss"], content.config.duel, content.config.battle
+    worn, bare = p.duel.model_copy(deep=True), p.duel.model_copy(deep=True)
+    bare.cut = 0.0
+    a = duel.exchange_full(bare, boss, "強攻", cfg, tuning, random.Random(1), cut_cap=0.6)
+    b = duel.exchange_full(worn, boss, "強攻", cfg, tuning, random.Random(1), cut_cap=0.6)
+    assert a.hp > 0 and b.hp == round(a.hp * 0.78)
+    assert (a.delta, a.beat, a.mine, a.his) == (b.delta, b.beat, b.mine, b.his)  # 氣勢、剋、出的招一個都沒變，只有挨的那一下少
+    assert worn.hp - bare.hp == a.hp - b.hp > 0 and bare.edge == worn.edge  # 穿甲的池子多留了少挨的那幾點
+
+
+def test_a_boss_blow_takes_the_armor_and_the_tactic_toll_cut_together_clamped_at_the_cap(setup, monkeypatch):
+    from tianxia import tactics
+
+    content, game = setup
+    content.config.duel.luck = 0
+    p = game.state.player
+    _meet(game)
+    boss, cfg, tuning = content.duels["lake_boss"], content.config.duel, content.config.battle
+    stub = tactics.Step(a_cut=0.3)
+    monkeypatch.setattr(tactics, "step", lambda bout, move, his, *a, **k: stub.model_copy(update={"a_move": move, "b_move": his}))
+
+    def hit(cut, cap=0.6):
+        d = p.duel.model_copy(deep=True)
+        d.bout, d.cut = _bout(), cut
+        return duel.exchange_full(d, boss, "強攻", cfg, tuning, random.Random(1), content.config.tactics, random.Random(2), cut_cap=cap).hp
+
+    raw = duel.harm_of(p.duel.hp_cap, p.duel.scores["強攻"], duel.foe_strength(tuning, cfg, boss, duel.foe_difficulty(p.duel, boss)), 0, cfg)  # 戰法的 Step.beat 是 0
+
+    def near(got, want):
+        return abs(got - want) <= 0.51  # 四捨五入
+
+    assert raw >= 10
+    assert hit(0.0) == round(raw * 0.7)  # 沒防具：戰法的化勁照舊（一字不差）
+    assert near(hit(0.22), raw * 0.48)  # 防具 22%＋化勁 30%
+    assert near(hit(0.4), raw * 0.4)  # 40%＋30% 超過 60%：夾在 60%
+    assert near(hit(0.4, cap=0.8), raw * 0.3)
+
+
+def test_a_failed_gamble_and_a_tactics_self_cost_do_not_eat_the_armor(setup, monkeypatch):
+    from tianxia import tactics
+
+    content, game = setup
+    content.config.duel.luck = 0
+    p = game.state.player
+    _meet(game)
+    boss, cfg, tuning = content.duels["lake_boss"], content.config.duel, content.config.battle
+    # 放手一搏失手扣的是自己冒的險：有沒有穿甲都一樣
+    plain, worn = p.duel.model_copy(deep=True), p.duel.model_copy(deep=True)
+    worn.cut = 0.5
+    assert duel.gamble(plain, 0, cfg, tuning, random.Random(3)) == duel.gamble(worn, 0, cfg, tuning, random.Random(3))
+    assert plain.hp == worn.hp and plain.hp < plain.hp_cap
+    # 戰法自扣（焚身那類，Step.a_hp）：只有「打中你的那一下」被乘，自扣照原數
+    monkeypatch.setattr(tactics, "step", lambda bout, move, his, *a, **k: tactics.Step(a_move=move, b_move=his, a_hp=-0.01))  # 負的：自己又掉了一成的一成
+
+    def lose(cut):
+        d = p.duel.model_copy(deep=True)
+        d.bout, d.cut = _bout(), cut
+        return duel.exchange_full(d, boss, "強攻", cfg, tuning, random.Random(1), content.config.tactics, random.Random(2), cut_cap=0.6).hp
+
+    self_cost = round(0.01 * p.duel.hp_cap)
+    raw = lose(0.0) - self_cost  # 沒穿甲時打中的那一下
+    assert self_cost >= 1 and raw >= 10
+    assert lose(0.5) == round(raw * 0.5) + self_cost  # 打中的那一下少一半；自扣那一截一點不少
+
+
+def test_the_pool_lost_to_a_boss_is_counted_after_the_armor_so_the_injury_is_smaller(setup):
+    """內傷從乘過防具之後的數算（頭目戰收場：池子掉的氣血兩成變內傷，_duel_finish）。"""
+    content, game = setup
+    content.config.armor.enabled = True
+    content.config.duel.tell_truth = 1.0
+    content.config.duel.luck = 0
+
+    def fight(armor):
+        content.config.armor.enabled = armor
+        g = Game.new(content, "穿甲" if armor else "赤膊", rng=random.Random(0), world=game.world)
+        g.client = None
+        rules.learn_skill(g.state, content, "fist")
+        g.state.player.location, g.state.player.stamina = "lake", 200.0
+        g.state.player.armor = _mail() if armor else None
+        g.sync(NOW)
+        p = g.state.player
+        _meet(g)
+        while p.duel is not None:
+            g.choose(f"duel:{next(m for m in MOVES if duel.counter(m, p.duel.move) < 0)}")  # 一直被剋
+        if armor:
+            assert p.armor.edge == 100  # 不磨耐久（同切磋、決戰）
+        return p.member.injury, g._player_hp_and_cap()[0], g.state.battles[0].tier
+
+    bare_injury, bare_hp, bare_tier = fight(False)
+    worn_injury, worn_hp, worn_tier = fight(True)
+    assert bare_tier == worn_tier  # 氣勢不受防具影響，結果同一個
+    assert worn_injury < bare_injury and worn_hp > bare_hp
+
+
+def test_every_model_that_carries_a_cut_reads_old_saves_and_is_read_by_older_programs():
+    """退版安全（3.9）：DuelState、ArenaEntry、ArenaSide、BattleParticipant、SealSide 都不是 _Strict（extra 預設 ignore）——新程式讀沒有 cut 的舊存檔是 0，
+    舊程式讀有 cut 的新存檔會略過它不認得的鍵。資料庫結構（第 7 版）不動。（實讀過 origin/feature/smithing-flow 的舊程式，結果寫在計畫與回報。）"""
+    from tianxia.battle_instance import BattleParticipant
+    from tianxia.state import ArenaEntry, ArenaSide, DuelState
+    from tianxia.world_state import SealSide
+
+    samples = [
+        (DuelState, dict(boss="lake_boss", foe=0, hp=1.0, hp_cap=2.0, hp_start=2.0, power=3.0)),
+        (ArenaEntry, dict(name="乙", power=3.0, hp_cap=2.0)),
+        (ArenaSide, dict(name="乙", power=3.0, hp=1.0, hp_cap=2.0)),
+        (BattleParticipant, dict(name="乙", faction="guan", neili=1.0, neili_cap=2.0)),
+        (SealSide, dict(name="乙", hp=1.0, hp_cap=2.0)),
+    ]
+    for model, data in samples:
+        assert model.model_config.get("extra") != "forbid", model.__name__
+        assert model.model_validate(data).cut == 0.0  # 舊存檔沒有 cut：不吃
+        worn = model.model_validate({**data, "cut": 0.22})
+        assert worn.cut == 0.22 and model.model_validate_json(worn.model_dump_json()).cut == 0.22  # 寫出去再讀回來
+        assert model.model_validate({**data, "cut": 0.22, "a_key_only_a_newer_program_writes": 1}).cut == 0.22  # 不認得的鍵略過
+
+
 def test_real_content_has_bosses_for_everyone(real):
     assert len(real.duels) >= 4
     for boss in real.duels.values():

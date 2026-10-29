@@ -834,7 +834,8 @@ def visit_smith(game: Game) -> None:
         better = smithing.better_in_rack(s, c, w, art())
         if better is not None and f"smith:wield:{better.id}" in enabled():
             game.choose(f"smith:wield:{better.id}")
-        for _ in range(c.config.weapons.temper_max):
+        weapon = s.player.weapon  # 淬煉最多幾次照這一把的品質（鐵匠鋪與合成流程 3.6）
+        for _ in range(smithing.temper_cap(weapon, c) if weapon is not None else 0):
             if not smithing.temper_wanted(s, c, w, art()) or smithing.TEMPER not in enabled():
                 break
             game.choose(smithing.TEMPER)
@@ -851,7 +852,8 @@ def visit_smith(game: Game) -> None:
                 game.choose(oid)
             finish_draft()
             press(lambda: armor.wanted(s, c, inner()))  # 打出來進了裝備庫、比身上那件好：換上
-        for _ in range(c.config.armor.temper_max):
+        worn_armor = s.player.armor
+        for _ in range(smithing.temper_cap(worn_armor, c) if worn_armor is not None else 0):
             if not smithing.armor_temper_wanted(s, c, w, inner()) or smithing.ARMOR_TEMPER not in enabled():
                 break
             game.choose(smithing.ARMOR_TEMPER)

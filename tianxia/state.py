@@ -340,6 +340,9 @@ class DuelState(BaseModel):
     lines: list[str] = Field(default_factory=list)  # 每回合一行（戰報的過程）
     difficulty: float | None = None  # 開打時快照的他的難度（江湖水漲，rise.duel）；舊存檔沒有，照內容寫的（duel.foe_difficulty）
     bout: Bout | None = None  # 兩邊的本命戰法（tactics.Bout，本命戰法第二批）；你沒有本命戰法是 None
+    # 開打那一刻抄的防具減損（含耐久，夾在 Config.armor.total_cap；team.duel_armor_cut）：他打中你的那一下乘 1 − 它（鐵匠鋪與合成流程 3.9）。
+    # 化勁不抄在這裡（單挑裡化勁本來就是戰法，Step.a_cut）。頭目沒有防具。舊存檔沒有＝0（不吃）；舊程式讀到這一欄會略過
+    cut: float = 0.0
 
 
 class TavernNote(BaseModel):
@@ -446,6 +449,7 @@ class ArenaSide(BaseModel):
     hp: float
     hp_cap: float
     bare: float | None = None  # 不含玉璽碎片戰力的威力（改版，FB-615）：只有戴著碎片才記；None＝power 本身就是給別人看的那一份
+    cut: float = 0.0  # 這一邊的防具減損（挑的人是開打那一刻的、守的人是分身 ArenaEntry.cut）：對面打中這一邊的那一下乘 1 − 它（鐵匠鋪與合成流程 3.9）；舊存檔 0
 
     @property
     def shown(self) -> float:
@@ -517,6 +521,7 @@ class ArenaEntry(BaseModel):
     hp_cap: float
     arts: list[str] = Field(default_factory=list)  # 身上兩門武學的名字（選單上寫他守擂用什麼）
     kit: BoutSide | None = None  # 報名那一刻身上的本命戰法（team.self_side）；沒有是 None，舊存檔也是
+    cut: float = 0.0  # 報名或更新分身那一刻的防具減損（含耐久，team.duel_armor_cut）：別人來挑時這一邊挨的打乘 1 − 它（鐵匠鋪與合成流程 3.9）；舊的分身沒有＝0
     joined: float = 0.0  # 第一次報名的世界秒
     rank: int = 0  # 名次（1 是天下第一）；報名排到榜尾，挑的人贏了兩人交換（arena.swap）
     wins: int = 0

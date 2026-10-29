@@ -136,6 +136,15 @@ def harm_of(hp_cap: float, mine: float, theirs: float, beat: int, tuning: DuelTu
     return round(hp_cap * tuning.hit * harm * scale)
 
 
+def blow_taken(harm: int, cut: float, tactic_cut: float, cap: float) -> int:
+    """對手打中你的那一下，乘過防具與化勁之後挨多少（鐵匠鋪與合成流程 3.9；頭目戰、擂台、奪璽單挑共用，harm_of 本身不動、呼叫端乘）。
+    cut 是開打那一刻抄的防具減損（含耐久，DuelState／ArenaSide／SealSide 的 cut）；tactic_cut 是戰法的化勁這一回合挨的打少幾成
+    （tactics.Step.a_cut／b_cut——單挑裡化勁本來就是戰法，所以快照不重複抄它）。沒有防具（cut 是 0）就是原本的 round(harm × (1 − 化勁))，
+    一個字不變；有防具兩份相加、合計夾在 cap（Config.armor.total_cap），同一般的仗。只乘「打中的那一下」：放手一搏失手扣的、戰法自扣的不經過這裡。"""
+    reduced = tactic_cut if cut <= 0 else min(cap, tactic_cut + cut)
+    return round(harm * (1 - reduced))
+
+
 def gamble_roll(
     rate: int, hp_cap: float, power: float, role: str, tuning: DuelTuning, battle: BattleTuning, rng: random.Random,
 ) -> tuple[bool, int, int, int]:
@@ -184,21 +193,24 @@ class Exchange(NamedTuple):
 
 def exchange(
     duel: DuelState, boss: DuelBoss, move: str, tuning: DuelTuning, battle: BattleTuning, rng: random.Random,
-    tactic: tactics.TacticTuning | None = None, trng: random.Random | None = None,
+    tactic: tactics.TacticTuning | None = None, trng: random.Random | None = None, cut_cap: float = 1.0,
 ) -> tuple[int, int, int]:
     """出一招：（氣勢推了多少, 你掉多少氣血, 剋）。見 exchange_full。"""
-    out = exchange_full(duel, boss, move, tuning, battle, rng, tactic, trng)
+    out = exchange_full(duel, boss, move, tuning, battle, rng, tactic, trng, cut_cap)
     return out.delta, out.hp, out.beat
 
 
 def exchange_full(
     duel: DuelState, boss: DuelBoss, move: str, tuning: DuelTuning, battle: BattleTuning, rng: random.Random,
-    tactic: tactics.TacticTuning | None = None, trng: random.Random | None = None,
+    tactic: tactics.TacticTuning | None = None, trng: random.Random | None = None, cut_cap: float = 1.0,
 ) -> Exchange:
     """出一招。改 duel.edge、duel.hp。參謀被剋時吃虧少一截（同決戰）。推力與挨的打照 push_of、harm_of（奪璽單挑共用）；
     運氣照舊在這裡用 rng 擲一次。duel.bout 在（你帶著本命戰法）時先照戰法打這一回合（tactics.step，亂數是 trng，不碰 rng）：
     招可能被定身、失神、卸勁改掉，剋照無隙改，氣勢多推戰法那一份，他沒打到你的回合你不掉血，戰法回的、焚身這類照池子算
-    （他沒有池子，扣他的換成氣勢）。"""
+    （他沒有池子，扣他的換成氣勢）。
+    頭目戰吃防具（鐵匠鋪與合成流程 3.9）：他打中你的那一下乘過 duel.cut（開打那一刻抄的防具減損）與戰法的化勁（blow_taken），
+    合計夾在 cut_cap（Config.armor.total_cap；呼叫端傳，沒傳不夾）；放手一搏失手與戰法自扣（焚身這類）不經過這裡。內傷收場時照乘過之後
+    掉的池子算（Game._duel_finish）。頭目沒有防具。cut 是 0（沒穿、防具關著、舊存檔）時一個字不變。"""
     step = None
     his = duel.move
     if duel.bout is not None and tactic is not None and trng is not None:
@@ -210,11 +222,17 @@ def exchange_full(
     luck = rng.uniform(-tuning.luck, tuning.luck) * tactics.luck_scale(duel.bout if step is not None else None)
     delta = push_of(mine, theirs, beat, duel.role, tuning, battle, luck)
     delta = round(tactics.scale_push(delta, step))
-    hp = min(duel.hp, harm_of(duel.hp_cap, mine, theirs, beat, tuning))
+    harm = harm_of(duel.hp_cap, mine, theirs, beat, tuning)
+    if duel.cut > 0:  # 穿了防具：打中你的這一下連同戰法的化勁一起乘（blow_taken）；沒穿照舊
+        harm = blow_taken(harm, duel.cut, step.a_cut if step is not None else 0.0, cut_cap)
+    hp = min(duel.hp, harm)
     lines: list[str] = []
     if step is not None:
         delta += round(step.push + tactics.pool_push(step.b_hp, tactic))
-        hp = round(hp * (1 - step.a_cut)) if step.a_hit else 0
+        if not step.a_hit:
+            hp = 0
+        elif duel.cut <= 0:  # 穿了防具的，化勁已經跟防具一起乘在 harm 裡了
+            hp = round(hp * (1 - step.a_cut))
         hp -= round(step.a_hp * duel.hp_cap)
         lines = list(step.lines)
         guarded, said = tactics.guard_pool(duel.bout, "a", duel.hp, hp, duel.hp_cap)

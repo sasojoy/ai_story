@@ -97,6 +97,35 @@ def kept(item: Equipment) -> str:
     return ORIGINAL_KEPT if item.original else ""
 
 
+SLOW_WEAR = "磨得慢"  # 待 joy 潤（鐵匠鋪與合成流程 3.6）：上品的卡多這一句——每場少扣鋒利度（防具是耐久度）
+
+
+def _rules_of(content: Content, item: Equipment):
+    """這一件的淬煉與磨損照哪一組設定：防具 Config.armor，其餘（兵器）Config.weapons（同 smithing.rules_of，那一支在 smithing 裡、這裡不能 import）。"""
+    return content.config.armor if item.slot == "armor" else content.config.weapons
+
+
+def temper_cap(item: Equipment, content: Content) -> int:
+    """這一件最多淬幾次（鐵匠鋪與合成流程 3.6）：照品質查 temper_max_by_quality，沒寫的品質（整組沒寫也是）照 temper_max。
+    神器原品、仿品與名將本命兵器打出來就是上品（smithing.forge 寫死、signature_arms.new_arm），名器是擲到的品質，所以只讀 item.quality。
+    smithing.temper_problem、鐵匠鋪選單、店面與修練頁寫的「N／M」、整季機器人都讀這一支（smithing.temper_cap 是同一個），不另算一份。"""
+    rule = _rules_of(content, item)
+    return rule.temper_max_by_quality.get(item.quality, rule.temper_max)
+
+
+def wear_amount(base: int, item: Equipment, content: Content) -> int:
+    """這一場要扣的鋒利度（防具是耐久度）：base 是 wear 表上這個結果的數字。本來就不扣（0）的照舊不扣；要扣的減掉這一品質的
+    wear_less_by_quality、最少扣 1（3.6：防具大勝本來只扣 1，上品那一場等於沒省，是刻意的）。weapons.wear、armor.wear 扣之前問它。"""
+    if base <= 0:
+        return base
+    return max(1, base - _rules_of(content, item).wear_less_by_quality.get(item.quality, 0))
+
+
+def wear_note(item: Equipment, content: Content) -> str:
+    """列與卡上的 wear_note：這一件磨得比較慢（wear_less_by_quality 對它的品質有寫）寫 SLOW_WEAR，否則空字串；網頁照它多寫一句。"""
+    return SLOW_WEAR if _rules_of(content, item).wear_less_by_quality.get(item.quality, 0) > 0 else ""
+
+
 def on(content: Content, slot: str) -> bool:
     """這一欄開著沒（2.6：每欄自己的 enabled，不問第一季開關）；表外的欄位一律 False。"""
     entry = SLOTS.get(slot)

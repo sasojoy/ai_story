@@ -88,10 +88,16 @@ HAVE_DIVINE = "你已經有這一件神器了"  # 待 joy 潤：同一件神器�
 DIVINE_FIRST_FOREVER = "這是一{unit}神器，這門鑄法全江湖只有這一{unit}原品——到修練頁的裝備庫替它定名。"  # 待 joy 潤：輪替季的原品（全服一把）
 
 
+def held_divine(p: PlayerState, recipe_id: str) -> Equipment | None:
+    """身上、裝備庫、寄放裡這一件神器的那一把（原品或仿品；名將本命兵器不算）；沒有是 None。是原品還是仿品看那一把的 original／copy_of
+    （鐵匠鋪與合成流程 3.8：神器頁寫「原品在手」「仿品在手」）。"""
+    key = PREFIX + recipe_id
+    return next((item for item in owned_gear(p) if item.signature is None and (item.original and item.secret == recipe_id or item.copy_of == key)), None)
+
+
 def owns_divine(p: PlayerState, recipe_id: str) -> bool:
     """身上、裝備庫、寄放裡已經有這一件神器（原品或仿品；名將本命兵器不算）。"""
-    key = PREFIX + recipe_id
-    return any(item.signature is None and (item.original and item.secret == recipe_id or item.copy_of == key) for item in owned_gear(p))
+    return held_divine(p, recipe_id) is not None
 
 
 def owned_gear(p: PlayerState) -> list[Equipment]:

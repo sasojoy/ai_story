@@ -104,11 +104,12 @@ EDGE_WARNING = "你的{name}{dull}，找間鐵匠鋪修一修。"  # 待 joy 潤
 
 def wear(state: GameState, content: Content, tier: str) -> list[str]:
     """打完一場，身上那把扣鋒利度（3.4，照結果）；第一次鈍到 edge_warn 以下回一句提醒（只一次，修好才重設）。
-    劇情戰與全服決戰不呼叫這裡（engine._file_battle 擋劇情戰；決戰不走 _file_battle）；頭目戰（kind=duel）、切磋、截殺雙方照磨（防具另有自己的條件，見 armor.wears）。"""
+    劇情戰與全服決戰不呼叫這裡（engine._file_battle 擋劇情戰；決戰不走 _file_battle）；頭目戰（kind=duel）、切磋、截殺雙方照磨（防具另有自己的條件，見 armor.wears）。
+    上品磨得慢（鐵匠鋪與合成流程 3.6）：本來會扣的那一場照 wear_less_by_quality 少扣、最少扣 1（equipment.wear_amount）；沒寫那一組跟以前一字不差。"""
     rule, p = content.config.weapons, state.player
     if not rule.enabled or p.weapon is None:
         return []
-    p.weapon.edge = max(0, p.weapon.edge - rule.wear.get(tier, 0))
+    p.weapon.edge = max(0, p.weapon.edge - equipment.wear_amount(rule.wear.get(tier, 0), p.weapon, content))
     if p.weapon.edge < rule.edge_warn and not p.edge_warned:
         p.edge_warned = True
         return [EDGE_WARNING.format(name=p.weapon.name, dull=DULL.get(p.weapon.kind, "鈍了"))]
@@ -432,7 +433,8 @@ def _row(w: Weapon, art: MartialArt | None, content: Content, world: WorldStateS
         "grade": grade(w),
         "confirm": "" if worn or w.original else dismantle_confirm(content, w),  # 身上那把不能拆，沒有問句（FB-125）；原品也拆不得（5.4）
         "keep": equipment.kept(w),  # 網頁照它把拆解鈕灰掉寫原因（神器原品、本命兵器）
-        "tempers": w.tempers, "temper_max": content.config.weapons.temper_max,
+        "tempers": w.tempers, "temper_max": equipment.temper_cap(w, content),  # 照這一把的品質（鐵匠鋪與合成流程 3.6）
+        "wear_note": equipment.wear_note(w, content),  # 上品寫「磨得慢」（待 joy 潤），其餘空字串
         "recipe": recipe_text(content, w.recipe),  # 自己打的那一把寫配方（主料＋輔料），買的、掉落的是 None
         "tactic": tactics.item_lines(content, w),  # 神器、名將本命兵器的特技與人器合一（本命戰法第三批），沒有是空的
     }

@@ -130,6 +130,19 @@ def test_armor_divine_recipes_make_originals_and_copies_too(divine_content, worl
     assert world.lookup_gear_find("鑄|t_ward").slot == "armor"
 
 
+def test_forged_divine_originals_and_copies_temper_as_top_quality(divine_content, world):
+    """鐵匠鋪與合成流程 3.6：神器那一爐不擲品質、寫死上品，原品與仿品（兵器、防具）的淬煉上限都照上品。"""
+    divine_content.config.weapons.temper_max_by_quality = divine_content.config.armor.temper_max_by_quality = {"下品": 5, "中品": 6, "上品": 7}
+    game = _forger(divine_content, world)
+    game.state.player.materials["gang_3"] = 8  # 四爐，每爐兩份
+    original, _ = smithing.forge(game.state, divine_content, world, "劍", "gang_3", "gang_3")
+    copy, _ = smithing.forge(game.state, divine_content, world, "劍", "gang_3", "gang_3")
+    coat, _ = smithing.forge(game.state, divine_content, world, smithing.ARMOR_KIND, "gang_3", "gang_3")
+    echo, _ = smithing.forge(game.state, divine_content, world, smithing.ARMOR_KIND, "gang_3", "gang_3")
+    assert (original.original, copy.copy_of is not None, coat.original, echo.copy_of is not None) == (True, True, True, True)
+    assert [smithing.temper_cap(item, divine_content) for item in (original, copy, coat, echo)] == [7, 7, 7, 7]
+
+
 def test_originals_and_copies_take_their_own_base_and_skip_the_named_bonus(divine_content, world):
     c = divine_content
     w, a = c.config.weapons, c.config.armor

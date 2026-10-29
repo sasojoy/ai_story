@@ -286,21 +286,21 @@ def test_tier4_forge_costs_300():
     assert smithing.price(c, 4) == 300 and smithing.price(c, 4, "armor") == 300
 
 
-def test_tier4_temper_takes_tier3_first():
+def test_tier4_temper_takes_one_tier_one_material_and_pays_150():
+    """鐵匠鋪與合成流程 3.7：淬煉的料固定一階，工錢照裝備的階（四階 150）；以前四階裝備收三階以上的料（temper_floor）已拿掉。"""
     from tianxia import smithing
 
-    game = _econ_game(bag={"gang_3": 1, "gang_4": 1})
+    game = _econ_game(bag={"gang_1": 1, "gang_3": 1, "gang_4": 1})
     s, c = game.state, game.content
     s.player.weapon = _gear(tier=4)
-    assert smithing.temper_floor(s.player.weapon) == 3
-    mid = smithing.temper_material(s, c)
-    assert mid == "gang_3" and smithing.temper_price(c, c.materials[mid]) == 80
-    s.player.materials = {"gang_4": 1}
-    mid = smithing.temper_material(s, c)
-    assert mid == "gang_4" and smithing.temper_price(c, c.materials[mid]) == 150
+    assert not hasattr(smithing, "temper_floor")
+    assert smithing.temper_material(s, c) == "gang_1" and smithing.temper_price(s, c) == 150
+    s.player.materials = {"gang_3": 1, "gang_4": 1}  # 三階、四階的料都不收
+    assert smithing.temper_material(s, c) is None
+    assert smithing.temper_problem(s, c) == "沒有一階的料"
     s.player.weapon, s.player.materials = _gear(tier=3), {"gang_2": 1}
     assert smithing.temper_material(s, c) is None
-    assert smithing.temper_problem(s, c) == "沒有三階以上的素材"
+    assert smithing.temper_problem(s, c) == "沒有一階的料"
 
 
 def test_aux_three_tiers_apart():

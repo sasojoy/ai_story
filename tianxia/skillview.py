@@ -529,7 +529,7 @@ def shown_gear(content: Content, item, live: bool = True) -> dict:
     return {
         "name": item.name, "slot": slot, "what": weapons.noun(item.kind) if slot == "weapon" else equipment.SLOTS[slot].label,
         "attribute": item.attribute, "grade": equipment.grade(item), "tempers": item.tempers if live else None,
-        "temper_max": (content.config.weapons if slot == "weapon" else content.config.armor).temper_max,
+        "temper_max": equipment.temper_cap(item, content), "wear_note": equipment.wear_note(item, content),  # 鐵匠鋪與合成流程 3.6
         "edge": item.edge if live else None, "wear_word": equipment.WEAR_WORDS.get(slot, ""),
         "tactic": tactics_mod.item_lines(content, item),
     }

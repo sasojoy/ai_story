@@ -77,11 +77,12 @@ def wears(kind: str, tier: str) -> bool:
 
 
 def wear(state: GameState, content: Content, tier: str) -> list[str]:
-    """打完一場，身上那件扣耐久度（4.5，照結果）；第一次低到 edge_warn 以下回一句提醒（只一次，修好或換一件才重設）。"""
+    """打完一場，身上那件扣耐久度（4.5，照結果）；第一次低到 edge_warn 以下回一句提醒（只一次，修好或換一件才重設）。
+    上品磨得慢（鐵匠鋪與合成流程 3.6）：本來會扣的那一場照 wear_less_by_quality 少扣、最少扣 1（equipment.wear_amount）；沒寫那一組跟以前一字不差。"""
     rule, p = content.config.armor, state.player
     if not rule.enabled or p.armor is None:
         return []
-    p.armor.edge = max(0, p.armor.edge - rule.wear.get(tier, 0))
+    p.armor.edge = max(0, p.armor.edge - equipment.wear_amount(rule.wear.get(tier, 0), p.armor, content))
     if p.armor.edge < rule.edge_warn and not p.armor_warned:
         p.armor_warned = True
         return [WORN_WARNING.format(name=p.armor.name)]
@@ -232,7 +233,8 @@ def _row(item: Equipment, neigong: MartialArt | None, content: Content, worn: bo
         "id": item.id, "name": item.name, "attribute": item.attribute, "tier": item.tier, "quality": item.quality,
         "grade": grade(item), "edge": item.edge, "wear_word": WEAR_WORD,  # 網頁照這個字寫「耐久度 N」（3.1 的字表，不在網頁寫死）
         "cut": pct(cut(item, neigong, content)), "fit": fit_note(item, neigong),
-        "tempers": item.tempers, "temper_max": content.config.armor.temper_max,  # 網頁寫「淬煉 N/M」（防具打造）
+        "tempers": item.tempers, "temper_max": equipment.temper_cap(item, content),  # 網頁寫「淬煉 N/M」（防具打造）；M 照這一件的品質（鐵匠鋪與合成流程 3.6）
+        "wear_note": equipment.wear_note(item, content),  # 上品寫「磨得慢」（待 joy 潤），其餘空字串
         "recipe": recipe_text(content, item.recipe),  # 自己打的那一件寫配方（主料＋輔料），買的是 None
         "confirm": "" if worn or item.original else equipment.dismantle_confirm(content, item),  # 身上那件、原品（5.4）不能拆，沒有問句
         "keep": equipment.ORIGINAL_KEPT if item.original else "",

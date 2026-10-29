@@ -741,17 +741,17 @@ def test_repairing_a_rack_item_keeps_it_in_the_rack_and_writes_one_smithy_entry(
     assert [e.title for e in game.state.journal[:2]] == [weapons.SMITH, weapons.SMITH]
 
 
-def test_tempering_a_rack_item_uses_the_material_that_fits_it_and_does_not_wield_it(content, world):
+def test_tempering_a_rack_item_pays_its_own_tier_wage_and_does_not_wield_it(content, world):
     game = _gear(content, world)
     p = game.state.player
-    msgs = game.temper_item("兵:1")  # 二階：不低於二階的料裡最便宜的，玄鋼骨 ×1＋30 兩
+    msgs = game.temper_item("兵:1")  # 二階：一個一階的料（3.7）＋30 兩（工錢照這一把的階）
     assert p.rack[0].tempers == 1 and p.weapon.id == "兵:9" and p.weapon.tempers == 0 and [i.id for i in p.rack] == ["兵:1", "甲:2"]
-    assert p.stats["silver"] == 270 and "gang_2" not in p.materials
-    assert msgs[0] == "鐵匠拿玄鋼骨把【庫刃】淬了一回，這是第 1 次。"
+    assert p.stats["silver"] == 270 and p.materials["gang_2"] == 1 and p.materials["gang_1"] == 3
+    assert msgs[0] == "鐵匠拿精鐵砂把【庫刃】淬了一回，這是第 1 次。"
     top = game.state.journal[0]
     assert top.title == weapons.SMITH and msgs[0] in top.lines and "銀兩 -30" in top.changes  # 寫「鐵匠鋪」紀錄（稿 3.4）
     game.temper_item("甲:2")  # 一階防具：一階的料不收錢
-    assert p.rack[1].tempers == 1 and p.armor.tempers == 0 and p.stats["silver"] == 270 and p.materials["gang_1"] == 3
+    assert p.rack[1].tempers == 1 and p.armor.tempers == 0 and p.stats["silver"] == 270 and p.materials["gang_1"] == 2
 
 
 @pytest.mark.parametrize(("what", "option", "worn_id"), [("repair", "smith:repair", "兵:9"), ("temper", "smith:temper", "兵:9"),
@@ -799,8 +799,9 @@ def test_a_refused_repair_or_temper_costs_nothing_writes_nothing_and_rolls_no_cl
     p.rack[0].tempers = content.config.weapons.temper_max
     assert game.temper_item("兵:1") == [f"（{smithing.FULL}。）"]
     p.rack[0].tempers = 0
-    p.materials = {"gang_1": 4}  # 二階的庫刃沒有二階以上的料可淬
-    assert game.temper_item("兵:1") == ["（沒有二階以上的素材。）"]
+    p.materials = {"gang_2": 4}  # 二階的庫刃也只收一階的料（3.7），二階的料不收
+    assert game.temper_item("兵:1") == ["（沒有一階的料。）"]
+    p.materials = {"gang_1": 4}
     p.stats["silver"] = 2
     assert game.repair_item("甲:2") == ["（還差 3 兩。）"] and p.shop_line == "short_silver"
     p.stats["silver"] = 300
@@ -952,7 +953,7 @@ def test_every_rack_row_says_whether_it_can_be_repaired_tempered_and_what_disman
     rows = _rows(game)
     blade = rows["兵:1"]
     assert blade["repair"] == {"ok": True, "why": None, "use": "精鐵砂×1＋5 兩"}
-    assert blade["temper"] == {"ok": True, "why": None, "use": "玄鋼骨×1＋30 兩"}  # 二階：不低於二階、最便宜的料
+    assert blade["temper"] == {"ok": True, "why": None, "use": "精鐵砂×1＋30 兩"}  # 料一律一階（3.7）、工錢照這一把的階（二階 30）
     assert blade["into"] == {"name": equipment.dismantle_material(content, next(i for i in game.state.player.rack if i.id == "兵:1")).name, "count": 1}
     assert blade["tempers"] == 0 and rows["兵:4"]["tempers"] == 2  # 淬過幾次（批量確認單寫「淬過 2 次一起沒了」）
     game.choose("smith:page:armor")
@@ -971,7 +972,7 @@ def test_the_row_buttons_give_the_same_reasons_as_the_worn_card_and_the_rules(co
     p.rack[0].edge, p.materials = 30, {}
     row = _rows(game)["兵:1"]
     assert row["repair"]["why"] == equipment.NO_REPAIR_MATERIAL and row["repair"]["use"] == "一個一階素材＋5 兩"
-    assert row["temper"] == {"ok": False, "why": "沒有二階以上的素材", "use": ""}  # 沒料：沒有小字，原因寫在 why
+    assert row["temper"] == {"ok": False, "why": "沒有一階的料", "use": ""}  # 沒料：沒有小字，原因寫在 why
     p.materials, p.stats["silver"] = {"gang_1": 4, "gang_2": 1}, 2
     next(i for i in p.rack if i.id == "兵:4").edge = 30
     row = _rows(game)["兵:4"]
