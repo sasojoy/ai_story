@@ -35,7 +35,7 @@ def place(tmp_path, monkeypatch):
     for f in ("tests/core/test_a.py", "tests/core/test_b.py"):
         (checkout / f).parent.mkdir(parents=True, exist_ok=True)
         (checkout / f).write_text("", encoding="utf-8")
-    monkeypatch.setattr(nightly, "commits_between", lambda repo, previous, sha: ("a..b", []))
+    monkeypatch.setattr(nightly, "commits_between", lambda repo, previous, sha: ("a..b", "git log a..b", []))
     return out, checkout
 
 
@@ -120,6 +120,37 @@ def test_only_exit_codes_0_and_1_count_as_a_finished_run(place, code):
     text = _summarize(out, checkout, "2026-10-31", exit=code, cases=[("tests.core.test_a", "test_one", "pass")])
     assert "沒跑完" in text and f"結束碼 {code}" in text and "passed" not in text
     assert not (out / "2026-10-31.json").exists()
+
+
+def test_an_old_red_says_since_when(place):
+    """手冊 4.4「新紅三天沒修，PM revert」：舊紅後面寫從哪一天起紅、第幾天，PM 不必翻交接算；轉綠再紅從頭算。
+    json 記每一條紅的起始日（red_since），沒有這一欄的舊 json 當成從那一天起。"""
+    out, checkout = place
+    red = [("tests.core.test_a", "test_one", "fail")]
+    _summarize(out, checkout, "2026-10-29", cases=red)
+    _summarize(out, checkout, "2026-10-30", cases=red)
+    text = _summarize(out, checkout, "2026-10-31", cases=red)
+    assert "  tests/core/test_a.py::test_one（從 2026-10-29 起紅，第 3 天）" in text
+    kept = json.loads((out / "2026-10-31.json").read_text(encoding="utf-8"))
+    assert kept["red_since"] == {"tests/core/test_a.py::test_one": "2026-10-29"}
+    _summarize(out, checkout, "2026-11-01", cases=[("tests.core.test_a", "test_one", "pass")])
+    _summarize(out, checkout, "2026-11-02", cases=red)
+    text = _summarize(out, checkout, "2026-11-03", cases=red)
+    assert "（從 2026-11-02 起紅，第 2 天）" in text
+    legacy = json.loads((out / "2026-11-03.json").read_text(encoding="utf-8"))
+    del legacy["red_since"]  # 這一批之前寫的 json 沒有這一欄
+    (out / "2026-11-03.json").write_text(json.dumps(legacy), encoding="utf-8")
+    assert "（從 2026-11-03 起紅，第 2 天）" in _summarize(out, checkout, "2026-11-04", cases=red)
+
+
+def test_the_more_commits_line_is_a_command_that_runs():
+    """提交太多只列前 MAX_COMMITS 筆，「還有幾筆」後面給的是真的跑得了的 git log（沒有前一次時以前印成一句說明）。"""
+    summary = {"date": "2026-10-31", "sha": "455664ac00", "exit": 0, "workers": 4, "notes": [],
+               "result": {"passed": 1, "failures": 0, "errors": 0, "skipped": 0}}
+    commits = [f"c{i}" for i in range(nightly.MAX_COMMITS + 14)]
+    text = nightly.render(summary, None, [], [], [], "沒有前一次可比，列一天之內的",
+                          'git log --since="1 day ago" 455664ac', commits)
+    assert '還有 14 筆（git log --since="1 day ago" 455664ac）' in text
 
 
 def test_latest_and_the_ps1_carry_a_bom(place):

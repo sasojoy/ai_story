@@ -133,21 +133,28 @@ def compare(previous: list[str] | None, today: list[str]) -> tuple[list[str], li
     return sorted(now - before), sorted(now & before), sorted(before - now)
 
 
-def commits_between(repo: Path, previous: dict | None, sha: str) -> tuple[str, list[str]]:
-    """前一次的 SHA 到這一次之間 develop 新進的提交（沒有前一次就列一天之內的）。"""
+def commits_between(repo: Path, previous: dict | None, sha: str) -> tuple[str, str, list[str]]:
+    """前一次的 SHA 到這一次之間 develop 新進的提交（沒有前一次就列一天之內的）：（標題寫的範圍, 自己查用的 git log, 提交）。"""
     fmt = "--format=%h %ad %an：%s"
     if previous and previous.get("sha"):
         if previous["sha"] == sha:
-            return "跟前一次是同一個 SHA，沒有新提交", []
+            return "跟前一次是同一個 SHA，沒有新提交", "", []
+        span = f"{previous['sha'][:8]}..{sha[:8]}"
         out = git(repo, "log", "--date=short", fmt, f"{previous['sha']}..{sha}")
         if out.returncode == 0:
-            return f"{previous['sha'][:8]}..{sha[:8]}", [line for line in out.stdout.splitlines() if line.strip()]
+            return span, f"git log {span}", [line for line in out.stdout.splitlines() if line.strip()]
     out = git(repo, "log", "--date=short", fmt, "--since=1 day ago", sha)
-    return "沒有前一次可比，列一天之內的", [line for line in out.stdout.splitlines() if line.strip()]
+    return ("沒有前一次可比，列一天之內的", f'git log --since="1 day ago" {sha[:8]}',
+            [line for line in out.stdout.splitlines() if line.strip()])
+
+
+def red_days(since: str, date: str) -> int:
+    """從 since 那一天起紅到 date 是第幾天（當天算第 1 天）。"""
+    return (dt.date.fromisoformat(date) - dt.date.fromisoformat(since)).days + 1
 
 
 def render(summary: dict, previous: dict | None, new: list[str], old: list[str], fixed: list[str],
-           span: str, commits: list[str]) -> str:
+           span: str, log_cmd: str, commits: list[str]) -> str:
     lines = [f"每日整套 {summary['date']}（develop {summary['sha'][:8]}，{summary.get('started', '')}開始）"]
     if summary.get("result") is None:
         lines.append(f"結果：沒跑完（pytest 結束碼 {summary.get('exit')}，不是 0、1 或沒有 junit 結果；不比、不留 .json；"
@@ -165,15 +172,17 @@ def render(summary: dict, previous: dict | None, new: list[str], old: list[str],
     lines.append("")
     lines.append(f"新紅（前一次綠、這一次紅）：{len(new)} 條" + ("" if new else "（無）"))
     lines += [f"  {t}" for t in new]
-    lines.append(f"舊紅（前一次就紅）：{len(old)} 條" + ("" if old else "（無）"))
-    lines += [f"  {t}" for t in old]
+    lines.append(f"舊紅（前一次就紅）：{len(old)} 條" + ("（無）" if not old else "（手冊 4.4：新紅三天沒修，revert 那一線的合併）"))
+    since = summary.get("red_since", {})
+    lines += [f"  {t}" + (f"（從 {since[t]} 起紅，第 {red_days(since[t], summary['date'])} 天）" if t in since else "")
+              for t in old]
     lines.append(f"轉綠（前一次紅、這一次不紅）：{len(fixed)} 條" + ("" if fixed else "（無）"))
     lines += [f"  {t}" for t in fixed]
     lines.append("")
     lines.append(f"develop 新進的提交（{span}）：{len(commits)} 筆" + ("" if commits else "（無）"))
     lines += [f"  {c}" for c in commits[:MAX_COMMITS]]
     if len(commits) > MAX_COMMITS:
-        lines.append(f"  ……還有 {len(commits) - MAX_COMMITS} 筆（git log {span}）")
+        lines.append(f"  ……還有 {len(commits) - MAX_COMMITS} 筆（{log_cmd}）")
     return "\n".join(lines) + "\n"
 
 
@@ -194,8 +203,11 @@ def summarize(repo: Path, out: Path, checkout: Path, date: str, sha: str, extra:
         new, old, fixed = [], [], []
     else:
         new, old, fixed = compare(previous.get("failed") if previous else None, summary["failed"])
-    span, commits = commits_between(repo, previous, sha)
-    text = render(summary, previous, new, old, fixed, span, commits)
+        # 每一條紅的從哪一天起紅：舊紅照前一次記的（這一欄以前沒有：當成從前一次那一天起），新紅是今天
+        before = previous.get("red_since", {}) if previous else {}
+        summary["red_since"] = {**{t: before.get(t) or previous["date"] for t in old}, **{t: date for t in new}}
+    span, log_cmd, commits = commits_between(repo, previous, sha)
+    text = render(summary, previous, new, old, fixed, span, log_cmd, commits)
     if result is not None:  # 沒跑完的那一次不留 json：下一次照樣跟最後一次跑完的比
         (out / f"{date}.json").write_text(json.dumps(summary, ensure_ascii=False, indent=1), encoding="utf-8")
     (out / "latest.txt").write_text(text, encoding="utf-8-sig")  # 帶 BOM：Windows PowerShell 5.1 的 Get-Content 才讀得對
