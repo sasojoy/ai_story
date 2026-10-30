@@ -10,7 +10,7 @@
 // 用法：txSlg4('near'|'far', 點的地點 id)；txSlg4Off() 還原。只是草圖。
 (() => {
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-  const W = 375, H = 667, TOPBAR = 64, BOTBAR = 70;
+  let W = 375, H = 667; const TOPBAR = 64, BOTBAR = 70; // W、H 照現在的視窗量（txSlg4 裡設），320 寬也能看
   const RED = "#C0392B", ORANGE = "#F0A640", INK = "#1B1F17";
   const LAND = "#8F9B6C", LAND_LIGHT = "#A8B07F", LAND_DARK = "#66704D", WATER_EDGE = "#3F6D8C", WATER = "#78A9C4", YELLOW_R = "#C9A867", YELLOW_R2 = "#E2CB94";
   const MTN_LIGHT = "#9A9573", MTN_DARK = "#5E5A3F", TREE = "#55693F", TREE2 = "#7FA36A";
@@ -44,9 +44,10 @@
     const [fx0, fy0, fx1, fy1] = d.frame; let s, cx, cy;
     if (zoom === "far") { s = Math.min((W - 16) / (fx1 - fx0), (H - TOPBAR - BOTBAR) / (fy1 - fy0)); cx = (fx0 + fx1) / 2; cy = (fy0 + fy1) / 2; }
     else { s = W / NEAR_UNITS;
-      // 以你為主、往腳下那幾站偏一點（你算兩票、每一站一票），免得一半畫面是沒人的地
+      // 以你為主、往腳下那幾站偏一點（你算兩票、每一站一票），免得一半畫面是沒人的地；在路上就以路上那一點與要去的那一站為中心
       const nb = Object.keys(d.hops).filter((id) => d.hops[id] === 1).map((id) => d.byId[id]); const n = nb.length + 2;
       cx = (d.hp.x * 2 + nb.reduce((a, p) => a + p.x, 0)) / n; cy = (d.hp.y * 2 + nb.reduce((a, p) => a + p.y, 0)) / n;
+      const J = d.st.journey; if (J && J.x != null) { const to = d.byId[J.to]; cx = to ? J.x + (to.x - J.x) * 0.35 : J.x; cy = to ? J.y + (to.y - J.y) * 0.35 : J.y; }
       if (pickId && d.byId[pickId]) { cx = (d.hp.x + d.byId[pickId].x) / 2; cy = (d.hp.y + d.byId[pickId].y) / 2; } }
     const midY = zoom === "far" ? (TOPBAR + H - BOTBAR) / 2 : (TOPBAR + H - BOTBAR) / 2;
     let vx0 = cx - (W / 2) / s, vy0 = cy - midY / s;
@@ -147,7 +148,7 @@
       if (st.tug || st.melee) g.push(`<g transform="translate(10,-9)"><circle r="6.5" fill="${RED}" stroke="#fff" stroke-width="1"/><path d="M-3,-3L3,3M3,-3L-3,3" stroke="#fff" stroke-width="1.6"/></g>`);
       if (st.rich) g.push(`<g transform="translate(-10,-9)"><path d="M-6,2l3,-4h6l3,4l-2,3h-8z" fill="#F2C94C" stroke="#7A5A14" stroke-width=".9"/></g>`);
       if (isWeek) g.push(`<path d="M0,-11v-20" stroke="${INK}" stroke-width="1.8"/><path d="M0,-31l15,5-15,5z" fill="${RED}" stroke="#7A1F18" stroke-width="1"/>`);
-      if (isHere) g.push(`<circle r="18" fill="none" stroke="${RED}" stroke-width="2.2" opacity=".55"/><g transform="translate(0,-14)"><path d="M0,8C-9,-2 -9,-12 0,-12C9,-12 9,-2 0,8Z" fill="${RED}" stroke="#fff" stroke-width="1.6"/><text y="-2.5" font-size="10" text-anchor="middle" fill="#fff" font-weight="700">你</text></g>`);
+      if (isHere && !d.st.journey) g.push(`<circle r="18" fill="none" stroke="${RED}" stroke-width="2.2" opacity=".55"/><g transform="translate(0,-14)"><path d="M0,8C-9,-2 -9,-12 0,-12C9,-12 9,-2 0,8Z" fill="${RED}" stroke="#fff" stroke-width="1.6"/><text y="-2.5" font-size="10" text-anchor="middle" fill="#fff" font-weight="700">你</text></g>`);
       g.push(`</g>`);
       if (!named(p, st) && !isHere) continue;
       const near = (d.hops[p.id] ?? 99) <= 2 && !isHere; const name = p.name.replace(/（.*）/, "") + (near && st.minutes != null ? ` ${st.minutes}分` : "");
@@ -162,6 +163,12 @@
       let ok = null; for (const [dx, dy] of c) { const rc = { x: l.px + dx, y: l.py + dy, w: l.w, h: l.h }; if (!hit(rc)) { ok = rc; break; } }
       if (!ok) { const rc = { x: Math.max(l.w / 2 + 4, Math.min(W - l.w / 2 - 4, l.px)), y: l.py + l.r + l.h / 2 + 3, w: l.w, h: l.h }; if (rc.y + rc.h / 2 > H - BOTBAR || rc.y - rc.h / 2 < TOPBAR) continue; ok = rc; } placed.push(ok);
       L.push(`<text x="${ok.x.toFixed(1)}" y="${(ok.y + l.fs * 0.36).toFixed(1)}" font-size="${l.fs}" text-anchor="middle" fill="${l.isHere ? "#FFE3DD" : "#FFFFFF"}" stroke="${INK}" stroke-width="3" paint-order="stroke" font-weight="700" stroke-linejoin="round">${esc(l.name)}</text>`); }
+    // 在路上：紅釘畫在路上那一點，到要去的那一站畫一條虛線，釘子旁寫還有幾分
+    const J = d.st.journey;
+    if (J && J.x != null) { const to = d.byId[J.to]; const k2 = k;
+      if (to) g.push(`<path d="M${J.x},${J.y}L${to.x},${to.y}" fill="none" stroke="#FFFFFF" stroke-width="3" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-dasharray="8 6" opacity=".9"/>`);
+      g.push(`<g transform="translate(${J.x},${J.y}) scale(${k2.toFixed(4)})"><circle r="16" fill="none" stroke="${RED}" stroke-width="2.2" opacity=".55"/><circle r="5" fill="${RED}" stroke="#fff" stroke-width="1.5"/><g transform="translate(0,-14)"><path d="M0,8C-9,-2 -9,-12 0,-12C9,-12 9,-2 0,8Z" fill="${RED}" stroke="#fff" stroke-width="1.6"/><text y="-2.5" font-size="10" text-anchor="middle" fill="#fff" font-weight="700">你</text></g></g>`);
+      if (zoom !== "far") L.push(`<text x="${(f.X(J.x) + 22).toFixed(1)}" y="${(f.Y(J.y) + 4).toFixed(1)}" font-size="11.5" fill="#FFE3DD" stroke="${INK}" stroke-width="3" paint-order="stroke" font-weight="700">→ ${esc(J.to_name || "")}・還有 ${J.minutes ?? "?"} 分</text>`); }
     if (zoom === "far") for (const r of d.base.regions) L.push(`<text x="${f.X(r.cx).toFixed(1)}" y="${(f.Y(r.cy) - 26).toFixed(1)}" font-size="18" text-anchor="middle" fill="#FFFFFF" stroke="${INK}" stroke-width="4" paint-order="stroke" font-weight="700" opacity=".92" letter-spacing="2">${esc(r.name)}</text>`);
     return { marks: g.join(""), labels: L.join("") };
   }
@@ -190,7 +197,7 @@
   const roundBtn = (txt, on) => `<div style="width:44px;height:44px;border-radius:50%;background:rgba(20,24,18,.84);color:${on ? ORANGE : "#F4F1E8"};border:1px solid ${on ? ORANGE : "rgba(255,255,255,.22)"};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,.35)">${txt}</div>`;
   // 右上角的小地圖：整個天下，每一塊地照主人上色、區界、現在看的框、你
   function minimap(d, f) {
-    const [fx0, fy0, fx1, fy1] = d.frame; const mw = 100, mh = Math.round(mw * (fy1 - fy0) / (fx1 - fx0));
+    const [fx0, fy0, fx1, fy1] = d.frame; const mw = W < 360 ? 64 : 100, mh = Math.round(mw * (fy1 - fy0) / (fx1 - fx0)); // 窄螢幕小地圖縮小
     const cells = [...d.cells].sort((a, b) => { const area = (c) => { let s = 0; for (let i = 0; i < c.pts.length; i++) { const [x1, y1] = c.pts[i], [x2, y2] = c.pts[(i + 1) % c.pts.length]; s += x1 * y2 - x2 * y1; } return Math.abs(s); }; return area(b) - area(a); });
     const body = cells.map((c) => { const sd = sideOf(d, c.id); return `<g clip-path="url(#rg-${c.region})"><polygon points="${poly(c.pts)}" fill="${sd ? sd.color : "#C9C2AE"}" fill-opacity="${sd ? ".85" : ".4"}"/></g>`; }).join("")
       + d.regions.map((r) => `<polygon points="${poly(r.pts)}" fill="none" stroke="#1B1F17" stroke-opacity=".6" stroke-width="${((fx1 - fx0) / mw).toFixed(1)}"/>`).join("");
@@ -203,7 +210,7 @@
     const sortieN = Object.values(d.S).filter((s) => s.sortie).length; const wk = d.week && d.byId[d.week.id]; const ws = wk && (d.S[wk.id] || {});
     return `<div style="position:absolute;left:10px;top:10px">${chip(`${esc(d.base.regions.find((r) => r.id === d.rid).name)} ▾`)}</div><div style="position:absolute;right:10px;top:10px">${roundBtn("🔍")}</div>${zoom === "near" ? minimap(d, f) : ""}
       <div style="position:absolute;right:10px;bottom:70px;display:flex;flex-direction:column;gap:8px">${roundBtn("⌖", zoom === "near")}${roundBtn("天下", zoom === "far")}</div>
-      <div style="position:absolute;left:10px;right:10px;bottom:10px;background:rgba(20,24,18,.86);color:#F4F1E8;border:1px solid rgba(255,255,255,.16);border-radius:8px;padding:8px 12px;display:flex;justify-content:space-between;align-items:center;font-size:13px"><div>${wk ? `<span style="background:${RED};color:#fff;border-radius:3px;padding:1px 5px;font-size:11px;margin-right:6px">本週</span><b style="font-size:15px">${esc(wk.name.replace(/（.*）/, ""))}</b> <span style="color:#C9C4B6">${esc((d.week.why || "").split("・").slice(1).join("・"))}・步行 ${ws.minutes ?? ""} 分</span>` : "本週沒有軍令"}</div><div style="color:${ORANGE};font-weight:700;white-space:nowrap">可出陣 ${sortieN} ›</div></div>`;
+      <div style="position:absolute;left:10px;right:10px;bottom:10px;background:rgba(20,24,18,.86);color:#F4F1E8;border:1px solid rgba(255,255,255,.16);border-radius:8px;padding:8px 12px;display:flex;justify-content:space-between;align-items:center;font-size:13px"><div>${d.st.journey ? `<span style="background:${ORANGE};color:${INK};border-radius:3px;padding:1px 5px;font-size:11px;margin-right:6px;font-weight:700">在路上</span><b style="font-size:15px">→ ${esc(d.st.journey.to_name || "")}</b> <span style="color:#C9C4B6">還有 ${d.st.journey.minutes ?? ""} 分${d.st.journey.next_name ? "・下一站 " + esc(d.st.journey.next_name) : ""}</span>` : wk ? `<span style="background:${RED};color:#fff;border-radius:3px;padding:1px 5px;font-size:11px;margin-right:6px">本週</span><b style="font-size:15px">${esc(wk.name.replace(/（.*）/, ""))}</b> <span style="color:#C9C4B6;font-size:${W < 360 ? 11.5 : 13}px">${esc(W < 360 ? ((d.week.why || "").split("・")[1] || "") : (d.week.why || "").split("・").slice(1).join("・"))}・${ws.minutes ?? ""} 分</span>` : "本週沒有軍令"}</div><div style="color:${ORANGE};font-weight:700;white-space:nowrap;font-size:${W < 360 ? 12 : 13}px">${d.st.journey ? "沿路做小事 ›" : `可出陣 ${sortieN} ›`}</div></div>`;
   }
   function card(d, id) {
     const p = d.byId[id], s = d.S[id] || {}; const sd = sideOf(d, id); const stars = "★".repeat(s.danger || 1) + "☆".repeat(3 - (s.danger || 1));
@@ -218,10 +225,10 @@
 
   function draw(d, zoom, pickId, tiles) {
     const f = view(d, zoom, pickId);
-    const pills = zoom === "near" && !pickId ? edgePills(d, f) : { html: "", rects: [] };
+    const pills = zoom === "near" && !pickId && !d.st.journey ? edgePills(d, f) : { html: "", rects: [] }; // 在路上不掛箭頭牌
     const m = marksSvg(d, f, { zoom, pick: pickId, blockers: pills.rects });
     const svg = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="display:block;position:absolute;inset:0"><g transform="${f.tr}">${groundSvg(d, f, { tiles })}${m.marks}</g><g>${m.labels}</g><rect width="${W}" height="${H}" filter="url(#grain)" pointer-events="none"/></svg>`;
     return `<div style="position:relative;width:${W}px;height:${H}px">${svg}${pills.html}${pickId ? card(d, pickId) + `<div style="position:absolute;left:10px;top:10px">${chip(`${esc(d.base.regions.find((r) => r.id === d.rid).name)} ▾`)}</div>` : hud(d, zoom, f)}</div>`;
   }
-  window.txSlg4 = async (zoom, pickId, tiles) => { const d = await data(); mount(draw(d, zoom || "near", pickId, tiles || "plate")); return { zoom, pickId, tiles }; };
+  window.txSlg4 = async (zoom, pickId, tiles) => { W = document.documentElement.clientWidth; H = Math.round(document.querySelector(".tabs").getBoundingClientRect().top - document.querySelector("#map").getBoundingClientRect().top); const d = await data(); mount(draw(d, zoom || "near", pickId, tiles || "plate")); return { zoom, pickId, tiles, W, H }; };
 })();
