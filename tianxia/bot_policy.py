@@ -10,7 +10,7 @@ import hashlib
 import random
 from dataclasses import dataclass
 
-from . import allied, arena, atlas, battle_instance, bot, bounties, conquest, cultivation, duel, epiphany, explore_modes, forge_secrets, invites, leaderboard, library, mingtie, naming, orders, precise, rules, sensing, server_bots, social, sortie, stances, team
+from . import allied, arena, atlas, battle_instance, bot, bounties, conquest, cultivation, duel, epiphany, explore_modes, forge_secrets, invites, leaderboard, library, mingtie, naming, orders, outing, precise, rules, sensing, server_bots, social, sortie, stances, team
 from . import sortie_duel  # 出陣約戰（減法季批 3b）
 from . import tavern as tavern_rules  # 酒肆殺手：失手加價
 from .bot import allocate_points, can_practise, wants_heal
@@ -242,7 +242,13 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random, slot: NamingS
         step = _toward_faction(game, profile.faction, ids)
         if step is not None:
             return msgs + game.choose(step)
+    if outing.active(s) is not None and game.outing_can_go():  # 走一趟停在要選的事上、選完了：接著走（同真人）
+        return msgs + game.outing_go()
     choice = pick(game, options, profile, rng)
+    if choice == "act:explore" and outing.on(game.content, s):  # 走一趟開著：探索照真人一樣挑段數出發（bot.outing_segments）
+        n = bot.outing_segments(game, rng)
+        if n:
+            return msgs + game.outing_go(n)
     # 約戰開著（減法季批 3b）：挑到出陣那一格（只是打開出陣前那張卡）換成真的貼一張、封好三招（bot.duel_go）
     return msgs + game.choose(bot.duel_go(game, choice, rng)) if choice else msgs
 

@@ -16,6 +16,7 @@ from . import arts as arts_mod, allied, armor, bounties, checkin, chuangong, cli
 from . import prologue as prologue_rules
 from . import sortie_duel, tactics  # 出陣約戰（減法季批 3b）：封三招
 from . import growth  # 減法季屬性五段：假人照路配點（stat_path、plan_points）
+from . import outing  # 走一趟：假人挑段數（outing_segments）
 from .engine import ARENA_YIELD, DUEL_FLEE, FREE_TEXT_OPTION, TEXT_TALKS, Game, Option
 from .rules import jianfa
 from .martial_arts import MartialArt, next_quality
@@ -434,6 +435,18 @@ def pick_outcome(game: Game, outcomes: list[Outcome], rng: random.Random) -> str
     （bot_policy.take_turn）也照舊不按。留著位子：之後要做就照個性挑一種的 id，直接交給 Game.answer_event 的 outcome
     （不經模型、不寫字；江湖紀錄與行狀照真人一樣只寫類名，看不出是假人）。"""
     return None
+
+
+OUTING_WEIGHTS = {1: 1, 3: 3, 5: 2}  # 假人走一趟挑幾段的比重（只在體力夠的段數裡挑）【預設】
+
+
+def outing_segments(game: Game, rng: random.Random) -> int:
+    """假人走一趟挑幾段（tianxia/outing.py）：體力夠走的段數照 OUTING_WEIGHTS 挑一種；一段都走不起是 0。"""
+    c, p = game.content, game.state.player
+    ok = [n for n in outing.segments(c) if p.stamina >= outing.cost(c, n)]
+    if not ok:
+        return 0
+    return rng.choices(ok, weights=[OUTING_WEIGHTS.get(n, 1) for n in ok])[0]
 
 
 def pick(game: Game, options: list[Option], rng: random.Random) -> str | None:

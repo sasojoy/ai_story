@@ -145,3 +145,13 @@ def test_view_and_switch():
     off = _game(outing=False)
     assert off.outing_view() is None
     assert off.outing_go(3) == ["（此刻無法這麼做。）"]
+
+
+def test_bots_walk_the_same_trip():
+    """伺服器假人：挑到探索就挑段數走一趟；停在要選的事上、選完了就接著走（bot_policy.take_turn）。"""
+    from tianxia import bot
+    game = _game()
+    rng = random.Random(1)
+    assert bot.outing_segments(game, rng) in (1, 3, 5)
+    game.state.player.stamina = 5.0
+    assert bot.outing_segments(game, rng) == 0
