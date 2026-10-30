@@ -56,11 +56,17 @@ def test_a_module_picks_the_tests_that_import_it():
     assert "test_sensing.py" in names and "test_real_content.py" not in names
 
 
-def test_content_picks_its_tests_but_the_real_content_season_only_with_slow():
-    """手冊 4.3：內容改了挑 test_content.py 與寫到那個檔名的；test_real_content.py（整季）每日整套會跑，--slow 才加。"""
-    assert "test_content.py" in _names(["content/skills.json"])
-    assert "test_real_content.py" not in _names(["content/skills.json"])
-    assert "test_real_content.py" in _names(["content/skills.json"], slow=True)
+def test_content_picks_its_tests_and_the_fast_part_of_real_content():
+    """內容改了挑 test_content.py、寫到那個檔名的，加 test_real_content.py 不是 slow 的那些（147 條只有整季那 11 條是 slow；
+    其他的含事件難度帶 DIFFICULTY_BANDS 的鎖、地點走得到，-n 4 約 25 秒）。整季那幾條照舊要 --slow（手冊 4.3 的本意）。"""
+    picked = test_for.pick(["content/events/explore_jizhou.json"])
+    assert {"test_content.py", "test_real_content.py"} <= {p.name for p in picked.files}
+    (cmd,) = test_for.pytest_commands(picked, slow=False, extra=[])
+    assert _marker(cmd) == "not slow"
+    real = next(p for p in picked.files if p.name == "test_real_content.py")
+    assert not test_for.whole_slow(real), "test_real_content.py 整個標 slow 的話，內容改了就一條難度帶都不驗"
+    (both,) = test_for.pytest_commands(picked, slow=True, extra=[])
+    assert _marker(both) == "slow or not slow" and "tests/season/test_real_content.py" in both
 
 
 def test_the_promotion_and_rank_action_content_picks_the_tests_that_pin_it():

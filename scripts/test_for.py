@@ -28,7 +28,8 @@
   兩樣都沒有的群（feast、road、ambush……）改用內文叫到那一群方法（.feast_open(）或寫到那一群選項 id（"feast:）的。
 - 其他 tianxia/<模組>.py、run_bots.py、scripts/<腳本>.py：直接 import 它的測試檔，加上檔名是 test_<模組>… 的
   （「import 了 engine」不再算相關：engine.py 照上面那一條）。
-- content/：test_content.py ＋ 寫到那個檔名的測試檔；test_real_content.py 不自動跟（每日整套會跑），--slow 才加。
+- content/：test_content.py ＋ test_real_content.py ＋ 寫到那個檔名的測試檔，照舊不含 slow：test_real_content.py 用真實內容
+  跑整季的那幾條是 slow（--slow 才跑、每日整套會跑），其他的（事件難度帶 DIFFICULTY_BANDS 的鎖、地點走得到……）每次都跑。
 - web/：寫到那個檔名的測試檔（main.js、map.js、outing.js 照 app.js 挑），加上 test_server.py。
 - tests/ 裡的測試檔：跑它自己，連 slow 一起（改了就是要跑它；挑到的其他檔照舊不含 slow，所以分兩次跑）；
   tests/kit/ 這類共用工具：import 它的測試檔；tests/fixtures/：寫到那個檔名的測試檔。
@@ -63,7 +64,7 @@ WEB_SCRIPTS = {"main.js", "map.js", "outing.js", "app.js"}  # 網頁測試每一
 SETUP_FILES = {"tests/conftest.py", "pyproject.toml", "requirements.txt", "requirements-dev.txt"}
 # 跟哪一條分支比（企劃者 2026-10-18 起功能在功能分支上做：批的工作樹要跟功能分支比，不然越做越多）
 DEFAULT_BASE = os.environ.get("TIANXIA_TEST_BASE", "origin/main")
-REAL_CONTENT_TEST = "test_real_content.py"  # 用真實內容跑整季（slow）：內容改了不自動跟，--slow 才加
+REAL_CONTENT_TEST = "test_real_content.py"  # 內容改了就跟（不含 slow）；用真實內容跑整季的那幾條是 slow，--slow 才跑
 SERVER_TEST = "test_server.py"
 
 # 核心（手冊 3.1、4.3）：改了跑核心測試＋煙霧＋自己檔名的測試，不照「誰 import 它」挑（team、models、state 被一兩百個測試檔 import）
@@ -578,10 +579,10 @@ def server_groups(hunk_list: list[Hunk], old_src: str, new_src: str) -> tuple[se
 
 # ── 挑 ───────────────────────────────────────────────────────────────
 
-def pick(files: list[str], base: str = DEFAULT_BASE, slow: bool = False,
+def pick(files: list[str], base: str = DEFAULT_BASE,
          hunks_of: dict[str, tuple[list[Hunk], str, str]] | None = None) -> Pick:
-    """要跑的測試。hunks_of 給測試用：{"tianxia/engine.py": ([(拿掉的行, 加上的行)…], 舊原始碼, 新原始碼)}，
-    沒給就問 git。"""
+    """要跑的測試（挑的時候不管 slow：要不要連 slow 一起跑是 pytest_commands 的事）。hunks_of 給測試用：
+    {"tianxia/engine.py": ([(拿掉的行, 加上的行)…], 舊原始碼, 新原始碼)}，沒給就問 git。"""
     tests = all_tests()
     named = {t.name: t for t in tests}
     result = Pick()
@@ -669,11 +670,12 @@ def pick(files: list[str], base: str = DEFAULT_BASE, slow: bool = False,
                              or (f.startswith("scripts/") and f"{mod}.py" in _text(t))}
             continue
         if f.startswith("content/"):
-            if "test_content.py" in named:
-                result.files.add(named["test_content.py"])
-            result.files |= {t for t in tests if path.name in _text(t) and (slow or t.name != REAL_CONTENT_TEST)}
-            if slow and REAL_CONTENT_TEST in named:
-                result.files.add(named[REAL_CONTENT_TEST])
+            # test_real_content.py 147 條只有整季那 11 條是 slow：其他的（事件難度帶 DIFFICULTY_BANDS、地點走得到……）照
+            # 「不含 slow」跟著跑，約 25 秒；整季那幾條 --slow 才跑（手冊 4.3 不要的是用真實內容跑整季）
+            for name in ("test_content.py", REAL_CONTENT_TEST):
+                if name in named:
+                    result.files.add(named[name])
+            result.files |= {t for t in tests if path.name in _text(t)}
             continue
         if f.startswith("web/"):
             if SERVER_TEST in named:
@@ -794,7 +796,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("files", nargs="*", help="改過的檔（沒給就問 git）")
     parser.add_argument("--list", action="store_true", help="只列出要跑的、為什麼，不跑")
     parser.add_argument("--count", action="store_true", help="再用 pytest --collect-only 數一共幾條（不跑）")
-    parser.add_argument("--slow", action="store_true", help="挑到的連 slow 一起跑（內容改了也加 test_real_content.py）")
+    parser.add_argument("--slow", action="store_true", help="挑到的連 slow 一起跑（例：內容改了連 test_real_content 的整季）")
     parser.add_argument("--all", action="store_true", help="整套，含 slow（上 main 之前用）")
     parser.add_argument("--base", default=DEFAULT_BASE,
                         help="跟哪一條分支比（預設 origin/main，或環境變數 TIANXIA_TEST_BASE）")
@@ -804,7 +806,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.all:
         chosen = Pick(everything=True)
     else:
-        chosen = pick(args.files or changed_files(args.base), base=args.base, slow=args.slow)
+        chosen = pick(args.files or changed_files(args.base), base=args.base)
     if chosen.empty:
         print("這些改動沒有對應的測試（文件之類）。要跑整套用 --all。")
         for w in chosen.why:
