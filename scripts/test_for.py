@@ -142,7 +142,9 @@ class Pick:
 # ── git ──────────────────────────────────────────────────────────────
 
 def _git(*args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    # core.quotepath=off：中文檔名照原字印（不然是 "docs/guide/\351\207…" 加引號，對不上任何規則）
+    return subprocess.run(["git", "-c", "core.quotepath=off", *args], cwd=ROOT, capture_output=True, text=True,
+                          encoding="utf-8", errors="replace")
 
 
 def changed_files(base: str = DEFAULT_BASE) -> list[str]:
@@ -418,9 +420,13 @@ def core_tests() -> list[Path]:
     return sorted(CORE_TESTS.glob("test_*.py"))
 
 
+_SLOW_MARK = re.compile(r"^[ \t]*(?:@pytest\.mark\.slow\b|pytestmark[ \t]*=[^\n]*\bslow\b)|\bmarks[ \t]*=[^\n]*\bmark\.slow\b",
+                        re.M)
+
+
 def has_slow(test: Path) -> bool:
-    """這個測試檔有沒有標 slow 的（整個檔或其中幾條）。"""
-    return re.search(r"\bmark\.slow\b", _text(test)) is not None
+    """這個測試檔有沒有標 slow 的（整個檔、類別、函式，或 pytest.param 的 marks）；字串裡寫到的不算。"""
+    return _SLOW_MARK.search(_text(test)) is not None
 
 
 def whole_slow(test: Path) -> bool:

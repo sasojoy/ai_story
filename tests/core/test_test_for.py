@@ -286,6 +286,9 @@ def test_changed_slow_test_files_run_apart_from_the_rest_of_the_pick():
     assert _marker(second) == "slow or not slow" and second[-1] == "tests/arts/test_epiphany.py"
     plain = test_for.pick(["tests/arts/test_fusion.py"])  # 沒有 slow 的測試檔：一次就好
     assert len(test_for.pytest_commands(plain, slow=False, extra=[])) == 1
+    # 這個檔的字串裡寫了 "@pytest.mark.slow"（_slow_smoke 的例子），不是標記：也是一次就好
+    assert not test_for.has_slow(ROOT / "tests/core/test_test_for.py")
+    assert test_for.has_slow(ROOT / "tests/arts/test_epiphany.py")
 
 
 def test_a_pick_that_is_all_slow_says_so_and_does_not_fail(capsys):
