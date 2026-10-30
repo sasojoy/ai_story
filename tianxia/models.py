@@ -3443,6 +3443,32 @@ class WebPushRules(_Strict):
     max_devices: int = Field(default=5, ge=1)  # 一個帳號最多記幾台裝置
 
 
+class MapViewRules(_Strict):
+    """輿圖表現（docs/superpowers/specs/2026-10-30-輿圖表現-design.md 第四章；計畫 docs/superpowers/plans/2026-10-30-輿圖表現-S1.md）：
+    一張連續戰略圖的取景與密度。九個數字由 `/api/map/base` 的 `view` 原樣送到畫面（tianxia/mapdata.py `base()`），給 W1 以後的新圖用；
+    倍率都是「打開時的倍率」Z0 的幾倍（`Z0 = min(框寬, open_width_max) / open_units`：`open_units` 決定打開時螢幕寬放幾個地圖單位，
+    `open_width_max` 讓桌機、平板、橫向手機不再放大、只多看一圈）。顏色、字級、半徑、透明度是畫法，寫在 `web/map.js`，
+    不進這裡。數字全是【預設】。"""
+
+    open_units: float = Field(default=250, gt=0)  # 【預設】打開時螢幕寬放幾個地圖單位
+    open_width_max: int = Field(default=480, ge=1)  # 【預設】算打開倍率時框寬最多算到幾 px（Z0 = min(框寬, 它) / open_units）
+    zoom_max: float = Field(default=1.6, ge=1)  # 【預設】最多放大到打開倍率的幾倍
+    near_from: float = Field(default=0.8, gt=0)  # 【預設】倍率 ≥ 打開的幾倍算「近」
+    mid_from: float = Field(default=0.45, gt=0)  # 【預設】倍率 ≥ 打開的幾倍算「中」（再小是「遠」）
+    named_hops_near: int = Field(default=2, ge=0)  # 【預設】近景：幾步內的地名一定畫（帶幾分）
+    named_hops_mid: int = Field(default=1, ge=0)  # 【預設】中景：幾步內的地名一定畫
+    switch_zoom: float = Field(default=0.6, gt=0)  # 【預設】換區時倍率到打開的幾倍（要落在中景：mid_from ≤ 它 < near_from）
+    patch_radius: float = Field(default=60, gt=0)  # 【預設】沒有地塊的地點，拿多大的圓當它的地（地圖單位）
+
+    @model_validator(mode="after")
+    def _bands_in_order(self) -> "MapViewRules":
+        if not self.mid_from < self.near_from:
+            raise ValueError("map_view：mid_from（中景起）要小於 near_from（近景起）")
+        if not self.mid_from <= self.switch_zoom < self.near_from:
+            raise ValueError("map_view：switch_zoom（換區的倍率）要落在中景：mid_from ≤ switch_zoom < near_from")
+        return self
+
+
 class ConquestRules(_Strict):
     """領地爭奪（第 38 項改版，docs/superpowers/specs/2026-10-20-領地爭奪-design.md；計畫 docs/superpowers/plans/2026-10-20-領地爭奪.md；
     tianxia/conquest.py）。地盤開著（territory.on：第一季規則開著、劇本有官軍與黃巾、寫了 territory.blocks、豪強分屬兩軍）就是領地爭奪，
@@ -3924,6 +3950,7 @@ class Config(_Strict):
     push_watch_seconds: float = Field(default=5, gt=0)
     push_world_min_seconds: float = Field(default=10, ge=0)
     web_push: WebPushRules = Field(default_factory=WebPushRules)  # 手機跳通知（減法季第十章，批 9；server_push.WebPush）
+    map_view: MapViewRules = Field(default_factory=MapViewRules)  # 輿圖表現的取景與密度（見 MapViewRules；mapdata.base 的 view）
 
     season_days: float = DEFAULT_SEASON_DAYS
     # 第一季濃縮版的規則（預設關，beta 那一季照舊）：季曆、時刻表、三條戰線都掛在這個開關後面。

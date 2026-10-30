@@ -42,6 +42,54 @@ def test_the_base_lists_open_places_roads_and_regions():
     assert b["key"] == mapdata.base_key(game.state, game.content) and b["svg"].startswith("<svg")
 
 
+# ── 輿圖表現 S1：底圖多 view 一個鍵（給 W1 以後的新圖用；舊圖照舊畫 svg；S1 原本另送的 terrain 作廢，山河林與名字走 paint）──
+
+OLD_BASE_KEYS = {"key", "w", "h", "svg", "places", "edges", "roads", "regions", "insight_kinds", "insight_layer", "world", "paint"}
+FORMAL_VIEW = {  # content/config.json 的 map_view（設計 4：九個鍵；W1 以後的畫面照這幾個數字取景）
+    "open_units": 250, "open_width_max": 480, "zoom_max": 1.6, "near_from": 0.8, "mid_from": 0.45,
+    "named_hops_near": 2, "named_hops_mid": 1, "switch_zoom": 0.6, "patch_radius": 60,
+}
+
+
+@pytest.mark.parametrize("profile", [None, "weekend", "season21", "week7"])
+def test_the_base_adds_only_the_view(profile):
+    game = _game(profile=profile)
+    b = game.map_base()
+    assert set(b) - {mapdata.VIEWER_MOSTLY} == OLD_BASE_KEYS | {"view"}  # 沒有 terrain：山河林與名字是 Joy 的 paint
+    assert b["svg"] == mapview.render_base(game.state, game.content)  # 舊圖照舊畫：位元組不變（W4 才拿掉）
+    assert b["view"] == game.content.config.map_view.model_dump() == FORMAL_VIEW
+    assert json.loads(json.dumps(b))["view"] == FORMAL_VIEW  # 送得出去
+
+
+def test_the_view_is_whatever_the_config_says():
+    game = _game()
+    game.content.config.map_view.open_units = 320
+    game.content.config.map_view.open_width_max = 520
+    game.content.config.map_view.patch_radius = 45.5
+    view = game.map_base()["view"]
+    assert (view["open_units"], view["open_width_max"], view["patch_radius"]) == (320, 520, 45.5) and view["zoom_max"] == 1.6
+
+
+def test_opening_a_place_changes_the_svg_but_not_the_view():
+    game = _game(profile=None)  # 14 天的季：南華觀要等 xi_open
+    before = game.map_base()
+    game.state.world.flags.add("xi_open")
+    after = game.map_base()
+    assert after["key"] != before["key"] and after["svg"] != before["svg"]
+    assert after["view"] == before["view"]  # 只跟設定有關，跟開放了哪些地點無關
+
+
+def test_each_viewer_shares_the_one_view():
+    core = _game().map_base(viewer=False)
+    mine = mapdata.with_mostly(core, "k", {})
+    assert mine["view"] is core["view"]  # 換上看的人的名字旁，不重複存
+
+
+def test_the_state_does_not_carry_the_view():
+    st = _game().map_state()
+    assert "terrain" not in st and "view" not in st
+
+
 def test_the_state_suggests_where_to_sortie():
     st = _game().map_state()
     assert 1 <= len(st["suggest"]) <= mapdata.SUGGEST_MAX + 1  # 打得過的最多三處，再加一處必敗的

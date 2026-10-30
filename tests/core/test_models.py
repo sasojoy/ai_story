@@ -273,3 +273,25 @@ def test_a_partial_affinity_override_changes_only_the_rows_it_names():
 def test_a_bad_row_inside_a_partial_affinity_override_is_still_rejected():
     with pytest.raises(ValidationError):
         Config(battle={"affinity": {"陽": ["強攻", "強攻"]}})
+
+
+def test_map_view_defaults_are_the_nine_numbers_of_the_design():
+    """輿圖表現設計第四章的表：九個鍵、九個預設；沒寫 map_view 的設定（測試內容）也有。"""
+    assert Config().map_view.model_dump() == {
+        "open_units": 250, "open_width_max": 480, "zoom_max": 1.6, "near_from": 0.8, "mid_from": 0.45,
+        "named_hops_near": 2, "named_hops_mid": 1, "switch_zoom": 0.6, "patch_radius": 60,
+    }
+    assert Config(map_view={"open_units": 300}).map_view.open_units == 300  # 只寫一個鍵，其餘照預設
+    assert Config(map_view={"open_units": 300}).map_view.zoom_max == 1.6
+
+
+@pytest.mark.parametrize("bad", [
+    {"no_such_key": 1},  # 拼錯的鍵直接報錯
+    {"open_units": 0}, {"open_width_max": 0}, {"open_width_max": -480}, {"zoom_max": 0.9}, {"patch_radius": 0}, {"named_hops_near": -1},
+    {"mid_from": 0.8},  # 中景起要小於近景起
+    {"near_from": 0.4},
+    {"switch_zoom": 0.3}, {"switch_zoom": 0.8},  # 換區的倍率要落在中景（0.45 ≤ 它 < 0.8）
+])
+def test_map_view_rejects_numbers_that_do_not_make_sense(bad):
+    with pytest.raises(ValidationError):
+        Config(map_view=bad)

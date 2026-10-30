@@ -253,6 +253,14 @@ description: 《天下大勢》開發一批或修一張回饋單之前先看：�
 - **驗「動作最後那幾步」不要連按同一個動作**（同批）：`choose("act:explore")` 常撞上事件，下一個 `choose("act:explore")` 只回「（此刻無法這麼做。）」、什麼都沒跑，測試看起來像規則沒作用。要在同一局連驗兩次「動作尾端的檢查」，直接叫尾端的函式（`game._deep_cap_now(); game._signature_arms()`，就是 `Game.choose` 在 `_log` 前叫的那兩步），或按完事件的選項再按。
 - **變異檢查抓不到的，補一條會抓的測試再比一次**（同批）：「進名單那一下的說明連免費那幾位也說」一開始沒被抓到（測試只斷言靠名額的那一位有說），補「名單內三位不說」的斷言就紅了；「`withheld` 永遠 True」要補「沒東西可扣的人物不說」才抓得到。變異腳本在這一輪 scratchpad 的 `mutate7c.py <工作樹> <相對檔> <測試檔> '<舊>' '<新>'`，一行一個、舊字串必須剛好一處、`finally` 寫回；PowerShell 傳多行舊字串直接寫單引號跨行就行。
 - **關著對照的腳本可以重用上一批的**（同批）：`Get-ChildItem C:\Users\ray61\AppData\Local\Temp\claude -Recurse -Include cmp7b.py,cmp_qa.py` 找得到前幾輪留下的（`jf7b/cmp/cmp7b.py` + `cmp_run.py`：解兩份 tar、五種平行跑、逐行比）；抄到自己的 scratchpad，只改要比的東西（這一批多印商城每一列的說明，免得說明字串在關著時漏出來）。**全開那一種行數不同時逐行 zip 比會整片錯位**（報 460 行不同其實只差十幾處）：另寫一支 `difflib.SequenceMatcher(None, a, b, autojunk=False).get_opcodes()` 分塊（800 行幾秒就好），逐塊看是不是預期的差。
+- **要拿掉上一位（或上一版設計）加的功能，先看那些檔是不是整個都只為它而改**（輿圖表現 S1 併，2026-10-30：拿掉 `base.terrain`）：
+  `git diff <develop 那一版> HEAD -- <檔>` 一看，`tianxia/mapart.py` 與 `tests/map/test_mapart.py` 的差異全是 `terrain_data` 和它的四個小函式、`Piece` 多的四個欄位、`_num`、三處 `Piece(...)` 多給的引數與它們的測試，就整檔 `git checkout <develop 那一版> -- <檔>` 還原：比一處處刪乾淨，而且結果跟 develop 位元組一樣，之後「其餘逐位元組不變」的對照自然過。只有一部分是的檔（`mapdata.py`、`test_mapdata.py`、`test_server.py`）才手改。刪完 grep 一次函式名，連導覽和計畫裡的句子一起找（計畫不刪，標「作廢：…」並留原文）。
+- **比 API 的原始位元組：用 TestClient 打 `server.app`，不必開真伺服器；固定時鐘與亂數，並且先證明 base 自己跑兩次一模一樣**（輿圖表現 S1 併，`/api/map/base`、`/api/map/state` × 四種設定 × 官軍黃巾兩人 × 三個時間點＝48 個回應）：
+  - 做法：`git archive <develop 那一版>`／`HEAD`（`tianxia content web server.py server_push.py zhuan_html.py llm_queue.py console.py`，`docs/` 別帶）用 `tarfile` 解到 scratchpad 兩個資料夾；一支 `cmp_srv.py <根> <設定名|none> <資料庫> <輸出夾>` 在最前面 `time.time = lambda: CLOCK[0]`，再把 `random.Random.__init__` 換成沒給種子就用固定種子，`sys.path.insert(0, 根)`、`os.chdir(根)` 之後才 `import server`；`server.CONTENT.config.ollama_url = "http://127.0.0.1:9"`、`auto_open_first_season = True`；註冊兩個人，用 `open_characters()` 把陣營寫進存檔；每個時間點先打 `/api/main` 讓世界補算，再把 `r.content` 原樣寫檔；一支調度腳本用 `sys.executable` 平行開子行程（`PYTHONHASHSEED=0`，每個一個新資料庫）。
+  - **不固定亂數，`state` 的 `ropes`（戰線推力）每次跑都不一樣**（week7 的 `ropes[0].value` 39／52），連同一份程式跑兩次都不同，看起來像程式的差；固定之後 develop 跑兩次（none、week7 兩種設定的 24 個檔）位元組全同。所以比之前一定先跑一次「develop 對 develop」。
+  - 比的方式：`state` 逐位元組相等；`base` 把 HEAD 原始位元組裡 `,"view":{…}`（用同一個 `json.dumps(…, ensure_ascii=False, separators=(",", ":"))` 組出來的片段，斷言只出現一次）拿掉，剩下的要跟 develop 一模一樣，再解 JSON 確認只多 `view`、鍵的順序其餘不變。**別斷言 `view` 是最後一個鍵**：有看的人的名字旁時 `viewer_mostly` 排在它後面。
+  - 比出來「長度一樣、位元組不同」先 `whatdiff`（遞迴比 JSON 的葉子，列出路徑）看是順序還是值；這一輪第一次比 48 個回應紅了 28 個，原因是斷言太嚴（鍵順序）加上亂數沒固定，兩個都不是程式的差。
+- **PowerShell 裡 `git diff | cat` 會報 `Get-Content` 綁不到輸入**（`cat` 是別名）：PowerShell 直接不接 `| cat`（`git` 不會開分頁器），要管線就換 Bash 的 git。
 
 ## 量表怎麼讀
 
