@@ -7,7 +7,7 @@ import pytest
 from conftest import real_content
 from tianxia import deeds, figure_life, figures, plans, seal_acts
 from tianxia.models import Itinerary, ItineraryStop, PlanContest
-from tianxia.state import GameState, PlayerState, SealAct
+from tianxia.state import GameState, Plan, PlayerState, SealAct
 from tianxia.world_state import fresh_season
 
 END = 14 * 86400.0  # 預設設定的季長（14 天）：day7 1.0～8.0 對 0～END
@@ -237,6 +237,157 @@ def test_a_stop_for_a_figure_nobody_pinned_does_not_touch_other_pulls(c):
     assert other.ended is None and seal_acts.pinned(s.world, "zhangjiao") is other
     assert figures.state_of(s, c, "zhangjiao").location == "changshe"
     assert figures.state_of(s, c, "bocai").location == "juma_river"
+
+
+# ── FB-9038：引將的目標清單也看行程（比照時刻表：窗口內行程要搬他就灰掉、按不下去）──
+# 14 天的預設設定：一個世界日＝7 天季的 0.5 天，所以引將的窗口（一日）是 day7 的 0.5 天。
+
+
+def _grey(s: GameState, c) -> dict[str, str]:
+    """引將的目標清單（現在起一日之內）：人物 id → 灰掉的原因（沒灰是空字串）。玩家站在長社，長社的人是「已經在這裡」。"""
+    until = s.world.time + seal_acts.span(c, s.world)
+    return {row["id"]: row["why"] for row in seal_acts.figure_targets(s, c, until)}
+
+
+def test_yinjiang_greys_out_a_figure_whose_plain_stop_falls_within_the_day(c):
+    _only(c, ItineraryStop(id="t_raise", day=2.0, place="juma_river", text="{name}到了{place}。"), who="bocai")
+    s = _season(c)
+    _at(s, 1.4)  # 窗口 1.4～1.9：這一站（第 2.0 天）還在窗口外，按得下去
+    assert _grey(s, c)["bocai"] == "" and seal_acts.target_problem(s, c, "yinjiang", "bocai", "") is None
+    _at(s, 1.9)  # 窗口 1.9～2.4：他會被搬去拒馬河畔，灰掉、起用也被擋（兩處同一條）
+    assert _grey(s, c)["bocai"] == seal_acts.CLASH_PLAN
+    assert seal_acts.target_problem(s, c, "yinjiang", "bocai", "") == "波才" + seal_acts.CLASH_PLAN + "。"
+    assert _grey(s, c)["zhangjiao"] == ""  # 別人沒有這一站，不受影響
+
+
+def test_yinjiang_does_not_grey_a_stop_that_ends_where_he_already_stands(c):
+    """目的地就是他此刻站的地方：行程不會搬他，不灰。"""
+    _only(c, ItineraryStop(id="t_raise", day=2.0, place="huangjin_camp", text="{name}到了{place}。"), who="bocai")
+    s = _season(c)
+    _at(s, 1.9)
+    assert figures.state_of(s, c, "bocai").location == "huangjin_camp" and _grey(s, c)["bocai"] == ""
+
+
+def test_a_stop_that_is_already_done_greys_nothing(c):
+    _only(c, ItineraryStop(id="t_raise", day=2.0, place="juma_river", text="{name}到了{place}。"), who="bocai")
+    s = _season(c)
+    _at(s, 1.9)
+    s.world.stops_done["t_raise"] = True
+    assert _grey(s, c)["bocai"] == ""
+
+
+def test_yinjiang_greys_out_a_figure_whose_contest_opens_or_settles_within_the_day(c):
+    """盤算公告（_open 會把人先帶到那裡）與結算（成了去 place、不成去 lose_place）都算；結果靠還沒擲的骰子，有一種結果會搬他就算。"""
+    fight = dict(id="t_fight", day=3.0, place="juma_river")
+    _only(c, ItineraryStop(**fight, contest=_contest()), who="bocai")
+    s = _season(c)
+    _at(s, 1.4)  # 窗口 1.4～1.9：公告在第 2.0 天（day－lead_days7）才開，結算在第 3.0 天
+    assert _grey(s, c)["bocai"] == ""
+    _at(s, 1.6)  # 窗口 1.6～2.1：公告落在窗口內，他會被帶到拒馬河畔
+    assert _grey(s, c)["bocai"] == seal_acts.CLASH_PLAN
+    _at(s, 2.0)
+    plans.tick(s, c, END)  # 公告開了，人已經在拒馬河畔
+    assert plans.find(s, "t_fight") is not None and figures.state_of(s, c, "bocai").location == "juma_river"
+    _at(s, 2.7)  # 窗口 2.7～3.2：到點結算。成了留在原地、不成又沒寫退到哪也留在原地：搬不動他
+    assert _grey(s, c)["bocai"] == ""
+    _only(c, ItineraryStop(**fight, contest=_contest(lose_place="loushang_village")), who="bocai")  # 不成要退到別處：有一種結果會搬他
+    assert _grey(s, c)["bocai"] == seal_acts.CLASH_PLAN
+    _at(s, 2.3)  # 窗口 2.3～2.8：結算在窗口外
+    assert _grey(s, c)["bocai"] == ""
+
+
+def test_a_contest_that_has_no_room_to_open_does_not_count_until_it_settles(c):
+    """全服同時最多 max_open 件：滿了的時候公告開不了（到點才直接擲），窗口內只有公告時不灰；有空位、或開著的有一件在窗口內結算就算有空位。"""
+    c.itineraries = [
+        Itinerary(who="caocao", stops=[ItineraryStop(id="t_other", day=7.0, place="qiao_county", contest=_contest())]),
+        Itinerary(who="bocai", stops=[ItineraryStop(id="t_fight", day=3.0, place="juma_river", contest=_contest())]),
+    ]
+    c.config.plans.max_open = 1
+    s = _season(c)
+    s.world.plans.append(Plan(stop="t_other", who="caocao", place="qiao_county", open_at=0.0, due=plans._time_of(c, s.world, 7.0, END)))  # noqa: SLF001
+    _at(s, 1.6)  # 窗口 1.6～2.1：公告落在窗口內，可是那一件佔著唯一的位子，到第 7.0 天才結算
+    assert _grey(s, c)["bocai"] == ""
+    c.config.plans.max_open = 2  # 有空位
+    assert _grey(s, c)["bocai"] == seal_acts.CLASH_PLAN
+    c.config.plans.max_open = 1
+    s.world.plans[0].due = s.world.time + 3600  # 佔位子的那一件一個時辰後結算：空位會在窗口內出來
+    assert _grey(s, c)["bocai"] == seal_acts.CLASH_PLAN
+
+
+def test_yinjiang_greys_out_a_follower_when_the_leader_walks_the_company(c):
+    """跟著別人走的人（follows）：他跟的那個人的行程要搬隊伍時也算；目的地就是他此刻站的地方的不算；跟的人倒下、沒有跟隨關係的不算。"""
+    _only(c, ItineraryStop(id="t_raise", day=2.0, place="juma_river", text="{name}到了{place}。"), who="zhangmancheng")
+    assert c.characters["zhaohong"].follows == "zhangmancheng" and c.characters["zhaohong"].deep_interaction  # 正式內容：趙弘跟著張曼成
+    s = _season(c)
+    _at(s, 1.9)
+    grey = _grey(s, c)
+    assert grey["zhangmancheng"] == grey["zhaohong"] == seal_acts.CLASH_PLAN and grey["bocai"] == ""  # 波才不跟他走
+    figures._ensure(s, c, "zhaohong").location = "juma_river"  # noqa: SLF001  隊伍要去的地方就是他站的地方
+    assert _grey(s, c)["zhaohong"] == ""
+    figures._ensure(s, c, "zhaohong").location = "nanyang_huangjin_camp"  # noqa: SLF001
+    figures._ensure(s, c, "zhaohong").status = "retired"  # noqa: SLF001  他自己倒下了：不在場的人沒有「搬不搬」
+    assert not seal_acts.clash_plan(s, c, "zhaohong", s.world.time + seal_acts.span(c, s.world))
+    figures._ensure(s, c, "zhaohong").status = "active"  # noqa: SLF001
+    figures._ensure(s, c, "zhangmancheng").status = "retired"  # noqa: SLF001  領頭的倒下了：行程不會有這一站，也就不帶隊伍
+    assert "zhangmancheng" not in _grey(s, c) and _grey(s, c)["zhaohong"] == ""
+    figures._ensure(s, c, "zhangmancheng").status = "active"  # noqa: SLF001
+    c.characters["zhaohong"].deep_interaction = False  # 不是跟著走的同伴（plans._go 只帶 deep_interaction 的）
+    assert _grey(s, c)["zhaohong"] == ""
+
+
+def test_yinjiang_waits_on_the_stops_a_stop_depends_on(c):
+    """if_won／if_lost 列的前一站：已經有結果的照結果對；還沒結果的要在窗口內也有機會做完，不然這一站在窗口內到不了。"""
+    before = ItineraryStop(id="t_a", day=1.2, place="huangjin_camp", contest=_contest())  # 結算不會搬他（他本來就在黃巾營寨）
+    then = ItineraryStop(id="t_b", day=1.3, place="juma_river", text="{name}到了{place}。", if_won=["t_a"])
+    _only(c, before, then, who="bocai")
+    s = _season(c)
+    _at(s, 1.0)  # 窗口 1.0～1.5：前一站（1.2）在窗口內結算，這一站（1.3）接著做
+    assert _grey(s, c)["bocai"] == seal_acts.CLASH_PLAN
+    s.world.stops_done["t_a"] = False  # 前一站沒成：這一站不會有
+    assert _grey(s, c)["bocai"] == ""
+    s.world.stops_done["t_a"] = True
+    assert _grey(s, c)["bocai"] == seal_acts.CLASH_PLAN
+    del s.world.stops_done["t_a"]
+    _only(c, ItineraryStop(**{**before.model_dump(), "day": 1.8}), then, who="bocai")  # 前一站（1.8）在窗口外才結算：這一站等它，窗口內做不到
+    assert _grey(s, c)["bocai"] == ""
+    plans.tick(s, c, END)  # 前一站已經公告開著（到第 1.8 天才結算）：還是一樣，照它的 due 看
+    assert plans.find(s, "t_a") is not None and _grey(s, c)["bocai"] == ""
+
+
+def test_the_yinjiang_list_does_not_change_with_plans_off(c):
+    """盤算關著：目標清單與起用的檢查跟沒有行程時一個字不變。"""
+    _only(c, ItineraryStop(id="t_raise", day=2.0, place="juma_river", text="{name}到了{place}。"), who="bocai")
+    s = _season(c)
+    _at(s, 1.9)
+    until = s.world.time + seal_acts.span(c, s.world)
+    assert seal_acts.clash_plan(s, c, "bocai", until)
+    c.config.plans.enabled = False
+    off = seal_acts.figure_targets(s, c, until)
+    assert not seal_acts.clash_plan(s, c, "bocai", until) and seal_acts.target_problem(s, c, "yinjiang", "bocai", "") is None
+    c.config.plans.enabled = True
+    c.itineraries = []  # 沒有行程時的樣子
+    assert off == seal_acts.figure_targets(s, c, until) and all(row["why"] != seal_acts.CLASH_PLAN for row in off)
+
+
+@pytest.mark.parametrize("profile", ["weekend", "week7", "season21"])
+def test_the_yinjiang_window_follows_each_season_kind(profile):
+    """季種類（週末、7 天、21 天）的時間換算照 plans.tick 用的 day7／season_end_time：孫堅 7 天季第 1.7 天要走（sunjian_march），
+    引將的一日（一個季曆天）窗口蓋到那一刻才灰，窗口在它之前結束就不灰。"""
+    from tianxia import world
+
+    content = real_content(profile)
+    season = fresh_season(content, now=1792549800)  # 週三 10:30 開季
+    s = GameState(player=PlayerState(name="甲", location="changshe", stats={}, stamina=100), world=season)
+    end = world.season_end_time(season, content)
+    stop = plans.find_stop(content, "sunjian_march")[1]
+    at = plans._time_of(content, season, stop.day, end)  # noqa: SLF001
+    span = seal_acts.span(content, season)
+    assert figures.state_of(s, content, "sunjian").location == "wan_city" != stop.place and plans.on(content)
+    season.time = at - span / 2  # 窗口結束在那一站之後
+    assert seal_acts.clash_plan(s, content, "sunjian", season.time + span)
+    season.time = at - span - 600  # 窗口結束在那一站之前十分鐘
+    assert not seal_acts.clash_plan(s, content, "sunjian", season.time + span)
+    assert seal_acts.CLASH_PLAN not in {r["why"] for r in seal_acts.figure_targets(s, content, season.time + span) if r["id"] == "sunjian"}
 
 
 def test_a_figure_with_an_itinerary_does_not_stroll(c):

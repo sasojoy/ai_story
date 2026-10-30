@@ -10,7 +10,8 @@
   companion_agent._apply_turn、feasts.toast）。改版關著一律中性值（季上那一本本來就是空的，查詢再擋一次）。
 - 不具名（企劃者）：天下大事與江湖史那一句（public_text）不寫是誰；誰用的只在全服登記那一筆 use（管理者看）與起用的人自己的紀錄裡。
 - 引將改大勢人物的所在（pull）、期滿回原處（tick：world.advance_world_state 每一步、人物活起來走動之前叫；期滿那一刻另外切一段，
-  next_end）、被時刻表或退場搬動時先回原處再提早結束（release：figures._change、_hand_over 叫）。
+  next_end）、被時刻表或退場搬動時先回原處再提早結束（release：figures._change、_hand_over、plans._move 叫）；目標清單與起用那一下灰掉
+窗口內時刻表（clash）或史書行程（clash_plan，FB-9038）要搬動的人。
 - 鎮地：生效中的那一塊誰都推不動（held：conquest.push_problem、letter_problem 問；held_during：conquest.decay 問，那一天鎮過就不回），
   那一塊換了主人當場結束（hold_lapse：conquest._announce、set_control 叫）。補缺：當場退回原主（conquest.restore，Game.seal_use 叫），
   目標照翻地帳記的最近一次易手（BlockFight.flipped_at、flipped_from）。兩種都只在領地爭奪的季（conquest.on），不然灰著（NO_CONQUEST）。
@@ -90,6 +91,7 @@ ALL_GREY = {"zhendi": "佔著的地此刻都鎮不了。", "bujue": "剛被翻�
 PINNED = "正被引著"
 HERE = "已經在這裡"
 CLASH = "一日之內時刻表要動他"
+CLASH_PLAN = "一日之內行程要動他"  # 待 joy 潤（FB-9038）：窗口內史書行程（plans）會把他搬離此刻所在的地方，寫法照 CLASH
 GONE = "此刻不在江湖上"
 NO_REGION = "這裡不在任何一個大區"
 LAND_COOLING = "剛易手，還在冷卻"  # 鎮地：冷卻中的地不能鎮（設計）
@@ -406,6 +408,17 @@ def clash(state: GameState, content: Content, fid: str, until: float) -> bool:
     return False
 
 
+def clash_plan(state: GameState, content: Content, fid: str, until: float) -> bool:
+    """窗口內史書行程（plans）會不會把 fid 搬離他此刻所在的地方（FB-9038：比照 clash，按不下去）：本人的站、盤算公告與結算、跟著的人的站，
+    算法在 plans.displaces。照 plans.on 開，不看季種類（盤算每種季都有，clash 才只在第一季）；盤算關著一個字不變。
+    收季的世界秒要 world.season_end_time，plans 不 import world，這裡延後 import 補上（world 載入時已經 import 過 seal_acts）。"""
+    from . import plans, world  # noqa: PLC0415
+
+    if not plans.on(content):
+        return False
+    return plans.displaces(state, content, fid, until, world.season_end_time(state.world, content))
+
+
 # ── 目標 ──────────────────────────────────────────────────
 
 def lines(content: Content, world: WorldState) -> list[str]:
@@ -435,8 +448,8 @@ def own_side(state: GameState, content: Content, line: str | None = None) -> str
 
 
 def figure_targets(state: GameState, content: Content, until: float) -> list[dict]:
-    """引將能指定的大勢人物：此刻在場、有所在的（退場、重創、下獄、還沒出場的不列）；正被引著、已經在你這裡、一日之內時刻表要動他的灰掉
-    （why）。照人物表的順序。"""
+    """引將能指定的大勢人物：此刻在場、有所在的（退場、重創、下獄、還沒出場的不列）；正被引著、已經在你這裡、一日之內時刻表要動他、
+    一日之內行程要動他（FB-9038）的灰掉（why）。照人物表的順序。目標清單與起用那一下（target_problem）都問這裡，兩處同一條。"""
     from . import figures  # noqa: PLC0415
 
     here = state.player.location
@@ -446,7 +459,7 @@ def figure_targets(state: GameState, content: Content, until: float) -> list[dic
         if now.status != "active" or not now.location:
             continue
         why = (PINNED if pinned(state.world, fid) is not None else HERE if now.location == here
-               else CLASH if clash(state, content, fid, until) else "")
+               else CLASH if clash(state, content, fid, until) else CLASH_PLAN if clash_plan(state, content, fid, until) else "")
         place = content.locations[now.location].name if now.location in content.locations else now.location
         out.append({"id": fid, "name": fig.name, "where": place, "why": why})  # where：他此刻在哪（畫面寫在名字旁）
     return out

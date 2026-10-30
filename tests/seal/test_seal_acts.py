@@ -323,7 +323,8 @@ def test_the_card_carries_the_act_for_the_holder_only():
     assert (act["kind"], act["name"], act["left"], act["ok"], act["why"]) == ("yinjiang", "引將", 2, True, "")
     ids = {t["id"]: t for t in act["targets"]}
     assert ids["huangfusong"]["why"] == seal_acts.HERE  # 皇甫嵩就在長社
-    assert ids["bocai"]["why"] == "" and "波才" in ids["bocai"]["name"]
+    assert ids["qinjie"]["why"] == "" and "秦頡" in ids["qinjie"]["name"]  # 沒有行程的人照舊按得下去
+    assert ids["bocai"]["why"] == seal_acts.CLASH_PLAN  # 波才的盤算公告（長社那一件）就在第一天之內：FB-9038，行程要動他
     assert "pengtuo" not in ids  # 還沒出場
     assert "{target}" in act["confirm"] and "長社" in act["confirm"]
     other = _person(c, w, "旁人", side="huang")
@@ -488,6 +489,40 @@ def test_yinjiang_greys_out_a_figure_the_timetable_will_move_within_the_day():
     assert not seal_acts.clash(v, c, fid, first - 1)
     rows = {t["id"]: t["why"] for t in seal_acts.figure_targets(v, c, first + 1)}
     assert rows[fid] == seal_acts.CLASH
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(("day", "place", "plans_on", "usable"), [
+    (1.2, "nanyang_road", True, False),  # 一日之內行程要把他帶去南陽道上：灰掉，按下去被拒
+    (1.9, "nanyang_road", True, True),  # 那一站在窗口外：照舊按得下去
+    (1.2, "wan_city", True, True),  # 要去的地方就是他此刻站的地方：不灰
+    (1.2, "nanyang_road", False, True),  # 盤算關著：行程不算，跟以前一樣
+])
+def test_yinjiang_refuses_a_figure_whose_itinerary_moves_him_within_the_day(day, place, plans_on, usable):
+    """FB-9038：行程比照時刻表，窗口（一日）內會把人搬離他此刻所在的地方，目標灰掉、起用按下去被拒、不記次數、人不動；
+    起用那一下的檢查跟目標清單是同一條（seal_acts.figure_targets）。7 天季第 1.7 天孫堅動身那種情形（QA develop-red7）。"""
+    from tianxia import figures
+    from tianxia.models import Itinerary, ItineraryStop
+
+    c, w, g = _holder("xuanniu", at="changshe", plans=plans_on)
+    c.itineraries = [Itinerary(who="qinjie", stops=[ItineraryStop(id="t_march", day=day, place=place, text="{name}拔營了。")])]
+    origin = figures.state_of(_vehicle(c, w.get_season()), c, "qinjie").location
+    assert origin == "wan_city"
+    shard_id = "xuanniu"
+    msgs = _use(c, w, target="qinjie")
+    season = w.get_season()
+    shard = w.seal_state().registry.shards[shard_id]
+    number = w.get_season_number()
+    if usable:
+        [act] = season.seal_acts
+        assert (act.target, act.origin) == ("qinjie", origin) and seal_acts.used(shard, number) == 1
+        assert figures.state_of(_vehicle(c, season), c, "qinjie").location == "changshe"
+    else:
+        assert msgs == [f"（秦頡{seal_acts.CLASH_PLAN}。）"]  # 灰掉的原因就是按下去被拒的那一句
+        assert season.seal_acts == [] and _uses(w) == [] and seal_acts.used(shard, number) == 0  # 不扣次數
+        assert figures.state_of(_vehicle(c, season), c, "qinjie").location == origin  # 人不動
+        view = _do(c, w, "懷璽", lambda game: game.seal_view()["act"])  # 碎片卡的目標清單也灰著
+        assert {t["id"]: t["why"] for t in view["targets"]}["qinjie"] == seal_acts.CLASH_PLAN
 
 
 # ── Task 5：頒詔、承露、收心 ──

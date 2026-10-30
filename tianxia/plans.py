@@ -12,6 +12,8 @@
 - 有行程的人不再在常去的地方之間隨機晃（figure_life._act 問 holds）。大勢人物倒下、不在場時他的站跳過（記成沒辦成）。
 - 行程要搬一個正被引將釘著的人（本人或跟著他走的人）時比照時刻表（玉璽碎片改版五之一 1「時刻表優先」）：先叫 seal_acts.release 讓引將提前
   結束、回原處，再照行程搬，行程不等引將（FB-9036，PM 2026-10-30）；引將原本的期滿那一刻不會再把他拉回去。
+- 引將的目標清單也問行程（displaces，FB-9038）：窗口（現在到期滿）內行程會把這個人（本人的站、盤算公告與結算，或他跟著的人的站）搬離他此刻
+  所在的地方，目標灰掉、起用按不下去；結果靠還沒擲的骰子時，只要有一種結果會搬他就算。照 on(content) 開，不看季種類（盤算每種季都有）。
 只 import models、state、rules、calendar、figures、figure_life、deeds、renown、seal_acts；world、engine 呼叫它。"""
 from __future__ import annotations
 
@@ -238,6 +240,79 @@ def _warring(content: Content) -> list[str]:
 
 def _other_side(content: Content, side: str) -> str | None:
     return next((f for f in _warring(content) if f != side), None)
+
+
+# ── 引將的窗口：行程會不會把他搬離此刻所在的地方（FB-9038）────────
+
+
+def displaces(state: GameState, content: Content, fid: str, until: float, end: float) -> bool:
+    """窗口（現在到 until，世界秒）內，史書行程會不會把這位大勢人物搬離他此刻所在的地方（seal_acts.clash_plan 問，引將的目標清單與起用共用）。
+    比照 tick 逐站看：他自己的行程（一般的一站、盤算公告 _open、盤算結算 _settle），跟著別人走的人（follows）也看他跟的那個人的行程；
+    目的地就是他此刻站的地方的不算。結果靠還沒擲的骰子（盤算成不成）時，成了去 place、不成去 lose_place，只要有一種去處不是他此刻站的地方就算
+    （寧可灰掉，不讓玩家白扣一次）；公告能不能開（全服同時最多 max_open 件）也往寬了看：有空位、或開著的有一件在窗口內結算就算有空位。
+    前面的站還沒結果的（if_won／if_lost）要它們在窗口內也有機會做完、結果對得上才算。end 是這一季收季的世界秒（呼叫端給：plans 不 import world）。
+    盤算關著、季已經收了、不是大勢人物、不在場是 False。"""
+    w = state.world
+    fig = content.figures.get(fid)
+    if not on(content) or w.ended or fig is None or fig.character not in content.characters:
+        return False
+    now = figures.state_of(state, content, fid)
+    if now.status != "active" or not now.location:
+        return False
+    tuning = content.config.plans
+    eps = calendar.EPS_SECONDS
+    me = content.characters[fig.character]
+    open_now = open_plans(state)
+    room = len(open_now) < tuning.max_open or any(p.due <= until + eps for p in open_now)
+
+    def day_by(day: float) -> bool:
+        """7 天季的第 day 天（行程寫的天）在窗口結束之前到不到。"""
+        return _time_of(content, w, day, end) <= until + eps
+
+    def resolves(stop_id: str, seen: tuple[str, ...]) -> bool:
+        """前面那一站（還沒有結果）在窗口內會不會做完或結算：盤算開著的看 due，其餘看那一天到了沒有、它自己的條件也要有機會對上。"""
+        pair = find_stop(content, stop_id)
+        if pair is None or stop_id in seen:
+            return False
+        plan = find(state, stop_id)
+        if plan is not None and not plan.settled:
+            return plan.due <= until + eps
+        return day_by(pair[1].day) and gate_may(pair[1], (*seen, stop_id))
+
+    def gate_may(st: ItineraryStop, seen: tuple[str, ...]) -> bool:
+        """_gate 的寬鬆版：if_won／if_lost 列的站已有結果的照結果對、還沒有的要在窗口內有機會做完（結果往哪邊都算有機會）。"""
+        done = w.stops_done
+        for ref, need in [(r, True) for r in st.if_won] + [(r, False) for r in st.if_lost]:
+            if ref in done:
+                if done[ref] != need:
+                    return False
+            elif not resolves(ref, seen):
+                return False
+        return True
+
+    for it, st in _all_stops(content):
+        mover = it.who == fig.character or (me.follows == it.who and me.deep_interaction)  # 本人的站，或他跟著的人帶隊伍走
+        if not mover or st.id in w.stops_done or not _alive(state, content, it.who):
+            continue
+        dests: set[str] = set()
+        if st.contest is None:
+            if day_by(st.day) and gate_may(st, (st.id,)):
+                dests.add(st.place)
+        else:
+            plan = find(state, st.id)
+            if plan is not None:
+                settles, opens = not plan.settled and plan.due <= until + eps, False  # 開著的：人早就走到 place，到點才又動
+            else:
+                ready = gate_may(st, (st.id,))
+                settles = ready and day_by(st.day)
+                opens = ready and room and day_by(st.day - tuning.lead_days7)
+            if settles or opens:
+                dests.add(st.place)
+            if settles and st.contest.lose_place is not None:
+                dests.add(st.contest.lose_place)
+        if any(dest != now.location for dest in dests):
+            return True
+    return False
 
 
 # ── 玩家插手 ─────────────────────────────────────────
