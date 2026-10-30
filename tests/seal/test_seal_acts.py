@@ -379,21 +379,26 @@ def test_the_admin_sees_who_used_what():
 
 @pytest.mark.slow
 def test_yinjiang_pulls_a_figure_to_you_and_sends_him_back_on_time():
-    from tianxia import figures
+    from tianxia import figures, plans
 
-    c, w, g = _holder("xuanniu", at="changshe", plans=False)  # 行程開著時波才一開季就先被帶到長社（盤算公告），沒東西可引
-    _use(c, w, target="bocai")
+    # 盤算開著（FB-9039：主流程要在行程開著時有人守）：挑一位沒有行程的人（秦頡），行程不會把他帶走；
+    # 行程開著時波才一開季就先被帶到長社（盤算公告），沒東西可引，所以不挑他
+    c, w, g = _holder("xuanniu", at="changshe")
+    assert plans.on(c) and not plans.holds(c, "qinjie")
+    origin = figures.state_of(_vehicle(c, w.get_season()), c, "qinjie").location
+    assert origin != "changshe"
+    _use(c, w, target="qinjie")
     season = w.get_season()
-    assert season.figures["bocai"].location == "changshe"
+    assert season.figures["qinjie"].location == "changshe"
     [act] = season.seal_acts
-    assert (act.target, act.place, act.origin) == ("bocai", "changshe", "huangjin_camp")
-    assert any("波才應召移駐長社" in r.text for r in season.rumors)
+    assert (act.target, act.place, act.origin) == ("qinjie", "changshe", origin)
+    assert any("秦頡應召移駐長社" in r.text for r in season.rumors)
     assert seal_acts.next_end(season) == pytest.approx(act.until)
     late = _do(c, w, "懷璽", lambda game: game.state.world, now=10.0 + DAY + 5)
-    assert figures.state_of(_vehicle(c, late), c, "bocai").location == "huangjin_camp"
+    assert figures.state_of(_vehicle(c, late), c, "qinjie").location == origin
     back = w.get_season()
     assert back.seal_acts[0].ended == pytest.approx(act.until)
-    assert any(seal_acts.BACK.format(figure="波才", place="黃巾別部營寨") == r.text for r in back.rumors)
+    assert any(seal_acts.BACK.format(figure="秦頡", place=c.locations[origin].name) == r.text for r in back.rumors)
 
 
 def _vehicle(c, season):
@@ -443,10 +448,12 @@ def test_a_figure_staying_put_ends_nothing():
 @pytest.mark.slow
 def test_a_pinned_figure_does_not_wander():
     """14 天的季人物會自己走動：被引將釘著的不走、不跟、不趕（亂數照擲，別人的序列不位移）。"""
-    from tianxia import figure_life, figures
+    from tianxia import figure_life, figures, plans
 
-    c, w, g = _holder("xuanniu", profile=None, at="yingchuan_wilds", plans=False)  # 有行程的人本來就不亂晃（plans.holds），挑到他就測不到引將
-    fid = next(f for f, d in c.figures.items() if d.character and len(c.characters[d.character].haunts) > 1
+    # 盤算開著（FB-9039）：有行程的人本來就不亂晃（plans.holds），挑到他就測不到引將，所以只挑沒有行程的人
+    c, w, g = _holder("xuanniu", profile=None, at="yingchuan_wilds")
+    assert plans.on(c)
+    fid = next(f for f, d in c.figures.items() if d.character and not plans.holds(c, d.character) and len(c.characters[d.character].haunts) > 1
                and figures.state_of(_vehicle(c, w.get_season()), c, f).location in c.characters[d.character].haunts
                and figures.state_of(_vehicle(c, w.get_season()), c, f).location != "yingchuan_wilds")
     cid = c.figures[fid].character
