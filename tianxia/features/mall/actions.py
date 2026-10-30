@@ -8,7 +8,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-from tianxia import calendar, journal
+from tianxia import calendar
+from tianxia import journal  # 過渡：待搬（江湖紀錄；手冊 3.1 的核心清單沒有它，帶 changes 的那一則 ctx._write 寫不了）
 from tianxia import server_bots  # 過渡：待搬（保留的名號：易名帖撞名照建角色）
 from tianxia import zhuan_end  # 過渡：待搬（這一季用不上的列傳插畫票不賣，FB-845）
 from tianxia.accounts import NAME_TAKEN as NAME_IN_USE, AccountStore

@@ -19,10 +19,11 @@ TIANXIA = ROOT / "tianxia"
 FEATURES = TIANXIA / "features"
 MARK = "過渡：待搬"
 
-# 手冊 3.1 的核心模組，加上 3.10 的錢包（wallet）與共用服務的記錄（journal）
+# 手冊 3.1 的核心模組，加上 3.10 的錢包（wallet）。journal（江湖紀錄）不在 3.1 的清單上、自己又 import front_lines、battlelog：
+# 包 import 它照舊模組註「過渡：待搬」（要算成核心先過 PM、回寫手冊 3.1）
 CORE = {
     "state", "sqlite_world", "world_state", "characters", "accounts", "database", "rules", "calendar", "models", "content",
-    "team", "gender", "naming", "wallet", "journal",
+    "team", "gender", "naming", "wallet",
 }
 
 
