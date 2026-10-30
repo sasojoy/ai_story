@@ -21,7 +21,8 @@ from tianxia import terrain
 pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 NAMES = ["S", "pageMap", "controlAt", "drawerHtml", "placeCard", "cardExtras", "searchHtml", "searchResults", "timelineHtml", "graphSvg",
          "chartHtml", "mapDrawerPx", "setMapDrawer", "insightRow", "redrawDrawer", "journeyHtml", "nearHtml", "nearList", "chipList", "chipsHtml",
-         "mapFilter", "marksHtml", "groundSvg", "camClamp", "camFit", "zMin", "mapPick", "mapBack", "mapFind", "routeD", "camSet", "mapFirst"]
+         "mapFilter", "marksHtml", "groundSvg", "camClamp", "camFit", "zMin", "mapPick", "mapBack", "mapFind", "routeD", "camSet", "mapFirst",
+         "groundShow", "landAt", "mapLand", "mvDown", "mvUp"]
 DRIVER = re.sub(r"wholeApp\(\[.*?\]\)", "wholeApp(" + repr(NAMES).replace("'", '"') + ")", test_prologue_web.DRIVER, count=1, flags=re.S)
 APP = webharness.APP  # 三個檔（main.js、map.js、app.js）接起來的那一份
 # 一個夠大的地圖框：整張天下都在「畫面附近」，字一處都不會因為在畫面外被略過
@@ -61,14 +62,16 @@ def _lab(out, loc):
 # ── 整頁 ──
 def test_the_map_page_is_one_world_with_floating_search_chips_buttons_and_a_drawer():
     """整頁一層：地圖框裡一張天下（#mvw：地面 #mk、路線 #mkr，大小是地圖本身的寬高）與照螢幕寫的字那一層（#mkt）；外面浮著搜尋列、
-    篩選、回到我與看整張兩顆、抽屜。以前三張圖的上面那一排（‹ 天下、大區、看大局）都沒有了。"""
+    篩選、回到我與看整張兩顆、抽屜。以前三張圖的上面那一排（‹ 天下、大區、看大局）都沒有了。
+    輿圖表現第二版 W1：地常駐，「塗層」那一顆拿掉了；地（#mk）是一張向量的 SVG（不再是點陣）。"""
     game = _game()
     out = run(game, "return H.pageMap();")
     b = game.map_base()
     assert f'<div class="mv-world" id="mvw" style="width:{b["w"]}px;height:{b["h"]}px">' in out
     assert 'id="mk"' in out and 'id="mkr"' in out and 'class="mv-marks" id="mkt"' in out and 'id="mdrawer"' in out
+    assert f'<svg class="mv-ground" id="mk" width="{b["w"]}" height="{b["h"]}" viewBox="0 0 {b["w"]} {b["h"]}"' in out and "<canvas" not in out
     assert 'data-act="map-search"' in out and 'id="mv-chips"' in out and 'data-act="map-home"' in out and 'data-act="map-fit"' in out
-    assert 'data-act="map-timeline"' in out and 'data-act="map-wash"' in out
+    assert 'data-act="map-timeline"' in out and 'data-act="map-wash"' not in out and "塗層" not in out
     assert 'id="mv-find"' not in out  # 找地點那一頁開著才畫
     for gone in ("r-top", "w-top", "world-enter", "region-go", "map-world", "map-full", "map-ctl", "map-legend"):
         assert gone not in out, gone
@@ -199,19 +202,21 @@ def test_far_away_shows_regions_with_counts_and_coloured_dots():
     assert "你在這裡" in _lab(out, "yingchuan") and out.count('class="mv-you"') == 1
 
 
-def test_middle_distance_shows_icons_names_and_seals():
-    """中間：每一處的小圖與名字、誰佔著的小印、寶；山河名。不寫幾分與勝算（近看才有）。"""
+def test_middle_distance_shows_icons_names_and_badges():
+    """中間：每一處的小圖與名字、山河名；寶是小圖左上角的徽（輿圖表現第二版 W1：誰佔著看地的顏色，名字旁不再蓋小印、不接「寶」字條）。
+    不寫幾分與勝算。"""
     game = _game()
     out = marks(game, 1)
     assert 'class="mv-pin' in out and 'class="mv-dot' not in out and 'class="mv-reg"' not in out and 'class="mv-geo' in out
-    assert 'class="mv-side"' in out and 'class="mv-rich"' in out
+    assert 'class="mv-side"' not in out and 'class="mv-rich"' not in out and 'class="mv-bd mv-bd-rich"' in out and 'class="mv-dg"' in out
     assert "<small>" not in _lab(out, "changshe")
 
 
-def test_close_up_adds_minutes_and_insights():
+def test_close_up_names_are_only_names():
+    """近看（輿圖表現第二版 W1）：名字只有名字——分鐘・多半・勝算那一行、悟字都在抽屜的卡與一排卡裡，不畫在圖上。"""
     game = _game()
     out = marks(game, 2)
-    assert re.search(r"<small>\d+ 分", _lab(out, "changshe")) and 'class="ins"' in out
+    assert _lab(out, "changshe") and "<small>" not in _lab(out, "changshe") and 'class="ins"' not in out
 
 
 def test_the_selected_place_gets_a_ring_a_route_and_a_minutes_bubble():
@@ -233,6 +238,274 @@ return [...html.matchAll(/class="mv-lab[^"]*" style="left:([-\\d.]+)px;top:([-\\
         assert len(out) > 10
         spots = {(round(x), round(y)) for _, x, y in out}
         assert len(spots) == len(out), z  # 沒有兩個名字擺在同一點
+
+
+# ── 輿圖表現第二版 W1：地與徽（docs/superpowers/specs/2026-10-30-輿圖表現-design.md 2.1、第六章 W1、第七章；企劃者 2026-10-30「照丙定」）──
+# 地是每一處的地塊裁到區界、填主人色（沒人佔淡灰）、正在翻斜紋、可出陣橘虛框、你紅框、兩方相接白邊；沒有地塊的拿圓。常駐、三段都畫。
+# 近、中景的名字只有名字，小圖角上掛危險度、⚔、寶、本週旗；點一塊地開那一處的卡。資料照伺服器真的給的（season21 開季），要的局面直接改疊層。
+UNHELD = "#B9B2A0"
+LAND = re.compile(r'<(path|circle) class="ld-fill" data-cell="([^"]+)" [^>]*?fill="([^"]+)" fill-opacity="([\d.]+)"/>')
+
+
+def _ground(game, st=None, k=1, week=None, **S):
+    w = "H.S.mapState.now_week" if week is None else str(week)
+    return run(game, f"return H.groundSvg(H.S.mapBase, H.S.mapState, {k}, {w});", st=st, **S)
+
+
+def _poly(d):
+    nums = [float(x) for x in re.findall(r"-?\d+(?:\.\d+)?", d)]
+    return list(zip(nums[0::2], nums[1::2]))
+
+
+def _inside(x, y, pg):
+    ins, j = False, len(pg) - 1
+    for i in range(len(pg)):
+        (xi, yi), (xj, yj) = pg[i], pg[j]
+        if (yi > y) != (yj > y) and x < (xj - xi) * (y - yi) / (yj - yi) + xi:
+            ins = not ins
+        j = i
+    return ins
+
+
+def _patches(base):
+    """拿圓當地的地點（設計 2.1「沒有地塊的地點」）：world.cells 裡沒有它、或它自己的座標落在所屬區的多邊形之外。照底圖自己算一次，不借網頁的。"""
+    regions = {r["id"]: _poly(r["d"]) for r in base["world"]["regions"]}
+    cells = {c["id"]: c for c in base["world"]["cells"]}
+    return {p["id"] for p in base["places"] if p["id"] not in cells or not _inside(p["x"], p["y"], regions[cells[p["id"]]["region"]])}
+
+
+def _sides(game):
+    return {s["id"]: s["color"] for s in game.map_base()["world"]["sides"]}
+
+
+def _xy(pairs):
+    return {(float(x), float(y)) for x, y in pairs}
+
+
+@pytest.mark.slow  # 單一條超過一秒
+def test_w1_every_place_is_land_in_its_holders_colour():
+    """每一塊地的填色＝疊層 control 那一方的顏色（34%）；沒人佔淡灰（10%）。地塊裁在它那一區的區界裡（clipPath），一處一塊、不多不少。"""
+    game = _game(profile="season21")
+    st = game.map_state()
+    st["places"]["runan_wilds"]["control"] = "huang"  # 換一塊主人：顏色照疊層，不照開季
+    out = _ground(game, st=st)
+    sides, base = _sides(game), game.map_base()
+    land = {m[1]: (m[0], m[2], float(m[3])) for m in LAND.findall(out)}
+    assert set(land) == set(st["places"]) and len(LAND.findall(out)) == len(st["places"])
+    held = {q["control"] for q in st["places"].values()}
+    assert {"guan", "huang", None} <= held
+    for pid, q in st["places"].items():
+        want = (sides[q["control"]], 0.34) if q["control"] else (UNHELD, 0.1)
+        assert land[pid][1:] == want, pid
+    patches = _patches(base)
+    cells = {c["id"]: c["region"] for c in base["world"]["cells"]}
+    for pid in set(st["places"]) - patches:
+        assert f'<g clip-path="url(#lr-{cells[pid]})"><path class="ld-fill" data-cell="{pid}"' in out, pid
+    assert out.count('<clipPath id="lr-') == len(base["world"]["regions"])
+
+
+def test_w1_a_block_being_taken_is_striped_in_both_colours():
+    """正在翻：那一塊 45° 斜紋兩色（推的那一方＋現在的主人；沒人佔的是淡灰）50%。看以前的週（版圖變化）不畫斜紋。"""
+    game = _game(profile="season21")
+    st = game.map_state()
+    sides = _sides(game)
+    assert st["places"]["yingchuan_wilds"]["control"] == "guan"
+    st["places"]["yingchuan_wilds"]["tug"] = {"huang": 40}
+    st["places"]["runan_wilds"].update(control=None, tug={"guan": 65})
+    out = _ground(game, st=st)
+    for pid, a, b in (("yingchuan_wilds", sides["huang"], sides["guan"]), ("runan_wilds", sides["guan"], UNHELD)):
+        assert re.search(rf'<path class="ld-fill" data-cell="{pid}" d="[^"]*" fill="url\(#ls-{pid}\)" fill-opacity="0.5"/>', out), pid
+        pattern = re.search(rf'<pattern id="ls-{pid}"[^>]*patternTransform="rotate\(45\)">(.*?)</pattern>', out).group(1)
+        assert re.findall(r'fill="(#[0-9A-Fa-f]{6})"', pattern) == [a, b]
+    assert out.count("<pattern ") == 2
+    past = _ground(game, st=st, week=0)
+    assert "<pattern " not in past and "url(#ls-" not in past
+
+
+def test_w1_orange_frames_are_where_you_can_sortie_and_the_hopeless_ones_are_faint():
+    """可出陣：那一塊內側橘虛框，框數＝疊層 sortie 不是 null 的數；引擎說必敗的（suggest 的 lose，不在 suggest 裡的照同一個字）畫淡一半。"""
+    game = _game(profile="season21")
+    st = game.map_state()
+    can = {x for x, q in st["places"].items() if q["sortie"]}
+    calm = next(x for x in sorted(can) if x not in {g["id"] for g in st["suggest"]})
+    st["places"][calm]["odds"] = {"word": "穩勝", "tone": "safe"}  # 打得過的那一處：框不淡
+    out = _ground(game, st=st)
+    frames = re.findall(r'<(?:path|circle) class="ld-sortie" data-cell="([^"]+)" [^>]*?stroke="#F0A640" stroke-width="6" stroke-dasharray="8 5"( stroke-opacity="0.5")?', out)
+    assert len(can) >= 3 and sorted(x for x, _ in frames) == sorted(can)
+    lose = {g["id"] for g in st["suggest"] if g["lose"]} | {x for x in can if st["places"][x]["sortie"] == "attack" and not st["places"][x].get("convoy")
+                                                             and st["places"][x]["odds"] and st["places"][x]["odds"]["word"] == "必敗"}
+    faint = {x for x, f in frames if f}
+    assert faint == lose & can and faint and calm not in faint
+
+
+@pytest.mark.slow  # 單一條超過一秒（走一段路）
+def test_w1_your_block_has_a_red_frame_but_not_while_on_the_road():
+    game = _game()
+    st = game.map_state()
+    assert re.findall(r'class="ld-here" data-cell="([^"]+)" [^>]*?stroke="#C0392B" stroke-width="6"', _ground(game, st=st)) == [st["here"]]
+    game.travel("changshe", "walk")
+    road = game.map_state()
+    assert road["journey"] and "ld-here" not in _ground(game, st=road)
+
+
+def test_w1_the_front_is_every_edge_between_two_holders():
+    """戰線：相接的兩塊主人不同，那一段共用邊亮白 3.2（world.edges）；拿圓當地的不算戰線。換一塊主人，戰線跟著換。"""
+    game = _game(profile="season21")
+    base = game.map_base()
+    patches = _patches(base)
+    for flip in (None, ("yingchuan_wilds", "huang")):
+        st = game.map_state()
+        if flip:
+            st["places"][flip[0]]["control"] = flip[1]
+        ctrl = {x: q["control"] for x, q in st["places"].items()}
+        want = sorted((e["a"], e["b"]) for e in base["world"]["edges"] if e["a"] not in patches and e["b"] not in patches
+                      and ctrl.get(e["a"]) and ctrl.get(e["b"]) and ctrl[e["a"]] != ctrl[e["b"]])
+        out = _ground(game, st=st)
+        assert sorted(re.findall(r'<path class="ld-front" data-a="([^"]+)" data-b="([^"]+)"', out)) == want and want, flip
+        assert '<g fill="none" stroke="#FFF6E0" stroke-width="3.2" stroke-linecap="round">' in out
+    assert any("yingchuan_wilds" in e for e in want)  # 換了主人的那一塊多出戰線
+
+
+def test_w1_places_without_a_block_stand_on_a_round_patch():
+    """沒有地塊（曹氏莊院這類不是區塊的）或座標在區外（官軍大營：地塊裁到區界會裁光）的地點：半徑 view.patch_radius 的圓當它的地，
+    一樣填色上框、不裁區界。"""
+    game = _game(profile="season21")
+    base, st = game.map_base(), game.map_state()
+    patches = _patches(base)
+    assert {"guan_camp", "cao_manor"} <= patches
+    out = _ground(game, st=st)
+    r = base["view"]["patch_radius"]
+    for p in (b for b in base["places"] if b["id"] in patches):
+        circle = re.search(rf'(<g [^>]*>)?<circle class="ld-fill" data-cell="{p["id"]}" cx="([\d.]+)" cy="([\d.]+)" r="([\d.]+)"', out)
+        assert circle and circle.group(1) is None, p["id"]  # 不包在區界的 clip 裡
+        assert (float(circle.group(2)), float(circle.group(3)), float(circle.group(4))) == (p["x"], p["y"], r)
+        assert f'<clipPath id="lc-{p["id"]}"><circle ' in out
+
+
+@pytest.mark.parametrize("z", [1, 2])
+def test_w1_near_and_middle_names_have_no_seal_line_bar_or_insight(z):
+    """近、中景：名字只有名字——沒有官／巾小印（.mv-side）、名字後的「寶」「戰」「本週」字條、名字底下那一行、進度條（.mv-bar）、悟字（.ins）。"""
+    game = _game(profile="season21")
+    st = game.map_state()
+    st["places"]["yingchuan_wilds"]["tug"] = {"huang": 40}  # 以前會畫進度條
+    st["places"]["runan_wilds"]["siege"] = "letter"  # 以前會接「戰」
+    st["week"] = {"id": "changshe", "why": "軍令・守城", "minutes": 6}  # 以前會接「本週」
+    out = marks(game, z, st=st)
+    for gone in ('class="mv-side"', 'class="mv-bar"', 'class="ins"', 'class="mv-rich"', 'class="mv-wk"', "<small>"):
+        assert gone not in out, gone
+    labs = re.findall(r'<button type="button" class="mv-lab[^"]*"[^>]*>(.*?)</button>', out)
+    assert len(labs) > 10 and all(re.fullmatch(r'<span class="t"><span class="nm">[^<]+</span></span>', x) for x in labs)
+
+
+def test_w1_every_icon_but_yours_wears_its_danger():
+    """危險度徽（右下，1～3）：數目＝畫出來的小圖數減一（你腳下那一處不掛），數字照疊層的 danger；在路上每一處都掛。"""
+    game = _game()
+    for st in (game.map_state(), None):
+        if st is None:
+            game.travel("changshe", "walk")
+            st = game.map_state()
+        out = marks(game, 1, st=st)
+        pins = re.findall(r'class="mv-pin [a-z]+" style="left:([-\d.]+)px;top:([-\d.]+)px[^"]*" data-act="map-place" data-id="([^"]+)"', out)
+        dg = re.findall(r'<i class="mv-dg" style="left:([-\d.]+)px;top:([-\d.]+)px">(\d)</i>', out)
+        mine = None if st["journey"] else st["here"]
+        assert len(pins) == len(st["places"]) and len(dg) == len(pins) - (1 if mine else 0)
+        assert sorted((float(x), float(y), d) for x, y, d in dg) == sorted(
+            (float(x) + 10, float(y) + 9, str(st["places"][pid]["danger"])) for x, y, pid in pins if pid != mine)
+
+
+def test_w1_corner_badges_for_a_fight_a_treasure_and_this_week():
+    """⚔（右上）：正在翻、激戰；寶（左上）：疊層的 rich；本週（頂上一面紅旗）：疊層的 week。"""
+    game = _game(profile="season21")
+    st = game.map_state()
+    pts = {p["id"]: (p["x"], p["y"]) for p in game.map_base()["places"]}
+    st["places"]["yingchuan_wilds"]["tug"] = {"huang": 40}
+    st["places"]["changshe"]["melee"] = True
+    st["week"] = {"id": "songshan_foot", "why": "軍令・守城", "minutes": 9}
+    z = 2  # 近看：地圖座標 × 2 是螢幕座標
+    out = marks(game, z, st=st)
+    swords = _xy(re.findall(r'<i class="mv-bd mv-bd-x" style="left:([-\d.]+)px;top:([-\d.]+)px">⚔</i>', out))
+    assert swords == {(pts[x][0] * z + 11, pts[x][1] * z - 10) for x in ("yingchuan_wilds", "changshe")}
+    rich = _xy(re.findall(r'<i class="mv-bd mv-bd-rich" style="left:([-\d.]+)px;top:([-\d.]+)px">寶</i>', out))
+    assert rich == {(pts[x][0] * z - 11, pts[x][1] * z - 10) for x, q in st["places"].items() if q["rich"]} and rich
+    flags = _xy(re.findall(r'<svg class="mv-flag" width="16" height="24" viewBox="0 0 16 24" style="left:([-\d.]+)px;top:([-\d.]+)px"', out))
+    assert flags == {(pts["songshan_foot"][0] * z, pts["songshan_foot"][1] * z - 12)}
+
+
+@pytest.mark.slow  # 單一條超過一秒（兩下之間要隔開，免得算成雙擊）
+def test_w1_tapping_the_land_opens_that_place_and_tapping_it_again_closes_the_card():
+    """整塊地都是那一處的熱區（設計 2.3）：點長社那一塊地（不是小圖）開長社的卡、再點一次收回；點圓（曹氏莊院）開它的卡；點區外是空地。
+    照畫出來的那一塊算（landAt：圓先、地塊要在區界裡）。雙擊照舊放大，所以兩下之間隔開。"""
+    game = _game(profile="season21")
+    base = game.map_base()
+    cell = next(c for c in base["world"]["cells"] if c["id"] == "changshe")
+    region = next(r for r in base["world"]["regions"] if r["id"] == cell["region"])
+    p = next(b for b in base["places"] if b["id"] == "changshe")
+    patches = [b for b in base["places"] if b["id"] in _patches(base)]
+    spot = next((p["x"] + dx, p["y"] + dy) for dx, dy in ((30, 0), (-30, 0), (0, 30), (0, -30), (25, 25), (-25, -25), (25, -25), (-25, 25))
+                if _inside(p["x"] + dx, p["y"] + dy, _poly(cell["d"])) and _inside(p["x"] + dx, p["y"] + dy, _poly(region["d"]))
+                and all((p["x"] + dx - q["x"]) ** 2 + (p["y"] + dy - q["y"]) ** 2 > base["view"]["patch_radius"] ** 2 for q in patches))
+    manor = next(b for b in base["places"] if b["id"] == "cao_manor")
+    # 地塊伸出區界外的那一截（裁掉、沒畫的）不算那一處的地
+    regions = {r["id"]: _poly(r["d"]) for r in base["world"]["regions"]}
+    cut = next((x, y) for c in base["world"]["cells"] for x in range(0, base["w"], 7) for y in range(0, base["h"], 7)
+               if _inside(x, y, _poly(c["d"])) and not any(_inside(x, y, rg) for rg in regions.values())
+               and all((x - q["x"]) ** 2 + (y - q["y"]) ** 2 > base["view"]["patch_radius"] ** 2 for q in patches))
+    out = run(game, DRAWER_DOM + f"""
+const map = {{ clientWidth: 375, clientHeight: 700, clientLeft: 0, clientTop: 0, getBoundingClientRect: () => ({{ left: 0, top: 0 }}) }};
+els.map = map;
+H.S.mapCam = {{ z: 1, x: 0, y: 0 }};
+const wait = () => new Promise((r) => setTimeout(r, 360));
+const tap = (x, y, id) => {{
+  const ev = {{ pointerType: 'touch', button: 0, pointerId: id, clientX: x, clientY: y, target: {{ closest: () => null }} }};
+  H.mvDown({{ ...ev, type: 'pointerdown' }}); H.mvUp({{ ...ev, type: 'pointerup' }});
+  return [H.S.mapMode, H.S.mapSel, body.innerHTML.includes('data-act="map-back"') && !body.innerHTML.includes('m-cards')];  // 抽屜是那一處的卡
+}};
+return (async () => {{
+  const look = [H.landAt(H.S.mapBase, H.S.mapState, {spot[0]}, {spot[1]}), H.landAt(H.S.mapBase, H.S.mapState, {manor['x']}, {manor['y']}),
+    H.landAt(H.S.mapBase, H.S.mapState, -50, -50), H.landAt(H.S.mapBase, H.S.mapState, {cut[0]}, {cut[1]})];
+  const open = tap({spot[0]}, {spot[1]}, 1); await wait();
+  const shut = tap({spot[0]}, {spot[1]}, 2); await wait();
+  const round = tap({manor['x'] + 20}, {manor['y']}, 3); await wait();
+  const blank = tap(-50, -50, 4);
+  return {{ look, open, shut, round, blank }};
+}})();""")
+    assert out["look"] == ["changshe", "cao_manor", None, None]
+    assert out["open"] == ["place", "changshe", True]
+    assert out["shut"] == ["overview", None, False]
+    assert out["round"] == ["place", "cao_manor", True]
+    assert out["blank"] == ["overview", None, False]  # 點空地照舊收回
+
+
+def test_w1_no_stylesheet_rule_overrides_the_lands_own_colours_and_widths():
+    """地的顏色、線寬、虛線寫在 SVG 的屬性上；樣式表的規則會蓋過屬性，所以地用到的 class 在 style.css 一條規則都不能有
+    （實機踩過：一開始取名 .w-rim、.w-seam，撞到煉爐那一塊的全域樣式，內框整圈變成 1px 的金線）。"""
+    from pathlib import Path
+
+    out = _ground(_game(profile="season21"))
+    used = set(re.findall(r'class="([\w-]+)"', out))
+    assert {"ld-fill", "ld-rim", "ld-seam", "ld-front", "ld-here"} <= used
+    css = re.sub(r"/\*.*?\*/", "", (Path(server.WEB) / "style.css").read_text(encoding="utf-8"), flags=re.S)
+    selectors = " ".join(sel for sel, _ in re.findall(r"([^{}]+)\{([^{}]*)\}", css))
+    for cls in used | {"ld-sortie", "w-cool", "w-letter"}:
+        assert not re.search(rf"\.{re.escape(cls)}(?![\w-])", selectors), cls
+
+
+def test_w1_the_land_is_always_drawn_and_only_redrawn_per_third_of_a_zoom_octave():
+    """地常駐（不再只在遠看、塗層、版圖時畫）：近看也畫；拖縮不重畫（camSet 只換 transform，上面那一條），停下來照倍率的三分之一級
+    （log2(z)×3 取整）換線寬，同一級不重寫；換了週次（版圖變化）重寫。線寬照螢幕（k＝1／倍率）。"""
+    out = run(_game(profile="season21"), """
+const writes = [], mk = {};
+Object.defineProperty(mk, 'innerHTML', { set: (v) => { writes.push(v); }, get: () => writes[writes.length - 1] || '' });
+const doc = T.ctx.document, byId = doc.getElementById;
+doc.getElementById = (id) => (id === 'mk' ? mk : byId(id));
+for (const z of [0.4, 0.41, 1, 1.05, 1.3, 2.4]) H.groundShow({ z, x: 0, y: 0 });
+const before = writes.length;
+H.S.mapMode = 'timeline'; H.S.mapWeek = H.S.mapState.now_week + 1; H.groundShow({ z: 2.4, x: 0, y: 0 });
+return { before, after: writes.length, land: writes.map((w) => (w.match(/class="ld-fill"/g) || []).length),
+  front: writes.map((w) => w.match(/stroke="#FFF6E0" stroke-width="([\\d.]+)"/)[1]) };""")
+    assert out["before"] == 4 and out["after"] == 5
+    assert len(set(out["land"])) == 1 and out["land"][0] > 30
+    assert out["front"][:4] == ["8.06", "3.2", "2.54", "1.27"]  # 3.2 × 2^(4/3)、×1、×2^(-1/3)、×2^(-4/3)
 
 
 # ── 看哪裡 ──

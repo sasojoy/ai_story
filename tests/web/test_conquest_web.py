@@ -454,17 +454,24 @@ MARKS = "return H.marksHtml(H.S.mapBase, H.S.mapState, { z: 1, x: 0, y: 0 }, { v
 @pytest.mark.slow  # 單一條超過一秒（2026-10-27 測試整理 4 量的）
 @pytest.mark.skipif(webharness.NODE is None, reason="沒有 node，前端畫面測試略過")
 def test_web_map_draws_unheld_neutral_without_a_side_seal_but_with_the_treasure():
-    """還沒人佔的中立地：地圖上名字旁沒有哪一方的小印、只有朱印「寶」；被佔下照佔領方的小印、寶照樣在（開季中立的，不管此刻誰佔著）。
-    卡上那一句寫「中立・高級資源領地，還沒有人佔」。"""
+    """還沒人佔的中立地：地是淡灰、小圖左上角一顆「寶」；被佔下地換成佔領方的顏色、寶照樣在（開季中立的，不管此刻誰佔著）。
+    名字旁沒有哪一方的小印、沒有「寶」字條（輿圖表現第二版 W1：誰的看地的顏色，寶是徽）。卡上那一句寫「中立・高級資源領地，還沒有人佔」。"""
     game = _game()
     ink = {s["id"]: s for s in game.map_base()["world"]["sides"]}
-    lab = test_map_web._lab(test_map_web.run(game, MARKS), "nanyang_wilds")
-    assert 'class="mv-side"' not in lab and '<span class="mv-rich">寶</span>' in lab
+    p = next(b for b in game.map_base()["places"] if b["id"] == "nanyang_wilds")
+    badge = f'<i class="mv-bd mv-bd-rich" style="left:{p["x"] - 11}px;top:{p["y"] - 10}px">寶</i>'
+    both = "return [" + MARKS[len("return "):-1] + ", H.groundSvg(H.S.mapBase, H.S.mapState, 1, H.S.mapState.now_week)];"
+    out, ground = test_map_web.run(game, both)
+    lab = test_map_web._lab(out, "nanyang_wilds")
+    assert 'class="mv-side"' not in lab and "mv-rich" not in lab and badge in out
+    assert re.search(r'<path class="ld-fill" data-cell="nanyang_wilds" d="[^"]*" fill="#B9B2A0" fill-opacity="0.1"/>', ground)
     card = test_map_web.run(game, 'return H.placeCard(H.S.mapBase, H.S.mapState, "nanyang_wilds");')
     assert "中立・高級資源領地，還沒有人佔" in card
     conquest.set_control(game.state.world, game.content, "nanyang_wilds", "huang")
-    held = test_map_web._lab(test_map_web.run(game, MARKS), "nanyang_wilds")
-    assert f'<span class="mv-side" style="background:{ink["huang"]["color"]}">' in held and '<span class="mv-rich">寶</span>' in held
+    out, ground = test_map_web.run(game, both)
+    held = test_map_web._lab(out, "nanyang_wilds")
+    assert 'class="mv-side"' not in held and "mv-rich" not in held and badge in out
+    assert re.search(rf'<path class="ld-fill" data-cell="nanyang_wilds" d="[^"]*" fill="{ink["huang"]["color"]}" fill-opacity="0.34"/>', ground)
 
 
 # ── 原 test_conquest_siege_map_web.py（整檔搬進來） ──
@@ -650,28 +657,32 @@ def test_the_report_button_opens_the_reports_page():
 # ── 地圖 ──
 @pytest.mark.slow  # 單一條超過一秒（2026-10-27 測試整理 4 量的）
 def test_the_map_seal_for_a_letter_and_a_ring_for_a_fight():
-    """A：汝南荒野名字旁一枚「戰」字印；B：潁川郊野外一圈紅（.mv-fight）；C：荒丘不另畫。名字照舊寫。"""
+    """A：汝南荒野的戰書畫在地上（朱紅虛框，下一條），名字旁不再掛「戰」字印（輿圖表現第二版 W1）；B：潁川郊野外一圈紅（.mv-fight）、
+    小圖右上一顆 ⚔；C：荒丘不另畫。正在翻的（A 官軍推了 65）也掛 ⚔。名字照舊寫。"""
     game = _sgame(profile="season21")
     _moments(game)
     out = test_map_web.run(game, MARKS)
-    assert '<span class="mv-rich">戰</span>' in test_map_web._lab(out, "runan_wilds")
-    assert '<span class="mv-rich">戰</span>' not in test_map_web._lab(out, "yingchuan_wilds")
+    assert test_map_web._lab(out, "runan_wilds") and "戰</span>" not in out and "mv-rich" not in out
     pts = {p["id"]: (p["x"], p["y"]) for p in game.map_base()["places"]}
     rings = [tuple(float(v) for v in m) for m in re.findall(r'<i class="mv-fight" style="left:([-\d.]+)px;top:([-\d.]+)px">', out)]
     assert rings == [tuple(float(v) for v in pts["yingchuan_wilds"])]
-    assert "戰</span>" not in test_map_web._lab(out, "hilltop_wilds")
+    swords = {(float(x), float(y)) for x, y in re.findall(r'<i class="mv-bd mv-bd-x" style="left:([-\d.]+)px;top:([-\d.]+)px">⚔</i>', out)}
+    at = lambda loc: (pts[loc][0] + 11, pts[loc][1] - 10)  # noqa: E731（小圖右上角）
+    assert at("yingchuan_wilds") in swords and at("runan_wilds") in swords and at("hilltop_wilds") not in swords
 
 
 @pytest.mark.slow  # 單一條超過一秒（2026-10-27 測試整理 4 量的）
 def test_the_ground_dashed_frame_for_a_letter_and_the_clash_glow_for_a_fight():
-    """A：地面汝南荒野那一格一圈朱紅虛線框（.w-letter）；B：潁川郊野那一格借激戰的紅光（.w-melee）；C：荒丘不另畫。看以前的週（版圖變化）不畫。"""
+    """A：地面汝南荒野那一塊內側一圈朱紅虛線框（.w-letter）；B：潁川郊野不再借激戰的紅底（輿圖表現第二版 W1 拿掉 .w-melee：地的語言只有
+    顏色、斜紋、框；激戰看小圖上的閃圈與 ⚔）；C：荒丘剛易手，內框改成虛線（.w-cool）。看以前的週（版圖變化）都不畫。"""
     game = _sgame(content=real_content("season21"))
     _moments(game)
     now, past = test_map_web.run(game, "return [1, 0].map((w) => H.groundSvg(H.S.mapBase, H.S.mapState, 1, w ? H.S.mapState.now_week : 0));")
     assert re.search(r'<path class="w-letter" data-cell="runan_wilds"[^>]*stroke-dasharray', now)
-    assert '<path class="w-melee" data-cell="yingchuan_wilds"' in now
-    assert 'data-cell="hilltop_wilds"' not in "".join(re.findall(r'<path class="w-(?:letter|melee)"[^>]*>', now))
-    assert "w-letter" not in past and 'w-melee" data-cell="yingchuan_wilds"' not in past
+    assert "w-melee" not in now and "w-melee" not in past
+    assert re.findall(r'<path class="w-letter" data-cell="([^"]+)"', now) == ["runan_wilds"]
+    assert re.search(r'<path class="w-cool" data-cell="hilltop_wilds"[^>]*stroke-dasharray', now)
+    assert "w-letter" not in past and "w-cool" not in past
 
 
 def _four_sides():
@@ -697,16 +708,21 @@ def _four_sides():
 
 
 def test_four_sides_marks_do_not_take_any_sides_colour():
-    """四方的測試劇本（設計 3.3）：魏攻吳佔著的那一處下了戰書——地圖上照樣一枚「戰」、地面照樣一圈朱紅虛線；字印不照任何一方的顏色，
-    名字旁的小印照四方的顏色。"""
+    """四方的測試劇本（設計 3.3）：魏攻吳佔著的那一處下了戰書——地面照樣一圈朱紅虛線（不照任何一方的顏色），地照吳的顏色填；
+    名字旁不再掛「戰」字印與小印（輿圖表現第二版 W1），小圖角上的徽也不照任何一方的顏色。"""
     game, control = _four_sides()
     st = game.map_state()
     target = next(x for x, sd in control.items() if sd == "wu" and x in st["places"])
     st["places"][target]["siege"] = "letter"
     out, ground = test_map_web.run(game, MARKS.replace("return ", "return [").rstrip(";") + ", H.groundSvg(H.S.mapBase, H.S.mapState, 1, H.S.mapState.now_week)];", st=st)
     lab = test_map_web._lab(out, target)
-    assert '<span class="mv-rich">戰</span>' in lab and '<span class="mv-side" style="background:#2E7D5B">' in lab
-    assert f'data-cell="{target}"' in "".join(re.findall(r'<path class="w-letter"[^>]*>', ground))
+    assert lab and "戰</span>" not in lab and "mv-side" not in lab
+    letter = "".join(re.findall(r'<path class="w-letter"[^>]*>', ground))
+    assert f'data-cell="{target}"' in letter and 'stroke="#A8322A"' in letter
+    assert re.search(rf'<path class="ld-fill" data-cell="{target}" d="[^"]*" fill="#2E7D5B"', ground)
+    badges = "".join(re.findall(r'<i class="mv-(?:dg|bd)[^>]*>[^<]*</i>', out))
+    for color in ("#6A3D7A", "#2E7D5B", "#3D5F8F", "#B9821A"):
+        assert color not in badges and color not in letter, color
 
 
 def test_the_siege_code_names_no_side():

@@ -6146,7 +6146,6 @@
         case "map-pick": mapPick(el.dataset.id, true); break; // 找地點、今天去哪裡出陣挑了一處：飛過去、開它的卡
         case "map-region": mapBack(); mapRegionFly(el.dataset.id); break; // 找地點的「跳到大區」：收起那一頁，飛過去
         case "map-filter": mapFilter(el.dataset.id); break; // 上面那一排標籤（再按一次回全部）
-        case "map-wash": washToggle(); break; // 「塗層」
         case "map-search": mapFind(); break;
         case "map-open": mapOpen(); break;
         case "map-back": mapBack(); break;
