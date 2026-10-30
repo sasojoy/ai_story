@@ -1,6 +1,12 @@
 """功能包的掛鉤（開發規範手冊 3.3）與核心照 FEATURES 彙整（registry.py 的清單，有順序）。
 
-一個功能一包（tianxia/features/<包>/）；核心在幾個大家都插一段的地方照清單依序問每一包，關著的包（enabled 是 False）一個掛鉤都不叫：
+一個功能一包（tianxia/features/<包>/）；核心在幾個大家都插一段的地方照清單依序問每一包。
+兩種掛鉤看 enabled 的方式不一樣（手冊 3.3 寫「關著的包一個掛鉤都不叫」，指的是第一種）：
+- 遊戲當下的（options、menu、choose、status、on_sync、on_day、on_season_*、on_drop_stale、bot_pick）：每一次先問 enabled(ctx)，
+  關著的包一個都不叫（tests/core/test_contract_core.py、test_contract_features.py 守）。
+- 殼啟動、載入內容時的（routes、admin_tools、check_content、bot_always，與宣告的 web、content）：那時候還沒有 ctx（沒有角色、
+  開關可能在季中被管理者切換），所以不看 enabled、登記的包全部照掛：路由與管理者工具由各自的 gate 在關著時回 404（搬包之前
+  商城在 server 裡也是照掛再 404）、內容照驗（檔案寫壞了早點知道）、永遠按得下去的前綴照排除（關著的包選單上本來就沒有它們）。
 
 | 掛鉤 | 核心在哪裡問 |
 |---|---|
