@@ -10,12 +10,14 @@
   一直等不到空位、到點還沒公告的那一件不讓人插手，直接照 base 擲。
 - 結果（deliver，Game.sync 叫）：助他辦成的人情誼照 Config.plans 加，其他人寫一句結果。
 - 有行程的人不再在常去的地方之間隨機晃（figure_life._act 問 holds）。大勢人物倒下、不在場時他的站跳過（記成沒辦成）。
-只 import models、state、rules、calendar、figures、figure_life、deeds、renown；world、engine 呼叫它。"""
+- 行程要搬一個正被引將釘著的人（本人或跟著他走的人）時比照時刻表（玉璽碎片改版五之一 1「時刻表優先」）：先叫 seal_acts.release 讓引將提前
+  結束、回原處，再照行程搬，行程不等引將（FB-9036，PM 2026-10-30）；引將原本的期滿那一刻不會再把他拉回去。
+只 import models、state、rules、calendar、figures、figure_life、deeds、renown、seal_acts；world、engine 呼叫它。"""
 from __future__ import annotations
 
 import random
 
-from . import calendar, deeds, figure_life, figures, renown
+from . import calendar, deeds, figure_life, figures, renown, seal_acts
 from .models import Content, Itinerary, ItineraryStop
 from .rules import add_rumor, add_world_flags, change_trend, trend_shown
 from .state import GameState, Plan
@@ -117,12 +119,21 @@ def _gate(state: GameState, st: ItineraryStop) -> bool | None:
     return all(done[r] for r in st.if_won) and not any(done[r] for r in st.if_lost)
 
 
+def _move(state: GameState, content: Content, cid: str, dest: str) -> None:
+    """搬一個人到 dest。他是大勢人物、此刻正被引將釘著（seal_acts.pinned）就先讓引將提前結束、回原處，再照行程搬：行程比照時刻表，
+    不是人物活起來的走動那種「被釘著就不動」（FB-9036）。引將記的是大勢人物 id，行程拿的是角色 id（figures.of_character 換）。"""
+    fid = figures.of_character(content, cid)
+    if fid is not None:
+        seal_acts.release(state, content, fid)  # 沒被釘著回 False、什麼都不做
+    figure_life._place_at(state, content, cid, fid, dest)
+
+
 def _go(state: GameState, content: Content, cid: str, dest: str) -> None:
     """人走到 dest，跟著他的人一起走（關羽、張飛跟著劉備）。"""
-    figure_life._place_at(state, content, cid, figures.of_character(content, cid), dest)
+    _move(state, content, cid, dest)
     for other, ch in content.characters.items():
         if ch.follows == cid and ch.deep_interaction and _alive(state, content, other):
-            figure_life._place_at(state, content, other, figures.of_character(content, other), dest)
+            _move(state, content, other, dest)
 
 
 def _company(content: Content, cid: str) -> list[str]:
