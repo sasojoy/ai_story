@@ -27,7 +27,7 @@ KNOWN = {
     ("event_llm.py", "SuccessRateJudgment"): "隨口應對的評分：FB-223 守門測試連 kwargs 都要一字不差（丁批 QA 量到動它分數整體移動）",
     ("battle_instance.py", "SuccessRateJudgment"): "放手一搏的評分：同上一類，分數帶要主機重量才能動",
     ("battle_instance.py", "GambleScore"): "大場面放手一搏的評分：同上",
-    ("feasts.py", "ToastScore"): "敬酒評分：同上",
+    ("features/feast/rules.py", "ToastScore"): "敬酒評分：同上（宴客搬進功能包 tianxia/features/feast/）",
     ("gather_llm.py", "reply_model"): "找素材的評分（create_model 動態組的類別，enum 照地點換）：同上",
     ("companion_agent.py", "DriftSynthesis"): "人物心境整理：背景執行、失敗不影響玩家，還沒實測",
     ("yuedan.py", "YuedanBatch"): "月旦評：背景執行、有固定段退路，還沒實測",
@@ -36,7 +36,8 @@ KNOWN = {
 
 def _calls():
     """每一個 chat_structured 呼叫：(檔名, 行號, 回答類別的寫法, required_fields, require_in_schema, 模組)。"""
-    for path in sorted(ROOT.glob("*.py")):
+    # 功能包（tianxia/features/<包>/，開發規範手冊 3.2）也掃：檔名記相對 tianxia/ 的路徑、模組照點分的名字
+    for path in sorted(ROOT.glob("*.py")) + sorted((ROOT / "features").glob("*/*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
             if not (isinstance(node, ast.Call) and getattr(node.func, "attr", None) == "chat_structured" and len(node.args) > 1):
@@ -44,7 +45,8 @@ def _calls():
             kw = {k.arg: k.value for k in node.keywords if k.arg}
             required = ast.literal_eval(kw["required_fields"]) if "required_fields" in kw else []
             forced = "require_in_schema" in kw and ast.literal_eval(kw["require_in_schema"]) is True
-            yield path.name, node.lineno, ast.unparse(node.args[1]), required, forced, path.stem
+            rel = path.relative_to(ROOT)
+            yield rel.as_posix(), node.lineno, ast.unparse(node.args[1]), required, forced, ".".join(rel.with_suffix("").parts)
 
 
 def _model(module_name: str, expr: str):

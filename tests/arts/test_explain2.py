@@ -257,16 +257,19 @@ def test_only_events_and_the_first_echo_give_fame_in_the_code():
     """名望的來源只有六條：事件的效果（rules.apply_effect 照內容的 stats 加減）、第一季的首創回饋（Game._deliver_echoes）、
     決戰最有戲的那一搏（Game._file_showdown）、打贏頭目（Game._duel_finish）、奪璽單挑（Game._file_seal，玉璽碎片設計 5.9）、得天命的那一軍（Game._showdown_pay，玉璽二）、擂台賽（Game._arena_finish 的最險一搏、Game._deliver_arena 的每日俸與季末前三名）、決戰陣前擊退龍頭（Game._showdown_pay）、護衛擋下挑戰（Game._deliver_guard_credits）、領地爭奪的分紅與守城功（Game._deliver_conquest，玩法說明 howto._fame_sources 那一句）。程式裡直接寫名望的只有後面這幾條的那幾行；內容裡給名望的效果只在 content/events。多了一條來源，玩法說明「名望」那一節要跟著寫。"""
     writes = []
-    for path in sorted((ROOT / "tianxia").glob("*.py")):
+    # 功能包（tianxia/features/<包>/，開發規範手冊 3.2）也是程式：一起掃，包裡的檔照相對 tianxia/ 的路徑記
+    code = sorted((ROOT / "tianxia").glob("*.py")) + sorted((ROOT / "tianxia" / "features").glob("*/*.py"))
+    label = lambda path: path.relative_to(ROOT / "tianxia").as_posix()  # noqa: E731
+    for path in code:
         for line in path.read_text(encoding="utf-8").splitlines():
             if re.search(r"""stats\[\s*["']fame["']\s*\]\s*[+-]?=""", line):
-                writes.append((path.name, line.strip()))
+                writes.append((label(path), line.strip()))
     assert writes == []  # 名聲（2026-10-15，設計 3.2）起程式裡加名望一律走 renown.gain，不直接寫
     gains = []
-    for path in sorted((ROOT / "tianxia").glob("*.py")):
+    for path in code:
         for line in path.read_text(encoding="utf-8").splitlines():
             if re.search(r"""renown\.gain\([^)]*["']fame["']""", line):
-                gains.append((path.name, line.strip().split("#")[0].strip()))
+                gains.append((label(path), line.strip().split("#")[0].strip()))
     assert gains == [
         ("engine.py", 'return [tavern_rules.TREAT_DONE] + renown.gain(s, c, "fame", cfg.treat_fame)'),  # 酒肆請全店喝酒（Game._tavern_treat）
         ("engine.py", 'record.changes += renown.gain(s, c, "fame", cfg.hit_win_fame)'),  # 酒肆：打退殺手（Game._tavern_hit_fight）
@@ -282,7 +285,7 @@ def test_only_events_and_the_first_echo_give_fame_in_the_code():
         ("engine.py", 'record.changes += renown.gain(s, c, "fame", cfg.highlight_fame)'),  # 擂台上成了的最險一搏
         ("engine.py", 'renown.gain(s, c, "fame", fame)'),  # 擂台每天的俸（Game._deliver_arena）
         ("engine.py", 'renown.gain(s, c, "fame", fame)'),  # 擂台賽季末前三名（Game._deliver_arena）
-        ("feasts.py", 'out += renown.gain(state, content, "fame", amount)'),  # 宴客散席時最好的那一句敬酒（feasts.deliver）
+        ("features/feast/rules.py", 'out += renown.gain(state, content, "fame", amount)'),  # 宴客散席時最好的那一句敬酒（feasts.deliver；宴客搬進功能包）
     ]
     givers = []
 

@@ -7,10 +7,11 @@ from __future__ import annotations
 
 from .features import Feature
 
-from ..features import mall  # 商城（萬寶閣）：第 1 階搬進來的示範
+from ..features import feast, mall  # 商城（萬寶閣）：第 1 階搬進來的示範；宴客：第 1 階多搬的有按鈕的小包（3.10）
 # ── import（new_feature.py 接在這一行前面）──
 
 FEATURES: list[Feature] = [
     mall.FEATURE,
+    feast.FEATURE,
     # ── 清單（new_feature.py 接在這一行前面）──
 ]

@@ -128,7 +128,7 @@ def _cheer_letter(state: GameState, content: Content) -> Letter | None:
 
 def _feast_letter(state: GameState, content: Content) -> Letter | None:
     """情誼夠的人物正在擺宴、這一場還沒邀過你、你還沒敬過酒：寫一封邀宴（第三批，feasts.py）。"""
-    from . import feasts  # noqa: PLC0415  feasts → figure_life
+    from .features.feast import rules as feasts  # noqa: PLC0415  宴客（功能包）→ figure_life：延後載入
 
     if not feasts.on(content):
         return None
