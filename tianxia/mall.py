@@ -49,8 +49,11 @@ EFFECTS: dict[str, EffectSpec] = {
     "zhuan_seal": EffectSpec("consumable", "紀念印 {n} 方（休季時用）", 1),
     "zhuan_quote": EffectSpec("consumable", "人物親筆評曰 {n} 張（休季時挑人物）", 1),
     "deep_slot": EffectSpec("consumable", "深交名額 +{n}（這一季）", 1),
+    # 題壁墨（走一趟，Joy 2026-10-29～30「任意留言需要消耗商城道具」「題壁墨都先只能元寶買」）：不改角色，那一列購買就是一張；
+    # 走完一趟自己寫一句時用掉一張（data 記 used、place、inscription；outing.INK）。換季也帶著走
+    "inscribe": EffectSpec("consumable", "題壁墨 {n} 張", 99),
 }
-TICKET_NAMES = {"zhuan_art": "列傳插畫", "zhuan_seal": "紀念印", "zhuan_quote": "人物親筆評曰", "deep_slot": "深交名額"}  # 退款那一句
+TICKET_NAMES = {"zhuan_art": "列傳插畫", "zhuan_seal": "紀念印", "zhuan_quote": "人物親筆評曰", "deep_slot": "深交名額", "inscribe": "題壁墨"}  # 退款那一句
 KIND_NAMES = {"look": "外觀", "consumable": "消耗品", "card": "月卡", "pass": "通行證"}
 REASONS = {"grant": "封測發放", "buy": "購買", "refund": "退款", "reissue": "補發", "revoke": "扣回", "topup": "儲值"}
 # 月卡的元寶照舊記成 grant（帳本的原因有 CHECK，加原因要改結構；不改結構版本），照編號的開頭認是月卡的哪一份：

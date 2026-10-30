@@ -5665,7 +5665,7 @@ class Game:
                 return ["（此刻無法這麼做。）"]
             if p.stamina < outing_rules.cost(c, total):
                 return ["（體力不夠走這麼多段。）"]
-            p.outing = Outing(place=p.location, total=total)
+            p.outing = Outing(place=p.location, total=total, n=(p.outing.n + 1) if p.outing is not None else 1)
         else:
             trip = p.outing
             if trip is None or trip.end:
@@ -5685,7 +5685,13 @@ class Game:
         最後一段是要選的事時，接著走只是把這一趟收成「走完」）。關著是 None。"""
         view = outing_rules.view(self.state, self.content)
         if view is not None and view["trip"] is not None:
-            view["trip"]["can_go"] = self.outing_can_go()
+            trip = view["trip"]
+            trip["can_go"] = self.outing_can_go()
+            if trip["can_say"]:
+                trip["ink"] = self.outing_ink_left()
+                trip["ink_item"] = mall.item_for(self.content, outing_rules.INK)
+                trip["people"] = [o.player.name for o in social.here(self)]  # 結算卡的「此地還有」：點名字開玩家卡打招呼、邀結伴
+            trip["admin"] = self.is_admin()
         return view
 
     def outing_can_go(self) -> bool:
@@ -5721,9 +5727,105 @@ class Game:
                 trip.end = outing_rules.HURT
             if stop:
                 break
+            if trip.end != outing_rules.LOST:
+                self._outing_trace(trip)
         if not trip.end and trip.done >= trip.total and IDLE_MARK in {o.id for o in self.options(odds=False, tick=False)}:
             trip.end = outing_rules.DONE  # 最後一段端出要選的事時先不收：選完、接著走那一下才收
+        if trip.end and any(b.rare for b in trip.beats):  # 碰上稀罕的東西：世界記事記一筆（此地舊事、人物對話讀得到）
+            place = c.locations[trip.place].name if trip.place in c.locations else trip.place
+            deeds.record(s, c, outing_rules.DEED_KIND, outing_rules.DEED_LINE.format(name=p.name, place=place),
+                         place=trip.place, actors=[p.name])
         return []
+
+    def _outing_trace(self, trip: Outing) -> None:
+        """一段走完、沒停下：擲一下路上有沒有看到東西（outing_trace_chance）——這一處有別人、這一趟還沒揮過手的話先是遠處有人揮手，
+        不然是一則別人的留言。一趟最多 outing_trace_cap 行，不佔段數。亂數另起（outing.trace_rng），Game.rng 一個都不動。"""
+        c = self.content
+        if outing_rules.traces_left(trip, c) <= 0:
+            return
+        rng = outing_rules.trace_rng(self.state, trip)
+        if rng.random() >= c.config.jianfa.outing_trace_chance:
+            return
+        beat = None
+        if not trip.waved:
+            beat = outing_rules.wave_beat([o.player.name for o in social.here(self)], rng)
+            trip.waved = beat is not None
+        if beat is None:
+            beat = outing_rules.seen_beat(self.state, c, trip, rng)
+        if beat is not None:
+            trip.beats.append(beat)
+
+    def outing_say(self, preset: int = -1, text: str = "", verdict: str = "") -> list[str]:
+        """走完一趟在這一處留一句（outing.say_ok）：preset 是預設句的第幾句（免費）；不然是自己寫的 text（伺服器量過長度、
+        鎖外審過，verdict 是模型的判斷），過字表（speech.problem，同名帖自題那一套），用掉一張題壁墨（商城 inscribe）。
+        成了刻進這一處（outing.inscribe）、寫一則江湖紀錄；不成只回一句、什麼都不動。"""
+        s, c = self.state, self.content
+        if not outing_rules.on(c, s):
+            return ["（此刻無法這麼做。）"]
+        trip = outing_rules.say_ok(s)
+        if trip is None:
+            p = s.player
+            return [outing_rules.SAY_AGAIN if p.outing is not None and p.outing.said else outing_rules.SAY_NOT_HERE]
+        token = None
+        if 0 <= preset < len(outing_rules.PRESETS):
+            line, is_preset = outing_rules.PRESETS[preset], True
+        else:
+            line, is_preset = speech.clean(text), False
+            if not line:
+                return [outing_rules.SAY_EMPTY]
+            problem = speech.problem(line, c, speech.MOTTO, c.config.jianfa.outing_say_max, verdict)
+            if problem is None and any(word in line for word in tavern_rules.BANNED_WORDS):
+                problem = speech.BLOCKED  # 同酒肆題壁：牆上不寫這幾個字
+            if problem:
+                return [problem]
+            wallet = self._wallet()
+            left = [] if wallet is None else mall.tokens(wallet, self._mall_owner(), outing_rules.INK)
+            if not left:
+                return [outing_rules.NO_INK]
+            token = left[0]
+        place = c.locations[trip.place].name if trip.place in c.locations else trip.place
+        item = outing_rules.inscribe(s, c, line, preset=is_preset)
+        if token is not None:
+            self._wallet().mark_used(token, self.pill_now(), place=trip.place, inscription=item.id)
+        said = outing_rules.SAY_DONE.format(place=place, text=line)
+        journal.add_entry(s, JournalEntry(time=s.world.time, title=outing_rules.SAY_TITLE, lines=[said],
+                                          changes=[] if token is None else ["題壁墨 -1"]))
+        return self._log([said])
+
+    def outing_tale_request(self) -> outing_rules.TaleRequest | list[str]:
+        """遊記的 A 段（只讀）：這一趟收了、還沒請過模型就開單；不然回一句（不叫模型）。"""
+        req = outing_rules.tale_request(self.state, self.content)
+        return ["（此刻無法這麼做。）"] if req is None or not outing_rules.on(self.content, self.state) else req
+
+    def outing_set_tale(self, text: str | None, request: outing_rules.TaleRequest) -> list[str]:
+        """遊記的 C 段：還是同一趟（outing.same_trip）才收；text 是 None（叫不動、不合用）就記成請過了、畫面照用模板。"""
+        trip = outing_rules.same_trip(self.state, request)
+        if trip is None:
+            return []
+        trip.tale, trip.tale_done = text or "", True
+        return []
+
+    def outing_keep(self) -> list[str]:
+        """把這一趟的遊記收進行狀（annals DEED；沒有模型寫的就收模板那一段）。一趟一次。"""
+        s, c = self.state, self.content
+        trip = s.player.outing
+        if not outing_rules.on(c, s) or trip is None or not trip.end or trip.kept:
+            return ["（此刻無法這麼做。）"]
+        place = c.locations[trip.place].name if trip.place in c.locations else trip.place
+        annals.note(s, c, annals.DEED, trip.tale or outing_rules.template_tale(trip, c), 2, place=place)
+        trip.kept = True
+        return self._log([outing_rules.KEPT])
+
+    def outing_ink_left(self) -> int:
+        """手上還沒用掉的題壁墨幾張；商城關著是 0。"""
+        wallet = self._wallet()
+        return 0 if wallet is None else len(mall.tokens(wallet, self._mall_owner(), outing_rules.INK))
+
+    def admin_erase_inscription(self, ins_id: int) -> list[str]:
+        """管理者抹掉一則留言（路上那一行的 ref）。不是管理者、沒有這一則都回同一句「此刻無法」。"""
+        if not self.is_admin() or not outing_rules.erase(self.state, ins_id):
+            return ["（此刻無法這麼做。）"]
+        return self._log([outing_rules.ERASED])
 
     def is_idle(self) -> bool:
         """此刻閒著（切磋、論武、假人答論武都問它）：選單上有探索（IDLE_MARK）——不在路上、沒有事件、對話、店面的選單擋著、不在開打的決戰裡。

@@ -9,9 +9,11 @@ pytestmark = pytest.mark.skipif(webharness.NODE is None, reason="沒有 node")
 
 DRIVER = r"""
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const code = ["OUTING_CLOSE", "OUTING_AGAIN"].map(konst).join("\n") + fn("outingPickerHtml") + fn("outingSum") + fn("outingResultHtml") + fn("outingLedgerHtml");
+const code = ["OUTING_CLOSE", "OUTING_AGAIN", "OUTING_SAY_HEAD", "OUTING_SAY_OWN", "OUTING_SAY_INK", "OUTING_SAY_BUY", "OUTING_SAID", "OUTING_HERE", "OUTING_KEEP", "OUTING_KEPT"].map(konst).join("\n")
+  + fn("outingPickerHtml") + fn("outingSum") + fn("outingResultHtml") + fn("outingLedgerHtml") + fn("outingSayHtml") + fn("outingPeopleHtml");
 const H = new Function("esc", code + "\nreturn { outingPickerHtml, outingSum, outingResultHtml, outingLedgerHtml };")(esc);
-finish({ picker: H.outingPickerHtml(input.m), result: H.outingResultHtml(input.trip), ledger: H.outingLedgerHtml(input.ledger) });
+finish({ picker: H.outingPickerHtml(input.m), result: H.outingResultHtml(input.trip), ledger: H.outingLedgerHtml(input.ledger),
+  extra: (input.more || []).map((t) => H.outingResultHtml(t)) });
 """
 
 PICKER = {"picker": [{"n": 1, "stamina": 6, "ok": True}, {"n": 3, "stamina": 18, "ok": True}, {"n": 5, "stamina": 30, "ok": False}],
@@ -23,8 +25,8 @@ TRIP = {"place": "潁川郊野", "total": 3, "done": 3, "end": "done", "title": 
 ]}
 
 
-def _run(ledger: str = "得：驚羽 ×1　失：氣血 -6"):
-    return webharness.run(DRIVER, {"m": {"outing": PICKER}, "trip": TRIP, "ledger": ledger})
+def _run(ledger: str = "得：驚羽 ×1　失：氣血 -6", more=()):
+    return webharness.run(DRIVER, {"m": {"outing": PICKER}, "trip": TRIP, "ledger": ledger, "more": list(more)})
 
 
 def test_the_picker_offers_one_three_five_without_the_multiplier():
@@ -46,3 +48,42 @@ def test_the_result_adds_up_the_segments():
 def test_a_segment_ledger_colours_gains_and_losses():
     html = _run()["ledger"]
     assert '<small class="up">得：驚羽 ×1</small>' in html and '<small class="down">失：氣血 -6</small>' in html
+
+
+SAY = {**TRIP, "can_say": True, "said": "", "presets": ["溪水可飲。", "後來者保重。"], "say_max": 20, "ink": 0, "ink_item": "inscribe_ink",
+       "people": ["遠方客"]}
+
+
+def test_the_result_card_offers_free_lines_and_ink():
+    """預設句一按就留（免費）；沒有題壁墨給去萬寶閣的鈕，有就給輸入框；此地還有誰點名字開玩家卡。"""
+    no_ink, ink, said = _run(more=[SAY, {**SAY, "ink": 2}, {**SAY, "can_say": False, "said": "溪水可飲。"}])["extra"]
+    assert no_ink.count('data-act="outing-say"') == 2 and 'data-act="outing-mall" data-id="inscribe_ink"' in no_ink
+    assert 'id="outing-own"' not in no_ink
+    assert 'id="outing-own" maxlength="20"' in ink and "手上 2 張" in ink
+    assert 'data-act="outing-peer" data-name="遠方客"' in no_ink
+    assert "你留下：「溪水可飲。」" in said and 'data-act="outing-say"' not in said
+
+
+def test_the_result_card_shows_the_tale_and_keeps_it():
+    tale, kept = _run(more=[{**TRIP, "diary": "你在潁川郊野走了一程。", "kept": False}, {**TRIP, "diary": "你在潁川郊野走了一程。", "kept": True}])["extra"]
+    assert '<p class="outing-diary">你在潁川郊野走了一程。</p>' in tale and 'data-act="outing-keep"' in tale
+    assert "已收進行狀" in kept and 'data-act="outing-keep"' not in kept
+
+
+CHOICE_DRIVER = r"""
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const code = konst("OUTING_WAIT") + fn("outingChoiceHtml");
+const H = new Function("esc", code + "\nreturn { outingChoiceHtml };")(esc);
+finish({ html: H.outingChoiceHtml(input.m) });
+"""
+
+
+def test_a_stop_puts_the_choice_on_the_card():
+    """Joy 10/30「選項應該就要在浮起來那邊吧，幹嘛多此一舉弄什麼去看看」：停下來要選的事與選項畫在走一趟的卡上，沒有「去看看」。"""
+    m = {"scene": "<p><strong>狼群</strong></p><p>林中傳來一聲狼嚎。</p>", "options": [
+        {"id": "choice:0", "label": "拔出兵器迎戰", "enabled": True},
+        {"id": "choice:1", "label": "爬上大樹躲避", "enabled": False}]}
+    html = webharness.run(CHOICE_DRIVER, {"m": m})["html"]
+    assert "林中傳來一聲狼嚎。" in html
+    assert 'data-act="outing-choose" data-id="choice:0" >' in html and 'data-id="choice:1" disabled' in html
+    assert "去看看" not in html and 'data-act="choose"' not in html

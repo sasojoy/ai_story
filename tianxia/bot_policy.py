@@ -243,12 +243,12 @@ def take_turn(game: Game, profile: BotProfile, rng: random.Random, slot: NamingS
         if step is not None:
             return msgs + game.choose(step)
     if outing.active(s) is not None and game.outing_can_go():  # 走一趟停在要選的事上、選完了：接著走（同真人）
-        return msgs + game.outing_go()
+        return msgs + game.outing_go() + bot.outing_say(game, rng)
     choice = pick(game, options, profile, rng)
     if choice == "act:explore" and outing.on(game.content, s):  # 走一趟開著：探索照真人一樣挑段數出發（bot.outing_segments）
         n = bot.outing_segments(game, rng)
         if n:
-            return msgs + game.outing_go(n)
+            return msgs + game.outing_go(n) + bot.outing_say(game, rng)
     # 約戰開著（減法季批 3b）：挑到出陣那一格（只是打開出陣前那張卡）換成真的貼一張、封好三招（bot.duel_go）
     return msgs + game.choose(bot.duel_go(game, choice, rng)) if choice else msgs
 
