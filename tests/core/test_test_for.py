@@ -114,6 +114,37 @@ def test_a_shared_helper_without_a_feature_is_core():
     assert picked.core and picked.smoke
 
 
+def test_the_shared_services_of_the_handbook_are_core_even_when_named_like_a_feature():
+    """手冊 3.3 列為 ctx 的共用服務（_side、_save_season、_pill_day、_write、_guide、_wallet……）被叫幾十上百次：
+    改到就是核心（核心測試＋煙霧），不是名字裡那個字的小功能群（_save_season 不是 season、_pill_day 不是 pill），
+    hunk 裡提到的功能前綴另外加（_side 改成問 allied → 也加 allied 那一群）。"""
+    src = (
+        "class Game:\n"
+        "    def _side(self):\n"
+        "        return allied.side_of(self.state, self.content) or None\n"
+        "\n"
+        "    def _save_season(self):\n"
+        "        self._write()  # 註解\n"
+        "\n"
+        "    def _pill_day(self):\n"
+        "        return 1\n"
+    )
+    for line, name in ((3, "_side"), (6, "_save_season"), (9, "_pill_day")):
+        picked = test_for.pick(["tianxia/engine.py"], hunks_of=_added("tianxia/engine.py", src, line))
+        assert picked.core and picked.smoke, name
+        assert not {p.name for p in picked.files} & {"test_pill_per_day.py", "test_season_pause.py"}, name
+    side = test_for.pick(["tianxia/engine.py"], hunks_of=_added("tianxia/engine.py", src, 3))
+    assert any("allied" in p.name for p in side.files)
+
+
+def test_every_shared_service_is_a_real_game_method():
+    """CORE_METHODS 跟著 engine.py 走：改了名字、拿掉了，這裡紅（不然那個服務改到時悄悄落回小功能群）。"""
+    methods = {name for name, *_ in test_for._game_methods((ROOT / "tianxia" / "engine.py").read_text(encoding="utf-8"))}
+    assert test_for.CORE_METHODS <= methods, sorted(test_for.CORE_METHODS - methods)
+    assert {"_log", "_write", "_save_season", "_side", "_pill_day", "_cost_option", "stamp", "_guide",
+            "_quick_client", "_wallet"} <= test_for.CORE_METHODS
+
+
 def test_a_removed_line_is_found_in_the_old_file():
     """整個方法拿掉：拿掉的行照舊檔的行號找方法。"""
     old = FAKE_ENGINE

@@ -19,6 +19,8 @@
 - tianxia/engine.py：hunk 落在 Game 的哪個方法 → 方法名第一個認得的字當功能群（tavern_seek → tavern；_deliver_seal_results
   → seal）→ 那一群的測試檔。落在 choose、_everyday_options、sync、status_data、__init__、換季重設、清失效參照這幾個共用方法
   （SHARED_METHODS）、方法以外、或方法名認不出功能 → 看 hunk 裡提到哪些功能前綴；都沒有 → 核心測試＋煙霧。
+  落在手冊 3.3 列為 ctx 的共用服務（CORE_METHODS：_log、_write、_save_season、_side、_pill_day……）→ 核心測試＋煙霧
+  （名字像功能也一樣），hunk 裡提到的功能前綴另外加。
 - server.py：hunk 落在哪條路由 → 路由前綴（/api/mall → mall）那一群＋tests/server/test_server.py；
   /api/do、/api/choose 這種不帶功能的路由看 hunk 裡提到什麼；殼（登入、鎖、路由以外）→ 核心測試＋煙霧＋test_server.py。
 - 「功能群的測試檔」＝ 檔名（test_ 後面照底線拆）有那個字的（test_tavern.py、test_seal_fb643_tavern.py）；
@@ -71,6 +73,13 @@ HUNK_FILES = {"tianxia/engine.py", "tianxia/models.py", "tianxia/state.py", "ser
 SHARED_METHODS = {
     "choose", "_everyday_options", "sync", "status_data", "__init__",
     "_reset_player_for_new_season", "_drop_stale_references", "options", "new",
+}
+# 共用服務（手冊 3.1「共用服務（記錄、花費、錢包、時刻）」、3.3 的 ctx 清單）：每一個都被叫幾十上百次，改到就是改核心
+# → 核心測試＋煙霧（hunk 裡提到的功能前綴另外加）。名字像功能（_save_season、_pill_day、_guide、_wallet）也不照名字分群。
+# tests/core/test_test_for.py 守這裡的每一個都還是 Game 的方法。
+CORE_METHODS = {
+    "_log", "_write", "_save_season", "_side", "_pill_day", "_cost_option", "stamp", "_guide", "_quick_client",
+    "_wallet",
 }
 # 不是功能前綴的字：方法名第一個字是它的（_deliver_seal_results、apply_tavern_chatter、_can_x）往後找下一個認得的字，
 # hunk 裡出現它也不算。寫在這裡的字有自己的測試檔名也不算（test_for、test_in_lock_model_timeout、test_real_content……）。
@@ -419,6 +428,13 @@ def engine_groups(hunk_list: list[Hunk], old_src: str, new_src: str) -> tuple[se
     why: list[str] = []
     for name, (removed, added) in _split(hunk_list, old_src, new_src, spans_of).items():
         label = name or "方法以外"
+        if name in CORE_METHODS:
+            hits = scan(removed + added)
+            core = True
+            found |= hits
+            why.append(f"{label}：共用服務（手冊 3.3）→ 核心測試＋煙霧"
+                       + (f"，另外提到 {'、'.join(sorted(hits))}" if hits else ""))
+            continue
         if name is not None and name not in SHARED_METHODS:
             hit = _feature_words(name)
             if hit:
